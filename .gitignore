@@ -145,3 +145,7 @@ lerna-debug.log*
 .agent
 .agents
 .claude
+
+/bin/
+rooms*.txt
+real-texts*.txt
