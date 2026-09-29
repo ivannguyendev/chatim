@@ -63,6 +63,7 @@ func runRead(ctx context.Context, args []string) error {
 
 	var rec latency.Recorder
 	var pages, empty atomic.Int64
+	var failed atomic.Int64
 	runCtx, cancel := context.WithTimeout(ctx, *duration)
 	defer cancel()
 	var wg sync.WaitGroup
@@ -74,6 +75,9 @@ func runRead(ctx context.Context, args []string) error {
 				start := time.Now()
 				n, err := readPage(runCtx, coll, filter, sort, *limit)
 				if err != nil {
+					if runCtx.Err() == nil {
+						failed.Add(1)
+					}
 					continue
 				}
 				rec.Add(time.Since(start))
@@ -85,8 +89,8 @@ func runRead(ctx context.Context, args []string) error {
 		})
 	}
 	wg.Wait()
-	fmt.Printf("mode=%s pages=%d (%.0f/s) empty=%d latency: %v\n",
-		*mode, pages.Load(), float64(pages.Load())/duration.Seconds(), empty.Load(), rec.Summary())
+	fmt.Printf("mode=%s pages=%d (%.0f/s) empty=%d errors=%d latency: %v\n",
+		*mode, pages.Load(), float64(pages.Load())/duration.Seconds(), empty.Load(), failed.Load(), rec.Summary())
 	return nil
 }
 

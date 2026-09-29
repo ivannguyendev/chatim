@@ -110,10 +110,12 @@ func flushLoop(ctx context.Context, coll *mongo.Collection, in <-chan pending, w
 		begin := time.Now()
 		_, err := coll.InsertMany(ctx, docs, options.InsertMany().SetOrdered(false))
 		done := time.Now()
-		st.insLat.Add(done.Sub(begin))
 		if err != nil {
-			st.errored.Add(1)
+			st.errored.Add(int64(len(batch)))
+			batch = batch[:0]
+			return
 		}
+		st.insLat.Add(done.Sub(begin))
 		for _, p := range batch {
 			st.msgLat.Add(done.Sub(p.at))
 		}
