@@ -27,7 +27,7 @@
 - **Mỗi file code < 200 dòng**; `gofmt` sạch (`make fmt-check`).
 - **Commit** theo Conventional Commits, không nhắc tới AI, không commit `.env`, dữ liệu thật hay file sinh ra (`rooms.txt`, `real-texts.txt`, `bin/`).
 - **Quy tắc sẵn sàng sharding** (thiết kế mục 4.1): `_id` các collection lớn luôn có prefix `room_id`; mọi truy vấn có prefix room; không transaction nhiều document; `MONGO_URI` lấy từ cấu hình.
-- Chạy mọi lệnh từ thư mục gốc repo. `MONGO_ROOT_PASSWORD` chỉ dùng chữ và số, vì Makefile ghép nó thẳng vào `MONGO_URI`.
+- Chạy mọi lệnh từ thư mục gốc repo. `MONGO_ROOT_PASSWORD` chỉ dùng chữ, số, `-` hoặc `_`, vì Makefile ghép nó thẳng vào `MONGO_URI` mà không mã hoá URL.
 
 ---
 
@@ -53,7 +53,7 @@ Expected: commit chứa `.gitignore`, `README.md`, `docs/research/…`, `docs/de
 
 ### Task 1: Makefile (Go qua Docker) và Go module
 
-`GO_RUN` mount repo vào `/src` và giữ cache module/build trong 2 named volume (`chatim-gomod`, `chatim-gocache`), nên từ lần chạy thứ hai sẽ nhanh. `POC_RUN` gắn thêm mạng compose và ghép `MONGO_URI` từ `.env` (dùng `-include .env`). `poc` build binary vào `bin/` rồi chạy chính binary đó trong container, để server khởi động tức thì. `image` build image runtime (Task 11).
+`GO_RUN` mount repo vào `/src` và giữ cache module/build trong 2 named volume (`chatim-gomod`, `chatim-gocache`), nên từ lần chạy thứ hai sẽ nhanh. `POC_RUN` gắn thêm mạng compose và ghép `MONGO_URI` từ `.env` (dùng `-include .env`). `poc` build binary vào `bin/` rồi chạy chính binary đó trong container, để server khởi động tức thì. `image` build image runtime (Task 11). `check-env` dừng sớm với thông báo rõ khi thiếu `.env` (nếu không, `poc` sẽ ghép `MONGO_URI` rỗng và lỗi xác thực ở tận trong chương trình).
 
 **Files:**
 - Create: `Makefile`, `.env.example`, `go.mod`
@@ -72,10 +72,13 @@ COMPOSE  := docker compose -f deploy/compose/docker-compose.yml --env-file .env
 GO_RUN   := docker run --rm -v "$(CURDIR)":/src -w /src -v chatim-gomod:/go/pkg/mod -v chatim-gocache:/root/.cache/go-build -e GOFLAGS=-buildvcs=false
 POC_RUN  := $(GO_RUN) --network $(NETWORK) -e "MONGO_URI=mongodb://$(MONGO_ROOT_USER):$(MONGO_ROOT_PASSWORD)@chatim-mongodb:27017/?replicaSet=rs0&authSource=admin"
 
-.PHONY: go test vet fmt-check tidy poc image infra-up infra-down infra-reset
+.PHONY: go check-env test vet fmt-check tidy poc image infra-up infra-down infra-reset
 
 go:
 	$(GO_RUN) $(GO_IMAGE) go $(ARGS)
+
+check-env:
+	@test -f .env || (echo "missing .env: run cp .env.example .env" && exit 1)
 
 test:
 	$(GO_RUN) $(GO_IMAGE) go test -race ./...
@@ -89,21 +92,21 @@ fmt-check:
 tidy:
 	$(GO_RUN) $(GO_IMAGE) go mod tidy
 
-poc:
+poc: check-env
 	$(GO_RUN) $(GO_IMAGE) go build -o bin/$(TOOL) ./tools/poc/$(TOOL)
 	$(POC_RUN) $(POC_FLAGS) $(GO_IMAGE) ./bin/$(TOOL) $(ARGS)
 
 image:
 	docker build -f deploy/docker/Dockerfile --build-arg TARGET=$(TARGET) -t chatim/$(notdir $(TARGET)):dev .
 
-infra-up:
+infra-up: check-env
 	$(COMPOSE) up -d
 	./scripts/wait-mongo-primary.sh
 
-infra-down:
+infra-down: check-env
 	$(COMPOSE) down
 
-infra-reset:
+infra-reset: check-env
 	$(COMPOSE) down -v
 ```
 
@@ -156,7 +159,7 @@ git commit -m "chore: init go module with docker-based go tooling"
 
 ### Task 2: Hạ tầng dev (MongoDB rs0, Redis, NATS)
 
-Mongo theo đúng quy ước team: replica set 1 node `rs0`, keyfile tự sinh trong volume ở lần khởi động đầu, container `mongodb-init` chạy `rs.initiate` một lần. Credential lấy từ `.env`. Port host mặc định lệch chuẩn (27117/6380/4223/8223) để không đụng các stack khác; công cụ PoC không dùng port host mà gọi thẳng tên dịch vụ trong mạng `chatim_default`.
+Mongo theo đúng quy ước team: replica set 1 node `rs0`, keyfile tự sinh trong volume ở lần khởi động đầu, container `mongodb-init` chạy `rs.initiate` một lần. Credential lấy từ `.env`. Port host mặc định lệch chuẩn (27117/6380/4223/8223) để không đụng các stack khác; công cụ PoC không dùng port host mà gọi thẳng tên dịch vụ trong mạng `chatim_default`. Tên mạng được ghim cứng trong compose, để không phụ thuộc tên thư mục chứa repo hay `COMPOSE_PROJECT_NAME`.
 
 **Files:**
 - Create: `deploy/compose/docker-compose.yml`, `scripts/wait-mongo-primary.sh`
@@ -243,6 +246,10 @@ services:
       timeout: 3s
       retries: 10
 
+networks:
+  default:
+    name: chatim_default
+
 volumes:
   mongodb_data:
   redis_data:
@@ -273,7 +280,7 @@ Run: `chmod +x scripts/wait-mongo-primary.sh`
 
 **Step 3: Chạy hạ tầng**
 
-Tạo `.env` từ mẫu rồi sửa `MONGO_ROOT_PASSWORD` (chỉ chữ và số) trước khi chạy tiếp:
+Tạo `.env` từ mẫu rồi sửa `MONGO_ROOT_PASSWORD` (chữ, số, `-` hoặc `_`) trước khi chạy tiếp:
 
 ```bash
 cp .env.example .env
@@ -2964,7 +2971,7 @@ git commit -m "docs(poc): record phase 1 poc results and decisions"
 
 Chỉ cần Docker; Go chạy trong container `golang:1.26` qua `make`.
 
-    cp .env.example .env        # đổi MONGO_ROOT_PASSWORD (chỉ chữ và số)
+    cp .env.example .env        # đổi MONGO_ROOT_PASSWORD (chữ, số, - hoặc _)
     make infra-up               # mongo rs0 :27117, redis :6380, nats :4223 (monitor :8223)
     make test                   # go test -race ./... trong container
     make go ARGS="vet ./..."    # lệnh go bất kỳ
@@ -2998,7 +3005,7 @@ Mỗi milestone có plan chi tiết riêng, viết sau khi có kết quả M1.
 | **M2 — core: đường ghi** | `proto/chatim/v1` + buf (chạy trong container); `pkg/config`, `logx`, `telemetry`; bootstrap collection/index theo quy tắc sẵn sàng sharding; actor theo room + flusher; chống trùng `cid`; sửa/xoá/reaction/pin/read + `message_edits`; publish JetStream + watermark publish bù; gRPC Send/Edit/Delete/React/Pin/Read; integration test bằng testcontainers | R1, R2, R5 |
 | **M3 — core: đường đọc** | GetHistory, GetMessages, ListMyRoomIDs, ListMyRooms, Sync, GetEditHistory, GetReactions, ListPins, ListBookmarks; bộ test sẵn sàng sharding trên cluster 2 shard (`SINGLE_SHARD`) | M2, R1 |
 | **M4 — gateway** | gws server, JWT/JWKS, frame protobuf, interest subscription, hàng đợi gửi có giới hạn + 4008, typing/presence, đọc bảng slot từ Redis | M2, R3, R4 |
-| **M5 — hardening** | service `core`/`gateway` trong compose (dùng Dockerfile ở Task 11), load test 100K, chaos test, OTel/Prometheus/Grafana, CI (fmt-check, vet, test -race trong container) | M3, M4 |
+| **M5 — hardening** | service `core`/`gateway` trong compose (dùng Dockerfile ở Task 11), load test 100K, chaos test, OTel/Prometheus/Grafana, CI (fmt-check, vet, test -race trong container); chạy container Go bằng uid của user trên Linux (hiện `make` chạy bằng root nên file sinh ra trong repo thuộc root trên Linux; macOS không bị) | M3, M4 |
 
 ## Tóm tắt kiểm chứng
 
