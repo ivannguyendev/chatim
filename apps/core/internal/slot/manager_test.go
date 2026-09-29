@@ -76,13 +76,18 @@ func TestReleaseAllHandsSlotsBack(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		stepAll(t, a, b)
 	}
-	held := len(a.Owned())
+	held := a.Owned()
 	drained = 0
 	if err := a.ReleaseAll(context.Background()); err != nil {
 		t.Fatalf("ReleaseAll: %v", err)
 	}
-	if drained != held || len(a.Owned()) != 0 {
-		t.Fatalf("drained %d of %d slots, still owns %d", drained, held, len(a.Owned()))
+	if drained != len(held) || len(a.Owned()) != 0 {
+		t.Fatalf("drained %d of %d slots, still owns %d", drained, len(held), len(a.Owned()))
+	}
+	for _, s := range held {
+		if mr.Exists(slotmap.SlotKey(s)) {
+			t.Fatalf("slot %d lease still in redis after ReleaseAll", s)
+		}
 	}
 	if mr.Exists(slotmap.CoreKey("core-a")) {
 		t.Fatal("ReleaseAll must remove the heartbeat")

@@ -32,6 +32,7 @@ type Manager struct {
 	log   *slog.Logger
 	mu    sync.RWMutex
 	owned map[uint16]time.Time
+	now   func() time.Time
 }
 
 func New(rdb redis.UniversalClient, cfg Config, log *slog.Logger) (*Manager, error) {
@@ -47,14 +48,14 @@ func New(rdb redis.UniversalClient, cfg Config, log *slog.Logger) (*Manager, err
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Manager{cfg: cfg, rdb: rdb, log: log.With("core", cfg.CoreID), owned: map[uint16]time.Time{}}, nil
+	return &Manager{cfg: cfg, rdb: rdb, log: log.With("core", cfg.CoreID), owned: map[uint16]time.Time{}, now: time.Now}, nil
 }
 
 func (m *Manager) Owns(slot uint16) bool {
 	m.mu.RLock()
 	at, ok := m.owned[slot]
 	m.mu.RUnlock()
-	return ok && time.Since(at) < m.cfg.LeaseTTL-m.cfg.Tick
+	return ok && m.now().Sub(at) < min(m.cfg.LeaseTTL, m.cfg.HeartbeatTTL)-m.cfg.Tick
 }
 
 func (m *Manager) Owned() []uint16 {

@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"time"
 
 	"github.com/redis/go-redis/v9"
 
@@ -65,7 +64,7 @@ func (m *Manager) renew(ctx context.Context) (lost bool, err error) {
 	if err != nil {
 		return false, fmt.Errorf("renew: %w", err)
 	}
-	now := time.Now()
+	now := m.now()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for i, s := range slots {
@@ -111,18 +110,19 @@ func (m *Manager) claim(ctx context.Context, alive map[string]bool, need int) (b
 	for i, c := range cands {
 		cmds[i] = pipe.Eval(ctx, claimScript, []string{keys[c.slot]}, c.expect, m.cfg.CoreID, m.cfg.LeaseTTL.Milliseconds())
 	}
-	if _, err := pipe.Exec(ctx); err != nil {
-		return false, fmt.Errorf("claim: %w", err)
-	}
-	now := time.Now()
+	_, execErr := pipe.Exec(ctx)
+	now := m.now()
 	claimed := false
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for i, c := range cands {
-		if n, _ := cmds[i].Int64(); n == 1 {
+		if n, err := cmds[i].Int64(); err == nil && n == 1 {
 			m.owned[c.slot] = now
 			claimed = true
 		}
+	}
+	if execErr != nil {
+		return claimed, fmt.Errorf("claim: %w", execErr)
 	}
 	return claimed, nil
 }
