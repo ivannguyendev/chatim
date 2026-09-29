@@ -149,3 +149,6 @@ lerna-debug.log*
 /bin/
 rooms*.txt
 real-texts*.txt
+
+.env.*
+!.env.example
