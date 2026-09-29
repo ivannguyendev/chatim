@@ -1,0 +1,85 @@
+name: chatim
+
+services:
+  mongodb:
+    image: mongo:8.2
+    container_name: chatim-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:?set MONGO_ROOT_USER in .env}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?set MONGO_ROOT_PASSWORD in .env}
+    entrypoint:
+      - bash
+      - -c
+      - >-
+        if [ ! -f /data/db/mongo-keyfile ]; then openssl rand -base64 756 > /data/db/mongo-keyfile;
+        chmod 400 /data/db/mongo-keyfile; chown 999:999 /data/db/mongo-keyfile; fi;
+        exec docker-entrypoint.sh mongod --replSet rs0 --bind_ip_all --keyFile /data/db/mongo-keyfile
+        --wiredTigerCacheSizeGB ${MONGO_CACHE_GB:-3} --oplogSize 4096
+    ports:
+      - "${MONGO_PORT:-27117}:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet -u \"$$MONGO_INITDB_ROOT_USERNAME\" -p \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval \"db.runCommand('ping').ok\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  mongodb-init:
+    image: mongo:8.2
+    container_name: chatim-mongodb-init
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      MONGO_USER: ${MONGO_ROOT_USER}
+      MONGO_PASSWORD: ${MONGO_ROOT_PASSWORD}
+    entrypoint: ["bash", "-c"]
+    command:
+      - >-
+        mongosh --host chatim-mongodb -u "$$MONGO_USER" -p "$$MONGO_PASSWORD" --authenticationDatabase admin --quiet
+        --eval 'try { rs.status(); print("replica set already initialized") }
+        catch (e) { rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "chatim-mongodb:27017" }] }); print("replica set initialized") }'
+    restart: "no"
+
+  redis:
+    image: redis:7.4.2-alpine
+    container_name: chatim-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  nats:
+    image: nats:2.15-alpine
+    container_name: chatim-nats
+    restart: unless-stopped
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    ports:
+      - "${NATS_PORT:-4223}:4222"
+      - "${NATS_MON_PORT:-8223}:8222"
+    volumes:
+      - nats_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+networks:
+  default:
+    name: chatim_default
+
+volumes:
+  mongodb_data:
+  redis_data:
+  nats_data:
