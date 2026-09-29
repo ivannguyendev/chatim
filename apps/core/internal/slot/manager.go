@@ -42,8 +42,8 @@ func New(rdb redis.UniversalClient, cfg Config, log *slog.Logger) (*Manager, err
 	cfg.Tick = cmp.Or(cfg.Tick, time.Second)
 	cfg.HeartbeatTTL = cmp.Or(cfg.HeartbeatTTL, 5*time.Second)
 	cfg.LeaseTTL = cmp.Or(cfg.LeaseTTL, 10*time.Second)
-	if cfg.LeaseTTL <= 2*cfg.Tick || cfg.HeartbeatTTL <= cfg.Tick {
-		return nil, errors.New("slot: LeaseTTL must exceed 2×Tick and HeartbeatTTL must exceed Tick")
+	if cfg.LeaseTTL <= 2*cfg.Tick || cfg.HeartbeatTTL <= 2*cfg.Tick {
+		return nil, errors.New("slot: LeaseTTL and HeartbeatTTL must each exceed 2×Tick")
 	}
 	if log == nil {
 		log = slog.Default()
@@ -87,6 +87,7 @@ func (m *Manager) Run(ctx context.Context) error {
 }
 
 func (m *Manager) Step(ctx context.Context) error {
+	stamp := m.now()
 	if err := m.rdb.Set(ctx, slotmap.CoreKey(m.cfg.CoreID), m.cfg.Addr, m.cfg.HeartbeatTTL).Err(); err != nil {
 		return fmt.Errorf("heartbeat: %w", err)
 	}
@@ -94,7 +95,7 @@ func (m *Manager) Step(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	lost, err := m.renew(ctx)
+	lost, err := m.renew(ctx, stamp)
 	if err != nil {
 		return err
 	}
@@ -104,13 +105,10 @@ func (m *Manager) Step(ctx context.Context) error {
 	case n > target:
 		moved, err = true, m.release(ctx, n-target)
 	case n < target:
-		moved, err = m.claim(ctx, alive, target-n)
-	}
-	if err != nil {
-		return err
+		moved, err = m.claim(ctx, alive, target-n, stamp)
 	}
 	if lost || moved {
-		return m.rdb.Publish(ctx, slotmap.ChangedChannel, m.cfg.CoreID).Err()
+		err = errors.Join(err, m.rdb.Publish(ctx, slotmap.ChangedChannel, m.cfg.CoreID).Err())
 	}
-	return nil
+	return err
 }

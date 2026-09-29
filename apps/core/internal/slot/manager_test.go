@@ -115,6 +115,7 @@ func TestNewValidatesConfig(t *testing.T) {
 		{CoreID: ""},
 		{CoreID: "core*"},
 		{CoreID: "core-a", Tick: time.Second, LeaseTTL: 2 * time.Second},
+		{CoreID: "core-a", Tick: time.Second, HeartbeatTTL: 2 * time.Second, LeaseTTL: 10 * time.Second},
 	}
 	for _, cfg := range bad {
 		if _, err := New(rdb, cfg, nil); err == nil {

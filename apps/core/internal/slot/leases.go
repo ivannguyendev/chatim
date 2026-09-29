@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 
@@ -51,7 +52,7 @@ func (m *Manager) aliveCores(ctx context.Context) (map[string]bool, error) {
 	return alive, nil
 }
 
-func (m *Manager) renew(ctx context.Context) (lost bool, err error) {
+func (m *Manager) renew(ctx context.Context, stamp time.Time) (lost bool, err error) {
 	slots := m.Owned()
 	if len(slots) == 0 {
 		return false, nil
@@ -64,12 +65,11 @@ func (m *Manager) renew(ctx context.Context) (lost bool, err error) {
 	if err != nil {
 		return false, fmt.Errorf("renew: %w", err)
 	}
-	now := m.now()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for i, s := range slots {
 		if kept[i] == 1 {
-			m.owned[s] = now
+			m.owned[s] = stamp
 			continue
 		}
 		delete(m.owned, s)
@@ -78,7 +78,7 @@ func (m *Manager) renew(ctx context.Context) (lost bool, err error) {
 	return lost, nil
 }
 
-func (m *Manager) claim(ctx context.Context, alive map[string]bool, need int) (bool, error) {
+func (m *Manager) claim(ctx context.Context, alive map[string]bool, need int, stamp time.Time) (bool, error) {
 	keys := make([]string, slotmap.Count)
 	for s := range keys {
 		keys[s] = slotmap.SlotKey(uint16(s))
@@ -111,13 +111,12 @@ func (m *Manager) claim(ctx context.Context, alive map[string]bool, need int) (b
 		cmds[i] = pipe.Eval(ctx, claimScript, []string{keys[c.slot]}, c.expect, m.cfg.CoreID, m.cfg.LeaseTTL.Milliseconds())
 	}
 	_, execErr := pipe.Exec(ctx)
-	now := m.now()
 	claimed := false
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for i, c := range cands {
 		if n, err := cmds[i].Int64(); err == nil && n == 1 {
-			m.owned[c.slot] = now
+			m.owned[c.slot] = stamp
 			claimed = true
 		}
 	}
