@@ -47,7 +47,24 @@ func main() {
 	}
 }
 
+func (c config) interval() time.Duration {
+	return time.Duration(float64(time.Second) * float64(c.publishers) / float64(c.rate))
+}
+
+func (c config) validate() error {
+	if c.subs <= 0 || c.conns <= 0 || c.rate <= 0 || c.publishers <= 0 || c.duration <= 0 {
+		return errors.New("invalid flags: -subs, -conns, -rate, -publishers and -duration must be positive")
+	}
+	if c.interval() <= 0 {
+		return errors.New("rate too high for publisher count")
+	}
+	return nil
+}
+
 func run(ctx context.Context, c config) error {
+	if err := c.validate(); err != nil {
+		return err
+	}
 	nc, err := nats.Connect(c.url)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)

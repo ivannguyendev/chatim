@@ -28,12 +28,14 @@ func load(ctx context.Context, c config, js jetstream.JetStream) error {
 	}
 
 	start := time.Now()
+	subs := make([]*nats.Subscription, 0, c.subs)
 	for room := 0; room < c.subs; room++ {
 		i := room % c.conns
-
-		if _, err := conns[i].ChanSubscribe(fmt.Sprintf("live.t1.room.%d.>", room), inboxes[i]); err != nil {
+		sub, err := conns[i].ChanSubscribe(fmt.Sprintf("live.t1.room.%d.>", room), inboxes[i])
+		if err != nil {
 			return fmt.Errorf("subscribe room %d: %w", room, err)
 		}
+		subs = append(subs, sub)
 	}
 	for _, nc := range conns {
 		if err := nc.Flush(); err != nil {
@@ -64,7 +66,7 @@ func load(ctx context.Context, c config, js jetstream.JetStream) error {
 	pubCtx, cancel := context.WithTimeout(ctx, c.duration)
 	defer cancel()
 	var pubWG sync.WaitGroup
-	interval := time.Duration(float64(time.Second) * float64(c.publishers) / float64(c.rate))
+	interval := c.interval()
 	for p := 0; p < c.publishers; p++ {
 		pubWG.Go(func() {
 			rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
@@ -88,13 +90,36 @@ func load(ctx context.Context, c config, js jetstream.JetStream) error {
 		})
 	}
 	pubWG.Wait()
-	time.Sleep(time.Second)
+	awaitDelivered(ctx, &received, &published)
 	stopRecv()
 	recvWG.Wait()
 
-	fmt.Printf("published=%d (%.0f/s) failed=%d received=%d; %s\n",
-		published.Load(), float64(published.Load())/c.duration.Seconds(), failed.Load(), received.Load(), serverMem(c.monitor))
+	dropped, err := totalDropped(subs)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("target=%d/s published=%d (%.0f/s) failed=%d received=%d dropped=%d; %s\n",
+		c.rate, published.Load(), float64(published.Load())/c.duration.Seconds(), failed.Load(), received.Load(), dropped, serverMem(c.monitor))
 	fmt.Printf("jetstream publish ack: %v\n", ack.Summary())
 	fmt.Printf("publish -> gateway:    %v\n", e2e.Summary())
 	return nil
+}
+
+func awaitDelivered(ctx context.Context, received, published *atomic.Int64) {
+	deadline := time.Now().Add(5 * time.Second)
+	for received.Load() < published.Load() && time.Now().Before(deadline) && ctx.Err() == nil {
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func totalDropped(subs []*nats.Subscription) (int, error) {
+	total := 0
+	for _, sub := range subs {
+		n, err := sub.Dropped()
+		if err != nil {
+			return 0, fmt.Errorf("dropped count: %w", err)
+		}
+		total += n
+	}
+	return total, nil
 }
