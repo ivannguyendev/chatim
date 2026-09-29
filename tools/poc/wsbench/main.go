@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
+	"time"
 )
 
 func main() {
@@ -27,4 +29,19 @@ func main() {
 func usage() {
 	fmt.Fprintln(os.Stderr, "usage: wsbench server|client [flags]  (use -h after a subcommand)")
 	os.Exit(2)
+}
+
+func splitList(s string) []string {
+	parts := strings.Split(s, ",")
+	for i, p := range parts {
+		parts[i] = strings.TrimSpace(p)
+	}
+	return parts
+}
+
+func requirePositive[T int | time.Duration](name string, v T) error {
+	if v <= 0 {
+		return fmt.Errorf("invalid -%s: %v (must be > 0)", name, v)
+	}
+	return nil
 }

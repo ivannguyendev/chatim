@@ -28,9 +28,13 @@ func TestSummaryEdgeCases(t *testing.T) {
 	if s := r.Summary(); s.P50 != 7*time.Millisecond || s.P99 != 7*time.Millisecond || s.Count != 1 {
 		t.Fatalf("single-sample Summary() = %+v", s)
 	}
-	r.Reset()
+	r.Add(3 * time.Millisecond)
+	r.Add(9 * time.Millisecond)
+	if s := r.SummaryAndReset(); s.Count != 3 {
+		t.Fatalf("SummaryAndReset() = %+v, want Count 3", s)
+	}
 	if r.Summary().Count != 0 {
-		t.Fatal("Reset must drop samples")
+		t.Fatal("SummaryAndReset must drop samples")
 	}
 }
 

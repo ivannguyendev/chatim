@@ -23,16 +23,22 @@ func (r *Recorder) Add(d time.Duration) {
 	r.mu.Unlock()
 }
 
-func (r *Recorder) Reset() {
-	r.mu.Lock()
-	r.samples = r.samples[:0]
-	r.mu.Unlock()
-}
-
 func (r *Recorder) Summary() Summary {
 	r.mu.Lock()
 	s := slices.Clone(r.samples)
 	r.mu.Unlock()
+	return summarize(s)
+}
+
+func (r *Recorder) SummaryAndReset() Summary {
+	r.mu.Lock()
+	s := slices.Clone(r.samples)
+	r.samples = r.samples[:0]
+	r.mu.Unlock()
+	return summarize(s)
+}
+
+func summarize(s []time.Duration) Summary {
 	if len(s) == 0 {
 		return Summary{}
 	}

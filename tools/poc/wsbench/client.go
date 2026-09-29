@@ -3,9 +3,10 @@ package main
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"flag"
 	"fmt"
-	"strings"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -27,6 +28,13 @@ func (r *receiver) OnMessage(_ *gws.Conn, m *gws.Message) {
 	}
 }
 
+func validateClientFlags(addrs string, urls []string, conns, dialRate int) error {
+	if slices.Contains(urls, "") {
+		return fmt.Errorf("invalid -addrs: %q", addrs)
+	}
+	return errors.Join(requirePositive("conns", conns), requirePositive("dial-rate", dialRate))
+}
+
 func runClient(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("client", flag.ExitOnError)
 	addrs := fs.String("addrs", "ws://chatim-wsbench-server:9001/ws", "comma-separated server URLs")
@@ -34,19 +42,22 @@ func runClient(ctx context.Context, args []string) error {
 	dialRate := fs.Int("dial-rate", 2000, "new connections per second")
 	duration := fs.Duration("duration", 0, "exit after this long (0 = until interrupted)")
 	_ = fs.Parse(args)
+	urls := splitList(*addrs)
+	if err := validateClientFlags(*addrs, urls, *total, *dialRate); err != nil {
+		return err
+	}
 	if *duration > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, *duration)
 		defer cancel()
 	}
 
-	urls := strings.Split(*addrs, ",")
 	rec := &receiver{lat: &latency.Recorder{}}
 	var mu sync.Mutex
 	var open []*gws.Conn
 	var failed atomic.Int64
 	go func() {
-		pace := time.NewTicker(time.Second / time.Duration(max(*dialRate, 1)))
+		pace := time.NewTicker(time.Second / time.Duration(*dialRate))
 		defer pace.Stop()
 		for i := 0; i < *total && ctx.Err() == nil; i++ {
 			<-pace.C
@@ -60,7 +71,7 @@ func runClient(ctx context.Context, args []string) error {
 				open = append(open, c)
 				mu.Unlock()
 				c.ReadLoop()
-			}(strings.TrimSpace(urls[i%len(urls)]))
+			}(urls[i%len(urls)])
 		}
 	}()
 
@@ -79,8 +90,7 @@ func runClient(ctx context.Context, args []string) error {
 			mu.Lock()
 			n := len(open)
 			mu.Unlock()
-			fmt.Printf("connected=%d failed=%d broadcast latency (last 5s): %v\n", n, failed.Load(), rec.lat.Summary())
-			rec.lat.Reset()
+			fmt.Printf("connected=%d failed=%d broadcast latency (last 5s): %v\n", n, failed.Load(), rec.lat.SummaryAndReset())
 		}
 	}
 }
