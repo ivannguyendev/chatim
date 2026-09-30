@@ -2,7 +2,7 @@
 
 Hạ tầng chat dùng chung (CPaaS nội bộ) cho nhiều sản phẩm: quản lý room, tin nhắn, tương tác realtime hiệu năng cao; lấy lịch sử cực nhanh ở bất kỳ vị trí nào; phát event mạnh tới các app khác kết nối vào. Multi-tenant về mặt logic.
 
-> Trạng thái: **thiết kế Phase 1 đã chốt, chưa implement**. Bước tiếp theo: PoC các rủi ro R1–R5 trong tài liệu thiết kế.
+> Trạng thái: **M0–M1 (nền tảng + PoC) đã xong trên máy dev**; đang chờ chạy PoC trên môi trường prod-like trước khi làm M2 (core). Kết quả: [docs/poc/README.md](docs/poc/README.md).
 
 ## Kiến trúc
 
@@ -27,7 +27,23 @@ deploy/compose/          # môi trường dev
 docs/                    # nghiên cứu, thiết kế
 ```
 
+## Chạy hạ tầng dev
+
+Chỉ cần Docker; Go chạy trong container `golang:1.26` qua `make`.
+
+    cp .env.example .env        # đổi MONGO_ROOT_PASSWORD (chữ, số, - hoặc _)
+    make infra-up               # mongo rs0 :27117, redis :6380, nats :4223 (monitor :8223)
+    make test                   # go test -race ./... trong container
+    make go ARGS="vet ./..."    # lệnh go bất kỳ
+    make infra-down             # dừng; make infra-reset để xoá cả dữ liệu
+
+Image chạy cho một chương trình Go bất kỳ: `make image TARGET=tools/poc/natsbench` (distroless, không cần Go trên máy chạy).
+
+Công cụ PoC nằm ở `tools/poc/`, chạy bằng `make poc TOOL=<tên> ARGS="…"` — cách chạy và kết quả: [docs/poc/README.md](docs/poc/README.md).
+
 ## Tài liệu
 
 - [Thiết kế Phase 1: core + gateway](docs/designs/260930-chat-core-gateway-design.md)
 - [Nghiên cứu kiến trúc chat mã nguồn mở (tinode, teamgram, chatto, gws)](docs/research/260930-opensource-chat-architecture-research.md)
+- [Kết quả PoC](docs/poc/README.md)
+- [Plan M0–M1](docs/plans/2026-09-30-phase1-foundation-and-poc.md)
