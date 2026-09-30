@@ -11,6 +11,7 @@
 **Tài liệu gốc:** [thiết kế Phase 1](../designs/260930-chat-core-gateway-design.md) · [nghiên cứu](../research/260930-opensource-chat-architecture-research.md)
 
 > Toàn bộ code và lệnh `make` trong plan này đã được chạy thật trong Docker (Go 1.26.8 linux/amd64, 2026-09-30): fmt-check, vet, `test -race`, chạy thử 3 công cụ trong mạng compose, build image runtime. Nếu một bước cho ra kết quả khác "Expected", dừng lại và báo, đừng sửa cho qua.
+> Sau M1, công cụ PoC được mở rộng (thêm `postgresbench`, các package `tools/poc/internal/{roomset,msgtext,seedload,writeload}`, `mongobench -order/-w/-j`) — code trong plan dừng ở trạng thái lúc hoàn thành M1; code hiện tại xem trong repo.
 > Code trong plan là **phiên bản cuối sau review** khi thực thi plan (2026-09-30): một số chi tiết đã được sửa qua các vòng review — lý do nằm trong phần mô tả của từng task và trong `git log` của branch `feat/phase1-foundation-poc`.
 
 ---

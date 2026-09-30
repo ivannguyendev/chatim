@@ -278,7 +278,7 @@ gateway: roomIndex room→{conn}; 1 NATS sub mỗi room (đếm tham chiếu)
 
 ## 13. Rủi ro — cần PoC trước khi code toàn bộ
 
-Kết quả trên máy dev và hướng dẫn chạy prod-like: [../poc/README.md](../poc/README.md). Chưa có quyết định go/no-go: trên dev (Intel Mac + OrbStack), R1b (p99 trang cũ nhất), R2 (p99 chờ ack) và lần ghi cuối của R4 chưa đạt, còn R5 mới kiểm ở mức unit; tất cả cần đo lại trên prod-like.
+Kết quả trên máy dev và hướng dẫn chạy prod-like: [../poc/README.md](../poc/README.md). Chưa có quyết định go/no-go: trên dev (Intel Mac + OrbStack), R1b đạt sau khi sửa công cụ đo; R2 (p99 chờ ack) và lần ghi cuối của R4 chưa đạt, còn R5 mới kiểm ở mức unit; tất cả cần đo lại trên prod-like. So sánh MongoDB với PostgreSQL trên cùng máy: [../poc/260930-mongodb-vs-postgresql.md](../poc/260930-mongodb-vs-postgresql.md) — MongoDB thắng đọc trang ngẫu nhiên khi dữ liệu > RAM và dung lượng, PostgreSQL thắng độ trễ ghi bền; D9 giữ nguyên, chờ đo prod-like.
 
 | # | Rủi ro | Cách kiểm chứng | Nếu không đạt |
 |---|---|---|---|
