@@ -77,6 +77,58 @@ services:
       timeout: 3s
       retries: 10
 
+  postgres:
+    image: postgres:18
+    container_name: chatim-postgres
+    profiles: ["postgres"]
+    restart: unless-stopped
+    shm_size: 1g
+    environment:
+      POSTGRES_USER: ${PG_USER:?set PG_USER in .env}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:?set PG_PASSWORD in .env}
+      POSTGRES_DB: chatim_poc
+    command:
+      - postgres
+      - -c
+      - shared_buffers=${PG_SHARED_BUFFERS:-3GB}
+      - -c
+      - effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE:-6GB}
+      - -c
+      - maintenance_work_mem=512MB
+      - -c
+      - work_mem=16MB
+      - -c
+      - max_connections=200
+      - -c
+      - wal_buffers=64MB
+      - -c
+      - wal_compression=lz4
+      - -c
+      - max_wal_size=8GB
+      - -c
+      - min_wal_size=1GB
+      - -c
+      - checkpoint_timeout=15min
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+      - -c
+      - default_toast_compression=lz4
+      - -c
+      - jit=off
+    ports:
+      - "${PG_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d chatim_poc"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
 networks:
   default:
     name: chatim_default
@@ -85,3 +137,4 @@ volumes:
   mongodb_data:
   redis_data:
   nats_data:
+  postgres_data:

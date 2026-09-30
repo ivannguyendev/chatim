@@ -1,14 +1,9 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"flag"
 	"fmt"
-	"math/rand/v2"
-	"os"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -17,6 +12,9 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/writeconcern"
 
 	"github.com/ivannguyendev/chatim/pkg/ids"
+	"github.com/ivannguyendev/chatim/tools/poc/internal/msgtext"
+	"github.com/ivannguyendev/chatim/tools/poc/internal/roomset"
+	"github.com/ivannguyendev/chatim/tools/poc/internal/seedload"
 )
 
 func runSeed(ctx context.Context, args []string) error {
@@ -27,11 +25,20 @@ func runSeed(ctx context.Context, args []string) error {
 	perRoom := fs.Int("per-room", 1000, "messages per room")
 	workers := fs.Int("workers", 8, "parallel insert workers")
 	batch := fs.Int("batch", 1000, "documents per insertMany")
+	order := fs.String("order", "interleaved", "insert order: interleaved (rooms mixed like real traffic) or room (one room at a time)")
 	reset := fs.Bool("reset", false, "drop the collection first")
-	roomsFile := fs.String("rooms-file", "rooms.txt", "file that receives the seeded room ids")
+	roomsFile := fs.String("rooms-file", "rooms-mongo.txt", "file that receives the seeded room ids")
 	textFile := fs.String("text-file", "", "optional file of real message texts, one per line (needed for credible storage numbers)")
 	_ = fs.Parse(args)
-	texts, err := loadTexts(*textFile)
+	texts, err := msgtext.Load(*textFile)
+	if err != nil {
+		return err
+	}
+	roomIDs := make([]uint64, *rooms)
+	for i := range roomIDs {
+		roomIDs[i] = ids.NewRoomID()
+	}
+	jobs, err := roomset.Jobs(*order, roomIDs, *perRoom, *batch)
 	if err != nil {
 		return err
 	}
@@ -49,59 +56,23 @@ func runSeed(ctx context.Context, args []string) error {
 	if err := createClustered(ctx, coll.Database(), t.coll); err != nil {
 		return err
 	}
-	roomIDs := make([]uint64, *rooms)
-	for i := range roomIDs {
-		roomIDs[i] = ids.NewRoomID()
-	}
-	if err := writeRooms(*roomsFile, roomIDs, *perRoom); err != nil {
+	if err := roomset.Write(*roomsFile, roomIDs, *perRoom); err != nil {
 		return err
 	}
 
 	start := time.Now()
-	var inserted atomic.Int64
-	stopProgress := progress(&inserted, int64(*rooms)*int64(*perRoom))
-	jobs := make(chan uint64)
-	errs := make(chan error, *workers)
-	var wg sync.WaitGroup
-	for w := 0; w < *workers; w++ {
-		wg.Go(func() {
-			rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
-			for room := range jobs {
-				for from := 1; from <= *perRoom; from += *batch {
-					docs := make([]any, 0, *batch)
-					for seq := from; seq < from+*batch && seq <= *perRoom; seq++ {
-						docs = append(docs, newMessage(room, uint64(seq), rng, texts))
-					}
-					if _, err := coll.InsertMany(ctx, docs, options.InsertMany().SetOrdered(false)); err != nil {
-						errs <- fmt.Errorf("insert room %d: %w", room, err)
-						return
-					}
-					inserted.Add(int64(len(docs)))
-				}
-			}
-		})
-	}
-feed:
-	for _, room := range roomIDs {
-		select {
-		case jobs <- room:
-		case err := <-errs:
-			close(jobs)
-			wg.Wait()
-			return err
-		case <-ctx.Done():
-			break feed
+	n, err := seedload.Run(ctx, jobs, *workers, texts, func(ctx context.Context, rows []seedload.Row) error {
+		docs := make([]any, len(rows))
+		for i, r := range rows {
+			docs[i] = newMessage(r.Room, r.Seq, r.From, r.Text)
 		}
-	}
-	close(jobs)
-	wg.Wait()
-	stopProgress()
-	select {
-	case err := <-errs:
+		_, err := coll.InsertMany(ctx, docs, options.InsertMany().SetOrdered(false))
 		return err
-	default:
+	})
+	if err != nil {
+		return err
 	}
-	fmt.Printf("seeded %d messages in %v\n", inserted.Load(), time.Since(start).Round(time.Second))
+	fmt.Printf("seeded %d messages (order=%s) in %v\n", n, *order, time.Since(start).Round(time.Second))
 	return printStorage(ctx, coll)
 }
 
@@ -114,36 +85,4 @@ func createClustered(ctx context.Context, db *mongo.Database, name string) error
 		SetClusteredIndex(bson.D{{Key: "key", Value: bson.D{{Key: "_id", Value: 1}}}, {Key: "unique", Value: true}}).
 		SetStorageEngine(bson.D{{Key: "wiredTiger", Value: bson.D{{Key: "configString", Value: "block_compressor=zstd"}}}})
 	return db.CreateCollection(ctx, name, opts)
-}
-
-func writeRooms(path string, roomIDs []uint64, perRoom int) error {
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	w := bufio.NewWriter(f)
-	for _, id := range roomIDs {
-		fmt.Fprintf(w, "%d %d\n", id, perRoom)
-	}
-	if err := w.Flush(); err != nil {
-		_ = f.Close()
-		return err
-	}
-	return f.Close()
-}
-
-func progress(done *atomic.Int64, total int64) (stop func()) {
-	t := time.NewTicker(5 * time.Second)
-	quit := make(chan struct{})
-	go func() {
-		for {
-			select {
-			case <-t.C:
-				fmt.Printf("  %d / %d messages\n", done.Load(), total)
-			case <-quit:
-				return
-			}
-		}
-	}()
-	return func() { t.Stop(); close(quit) }
 }

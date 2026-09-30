@@ -3,12 +3,9 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"os"
+	"strings"
 	"time"
-
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
-	"go.mongodb.org/mongo-driver/v2/mongo/writeconcern"
 
 	"github.com/ivannguyendev/chatim/pkg/ids"
 	"github.com/ivannguyendev/chatim/tools/poc/internal/writeload"
@@ -25,13 +22,8 @@ func runWrite(ctx context.Context, args []string) error {
 	fs.DurationVar(&cfg.Window, "window", 2*time.Millisecond, "flush window")
 	fs.IntVar(&cfg.MaxBatch, "max-batch", 256, "flush when a batch reaches this size")
 	fs.IntVar(&cfg.Flushers, "flushers", 6, "parallel flushers (≈ cores × flush workers)")
-	w := fs.String("w", "majority", "write concern: majority or 1")
-	journal := fs.Bool("j", false, "also wait for the on-disk journal")
+	syncCommit := fs.String("sync", "on", "synchronous_commit: on (wait for WAL flush) or off")
 	_ = fs.Parse(args)
-	wc, err := writeConcern(*w, *journal)
-	if err != nil {
-		return err
-	}
 	cfg.Rooms = make([]uint64, max(*rooms, 0))
 	for i := range cfg.Rooms {
 		cfg.Rooms[i] = ids.NewRoomID()
@@ -40,38 +32,28 @@ func runWrite(ctx context.Context, args []string) error {
 		return err
 	}
 
-	client, coll, err := t.connect(ctx, wc)
+	pool, err := t.connect(ctx, *syncCommit, cfg.Flushers+1)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = client.Disconnect(context.Background()) }()
-	if err := createClustered(ctx, coll.Database(), t.coll); err != nil {
+	defer pool.Close()
+	if err := createTable(ctx, pool, t.table, 0); err != nil {
 		return err
 	}
+	insert := "INSERT INTO " + t.ident() + " (" + strings.Join(columns, ", ") + ") " +
+		"SELECT * FROM unnest($1::bigint[], $2::bigint[], $3::bigint[], $4::text[], $5::bigint[], $6::smallint[], $7::text[], $8::timestamptz[]) " +
+		"ON CONFLICT DO NOTHING"
 	res := writeload.Run(ctx, cfg, func(ctx context.Context, batch []writeload.Msg) error {
-		docs := make([]any, len(batch))
+		n := len(batch)
+		roomIDs, threads, seqs, froms := make([]int64, n), make([]int64, n), make([]int64, n), make([]string, n)
+		pts, kinds, bodies, stamps := make([]int64, n), make([]int16, n), make([]string, n), make([]time.Time, n)
+		now := time.Now()
 		for i, m := range batch {
-			docs[i] = newMessage(m.Room, m.Seq, m.From, m.Text)
+			roomIDs[i], seqs[i], froms[i], pts[i], kinds[i], bodies[i], stamps[i] = int64(m.Room), int64(m.Seq), m.From, int64(m.Seq), 1, m.Text, now
 		}
-		_, err := coll.InsertMany(ctx, docs, options.InsertMany().SetOrdered(false))
+		_, err := pool.Exec(ctx, insert, roomIDs, threads, seqs, froms, pts, kinds, bodies, stamps)
 		return err
 	})
-	res.Report(os.Stdout, fmt.Sprintf("w=%s j=%t", *w, *journal), cfg.Rate)
+	res.Report(os.Stdout, "sync="+*syncCommit, cfg.Rate)
 	return nil
-}
-
-func writeConcern(w string, journal bool) (*writeconcern.WriteConcern, error) {
-	var wc *writeconcern.WriteConcern
-	switch w {
-	case "majority":
-		wc = writeconcern.Majority()
-	case "1":
-		wc = writeconcern.W1()
-	default:
-		return nil, fmt.Errorf("invalid -w %q: use majority or 1", w)
-	}
-	if journal {
-		wc.Journal = &journal
-	}
-	return wc, nil
 }
