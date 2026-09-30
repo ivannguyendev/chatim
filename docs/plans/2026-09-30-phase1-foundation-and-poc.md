@@ -165,7 +165,7 @@ git commit -m "chore: init go module with docker-based go tooling"
 
 ### Task 2: Hạ tầng dev (MongoDB rs0, Redis, NATS)
 
-Mongo theo đúng quy ước team: replica set 1 node `rs0`, keyfile tự sinh trong volume ở lần khởi động đầu, container `mongodb-init` chạy `rs.initiate` một lần. Credential lấy từ `.env`. Port host mặc định lệch chuẩn (27117/6380/4223/8223) để không đụng các stack khác; công cụ PoC không dùng port host mà gọi thẳng tên dịch vụ trong mạng `chatim_default`. Tên mạng được ghim cứng trong compose, để không phụ thuộc tên thư mục chứa repo hay `COMPOSE_PROJECT_NAME`.
+Mongo theo đúng quy ước team: replica set 1 node `rs0`, keyfile tự sinh trong volume ở lần khởi động đầu, container `mongodb-init` chạy `rs.initiate` một lần. Với volume mới, entrypoint của image mongo chạy một `mongod` tạm (không `--replSet`, chỉ nghe localhost) để tạo user rồi mới khởi động lại: healthcheck có thể qua trên `mongod` tạm đó, nên `mongodb-init` thử lại tối đa 30 lần (mỗi lần cách 2s) và script chờ chỉ chấp nhận khi `setName` là `rs0` và node là primary. Credential lấy từ `.env`. Port host mặc định lệch chuẩn (27117/6380/4223/8223) để không đụng các stack khác; công cụ PoC không dùng port host mà gọi thẳng tên dịch vụ trong mạng `chatim_default`. Tên mạng được ghim cứng trong compose, để không phụ thuộc tên thư mục chứa repo hay `COMPOSE_PROJECT_NAME`.
 
 **Files:**
 - Create: `deploy/compose/docker-compose.yml`, `scripts/wait-mongo-primary.sh`
@@ -216,9 +216,11 @@ services:
     entrypoint: ["bash", "-c"]
     command:
       - >-
+        for i in $$(seq 1 30); do
         mongosh --host chatim-mongodb -u "$$MONGO_USER" -p "$$MONGO_PASSWORD" --authenticationDatabase admin --quiet
         --eval 'try { rs.status(); print("replica set already initialized") }
         catch (e) { rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "chatim-mongodb:27017" }] }); print("replica set initialized") }'
+        && exit 0; sleep 2; done; exit 1
     restart: "no"
 
   redis:
@@ -272,7 +274,7 @@ set -euo pipefail
 source "$(dirname "$0")/../.env"
 for _ in $(seq 1 90); do
   if docker exec chatim-mongodb mongosh --quiet -u "$MONGO_ROOT_USER" -p "$MONGO_ROOT_PASSWORD" \
-    --authenticationDatabase admin --eval 'db.hello().isWritablePrimary' 2>/dev/null | grep -q true; then
+    --authenticationDatabase admin --eval 'const h = db.hello(); print(h.setName === "rs0" && h.isWritablePrimary)' 2>/dev/null | grep -q true; then
     echo "mongodb primary ready"
     exit 0
   fi
