@@ -1598,7 +1598,7 @@ git commit -m "feat(core): soft slot ownership on redis with heartbeat and lease
 Ba lệnh con:
 - `seed`: tạo collection clustered trên `_id` + nén `zstd`, nạp tin (ghi `w:1` cho nhanh), ghi danh sách room vào `rooms.txt`, in dung lượng và dự phóng cho 5 và 20 tỷ tin. `-text-file` lấy nội dung tin thật (mỗi dòng một tin); không có thì dùng văn bản giả, nén tốt bất thường nên chỉ để kiểm tra công cụ.
 - `read`: đo trang `oldest` / `random` / `latest` của timeline chính, in plan để chắc chắn là `CLUSTERED_IXSCAN`. Trang `random` kết thúc ngay trước một seq ngẫu nhiên trong `2..per-room+1` nên không bao giờ rỗng. Lỗi truy vấn được đếm vào `errors=` (trừ lỗi do hết thời gian chạy), không bị bỏ qua trong im lặng.
-- `write`: mô phỏng flusher của core (cửa sổ 2ms hoặc 256 doc, `insertMany(ordered:false)` với `w:majority`, nhiều room trong một batch). Bộ sinh giữ seq liên tục theo từng room như actor. Dùng room mới sinh nên không đụng dữ liệu đã seed. `arrival->commit` là thời gian người gửi chờ ack. Batch `insertMany` lỗi **không** được tính vào throughput hay độ trễ; `errors=` đếm số document ghi lỗi.
+- `write`: mô phỏng flusher của core (cửa sổ 2ms hoặc 256 doc, `insertMany(ordered:false)` với `w:majority`, nhiều room trong một batch). Bộ sinh giữ seq liên tục theo từng room như actor. Dùng room mới sinh nên không đụng dữ liệu đã seed. `arrival->commit` là thời gian người gửi chờ ack. Batch `insertMany` lỗi **không** được tính vào throughput hay độ trễ; `errors=` đếm số document ghi lỗi. Cờ `-w majority|1` và `-j` cho phép so sánh các mức write concern (mặc định `majority`).
 
 `MONGO_URI` do `make poc` truyền vào: `mongodb://<user>:<pass>@chatim-mongodb:27017/?replicaSet=rs0&authSource=admin`.
 
@@ -2177,9 +2177,15 @@ func runWrite(ctx context.Context, args []string) error {
 	window := fs.Duration("window", 2*time.Millisecond, "flush window")
 	maxBatch := fs.Int("max-batch", 256, "flush when a batch reaches this size")
 	flushers := fs.Int("flushers", 6, "parallel flushers (≈ cores × flush workers)")
+	w := fs.String("w", "majority", "write concern: majority or 1")
+	journal := fs.Bool("j", false, "also wait for the on-disk journal")
 	_ = fs.Parse(args)
+	wc, err := writeConcern(*w, *journal)
+	if err != nil {
+		return err
+	}
 
-	client, coll, err := t.connect(ctx, writeconcern.Majority())
+	client, coll, err := t.connect(ctx, wc)
 	if err != nil {
 		return err
 	}
@@ -2202,11 +2208,11 @@ func runWrite(ctx context.Context, args []string) error {
 	}
 	wg.Wait()
 	elapsed := time.Since(start)
-	fmt.Printf("target=%d/s achieved=%.0f/s docs=%d batches=%d avg-batch=%.1f errors=%d\n",
-		*rate, float64(st.docs.Load())/elapsed.Seconds(), st.docs.Load(), st.batches.Load(),
+	fmt.Printf("w=%s j=%t target=%d/s achieved=%.0f/s docs=%d batches=%d avg-batch=%.1f errors=%d\n",
+		*w, *journal, *rate, float64(st.docs.Load())/elapsed.Seconds(), st.docs.Load(), st.batches.Load(),
 		float64(st.docs.Load())/float64(max(st.batches.Load(), 1)), st.errored.Load())
 	fmt.Printf("arrival->commit (what a sender waits for ack): %v\n", st.msgLat.Summary())
-	fmt.Printf("insertMany w:majority round trip:              %v\n", st.insLat.Summary())
+	fmt.Printf("insertMany round trip:                         %v\n", st.insLat.Summary())
 	return nil
 }
 
@@ -2282,6 +2288,22 @@ func flushLoop(ctx context.Context, coll *mongo.Collection, in <-chan pending, w
 			return
 		}
 	}
+}
+
+func writeConcern(w string, journal bool) (*writeconcern.WriteConcern, error) {
+	var wc *writeconcern.WriteConcern
+	switch w {
+	case "majority":
+		wc = writeconcern.Majority()
+	case "1":
+		wc = writeconcern.W1()
+	default:
+		return nil, fmt.Errorf("invalid -w %q: use majority or 1", w)
+	}
+	if journal {
+		wc.Journal = &journal
+	}
+	return wc, nil
 }
 ```
 

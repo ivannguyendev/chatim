@@ -22,6 +22,21 @@
 | R4 | gws 50K connection | ≤ 40KB/conn; lần ghi cuối của 1 broadcast ≤ 100ms | Biến thể dev: server và client là 2 container trên `chatim_default` trong cùng VM, 4 port, `nofile=200000`, `-dial-rate 2000`, client `-duration 90s`, server `-every 5s`. Client: `connected=50000 failed=0`. RAM server (idle, trước broadcast): ≤ 10.3KB/conn (đỉnh ở 44756 conn; 9.2–10.1KB ở 50000 conn, heap 342→381MB, stack 105→114MB, sys 565→574MB). `last write done` ở 50000 conn ổn định (10 lần): 154.62581ms – 244.613828ms (lần đầu ngay sau khi dial xong: 461.139046ms), `write errors=0`, không có dòng `overlap`. Đang dial: 44756 conn → 861.286222ms, 48153 conn → 3.786643582s → RAM **đạt**, lần ghi cuối **không đạt trên dev** | Chờ: 2 host Linux, `--network host` | Chưa kết luận |
 | R5 | Soft-ownership khi Redis mất dữ liệu | `go test -race -count=20 ./apps/core/internal/slot/` pass | `make -s fmt-check`, `make -s vet` sạch; `ok github.com/ivannguyendev/chatim/apps/core/internal/slot 233.328s`; `make -s test`: mọi package có test đều `ok` → **đạt ở mức unit**: miniredis giả lập Redis mất dữ liệu (`FlushAll`) và core chết, chạy `-race -count=20` | Chờ: test chaos mục 13 của thiết kế (kill Redis master khi đang tải) chưa chạy | Đạt ở mức unit; còn test chaos |
 
+### R2: so sánh write concern (dev, 2026-09-30)
+
+Cùng điều kiện R2 (`write -rate 10000 -duration 60s -rooms 5000 -flushers 6`), đổi `-w` / `-j`:
+
+| Chế độ | Chờ ack p50 | Chờ ack p99 | `insertMany` p50 | `insertMany` p99 | max |
+|---|---|---|---|---|---|
+| `w:majority` | 8.431187ms | 60.946999ms | 6.054299ms | 25.872161ms | 291.900378ms |
+| `w:1` | 3.17691ms | 10.083733ms | 955.086µs | 4.079057ms | 110.504033ms |
+| `w:1`, `j:true` | 9.787944ms | 42.291314ms | 7.227682ms | 27.88114ms | 275.213302ms |
+
+- Trên replica set 1 node, `w:majority` gần bằng `w:1` + `j:true`: phần tốn thời gian là chờ ghi journal xuống đĩa (fsync của đĩa ảo OrbStack), không phải replication.
+- `w:1` đạt tiêu chí (p99 10.08ms ≤ 30ms) nhưng **không bền**: server ack khi mới ghi vào bộ nhớ, journal flush sau tối đa khoảng 100ms; mongod crash hoặc primary failover có thể làm mất tin đã ack. Điều này trái với giả định A2 của thiết kế (đã ack = đã lưu `w:majority`), nên không dùng `w:1` cho tin nhắn.
+- `w:1` phù hợp cho các lần ghi có thể dựng lại hoặc idempotent: cập nhật chậm `rooms.last_seq` / `read_seq` bằng `$max` (thiết kế mục 5.2–5.3).
+- Lần chạy `w:majority` này có p99 60.95ms, lần R2 trước là 213.52ms: độ dao động giữa các lần chạy trên dev lớn. Cần đo `w:majority` trên rs 3 member với đĩa NVMe thật trước khi kết luận.
+
 ## Chạy lại R1b
 
 Database `chatim_poc` đã được xoá sau lần dev, nên phải seed lại rồi chạy cả 3 mode trong cùng một điều kiện cache:
