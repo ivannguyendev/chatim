@@ -11,6 +11,7 @@
 **Tài liệu gốc:** [thiết kế Phase 1](../designs/260930-chat-core-gateway-design.md) · [nghiên cứu](../research/260930-opensource-chat-architecture-research.md)
 
 > Toàn bộ code và lệnh `make` trong plan này đã được chạy thật trong Docker (Go 1.26.8 linux/amd64, 2026-09-30): fmt-check, vet, `test -race`, chạy thử 3 công cụ trong mạng compose, build image runtime. Nếu một bước cho ra kết quả khác "Expected", dừng lại và báo, đừng sửa cho qua.
+> Code trong plan là **phiên bản cuối sau review** khi thực thi plan (2026-09-30): một số chi tiết đã được sửa qua các vòng review — lý do nằm trong phần mô tả của từng task và trong `git log` của branch `feat/phase1-foundation-poc`.
 
 ---
 
@@ -131,7 +132,12 @@ NATS_MON_PORT=8223
 /bin/
 rooms*.txt
 real-texts*.txt
+
+.env.*
+!.env.example
 ```
+
+`.env.*` chặn mọi biến thể như `.env.local`; riêng `.env.example` vẫn được commit.
 
 **Step 4: Khởi tạo module (trong container)**
 
@@ -807,7 +813,7 @@ git commit -m "feat(slotmap): room-to-slot mapping with rendezvous hashing"
 
 ### Task 6: `tools/poc/internal/latency` — đo percentile
 
-`Recorder` dùng được ngay ở giá trị zero và an toàn khi nhiều goroutine cùng ghi. Percentile tính theo nearest-rank: phần tử thứ `ceil(p·n/100)` sau khi sắp xếp.
+`Recorder` dùng được ngay ở giá trị zero và an toàn khi nhiều goroutine cùng ghi. Percentile tính theo nearest-rank: phần tử thứ `ceil(p·n/100)` sau khi sắp xếp. `SummaryAndReset` lấy mẫu và xoá trong **một** lần khoá, để mẫu đến giữa hai bước không bị mất (dùng cho báo cáo định kỳ của `wsbench`).
 
 **Files:**
 - Create: `tools/poc/internal/latency/latency.go`
@@ -848,9 +854,13 @@ func TestSummaryEdgeCases(t *testing.T) {
 	if s := r.Summary(); s.P50 != 7*time.Millisecond || s.P99 != 7*time.Millisecond || s.Count != 1 {
 		t.Fatalf("single-sample Summary() = %+v", s)
 	}
-	r.Reset()
+	r.Add(3 * time.Millisecond)
+	r.Add(9 * time.Millisecond)
+	if s := r.SummaryAndReset(); s.Count != 3 {
+		t.Fatalf("SummaryAndReset() = %+v, want Count 3", s)
+	}
 	if r.Summary().Count != 0 {
-		t.Fatal("Reset must drop samples")
+		t.Fatal("SummaryAndReset must drop samples")
 	}
 }
 
@@ -906,16 +916,22 @@ func (r *Recorder) Add(d time.Duration) {
 	r.mu.Unlock()
 }
 
-func (r *Recorder) Reset() {
-	r.mu.Lock()
-	r.samples = r.samples[:0]
-	r.mu.Unlock()
-}
-
 func (r *Recorder) Summary() Summary {
 	r.mu.Lock()
 	s := slices.Clone(r.samples)
 	r.mu.Unlock()
+	return summarize(s)
+}
+
+func (r *Recorder) SummaryAndReset() Summary {
+	r.mu.Lock()
+	s := slices.Clone(r.samples)
+	r.samples = r.samples[:0]
+	r.mu.Unlock()
+	return summarize(s)
+}
+
+func summarize(s []time.Duration) Summary {
 	if len(s) == 0 {
 		return Summary{}
 	}
@@ -955,15 +971,17 @@ Hành vi cần đạt:
 - Mỗi `Step`: heartbeat (`chatim:core:<id>`, TTL 5s) → quét core còn sống → gia hạn lease (`chatim:slot:<n>`, TTL 10s) → nhận hoặc nhả slot để tiến về `ceil(1024 / số core sống)`. Nhận slot theo thứ tự `Score` giảm dần để các core ít tranh nhau; nhả những slot có `Score` thấp nhất.
 - Core chết (hết heartbeat) → các core còn lại nhận slot của nó bằng CAS (`claimScript` chỉ ghi khi chủ hiện tại vẫn là chủ đã thấy; chuỗi rỗng = slot trống).
 - Redis mất hết dữ liệu → hội tụ lại; hai core chỉ có thể cùng tưởng giữ một slot cho tới khi mọi core chạy thêm một tick.
-- `Owns` chỉ trả `true` khi lease còn mới hơn `LeaseTTL − Tick`.
+- `Owns` chỉ trả `true` khi lease còn mới hơn `min(LeaseTTL, HeartbeatTTL) − Tick`, tính từ **đầu** `Step` (thời điểm lấy trước lệnh ghi heartbeat). Lý do: core khác được phép nhận slot ngay khi heartbeat (5s) hết hạn, không phải đợi lease (10s); nếu mốc cắt dựa trên lease hoặc lấy sau round trip Redis, một core mất kết nối Redis sẽ tưởng mình còn giữ slot thêm khoảng 4s sau khi slot đã bị nhận.
+- `New` từ chối cấu hình có `LeaseTTL` hoặc `HeartbeatTTL` không lớn hơn `2×Tick`.
+- Khi claim/release thành công một phần rồi lỗi (pipeline đứt giữa chừng), các slot đã nhận vẫn được ghi nhận và `Step` vẫn báo `chatim:slots:changed`.
 - `ReleaseAll` (tắt máy): gỡ slot khỏi định tuyến trước, gọi `BeforeRelease` cho từng slot để drain, nhả lease, xoá heartbeat, báo `chatim:slots:changed`.
 - Các script Lua chạy trên **một Redis primary (Sentinel), không chạy trên Redis Cluster**, vì `renewScript` chạm nhiều key trong một lần gọi.
 
-Test dùng miniredis để điều khiển thời gian (`FastForward`) và giả lập Redis mất dữ liệu (`FlushAll`) — chính là tình huống R5. `TestReleaseAllHandsSlotsBack` đặt lại bộ đếm drain ngay trước `ReleaseAll`, vì các slot core-a nhả lúc core-b tham gia cũng gọi hook.
+Test dùng miniredis để điều khiển thời gian (`FastForward`) và giả lập Redis mất dữ liệu (`FlushAll`) — chính là tình huống R5. `TestReleaseAllHandsSlotsBack` đặt lại bộ đếm drain ngay trước `ReleaseAll`, vì các slot core-a nhả lúc core-b tham gia cũng gọi hook, và kiểm tra lease đã bị xoá thật trong Redis. `ownership_rules_test.go` kiểm tra mốc cắt của `Owns` bằng đồng hồ inject (`m.now`), dùng một `redis.Hook` làm đồng hồ nhảy 2s mỗi lệnh để giả lập Redis chậm, và kiểm tra slot bị nhả là những slot có `Score` thấp nhất.
 
 **Files:**
 - Create: `apps/core/internal/slot/manager.go`, `apps/core/internal/slot/leases.go`
-- Test: `apps/core/internal/slot/manager_test.go`
+- Test: `apps/core/internal/slot/manager_test.go`, `apps/core/internal/slot/ownership_rules_test.go`
 
 **Step 1: Thêm dependency**
 
@@ -1053,13 +1071,18 @@ func TestReleaseAllHandsSlotsBack(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		stepAll(t, a, b)
 	}
-	held := len(a.Owned())
+	held := a.Owned()
 	drained = 0
 	if err := a.ReleaseAll(context.Background()); err != nil {
 		t.Fatalf("ReleaseAll: %v", err)
 	}
-	if drained != held || len(a.Owned()) != 0 {
-		t.Fatalf("drained %d of %d slots, still owns %d", drained, held, len(a.Owned()))
+	if drained != len(held) || len(a.Owned()) != 0 {
+		t.Fatalf("drained %d of %d slots, still owns %d", drained, len(held), len(a.Owned()))
+	}
+	for _, s := range held {
+		if mr.Exists(slotmap.SlotKey(s)) {
+			t.Fatalf("slot %d lease still in redis after ReleaseAll", s)
+		}
 	}
 	if mr.Exists(slotmap.CoreKey("core-a")) {
 		t.Fatal("ReleaseAll must remove the heartbeat")
@@ -1087,6 +1110,7 @@ func TestNewValidatesConfig(t *testing.T) {
 		{CoreID: ""},
 		{CoreID: "core*"},
 		{CoreID: "core-a", Tick: time.Second, LeaseTTL: 2 * time.Second},
+		{CoreID: "core-a", Tick: time.Second, HeartbeatTTL: 2 * time.Second, LeaseTTL: 10 * time.Second},
 	}
 	for _, cfg := range bad {
 		if _, err := New(rdb, cfg, nil); err == nil {
@@ -1156,6 +1180,102 @@ func assertShares(t *testing.T, lo, hi int, ms ...*Manager) {
 }
 ```
 
+`apps/core/internal/slot/ownership_rules_test.go`:
+
+```go
+package slot
+
+import (
+	"context"
+	"slices"
+	"testing"
+	"time"
+
+	"github.com/redis/go-redis/v9"
+
+	"github.com/ivannguyendev/chatim/pkg/slotmap"
+)
+
+func TestOwnsExpiresBeforeOtherCoresMayTakeOver(t *testing.T) {
+	_, rdb := newRedis(t)
+	a := newManager(t, rdb, "core-a", nil)
+	t0 := time.Unix(1_700_000_000, 0)
+	a.now = func() time.Time { return t0 }
+	stepAll(t, a)
+	cutoff := t0.Add(a.cfg.HeartbeatTTL - a.cfg.Tick)
+	a.now = func() time.Time { return cutoff.Add(-100 * time.Millisecond) }
+	if !a.Owns(0) {
+		t.Fatal("Owns(0) = false while no other core may take the slot over yet")
+	}
+	a.now = func() time.Time { return cutoff.Add(100 * time.Millisecond) }
+	if a.Owns(0) {
+		t.Fatal("Owns(0) = true after other cores may already have taken the slot over")
+	}
+}
+
+func TestOwnershipStampedAtStepStart(t *testing.T) {
+	_, rdb := newRedis(t)
+	a := newManager(t, rdb, "core-a", nil)
+	t0 := time.Unix(1_700_000_000, 0)
+	clock := t0
+	a.now = func() time.Time { return clock }
+	rdb.AddHook(slowRoundTrips{clock: &clock, delay: 2 * time.Second})
+	stepAll(t, a)
+	clock = t0.Add(a.cfg.HeartbeatTTL - a.cfg.Tick + 100*time.Millisecond)
+	if a.Owns(0) {
+		t.Fatal("Owns(0) = true past the heartbeat window measured from step start")
+	}
+}
+
+type slowRoundTrips struct {
+	clock *time.Time
+	delay time.Duration
+}
+
+func (h slowRoundTrips) DialHook(next redis.DialHook) redis.DialHook { return next }
+
+func (h slowRoundTrips) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
+	return func(ctx context.Context, cmd redis.Cmder) error {
+		*h.clock = h.clock.Add(h.delay)
+		return next(ctx, cmd)
+	}
+}
+
+func (h slowRoundTrips) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
+	return func(ctx context.Context, cmds []redis.Cmder) error {
+		*h.clock = h.clock.Add(h.delay)
+		return next(ctx, cmds)
+	}
+}
+
+func TestReleaseDropsLowestScoreSlots(t *testing.T) {
+	_, rdb := newRedis(t)
+	a, b := newManager(t, rdb, "core-a", nil), newManager(t, rdb, "core-b", nil)
+	stepAll(t, a)
+	stepAll(t, b)
+	if n := len(b.Owned()); n != 0 {
+		t.Fatalf("core-b claimed %d slots held by a live core", n)
+	}
+	stepAll(t, a)
+	kept := a.Owned()
+	if len(kept) != slotmap.Count/2 {
+		t.Fatalf("core-a owns %d slots, want %d", len(kept), slotmap.Count/2)
+	}
+	var keptScores, releasedScores []uint64
+	for s := uint16(0); s < slotmap.Count; s++ {
+		score := slotmap.Score(s, "core-a")
+		if slices.Contains(kept, s) {
+			keptScores = append(keptScores, score)
+		} else {
+			releasedScores = append(releasedScores, score)
+		}
+	}
+	if lo, hi := slices.Min(keptScores), slices.Max(releasedScores); lo <= hi {
+		t.Fatalf("lowest kept score %d <= highest released score %d", lo, hi)
+	}
+}
+```
+
 **Step 3: Chạy test, phải FAIL**
 
 Run: `make -s go ARGS="test ./apps/core/internal/slot/"`
@@ -1200,6 +1320,7 @@ type Manager struct {
 	log   *slog.Logger
 	mu    sync.RWMutex
 	owned map[uint16]time.Time
+	now   func() time.Time
 }
 
 func New(rdb redis.UniversalClient, cfg Config, log *slog.Logger) (*Manager, error) {
@@ -1209,20 +1330,20 @@ func New(rdb redis.UniversalClient, cfg Config, log *slog.Logger) (*Manager, err
 	cfg.Tick = cmp.Or(cfg.Tick, time.Second)
 	cfg.HeartbeatTTL = cmp.Or(cfg.HeartbeatTTL, 5*time.Second)
 	cfg.LeaseTTL = cmp.Or(cfg.LeaseTTL, 10*time.Second)
-	if cfg.LeaseTTL <= 2*cfg.Tick || cfg.HeartbeatTTL <= cfg.Tick {
-		return nil, errors.New("slot: LeaseTTL must exceed 2×Tick and HeartbeatTTL must exceed Tick")
+	if cfg.LeaseTTL <= 2*cfg.Tick || cfg.HeartbeatTTL <= 2*cfg.Tick {
+		return nil, errors.New("slot: LeaseTTL and HeartbeatTTL must each exceed 2×Tick")
 	}
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Manager{cfg: cfg, rdb: rdb, log: log.With("core", cfg.CoreID), owned: map[uint16]time.Time{}}, nil
+	return &Manager{cfg: cfg, rdb: rdb, log: log.With("core", cfg.CoreID), owned: map[uint16]time.Time{}, now: time.Now}, nil
 }
 
 func (m *Manager) Owns(slot uint16) bool {
 	m.mu.RLock()
 	at, ok := m.owned[slot]
 	m.mu.RUnlock()
-	return ok && time.Since(at) < m.cfg.LeaseTTL-m.cfg.Tick
+	return ok && m.now().Sub(at) < min(m.cfg.LeaseTTL, m.cfg.HeartbeatTTL)-m.cfg.Tick
 }
 
 func (m *Manager) Owned() []uint16 {
@@ -1254,6 +1375,7 @@ func (m *Manager) Run(ctx context.Context) error {
 }
 
 func (m *Manager) Step(ctx context.Context) error {
+	stamp := m.now()
 	if err := m.rdb.Set(ctx, slotmap.CoreKey(m.cfg.CoreID), m.cfg.Addr, m.cfg.HeartbeatTTL).Err(); err != nil {
 		return fmt.Errorf("heartbeat: %w", err)
 	}
@@ -1261,7 +1383,7 @@ func (m *Manager) Step(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	lost, err := m.renew(ctx)
+	lost, err := m.renew(ctx, stamp)
 	if err != nil {
 		return err
 	}
@@ -1271,15 +1393,12 @@ func (m *Manager) Step(ctx context.Context) error {
 	case n > target:
 		moved, err = true, m.release(ctx, n-target)
 	case n < target:
-		moved, err = m.claim(ctx, alive, target-n)
-	}
-	if err != nil {
-		return err
+		moved, err = m.claim(ctx, alive, target-n, stamp)
 	}
 	if lost || moved {
-		return m.rdb.Publish(ctx, slotmap.ChangedChannel, m.cfg.CoreID).Err()
+		err = errors.Join(err, m.rdb.Publish(ctx, slotmap.ChangedChannel, m.cfg.CoreID).Err())
 	}
-	return nil
+	return err
 }
 ```
 
@@ -1342,7 +1461,7 @@ func (m *Manager) aliveCores(ctx context.Context) (map[string]bool, error) {
 	return alive, nil
 }
 
-func (m *Manager) renew(ctx context.Context) (lost bool, err error) {
+func (m *Manager) renew(ctx context.Context, stamp time.Time) (lost bool, err error) {
 	slots := m.Owned()
 	if len(slots) == 0 {
 		return false, nil
@@ -1355,12 +1474,11 @@ func (m *Manager) renew(ctx context.Context) (lost bool, err error) {
 	if err != nil {
 		return false, fmt.Errorf("renew: %w", err)
 	}
-	now := time.Now()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for i, s := range slots {
 		if kept[i] == 1 {
-			m.owned[s] = now
+			m.owned[s] = stamp
 			continue
 		}
 		delete(m.owned, s)
@@ -1369,7 +1487,7 @@ func (m *Manager) renew(ctx context.Context) (lost bool, err error) {
 	return lost, nil
 }
 
-func (m *Manager) claim(ctx context.Context, alive map[string]bool, need int) (bool, error) {
+func (m *Manager) claim(ctx context.Context, alive map[string]bool, need int, stamp time.Time) (bool, error) {
 	keys := make([]string, slotmap.Count)
 	for s := range keys {
 		keys[s] = slotmap.SlotKey(uint16(s))
@@ -1401,18 +1519,18 @@ func (m *Manager) claim(ctx context.Context, alive map[string]bool, need int) (b
 	for i, c := range cands {
 		cmds[i] = pipe.Eval(ctx, claimScript, []string{keys[c.slot]}, c.expect, m.cfg.CoreID, m.cfg.LeaseTTL.Milliseconds())
 	}
-	if _, err := pipe.Exec(ctx); err != nil {
-		return false, fmt.Errorf("claim: %w", err)
-	}
-	now := time.Now()
+	_, execErr := pipe.Exec(ctx)
 	claimed := false
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for i, c := range cands {
-		if n, _ := cmds[i].Int64(); n == 1 {
-			m.owned[c.slot] = now
+		if n, err := cmds[i].Int64(); err == nil && n == 1 {
+			m.owned[c.slot] = stamp
 			claimed = true
 		}
+	}
+	if execErr != nil {
+		return claimed, fmt.Errorf("claim: %w", execErr)
 	}
 	return claimed, nil
 }
@@ -1462,7 +1580,7 @@ func (m *Manager) releaseSlots(ctx context.Context, slots []uint16) error {
 **Step 6: Chạy test, phải PASS (nhiều lần, có `-race`)**
 
 Run: `make -s tidy && make -s go ARGS="test -race -count=5 ./apps/core/internal/slot/"`
-Expected: `ok  	github.com/ivannguyendev/chatim/apps/core/internal/slot` (khoảng 2–3s mỗi lượt)
+Expected: `ok  	github.com/ivannguyendev/chatim/apps/core/internal/slot` (khoảng 10s mỗi lượt với `-race` trên máy dev Intel; mỗi lần claim gửi tới 1024 lệnh Lua qua miniredis)
 
 **Step 7: Commit**
 
@@ -1477,8 +1595,8 @@ git commit -m "feat(core): soft slot ownership on redis with heartbeat and lease
 
 Ba lệnh con:
 - `seed`: tạo collection clustered trên `_id` + nén `zstd`, nạp tin (ghi `w:1` cho nhanh), ghi danh sách room vào `rooms.txt`, in dung lượng và dự phóng cho 5 và 20 tỷ tin. `-text-file` lấy nội dung tin thật (mỗi dòng một tin); không có thì dùng văn bản giả, nén tốt bất thường nên chỉ để kiểm tra công cụ.
-- `read`: đo trang `oldest` / `random` / `latest` của timeline chính, in plan để chắc chắn là `CLUSTERED_IXSCAN`. Trang `random` kết thúc ngay trước một seq ngẫu nhiên trong `2..per-room+1` nên không bao giờ rỗng.
-- `write`: mô phỏng flusher của core (cửa sổ 2ms hoặc 256 doc, `insertMany(ordered:false)` với `w:majority`, nhiều room trong một batch). Bộ sinh giữ seq liên tục theo từng room như actor. Dùng room mới sinh nên không đụng dữ liệu đã seed. `arrival->commit` là thời gian người gửi chờ ack.
+- `read`: đo trang `oldest` / `random` / `latest` của timeline chính, in plan để chắc chắn là `CLUSTERED_IXSCAN`. Trang `random` kết thúc ngay trước một seq ngẫu nhiên trong `2..per-room+1` nên không bao giờ rỗng. Lỗi truy vấn được đếm vào `errors=` (trừ lỗi do hết thời gian chạy), không bị bỏ qua trong im lặng.
+- `write`: mô phỏng flusher của core (cửa sổ 2ms hoặc 256 doc, `insertMany(ordered:false)` với `w:majority`, nhiều room trong một batch). Bộ sinh giữ seq liên tục theo từng room như actor. Dùng room mới sinh nên không đụng dữ liệu đã seed. `arrival->commit` là thời gian người gửi chờ ack. Batch `insertMany` lỗi **không** được tính vào throughput hay độ trễ; `errors=` đếm số document ghi lỗi.
 
 `MONGO_URI` do `make poc` truyền vào: `mongodb://<user>:<pass>@chatim-mongodb:27017/?replicaSet=rs0&authSource=admin`.
 
@@ -1936,6 +2054,7 @@ func runRead(ctx context.Context, args []string) error {
 
 	var rec latency.Recorder
 	var pages, empty atomic.Int64
+	var failed atomic.Int64
 	runCtx, cancel := context.WithTimeout(ctx, *duration)
 	defer cancel()
 	var wg sync.WaitGroup
@@ -1947,6 +2066,9 @@ func runRead(ctx context.Context, args []string) error {
 				start := time.Now()
 				n, err := readPage(runCtx, coll, filter, sort, *limit)
 				if err != nil {
+					if runCtx.Err() == nil {
+						failed.Add(1)
+					}
 					continue
 				}
 				rec.Add(time.Since(start))
@@ -1958,8 +2080,8 @@ func runRead(ctx context.Context, args []string) error {
 		})
 	}
 	wg.Wait()
-	fmt.Printf("mode=%s pages=%d (%.0f/s) empty=%d latency: %v\n",
-		*mode, pages.Load(), float64(pages.Load())/duration.Seconds(), empty.Load(), rec.Summary())
+	fmt.Printf("mode=%s pages=%d (%.0f/s) empty=%d errors=%d latency: %v\n",
+		*mode, pages.Load(), float64(pages.Load())/duration.Seconds(), empty.Load(), failed.Load(), rec.Summary())
 	return nil
 }
 
@@ -2126,10 +2248,12 @@ func flushLoop(ctx context.Context, coll *mongo.Collection, in <-chan pending, w
 		begin := time.Now()
 		_, err := coll.InsertMany(ctx, docs, options.InsertMany().SetOrdered(false))
 		done := time.Now()
-		st.insLat.Add(done.Sub(begin))
 		if err != nil {
-			st.errored.Add(1)
+			st.errored.Add(int64(len(batch)))
+			batch = batch[:0]
+			return
 		}
+		st.insLat.Add(done.Sub(begin))
 		for _, p := range batch {
 			st.msgLat.Add(done.Sub(p.at))
 		}
@@ -2175,7 +2299,7 @@ make -s poc TOOL=mongobench ARGS="write -rate 2000 -duration 5s -rooms 500"
 
 Expected (số đo trên máy dev chỉ để tham khảo; lần chạy mẫu trên Docker Desktop cho p99 đọc khoảng 30ms):
 - `seed`: `seeded 100000 messages …`, dòng `docs=100000 … ratio=…x`, và 2 dòng `projected on-disk …`.
-- `read`: `plan (oldest page): LIMIT > CLUSTERED_IXSCAN` (tương tự cho `random`), `empty=0`.
+- `read`: `plan (oldest page): LIMIT > CLUSTERED_IXSCAN` (tương tự cho `random`), `empty=0 errors=0`.
 - `write`: `achieved=≈2000/s`, `errors=0`.
 
 Nếu plan **không** phải `CLUSTERED_IXSCAN` thì collection không được tạo dạng clustered: chạy lại `seed` với `-reset`.
@@ -2196,6 +2320,12 @@ Kiểm tra 2 điều:
 - (b) Mỗi gateway giữ một subscription cho mỗi room. Dùng `ChanSubscribe` vì nó không tạo goroutine cho từng subscription — điều bắt buộc khi một gateway giữ hàng trăm nghìn room.
 
 Deadline chỉ dừng vòng lặp publish; lệnh publish đang chạy dùng context cha, nên cuối lượt không có lỗi giả. `NATS_URL` và `NATS_MONITOR_URL` mặc định là `nats://chatim-nats:4222` và `http://chatim-nats:8222`.
+
+Để số đo đáng tin:
+- `ChanSubscribe` bỏ tin khi channel đầy (slow consumer) mà không báo lỗi, nên công cụ giữ lại mọi `*nats.Subscription` và in tổng `Dropped()` thành `dropped=`.
+- Cờ không hợp lệ (`-subs`, `-conns`, `-rate`, `-publishers`, `-duration` ≤ 0, hoặc rate quá cao để chia nhịp) bị từ chối **trước** khi kết nối, không để panic sau khi đã tốn công tạo 1M subscription.
+- Sau khi dừng publish, công cụ chờ theo bước 50ms cho tới khi `received ≥ published` (tối đa 5s) thay vì chờ cố định.
+- Dòng tổng kết in `target=` cạnh tốc độ đạt được, để thấy ngay khi publish không theo kịp.
 
 **Files:**
 - Create: `tools/poc/natsbench/main.go`, `tools/poc/natsbench/load.go`
@@ -2259,7 +2389,24 @@ func main() {
 	}
 }
 
+func (c config) interval() time.Duration {
+	return time.Duration(float64(time.Second) * float64(c.publishers) / float64(c.rate))
+}
+
+func (c config) validate() error {
+	if c.subs <= 0 || c.conns <= 0 || c.rate <= 0 || c.publishers <= 0 || c.duration <= 0 {
+		return errors.New("invalid flags: -subs, -conns, -rate, -publishers and -duration must be positive")
+	}
+	if c.interval() <= 0 {
+		return errors.New("rate too high for publisher count")
+	}
+	return nil
+}
+
 func run(ctx context.Context, c config) error {
+	if err := c.validate(); err != nil {
+		return err
+	}
 	nc, err := nats.Connect(c.url)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
@@ -2369,12 +2516,14 @@ func load(ctx context.Context, c config, js jetstream.JetStream) error {
 	}
 
 	start := time.Now()
+	subs := make([]*nats.Subscription, 0, c.subs)
 	for room := 0; room < c.subs; room++ {
 		i := room % c.conns
-
-		if _, err := conns[i].ChanSubscribe(fmt.Sprintf("live.t1.room.%d.>", room), inboxes[i]); err != nil {
+		sub, err := conns[i].ChanSubscribe(fmt.Sprintf("live.t1.room.%d.>", room), inboxes[i])
+		if err != nil {
 			return fmt.Errorf("subscribe room %d: %w", room, err)
 		}
+		subs = append(subs, sub)
 	}
 	for _, nc := range conns {
 		if err := nc.Flush(); err != nil {
@@ -2405,7 +2554,7 @@ func load(ctx context.Context, c config, js jetstream.JetStream) error {
 	pubCtx, cancel := context.WithTimeout(ctx, c.duration)
 	defer cancel()
 	var pubWG sync.WaitGroup
-	interval := time.Duration(float64(time.Second) * float64(c.publishers) / float64(c.rate))
+	interval := c.interval()
 	for p := 0; p < c.publishers; p++ {
 		pubWG.Go(func() {
 			rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
@@ -2429,15 +2578,38 @@ func load(ctx context.Context, c config, js jetstream.JetStream) error {
 		})
 	}
 	pubWG.Wait()
-	time.Sleep(time.Second)
+	awaitDelivered(ctx, &received, &published)
 	stopRecv()
 	recvWG.Wait()
 
-	fmt.Printf("published=%d (%.0f/s) failed=%d received=%d; %s\n",
-		published.Load(), float64(published.Load())/c.duration.Seconds(), failed.Load(), received.Load(), serverMem(c.monitor))
+	dropped, err := totalDropped(subs)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("target=%d/s published=%d (%.0f/s) failed=%d received=%d dropped=%d; %s\n",
+		c.rate, published.Load(), float64(published.Load())/c.duration.Seconds(), failed.Load(), received.Load(), dropped, serverMem(c.monitor))
 	fmt.Printf("jetstream publish ack: %v\n", ack.Summary())
 	fmt.Printf("publish -> gateway:    %v\n", e2e.Summary())
 	return nil
+}
+
+func awaitDelivered(ctx context.Context, received, published *atomic.Int64) {
+	deadline := time.Now().Add(5 * time.Second)
+	for received.Load() < published.Load() && time.Now().Before(deadline) && ctx.Err() == nil {
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func totalDropped(subs []*nats.Subscription) (int, error) {
+	total := 0
+	for _, sub := range subs {
+		n, err := sub.Dropped()
+		if err != nil {
+			return 0, fmt.Errorf("dropped count: %w", err)
+		}
+		total += n
+	}
+	return total, nil
 }
 ```
 
@@ -2452,7 +2624,7 @@ Expected:
 ```
 republish transform: PASS
 subscribed 20000 rooms on 4 connections in …; server mem=…MB subscriptions=20066
-published=≈5000 (≈1000/s) failed=0 received=≈5000; …
+target=1000/s published=≈5000 (≈1000/s) failed=0 received=≈5000 dropped=0; …
 jetstream publish ack: n=… p50=… p99=…
 publish -> gateway:    n=… p50=… p99=…
 ```
@@ -2469,7 +2641,7 @@ git commit -m "test(poc): natsbench for stream republish and per-room interest s
 
 ### Task 10: `tools/poc/wsbench` — R4 (gws: RAM mỗi connection, broadcast)
 
-Server đo RAM mỗi connection (heap + stack chia số connection) và thời điểm **lần ghi cuối** của một broadcast xong, qua callback của gws nên không phụ thuộc đồng hồ client. `ParallelEnabled=false` để giữ thứ tự tin trên mỗi connection. Client mở nhiều connection và đo độ trễ nhận. Một máy client chỉ mở được khoảng 16K connection cho mỗi port server (giới hạn ephemeral port), nên server nghe trên nhiều port. Trong mạng compose, server chạy với tên container `chatim-wsbench-server` (địa chỉ mặc định của client).
+Server đo RAM mỗi connection (heap + stack chia số connection) **ngay trước** mỗi broadcast — tức trạng thái rảnh, vì trong lúc broadcast gws sinh thêm một goroutine ghi cho mỗi connection — và thời điểm **lần ghi cuối** của một broadcast xong, qua callback của gws nên không phụ thuộc đồng hồ client. Nếu broadcast trước chưa ghi xong khi tới tick sau, server in `overlap: previous broadcast still has N writes pending` (số đo lúc đó bị lẫn backlog). Cờ `-ports` (1–65535), `-every`, `-size`, `-conns`, `-dial-rate`, `-addrs` được kiểm tra trước khi chạy. Client báo độ trễ mỗi 5s bằng `SummaryAndReset`. `ParallelEnabled=false` để giữ thứ tự tin trên mỗi connection. Client mở nhiều connection và đo độ trễ nhận. Một máy client chỉ mở được khoảng 16K connection cho mỗi port server (giới hạn ephemeral port), nên server nghe trên nhiều port. Trong mạng compose, server chạy với tên container `chatim-wsbench-server` (địa chỉ mặc định của client).
 
 Lưu ý gws v1.10.2: `Broadcaster.Broadcast(conn, callback func(error))`; callback có thể là `nil`.
 
@@ -2493,7 +2665,9 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
+	"time"
 )
 
 func main() {
@@ -2516,6 +2690,21 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "usage: wsbench server|client [flags]  (use -h after a subcommand)")
 	os.Exit(2)
 }
+
+func splitList(s string) []string {
+	parts := strings.Split(s, ",")
+	for i, p := range parts {
+		parts[i] = strings.TrimSpace(p)
+	}
+	return parts
+}
+
+func requirePositive[T int | time.Duration](name string, v T) error {
+	if v <= 0 {
+		return fmt.Errorf("invalid -%s: %v (must be > 0)", name, v)
+	}
+	return nil
+}
 ```
 
 **Step 3: Tạo `tools/poc/wsbench/server.go`**
@@ -2533,6 +2722,7 @@ import (
 	"fmt"
 	"net/http"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -2571,13 +2761,26 @@ func (h *hub) snapshot() []*gws.Conn {
 	return out
 }
 
+func validateServerFlags(ports []string, every time.Duration, size int) error {
+	for _, p := range ports {
+		if n, err := strconv.ParseUint(p, 10, 16); err != nil || n == 0 {
+			return fmt.Errorf("invalid -ports: %q", p)
+		}
+	}
+	return errors.Join(requirePositive("every", every), requirePositive("size", size))
+}
+
 func runServer(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("server", flag.ExitOnError)
-	ports := fs.String("ports", "9001,9002,9003,9004", "comma-separated listen ports")
+	portList := fs.String("ports", "9001,9002,9003,9004", "comma-separated listen ports")
 	every := fs.Duration("every", 5*time.Second, "broadcast interval")
 	size := fs.Int("size", 256, "broadcast payload bytes")
 	duration := fs.Duration("duration", 0, "exit after this long (0 = until interrupted)")
 	_ = fs.Parse(args)
+	ports := splitList(*portList)
+	if err := validateServerFlags(ports, *every, *size); err != nil {
+		return err
+	}
 	if *duration > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, *duration)
@@ -2597,9 +2800,9 @@ func runServer(ctx context.Context, args []string) error {
 		}
 		go c.ReadLoop()
 	})
-	servers := make([]*http.Server, 0)
-	for _, p := range strings.Split(*ports, ",") {
-		srv := &http.Server{Addr: ":" + strings.TrimSpace(p), Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	servers := make([]*http.Server, 0, len(ports))
+	for _, p := range ports {
+		srv := &http.Server{Addr: ":" + p, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 		servers = append(servers, srv)
 		go func() {
 			if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -2607,10 +2810,11 @@ func runServer(ctx context.Context, args []string) error {
 			}
 		}()
 	}
-	fmt.Printf("listening on %s, broadcasting every %v\n", *ports, *every)
+	fmt.Printf("listening on %s, broadcasting every %v\n", strings.Join(ports, ","), *every)
 
 	tick := time.NewTicker(*every)
 	defer tick.Stop()
+	pending := new(atomic.Int64)
 	for {
 		select {
 		case <-ctx.Done():
@@ -2619,42 +2823,53 @@ func runServer(ctx context.Context, args []string) error {
 			}
 			return nil
 		case <-tick.C:
-			broadcast(h.snapshot(), *size)
+			if n := pending.Load(); n > 0 {
+				fmt.Printf("overlap: previous broadcast still has %d writes pending\n", n)
+			}
+			pending = broadcast(h.snapshot(), *size)
 		}
 	}
 }
 
-func broadcast(conns []*gws.Conn, size int) {
+func broadcast(conns []*gws.Conn, size int) *atomic.Int64 {
+	printIdleMemory(len(conns))
 	payload := make([]byte, max(size, 8))
 	start := time.Now()
 	binary.BigEndian.PutUint64(payload, uint64(start.UnixNano()))
-	var left, failed atomic.Int64
-	left.Store(int64(len(conns)))
+	pending := new(atomic.Int64)
+	pending.Store(int64(len(conns)))
+	var failed atomic.Int64
 	written := func(err error) {
 		if err != nil {
 			failed.Add(1)
 		}
-		if left.Add(-1) == 0 {
+		if pending.Add(-1) == 0 {
 			fmt.Printf("  last write done %v after broadcast start (write errors=%d)\n", time.Since(start), failed.Load())
 		}
 	}
 	b := gws.NewBroadcaster(gws.OpcodeBinary, payload)
+	enqueued := 0
 	for _, c := range conns {
 		if err := b.Broadcast(c, written); err != nil {
 			written(err)
+			continue
 		}
+		enqueued++
 	}
 	_ = b.Close()
-	enqueued := time.Since(start)
+	fmt.Printf("  enqueued %d frames in %v\n", enqueued, time.Since(start))
+	return pending
+}
 
+func printIdleMemory(conns int) {
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
 	perConn := 0.0
-	if len(conns) > 0 {
-		perConn = float64(ms.HeapInuse+ms.StackInuse) / float64(len(conns)) / 1024
+	if conns > 0 {
+		perConn = float64(ms.HeapInuse+ms.StackInuse) / float64(conns) / 1024
 	}
-	fmt.Printf("conns=%d goroutines=%d heap=%.0fMB stack=%.0fMB sys=%.0fMB per-conn=%.1fKB enqueue=%v\n",
-		len(conns), runtime.NumGoroutine(), mbytes(ms.HeapInuse), mbytes(ms.StackInuse), mbytes(ms.Sys), perConn, enqueued)
+	fmt.Printf("conns=%d goroutines=%d heap=%.0fMB stack=%.0fMB sys=%.0fMB per-conn=%.1fKB\n",
+		conns, runtime.NumGoroutine(), mbytes(ms.HeapInuse), mbytes(ms.StackInuse), mbytes(ms.Sys), perConn)
 }
 
 func mbytes(b uint64) float64 { return float64(b) / (1 << 20) }
@@ -2670,9 +2885,10 @@ package main
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"flag"
 	"fmt"
-	"strings"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -2694,6 +2910,13 @@ func (r *receiver) OnMessage(_ *gws.Conn, m *gws.Message) {
 	}
 }
 
+func validateClientFlags(addrs string, urls []string, conns, dialRate int) error {
+	if slices.Contains(urls, "") {
+		return fmt.Errorf("invalid -addrs: %q", addrs)
+	}
+	return errors.Join(requirePositive("conns", conns), requirePositive("dial-rate", dialRate))
+}
+
 func runClient(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("client", flag.ExitOnError)
 	addrs := fs.String("addrs", "ws://chatim-wsbench-server:9001/ws", "comma-separated server URLs")
@@ -2701,19 +2924,22 @@ func runClient(ctx context.Context, args []string) error {
 	dialRate := fs.Int("dial-rate", 2000, "new connections per second")
 	duration := fs.Duration("duration", 0, "exit after this long (0 = until interrupted)")
 	_ = fs.Parse(args)
+	urls := splitList(*addrs)
+	if err := validateClientFlags(*addrs, urls, *total, *dialRate); err != nil {
+		return err
+	}
 	if *duration > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, *duration)
 		defer cancel()
 	}
 
-	urls := strings.Split(*addrs, ",")
 	rec := &receiver{lat: &latency.Recorder{}}
 	var mu sync.Mutex
 	var open []*gws.Conn
 	var failed atomic.Int64
 	go func() {
-		pace := time.NewTicker(time.Second / time.Duration(max(*dialRate, 1)))
+		pace := time.NewTicker(time.Second / time.Duration(*dialRate))
 		defer pace.Stop()
 		for i := 0; i < *total && ctx.Err() == nil; i++ {
 			<-pace.C
@@ -2727,7 +2953,7 @@ func runClient(ctx context.Context, args []string) error {
 				open = append(open, c)
 				mu.Unlock()
 				c.ReadLoop()
-			}(strings.TrimSpace(urls[i%len(urls)]))
+			}(urls[i%len(urls)])
 		}
 	}()
 
@@ -2746,8 +2972,7 @@ func runClient(ctx context.Context, args []string) error {
 			mu.Lock()
 			n := len(open)
 			mu.Unlock()
-			fmt.Printf("connected=%d failed=%d broadcast latency (last 5s): %v\n", n, failed.Load(), rec.lat.Summary())
-			rec.lat.Reset()
+			fmt.Printf("connected=%d failed=%d broadcast latency (last 5s): %v\n", n, failed.Load(), rec.lat.SummaryAndReset())
 		}
 	}
 }
@@ -2765,7 +2990,7 @@ docker stop chatim-wsbench-server
 
 Expected:
 - Client: `connected=2000 failed=0 broadcast latency (last 5s): n=… p99=…`
-- Server log: mỗi lần broadcast có dòng `conns=2000 … per-conn=…KB`, rồi `last write done …`. Lần chạy mẫu: khoảng 13KB/conn, lần ghi cuối xong sau khoảng 10ms, `write errors=0`.
+- Server log: mỗi lần broadcast có dòng `conns=2000 goroutines=… per-conn=…KB` (trạng thái rảnh), rồi `enqueued 2000 frames in …`, rồi `last write done …`. Lần chạy mẫu: 11–14KB/conn, lần ghi cuối xong sau 6–9ms, `write errors=0`, không có dòng `overlap`.
 
 **Step 6: Commit**
 
@@ -2778,7 +3003,7 @@ git commit -m "test(poc): wsbench for gws memory per connection and broadcast fa
 
 ### Task 11: Image runtime (`deploy/docker/Dockerfile`)
 
-Một Dockerfile multi-stage cho mọi chương trình Go trong repo, chọn bằng `TARGET` (đường dẫn package main): build `CGO_ENABLED=0` trong `golang:1.26`, chạy trên `gcr.io/distroless/static-debian12:nonroot`. Dùng ngay cho PoC trên máy prod-like (không cần cài Go); M2+ dùng lại cho `apps/core`, `apps/gateway`. Task này nằm sau Task 7 vì Dockerfile cần `go.sum`.
+Một Dockerfile multi-stage cho mọi chương trình Go trong repo, chọn bằng `TARGET` (đường dẫn package main): build `CGO_ENABLED=0` trong `golang:1.26`, chạy trên `gcr.io/distroless/static-debian12:nonroot` (đã có sẵn CA certificates và tzdata). `.dockerignore` loại `.env*` để mọi biến thể file env không lọt vào build context. Dùng ngay cho PoC trên máy prod-like (không cần cài Go); M2+ dùng lại cho `apps/core`, `apps/gateway`. Task này nằm sau Task 7 vì Dockerfile cần `go.sum`.
 
 **Files:**
 - Create: `deploy/docker/Dockerfile`, `.dockerignore`
@@ -2809,7 +3034,7 @@ ENTRYPOINT ["/app"]
 
 ```text
 .git
-.env
+.env*
 .claude
 .agent
 bin
@@ -2883,7 +3108,7 @@ Expected: tất cả `ok`. Ghi dòng R5.
 
 **Step 3: R1 — xuất dữ liệu thật**
 
-Văn bản giả nén tốt bất thường (lần chạy thử: khoảng 17x), nên dung lượng **chỉ tính theo dữ liệu thật**. Xuất ít nhất 1 triệu nội dung tin từ MongoDB của hệ thống cũ, mỗi dòng một tin, bằng `mongoexport` có sẵn trong image `mongo:8.2`. Tên collection và field phải chỉnh theo hệ thống cũ:
+Văn bản giả có từ vựng nhỏ nên tỉ lệ nén không phản ánh thực tế (lần chạy thử: 17x với 100K tin, 3.37x với 10M tin), nên dung lượng **chỉ tính theo dữ liệu thật**. Xuất ít nhất 1 triệu nội dung tin từ MongoDB của hệ thống cũ, mỗi dòng một tin, bằng `mongoexport` có sẵn trong image `mongo:8.2`. Tên collection và field phải chỉnh theo hệ thống cũ:
 
 ```bash
 docker run --rm -v "$PWD":/work -w /work mongo:8.2 mongoexport --uri "$LEGACY_MONGO_URI" \
@@ -3002,7 +3227,7 @@ Mỗi milestone có plan chi tiết riêng, viết sau khi có kết quả M1.
 
 | Milestone | Nội dung | Phụ thuộc |
 |---|---|---|
-| **M2 — core: đường ghi** | `proto/chatim/v1` + buf (chạy trong container); `pkg/config`, `logx`, `telemetry`; bootstrap collection/index theo quy tắc sẵn sàng sharding; actor theo room + flusher; chống trùng `cid`; sửa/xoá/reaction/pin/read + `message_edits`; publish JetStream + watermark publish bù; gRPC Send/Edit/Delete/React/Pin/Read; integration test bằng testcontainers | R1, R2, R5 |
+| **M2 — core: đường ghi** | ghim digest cho `golang:1.26` và distroless trước khi build image app; `proto/chatim/v1` + buf (chạy trong container); `pkg/config`, `logx`, `telemetry`; bootstrap collection/index theo quy tắc sẵn sàng sharding; actor theo room + flusher; chống trùng `cid`; sửa/xoá/reaction/pin/read + `message_edits`; publish JetStream + watermark publish bù; gRPC Send/Edit/Delete/React/Pin/Read; integration test bằng testcontainers | R1, R2, R5 |
 | **M3 — core: đường đọc** | GetHistory, GetMessages, ListMyRoomIDs, ListMyRooms, Sync, GetEditHistory, GetReactions, ListPins, ListBookmarks; bộ test sẵn sàng sharding trên cluster 2 shard (`SINGLE_SHARD`) | M2, R1 |
 | **M4 — gateway** | gws server, JWT/JWKS, frame protobuf, interest subscription, hàng đợi gửi có giới hạn + 4008, typing/presence, đọc bảng slot từ Redis | M2, R3, R4 |
 | **M5 — hardening** | service `core`/`gateway` trong compose (dùng Dockerfile ở Task 11), load test 100K, chaos test, OTel/Prometheus/Grafana, CI (fmt-check, vet, test -race trong container); chạy container Go bằng uid của user trên Linux (hiện `make` chạy bằng root nên file sinh ra trong repo thuộc root trên Linux; macOS không bị) | M3, M4 |

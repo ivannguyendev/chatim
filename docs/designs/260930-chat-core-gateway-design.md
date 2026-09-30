@@ -69,15 +69,16 @@ chatim/
 │   └── config/ logx/ telemetry/
 ├── proto/chatim/v1/        # common, room, message, core_service, realtime, events
 ├── deploy/
-│   ├── docker/Dockerfile   # multi-stage, ARG APP → distroless
+│   ├── docker/Dockerfile   # multi-stage, ARG TARGET → distroless
 │   └── compose/            # mongo:8.2 replica set 1 node (rs0), redis, nats×3, core×2, gateway×2
 └── docs/  Makefile  buf.yaml
 ```
 
 - `internal/` của Go chặn app import code nội bộ của app khác. App mới (api, events, push, auth, migrator) thêm vào `apps/`.
-- 1 Dockerfile: `docker build --build-arg APP=core .`
+- 1 Dockerfile cho mọi chương trình Go: `make image TARGET=apps/core` (hoặc bất kỳ package main nào, vd `tools/poc/natsbench`).
 - Giao tiếp: `gateway → core` gRPC unary · `core → JetStream` · `gateway ← NATS`. Không gọi ngược.
 - Thư viện: gws, mongo-go-driver v2, go-redis v9, nats.go + jetstream, grpc-go, buf, OpenTelemetry, prometheus/client_golang, testcontainers-go, goleak. Go stable mới nhất (≥1.26).
+- Quy ước dev: mọi lệnh Go (build, test, chạy) chạy trong container `golang:1.26` qua `make`, máy dev chỉ cần Docker. Code không có comment; giải thích nằm trong tài liệu và commit message.
 - Mỗi container: `/healthz`, `/readyz`, dừng gọn khi SIGTERM, cấu hình qua env.
 - **MongoDB dev** theo quy ước team: `mongo:8.2`, replica set 1 node `rs0` (`--replSet rs0 --keyFile`, keyfile tự sinh trong volume khi khởi động lần đầu), healthcheck `mongosh ping`, container `mongodb-init` chạy `rs.initiate` một lần. User/password lấy từ `.env` (đã gitignore), không ghi cứng trong compose. Prod: replica set 3 member, `w:majority`.
 
@@ -87,7 +88,7 @@ chatim/
 - `seq`: vị trí tin trong **timeline**. Timeline chính của room và mỗi thread có dãy riêng.
 - `pts`: vị trí của **mọi event được lưu** trong room (tin mới, sửa, xoá, reaction, ghim, member, thread cập nhật). Dùng để phát hiện event bị thiếu và đồng bộ phần chênh.
 
-**Khoá nhị phân**: các số ghép big-endian `uint64` → thứ tự byte trùng thứ tự số. `room_id` là số 63-bit ngẫu nhiên (trả client dạng string) để không đoán được id, không lộ số lượng room, và để khi shard thì ghi phân tán đều giữa các shard. `thread_root = 0` là timeline chính.
+**Khoá nhị phân**: các số ghép big-endian `uint64` → thứ tự byte trùng thứ tự số. `room_id` là số 63-bit ngẫu nhiên (trả client dạng string) để không đoán được id, không lộ số lượng room, và để khi shard thì ghi phân tán đều giữa các shard. `thread_root = 0` là timeline chính. Seq bắt đầu từ 1; giá trị `math.MaxUint64` được giữ lại, không dùng làm seq, vì khoảng "cả timeline" `MsgRange(room, thread, 0, MaxUint64)` là khoảng nửa mở.
 
 | Collection | `_id` / khoá | Trường chính | Index |
 |---|---|---|---|
@@ -154,6 +155,8 @@ Mỗi core chạy vòng lặp 1s (có jitter):
 4. Dư → nhả bớt: ngừng nhận lệnh, flush xong batch đang dở, xoá key nếu vẫn là của mình.
 
 **Nguyên tắc**: *core nào cũng xử lý đúng được mọi room*. Chủ slot chỉ là nơi được ưu tiên để gộp batch, giữ thứ tự và dùng cache. Trạng thái trong RAM của actor chỉ là cache; mọi thay đổi có ý nghĩa đi qua lệnh atomic của DB. Vì vậy Redis sai (failover, 2 core cùng giữ một slot) không làm mất hay trùng tin.
+
+**Mốc sở hữu an toàn** (chỉnh qua review khi implement): core chỉ coi mình còn giữ slot khi lease mới hơn `min(LeaseTTL, HeartbeatTTL) − Tick`, tính từ đầu vòng lặp (trước lệnh ghi heartbeat). Lý do: core khác được phép nhận slot ngay khi heartbeat hết hạn (5s), không phải đợi lease (10s). Nhờ vậy khoảng thời gian hai core cùng tưởng giữ một slot không quá khoảng một tick. `LeaseTTL` và `HeartbeatTTL` đều phải lớn hơn `2×Tick`.
 
 ### 5.2 Actor và flusher
 
@@ -257,6 +260,7 @@ gateway: roomIndex room→{conn}; 1 NATS sub mỗi room (đếm tham chiếu)
 - Kiểm tra đầu vào theo A6; text phải là UTF-8 hợp lệ.
 - Rate limit ở gateway: ~10 tin/s/user (burst 20) + quota theo tenant trong Redis.
 - Không log nội dung tin (PII); NATS và Redis dùng TLS + credential riêng cho từng service.
+- Compose dev truyền mật khẩu Mongo qua tham số `mongosh -p` (thấy được trong danh sách process của máy dev): chấp nhận cho dev, theo cách team đang làm; mongosh không đọc mật khẩu từ biến môi trường. Production dùng secret của orchestrator.
 
 ## 11. Kiểm thử (70 / 20 / 10)
 
@@ -273,6 +277,8 @@ gateway: roomIndex room→{conn}; 1 NATS sub mỗi room (đếm tham chiếu)
 - OTel trace gateway → core → Mongo/NATS; log JSON (slog); dashboard Grafana; `/healthz`, `/readyz`.
 
 ## 13. Rủi ro — cần PoC trước khi code toàn bộ
+
+Kết quả trên máy dev và hướng dẫn chạy prod-like: [../poc/README.md](../poc/README.md). Chưa có quyết định go/no-go: trên dev (Intel Mac + OrbStack), R1b (p99 trang cũ nhất), R2 (p99 chờ ack) và lần ghi cuối của R4 chưa đạt, còn R5 mới kiểm ở mức unit; tất cả cần đo lại trên prod-like.
 
 | # | Rủi ro | Cách kiểm chứng | Nếu không đạt |
 |---|---|---|---|
@@ -305,8 +311,11 @@ gateway: roomIndex room→{conn}; 1 NATS sub mỗi room (đếm tham chiếu)
 | D17 | Protobuf qua WS + JSON để debug | Chỉ JSON | Nhỏ, nhanh, dùng chung proto với gRPC |
 | D18 | Không cache tin trong Redis | Redis tail cache | RAM actor + WiredTiger đủ; tránh lệch khi sửa/reaction |
 | D19 | Ack sau DB commit; publish at-least-once + watermark publish bù | Transactional outbox, log-first | Ack nhanh, không mất event |
-| D20 | 1 `go.mod`, 1 Dockerfile `ARG APP` | `go.work` nhiều module | Ít phức tạp dependency và CI |
+| D20 | 1 `go.mod`, 1 Dockerfile `ARG TARGET` | `go.work` nhiều module | Ít phức tạp dependency và CI |
 | D21 | MongoDB replica set, chưa sharding; code giữ sẵn sàng shard để bật bằng cấu hình | Sharded ngay từ đầu; replica set không tính tới shard | Quy ước vận hành của team; khi vượt ngưỡng chỉ đổi `MONGO_URI` + chạy `shardCollection` (đã kiểm chứng trên 8.2.12) |
+| D22 | Build/test/chạy Go qua Docker (`golang:1.26`) bằng `make` | Cài Go trên từng máy | Đồng nhất phiên bản (máy dev có 1.25, nats.go v1.54 cần 1.26); yêu cầu của team |
+| D23 | Không viết comment trong code | Doc comment theo chuẩn Go | Yêu cầu của team; ràng buộc cần giải thích ghi ở tài liệu và commit message |
+| D24 | Mốc `Owns` = `min(LeaseTTL, HeartbeatTTL) − Tick`, tính từ đầu vòng lặp | `LeaseTTL − Tick`, tính sau round trip Redis | Heartbeat mới quyết định lúc core khác được nhận slot; cách cũ để hai core cùng giữ slot khoảng 4s (phát hiện khi review) |
 
 ## 15. Câu hỏi còn mở
 
