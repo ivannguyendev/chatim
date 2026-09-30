@@ -16,15 +16,17 @@ Monorepo Go, mỗi app một container.
 
 Hạ tầng: MongoDB (replica set), Redis, NATS JetStream.
 
-## Cấu trúc dự kiến
+## Cấu trúc
 
 ```
-apps/{core,gateway}/     # mỗi app: main.go + internal/
-pkg/                     # thư viện dùng chung (pb, slotmap, mongox, redisx, natsx, config, logx, telemetry)
-proto/chatim/v1/         # định nghĩa protobuf (buf)
-deploy/docker/           # 1 Dockerfile, build theo ARG APP
-deploy/compose/          # môi trường dev
-docs/                    # nghiên cứu, thiết kế
+apps/{core,gateway}/     # mỗi app: main.go + internal/ (hiện có apps/core/internal/slot)
+pkg/                     # thư viện dùng chung (hiện có keys, ids, slotmap; M2 thêm pb, mongox, redisx, natsx, config, logx, telemetry)
+proto/chatim/v1/         # định nghĩa protobuf (buf), từ M2
+tools/poc/               # công cụ đo PoC: mongobench, natsbench, wsbench
+scripts/                 # script hỗ trợ (wait-mongo-primary.sh)
+deploy/docker/           # 1 Dockerfile, chọn chương trình bằng ARG TARGET
+deploy/compose/          # hạ tầng dev
+docs/                    # nghiên cứu, thiết kế, plan, kết quả PoC
 ```
 
 ## Chạy hạ tầng dev
