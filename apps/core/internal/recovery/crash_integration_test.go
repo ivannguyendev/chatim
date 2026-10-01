@@ -40,6 +40,7 @@ func TestRealInfraRepublishesWhatACrashedCoreCommitted(t *testing.T) {
 	rooms := newRecorder(b.router)
 	clk := &clock{}
 	sw := newSweeper(t, recovery.Deps{Slots: owning(slot), Rooms: rooms, Msgs: it.store, Redis: it.rdb}, passSetup, clk)
+	clk.advance(staleShift)
 	stopSweeper := runSweeper(t, sw)
 	sw.Trigger([]uint16{slot})
 	rooms.awaitDone(t, room)

@@ -11,7 +11,9 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/redisguard"
+	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 	"github.com/ivannguyendev/chatim/pkg/slotmap"
 )
@@ -29,6 +31,7 @@ type Rooms interface {
 
 type Timeline interface {
 	Last(ctx context.Context, room, thread uint64) (seq, pts uint64, err error)
+	Page(ctx context.Context, q store.PageQuery) ([]domain.Message, error)
 }
 
 type Deps struct {

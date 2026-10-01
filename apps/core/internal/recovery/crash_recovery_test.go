@@ -13,7 +13,10 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/recovery"
 )
 
-var errNATSDown = errors.New("nats down")
+var (
+	errNATSDown = errors.New("nats down")
+	staleShift  = recovery.DefaultStaleAfter + 3*time.Second
+)
 
 func refuseAll(js *publishtest.JetStream, refused chan<- struct{}) {
 	js.RefuseWhen(func(*nats.Msg) error {
@@ -47,6 +50,7 @@ func TestCommittedMessagesOfACrashedCoreArePublishedOnceInPtsOrderByTheNextOwner
 			rooms := newRecorder(b.router)
 			clk := &clock{}
 			sw := newSweeper(t, recovery.Deps{Slots: owning(slotA), Rooms: rooms, Msgs: w.msgs, Redis: w.rdb}, passSetup, clk)
+			clk.advance(staleShift)
 			stopSweeper := runSweeper(t, sw)
 			sw.Trigger([]uint16{slotA})
 			if c := rooms.awaitDone(t, roomA); c.from != 0 {
@@ -94,7 +98,9 @@ func TestPublishesLostToANATSOutageAreRepublishedByTheNextPeriodicPass(t *testin
 	rooms := newRecorder(c.router)
 	cfg := passSetup
 	cfg.Interval = 20 * time.Millisecond
-	sw := newSweeper(t, recovery.Deps{Slots: owning(slotA), Rooms: rooms, Msgs: w.msgs, Redis: w.rdb}, cfg, nil)
+	clk := &clock{}
+	clk.advance(staleShift)
+	sw := newSweeper(t, recovery.Deps{Slots: owning(slotA), Rooms: rooms, Msgs: w.msgs, Redis: w.rdb}, cfg, clk)
 	stopSweeper := runSweeper(t, sw)
 	rooms.awaitDone(t, roomA)
 	stopSweeper()

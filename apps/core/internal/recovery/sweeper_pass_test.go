@@ -66,7 +66,7 @@ func TestCaughtUpRoomIsRemovedOnlyOnceItsMarkIsOlderThanRemoveAfter(t *testing.T
 
 func TestBehindRoomIsRecoveredFromItsWatermarkAndNeverRemoved(t *testing.T) {
 	pw := newPassWorld(t, passSetup, nil)
-	seed(t, pw.msgs, roomA, time.Now(), 1, 2, 3, 4, 5)
+	seed(t, pw.msgs, roomA, pw.clk.now().Add(-time.Minute), 1, 2, 3, 4, 5)
 	setWatermark(t, pw.mr, roomA, "2")
 	mark(t, pw.mr, roomA, pw.clk.now().Add(-time.Hour))
 
@@ -84,8 +84,8 @@ func TestMissingOrMalformedWatermarksRecoverFromTheStart(t *testing.T) {
 	pw := newPassWorld(t, passSetup, nil)
 	ids := roomsInSlot(slotA, 4)
 	for i, room := range ids {
-		seed(t, pw.msgs, room, time.Now(), 1, 2)
-		mark(t, pw.mr, room, time.Now().Add(time.Duration(i)*time.Millisecond))
+		seed(t, pw.msgs, room, pw.clk.now().Add(-time.Minute), 1, 2)
+		mark(t, pw.mr, room, pw.clk.now().Add(time.Duration(i)*time.Millisecond))
 	}
 	setWatermark(t, pw.mr, ids[1], "abc")
 	setWatermark(t, pw.mr, ids[2], "18446744073709551616")

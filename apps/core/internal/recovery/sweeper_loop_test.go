@@ -28,7 +28,7 @@ func newLoopWorld(t *testing.T, cfg recovery.Config, n int) *loopWorld {
 	for i := range n {
 		slot := (slotA + uint16(i)) % slotmap.Count
 		room := roomsInSlot(slot, 1)[0]
-		seed(t, msgs, room, time.Now(), 1)
+		seed(t, msgs, room, time.Now().Add(-time.Hour), 1)
 		mark(t, mr, room, time.Now())
 		lw.slots, lw.rooms = append(lw.slots, slot), append(lw.rooms, room)
 	}
@@ -136,6 +136,7 @@ func TestNewRejectsMissingDependenciesAndUnsafeConfig(t *testing.T) {
 		"room timeout too low": {deps, withConfig(func(c *recovery.Config) { c.RoomTimeout = c.GroupDeadline })},
 		"negative workers":     {deps, withConfig(func(c *recovery.Config) { c.Workers = -1 })},
 		"negative interval":    {deps, withConfig(func(c *recovery.Config) { c.Interval = -time.Second })},
+		"negative stale after": {deps, withConfig(func(c *recovery.Config) { c.StaleAfter = -time.Second })},
 		"huge batch":           {deps, withConfig(func(c *recovery.Config) { c.Batch = 1_000_000 })},
 	}
 	for name, tc := range cases {

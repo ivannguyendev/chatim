@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+
+	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
 type verdict uint8
@@ -14,6 +16,7 @@ type verdict uint8
 const (
 	unchecked verdict = iota
 	caughtUp
+	inFlight
 	republished
 	failed
 )
@@ -22,6 +25,7 @@ type summary struct {
 	slots       int
 	rooms       int
 	republished int
+	inFlight    int
 	removed     int
 	failed      int
 	err         error
@@ -31,6 +35,7 @@ func (s *summary) add(o summary) {
 	s.slots += o.slots
 	s.rooms += o.rooms
 	s.republished += o.republished
+	s.inFlight += o.inFlight
 	s.removed += o.removed
 	s.failed += o.failed
 	s.err = cmp.Or(s.err, o.err)
@@ -45,9 +50,9 @@ func (s summary) report(ctx context.Context, log *slog.Logger) {
 	switch {
 	case s.slots == 0 || ctx.Err() != nil:
 	case s.failed > 0:
-		log.WarnContext(ctx, "recovery pass left rooms for the next pass", "slots", s.slots, "rooms", s.rooms, "republished", s.republished, "removed", s.removed, "failed", s.failed, "err", s.err)
+		log.WarnContext(ctx, "recovery pass left rooms for the next pass", "slots", s.slots, "rooms", s.rooms, "republished", s.republished, "in_flight", s.inFlight, "removed", s.removed, "failed", s.failed, "err", s.err)
 	default:
-		log.DebugContext(ctx, "recovery pass finished", "slots", s.slots, "rooms", s.rooms, "republished", s.republished, "removed", s.removed)
+		log.DebugContext(ctx, "recovery pass finished", "slots", s.slots, "rooms", s.rooms, "republished", s.republished, "in_flight", s.inFlight, "removed", s.removed)
 	}
 }
 
@@ -71,6 +76,8 @@ func (s *Sweeper) sweepSlot(ctx context.Context, slot uint16) summary {
 			}
 		case republished:
 			sum.republished++
+		case inFlight:
+			sum.inFlight++
 		case failed:
 			sum.fail(errs[i])
 		case unchecked:
@@ -127,6 +134,13 @@ func (s *Sweeper) check(ctx context.Context, r activeRoom) (verdict, error) {
 	}
 	if r.wm >= last {
 		return caughtUp, nil
+	}
+	next, err := s.deps.Msgs.Page(cctx, store.PageQuery{Room: r.id, Anchor: store.After, Seq: r.wm, Limit: 1})
+	if err != nil {
+		return failed, fmt.Errorf("message after pts %d of room %d: %w", r.wm, r.id, err)
+	}
+	if len(next) > 0 && s.now().Sub(next[0].CreatedAt) < s.cfg.StaleAfter {
+		return inFlight, nil
 	}
 	if err := s.deps.Rooms.Recover(cctx, r.id, r.wm); err != nil {
 		return failed, fmt.Errorf("recover room %d after pts %d: %w", r.id, r.wm, err)
