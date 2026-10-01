@@ -58,7 +58,7 @@ linters:
       - path: ^tools/poc/
         linters: [gosec]
         text: "G115|G404"
-      - path: ^apps/core/internal/actor/retry_backoff\.go$
+      - path: ^apps/core/internal/backoff/backoff\.go$
         linters: [gosec]
         text: G404
 

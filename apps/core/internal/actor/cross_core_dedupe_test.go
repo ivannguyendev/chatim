@@ -3,7 +3,6 @@ package actor_test
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +10,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/testlog"
 )
 
 func TestCommittedCIDIsAckedByAnotherCoreWithoutInsert(t *testing.T) {
@@ -122,8 +122,8 @@ func TestFailedWriteReleasesOrKeepsTheCIDForOtherCores(t *testing.T) {
 
 func TestRedisOutageFallsBackToTheLocalCacheAndRecovers(t *testing.T) {
 	w := newWorld(t)
-	sink := &logSink{}
-	core := startCore(t, w.msgs, w.rooms, w.registry(t, "core-a", slog.New(sink), 20*time.Millisecond))
+	sink := &testlog.Sink{}
+	core := startCore(t, w.msgs, w.rooms, w.registry(t, "core-a", sink.Logger(), 20*time.Millisecond))
 	mustSend(t, core, cmd(roomA, "alice", "before"))
 
 	w.mr.Close()
@@ -136,7 +136,7 @@ func TestRedisOutageFallsBackToTheLocalCacheAndRecovers(t *testing.T) {
 		t.Fatalf("resend during the outage got %+v, want %+v", again, first)
 	}
 	assertStoredIn(t, w, "x", first)
-	if n := sink.count(degradedMsg); n != 1 {
+	if n := sink.Count(degradedMsg); n != 1 {
 		t.Fatalf("logged degraded %d times during one outage, want 1", n)
 	}
 
@@ -154,7 +154,7 @@ func TestRedisOutageFallsBackToTheLocalCacheAndRecovers(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if d, r := sink.count(degradedMsg), sink.count(recoveredMsg); d != 1 || r != 1 {
+	if d, r := sink.Count(degradedMsg), sink.Count(recoveredMsg); d != 1 || r != 1 {
 		t.Fatalf("logged degraded %d and recovered %d times, want 1 each", d, r)
 	}
 }

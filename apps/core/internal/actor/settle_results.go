@@ -7,6 +7,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/backoff"
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -51,7 +52,7 @@ func (a *actor) reconcile(ctx context.Context, open []*entry) {
 			open = a.resolve(open, found)
 			a.conclude(ctx)
 		}
-		if len(open) == 0 || !pause(ctx, jitter(wait)) {
+		if len(open) == 0 || !backoff.Pause(ctx, backoff.Jitter(wait)) {
 			break
 		}
 		wait = min(2*wait, maxFindBackoff)

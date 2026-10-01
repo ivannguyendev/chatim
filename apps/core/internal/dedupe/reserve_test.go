@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/ivannguyendev/chatim/apps/core/internal/testlog"
 )
 
 func TestReserveReportsTheStateOfEachKey(t *testing.T) {
@@ -45,7 +47,7 @@ func TestPendingReservationExpiresAfterPendingTTL(t *testing.T) {
 
 func TestMalformedValuesAreTreatedAsAbsentAndLeftAlone(t *testing.T) {
 	mr, rdb := newRedis(t)
-	sink := &logSink{}
+	sink := &testlog.Sink{}
 	s := newStore(t, rdb, "core-a", sink)
 	values := []string{
 		"", "garbage", "p:", "p:a b", "p:a:b", "c:1:2", "c:0:1:5", "c:1:0:5", "c:01:1:5",
@@ -74,7 +76,7 @@ func TestMalformedValuesAreTreatedAsAbsentAndLeftAlone(t *testing.T) {
 	if !mr.Exists(hash.String()) {
 		t.Fatal("reserve replaced a key of another type")
 	}
-	if n := sink.count(malformedMsg); n != len(keys) {
+	if n := sink.Count(malformedMsg); n != len(keys) {
 		t.Fatalf("logged %d malformed values, want %d", n, len(keys))
 	}
 }

@@ -91,33 +91,3 @@ func eventually(t *testing.T, what string, cond func() bool) {
 		time.Sleep(time.Millisecond)
 	}
 }
-
-type logSink struct {
-	mu   sync.Mutex
-	msgs []string
-}
-
-func (s *logSink) Enabled(context.Context, slog.Level) bool { return true }
-
-func (s *logSink) Handle(_ context.Context, r slog.Record) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.msgs = append(s.msgs, r.Message)
-	return nil
-}
-
-func (s *logSink) WithAttrs([]slog.Attr) slog.Handler { return s }
-
-func (s *logSink) WithGroup(string) slog.Handler { return s }
-
-func (s *logSink) count(msg string) int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	n := 0
-	for _, m := range s.msgs {
-		if m == msg {
-			n++
-		}
-	}
-	return n
-}

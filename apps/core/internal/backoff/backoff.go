@@ -1,4 +1,4 @@
-package actor
+package backoff
 
 import (
 	"context"
@@ -6,11 +6,11 @@ import (
 	"time"
 )
 
-func jitter(d time.Duration) time.Duration {
+func Jitter(d time.Duration) time.Duration {
 	return d/2 + rand.N(d/2+1)
 }
 
-func pause(ctx context.Context, d time.Duration) bool {
+func Pause(ctx context.Context, d time.Duration) bool {
 	t := time.NewTimer(d)
 	defer t.Stop()
 	select {

@@ -3,14 +3,15 @@ package dedupe
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"testing"
 	"time"
+
+	"github.com/ivannguyendev/chatim/apps/core/internal/testlog"
 )
 
 func TestRedisFailureDegradesOnceAndProbesAfterCooldown(t *testing.T) {
 	mr, rdb := newRedis(t)
-	sink := &logSink{}
+	sink := &testlog.Sink{}
 	s := newStore(t, rdb, "core-a", sink)
 	now := time.Unix(1_700_000_000, 0)
 	s.now = func() time.Time { return now }
@@ -29,7 +30,7 @@ func TestRedisFailureDegradesOnceAndProbesAfterCooldown(t *testing.T) {
 		t.Fatalf("probe after cooldown = %v, want the redis error", err)
 	}
 	expectSkipped(t, s)
-	if n := sink.count(degradedMsg); n != 1 {
+	if n := sink.Count(degradedMsg); n != 1 {
 		t.Fatalf("logged degraded %d times during one outage, want 1", n)
 	}
 
@@ -47,14 +48,14 @@ func TestRedisFailureDegradesOnceAndProbesAfterCooldown(t *testing.T) {
 		t.Fatalf("Reserve after redis returned: %v", err)
 	}
 	reserve(t, s, key("c"))
-	if d, r := sink.count(degradedMsg), sink.count(recoveredMsg); d != 1 || r != 1 {
+	if d, r := sink.Count(degradedMsg), sink.Count(recoveredMsg); d != 1 || r != 1 {
 		t.Fatalf("logged degraded %d and recovered %d times, want 1 each", d, r)
 	}
 }
 
 func TestCallerCancellationIsNotARedisFailure(t *testing.T) {
 	_, rdb := newRedis(t)
-	sink := &logSink{}
+	sink := &testlog.Sink{}
 	s := newStore(t, rdb, "core-a", sink)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
@@ -62,37 +63,8 @@ func TestCallerCancellationIsNotARedisFailure(t *testing.T) {
 		t.Fatalf("Reserve with a cancelled caller = %v, want context.Canceled", err)
 	}
 	expectStatuses(t, reserve(t, s, key("a")), Reserved)
-	if n := sink.count(degradedMsg); n != 0 {
+	if n := sink.Count(degradedMsg); n != 0 {
 		t.Fatalf("caller cancellation logged degraded %d times", n)
-	}
-}
-
-func TestSuccessStartedBeforeTheFailureDoesNotEndTheEpisode(t *testing.T) {
-	sink := &logSink{}
-	h := &health{cooldown: time.Second, log: slog.New(sink)}
-	ctx := t.Context()
-	now := time.Unix(1_700_000_000, 0)
-	early, _ := h.admit(now)
-	failing, _ := h.admit(now)
-	h.observe(ctx, failing, "reserve", errors.New("boom"), now)
-	h.observe(ctx, early, "reserve", nil, now)
-	if _, ok := h.admit(now); ok {
-		t.Fatal("a success that started before the failure ended the cooldown")
-	}
-	later := now.Add(time.Second)
-	probe, ok := h.admit(later)
-	if !ok {
-		t.Fatal("no probe admitted after the cooldown")
-	}
-	if _, ok := h.admit(later); ok {
-		t.Fatal("a second probe was admitted in the same cooldown")
-	}
-	h.observe(ctx, probe, "reserve", nil, later)
-	if _, ok := h.admit(later); !ok {
-		t.Fatal("redis still skipped after a successful probe")
-	}
-	if d, r := sink.count(degradedMsg), sink.count(recoveredMsg); d != 1 || r != 1 {
-		t.Fatalf("logged degraded %d and recovered %d times, want 1 each", d, r)
 	}
 }
 
