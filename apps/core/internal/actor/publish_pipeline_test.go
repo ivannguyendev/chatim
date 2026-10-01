@@ -48,11 +48,23 @@ func marksFor(t *testing.T, rdb *redis.Client) *publish.ActivityMarks {
 	return m
 }
 
+func drain(t *testing.T, closers ...func(context.Context) error) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	for _, c := range closers {
+		if err := c(ctx); err != nil {
+			t.Fatalf("drain: %v", err)
+		}
+	}
+}
+
 func TestSentMessagesArePublishedInPtsOrderUpToTheWatermark(t *testing.T) {
 	w := newWorld(t)
 	createRoom(t, w.rooms, roomB, "alice", "bob")
 	js := &publishtest.JetStream{}
-	core := startCoreWith(t, w.msgs, w.rooms, &fakeRegistry{}, startPublisher(t, js, w.rdb), marksFor(t, w.rdb))
+	pub := startPublisher(t, js, w.rdb)
+	core := startCoreWith(t, w.msgs, w.rooms, &fakeRegistry{}, pub, marksFor(t, w.rdb))
 	const perRoom = 25
 	rooms := []uint64{roomA, roomB}
 	var wg sync.WaitGroup
@@ -67,10 +79,12 @@ func TestSentMessagesArePublishedInPtsOrderUpToTheWatermark(t *testing.T) {
 		}
 	}
 	wg.Wait()
+	drain(t, core.Close, pub.Close)
 
 	for _, room := range rooms {
-		key := publish.WatermarkKey(room)
-		eventually(t, key+" = 25", func() bool { v, _ := w.mr.Get(key); return v == strconv.Itoa(perRoom) })
+		if v, _ := w.mr.Get(publish.WatermarkKey(room)); v != strconv.Itoa(perRoom) {
+			t.Fatalf("room %d watermark after drain = %q, want %d", room, v, perRoom)
+		}
 		docs := timeline(t, w.msgs, room)
 		var got []proto.Message
 		evs, err := js.Events()

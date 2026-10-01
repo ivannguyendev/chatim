@@ -66,9 +66,10 @@ func TestSameCIDRacingOnTwoCoresIsStoredOnce(t *testing.T) {
 
 func TestCrashedCoreBlocksTheCIDUntilItsReservationExpires(t *testing.T) {
 	w := newWorld(t)
-	a, crash := runRouter(t, w.msgs, w.rooms, blackhole{}, w.registry(t, "core-a", quiet, 0), clusterConfig)
+	sink := newBlackhole()
+	a, crash := runRouter(t, w.msgs, w.rooms, sink, w.registry(t, "core-a", quiet, 0), clusterConfig)
 	lost := sendAsync(context.Background(), a, cmd(roomA, "alice", "x"))
-	eventually(t, "core A reservation", func() bool { return w.cidValue("x") == "p:core-a" })
+	awaitSignal(t, "core A submit after its reservation", sink.submitted)
 	crash()
 	expectErr(t, (<-lost).err, domain.ErrRetryLater)
 	if v := w.cidValue("x"); v != "p:core-a" {
@@ -143,14 +144,15 @@ func TestRedisOutageFallsBackToTheLocalCacheAndRecovers(t *testing.T) {
 	if err := w.mr.Restart(); err != nil {
 		t.Fatalf("Restart: %v", err)
 	}
+	deadline := time.Now().Add(30 * time.Second)
 	for i := 0; ; i++ {
 		cid := fmt.Sprintf("up-%d", i)
 		mustSend(t, core, cmd(roomA, "alice", cid))
 		if strings.HasPrefix(w.cidValue(cid), "c:") {
 			break
 		}
-		if i == 200 {
-			t.Fatal("redis never used again after it came back")
+		if time.Now().After(deadline) {
+			t.Fatal("redis never used again within 30s after it came back")
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

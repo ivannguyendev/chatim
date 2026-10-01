@@ -22,7 +22,10 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
+func TestMain(m *testing.M) {
+	testlog.SilenceRedis()
+	goleak.VerifyTestMain(m)
+}
 
 const (
 	tenant        = "acme"

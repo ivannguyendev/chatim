@@ -13,7 +13,10 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/testlog"
 )
 
-func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
+func TestMain(m *testing.M) {
+	testlog.SilenceRedis()
+	goleak.VerifyTestMain(m)
+}
 
 const (
 	degradedMsg  = "cid dedupe degraded to the local cache"

@@ -15,9 +15,13 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
+	"github.com/ivannguyendev/chatim/apps/core/internal/testlog"
 )
 
-func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
+func TestMain(m *testing.M) {
+	testlog.SilenceRedis()
+	goleak.VerifyTestMain(m)
+}
 
 const (
 	tenant        = "acme"

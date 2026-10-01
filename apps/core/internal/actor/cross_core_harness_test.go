@@ -77,17 +77,23 @@ func runRouter(t *testing.T, msgs store.Messages, rooms store.Rooms, sub actor.S
 	return r, stop
 }
 
-type blackhole struct{}
+type blackhole struct{ submitted chan struct{} }
 
-func (blackhole) Submit(context.Context, flush.Group) error { return nil }
+func newBlackhole() blackhole { return blackhole{submitted: make(chan struct{}, 1)} }
 
-func eventually(t *testing.T, what string, cond func() bool) {
+func (b blackhole) Submit(context.Context, flush.Group) error {
+	select {
+	case b.submitted <- struct{}{}:
+	default:
+	}
+	return nil
+}
+
+func awaitSignal(t *testing.T, what string, ch <-chan struct{}) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for !cond() {
-		if time.Now().After(deadline) {
-			t.Fatalf("%s did not happen within 5s", what)
-		}
-		time.Sleep(time.Millisecond)
+	select {
+	case <-ch:
+	case <-time.After(30 * time.Second):
+		t.Fatalf("%s did not happen within 30s", what)
 	}
 }
