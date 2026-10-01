@@ -36,6 +36,7 @@ func (a *actor) settle(res []store.Result) {
 			open = append(open, e)
 		}
 	}
+	a.conclude(g.ctx)
 	a.reconcile(g.ctx, open)
 	slices.SortFunc(a.retries, func(x, y *entry) int { return cmp.Compare(x.msg.Seq, y.msg.Seq) })
 }
@@ -46,6 +47,7 @@ func (a *actor) reconcile(ctx context.Context, open []*entry) {
 		found, err := a.r.msgs.Find(ctx, a.id, keysOf(open))
 		if err == nil {
 			open = a.resolve(open, found)
+			a.conclude(ctx)
 		}
 		if len(open) == 0 || !pause(ctx, jitter(wait)) {
 			break
@@ -58,6 +60,7 @@ func (a *actor) reconcile(ctx context.Context, open []*entry) {
 	for _, e := range open {
 		a.fail(e, errUnconfirmed, true)
 	}
+	a.conclude(ctx)
 }
 
 func (a *actor) resolve(open []*entry, found []domain.Message) []*entry {

@@ -14,6 +14,7 @@ type Router struct {
 	msgs  store.Messages
 	rooms store.Rooms
 	sub   Submitter
+	cids  CIDRegistry
 	cfg   Config
 	log   *slog.Logger
 
@@ -27,9 +28,9 @@ type Router struct {
 	done    chan struct{}
 }
 
-func NewRouter(msgs store.Messages, rooms store.Rooms, sub Submitter, cfg Config, log *slog.Logger) (*Router, error) {
-	if msgs == nil || rooms == nil || sub == nil {
-		return nil, fmt.Errorf("%w: router needs message and room stores and a submitter", apperr.ErrInvalidArgument)
+func NewRouter(msgs store.Messages, rooms store.Rooms, sub Submitter, cids CIDRegistry, cfg Config, log *slog.Logger) (*Router, error) {
+	if msgs == nil || rooms == nil || sub == nil || cids == nil {
+		return nil, fmt.Errorf("%w: router needs message and room stores, a submitter and a cid registry", apperr.ErrInvalidArgument)
 	}
 	if err := cfg.validate(); err != nil {
 		return nil, err
@@ -41,6 +42,7 @@ func NewRouter(msgs store.Messages, rooms store.Rooms, sub Submitter, cfg Config
 		msgs:    msgs,
 		rooms:   rooms,
 		sub:     sub,
+		cids:    cids,
 		cfg:     cfg,
 		log:     log,
 		actors:  make(map[uint64]*actor),

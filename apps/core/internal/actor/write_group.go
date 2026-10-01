@@ -12,6 +12,7 @@ func (a *actor) dispatch(ctx context.Context, first *request) {
 	gctx, cancel := context.WithTimeout(ctx, a.r.cfg.GroupDeadline)
 	entries := a.gather(gctx, first)
 	if len(entries) == 0 {
+		a.conclude(gctx)
 		cancel()
 		return
 	}
@@ -28,34 +29,41 @@ func (a *actor) dispatch(ctx context.Context, first *request) {
 		for _, e := range entries {
 			a.fail(e, err, e.fixed)
 		}
+		a.conclude(gctx)
 		return
 	}
 	a.flight = &group{ctx: gctx, cancel: cancel, entries: entries}
 }
 
 func (a *actor) gather(ctx context.Context, first *request) []*entry {
-	entries := a.retries
+	retries := a.retries
 	a.retries = nil
 	if err := a.refresh(ctx); err != nil {
 		a.r.log.WarnContext(ctx, "reload room timeline failed", "room", a.id, "err", err)
-		for _, e := range entries {
+		for _, e := range retries {
 			a.fail(e, errUnavailable, e.fixed)
 		}
 		a.reject(first, errUnavailable)
 		return nil
 	}
+	var fresh []*entry
 	if first != nil {
-		entries = a.take(ctx, entries, first)
+		fresh = a.take(ctx, fresh, first)
 	}
-	for len(entries) < a.r.cfg.MaxGroup {
+	fresh = a.drain(ctx, fresh, a.r.cfg.MaxGroup-len(retries))
+	return append(retries, a.reserve(ctx, fresh)...)
+}
+
+func (a *actor) drain(ctx context.Context, fresh []*entry, limit int) []*entry {
+	for len(fresh) < limit {
 		select {
 		case q := <-a.mailbox:
-			entries = a.take(ctx, entries, q)
+			fresh = a.take(ctx, fresh, q)
 		default:
-			return entries
+			return fresh
 		}
 	}
-	return entries
+	return fresh
 }
 
 func (a *actor) take(ctx context.Context, entries []*entry, q *request) []*entry {

@@ -109,6 +109,10 @@ func (s *fakeSubmitter) foreignFirst(msgs []domain.Message) []store.Result {
 	return s.insert(msgs)
 }
 
+func rejected(msgs []domain.Message) []store.Result {
+	return uniform(len(msgs), store.Rejected)
+}
+
 func lostUnknown(msgs []domain.Message) []store.Result {
 	return uniform(len(msgs), store.Unknown)
 }

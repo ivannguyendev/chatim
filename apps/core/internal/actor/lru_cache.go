@@ -41,4 +41,11 @@ func (c *lru[K, V]) put(k K, v V) {
 	}
 }
 
+func (c *lru[K, V]) remove(k K) {
+	if el, ok := c.items[k]; ok {
+		c.order.Remove(el)
+		delete(c.items, k)
+	}
+}
+
 func (c *lru[K, V]) len() int { return c.order.Len() }

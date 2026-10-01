@@ -45,7 +45,7 @@ func (a *actor) refresh(ctx context.Context) error {
 		return fmt.Errorf("seed cid cache: %w", err)
 	}
 	for _, m := range page {
-		a.dedupe.seed(dedupeKey{user: m.From, cid: m.CID}, ackOf(m))
+		a.cache.seed(dedupeKey{user: m.From, cid: m.CID}, ackOf(m))
 	}
 	a.dirty = false
 	return nil
@@ -62,7 +62,7 @@ func (a *actor) admit(ctx context.Context, q *request) *entry {
 		return nil
 	}
 	k := dedupeKey{user: c.User, cid: c.CID}
-	if a.dedupe.join(k, q) {
+	if a.cache.join(k, q) {
 		return nil
 	}
 	return &entry{key: k, msg: domain.Message{

@@ -18,7 +18,21 @@ type spyMessages struct {
 	lasts    int
 	pages    int
 	finds    int
+	inserted int
 	findHook func(call int) error
+}
+
+func (m *spyMessages) Insert(ctx context.Context, msgs []domain.Message) []store.Result {
+	m.mu.Lock()
+	m.inserted += len(msgs)
+	m.mu.Unlock()
+	return m.Messages.Insert(ctx, msgs)
+}
+
+func (m *spyMessages) insertedCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.inserted
 }
 
 func (m *spyMessages) Last(ctx context.Context, room, thread uint64) (seq, pts uint64, err error) {

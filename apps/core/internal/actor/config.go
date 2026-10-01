@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -14,6 +15,7 @@ import (
 
 const (
 	cidCacheSize    = 4096
+	cidCacheTTL     = 10 * time.Minute
 	memberCacheSize = 1024
 	seedSize        = store.MaxPageLimit
 	maxRequeues     = 3
@@ -28,12 +30,20 @@ var (
 	errUnavailable   = fmt.Errorf("room store unavailable: %w", domain.ErrRetryLater)
 	errUnconfirmed   = fmt.Errorf("message write unconfirmed: %w", domain.ErrRetryLater)
 	errSeqContention = fmt.Errorf("sequence taken too many times: %w", domain.ErrRetryLater)
+	errCIDElsewhere  = fmt.Errorf("cid in flight on another core: %w", domain.ErrRetryLater)
+	errCIDUnsettled  = fmt.Errorf("cid reservation of an abandoned write still held: %w", domain.ErrRetryLater)
 	errMailboxFull   = fmt.Errorf("room mailbox full: %w", domain.ErrBusy)
 	errTooManyRooms  = fmt.Errorf("too many active rooms: %w", domain.ErrBusy)
 )
 
 type Submitter interface {
 	Submit(ctx context.Context, g flush.Group) error
+}
+
+type CIDRegistry interface {
+	Reserve(ctx context.Context, keys []dedupe.Key) ([]dedupe.Verdict, error)
+	Commit(ctx context.Context, entries []dedupe.Entry) error
+	Abort(ctx context.Context, keys []dedupe.Key) error
 }
 
 type SendCmd struct {

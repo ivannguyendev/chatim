@@ -15,6 +15,7 @@ type entry struct {
 	resends   int
 	fixed     bool
 	dup       bool
+	reserved  bool
 }
 
 type group struct {
@@ -34,9 +35,11 @@ type actor struct {
 	stale   bool
 	dirty   bool
 	members *lru[string, struct{}]
-	dedupe  dedupe
+	cache   cidCache
 	retries []*entry
 	flight  *group
+	landed  []landing
+	failed  []failure
 }
 
 func newActor(r *Router, id uint64) *actor {
@@ -47,7 +50,7 @@ func newActor(r *Router, id uint64) *actor {
 		results: make(chan []store.Result, 1),
 		dirty:   true,
 		members: newLRU[string, struct{}](memberCacheSize),
-		dedupe:  newDedupe(cidCacheSize),
+		cache:   newCIDCache(cidCacheSize, cidCacheTTL),
 	}
 }
 
@@ -119,11 +122,11 @@ func (a *actor) exit(err error) {
 		a.flight = nil
 		g.cancel()
 		for _, e := range g.entries {
-			a.dedupe.fail(e.key, err)
+			a.cache.fail(e.key, err)
 		}
 	}
 	for _, e := range a.retries {
-		a.dedupe.fail(e.key, err)
+		a.cache.fail(e.key, err)
 	}
 	a.retries = nil
 	for {
@@ -138,12 +141,12 @@ func (a *actor) exit(err error) {
 
 func (a *actor) commit(e *entry, stored domain.Message) {
 	a.last = max(a.last, stored.Seq)
-	a.dedupe.commit(e.key, ackOf(stored))
+	a.landed = append(a.landed, landing{e: e, ack: ackOf(stored)})
 }
 
 func (a *actor) fail(e *entry, err error, uncertain bool) {
 	if uncertain {
 		a.dirty = true
 	}
-	a.dedupe.fail(e.key, err)
+	a.failed = append(a.failed, failure{e: e, err: err, release: e.reserved && !uncertain})
 }

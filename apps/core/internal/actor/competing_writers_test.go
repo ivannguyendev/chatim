@@ -12,6 +12,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
+	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
 )
 
@@ -35,18 +36,18 @@ func newCluster(t *testing.T, n int) *cluster {
 		createRoom(t, rooms, id, clusterUsers...)
 	}
 	for range n {
-		cl.cores = append(cl.cores, startCore(t, cl.msgs, rooms))
+		cl.cores = append(cl.cores, startCore(t, cl.msgs, rooms, &fakeRegistry{}))
 	}
 	return cl
 }
 
-func startCore(t *testing.T, msgs *memstore.Messages, rooms *memstore.Rooms) *actor.Router {
+func startCore(t *testing.T, msgs store.Messages, rooms store.Rooms, cids actor.CIDRegistry) *actor.Router {
 	t.Helper()
 	fl, err := flush.New(msgs, flushConfig)
 	if err != nil {
 		t.Fatalf("flush.New: %v", err)
 	}
-	r, err := actor.NewRouter(msgs, rooms, fl, clusterConfig, quiet)
+	r, err := actor.NewRouter(msgs, rooms, fl, cids, clusterConfig, quiet)
 	if err != nil {
 		t.Fatalf("NewRouter: %v", err)
 	}

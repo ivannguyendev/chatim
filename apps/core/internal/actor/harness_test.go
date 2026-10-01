@@ -35,6 +35,7 @@ type rig struct {
 	msgs   *spyMessages
 	rooms  *spyRooms
 	sub    *fakeSubmitter
+	cids   *fakeRegistry
 	cancel context.CancelFunc
 	done   chan error
 	once   sync.Once
@@ -48,11 +49,12 @@ func newRig(t *testing.T, cfg actor.Config) *rig {
 		msgs:  &spyMessages{Messages: base},
 		rooms: &spyRooms{Rooms: memstore.NewRooms()},
 		sub:   &fakeSubmitter{store: base},
+		cids:  &fakeRegistry{},
 		done:  make(chan error, 1),
 	}
 	createRoom(t, rg.rooms, roomA, "alice", "bob")
 	createRoom(t, rg.rooms, roomB, "alice", "bob")
-	r, err := actor.NewRouter(rg.msgs, rg.rooms, rg.sub, cfg, quiet)
+	r, err := actor.NewRouter(rg.msgs, rg.rooms, rg.sub, rg.cids, cfg, quiet)
 	if err != nil {
 		t.Fatalf("NewRouter: %v", err)
 	}

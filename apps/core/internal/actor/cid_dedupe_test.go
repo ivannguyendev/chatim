@@ -4,9 +4,6 @@ import (
 	"context"
 	"testing"
 	"testing/synctest"
-
-	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
-	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
 func TestDuplicateQueuedWithPendingCIDSharesItsOutcome(t *testing.T) {
@@ -59,7 +56,7 @@ func TestDuplicateQueuedWithPendingCIDSharesItsOutcome(t *testing.T) {
 func TestFailedCIDIsForgottenSoItCanBeRetried(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rg := newRig(t, baseConfig)
-		rg.sub.then(func(msgs []domain.Message) []store.Result { return uniform(len(msgs), store.Rejected) })
+		rg.sub.then(rejected)
 		rg.start(t)
 		if _, err := rg.Send(t.Context(), cmd(roomA, "alice", "c1")); err == nil {
 			t.Fatal("rejected write was acked")

@@ -3,6 +3,7 @@ package actor
 import (
 	"errors"
 	"testing"
+	"time"
 )
 
 func TestLRUEvictsLeastRecentlyUsed(t *testing.T) {
@@ -22,8 +23,8 @@ func TestLRUEvictsLeastRecentlyUsed(t *testing.T) {
 	}
 }
 
-func TestDedupeBoundsCommittedAcksButNeverPendingOnes(t *testing.T) {
-	d := newDedupe(2)
+func TestCIDCacheBoundsCommittedAcksButNeverPendingOnes(t *testing.T) {
+	d := newCIDCache(2, time.Minute)
 	pending := dedupeKey{user: "alice", cid: "p"}
 	owner := newRequest(SendCmd{})
 	if d.join(pending, owner) {
