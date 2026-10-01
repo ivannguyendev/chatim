@@ -98,19 +98,30 @@ func (p *Publisher) Enqueue(room uint64, events []*chatimv1.Event) error {
 	if len(events) == 0 {
 		return nil
 	}
-	s := p.shards[int(slotmap.Of(room))%len(p.shards)]
+	return p.offer(item{room: room, events: events})
+}
+
+func (p *Publisher) Skip(room uint64, pts []uint64) error {
+	if len(pts) == 0 {
+		return nil
+	}
+	return p.offer(item{room: room, skips: pts})
+}
+
+func (p *Publisher) offer(it item) error {
+	s := p.shards[int(slotmap.Of(it.room))%len(p.shards)]
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	if p.closed {
 		return ErrClosed
 	}
 	select {
-	case s.queue <- item{room: room, events: events}:
+	case s.queue <- it:
 		s.full.Store(false)
 		return nil
 	default:
 		if s.full.CompareAndSwap(false, true) {
-			p.log.Warn("publish queue full; dropping events until recovery republishes them", "room", room, "events", len(events))
+			p.log.Warn("publish queue full; dropping events until recovery republishes them", "room", it.room, "events", len(it.events), "skips", len(it.skips))
 		}
 		return ErrQueueFull
 	}

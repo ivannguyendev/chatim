@@ -14,6 +14,7 @@ import (
 type item struct {
 	room   uint64
 	events []*chatimv1.Event
+	skips  []uint64
 }
 
 type shard struct {
@@ -63,7 +64,8 @@ func (s *shard) run(ctx context.Context) {
 				queue = nil
 				continue
 			}
-			s.carry = it
+			s.skip(it.room, it.skips)
+			s.carry = item{room: it.room, events: it.events}
 		case <-okc:
 			s.settleHead(nil)
 		case err := <-errc:
@@ -106,6 +108,22 @@ func (s *shard) hand(room uint64, ev *chatimv1.Event) {
 		s.overflowed("tracked rooms", room)
 	}
 	s.send(a)
+}
+
+func (s *shard) skip(room uint64, pts []uint64) {
+	now := time.Now()
+	for _, p := range pts {
+		if p == 0 {
+			continue
+		}
+		if !s.rooms.hand(room, p, now) {
+			s.overflowed("tracked rooms", room)
+			return
+		}
+		if s.rooms.acked(room, p) {
+			s.overflowed("published events above the watermark", room)
+		}
+	}
 }
 
 func (s *shard) settleHead(err error) {
