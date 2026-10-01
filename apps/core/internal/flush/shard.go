@@ -37,6 +37,7 @@ type shard struct {
 	queue    chan pending
 	window   time.Duration
 	maxBatch int
+	timeout  time.Duration
 	closeAll func()
 	timer    *time.Timer
 	carry    *pending
@@ -129,7 +130,7 @@ func (s *shard) flush(ctx context.Context, b batch) {
 	for _, p := range b.groups {
 		msgs = append(msgs, p.Msgs...)
 	}
-	res := s.msgs.Insert(ctx, msgs)
+	res := s.insert(ctx, msgs)
 	if len(res) != len(msgs) {
 		res = unknown(len(msgs), fmt.Errorf("flush: store returned %d results for %d messages", len(res), len(msgs)))
 	}
@@ -138,6 +139,12 @@ func (s *shard) flush(ctx context.Context, b batch) {
 		p.Done(res[:n:n])
 		res = res[n:]
 	}
+}
+
+func (s *shard) insert(ctx context.Context, msgs []domain.Message) []store.Result {
+	ictx, cancel := context.WithTimeout(ctx, s.timeout)
+	defer cancel()
+	return s.msgs.Insert(ictx, msgs)
 }
 
 func (s *shard) abort(ctx context.Context) error {

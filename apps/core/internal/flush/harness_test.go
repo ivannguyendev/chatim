@@ -5,6 +5,7 @@ import (
 	"slices"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -20,6 +21,9 @@ type harness struct {
 
 func start(t *testing.T, s store.Messages, cfg flush.Config) *harness {
 	t.Helper()
+	if cfg.InsertTimeout == 0 {
+		cfg.InsertTimeout = time.Hour
+	}
 	f, err := flush.New(s, cfg)
 	if err != nil {
 		t.Fatalf("New: %v", err)

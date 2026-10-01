@@ -11,19 +11,23 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/slotmap"
 )
 
-var validConfig = flush.Config{Shards: 2, Window: time.Millisecond, MaxBatch: 8, QueueSize: 4}
+var validConfig = flush.Config{Shards: 2, Window: time.Millisecond, MaxBatch: 8, QueueSize: 4, InsertTimeout: time.Second}
 
 func TestNewValidatesConfig(t *testing.T) {
 	tests := map[string]func(*flush.Config){
-		"zero shards":       func(c *flush.Config) { c.Shards = 0 },
-		"negative shards":   func(c *flush.Config) { c.Shards = -1 },
-		"zero window":       func(c *flush.Config) { c.Window = 0 },
-		"negative window":   func(c *flush.Config) { c.Window = -time.Millisecond },
-		"zero max batch":    func(c *flush.Config) { c.MaxBatch = 0 },
-		"zero queue size":   func(c *flush.Config) { c.QueueSize = 0 },
-		"negative queue sz": func(c *flush.Config) { c.QueueSize = -4 },
+		"zero shards":            func(c *flush.Config) { c.Shards = 0 },
+		"negative shards":        func(c *flush.Config) { c.Shards = -1 },
+		"zero window":            func(c *flush.Config) { c.Window = 0 },
+		"negative window":        func(c *flush.Config) { c.Window = -time.Millisecond },
+		"zero max batch":         func(c *flush.Config) { c.MaxBatch = 0 },
+		"zero queue size":        func(c *flush.Config) { c.QueueSize = 0 },
+		"negative queue sz":      func(c *flush.Config) { c.QueueSize = -4 },
+		"zero timeout":           func(c *flush.Config) { c.InsertTimeout = 0 },
+		"negative timeout":       func(c *flush.Config) { c.InsertTimeout = -time.Second },
+		"more shards than slots": func(c *flush.Config) { c.Shards = slotmap.Count + 1 },
 	}
 	for name, mutate := range tests {
 		cfg := validConfig
@@ -37,6 +41,11 @@ func TestNewValidatesConfig(t *testing.T) {
 	}
 	if _, err := flush.New(&fakeStore{}, validConfig); err != nil {
 		t.Errorf("New(valid) = %v", err)
+	}
+	maxShards := validConfig
+	maxShards.Shards = slotmap.Count
+	if _, err := flush.New(&fakeStore{}, maxShards); err != nil {
+		t.Errorf("New(%d shards) = %v, want nil", slotmap.Count, err)
 	}
 }
 
