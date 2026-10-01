@@ -1,0 +1,121 @@
+package flush
+
+import (
+	"cmp"
+	"context"
+	"errors"
+	"fmt"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/slotmap"
+)
+
+var (
+	errClosed       = fmt.Errorf("flusher closed: %w", domain.ErrRetryLater)
+	errInvalidGroup = fmt.Errorf("%w: write group needs messages and a done callback", apperr.ErrInvalidArgument)
+	errStarted      = errors.New("flusher already started")
+)
+
+type Group struct {
+	Room uint64
+	Msgs []domain.Message
+	Done func([]store.Result)
+}
+
+type Config struct {
+	Shards    int
+	Window    time.Duration
+	MaxBatch  int
+	QueueSize int
+}
+
+type Flusher struct {
+	shards  []*shard
+	mu      sync.RWMutex
+	closed  bool
+	started atomic.Bool
+	done    chan struct{}
+}
+
+func New(msgs store.Messages, cfg Config) (*Flusher, error) {
+	if msgs == nil {
+		return nil, fmt.Errorf("%w: flusher needs a message store", apperr.ErrInvalidArgument)
+	}
+	if cfg.Shards <= 0 || cfg.Window <= 0 || cfg.MaxBatch <= 0 || cfg.QueueSize <= 0 {
+		return nil, fmt.Errorf("%w: flush config %+v must be positive", apperr.ErrInvalidArgument, cfg)
+	}
+	f := &Flusher{shards: make([]*shard, cfg.Shards), done: make(chan struct{})}
+	for i := range f.shards {
+		f.shards[i] = &shard{
+			msgs:     msgs,
+			queue:    make(chan pending, cfg.QueueSize),
+			window:   cfg.Window,
+			maxBatch: cfg.MaxBatch,
+			closeAll: f.closeQueues,
+		}
+	}
+	return f, nil
+}
+
+func (f *Flusher) Run(ctx context.Context) error {
+	if !f.started.CompareAndSwap(false, true) {
+		return errStarted
+	}
+	defer close(f.done)
+	errs := make([]error, len(f.shards))
+	var wg sync.WaitGroup
+	for i, s := range f.shards {
+		wg.Go(func() { errs[i] = s.run(ctx) })
+	}
+	wg.Wait()
+	return cmp.Or(errs...)
+}
+
+func (f *Flusher) Submit(ctx context.Context, g Group) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if len(g.Msgs) == 0 || g.Done == nil {
+		return errInvalidGroup
+	}
+	s := f.shards[int(slotmap.Of(g.Room))%len(f.shards)]
+	p := pending{Group: g, at: time.Now()}
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	if f.closed {
+		return errClosed
+	}
+	select {
+	case s.queue <- p:
+		return nil
+	default:
+		return domain.ErrBusy
+	}
+}
+
+func (f *Flusher) Close(ctx context.Context) error {
+	f.closeQueues()
+	select {
+	case <-f.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (f *Flusher) closeQueues() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.closed {
+		return
+	}
+	f.closed = true
+	for _, s := range f.shards {
+		close(s.queue)
+	}
+}
