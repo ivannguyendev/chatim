@@ -21,7 +21,7 @@ func (a *actor) dispatch(ctx context.Context, first *request) {
 	for i, e := range entries {
 		msgs[i] = e.msg
 	}
-	a.markActive(gctx)
+	a.markActive(gctx, msgs)
 	deadline, _ := gctx.Deadline()
 	if err := a.r.sub.Submit(gctx, flush.Group{Room: a.id, Msgs: msgs, Done: a.deliver, Deadline: deadline}); err != nil {
 		switch {

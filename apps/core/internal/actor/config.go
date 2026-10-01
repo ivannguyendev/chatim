@@ -55,7 +55,7 @@ type EventPublisher interface {
 }
 
 type ActivityMarker interface {
-	MarkActive(ctx context.Context, room uint64) error
+	Mark(ctx context.Context, room, last uint64) error
 }
 
 type CIDRegistry interface {

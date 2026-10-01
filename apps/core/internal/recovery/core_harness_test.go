@@ -22,6 +22,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/publish/publishtest"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
+	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 var (
@@ -74,15 +75,25 @@ type core struct {
 	stop   func()
 }
 
+type lostEvents struct{}
+
+func (lostEvents) Enqueue(uint64, []*chatimv1.Event) error { return nil }
+
+func (lostEvents) Skip(uint64, []uint64) error { return nil }
+
 func (w *world) startCore(t *testing.T, id string, js publish.JetStream) *core {
 	t.Helper()
 	flusher, err := flush.New(w.msgs, flushSetup)
 	if err != nil {
 		t.Fatalf("flush.New: %v", err)
 	}
-	pub, err := publish.New(js, w.rdb, w.pub, quiet)
-	if err != nil {
-		t.Fatalf("publish.New: %v", err)
+	var pub *publish.Publisher
+	var events actor.EventPublisher = lostEvents{}
+	if js != nil {
+		if pub, err = publish.New(js, w.rdb, w.pub, quiet); err != nil {
+			t.Fatalf("publish.New: %v", err)
+		}
+		events = pub
 	}
 	marks, err := publish.NewActivityMarks(w.rdb, publish.MarkConfig{Timeout: time.Second, Cooldown: 20 * time.Millisecond}, quiet)
 	if err != nil {
@@ -92,14 +103,16 @@ func (w *world) startCore(t *testing.T, id string, js publish.JetStream) *core {
 	if err != nil {
 		t.Fatalf("dedupe.New: %v", err)
 	}
-	router, err := actor.NewRouter(w.msgs, w.rooms, flusher, cids, pub, marks, routerSetup, quiet)
+	router, err := actor.NewRouter(w.msgs, w.rooms, flusher, cids, events, marks, routerSetup, quiet)
 	if err != nil {
 		t.Fatalf("NewRouter: %v", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &core{router: router, pub: pub, cancel: cancel}
 	c.wg.Go(func() { _ = flusher.Run(ctx) })
-	c.wg.Go(func() { _ = pub.Run(ctx) })
+	if pub != nil {
+		c.wg.Go(func() { _ = pub.Run(ctx) })
+	}
 	c.wg.Go(func() { _ = router.Run(ctx) })
 	for !router.Started() {
 		runtime.Gosched()
@@ -119,8 +132,10 @@ func (c *core) drain(t *testing.T) {
 	if err := c.router.Close(ctx); err != nil {
 		t.Fatalf("router Close: %v", err)
 	}
-	if err := c.pub.Close(ctx); err != nil {
-		t.Fatalf("publisher Close: %v", err)
+	if c.pub != nil {
+		if err := c.pub.Close(ctx); err != nil {
+			t.Fatalf("publisher Close: %v", err)
+		}
 	}
 	c.stop()
 }

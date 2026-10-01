@@ -19,7 +19,7 @@ func (nopPublisher) Skip(uint64, []uint64) error { return nil }
 
 type nopMarker struct{}
 
-func (nopMarker) MarkActive(context.Context, uint64) error { return nil }
+func (nopMarker) Mark(context.Context, uint64, uint64) error { return nil }
 
 type journal struct {
 	mu      sync.Mutex
@@ -108,20 +108,28 @@ func (p *publishSpy) events(room uint64) []*chatimv1.Event {
 type markSpy struct {
 	log *journal
 
-	mu    sync.Mutex
-	tries map[uint64]int
-	err   error
+	mu     sync.Mutex
+	tries  map[uint64]int
+	floors map[uint64][]uint64
+	err    error
 }
 
-func (m *markSpy) MarkActive(_ context.Context, room uint64) error {
+func (m *markSpy) Mark(_ context.Context, room, last uint64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.tries == nil {
-		m.tries = map[uint64]int{}
+		m.tries, m.floors = map[uint64]int{}, map[uint64][]uint64{}
 	}
 	m.tries[room]++
+	m.floors[room] = append(m.floors[room], last)
 	m.log.add("mark")
 	return m.err
+}
+
+func (m *markSpy) pinned(room uint64) []uint64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return slices.Clone(m.floors[room])
 }
 
 func (m *markSpy) attempts(room uint64) int {
