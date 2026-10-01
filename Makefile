@@ -10,7 +10,7 @@ GO_RUN   := docker run --rm -v "$(CURDIR)":/src -w /src -v chatim-gomod:/go/pkg/
 BUF_RUN  := docker run --rm -v "$(CURDIR)":/src -w /src $(BUF_IMAGE)
 POC_RUN  := $(GO_RUN) --network $(NETWORK) -e "MONGO_URI=mongodb://$(MONGO_ROOT_USER):$(MONGO_ROOT_PASSWORD)@chatim-mongodb:27017/?replicaSet=rs0&authSource=admin" -e "PG_URI=postgres://$(PG_USER):$(PG_PASSWORD)@chatim-postgres:5432/chatim_poc"
 
-.PHONY: go check-env test vet fmt-check lint vuln tidy proto buf-lint poc image infra-up infra-down infra-reset pg-up pg-down
+.PHONY: go check-env test itest vet fmt-check lint vuln tidy proto buf-lint poc image infra-up infra-down infra-reset pg-up pg-down
 
 go:
 	$(GO_RUN) $(GO_IMAGE) go $(ARGS)
@@ -20,6 +20,9 @@ check-env:
 
 test:
 	$(GO_RUN) $(GO_IMAGE) go test -race -shuffle=on ./...
+
+itest: check-env
+	$(GO_RUN) --network $(NETWORK) -e "CHATIM_IT_MONGO_URI=mongodb://$(MONGO_ROOT_USER):$(MONGO_ROOT_PASSWORD)@chatim-mongodb:27017/?replicaSet=rs0&authSource=admin" -e CHATIM_IT_REDIS_ADDR=chatim-redis:6379 -e CHATIM_IT_NATS_URL=nats://chatim-nats:4222 $(GO_IMAGE) go test -race -shuffle=on -count=1 ./...
 
 vet:
 	$(GO_RUN) $(GO_IMAGE) go vet ./...
