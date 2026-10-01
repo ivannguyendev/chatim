@@ -21,6 +21,12 @@ func (s *Store) Create(ctx context.Context, r domain.Room, members []domain.Memb
 	if err != nil {
 		return err
 	}
+	if _, err := s.rooms.InsertOne(ctx, room); err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return fmt.Errorf("create room %d: %w", r.ID, store.ErrRoomExists)
+		}
+		return fmt.Errorf("create room %d: %w", r.ID, err)
+	}
 	docs := make([]any, len(members))
 	for i, m := range members {
 		docs[i] = encodeMember(m, room.ID)
@@ -28,12 +34,6 @@ func (s *Store) Create(ctx context.Context, r domain.Room, members []domain.Memb
 	_, err = s.members.InsertMany(ctx, docs, options.InsertMany().SetOrdered(false))
 	if err != nil && !onlyDuplicateKeys(err) {
 		return fmt.Errorf("create room %d: insert members: %w", r.ID, err)
-	}
-	if _, err := s.rooms.InsertOne(ctx, room); err != nil {
-		if mongo.IsDuplicateKeyError(err) {
-			return fmt.Errorf("create room %d: %w", r.ID, store.ErrRoomExists)
-		}
-		return fmt.Errorf("create room %d: %w", r.ID, err)
 	}
 	return nil
 }

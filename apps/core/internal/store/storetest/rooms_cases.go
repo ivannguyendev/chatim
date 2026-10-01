@@ -13,7 +13,7 @@ import (
 func roomsCases() []roomsCase {
 	return []roomsCase{
 		{"create then get room and members", roomsCreate},
-		{"create of an existing id fails and keeps the room", roomsCreateExisting},
+		{"create of an existing id fails, keeps the room and adds no members", roomsCreateExisting},
 		{"get of a missing room is not found", roomsMissing},
 		{"invalid room or members are rejected and not stored", roomsInvalid},
 		{"membership is per room", roomsMembership},
@@ -98,6 +98,7 @@ func roomsCreateExisting(t *testing.T, s store.Rooms) {
 	for _, m := range members {
 		assertMember(t, s, m)
 	}
+	assertNotMember(t, s, roomA, "dave")
 }
 
 func roomsMissing(t *testing.T, s store.Rooms) {

@@ -35,16 +35,16 @@ func (s *Rooms) Create(ctx context.Context, r domain.Room, members []domain.Memb
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if _, ok := s.rooms[r.ID]; ok {
+		return fmt.Errorf("create room %d: %w", r.ID, store.ErrRoomExists)
+	}
+	s.rooms[r.ID] = r
 	for _, m := range members {
 		k := memberKey{m.Room, m.User}
 		if _, ok := s.members[k]; !ok {
 			s.members[k] = m
 		}
 	}
-	if _, ok := s.rooms[r.ID]; ok {
-		return fmt.Errorf("create room %d: %w", r.ID, store.ErrRoomExists)
-	}
-	s.rooms[r.ID] = r
 	return nil
 }
 

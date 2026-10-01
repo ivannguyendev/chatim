@@ -10,6 +10,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
 var (
@@ -39,7 +40,8 @@ func TestClassifyInsert(t *testing.T) {
 		wantIs error
 	}{
 		{"no error inserts every sent doc", []int{0, 1, 2, 3, 4}, nil, []store.Outcome{I, I, I, I, I}, nil},
-		{"write errors map by sent index", []int{0, 2, 4}, bulk(nil, dupAt(1), failedAt(2)), []store.Outcome{I, R, D, R, R}, nil},
+		{"write errors map by sent index", []int{0, 2, 4}, bulk(nil, dupAt(1), failedAt(2)), []store.Outcome{I, R, D, R, R}, apperr.ErrInvalidArgument},
+		{"server write error is invalid argument", []int{0, 1}, bulk(nil, failedAt(1)), []store.Outcome{I, R}, apperr.ErrInvalidArgument},
 		{"wrapped bulk exception still maps", []int{1, 3}, fmt.Errorf("op: %w", bulk(nil, dupAt(0))), []store.Outcome{R, D, R, I, R}, nil},
 		{"write concern error makes clean docs unknown", []int{0, 1, 2}, bulk(errWriteConcernTimeout, dupAt(0), failedAt(2)), []store.Outcome{D, U, R, R, R}, nil},
 		{"write concern error alone", []int{0, 1, 2, 3, 4}, bulk(errWriteConcernTimeout), []store.Outcome{U, U, U, U, U}, nil},

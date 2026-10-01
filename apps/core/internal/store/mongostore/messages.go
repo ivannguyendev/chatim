@@ -11,6 +11,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/apperr"
 	"github.com/ivannguyendev/chatim/pkg/keys"
 )
 
@@ -65,7 +66,7 @@ func writeErrorResult(we mongo.BulkWriteError) store.Result {
 	if mongo.IsDuplicateKeyError(we.WriteError) {
 		return store.Result{Outcome: store.Duplicate}
 	}
-	return store.Result{Outcome: store.Rejected, Err: fmt.Errorf("insert message: %w", we.WriteError)}
+	return store.Result{Outcome: store.Rejected, Err: fmt.Errorf("insert message: %w: %w", apperr.ErrInvalidArgument, we.WriteError)}
 }
 
 func unknown(err error) store.Result {
