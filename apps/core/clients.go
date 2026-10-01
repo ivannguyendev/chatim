@@ -16,9 +16,12 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
 )
 
+const slotRedisPool = 4
+
 type clients struct {
 	mongo *mongo.Client
 	redis *redis.Client
+	slots *redis.Client
 	nats  *nats.Conn
 	js    jetstream.JetStream
 }
@@ -48,26 +51,34 @@ func (c *clients) connectMongo(ctx context.Context, cfg config.Config) error {
 		SetServerSelectionTimeout(cfg.ConnectTimeout)
 	client, err := mongo.Connect(opts)
 	if err != nil {
-		return fmt.Errorf("mongo connect %s: %w", config.RedactURL(cfg.MongoURI), err)
+		return fmt.Errorf("mongo connect %s: %w", config.RedactURL(cfg.MongoURI), config.RedactError(err, cfg.MongoURI))
 	}
 	c.mongo = client
 	if err := client.Ping(ctx, readpref.Primary()); err != nil {
-		return fmt.Errorf("mongo ping %s: %w", config.RedactURL(cfg.MongoURI), err)
+		return fmt.Errorf("mongo ping %s: %w", config.RedactURL(cfg.MongoURI), config.RedactError(err, cfg.MongoURI))
 	}
 	return nil
 }
 
 func (c *clients) connectRedis(ctx context.Context, cfg config.Config) error {
-	c.redis = redis.NewClient(&redis.Options{
-		Addr:                  cfg.RedisAddr,
-		DB:                    cfg.RedisDB,
-		ClientName:            "chatim-core-" + cfg.CoreID,
-		ContextTimeoutEnabled: true,
-	})
-	if err := c.redis.Ping(ctx).Err(); err != nil {
-		return fmt.Errorf("redis ping %s/%d: %w", cfg.RedisAddr, cfg.RedisDB, err)
+	c.redis = redis.NewClient(redisOptions(cfg, "chatim-core-"+cfg.CoreID, 0))
+	c.slots = redis.NewClient(redisOptions(cfg, "chatim-core-slots-"+cfg.CoreID, slotRedisPool))
+	for _, rdb := range []*redis.Client{c.redis, c.slots} {
+		if err := rdb.Ping(ctx).Err(); err != nil {
+			return fmt.Errorf("redis ping %s/%d: %w", cfg.RedisAddr, cfg.RedisDB, err)
+		}
 	}
 	return nil
+}
+
+func redisOptions(cfg config.Config, name string, pool int) *redis.Options {
+	return &redis.Options{
+		Addr:                  cfg.RedisAddr,
+		DB:                    cfg.RedisDB,
+		ClientName:            name,
+		PoolSize:              pool,
+		ContextTimeoutEnabled: true,
+	}
 }
 
 func (c *clients) connectNATS(cfg config.Config, log *slog.Logger) error {
@@ -83,12 +94,12 @@ func (c *clients) connectNATS(cfg config.Config, log *slog.Logger) error {
 		nats.ReconnectHandler(func(*nats.Conn) { log.Info("nats reconnected") }),
 	)
 	if err != nil {
-		return fmt.Errorf("nats connect %s: %w", config.RedactURL(cfg.NATSURL), err)
+		return fmt.Errorf("nats connect %s: %w", config.RedactURL(cfg.NATSURL), config.RedactError(err, cfg.NATSURL))
 	}
 	c.nats = nc
 	js, err := jetstream.New(nc, cfg.Publish.JetStreamOptions()...)
 	if err != nil {
-		return fmt.Errorf("jetstream: %w", err)
+		return fmt.Errorf("jetstream: %w", config.RedactError(err, cfg.NATSURL))
 	}
 	c.js = js
 	return nil
@@ -101,8 +112,10 @@ func (c *clients) close(ctx context.Context, log *slog.Logger) {
 	if c.nats != nil {
 		c.nats.Close()
 	}
-	if c.redis != nil {
-		errs = append(errs, c.redis.Close())
+	for _, rdb := range []*redis.Client{c.redis, c.slots} {
+		if rdb != nil {
+			errs = append(errs, rdb.Close())
+		}
 	}
 	if c.mongo != nil {
 		errs = append(errs, c.mongo.Disconnect(ctx))

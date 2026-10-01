@@ -5,12 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
 )
-
-const startPoll = time.Millisecond
 
 type tasks struct {
 	admin, publisher, flusher, router, sweeper, slots, grpc *task
@@ -48,28 +45,25 @@ func (a *app) serve(ctx context.Context, adminLis, grpcLis net.Listener) error {
 		slots:     sup.start("slot manager", a.slots.Run),
 	}
 	cause := a.awaitRouter(ctx, sup)
-	t.grpc = sup.start("grpc", func(c context.Context) error { return a.grpc.ServeListener(c, grpcLis) })
-	if cause == nil && ctx.Err() == nil {
-		a.admin.SetReady(true)
-		a.log.InfoContext(ctx, "core ready", "grpc", grpcLis.Addr().String(), "admin", adminLis.Addr().String())
-		cause = sup.wait(ctx)
+	if cause != nil || ctx.Err() != nil {
+		_ = grpcLis.Close()
+		return a.shutdown(ctx, sup, t, cause)
 	}
-	return a.shutdown(ctx, sup, t, cause)
+	t.grpc = sup.start("grpc", func(c context.Context) error { return a.grpc.ServeListener(c, grpcLis) })
+	a.admin.SetReady(true)
+	a.log.InfoContext(ctx, "core ready", "grpc", grpcLis.Addr().String(), "admin", adminLis.Addr().String())
+	return a.shutdown(ctx, sup, t, sup.wait(ctx))
 }
 
 func (a *app) awaitRouter(ctx context.Context, sup *supervisor) error {
-	tick := time.NewTicker(startPoll)
-	defer tick.Stop()
-	for !a.router.Started() {
-		select {
-		case err := <-sup.failed:
-			return err
-		case <-ctx.Done():
-			return nil
-		case <-tick.C:
-		}
+	select {
+	case <-a.router.Running():
+		return nil
+	case err := <-sup.failed:
+		return err
+	case <-ctx.Done():
+		return nil
 	}
-	return nil
 }
 
 func listenAll(ctx context.Context, addrs ...string) ([]net.Listener, error) {

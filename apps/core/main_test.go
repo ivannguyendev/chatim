@@ -54,3 +54,25 @@ func TestRunFailsFastWhenMongoIsUnreachable(t *testing.T) {
 		t.Fatalf("run error %q leaks the mongo password", err)
 	}
 }
+
+func TestConnectErrorsHideCredentials(t *testing.T) {
+	cfg := config.Config{
+		CoreID:         "core-redact",
+		ConnectTimeout: 300 * time.Millisecond,
+		MongoURI:       "mongodb://chatim:s3cr3t@[bad/?replicaSet=rs0",
+		NATSURL:        "nats://core:s3cr3t@[bad",
+	}
+	c := &clients{}
+	defer c.close(t.Context(), quiet)
+	for name, err := range map[string]error{
+		"mongo": c.connectMongo(t.Context(), cfg),
+		"nats":  c.connectNATS(cfg, quiet),
+	} {
+		if err == nil {
+			t.Fatalf("%s connect = nil, want an error for a malformed url", name)
+		}
+		if strings.Contains(err.Error(), "s3cr3t") {
+			t.Fatalf("%s connect error %q leaks the password", name, err)
+		}
+	}
+}

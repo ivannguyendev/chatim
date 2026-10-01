@@ -49,8 +49,8 @@ func (s *stopper) step(name string, limit time.Duration, drain func(context.Cont
 		}
 		cancel()
 	}
-	if serr := t.stop(s.ctx); serr != nil {
-		err = errors.Join(err, serr)
+	if t != nil {
+		err = errors.Join(err, t.stop(s.ctx))
 	}
 	if err != nil {
 		s.failed = append(s.failed, name)

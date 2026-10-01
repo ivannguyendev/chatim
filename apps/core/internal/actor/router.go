@@ -26,6 +26,7 @@ type Router struct {
 	closed  bool
 	runCtx  context.Context
 	wg      sync.WaitGroup
+	running chan struct{}
 	closing chan struct{}
 	done    chan struct{}
 }
@@ -50,6 +51,7 @@ func NewRouter(msgs store.Messages, rooms store.Rooms, sub Submitter, cids CIDRe
 		cfg:     cfg,
 		log:     log,
 		actors:  make(map[uint64]*actor),
+		running: make(chan struct{}),
 		closing: make(chan struct{}),
 		done:    make(chan struct{}),
 	}, nil
@@ -78,8 +80,11 @@ func (r *Router) start(ctx context.Context) error {
 		return errStarted
 	}
 	r.started, r.runCtx = true, ctx
+	close(r.running)
 	return nil
 }
+
+func (r *Router) Running() <-chan struct{} { return r.running }
 
 func (r *Router) Started() bool {
 	r.mu.RLock()
