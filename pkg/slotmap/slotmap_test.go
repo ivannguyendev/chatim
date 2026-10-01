@@ -15,7 +15,7 @@ func TestOfSpreadsRoomsEvenly(t *testing.T) {
 	}
 	for name, next := range sources {
 		counts := make([]int, Count)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			counts[Of(next(i))]++
 		}
 		mean := n / Count
@@ -28,8 +28,11 @@ func TestOfSpreadsRoomsEvenly(t *testing.T) {
 }
 
 func TestOfIsDeterministic(t *testing.T) {
-	if Of(0x5f00aa11bb22cc33) != Of(0x5f00aa11bb22cc33) {
-		t.Fatal("Of must return the same slot for the same room")
+	pinned := map[uint64]uint16{0: 0, 1: 812, 42: 460, 0x5f00aa11bb22cc33: 250, ^uint64(0): 801}
+	for room, want := range pinned {
+		if got := Of(room); got != want {
+			t.Errorf("Of(%#x) = %d, want %d: slot assignment must never change", room, got, want)
+		}
 	}
 }
 
@@ -37,7 +40,7 @@ func TestPreferredMovesOnlyTheNewCoreShare(t *testing.T) {
 	before := []string{"core-a", "core-b", "core-c"}
 	after := append(slices.Clone(before), "core-d")
 	moved := 0
-	for s := uint16(0); s < Count; s++ {
+	for s := range uint16(Count) {
 		was, now := Preferred(s, before), Preferred(s, after)
 		if was == now {
 			continue
@@ -55,7 +58,7 @@ func TestPreferredMovesOnlyTheNewCoreShare(t *testing.T) {
 func TestPreferredBalancesCores(t *testing.T) {
 	cores := []string{"core-a", "core-b", "core-c"}
 	share := map[string]int{}
-	for s := uint16(0); s < Count; s++ {
+	for s := range uint16(Count) {
 		share[Preferred(s, cores)]++
 	}
 	for _, c := range cores {

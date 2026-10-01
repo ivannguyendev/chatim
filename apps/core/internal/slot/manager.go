@@ -74,7 +74,7 @@ func (m *Manager) Run(ctx context.Context) error {
 	defer t.Stop()
 	for {
 		if err := m.Step(ctx); err != nil && ctx.Err() == nil {
-			m.log.Warn("slot reconcile failed", "err", err)
+			m.log.WarnContext(ctx, "slot reconcile failed", "err", err)
 		}
 		select {
 		case <-ctx.Done():

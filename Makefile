@@ -1,13 +1,14 @@
 -include .env
 
 GO_IMAGE ?= golang:1.26
+LINT_IMAGE ?= golangci/golangci-lint:v2.14.0
 NETWORK  ?= chatim_default
 COMPOSE  := docker compose -f deploy/compose/docker-compose.yml --env-file .env
 COMPOSE_ALL := $(COMPOSE) --profile postgres
 GO_RUN   := docker run --rm -v "$(CURDIR)":/src -w /src -v chatim-gomod:/go/pkg/mod -v chatim-gocache:/root/.cache/go-build -e GOFLAGS=-buildvcs=false
 POC_RUN  := $(GO_RUN) --network $(NETWORK) -e "MONGO_URI=mongodb://$(MONGO_ROOT_USER):$(MONGO_ROOT_PASSWORD)@chatim-mongodb:27017/?replicaSet=rs0&authSource=admin" -e "PG_URI=postgres://$(PG_USER):$(PG_PASSWORD)@chatim-postgres:5432/chatim_poc"
 
-.PHONY: go check-env test vet fmt-check tidy poc image infra-up infra-down infra-reset pg-up pg-down
+.PHONY: go check-env test vet fmt-check lint vuln tidy poc image infra-up infra-down infra-reset pg-up pg-down
 
 go:
 	$(GO_RUN) $(GO_IMAGE) go $(ARGS)
@@ -23,6 +24,12 @@ vet:
 
 fmt-check:
 	$(GO_RUN) $(GO_IMAGE) sh -c 'test -z "$$(gofmt -l .)" || (gofmt -l . && exit 1)'
+
+lint:
+	$(GO_RUN) -v chatim-lintcache:/root/.cache/golangci-lint $(LINT_IMAGE) golangci-lint run ./...
+
+vuln:
+	$(GO_RUN) $(GO_IMAGE) go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
 tidy:
 	$(GO_RUN) $(GO_IMAGE) go mod tidy

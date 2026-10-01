@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -24,7 +25,7 @@ func printStorage(ctx context.Context, coll *mongo.Collection) error {
 		return fmt.Errorf("decode collStats: %w", err)
 	}
 	if len(out) == 0 {
-		return fmt.Errorf("collStats returned no rows")
+		return errors.New("collStats returned no rows")
 	}
 	s := out[0].Storage
 	if s.Count == 0 || s.StorageSize == 0 {

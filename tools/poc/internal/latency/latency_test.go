@@ -41,9 +41,9 @@ func TestSummaryEdgeCases(t *testing.T) {
 func TestRecorderIsSafeForConcurrentUse(t *testing.T) {
 	var r Recorder
 	var wg sync.WaitGroup
-	for g := 0; g < 10; g++ {
+	for range 10 {
 		wg.Go(func() {
-			for i := 0; i < 100; i++ {
+			for range 100 {
 				r.Add(time.Millisecond)
 			}
 		})

@@ -77,7 +77,7 @@ func TestReleaseDropsLowestScoreSlots(t *testing.T) {
 		t.Fatalf("core-a owns %d slots, want %d", len(kept), slotmap.Count/2)
 	}
 	var keptScores, releasedScores []uint64
-	for s := uint16(0); s < slotmap.Count; s++ {
+	for s := range uint16(slotmap.Count) {
 		score := slotmap.Score(s, "core-a")
 		if slices.Contains(kept, s) {
 			keptScores = append(keptScores, score)

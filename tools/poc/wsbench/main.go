@@ -10,20 +10,23 @@ import (
 	"time"
 )
 
-func main() {
+func main() { os.Exit(realMain()) }
+
+func realMain() int {
 	if len(os.Args) < 2 {
 		usage()
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 	run := map[string]func(context.Context, []string) error{"server": runServer, "client": runClient}[os.Args[1]]
 	if run == nil {
 		usage()
 	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	if err := run(ctx, os.Args[2:]); err != nil {
 		fmt.Fprintln(os.Stderr, "wsbench:", err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 func usage() {

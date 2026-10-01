@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
@@ -24,7 +25,7 @@ func createTable(ctx context.Context, pool *pgxpool.Pool, table string, partitio
 	if _, err := pool.Exec(ctx, fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (%s) PARTITION BY HASH (room_id)", id, columnDefs)); err != nil {
 		return err
 	}
-	for i := 0; i < partitions; i++ {
+	for i := range partitions {
 		part := pgx.Identifier{fmt.Sprintf("%s_p%d", table, i)}.Sanitize()
 		stmt := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s PARTITION OF %s FOR VALUES WITH (MODULUS %d, REMAINDER %d)", part, id, partitions, i)
 		if _, err := pool.Exec(ctx, stmt); err != nil {
@@ -92,8 +93,11 @@ func explain(ctx context.Context, pool *pgxpool.Pool, sql string, args ...any) (
 	var plans []struct {
 		Plan planNode `json:"Plan"`
 	}
-	if err := json.Unmarshal([]byte(raw), &plans); err != nil || len(plans) == 0 {
-		return nil, fmt.Errorf("decode explain: %v", err)
+	if err := json.Unmarshal([]byte(raw), &plans); err != nil {
+		return nil, fmt.Errorf("decode explain: %w", err)
+	}
+	if len(plans) == 0 {
+		return nil, errors.New("decode explain: empty plan")
 	}
 	return plans[0].Plan.stages(), nil
 }

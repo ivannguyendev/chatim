@@ -28,7 +28,7 @@ func TestSingleCoreClaimsAllSlots(t *testing.T) {
 func TestCoresConvergeToFairShares(t *testing.T) {
 	mr, rdb := newRedis(t)
 	ms := []*Manager{newManager(t, rdb, "core-a", nil), newManager(t, rdb, "core-b", nil), newManager(t, rdb, "core-c", nil)}
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		stepAll(t, ms...)
 	}
 	assertPartition(t, mr, ms...)
@@ -38,11 +38,11 @@ func TestCoresConvergeToFairShares(t *testing.T) {
 func TestDeadCoreSlotsAreTakenOver(t *testing.T) {
 	mr, rdb := newRedis(t)
 	a, b, c := newManager(t, rdb, "core-a", nil), newManager(t, rdb, "core-b", nil), newManager(t, rdb, "core-c", nil)
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		stepAll(t, a, b, c)
 	}
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		mr.FastForward(time.Second)
 		stepAll(t, a, b)
 	}
@@ -56,11 +56,11 @@ func TestDeadCoreSlotsAreTakenOver(t *testing.T) {
 func TestRedisDataLossReconverges(t *testing.T) {
 	mr, rdb := newRedis(t)
 	ms := []*Manager{newManager(t, rdb, "core-a", nil), newManager(t, rdb, "core-b", nil), newManager(t, rdb, "core-c", nil)}
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		stepAll(t, ms...)
 	}
 	mr.FlushAll()
-	for round := 0; round < 5; round++ {
+	for range 5 {
 		stepAll(t, ms...)
 		assertDisjoint(t, ms...)
 	}
@@ -73,7 +73,7 @@ func TestReleaseAllHandsSlotsBack(t *testing.T) {
 	drained := 0
 	a := newManager(t, rdb, "core-a", func(context.Context, uint16) { drained++ })
 	b := newManager(t, rdb, "core-b", nil)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		stepAll(t, a, b)
 	}
 	held := a.Owned()
@@ -153,7 +153,7 @@ func stepAll(t *testing.T, ms ...*Manager) {
 func assertPartition(t *testing.T, mr *miniredis.Miniredis, ms ...*Manager) {
 	t.Helper()
 	owner := assertDisjoint(t, ms...)
-	for s := uint16(0); s < slotmap.Count; s++ {
+	for s := range uint16(slotmap.Count) {
 		inRedis, _ := mr.Get(slotmap.SlotKey(s))
 		if owner[s] == "" || inRedis != owner[s] {
 			t.Fatalf("slot %d: local owner %q, redis owner %q", s, owner[s], inRedis)

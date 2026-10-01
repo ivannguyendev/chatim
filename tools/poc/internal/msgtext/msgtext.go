@@ -41,7 +41,7 @@ func Load(path string) ([]string, error) {
 		return nil, fmt.Errorf("read text file: %w", err)
 	}
 	var texts []string
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		if line = strings.TrimSpace(line); line != "" {
 			texts = append(texts, line)
 		}
