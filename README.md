@@ -48,4 +48,5 @@ Công cụ PoC nằm ở `tools/poc/`, chạy bằng `make poc TOOL=<tên> ARGS=
 - [Thiết kế Phase 1: core + gateway](docs/designs/260930-chat-core-gateway-design.md)
 - [Nghiên cứu kiến trúc chat mã nguồn mở (tinode, teamgram, chatto, gws)](docs/research/260930-opensource-chat-architecture-research.md)
 - [Kết quả PoC](docs/poc/README.md)
+- [Roadmap](docs/roadmap.md)
 - [Plan M0–M1](docs/plans/2026-09-30-phase1-foundation-and-poc.md)
