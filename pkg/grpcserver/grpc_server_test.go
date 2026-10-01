@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"go.uber.org/goleak"
@@ -108,33 +109,36 @@ func TestErrorBoundary(t *testing.T) {
 }
 
 func TestShutdownForcesStopAfterTimeout(t *testing.T) {
-	entered := make(chan struct{})
-	release := make(chan struct{})
-	h := start(t, grpcserver.Config{ShutdownTimeout: 100 * time.Millisecond},
-		func(context.Context) error {
-			close(entered)
-			<-release
-			return nil
-		})
-	defer close(release)
+	synctest.Test(t, func(t *testing.T) {
+		const timeout = 100 * time.Millisecond
+		entered := make(chan struct{})
+		release := make(chan struct{})
+		h := start(t, grpcserver.Config{ShutdownTimeout: timeout},
+			func(context.Context) error {
+				close(entered)
+				<-release
+				return nil
+			})
+		defer close(release)
 
-	rpcErr := make(chan error, 1)
-	go func() { rpcErr <- callFake(context.Background(), h.conn) }()
-	<-entered
+		rpcErr := make(chan error, 1)
+		go func() { rpcErr <- callFake(context.Background(), h.conn) }()
+		<-entered
 
-	begin := time.Now()
-	h.cancel()
-	select {
-	case err := <-rpcErr:
-		if status.Code(err) != codes.Unavailable {
-			t.Errorf("in-flight RPC got %v, want Unavailable", err)
+		begin := time.Now()
+		h.cancel()
+		select {
+		case err := <-rpcErr:
+			if status.Code(err) != codes.Unavailable {
+				t.Errorf("in-flight RPC got %v, want Unavailable", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("shutdown did not force-stop the stuck RPC")
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("shutdown did not force-stop the stuck RPC")
-	}
-	if elapsed := time.Since(begin); elapsed < 100*time.Millisecond {
-		t.Errorf("stopped after %v, before ShutdownTimeout", elapsed)
-	}
+		if elapsed := time.Since(begin); elapsed < timeout {
+			t.Errorf("stopped after %v, before ShutdownTimeout %v", elapsed, timeout)
+		}
+	})
 }
 
 func TestWatchStreamEndsOnShutdown(t *testing.T) {
