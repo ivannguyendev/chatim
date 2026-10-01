@@ -21,6 +21,8 @@ const (
 	maxRequeues     = 3
 	findBackoff     = 5 * time.Millisecond
 	maxFindBackoff  = 200 * time.Millisecond
+
+	reservationMargin = time.Second
 )
 
 var (
@@ -32,6 +34,9 @@ var (
 	errSeqContention = fmt.Errorf("sequence taken too many times: %w", domain.ErrRetryLater)
 	errCIDElsewhere  = fmt.Errorf("cid in flight on another core: %w", domain.ErrRetryLater)
 	errCIDUnsettled  = fmt.Errorf("cid reservation of an abandoned write still held: %w", domain.ErrRetryLater)
+	errWriteNotSent  = fmt.Errorf("message write not sent before its deadline too many times: %w", domain.ErrRetryLater)
+	errOutOfTime     = fmt.Errorf("message write would outlive its cid reservation: %w", domain.ErrRetryLater)
+	errGroupExpired  = fmt.Errorf("write group deadline passed before submit: %w", domain.ErrRetryLater)
 	errMailboxFull   = fmt.Errorf("room mailbox full: %w", domain.ErrBusy)
 	errTooManyRooms  = fmt.Errorf("too many active rooms: %w", domain.ErrBusy)
 )
@@ -58,18 +63,23 @@ type Ack struct {
 }
 
 type Config struct {
-	Mailbox       int
-	Idle          time.Duration
-	MaxGroup      int
-	MaxActors     int
-	GroupDeadline time.Duration
+	Mailbox        int
+	Idle           time.Duration
+	MaxGroup       int
+	MaxActors      int
+	GroupDeadline  time.Duration
+	ReservationTTL time.Duration
 }
 
 func (c Config) validate() error {
-	if c.Mailbox <= 0 || c.Idle <= 0 || c.MaxGroup <= 0 || c.MaxActors <= 0 || c.GroupDeadline <= 0 {
+	switch {
+	case c.Mailbox <= 0 || c.Idle <= 0 || c.MaxGroup <= 0 || c.MaxActors <= 0 || c.GroupDeadline <= 0:
 		return fmt.Errorf("%w: actor config %+v must be positive", apperr.ErrInvalidArgument, c)
+	case c.ReservationTTL <= c.GroupDeadline+reservationMargin:
+		return fmt.Errorf("%w: reservation ttl %v must exceed the group deadline %v plus %v", apperr.ErrInvalidArgument, c.ReservationTTL, c.GroupDeadline, reservationMargin)
+	default:
+		return nil
 	}
-	return nil
 }
 
 func (c SendCmd) validate() error {

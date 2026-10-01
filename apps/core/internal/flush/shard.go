@@ -126,23 +126,40 @@ func (s *shard) flush(ctx context.Context, b batch) {
 		}
 		return
 	}
+	cutoff := time.Now().Add(s.timeout)
+	send := sendable(b.groups, cutoff)
+	if len(send) == 0 {
+		return
+	}
 	msgs := make([]domain.Message, 0, b.size)
-	for _, p := range b.groups {
+	for _, p := range send {
 		msgs = append(msgs, p.Msgs...)
 	}
-	res := s.insert(ctx, msgs)
+	res := s.insert(ctx, msgs, cutoff)
 	if len(res) != len(msgs) {
 		res = unknown(len(msgs), fmt.Errorf("flush: store returned %d results for %d messages", len(res), len(msgs)))
 	}
-	for _, p := range b.groups {
+	for _, p := range send {
 		n := len(p.Msgs)
 		p.Done(res[:n:n])
 		res = res[n:]
 	}
 }
 
-func (s *shard) insert(ctx context.Context, msgs []domain.Message) []store.Result {
-	ictx, cancel := context.WithTimeout(ctx, s.timeout)
+func sendable(groups []pending, cutoff time.Time) []pending {
+	send := groups[:0]
+	for _, p := range groups {
+		if !p.Deadline.IsZero() && cutoff.After(p.Deadline) {
+			p.Done(unknown(len(p.Msgs), ErrNotSent))
+			continue
+		}
+		send = append(send, p)
+	}
+	return send
+}
+
+func (s *shard) insert(ctx context.Context, msgs []domain.Message, cutoff time.Time) []store.Result {
+	ictx, cancel := context.WithDeadline(ctx, cutoff)
 	defer cancel()
 	return s.msgs.Insert(ictx, msgs)
 }

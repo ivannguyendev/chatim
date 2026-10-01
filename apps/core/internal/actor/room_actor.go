@@ -9,13 +9,14 @@ import (
 )
 
 type entry struct {
-	key       dedupeKey
-	msg       domain.Message
-	reassigns int
-	resends   int
-	fixed     bool
-	dup       bool
-	reserved  bool
+	key        dedupeKey
+	msg        domain.Message
+	admittedAt time.Time
+	reassigns  int
+	resends    int
+	fixed      bool
+	dup        bool
+	reserved   bool
 }
 
 type group struct {

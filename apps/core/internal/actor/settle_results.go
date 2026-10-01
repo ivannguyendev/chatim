@@ -3,12 +3,12 @@ package actor
 import (
 	"cmp"
 	"context"
-	"crypto/rand"
-	"math/big"
+	"errors"
 	"slices"
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
@@ -22,15 +22,17 @@ func (a *actor) settle(res []store.Result) {
 	}
 	var open []*entry
 	for i, e := range g.entries {
-		switch r := res[i]; r.Outcome {
-		case store.Inserted:
+		switch r := res[i]; {
+		case r.Outcome == store.Inserted:
 			a.commit(e, e.msg)
-		case store.Rejected:
+		case r.Outcome == store.Rejected:
 			a.r.log.WarnContext(g.ctx, "message rejected by store", "room", a.id, "seq", e.msg.Seq, "err", r.Err)
 			a.fail(e, r.Err, e.fixed)
-		case store.Duplicate:
+		case r.Outcome == store.Duplicate:
 			e.dup = true
 			open = append(open, e)
+		case !e.fixed && errors.Is(r.Err, flush.ErrNotSent):
+			a.requeue(e, false, errWriteNotSent)
 		default:
 			e.dup = false
 			open = append(open, e)
@@ -76,28 +78,36 @@ func (a *actor) resolve(open []*entry, found []domain.Message) []*entry {
 			a.commit(e, doc)
 		case ok:
 			a.stale = true
-			a.requeue(e, false)
+			a.requeue(e, false, errSeqContention)
 		case e.dup:
 			unresolved = append(unresolved, e)
 		default:
-			a.requeue(e, true)
+			a.requeue(e, true, errUnconfirmed)
 		}
 	}
 	return unresolved
 }
 
-func (a *actor) requeue(e *entry, fixed bool) {
-	count, exhausted := &e.reassigns, errSeqContention
+func (a *actor) requeue(e *entry, fixed bool, exhausted error) {
+	count := &e.reassigns
 	if fixed {
-		count, exhausted = &e.resends, errUnconfirmed
+		count = &e.resends
 	}
-	if *count >= maxRequeues {
+	switch {
+	case *count >= maxRequeues:
 		a.fail(e, exhausted, fixed)
-		return
+	case !a.affordsAnotherCycle(e):
+		a.fail(e, errOutOfTime, fixed)
+	default:
+		*count++
+		e.fixed = fixed
+		a.retries = append(a.retries, e)
 	}
-	*count++
-	e.fixed = fixed
-	a.retries = append(a.retries, e)
+}
+
+func (a *actor) affordsAnotherCycle(e *entry) bool {
+	end := e.admittedAt.Add(a.r.cfg.ReservationTTL - reservationMargin)
+	return !time.Now().Add(a.r.cfg.GroupDeadline).After(end)
 }
 
 func keysOf(entries []*entry) []store.MsgKey {
@@ -106,23 +116,4 @@ func keysOf(entries []*entry) []store.MsgKey {
 		out[i] = store.KeyOf(e.msg)
 	}
 	return out
-}
-
-func jitter(d time.Duration) time.Duration {
-	n, err := rand.Int(rand.Reader, big.NewInt(int64(d/2)+1))
-	if err != nil {
-		return d
-	}
-	return d/2 + time.Duration(n.Int64())
-}
-
-func pause(ctx context.Context, d time.Duration) bool {
-	t := time.NewTimer(d)
-	defer t.Stop()
-	select {
-	case <-t.C:
-		return true
-	case <-ctx.Done():
-		return false
-	}
 }

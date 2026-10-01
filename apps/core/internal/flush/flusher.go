@@ -15,6 +15,8 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/slotmap"
 )
 
+var ErrNotSent = fmt.Errorf("write group not sent before its deadline: %w", domain.ErrRetryLater)
+
 var (
 	errClosed       = fmt.Errorf("flusher closed: %w", domain.ErrRetryLater)
 	errInvalidGroup = fmt.Errorf("%w: write group needs messages and a done callback", apperr.ErrInvalidArgument)
@@ -22,9 +24,10 @@ var (
 )
 
 type Group struct {
-	Room uint64
-	Msgs []domain.Message
-	Done func([]store.Result)
+	Room     uint64
+	Msgs     []domain.Message
+	Done     func([]store.Result)
+	Deadline time.Time
 }
 
 type Config struct {

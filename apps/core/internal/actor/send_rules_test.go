@@ -22,6 +22,10 @@ func TestNewRouterValidatesInputs(t *testing.T) {
 		"zero max group":      func(c *actor.Config) { c.MaxGroup = 0 },
 		"zero max actors":     func(c *actor.Config) { c.MaxActors = 0 },
 		"zero group deadline": func(c *actor.Config) { c.GroupDeadline = 0 },
+		"zero reservation":    func(c *actor.Config) { c.ReservationTTL = 0 },
+		"reservation too short": func(c *actor.Config) {
+			c.ReservationTTL = c.GroupDeadline + time.Second
+		},
 	}
 	for name, mutate := range mutations {
 		cfg := baseConfig

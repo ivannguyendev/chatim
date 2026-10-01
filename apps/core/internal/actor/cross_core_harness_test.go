@@ -54,9 +54,9 @@ func (w *world) cidValue(cid string) string {
 	return v
 }
 
-func runRouter(t *testing.T, msgs store.Messages, rooms store.Rooms, sub actor.Submitter, cids actor.CIDRegistry) (*actor.Router, func()) {
+func runRouter(t *testing.T, msgs store.Messages, rooms store.Rooms, sub actor.Submitter, cids actor.CIDRegistry, cfg actor.Config) (*actor.Router, func()) {
 	t.Helper()
-	r, err := actor.NewRouter(msgs, rooms, sub, cids, clusterConfig, quiet)
+	r, err := actor.NewRouter(msgs, rooms, sub, cids, cfg, quiet)
 	if err != nil {
 		t.Fatalf("NewRouter: %v", err)
 	}

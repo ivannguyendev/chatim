@@ -19,7 +19,7 @@ import (
 var (
 	clusterRooms  = []uint64{roomA, roomB, 303}
 	clusterUsers  = []string{"u0", "u1", "u2", "u3", "u4", "u5", "u6", "u7"}
-	clusterConfig = actor.Config{Mailbox: 64, Idle: time.Minute, MaxGroup: 8, MaxActors: 16, GroupDeadline: 2 * time.Second}
+	clusterConfig = actor.Config{Mailbox: 64, Idle: time.Minute, MaxGroup: 8, MaxActors: 16, GroupDeadline: 2 * time.Second, ReservationTTL: 10 * time.Second}
 	flushConfig   = flush.Config{Shards: 4, Window: 200 * time.Microsecond, MaxBatch: 64, QueueSize: 1024, InsertTimeout: time.Second}
 )
 

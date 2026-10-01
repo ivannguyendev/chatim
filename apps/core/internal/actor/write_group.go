@@ -21,11 +21,15 @@ func (a *actor) dispatch(ctx context.Context, first *request) {
 	for i, e := range entries {
 		msgs[i] = e.msg
 	}
-	if err := a.r.sub.Submit(gctx, flush.Group{Room: a.id, Msgs: msgs, Done: a.deliver}); err != nil {
-		cancel()
-		if ctx.Err() != nil {
+	deadline, _ := gctx.Deadline()
+	if err := a.r.sub.Submit(gctx, flush.Group{Room: a.id, Msgs: msgs, Done: a.deliver, Deadline: deadline}); err != nil {
+		switch {
+		case ctx.Err() != nil:
 			err = errStopped
+		case gctx.Err() != nil:
+			err = errGroupExpired
 		}
+		cancel()
 		for _, e := range entries {
 			a.fail(e, err, e.fixed)
 		}

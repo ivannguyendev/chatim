@@ -2,6 +2,7 @@ package actor
 
 import (
 	"context"
+	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 )
@@ -25,8 +26,10 @@ func (a *actor) reserve(ctx context.Context, fresh []*entry) []*entry {
 	if len(fresh) == 0 {
 		return fresh
 	}
+	now := time.Now()
 	keys := make([]dedupe.Key, len(fresh))
 	for i, e := range fresh {
+		e.admittedAt = now
 		keys[i] = a.remoteKey(e.key)
 	}
 	verdicts, err := a.r.cids.Reserve(ctx, keys)

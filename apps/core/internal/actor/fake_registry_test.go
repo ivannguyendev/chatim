@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 )
@@ -13,12 +14,17 @@ type fakeRegistry struct {
 	committed map[dedupe.Key]dedupe.Record
 	forced    map[dedupe.Key]dedupe.Status
 	err       error
+	delay     time.Duration
 	reserves  [][]dedupe.Key
 	commits   [][]dedupe.Entry
 	aborts    [][]dedupe.Key
 }
 
 func (f *fakeRegistry) Reserve(_ context.Context, keys []dedupe.Key) ([]dedupe.Verdict, error) {
+	f.mu.Lock()
+	delay := f.delay
+	f.mu.Unlock()
+	time.Sleep(delay)
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.reserves = append(f.reserves, slices.Clone(keys))

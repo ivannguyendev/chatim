@@ -66,7 +66,7 @@ func TestSameCIDRacingOnTwoCoresIsStoredOnce(t *testing.T) {
 
 func TestCrashedCoreBlocksTheCIDUntilItsReservationExpires(t *testing.T) {
 	w := newWorld(t)
-	a, crash := runRouter(t, w.msgs, w.rooms, blackhole{}, w.registry(t, "core-a", quiet, 0))
+	a, crash := runRouter(t, w.msgs, w.rooms, blackhole{}, w.registry(t, "core-a", quiet, 0), clusterConfig)
 	lost := sendAsync(context.Background(), a, cmd(roomA, "alice", "x"))
 	eventually(t, "core A reservation", func() bool { return w.cidValue("x") == "p:core-a" })
 	crash()
@@ -99,7 +99,7 @@ func TestFailedWriteReleasesOrKeepsTheCIDForOtherCores(t *testing.T) {
 			w := newWorld(t)
 			sub := &fakeSubmitter{store: w.msgs}
 			sub.alwaysDo(tt.write)
-			a, _ := runRouter(t, w.msgs, w.rooms, sub, w.registry(t, "core-a", quiet, 0))
+			a, _ := runRouter(t, w.msgs, w.rooms, sub, w.registry(t, "core-a", quiet, 0), clusterConfig)
 			if _, err := a.Send(context.Background(), cmd(roomA, "alice", "x")); err == nil {
 				t.Fatal("failing write was acked")
 			}
