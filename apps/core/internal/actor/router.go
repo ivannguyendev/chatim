@@ -81,6 +81,12 @@ func (r *Router) start(ctx context.Context) error {
 	return nil
 }
 
+func (r *Router) Started() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.started
+}
+
 func (r *Router) Close(ctx context.Context) error {
 	r.mu.Lock()
 	started := r.started
@@ -104,10 +110,13 @@ func (r *Router) Send(ctx context.Context, c SendCmd) (Ack, error) {
 	if err := c.validate(); err != nil {
 		return Ack{}, err
 	}
+	return r.await(ctx, newRequest(c))
+}
+
+func (r *Router) await(ctx context.Context, q *request) (Ack, error) {
 	if err := ctx.Err(); err != nil {
 		return Ack{}, err
 	}
-	q := newRequest(c)
 	if err := r.enqueue(q); err != nil {
 		return Ack{}, err
 	}

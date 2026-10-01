@@ -72,6 +72,10 @@ func (a *actor) drain(ctx context.Context, fresh []*entry, limit int) []*entry {
 }
 
 func (a *actor) take(ctx context.Context, entries []*entry, q *request) []*entry {
+	if q.republish {
+		a.replays = append(a.replays, q)
+		return entries
+	}
 	if e := a.admit(ctx, q); e != nil {
 		return append(entries, e)
 	}

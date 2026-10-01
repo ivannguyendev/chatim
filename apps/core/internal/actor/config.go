@@ -24,7 +24,8 @@ const (
 	maxFindBackoff  = 200 * time.Millisecond
 
 	reservationMargin = time.Second
-	activeMarkEvery   = 5 * time.Second
+
+	ActiveMarkEvery = 5 * time.Second
 )
 
 var (
@@ -50,6 +51,7 @@ type Submitter interface {
 
 type EventPublisher interface {
 	Enqueue(room uint64, events []*chatimv1.Event) error
+	Skip(room uint64, pts []uint64) error
 }
 
 type ActivityMarker interface {
@@ -121,12 +123,18 @@ type reply struct {
 }
 
 type request struct {
-	cmd   SendCmd
-	reply chan reply
+	cmd       SendCmd
+	republish bool
+	from      uint64
+	reply     chan reply
 }
 
 func newRequest(c SendCmd) *request {
 	return &request{cmd: c, reply: make(chan reply, 1)}
+}
+
+func newRecovery(room, from uint64) *request {
+	return &request{cmd: SendCmd{Room: room}, republish: true, from: from, reply: make(chan reply, 1)}
 }
 
 func (q *request) answer(ack Ack, err error) {

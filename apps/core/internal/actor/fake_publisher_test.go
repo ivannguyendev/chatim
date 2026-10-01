@@ -2,6 +2,7 @@ package actor_test
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"sync"
 
@@ -13,6 +14,8 @@ import (
 type nopPublisher struct{}
 
 func (nopPublisher) Enqueue(uint64, []*chatimv1.Event) error { return nil }
+
+func (nopPublisher) Skip(uint64, []uint64) error { return nil }
 
 type nopMarker struct{}
 
@@ -41,16 +44,55 @@ func (j *journal) list() []string {
 type publishSpy struct {
 	mu      sync.Mutex
 	batches map[uint64][][]*chatimv1.Event
+	handed  map[uint64][]string
+	err     error
 }
 
 func (p *publishSpy) Enqueue(room uint64, events []*chatimv1.Event) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.err != nil {
+		return p.err
+	}
 	if p.batches == nil {
 		p.batches = map[uint64][][]*chatimv1.Event{}
 	}
 	p.batches[room] = append(p.batches[room], events)
+	pts := make([]uint64, len(events))
+	for i, ev := range events {
+		pts[i] = ev.GetPts()
+	}
+	p.note(room, "events", pts)
 	return nil
+}
+
+func (p *publishSpy) Skip(room uint64, pts []uint64) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.err != nil {
+		return p.err
+	}
+	p.note(room, "skip", pts)
+	return nil
+}
+
+func (p *publishSpy) note(room uint64, kind string, pts []uint64) {
+	if p.handed == nil {
+		p.handed = map[uint64][]string{}
+	}
+	p.handed[room] = append(p.handed[room], fmt.Sprint(kind, pts))
+}
+
+func (p *publishSpy) calls(room uint64) []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Clone(p.handed[room])
+}
+
+func (p *publishSpy) fail(err error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.err = err
 }
 
 func (p *publishSpy) events(room uint64) []*chatimv1.Event {

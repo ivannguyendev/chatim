@@ -41,6 +41,7 @@ type actor struct {
 	members  *lru[string, struct{}]
 	cache    cidCache
 	retries  []*entry
+	replays  []*request
 	flight   *group
 	landed   []landing
 	failed   []failure
@@ -88,6 +89,10 @@ func (a *actor) run(ctx context.Context) {
 			a.exit(errStopped)
 			return
 		}
+		if a.flight == nil && len(a.replays) > 0 && !a.retireRequested() {
+			a.replay(ctx)
+			continue
+		}
 		var first *request
 		if a.flight == nil && len(a.retries) == 0 {
 			if closing == nil && len(a.mailbox) == 0 {
@@ -114,6 +119,10 @@ func (a *actor) run(ctx context.Context) {
 		if a.retireRequested() {
 			a.retireNow(ctx, first)
 			return
+		}
+		if first != nil && first.republish {
+			a.replays = append(a.replays, first)
+			continue
 		}
 		if a.flight == nil {
 			a.dispatch(ctx, first)
@@ -144,6 +153,10 @@ func (a *actor) exit(err error) {
 		a.cache.fail(e.key, err)
 	}
 	a.retries = nil
+	for _, q := range a.replays {
+		q.answer(Ack{}, err)
+	}
+	a.replays = nil
 	for {
 		select {
 		case q := <-a.mailbox:

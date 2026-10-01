@@ -5,9 +5,3 @@ func (r *Router) ActorCount() int {
 	defer r.mu.RUnlock()
 	return len(r.actors)
 }
-
-func (r *Router) Started() bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.started
-}

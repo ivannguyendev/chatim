@@ -12,7 +12,7 @@ import (
 
 func (a *actor) markActive(ctx context.Context) {
 	now := time.Now()
-	if !a.markedAt.IsZero() && now.Sub(a.markedAt) < activeMarkEvery {
+	if !a.markedAt.IsZero() && now.Sub(a.markedAt) < ActiveMarkEvery {
 		return
 	}
 	if a.r.marks.MarkActive(ctx, a.id) == nil {
