@@ -43,11 +43,16 @@ func newCluster(t *testing.T, n int) *cluster {
 
 func startCore(t *testing.T, msgs store.Messages, rooms store.Rooms, cids actor.CIDRegistry) *actor.Router {
 	t.Helper()
+	return startCoreWith(t, msgs, rooms, cids, nopPublisher{}, nopMarker{})
+}
+
+func startCoreWith(t *testing.T, msgs store.Messages, rooms store.Rooms, cids actor.CIDRegistry, events actor.EventPublisher, marks actor.ActivityMarker) *actor.Router {
+	t.Helper()
 	fl, err := flush.New(msgs, flushConfig)
 	if err != nil {
 		t.Fatalf("flush.New: %v", err)
 	}
-	r, err := actor.NewRouter(msgs, rooms, fl, cids, clusterConfig, quiet)
+	r, err := actor.NewRouter(msgs, rooms, fl, cids, events, marks, clusterConfig, quiet)
 	if err != nil {
 		t.Fatalf("NewRouter: %v", err)
 	}

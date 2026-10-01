@@ -1,0 +1,105 @@
+package actor_test
+
+import (
+	"context"
+	"slices"
+	"sync"
+
+	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
+	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
+	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
+)
+
+type nopPublisher struct{}
+
+func (nopPublisher) Enqueue(uint64, []*chatimv1.Event) error { return nil }
+
+type nopMarker struct{}
+
+func (nopMarker) MarkActive(context.Context, uint64) error { return nil }
+
+type journal struct {
+	mu      sync.Mutex
+	entries []string
+}
+
+func (j *journal) add(s string) {
+	if j == nil {
+		return
+	}
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	j.entries = append(j.entries, s)
+}
+
+func (j *journal) list() []string {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return slices.Clone(j.entries)
+}
+
+type publishSpy struct {
+	mu      sync.Mutex
+	batches map[uint64][][]*chatimv1.Event
+}
+
+func (p *publishSpy) Enqueue(room uint64, events []*chatimv1.Event) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.batches == nil {
+		p.batches = map[uint64][][]*chatimv1.Event{}
+	}
+	p.batches[room] = append(p.batches[room], events)
+	return nil
+}
+
+func (p *publishSpy) events(room uint64) []*chatimv1.Event {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	var out []*chatimv1.Event
+	for _, b := range p.batches[room] {
+		out = append(out, b...)
+	}
+	return out
+}
+
+type markSpy struct {
+	log *journal
+
+	mu    sync.Mutex
+	tries map[uint64]int
+	err   error
+}
+
+func (m *markSpy) MarkActive(_ context.Context, room uint64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.tries == nil {
+		m.tries = map[uint64]int{}
+	}
+	m.tries[room]++
+	m.log.add("mark")
+	return m.err
+}
+
+func (m *markSpy) attempts(room uint64) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.tries[room]
+}
+
+func (m *markSpy) fail(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.err = err
+}
+
+type journaledSubmitter struct {
+	actor.Submitter
+	log *journal
+}
+
+func (s journaledSubmitter) Submit(ctx context.Context, g flush.Group) error {
+	s.log.add("submit")
+	return s.Submitter.Submit(ctx, g)
+}

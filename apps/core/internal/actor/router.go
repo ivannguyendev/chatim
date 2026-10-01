@@ -11,12 +11,14 @@ import (
 )
 
 type Router struct {
-	msgs  store.Messages
-	rooms store.Rooms
-	sub   Submitter
-	cids  CIDRegistry
-	cfg   Config
-	log   *slog.Logger
+	msgs   store.Messages
+	rooms  store.Rooms
+	sub    Submitter
+	cids   CIDRegistry
+	events EventPublisher
+	marks  ActivityMarker
+	cfg    Config
+	log    *slog.Logger
 
 	mu      sync.RWMutex
 	actors  map[uint64]*actor
@@ -28,9 +30,9 @@ type Router struct {
 	done    chan struct{}
 }
 
-func NewRouter(msgs store.Messages, rooms store.Rooms, sub Submitter, cids CIDRegistry, cfg Config, log *slog.Logger) (*Router, error) {
-	if msgs == nil || rooms == nil || sub == nil || cids == nil {
-		return nil, fmt.Errorf("%w: router needs message and room stores, a submitter and a cid registry", apperr.ErrInvalidArgument)
+func NewRouter(msgs store.Messages, rooms store.Rooms, sub Submitter, cids CIDRegistry, events EventPublisher, marks ActivityMarker, cfg Config, log *slog.Logger) (*Router, error) {
+	if msgs == nil || rooms == nil || sub == nil || cids == nil || events == nil || marks == nil {
+		return nil, fmt.Errorf("%w: router needs message and room stores, a submitter, a cid registry, an event publisher and an activity marker", apperr.ErrInvalidArgument)
 	}
 	if err := cfg.validate(); err != nil {
 		return nil, err
@@ -43,6 +45,8 @@ func NewRouter(msgs store.Messages, rooms store.Rooms, sub Submitter, cids CIDRe
 		rooms:   rooms,
 		sub:     sub,
 		cids:    cids,
+		events:  events,
+		marks:   marks,
 		cfg:     cfg,
 		log:     log,
 		actors:  make(map[uint64]*actor),

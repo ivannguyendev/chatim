@@ -5,10 +5,12 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
+	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 )
 
 type landing struct {
 	e   *entry
+	msg domain.Message
 	ack Ack
 }
 
@@ -77,6 +79,7 @@ func (a *actor) conclude(ctx context.Context) {
 	for _, l := range a.landed {
 		a.cache.commit(l.e.key, l.ack)
 	}
+	a.publishLanded()
 	for _, f := range a.failed {
 		a.cache.fail(f.e.key, f.err)
 	}

@@ -31,16 +31,17 @@ type actor struct {
 	mailbox chan *request
 	results chan []store.Result
 
-	room    domain.Room
-	last    uint64
-	stale   bool
-	dirty   bool
-	members *lru[string, struct{}]
-	cache   cidCache
-	retries []*entry
-	flight  *group
-	landed  []landing
-	failed  []failure
+	room     domain.Room
+	last     uint64
+	stale    bool
+	dirty    bool
+	markedAt time.Time
+	members  *lru[string, struct{}]
+	cache    cidCache
+	retries  []*entry
+	flight   *group
+	landed   []landing
+	failed   []failure
 }
 
 func newActor(r *Router, id uint64) *actor {
@@ -142,7 +143,7 @@ func (a *actor) exit(err error) {
 
 func (a *actor) commit(e *entry, stored domain.Message) {
 	a.last = max(a.last, stored.Seq)
-	a.landed = append(a.landed, landing{e: e, ack: ackOf(stored)})
+	a.landed = append(a.landed, landing{e: e, msg: stored, ack: ackOf(stored)})
 }
 
 func (a *actor) fail(e *entry, err error, uncertain bool) {

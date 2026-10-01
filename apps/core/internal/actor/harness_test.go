@@ -36,6 +36,9 @@ type rig struct {
 	rooms  *spyRooms
 	sub    *fakeSubmitter
 	cids   *fakeRegistry
+	events *publishSpy
+	marks  *markSpy
+	order  *journal
 	cancel context.CancelFunc
 	done   chan error
 	once   sync.Once
@@ -45,16 +48,20 @@ type rig struct {
 func newRig(t *testing.T, cfg actor.Config) *rig {
 	t.Helper()
 	base := memstore.NewMessages()
+	order := &journal{}
 	rg := &rig{
-		msgs:  &spyMessages{Messages: base},
-		rooms: &spyRooms{Rooms: memstore.NewRooms()},
-		sub:   &fakeSubmitter{store: base},
-		cids:  &fakeRegistry{},
-		done:  make(chan error, 1),
+		msgs:   &spyMessages{Messages: base},
+		rooms:  &spyRooms{Rooms: memstore.NewRooms()},
+		sub:    &fakeSubmitter{store: base},
+		cids:   &fakeRegistry{},
+		events: &publishSpy{},
+		marks:  &markSpy{log: order},
+		order:  order,
+		done:   make(chan error, 1),
 	}
 	createRoom(t, rg.rooms, roomA, "alice", "bob")
 	createRoom(t, rg.rooms, roomB, "alice", "bob")
-	r, err := actor.NewRouter(rg.msgs, rg.rooms, rg.sub, rg.cids, cfg, quiet)
+	r, err := actor.NewRouter(rg.msgs, rg.rooms, journaledSubmitter{Submitter: rg.sub, log: order}, rg.cids, rg.events, rg.marks, cfg, quiet)
 	if err != nil {
 		t.Fatalf("NewRouter: %v", err)
 	}

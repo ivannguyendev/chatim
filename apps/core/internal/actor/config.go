@@ -11,6 +11,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
+	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 const (
@@ -23,6 +24,7 @@ const (
 	maxFindBackoff  = 200 * time.Millisecond
 
 	reservationMargin = time.Second
+	activeMarkEvery   = 5 * time.Second
 )
 
 var (
@@ -43,6 +45,14 @@ var (
 
 type Submitter interface {
 	Submit(ctx context.Context, g flush.Group) error
+}
+
+type EventPublisher interface {
+	Enqueue(room uint64, events []*chatimv1.Event) error
+}
+
+type ActivityMarker interface {
+	MarkActive(ctx context.Context, room uint64) error
 }
 
 type CIDRegistry interface {
