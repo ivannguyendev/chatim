@@ -31,6 +31,7 @@ var (
 	errStarted       = errors.New("router already started")
 	errNotRunning    = fmt.Errorf("router not accepting messages: %w", domain.ErrRetryLater)
 	errStopped       = fmt.Errorf("room actor stopped: %w", domain.ErrRetryLater)
+	errRetired       = fmt.Errorf("room actor retired after its slot moved: %w", domain.ErrRetryLater)
 	errUnavailable   = fmt.Errorf("room store unavailable: %w", domain.ErrRetryLater)
 	errUnconfirmed   = fmt.Errorf("message write unconfirmed: %w", domain.ErrRetryLater)
 	errSeqContention = fmt.Errorf("sequence taken too many times: %w", domain.ErrRetryLater)

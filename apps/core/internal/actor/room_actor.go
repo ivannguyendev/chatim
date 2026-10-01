@@ -30,6 +30,8 @@ type actor struct {
 	id      uint64
 	mailbox chan *request
 	results chan []store.Result
+	retire  chan struct{}
+	gone    chan struct{}
 
 	room     domain.Room
 	last     uint64
@@ -50,6 +52,8 @@ func newActor(r *Router, id uint64) *actor {
 		id:      id,
 		mailbox: make(chan *request, r.cfg.Mailbox),
 		results: make(chan []store.Result, 1),
+		retire:  make(chan struct{}),
+		gone:    make(chan struct{}),
 		dirty:   true,
 		members: newLRU[string, struct{}](memberCacheSize),
 		cache:   newCIDCache(cidCacheSize, cidCacheTTL),
@@ -57,6 +61,9 @@ func newActor(r *Router, id uint64) *actor {
 }
 
 func (a *actor) offer(q *request) error {
+	if a.retireRequested() {
+		return errRetired
+	}
 	select {
 	case a.mailbox <- q:
 		return nil
@@ -68,6 +75,7 @@ func (a *actor) offer(q *request) error {
 func (a *actor) deliver(res []store.Result) { a.results <- res }
 
 func (a *actor) run(ctx context.Context) {
+	defer close(a.gone)
 	if err := a.load(ctx); err != nil {
 		a.exit(err)
 		return
@@ -97,10 +105,15 @@ func (a *actor) run(ctx context.Context) {
 			case <-closing:
 				closing = nil
 				continue
+			case <-a.retire:
 			case <-ctx.Done():
 				a.exit(errStopped)
 				return
 			}
+		}
+		if a.retireRequested() {
+			a.retireNow(ctx, first)
+			return
 		}
 		if a.flight == nil {
 			a.dispatch(ctx, first)
