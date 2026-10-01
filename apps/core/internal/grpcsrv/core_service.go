@@ -1,0 +1,92 @@
+package grpcsrv
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"time"
+
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
+	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/ids"
+	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
+)
+
+var (
+	errMissingDeps = fmt.Errorf("%w: core service needs a sender, a room store and a page reader", apperr.ErrInvalidArgument)
+	errBadRoomID   = fmt.Errorf("%w: room id", apperr.ErrInvalidArgument)
+)
+
+type Sender interface {
+	Send(ctx context.Context, c actor.SendCmd) (actor.Ack, error)
+}
+
+type PageReader interface {
+	Page(ctx context.Context, q store.PageQuery) ([]domain.Message, error)
+}
+
+type Deps struct {
+	Sender Sender
+	Rooms  store.Rooms
+	Pages  PageReader
+	NewID  func() uint64
+	Now    func() time.Time
+}
+
+type Service struct {
+	chatimv1.UnimplementedCoreServiceServer
+	sender Sender
+	rooms  store.Rooms
+	pages  PageReader
+	newID  func() uint64
+	now    func() time.Time
+	log    *slog.Logger
+}
+
+var _ chatimv1.CoreServiceServer = (*Service)(nil)
+
+func New(d Deps, log *slog.Logger) (*Service, error) {
+	if d.Sender == nil || d.Rooms == nil || d.Pages == nil {
+		return nil, errMissingDeps
+	}
+	if d.NewID == nil {
+		d.NewID = ids.NewRoomID
+	}
+	if d.Now == nil {
+		d.Now = time.Now
+	}
+	if log == nil {
+		log = slog.Default()
+	}
+	return &Service{sender: d.Sender, rooms: d.Rooms, pages: d.Pages, newID: d.NewID, now: d.Now, log: log}, nil
+}
+
+func (s *Service) SendMessage(ctx context.Context, req *chatimv1.SendMessageRequest) (*chatimv1.SendMessageResponse, error) {
+	who, err := callerOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	room, err := parseRoomID(req.GetRoomId())
+	if err != nil {
+		return nil, err
+	}
+	ack, err := s.sender.Send(ctx, actor.SendCmd{
+		Tenant: who.tenant, User: who.user, Room: room, Thread: req.GetThreadRoot(), CID: req.GetCid(), Text: req.GetText(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &chatimv1.SendMessageResponse{Seq: ack.Seq, Pts: ack.Pts, CreatedAt: timestamppb.New(ack.CreatedAt)}, nil
+}
+
+func parseRoomID(s string) (uint64, error) {
+	id, err := ids.ParseRoomID(s)
+	if err != nil {
+		return 0, errBadRoomID
+	}
+	return id, nil
+}
