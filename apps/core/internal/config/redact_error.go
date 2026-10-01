@@ -21,20 +21,22 @@ func RedactError(err error, rawURL string) error {
 		return nil
 	}
 	msg := err.Error()
-	clean := redactText(msg, rawURL)
+	clean := RedactText(msg, rawURL)
 	if clean == msg {
 		return err
 	}
 	return &redactedError{msg: clean, err: err}
 }
 
-func redactText(text, rawURL string) string {
-	if rawURL == "" {
-		return text
-	}
-	text = strings.ReplaceAll(text, rawURL, RedactURL(rawURL))
-	for _, s := range urlSecrets(rawURL) {
-		text = strings.ReplaceAll(text, s, redacted)
+func RedactText(text string, rawURLs ...string) string {
+	for _, raw := range rawURLs {
+		if raw == "" {
+			continue
+		}
+		text = strings.ReplaceAll(text, raw, RedactURL(raw))
+		for _, s := range urlSecrets(raw) {
+			text = strings.ReplaceAll(text, s, redacted)
+		}
 	}
 	return text
 }
@@ -46,7 +48,7 @@ func urlSecrets(rawURL string) []string {
 		if !ok {
 			continue
 		}
-		base, query, _ := strings.Cut(rest, "?")
+		base, _, _ := strings.Cut(rest, "?")
 		if at := strings.LastIndex(base, "@"); at >= 0 {
 			userinfo := base[:at]
 			out = append(out, userinfo)
@@ -54,13 +56,32 @@ func urlSecrets(rawURL string) []string {
 				out = append(out, pass)
 			}
 		}
-		for pair := range strings.SplitSeq(query, "&") {
-			if key, value, ok := strings.Cut(pair, "="); ok && secretKey(key) {
-				out = append(out, value)
+	}
+	if _, query, ok := strings.Cut(rawURL, "?"); ok {
+		out = append(out, querySecrets(query)...)
+	}
+	return spellings(out)
+}
+
+func querySecrets(query string) []string {
+	var out []string
+	for pair := range strings.SplitSeq(query, "&") {
+		key, value, ok := strings.Cut(pair, "=")
+		if !ok || !secretKey(key) {
+			continue
+		}
+		decoded, err := url.QueryUnescape(value)
+		if err != nil {
+			decoded = value
+		}
+		out = append(out, value)
+		for item := range strings.SplitSeq(decoded, ",") {
+			if _, v, ok := strings.Cut(item, ":"); ok {
+				out = append(out, v)
 			}
 		}
 	}
-	return spellings(out)
+	return out
 }
 
 func spellings(secrets []string) []string {

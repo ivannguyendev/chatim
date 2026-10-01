@@ -82,17 +82,7 @@ func redisOptions(cfg config.Config, name string, pool int) *redis.Options {
 }
 
 func (c *clients) connectNATS(cfg config.Config, log *slog.Logger) error {
-	nc, err := nats.Connect(cfg.NATSURL,
-		nats.Name("chatim-core-"+cfg.CoreID),
-		nats.Timeout(cfg.ConnectTimeout),
-		nats.MaxReconnects(-1),
-		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
-			if err != nil {
-				log.Warn("nats disconnected", "err", err)
-			}
-		}),
-		nats.ReconnectHandler(func(*nats.Conn) { log.Info("nats reconnected") }),
-	)
+	nc, err := nats.Connect(cfg.NATSURL, natsOptions(cfg, log)...)
 	if err != nil {
 		return fmt.Errorf("nats connect %s: %w", config.RedactURL(cfg.NATSURL), config.RedactError(err, cfg.NATSURL))
 	}
@@ -103,6 +93,23 @@ func (c *clients) connectNATS(cfg config.Config, log *slog.Logger) error {
 	}
 	c.js = js
 	return nil
+}
+
+func natsOptions(cfg config.Config, log *slog.Logger) []nats.Option {
+	return []nats.Option{
+		nats.Name("chatim-core-" + cfg.CoreID),
+		nats.Timeout(cfg.ConnectTimeout),
+		nats.MaxReconnects(-1),
+		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
+			if err != nil {
+				log.Warn("nats disconnected", "err", config.RedactError(err, cfg.NATSURL))
+			}
+		}),
+		nats.ReconnectHandler(func(*nats.Conn) { log.Info("nats reconnected") }),
+		nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) {
+			log.Warn("nats async error", "err", config.RedactError(err, cfg.NATSURL))
+		}),
+	}
 }
 
 func (c *clients) close(ctx context.Context, log *slog.Logger) {

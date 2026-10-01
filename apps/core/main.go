@@ -48,7 +48,7 @@ func serveMain() int {
 		return 1
 	}
 	if err := run(ctx, cfg, logger); err != nil {
-		logger.ErrorContext(ctx, "core exited with error", "err", err)
+		redactedLogger(logger, cfg).ErrorContext(ctx, "core exited with error", "err", err)
 		return 1
 	}
 	return 0

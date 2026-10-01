@@ -14,6 +14,7 @@ type tasks struct {
 }
 
 func run(ctx context.Context, cfg config.Config, log *slog.Logger) error {
+	log = redactedLogger(log, cfg)
 	log.InfoContext(ctx, "starting core", "config", cfg)
 	cl, err := connect(ctx, cfg, log)
 	if err != nil {
