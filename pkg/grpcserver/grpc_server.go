@@ -21,6 +21,7 @@ type Config struct {
 	Addr             string
 	ShutdownTimeout  time.Duration
 	DrainDelay       time.Duration
+	RequestDeadline  time.Duration
 	EnableReflection bool
 	Limiter          *resilience.Limiter
 	ServerOptions    []grpc.ServerOption
@@ -43,6 +44,9 @@ func New(cfg Config, logger *slog.Logger) *Server {
 	}
 
 	unary := []grpc.UnaryServerInterceptor{RecoveryUnary(logger)}
+	if cfg.RequestDeadline > 0 {
+		unary = append(unary, DeadlineUnary(cfg.RequestDeadline))
+	}
 	if cfg.Limiter != nil {
 		unary = append(unary, LoadShedUnary(cfg.Limiter))
 	}
