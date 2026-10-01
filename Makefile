@@ -2,13 +2,15 @@
 
 GO_IMAGE ?= golang:1.26
 LINT_IMAGE ?= golangci/golangci-lint:v2.14.0
+BUF_IMAGE ?= bufbuild/buf:1.73.0
 NETWORK  ?= chatim_default
 COMPOSE  := docker compose -f deploy/compose/docker-compose.yml --env-file .env
 COMPOSE_ALL := $(COMPOSE) --profile postgres
 GO_RUN   := docker run --rm -v "$(CURDIR)":/src -w /src -v chatim-gomod:/go/pkg/mod -v chatim-gocache:/root/.cache/go-build -e GOFLAGS=-buildvcs=false
+BUF_RUN  := docker run --rm -v "$(CURDIR)":/src -w /src $(BUF_IMAGE)
 POC_RUN  := $(GO_RUN) --network $(NETWORK) -e "MONGO_URI=mongodb://$(MONGO_ROOT_USER):$(MONGO_ROOT_PASSWORD)@chatim-mongodb:27017/?replicaSet=rs0&authSource=admin" -e "PG_URI=postgres://$(PG_USER):$(PG_PASSWORD)@chatim-postgres:5432/chatim_poc"
 
-.PHONY: go check-env test vet fmt-check lint vuln tidy poc image infra-up infra-down infra-reset pg-up pg-down
+.PHONY: go check-env test vet fmt-check lint vuln tidy proto buf-lint poc image infra-up infra-down infra-reset pg-up pg-down
 
 go:
 	$(GO_RUN) $(GO_IMAGE) go $(ARGS)
@@ -33,6 +35,13 @@ vuln:
 
 tidy:
 	$(GO_RUN) $(GO_IMAGE) go mod tidy
+
+proto:
+	$(BUF_RUN) generate
+
+buf-lint:
+	$(BUF_RUN) lint
+	$(BUF_RUN) format -d --exit-code
 
 poc: check-env
 	$(GO_RUN) $(GO_IMAGE) go build -o bin/$(TOOL) ./tools/poc/$(TOOL)
