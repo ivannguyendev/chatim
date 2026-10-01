@@ -10,4 +10,5 @@ var (
 	ErrPermissionDenied   = errors.New("permission denied")
 	ErrUnauthenticated    = errors.New("unauthenticated")
 	ErrUnavailable        = errors.New("dependency unavailable")
+	ErrResourceExhausted  = errors.New("resource exhausted")
 )

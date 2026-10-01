@@ -21,6 +21,7 @@ var domainCodes = []struct {
 	{apperr.ErrPermissionDenied, codes.PermissionDenied},
 	{apperr.ErrUnauthenticated, codes.Unauthenticated},
 	{apperr.ErrUnavailable, codes.Unavailable},
+	{apperr.ErrResourceExhausted, codes.ResourceExhausted},
 }
 
 func ToStatus(err error) error {
