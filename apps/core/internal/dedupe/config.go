@@ -28,6 +28,8 @@ type Config struct {
 	Cooldown     time.Duration
 }
 
+func (c Config) Validate() error { return c.withDefaults().validate() }
+
 func (c Config) withDefaults() Config {
 	c.PendingTTL = cmp.Or(c.PendingTTL, DefaultPendingTTL)
 	c.CommittedTTL = cmp.Or(c.CommittedTTL, DefaultCommittedTTL)

@@ -52,6 +52,8 @@ type Config struct {
 	MaxRooms      int
 }
 
+func (c Config) Validate() error { return c.withDefaults().validate() }
+
 func (c Config) withDefaults() Config {
 	c.Shards = cmp.Or(c.Shards, DefaultShards)
 	c.QueueSize = cmp.Or(c.QueueSize, DefaultQueueSize)

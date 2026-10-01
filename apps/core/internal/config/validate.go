@@ -2,8 +2,9 @@ package config
 
 import (
 	"errors"
+	"fmt"
+	"net"
 	"regexp"
-	"time"
 )
 
 var (
@@ -11,34 +12,29 @@ var (
 	subjectRootPattern = regexp.MustCompile(`^[a-z0-9_]+$`)
 )
 
+const stopPhases = "CORE_DRAIN_DELAY + CORE_GRPC_SHUTDOWN + CORE_REQUEST_DEADLINE (router drain) + " +
+	"FLUSH_INSERT_TIMEOUT (flusher drain) + CORE_PUBLISHER_DRAIN + slot release + client close"
+
+type rule struct {
+	ok  bool
+	msg string
+}
+
 func (c Config) validate() error {
-	rules := []struct {
-		ok  bool
-		msg string
-	}{
+	plan := c.StopPlan()
+	rules := []rule{
 		{c.MongoURI != "", "MONGO_URI is required"},
-		{c.RedisDB >= 0, "REDIS_DB must not be negative"},
-		{c.StreamReplicas > 0, "EVT_STREAM_REPLICAS must be positive"},
-		{c.FlushMaxBatch > 0, "FLUSH_MAX_BATCH must be positive"},
-		{c.FlushShards > 0, "FLUSH_SHARDS must be positive"},
-		{c.Mailbox > 0, "ACTOR_MAILBOX must be positive"},
-		{c.MaxInflight > 0, "CORE_MAX_INFLIGHT must be positive"},
-		{c.FlushWindow > 0, "FLUSH_WINDOW must be positive"},
-		{c.ActorIdle > 0, "ACTOR_IDLE must be positive"},
-		{c.RequestDeadline > 0, "CORE_REQUEST_DEADLINE must be positive"},
-		{c.DrainDelay > 0, "CORE_DRAIN_DELAY must be positive"},
-		{c.GRPCShutdown > 0, "CORE_GRPC_SHUTDOWN must be positive"},
-		{c.PublisherDrain > 0, "CORE_PUBLISHER_DRAIN must be positive"},
-		{c.ShutdownBudget > 0, "CORE_SHUTDOWN_BUDGET must be positive"},
-		{streamNamePattern.MatchString(c.StreamName), "EVT_STREAM must match " + streamNamePattern.String()},
-		{subjectRootPattern.MatchString(c.SubjectRoot), "EVT_SUBJECT_ROOT must match " + subjectRootPattern.String()},
-		{subjectRootPattern.MatchString(c.LiveRoot), "EVT_LIVE_ROOT must match " + subjectRootPattern.String()},
-		{c.SubjectRoot != c.LiveRoot, "EVT_SUBJECT_ROOT and EVT_LIVE_ROOT must differ"},
+		{validAdvertiseAddr(c.AdvertiseAddr), "CORE_ADVERTISE_ADDR must be host:port with a host"},
+		{streamNamePattern.MatchString(c.Stream.Name), "EVT_STREAM must match " + streamNamePattern.String()},
+		{subjectRootPattern.MatchString(c.Stream.SubjectRoot), "EVT_SUBJECT_ROOT must match " + subjectRootPattern.String()},
+		{subjectRootPattern.MatchString(c.Stream.LiveRoot), "EVT_LIVE_ROOT must match " + subjectRootPattern.String()},
 		{c.RequestDeadline < c.GRPCShutdown, "CORE_REQUEST_DEADLINE must be shorter than CORE_GRPC_SHUTDOWN"},
-		{
-			fitsWithin(c.ShutdownBudget, c.DrainDelay, c.GRPCShutdown, c.PublisherDrain),
-			"CORE_DRAIN_DELAY + CORE_GRPC_SHUTDOWN + CORE_PUBLISHER_DRAIN must be shorter than CORE_SHUTDOWN_BUDGET",
-		},
+		{c.QueueWait <= c.RequestDeadline/10, "CORE_QUEUE_WAIT must be at most a tenth of CORE_REQUEST_DEADLINE"},
+		{c.Flush.InsertTimeout < c.RequestDeadline, "FLUSH_INSERT_TIMEOUT must be shorter than CORE_REQUEST_DEADLINE"},
+		{c.Dedupe.Timeout <= c.RequestDeadline/10, "REDIS_OP_TIMEOUT must be at most a tenth of CORE_REQUEST_DEADLINE"},
+		{c.Actor.MaxGroup <= c.Flush.MaxBatch, "ACTOR_MAX_GROUP must not exceed FLUSH_MAX_BATCH"},
+		{c.Publish.AckTimeout < c.PublisherDrain, "PUB_ACK_TIMEOUT must be shorter than CORE_PUBLISHER_DRAIN"},
+		{plan.fitsWithin(c.ShutdownBudget), fmt.Sprintf("%s = %v must be shorter than CORE_SHUTDOWN_BUDGET %v", stopPhases, plan.total(), c.ShutdownBudget)},
 	}
 	var errs []error
 	for _, r := range rules {
@@ -46,15 +42,32 @@ func (c Config) validate() error {
 			errs = append(errs, errors.New(r.msg))
 		}
 	}
-	return errors.Join(errs...)
+	return errors.Join(append(errs, c.componentErrors()...)...)
 }
 
-func fitsWithin(budget time.Duration, phases ...time.Duration) bool {
-	for _, d := range phases {
-		budget -= d
-		if budget <= 0 {
-			return false
+func (c Config) componentErrors() []error {
+	parts := []struct {
+		keys string
+		err  error
+	}{
+		{"FLUSH_*", c.Flush.Validate()},
+		{"ACTOR_*, CID_PENDING_TTL, CORE_REQUEST_DEADLINE", c.Actor.Validate()},
+		{"CORE_ID, CID_*, REDIS_OP_TIMEOUT, REDIS_COOLDOWN", c.Dedupe.Validate()},
+		{"PUB_*, EVT_SUBJECT_ROOT, REDIS_OP_TIMEOUT, REDIS_COOLDOWN", c.Publish.Validate()},
+		{"EVT_*", c.Stream.Validate()},
+		{"RECOVERY_*, CORE_REQUEST_DEADLINE", c.Recovery.Validate()},
+		{"SLOT_*, CORE_ID", c.Slot.Validate()},
+	}
+	var errs []error
+	for _, part := range parts {
+		if part.err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", part.keys, part.err))
 		}
 	}
-	return true
+	return errs
+}
+
+func validAdvertiseAddr(addr string) bool {
+	host, port, err := net.SplitHostPort(addr)
+	return err == nil && host != "" && port != ""
 }

@@ -50,7 +50,7 @@ func New(msgs store.Messages, cfg Config) (*Flusher, error) {
 	if msgs == nil {
 		return nil, fmt.Errorf("%w: flusher needs a message store", apperr.ErrInvalidArgument)
 	}
-	if err := cfg.validate(); err != nil {
+	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
 	f := &Flusher{shards: make([]*shard, cfg.Shards), done: make(chan struct{})}
@@ -67,7 +67,7 @@ func New(msgs store.Messages, cfg Config) (*Flusher, error) {
 	return f, nil
 }
 
-func (c Config) validate() error {
+func (c Config) Validate() error {
 	switch {
 	case c.Shards <= 0 || c.Window <= 0 || c.MaxBatch <= 0 || c.QueueSize <= 0 || c.InsertTimeout <= 0:
 		return fmt.Errorf("%w: flush config %+v must be positive", apperr.ErrInvalidArgument, c)

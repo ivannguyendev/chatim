@@ -84,7 +84,7 @@ type Config struct {
 	ReservationTTL time.Duration
 }
 
-func (c Config) validate() error {
+func (c Config) Validate() error {
 	switch {
 	case c.Mailbox <= 0 || c.Idle <= 0 || c.MaxGroup <= 0 || c.MaxActors <= 0 || c.GroupDeadline <= 0:
 		return fmt.Errorf("%w: actor config %+v must be positive", apperr.ErrInvalidArgument, c)

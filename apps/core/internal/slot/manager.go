@@ -16,6 +16,8 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/slotmap"
 )
 
+const ReleaseTimeout = 5 * time.Second
+
 type Config struct {
 	CoreID       string
 	Addr         string
@@ -39,23 +41,39 @@ type Manager struct {
 }
 
 func New(rdb redis.UniversalClient, cfg Config, log *slog.Logger) (*Manager, error) {
-	if cfg.CoreID == "" || strings.ContainsAny(cfg.CoreID, "*?[]\\ ") {
-		return nil, errors.New("slot: CoreID must be non-empty and free of glob characters and spaces")
-	}
-	cfg.Tick = cmp.Or(cfg.Tick, time.Second)
-	cfg.HeartbeatTTL = cmp.Or(cfg.HeartbeatTTL, 5*time.Second)
-	cfg.LeaseTTL = cmp.Or(cfg.LeaseTTL, 10*time.Second)
-	cfg.HookTimeout = cmp.Or(cfg.HookTimeout, cfg.Tick/2)
-	if cfg.LeaseTTL <= 2*cfg.Tick || cfg.HeartbeatTTL <= 2*cfg.Tick {
-		return nil, errors.New("slot: LeaseTTL and HeartbeatTTL must each exceed 2×Tick")
-	}
-	if cfg.HookTimeout <= 0 || cfg.HookTimeout >= cfg.Tick {
-		return nil, errors.New("slot: HookTimeout must be positive and shorter than Tick")
+	cfg = cfg.withDefaults()
+	if err := cfg.validate(); err != nil {
+		return nil, err
 	}
 	if log == nil {
 		log = slog.Default()
 	}
 	return &Manager{cfg: cfg, rdb: rdb, log: log.With("core", cfg.CoreID), owned: map[uint16]time.Time{}, now: time.Now}, nil
+}
+
+func (c Config) Validate() error { return c.withDefaults().validate() }
+
+func (c Config) withDefaults() Config {
+	c.Tick = cmp.Or(c.Tick, time.Second)
+	c.HeartbeatTTL = cmp.Or(c.HeartbeatTTL, 5*time.Second)
+	c.LeaseTTL = cmp.Or(c.LeaseTTL, 10*time.Second)
+	c.HookTimeout = cmp.Or(c.HookTimeout, c.Tick/2)
+	return c
+}
+
+func (c Config) validate() error {
+	switch {
+	case c.CoreID == "" || strings.ContainsAny(c.CoreID, "*?[]\\ "):
+		return errors.New("slot: CoreID must be non-empty and free of glob characters and spaces")
+	case c.Tick <= 0:
+		return errors.New("slot: Tick must be positive")
+	case c.LeaseTTL <= 2*c.Tick || c.HeartbeatTTL <= 2*c.Tick:
+		return errors.New("slot: LeaseTTL and HeartbeatTTL must each exceed 2×Tick")
+	case c.HookTimeout <= 0 || c.HookTimeout >= c.Tick:
+		return errors.New("slot: HookTimeout must be positive and shorter than Tick")
+	default:
+		return nil
+	}
 }
 
 func (m *Manager) Owns(slot uint16) bool {
@@ -85,7 +103,7 @@ func (m *Manager) Run(ctx context.Context) error {
 		}
 		select {
 		case <-ctx.Done():
-			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			rctx, cancel := context.WithTimeout(context.Background(), ReleaseTimeout)
 			defer cancel()
 			return m.ReleaseAll(rctx)
 		case <-t.C:

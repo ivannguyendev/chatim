@@ -33,6 +33,8 @@ type Config struct {
 	Workers       int
 }
 
+func (c Config) Validate() error { return c.withDefaults().validate() }
+
 func (c Config) withDefaults() Config {
 	c.Interval = cmp.Or(c.Interval, DefaultInterval)
 	c.RemoveAfter = cmp.Or(c.RemoveAfter, DefaultRemoveAfter)

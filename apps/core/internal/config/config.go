@@ -2,11 +2,21 @@ package config
 
 import (
 	"errors"
-	"fmt"
-	"os"
+	"math"
 	"time"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
+	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
+	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
+	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
+	"github.com/ivannguyendev/chatim/apps/core/internal/recovery"
+	"github.com/ivannguyendev/chatim/apps/core/internal/slot"
 	"github.com/ivannguyendev/chatim/pkg/envconfig"
+)
+
+const (
+	CloseTimeout     = time.Second
+	defaultAdminAddr = ":9090"
 )
 
 type Config struct {
@@ -19,51 +29,58 @@ type Config struct {
 	RedisAddr       string
 	RedisDB         int
 	NATSURL         string
-	StreamName      string
-	SubjectRoot     string
-	LiveRoot        string
-	StreamReplicas  int
-	FlushWindow     time.Duration
-	FlushMaxBatch   int
-	FlushShards     int
-	Mailbox         int
-	ActorIdle       time.Duration
+	ConnectTimeout  time.Duration
 	RequestDeadline time.Duration
+	QueueWait       time.Duration
 	MaxInflight     int
 	DrainDelay      time.Duration
 	GRPCShutdown    time.Duration
 	PublisherDrain  time.Duration
 	ShutdownBudget  time.Duration
+	Flush           flush.Config
+	Actor           actor.Config
+	Dedupe          dedupe.Config
+	Publish         publish.Config
+	Marks           publish.MarkConfig
+	Stream          publish.StreamConfig
+	Recovery        recovery.Config
+	Slot            slot.Config
 }
+
+type StopPlan struct {
+	DrainDelay time.Duration
+	GRPC       time.Duration
+	Router     time.Duration
+	Flusher    time.Duration
+	Publisher  time.Duration
+	Slots      time.Duration
+	Close      time.Duration
+}
+
+func AdminAddr() string { return envconfig.String("CORE_ADMIN_ADDR", defaultAdminAddr) }
 
 func Load() (Config, error) {
 	var p parser
 	c := Config{
 		CoreID:          p.coreID(),
 		GRPCAddr:        envconfig.String("CORE_GRPC_ADDR", ":9000"),
-		AdminAddr:       envconfig.String("CORE_ADMIN_ADDR", ":9090"),
+		AdminAddr:       AdminAddr(),
 		MongoURI:        envconfig.String("MONGO_URI", ""),
 		MongoDB:         envconfig.String("MONGO_DB", "chatim"),
 		RedisAddr:       envconfig.String("REDIS_ADDR", "chatim-redis:6379"),
-		RedisDB:         p.integer("REDIS_DB", 0),
+		RedisDB:         p.index("REDIS_DB", 0),
 		NATSURL:         envconfig.String("NATS_URL", "nats://chatim-nats:4222"),
-		StreamName:      envconfig.String("EVT_STREAM", "CHATIM_EVT"),
-		SubjectRoot:     envconfig.String("EVT_SUBJECT_ROOT", "evt"),
-		LiveRoot:        envconfig.String("EVT_LIVE_ROOT", "live"),
-		StreamReplicas:  p.integer("EVT_STREAM_REPLICAS", 1),
-		FlushWindow:     p.duration("FLUSH_WINDOW", 2*time.Millisecond),
-		FlushMaxBatch:   p.integer("FLUSH_MAX_BATCH", 256),
-		FlushShards:     p.integer("FLUSH_SHARDS", 4),
-		Mailbox:         p.integer("ACTOR_MAILBOX", 1024),
-		ActorIdle:       p.duration("ACTOR_IDLE", 5*time.Minute),
-		RequestDeadline: p.duration("CORE_REQUEST_DEADLINE", 3*time.Second),
-		MaxInflight:     p.integer("CORE_MAX_INFLIGHT", 2048),
-		DrainDelay:      p.duration("CORE_DRAIN_DELAY", 2*time.Second),
-		GRPCShutdown:    p.duration("CORE_GRPC_SHUTDOWN", 10*time.Second),
-		PublisherDrain:  p.duration("CORE_PUBLISHER_DRAIN", 5*time.Second),
-		ShutdownBudget:  p.duration("CORE_SHUTDOWN_BUDGET", 25*time.Second),
+		ConnectTimeout:  p.span("CORE_CONNECT_TIMEOUT", 10*time.Second),
+		RequestDeadline: p.span("CORE_REQUEST_DEADLINE", 3*time.Second),
+		QueueWait:       p.span("CORE_QUEUE_WAIT", 25*time.Millisecond),
+		MaxInflight:     p.count("CORE_MAX_INFLIGHT", 2048),
+		DrainDelay:      p.span("CORE_DRAIN_DELAY", 2*time.Second),
+		GRPCShutdown:    p.span("CORE_GRPC_SHUTDOWN", 5*time.Second),
+		PublisherDrain:  p.span("CORE_PUBLISHER_DRAIN", 5*time.Second),
+		ShutdownBudget:  p.span("CORE_SHUTDOWN_BUDGET", 25*time.Second),
 	}
-	c.AdvertiseAddr = envconfig.String("CORE_ADVERTISE_ADDR", c.CoreID+":9000")
+	c.AdvertiseAddr = p.advertiseAddr(c.CoreID, c.GRPCAddr)
+	p.components(&c)
 	if err := errors.Join(p.errs...); err != nil {
 		return Config{}, err
 	}
@@ -73,29 +90,27 @@ func Load() (Config, error) {
 	return c, nil
 }
 
-type parser struct {
-	errs []error
-}
-
-func (p *parser) coreID() string {
-	if id := os.Getenv("CORE_ID"); id != "" {
-		return id
+func (c Config) StopPlan() StopPlan {
+	return StopPlan{
+		DrainDelay: c.DrainDelay,
+		GRPC:       c.GRPCShutdown,
+		Router:     c.RequestDeadline,
+		Flusher:    c.Flush.InsertTimeout,
+		Publisher:  c.PublisherDrain,
+		Slots:      slot.ReleaseTimeout,
+		Close:      CloseTimeout,
 	}
-	host, err := os.Hostname()
-	if err != nil {
-		p.errs = append(p.errs, fmt.Errorf("CORE_ID unset and hostname unavailable: %w", err))
+}
+
+func (s StopPlan) total() time.Duration {
+	var sum time.Duration
+	for _, d := range []time.Duration{s.DrainDelay, s.GRPC, s.Router, s.Flusher, s.Publisher, s.Slots, s.Close} {
+		if d > math.MaxInt64-sum {
+			return math.MaxInt64
+		}
+		sum += d
 	}
-	return host
+	return sum
 }
 
-func (p *parser) integer(key string, def int) int {
-	v, err := envconfig.Int(key, def)
-	p.errs = append(p.errs, err)
-	return v
-}
-
-func (p *parser) duration(key string, def time.Duration) time.Duration {
-	v, err := envconfig.Duration(key, def)
-	p.errs = append(p.errs, err)
-	return v
-}
+func (s StopPlan) fitsWithin(budget time.Duration) bool { return s.total() < budget }

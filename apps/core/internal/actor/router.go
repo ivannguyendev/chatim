@@ -34,7 +34,7 @@ func NewRouter(msgs store.Messages, rooms store.Rooms, sub Submitter, cids CIDRe
 	if msgs == nil || rooms == nil || sub == nil || cids == nil || events == nil || marks == nil {
 		return nil, fmt.Errorf("%w: router needs message and room stores, a submitter, a cid registry, an event publisher and an activity marker", apperr.ErrInvalidArgument)
 	}
-	if err := cfg.validate(); err != nil {
+	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
 	if log == nil {

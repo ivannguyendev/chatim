@@ -32,6 +32,8 @@ type StreamConfig struct {
 	Duplicates  time.Duration
 }
 
+func (c StreamConfig) Validate() error { return c.withDefaults().validate() }
+
 func (c StreamConfig) withDefaults() StreamConfig {
 	c.MaxAge = cmp.Or(c.MaxAge, DefaultStreamMaxAge)
 	c.Duplicates = cmp.Or(c.Duplicates, DefaultStreamDuplicates)
