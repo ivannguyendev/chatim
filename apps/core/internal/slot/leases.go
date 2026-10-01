@@ -52,10 +52,10 @@ func (m *Manager) aliveCores(ctx context.Context) (map[string]bool, error) {
 	return alive, nil
 }
 
-func (m *Manager) renew(ctx context.Context, stamp time.Time) (lost bool, err error) {
+func (m *Manager) renew(ctx context.Context, stamp time.Time) (lost []uint16, err error) {
 	slots := m.Owned()
 	if len(slots) == 0 {
-		return false, nil
+		return nil, nil
 	}
 	keys := make([]string, len(slots))
 	for i, s := range slots {
@@ -63,7 +63,7 @@ func (m *Manager) renew(ctx context.Context, stamp time.Time) (lost bool, err er
 	}
 	kept, err := m.rdb.Eval(ctx, renewScript, keys, m.cfg.CoreID, m.cfg.LeaseTTL.Milliseconds()).Int64Slice()
 	if err != nil {
-		return false, fmt.Errorf("renew: %w", err)
+		return nil, fmt.Errorf("renew: %w", err)
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -73,19 +73,19 @@ func (m *Manager) renew(ctx context.Context, stamp time.Time) (lost bool, err er
 			continue
 		}
 		delete(m.owned, s)
-		lost = true
+		lost = append(lost, s)
 	}
 	return lost, nil
 }
 
-func (m *Manager) claim(ctx context.Context, alive map[string]bool, need int, stamp time.Time) (bool, error) {
+func (m *Manager) claim(ctx context.Context, alive map[string]bool, need int, stamp time.Time) ([]uint16, error) {
 	keys := make([]string, slotmap.Count)
 	for s := range keys {
 		keys[s] = slotmap.SlotKey(uint16(s))
 	}
 	owners, err := m.rdb.MGet(ctx, keys...).Result()
 	if err != nil {
-		return false, fmt.Errorf("read owners: %w", err)
+		return nil, fmt.Errorf("read owners: %w", err)
 	}
 	type candidate struct {
 		slot   uint16
@@ -103,7 +103,7 @@ func (m *Manager) claim(ctx context.Context, alive map[string]bool, need int, st
 	slices.SortFunc(cands, func(a, b candidate) int { return cmp.Compare(b.score, a.score) })
 	cands = cands[:min(need, len(cands))]
 	if len(cands) == 0 {
-		return false, nil
+		return nil, nil
 	}
 	pipe := m.rdb.Pipeline()
 	cmds := make([]*redis.Cmd, len(cands))
@@ -111,13 +111,13 @@ func (m *Manager) claim(ctx context.Context, alive map[string]bool, need int, st
 		cmds[i] = pipe.Eval(ctx, claimScript, []string{keys[c.slot]}, c.expect, m.cfg.CoreID, m.cfg.LeaseTTL.Milliseconds())
 	}
 	_, execErr := pipe.Exec(ctx)
-	claimed := false
+	var claimed []uint16
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for i, c := range cands {
 		if n, err := cmds[i].Int64(); err == nil && n == 1 {
 			m.owned[c.slot] = stamp
-			claimed = true
+			claimed = append(claimed, c.slot)
 		}
 	}
 	if execErr != nil {
@@ -126,17 +126,20 @@ func (m *Manager) claim(ctx context.Context, alive map[string]bool, need int, st
 	return claimed, nil
 }
 
-func (m *Manager) release(ctx context.Context, count int) error {
+func (m *Manager) release(ctx, hookCtx context.Context, count int) error {
 	slots := m.Owned()
 	slices.SortFunc(slots, func(a, b uint16) int {
 		return cmp.Compare(slotmap.Score(a, m.cfg.CoreID), slotmap.Score(b, m.cfg.CoreID))
 	})
-	return m.releaseSlots(ctx, slots[:count])
+	return m.releaseSlots(ctx, hookCtx, slots[:count:count])
 }
 
 func (m *Manager) ReleaseAll(ctx context.Context) error {
 	if slots := m.Owned(); len(slots) > 0 {
-		if err := m.releaseSlots(ctx, slots); err != nil {
+		hookCtx, cancel := context.WithTimeout(ctx, m.cfg.HookTimeout)
+		err := m.releaseSlots(ctx, hookCtx, slots)
+		cancel()
+		if err != nil {
 			return err
 		}
 	}
@@ -146,17 +149,13 @@ func (m *Manager) ReleaseAll(ctx context.Context) error {
 	return m.rdb.Publish(ctx, slotmap.ChangedChannel, m.cfg.CoreID).Err()
 }
 
-func (m *Manager) releaseSlots(ctx context.Context, slots []uint16) error {
+func (m *Manager) releaseSlots(ctx, hookCtx context.Context, slots []uint16) error {
 	m.mu.Lock()
 	for _, s := range slots {
 		delete(m.owned, s)
 	}
 	m.mu.Unlock()
-	if m.cfg.BeforeRelease != nil {
-		for _, s := range slots {
-			m.cfg.BeforeRelease(ctx, s)
-		}
-	}
+	deliver(hookCtx, m.cfg.BeforeRelease, slots)
 	pipe := m.rdb.Pipeline()
 	for _, s := range slots {
 		pipe.Eval(ctx, releaseScript, []string{slotmap.SlotKey(s)}, m.cfg.CoreID)
