@@ -15,6 +15,7 @@ func roomsCases() []roomsCase {
 		{"create then get room and members", roomsCreate},
 		{"create of an existing id fails and keeps the room", roomsCreateExisting},
 		{"get of a missing room is not found", roomsMissing},
+		{"invalid room or members are rejected and not stored", roomsInvalid},
 		{"membership is per room", roomsMembership},
 		{"cancelled context", roomsCancelled},
 	}
@@ -71,6 +72,12 @@ func assertNotMember(t *testing.T, s store.Rooms, room uint64, user string) {
 	assertErrorIs(t, "Member", err, domain.ErrNotMember)
 }
 
+func assertNoRoom(t *testing.T, s store.Rooms, id uint64) {
+	t.Helper()
+	_, err := s.Get(t.Context(), id)
+	assertErrorIs(t, "Get", err, domain.ErrRoomNotFound)
+}
+
 func roomsCreate(t *testing.T, s store.Rooms) {
 	room, members := teamOf(roomA)
 	mustCreate(t, s, room, members)
@@ -96,9 +103,39 @@ func roomsCreateExisting(t *testing.T, s store.Rooms) {
 func roomsMissing(t *testing.T, s store.Rooms) {
 	room, members := teamOf(roomA)
 	mustCreate(t, s, room, members)
-	for _, id := range []uint64{roomB, 0} {
-		_, err := s.Get(t.Context(), id)
-		assertErrorIs(t, "Get", err, domain.ErrRoomNotFound)
+	assertNoRoom(t, s, roomB)
+	assertNoRoom(t, s, 0)
+}
+
+func roomsInvalid(t *testing.T, s store.Rooms) {
+	noTenant, noTenantOwner := group(roomA, "Team", 1), member(roomA, "alice", domain.RoleOwner)
+	noTenant.Tenant, noTenantOwner.Tenant = "", ""
+	foreign := member(roomA+4, "bob", domain.RoleMember)
+	foreign.Tenant = "other"
+	tests := []struct {
+		name    string
+		room    domain.Room
+		members []domain.Member
+	}{
+		{"zero room id", group(0, "Team", 1), []domain.Member{member(0, "alice", domain.RoleOwner)}},
+		{"empty tenant", noTenant, []domain.Member{noTenantOwner}},
+		{"no members", group(roomA+1, "Team", 0), nil},
+		{"member of another room", group(roomA+2, "Team", 2), []domain.Member{
+			member(roomA+2, "alice", domain.RoleOwner), member(roomA+3, "bob", domain.RoleMember),
+		}},
+		{"member of another tenant", group(roomA+4, "Team", 2), []domain.Member{
+			member(roomA+4, "alice", domain.RoleOwner), foreign,
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertErrorIs(t, "Create", s.Create(t.Context(), tt.room, tt.members), apperr.ErrInvalidArgument)
+			assertNoRoom(t, s, tt.room.ID)
+			assertNotMember(t, s, tt.room.ID, "alice")
+			for _, m := range tt.members {
+				assertNotMember(t, s, m.Room, m.User)
+			}
+		})
 	}
 }
 
@@ -118,11 +155,10 @@ func roomsCancelled(t *testing.T, s store.Rooms) {
 	room, members := teamOf(roomA)
 	ctx := cancelledContext(t)
 	assertErrorIs(t, "Create", s.Create(ctx, room, members), context.Canceled)
-	_, err := s.Get(t.Context(), roomA)
-	assertErrorIs(t, "Get after cancelled Create", err, domain.ErrRoomNotFound)
+	assertNoRoom(t, s, roomA)
 	assertNotMember(t, s, roomA, "alice")
 	mustCreate(t, s, room, members)
-	_, err = s.Get(ctx, roomA)
+	_, err := s.Get(ctx, roomA)
 	assertErrorIs(t, "Get", err, context.Canceled)
 	_, err = s.Member(ctx, roomA, "alice")
 	assertErrorIs(t, "Member", err, context.Canceled)

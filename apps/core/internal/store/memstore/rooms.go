@@ -30,6 +30,9 @@ func (s *Rooms) Create(ctx context.Context, r domain.Room, members []domain.Memb
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if err := store.ValidateRoom(r, members); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, m := range members {

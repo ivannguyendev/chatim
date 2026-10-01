@@ -84,6 +84,32 @@ func TestPageQueryValidate(t *testing.T) {
 	}
 }
 
+func TestValidateRoom(t *testing.T) {
+	room := domain.Room{ID: 42, Tenant: "acme"}
+	owner := domain.Member{Room: 42, Tenant: "acme", User: "alice"}
+	other := domain.Member{Room: 42, Tenant: "acme", User: "bob"}
+	tests := []struct {
+		name    string
+		room    domain.Room
+		members []domain.Member
+		ok      bool
+	}{
+		{"valid", room, []domain.Member{owner, other}, true},
+		{"zero id", domain.Room{Tenant: "acme"}, []domain.Member{{Tenant: "acme", User: "alice"}}, false},
+		{"empty tenant", domain.Room{ID: 42}, []domain.Member{{Room: 42, User: "alice"}}, false},
+		{"nil members", room, nil, false},
+		{"empty members", room, []domain.Member{}, false},
+		{"member of another room", room, []domain.Member{owner, {Room: 43, Tenant: "acme", User: "bob"}}, false},
+		{"member of another tenant", room, []domain.Member{owner, {Room: 42, Tenant: "other", User: "bob"}}, false},
+		{"member without tenant", room, []domain.Member{{Room: 42, User: "alice"}}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertValid(t, store.ValidateRoom(tt.room, tt.members), tt.ok, tt.name)
+		})
+	}
+}
+
 func assertValid(t *testing.T, err error, ok bool, input any) {
 	t.Helper()
 	if ok {

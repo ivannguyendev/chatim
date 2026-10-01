@@ -35,6 +35,23 @@ func ValidateKeys(room uint64, keys []MsgKey) error {
 	return nil
 }
 
+func ValidateRoom(r domain.Room, members []domain.Member) error {
+	switch {
+	case r.ID == 0:
+		return invalid("room id")
+	case r.Tenant == "":
+		return invalid("tenant")
+	case len(members) == 0:
+		return invalid("members")
+	}
+	for _, m := range members {
+		if m.Room != r.ID || m.Tenant != r.Tenant {
+			return invalid("member")
+		}
+	}
+	return nil
+}
+
 func (q PageQuery) Validate() error {
 	if q.Limit < 1 || q.Limit > MaxPageLimit {
 		return invalid("limit")
