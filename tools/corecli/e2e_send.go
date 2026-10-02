@@ -13,7 +13,7 @@ import (
 
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/tools/corecli/internal/e2e"
-	"github.com/ivannguyendev/chatim/tools/corecli/internal/route"
+	"github.com/ivannguyendev/chatim/tools/internal/route"
 )
 
 type sendTally struct {

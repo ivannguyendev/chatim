@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"sync"
 	"testing"
 
@@ -13,10 +14,12 @@ import (
 	"google.golang.org/grpc/status"
 
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
-	"github.com/ivannguyendev/chatim/tools/corecli/internal/route"
+	"github.com/ivannguyendev/chatim/tools/internal/route"
 )
 
 func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
+
+var quietLog = slog.New(slog.DiscardHandler)
 
 type fakeLocator struct {
 	mu        sync.Mutex

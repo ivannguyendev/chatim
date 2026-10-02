@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
-	"github.com/ivannguyendev/chatim/tools/corecli/internal/route"
+	"github.com/ivannguyendev/chatim/tools/internal/route"
 )
 
 var unavailable = status.Error(codes.Unavailable, "core down")

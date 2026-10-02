@@ -13,9 +13,23 @@ func TestSummaryNearestRank(t *testing.T) {
 		r.Add(time.Duration(i+1) * time.Millisecond)
 	}
 	s := r.Summary()
-	want := Summary{Count: 100, P50: 50 * time.Millisecond, P95: 95 * time.Millisecond, P99: 99 * time.Millisecond, Max: 100 * time.Millisecond}
+	want := Summary{Count: 100, P50: 50 * time.Millisecond, P95: 95 * time.Millisecond, P99: 99 * time.Millisecond, P999: 100 * time.Millisecond, Max: 100 * time.Millisecond}
 	if s != want {
 		t.Fatalf("Summary() = %+v, want %+v", s, want)
+	}
+}
+
+func TestSummaryP999NeedsAThousandSamples(t *testing.T) {
+	var r Recorder
+	for _, i := range rand.Perm(2000) {
+		r.Add(time.Duration(i+1) * time.Microsecond)
+	}
+	s := r.Summary()
+	if s.P99 != 1980*time.Microsecond || s.P999 != 1998*time.Microsecond || s.Max != 2000*time.Microsecond {
+		t.Fatalf("Summary() = %+v, want p99=1.98ms p99.9=1.998ms max=2ms", s)
+	}
+	if got := s.String(); got != "n=2000 p50=1ms p95=1.9ms p99=1.98ms p99.9=1.998ms max=2ms" {
+		t.Fatalf("String() = %q", got)
 	}
 }
 

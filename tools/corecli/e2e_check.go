@@ -11,7 +11,7 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/backoff"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/tools/corecli/internal/e2e"
-	"github.com/ivannguyendev/chatim/tools/corecli/internal/route"
+	"github.com/ivannguyendev/chatim/tools/internal/route"
 )
 
 const eventPoll = 200 * time.Millisecond
