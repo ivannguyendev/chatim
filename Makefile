@@ -12,7 +12,7 @@ GO_RUN   := docker run --rm -v "$(CURDIR)":/src -w /src -v chatim-gomod:/go/pkg/
 BUF_RUN  := docker run --rm -v "$(CURDIR)":/src -w /src $(BUF_IMAGE)
 POC_RUN  := $(GO_RUN) --network $(NETWORK) -e "MONGO_URI=mongodb://$(MONGO_ROOT_USER):$(MONGO_ROOT_PASSWORD)@chatim-mongodb:27017/?replicaSet=rs0&authSource=admin" -e "PG_URI=postgres://$(PG_USER):$(PG_PASSWORD)@chatim-postgres:5432/chatim_poc"
 
-.PHONY: go check-env test itest vet fmt-check lint vuln tidy proto buf-lint poc image infra-up infra-down infra-reset pg-up pg-down core-up core-down
+.PHONY: go check-env test itest vet fmt-check lint vuln tidy proto buf-lint poc image infra-up infra-down infra-reset pg-up pg-down core-up core-down e2e
 
 go:
 	$(GO_RUN) $(GO_IMAGE) go $(ARGS)
@@ -79,3 +79,7 @@ core-up: check-env
 
 core-down: check-env
 	$(CORE_COMPOSE) rm -s -f $(CORES)
+
+e2e: check-env
+	$(MAKE) -s image TARGET=tools/corecli
+	NETWORK=$(NETWORK) ./scripts/e2e.sh
