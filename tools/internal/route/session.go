@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/ivannguyendev/chatim/pkg/grpcclient"
@@ -78,10 +77,7 @@ func (s *Session) Close() error {
 }
 
 func DialInsecure(addr string) (chatimv1.CoreServiceClient, io.Closer, error) {
-	cc, err := grpcclient.New(addr, grpcclient.Options{
-		Creds:       insecure.NewCredentials(),
-		DialOptions: []grpc.DialOption{grpc.WithDisableServiceConfig()},
-	})
+	cc, err := grpcclient.New(addr, grpcclient.Options{Creds: insecure.NewCredentials()})
 	if err != nil {
 		return nil, nil, err
 	}

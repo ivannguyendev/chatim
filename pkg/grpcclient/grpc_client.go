@@ -45,6 +45,7 @@ func New(target string, opts Options) (*grpc.ClientConn, error) {
 		grpc.WithTransportCredentials(opts.Creds),
 		grpc.WithChainUnaryInterceptor(wrapDownstreamUnary),
 		grpc.WithDefaultServiceConfig(sc),
+		grpc.WithDisableServiceConfig(),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
 			Time:                30 * time.Second,
 			Timeout:             10 * time.Second,
