@@ -20,6 +20,7 @@
 | R3a | RePublish đổi subject | `republish transform: PASS` | `republish transform: PASS` → **đạt trên dev** | Chờ: NATS 3 node | Đạt trên dev; xác nhận lại trên cluster 3 node |
 | R3b | 1M interest sub + 5K event/s | publish→gateway p99 ≤ 10ms; RAM server (ghi MB) | `-subs 1000000 -conns 4 -rate 5000 -duration 60s`: `subscribed 1000000 rooms on 4 connections in 5.101s; server mem=925MB subscriptions=1000066`; `target=5000/s published=294325 (4905/s) failed=0 received=294325 dropped=0; server mem=1715MB`; `jetstream publish ack: p50=456.473µs p95=799.798µs p99=1.261449ms max=279.127487ms`; `publish -> gateway: n=294325 p50=445.129µs p95=773.474µs p99=1.196376ms max=279.285952ms` → p99 ≤ 10ms, `failed=0`, `dropped=0`, **đạt trên dev** (tốc độ thực tế 4905/s, thấp hơn 5000/s mục tiêu) | Chờ: NATS 3 node | Chưa kết luận |
 | R4 | gws 50K connection | ≤ 40KB/conn; lần ghi cuối của 1 broadcast ≤ 100ms | Biến thể dev: server và client là 2 container trên `chatim_default` trong cùng VM, 4 port, `nofile=200000`, `-dial-rate 2000`, client `-duration 90s`, server `-every 5s`. Client: `connected=50000 failed=0`. RAM server (idle, trước broadcast): ≤ 10.3KB/conn (đỉnh ở 44756 conn; 9.2–10.1KB ở 50000 conn, heap 342→381MB, stack 105→114MB, sys 565→574MB). `last write done` ở 50000 conn ổn định (10 lần): 154.62581ms – 244.613828ms (lần đầu ngay sau khi dial xong: 461.139046ms), `write errors=0`, không có dòng `overlap`. Đang dial: 44756 conn → 861.286222ms, 48153 conn → 3.786643582s → RAM **đạt**, lần ghi cuối **không đạt trên dev** | Chờ: 2 host Linux, `--network host` | Chưa kết luận |
+| C1 | Core ×2 qua gRPC ở 10K tin/s (corebench, open-loop, M2a) | Ack p99 ≤ 30ms (A1, trên dev chỉ để tham khảo), failed = 0, shed_by_client = 0 | `-rate 10000 -duration 60s -watch 20`, 2 lần: `acked=9426/s` và `7546/s`, `shed_by_client=34429` và `147085`, `failed=2` và `152`, ack p99 `1.018039844s` và `2.368397163s` → **không đạt trên dev**. 5K/s vẫn giữ đủ tải (`shed_by_client=0 failed=0`) nhưng p99 `504.567349ms`; không mức nào đạt 30ms, kể cả 500/s (p99 `85.278617ms`). Chi tiết ở [C1](#c1-corebench-2-core-qua-grpc-dev-2026-10-02) | Chờ: rs 3 member, core và corebench trên host riêng | Chưa kết luận |
 | R5 | Soft-ownership khi Redis mất dữ liệu | `go test -race -count=20 ./apps/core/internal/slot/` pass | `make -s fmt-check`, `make -s vet` sạch; `ok github.com/ivannguyendev/chatim/apps/core/internal/slot 233.328s`; `make -s test`: mọi package có test đều `ok` → **đạt ở mức unit**: miniredis giả lập Redis mất dữ liệu (`FlushAll`) và core chết, chạy `-race -count=20` | Chờ: test chaos mục 13 của thiết kế (kill Redis master khi đang tải) chưa chạy | Đạt ở mức unit; còn test chaos |
 
 ### R2: so sánh write concern (dev, 2026-09-30)
@@ -36,6 +37,68 @@ Cùng điều kiện R2 (`write -rate 10000 -duration 60s -rooms 5000 -flushers 
 - `w:1` đạt tiêu chí (p99 10.08ms ≤ 30ms) nhưng **không bền**: server ack khi mới ghi vào bộ nhớ, journal flush sau tối đa khoảng 100ms; mongod crash hoặc primary failover có thể làm mất tin đã ack. Điều này trái với giả định A2 của thiết kế (đã ack = đã lưu `w:majority`), nên không dùng `w:1` cho tin nhắn.
 - `w:1` phù hợp cho các lần ghi có thể dựng lại hoặc idempotent: cập nhật chậm `rooms.last_seq` / `read_seq` bằng `$max` (thiết kế mục 5.2–5.3).
 - Lần chạy `w:majority` này có p99 60.95ms, lần R2 trước là 213.52ms: độ dao động giữa các lần chạy trên dev lớn. Cần đo `w:majority` trên rs 3 member với đĩa NVMe thật trước khi kết luận.
+
+### C1: corebench, 2 core qua gRPC (dev, 2026-10-02)
+
+**Máy và điều kiện.** Cùng máy dev ở bảng Môi trường (OrbStack, VM 10 vCPU / 11.75GiB). MongoDB 1 node `rs0` (`w:majority` chỉ gồm 1 member), NATS 1 node, Redis 1 node. Hai core `chatim-core-1`, `chatim-core-2` (image `chatim/core:dev`, `mem_limit 1g`, `GOMEMLIMIT=920MiB`), mỗi core giữ 512/1024 slot. corebench chạy trong container `golang:1.26` trên cùng VM, nên công cụ đo, 2 core, MongoDB, NATS và Redis tranh nhau 10 vCPU. **Chỉ để tham khảo; quyết định cần prod-like.**
+
+**Lệnh.** `make -s poc TOOL=corebench ARGS="-rate <R> -duration 60s -watch 20"`. Các giá trị mặc định của corebench: 1000 room group, mỗi room 4 member (người gửi chọn ngẫu nhiên trong room); chọn room đều (không `-zipf`); warmup 5s không tính vào kết quả; `-max-inflight 4096`; deadline của 1 lần gửi 10s (gồm cả thử lại), mỗi attempt 5s; văn bản giả (`msgtext.Synthetic`, 4096 câu); mỗi lần gửi một cid riêng. `-watch 20` theo dõi subject live của 20 room đầu.
+
+**Config core.** Compose không đặt biến nào, nên core chạy với giá trị mặc định: `FLUSH_SHARDS=4`, `FLUSH_WINDOW=2ms`, `FLUSH_MAX_BATCH=256`, `FLUSH_QUEUE=1024`, `FLUSH_INSERT_TIMEOUT=1s`, `ACTOR_MAX_GROUP=64`, `ACTOR_MAILBOX=1024`, `CORE_REQUEST_DEADLINE=3s`, `CORE_MAX_INFLIGHT=2048`, `CORE_QUEUE_WAIT=25ms`, `REDIS_OP_TIMEOUT=100ms`, `CID_COMMITTED_TTL=15m`. corebench in các biến này từ env của chính nó (`default` nghĩa là không đặt), không đọc từ core.
+
+**Cách đo.**
+- Open-loop: lần gửi thứ i được hẹn lúc `start + i/rate`. Độ trễ ack tính từ **thời điểm hẹn**, nên khi core (hoặc chính corebench) bị nghẽn, mọi lần gửi đến hạn trong lúc đó đều mang phần chờ này (không bị coordinated omission).
+- Khi đã có `max-inflight` lần gửi đang chờ, lần đến hạn tiếp theo bị bỏ và đếm vào `shed_by_client`; pacer không bao giờ bị chặn.
+- `pacer lag` = lúc thực sự gửi − lúc hẹn, và nằm trong độ trễ ack. Từ 7.5K/s trở lên, pacer lag p99 khoảng 90–100ms, tức chính máy đo đã thiếu CPU.
+- Live lag = lúc corebench nhận event − `ts` của event. `ts` là lúc core gán seq (trước khi insert), nên live lag gồm cả insert, commit Redis, publish JetStream và RePublish. Mọi container dùng chung kernel của VM nên chung đồng hồ; tuy vậy clocksource `tsc` của VM thỉnh thoảng lùi khoảng 1ms (log core có `duration_ms` âm, `time.Since` trong container trả về -1ms), nên sai số cỡ ±1ms.
+- Trước mỗi lần chạy, trừ 2 lần đầu: xoá key `chatim:cid:*:cb*` của các lần bench trước và `CONFIG RESETSTAT`. Các key này chỉ là bản ghi chống trùng của tin bench đã commit, và bench không bao giờ gửi lại cid cũ. Lý do phải xoá nằm ở mục "Nơi tốn thời gian" bên dưới.
+
+| Lần | Rate mục tiêu | Redis trước khi chạy (`dbsize`) | acked/s | shed_by_client | failed (mã) | Lần gửi có thử lại / max attempts | Ack p50 | Ack p95 | Ack p99 | Ack p99.9 | Ack max | Live lag p50 / p99 | Pacer lag p99 | CPU TB: core-1 / core-2 / mongod / nats / redis / corebench |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 10000/s | Còn key của các lần chạy thử (không đếm) | 9426 | 34429 (5.7%) | 2 (DeadlineExceeded 1, Unavailable 1) | 2365 / 3 | 206.346966ms | 565.572519ms | 1.018039844s | 7.0439397s | 9.990229438s | 111.62872ms / 452.946079ms | 99.721744ms | 296 / 277 / 230 / 70 / 67 / 225% |
+| 2 | 2000/s | ~200K+ còn lại từ lần 1 (334030 key sau lần chạy) | 2000 | 0 | 0 | 0 / 1 | 20.881907ms | 157.959367ms | 474.07051ms | 769.357027ms | 891.887076ms | 18.171719ms / 304.02808ms | 48.320631ms | 171 / 194 / 199 / 60 / 107 / 111% |
+| 3 | 2000/s | Sạch (3666 key tổng) | 2000 | 0 | 0 | 0 / 1 | 16.099827ms | 59.118942ms | 138.900973ms | 291.535306ms | 382.397221ms | 14.562295ms / 136.204916ms | 8.169424ms | 192 / 185 / 187 / 65 / 72 / 104% |
+| 4 | 5000/s (kèm pprof core-1 20s) | Sạch (4984) | 5000 | 0 | 0 | 0 / 1 | 48.17521ms | 235.147348ms | 504.567349ms | 813.577644ms | 1.244848535s | 35.296855ms / 265.114557ms | 25.184324ms | 291 / 275 / 255 / 76 / 109 / 154% |
+| 5 | 1000/s | Sạch (5666) | 1000 | 0 | 0 | 0 / 1 | 11.538815ms | 34.38055ms | 89.253917ms | 151.685016ms | 177.18554ms | 10.863902ms / 85.347745ms | 5.325191ms | 129 / 116 / 163 / 53 / 50 / 91% |
+| 6 | 500/s | Sạch (7986) | 500 | 0 | 0 | 0 / 1 | 9.778728ms | 30.413015ms | 85.278617ms | 162.880243ms | 189.491981ms | 9.164631ms / 78.11343ms | 10.867065ms | 87 / 87 / 137 / 35 / 34 / 74% |
+| 7 | 7500/s | Sạch (9308) | 7319 | 10845 (2.4%) | 0 | 1253 / 2 | 223.789716ms | 617.622743ms | 885.549854ms | 4.669676444s | 6.141840591s | 121.77568ms / 465.47567ms | 96.876784ms | 323 / 317 / 258 / 85 / 75 / 202% |
+| 8 | 10000/s | Sạch (10363) | 7546 | 147085 (24.5%) | 152 (Unavailable 151, DeadlineExceeded 1) | 10911 / 4 | 360.433224ms | 1.077556943s | 2.368397163s | 5.705564249s | 9.731086459s | 176.271873ms / 744.911857ms | 89.18838ms | 303 / 328 / 278 / 112 / 60 / 237% |
+
+CPU là trung bình `docker stats` lấy mẫu mỗi 3s trong lúc chạy (100% = 1 vCPU). Ở mọi lần chạy, event live trên các room được theo dõi đều `missing=0 duplicates=0`. Ngoài bảng còn 1 lần 2K/s 20s chỉ để lấy pprof của corebench (`-cpuprofile`).
+
+**Điểm gãy (knee).**
+- Thông lượng: giữ đủ tải (`shed_by_client=0 failed=0`, không lần nào phải thử lại) tới 5K/s. 7.5K/s chỉ đạt 7319/s (bỏ 2.4%); 10K/s đạt 7546–9426/s (bỏ 5.7–24.5%; lần 8 có 151 lần gửi kết thúc bằng `Unavailable`). Knee thông lượng trên dev nằm giữa 5K và 7.5K/s.
+- Độ trễ: p99 là 85ms (500/s), 89ms (1K), 139ms (2K), 505ms (5K), 886ms (7.5K). p50 khoảng 10–16ms tới 2K/s rồi tăng mạnh khi lên 5K/s (48ms).
+- Hai lần 10K/s chênh nhau nhiều (p99 1.02s và 2.37s): số đo trên dev dao động mạnh, giống R2.
+
+**Nơi tốn thời gian.**
+1. **VM bão hoà CPU.** Tổng CPU của các container khoảng 805% ở 2K/s, 1160% ở 5K/s và 1165–1320% ở 7.5K–10K/s, trên tổng 10 vCPU. Từ 5K/s, mọi thành phần đều xếp hàng chờ CPU. Riêng corebench dùng 0.7–2.4 vCPU; theo pprof (`-cpuprofile`), phần lớn là việc của gRPC client: framing HTTP/2 và một syscall write cho mỗi RPC.
+2. **Pprof core-1 ở 5K/s** (khoảng 2.5K tin/s mỗi core, lấy 20s bằng `curl http://core-1:9090/debug/pprof/profile?seconds=20` từ một container trên `chatim_default`):
+   - Redis cho chống trùng cid ~20% (`redisguard.Do`): mỗi tin có 1 `EVALSHA` cho Reserve và 1 pipeline cho Commit, không gộp theo nhóm ghi.
+   - GC và cấp phát ~25% (`gcBgMarkWorker` 13.8%, `mallocgc` 12.2%).
+   - Log JSON mức INFO cho mỗi RPC ra stdout ~10.6% (`logRPC`).
+   - Insert Mongo ~7.5%. Syscall write (mạng và log) chiếm 13.5%.
+3. **Redis `SCAN` quét cả keyspace** — phát hiện quan trọng nhất của lần đo này. Mỗi tick (1s), slot manager của mỗi core tìm core còn sống bằng `SCAN chatim:core:*`, và resolver phía client quét lại mỗi lần refresh. `SCAN` đi qua **toàn bộ keyspace**, trong khi keyspace chứa mọi key `chatim:cid:*` (TTL 15 phút).
+   - Lúc nghỉ, với khoảng 312K key cid: 2438 lệnh `SCAN`/s, và Redis bận 31% chỉ để quét. Tính từ lúc Redis khởi động (44 giờ, gồm các lần e2e, chạy thử, lần 1 và lần 2), `SCAN` chiếm 60.8s trong khoảng 93s CPU của Redis (403088 lệnh, 150µs/lệnh). Ngay cả ở lần 3 (bắt đầu sạch), `SCAN` vẫn là lệnh tốn CPU Redis nhất (9.7s trong khoảng 19.5s).
+   - Lần 2 (còn ~200K+ key cid) có p99 474ms, so với 139ms ở lần 3 (sạch) cùng mức 2K/s.
+   - Ở lần 7 và 8 (7.5K và 10K/s), lệnh Redis của core vượt `REDIS_OP_TIMEOUT=100ms`, nên core chuyển chống trùng sang chỉ dùng LRU, bỏ qua active room mark (`sends continue without recovery marks`) và tạm dừng watermark publish. Log của mỗi core có khoảng 27 lần cho mỗi loại trong 2 lần chạy này (lần 1 không có). Sau lần 8, Redis có 114683 key (trước khi chạy là 10363), dù đã ack 452763 tin: các tin gửi lúc suy giảm không có bản ghi chống trùng trong Redis.
+   - Resolver của corebench báo `slot table reload failed: scan cores: context deadline exceeded`.
+   - Nếu chạy liên tục 10K tin/s, keyspace sẽ có khoảng 9M key cid (10K × 900s). Khi đó mỗi lượt quét cần khoảng 35K lệnh `SCAN` và không thể xong trong 1 tick.
+   - **Đề xuất (chưa quyết định, chưa sửa):** lưu danh sách core còn sống ở một key riêng (ví dụ ZSET `chatim:cores` với score là hạn heartbeat) thay cho `SCAN`, hoặc tách key cid sang Redis DB hoặc instance khác. Cần đưa vào thiết kế mục 5.1 và Decision Log.
+4. **VM đánh thức timer trễ.** Trong một container nhàn rỗi, `time.Sleep` theo nhịp 100µs bị trễ p50 1.1ms, p99 14.9ms, max 36ms. Mỗi hop (client → core → Redis → Mongo → NATS) đều có thể chịu thêm phần trễ này; đây có thể là lý do p99 ở 500/s vẫn khoảng 85ms dù CPU còn dư.
+
+**So với A1 (ack p99 ≤ 30ms, trên dev chỉ để tham khảo).** Không đạt ở mức nào, kể cả 500/s (p50 9.778728ms, p95 30.413015ms, p99 85.278617ms). Ở 10K/s, p99 là 1.02–2.37s. Chưa kết luận: cần chạy lại trên prod-like (core và corebench trên host riêng, rs 3 member, Redis sentinel) sau khi xử lý vấn đề `SCAN`.
+
+**Lỗi lúc setup, đã sửa trong công cụ.** Hai lần chạy (lần smoke đầu tiên và lần thử 10K/s đầu tiên, đều không ghi vào bảng) dừng ở bước tạo room: 32 `CreateRoom` cùng trả `DeadlineExceeded` sau 5s, và core không nhận được request nào. Nguyên nhân nhiều khả năng là resolver DNS của grpc-go: nó tra bản ghi TXT `_grpc_config.<host>` trước khi trả địa chỉ, Docker chuyển truy vấn này ra DNS của host, và khi DNS host chậm thì mọi RPC đầu tiên phải chờ tới hết hạn. Đã tái hiện đúng lỗi này bằng `POC_FLAGS="--dns 10.255.255.1"`, và sửa bằng `grpc.WithDisableServiceConfig()` trong dialer của `tools/internal/route` (service config mặc định khai báo trong code vẫn được dùng). Gateway (M4) gọi core qua `pkg/grpcclient` mặc định cũng sẽ gặp lỗi này.
+
+Chạy lại một mức từ trạng thái sạch:
+
+```bash
+docker exec chatim-redis sh -c "redis-cli --scan --pattern 'chatim:cid:*:cb*' --count 5000 | xargs -r -n 1000 redis-cli unlink"
+docker exec chatim-redis redis-cli config resetstat
+make -s poc TOOL=corebench ARGS="-rate 5000 -duration 60s -watch 20"
+docker exec chatim-redis redis-cli info commandstats
+```
 
 ## Chạy lại R1b
 
@@ -71,6 +134,7 @@ Chỉ có quan sát trên máy dev; **chưa có quyết định giữ/đổi thi
 - **Không đạt trên dev:**
   - R1b oldest (lần đo đầu, trước khi sửa công cụ; lần đo lại đã đạt — xem [so sánh MongoDB/PostgreSQL](260930-mongodb-vs-postgresql.md)): p99 23.357931ms > 20ms, dù dữ liệu on-disk (932.1MB) có thể nằm hết trong page cache của VM. Vì lượt đọc có thể được phục vụ từ page cache của VM thay vì đĩa, 23.36ms là con số lạc quan; trên prod-like với dữ liệu thật lớn hơn RAM, p99 nhiều khả năng cao hơn chứ không thấp hơn, nên R1b là phép đo prod-like cần ưu tiên nhất.
   - R2: `insertMany` p99 26.816186ms nhưng thời gian chờ ack p99 213.521741ms > 30ms; max `insertMany` 523.148044ms cho thấy có các lần ghi bị nghẽn khoảng 0.5s, tin đến trong lúc đó xếp hàng sau flusher. Trên prod-like cần xem các lần nghẽn này còn không, và thử "Nếu không đạt" của R2 (kích thước batch, cửa sổ flush, số flusher, disk/IOPS).
+  - C1 (corebench, M2a): 2 core trên dev giữ đủ 5K tin/s nhưng ack p99 504.567349ms; 10K/s bỏ 5.7–24.5% và p99 1.02–2.37s; không mức nào đạt A1 (≤ 30ms), kể cả 500/s (85.278617ms). Phát hiện cần xử lý trước khi đo prod-like: `SCAN chatim:core:*` quét cả keyspace chứa key cid, nên Redis chậm dần khi số key cid tăng và core rơi vào chế độ suy giảm (xem [C1](#c1-corebench-2-core-qua-grpc-dev-2026-10-02)).
   - R4: lần ghi cuối 154.62581ms – 244.613828ms > 100ms ở 50K conn; server và client dùng chung 10 vCPU nên kết quả dev bi quan. Trên máy dev, lần ghi cuối còn ≤ 100ms ở 28973 conn (98.157828ms, lúc client vẫn đang dial).
 - **Chưa đo được trên dev:** R1a với dữ liệu thật; R1b mode random và latest (chưa chạy được do giới hạn quyền của môi trường chạy tự động lúc đó (không phải lỗi mongobench); xem [Chạy lại R1b](#chạy-lại-r1b)); `w:majority` trên 3 member; test chaos R5 (kill Redis master khi đang tải, mục 13 của thiết kế).
 - Văn bản giả lần này nén 3.37x (không phải ~17x như lần chạy thử trước), càng cho thấy dung lượng R1a phải đo bằng dữ liệu thật.
