@@ -17,11 +17,14 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/resilience"
 )
 
+const DefaultSlowRPC = 500 * time.Millisecond
+
 type Config struct {
 	Addr             string
 	ShutdownTimeout  time.Duration
 	DrainDelay       time.Duration
 	RequestDeadline  time.Duration
+	SlowRPC          time.Duration
 	EnableReflection bool
 	Limiter          *resilience.Limiter
 	ServerOptions    []grpc.ServerOption
@@ -42,6 +45,9 @@ func New(cfg Config, logger *slog.Logger) *Server {
 	if cfg.ShutdownTimeout <= 0 {
 		cfg.ShutdownTimeout = 15 * time.Second
 	}
+	if cfg.SlowRPC <= 0 {
+		cfg.SlowRPC = DefaultSlowRPC
+	}
 
 	unary := []grpc.UnaryServerInterceptor{RecoveryUnary(logger)}
 	if cfg.RequestDeadline > 0 {
@@ -50,11 +56,11 @@ func New(cfg Config, logger *slog.Logger) *Server {
 	if cfg.Limiter != nil {
 		unary = append(unary, LoadShedUnary(cfg.Limiter))
 	}
-	unary = append(unary, LoggingUnary(logger), ErrorBoundaryUnary(logger))
+	unary = append(unary, LoggingUnary(logger, cfg.SlowRPC), ErrorBoundaryUnary(logger))
 
 	opts := []grpc.ServerOption{
 		grpc.ChainUnaryInterceptor(unary...),
-		grpc.ChainStreamInterceptor(RecoveryStream(logger), LoggingStream(logger), ErrorBoundaryStream(logger)),
+		grpc.ChainStreamInterceptor(RecoveryStream(logger), LoggingStream(logger, cfg.SlowRPC), ErrorBoundaryStream(logger)),
 		grpc.KeepaliveParams(keepalive.ServerParameters{
 			MaxConnectionIdle:     5 * time.Minute,
 			MaxConnectionAge:      30 * time.Minute,

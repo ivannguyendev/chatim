@@ -12,6 +12,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/recovery"
 	"github.com/ivannguyendev/chatim/apps/core/internal/slot"
 	"github.com/ivannguyendev/chatim/pkg/envconfig"
+	"github.com/ivannguyendev/chatim/pkg/grpcserver"
 )
 
 const (
@@ -31,6 +32,7 @@ type Config struct {
 	NATSURL         string
 	ConnectTimeout  time.Duration
 	RequestDeadline time.Duration
+	SlowRPC         time.Duration
 	QueueWait       time.Duration
 	MaxInflight     int
 	DrainDelay      time.Duration
@@ -72,6 +74,7 @@ func Load() (Config, error) {
 		NATSURL:         envconfig.String("NATS_URL", "nats://chatim-nats:4222"),
 		ConnectTimeout:  p.span("CORE_CONNECT_TIMEOUT", 10*time.Second),
 		RequestDeadline: p.span("CORE_REQUEST_DEADLINE", 3*time.Second),
+		SlowRPC:         p.span("CORE_SLOW_RPC", grpcserver.DefaultSlowRPC),
 		QueueWait:       p.span("CORE_QUEUE_WAIT", 25*time.Millisecond),
 		MaxInflight:     p.count("CORE_MAX_INFLIGHT", 2048),
 		DrainDelay:      p.span("CORE_DRAIN_DELAY", 2*time.Second),

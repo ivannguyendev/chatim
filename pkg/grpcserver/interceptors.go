@@ -39,34 +39,41 @@ func panicToStatus(ctx context.Context, logger *slog.Logger, method string, r an
 	return status.Error(codes.Internal, "internal error")
 }
 
-func LoggingUnary(logger *slog.Logger) grpc.UnaryServerInterceptor {
+func LoggingUnary(logger *slog.Logger, slow time.Duration) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		start := time.Now()
 		resp, err := handler(ctx, req)
-		logRPC(ctx, logger, info.FullMethod, start, err)
+		logRPC(ctx, logger, info.FullMethod, time.Since(start), slow, err)
 		return resp, err
 	}
 }
 
-func LoggingStream(logger *slog.Logger) grpc.StreamServerInterceptor {
+func LoggingStream(logger *slog.Logger, slow time.Duration) grpc.StreamServerInterceptor {
 	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		start := time.Now()
 		err := handler(srv, ss)
-		logRPC(ss.Context(), logger, info.FullMethod, start, err)
+		logRPC(ss.Context(), logger, info.FullMethod, time.Since(start), slow, err)
 		return err
 	}
 }
 
-func logRPC(ctx context.Context, logger *slog.Logger, method string, start time.Time, err error) {
+func logRPC(ctx context.Context, logger *slog.Logger, method string, took, slow time.Duration, err error) {
 	code := status.Code(err)
-	level := slog.LevelInfo
-	if isServerFault(code) {
+	var level slog.Level
+	switch {
+	case isServerFault(code):
 		level = slog.LevelError
+	case code != codes.OK:
+		level = slog.LevelInfo
+	case took >= slow:
+		level = slog.LevelWarn
+	default:
+		return
 	}
 	logger.Log(ctx, level, "rpc finished",
 		"grpc.method", method,
 		"grpc.code", code.String(),
-		"duration_ms", float64(time.Since(start).Microseconds())/1000,
+		"duration_ms", float64(took.Microseconds())/1000,
 	)
 }
 

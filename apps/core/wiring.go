@@ -103,6 +103,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 		Addr:            cfg.GRPCAddr,
 		ShutdownTimeout: cfg.GRPCShutdown,
 		RequestDeadline: cfg.RequestDeadline,
+		SlowRPC:         cfg.SlowRPC,
 		Limiter:         resilience.NewLimiter(cfg.MaxInflight, cfg.QueueWait),
 	}, log)
 	chatimv1.RegisterCoreServiceServer(a.grpc, svc)

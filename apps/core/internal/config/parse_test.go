@@ -28,6 +28,7 @@ func TestLoadRejectsNonPositiveValues(t *testing.T) {
 		{"REDIS_DB", "-1"},
 		{"CORE_MAX_INFLIGHT", "0"},
 		{"CORE_REQUEST_DEADLINE", "0s"},
+		{"CORE_SLOW_RPC", "0s"},
 		{"CORE_CONNECT_TIMEOUT", "-1s"},
 		{"CORE_QUEUE_WAIT", "0s"},
 		{"CORE_DRAIN_DELAY", "0s"},

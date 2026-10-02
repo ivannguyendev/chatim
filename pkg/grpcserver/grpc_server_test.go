@@ -32,8 +32,13 @@ type harness struct {
 
 func start(t *testing.T, cfg grpcserver.Config, fn func(context.Context) error) *harness {
 	t.Helper()
+	return startLogged(t, cfg, slog.New(slog.DiscardHandler), fn)
+}
+
+func startLogged(t *testing.T, cfg grpcserver.Config, logger *slog.Logger, fn func(context.Context) error) *harness {
+	t.Helper()
 	lis := bufconn.Listen(1 << 20)
-	srv := grpcserver.New(cfg, slog.New(slog.DiscardHandler))
+	srv := grpcserver.New(cfg, logger)
 	registerFake(srv, fn)
 
 	ctx, cancel := context.WithCancel(context.Background())
