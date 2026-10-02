@@ -2,12 +2,12 @@ package slotmap
 
 import (
 	"strconv"
-	"strings"
+	"time"
 )
 
 const (
-	CorePattern    = corePrefix + "*"
-	ChangedChannel = "chatim:slots:changed"
+	ChangedChannel  = "chatim:slots:changed"
+	CoreRegistryKey = "chatim:cores"
 
 	corePrefix = "chatim:core:"
 	slotPrefix = "chatim:slot:"
@@ -15,6 +15,6 @@ const (
 
 func CoreKey(id string) string { return corePrefix + id }
 
-func CoreIDFromKey(key string) (string, bool) { return strings.CutPrefix(key, corePrefix) }
-
 func SlotKey(slot uint16) string { return slotPrefix + strconv.Itoa(int(slot)) }
+
+func CoreExpiryScore(at time.Time) float64 { return float64(at.UnixMilli()) }

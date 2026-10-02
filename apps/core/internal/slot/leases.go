@@ -38,20 +38,6 @@ if redis.call('GET', KEYS[1]) == ARGV[1] then
 end
 return 0`
 
-func (m *Manager) aliveCores(ctx context.Context) (map[string]bool, error) {
-	alive := map[string]bool{m.cfg.CoreID: true}
-	iter := m.rdb.Scan(ctx, 0, slotmap.CorePattern, 256).Iterator()
-	for iter.Next(ctx) {
-		if id, ok := slotmap.CoreIDFromKey(iter.Val()); ok {
-			alive[id] = true
-		}
-	}
-	if err := iter.Err(); err != nil {
-		return nil, fmt.Errorf("scan cores: %w", err)
-	}
-	return alive, nil
-}
-
 func (m *Manager) renew(ctx context.Context, stamp time.Time) (lost []uint16, err error) {
 	slots := m.Owned()
 	if len(slots) == 0 {
@@ -143,8 +129,8 @@ func (m *Manager) ReleaseAll(ctx context.Context) error {
 			return err
 		}
 	}
-	if err := m.rdb.Del(ctx, slotmap.CoreKey(m.cfg.CoreID)).Err(); err != nil {
-		return fmt.Errorf("remove heartbeat: %w", err)
+	if err := m.deregister(ctx); err != nil {
+		return err
 	}
 	return m.rdb.Publish(ctx, slotmap.ChangedChannel, m.cfg.CoreID).Err()
 }

@@ -16,29 +16,46 @@ func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
 
 var quietLog = slog.New(slog.DiscardHandler)
 
+var redisEpoch = time.UnixMilli(1_700_000_000_000)
+
 type resolverRig struct {
 	mr  *miniredis.Miniredis
 	rdb *redis.Client
 	r   *Resolver
+	now time.Time
 }
 
 func newResolverRig(t *testing.T, cfg ResolverConfig) *resolverRig {
 	t.Helper()
 	mr := miniredis.RunT(t)
+	mr.SetTime(redisEpoch)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr(), ContextTimeoutEnabled: true, MaxRetries: -1})
 	t.Cleanup(func() { _ = rdb.Close() })
 	r, err := NewResolver(rdb, cfg, quietLog)
 	if err != nil {
 		t.Fatalf("NewResolver: %v", err)
 	}
-	return &resolverRig{mr: mr, rdb: rdb, r: r}
+	return &resolverRig{mr: mr, rdb: rdb, r: r, now: redisEpoch}
 }
 
 func (g *resolverRig) heartbeat(id, addr string, ttl time.Duration) {
 	_ = g.mr.Set(CoreKey(id), addr)
+	expiry := g.now.Add(24 * time.Hour)
 	if ttl > 0 {
 		g.mr.SetTTL(CoreKey(id), ttl)
+		expiry = g.now.Add(ttl)
 	}
+	g.register(id, expiry)
+}
+
+func (g *resolverRig) register(id string, expiry time.Time) {
+	_, _ = g.mr.ZAdd(CoreRegistryKey, CoreExpiryScore(expiry), id)
+}
+
+func (g *resolverRig) advance(d time.Duration) {
+	g.now = g.now.Add(d)
+	g.mr.SetTime(g.now)
+	g.mr.FastForward(d)
 }
 
 func (g *resolverRig) own(slot uint16, id string) { _ = g.mr.Set(SlotKey(slot), id) }

@@ -128,6 +128,9 @@ func heartbeat(t *testing.T, mr *miniredis.Miniredis, core string) {
 	if err := mr.Set(slotmap.CoreKey(core), core+":9000"); err != nil {
 		t.Fatalf("heartbeat %s: %v", core, err)
 	}
+	if _, err := mr.ZAdd(slotmap.CoreRegistryKey, slotmap.CoreExpiryScore(redisEpoch.Add(time.Hour)), core); err != nil {
+		t.Fatalf("register %s: %v", core, err)
+	}
 }
 
 func overwriteLeases(t *testing.T, mr *miniredis.Miniredis, owner string, slots ...uint16) {

@@ -46,7 +46,7 @@ func TestResolverFallsBackToAPreferredLiveCoreWithoutALiveOwner(t *testing.T) {
 	if rt := g.routeOf(t, 7); !rt.Owner || rt.Core != "core-a" {
 		t.Fatalf("slot 7 route = %+v, want owner core-a", rt)
 	}
-	g.mr.FastForward(6 * time.Second)
+	g.advance(6 * time.Second)
 	g.refresh(t)
 	for s := range uint16(Count) {
 		if rt := g.routeOf(t, s); rt.Owner || rt.Core != "core-b" {

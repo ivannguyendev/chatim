@@ -43,7 +43,7 @@ func TestDeadCoreSlotsAreTakenOver(t *testing.T) {
 	}
 
 	for range 10 {
-		mr.FastForward(time.Second)
+		advance(t, mr, rdb, time.Second)
 		stepAll(t, a, b)
 	}
 	if mr.Exists(slotmap.CoreKey("core-c")) {
@@ -89,8 +89,8 @@ func TestReleaseAllHandsSlotsBack(t *testing.T) {
 			t.Fatalf("slot %d lease still in redis after ReleaseAll", s)
 		}
 	}
-	if mr.Exists(slotmap.CoreKey("core-a")) {
-		t.Fatal("ReleaseAll must remove the heartbeat")
+	if mr.Exists(slotmap.CoreKey("core-a")) || registered(mr, "core-a") {
+		t.Fatal("ReleaseAll must remove the heartbeat and the registry member")
 	}
 	stepAll(t, b)
 	assertPartition(t, mr, b)
@@ -129,6 +129,7 @@ func TestNewValidatesConfig(t *testing.T) {
 func newRedis(t *testing.T) (*miniredis.Miniredis, *redis.Client) {
 	t.Helper()
 	mr := miniredis.RunT(t)
+	mr.SetTime(redisEpoch)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 	return mr, rdb

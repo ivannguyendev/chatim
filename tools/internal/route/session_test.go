@@ -14,8 +14,10 @@ import (
 
 func TestOpenRoutesBySlotLeasesAndCloses(t *testing.T) {
 	mr := miniredis.RunT(t)
-	_ = mr.Set(slotmap.CoreKey("core-1"), "core-1:9000")
-	_ = mr.Set(slotmap.CoreKey("core-2"), "core-2:9000")
+	for _, id := range []string{"core-1", "core-2"} {
+		_ = mr.Set(slotmap.CoreKey(id), id+":9000")
+		_, _ = mr.ZAdd(slotmap.CoreRegistryKey, slotmap.CoreExpiryScore(time.Now().Add(time.Hour)), id)
+	}
 	const room = 42
 	_ = mr.Set(slotmap.SlotKey(slotmap.Of(room)), "core-2")
 	net := newFakeNet(map[string]*fakeCore{"core-1:9000": {}, "core-2:9000": {}})

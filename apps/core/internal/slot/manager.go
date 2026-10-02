@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"slices"
 	"strings"
@@ -115,10 +114,7 @@ func (m *Manager) Step(ctx context.Context) error {
 	stamp := m.now()
 	hookCtx, cancel := context.WithTimeout(ctx, m.cfg.HookTimeout)
 	defer cancel()
-	if err := m.rdb.Set(ctx, slotmap.CoreKey(m.cfg.CoreID), m.cfg.Addr, m.cfg.HeartbeatTTL).Err(); err != nil {
-		return fmt.Errorf("heartbeat: %w", err)
-	}
-	alive, err := m.aliveCores(ctx)
+	alive, err := m.heartbeat(ctx)
 	if err != nil {
 		return err
 	}

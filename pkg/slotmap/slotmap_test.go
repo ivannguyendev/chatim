@@ -4,6 +4,7 @@ import (
 	"math/rand/v2"
 	"slices"
 	"testing"
+	"time"
 )
 
 func TestOfSpreadsRoomsEvenly(t *testing.T) {
@@ -75,11 +76,11 @@ func TestRedisKeys(t *testing.T) {
 	if got := SlotKey(17); got != "chatim:slot:17" {
 		t.Fatalf("SlotKey(17) = %q", got)
 	}
-	id, ok := CoreIDFromKey(CoreKey("core-a"))
-	if !ok || id != "core-a" {
-		t.Fatalf("CoreIDFromKey(CoreKey) = %q, %v", id, ok)
+	if got := CoreKey("core-a"); got != "chatim:core:core-a" {
+		t.Fatalf("CoreKey(core-a) = %q", got)
 	}
-	if _, ok := CoreIDFromKey("chatim:slot:1"); ok {
-		t.Fatal("slot key must not parse as core key")
+	at := time.UnixMilli(1_700_000_005_123)
+	if got := CoreExpiryScore(at); got != 1_700_000_005_123 {
+		t.Fatalf("CoreExpiryScore = %v, want unix milliseconds", got)
 	}
 }

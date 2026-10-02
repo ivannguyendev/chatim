@@ -30,30 +30,30 @@ func (r *Resolver) load(ctx context.Context) error {
 	return nil
 }
 
+const liveCoresScript = `
+local t = redis.call('TIME')
+local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
+return redis.call('ZRANGEBYSCORE', KEYS[1], '(' .. string.format('%.0f', now), '+inf', 'LIMIT', 0, ARGV[1])`
+
 func (r *Resolver) liveCores(ctx context.Context) ([]core, error) {
-	seen := make(map[string]struct{}, 8)
-	iter := r.rdb.Scan(ctx, 0, CorePattern, 256).Iterator()
-	for len(seen) < MaxCores && iter.Next(ctx) {
-		seen[iter.Val()] = struct{}{}
+	ids, err := r.rdb.Eval(ctx, liveCoresScript, []string{CoreRegistryKey}, MaxCores).StringSlice()
+	if err != nil {
+		return nil, fmt.Errorf("read core registry: %w", err)
 	}
-	if err := iter.Err(); err != nil {
-		return nil, fmt.Errorf("scan cores: %w", err)
-	}
-	if len(seen) == 0 {
+	if len(ids) == 0 {
 		return nil, nil
 	}
-	keys := make([]string, 0, len(seen))
-	for k := range seen {
-		keys = append(keys, k)
+	slices.Sort(ids)
+	keys := make([]string, len(ids))
+	for i, id := range ids {
+		keys[i] = CoreKey(id)
 	}
-	slices.Sort(keys)
 	addrs, err := r.rdb.MGet(ctx, keys...).Result()
 	if err != nil {
 		return nil, fmt.Errorf("read core addresses: %w", err)
 	}
-	cores := make([]core, 0, len(keys))
-	for i, k := range keys {
-		id, _ := CoreIDFromKey(k)
+	cores := make([]core, 0, len(ids))
+	for i, id := range ids {
 		if addr, _ := addrs[i].(string); id != "" && addr != "" {
 			cores = append(cores, core{id: id, addr: addr})
 		}
