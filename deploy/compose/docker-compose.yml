@@ -1,5 +1,32 @@
 name: chatim
 
+x-core: &core
+  image: chatim/core:dev
+  profiles: ["app"]
+  restart: unless-stopped
+  mem_limit: 1g
+  stop_grace_period: 30s
+  depends_on:
+    mongodb-init:
+      condition: service_completed_successfully
+    redis:
+      condition: service_healthy
+    nats:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD", "/app", "probe"]
+    interval: 5s
+    timeout: 3s
+    retries: 3
+    start_period: 60s
+    start_interval: 1s
+
+x-core-env: &core-env
+  MONGO_URI: "mongodb://${MONGO_ROOT_USER:?set MONGO_ROOT_USER in .env}:${MONGO_ROOT_PASSWORD:?set MONGO_ROOT_PASSWORD in .env}@chatim-mongodb:27017/?replicaSet=rs0&authSource=admin"
+  REDIS_ADDR: chatim-redis:6379
+  NATS_URL: nats://chatim-nats:4222
+  GOMEMLIMIT: 920MiB
+
 services:
   mongodb:
     image: mongo:8.2
@@ -128,6 +155,24 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+
+  core-1:
+    <<: *core
+    container_name: chatim-core-1
+    environment:
+      <<: *core-env
+      CORE_ID: core-1
+    ports:
+      - "127.0.0.1:${CORE1_GRPC_PORT:-9001}:9000"
+
+  core-2:
+    <<: *core
+    container_name: chatim-core-2
+    environment:
+      <<: *core-env
+      CORE_ID: core-2
+    ports:
+      - "127.0.0.1:${CORE2_GRPC_PORT:-9002}:9000"
 
 networks:
   default:

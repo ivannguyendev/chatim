@@ -5,12 +5,14 @@ LINT_IMAGE ?= golangci/golangci-lint:v2.14.0
 BUF_IMAGE ?= bufbuild/buf:1.73.0
 NETWORK  ?= chatim_default
 COMPOSE  := docker compose -f deploy/compose/docker-compose.yml --env-file .env
-COMPOSE_ALL := $(COMPOSE) --profile postgres
+COMPOSE_ALL := $(COMPOSE) --profile postgres --profile app
+CORE_COMPOSE := $(COMPOSE) --profile app
+CORES    := core-1 core-2
 GO_RUN   := docker run --rm -v "$(CURDIR)":/src -w /src -v chatim-gomod:/go/pkg/mod -v chatim-gocache:/root/.cache/go-build -e GOFLAGS=-buildvcs=false
 BUF_RUN  := docker run --rm -v "$(CURDIR)":/src -w /src $(BUF_IMAGE)
 POC_RUN  := $(GO_RUN) --network $(NETWORK) -e "MONGO_URI=mongodb://$(MONGO_ROOT_USER):$(MONGO_ROOT_PASSWORD)@chatim-mongodb:27017/?replicaSet=rs0&authSource=admin" -e "PG_URI=postgres://$(PG_USER):$(PG_PASSWORD)@chatim-postgres:5432/chatim_poc"
 
-.PHONY: go check-env test itest vet fmt-check lint vuln tidy proto buf-lint poc image infra-up infra-down infra-reset pg-up pg-down
+.PHONY: go check-env test itest vet fmt-check lint vuln tidy proto buf-lint poc image infra-up infra-down infra-reset pg-up pg-down core-up core-down
 
 go:
 	$(GO_RUN) $(GO_IMAGE) go $(ARGS)
@@ -69,3 +71,11 @@ pg-up: check-env
 
 pg-down: check-env
 	$(COMPOSE_ALL) stop postgres
+
+core-up: check-env
+	$(MAKE) -s image TARGET=apps/core
+	$(CORE_COMPOSE) up -d $(CORES)
+	./scripts/wait-core-healthy.sh $(addprefix chatim-,$(CORES))
+
+core-down: check-env
+	$(CORE_COMPOSE) rm -s -f $(CORES)
