@@ -6,7 +6,7 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/backoff"
+	"github.com/ivannguyendev/chatim/pkg/backoff"
 )
 
 func TestJitterStaysWithinTheUpperHalf(t *testing.T) {

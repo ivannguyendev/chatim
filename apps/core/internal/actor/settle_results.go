@@ -7,10 +7,10 @@ import (
 	"slices"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/backoff"
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/backoff"
 )
 
 func (a *actor) settle(res []store.Result) {
