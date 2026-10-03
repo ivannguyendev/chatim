@@ -66,8 +66,16 @@ Cùng điều kiện R2 (`write -rate 10000 -duration 60s -rooms 5000 -flushers 
 | 9 | 2000/s (sau D25) | Không xoá (10749) | 2000 | 0 | 0 | 0 / 1 | 14.226624ms | 41.824847ms | 118.922064ms | 231.421387ms | 322.743537ms | 13.480464ms / 85.979191ms | 5.053541ms | không đo |
 | 10 | 5000/s (sau D25) | Không xoá (141423) | 5000 | 0 | 0 | 0 / 1 | 36.52522ms | 144.46064ms | 291.830813ms | 438.348353ms | 566.035187ms | 28.95389ms / 177.786792ms | 15.466907ms | không đo |
 | 11 | 10000/s (sau D25) | Không xoá (459137) | 9452 | 32893 (5.5%) | 0 | 3698 / 5 | 198.460026ms | 573.013277ms | 818.120106ms | 1.009077709s | 1.239543751s | 122.133479ms / 492.715092ms | 96.098976ms | không đo |
+| 12 | 5000/s (M2a.1, 2026-10-03) | Không xoá, không đếm | 4890 | 6583 (2.2%) | 0 | 338 / 3 | 70.133333ms | 600.528096ms | 1.453632333s | 2.188710997s | 2.744326407s | 52.472982ms / 752.517726ms | 82.412071ms | không đo |
 
 CPU là trung bình `docker stats` lấy mẫu mỗi 3s trong lúc chạy (100% = 1 vCPU). Ở mọi lần chạy, event live trên các room được theo dõi đều `missing=0 duplicates=0`. Ngoài bảng còn 1 lần 2K/s 20s chỉ để lấy pprof của corebench (`-cpuprofile`).
+
+Lần 12 (M2a.1: bỏ pts, bỏ watermark/active mark/sweeper, publisher theo thứ tự từng room) kém hơn lần 10 cùng mức 5K/s (p99 1.45s so với 292ms, bỏ 2.2%). Hai lần không cùng điều kiện, nên không kết luận đây là hồi quy:
+- Lần 10 chạy trước khi tách Redis dedupe và bật AUTH (D44, D45).
+- Lần 12 chạy ngay sau `make core-up` và e2e có kill core, Redis không được dọn.
+- Thay đổi của M2a.1 không nằm trên đường ack: nó bỏ một lệnh Redis trước insert và chỉ đổi phần publish sau ack.
+
+Cần đo lại cả M2a lẫn M2a.1 trong cùng điều kiện, hoặc đo prod-like, trước khi so.
 
 **Điểm gãy (knee).**
 - Thông lượng: giữ đủ tải (`shed_by_client=0 failed=0`, không lần nào phải thử lại) tới 5K/s. 7.5K/s chỉ đạt 7319/s (bỏ 2.4%); 10K/s đạt 7546–9426/s (bỏ 5.7–24.5%; lần 8 có 151 lần gửi kết thúc bằng `Unavailable`). Knee thông lượng trên dev nằm giữa 5K và 7.5K/s.
