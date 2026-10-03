@@ -159,9 +159,10 @@ services:
     profiles: ["postgres"]
     restart: unless-stopped
     shm_size: 1g
+    secrets: [pg_password]
     environment:
       POSTGRES_USER: ${PG_USER:?set PG_USER in .env}
-      POSTGRES_PASSWORD: ${PG_PASSWORD:?set PG_PASSWORD in .env}
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_password
       POSTGRES_DB: chatim_poc
     command:
       - postgres
@@ -230,6 +231,8 @@ secrets:
     environment: REDIS_PASSWORD
   redis_dedupe_password:
     environment: REDIS_DEDUPE_PASSWORD
+  pg_password:
+    environment: PG_PASSWORD
 
 networks:
   default:
