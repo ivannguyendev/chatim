@@ -22,7 +22,7 @@ func e2eCheck(ctx context.Context, args []string) error {
 	dir := fs.String("state", "/state", "directory holding the scenario state")
 	events := fs.String("events", "/state/events.jsonl", "events file written by corecli watch -out")
 	limit := fs.Int("page", 16, "history page size, at most 100")
-	wait := fs.Duration("wait", 45*time.Second, "wait this long for a live event of every acked pts")
+	wait := fs.Duration("wait", 45*time.Second, "wait this long for a live event of every acked seq")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -49,7 +49,7 @@ func e2eCheck(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "live ok: an event for each of %d pts, %d duplicate(s) dropped\n", cov.Distinct, cov.Duplicates)
+	fmt.Fprintf(os.Stderr, "live ok: an event for each of %d seq, %d duplicate(s) dropped\n", cov.Distinct, cov.Duplicates)
 	return nil
 }
 
@@ -122,7 +122,7 @@ func awaitEvents(ctx context.Context, st e2e.State, path string, wait time.Durat
 		case cov.MissingCount == 0:
 			return cov, nil
 		case time.Now().After(deadline):
-			return cov, fmt.Errorf("%d of %d pts have no live event after %v, first missing %v", cov.MissingCount, len(st.Acks), wait, cov.Missing)
+			return cov, fmt.Errorf("%d of %d seq have no live event after %v, first missing %v", cov.MissingCount, len(st.Acks), wait, cov.Missing)
 		case !backoff.Pause(ctx, eventPoll):
 			return cov, ctx.Err()
 		}

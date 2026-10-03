@@ -94,7 +94,7 @@ func (f *fakeCore) SendMessage(ctx context.Context, in *chatimv1.SendMessageRequ
 	if err := f.next(ctx); err != nil {
 		return nil, err
 	}
-	return &chatimv1.SendMessageResponse{Seq: 7, Pts: 7}, nil
+	return &chatimv1.SendMessageResponse{Seq: 7}, nil
 }
 
 func (f *fakeCore) GetHistory(ctx context.Context, _ *chatimv1.GetHistoryRequest, _ ...grpc.CallOption) (*chatimv1.GetHistoryResponse, error) {

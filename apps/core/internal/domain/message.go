@@ -10,7 +10,6 @@ type Message struct {
 	Room      uint64
 	Thread    uint64
 	Seq       uint64
-	Pts       uint64
 	Tenant    string
 	From      string
 	Kind      Kind

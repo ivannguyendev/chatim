@@ -15,8 +15,8 @@ func TestKeyNamesRoomUserAndCID(t *testing.T) {
 func TestValuesRoundTripStrictly(t *testing.T) {
 	records := []Record{
 		sampleRecord,
-		{Seq: 1, Pts: 1, CreatedAt: time.UnixMilli(0).UTC()},
-		{Seq: 18446744073709551614, Pts: 3, CreatedAt: time.UnixMilli(-5).UTC()},
+		{Seq: 1, CreatedAt: time.UnixMilli(0).UTC()},
+		{Seq: 18446744073709551614, CreatedAt: time.UnixMilli(-5).UTC()},
 	}
 	for _, r := range records {
 		v := committedValue(r)

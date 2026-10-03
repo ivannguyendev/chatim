@@ -26,7 +26,7 @@ const (
 
 const testTimeout = time.Second
 
-var sampleRecord = Record{Seq: 7, Pts: 7, CreatedAt: time.UnixMilli(1_700_000_000_123).UTC()}
+var sampleRecord = Record{Seq: 7, CreatedAt: time.UnixMilli(1_700_000_000_123).UTC()}
 
 func newRedis(t *testing.T) (*miniredis.Miniredis, *redis.Client) {
 	t.Helper()
@@ -80,7 +80,7 @@ func expectValue(t *testing.T, mr *miniredis.Miniredis, k Key, want string) {
 }
 
 func sameRecord(a, b Record) bool {
-	return a.Seq == b.Seq && a.Pts == b.Pts && a.CreatedAt.Equal(b.CreatedAt)
+	return a.Seq == b.Seq && a.CreatedAt.Equal(b.CreatedAt)
 }
 
 type roundTrips struct{ n atomic.Int64 }

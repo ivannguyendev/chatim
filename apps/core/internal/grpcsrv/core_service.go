@@ -80,7 +80,7 @@ func (s *Service) SendMessage(ctx context.Context, req *chatimv1.SendMessageRequ
 	if err != nil {
 		return nil, err
 	}
-	return &chatimv1.SendMessageResponse{Seq: ack.Seq, Pts: ack.Pts, CreatedAt: timestamppb.New(ack.CreatedAt)}, nil
+	return &chatimv1.SendMessageResponse{Seq: ack.Seq, CreatedAt: timestamppb.New(ack.CreatedAt)}, nil
 }
 
 func parseRoomID(s string) (uint64, error) {

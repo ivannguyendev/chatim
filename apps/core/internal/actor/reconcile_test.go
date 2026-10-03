@@ -92,7 +92,7 @@ func TestDuplicateFromAnotherWriterIsReassignedAfterReloadedLast(t *testing.T) {
 		rg := newRig(t, baseConfig)
 		rg.sub.then(func(msgs []domain.Message) []store.Result {
 			for seq := uint64(1); seq <= 5; seq++ {
-				rg.sub.insert([]domain.Message{{Room: roomA, Seq: seq, Pts: seq, From: "mallory", CID: "m"}})
+				rg.sub.insert([]domain.Message{{Room: roomA, Seq: seq, From: "mallory", CID: "m"}})
 			}
 			return rg.sub.insert(msgs)
 		})

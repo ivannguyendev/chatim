@@ -103,6 +103,6 @@ func (a *actor) number(entries []*entry, now time.Time) {
 			continue
 		}
 		next++
-		e.msg.Seq, e.msg.Pts, e.msg.CreatedAt = next, next, now
+		e.msg.Seq, e.msg.CreatedAt = next, now
 	}
 }

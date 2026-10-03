@@ -44,14 +44,14 @@ func insertDuplicateKeepsOriginal(t *testing.T, s store.Messages) {
 	orig := msg(roomA, mainThread, 1)
 	mustInsert(t, s, []domain.Message{orig})
 	changed := orig
-	changed.Text, changed.CID, changed.Pts = "changed", "cid-other", orig.Pts+100
+	changed.Text, changed.CID = "changed", "cid-other"
 	assertOutcomes(t, s.Insert(t.Context(), []domain.Message{changed}), []store.Outcome{store.Duplicate})
 	got, err := s.Find(t.Context(), roomA, []store.MsgKey{store.KeyOf(orig)})
 	if err != nil {
 		t.Fatalf("Find: %v", err)
 	}
 	assertMessages(t, got, []domain.Message{orig})
-	assertLast(t, s, roomA, mainThread, orig.Seq, orig.Pts)
+	assertLast(t, s, roomA, mainThread, orig.Seq)
 }
 
 func insertSameKeyTwice(t *testing.T, s store.Messages) {
@@ -69,8 +69,8 @@ func insertSameKeyTwice(t *testing.T, s store.Messages) {
 func insertRejectsZeroKey(t *testing.T, s store.Messages) {
 	batch := []domain.Message{msg(roomA, mainThread, 0), msg(0, mainThread, 1), msg(0, sideThread, 0)}
 	assertOutcomes(t, s.Insert(t.Context(), batch), []store.Outcome{store.Rejected, store.Rejected, store.Rejected})
-	assertLast(t, s, roomA, mainThread, 0, 0)
-	assertLast(t, s, 0, mainThread, 0, 0)
+	assertLast(t, s, roomA, mainThread, 0)
+	assertLast(t, s, 0, mainThread, 0)
 	got, err := s.Find(t.Context(), 0, keysOf(batch[1:]))
 	if err != nil {
 		t.Fatalf("Find: %v", err)
@@ -132,5 +132,5 @@ func insertCancelled(t *testing.T, s store.Messages) {
 		}
 		assertErrorIs(t, "Insert", r.Err, context.Canceled)
 	}
-	assertLast(t, s, roomA, mainThread, 0, 0)
+	assertLast(t, s, roomA, mainThread, 0)
 }

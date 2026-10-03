@@ -91,7 +91,7 @@ func started(t *testing.T, cfg publish.Config) *rig {
 func events(room uint64, seqs ...uint64) []*chatimv1.Event {
 	out := make([]*chatimv1.Event, len(seqs))
 	for i, s := range seqs {
-		m := domain.Message{Room: room, Seq: s, Pts: s, Tenant: tenant, From: "alice", Kind: domain.KindText, Text: "hi", CID: "c" + strconv.FormatUint(s, 10), CreatedAt: sentAt}
+		m := domain.Message{Room: room, Seq: s, Tenant: tenant, From: "alice", Kind: domain.KindText, Text: "hi", CID: "c" + strconv.FormatUint(s, 10), CreatedAt: sentAt}
 		out[i] = pbconv.MessageCreated(domain.RoomGroup, m)
 	}
 	return out

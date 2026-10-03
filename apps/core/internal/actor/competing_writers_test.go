@@ -124,8 +124,8 @@ func TestCompetingCoresKeepEveryTimelineGapless(t *testing.T) {
 	for _, room := range clusterRooms {
 		seen := map[string]bool{}
 		for i, doc := range timeline(t, cl.msgs, room) {
-			if want := uint64(i + 1); doc.Seq != want || doc.Pts != doc.Seq {
-				t.Fatalf("room %d position %d: seq %d pts %d, want seq=pts=%d", room, i, doc.Seq, doc.Pts, want)
+			if want := uint64(i + 1); doc.Seq != want {
+				t.Fatalf("room %d position %d: seq %d, want %d", room, i, doc.Seq, want)
 			}
 			if seen[doc.CID] {
 				t.Fatalf("room %d: cid %s stored twice", room, doc.CID)

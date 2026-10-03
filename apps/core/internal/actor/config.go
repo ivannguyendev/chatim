@@ -64,7 +64,7 @@ type SendCmd struct {
 }
 
 type Ack struct {
-	Seq, Pts  uint64
+	Seq       uint64
 	CreatedAt time.Time
 }
 
@@ -107,7 +107,7 @@ func (c SendCmd) validate() error {
 }
 
 func ackOf(m domain.Message) Ack {
-	return Ack{Seq: m.Seq, Pts: m.Pts, CreatedAt: m.CreatedAt}
+	return Ack{Seq: m.Seq, CreatedAt: m.CreatedAt}
 }
 
 type reply struct {

@@ -168,11 +168,11 @@ func storedCIDs(t *testing.T, m store.Messages, room uint64) map[string][]domain
 
 func assertAckMatches(t *testing.T, ack actor.Ack, doc domain.Message) {
 	t.Helper()
-	if ack.Seq != doc.Seq || ack.Pts != doc.Pts || !ack.CreatedAt.Equal(doc.CreatedAt) {
-		t.Fatalf("ack %+v does not match stored seq=%d pts=%d at=%v", ack, doc.Seq, doc.Pts, doc.CreatedAt)
+	if ack.Seq != doc.Seq || !ack.CreatedAt.Equal(doc.CreatedAt) {
+		t.Fatalf("ack %+v does not match stored seq=%d at=%v", ack, doc.Seq, doc.CreatedAt)
 	}
 }
 
 func sameAck(a, b actor.Ack) bool {
-	return a.Seq == b.Seq && a.Pts == b.Pts && a.CreatedAt.Equal(b.CreatedAt)
+	return a.Seq == b.Seq && a.CreatedAt.Equal(b.CreatedAt)
 }

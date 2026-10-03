@@ -6,13 +6,14 @@ import "chatim/v1/core.proto";
 import "google/protobuf/timestamp.proto";
 
 message Event {
+  reserved 7;
+  reserved "pts";
   string id = 1;
   string tenant = 2;
   string room_id = 3;
   RoomType room_type = 4;
   uint64 thread_root = 5;
   uint64 seq = 6;
-  uint64 pts = 7;
   string actor = 8;
   google.protobuf.Timestamp ts = 9;
   oneof payload {

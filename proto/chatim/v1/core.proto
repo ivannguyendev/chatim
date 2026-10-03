@@ -40,10 +40,11 @@ message Room {
 }
 
 message Message {
+  reserved 4;
+  reserved "pts";
   string room_id = 1;
   uint64 thread_root = 2;
   uint64 seq = 3;
-  uint64 pts = 4;
   string sender = 5;
   MessageKind kind = 6;
   string text = 7;
@@ -69,8 +70,9 @@ message SendMessageRequest {
 }
 
 message SendMessageResponse {
+  reserved 2;
+  reserved "pts";
   uint64 seq = 1;
-  uint64 pts = 2;
   google.protobuf.Timestamp created_at = 3;
 }
 

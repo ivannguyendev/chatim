@@ -22,7 +22,7 @@ func (k Key) String() string {
 }
 
 type Record struct {
-	Seq, Pts  uint64
+	Seq       uint64
 	CreatedAt time.Time
 }
 
@@ -64,7 +64,7 @@ type Verdict struct {
 func pendingValue(core string) string { return pendingPrefix + core }
 
 func committedValue(r Record) string {
-	return committedPrefix + strconv.FormatUint(r.Seq, 10) + ":" + strconv.FormatUint(r.Pts, 10) + ":" + strconv.FormatInt(r.CreatedAt.UnixMilli(), 10)
+	return committedPrefix + strconv.FormatUint(r.Seq, 10) + ":" + strconv.FormatInt(r.CreatedAt.UnixMilli(), 10)
 }
 
 func parseValue(v, self string) (Verdict, bool) {
@@ -87,16 +87,15 @@ func parseValue(v, self string) (Verdict, bool) {
 
 func parseCommitted(v string) (Record, bool) {
 	fields := strings.Split(v, ":")
-	if len(fields) != 4 || fields[0]+":" != committedPrefix {
+	if len(fields) != 3 || fields[0]+":" != committedPrefix {
 		return Record{}, false
 	}
 	seq, errSeq := strconv.ParseUint(fields[1], 10, 64)
-	pts, errPts := strconv.ParseUint(fields[2], 10, 64)
-	ms, errMs := strconv.ParseInt(fields[3], 10, 64)
-	if errSeq != nil || errPts != nil || errMs != nil || seq == 0 || pts == 0 {
+	ms, errMs := strconv.ParseInt(fields[2], 10, 64)
+	if errSeq != nil || errMs != nil || seq == 0 {
 		return Record{}, false
 	}
-	r := Record{Seq: seq, Pts: pts, CreatedAt: time.UnixMilli(ms).UTC()}
+	r := Record{Seq: seq, CreatedAt: time.UnixMilli(ms).UTC()}
 	if committedValue(r) != v {
 		return Record{}, false
 	}

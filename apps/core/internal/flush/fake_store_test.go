@@ -106,7 +106,7 @@ func newRecorder() *recorder {
 func (r *recorder) group(id string, room uint64, seqs ...uint64) flush.Group {
 	msgs := make([]domain.Message, len(seqs))
 	for i, seq := range seqs {
-		msgs[i] = domain.Message{Room: room, Seq: seq, Pts: seq, CID: id}
+		msgs[i] = domain.Message{Room: room, Seq: seq, CID: id}
 	}
 	return flush.Group{Room: room, Msgs: msgs, Done: func(res []store.Result) {
 		r.mu.Lock()

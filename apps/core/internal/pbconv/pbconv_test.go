@@ -16,7 +16,7 @@ import (
 var sentAt = time.UnixMilli(1_700_000_000_123).UTC()
 
 func sample() domain.Message {
-	return domain.Message{Room: 9_007_199_254_740_993, Seq: 7, Pts: 7, Tenant: "acme", From: "alice", Kind: domain.KindText, Text: "xin chào", CID: "c-1", CreatedAt: sentAt}
+	return domain.Message{Room: 9_007_199_254_740_993, Seq: 7, Tenant: "acme", From: "alice", Kind: domain.KindText, Text: "xin chào", CID: "c-1", CreatedAt: sentAt}
 }
 
 func TestIdentifiersAreDecimal(t *testing.T) {
@@ -69,7 +69,7 @@ func TestEnumsMapKnownValuesAndDefaultToUnspecified(t *testing.T) {
 
 func TestMessageCopiesEveryField(t *testing.T) {
 	want := &chatimv1.Message{
-		RoomId: "9007199254740993", Seq: 7, Pts: 7, Sender: "alice", Kind: chatimv1.MessageKind_MESSAGE_KIND_TEXT,
+		RoomId: "9007199254740993", Seq: 7, Sender: "alice", Kind: chatimv1.MessageKind_MESSAGE_KIND_TEXT,
 		Text: "xin chào", Cid: "c-1", CreatedAt: timestamppb.New(sentAt),
 	}
 	if got := pbconv.Message(sample()); !proto.Equal(got, want) {
@@ -81,7 +81,7 @@ func TestMessageCreatedEnvelope(t *testing.T) {
 	m := sample()
 	want := &chatimv1.Event{
 		Id: "9007199254740993-0-7", Tenant: "acme", RoomId: "9007199254740993", RoomType: chatimv1.RoomType_ROOM_TYPE_GROUP,
-		Seq: 7, Pts: 7, Actor: "alice", Ts: timestamppb.New(sentAt),
+		Seq: 7, Actor: "alice", Ts: timestamppb.New(sentAt),
 		Payload: &chatimv1.Event_MessageCreated{MessageCreated: &chatimv1.MessageCreated{Message: pbconv.Message(m)}},
 	}
 	got := pbconv.MessageCreated(domain.RoomGroup, m)

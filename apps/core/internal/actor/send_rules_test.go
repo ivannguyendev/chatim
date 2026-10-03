@@ -157,8 +157,8 @@ func TestAckCarriesStoredMillisecondUTCTimestamp(t *testing.T) {
 		time.Sleep(1234567 * time.Nanosecond)
 		want := time.Now().UTC().Truncate(time.Millisecond)
 		ack := mustSend(t, rg.Router, cmd(roomA, "alice", "c1"))
-		if ack.Seq != 1 || ack.Pts != 1 {
-			t.Fatalf("ack = %+v, want seq 1 pts 1", ack)
+		if ack.Seq != 1 {
+			t.Fatalf("ack = %+v, want seq 1", ack)
 		}
 		if !ack.CreatedAt.Equal(want) || ack.CreatedAt.Location() != time.UTC {
 			t.Fatalf("CreatedAt = %v, want %v (UTC, truncated to milliseconds)", ack.CreatedAt, want)

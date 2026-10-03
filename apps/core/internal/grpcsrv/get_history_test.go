@@ -16,11 +16,11 @@ func TestHistoryPagesThroughWhatWasSent(t *testing.T) {
 	sent := make([]*chatimv1.Message, len(sends))
 	for i, s := range sends {
 		ack := rg.send(t, as(t, "acme", s.user), room, s.cid, s.text)
-		if ack.GetSeq() != uint64(i+1) || ack.GetPts() != uint64(i+1) {
-			t.Fatalf("send %d acked seq %d pts %d, want %d", i, ack.GetSeq(), ack.GetPts(), i+1)
+		if ack.GetSeq() != uint64(i+1) {
+			t.Fatalf("send %d acked seq %d, want %d", i, ack.GetSeq(), i+1)
 		}
 		sent[i] = &chatimv1.Message{
-			RoomId: room, Seq: ack.GetSeq(), Pts: ack.GetPts(), Sender: s.user, Kind: chatimv1.MessageKind_MESSAGE_KIND_TEXT,
+			RoomId: room, Seq: ack.GetSeq(), Sender: s.user, Kind: chatimv1.MessageKind_MESSAGE_KIND_TEXT,
 			Text: s.text, Cid: s.cid, CreatedAt: ack.GetCreatedAt(),
 		}
 	}

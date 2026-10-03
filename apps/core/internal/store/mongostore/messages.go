@@ -79,16 +79,16 @@ func fill(out []store.Result, at []int, r store.Result) {
 	}
 }
 
-func (s *Store) Last(ctx context.Context, room, thread uint64) (seq, pts uint64, err error) {
+func (s *Store) Last(ctx context.Context, room, thread uint64) (uint64, error) {
 	q := pageRange(store.PageQuery{Room: room, Thread: thread, Anchor: store.Latest, Limit: 1})
 	msgs, err := find(ctx, s.messages, q)
 	if err != nil {
-		return 0, 0, fmt.Errorf("last message of %d/%d: %w", room, thread, err)
+		return 0, fmt.Errorf("last message of %d/%d: %w", room, thread, err)
 	}
 	if len(msgs) == 0 {
-		return 0, 0, nil
+		return 0, nil
 	}
-	return msgs[0].Seq, msgs[0].Pts, nil
+	return msgs[0].Seq, nil
 }
 
 func (s *Store) Find(ctx context.Context, room uint64, ks []store.MsgKey) ([]domain.Message, error) {

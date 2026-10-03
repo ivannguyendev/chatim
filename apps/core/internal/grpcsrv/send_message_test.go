@@ -20,10 +20,10 @@ import (
 
 func TestSendMessageHandsTheCallerAndRequestToTheSender(t *testing.T) {
 	at := time.UnixMilli(1_700_000_000_123).UTC()
-	sender := &fakeSender{ack: actor.Ack{Seq: 7, Pts: 9, CreatedAt: at}}
+	sender := &fakeSender{ack: actor.Ack{Seq: 7, CreatedAt: at}}
 	rg := newRig(t, options{sender: sender})
 	resp := rg.send(t, as(t, "acme", "alice"), "9007199254740993", "c-1", "xin chào")
-	want := &chatimv1.SendMessageResponse{Seq: 7, Pts: 9, CreatedAt: timestamppb.New(at)}
+	want := &chatimv1.SendMessageResponse{Seq: 7, CreatedAt: timestamppb.New(at)}
 	if !proto.Equal(resp, want) {
 		t.Fatalf("response = %v, want %v", resp, want)
 	}
@@ -115,7 +115,7 @@ func TestSendMessageRequiresMembership(t *testing.T) {
 	_, err := rg.client.SendMessage(as(t, "acme", "mallory"), &chatimv1.SendMessageRequest{RoomId: room, Cid: "c-1", Text: "hi"})
 	expectCode(t, err, codes.PermissionDenied)
 	resp := rg.send(t, as(t, "acme", "bob"), room, "c-1", "hi")
-	if resp.GetSeq() != 1 || resp.GetPts() != 1 || resp.GetCreatedAt() == nil {
-		t.Fatalf("member send = %v, want seq 1 pts 1 with a timestamp", resp)
+	if resp.GetSeq() != 1 || resp.GetCreatedAt() == nil {
+		t.Fatalf("member send = %v, want seq 1 with a timestamp", resp)
 	}
 }

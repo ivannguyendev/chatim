@@ -28,7 +28,6 @@ func msg(room, thread, seq uint64) domain.Message {
 		Room:      room,
 		Thread:    thread,
 		Seq:       seq,
-		Pts:       5000 + seq*3 + thread,
 		Tenant:    tenant,
 		From:      "alice",
 		Kind:      domain.KindText,

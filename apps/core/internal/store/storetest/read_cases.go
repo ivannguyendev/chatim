@@ -12,7 +12,7 @@ import (
 func lastCases() []messagesCase {
 	return []messagesCase{
 		{"empty timeline is zero", lastEmpty},
-		{"highest seq and its pts per timeline", lastHighest},
+		{"highest seq per timeline", lastHighest},
 		{"cancelled context", lastCancelled},
 	}
 }
@@ -26,19 +26,19 @@ func findCases() []messagesCase {
 	}
 }
 
-func assertLast(t *testing.T, s store.Messages, room, thread, wantSeq, wantPts uint64) {
+func assertLast(t *testing.T, s store.Messages, room, thread, wantSeq uint64) {
 	t.Helper()
-	seq, pts, err := s.Last(t.Context(), room, thread)
-	if err != nil || seq != wantSeq || pts != wantPts {
-		t.Fatalf("Last(%d, %d) = %d, %d, %v; want %d, %d, nil", room, thread, seq, pts, err, wantSeq, wantPts)
+	seq, err := s.Last(t.Context(), room, thread)
+	if err != nil || seq != wantSeq {
+		t.Fatalf("Last(%d, %d) = %d, %v; want %d, nil", room, thread, seq, err, wantSeq)
 	}
 }
 
 func lastEmpty(t *testing.T, s store.Messages) {
-	assertLast(t, s, roomA, mainThread, 0, 0)
+	assertLast(t, s, roomA, mainThread, 0)
 	mustInsert(t, s, span(roomA, sideThread, 1, 3))
 	mustInsert(t, s, span(roomB, mainThread, 1, 3))
-	assertLast(t, s, roomA, mainThread, 0, 0)
+	assertLast(t, s, roomA, mainThread, 0)
 }
 
 func lastHighest(t *testing.T, s store.Messages) {
@@ -50,14 +50,14 @@ func lastHighest(t *testing.T, s store.Messages) {
 		msg(roomA, sideThread, 9),
 		msg(roomB, mainThread, 20),
 	})
-	assertLast(t, s, roomA, mainThread, 5, msg(roomA, mainThread, 5).Pts)
-	assertLast(t, s, roomA, sideThread, 9, msg(roomA, sideThread, 9).Pts)
-	assertLast(t, s, roomB, mainThread, 20, msg(roomB, mainThread, 20).Pts)
+	assertLast(t, s, roomA, mainThread, 5)
+	assertLast(t, s, roomA, sideThread, 9)
+	assertLast(t, s, roomB, mainThread, 20)
 }
 
 func lastCancelled(t *testing.T, s store.Messages) {
 	mustInsert(t, s, span(roomA, mainThread, 1, 3))
-	_, _, err := s.Last(cancelledContext(t), roomA, mainThread)
+	_, err := s.Last(cancelledContext(t), roomA, mainThread)
 	assertErrorIs(t, "Last", err, context.Canceled)
 }
 

@@ -14,7 +14,7 @@ func acks(n int) []e2e.Ack {
 	out := make([]e2e.Ack, n)
 	for i := range out {
 		seq := uint64(i + 1)
-		out[i] = e2e.Ack{CID: "a-" + string(rune('a'+i)), Seq: seq, Pts: seq}
+		out[i] = e2e.Ack{CID: "a-" + string(rune('a'+i)), Seq: seq}
 	}
 	return out
 }
@@ -22,7 +22,7 @@ func acks(n int) []e2e.Ack {
 func messagesOf(as []e2e.Ack) []*chatimv1.Message {
 	out := make([]*chatimv1.Message, len(as))
 	for i, a := range as {
-		out[i] = &chatimv1.Message{RoomId: room, Seq: a.Seq, Pts: a.Pts, Cid: a.CID, Sender: sender, Text: e2e.TextFor(a.CID)}
+		out[i] = &chatimv1.Message{RoomId: room, Seq: a.Seq, Cid: a.CID, Sender: sender, Text: e2e.TextFor(a.CID)}
 	}
 	return out
 }
@@ -34,16 +34,13 @@ func expectErr(t *testing.T, err error, part string) {
 	}
 }
 
-func TestCheckAcksWantsContiguousSeqAndPtsWithDistinctCIDs(t *testing.T) {
+func TestCheckAcksWantsContiguousSeqWithDistinctCIDs(t *testing.T) {
 	if err := e2e.CheckAcks(acks(5)); err != nil {
 		t.Fatalf("CheckAcks(valid) = %v", err)
 	}
 	gap := acks(5)
 	gap[3].Seq = 9
 	expectErr(t, e2e.CheckAcks(gap), "seq")
-	pts := acks(5)
-	pts[2].Pts = 2
-	expectErr(t, e2e.CheckAcks(pts), "pts")
 	dup := acks(5)
 	dup[4].CID = dup[0].CID
 	expectErr(t, e2e.CheckAcks(dup), "cid")
@@ -63,7 +60,6 @@ func TestCheckPageWantsExactlyTheAckedMessagesInSeqOrder(t *testing.T) {
 		"text":   func(m *chatimv1.Message) { m.Text = "other" },
 		"sender": func(m *chatimv1.Message) { m.Sender = "bob" },
 		"room":   func(m *chatimv1.Message) { m.RoomId = "7" },
-		"pts":    func(m *chatimv1.Message) { m.Pts = 99 },
 		"thread": func(m *chatimv1.Message) { m.ThreadRoot = 1 },
 	}
 	for field, spoil := range cases {
@@ -73,11 +69,11 @@ func TestCheckPageWantsExactlyTheAckedMessagesInSeqOrder(t *testing.T) {
 	}
 }
 
-func TestCheckEventsDedupesByPtsAndReportsWhatIsMissing(t *testing.T) {
+func TestCheckEventsDedupesBySeqAndReportsWhatIsMissing(t *testing.T) {
 	want := acks(5)
 	var events []e2e.Event
 	for _, a := range want[:4] {
-		events = append(events, e2e.Event{Room: room, Pts: a.Pts, Seq: a.Seq, CID: a.CID})
+		events = append(events, e2e.Event{Room: room, ID: e2e.MessageEventID(room, a.Seq), Seq: a.Seq, CID: a.CID})
 	}
 	events = append(events, events[1], events[1])
 	cov, err := e2e.CheckEvents(want, room, events)
@@ -85,18 +81,18 @@ func TestCheckEventsDedupesByPtsAndReportsWhatIsMissing(t *testing.T) {
 		t.Fatalf("CheckEvents = %v", err)
 	}
 	if cov.Distinct != 4 || cov.Duplicates != 2 || len(cov.Missing) != 1 || cov.Missing[0] != 5 {
-		t.Fatalf("coverage = %+v, want 4 distinct, 2 duplicates, pts 5 missing", cov)
+		t.Fatalf("coverage = %+v, want 4 distinct, 2 duplicates, seq 5 missing", cov)
 	}
-	events = append(events, e2e.Event{Room: room, Pts: 5, Seq: 5, CID: want[4].CID})
+	events = append(events, e2e.Event{Room: room, ID: e2e.MessageEventID(room, 5), Seq: 5, CID: want[4].CID})
 	if cov, err := e2e.CheckEvents(want, room, events); err != nil || len(cov.Missing) != 0 {
 		t.Fatalf("CheckEvents complete = %+v, %v", cov, err)
 	}
 
 	bad := map[string]e2e.Event{
-		"unexpected pts": {Room: room, Pts: 6, Seq: 6, CID: "x"},
-		"other room":     {Room: "7", Pts: 1, Seq: 1, CID: want[0].CID},
-		"cid":            {Room: room, Pts: 2, Seq: 2, CID: "x"},
-		"seq":            {Room: room, Pts: 3, Seq: 4, CID: want[2].CID},
+		"unexpected seq": {Room: room, ID: e2e.MessageEventID(room, 6), Seq: 6, CID: "x"},
+		"other room":     {Room: "7", ID: e2e.MessageEventID("7", 1), Seq: 1, CID: want[0].CID},
+		"cid":            {Room: room, ID: e2e.MessageEventID(room, 2), Seq: 2, CID: "x"},
+		"id":             {Room: room, ID: room + "-3", Seq: 3, CID: want[2].CID},
 	}
 	for part, ev := range bad {
 		_, err := e2e.CheckEvents(want, room, append([]e2e.Event{ev}, events...))
@@ -107,6 +103,6 @@ func TestCheckEventsDedupesByPtsAndReportsWhatIsMissing(t *testing.T) {
 func TestMissingListIsBounded(t *testing.T) {
 	cov, err := e2e.CheckEvents(acks(26), room, nil)
 	if err != nil || cov.MissingCount != 26 || len(cov.Missing) > 10 || cov.Missing[0] != 1 {
-		t.Fatalf("coverage = %+v, %v; want 26 missing, at most 10 listed from pts 1", cov, err)
+		t.Fatalf("coverage = %+v, %v; want 26 missing, at most 10 listed from seq 1", cov, err)
 	}
 }

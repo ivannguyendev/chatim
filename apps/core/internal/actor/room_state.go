@@ -32,7 +32,7 @@ func (a *actor) refresh(ctx context.Context) error {
 	if !a.stale && !a.dirty {
 		return nil
 	}
-	seq, _, err := a.r.msgs.Last(ctx, a.id, 0)
+	seq, err := a.r.msgs.Last(ctx, a.id, 0)
 	if err != nil {
 		return fmt.Errorf("reload last seq: %w", err)
 	}
