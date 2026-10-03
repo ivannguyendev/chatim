@@ -54,7 +54,8 @@ scripts/wait-core-healthy.sh,script,Bounded wait until a core container is healt
 scripts/wait-mongo-primary.sh,script,Bounded wait until rs0 has a writable primary; authenticates inside mongosh --eval from /run/secrets/mongo_password (no password in argv),,make infra-up,,
 scripts/wait-postgres.sh,script,Bounded wait until postgres accepts connections,,make pg-up,,
 docs/designs/260930-chat-core-gateway-design.md,doc,Source of truth: data model; write/read paths; publish and recovery; failure table; Decision Log D1-D46,,everyone,,D1-D46
-docs/roadmap.md,doc,Milestone status and carried-over items (M2a done; M2b next),,everyone,,
+docs/roadmap.md,doc,Milestone status; readiness levels; carried-over items (M2a done; M2b next),,everyone,,
+docs/git-workflow.md,doc,Git workflow: feat/fix branches to main by PR; merge Definition of Done; readiness levels; SemVer release tags; broken main and prod hotfix handling,,everyone,,
 docs/poc/README.md,doc,PoC criteria and results R1-R5 and corebench C1 with machine caveats,,everyone,,
 docs/poc/260930-mongodb-vs-postgresql.md,doc,MongoDB vs PostgreSQL comparison with optimized configs,,everyone,,D9
 docs/research/260930-opensource-chat-architecture-research.md,doc,Research on tinode/chatto/teamgram/gws architectures,,everyone,,

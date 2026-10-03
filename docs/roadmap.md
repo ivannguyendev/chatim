@@ -1,6 +1,6 @@
 # Roadmap — chatim
 
-> Cập nhật: 2026-10-01. Thiết kế: [designs/260930-chat-core-gateway-design.md](designs/260930-chat-core-gateway-design.md) · Plan M0–M1: [plans/2026-09-30-phase1-foundation-and-poc.md](plans/2026-09-30-phase1-foundation-and-poc.md) · Kết quả PoC: [poc/README.md](poc/README.md), [poc/260930-mongodb-vs-postgresql.md](poc/260930-mongodb-vs-postgresql.md)
+> Cập nhật: 2026-10-03. Thiết kế: [designs/260930-chat-core-gateway-design.md](designs/260930-chat-core-gateway-design.md) · Plan M0–M1: [plans/2026-09-30-phase1-foundation-and-poc.md](plans/2026-09-30-phase1-foundation-and-poc.md) · Kết quả PoC: [poc/README.md](poc/README.md), [poc/260930-mongodb-vs-postgresql.md](poc/260930-mongodb-vs-postgresql.md)
 
 | Phase | Milestone | Nội dung | Trạng thái |
 |---|---|---|---|
@@ -18,6 +18,10 @@
 | 2 | App `events` | gRPC stream cho app ngoài, cô lập tenant | Sau Phase 1 |
 | 2 | App `push` | Thông báo đẩy cho user offline | Sau Phase 1 |
 | 2 | App `migrator` | Dual-write / import từ MongoDB cũ | Sau Phase 1 |
+
+## Mức sẵn sàng
+
+Theo [git-workflow.md](git-workflow.md#mức-sẵn-sàng): `dev-done` → `prod-like validated` → `go-live`. M0, M1, M2a: `dev-done` (đã merge vào `main` qua PR #2, #5). Chưa milestone nào `prod-like validated`; chưa có tag release.
 
 ## M2a — tóm tắt
 
