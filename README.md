@@ -2,7 +2,7 @@
 
 Hạ tầng chat dùng chung (CPaaS nội bộ) cho nhiều sản phẩm: quản lý room, tin nhắn, tương tác realtime hiệu năng cao; lấy lịch sử cực nhanh ở bất kỳ vị trí nào; phát event mạnh tới các app khác kết nối vào. Multi-tenant về mặt logic.
 
-> Trạng thái: **M0–M1 (nền tảng + PoC) đã xong trên máy dev**; đang chờ chạy PoC trên môi trường prod-like trước khi làm M2 (core). Kết quả: [docs/poc/README.md](docs/poc/README.md).
+> Trạng thái: **M0–M1 (nền tảng + PoC) và M2a (core: CreateRoom/SendMessage/GetHistory qua gRPC, chống trùng cid, publish JetStream, khôi phục khi core chết, 2 core trong compose) đã xong trên máy dev**. Tiếp theo là M2b; quyết định go/no-go chờ PoC prod-like. Kết quả đo: [docs/poc/README.md](docs/poc/README.md). Bản đồ code: [INDEXES.csv](INDEXES.csv).
 
 ## Kiến trúc
 
@@ -19,11 +19,11 @@ Hạ tầng: MongoDB (replica set), Redis, NATS JetStream.
 ## Cấu trúc
 
 ```
-apps/{core,gateway}/     # mỗi app: main.go + internal/ (hiện có apps/core/internal/slot)
-pkg/                     # thư viện dùng chung (hiện có keys, ids, slotmap; M2 thêm pb, mongox, redisx, natsx, config, logx, telemetry)
-proto/chatim/v1/         # định nghĩa protobuf (buf), từ M2
-tools/poc/               # công cụ đo PoC: mongobench, natsbench, wsbench
-scripts/                 # script hỗ trợ (wait-mongo-primary.sh)
+apps/core/               # main.go + internal/{actor,flush,dedupe,publish,recovery,slot,grpcsrv,store,config,domain,…}
+pkg/                     # dùng chung: keys, ids, slotmap, apperr, envconfig, resilience, admin, grpcserver, grpcclient, backoff, pb
+proto/chatim/v1/         # định nghĩa protobuf (buf) → pkg/pb
+tools/                   # corecli, internal/route; poc/: corebench, mongobench, postgresbench, natsbench, wsbench
+scripts/                 # e2e.sh và các script chờ hạ tầng sẵn sàng
 deploy/docker/           # 1 Dockerfile, chọn chương trình bằng ARG TARGET
 deploy/compose/          # hạ tầng dev
 docs/                    # nghiên cứu, thiết kế, plan, kết quả PoC
