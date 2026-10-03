@@ -19,11 +19,12 @@ import (
 const slotRedisPool = 4
 
 type clients struct {
-	mongo *mongo.Client
-	redis *redis.Client
-	slots *redis.Client
-	nats  *nats.Conn
-	js    jetstream.JetStream
+	mongo  *mongo.Client
+	redis  *redis.Client
+	slots  *redis.Client
+	dedupe *redis.Client
+	nats   *nats.Conn
+	js     jetstream.JetStream
 }
 
 func connect(ctx context.Context, cfg config.Config, log *slog.Logger) (*clients, error) {
@@ -61,20 +62,27 @@ func (c *clients) connectMongo(ctx context.Context, cfg config.Config) error {
 }
 
 func (c *clients) connectRedis(ctx context.Context, cfg config.Config) error {
-	c.redis = redis.NewClient(redisOptions(cfg, "chatim-core-"+cfg.CoreID, 0))
-	c.slots = redis.NewClient(redisOptions(cfg, "chatim-core-slots-"+cfg.CoreID, slotRedisPool))
-	for _, rdb := range []*redis.Client{c.redis, c.slots} {
-		if err := rdb.Ping(ctx).Err(); err != nil {
-			return fmt.Errorf("redis ping %s/%d: %w", cfg.RedisAddr, cfg.RedisDB, err)
+	c.redis = redis.NewClient(redisOptions(cfg.RedisAddr, cfg.RedisDB, cfg.RedisPassword, "chatim-core-"+cfg.CoreID, 0))
+	c.slots = redis.NewClient(redisOptions(cfg.RedisAddr, cfg.RedisDB, cfg.RedisPassword, "chatim-core-slots-"+cfg.CoreID, slotRedisPool))
+	c.dedupe = redis.NewClient(redisOptions(cfg.RedisDedupeAddr, cfg.RedisDedupeDB, cfg.RedisDedupePassword, "chatim-core-dedupe-"+cfg.CoreID, 0))
+	pings := []struct {
+		instance string
+		rdb      *redis.Client
+	}{{"state", c.redis}, {"state", c.slots}, {"dedupe", c.dedupe}}
+	for _, p := range pings {
+		if err := p.rdb.Ping(ctx).Err(); err != nil {
+			opts := p.rdb.Options()
+			return fmt.Errorf("redis %s ping %s/%d: %w", p.instance, opts.Addr, opts.DB, err)
 		}
 	}
 	return nil
 }
 
-func redisOptions(cfg config.Config, name string, pool int) *redis.Options {
+func redisOptions(addr string, db int, password, name string, pool int) *redis.Options {
 	return &redis.Options{
-		Addr:                  cfg.RedisAddr,
-		DB:                    cfg.RedisDB,
+		Addr:                  addr,
+		DB:                    db,
+		Password:              password,
 		ClientName:            name,
 		PoolSize:              pool,
 		ContextTimeoutEnabled: true,
@@ -119,7 +127,7 @@ func (c *clients) close(ctx context.Context, log *slog.Logger) {
 	if c.nats != nil {
 		c.nats.Close()
 	}
-	for _, rdb := range []*redis.Client{c.redis, c.slots} {
+	for _, rdb := range []*redis.Client{c.redis, c.slots, c.dedupe} {
 		if rdb != nil {
 			errs = append(errs, rdb.Close())
 		}

@@ -58,7 +58,7 @@ func prepare(ctx context.Context, cfg config.Config, cl *clients) error {
 func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 	st := mongostore.New(cl.mongo.Database(cfg.MongoDB), mongostore.Options{})
 	a := &app{cfg: cfg, log: log}
-	cids, err := dedupe.New(cl.redis, cfg.Dedupe, log)
+	cids, err := dedupe.New(cl.dedupe, cfg.Dedupe, log)
 	if err != nil {
 		return nil, fmt.Errorf("wire cid dedupe: %w", err)
 	}

@@ -26,6 +26,7 @@ func TestLoadJoinsAllParseErrors(t *testing.T) {
 func TestLoadRejectsNonPositiveValues(t *testing.T) {
 	tests := []struct{ key, value string }{
 		{"REDIS_DB", "-1"},
+		{"REDIS_DEDUPE_DB", "-1"},
 		{"CORE_MAX_INFLIGHT", "0"},
 		{"CORE_REQUEST_DEADLINE", "0s"},
 		{"CORE_SLOW_RPC", "0s"},

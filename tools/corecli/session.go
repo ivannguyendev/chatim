@@ -17,6 +17,7 @@ import (
 type options struct {
 	redis    string
 	redisDB  int
+	redisPW  string
 	tenant   string
 	user     string
 	deadline time.Duration
@@ -27,6 +28,7 @@ func addOptions(fs *flag.FlagSet) *options {
 	o := &options{}
 	fs.StringVar(&o.redis, "redis", cmp.Or(os.Getenv("REDIS_ADDR"), "chatim-redis:6379"), "Redis holding slot leases (env REDIS_ADDR)")
 	fs.IntVar(&o.redisDB, "redis-db", 0, "Redis database index of the cores")
+	fs.StringVar(&o.redisPW, "redis-password", "", "password of that Redis; env REDIS_PASSWORD when empty")
 	fs.StringVar(&o.tenant, "tenant", "e2e", "caller tenant sent as x-chatim-tenant")
 	fs.StringVar(&o.user, "user", "e2e-user", "caller user sent as x-chatim-user")
 	fs.DurationVar(&o.deadline, "deadline", time.Minute, "give up one call after this long, retries included")
@@ -41,11 +43,12 @@ type session struct {
 
 func withSession(ctx context.Context, o *options, run func(ctx context.Context, s *session) error) error {
 	rs, err := route.Open(ctx, route.SessionConfig{
-		RedisAddr:  o.redis,
-		RedisDB:    o.redisDB,
-		ClientName: "chatim-corecli",
-		Policy:     route.Policy{Deadline: o.deadline, Attempt: o.attempt},
-		Log:        slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn})),
+		RedisAddr:     o.redis,
+		RedisDB:       o.redisDB,
+		RedisPassword: cmp.Or(o.redisPW, os.Getenv("REDIS_PASSWORD")),
+		ClientName:    "chatim-corecli",
+		Policy:        route.Policy{Deadline: o.deadline, Attempt: o.attempt},
+		Log:           slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn})),
 	})
 	if err != nil {
 		return err

@@ -61,6 +61,9 @@ linters:
       - path: ^pkg/backoff/backoff\.go$
         linters: [gosec]
         text: G404
+      - path: ^apps/core/internal/config/parse\.go$
+        linters: [gosec]
+        text: G703
 
 formatters:
   enable: [gofmt, goimports]

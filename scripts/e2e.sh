@@ -14,7 +14,7 @@ result=FAIL
 step="start"
 
 cli() {
-  docker run --rm --network "$network" --user "$(id -u):$(id -g)" -v "$state":/state "$image" "$@"
+  docker run --rm --network "$network" --user "$(id -u):$(id -g)" -e REDIS_PASSWORD -v "$state":/state "$image" "$@"
 }
 
 restore() {
@@ -60,7 +60,7 @@ fi
 echo "phase 1: room $room, slot owned by $owner"
 
 step="start the live watcher"
-docker run -d --name "$watcher" --network "$network" --user "$(id -u):$(id -g)" -v "$state":/state "$image" \
+docker run -d --name "$watcher" --network "$network" --user "$(id -u):$(id -g)" -e REDIS_PASSWORD -v "$state":/state "$image" \
   watch -room "$room" -out /state/events.jsonl >/dev/null
 for _ in $(seq 1 30); do
   if docker logs "$watcher" 2>&1 | grep '^watching ' >/dev/null; then

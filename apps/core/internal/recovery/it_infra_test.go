@@ -25,6 +25,7 @@ import (
 const (
 	itMongoURIEnv  = "CHATIM_IT_MONGO_URI"
 	itRedisAddrEnv = "CHATIM_IT_REDIS_ADDR"
+	itRedisPWEnv   = "CHATIM_IT_REDIS_PASSWORD"
 	itNATSURLEnv   = "CHATIM_IT_NATS_URL"
 	itRedisDB      = 13
 )
@@ -45,7 +46,7 @@ func realInfra(t *testing.T) *itInfra {
 	var b [6]byte
 	_, _ = rand.Read(b[:])
 	suffix := hex.EncodeToString(b[:])
-	it := &itInfra{store: itStore(t, mongoURI, suffix), rdb: itRedis(t, redisAddr)}
+	it := &itInfra{store: itStore(t, mongoURI, suffix), rdb: itRedis(t, redisAddr, os.Getenv(itRedisPWEnv))}
 	it.openStream(t, natsURL, suffix)
 	return it
 }
@@ -74,9 +75,9 @@ func itStore(t *testing.T, uri, suffix string) *mongostore.Store {
 	return mongostore.New(db, mongostore.Options{})
 }
 
-func itRedis(t *testing.T, addr string) *redis.Client {
+func itRedis(t *testing.T, addr, password string) *redis.Client {
 	t.Helper()
-	rdb := redis.NewClient(&redis.Options{Addr: addr, DB: itRedisDB, ContextTimeoutEnabled: true})
+	rdb := redis.NewClient(&redis.Options{Addr: addr, DB: itRedisDB, Password: password, ContextTimeoutEnabled: true})
 	t.Cleanup(func() { _ = rdb.Close() })
 	if err := rdb.Ping(t.Context()).Err(); err != nil {
 		t.Fatalf("redis ping %s: %v", addr, err)

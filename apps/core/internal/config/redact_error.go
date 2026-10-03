@@ -41,6 +41,21 @@ func RedactText(text string, rawURLs ...string) string {
 	return text
 }
 
+func (c Config) Secrets() []string {
+	out := slices.DeleteFunc([]string{c.RedisPassword, c.RedisDedupePassword}, func(s string) bool { return s == "" })
+	slices.SortStableFunc(out, func(a, b string) int { return cmp.Compare(len(b), len(a)) })
+	return out
+}
+
+func RedactSecrets(text string, secrets ...string) string {
+	for _, s := range secrets {
+		if s != "" {
+			text = strings.ReplaceAll(text, s, redacted)
+		}
+	}
+	return text
+}
+
 func urlSecrets(rawURL string) []string {
 	var out []string
 	for piece := range strings.SplitSeq(rawURL, ",") {

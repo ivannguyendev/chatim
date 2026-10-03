@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -14,13 +15,15 @@ import (
 )
 
 var leakyConfig = config.Config{
-	CoreID:         "core-redact",
-	ConnectTimeout: time.Second,
-	MongoURI:       "mongodb://chatim:pw1secret@m1:27017,m2:27017/?replicaSet=rs0&authMechanismProperties=AWS_SESSION_TOKEN:t0k3nsecret",
-	NATSURL:        "nats://core:pw2secret@n1:4222",
+	CoreID:              "core-redact",
+	ConnectTimeout:      time.Second,
+	MongoURI:            "mongodb://chatim:pw1secret@m1:27017,m2:27017/?replicaSet=rs0&authMechanismProperties=AWS_SESSION_TOKEN:t0k3nsecret",
+	NATSURL:             "nats://core:pw2secret@n1:4222",
+	RedisPassword:       "st4t3pwsecret",
+	RedisDedupePassword: "d3dup3pwsecret",
 }
 
-var leakySecrets = []string{"pw1secret", "pw2secret", "t0k3nsecret"}
+var leakySecrets = []string{"pw1secret", "pw2secret", "t0k3nsecret", "st4t3pwsecret", "d3dup3pwsecret"}
 
 func assertNoSecrets(t *testing.T, out string) {
 	t.Helper()
@@ -36,7 +39,8 @@ func TestRedactedLoggerScrubsEveryAttrShape(t *testing.T) {
 	log := redactedLogger(slog.New(slog.NewJSONHandler(&buf, nil)), leakyConfig)
 	leak := fmt.Errorf("dial %s failed", leakyConfig.NATSURL)
 	log.With("uri", leakyConfig.MongoURI).WithGroup("g").Info("connect "+leakyConfig.NATSURL+" failed",
-		"err", leak, "token", "t0k3nsecret", "steps", []string{"pw1secret"},
+		"err", leak, "token", "t0k3nsecret", "steps", []string{"pw1secret", "d3dup3pwsecret"},
+		"auth", errors.New("AUTH st4t3pwsecret failed"),
 		slog.Group("inner", "url", leakyConfig.MongoURI), "count", 3)
 	out := buf.String()
 	assertNoSecrets(t, out)

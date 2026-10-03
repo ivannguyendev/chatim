@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/ivannguyendev/chatim/pkg/envconfig"
@@ -71,4 +72,18 @@ func (p *parser) span(key string, def time.Duration) time.Duration {
 		p.fail(fmt.Errorf("%s=%v: must be positive", key, v))
 	}
 	return v
+}
+
+func (p *parser) secret(key string) string {
+	fileKey := key + "_FILE"
+	path := os.Getenv(fileKey)
+	if path == "" {
+		return os.Getenv(key)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		p.fail(fmt.Errorf("%s: %w", fileKey, err))
+		return ""
+	}
+	return strings.TrimRight(string(b), "\r\n")
 }

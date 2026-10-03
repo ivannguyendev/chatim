@@ -21,32 +21,36 @@ const (
 )
 
 type Config struct {
-	CoreID          string
-	GRPCAddr        string
-	AdvertiseAddr   string
-	AdminAddr       string
-	MongoURI        string
-	MongoDB         string
-	RedisAddr       string
-	RedisDB         int
-	NATSURL         string
-	ConnectTimeout  time.Duration
-	RequestDeadline time.Duration
-	SlowRPC         time.Duration
-	QueueWait       time.Duration
-	MaxInflight     int
-	DrainDelay      time.Duration
-	GRPCShutdown    time.Duration
-	PublisherDrain  time.Duration
-	ShutdownBudget  time.Duration
-	Flush           flush.Config
-	Actor           actor.Config
-	Dedupe          dedupe.Config
-	Publish         publish.Config
-	Marks           publish.MarkConfig
-	Stream          publish.StreamConfig
-	Recovery        recovery.Config
-	Slot            slot.Config
+	CoreID              string
+	GRPCAddr            string
+	AdvertiseAddr       string
+	AdminAddr           string
+	MongoURI            string
+	MongoDB             string
+	RedisAddr           string
+	RedisDB             int
+	RedisPassword       string
+	RedisDedupeAddr     string
+	RedisDedupeDB       int
+	RedisDedupePassword string
+	NATSURL             string
+	ConnectTimeout      time.Duration
+	RequestDeadline     time.Duration
+	SlowRPC             time.Duration
+	QueueWait           time.Duration
+	MaxInflight         int
+	DrainDelay          time.Duration
+	GRPCShutdown        time.Duration
+	PublisherDrain      time.Duration
+	ShutdownBudget      time.Duration
+	Flush               flush.Config
+	Actor               actor.Config
+	Dedupe              dedupe.Config
+	Publish             publish.Config
+	Marks               publish.MarkConfig
+	Stream              publish.StreamConfig
+	Recovery            recovery.Config
+	Slot                slot.Config
 }
 
 type StopPlan struct {
@@ -64,23 +68,27 @@ func AdminAddr() string { return envconfig.String("CORE_ADMIN_ADDR", defaultAdmi
 func Load() (Config, error) {
 	var p parser
 	c := Config{
-		CoreID:          p.coreID(),
-		GRPCAddr:        envconfig.String("CORE_GRPC_ADDR", ":9000"),
-		AdminAddr:       AdminAddr(),
-		MongoURI:        envconfig.String("MONGO_URI", ""),
-		MongoDB:         envconfig.String("MONGO_DB", "chatim"),
-		RedisAddr:       envconfig.String("REDIS_ADDR", "chatim-redis:6379"),
-		RedisDB:         p.index("REDIS_DB", 0),
-		NATSURL:         envconfig.String("NATS_URL", "nats://chatim-nats:4222"),
-		ConnectTimeout:  p.span("CORE_CONNECT_TIMEOUT", 10*time.Second),
-		RequestDeadline: p.span("CORE_REQUEST_DEADLINE", 3*time.Second),
-		SlowRPC:         p.span("CORE_SLOW_RPC", grpcserver.DefaultSlowRPC),
-		QueueWait:       p.span("CORE_QUEUE_WAIT", 25*time.Millisecond),
-		MaxInflight:     p.count("CORE_MAX_INFLIGHT", 2048),
-		DrainDelay:      p.span("CORE_DRAIN_DELAY", 2*time.Second),
-		GRPCShutdown:    p.span("CORE_GRPC_SHUTDOWN", 5*time.Second),
-		PublisherDrain:  p.span("CORE_PUBLISHER_DRAIN", 5*time.Second),
-		ShutdownBudget:  p.span("CORE_SHUTDOWN_BUDGET", 25*time.Second),
+		CoreID:              p.coreID(),
+		GRPCAddr:            envconfig.String("CORE_GRPC_ADDR", ":9000"),
+		AdminAddr:           AdminAddr(),
+		MongoURI:            envconfig.String("MONGO_URI", ""),
+		MongoDB:             envconfig.String("MONGO_DB", "chatim"),
+		RedisAddr:           envconfig.String("REDIS_ADDR", "chatim-redis:6379"),
+		RedisDB:             p.index("REDIS_DB", 0),
+		RedisPassword:       p.secret("REDIS_PASSWORD"),
+		RedisDedupeAddr:     envconfig.String("REDIS_DEDUPE_ADDR", "chatim-redis-dedupe:6379"),
+		RedisDedupeDB:       p.index("REDIS_DEDUPE_DB", 0),
+		RedisDedupePassword: p.secret("REDIS_DEDUPE_PASSWORD"),
+		NATSURL:             envconfig.String("NATS_URL", "nats://chatim-nats:4222"),
+		ConnectTimeout:      p.span("CORE_CONNECT_TIMEOUT", 10*time.Second),
+		RequestDeadline:     p.span("CORE_REQUEST_DEADLINE", 3*time.Second),
+		SlowRPC:             p.span("CORE_SLOW_RPC", grpcserver.DefaultSlowRPC),
+		QueueWait:           p.span("CORE_QUEUE_WAIT", 25*time.Millisecond),
+		MaxInflight:         p.count("CORE_MAX_INFLIGHT", 2048),
+		DrainDelay:          p.span("CORE_DRAIN_DELAY", 2*time.Second),
+		GRPCShutdown:        p.span("CORE_GRPC_SHUTDOWN", 5*time.Second),
+		PublisherDrain:      p.span("CORE_PUBLISHER_DRAIN", 5*time.Second),
+		ShutdownBudget:      p.span("CORE_SHUTDOWN_BUDGET", 25*time.Second),
 	}
 	c.AdvertiseAddr = p.advertiseAddr(c.CoreID, c.GRPCAddr)
 	p.components(&c)

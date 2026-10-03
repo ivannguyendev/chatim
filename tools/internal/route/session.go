@@ -20,13 +20,14 @@ import (
 const DefaultReadyTimeout = 10 * time.Second
 
 type SessionConfig struct {
-	RedisAddr    string
-	RedisDB      int
-	ClientName   string
-	Policy       Policy
-	ReadyTimeout time.Duration
-	Log          *slog.Logger
-	Dial         Dialer
+	RedisAddr     string
+	RedisDB       int
+	RedisPassword string
+	ClientName    string
+	Policy        Policy
+	ReadyTimeout  time.Duration
+	Log           *slog.Logger
+	Dial          Dialer
 }
 
 type Session struct {
@@ -41,7 +42,9 @@ func Open(ctx context.Context, cfg SessionConfig) (*Session, error) {
 	if cfg.ReadyTimeout < 0 {
 		return nil, errors.New("route: ready timeout must not be negative")
 	}
-	rdb := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr, DB: cfg.RedisDB, ClientName: cfg.ClientName, ContextTimeoutEnabled: true})
+	rdb := redis.NewClient(&redis.Options{
+		Addr: cfg.RedisAddr, DB: cfg.RedisDB, Password: cfg.RedisPassword, ClientName: cfg.ClientName, ContextTimeoutEnabled: true,
+	})
 	res, err := slotmap.NewResolver(rdb, slotmap.ResolverConfig{}, cfg.Log)
 	if err != nil {
 		return nil, errors.Join(err, rdb.Close())

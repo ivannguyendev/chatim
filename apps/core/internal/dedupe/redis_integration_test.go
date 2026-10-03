@@ -13,17 +13,27 @@ import (
 )
 
 const (
-	itRedisAddrEnv = "CHATIM_IT_REDIS_ADDR"
-	ttlSlack       = 10 * time.Millisecond
+	itRedisAddrEnv           = "CHATIM_IT_REDIS_ADDR"
+	itRedisPasswordEnv       = "CHATIM_IT_REDIS_PASSWORD"
+	itRedisDedupeAddrEnv     = "CHATIM_IT_REDIS_DEDUPE_ADDR"
+	itRedisDedupePasswordEnv = "CHATIM_IT_REDIS_DEDUPE_PASSWORD"
+	ttlSlack                 = 10 * time.Millisecond
 )
+
+func itTarget() (addr, password string) {
+	if addr := os.Getenv(itRedisDedupeAddrEnv); addr != "" {
+		return addr, os.Getenv(itRedisDedupePasswordEnv)
+	}
+	return os.Getenv(itRedisAddrEnv), os.Getenv(itRedisPasswordEnv)
+}
 
 func itClient(t *testing.T) *redis.Client {
 	t.Helper()
-	addr := os.Getenv(itRedisAddrEnv)
+	addr, password := itTarget()
 	if addr == "" {
-		t.Skip("set CHATIM_IT_REDIS_ADDR to run")
+		t.Skip("set CHATIM_IT_REDIS_DEDUPE_ADDR or CHATIM_IT_REDIS_ADDR to run")
 	}
-	rdb := redis.NewClient(&redis.Options{Addr: addr, ContextTimeoutEnabled: true})
+	rdb := redis.NewClient(&redis.Options{Addr: addr, Password: password, ContextTimeoutEnabled: true})
 	t.Cleanup(func() { _ = rdb.Close() })
 	if err := rdb.Ping(t.Context()).Err(); err != nil {
 		t.Fatalf("ping %s: %v", addr, err)

@@ -1,4 +1,7 @@
 -include .env
+export REDIS_PASSWORD REDIS_DEDUPE_PASSWORD
+export CHATIM_IT_REDIS_PASSWORD := $(REDIS_PASSWORD)
+export CHATIM_IT_REDIS_DEDUPE_PASSWORD := $(REDIS_DEDUPE_PASSWORD)
 
 GO_IMAGE ?= golang:1.26
 LINT_IMAGE ?= golangci/golangci-lint:v2.14.0
@@ -8,11 +11,14 @@ COMPOSE  := docker compose -f deploy/compose/docker-compose.yml --env-file .env
 COMPOSE_ALL := $(COMPOSE) --profile postgres --profile app
 CORE_COMPOSE := $(COMPOSE) --profile app
 CORES    := core-1 core-2
+INSTANCE ?= state
+REDIS_CONTAINER_state  := chatim-redis
+REDIS_CONTAINER_dedupe := chatim-redis-dedupe
 GO_RUN   := docker run --rm -v "$(CURDIR)":/src -w /src -v chatim-gomod:/go/pkg/mod -v chatim-gocache:/root/.cache/go-build -e GOFLAGS=-buildvcs=false
 BUF_RUN  := docker run --rm -v "$(CURDIR)":/src -w /src $(BUF_IMAGE)
-POC_RUN  := $(GO_RUN) --network $(NETWORK) -e "MONGO_URI=mongodb://$(MONGO_ROOT_USER):$(MONGO_ROOT_PASSWORD)@chatim-mongodb:27017/?replicaSet=rs0&authSource=admin" -e "PG_URI=postgres://$(PG_USER):$(PG_PASSWORD)@chatim-postgres:5432/chatim_poc"
+POC_RUN  := $(GO_RUN) --network $(NETWORK) -e "MONGO_URI=mongodb://$(MONGO_ROOT_USER):$(MONGO_ROOT_PASSWORD)@chatim-mongodb:27017/?replicaSet=rs0&authSource=admin" -e "PG_URI=postgres://$(PG_USER):$(PG_PASSWORD)@chatim-postgres:5432/chatim_poc" -e REDIS_PASSWORD
 
-.PHONY: go check-env test itest vet fmt-check lint vuln tidy proto buf-lint poc image infra-up infra-down infra-reset pg-up pg-down core-up core-down e2e
+.PHONY: go check-env test itest vet fmt-check lint vuln tidy proto buf-lint poc image infra-up infra-down infra-reset pg-up pg-down core-up core-down e2e redis-cli
 
 go:
 	$(GO_RUN) $(GO_IMAGE) go $(ARGS)
@@ -24,7 +30,7 @@ test:
 	$(GO_RUN) $(GO_IMAGE) go test -race -shuffle=on ./...
 
 itest: check-env
-	$(GO_RUN) --network $(NETWORK) -e "CHATIM_IT_MONGO_URI=mongodb://$(MONGO_ROOT_USER):$(MONGO_ROOT_PASSWORD)@chatim-mongodb:27017/?replicaSet=rs0&authSource=admin" -e CHATIM_IT_REDIS_ADDR=chatim-redis:6379 -e CHATIM_IT_NATS_URL=nats://chatim-nats:4222 $(GO_IMAGE) go test -race -shuffle=on -count=1 ./...
+	$(GO_RUN) --network $(NETWORK) -e "CHATIM_IT_MONGO_URI=mongodb://$(MONGO_ROOT_USER):$(MONGO_ROOT_PASSWORD)@chatim-mongodb:27017/?replicaSet=rs0&authSource=admin" -e CHATIM_IT_REDIS_ADDR=chatim-redis:6379 -e CHATIM_IT_REDIS_PASSWORD -e CHATIM_IT_REDIS_DEDUPE_ADDR=chatim-redis-dedupe:6379 -e CHATIM_IT_REDIS_DEDUPE_PASSWORD -e CHATIM_IT_NATS_URL=nats://chatim-nats:4222 $(GO_IMAGE) go test -race -shuffle=on -count=1 ./...
 
 vet:
 	$(GO_RUN) $(GO_IMAGE) go vet ./...
@@ -64,6 +70,10 @@ infra-down: check-env
 
 infra-reset: check-env
 	$(COMPOSE_ALL) down -v
+
+redis-cli:
+	@test -n "$(REDIS_CONTAINER_$(INSTANCE))" || (echo "INSTANCE must be state or dedupe" && exit 1)
+	docker exec $(REDIS_CONTAINER_$(INSTANCE)) sh -c 'read -r REDISCLI_AUTH < "$$REDIS_SECRET_FILE"; export REDISCLI_AUTH; exec redis-cli "$$@"' redis-cli $(ARGS)
 
 pg-up: check-env
 	$(COMPOSE_ALL) up -d postgres

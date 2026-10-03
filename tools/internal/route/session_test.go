@@ -12,14 +12,21 @@ import (
 	"github.com/ivannguyendev/chatim/tools/internal/route"
 )
 
-func TestOpenRoutesBySlotLeasesAndCloses(t *testing.T) {
+const room = 42
+
+func leasedRedis(t *testing.T) *miniredis.Miniredis {
+	t.Helper()
 	mr := miniredis.RunT(t)
 	for _, id := range []string{"core-1", "core-2"} {
 		_ = mr.Set(slotmap.CoreKey(id), id+":9000")
 		_, _ = mr.ZAdd(slotmap.CoreRegistryKey, slotmap.CoreExpiryScore(time.Now().Add(time.Hour)), id)
 	}
-	const room = 42
 	_ = mr.Set(slotmap.SlotKey(slotmap.Of(room)), "core-2")
+	return mr
+}
+
+func TestOpenRoutesBySlotLeasesAndCloses(t *testing.T) {
+	mr := leasedRedis(t)
 	net := newFakeNet(map[string]*fakeCore{"core-1:9000": {}, "core-2:9000": {}})
 	s, err := route.Open(t.Context(), route.SessionConfig{RedisAddr: mr.Addr(), ClientName: "route-test", Dial: net.dial, Log: quietLog})
 	if err != nil {
@@ -55,5 +62,25 @@ func TestOpenGivesUpWhenTheSlotTableNeverLoads(t *testing.T) {
 	}
 	if _, err := route.Open(t.Context(), route.SessionConfig{RedisAddr: addr, ReadyTimeout: -time.Second}); err == nil {
 		t.Fatal("Open accepted a negative ready timeout")
+	}
+}
+
+func TestOpenAuthenticatesWithTheRedisPassword(t *testing.T) {
+	mr := leasedRedis(t)
+	mr.RequireAuth("route-pw")
+	net := newFakeNet(map[string]*fakeCore{"core-1:9000": {}, "core-2:9000": {}})
+	s, err := route.Open(t.Context(), route.SessionConfig{RedisAddr: mr.Addr(), RedisPassword: "route-pw", Dial: net.dial, Log: quietLog})
+	if err != nil {
+		t.Fatalf("Open with the password: %v", err)
+	}
+	if addr, ok := s.Resolver.Addr(room); !ok || addr != "core-2:9000" {
+		t.Errorf("Addr(%d) = %q, %v; want core-2:9000", room, addr, ok)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	_, err = route.Open(t.Context(), route.SessionConfig{RedisAddr: mr.Addr(), ReadyTimeout: 300 * time.Millisecond, Dial: net.dial, Log: quietLog})
+	if err == nil {
+		t.Fatal("Open without the password succeeded")
 	}
 }

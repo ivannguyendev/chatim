@@ -9,12 +9,13 @@ import (
 )
 
 type redactingHandler struct {
-	inner slog.Handler
-	urls  []string
+	inner   slog.Handler
+	urls    []string
+	secrets []string
 }
 
 func redactedLogger(log *slog.Logger, cfg config.Config) *slog.Logger {
-	return slog.New(&redactingHandler{inner: log.Handler(), urls: []string{cfg.MongoURI, cfg.NATSURL}})
+	return slog.New(&redactingHandler{inner: log.Handler(), urls: []string{cfg.MongoURI, cfg.NATSURL}, secrets: cfg.Secrets()})
 }
 
 func (h *redactingHandler) Enabled(ctx context.Context, level slog.Level) bool {
@@ -31,14 +32,16 @@ func (h *redactingHandler) Handle(ctx context.Context, r slog.Record) error {
 }
 
 func (h *redactingHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return &redactingHandler{inner: h.inner.WithAttrs(h.attrs(attrs)), urls: h.urls}
+	return &redactingHandler{inner: h.inner.WithAttrs(h.attrs(attrs)), urls: h.urls, secrets: h.secrets}
 }
 
 func (h *redactingHandler) WithGroup(name string) slog.Handler {
-	return &redactingHandler{inner: h.inner.WithGroup(name), urls: h.urls}
+	return &redactingHandler{inner: h.inner.WithGroup(name), urls: h.urls, secrets: h.secrets}
 }
 
-func (h *redactingHandler) clean(s string) string { return config.RedactText(s, h.urls...) }
+func (h *redactingHandler) clean(s string) string {
+	return config.RedactSecrets(config.RedactText(s, h.urls...), h.secrets...)
+}
 
 func (h *redactingHandler) attrs(in []slog.Attr) []slog.Attr {
 	out := make([]slog.Attr, len(in))

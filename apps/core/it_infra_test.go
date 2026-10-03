@@ -32,17 +32,19 @@ const (
 )
 
 type itInfra struct {
-	mongoURI, redisAddr, natsURL string
-	suffix                       string
-	mongo                        *mongo.Client
-	rdb                          *redis.Client
-	js                           jetstream.JetStream
+	mongoURI, natsURL string
+	state, dedupe     itRedisTarget
+	suffix            string
+	mongo             *mongo.Client
+	rdb, dedupeRDB    *redis.Client
+	js                jetstream.JetStream
 }
 
 func realInfra(t *testing.T) *itInfra {
 	t.Helper()
-	it := &itInfra{mongoURI: os.Getenv(itMongoURIEnv), redisAddr: os.Getenv(itRedisAddrEnv), natsURL: os.Getenv(itNATSURLEnv)}
-	if it.mongoURI == "" || it.redisAddr == "" || it.natsURL == "" {
+	it := &itInfra{mongoURI: os.Getenv(itMongoURIEnv), natsURL: os.Getenv(itNATSURLEnv)}
+	it.state, it.dedupe = itRedisTargets()
+	if it.mongoURI == "" || it.state.addr == "" || it.natsURL == "" {
 		t.Skip("set CHATIM_IT_MONGO_URI, CHATIM_IT_REDIS_ADDR and CHATIM_IT_NATS_URL to run")
 	}
 	var b [6]byte
@@ -59,11 +61,8 @@ func realInfra(t *testing.T) *itInfra {
 	}
 	it.mongo = client
 
-	it.rdb = redis.NewClient(&redis.Options{Addr: it.redisAddr, DB: itRedisDB, ContextTimeoutEnabled: true})
-	t.Cleanup(func() { _ = it.rdb.Close() })
-	if err := it.rdb.Ping(t.Context()).Err(); err != nil {
-		t.Fatalf("redis ping: %v", err)
-	}
+	it.rdb = itRedisClient(t, it.state, itRedisDB)
+	it.dedupeRDB = itRedisClient(t, it.dedupe, itRedisDB)
 
 	nc, err := nats.Connect(it.natsURL)
 	if err != nil {
@@ -79,17 +78,21 @@ func realInfra(t *testing.T) *itInfra {
 func (it *itInfra) coreConfig(t *testing.T, env map[string]string) config.Config {
 	t.Helper()
 	base := map[string]string{
-		"CORE_ID":          "it-core-" + it.suffix,
-		"CORE_GRPC_ADDR":   freeAddr(t),
-		"CORE_ADMIN_ADDR":  freeAddr(t),
-		"MONGO_URI":        it.mongoURI,
-		"MONGO_DB":         "chatim_it_core_" + it.suffix,
-		"REDIS_ADDR":       it.redisAddr,
-		"REDIS_DB":         strconv.Itoa(itRedisDB),
-		"NATS_URL":         it.natsURL,
-		"EVT_STREAM":       "IT_CORE_" + strings.ToUpper(it.suffix),
-		"EVT_SUBJECT_ROOT": "itcevt" + it.suffix,
-		"EVT_LIVE_ROOT":    "itclive" + it.suffix,
+		"CORE_ID":               "it-core-" + it.suffix,
+		"CORE_GRPC_ADDR":        freeAddr(t),
+		"CORE_ADMIN_ADDR":       freeAddr(t),
+		"MONGO_URI":             it.mongoURI,
+		"MONGO_DB":              "chatim_it_core_" + it.suffix,
+		"REDIS_ADDR":            it.state.addr,
+		"REDIS_DB":              strconv.Itoa(itRedisDB),
+		"REDIS_PASSWORD":        it.state.password,
+		"REDIS_DEDUPE_ADDR":     it.dedupe.addr,
+		"REDIS_DEDUPE_DB":       strconv.Itoa(itRedisDB),
+		"REDIS_DEDUPE_PASSWORD": it.dedupe.password,
+		"NATS_URL":              it.natsURL,
+		"EVT_STREAM":            "IT_CORE_" + strings.ToUpper(it.suffix),
+		"EVT_SUBJECT_ROOT":      "itcevt" + it.suffix,
+		"EVT_LIVE_ROOT":         "itclive" + it.suffix,
 	}
 	maps.Copy(base, env)
 	for k, v := range base {
@@ -112,17 +115,23 @@ func (it *itInfra) forget(t *testing.T, cfg config.Config) {
 	if err := it.js.DeleteStream(ctx, cfg.Stream.Name); err != nil && !errors.Is(err, jetstream.ErrStreamNotFound) {
 		t.Errorf("delete stream %s: %v", cfg.Stream.Name, err)
 	}
-	iter := it.rdb.Scan(ctx, 0, "chatim:*", 1000).Iterator()
+	for _, rdb := range []*redis.Client{it.rdb, it.dedupeRDB} {
+		forgetKeys(ctx, t, rdb)
+	}
+}
+
+func forgetKeys(ctx context.Context, t *testing.T, rdb *redis.Client) {
+	iter := rdb.Scan(ctx, 0, "chatim:*", 1000).Iterator()
 	var keys []string
 	for iter.Next(ctx) {
 		keys = append(keys, iter.Val())
 	}
 	if err := iter.Err(); err != nil {
-		t.Errorf("scan redis db %d: %v", itRedisDB, err)
+		t.Errorf("scan redis %s db %d: %v", rdb.Options().Addr, itRedisDB, err)
 	}
 	for len(keys) > 0 {
 		n := min(len(keys), 1000)
-		if err := it.rdb.Del(ctx, keys[:n]...).Err(); err != nil {
+		if err := rdb.Del(ctx, keys[:n]...).Err(); err != nil {
 			t.Errorf("delete redis keys: %v", err)
 		}
 		keys = keys[n:]

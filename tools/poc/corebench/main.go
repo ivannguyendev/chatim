@@ -27,13 +27,14 @@ var coreKnobs = []string{
 }
 
 type config struct {
-	redis, nats, tenant, texts, liveRoot string
-	cpuProfile                           string
-	redisDB, rooms, members, workers     int
-	watch                                int
-	zipf                                 float64
-	deadline, attempt, grace             time.Duration
-	plan                                 openloop.Plan
+	redis, redisPW, nats, tenant, texts string
+	liveRoot                            string
+	cpuProfile                          string
+	redisDB, rooms, members, workers    int
+	watch                               int
+	zipf                                float64
+	deadline, attempt, grace            time.Duration
+	plan                                openloop.Plan
 }
 
 func main() { os.Exit(realMain()) }
@@ -42,6 +43,7 @@ func realMain() int {
 	var c config
 	flag.StringVar(&c.redis, "redis", cmp.Or(os.Getenv("REDIS_ADDR"), "chatim-redis:6379"), "Redis holding slot leases (env REDIS_ADDR)")
 	flag.IntVar(&c.redisDB, "redis-db", 0, "Redis database index of the cores")
+	flag.StringVar(&c.redisPW, "redis-password", "", "password of that Redis; env REDIS_PASSWORD when empty")
 	flag.StringVar(&c.nats, "nats", cmp.Or(os.Getenv("NATS_URL"), "nats://chatim-nats:4222"), "NATS URL for -watch (env NATS_URL)")
 	flag.StringVar(&c.liveRoot, "live-root", "live", "live subject root, EVT_LIVE_ROOT of the cores")
 	flag.StringVar(&c.tenant, "tenant", "bench", "tenant of the bench rooms")
@@ -101,7 +103,8 @@ func run(ctx context.Context, c config) error {
 	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
 	s, err := route.Open(ctx, route.SessionConfig{
-		RedisAddr: c.redis, RedisDB: c.redisDB, ClientName: "chatim-corebench", Log: log,
+		RedisAddr: c.redis, RedisDB: c.redisDB, RedisPassword: cmp.Or(c.redisPW, os.Getenv("REDIS_PASSWORD")),
+		ClientName: "chatim-corebench", Log: log,
 		Policy: route.Policy{Deadline: c.deadline, Attempt: c.attempt},
 	})
 	if err != nil {
