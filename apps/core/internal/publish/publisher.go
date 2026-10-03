@@ -103,7 +103,7 @@ func (p *Publisher) publish(it item) {
 	for _, ev := range it.events {
 		msg, err := message(p.cfg.SubjectRoot, it.room, ev)
 		if err != nil {
-			p.log.Error("dropping malformed event", "room", it.room, "err", err)
+			p.fails.record("dropping malformed event", ev.GetId(), err)
 			continue
 		}
 		if _, err := p.js.PublishMsgAsync(msg, jetstream.WithRetryAttempts(p.cfg.Attempts), jetstream.WithRetryWait(p.cfg.RetryBackoff)); err != nil {

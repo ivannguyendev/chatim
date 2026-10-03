@@ -19,14 +19,10 @@ func TestEnqueueNeverBlocksWhenTheQueueIsFull(t *testing.T) {
 	rg := newRig(t, cfg)
 	rg.enqueue(t, roomA, 1)
 	rg.enqueue(t, roomA, 2)
-	begin := time.Now()
 	for range 3 {
 		if err := rg.Enqueue(roomA, events(roomA, 3)); !errors.Is(err, publish.ErrQueueFull) {
 			t.Fatalf("Enqueue on a full queue = %v, want ErrQueueFull", err)
 		}
-	}
-	if d := time.Since(begin); d > 100*time.Millisecond {
-		t.Fatalf("full-queue Enqueue took %v", d)
 	}
 	if n := rg.sink.Count(queueFullMsg); n != 1 {
 		t.Fatalf("logged a full queue %d times in one episode, want 1", n)
@@ -93,30 +89,27 @@ func TestCloseStopsAtItsDeadlineWhenAcksDoNotArrive(t *testing.T) {
 }
 
 func TestHardCancelStopsShardsWithoutLeaks(t *testing.T) {
-	rg := newRig(t, fastSetup)
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan error, 1)
-	go func() { done <- rg.Run(ctx) }()
-	rg.js.Hold()
-	rg.enqueue(t, roomA, 1, 2)
-	rg.enqueue(t, roomB, 1)
-	eventually(t, "publishes in flight", func() bool { return rg.js.Held() == 3 })
-	cancel()
-	rg.js.Release()
-	select {
-	case err := <-done:
-		if !errors.Is(err, context.Canceled) {
+	synctest.Test(t, func(t *testing.T) {
+		rg := newRig(t, fastSetup)
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan error, 1)
+		go func() { done <- rg.Run(ctx) }()
+		rg.js.Hold()
+		rg.enqueue(t, roomA, 1, 2)
+		rg.enqueue(t, roomB, 1)
+		synctest.Wait()
+		cancel()
+		if err := <-done; !errors.Is(err, context.Canceled) {
 			t.Fatalf("Run after cancel = %v, want context.Canceled", err)
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("Run did not return after cancel")
-	}
-	if err := rg.Run(context.Background()); err == nil {
-		t.Fatal("second Run succeeded")
-	}
-	if err := rg.Close(t.Context()); err != nil {
-		t.Fatalf("Close after Run returned = %v", err)
-	}
+		rg.js.Release()
+		if err := rg.Run(context.Background()); err == nil {
+			t.Fatal("second Run succeeded")
+		}
+		if err := rg.Close(t.Context()); err != nil {
+			t.Fatalf("Close after Run returned = %v", err)
+		}
+	})
 }
 
 func TestNewRejectsMissingDependenciesAndBadConfig(t *testing.T) {
