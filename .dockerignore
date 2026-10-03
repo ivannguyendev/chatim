@@ -1,8 +1,0 @@
-.git
-.env*
-.claude
-.agent
-bin
-docs
-rooms*.txt
-real-texts*.txt
