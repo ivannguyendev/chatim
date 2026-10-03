@@ -14,7 +14,7 @@ import (
 
 type Event struct {
 	Room    string `json:"room"`
-	Pts     uint64 `json:"pts"`
+	ID      string `json:"id"`
 	Seq     uint64 `json:"seq"`
 	CID     string `json:"cid"`
 	Subject string `json:"subject,omitempty"`
@@ -23,7 +23,7 @@ type Event struct {
 func EventOf(subject string, ev *chatimv1.Event) Event {
 	return Event{
 		Room:    ev.GetRoomId(),
-		Pts:     ev.GetPts(),
+		ID:      ev.GetId(),
 		Seq:     ev.GetSeq(),
 		CID:     ev.GetMessageCreated().GetMessage().GetCid(),
 		Subject: subject,

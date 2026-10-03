@@ -10,7 +10,6 @@ import (
 type Ack struct {
 	CID string `json:"cid"`
 	Seq uint64 `json:"seq"`
-	Pts uint64 `json:"pts"`
 }
 
 type State struct {

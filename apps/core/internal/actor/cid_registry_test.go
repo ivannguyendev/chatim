@@ -15,7 +15,7 @@ import (
 func TestRemoteCommittedCIDIsAnsweredWithoutInsert(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rg := newRig(t, baseConfig)
-		rec := dedupe.Record{Seq: 7, Pts: 7, CreatedAt: time.UnixMilli(1_700_000_000_123).UTC()}
+		rec := dedupe.Record{Seq: 7, CreatedAt: time.UnixMilli(1_700_000_000_123).UTC()}
 		rg.cids.force(remoteKey(roomA, "alice", "x"), dedupe.Committed, rec)
 		rg.start(t)
 		ack := mustSend(t, rg.Router, cmd(roomA, "alice", "x"))

@@ -30,7 +30,6 @@ type Event struct {
 	RoomType   RoomType               `protobuf:"varint,4,opt,name=room_type,json=roomType,proto3,enum=chatim.v1.RoomType" json:"room_type,omitempty"`
 	ThreadRoot uint64                 `protobuf:"varint,5,opt,name=thread_root,json=threadRoot,proto3" json:"thread_root,omitempty"`
 	Seq        uint64                 `protobuf:"varint,6,opt,name=seq,proto3" json:"seq,omitempty"`
-	Pts        uint64                 `protobuf:"varint,7,opt,name=pts,proto3" json:"pts,omitempty"`
 	Actor      string                 `protobuf:"bytes,8,opt,name=actor,proto3" json:"actor,omitempty"`
 	Ts         *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=ts,proto3" json:"ts,omitempty"`
 	// Types that are valid to be assigned to Payload:
@@ -109,13 +108,6 @@ func (x *Event) GetThreadRoot() uint64 {
 func (x *Event) GetSeq() uint64 {
 	if x != nil {
 		return x.Seq
-	}
-	return 0
-}
-
-func (x *Event) GetPts() uint64 {
-	if x != nil {
-		return x.Pts
 	}
 	return 0
 }
@@ -208,7 +200,7 @@ var File_chatim_v1_events_proto protoreflect.FileDescriptor
 
 const file_chatim_v1_events_proto_rawDesc = "" +
 	"\n" +
-	"\x16chatim/v1/events.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd2\x02\n" +
+	"\x16chatim/v1/events.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xcb\x02\n" +
 	"\x05Event\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06tenant\x18\x02 \x01(\tR\x06tenant\x12\x17\n" +
@@ -216,12 +208,11 @@ const file_chatim_v1_events_proto_rawDesc = "" +
 	"\troom_type\x18\x04 \x01(\x0e2\x13.chatim.v1.RoomTypeR\broomType\x12\x1f\n" +
 	"\vthread_root\x18\x05 \x01(\x04R\n" +
 	"threadRoot\x12\x10\n" +
-	"\x03seq\x18\x06 \x01(\x04R\x03seq\x12\x10\n" +
-	"\x03pts\x18\a \x01(\x04R\x03pts\x12\x14\n" +
+	"\x03seq\x18\x06 \x01(\x04R\x03seq\x12\x14\n" +
 	"\x05actor\x18\b \x01(\tR\x05actor\x12*\n" +
 	"\x02ts\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\x02ts\x12D\n" +
 	"\x0fmessage_created\x18\x14 \x01(\v2\x19.chatim.v1.MessageCreatedH\x00R\x0emessageCreatedB\t\n" +
-	"\apayload\">\n" +
+	"\apayloadJ\x04\b\a\x10\bR\x03pts\">\n" +
 	"\x0eMessageCreated\x12,\n" +
 	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessageB\x9c\x01\n" +
 	"\rcom.chatim.v1B\vEventsProtoP\x01Z9github.com/ivannguyendev/chatim/pkg/pb/chatim/v1;chatimv1\xa2\x02\x03CXX\xaa\x02\tChatim.V1\xca\x02\tChatim\\V1\xe2\x02\x15Chatim\\V1\\GPBMetadata\xea\x02\n" +

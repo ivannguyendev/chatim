@@ -10,9 +10,10 @@ chatim is an internal, logically multi-tenant chat platform (CPaaS) in Go. Phase
 
 Done:
 - M0–M1: foundation and PoC.
-- M2a, merged to main (PR #5): core CreateRoom/SendMessage/GetHistory over gRPC, cid dedupe, JetStream publish, crash recovery, and two cores in compose.
+- M2a, merged to main (PR #5): core CreateRoom/SendMessage/GetHistory over gRPC, cid dedupe, JetStream publish, crash recovery (sweeper, replaced in M2a.1), and two cores in compose.
+- M2a.1, in progress on `fix/m2a1-event-identity` (not merged): no room-wide pts, natural event ids, per-room publisher order, best-effort events (D47–D51).
 
-Next is M2b: edit/delete/reactions and safe pts allocation. The milestone order is in `docs/roadmap.md`. Project docs are written in Vietnamese.
+Next is M2b, after M2a.1 merges: edit (+history), delete (for everyone / for me), reactions, pins, read receipts. The milestone order is in `docs/roadmap.md`. Project docs are written in Vietnamese.
 
 ## Hard rules
 
@@ -37,7 +38,7 @@ The user finds long review and test loops too slow. Run the cheapest check that 
 | Mongo/Redis/NATS adapters or `apps/core` wiring changed | `make itest` once (needs `make infra-up`) |
 | Milestone end only | `make test`, `make itest`, `make core-up && make e2e`, corebench |
 
-- **Risky tasks get one reviewer.** These are the write path, dedupe, publish, recovery, slots and lifecycle.
+- **Risky tasks get one reviewer.** These are the write path, dedupe, publish, slots and lifecycle.
   - The reviewer checks spec and quality in a single pass over the diff.
   - It does not re-run suites the implementer already ran green; at most `-count=3` on touched packages.
 - **Findings:**
@@ -102,25 +103,22 @@ There is one module, `github.com/ivannguyendev/chatim`, and one Dockerfile (`dep
 **Key encoding (`pkg/keys`).** Big-endian uint64 fields are concatenated, so byte order matches numeric order:
 - messages `_id` = `room│thread_root│seq` (24B)
 - message_edits = the same plus a uint32 version (28B)
-- room_events = `room│pts` (16B)
+- room_events = `room│pts` (16B), unused since M2a.1; revisit in M2b/M3
 
 These are `_id`s of MongoDB clustered collections, so any history page, including the oldest, is one range scan. `thread_root = 0` is the main timeline, seq starts at 1, and `MaxUint64` is reserved.
 
 **Counters.**
 - `seq` is a position in a timeline.
-- `pts` numbers every persisted event in a room; clients use it for gap detection and Sync.
-- In M2a pts == seq. Recovery paging and the pubwm pin rely on that, so M2b must switch them to pts.
+- There is no room-wide event counter (proto `pts` fields are reserved). An event id is a natural key: `{room}-{thread}-{seq}` for a new message (`pbconv.MessageEventID`); M2b changes use the target doc's version.
 - Room ids (`pkg/ids`) are random non-zero 63-bit numbers, sent as decimal strings.
 
 **Send path (`apps/core/internal`).**
 1. `grpcsrv` reads the tenant and user from the metadata keys `x-chatim-tenant` and `x-chatim-user`; callers are trusted internal apps until mTLS. Handlers return domain or `apperr` errors, and `pkg/grpcserver` maps them to gRPC codes at one boundary, so clients see sentinel text only.
 2. `actor.Router` runs one goroutine per room, with a bounded mailbox and idle eviction. An actor is retired when its slot moves, and it keeps one write group in flight.
 3. `dedupe` checks the cid against a RAM LRU, then the dedupe Redis `chatim:cid:{room}:{user}:{cid}` (pending `p:{core}` for 10s, committed for 15m). Calls are batched per group. On Redis errors it falls back to the LRU only, using the `redisguard` cooldown.
-4. `publish.ActivityMarks` runs one Lua script before the insert: `ZADD chatim:active:{slot}` and `SET NX chatim:pubwm:{room}`, which pins the publish base.
-5. `flush.Flusher` shards batch groups into `insertMany(ordered:false, w:majority)` every 2ms or 256 docs. A group that can't finish by its deadline is not sent (`ErrNotSent`).
-6. Each insert ends as Inserted, Duplicate, Unknown or Rejected. Duplicate and Unknown are reconciled with `Find` (majority read) by (from, cid). Every retry is bounded by the cid reservation TTL, so a pending key never expires while an attempt is live.
-7. After commit: dedupe Commit, then ack, then `publish.Publisher` sends to stream `CHATIM_EVT` on subject `evt.{t}.room.{rid}.msg_created` with `Nats-Msg-Id = {room}-{pts}`, RePublished to `live.*`. `pubwm` advances only over contiguous pts that got a PubAck.
-8. `recovery.Sweeper` runs on slot claim and every 30s. Rooms in `active:{slot}` whose DB last pts is above pubwm are republished through their actor. Caught-up rooms are removed by CAS after 15s.
+4. `flush.Flusher` shards batch groups into `insertMany(ordered:false, w:majority)` every 2ms or 256 docs. A group that can't finish by its deadline is not sent (`ErrNotSent`).
+5. Each insert ends as Inserted, Duplicate, Unknown or Rejected. Duplicate and Unknown are reconciled with `Find` (majority read) by (from, cid). Every retry is bounded by the cid reservation TTL, so a pending key never expires while an attempt is live.
+6. After commit: dedupe Commit (`c:{seq}:{ms}`), then ack, then `publish.Publisher` sends to stream `CHATIM_EVT` on subject `evt.{t}.room.{rid}.msg_created` with `Nats-Msg-Id` = the natural event id, RePublished to `live.*`. The publisher is sharded by slot; each actor Enqueue is a batch, and a room's next batch waits until its earlier batch is acked or gives up (D50). Best-effort with bounded retries (D47): events lost on crash, queue full or exhausted retries are left to the Phase 2 reconciliation module.
 
 `GetHistory` reads the store directly, not through actors.
 
@@ -131,7 +129,7 @@ These are `_id`s of MongoDB clustered collections, so any history page, includin
 Every adapter must pass the `storetest` contract suite, so a PostgreSQL adapter could replace Mongo if the prod-like PoC says so.
 
 **Two Redis instances (D44, D45).**
-- State, `chatim-redis`: `chatim:core:*`, `chatim:cores`, `chatim:slot:*`, pub/sub `chatim:slots:changed`, `chatim:pubwm:*`, `chatim:active:*`. AOF everysec, `noeviction`.
+- State, `chatim-redis`: used only by the slot manager: `chatim:core:*`, `chatim:cores`, `chatim:slot:*`, pub/sub `chatim:slots:changed`. AOF everysec, `noeviction`.
 - Dedupe, `chatim-redis-dedupe`: only `chatim:cid:*`. No persistence, `REDIS_DEDUPE_MAXMEMORY` (512mb), `allkeys-lru`. If it dies, dedupe falls back to the LRU.
 - Both require AUTH. Passwords come from `.env` through compose secrets; cores read `REDIS_PASSWORD_FILE`/`REDIS_DEDUPE_PASSWORD_FILE`, tools read `-redis-password` or `REDIS_PASSWORD`. Passwords never go in argv, `docker inspect`, echoed make lines or logs.
 - There is no `REDISCLI_AUTH` env in the containers: use `make redis-cli [INSTANCE=dedupe] ARGS=…`.
@@ -147,7 +145,7 @@ Every adapter must pass the `storetest` contract suite, so a PostgreSQL adapter 
 Hooks:
 - The hooks receive batches of slots and share one `HookTimeout` per Step.
 - BeforeRelease and AfterLose call `Router.EvictSlots`.
-- AfterClaim calls `EvictSlots` and then `Sweeper.Trigger`.
+- AfterClaim calls `EvictSlots` only.
 
 Rules:
 - `Owns()` is true only while the lease stamp is newer than `min(LeaseTTL, HeartbeatTTL) − Tick`, measured from the start of the tick (D24).
@@ -159,8 +157,8 @@ Rules:
 
 **Process lifecycle (`apps/core`).**
 - Config is validated at boot by `apps/core/internal/config`, which applies cross-field timeout rules; components export `Validate()`.
-- Start order: publisher → flusher → router → sweeper → slot manager → gRPC. gRPC is served only after a clean start.
-- Shutdown order: `/readyz` false → drain delay → gRPC → sweeper → router → flusher → publisher → slot release → clients. All of it fits within `CORE_SHUTDOWN_BUDGET`.
+- Start order: publisher → flusher → router → slot manager → gRPC. gRPC is served only after a clean start.
+- Shutdown order: `/readyz` false → drain delay → gRPC → router → flusher → publisher (drains within `CORE_PUBLISHER_DRAIN`, aborts at the deadline) → slot release → clients. All of it fits within `CORE_SHUTDOWN_BUDGET`.
 - `/app probe` is the container healthcheck.
 - Every log line goes through a handler that redacts MONGO_URI and NATS_URL credentials, the Mongo password and both Redis passwords.
 
@@ -179,9 +177,10 @@ Rules:
 
 ## Docs
 
-- `docs/designs/260930-chat-core-gateway-design.md`: the source of truth for the data model, write and read paths, failure handling and the Decision Log (D1–D46). Add new decisions there.
-- `docs/plans/`: per-milestone plans, executed task by task with `subagent-driven-development` or `separate-driven-development`.
+- `docs/designs/260930-chat-core-gateway-design.md`: the source of truth for the data model, write and read paths, failure handling and the Decision Log (D1–D51). Add new decisions there.
+- `docs/plans/`: per-milestone plans, executed task by task with `subagent-driven-development` or `separate-driven-development`. M2a.1: `docs/plans/2026-10-03-m2a1-event-identity.md`.
 - `docs/poc/README.md`: PoC and corebench results (C1). Dev numbers only validate tools; go/no-go needs prod-like runs.
 - `docs/roadmap.md`: milestone status and carried-over items.
 - `docs/git-workflow.md`: branches, merge Definition of Done, readiness levels, SemVer tags and handling a broken `main`.
 - `.claude/plans/m2a-core-send-history_design.md`: local (gitignored) M2a decision log.
+- `.claude/plans/m2b-core-mutations_design.md`: local (gitignored) M2a.1 + M2b decision log (requirements, D47–D56, rejected alternatives).

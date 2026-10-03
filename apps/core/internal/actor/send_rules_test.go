@@ -30,24 +30,21 @@ func TestNewRouterValidatesInputs(t *testing.T) {
 	for name, mutate := range mutations {
 		cfg := baseConfig
 		mutate(&cfg)
-		if _, err := actor.NewRouter(msgs, rooms, sub, cids, nopPublisher{}, nopMarker{}, cfg, quiet); !errors.Is(err, apperr.ErrInvalidArgument) {
+		if _, err := actor.NewRouter(msgs, rooms, sub, cids, nopPublisher{}, cfg, quiet); !errors.Is(err, apperr.ErrInvalidArgument) {
 			t.Errorf("%s: NewRouter = %v, want ErrInvalidArgument", name, err)
 		}
 	}
-	if _, err := actor.NewRouter(nil, rooms, sub, cids, nopPublisher{}, nopMarker{}, baseConfig, quiet); !errors.Is(err, apperr.ErrInvalidArgument) {
+	if _, err := actor.NewRouter(nil, rooms, sub, cids, nopPublisher{}, baseConfig, quiet); !errors.Is(err, apperr.ErrInvalidArgument) {
 		t.Errorf("NewRouter(nil messages) = %v, want ErrInvalidArgument", err)
 	}
-	if _, err := actor.NewRouter(msgs, rooms, nil, cids, nopPublisher{}, nopMarker{}, baseConfig, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
+	if _, err := actor.NewRouter(msgs, rooms, nil, cids, nopPublisher{}, baseConfig, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
 		t.Errorf("NewRouter(nil submitter) = %v, want ErrInvalidArgument", err)
 	}
-	if _, err := actor.NewRouter(msgs, rooms, sub, nil, nopPublisher{}, nopMarker{}, baseConfig, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
+	if _, err := actor.NewRouter(msgs, rooms, sub, nil, nopPublisher{}, baseConfig, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
 		t.Errorf("NewRouter(nil cid registry) = %v, want ErrInvalidArgument", err)
 	}
-	if _, err := actor.NewRouter(msgs, rooms, sub, cids, nil, nopMarker{}, baseConfig, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
+	if _, err := actor.NewRouter(msgs, rooms, sub, cids, nil, baseConfig, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
 		t.Errorf("NewRouter(nil event publisher) = %v, want ErrInvalidArgument", err)
-	}
-	if _, err := actor.NewRouter(msgs, rooms, sub, cids, nopPublisher{}, nil, baseConfig, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
-		t.Errorf("NewRouter(nil activity marker) = %v, want ErrInvalidArgument", err)
 	}
 }
 
@@ -160,8 +157,8 @@ func TestAckCarriesStoredMillisecondUTCTimestamp(t *testing.T) {
 		time.Sleep(1234567 * time.Nanosecond)
 		want := time.Now().UTC().Truncate(time.Millisecond)
 		ack := mustSend(t, rg.Router, cmd(roomA, "alice", "c1"))
-		if ack.Seq != 1 || ack.Pts != 1 {
-			t.Fatalf("ack = %+v, want seq 1 pts 1", ack)
+		if ack.Seq != 1 {
+			t.Fatalf("ack = %+v, want seq 1", ack)
 		}
 		if !ack.CreatedAt.Equal(want) || ack.CreatedAt.Location() != time.UTC {
 			t.Fatalf("CreatedAt = %v, want %v (UTC, truncated to milliseconds)", ack.CreatedAt, want)

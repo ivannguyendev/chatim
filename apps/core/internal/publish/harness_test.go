@@ -9,9 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alicebob/miniredis/v2"
 	"github.com/nats-io/nats.go"
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/goleak"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
@@ -23,7 +21,6 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	testlog.SilenceRedis()
 	goleak.VerifyTestMain(m)
 }
 
@@ -32,10 +29,8 @@ const (
 	roomA  uint64 = 101
 	roomB  uint64 = 202
 
-	queueFullMsg = "publish queue full; dropping events until recovery republishes them"
-	abandonedMsg = "event publish abandoned; its watermark stalls until recovery republishes it"
-	overflowMsg  = "publish watermark tracking full; affected watermarks stall until recovery republishes"
-	degradedMsg  = "publish watermarks degraded; they stall until redis returns"
+	queueFullMsg = "publish queue full; dropping events"
+	abandonedMsg = "event publish abandoned; reconciliation must republish it"
 	malformedMsg = "dropping malformed event"
 )
 
@@ -45,40 +40,22 @@ var (
 	fastSetup = publish.Config{
 		SubjectRoot: "evt", Shards: 2, QueueSize: 64, MaxPending: 16, MaxRetrying: 64, Attempts: 3,
 		RetryBackoff: time.Millisecond, MaxBackoff: 4 * time.Millisecond, AckTimeout: 200 * time.Millisecond,
-		FlushEvery: time.Millisecond, RedisTimeout: time.Second, RedisCooldown: 20 * time.Millisecond, RoomIdle: time.Hour,
 	}
 )
 
 type rig struct {
 	*publish.Publisher
 	js   *publishtest.JetStream
-	mr   *miniredis.Miniredis
 	sink *testlog.Sink
 	done chan error
 	once sync.Once
 	err  error
 }
 
-func newRedis(t *testing.T) (*miniredis.Miniredis, *redis.Client) {
+func newRig(t *testing.T, cfg publish.Config) *rig {
 	t.Helper()
-	mr := miniredis.RunT(t)
-	return mr, client(t, mr)
-}
-
-func client(t *testing.T, mr *miniredis.Miniredis) *redis.Client {
-	t.Helper()
-	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr(), ContextTimeoutEnabled: true, MaxRetries: -1, DialerRetries: 1})
-	t.Cleanup(func() { _ = rdb.Close() })
-	return rdb
-}
-
-func newRig(t *testing.T, cfg publish.Config, mr *miniredis.Miniredis) *rig {
-	t.Helper()
-	if mr == nil {
-		mr = miniredis.RunT(t)
-	}
-	rg := &rig{js: &publishtest.JetStream{}, mr: mr, sink: &testlog.Sink{}}
-	p, err := publish.New(rg.js, client(t, mr), cfg, rg.sink.Logger())
+	rg := &rig{js: &publishtest.JetStream{}, sink: &testlog.Sink{}}
+	p, err := publish.New(rg.js, cfg, rg.sink.Logger())
 	if err != nil {
 		t.Fatalf("publish.New: %v", err)
 	}
@@ -108,55 +85,22 @@ func (rg *rig) wait() error {
 
 func started(t *testing.T, cfg publish.Config) *rig {
 	t.Helper()
-	return newRig(t, cfg, nil).start(t)
+	return newRig(t, cfg).start(t)
 }
 
-func events(room uint64, pts ...uint64) []*chatimv1.Event {
-	out := make([]*chatimv1.Event, len(pts))
-	for i, p := range pts {
-		m := domain.Message{Room: room, Seq: p, Pts: p, Tenant: tenant, From: "alice", Kind: domain.KindText, Text: "hi", CID: "c" + strconv.FormatUint(p, 10), CreatedAt: sentAt}
+func events(room uint64, seqs ...uint64) []*chatimv1.Event {
+	out := make([]*chatimv1.Event, len(seqs))
+	for i, s := range seqs {
+		m := domain.Message{Room: room, Seq: s, Tenant: tenant, From: "alice", Kind: domain.KindText, Text: "hi", CID: "c" + strconv.FormatUint(s, 10), CreatedAt: sentAt}
 		out[i] = pbconv.MessageCreated(domain.RoomGroup, m)
 	}
 	return out
 }
 
-func span(from, to uint64) []uint64 {
-	var out []uint64
-	for p := from; p <= to; p++ {
-		out = append(out, p)
-	}
-	return out
-}
-
-func (rg *rig) enqueue(t *testing.T, room uint64, pts ...uint64) {
+func (rg *rig) enqueue(t *testing.T, room uint64, seqs ...uint64) {
 	t.Helper()
-	if err := rg.Enqueue(room, events(room, pts...)); err != nil {
-		t.Fatalf("Enqueue(%d, %v): %v", room, pts, err)
-	}
-}
-
-func watermark(mr *miniredis.Miniredis, room uint64) (uint64, bool) {
-	v, err := mr.Get(publish.WatermarkKey(room))
-	if err != nil {
-		return 0, false
-	}
-	n, err := strconv.ParseUint(v, 10, 64)
-	return n, err == nil
-}
-
-func waitWatermark(t *testing.T, mr *miniredis.Miniredis, room, want uint64) {
-	t.Helper()
-	eventually(t, "watermark "+strconv.FormatUint(want, 10), func() bool {
-		got, ok := watermark(mr, room)
-		return ok && got == want
-	})
-}
-
-func holdsWatermark(t *testing.T, mr *miniredis.Miniredis, room, want uint64) {
-	t.Helper()
-	time.Sleep(30 * time.Millisecond)
-	if got, ok := watermark(mr, room); !ok || got != want {
-		t.Fatalf("watermark of room %d = %d (present %v), want it held at %d", room, got, ok, want)
+	if err := rg.Enqueue(room, events(room, seqs...)); err != nil {
+		t.Fatalf("Enqueue(%d, %v): %v", room, seqs, err)
 	}
 }
 
@@ -196,4 +140,14 @@ func attemptsOf(js *publishtest.JetStream, id string) int {
 		}
 	}
 	return n
+}
+
+func attemptIndexes(js *publishtest.JetStream, id string) []int {
+	var out []int
+	for i, m := range js.Attempts() {
+		if publishtest.MsgID(m) == id {
+			out = append(out, i)
+		}
+	}
+	return out
 }

@@ -43,16 +43,16 @@ func newCluster(t *testing.T, n int) *cluster {
 
 func startCore(t *testing.T, msgs store.Messages, rooms store.Rooms, cids actor.CIDRegistry) *actor.Router {
 	t.Helper()
-	return startCoreWith(t, msgs, rooms, cids, nopPublisher{}, nopMarker{})
+	return startCoreWith(t, msgs, rooms, cids, nopPublisher{})
 }
 
-func startCoreWith(t *testing.T, msgs store.Messages, rooms store.Rooms, cids actor.CIDRegistry, events actor.EventPublisher, marks actor.ActivityMarker) *actor.Router {
+func startCoreWith(t *testing.T, msgs store.Messages, rooms store.Rooms, cids actor.CIDRegistry, events actor.EventPublisher) *actor.Router {
 	t.Helper()
 	fl, err := flush.New(msgs, flushConfig)
 	if err != nil {
 		t.Fatalf("flush.New: %v", err)
 	}
-	r, err := actor.NewRouter(msgs, rooms, fl, cids, events, marks, clusterConfig, quiet)
+	r, err := actor.NewRouter(msgs, rooms, fl, cids, events, clusterConfig, quiet)
 	if err != nil {
 		t.Fatalf("NewRouter: %v", err)
 	}
@@ -124,8 +124,8 @@ func TestCompetingCoresKeepEveryTimelineGapless(t *testing.T) {
 	for _, room := range clusterRooms {
 		seen := map[string]bool{}
 		for i, doc := range timeline(t, cl.msgs, room) {
-			if want := uint64(i + 1); doc.Seq != want || doc.Pts != doc.Seq {
-				t.Fatalf("room %d position %d: seq %d pts %d, want seq=pts=%d", room, i, doc.Seq, doc.Pts, want)
+			if want := uint64(i + 1); doc.Seq != want {
+				t.Fatalf("room %d position %d: seq %d, want %d", room, i, doc.Seq, want)
 			}
 			if seen[doc.CID] {
 				t.Fatalf("room %d: cid %s stored twice", room, doc.CID)

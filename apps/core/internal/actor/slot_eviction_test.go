@@ -69,8 +69,8 @@ func TestRetireSettlesTheInFlightGroupAndTurnsAwayTheRest(t *testing.T) {
 		if n := rg.ActorCount(); n != 0 {
 			t.Fatalf("%d actors after retire, want 0", n)
 		}
-		if evs := rg.events.events(roomA); len(evs) != 1 || evs[0].GetPts() != 1 {
-			t.Fatalf("published %d events, want only pts 1 of the settled group", len(evs))
+		if evs := rg.events.events(roomA); len(evs) != 1 || evs[0].GetSeq() != 1 {
+			t.Fatalf("published %d events, want only seq 1 of the settled group", len(evs))
 		}
 		reserves, commits, aborts := rg.cids.calls()
 		if len(reserves) != 1 || len(commits) != 1 || len(commits[0]) != 1 || commits[0][0].Key != remoteKey(roomA, "alice", "c1") || len(aborts) != 0 {

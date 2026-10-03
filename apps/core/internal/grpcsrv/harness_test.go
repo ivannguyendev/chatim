@@ -77,7 +77,7 @@ func startRouter(t *testing.T, rg *rig) *actor.Router {
 	if err != nil {
 		t.Fatalf("flush.New: %v", err)
 	}
-	router, err := actor.NewRouter(rg.msgs, rg.rooms, fl, acceptAllCIDs{}, nopPublisher{}, nopMarker{}, actorConfig, quiet)
+	router, err := actor.NewRouter(rg.msgs, rg.rooms, fl, acceptAllCIDs{}, nopPublisher{}, actorConfig, quiet)
 	if err != nil {
 		t.Fatalf("NewRouter: %v", err)
 	}

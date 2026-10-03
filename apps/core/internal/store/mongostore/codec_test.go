@@ -19,7 +19,7 @@ var codecTime = time.UnixMilli(1_700_000_000_123).UTC()
 
 func sampleMessage() domain.Message {
 	return domain.Message{
-		Room: 7_340_000_001, Thread: 3, Seq: 42, Pts: 99, Tenant: "acme", From: "alice",
+		Room: 7_340_000_001, Thread: 3, Seq: 42, Tenant: "acme", From: "alice",
 		Kind: domain.KindText, Text: "xin chào", CID: "cid-1", CreatedAt: codecTime,
 	}
 }
@@ -60,7 +60,7 @@ func TestMessageCodecRoundTrip(t *testing.T) {
 		t.Fatalf("_id = %x, want keys.Msg", doc.ID)
 	}
 	back, raw := roundTrip(t, doc)
-	if got, want := fieldNames(t, raw), []string{"_id", "t", "f", "p", "k", "x", "c", "ts"}; !slices.Equal(got, want) {
+	if got, want := fieldNames(t, raw), []string{"_id", "t", "f", "k", "x", "c", "ts"}; !slices.Equal(got, want) {
 		t.Fatalf("fields = %v, want %v", got, want)
 	}
 	got, err := decodeMessage(back)
@@ -85,7 +85,6 @@ func TestEncodeMessageRejectsInvalid(t *testing.T) {
 		{"zero seq", func(m *domain.Message) { m.Seq = 0 }},
 		{"seq above max int64", func(m *domain.Message) { m.Seq = math.MaxInt64 + 1 }},
 		{"reserved max seq", func(m *domain.Message) { m.Seq = math.MaxUint64 }},
-		{"pts above max int64", func(m *domain.Message) { m.Pts = math.MaxInt64 + 1 }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -100,14 +99,14 @@ func TestEncodeMessageRejectsInvalid(t *testing.T) {
 
 func TestEncodeMessageAcceptsMaxInt64(t *testing.T) {
 	m := sampleMessage()
-	m.Seq, m.Pts = math.MaxInt64, math.MaxInt64
+	m.Seq = math.MaxInt64
 	doc, err := encodeMessage(m)
 	if err != nil {
 		t.Fatalf("encodeMessage: %v", err)
 	}
 	got, err := decodeMessage(doc)
-	if err != nil || got.Seq != m.Seq || got.Pts != m.Pts {
-		t.Fatalf("decode = %+v, %v; want seq and pts %d", got, err, int64(math.MaxInt64))
+	if err != nil || got.Seq != m.Seq {
+		t.Fatalf("decode = %+v, %v; want seq %d", got, err, int64(math.MaxInt64))
 	}
 }
 
@@ -116,10 +115,9 @@ func TestDecodeMessageRejectsCorruptDocument(t *testing.T) {
 	if err != nil {
 		t.Fatalf("encodeMessage: %v", err)
 	}
-	shortID, negativePts := good, good
+	shortID := good
 	shortID.ID = shortID.ID[:16]
-	negativePts.Pts = -1
-	for name, doc := range map[string]messageDoc{"short id": shortID, "negative pts": negativePts} {
+	for name, doc := range map[string]messageDoc{"short id": shortID} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := decodeMessage(doc); err == nil {
 				t.Fatal("decodeMessage accepted a corrupt document")

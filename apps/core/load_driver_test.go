@@ -24,9 +24,9 @@ const (
 )
 
 type sent struct {
-	room     uint64
-	cid      string
-	seq, pts uint64
+	room uint64
+	cid  string
+	seq  uint64
 }
 
 type load struct {
@@ -78,7 +78,7 @@ func (l *load) send(w int) {
 			continue
 		}
 		l.mu.Lock()
-		l.acks = append(l.acks, sent{room: id, cid: cid, seq: resp.GetSeq(), pts: resp.GetPts()})
+		l.acks = append(l.acks, sent{room: id, cid: cid, seq: resp.GetSeq()})
 		l.mu.Unlock()
 	}
 }

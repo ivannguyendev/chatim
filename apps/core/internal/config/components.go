@@ -7,7 +7,6 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
-	"github.com/ivannguyendev/chatim/apps/core/internal/recovery"
 	"github.com/ivannguyendev/chatim/apps/core/internal/slot"
 	"github.com/ivannguyendev/chatim/pkg/envconfig"
 )
@@ -16,7 +15,6 @@ func (p *parser) components(c *Config) {
 	pendingTTL := p.span("CID_PENDING_TTL", dedupe.DefaultPendingTTL)
 	redisTimeout := p.span("REDIS_OP_TIMEOUT", dedupe.DefaultTimeout)
 	redisCooldown := p.span("REDIS_COOLDOWN", dedupe.DefaultCooldown)
-	watermarkTTL := p.span("PUB_WATERMARK_TTL", publish.DefaultWatermarkTTL)
 	subjectRoot := envconfig.String("EVT_SUBJECT_ROOT", "evt")
 	tick := p.span("SLOT_TICK", time.Second)
 
@@ -43,17 +41,12 @@ func (p *parser) components(c *Config) {
 		Cooldown:     redisCooldown,
 	}
 	c.Publish = publish.Config{
-		SubjectRoot:   subjectRoot,
-		Shards:        p.count("PUB_SHARDS", publish.DefaultShards),
-		QueueSize:     p.count("PUB_QUEUE", publish.DefaultQueueSize),
-		MaxPending:    p.count("PUB_MAX_PENDING", publish.DefaultMaxPending),
-		AckTimeout:    p.span("PUB_ACK_TIMEOUT", publish.DefaultAckTimeout),
-		FlushEvery:    p.span("PUB_FLUSH_EVERY", publish.DefaultFlushEvery),
-		WatermarkTTL:  watermarkTTL,
-		RedisTimeout:  redisTimeout,
-		RedisCooldown: redisCooldown,
+		SubjectRoot: subjectRoot,
+		Shards:      p.count("PUB_SHARDS", publish.DefaultShards),
+		QueueSize:   p.count("PUB_QUEUE", publish.DefaultQueueSize),
+		MaxPending:  p.count("PUB_MAX_PENDING", publish.DefaultMaxPending),
+		AckTimeout:  p.span("PUB_ACK_TIMEOUT", publish.DefaultAckTimeout),
 	}
-	c.Marks = publish.MarkConfig{Timeout: redisTimeout, Cooldown: redisCooldown, WatermarkTTL: watermarkTTL}
 	c.Stream = publish.StreamConfig{
 		Name:        envconfig.String("EVT_STREAM", "CHATIM_EVT"),
 		SubjectRoot: subjectRoot,
@@ -61,12 +54,6 @@ func (p *parser) components(c *Config) {
 		Replicas:    p.count("EVT_STREAM_REPLICAS", 1),
 		MaxAge:      p.span("EVT_STREAM_MAX_AGE", publish.DefaultStreamMaxAge),
 		Duplicates:  p.span("EVT_STREAM_DUPLICATES", publish.DefaultStreamDuplicates),
-	}
-	c.Recovery = recovery.Config{
-		Interval:      p.span("RECOVERY_INTERVAL", recovery.DefaultInterval),
-		RemoveAfter:   p.span("RECOVERY_REMOVE_AFTER", recovery.DefaultRemoveAfter),
-		StaleAfter:    p.span("RECOVERY_STALE_AFTER", recovery.DefaultStaleAfter),
-		GroupDeadline: c.RequestDeadline,
 	}
 	c.Slot = slot.Config{
 		CoreID:       c.CoreID,

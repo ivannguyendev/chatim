@@ -16,7 +16,6 @@ type Router struct {
 	sub    Submitter
 	cids   CIDRegistry
 	events EventPublisher
-	marks  ActivityMarker
 	cfg    Config
 	log    *slog.Logger
 
@@ -31,9 +30,9 @@ type Router struct {
 	done    chan struct{}
 }
 
-func NewRouter(msgs store.Messages, rooms store.Rooms, sub Submitter, cids CIDRegistry, events EventPublisher, marks ActivityMarker, cfg Config, log *slog.Logger) (*Router, error) {
-	if msgs == nil || rooms == nil || sub == nil || cids == nil || events == nil || marks == nil {
-		return nil, fmt.Errorf("%w: router needs message and room stores, a submitter, a cid registry, an event publisher and an activity marker", apperr.ErrInvalidArgument)
+func NewRouter(msgs store.Messages, rooms store.Rooms, sub Submitter, cids CIDRegistry, events EventPublisher, cfg Config, log *slog.Logger) (*Router, error) {
+	if msgs == nil || rooms == nil || sub == nil || cids == nil || events == nil {
+		return nil, fmt.Errorf("%w: router needs message and room stores, a submitter, a cid registry and an event publisher", apperr.ErrInvalidArgument)
 	}
 	if err := cfg.Validate(); err != nil {
 		return nil, err
@@ -47,7 +46,6 @@ func NewRouter(msgs store.Messages, rooms store.Rooms, sub Submitter, cids CIDRe
 		sub:     sub,
 		cids:    cids,
 		events:  events,
-		marks:   marks,
 		cfg:     cfg,
 		log:     log,
 		actors:  make(map[uint64]*actor),

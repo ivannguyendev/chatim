@@ -34,12 +34,12 @@ func TestReadEventsSkipsAnUnfinishedLastLine(t *testing.T) {
 	if evs, err := e2e.ReadEvents(path); err != nil || len(evs) != 0 {
 		t.Fatalf("ReadEvents of a missing file = %v, %v; want none yet", evs, err)
 	}
-	content := `{"room":"42","pts":1,"seq":1,"cid":"a"}` + "\n" + `{"room":"42","pts":2,"seq":2,"cid":"b"}` + "\n" + `{"room":"42","pts":3`
+	content := `{"room":"42","id":"42-0-1","seq":1,"cid":"a"}` + "\n" + `{"room":"42","id":"42-0-2","seq":2,"cid":"b"}` + "\n" + `{"room":"42","id":"42-0-3"`
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	evs, err := e2e.ReadEvents(path)
-	if err != nil || len(evs) != 2 || evs[1] != (e2e.Event{Room: "42", Pts: 2, Seq: 2, CID: "b"}) {
+	if err != nil || len(evs) != 2 || evs[1] != (e2e.Event{Room: "42", ID: "42-0-2", Seq: 2, CID: "b"}) {
 		t.Fatalf("ReadEvents = %+v, %v", evs, err)
 	}
 	if err := os.WriteFile(path, []byte("not json\n"), 0o600); err != nil {
@@ -51,11 +51,11 @@ func TestReadEventsSkipsAnUnfinishedLastLine(t *testing.T) {
 }
 
 func TestEventOfReadsTheCreatedMessage(t *testing.T) {
-	ev := &chatimv1.Event{RoomId: room, Seq: 4, Pts: 4, Payload: &chatimv1.Event_MessageCreated{
+	ev := &chatimv1.Event{RoomId: room, Id: "42-0-4", Seq: 4, Payload: &chatimv1.Event_MessageCreated{
 		MessageCreated: &chatimv1.MessageCreated{Message: &chatimv1.Message{Cid: "a-4"}},
 	}}
 	got := e2e.EventOf("live.e2e.room.42.evt.msg_created", ev)
-	want := e2e.Event{Room: room, Pts: 4, Seq: 4, CID: "a-4", Subject: "live.e2e.room.42.evt.msg_created"}
+	want := e2e.Event{Room: room, ID: "42-0-4", Seq: 4, CID: "a-4", Subject: "live.e2e.room.42.evt.msg_created"}
 	if got != want {
 		t.Fatalf("EventOf = %+v, want %+v", got, want)
 	}

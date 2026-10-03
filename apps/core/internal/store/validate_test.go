@@ -26,7 +26,7 @@ func TestOutcomeString(t *testing.T) {
 }
 
 func TestKeyOf(t *testing.T) {
-	m := domain.Message{Room: 42, Thread: 7, Seq: 3, Pts: 99, Text: "hi"}
+	m := domain.Message{Room: 42, Thread: 7, Seq: 3, Text: "hi"}
 	if got, want := store.KeyOf(m), (store.MsgKey{Room: 42, Thread: 7, Seq: 3}); got != want {
 		t.Fatalf("KeyOf = %+v, want %+v", got, want)
 	}

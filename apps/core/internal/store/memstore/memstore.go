@@ -53,18 +53,17 @@ func (s *Messages) insertLocked(m domain.Message) store.Result {
 	return store.Result{Outcome: store.Inserted}
 }
 
-func (s *Messages) Last(ctx context.Context, room, thread uint64) (seq, pts uint64, err error) {
+func (s *Messages) Last(ctx context.Context, room, thread uint64) (uint64, error) {
 	if err := ctx.Err(); err != nil {
-		return 0, 0, err
+		return 0, err
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	line := s.lines[timeline{room, thread}]
 	if len(line) == 0 {
-		return 0, 0, nil
+		return 0, nil
 	}
-	last := line[len(line)-1]
-	return last.Seq, last.Pts, nil
+	return line[len(line)-1].Seq, nil
 }
 
 func (s *Messages) Page(ctx context.Context, q store.PageQuery) ([]domain.Message, error) {

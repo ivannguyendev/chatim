@@ -50,8 +50,8 @@ func TestMalformedValuesAreTreatedAsAbsentAndLeftAlone(t *testing.T) {
 	sink := &testlog.Sink{}
 	s := newStore(t, rdb, "core-a", sink)
 	values := []string{
-		"", "garbage", "p:", "p:a b", "p:a:b", "c:1:2", "c:0:1:5", "c:1:0:5", "c:01:1:5",
-		"c:1:1:+5", "c:1:1:5:6", "c:18446744073709551616:1:1", "x:1:1:1",
+		"", "garbage", "p:", "p:a b", "p:a:b", "c:1", "c:0:5", "c:01:5", "c:1:+5",
+		"c:7:7:1", "c:1:5:6", "c:18446744073709551616:1", "x:1:1",
 	}
 	keys := make([]Key, 0, len(values)+1)
 	for i, v := range values {

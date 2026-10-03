@@ -18,7 +18,6 @@ type messageDoc struct {
 	ID        []byte      `bson:"_id"`
 	Tenant    string      `bson:"t"`
 	From      string      `bson:"f"`
-	Pts       int64       `bson:"p"`
 	Kind      domain.Kind `bson:"k"`
 	Text      string      `bson:"x"`
 	CID       string      `bson:"c"`
@@ -50,15 +49,10 @@ func encodeMessage(m domain.Message) (messageDoc, error) {
 	if _, err := toInt64("seq", m.Seq); err != nil {
 		return messageDoc{}, err
 	}
-	pts, err := toInt64("pts", m.Pts)
-	if err != nil {
-		return messageDoc{}, err
-	}
 	return messageDoc{
 		ID:        keys.Msg(m.Room, m.Thread, m.Seq),
 		Tenant:    m.Tenant,
 		From:      m.From,
-		Pts:       pts,
 		Kind:      m.Kind,
 		Text:      m.Text,
 		CID:       m.CID,
@@ -71,15 +65,10 @@ func decodeMessage(d messageDoc) (domain.Message, error) {
 	if err != nil {
 		return domain.Message{}, fmt.Errorf("%w: message _id: %w", errCorrupt, err)
 	}
-	pts, err := toUint64("message pts", d.Pts)
-	if err != nil {
-		return domain.Message{}, err
-	}
 	return domain.Message{
 		Room:      room,
 		Thread:    thread,
 		Seq:       seq,
-		Pts:       pts,
 		Tenant:    d.Tenant,
 		From:      d.From,
 		Kind:      d.Kind,

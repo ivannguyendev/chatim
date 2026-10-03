@@ -66,8 +66,29 @@ Cùng điều kiện R2 (`write -rate 10000 -duration 60s -rooms 5000 -flushers 
 | 9 | 2000/s (sau D25) | Không xoá (10749) | 2000 | 0 | 0 | 0 / 1 | 14.226624ms | 41.824847ms | 118.922064ms | 231.421387ms | 322.743537ms | 13.480464ms / 85.979191ms | 5.053541ms | không đo |
 | 10 | 5000/s (sau D25) | Không xoá (141423) | 5000 | 0 | 0 | 0 / 1 | 36.52522ms | 144.46064ms | 291.830813ms | 438.348353ms | 566.035187ms | 28.95389ms / 177.786792ms | 15.466907ms | không đo |
 | 11 | 10000/s (sau D25) | Không xoá (459137) | 9452 | 32893 (5.5%) | 0 | 3698 / 5 | 198.460026ms | 573.013277ms | 818.120106ms | 1.009077709s | 1.239543751s | 122.133479ms / 492.715092ms | 96.098976ms | không đo |
+| 12 | 5000/s (M2a.1, 2026-10-03) | Không xoá, không đếm | 4890 | 6583 (2.2%) | 0 | 338 / 3 | 70.133333ms | 600.528096ms | 1.453632333s | 2.188710997s | 2.744326407s | 52.472982ms / 752.517726ms | 82.412071ms | không đo |
+| 13 | 5000/s (M2a, infra sạch, cặp 1) | Sạch (`infra-reset`) | 5000 | 0 | 0 | 0 / 1 | 28.896202ms | 89.555403ms | 153.011724ms | 234.786292ms | 338.173241ms | 24.088281ms / 112.836673ms | 10.777864ms | không đo |
+| 14 | 5000/s (M2a.1, infra sạch, cặp 1) | Sạch (`infra-reset`) | 5000 | 0 | 0 | 0 / 1 | 29.072126ms | 90.857375ms | 198.174281ms | 400.949174ms | 630.267991ms | 24.057524ms / 172.362238ms | 14.213491ms | không đo |
+| 15 | 5000/s (M2a.1, infra sạch, cặp 2) | Sạch (`infra-reset`) | 5000 | 0 | 0 | 0 / 1 | 31.342515ms | 110.285368ms | 196.28116ms | 285.697254ms | 418.830724ms | 25.023772ms / 145.312213ms | 10.629624ms | không đo |
+| 16 | 5000/s (M2a, infra sạch, cặp 2) | Sạch (`infra-reset`) | 5000 | 0 | 0 | 0 / 1 | 28.706354ms | 85.008436ms | 170.207129ms | 414.161622ms | 677.922281ms | 23.788106ms / 104.818311ms | 12.767881ms | không đo |
 
 CPU là trung bình `docker stats` lấy mẫu mỗi 3s trong lúc chạy (100% = 1 vCPU). Ở mọi lần chạy, event live trên các room được theo dõi đều `missing=0 duplicates=0`. Ngoài bảng còn 1 lần 2K/s 20s chỉ để lấy pprof của corebench (`-cpuprofile`).
+
+Lần 12 (M2a.1: bỏ pts, bỏ watermark/active mark/sweeper, publisher theo thứ tự từng room) kém hơn lần 10 cùng mức 5K/s (p99 1.45s so với 292ms, bỏ 2.2%). Hai lần không cùng điều kiện, nên không kết luận đây là hồi quy:
+- Lần 10 chạy trước khi tách Redis dedupe và bật AUTH (D44, D45).
+- Lần 12 chạy ngay sau `make core-up` và e2e có kill core, Redis không được dọn.
+- Thay đổi của M2a.1 không nằm trên đường ack: nó bỏ một lệnh Redis trước insert và chỉ đổi phần publish sau ack.
+
+**So sánh cùng điều kiện (lần 13–16, 2026-10-03).** Mỗi lần đều chạy sau `make infra-reset && make infra-up`, với core vừa khởi động. M2a build từ `main` @ `9994753`, M2a.1 build từ branch `fix/m2a1-event-identity`. Chạy hai cặp, cặp 2 đảo thứ tự.
+- Cả 4 lần đều giữ đủ 5000/s: `shed_by_client=0`, `failed=0`, không lần gửi nào phải thử lại; live `missing=0 duplicates=0`.
+- Lần 12 kém chủ yếu vì điều kiện bẩn. Khi chạy sạch, cả hai bản đều tốt hơn lần 10 và lần 12.
+- M2a.1 chậm hơn M2a một chút và nhất quán:
+  - ack p50 30.2ms so với 28.8ms (+5%);
+  - p95 100.6ms so với 87.3ms (+15%);
+  - p99 197ms so với 161.5ms (+22%), với p99 của M2a.1 rất ổn định (198/196ms);
+  - p99.9 thì lẫn lộn giữa hai cặp: 401/286ms so với 235/414ms.
+- Live lag p99 cao hơn rõ: 172/145ms so với 113/105ms. Đây là cái giá dự kiến của D50: batch sau của một room chờ ack của batch trước.
+- Mức chênh nằm trong ngưỡng chấp nhận đặt trước (p99 ≤ +25%, không bỏ lượt, không lỗi). Nguyên nhân phần đuôi ack chưa được chứng minh. Cần pprof nếu prod-like cho thấy cùng xu hướng.
 
 **Điểm gãy (knee).**
 - Thông lượng: giữ đủ tải (`shed_by_client=0 failed=0`, không lần nào phải thử lại) tới 5K/s. 7.5K/s chỉ đạt 7319/s (bỏ 2.4%); 10K/s đạt 7546–9426/s (bỏ 5.7–24.5%; lần 8 có 151 lần gửi kết thúc bằng `Unavailable`). Knee thông lượng trên dev nằm giữa 5K và 7.5K/s.

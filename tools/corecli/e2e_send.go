@@ -88,7 +88,7 @@ func sendOne(ctx context.Context, cl *route.Client, room, cid string, tally *sen
 	if err != nil {
 		return e2e.Ack{}, fmt.Errorf("send cid %s: %w", cid, err)
 	}
-	return e2e.Ack{CID: cid, Seq: resp.GetSeq(), Pts: resp.GetPts()}, nil
+	return e2e.Ack{CID: cid, Seq: resp.GetSeq()}, nil
 }
 
 func resendLast(ctx context.Context, cl *route.Client, st e2e.State, tally *sendTally) error {
@@ -101,7 +101,7 @@ func resendLast(ctx context.Context, cl *route.Client, st e2e.State, tally *send
 		return fmt.Errorf("resend: %w", err)
 	}
 	if got != last {
-		return fmt.Errorf("resend of acked cid %s returned seq %d pts %d, want the original seq %d pts %d", last.CID, got.Seq, got.Pts, last.Seq, last.Pts)
+		return fmt.Errorf("resend of acked cid %s returned seq %d, want the original seq %d", last.CID, got.Seq, last.Seq)
 	}
 	fmt.Fprintf(os.Stderr, "resent cid %s: same ack seq %d\n", last.CID, got.Seq)
 	return nil

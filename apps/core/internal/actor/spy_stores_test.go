@@ -35,7 +35,7 @@ func (m *spyMessages) insertedCount() int {
 	return m.inserted
 }
 
-func (m *spyMessages) Last(ctx context.Context, room, thread uint64) (seq, pts uint64, err error) {
+func (m *spyMessages) Last(ctx context.Context, room, thread uint64) (uint64, error) {
 	m.mu.Lock()
 	m.lasts++
 	m.mu.Unlock()

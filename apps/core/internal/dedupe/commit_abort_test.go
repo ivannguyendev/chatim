@@ -9,12 +9,12 @@ func TestCommitOverwritesUnconditionallyWithCommittedTTL(t *testing.T) {
 	a, b := newStore(t, rdb, "core-a", nil), newStore(t, rdb, "core-b", nil)
 	x, y := key("x"), key("y")
 	expectStatuses(t, reserve(t, b, x), Reserved)
-	second := Record{Seq: 8, Pts: 8, CreatedAt: sampleRecord.CreatedAt}
+	second := Record{Seq: 8, CreatedAt: sampleRecord.CreatedAt}
 	if err := a.Commit(t.Context(), []Entry{{Key: x, Record: sampleRecord}, {Key: y, Record: second}}); err != nil {
 		t.Fatalf("Commit: %v", err)
 	}
-	expectValue(t, mr, x, "c:7:7:1700000000123")
-	expectValue(t, mr, y, "c:8:8:1700000000123")
+	expectValue(t, mr, x, "c:7:1700000000123")
+	expectValue(t, mr, y, "c:8:1700000000123")
 	for _, k := range []Key{x, y} {
 		if ttl := mr.TTL(k.String()); ttl != DefaultCommittedTTL {
 			t.Fatalf("committed ttl of %s = %v, want %v", k, ttl, DefaultCommittedTTL)

@@ -44,9 +44,6 @@ func TestConnectRedisSplitsStateAndDedupe(t *testing.T) {
 	if !state.Exists("chatim:slot:1") || dedupe.Exists("chatim:slot:1") {
 		t.Error("slot key did not land on the state instance only")
 	}
-	if got := c.redis.Options().Addr; got != state.Addr() {
-		t.Errorf("marks client addr = %s, want state %s", got, state.Addr())
-	}
 }
 
 func TestConnectRedisNamesTheFailingInstanceWithoutPasswords(t *testing.T) {

@@ -41,8 +41,6 @@ type rig struct {
 	sub    *fakeSubmitter
 	cids   *fakeRegistry
 	events *publishSpy
-	marks  *markSpy
-	order  *journal
 	cancel context.CancelFunc
 	done   chan error
 	once   sync.Once
@@ -52,20 +50,17 @@ type rig struct {
 func newRig(t *testing.T, cfg actor.Config) *rig {
 	t.Helper()
 	base := memstore.NewMessages()
-	order := &journal{}
 	rg := &rig{
 		msgs:   &spyMessages{Messages: base},
 		rooms:  &spyRooms{Rooms: memstore.NewRooms()},
 		sub:    &fakeSubmitter{store: base},
 		cids:   &fakeRegistry{},
 		events: &publishSpy{},
-		marks:  &markSpy{log: order},
-		order:  order,
 		done:   make(chan error, 1),
 	}
 	createRoom(t, rg.rooms, roomA, "alice", "bob")
 	createRoom(t, rg.rooms, roomB, "alice", "bob")
-	r, err := actor.NewRouter(rg.msgs, rg.rooms, journaledSubmitter{Submitter: rg.sub, log: order}, rg.cids, rg.events, rg.marks, cfg, quiet)
+	r, err := actor.NewRouter(rg.msgs, rg.rooms, rg.sub, rg.cids, rg.events, cfg, quiet)
 	if err != nil {
 		t.Fatalf("NewRouter: %v", err)
 	}
@@ -173,11 +168,11 @@ func storedCIDs(t *testing.T, m store.Messages, room uint64) map[string][]domain
 
 func assertAckMatches(t *testing.T, ack actor.Ack, doc domain.Message) {
 	t.Helper()
-	if ack.Seq != doc.Seq || ack.Pts != doc.Pts || !ack.CreatedAt.Equal(doc.CreatedAt) {
-		t.Fatalf("ack %+v does not match stored seq=%d pts=%d at=%v", ack, doc.Seq, doc.Pts, doc.CreatedAt)
+	if ack.Seq != doc.Seq || !ack.CreatedAt.Equal(doc.CreatedAt) {
+		t.Fatalf("ack %+v does not match stored seq=%d at=%v", ack, doc.Seq, doc.CreatedAt)
 	}
 }
 
 func sameAck(a, b actor.Ack) bool {
-	return a.Seq == b.Seq && a.Pts == b.Pts && a.CreatedAt.Equal(b.CreatedAt)
+	return a.Seq == b.Seq && a.CreatedAt.Equal(b.CreatedAt)
 }

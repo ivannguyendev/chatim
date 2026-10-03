@@ -11,7 +11,6 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/grpcsrv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
-	"github.com/ivannguyendev/chatim/apps/core/internal/recovery"
 	"github.com/ivannguyendev/chatim/apps/core/internal/slot"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
 	"github.com/ivannguyendev/chatim/pkg/admin"
@@ -42,7 +41,6 @@ type app struct {
 	publisher drainer
 	flusher   drainer
 	router    gate
-	sweeper   runner
 	slots     runner
 }
 
@@ -62,11 +60,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wire cid dedupe: %w", err)
 	}
-	marks, err := publish.NewActivityMarks(cl.redis, cfg.Marks, log)
-	if err != nil {
-		return nil, fmt.Errorf("wire activity marks: %w", err)
-	}
-	pub, err := publish.New(cl.js, cl.redis, cfg.Publish, log)
+	pub, err := publish.New(cl.js, cfg.Publish, log)
 	if err != nil {
 		return nil, fmt.Errorf("wire publisher: %w", err)
 	}
@@ -74,27 +68,19 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wire flusher: %w", err)
 	}
-	router, err := actor.NewRouter(st, st, fl, cids, pub, marks, cfg.Actor, log)
+	router, err := actor.NewRouter(st, st, fl, cids, pub, cfg.Actor, log)
 	if err != nil {
 		return nil, fmt.Errorf("wire router: %w", err)
 	}
-	var sweeper *recovery.Sweeper
 	slotCfg := cfg.Slot
 	slotCfg.BeforeRelease = router.EvictSlots
 	slotCfg.AfterLose = router.EvictSlots
-	slotCfg.AfterClaim = func(ctx context.Context, slots []uint16) {
-		router.EvictSlots(ctx, slots)
-		sweeper.Trigger(slots)
-	}
+	slotCfg.AfterClaim = router.EvictSlots
 	slots, err := slot.New(cl.slots, slotCfg, log)
 	if err != nil {
 		return nil, fmt.Errorf("wire slot manager: %w", err)
 	}
-	deps := recovery.Deps{Slots: slots, Rooms: router, Msgs: st, Redis: cl.redis}
-	if sweeper, err = recovery.New(deps, cfg.Recovery, log); err != nil {
-		return nil, fmt.Errorf("wire recovery sweeper: %w", err)
-	}
-	a.publisher, a.flusher, a.router, a.sweeper, a.slots = pub, fl, router, sweeper, slots
+	a.publisher, a.flusher, a.router, a.slots = pub, fl, router, slots
 	svc, err := grpcsrv.New(grpcsrv.Deps{Sender: router, Rooms: st, Pages: st}, log)
 	if err != nil {
 		return nil, fmt.Errorf("wire core service: %w", err)

@@ -55,9 +55,8 @@ func (c Config) componentErrors() []error {
 		{"FLUSH_*", c.Flush.Validate()},
 		{"ACTOR_*, CID_PENDING_TTL, CORE_REQUEST_DEADLINE", c.Actor.Validate()},
 		{"CORE_ID, CID_*, REDIS_OP_TIMEOUT, REDIS_COOLDOWN", c.Dedupe.Validate()},
-		{"PUB_*, EVT_SUBJECT_ROOT, REDIS_OP_TIMEOUT, REDIS_COOLDOWN", c.Publish.Validate()},
+		{"PUB_*, EVT_SUBJECT_ROOT", c.Publish.Validate()},
 		{"EVT_*", c.Stream.Validate()},
-		{"RECOVERY_*, CORE_REQUEST_DEADLINE", c.Recovery.Validate()},
 		{"SLOT_*, CORE_ID", c.Slot.Validate()},
 	}
 	var errs []error

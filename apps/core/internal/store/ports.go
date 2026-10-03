@@ -8,7 +8,7 @@ import (
 
 type Messages interface {
 	Insert(ctx context.Context, msgs []domain.Message) []Result
-	Last(ctx context.Context, room, thread uint64) (seq, pts uint64, err error)
+	Last(ctx context.Context, room, thread uint64) (uint64, error)
 	Page(ctx context.Context, q PageQuery) ([]domain.Message, error)
 	Find(ctx context.Context, room uint64, keys []MsgKey) ([]domain.Message, error)
 }

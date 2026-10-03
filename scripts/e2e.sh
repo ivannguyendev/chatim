@@ -34,7 +34,7 @@ finish() {
   fi
   rm -rf "$state"
   if [ "$result" = PASS ]; then
-    echo "e2e PASS: $first messages before and $after after killing $victim, no loss, no duplicate, every pts live"
+    echo "e2e PASS: $first messages before and $after after killing $victim, no loss, no duplicate, every acked seq live"
     exit 0
   fi
   echo "e2e FAIL during: $step" >&2

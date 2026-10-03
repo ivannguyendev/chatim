@@ -269,7 +269,6 @@ type Message struct {
 	RoomId        string                 `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
 	ThreadRoot    uint64                 `protobuf:"varint,2,opt,name=thread_root,json=threadRoot,proto3" json:"thread_root,omitempty"`
 	Seq           uint64                 `protobuf:"varint,3,opt,name=seq,proto3" json:"seq,omitempty"`
-	Pts           uint64                 `protobuf:"varint,4,opt,name=pts,proto3" json:"pts,omitempty"`
 	Sender        string                 `protobuf:"bytes,5,opt,name=sender,proto3" json:"sender,omitempty"`
 	Kind          MessageKind            `protobuf:"varint,6,opt,name=kind,proto3,enum=chatim.v1.MessageKind" json:"kind,omitempty"`
 	Text          string                 `protobuf:"bytes,7,opt,name=text,proto3" json:"text,omitempty"`
@@ -326,13 +325,6 @@ func (x *Message) GetThreadRoot() uint64 {
 func (x *Message) GetSeq() uint64 {
 	if x != nil {
 		return x.Seq
-	}
-	return 0
-}
-
-func (x *Message) GetPts() uint64 {
-	if x != nil {
-		return x.Pts
 	}
 	return 0
 }
@@ -547,7 +539,6 @@ func (x *SendMessageRequest) GetText() string {
 type SendMessageResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Seq           uint64                 `protobuf:"varint,1,opt,name=seq,proto3" json:"seq,omitempty"`
-	Pts           uint64                 `protobuf:"varint,2,opt,name=pts,proto3" json:"pts,omitempty"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -586,13 +577,6 @@ func (*SendMessageResponse) Descriptor() ([]byte, []int) {
 func (x *SendMessageResponse) GetSeq() uint64 {
 	if x != nil {
 		return x.Seq
-	}
-	return 0
-}
-
-func (x *SendMessageResponse) GetPts() uint64 {
-	if x != nil {
-		return x.Pts
 	}
 	return 0
 }
@@ -738,19 +722,18 @@ const file_chatim_v1_core_proto_rawDesc = "" +
 	"created_by\x18\x05 \x01(\tR\tcreatedBy\x129\n" +
 	"\n" +
 	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12!\n" +
-	"\fmember_count\x18\a \x01(\x05R\vmemberCount\"\x8c\x02\n" +
+	"\fmember_count\x18\a \x01(\x05R\vmemberCount\"\x85\x02\n" +
 	"\aMessage\x12\x17\n" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x1f\n" +
 	"\vthread_root\x18\x02 \x01(\x04R\n" +
 	"threadRoot\x12\x10\n" +
-	"\x03seq\x18\x03 \x01(\x04R\x03seq\x12\x10\n" +
-	"\x03pts\x18\x04 \x01(\x04R\x03pts\x12\x16\n" +
+	"\x03seq\x18\x03 \x01(\x04R\x03seq\x12\x16\n" +
 	"\x06sender\x18\x05 \x01(\tR\x06sender\x12*\n" +
 	"\x04kind\x18\x06 \x01(\x0e2\x16.chatim.v1.MessageKindR\x04kind\x12\x12\n" +
 	"\x04text\x18\a \x01(\tR\x04text\x12\x10\n" +
 	"\x03cid\x18\b \x01(\tR\x03cid\x129\n" +
 	"\n" +
-	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"j\n" +
+	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAtJ\x04\b\x04\x10\x05R\x03pts\"j\n" +
 	"\x11CreateRoomRequest\x12'\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x13.chatim.v1.RoomTypeR\x04type\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
@@ -762,12 +745,11 @@ const file_chatim_v1_core_proto_rawDesc = "" +
 	"\vthread_root\x18\x02 \x01(\x04R\n" +
 	"threadRoot\x12\x10\n" +
 	"\x03cid\x18\x03 \x01(\tR\x03cid\x12\x12\n" +
-	"\x04text\x18\x04 \x01(\tR\x04text\"t\n" +
+	"\x04text\x18\x04 \x01(\tR\x04text\"m\n" +
 	"\x13SendMessageResponse\x12\x10\n" +
-	"\x03seq\x18\x01 \x01(\x04R\x03seq\x12\x10\n" +
-	"\x03pts\x18\x02 \x01(\x04R\x03pts\x129\n" +
+	"\x03seq\x18\x01 \x01(\x04R\x03seq\x129\n" +
 	"\n" +
-	"created_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\xa7\x01\n" +
+	"created_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAtJ\x04\b\x02\x10\x03R\x03pts\"\xa7\x01\n" +
 	"\x11GetHistoryRequest\x12\x17\n" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x1f\n" +
 	"\vthread_root\x18\x02 \x01(\x04R\n" +

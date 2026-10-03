@@ -73,9 +73,8 @@ func TestRealJetStreamDedupesByMsgIDAndRepublishesLive(t *testing.T) {
 	if err := it.nc.Flush(); err != nil {
 		t.Fatalf("flush: %v", err)
 	}
-	mr, rdb := newRedis(t)
 	sink := &testlog.Sink{}
-	p, err := publish.New(it.js, rdb, cfg, sink.Logger())
+	p, err := publish.New(it.js, cfg, sink.Logger())
 	if err != nil {
 		t.Fatalf("publish.New: %v", err)
 	}
@@ -92,13 +91,39 @@ func TestRealJetStreamDedupesByMsgIDAndRepublishesLive(t *testing.T) {
 			t.Fatalf("Enqueue: %v", err)
 		}
 	}
-	waitWatermark(t, mr, roomA, 2)
+	eventually(t, "both events stored", func() bool { return streamMsgs(t, it) == 2 })
 	stop, stopped := context.WithTimeout(context.Background(), 5*time.Second)
 	defer stopped()
 	if err := p.Close(stop); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
 
+	if n := streamMsgs(t, it); n != 2 {
+		t.Fatalf("stream holds %d messages after publishing seq 1 twice and seq 2, want 2", n)
+	}
+	for _, seq := range []uint64{1, 2} {
+		msg, err := live.NextMsg(2 * time.Second)
+		if err != nil {
+			t.Fatalf("live seq %d: %v", seq, err)
+		}
+		got := &chatimv1.Event{}
+		if err := proto.Unmarshal(msg.Data, got); err != nil {
+			t.Fatalf("decode live seq %d: %v", seq, err)
+		}
+		if want := events(roomA, seq)[0]; !proto.Equal(got, want) {
+			t.Fatalf("live event = %v, want %v", got, want)
+		}
+		if id := msg.Header.Get(jetstream.MsgIDHeader); id != pbconv.MessageEventID(roomA, 0, seq) {
+			t.Fatalf("live msg id = %q", id)
+		}
+	}
+	if msg, err := live.NextMsg(100 * time.Millisecond); err == nil {
+		t.Fatalf("duplicate was republished live: %s", msg.Header.Get(jetstream.MsgIDHeader))
+	}
+}
+
+func streamMsgs(t *testing.T, it *itStream) uint64 {
+	t.Helper()
 	s, err := it.js.Stream(t.Context(), it.cfg.Name)
 	if err != nil {
 		t.Fatalf("stream: %v", err)
@@ -107,26 +132,5 @@ func TestRealJetStreamDedupesByMsgIDAndRepublishesLive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stream info: %v", err)
 	}
-	if info.State.Msgs != 2 {
-		t.Fatalf("stream holds %d messages after publishing pts 1 twice and pts 2, want 2", info.State.Msgs)
-	}
-	for _, pts := range []uint64{1, 2} {
-		msg, err := live.NextMsg(2 * time.Second)
-		if err != nil {
-			t.Fatalf("live pts %d: %v", pts, err)
-		}
-		got := &chatimv1.Event{}
-		if err := proto.Unmarshal(msg.Data, got); err != nil {
-			t.Fatalf("decode live pts %d: %v", pts, err)
-		}
-		if want := events(roomA, pts)[0]; !proto.Equal(got, want) {
-			t.Fatalf("live event = %v, want %v", got, want)
-		}
-		if id := msg.Header.Get(jetstream.MsgIDHeader); id != pbconv.EventID(roomA, pts) {
-			t.Fatalf("live msg id = %q", id)
-		}
-	}
-	if msg, err := live.NextMsg(100 * time.Millisecond); err == nil {
-		t.Fatalf("duplicate was republished live: %s", msg.Header.Get(jetstream.MsgIDHeader))
-	}
+	return info.State.Msgs
 }

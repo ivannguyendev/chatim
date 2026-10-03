@@ -146,8 +146,8 @@ func verifyAcked(t *testing.T, it *itInfra, cfg config.Config, acks []sent) {
 			if m, ok := bySeq[a.seq]; !ok || m.CID != a.cid || m.From != itUser {
 				t.Errorf("acked %s in room %d at seq %d is not stored there (found %+v)", a.cid, room, a.seq, m)
 			}
-			if events[pbconv.EventID(room, a.pts)] == 0 {
-				t.Errorf("acked %s in room %d has no event for pts %d", a.cid, room, a.pts)
+			if events[pbconv.MessageEventID(room, 0, a.seq)] == 0 {
+				t.Errorf("acked %s in room %d has no event for seq %d", a.cid, room, a.seq)
 			}
 		}
 	}

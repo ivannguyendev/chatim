@@ -21,7 +21,7 @@ const itRoom uint64 = 7_340_000_001
 
 func msgAt(room, thread, seq uint64) domain.Message {
 	m := sampleMessage()
-	m.Room, m.Thread, m.Seq, m.Pts, m.CID = room, thread, seq, seq, fmt.Sprintf("cid-%d", seq)
+	m.Room, m.Thread, m.Seq, m.CID = room, thread, seq, fmt.Sprintf("cid-%d", seq)
 	return m
 }
 
@@ -124,11 +124,11 @@ func TestInsertMapsMixedBatch(t *testing.T) {
 	s, db := itStore(t, itClient(t))
 	existing := msgAt(itRoom, 0, 1)
 	seedTimeline(t, s, itRoom, 0, 1)
-	again, twin, hugePts := existing, msgAt(itRoom, 0, 3), msgAt(itRoom, 0, 4)
+	again, twin, hugeSeq := existing, msgAt(itRoom, 0, 3), msgAt(itRoom, 0, 4)
 	again.Text, again.CID = "retry", "cid-retry"
 	twin.CID = "cid-twin"
-	hugePts.Pts = math.MaxInt64 + 1
-	batch := []domain.Message{msgAt(itRoom, 0, 2), again, msgAt(itRoom, 0, 3), twin, hugePts, msgAt(itRoom, 0, 0), msgAt(itRoom, 0, 5)}
+	hugeSeq.Seq = math.MaxInt64 + 1
+	batch := []domain.Message{msgAt(itRoom, 0, 2), again, msgAt(itRoom, 0, 3), twin, hugeSeq, msgAt(itRoom, 0, 0), msgAt(itRoom, 0, 5)}
 	want := []store.Outcome{store.Inserted, store.Duplicate, store.Inserted, store.Duplicate, store.Rejected, store.Rejected, store.Inserted}
 	res := s.Insert(t.Context(), batch)
 	for i, r := range res {
@@ -156,7 +156,7 @@ func TestInsertMapsMixedBatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FindOne raw: %v", err)
 	}
-	if names := fieldNames(t, raw); !slices.Equal(names, []string{"_id", "t", "f", "p", "k", "x", "c", "ts"}) {
+	if names := fieldNames(t, raw); !slices.Equal(names, []string{"_id", "t", "f", "k", "x", "c", "ts"}) {
 		t.Fatalf("stored fields = %v", names)
 	}
 }

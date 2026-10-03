@@ -1,11 +1,8 @@
 package actor_test
 
 import (
-	"errors"
-	"slices"
 	"testing"
 	"testing/synctest"
-	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -13,60 +10,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/pbconv"
 )
 
-const markEvery = 5 * time.Second
-
-func TestActiveMarkIsWrittenBeforeTheInsert(t *testing.T) {
-	rg := started(t, baseConfig)
-	mustSend(t, rg.Router, cmd(roomA, "alice", "a1"))
-	mustSend(t, rg.Router, cmd(roomB, "alice", "b1"))
-	if got, want := rg.order.list(), []string{"mark", "submit", "mark", "submit"}; !slices.Equal(got, want) {
-		t.Fatalf("calls = %v, want %v", got, want)
-	}
-}
-
-func TestActiveMarkIsThrottledPerRoom(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		rg := started(t, baseConfig)
-		mustSend(t, rg.Router, cmd(roomA, "alice", "a1"))
-		time.Sleep(markEvery - time.Millisecond)
-		mustSend(t, rg.Router, cmd(roomA, "alice", "a2"))
-		if n := rg.marks.attempts(roomA); n != 1 {
-			t.Fatalf("marked room A %d times within %v, want 1", n, markEvery)
-		}
-		mustSend(t, rg.Router, cmd(roomB, "alice", "b1"))
-		if n := rg.marks.attempts(roomB); n != 1 {
-			t.Fatalf("room B marks = %d, want its own first mark", n)
-		}
-		time.Sleep(time.Millisecond)
-		mustSend(t, rg.Router, cmd(roomA, "alice", "a3"))
-		if n := rg.marks.attempts(roomA); n != 2 {
-			t.Fatalf("marked room A %d times after %v, want 2", n, markEvery)
-		}
-		rg.cancel()
-		_ = rg.wait()
-	})
-}
-
-func TestSendSucceedsWhenTheMarkFailsAndTheNextGroupRetriesIt(t *testing.T) {
-	rg := started(t, baseConfig)
-	rg.marks.fail(errors.New("redis down"))
-	mustSend(t, rg.Router, cmd(roomA, "alice", "a1"))
-	mustSend(t, rg.Router, cmd(roomA, "alice", "a2"))
-	if n := rg.marks.attempts(roomA); n != 2 {
-		t.Fatalf("mark attempts after two failing groups = %d, want 2", n)
-	}
-	rg.marks.fail(nil)
-	mustSend(t, rg.Router, cmd(roomA, "alice", "a3"))
-	mustSend(t, rg.Router, cmd(roomA, "alice", "a4"))
-	if n := rg.marks.attempts(roomA); n != 3 {
-		t.Fatalf("mark attempts after a success = %d, want 3", n)
-	}
-	if n := len(timeline(t, rg.msgs, roomA)); n != 4 {
-		t.Fatalf("stored %d messages, want 4", n)
-	}
-}
-
-func TestOnlyCommittedMessagesArePublishedAndInPtsOrder(t *testing.T) {
+func TestOnlyCommittedMessagesArePublishedInSeqOrder(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rg := started(t, baseConfig)
 		mustSend(t, rg.Router, cmd(roomA, "alice", "a1"))
