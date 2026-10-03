@@ -30,12 +30,16 @@ func TestLoadReadsPasswordFiles(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			setEnv(t, map[string]string{
+				"MONGO_USER": "core", "MONGO_PASSWORD_FILE": secretFile(t, "mongo-"+tt.content), "MONGO_PASSWORD": tt.plain,
 				"REDIS_PASSWORD_FILE": secretFile(t, tt.content), "REDIS_PASSWORD": tt.plain,
 				"REDIS_DEDUPE_PASSWORD_FILE": secretFile(t, "dedupe-"+tt.content), "REDIS_DEDUPE_PASSWORD": tt.plain,
 			})
 			cfg, err := config.Load()
 			if err != nil {
 				t.Fatalf("Load: %v", err)
+			}
+			if cfg.MongoPassword != "mongo-"+tt.want {
+				t.Errorf("MongoPassword = %q, want %q", cfg.MongoPassword, "mongo-"+tt.want)
 			}
 			if cfg.RedisPassword != tt.want || cfg.RedisDedupePassword != "dedupe-"+tt.want {
 				t.Errorf("passwords = %q, %q; want %q, %q", cfg.RedisPassword, cfg.RedisDedupePassword, tt.want, "dedupe-"+tt.want)

@@ -6,7 +6,7 @@ const testMongoURI = "mongodb://chatim-mongodb:27017/?replicaSet=rs0"
 
 var envKeys = []string{
 	"CORE_ID", "CORE_GRPC_ADDR", "CORE_ADVERTISE_ADDR", "CORE_ADMIN_ADDR",
-	"MONGO_URI", "MONGO_DB", "REDIS_ADDR", "REDIS_DB", "REDIS_PASSWORD", "NATS_URL",
+	"MONGO_URI", "MONGO_DB", "MONGO_USER", "MONGO_PASSWORD", "MONGO_AUTH_SOURCE", "REDIS_ADDR", "REDIS_DB", "REDIS_PASSWORD", "NATS_URL",
 	"REDIS_DEDUPE_ADDR", "REDIS_DEDUPE_DB", "REDIS_DEDUPE_PASSWORD",
 	"CORE_CONNECT_TIMEOUT", "CORE_REQUEST_DEADLINE", "CORE_SLOW_RPC", "CORE_QUEUE_WAIT", "CORE_MAX_INFLIGHT",
 	"CORE_DRAIN_DELAY", "CORE_GRPC_SHUTDOWN", "CORE_PUBLISHER_DRAIN", "CORE_SHUTDOWN_BUDGET",
@@ -21,7 +21,8 @@ var envKeys = []string{
 
 var overrides = map[string]string{
 	"CORE_ID": "core-a", "CORE_GRPC_ADDR": ":7000", "CORE_ADVERTISE_ADDR": "10.0.0.5:7000", "CORE_ADMIN_ADDR": "127.0.0.1:7090",
-	"MONGO_URI": "mongodb://m1,m2/?replicaSet=rs1", "MONGO_DB": "chatim_it", "REDIS_ADDR": "redis:6380", "REDIS_DB": "3",
+	"MONGO_URI": "mongodb://m1,m2/?replicaSet=rs1", "MONGO_DB": "chatim_it",
+	"MONGO_USER": "core-user", "MONGO_PASSWORD": "mongo-pw", "MONGO_AUTH_SOURCE": "chatim", "REDIS_ADDR": "redis:6380", "REDIS_DB": "3",
 	"REDIS_PASSWORD": "state-pw", "REDIS_DEDUPE_ADDR": "dedupe:6381", "REDIS_DEDUPE_DB": "2", "REDIS_DEDUPE_PASSWORD": "dedupe-pw",
 	"NATS_URL": "nats://n1:4222", "CORE_CONNECT_TIMEOUT": "4s", "CORE_REQUEST_DEADLINE": "2s", "CORE_SLOW_RPC": "750ms", "CORE_QUEUE_WAIT": "10ms",
 	"CORE_MAX_INFLIGHT": "100", "CORE_DRAIN_DELAY": "1s", "CORE_GRPC_SHUTDOWN": "4s", "CORE_PUBLISHER_DRAIN": "3s",
@@ -35,7 +36,7 @@ var overrides = map[string]string{
 	"SLOT_LEASE_TTL": "6s", "SLOT_HOOK_TIMEOUT": "200ms",
 }
 
-var secretFileKeys = []string{"REDIS_PASSWORD_FILE", "REDIS_DEDUPE_PASSWORD_FILE"}
+var secretFileKeys = []string{"MONGO_PASSWORD_FILE", "REDIS_PASSWORD_FILE", "REDIS_DEDUPE_PASSWORD_FILE"}
 
 func setEnv(t *testing.T, env map[string]string) {
 	t.Helper()

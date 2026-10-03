@@ -27,6 +27,9 @@ type Config struct {
 	AdminAddr           string
 	MongoURI            string
 	MongoDB             string
+	MongoUser           string
+	MongoPassword       string
+	MongoAuthSource     string
 	RedisAddr           string
 	RedisDB             int
 	RedisPassword       string
@@ -73,6 +76,9 @@ func Load() (Config, error) {
 		AdminAddr:           AdminAddr(),
 		MongoURI:            envconfig.String("MONGO_URI", ""),
 		MongoDB:             envconfig.String("MONGO_DB", "chatim"),
+		MongoUser:           envconfig.String("MONGO_USER", ""),
+		MongoPassword:       p.secret("MONGO_PASSWORD"),
+		MongoAuthSource:     envconfig.String("MONGO_AUTH_SOURCE", "admin"),
 		RedisAddr:           envconfig.String("REDIS_ADDR", "chatim-redis:6379"),
 		RedisDB:             p.index("REDIS_DB", 0),
 		RedisPassword:       p.secret("REDIS_PASSWORD"),

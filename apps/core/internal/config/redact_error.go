@@ -42,7 +42,7 @@ func RedactText(text string, rawURLs ...string) string {
 }
 
 func (c Config) Secrets() []string {
-	out := slices.DeleteFunc([]string{c.RedisPassword, c.RedisDedupePassword}, func(s string) bool { return s == "" })
+	out := slices.DeleteFunc([]string{c.MongoPassword, c.RedisPassword, c.RedisDedupePassword}, func(s string) bool { return s == "" })
 	slices.SortStableFunc(out, func(a, b string) int { return cmp.Compare(len(b), len(a)) })
 	return out
 }

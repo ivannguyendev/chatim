@@ -17,6 +17,7 @@ func (c Config) LogValue() slog.Value {
 		slog.String("admin_addr", c.AdminAddr),
 		slog.String("mongo_uri", RedactURL(c.MongoURI)),
 		slog.String("mongo_db", c.MongoDB),
+		slog.Bool("mongo_auth", c.MongoUser != "" || uriHasCredentials(c.MongoURI)),
 		slog.String("redis_addr", c.RedisAddr),
 		slog.Int("redis_db", c.RedisDB),
 		slog.Bool("redis_auth", c.RedisPassword != ""),
@@ -53,6 +54,12 @@ func RedactURL(raw string) string {
 		rest = base + "?" + redactQuery(query)
 	}
 	return scheme + "://" + rest
+}
+
+func uriHasCredentials(raw string) bool {
+	_, rest, ok := strings.Cut(raw, "://")
+	base, _, _ := strings.Cut(rest, "?")
+	return ok && strings.Contains(base, "@")
 }
 
 func redactQuery(query string) string {

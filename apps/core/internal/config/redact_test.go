@@ -83,18 +83,19 @@ func TestConfigLogValueReportsRedisWithoutAuth(t *testing.T) {
 
 func TestSecretsListsSetPasswordsLongestFirst(t *testing.T) {
 	tests := []struct {
-		state, dedupe string
-		want          []string
+		mongo, state, dedupe string
+		want                 []string
 	}{
-		{"", "", nil},
-		{"short", "", []string{"short"}},
-		{"", "dedupe-only", []string{"dedupe-only"}},
-		{"short", "much-longer", []string{"much-longer", "short"}},
+		{"", "", "", nil},
+		{"", "short", "", []string{"short"}},
+		{"", "", "dedupe-only", []string{"dedupe-only"}},
+		{"", "short", "much-longer", []string{"much-longer", "short"}},
+		{"mongo-pw-longest", "short", "mid-size", []string{"mongo-pw-longest", "mid-size", "short"}},
 	}
 	for _, tt := range tests {
-		got := config.Config{RedisPassword: tt.state, RedisDedupePassword: tt.dedupe}.Secrets()
+		got := config.Config{MongoPassword: tt.mongo, RedisPassword: tt.state, RedisDedupePassword: tt.dedupe}.Secrets()
 		if !slices.Equal(got, tt.want) {
-			t.Errorf("Secrets(%q, %q) = %q, want %q", tt.state, tt.dedupe, got, tt.want)
+			t.Errorf("Secrets(%q, %q, %q) = %q, want %q", tt.mongo, tt.state, tt.dedupe, got, tt.want)
 		}
 	}
 }

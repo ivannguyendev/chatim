@@ -46,11 +46,7 @@ func connect(ctx context.Context, cfg config.Config, log *slog.Logger) (*clients
 }
 
 func (c *clients) connectMongo(ctx context.Context, cfg config.Config) error {
-	opts := options.Client().ApplyURI(cfg.MongoURI).
-		SetAppName("chatim-core").
-		SetConnectTimeout(cfg.ConnectTimeout).
-		SetServerSelectionTimeout(cfg.ConnectTimeout)
-	client, err := mongo.Connect(opts)
+	client, err := mongo.Connect(mongoOptions(cfg))
 	if err != nil {
 		return fmt.Errorf("mongo connect %s: %w", config.RedactURL(cfg.MongoURI), config.RedactError(err, cfg.MongoURI))
 	}
@@ -59,6 +55,17 @@ func (c *clients) connectMongo(ctx context.Context, cfg config.Config) error {
 		return fmt.Errorf("mongo ping %s: %w", config.RedactURL(cfg.MongoURI), config.RedactError(err, cfg.MongoURI))
 	}
 	return nil
+}
+
+func mongoOptions(cfg config.Config) *options.ClientOptions {
+	opts := options.Client().ApplyURI(cfg.MongoURI).
+		SetAppName("chatim-core").
+		SetConnectTimeout(cfg.ConnectTimeout).
+		SetServerSelectionTimeout(cfg.ConnectTimeout)
+	if cfg.MongoUser != "" {
+		opts.SetAuth(options.Credential{Username: cfg.MongoUser, Password: cfg.MongoPassword, AuthSource: cfg.MongoAuthSource})
+	}
+	return opts
 }
 
 func (c *clients) connectRedis(ctx context.Context, cfg config.Config) error {

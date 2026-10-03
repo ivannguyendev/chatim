@@ -24,6 +24,8 @@ func (c Config) validate() error {
 	plan := c.StopPlan()
 	rules := []rule{
 		{c.MongoURI != "", "MONGO_URI is required"},
+		{c.MongoUser == "" || !uriHasCredentials(c.MongoURI), "MONGO_USER must not be set when MONGO_URI carries credentials"},
+		{c.MongoPassword == "" || c.MongoUser != "", "MONGO_PASSWORD needs MONGO_USER"},
 		{validAdvertiseAddr(c.AdvertiseAddr), "CORE_ADVERTISE_ADDR must be host:port with a host"},
 		{streamNamePattern.MatchString(c.Stream.Name), "EVT_STREAM must match " + streamNamePattern.String()},
 		{subjectRootPattern.MatchString(c.Stream.SubjectRoot), "EVT_SUBJECT_ROOT must match " + subjectRootPattern.String()},
