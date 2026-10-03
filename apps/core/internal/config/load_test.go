@@ -11,7 +11,6 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
-	"github.com/ivannguyendev/chatim/apps/core/internal/recovery"
 	"github.com/ivannguyendev/chatim/apps/core/internal/slot"
 )
 
@@ -44,9 +43,7 @@ func TestLoadDefaults(t *testing.T) {
 			SubjectRoot: "evt", Shards: 4, QueueSize: 1024, MaxPending: 256, AckTimeout: 2 * time.Second,
 			FlushEvery: 50 * time.Millisecond, WatermarkTTL: 7 * day, RedisTimeout: 100 * time.Millisecond, RedisCooldown: time.Second,
 		},
-		Marks:    publish.MarkConfig{Timeout: 100 * time.Millisecond, Cooldown: time.Second, WatermarkTTL: 7 * day},
-		Stream:   publish.StreamConfig{Name: "CHATIM_EVT", SubjectRoot: "evt", LiveRoot: "live", Replicas: 1, MaxAge: 7 * day, Duplicates: 2 * time.Minute},
-		Recovery: recovery.Config{Interval: 30 * time.Second, RemoveAfter: 15 * time.Second, StaleAfter: 5 * time.Second, GroupDeadline: 3 * time.Second},
+		Stream: publish.StreamConfig{Name: "CHATIM_EVT", SubjectRoot: "evt", LiveRoot: "live", Replicas: 1, MaxAge: 7 * day, Duplicates: 2 * time.Minute},
 		Slot: slot.Config{
 			CoreID: host, Addr: host + ":9000", Tick: time.Second, HeartbeatTTL: 5 * time.Second,
 			LeaseTTL: 10 * time.Second, HookTimeout: 500 * time.Millisecond,
@@ -81,9 +78,7 @@ func TestLoadOverrides(t *testing.T) {
 			SubjectRoot: "evt_it", Shards: 2, QueueSize: 512, MaxPending: 128, AckTimeout: time.Second,
 			FlushEvery: 20 * time.Millisecond, WatermarkTTL: day, RedisTimeout: 50 * time.Millisecond, RedisCooldown: 2 * time.Second,
 		},
-		Marks:    publish.MarkConfig{Timeout: 50 * time.Millisecond, Cooldown: 2 * time.Second, WatermarkTTL: day},
-		Stream:   publish.StreamConfig{Name: "CHATIM_EVT_IT", SubjectRoot: "evt_it", LiveRoot: "live_it", Replicas: 3, MaxAge: 2 * day, Duplicates: 5 * time.Minute},
-		Recovery: recovery.Config{Interval: 10 * time.Second, RemoveAfter: 9 * time.Second, StaleAfter: 2 * time.Second, GroupDeadline: 2 * time.Second},
+		Stream: publish.StreamConfig{Name: "CHATIM_EVT_IT", SubjectRoot: "evt_it", LiveRoot: "live_it", Replicas: 3, MaxAge: 2 * day, Duplicates: 5 * time.Minute},
 		Slot: slot.Config{
 			CoreID: "core-a", Addr: "10.0.0.5:7000", Tick: 500 * time.Millisecond, HeartbeatTTL: 3 * time.Second,
 			LeaseTTL: 6 * time.Second, HookTimeout: 200 * time.Millisecond,

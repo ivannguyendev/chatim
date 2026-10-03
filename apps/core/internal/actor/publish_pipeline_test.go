@@ -3,7 +3,6 @@ package actor_test
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -15,7 +14,6 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/publish/publishtest"
-	"github.com/ivannguyendev/chatim/pkg/slotmap"
 )
 
 func startPublisher(t *testing.T, js publish.JetStream, rdb *redis.Client) *publish.Publisher {
@@ -39,15 +37,6 @@ func startPublisher(t *testing.T, js publish.JetStream, rdb *redis.Client) *publ
 	return p
 }
 
-func marksFor(t *testing.T, rdb *redis.Client) *publish.ActivityMarks {
-	t.Helper()
-	m, err := publish.NewActivityMarks(rdb, publish.MarkConfig{Timeout: time.Second, Cooldown: 20 * time.Millisecond}, quiet)
-	if err != nil {
-		t.Fatalf("NewActivityMarks: %v", err)
-	}
-	return m
-}
-
 func drain(t *testing.T, closers ...func(context.Context) error) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -59,12 +48,12 @@ func drain(t *testing.T, closers ...func(context.Context) error) {
 	}
 }
 
-func TestSentMessagesArePublishedInPtsOrderUpToTheWatermark(t *testing.T) {
+func TestSentMessagesArePublishedInSeqOrder(t *testing.T) {
 	w := newWorld(t)
 	createRoom(t, w.rooms, roomB, "alice", "bob")
 	js := &publishtest.JetStream{}
 	pub := startPublisher(t, js, w.rdb)
-	core := startCoreWith(t, w.msgs, w.rooms, &fakeRegistry{}, pub, marksFor(t, w.rdb))
+	core := startCoreWith(t, w.msgs, w.rooms, &fakeRegistry{}, pub)
 	const perRoom = 25
 	rooms := []uint64{roomA, roomB}
 	var wg sync.WaitGroup
@@ -82,9 +71,6 @@ func TestSentMessagesArePublishedInPtsOrderUpToTheWatermark(t *testing.T) {
 	drain(t, core.Close, pub.Close)
 
 	for _, room := range rooms {
-		if v, _ := w.mr.Get(publish.WatermarkKey(room)); v != strconv.Itoa(perRoom) {
-			t.Fatalf("room %d watermark after drain = %q, want %d", room, v, perRoom)
-		}
 		docs := timeline(t, w.msgs, room)
 		var got []proto.Message
 		evs, err := js.Events()
@@ -104,20 +90,5 @@ func TestSentMessagesArePublishedInPtsOrderUpToTheWatermark(t *testing.T) {
 				t.Fatalf("room %d event %d = %v, want %v", room, i, got[i], want)
 			}
 		}
-		if _, err := w.mr.ZScore(publish.ActiveKey(slotmap.Of(room)), pbconv.RoomID(room)); err != nil {
-			t.Fatalf("room %d not marked active: %v", room, err)
-		}
-	}
-}
-
-func TestSendSucceedsWhileRedisIsDownForActiveMarks(t *testing.T) {
-	w := newWorld(t)
-	core := startCoreWith(t, w.msgs, w.rooms, &fakeRegistry{}, nopPublisher{}, marksFor(t, w.rdb))
-	w.mr.Close()
-	for i := range 3 {
-		mustSend(t, core, cmd(roomA, "alice", fmt.Sprintf("x%d", i)))
-	}
-	if n := len(timeline(t, w.msgs, roomA)); n != 3 {
-		t.Fatalf("stored %d messages with redis down, want 3", n)
 	}
 }

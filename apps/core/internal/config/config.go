@@ -9,7 +9,6 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
-	"github.com/ivannguyendev/chatim/apps/core/internal/recovery"
 	"github.com/ivannguyendev/chatim/apps/core/internal/slot"
 	"github.com/ivannguyendev/chatim/pkg/envconfig"
 	"github.com/ivannguyendev/chatim/pkg/grpcserver"
@@ -50,9 +49,7 @@ type Config struct {
 	Actor               actor.Config
 	Dedupe              dedupe.Config
 	Publish             publish.Config
-	Marks               publish.MarkConfig
 	Stream              publish.StreamConfig
-	Recovery            recovery.Config
 	Slot                slot.Config
 }
 

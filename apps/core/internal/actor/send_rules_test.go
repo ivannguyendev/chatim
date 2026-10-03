@@ -30,24 +30,21 @@ func TestNewRouterValidatesInputs(t *testing.T) {
 	for name, mutate := range mutations {
 		cfg := baseConfig
 		mutate(&cfg)
-		if _, err := actor.NewRouter(msgs, rooms, sub, cids, nopPublisher{}, nopMarker{}, cfg, quiet); !errors.Is(err, apperr.ErrInvalidArgument) {
+		if _, err := actor.NewRouter(msgs, rooms, sub, cids, nopPublisher{}, cfg, quiet); !errors.Is(err, apperr.ErrInvalidArgument) {
 			t.Errorf("%s: NewRouter = %v, want ErrInvalidArgument", name, err)
 		}
 	}
-	if _, err := actor.NewRouter(nil, rooms, sub, cids, nopPublisher{}, nopMarker{}, baseConfig, quiet); !errors.Is(err, apperr.ErrInvalidArgument) {
+	if _, err := actor.NewRouter(nil, rooms, sub, cids, nopPublisher{}, baseConfig, quiet); !errors.Is(err, apperr.ErrInvalidArgument) {
 		t.Errorf("NewRouter(nil messages) = %v, want ErrInvalidArgument", err)
 	}
-	if _, err := actor.NewRouter(msgs, rooms, nil, cids, nopPublisher{}, nopMarker{}, baseConfig, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
+	if _, err := actor.NewRouter(msgs, rooms, nil, cids, nopPublisher{}, baseConfig, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
 		t.Errorf("NewRouter(nil submitter) = %v, want ErrInvalidArgument", err)
 	}
-	if _, err := actor.NewRouter(msgs, rooms, sub, nil, nopPublisher{}, nopMarker{}, baseConfig, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
+	if _, err := actor.NewRouter(msgs, rooms, sub, nil, nopPublisher{}, baseConfig, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
 		t.Errorf("NewRouter(nil cid registry) = %v, want ErrInvalidArgument", err)
 	}
-	if _, err := actor.NewRouter(msgs, rooms, sub, cids, nil, nopMarker{}, baseConfig, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
+	if _, err := actor.NewRouter(msgs, rooms, sub, cids, nil, baseConfig, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
 		t.Errorf("NewRouter(nil event publisher) = %v, want ErrInvalidArgument", err)
-	}
-	if _, err := actor.NewRouter(msgs, rooms, sub, cids, nopPublisher{}, nil, baseConfig, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
-		t.Errorf("NewRouter(nil activity marker) = %v, want ErrInvalidArgument", err)
 	}
 }
 

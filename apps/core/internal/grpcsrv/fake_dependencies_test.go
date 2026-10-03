@@ -27,12 +27,6 @@ type nopPublisher struct{}
 
 func (nopPublisher) Enqueue(uint64, []*chatimv1.Event) error { return nil }
 
-func (nopPublisher) Skip(uint64, []uint64) error { return nil }
-
-type nopMarker struct{}
-
-func (nopMarker) Mark(context.Context, uint64, uint64) error { return nil }
-
 type fakeSender struct {
 	mu   sync.Mutex
 	cmds []actor.SendCmd

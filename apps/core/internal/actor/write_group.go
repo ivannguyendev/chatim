@@ -21,7 +21,6 @@ func (a *actor) dispatch(ctx context.Context, first *request) {
 	for i, e := range entries {
 		msgs[i] = e.msg
 	}
-	a.markActive(gctx, msgs)
 	deadline, _ := gctx.Deadline()
 	if err := a.r.sub.Submit(gctx, flush.Group{Room: a.id, Msgs: msgs, Done: a.deliver, Deadline: deadline}); err != nil {
 		switch {
@@ -72,10 +71,6 @@ func (a *actor) drain(ctx context.Context, fresh []*entry, limit int) []*entry {
 }
 
 func (a *actor) take(ctx context.Context, entries []*entry, q *request) []*entry {
-	if q.republish {
-		a.replays = append(a.replays, q)
-		return entries
-	}
 	if e := a.admit(ctx, q); e != nil {
 		return append(entries, e)
 	}

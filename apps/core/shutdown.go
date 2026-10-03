@@ -30,7 +30,6 @@ func (a *app) shutdown(ctx context.Context, sup *supervisor, t tasks, cause erro
 	}
 	s := &stopper{ctx: stopCtx, log: a.log}
 	s.step("grpc", 0, nil, t.grpc)
-	s.step("recovery sweeper", 0, nil, t.sweeper)
 	s.step("router", plan.Router, a.router.Close, t.router)
 	s.step("flusher", plan.Flusher, a.flusher.Close, t.flusher)
 	s.step("publisher", plan.Publisher, a.publisher.Close, t.publisher)

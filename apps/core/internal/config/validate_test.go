@@ -36,8 +36,6 @@ func TestLoadValidation(t *testing.T) {
 		{"committed ttl below pending ttl", map[string]string{"CID_COMMITTED_TTL": "5s"}, "CID_*"},
 		{"core id with a colon", map[string]string{"CORE_ID": "core:a"}, "CORE_ID"},
 		{"core id with a space", map[string]string{"CORE_ID": "core a", "CORE_ADVERTISE_ADDR": "core-a:9000"}, "SLOT_*, CORE_ID"},
-		{"remove-after below mark interval plus deadline plus skew", map[string]string{"RECOVERY_REMOVE_AFTER": "8999ms"}, "RECOVERY_*"},
-		{"remove-after at mark interval plus deadline plus skew", map[string]string{"RECOVERY_REMOVE_AFTER": "9s"}, ""},
 		{"lease ttl within two ticks", map[string]string{"SLOT_LEASE_TTL": "2s"}, "SLOT_*"},
 		{"heartbeat ttl within two ticks", map[string]string{"SLOT_HEARTBEAT_TTL": "2s"}, "SLOT_*"},
 		{"hook timeout equals tick", map[string]string{"SLOT_HOOK_TIMEOUT": "1s"}, "SLOT_*"},

@@ -56,7 +56,7 @@ func (w *world) cidValue(cid string) string {
 
 func runRouter(t *testing.T, msgs store.Messages, rooms store.Rooms, sub actor.Submitter, cids actor.CIDRegistry, cfg actor.Config) (*actor.Router, func()) {
 	t.Helper()
-	r, err := actor.NewRouter(msgs, rooms, sub, cids, nopPublisher{}, nopMarker{}, cfg, quiet)
+	r, err := actor.NewRouter(msgs, rooms, sub, cids, nopPublisher{}, cfg, quiet)
 	if err != nil {
 		t.Fatalf("NewRouter: %v", err)
 	}
