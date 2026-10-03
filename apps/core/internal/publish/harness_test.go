@@ -3,13 +3,11 @@ package publish_test
 import (
 	"context"
 	"errors"
-	"slices"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/nats-io/nats.go"
 	"go.uber.org/goleak"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
@@ -30,16 +28,17 @@ const (
 	roomB  uint64 = 202
 
 	queueFullMsg = "publish queue full; dropping events"
-	abandonedMsg = "event publish abandoned; reconciliation must republish it"
 	malformedMsg = "dropping malformed event"
+	refusedMsg   = "event publish refused; reconciliation must republish it"
+	failedMsg    = "event publish failed; reconciliation must republish it"
 )
 
 var (
-	errNack   = errors.New("nack")
-	sentAt    = time.UnixMilli(1_700_000_000_000).UTC()
-	fastSetup = publish.Config{
-		SubjectRoot: "evt", Shards: 2, QueueSize: 64, MaxPending: 16, MaxRetrying: 64, Attempts: 3,
-		RetryBackoff: time.Millisecond, MaxBackoff: 4 * time.Millisecond, AckTimeout: 200 * time.Millisecond,
+	errRefused = errors.New("refused")
+	sentAt     = time.UnixMilli(1_700_000_000_000).UTC()
+	fastSetup  = publish.Config{
+		SubjectRoot: "evt", Shards: 2, QueueSize: 64, MaxPending: 16, Attempts: 3,
+		RetryBackoff: time.Millisecond, AckTimeout: 200 * time.Millisecond,
 	}
 )
 
@@ -115,15 +114,6 @@ func eventually(t *testing.T, what string, cond func() bool) {
 	}
 }
 
-func nackIDs(ids ...string) publishtest.Rule {
-	return func(m *nats.Msg) error {
-		if slices.Contains(ids, publishtest.MsgID(m)) {
-			return errNack
-		}
-		return nil
-	}
-}
-
 func storedIDs(js *publishtest.JetStream) []string {
 	var out []string
 	for _, m := range js.Stored() {
@@ -140,14 +130,4 @@ func attemptsOf(js *publishtest.JetStream, id string) int {
 		}
 	}
 	return n
-}
-
-func attemptIndexes(js *publishtest.JetStream, id string) []int {
-	var out []int
-	for i, m := range js.Attempts() {
-		if publishtest.MsgID(m) == id {
-			out = append(out, i)
-		}
-	}
-	return out
 }

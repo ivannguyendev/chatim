@@ -18,11 +18,10 @@ type JetStream struct {
 	ids      map[string]bool
 	stored   []*nats.Msg
 	attempts []*nats.Msg
-	nack     Rule
 	refuse   Rule
-	silent   func(m *nats.Msg) bool
 	holding  bool
 	held     []*future
+	waiters  []chan struct{}
 	seq      uint64
 }
 
@@ -48,23 +47,27 @@ func (j *JetStream) PublishMsgAsync(m *nats.Msg, _ ...jetstream.PublishOpt) (jet
 		}
 	}
 	f := &future{ok: make(chan *jetstream.PubAck, 1), err: make(chan error, 1), msg: m}
-	switch {
-	case j.silent != nil && j.silent(m):
-	case j.holding:
+	if j.holding {
 		j.held = append(j.held, f)
-	default:
+	} else {
 		j.resolveLocked(f)
 	}
 	return f, nil
 }
 
-func (j *JetStream) resolveLocked(f *future) {
-	if j.nack != nil {
-		if err := j.nack(f.msg); err != nil {
-			f.err <- err
-			return
-		}
+func (j *JetStream) PublishAsyncComplete() <-chan struct{} {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	done := make(chan struct{})
+	if len(j.held) == 0 {
+		close(done)
+		return done
 	}
+	j.waiters = append(j.waiters, done)
+	return done
+}
+
+func (j *JetStream) resolveLocked(f *future) {
 	id := f.msg.Header.Get(jetstream.MsgIDHeader)
 	dup := j.ids[id]
 	if !dup {
@@ -78,22 +81,10 @@ func (j *JetStream) resolveLocked(f *future) {
 	f.ok <- &jetstream.PubAck{Stream: "FAKE", Sequence: j.seq, Duplicate: dup}
 }
 
-func (j *JetStream) NackWhen(r Rule) {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	j.nack = r
-}
-
 func (j *JetStream) RefuseWhen(r Rule) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	j.refuse = r
-}
-
-func (j *JetStream) SilenceWhen(fn func(m *nats.Msg) bool) {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	j.silent = fn
 }
 
 func (j *JetStream) Hold() {
@@ -110,6 +101,10 @@ func (j *JetStream) Release() {
 		j.resolveLocked(f)
 	}
 	j.held = nil
+	for _, w := range j.waiters {
+		close(w)
+	}
+	j.waiters = nil
 }
 
 func (j *JetStream) Held() int {

@@ -100,7 +100,7 @@ func (c *clients) connectNATS(cfg config.Config, log *slog.Logger) error {
 		return fmt.Errorf("nats connect %s: %w", config.RedactURL(cfg.NATSURL), config.RedactError(err, cfg.NATSURL))
 	}
 	c.nats = nc
-	js, err := jetstream.New(nc, cfg.Publish.JetStreamOptions()...)
+	js, err := jetstream.New(nc, cfg.Publish.JetStreamOptions(log)...)
 	if err != nil {
 		return fmt.Errorf("jetstream: %w", config.RedactError(err, cfg.NATSURL))
 	}
