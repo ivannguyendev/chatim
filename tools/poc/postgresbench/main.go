@@ -13,20 +13,23 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func main() {
+func main() { os.Exit(realMain()) }
+
+func realMain() int {
 	if len(os.Args) < 2 {
 		usage()
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 	run := map[string]func(context.Context, []string) error{"seed": runSeed, "read": runRead, "write": runWrite}[os.Args[1]]
 	if run == nil {
 		usage()
 	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	if err := run(ctx, os.Args[2:]); err != nil {
 		fmt.Fprintln(os.Stderr, "postgresbench:", err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 func usage() {

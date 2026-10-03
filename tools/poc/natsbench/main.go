@@ -28,7 +28,9 @@ type config struct {
 	duration         time.Duration
 }
 
-func main() {
+func main() { os.Exit(realMain()) }
+
+func realMain() int {
 	var c config
 	flag.StringVar(&c.url, "url", cmp.Or(os.Getenv("NATS_URL"), "nats://chatim-nats:4222"), "NATS URL (env NATS_URL)")
 	flag.StringVar(&c.monitor, "monitor", cmp.Or(os.Getenv("NATS_MONITOR_URL"), "http://chatim-nats:8222"), "NATS monitoring URL (env NATS_MONITOR_URL)")
@@ -43,8 +45,9 @@ func main() {
 	defer stop()
 	if err := run(ctx, c); err != nil {
 		fmt.Fprintln(os.Stderr, "natsbench:", err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 func (c config) interval() time.Duration {
@@ -122,8 +125,14 @@ func stamp(size int) []byte {
 	return b
 }
 
-func serverMem(monitor string) string {
-	resp, err := http.Get(monitor + "/varz")
+func serverMem(ctx context.Context, monitor string) string {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, monitor+"/varz", nil)
+	if err != nil {
+		return "unknown (" + err.Error() + ")"
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "unknown (" + err.Error() + ")"
 	}

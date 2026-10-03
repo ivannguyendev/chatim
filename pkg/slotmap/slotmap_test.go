@@ -4,6 +4,7 @@ import (
 	"math/rand/v2"
 	"slices"
 	"testing"
+	"time"
 )
 
 func TestOfSpreadsRoomsEvenly(t *testing.T) {
@@ -15,7 +16,7 @@ func TestOfSpreadsRoomsEvenly(t *testing.T) {
 	}
 	for name, next := range sources {
 		counts := make([]int, Count)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			counts[Of(next(i))]++
 		}
 		mean := n / Count
@@ -28,8 +29,11 @@ func TestOfSpreadsRoomsEvenly(t *testing.T) {
 }
 
 func TestOfIsDeterministic(t *testing.T) {
-	if Of(0x5f00aa11bb22cc33) != Of(0x5f00aa11bb22cc33) {
-		t.Fatal("Of must return the same slot for the same room")
+	pinned := map[uint64]uint16{0: 0, 1: 812, 42: 460, 0x5f00aa11bb22cc33: 250, ^uint64(0): 801}
+	for room, want := range pinned {
+		if got := Of(room); got != want {
+			t.Errorf("Of(%#x) = %d, want %d: slot assignment must never change", room, got, want)
+		}
 	}
 }
 
@@ -37,7 +41,7 @@ func TestPreferredMovesOnlyTheNewCoreShare(t *testing.T) {
 	before := []string{"core-a", "core-b", "core-c"}
 	after := append(slices.Clone(before), "core-d")
 	moved := 0
-	for s := uint16(0); s < Count; s++ {
+	for s := range uint16(Count) {
 		was, now := Preferred(s, before), Preferred(s, after)
 		if was == now {
 			continue
@@ -55,7 +59,7 @@ func TestPreferredMovesOnlyTheNewCoreShare(t *testing.T) {
 func TestPreferredBalancesCores(t *testing.T) {
 	cores := []string{"core-a", "core-b", "core-c"}
 	share := map[string]int{}
-	for s := uint16(0); s < Count; s++ {
+	for s := range uint16(Count) {
 		share[Preferred(s, cores)]++
 	}
 	for _, c := range cores {
@@ -72,11 +76,11 @@ func TestRedisKeys(t *testing.T) {
 	if got := SlotKey(17); got != "chatim:slot:17" {
 		t.Fatalf("SlotKey(17) = %q", got)
 	}
-	id, ok := CoreIDFromKey(CoreKey("core-a"))
-	if !ok || id != "core-a" {
-		t.Fatalf("CoreIDFromKey(CoreKey) = %q, %v", id, ok)
+	if got := CoreKey("core-a"); got != "chatim:core:core-a" {
+		t.Fatalf("CoreKey(core-a) = %q", got)
 	}
-	if _, ok := CoreIDFromKey("chatim:slot:1"); ok {
-		t.Fatal("slot key must not parse as core key")
+	at := time.UnixMilli(1_700_000_005_123)
+	if got := CoreExpiryScore(at); got != 1_700_000_005_123 {
+		t.Fatalf("CoreExpiryScore = %v, want unix milliseconds", got)
 	}
 }

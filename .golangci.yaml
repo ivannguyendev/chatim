@@ -1,0 +1,72 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - noctx
+    - fatcontext
+    - errorlint
+    - errname
+    - nilerr
+    - gosec
+    - sloglint
+    - spancheck
+    - exhaustive
+    - gocritic
+    - revive
+    - misspell
+    - unconvert
+    - usestdlibvars
+    - perfsprint
+    - intrange
+    - modernize
+  settings:
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+        - shadow
+    sloglint:
+      context: scope
+      no-mixed-args: true
+    spancheck:
+      checks: [end, record-error]
+    exhaustive:
+      default-signifies-exhaustive: true
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
+        - name: context-as-argument
+        - name: error-return
+        - name: error-naming
+        - name: receiver-naming
+        - name: unused-parameter
+        - name: var-naming
+  exclusions:
+    generated: lax
+    presets: [common-false-positives, std-error-handling]
+    rules:
+      - path: _test\.go
+        linters: [gosec, noctx, revive]
+      - path: ^tools/poc/
+        linters: [gosec]
+        text: "G115|G404"
+      - path: ^pkg/backoff/backoff\.go$
+        linters: [gosec]
+        text: G404
+      - path: ^apps/core/internal/config/parse\.go$
+        linters: [gosec]
+        text: G703
+
+formatters:
+  enable: [gofmt, goimports]
+  settings:
+    goimports:
+      local-prefixes: [github.com/ivannguyendev/chatim]

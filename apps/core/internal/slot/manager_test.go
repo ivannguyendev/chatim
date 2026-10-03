@@ -14,7 +14,7 @@ import (
 
 func TestSingleCoreClaimsAllSlots(t *testing.T) {
 	mr, rdb := newRedis(t)
-	a := newManager(t, rdb, "core-a", nil)
+	a := newManager(t, rdb, "core-a")
 	stepAll(t, a)
 	if n := len(a.Owned()); n != slotmap.Count {
 		t.Fatalf("core-a owns %d slots, want %d", n, slotmap.Count)
@@ -27,8 +27,8 @@ func TestSingleCoreClaimsAllSlots(t *testing.T) {
 
 func TestCoresConvergeToFairShares(t *testing.T) {
 	mr, rdb := newRedis(t)
-	ms := []*Manager{newManager(t, rdb, "core-a", nil), newManager(t, rdb, "core-b", nil), newManager(t, rdb, "core-c", nil)}
-	for i := 0; i < 4; i++ {
+	ms := []*Manager{newManager(t, rdb, "core-a"), newManager(t, rdb, "core-b"), newManager(t, rdb, "core-c")}
+	for range 4 {
 		stepAll(t, ms...)
 	}
 	assertPartition(t, mr, ms...)
@@ -37,13 +37,13 @@ func TestCoresConvergeToFairShares(t *testing.T) {
 
 func TestDeadCoreSlotsAreTakenOver(t *testing.T) {
 	mr, rdb := newRedis(t)
-	a, b, c := newManager(t, rdb, "core-a", nil), newManager(t, rdb, "core-b", nil), newManager(t, rdb, "core-c", nil)
-	for i := 0; i < 4; i++ {
+	a, b, c := newManager(t, rdb, "core-a"), newManager(t, rdb, "core-b"), newManager(t, rdb, "core-c")
+	for range 4 {
 		stepAll(t, a, b, c)
 	}
 
-	for i := 0; i < 10; i++ {
-		mr.FastForward(time.Second)
+	for range 10 {
+		advance(t, mr, rdb, time.Second)
 		stepAll(t, a, b)
 	}
 	if mr.Exists(slotmap.CoreKey("core-c")) {
@@ -55,12 +55,12 @@ func TestDeadCoreSlotsAreTakenOver(t *testing.T) {
 
 func TestRedisDataLossReconverges(t *testing.T) {
 	mr, rdb := newRedis(t)
-	ms := []*Manager{newManager(t, rdb, "core-a", nil), newManager(t, rdb, "core-b", nil), newManager(t, rdb, "core-c", nil)}
-	for i := 0; i < 4; i++ {
+	ms := []*Manager{newManager(t, rdb, "core-a"), newManager(t, rdb, "core-b"), newManager(t, rdb, "core-c")}
+	for range 4 {
 		stepAll(t, ms...)
 	}
 	mr.FlushAll()
-	for round := 0; round < 5; round++ {
+	for range 5 {
 		stepAll(t, ms...)
 		assertDisjoint(t, ms...)
 	}
@@ -70,27 +70,27 @@ func TestRedisDataLossReconverges(t *testing.T) {
 
 func TestReleaseAllHandsSlotsBack(t *testing.T) {
 	mr, rdb := newRedis(t)
-	drained := 0
-	a := newManager(t, rdb, "core-a", func(context.Context, uint16) { drained++ })
-	b := newManager(t, rdb, "core-b", nil)
-	for i := 0; i < 3; i++ {
+	drained := &hookLog{}
+	a := newManager(t, rdb, "core-a", withBeforeRelease(drained.record))
+	b := newManager(t, rdb, "core-b")
+	for range 3 {
 		stepAll(t, a, b)
 	}
 	held := a.Owned()
-	drained = 0
+	drained.reset()
 	if err := a.ReleaseAll(context.Background()); err != nil {
 		t.Fatalf("ReleaseAll: %v", err)
 	}
-	if drained != len(held) || len(a.Owned()) != 0 {
-		t.Fatalf("drained %d of %d slots, still owns %d", drained, len(held), len(a.Owned()))
+	if batches := drained.batches(); len(batches) != 1 || !sameSlots(batches[0], held) || len(a.Owned()) != 0 {
+		t.Fatalf("drained batches %v for %d held slots, still owns %d; want one batch of every held slot", batchSizes(batches), len(held), len(a.Owned()))
 	}
 	for _, s := range held {
 		if mr.Exists(slotmap.SlotKey(s)) {
 			t.Fatalf("slot %d lease still in redis after ReleaseAll", s)
 		}
 	}
-	if mr.Exists(slotmap.CoreKey("core-a")) {
-		t.Fatal("ReleaseAll must remove the heartbeat")
+	if mr.Exists(slotmap.CoreKey("core-a")) || registered(mr, "core-a") {
+		t.Fatal("ReleaseAll must remove the heartbeat and the registry member")
 	}
 	stepAll(t, b)
 	assertPartition(t, mr, b)
@@ -98,10 +98,10 @@ func TestReleaseAllHandsSlotsBack(t *testing.T) {
 
 func TestLostLeaseStopsOwnership(t *testing.T) {
 	mr, rdb := newRedis(t)
-	a := newManager(t, rdb, "core-a", nil)
+	a := newManager(t, rdb, "core-a")
 	stepAll(t, a)
 	mr.FlushAll()
-	b := newManager(t, rdb, "core-b", nil)
+	b := newManager(t, rdb, "core-b")
 	stepAll(t, b)
 	stepAll(t, a)
 	if a.Owns(0) || len(a.Owned()) != 0 {
@@ -116,6 +116,8 @@ func TestNewValidatesConfig(t *testing.T) {
 		{CoreID: "core*"},
 		{CoreID: "core-a", Tick: time.Second, LeaseTTL: 2 * time.Second},
 		{CoreID: "core-a", Tick: time.Second, HeartbeatTTL: 2 * time.Second, LeaseTTL: 10 * time.Second},
+		{CoreID: "core-a", Tick: time.Second, HookTimeout: time.Second},
+		{CoreID: "core-a", Tick: time.Second, HookTimeout: -time.Millisecond},
 	}
 	for _, cfg := range bad {
 		if _, err := New(rdb, cfg, nil); err == nil {
@@ -127,14 +129,19 @@ func TestNewValidatesConfig(t *testing.T) {
 func newRedis(t *testing.T) (*miniredis.Miniredis, *redis.Client) {
 	t.Helper()
 	mr := miniredis.RunT(t)
+	mr.SetTime(redisEpoch)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 	return mr, rdb
 }
 
-func newManager(t *testing.T, rdb *redis.Client, id string, hook func(context.Context, uint16)) *Manager {
+func newManager(t *testing.T, rdb *redis.Client, id string, tune ...func(*Config)) *Manager {
 	t.Helper()
-	m, err := New(rdb, Config{CoreID: id, Addr: id + ":9000", BeforeRelease: hook}, slog.New(slog.DiscardHandler))
+	cfg := Config{CoreID: id, Addr: id + ":9000"}
+	for _, f := range tune {
+		f(&cfg)
+	}
+	m, err := New(rdb, cfg, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("New(%s): %v", id, err)
 	}
@@ -153,7 +160,7 @@ func stepAll(t *testing.T, ms ...*Manager) {
 func assertPartition(t *testing.T, mr *miniredis.Miniredis, ms ...*Manager) {
 	t.Helper()
 	owner := assertDisjoint(t, ms...)
-	for s := uint16(0); s < slotmap.Count; s++ {
+	for s := range uint16(slotmap.Count) {
 		inRedis, _ := mr.Get(slotmap.SlotKey(s))
 		if owner[s] == "" || inRedis != owner[s] {
 			t.Fatalf("slot %d: local owner %q, redis owner %q", s, owner[s], inRedis)

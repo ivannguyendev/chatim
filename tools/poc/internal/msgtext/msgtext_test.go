@@ -10,7 +10,7 @@ import (
 
 func TestSyntheticHasTwentyToFiftyNineWords(t *testing.T) {
 	rng := rand.New(rand.NewPCG(1, 2))
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		if n := len(strings.Fields(Synthetic(rng))); n < 20 || n > 59 {
 			t.Fatalf("Synthetic produced %d words", n)
 		}

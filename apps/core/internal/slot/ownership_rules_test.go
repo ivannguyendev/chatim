@@ -13,7 +13,7 @@ import (
 
 func TestOwnsExpiresBeforeOtherCoresMayTakeOver(t *testing.T) {
 	_, rdb := newRedis(t)
-	a := newManager(t, rdb, "core-a", nil)
+	a := newManager(t, rdb, "core-a")
 	t0 := time.Unix(1_700_000_000, 0)
 	a.now = func() time.Time { return t0 }
 	stepAll(t, a)
@@ -30,7 +30,7 @@ func TestOwnsExpiresBeforeOtherCoresMayTakeOver(t *testing.T) {
 
 func TestOwnershipStampedAtStepStart(t *testing.T) {
 	_, rdb := newRedis(t)
-	a := newManager(t, rdb, "core-a", nil)
+	a := newManager(t, rdb, "core-a")
 	t0 := time.Unix(1_700_000_000, 0)
 	clock := t0
 	a.now = func() time.Time { return clock }
@@ -65,7 +65,7 @@ func (h slowRoundTrips) ProcessPipelineHook(next redis.ProcessPipelineHook) redi
 
 func TestReleaseDropsLowestScoreSlots(t *testing.T) {
 	_, rdb := newRedis(t)
-	a, b := newManager(t, rdb, "core-a", nil), newManager(t, rdb, "core-b", nil)
+	a, b := newManager(t, rdb, "core-a"), newManager(t, rdb, "core-b")
 	stepAll(t, a)
 	stepAll(t, b)
 	if n := len(b.Owned()); n != 0 {
@@ -77,7 +77,7 @@ func TestReleaseDropsLowestScoreSlots(t *testing.T) {
 		t.Fatalf("core-a owns %d slots, want %d", len(kept), slotmap.Count/2)
 	}
 	var keptScores, releasedScores []uint64
-	for s := uint16(0); s < slotmap.Count; s++ {
+	for s := range uint16(slotmap.Count) {
 		score := slotmap.Score(s, "core-a")
 		if slices.Contains(kept, s) {
 			keptScores = append(keptScores, score)

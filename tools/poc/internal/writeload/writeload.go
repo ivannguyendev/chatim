@@ -53,7 +53,7 @@ func Run(ctx context.Context, cfg Config, insert Insert) Result {
 	start := time.Now()
 	go generate(ctx, in, cfg)
 	var wg sync.WaitGroup
-	for i := 0; i < cfg.Flushers; i++ {
+	for range cfg.Flushers {
 		wg.Go(func() {
 			flushLoop(ctx, in, cfg, func(batch []Msg) {
 				begin := time.Now()

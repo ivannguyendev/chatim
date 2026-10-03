@@ -53,7 +53,7 @@ func runRead(ctx context.Context, args []string) error {
 	runCtx, cancel := context.WithTimeout(ctx, *duration)
 	defer cancel()
 	var wg sync.WaitGroup
-	for w := 0; w < *concurrency; w++ {
+	for range *concurrency {
 		wg.Go(func() {
 			rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 			for runCtx.Err() == nil {

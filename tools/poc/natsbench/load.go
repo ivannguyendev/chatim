@@ -29,7 +29,7 @@ func load(ctx context.Context, c config, js jetstream.JetStream) error {
 
 	start := time.Now()
 	subs := make([]*nats.Subscription, 0, c.subs)
-	for room := 0; room < c.subs; room++ {
+	for room := range c.subs {
 		i := room % c.conns
 		sub, err := conns[i].ChanSubscribe(fmt.Sprintf("live.t1.room.%d.>", room), inboxes[i])
 		if err != nil {
@@ -42,7 +42,7 @@ func load(ctx context.Context, c config, js jetstream.JetStream) error {
 			return err
 		}
 	}
-	fmt.Printf("subscribed %d rooms on %d connections in %v; %s\n", c.subs, c.conns, time.Since(start).Round(time.Millisecond), serverMem(c.monitor))
+	fmt.Printf("subscribed %d rooms on %d connections in %v; %s\n", c.subs, c.conns, time.Since(start).Round(time.Millisecond), serverMem(ctx, c.monitor))
 
 	var e2e, ack latency.Recorder
 	var received, published, failed atomic.Int64
@@ -67,7 +67,7 @@ func load(ctx context.Context, c config, js jetstream.JetStream) error {
 	defer cancel()
 	var pubWG sync.WaitGroup
 	interval := c.interval()
-	for p := 0; p < c.publishers; p++ {
+	for range c.publishers {
 		pubWG.Go(func() {
 			rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 			tick := time.NewTicker(interval)
@@ -99,7 +99,7 @@ func load(ctx context.Context, c config, js jetstream.JetStream) error {
 		return err
 	}
 	fmt.Printf("target=%d/s published=%d (%.0f/s) failed=%d received=%d dropped=%d; %s\n",
-		c.rate, published.Load(), float64(published.Load())/c.duration.Seconds(), failed.Load(), received.Load(), dropped, serverMem(c.monitor))
+		c.rate, published.Load(), float64(published.Load())/c.duration.Seconds(), failed.Load(), received.Load(), dropped, serverMem(ctx, c.monitor))
 	fmt.Printf("jetstream publish ack: %v\n", ack.Summary())
 	fmt.Printf("publish -> gateway:    %v\n", e2e.Summary())
 	return nil

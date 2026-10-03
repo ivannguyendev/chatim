@@ -1,13 +1,71 @@
 name: chatim
 
+x-redis: &redis
+  image: redis:7.4.2-alpine
+  restart: unless-stopped
+  entrypoint:
+    - sh
+    - -c
+    - >-
+      set -eu;
+      conf=/etc/redis/auth.conf;
+      read -r pw < "$$REDIS_SECRET_FILE" || true;
+      if [ -z "$$pw" ]; then echo "empty secret $$REDIS_SECRET_FILE" >&2; exit 1; fi;
+      umask 077; mkdir -p "$${conf%/*}";
+      printf 'requirepass "%s"\n' "$$pw" > "$$conf"; unset pw;
+      chown -R redis:redis "$${conf%/*}"; chmod 600 "$$conf";
+      exec docker-entrypoint.sh redis-server "$$conf" "$$@"
+    - redis-start
+  healthcheck:
+    test: ["CMD-SHELL", "read -r REDISCLI_AUTH < \"$$REDIS_SECRET_FILE\"; export REDISCLI_AUTH; redis-cli ping | grep -q PONG"]
+    interval: 5s
+    timeout: 3s
+    retries: 10
+
+x-core: &core
+  image: chatim/core:dev
+  profiles: ["app"]
+  restart: unless-stopped
+  mem_limit: 1g
+  stop_grace_period: 30s
+  secrets: [mongo_password, redis_password, redis_dedupe_password]
+  depends_on:
+    mongodb-init:
+      condition: service_completed_successfully
+    redis:
+      condition: service_healthy
+    redis-dedupe:
+      condition: service_healthy
+    nats:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD", "/app", "probe"]
+    interval: 5s
+    timeout: 3s
+    retries: 3
+    start_period: 60s
+    start_interval: 1s
+
+x-core-env: &core-env
+  MONGO_URI: "mongodb://chatim-mongodb:27017/?replicaSet=rs0&authSource=admin"
+  MONGO_USER: ${MONGO_ROOT_USER:?set MONGO_ROOT_USER in .env}
+  MONGO_PASSWORD_FILE: /run/secrets/mongo_password
+  REDIS_ADDR: chatim-redis:6379
+  REDIS_PASSWORD_FILE: /run/secrets/redis_password
+  REDIS_DEDUPE_ADDR: chatim-redis-dedupe:6379
+  REDIS_DEDUPE_PASSWORD_FILE: /run/secrets/redis_dedupe_password
+  NATS_URL: nats://chatim-nats:4222
+  GOMEMLIMIT: 920MiB
+
 services:
   mongodb:
     image: mongo:8.2
     container_name: chatim-mongodb
     restart: unless-stopped
+    secrets: [mongo_password]
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:?set MONGO_ROOT_USER in .env}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?set MONGO_ROOT_PASSWORD in .env}
+      MONGO_INITDB_ROOT_PASSWORD_FILE: /run/secrets/mongo_password
     entrypoint:
       - bash
       - -c
@@ -21,7 +79,15 @@ services:
     volumes:
       - mongodb_data:/data/db
     healthcheck:
-      test: ["CMD-SHELL", "mongosh --quiet -u \"$$MONGO_INITDB_ROOT_USERNAME\" -p \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval \"db.runCommand('ping').ok\""]
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - >-
+          db.getSiblingDB("admin").auth(process.env.MONGO_INITDB_ROOT_USERNAME,
+          require("fs").readFileSync("/run/secrets/mongo_password", "utf8").trim());
+          print(db.runCommand("ping").ok)
       interval: 10s
       timeout: 5s
       retries: 10
@@ -33,33 +99,43 @@ services:
     depends_on:
       mongodb:
         condition: service_healthy
+    secrets: [mongo_password]
     environment:
-      MONGO_USER: ${MONGO_ROOT_USER}
-      MONGO_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      MONGO_USER: ${MONGO_ROOT_USER:?set MONGO_ROOT_USER in .env}
     entrypoint: ["bash", "-c"]
     command:
       - >-
         for i in $$(seq 1 30); do
-        mongosh --host chatim-mongodb -u "$$MONGO_USER" -p "$$MONGO_PASSWORD" --authenticationDatabase admin --quiet
-        --eval 'try { rs.status(); print("replica set already initialized") }
+        mongosh --host chatim-mongodb --quiet
+        --eval 'db.getSiblingDB("admin").auth(process.env.MONGO_USER, require("fs").readFileSync("/run/secrets/mongo_password", "utf8").trim());
+        try { rs.status(); print("replica set already initialized") }
         catch (e) { rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "chatim-mongodb:27017" }] }); print("replica set initialized") }'
         && exit 0; sleep 2; done; exit 1
     restart: "no"
 
   redis:
-    image: redis:7.4.2-alpine
+    <<: *redis
     container_name: chatim-redis
-    restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
+    secrets: [redis_password]
+    environment:
+      REDIS_SECRET_FILE: /run/secrets/redis_password
+    command: ["--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory-policy", "noeviction"]
     ports:
       - "${REDIS_PORT:-6380}:6379"
     volumes:
       - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
+
+  redis-dedupe:
+    <<: *redis
+    container_name: chatim-redis-dedupe
+    secrets: [redis_dedupe_password]
+    environment:
+      REDIS_SECRET_FILE: /run/secrets/redis_dedupe_password
+    command: ["--save", "", "--appendonly", "no", "--maxmemory", "${REDIS_DEDUPE_MAXMEMORY:-512mb}", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "${REDIS_DEDUPE_PORT:-6381}:6379"
+    tmpfs:
+      - /data
 
   nats:
     image: nats:2.15-alpine
@@ -83,9 +159,10 @@ services:
     profiles: ["postgres"]
     restart: unless-stopped
     shm_size: 1g
+    secrets: [pg_password]
     environment:
       POSTGRES_USER: ${PG_USER:?set PG_USER in .env}
-      POSTGRES_PASSWORD: ${PG_PASSWORD:?set PG_PASSWORD in .env}
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_password
       POSTGRES_DB: chatim_poc
     command:
       - postgres
@@ -128,6 +205,34 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+
+  core-1:
+    <<: *core
+    container_name: chatim-core-1
+    environment:
+      <<: *core-env
+      CORE_ID: core-1
+    ports:
+      - "127.0.0.1:${CORE1_GRPC_PORT:-9001}:9000"
+
+  core-2:
+    <<: *core
+    container_name: chatim-core-2
+    environment:
+      <<: *core-env
+      CORE_ID: core-2
+    ports:
+      - "127.0.0.1:${CORE2_GRPC_PORT:-9002}:9000"
+
+secrets:
+  mongo_password:
+    environment: MONGO_ROOT_PASSWORD
+  redis_password:
+    environment: REDIS_PASSWORD
+  redis_dedupe_password:
+    environment: REDIS_DEDUPE_PASSWORD
+  pg_password:
+    environment: PG_PASSWORD
 
 networks:
   default:

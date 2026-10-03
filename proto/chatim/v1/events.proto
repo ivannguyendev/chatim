@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package chatim.v1;
+
+import "chatim/v1/core.proto";
+import "google/protobuf/timestamp.proto";
+
+message Event {
+  string id = 1;
+  string tenant = 2;
+  string room_id = 3;
+  RoomType room_type = 4;
+  uint64 thread_root = 5;
+  uint64 seq = 6;
+  uint64 pts = 7;
+  string actor = 8;
+  google.protobuf.Timestamp ts = 9;
+  oneof payload {
+    MessageCreated message_created = 20;
+  }
+}
+
+message MessageCreated {
+  Message message = 1;
+}

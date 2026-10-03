@@ -1,0 +1,191 @@
+package actor
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"sync"
+
+	"github.com/ivannguyendev/chatim/apps/core/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/apperr"
+)
+
+type Router struct {
+	msgs   store.Messages
+	rooms  store.Rooms
+	sub    Submitter
+	cids   CIDRegistry
+	events EventPublisher
+	marks  ActivityMarker
+	cfg    Config
+	log    *slog.Logger
+
+	mu      sync.RWMutex
+	actors  map[uint64]*actor
+	started bool
+	closed  bool
+	runCtx  context.Context
+	wg      sync.WaitGroup
+	running chan struct{}
+	closing chan struct{}
+	done    chan struct{}
+}
+
+func NewRouter(msgs store.Messages, rooms store.Rooms, sub Submitter, cids CIDRegistry, events EventPublisher, marks ActivityMarker, cfg Config, log *slog.Logger) (*Router, error) {
+	if msgs == nil || rooms == nil || sub == nil || cids == nil || events == nil || marks == nil {
+		return nil, fmt.Errorf("%w: router needs message and room stores, a submitter, a cid registry, an event publisher and an activity marker", apperr.ErrInvalidArgument)
+	}
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+	if log == nil {
+		log = slog.Default()
+	}
+	return &Router{
+		msgs:    msgs,
+		rooms:   rooms,
+		sub:     sub,
+		cids:    cids,
+		events:  events,
+		marks:   marks,
+		cfg:     cfg,
+		log:     log,
+		actors:  make(map[uint64]*actor),
+		running: make(chan struct{}),
+		closing: make(chan struct{}),
+		done:    make(chan struct{}),
+	}, nil
+}
+
+func (r *Router) Run(ctx context.Context) error {
+	if err := r.start(ctx); err != nil {
+		return err
+	}
+	defer close(r.done)
+	select {
+	case <-ctx.Done():
+	case <-r.closing:
+	}
+	r.mu.Lock()
+	r.closed = true
+	r.mu.Unlock()
+	r.wg.Wait()
+	return ctx.Err()
+}
+
+func (r *Router) start(ctx context.Context) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.started {
+		return errStarted
+	}
+	r.started, r.runCtx = true, ctx
+	close(r.running)
+	return nil
+}
+
+func (r *Router) Running() <-chan struct{} { return r.running }
+
+func (r *Router) Started() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.started
+}
+
+func (r *Router) Close(ctx context.Context) error {
+	r.mu.Lock()
+	started := r.started
+	if !r.closed {
+		r.closed = true
+		close(r.closing)
+	}
+	r.mu.Unlock()
+	if !started {
+		return nil
+	}
+	select {
+	case <-r.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (r *Router) Send(ctx context.Context, c SendCmd) (Ack, error) {
+	if err := c.validate(); err != nil {
+		return Ack{}, err
+	}
+	return r.await(ctx, newRequest(c))
+}
+
+func (r *Router) await(ctx context.Context, q *request) (Ack, error) {
+	if err := ctx.Err(); err != nil {
+		return Ack{}, err
+	}
+	if err := r.enqueue(q); err != nil {
+		return Ack{}, err
+	}
+	select {
+	case out := <-q.reply:
+		return out.ack, out.err
+	case <-ctx.Done():
+		return Ack{}, ctx.Err()
+	}
+}
+
+func (r *Router) enqueue(q *request) error {
+	if routed, err := r.offerExisting(q); routed {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !r.started || r.closed {
+		return errNotRunning
+	}
+	a := r.actors[q.cmd.Room]
+	if a == nil {
+		if len(r.actors) >= r.cfg.MaxActors {
+			return errTooManyRooms
+		}
+		a = newActor(r, q.cmd.Room)
+		r.actors[a.id] = a
+		ctx := r.runCtx
+		r.wg.Go(func() { a.run(ctx) })
+	}
+	return a.offer(q)
+}
+
+func (r *Router) offerExisting(q *request) (bool, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if !r.started || r.closed {
+		return true, errNotRunning
+	}
+	a := r.actors[q.cmd.Room]
+	if a == nil {
+		return false, nil
+	}
+	return true, a.offer(q)
+}
+
+func (r *Router) evict(a *actor) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(a.mailbox) > 0 {
+		return false
+	}
+	r.forgetLocked(a)
+	return true
+}
+
+func (r *Router) remove(a *actor) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.forgetLocked(a)
+}
+
+func (r *Router) forgetLocked(a *actor) {
+	if r.actors[a.id] == a {
+		delete(r.actors, a.id)
+	}
+}

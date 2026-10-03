@@ -29,7 +29,7 @@ func TestMsgRoundTrip(t *testing.T) {
 
 func TestMsgByteOrderMatchesNumericOrder(t *testing.T) {
 	rng := rand.New(rand.NewPCG(1, 2))
-	for i := 0; i < 10_000; i++ {
+	for range 10_000 {
 		a := []uint64{rng.Uint64() % 4, rng.Uint64() % 4, rng.Uint64()}
 		b := []uint64{rng.Uint64() % 4, rng.Uint64() % 4, rng.Uint64()}
 		got := bytes.Compare(Msg(a[0], a[1], a[2]), Msg(b[0], b[1], b[2]))
@@ -42,7 +42,7 @@ func TestMsgByteOrderMatchesNumericOrder(t *testing.T) {
 func TestMsgRangeSelectsOneTimelineWindow(t *testing.T) {
 	lo, hi := MsgRange(7, 0, 10, 20)
 	inRange := func(k []byte) bool { return bytes.Compare(k, lo) >= 0 && bytes.Compare(k, hi) < 0 }
-	for seq := uint64(0); seq < 30; seq++ {
+	for seq := range uint64(30) {
 		if got, want := inRange(Msg(7, 0, seq)), seq >= 10 && seq < 20; got != want {
 			t.Errorf("seq %d in range = %v, want %v", seq, got, want)
 		}

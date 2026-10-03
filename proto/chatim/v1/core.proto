@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+package chatim.v1;
+
+import "google/protobuf/timestamp.proto";
+
+service CoreService {
+  rpc CreateRoom(CreateRoomRequest) returns (CreateRoomResponse);
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+  rpc GetHistory(GetHistoryRequest) returns (GetHistoryResponse);
+}
+
+enum RoomType {
+  ROOM_TYPE_UNSPECIFIED = 0;
+  ROOM_TYPE_DM = 1;
+  ROOM_TYPE_GROUP = 2;
+}
+
+enum MessageKind {
+  MESSAGE_KIND_UNSPECIFIED = 0;
+  MESSAGE_KIND_TEXT = 1;
+}
+
+enum HistoryAnchor {
+  HISTORY_ANCHOR_UNSPECIFIED = 0;
+  HISTORY_ANCHOR_LATEST = 1;
+  HISTORY_ANCHOR_OLDEST = 2;
+  HISTORY_ANCHOR_BEFORE = 3;
+  HISTORY_ANCHOR_AFTER = 4;
+}
+
+message Room {
+  string id = 1;
+  string tenant = 2;
+  RoomType type = 3;
+  string name = 4;
+  string created_by = 5;
+  google.protobuf.Timestamp created_at = 6;
+  int32 member_count = 7;
+}
+
+message Message {
+  string room_id = 1;
+  uint64 thread_root = 2;
+  uint64 seq = 3;
+  uint64 pts = 4;
+  string sender = 5;
+  MessageKind kind = 6;
+  string text = 7;
+  string cid = 8;
+  google.protobuf.Timestamp created_at = 9;
+}
+
+message CreateRoomRequest {
+  RoomType type = 1;
+  string name = 2;
+  repeated string members = 3;
+}
+
+message CreateRoomResponse {
+  Room room = 1;
+}
+
+message SendMessageRequest {
+  string room_id = 1;
+  uint64 thread_root = 2;
+  string cid = 3;
+  string text = 4;
+}
+
+message SendMessageResponse {
+  uint64 seq = 1;
+  uint64 pts = 2;
+  google.protobuf.Timestamp created_at = 3;
+}
+
+message GetHistoryRequest {
+  string room_id = 1;
+  uint64 thread_root = 2;
+  HistoryAnchor anchor = 3;
+  uint64 seq = 4;
+  int32 limit = 5;
+}
+
+message GetHistoryResponse {
+  repeated Message messages = 1;
+}

@@ -27,7 +27,7 @@ func Run(ctx context.Context, jobs []roomset.Job, workers int, texts []string, i
 	feed := make(chan roomset.Job)
 	errs := make(chan error, workers)
 	var wg sync.WaitGroup
-	for w := 0; w < workers; w++ {
+	for range workers {
 		wg.Go(func() {
 			rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 			for job := range feed {

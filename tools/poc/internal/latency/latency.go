@@ -13,8 +13,8 @@ type Recorder struct {
 }
 
 type Summary struct {
-	Count              int
-	P50, P95, P99, Max time.Duration
+	Count                    int
+	P50, P95, P99, P999, Max time.Duration
 }
 
 func (r *Recorder) Add(d time.Duration) {
@@ -43,14 +43,14 @@ func summarize(s []time.Duration) Summary {
 		return Summary{}
 	}
 	slices.Sort(s)
-	return Summary{Count: len(s), P50: rank(s, 50), P95: rank(s, 95), P99: rank(s, 99), Max: s[len(s)-1]}
+	return Summary{Count: len(s), P50: rank(s, 500), P95: rank(s, 950), P99: rank(s, 990), P999: rank(s, 999), Max: s[len(s)-1]}
 }
 
 func (s Summary) String() string {
-	return fmt.Sprintf("n=%d p50=%v p95=%v p99=%v max=%v", s.Count, s.P50, s.P95, s.P99, s.Max)
+	return fmt.Sprintf("n=%d p50=%v p95=%v p99=%v p99.9=%v max=%v", s.Count, s.P50, s.P95, s.P99, s.P999, s.Max)
 }
 
-func rank(sorted []time.Duration, p int) time.Duration {
-	i := (p*len(sorted)+99)/100 - 1
+func rank(sorted []time.Duration, perMille int) time.Duration {
+	i := (perMille*len(sorted)+999)/1000 - 1
 	return sorted[max(i, 0)]
 }

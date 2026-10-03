@@ -62,7 +62,10 @@ func runClient(ctx context.Context, args []string) error {
 		for i := 0; i < *total && ctx.Err() == nil; i++ {
 			<-pace.C
 			go func(url string) {
-				c, _, err := gws.NewClient(rec, &gws.ClientOption{Addr: url})
+				c, resp, err := gws.NewClient(rec, &gws.ClientOption{Addr: url})
+				if resp != nil {
+					_ = resp.Body.Close()
+				}
 				if err != nil {
 					failed.Add(1)
 					return

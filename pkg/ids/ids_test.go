@@ -7,7 +7,7 @@ import (
 
 func TestNewRoomIDIsPositiveInt64AndUnique(t *testing.T) {
 	seen := make(map[uint64]bool, 10_000)
-	for i := 0; i < 10_000; i++ {
+	for range 10_000 {
 		id := NewRoomID()
 		if id == 0 || id>>63 != 0 {
 			t.Fatalf("NewRoomID() = %d, want non-zero with top bit clear", id)
