@@ -33,8 +33,10 @@ docs/                    # nghiên cứu, thiết kế, plan, kết quả PoC
 
 Chỉ cần Docker; Go chạy trong container `golang:1.26` qua `make`.
 
-    cp .env.example .env        # đổi MONGO_ROOT_PASSWORD (chữ, số, - hoặc _)
-    make infra-up               # mongo rs0 :27117, redis :6380, nats :4223 (monitor :8223)
+    cp .env.example .env        # đổi MONGO_ROOT_PASSWORD, REDIS_PASSWORD, REDIS_DEDUPE_PASSWORD (chữ, số, - hoặc _)
+    make infra-up               # mongo rs0 :27117, redis state :6380, redis dedupe :6381, nats :4223 (monitor :8223)
+    make redis-cli ARGS="info memory"                      # redis-cli trong container, mật khẩu lấy từ secret
+    make redis-cli INSTANCE=dedupe ARGS="dbsize"           # INSTANCE=state (mặc định) hoặc dedupe
     make test                   # go test -race ./... trong container
     make go ARGS="vet ./..."    # lệnh go bất kỳ
     make infra-down             # dừng; make infra-reset để xoá cả dữ liệu
@@ -70,7 +72,10 @@ Toàn bộ đọc qua `apps/core/internal/config`; thiếu thì dùng giá trị
 | `CORE_ADVERTISE_ADDR` | `<CORE_ID>:<cổng của CORE_GRPC_ADDR>` | Địa chỉ core tự quảng cáo cho slot lease |
 | `CORE_ADMIN_ADDR` | `:9090` | `/healthz`, `/readyz`, pprof — không công khai ra ngoài mạng compose |
 | `MONGO_URI`, `MONGO_DB` | — / `chatim` | Bắt buộc có `MONGO_URI` |
-| `REDIS_ADDR`, `REDIS_DB` | `chatim-redis:6379` / `0` | |
+| `REDIS_ADDR`, `REDIS_DB` | `chatim-redis:6379` / `0` | Redis state: heartbeat, slot lease, pub/sub, `pubwm`, `active` (D44) |
+| `REDIS_PASSWORD`, `REDIS_PASSWORD_FILE` | rỗng (không AUTH) | Mật khẩu Redis state; nếu đặt `_FILE` thì đọc từ file đó (bỏ newline cuối) và file thắng biến thường. Compose dùng `_FILE` trỏ vào secret (D45) |
+| `REDIS_DEDUPE_ADDR`, `REDIS_DEDUPE_DB` | `chatim-redis-dedupe:6379` / `0` | Redis dedupe: chỉ key `chatim:cid:*` (D44) |
+| `REDIS_DEDUPE_PASSWORD`, `REDIS_DEDUPE_PASSWORD_FILE` | rỗng (không AUTH) | Như `REDIS_PASSWORD`, cho Redis dedupe |
 | `NATS_URL` | `nats://chatim-nats:4222` | |
 | `CORE_CONNECT_TIMEOUT` | `10s` | Timeout nối Mongo/Redis/NATS lúc khởi động |
 | `CORE_REQUEST_DEADLINE` | `3s` | Deadline phía server cho mỗi unary RPC (D42), cũng là group deadline của actor và sweeper |
@@ -90,10 +95,12 @@ Toàn bộ đọc qua `apps/core/internal/config`; thiếu thì dùng giá trị
 
 ## Cổng
 
-Compose publish ra host chỉ gRPC của core, và chỉ trên loopback — vì caller hiện được tin cậy qua metadata tới khi có mTLS (M5):
+Với app, compose publish ra host chỉ gRPC của core, và chỉ trên loopback — vì caller hiện được tin cậy qua metadata tới khi có mTLS (M5). Hạ tầng dev publish cổng riêng (`.env`):
 
 | Cổng | Dịch vụ | Ghi chú |
 |---|---|---|
+| `6380` | `redis` state (`REDIS_PORT`) | AOF everysec, `noeviction`, bắt buộc AUTH (`REDIS_PASSWORD`) |
+| `6381` | `redis-dedupe` (`REDIS_DEDUPE_PORT`) | Không lưu đĩa, `maxmemory` `REDIS_DEDUPE_MAXMEMORY` (512mb), `allkeys-lru`, bắt buộc AUTH (`REDIS_DEDUPE_PASSWORD`) |
 | `127.0.0.1:9001` | `core-1` gRPC (`CORE1_GRPC_PORT`) | |
 | `127.0.0.1:9002` | `core-2` gRPC (`CORE2_GRPC_PORT`) | |
 | — | admin (`/healthz`, `/readyz`, pprof) mỗi core, cổng `9090` | Chỉ trong mạng compose, không publish ra host |

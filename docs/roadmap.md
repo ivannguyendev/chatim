@@ -11,7 +11,7 @@
 | 1 | M2c — Core: thread & tiện ích | Thread, mention, reply/forward, bookmark, đánh dấu chưa đọc | Chưa |
 | 1 | M3 — Core: đường đọc | ListMyRoomIDs, ListMyRooms (unread), Sync, GetReactions/Pins/Bookmarks, cache RAM trang mới nhất + singleflight đọc lịch sử, test sẵn sàng sharding trên cluster 2 shard | Chưa |
 | 1 | M4 — Gateway | WebSocket (gws), JWT/JWKS, frame protobuf, subscribe theo room, hàng đợi gửi có giới hạn, typing/presence, định tuyến theo slot, gateway đánh dấu core địa chỉ đang lỗi, hằng số header tenant/user chuyển vào `pkg`, cân nhắc client gRPC tự re-resolve DNS | Chưa |
-| 1 | M5 — Hardening | Load test 100K kết nối, chaos test (kể cả R5 thật), OTel/Prometheus/Grafana, CI, ghim digest image, chạy container theo uid trên Linux, bật Redis AUTH | Chưa |
+| 1 | M5 — Hardening | Load test 100K kết nối, chaos test (kể cả R5 thật), OTel/Prometheus/Grafana, CI, ghim digest image, chạy container theo uid trên Linux, Sentinel (`FailoverClient`) cho cả hai Redis (state và dedupe), dev cùng mô hình | Chưa |
 | 1 | PoC prod-like (song song) | Mongo rs 3 member NVMe vs PostgreSQL, NATS 3 node, 2 host Linux, dữ liệu thật ≥1M tin → chốt database | Chờ hạ tầng |
 | 2 | App `auth` | Cấp JWT/JWKS theo tenant | Sau Phase 1 |
 | 2 | App `api` | Public REST/BFF cho các sản phẩm | Sau Phase 1 |
