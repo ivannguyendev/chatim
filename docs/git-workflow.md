@@ -24,6 +24,12 @@ feat/<ms>-<slug> ──PR──▶ main ──tag vX.Y.Z──▶ image chatim/c
 - Merge vào `main` qua PR, giữ merge commit. Xoá nhánh sau khi merge.
 - Không commit thẳng `main`, không force-push `main`, không rewrite history của `main`.
 
+## CI và bảo vệ nhánh
+
+- `.github/workflows/ci.yml`, job `checks`: chạy `make fmt-check`, `make vet`, `make lint`, `make test` trên mọi PR vào `main` và mỗi lần push lên `main`. Go vẫn chạy trong container `golang:1.26` qua `make`, giống máy dev.
+- CI chỉ chạy unit test. `make itest` và `make core-up && make e2e` cần hạ tầng nên vẫn chạy trên máy dev (DoD bước 2).
+- Branch protection `main`: bắt buộc PR, bắt buộc status check `checks` xanh, không ai được bỏ qua.
+
 ## Definition of Done để merge vào main
 
 1. Mọi task trong `docs/plans/<milestone>.md` đã xong; bước nào cho kết quả khác "Expected" đã được báo và xử lý.
