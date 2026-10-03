@@ -29,7 +29,7 @@ func TestBaseIsLowestHandedMinusOneWhenRedisHasNone(t *testing.T) {
 	rg.enqueue(t, roomA, 21, 22)
 	waitWatermark(t, rg.mr, roomA, 22)
 
-	rg.js.NackWhen(nackIDs("202-31"))
+	rg.js.NackWhen(nackIDs("202-0-31"))
 	rg.enqueue(t, roomB, 31, 32)
 	waitWatermark(t, rg.mr, roomB, 30)
 	eventually(t, "pts 31 abandoned", func() bool { return rg.sink.Count(abandonedMsg) == 1 })

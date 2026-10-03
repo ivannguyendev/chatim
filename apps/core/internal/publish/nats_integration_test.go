@@ -122,7 +122,7 @@ func TestRealJetStreamDedupesByMsgIDAndRepublishesLive(t *testing.T) {
 		if want := events(roomA, pts)[0]; !proto.Equal(got, want) {
 			t.Fatalf("live event = %v, want %v", got, want)
 		}
-		if id := msg.Header.Get(jetstream.MsgIDHeader); id != pbconv.EventID(roomA, pts) {
+		if id := msg.Header.Get(jetstream.MsgIDHeader); id != pbconv.MessageEventID(roomA, 0, pts) {
 			t.Fatalf("live msg id = %q", id)
 		}
 	}

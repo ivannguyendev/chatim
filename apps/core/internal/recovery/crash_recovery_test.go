@@ -124,7 +124,7 @@ func TestRecoveryPublishesAroundAnOldHoleAndTheWatermarkPassesIt(t *testing.T) {
 	sw.Pass(t.Context(), []uint16{slotA})
 	c.drain(t)
 
-	if got, want := idsOf(js.Stored()), []string{"101-1", "101-2", "101-4", "101-5"}; !slices.Equal(got, want) {
+	if got, want := idsOf(js.Stored()), []string{"101-0-1", "101-0-2", "101-0-4", "101-0-5"}; !slices.Equal(got, want) {
 		t.Fatalf("stored %v, want %v", got, want)
 	}
 	if wm, ok := w.watermark(roomA); !ok || wm != 5 {
@@ -143,7 +143,7 @@ func TestRecoveryStopsAtAYoungHoleAndHoldsTheWatermarkBelowIt(t *testing.T) {
 	sw.Pass(t.Context(), []uint16{slotA})
 	c.drain(t)
 
-	if got, want := idsOf(js.Stored()), []string{"101-1", "101-2"}; !slices.Equal(got, want) {
+	if got, want := idsOf(js.Stored()), []string{"101-0-1", "101-0-2"}; !slices.Equal(got, want) {
 		t.Fatalf("stored %v, want %v", got, want)
 	}
 	if wm, ok := w.watermark(roomA); !ok || wm != 2 {

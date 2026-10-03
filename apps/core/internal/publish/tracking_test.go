@@ -24,7 +24,7 @@ func TestBusyRoomKeepsItsTrackingWhileIdleRoomsAreSwept(t *testing.T) {
 	cfg := fastSetup
 	cfg.RoomIdle = 5 * time.Millisecond
 	rg := started(t, cfg)
-	rg.js.NackWhen(nackIDs("101-1"))
+	rg.js.NackWhen(nackIDs("101-0-1"))
 	rg.enqueue(t, roomA, 1, 2, 3)
 	waitWatermark(t, rg.mr, roomA, 0)
 	time.Sleep(30 * time.Millisecond)
@@ -37,7 +37,7 @@ func TestRoomWithTooManyEventsAboveAGapStopsTracking(t *testing.T) {
 	cfg := fastSetup
 	cfg.MaxAhead, cfg.Attempts, cfg.RoomIdle = 3, 1, 5*time.Millisecond
 	rg := started(t, cfg)
-	rg.js.NackWhen(nackIDs("101-1"))
+	rg.js.NackWhen(nackIDs("101-0-1"))
 	rg.enqueue(t, roomA, span(1, 6)...)
 	eventually(t, "overflow logged", func() bool { return rg.sink.Count(overflowMsg) == 1 })
 	waitWatermark(t, rg.mr, roomA, 0)

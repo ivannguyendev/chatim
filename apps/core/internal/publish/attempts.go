@@ -9,14 +9,13 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/pbconv"
 	"github.com/ivannguyendev/chatim/pkg/backoff"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 var (
 	errAckTimeout = errors.New("publish ack timed out")
-	errMalformed  = errors.New("event needs a pts, a subject-safe tenant and a known payload")
+	errMalformed  = errors.New("event needs an id, a pts, a subject-safe tenant and a known payload")
 )
 
 type attempt struct {
@@ -33,7 +32,7 @@ type attempt struct {
 
 func message(root string, room uint64, ev *chatimv1.Event) (*nats.Msg, error) {
 	kind, ok := eventKind(ev)
-	if !ok || ev.GetPts() == 0 || !validToken(ev.GetTenant()) {
+	if !ok || ev.GetId() == "" || ev.GetPts() == 0 || !validToken(ev.GetTenant()) {
 		return nil, errMalformed
 	}
 	data, err := proto.Marshal(ev)
@@ -41,7 +40,7 @@ func message(root string, room uint64, ev *chatimv1.Event) (*nats.Msg, error) {
 		return nil, fmt.Errorf("marshal event: %w", err)
 	}
 	m := &nats.Msg{Subject: roomSubject(root, ev.GetTenant(), room, kind), Data: data, Header: nats.Header{}}
-	m.Header.Set(jetstream.MsgIDHeader, pbconv.EventID(room, ev.GetPts()))
+	m.Header.Set(jetstream.MsgIDHeader, ev.GetId())
 	return m, nil
 }
 

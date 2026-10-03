@@ -46,7 +46,7 @@ func TestSkippedPtsCountTowardTheWatermarkWithoutBeingPublished(t *testing.T) {
 	closeRig(t, rg)
 
 	finalWatermark(t, rg.mr, roomA, 5)
-	if got, want := storedIDs(rg.js), []string{"101-1", "101-2", "101-5"}; !slices.Equal(got, want) {
+	if got, want := storedIDs(rg.js), []string{"101-0-1", "101-0-2", "101-0-5"}; !slices.Equal(got, want) {
 		t.Fatalf("stored %v, want %v", got, want)
 	}
 	if n := len(rg.js.Attempts()); n != 3 {
@@ -61,7 +61,7 @@ func TestSkipHandedFirstPinsTheBaseBelowTheSkippedPts(t *testing.T) {
 	closeRig(t, rg)
 
 	finalWatermark(t, rg.mr, roomA, 3)
-	if got, want := storedIDs(rg.js), []string{"101-2", "101-3"}; !slices.Equal(got, want) {
+	if got, want := storedIDs(rg.js), []string{"101-0-2", "101-0-3"}; !slices.Equal(got, want) {
 		t.Fatalf("stored %v, want %v", got, want)
 	}
 }
@@ -70,7 +70,7 @@ func TestSkipDoesNotCoverAPtsWhosePublishFailed(t *testing.T) {
 	cfg := fastSetup
 	cfg.Attempts = 1
 	rg := started(t, cfg)
-	rg.js.NackWhen(nackIDs("101-2"))
+	rg.js.NackWhen(nackIDs("101-0-2"))
 	rg.enqueue(t, roomA, 1, 2)
 	skip(t, rg, roomA, 3)
 	rg.enqueue(t, roomA, 4)

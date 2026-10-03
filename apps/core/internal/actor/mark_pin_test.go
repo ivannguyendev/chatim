@@ -44,7 +44,7 @@ func TestWakingAnOldRoomPublishesOnlyItsNewMessage(t *testing.T) {
 	for _, m := range js.Stored() {
 		ids = append(ids, publishtest.MsgID(m))
 	}
-	if !slices.Equal(ids, []string{"101-51"}) {
+	if !slices.Equal(ids, []string{"101-0-51"}) {
 		t.Fatalf("published %v, want only the new message", ids)
 	}
 }

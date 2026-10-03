@@ -163,7 +163,7 @@ func sendMany(t *testing.T, r *actor.Router, room uint64, n int) {
 func eventIDs(room uint64, from, to uint64) []string {
 	var out []string
 	for p := from; p <= to; p++ {
-		out = append(out, pbconv.EventID(room, p))
+		out = append(out, pbconv.MessageEventID(room, 0, p))
 	}
 	return out
 }

@@ -30,7 +30,7 @@ func TestNextOwnerWritingFirstCannotHideWhatACrashedCoreCommitted(t *testing.T) 
 	if wm, ok := w.watermark(roomA); !ok || wm != 0 {
 		t.Fatalf("watermark after the next owner published pts %d = %d (present %v), want it held at 0", n+1, wm, ok)
 	}
-	if got := idsOf(js.Stored()); !slices.Equal(got, []string{"101-6"}) {
+	if got := idsOf(js.Stored()); !slices.Equal(got, []string{"101-0-6"}) {
 		t.Fatalf("stored before recovery %v, want only the next owner's write", got)
 	}
 
@@ -41,7 +41,7 @@ func TestNextOwnerWritingFirstCannotHideWhatACrashedCoreCommitted(t *testing.T) 
 	sw.Pass(t.Context(), []uint16{slotA})
 	restarted.drain(t)
 
-	want := append([]string{"101-6"}, eventIDs(roomA, 1, n)...)
+	want := append([]string{"101-0-6"}, eventIDs(roomA, 1, n)...)
 	if got := idsOf(js.Stored()); !slices.Equal(got, want) {
 		t.Fatalf("stored %v, want %v: pts 1..%d recovered in order after the next owner's write", got, want, n)
 	}
