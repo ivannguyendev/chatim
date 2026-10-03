@@ -53,8 +53,8 @@ scripts/e2e.sh,script,Kill-a-core end-to-end scenario: create/send/history/live;
 scripts/wait-core-healthy.sh,script,Bounded wait until a core container is healthy,,make core-up;scripts/e2e.sh,,
 scripts/wait-mongo-primary.sh,script,Bounded wait until rs0 has a writable primary; authenticates inside mongosh --eval from /run/secrets/mongo_password (no password in argv),,make infra-up,,
 scripts/wait-postgres.sh,script,Bounded wait until postgres accepts connections,,make pg-up,,
-docs/designs/260930-chat-core-gateway-design.md,doc,Source of truth: data model; write/read paths; best-effort publish with natural event ids; failure table; Decision Log D1-D51,,everyone,,D1-D51
-docs/roadmap.md,doc,"Milestone status; readiness levels; carried-over items (M2a done; M2a.1 next, then M2b)",,everyone,,
+docs/designs/260930-chat-core-gateway-design.md,doc,Source of truth: data model; write/read paths; best-effort publish with natural event ids; failure table; Decision Log D1-D52,,everyone,,D1-D52
+docs/roadmap.md,doc,"Milestone status; readiness levels; carried-over items (M2a and M2a.1 done; M2a.2 then M2a.3, then M2b)",,everyone,,
 docs/git-workflow.md,doc,Git workflow: feat/fix branches to main by PR; merge Definition of Done; readiness levels; SemVer release tags; broken main and prod hotfix handling,,everyone,,
 docs/poc/README.md,doc,PoC criteria and results R1-R5 and corebench C1 with machine caveats,,everyone,,
 docs/poc/260930-mongodb-vs-postgresql.md,doc,MongoDB vs PostgreSQL comparison with optimized configs,,everyone,,D9
