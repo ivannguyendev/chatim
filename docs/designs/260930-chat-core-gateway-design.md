@@ -1,6 +1,7 @@
 # chatim — Thiết kế Phase 1: `core` + `gateway`
 
 > Ngày: 2026-09-30 · Trạng thái: **đã duyệt qua brainstorm** — chưa implement; cần PoC R1–R5 trước khi code toàn bộ
+> Cập nhật 2026-10-03: M2a.1 đổi hướng đánh số và publish (D47–D51)
 > Nghiên cứu nền: [../research/260930-opensource-chat-architecture-research.md](../research/260930-opensource-chat-architecture-research.md)
 
 ## Tóm tắt
@@ -27,7 +28,7 @@ Ba ý chính:
  │ slot ownership · actor/room · flusher│
  └──────┬───────────────┬──────────────┘
         ▼               ▼
-   MongoDB RS (3)    Redis state (slot lease, heartbeat, watermark, presence) + Redis dedupe (cid)
+   MongoDB RS (3)    Redis state (slot lease, heartbeat, presence) + Redis dedupe (cid)
 ```
 
 ## 1. Phạm vi
@@ -47,7 +48,7 @@ Ba ý chính:
 | # | Giả định |
 |---|---|
 | A1 | p99: ack ≤30ms · tới người nhận online ≤100ms · trang 50 tin ở bất kỳ vị trí (kể cả cũ nhất) ≤20ms |
-| A2 | Đã ack = đã lưu `w:majority`; thứ tự trong room luôn đúng; giao at-least-once, client bỏ trùng theo `(room, pts)` |
+| A2 | Đã ack = đã lưu `w:majority`; thứ tự tin trong timeline thống nhất cho mọi người (theo seq); event phát best-effort, mỗi event có id tự nhiên để người nhận bỏ trùng; mất event do module đối soát định kỳ bù (D47, D48) |
 | A3 | 99.95%, không điểm chết đơn lẻ: core ≥2, gateway ≥2 (3 cho 100K), MongoDB **replica set 3 member, không sharding**, NATS 3, Redis sentinel |
 | A4 | Tin nhắn và lịch sử sửa lưu vĩnh viễn · `room_events` 30 ngày · `CHATIM_EVT` 7 ngày |
 | A5 | JWT do app auth cấp (EdDSA/RS256, JWKS theo tenant, claim `tenant`/`sub`/`sid`/`exp`); mTLS nội bộ; không E2EE |
@@ -84,19 +85,20 @@ chatim/
 
 ## 4. Mô hình dữ liệu (MongoDB, WiredTiger `zstd`)
 
-**Hai loại số thứ tự**
+**Số thứ tự**
 - `seq`: vị trí tin trong **timeline**. Timeline chính của room và mỗi thread có dãy riêng.
-- `pts`: vị trí của **mọi event được lưu** trong room (tin mới, sửa, xoá, reaction, ghim, member, thread cập nhật). Dùng để phát hiện event bị thiếu và đồng bộ phần chênh.
+
+Không có bộ đếm event toàn room. Id event là khoá tự nhiên suy ra từ doc: tạo tin `{room}-{thread}-{seq}`; các loại thay đổi (M2b) dùng version của doc đích (D48, D51).
 
 **Khoá nhị phân**: các số ghép big-endian `uint64` → thứ tự byte trùng thứ tự số. `room_id` là số 63-bit ngẫu nhiên (trả client dạng string) để không đoán được id, không lộ số lượng room, và để khi shard thì ghi phân tán đều giữa các shard. `thread_root = 0` là timeline chính. Seq bắt đầu từ 1; giá trị `math.MaxUint64` được giữ lại, không dùng làm seq, vì khoảng "cả timeline" `MsgRange(room, thread, 0, MaxUint64)` là khoảng nửa mở.
 
 | Collection | `_id` / khoá | Trường chính | Index |
 |---|---|---|---|
-| `rooms` | `room_id` | tenant, type (dm/group/channel), name, settings (ai được post, bật thread), member_count, last_seq, last_pts, last_msg_at, dm_key, pins (≤50) | `{t, dm_key}` unique (partial, chỉ DM) |
+| `rooms` | `room_id` | tenant, type (dm/group/channel), name, settings (ai được post, bật thread), member_count, last_seq, last_msg_at, dm_key, pins (≤50) | `{t, dm_key}` unique (partial, chỉ DM) |
 | `members` | ObjectId | r, u, role, read_seq, mention_unread, marked_unread, muted_until, cleared_seq | `{r,u}` unique · `{t,u,r}` |
-| `messages` (**clustered**) | 24B `room│thread_root│seq` | f, p (pts), kind, text, attachments, mentions, reply_to, forward_from, thread_count, thread_last_seq, reaction_summary, ver, edited_at, deleted, cid, ts, meta | **không có index phụ** |
+| `messages` (**clustered**) | 24B `room│thread_root│seq` | f, kind, text, attachments, mentions, reply_to, forward_from, thread_count, thread_last_seq, reaction_summary, ver, edited_at, deleted, cid, ts, meta | **không có index phụ** |
 | `message_edits` (clustered) | 28B `room│thread│seq│version` | bản bị thay thế: text, attachments, meta, editor, ts | — |
-| `room_events` (clustered) | 16B `room│pts` | type, seq đích, payload thay đổi, ts | TTL 30 ngày trên `ts` |
+| `room_events` (clustered) | 16B `room│pts` | type, seq đích, payload thay đổi, ts | TTL 30 ngày trên `ts` · chưa dùng; xem lại ở M2b/M3 |
 | `reactions` | ObjectId | k (`room│thread│seq`), u, emoji | `{k,u,emoji}` unique |
 | `thread_subs` | ObjectId | r, thread_root, u | `{r,thread_root,u}` unique |
 | `bookmarks` | ObjectId | t, u, r, thread_root, seq, note, ts | `{t,u,ts:-1}` |
@@ -104,8 +106,8 @@ chatim/
 
 **Quy tắc**
 - Timeline chính = quét `R│0│*`; thread = quét `R│root│*`. Insert tin mới chỉ ghi 1 cấu trúc.
-- Tin mới **không** ghi vào `room_events` (tin đã mang `p`); `room_events` chỉ chứa thay đổi.
-- Unread = `rooms.last_seq − members.read_seq` → không ghi cho từng member khi có tin mới.
+- Tin mới **không** ghi vào `room_events`; `room_events` chỉ chứa thay đổi (chưa dùng, xem lại ở M2b/M3).
+- Unread = `rooms.last_seq − members.read_seq` → không ghi cho từng member khi có tin mới. (sai vì đếm cả tin thu hồi, tin hệ thống, tin bị ẩn, tin của chính mình và lỗ; M3 thay bằng unread chính xác 99+ theo cờ đếm)
 - Reaction: số đếm theo emoji nằm trong tin (`$inc`), danh sách người thả ở `reactions` → tin trong channel lớn không phình.
 - Xoá cho mọi người = tombstone (giữ `_id`, xoá nội dung) → không tạo lỗ seq.
 - Mỗi reply trong thread sinh `room_event` `thread.updated` (seq tin gốc, số reply, seq cuối).
@@ -156,11 +158,11 @@ Mỗi core chạy vòng lặp 1s (có jitter):
 3. Thiếu → nhận slot trống hoặc slot của core hết heartbeat (`SET NX` / Lua), chọn theo thứ tự rendezvous hash.
 4. Dư → nhả bớt: ngừng nhận lệnh, flush xong batch đang dở, xoá key nếu vẫn là của mình.
 
-Slot manager dùng một Redis client riêng (pool riêng, không chung với chống trùng cid, watermark và active mark) để gia hạn lease không bao giờ phải xếp hàng sau lưu lượng ghi tin (D28).
+Slot manager dùng một Redis client riêng (pool riêng, không chung với chống trùng cid) để gia hạn lease không bao giờ phải xếp hàng sau lưu lượng ghi tin (D28).
 
 **Hook theo batch, không chặn `Step`.** `slot.Config` có 3 hook nhận **nhiều slot một lần**, không bao giờ chạy goroutine riêng: `BeforeRelease(ctx, slots)` — slot sắp nhả trong `Step` (nhả dư hoặc `ReleaseAll` lúc shutdown), gọi sau khi `Owns` đã false và trước khi xoá key lease; `AfterClaim(ctx, slots)` — slot vừa nhận trong `Step`; `AfterLose(ctx, slots)` — slot bị core khác ghi đè khi gia hạn thất bại. Cả 3 hook của cùng một `Step` dùng chung một context, hết hạn sau `HookTimeout` (mặc định `Tick/2`, phải nhỏ hơn `Tick`) tính từ lúc `Step` bắt đầu — nên một hook chặn không bao giờ kéo một `Step` dài quá một tick; hook phải tôn trọng ctx. Hook `nil` bị bỏ qua, batch rỗng không gọi (D26).
 
-Router dùng `AfterLose` + `AfterClaim` để cho nghỉ (`EvictSlots`) mọi actor của room thuộc các slot vừa đổi chủ: actor đang nghỉ từ chối lệnh mới bằng `ErrRetryLater`, chờ nhóm ghi đang bay (nếu có) kết thúc bình thường rồi tự xoá; lệnh `Send` kế tiếp dựng actor mới, nạp lại `last_seq` và cache cid từ DB thay vì tiếp tục tranh chấp với core chủ mới bằng seq cũ (D27).
+Router dùng `AfterLose` + `AfterClaim` (từ M2a.1 `AfterClaim` chỉ còn `EvictSlots`, D49) để cho nghỉ (`EvictSlots`) mọi actor của room thuộc các slot vừa đổi chủ: actor đang nghỉ từ chối lệnh mới bằng `ErrRetryLater`, chờ nhóm ghi đang bay (nếu có) kết thúc bình thường rồi tự xoá; lệnh `Send` kế tiếp dựng actor mới, nạp lại `last_seq` và cache cid từ DB thay vì tiếp tục tranh chấp với core chủ mới bằng seq cũ (D27).
 
 **Nguyên tắc**: *core nào cũng xử lý đúng được mọi room*. Chủ slot chỉ là nơi được ưu tiên để gộp batch, giữ thứ tự và dùng cache. Trạng thái trong RAM của actor chỉ là cache; mọi thay đổi có ý nghĩa đi qua lệnh atomic của DB. Vì vậy Redis sai (failover, 2 core cùng giữ một slot) không làm mất hay trùng tin.
 
@@ -173,22 +175,22 @@ Gateway ─gRPC Send{room, thread, cid, content}─► core chủ slot (không p
 core
  ├─ router: room → actor (tạo khi có lệnh, dừng sau 5 phút không hoạt động)
  ├─ actor(room): 1 goroutine, hàng đợi ≤1024 (đầy → RESOURCE_EXHAUSTED)
- │    cache: last_seq từng timeline, last_pts, member/role, cid LRU 10 phút, 100 tin gần nhất
+ │    cache: last_seq từng timeline, member/role, cid LRU 10 phút, 100 tin gần nhất
  │    ① kiểm quyền (đúng tenant, là member, channel chỉ admin post)
  │    ② chống trùng cid: LRU RAM → Redis SET NX
- │    ③ seq = last_seq+1, pts = last_pts+1 → chuyển doc sang flusher
+ │    ③ seq = last_seq+1 → chuyển doc sang flusher
  └─ flusher (vài worker / core): flush mỗi 2ms hoặc khi đủ 256 doc
       insertMany(ordered:false, w:majority) → kết quả từng doc
-        ✔ thành công    → publish JetStream (async) → ack gateway {seq, pts}
-        ✘ duplicate key → core khác vừa ghi room này: actor nạp lại last_seq/pts từ DB, gán lại, thử lại
+        ✔ thành công    → ack gateway {seq} → publish JetStream (async, best-effort)
+        ✘ duplicate key → core khác vừa ghi room này: actor nạp lại last_seq từ DB, gán lại, thử lại
         ✘ timeout       → đọc lại khoảng seq theo cid để biết doc nào đã ghi, thử lại phần thiếu
- mỗi 1s: bulkWrite rooms {$max last_seq, last_pts, last_msg_at} + read_seq của người gửi
+ mỗi 1s: bulkWrite rooms {$max last_seq, last_msg_at} + read_seq của người gửi
 ```
 
 - `_id` unique đóng vai trò CAS → không cần ghi counter trên đường gửi tin.
-- Lỗi ghi dở giữa chừng (rất hiếm) có thể để lại lỗ seq/pts; client và API coi lỗ quá 5s là void.
+- Lỗi ghi dở giữa chừng (rất hiếm) có thể để lại lỗ seq; client và API coi lỗ quá 5s là void.
 - Mỗi actor chỉ giữ **một nhóm ghi đang bay**: số bị từ chối lại thử trước, lệnh mới xếp sau. Nhận nhóm thứ hai trước khi biết kết quả nhóm đầu không an toàn, vì `last_seq` trong cache có thể lùi lại nếu nhóm đầu hoá ra trùng (D29).
-- Kết quả insert có 4 trạng thái: `Inserted`, `Duplicate` (lỗi khoá trùng), `Unknown` (timeout/lỗi transport — không rõ đã ghi hay chưa) và `Rejected` (lỗi ghi khác, không phải trùng khoá). `Duplicate` và `Unknown` được đối chiếu bằng `Find` (read concern majority) theo `(from, cid)`: doc của chính mình → coi như đã ghi — kể cả khi `Find` chưa thấy ngay (ghi majority chưa kịp lan, thử lại `Find` trong cùng deadline) — còn doc của core khác → nạp lại `last_seq`/`last_pts` rồi gán lại (tối đa 3 lần); `Unknown` mà `Find` không thấy gì ở đúng seq cũ → gửi lại đúng seq đó (tối đa 3 lần); hết cả hai hạn mức mà vẫn chưa rõ → `ErrRetryLater`, buộc actor nạp lại `last_seq`/`last_pts` và cache cid trước nhóm kế tiếp (D30).
+- Kết quả insert có 4 trạng thái: `Inserted`, `Duplicate` (lỗi khoá trùng), `Unknown` (timeout/lỗi transport — không rõ đã ghi hay chưa) và `Rejected` (lỗi ghi khác, không phải trùng khoá). `Duplicate` và `Unknown` được đối chiếu bằng `Find` (read concern majority) theo `(from, cid)`: doc của chính mình → coi như đã ghi — kể cả khi `Find` chưa thấy ngay (ghi majority chưa kịp lan, thử lại `Find` trong cùng deadline) — còn doc của core khác → nạp lại `last_seq` rồi gán lại (tối đa 3 lần); `Unknown` mà `Find` không thấy gì ở đúng seq cũ → gửi lại đúng seq đó (tối đa 3 lần); hết cả hai hạn mức mà vẫn chưa rõ → `ErrRetryLater`, buộc actor nạp lại `last_seq` và cache cid trước nhóm kế tiếp (D30).
 - Mỗi entry có **ngân sách tuyệt đối** tính từ lúc đặt chỗ cid (`Reserve`), bị chặn bởi TTL đặt chỗ (`ReservationTTL`, cấu hình bằng `CID_PENDING_TTL`): hết ngân sách trước khi hết số lần thử lại cũng coi như hết hạn mức, để một entry không sống qua nhiều lần group deadline trong lúc key `pending` 10s đã hết hạn và một core khác đã ghi trùng (D32).
 - Flusher nhận `Deadline` theo từng nhóm: không gửi một nhóm nếu không thể xong trước deadline (`now + InsertTimeout` vượt deadline) mà trả `Unknown` kèm `ErrNotSent` (bọc `ErrRetryLater`); phần còn lại của batch vẫn gửi bình thường. Context insert, và qua đó `maxTimeMS` phía server, cũng cắt đúng ở deadline này (D33).
 - Chống trùng cid theo 3 tầng: LRU RAM (10 phút / 4096 entry, nạp lại từ 100 tin gần nhất lúc actor khởi động) → Redis dedupe `pending` (10s, một `EVALSHA` cho cả nhóm) → Redis `committed` (15 phút, ghi đè không điều kiện ngay sau khi DB commit, vì DB là nguồn sự thật). Redis lỗi → chỉ dùng LRU, tạm ngừng gọi Redis 1s (`cooldown`, một probe mỗi cooldown, log một lần lúc vào và một lần lúc ra chế độ suy giảm) (D34).
@@ -196,16 +198,27 @@ core
 
 ### 5.3 Thay đổi khác
 
-- Sửa, xoá, reaction, ghim, member, room: qua actor để lấy `pts`; ghi bằng lệnh atomic có điều kiện + insert `room_events`; gộp vào cùng flusher (bulkWrite theo collection).
+- Sửa, xoá, reaction, ghim, member, room: qua actor; ghi bằng lệnh atomic có điều kiện; id event lấy từ version của doc đích (D48, D51). Chi tiết chốt ở plan M2b (D52–D56 trong decision log M2b).
 - **Sửa tin**: `updateOne({_id, ver: N}, {$set: nội dung mới, $inc: {ver: 1}})` + insert bản cũ vào `message_edits`.
-- **Read receipt**: trạng thái riêng từng user, không cần `pts`: `members {$max read_seq}` gộp mỗi 1s; gateway giới hạn 1 lần/s/room/user.
+- **Read receipt**: trạng thái riêng từng user, không phát event theo room: `members {$max read_seq}` gộp mỗi 1s; gateway giới hạn 1 lần/s/room/user.
 
-### 5.4 Publish không mất event (at-least-once)
+### 5.4 Publish best-effort (D47–D51)
 
-1. **Trước khi flush một nhóm ghi**, actor đánh dấu room đang hoạt động và ghim mốc publish nếu chưa có — cả hai trong **một** lệnh Lua: `ZADD chatim:active:{slot} <now ms> <room>` (tối đa 1 lần/5s/room) và `SET chatim:pubwm:{room} <min(mốc đã publish, seq thấp nhất của nhóm sắp ghi − 1)> NX PX 7d` (đã có thì chỉ gia hạn TTL, không bao giờ hạ hay ghi đè). Đánh dấu/ghim phải đi **trước** insert, không phải sau publish: nếu core chết ngay sau commit mà trước publish, sweeper cần thấy room này trong `active:{slot}` ngay cả khi publish chưa từng chạy (D36).
-2. Ack client ngay khi DB commit. Publish với `Nats-Msg-Id = room│pts` (JetStream bỏ trùng trong 2 phút). Watermark trong RAM chỉ tiến qua dải `pts` **liên tục** đã nhận `PubAck`, không phải theo pts lớn nhất đã publish: một `pts` publish lỗi (hoặc một lỗ vĩnh viễn báo bằng `Skip`) giữ watermark đứng đúng tại đó để chờ khôi phục, thay vì để lỗ tuột qua (D37).
-3. **Sweeper khôi phục** (`recovery.Sweeper`) chạy khi core vừa nhận slot và mỗi `Interval` (mặc định 30s) cho mọi slot đang giữ. Với mỗi room trong `active:{slot}`: `last_pts` (RAM actor) lớn hơn watermark Redis → room sau mốc → `Router.Recover` từ watermark, nhưng chỉ khi tin ngay sau watermark đã cũ hơn `StaleAfter` (mặc định 5s) — tin trẻ hơn coi như publisher đang xử lý, bỏ qua lượt này. Room đã bắt kịp mốc chỉ bị xoá khỏi `active:{slot}` khi mốc hoạt động cũ hơn `RemoveAfter` (mặc định 15s, phải ≥ chu kỳ đánh dấu + group deadline + 1s lệch đồng hồ) **và** điều kiện đó vẫn đúng ngay lúc xoá (so khớp điểm số trong cùng một lệnh Lua, theo batch) — một lần ghi mới tự đánh dấu lại entry thì không bị xoá nhầm (D38).
-4. **Lỗ còn sót lại đã biết, chấp nhận ở M2a**: Redis lỗi đúng lúc đánh dấu/ghim (actor vẫn ghi tiếp ở chế độ suy giảm, không có mốc để khôi phục); client đọc từ RAM actor cũ rồi actor đó bị rollback do thua CAS; một core cũ còn tưởng mình chủ slot (stale double-owner) lấp đúng một lỗ mà core mới đã bỏ qua; giả định `pts == seq` của M2a — M2b phải sửa lại cách quét theo pts khi sửa/xoá/reaction sinh pts mà không sinh seq.
+1. Ack client ngay khi DB commit. Sau đó actor đưa event vào publisher; mỗi event có `Nats-Msg-Id` = id tự nhiên (tạo tin: `{room}-{thread}-{seq}`), nên JetStream bỏ trùng trong cửa sổ 2 phút.
+2. Publisher sharding theo slot. Mỗi lần actor `Enqueue` là một batch; batch sau của cùng room chỉ gửi khi batch trước đã có ack hoặc hết hạn mức retry; các room khác không phải chờ (D50). Trong một batch các event gửi pipeline. Thứ tự này đảm bảo thay đổi của một tin (M2b) phát sau chính tin đó.
+3. Không có watermark, active mark hay sweeper. Event mất khi core chết giữa commit và publish, khi NATS gián đoạn lâu hơn hạn mức retry, hoặc khi hàng đợi đầy. Client không dò thiếu bằng số; khi connect/reconnect client lấy bản mới nhất (doc tin luôn giữ trạng thái hiện tại). Các app cần đủ event dựa vào **module đối soát event định kỳ** (Phase 2), module này dựng lại event từ doc với đúng id (D51).
+4. Lúc dừng, publisher drain trong `CORE_PUBLISHER_DRAIN`, chỉ abort khi hết giờ.
+
+Các trường hợp event bị bỏ (để đối soát bù):
+- hết số lần thử (`Attempts`);
+- hàng đợi retry của shard đầy (`MaxRetrying`);
+- hàng đợi publish đầy (`PUB_QUEUE`);
+- core chết giữa commit và publish;
+- `Enqueue` của actor lỗi — lỗi này bị bỏ qua vì client đã được ack.
+
+Ghi chú vận hành:
+- Mỗi shard chỉ poll ack của publish đang chờ ở đầu hàng, nên một ack bị treo có thể làm chậm việc ghi nhận ack của room khác tối đa `PUB_ACK_TIMEOUT`; room khác không bao giờ bị chặn lâu hơn mức đó.
+- Rolling deploy: dedupe committed đổi từ `c:{seq}:{pts}:{ms}` sang `c:{seq}:{ms}`; core mới coi giá trị 4 trường của core cũ là không có. An toàn vì `_id` unique + đối chiếu theo `(from, cid)` vẫn chặn trùng.
 
 ## 6. Đường đọc
 
@@ -217,7 +230,7 @@ Lệnh đọc gắn với một room đi về core chủ slot (dùng RAM actor);
 | `GetMessages(room, [{thread, seq}])` | `$in` trên `_id` (xem trước reply, pin, bookmark) | ≤10ms |
 | `ListMyRoomIDs(user)` | Covered query trên `{t,u,r}`; gateway gọi khi client kết nối | ≤10ms |
 | `ListMyRooms(user, cursor)` | members → rooms (`$in`) → sắp theo `last_msg_at`; kèm unread, mention_unread, marked_unread, tin cuối | ≤30ms |
-| `Sync([{room, pts, seq}])` | Tin có `seq >` của client + `room_events` có `pts >` của client (≤200). Thiếu >200 hoặc quá 30 ngày → `too_long`, client tải lại trang mới nhất | ≤50ms / 20 room |
+| `Sync([{room, pts, seq}])` (thiết kế lại ở M3: không phát lại; reconnect lấy mới nhất) | Tin có `seq >` của client + `room_events` có `pts >` của client (≤200). Thiếu >200 hoặc quá 30 ngày → `too_long`, client tải lại trang mới nhất | ≤50ms / 20 room |
 | `GetEditHistory` · `GetReactions(msg, emoji, cursor)` · `ListPins` · `ListBookmarks` | Quét theo prefix / index có sẵn | ≤20ms |
 
 - Lọc theo người đọc: ẩn seq ≤ `cleared_seq`, ẩn tin trong `hidden` (cache theo user–room), tin xoá trả placeholder `deleted`.
@@ -230,7 +243,7 @@ Lệnh đọc gắn với một room đi về core chủ slot (dùng RAM actor);
 - gws, 1 goroutine/connection, `ParallelEnabled=false`, tắt nén, frame ≤64KB, ping 25s, 60s không phản hồi thì đóng.
 - JWT trong subprotocol hoặc frame đầu (≤5s), kiểm tra bằng JWKS có cache.
 - Giao thức protobuf: `ClientFrame{id, oneof: send | edit | delete | react | read | typing | history | sync | sub_presence …}`, `ServerFrame{reply{id} | event | heartbeat}`. Subprotocol JSON cho debug.
-- Hàng đợi gửi mỗi connection có giới hạn (256 frame / 1MB): đầy → bỏ typing/presence trước → vẫn đầy thì đóng mã `4008 slow consumer`, client kết nối lại và `Sync`.
+- Hàng đợi gửi mỗi connection có giới hạn (256 frame / 1MB): đầy → bỏ typing/presence trước → vẫn đầy thì đóng mã `4008 slow consumer`, client kết nối lại và lấy bản mới nhất.
 
 **Fanout theo interest**
 ```
@@ -247,13 +260,13 @@ gateway: roomIndex room→{conn}; 1 NATS sub mỗi room (đếm tham chiếu)
 - Typing: gateway kiểm membership bằng `roomIndex`, giới hạn 1 lần/3s, không có trong channel.
 - Presence: Redis `pres:{t}:{uid}` đếm connection theo gateway; 0→1 online, 1→0 offline (chờ 5s chống nhấp nháy); client chỉ đăng ký presence của ≤200 user đang hiển thị.
 - Tải: ~50K connection/gateway (~1.5GB RAM); 3 gateway cho 100K.
-- Gateway không sắp lại thứ tự; SDK client theo dõi `pts` từng room, thấy lỗ thì gọi `Sync`.
+- Gateway không sắp lại thứ tự; client sắp tin theo seq và bỏ trùng event theo id.
 
 ## 8. Event stream
 
 - Stream `CHATIM_EVT`: subject `evt.>`, R3, lưu file, giữ 7 ngày, cửa sổ chống trùng 2 phút.
-- Envelope `chatim.events.v1.Event{id, tenant, room_id, room_type, thread, seq, pts, type, actor, ts, oneof payload}`. Chỉ thêm field (buf breaking check).
-- Consumer nội bộ: durable pull consumer, `FilterSubjects` theo tenant/loại event, ack từng event, bỏ trùng theo `(room, pts)`. Thứ tự trong một room được giữ.
+- Envelope `chatim.events.v1.Event{id, tenant, room_id, room_type, thread, seq, type, actor, ts, oneof payload}` (field `pts` reserved, D48). Chỉ thêm field (buf breaking check).
+- Consumer nội bộ: durable pull consumer, `FilterSubjects` theo tenant/loại event, ack từng event, bỏ trùng theo id event; thứ tự event của một room theo thứ tự publisher phát (D50).
 - Typing/presence không bao giờ vào stream.
 - **NATS chỉ dùng nội bộ** (app trong monorepo). App bên ngoài đi qua app `events` (làm sau): kiểm tra token, buộc lọc theo tenant của app, bọc thành gRPC `WatchEvents(filter, cursor)`.
 
@@ -262,14 +275,13 @@ gateway: roomIndex room→{conn}; 1 NATS sub mỗi room (đếm tham chiếu)
 | Sự cố | Phản ứng |
 |---|---|
 | Mongo đổi primary (5–12s) | Flusher thử lại có backoff, lệnh chờ trong hàng đợi actor; quá deadline 3s → UNAVAILABLE, SDK gửi lại cùng `cid` |
-| NATS chết toàn bộ | DB vẫn ghi; watermark tụt lại, publish bù khi NATS sống lại; gateway báo `degraded`, client `Sync` mỗi 5s |
-| Redis state chết (`chatim-redis`) | Dùng bảng slot gần nhất (lease hết hạn thì `Owns()` false, mọi core vẫn ghi đúng nhờ `_id` làm CAS); watermark/active mark tạm ngừng, sweeper publish bù khi Redis sống lại; tạm tắt presence/typing |
-| Redis dedupe chết (`chatim-redis-dedupe`) | Chống trùng chỉ còn LRU RAM actor (redisguard cooldown); slot, watermark và publish không bị ảnh hưởng. Mất key cid khi khởi động lại là chấp nhận được vì instance này không lưu đĩa (D44) |
-| Core chết | Core khác nhận slot trong ~5s; trong lúc chờ, core bất kỳ vẫn xử lý đúng; publish bù theo watermark |
-| Core bị kill giữa chừng một lần ghi | DB là nguồn sự thật: nhóm đã `Inserted` ở Mongo coi như xong dù core chết trước khi ack/publish; core nhận slot mới nạp lại `last_seq`/`last_pts` từ DB, sweeper publish bù theo watermark (5.4); không có 2PC nên không có trạng thái treo giữa DB và publish |
-| Redis chậm hoặc suy giảm (vượt `REDIS_OP_TIMEOUT`) | Mỗi client Redis (chống trùng, watermark/active mark, slot lease) tự chuyển chế độ suy giảm độc lập: chống trùng dùng LRU RAM, watermark/active mark tạm ngừng cập nhật (sends continue without recovery marks), slot renew dùng lease gần nhất; mỗi client log 1 lần vào và 1 lần ra chế độ suy giảm, 1 probe mỗi `cooldown` (1s) |
-| NATS gián đoạn kéo dài qua hết TTL watermark (> 7 ngày) | Phần timeline chưa publish vẫn còn trong DB; watermark `chatim:pubwm:{room}` hết TTL thì mất mốc, sweeper coi room như chưa publish gì và quét lại từ `pts` 1 — tốn hơn nhưng không mất event; biết trước và chấp nhận ở M2a (room phải im lặng > 7 ngày) |
-| Gateway chết / kết nối lại hàng loạt | Client backoff + jitter 0–10s; gateway giới hạn handshake/s; client `Sync` theo pts |
+| NATS chết toàn bộ | DB vẫn ghi; event trong lúc gián đoạn có thể mất sau hạn mức retry; client reconnect lấy mới nhất; đối soát bù cho app; gateway báo `degraded` |
+| Redis state chết (`chatim-redis`) | Dùng bảng slot gần nhất (lease hết hạn thì `Owns()` false, mọi core vẫn ghi đúng nhờ `_id` làm CAS); publish không dùng Redis nên không bị ảnh hưởng; tạm tắt presence/typing |
+| Redis dedupe chết (`chatim-redis-dedupe`) | Chống trùng chỉ còn LRU RAM actor (redisguard cooldown); slot và publish không bị ảnh hưởng. Mất key cid khi khởi động lại là chấp nhận được vì instance này không lưu đĩa (D44) |
+| Core chết | Core khác nhận slot trong ~5s; trong lúc chờ, core bất kỳ vẫn xử lý đúng; event chưa publish có thể mất (D47) |
+| Core bị kill giữa chừng một lần ghi | DB là nguồn sự thật: nhóm đã `Inserted` ở Mongo coi như xong dù core chết trước khi ack/publish; core nhận slot mới nạp lại `last_seq` từ DB; event chưa publish có thể mất (D47), đối soát bù (5.4); không có 2PC nên không có trạng thái treo giữa DB và publish |
+| Redis chậm hoặc suy giảm (vượt `REDIS_OP_TIMEOUT`) | Mỗi client Redis (chống trùng, slot lease) tự chuyển chế độ suy giảm độc lập: chống trùng dùng LRU RAM, slot renew dùng lease gần nhất; mỗi client log 1 lần vào và 1 lần ra chế độ suy giảm, 1 probe mỗi `cooldown` (1s) |
+| Gateway chết / kết nối lại hàng loạt | Client backoff + jitter 0–10s; gateway giới hạn handshake/s; client lấy bản mới nhất |
 | Room nóng | Hàng đợi actor có giới hạn, singleflight khi đọc, rate limit post theo user |
 
 ## 10. Bảo mật
@@ -284,15 +296,15 @@ gateway: roomIndex room→{conn}; 1 NATS sub mỗi room (đếm tham chiếu)
 ## 11. Kiểm thử (70 / 20 / 10)
 
 - **Unit**: mã hoá key nhị phân (thứ tự byte), tính slot, actor gán lại seq khi duplicate, flusher gộp batch, kiểm quyền, bộ phát hiện gap phía client, codec frame.
-- **Integration** (testcontainers: Mongo RS, Redis, NATS): 2 core cùng ghi 1 room, chuyển slot, kill core rồi kiểm tra publish bù, trang cũ nhất, CAS khi sửa, `Sync` trả `too_long`.
+- **Integration** (testcontainers: Mongo RS, Redis, NATS): 2 core cùng ghi 1 room, chuyển slot, kill core, trang cũ nhất, CAS khi sửa, `Sync` trả `too_long`.
 - **Giữ sẵn sàng sharding**: một bộ integration test chạy trên cluster 2 shard, kiểm tra mọi truy vấn vào collection lớn có `explain` là `SINGLE_SHARD` → chặn sớm code vi phạm quy tắc 4.1.
 - **E2E**: docker compose + client WS viết bằng Go chạy kịch bản đầy đủ.
 - **Load**: 100K connection / 3 gateway; 10K tin/s (70% DM, 25% group, 5% channel); đo p99 ack, tới người nhận, trang cũ nhất trên tập 100M tin.
-- **Chaos**: kill core, `rs.stepDown()`, failover Redis, kill node NATS → mọi `cid` đã ack có đúng 1 bản trong DB; consumer nhận đủ mọi pts.
+- **Chaos**: kill core, `rs.stepDown()`, failover Redis, kill node NATS → mọi `cid` đã ack có đúng 1 bản trong DB.
 
 ## 12. Quan sát hệ thống
 
-- Metric: kích thước/độ trễ flush, số lần thử lại do duplicate, độ sâu hàng đợi actor, slot đang giữ, độ trễ publish (`pts` DB − watermark), số connection, frame bị bỏ, số lần đóng 4008, độ trễ tới người nhận.
+- Metric: kích thước/độ trễ flush, số lần thử lại do duplicate, độ sâu hàng đợi actor, slot đang giữ, số event publish bị bỏ (abandoned/queue full), số connection, frame bị bỏ, số lần đóng 4008, độ trễ tới người nhận.
 - OTel trace gateway → core → Mongo/NATS; log JSON (slog); dashboard Grafana; `/healthz`, `/readyz`.
 
 ## 13. Rủi ro — cần PoC trước khi code toàn bộ
@@ -329,7 +341,7 @@ Kết quả trên máy dev và hướng dẫn chạy prod-like: [../poc/README.m
 | D16 | NATS chỉ nội bộ; cô lập tenant ở app `events` | Cấp credential NATS cho từng app ngoài | Đơn giản, không lộ bus |
 | D17 | Protobuf qua WS + JSON để debug | Chỉ JSON | Nhỏ, nhanh, dùng chung proto với gRPC |
 | D18 | Không cache tin trong Redis | Redis tail cache | RAM actor + WiredTiger đủ; tránh lệch khi sửa/reaction |
-| D19 | Ack sau DB commit; publish at-least-once + watermark publish bù | Transactional outbox, log-first | Ack nhanh, không mất event |
+| D19 | Ack sau DB commit; publish at-least-once + watermark publish bù | Transactional outbox, log-first | Ack nhanh, không mất event — **thay bởi D47** (2026-10-03) |
 | D20 | 1 `go.mod`, 1 Dockerfile `ARG TARGET` | `go.work` nhiều module | Ít phức tạp dependency và CI |
 | D21 | MongoDB replica set, chưa sharding; code giữ sẵn sàng shard để bật bằng cấu hình | Sharded ngay từ đầu; replica set không tính tới shard | Quy ước vận hành của team; khi vượt ngưỡng chỉ đổi `MONGO_URI` + chạy `shardCollection` (đã kiểm chứng trên 8.2.12) |
 | D22 | Build/test/chạy Go qua Docker (`golang:1.26`) bằng `make` | Cài Go trên từng máy | Đồng nhất phiên bản (máy dev có 1.25, nats.go v1.54 cần 1.26); yêu cầu của team |
@@ -346,17 +358,22 @@ Kết quả trên máy dev và hướng dẫn chạy prod-like: [../poc/README.m
 | D33 | Flusher có `Deadline` theo nhóm; nhóm không kịp xong thì không gửi, trả `Unknown`+`ErrNotSent` | Luôn gửi, để context hết hạn giữa chừng | Biết trước là không kịp thì khỏi tốn 1 lượt insert; phần batch còn lại không bị kéo theo |
 | D34 | Cid dedupe committed TTL 15 phút (cấu hình được), không phải 24h | TTL 24h | Ở 10K tin/s, 24h ≈ 860M key / 150GB trên đúng Redis đang giữ slot lease; đã tách Redis riêng cho chống trùng (D44) |
 | D35 | `CreateRoom` ghi room trước, member sau | Ghi member trước, room sau | `_id` trùng (va chạm room id ngẫu nhiên) phải chặn ngay ở bước đầu; ngược lại có thể gắn người vào room của người khác |
-| D36 | `ZADD active:{slot}` **trước** insert, ghim `pubwm` NX trong cùng 1 Lua (sửa bản nháp mục 5.4 ban đầu) | Đánh dấu/ghim sau khi publish thành công | Core chết giữa commit và publish vẫn phải lọt vào tầm quét của sweeper dù publish chưa từng chạy |
-| D37 | Watermark RAM chỉ tiến qua dải pts liên tục đã có `PubAck` | Mốc kiểu max-set (pts lớn nhất đã thấy) | Max-set bỏ qua đúng pts publish lỗi, không bao giờ được khôi phục |
-| D38 | Sweeper chạy lúc nhận slot + mỗi 30s; trễ khôi phục 1 tin non bằng `StaleAfter`; xoá khỏi `active:{slot}` cần mốc cũ hơn `RemoveAfter` **và** còn đúng lúc xoá (so khớp điều kiện trong Lua) | Sweeper chỉ chạy lúc nhận slot; xoá ngay khi bắt kịp mốc | Bỏ sót trường hợp nhả slot êm trong lúc NATS gián đoạn; xoá ngay có thể xoá nhầm 1 room vừa ghi lại ngay sau lần đọc `last_pts` |
-| D39 | Thứ tự dừng có ngân sách từng bước trong `CORE_SHUTDOWN_BUDGET`: tắt readiness → gRPC graceful → sweeper → router → flusher → publisher → nhả slot → admin → đóng client; `Router.Close` có khoảng chờ êm riêng, publisher dừng cứng (abort) dựa vào sweeper khôi phục phần còn lại | Dừng đồng thời mọi thành phần; publisher chờ drain hết hàng đợi | Dừng tuần tự giữ đúng phụ thuộc (không nhận request mới khi DB sắp đóng); publisher không cần đợi hết vì sweeper đã đảm bảo khôi phục |
+| D36 | `ZADD active:{slot}` **trước** insert, ghim `pubwm` NX trong cùng 1 Lua (sửa bản nháp mục 5.4 ban đầu) | Đánh dấu/ghim sau khi publish thành công | Core chết giữa commit và publish vẫn phải lọt vào tầm quét của sweeper dù publish chưa từng chạy — **thay bởi D49** |
+| D37 | Watermark RAM chỉ tiến qua dải pts liên tục đã có `PubAck` | Mốc kiểu max-set (pts lớn nhất đã thấy) | Max-set bỏ qua đúng pts publish lỗi, không bao giờ được khôi phục — **thay bởi D49** |
+| D38 | Sweeper chạy lúc nhận slot + mỗi 30s; trễ khôi phục 1 tin non bằng `StaleAfter`; xoá khỏi `active:{slot}` cần mốc cũ hơn `RemoveAfter` **và** còn đúng lúc xoá (so khớp điều kiện trong Lua) | Sweeper chỉ chạy lúc nhận slot; xoá ngay khi bắt kịp mốc | Bỏ sót trường hợp nhả slot êm trong lúc NATS gián đoạn; xoá ngay có thể xoá nhầm 1 room vừa ghi lại ngay sau lần đọc `last_pts` — **thay bởi D49** |
+| D39 | Thứ tự dừng có ngân sách từng bước trong `CORE_SHUTDOWN_BUDGET`: tắt readiness → gRPC graceful → sweeper → router → flusher → publisher → nhả slot → admin → đóng client; `Router.Close` có khoảng chờ êm riêng, publisher dừng cứng (abort) dựa vào sweeper khôi phục phần còn lại | Dừng đồng thời mọi thành phần; publisher chờ drain hết hàng đợi | Dừng tuần tự giữ đúng phụ thuộc (không nhận request mới khi DB sắp đóng); publisher không cần đợi hết vì sweeper đã đảm bảo khôi phục (publisher: drain, không còn dựa vào sweeper — D49) |
 | D40 | gRPC chỉ mở cổng và báo `SERVING` sau khi router chạy và không thành phần nào lỗi lúc khởi động | Mở cổng ngay, báo lỗi sau | Tránh `/readyz` báo sẵn sàng trong lúc router/flusher/publisher chưa chạy |
 | D41 | Mọi logger che giấu thông tin nhạy cảm (mật khẩu, query bí mật trong `MONGO_URI`/`NATS_URL`) qua 1 slog handler chung, kể cả lỗi bất đồng bộ của NATS/JetStream | Che ở từng điểm log riêng lẻ | 1 điểm che chắc chắn hơn; bỏ sót log bất đồng bộ (disconnect, publish lỗi) từng lộ credential |
 | D42 | Mỗi unary RPC bị giới hạn bởi `CORE_REQUEST_DEADLINE` ở phía server | Chỉ dựa vào deadline phía client | Client lỗi hoặc không đặt deadline không được phép giữ tài nguyên server vô thời hạn |
 | D43 | Client gRPC tắt service config từ DNS (`grpc.WithDisableServiceConfig`) | Giữ mặc định grpc-go (tra `_grpc_config` TXT trước khi dùng địa chỉ) | DNS host chậm làm mọi RPC đầu tiên chờ tới hết hạn (tái hiện được); ảnh hưởng mọi client gRPC nội bộ, kể cả gateway ở M4 |
-| D44 | Hai instance Redis: **state** (`chatim-redis`: `chatim:core:*`, `chatim:cores`, `chatim:slot:*`, pub/sub `chatim:slots:changed`, `chatim:pubwm:*`, `chatim:active:*`; AOF everysec, `maxmemory-policy noeviction`) và **dedupe** (`chatim-redis-dedupe`: chỉ `chatim:cid:*`; không lưu đĩa, `maxmemory` theo `REDIS_DEDUPE_MAXMEMORY`, `allkeys-lru`). Cùng mô hình ở dev và prod; Sentinel để M5. Cỡ bộ nhớ dedupe ≈ tốc độ gửi × `CID_COMMITTED_TTL` × ~150B × 1.5 (10K tin/s × 15 phút ≈ 9M key ≈ 2GB; mặc định dev 512mb đủ ~2.3K tin/s, vượt thì LRU bỏ bản ghi committed cũ nhất, cửa sổ chống trùng ngắn lại) | Một Redis chung; dedupe dùng `volatile-ttl` | Key cid (~9M ở 10K tin/s) không được phép làm đói bộ nhớ hay đẩy slot lease ra ngoài. `allkeys-lru` bỏ bản ghi committed cũ nhất trước; `volatile-ttl` sẽ bỏ key pending 10s trước và phá đặt chỗ giữa các core. Dedupe chết thì core đã tự suy giảm về LRU qua redisguard. `pubwm` và `active` ở lại state vì `ActivityMarks` ghi cả hai trong một Lua script |
+| D44 | Hai instance Redis: **state** (`chatim-redis`: `chatim:core:*`, `chatim:cores`, `chatim:slot:*`, pub/sub `chatim:slots:changed`, `chatim:pubwm:*`, `chatim:active:*`; AOF everysec, `maxmemory-policy noeviction`) và **dedupe** (`chatim-redis-dedupe`: chỉ `chatim:cid:*`; không lưu đĩa, `maxmemory` theo `REDIS_DEDUPE_MAXMEMORY`, `allkeys-lru`). Cùng mô hình ở dev và prod; Sentinel để M5. Cỡ bộ nhớ dedupe ≈ tốc độ gửi × `CID_COMMITTED_TTL` × ~150B × 1.5 (10K tin/s × 15 phút ≈ 9M key ≈ 2GB; mặc định dev 512mb đủ ~2.3K tin/s, vượt thì LRU bỏ bản ghi committed cũ nhất, cửa sổ chống trùng ngắn lại) | Một Redis chung; dedupe dùng `volatile-ttl` | Key cid (~9M ở 10K tin/s) không được phép làm đói bộ nhớ hay đẩy slot lease ra ngoài. `allkeys-lru` bỏ bản ghi committed cũ nhất trước; `volatile-ttl` sẽ bỏ key pending 10s trước và phá đặt chỗ giữa các core. Dedupe chết thì core đã tự suy giảm về LRU qua redisguard. `pubwm` và `active` ở lại state vì `ActivityMarks` ghi cả hai trong một Lua script (hai key này bỏ ở M2a.1, D49) |
 | D45 | Redis bắt buộc AUTH. Mật khẩu lấy từ `.env` (`REDIS_PASSWORD`, `REDIS_DEDUPE_PASSWORD`) qua compose secrets: script khởi động Redis đọc `/run/secrets/…`, ghi `requirepass` vào file conf 0600 của user redis rồi `exec docker-entrypoint.sh redis-server <conf>`; core đọc `REDIS_PASSWORD_FILE`/`REDIS_DEDUPE_PASSWORD_FILE` (file thắng biến thường). `redis-cli` tay dùng `make redis-cli INSTANCE=state\|dedupe ARGS=…`, healthcheck đặt `REDISCLI_AUTH` từ file ngay trong lệnh | Mật khẩu trong `environment`/`REDISCLI_AUTH` hoặc `--requirepass` | Mật khẩu không bao giờ nằm trong argv, `docker inspect`, dòng lệnh `make` in ra hay log (core chỉ log `redis_auth=true\|false` và xoá hai mật khẩu khỏi mọi dòng log). Biến môi trường hiện ở `docker inspect`, nên chỉ dùng biến thường cho lần chạy ngoài compose và cho tools (`-redis-password` hoặc `REDIS_PASSWORD`) |
 | D46 | Mật khẩu Mongo theo cùng mô hình D45: secret `mongo_password` lấy từ `MONGO_ROOT_PASSWORD` trong `.env`; `chatim-mongodb` dùng `MONGO_INITDB_ROOT_PASSWORD_FILE` (chỉ có tác dụng khi khởi tạo data dir rỗng, volume cũ vẫn dùng được); healthcheck, `mongodb-init` và `wait-mongo-primary.sh` xác thực trong `--eval` bằng `db.getSiblingDB("admin").auth(user, require("fs").readFileSync("/run/secrets/mongo_password"))`; core nhận `MONGO_URI` không credential + `MONGO_USER` + `MONGO_PASSWORD_FILE` (`SetAuth`, `MONGO_AUTH_SOURCE` mặc định `admin`). `make` export URI đã ghép (`MONGO_URI`, `CHATIM_IT_MONGO_URI`, `PG_URI`) và truyền bằng `-e NAME`; Postgres PoC (`chatim-postgres`, profile `postgres`) cũng vậy: secret `pg_password` lấy từ `PG_PASSWORD`, image dùng `POSTGRES_PASSWORD_FILE` | `mongosh -u -p` (argv), `--password "$(cat …)"` (vẫn là argv), mật khẩu trong `environment` hoặc trong `MONGO_URI` của compose | Mật khẩu Mongo không còn trong `ps`, `docker inspect`, dòng lệnh `make` in ra hay log; `MONGO_URI` có credential vẫn dùng được cho lần chạy ngoài compose và itest, nhưng đặt kèm `MONGO_USER` là lỗi khởi động |
+| D47 | Event best-effort; đủ event nhờ module đối soát event định kỳ (Phase 2). Thay D19 | Giữ D19 bằng bộ đếm pts mỗi nhóm ghi (`$inc`/CAS, +1 RTT majority mỗi lần gửi); thuê khối pts; id kiểu Snowflake + frontier; tách hai dãy; log sự kiện (event sourcing) | Không ai cần pts liên tục; client reconnect lấy bản mới nhất (doc tin luôn giữ trạng thái hiện tại); mọi bản vá giữ pts liên tục đều hỏng khi review (mất event qua `Nats-Msg-Id` trùng, lỗ khi crash, đảo thứ tự khi hai chủ) |
+| D48 | Bỏ pts toàn room. Id event là khoá tự nhiên suy ra từ doc; tin mới `{room}-{thread}-{seq}`, dùng làm `Nats-Msg-Id` và `Event.id`; field `pts` trong proto reserved | pts liên tục + `EventID {room}-{pts}`; bộ đếm +1 RTT; thuê khối; Snowflake; tách hai dãy | pts nằm ở hai nơi (`messages.p`, `room_events._id`) không có khoá unique chung, hai core cấp trùng pts → JetStream bỏ một event mà không dấu vết; id tự nhiên lặp lại đúng khi publish lại hoặc đối soát |
+| D49 | Bỏ watermark publish, `ActivityMarks`, `Skip`, `recovery.Sweeper`, vòng khôi phục của actor, key Redis `chatim:pubwm:*` và `chatim:active:*`; `AfterClaim = router.EvictSlots`; publisher drain trong `CORE_PUBLISHER_DRAIN`, chỉ abort khi hết giờ; bỏ env `RECOVERY_*`, `PUB_WATERMARK_TTL`, `PUB_FLUSH_EVERY`. Thay D36, D37, D38 và phần publisher của D39 | Giữ sweeper quét theo seq; log sự kiện | Không còn số liên tục để làm mốc khôi phục; phần mất bù bằng đối soát (D47); Redis state chỉ còn phục vụ slot manager |
+| D50 | Publisher giữ thứ tự từng room: mỗi `Enqueue` là một batch, batch sau của room chờ batch trước có ack hoặc các event lỗi hết hạn mức retry; room khác vẫn chạy; trong batch gửi pipeline. Chỉ poll ack của publish đầu hàng, nên ack treo làm chậm ghi nhận ack room khác tối đa `PUB_ACK_TIMEOUT` | Pipeline bỏ qua event lỗi (`publish/attempts.go` cũ) | Thay đổi của một tin (M2b) phải phát sau chính tin đó (R6/R7); thứ tự tới người nhận vẫn không kiểm soát |
+| D51 | Mọi event phải dựng lại được từ post-image của doc (id + nội dung), để module đối soát publish lại đúng id | Event mang dữ liệu không suy ra được từ doc | Đối soát và publish lại cùng id → JetStream/người nhận bỏ trùng; không cần lưu event riêng |
 
 ## 15. Câu hỏi còn mở
 
