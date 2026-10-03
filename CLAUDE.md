@@ -11,9 +11,9 @@ chatim is an internal, logically multi-tenant chat platform (CPaaS) in Go. Phase
 Done:
 - M0–M1: foundation and PoC.
 - M2a, merged to main (PR #5): core CreateRoom/SendMessage/GetHistory over gRPC, cid dedupe, JetStream publish, crash recovery (sweeper, replaced in M2a.1), and two cores in compose.
-- M2a.1, in progress on `fix/m2a1-event-identity` (not merged): no room-wide pts, natural event ids, per-room publisher order, best-effort events (D47–D51).
+- M2a.1, in progress on `fix/m2a1-event-identity` (not merged): no room-wide pts, natural event ids, best-effort events, a queue-only publisher on top of the nats.go async publisher (D47–D51, D50 revised).
 
-Next is M2b, after M2a.1 merges: edit (+history), delete (for everyone / for me), reactions, pins, read receipts. The milestone order is in `docs/roadmap.md`. Project docs are written in Vietnamese.
+Next is M2a.2 (event reconciliation from the Mongo change stream, D52), then M2b: edit (+history), delete (for everyone / for me), reactions, pins, read receipts. The milestone order is in `docs/roadmap.md`. Project docs are written in Vietnamese.
 
 ## Hard rules
 
@@ -118,7 +118,7 @@ These are `_id`s of MongoDB clustered collections, so any history page, includin
 3. `dedupe` checks the cid against a RAM LRU, then the dedupe Redis `chatim:cid:{room}:{user}:{cid}` (pending `p:{core}` for 10s, committed for 15m). Calls are batched per group. On Redis errors it falls back to the LRU only, using the `redisguard` cooldown.
 4. `flush.Flusher` shards batch groups into `insertMany(ordered:false, w:majority)` every 2ms or 256 docs. A group that can't finish by its deadline is not sent (`ErrNotSent`).
 5. Each insert ends as Inserted, Duplicate, Unknown or Rejected. Duplicate and Unknown are reconciled with `Find` (majority read) by (from, cid). Every retry is bounded by the cid reservation TTL, so a pending key never expires while an attempt is live.
-6. After commit: dedupe Commit (`c:{seq}:{ms}`), then ack, then `publish.Publisher` sends to stream `CHATIM_EVT` on subject `evt.{t}.room.{rid}.msg_created` with `Nats-Msg-Id` = the natural event id, RePublished to `live.*`. The publisher is sharded by slot; each actor Enqueue is a batch, and a room's next batch waits until its earlier batch is acked or gives up (D50). Best-effort with bounded retries (D47): events lost on crash, queue full or exhausted retries are left to the Phase 2 reconciliation module.
+6. After commit: dedupe Commit (`c:{seq}:{ms}`), then ack, then `publish.Publisher` sends to stream `CHATIM_EVT` on subject `evt.{t}.room.{rid}.msg_created` with `Nats-Msg-Id` = the natural event id, RePublished to `live.*`. The publisher keeps only a queue per shard (sharded by slot), so Enqueue never blocks and a room's events keep arrival order; each shard calls `PublishMsgAsync` without waiting for acks. nats.go owns the in-flight limit (`PUB_MAX_PENDING`), ack timeouts (`PUB_ACK_TIMEOUT`) and no-leader retries; failures go to `WithPublishAsyncErrHandler` and are only logged, at most once per second (D50). Best-effort (D47): events lost on nack, ack timeout, too many in flight, queue full or crash are left to the M2a.2 reconciler (D52).
 
 `GetHistory` reads the store directly, not through actors.
 
@@ -158,7 +158,7 @@ Rules:
 **Process lifecycle (`apps/core`).**
 - Config is validated at boot by `apps/core/internal/config`, which applies cross-field timeout rules; components export `Validate()`.
 - Start order: publisher → flusher → router → slot manager → gRPC. gRPC is served only after a clean start.
-- Shutdown order: `/readyz` false → drain delay → gRPC → router → flusher → publisher (drains within `CORE_PUBLISHER_DRAIN`, aborts at the deadline) → slot release → clients. All of it fits within `CORE_SHUTDOWN_BUDGET`.
+- Shutdown order: `/readyz` false → drain delay → gRPC → router → flusher → publisher (drains its queues, then waits for `PublishAsyncComplete` within `CORE_PUBLISHER_DRAIN`) → slot release → clients. All of it fits within `CORE_SHUTDOWN_BUDGET`.
 - `/app probe` is the container healthcheck.
 - Every log line goes through a handler that redacts MONGO_URI and NATS_URL credentials, the Mongo password and both Redis passwords.
 
@@ -183,4 +183,4 @@ Rules:
 - `docs/roadmap.md`: milestone status and carried-over items.
 - `docs/git-workflow.md`: branches, merge Definition of Done, readiness levels, SemVer tags and handling a broken `main`.
 - `.claude/plans/m2a-core-send-history_design.md`: local (gitignored) M2a decision log.
-- `.claude/plans/m2b-core-mutations_design.md`: local (gitignored) M2a.1 + M2b decision log (requirements, D47–D56, rejected alternatives).
+- `.claude/plans/m2b-core-mutations_design.md`: local (gitignored) M2a.1 + M2b decision log (requirements, D47–D57, rejected alternatives).
