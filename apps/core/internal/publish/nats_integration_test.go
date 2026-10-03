@@ -22,9 +22,10 @@ import (
 const itNATSURLEnv = "CHATIM_IT_NATS_URL"
 
 type itStream struct {
-	nc  *nats.Conn
-	js  jetstream.JetStream
-	cfg publish.StreamConfig
+	nc       *nats.Conn
+	js       jetstream.JetStream
+	cfg      publish.StreamConfig
+	failures *testlog.Sink
 }
 
 func realStream(t *testing.T, pub publish.Config) *itStream {
@@ -38,7 +39,8 @@ func realStream(t *testing.T, pub publish.Config) *itStream {
 		t.Fatalf("connect %s: %v", url, err)
 	}
 	t.Cleanup(nc.Close)
-	js, err := jetstream.New(nc, pub.JetStreamOptions()...)
+	failures := &testlog.Sink{}
+	js, err := jetstream.New(nc, pub.JetStreamOptions(failures.Logger())...)
 	if err != nil {
 		t.Fatalf("jetstream.New: %v", err)
 	}
@@ -59,7 +61,7 @@ func realStream(t *testing.T, pub publish.Config) *itStream {
 	if err := publish.EnsureStream(t.Context(), js, cfg); err != nil {
 		t.Fatalf("EnsureStream on an existing stream: %v", err)
 	}
-	return &itStream{nc: nc, js: js, cfg: cfg}
+	return &itStream{nc: nc, js: js, cfg: cfg, failures: failures}
 }
 
 func TestRealJetStreamDedupesByMsgIDAndRepublishesLive(t *testing.T) {
@@ -119,6 +121,37 @@ func TestRealJetStreamDedupesByMsgIDAndRepublishesLive(t *testing.T) {
 	}
 	if msg, err := live.NextMsg(100 * time.Millisecond); err == nil {
 		t.Fatalf("duplicate was republished live: %s", msg.Header.Get(jetstream.MsgIDHeader))
+	}
+}
+
+func TestRealJetStreamReportsUnstoredPublishesThroughTheErrHandler(t *testing.T) {
+	cfg := fastSetup
+	it := realStream(t, cfg)
+	cfg.SubjectRoot = it.cfg.SubjectRoot + "unbound"
+	p, err := publish.New(it.js, cfg, nil)
+	if err != nil {
+		t.Fatalf("publish.New: %v", err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- p.Run(context.Background()) }()
+	if err := p.Enqueue(roomA, events(roomA, 1)); err != nil {
+		t.Fatalf("Enqueue: %v", err)
+	}
+	stop, stopped := context.WithTimeout(context.Background(), 5*time.Second)
+	defer stopped()
+	if err := p.Close(stop); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	select {
+	case <-it.js.PublishAsyncComplete():
+	case <-stop.Done():
+		t.Fatal("async publishes did not settle")
+	}
+	if n := it.failures.Count(failedMsg); n != 1 {
+		t.Fatalf("err handler logged %d failures for a subject without a stream, want 1", n)
 	}
 }
 

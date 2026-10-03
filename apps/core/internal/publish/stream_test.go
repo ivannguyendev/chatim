@@ -3,7 +3,9 @@ package publish_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
@@ -88,18 +90,20 @@ func TestPublishedMessageCarriesSubjectMsgIDAndEvent(t *testing.T) {
 	}
 }
 
-func TestMalformedEventsAreDroppedAndOthersPublished(t *testing.T) {
-	rg := started(t, fastSetup)
-	dotted, empty, noID := events(roomA, 2)[0], events(roomA, 3)[0], events(roomA, 5)[0]
-	dotted.Tenant, empty.Payload, noID.Id = "acme.x", nil, ""
-	if err := rg.Enqueue(roomA, []*chatimv1.Event{dotted, empty, noID, events(roomA, 4)[0]}); err != nil {
-		t.Fatalf("Enqueue: %v", err)
-	}
-	eventually(t, "valid event stored", func() bool { return len(rg.js.Stored()) == 1 })
-	if n := rg.sink.Count(malformedMsg); n != 3 {
-		t.Fatalf("logged %d malformed events, want 3", n)
-	}
-	if got := storedIDs(rg.js); got[0] != "101-0-4" {
-		t.Fatalf("stored %v, want only 101-0-4", got)
-	}
+func TestMalformedEventsAreDroppedWithOneLogLineAndOthersPublished(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		rg := started(t, fastSetup)
+		dotted, empty, noID := events(roomA, 2)[0], events(roomA, 3)[0], events(roomA, 5)[0]
+		dotted.Tenant, empty.Payload, noID.Id = "acme.x", nil, ""
+		if err := rg.Enqueue(roomA, []*chatimv1.Event{dotted, empty, noID, events(roomA, 4)[0]}); err != nil {
+			t.Fatalf("Enqueue: %v", err)
+		}
+		synctest.Wait()
+		if got := storedIDs(rg.js); !slices.Equal(got, []string{"101-0-4"}) {
+			t.Fatalf("stored %v, want only 101-0-4", got)
+		}
+		if n := rg.sink.Count(malformedMsg); n != 1 {
+			t.Fatalf("logged %d malformed events within one second, want 1", n)
+		}
+	})
 }

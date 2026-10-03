@@ -3,6 +3,7 @@ package publish
 import (
 	"cmp"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -16,10 +17,8 @@ const (
 	DefaultShards       = 4
 	DefaultQueueSize    = 1024
 	DefaultMaxPending   = 256
-	DefaultMaxRetrying  = 1024
 	DefaultAttempts     = 4
 	DefaultRetryBackoff = 100 * time.Millisecond
-	DefaultMaxBackoff   = 2 * time.Second
 	DefaultAckTimeout   = 2 * time.Second
 )
 
@@ -28,10 +27,8 @@ type Config struct {
 	Shards       int
 	QueueSize    int
 	MaxPending   int
-	MaxRetrying  int
 	Attempts     int
 	RetryBackoff time.Duration
-	MaxBackoff   time.Duration
 	AckTimeout   time.Duration
 }
 
@@ -41,17 +38,15 @@ func (c Config) withDefaults() Config {
 	c.Shards = cmp.Or(c.Shards, DefaultShards)
 	c.QueueSize = cmp.Or(c.QueueSize, DefaultQueueSize)
 	c.MaxPending = cmp.Or(c.MaxPending, DefaultMaxPending)
-	c.MaxRetrying = cmp.Or(c.MaxRetrying, DefaultMaxRetrying)
 	c.Attempts = cmp.Or(c.Attempts, DefaultAttempts)
 	c.RetryBackoff = cmp.Or(c.RetryBackoff, DefaultRetryBackoff)
-	c.MaxBackoff = cmp.Or(c.MaxBackoff, DefaultMaxBackoff)
 	c.AckTimeout = cmp.Or(c.AckTimeout, DefaultAckTimeout)
 	return c
 }
 
 func (c Config) validate() error {
-	counts := []int{c.Shards, c.QueueSize, c.MaxPending, c.MaxRetrying, c.Attempts}
-	spans := []time.Duration{c.RetryBackoff, c.MaxBackoff, c.AckTimeout}
+	counts := []int{c.Shards, c.QueueSize, c.MaxPending, c.Attempts}
+	spans := []time.Duration{c.RetryBackoff, c.AckTimeout}
 	switch {
 	case !validToken(c.SubjectRoot):
 		return fmt.Errorf("%w: publish subject root %q must be one subject token", apperr.ErrInvalidArgument, c.SubjectRoot)
@@ -59,18 +54,17 @@ func (c Config) validate() error {
 		return fmt.Errorf("%w: publish config %+v must be positive", apperr.ErrInvalidArgument, c)
 	case c.Shards > slotmap.Count:
 		return fmt.Errorf("%w: publish shards %d exceed %d slots", apperr.ErrInvalidArgument, c.Shards, slotmap.Count)
-	case c.RetryBackoff > c.MaxBackoff:
-		return fmt.Errorf("%w: publish retry backoff %v exceeds its cap %v", apperr.ErrInvalidArgument, c.RetryBackoff, c.MaxBackoff)
 	default:
 		return nil
 	}
 }
 
-func (c Config) JetStreamOptions() []jetstream.JetStreamOpt {
+func (c Config) JetStreamOptions(log *slog.Logger) []jetstream.JetStreamOpt {
 	c = c.withDefaults()
 	return []jetstream.JetStreamOpt{
 		jetstream.WithPublishAsyncMaxPending(2 * c.Shards * c.MaxPending),
 		jetstream.WithPublishAsyncTimeout(c.AckTimeout),
+		jetstream.WithPublishAsyncErrHandler(AsyncFailureHandler(log)),
 	}
 }
 

@@ -25,11 +25,25 @@ var (
 
 type JetStream interface {
 	PublishMsgAsync(m *nats.Msg, opts ...jetstream.PublishOpt) (jetstream.PubAckFuture, error)
+	PublishAsyncComplete() <-chan struct{}
+}
+
+type item struct {
+	room   uint64
+	events []*chatimv1.Event
+}
+
+type shard struct {
+	queue chan item
+	full  atomic.Bool
 }
 
 type Publisher struct {
-	shards  []*shard
+	js      JetStream
+	cfg     Config
 	log     *slog.Logger
+	fails   failureLog
+	shards  []*shard
 	mu      sync.RWMutex
 	closed  bool
 	started atomic.Bool
@@ -49,9 +63,9 @@ func New(js JetStream, cfg Config, log *slog.Logger) (*Publisher, error) {
 	if log == nil {
 		log = slog.Default()
 	}
-	p := &Publisher{shards: make([]*shard, cfg.Shards), log: log, abort: make(chan struct{}), done: make(chan struct{})}
+	p := &Publisher{js: js, cfg: cfg, log: log, fails: failureLog{log: log}, shards: make([]*shard, cfg.Shards), abort: make(chan struct{}), done: make(chan struct{})}
 	for i := range p.shards {
-		p.shards[i] = newShard(js, cfg, log, p.abort)
+		p.shards[i] = &shard{queue: make(chan item, cfg.QueueSize)}
 	}
 	return p, nil
 }
@@ -63,10 +77,39 @@ func (p *Publisher) Run(ctx context.Context) error {
 	defer close(p.done)
 	var wg sync.WaitGroup
 	for _, s := range p.shards {
-		wg.Go(func() { s.run(ctx) })
+		wg.Go(func() { p.drain(ctx, s.queue) })
 	}
 	wg.Wait()
 	return ctx.Err()
+}
+
+func (p *Publisher) drain(ctx context.Context, queue <-chan item) {
+	for {
+		select {
+		case it, open := <-queue:
+			if !open {
+				return
+			}
+			p.publish(it)
+		case <-p.abort:
+			return
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (p *Publisher) publish(it item) {
+	for _, ev := range it.events {
+		msg, err := message(p.cfg.SubjectRoot, it.room, ev)
+		if err != nil {
+			p.fails.record("dropping malformed event", ev.GetId(), err)
+			continue
+		}
+		if _, err := p.js.PublishMsgAsync(msg, jetstream.WithRetryAttempts(p.cfg.Attempts), jetstream.WithRetryWait(p.cfg.RetryBackoff)); err != nil {
+			p.fails.record("event publish refused; reconciliation must republish it", ev.GetId(), err)
+		}
+	}
 }
 
 func (p *Publisher) Enqueue(room uint64, events []*chatimv1.Event) error {
@@ -105,10 +148,15 @@ func (p *Publisher) Close(ctx context.Context) error {
 	}
 	select {
 	case <-p.done:
-		return nil
 	case <-ctx.Done():
 		p.stop.Do(func() { close(p.abort) })
 		<-p.done
+		return ctx.Err()
+	}
+	select {
+	case <-p.js.PublishAsyncComplete():
+		return nil
+	case <-ctx.Done():
 		return ctx.Err()
 	}
 }

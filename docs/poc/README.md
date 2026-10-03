@@ -71,6 +71,10 @@ Cùng điều kiện R2 (`write -rate 10000 -duration 60s -rooms 5000 -flushers 
 | 14 | 5000/s (M2a.1, infra sạch, cặp 1) | Sạch (`infra-reset`) | 5000 | 0 | 0 | 0 / 1 | 29.072126ms | 90.857375ms | 198.174281ms | 400.949174ms | 630.267991ms | 24.057524ms / 172.362238ms | 14.213491ms | không đo |
 | 15 | 5000/s (M2a.1, infra sạch, cặp 2) | Sạch (`infra-reset`) | 5000 | 0 | 0 | 0 / 1 | 31.342515ms | 110.285368ms | 196.28116ms | 285.697254ms | 418.830724ms | 25.023772ms / 145.312213ms | 10.629624ms | không đo |
 | 16 | 5000/s (M2a, infra sạch, cặp 2) | Sạch (`infra-reset`) | 5000 | 0 | 0 | 0 / 1 | 28.706354ms | 85.008436ms | 170.207129ms | 414.161622ms | 677.922281ms | 23.788106ms / 104.818311ms | 12.767881ms | không đo |
+| 17 | 5000/s (M2a, infra sạch, kèm pprof core-1 20s) — **nhiễu, không dùng để so** | Sạch (`infra-reset`) | 4966 | 2037 (0.7%) | 0 | 0 / 1 | 111.895078ms | 554.772468ms | 990.578992ms | 1.236784984s | 1.595409136s | 79.256045ms / 547.48658ms | 75.17808ms | không đo |
+| 18 | 5000/s (M2a.1 publisher chỉ còn hàng đợi, infra sạch, kèm pprof core-1 20s) | Sạch (`infra-reset`) | 5000 | 0 | 0 | 0 / 1 | 19.43453ms | 57.926439ms | 133.153562ms | 250.622058ms | 385.895037ms | 16.989489ms / 86.409949ms | 7.497122ms | không đo |
+| 19 | 5000/s (M2a.1 publisher chỉ còn hàng đợi, infra sạch) | Sạch (`infra-reset`) | 5000 | 0 | 0 | 0 / 1 | 37.562724ms | 127.422924ms | 271.477498ms | 428.603507ms | 587.618481ms | 29.359084ms / 147.487225ms | 18.357325ms | không đo |
+| 20 | 5000/s (M2a, infra sạch) | Sạch (`infra-reset`) | 5000 | 0 | 0 | 0 / 1 | 26.560117ms | 133.339161ms | 233.851627ms | 391.134177ms | 528.871241ms | 22.119786ms / 163.490035ms | 16.000114ms | không đo |
 
 CPU là trung bình `docker stats` lấy mẫu mỗi 3s trong lúc chạy (100% = 1 vCPU). Ở mọi lần chạy, event live trên các room được theo dõi đều `missing=0 duplicates=0`. Ngoài bảng còn 1 lần 2K/s 20s chỉ để lấy pprof của corebench (`-cpuprofile`).
 
@@ -87,8 +91,21 @@ Lần 12 (M2a.1: bỏ pts, bỏ watermark/active mark/sweeper, publisher theo th
   - p95 100.6ms so với 87.3ms (+15%);
   - p99 197ms so với 161.5ms (+22%), với p99 của M2a.1 rất ổn định (198/196ms);
   - p99.9 thì lẫn lộn giữa hai cặp: 401/286ms so với 235/414ms.
-- Live lag p99 cao hơn rõ: 172/145ms so với 113/105ms. Đây là cái giá dự kiến của D50: batch sau của một room chờ ack của batch trước.
-- Mức chênh nằm trong ngưỡng chấp nhận đặt trước (p99 ≤ +25%, không bỏ lượt, không lỗi). Nguyên nhân phần đuôi ack chưa được chứng minh. Cần pprof nếu prod-like cho thấy cùng xu hướng.
+- Live lag p99 cao hơn rõ: 172/145ms so với 113/105ms. Nguyên nhân là bản D50 đầu tiên: batch sau của một room chờ ack của batch trước.
+- Mức chênh nằm trong ngưỡng chấp nhận đặt trước (p99 ≤ +25%, không bỏ lượt, không lỗi).
+
+**Sau khi sửa D50 (lần 17–20, 2026-10-04).** Publisher chỉ còn hàng đợi theo shard, gọi `PublishMsgAsync` lần lượt từng event và không chờ ack; theo dõi publish đang bay, timeout ack và gửi lại do nats.go lo. Quy trình như lần 13–16.
+- Lần 17 (M2a kèm pprof) bị nhiễu: pacer lag p99 75ms so với khoảng 8–18ms ở các lần khác, tức chính máy đo thiếu CPU. Lần này không dùng để so; profile của nó vẫn được dùng.
+- Trung bình các lần sạch:
+  - M2a (13, 16, 20): ack p50 / p95 / p99 = 28.1 / 102.5 / 186ms; live lag p99 127ms.
+  - M2a.1 bản mới (18, 19): 28.5 / 92.7 / 202ms (p95 −10%, p99 +9%); live lag p99 116.5ms (−8%).
+  - Bản D50 cũ (14, 15): live lag p99 158.5ms.
+- Bỏ chờ theo room đưa live lag về mức M2a. Ack p99 chênh +9%, nằm trong nhiễu: cùng bản M2a.1 mà lần 18 là 133ms, lần 19 là 271ms. Cả 5 lần sạch đều 0 lượt bỏ, 0 lỗi, live 0 thiếu/0 trùng.
+- **pprof** (CPU core-1, 20s ở 5K/s, mỗi core khoảng 2.5K tin/s):
+  - Publisher: 8.4% CPU ở M2a (gồm watermark Redis), 4.4% ở M2a.1.
+  - Số goroutine: 1214 so với 653.
+  - Ở cả hai bản, phần tốn nhất là Redis chống trùng cid (`dedupe.Store.Reserve` + `Commit`): 17% ở M2a, 24% ở M2a.1, theo tỉ lệ trên tổng CPU của từng lần. Tiếp theo là `InsertMany` Mongo (8–12%), GC (8–10%) và syscall write ra mạng.
+  - Nếu cần giảm ack latency, đây là các ứng viên: gộp Reserve/Commit theo nhóm ghi, giảm cấp phát.
 
 **Điểm gãy (knee).**
 - Thông lượng: giữ đủ tải (`shed_by_client=0 failed=0`, không lần nào phải thử lại) tới 5K/s. 7.5K/s chỉ đạt 7319/s (bỏ 2.4%); 10K/s đạt 7546–9426/s (bỏ 5.7–24.5%; lần 8 có 151 lần gửi kết thúc bằng `Unavailable`). Knee thông lượng trên dev nằm giữa 5K và 7.5K/s.

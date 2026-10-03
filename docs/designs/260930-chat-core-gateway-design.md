@@ -2,6 +2,7 @@
 
 > Ngày: 2026-09-30 · Trạng thái: **đã duyệt qua brainstorm** — chưa implement; cần PoC R1–R5 trước khi code toàn bộ
 > Cập nhật 2026-10-03: M2a.1 đổi hướng đánh số và publish (D47–D51)
+> Cập nhật 2026-10-04: publisher chỉ còn hàng đợi, dùng cơ chế async của nats.go (D50 viết lại); reconcile event là milestone M2a.2 (D52)
 > Nghiên cứu nền: [../research/260930-opensource-chat-architecture-research.md](../research/260930-opensource-chat-architecture-research.md)
 
 ## Tóm tắt
@@ -48,7 +49,7 @@ Ba ý chính:
 | # | Giả định |
 |---|---|
 | A1 | p99: ack ≤30ms · tới người nhận online ≤100ms · trang 50 tin ở bất kỳ vị trí (kể cả cũ nhất) ≤20ms |
-| A2 | Đã ack = đã lưu `w:majority`; thứ tự tin trong timeline thống nhất cho mọi người (theo seq); event phát best-effort, mỗi event có id tự nhiên để người nhận bỏ trùng; mất event do module đối soát định kỳ bù (D47, D48) |
+| A2 | Đã ack = đã lưu `w:majority`; thứ tự tin trong timeline thống nhất cho mọi người (theo seq); event phát best-effort, mỗi event có id tự nhiên để người nhận bỏ trùng; mất event do reconcile (M2a.2) bù (D47, D48, D52) |
 | A3 | 99.95%, không điểm chết đơn lẻ: core ≥2, gateway ≥2 (3 cho 100K), MongoDB **replica set 3 member, không sharding**, NATS 3, Redis sentinel |
 | A4 | Tin nhắn và lịch sử sửa lưu vĩnh viễn · `room_events` 30 ngày · `CHATIM_EVT` 7 ngày |
 | A5 | JWT do app auth cấp (EdDSA/RS256, JWKS theo tenant, claim `tenant`/`sub`/`sid`/`exp`); mTLS nội bộ; không E2EE |
@@ -198,26 +199,25 @@ core
 
 ### 5.3 Thay đổi khác
 
-- Sửa, xoá, reaction, ghim, member, room: qua actor; ghi bằng lệnh atomic có điều kiện; id event lấy từ version của doc đích (D48, D51). Chi tiết chốt ở plan M2b (D52–D56 trong decision log M2b).
+- Sửa, xoá, reaction, ghim, member, room: qua actor; ghi bằng lệnh atomic có điều kiện; id event lấy từ version của doc đích (D48, D51). Chi tiết chốt ở plan M2b (D53–D57 trong decision log M2b).
 - **Sửa tin**: `updateOne({_id, ver: N}, {$set: nội dung mới, $inc: {ver: 1}})` + insert bản cũ vào `message_edits`.
 - **Read receipt**: trạng thái riêng từng user, không phát event theo room: `members {$max read_seq}` gộp mỗi 1s; gateway giới hạn 1 lần/s/room/user.
 
-### 5.4 Publish best-effort (D47–D51)
+### 5.4 Publish best-effort (D47–D52)
 
 1. Ack client ngay khi DB commit. Sau đó actor đưa event vào publisher; mỗi event có `Nats-Msg-Id` = id tự nhiên (tạo tin: `{room}-{thread}-{seq}`), nên JetStream bỏ trùng trong cửa sổ 2 phút.
-2. Publisher sharding theo slot. Mỗi lần actor `Enqueue` là một batch; batch sau của cùng room chỉ gửi khi batch trước đã có ack hoặc hết hạn mức retry; các room khác không phải chờ (D50). Trong một batch các event gửi pipeline. Thứ tự này đảm bảo thay đổi của một tin (M2b) phát sau chính tin đó.
-3. Không có watermark, active mark hay sweeper. Event mất khi core chết giữa commit và publish, khi NATS gián đoạn lâu hơn hạn mức retry, hoặc khi hàng đợi đầy. Client không dò thiếu bằng số; khi connect/reconnect client lấy bản mới nhất (doc tin luôn giữ trạng thái hiện tại). Các app cần đủ event dựa vào **module đối soát event định kỳ** (Phase 2), module này dựng lại event từ doc với đúng id (D51).
-4. Lúc dừng, publisher drain trong `CORE_PUBLISHER_DRAIN`, chỉ abort khi hết giờ.
+2. Publisher giữ hàng đợi theo shard (theo slot) để `Enqueue` không chặn. Mỗi shard gọi `PublishMsgAsync` theo thứ tự nhận và không chờ ack. nats.go lo giới hạn publish đang bay (`PUB_MAX_PENDING`), timeout ack (`PUB_ACK_TIMEOUT`) và gửi lại khi stream chưa có leader. Lỗi chỉ log, giới hạn 1 lần/giây; M2a.2 bù (D50). Thứ tự từng room giữ ở đường bình thường; retry của thư viện, reconnect hoặc đổi chủ slot có thể làm đảo.
+3. Không có watermark, active mark hay sweeper. Client không dò thiếu bằng số; khi connect/reconnect client lấy bản mới nhất (doc tin luôn giữ trạng thái hiện tại). Các app cần đủ event dựa vào **reconcile event** (M2a.2, D52), dựng lại event từ doc với đúng id (D51).
+4. Lúc dừng, publisher đẩy hết hàng đợi rồi chờ `PublishAsyncComplete()` trong `CORE_PUBLISHER_DRAIN`, hết giờ thì bỏ.
 
-Các trường hợp event bị bỏ (để đối soát bù):
-- hết số lần thử (`Attempts`);
-- hàng đợi retry của shard đầy (`MaxRetrying`);
+Các trường hợp event bị bỏ (để reconcile bù):
+- nack hoặc timeout ack;
+- quá nhiều publish đang bay (`ErrTooManyStalledMsgs`);
 - hàng đợi publish đầy (`PUB_QUEUE`);
 - core chết giữa commit và publish;
 - `Enqueue` của actor lỗi — lỗi này bị bỏ qua vì client đã được ack.
 
 Ghi chú vận hành:
-- Mỗi shard chỉ poll ack của publish đang chờ ở đầu hàng, nên một ack bị treo có thể làm chậm việc ghi nhận ack của room khác tối đa `PUB_ACK_TIMEOUT`; room khác không bao giờ bị chặn lâu hơn mức đó.
 - Rolling deploy: dedupe committed đổi từ `c:{seq}:{pts}:{ms}` sang `c:{seq}:{ms}`; core mới coi giá trị 4 trường của core cũ là không có. An toàn vì `_id` unique + đối chiếu theo `(from, cid)` vẫn chặn trùng.
 
 ## 6. Đường đọc
@@ -266,7 +266,7 @@ gateway: roomIndex room→{conn}; 1 NATS sub mỗi room (đếm tham chiếu)
 
 - Stream `CHATIM_EVT`: subject `evt.>`, R3, lưu file, giữ 7 ngày, cửa sổ chống trùng 2 phút.
 - Envelope `chatim.events.v1.Event{id, tenant, room_id, room_type, thread, seq, type, actor, ts, oneof payload}` (field `pts` reserved, D48). Chỉ thêm field (buf breaking check).
-- Consumer nội bộ: durable pull consumer, `FilterSubjects` theo tenant/loại event, ack từng event, bỏ trùng theo id event; thứ tự event của một room theo thứ tự publisher phát (D50).
+- Consumer nội bộ: durable pull consumer, `FilterSubjects` theo tenant/loại event, ack từng event, bỏ trùng theo id event; thứ tự event của một room theo thứ tự publisher phát, chỉ giữ ở đường bình thường (D50).
 - Typing/presence không bao giờ vào stream.
 - **NATS chỉ dùng nội bộ** (app trong monorepo). App bên ngoài đi qua app `events` (làm sau): kiểm tra token, buộc lọc theo tenant của app, bọc thành gRPC `WatchEvents(filter, cursor)`.
 
@@ -275,7 +275,7 @@ gateway: roomIndex room→{conn}; 1 NATS sub mỗi room (đếm tham chiếu)
 | Sự cố | Phản ứng |
 |---|---|
 | Mongo đổi primary (5–12s) | Flusher thử lại có backoff, lệnh chờ trong hàng đợi actor; quá deadline 3s → UNAVAILABLE, SDK gửi lại cùng `cid` |
-| NATS chết toàn bộ | DB vẫn ghi; event trong lúc gián đoạn có thể mất sau hạn mức retry; client reconnect lấy mới nhất; đối soát bù cho app; gateway báo `degraded` |
+| NATS chết toàn bộ | DB vẫn ghi; event trong lúc gián đoạn có thể mất (nack/timeout chỉ log); client reconnect lấy mới nhất; reconcile (M2a.2) bù cho app; gateway báo `degraded` |
 | Redis state chết (`chatim-redis`) | Dùng bảng slot gần nhất (lease hết hạn thì `Owns()` false, mọi core vẫn ghi đúng nhờ `_id` làm CAS); publish không dùng Redis nên không bị ảnh hưởng; tạm tắt presence/typing |
 | Redis dedupe chết (`chatim-redis-dedupe`) | Chống trùng chỉ còn LRU RAM actor (redisguard cooldown); slot và publish không bị ảnh hưởng. Mất key cid khi khởi động lại là chấp nhận được vì instance này không lưu đĩa (D44) |
 | Core chết | Core khác nhận slot trong ~5s; trong lúc chờ, core bất kỳ vẫn xử lý đúng; event chưa publish có thể mất (D47) |
@@ -372,8 +372,9 @@ Kết quả trên máy dev và hướng dẫn chạy prod-like: [../poc/README.m
 | D47 | Event best-effort; đủ event nhờ module đối soát event định kỳ (Phase 2). Thay D19 | Giữ D19 bằng bộ đếm pts mỗi nhóm ghi (`$inc`/CAS, +1 RTT majority mỗi lần gửi); thuê khối pts; id kiểu Snowflake + frontier; tách hai dãy; log sự kiện (event sourcing) | Không ai cần pts liên tục; client reconnect lấy bản mới nhất (doc tin luôn giữ trạng thái hiện tại); mọi bản vá giữ pts liên tục đều hỏng khi review (mất event qua `Nats-Msg-Id` trùng, lỗ khi crash, đảo thứ tự khi hai chủ) |
 | D48 | Bỏ pts toàn room. Id event là khoá tự nhiên suy ra từ doc; tin mới `{room}-{thread}-{seq}`, dùng làm `Nats-Msg-Id` và `Event.id`; field `pts` trong proto reserved | pts liên tục + `EventID {room}-{pts}`; bộ đếm +1 RTT; thuê khối; Snowflake; tách hai dãy | pts nằm ở hai nơi (`messages.p`, `room_events._id`) không có khoá unique chung, hai core cấp trùng pts → JetStream bỏ một event mà không dấu vết; id tự nhiên lặp lại đúng khi publish lại hoặc đối soát |
 | D49 | Bỏ watermark publish, `ActivityMarks`, `Skip`, `recovery.Sweeper`, vòng khôi phục của actor, key Redis `chatim:pubwm:*` và `chatim:active:*`; `AfterClaim = router.EvictSlots`; publisher drain trong `CORE_PUBLISHER_DRAIN`, chỉ abort khi hết giờ; bỏ env `RECOVERY_*`, `PUB_WATERMARK_TTL`, `PUB_FLUSH_EVERY`. Thay D36, D37, D38 và phần publisher của D39 | Giữ sweeper quét theo seq; log sự kiện | Không còn số liên tục để làm mốc khôi phục; phần mất bù bằng đối soát (D47); Redis state chỉ còn phục vụ slot manager |
-| D50 | Publisher giữ thứ tự từng room: mỗi `Enqueue` là một batch, batch sau của room chờ batch trước có ack hoặc các event lỗi hết hạn mức retry; room khác vẫn chạy; trong batch gửi pipeline. Chỉ poll ack của publish đầu hàng, nên ack treo làm chậm ghi nhận ack room khác tối đa `PUB_ACK_TIMEOUT` | Pipeline bỏ qua event lỗi (`publish/attempts.go` cũ) | Thay đổi của một tin (M2b) phải phát sau chính tin đó (R6/R7); thứ tự tới người nhận vẫn không kiểm soát |
+| D50 | (viết lại 2026-10-04) Publisher chỉ giữ hàng đợi theo shard (theo slot) để `Enqueue` không chặn và giữ thứ tự từng room. Goroutine của shard gọi `PublishMsgAsync` cho từng event theo thứ tự nhận, không chờ ack. Theo dõi publish đang bay (`WithPublishAsyncMaxPending`, đầy thì chờ rồi trả `ErrTooManyStalledMsgs`), timeout ack (`WithPublishAsyncTimeout`) và gửi lại khi stream chưa có leader (`WithRetryAttempts`/`WithRetryWait`) đều giao cho nats.go. Lỗi (nack, timeout, quá nhiều publish đang bay) chỉ log qua `WithPublishAsyncErrHandler`, giới hạn 1 lần/giây, và để M2a.2 bù. Thứ tự giữ ở đường bình thường; retry của thư viện, reconnect hoặc đổi chủ slot có thể làm đảo, chấp nhận. Close đẩy hết hàng đợi rồi chờ `PublishAsyncComplete()` | Bản D50 đầu: mỗi `Enqueue` là một batch, batch sau của room chờ batch trước có ack; publisher tự quản lý ready/pending/retrying/abandoned, tự retry có backoff | Bản đầu tốn ~380 dòng, bench sạch cho ack p99 +22% và live lag p99 khoảng +50% so với M2a, vẫn không bảo đảm thứ tự trọn vẹn và chỉ poll ack của event đầu hàng. Theo dõi từng event là di sản của watermark liền nhau (D37), đã gỡ ở D49. "Tin trước, sửa sau" do snapshot + version (M2b) và reconcile gánh. Hệ quả: không còn retry tự viết cho nack/timeout, trước khi M2a.2 xong sự cố NATS ngắn có thể làm mất nhiều event hơn (vẫn đúng D47) |
 | D51 | Mọi event phải dựng lại được từ post-image của doc (id + nội dung), để module đối soát publish lại đúng id | Event mang dữ liệu không suy ra được từ doc | Đối soát và publish lại cùng id → JetStream/người nhận bỏ trùng; không cần lưu event riêng |
+| D52 | (dự kiến, làm ở M2a.2) Reconcile event là component trong core, bật mặc định, tắt được bằng env, giữ bằng lease trên Redis state nên chỉ một instance chạy:<br>• tail MongoDB change stream của `messages` sau một port (Postgres dùng logical decoding sau);<br>• chỉ xử lý thay đổi cũ hơn `D = 30s`;<br>• dựng lại event từ doc hiện tại với đúng id tự nhiên, `room_type` tra từ `rooms` qua LRU;<br>• publish bằng vòng riêng, retry không giới hạn;<br>• lưu resume token (collection `reconciler_state`, tạo ở bootstrap) chỉ khi mọi event trước đó đã có ack;<br>• nâng `EVT_STREAM_DUPLICATES` lên 5m; lúc boot kiểm `D + lag < cửa sổ`;<br>• bản đầu republish mọi tin (đo cái giá), bước sau mới chỉ republish id còn thiếu | App riêng (Go `internal` chặn import `pbconv`/`mongostore`); quét DB theo room hoạt động; dùng lại `publish.Publisher` (nó bỏ event khi lỗi) | Bù event mà D50 bỏ; mất resume token (quá cửa sổ oplog) thì phần đó mất hẳn, prod cần oplog `minRetentionHours` ≥ 24h và alert theo lag; republish mọi tin làm số publish lên NATS gấp đôi |
 
 ## 15. Câu hỏi còn mở
 
