@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
@@ -16,9 +15,9 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/publish/publishtest"
 )
 
-func startPublisher(t *testing.T, js publish.JetStream, rdb *redis.Client) *publish.Publisher {
+func startPublisher(t *testing.T, js publish.JetStream) *publish.Publisher {
 	t.Helper()
-	p, err := publish.New(js, rdb, publish.Config{SubjectRoot: "evt", FlushEvery: time.Millisecond, RedisTimeout: time.Second}, quiet)
+	p, err := publish.New(js, publish.Config{SubjectRoot: "evt"}, quiet)
 	if err != nil {
 		t.Fatalf("publish.New: %v", err)
 	}
@@ -52,7 +51,7 @@ func TestSentMessagesArePublishedInSeqOrder(t *testing.T) {
 	w := newWorld(t)
 	createRoom(t, w.rooms, roomB, "alice", "bob")
 	js := &publishtest.JetStream{}
-	pub := startPublisher(t, js, w.rdb)
+	pub := startPublisher(t, js)
 	core := startCoreWith(t, w.msgs, w.rooms, &fakeRegistry{}, pub)
 	const perRoom = 25
 	rooms := []uint64{roomA, roomB}

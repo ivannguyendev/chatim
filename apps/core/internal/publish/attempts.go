@@ -15,14 +15,12 @@ import (
 
 var (
 	errAckTimeout = errors.New("publish ack timed out")
-	errMalformed  = errors.New("event needs an id, a pts, a subject-safe tenant and a known payload")
+	errMalformed  = errors.New("event needs an id, a subject-safe tenant and a known payload")
 )
 
 type attempt struct {
-	room     uint64
-	pts      uint64
+	batch    *batch
 	msg      *nats.Msg
-	tracked  bool
 	tries    int
 	okc      <-chan *jetstream.PubAck
 	errc     <-chan error
@@ -32,7 +30,7 @@ type attempt struct {
 
 func message(root string, room uint64, ev *chatimv1.Event) (*nats.Msg, error) {
 	kind, ok := eventKind(ev)
-	if !ok || ev.GetId() == "" || ev.GetPts() == 0 || !validToken(ev.GetTenant()) {
+	if !ok || ev.GetId() == "" || !validToken(ev.GetTenant()) {
 		return nil, errMalformed
 	}
 	data, err := proto.Marshal(ev)
@@ -73,13 +71,11 @@ func (s *shard) failed(a *attempt, err error) {
 		}
 		return
 	}
-	if a.tracked {
-		s.rooms.dropped(a.room)
-	}
 	if !s.givingUp {
 		s.givingUp = true
-		s.log.Warn("event publish abandoned; its watermark stalls until recovery republishes it", "room", a.room, "pts", a.pts, "tries", a.tries, "err", err)
+		s.log.Warn("event publish abandoned; reconciliation must republish it", "room", a.batch.room, "event", a.msg.Header.Get(jetstream.MsgIDHeader), "tries", a.tries, "err", err)
 	}
+	s.done(a)
 }
 
 func (s *shard) retryDelay(tries int) time.Duration {
@@ -98,7 +94,7 @@ func (s *shard) armed() <-chan time.Time {
 	if len(s.pending) > 0 {
 		at = s.pending[0].deadline
 	}
-	if len(s.retrying) > 0 && len(s.pending) < s.cfg.MaxPending && (at.IsZero() || s.nextRetry.Before(at)) {
+	if len(s.retrying) > 0 && (at.IsZero() || s.nextRetry.Before(at)) {
 		at = s.nextRetry
 	}
 	if at.IsZero() {
@@ -122,12 +118,11 @@ func (s *shard) wakeUp(now time.Time) {
 	if len(s.retrying) == 0 || now.Before(s.nextRetry) {
 		return
 	}
-	room := s.cfg.MaxPending - len(s.pending)
 	var due []*attempt
 	rest := s.retrying[:0:0]
 	s.nextRetry = time.Time{}
 	for _, a := range s.retrying {
-		if len(due) < room && !now.Before(a.due) {
+		if !now.Before(a.due) {
 			due = append(due, a)
 			continue
 		}
@@ -137,7 +132,5 @@ func (s *shard) wakeUp(now time.Time) {
 		}
 	}
 	s.retrying = rest
-	for _, a := range due {
-		s.send(a)
-	}
+	s.ready = append(due, s.ready...)
 }

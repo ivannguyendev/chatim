@@ -3,10 +3,9 @@ package publish_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
-
-	"github.com/redis/go-redis/v9"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/publish/publishtest"
@@ -16,7 +15,7 @@ import (
 func TestEnqueueNeverBlocksWhenTheQueueIsFull(t *testing.T) {
 	cfg := fastSetup
 	cfg.Shards, cfg.QueueSize = 1, 2
-	rg := newRig(t, cfg, nil)
+	rg := newRig(t, cfg)
 	rg.enqueue(t, roomA, 1)
 	rg.enqueue(t, roomA, 2)
 	begin := time.Now()
@@ -42,10 +41,8 @@ func TestEnqueueNeverBlocksWhenTheQueueIsFull(t *testing.T) {
 	}
 }
 
-func TestCloseDrainsQueuedEventsAndFlushesWatermarks(t *testing.T) {
-	cfg := fastSetup
-	cfg.FlushEvery = time.Hour
-	rg := started(t, cfg)
+func TestCloseDrainsQueuedEvents(t *testing.T) {
+	rg := started(t, fastSetup)
 	rg.js.Hold()
 	rg.enqueue(t, roomA, 1, 2, 3)
 	eventually(t, "three publishes in flight", func() bool { return rg.js.Held() == 3 })
@@ -59,20 +56,20 @@ func TestCloseDrainsQueuedEventsAndFlushesWatermarks(t *testing.T) {
 	if err := rg.wait(); err != nil {
 		t.Fatalf("Run after Close = %v", err)
 	}
-	if got, ok := watermark(rg.mr, roomA); !ok || got != 3 {
-		t.Fatalf("watermark after Close = %d (present %v), want 3", got, ok)
+	if n := len(rg.js.Stored()); n != 3 {
+		t.Fatalf("stored %d events after Close, want 3", n)
 	}
 }
 
 func TestCloseStopsAtItsDeadlineAndKeepsAckedProgress(t *testing.T) {
 	cfg := fastSetup
-	cfg.FlushEvery, cfg.AckTimeout = time.Hour, time.Hour
+	cfg.AckTimeout = time.Hour
 	rg := started(t, cfg)
 	rg.enqueue(t, roomA, 1)
-	eventually(t, "pts 1 stored", func() bool { return len(rg.js.Stored()) == 1 })
+	eventually(t, "seq 1 stored", func() bool { return len(rg.js.Stored()) == 1 })
 	rg.js.Hold()
 	rg.enqueue(t, roomA, 2)
-	eventually(t, "pts 2 in flight", func() bool { return rg.js.Held() == 1 })
+	eventually(t, "seq 2 in flight", func() bool { return rg.js.Held() == 1 })
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	begin := time.Now()
@@ -82,13 +79,13 @@ func TestCloseStopsAtItsDeadlineAndKeepsAckedProgress(t *testing.T) {
 	if d := time.Since(begin); d > time.Second {
 		t.Fatalf("Close took %v past its 50ms deadline", d)
 	}
-	if got, ok := watermark(rg.mr, roomA); !ok || got != 1 {
-		t.Fatalf("watermark after aborted drain = %d (present %v), want 1", got, ok)
+	if got := storedIDs(rg.js); !slices.Equal(got, []string{"101-0-1"}) {
+		t.Fatalf("stored %v after an aborted drain, want only 101-0-1", got)
 	}
 }
 
 func TestHardCancelStopsShardsWithoutLeaks(t *testing.T) {
-	rg := newRig(t, fastSetup, nil)
+	rg := newRig(t, fastSetup)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- rg.Run(ctx) }()
@@ -114,24 +111,14 @@ func TestHardCancelStopsShardsWithoutLeaks(t *testing.T) {
 }
 
 func TestNewRejectsMissingDependenciesAndBadConfig(t *testing.T) {
-	_, rdb := newRedis(t)
-	plain := redis.NewClient(&redis.Options{Addr: "127.0.0.1:1"})
-	defer plain.Close()
 	js := &publishtest.JetStream{}
-	if _, err := publish.New(nil, rdb, fastSetup, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
+	if _, err := publish.New(nil, fastSetup, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
 		t.Errorf("New(nil jetstream) = %v", err)
-	}
-	if _, err := publish.New(js, nil, fastSetup, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
-		t.Errorf("New(nil redis) = %v", err)
-	}
-	if _, err := publish.New(js, plain, fastSetup, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
-		t.Errorf("New(redis without context timeouts) = %v", err)
 	}
 	for name, mutate := range map[string]func(*publish.Config){
 		"dotted root":     func(c *publish.Config) { c.SubjectRoot = "evt.x" },
 		"empty root":      func(c *publish.Config) { c.SubjectRoot = "" },
 		"negative queue":  func(c *publish.Config) { c.QueueSize = -1 },
-		"negative ttl":    func(c *publish.Config) { c.WatermarkTTL = -time.Second },
 		"too many shards": func(c *publish.Config) { c.Shards = 1025 },
 		"backoff above cap": func(c *publish.Config) {
 			c.RetryBackoff, c.MaxBackoff = time.Second, time.Millisecond
@@ -139,11 +126,11 @@ func TestNewRejectsMissingDependenciesAndBadConfig(t *testing.T) {
 	} {
 		cfg := fastSetup
 		mutate(&cfg)
-		if _, err := publish.New(js, rdb, cfg, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
+		if _, err := publish.New(js, cfg, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
 			t.Errorf("%s: New = %v, want ErrInvalidArgument", name, err)
 		}
 	}
-	if _, err := publish.New(js, rdb, publish.Config{SubjectRoot: "evt"}, nil); err != nil {
+	if _, err := publish.New(js, publish.Config{SubjectRoot: "evt"}, nil); err != nil {
 		t.Errorf("New with defaults = %v", err)
 	}
 	if n := len(publish.Config{}.JetStreamOptions()); n != 2 {

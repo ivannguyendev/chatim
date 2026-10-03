@@ -90,14 +90,14 @@ func TestPublishedMessageCarriesSubjectMsgIDAndEvent(t *testing.T) {
 
 func TestMalformedEventsAreDroppedAndOthersPublished(t *testing.T) {
 	rg := started(t, fastSetup)
-	noPts, dotted, empty, noID := events(roomA, 1)[0], events(roomA, 2)[0], events(roomA, 3)[0], events(roomA, 5)[0]
-	noPts.Pts, dotted.Tenant, empty.Payload, noID.Id = 0, "acme.x", nil, ""
-	if err := rg.Enqueue(roomA, []*chatimv1.Event{noPts, dotted, empty, noID, events(roomA, 4)[0]}); err != nil {
+	dotted, empty, noID := events(roomA, 2)[0], events(roomA, 3)[0], events(roomA, 5)[0]
+	dotted.Tenant, empty.Payload, noID.Id = "acme.x", nil, ""
+	if err := rg.Enqueue(roomA, []*chatimv1.Event{dotted, empty, noID, events(roomA, 4)[0]}); err != nil {
 		t.Fatalf("Enqueue: %v", err)
 	}
 	eventually(t, "valid event stored", func() bool { return len(rg.js.Stored()) == 1 })
-	if n := rg.sink.Count(malformedMsg); n != 4 {
-		t.Fatalf("logged %d malformed events, want 4", n)
+	if n := rg.sink.Count(malformedMsg); n != 3 {
+		t.Fatalf("logged %d malformed events, want 3", n)
 	}
 	if got := storedIDs(rg.js); got[0] != "101-0-4" {
 		t.Fatalf("stored %v, want only 101-0-4", got)

@@ -60,7 +60,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wire cid dedupe: %w", err)
 	}
-	pub, err := publish.New(cl.js, cl.redis, cfg.Publish, log)
+	pub, err := publish.New(cl.js, cfg.Publish, log)
 	if err != nil {
 		return nil, fmt.Errorf("wire publisher: %w", err)
 	}

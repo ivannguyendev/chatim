@@ -20,7 +20,6 @@ const slotRedisPool = 4
 
 type clients struct {
 	mongo  *mongo.Client
-	redis  *redis.Client
 	slots  *redis.Client
 	dedupe *redis.Client
 	nats   *nats.Conn
@@ -69,13 +68,12 @@ func mongoOptions(cfg config.Config) *options.ClientOptions {
 }
 
 func (c *clients) connectRedis(ctx context.Context, cfg config.Config) error {
-	c.redis = redis.NewClient(redisOptions(cfg.RedisAddr, cfg.RedisDB, cfg.RedisPassword, "chatim-core-"+cfg.CoreID, 0))
 	c.slots = redis.NewClient(redisOptions(cfg.RedisAddr, cfg.RedisDB, cfg.RedisPassword, "chatim-core-slots-"+cfg.CoreID, slotRedisPool))
 	c.dedupe = redis.NewClient(redisOptions(cfg.RedisDedupeAddr, cfg.RedisDedupeDB, cfg.RedisDedupePassword, "chatim-core-dedupe-"+cfg.CoreID, 0))
 	pings := []struct {
 		instance string
 		rdb      *redis.Client
-	}{{"state", c.redis}, {"state", c.slots}, {"dedupe", c.dedupe}}
+	}{{"state", c.slots}, {"dedupe", c.dedupe}}
 	for _, p := range pings {
 		if err := p.rdb.Ping(ctx).Err(); err != nil {
 			opts := p.rdb.Options()
@@ -134,7 +132,7 @@ func (c *clients) close(ctx context.Context, log *slog.Logger) {
 	if c.nats != nil {
 		c.nats.Close()
 	}
-	for _, rdb := range []*redis.Client{c.redis, c.slots, c.dedupe} {
+	for _, rdb := range []*redis.Client{c.slots, c.dedupe} {
 		if rdb != nil {
 			errs = append(errs, rdb.Close())
 		}

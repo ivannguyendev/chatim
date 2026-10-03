@@ -16,6 +16,6 @@ func (a *actor) publishLanded() {
 	for i, l := range a.landed {
 		events[i] = pbconv.MessageCreated(a.room.Type, l.msg)
 	}
-	slices.SortFunc(events, func(x, y *chatimv1.Event) int { return cmp.Compare(x.GetPts(), y.GetPts()) })
+	slices.SortFunc(events, func(x, y *chatimv1.Event) int { return cmp.Compare(x.GetSeq(), y.GetSeq()) })
 	_ = a.r.events.Enqueue(a.id, events)
 }

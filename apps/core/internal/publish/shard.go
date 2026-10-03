@@ -14,43 +14,41 @@ import (
 type item struct {
 	room   uint64
 	events []*chatimv1.Event
-	skips  []uint64
 }
 
 type shard struct {
 	js    JetStream
-	store *watermarkStore
 	cfg   Config
 	log   *slog.Logger
 	queue chan item
 	abort <-chan struct{}
 	full  atomic.Bool
 
-	rooms     *tracker
-	carry     item
+	rooms     roomQueues
+	ready     []*attempt
 	pending   []*attempt
 	retrying  []*attempt
 	nextRetry time.Time
 	wake      *time.Timer
 	givingUp  bool
-	overflow  bool
+}
+
+func newShard(js JetStream, cfg Config, log *slog.Logger, abort <-chan struct{}) *shard {
+	return &shard{js: js, cfg: cfg, log: log, queue: make(chan item, cfg.QueueSize), abort: abort, rooms: newRoomQueues()}
 }
 
 func (s *shard) run(ctx context.Context) {
 	s.wake = time.NewTimer(time.Hour)
 	s.wake.Stop()
 	defer s.wake.Stop()
-	tick := time.NewTicker(s.cfg.FlushEvery)
-	defer tick.Stop()
-	defer s.sync(context.WithoutCancel(ctx))
 	queue := s.queue
 	for {
 		s.feed()
-		if queue == nil && len(s.carry.events) == 0 && len(s.pending) == 0 && len(s.retrying) == 0 {
+		if queue == nil && s.idle() {
 			return
 		}
 		in := queue
-		if len(s.carry.events) > 0 || len(s.pending) >= s.cfg.MaxPending {
+		if len(s.ready) > 0 || s.rooms.held >= s.cfg.QueueSize {
 			in = nil
 		}
 		var okc <-chan *jetstream.PubAck
@@ -64,19 +62,15 @@ func (s *shard) run(ctx context.Context) {
 				queue = nil
 				continue
 			}
-			s.skip(it.room, it.skips)
-			s.carry = item{room: it.room, events: it.events}
+			if !s.rooms.hold(it) {
+				s.begin(it)
+			}
 		case <-okc:
 			s.settleHead(nil)
 		case err := <-errc:
 			s.settleHead(err)
 		case <-s.armed():
 			s.wakeUp(time.Now())
-		case <-tick.C:
-			s.sync(ctx)
-			if s.rooms.sweep(time.Now()) {
-				s.overflow = false
-			}
 		case <-s.abort:
 			return
 		case <-ctx.Done():
@@ -85,44 +79,44 @@ func (s *shard) run(ctx context.Context) {
 	}
 }
 
-func (s *shard) feed() {
-	for len(s.carry.events) > 0 && len(s.pending) < s.cfg.MaxPending {
-		ev := s.carry.events[0]
-		s.carry.events = s.carry.events[1:]
-		s.hand(s.carry.room, ev)
-	}
-	if len(s.carry.events) == 0 {
-		s.carry = item{}
-	}
+func (s *shard) idle() bool {
+	return s.rooms.empty() && len(s.ready) == 0 && len(s.pending) == 0 && len(s.retrying) == 0
 }
 
-func (s *shard) hand(room uint64, ev *chatimv1.Event) {
-	msg, err := message(s.cfg.SubjectRoot, room, ev)
-	if err != nil {
-		s.log.Error("dropping malformed event", "room", room, "err", err)
-		return
-	}
-	a := &attempt{room: room, pts: ev.GetPts(), msg: msg}
-	a.tracked = s.rooms.hand(room, a.pts, time.Now())
-	if !a.tracked {
-		s.overflowed("tracked rooms", room)
-	}
-	s.send(a)
-}
-
-func (s *shard) skip(room uint64, pts []uint64) {
-	now := time.Now()
-	for _, p := range pts {
-		if p == 0 {
-			continue
-		}
-		if !s.rooms.hand(room, p, now) {
-			s.overflowed("tracked rooms", room)
+func (s *shard) begin(it item) {
+	for !s.queueBatch(it) {
+		next, ok := s.rooms.finish(it.room)
+		if !ok {
 			return
 		}
-		if s.rooms.acked(room, p) {
-			s.overflowed("published events above the watermark", room)
+		it = next
+	}
+}
+
+func (s *shard) queueBatch(it item) bool {
+	b := &batch{room: it.room}
+	for _, ev := range it.events {
+		msg, err := message(s.cfg.SubjectRoot, it.room, ev)
+		if err != nil {
+			s.log.Error("dropping malformed event", "room", it.room, "err", err)
+			continue
 		}
+		b.open++
+		s.ready = append(s.ready, &attempt{batch: b, msg: msg})
+	}
+	if b.open == 0 {
+		return false
+	}
+	s.rooms.start(b)
+	return true
+}
+
+func (s *shard) feed() {
+	for len(s.ready) > 0 && len(s.pending) < s.cfg.MaxPending {
+		a := s.ready[0]
+		s.ready[0] = nil
+		s.ready = s.ready[1:]
+		s.send(a)
 	}
 }
 
@@ -135,35 +129,15 @@ func (s *shard) settleHead(err error) {
 		return
 	}
 	s.givingUp = false
-	if a.tracked && s.rooms.acked(a.room, a.pts) {
-		s.overflowed("published events above the watermark", a.room)
-	}
+	s.done(a)
 }
 
-func (s *shard) sync(ctx context.Context) {
-	for range syncPasses {
-		reqs := s.rooms.due()
-		if len(reqs) == 0 {
-			return
-		}
-		for len(reqs) > 0 {
-			n := min(len(reqs), syncChunk)
-			values, err := s.store.sync(ctx, reqs[:n])
-			if err != nil {
-				return
-			}
-			for i, r := range reqs[:n] {
-				s.rooms.settle(r.room, values[i])
-			}
-			reqs = reqs[n:]
-		}
-	}
-}
-
-func (s *shard) overflowed(limit string, room uint64) {
-	if s.overflow {
+func (s *shard) done(a *attempt) {
+	a.batch.open--
+	if a.batch.open > 0 {
 		return
 	}
-	s.overflow = true
-	s.log.Warn("publish watermark tracking full; affected watermarks stall until recovery republishes", "limit", limit, "room", room)
+	if next, ok := s.rooms.finish(a.batch.room); ok {
+		s.begin(next)
+	}
 }

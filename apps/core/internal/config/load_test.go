@@ -41,7 +41,6 @@ func TestLoadDefaults(t *testing.T) {
 		Dedupe: dedupe.Config{CoreID: host, PendingTTL: 10 * time.Second, CommittedTTL: 15 * time.Minute, Timeout: 100 * time.Millisecond, Cooldown: time.Second},
 		Publish: publish.Config{
 			SubjectRoot: "evt", Shards: 4, QueueSize: 1024, MaxPending: 256, AckTimeout: 2 * time.Second,
-			FlushEvery: 50 * time.Millisecond, WatermarkTTL: 7 * day, RedisTimeout: 100 * time.Millisecond, RedisCooldown: time.Second,
 		},
 		Stream: publish.StreamConfig{Name: "CHATIM_EVT", SubjectRoot: "evt", LiveRoot: "live", Replicas: 1, MaxAge: 7 * day, Duplicates: 2 * time.Minute},
 		Slot: slot.Config{
@@ -76,7 +75,6 @@ func TestLoadOverrides(t *testing.T) {
 		Dedupe: dedupe.Config{CoreID: "core-a", PendingTTL: 8 * time.Second, CommittedTTL: 30 * time.Minute, Timeout: 50 * time.Millisecond, Cooldown: 2 * time.Second},
 		Publish: publish.Config{
 			SubjectRoot: "evt_it", Shards: 2, QueueSize: 512, MaxPending: 128, AckTimeout: time.Second,
-			FlushEvery: 20 * time.Millisecond, WatermarkTTL: day, RedisTimeout: 50 * time.Millisecond, RedisCooldown: 2 * time.Second,
 		},
 		Stream: publish.StreamConfig{Name: "CHATIM_EVT_IT", SubjectRoot: "evt_it", LiveRoot: "live_it", Replicas: 3, MaxAge: 2 * day, Duplicates: 5 * time.Minute},
 		Slot: slot.Config{

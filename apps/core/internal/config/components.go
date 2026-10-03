@@ -15,7 +15,6 @@ func (p *parser) components(c *Config) {
 	pendingTTL := p.span("CID_PENDING_TTL", dedupe.DefaultPendingTTL)
 	redisTimeout := p.span("REDIS_OP_TIMEOUT", dedupe.DefaultTimeout)
 	redisCooldown := p.span("REDIS_COOLDOWN", dedupe.DefaultCooldown)
-	watermarkTTL := p.span("PUB_WATERMARK_TTL", publish.DefaultWatermarkTTL)
 	subjectRoot := envconfig.String("EVT_SUBJECT_ROOT", "evt")
 	tick := p.span("SLOT_TICK", time.Second)
 
@@ -42,15 +41,11 @@ func (p *parser) components(c *Config) {
 		Cooldown:     redisCooldown,
 	}
 	c.Publish = publish.Config{
-		SubjectRoot:   subjectRoot,
-		Shards:        p.count("PUB_SHARDS", publish.DefaultShards),
-		QueueSize:     p.count("PUB_QUEUE", publish.DefaultQueueSize),
-		MaxPending:    p.count("PUB_MAX_PENDING", publish.DefaultMaxPending),
-		AckTimeout:    p.span("PUB_ACK_TIMEOUT", publish.DefaultAckTimeout),
-		FlushEvery:    p.span("PUB_FLUSH_EVERY", publish.DefaultFlushEvery),
-		WatermarkTTL:  watermarkTTL,
-		RedisTimeout:  redisTimeout,
-		RedisCooldown: redisCooldown,
+		SubjectRoot: subjectRoot,
+		Shards:      p.count("PUB_SHARDS", publish.DefaultShards),
+		QueueSize:   p.count("PUB_QUEUE", publish.DefaultQueueSize),
+		MaxPending:  p.count("PUB_MAX_PENDING", publish.DefaultMaxPending),
+		AckTimeout:  p.span("PUB_ACK_TIMEOUT", publish.DefaultAckTimeout),
 	}
 	c.Stream = publish.StreamConfig{
 		Name:        envconfig.String("EVT_STREAM", "CHATIM_EVT"),

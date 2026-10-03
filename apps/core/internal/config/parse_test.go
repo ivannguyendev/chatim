@@ -53,8 +53,6 @@ func TestLoadRejectsNonPositiveValues(t *testing.T) {
 		{"PUB_QUEUE", "0"},
 		{"PUB_MAX_PENDING", "0"},
 		{"PUB_ACK_TIMEOUT", "0s"},
-		{"PUB_FLUSH_EVERY", "0s"},
-		{"PUB_WATERMARK_TTL", "0s"},
 		{"EVT_STREAM_REPLICAS", "0"},
 		{"EVT_STREAM_MAX_AGE", "0s"},
 		{"EVT_STREAM_DUPLICATES", "0s"},
