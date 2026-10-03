@@ -9,7 +9,8 @@
 | 1 | M2a — Core: Send + History | CreateRoom/SendMessage/GetHistory qua gRPC, actor + flusher, chống trùng cid, JetStream + watermark, publish bù khi core chết (watermark và publish bù thay bởi M2a.1), core ×2 trong compose, corebench | ✅ Xong trên dev |
 | 1 | M2a.1 — Sửa hướng đánh số & publish | Bỏ `pts` toàn room; id event tự nhiên `{room}-{thread}-{seq}`; event best-effort; publisher chỉ còn hàng đợi, dùng cơ chế async của nats.go (D50 viết lại); bỏ watermark, active mark, sweeper và vòng khôi phục của actor (D47–D51) | 🚧 Đang làm trên `fix/m2a1-event-identity` |
 | 1 | M2a.2 — Reconcile event | Component trong core, bật mặc định, một instance nhờ lease Redis: tail change stream của `messages`, dựng lại event từ doc với đúng id và publish bù phần event mất, lưu resume token sau khi có ack (D47, D51, D52) | Chưa (sau M2a.1) |
-| 1 | M2b — Core: thay đổi tin | Sửa (+ lịch sử sửa), xoá (cho mọi người / phía tôi), reaction, ghim, read receipt; id event theo version của doc (D53–D57 trong decision log M2b) | Chưa (bắt đầu sau M2a.2) |
+| 1 | M2a.3 — Perf đường ghi | Gom lệnh chống trùng cid trên Redis (Reserve/Commit) giữa nhiều room trong mỗi core, giống flusher gom insert Mongo; thử `GOGC`; đo lại cùng quy trình corebench + pprof. "Trả ack trước, Commit sau" còn để thảo luận (decision log `.claude/plans/m2a3-write-path-perf_design.md`) | Chưa (sau M2a.2) |
+| 1 | M2b — Core: thay đổi tin | Sửa (+ lịch sử sửa), xoá (cho mọi người / phía tôi), reaction, ghim, read receipt; id event theo version của doc (D53–D57 trong decision log M2b) | Chưa (bắt đầu sau M2a.3) |
 | 1 | M2c — Core: thread & tiện ích | Thread, mention, reply/forward, bookmark, đánh dấu chưa đọc | Chưa |
 | 1 | M3 — Core: đường đọc | ListMyRoomIDs, ListMyRooms (unread chính xác, chặn ở 99+, chỉ đếm tin có cờ đếm), Sync thiết kế lại (không phát lại, reconnect lấy mới nhất), đồng bộ trạng thái giữa các thiết bị, GetReactions/Pins/Bookmarks, cache RAM trang mới nhất + singleflight đọc lịch sử, test sẵn sàng sharding trên cluster 2 shard | Chưa |
 | 1 | M4 — Gateway | WebSocket (gws), JWT/JWKS, frame protobuf, subscribe theo room, hàng đợi gửi có giới hạn, typing/presence, định tuyến theo slot, gateway đánh dấu core địa chỉ đang lỗi, hằng số header tenant/user chuyển vào `pkg`, cân nhắc client gRPC tự re-resolve DNS, gateway không chuyển `kind`/cờ đếm unread từ client | Chưa |
@@ -38,6 +39,6 @@ Xong trên máy dev: `CreateRoom`/`SendMessage`/`GetHistory` qua gRPC, actor the
 
 ## Thứ tự phụ thuộc
 
-- M2a → M2a.1 → M2a.2 → M2b → M2c → M3 → M4 → M5.
+- M2a → M2a.1 → M2a.2 → M2a.3 → M2b → M2c → M3 → M4 → M5.
 - PoC prod-like chạy song song và phải xong trước M5, vì đó là lúc chốt database. Tầng lưu trữ của core đặt sau interface, nên nếu PoC chọn PostgreSQL thì chỉ thêm adapter.
 - Phase 2 bắt đầu khi M4 xong, vì các app vệ tinh cần gateway và event stream ổn định.
