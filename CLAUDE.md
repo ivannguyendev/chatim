@@ -11,9 +11,9 @@ chatim is an internal, logically multi-tenant chat platform (CPaaS) in Go. Phase
 Done:
 - M0–M1: foundation and PoC.
 - M2a, merged to main (PR #5): core CreateRoom/SendMessage/GetHistory over gRPC, cid dedupe, JetStream publish, crash recovery (sweeper, replaced in M2a.1), and two cores in compose.
-- M2a.1, in progress on `fix/m2a1-event-identity` (not merged): no room-wide pts, natural event ids, best-effort events, a queue-only publisher on top of the nats.go async publisher (D47–D51, D50 revised).
+- M2a.1, dev-done (PR from `fix/m2a1-event-identity`): no room-wide pts, natural event ids, best-effort events, a queue-only publisher on top of the nats.go async publisher (D47–D51, D50 revised).
 
-Next is M2a.2 (event reconciliation from the Mongo change stream, D52), then M2b: edit (+history), delete (for everyone / for me), reactions, pins, read receipts. The milestone order is in `docs/roadmap.md`. Project docs are written in Vietnamese.
+Next is M2a.2 (event reconciliation from the database change feed, D52), then M2a.3 (write-path perf: cross-room cid batching, ack before Commit), then M2b: edit (+history), delete (for everyone / for me), reactions, pins, read receipts. The milestone order is in `docs/roadmap.md`. Project docs are written in Vietnamese.
 
 ## Hard rules
 
@@ -177,10 +177,11 @@ Rules:
 
 ## Docs
 
-- `docs/designs/260930-chat-core-gateway-design.md`: the source of truth for the data model, write and read paths, failure handling and the Decision Log (D1–D51). Add new decisions there.
+- `docs/designs/260930-chat-core-gateway-design.md`: the source of truth for the data model, write and read paths, failure handling and the Decision Log (D1–D52). Add new decisions there.
 - `docs/plans/`: per-milestone plans, executed task by task with `subagent-driven-development` or `separate-driven-development`. M2a.1: `docs/plans/2026-10-03-m2a1-event-identity.md`.
 - `docs/poc/README.md`: PoC and corebench results (C1). Dev numbers only validate tools; go/no-go needs prod-like runs.
 - `docs/roadmap.md`: milestone status and carried-over items.
 - `docs/git-workflow.md`: branches, merge Definition of Done, readiness levels, SemVer tags and handling a broken `main`.
 - `.claude/plans/m2a-core-send-history_design.md`: local (gitignored) M2a decision log.
 - `.claude/plans/m2b-core-mutations_design.md`: local (gitignored) M2a.1 + M2b decision log (requirements, D47–D57, rejected alternatives).
+- `.claude/plans/m2a2-event-reconcile_design.md`, `.claude/plans/m2a3-write-path-perf_design.md`: local (gitignored) M2a.2 and M2a.3 decision logs.

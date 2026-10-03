@@ -7,7 +7,7 @@
 | 1 | M0 — Nền tảng | Go module, Makefile chạy Go qua Docker, hạ tầng dev (Mongo rs0, Redis, NATS, Postgres), `pkg/keys`, `pkg/ids`, `pkg/slotmap`, Dockerfile runtime | ✅ Xong |
 | 1 | M1 — PoC R1–R5 | Slot ownership trên Redis (code production), mongobench/natsbench/wsbench/postgresbench, kết quả dev, so sánh MongoDB/PostgreSQL | ✅ Xong trên dev · ⏳ prod-like chờ hạ tầng |
 | 1 | M2a — Core: Send + History | CreateRoom/SendMessage/GetHistory qua gRPC, actor + flusher, chống trùng cid, JetStream + watermark, publish bù khi core chết (watermark và publish bù thay bởi M2a.1), core ×2 trong compose, corebench | ✅ Xong trên dev |
-| 1 | M2a.1 — Sửa hướng đánh số & publish | Bỏ `pts` toàn room; id event tự nhiên `{room}-{thread}-{seq}`; event best-effort; publisher chỉ còn hàng đợi, dùng cơ chế async của nats.go (D50 viết lại); bỏ watermark, active mark, sweeper và vòng khôi phục của actor (D47–D51) | 🚧 Đang làm trên `fix/m2a1-event-identity` |
+| 1 | M2a.1 — Sửa hướng đánh số & publish | Bỏ `pts` toàn room; id event tự nhiên `{room}-{thread}-{seq}`; event best-effort; publisher chỉ còn hàng đợi, dùng cơ chế async của nats.go (D50 viết lại); bỏ watermark, active mark, sweeper và vòng khôi phục của actor (D47–D51) | ✅ Xong trên dev |
 | 1 | M2a.2 — Reconcile event | Component trong core, bật mặc định, chạy trên core giữ slot 0: đọc change stream của `messages` (nguồn sự thật) qua port `ChangeFeed` có contract chung để đổi DB được (Postgres dùng logical replication), publisher đánh dấu id đã ack lên Redis dedupe (TTL 1h, ngoài đường ack) để reconciler chỉ publish bù id chưa có dấu, dựng lại event từ doc với đúng id, lưu resume token sau khi có ack (D47, D51, D52; decision log `.claude/plans/m2a2-event-reconcile_design.md`) | Chưa (sau M2a.1) |
 | 1 | M2a.3 — Perf đường ghi | Gom lệnh chống trùng cid trên Redis (Reserve/Commit) giữa nhiều room trong mỗi core, gửi kiểu động (rảnh gửi ngay, đang bay thì gom); trả ack ngay sau insert, Commit gửi sau; thử `GOGC`; đo lại cùng quy trình corebench + pprof (decision log `.claude/plans/m2a3-write-path-perf_design.md`) | Chưa (sau M2a.2) |
 | 1 | M2b — Core: thay đổi tin | Sửa (+ lịch sử sửa), xoá (cho mọi người / phía tôi), reaction, ghim, read receipt; id event theo version của doc (D53–D57 trong decision log M2b) | Chưa (bắt đầu sau M2a.3) |
@@ -25,7 +25,7 @@
 
 ## Mức sẵn sàng
 
-Theo [git-workflow.md](git-workflow.md#mức-sẵn-sàng): `dev-done` → `prod-like validated` → `go-live`. M0, M1, M2a: `dev-done` (đã merge vào `main` qua PR #2, #5). Chưa milestone nào `prod-like validated`; chưa có tag release.
+Theo [git-workflow.md](git-workflow.md#mức-sẵn-sàng): `dev-done` → `prod-like validated` → `go-live`. M0, M1, M2a: `dev-done` (đã merge vào `main` qua PR #2, #5). M2a.1: `dev-done` (PR từ `fix/m2a1-event-identity`). Chưa milestone nào `prod-like validated`; chưa có tag release.
 
 ## M2a — tóm tắt
 
