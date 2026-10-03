@@ -10,7 +10,7 @@ chatim is an internal, logically multi-tenant chat platform (CPaaS) in Go. Phase
 
 Done:
 - M0–M1: foundation and PoC.
-- M2a, on branch `feat/m2a-core-send-history`: core CreateRoom/SendMessage/GetHistory over gRPC, cid dedupe, JetStream publish, crash recovery, and two cores in compose.
+- M2a, merged to main (PR #5): core CreateRoom/SendMessage/GetHistory over gRPC, cid dedupe, JetStream publish, crash recovery, and two cores in compose.
 
 Next is M2b: edit/delete/reactions and safe pts allocation. The milestone order is in `docs/roadmap.md`. Project docs are written in Vietnamese.
 
@@ -48,6 +48,17 @@ The user finds long review and test loops too slow. Run the cheapest check that 
 - No mutation-testing passes, repeated stress runs or benchmark re-runs unless asked.
 - When task N and task N+1 touch different files, review task N while task N+1 is being implemented.
 - Report in a few lines. If nothing changed since the last green run, don't re-run the whole repo at the end.
+
+## Git workflow
+
+Full rules in `docs/git-workflow.md`.
+
+- Branches: short-lived `feat/<milestone>-<slug>`, `fix/<slug>`, `docs/<slug>` from `main`. No long-lived `prod`, `develop` or `release` branches.
+- `main` holds finished, green work (`dev-done`), not necessarily go-live. Merge by PR with a merge commit. Never commit directly to, force-push or rewrite `main`.
+- Merge only when the milestone's Definition of Done holds: plan tasks done; `fmt-check`, `vet`, `lint`, `test`, `itest`, `e2e` green; no open Critical/Important findings; roadmap, Decision Log, `INDEXES.csv` and this file updated in the same PR; the PR states the readiness level.
+- Readiness: `dev-done` → `prod-like validated` → `go-live`.
+- Releases are SemVer tags on `main`, one per release, not per PR. `v1.0.0` is the first go-live. Prod runs the image built from a tag; the same image goes staging → prod.
+- Broken `main`: fix forward with `fix/*`; if that takes more than about a day or blocks others, revert the merge (`git revert -m 1`). A prod bug gets a patch tag; cut `release/vX.Y` from the tag only when `main` holds unready work.
 
 ## Commands
 
@@ -171,4 +182,5 @@ Rules:
 - `docs/plans/`: per-milestone plans, executed task by task with `subagent-driven-development` or `separate-driven-development`.
 - `docs/poc/README.md`: PoC and corebench results (C1). Dev numbers only validate tools; go/no-go needs prod-like runs.
 - `docs/roadmap.md`: milestone status and carried-over items.
+- `docs/git-workflow.md`: branches, merge Definition of Done, readiness levels, SemVer tags and handling a broken `main`.
 - `.claude/plans/m2a-core-send-history_design.md`: local (gitignored) M2a decision log.
