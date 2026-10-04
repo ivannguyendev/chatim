@@ -13,7 +13,7 @@ func Bootstrap(ctx context.Context, db *mongo.Database) error {
 	if err := ensureMessages(ctx, db); err != nil {
 		return err
 	}
-	for _, name := range []string{roomsCollection, membersCollection} {
+	for _, name := range []string{roomsCollection, membersCollection, reconcilerStateCollection} {
 		if err := createCollection(ctx, db, name); err != nil {
 			return err
 		}

@@ -96,6 +96,7 @@ func TestBootstrapIsIdempotent(t *testing.T) {
 	assertMessagesLayout(t, db)
 	assertMemberIndexes(t, db)
 	collectionOptions(t, db, roomsCollection)
+	collectionOptions(t, db, reconcilerStateCollection)
 	got, err := s.Find(t.Context(), m.Room, []store.MsgKey{store.KeyOf(m)})
 	if err != nil || len(got) != 1 || got[0].CID != m.CID {
 		t.Fatalf("Find after re-bootstrap = %+v, %v; want the inserted message", got, err)
