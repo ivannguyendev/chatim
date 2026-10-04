@@ -52,7 +52,7 @@ func TestLoadValidation(t *testing.T) {
 		{"reconcile disabled ignores its delay", map[string]string{"RECONCILE_ENABLED": "false", "RECONCILE_DELAY": "5m"}, ""},
 		{"stop phases fill the budget", map[string]string{"CORE_SHUTDOWN_BUDGET": "24200ms"}, "CORE_SHUTDOWN_BUDGET"},
 		{"stop phases just fit the budget", map[string]string{"CORE_SHUTDOWN_BUDGET": "24201ms"}, ""},
-		{"cid batch drain follows the redis op timeout", map[string]string{"REDIS_OP_TIMEOUT": "300ms", "CORE_SHUTDOWN_BUDGET": "24600ms"}, "CORE_SHUTDOWN_BUDGET"},
+		{"cid batch drain follows the redis op timeout", map[string]string{"REDIS_OP_TIMEOUT": "300ms", "CORE_SHUTDOWN_BUDGET": "24600ms"}, "2 x REDIS_OP_TIMEOUT (cid batcher drain) + FLUSH_INSERT_TIMEOUT"},
 		{"cid batch shards above slot count", map[string]string{"CID_BATCH_SHARDS": "2000"}, "CID_BATCH_*"},
 		{"cid batch shards at slot count", map[string]string{"CID_BATCH_SHARDS": "1024"}, ""},
 		{"zero cid batch queue", map[string]string{"CID_BATCH_QUEUE": "0"}, "CID_BATCH_QUEUE"},

@@ -13,7 +13,7 @@ var (
 )
 
 const stopPhases = "CORE_DRAIN_DELAY + CORE_GRPC_SHUTDOWN + RECONCILE_DRAIN + 1s + CORE_REQUEST_DEADLINE (router drain) + " +
-	"FLUSH_INSERT_TIMEOUT (flusher drain) + CORE_PUBLISHER_DRAIN + slot release + client close"
+	"2 x REDIS_OP_TIMEOUT (cid batcher drain) + FLUSH_INSERT_TIMEOUT (flusher drain) + CORE_PUBLISHER_DRAIN + slot release + client close"
 
 type rule struct {
 	ok  bool

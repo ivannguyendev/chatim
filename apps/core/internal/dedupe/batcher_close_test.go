@@ -63,3 +63,25 @@ func TestCloseBeforeRunAnswersQueuedCalls(t *testing.T) {
 		}
 	})
 }
+
+const settleAfterCloseMsg = "cid settle after close; dropping"
+
+func TestSettleAfterCloseIsCountedAndLoggedOnce(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		b, reg, sink := startFake(t, testBatch, false)
+		expectNil(t, b.Close(t.Context()))
+		room := roomsOnShard(testBatch.Shards, 0, 1)[0]
+		expectNil(t, b.Commit(t.Context(), roomEntries(room, 2)))
+		expectNil(t, b.Abort(t.Context(), roomKeys(room, 1)))
+		expectNil(t, b.Commit(t.Context(), roomEntries(room, 3)))
+		if n := b.Dropped(); n != 6 {
+			t.Fatalf("Dropped() = %d, want 6 late keys", n)
+		}
+		if n := sink.Count(settleAfterCloseMsg); n != 1 {
+			t.Fatalf("logged late settles %d times, want 1", n)
+		}
+		if _, commits, aborts := reg.calls(); len(commits)+len(aborts) != 0 {
+			t.Fatalf("late settles reached the store: %v %v", commits, aborts)
+		}
+	})
+}

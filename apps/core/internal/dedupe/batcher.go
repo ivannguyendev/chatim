@@ -57,6 +57,7 @@ type Batcher struct {
 	closed   bool
 	started  atomic.Bool
 	dropped  atomic.Uint64
+	late     atomic.Bool
 	stopping chan struct{}
 	stop     sync.Once
 	abort    chan struct{}
@@ -139,6 +140,11 @@ func (b *Batcher) settle(room uint64, call settleCall) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	if b.closed {
+		n := call.size()
+		b.dropped.Add(uint64(max(n, 0)))
+		if b.late.CompareAndSwap(false, true) {
+			b.log.Warn("cid settle after close; dropping", "room", room, "keys", n)
+		}
 		return
 	}
 	select {
