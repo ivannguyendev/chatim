@@ -10,7 +10,7 @@ import (
 )
 
 type tasks struct {
-	admin, publisher, flusher, router, slots, grpc *task
+	admin, publisher, flusher, cidBatch, router, slots, reconciler, grpc *task
 }
 
 func run(ctx context.Context, cfg config.Config, log *slog.Logger) error {
@@ -36,13 +36,17 @@ func run(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 }
 
 func (a *app) serve(ctx context.Context, adminLis, grpcLis net.Listener) error {
-	sup := newSupervisor(ctx, 6)
+	sup := newSupervisor(ctx, 8)
 	t := tasks{
 		admin:     sup.start("admin", func(c context.Context) error { return a.admin.ServeListener(c, adminLis) }),
 		publisher: sup.start("publisher", a.publisher.Run),
 		flusher:   sup.start("flusher", a.flusher.Run),
+		cidBatch:  sup.start("cid batcher", a.cidBatch.Run),
 		router:    sup.start("router", a.router.Run),
 		slots:     sup.start("slot manager", a.slots.Run),
+	}
+	if a.reconciler != nil {
+		t.reconciler = sup.start("reconciler", a.reconciler.Run)
 	}
 	cause := a.awaitRouter(ctx, sup)
 	if cause != nil || ctx.Err() != nil {

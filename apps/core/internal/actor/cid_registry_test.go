@@ -72,7 +72,7 @@ func TestRemotelyPendingCIDFailsEveryWaiterWithRetryLater(t *testing.T) {
 	}
 }
 
-func TestGroupReservesOnceAndRecordsCommitsBeforeAcking(t *testing.T) {
+func TestGroupReservesOnceAndRecordsCommitsInOneBatch(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rg := newRig(t, baseConfig)
 		rg.sub.hold()
@@ -90,14 +90,15 @@ func TestGroupReservesOnceAndRecordsCommitsBeforeAcking(t *testing.T) {
 		<-busy
 		synctest.Wait()
 		rg.sub.release()
+		synctest.Wait()
+		_, commits, _ := rg.cids.calls()
+		if len(commits) != 2 || len(commits[1]) != len(cids) {
+			t.Fatalf("commits %v, want [busy] then one batch of %d", commits, len(cids))
+		}
 		for i, w := range waits {
 			got := <-w
 			if got.err != nil {
 				t.Fatalf("%s: %v", cids[i], got.err)
-			}
-			_, commits, _ := rg.cids.calls()
-			if len(commits) != 2 || len(commits[1]) != len(cids) {
-				t.Fatalf("commits when %s was acked: %v, want [busy] then one batch of %d", cids[i], commits, len(cids))
 			}
 			rec := commits[1][i]
 			if rec.Key != remoteKey(roomA, "alice", cids[i]) || !sameAck(actor.Ack(rec.Record), got.ack) {

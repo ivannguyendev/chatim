@@ -7,18 +7,33 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/mongo/writeconcern"
 )
 
 func Bootstrap(ctx context.Context, db *mongo.Database) error {
 	if err := ensureMessages(ctx, db); err != nil {
 		return err
 	}
-	for _, name := range []string{roomsCollection, membersCollection} {
+	for _, name := range []string{roomsCollection, membersCollection, reconcilerStateCollection} {
 		if err := createCollection(ctx, db, name); err != nil {
 			return err
 		}
 	}
-	return ensureMemberIndexes(ctx, db)
+	if err := ensureMemberIndexes(ctx, db); err != nil {
+		return err
+	}
+	return ensureFeedAnchor(ctx, db)
+}
+
+func ensureFeedAnchor(ctx context.Context, db *mongo.Database) error {
+	state := db.Collection(reconcilerStateCollection, options.Collection().SetWriteConcern(writeconcern.Majority()))
+	keepOrNow := bson.D{{Key: "$ifNull", Value: bson.A{"$at", "$$CLUSTER_TIME"}}}
+	update := mongo.Pipeline{{{Key: "$set", Value: bson.D{{Key: "at", Value: keepOrNow}}}}}
+	filter := bson.D{{Key: "_id", Value: messagesFeedID}}
+	if _, err := state.UpdateOne(ctx, filter, update, options.UpdateOne().SetUpsert(true)); err != nil && !mongo.IsDuplicateKeyError(err) {
+		return fmt.Errorf("bootstrap %s: anchor change feed: %w", reconcilerStateCollection, err)
+	}
+	return nil
 }
 
 func ensureMessages(ctx context.Context, db *mongo.Database) error {

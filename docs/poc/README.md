@@ -75,6 +75,8 @@ Cùng điều kiện R2 (`write -rate 10000 -duration 60s -rooms 5000 -flushers 
 | 18 | 5000/s (M2a.1 publisher chỉ còn hàng đợi, infra sạch, kèm pprof core-1 20s) | Sạch (`infra-reset`) | 5000 | 0 | 0 | 0 / 1 | 19.43453ms | 57.926439ms | 133.153562ms | 250.622058ms | 385.895037ms | 16.989489ms / 86.409949ms | 7.497122ms | không đo |
 | 19 | 5000/s (M2a.1 publisher chỉ còn hàng đợi, infra sạch) | Sạch (`infra-reset`) | 5000 | 0 | 0 | 0 / 1 | 37.562724ms | 127.422924ms | 271.477498ms | 428.603507ms | 587.618481ms | 29.359084ms / 147.487225ms | 18.357325ms | không đo |
 | 20 | 5000/s (M2a, infra sạch) | Sạch (`infra-reset`) | 5000 | 0 | 0 | 0 / 1 | 26.560117ms | 133.339161ms | 233.851627ms | 391.134177ms | 528.871241ms | 22.119786ms / 163.490035ms | 16.000114ms | không đo |
+| 21 | 5000/s (M2a.2 reconciler bật, infra sạch) — có 1 đợt Redis dedupe nghẽn | Sạch (`infra-reset`) | 5000 | 0 | 0 | 0 / 1 | 26.994708ms | 203.541627ms | 390.576006ms | 558.472075ms | 719.195865ms | 22.211451ms / 249.797369ms | 19.916464ms | 190 / 159 / 166 / 53 / 55 (redis dedupe) / không đo |
+| 22 | 5000/s (M2a.2 reconciler bật, infra sạch) — có 1 đợt Redis dedupe nghẽn | Sạch (`infra-reset`) | 5000 | 0 | 0 | 0 / 1 | 23.764476ms | 77.084075ms | 165.502459ms | 295.020523ms | 399.419208ms | 19.896907ms / 114.383545ms | 8.284185ms | 204 / 170 / 180 / 61 / 57 (redis dedupe) / không đo |
 
 CPU là trung bình `docker stats` lấy mẫu mỗi 3s trong lúc chạy (100% = 1 vCPU). Ở mọi lần chạy, event live trên các room được theo dõi đều `missing=0 duplicates=0`. Ngoài bảng còn 1 lần 2K/s 20s chỉ để lấy pprof của corebench (`-cpuprofile`).
 
@@ -106,6 +108,77 @@ Lần 12 (M2a.1: bỏ pts, bỏ watermark/active mark/sweeper, publisher theo th
   - Số goroutine: 1214 so với 653.
   - Ở cả hai bản, phần tốn nhất là Redis chống trùng cid (`dedupe.Store.Reserve` + `Commit`): 17% ở M2a, 24% ở M2a.1, theo tỉ lệ trên tổng CPU của từng lần. Tiếp theo là `InsertMany` Mongo (8–12%), GC (8–10%) và syscall write ra mạng.
   - Nếu cần giảm ack latency, đây là các ứng viên: gộp Reserve/Commit theo nhóm ghi, giảm cấp phát.
+
+**M2a.2: reconciler bật (lần 21–22, 2026-10-04).** Quy trình như lần 13–20: `infra-reset`, `infra-up`, `core-up`, rồi `-rate 5000 -duration 60s -watch 20`. core-1 giữ slot 0 nên chạy reconciler (log `reconcile term started` chỉ có ở core-1).
+- Cả hai lần đều `failed=0`, `shed_by_client=0`, live `missing=0 duplicates=0`.
+- Lần 22: ack p50 / p95 / p99 = 23.8 / 77.1 / 165.5ms, live lag p99 114ms. Ngang hoặc tốt hơn M2a.1 (28.5 / 92.7 / 202ms).
+- Lần 21: p99 391ms. Lần này dính một đợt Redis dedupe nghẽn: cả hai core cùng lúc vào chế độ suy giảm (`cid dedupe degraded`, `event ack marks degraded`) rồi hồi sau 1s cooldown.
+- Lần 22 cũng có một đợt như vậy ở phút đầu (02:33:32, hồi lúc 02:33:33), nhưng ngắn hơn. Đợt nghẽn đụng cả chống trùng cid, không riêng mark. Nguyên nhân chưa rõ (VM hay Redis); M2a.3 đo bằng `LATENCY`/`SLOWLOG` khi gom lệnh Redis.
+- **Reconciler làm đúng việc** (lần 21):
+  - Tra mark cho toàn bộ 325000 tin (`getbit` 325000 lệnh).
+  - Khoảng 7.5K tin mất mark trong đợt nghẽn được publish lại: NATS `in_msgs` 332556 so với 325000 tin gửi. Lần 22 khoảng 4.1K.
+  - JetStream bỏ trùng, live không thấy bản trùng.
+- **Chi phí:**
+  - Core giữ slot 0 dùng nhiều hơn core kia khoảng 0.3 vCPU (190% so với 159%, 204% so với 170%).
+  - Redis dedupe nhận thêm khoảng 2 lệnh mỗi tin (`setbit` + `pexpire`, khoảng 310K mỗi loại), vì ở 5K/s mỗi batch mark chỉ có khoảng 1 tin. Thêm 1 `getbit` mỗi tin từ reconciler. M2a.3 gom các lệnh này cùng Reserve/Commit.
+  - Bộ nhớ NATS: 17MB lúc nghỉ, 211–215MB sau lần chạy (map dedupe 5 phút cộng dữ liệu stream).
+
+**Điều tra Redis dedupe suy giảm và nguồn p99 (2026-10-04).** Chỉ đo, không đổi code. Mỗi ô là corebench 5K tin/s × 60s, đo kèm theo từng giây: CPU/iowait của VM (`/proc/stat`), `docker stats`, giới hạn xung CPU của macOS (`pmset -g therm` → `CPU_Speed_Limit`), số kết nối mới tới Redis dedupe, checkpoint WiredTiger, profiler Mongo (>20ms) và log suy giảm của core. Có thêm Go trace 5s trên core-1.
+
+| Ô | Dữ liệu | Máy | Ack p50 / p95 / p99 | Pacer lag p99 | `CPU_Speed_Limit` | Đợt suy giảm | Kết nối Redis mới |
+|---|---|---|---|---|---|---|---|
+| A | reset | nghỉ 5' | 131ms / 574ms / 1.77s (bỏ 6877 lượt) | 192ms | 100 → **39** | 60 | 1785 (đỉnh 227/s) |
+| D | giữ (sau A) | nóng | 34 / 147 / 302ms | 28ms | 53–67 | 6 | 106 |
+| C | giữ | nghỉ 5' | 82 / 295 / 444ms | 30ms | 100 → 53 | 27 | 712 |
+| B | reset | nóng | 103 / 329 / 471ms | 51ms | 48–53 | 42 | 1193 |
+| A 2.5K | reset | nghỉ 5' | 13.7 / 34 / **76ms** | 5.8ms | **100 suốt run** | 1 | 278 |
+
+Kết luận:
+- **Máy dev giảm xung vì nhiệt là nguyên nhân chính.** Ở 5K tin/s, MacBook 2018 bị macOS giới hạn còn 39–53% xung CPU chỉ sau 30–60 giây, kể cả khi đã nghỉ 5 phút trước đó. Ở 2.5K tin/s máy giữ 100% suốt run, p99 76ms và chỉ có 1 đợt suy giảm.
+- Vì vậy chênh lệch giữa các lần chạy (133 so với 271ms, 165 so với 391ms, rồi 1.2s) chủ yếu do trạng thái nhiệt lúc chạy. Ô giữ dữ liệu (D) còn tốt hơn ô reset (A), nên **tích luỹ dữ liệu không phải nguyên nhân chính**.
+- **Redis dedupe không tự nghẽn.** Đợt suy giảm xảy ra khi máy bị giảm xung: CPU của VM bận 70–89% so với sức chứa đã bị cắt, và lệnh vượt hạn 100ms.
+- **Có vòng khuếch đại:** sau mỗi timeout, go-redis bỏ kết nối rồi mở lại (AUTH + HELLO); số kết nối mới vọt lên 100–227/s đúng các giây suy giảm (ô A, B).
+- **iowait thấp** (2–4%, đỉnh 12%), nên đĩa không phải nút cổ chai. Checkpoint WiredTiger mỗi run một lần, dài 1.9–7.6s; lệnh Mongo chậm nhất 0.9–2.4s, nhưng không trùng phần lớn các đợt suy giảm.
+- **Go trace (ô C, D):** khoảng 82% thời gian chờ mạng của các goroutine actor nằm ở Redis dedupe, chia gần đều cho Reserve và Commit. Trên đường ack, actor chờ chủ yếu ở hai lượt Redis nối tiếp; đây là phần M2a.3 (P2, P3) cắt.
+- **Hệ quả cho quy trình đo:** số p99 ở 5K tin/s trên máy dev không dùng để quyết định. So sánh trước/sau trên dev nên chạy ở 2.5K tin/s, nơi máy không bị giảm xung, và ghi kèm `CPU_Speed_Limit`. Quyết định go/no-go vẫn cần prod-like.
+
+**M2a.3 — đo trước/sau (2026-10-04).** Mỗi ô chạy bằng `scripts/bench-cell.sh NAME RATE reset [pprof]`: nghỉ 5 phút, `infra-reset`, `core-up`, corebench 60s, kèm số liệu theo giây của `scripts/bench-sample.sh`. 1 run mỗi ô. Kết quả thô ở `bin/bench/` (không commit).
+
+Nền (code M2a.2, 14:25–14:52, `CPU_Speed_Limit` 100 ở mọi ô). CPU theo `docker stats`, đơn vị % của 1 vCPU:
+
+| Ô | Ack p50 / p95 / p99 | Live p99 | VM bận tb / max | CPU core-1 / core-2 / mongod / nats / redis-dedupe | Đợt suy giảm | Kết nối Redis mới | Checkpoint Mongo | Mongo profiler p99 / max | `insertMany` (doc/lệnh) |
+|---|---|---|---|---|---|---|---|---|---|
+| 1K | 11.9 / 32.3 / 94ms | 61ms | 26 / 48% | 157 / 147 / 188 / 57 / 46 | 0 | 229 | 0.8s | 222 / 825ms | 43964 (1.4) |
+| 2.5K (ô A 2.5K của lần điều tra) | 13.7 / 34.1 / 76ms | 54ms | 34 / 49% | 216 / 199 / 254 / 73 / 64 | 1 | 278 | 1.9s | 199 / 882ms | - |
+| 3K | 37.3 / 495 / 1141ms | 643ms | 42 / 71% | 281 / 244 / 243 / 88 / 75 | 20 | 498 | 4.0s | 509 / 2068ms | 32936 (5.5) |
+| 5K | 37.9 / 144 / 272ms | 177ms | 54 / 74% | 306 / 282 / 275 / 101 / 89 | 6 | 354 | 4.2s | 468 / 1657ms | 37803 (7.9) |
+| 3K, `RECONCILE_ENABLED=false` | 20.8 / 127 / 261ms | 211ms | 40 / 62% | 230 / 233 / 244 / 83 / 70 | 9 | 467 | 2.5s | 241 / 294ms | 48442 (3.7) |
+
+Kết luận từ ô nền:
+- **Ngưỡng cần can thiệp trên dev khoảng 3K tin/s.** Từ mức này bắt đầu có đợt Redis dedupe suy giảm và ack p99 > 100ms. Không ô nào bỏ lượt hay lỗi.
+- **p99 do các lần nghẽn rời rạc, không do CPU.** Ô 3K tệ hơn ô 5K dù VM chỉ bận trung bình 42%. Ở 3–5K, checkpoint Mongo kéo dài tới 4s và lệnh Mongo chậm nhất tới 2s.
+- **Reconciler tốn khoảng 0.5 vCPU trên core-1** (281% so với 230% ở 3K) và không đo được gì thêm trên mongod (243% so với 244%).
+- **mongod tốn thời gian chủ yếu ở `insert messages`** (20–42s wall mỗi run theo `top`). Change stream `getmore` 9–12s ở 3K/5K, phần lớn là chờ. Đọc thì nhỏ: 4000 lệnh `members` (lần gửi đầu của mỗi user trong mỗi room, sau đó actor cache) và 2000 lệnh `messages` (actor nạp `Last` + `Page` mỗi room).
+
+Sau M2a.3. "Batcher" là sau D58 + D59 (commit `612d26a`, `0ebb38d`); "cửa sổ mark" là thêm D60 phần mark (`67019e4`, `3a13c43`):
+
+| Chỉ số | Nền (M2a.2) | Batcher | Cửa sổ mark |
+|---|---|---|---|
+| Lệnh Redis dedupe mỗi tin, 1K | 6.62 | 6.49 | 5.57 |
+| Lệnh Redis dedupe mỗi tin, 5K | 6.35 | 6.06 | 4.74 |
+| CPU redis-dedupe, 5K | 89% | 76% | 69% |
+| CPU core-1 + core-2, 5K | 588% | 520% | - |
+| Kết nối Redis mới mỗi run, 5K | 354 | 82 | 94 |
+| Đợt Redis dedupe suy giảm, 5K | 6 | 2 | không dùng được |
+| Ack p99, 5K | 272ms | 229ms | không dùng được |
+
+- Bộ đo tự mở 1 kết nối mỗi giây (`redis-cli info stats`), nên phần lớn 82–94 kết nối mới là của bộ đo. Ở ô nền 5K có giây vọt tới 106 kết nối mới; sau batcher không giây nào quá 2 (D60).
+- **pprof core-1 ở 5K, 20s** (M2a.1 so với sau batcher):
+  - Tổng CPU 30.1s → 26.0s.
+  - `dedupe` Reserve + Commit 7.16s (23.8%) → 3.22s (12.4%).
+  - `Syscall6` 19.9% → 13.7%; writer/reader của go-redis 9.8% / 4.3% → 6.6% / 1.9%; futex 4.2% → 2.7%.
+  - GC khoảng 25% giờ là phần lớn nhất. `GOGC` (P4) chưa đo, để sau; gộp Commit vào script Reserve (P5) cũng để sau.
+- **Cảnh báo về lần chạy "cửa sổ mark":** máy bị tranh chấp từ tiến trình khác trên host (gopls, opendirectoryd, iCloud). Pacer lag p99 của corebench là 139ms ở 5K (các lần khác khoảng 14ms) và 91ms ở 1K (khoảng 10ms). Vì vậy độ trễ của lần này (5K bỏ 3714 lượt, p99 1.15s; 1K p99 327ms) không dùng được. Số CPU và số lệnh Redis của nó vẫn dùng được.
 
 **Điểm gãy (knee).**
 - Thông lượng: giữ đủ tải (`shed_by_client=0 failed=0`, không lần nào phải thử lại) tới 5K/s. 7.5K/s chỉ đạt 7319/s (bỏ 2.4%); 10K/s đạt 7546–9426/s (bỏ 5.7–24.5%; lần 8 có 151 lần gửi kết thúc bằng `Unavailable`). Knee thông lượng trên dev nằm giữa 5K và 7.5K/s.

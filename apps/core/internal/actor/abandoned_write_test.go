@@ -51,11 +51,13 @@ func TestAbandonedWriteNeverLandsAfterAnotherCoreTookTheCID(t *testing.T) {
 		t.Fatalf("abandoned ambiguous write left %q, want core A's reservation kept", v)
 	}
 
-	b := startCore(t, w.msgs, w.rooms, w.registry(t, "core-b", quiet, 0))
+	regB := signalCommits(w.registry(t, "core-b", quiet, 0))
+	b := startCore(t, w.msgs, w.rooms, regB)
 	_, err = b.Send(context.Background(), cmd(roomA, "alice", "x"))
 	expectErr(t, err, domain.ErrRetryLater)
 	w.mr.FastForward(dedupe.DefaultPendingTTL)
 	ack := mustSend(t, b, cmd(roomA, "alice", "x"))
+	awaitSignal(t, "core B cid commit", regB.committed)
 
 	time.Sleep(2 * cfg.GroupDeadline)
 	if got := mustSend(t, a, cmd(roomA, "alice", "x")); !sameAck(got, ack) {

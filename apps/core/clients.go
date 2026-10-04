@@ -16,14 +16,23 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
 )
 
-const slotRedisPool = 4
+const (
+	slotRedisPool   = 4
+	dedupeSideConns = 4
+)
+
+type redisPool struct {
+	size, maxActive, minIdle  int
+	maxRetries, dialerRetries int
+}
 
 type clients struct {
-	mongo  *mongo.Client
-	slots  *redis.Client
-	dedupe *redis.Client
-	nats   *nats.Conn
-	js     jetstream.JetStream
+	mongo       *mongo.Client
+	slots       *redis.Client
+	dedupe      *redis.Client
+	nats        *nats.Conn
+	js          jetstream.JetStream
+	reconcileJS jetstream.JetStream
 }
 
 func connect(ctx context.Context, cfg config.Config, log *slog.Logger) (*clients, error) {
@@ -68,8 +77,13 @@ func mongoOptions(cfg config.Config) *options.ClientOptions {
 }
 
 func (c *clients) connectRedis(ctx context.Context, cfg config.Config) error {
-	c.slots = redis.NewClient(redisOptions(cfg.RedisAddr, cfg.RedisDB, cfg.RedisPassword, "chatim-core-slots-"+cfg.CoreID, slotRedisPool))
-	c.dedupe = redis.NewClient(redisOptions(cfg.RedisDedupeAddr, cfg.RedisDedupeDB, cfg.RedisDedupePassword, "chatim-core-dedupe-"+cfg.CoreID, 0))
+	batchConns := cfg.CIDBatch.Connections()
+	dedupePool := redisPool{
+		size: batchConns + dedupeSideConns, maxActive: batchConns + dedupeSideConns, minIdle: batchConns,
+		maxRetries: -1, dialerRetries: 1,
+	}
+	c.slots = redis.NewClient(redisOptions(cfg.RedisAddr, cfg.RedisDB, cfg.RedisPassword, "chatim-core-slots-"+cfg.CoreID, redisPool{size: slotRedisPool}))
+	c.dedupe = redis.NewClient(redisOptions(cfg.RedisDedupeAddr, cfg.RedisDedupeDB, cfg.RedisDedupePassword, "chatim-core-dedupe-"+cfg.CoreID, dedupePool))
 	pings := []struct {
 		instance string
 		rdb      *redis.Client
@@ -83,13 +97,18 @@ func (c *clients) connectRedis(ctx context.Context, cfg config.Config) error {
 	return nil
 }
 
-func redisOptions(addr string, db int, password, name string, pool int) *redis.Options {
+func redisOptions(addr string, db int, password, name string, pool redisPool) *redis.Options {
 	return &redis.Options{
 		Addr:                  addr,
 		DB:                    db,
 		Password:              password,
 		ClientName:            name,
-		PoolSize:              pool,
+		PoolSize:              pool.size,
+		MaxActiveConns:        pool.maxActive,
+		MinIdleConns:          pool.minIdle,
+		MaxRetries:            pool.maxRetries,
+		DialerRetries:         pool.dialerRetries,
+		DisableIdentity:       true,
 		ContextTimeoutEnabled: true,
 	}
 }
@@ -105,6 +124,11 @@ func (c *clients) connectNATS(cfg config.Config, log *slog.Logger) error {
 		return fmt.Errorf("jetstream: %w", config.RedactError(err, cfg.NATSURL))
 	}
 	c.js = js
+	rjs, err := jetstream.New(nc, cfg.Reconcile.JetStreamOptions(cfg.Publish.AckTimeout)...)
+	if err != nil {
+		return fmt.Errorf("reconcile jetstream: %w", config.RedactError(err, cfg.NATSURL))
+	}
+	c.reconcileJS = rjs
 	return nil
 }
 

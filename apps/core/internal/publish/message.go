@@ -13,7 +13,7 @@ import (
 
 var errMalformed = errors.New("event needs an id, a subject-safe tenant and a known payload")
 
-func message(root string, room uint64, ev *chatimv1.Event) (*nats.Msg, error) {
+func Message(root string, room uint64, ev *chatimv1.Event) (*nats.Msg, error) {
 	kind, ok := eventKind(ev)
 	if !ok || ev.GetId() == "" || !validToken(ev.GetTenant()) {
 		return nil, errMalformed

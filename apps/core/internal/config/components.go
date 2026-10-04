@@ -5,8 +5,10 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
+	"github.com/ivannguyendev/chatim/apps/core/internal/eventmark"
 	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
+	"github.com/ivannguyendev/chatim/apps/core/internal/reconcile"
 	"github.com/ivannguyendev/chatim/apps/core/internal/slot"
 	"github.com/ivannguyendev/chatim/pkg/envconfig"
 )
@@ -40,6 +42,11 @@ func (p *parser) components(c *Config) {
 		Timeout:      redisTimeout,
 		Cooldown:     redisCooldown,
 	}
+	c.CIDBatch = dedupe.BatchConfig{
+		Shards:  p.count("CID_BATCH_SHARDS", dedupe.DefaultBatchShards),
+		MaxKeys: p.count("CID_BATCH_MAX_KEYS", dedupe.DefaultBatchMaxKeys),
+		Queue:   p.count("CID_BATCH_QUEUE", dedupe.DefaultBatchQueue),
+	}
 	c.Publish = publish.Config{
 		SubjectRoot: subjectRoot,
 		Shards:      p.count("PUB_SHARDS", publish.DefaultShards),
@@ -62,5 +69,22 @@ func (p *parser) components(c *Config) {
 		HeartbeatTTL: p.span("SLOT_HEARTBEAT_TTL", 5*time.Second),
 		LeaseTTL:     p.span("SLOT_LEASE_TTL", 10*time.Second),
 		HookTimeout:  p.span("SLOT_HOOK_TIMEOUT", tick/2),
+	}
+	c.ReconcileEnabled = p.flag("RECONCILE_ENABLED", true)
+	c.Reconcile = reconcile.Config{
+		SubjectRoot:     subjectRoot,
+		Delay:           p.span("RECONCILE_DELAY", reconcile.DefaultDelay),
+		DuplicateWindow: c.Stream.Duplicates,
+		Window:          p.count("RECONCILE_WINDOW", reconcile.DefaultWindow),
+		Batch:           p.count("RECONCILE_BATCH", reconcile.DefaultBatch),
+		ConfirmEvery:    p.span("RECONCILE_CONFIRM_EVERY", reconcile.DefaultConfirmEvery),
+		Drain:           p.span("RECONCILE_DRAIN", reconcile.DefaultDrain),
+		Poll:            tick,
+		RoomCache:       p.count("RECONCILE_ROOM_CACHE", reconcile.DefaultRoomCache),
+	}
+	c.AckMarks = eventmark.Config{
+		TTL:      p.span("EVT_ACK_MARK_TTL", eventmark.DefaultTTL),
+		Timeout:  redisTimeout,
+		Cooldown: redisCooldown,
 	}
 }

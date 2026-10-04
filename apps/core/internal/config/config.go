@@ -7,8 +7,10 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
+	"github.com/ivannguyendev/chatim/apps/core/internal/eventmark"
 	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
+	"github.com/ivannguyendev/chatim/apps/core/internal/reconcile"
 	"github.com/ivannguyendev/chatim/apps/core/internal/slot"
 	"github.com/ivannguyendev/chatim/pkg/envconfig"
 	"github.com/ivannguyendev/chatim/pkg/grpcserver"
@@ -48,15 +50,21 @@ type Config struct {
 	Flush               flush.Config
 	Actor               actor.Config
 	Dedupe              dedupe.Config
+	CIDBatch            dedupe.BatchConfig
 	Publish             publish.Config
 	Stream              publish.StreamConfig
 	Slot                slot.Config
+	ReconcileEnabled    bool
+	Reconcile           reconcile.Config
+	AckMarks            eventmark.Config
 }
 
 type StopPlan struct {
 	DrainDelay time.Duration
 	GRPC       time.Duration
+	Reconciler time.Duration
 	Router     time.Duration
+	CIDBatch   time.Duration
 	Flusher    time.Duration
 	Publisher  time.Duration
 	Slots      time.Duration
@@ -108,7 +116,9 @@ func (c Config) StopPlan() StopPlan {
 	return StopPlan{
 		DrainDelay: c.DrainDelay,
 		GRPC:       c.GRPCShutdown,
+		Reconciler: c.Reconcile.Drain + CloseTimeout,
 		Router:     c.RequestDeadline,
+		CIDBatch:   2 * c.Dedupe.Timeout,
 		Flusher:    c.Flush.InsertTimeout,
 		Publisher:  c.PublisherDrain,
 		Slots:      slot.ReleaseTimeout,
@@ -118,7 +128,7 @@ func (c Config) StopPlan() StopPlan {
 
 func (s StopPlan) total() time.Duration {
 	var sum time.Duration
-	for _, d := range []time.Duration{s.DrainDelay, s.GRPC, s.Router, s.Flusher, s.Publisher, s.Slots, s.Close} {
+	for _, d := range []time.Duration{s.DrainDelay, s.GRPC, s.Reconciler, s.Router, s.CIDBatch, s.Flusher, s.Publisher, s.Slots, s.Close} {
 		if d > math.MaxInt64-sum {
 			return math.MaxInt64
 		}

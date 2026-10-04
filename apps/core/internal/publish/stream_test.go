@@ -41,7 +41,7 @@ func TestEnsureStreamConfiguresDedupeAndRepublish(t *testing.T) {
 		t.Fatalf("name %q subjects %v", c.Name, c.Subjects)
 	case c.Storage != jetstream.FileStorage || c.Replicas != 3:
 		t.Fatalf("storage %v replicas %d", c.Storage, c.Replicas)
-	case c.MaxAge != 7*24*time.Hour || c.Duplicates != 2*time.Minute:
+	case c.MaxAge != 7*24*time.Hour || c.Duplicates != 5*time.Minute:
 		t.Fatalf("max age %v duplicates %v", c.MaxAge, c.Duplicates)
 	case c.RePublish == nil || c.RePublish.Source != "evt.*.room.*.*" ||
 		c.RePublish.Destination != "live.{{wildcard(1)}}.room.{{wildcard(2)}}.evt.{{wildcard(3)}}":

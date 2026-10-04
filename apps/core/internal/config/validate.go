@@ -12,8 +12,8 @@ var (
 	subjectRootPattern = regexp.MustCompile(`^[a-z0-9_]+$`)
 )
 
-const stopPhases = "CORE_DRAIN_DELAY + CORE_GRPC_SHUTDOWN + CORE_REQUEST_DEADLINE (router drain) + " +
-	"FLUSH_INSERT_TIMEOUT (flusher drain) + CORE_PUBLISHER_DRAIN + slot release + client close"
+const stopPhases = "CORE_DRAIN_DELAY + CORE_GRPC_SHUTDOWN + RECONCILE_DRAIN + 1s + CORE_REQUEST_DEADLINE (router drain) + " +
+	"2 x REDIS_OP_TIMEOUT (cid batcher drain) + FLUSH_INSERT_TIMEOUT (flusher drain) + CORE_PUBLISHER_DRAIN + slot release + client close"
 
 type rule struct {
 	ok  bool
@@ -36,6 +36,7 @@ func (c Config) validate() error {
 		{c.Dedupe.Timeout <= c.RequestDeadline/10, "REDIS_OP_TIMEOUT must be at most a tenth of CORE_REQUEST_DEADLINE"},
 		{c.Actor.MaxGroup <= c.Flush.MaxBatch, "ACTOR_MAX_GROUP must not exceed FLUSH_MAX_BATCH"},
 		{c.Publish.AckTimeout < c.PublisherDrain, "PUB_ACK_TIMEOUT must be shorter than CORE_PUBLISHER_DRAIN"},
+		{!c.ReconcileEnabled || c.Reconcile.Delay < c.Stream.Duplicates, "RECONCILE_DELAY must be shorter than EVT_STREAM_DUPLICATES"},
 		{plan.fitsWithin(c.ShutdownBudget), fmt.Sprintf("%s = %v must be shorter than CORE_SHUTDOWN_BUDGET %v", stopPhases, plan.total(), c.ShutdownBudget)},
 	}
 	var errs []error
@@ -55,9 +56,17 @@ func (c Config) componentErrors() []error {
 		{"FLUSH_*", c.Flush.Validate()},
 		{"ACTOR_*, CID_PENDING_TTL, CORE_REQUEST_DEADLINE", c.Actor.Validate()},
 		{"CORE_ID, CID_*, REDIS_OP_TIMEOUT, REDIS_COOLDOWN", c.Dedupe.Validate()},
+		{"CID_BATCH_*", c.CIDBatch.Validate()},
 		{"PUB_*, EVT_SUBJECT_ROOT", c.Publish.Validate()},
 		{"EVT_*", c.Stream.Validate()},
 		{"SLOT_*, CORE_ID", c.Slot.Validate()},
+		{"EVT_ACK_MARK_TTL, REDIS_OP_TIMEOUT, REDIS_COOLDOWN", c.AckMarks.Validate()},
+	}
+	if c.ReconcileEnabled {
+		parts = append(parts, struct {
+			keys string
+			err  error
+		}{"RECONCILE_*", c.Reconcile.Validate()})
 	}
 	var errs []error
 	for _, part := range parts {

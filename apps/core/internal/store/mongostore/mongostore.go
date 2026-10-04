@@ -13,9 +13,10 @@ import (
 )
 
 const (
-	messagesCollection = "messages"
-	roomsCollection    = "rooms"
-	membersCollection  = "members"
+	messagesCollection        = "messages"
+	roomsCollection           = "rooms"
+	membersCollection         = "members"
+	reconcilerStateCollection = "reconciler_state"
 )
 
 var (

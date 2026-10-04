@@ -16,12 +16,14 @@ import (
 func TestCommittedCIDIsAckedByAnotherCoreWithoutInsert(t *testing.T) {
 	w := newWorld(t)
 	spyB := &spyMessages{Messages: w.msgs}
-	a := startCore(t, w.msgs, w.rooms, w.registry(t, "core-a", quiet, 0))
+	regA := signalCommits(w.registry(t, "core-a", quiet, 0))
+	a := startCore(t, w.msgs, w.rooms, regA)
 	b := startCore(t, spyB, w.rooms, w.registry(t, "core-b", quiet, 0))
 	mustSend(t, b, cmd(roomA, "bob", "warm"))
 	before := spyB.insertedCount()
 
 	ack := mustSend(t, a, cmd(roomA, "alice", "x"))
+	awaitSignal(t, "core A cid commit", regA.committed)
 	if got := mustSend(t, b, cmd(roomA, "alice", "x")); !sameAck(got, ack) {
 		t.Fatalf("core B answered %+v, want core A's %+v", got, ack)
 	}
@@ -76,11 +78,13 @@ func TestCrashedCoreBlocksTheCIDUntilItsReservationExpires(t *testing.T) {
 		t.Fatalf("crash changed the reservation to %q", v)
 	}
 
-	b := startCore(t, w.msgs, w.rooms, w.registry(t, "core-b", quiet, 0))
+	regB := signalCommits(w.registry(t, "core-b", quiet, 0))
+	b := startCore(t, w.msgs, w.rooms, regB)
 	_, err := b.Send(context.Background(), cmd(roomA, "alice", "x"))
 	expectErr(t, err, domain.ErrRetryLater)
 	w.mr.FastForward(dedupe.DefaultPendingTTL)
 	ack := mustSend(t, b, cmd(roomA, "alice", "x"))
+	awaitSignal(t, "core B cid commit", regB.committed)
 	assertStoredIn(t, w, "x", ack)
 	if v := w.cidValue("x"); !strings.HasPrefix(v, "c:") {
 		t.Fatalf("redis holds %q after core B committed, want a committed record", v)
@@ -124,8 +128,10 @@ func TestFailedWriteReleasesOrKeepsTheCIDForOtherCores(t *testing.T) {
 func TestRedisOutageFallsBackToTheLocalCacheAndRecovers(t *testing.T) {
 	w := newWorld(t)
 	sink := &testlog.Sink{}
-	core := startCore(t, w.msgs, w.rooms, w.registry(t, "core-a", sink.Logger(), 20*time.Millisecond))
+	reg := signalCommits(w.registry(t, "core-a", sink.Logger(), 20*time.Millisecond))
+	core := startCore(t, w.msgs, w.rooms, reg)
 	mustSend(t, core, cmd(roomA, "alice", "before"))
+	awaitSignal(t, "cid commit before the outage", reg.committed)
 
 	w.mr.Close()
 	first := mustSend(t, core, cmd(roomA, "alice", "x"))

@@ -8,9 +8,11 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
+	"github.com/ivannguyendev/chatim/apps/core/internal/eventmark"
 	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/grpcsrv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
+	"github.com/ivannguyendev/chatim/apps/core/internal/reconcile"
 	"github.com/ivannguyendev/chatim/apps/core/internal/slot"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
 	"github.com/ivannguyendev/chatim/pkg/admin"
@@ -34,14 +36,16 @@ type gate interface {
 }
 
 type app struct {
-	cfg       config.Config
-	log       *slog.Logger
-	admin     *admin.Server
-	grpc      *grpcserver.Server
-	publisher drainer
-	flusher   drainer
-	router    gate
-	slots     runner
+	cfg        config.Config
+	log        *slog.Logger
+	admin      *admin.Server
+	grpc       *grpcserver.Server
+	publisher  drainer
+	flusher    drainer
+	cidBatch   drainer
+	router     gate
+	slots      runner
+	reconciler drainer
 }
 
 func prepare(ctx context.Context, cfg config.Config, cl *clients) error {
@@ -60,7 +64,15 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wire cid dedupe: %w", err)
 	}
-	pub, err := publish.New(cl.js, cfg.Publish, log)
+	batch, err := dedupe.NewBatcher(cids, cfg.CIDBatch, log)
+	if err != nil {
+		return nil, fmt.Errorf("wire cid batcher: %w", err)
+	}
+	marks, err := eventmark.New(cl.dedupe, cfg.AckMarks, log)
+	if err != nil {
+		return nil, fmt.Errorf("wire event ack marks: %w", err)
+	}
+	pub, err := publish.New(cl.js, cfg.Publish, log, publish.WithAckMarks(marks))
 	if err != nil {
 		return nil, fmt.Errorf("wire publisher: %w", err)
 	}
@@ -68,7 +80,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wire flusher: %w", err)
 	}
-	router, err := actor.NewRouter(st, st, fl, cids, pub, cfg.Actor, log)
+	router, err := actor.NewRouter(st, st, fl, batch, pub, cfg.Actor, log)
 	if err != nil {
 		return nil, fmt.Errorf("wire router: %w", err)
 	}
@@ -80,7 +92,16 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wire slot manager: %w", err)
 	}
-	a.publisher, a.flusher, a.router, a.slots = pub, fl, router, slots
+	if cfg.ReconcileEnabled {
+		rec, err := reconcile.New(reconcile.Deps{
+			Feed: mongostore.NewFeed(cl.mongo.Database(cfg.MongoDB)), Rooms: st, Marks: marks, Owner: slots, JS: cl.reconcileJS,
+		}, cfg.Reconcile, log)
+		if err != nil {
+			return nil, fmt.Errorf("wire reconciler: %w", err)
+		}
+		a.reconciler = rec
+	}
+	a.publisher, a.flusher, a.cidBatch, a.router, a.slots = pub, fl, batch, router, slots
 	svc, err := grpcsrv.New(grpcsrv.Deps{Sender: router, Rooms: st, Pages: st}, log)
 	if err != nil {
 		return nil, fmt.Errorf("wire core service: %w", err)

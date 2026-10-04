@@ -12,6 +12,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/pkg/slotmap"
@@ -50,9 +51,10 @@ type Publisher struct {
 	abort   chan struct{}
 	stop    sync.Once
 	done    chan struct{}
+	marks   *ackMarks
 }
 
-func New(js JetStream, cfg Config, log *slog.Logger) (*Publisher, error) {
+func New(js JetStream, cfg Config, log *slog.Logger, opts ...Option) (*Publisher, error) {
 	if js == nil {
 		return nil, fmt.Errorf("%w: publisher needs a jetstream client", apperr.ErrInvalidArgument)
 	}
@@ -64,6 +66,9 @@ func New(js JetStream, cfg Config, log *slog.Logger) (*Publisher, error) {
 		log = slog.Default()
 	}
 	p := &Publisher{js: js, cfg: cfg, log: log, fails: failureLog{log: log}, shards: make([]*shard, cfg.Shards), abort: make(chan struct{}), done: make(chan struct{})}
+	for _, opt := range opts {
+		opt(p)
+	}
 	for i := range p.shards {
 		p.shards[i] = &shard{queue: make(chan item, cfg.QueueSize)}
 	}
@@ -75,11 +80,22 @@ func (p *Publisher) Run(ctx context.Context) error {
 		return errStarted
 	}
 	defer close(p.done)
+	marking := make(chan struct{})
+	go func() {
+		defer close(marking)
+		if p.marks != nil {
+			p.marks.run(p.abort)
+		}
+	}()
 	var wg sync.WaitGroup
 	for _, s := range p.shards {
 		wg.Go(func() { p.drain(ctx, s.queue) })
 	}
 	wg.Wait()
+	if p.marks != nil {
+		close(p.marks.queue)
+	}
+	<-marking
 	return ctx.Err()
 }
 
@@ -101,14 +117,17 @@ func (p *Publisher) drain(ctx context.Context, queue <-chan item) {
 
 func (p *Publisher) publish(it item) {
 	for _, ev := range it.events {
-		msg, err := message(p.cfg.SubjectRoot, it.room, ev)
+		msg, err := Message(p.cfg.SubjectRoot, it.room, ev)
 		if err != nil {
 			p.fails.record("dropping malformed event", ev.GetId(), err)
 			continue
 		}
-		if _, err := p.js.PublishMsgAsync(msg, jetstream.WithRetryAttempts(p.cfg.Attempts), jetstream.WithRetryWait(p.cfg.RetryBackoff)); err != nil {
+		f, err := p.js.PublishMsgAsync(msg, jetstream.WithRetryAttempts(p.cfg.Attempts), jetstream.WithRetryWait(p.cfg.RetryBackoff))
+		if err != nil {
 			p.fails.record("event publish refused; reconciliation must republish it", ev.GetId(), err)
+			continue
 		}
+		p.marks.track(store.MsgKey{Room: it.room, Thread: ev.GetThreadRoot(), Seq: ev.GetSeq()}, f)
 	}
 }
 
