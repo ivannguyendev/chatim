@@ -162,7 +162,7 @@ Rules:
 - Waits until `CommittedAt + RECONCILE_DELAY` (D = 30s), looks up acked marks per batch, and republishes unmarked messages rebuilt from the doc with the natural id on its own `jetstream.New` client (window `RECONCILE_WINDOW`, unbounded retry). A missing room or corrupt doc is dropped and logged.
 - `Confirm` only past changes that are all acked or marked, every `RECONCILE_CONFIRM_EVERY`; a term never blocks longer than that without a checkpoint (confirm + slot 0 check).
 - `EVT_STREAM_DUPLICATES` is 5m; boot rejects `RECONCILE_DELAY >= EVT_STREAM_DUPLICATES`. Lost history (`ErrFeedHistoryLost`) logs an error, `Forget`s and restarts from now; that gap is lost.
-- First-deploy gap (accepted): with no saved position the feed starts when the leader first opens it, so on a new database or after `Forget`, writes before the first term are not reconciled.
+- Bootstrap anchor: `mongostore.Bootstrap` writes `reconciler_state` `{_id: "messages", at: $$CLUSTER_TIME}` only when no `at` exists (pipeline upsert, `w:majority`), so re-running it never moves the anchor or a confirmed token. `Open` resumes after the token, else starts at the anchor (`StartAtOperationTime`), else from now, so a fresh database also reconciles writes made before the first term. Only after `Forget` (lost history) does the feed start from now; that range was already lost.
 
 **Process lifecycle (`apps/core`).**
 - Config is validated at boot by `apps/core/internal/config`, which applies cross-field timeout rules; components export `Validate()`.

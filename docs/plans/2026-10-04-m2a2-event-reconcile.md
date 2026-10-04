@@ -2818,3 +2818,4 @@ git commit -m "docs(poc): record corebench with the event reconciler on"
   - Task 6: test trong plan gốc đua với term đầu tiên (tin ghi trước khi feed mở thì không được bù); đã sửa bằng cách chờ log `reconcile term started` rồi mới ghi.
   - Task 7: contract `storetest.RunFeed` không có case mất lịch sử. Chỉ memstore có test `LoseHistory`; việc map `ChangeStreamHistoryLost` → `ErrFeedHistoryLost` của mongostore chưa có test (đưa vào chaos test M5).
   - Task 8: cả hai lần corebench đều có một đợt Redis dedupe nghẽn khoảng 1s, hai core cùng suy giảm một lúc. Điều tra ở M2a.3.
+- R7 đã sửa sau khi làm xong (bootstrap anchor): `Bootstrap` ghi mốc cluster time vào `reconciler_state`, feed của DB mới đọc từ mốc đó; case contract "inserts before the first open are not replayed" đổi thành "inserts after bootstrap but before the first open are read".
