@@ -142,6 +142,44 @@ Kết luận:
 - **Go trace (ô C, D):** khoảng 82% thời gian chờ mạng của các goroutine actor nằm ở Redis dedupe, chia gần đều cho Reserve và Commit. Trên đường ack, actor chờ chủ yếu ở hai lượt Redis nối tiếp; đây là phần M2a.3 (P2, P3) cắt.
 - **Hệ quả cho quy trình đo:** số p99 ở 5K tin/s trên máy dev không dùng để quyết định. So sánh trước/sau trên dev nên chạy ở 2.5K tin/s, nơi máy không bị giảm xung, và ghi kèm `CPU_Speed_Limit`. Quyết định go/no-go vẫn cần prod-like.
 
+**M2a.3 — đo trước/sau (2026-10-04).** Mỗi ô chạy bằng `scripts/bench-cell.sh NAME RATE reset [pprof]`: nghỉ 5 phút, `infra-reset`, `core-up`, corebench 60s, kèm số liệu theo giây của `scripts/bench-sample.sh`. 1 run mỗi ô. Kết quả thô ở `bin/bench/` (không commit).
+
+Nền (code M2a.2, 14:25–14:52, `CPU_Speed_Limit` 100 ở mọi ô). CPU theo `docker stats`, đơn vị % của 1 vCPU:
+
+| Ô | Ack p50 / p95 / p99 | Live p99 | VM bận tb / max | CPU core-1 / core-2 / mongod / nats / redis-dedupe | Đợt suy giảm | Kết nối Redis mới | Checkpoint Mongo | Mongo profiler p99 / max | `insertMany` (doc/lệnh) |
+|---|---|---|---|---|---|---|---|---|---|
+| 1K | 11.9 / 32.3 / 94ms | 61ms | 26 / 48% | 157 / 147 / 188 / 57 / 46 | 0 | 229 | 0.8s | 222 / 825ms | 43964 (1.4) |
+| 2.5K (ô A 2.5K của lần điều tra) | 13.7 / 34.1 / 76ms | 54ms | 34 / 49% | 216 / 199 / 254 / 73 / 64 | 1 | 278 | 1.9s | 199 / 882ms | - |
+| 3K | 37.3 / 495 / 1141ms | 643ms | 42 / 71% | 281 / 244 / 243 / 88 / 75 | 20 | 498 | 4.0s | 509 / 2068ms | 32936 (5.5) |
+| 5K | 37.9 / 144 / 272ms | 177ms | 54 / 74% | 306 / 282 / 275 / 101 / 89 | 6 | 354 | 4.2s | 468 / 1657ms | 37803 (7.9) |
+| 3K, `RECONCILE_ENABLED=false` | 20.8 / 127 / 261ms | 211ms | 40 / 62% | 230 / 233 / 244 / 83 / 70 | 9 | 467 | 2.5s | 241 / 294ms | 48442 (3.7) |
+
+Kết luận từ ô nền:
+- **Ngưỡng cần can thiệp trên dev khoảng 3K tin/s.** Từ mức này bắt đầu có đợt Redis dedupe suy giảm và ack p99 > 100ms. Không ô nào bỏ lượt hay lỗi.
+- **p99 do các lần nghẽn rời rạc, không do CPU.** Ô 3K tệ hơn ô 5K dù VM chỉ bận trung bình 42%. Ở 3–5K, checkpoint Mongo kéo dài tới 4s và lệnh Mongo chậm nhất tới 2s.
+- **Reconciler tốn khoảng 0.5 vCPU trên core-1** (281% so với 230% ở 3K) và không đo được gì thêm trên mongod (243% so với 244%).
+- **mongod tốn thời gian chủ yếu ở `insert messages`** (20–42s wall mỗi run theo `top`). Change stream `getmore` 9–12s ở 3K/5K, phần lớn là chờ. Đọc thì nhỏ: 4000 lệnh `members` (lần gửi đầu của mỗi user trong mỗi room, sau đó actor cache) và 2000 lệnh `messages` (actor nạp `Last` + `Page` mỗi room).
+
+Sau M2a.3. "Batcher" là sau D58 + D59 (commit `612d26a`, `0ebb38d`); "cửa sổ mark" là thêm D60 phần mark (`67019e4`, `3a13c43`):
+
+| Chỉ số | Nền (M2a.2) | Batcher | Cửa sổ mark |
+|---|---|---|---|
+| Lệnh Redis dedupe mỗi tin, 1K | 6.62 | 6.49 | 5.57 |
+| Lệnh Redis dedupe mỗi tin, 5K | 6.35 | 6.06 | 4.74 |
+| CPU redis-dedupe, 5K | 89% | 76% | 69% |
+| CPU core-1 + core-2, 5K | 588% | 520% | - |
+| Kết nối Redis mới mỗi run, 5K | 354 | 82 | 94 |
+| Đợt Redis dedupe suy giảm, 5K | 6 | 2 | không dùng được |
+| Ack p99, 5K | 272ms | 229ms | không dùng được |
+
+- Bộ đo tự mở 1 kết nối mỗi giây (`redis-cli info stats`), nên phần lớn 82–94 kết nối mới là của bộ đo. Ở ô nền 5K có giây vọt tới 106 kết nối mới; sau batcher không giây nào quá 2 (D60).
+- **pprof core-1 ở 5K, 20s** (M2a.1 so với sau batcher):
+  - Tổng CPU 30.1s → 26.0s.
+  - `dedupe` Reserve + Commit 7.16s (23.8%) → 3.22s (12.4%).
+  - `Syscall6` 19.9% → 13.7%; writer/reader của go-redis 9.8% / 4.3% → 6.6% / 1.9%; futex 4.2% → 2.7%.
+  - GC khoảng 25% giờ là phần lớn nhất. `GOGC` (P4) chưa đo, để sau; gộp Commit vào script Reserve (P5) cũng để sau.
+- **Cảnh báo về lần chạy "cửa sổ mark":** máy bị tranh chấp từ tiến trình khác trên host (gopls, opendirectoryd, iCloud). Pacer lag p99 của corebench là 139ms ở 5K (các lần khác khoảng 14ms) và 91ms ở 1K (khoảng 10ms). Vì vậy độ trễ của lần này (5K bỏ 3714 lượt, p99 1.15s; 1K p99 327ms) không dùng được. Số CPU và số lệnh Redis của nó vẫn dùng được.
+
 **Điểm gãy (knee).**
 - Thông lượng: giữ đủ tải (`shed_by_client=0 failed=0`, không lần nào phải thử lại) tới 5K/s. 7.5K/s chỉ đạt 7319/s (bỏ 2.4%); 10K/s đạt 7546–9426/s (bỏ 5.7–24.5%; lần 8 có 151 lần gửi kết thúc bằng `Unavailable`). Knee thông lượng trên dev nằm giữa 5K và 7.5K/s.
 - Độ trễ: p99 là 85ms (500/s), 89ms (1K), 139ms (2K), 505ms (5K), 886ms (7.5K). p50 khoảng 10–16ms tới 2K/s rồi tăng mạnh khi lên 5K/s (48ms).

@@ -2,7 +2,7 @@
 
 Hạ tầng chat dùng chung (CPaaS nội bộ) cho nhiều sản phẩm: quản lý room, tin nhắn, tương tác realtime hiệu năng cao; lấy lịch sử cực nhanh ở bất kỳ vị trí nào; phát event mạnh tới các app khác kết nối vào. Multi-tenant về mặt logic.
 
-> Trạng thái: **M0–M1 (nền tảng + PoC) và M2a (core: CreateRoom/SendMessage/GetHistory qua gRPC, chống trùng cid, publish JetStream, 2 core trong compose) đã xong trên máy dev**. M2a.1 (bỏ `pts` toàn room, id event tự nhiên, publisher chỉ còn hàng đợi trên cơ chế async của nats.go, event best-effort — D47–D51) xong trên máy dev. M2a.2 (reconciler trên core giữ slot 0 đọc change stream của `messages`, publish bù event chưa có mark đã ack — D52) xong trên máy dev; tiếp theo là M2a.3 (perf đường ghi) rồi M2b; quyết định go/no-go chờ PoC prod-like. Kết quả đo: [docs/poc/README.md](docs/poc/README.md). Bản đồ code: [INDEXES.csv](INDEXES.csv).
+> Trạng thái: **M0–M1 (nền tảng + PoC) và M2a (core: CreateRoom/SendMessage/GetHistory qua gRPC, chống trùng cid, publish JetStream, 2 core trong compose) đã xong trên máy dev**. M2a.1 (bỏ `pts` toàn room, id event tự nhiên, publisher chỉ còn hàng đợi trên cơ chế async của nats.go, event best-effort — D47–D51) xong trên máy dev. M2a.2 (reconciler trên core giữ slot 0 đọc change stream của `messages`, publish bù event chưa có mark đã ack — D52) xong trên máy dev. M2a.3 (perf đường ghi: gom lệnh chống trùng cid giữa các room, ack trước Commit, client Redis dedupe pool nhỏ và ấm, mark đã ack gom trong cửa sổ 10ms — D58–D60) xong trên máy dev; M2a.2 và M2a.3 merge cùng lúc. Tiếp theo là M2b; quyết định go/no-go chờ PoC prod-like. Kết quả đo: [docs/poc/README.md](docs/poc/README.md). Bản đồ code: [INDEXES.csv](INDEXES.csv).
 
 ## Kiến trúc
 
@@ -23,7 +23,7 @@ apps/core/               # main.go + internal/{actor,flush,dedupe,publish,eventm
 pkg/                     # dùng chung: keys, ids, slotmap, apperr, envconfig, resilience, admin, grpcserver, grpcclient, backoff, pb
 proto/chatim/v1/         # định nghĩa protobuf (buf) → pkg/pb
 tools/                   # corecli, internal/route; poc/: corebench, mongobench, postgresbench, natsbench, wsbench
-scripts/                 # e2e.sh và các script chờ hạ tầng sẵn sàng
+scripts/                 # e2e.sh, các script chờ hạ tầng sẵn sàng, bench-cell.sh / bench-sample.sh (đo corebench)
 deploy/docker/           # 1 Dockerfile, chọn chương trình bằng ARG TARGET
 deploy/compose/          # hạ tầng dev
 docs/                    # nghiên cứu, thiết kế, plan, kết quả PoC
@@ -44,6 +44,14 @@ Chỉ cần Docker; Go chạy trong container `golang:1.26` qua `make`.
 Image chạy cho một chương trình Go bất kỳ: `make image TARGET=tools/poc/natsbench` (distroless, không cần Go trên máy chạy).
 
 Công cụ PoC nằm ở `tools/poc/`, chạy bằng `make poc TOOL=<tên> ARGS="…"` — cách chạy và kết quả: [docs/poc/README.md](docs/poc/README.md).
+
+Một ô đo corebench (tuỳ chọn nghỉ 5 phút + `infra-reset`, latency monitor Redis dedupe, profiler Mongo, số liệu theo giây qua `scripts/bench-sample.sh`, kết quả vào `bin/bench/NAME/`):
+
+    ./scripts/bench-cell.sh base-3k 3000 reset pprof
+    RECONCILE_ENABLED=false ./scripts/bench-cell.sh base-3k-norec 3000 reset
+    CORE_GOGC=200 ./scripts/bench-cell.sh after-3k-gogc200 3000 reset
+
+Compose đọc `CORE_GOGC` (mặc định 100, thành `GOGC` của core) và `RECONCILE_ENABLED` (mặc định `true`) lúc `make core-up`, chỉ để đo; không có trong `.env.example`.
 
 ## Lệnh hay dùng
 
@@ -85,9 +93,10 @@ Toàn bộ đọc qua `apps/core/internal/config`; thiếu thì dùng giá trị
 | `CORE_DRAIN_DELAY` | `2s` | Chờ trước khi gRPC graceful stop, để LB ngừng gửi request mới |
 | `CORE_GRPC_SHUTDOWN` | `5s` | Hạn graceful stop của gRPC server |
 | `CORE_PUBLISHER_DRAIN` | `5s` | Hạn đẩy hết hàng đợi publisher và chờ `PublishAsyncComplete` lúc dừng; hết hạn thì bỏ phần còn lại (D49, D50) |
-| `CORE_SHUTDOWN_BUDGET` | `25s` | Tổng ngân sách toàn bộ chuỗi dừng (D39); `Load()` từ chối nếu các mốc dừng cộng lại không nhỏ hơn. Mặc định các mốc là 24s (gồm `RECONCILE_DRAIN + 1s` của reconciler), nên tăng mốc nào cũng phải tăng ngân sách này và `stop_grace_period` của compose (30s) |
+| `CORE_SHUTDOWN_BUDGET` | `25s` | Tổng ngân sách toàn bộ chuỗi dừng (D39); `Load()` từ chối nếu các mốc dừng cộng lại không nhỏ hơn. Mặc định các mốc là 24.2s (gồm `RECONCILE_DRAIN + 1s` của reconciler và `2 × REDIS_OP_TIMEOUT` để cid batcher gửi hết Commit), nên tăng mốc nào cũng phải tăng ngân sách này và `stop_grace_period` của compose (30s) |
 | `CID_PENDING_TTL`, `CID_COMMITTED_TTL` | `10s` / `15m` | TTL key chống trùng cid ở Redis (D34) |
 | `REDIS_OP_TIMEOUT`, `REDIS_COOLDOWN` | `100ms` / `1s` | Timeout mỗi lệnh Redis và thời gian chờ trước khi probe lại sau khi suy giảm |
+| `CID_BATCH_SHARDS`, `CID_BATCH_MAX_KEYS`, `CID_BATCH_QUEUE` | `4` / `256` / `4096` | cid batcher: số shard (theo slot, tối đa 1024), số key tối đa mỗi lượt Reserve/Commit, hàng đợi mỗi shard (Commit/Abort đầy thì bỏ). Pool Redis dedupe = `2 × CID_BATCH_SHARDS + 4` kết nối, giữ ấm `2 × CID_BATCH_SHARDS` (D58, D60) |
 | `FLUSH_SHARDS`, `FLUSH_WINDOW`, `FLUSH_MAX_BATCH`, `FLUSH_QUEUE`, `FLUSH_INSERT_TIMEOUT` | `4` / `2ms` / `256` / `1024` / `1s` | Flusher: số shard, cửa sổ gộp batch, batch tối đa, hàng đợi mỗi shard, timeout insert |
 | `ACTOR_MAILBOX`, `ACTOR_IDLE`, `ACTOR_MAX_GROUP`, `ACTOR_MAX` | `1024` / `5m` / `64` / `100000` | Hàng đợi mỗi actor, thời gian nghỉ trước khi tự dừng, số lệnh gộp 1 nhóm, số actor tối đa 1 core |
 | `PUB_SHARDS`, `PUB_QUEUE`, `PUB_MAX_PENDING`, `PUB_ACK_TIMEOUT` | `4` / `1024` / `256` / `2s` | Publisher JetStream: sharding theo slot, hàng đợi mỗi shard, số publish đang chờ ack mỗi shard (nats.go giới hạn `2 × shards × max pending`), timeout ack; mỗi shard phát theo thứ tự nhận, không chờ ack (D50) |
@@ -122,3 +131,4 @@ Với app, compose publish ra host chỉ gRPC của core, và chỉ trên loopba
 - [Plan M0–M1](docs/plans/2026-09-30-phase1-foundation-and-poc.md)
 - [Plan M2a.1](docs/plans/2026-10-03-m2a1-event-identity.md)
 - [Plan M2a.2](docs/plans/2026-10-04-m2a2-event-reconcile.md)
+- [Plan M2a.3](docs/plans/2026-10-04-m2a3-write-path-perf.md)
