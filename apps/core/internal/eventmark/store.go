@@ -51,9 +51,11 @@ func (c Config) validate() error {
 }
 
 type Store struct {
-	rdb   *redis.Client
-	cfg   Config
-	guard *redisguard.Guard
+	rdb     *redis.Client
+	cfg     Config
+	guard   *redisguard.Guard
+	now     func() time.Time
+	refresh *refreshLog
 }
 
 func New(rdb *redis.Client, cfg Config, log *slog.Logger) (*Store, error) {
@@ -67,6 +69,7 @@ func New(rdb *redis.Client, cfg Config, log *slog.Logger) (*Store, error) {
 	if log == nil {
 		log = slog.Default()
 	}
+	s := &Store{rdb: rdb, cfg: cfg, now: time.Now, refresh: newRefreshLog(cfg.TTL)}
 	guard, err := redisguard.New(redisguard.Config{
 		Name:      "event ack marks",
 		Timeout:   cfg.Timeout,
@@ -74,33 +77,41 @@ func New(rdb *redis.Client, cfg Config, log *slog.Logger) (*Store, error) {
 		Skipped:   ErrDegraded,
 		Degraded:  "event ack marks degraded; reconciliation republishes unmarked events",
 		Recovered: "event ack marks recovered",
-		Now:       time.Now,
+		Now:       func() time.Time { return s.now() },
 	}, log)
 	if err != nil {
 		return nil, err
 	}
-	return &Store{rdb: rdb, cfg: cfg, guard: guard}, nil
+	s.guard = guard
+	return s, nil
 }
 
 func (s *Store) Mark(ctx context.Context, keys []store.MsgKey) error {
 	if len(keys) == 0 {
 		return nil
 	}
-	return s.guard.Do(ctx, "mark", func(cctx context.Context) error {
+	chunks := make([]string, len(keys))
+	for i, k := range keys {
+		chunks[i] = chunkKey(k)
+	}
+	now := s.now()
+	stale := s.refresh.stale(chunks, now)
+	err := s.guard.Do(ctx, "mark", func(cctx context.Context) error {
 		_, err := s.rdb.Pipelined(cctx, func(p redis.Pipeliner) error {
-			touched := make(map[string]bool, len(keys))
-			for _, k := range keys {
-				chunk := chunkKey(k)
-				p.SetBit(cctx, chunk, offset(k), 1)
-				if !touched[chunk] {
-					touched[chunk] = true
-					p.PExpire(cctx, chunk, s.cfg.TTL)
-				}
+			for i, k := range keys {
+				p.SetBit(cctx, chunks[i], offset(k), 1)
+			}
+			for _, chunk := range stale {
+				p.PExpire(cctx, chunk, s.cfg.TTL)
 			}
 			return nil
 		})
 		return err
 	})
+	if err == nil {
+		s.refresh.record(stale, now)
+	}
+	return err
 }
 
 func (s *Store) Acked(ctx context.Context, keys []store.MsgKey) ([]bool, error) {
