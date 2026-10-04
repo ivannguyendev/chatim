@@ -58,7 +58,8 @@ scripts/wait-core-healthy.sh,script,Bounded wait until a core container is healt
 scripts/wait-mongo-primary.sh,script,Bounded wait until rs0 has a writable primary; authenticates inside mongosh --eval from /run/secrets/mongo_password (no password in argv),,make infra-up,,
 scripts/wait-postgres.sh,script,Bounded wait until postgres accepts connections,,make pg-up,,
 docs/designs/260930-chat-core-gateway-design.md,doc,Source of truth: data model; write/read paths; best-effort publish with natural event ids; event reconciliation from the change feed (5.5); failure table; Decision Log D1-D52,,everyone,,D1-D52
-docs/roadmap.md,doc,"Milestone status; readiness levels; carried-over items (M2a, M2a.1 and M2a.2 done on dev; M2a.3 then M2b)",,everyone,,
+docs/designs/261004-system-mechanisms.md,doc,"Draft (owner review pending): principles P1-P8; system mechanisms C1-C10 (fact writes, idempotent commands, commit log -> effect, counter, reader view, permissions); gaps H1-H8; proposed roadmap with M2b split; plan-writing rules; appendix with the M2b effect/counter/event catalog proposal",,everyone,,D47-D57
+docs/roadmap.md,doc,"Milestone status; readiness levels; carried-over items (M2a through M2a.3 done on dev; M2b on hold pending the system mechanisms review)",,everyone,,
 docs/git-workflow.md,doc,Git workflow: feat/fix branches to main by PR; merge Definition of Done; readiness levels; SemVer release tags; broken main and prod hotfix handling,,everyone,,
 docs/poc/README.md,doc,PoC criteria and results R1-R5 and corebench C1 with machine caveats,,everyone,,
 docs/poc/260930-mongodb-vs-postgresql.md,doc,MongoDB vs PostgreSQL comparison with optimized configs,,everyone,,D9

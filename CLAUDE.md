@@ -15,7 +15,7 @@ Done:
 - M2a.2, done on `feat/m2a2-event-reconcile` (not merged): event reconciliation from the database change feed, with acked marks on the dedupe Redis (D52).
 - M2a.3, done on `feat/m2a3-write-path-perf` (not merged): cross-room cid batching (`dedupe.Batcher`), ack before the cid Commit, a small warm dedupe Redis pool without command retries, acked marks in a 10ms window (D58–D60). M2a.2 and M2a.3 merge together.
 
-Next is M2b: edit (+history), delete (for everyone / for me), reactions, pins, read receipts. The milestone order is in `docs/roadmap.md`. Project docs are written in Vietnamese.
+M2b (edit + history, delete, reactions, pins, read receipts) is on hold (2026-10-04): the owner wants every problem mapped to a shared system mechanism before more code. The draft map of mechanisms, gaps (H1–H8) and proposed roadmap is `docs/designs/261004-system-mechanisms.md`, waiting for owner review. Do not plan or code M2b until the owner reopens it. The milestone order is in `docs/roadmap.md`. Project docs are written in Vietnamese.
 
 ## Hard rules
 
@@ -192,6 +192,7 @@ Rules:
 - `docs/designs/260930-chat-core-gateway-design.md`: the source of truth for the data model, write and read paths, failure handling and the Decision Log (D1–D52, D58–D60; D53–D57 are reserved for M2b). Add new decisions there.
 - `docs/plans/`: per-milestone plans, executed task by task with `subagent-driven-development` or `separate-driven-development`. M2a.1: `docs/plans/2026-10-03-m2a1-event-identity.md`. M2a.2: `docs/plans/2026-10-04-m2a2-event-reconcile.md`. M2a.3: `docs/plans/2026-10-04-m2a3-write-path-perf.md`.
 - `docs/poc/README.md`: PoC and corebench results (C1). Dev numbers only validate tools; go/no-go needs prod-like runs.
+- `docs/designs/261004-system-mechanisms.md`: draft review of shared system mechanisms (fact → effect, counter, reader view, permissions), gaps H1–H8, proposed roadmap and plan-writing rules; M2b waits on it.
 - `docs/roadmap.md`: milestone status and carried-over items.
 - `docs/git-workflow.md`: branches, merge Definition of Done, readiness levels, SemVer tags and handling a broken `main`.
 - `.claude/plans/m2a-core-send-history_design.md`: local (gitignored) M2a decision log.
