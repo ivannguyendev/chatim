@@ -15,7 +15,7 @@ Done:
 - M2a.2, done on `feat/m2a2-event-reconcile` (not merged): event reconciliation from the database change feed, with acked marks on the dedupe Redis (D52).
 - M2a.3, done on `feat/m2a3-write-path-perf` (not merged): cross-room cid batching (`dedupe.Batcher`), ack before the cid Commit, a small warm dedupe Redis pool without command retries, acked marks in a 10ms window (D58–D60). M2a.2 and M2a.3 merge together.
 
-M2b (edit + history, delete, reactions, pins, read receipts) is on hold (2026-10-04): the owner wants every problem mapped to a shared system mechanism before more code. The draft map of mechanisms, gaps (H1–H8) and proposed roadmap is `docs/designs/261004-system-mechanisms.md`, waiting for owner review. Do not plan or code M2b until the owner reopens it. The milestone order is in `docs/roadmap.md`. Project docs are written in Vietnamese.
+M2b (edit + history, delete, reactions, pins, read receipts) is on hold (2026-10-04): the owner wants every problem mapped to a shared system mechanism before more code. The draft map of mechanisms, gaps (H1–H8) and proposed roadmap is `docs/designs/261004-system-mechanisms.md`. Round 1 of external review (two reviewers) is summarised in `docs/research/261004-system-mechanisms-synthesis.md`; four open points went to round 2. When round 2 closes, the roadmap is rewritten around the data-class framework and the old design, plans and PoC docs move to `docs/archive/`. Do not plan or code M2b until the owner reopens it. The milestone order is in `docs/roadmap.md`. Project docs are written in Vietnamese.
 
 ## Hard rules
 
@@ -193,6 +193,7 @@ Rules:
 - `docs/plans/`: per-milestone plans, executed task by task with `subagent-driven-development` or `separate-driven-development`. M2a.1: `docs/plans/2026-10-03-m2a1-event-identity.md`. M2a.2: `docs/plans/2026-10-04-m2a2-event-reconcile.md`. M2a.3: `docs/plans/2026-10-04-m2a3-write-path-perf.md`.
 - `docs/poc/README.md`: PoC and corebench results (C1). Dev numbers only validate tools; go/no-go needs prod-like runs.
 - `docs/designs/261004-system-mechanisms.md`: draft review of shared system mechanisms (fact → effect, counter, reader view, permissions), gaps H1–H8, proposed roadmap and plan-writing rules; M2b waits on it.
+- `docs/research/261004-system-mechanisms-*`: the English report sent to external reviewers (`-report`), round 1 reviews (`-review-cl`, `-review-ge`), the owner-facing synthesis (`-synthesis`: what both agree on, what is wrong, proposed decisions) and round 2 questions (`-round2-cl`, `-round2-ge`: shared sections 0–3, reviewer-specific section 4).
 - `docs/roadmap.md`: milestone status and carried-over items.
 - `docs/git-workflow.md`: branches, merge Definition of Done, readiness levels, SemVer tags and handling a broken `main`.
 - `.claude/plans/m2a-core-send-history_design.md`: local (gitignored) M2a decision log.
