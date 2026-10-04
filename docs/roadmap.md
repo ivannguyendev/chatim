@@ -1,45 +1,40 @@
 # Roadmap — chatim
 
-> Cập nhật: 2026-10-04. Thiết kế: [designs/260930-chat-core-gateway-design.md](designs/260930-chat-core-gateway-design.md) · Plan M0–M1: [plans/2026-09-30-phase1-foundation-and-poc.md](plans/2026-09-30-phase1-foundation-and-poc.md) · Plan M2a.1: [plans/2026-10-03-m2a1-event-identity.md](plans/2026-10-03-m2a1-event-identity.md) · Plan M2a.2: [plans/2026-10-04-m2a2-event-reconcile.md](plans/2026-10-04-m2a2-event-reconcile.md) · Plan M2a.3: [plans/2026-10-04-m2a3-write-path-perf.md](plans/2026-10-04-m2a3-write-path-perf.md) · Rà soát cơ chế hệ thống (nháp, chờ review): [designs/261004-system-mechanisms.md](designs/261004-system-mechanisms.md), báo cáo tiếng Anh cho reviewer bên ngoài: [research/261004-system-mechanisms-report.md](research/261004-system-mechanisms-report.md), phản biện vòng 1 ([CL](research/261004-system-mechanisms-review-cl.md), [GE](research/261004-system-mechanisms-review-ge.md)), tổng hợp: [research/261004-system-mechanisms-synthesis.md](research/261004-system-mechanisms-synthesis.md), câu hỏi vòng 2 ([CL](research/261004-system-mechanisms-round2-cl.md), [GE](research/261004-system-mechanisms-round2-ge.md)) · Kết quả PoC: [poc/README.md](poc/README.md), [poc/260930-mongodb-vs-postgresql.md](poc/260930-mongodb-vs-postgresql.md)
+> Cập nhật: 2026-10-05 (viết lại sau 2 vòng phản biện cơ chế hệ thống). Thiết kế: [designs/261005-chatim-architecture.md](designs/261005-chatim-architecture.md) · Tổng hợp phản biện: [research/261004-system-mechanisms-synthesis.md](research/261004-system-mechanisms-synthesis.md) · PoC: [poc/README.md](poc/README.md) · Bản cũ (roadmap trước, plan M0–M2a.3, thiết kế Phase 1): [archive/](archive/README.md)
+
+## Quy tắc viết plan
+
+- Mỗi milestone có plan riêng trong `docs/plans/`, viết **trước khi code**, theo skill `writing-plans`: từng bước TDD, file, test, lệnh chạy, "Expected". Người thực thi gặp chỗ plan không nói tới thì dừng và báo.
+- Plan mở đầu bằng bảng **tính năng → lớp dữ liệu** ([thiết kế §4](designs/261005-chatim-architecture.md#4-khung-lớp-dữ-liệu-bắt-buộc-cho-mọi-plan)). Mỗi tính năng khai báo: fact (lệnh atomic nào, doc nào), cách idempotent (cid hoặc `base_ver`), effect + chính sách, quyền (permission hook), view theo người đọc, dòng trong danh mục event, ngân sách khuếch đại ở nhóm 5K và channel 200K, guarantee + detector. Tính năng không khớp lớp nào thì dừng, thiết kế lớp đó trước.
+- Bộ test chung mỗi PR: fact sinh đúng effect; no-op không sinh effect; lỗi không sinh effect; parity fast path / reconciler; chạy effect hai lần cho cùng kết quả.
+
+## Milestone
 
 | Phase | Milestone | Nội dung | Trạng thái |
 |---|---|---|---|
-| 1 | M0 — Nền tảng | Go module, Makefile chạy Go qua Docker, hạ tầng dev (Mongo rs0, Redis, NATS, Postgres), `pkg/keys`, `pkg/ids`, `pkg/slotmap`, Dockerfile runtime | ✅ Xong |
-| 1 | M1 — PoC R1–R5 | Slot ownership trên Redis (code production), mongobench/natsbench/wsbench/postgresbench, kết quả dev, so sánh MongoDB/PostgreSQL | ✅ Xong trên dev · ⏳ prod-like chờ hạ tầng |
-| 1 | M2a — Core: Send + History | CreateRoom/SendMessage/GetHistory qua gRPC, actor + flusher, chống trùng cid, JetStream + watermark, publish bù khi core chết (watermark và publish bù thay bởi M2a.1), core ×2 trong compose, corebench | ✅ Xong trên dev |
-| 1 | M2a.1 — Sửa hướng đánh số & publish | Bỏ `pts` toàn room; id event tự nhiên `{room}-{thread}-{seq}`; event best-effort; publisher chỉ còn hàng đợi, dùng cơ chế async của nats.go (D50 viết lại); bỏ watermark, active mark, sweeper và vòng khôi phục của actor (D47–D51) | ✅ Xong trên dev |
-| 1 | M2a.2 — Reconcile event | Component trong core, bật mặc định, chạy trên core giữ slot 0: đọc change stream của `messages` (nguồn sự thật) qua port `ChangeFeed` có contract chung để đổi DB được (Postgres dùng logical replication); publisher đánh dấu tin đã ack lên Redis dedupe bằng bitmap `chatim:evtack:*` (TTL 1h, ngoài đường ack) để reconciler chỉ publish bù tin chưa có dấu sau D = 30s, qua JetStream client riêng; dựng lại event từ doc với đúng id; lưu vị trí ở `reconciler_state` sau khi có ack; `EVT_STREAM_DUPLICATES` 5m. Bootstrap ghi mốc (cluster time) nên feed của DB mới đọc cả tin ghi trước term đầu tiên; chỉ sau khi mất lịch sử (`Forget`) feed mới bắt đầu từ bây giờ (D47, D51, D52) | ✅ Xong trên dev |
-| 1 | M2a.3 — Perf đường ghi | `dedupe.Batcher` gom Reserve/Commit/Abort chống trùng cid giữa các room theo shard (`CID_BATCH_*`), gửi kiểu động (rảnh gửi ngay, đang bay thì gom), Commit/Abort chỉ enqueue và được gửi hết lúc dừng (D58); trả ack ngay sau insert, rồi event, rồi Commit (D59); client Redis dedupe pool nhỏ và ấm, không retry lệnh, `DisableIdentity`, nên timeout không còn gây bão mở kết nối; mark đã ack gom trong cửa sổ 10ms/256 key, `PEXPIRE` chunk tối đa mỗi TTL/4 (D60); `scripts/bench-cell.sh` + `bench-sample.sh` đo theo giây. Đo 5K: lệnh Redis/tin 6.35 → 4.74, CPU redis-dedupe 89% → 69%, Reserve + Commit 23.8% → 12.4% CPU core-1. Hoãn: `GOGC` (P4), gộp Commit vào Reserve (P5) | ✅ Xong trên dev |
-| 1 | M2b — Core: thay đổi tin | Sửa (+ lịch sử sửa), xoá (cho mọi người / phía tôi), reaction, ghim, read receipt; id event theo version của doc (D53–D57 trong decision log M2b) | ⏸ Tạm hoãn, chờ phản biện vòng 2 về cơ chế hệ thống ([tổng hợp vòng 1](research/261004-system-mechanisms-synthesis.md)) |
-| 1 | M2c — Core: thread & tiện ích | Thread, mention, reply/forward, bookmark, đánh dấu chưa đọc | Chưa |
-| 1 | M3 — Core: đường đọc | ListMyRoomIDs, ListMyRooms (unread chính xác, chặn ở 99+, chỉ đếm tin có cờ đếm), Sync thiết kế lại (không phát lại, reconnect lấy mới nhất), đồng bộ trạng thái giữa các thiết bị, GetReactions/Pins/Bookmarks, cache RAM trang mới nhất + singleflight đọc lịch sử, test sẵn sàng sharding trên cluster 2 shard | Chưa |
-| 1 | M4 — Gateway | WebSocket (gws), JWT/JWKS, frame protobuf, subscribe theo room, hàng đợi gửi có giới hạn, typing/presence, định tuyến theo slot, gateway đánh dấu core địa chỉ đang lỗi, hằng số header tenant/user chuyển vào `pkg`, cân nhắc client gRPC tự re-resolve DNS, gateway không chuyển `kind`/cờ đếm unread từ client | Chưa |
-| 1 | M5 — Hardening | Load test 100K kết nối, chaos test (kể cả R5 thật), OTel/Prometheus/Grafana, CI đầy đủ (CI tối thiểu đã có từ 2026-10-03: fmt-check/vet/lint/test trên PR), ghim digest image, chạy container theo uid trên Linux, Sentinel (`FailoverClient`) cho cả hai Redis (state và dedupe), dev cùng mô hình | Chưa |
-| 1 | PoC prod-like (song song) | Mongo rs 3 member NVMe vs PostgreSQL, NATS 3 node, 2 host Linux, dữ liệu thật ≥1M tin → chốt database | Chờ hạ tầng |
-| 2 | App `auth` | Cấp JWT/JWKS theo tenant | Sau Phase 1 |
-| 2 | App `api` | Public REST/BFF cho các sản phẩm | Sau Phase 1 |
-| 2 | App `events` | gRPC stream cho app ngoài, cô lập tenant | Sau Phase 1 |
-| 2 | App `push` | Thông báo đẩy cho user offline | Sau Phase 1 |
-| 2 | App `migrator` | Dual-write / import từ MongoDB cũ | Sau Phase 1 |
-| 2 | Policy quyền | Chính sách quyền theo tính năng/app; trước đó core chỉ giữ bất biến tenant + membership và ghi actor của mọi thay đổi | Sau Phase 1 |
-
-## Mức sẵn sàng
-
-Theo [git-workflow.md](git-workflow.md#mức-sẵn-sàng): `dev-done` → `prod-like validated` → `go-live`. M0, M1, M2a: `dev-done` (đã merge vào `main` qua PR #2, #5). M2a.1: `dev-done` (PR từ `fix/m2a1-event-identity`). M2a.2 và M2a.3: `dev-done` (PR từ `feat/m2a2-event-reconcile` và `feat/m2a3-write-path-perf`, merge cùng lúc); go-live còn cần oplog `minRetentionHours` ≥ 24h, alert theo log mất lịch sử feed và log lag, đo bộ nhớ NATS prod-like, và đo lại M2a.3 trên prod-like (số dev chỉ để so trước/sau). Chưa milestone nào `prod-like validated`; chưa có tag release.
-
-## M2a — tóm tắt
-
-Xong trên máy dev: `CreateRoom`/`SendMessage`/`GetHistory` qua gRPC, actor theo room + flusher gộp batch, chống trùng cid 3 tầng (LRU → Redis pending → Redis committed), publish JetStream với watermark liên tục và sweeper khôi phục khi core chết hoặc NATS gián đoạn (watermark và sweeper thay bởi M2a.1, D49), slot hook theo batch để actor nghỉ đúng lúc đổi chủ, core ×2 chạy trong compose và `corebench` đo tải mở-vòng tới cụm. Trên dev, `corebench` giữ đủ tải tới 5K tin/s (`shed_by_client=0`, `failed=0`) nhưng ack p99 ở mức ms (không mức nào đạt A1 ≤30ms, kể cả 500/s); 10K/s ban đầu phải bỏ bớt 5.7–24.5% lượt gửi. Sau khi bỏ Redis `SCAN` toàn keyspace (ZSET `chatim:cores`, D25), đo lại: 10K/s đạt 9452/s, bỏ 5.5%, `failed=0`, p99 818ms; 5K/s p99 292ms; phần còn lại do VM dev bão hoà CPU. Quyết định go/no-go chờ chạy prod-like. Chi tiết: [poc/README.md#c1-corebench-2-core-qua-grpc-dev-2026-10-02](poc/README.md#c1-corebench-2-core-qua-grpc-dev-2026-10-02).
-
-## M2a.1 — lý do
-
-- Thiết kế cũ cần `pts` liên tục cho mọi event của room nhưng lưu ở hai nơi (`messages.p`, `room_events._id`) không có khoá unique chung; hai core có thể cấp trùng pts và JetStream bỏ một event qua `Nats-Msg-Id` mà không dấu vết.
-- Các bản vá giữ pts liên tục (bộ đếm +1 RTT, thuê khối, id kiểu Snowflake, tách hai dãy, log sự kiện) đều hỏng khi review; rà lại yêu cầu thì không ai cần pts liên tục.
-- Hướng mới: event best-effort với id tự nhiên, publisher chỉ còn hàng đợi theo shard và giao phần publish đang bay cho nats.go, client reconnect lấy bản mới nhất, reconcile event (M2a.2, D52) bù phần mất. Quyết định: D47–D52 trong [thiết kế §14](designs/260930-chat-core-gateway-design.md#14-decision-log).
+| 1 | M0–M2a.3 — Nền tảng, PoC dev, gửi tin + lịch sử | Monorepo, Go qua Docker, hạ tầng dev; slot ownership mềm; PoC R1–R5 trên dev; `CreateRoom`/`SendMessage`/`GetHistory` qua gRPC, actor + flusher, chống trùng cid 3 tầng gom giữa các room, ack trước Commit; event best-effort với id tự nhiên; reconciler từ change stream của `messages` + ack mark bitmap; 2 core trong compose; corebench và bench-cell | ✅ `dev-done`, đã merge vào `main` (PR #2, #5, #8–#11) |
+| 1 | **M2b.0 — Nền cơ chế** | Sửa lỗi mark của publisher (mark theo event id + loại, D65); `RECONCILE_DELAY` theo effect, `msg_created` ~5s; actor tự rút khi va doc core khác + retry backoff/jitter (D77); reader pipeline + permission hook, áp vào `GetHistory` (thiết kế §9.2); detector/alert cho guarantee đang có RC1–RC5, CD1–CD3 (D76); contract test: mọi write method của adapter là insert unique, CAS, upsert hoặc bump version | ⏭ Tiếp theo — cần plan |
+| 1 | M2b.1 — Effect engine | Reader trên slot 0 → JetStream work stream theo slot, id tự nhiên, worker ở mọi core, vị trí xác nhận theo work stream (D66); registry effect + chính sách (D65); chuyển reconcile `msg_created` sang engine; `room_created` là effect mới đầu tiên; room activity (`last_seq`, `last_msg_at`, `last_change_at`, `act_bucket`, ghi gom, D69); công cụ resync thủ công + diễn tập; đo xả backlog | Chưa |
+| 1 | M2b.2 — Sửa + xoá | Fact `message_edits` + projection `messages` (D62); `base_ver`, `prev` ở v1 (D63); ack sau projection (D64); delay xoá 2–3s; hợp đồng xoá (D75); `GetEditHistory`; quyền tác giả/owner qua permission hook; ẩn phía tôi (`hidden` thưa) và clear history (`cleared_before_seq`) qua reader pipeline; index `{room, ts}` (D70) | Chưa |
+| 1 | M2b.3 — Reaction + ghim | Tập reaction `{k, emoji, u}` + `n` (D68); counter recount CAS-ver (D67); `pin_actions` + `base_pv` + kiểm ≤50 pin trước commit; event cho SysMsg (cid `sys:{event_id}`) | Chưa |
+| 1 | M2b.4 — Member + vị trí đọc | Fact member (thêm/bớt/rời/đổi role); `user_rooms {u│r}` (D72); `member_count`; event member trên subject user; vị trí đọc `$max` + event coalesce; đánh dấu chưa đọc (version + LWW) | Chưa |
+| 1 | M2c — Thread & tiện ích | Thread (`thread_count` là counter), mention, reply/forward (cid), bookmark | Chưa |
+| 1 | M3 — Đường đọc | **Trước khi viết plan: hỏi owner số thật** (thiết kế §2.3). `ListMyRooms` qua `user_rooms`; "có tin mới" đọc từ `messages`; room-tail cache; unread theo R17 mới (exact trong S, không thì `approx`, D73); sync token `room → last_seq` + full sync (D74); SDK reconnect jitter; API caller nội bộ cho SysMsg (`kind` + cờ unread); đồng bộ đa thiết bị qua subject user; `GetMessages`/`GetReactions`/`ListPins`/`ListBookmarks`; test sẵn sàng sharding trên cluster 2 shard | Chưa |
+| 1 | M4 — Gateway | WebSocket (gws), JWT/JWKS, frame protobuf, fanout theo interest, hàng đợi gửi có giới hạn, định tuyến theo slot; typing/presence ephemeral không qua core; subject user cho dữ liệu riêng; `member_removed` → unsubscribe; chế độ event không text cho tenant xoá chặt; không chuyển `kind`/cờ unread từ client; hằng số header tenant/user vào `pkg` | Chưa |
+| 1 | M5 — Hardening | Load test 100K kết nối, chaos test (kể cả R5 thật), OTel/Prometheus/Grafana, CI đầy đủ, ghim digest image, container theo uid, Sentinel (`FailoverClient`) cho cả hai Redis | Chưa |
+| 1 | Channel | Room type channel (~200K subscriber, chỉ admin post): quyền post, fanout, counter lớn (bucket) | Chưa — chốt milestone sau M3 |
+| 1 | PoC prod-like (song song) | **Trước khi chạy: hỏi owner số thật.** Mongo rs 3 member NVMe, NATS 3 node, 2 host Linux, dữ liệu thật ≥1M tin; P1–P10 ở [poc/README.md](poc/README.md) → chốt database, go/no-go A1 | Chờ hạ tầng |
+| 2 | App `auth`, `api`, `events`, `push`, `migrator` | JWT/JWKS theo tenant; REST/BFF; gRPC stream cho app ngoài; push (badge xấp xỉ, D73); migrator dual-write/import (chế độ import im lặng để reconciler không phát hàng tỷ event) | Sau Phase 1 |
+| 2 | Policy quyền | Chính sách quyền cắm vào permission hook (M2b.0) | Sau Phase 1 |
 
 ## Thứ tự phụ thuộc
 
-- M2a → M2a.1 → M2a.2 → M2a.3 → M2b → M2c → M3 → M4 → M5.
-- (2026-10-04) M2b tạm hoãn: owner yêu cầu đưa mọi vấn đề về cơ chế hệ thống dùng chung trước khi code tiếp. Bản đồ cơ chế, lỗ hổng (H1–H8) và roadmap đề xuất nằm ở [designs/261004-system-mechanisms.md](designs/261004-system-mechanisms.md); thứ tự trên giữ nguyên tới khi owner review xong. Phản biện vòng 1 (2 reviewer) đã tổng hợp ở [research/261004-system-mechanisms-synthesis.md](research/261004-system-mechanisms-synthesis.md); 4 điểm còn mở (fact + projection, counter, resync oplog, room list/unread) đã gửi vòng 2. Khi vòng 2 đóng: viết lại roadmap theo khung lớp dữ liệu, chuyển design/plans/PoC cũ vào `docs/archive/`.
-- PoC prod-like chạy song song và phải xong trước M5, vì đó là lúc chốt database. Tầng lưu trữ của core đặt sau interface, nên nếu PoC chọn PostgreSQL thì chỉ thêm adapter.
-- Phase 2 bắt đầu khi M4 xong, vì các app vệ tinh cần gateway và event stream ổn định.
+- M2b.0 → M2b.1 → M2b.2 → M2b.3 → M2b.4 → M2c → M3 → M4 → M5.
+- M2b.0 là điều kiện của mọi milestone sau: permission hook, reader pipeline và detector dùng chung.
+- M2b.1 phải xong trước mọi tính năng có fact mới, vì effect của chúng chạy trên engine.
+- PoC prod-like chạy song song, xong trước M5 (chốt database). Storage nằm sau port nên PostgreSQL chỉ cần thêm adapter.
+- Phase 2 bắt đầu khi M4 xong.
+
+## Mức sẵn sàng
+
+Theo [git-workflow.md](git-workflow.md#mức-sẵn-sàng): `dev-done` → `prod-like validated` → `go-live`. M0–M2a.3: `dev-done`, đã merge vào `main` (M2a.2 + M2a.3 cùng PR #11). Go-live còn cần: oplog `minRetentionHours` ≥ 24h, alert RC5 và lag, đo bộ nhớ NATS, đo lại trên prod-like. Chưa milestone nào `prod-like validated`; chưa có tag release.
