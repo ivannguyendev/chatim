@@ -56,6 +56,8 @@ x-core-env: &core-env
   REDIS_DEDUPE_PASSWORD_FILE: /run/secrets/redis_dedupe_password
   NATS_URL: nats://chatim-nats:4222
   GOMEMLIMIT: 920MiB
+  GOGC: ${CORE_GOGC:-100}
+  RECONCILE_ENABLED: ${RECONCILE_ENABLED:-true}
 
 services:
   mongodb:

@@ -34,7 +34,7 @@ Mọi thay đổi đều có số đo trước và sau.
 - Commit Conventional Commits, không nhắc AI, không có dòng `Co-Authored-By`. Chỉ stage đúng các file của task.
 - Kết quả khác "Expected" → dừng, báo cáo kèm output.
 - Task 2, 3 (write path, dedupe, lifecycle): mỗi task 1 reviewer, một lượt. Task 1, 4, 5, 6 do controller kiểm.
-- **Quy trình đo** (từ điều tra 2026-10-04): máy dev bị giảm xung vì nhiệt ở 5K tin/s, nên so trước/sau ở **2.5K tin/s**.
+- **Quy trình đo** (từ điều tra 2026-10-04): máy dev bị giảm xung vì nhiệt ở 5K tin/s. Quét tải 1K/3K/5K để tìm ngưỡng; chỉ so trước/sau ở các mức máy không bị giảm xung.
   - Mỗi ô: nghỉ 5 phút, `infra-reset`, `core-up`, corebench 60s.
   - Chạy kèm bộ đo theo giây: `scripts/bench-sample.sh`, thêm ở Task 1.
   - Ghi `CPU_Speed_Limit` cho mỗi ô; ô nào xuống dưới 100 thì ghi chú, không dùng để so.
@@ -78,15 +78,27 @@ Mọi thay đổi đều có số đo trước và sau.
 - Thu thập: `LATENCY HISTORY command`, `SLOWLOG GET 256`, `system.profile`, log core (degraded/rpc finished/reconcile).
 - Ghi tất cả vào `bin/bench/NAME/` (bin/ đã gitignored).
 
-Đo nền trên HEAD hiện tại (M2a.2 cuối), mỗi ô có `reset`:
-- `base-2k5-1`, `base-2k5-2`: 2500 tin/s;
-- `base-5k`: 5000 tin/s;
-- trong ô `base-2k5-1`, lấy thêm pprof CPU core-1 20s ở giây 20: `curl http://chatim-core-1:9090/debug/pprof/profile?seconds=20` qua container `curlimages/curl` trên `chatim_default`, lưu `bin/pprof-m2a3-base.pb.gz`.
+`bench-cell.sh` còn chụp `admin.runCommand({top: 1})` và `serverStatus().opcounters` trước và sau mỗi ô, để biết mongod tốn thời gian ở namespace và loại lệnh nào. Compose cho phép đặt `RECONCILE_ENABLED` và `CORE_GOGC` khi `core-up` (`x-core-env`).
 
-Ghi lại cho mỗi ô:
+**Mục tiêu đo: tìm ngưỡng cần can thiệp**, tức mức tải đầu tiên xuất hiện một trong các dấu hiệu sau:
+- `shed_by_client > 0` hoặc `failed > 0`;
+- có đợt Redis dedupe suy giảm;
+- ack p99 > 100ms (A1 30ms chỉ xét trên prod-like);
+- VM bận trung bình > 70% (`/proc/stat`), hoặc một thành phần dùng gần trọn phần CPU của nó;
+- `CPU_Speed_Limit` < 100 → ghi là giới hạn máy dev, không phải của hệ thống.
+
+Quét tải trên HEAD hiện tại (code M2a.2), mỗi ô có `reset`:
+- `base-1k`: 1000 tin/s;
+- `base-3k`: 3000 tin/s, kèm `pprof`;
+- `base-5k`: 5000 tin/s;
+- `base-3k-norec`: 3000 tin/s, `RECONCILE_ENABLED=false`, để đo chi phí change stream trên mongod và core-1.
+- Ô 2.5K của lần điều tra 2026-10-04 dùng làm điểm thêm.
+
+Mỗi ô ghi lại:
 - ack p50/p95/p99/p99.9, live lag p99, pacer lag p99;
-- CPU trung bình core-1/core-2/redis-dedupe/mongod;
-- Redis dedupe: số lệnh mỗi giây (`total_commands_processed` chia thời gian) và tổng kết nối mới;
+- tỉ trọng CPU từng thành phần (`docker stats` của OrbStack đếm dư, nên tổng VM lấy từ `/proc/stat`), CPU core trên mỗi 1K tin;
+- lệnh Redis dedupe trên mỗi tin, tổng kết nối mới;
+- `top` của mongod theo namespace/lệnh;
 - số đợt suy giảm, `CPU_Speed_Limit` thấp nhất.
 
 Commit:
@@ -296,16 +308,16 @@ Run: `make -s go ARGS="test -race -shuffle=on -count=5 ./apps/core/internal/acto
 
 **Step 4: Client Redis (C1–C3)**
 
-`redisOptions` nhận thêm `minIdle int` và đặt:
-- `MinIdleConns: minIdle`;
-- `MaxActiveConns: pool` (khi `pool > 0`);
-- `DisableIdentity: true`.
-
-Gọi như sau:
-- state: `redisOptions(..., slotRedisPool, 1)`;
-- dedupe: `pool = cfg.CIDBatch.Connections() + dedupeSideConns`, `minIdle = cfg.CIDBatch.Connections()`, với `const dedupeSideConns = 4` (mark của publisher, reconciler, probe, dự phòng).
-
-Test trong `redis_clients_test.go`: `TestRedisClientsUseSmallWarmPools` kiểm `c.dedupe.Options()` có `PoolSize`, `MinIdleConns`, `MaxActiveConns` đúng công thức và `DisableIdentity` true; client state tương tự.
+Client hiện để gần hết mặc định của go-redis v9.22: `PoolSize` = 10 × GOMAXPROCS (100 mỗi core), `MaxRetries` 3, `DialerRetries` 5 cách nhau 100ms, `CLIENT SETINFO` mỗi lần mở kết nối.
+- **Client dedupe:**
+  - `PoolSize = MaxActiveConns = cfg.CIDBatch.Connections() + dedupeSideConns`, với `const dedupeSideConns = 4` (mark của publisher, reconciler, probe, dự phòng);
+  - `MinIdleConns = cfg.CIDBatch.Connections()`;
+  - `MaxRetries: -1` (C5): thử lại tốn hạn 100ms, và Reserve không idempotent; lần thử lại sau EOF sẽ thấy pending của chính core mình và trả `errCIDUnsettled` giả;
+  - `DialerRetries: 1` (C6);
+  - `DisableIdentity: true`.
+- **Client state (slot manager):** chỉ thêm `DisableIdentity: true`; không đổi pool hay retry, vì đụng lease phải chạy R5.
+- **Cách làm:** đổi `redisOptions` thành nhận một struct nhỏ (ví dụ `redisPool{size, minIdle int; noRetry bool}`) để hai lời gọi rõ nghĩa.
+- **Test** trong `redis_clients_test.go`: `TestRedisClientsUseSmallWarmPools` kiểm `c.dedupe.Options()` (`PoolSize`, `MaxActiveConns`, `MinIdleConns`, `MaxRetries`, `DialerRetries`, `DisableIdentity`) và `c.slots.Options()` (`PoolSize` 4, `DisableIdentity`, `MaxRetries` giữ mặc định).
 
 **Step 5: Wiring và lifecycle**
 - `wire`: sau `dedupe.New`, tạo `batch, err := dedupe.NewBatcher(cids, cfg.CIDBatch, log)`, rồi truyền `batch` cho `actor.NewRouter` thay cho `cids`. `app` thêm field `cidBatch drainer`.
@@ -332,20 +344,17 @@ git commit -m "perf(core): answer the ack before the cid commit and batch dedupe
 
 ### Task 4: Đo sau và thử `GOGC=200` (P4)
 
-- Compose: `x-core-env` thêm `GOGC: ${CORE_GOGC:-100}` để thử mà không sửa file giữa các lần.
-- Đo trên HEAD mới, mỗi ô có `reset` và nghỉ 5 phút:
-  - `after-2k5-1`, `after-2k5-2`: 2500 tin/s;
-  - `after-5k`: 5000 tin/s;
-  - `gogc200-2k5-1`, `gogc200-2k5-2`: `CORE_GOGC=200 make core-up`;
-  - pprof CPU core-1 20s ở `after-2k5-1` (`bin/pprof-m2a3-after.pb.gz`).
-- So với nền (Task 1), chỉ dùng các ô có `CPU_Speed_Limit` = 100:
+- Quét tải trên HEAD mới, cùng các ô như Task 1, mỗi ô có `reset`:
+  - `after-1k`, `after-3k` (kèm `pprof`), `after-5k`, `after-3k-norec`;
+  - `after-3k-gogc200`: `CORE_GOGC=200 ./scripts/bench-cell.sh after-3k-gogc200 3000 reset`.
+- So với nền (Task 1) ở từng mức tải. Chỉ so các ô có `CPU_Speed_Limit` = 100:
   - CPU core trên mỗi 1K tin/s;
   - lệnh Redis dedupe mỗi giây và lệnh trên mỗi tin;
   - kết nối mới trong mỗi run (kỳ vọng ≈ pool, không vọt);
   - ack p50/p95/p99;
   - `dedupe.(*Store).Reserve` + `Commit` cumulative trong pprof.
 - `GOGC=200`:
-  - Giữ (đặt mặc định `CORE_GOGC` 200 trong compose) nếu CPU core giảm ≥5% ở cả hai ô và RSS core dưới 80% `mem_limit`.
+  - Giữ (đặt mặc định `CORE_GOGC` 200 trong compose) nếu CPU core giảm ≥5% so với `after-3k` và RSS core dưới 80% `mem_limit`.
   - Ngược lại để 100 và ghi lý do.
 - Ô 5K: `failed=0`, không bỏ lượt (`shed_by_client=0`) nếu `CPU_Speed_Limit` không xuống dưới 60; nếu máy bị giảm xung thì chỉ ghi lại.
 

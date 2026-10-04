@@ -39,6 +39,11 @@ for cmd in "config set latency-monitor-threshold 5" "config set slowlog-log-slow
 done
 mongo_eval "const c = db.getSiblingDB('chatim'); c.setProfilingLevel(0); c.system.profile.drop(); c.setProfilingLevel(1, {slowms: 20});" >/dev/null
 
+snapshot() {
+  mongo_eval "const a = db.getSiblingDB('admin'); printjson({top: a.runCommand({top: 1}).totals, opcounters: a.serverStatus().opcounters});" >"$dir/mongo-top-$1.json" 2>&1
+}
+
+snapshot before
 start=$(date +%s)
 echo "$start" >"$dir/start"
 "$repo/scripts/bench-sample.sh" "$dir" start
@@ -49,6 +54,7 @@ echo "[$(date +%H:%M:%S)] $name: corebench rate=$rate"
 make -s poc TOOL=corebench ARGS="-rate $rate -duration 60s -watch 20" >"$dir/corebench.txt" 2>&1
 wait
 date +%s >"$dir/end"
+snapshot after
 "$repo/scripts/bench-sample.sh" "$dir" stop
 
 make -s redis-cli INSTANCE=dedupe ARGS="latency history command" >"$dir/redis-latency.txt" 2>&1
