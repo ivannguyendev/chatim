@@ -75,6 +75,8 @@ Cùng điều kiện R2 (`write -rate 10000 -duration 60s -rooms 5000 -flushers 
 | 18 | 5000/s (M2a.1 publisher chỉ còn hàng đợi, infra sạch, kèm pprof core-1 20s) | Sạch (`infra-reset`) | 5000 | 0 | 0 | 0 / 1 | 19.43453ms | 57.926439ms | 133.153562ms | 250.622058ms | 385.895037ms | 16.989489ms / 86.409949ms | 7.497122ms | không đo |
 | 19 | 5000/s (M2a.1 publisher chỉ còn hàng đợi, infra sạch) | Sạch (`infra-reset`) | 5000 | 0 | 0 | 0 / 1 | 37.562724ms | 127.422924ms | 271.477498ms | 428.603507ms | 587.618481ms | 29.359084ms / 147.487225ms | 18.357325ms | không đo |
 | 20 | 5000/s (M2a, infra sạch) | Sạch (`infra-reset`) | 5000 | 0 | 0 | 0 / 1 | 26.560117ms | 133.339161ms | 233.851627ms | 391.134177ms | 528.871241ms | 22.119786ms / 163.490035ms | 16.000114ms | không đo |
+| 21 | 5000/s (M2a.2 reconciler bật, infra sạch) — có 1 đợt Redis dedupe nghẽn | Sạch (`infra-reset`) | 5000 | 0 | 0 | 0 / 1 | 26.994708ms | 203.541627ms | 390.576006ms | 558.472075ms | 719.195865ms | 22.211451ms / 249.797369ms | 19.916464ms | 190 / 159 / 166 / 53 / 55 (redis dedupe) / không đo |
+| 22 | 5000/s (M2a.2 reconciler bật, infra sạch) — có 1 đợt Redis dedupe nghẽn | Sạch (`infra-reset`) | 5000 | 0 | 0 | 0 / 1 | 23.764476ms | 77.084075ms | 165.502459ms | 295.020523ms | 399.419208ms | 19.896907ms / 114.383545ms | 8.284185ms | 204 / 170 / 180 / 61 / 57 (redis dedupe) / không đo |
 
 CPU là trung bình `docker stats` lấy mẫu mỗi 3s trong lúc chạy (100% = 1 vCPU). Ở mọi lần chạy, event live trên các room được theo dõi đều `missing=0 duplicates=0`. Ngoài bảng còn 1 lần 2K/s 20s chỉ để lấy pprof của corebench (`-cpuprofile`).
 
@@ -106,6 +108,20 @@ Lần 12 (M2a.1: bỏ pts, bỏ watermark/active mark/sweeper, publisher theo th
   - Số goroutine: 1214 so với 653.
   - Ở cả hai bản, phần tốn nhất là Redis chống trùng cid (`dedupe.Store.Reserve` + `Commit`): 17% ở M2a, 24% ở M2a.1, theo tỉ lệ trên tổng CPU của từng lần. Tiếp theo là `InsertMany` Mongo (8–12%), GC (8–10%) và syscall write ra mạng.
   - Nếu cần giảm ack latency, đây là các ứng viên: gộp Reserve/Commit theo nhóm ghi, giảm cấp phát.
+
+**M2a.2: reconciler bật (lần 21–22, 2026-10-04).** Quy trình như lần 13–20: `infra-reset`, `infra-up`, `core-up`, rồi `-rate 5000 -duration 60s -watch 20`. core-1 giữ slot 0 nên chạy reconciler (log `reconcile term started` chỉ có ở core-1).
+- Cả hai lần đều `failed=0`, `shed_by_client=0`, live `missing=0 duplicates=0`.
+- Lần 22: ack p50 / p95 / p99 = 23.8 / 77.1 / 165.5ms, live lag p99 114ms. Ngang hoặc tốt hơn M2a.1 (28.5 / 92.7 / 202ms).
+- Lần 21: p99 391ms. Lần này dính một đợt Redis dedupe nghẽn: cả hai core cùng lúc vào chế độ suy giảm (`cid dedupe degraded`, `event ack marks degraded`) rồi hồi sau 1s cooldown.
+- Lần 22 cũng có một đợt như vậy ở phút đầu (02:33:32, hồi lúc 02:33:33), nhưng ngắn hơn. Đợt nghẽn đụng cả chống trùng cid, không riêng mark. Nguyên nhân chưa rõ (VM hay Redis); M2a.3 đo bằng `LATENCY`/`SLOWLOG` khi gom lệnh Redis.
+- **Reconciler làm đúng việc** (lần 21):
+  - Tra mark cho toàn bộ 325000 tin (`getbit` 325000 lệnh).
+  - Khoảng 7.5K tin mất mark trong đợt nghẽn được publish lại: NATS `in_msgs` 332556 so với 325000 tin gửi. Lần 22 khoảng 4.1K.
+  - JetStream bỏ trùng, live không thấy bản trùng.
+- **Chi phí:**
+  - Core giữ slot 0 dùng nhiều hơn core kia khoảng 0.3 vCPU (190% so với 159%, 204% so với 170%).
+  - Redis dedupe nhận thêm khoảng 2 lệnh mỗi tin (`setbit` + `pexpire`, khoảng 310K mỗi loại), vì ở 5K/s mỗi batch mark chỉ có khoảng 1 tin. Thêm 1 `getbit` mỗi tin từ reconciler. M2a.3 gom các lệnh này cùng Reserve/Commit.
+  - Bộ nhớ NATS: 17MB lúc nghỉ, 211–215MB sau lần chạy (map dedupe 5 phút cộng dữ liệu stream).
 
 **Điểm gãy (knee).**
 - Thông lượng: giữ đủ tải (`shed_by_client=0 failed=0`, không lần nào phải thử lại) tới 5K/s. 7.5K/s chỉ đạt 7319/s (bỏ 2.4%); 10K/s đạt 7546–9426/s (bỏ 5.7–24.5%; lần 8 có 151 lần gửi kết thúc bằng `Unavailable`). Knee thông lượng trên dev nằm giữa 5K và 7.5K/s.

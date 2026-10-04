@@ -2816,3 +2816,5 @@ git commit -m "docs(poc): record corebench with the event reconciler on"
   - Task 4: `Marks.Acked` và `Rooms.Get` chạy theo context của `Run`, không theo `stop`, nên một lệnh Redis/Mongo treo có thể làm `Close` chậm tới hết ngân sách của lệnh đó.
   - Task 5: `StopPlan.Reconciler` vẫn được tính khi `RECONCILE_ENABLED=false`. `RECONCILE_DELAY >= EVT_STREAM_DUPLICATES` sinh hai lỗi. Chuỗi `stopPhases` ghi cứng "+ 1s". `marks` và JetStream client của reconcile vẫn được tạo khi tắt reconciler.
   - Task 6: test trong plan gốc đua với term đầu tiên (tin ghi trước khi feed mở thì không được bù); đã sửa bằng cách chờ log `reconcile term started` rồi mới ghi.
+  - Task 7: contract `storetest.RunFeed` không có case mất lịch sử. Chỉ memstore có test `LoseHistory`; việc map `ChangeStreamHistoryLost` → `ErrFeedHistoryLost` của mongostore chưa có test (đưa vào chaos test M5).
+  - Task 8: cả hai lần corebench đều có một đợt Redis dedupe nghẽn khoảng 1s, hai core cùng suy giảm một lúc. Điều tra ở M2a.3.
