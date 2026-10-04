@@ -17,10 +17,12 @@ type timeline struct{ room, thread uint64 }
 type Messages struct {
 	mu    sync.RWMutex
 	lines map[timeline][]domain.Message
+	log   []logged
+	grew  chan struct{}
 }
 
 func NewMessages() *Messages {
-	return &Messages{lines: make(map[timeline][]domain.Message)}
+	return &Messages{lines: make(map[timeline][]domain.Message), grew: make(chan struct{})}
 }
 
 func (s *Messages) Insert(ctx context.Context, msgs []domain.Message) []store.Result {
@@ -50,6 +52,7 @@ func (s *Messages) insertLocked(m domain.Message) store.Result {
 		return store.Result{Outcome: store.Duplicate}
 	}
 	s.lines[tl] = slices.Insert(line, i, m)
+	s.appendLog(m)
 	return store.Result{Outcome: store.Inserted}
 }
 
