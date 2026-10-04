@@ -37,6 +37,7 @@
 ### 3.A Sửa / xoá / ghim: fact bất biến + projection
 
 **Đề xuất**
+
 1. Sửa = insert fact `message_edits {_id: room│th│seq│ver, kind: "edit", text, by, ts}` chứa **bản mới** (thiết kế cũ lưu bản bị thay thế). Unique `_id` chính là CAS theo version: hai lệnh sửa cùng `ver` thì một bên nhận duplicate key → trả conflict kèm trạng thái hiện tại.
 2. Xoá cho mọi người = insert cùng không gian khoá với `kind: "delete"`. Sửa và xoá tranh **cùng một** `ver`, nên "sửa thua xoá" là kết quả của CAS, không cần code dọn riêng.
 3. Cấp `ver` và kiểm quyền (đúng tác giả, chưa bị xoá) đọc từ **fact cuối** trong range của tin (một reverse scan trên clustered key), không đọc từ projection.
@@ -49,6 +50,7 @@
 **Lý do:** lịch sử đúng; tin hệ thống biết ai làm gì ở từng lần đổi; feed của fact chỉ cần insert, không cần `updateLookup` hay pre/post-image; một không gian version cho sửa và xoá.
 
 **Câu hỏi**
+
 1. Projection bị mất ở fast path thì `GetHistory` trả text cũ tới D. Chấp nhận được không, hay đọc lịch sử phải ghép fact cuối (thêm một range scan mỗi tin đã sửa trong trang)?
 2. Kiểm quyền + cấp `ver` từ fact cuối (mục 3) còn lỗ nào khi hai core cùng xử lý, có retry, hoặc failover?
 3. Xoá cho mọi người phải xoá nội dung các bản sửa cũ (riêng tư). Dọn bằng `$unset text` trên fact edit cũ (giữ khoá) có phá tính "bất biến" ở chỗ nào quan trọng không?
@@ -61,6 +63,7 @@
 Áp cho số reaction theo emoji, số reply của thread, số member. Unread không thuộc đây.
 
 **Đề xuất**
+
 1. Summary nằm trên doc đích: `{n, ver}` mỗi counter.
 2. Fast path, ngay sau fact: `$inc: {n: ±1, ver: 1}`. Có thể lệch khi retry gặp kết quả không rõ hoặc core chết giữa fact và `$inc`.
 3. Reconciler, sau D, gom theo target (mỗi target tối đa một recount mỗi cửa sổ W):
@@ -72,6 +75,7 @@
 5. Target nóng: post viral 200K reactor → mỗi recount scan 200K khoá; W giới hạn tần suất (ví dụ 1 lần/30s). Partition `hash(user) % K`, tổng = Σ bucket, chỉ bật khi đo thấy cần.
 
 **Câu hỏi**
+
 1. Có kịch bản không hội tụ? Ví dụ: target nóng làm CAS fail R lần liên tiếp đúng ở touch cuối.
 2. `ver++` trong `$inc` có cần không? Hay bỏ hẳn `$inc` (counter chỉ đúng sau recount, trễ D)?
 3. 500 reaction/s vào một post = 500 `$inc`/s trên một doc. WiredTiger có write conflict / retry đáng kể không? Có cần gom `$inc` theo cửa sổ?
@@ -84,14 +88,16 @@
 **Bối cảnh:** reconciler theo vị trí change stream. Vị trí rơi khỏi oplog → hiện tại log lỗi và "bắt đầu lại từ bây giờ", khoảng mất là mất vĩnh viễn. `messages` không có secondary index nên không quét được "thay đổi từ thời điểm T". Oplog capped theo byte: đỉnh 10K tin/s × 1–2KB ≈ 0,9–1,7TB/ngày.
 
 **Đề xuất**
+
 1. Projection **room activity** trên `rooms`: `last_seq`, `last_msg_at` (trường đã có trong mô hình nhưng chưa ghi), là effect coalesce (mỗi room tối đa một write mỗi W_r, ví dụ 1s). Dùng cho hai việc: inbox (sắp room theo hoạt động) và chỉ mục resync.
 2. Resync khoảng mất [T1, T2]: quét room có `last_msg_at ≥ T1` (cần index `{last_msg_at}` trên `rooms`, query không có prefix room); với mỗi room, scan ngược `messages` từ `last_seq` tới khi `ts < T1`; publish bù tin chưa có ack mark và chạy lại effect projection.
 3. Topo reconciler, hai phương án:
    - (a) Một reader nhẹ đọc change stream (từ secondary), không lookup, đẩy bản ghi thô vào JetStream work stream phân vùng theo slot; worker ở mọi core chạy effect.
    - (b) N change stream, mỗi cái lọc `$mod` theo room; mỗi cursor vẫn quét toàn oplog phía server.
-   Đề xuất mặc định (a), quyết định sau khi replay backlog ở PoC prod-like với tiêu chí xả backlog ≥ 3× ingest đỉnh.
+     Đề xuất mặc định (a), quyết định sau khi replay backlog ở PoC prod-like với tiêu chí xả backlog ≥ 3× ingest đỉnh.
 
 **Câu hỏi**
+
 1. Room 100 tin/s: coalesce 1s có đủ tránh hot doc? Index `{last_msg_at}` trên `rooms` (không prefix room) có chấp nhận được khi `rooms` lên hàng chục triệu doc và sau này shard?
 2. Quy trình resync có lỗ không? Ví dụ: write room activity cũng mất trong khoảng đó; ack mark hết TTL 1h nên tin cũ hơn 1h bị publish lại ngoài cửa sổ chống trùng 5m của JetStream; fact `message_edits` không có thời gian trong khoá nên không quét theo thời gian được.
 3. (a) hay (b) trước khi đo? Work stream thêm một hop JetStream: độ trễ và chi phí lưu thế nào?
@@ -104,12 +110,14 @@
 **Bối cảnh:** vòng 1 thống nhất unread tính lazy. Hiện đường gửi không ghi gì lên `rooms`. "Xoá phía tôi" là collection riêng `hidden`, index `{u, r, thread_root, seq}`.
 
 **Đề xuất nháp**
+
 1. `ListMyRooms`: đọc các member doc của user (có vị trí đọc `read_seq`, gọi tắt `rs`), lấy room activity (3.C) để sắp xếp và biết room nào có `last_seq > rs`. Chỉ room có tin mới mới cần đếm.
 2. Unread một room: scan ngược `messages` từ `last_seq` về `rs`, lọc from/deleted/kind trong doc, dừng khi đủ 100 hoặc chạm giới hạn scan S (ví dụ 300 doc); `hidden` lấy bằng range scan `{u, r, thread_root, seq > rs}`.
 3. Cache (user, room) → (last_seq lúc đếm, count); còn hợp lệ khi `last_seq` không đổi. Event tin mới chỉ để client tự tăng cục bộ.
 4. Reconnect: client gửi sync token; server chỉ trả room có thay đổi sau token.
 
 **Câu hỏi**
+
 1. Owner chưa có số room trung bình mỗi user. Hãy nêu giả định (ví dụ 50 room, 10 room có tin mới) rồi tính số scan/s khi 100K user reconnect trong 60s. Replica set 3 member có chịu được không?
 2. `hidden`: range scan riêng mỗi room, hay embed danh sách/bitmap nhỏ trên member doc?
 3. Chạm S mà chưa về tới `rs` và chưa đủ 100 thì trả gì để vẫn "chính xác" theo R17?
@@ -131,6 +139,7 @@
 ### 4.2 Phản bác 3.A so với pre/post-image bạn đề xuất
 
 Vòng 1 bạn đề xuất bật `changeStreamPreAndPostImages` trên `messages` để ghi lịch sử sửa đúng. 3.A thay bằng fact bất biến + projection.
+
 - Kịch bản nào 3.A sai mà pre/post-image đúng?
 - Chi phí pre-image ở 10K tin/s (ghi thêm vào `config.system.preimages`, oplog) so với một insert fact mỗi lần sửa?
 - Cách nào khoá chặt vào Mongo hơn khi cần đổi sang PostgreSQL?
@@ -144,5 +153,6 @@ Vòng 1 bạn đề xuất bật `changeStreamPreAndPostImages` trên `messages`
 ### 4.4 D theo từng effect
 
 Vòng 1 bạn đề xuất D = 3–5s và ack mark cho **mọi** effect.
+
 - `PUB_ACK_TIMEOUT` = 2s; mark gom theo cửa sổ 10ms hoặc 256 khoá. D nhỏ nhất an toàn cho `msg_created` là bao nhiêu, và tính theo công thức nào?
 - Ack mark cho mọi effect: số lệnh Redis thêm ở 10K tin/s, khi sửa/reaction hiếm hơn nhiều? So với chỉ mark cho effect lưu lượng cao, còn effect hiếm thì để reconciler chạy lại (JetStream bỏ bản trùng)?

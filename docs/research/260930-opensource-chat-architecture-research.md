@@ -2,7 +2,7 @@
 
 > Ngày: 2026-09-30 · Phạm vi: tinode/chat, teamgram, chattocorp/chatto, lxzan/gws
 > Mục đích: rút ra mô hình dữ liệu và kiến trúc cho `chatim` (chat core hiệu năng cao, fanout mạnh, lấy tin cũ nhanh).
-> Thiết kế đã chốt dựa trên nghiên cứu này: [../designs/260930-chat-core-gateway-design.md](../designs/260930-chat-core-gateway-design.md)
+> Thiết kế đã chốt dựa trên nghiên cứu này: [../archive/designs/260930-chat-core-gateway-design.md](../archive/designs/260930-chat-core-gateway-design.md)
 
 Cách thu thập: đọc source qua GitHub (WebFetch/REST API, không clone). Một số trích dẫn là tóm tắt của công cụ fetch, không phải nguyên văn từng byte.
 
