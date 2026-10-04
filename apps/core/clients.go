@@ -19,11 +19,12 @@ import (
 const slotRedisPool = 4
 
 type clients struct {
-	mongo  *mongo.Client
-	slots  *redis.Client
-	dedupe *redis.Client
-	nats   *nats.Conn
-	js     jetstream.JetStream
+	mongo       *mongo.Client
+	slots       *redis.Client
+	dedupe      *redis.Client
+	nats        *nats.Conn
+	js          jetstream.JetStream
+	reconcileJS jetstream.JetStream
 }
 
 func connect(ctx context.Context, cfg config.Config, log *slog.Logger) (*clients, error) {
@@ -105,6 +106,11 @@ func (c *clients) connectNATS(cfg config.Config, log *slog.Logger) error {
 		return fmt.Errorf("jetstream: %w", config.RedactError(err, cfg.NATSURL))
 	}
 	c.js = js
+	rjs, err := jetstream.New(nc, cfg.Reconcile.JetStreamOptions(cfg.Publish.AckTimeout)...)
+	if err != nil {
+		return fmt.Errorf("reconcile jetstream: %w", config.RedactError(err, cfg.NATSURL))
+	}
+	c.reconcileJS = rjs
 	return nil
 }
 

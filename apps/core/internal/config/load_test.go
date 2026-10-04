@@ -9,8 +9,10 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
+	"github.com/ivannguyendev/chatim/apps/core/internal/eventmark"
 	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
+	"github.com/ivannguyendev/chatim/apps/core/internal/reconcile"
 	"github.com/ivannguyendev/chatim/apps/core/internal/slot"
 )
 
@@ -42,11 +44,17 @@ func TestLoadDefaults(t *testing.T) {
 		Publish: publish.Config{
 			SubjectRoot: "evt", Shards: 4, QueueSize: 1024, MaxPending: 256, AckTimeout: 2 * time.Second,
 		},
-		Stream: publish.StreamConfig{Name: "CHATIM_EVT", SubjectRoot: "evt", LiveRoot: "live", Replicas: 1, MaxAge: 7 * day, Duplicates: 2 * time.Minute},
+		Stream: publish.StreamConfig{Name: "CHATIM_EVT", SubjectRoot: "evt", LiveRoot: "live", Replicas: 1, MaxAge: 7 * day, Duplicates: 5 * time.Minute},
 		Slot: slot.Config{
 			CoreID: host, Addr: host + ":9000", Tick: time.Second, HeartbeatTTL: 5 * time.Second,
 			LeaseTTL: 10 * time.Second, HookTimeout: 500 * time.Millisecond,
 		},
+		ReconcileEnabled: true,
+		Reconcile: reconcile.Config{
+			SubjectRoot: "evt", Delay: 30 * time.Second, DuplicateWindow: 5 * time.Minute, Window: 1024, Batch: 256,
+			ConfirmEvery: time.Second, Drain: time.Second, Poll: time.Second, RoomCache: 65536,
+		},
+		AckMarks: eventmark.Config{TTL: time.Hour, Timeout: 100 * time.Millisecond, Cooldown: time.Second},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Load() =\n%#v\nwant\n%#v", got, want)
@@ -81,6 +89,12 @@ func TestLoadOverrides(t *testing.T) {
 			CoreID: "core-a", Addr: "10.0.0.5:7000", Tick: 500 * time.Millisecond, HeartbeatTTL: 3 * time.Second,
 			LeaseTTL: 6 * time.Second, HookTimeout: 200 * time.Millisecond,
 		},
+		ReconcileEnabled: false,
+		Reconcile: reconcile.Config{
+			SubjectRoot: "evt_it", Delay: 20 * time.Second, DuplicateWindow: 5 * time.Minute, Window: 64, Batch: 32,
+			ConfirmEvery: 2 * time.Second, Drain: 500 * time.Millisecond, Poll: 500 * time.Millisecond, RoomCache: 128,
+		},
+		AckMarks: eventmark.Config{TTL: 30 * time.Minute, Timeout: 50 * time.Millisecond, Cooldown: 2 * time.Second},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Load() =\n%#v\nwant\n%#v", got, want)
