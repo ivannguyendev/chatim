@@ -58,6 +58,7 @@ type Batcher struct {
 	started  atomic.Bool
 	dropped  atomic.Uint64
 	stopping chan struct{}
+	stop     sync.Once
 	abort    chan struct{}
 	halt     sync.Once
 	done     chan struct{}
@@ -112,6 +113,8 @@ func (b *Batcher) submit(ctx context.Context, s *batchShard, call reserveCall) e
 	select {
 	case s.reserves <- call:
 		return nil
+	case <-b.stopping:
+		return ErrBatcherClosed
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -151,10 +154,10 @@ func (b *Batcher) settle(room uint64, call settleCall) {
 }
 
 func (b *Batcher) Close(ctx context.Context) error {
+	b.stop.Do(func() { close(b.stopping) })
 	b.mu.Lock()
 	if !b.closed {
 		b.closed = true
-		close(b.stopping)
 		for _, s := range b.shards {
 			close(s.reserves)
 			close(s.settles)
@@ -162,6 +165,7 @@ func (b *Batcher) Close(ctx context.Context) error {
 	}
 	b.mu.Unlock()
 	if !b.started.Load() {
+		b.discardQueued()
 		return nil
 	}
 	select {

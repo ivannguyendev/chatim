@@ -40,8 +40,21 @@ func (b *Batcher) reserveLoop(in <-chan reserveCall) {
 	if held {
 		next.out <- reserveResult{err: ErrBatcherClosed}
 	}
+	rejectReserves(in)
+}
+
+func rejectReserves(in <-chan reserveCall) {
 	for c := range in {
 		c.out <- reserveResult{err: ErrBatcherClosed}
+	}
+}
+
+func (b *Batcher) discardQueued() {
+	for _, s := range b.shards {
+		rejectReserves(s.reserves)
+		for c := range s.settles {
+			b.dropped.Add(uint64(max(c.size(), 0)))
+		}
 	}
 }
 
