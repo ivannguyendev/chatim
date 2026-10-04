@@ -31,6 +31,7 @@
 
 - M2b.0 → M2b.1 → M2b.2 → M2b.3 → M2b.4 → M2c → M3 → M4 → M5.
 - M2b.0 là điều kiện của mọi milestone sau: permission hook, reader pipeline và detector dùng chung.
+- (owner 2026-10-05) M2b.0 → M2b.4 làm trên một nhánh chung `feat/m2b` (tạo từ `docs/system-mechanisms`), không PR từng phần; merge vào `main` một lần khi M2b.4 đạt Definition of Done.
 - M2b.1 phải xong trước mọi tính năng có fact mới, vì effect của chúng chạy trên engine.
 - PoC prod-like chạy song song, xong trước M5 (chốt database). Storage nằm sau port nên PostgreSQL chỉ cần thêm adapter.
 - Phase 2 bắt đầu khi M4 xong.

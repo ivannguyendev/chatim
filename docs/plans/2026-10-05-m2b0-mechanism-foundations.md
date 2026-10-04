@@ -66,9 +66,11 @@ M2b.0 không thêm fact hay collection mới; mọi hạng mục là cơ chế d
 
 ### Task 0: Branch
 
-**Step 1:** Nếu PR `docs/system-mechanisms` đã merge: `git switch main && git pull && git switch -c feat/m2b0-mechanism-foundations`. Nếu chưa merge: tạo branch từ `docs/system-mechanisms` và ghi chú trong PR rằng branch xếp chồng.
+Owner chốt (2026-10-05): cả M2b (M2b.0 → M2b.4) làm trên **một nhánh chung `feat/m2b`**, tạo từ `docs/system-mechanisms` (chứa thiết kế, roadmap và plan này). Không mở PR theo từng milestone con; merge vào `main` một lần khi M2b.4 xong và đạt Definition of Done.
 
-**Step 2:** `git branch --show-current` → Expected: `feat/m2b0-mechanism-foundations`.
+**Step 1:** `git switch feat/m2b && git pull --ff-only` (nhánh đã có trên origin).
+
+**Step 2:** `git branch --show-current` → Expected: `feat/m2b`.
 
 ---
 
