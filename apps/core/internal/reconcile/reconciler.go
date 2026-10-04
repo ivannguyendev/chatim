@@ -127,6 +127,7 @@ func (r *Reconciler) term(ctx context.Context) {
 		r.ended(ctx, err)
 		return
 	}
+	r.log.InfoContext(ctx, "reconcile term started")
 	t := newTerm(r, cur)
 	err = t.run(ctx)
 	settle, cancel := context.WithTimeout(context.WithoutCancel(ctx), r.cfg.Drain)
