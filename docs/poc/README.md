@@ -123,6 +123,25 @@ Lần 12 (M2a.1: bỏ pts, bỏ watermark/active mark/sweeper, publisher theo th
   - Redis dedupe nhận thêm khoảng 2 lệnh mỗi tin (`setbit` + `pexpire`, khoảng 310K mỗi loại), vì ở 5K/s mỗi batch mark chỉ có khoảng 1 tin. Thêm 1 `getbit` mỗi tin từ reconciler. M2a.3 gom các lệnh này cùng Reserve/Commit.
   - Bộ nhớ NATS: 17MB lúc nghỉ, 211–215MB sau lần chạy (map dedupe 5 phút cộng dữ liệu stream).
 
+**Điều tra Redis dedupe suy giảm và nguồn p99 (2026-10-04).** Chỉ đo, không đổi code. Mỗi ô là corebench 5K tin/s × 60s, đo kèm theo từng giây: CPU/iowait của VM (`/proc/stat`), `docker stats`, giới hạn xung CPU của macOS (`pmset -g therm` → `CPU_Speed_Limit`), số kết nối mới tới Redis dedupe, checkpoint WiredTiger, profiler Mongo (>20ms) và log suy giảm của core. Có thêm Go trace 5s trên core-1.
+
+| Ô | Dữ liệu | Máy | Ack p50 / p95 / p99 | Pacer lag p99 | `CPU_Speed_Limit` | Đợt suy giảm | Kết nối Redis mới |
+|---|---|---|---|---|---|---|---|
+| A | reset | nghỉ 5' | 131ms / 574ms / 1.77s (bỏ 6877 lượt) | 192ms | 100 → **39** | 60 | 1785 (đỉnh 227/s) |
+| D | giữ (sau A) | nóng | 34 / 147 / 302ms | 28ms | 53–67 | 6 | 106 |
+| C | giữ | nghỉ 5' | 82 / 295 / 444ms | 30ms | 100 → 53 | 27 | 712 |
+| B | reset | nóng | 103 / 329 / 471ms | 51ms | 48–53 | 42 | 1193 |
+| A 2.5K | reset | nghỉ 5' | 13.7 / 34 / **76ms** | 5.8ms | **100 suốt run** | 1 | 278 |
+
+Kết luận:
+- **Máy dev giảm xung vì nhiệt là nguyên nhân chính.** Ở 5K tin/s, MacBook 2018 bị macOS giới hạn còn 39–53% xung CPU chỉ sau 30–60 giây, kể cả khi đã nghỉ 5 phút trước đó. Ở 2.5K tin/s máy giữ 100% suốt run, p99 76ms và chỉ có 1 đợt suy giảm.
+- Vì vậy chênh lệch giữa các lần chạy (133 so với 271ms, 165 so với 391ms, rồi 1.2s) chủ yếu do trạng thái nhiệt lúc chạy. Ô giữ dữ liệu (D) còn tốt hơn ô reset (A), nên **tích luỹ dữ liệu không phải nguyên nhân chính**.
+- **Redis dedupe không tự nghẽn.** Đợt suy giảm xảy ra khi máy bị giảm xung: CPU của VM bận 70–89% so với sức chứa đã bị cắt, và lệnh vượt hạn 100ms.
+- **Có vòng khuếch đại:** sau mỗi timeout, go-redis bỏ kết nối rồi mở lại (AUTH + HELLO); số kết nối mới vọt lên 100–227/s đúng các giây suy giảm (ô A, B).
+- **iowait thấp** (2–4%, đỉnh 12%), nên đĩa không phải nút cổ chai. Checkpoint WiredTiger mỗi run một lần, dài 1.9–7.6s; lệnh Mongo chậm nhất 0.9–2.4s, nhưng không trùng phần lớn các đợt suy giảm.
+- **Go trace (ô C, D):** khoảng 82% thời gian chờ mạng của các goroutine actor nằm ở Redis dedupe, chia gần đều cho Reserve và Commit. Trên đường ack, actor chờ chủ yếu ở hai lượt Redis nối tiếp; đây là phần M2a.3 (P2, P3) cắt.
+- **Hệ quả cho quy trình đo:** số p99 ở 5K tin/s trên máy dev không dùng để quyết định. So sánh trước/sau trên dev nên chạy ở 2.5K tin/s, nơi máy không bị giảm xung, và ghi kèm `CPU_Speed_Limit`. Quyết định go/no-go vẫn cần prod-like.
+
 **Điểm gãy (knee).**
 - Thông lượng: giữ đủ tải (`shed_by_client=0 failed=0`, không lần nào phải thử lại) tới 5K/s. 7.5K/s chỉ đạt 7319/s (bỏ 2.4%); 10K/s đạt 7546–9426/s (bỏ 5.7–24.5%; lần 8 có 151 lần gửi kết thúc bằng `Unavailable`). Knee thông lượng trên dev nằm giữa 5K và 7.5K/s.
 - Độ trễ: p99 là 85ms (500/s), 89ms (1K), 139ms (2K), 505ms (5K), 886ms (7.5K). p50 khoảng 10–16ms tới 2K/s rồi tăng mạnh khi lên 5K/s (48ms).
