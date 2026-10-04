@@ -51,10 +51,10 @@ type rig struct {
 	err  error
 }
 
-func newRig(t *testing.T, cfg publish.Config) *rig {
+func newRig(t *testing.T, cfg publish.Config, opts ...publish.Option) *rig {
 	t.Helper()
 	rg := &rig{js: &publishtest.JetStream{}, sink: &testlog.Sink{}}
-	p, err := publish.New(rg.js, cfg, rg.sink.Logger())
+	p, err := publish.New(rg.js, cfg, rg.sink.Logger(), opts...)
 	if err != nil {
 		t.Fatalf("publish.New: %v", err)
 	}
