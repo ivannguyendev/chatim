@@ -42,6 +42,7 @@ type app struct {
 	grpc       *grpcserver.Server
 	publisher  drainer
 	flusher    drainer
+	cidBatch   drainer
 	router     gate
 	slots      runner
 	reconciler drainer
@@ -63,6 +64,10 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wire cid dedupe: %w", err)
 	}
+	batch, err := dedupe.NewBatcher(cids, cfg.CIDBatch, log)
+	if err != nil {
+		return nil, fmt.Errorf("wire cid batcher: %w", err)
+	}
 	marks, err := eventmark.New(cl.dedupe, cfg.AckMarks, log)
 	if err != nil {
 		return nil, fmt.Errorf("wire event ack marks: %w", err)
@@ -75,7 +80,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wire flusher: %w", err)
 	}
-	router, err := actor.NewRouter(st, st, fl, cids, pub, cfg.Actor, log)
+	router, err := actor.NewRouter(st, st, fl, batch, pub, cfg.Actor, log)
 	if err != nil {
 		return nil, fmt.Errorf("wire router: %w", err)
 	}
@@ -96,7 +101,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 		}
 		a.reconciler = rec
 	}
-	a.publisher, a.flusher, a.router, a.slots = pub, fl, router, slots
+	a.publisher, a.flusher, a.cidBatch, a.router, a.slots = pub, fl, batch, router, slots
 	svc, err := grpcsrv.New(grpcsrv.Deps{Sender: router, Rooms: st, Pages: st}, log)
 	if err != nil {
 		return nil, fmt.Errorf("wire core service: %w", err)

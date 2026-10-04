@@ -40,7 +40,8 @@ func TestLoadDefaults(t *testing.T) {
 			Mailbox: 1024, Idle: 5 * time.Minute, MaxGroup: 64, MaxActors: 100000,
 			GroupDeadline: 3 * time.Second, ReservationTTL: 10 * time.Second,
 		},
-		Dedupe: dedupe.Config{CoreID: host, PendingTTL: 10 * time.Second, CommittedTTL: 15 * time.Minute, Timeout: 100 * time.Millisecond, Cooldown: time.Second},
+		Dedupe:   dedupe.Config{CoreID: host, PendingTTL: 10 * time.Second, CommittedTTL: 15 * time.Minute, Timeout: 100 * time.Millisecond, Cooldown: time.Second},
+		CIDBatch: dedupe.BatchConfig{Shards: 4, MaxKeys: 256, Queue: 4096},
 		Publish: publish.Config{
 			SubjectRoot: "evt", Shards: 4, QueueSize: 1024, MaxPending: 256, AckTimeout: 2 * time.Second,
 		},
@@ -80,7 +81,8 @@ func TestLoadOverrides(t *testing.T) {
 			Mailbox: 64, Idle: time.Minute, MaxGroup: 32, MaxActors: 5000,
 			GroupDeadline: 2 * time.Second, ReservationTTL: 8 * time.Second,
 		},
-		Dedupe: dedupe.Config{CoreID: "core-a", PendingTTL: 8 * time.Second, CommittedTTL: 30 * time.Minute, Timeout: 50 * time.Millisecond, Cooldown: 2 * time.Second},
+		Dedupe:   dedupe.Config{CoreID: "core-a", PendingTTL: 8 * time.Second, CommittedTTL: 30 * time.Minute, Timeout: 50 * time.Millisecond, Cooldown: 2 * time.Second},
+		CIDBatch: dedupe.BatchConfig{Shards: 2, MaxKeys: 64, Queue: 512},
 		Publish: publish.Config{
 			SubjectRoot: "evt_it", Shards: 2, QueueSize: 512, MaxPending: 128, AckTimeout: time.Second,
 		},

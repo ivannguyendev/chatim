@@ -50,6 +50,7 @@ type Config struct {
 	Flush               flush.Config
 	Actor               actor.Config
 	Dedupe              dedupe.Config
+	CIDBatch            dedupe.BatchConfig
 	Publish             publish.Config
 	Stream              publish.StreamConfig
 	Slot                slot.Config
@@ -63,6 +64,7 @@ type StopPlan struct {
 	GRPC       time.Duration
 	Reconciler time.Duration
 	Router     time.Duration
+	CIDBatch   time.Duration
 	Flusher    time.Duration
 	Publisher  time.Duration
 	Slots      time.Duration
@@ -116,6 +118,7 @@ func (c Config) StopPlan() StopPlan {
 		GRPC:       c.GRPCShutdown,
 		Reconciler: c.Reconcile.Drain + CloseTimeout,
 		Router:     c.RequestDeadline,
+		CIDBatch:   2 * c.Dedupe.Timeout,
 		Flusher:    c.Flush.InsertTimeout,
 		Publisher:  c.PublisherDrain,
 		Slots:      slot.ReleaseTimeout,
@@ -125,7 +128,7 @@ func (c Config) StopPlan() StopPlan {
 
 func (s StopPlan) total() time.Duration {
 	var sum time.Duration
-	for _, d := range []time.Duration{s.DrainDelay, s.GRPC, s.Reconciler, s.Router, s.Flusher, s.Publisher, s.Slots, s.Close} {
+	for _, d := range []time.Duration{s.DrainDelay, s.GRPC, s.Reconciler, s.Router, s.CIDBatch, s.Flusher, s.Publisher, s.Slots, s.Close} {
 		if d > math.MaxInt64-sum {
 			return math.MaxInt64
 		}

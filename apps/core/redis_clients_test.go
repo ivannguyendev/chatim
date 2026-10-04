@@ -68,3 +68,24 @@ func TestConnectRedisNamesTheFailingInstanceWithoutPasswords(t *testing.T) {
 		})
 	}
 }
+
+func TestRedisClientsUseSmallWarmPools(t *testing.T) {
+	state, dedupe := authedRedis(t, "state-pw"), authedRedis(t, "dedupe-pw")
+	cfg := redisConfig(state, dedupe, "state-pw", "dedupe-pw")
+	cfg.CIDBatch.Shards = 3
+	c := &clients{}
+	defer c.close(t.Context(), quiet)
+	if err := c.connectRedis(t.Context(), cfg); err != nil {
+		t.Fatalf("connectRedis: %v", err)
+	}
+	d := c.dedupe.Options()
+	if d.PoolSize != 10 || d.MaxActiveConns != 10 || d.MinIdleConns != 6 || d.MaxRetries != 0 || d.DialerRetries != 1 || !d.DisableIdentity {
+		t.Errorf("dedupe pool %d/%d idle %d retries %d dial retries %d no identity %v, want 10/10 idle 6 retries 0 dial retries 1 no identity",
+			d.PoolSize, d.MaxActiveConns, d.MinIdleConns, d.MaxRetries, d.DialerRetries, d.DisableIdentity)
+	}
+	s := c.slots.Options()
+	if s.PoolSize != 4 || s.MaxRetries != 3 || s.DialerRetries != 5 || !s.DisableIdentity {
+		t.Errorf("slots pool %d retries %d dial retries %d no identity %v, want 4, 3, 5 and no identity",
+			s.PoolSize, s.MaxRetries, s.DialerRetries, s.DisableIdentity)
+	}
+}

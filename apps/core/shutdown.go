@@ -36,6 +36,7 @@ func (a *app) shutdown(ctx context.Context, sup *supervisor, t tasks, cause erro
 	}
 	s.step("reconciler", plan.Reconciler, closeReconciler, t.reconciler)
 	s.step("router", plan.Router, a.router.Close, t.router)
+	s.step("cid batcher", plan.CIDBatch, a.cidBatch.Close, t.cidBatch)
 	s.step("flusher", plan.Flusher, a.flusher.Close, t.flusher)
 	s.step("publisher", plan.Publisher, a.publisher.Close, t.publisher)
 	s.step("slot manager", 0, nil, t.slots)

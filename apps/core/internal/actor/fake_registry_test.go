@@ -15,6 +15,7 @@ type fakeRegistry struct {
 	forced    map[dedupe.Key]dedupe.Status
 	err       error
 	delay     time.Duration
+	hold      chan struct{}
 	reserves  [][]dedupe.Key
 	commits   [][]dedupe.Entry
 	aborts    [][]dedupe.Key
@@ -46,7 +47,17 @@ func (f *fakeRegistry) Reserve(_ context.Context, keys []dedupe.Key) ([]dedupe.V
 	return out, nil
 }
 
-func (f *fakeRegistry) Commit(_ context.Context, entries []dedupe.Entry) error {
+func (f *fakeRegistry) Commit(ctx context.Context, entries []dedupe.Entry) error {
+	f.mu.Lock()
+	hold := f.hold
+	f.mu.Unlock()
+	if hold != nil {
+		select {
+		case <-hold:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.commits = append(f.commits, slices.Clone(entries))
@@ -79,6 +90,13 @@ func (f *fakeRegistry) force(k dedupe.Key, status dedupe.Status, rec dedupe.Reco
 		f.committed = map[dedupe.Key]dedupe.Record{}
 	}
 	f.forced[k], f.committed[k] = status, rec
+}
+
+func (f *fakeRegistry) holdCommits() (release func()) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.hold = make(chan struct{})
+	return sync.OnceFunc(func() { close(f.hold) })
 }
 
 func (f *fakeRegistry) fail(err error) {

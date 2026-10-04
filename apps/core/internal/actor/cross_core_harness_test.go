@@ -97,3 +97,21 @@ func awaitSignal(t *testing.T, what string, ch <-chan struct{}) {
 		t.Fatalf("%s did not happen within 30s", what)
 	}
 }
+
+type commitSignal struct {
+	actor.CIDRegistry
+	committed chan struct{}
+}
+
+func signalCommits(inner actor.CIDRegistry) commitSignal {
+	return commitSignal{CIDRegistry: inner, committed: make(chan struct{}, 1)}
+}
+
+func (s commitSignal) Commit(ctx context.Context, entries []dedupe.Entry) error {
+	err := s.CIDRegistry.Commit(ctx, entries)
+	select {
+	case s.committed <- struct{}{}:
+	default:
+	}
+	return err
+}

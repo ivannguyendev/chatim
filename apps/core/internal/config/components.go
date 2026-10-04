@@ -42,6 +42,11 @@ func (p *parser) components(c *Config) {
 		Timeout:      redisTimeout,
 		Cooldown:     redisCooldown,
 	}
+	c.CIDBatch = dedupe.BatchConfig{
+		Shards:  p.count("CID_BATCH_SHARDS", dedupe.DefaultBatchShards),
+		MaxKeys: p.count("CID_BATCH_MAX_KEYS", dedupe.DefaultBatchMaxKeys),
+		Queue:   p.count("CID_BATCH_QUEUE", dedupe.DefaultBatchQueue),
+	}
 	c.Publish = publish.Config{
 		SubjectRoot: subjectRoot,
 		Shards:      p.count("PUB_SHARDS", publish.DefaultShards),

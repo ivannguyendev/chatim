@@ -60,6 +60,10 @@ func (a *actor) conclude(ctx context.Context) {
 		return
 	}
 	detached := context.WithoutCancel(ctx)
+	for _, l := range a.landed {
+		a.cache.commit(l.e.key, l.ack)
+	}
+	a.publishLanded()
 	if len(a.landed) > 0 {
 		entries := make([]dedupe.Entry, len(a.landed))
 		for i, l := range a.landed {
@@ -76,10 +80,6 @@ func (a *actor) conclude(ctx context.Context) {
 	if len(released) > 0 {
 		_ = a.r.cids.Abort(detached, released)
 	}
-	for _, l := range a.landed {
-		a.cache.commit(l.e.key, l.ack)
-	}
-	a.publishLanded()
 	for _, f := range a.failed {
 		a.cache.fail(f.e.key, f.err)
 	}
