@@ -1,11 +1,14 @@
 package mongostore
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -119,4 +122,56 @@ func TestBootstrapRejectsUnclusteredMessages(t *testing.T) {
 	if !slices.Equal(names, []string{messagesCollection}) {
 		t.Fatalf("collections = %v, want only the pre-existing messages", names)
 	}
+}
+
+func feedState(t *testing.T, db *mongo.Database) feedPosition {
+	t.Helper()
+	var p feedPosition
+	if err := db.Collection(reconcilerStateCollection).FindOne(t.Context(), bson.D{{Key: "_id", Value: messagesFeedID}}).Decode(&p); err != nil {
+		t.Fatalf("load feed state: %v", err)
+	}
+	return p
+}
+
+func bootstrapTwice(t *testing.T, db *mongo.Database, want feedPosition) {
+	t.Helper()
+	for i := range 2 {
+		if err := Bootstrap(t.Context(), db); err != nil {
+			t.Fatalf("Bootstrap #%d: %v", i+1, err)
+		}
+		if got := feedState(t, db); got.At != want.At || !bytes.Equal(got.Token, want.Token) {
+			t.Fatalf("feed state after Bootstrap #%d = %+v, want %+v", i+1, got, want)
+		}
+	}
+}
+
+func TestBootstrapAnchorsTheFeedOnce(t *testing.T) {
+	s, db := itStore(t, itClient(t))
+	anchor := feedState(t, db)
+	if anchor.At.IsZero() || len(anchor.Token) != 0 {
+		t.Fatalf("anchor = %+v, want a cluster time and no token", anchor)
+	}
+	bootstrapTwice(t, db, anchor)
+	cur, err := NewFeed(db).Open(t.Context())
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = cur.Close(context.Background()) })
+	if res := s.Insert(t.Context(), []domain.Message{sampleMessage()}); res[0].Outcome != store.Inserted {
+		t.Fatalf("Insert = %+v, want inserted", res)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	c, err := cur.Next(ctx)
+	if err != nil {
+		t.Fatalf("Next: %v", err)
+	}
+	if err := cur.Confirm(t.Context(), c.Position); err != nil {
+		t.Fatalf("Confirm: %v", err)
+	}
+	confirmed := feedState(t, db)
+	if len(confirmed.Token) == 0 || confirmed.At.Compare(anchor.At) <= 0 {
+		t.Fatalf("confirmed = %+v, want a token after anchor %+v", confirmed, anchor)
+	}
+	bootstrapTwice(t, db, confirmed)
 }

@@ -48,7 +48,7 @@ type Feed struct {
 	lost      bool
 }
 
-func NewFeed(msgs *Messages) *Feed { return &Feed{msgs: msgs} }
+func NewFeed(msgs *Messages) *Feed { return &Feed{msgs: msgs, confirmed: msgs.logLen(), known: true} }
 
 func (f *Feed) LoseHistory() {
 	f.mu.Lock()

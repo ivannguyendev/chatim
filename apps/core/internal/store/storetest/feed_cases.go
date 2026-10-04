@@ -29,7 +29,7 @@ func RunFeed(t *testing.T, open func(t *testing.T) (store.Messages, store.Change
 func feedCases() []feedCase {
 	return []feedCase{
 		{"new inserts come out in commit order with their content", feedOrder},
-		{"inserts before the first open are not replayed", feedStartsNow},
+		{"inserts after bootstrap but before the first open are read", feedStartsAtBootstrap},
 		{"reopen resumes after the confirmed position", feedResume},
 		{"an older confirm does not move the position back", feedNoRewind},
 		{"forget restarts from now", feedForget},
@@ -100,9 +100,11 @@ func feedOrder(t *testing.T, msgs store.Messages, feed store.ChangeFeed) {
 	assertMessages(t, messagesOf(nextChanges(t, cur, len(want))), want)
 }
 
-func feedStartsNow(t *testing.T, msgs store.Messages, feed store.ChangeFeed) {
-	insertEach(t, msgs, msg(roomA, mainThread, 1))
+func feedStartsAtBootstrap(t *testing.T, msgs store.Messages, feed store.ChangeFeed) {
+	early := msg(roomA, mainThread, 1)
+	insertEach(t, msgs, early)
 	cur := openCursor(t, feed)
+	assertMessages(t, messagesOf(nextChanges(t, cur, 1)), []domain.Message{early})
 	later := msg(roomA, mainThread, 2)
 	insertEach(t, msgs, later)
 	assertMessages(t, messagesOf(nextChanges(t, cur, 1)), []domain.Message{later})

@@ -54,9 +54,11 @@ func (f *Feed) Open(ctx context.Context) (store.Cursor, error) {
 	opts := options.ChangeStream().SetMaxAwaitTime(feedMaxAwait)
 	var saved feedPosition
 	switch err := f.state.FindOne(ctx, bson.D{{Key: "_id", Value: messagesFeedID}}).Decode(&saved); {
-	case err == nil:
+	case err == nil && len(saved.Token) > 0:
 		opts.SetStartAfter(saved.Token)
-	case !errors.Is(err, mongo.ErrNoDocuments):
+	case err == nil && !saved.At.IsZero():
+		opts.SetStartAtOperationTime(&saved.At)
+	case err != nil && !errors.Is(err, mongo.ErrNoDocuments):
 		return nil, fmt.Errorf("load change feed position: %w", err)
 	}
 	pipeline := mongo.Pipeline{{{Key: "$match", Value: bson.D{{Key: "operationType", Value: "insert"}}}}}
