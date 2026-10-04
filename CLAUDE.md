@@ -8,14 +8,13 @@ chatim is an internal, logically multi-tenant chat platform (CPaaS) in Go. Phase
 - `core`: rooms, members, messages, seq allocation, MongoDB storage, events to NATS JetStream.
 - `gateway`: WebSocket via gws, realtime fanout. Not built yet.
 
-Done:
-- M0–M1: foundation and PoC.
-- M2a, merged to main (PR #5): core CreateRoom/SendMessage/GetHistory over gRPC, cid dedupe, JetStream publish, crash recovery (sweeper, replaced in M2a.1), and two cores in compose.
-- M2a.1, dev-done (PR from `fix/m2a1-event-identity`): no room-wide pts, natural event ids, best-effort events, a queue-only publisher on top of the nats.go async publisher (D47–D51, D50 revised).
-- M2a.2, done on `feat/m2a2-event-reconcile` (not merged): event reconciliation from the database change feed, with acked marks on the dedupe Redis (D52).
-- M2a.3, done on `feat/m2a3-write-path-perf` (not merged): cross-room cid batching (`dedupe.Batcher`), ack before the cid Commit, a small warm dedupe Redis pool without command retries, acked marks in a 10ms window (D58–D60). M2a.2 and M2a.3 merge together.
+Done and merged to `main` (`dev-done`):
+- M0–M1: foundation and PoC on dev.
+- M2a (PR #5): core CreateRoom/SendMessage/GetHistory over gRPC, cid dedupe, JetStream publish, two cores in compose.
+- M2a.1 (PR #8–#10): no room-wide pts, natural event ids, best-effort events, a queue-only publisher on top of the nats.go async publisher (D47–D51).
+- M2a.2 + M2a.3 (PR #11): event reconciliation from the database change feed with acked marks on the dedupe Redis (D52); cross-room cid batching, ack before the cid Commit, a small warm dedupe Redis pool, acked marks in a 10ms window (D58–D60).
 
-M2b (edit + history, delete, reactions, pins, read receipts) is on hold (2026-10-04): the owner wants every problem mapped to a shared system mechanism before more code. The draft map of mechanisms, gaps (H1–H8) and proposed roadmap is `docs/designs/261004-system-mechanisms.md`. Round 1 of external review (two reviewers) is summarised in `docs/research/261004-system-mechanisms-synthesis.md`; four open points went to round 2. When round 2 closes, the roadmap is rewritten around the data-class framework and the old design, plans and PoC docs move to `docs/archive/`. Do not plan or code M2b until the owner reopens it. The milestone order is in `docs/roadmap.md`. Project docs are written in Vietnamese.
+The system mechanisms review closed on 2026-10-05 after two rounds with two external reviewers. The result is one design, `docs/designs/261005-chatim-architecture.md`, built on a data-class framework (§4) with decisions D61–D77, and a rewritten `docs/roadmap.md`. Next is M2b.0 (mechanism foundations); its plan is not written yet. Old design, plans and PoC notes are in `docs/archive/` and are not updated. Project docs are written in Vietnamese.
 
 ## Hard rules
 
@@ -106,7 +105,7 @@ There is one module, `github.com/ivannguyendev/chatim`, and one Dockerfile (`dep
 **Key encoding (`pkg/keys`).** Big-endian uint64 fields are concatenated, so byte order matches numeric order:
 - messages `_id` = `room│thread_root│seq` (24B)
 - message_edits = the same plus a uint32 version (28B)
-- room_events = `room│pts` (16B), unused since M2a.1; revisit in M2b/M3
+- room_events = `room│pts` (16B), unused since M2a.1 and dropped from the design
 
 These are `_id`s of MongoDB clustered collections, so any history page, including the oldest, is one range scan. `thread_root = 0` is the main timeline, seq starts at 1, and `MaxUint64` is reserved.
 
@@ -174,11 +173,11 @@ Rules:
 - `/app probe` is the container healthcheck.
 - Every log line goes through a handler that redacts MONGO_URI and NATS_URL credentials, the Mongo password and both Redis passwords.
 
-**Shard-readiness rules (design §4.1).** Mongo runs as a replica set without sharding, but sharding must later need configuration only:
+**Shard-readiness rules (design §5.1).** Mongo runs as a replica set without sharding, but sharding must later need configuration only:
 - Large collections use a room-prefixed `_id`; the future shard key is `{_id: 1}`.
-- Every query on them carries the room prefix.
-- No multi-document transactions, and no `$lookup` into large collections.
-- The `reactions` unique index `{k,u,emoji}` starts with `k`.
+- Every query on `messages` carries the room prefix, and `messages` has no secondary index. Small fact collections (`message_edits`, `pin_actions`) may have `{room, ts}` (D70).
+- No multi-document transactions, and no `$lookup` into large collections. Bounded point lookups are fine; unbounded joins are not.
+- The `reactions` unique index `{k, emoji, u}` starts with `k` (D68).
 - The URI, read preference and write concern come from config.
 - Collections are created only in the bootstrap step.
 
@@ -189,13 +188,12 @@ Rules:
 
 ## Docs
 
-- `docs/designs/260930-chat-core-gateway-design.md`: the source of truth for the data model, write and read paths, failure handling and the Decision Log (D1–D52, D58–D60; D53–D57 are reserved for M2b). Add new decisions there.
-- `docs/plans/`: per-milestone plans, executed task by task with `subagent-driven-development` or `separate-driven-development`. M2a.1: `docs/plans/2026-10-03-m2a1-event-identity.md`. M2a.2: `docs/plans/2026-10-04-m2a2-event-reconcile.md`. M2a.3: `docs/plans/2026-10-04-m2a3-write-path-perf.md`.
-- `docs/poc/README.md`: PoC and corebench results (C1). Dev numbers only validate tools; go/no-go needs prod-like runs.
-- `docs/designs/261004-system-mechanisms.md`: draft review of shared system mechanisms (fact → effect, counter, reader view, permissions), gaps H1–H8, proposed roadmap and plan-writing rules; M2b waits on it.
-- `docs/research/261004-system-mechanisms-*`: the English report sent to external reviewers (`-report`), round 1 reviews (`-review-cl`, `-review-ge`), the owner-facing synthesis (`-synthesis`: what both agree on, what is wrong, proposed decisions) and round 2 questions (`-round2-cl`, `-round2-ge`: shared sections 0–3, reviewer-specific section 4).
-- `docs/roadmap.md`: milestone status and carried-over items.
+- `docs/designs/261005-chatim-architecture.md`: the single source of truth: requirements (R17 revised), principles P1–P8, the data-class framework every plan must use (§4), data model, write path (built and planned), counter, effect engine, read path, gateway, guarantees with detectors, and the Decision Log (D1–D60 kept by id, new D61–D77). Add new decisions there.
+- `docs/roadmap.md`: plan-writing rules, milestones M2b.0 → M5, dependencies, readiness.
+- `docs/plans/`: per-milestone plans written with `writing-plans` before coding, executed with `subagent-driven-development` or `separate-driven-development`. Empty until the M2b.0 plan is written.
+- `docs/poc/README.md`: dev results (R1–R5, C1) and the prod-like measurement list P1–P10. Dev numbers only validate tools.
+- `docs/research/261004-system-mechanisms-*`: the review record: the English report (`-report`), round 1 reviews (`-review-cl`, `-review-ge`), round 2 questions (`-round2-cl`, `-round2-ge`) and answers (`-round2-review-cl`, `-round2-review-ge`), and the owner-facing synthesis with every decision (`-synthesis`).
+- `docs/archive/`: the Phase 1 design (full D1–D60 rationale), the draft mechanisms review, the component diagrams, the M0–M2a.3 plans and the old PoC notes. Frozen.
 - `docs/git-workflow.md`: branches, merge Definition of Done, readiness levels, SemVer tags and handling a broken `main`.
-- `.claude/plans/m2a-core-send-history_design.md`: local (gitignored) M2a decision log.
-- `.claude/plans/m2b-core-mutations_design.md`: local (gitignored) M2a.1 + M2b decision log (requirements, D47–D57, rejected alternatives).
-- `.claude/plans/m2a2-event-reconcile_design.md`, `.claude/plans/m2a3-write-path-perf_design.md`: local (gitignored) M2a.2 and M2a.3 decision logs.
+- `.claude/plans/*_design.md`: local (gitignored) decision logs of M2a, M2a.1/M2b draft, M2a.2 and M2a.3.
+- Before writing the M3 plan, running the prod-like PoC or sizing the work stream or oplog, ask the owner for real numbers to replace the assumptions in design §2.3.

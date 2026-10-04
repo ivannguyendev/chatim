@@ -2,7 +2,7 @@
 
 Hạ tầng chat dùng chung (CPaaS nội bộ) cho nhiều sản phẩm: quản lý room, tin nhắn, tương tác realtime hiệu năng cao; lấy lịch sử cực nhanh ở bất kỳ vị trí nào; phát event mạnh tới các app khác kết nối vào. Multi-tenant về mặt logic.
 
-> Trạng thái: **M0–M1 (nền tảng + PoC) và M2a (core: CreateRoom/SendMessage/GetHistory qua gRPC, chống trùng cid, publish JetStream, 2 core trong compose) đã xong trên máy dev**. M2a.1 (bỏ `pts` toàn room, id event tự nhiên, publisher chỉ còn hàng đợi trên cơ chế async của nats.go, event best-effort — D47–D51) xong trên máy dev. M2a.2 (reconciler trên core giữ slot 0 đọc change stream của `messages`, publish bù event chưa có mark đã ack — D52) xong trên máy dev. M2a.3 (perf đường ghi: gom lệnh chống trùng cid giữa các room, ack trước Commit, client Redis dedupe pool nhỏ và ấm, mark đã ack gom trong cửa sổ 10ms — D58–D60) xong trên máy dev; M2a.2 và M2a.3 merge cùng lúc. Tiếp theo là M2b; quyết định go/no-go chờ PoC prod-like. Kết quả đo: [docs/poc/README.md](docs/poc/README.md). Bản đồ code: [INDEXES.csv](INDEXES.csv).
+> Trạng thái: **M0–M1 (nền tảng + PoC) và M2a (core: CreateRoom/SendMessage/GetHistory qua gRPC, chống trùng cid, publish JetStream, 2 core trong compose) đã xong trên máy dev**. M2a.1 (bỏ `pts` toàn room, id event tự nhiên, publisher chỉ còn hàng đợi trên cơ chế async của nats.go, event best-effort — D47–D51) xong trên máy dev. M2a.2 (reconciler trên core giữ slot 0 đọc change stream của `messages`, publish bù event chưa có mark đã ack — D52) xong trên máy dev. M2a.3 (perf đường ghi: gom lệnh chống trùng cid giữa các room, ack trước Commit, client Redis dedupe pool nhỏ và ấm, mark đã ack gom trong cửa sổ 10ms — D58–D60) xong trên máy dev; M2a.2 và M2a.3 đã merge cùng lúc (PR #11). Rà soát cơ chế hệ thống đã chốt (2026-10-05): [thiết kế kiến trúc](docs/designs/261005-chatim-architecture.md); tiếp theo là M2b.0 theo [roadmap](docs/roadmap.md); quyết định go/no-go chờ PoC prod-like. Kết quả đo: [docs/poc/README.md](docs/poc/README.md). Bản đồ code: [INDEXES.csv](INDEXES.csv).
 
 ## Kiến trúc
 
@@ -124,11 +124,9 @@ Với app, compose publish ra host chỉ gRPC của core, và chỉ trên loopba
 
 ## Tài liệu
 
-- [Thiết kế Phase 1: core + gateway](docs/designs/260930-chat-core-gateway-design.md)
-- [Nghiên cứu kiến trúc chat mã nguồn mở (tinode, teamgram, chatto, gws)](docs/research/260930-opensource-chat-architecture-research.md)
-- [Kết quả PoC](docs/poc/README.md)
+- [Kiến trúc hệ thống (nguồn sự thật)](docs/designs/261005-chatim-architecture.md)
 - [Roadmap](docs/roadmap.md)
-- [Plan M0–M1](docs/plans/2026-09-30-phase1-foundation-and-poc.md)
-- [Plan M2a.1](docs/plans/2026-10-03-m2a1-event-identity.md)
-- [Plan M2a.2](docs/plans/2026-10-04-m2a2-event-reconcile.md)
-- [Plan M2a.3](docs/plans/2026-10-04-m2a3-write-path-perf.md)
+- [Kết quả PoC](docs/poc/README.md)
+- [Tổng hợp phản biện cơ chế hệ thống](docs/research/261004-system-mechanisms-synthesis.md)
+- [Nghiên cứu kiến trúc chat mã nguồn mở (tinode, teamgram, chatto, gws)](docs/research/260930-opensource-chat-architecture-research.md)
+- [Archive: thiết kế Phase 1, plan M0–M2a.3, ghi chú PoC cũ](docs/archive/README.md)
