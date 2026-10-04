@@ -16,19 +16,39 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
-const markFailedMsg = "marking acked events failed; reconciliation republishes them"
+const (
+	markFailedMsg = "marking acked events failed; reconciliation republishes them"
+	markWindow    = 10 * time.Millisecond
+	markBatch     = 256
+)
 
 type recordingMarker struct {
-	mu   sync.Mutex
-	keys []store.MsgKey
-	err  error
+	mu    sync.Mutex
+	keys  []store.MsgKey
+	sizes []int
+	err   error
 }
 
 func (m *recordingMarker) Mark(_ context.Context, keys []store.MsgKey) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.keys = append(m.keys, keys...)
+	m.sizes = append(m.sizes, len(keys))
 	return m.err
+}
+
+func (m *recordingMarker) calls() []int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return slices.Clone(m.sizes)
+}
+
+func seqs(from, to uint64) []uint64 {
+	var out []uint64
+	for s := from; s <= to; s++ {
+		out = append(out, s)
+	}
+	return out
 }
 
 func (m *recordingMarker) marked() []store.MsgKey {
@@ -107,6 +127,68 @@ func TestMarkFailureIsOnlyLogged(t *testing.T) {
 		}
 		if ids := storedIDs(rg.js); len(ids) != 1 {
 			t.Fatalf("stored = %v, want the event despite the mark failure", ids)
+		}
+	})
+}
+
+func TestAcksWithinTheWindowShareOneMark(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		m := &recordingMarker{}
+		rg := newRig(t, fastSetup, publish.WithAckMarks(m)).start(t)
+		for seq := uint64(1); seq <= 10; seq++ {
+			rg.enqueue(t, roomA, seq)
+			synctest.Wait()
+			if seq < 10 {
+				time.Sleep(time.Millisecond)
+			}
+		}
+		if got := m.calls(); len(got) != 0 {
+			t.Fatalf("Mark calls inside the window = %v, want none", got)
+		}
+		time.Sleep(markWindow)
+		synctest.Wait()
+		if got := m.calls(); !slices.Equal(got, []int{10}) {
+			t.Fatalf("Mark calls after the window = %v, want [10]", got)
+		}
+		closeRig(t, rg)
+		if got := m.calls(); !slices.Equal(got, []int{10}) {
+			t.Fatalf("Mark calls after Close = %v, want [10]", got)
+		}
+	})
+}
+
+func TestFullBatchIsMarkedWithoutWaiting(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		m := &recordingMarker{}
+		rg := newRig(t, fastSetup, publish.WithAckMarks(m)).start(t)
+		rg.enqueue(t, roomA, seqs(1, markBatch+1)...)
+		synctest.Wait()
+		if got := m.calls(); !slices.Equal(got, []int{markBatch}) {
+			t.Fatalf("Mark calls before the window = %v, want [%d]", got, markBatch)
+		}
+		closeRig(t, rg)
+		if got := m.calls(); !slices.Equal(got, []int{markBatch, 1}) {
+			t.Fatalf("Mark calls after Close = %v, want [%d 1]", got, markBatch)
+		}
+	})
+}
+
+func TestCloseMarksKeysInAnOpenWindow(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		m := &recordingMarker{}
+		rg := newRig(t, fastSetup, publish.WithAckMarks(m)).start(t)
+		rg.enqueue(t, roomA, 1, 2, 3)
+		synctest.Wait()
+		if got := m.calls(); len(got) != 0 {
+			t.Fatalf("Mark calls inside the window = %v, want none", got)
+		}
+		start := time.Now()
+		closeRig(t, rg)
+		if waited := time.Since(start); waited != 0 {
+			t.Fatalf("Close waited %v for the window, want 0", waited)
+		}
+		if got := m.calls(); !slices.Equal(got, []int{3}) {
+			t.Fatalf("Mark calls after Close = %v, want [3]", got)
 		}
 	})
 }

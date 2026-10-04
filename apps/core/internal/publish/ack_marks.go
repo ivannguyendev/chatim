@@ -14,6 +14,7 @@ import (
 const (
 	markQueue   = 4096
 	markBatch   = 256
+	markWindow  = 10 * time.Millisecond
 	markTimeout = time.Second
 )
 
@@ -59,35 +60,35 @@ func (a *ackMarks) track(key store.MsgKey, f jetstream.PubAckFuture) {
 }
 
 func (a *ackMarks) run(abort <-chan struct{}) {
-	var batch []store.MsgKey
+	window := time.NewTimer(markWindow)
+	window.Stop()
+	defer window.Stop()
+	batch := make([]store.MsgKey, 0, markBatch)
 	for {
-		var t tracked
-		var open bool
-		if len(batch) == 0 {
-			select {
-			case t, open = <-a.queue:
-			case <-abort:
+		select {
+		case t, open := <-a.queue:
+			if !open {
+				a.flush(batch)
 				return
 			}
-		} else {
-			select {
-			case t, open = <-a.queue:
-			default:
-				a.flush(batch)
-				batch = batch[:0]
+			if !acked(t.future, abort) {
 				continue
 			}
-		}
-		if !open {
-			a.flush(batch)
-			return
-		}
-		if acked(t.future, abort) {
+			if len(batch) == 0 {
+				window.Reset(markWindow)
+			}
 			batch = append(batch, t.key)
-		}
-		if len(batch) >= markBatch {
+			if len(batch) >= markBatch {
+				window.Stop()
+				a.flush(batch)
+				batch = batch[:0]
+			}
+		case <-window.C:
 			a.flush(batch)
 			batch = batch[:0]
+		case <-abort:
+			a.flush(batch)
+			return
 		}
 	}
 }
