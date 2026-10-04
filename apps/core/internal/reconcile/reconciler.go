@@ -18,6 +18,7 @@ import (
 const (
 	historyLostMsg = "change feed history lost; restarting from now, events in the gap are lost for good"
 	lagMsg         = "reconciler lags behind the stream duplicate window; republished events may duplicate"
+	failedMsg      = "event republish failed; retrying"
 )
 
 var (
@@ -53,6 +54,7 @@ type Reconciler struct {
 	types   *roomTypes
 	drops   limitedLog
 	lags    limitedLog
+	fails   limitedLog
 	dropped atomic.Uint64
 	started atomic.Bool
 	stop    chan struct{}
@@ -74,7 +76,7 @@ func New(deps Deps, cfg Config, log *slog.Logger) (*Reconciler, error) {
 	return &Reconciler{
 		deps: deps, cfg: cfg, log: log,
 		types: newRoomTypes(deps.Rooms, cfg.RoomCache),
-		drops: limitedLog{log: log}, lags: limitedLog{log: log},
+		drops: limitedLog{log: log}, lags: limitedLog{log: log}, fails: limitedLog{log: log},
 		stop: make(chan struct{}), done: make(chan struct{}),
 	}, nil
 }
@@ -154,6 +156,10 @@ func (r *Reconciler) ended(ctx context.Context, err error) {
 func (r *Reconciler) drop(ctx context.Context, msg string, err error) {
 	r.dropped.Add(1)
 	r.drops.warn(ctx, msg, "err", err)
+}
+
+func (r *Reconciler) republishFailed(err error) {
+	r.fails.warn(context.Background(), failedMsg, "err", err)
 }
 
 func (r *Reconciler) watchLag(ctx context.Context, committed time.Time) {

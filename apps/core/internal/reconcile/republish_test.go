@@ -149,3 +149,24 @@ func TestFullWindowWaitsForTheHead(t *testing.T) {
 		}
 	})
 }
+
+func TestPersistentRefusalIsLoggedAndRetried(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		rg := newRig(t, nil).start(t)
+		synctest.Wait()
+		rg.js.RefuseWhen(func(*nats.Msg) error { return errors.New("no responders") })
+		rg.insert(t, room, 1)
+		time.Sleep(delay + 4*tick)
+		synctest.Wait()
+		attempts := attemptIDs(rg.js)
+		if len(attempts) < 3 {
+			t.Fatalf("attempts = %v, want the refused publish retried", attempts)
+		}
+		if got := rg.sink.Count(failedMsg); got < 1 || got > len(attempts) {
+			t.Fatalf("%q logged %d times for %d attempts, want at least once and at most once per attempt", failedMsg, got, len(attempts))
+		}
+		if got := rg.confirmed(t); got != 0 || len(rg.js.Stored()) != 0 {
+			t.Fatalf("confirmed = %d, stored = %v; want nothing past a refused publish", got, storedIDs(rg.js))
+		}
+	})
+}

@@ -31,6 +31,7 @@ const (
 	historyLostMsg = "change feed history lost; restarting from now, events in the gap are lost for good"
 	dropMsg        = "dropping change that cannot become an event"
 	lagMsg         = "reconciler lags behind the stream duplicate window; republished events may duplicate"
+	failedMsg      = "event republish failed; retrying"
 )
 
 var setup = reconcile.Config{

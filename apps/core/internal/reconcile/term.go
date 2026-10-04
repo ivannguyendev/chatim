@@ -1,7 +1,6 @@
 package reconcile
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"time"
@@ -19,14 +18,16 @@ type term struct {
 	failed    chan error
 	next      *store.Change
 	confirmed store.Position
+	checked   time.Time
 }
 
 func newTerm(r *Reconciler, cur store.Cursor) *term {
 	return &term{
 		r: r, cur: cur,
-		win:     newWindow(r.deps.JS, r.cfg.Window, r.cfg.Poll),
+		win:     newWindow(r.deps.JS, r.cfg.Window, r.cfg.Poll, r.republishFailed),
 		changes: make(chan store.Change, r.cfg.Batch),
 		failed:  make(chan error, 1),
+		checked: time.Now(),
 	}
 }
 
@@ -101,7 +102,7 @@ func (t *term) readFailure() error {
 }
 
 func (t *term) handle(ctx context.Context, first store.Change) error {
-	if err := sleep(ctx, t.r.stop, time.Until(first.CommittedAt.Add(t.r.cfg.Delay))); err != nil {
+	if err := t.pause(ctx, first.CommittedAt.Add(t.r.cfg.Delay)); err != nil {
 		return err
 	}
 	t.r.watchLag(ctx, first.CommittedAt)
@@ -151,35 +152,9 @@ func (t *term) publish(ctx context.Context, c store.Change) error {
 	case err != nil:
 		return err
 	}
-	if err := t.win.wait(ctx, t.r.stop); err != nil {
+	if err := t.makeRoom(ctx); err != nil {
 		return err
 	}
 	t.win.send(c.Position, msg)
 	return nil
-}
-
-func (t *term) checkpoint(ctx context.Context) error {
-	t.win.collect()
-	t.confirm(ctx)
-	if !t.r.leading() {
-		return errLostLead
-	}
-	return nil
-}
-
-func (t *term) settle(ctx context.Context) {
-	t.win.drain(ctx)
-	t.confirm(ctx)
-}
-
-func (t *term) confirm(ctx context.Context) {
-	pos := t.win.settled
-	if pos == nil || bytes.Equal(pos, t.confirmed) {
-		return
-	}
-	if err := t.cur.Confirm(ctx, pos); err != nil {
-		t.r.log.WarnContext(ctx, "confirm change feed position", "err", err)
-		return
-	}
-	t.confirmed = pos
 }
