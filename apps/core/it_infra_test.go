@@ -38,6 +38,7 @@ type itInfra struct {
 	mongo             *mongo.Client
 	rdb, dedupeRDB    *redis.Client
 	js                jetstream.JetStream
+	nc                *nats.Conn
 }
 
 func realInfra(t *testing.T) *itInfra {
@@ -69,6 +70,7 @@ func realInfra(t *testing.T) *itInfra {
 		t.Fatalf("nats connect: %v", err)
 	}
 	t.Cleanup(nc.Close)
+	it.nc = nc
 	if it.js, err = jetstream.New(nc); err != nil {
 		t.Fatalf("jetstream.New: %v", err)
 	}
