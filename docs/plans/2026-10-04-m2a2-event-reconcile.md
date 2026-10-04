@@ -1328,10 +1328,10 @@ func TestMain(m *testing.M) {
 }
 
 const (
-	tenant       = "acme"
-	room  uint64 = 4242
-	delay        = 30 * time.Second
-	tick         = time.Second
+	tenant        = "acme"
+	room   uint64 = 4242
+	delay         = 30 * time.Second
+	tick          = time.Second
 
 	historyLostMsg = "change feed history lost; restarting from now, events in the gap are lost for good"
 	dropMsg        = "dropping change that cannot become an event"
@@ -2811,3 +2811,8 @@ git commit -m "docs(poc): record corebench with the event reconciler on"
 - Nếu `redisguard.CheckClient` từ chối client dedupe vì tên/cấu hình: đọc `redisguard/guard.go:43`, không đổi client dedupe chỉ để qua kiểm.
 - Bitmap mark chỉ cho `msg_created`. Ở M2b, id event theo version (D53) cần namespace riêng; ghi vào plan M2b, không làm ở đây.
 - Reconciler publish qua JetStream client riêng, nên `PublishAsyncComplete` của publisher không chờ nó, và ngược lại.
+- Finding Minor từ review (chưa sửa, cân nhắc ở M2a.3 hoặc M5):
+  - Task 3: `eventmark.offset` còn chặn `> math.MaxInt64` không bao giờ đúng, chỉ để qua gosec. Pipeline `SETBIT` + `PEXPIRE` không phải transaction, nên một chunk có thể mất TTL; `allkeys-lru` vẫn đuổi nó, và cái giá chỉ là publish thừa. `ackMarks.flush` dùng context `Background`, không theo abort. Marker chờ ack theo thứ tự, nên một ack chậm có thể làm đầy hàng đợi 4096 (đúng thiết kế, R2).
+  - Task 4: `Marks.Acked` và `Rooms.Get` chạy theo context của `Run`, không theo `stop`, nên một lệnh Redis/Mongo treo có thể làm `Close` chậm tới hết ngân sách của lệnh đó.
+  - Task 5: `StopPlan.Reconciler` vẫn được tính khi `RECONCILE_ENABLED=false`. `RECONCILE_DELAY >= EVT_STREAM_DUPLICATES` sinh hai lỗi. Chuỗi `stopPhases` ghi cứng "+ 1s". `marks` và JetStream client của reconcile vẫn được tạo khi tắt reconciler.
+  - Task 6: test trong plan gốc đua với term đầu tiên (tin ghi trước khi feed mở thì không được bù); đã sửa bằng cách chờ log `reconcile term started` rồi mới ghi.

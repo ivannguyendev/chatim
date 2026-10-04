@@ -12,8 +12,9 @@ Done:
 - M0–M1: foundation and PoC.
 - M2a, merged to main (PR #5): core CreateRoom/SendMessage/GetHistory over gRPC, cid dedupe, JetStream publish, crash recovery (sweeper, replaced in M2a.1), and two cores in compose.
 - M2a.1, dev-done (PR from `fix/m2a1-event-identity`): no room-wide pts, natural event ids, best-effort events, a queue-only publisher on top of the nats.go async publisher (D47–D51, D50 revised).
+- M2a.2, done on `feat/m2a2-event-reconcile` (not merged): event reconciliation from the database change feed, with acked marks on the dedupe Redis (D52).
 
-Next is M2a.2 (event reconciliation from the database change feed, D52), then M2a.3 (write-path perf: cross-room cid batching, ack before Commit), then M2b: edit (+history), delete (for everyone / for me), reactions, pins, read receipts. The milestone order is in `docs/roadmap.md`. Project docs are written in Vietnamese.
+Next is M2a.3 (write-path perf: cross-room cid batching, ack before Commit), then M2b: edit (+history), delete (for everyone / for me), reactions, pins, read receipts. The milestone order is in `docs/roadmap.md`. Project docs are written in Vietnamese.
 
 ## Hard rules
 
@@ -118,11 +119,11 @@ These are `_id`s of MongoDB clustered collections, so any history page, includin
 3. `dedupe` checks the cid against a RAM LRU, then the dedupe Redis `chatim:cid:{room}:{user}:{cid}` (pending `p:{core}` for 10s, committed for 15m). Calls are batched per group. On Redis errors it falls back to the LRU only, using the `redisguard` cooldown.
 4. `flush.Flusher` shards batch groups into `insertMany(ordered:false, w:majority)` every 2ms or 256 docs. A group that can't finish by its deadline is not sent (`ErrNotSent`).
 5. Each insert ends as Inserted, Duplicate, Unknown or Rejected. Duplicate and Unknown are reconciled with `Find` (majority read) by (from, cid). Every retry is bounded by the cid reservation TTL, so a pending key never expires while an attempt is live.
-6. After commit: dedupe Commit (`c:{seq}:{ms}`), then ack, then `publish.Publisher` sends to stream `CHATIM_EVT` on subject `evt.{t}.room.{rid}.msg_created` with `Nats-Msg-Id` = the natural event id, RePublished to `live.*`. The publisher keeps only a queue per shard (sharded by slot), so Enqueue never blocks and a room's events keep arrival order; each shard calls `PublishMsgAsync` without waiting for acks. nats.go owns the in-flight limit (`PUB_MAX_PENDING`), ack timeouts (`PUB_ACK_TIMEOUT`) and no-leader retries; failures go to `WithPublishAsyncErrHandler` and are only logged, at most once per second (D50). Best-effort (D47): events lost on nack, ack timeout, too many in flight, queue full or crash are left to the M2a.2 reconciler (D52).
+6. After commit: dedupe Commit (`c:{seq}:{ms}`), then ack, then `publish.Publisher` sends to stream `CHATIM_EVT` on subject `evt.{t}.room.{rid}.msg_created` with `Nats-Msg-Id` = the natural event id, RePublished to `live.*`. The publisher keeps only a queue per shard (sharded by slot), so Enqueue never blocks and a room's events keep arrival order; each shard calls `PublishMsgAsync` without waiting for acks. nats.go owns the in-flight limit (`PUB_MAX_PENDING`), ack timeouts (`PUB_ACK_TIMEOUT`) and no-leader retries; failures go to `WithPublishAsyncErrHandler` and are only logged, at most once per second (D50). After each `PubAck` the publisher marks the message acked on the dedupe Redis, batched off the ack path (`publish.WithAckMarks` → `eventmark`). Best-effort (D47): events lost on nack, ack timeout, too many in flight, queue full or crash are republished by the reconciler (D52).
 
 `GetHistory` reads the store directly, not through actors.
 
-**Storage ports.** The ports are `store.Messages` and `store.Rooms`. The adapters are:
+**Storage ports.** The ports are `store.Messages`, `store.Rooms` and `store.ChangeFeed`. The adapters are:
 - `mongostore`: clustered collections, created by a bootstrap step at startup.
 - `memstore`: in-memory, used by unit tests.
 
@@ -130,7 +131,7 @@ Every adapter must pass the `storetest` contract suite, so a PostgreSQL adapter 
 
 **Two Redis instances (D44, D45).**
 - State, `chatim-redis`: used only by the slot manager: `chatim:core:*`, `chatim:cores`, `chatim:slot:*`, pub/sub `chatim:slots:changed`. AOF everysec, `noeviction`.
-- Dedupe, `chatim-redis-dedupe`: only `chatim:cid:*`. No persistence, `REDIS_DEDUPE_MAXMEMORY` (512mb), `allkeys-lru`. If it dies, dedupe falls back to the LRU.
+- Dedupe, `chatim-redis-dedupe`: `chatim:cid:*` and the acked-event bitmaps `chatim:evtack:{room}:{thread}:{seq>>13}` (one bit per message, TTL `EVT_ACK_MARK_TTL` 1h refreshed per chunk; a string key per message would be ~36M keys at 10K msg/s and evict cid keys). No persistence, `REDIS_DEDUPE_MAXMEMORY` (512mb), `allkeys-lru`. If it dies, dedupe falls back to the LRU and the reconciler republishes unmarked messages.
 - Both require AUTH. Passwords come from `.env` through compose secrets; cores read `REDIS_PASSWORD_FILE`/`REDIS_DEDUPE_PASSWORD_FILE`, tools read `-redis-password` or `REDIS_PASSWORD`. Passwords never go in argv, `docker inspect`, echoed make lines or logs.
 - There is no `REDISCLI_AUTH` env in the containers: use `make redis-cli [INSTANCE=dedupe] ARGS=…`.
 
@@ -155,10 +156,18 @@ Rules:
 
 **Invariant: any core must handle any room correctly.** Ownership only buys batching, ordering and cache hits. Correctness comes from the unique `_id` acting as CAS, so a Redis failover or a double owner never loses or duplicates a message.
 
+**Event reconciliation (`apps/core/internal/reconcile`, D52).**
+- Runs only on the slot 0 owner (`Owns(0)`, no extra lease); each lead is a term that opens the feed and logs `reconcile term started`. Overlapping reconcilers stay correct (same ids). `RECONCILE_ENABLED=false` turns it off; marks are still written.
+- Source is the database commit log through `store.ChangeFeed`/`store.Cursor`; the reconciler imports no driver. `mongostore.Feed` tails the `messages` change stream (insert only) and stores the position in `reconciler_state` (conditional, `w:majority`, never moves back). Every feed adapter must pass `storetest.RunFeed`.
+- Waits until `CommittedAt + RECONCILE_DELAY` (D = 30s), looks up acked marks per batch, and republishes unmarked messages rebuilt from the doc with the natural id on its own `jetstream.New` client (window `RECONCILE_WINDOW`, unbounded retry). A missing room or corrupt doc is dropped and logged.
+- `Confirm` only past changes that are all acked or marked, every `RECONCILE_CONFIRM_EVERY`; a term never blocks longer than that without a checkpoint (confirm + slot 0 check).
+- `EVT_STREAM_DUPLICATES` is 5m; boot rejects `RECONCILE_DELAY >= EVT_STREAM_DUPLICATES`. Lost history (`ErrFeedHistoryLost`) logs an error, `Forget`s and restarts from now; that gap is lost.
+- First-deploy gap (accepted): with no saved position the feed starts when the leader first opens it, so on a new database or after `Forget`, writes before the first term are not reconciled.
+
 **Process lifecycle (`apps/core`).**
 - Config is validated at boot by `apps/core/internal/config`, which applies cross-field timeout rules; components export `Validate()`.
-- Start order: publisher → flusher → router → slot manager → gRPC. gRPC is served only after a clean start.
-- Shutdown order: `/readyz` false → drain delay → gRPC → router → flusher → publisher (drains its queues, then waits for `PublishAsyncComplete` within `CORE_PUBLISHER_DRAIN`) → slot release → clients. All of it fits within `CORE_SHUTDOWN_BUDGET`.
+- Start order: publisher → flusher → router → slot manager → reconciler → gRPC. gRPC is served only after a clean start.
+- Shutdown order: `/readyz` false → drain delay → gRPC → reconciler (`RECONCILE_DRAIN + 1s`) → router → flusher → publisher (drains its queues, then waits for `PublishAsyncComplete` within `CORE_PUBLISHER_DRAIN`) → slot release → clients. All of it fits within `CORE_SHUTDOWN_BUDGET`: the default plan is 24s of 25s, so raising any stop phase needs a higher budget and compose `stop_grace_period` (30s).
 - `/app probe` is the container healthcheck.
 - Every log line goes through a handler that redacts MONGO_URI and NATS_URL credentials, the Mongo password and both Redis passwords.
 
@@ -178,7 +187,7 @@ Rules:
 ## Docs
 
 - `docs/designs/260930-chat-core-gateway-design.md`: the source of truth for the data model, write and read paths, failure handling and the Decision Log (D1–D52). Add new decisions there.
-- `docs/plans/`: per-milestone plans, executed task by task with `subagent-driven-development` or `separate-driven-development`. M2a.1: `docs/plans/2026-10-03-m2a1-event-identity.md`.
+- `docs/plans/`: per-milestone plans, executed task by task with `subagent-driven-development` or `separate-driven-development`. M2a.1: `docs/plans/2026-10-03-m2a1-event-identity.md`. M2a.2: `docs/plans/2026-10-04-m2a2-event-reconcile.md`.
 - `docs/poc/README.md`: PoC and corebench results (C1). Dev numbers only validate tools; go/no-go needs prod-like runs.
 - `docs/roadmap.md`: milestone status and carried-over items.
 - `docs/git-workflow.md`: branches, merge Definition of Done, readiness levels, SemVer tags and handling a broken `main`.
