@@ -37,7 +37,7 @@ type actor struct {
 	last    uint64
 	stale   bool
 	dirty   bool
-	members *lru[string, struct{}]
+	members *lru[string, domain.Member]
 	cache   cidCache
 	retries []*entry
 	flight  *group
@@ -57,7 +57,7 @@ func newActor(r *Router, id uint64) *actor {
 		retire:  make(chan struct{}),
 		gone:    make(chan struct{}),
 		dirty:   true,
-		members: newLRU[string, struct{}](memberCacheSize),
+		members: newLRU[string, domain.Member](memberCacheSize),
 		cache:   newCIDCache(cidCacheSize, cidCacheTTL),
 	}
 }

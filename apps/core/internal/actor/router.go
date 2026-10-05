@@ -2,13 +2,12 @@ package actor
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"sync"
 	"sync/atomic"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
-	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
 type Router struct {
@@ -17,6 +16,7 @@ type Router struct {
 	sub    Submitter
 	cids   CIDRegistry
 	events EventPublisher
+	policy access.Policy
 	cfg    Config
 	log    *slog.Logger
 
@@ -32,31 +32,6 @@ type Router struct {
 
 	yields       atomic.Uint64
 	cidElsewhere atomic.Uint64
-}
-
-func NewRouter(msgs store.Messages, rooms store.Rooms, sub Submitter, cids CIDRegistry, events EventPublisher, cfg Config, log *slog.Logger) (*Router, error) {
-	if msgs == nil || rooms == nil || sub == nil || cids == nil || events == nil {
-		return nil, fmt.Errorf("%w: router needs message and room stores, a submitter, a cid registry and an event publisher", apperr.ErrInvalidArgument)
-	}
-	if err := cfg.Validate(); err != nil {
-		return nil, err
-	}
-	if log == nil {
-		log = slog.Default()
-	}
-	return &Router{
-		msgs:    msgs,
-		rooms:   rooms,
-		sub:     sub,
-		cids:    cids,
-		events:  events,
-		cfg:     cfg,
-		log:     log,
-		actors:  make(map[uint64]*actor),
-		running: make(chan struct{}),
-		closing: make(chan struct{}),
-		done:    make(chan struct{}),
-	}, nil
 }
 
 func (r *Router) Run(ctx context.Context) error {

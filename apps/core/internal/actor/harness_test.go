@@ -47,7 +47,7 @@ type rig struct {
 	runErr error
 }
 
-func newRig(t *testing.T, cfg actor.Config) *rig {
+func newRig(t *testing.T, cfg actor.Config, opts ...actor.Option) *rig {
 	t.Helper()
 	base := memstore.NewMessages()
 	rg := &rig{
@@ -60,7 +60,7 @@ func newRig(t *testing.T, cfg actor.Config) *rig {
 	}
 	createRoom(t, rg.rooms, roomA, "alice", "bob")
 	createRoom(t, rg.rooms, roomB, "alice", "bob")
-	r, err := actor.NewRouter(rg.msgs, rg.rooms, rg.sub, rg.cids, rg.events, cfg, quiet)
+	r, err := actor.NewRouter(rg.msgs, rg.rooms, rg.sub, rg.cids, rg.events, cfg, quiet, opts...)
 	if err != nil {
 		t.Fatalf("NewRouter: %v", err)
 	}
