@@ -13,15 +13,15 @@
 | Phase | Milestone | Nội dung | Trạng thái |
 |---|---|---|---|
 | 1 | M0–M2a.3 — Nền tảng, PoC dev, gửi tin + lịch sử | Monorepo, Go qua Docker, hạ tầng dev; slot ownership mềm; PoC R1–R5 trên dev; `CreateRoom`/`SendMessage`/`GetHistory` qua gRPC, actor + flusher, chống trùng cid 3 tầng gom giữa các room, ack trước Commit; event best-effort với id tự nhiên; reconciler từ change stream của `messages` + ack mark bitmap; 2 core trong compose; corebench và bench-cell | ✅ `dev-done`, đã merge vào `main` (PR #2, #5, #8–#11) |
-| 1 | **M2b.0 — Nền cơ chế** | Sửa lỗi mark của publisher (mark theo event id + loại, D65); `RECONCILE_DELAY` theo effect, `msg_created` ~5s; actor tự rút khi va doc core khác + retry backoff/jitter (D77); reader pipeline + permission hook, áp vào `GetHistory` (thiết kế §9.2); detector/alert cho guarantee đang có RC1–RC5, CD1–CD3 (D76); contract test: mọi write method của adapter là insert unique, CAS, upsert hoặc bump version | ⏭ Tiếp theo — [plan](plans/2026-10-05-m2b0-mechanism-foundations.md) sẵn sàng |
-| 1 | M2b.1 — Effect engine | Reader trên slot 0 → JetStream work stream theo slot, id tự nhiên, worker ở mọi core, vị trí xác nhận theo work stream (D66); registry effect + chính sách (D65); chuyển reconcile `msg_created` sang engine; `room_created` là effect mới đầu tiên; room activity (`last_seq`, `last_msg_at`, `last_change_at`, `act_bucket`, ghi gom, D69); công cụ resync thủ công + diễn tập; đo xả backlog | Chưa |
+| 1 | **M2b.0 — Nền cơ chế** | Sửa lỗi mark của publisher (mark theo event id + loại, D65); `RECONCILE_DELAY` theo effect, `msg_created` ~5s; actor tự rút khi va doc core khác + retry backoff/jitter (D77); reader pipeline + permission hook, áp vào `GetHistory` (thiết kế §9.2); detector/alert cho guarantee đang có RC1–RC5, CD1–CD3 (D76); contract test: mọi write method của adapter là insert unique, CAS, upsert hoặc bump version | ✅ `dev-done` (trên `feat/m2b`, chưa merge `main`) — [plan](plans/2026-10-05-m2b0-mechanism-foundations.md); gồm `GET /metrics` và 13 luật alert (D78) |
+| 1 | M2b.1 — Effect engine | Reader trên slot 0 → JetStream work stream theo slot, id tự nhiên, worker ở mọi core, vị trí xác nhận theo work stream (D66); registry effect + chính sách (D65); chuyển reconcile `msg_created` sang engine; `room_created` là effect mới đầu tiên; room activity (`last_seq`, `last_msg_at`, `last_change_at`, `act_bucket`, ghi gom, D69); công cụ resync thủ công + diễn tập; đo xả backlog | ⏭ Tiếp theo — cần plan |
 | 1 | M2b.2 — Sửa + xoá | Fact `message_edits` + projection `messages` (D62); `base_ver`, `prev` ở v1 (D63); ack sau projection (D64); delay xoá 2–3s; hợp đồng xoá (D75); `GetEditHistory`; quyền tác giả/owner qua permission hook; ẩn phía tôi (`hidden` thưa) và clear history (`cleared_before_seq`) qua reader pipeline; index `{room, ts}` (D70) | Chưa |
 | 1 | M2b.3 — Reaction + ghim | Tập reaction `{k, emoji, u}` + `n` (D68); counter recount CAS-ver (D67); `pin_actions` + `base_pv` + kiểm ≤50 pin trước commit; event cho SysMsg (cid `sys:{event_id}`) | Chưa |
 | 1 | M2b.4 — Member + vị trí đọc | Fact member (thêm/bớt/rời/đổi role); `user_rooms {u│r}` (D72); `member_count`; event member trên subject user; vị trí đọc `$max` + event coalesce; đánh dấu chưa đọc (version + LWW) | Chưa |
 | 1 | M2c — Thread & tiện ích | Thread (`thread_count` là counter), mention, reply/forward (cid), bookmark | Chưa |
 | 1 | M3 — Đường đọc | **Trước khi viết plan: hỏi owner số thật** (thiết kế §2.3). `ListMyRooms` qua `user_rooms`; "có tin mới" đọc từ `messages`; room-tail cache; unread theo R17 mới (exact trong S, không thì `approx`, D73); sync token `room → last_seq` + full sync (D74); SDK reconnect jitter; API caller nội bộ cho SysMsg (`kind` + cờ unread); đồng bộ đa thiết bị qua subject user; `GetMessages`/`GetReactions`/`ListPins`/`ListBookmarks`; test sẵn sàng sharding trên cluster 2 shard | Chưa |
 | 1 | M4 — Gateway | WebSocket (gws), JWT/JWKS, frame protobuf, fanout theo interest, hàng đợi gửi có giới hạn, định tuyến theo slot; typing/presence ephemeral không qua core; subject user cho dữ liệu riêng; `member_removed` → unsubscribe; chế độ event không text cho tenant xoá chặt; không chuyển `kind`/cờ unread từ client; hằng số header tenant/user vào `pkg` | Chưa |
-| 1 | M5 — Hardening | Load test 100K kết nối, chaos test (kể cả R5 thật), OTel/Prometheus/Grafana, CI đầy đủ, ghim digest image, container theo uid, Sentinel (`FailoverClient`) cho cả hai Redis | Chưa |
+| 1 | M5 — Hardening | Load test 100K kết nối, chaos test (kể cả R5 thật), OTel/Prometheus/Grafana, CI đầy đủ, ghim digest image, container theo uid, Sentinel (`FailoverClient`) cho cả hai Redis; mục mang sang từ M2b.0 (xem dưới) | Chưa |
 | 1 | Channel | Room type channel (~200K subscriber, chỉ admin post): quyền post, fanout, counter lớn (bucket) | Chưa — chốt milestone sau M3 |
 | 1 | PoC prod-like (song song) | **Trước khi chạy: hỏi owner số thật.** Mongo rs 3 member NVMe, NATS 3 node, 2 host Linux, dữ liệu thật ≥1M tin; P1–P10 ở [poc/README.md](poc/README.md) → chốt database, go/no-go A1 | Chờ hạ tầng |
 | 2 | App `auth`, `api`, `events`, `push`, `migrator` | JWT/JWKS theo tenant; REST/BFF; gRPC stream cho app ngoài; push (badge xấp xỉ, D73); migrator dual-write/import (chế độ import im lặng để reconciler không phát hàng tỷ event) | Sau Phase 1 |
@@ -35,6 +35,21 @@
 - M2b.1 phải xong trước mọi tính năng có fact mới, vì effect của chúng chạy trên engine.
 - PoC prod-like chạy song song, xong trước M5 (chốt database). Storage nằm sau port nên PostgreSQL chỉ cần thêm adapter.
 - Phase 2 bắt đầu khi M4 xong.
+
+## Mục mang sang M5 (hardening)
+
+Từ M2b.0, chi tiết ở [plan, mục Kết quả thực thi](plans/2026-10-05-m2b0-mechanism-foundations.md#kết-quả-thực-thi-2026-10-05):
+
+- `room_yields_total` có thể đếm thừa khi hai entry cùng hết lượt trong một group hoặc slot đã yêu cầu retire.
+- Pause contention không thức dậy khi retire; mỗi actor bị tranh có thể dùng tới 200ms của `HookTimeout` slot.
+- `contentionWait` không reset sau chu kỳ tranh mà không có gì để retry.
+- Event còn trong hàng đợi khi publisher bị abort cưỡng bức không được đếm.
+- `reconcile_republished_total` đếm số lần gửi, nên thay đổi phát lại sau khi term restart bị đếm lại.
+- `ack_marks_dropped_total{reason=marker_failed}` là cận trên (đếm cả batch).
+- Chưa có test trực tiếp cho counter `MarkQueueFull` và `Malformed`.
+- Probe oplog đọc primary hai lần mỗi lần scrape, không cache.
+- Metric reconcile lấy một snapshot `Stats` cho mỗi metric.
+- `make vuln`: một cảnh báo cấp module GO-2026-5932 (`golang.org/x/crypto/openpgp`), có từ trước, code không gọi tới; xử lý khi nâng phụ thuộc.
 
 ## Mức sẵn sàng
 

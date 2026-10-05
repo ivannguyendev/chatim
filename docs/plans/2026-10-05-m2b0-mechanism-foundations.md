@@ -1124,7 +1124,7 @@ Thêm import `access`, `view`.
 `get_history.go`: xoá `authorizeRead`; trong `GetHistory` thay khối `if err := s.authorizeRead(...)` … `return &chatimv1.GetHistoryResponse{...}` bằng:
 
 ```go
-	req, err := s.access.Authorize(ctx, access.ReadHistory, who.tenant, who.user, q.Room)
+	grant, err := s.access.Authorize(ctx, access.ReadHistory, who.tenant, who.user, q.Room)
 	if err != nil {
 		return nil, err
 	}
@@ -1132,7 +1132,7 @@ Thêm import `access`, `view`.
 	if err != nil {
 		return nil, err
 	}
-	page = s.view.Apply(view.Viewer{User: who.user, Room: req.Room}, page)
+	page = s.view.Apply(view.Viewer{User: who.user, Room: grant.Room}, page)
 	out := make([]*chatimv1.Message, len(page))
 	for i, m := range page {
 		out[i] = pbconv.Message(m)
@@ -1205,8 +1205,8 @@ func TestEveryPortMethodHasAWriteContract(t *testing.T) {
 	}
 	seen := map[string]bool{}
 	for _, p := range ports {
-		for i := range p.NumMethod() {
-			name := p.Name() + "." + p.Method(i).Name
+		for m := range p.Methods() {
+			name := p.Name() + "." + m.Name
 			seen[name] = true
 			kind, ok := portMethods[name]
 			switch {
@@ -1717,7 +1717,7 @@ git commit -m "feat(core): expose redis degraded state and the mongo oplog windo
 **Step 1: Dependency**
 
 Run: `make go ARGS="get github.com/prometheus/client_golang@latest" && make tidy`
-Expected: `go.mod` có `github.com/prometheus/client_golang vX.Y.Z` ở khối require trực tiếp. Ghi version vào commit body. Sau đó `make vuln` → Expected: `No vulnerabilities found.`
+Expected: `go.mod` có `github.com/prometheus/client_golang vX.Y.Z` ở khối require trực tiếp. Ghi version vào commit body. Sau đó `make vuln` → Expected: `Your code is affected by 0 vulnerabilities` (có một cảnh báo cấp module GO-2026-5932 ở `golang.org/x/crypto/openpgp`, có sẵn từ trước, code không gọi tới).
 
 **Step 2: Test metrics**
 
@@ -2051,7 +2051,7 @@ func metricSources(p probes) []metrics.Source {
 func reconcileSources(stats func() reconcile.Stats) []metrics.Source {
 	return []metrics.Source{
 		{Name: "reconcile_running", Help: "1 while this core runs a reconcile term.", Gauge: true, Read: func() float64 { return flag(stats().Running) }},
-		{Name: "reconcile_lag_seconds", Help: "Age of the last change the reconciler handled.", Gauge: true, Read: func() float64 { return stats().Lag.Seconds() }},
+		{Name: "reconcile_lag_seconds", Help: "How far the reconciler runs behind its configured delay.", Gauge: true, Read: func() float64 { return stats().Lag.Seconds() }},
 		{Name: "reconcile_terms_total", Help: "Reconcile terms started on this core.", Read: func() float64 { return float64(stats().Terms) }},
 		{Name: "reconcile_republished_total", Help: "Events the reconciler sent again.", Read: func() float64 { return float64(stats().Republished) }},
 		{Name: "reconcile_dropped_total", Help: "Changes that could not become events.", Read: func() float64 { return float64(stats().Dropped) }},
@@ -2297,7 +2297,7 @@ git commit -m "docs: record M2b.0 mechanisms, detectors and decision D78"
 
 ### Task 15: Kiểm chứng cuối milestone
 
-**Step 1:** `make fmt-check && make vet && make lint && make vuln` → Expected: sạch, `No vulnerabilities found.`
+**Step 1:** `make fmt-check && make vet && make lint && make vuln` → Expected: sạch; vuln: `Your code is affected by 0 vulnerabilities` (có một cảnh báo cấp module GO-2026-5932 ở `golang.org/x/crypto/openpgp`, có sẵn từ trước, code không gọi tới).
 
 **Step 2:** `make test` → Expected: mọi package `ok`.
 
@@ -2307,7 +2307,7 @@ git commit -m "docs: record M2b.0 mechanisms, detectors and decision D78"
 
 **Step 5:** Kiểm `/metrics` trên cả hai core như Task 12 Step 5. Expected: đúng một core có `chatim_core_reconcile_running 1`; `chatim_core_room_yields_total` và `chatim_core_cid_pending_elsewhere_total` có mặt.
 
-**Step 6:** `make alerts-check` → Expected: `SUCCESS: 12 rules found`.
+**Step 6:** `make alerts-check` → Expected: `SUCCESS: 13 rules found` (thêm `ChatimOplogWindowUnknown` sau review Task 12).
 
 **Step 7:** M2b.0 không phải milestone perf: không chạy corebench sweep. Ghi kết quả các bước trên vào PR (mức sẵn sàng `dev-done`).
 
@@ -2320,3 +2320,30 @@ git commit -m "docs: record M2b.0 mechanisms, detectors and decision D78"
 - Không đổi hành vi slot manager: Task 3 không chạm `apps/core/internal/slot`, nên không cần R5.
 - `mongo_oplog_window_seconds` đọc `local.oplog.rs` mỗi lần scrape (2 lệnh `findOne`, timeout 2s). User Mongo của compose là root nên có quyền; prod cần quyền đọc `local`.
 - Số đo dev không phải tiêu chí ở milestone này; tiêu chí là test và detector có mặt.
+
+## Kết quả thực thi (2026-10-05)
+
+Mức sẵn sàng: `dev-done` trên `feat/m2b`. `make alerts-check`: 13 luật. `make vuln`: 0 lỗ hổng bị gọi tới; một cảnh báo cấp module GO-2026-5932 (`golang.org/x/crypto/openpgp`) có từ trước, code không gọi tới. `client_golang` v1.24.1.
+
+**Lệch so với plan**
+- Task 2: tách test "ack timeout ngay dưới thời gian drain của publisher" thành case riêng với `RECONCILE_DELAY=7s`.
+- Task 5: `NewRouter` chuyển sang `apps/core/internal/actor/router_new.go` (giới hạn kích thước `router.go`); `actor` xuất `Option`, `WithPolicy`, `Stats`.
+- Task 7: biến cục bộ đổi tên `grant` (đã sửa snippet trong plan).
+- Task 8: dùng iterator `Methods()` để qua lint (đã sửa snippet trong plan).
+- Task 9: fix thêm `f071dfb`: `Stats.Lag` / `reconcile_lag_seconds` = thời gian reconciler chạy trễ so với `RECONCILE_DELAY` (`max(tuổi - delay, 0)`), không phải tuổi thô.
+- Task 11: kỳ vọng `make vuln` đổi (cảnh báo module GO-2026-5932 có sẵn).
+- Task 13: fix thêm `2965edb`: luật thứ 13 `ChatimOplogWindowUnknown` (probe oplog trả NaN khi lỗi; luật `NaN != NaN`).
+- D65 với delay mặc định 5s: `PUB_ACK_TIMEOUT` phải dưới khoảng 3,99s (delay > ack timeout + 10ms + 1s).
+
+**Phát hiện Minor giữ làm known issue (không sửa)**
+1. `room_yields_total` có thể đếm thừa khi hai entry cùng hết lượt trong một group hoặc slot đã yêu cầu retire.
+2. Pause contention không thức dậy khi retire; mỗi actor bị tranh có thể dùng tới 200ms của `HookTimeout` slot.
+3. `contentionWait` không reset sau chu kỳ tranh mà không có gì để retry.
+4. Event còn trong hàng đợi khi publisher bị abort cưỡng bức không được đếm.
+5. `reconcile_republished_total` đếm số lần gửi, nên thay đổi phát lại sau khi term restart bị đếm lại.
+6. `ack_marks_dropped_total{reason=marker_failed}` là cận trên (đếm cả batch).
+7. Chưa có test trực tiếp cho counter `MarkQueueFull` và `Malformed`.
+8. Probe oplog đọc primary hai lần mỗi lần scrape, không cache.
+9. Metric reconcile lấy một snapshot `Stats` cho mỗi metric.
+
+Cả 9 mục đã ghi vào [roadmap](../roadmap.md) như mục mang sang M5.

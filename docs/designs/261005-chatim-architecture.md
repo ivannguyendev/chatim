@@ -141,7 +141,7 @@ Khoá nhị phân: các số `uint64` ghép big-endian nên thứ tự byte trù
 
 `Owns()` chỉ đúng khi lease mới hơn `min(LeaseTTL, HeartbeatTTL) − Tick`, tính từ đầu tick (D24), nên hai core cùng tưởng giữ một slot không quá ~1 tick. Hook nhận cả batch slot, dùng chung `HookTimeout` mỗi `Step` (D26); `BeforeRelease`, `AfterLose`, `AfterClaim` gọi `Router.EvictSlots` (D27, D49). Slot manager dùng Redis client riêng (D28). Client dùng `slotmap.Resolver` để map slot → địa chỉ core; gateway và `tools/internal/route` định tuyến mọi lệnh của một room về core chủ slot.
 
-**Khi va doc của core khác** (D77, chưa xây): actor tự rút (evict mình, nạp lại từ DB ở lệnh sau) và retry có backoff + jitter, để double ownership không tự khuếch đại thành bão retry. Không dùng fencing token.
+**Khi va doc của core khác** (D77) [Đã xây]: actor nghỉ có backoff `Jitter(5ms → 200ms)` giữa các vòng gán lại seq; hết lượt gán lại thì actor tự rút qua `a.retire` (cùng cơ chế với slot hook), nên lệnh sau đi về chủ thật và nạp lại từ DB. Double ownership không tự khuếch đại thành bão retry. Không dùng fencing token.
 
 ### 6.2 Gửi tin: actor + flusher + chống trùng cid [Đã xây]
 
@@ -199,7 +199,7 @@ Ngân sách: 1–3% tin (giả định §2.3) → 100–300 lệnh/s đỉnh, m�
 
 Sau ack, actor enqueue event vào `publish.Publisher` (D50): hàng đợi theo shard (theo slot), `Enqueue` không chặn, mỗi shard gọi `PublishMsgAsync` theo thứ tự nhận, không chờ ack. nats.go lo publish đang bay (`PUB_MAX_PENDING`), timeout (`PUB_ACK_TIMEOUT` 2s), retry khi chưa có leader; lỗi chỉ log ≤1 lần/giây. Stream `CHATIM_EVT`, subject `evt.{t}.room.{rid}.{type}` (dữ liệu riêng: `evt.{t}.user.{uid}.{type}`), `Nats-Msg-Id` = id tự nhiên, cửa sổ chống trùng `EVT_STREAM_DUPLICATES` 5m, RePublish sang `live.*`.
 
-Sau mỗi `PubAck`, publisher ghi ack mark lên Redis dedupe (`publish.WithAckMarks` → `eventmark`): bitmap `chatim:evtack:{room}:{thread}:{seq>>13}`, gom 10ms/256 key, `PEXPIRE` chunk tối đa mỗi TTL/4 (D60). **Lỗi cần sửa (M2b.0):** mark hiện theo (room, thread, seq), không theo loại event; khi có event thay đổi, ack của `msg_edited` sẽ bật bit và che mất `msg_created` bị rớt. Mark phải theo event id + loại (D65).
+Sau mỗi `PubAck`, publisher ghi ack mark lên Redis dedupe (`publish.WithAckMarks` → `eventmark`): bitmap `chatim:evtack:{room}:{thread}:{seq>>13}`, gom 10ms/256 key, `PEXPIRE` chunk tối đa mỗi TTL/4 (D60). Publisher chỉ mark event có chính sách ack mark (`markKey`, hiện chỉ `msg_created`), nên ack của event thay đổi (`msg_edited`…) không bật bit che mất `msg_created` bị rớt (D65). Boot kiểm `RECONCILE_DELAY > PUB_ACK_TIMEOUT + 10ms + 1s` (`publish.MarkDeadline`); mặc định 5s, nên `PUB_ACK_TIMEOUT` phải dưới khoảng 3,99s. Delay theo từng effect vẫn ở M2b.1.
 
 Event bị bỏ ở fast path: nack, timeout ack, quá nhiều publish đang bay, hàng đợi đầy, core chết giữa commit và publish.
 
@@ -237,7 +237,7 @@ Fast path và reconciler gọi cùng registry, nên kết quả không lệch (t
 
 `GetHistory(room, thread, anchor, dir, limit≤100)` quét khoảng `_id` clustered, đọc thẳng store, không qua actor.
 
-### 9.2 Reader pipeline + permission hook [Chưa xây]
+### 9.2 Reader pipeline + permission hook [Đã xây một phần]
 
 Mọi API đọc (`GetHistory`, `GetMessages`, `ListMyRooms`, `GetEditHistory`…) chạy qua một pipeline sau khi đọc store:
 1. Permission hook: một interface duy nhất (tenant, member, role, tác giả/owner, quyền đọc lịch sử sửa A7). Policy cắm sau (Phase 2).
@@ -246,6 +246,8 @@ Mọi API đọc (`GetHistory`, `GetMessages`, `ListMyRooms`, `GetEditHistory`�
 4. Gộp theo `(sender, cid)` để che lớp trùng CD2/CD3.
 
 Lệnh ghi cũng gọi cùng permission hook.
+
+**Đã xây (M2b.0):** bước 1 là `access.Policy` (interface một hàm `Check`) + `access.Checker` (luôn kiểm tenant và membership trước policy; `access.AllowMembers` là policy mặc định); `SendMessage` hỏi qua actor (`actor.WithPolicy`), `GetHistory` hỏi qua `grpcsrv`. Bước 4 là `view.Pipeline` với `view.CollapseRetried` (giữ seq nhỏ nhất của mỗi `(sender, cid)`); `view.Default()` dùng cho `GetHistory`. **Chưa xây:** ẩn và mặt nạ xoá (bước 2, 3) thuộc M2b.2.
 
 ### 9.3 Room list, unread, sync [Chưa xây]
 
@@ -277,19 +279,19 @@ Lệnh ghi cũng gọi cùng permission hook.
 
 ## 12. Guarantee và detector
 
-Mỗi guarantee có detector + alert ngay khi định nghĩa (D76), không đợi M5.
+Mỗi guarantee có detector + alert ngay khi định nghĩa (D76), không đợi M5. Detector là bộ đếm trong component, đăng ký vào `GET /metrics` của cổng admin (D78); luật alert ở `deploy/prometheus/alerts.yml` (13 luật), kiểm bằng `make alerts-check`. Mọi metric có tiền tố `chatim_core_`.
 
-| # | Guarantee | Detector / alert |
-|---|---|---|
-| RC1 | Mọi fact đã commit cuối cùng có event trên stream, trong delay của effect + lag reconciler | Metric tuổi thay đổi cũ nhất chưa xác nhận; alert khi vượt ngưỡng |
-| RC2 | Event bù giống hệt event fast path (id, nội dung) | Test parity trong CI cho mọi loại event |
-| RC3 | Reconciler/reader crash, restart, đổi chủ không làm mất gì | Itest; log `reconcile term started`; metric số term |
-| RC4 | Trùng được phép nhưng hiếm; người nhận bỏ theo id | Metric số event publish lại và số bản trùng bị stream từ chối |
-| RC5 | Khoảng mất ngoài oplog là mất hẳn | Alert log `change feed history lost`; metric cửa sổ oplog (giờ) và tuổi vị trí reader; alert khi cửa sổ < 2× ngưỡng |
-| CD1 | Retry cùng cid trong 15 phút trả đúng ack cũ, không thêm bản, trên mọi core | Metric hit theo tầng (LRU/pending/committed) |
-| CD2 | Redis dedupe chết → chỉ LRU, trùng giữa core có thể xảy ra | Log/metric vào chế độ suy giảm; alert |
-| CD3 | Core chết giữa insert và Commit, retry sau 10s ở core khác, tin ngoài 100 tin gần nhất → trùng | Metric `ErrRetryLater` do `PendingElsewhere`; phía đọc gộp theo `(sender, cid)` |
-| PJ1 | Projection cuối cùng khớp fact cuối | Metric số projection/counter reconciler phải sửa |
+| # | Guarantee | Detector / alert | Metric |
+|---|---|---|---|
+| RC1 | Mọi fact đã commit cuối cùng có event trên stream, trong delay của effect + lag reconciler | Metric tuổi thay đổi cũ nhất chưa xác nhận; alert khi vượt ngưỡng | `reconcile_lag_seconds` (thời gian reconciler chạy trễ so với `RECONCILE_DELAY`, không phải tuổi thô), `reconcile_running`; alert `ChatimReconcilerAbsent`, `ChatimReconcilerLagging`, `ChatimReconcilerDropping` |
+| RC2 | Event bù giống hệt event fast path (id, nội dung) | Test parity trong CI cho mọi loại event | (test parity, không có metric) |
+| RC3 | Reconciler/reader crash, restart, đổi chủ không làm mất gì | Itest; log `reconcile term started`; metric số term | `reconcile_terms_total` |
+| RC4 | Trùng được phép nhưng hiếm; người nhận bỏ theo id | Metric số event publish lại và số bản trùng bị stream từ chối | `reconcile_republished_total`, `publish_dropped_total{reason}`, `ack_marks_dropped_total{reason}`; alert `ChatimRepublishSurge`, `ChatimEventsDropped` |
+| RC5 | Khoảng mất ngoài oplog là mất hẳn | Alert log `change feed history lost`; metric cửa sổ oplog (giờ) và tuổi vị trí reader; alert khi cửa sổ < 2× ngưỡng | `reconcile_history_lost_total`, `mongo_oplog_window_seconds` (NaN khi không đọc được); alert `ChatimFeedHistoryLost`, `ChatimOplogWindowShort`, `ChatimOplogWindowCritical`, `ChatimOplogWindowUnknown` |
+| CD1 | Retry cùng cid trong 15 phút trả đúng ack cũ, không thêm bản, trên mọi core | Số Commit/Abort bị bỏ khỏi hàng đợi settle; Redis vào chế độ suy giảm | `cid_settle_dropped_total`, `redis_degraded{client}`; alert `ChatimCIDSettleDropped` |
+| CD2 | Redis dedupe chết → chỉ LRU, trùng giữa core có thể xảy ra | Log/metric vào chế độ suy giảm; alert | `redis_degraded{client}`; alert `ChatimRedisDegraded` |
+| CD3 | Core chết giữa insert và Commit, retry sau 10s ở core khác, tin ngoài 100 tin gần nhất → trùng | Metric `ErrRetryLater` do `PendingElsewhere`; phía đọc gộp theo `(sender, cid)` | `cid_pending_elsewhere_total`; alert `ChatimCIDPendingElsewhere` |
+| PJ1 | Projection cuối cùng khớp fact cuối | Metric số projection/counter reconciler phải sửa | (chưa có projection) |
 
 Vận hành: oplog `minRetentionHours` ≥ 24h; định cỡ oplog theo byte (đỉnh 10K tin/s × 1–2KB ≈ 0,9–1,7TB/ngày); work stream retention theo §8.3; đo bộ nhớ NATS cho map chống trùng 5m (~3M id ở 10K tin/s); tốc độ xả backlog ≥ 3× ingest đỉnh.
 
@@ -337,7 +339,7 @@ Vận hành: oplog `minRetentionHours` ≥ 24h; định cỡ oplog theo byte (đ
 
 ## 17. Decision Log
 
-Quyết định D1–D60 giữ id cũ; chi tiết và phương án bị loại ở [thiết kế Phase 1 (archive)](../archive/designs/260930-chat-core-gateway-design.md#14-decision-log). D53–D57 (nháp M2b) bị bỏ, thay bởi D61–D77.
+Quyết định D1–D60 giữ id cũ; chi tiết và phương án bị loại ở [thiết kế Phase 1 (archive)](../archive/designs/260930-chat-core-gateway-design.md#14-decision-log). D53–D57 (nháp M2b) bị bỏ, thay bởi D61–D78.
 
 ### 17.1 Còn hiệu lực từ D1–D60
 
@@ -385,3 +387,4 @@ Quyết định D1–D60 giữ id cũ; chi tiết và phương án bị loại �
 | D75 | Hợp đồng xoá: kho chính + huỷ hiển thị; log vận hành tự hết hạn; tenant xoá chặt dùng event không text | Purge mọi nơi; mã hoá theo tin rồi huỷ khoá | Purge JetStream chưa kiểm chứng; 5–20 tỷ khoá mã hoá không đáng |
 | D76 | Mỗi guarantee có detector + alert ngay khi định nghĩa | Để alert tới M5 | Guarantee không có detector thì không biết đã vỡ |
 | D77 | Không fencing; actor tự rút khi va doc core khác, retry có backoff + jitter; typing/presence ephemeral không qua core | Fencing epoch theo slot; typing qua slot router | P1 giữ đúng đắn; rủi ro thật là bão retry tự khuếch đại, không phải mất dữ liệu |
+| D78 | Detector là bộ đếm atomic + accessor trong component; package `metrics` đăng ký theo kiểu pull vào Prometheus registry riêng, `GET /metrics` trên cổng admin; luật alert trong repo, kiểm bằng `promtool` | Chỉ log; expvar; OTel metrics ngay | Owner chọn 2026-10-05; Prometheus đã nằm trong kế hoạch M5, pull không đổi đường nóng |

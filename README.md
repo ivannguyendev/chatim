@@ -62,6 +62,7 @@ Compose đọc `CORE_GOGC` (mặc định 100, thành `GOGC` của core) và `RE
     make itest                   # go test -race -shuffle=on -count=1 ./... với Mongo/Redis/NATS thật (cần infra-up)
     make core-up                 # build image apps/core, chạy core-1 + core-2 (profile app), chờ /readyz healthy
     make core-down               # dừng và xoá core-1, core-2
+    make alerts-check            # promtool kiểm deploy/prometheus/alerts.yml (trong Docker)
     make e2e                     # build tools/corecli, chạy scripts/e2e.sh (route theo slot, kill core-1, kiểm tra)
     make poc TOOL=corebench ARGS="-rate 5000 -duration 60s -watch 20"   # tải mở-vòng vào cụm core, cần core-up trước
 
@@ -78,7 +79,7 @@ Toàn bộ đọc qua `apps/core/internal/config`; thiếu thì dùng giá trị
 | `CORE_ID` | hostname | Định danh core, cũng là id gửi lên `chatim:cores` |
 | `CORE_GRPC_ADDR` | `:9000` | Địa chỉ lắng nghe gRPC |
 | `CORE_ADVERTISE_ADDR` | `<CORE_ID>:<cổng của CORE_GRPC_ADDR>` | Địa chỉ core tự quảng cáo cho slot lease |
-| `CORE_ADMIN_ADDR` | `:9090` | `/healthz`, `/readyz`, pprof — không công khai ra ngoài mạng compose |
+| `CORE_ADMIN_ADDR` | `:9090` | `/healthz`, `/readyz`, `/metrics` (Prometheus), pprof — không công khai ra ngoài mạng compose |
 | `MONGO_URI`, `MONGO_DB` | — / `chatim` | Bắt buộc có `MONGO_URI`. Compose truyền URI không kèm credential |
 | `MONGO_USER`, `MONGO_AUTH_SOURCE` | rỗng / `admin` | Nếu đặt `MONGO_USER` thì core xác thực bằng user này; không được đặt cùng lúc với credential trong `MONGO_URI` (D46) |
 | `MONGO_PASSWORD`, `MONGO_PASSWORD_FILE` | rỗng | Mật khẩu Mongo, cần `MONGO_USER`; `_FILE` đọc từ file (bỏ newline cuối) và thắng biến thường. Compose trỏ `_FILE` vào secret `mongo_password` (D46) |
@@ -120,7 +121,7 @@ Với app, compose publish ra host chỉ gRPC của core, và chỉ trên loopba
 | `6381` | `redis-dedupe` (`REDIS_DEDUPE_PORT`) | Không lưu đĩa, `maxmemory` `REDIS_DEDUPE_MAXMEMORY` (512mb), `allkeys-lru`, bắt buộc AUTH (`REDIS_DEDUPE_PASSWORD`) |
 | `127.0.0.1:9001` | `core-1` gRPC (`CORE1_GRPC_PORT`) | |
 | `127.0.0.1:9002` | `core-2` gRPC (`CORE2_GRPC_PORT`) | |
-| — | admin (`/healthz`, `/readyz`, pprof) mỗi core, cổng `9090` | Chỉ trong mạng compose, không publish ra host |
+| — | admin (`/healthz`, `/readyz`, `/metrics`, pprof) mỗi core, cổng `9090` | Chỉ trong mạng compose, không publish ra host |
 
 ## Tài liệu
 
