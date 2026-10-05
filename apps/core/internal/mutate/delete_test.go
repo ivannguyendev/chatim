@@ -1,0 +1,105 @@
+package mutate_test
+
+import (
+	"errors"
+	"testing"
+
+	"google.golang.org/protobuf/proto"
+
+	"github.com/ivannguyendev/chatim/apps/core/internal/access"
+	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/pbconv"
+	"github.com/ivannguyendev/chatim/pkg/apperr"
+)
+
+func TestDeletePurgesTheTextOfEarlierVersions(t *testing.T) {
+	rg := newRig(t, nil)
+	rg.send(t, 1, "alice", "v0")
+	for _, c := range []mutate.EditCmd{edit("alice", 1, 0, "v1"), edit("alice", 1, 1, "v2")} {
+		if _, err := rg.m.Edit(t.Context(), c); err != nil {
+			t.Fatalf("Edit base %d: %v", c.BaseVersion, err)
+		}
+	}
+	got, err := rg.m.Delete(t.Context(), del("alice", 1, 2))
+	if err != nil || !got.Deleted || got.Text != "" || got.Version != 3 {
+		t.Fatalf("Delete = %+v, %v; want deleted at version 3", got, err)
+	}
+	facts := rg.facts(t, 1)
+	if len(facts) != 3 || facts[2].Kind != domain.EditDelete {
+		t.Fatalf("facts = %+v, want v1, v2 and a delete", facts)
+	}
+	for _, f := range facts {
+		if f.Text != "" || f.Prev != "" {
+			t.Fatalf("fact v%d keeps text %q prev %q after delete", f.Version, f.Text, f.Prev)
+		}
+	}
+	if _, events := rg.events.list(); len(events) != 3 || !proto.Equal(events[2], pbconv.MessageDeleted(domain.RoomGroup, got, facts[2])) {
+		t.Fatalf("last event = %v, want msg_deleted v3", events)
+	}
+}
+
+func TestNothingChangesADeletedMessage(t *testing.T) {
+	rg := newRig(t, nil)
+	rg.send(t, 1, "alice", "v0")
+	if _, err := rg.m.Delete(t.Context(), del("alice", 1, 0)); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if _, err := rg.m.Edit(t.Context(), edit("alice", 1, 1, "back")); !errors.Is(err, domain.ErrMessageDeleted) {
+		t.Fatalf("edit after delete = %v, want ErrMessageDeleted", err)
+	}
+	if _, err := rg.m.Delete(t.Context(), del("alice", 1, 1)); !errors.Is(err, domain.ErrMessageDeleted) {
+		t.Fatalf("second delete = %v, want ErrMessageDeleted", err)
+	}
+	if got, err := rg.m.Delete(t.Context(), del("alice", 1, 0)); err != nil || !got.Deleted {
+		t.Fatalf("retried delete = %+v, %v; want success", got, err)
+	}
+	if facts := rg.facts(t, 1); len(facts) != 1 || facts[0].Kind != domain.EditDelete || facts[0].Prev != "" {
+		t.Fatalf("facts = %+v, want only the delete, without the original text", facts)
+	}
+}
+
+func TestChangesOfAnUnknownMessage(t *testing.T) {
+	rg := newRig(t, nil)
+	if _, err := rg.m.Edit(t.Context(), edit("alice", 9, 0, "x")); !errors.Is(err, domain.ErrMessageNotFound) {
+		t.Fatalf("Edit = %v, want ErrMessageNotFound", err)
+	}
+	if _, err := rg.m.Delete(t.Context(), del("alice", 9, 0)); !errors.Is(err, domain.ErrMessageNotFound) {
+		t.Fatalf("Delete = %v, want ErrMessageNotFound", err)
+	}
+}
+
+func TestARefusedEventDoesNotFailTheChange(t *testing.T) {
+	rg := newRig(t, nil)
+	rg.send(t, 1, "alice", "v0")
+	rg.events.err = errBoom
+	if got, err := rg.m.Edit(t.Context(), edit("alice", 1, 0, "v1")); err != nil || got.Version != 1 {
+		t.Fatalf("Edit with a refused event = %+v, %v; want success", got, err)
+	}
+}
+
+func TestNewRequiresEveryDependency(t *testing.T) {
+	rg := newRig(t, nil)
+	checker, err := access.NewChecker(rg.rooms, nil)
+	if err != nil {
+		t.Fatalf("NewChecker: %v", err)
+	}
+	full := mutate.Deps{Access: checker, Messages: rg.msgs, Edits: rg.edits, Hidden: rg.hidden, Rooms: rg.rooms, Events: rg.events}
+	for name, drop := range map[string]func(d *mutate.Deps){
+		"no access":   func(d *mutate.Deps) { d.Access = nil },
+		"no messages": func(d *mutate.Deps) { d.Messages = nil },
+		"no edits":    func(d *mutate.Deps) { d.Edits = nil },
+		"no hidden":   func(d *mutate.Deps) { d.Hidden = nil },
+		"no rooms":    func(d *mutate.Deps) { d.Rooms = nil },
+		"no events":   func(d *mutate.Deps) { d.Events = nil },
+	} {
+		d := full
+		drop(&d)
+		if _, err := mutate.New(d); !errors.Is(err, apperr.ErrInvalidArgument) {
+			t.Fatalf("%s: New = %v, want ErrInvalidArgument", name, err)
+		}
+	}
+	if _, err := mutate.New(full); err != nil {
+		t.Fatalf("New with a default clock: %v", err)
+	}
+}
