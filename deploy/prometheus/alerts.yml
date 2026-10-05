@@ -47,6 +47,14 @@ groups:
           guarantee: RC5
         annotations:
           summary: The oplog covers less than 24h, below the minimum retention.
+      - alert: ChatimOplogWindowUnknown
+        expr: count(chatim_core_mongo_oplog_window_seconds != chatim_core_mongo_oplog_window_seconds) > 0
+        for: 10m
+        labels:
+          severity: warning
+          guarantee: RC5
+        annotations:
+          summary: A core cannot read the oplog window; the RC5 detector is blind.
       - alert: ChatimRepublishSurge
         expr: sum(rate(chatim_core_reconcile_republished_total[5m])) > 100
         for: 10m
