@@ -169,7 +169,7 @@ func (r *Reconciler) republishFailed(err error) {
 
 func (r *Reconciler) watchLag(ctx context.Context, committed time.Time) {
 	lag := time.Since(committed)
-	r.stats.lag.Store(int64(lag))
+	r.stats.lag.Store(int64(max(lag-r.cfg.Delay, 0)))
 	if lag > r.cfg.DuplicateWindow {
 		r.lags.warn(ctx, lagMsg, "lag", lag, "window", r.cfg.DuplicateWindow)
 	}

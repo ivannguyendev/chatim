@@ -17,8 +17,8 @@ func TestStatsTrackTermsRepublishesAndLag(t *testing.T) {
 		time.Sleep(delay + tick)
 		synctest.Wait()
 		s := rg.Stats()
-		if !s.Running || s.Terms != 1 || s.Republished != 1 || s.Lag < delay {
-			t.Fatalf("stats = %+v, want running, 1 term, 1 republished, lag >= %v", s, delay)
+		if !s.Running || s.Terms != 1 || s.Republished != 1 || s.Lag < 0 || s.Lag >= tick {
+			t.Fatalf("stats = %+v, want running, 1 term, 1 republished, lag behind the delay < %v", s, tick)
 		}
 		rg.owner.leading.Store(false)
 		time.Sleep(2 * tick)
