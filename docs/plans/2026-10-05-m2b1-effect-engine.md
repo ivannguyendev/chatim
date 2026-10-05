@@ -9309,4 +9309,13 @@ Lỗi Minor còn mở:
 5. T12: (1) thời gian fetch hiệu dụng bằng 90% `WORK_FETCH_WAIT`; tin chưa đọc trong channel lúc ctx.Done hoặc tới sau deadline fetch chỉ giao lại sau `AckWait` 35s (chỉ trễ); (2) chưa có unit test cho `fetchError` deadline vs cancel; (3) bước dừng worker `Drain + 1s` = 2s có thể ngắn hơn thời gian chờ PubAck (~`PUB_ACK_TIMEOUT`) → "shutdown incomplete" dưới tải, record bị `Nak`, không mất; cân nhắc luật `WORK_DRAIN` so với `PUB_ACK_TIMEOUT`; (4) `stop_order_test` thiếu ca reader nil; (5) nhãn validation "WORK_*, SLOT_TICK" mơ hồ. Ghi chú T6: `Fetch` chờ trọn `WORK_FETCH_WAIT` khi lưu lượng nhẹ nên `room_activity` trễ ~1s; mỗi cửa sổ fetch chỉ kiểm shutdown/ownership một lần.
 6. T14: lỗi `config.Load` log không che (như serve); dòng báo cáo vẫn in khi Run lỗi (không có dấu partial); scan ngược giả định `CreatedAt` tăng đơn điệu theo seq (migrator/lệch đồng hồ có thể dừng sớm); range xa quá khứ đi qua các trang mới trước (chi phí runbook); negative check của drill là chờ cố định 3s; `resync` không tham số thoát mã 2 báo lỗi `-from` nhưng không liệt kê cờ; `config.Load` có thể đòi secret Redis cho container chỉ chạy resync (còn mở). Giới hạn đã ghi: thứ tự event trong room ngược; scan room bận từ tin mới nhất; lệch đồng hồ sát mép `-from`.
 
-Số đo xả backlog dev (Task 17): (controller điền)
+Số đo xả backlog dev (Task 17, W1 trong `docs/poc/README.md`): 36000 record xả trong ~4s ≈ ≥ 9000 record/s sau 35s ghi 1000 tin/s với reader tắt; lag worker tối đa 52.4s; failures 0; republish `room_created` 1000, `msg_created` 0; CPU_Speed_Limit 100. Mẫu thô: `bin/bench/m2b1-drain/samples.txt` (không commit). Vòng lấy mẫu không tự dừng (lỗi điều kiện trong script đo, không ảnh hưởng số).
+
+Kiểm chứng cuối (Task 17, 2026-10-05):
+- `make fmt-check`, `make vet`, `make lint` sạch; `make vuln`: "No vulnerabilities found", "Your code is affected by 0 vulnerabilities".
+- `make test`: mọi package `ok`, gồm `work`, `work/worktest`, `effects`, `resync`.
+- `make itest`: xanh sau Task 15 (5 itest end-to-end chạy thật); không chạy lại vì từ đó chỉ đổi docs.
+- `make e2e`: `e2e PASS: 40 messages before and 40 after killing core-1, no loss, no duplicate, every acked seq live` (80 seq live, 0 trùng).
+- `/metrics` hai core: đúng một core `reconcile_running 1`; `work_failures_total 0`; `effect_dropped_total` 0; `mongo_oplog_window_seconds` dương.
+- `make alerts-check`: `SUCCESS: 15 rules found`.
+- Mức sẵn sàng: `dev-done` trên `feat/m2b` (chưa merge `main`; merge một lần sau M2b.4).
