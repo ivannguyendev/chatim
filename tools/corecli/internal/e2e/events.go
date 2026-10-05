@@ -20,14 +20,18 @@ type Event struct {
 	Subject string `json:"subject,omitempty"`
 }
 
-func EventOf(subject string, ev *chatimv1.Event) Event {
+func EventOf(subject string, ev *chatimv1.Event) (Event, bool) {
+	created := ev.GetMessageCreated()
+	if created == nil {
+		return Event{}, false
+	}
 	return Event{
 		Room:    ev.GetRoomId(),
 		ID:      ev.GetId(),
 		Seq:     ev.GetSeq(),
-		CID:     ev.GetMessageCreated().GetMessage().GetCid(),
+		CID:     created.GetMessage().GetCid(),
 		Subject: subject,
-	}
+	}, true
 }
 
 func ReadEvents(path string) ([]Event, error) {

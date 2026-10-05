@@ -74,7 +74,11 @@ func watch(ctx context.Context, url, subject string, w io.Writer) error {
 		if err := proto.Unmarshal(msg.Data, &ev); err != nil {
 			return fmt.Errorf("decode event on %s: %w", msg.Subject, err)
 		}
-		if err := enc.Encode(e2e.EventOf(msg.Subject, &ev)); err != nil {
+		got, ok := e2e.EventOf(msg.Subject, &ev)
+		if !ok {
+			continue
+		}
+		if err := enc.Encode(got); err != nil {
 			return fmt.Errorf("write event: %w", err)
 		}
 	}
