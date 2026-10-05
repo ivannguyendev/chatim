@@ -53,6 +53,7 @@ func fixed(addr string) func(int) (string, bool) {
 }
 
 type fakeCore struct {
+	chatimv1.CoreServiceClient
 	mu      sync.Mutex
 	fail    []error
 	block   int

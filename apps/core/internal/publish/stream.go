@@ -18,6 +18,8 @@ const (
 
 	msgCreated  = "msg_created"
 	roomCreated = "room_created"
+	msgEdited   = "msg_edited"
+	msgDeleted  = "msg_deleted"
 )
 
 type StreamManager interface {

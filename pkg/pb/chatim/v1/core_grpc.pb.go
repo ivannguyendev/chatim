@@ -19,9 +19,14 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	CoreService_CreateRoom_FullMethodName  = "/chatim.v1.CoreService/CreateRoom"
-	CoreService_SendMessage_FullMethodName = "/chatim.v1.CoreService/SendMessage"
-	CoreService_GetHistory_FullMethodName  = "/chatim.v1.CoreService/GetHistory"
+	CoreService_CreateRoom_FullMethodName     = "/chatim.v1.CoreService/CreateRoom"
+	CoreService_SendMessage_FullMethodName    = "/chatim.v1.CoreService/SendMessage"
+	CoreService_GetHistory_FullMethodName     = "/chatim.v1.CoreService/GetHistory"
+	CoreService_EditMessage_FullMethodName    = "/chatim.v1.CoreService/EditMessage"
+	CoreService_DeleteMessage_FullMethodName  = "/chatim.v1.CoreService/DeleteMessage"
+	CoreService_HideMessage_FullMethodName    = "/chatim.v1.CoreService/HideMessage"
+	CoreService_ClearHistory_FullMethodName   = "/chatim.v1.CoreService/ClearHistory"
+	CoreService_GetEditHistory_FullMethodName = "/chatim.v1.CoreService/GetEditHistory"
 )
 
 // CoreServiceClient is the client API for CoreService service.
@@ -31,6 +36,11 @@ type CoreServiceClient interface {
 	CreateRoom(ctx context.Context, in *CreateRoomRequest, opts ...grpc.CallOption) (*CreateRoomResponse, error)
 	SendMessage(ctx context.Context, in *SendMessageRequest, opts ...grpc.CallOption) (*SendMessageResponse, error)
 	GetHistory(ctx context.Context, in *GetHistoryRequest, opts ...grpc.CallOption) (*GetHistoryResponse, error)
+	EditMessage(ctx context.Context, in *EditMessageRequest, opts ...grpc.CallOption) (*EditMessageResponse, error)
+	DeleteMessage(ctx context.Context, in *DeleteMessageRequest, opts ...grpc.CallOption) (*DeleteMessageResponse, error)
+	HideMessage(ctx context.Context, in *HideMessageRequest, opts ...grpc.CallOption) (*HideMessageResponse, error)
+	ClearHistory(ctx context.Context, in *ClearHistoryRequest, opts ...grpc.CallOption) (*ClearHistoryResponse, error)
+	GetEditHistory(ctx context.Context, in *GetEditHistoryRequest, opts ...grpc.CallOption) (*GetEditHistoryResponse, error)
 }
 
 type coreServiceClient struct {
@@ -71,6 +81,56 @@ func (c *coreServiceClient) GetHistory(ctx context.Context, in *GetHistoryReques
 	return out, nil
 }
 
+func (c *coreServiceClient) EditMessage(ctx context.Context, in *EditMessageRequest, opts ...grpc.CallOption) (*EditMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(EditMessageResponse)
+	err := c.cc.Invoke(ctx, CoreService_EditMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) DeleteMessage(ctx context.Context, in *DeleteMessageRequest, opts ...grpc.CallOption) (*DeleteMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteMessageResponse)
+	err := c.cc.Invoke(ctx, CoreService_DeleteMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) HideMessage(ctx context.Context, in *HideMessageRequest, opts ...grpc.CallOption) (*HideMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HideMessageResponse)
+	err := c.cc.Invoke(ctx, CoreService_HideMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) ClearHistory(ctx context.Context, in *ClearHistoryRequest, opts ...grpc.CallOption) (*ClearHistoryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ClearHistoryResponse)
+	err := c.cc.Invoke(ctx, CoreService_ClearHistory_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) GetEditHistory(ctx context.Context, in *GetEditHistoryRequest, opts ...grpc.CallOption) (*GetEditHistoryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetEditHistoryResponse)
+	err := c.cc.Invoke(ctx, CoreService_GetEditHistory_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CoreServiceServer is the server API for CoreService service.
 // All implementations must embed UnimplementedCoreServiceServer
 // for forward compatibility.
@@ -78,6 +138,11 @@ type CoreServiceServer interface {
 	CreateRoom(context.Context, *CreateRoomRequest) (*CreateRoomResponse, error)
 	SendMessage(context.Context, *SendMessageRequest) (*SendMessageResponse, error)
 	GetHistory(context.Context, *GetHistoryRequest) (*GetHistoryResponse, error)
+	EditMessage(context.Context, *EditMessageRequest) (*EditMessageResponse, error)
+	DeleteMessage(context.Context, *DeleteMessageRequest) (*DeleteMessageResponse, error)
+	HideMessage(context.Context, *HideMessageRequest) (*HideMessageResponse, error)
+	ClearHistory(context.Context, *ClearHistoryRequest) (*ClearHistoryResponse, error)
+	GetEditHistory(context.Context, *GetEditHistoryRequest) (*GetEditHistoryResponse, error)
 	mustEmbedUnimplementedCoreServiceServer()
 }
 
@@ -96,6 +161,21 @@ func (UnimplementedCoreServiceServer) SendMessage(context.Context, *SendMessageR
 }
 func (UnimplementedCoreServiceServer) GetHistory(context.Context, *GetHistoryRequest) (*GetHistoryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetHistory not implemented")
+}
+func (UnimplementedCoreServiceServer) EditMessage(context.Context, *EditMessageRequest) (*EditMessageResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method EditMessage not implemented")
+}
+func (UnimplementedCoreServiceServer) DeleteMessage(context.Context, *DeleteMessageRequest) (*DeleteMessageResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteMessage not implemented")
+}
+func (UnimplementedCoreServiceServer) HideMessage(context.Context, *HideMessageRequest) (*HideMessageResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method HideMessage not implemented")
+}
+func (UnimplementedCoreServiceServer) ClearHistory(context.Context, *ClearHistoryRequest) (*ClearHistoryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ClearHistory not implemented")
+}
+func (UnimplementedCoreServiceServer) GetEditHistory(context.Context, *GetEditHistoryRequest) (*GetEditHistoryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetEditHistory not implemented")
 }
 func (UnimplementedCoreServiceServer) mustEmbedUnimplementedCoreServiceServer() {}
 func (UnimplementedCoreServiceServer) testEmbeddedByValue()                     {}
@@ -172,6 +252,96 @@ func _CoreService_GetHistory_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CoreService_EditMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EditMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).EditMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_EditMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).EditMessage(ctx, req.(*EditMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_DeleteMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).DeleteMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_DeleteMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).DeleteMessage(ctx, req.(*DeleteMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_HideMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HideMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).HideMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_HideMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).HideMessage(ctx, req.(*HideMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_ClearHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ClearHistoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).ClearHistory(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_ClearHistory_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).ClearHistory(ctx, req.(*ClearHistoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_GetEditHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetEditHistoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).GetEditHistory(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_GetEditHistory_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).GetEditHistory(ctx, req.(*GetEditHistoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CoreService_ServiceDesc is the grpc.ServiceDesc for CoreService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -190,6 +360,26 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetHistory",
 			Handler:    _CoreService_GetHistory_Handler,
+		},
+		{
+			MethodName: "EditMessage",
+			Handler:    _CoreService_EditMessage_Handler,
+		},
+		{
+			MethodName: "DeleteMessage",
+			Handler:    _CoreService_DeleteMessage_Handler,
+		},
+		{
+			MethodName: "HideMessage",
+			Handler:    _CoreService_HideMessage_Handler,
+		},
+		{
+			MethodName: "ClearHistory",
+			Handler:    _CoreService_ClearHistory_Handler,
+		},
+		{
+			MethodName: "GetEditHistory",
+			Handler:    _CoreService_GetEditHistory_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

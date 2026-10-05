@@ -33,6 +33,10 @@ func eventKind(ev *chatimv1.Event) (string, bool) {
 		return msgCreated, true
 	case *chatimv1.Event_RoomCreated:
 		return roomCreated, true
+	case *chatimv1.Event_MessageEdited:
+		return msgEdited, true
+	case *chatimv1.Event_MessageDeleted:
+		return msgDeleted, true
 	default:
 		return "", false
 	}

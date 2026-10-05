@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -86,7 +87,18 @@ func Message(m domain.Message) *chatimv1.Message {
 		Text:       m.Text,
 		Cid:        m.CID,
 		CreatedAt:  timestamppb.New(m.CreatedAt),
+		Version:    m.Version,
+		Deleted:    m.Deleted,
+		EditedAt:   optionalTime(m.EditedAt),
+		Hidden:     m.Hidden,
 	}
+}
+
+func optionalTime(t time.Time) *timestamppb.Timestamp {
+	if t.IsZero() {
+		return nil
+	}
+	return timestamppb.New(t)
 }
 
 func MessageCreated(roomType domain.RoomType, m domain.Message) *chatimv1.Event {

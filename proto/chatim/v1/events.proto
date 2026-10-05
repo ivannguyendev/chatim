@@ -19,6 +19,8 @@ message Event {
   oneof payload {
     MessageCreated message_created = 20;
     RoomCreated room_created = 21;
+    MessageEdited message_edited = 22;
+    MessageDeleted message_deleted = 23;
   }
 }
 
@@ -28,4 +30,14 @@ message MessageCreated {
 
 message RoomCreated {
   Room room = 1;
+}
+
+message MessageEdited {
+  Message message = 1;
+  uint32 version = 2;
+}
+
+message MessageDeleted {
+  Message message = 1;
+  uint32 version = 2;
 }

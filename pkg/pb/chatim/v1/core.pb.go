@@ -172,6 +172,58 @@ func (HistoryAnchor) EnumDescriptor() ([]byte, []int) {
 	return file_chatim_v1_core_proto_rawDescGZIP(), []int{2}
 }
 
+type EditKind int32
+
+const (
+	EditKind_EDIT_KIND_UNSPECIFIED EditKind = 0
+	EditKind_EDIT_KIND_ORIGINAL    EditKind = 1
+	EditKind_EDIT_KIND_TEXT        EditKind = 2
+	EditKind_EDIT_KIND_DELETE      EditKind = 3
+)
+
+// Enum value maps for EditKind.
+var (
+	EditKind_name = map[int32]string{
+		0: "EDIT_KIND_UNSPECIFIED",
+		1: "EDIT_KIND_ORIGINAL",
+		2: "EDIT_KIND_TEXT",
+		3: "EDIT_KIND_DELETE",
+	}
+	EditKind_value = map[string]int32{
+		"EDIT_KIND_UNSPECIFIED": 0,
+		"EDIT_KIND_ORIGINAL":    1,
+		"EDIT_KIND_TEXT":        2,
+		"EDIT_KIND_DELETE":      3,
+	}
+)
+
+func (x EditKind) Enum() *EditKind {
+	p := new(EditKind)
+	*p = x
+	return p
+}
+
+func (x EditKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (EditKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_chatim_v1_core_proto_enumTypes[3].Descriptor()
+}
+
+func (EditKind) Type() protoreflect.EnumType {
+	return &file_chatim_v1_core_proto_enumTypes[3]
+}
+
+func (x EditKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use EditKind.Descriptor instead.
+func (EditKind) EnumDescriptor() ([]byte, []int) {
+	return file_chatim_v1_core_proto_rawDescGZIP(), []int{3}
+}
+
 type Room struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -274,6 +326,10 @@ type Message struct {
 	Text          string                 `protobuf:"bytes,7,opt,name=text,proto3" json:"text,omitempty"`
 	Cid           string                 `protobuf:"bytes,8,opt,name=cid,proto3" json:"cid,omitempty"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	Version       uint32                 `protobuf:"varint,10,opt,name=version,proto3" json:"version,omitempty"`
+	Deleted       bool                   `protobuf:"varint,11,opt,name=deleted,proto3" json:"deleted,omitempty"`
+	EditedAt      *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=edited_at,json=editedAt,proto3" json:"edited_at,omitempty"`
+	Hidden        bool                   `protobuf:"varint,13,opt,name=hidden,proto3" json:"hidden,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -364,6 +420,110 @@ func (x *Message) GetCreatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Message) GetVersion() uint32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *Message) GetDeleted() bool {
+	if x != nil {
+		return x.Deleted
+	}
+	return false
+}
+
+func (x *Message) GetEditedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EditedAt
+	}
+	return nil
+}
+
+func (x *Message) GetHidden() bool {
+	if x != nil {
+		return x.Hidden
+	}
+	return false
+}
+
+type MessageVersion struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Version       uint32                 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	Kind          EditKind               `protobuf:"varint,2,opt,name=kind,proto3,enum=chatim.v1.EditKind" json:"kind,omitempty"`
+	Text          string                 `protobuf:"bytes,3,opt,name=text,proto3" json:"text,omitempty"`
+	By            string                 `protobuf:"bytes,4,opt,name=by,proto3" json:"by,omitempty"`
+	At            *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=at,proto3" json:"at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MessageVersion) Reset() {
+	*x = MessageVersion{}
+	mi := &file_chatim_v1_core_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MessageVersion) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MessageVersion) ProtoMessage() {}
+
+func (x *MessageVersion) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_core_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MessageVersion.ProtoReflect.Descriptor instead.
+func (*MessageVersion) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_core_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *MessageVersion) GetVersion() uint32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *MessageVersion) GetKind() EditKind {
+	if x != nil {
+		return x.Kind
+	}
+	return EditKind_EDIT_KIND_UNSPECIFIED
+}
+
+func (x *MessageVersion) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *MessageVersion) GetBy() string {
+	if x != nil {
+		return x.By
+	}
+	return ""
+}
+
+func (x *MessageVersion) GetAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.At
+	}
+	return nil
+}
+
 type CreateRoomRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Type          RoomType               `protobuf:"varint,1,opt,name=type,proto3,enum=chatim.v1.RoomType" json:"type,omitempty"`
@@ -375,7 +535,7 @@ type CreateRoomRequest struct {
 
 func (x *CreateRoomRequest) Reset() {
 	*x = CreateRoomRequest{}
-	mi := &file_chatim_v1_core_proto_msgTypes[2]
+	mi := &file_chatim_v1_core_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -387,7 +547,7 @@ func (x *CreateRoomRequest) String() string {
 func (*CreateRoomRequest) ProtoMessage() {}
 
 func (x *CreateRoomRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_core_proto_msgTypes[2]
+	mi := &file_chatim_v1_core_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -400,7 +560,7 @@ func (x *CreateRoomRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateRoomRequest.ProtoReflect.Descriptor instead.
 func (*CreateRoomRequest) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{2}
+	return file_chatim_v1_core_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *CreateRoomRequest) GetType() RoomType {
@@ -433,7 +593,7 @@ type CreateRoomResponse struct {
 
 func (x *CreateRoomResponse) Reset() {
 	*x = CreateRoomResponse{}
-	mi := &file_chatim_v1_core_proto_msgTypes[3]
+	mi := &file_chatim_v1_core_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -445,7 +605,7 @@ func (x *CreateRoomResponse) String() string {
 func (*CreateRoomResponse) ProtoMessage() {}
 
 func (x *CreateRoomResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_core_proto_msgTypes[3]
+	mi := &file_chatim_v1_core_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -458,7 +618,7 @@ func (x *CreateRoomResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateRoomResponse.ProtoReflect.Descriptor instead.
 func (*CreateRoomResponse) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{3}
+	return file_chatim_v1_core_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *CreateRoomResponse) GetRoom() *Room {
@@ -480,7 +640,7 @@ type SendMessageRequest struct {
 
 func (x *SendMessageRequest) Reset() {
 	*x = SendMessageRequest{}
-	mi := &file_chatim_v1_core_proto_msgTypes[4]
+	mi := &file_chatim_v1_core_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -492,7 +652,7 @@ func (x *SendMessageRequest) String() string {
 func (*SendMessageRequest) ProtoMessage() {}
 
 func (x *SendMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_core_proto_msgTypes[4]
+	mi := &file_chatim_v1_core_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -505,7 +665,7 @@ func (x *SendMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendMessageRequest.ProtoReflect.Descriptor instead.
 func (*SendMessageRequest) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{4}
+	return file_chatim_v1_core_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *SendMessageRequest) GetRoomId() string {
@@ -546,7 +706,7 @@ type SendMessageResponse struct {
 
 func (x *SendMessageResponse) Reset() {
 	*x = SendMessageResponse{}
-	mi := &file_chatim_v1_core_proto_msgTypes[5]
+	mi := &file_chatim_v1_core_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -558,7 +718,7 @@ func (x *SendMessageResponse) String() string {
 func (*SendMessageResponse) ProtoMessage() {}
 
 func (x *SendMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_core_proto_msgTypes[5]
+	mi := &file_chatim_v1_core_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -571,7 +731,7 @@ func (x *SendMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendMessageResponse.ProtoReflect.Descriptor instead.
 func (*SendMessageResponse) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{5}
+	return file_chatim_v1_core_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *SendMessageResponse) GetSeq() uint64 {
@@ -601,7 +761,7 @@ type GetHistoryRequest struct {
 
 func (x *GetHistoryRequest) Reset() {
 	*x = GetHistoryRequest{}
-	mi := &file_chatim_v1_core_proto_msgTypes[6]
+	mi := &file_chatim_v1_core_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -613,7 +773,7 @@ func (x *GetHistoryRequest) String() string {
 func (*GetHistoryRequest) ProtoMessage() {}
 
 func (x *GetHistoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_core_proto_msgTypes[6]
+	mi := &file_chatim_v1_core_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -626,7 +786,7 @@ func (x *GetHistoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetHistoryRequest.ProtoReflect.Descriptor instead.
 func (*GetHistoryRequest) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{6}
+	return file_chatim_v1_core_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *GetHistoryRequest) GetRoomId() string {
@@ -673,7 +833,7 @@ type GetHistoryResponse struct {
 
 func (x *GetHistoryResponse) Reset() {
 	*x = GetHistoryResponse{}
-	mi := &file_chatim_v1_core_proto_msgTypes[7]
+	mi := &file_chatim_v1_core_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -685,7 +845,7 @@ func (x *GetHistoryResponse) String() string {
 func (*GetHistoryResponse) ProtoMessage() {}
 
 func (x *GetHistoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_core_proto_msgTypes[7]
+	mi := &file_chatim_v1_core_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -698,12 +858,556 @@ func (x *GetHistoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetHistoryResponse.ProtoReflect.Descriptor instead.
 func (*GetHistoryResponse) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{7}
+	return file_chatim_v1_core_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GetHistoryResponse) GetMessages() []*Message {
 	if x != nil {
 		return x.Messages
+	}
+	return nil
+}
+
+type EditMessageRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RoomId        string                 `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
+	ThreadRoot    uint64                 `protobuf:"varint,2,opt,name=thread_root,json=threadRoot,proto3" json:"thread_root,omitempty"`
+	Seq           uint64                 `protobuf:"varint,3,opt,name=seq,proto3" json:"seq,omitempty"`
+	BaseVersion   uint32                 `protobuf:"varint,4,opt,name=base_version,json=baseVersion,proto3" json:"base_version,omitempty"`
+	Text          string                 `protobuf:"bytes,5,opt,name=text,proto3" json:"text,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EditMessageRequest) Reset() {
+	*x = EditMessageRequest{}
+	mi := &file_chatim_v1_core_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EditMessageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EditMessageRequest) ProtoMessage() {}
+
+func (x *EditMessageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_core_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EditMessageRequest.ProtoReflect.Descriptor instead.
+func (*EditMessageRequest) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_core_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *EditMessageRequest) GetRoomId() string {
+	if x != nil {
+		return x.RoomId
+	}
+	return ""
+}
+
+func (x *EditMessageRequest) GetThreadRoot() uint64 {
+	if x != nil {
+		return x.ThreadRoot
+	}
+	return 0
+}
+
+func (x *EditMessageRequest) GetSeq() uint64 {
+	if x != nil {
+		return x.Seq
+	}
+	return 0
+}
+
+func (x *EditMessageRequest) GetBaseVersion() uint32 {
+	if x != nil {
+		return x.BaseVersion
+	}
+	return 0
+}
+
+func (x *EditMessageRequest) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+type EditMessageResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Message       *Message               `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EditMessageResponse) Reset() {
+	*x = EditMessageResponse{}
+	mi := &file_chatim_v1_core_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EditMessageResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EditMessageResponse) ProtoMessage() {}
+
+func (x *EditMessageResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_core_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EditMessageResponse.ProtoReflect.Descriptor instead.
+func (*EditMessageResponse) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_core_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *EditMessageResponse) GetMessage() *Message {
+	if x != nil {
+		return x.Message
+	}
+	return nil
+}
+
+type DeleteMessageRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RoomId        string                 `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
+	ThreadRoot    uint64                 `protobuf:"varint,2,opt,name=thread_root,json=threadRoot,proto3" json:"thread_root,omitempty"`
+	Seq           uint64                 `protobuf:"varint,3,opt,name=seq,proto3" json:"seq,omitempty"`
+	BaseVersion   uint32                 `protobuf:"varint,4,opt,name=base_version,json=baseVersion,proto3" json:"base_version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteMessageRequest) Reset() {
+	*x = DeleteMessageRequest{}
+	mi := &file_chatim_v1_core_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteMessageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteMessageRequest) ProtoMessage() {}
+
+func (x *DeleteMessageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_core_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteMessageRequest.ProtoReflect.Descriptor instead.
+func (*DeleteMessageRequest) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_core_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *DeleteMessageRequest) GetRoomId() string {
+	if x != nil {
+		return x.RoomId
+	}
+	return ""
+}
+
+func (x *DeleteMessageRequest) GetThreadRoot() uint64 {
+	if x != nil {
+		return x.ThreadRoot
+	}
+	return 0
+}
+
+func (x *DeleteMessageRequest) GetSeq() uint64 {
+	if x != nil {
+		return x.Seq
+	}
+	return 0
+}
+
+func (x *DeleteMessageRequest) GetBaseVersion() uint32 {
+	if x != nil {
+		return x.BaseVersion
+	}
+	return 0
+}
+
+type DeleteMessageResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Message       *Message               `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteMessageResponse) Reset() {
+	*x = DeleteMessageResponse{}
+	mi := &file_chatim_v1_core_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteMessageResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteMessageResponse) ProtoMessage() {}
+
+func (x *DeleteMessageResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_core_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteMessageResponse.ProtoReflect.Descriptor instead.
+func (*DeleteMessageResponse) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_core_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *DeleteMessageResponse) GetMessage() *Message {
+	if x != nil {
+		return x.Message
+	}
+	return nil
+}
+
+type HideMessageRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RoomId        string                 `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
+	ThreadRoot    uint64                 `protobuf:"varint,2,opt,name=thread_root,json=threadRoot,proto3" json:"thread_root,omitempty"`
+	Seq           uint64                 `protobuf:"varint,3,opt,name=seq,proto3" json:"seq,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HideMessageRequest) Reset() {
+	*x = HideMessageRequest{}
+	mi := &file_chatim_v1_core_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HideMessageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HideMessageRequest) ProtoMessage() {}
+
+func (x *HideMessageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_core_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HideMessageRequest.ProtoReflect.Descriptor instead.
+func (*HideMessageRequest) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_core_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *HideMessageRequest) GetRoomId() string {
+	if x != nil {
+		return x.RoomId
+	}
+	return ""
+}
+
+func (x *HideMessageRequest) GetThreadRoot() uint64 {
+	if x != nil {
+		return x.ThreadRoot
+	}
+	return 0
+}
+
+func (x *HideMessageRequest) GetSeq() uint64 {
+	if x != nil {
+		return x.Seq
+	}
+	return 0
+}
+
+type HideMessageResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HideMessageResponse) Reset() {
+	*x = HideMessageResponse{}
+	mi := &file_chatim_v1_core_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HideMessageResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HideMessageResponse) ProtoMessage() {}
+
+func (x *HideMessageResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_core_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HideMessageResponse.ProtoReflect.Descriptor instead.
+func (*HideMessageResponse) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_core_proto_rawDescGZIP(), []int{14}
+}
+
+type ClearHistoryRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RoomId        string                 `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
+	UpToSeq       uint64                 `protobuf:"varint,2,opt,name=up_to_seq,json=upToSeq,proto3" json:"up_to_seq,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClearHistoryRequest) Reset() {
+	*x = ClearHistoryRequest{}
+	mi := &file_chatim_v1_core_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClearHistoryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClearHistoryRequest) ProtoMessage() {}
+
+func (x *ClearHistoryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_core_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClearHistoryRequest.ProtoReflect.Descriptor instead.
+func (*ClearHistoryRequest) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_core_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ClearHistoryRequest) GetRoomId() string {
+	if x != nil {
+		return x.RoomId
+	}
+	return ""
+}
+
+func (x *ClearHistoryRequest) GetUpToSeq() uint64 {
+	if x != nil {
+		return x.UpToSeq
+	}
+	return 0
+}
+
+type ClearHistoryResponse struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	ClearedBeforeSeq uint64                 `protobuf:"varint,1,opt,name=cleared_before_seq,json=clearedBeforeSeq,proto3" json:"cleared_before_seq,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ClearHistoryResponse) Reset() {
+	*x = ClearHistoryResponse{}
+	mi := &file_chatim_v1_core_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClearHistoryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClearHistoryResponse) ProtoMessage() {}
+
+func (x *ClearHistoryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_core_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClearHistoryResponse.ProtoReflect.Descriptor instead.
+func (*ClearHistoryResponse) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_core_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *ClearHistoryResponse) GetClearedBeforeSeq() uint64 {
+	if x != nil {
+		return x.ClearedBeforeSeq
+	}
+	return 0
+}
+
+type GetEditHistoryRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RoomId        string                 `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
+	ThreadRoot    uint64                 `protobuf:"varint,2,opt,name=thread_root,json=threadRoot,proto3" json:"thread_root,omitempty"`
+	Seq           uint64                 `protobuf:"varint,3,opt,name=seq,proto3" json:"seq,omitempty"`
+	AfterVersion  uint32                 `protobuf:"varint,4,opt,name=after_version,json=afterVersion,proto3" json:"after_version,omitempty"`
+	Limit         uint32                 `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetEditHistoryRequest) Reset() {
+	*x = GetEditHistoryRequest{}
+	mi := &file_chatim_v1_core_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetEditHistoryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetEditHistoryRequest) ProtoMessage() {}
+
+func (x *GetEditHistoryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_core_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetEditHistoryRequest.ProtoReflect.Descriptor instead.
+func (*GetEditHistoryRequest) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_core_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *GetEditHistoryRequest) GetRoomId() string {
+	if x != nil {
+		return x.RoomId
+	}
+	return ""
+}
+
+func (x *GetEditHistoryRequest) GetThreadRoot() uint64 {
+	if x != nil {
+		return x.ThreadRoot
+	}
+	return 0
+}
+
+func (x *GetEditHistoryRequest) GetSeq() uint64 {
+	if x != nil {
+		return x.Seq
+	}
+	return 0
+}
+
+func (x *GetEditHistoryRequest) GetAfterVersion() uint32 {
+	if x != nil {
+		return x.AfterVersion
+	}
+	return 0
+}
+
+func (x *GetEditHistoryRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type GetEditHistoryResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Versions      []*MessageVersion      `protobuf:"bytes,1,rep,name=versions,proto3" json:"versions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetEditHistoryResponse) Reset() {
+	*x = GetEditHistoryResponse{}
+	mi := &file_chatim_v1_core_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetEditHistoryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetEditHistoryResponse) ProtoMessage() {}
+
+func (x *GetEditHistoryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_core_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetEditHistoryResponse.ProtoReflect.Descriptor instead.
+func (*GetEditHistoryResponse) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_core_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *GetEditHistoryResponse) GetVersions() []*MessageVersion {
+	if x != nil {
+		return x.Versions
 	}
 	return nil
 }
@@ -722,7 +1426,7 @@ const file_chatim_v1_core_proto_rawDesc = "" +
 	"created_by\x18\x05 \x01(\tR\tcreatedBy\x129\n" +
 	"\n" +
 	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12!\n" +
-	"\fmember_count\x18\a \x01(\x05R\vmemberCount\"\x85\x02\n" +
+	"\fmember_count\x18\a \x01(\x05R\vmemberCount\"\x8a\x03\n" +
 	"\aMessage\x12\x17\n" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x1f\n" +
 	"\vthread_root\x18\x02 \x01(\x04R\n" +
@@ -733,7 +1437,18 @@ const file_chatim_v1_core_proto_rawDesc = "" +
 	"\x04text\x18\a \x01(\tR\x04text\x12\x10\n" +
 	"\x03cid\x18\b \x01(\tR\x03cid\x129\n" +
 	"\n" +
-	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAtJ\x04\b\x04\x10\x05R\x03pts\"j\n" +
+	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x18\n" +
+	"\aversion\x18\n" +
+	" \x01(\rR\aversion\x12\x18\n" +
+	"\adeleted\x18\v \x01(\bR\adeleted\x127\n" +
+	"\tedited_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\beditedAt\x12\x16\n" +
+	"\x06hidden\x18\r \x01(\bR\x06hiddenJ\x04\b\x04\x10\x05R\x03pts\"\xa3\x01\n" +
+	"\x0eMessageVersion\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\rR\aversion\x12'\n" +
+	"\x04kind\x18\x02 \x01(\x0e2\x13.chatim.v1.EditKindR\x04kind\x12\x12\n" +
+	"\x04text\x18\x03 \x01(\tR\x04text\x12\x0e\n" +
+	"\x02by\x18\x04 \x01(\tR\x02by\x12*\n" +
+	"\x02at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x02at\"j\n" +
 	"\x11CreateRoomRequest\x12'\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x13.chatim.v1.RoomTypeR\x04type\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
@@ -758,7 +1473,44 @@ const file_chatim_v1_core_proto_rawDesc = "" +
 	"\x03seq\x18\x04 \x01(\x04R\x03seq\x12\x14\n" +
 	"\x05limit\x18\x05 \x01(\x05R\x05limit\"D\n" +
 	"\x12GetHistoryResponse\x12.\n" +
-	"\bmessages\x18\x01 \x03(\v2\x12.chatim.v1.MessageR\bmessages*L\n" +
+	"\bmessages\x18\x01 \x03(\v2\x12.chatim.v1.MessageR\bmessages\"\x97\x01\n" +
+	"\x12EditMessageRequest\x12\x17\n" +
+	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x1f\n" +
+	"\vthread_root\x18\x02 \x01(\x04R\n" +
+	"threadRoot\x12\x10\n" +
+	"\x03seq\x18\x03 \x01(\x04R\x03seq\x12!\n" +
+	"\fbase_version\x18\x04 \x01(\rR\vbaseVersion\x12\x12\n" +
+	"\x04text\x18\x05 \x01(\tR\x04text\"C\n" +
+	"\x13EditMessageResponse\x12,\n" +
+	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\"\x85\x01\n" +
+	"\x14DeleteMessageRequest\x12\x17\n" +
+	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x1f\n" +
+	"\vthread_root\x18\x02 \x01(\x04R\n" +
+	"threadRoot\x12\x10\n" +
+	"\x03seq\x18\x03 \x01(\x04R\x03seq\x12!\n" +
+	"\fbase_version\x18\x04 \x01(\rR\vbaseVersion\"E\n" +
+	"\x15DeleteMessageResponse\x12,\n" +
+	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\"`\n" +
+	"\x12HideMessageRequest\x12\x17\n" +
+	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x1f\n" +
+	"\vthread_root\x18\x02 \x01(\x04R\n" +
+	"threadRoot\x12\x10\n" +
+	"\x03seq\x18\x03 \x01(\x04R\x03seq\"\x15\n" +
+	"\x13HideMessageResponse\"J\n" +
+	"\x13ClearHistoryRequest\x12\x17\n" +
+	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x1a\n" +
+	"\tup_to_seq\x18\x02 \x01(\x04R\aupToSeq\"D\n" +
+	"\x14ClearHistoryResponse\x12,\n" +
+	"\x12cleared_before_seq\x18\x01 \x01(\x04R\x10clearedBeforeSeq\"\x9e\x01\n" +
+	"\x15GetEditHistoryRequest\x12\x17\n" +
+	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x1f\n" +
+	"\vthread_root\x18\x02 \x01(\x04R\n" +
+	"threadRoot\x12\x10\n" +
+	"\x03seq\x18\x03 \x01(\x04R\x03seq\x12#\n" +
+	"\rafter_version\x18\x04 \x01(\rR\fafterVersion\x12\x14\n" +
+	"\x05limit\x18\x05 \x01(\rR\x05limit\"O\n" +
+	"\x16GetEditHistoryResponse\x125\n" +
+	"\bversions\x18\x01 \x03(\v2\x19.chatim.v1.MessageVersionR\bversions*L\n" +
 	"\bRoomType\x12\x19\n" +
 	"\x15ROOM_TYPE_UNSPECIFIED\x10\x00\x12\x10\n" +
 	"\fROOM_TYPE_DM\x10\x01\x12\x13\n" +
@@ -771,13 +1523,23 @@ const file_chatim_v1_core_proto_rawDesc = "" +
 	"\x15HISTORY_ANCHOR_LATEST\x10\x01\x12\x19\n" +
 	"\x15HISTORY_ANCHOR_OLDEST\x10\x02\x12\x19\n" +
 	"\x15HISTORY_ANCHOR_BEFORE\x10\x03\x12\x18\n" +
-	"\x14HISTORY_ANCHOR_AFTER\x10\x042\xf1\x01\n" +
+	"\x14HISTORY_ANCHOR_AFTER\x10\x04*g\n" +
+	"\bEditKind\x12\x19\n" +
+	"\x15EDIT_KIND_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x12EDIT_KIND_ORIGINAL\x10\x01\x12\x12\n" +
+	"\x0eEDIT_KIND_TEXT\x10\x02\x12\x14\n" +
+	"\x10EDIT_KIND_DELETE\x10\x032\x89\x05\n" +
 	"\vCoreService\x12I\n" +
 	"\n" +
 	"CreateRoom\x12\x1c.chatim.v1.CreateRoomRequest\x1a\x1d.chatim.v1.CreateRoomResponse\x12L\n" +
 	"\vSendMessage\x12\x1d.chatim.v1.SendMessageRequest\x1a\x1e.chatim.v1.SendMessageResponse\x12I\n" +
 	"\n" +
-	"GetHistory\x12\x1c.chatim.v1.GetHistoryRequest\x1a\x1d.chatim.v1.GetHistoryResponseB\x9a\x01\n" +
+	"GetHistory\x12\x1c.chatim.v1.GetHistoryRequest\x1a\x1d.chatim.v1.GetHistoryResponse\x12L\n" +
+	"\vEditMessage\x12\x1d.chatim.v1.EditMessageRequest\x1a\x1e.chatim.v1.EditMessageResponse\x12R\n" +
+	"\rDeleteMessage\x12\x1f.chatim.v1.DeleteMessageRequest\x1a .chatim.v1.DeleteMessageResponse\x12L\n" +
+	"\vHideMessage\x12\x1d.chatim.v1.HideMessageRequest\x1a\x1e.chatim.v1.HideMessageResponse\x12O\n" +
+	"\fClearHistory\x12\x1e.chatim.v1.ClearHistoryRequest\x1a\x1f.chatim.v1.ClearHistoryResponse\x12U\n" +
+	"\x0eGetEditHistory\x12 .chatim.v1.GetEditHistoryRequest\x1a!.chatim.v1.GetEditHistoryResponseB\x9a\x01\n" +
 	"\rcom.chatim.v1B\tCoreProtoP\x01Z9github.com/ivannguyendev/chatim/pkg/pb/chatim/v1;chatimv1\xa2\x02\x03CXX\xaa\x02\tChatim.V1\xca\x02\tChatim\\V1\xe2\x02\x15Chatim\\V1\\GPBMetadata\xea\x02\n" +
 	"Chatim::V1b\x06proto3"
 
@@ -793,43 +1555,71 @@ func file_chatim_v1_core_proto_rawDescGZIP() []byte {
 	return file_chatim_v1_core_proto_rawDescData
 }
 
-var file_chatim_v1_core_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_chatim_v1_core_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_chatim_v1_core_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_chatim_v1_core_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_chatim_v1_core_proto_goTypes = []any{
-	(RoomType)(0),                 // 0: chatim.v1.RoomType
-	(MessageKind)(0),              // 1: chatim.v1.MessageKind
-	(HistoryAnchor)(0),            // 2: chatim.v1.HistoryAnchor
-	(*Room)(nil),                  // 3: chatim.v1.Room
-	(*Message)(nil),               // 4: chatim.v1.Message
-	(*CreateRoomRequest)(nil),     // 5: chatim.v1.CreateRoomRequest
-	(*CreateRoomResponse)(nil),    // 6: chatim.v1.CreateRoomResponse
-	(*SendMessageRequest)(nil),    // 7: chatim.v1.SendMessageRequest
-	(*SendMessageResponse)(nil),   // 8: chatim.v1.SendMessageResponse
-	(*GetHistoryRequest)(nil),     // 9: chatim.v1.GetHistoryRequest
-	(*GetHistoryResponse)(nil),    // 10: chatim.v1.GetHistoryResponse
-	(*timestamppb.Timestamp)(nil), // 11: google.protobuf.Timestamp
+	(RoomType)(0),                  // 0: chatim.v1.RoomType
+	(MessageKind)(0),               // 1: chatim.v1.MessageKind
+	(HistoryAnchor)(0),             // 2: chatim.v1.HistoryAnchor
+	(EditKind)(0),                  // 3: chatim.v1.EditKind
+	(*Room)(nil),                   // 4: chatim.v1.Room
+	(*Message)(nil),                // 5: chatim.v1.Message
+	(*MessageVersion)(nil),         // 6: chatim.v1.MessageVersion
+	(*CreateRoomRequest)(nil),      // 7: chatim.v1.CreateRoomRequest
+	(*CreateRoomResponse)(nil),     // 8: chatim.v1.CreateRoomResponse
+	(*SendMessageRequest)(nil),     // 9: chatim.v1.SendMessageRequest
+	(*SendMessageResponse)(nil),    // 10: chatim.v1.SendMessageResponse
+	(*GetHistoryRequest)(nil),      // 11: chatim.v1.GetHistoryRequest
+	(*GetHistoryResponse)(nil),     // 12: chatim.v1.GetHistoryResponse
+	(*EditMessageRequest)(nil),     // 13: chatim.v1.EditMessageRequest
+	(*EditMessageResponse)(nil),    // 14: chatim.v1.EditMessageResponse
+	(*DeleteMessageRequest)(nil),   // 15: chatim.v1.DeleteMessageRequest
+	(*DeleteMessageResponse)(nil),  // 16: chatim.v1.DeleteMessageResponse
+	(*HideMessageRequest)(nil),     // 17: chatim.v1.HideMessageRequest
+	(*HideMessageResponse)(nil),    // 18: chatim.v1.HideMessageResponse
+	(*ClearHistoryRequest)(nil),    // 19: chatim.v1.ClearHistoryRequest
+	(*ClearHistoryResponse)(nil),   // 20: chatim.v1.ClearHistoryResponse
+	(*GetEditHistoryRequest)(nil),  // 21: chatim.v1.GetEditHistoryRequest
+	(*GetEditHistoryResponse)(nil), // 22: chatim.v1.GetEditHistoryResponse
+	(*timestamppb.Timestamp)(nil),  // 23: google.protobuf.Timestamp
 }
 var file_chatim_v1_core_proto_depIdxs = []int32{
 	0,  // 0: chatim.v1.Room.type:type_name -> chatim.v1.RoomType
-	11, // 1: chatim.v1.Room.created_at:type_name -> google.protobuf.Timestamp
+	23, // 1: chatim.v1.Room.created_at:type_name -> google.protobuf.Timestamp
 	1,  // 2: chatim.v1.Message.kind:type_name -> chatim.v1.MessageKind
-	11, // 3: chatim.v1.Message.created_at:type_name -> google.protobuf.Timestamp
-	0,  // 4: chatim.v1.CreateRoomRequest.type:type_name -> chatim.v1.RoomType
-	3,  // 5: chatim.v1.CreateRoomResponse.room:type_name -> chatim.v1.Room
-	11, // 6: chatim.v1.SendMessageResponse.created_at:type_name -> google.protobuf.Timestamp
-	2,  // 7: chatim.v1.GetHistoryRequest.anchor:type_name -> chatim.v1.HistoryAnchor
-	4,  // 8: chatim.v1.GetHistoryResponse.messages:type_name -> chatim.v1.Message
-	5,  // 9: chatim.v1.CoreService.CreateRoom:input_type -> chatim.v1.CreateRoomRequest
-	7,  // 10: chatim.v1.CoreService.SendMessage:input_type -> chatim.v1.SendMessageRequest
-	9,  // 11: chatim.v1.CoreService.GetHistory:input_type -> chatim.v1.GetHistoryRequest
-	6,  // 12: chatim.v1.CoreService.CreateRoom:output_type -> chatim.v1.CreateRoomResponse
-	8,  // 13: chatim.v1.CoreService.SendMessage:output_type -> chatim.v1.SendMessageResponse
-	10, // 14: chatim.v1.CoreService.GetHistory:output_type -> chatim.v1.GetHistoryResponse
-	12, // [12:15] is the sub-list for method output_type
-	9,  // [9:12] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	23, // 3: chatim.v1.Message.created_at:type_name -> google.protobuf.Timestamp
+	23, // 4: chatim.v1.Message.edited_at:type_name -> google.protobuf.Timestamp
+	3,  // 5: chatim.v1.MessageVersion.kind:type_name -> chatim.v1.EditKind
+	23, // 6: chatim.v1.MessageVersion.at:type_name -> google.protobuf.Timestamp
+	0,  // 7: chatim.v1.CreateRoomRequest.type:type_name -> chatim.v1.RoomType
+	4,  // 8: chatim.v1.CreateRoomResponse.room:type_name -> chatim.v1.Room
+	23, // 9: chatim.v1.SendMessageResponse.created_at:type_name -> google.protobuf.Timestamp
+	2,  // 10: chatim.v1.GetHistoryRequest.anchor:type_name -> chatim.v1.HistoryAnchor
+	5,  // 11: chatim.v1.GetHistoryResponse.messages:type_name -> chatim.v1.Message
+	5,  // 12: chatim.v1.EditMessageResponse.message:type_name -> chatim.v1.Message
+	5,  // 13: chatim.v1.DeleteMessageResponse.message:type_name -> chatim.v1.Message
+	6,  // 14: chatim.v1.GetEditHistoryResponse.versions:type_name -> chatim.v1.MessageVersion
+	7,  // 15: chatim.v1.CoreService.CreateRoom:input_type -> chatim.v1.CreateRoomRequest
+	9,  // 16: chatim.v1.CoreService.SendMessage:input_type -> chatim.v1.SendMessageRequest
+	11, // 17: chatim.v1.CoreService.GetHistory:input_type -> chatim.v1.GetHistoryRequest
+	13, // 18: chatim.v1.CoreService.EditMessage:input_type -> chatim.v1.EditMessageRequest
+	15, // 19: chatim.v1.CoreService.DeleteMessage:input_type -> chatim.v1.DeleteMessageRequest
+	17, // 20: chatim.v1.CoreService.HideMessage:input_type -> chatim.v1.HideMessageRequest
+	19, // 21: chatim.v1.CoreService.ClearHistory:input_type -> chatim.v1.ClearHistoryRequest
+	21, // 22: chatim.v1.CoreService.GetEditHistory:input_type -> chatim.v1.GetEditHistoryRequest
+	8,  // 23: chatim.v1.CoreService.CreateRoom:output_type -> chatim.v1.CreateRoomResponse
+	10, // 24: chatim.v1.CoreService.SendMessage:output_type -> chatim.v1.SendMessageResponse
+	12, // 25: chatim.v1.CoreService.GetHistory:output_type -> chatim.v1.GetHistoryResponse
+	14, // 26: chatim.v1.CoreService.EditMessage:output_type -> chatim.v1.EditMessageResponse
+	16, // 27: chatim.v1.CoreService.DeleteMessage:output_type -> chatim.v1.DeleteMessageResponse
+	18, // 28: chatim.v1.CoreService.HideMessage:output_type -> chatim.v1.HideMessageResponse
+	20, // 29: chatim.v1.CoreService.ClearHistory:output_type -> chatim.v1.ClearHistoryResponse
+	22, // 30: chatim.v1.CoreService.GetEditHistory:output_type -> chatim.v1.GetEditHistoryResponse
+	23, // [23:31] is the sub-list for method output_type
+	15, // [15:23] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_chatim_v1_core_proto_init() }
@@ -842,8 +1632,8 @@ func file_chatim_v1_core_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_chatim_v1_core_proto_rawDesc), len(file_chatim_v1_core_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   8,
+			NumEnums:      4,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

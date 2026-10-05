@@ -36,6 +36,8 @@ type Event struct {
 	//
 	//	*Event_MessageCreated
 	//	*Event_RoomCreated
+	//	*Event_MessageEdited
+	//	*Event_MessageDeleted
 	Payload       isEvent_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -152,6 +154,24 @@ func (x *Event) GetRoomCreated() *RoomCreated {
 	return nil
 }
 
+func (x *Event) GetMessageEdited() *MessageEdited {
+	if x != nil {
+		if x, ok := x.Payload.(*Event_MessageEdited); ok {
+			return x.MessageEdited
+		}
+	}
+	return nil
+}
+
+func (x *Event) GetMessageDeleted() *MessageDeleted {
+	if x != nil {
+		if x, ok := x.Payload.(*Event_MessageDeleted); ok {
+			return x.MessageDeleted
+		}
+	}
+	return nil
+}
+
 type isEvent_Payload interface {
 	isEvent_Payload()
 }
@@ -164,9 +184,21 @@ type Event_RoomCreated struct {
 	RoomCreated *RoomCreated `protobuf:"bytes,21,opt,name=room_created,json=roomCreated,proto3,oneof"`
 }
 
+type Event_MessageEdited struct {
+	MessageEdited *MessageEdited `protobuf:"bytes,22,opt,name=message_edited,json=messageEdited,proto3,oneof"`
+}
+
+type Event_MessageDeleted struct {
+	MessageDeleted *MessageDeleted `protobuf:"bytes,23,opt,name=message_deleted,json=messageDeleted,proto3,oneof"`
+}
+
 func (*Event_MessageCreated) isEvent_Payload() {}
 
 func (*Event_RoomCreated) isEvent_Payload() {}
+
+func (*Event_MessageEdited) isEvent_Payload() {}
+
+func (*Event_MessageDeleted) isEvent_Payload() {}
 
 type MessageCreated struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -256,11 +288,115 @@ func (x *RoomCreated) GetRoom() *Room {
 	return nil
 }
 
+type MessageEdited struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Message       *Message               `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	Version       uint32                 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MessageEdited) Reset() {
+	*x = MessageEdited{}
+	mi := &file_chatim_v1_events_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MessageEdited) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MessageEdited) ProtoMessage() {}
+
+func (x *MessageEdited) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_events_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MessageEdited.ProtoReflect.Descriptor instead.
+func (*MessageEdited) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_events_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *MessageEdited) GetMessage() *Message {
+	if x != nil {
+		return x.Message
+	}
+	return nil
+}
+
+func (x *MessageEdited) GetVersion() uint32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+type MessageDeleted struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Message       *Message               `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	Version       uint32                 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MessageDeleted) Reset() {
+	*x = MessageDeleted{}
+	mi := &file_chatim_v1_events_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MessageDeleted) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MessageDeleted) ProtoMessage() {}
+
+func (x *MessageDeleted) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_events_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MessageDeleted.ProtoReflect.Descriptor instead.
+func (*MessageDeleted) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_events_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *MessageDeleted) GetMessage() *Message {
+	if x != nil {
+		return x.Message
+	}
+	return nil
+}
+
+func (x *MessageDeleted) GetVersion() uint32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
 var File_chatim_v1_events_proto protoreflect.FileDescriptor
 
 const file_chatim_v1_events_proto_rawDesc = "" +
 	"\n" +
-	"\x16chatim/v1/events.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x88\x03\n" +
+	"\x16chatim/v1/events.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x91\x04\n" +
 	"\x05Event\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06tenant\x18\x02 \x01(\tR\x06tenant\x12\x17\n" +
@@ -272,12 +408,20 @@ const file_chatim_v1_events_proto_rawDesc = "" +
 	"\x05actor\x18\b \x01(\tR\x05actor\x12*\n" +
 	"\x02ts\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\x02ts\x12D\n" +
 	"\x0fmessage_created\x18\x14 \x01(\v2\x19.chatim.v1.MessageCreatedH\x00R\x0emessageCreated\x12;\n" +
-	"\froom_created\x18\x15 \x01(\v2\x16.chatim.v1.RoomCreatedH\x00R\vroomCreatedB\t\n" +
+	"\froom_created\x18\x15 \x01(\v2\x16.chatim.v1.RoomCreatedH\x00R\vroomCreated\x12A\n" +
+	"\x0emessage_edited\x18\x16 \x01(\v2\x18.chatim.v1.MessageEditedH\x00R\rmessageEdited\x12D\n" +
+	"\x0fmessage_deleted\x18\x17 \x01(\v2\x19.chatim.v1.MessageDeletedH\x00R\x0emessageDeletedB\t\n" +
 	"\apayloadJ\x04\b\a\x10\bR\x03pts\">\n" +
 	"\x0eMessageCreated\x12,\n" +
 	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\"2\n" +
 	"\vRoomCreated\x12#\n" +
-	"\x04room\x18\x01 \x01(\v2\x0f.chatim.v1.RoomR\x04roomB\x9c\x01\n" +
+	"\x04room\x18\x01 \x01(\v2\x0f.chatim.v1.RoomR\x04room\"W\n" +
+	"\rMessageEdited\x12,\n" +
+	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\rR\aversion\"X\n" +
+	"\x0eMessageDeleted\x12,\n" +
+	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\rR\aversionB\x9c\x01\n" +
 	"\rcom.chatim.v1B\vEventsProtoP\x01Z9github.com/ivannguyendev/chatim/pkg/pb/chatim/v1;chatimv1\xa2\x02\x03CXX\xaa\x02\tChatim.V1\xca\x02\tChatim\\V1\xe2\x02\x15Chatim\\V1\\GPBMetadata\xea\x02\n" +
 	"Chatim::V1b\x06proto3"
 
@@ -293,28 +437,34 @@ func file_chatim_v1_events_proto_rawDescGZIP() []byte {
 	return file_chatim_v1_events_proto_rawDescData
 }
 
-var file_chatim_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_chatim_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_chatim_v1_events_proto_goTypes = []any{
 	(*Event)(nil),                 // 0: chatim.v1.Event
 	(*MessageCreated)(nil),        // 1: chatim.v1.MessageCreated
 	(*RoomCreated)(nil),           // 2: chatim.v1.RoomCreated
-	(RoomType)(0),                 // 3: chatim.v1.RoomType
-	(*timestamppb.Timestamp)(nil), // 4: google.protobuf.Timestamp
-	(*Message)(nil),               // 5: chatim.v1.Message
-	(*Room)(nil),                  // 6: chatim.v1.Room
+	(*MessageEdited)(nil),         // 3: chatim.v1.MessageEdited
+	(*MessageDeleted)(nil),        // 4: chatim.v1.MessageDeleted
+	(RoomType)(0),                 // 5: chatim.v1.RoomType
+	(*timestamppb.Timestamp)(nil), // 6: google.protobuf.Timestamp
+	(*Message)(nil),               // 7: chatim.v1.Message
+	(*Room)(nil),                  // 8: chatim.v1.Room
 }
 var file_chatim_v1_events_proto_depIdxs = []int32{
-	3, // 0: chatim.v1.Event.room_type:type_name -> chatim.v1.RoomType
-	4, // 1: chatim.v1.Event.ts:type_name -> google.protobuf.Timestamp
-	1, // 2: chatim.v1.Event.message_created:type_name -> chatim.v1.MessageCreated
-	2, // 3: chatim.v1.Event.room_created:type_name -> chatim.v1.RoomCreated
-	5, // 4: chatim.v1.MessageCreated.message:type_name -> chatim.v1.Message
-	6, // 5: chatim.v1.RoomCreated.room:type_name -> chatim.v1.Room
-	6, // [6:6] is the sub-list for method output_type
-	6, // [6:6] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	5,  // 0: chatim.v1.Event.room_type:type_name -> chatim.v1.RoomType
+	6,  // 1: chatim.v1.Event.ts:type_name -> google.protobuf.Timestamp
+	1,  // 2: chatim.v1.Event.message_created:type_name -> chatim.v1.MessageCreated
+	2,  // 3: chatim.v1.Event.room_created:type_name -> chatim.v1.RoomCreated
+	3,  // 4: chatim.v1.Event.message_edited:type_name -> chatim.v1.MessageEdited
+	4,  // 5: chatim.v1.Event.message_deleted:type_name -> chatim.v1.MessageDeleted
+	7,  // 6: chatim.v1.MessageCreated.message:type_name -> chatim.v1.Message
+	8,  // 7: chatim.v1.RoomCreated.room:type_name -> chatim.v1.Room
+	7,  // 8: chatim.v1.MessageEdited.message:type_name -> chatim.v1.Message
+	7,  // 9: chatim.v1.MessageDeleted.message:type_name -> chatim.v1.Message
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_chatim_v1_events_proto_init() }
@@ -326,6 +476,8 @@ func file_chatim_v1_events_proto_init() {
 	file_chatim_v1_events_proto_msgTypes[0].OneofWrappers = []any{
 		(*Event_MessageCreated)(nil),
 		(*Event_RoomCreated)(nil),
+		(*Event_MessageEdited)(nil),
+		(*Event_MessageDeleted)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -333,7 +485,7 @@ func file_chatim_v1_events_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_chatim_v1_events_proto_rawDesc), len(file_chatim_v1_events_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
