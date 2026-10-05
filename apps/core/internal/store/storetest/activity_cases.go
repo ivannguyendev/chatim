@@ -14,6 +14,7 @@ func activityCases() []roomsCase {
 	return []roomsCase{
 		{"touch activity keeps the highest seq and time and never moves back", activityMonotonic},
 		{"thread activity only bumps the change time and bucket", activityThread},
+		{"an activity with seq 0 bumps only the last change", activityWithoutSeq},
 		{"touch of a missing room is ignored", activityMissingRoom},
 		{"active rooms: touched since from or created in range, by tenant, paged by id", activeRoomsRange},
 		{"active rooms rejects a bad limit or range", activeRoomsInvalid},
@@ -137,5 +138,17 @@ func activeRoomsInvalid(t *testing.T, s store.Rooms) {
 	} {
 		_, err := s.ActiveRooms(t.Context(), q)
 		assertErrorIs(t, "ActiveRooms", err, apperr.ErrInvalidArgument)
+	}
+}
+
+func activityWithoutSeq(t *testing.T, s store.Rooms) {
+	room, members := teamOf(roomA)
+	mustCreate(t, s, room, members)
+	editAt := baseTime.Add(5 * time.Hour)
+	mustTouch(t, s, store.Activity{Room: roomA, Seq: 2, At: baseTime})
+	mustTouch(t, s, store.Activity{Room: roomA, At: editAt})
+	assertActivity(t, s, roomA, 2, baseTime, editAt)
+	if got := activeIDs(t, s, store.ActiveQuery{From: editAt, To: editAt, Limit: 10}); !slices.Equal(got, []uint64{roomA}) {
+		t.Fatalf("active rooms in the edit's hour = %v, want [%d]", got, roomA)
 	}
 }

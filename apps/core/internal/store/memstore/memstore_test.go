@@ -20,3 +20,9 @@ func TestFeedContract(t *testing.T) {
 		return msgs, rooms, memstore.NewFeed(msgs, rooms)
 	})
 }
+
+func TestEditsContract(t *testing.T) {
+	storetest.RunEdits(t, func(*testing.T) (storetest.EditableMessages, storetest.ClearableRooms, store.Edits, store.Hidden) {
+		return memstore.NewMessages(), memstore.NewRooms(), memstore.NewEdits(), memstore.NewHidden()
+	})
+}

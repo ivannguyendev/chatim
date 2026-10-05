@@ -46,7 +46,7 @@ func (s *Rooms) ActiveRooms(ctx context.Context, q store.ActiveQuery) ([]domain.
 func withActivity(r domain.Room, a store.Activity) domain.Room {
 	at := a.At.UTC()
 	r.LastChangeAt = laterOf(r.LastChangeAt, at)
-	if a.Thread == 0 {
+	if a.Thread == 0 && a.Seq > 0 {
 		r.LastSeq = max(r.LastSeq, a.Seq)
 		r.LastMsgAt = laterOf(r.LastMsgAt, at)
 	}

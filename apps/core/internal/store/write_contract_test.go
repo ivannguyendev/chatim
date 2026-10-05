@@ -8,7 +8,7 @@ import (
 )
 
 var allowedKinds = map[string]bool{
-	"read": true, "lifecycle": true, "reset": true,
+	"read": true, "lifecycle": true, "reset": true, "purge": true,
 	"insert-unique": true, "cas": true, "monotonic-cas": true, "monotonic-max": true, "upsert": true, "version-bump": true,
 }
 
@@ -27,6 +27,17 @@ var portMethods = map[string]string{
 	"Cursor.Next":         "read",
 	"Cursor.Confirm":      "monotonic-cas",
 	"Cursor.Close":        "lifecycle",
+
+	"MessageEditor.ApplyEdit":     "cas",
+	"HistoryClearer.ClearHistory": "monotonic-max",
+	"Edits.Append":                "insert-unique",
+	"Edits.At":                    "read",
+	"Edits.Latest":                "read",
+	"Edits.History":               "read",
+	"Edits.Between":               "read",
+	"Edits.PurgeText":             "purge",
+	"Hidden.Hide":                 "upsert",
+	"Hidden.HiddenIn":             "read",
 }
 
 func TestEveryPortMethodHasAWriteContract(t *testing.T) {
@@ -35,6 +46,10 @@ func TestEveryPortMethodHasAWriteContract(t *testing.T) {
 		reflect.TypeFor[store.Rooms](),
 		reflect.TypeFor[store.ChangeFeed](),
 		reflect.TypeFor[store.Cursor](),
+		reflect.TypeFor[store.MessageEditor](),
+		reflect.TypeFor[store.HistoryClearer](),
+		reflect.TypeFor[store.Edits](),
+		reflect.TypeFor[store.Hidden](),
 	}
 	seen := map[string]bool{}
 	for _, p := range ports {
@@ -46,7 +61,7 @@ func TestEveryPortMethodHasAWriteContract(t *testing.T) {
 			case !ok:
 				t.Errorf("%s has no write contract: classify it here and add its storetest case", name)
 			case !allowedKinds[kind]:
-				t.Errorf("%s has kind %q; writes must be insert-unique, cas, monotonic-cas, monotonic-max, upsert or version-bump", name, kind)
+				t.Errorf("%s has kind %q; writes must be insert-unique, cas, monotonic-cas, monotonic-max, upsert, version-bump or purge", name, kind)
 			}
 		}
 	}

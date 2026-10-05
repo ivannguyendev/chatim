@@ -127,7 +127,7 @@ func assertErrorIs(t *testing.T, op string, err, want error) {
 }
 
 func sameMessage(a, b domain.Message) bool {
-	at, bt := a.CreatedAt, b.CreatedAt
-	a.CreatedAt, b.CreatedAt = time.Time{}, time.Time{}
-	return a == b && at.Equal(bt)
+	at, bt, ae, be := a.CreatedAt, b.CreatedAt, a.EditedAt, b.EditedAt
+	a.CreatedAt, b.CreatedAt, a.EditedAt, b.EditedAt = time.Time{}, time.Time{}, time.Time{}, time.Time{}
+	return a == b && at.Equal(bt) && ae.Equal(be)
 }

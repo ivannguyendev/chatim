@@ -9,7 +9,10 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
-var _ store.Rooms = (*Rooms)(nil)
+var (
+	_ store.Rooms          = (*Rooms)(nil)
+	_ store.HistoryClearer = (*Rooms)(nil)
+)
 
 type memberKey struct {
 	room uint64
@@ -76,4 +79,20 @@ func (s *Rooms) Member(ctx context.Context, room uint64, user string) (domain.Me
 		return domain.Member{}, domain.ErrNotMember
 	}
 	return m, nil
+}
+
+func (s *Rooms) ClearHistory(ctx context.Context, room uint64, user string, seq uint64) (uint64, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	k := memberKey{room, user}
+	m, ok := s.members[k]
+	if !ok {
+		return 0, domain.ErrNotMember
+	}
+	m.ClearedBeforeSeq = max(m.ClearedBeforeSeq, seq)
+	s.members[k] = m
+	return m.ClearedBeforeSeq, nil
 }
