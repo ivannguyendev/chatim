@@ -9,22 +9,24 @@ import (
 
 var allowedKinds = map[string]bool{
 	"read": true, "lifecycle": true, "reset": true,
-	"insert-unique": true, "cas": true, "monotonic-cas": true, "upsert": true, "version-bump": true,
+	"insert-unique": true, "cas": true, "monotonic-cas": true, "monotonic-max": true, "upsert": true, "version-bump": true,
 }
 
 var portMethods = map[string]string{
-	"Messages.Insert":   "insert-unique",
-	"Messages.Last":     "read",
-	"Messages.Page":     "read",
-	"Messages.Find":     "read",
-	"Rooms.Create":      "insert-unique",
-	"Rooms.Get":         "read",
-	"Rooms.Member":      "read",
-	"ChangeFeed.Open":   "read",
-	"ChangeFeed.Forget": "reset",
-	"Cursor.Next":       "read",
-	"Cursor.Confirm":    "monotonic-cas",
-	"Cursor.Close":      "lifecycle",
+	"Messages.Insert":     "insert-unique",
+	"Messages.Last":       "read",
+	"Messages.Page":       "read",
+	"Messages.Find":       "read",
+	"Rooms.Create":        "insert-unique",
+	"Rooms.Get":           "read",
+	"Rooms.Member":        "read",
+	"Rooms.TouchActivity": "monotonic-max",
+	"Rooms.ActiveRooms":   "read",
+	"ChangeFeed.Open":     "read",
+	"ChangeFeed.Forget":   "reset",
+	"Cursor.Next":         "read",
+	"Cursor.Confirm":      "monotonic-cas",
+	"Cursor.Close":        "lifecycle",
 }
 
 func TestEveryPortMethodHasAWriteContract(t *testing.T) {
@@ -44,7 +46,7 @@ func TestEveryPortMethodHasAWriteContract(t *testing.T) {
 			case !ok:
 				t.Errorf("%s has no write contract: classify it here and add its storetest case", name)
 			case !allowedKinds[kind]:
-				t.Errorf("%s has kind %q; writes must be insert-unique, cas, monotonic-cas, upsert or version-bump", name, kind)
+				t.Errorf("%s has kind %q; writes must be insert-unique, cas, monotonic-cas, monotonic-max, upsert or version-bump", name, kind)
 			}
 		}
 	}

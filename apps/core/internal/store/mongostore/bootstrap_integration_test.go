@@ -81,6 +81,16 @@ func assertMemberIndexes(t *testing.T, db *mongo.Database) {
 	}
 }
 
+func assertRoomIndexes(t *testing.T, db *mongo.Database) {
+	t.Helper()
+	got := indexKeys(t, db.Collection(roomsCollection))
+	for _, k := range []string{"ab:1", "ca:1"} {
+		if unique, ok := got[k]; !ok || unique {
+			t.Fatalf("rooms indexes = %v, want non-unique %s", got, k)
+		}
+	}
+}
+
 func TestBootstrapIsIdempotent(t *testing.T) {
 	db := itDatabase(t, itClient(t))
 	for i := range 2 {
@@ -98,6 +108,7 @@ func TestBootstrapIsIdempotent(t *testing.T) {
 	}
 	assertMessagesLayout(t, db)
 	assertMemberIndexes(t, db)
+	assertRoomIndexes(t, db)
 	collectionOptions(t, db, roomsCollection)
 	collectionOptions(t, db, reconcilerStateCollection)
 	got, err := s.Find(t.Context(), m.Room, []store.MsgKey{store.KeyOf(m)})

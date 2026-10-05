@@ -25,13 +25,16 @@ type messageDoc struct {
 }
 
 type roomDoc struct {
-	ID          int64           `bson:"_id"`
-	Tenant      string          `bson:"t"`
-	Type        domain.RoomType `bson:"ty"`
-	Name        string          `bson:"n"`
-	CreatedBy   string          `bson:"cb"`
-	CreatedAt   time.Time       `bson:"ca"`
-	MemberCount int             `bson:"mc"`
+	ID           int64           `bson:"_id"`
+	Tenant       string          `bson:"t"`
+	Type         domain.RoomType `bson:"ty"`
+	Name         string          `bson:"n"`
+	CreatedBy    string          `bson:"cb"`
+	CreatedAt    time.Time       `bson:"ca"`
+	MemberCount  int             `bson:"mc"`
+	LastSeq      int64           `bson:"ls,omitempty"`
+	LastMsgAt    time.Time       `bson:"lm,omitempty"`
+	LastChangeAt time.Time       `bson:"lc,omitempty"`
 }
 
 type memberDoc struct {
@@ -111,14 +114,21 @@ func decodeRoom(d roomDoc) (domain.Room, error) {
 	if err != nil {
 		return domain.Room{}, err
 	}
+	lastSeq, err := toUint64("room last seq", d.LastSeq)
+	if err != nil {
+		return domain.Room{}, err
+	}
 	return domain.Room{
-		ID:          id,
-		Tenant:      d.Tenant,
-		Type:        d.Type,
-		Name:        d.Name,
-		CreatedBy:   d.CreatedBy,
-		CreatedAt:   d.CreatedAt,
-		MemberCount: d.MemberCount,
+		ID:           id,
+		Tenant:       d.Tenant,
+		Type:         d.Type,
+		Name:         d.Name,
+		CreatedBy:    d.CreatedBy,
+		CreatedAt:    d.CreatedAt,
+		MemberCount:  d.MemberCount,
+		LastSeq:      lastSeq,
+		LastMsgAt:    d.LastMsgAt,
+		LastChangeAt: d.LastChangeAt,
 	}, nil
 }
 

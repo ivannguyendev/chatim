@@ -17,13 +17,16 @@ const (
 )
 
 type Room struct {
-	ID          uint64
-	Tenant      string
-	Type        RoomType
-	Name        string
-	CreatedBy   string
-	CreatedAt   time.Time
-	MemberCount int
+	ID           uint64
+	Tenant       string
+	Type         RoomType
+	Name         string
+	CreatedBy    string
+	CreatedAt    time.Time
+	MemberCount  int
+	LastSeq      uint64
+	LastMsgAt    time.Time
+	LastChangeAt time.Time
 }
 
 type Member struct {

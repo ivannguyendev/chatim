@@ -22,7 +22,10 @@ func Bootstrap(ctx context.Context, db *mongo.Database) error {
 			return err
 		}
 	}
-	if err := ensureMemberIndexes(ctx, db); err != nil {
+	if err := ensureIndexes(ctx, db, membersCollection, memberIndexes()); err != nil {
+		return err
+	}
+	if err := ensureIndexes(ctx, db, roomsCollection, roomIndexes()); err != nil {
 		return err
 	}
 	return ensureFeedAnchor(ctx, db)
@@ -89,13 +92,20 @@ func createCollection(ctx context.Context, db *mongo.Database, name string, opts
 	return nil
 }
 
-func ensureMemberIndexes(ctx context.Context, db *mongo.Database) error {
-	models := []mongo.IndexModel{
+func memberIndexes() []mongo.IndexModel {
+	return []mongo.IndexModel{
 		{Keys: bson.D{{Key: "r", Value: 1}, {Key: "u", Value: 1}}, Options: options.Index().SetUnique(true)},
 		{Keys: bson.D{{Key: "t", Value: 1}, {Key: "u", Value: 1}, {Key: "r", Value: 1}}},
 	}
-	if _, err := db.Collection(membersCollection).Indexes().CreateMany(ctx, models); err != nil {
-		return fmt.Errorf("bootstrap %s: create indexes: %w", membersCollection, err)
+}
+
+func roomIndexes() []mongo.IndexModel {
+	return []mongo.IndexModel{{Keys: bson.D{{Key: "ab", Value: 1}}}, {Keys: bson.D{{Key: "ca", Value: 1}}}}
+}
+
+func ensureIndexes(ctx context.Context, db *mongo.Database, coll string, models []mongo.IndexModel) error {
+	if _, err := db.Collection(coll).Indexes().CreateMany(ctx, models); err != nil {
+		return fmt.Errorf("bootstrap %s: create indexes: %w", coll, err)
 	}
 	return nil
 }

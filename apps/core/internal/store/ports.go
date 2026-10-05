@@ -17,4 +17,6 @@ type Rooms interface {
 	Create(ctx context.Context, r domain.Room, members []domain.Member) error
 	Get(ctx context.Context, id uint64) (domain.Room, error)
 	Member(ctx context.Context, room uint64, user string) (domain.Member, error)
+	TouchActivity(ctx context.Context, acts []Activity) error
+	ActiveRooms(ctx context.Context, q ActiveQuery) ([]domain.Room, error)
 }

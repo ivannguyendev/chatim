@@ -146,6 +146,21 @@ func TestRoomCodecRoundTrip(t *testing.T) {
 	}
 }
 
+func TestRoomCodecDecodesActivity(t *testing.T) {
+	d := roomDoc{
+		ID: 7_340_000_001, Tenant: "acme", Type: domain.RoomGroup, Name: "Team", CreatedBy: "alice", CreatedAt: codecTime, MemberCount: 2,
+		LastSeq: 42, LastMsgAt: codecTime.Add(time.Minute), LastChangeAt: codecTime.Add(2 * time.Minute),
+	}
+	got, err := decodeRoom(d)
+	if err != nil || got.LastSeq != 42 || !got.LastMsgAt.Equal(d.LastMsgAt) || !got.LastChangeAt.Equal(d.LastChangeAt) {
+		t.Fatalf("decodeRoom = %+v, %v; want seq 42 at %v / %v", got, err, d.LastMsgAt, d.LastChangeAt)
+	}
+	d.LastSeq = -1
+	if _, err := decodeRoom(d); !errors.Is(err, errCorrupt) {
+		t.Fatalf("decodeRoom(negative last seq) = %v, want errCorrupt", err)
+	}
+}
+
 func TestMemberCodecRoundTrip(t *testing.T) {
 	m := domain.Member{Room: 7_340_000_001, Tenant: "acme", User: "bob", Role: domain.RoleMember, JoinedAt: codecTime}
 	back, raw := roundTrip(t, encodeMember(m, int64(m.Room)))

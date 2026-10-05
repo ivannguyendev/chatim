@@ -39,7 +39,7 @@ func Run(t *testing.T, open func(t *testing.T) (store.Messages, store.Rooms)) {
 		})
 	}
 	t.Run("Rooms", func(t *testing.T) {
-		for _, c := range roomsCases() {
+		for _, c := range append(roomsCases(), activityCases()...) {
 			t.Run(c.name, func(t *testing.T) {
 				_, rooms := open(t)
 				c.run(t, rooms)
