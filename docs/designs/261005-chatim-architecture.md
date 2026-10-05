@@ -105,15 +105,17 @@ Khoá nhị phân: các số `uint64` ghép big-endian nên thứ tự byte trù
 | `messages` (clustered) | 24B `room│thread│seq` | Fact (tạo) + projection (sửa/xoá) | f, kind, text, attachments, mentions, reply_to, forward_from, cid, ts, v, d, meta, reaction summary `{n, ver}` | **không có index phụ** | Đã xây (tạo) |
 | `message_edits` (clustered) | 28B `room│thread│seq│ver` | Fact | kind (`edit`/`delete`), text, attachments, meta, by, ts; v1 thêm `prev` (bản gốc) | `{room, ts}` (D70) | Chưa xây |
 | `pin_actions` (clustered) | `room│pv` | Fact | op (`pin`/`unpin`), target, by, ts | `{room, ts}` | Chưa xây |
-| `rooms` | `room_id` | Metadata + projection | t, type, name, settings, pins + pv, member_count `{n, ver}`, last_seq, last_msg_at, last_change_at, act_bucket | `{t, dm_key}` unique partial; `{act_bucket}` (D69) | Đã xây (tạo) |
+| `rooms` | `room_id` | Metadata + projection | t, type, name, settings, pins + pv, member_count `{n, ver}`, last_seq, last_msg_at, last_change_at, act_bucket | `{t, dm_key}` unique partial; `{act_bucket}` (D69); `{ca}` (nhánh "tạo trong khoảng" của truy vấn resync, M2b.1) | Đã xây (tạo; activity ls/lm/lc/ab, M2b.1) |
 | `members` | ObjectId | Fact member + vị trí đọc | r, u, role, read_seq, cleared_before_seq, marked_unread `{v}`, muted_until | `{r, u}` unique | Đã xây (tạo) |
 | `user_rooms` | `u│r` | Projection từ fact member | t, role, joined_at | — (khoá theo user, shard theo user) | Chưa xây |
 | `reactions` | ObjectId | Tập | k (`room│thread│seq`), emoji, u, n | `{k, emoji, u}` unique (D68) | Chưa xây |
 | `hidden` | ObjectId | Fact thưa theo người đọc | u, r, thread_root, seq | `{u, r, thread_root, seq}` | Chưa xây |
 | `thread_subs` | ObjectId | Tập | r, thread_root, u | `{r, thread_root, u}` unique | Chưa xây |
 | `bookmarks` | ObjectId | Tập | t, u, r, thread_root, seq, note, ts | `{t, u, ts:-1}` | Chưa xây |
-| `reconciler_state` | tên feed | Vận hành | token, at (cluster time) | — | Đã xây |
+| `reconciler_state` | tên feed (`changes`) | Vận hành | token, at (cluster time) | — | Đã xây |
 | `room_events` (clustered) | `room│pts` | — | — | — | Bỏ, không dùng từ M2a.1 |
+
+`rooms.ls/lm/lc/ab` chỉ đổi qua `$max` của effect `room_activity` (không bao giờ lùi); `ab = floor(lc/1h)` là giờ hoạt động **cuối**, nên truy vấn resync lấy `ab ≥ giờ(from)` hoặc `ca ∈ [from, to]`.
 
 ### 5.1 Sẵn sàng sharding (chỉ đổi cấu hình)
 
@@ -203,11 +205,11 @@ Sau mỗi `PubAck`, publisher ghi ack mark lên Redis dedupe (`publish.WithAckMa
 
 Event bị bỏ ở fast path: nack, timeout ack, quá nhiều publish đang bay, hàng đợi đầy, core chết giữa commit và publish.
 
-### 8.2 Reconcile hiện tại [Đã xây, sẽ thay ở M2b.1]
+### 8.2 Reader [Đã xây, M2b.1]
 
-Package `reconcile`, chạy trên core giữ slot 0, mỗi lần nhận slot 0 là một term. Đọc change stream insert của `messages` qua port `store.ChangeFeed`/`store.Cursor` (contract `storetest.RunFeed`), chờ `CommittedAt + RECONCILE_DELAY` (30s), tra mark theo batch, publish tin chưa mark trên JetStream client riêng (`RECONCILE_WINDOW`, retry vô hạn), `Confirm` vị trí khi mọi thay đổi trước đó đã ack hoặc có mark, mỗi `RECONCILE_CONFIRM_EVERY`. Bootstrap ghi mốc `at` = cluster time khi chưa có, nên DB mới vẫn bù tin ghi trước term đầu. Mất lịch sử (`ErrFeedHistoryLost`) → log Error, `Forget`, bắt đầu từ bây giờ (D52).
+Package `reconcile` là reader, chạy trên core giữ slot 0, mỗi lần nhận slot 0 là một term (log `reconcile term started`). Đọc nhật ký commit qua `store.ChangeFeed`/`store.Cursor` (Mongo: change stream cấp database lọc insert của `messages` và `rooms`, vị trí ở `reconciler_state._id = "changes"`), dựng **record** (`work.Record`, chỉ khoá + `CommittedAt`, 33 byte, D80) và publish vào work stream với `Nats-Msg-Id` = id record (`m:{room}-{thread}-{seq}`, `r:{room}`), cửa sổ `RECONCILE_WINDOW`, retry vô hạn. Vị trí xác nhận = prefix record đã được work stream ack, lưu mỗi `RECONCILE_CONFIRM_EVERY`. Reader không chờ delay, không tra mark, không dựng event. Mất lịch sử (`ErrFeedHistoryLost`) → log Error, `Forget`, bắt đầu từ bây giờ, phục hồi bằng `/app resync` (D52, D81).
 
-### 8.3 Effect engine [Chưa xây]
+### 8.3 Effect engine [Đã xây phần M2b.1]
 
 **Registry + chính sách (D65).** Mỗi loại thay đổi map tới danh sách effect; mỗi effect khai báo:
 
@@ -221,15 +223,21 @@ Package `reconcile`, chạy trên core giữ slot 0, mỗi lần nhận slot 0 l
 Fast path và reconciler gọi cùng registry, nên kết quả không lệch (test parity cho mọi loại event).
 
 **Topo (a) (D66).**
-1. **Reader** nhẹ chạy trên core giữ slot 0: một change stream, `$match` đơn giản (`operationType` + `ns.coll`), đọc từ secondary được, không lookup. Đẩy bản ghi thô vào JetStream **work stream** phân vùng theo slot, `Nats-Msg-Id` = id tự nhiên của fact (`{coll}:{_id}`; tập dùng `{coll}:{_id}:n{n}`).
+1. **Reader** nhẹ chạy trên core giữ slot 0: một change stream, `$match` đơn giản (`operationType` + `ns.coll`), đọc từ secondary được, không lookup. Đẩy bản ghi thô vào JetStream **work stream** phân vùng theo slot, `Nats-Msg-Id` = id tự nhiên của fact (`{coll}:{_id}`; tập dùng `{coll}:{_id}:n{n}`). Work stream `CHATIM_WORK`: WorkQueue, file, replica `EVT_STREAM_REPLICAS`, `MaxAge` 2h, chống trùng 2m, 32 partition `work.p{n}`, partition = `slot % 32` (D79).
 2. **Vị trí xác nhận** = work stream đã ack bản ghi; reader lưu vị trí có điều kiện, không lùi. Reader chết thì core nhận slot 0 đọc lại từ vị trí cuối; phần trùng bị work stream bỏ theo id.
-3. **Worker** ở mọi core tiêu thụ partition theo slot của mình, chờ delay theo effect, kiểm mark, chạy effect.
+3. **Worker** (`effects.Workers`) ở mọi core: partition n do core giữ slot n tiêu thụ (consumer durable `work-p{n}`, kiểm `Owns(n)` trước mỗi fetch, lô ≤ `WORK_FETCH_BATCH`); chạy effect theo registry, trước mỗi effect chờ `max(CommittedAt) + delay`; record chỉ ack khi mọi effect xong, lỗi → `Nak(WORK_RETRY_DELAY)`. Registry hiện có:
+
+   | Change | Effect (thứ tự) | Delay | Ack mark | Ghi |
+   |---|---|---|---|---|
+   | `MessageInserted` | `room_activity` | 0 | — | bulk `$max` lên `rooms`, 1 write/room/lô |
+   | `MessageInserted` | `msg_created` | `RECONCILE_DELAY` | có | tra mark theo lô; `Find` tin chưa mark; publish + chờ PubAck |
+   | `RoomInserted` | `room_created` | `RECONCILE_DELAY` | không | đọc room, publish (stream bỏ trùng với fast path `CreateRoom`) |
 4. Work stream có retention tự định cỡ (≈300–500B/tin, đỉnh 3–5MB/s, giữ 2h ≈ 22–36GB với R3; tính lại bằng số thật). Rủi ro mất (RC5) chỉ còn khi reader ngừng lâu hơn cửa sổ oplog.
 5. Không mở N change stream lọc `$mod`: mỗi cursor vẫn đọc và lọc toàn oplog phía server.
 
-**Room activity (D69).** Effect coalesce ghi `rooms.last_seq`, `last_msg_at`, `last_change_at` (mọi fact), `act_bucket = floor(ts/1h)` (đổi tối đa 1 lần/giờ/room), ghi theo bulk 256 hoặc W_r = 1–5s; flush khi actor retire/shutdown. Chỉ dùng để sắp xếp room list và làm chỉ mục resync; **không** dùng để quyết định client đã có đủ tin (§9).
+**Room activity (D69).** Effect coalesce ghi `rooms.last_seq`, `last_msg_at`, `last_change_at` (mọi fact), `act_bucket = floor(ts/1h)` (đổi tối đa 1 lần/giờ/room), chỉ worker ghi, gom theo lô fetch (≤ `WORK_FETCH_BATCH` record → ≤ 1 write mỗi room mỗi lô); actor không ghi (owner chốt 2026-10-05). Chỉ dùng để sắp xếp room list và làm chỉ mục resync; **không** dùng để quyết định client đã có đủ tin (§9).
 
-**Resync (D69).** Khi mất vị trí ngoài oplog: công cụ thủ công, có phạm vi (tenant/room), rate limit, diễn tập định kỳ. Quét room theo `act_bucket` trong khoảng mất, scan ngược `messages` tới khi `ts` ra khỏi khoảng, quét `message_edits`/`pin_actions` theo `{room, ts}`, chạy lại effect. Ack mark hết TTL 1h nên resync sinh trùng thật ngoài cửa sổ 5m; consumer bỏ trùng theo id. Rủi ro còn lại: room có activity write cũng mất trong khoảng đó và không có tin sau đó.
+**Resync (D69).** `/app resync -from -to [-tenant] [-room] [-rate] [-dry-run]` (D81, M2b.1): quét room `ab ≥ giờ(from)` hoặc `ca ∈ [from, to]`, record `RoomInserted` cho room tạo trong khoảng, scan ngược timeline chính tới khi `ts < from`, đẩy record vào work stream theo `-rate` (mặc định 500/s); diễn tập bằng itest `TestRealInfraResyncDrillRepublishesWritesTheReaderMissed`. Chưa có thread và `message_edits`/`pin_actions` nên chỉ quét timeline chính; M2b.2/M2b.3 thêm quét `{room, ts}`. Khi mất vị trí ngoài oplog: công cụ thủ công, có phạm vi (tenant/room), rate limit, diễn tập định kỳ. Quét room theo `act_bucket` trong khoảng mất, scan ngược `messages` tới khi `ts` ra khỏi khoảng, quét `message_edits`/`pin_actions` theo `{room, ts}`, chạy lại effect. Ack mark hết TTL 1h nên resync sinh trùng thật ngoài cửa sổ 5m; consumer bỏ trùng theo id. Rủi ro còn lại: room có activity write cũng mất trong khoảng đó và không có tin sau đó.
 
 ## 9. Đường đọc
 
@@ -272,6 +280,7 @@ Lệnh ghi cũng gọi cùng permission hook.
 ## 11. Event stream
 
 - `CHATIM_EVT`: subject `evt.>`, R3, lưu file, 7 ngày, chống trùng 5m (phải dài hơn delay lớn nhất của effect).
+- `CHATIM_WORK`: work stream nội bộ của effect engine (§8.3), không phải event cho consumer.
 - Envelope `chatim.events.v1.Event{id, tenant, room_id, room_type, thread, seq, type, actor, ts, oneof payload}` (`pts` reserved); chỉ thêm field (buf breaking check).
 - Consumer nội bộ: durable pull, lọc theo tenant/loại, ack từng event, bỏ trùng theo id. Thứ tự một room chỉ giữ ở đường bình thường.
 - Chế độ tenant "xoá chặt": event không mang text, client fetch (R-xoá).
@@ -279,28 +288,28 @@ Lệnh ghi cũng gọi cùng permission hook.
 
 ## 12. Guarantee và detector
 
-Mỗi guarantee có detector + alert ngay khi định nghĩa (D76), không đợi M5. Detector là bộ đếm trong component, đăng ký vào `GET /metrics` của cổng admin (D78); luật alert ở `deploy/prometheus/alerts.yml` (13 luật), kiểm bằng `make alerts-check`. Mọi metric có tiền tố `chatim_core_`.
+Mỗi guarantee có detector + alert ngay khi định nghĩa (D76), không đợi M5. Detector là bộ đếm trong component, đăng ký vào `GET /metrics` của cổng admin (D78); luật alert ở `deploy/prometheus/alerts.yml` (15 luật), kiểm bằng `make alerts-check`. Mọi metric có tiền tố `chatim_core_`.
 
 | # | Guarantee | Detector / alert | Metric |
 |---|---|---|---|
-| RC1 | Mọi fact đã commit cuối cùng có event trên stream, trong delay của effect + lag reconciler | Metric tuổi thay đổi cũ nhất chưa xác nhận; alert khi vượt ngưỡng | `reconcile_lag_seconds` (thời gian reconciler chạy trễ so với `RECONCILE_DELAY`, không phải tuổi thô), `reconcile_running`; alert `ChatimReconcilerAbsent`, `ChatimReconcilerLagging`, `ChatimReconcilerDropping` |
+| RC1 | Mọi fact đã commit cuối cùng có event trên stream, trong delay của effect + lag reconciler | Metric tuổi thay đổi cũ nhất chưa xác nhận; alert khi vượt ngưỡng | `reconcile_lag_seconds` (worker chạy trễ so với delay của effect, xuất ở mọi core), `work_failures_total`, `effect_dropped_total{effect}`, `reconcile_running` (reader), `reconcile_dropped_total` (change hỏng reader bỏ); alert `ChatimReconcilerAbsent`, `ChatimReconcilerLagging`, `ChatimReconcilerDropping`, `ChatimWorkFailing`, `ChatimEffectDropping` |
 | RC2 | Event bù giống hệt event fast path (id, nội dung) | Test parity trong CI cho mọi loại event | (test parity, không có metric) |
-| RC3 | Reconciler/reader crash, restart, đổi chủ không làm mất gì | Itest; log `reconcile term started`; metric số term | `reconcile_terms_total` |
-| RC4 | Trùng được phép nhưng hiếm; người nhận bỏ theo id | Metric số event publish lại và số bản trùng bị stream từ chối | `reconcile_republished_total`, `publish_dropped_total{reason}`, `ack_marks_dropped_total{reason}`; alert `ChatimRepublishSurge`, `ChatimEventsDropped` |
-| RC5 | Khoảng mất ngoài oplog là mất hẳn | Alert log `change feed history lost`; metric cửa sổ oplog (giờ) và tuổi vị trí reader; alert khi cửa sổ < 2× ngưỡng | `reconcile_history_lost_total`, `mongo_oplog_window_seconds` (NaN khi không đọc được); alert `ChatimFeedHistoryLost`, `ChatimOplogWindowShort`, `ChatimOplogWindowCritical`, `ChatimOplogWindowUnknown` |
+| RC3 | Reconciler/reader crash, restart, đổi chủ không làm mất gì | Itest; log `reconcile term started`; metric số term | `reconcile_terms_total`, `reconcile_forwarded_total` |
+| RC4 | Trùng được phép nhưng hiếm; người nhận bỏ theo id | Metric số event publish lại và số bản trùng bị stream từ chối | `reconcile_republished_total{effect}` (worker gửi vì không có mark), `publish_dropped_total{reason}`, `ack_marks_dropped_total{reason}`; alert `ChatimRepublishSurge`, `ChatimEventsDropped` |
+| RC5 | Khoảng mất ngoài oplog là mất hẳn | Alert log `change feed history lost`; metric cửa sổ oplog (giờ) và tuổi vị trí reader; alert khi cửa sổ < 2× ngưỡng; phục hồi bằng `/app resync` (D81) | `reconcile_history_lost_total`, `mongo_oplog_window_seconds` (NaN khi không đọc được); alert `ChatimFeedHistoryLost`, `ChatimOplogWindowShort`, `ChatimOplogWindowCritical`, `ChatimOplogWindowUnknown` |
 | CD1 | Retry cùng cid trong 15 phút trả đúng ack cũ, không thêm bản, trên mọi core | Số Commit/Abort bị bỏ khỏi hàng đợi settle; Redis vào chế độ suy giảm | `cid_settle_dropped_total`, `redis_degraded{client}`; alert `ChatimCIDSettleDropped` |
 | CD2 | Redis dedupe chết → chỉ LRU, trùng giữa core có thể xảy ra | Log/metric vào chế độ suy giảm; alert | `redis_degraded{client}`; alert `ChatimRedisDegraded` |
 | CD3 | Core chết giữa insert và Commit, retry sau 10s ở core khác, tin ngoài 100 tin gần nhất → trùng | Metric `ErrRetryLater` do `PendingElsewhere`; phía đọc gộp theo `(sender, cid)` | `cid_pending_elsewhere_total`; alert `ChatimCIDPendingElsewhere` |
 | PJ1 | Projection cuối cùng khớp fact cuối | Metric số projection/counter reconciler phải sửa | (chưa có projection) |
 
-Vận hành: oplog `minRetentionHours` ≥ 24h; định cỡ oplog theo byte (đỉnh 10K tin/s × 1–2KB ≈ 0,9–1,7TB/ngày); work stream retention theo §8.3; đo bộ nhớ NATS cho map chống trùng 5m (~3M id ở 10K tin/s); tốc độ xả backlog ≥ 3× ingest đỉnh.
+Vận hành: oplog `minRetentionHours` ≥ 24h; định cỡ oplog theo byte (đỉnh 10K tin/s × 1–2KB ≈ 0,9–1,7TB/ngày); work stream retention theo §8.3; đo bộ nhớ NATS cho map chống trùng 5m (~3M id ở 10K tin/s); tốc độ xả backlog ≥ 3× ingest đỉnh (đo trên dev ở `docs/poc/README.md` (W1), chỉ kiểm công cụ).
 
 ## 13. Hạ tầng, bảo mật, vòng đời [Đã xây]
 
 - **Hai Redis** (D44): state `chatim-redis` chỉ cho slot manager (AOF everysec, `noeviction`); dedupe `chatim-redis-dedupe` cho `chatim:cid:*` + `chatim:evtack:*` (không lưu đĩa, `REDIS_DEDUPE_MAXMEMORY`, `allkeys-lru`). Client dedupe: pool `2 × CID_BATCH_SHARDS + 4`, `MinIdleConns` `2 × CID_BATCH_SHARDS`, `MaxRetries -1`, `DialerRetries 1`, `DisableIdentity`; client state giữ pool 4 (D60).
 - **Bí mật** (D45, D46): Redis AUTH bắt buộc, mật khẩu Mongo/Redis qua compose secrets và `*_PASSWORD_FILE`; không nằm trong argv, `docker inspect`, dòng `make` in ra hay log. Mọi log qua handler che credential (D41).
 - **Bảo mật:** JWT EdDSA/RS256 theo JWKS tenant; mTLS nội bộ; core kiểm room thuộc tenant ở mọi thao tác; kiểm đầu vào theo A6, UTF-8 hợp lệ; không log nội dung tin.
-- **Vòng đời core:** config kiểm ở boot (`apps/core/internal/config`, mỗi component có `Validate()`). Khởi động: publisher → flusher → cid batcher → router → slot manager → reconciler → gRPC (chỉ mở sau khi khởi động sạch, D40). Dừng: `/readyz` false → drain → gRPC → reconciler → router → cid batcher → flusher → publisher → nhả slot → đóng client, trong `CORE_SHUTDOWN_BUDGET` (24.2s/25s; tăng mốc nào phải tăng budget và `stop_grace_period` 30s). Mỗi RPC có `CORE_REQUEST_DEADLINE` (D42); client gRPC tắt service config từ DNS (D43).
+- **Vòng đời core:** config kiểm ở boot (`apps/core/internal/config`, mỗi component có `Validate()`). Khởi động: publisher → flusher → cid batcher → router → slot manager → workers → reader → gRPC (chỉ mở sau khi khởi động sạch, D40). Dừng: `/readyz` false → drain → gRPC → reader (`RECONCILE_DRAIN + 1s`) → workers (`WORK_DRAIN + 1s`) → router → cid batcher → flusher → publisher → nhả slot → đóng client, trong `CORE_SHUTDOWN_BUDGET` (26.2s/28s; tăng mốc nào phải tăng budget và `stop_grace_period` 33s). Mỗi RPC có `CORE_REQUEST_DEADLINE` (D42); client gRPC tắt service config từ DNS (D43). Core có ba JetStream client: publisher fast path, reader, worker (`WORK_PARTITIONS × WORK_FETCH_BATCH` publish đang bay).
 - Monorepo một module, một Dockerfile `ARG TARGET`; Go chạy trong `golang:1.26` qua `make` (D20, D22); code không comment (D23).
 
 ## 14. Xử lý sự cố
@@ -308,13 +317,13 @@ Vận hành: oplog `minRetentionHours` ≥ 24h; định cỡ oplog theo byte (đ
 | Sự cố | Phản ứng |
 |---|---|
 | Mongo đổi primary (5–12s) | Flusher retry có backoff; quá deadline → `UNAVAILABLE`, SDK gửi lại cùng cid |
-| NATS chết | DB vẫn ghi; event fast path mất; reconciler/work stream retry tới khi NATS về; client reconnect lấy mới nhất |
+| NATS chết | DB vẫn ghi; event fast path mất; reader/worker retry tới khi NATS về; client reconnect lấy mới nhất |
 | Redis state chết | Lease hết hạn → `Owns()` false, mọi core vẫn ghi đúng nhờ CAS |
 | Redis dedupe chết | Chống trùng chỉ còn LRU (CD2); không có mark → reconciler publish lại, stream bỏ trùng trong 5m |
 | Core chết | Core khác nhận slot ~5s; event chưa publish được reconciler bù; core nhận slot 0 đọc lại từ vị trí đã xác nhận |
 | Core chết giữa ack và Commit cid | Retry có thể nhận `ErrRetryLater` trong 10s; sau đó trùng chỉ khi tin ngoài 100 tin gần nhất (CD3) |
 | Core chết giữa fact và projection | Retry lệnh đổi đi qua nhánh duplicate key rồi chạy lại projection; không retry thì reconciler sửa sau delay |
-| Reader chậm/ngừng quá cửa sổ oplog | Alert RC5; resync thủ công (§8.3) |
+| Reader chậm/ngừng quá cửa sổ oplog | Alert RC5; `/app resync` (§8.3, D81) |
 | Gateway chết / reconnect hàng loạt | Client backoff + jitter; sync token; room-tail cache |
 | Room nóng | Mailbox có giới hạn, coalesce counter, rate limit post |
 
@@ -388,3 +397,6 @@ Quyết định D1–D60 giữ id cũ; chi tiết và phương án bị loại �
 | D76 | Mỗi guarantee có detector + alert ngay khi định nghĩa | Để alert tới M5 | Guarantee không có detector thì không biết đã vỡ |
 | D77 | Không fencing; actor tự rút khi va doc core khác, retry có backoff + jitter; typing/presence ephemeral không qua core | Fencing epoch theo slot; typing qua slot router | P1 giữ đúng đắn; rủi ro thật là bão retry tự khuếch đại, không phải mất dữ liệu |
 | D78 | Detector là bộ đếm atomic + accessor trong component; package `metrics` đăng ký theo kiểu pull vào Prometheus registry riêng, `GET /metrics` trên cổng admin; luật alert trong repo, kiểm bằng `promtool` | Chỉ log; expvar; OTel metrics ngay | Owner chọn 2026-10-05; Prometheus đã nằm trong kế hoạch M5, pull không đổi đường nóng |
+| D79 | Work stream `CHATIM_WORK` (WorkQueue, file, `MaxAge` 2h, chống trùng 2m) chia 32 partition `work.p{n}` theo `slot % 32`; consumer durable `work-p{n}` do core giữ slot n tiêu thụ, kiểm `Owns(n)` trước mỗi fetch; ack khi mọi effect của record xong, lỗi → `Nak(WORK_RETRY_DELAY)` | Một consumer theo mỗi slot (1024); một consumer chung, worker tự lọc; partition theo core id; hàng đợi trên Redis | 32 đủ chia tải cho ≤ 32 core với ít consumer; gắn với slot nên worker thường chạy trên chủ room (cache ấm); WorkQueue tự xoá record đã ack nên retention theo backlog chứ không theo lưu lượng; Redis dedupe không bền (D44). Owner chốt 2026-10-05 |
+| D80 | Record work stream chỉ mang khoá (kind, room, thread, seq, `CommittedAt`; 33 byte), id `m:{room}-{thread}-{seq}` / `r:{room}`; worker đọc doc khi effect cần (`msg_created` chỉ `Find` tin chưa mark) | Đẩy doc đầy đủ; đẩy event dựng sẵn từ reader | Record nhỏ giữ work stream ≈ 33B/tin thay vì 300–500B (§8.3); phần lớn tin đã có mark nên không cần đọc lại; event chỉ dựng ở effect, dùng chung cho fast path và đường bù (RC2) |
+| D81 | Resync là subcommand `/app resync` của binary core: cùng image, secret, config; quét `rooms` theo `ab ≥ giờ(from)` hoặc `ca ∈ [from, to]`, scan ngược timeline chính, đẩy record vào work stream có `-rate`; worker chạy effect như bình thường | Binary riêng trong `tools/`; resync tự động khi history lost; tool publish event trực tiếp | Không thêm thứ phải deploy và cấp secret; đi qua work stream nên dùng chung registry + chính sách (delay, mark) và bỏ trùng theo id; tự động dễ sinh hàng triệu bản trùng (D69). Owner chốt 2026-10-05 |

@@ -10,6 +10,7 @@ chatim is an internal, logically multi-tenant chat platform (CPaaS) in Go. Phase
 
 Done on `feat/m2b` (shared branch for M2b.0 → M2b.4, one merge to `main` at the end; `dev-done`):
 - M2b.0 (plan `docs/plans/2026-10-05-m2b0-mechanism-foundations.md`): ack marks only for `msg_created`, `RECONCILE_DELAY` default 5s with a boot rule (D65); actor backs off and yields the room on seq contention (D77); `access` permission hook and `view` reader pipeline on `GetHistory`; store write-contract test; detectors on `/metrics` and alert rules (D76, D78).
+- M2b.1 (plan `docs/plans/2026-10-05-m2b1-effect-engine.md`): change reader on slot 0 → `CHATIM_WORK` work stream (32 partitions by slot) → effect workers on every core (D79–D81); `room_created` (fast path + worker); room activity `ls/lm/lc/ab` with `$max`; `/app resync` with a drill itest; stop budget 28s.
 
 Done and merged to `main` (`dev-done`):
 - M0–M1: foundation and PoC on dev.
@@ -17,7 +18,7 @@ Done and merged to `main` (`dev-done`):
 - M2a.1 (PR #8–#10): no room-wide pts, natural event ids, best-effort events, a queue-only publisher on top of the nats.go async publisher (D47–D51).
 - M2a.2 + M2a.3 (PR #11): event reconciliation from the database change feed with acked marks on the dedupe Redis (D52); cross-room cid batching, ack before the cid Commit, a small warm dedupe Redis pool, acked marks in a 10ms window (D58–D60).
 
-The system mechanisms review closed on 2026-10-05 after two rounds with two external reviewers. The result is one design, `docs/designs/261005-chatim-architecture.md`, built on a data-class framework (§4) with decisions D61–D78, and a rewritten `docs/roadmap.md`. Next is M2b.1 (effect engine); its plan is not written yet. Old design, plans and PoC notes are in `docs/archive/` and are not updated. Project docs are written in Vietnamese.
+The system mechanisms review closed on 2026-10-05 after two rounds with two external reviewers. The result is one design, `docs/designs/261005-chatim-architecture.md`, built on a data-class framework (§4) with decisions D61–D81, and a rewritten `docs/roadmap.md`. Next is M2b.2 (edit + delete); its plan is not written yet. Old design, plans and PoC notes are in `docs/archive/` and are not updated. Project docs are written in Vietnamese.
 
 ## Hard rules
 
@@ -84,6 +85,7 @@ make image TARGET=apps/core # distroless chatim/<name>:dev for any main package
 make core-up; make core-down   # core-1 + core-2 (compose profile app), gRPC 127.0.0.1:9001/9002, admin :9090 never published
 make alerts-check           # promtool check rules on deploy/prometheus/alerts.yml (in Docker)
 make e2e                    # tools/corecli: create, send, history, kill core-1, verify no loss/dup, live events
+docker exec chatim-core-1 /app resync -from RFC3339 -to RFC3339 [-tenant T] [-room ID] [-rate 500] [-dry-run]   # replay a lost change feed range into the work stream
 make poc TOOL=corebench ARGS="-rate 5000 -duration 60s -watch 20"   # needs core-up; other tools: mongobench, postgresbench, natsbench, wsbench
 ```
 
@@ -162,13 +164,15 @@ Rules:
 
 **Invariant: any core must handle any room correctly.** Ownership only buys batching, ordering and cache hits. Correctness comes from the unique `_id` acting as CAS, so a Redis failover or a double owner never loses or duplicates a message.
 
-**Event reconciliation (`apps/core/internal/reconcile`, D52).**
-- Runs only on the slot 0 owner (`Owns(0)`, no extra lease); each lead is a term that opens the feed and logs `reconcile term started`. Overlapping reconcilers stay correct (same ids). `RECONCILE_ENABLED=false` turns it off; marks are still written.
-- Source is the database commit log through `store.ChangeFeed`/`store.Cursor`; the reconciler imports no driver. `mongostore.Feed` tails the `messages` change stream (insert only) and stores the position in `reconciler_state` (conditional, `w:majority`, never moves back). Every feed adapter must pass `storetest.RunFeed`.
-- Waits until `CommittedAt + RECONCILE_DELAY` (D = `RECONCILE_DELAY`, default 5s), looks up acked marks per batch, and republishes unmarked messages rebuilt from the doc with the natural id on its own `jetstream.New` client (window `RECONCILE_WINDOW`, unbounded retry). A missing room or corrupt doc is dropped and logged.
-- `Confirm` only past changes that are all acked or marked, every `RECONCILE_CONFIRM_EVERY`; a term never blocks longer than that without a checkpoint (confirm + slot 0 check).
-- `EVT_STREAM_DUPLICATES` is 5m; boot rejects `RECONCILE_DELAY >= EVT_STREAM_DUPLICATES` and `RECONCILE_DELAY <= PUB_ACK_TIMEOUT + 10ms + 1s` (D65; with the default delay `PUB_ACK_TIMEOUT` must stay under about 3.99s). The publisher marks only events with an ack mark policy (`msg_created`). Lost history (`ErrFeedHistoryLost`) logs an error, `Forget`s and restarts from now; that gap is lost.
-- Bootstrap anchor: `mongostore.Bootstrap` writes `reconciler_state` `{_id: "messages", at: $$CLUSTER_TIME}` only when no `at` exists (pipeline upsert, `w:majority`), so re-running it never moves the anchor or a confirmed token. `Open` resumes after the token, else starts at the anchor (`StartAtOperationTime`), else from now, so a fresh database also reconciles writes made before the first term. Only after `Forget` (lost history) does the feed start from now; that range was already lost.
+**Effect engine (`reconcile` reader, `work`, `effects`; D52, D65, D66, D79–D81).**
+- The reader (`apps/core/internal/reconcile`) runs only on the slot 0 owner (`Owns(0)`, no extra lease); each lead is a term that opens the feed and logs `reconcile term started`. `RECONCILE_ENABLED=false` turns only the reader off; workers always run and marks are still written.
+- Source is the database commit log through `store.ChangeFeed`/`store.Cursor` (`store.Change.Kind`: `MessageInserted`, `RoomInserted`); the reader imports no driver. `mongostore.Feed` watches the database for inserts into `messages` and `rooms` and stores the position in `reconciler_state` `_id: "changes"` (conditional, `w:majority`, never moves back). Every feed adapter must pass `storetest.RunFeed`.
+- The reader turns each change into a `work.Record` (keys + `CommittedAt`, 33 bytes; id `m:{room}-{thread}-{seq}` or `r:{room}`) and publishes it to `CHATIM_WORK` (WorkQueue, subject `work.p{slot % 32}`, `Nats-Msg-Id` = record id) within `RECONCILE_WINDOW`, unbounded retry. It confirms only past the prefix the work stream acked, every `RECONCILE_CONFIRM_EVERY`. It never waits, reads marks or builds events.
+- Workers (`effects.Workers`) run on every core: partition n is fetched only while `Owns(n)` (durable consumer `work-p{n}`, batches of `WORK_FETCH_BATCH`). The registry runs, in order, `room_activity` (delay 0, one bulk `$max` per batch on `rooms`) and `msg_created` (delay `RECONCILE_DELAY`, checks ack marks, `Find`s unmarked messages, publishes and waits for the PubAck on the third JetStream client) for `MessageInserted`, and `room_created` (delay `RECONCILE_DELAY`, no mark) for `RoomInserted`. A record is acked only when every effect returned nil; otherwise `Nak(WORK_RETRY_DELAY)`. A missing room or corrupt doc is dropped, counted in `effect_dropped_total`.
+- `CreateRoom` publishes `room_created` on the fast path too; the stream drops the worker's copy by id within `EVT_STREAM_DUPLICATES`.
+- Boot rules: `RECONCILE_DELAY < EVT_STREAM_DUPLICATES` and `RECONCILE_DELAY > PUB_ACK_TIMEOUT + 10ms + 1s` always apply (D65); `WORK_DUPLICATES > RECONCILE_CONFIRM_EVERY + RECONCILE_DRAIN`. The publisher marks only `msg_created`. Lost history (`ErrFeedHistoryLost`) logs an error, `Forget`s and restarts from now; recover the gap with `/app resync` (scans rooms with `ab >= hour(from)` or `ca` in range, replays the main timeline backwards into the work stream at `-rate`).
+- Bootstrap anchor: `mongostore.Bootstrap` writes `reconciler_state` `{_id: "changes", at: $$CLUSTER_TIME}` only when no `at` exists, so a fresh database also forwards writes made before the first term; re-running it never moves the anchor or a confirmed token.
+- Room activity (`rooms.ls/lm/lc/ab`, D69) is written only by the `room_activity` worker effect; `ab` is the hour of the last change and is indexed (`{ab: 1}`, plus `{ca: 1}` for the resync query).
 
 **Permission hook and reader pipeline (`access`, `view`).**
 - `access.Policy` is the single permission point; `access.Checker` always enforces tenant and membership first, then asks the policy (default `AllowMembers`). `SendMessage` asks it in the actor (`actor.WithPolicy`), `GetHistory` in `grpcsrv`.
@@ -177,14 +181,16 @@ Rules:
 
 **Detectors (D76, D78).**
 - Components keep atomic counters and accessors; `apps/core/internal/metrics` registers them as pull-based `CounterFunc`/`GaugeFunc` on a private Prometheus registry served at `GET /metrics` on the admin port (wiring in `apps/core/metrics_wiring.go`). All names start with `chatim_core_`.
-- Alert rules are in `deploy/prometheus/alerts.yml` (13 rules); check with `make alerts-check`. A new guarantee needs a metric and a rule in the same PR.
-- `reconcile_lag_seconds` is how far the reconciler runs behind `RECONCILE_DELAY`, not raw age. `mongo_oplog_window_seconds` is NaN when the oplog cannot be read (needs read access to `local`).
+- Alert rules are in `deploy/prometheus/alerts.yml` (15 rules); check with `make alerts-check`. A new guarantee needs a metric and a rule in the same PR.
+- `reconcile_lag_seconds`, `reconcile_republished_total{effect}`, `effect_dropped_total{effect}`, `work_processed_total` and `work_failures_total` come from the workers on every core; reader metrics only on cores with `RECONCILE_ENABLED`.
+- `reconcile_lag_seconds` is how far the workers run behind each effect's delay, not raw age. `mongo_oplog_window_seconds` is NaN when the oplog cannot be read (needs read access to `local`).
 
 **Process lifecycle (`apps/core`).**
 - Config is validated at boot by `apps/core/internal/config`, which applies cross-field timeout rules; components export `Validate()`.
-- Start order: publisher → flusher → cid batcher → router → slot manager → reconciler → gRPC. gRPC is served only after a clean start.
-- Shutdown order: `/readyz` false → drain delay → gRPC → reconciler (`RECONCILE_DRAIN + 1s`) → router → cid batcher (flushes queued Commit/Abort within `2 × REDIS_OP_TIMEOUT`) → flusher → publisher (drains its queues, then waits for `PublishAsyncComplete` within `CORE_PUBLISHER_DRAIN`) → slot release → clients. All of it fits within `CORE_SHUTDOWN_BUDGET`: the default plan is 24.2s of 25s, so raising any stop phase needs a higher budget and compose `stop_grace_period` (30s).
+- Start order: publisher → flusher → cid batcher → router → slot manager → workers → reader → gRPC. gRPC is served only after a clean start.
+- Shutdown order: `/readyz` false → drain delay → gRPC → reader (`RECONCILE_DRAIN + 1s`) → workers (`WORK_DRAIN + 1s`) → router → cid batcher (flushes queued Commit/Abort within `2 × REDIS_OP_TIMEOUT`) → flusher → publisher (drains its queues, then waits for `PublishAsyncComplete` within `CORE_PUBLISHER_DRAIN`) → slot release → clients. All of it fits within `CORE_SHUTDOWN_BUDGET`: the default plan is 26.2s of 28s, so raising any stop phase needs a higher budget and compose `stop_grace_period` (33s).
 - `/app probe` is the container healthcheck.
+- `/app resync` is a one-shot subcommand: Mongo + NATS only, same config and redaction as serve.
 - Every log line goes through a handler that redacts MONGO_URI and NATS_URL credentials, the Mongo password and both Redis passwords.
 
 **Shard-readiness rules (design §5.1).** Mongo runs as a replica set without sharding, but sharding must later need configuration only:
@@ -202,9 +208,9 @@ Rules:
 
 ## Docs
 
-- `docs/designs/261005-chatim-architecture.md`: the single source of truth: requirements (R17 revised), principles P1–P8, the data-class framework every plan must use (§4), data model, write path (built and planned), counter, effect engine, read path, gateway, guarantees with detectors, and the Decision Log (D1–D60 kept by id, new D61–D78). Add new decisions there.
+- `docs/designs/261005-chatim-architecture.md`: the single source of truth: requirements (R17 revised), principles P1–P8, the data-class framework every plan must use (§4), data model, write path (built and planned), counter, effect engine, read path, gateway, guarantees with detectors, and the Decision Log (D1–D60 kept by id, new D61–D81). Add new decisions there.
 - `docs/roadmap.md`: plan-writing rules, milestones M2b.0 → M5, dependencies, readiness.
-- `docs/plans/`: per-milestone plans written with `writing-plans` before coding, executed with `subagent-driven-development` or `separate-driven-development`. M2b.0: `docs/plans/2026-10-05-m2b0-mechanism-foundations.md` (executed; results and known issues at its end).
+- `docs/plans/`: per-milestone plans written with `writing-plans` before coding, executed with `subagent-driven-development` or `separate-driven-development`. M2b.0: `docs/plans/2026-10-05-m2b0-mechanism-foundations.md` (executed; results and known issues at its end). M2b.1: `docs/plans/2026-10-05-m2b1-effect-engine.md` (executed; results and known issues at its end).
 - `docs/poc/README.md`: dev results (R1–R5, C1) and the prod-like measurement list P1–P10. Dev numbers only validate tools.
 - `docs/research/261004-system-mechanisms-*`: the review record: the English report (`-report`), round 1 reviews (`-review-cl`, `-review-ge`), round 2 questions (`-round2-cl`, `-round2-ge`) and answers (`-round2-review-cl`, `-round2-review-ge`), and the owner-facing synthesis with every decision (`-synthesis`).
 - `docs/archive/`: the Phase 1 design (full D1–D60 rationale), the draft mechanisms review, the component diagrams, the M0–M2a.3 plans and the old PoC notes. Frozen.

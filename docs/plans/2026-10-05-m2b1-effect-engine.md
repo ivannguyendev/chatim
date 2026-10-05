@@ -5323,8 +5323,7 @@ func (w *Workers) fetchFailed(ctx context.Context, p int, err error) {
 	if err == nil {
 		return
 	}
-	var bad work.BadRecordsError
-	if errors.As(err, &bad) {
+	if bad, ok := errors.AsType[work.BadRecordsError](err); ok {
 		w.failed.Add(bad.Terminated)
 	}
 	w.fails.warn(ctx, fetchFailedMsg, "partition", p, "err", err)
@@ -9283,3 +9282,31 @@ git commit -m "docs: record M2b.1 execution results"
 - Resync dừng ở tin đầu tiên `CreatedAt < from`; lệch đồng hồ giữa core có thể bỏ sót tin sát mép → README/thiết kế dặn chọn `-from` rộng hơn.
 - Task 17 Step 7 dùng `infra-reset` (xoá dữ liệu dev) và `pmset` (macOS).
 
+## Kết quả thực thi
+
+Commit từng task (nhánh `feat/m2b`):
+
+- T1 `32b4680` proto `room_created`; T2 `b85f5d8`, `8da5cce`, `b7ae5a8` publish kind + fast path CreateRoom (kèm sửa e2e corecli bỏ qua live event không phải tin).
+- T3 `a0da142`, `366dd89` `Change.Kind` + memstore log chung + guard reconcile tạm; T4 `312ffee` feed Mongo cấp database + anchor `changes`.
+- T5 `1155245` work record; T6 `511328d` work stream + consumer + `worktest` + config `Work`.
+- T7 `0883520` reader đẩy record; T8 `39c3f54` registry + worker loop; T9 `d957c7b` effect `msg_created`; T10 `83dc61e` effect `room_created`; T11 `eab6954` room activity.
+- T12 `a24a108` sửa `FetchContext` (fix), `97e1a70` worker mọi core + dừng 28s; T13 `8531a79` metrics + 15 alert; T14 `cc2da2e` `/app resync` + itest diễn tập; T15 `f8ffa10` itest end-to-end.
+- T16 commit docs này.
+
+Lệch so với plan:
+
+- Idiom gofmt/vet/lint: gofmt căn cột `load_test.go` (T6, T7), `write_contract_test.go` (T11), `stop_order_test.go` (T12); `errors.AsType` thay `errors.As` ở T8 (lint modernize, đã sửa cả snippet plan); `slices.Backward` ở `scan.go` (T14); T11 vet "suspect or" ở `room_activity_test.go:39` viết lại điều kiện, cùng ý.
+- T12: itest đầu fail goleak: 32 goroutine pull fetch của nats.go còn sống sau shutdown (`FetchMaxWait` không huỷ được). Sửa `a24a108`: fetch gắn context của caller (`FetchContext` + `WithTimeout`; hết deadline riêng = fetch rỗng). Sau đó mới commit Task 12 (itest ok, e2e PASS 80 seq, 0 trùng, một term reader mỗi core).
+- T14: xoá `itCore.awaitTerm` không dùng (lint); T15 thêm lại và dùng.
+- T4: `bootstrap.go` 101 dòng, plan ước 100.
+
+Lỗi Minor còn mở:
+
+1. T4: `NewFeed` dựng lại handle db (mất option db của caller); `feedStart` đọc doc cũ mỗi lần boot; `at` cũ hơn oplog → lỗi 286 → `Forget` (như trước); lỗi decode bọc hai lần; change stream cấp database cần quyền `changeStream` trên cả database (role prod).
+2. T7: luật `WORK_DUPLICATES` chỉ chặn replay khi head ack kịp; head kẹt (NATS chết > 2m) + reader crash thì replay record cũ hơn cửa sổ chống trùng → record trùng (an toàn vì effect idempotent). `EffectRoomCache` chưa dùng tới T12; alert `ChatimReconcilerLagging`/`ChatimRepublishSurge` không có dữ liệu tới T13 (đã biết).
+3. T8: (1) effect `Run` panic không recover → core sập; (2) sau `Close`, effect delay 0 kế tiếp trong nhóm vẫn có thể bắt đầu (có hạn, chậm dừng); (3) `Lag` cũ khi lô đang chạy; (4) kind chưa đăng ký bị ack im lặng, nhóm xếp theo giá trị `ChangeKind` không theo registry; (5) head-of-line giữa các kind trong một lô (chỉ trễ); (6) kết quả sai độ dài/nil không được log, retry im lặng mỗi `RetryDelay`; (7) Close-trước-Run vô hại; (8) `BadRecordsError` lúc đang dừng không được đếm. Thiếu test: kết quả sai độ dài; ctx huỷ khi effect đang chạy; Close hai lần/không Run; lỗi Ack/Nak; kind chưa đăng ký; mất ownership giữa chừng.
+4. T9: drop (room không có, token hỏng) chỉ đếm, không log (metric `effect_dropped_total` + alert bù); Ok và ctx cùng sẵn sàng có thể `Nak` record đã ack (bản trùng bị bỏ, `Failed` bị thổi phồng); `PublishMsgAsync` có thể chặn ở giới hạn stall mà không theo ctx (có hạn bởi nats.go). Thiếu test: lỗi tra cứu/store khi nhiều room; đếm drop key sai; `len(acked) != len(keys)`; cache eviction.
+5. T12: (1) thời gian fetch hiệu dụng bằng 90% `WORK_FETCH_WAIT`; tin chưa đọc trong channel lúc ctx.Done hoặc tới sau deadline fetch chỉ giao lại sau `AckWait` 35s (chỉ trễ); (2) chưa có unit test cho `fetchError` deadline vs cancel; (3) bước dừng worker `Drain + 1s` = 2s có thể ngắn hơn thời gian chờ PubAck (~`PUB_ACK_TIMEOUT`) → "shutdown incomplete" dưới tải, record bị `Nak`, không mất; cân nhắc luật `WORK_DRAIN` so với `PUB_ACK_TIMEOUT`; (4) `stop_order_test` thiếu ca reader nil; (5) nhãn validation "WORK_*, SLOT_TICK" mơ hồ. Ghi chú T6: `Fetch` chờ trọn `WORK_FETCH_WAIT` khi lưu lượng nhẹ nên `room_activity` trễ ~1s; mỗi cửa sổ fetch chỉ kiểm shutdown/ownership một lần.
+6. T14: lỗi `config.Load` log không che (như serve); dòng báo cáo vẫn in khi Run lỗi (không có dấu partial); scan ngược giả định `CreatedAt` tăng đơn điệu theo seq (migrator/lệch đồng hồ có thể dừng sớm); range xa quá khứ đi qua các trang mới trước (chi phí runbook); negative check của drill là chờ cố định 3s; `resync` không tham số thoát mã 2 báo lỗi `-from` nhưng không liệt kê cờ; `config.Load` có thể đòi secret Redis cho container chỉ chạy resync (còn mở). Giới hạn đã ghi: thứ tự event trong room ngược; scan room bận từ tin mới nhất; lệch đồng hồ sát mép `-from`.
+
+Số đo xả backlog dev (Task 17): (controller điền)
