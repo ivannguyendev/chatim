@@ -104,7 +104,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 		a.reconciler = rec
 	}
 	a.publisher, a.flusher, a.cidBatch, a.router, a.slots = pub, fl, batch, router, slots
-	svc, err := grpcsrv.New(grpcsrv.Deps{Sender: router, Rooms: st, Pages: st}, log)
+	svc, err := grpcsrv.New(grpcsrv.Deps{Sender: router, Rooms: st, Pages: st, Events: pub}, log)
 	if err != nil {
 		return nil, fmt.Errorf("wire core service: %w", err)
 	}

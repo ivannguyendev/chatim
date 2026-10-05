@@ -31,11 +31,20 @@ type PageReader interface {
 	Page(ctx context.Context, q store.PageQuery) ([]domain.Message, error)
 }
 
+type EventPublisher interface {
+	Enqueue(room uint64, events []*chatimv1.Event) error
+}
+
+type noEvents struct{}
+
+func (noEvents) Enqueue(uint64, []*chatimv1.Event) error { return nil }
+
 type Deps struct {
 	Sender Sender
 	Rooms  store.Rooms
 	Pages  PageReader
 	Policy access.Policy
+	Events EventPublisher
 	NewID  func() uint64
 	Now    func() time.Time
 }
@@ -45,6 +54,7 @@ type Service struct {
 	sender Sender
 	rooms  store.Rooms
 	pages  PageReader
+	events EventPublisher
 	access *access.Checker
 	view   view.Pipeline
 	newID  func() uint64
@@ -64,6 +74,9 @@ func New(d Deps, log *slog.Logger) (*Service, error) {
 	if d.Now == nil {
 		d.Now = time.Now
 	}
+	if d.Events == nil {
+		d.Events = noEvents{}
+	}
 	if log == nil {
 		log = slog.Default()
 	}
@@ -71,7 +84,7 @@ func New(d Deps, log *slog.Logger) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Service{sender: d.Sender, rooms: d.Rooms, pages: d.Pages, access: checker, view: view.Default(), newID: d.NewID, now: d.Now, log: log}, nil
+	return &Service{sender: d.Sender, rooms: d.Rooms, pages: d.Pages, events: d.Events, access: checker, view: view.Default(), newID: d.NewID, now: d.Now, log: log}, nil
 }
 
 func (s *Service) SendMessage(ctx context.Context, req *chatimv1.SendMessageRequest) (*chatimv1.SendMessageResponse, error) {

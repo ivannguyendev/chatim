@@ -57,6 +57,7 @@ type options struct {
 	now     func() time.Time
 	limiter *resilience.Limiter
 	policy  access.Policy
+	events  grpcsrv.EventPublisher
 }
 
 func newRig(t *testing.T, o options) *rig {
@@ -65,7 +66,7 @@ func newRig(t *testing.T, o options) *rig {
 	if o.sender == nil {
 		o.sender = startRouter(t, rg)
 	}
-	svc, err := grpcsrv.New(grpcsrv.Deps{Sender: o.sender, Rooms: rg.rooms, Pages: rg.msgs, NewID: o.newID, Now: o.now, Policy: o.policy}, quiet)
+	svc, err := grpcsrv.New(grpcsrv.Deps{Sender: o.sender, Rooms: rg.rooms, Pages: rg.msgs, NewID: o.newID, Now: o.now, Policy: o.policy, Events: o.events}, quiet)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

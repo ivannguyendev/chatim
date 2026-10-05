@@ -35,6 +35,7 @@ func (s *Service) CreateRoom(ctx context.Context, req *chatimv1.CreateRoomReques
 		err = s.rooms.Create(ctx, room, members)
 		switch {
 		case err == nil:
+			_ = s.events.Enqueue(room.ID, []*chatimv1.Event{pbconv.RoomCreated(room)})
 			return &chatimv1.CreateRoomResponse{Room: pbconv.Room(room)}, nil
 		case errors.Is(err, store.ErrRoomExists):
 			s.log.WarnContext(ctx, "room id taken, drawing a new one", "room", room.ID)
