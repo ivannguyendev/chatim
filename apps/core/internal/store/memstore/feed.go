@@ -5,40 +5,12 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
-	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
 var _ store.ChangeFeed = (*Feed)(nil)
-
-type logged struct {
-	msg domain.Message
-	at  time.Time
-}
-
-func (s *Messages) appendLog(m domain.Message) {
-	s.log = append(s.log, logged{msg: m, at: time.Now()})
-	close(s.grew)
-	s.grew = make(chan struct{})
-}
-
-func (s *Messages) logAt(i int) (logged, <-chan struct{}, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if i < len(s.log) {
-		return s.log[i], nil, true
-	}
-	return logged{}, s.grew, false
-}
-
-func (s *Messages) logLen() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return len(s.log)
-}
 
 type Feed struct {
 	msgs      *Messages
@@ -48,7 +20,12 @@ type Feed struct {
 	lost      bool
 }
 
-func NewFeed(msgs *Messages) *Feed { return &Feed{msgs: msgs, confirmed: msgs.logLen(), known: true} }
+func NewFeed(msgs *Messages, rooms *Rooms) *Feed {
+	if rooms != nil {
+		rooms.attach(msgs)
+	}
+	return &Feed{msgs: msgs, confirmed: msgs.logLen(), known: true}
+}
 
 func (f *Feed) LoseHistory() {
 	f.mu.Lock()
@@ -106,7 +83,7 @@ func (c *cursor) Next(ctx context.Context) (store.Change, error) {
 		l, grew, ok := c.feed.msgs.logAt(c.next)
 		if ok {
 			c.next++
-			return store.Change{Msg: l.msg, CommittedAt: l.at, Position: store.Position(strconv.Itoa(c.next))}, nil
+			return store.Change{Kind: l.kind, Msg: l.msg, Room: l.room, CommittedAt: l.at, Position: store.Position(strconv.Itoa(c.next))}, nil
 		}
 		select {
 		case <-grew:

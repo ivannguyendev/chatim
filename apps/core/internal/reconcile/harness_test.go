@@ -101,7 +101,7 @@ type rig struct {
 func newRig(t *testing.T, wrap func(store.ChangeFeed) store.ChangeFeed) *rig {
 	t.Helper()
 	rg := &rig{msgs: memstore.NewMessages(), owner: &owner{}, marks: &marks{acked: map[store.MsgKey]bool{}}, js: &publishtest.JetStream{}, sink: &testlog.Sink{}}
-	rg.feed = memstore.NewFeed(rg.msgs)
+	rg.feed = memstore.NewFeed(rg.msgs, nil)
 	rg.owner.leading.Store(true)
 	rooms := memstore.NewRooms()
 	created := time.Now()

@@ -17,8 +17,17 @@ var (
 
 type Position []byte
 
+type ChangeKind uint8
+
+const (
+	MessageInserted ChangeKind = iota + 1
+	RoomInserted
+)
+
 type Change struct {
+	Kind        ChangeKind
 	Msg         domain.Message
+	Room        domain.Room
 	CommittedAt time.Time
 	Position    Position
 }

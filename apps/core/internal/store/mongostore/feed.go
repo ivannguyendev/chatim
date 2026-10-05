@@ -100,7 +100,7 @@ func (c *feedCursor) Next(ctx context.Context) (store.Change, error) {
 	if err != nil {
 		return store.Change{}, fmt.Errorf("%w: encode position: %w", store.ErrCorruptChange, err)
 	}
-	return store.Change{Msg: m, CommittedAt: ev.WallTime, Position: pos}, nil
+	return store.Change{Kind: store.MessageInserted, Msg: m, CommittedAt: ev.WallTime, Position: pos}, nil
 }
 
 func (c *feedCursor) Confirm(ctx context.Context, pos store.Position) error {

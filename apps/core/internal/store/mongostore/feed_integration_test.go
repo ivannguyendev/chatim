@@ -9,8 +9,8 @@ import (
 
 func TestMongoFeedContract(t *testing.T) {
 	client := itClient(t)
-	storetest.RunFeed(t, func(t *testing.T) (store.Messages, store.ChangeFeed) {
+	storetest.RunFeed(t, func(t *testing.T) (store.Messages, store.Rooms, store.ChangeFeed) {
 		s, db := itStore(t, client)
-		return s, NewFeed(db)
+		return s, s, NewFeed(db)
 	})
 }

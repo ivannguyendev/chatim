@@ -20,6 +20,7 @@ type Rooms struct {
 	mu      sync.RWMutex
 	rooms   map[uint64]domain.Room
 	members map[memberKey]domain.Member
+	log     *Messages
 }
 
 func NewRooms() *Rooms {
@@ -44,6 +45,9 @@ func (s *Rooms) Create(ctx context.Context, r domain.Room, members []domain.Memb
 		if _, ok := s.members[k]; !ok {
 			s.members[k] = m
 		}
+	}
+	if s.log != nil {
+		s.log.appendRoom(r)
 	}
 	return nil
 }

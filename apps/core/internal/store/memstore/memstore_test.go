@@ -15,8 +15,8 @@ func TestContract(t *testing.T) {
 }
 
 func TestFeedContract(t *testing.T) {
-	storetest.RunFeed(t, func(*testing.T) (store.Messages, store.ChangeFeed) {
-		msgs := memstore.NewMessages()
-		return msgs, memstore.NewFeed(msgs)
+	storetest.RunFeed(t, func(*testing.T) (store.Messages, store.Rooms, store.ChangeFeed) {
+		msgs, rooms := memstore.NewMessages(), memstore.NewRooms()
+		return msgs, rooms, memstore.NewFeed(msgs, rooms)
 	})
 }
