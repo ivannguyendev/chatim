@@ -25,7 +25,7 @@ func NewRouter(msgs store.Messages, rooms store.Rooms, sub Submitter, cids CIDRe
 		sub:     sub,
 		cids:    cids,
 		events:  events,
-		policy:  access.AllowMembers{},
+		policy:  access.DefaultPolicy{},
 		cfg:     cfg,
 		log:     log,
 		actors:  make(map[uint64]*actor),

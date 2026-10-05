@@ -70,7 +70,7 @@ func TestCheckerPassesTheFullRequestToThePolicy(t *testing.T) {
 	}
 }
 
-func TestNilPolicyAllowsMembers(t *testing.T) {
+func TestNilPolicyUsesTheDefaultPolicy(t *testing.T) {
 	c, err := access.NewChecker(rooms(t), nil)
 	if err != nil {
 		t.Fatalf("NewChecker: %v", err)
@@ -79,7 +79,54 @@ func TestNilPolicyAllowsMembers(t *testing.T) {
 	if err != nil || req.Member.User != "alice" {
 		t.Fatalf("Authorize = %+v, %v; want alice allowed", req, err)
 	}
+	del, err := c.Admit(t.Context(), access.DeleteMessage, "acme", "alice", room)
+	if err != nil {
+		t.Fatalf("Admit: %v", err)
+	}
+	del.Author = "bob"
+	if err := c.Allow(t.Context(), del); !errors.Is(err, access.ErrDenied) {
+		t.Fatalf("owner alice deletes bob's message = %v, want ErrDenied", err)
+	}
 	if _, err := access.NewChecker(nil, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
 		t.Fatalf("NewChecker(nil) = %v, want ErrInvalidArgument", err)
+	}
+}
+
+func TestAdmitChecksTheRoomWithoutThePolicy(t *testing.T) {
+	asked := 0
+	deny := access.PolicyFunc(func(context.Context, access.Request) error { asked++; return access.ErrDenied })
+	c, err := access.NewChecker(rooms(t), deny)
+	if err != nil {
+		t.Fatalf("NewChecker: %v", err)
+	}
+	req, err := c.Admit(t.Context(), access.EditMessage, "acme", "alice", room)
+	if err != nil || asked != 0 {
+		t.Fatalf("Admit = %v after %d policy calls, want nil after 0", err, asked)
+	}
+	if req.Action != access.EditMessage || req.User != "alice" || req.Author != "" || req.Room.ID != room || req.Member.Role != domain.RoleOwner {
+		t.Fatalf("Admit = %+v, want edit_message by owner alice without an author", req)
+	}
+	if _, err := c.Admit(t.Context(), access.EditMessage, "acme", "mallory", room); !errors.Is(err, apperr.ErrPermissionDenied) {
+		t.Fatalf("Admit stranger = %v, want ErrPermissionDenied", err)
+	}
+}
+
+func TestAllowPassesTheRequestWithTheAuthor(t *testing.T) {
+	var got access.Request
+	deny := access.PolicyFunc(func(_ context.Context, r access.Request) error { got = r; return access.ErrDenied })
+	c, err := access.NewChecker(rooms(t), deny)
+	if err != nil {
+		t.Fatalf("NewChecker: %v", err)
+	}
+	req, err := c.Admit(t.Context(), access.DeleteMessage, "acme", "alice", room)
+	if err != nil {
+		t.Fatalf("Admit: %v", err)
+	}
+	req.Author = "bob"
+	if err := c.Allow(t.Context(), req); !errors.Is(err, apperr.ErrPermissionDenied) {
+		t.Fatalf("Allow = %v, want ErrPermissionDenied", err)
+	}
+	if got.Action != access.DeleteMessage || got.User != "alice" || got.Author != "bob" || got.Room.ID != room || got.Member.Role != domain.RoleOwner {
+		t.Fatalf("policy saw %+v, want delete_message by owner alice on bob's message", got)
 	}
 }

@@ -23,12 +23,12 @@ func NewChecker(rooms Rooms, policy Policy) (*Checker, error) {
 		return nil, fmt.Errorf("%w: access checker needs a room store", apperr.ErrInvalidArgument)
 	}
 	if policy == nil {
-		policy = AllowMembers{}
+		policy = DefaultPolicy{}
 	}
 	return &Checker{rooms: rooms, policy: policy}, nil
 }
 
-func (c *Checker) Authorize(ctx context.Context, action Action, tenant, user string, room uint64) (Request, error) {
+func (c *Checker) Admit(ctx context.Context, action Action, tenant, user string, room uint64) (Request, error) {
 	r, err := c.rooms.Get(ctx, room)
 	if err != nil {
 		return Request{}, err
@@ -40,6 +40,17 @@ func (c *Checker) Authorize(ctx context.Context, action Action, tenant, user str
 	if err != nil {
 		return Request{}, err
 	}
-	req := Request{Action: action, User: user, Room: r, Member: m}
-	return req, c.policy.Check(ctx, req)
+	return Request{Action: action, User: user, Room: r, Member: m}, nil
+}
+
+func (c *Checker) Allow(ctx context.Context, req Request) error {
+	return c.policy.Check(ctx, req)
+}
+
+func (c *Checker) Authorize(ctx context.Context, action Action, tenant, user string, room uint64) (Request, error) {
+	req, err := c.Admit(ctx, action, tenant, user, room)
+	if err != nil {
+		return Request{}, err
+	}
+	return req, c.Allow(ctx, req)
 }
