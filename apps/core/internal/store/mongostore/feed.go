@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	messagesFeedID          = "messages"
+	changesFeedID           = "changes"
+	legacyMessagesFeedID    = "messages"
 	changeStreamHistoryLost = 286
 	feedMaxAwait            = time.Second
 )
@@ -26,8 +27,8 @@ const (
 var _ store.ChangeFeed = (*Feed)(nil)
 
 type Feed struct {
-	messages *mongo.Collection
-	state    *mongo.Collection
+	db    *mongo.Database
+	state *mongo.Collection
 }
 
 type feedPosition struct {
@@ -35,25 +36,19 @@ type feedPosition struct {
 	At    bson.Timestamp `bson:"at"`
 }
 
-type changeDoc struct {
-	Token        bson.Raw       `bson:"_id"`
-	ClusterTime  bson.Timestamp `bson:"clusterTime"`
-	WallTime     time.Time      `bson:"wallTime"`
-	FullDocument messageDoc     `bson:"fullDocument"`
-}
-
 func NewFeed(db *mongo.Database) *Feed {
-	majority := options.Collection().
+	majority := options.Database().
 		SetReadPreference(readpref.Primary()).
 		SetReadConcern(readconcern.Majority()).
 		SetWriteConcern(writeconcern.Majority())
-	return &Feed{messages: db.Collection(messagesCollection, majority), state: db.Collection(reconcilerStateCollection, majority)}
+	watched := db.Client().Database(db.Name(), majority)
+	return &Feed{db: watched, state: watched.Collection(reconcilerStateCollection)}
 }
 
 func (f *Feed) Open(ctx context.Context) (store.Cursor, error) {
 	opts := options.ChangeStream().SetMaxAwaitTime(feedMaxAwait)
 	var saved feedPosition
-	switch err := f.state.FindOne(ctx, bson.D{{Key: "_id", Value: messagesFeedID}}).Decode(&saved); {
+	switch err := f.state.FindOne(ctx, bson.D{{Key: "_id", Value: changesFeedID}}).Decode(&saved); {
 	case err == nil && len(saved.Token) > 0:
 		opts.SetStartAfter(saved.Token)
 	case err == nil && !saved.At.IsZero():
@@ -61,16 +56,24 @@ func (f *Feed) Open(ctx context.Context) (store.Cursor, error) {
 	case err != nil && !errors.Is(err, mongo.ErrNoDocuments):
 		return nil, fmt.Errorf("load change feed position: %w", err)
 	}
-	pipeline := mongo.Pipeline{{{Key: "$match", Value: bson.D{{Key: "operationType", Value: "insert"}}}}}
-	cs, err := f.messages.Watch(ctx, pipeline, opts)
+	cs, err := f.db.Watch(ctx, feedPipeline(), opts)
 	if err != nil {
 		return nil, feedError("open change stream", err)
 	}
 	return &feedCursor{cs: cs, state: f.state}, nil
 }
 
+func feedPipeline() mongo.Pipeline {
+	match := bson.D{
+		{Key: "operationType", Value: "insert"},
+		{Key: "ns.coll", Value: bson.D{{Key: "$in", Value: bson.A{messagesCollection, roomsCollection}}}},
+	}
+	return mongo.Pipeline{{{Key: "$match", Value: match}}}
+}
+
 func (f *Feed) Forget(ctx context.Context) error {
-	if _, err := f.state.DeleteOne(ctx, bson.D{{Key: "_id", Value: messagesFeedID}}); err != nil {
+	filter := bson.D{{Key: "_id", Value: bson.D{{Key: "$in", Value: bson.A{changesFeedID, legacyMessagesFeedID}}}}}
+	if _, err := f.state.DeleteMany(ctx, filter); err != nil {
 		return fmt.Errorf("forget change feed position: %w", err)
 	}
 	return nil
@@ -92,7 +95,7 @@ func (c *feedCursor) Next(ctx context.Context) (store.Change, error) {
 	if err := c.cs.Decode(&ev); err != nil {
 		return store.Change{}, fmt.Errorf("%w: decode change event: %w", store.ErrCorruptChange, err)
 	}
-	m, err := decodeMessage(ev.FullDocument)
+	change, err := decodeChange(ev)
 	if err != nil {
 		return store.Change{}, fmt.Errorf("%w: %w", store.ErrCorruptChange, err)
 	}
@@ -100,7 +103,8 @@ func (c *feedCursor) Next(ctx context.Context) (store.Change, error) {
 	if err != nil {
 		return store.Change{}, fmt.Errorf("%w: encode position: %w", store.ErrCorruptChange, err)
 	}
-	return store.Change{Kind: store.MessageInserted, Msg: m, CommittedAt: ev.WallTime, Position: pos}, nil
+	change.Position = pos
+	return change, nil
 }
 
 func (c *feedCursor) Confirm(ctx context.Context, pos store.Position) error {
@@ -108,7 +112,7 @@ func (c *feedCursor) Confirm(ctx context.Context, pos store.Position) error {
 	if err := bson.Unmarshal(pos, &p); err != nil || len(p.Token) == 0 {
 		return fmt.Errorf("%w: change feed position", apperr.ErrInvalidArgument)
 	}
-	filter := bson.D{{Key: "_id", Value: messagesFeedID}, {Key: "at", Value: bson.D{{Key: "$lt", Value: p.At}}}}
+	filter := bson.D{{Key: "_id", Value: changesFeedID}, {Key: "at", Value: bson.D{{Key: "$lt", Value: p.At}}}}
 	update := bson.D{{Key: "$set", Value: bson.D{{Key: "token", Value: p.Token}, {Key: "at", Value: p.At}}}}
 	_, err := c.state.UpdateOne(ctx, filter, update, options.UpdateOne().SetUpsert(true))
 	if err != nil && !mongo.IsDuplicateKeyError(err) {

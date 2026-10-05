@@ -127,7 +127,7 @@ func TestBootstrapRejectsUnclusteredMessages(t *testing.T) {
 func feedState(t *testing.T, db *mongo.Database) feedPosition {
 	t.Helper()
 	var p feedPosition
-	if err := db.Collection(reconcilerStateCollection).FindOne(t.Context(), bson.D{{Key: "_id", Value: messagesFeedID}}).Decode(&p); err != nil {
+	if err := db.Collection(reconcilerStateCollection).FindOne(t.Context(), bson.D{{Key: "_id", Value: changesFeedID}}).Decode(&p); err != nil {
 		t.Fatalf("load feed state: %v", err)
 	}
 	return p

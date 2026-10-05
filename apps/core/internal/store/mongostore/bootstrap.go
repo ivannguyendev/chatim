@@ -2,11 +2,14 @@ package mongostore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/mongo/readconcern"
+	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
 	"go.mongodb.org/mongo-driver/v2/mongo/writeconcern"
 )
 
@@ -26,14 +29,35 @@ func Bootstrap(ctx context.Context, db *mongo.Database) error {
 }
 
 func ensureFeedAnchor(ctx context.Context, db *mongo.Database) error {
-	state := db.Collection(reconcilerStateCollection, options.Collection().SetWriteConcern(writeconcern.Majority()))
-	keepOrNow := bson.D{{Key: "$ifNull", Value: bson.A{"$at", "$$CLUSTER_TIME"}}}
-	update := mongo.Pipeline{{{Key: "$set", Value: bson.D{{Key: "at", Value: keepOrNow}}}}}
-	filter := bson.D{{Key: "_id", Value: messagesFeedID}}
+	majority := options.Collection().
+		SetReadPreference(readpref.Primary()).
+		SetReadConcern(readconcern.Majority()).
+		SetWriteConcern(writeconcern.Majority())
+	state := db.Collection(reconcilerStateCollection, majority)
+	start, err := feedStart(ctx, state)
+	if err != nil {
+		return err
+	}
+	keepOrStart := bson.D{{Key: "$ifNull", Value: bson.A{"$at", start}}}
+	update := mongo.Pipeline{{{Key: "$set", Value: bson.D{{Key: "at", Value: keepOrStart}}}}}
+	filter := bson.D{{Key: "_id", Value: changesFeedID}}
 	if _, err := state.UpdateOne(ctx, filter, update, options.UpdateOne().SetUpsert(true)); err != nil && !mongo.IsDuplicateKeyError(err) {
 		return fmt.Errorf("bootstrap %s: anchor change feed: %w", reconcilerStateCollection, err)
 	}
 	return nil
+}
+
+func feedStart(ctx context.Context, state *mongo.Collection) (any, error) {
+	var old feedPosition
+	err := state.FindOne(ctx, bson.D{{Key: "_id", Value: legacyMessagesFeedID}}).Decode(&old)
+	switch {
+	case errors.Is(err, mongo.ErrNoDocuments) || (err == nil && old.At.IsZero()):
+		return "$$CLUSTER_TIME", nil
+	case err != nil:
+		return nil, fmt.Errorf("bootstrap %s: read the messages feed position: %w", reconcilerStateCollection, err)
+	default:
+		return old.At, nil
+	}
 }
 
 func ensureMessages(ctx context.Context, db *mongo.Database) error {
