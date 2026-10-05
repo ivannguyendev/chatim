@@ -31,6 +31,8 @@ func eventKind(ev *chatimv1.Event) (string, bool) {
 	switch ev.GetPayload().(type) {
 	case *chatimv1.Event_MessageCreated:
 		return msgCreated, true
+	case *chatimv1.Event_RoomCreated:
+		return roomCreated, true
 	default:
 		return "", false
 	}

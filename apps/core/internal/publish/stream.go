@@ -16,7 +16,8 @@ const (
 	DefaultStreamMaxAge     = 7 * 24 * time.Hour
 	DefaultStreamDuplicates = 5 * time.Minute
 
-	msgCreated = "msg_created"
+	msgCreated  = "msg_created"
+	roomCreated = "room_created"
 )
 
 type StreamManager interface {
