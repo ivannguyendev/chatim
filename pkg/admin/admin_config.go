@@ -2,6 +2,7 @@ package admin
 
 import (
 	"cmp"
+	"net/http"
 	"time"
 )
 
@@ -15,6 +16,7 @@ type Config struct {
 	IdleTimeout       time.Duration
 	MaxHeaderBytes    int
 	ShutdownTimeout   time.Duration
+	Metrics           http.Handler
 }
 
 func (c Config) withDefaults() Config {
