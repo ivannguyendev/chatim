@@ -58,6 +58,8 @@ type Config struct {
 	Slot                slot.Config
 	ReconcileEnabled    bool
 	Reconcile           reconcile.Config
+	EffectDelay         time.Duration
+	EffectRoomCache     int
 	AckMarks            eventmark.Config
 }
 

@@ -54,11 +54,10 @@ func metricSources(p probes) []metrics.Source {
 
 func reconcileSources(stats func() reconcile.Stats) []metrics.Source {
 	return []metrics.Source{
-		{Name: "reconcile_running", Help: "1 while this core runs a reconcile term.", Gauge: true, Read: func() float64 { return flag(stats().Running) }},
-		{Name: "reconcile_lag_seconds", Help: "How far the reconciler runs behind its configured delay.", Gauge: true, Read: func() float64 { return stats().Lag.Seconds() }},
-		{Name: "reconcile_terms_total", Help: "Reconcile terms started on this core.", Read: func() float64 { return float64(stats().Terms) }},
-		{Name: "reconcile_republished_total", Help: "Events the reconciler sent again.", Read: func() float64 { return float64(stats().Republished) }},
-		{Name: "reconcile_dropped_total", Help: "Changes that could not become events.", Read: func() float64 { return float64(stats().Dropped) }},
+		{Name: "reconcile_running", Help: "1 while this core runs a reader term.", Gauge: true, Read: func() float64 { return flag(stats().Running) }},
+		{Name: "reconcile_terms_total", Help: "Reader terms started on this core.", Read: func() float64 { return float64(stats().Terms) }},
+		{Name: "reconcile_forwarded_total", Help: "Changes the reader sent to the work stream.", Read: func() float64 { return float64(stats().Forwarded) }},
+		{Name: "reconcile_dropped_total", Help: "Changes that could not become work records.", Read: func() float64 { return float64(stats().Dropped) }},
 		{Name: "reconcile_history_lost_total", Help: "Times the change feed position fell out of the oplog.", Read: func() float64 { return float64(stats().HistoryLost) }},
 	}
 }

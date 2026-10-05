@@ -4,21 +4,19 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"slices"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/nats-io/nats.go"
-	"github.com/nats-io/nats.go/jetstream"
-
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
-	"github.com/ivannguyendev/chatim/apps/core/internal/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
+	"github.com/ivannguyendev/chatim/apps/core/internal/work"
 	"github.com/ivannguyendev/chatim/pkg/ids"
 )
 
-func TestRealInfraReconcilerPublishesWritesThatSkippedTheCore(t *testing.T) {
+func TestRealInfraReaderForwardsWritesThatSkippedTheCore(t *testing.T) {
 	it := realInfra(t)
 	cfg := it.coreConfig(t, map[string]string{"CORE_DRAIN_DELAY": "200ms", "RECONCILE_DELAY": "2s", "PUB_ACK_TIMEOUT": "500ms"})
 	termStarted := make(chan struct{})
@@ -38,23 +36,16 @@ func TestRealInfraReconcilerPublishesWritesThatSkippedTheCore(t *testing.T) {
 		<-core.done
 	})
 	awaitReady(t, cfg, core)
+	select {
+	case <-termStarted:
+	case <-time.After(30 * time.Second):
+		t.Fatalf("reader did not start a term within 30s")
+	}
 
 	roomID := createRoom(t, dialCore(t, cfg))
 	room, err := ids.ParseRoomID(roomID)
 	if err != nil {
 		t.Fatalf("ParseRoomID(%s): %v", roomID, err)
-	}
-	live := make(chan *nats.Msg, 16)
-	sub, err := it.nc.ChanSubscribe(cfg.Stream.LiveRoot+"."+itTenant+".room."+roomID+".>", live)
-	if err != nil {
-		t.Fatalf("subscribe live: %v", err)
-	}
-	t.Cleanup(func() { _ = sub.Unsubscribe() })
-
-	select {
-	case <-termStarted:
-	case <-time.After(30 * time.Second):
-		t.Fatalf("reconciler did not start a term within 30s")
 	}
 
 	inserted := time.Now()
@@ -64,18 +55,35 @@ func TestRealInfraReconcilerPublishesWritesThatSkippedTheCore(t *testing.T) {
 		t.Fatalf("insert outside the core: %+v", res)
 	}
 
-	want := pbconv.MessageEventID(room, 0, 1)
-	deadline := time.After(30 * time.Second)
+	want := []string{
+		work.Record{Kind: store.RoomInserted, Room: room}.ID(),
+		work.Record{Kind: store.MessageInserted, Room: room, Seq: 1}.ID(),
+	}
+	awaitRecords(t, it, cfg.Work.Name, want)
+	t.Logf("records %v reached the work stream %v after the insert", want, time.Since(inserted))
+}
+
+func awaitRecords(t *testing.T, it *itInfra, stream string, want []string) {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	poll := time.NewTicker(250 * time.Millisecond)
+	defer poll.Stop()
+	seen := map[string]bool{}
 	for {
-		select {
-		case m := <-live:
-			if m.Header.Get(jetstream.MsgIDHeader) == want {
-				t.Logf("live event %s arrived %v after the insert", want, time.Since(inserted))
-				return
+		got := it.streamIDs(t, stream)
+		for id, n := range got {
+			if n > 0 {
+				seen[id] = true
 			}
-		case <-deadline:
-			t.Fatalf("no live event %s within 30s of a write that skipped the core", want)
 		}
+		missing := slices.DeleteFunc(slices.Clone(want), func(id string) bool { return seen[id] })
+		if len(missing) == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("work stream %s lacks %v 30s after the insert; has %v", stream, missing, got)
+		}
+		<-poll.C
 	}
 }
 

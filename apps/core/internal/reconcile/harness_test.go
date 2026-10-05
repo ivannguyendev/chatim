@@ -2,7 +2,6 @@ package reconcile_test
 
 import (
 	"context"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -10,12 +9,12 @@ import (
 	"go.uber.org/goleak"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
-	"github.com/ivannguyendev/chatim/apps/core/internal/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/publish/publishtest"
 	"github.com/ivannguyendev/chatim/apps/core/internal/reconcile"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
 	"github.com/ivannguyendev/chatim/apps/core/internal/testlog"
+	"github.com/ivannguyendev/chatim/apps/core/internal/work"
 )
 
 func TestMain(m *testing.M) {
@@ -23,58 +22,24 @@ func TestMain(m *testing.M) {
 }
 
 const (
-	tenant        = "acme"
-	room   uint64 = 4242
-	delay         = 30 * time.Second
-	tick          = time.Second
+	tenant           = "acme"
+	room      uint64 = 4242
+	otherRoom uint64 = 777
+	tick             = time.Second
 
-	historyLostMsg = "change feed history lost; restarting from now, events in the gap are lost for good"
-	dropMsg        = "dropping change that cannot become an event"
-	lagMsg         = "reconciler lags behind the stream duplicate window; republished events may duplicate"
-	failedMsg      = "event republish failed; retrying"
+	historyLostMsg = "change feed history lost; restarting from now, changes in the gap need a resync"
+	dropMsg        = "dropping change that cannot become a work record"
+	failedMsg      = "work record publish failed; retrying"
 )
 
 var setup = reconcile.Config{
-	SubjectRoot: "evt", Delay: delay, DuplicateWindow: 5 * time.Minute, Window: 4, Batch: 8,
-	ConfirmEvery: tick, Drain: tick, Poll: tick, RoomCache: 16,
+	SubjectRoot: "work", Partitions: 4, Window: 4, Batch: 8,
+	ConfirmEvery: tick, Drain: tick, Poll: tick,
 }
 
 type owner struct{ leading atomic.Bool }
 
 func (o *owner) Owns(slot uint16) bool { return slot == reconcile.LeaderSlot && o.leading.Load() }
-
-type marks struct {
-	mu    sync.Mutex
-	acked map[store.MsgKey]bool
-	err   error
-}
-
-func (m *marks) Acked(_ context.Context, keys []store.MsgKey) ([]bool, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.err != nil {
-		return nil, m.err
-	}
-	out := make([]bool, len(keys))
-	for i, k := range keys {
-		out[i] = m.acked[k]
-	}
-	return out, nil
-}
-
-func (m *marks) fail(err error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.err = err
-}
-
-func (m *marks) mark(keys ...store.MsgKey) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	for _, k := range keys {
-		m.acked[k] = true
-	}
-}
 
 type busyFeed struct {
 	store.ChangeFeed
@@ -91,29 +56,26 @@ func (b *busyFeed) Open(ctx context.Context) (store.Cursor, error) {
 type rig struct {
 	*reconcile.Reconciler
 	msgs  *memstore.Messages
+	rooms *memstore.Rooms
 	feed  *memstore.Feed
+	base  int
 	owner *owner
-	marks *marks
 	js    *publishtest.JetStream
 	sink  *testlog.Sink
 }
 
 func newRig(t *testing.T, wrap func(store.ChangeFeed) store.ChangeFeed) *rig {
 	t.Helper()
-	rg := &rig{msgs: memstore.NewMessages(), owner: &owner{}, marks: &marks{acked: map[store.MsgKey]bool{}}, js: &publishtest.JetStream{}, sink: &testlog.Sink{}}
-	rg.feed = memstore.NewFeed(rg.msgs, nil)
+	rg := &rig{msgs: memstore.NewMessages(), rooms: memstore.NewRooms(), owner: &owner{}, js: &publishtest.JetStream{}, sink: &testlog.Sink{}}
+	rg.createRoom(t, room)
+	rg.feed = memstore.NewFeed(rg.msgs, rg.rooms)
+	rg.base, _ = rg.feed.Confirmed()
 	rg.owner.leading.Store(true)
-	rooms := memstore.NewRooms()
-	created := time.Now()
-	r := domain.Room{ID: room, Tenant: tenant, Type: domain.RoomGroup, Name: "team", CreatedBy: "alice", CreatedAt: created, MemberCount: 1}
-	if err := rooms.Create(t.Context(), r, []domain.Member{{Room: room, Tenant: tenant, User: "alice", Role: domain.RoleOwner, JoinedAt: created}}); err != nil {
-		t.Fatalf("create room: %v", err)
-	}
 	var feed store.ChangeFeed = rg.feed
 	if wrap != nil {
 		feed = wrap(feed)
 	}
-	rec, err := reconcile.New(reconcile.Deps{Feed: feed, Rooms: rooms, Marks: rg.marks, Owner: rg.owner, JS: rg.js}, setup, rg.sink.Logger())
+	rec, err := reconcile.New(reconcile.Deps{Feed: feed, Owner: rg.owner, JS: rg.js}, setup, rg.sink.Logger())
 	if err != nil {
 		t.Fatalf("reconcile.New: %v", err)
 	}
@@ -140,6 +102,15 @@ func (rg *rig) start(t *testing.T) *rig {
 	return rg
 }
 
+func (rg *rig) createRoom(t *testing.T, id uint64) {
+	t.Helper()
+	created := time.Now()
+	r := domain.Room{ID: id, Tenant: tenant, Type: domain.RoomGroup, Name: "team", CreatedBy: "alice", CreatedAt: created, MemberCount: 1}
+	if err := rg.rooms.Create(t.Context(), r, []domain.Member{{Room: id, Tenant: tenant, User: "alice", Role: domain.RoleOwner, JoinedAt: created}}); err != nil {
+		t.Fatalf("create room %d: %v", id, err)
+	}
+}
+
 func (rg *rig) insert(t *testing.T, r uint64, seqs ...uint64) {
 	t.Helper()
 	for _, s := range seqs {
@@ -150,7 +121,27 @@ func (rg *rig) insert(t *testing.T, r uint64, seqs ...uint64) {
 	}
 }
 
-func eventID(seq uint64) string { return pbconv.MessageEventID(room, 0, seq) }
+func (rg *rig) confirmed(t *testing.T) int {
+	t.Helper()
+	n, _ := rg.feed.Confirmed()
+	return n - rg.base
+}
+
+func recordID(seq uint64) string {
+	return work.Record{Kind: store.MessageInserted, Room: room, Seq: seq}.ID()
+}
+
+func roomRecordID(id uint64) string {
+	return work.Record{Kind: store.RoomInserted, Room: id}.ID()
+}
+
+func recordIDs(seqs ...uint64) []string {
+	out := make([]string, len(seqs))
+	for i, s := range seqs {
+		out[i] = recordID(s)
+	}
+	return out
+}
 
 func attemptIDs(js *publishtest.JetStream) []string {
 	var out []string
@@ -166,10 +157,4 @@ func storedIDs(js *publishtest.JetStream) []string {
 		out = append(out, publishtest.MsgID(m))
 	}
 	return out
-}
-
-func (rg *rig) confirmed(t *testing.T) int {
-	t.Helper()
-	n, _ := rg.feed.Confirmed()
-	return n
 }

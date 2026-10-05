@@ -54,10 +54,12 @@ func TestLoadDefaults(t *testing.T) {
 		},
 		ReconcileEnabled: true,
 		Reconcile: reconcile.Config{
-			SubjectRoot: "evt", Delay: 5 * time.Second, DuplicateWindow: 5 * time.Minute, Window: 1024, Batch: 256,
-			ConfirmEvery: time.Second, Drain: time.Second, Poll: time.Second, RoomCache: 65536,
+			SubjectRoot: "work", Partitions: 32, Window: 1024, Batch: 256,
+			ConfirmEvery: time.Second, Drain: time.Second, Poll: time.Second,
 		},
-		AckMarks: eventmark.Config{TTL: time.Hour, Timeout: 100 * time.Millisecond, Cooldown: time.Second},
+		EffectDelay:     5 * time.Second,
+		EffectRoomCache: 65536,
+		AckMarks:        eventmark.Config{TTL: time.Hour, Timeout: 100 * time.Millisecond, Cooldown: time.Second},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Load() =\n%#v\nwant\n%#v", got, want)
@@ -96,10 +98,12 @@ func TestLoadOverrides(t *testing.T) {
 		},
 		ReconcileEnabled: false,
 		Reconcile: reconcile.Config{
-			SubjectRoot: "evt_it", Delay: 20 * time.Second, DuplicateWindow: 5 * time.Minute, Window: 64, Batch: 32,
-			ConfirmEvery: 2 * time.Second, Drain: 500 * time.Millisecond, Poll: 500 * time.Millisecond, RoomCache: 128,
+			SubjectRoot: "work_it", Partitions: 16, Window: 64, Batch: 32,
+			ConfirmEvery: 2 * time.Second, Drain: 500 * time.Millisecond, Poll: 500 * time.Millisecond,
 		},
-		AckMarks: eventmark.Config{TTL: 30 * time.Minute, Timeout: 50 * time.Millisecond, Cooldown: 2 * time.Second},
+		EffectDelay:     20 * time.Second,
+		EffectRoomCache: 128,
+		AckMarks:        eventmark.Config{TTL: 30 * time.Minute, Timeout: 50 * time.Millisecond, Cooldown: 2 * time.Second},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Load() =\n%#v\nwant\n%#v", got, want)

@@ -100,7 +100,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 	var rec *reconcile.Reconciler
 	if cfg.ReconcileEnabled {
 		rec, err = reconcile.New(reconcile.Deps{
-			Feed: mongostore.NewFeed(cl.mongo.Database(cfg.MongoDB)), Rooms: st, Marks: marks, Owner: slots, JS: cl.reconcileJS,
+			Feed: mongostore.NewFeed(cl.mongo.Database(cfg.MongoDB)), Owner: slots, JS: cl.reconcileJS,
 		}, cfg.Reconcile, log)
 		if err != nil {
 			return nil, fmt.Errorf("wire reconciler: %w", err)

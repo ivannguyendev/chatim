@@ -30,7 +30,7 @@ func TestCoreMetricSourcesCoverEveryGuarantee(t *testing.T) {
 	want := []string{
 		"publish_dropped_total", "ack_marks_dropped_total", "redis_degraded", "cid_settle_dropped_total",
 		"cid_pending_elsewhere_total", "room_yields_total", "grpc_load_shed_total", "mongo_oplog_window_seconds",
-		"reconcile_running", "reconcile_lag_seconds", "reconcile_terms_total", "reconcile_republished_total",
+		"reconcile_running", "reconcile_terms_total", "reconcile_forwarded_total",
 		"reconcile_dropped_total", "reconcile_history_lost_total",
 	}
 	got := map[string]bool{}

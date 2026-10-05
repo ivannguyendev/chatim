@@ -42,8 +42,9 @@ func (c Config) validate() error {
 		{c.Dedupe.Timeout <= c.RequestDeadline/10, "REDIS_OP_TIMEOUT must be at most a tenth of CORE_REQUEST_DEADLINE"},
 		{c.Actor.MaxGroup <= c.Flush.MaxBatch, "ACTOR_MAX_GROUP must not exceed FLUSH_MAX_BATCH"},
 		{c.Publish.AckTimeout < c.PublisherDrain, "PUB_ACK_TIMEOUT must be shorter than CORE_PUBLISHER_DRAIN"},
-		{!c.ReconcileEnabled || c.Reconcile.Delay < c.Stream.Duplicates, "RECONCILE_DELAY must be shorter than EVT_STREAM_DUPLICATES"},
-		{!c.ReconcileEnabled || c.Reconcile.Delay > publish.MarkDeadline(c.Publish.AckTimeout), "RECONCILE_DELAY must be longer than PUB_ACK_TIMEOUT plus the ack mark window and timeout"},
+		{c.EffectDelay < c.Stream.Duplicates, "RECONCILE_DELAY must be shorter than EVT_STREAM_DUPLICATES"},
+		{c.EffectDelay > publish.MarkDeadline(c.Publish.AckTimeout), "RECONCILE_DELAY must be longer than PUB_ACK_TIMEOUT plus the ack mark window and timeout"},
+		{c.Work.Duplicates > c.Reconcile.ConfirmEvery+c.Reconcile.Drain, "WORK_DUPLICATES must be longer than RECONCILE_CONFIRM_EVERY + RECONCILE_DRAIN"},
 		{plan.fitsWithin(c.ShutdownBudget), fmt.Sprintf("%s = %v must be shorter than CORE_SHUTDOWN_BUDGET %v", stopPhases, plan.total(), c.ShutdownBudget)},
 	}
 	var errs []error

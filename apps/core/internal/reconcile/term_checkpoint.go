@@ -23,21 +23,6 @@ func (t *term) checkpointIfDue(ctx context.Context) error {
 	return t.checkpoint(ctx)
 }
 
-func (t *term) pause(ctx context.Context, until time.Time) error {
-	for {
-		left := time.Until(until)
-		if left <= 0 {
-			return nil
-		}
-		if err := sleep(ctx, t.r.stop, min(left, t.r.cfg.ConfirmEvery)); err != nil {
-			return err
-		}
-		if err := t.checkpointIfDue(ctx); err != nil {
-			return err
-		}
-	}
-}
-
 func (t *term) makeRoom(ctx context.Context) error {
 	for {
 		t.win.collect()

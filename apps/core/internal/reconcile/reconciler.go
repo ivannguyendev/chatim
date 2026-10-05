@@ -7,18 +7,16 @@ import (
 	"log/slog"
 	"sync"
 	"sync/atomic"
-	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
 const (
-	historyLostMsg = "change feed history lost; restarting from now, events in the gap are lost for good"
-	lagMsg         = "reconciler lags behind the stream duplicate window; republished events may duplicate"
-	failedMsg      = "event republish failed; retrying"
+	historyLostMsg = "change feed history lost; restarting from now, changes in the gap need a resync"
+	dropMsg        = "dropping change that cannot become a work record"
+	failedMsg      = "work record publish failed; retrying"
 )
 
 var (
@@ -31,18 +29,8 @@ type Owner interface {
 	Owns(slot uint16) bool
 }
 
-type Marks interface {
-	Acked(ctx context.Context, keys []store.MsgKey) ([]bool, error)
-}
-
-type RoomReader interface {
-	Get(ctx context.Context, id uint64) (domain.Room, error)
-}
-
 type Deps struct {
 	Feed  store.ChangeFeed
-	Rooms RoomReader
-	Marks Marks
 	Owner Owner
 	JS    publish.JetStream
 }
@@ -51,11 +39,8 @@ type Reconciler struct {
 	deps    Deps
 	cfg     Config
 	log     *slog.Logger
-	types   *roomTypes
 	drops   limitedLog
-	lags    limitedLog
 	fails   limitedLog
-	dropped atomic.Uint64
 	stats   counters
 	started atomic.Bool
 	stop    chan struct{}
@@ -64,8 +49,8 @@ type Reconciler struct {
 }
 
 func New(deps Deps, cfg Config, log *slog.Logger) (*Reconciler, error) {
-	if deps.Feed == nil || deps.Rooms == nil || deps.Marks == nil || deps.Owner == nil || deps.JS == nil {
-		return nil, fmt.Errorf("%w: reconciler needs a feed, rooms, marks, an owner and a jetstream client", apperr.ErrInvalidArgument)
+	if deps.Feed == nil || deps.Owner == nil || deps.JS == nil {
+		return nil, fmt.Errorf("%w: reconciler needs a feed, an owner and a jetstream client", apperr.ErrInvalidArgument)
 	}
 	cfg = cfg.withDefaults()
 	if err := cfg.validate(); err != nil {
@@ -76,13 +61,10 @@ func New(deps Deps, cfg Config, log *slog.Logger) (*Reconciler, error) {
 	}
 	return &Reconciler{
 		deps: deps, cfg: cfg, log: log,
-		types: newRoomTypes(deps.Rooms, cfg.RoomCache),
-		drops: limitedLog{log: log}, lags: limitedLog{log: log}, fails: limitedLog{log: log},
+		drops: limitedLog{log: log}, fails: limitedLog{log: log},
 		stop: make(chan struct{}), done: make(chan struct{}),
 	}, nil
 }
-
-func (r *Reconciler) Dropped() uint64 { return r.dropped.Load() }
 
 func (r *Reconciler) Run(ctx context.Context) error {
 	if !r.started.CompareAndSwap(false, true) {
@@ -158,19 +140,11 @@ func (r *Reconciler) ended(ctx context.Context, err error) {
 	}
 }
 
-func (r *Reconciler) drop(ctx context.Context, msg string, err error) {
-	r.dropped.Add(1)
-	r.drops.warn(ctx, msg, "err", err)
+func (r *Reconciler) drop(ctx context.Context, err error) {
+	r.stats.dropped.Add(1)
+	r.drops.warn(ctx, dropMsg, "err", err)
 }
 
-func (r *Reconciler) republishFailed(err error) {
+func (r *Reconciler) publishFailed(err error) {
 	r.fails.warn(context.Background(), failedMsg, "err", err)
-}
-
-func (r *Reconciler) watchLag(ctx context.Context, committed time.Time) {
-	lag := time.Since(committed)
-	r.stats.lag.Store(int64(max(lag-r.cfg.Delay, 0)))
-	if lag > r.cfg.DuplicateWindow {
-		r.lags.warn(ctx, lagMsg, "lag", lag, "window", r.cfg.DuplicateWindow)
-	}
 }

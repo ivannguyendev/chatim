@@ -105,12 +105,12 @@ Toàn bộ đọc qua `apps/core/internal/config`; thiếu thì dùng giá trị
 | `WORK_STREAM`, `WORK_SUBJECT_ROOT`, `WORK_PARTITIONS`, `WORK_MAX_AGE`, `WORK_DUPLICATES` | `CHATIM_WORK` / `work` / `32` / `2h` / `2m` | Work stream WorkQueue (D79): subject `{root}.p{n}`, mỗi partition một durable pull consumer `work-p{n}` (`AckWait` = `RECONCILE_DELAY` + 30s, `MaxAckPending` 1024, replicas = `EVT_STREAM_REPLICAS`). Partition = `slot % WORK_PARTITIONS` (1–1024), do core giữ slot p tiêu thụ. Tên và gốc subject phải khác stream event; đổi số partition khi đang chạy phải xả hàng trước |
 | `SLOT_TICK`, `SLOT_HEARTBEAT_TTL`, `SLOT_LEASE_TTL`, `SLOT_HOOK_TIMEOUT` | `1s` / `5s` / `10s` / `Tick/2` | Nhịp slot manager; `HookTimeout` suy ra từ `SLOT_TICK` nếu không đặt riêng (D26) |
 | `EVT_ACK_MARK_TTL` | `1h` | TTL bitmap mark đã ack trên Redis dedupe, làm mới theo chunk 8192 tin; dùng chung `REDIS_OP_TIMEOUT`/`REDIS_COOLDOWN` (D52) |
-| `RECONCILE_ENABLED` | `true` | Bật reconciler; chỉ core giữ slot 0 chạy nó. Tắt thì publisher vẫn ghi mark (D52) |
-| `RECONCILE_DELAY` | `5s` | D: chỉ xử lý thay đổi đã commit lâu hơn D; phải dài hơn `PUB_ACK_TIMEOUT` + 10ms + 1s (cửa sổ và timeout của mark) và ngắn hơn `EVT_STREAM_DUPLICATES`; với mặc định 5s, `PUB_ACK_TIMEOUT` phải dưới khoảng 3,99s |
-| `RECONCILE_WINDOW`, `RECONCILE_BATCH` | `1024` / `256` | Số publish đang bay tối đa của reconciler (JetStream client riêng); số thay đổi tra mark trong một lần |
-| `RECONCILE_CONFIRM_EVERY` | `1s` | Nhịp lưu vị trí đã xác nhận và kiểm lại slot 0; reconciler không chặn lâu hơn mức này mà không qua bước đó |
+| `RECONCILE_ENABLED` | `true` | Bật reader trên core giữ slot 0: đọc nhật ký commit, đẩy record vào work stream (D66, D79). Tắt thì publisher vẫn ghi mark (D52) |
+| `RECONCILE_DELAY` | `5s` | D của effect `msg_created`/`room_created`: worker chạy effect sau `CommittedAt + D`; phải dài hơn `PUB_ACK_TIMEOUT` + 10ms + 1s (cửa sổ và timeout của mark) và ngắn hơn `EVT_STREAM_DUPLICATES`, kiểm cả khi `RECONCILE_ENABLED=false`; với mặc định 5s, `PUB_ACK_TIMEOUT` phải dưới khoảng 3,99s |
+| `RECONCILE_WINDOW`, `RECONCILE_BATCH` | `1024` / `256` | Số record đang bay tối đa từ reader tới work stream (JetStream client riêng); bộ đệm change giữa cursor và reader |
+| `RECONCILE_CONFIRM_EVERY` | `1s` | Nhịp lưu vị trí đã xác nhận (prefix record work stream đã ack) và kiểm lại slot 0; `WORK_DUPLICATES` phải dài hơn `RECONCILE_CONFIRM_EVERY + RECONCILE_DRAIN` |
 | `RECONCILE_DRAIN` | `1s` | Lúc dừng: chờ publish đang bay rồi lưu vị trí lần cuối; bước dừng reconciler chiếm `RECONCILE_DRAIN + 1s` |
-| `RECONCILE_ROOM_CACHE` | `65536` | Số room giữ `room_type` trong cache của reconciler |
+| `RECONCILE_ROOM_CACHE` | `65536` | Số room giữ `room_type` trong cache của effect `msg_created` |
 
 ## Cổng
 
