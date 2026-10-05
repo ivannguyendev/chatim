@@ -40,7 +40,7 @@ func realStream(t *testing.T, pub publish.Config) *itStream {
 	}
 	t.Cleanup(nc.Close)
 	failures := &testlog.Sink{}
-	js, err := jetstream.New(nc, pub.JetStreamOptions(failures.Logger())...)
+	js, err := jetstream.New(nc, pub.JetStreamOptions(failures.Logger(), nil)...)
 	if err != nil {
 		t.Fatalf("jetstream.New: %v", err)
 	}

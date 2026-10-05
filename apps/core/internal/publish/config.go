@@ -59,12 +59,12 @@ func (c Config) validate() error {
 	}
 }
 
-func (c Config) JetStreamOptions(log *slog.Logger) []jetstream.JetStreamOpt {
+func (c Config) JetStreamOptions(log *slog.Logger, counters *Counters) []jetstream.JetStreamOpt {
 	c = c.withDefaults()
 	return []jetstream.JetStreamOpt{
 		jetstream.WithPublishAsyncMaxPending(2 * c.Shards * c.MaxPending),
 		jetstream.WithPublishAsyncTimeout(c.AckTimeout),
-		jetstream.WithPublishAsyncErrHandler(AsyncFailureHandler(log)),
+		jetstream.WithPublishAsyncErrHandler(AsyncFailureHandler(log, counters)),
 	}
 }
 

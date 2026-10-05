@@ -26,12 +26,16 @@ func (f *failureLog) record(msg, id string, err error) {
 	}
 }
 
-func AsyncFailureHandler(log *slog.Logger) jetstream.MsgErrHandler {
+func AsyncFailureHandler(log *slog.Logger, counters *Counters) jetstream.MsgErrHandler {
 	if log == nil {
 		log = slog.Default()
 	}
+	if counters == nil {
+		counters = &Counters{}
+	}
 	f := &failureLog{log: log}
 	return func(_ jetstream.JetStream, m *nats.Msg, err error) {
+		counters.asyncFailed.Add(1)
 		f.record("event publish failed; reconciliation must republish it", m.Header.Get(jetstream.MsgIDHeader), err)
 	}
 }

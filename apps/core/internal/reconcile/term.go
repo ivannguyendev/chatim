@@ -156,5 +156,6 @@ func (t *term) publish(ctx context.Context, c store.Change) error {
 		return err
 	}
 	t.win.send(c.Position, msg)
+	t.r.stats.republished.Add(1)
 	return nil
 }

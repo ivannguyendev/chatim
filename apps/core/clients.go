@@ -14,6 +14,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
+	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
 )
 
 const (
@@ -33,6 +34,7 @@ type clients struct {
 	nats        *nats.Conn
 	js          jetstream.JetStream
 	reconcileJS jetstream.JetStream
+	pubCounters *publish.Counters
 }
 
 func connect(ctx context.Context, cfg config.Config, log *slog.Logger) (*clients, error) {
@@ -119,7 +121,8 @@ func (c *clients) connectNATS(cfg config.Config, log *slog.Logger) error {
 		return fmt.Errorf("nats connect %s: %w", config.RedactURL(cfg.NATSURL), config.RedactError(err, cfg.NATSURL))
 	}
 	c.nats = nc
-	js, err := jetstream.New(nc, cfg.Publish.JetStreamOptions(log)...)
+	c.pubCounters = &publish.Counters{}
+	js, err := jetstream.New(nc, cfg.Publish.JetStreamOptions(log, c.pubCounters)...)
 	if err != nil {
 		return fmt.Errorf("jetstream: %w", config.RedactError(err, cfg.NATSURL))
 	}

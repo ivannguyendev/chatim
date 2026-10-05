@@ -62,7 +62,7 @@ func TestARefusedPublishDropsOnlyThatEvent(t *testing.T) {
 func TestAsyncFailuresAreLoggedAtMostOncePerSecond(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		sink := &testlog.Sink{}
-		handle := publish.AsyncFailureHandler(sink.Logger())
+		handle := publish.AsyncFailureHandler(sink.Logger(), nil)
 		msg := &nats.Msg{Subject: "evt.acme.room.101.msg_created", Header: nats.Header{}}
 		msg.Header.Set(jetstream.MsgIDHeader, "101-0-1")
 		for range 5 {

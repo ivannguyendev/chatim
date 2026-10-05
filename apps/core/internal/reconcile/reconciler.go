@@ -56,6 +56,7 @@ type Reconciler struct {
 	lags    limitedLog
 	fails   limitedLog
 	dropped atomic.Uint64
+	stats   counters
 	started atomic.Bool
 	stop    chan struct{}
 	halt    sync.Once
@@ -128,6 +129,8 @@ func (r *Reconciler) term(ctx context.Context) {
 		return
 	}
 	r.log.InfoContext(ctx, "reconcile term started")
+	r.termStarted()
+	defer r.termEnded()
 	t := newTerm(r, cur)
 	err = t.run(ctx)
 	settle, cancel := context.WithTimeout(context.WithoutCancel(ctx), r.cfg.Drain)
@@ -143,6 +146,7 @@ func (r *Reconciler) ended(ctx context.Context, err error) {
 	switch {
 	case err == nil || ctx.Err() != nil || errors.Is(err, errStopped) || errors.Is(err, errLostLead):
 	case errors.Is(err, store.ErrFeedHistoryLost):
+		r.stats.historyLost.Add(1)
 		r.log.ErrorContext(ctx, historyLostMsg, "err", err)
 		if ferr := r.deps.Feed.Forget(ctx); ferr != nil {
 			r.log.WarnContext(ctx, "forget change feed position", "err", ferr)
@@ -164,35 +168,9 @@ func (r *Reconciler) republishFailed(err error) {
 }
 
 func (r *Reconciler) watchLag(ctx context.Context, committed time.Time) {
-	if lag := time.Since(committed); lag > r.cfg.DuplicateWindow {
+	lag := time.Since(committed)
+	r.stats.lag.Store(int64(lag))
+	if lag > r.cfg.DuplicateWindow {
 		r.lags.warn(ctx, lagMsg, "lag", lag, "window", r.cfg.DuplicateWindow)
-	}
-}
-
-func sleep(ctx context.Context, stop <-chan struct{}, d time.Duration) error {
-	t := time.NewTimer(d)
-	defer t.Stop()
-	select {
-	case <-t.C:
-		return nil
-	case <-stop:
-		return errStopped
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
-type limitedLog struct {
-	log  *slog.Logger
-	mu   sync.Mutex
-	last time.Time
-}
-
-func (l *limitedLog) warn(ctx context.Context, msg string, args ...any) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if now := time.Now(); l.last.IsZero() || now.Sub(l.last) >= time.Second {
-		l.last = now
-		l.log.WarnContext(ctx, msg, args...)
 	}
 }
