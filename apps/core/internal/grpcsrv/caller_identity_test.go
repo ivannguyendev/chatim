@@ -15,18 +15,23 @@ import (
 )
 
 func TestNewRequiresEveryDependency(t *testing.T) {
-	rooms, msgs, sender := memstore.NewRooms(), memstore.NewMessages(), &fakeSender{}
-	cases := map[string]grpcsrv.Deps{
-		"no sender": {Rooms: rooms, Pages: msgs},
-		"no rooms":  {Sender: sender, Pages: msgs},
-		"no pages":  {Sender: sender, Rooms: rooms},
-	}
-	for name, deps := range cases {
+	rg := &rig{rooms: memstore.NewRooms(), msgs: memstore.NewMessages(), edits: memstore.NewEdits(), hidden: memstore.NewHidden()}
+	full := grpcsrv.Deps{Sender: &fakeSender{}, Rooms: rg.rooms, Pages: rg.msgs, Mutator: newMutator(t, rg, options{}), Edits: rg.edits, Hidden: rg.hidden}
+	for name, drop := range map[string]func(d *grpcsrv.Deps){
+		"no sender":  func(d *grpcsrv.Deps) { d.Sender = nil },
+		"no rooms":   func(d *grpcsrv.Deps) { d.Rooms = nil },
+		"no pages":   func(d *grpcsrv.Deps) { d.Pages = nil },
+		"no mutator": func(d *grpcsrv.Deps) { d.Mutator = nil },
+		"no edits":   func(d *grpcsrv.Deps) { d.Edits = nil },
+		"no hidden":  func(d *grpcsrv.Deps) { d.Hidden = nil },
+	} {
+		deps := full
+		drop(&deps)
 		if _, err := grpcsrv.New(deps, quiet); !errors.Is(err, apperr.ErrInvalidArgument) {
 			t.Errorf("%s: New = %v, want ErrInvalidArgument", name, err)
 		}
 	}
-	if _, err := grpcsrv.New(grpcsrv.Deps{Sender: sender, Rooms: rooms, Pages: msgs}, nil); err != nil {
+	if _, err := grpcsrv.New(full, nil); err != nil {
 		t.Errorf("New with defaults = %v, want nil", err)
 	}
 }
@@ -45,6 +50,26 @@ func TestEveryRPCChecksCallerIdentityFirst(t *testing.T) {
 		},
 		"GetHistory": func(ctx context.Context) error {
 			_, err := rg.client.GetHistory(ctx, &chatimv1.GetHistoryRequest{RoomId: "42"})
+			return err
+		},
+		"EditMessage": func(ctx context.Context) error {
+			_, err := rg.client.EditMessage(ctx, &chatimv1.EditMessageRequest{RoomId: "42", Seq: 1, Text: "hi"})
+			return err
+		},
+		"DeleteMessage": func(ctx context.Context) error {
+			_, err := rg.client.DeleteMessage(ctx, &chatimv1.DeleteMessageRequest{RoomId: "42", Seq: 1})
+			return err
+		},
+		"HideMessage": func(ctx context.Context) error {
+			_, err := rg.client.HideMessage(ctx, &chatimv1.HideMessageRequest{RoomId: "42", Seq: 1})
+			return err
+		},
+		"ClearHistory": func(ctx context.Context) error {
+			_, err := rg.client.ClearHistory(ctx, &chatimv1.ClearHistoryRequest{RoomId: "42"})
+			return err
+		},
+		"GetEditHistory": func(ctx context.Context) error {
+			_, err := rg.client.GetEditHistory(ctx, &chatimv1.GetEditHistoryRequest{RoomId: "42", Seq: 1})
 			return err
 		},
 	}

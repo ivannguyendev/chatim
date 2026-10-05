@@ -10,7 +10,6 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/eventmark"
 	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
-	"github.com/ivannguyendev/chatim/apps/core/internal/grpcsrv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/metrics"
 	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/reconcile"
@@ -114,9 +113,9 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 		a.reconciler = rec
 	}
 	a.publisher, a.flusher, a.cidBatch, a.router, a.slots = pub, fl, batch, router, slots
-	svc, err := grpcsrv.New(grpcsrv.Deps{Sender: router, Rooms: st, Pages: st, Events: pub}, log)
+	svc, err := wireService(st, router, pub, log)
 	if err != nil {
-		return nil, fmt.Errorf("wire core service: %w", err)
+		return nil, err
 	}
 	limiter := resilience.NewLimiter(cfg.MaxInflight, cfg.QueueWait)
 	a.grpc = grpcserver.New(grpcserver.Config{

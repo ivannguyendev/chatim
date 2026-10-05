@@ -11,6 +11,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/apps/core/internal/view"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
@@ -19,7 +20,7 @@ import (
 )
 
 var (
-	errMissingDeps = fmt.Errorf("%w: core service needs a sender, a room store and a page reader", apperr.ErrInvalidArgument)
+	errMissingDeps = fmt.Errorf("%w: core service needs a sender, a room store, a page reader, a mutator, an edit store and a hidden store", apperr.ErrInvalidArgument)
 	errBadRoomID   = fmt.Errorf("%w: room id", apperr.ErrInvalidArgument)
 )
 
@@ -29,6 +30,7 @@ type Sender interface {
 
 type PageReader interface {
 	Page(ctx context.Context, q store.PageQuery) ([]domain.Message, error)
+	Find(ctx context.Context, room uint64, keys []store.MsgKey) ([]domain.Message, error)
 }
 
 type EventPublisher interface {
@@ -40,32 +42,37 @@ type noEvents struct{}
 func (noEvents) Enqueue(uint64, []*chatimv1.Event) error { return nil }
 
 type Deps struct {
-	Sender Sender
-	Rooms  store.Rooms
-	Pages  PageReader
-	Policy access.Policy
-	Events EventPublisher
-	NewID  func() uint64
-	Now    func() time.Time
+	Sender  Sender
+	Rooms   store.Rooms
+	Pages   PageReader
+	Policy  access.Policy
+	Events  EventPublisher
+	Mutator *mutate.Mutator
+	Edits   store.Edits
+	Hidden  store.Hidden
+	NewID   func() uint64
+	Now     func() time.Time
 }
 
 type Service struct {
 	chatimv1.UnimplementedCoreServiceServer
-	sender Sender
-	rooms  store.Rooms
-	pages  PageReader
-	events EventPublisher
-	access *access.Checker
-	view   view.Pipeline
-	newID  func() uint64
-	now    func() time.Time
-	log    *slog.Logger
+	sender  Sender
+	rooms   store.Rooms
+	pages   PageReader
+	events  EventPublisher
+	mutator *mutate.Mutator
+	edits   store.Edits
+	access  *access.Checker
+	view    view.Pipeline
+	newID   func() uint64
+	now     func() time.Time
+	log     *slog.Logger
 }
 
 var _ chatimv1.CoreServiceServer = (*Service)(nil)
 
 func New(d Deps, log *slog.Logger) (*Service, error) {
-	if d.Sender == nil || d.Rooms == nil || d.Pages == nil {
+	if d.Sender == nil || d.Rooms == nil || d.Pages == nil || d.Mutator == nil || d.Edits == nil || d.Hidden == nil {
 		return nil, errMissingDeps
 	}
 	if d.NewID == nil {
@@ -84,7 +91,10 @@ func New(d Deps, log *slog.Logger) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Service{sender: d.Sender, rooms: d.Rooms, pages: d.Pages, events: d.Events, access: checker, view: view.Default(), newID: d.NewID, now: d.Now, log: log}, nil
+	return &Service{
+		sender: d.Sender, rooms: d.Rooms, pages: d.Pages, events: d.Events, mutator: d.Mutator, edits: d.Edits,
+		access: checker, view: view.Default(), newID: d.NewID, now: d.Now, log: log,
+	}, nil
 }
 
 func (s *Service) SendMessage(ctx context.Context, req *chatimv1.SendMessageRequest) (*chatimv1.SendMessageResponse, error) {

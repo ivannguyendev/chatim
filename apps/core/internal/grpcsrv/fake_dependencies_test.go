@@ -3,9 +3,12 @@ package grpcsrv_test
 import (
 	"context"
 	"sync"
+	"testing"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
+	"github.com/ivannguyendev/chatim/apps/core/internal/mutate"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -45,4 +48,21 @@ func (f *fakeSender) sent() []actor.SendCmd {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]actor.SendCmd(nil), f.cmds...)
+}
+
+func newMutator(t *testing.T, rg *rig, o options) *mutate.Mutator {
+	t.Helper()
+	checker, err := access.NewChecker(rg.rooms, o.policy)
+	if err != nil {
+		t.Fatalf("NewChecker: %v", err)
+	}
+	var events mutate.EventPublisher = nopPublisher{}
+	if o.events != nil {
+		events = o.events
+	}
+	m, err := mutate.New(mutate.Deps{Access: checker, Messages: rg.msgs, Edits: rg.edits, Hidden: rg.hidden, Rooms: rg.rooms, Events: events, Now: o.now})
+	if err != nil {
+		t.Fatalf("mutate.New: %v", err)
+	}
+	return m
 }

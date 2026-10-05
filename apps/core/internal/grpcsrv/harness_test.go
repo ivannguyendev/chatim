@@ -35,13 +35,14 @@ var (
 	actorConfig = actor.Config{Mailbox: 16, Idle: time.Minute, MaxGroup: 8, MaxActors: 64, GroupDeadline: 2 * time.Second, ReservationTTL: 10 * time.Second}
 	flushConfig = flush.Config{Shards: 2, Window: time.Millisecond, MaxBatch: 64, QueueSize: 64, InsertTimeout: 500 * time.Millisecond}
 	sentinels   = map[codes.Code]string{
-		codes.NotFound:          apperr.ErrNotFound.Error(),
-		codes.InvalidArgument:   apperr.ErrInvalidArgument.Error(),
-		codes.PermissionDenied:  apperr.ErrPermissionDenied.Error(),
-		codes.Unauthenticated:   apperr.ErrUnauthenticated.Error(),
-		codes.Unavailable:       apperr.ErrUnavailable.Error(),
-		codes.ResourceExhausted: apperr.ErrResourceExhausted.Error(),
-		codes.Internal:          "internal error",
+		codes.NotFound:           apperr.ErrNotFound.Error(),
+		codes.InvalidArgument:    apperr.ErrInvalidArgument.Error(),
+		codes.FailedPrecondition: apperr.ErrFailedPrecondition.Error(),
+		codes.PermissionDenied:   apperr.ErrPermissionDenied.Error(),
+		codes.Unauthenticated:    apperr.ErrUnauthenticated.Error(),
+		codes.Unavailable:        apperr.ErrUnavailable.Error(),
+		codes.ResourceExhausted:  apperr.ErrResourceExhausted.Error(),
+		codes.Internal:           "internal error",
 	}
 )
 
@@ -49,6 +50,8 @@ type rig struct {
 	client chatimv1.CoreServiceClient
 	rooms  *memstore.Rooms
 	msgs   *memstore.Messages
+	edits  *memstore.Edits
+	hidden *memstore.Hidden
 }
 
 type options struct {
@@ -62,11 +65,14 @@ type options struct {
 
 func newRig(t *testing.T, o options) *rig {
 	t.Helper()
-	rg := &rig{rooms: memstore.NewRooms(), msgs: memstore.NewMessages()}
+	rg := &rig{rooms: memstore.NewRooms(), msgs: memstore.NewMessages(), edits: memstore.NewEdits(), hidden: memstore.NewHidden()}
 	if o.sender == nil {
 		o.sender = startRouter(t, rg)
 	}
-	svc, err := grpcsrv.New(grpcsrv.Deps{Sender: o.sender, Rooms: rg.rooms, Pages: rg.msgs, NewID: o.newID, Now: o.now, Policy: o.policy, Events: o.events}, quiet)
+	svc, err := grpcsrv.New(grpcsrv.Deps{
+		Sender: o.sender, Rooms: rg.rooms, Pages: rg.msgs, NewID: o.newID, Now: o.now, Policy: o.policy, Events: o.events,
+		Mutator: newMutator(t, rg, o), Edits: rg.edits, Hidden: rg.hidden,
+	}, quiet)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
