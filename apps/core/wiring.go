@@ -11,6 +11,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/eventmark"
 	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/grpcsrv"
+	"github.com/ivannguyendev/chatim/apps/core/internal/metrics"
 	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/reconcile"
 	"github.com/ivannguyendev/chatim/apps/core/internal/slot"
@@ -72,7 +73,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wire event ack marks: %w", err)
 	}
-	pub, err := publish.New(cl.js, cfg.Publish, log, publish.WithAckMarks(marks))
+	pub, err := publish.New(cl.js, cfg.Publish, log, publish.WithAckMarks(marks), publish.WithCounters(cl.pubCounters))
 	if err != nil {
 		return nil, fmt.Errorf("wire publisher: %w", err)
 	}
@@ -92,8 +93,9 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wire slot manager: %w", err)
 	}
+	var rec *reconcile.Reconciler
 	if cfg.ReconcileEnabled {
-		rec, err := reconcile.New(reconcile.Deps{
+		rec, err = reconcile.New(reconcile.Deps{
 			Feed: mongostore.NewFeed(cl.mongo.Database(cfg.MongoDB)), Rooms: st, Marks: marks, Owner: slots, JS: cl.reconcileJS,
 		}, cfg.Reconcile, log)
 		if err != nil {
@@ -106,14 +108,31 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wire core service: %w", err)
 	}
+	limiter := resilience.NewLimiter(cfg.MaxInflight, cfg.QueueWait)
 	a.grpc = grpcserver.New(grpcserver.Config{
 		Addr:            cfg.GRPCAddr,
 		ShutdownTimeout: cfg.GRPCShutdown,
 		RequestDeadline: cfg.RequestDeadline,
 		SlowRPC:         cfg.SlowRPC,
-		Limiter:         resilience.NewLimiter(cfg.MaxInflight, cfg.QueueWait),
+		Limiter:         limiter,
 	}, log)
 	chatimv1.RegisterCoreServiceServer(a.grpc, svc)
-	a.admin = admin.New(admin.Config{Addr: cfg.AdminAddr, ShutdownTimeout: config.CloseTimeout}, log)
+	p := probes{
+		drops:        cl.pubCounters.Drops,
+		router:       router.Stats,
+		cidDegraded:  cids.Degraded,
+		markDegraded: marks.Degraded,
+		cidDropped:   batch.Dropped,
+		loadShed:     limiter.Rejected,
+		oplogWindow:  oplogWindowSeconds(cl.mongo),
+	}
+	if rec != nil {
+		p.reconcile = rec.Stats
+	}
+	handler, err := metrics.Handler(metricSources(p))
+	if err != nil {
+		return nil, fmt.Errorf("wire metrics: %w", err)
+	}
+	a.admin = admin.New(admin.Config{Addr: cfg.AdminAddr, ShutdownTimeout: config.CloseTimeout, Metrics: handler}, log)
 	return a, nil
 }
