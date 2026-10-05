@@ -7,10 +7,13 @@ import (
 )
 
 var (
-	ErrRoomNotFound = fmt.Errorf("room %w", apperr.ErrNotFound)
-	ErrNotMember    = fmt.Errorf("not a member: %w", apperr.ErrPermissionDenied)
-	ErrBusy         = fmt.Errorf("room busy: %w", apperr.ErrResourceExhausted)
-	ErrRetryLater   = fmt.Errorf("retry later: %w", apperr.ErrUnavailable)
+	ErrRoomNotFound    = fmt.Errorf("room %w", apperr.ErrNotFound)
+	ErrNotMember       = fmt.Errorf("not a member: %w", apperr.ErrPermissionDenied)
+	ErrBusy            = fmt.Errorf("room busy: %w", apperr.ErrResourceExhausted)
+	ErrRetryLater      = fmt.Errorf("retry later: %w", apperr.ErrUnavailable)
+	ErrMessageNotFound = fmt.Errorf("message %w", apperr.ErrNotFound)
+	ErrMessageDeleted  = fmt.Errorf("message deleted: %w", apperr.ErrFailedPrecondition)
+	ErrVersionConflict = fmt.Errorf("message version conflict: %w", apperr.ErrFailedPrecondition)
 )
 
 func CheckTenant(room Room, tenant string) error {

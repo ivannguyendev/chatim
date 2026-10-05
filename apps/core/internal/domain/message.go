@@ -16,4 +16,8 @@ type Message struct {
 	Text      string
 	CID       string
 	CreatedAt time.Time
+	Version   uint32
+	Deleted   bool
+	EditedAt  time.Time
+	Hidden    bool
 }

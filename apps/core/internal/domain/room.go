@@ -30,11 +30,12 @@ type Room struct {
 }
 
 type Member struct {
-	Room     uint64
-	Tenant   string
-	User     string
-	Role     Role
-	JoinedAt time.Time
+	Room             uint64
+	Tenant           string
+	User             string
+	Role             Role
+	JoinedAt         time.Time
+	ClearedBeforeSeq uint64
 }
 
 func ParseRoomType(s string) (RoomType, error) {
