@@ -212,8 +212,8 @@ Rules:
 - `docs/roadmap.md`: plan-writing rules, milestones M2b.0 → M5, dependencies, readiness.
 - `docs/plans/`: per-milestone plans written with `writing-plans` before coding, executed with `subagent-driven-development` or `separate-driven-development`. M2b.0: `docs/plans/2026-10-05-m2b0-mechanism-foundations.md` (executed; results and known issues at its end). M2b.1: `docs/plans/2026-10-05-m2b1-effect-engine.md` (executed; results and known issues at its end).
 - `docs/poc/README.md`: dev results (R1–R5, C1) and the prod-like measurement list P1–P10. Dev numbers only validate tools.
-- `docs/research/261004-system-mechanisms-*`: the review record: the English report (`-report`), round 1 reviews (`-review-cl`, `-review-ge`), round 2 questions (`-round2-cl`, `-round2-ge`) and answers (`-round2-review-cl`, `-round2-review-ge`), and the owner-facing synthesis with every decision (`-synthesis`).
-- `docs/archive/`: the Phase 1 design (full D1–D60 rationale), the draft mechanisms review, the component diagrams, the M0–M2a.3 plans and the old PoC notes. Frozen.
+- `docs/research/261005-system-mechanisms-synthesis-report.md`: the comprehensive canonical research report consolidating the entire system mechanisms review.
+- `docs/archive/`: the Phase 1 design (full D1–D60 rationale), the draft mechanisms review, the component diagrams, the M0–M2a.3 plans, the 8 archived review documents (`docs/archive/research/261004-*`), and the old PoC notes. Frozen.
 - `docs/git-workflow.md`: branches, merge Definition of Done, readiness levels, SemVer tags and handling a broken `main`.
 - `.claude/plans/*_design.md`: local (gitignored) decision logs of M2a, M2a.1/M2b draft, M2a.2 and M2a.3.
 - Before writing the M3 plan, running the prod-like PoC or sizing the work stream or oplog, ask the owner for real numbers to replace the assumptions in design §2.3.

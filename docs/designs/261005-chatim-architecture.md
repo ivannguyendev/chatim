@@ -1,7 +1,7 @@
 # chatim — Kiến trúc hệ thống
 
 > Ngày: 2026-10-05 · Trạng thái: **nguồn sự thật duy nhất** cho thiết kế; thay [thiết kế Phase 1](../archive/designs/260930-chat-core-gateway-design.md) và [rà soát cơ chế](../archive/designs/261004-system-mechanisms.md) (đã archive).
-> Nguồn quyết định: [tổng hợp phản biện](../research/261004-system-mechanisms-synthesis.md) (2 vòng, 2 reviewer) · [báo cáo gửi reviewer](../research/261004-system-mechanisms-report.md) · [nghiên cứu mã nguồn mở](../research/260930-opensource-chat-architecture-research.md).
+> Nguồn quyết định: [báo cáo nghiên cứu cơ chế hệ thống](../research/261005-system-mechanisms-synthesis-report.md) · [tài liệu lưu trữ các vòng phản biện](../archive/research/261004-system-mechanisms-synthesis.md) · [nghiên cứu mã nguồn mở](../research/260930-opensource-chat-architecture-research.md).
 > Nhãn: **[Đã xây]** là code đang chạy trên `main` hoặc nhánh M2a.2/M2a.3; **[Chưa xây]** là thiết kế đã chốt, chưa code. Milestone ở [roadmap](../roadmap.md).
 
 ## 1. Phạm vi

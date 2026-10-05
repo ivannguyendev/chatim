@@ -135,6 +135,6 @@ Với app, compose publish ra host chỉ gRPC của core, và chỉ trên loopba
 - [Kiến trúc hệ thống (nguồn sự thật)](docs/designs/261005-chatim-architecture.md)
 - [Roadmap](docs/roadmap.md)
 - [Kết quả PoC](docs/poc/README.md)
-- [Tổng hợp phản biện cơ chế hệ thống](docs/research/261004-system-mechanisms-synthesis.md)
+- [Báo cáo nghiên cứu cơ chế hệ thống](docs/research/261005-system-mechanisms-synthesis-report.md)
 - [Nghiên cứu kiến trúc chat mã nguồn mở (tinode, teamgram, chatto, gws)](docs/research/260930-opensource-chat-architecture-research.md)
-- [Archive: thiết kế Phase 1, plan M0–M2a.3, ghi chú PoC cũ](docs/archive/README.md)
+- [Archive: thiết kế Phase 1, plan M0–M2a.3, 8 tài liệu phản biện cũ, ghi chú PoC cũ](docs/archive/README.md)
