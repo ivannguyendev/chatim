@@ -14,19 +14,29 @@ import (
 )
 
 func Bootstrap(ctx context.Context, db *mongo.Database) error {
-	if err := ensureMessages(ctx, db); err != nil {
-		return err
+	for _, name := range []string{messagesCollection, editsCollection} {
+		if err := ensureClustered(ctx, db, name); err != nil {
+			return err
+		}
 	}
-	for _, name := range []string{roomsCollection, membersCollection, reconcilerStateCollection} {
+	for _, name := range []string{roomsCollection, membersCollection, reconcilerStateCollection, hiddenCollection} {
 		if err := createCollection(ctx, db, name); err != nil {
 			return err
 		}
 	}
-	if err := ensureIndexes(ctx, db, membersCollection, memberIndexes()); err != nil {
-		return err
+	indexes := []struct {
+		coll   string
+		models []mongo.IndexModel
+	}{
+		{membersCollection, memberIndexes()},
+		{roomsCollection, roomIndexes()},
+		{editsCollection, editIndexes()},
+		{hiddenCollection, hiddenIndexes()},
 	}
-	if err := ensureIndexes(ctx, db, roomsCollection, roomIndexes()); err != nil {
-		return err
+	for _, ix := range indexes {
+		if err := ensureIndexes(ctx, db, ix.coll, ix.models); err != nil {
+			return err
+		}
 	}
 	return ensureFeedAnchor(ctx, db)
 }
@@ -63,19 +73,19 @@ func feedStart(ctx context.Context, state *mongo.Collection) (any, error) {
 	}
 }
 
-func ensureMessages(ctx context.Context, db *mongo.Database) error {
+func ensureClustered(ctx context.Context, db *mongo.Database, name string) error {
 	opts := options.CreateCollection().
 		SetClusteredIndex(bson.D{{Key: "key", Value: bson.D{{Key: "_id", Value: 1}}}, {Key: "unique", Value: true}}).
 		SetStorageEngine(bson.D{{Key: "wiredTiger", Value: bson.D{{Key: "configString", Value: "block_compressor=zstd"}}}})
-	if err := createCollection(ctx, db, messagesCollection, opts); err != nil {
+	if err := createCollection(ctx, db, name, opts); err != nil {
 		return err
 	}
-	specs, err := db.ListCollectionSpecifications(ctx, bson.D{{Key: "name", Value: messagesCollection}})
+	specs, err := db.ListCollectionSpecifications(ctx, bson.D{{Key: "name", Value: name}})
 	if err != nil {
-		return fmt.Errorf("bootstrap %s: list collections: %w", messagesCollection, err)
+		return fmt.Errorf("bootstrap %s: list collections: %w", name, err)
 	}
 	if len(specs) != 1 || !clusteredOnID(specs[0].Options) {
-		return fmt.Errorf("bootstrap %s: %w", messagesCollection, ErrNotClustered)
+		return fmt.Errorf("bootstrap %s: %w", name, ErrNotClustered)
 	}
 	return nil
 }
@@ -101,6 +111,15 @@ func memberIndexes() []mongo.IndexModel {
 
 func roomIndexes() []mongo.IndexModel {
 	return []mongo.IndexModel{{Keys: bson.D{{Key: "ab", Value: 1}}}, {Keys: bson.D{{Key: "ca", Value: 1}}}}
+}
+
+func editIndexes() []mongo.IndexModel {
+	return []mongo.IndexModel{{Keys: bson.D{{Key: "r", Value: 1}, {Key: "ts", Value: 1}}}}
+}
+
+func hiddenIndexes() []mongo.IndexModel {
+	keys := bson.D{{Key: "u", Value: 1}, {Key: "r", Value: 1}, {Key: "th", Value: 1}, {Key: "s", Value: 1}}
+	return []mongo.IndexModel{{Keys: keys, Options: options.Index().SetUnique(true)}}
 }
 
 func ensureIndexes(ctx context.Context, db *mongo.Database, coll string, models []mongo.IndexModel) error {

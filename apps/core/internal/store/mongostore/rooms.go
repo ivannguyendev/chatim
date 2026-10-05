@@ -70,3 +70,30 @@ func findOne(ctx context.Context, coll *mongo.Collection, filter bson.D, out any
 	}
 	return err
 }
+
+func (s *Store) ClearHistory(ctx context.Context, room uint64, user string, seq uint64) (uint64, error) {
+	key, err := toInt64("room id", room)
+	if err != nil {
+		return 0, fmt.Errorf("clear history of %q in room %d: %w", user, room, domain.ErrNotMember)
+	}
+	upTo, err := toInt64("seq", seq)
+	if err != nil {
+		return 0, err
+	}
+	filter := bson.D{{Key: "r", Value: key}, {Key: "u", Value: user}}
+	update := bson.D{{Key: "$max", Value: bson.D{{Key: "cb", Value: upTo}}}}
+	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
+	var d memberDoc
+	err = s.members.FindOneAndUpdate(ctx, filter, update, opts).Decode(&d)
+	switch {
+	case errors.Is(err, mongo.ErrNoDocuments):
+		return 0, fmt.Errorf("clear history of %q in room %d: %w", user, room, domain.ErrNotMember)
+	case err != nil:
+		return 0, fmt.Errorf("clear history of %q in room %d: %w", user, room, err)
+	}
+	m, err := decodeMember(d)
+	if err != nil {
+		return 0, err
+	}
+	return m.ClearedBeforeSeq, nil
+}

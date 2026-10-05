@@ -22,6 +22,9 @@ type messageDoc struct {
 	Text      string      `bson:"x"`
 	CID       string      `bson:"c"`
 	CreatedAt time.Time   `bson:"ts"`
+	Version   int32       `bson:"v,omitempty"`
+	Deleted   bool        `bson:"d,omitempty"`
+	EditedAt  time.Time   `bson:"ea,omitempty"`
 }
 
 type roomDoc struct {
@@ -38,11 +41,12 @@ type roomDoc struct {
 }
 
 type memberDoc struct {
-	Room     int64       `bson:"r"`
-	User     string      `bson:"u"`
-	Tenant   string      `bson:"t"`
-	Role     domain.Role `bson:"ro"`
-	JoinedAt time.Time   `bson:"ja"`
+	Room          int64       `bson:"r"`
+	User          string      `bson:"u"`
+	Tenant        string      `bson:"t"`
+	Role          domain.Role `bson:"ro"`
+	JoinedAt      time.Time   `bson:"ja"`
+	ClearedBefore int64       `bson:"cb,omitempty"`
 }
 
 func encodeMessage(m domain.Message) (messageDoc, error) {
@@ -50,6 +54,10 @@ func encodeMessage(m domain.Message) (messageDoc, error) {
 		return messageDoc{}, err
 	}
 	if _, err := toInt64("seq", m.Seq); err != nil {
+		return messageDoc{}, err
+	}
+	version, err := toInt32("version", m.Version)
+	if err != nil {
 		return messageDoc{}, err
 	}
 	return messageDoc{
@@ -60,6 +68,9 @@ func encodeMessage(m domain.Message) (messageDoc, error) {
 		Text:      m.Text,
 		CID:       m.CID,
 		CreatedAt: m.CreatedAt,
+		Version:   version,
+		Deleted:   m.Deleted,
+		EditedAt:  m.EditedAt,
 	}, nil
 }
 
@@ -67,6 +78,10 @@ func decodeMessage(d messageDoc) (domain.Message, error) {
 	room, thread, seq, err := keys.ParseMsg(d.ID)
 	if err != nil {
 		return domain.Message{}, fmt.Errorf("%w: message _id: %w", errCorrupt, err)
+	}
+	version, err := toUint32("message version", d.Version)
+	if err != nil {
+		return domain.Message{}, err
 	}
 	return domain.Message{
 		Room:      room,
@@ -78,6 +93,9 @@ func decodeMessage(d messageDoc) (domain.Message, error) {
 		Text:      d.Text,
 		CID:       d.CID,
 		CreatedAt: d.CreatedAt,
+		Version:   version,
+		Deleted:   d.Deleted,
+		EditedAt:  d.EditedAt,
 	}, nil
 }
 
@@ -141,7 +159,11 @@ func decodeMember(d memberDoc) (domain.Member, error) {
 	if err != nil {
 		return domain.Member{}, err
 	}
-	return domain.Member{Room: room, Tenant: d.Tenant, User: d.User, Role: d.Role, JoinedAt: d.JoinedAt}, nil
+	cleared, err := toUint64("member cleared before seq", d.ClearedBefore)
+	if err != nil {
+		return domain.Member{}, err
+	}
+	return domain.Member{Room: room, Tenant: d.Tenant, User: d.User, Role: d.Role, JoinedAt: d.JoinedAt, ClearedBeforeSeq: cleared}, nil
 }
 
 func toInt64(field string, v uint64) (int64, error) {

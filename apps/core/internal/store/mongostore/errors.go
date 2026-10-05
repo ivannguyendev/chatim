@@ -8,7 +8,7 @@ import (
 
 const namespaceExistsCode = 48
 
-var ErrNotClustered = errors.New("mongostore: messages collection is not clustered on _id")
+var ErrNotClustered = errors.New("mongostore: collection is not clustered on _id")
 
 func onlyDuplicateKeys(err error) bool {
 	bwe, ok := errors.AsType[mongo.BulkWriteException](err)

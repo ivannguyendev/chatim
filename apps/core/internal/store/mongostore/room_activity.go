@@ -36,7 +36,7 @@ func (s *Store) TouchActivity(ctx context.Context, acts []store.Activity) error 
 func activityFields(a store.Activity, seq int64) bson.D {
 	at := a.At.UTC()
 	fields := bson.D{{Key: "lc", Value: at}, {Key: "ab", Value: store.HourBucket(at)}}
-	if a.Thread == 0 {
+	if a.Thread == 0 && a.Seq > 0 {
 		fields = append(fields, bson.E{Key: "ls", Value: seq}, bson.E{Key: "lm", Value: at})
 	}
 	return fields

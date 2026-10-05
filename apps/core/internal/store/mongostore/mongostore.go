@@ -17,11 +17,17 @@ const (
 	roomsCollection           = "rooms"
 	membersCollection         = "members"
 	reconcilerStateCollection = "reconciler_state"
+	editsCollection           = "message_edits"
+	hiddenCollection          = "hidden"
 )
 
 var (
-	_ store.Messages = (*Store)(nil)
-	_ store.Rooms    = (*Store)(nil)
+	_ store.Messages       = (*Store)(nil)
+	_ store.Rooms          = (*Store)(nil)
+	_ store.MessageEditor  = (*Store)(nil)
+	_ store.HistoryClearer = (*Store)(nil)
+	_ store.Edits          = (*Store)(nil)
+	_ store.Hidden         = (*Store)(nil)
 )
 
 type Options struct {
@@ -33,6 +39,8 @@ type Store struct {
 	committed *mongo.Collection
 	rooms     *mongo.Collection
 	members   *mongo.Collection
+	edits     *mongo.Collection
+	hidden    *mongo.Collection
 }
 
 func New(db *mongo.Database, opts Options) *Store {
@@ -45,5 +53,7 @@ func New(db *mongo.Database, opts Options) *Store {
 		committed: db.Collection(messagesCollection, majority),
 		rooms:     db.Collection(roomsCollection, primary),
 		members:   db.Collection(membersCollection, primary),
+		edits:     db.Collection(editsCollection, primary),
+		hidden:    db.Collection(hiddenCollection, primary),
 	}
 }

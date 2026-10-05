@@ -56,17 +56,17 @@ func keyPattern(t *testing.T, keys bson.Raw) string {
 	return strings.Join(parts, ",")
 }
 
-func assertMessagesLayout(t *testing.T, db *mongo.Database) {
+func assertClusteredLayout(t *testing.T, db *mongo.Database, name string) {
 	t.Helper()
-	opts := collectionOptions(t, db, messagesCollection)
+	opts := collectionOptions(t, db, name)
 	if v, ok := opts.Lookup("clusteredIndex", "key", "_id").AsInt64OK(); !ok || v != 1 {
-		t.Fatalf("messages options %s: want clusteredIndex key {_id: 1}", opts)
+		t.Fatalf("%s options %s: want clusteredIndex key {_id: 1}", name, opts)
 	}
 	if u, ok := opts.Lookup("clusteredIndex", "unique").BooleanOK(); !ok || !u {
-		t.Fatalf("messages options %s: want a unique clustered index", opts)
+		t.Fatalf("%s options %s: want a unique clustered index", name, opts)
 	}
 	if c, _ := opts.Lookup("storageEngine", "wiredTiger", "configString").StringValueOK(); c != "block_compressor=zstd" {
-		t.Fatalf("messages configString = %q, want block_compressor=zstd", c)
+		t.Fatalf("%s configString = %q, want block_compressor=zstd", name, c)
 	}
 }
 
@@ -106,7 +106,7 @@ func TestBootstrapIsIdempotent(t *testing.T) {
 	if err := Bootstrap(t.Context(), db); err != nil {
 		t.Fatalf("Bootstrap with data: %v", err)
 	}
-	assertMessagesLayout(t, db)
+	assertClusteredLayout(t, db, messagesCollection)
 	assertMemberIndexes(t, db)
 	assertRoomIndexes(t, db)
 	collectionOptions(t, db, roomsCollection)
