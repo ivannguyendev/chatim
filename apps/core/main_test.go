@@ -20,7 +20,7 @@ func TestMain(m *testing.M) {
 var quiet = slog.New(slog.DiscardHandler)
 
 func TestRealMainRejectsUnknownCommands(t *testing.T) {
-	for _, args := range [][]string{{"bogus"}, {"serve", "extra"}, {"probe", "extra"}} {
+	for _, args := range [][]string{{"bogus"}, {"serve", "extra"}, {"probe", "extra"}, {"resync"}, {"resync", "-from", "2026-10-01T10:00:00Z"}} {
 		if got := realMain(args); got != 2 {
 			t.Errorf("realMain(%v) = %d, want 2", args, got)
 		}

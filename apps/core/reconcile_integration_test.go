@@ -86,31 +86,3 @@ func awaitRecords(t *testing.T, it *itInfra, stream string, want []string) {
 		<-poll.C
 	}
 }
-
-type termStartSignal struct {
-	slog.Handler
-	once    *sync.Once
-	started chan struct{}
-}
-
-func (h *termStartSignal) Enabled(_ context.Context, level slog.Level) bool {
-	return level >= slog.LevelInfo
-}
-
-func (h *termStartSignal) Handle(ctx context.Context, r slog.Record) error {
-	if r.Message == "reconcile term started" {
-		h.once.Do(func() { close(h.started) })
-	}
-	if !h.Handler.Enabled(ctx, r.Level) {
-		return nil
-	}
-	return h.Handler.Handle(ctx, r)
-}
-
-func (h *termStartSignal) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return &termStartSignal{Handler: h.Handler.WithAttrs(attrs), once: h.once, started: h.started}
-}
-
-func (h *termStartSignal) WithGroup(name string) slog.Handler {
-	return &termStartSignal{Handler: h.Handler.WithGroup(name), once: h.once, started: h.started}
-}
