@@ -104,4 +104,5 @@ func (p *parser) components(c *Config) {
 		Timeout:  redisTimeout,
 		Cooldown: redisCooldown,
 	}
+	p.workerConfig(c)
 }

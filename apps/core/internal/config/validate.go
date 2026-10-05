@@ -14,7 +14,7 @@ var (
 	subjectRootPattern = regexp.MustCompile(`^[a-z0-9_]+$`)
 )
 
-const stopPhases = "CORE_DRAIN_DELAY + CORE_GRPC_SHUTDOWN + RECONCILE_DRAIN + 1s + CORE_REQUEST_DEADLINE (router drain) + " +
+const stopPhases = "CORE_DRAIN_DELAY + CORE_GRPC_SHUTDOWN + RECONCILE_DRAIN + 1s + WORK_DRAIN + 1s + CORE_REQUEST_DEADLINE (router drain) + " +
 	"2 x REDIS_OP_TIMEOUT (cid batcher drain) + FLUSH_INSERT_TIMEOUT (flusher drain) + CORE_PUBLISHER_DRAIN + slot release + client close"
 
 type rule struct {
@@ -70,6 +70,7 @@ func (c Config) componentErrors() []error {
 		{"WORK_*, EVT_STREAM_REPLICAS, RECONCILE_DELAY", c.Work.Validate()},
 		{"SLOT_*, CORE_ID", c.Slot.Validate()},
 		{"EVT_ACK_MARK_TTL, REDIS_OP_TIMEOUT, REDIS_COOLDOWN", c.AckMarks.Validate()},
+		{"WORK_*, SLOT_TICK", c.Effects.Validate()},
 	}
 	if c.ReconcileEnabled {
 		parts = append(parts, struct {

@@ -47,6 +47,7 @@ type app struct {
 	cidBatch   drainer
 	router     gate
 	slots      runner
+	workers    drainer
 	reconciler drainer
 }
 
@@ -97,6 +98,11 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wire slot manager: %w", err)
 	}
+	fx, err := wireEffects(cfg, cl, st, marks, slots, log)
+	if err != nil {
+		return nil, err
+	}
+	a.workers = fx.workers
 	var rec *reconcile.Reconciler
 	if cfg.ReconcileEnabled {
 		rec, err = reconcile.New(reconcile.Deps{

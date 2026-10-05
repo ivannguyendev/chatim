@@ -9,6 +9,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
+	"github.com/ivannguyendev/chatim/apps/core/internal/effects"
 	"github.com/ivannguyendev/chatim/apps/core/internal/eventmark"
 	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
@@ -35,7 +36,7 @@ func TestLoadDefaults(t *testing.T) {
 		RedisDedupeAddr: "chatim-redis-dedupe:6379",
 		NATSURL:         "nats://chatim-nats:4222", ConnectTimeout: 10 * time.Second, RequestDeadline: 3 * time.Second,
 		SlowRPC: 500 * time.Millisecond, QueueWait: 25 * time.Millisecond, MaxInflight: 2048, DrainDelay: 2 * time.Second, GRPCShutdown: 5 * time.Second,
-		PublisherDrain: 5 * time.Second, ShutdownBudget: 25 * time.Second,
+		PublisherDrain: 5 * time.Second, ShutdownBudget: 28 * time.Second,
 		Flush: flush.Config{Shards: 4, Window: 2 * time.Millisecond, MaxBatch: 256, QueueSize: 1024, InsertTimeout: time.Second},
 		Actor: actor.Config{
 			Mailbox: 1024, Idle: 5 * time.Minute, MaxGroup: 64, MaxActors: 100000,
@@ -59,6 +60,7 @@ func TestLoadDefaults(t *testing.T) {
 		},
 		EffectDelay:     5 * time.Second,
 		EffectRoomCache: 65536,
+		Effects:         effects.Config{Partitions: 32, FetchBatch: 256, FetchWait: time.Second, RetryDelay: 5 * time.Second, Drain: time.Second, Poll: time.Second},
 		AckMarks:        eventmark.Config{TTL: time.Hour, Timeout: 100 * time.Millisecond, Cooldown: time.Second},
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -103,6 +105,7 @@ func TestLoadOverrides(t *testing.T) {
 		},
 		EffectDelay:     20 * time.Second,
 		EffectRoomCache: 128,
+		Effects:         effects.Config{Partitions: 16, FetchBatch: 64, FetchWait: 500 * time.Millisecond, RetryDelay: 2 * time.Second, Drain: 500 * time.Millisecond, Poll: 500 * time.Millisecond},
 		AckMarks:        eventmark.Config{TTL: 30 * time.Minute, Timeout: 50 * time.Millisecond, Cooldown: 2 * time.Second},
 	}
 	if !reflect.DeepEqual(got, want) {

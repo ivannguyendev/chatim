@@ -34,6 +34,7 @@ type clients struct {
 	nats        *nats.Conn
 	js          jetstream.JetStream
 	reconcileJS jetstream.JetStream
+	effectsJS   jetstream.JetStream
 	pubCounters *publish.Counters
 }
 
@@ -132,6 +133,14 @@ func (c *clients) connectNATS(cfg config.Config, log *slog.Logger) error {
 		return fmt.Errorf("reconcile jetstream: %w", config.RedactError(err, cfg.NATSURL))
 	}
 	c.reconcileJS = rjs
+	ejs, err := jetstream.New(nc,
+		jetstream.WithPublishAsyncMaxPending(cfg.Effects.Partitions*cfg.Effects.FetchBatch),
+		jetstream.WithPublishAsyncTimeout(cfg.Publish.AckTimeout),
+	)
+	if err != nil {
+		return fmt.Errorf("effects jetstream: %w", config.RedactError(err, cfg.NATSURL))
+	}
+	c.effectsJS = ejs
 	return nil
 }
 
