@@ -140,3 +140,5 @@ func redisKeys(keys []Key) []string {
 	}
 	return out
 }
+
+func (s *Store) Degraded() bool { return s.guard.Degraded() }
