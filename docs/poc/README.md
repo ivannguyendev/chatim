@@ -3,7 +3,7 @@
 > Thiết kế: [../designs/261005-chatim-architecture.md](../designs/261005-chatim-architecture.md) · Chi tiết lần đo dev, lệnh và cấu hình: [archive/poc/README.md](../archive/poc/README.md), [so sánh MongoDB/PostgreSQL](../archive/poc/260930-mongodb-vs-postgresql.md).
 > **Số dev chỉ để kiểm công cụ.** Máy dev là MacBook Intel 2018 + OrbStack (10 vCPU, 11.75GiB), DB, broker và công cụ đo chung một VM, Mongo 1 node. Go/no-go cần prod-like.
 
-## Kết quả dev (2026-09-30 → 2026-10-04)
+## Kết quả dev (2026-09-30 → 2026-10-05)
 
 | # | Câu hỏi | Tiêu chí | Dev | Kết luận dev |
 |---|---|---|---|---|
@@ -16,6 +16,7 @@
 | R5 | Soft ownership khi Redis mất dữ liệu | `-race -count=20` pass | pass ở mức unit | Còn chaos test |
 | C1 | corebench 2 core qua gRPC | Ack p99 ≤ 30ms (A1) | 5K/s đủ tải, p99 292ms; 10K/s đạt 9452/s, bỏ 5.5%, p99 818ms | Không đạt trên dev (VM bão hoà CPU) |
 | C1-M2a.3 | Perf đường ghi ở 5K/s | Trước/sau | Lệnh Redis/tin 6.35 → 4.74; CPU redis-dedupe 89% → 69% | Chỉ so trước/sau |
+| W1 | Xả backlog work stream (reader slot 0 + worker 2 core), M2b.1 | ≥ 3× ingest đỉnh (D66; đo thật ở P3) | 36000 record (1000 `RoomInserted` + 35000 `MessageInserted`) trong ~4s ≈ ≥ 9000 record/s (cận dưới, mẫu cách nhau 1–2s) sau 35s ghi 1000 tin/s với reader tắt; lag worker tối đa 52.4s (backlog tích luỹ); `work_failures_total` 0; republish `room_created` 1000 (không mark, stream bỏ trùng), `msg_created` 0 (fast path đã mark); CPU_Speed_Limit 100 | Chỉ kiểm công cụ |
 | DB | MongoDB vs PostgreSQL | — | Mongo thắng đọc ngẫu nhiên khi dữ liệu > RAM (8.4 vs 35ms) và dung lượng (130 vs 393B/tin); Postgres thắng độ trễ ghi bền | Giữ MongoDB (D9), chờ prod-like |
 
 ## Đo prod-like (chưa chạy)
