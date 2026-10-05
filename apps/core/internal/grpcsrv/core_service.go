@@ -62,6 +62,7 @@ type Service struct {
 	events  EventPublisher
 	mutator *mutate.Mutator
 	edits   store.Edits
+	hidden  store.Hidden
 	access  *access.Checker
 	view    view.Pipeline
 	newID   func() uint64
@@ -92,7 +93,7 @@ func New(d Deps, log *slog.Logger) (*Service, error) {
 		return nil, err
 	}
 	return &Service{
-		sender: d.Sender, rooms: d.Rooms, pages: d.Pages, events: d.Events, mutator: d.Mutator, edits: d.Edits,
+		sender: d.Sender, rooms: d.Rooms, pages: d.Pages, events: d.Events, mutator: d.Mutator, edits: d.Edits, hidden: d.Hidden,
 		access: checker, view: view.Default(), newID: d.NewID, now: d.Now, log: log,
 	}, nil
 }

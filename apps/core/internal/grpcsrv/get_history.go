@@ -35,7 +35,11 @@ func (s *Service) GetHistory(ctx context.Context, req *chatimv1.GetHistoryReques
 	if err != nil {
 		return nil, err
 	}
-	page = s.view.Apply(view.Viewer{User: who.user, Room: grant.Room}, page)
+	viewer, err := s.viewerOf(ctx, who.user, grant, q, page)
+	if err != nil {
+		return nil, err
+	}
+	page = s.view.Apply(viewer, page)
 	out := make([]*chatimv1.Message, len(page))
 	for i, m := range page {
 		out[i] = pbconv.Message(m)
@@ -82,4 +86,27 @@ func seqAnchor(a store.Anchor, seq uint64) (store.Anchor, uint64, error) {
 		return 0, 0, errAnchorSeq
 	}
 	return a, seq, nil
+}
+
+func (s *Service) viewerOf(ctx context.Context, user string, grant access.Request, q store.PageQuery, page []domain.Message) (view.Viewer, error) {
+	v := view.Viewer{User: user, Room: grant.Room, ClearedBeforeSeq: grant.Member.ClearedBeforeSeq}
+	if len(page) == 0 {
+		return v, nil
+	}
+	lo, hi := page[0].Seq, page[0].Seq
+	for _, m := range page[1:] {
+		lo, hi = min(lo, m.Seq), max(hi, m.Seq)
+	}
+	if hi <= v.ClearedBeforeSeq {
+		return v, nil
+	}
+	seqs, err := s.hidden.HiddenIn(ctx, user, q.Room, q.Thread, lo, hi)
+	if err != nil {
+		return view.Viewer{}, err
+	}
+	v.HiddenSeqs = make(map[uint64]bool, len(seqs))
+	for _, seq := range seqs {
+		v.HiddenSeqs[seq] = true
+	}
+	return v, nil
 }

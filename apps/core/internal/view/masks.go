@@ -1,0 +1,32 @@
+package view
+
+import (
+	"slices"
+
+	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
+)
+
+func MaskDeleted(_ Viewer, msgs []domain.Message) []domain.Message {
+	return eachCopy(msgs, func(m *domain.Message) {
+		if m.Deleted {
+			m.Text = ""
+		}
+	})
+}
+
+func HideForViewer(v Viewer, msgs []domain.Message) []domain.Message {
+	return eachCopy(msgs, func(m *domain.Message) {
+		if m.Seq <= v.ClearedBeforeSeq || v.HiddenSeqs[m.Seq] {
+			m.Hidden = true
+			m.Text = ""
+		}
+	})
+}
+
+func eachCopy(msgs []domain.Message, f func(m *domain.Message)) []domain.Message {
+	out := slices.Clone(msgs)
+	for i := range out {
+		f(&out[i])
+	}
+	return out
+}
