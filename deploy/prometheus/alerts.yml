@@ -1,0 +1,94 @@
+groups:
+  - name: chatim-core-guarantees
+    rules:
+      - alert: ChatimReconcilerAbsent
+        expr: sum(chatim_core_reconcile_running) == 0
+        for: 2m
+        labels:
+          severity: critical
+          guarantee: RC1
+        annotations:
+          summary: No core runs the event reconciler; lost events are not republished.
+      - alert: ChatimReconcilerLagging
+        expr: max(chatim_core_reconcile_lag_seconds) > 120
+        for: 5m
+        labels:
+          severity: warning
+          guarantee: RC1
+        annotations:
+          summary: The reconciler is more than two minutes behind commits.
+      - alert: ChatimReconcilerDropping
+        expr: sum(increase(chatim_core_reconcile_dropped_total[15m])) > 0
+        labels:
+          severity: warning
+          guarantee: RC1
+        annotations:
+          summary: Committed changes could not become events.
+      - alert: ChatimFeedHistoryLost
+        expr: sum(increase(chatim_core_reconcile_history_lost_total[15m])) > 0
+        labels:
+          severity: critical
+          guarantee: RC5
+        annotations:
+          summary: The change feed position fell out of the oplog; events in the gap are lost until a manual resync.
+      - alert: ChatimOplogWindowShort
+        expr: min(chatim_core_mongo_oplog_window_seconds) < 172800
+        for: 15m
+        labels:
+          severity: warning
+          guarantee: RC5
+        annotations:
+          summary: The oplog covers less than 48h.
+      - alert: ChatimOplogWindowCritical
+        expr: min(chatim_core_mongo_oplog_window_seconds) < 86400
+        for: 15m
+        labels:
+          severity: critical
+          guarantee: RC5
+        annotations:
+          summary: The oplog covers less than 24h, below the minimum retention.
+      - alert: ChatimRepublishSurge
+        expr: sum(rate(chatim_core_reconcile_republished_total[5m])) > 100
+        for: 10m
+        labels:
+          severity: warning
+          guarantee: RC4
+        annotations:
+          summary: The reconciler republishes more than 100 events per second.
+      - alert: ChatimEventsDropped
+        expr: sum(rate(chatim_core_publish_dropped_total[5m])) > 0
+        for: 10m
+        labels:
+          severity: warning
+          guarantee: RC1
+        annotations:
+          summary: The fast path keeps dropping events; delivery waits for the reconciler.
+      - alert: ChatimRedisDegraded
+        expr: max by (client) (chatim_core_redis_degraded) == 1
+        for: 1m
+        labels:
+          severity: warning
+          guarantee: CD2
+        annotations:
+          summary: A dedupe redis client is degraded; cross-core duplicates are possible.
+      - alert: ChatimCIDSettleDropped
+        expr: sum(increase(chatim_core_cid_settle_dropped_total[5m])) > 0
+        labels:
+          severity: warning
+          guarantee: CD1
+        annotations:
+          summary: Cid commits were dropped; retries may wait for the pending window.
+      - alert: ChatimCIDPendingElsewhere
+        expr: sum(increase(chatim_core_cid_pending_elsewhere_total[5m])) > 0
+        labels:
+          severity: info
+          guarantee: CD3
+        annotations:
+          summary: Sends hit a cid pending on another core, the CD3 duplicate window.
+      - alert: ChatimSeqContention
+        expr: sum(increase(chatim_core_room_yields_total[5m])) > 10
+        labels:
+          severity: warning
+          guarantee: P1
+        annotations:
+          summary: Actors keep yielding rooms after seq contention; check slot ownership.

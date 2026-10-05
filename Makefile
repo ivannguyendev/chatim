@@ -9,6 +9,7 @@ export PG_URI := postgres://$(PG_USER):$(PG_PASSWORD)@chatim-postgres:5432/chati
 GO_IMAGE ?= golang:1.26
 LINT_IMAGE ?= golangci/golangci-lint:v2.14.0
 BUF_IMAGE ?= bufbuild/buf:1.73.0
+PROM_IMAGE ?= prom/prometheus:v3.5.0
 NETWORK  ?= chatim_default
 COMPOSE  := docker compose -f deploy/compose/docker-compose.yml --env-file .env
 COMPOSE_ALL := $(COMPOSE) --profile postgres --profile app
@@ -21,7 +22,7 @@ GO_RUN   := docker run --rm -v "$(CURDIR)":/src -w /src -v chatim-gomod:/go/pkg/
 BUF_RUN  := docker run --rm -v "$(CURDIR)":/src -w /src $(BUF_IMAGE)
 POC_RUN  := $(GO_RUN) --network $(NETWORK) -e MONGO_URI -e PG_URI -e REDIS_PASSWORD
 
-.PHONY: go check-env test itest vet fmt-check lint vuln tidy proto buf-lint poc image infra-up infra-down infra-reset pg-up pg-down core-up core-down e2e redis-cli
+.PHONY: go check-env test itest vet fmt-check lint vuln tidy proto buf-lint alerts-check poc image infra-up infra-down infra-reset pg-up pg-down core-up core-down e2e redis-cli
 
 go:
 	$(GO_RUN) $(GO_IMAGE) go $(ARGS)
@@ -56,6 +57,9 @@ proto:
 buf-lint:
 	$(BUF_RUN) lint
 	$(BUF_RUN) format -d --exit-code
+
+alerts-check:
+	docker run --rm -v "$(CURDIR)/deploy/prometheus":/rules:ro --entrypoint promtool $(PROM_IMAGE) check rules /rules/alerts.yml
 
 poc: check-env
 	$(GO_RUN) $(GO_IMAGE) go build -o bin/$(TOOL) ./tools/poc/$(TOOL)
