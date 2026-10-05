@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
@@ -28,6 +29,9 @@ type Router struct {
 	running chan struct{}
 	closing chan struct{}
 	done    chan struct{}
+
+	yields       atomic.Uint64
+	cidElsewhere atomic.Uint64
 }
 
 func NewRouter(msgs store.Messages, rooms store.Rooms, sub Submitter, cids CIDRegistry, events EventPublisher, cfg Config, log *slog.Logger) (*Router, error) {

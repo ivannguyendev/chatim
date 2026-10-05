@@ -43,6 +43,9 @@ type actor struct {
 	flight  *group
 	landed  []landing
 	failed  []failure
+
+	contended      bool
+	contentionWait time.Duration
 }
 
 func newActor(r *Router, id uint64) *actor {
@@ -123,6 +126,7 @@ func (a *actor) run(ctx context.Context) {
 		select {
 		case res := <-a.results:
 			a.settle(res)
+			a.afterContention(ctx)
 		case <-ctx.Done():
 			a.exit(errStopped)
 			return

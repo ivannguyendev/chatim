@@ -44,6 +44,7 @@ func (a *actor) reserve(ctx context.Context, fresh []*entry) []*entry {
 		case dedupe.Committed:
 			a.cache.commit(e.key, Ack(v.Record))
 		case dedupe.PendingElsewhere:
+			a.r.cidElsewhere.Add(1)
 			a.cache.fail(e.key, errCIDElsewhere)
 		case dedupe.PendingHere:
 			a.cache.fail(e.key, errCIDUnsettled)
