@@ -17,6 +17,7 @@ var _ store.Edits = (*Edits)(nil)
 type Edits struct {
 	mu    sync.RWMutex
 	facts map[store.MsgKey][]domain.Edit
+	log   *Messages
 }
 
 func NewEdits() *Edits { return &Edits{facts: make(map[store.MsgKey][]domain.Edit)} }
@@ -37,6 +38,9 @@ func (s *Edits) Append(ctx context.Context, e domain.Edit) error {
 		return fmt.Errorf("append edit v%d of %+v: %w", e.Version, key, store.ErrEditExists)
 	}
 	s.facts[key] = slices.Insert(line, i, e)
+	if s.log != nil {
+		s.log.appendFact(logged{kind: store.EditInserted, edit: e})
+	}
 	return nil
 }
 

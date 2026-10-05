@@ -39,6 +39,8 @@ func RecordOf(c store.Change) Record {
 		r.Room, r.Thread, r.Seq = c.Msg.Room, c.Msg.Thread, c.Msg.Seq
 	case store.RoomInserted:
 		r.Room = c.Room.ID
+	case store.EditInserted:
+		r.Room, r.Thread, r.Seq = c.Edit.Room, c.Edit.Thread, c.Edit.Seq
 	}
 	return r
 }

@@ -29,6 +29,10 @@ func TestRecordOfKeepsOnlyKeysAndCommitTime(t *testing.T) {
 	if got, want := work.RecordOf(room), (work.Record{Kind: store.RoomInserted, Room: 77, CommittedAt: committed}); got != want {
 		t.Fatalf("RecordOf(room) = %+v, want %+v", got, want)
 	}
+	edit := store.Change{Kind: store.EditInserted, Edit: domain.Edit{Room: 42, Thread: 3, Seq: 9, Version: 2, Text: "x"}, CommittedAt: committed}
+	if got, want := work.RecordOf(edit), (work.Record{Kind: store.EditInserted, Room: 42, Thread: 3, Seq: 9, CommittedAt: committed}); got != want {
+		t.Fatalf("RecordOf(edit) = %+v, want %+v", got, want)
+	}
 }
 
 func TestRecordRoundTripsThroughThirtyThreeBytes(t *testing.T) {

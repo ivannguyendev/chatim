@@ -11,6 +11,7 @@ type logged struct {
 	kind store.ChangeKind
 	msg  domain.Message
 	room domain.Room
+	edit domain.Edit
 	at   time.Time
 }
 
@@ -21,10 +22,10 @@ func (s *Messages) appendLog(l logged) {
 	s.grew = make(chan struct{})
 }
 
-func (s *Messages) appendRoom(r domain.Room) {
+func (s *Messages) appendFact(l logged) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.appendLog(logged{kind: store.RoomInserted, room: r})
+	s.appendLog(l)
 }
 
 func (s *Messages) logAt(i int) (logged, <-chan struct{}, bool) {
@@ -43,6 +44,12 @@ func (s *Messages) logLen() int {
 }
 
 func (s *Rooms) attach(log *Messages) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.log = log
+}
+
+func (s *Edits) attach(log *Messages) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.log = log

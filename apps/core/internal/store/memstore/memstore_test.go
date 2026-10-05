@@ -17,12 +17,19 @@ func TestContract(t *testing.T) {
 func TestFeedContract(t *testing.T) {
 	storetest.RunFeed(t, func(*testing.T) (store.Messages, store.Rooms, store.ChangeFeed) {
 		msgs, rooms := memstore.NewMessages(), memstore.NewRooms()
-		return msgs, rooms, memstore.NewFeed(msgs, rooms)
+		return msgs, rooms, memstore.NewFeed(msgs, rooms, nil)
 	})
 }
 
 func TestEditsContract(t *testing.T) {
 	storetest.RunEdits(t, func(*testing.T) (storetest.EditableMessages, storetest.ClearableRooms, store.Edits, store.Hidden) {
 		return memstore.NewMessages(), memstore.NewRooms(), memstore.NewEdits(), memstore.NewHidden()
+	})
+}
+
+func TestEditFeedContract(t *testing.T) {
+	storetest.RunEditFeed(t, func(*testing.T) (store.Edits, store.ChangeFeed) {
+		msgs, edits := memstore.NewMessages(), memstore.NewEdits()
+		return edits, memstore.NewFeed(msgs, nil, edits)
 	})
 }

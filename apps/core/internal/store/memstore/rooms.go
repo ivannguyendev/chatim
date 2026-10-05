@@ -50,7 +50,7 @@ func (s *Rooms) Create(ctx context.Context, r domain.Room, members []domain.Memb
 		}
 	}
 	if s.log != nil {
-		s.log.appendRoom(r)
+		s.log.appendFact(logged{kind: store.RoomInserted, room: r})
 	}
 	return nil
 }

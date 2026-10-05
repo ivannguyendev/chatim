@@ -66,7 +66,7 @@ func (f *Feed) Open(ctx context.Context) (store.Cursor, error) {
 func feedPipeline() mongo.Pipeline {
 	match := bson.D{
 		{Key: "operationType", Value: "insert"},
-		{Key: "ns.coll", Value: bson.D{{Key: "$in", Value: bson.A{messagesCollection, roomsCollection}}}},
+		{Key: "ns.coll", Value: bson.D{{Key: "$in", Value: bson.A{messagesCollection, roomsCollection, editsCollection}}}},
 	}
 	return mongo.Pipeline{{{Key: "$match", Value: match}}}
 }

@@ -43,6 +43,16 @@ func decodeChange(ev changeDoc) (store.Change, error) {
 			return store.Change{}, err
 		}
 		return store.Change{Kind: store.RoomInserted, Room: r, CommittedAt: ev.WallTime}, nil
+	case editsCollection:
+		var d editDoc
+		if err := bson.Unmarshal(ev.FullDocument, &d); err != nil {
+			return store.Change{}, fmt.Errorf("%w: edit document: %w", errCorrupt, err)
+		}
+		e, err := decodeEdit(d)
+		if err != nil {
+			return store.Change{}, err
+		}
+		return store.Change{Kind: store.EditInserted, Edit: e, CommittedAt: ev.WallTime}, nil
 	default:
 		return store.Change{}, fmt.Errorf("%w: change on collection %q", errCorrupt, ev.NS.Coll)
 	}

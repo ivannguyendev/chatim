@@ -12,7 +12,7 @@ import (
 )
 
 func TestFeedLosesHistoryUntilForgotten(t *testing.T) {
-	feed := memstore.NewFeed(memstore.NewMessages(), nil)
+	feed := memstore.NewFeed(memstore.NewMessages(), nil, nil)
 	feed.LoseHistory()
 	if _, err := feed.Open(t.Context()); !errors.Is(err, store.ErrFeedHistoryLost) {
 		t.Fatalf("Open after lost history = %v, want ErrFeedHistoryLost", err)
@@ -26,7 +26,7 @@ func TestFeedLosesHistoryUntilForgotten(t *testing.T) {
 }
 
 func TestFeedRejectsForeignPositions(t *testing.T) {
-	cur, err := memstore.NewFeed(memstore.NewMessages(), nil).Open(t.Context())
+	cur, err := memstore.NewFeed(memstore.NewMessages(), nil, nil).Open(t.Context())
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -39,7 +39,7 @@ func TestFeedRejectsForeignPositions(t *testing.T) {
 
 func TestFeedWithoutRoomsSeesOnlyMessages(t *testing.T) {
 	msgs, rooms := memstore.NewMessages(), memstore.NewRooms()
-	cur, err := memstore.NewFeed(msgs, nil).Open(t.Context())
+	cur, err := memstore.NewFeed(msgs, nil, nil).Open(t.Context())
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

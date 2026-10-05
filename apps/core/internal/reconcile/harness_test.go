@@ -68,7 +68,7 @@ func newRig(t *testing.T, wrap func(store.ChangeFeed) store.ChangeFeed) *rig {
 	t.Helper()
 	rg := &rig{msgs: memstore.NewMessages(), rooms: memstore.NewRooms(), owner: &owner{}, js: &publishtest.JetStream{}, sink: &testlog.Sink{}}
 	rg.createRoom(t, room)
-	rg.feed = memstore.NewFeed(rg.msgs, rg.rooms)
+	rg.feed = memstore.NewFeed(rg.msgs, rg.rooms, nil)
 	rg.base, _ = rg.feed.Confirmed()
 	rg.owner.leading.Store(true)
 	var feed store.ChangeFeed = rg.feed

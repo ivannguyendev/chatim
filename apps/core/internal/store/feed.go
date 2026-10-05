@@ -22,12 +22,14 @@ type ChangeKind uint8
 const (
 	MessageInserted ChangeKind = iota + 1
 	RoomInserted
+	EditInserted
 )
 
 type Change struct {
 	Kind        ChangeKind
 	Msg         domain.Message
 	Room        domain.Room
+	Edit        domain.Edit
 	CommittedAt time.Time
 	Position    Position
 }

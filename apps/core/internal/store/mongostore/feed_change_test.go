@@ -47,11 +47,25 @@ func TestDecodeChangeRejectsOtherCollectionsAndBrokenDocuments(t *testing.T) {
 		"members insert":   changeOn(t, membersCollection, bson.D{{Key: "u", Value: "bob"}}),
 		"bad message id":   changeOn(t, messagesCollection, bson.D{{Key: "_id", Value: []byte{1, 2}}}),
 		"negative room id": changeOn(t, roomsCollection, bson.D{{Key: "_id", Value: int64(-1)}}),
+		"bad edit id":      changeOn(t, editsCollection, bson.D{{Key: "_id", Value: []byte{1, 2}}}),
 		"no document":      {WallTime: codecTime, NS: changeNS{Coll: messagesCollection}},
 	}
 	for name, ev := range cases {
 		if _, err := decodeChange(ev); !errors.Is(err, errCorrupt) {
 			t.Errorf("%s: decodeChange = %v, want errCorrupt", name, err)
 		}
+	}
+}
+
+func TestDecodeChangeReadsEdits(t *testing.T) {
+	e := sampleEdit()
+	doc, err := encodeEdit(e)
+	if err != nil {
+		t.Fatalf("encodeEdit: %v", err)
+	}
+	got, err := decodeChange(changeOn(t, editsCollection, doc))
+	if err != nil || got.Kind != store.EditInserted || store.EditKeyOf(got.Edit) != store.EditKeyOf(e) || got.Edit.Version != e.Version ||
+		got.Edit.Text != e.Text || got.Edit.Prev != e.Prev || !got.CommittedAt.Equal(codecTime) || got.Msg.Room != 0 || got.Room.ID != 0 {
+		t.Fatalf("edit change = %+v, %v", got, err)
 	}
 }
