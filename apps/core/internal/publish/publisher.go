@@ -12,7 +12,6 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
-	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/pkg/slotmap"
@@ -127,7 +126,9 @@ func (p *Publisher) publish(it item) {
 			p.fails.record("event publish refused; reconciliation must republish it", ev.GetId(), err)
 			continue
 		}
-		p.marks.track(store.MsgKey{Room: it.room, Thread: ev.GetThreadRoot(), Seq: ev.GetSeq()}, f)
+		if key, ok := markKey(it.room, ev); ok {
+			p.marks.track(key, f)
+		}
 	}
 }
 
