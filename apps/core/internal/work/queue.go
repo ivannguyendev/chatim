@@ -52,7 +52,9 @@ func (q *jetStreamQueue) Fetch(ctx context.Context, limit int, wait time.Duratio
 		}
 		q.consumer = c
 	}
-	batch, err := q.consumer.Fetch(limit, jetstream.FetchMaxWait(wait))
+	fctx, cancel := context.WithTimeout(ctx, wait)
+	defer cancel()
+	batch, err := q.consumer.Fetch(limit, jetstream.FetchContext(fctx))
 	if err != nil {
 		return nil, fmt.Errorf("fetch work partition %d: %w", q.partition, err)
 	}
@@ -67,7 +69,7 @@ func collect(ctx context.Context, batch jetstream.MessageBatch) ([]Delivery, err
 		select {
 		case m, open := <-msgs:
 			if !open {
-				return out, errors.Join(batch.Error(), badRecords(bad))
+				return out, errors.Join(fetchError(ctx, batch.Error()), badRecords(bad))
 			}
 			r, err := Decode(m.Data())
 			if err != nil {
@@ -80,6 +82,13 @@ func collect(ctx context.Context, batch jetstream.MessageBatch) ([]Delivery, err
 			return out, ctx.Err()
 		}
 	}
+}
+
+func fetchError(ctx context.Context, err error) error {
+	if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
+		return nil
+	}
+	return err
 }
 
 func badRecords(n uint64) error {
