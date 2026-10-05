@@ -18,9 +18,14 @@ message Event {
   google.protobuf.Timestamp ts = 9;
   oneof payload {
     MessageCreated message_created = 20;
+    RoomCreated room_created = 21;
   }
 }
 
 message MessageCreated {
   Message message = 1;
+}
+
+message RoomCreated {
+  Room room = 1;
 }

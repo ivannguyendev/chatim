@@ -35,6 +35,7 @@ type Event struct {
 	// Types that are valid to be assigned to Payload:
 	//
 	//	*Event_MessageCreated
+	//	*Event_RoomCreated
 	Payload       isEvent_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -142,6 +143,15 @@ func (x *Event) GetMessageCreated() *MessageCreated {
 	return nil
 }
 
+func (x *Event) GetRoomCreated() *RoomCreated {
+	if x != nil {
+		if x, ok := x.Payload.(*Event_RoomCreated); ok {
+			return x.RoomCreated
+		}
+	}
+	return nil
+}
+
 type isEvent_Payload interface {
 	isEvent_Payload()
 }
@@ -150,7 +160,13 @@ type Event_MessageCreated struct {
 	MessageCreated *MessageCreated `protobuf:"bytes,20,opt,name=message_created,json=messageCreated,proto3,oneof"`
 }
 
+type Event_RoomCreated struct {
+	RoomCreated *RoomCreated `protobuf:"bytes,21,opt,name=room_created,json=roomCreated,proto3,oneof"`
+}
+
 func (*Event_MessageCreated) isEvent_Payload() {}
+
+func (*Event_RoomCreated) isEvent_Payload() {}
 
 type MessageCreated struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -196,11 +212,55 @@ func (x *MessageCreated) GetMessage() *Message {
 	return nil
 }
 
+type RoomCreated struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Room          *Room                  `protobuf:"bytes,1,opt,name=room,proto3" json:"room,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RoomCreated) Reset() {
+	*x = RoomCreated{}
+	mi := &file_chatim_v1_events_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RoomCreated) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RoomCreated) ProtoMessage() {}
+
+func (x *RoomCreated) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_events_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RoomCreated.ProtoReflect.Descriptor instead.
+func (*RoomCreated) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_events_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *RoomCreated) GetRoom() *Room {
+	if x != nil {
+		return x.Room
+	}
+	return nil
+}
+
 var File_chatim_v1_events_proto protoreflect.FileDescriptor
 
 const file_chatim_v1_events_proto_rawDesc = "" +
 	"\n" +
-	"\x16chatim/v1/events.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xcb\x02\n" +
+	"\x16chatim/v1/events.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x88\x03\n" +
 	"\x05Event\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06tenant\x18\x02 \x01(\tR\x06tenant\x12\x17\n" +
@@ -211,10 +271,13 @@ const file_chatim_v1_events_proto_rawDesc = "" +
 	"\x03seq\x18\x06 \x01(\x04R\x03seq\x12\x14\n" +
 	"\x05actor\x18\b \x01(\tR\x05actor\x12*\n" +
 	"\x02ts\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\x02ts\x12D\n" +
-	"\x0fmessage_created\x18\x14 \x01(\v2\x19.chatim.v1.MessageCreatedH\x00R\x0emessageCreatedB\t\n" +
+	"\x0fmessage_created\x18\x14 \x01(\v2\x19.chatim.v1.MessageCreatedH\x00R\x0emessageCreated\x12;\n" +
+	"\froom_created\x18\x15 \x01(\v2\x16.chatim.v1.RoomCreatedH\x00R\vroomCreatedB\t\n" +
 	"\apayloadJ\x04\b\a\x10\bR\x03pts\">\n" +
 	"\x0eMessageCreated\x12,\n" +
-	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessageB\x9c\x01\n" +
+	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\"2\n" +
+	"\vRoomCreated\x12#\n" +
+	"\x04room\x18\x01 \x01(\v2\x0f.chatim.v1.RoomR\x04roomB\x9c\x01\n" +
 	"\rcom.chatim.v1B\vEventsProtoP\x01Z9github.com/ivannguyendev/chatim/pkg/pb/chatim/v1;chatimv1\xa2\x02\x03CXX\xaa\x02\tChatim.V1\xca\x02\tChatim\\V1\xe2\x02\x15Chatim\\V1\\GPBMetadata\xea\x02\n" +
 	"Chatim::V1b\x06proto3"
 
@@ -230,24 +293,28 @@ func file_chatim_v1_events_proto_rawDescGZIP() []byte {
 	return file_chatim_v1_events_proto_rawDescData
 }
 
-var file_chatim_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_chatim_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_chatim_v1_events_proto_goTypes = []any{
 	(*Event)(nil),                 // 0: chatim.v1.Event
 	(*MessageCreated)(nil),        // 1: chatim.v1.MessageCreated
-	(RoomType)(0),                 // 2: chatim.v1.RoomType
-	(*timestamppb.Timestamp)(nil), // 3: google.protobuf.Timestamp
-	(*Message)(nil),               // 4: chatim.v1.Message
+	(*RoomCreated)(nil),           // 2: chatim.v1.RoomCreated
+	(RoomType)(0),                 // 3: chatim.v1.RoomType
+	(*timestamppb.Timestamp)(nil), // 4: google.protobuf.Timestamp
+	(*Message)(nil),               // 5: chatim.v1.Message
+	(*Room)(nil),                  // 6: chatim.v1.Room
 }
 var file_chatim_v1_events_proto_depIdxs = []int32{
-	2, // 0: chatim.v1.Event.room_type:type_name -> chatim.v1.RoomType
-	3, // 1: chatim.v1.Event.ts:type_name -> google.protobuf.Timestamp
+	3, // 0: chatim.v1.Event.room_type:type_name -> chatim.v1.RoomType
+	4, // 1: chatim.v1.Event.ts:type_name -> google.protobuf.Timestamp
 	1, // 2: chatim.v1.Event.message_created:type_name -> chatim.v1.MessageCreated
-	4, // 3: chatim.v1.MessageCreated.message:type_name -> chatim.v1.Message
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	2, // 3: chatim.v1.Event.room_created:type_name -> chatim.v1.RoomCreated
+	5, // 4: chatim.v1.MessageCreated.message:type_name -> chatim.v1.Message
+	6, // 5: chatim.v1.RoomCreated.room:type_name -> chatim.v1.Room
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_chatim_v1_events_proto_init() }
@@ -258,6 +325,7 @@ func file_chatim_v1_events_proto_init() {
 	file_chatim_v1_core_proto_init()
 	file_chatim_v1_events_proto_msgTypes[0].OneofWrappers = []any{
 		(*Event_MessageCreated)(nil),
+		(*Event_RoomCreated)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -265,7 +333,7 @@ func file_chatim_v1_events_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_chatim_v1_events_proto_rawDesc), len(file_chatim_v1_events_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
