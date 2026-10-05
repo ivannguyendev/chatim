@@ -8,9 +8,11 @@ import (
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
+	"github.com/ivannguyendev/chatim/apps/core/internal/view"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 	"github.com/ivannguyendev/chatim/pkg/ids"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
@@ -33,6 +35,7 @@ type Deps struct {
 	Sender Sender
 	Rooms  store.Rooms
 	Pages  PageReader
+	Policy access.Policy
 	NewID  func() uint64
 	Now    func() time.Time
 }
@@ -42,6 +45,8 @@ type Service struct {
 	sender Sender
 	rooms  store.Rooms
 	pages  PageReader
+	access *access.Checker
+	view   view.Pipeline
 	newID  func() uint64
 	now    func() time.Time
 	log    *slog.Logger
@@ -62,7 +67,11 @@ func New(d Deps, log *slog.Logger) (*Service, error) {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Service{sender: d.Sender, rooms: d.Rooms, pages: d.Pages, newID: d.NewID, now: d.Now, log: log}, nil
+	checker, err := access.NewChecker(d.Rooms, d.Policy)
+	if err != nil {
+		return nil, err
+	}
+	return &Service{sender: d.Sender, rooms: d.Rooms, pages: d.Pages, access: checker, view: view.Default(), newID: d.NewID, now: d.Now, log: log}, nil
 }
 
 func (s *Service) SendMessage(ctx context.Context, req *chatimv1.SendMessageRequest) (*chatimv1.SendMessageResponse, error) {

@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
+	"github.com/ivannguyendev/chatim/apps/core/internal/view"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
@@ -25,30 +27,20 @@ func (s *Service) GetHistory(ctx context.Context, req *chatimv1.GetHistoryReques
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authorizeRead(ctx, q.Room, who); err != nil {
+	grant, err := s.access.Authorize(ctx, access.ReadHistory, who.tenant, who.user, q.Room)
+	if err != nil {
 		return nil, err
 	}
 	page, err := s.pages.Page(ctx, q)
 	if err != nil {
 		return nil, err
 	}
+	page = s.view.Apply(view.Viewer{User: who.user, Room: grant.Room}, page)
 	out := make([]*chatimv1.Message, len(page))
 	for i, m := range page {
 		out[i] = pbconv.Message(m)
 	}
 	return &chatimv1.GetHistoryResponse{Messages: out}, nil
-}
-
-func (s *Service) authorizeRead(ctx context.Context, room uint64, who caller) error {
-	r, err := s.rooms.Get(ctx, room)
-	if err != nil {
-		return err
-	}
-	if err := domain.CheckTenant(r, who.tenant); err != nil {
-		return err
-	}
-	_, err = s.rooms.Member(ctx, room, who.user)
-	return err
 }
 
 func pageQueryOf(req *chatimv1.GetHistoryRequest) (store.PageQuery, error) {

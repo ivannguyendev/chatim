@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/grpcsrv"
@@ -55,6 +56,7 @@ type options struct {
 	newID   func() uint64
 	now     func() time.Time
 	limiter *resilience.Limiter
+	policy  access.Policy
 }
 
 func newRig(t *testing.T, o options) *rig {
@@ -63,7 +65,7 @@ func newRig(t *testing.T, o options) *rig {
 	if o.sender == nil {
 		o.sender = startRouter(t, rg)
 	}
-	svc, err := grpcsrv.New(grpcsrv.Deps{Sender: o.sender, Rooms: rg.rooms, Pages: rg.msgs, NewID: o.newID, Now: o.now}, quiet)
+	svc, err := grpcsrv.New(grpcsrv.Deps{Sender: o.sender, Rooms: rg.rooms, Pages: rg.msgs, NewID: o.newID, Now: o.now, Policy: o.policy}, quiet)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
