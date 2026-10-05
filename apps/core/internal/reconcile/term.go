@@ -109,7 +109,7 @@ func (t *term) handle(ctx context.Context, first store.Change) error {
 	batch := t.gather(first)
 	acked := t.r.acked(ctx, batch)
 	for i, c := range batch {
-		if acked[i] {
+		if acked[i] || c.Kind == store.RoomInserted {
 			t.win.done(c.Position)
 			continue
 		}
