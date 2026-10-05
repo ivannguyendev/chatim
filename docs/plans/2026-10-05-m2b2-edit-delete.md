@@ -5,17 +5,18 @@
 **Goal:** Sửa tin, xoá tin cho mọi người, ẩn tin phía tôi, clear history và đọc lịch sử sửa, theo mô hình fact + projection (D62–D64): lệnh đổi ghi một **fact bất biến** vào `message_edits` (khoá `room│thread│seq│version` là CAS), cập nhật **projection** `messages` rồi mới ack; worker của effect engine (M2b.1) chạy lại projection và phát event `msg_edited`/`msg_deleted` từ feed insert của `message_edits`. Ẩn và clear là fact thưa theo người đọc, áp ở reader pipeline, không phát event (owner 2026-10-05).
 
 **Architecture:**
-- `domain`: `Message` thêm `Version`, `Deleted`, `EditedAt`, `Hidden` (cờ chỉ của view, không lưu); kiểu `Edit`; `Member.ClearedBeforeSeq`; lỗi `ErrMessageNotFound`, `ErrMessageDeleted`, `ErrVersionConflict`, `ErrNotAuthor`.
+- `domain`: `Message` thêm `Version`, `Deleted`, `EditedAt`, `Hidden` (cờ chỉ của view, không lưu); kiểu `Edit`; `Member.ClearedBeforeSeq`; lỗi `ErrMessageNotFound`, `ErrMessageDeleted`, `ErrVersionConflict`. Không có lỗi "không phải tác giả": quyền sửa/xoá/ẩn/đọc lịch sử chỉ do `access.Policy` quyết (D86).
 - `store`: port mới `Edits`, `Hidden`, `MessageEditor` (`ApplyEdit`, CAS theo version), `HistoryClearer` (`ClearHistory`, `$max`). Mongo: collection clustered `message_edits` (`_id = keys.Edit`, index `{r, ts}` — D70), `hidden` (index unique `{u, r, th, s}`), field `v/d/ea` trên `messages`, `cb` trên `members`.
 - Feed thêm `EditInserted`; `work.Record` thêm `Version` (37 byte, id `e:{room}-{th}-{seq}-v{ver}`).
-- Package mới `mutate`: `Edit`, `Delete`, `Hide`, `ClearHistory` (fast path: kiểm quyền qua `access`, đọc fact cuối, insert fact, projection, dọn text khi xoá, enqueue event, rồi trả).
+- `access`: `Request.Author`; `Checker.Admit` (tenant + membership) và `Checker.Allow` (policy), `Authorize` = hai bước; `DefaultPolicy` (sửa/xoá chỉ tác giả, còn lại cho member) thay `AllowMembers` làm mặc định (D86).
+- Package mới `mutate`: `Edit`, `Delete`, `Hide`, `ClearHistory` (fast path: kiểm quyền qua `access` với tác giả của tin, đọc fact cuối, insert fact, projection, dọn text khi xoá, enqueue event, rồi trả).
 - `grpcsrv`: 5 RPC mới (`EditMessage`, `DeleteMessage`, `HideMessage`, `ClearHistory`, `GetEditHistory`); `GetHistory` chạy thêm `view.MaskDeleted` và `view.HideForViewer`.
 - `effects`: `edit_projection` (delay 0) + `msg_changed` (delay `RECONCILE_DELAY`, không ack mark) cho `EditInserted`.
 - `/app resync` quét thêm `message_edits` theo `{r, ts}`; `corecli` + e2e có sửa/xoá.
 
 **Tech Stack:** Go 1.26 trong Docker qua `make`; buf; mongo-driver v2 (clustered collection, `UpdateOne` có điều kiện, `FindOneAndUpdate`); nats.go jetstream; `testing/synctest`; goleak.
 
-**Nguồn quyết định:** [thiết kế](../designs/261005-chatim-architecture.md) §4, §5, §6.3, §6.4 (ẩn/clear), §8.3, §9.2, D62–D64, D70, D75, D79–D81; [roadmap](../roadmap.md) dòng M2b.2; owner chốt 2026-10-05: phạm vi gồm sửa + xoá + ẩn + clear + GetEditHistory; ẩn/clear **không** phát event (đồng bộ đa thiết bị để M3/M4, H7/H8); **không** giới hạn thời gian sửa/xoá trong core (policy theo tenant cắm qua `access.Policy` ở Phase 2); A7 qua `access.Policy` với action `ReadEditHistory` (mặc định cho phép member). Quyết định mới ghi ở task docs: **D82** lệnh đổi qua package `mutate`, không qua actor, vẫn định tuyến theo slot; **D83** event thay đổi mang snapshot hiện tại + id theo version của fact, không ack mark, projection ở worker delay 0 (thay "xoá delay 2–3s"), event delay `RECONCILE_DELAY`; **D84** record work mang `Version` (37 byte); **D85** view: tin bị ẩn/clear trả placeholder `hidden` không nội dung, tin xoá trả `deleted` không nội dung, seq giữ nguyên.
+**Nguồn quyết định:** [thiết kế](../designs/261005-chatim-architecture.md) §4, §5, §6.3, §6.4 (ẩn/clear), §8.3, §9.2, D62–D64, D70, D75, D79–D81, D86; [roadmap](../roadmap.md) dòng M2b.2; owner chốt 2026-10-05: phạm vi gồm sửa + xoá + ẩn + clear + GetEditHistory; ẩn/clear **không** phát event (đồng bộ đa thiết bị để M3/M4, H7/H8); **không** giới hạn thời gian sửa/xoá trong core (policy theo tenant cắm qua `access.Policy` ở Phase 2); A7 qua `access.Policy` với action `ReadEditHistory` (mặc định cho phép member). Quyết định mới ghi ở task docs: **D82** lệnh đổi qua package `mutate`, không qua actor, vẫn định tuyến theo slot; **D83** event thay đổi mang snapshot hiện tại + id theo version của fact, không ack mark, projection ở worker delay 0 (thay "xoá delay 2–3s"), event delay `RECONCILE_DELAY`; **D84** record work mang `Version` (37 byte); **D85** view: tin bị ẩn/clear trả placeholder `hidden` không nội dung, tin xoá trả `deleted` không nội dung, seq giữ nguyên; **D86** (owner chốt 2026-10-05) mặc định không ai sửa/xoá tin của người khác; core chỉ hỏi `access.Policy` user có quyền sửa/xoá/ẩn hay không, không có bất biến tác giả/owner trong `mutate`; user → role → quyền là module policy chat (Phase 2).
 
 ---
 
@@ -35,8 +36,8 @@
 
 | Tính năng | Lớp (§4) | Fact | Idempotent | Effect + chính sách | Quyền | View | Event (id) | Khuếch đại | Guarantee + detector |
 |---|---|---|---|---|---|---|---|---|---|
-| Sửa tin | Fact bất biến + projection | insert `message_edits` v = base+1, kind `edit`, v1 có `prev` | `base_ver` (D63): dup key cùng tác giả + nội dung = thành công | fast path projection + event; worker `edit_projection` (0s) + `msg_changed` (`RECONCILE_DELAY`, không mark) | `access` `EditMessage` + bất biến tác giả | `Version`, `EditedAt` | `msg_edited` `{room}-{th}-{seq}-v{ver}` | 1 reverse scan + 2 write majority + 1 event | RC1: `reconcile_republished_total{effect="msg_changed"}`, `work_failures_total` |
-| Xoá cho mọi người | như trên, kind `delete` | như trên | như trên | như trên + `PurgeText` các fact ≤ v−1 (D75) | `DeleteMessage` + tác giả hoặc owner room | `MaskDeleted` | `msg_deleted` cùng dạng id | + 1 update nhiều doc (dọn text) | như trên |
+| Sửa tin | Fact bất biến + projection | insert `message_edits` v = base+1, kind `edit`, v1 có `prev` | `base_ver` (D63): dup key cùng tác giả + nội dung = thành công | fast path projection + event; worker `edit_projection` (0s) + `msg_changed` (`RECONCILE_DELAY`, không mark) | `access` `EditMessage` (policy mặc định: chỉ tác giả, D86) | `Version`, `EditedAt` | `msg_edited` `{room}-{th}-{seq}-v{ver}` | 1 reverse scan + 2 write majority + 1 event | RC1: `reconcile_republished_total{effect="msg_changed"}`, `work_failures_total` |
+| Xoá cho mọi người | như trên, kind `delete` | như trên | như trên | như trên + `PurgeText` các fact ≤ v−1 (D75) | `DeleteMessage` (policy mặc định: chỉ tác giả, D86) | `MaskDeleted` | `msg_deleted` cùng dạng id | + 1 update nhiều doc (dọn text) | như trên |
 | Ẩn phía tôi | Giá trị theo người đọc | upsert `hidden {u, r, th, s}` | upsert | không | `HideMessage` (member) | `HideForViewer` | không (owner) | 1 upsert | — |
 | Clear history | Giá trị theo người đọc | `$max members.cb` | `$max` | không | `ClearHistory` (member) | `HideForViewer` | không | 1 update | — |
 | Lịch sử sửa | Fact (đọc) | — | — | — | `ReadEditHistory` (A7) | tin đã xoá: rỗng | — | 1 range scan | — |
@@ -86,7 +87,6 @@ var (
 	ErrMessageNotFound = fmt.Errorf("message %w", apperr.ErrNotFound)
 	ErrMessageDeleted  = fmt.Errorf("message deleted: %w", apperr.ErrFailedPrecondition)
 	ErrVersionConflict = fmt.Errorf("message version conflict: %w", apperr.ErrFailedPrecondition)
-	ErrNotAuthor       = fmt.Errorf("not the author: %w", apperr.ErrPermissionDenied)
 )
 ```
 
@@ -187,6 +187,30 @@ message MessageVersion { uint32 version = 1; EditKind kind = 2; string text = 3;
 
 Thêm action: `EditMessage = "edit_message"`, `DeleteMessage = "delete_message"`, `HideMessage = "hide_message"`, `ClearHistory = "clear_history"`, `ReadEditHistory = "read_edit_history"`.
 
+```go
+type Request struct {
+	Action Action
+	User   string
+	Author string
+	Room   domain.Room
+	Member domain.Member
+}
+
+type DefaultPolicy struct{}
+
+func (DefaultPolicy) Check(ctx context.Context, req Request) error
+
+func (c *Checker) Admit(ctx context.Context, action Action, tenant, user string, room uint64) (Request, error)
+func (c *Checker) Allow(ctx context.Context, req Request) error
+func (c *Checker) Authorize(ctx context.Context, action Action, tenant, user string, room uint64) (Request, error)
+```
+
+- Quyền trên một tin (sửa, xoá, ẩn, đọc lịch sử sửa) **chỉ** do `access.Policy` quyết (D86); core không có bất biến tác giả/owner, không có `domain.ErrNotAuthor`. Từ chối = `access.ErrDenied` (bọc `apperr.ErrPermissionDenied` → `PERMISSION_DENIED`).
+- `Request.Author`: tác giả của tin đích (`msg.From`); rỗng với action theo room (`ReadHistory`, `SendMessage`, `ClearHistory`).
+- `DefaultPolicy`: `EditMessage`/`DeleteMessage` với `Author != User` → `ErrDenied`; mọi action khác → `nil`. `NewChecker(rooms, nil)` dùng `DefaultPolicy{}` (trước là `AllowMembers{}`); `AllowMembers` giữ lại (test dùng). Actor mặc định cũng đổi sang `DefaultPolicy{}`; `SendMessage`/`ReadHistory` không đổi hành vi vì policy mặc định cho phép.
+- `Admit`: room (`Rooms.Get`) → `domain.CheckTenant` → membership; **không** hỏi policy; trả `Request{Action, User, Room, Member}`. `Allow`: hỏi policy với `req`. `Authorize` = `Admit` rồi `Allow` (chữ ký giữ nguyên).
+- Thứ tự cho mọi action trên **một tin** (Edit, Delete, Hide, GetEditHistory): `Admit` → `Find` tin (không có → `ErrMessageNotFound`) → `Allow(req với Author = msg.From)` → phần còn lại. Action theo room (`ClearHistory`) dùng `Authorize`.
+
 ### `apps/core/internal/mutate` (Task 7, 8)
 
 ```go
@@ -246,16 +270,16 @@ func (m *Mutator) ClearHistory(ctx context.Context, c ClearCmd) (uint64, error)
 ```
 
 Luồng `Edit`/`Delete` (thiết kế §6.3):
-1. `Access.Authorize(ctx, EditMessage|DeleteMessage, tenant, user, room)` → grant (room, member).
-2. `Find` tin (không có → `ErrMessageNotFound`); `Edits.Latest` (fact cuối). Version hiện tại = `max(msg.Version, latest.Version)`. `BaseVersion >= MaxInt32` → `ErrVersionConflict`. **Retry trước:** fact cuối có `Version == BaseVersion + 1` và trùng `(By, Kind, Text)` của lệnh → retry thành công, dùng chính fact đã lưu, sang bước 7. Sau đó mới: đã xoá (`msg.Deleted` hoặc fact cuối là delete) → `ErrMessageDeleted`.
-3. Bất biến: sửa chỉ tác giả (`msg.From == user`); xoá: tác giả hoặc `grant.Member.Role == domain.RoleOwner`; sai → `ErrNotAuthor`.
-4. `BaseVersion != version hiện tại` → `ErrVersionConflict` (trừ khi bước 6 nhận ra retry).
+1. `Access.Admit(ctx, EditMessage|DeleteMessage, tenant, user, room)` → grant (room, member), chưa hỏi policy.
+2. `Find` tin (không có → `ErrMessageNotFound`).
+3. Policy: `Access.Allow(ctx, grant với Author = msg.From)`; từ chối → `access.ErrDenied` (D86). Hỏi trước nhận diện retry: tác giả gửi lại vẫn được phép.
+4. `Edits.Latest` (fact cuối). Version hiện tại = `max(msg.Version, latest.Version)`. `BaseVersion >= MaxInt32` → `ErrVersionConflict`. **Retry trước:** fact cuối có `Version == BaseVersion + 1` và trùng `(By, Kind, Text)` của lệnh → retry thành công, dùng chính fact đã lưu, sang bước 7. Sau đó mới: đã xoá (`msg.Deleted` hoặc fact cuối là delete) → `ErrMessageDeleted`; rồi `BaseVersion != version hiện tại` → `ErrVersionConflict` (trừ khi bước 6 nhận ra retry).
 5. Fact `Version = BaseVersion + 1`; `Prev = msg.Text` chỉ khi `Kind == EditText && Version == 1` (fact xoá không bao giờ có `Prev`); `At = Now().UTC().Truncate(ms)`. `Edits.Append`.
 6. `ErrEditExists` → `Edits.At(version)`: cùng `By`, `Kind` và `Text` → coi là retry thành công (không lỗi), đi tiếp bước 7; khác → `ErrVersionConflict`. (Bước 4 với retry: nếu `BaseVersion + 1 == version hiện tại` và fact ở version đó trùng nội dung → retry thành công.)
 7. `Messages.ApplyEdit(fact)`; xoá thì `Edits.PurgeText(key, Version − 1)`.
 8. `Find` lại tin (snapshot sau projection) → `Events.Enqueue(room, MessageEdited|MessageDeleted(grant.Room.Type, msg, fact))` (lỗi enqueue bỏ qua; worker bù) → trả snapshot.
 
-`Hide`: `Authorize(HideMessage)` → tin phải tồn tại → `Hidden.Hide`. `ClearHistory`: `Authorize(ClearHistory)`; `UpToSeq == 0` hoặc lớn hơn seq cuối → kẹp về `Messages.Last(room, 0)`; → `HistoryClearer.ClearHistory`.
+`Hide`: `Admit(HideMessage)` → tin phải tồn tại → `Allow(Author = msg.From)` → `Hidden.Hide`. `ClearHistory`: `Authorize(ClearHistory)`; `UpToSeq == 0` hoặc lớn hơn seq cuối → kẹp về `Messages.Last(room, 0)`; → `HistoryClearer.ClearHistory`.
 
 ### `apps/core/internal/view` (Task 10)
 
@@ -339,7 +363,7 @@ func (e *MessageChanged) Dropped() uint64
 | 4 | Mongostore: `message_edits`, `hidden`, codec `v/d/ea/cb`, ports | **cao** | 3 |
 | 5 | Feed `EditInserted` (memstore + Mongo) + reader nhận kind mới | trung bình | 3, 4 |
 | 6 | `work.Record` 37 byte + `Version` + id `e:` | thấp | 5 |
-| 7 | `access` actions + `mutate` Edit/Delete | **cao** | 2, 3 |
+| 7 | `access` (actions, `Admit`/`Allow`, `DefaultPolicy`) + `mutate` Edit/Delete | **cao** | 2, 3 |
 | 8 | `mutate` Hide/ClearHistory | thấp | 7 |
 | 9 | `grpcsrv` 5 RPC + wiring `apps/core` | **cao** | 7, 8 |
 | 10 | `view` MaskDeleted + HideForViewer + GetHistory | trung bình | 3, 9 |
@@ -362,7 +386,8 @@ func (e *MessageChanged) Dropped() uint64
 - **Metrics:** `msg_changed` chỉ đếm `republished` cho PubAck không bị đánh dấu trùng (để `ChatimRepublishSurge` không báo giả theo tốc độ sửa); `edit_projection` chỉ có `effect_dropped_total`. Không thêm luật alert (vẫn 15).
 - **Khoảng trống tạm:** từ Task 5 reader còn bỏ change sửa; Task 6 bật forward; từ Task 6 tới Task 11 worker ack record sửa mà chưa chạy effect nào (chỉ dev). Record 33 byte cũ còn trong work stream dev sẽ bị Term sau deploy.
 - **grpcsrv wiring** chuyển sang `apps/core/service_wiring.go` (Task 9); route `fakeCore` phải cài mọi RPC mới mà client gọi (Task 13).
-- **Câu hỏi owner (giữ hành vi như plan, hỏi khi review):** người tạo DM là `RoleOwner` nên xoá được tin của người kia; `GetEditHistory` không xét tin người đọc đã ẩn/clear.
+- **Quyền (D86, owner chốt 2026-10-05):** core không có luật tác giả/owner; `access.DefaultPolicy` từ chối sửa/xoá tin của người khác, kể cả owner room hay người tạo DM (`RoleOwner`). Owner/moderator xoá tin người khác là việc của module policy chat Phase 2 (cắm qua `access.Policy`).
+- **`GetEditHistory` trên tin người đọc đã ẩn/clear:** mặc định vẫn trả lịch sử (view ẩn chỉ áp ở `GetHistory`); policy có thể đổi (`ReadEditHistory` mang `Author`).
 
 ---
 
@@ -430,7 +455,6 @@ bằng:
 		{domain.ErrMessageNotFound, apperr.ErrNotFound},
 		{domain.ErrMessageDeleted, apperr.ErrFailedPrecondition},
 		{domain.ErrVersionConflict, apperr.ErrFailedPrecondition},
-		{domain.ErrNotAuthor, apperr.ErrPermissionDenied},
 	}
 ```
 
@@ -581,7 +605,6 @@ var (
 	ErrMessageNotFound = fmt.Errorf("message %w", apperr.ErrNotFound)
 	ErrMessageDeleted  = fmt.Errorf("message deleted: %w", apperr.ErrFailedPrecondition)
 	ErrVersionConflict = fmt.Errorf("message version conflict: %w", apperr.ErrFailedPrecondition)
-	ErrNotAuthor       = fmt.Errorf("not the author: %w", apperr.ErrPermissionDenied)
 )
 ```
 
@@ -594,7 +617,7 @@ Expected: PASS; vet sạch.
 
 INDEXES.csv, dòng `apps/core/internal/domain`:
 - thay `Room/Member/Message types and validation:` bằng `Room/Member/Message types and validation; Message edit state (Version/Deleted/EditedAt) and view-only Hidden; Edit fact (EditText/EditDelete; Prev on version 1); Member.ClearedBeforeSeq;`
-- trong key symbols thay `ErrBusy;ErrRetryLater` bằng `ErrBusy;ErrRetryLater;Edit;EditKind;EditText;EditDelete;ErrMessageNotFound;ErrMessageDeleted;ErrVersionConflict;ErrNotAuthor`
+- trong key symbols thay `ErrBusy;ErrRetryLater` bằng `ErrBusy;ErrRetryLater;Edit;EditKind;EditText;EditDelete;ErrMessageNotFound;ErrMessageDeleted;ErrVersionConflict`
 - cột decisions thay `D7;D35` bằng `D7;D35;D62;D63`.
 
 ```bash
@@ -3893,17 +3916,19 @@ git commit -m "feat(work): carry the edit version in work records and forward ed
 **Câu hỏi chưa giải quyết:**
 - Index `{r:1, ts:1}` có nên thành `{r:1, ts:1, _id:1}` để `Between` sort hoàn toàn bằng index không? Hiện giữ đúng D70/hợp đồng.
 
-### Task 7: `access` actions + package `mutate` — `Edit` và `Delete`
+### Task 7: `access` (actions, `Admit`/`Allow`, `DefaultPolicy`) + package `mutate` — `Edit` và `Delete`
 
-Lệnh đổi không đi qua actor (D82): `mutate.Mutator` kiểm quyền qua `access.Checker` (tenant + membership + policy), đọc tin và **fact cuối** (`Edits.Latest`, một reverse scan), kiểm trạng thái và bất biến tác giả, rồi insert fact `version = base + 1` (khoá `_id` là CAS, D62/D63). Duplicate key → đọc fact ở version đó: cùng `By` + `Kind` + `Text` là retry thành công, khác là `ErrVersionConflict`. Sau fact: projection `Messages.ApplyEdit` (CAS theo version), xoá thì `Edits.PurgeText(key, v−1)` (D75), đọc lại snapshot, enqueue `msg_edited`/`msg_deleted` (lỗi enqueue bỏ qua, worker `msg_changed` của Task 11 gửi bù) rồi mới trả (D64: ack sau projection).
+Lệnh đổi không đi qua actor (D82): `mutate.Mutator` vào room qua `access.Checker.Admit` (tenant + membership), đọc tin, hỏi policy qua `Checker.Allow` với `Author = msg.From` (D86: quyền chỉ do `access.Policy` quyết, core không có luật tác giả/owner), đọc **fact cuối** (`Edits.Latest`, một reverse scan), kiểm trạng thái, rồi insert fact `version = base + 1` (khoá `_id` là CAS, D62/D63). Duplicate key → đọc fact ở version đó: cùng `By` + `Kind` + `Text` là retry thành công, khác là `ErrVersionConflict`. Sau fact: projection `Messages.ApplyEdit` (CAS theo version), xoá thì `Edits.PurgeText(key, v−1)` (D75), đọc lại snapshot, enqueue `msg_edited`/`msg_deleted` (lỗi enqueue bỏ qua, worker `msg_changed` của Task 11 gửi bù) rồi mới trả (D64: ack sau projection).
 
-Thứ tự kiểm trong `commit` (bước 2–6 của hợp đồng, viết lại cho retry):
+`access` (D86): `Request` thêm `Author`; `Checker` tách `Admit` (room → `CheckTenant` → membership, không hỏi policy) và `Allow` (hỏi policy), `Authorize` = `Admit` rồi `Allow` (chữ ký giữ nguyên, `GetHistory` không đổi). `DefaultPolicy` thay `AllowMembers` làm mặc định của `NewChecker(rooms, nil)` và của actor (`router_new.go`): `EditMessage`/`DeleteMessage` với `Author != User` → `ErrDenied`, mọi action khác cho phép, nên `SendMessage`/`ReadHistory` giữ nguyên hành vi. Owner room cũng bị từ chối khi xoá tin người khác; muốn cho phép thì cắm policy riêng (module policy chat Phase 2).
+
+Thứ tự kiểm trong `apply` + `commit` (bước 1–6 của hợp đồng, viết lại cho retry):
+0. `Mutator.target`: `Admit` → `Find` tin (không có → `ErrMessageNotFound`) → `Allow(Author = msg.From)`; từ chối → `access.ErrDenied`. Policy được hỏi **trước** nhận diện retry: tác giả gửi lại vẫn được phép, còn người bị từ chối không dò được trạng thái tin. `Hide` (Task 8) dùng lại `target`.
 1. `BaseVersion >= MaxInt32` → `ErrVersionConflict` (không cộng tràn; `messages.v` lưu int32 nên store từ chối version > `MaxInt32`, xem Task 3–4).
-2. Fact cuối có `Version == BaseVersion + 1` và trùng `(By, Kind, Text)` của lệnh → **retry**: dùng chính fact đã lưu (giữ `At` cũ, nên event giống hệt lần đầu và JetStream bỏ trùng theo id), đi thẳng tới projection. Bước này đứng **trước** kiểm "đã xoá", để retry của một lệnh xoá đã thắng vẫn thành công; và trước kiểm tác giả, nhưng `By == user` đã ngầm kiểm.
+2. Fact cuối có `Version == BaseVersion + 1` và trùng `(By, Kind, Text)` của lệnh → **retry**: dùng chính fact đã lưu (giữ `At` cũ, nên event giống hệt lần đầu và JetStream bỏ trùng theo id), đi thẳng tới projection. Bước này đứng **trước** kiểm "đã xoá", để retry của một lệnh xoá đã thắng vẫn thành công.
 3. `msg.Deleted` hoặc fact cuối là `EditDelete` → `ErrMessageDeleted`.
-4. Sửa: chỉ tác giả. Xoá: tác giả hoặc `grant.Member.Role == RoleOwner`. Sai → `ErrNotAuthor`.
-5. `BaseVersion != max(msg.Version, latest.Version)` → `ErrVersionConflict`.
-6. `Append`; `ErrEditExists` (một lệnh khác thắng giữa `Latest` và `Append`) → `At(version)` → trùng là retry, khác là conflict.
+4. `BaseVersion != max(msg.Version, latest.Version)` → `ErrVersionConflict`.
+5. `Append`; `ErrEditExists` (một lệnh khác thắng giữa `Latest` và `Append`) → `At(version)` → trùng là retry, khác là conflict.
 
 `Prev` chỉ ghi cho fact **sửa** version 1 (tinh chỉnh hợp đồng): fact **xoá** v1 mà mang `Prev = text gốc` thì `PurgeText(key, 0)` không dọn được nó và text gốc sống mãi trong `message_edits`, trái D75.
 
@@ -3913,6 +3938,10 @@ Giả định từ part A (Task 1–3): `domain.Edit`, `domain.EditText/EditDele
 
 **Files:**
 - Modify: `apps/core/internal/access/policy.go`
+- Modify: `apps/core/internal/access/checker.go`
+- Modify: `apps/core/internal/access/checker_test.go`
+- Create: `apps/core/internal/access/default_policy_test.go`
+- Modify: `apps/core/internal/actor/router_new.go`
 - Create: `apps/core/internal/pbconv/change_event.go`
 - Create: `apps/core/internal/pbconv/change_event_test.go`
 - Create: `apps/core/internal/mutate/mutator.go`
@@ -3920,9 +3949,228 @@ Giả định từ part A (Task 1–3): `domain.Edit`, `domain.EditText/EditDele
 - Create: `apps/core/internal/mutate/fixtures_test.go`
 - Create: `apps/core/internal/mutate/edit_test.go`
 - Create: `apps/core/internal/mutate/delete_test.go`
+- Create: `apps/core/internal/mutate/policy_test.go`
 - Modify: `INDEXES.csv`
 
-**Step 1: Test `pbconv.MessageChanged`**
+**Step 1: Test `access` — `Admit`, `Allow`, `DefaultPolicy`**
+
+`apps/core/internal/access/checker_test.go`, thay nguyên hàm `TestNilPolicyAllowsMembers` bằng:
+
+```go
+func TestNilPolicyUsesTheDefaultPolicy(t *testing.T) {
+	c, err := access.NewChecker(rooms(t), nil)
+	if err != nil {
+		t.Fatalf("NewChecker: %v", err)
+	}
+	req, err := c.Authorize(t.Context(), access.ReadHistory, "acme", "alice", room)
+	if err != nil || req.Member.User != "alice" {
+		t.Fatalf("Authorize = %+v, %v; want alice allowed", req, err)
+	}
+	del, err := c.Admit(t.Context(), access.DeleteMessage, "acme", "alice", room)
+	if err != nil {
+		t.Fatalf("Admit: %v", err)
+	}
+	del.Author = "bob"
+	if err := c.Allow(t.Context(), del); !errors.Is(err, access.ErrDenied) {
+		t.Fatalf("owner alice deletes bob's message = %v, want ErrDenied", err)
+	}
+	if _, err := access.NewChecker(nil, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
+		t.Fatalf("NewChecker(nil) = %v, want ErrInvalidArgument", err)
+	}
+}
+
+func TestAdmitChecksTheRoomWithoutThePolicy(t *testing.T) {
+	asked := 0
+	deny := access.PolicyFunc(func(context.Context, access.Request) error { asked++; return access.ErrDenied })
+	c, err := access.NewChecker(rooms(t), deny)
+	if err != nil {
+		t.Fatalf("NewChecker: %v", err)
+	}
+	req, err := c.Admit(t.Context(), access.EditMessage, "acme", "alice", room)
+	if err != nil || asked != 0 {
+		t.Fatalf("Admit = %v after %d policy calls, want nil after 0", err, asked)
+	}
+	if req.Action != access.EditMessage || req.User != "alice" || req.Author != "" || req.Room.ID != room || req.Member.Role != domain.RoleOwner {
+		t.Fatalf("Admit = %+v, want edit_message by owner alice without an author", req)
+	}
+	if _, err := c.Admit(t.Context(), access.EditMessage, "acme", "mallory", room); !errors.Is(err, apperr.ErrPermissionDenied) {
+		t.Fatalf("Admit stranger = %v, want ErrPermissionDenied", err)
+	}
+}
+
+func TestAllowPassesTheRequestWithTheAuthor(t *testing.T) {
+	var got access.Request
+	deny := access.PolicyFunc(func(_ context.Context, r access.Request) error { got = r; return access.ErrDenied })
+	c, err := access.NewChecker(rooms(t), deny)
+	if err != nil {
+		t.Fatalf("NewChecker: %v", err)
+	}
+	req, err := c.Admit(t.Context(), access.DeleteMessage, "acme", "alice", room)
+	if err != nil {
+		t.Fatalf("Admit: %v", err)
+	}
+	req.Author = "bob"
+	if err := c.Allow(t.Context(), req); !errors.Is(err, apperr.ErrPermissionDenied) {
+		t.Fatalf("Allow = %v, want ErrPermissionDenied", err)
+	}
+	if got.Action != access.DeleteMessage || got.User != "alice" || got.Author != "bob" || got.Room.ID != room || got.Member.Role != domain.RoleOwner {
+		t.Fatalf("policy saw %+v, want delete_message by owner alice on bob's message", got)
+	}
+}
+```
+
+`apps/core/internal/access/default_policy_test.go`:
+
+```go
+package access_test
+
+import (
+	"errors"
+	"testing"
+
+	"github.com/ivannguyendev/chatim/apps/core/internal/access"
+)
+
+func TestDefaultPolicyLetsOnlyTheAuthorEditOrDelete(t *testing.T) {
+	cases := []struct {
+		action       access.Action
+		user, author string
+		want         error
+	}{
+		{access.EditMessage, "alice", "alice", nil},
+		{access.DeleteMessage, "alice", "alice", nil},
+		{access.EditMessage, "alice", "bob", access.ErrDenied},
+		{access.DeleteMessage, "alice", "bob", access.ErrDenied},
+		{access.DeleteMessage, "alice", "", access.ErrDenied},
+		{access.ReadHistory, "alice", "", nil},
+		{access.SendMessage, "alice", "", nil},
+		{access.ClearHistory, "alice", "", nil},
+		{access.HideMessage, "alice", "bob", nil},
+		{access.ReadEditHistory, "alice", "bob", nil},
+	}
+	for _, tc := range cases {
+		err := access.DefaultPolicy{}.Check(t.Context(), access.Request{Action: tc.action, User: tc.user, Author: tc.author})
+		if !errors.Is(err, tc.want) {
+			t.Fatalf("%s by %s on %q's message = %v, want %v", tc.action, tc.user, tc.author, err, tc.want)
+		}
+	}
+}
+```
+
+**Step 2: Chạy, thấy fail**
+
+Run: `make -s go ARGS="test -race -shuffle=on ./apps/core/internal/access/..."`
+Expected: FAIL biên dịch: `undefined: access.DeleteMessage`, `undefined: access.DefaultPolicy`, `c.Admit undefined (type *access.Checker has no field or method Admit)`, `unknown field Author in struct literal of type access.Request`.
+
+**Step 3: Code `access` + mặc định của actor**
+
+`apps/core/internal/access/policy.go` (thay cả file):
+
+```go
+package access
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
+	"github.com/ivannguyendev/chatim/pkg/apperr"
+)
+
+type Action string
+
+const (
+	ReadHistory     Action = "read_history"
+	SendMessage     Action = "send_message"
+	EditMessage     Action = "edit_message"
+	DeleteMessage   Action = "delete_message"
+	HideMessage     Action = "hide_message"
+	ClearHistory    Action = "clear_history"
+	ReadEditHistory Action = "read_edit_history"
+)
+
+var ErrDenied = fmt.Errorf("action denied: %w", apperr.ErrPermissionDenied)
+
+type Request struct {
+	Action Action
+	User   string
+	Author string
+	Room   domain.Room
+	Member domain.Member
+}
+
+type Policy interface {
+	Check(ctx context.Context, req Request) error
+}
+
+type PolicyFunc func(ctx context.Context, req Request) error
+
+func (f PolicyFunc) Check(ctx context.Context, req Request) error { return f(ctx, req) }
+
+type AllowMembers struct{}
+
+func (AllowMembers) Check(context.Context, Request) error { return nil }
+
+type DefaultPolicy struct{}
+
+func (DefaultPolicy) Check(_ context.Context, req Request) error {
+	if (req.Action == EditMessage || req.Action == DeleteMessage) && req.Author != req.User {
+		return ErrDenied
+	}
+	return nil
+}
+```
+
+`apps/core/internal/access/checker.go`, trong `NewChecker` thay `policy = AllowMembers{}` bằng `policy = DefaultPolicy{}`, rồi thay nguyên hàm `Authorize` bằng:
+
+```go
+func (c *Checker) Admit(ctx context.Context, action Action, tenant, user string, room uint64) (Request, error) {
+	r, err := c.rooms.Get(ctx, room)
+	if err != nil {
+		return Request{}, err
+	}
+	if err := domain.CheckTenant(r, tenant); err != nil {
+		return Request{}, err
+	}
+	m, err := c.rooms.Member(ctx, room, user)
+	if err != nil {
+		return Request{}, err
+	}
+	return Request{Action: action, User: user, Room: r, Member: m}, nil
+}
+
+func (c *Checker) Allow(ctx context.Context, req Request) error {
+	return c.policy.Check(ctx, req)
+}
+
+func (c *Checker) Authorize(ctx context.Context, action Action, tenant, user string, room uint64) (Request, error) {
+	req, err := c.Admit(ctx, action, tenant, user, room)
+	if err != nil {
+		return Request{}, err
+	}
+	return req, c.Allow(ctx, req)
+}
+```
+
+`apps/core/internal/actor/router_new.go`: thay `policy:  access.AllowMembers{},` bằng `policy:  access.DefaultPolicy{},`. Actor chỉ hỏi `SendMessage`, policy mặc định cho phép, nên test actor không đổi.
+
+**Step 4: Chạy, thấy pass + commit**
+
+Run: `make -s go ARGS="test -race -shuffle=on ./apps/core/internal/access/... ./apps/core/internal/actor/... ./apps/core/internal/grpcsrv/..."`
+Expected: PASS (`grpcsrv` `GetHistory` vẫn gọi `Authorize`, policy mặc định cho `ReadHistory`). `wc -l apps/core/internal/access/*.go` mỗi file < 200.
+
+`INDEXES.csv`, dòng `apps/core/internal/access`:
+- purpose thay "AllowMembers is the default policy; used by SendMessage in the actor and GetHistory in grpcsrv" bằng "Checker.Admit checks tenant and membership without the policy; Checker.Allow asks the policy; Authorize does both; Request.Author is the author of the target message; DefaultPolicy (default of NewChecker and the actor) lets only the author edit or delete and allows every other action (D86); AllowMembers allows every member; used by SendMessage in the actor; GetHistory/GetEditHistory in grpcsrv and the change commands in mutate";
+- key_symbols thay `Action;Request;Policy;PolicyFunc;AllowMembers;Rooms;Checker;NewChecker;Checker.Authorize` bằng `Action;EditMessage;DeleteMessage;HideMessage;ClearHistory;ReadEditHistory;Request;Policy;PolicyFunc;AllowMembers;DefaultPolicy;Rooms;Checker;NewChecker;Checker.Admit;Checker.Allow;Checker.Authorize`;
+- used_by thêm `;apps/core/internal/mutate`; decisions `D65;D77` → `D65;D77;D86`.
+
+```bash
+make fmt-check && make vet && make lint
+git add apps/core/internal/access/default_policy_test.go
+git commit -m "feat(access): let only the author edit or delete by default" -- apps/core/internal/access/ apps/core/internal/actor/router_new.go INDEXES.csv
+```
+
+**Step 5: Test `pbconv.MessageChanged`**
 
 `apps/core/internal/pbconv/change_event_test.go`:
 
@@ -3951,7 +4199,7 @@ func TestMessageChangedPicksTheEventByFactKind(t *testing.T) {
 }
 ```
 
-**Step 2: Test `mutate`**
+**Step 6: Test `mutate`**
 
 `apps/core/internal/mutate/fixtures_test.go`:
 
@@ -4113,7 +4361,6 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/pbconv"
@@ -4242,20 +4489,6 @@ func TestDuplicateVersionIsARetryOnlyForTheSameChange(t *testing.T) {
 	}
 }
 
-func TestOnlyTheAuthorEdits(t *testing.T) {
-	rg := newRig(t, nil)
-	rg.send(t, 1, "alice", "a")
-	rg.send(t, 2, "bob", "b")
-	for _, c := range []mutate.EditCmd{edit("bob", 1, 0, "x"), edit("alice", 2, 0, "x")} {
-		if _, err := rg.m.Edit(t.Context(), c); !errors.Is(err, domain.ErrNotAuthor) || !errors.Is(err, apperr.ErrPermissionDenied) {
-			t.Fatalf("%s edits seq %d = %v, want ErrNotAuthor", c.User, c.Seq, err)
-		}
-	}
-	if len(rg.facts(t, 1))+len(rg.facts(t, 2)) != 0 {
-		t.Fatalf("a refused edit wrote a fact")
-	}
-}
-
 func TestEditRejectsBadInput(t *testing.T) {
 	rg := newRig(t, nil)
 	rg.send(t, 1, "alice", "a")
@@ -4273,31 +4506,6 @@ func TestEditRejectsBadInput(t *testing.T) {
 	}
 }
 
-func TestChangesAskThePolicyThroughAuthorize(t *testing.T) {
-	var asked []access.Action
-	deny := access.PolicyFunc(func(_ context.Context, r access.Request) error { asked = append(asked, r.Action); return access.ErrDenied })
-	rg := newRig(t, deny)
-	rg.send(t, 1, "alice", "a")
-	if _, err := rg.m.Edit(t.Context(), edit("alice", 1, 0, "x")); !errors.Is(err, apperr.ErrPermissionDenied) {
-		t.Fatalf("Edit = %v, want PermissionDenied", err)
-	}
-	if _, err := rg.m.Delete(t.Context(), del("alice", 1, 0)); !errors.Is(err, apperr.ErrPermissionDenied) {
-		t.Fatalf("Delete = %v, want PermissionDenied", err)
-	}
-	if !slices.Equal(asked, []access.Action{access.EditMessage, access.DeleteMessage}) {
-		t.Fatalf("policy asked for %v", asked)
-	}
-	open := newRig(t, nil)
-	open.send(t, 1, "alice", "a")
-	if _, err := open.m.Edit(t.Context(), edit("mallory", 1, 0, "x")); !errors.Is(err, domain.ErrNotMember) {
-		t.Fatalf("stranger Edit = %v, want ErrNotMember", err)
-	}
-	other := edit("alice", 1, 0, "x")
-	other.Room = 999
-	if _, err := open.m.Edit(t.Context(), other); !errors.Is(err, domain.ErrRoomNotFound) {
-		t.Fatalf("unknown room Edit = %v, want ErrRoomNotFound", err)
-	}
-}
 ```
 
 `apps/core/internal/mutate/delete_test.go`:
@@ -4317,29 +4525,6 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/pbconv"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
-
-func TestOwnerDeletesAnyMessageMembersOnlyTheirOwn(t *testing.T) {
-	rg := newRig(t, nil)
-	rg.send(t, 1, "alice", "a")
-	rg.send(t, 2, "bob", "b")
-	rg.send(t, 3, "carol", "c")
-	for _, c := range []mutate.DeleteCmd{del("bob", 1, 0), del("carol", 2, 0)} {
-		if _, err := rg.m.Delete(t.Context(), c); !errors.Is(err, domain.ErrNotAuthor) {
-			t.Fatalf("%s deletes seq %d = %v, want ErrNotAuthor", c.User, c.Seq, err)
-		}
-	}
-	got, err := rg.m.Delete(t.Context(), del("alice", 2, 0))
-	if err != nil || !got.Deleted || got.Text != "" || got.Version != 1 {
-		t.Fatalf("owner delete = %+v, %v; want a deleted snapshot at version 1", got, err)
-	}
-	if _, err := rg.m.Delete(t.Context(), del("carol", 3, 0)); err != nil {
-		t.Fatalf("author delete: %v", err)
-	}
-	_, events := rg.events.list()
-	if len(events) != 2 || events[0].GetActor() != "alice" || events[0].GetMessageDeleted() == nil {
-		t.Fatalf("events = %v, want msg_deleted by alice first", events)
-	}
-}
 
 func TestDeletePurgesTheTextOfEarlierVersions(t *testing.T) {
 	rg := newRig(t, nil)
@@ -4433,35 +4618,114 @@ func TestNewRequiresEveryDependency(t *testing.T) {
 }
 ```
 
-**Step 3: Chạy, thấy fail**
+`apps/core/internal/mutate/policy_test.go`:
+
+```go
+package mutate_test
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/ivannguyendev/chatim/apps/core/internal/access"
+	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/mutate"
+	"github.com/ivannguyendev/chatim/pkg/apperr"
+)
+
+func TestTheDefaultPolicyLetsOnlyTheAuthorChangeAMessage(t *testing.T) {
+	rg := newRig(t, nil)
+	rg.send(t, 1, "alice", "a")
+	rg.send(t, 2, "bob", "b")
+	for _, c := range []mutate.EditCmd{edit("bob", 1, 0, "x"), edit("alice", 2, 0, "x")} {
+		if _, err := rg.m.Edit(t.Context(), c); !errors.Is(err, access.ErrDenied) || !errors.Is(err, apperr.ErrPermissionDenied) {
+			t.Fatalf("%s edits seq %d = %v, want ErrDenied", c.User, c.Seq, err)
+		}
+	}
+	for _, c := range []mutate.DeleteCmd{del("bob", 1, 0), del("carol", 2, 0), del("alice", 2, 0)} {
+		if _, err := rg.m.Delete(t.Context(), c); !errors.Is(err, access.ErrDenied) {
+			t.Fatalf("%s deletes seq %d = %v, want ErrDenied even for the room owner", c.User, c.Seq, err)
+		}
+	}
+	if len(rg.facts(t, 1))+len(rg.facts(t, 2)) != 0 {
+		t.Fatalf("a refused change wrote a fact")
+	}
+	if _, events := rg.events.list(); len(events) != 0 {
+		t.Fatalf("a refused change enqueued %v", events)
+	}
+	if got, err := rg.m.Delete(t.Context(), del("bob", 2, 0)); err != nil || !got.Deleted || got.Version != 1 {
+		t.Fatalf("author delete = %+v, %v; want a deleted snapshot at version 1", got, err)
+	}
+}
+
+func TestAPolicyCanLetTheRoomOwnerDeleteAnyMessage(t *testing.T) {
+	ownerOrAuthor := access.PolicyFunc(func(_ context.Context, r access.Request) error {
+		if r.Action != access.DeleteMessage || r.Member.Role == domain.RoleOwner || r.Author == r.User {
+			return nil
+		}
+		return access.ErrDenied
+	})
+	rg := newRig(t, ownerOrAuthor)
+	rg.send(t, 1, "bob", "b")
+	rg.send(t, 2, "carol", "c")
+	if _, err := rg.m.Delete(t.Context(), del("bob", 2, 0)); !errors.Is(err, access.ErrDenied) {
+		t.Fatalf("bob deletes carol's message = %v, want ErrDenied", err)
+	}
+	got, err := rg.m.Delete(t.Context(), del("alice", 1, 0))
+	if err != nil || !got.Deleted || got.Text != "" || got.Version != 1 {
+		t.Fatalf("owner delete = %+v, %v; want a deleted snapshot at version 1", got, err)
+	}
+	if again, err := rg.m.Delete(t.Context(), del("alice", 1, 0)); err != nil || !again.Deleted {
+		t.Fatalf("owner retry = %+v, %v; want success", again, err)
+	}
+	_, events := rg.events.list()
+	if len(events) != 2 || events[0].GetActor() != "alice" || events[0].GetMessageDeleted() == nil {
+		t.Fatalf("events = %v, want msg_deleted by alice", events)
+	}
+}
+
+func TestChangesAskThePolicyWithTheAuthor(t *testing.T) {
+	var asked []access.Request
+	deny := access.PolicyFunc(func(_ context.Context, r access.Request) error { asked = append(asked, r); return access.ErrDenied })
+	rg := newRig(t, deny)
+	rg.send(t, 1, "bob", "b")
+	if _, err := rg.m.Edit(t.Context(), edit("alice", 9, 0, "x")); !errors.Is(err, domain.ErrMessageNotFound) {
+		t.Fatalf("Edit of a missing message = %v, want ErrMessageNotFound", err)
+	}
+	if _, err := rg.m.Edit(t.Context(), edit("alice", 1, 0, "x")); !errors.Is(err, apperr.ErrPermissionDenied) {
+		t.Fatalf("Edit = %v, want PermissionDenied", err)
+	}
+	if _, err := rg.m.Delete(t.Context(), del("alice", 1, 0)); !errors.Is(err, apperr.ErrPermissionDenied) {
+		t.Fatalf("Delete = %v, want PermissionDenied", err)
+	}
+	if len(asked) != 2 || asked[0].Action != access.EditMessage || asked[1].Action != access.DeleteMessage {
+		t.Fatalf("policy asked %+v, want edit_message then delete_message", asked)
+	}
+	for _, r := range asked {
+		if r.User != "alice" || r.Author != "bob" || r.Member.Role != domain.RoleOwner {
+			t.Fatalf("policy saw %+v, want owner alice on bob's message", r)
+		}
+	}
+	open := newRig(t, nil)
+	open.send(t, 1, "alice", "a")
+	if _, err := open.m.Edit(t.Context(), edit("mallory", 1, 0, "x")); !errors.Is(err, domain.ErrNotMember) {
+		t.Fatalf("stranger Edit = %v, want ErrNotMember", err)
+	}
+	other := edit("alice", 1, 0, "x")
+	other.Room = 999
+	if _, err := open.m.Edit(t.Context(), other); !errors.Is(err, domain.ErrRoomNotFound) {
+		t.Fatalf("unknown room Edit = %v, want ErrRoomNotFound", err)
+	}
+}
+```
+
+**Step 7: Chạy, thấy fail**
 
 Run: `make -s go ARGS="test -race -shuffle=on ./apps/core/internal/mutate/... ./apps/core/internal/pbconv/..."`
-Expected: FAIL biên dịch: `no required module provides package .../internal/mutate` (hoặc `undefined: mutate.New`), `undefined: pbconv.MessageChanged`, `undefined: access.EditMessage`.
+Expected: FAIL biên dịch: `no required module provides package .../internal/mutate` (hoặc `undefined: mutate.New`), `undefined: pbconv.MessageChanged`.
 
-**Step 4: Code**
-
-`apps/core/internal/access/policy.go`, thay khối
-
-```go
-const (
-	ReadHistory Action = "read_history"
-	SendMessage Action = "send_message"
-)
-```
-
-bằng
-
-```go
-const (
-	ReadHistory     Action = "read_history"
-	SendMessage     Action = "send_message"
-	EditMessage     Action = "edit_message"
-	DeleteMessage   Action = "delete_message"
-	HideMessage     Action = "hide_message"
-	ClearHistory    Action = "clear_history"
-	ReadEditHistory Action = "read_edit_history"
-)
-```
+**Step 8: Code**
 
 `apps/core/internal/pbconv/change_event.go`:
 
@@ -4564,6 +4828,22 @@ func (m *Mutator) find(ctx context.Context, key store.MsgKey) (domain.Message, e
 	return found[0], nil
 }
 
+func (m *Mutator) target(ctx context.Context, action access.Action, tenant, user string, key store.MsgKey) (access.Request, domain.Message, error) {
+	req, err := m.d.Access.Admit(ctx, action, tenant, user, key.Room)
+	if err != nil {
+		return access.Request{}, domain.Message{}, err
+	}
+	msg, err := m.find(ctx, key)
+	if err != nil {
+		return access.Request{}, domain.Message{}, err
+	}
+	req.Author = msg.From
+	if err := m.d.Access.Allow(ctx, req); err != nil {
+		return access.Request{}, domain.Message{}, err
+	}
+	return req, msg, nil
+}
+
 func validKey(key store.MsgKey) error {
 	if err := key.Validate(); err != nil {
 		return err
@@ -4620,15 +4900,11 @@ func (m *Mutator) apply(ctx context.Context, c change) (domain.Message, error) {
 	if err := validKey(c.key); err != nil {
 		return domain.Message{}, err
 	}
-	grant, err := m.d.Access.Authorize(ctx, c.action, c.tenant, c.user, c.key.Room)
+	grant, msg, err := m.target(ctx, c.action, c.tenant, c.user, c.key)
 	if err != nil {
 		return domain.Message{}, err
 	}
-	msg, err := m.find(ctx, c.key)
-	if err != nil {
-		return domain.Message{}, err
-	}
-	fact, err := m.commit(ctx, c, grant.Member, msg)
+	fact, err := m.commit(ctx, c, msg)
 	if err != nil {
 		return domain.Message{}, err
 	}
@@ -4643,7 +4919,7 @@ func (m *Mutator) apply(ctx context.Context, c change) (domain.Message, error) {
 	return snap, nil
 }
 
-func (m *Mutator) commit(ctx context.Context, c change, member domain.Member, msg domain.Message) (domain.Edit, error) {
+func (m *Mutator) commit(ctx context.Context, c change, msg domain.Message) (domain.Edit, error) {
 	if c.base >= math.MaxInt32 {
 		return domain.Edit{}, domain.ErrVersionConflict
 	}
@@ -4657,8 +4933,6 @@ func (m *Mutator) commit(ctx context.Context, c change, member domain.Member, ms
 		return latest, nil
 	case msg.Deleted || (found && latest.Kind == domain.EditDelete):
 		return domain.Edit{}, domain.ErrMessageDeleted
-	case !c.allowed(msg, member):
-		return domain.Edit{}, domain.ErrNotAuthor
 	case c.base != max(msg.Version, latest.Version):
 		return domain.Edit{}, domain.ErrVersionConflict
 	}
@@ -4697,10 +4971,6 @@ func (c change) matches(e domain.Edit) bool {
 	return e.By == c.user && e.Kind == c.kind && e.Text == c.text
 }
 
-func (c change) allowed(msg domain.Message, member domain.Member) bool {
-	return msg.From == c.user || (c.kind == domain.EditDelete && member.Role == domain.RoleOwner)
-}
-
 func (c change) fact(msg domain.Message, version uint32, at time.Time) domain.Edit {
 	f := domain.Edit{
 		Room: c.key.Room, Thread: c.key.Thread, Seq: c.key.Seq, Version: version, Kind: c.kind,
@@ -4713,37 +4983,36 @@ func (c change) fact(msg domain.Message, version uint32, at time.Time) domain.Ed
 }
 ```
 
-**Step 5: Chạy, thấy pass**
+**Step 9: Chạy, thấy pass**
 
 Run: `make -s go ARGS="test -race -shuffle=on ./apps/core/internal/mutate/... ./apps/core/internal/pbconv/... ./apps/core/internal/access/..."`
 Expected: PASS. `wc -l apps/core/internal/mutate/*.go` mỗi file < 200.
 
 Không có goroutine mới (Mutator đồng bộ, an toàn khi gọi song song vì mọi trạng thái nằm ở store), nên không cần `-count=5` hay synctest.
 
-**Step 6: INDEXES + commit**
+**Step 10: INDEXES + commit**
 
 `INDEXES.csv`:
-- Dòng `apps/core/internal/access`: purpose thay "used by SendMessage in the actor and GetHistory in grpcsrv" bằng "used by SendMessage in the actor, GetHistory/GetEditHistory in grpcsrv and the change commands in mutate"; key_symbols thêm `EditMessage;DeleteMessage;HideMessage;ClearHistory;ReadEditHistory` (sau `Action`); used_by thêm `;apps/core/internal/mutate`.
 - Dòng `apps/core/internal/pbconv`: key_symbols thêm `MessageChanged`; purpose nối "; MessageChanged picks msg_deleted for a delete fact (else msg_edited)".
 - Thêm dòng mới ngay sau dòng `apps/core/internal/metrics`:
 
 ```csv
-apps/core/internal/mutate,package,"Change commands outside the actor (D82): Edit/Delete authorize through access.Checker, read the message and its last edit fact, recognize a retry (fact at base+1 with the same by/kind/text, also on a duplicate version from Append), refuse a deleted message, a non-author (delete: author or room owner) and a stale base, insert the fact (version base+1, v1 carries prev), project onto messages (CAS by version), purge older fact text on delete, re-read the snapshot and enqueue msg_edited/msg_deleted best effort before answering",Mutator;New;Deps;Messages;HistoryClearer;EventPublisher;EditCmd;DeleteCmd;Mutator.Edit;Mutator.Delete,apps/core/internal/grpcsrv;apps/core,unit,D62;D63;D64;D75;D82
+apps/core/internal/mutate,package,"Change commands outside the actor (D82): Edit/Delete admit through access.Checker (tenant and membership), read the message, ask access.Policy with the message author (default: author only; no author or owner rule in mutate, D86), read the last edit fact, recognize a retry (fact at base+1 with the same by/kind/text, also on a duplicate version from Append), refuse a deleted message and a stale base, insert the fact (version base+1, v1 carries prev), project onto messages (CAS by version), purge older fact text on delete, re-read the snapshot and enqueue msg_edited/msg_deleted best effort before answering",Mutator;New;Deps;Messages;HistoryClearer;EventPublisher;EditCmd;DeleteCmd;Mutator.Edit;Mutator.Delete,apps/core/internal/grpcsrv;apps/core,unit,D62;D63;D64;D75;D82;D86
 ```
 
 ```bash
 make fmt-check && make vet && make lint
-git add apps/core/internal/access/policy.go apps/core/internal/pbconv/change_event.go apps/core/internal/pbconv/change_event_test.go apps/core/internal/mutate/
-git commit -m "feat(mutate): edit and delete messages through immutable facts" -- apps/core/internal/access/policy.go apps/core/internal/pbconv/change_event.go apps/core/internal/pbconv/change_event_test.go apps/core/internal/mutate/ INDEXES.csv
+git add apps/core/internal/pbconv/change_event.go apps/core/internal/pbconv/change_event_test.go apps/core/internal/mutate/
+git commit -m "feat(mutate): edit and delete messages through immutable facts" -- apps/core/internal/pbconv/change_event.go apps/core/internal/pbconv/change_event_test.go apps/core/internal/mutate/ INDEXES.csv
 ```
 
-Task rủi ro: một reviewer, soát đúng luồng `commit` (thứ tự retry → xoá → tác giả → base), `PurgeText` chỉ chạy sau `ApplyEdit` của fact xoá, và lỗi enqueue không làm hỏng lệnh.
+Task rủi ro: một reviewer, soát đúng luồng `apply` + `commit` (thứ tự Admit → Find → policy với `Author` → retry → xoá → base; không còn luật tác giả/owner trong `mutate`, D86), `DefaultPolicy` chỉ chặn sửa/xoá khi `Author != User`, `PurgeText` chỉ chạy sau `ApplyEdit` của fact xoá, và lỗi enqueue không làm hỏng lệnh.
 
 ---
 
 ### Task 8: `mutate` — `Hide` và `ClearHistory`
 
-Ẩn và clear là giá trị theo người đọc (§4, §6.4): không fact bất biến, không event (owner 2026-10-05), chỉ áp ở reader pipeline (Task 10). `Hide`: kiểm quyền `HideMessage`, tin phải tồn tại (kể cả đã xoá), rồi `Hidden.Hide` (upsert, idempotent). `ClearHistory`: kiểm quyền `ClearHistory`, đọc `Messages.Last(room, 0)` và **kẹp** `UpToSeq` về `last` (0 hoặc lớn hơn `last` → `last`), rồi `Rooms.ClearHistory` (`$max`, trả giá trị sau cập nhật). Kẹp là tinh chỉnh so với hợp đồng: không kẹp thì một client gửi `up_to_seq` quá lớn sẽ ẩn luôn các tin **tương lai** của chính mình mà không có cách gỡ (mốc chỉ tăng).
+Ẩn và clear là giá trị theo người đọc (§4, §6.4): không fact bất biến, không event (owner 2026-10-05), chỉ áp ở reader pipeline (Task 10). `Hide`: `Mutator.target` của Task 7 (`Admit(HideMessage)` → tin phải tồn tại, kể cả đã xoá → `Allow` với `Author` = tác giả tin; `DefaultPolicy` cho phép ẩn tin của bất kỳ ai, D86), rồi `Hidden.Hide` (upsert, idempotent). `ClearHistory` là action theo room: `Authorize(ClearHistory)` (không có `Author`), đọc `Messages.Last(room, 0)` và **kẹp** `UpToSeq` về `last` (0 hoặc lớn hơn `last` → `last`), rồi `Rooms.ClearHistory` (`$max`, trả giá trị sau cập nhật). Kẹp là tinh chỉnh so với hợp đồng: không kẹp thì một client gửi `up_to_seq` quá lớn sẽ ẩn luôn các tin **tương lai** của chính mình mà không có cách gỡ (mốc chỉ tăng).
 
 **Files:**
 - Create: `apps/core/internal/mutate/hide_clear.go`
@@ -4850,8 +5119,8 @@ func TestClearHistoryOfAnEmptyRoomKeepsZero(t *testing.T) {
 }
 
 func TestHideAndClearAskThePolicy(t *testing.T) {
-	var asked []access.Action
-	deny := access.PolicyFunc(func(_ context.Context, r access.Request) error { asked = append(asked, r.Action); return access.ErrDenied })
+	var asked []access.Request
+	deny := access.PolicyFunc(func(_ context.Context, r access.Request) error { asked = append(asked, r); return access.ErrDenied })
 	rg := newRig(t, deny)
 	rg.send(t, 1, "alice", "hi")
 	if err := rg.m.Hide(t.Context(), mutate.HideCmd{Tenant: tenant, User: "bob", Room: room, Seq: 1}); !errors.Is(err, apperr.ErrPermissionDenied) {
@@ -4860,8 +5129,8 @@ func TestHideAndClearAskThePolicy(t *testing.T) {
 	if _, err := rg.m.ClearHistory(t.Context(), mutate.ClearCmd{Tenant: tenant, User: "bob", Room: room}); !errors.Is(err, apperr.ErrPermissionDenied) {
 		t.Fatalf("ClearHistory = %v, want PermissionDenied", err)
 	}
-	if !slices.Equal(asked, []access.Action{access.HideMessage, access.ClearHistory}) {
-		t.Fatalf("policy asked for %v", asked)
+	if len(asked) != 2 || asked[0].Action != access.HideMessage || asked[0].Author != "alice" || asked[1].Action != access.ClearHistory || asked[1].Author != "" {
+		t.Fatalf("policy asked %+v, want hide_message on alice's message, then clear_history without an author", asked)
 	}
 }
 ```
@@ -4901,10 +5170,7 @@ func (m *Mutator) Hide(ctx context.Context, c HideCmd) error {
 	if err := validKey(key); err != nil {
 		return err
 	}
-	if _, err := m.d.Access.Authorize(ctx, access.HideMessage, c.Tenant, c.User, c.Room); err != nil {
-		return err
-	}
-	if _, err := m.find(ctx, key); err != nil {
+	if _, _, err := m.target(ctx, access.HideMessage, c.Tenant, c.User, key); err != nil {
 		return err
 	}
 	return m.d.Hidden.Hide(ctx, c.User, key)
@@ -4933,7 +5199,7 @@ Expected: PASS.
 
 **Step 5: INDEXES + commit**
 
-`INDEXES.csv`, dòng `apps/core/internal/mutate`: purpose nối "; Hide (message must exist; upsert into hidden) and ClearHistory (UpToSeq 0 or past the last seq clamps to Messages.Last; $max on the member; returns the new mark) are per-reader values with no fact and no event"; key_symbols thêm `HideCmd;ClearCmd;Mutator.Hide;Mutator.ClearHistory`.
+`INDEXES.csv`, dòng `apps/core/internal/mutate`: purpose nối "; Hide (admit, message must exist, ask the policy with the author; upsert into hidden) and ClearHistory (UpToSeq 0 or past the last seq clamps to Messages.Last; $max on the member; returns the new mark) are per-reader values with no fact and no event"; key_symbols thêm `HideCmd;ClearCmd;Mutator.Hide;Mutator.ClearHistory`.
 
 ```bash
 make fmt-check && make vet && make lint
@@ -4945,11 +5211,11 @@ git commit -m "feat(mutate): hide a message and clear history per reader" -- app
 
 ### Task 9: `grpcsrv` — 5 RPC mới + wiring `apps/core`
 
-Năm handler mỏng: `callerOf` → `parseRoomID` (gộp trong `callerAndRoom`) → `Mutator`. `GetEditHistory` là đường đọc: kiểm khoá + `limit` (`domain.PageLimit`: 0 → 50, tối đa 100 = `store.MaxEditPage`) → `Authorize(ReadEditHistory)` (A7) → `Find` tin (không có → `NotFound`) → tin đã xoá trả danh sách rỗng → `Edits.History(key, after, limit)` → `pbconv.MessageVersions`. Mã lỗi đi qua `pkg/grpcserver` như cũ: `ErrVersionConflict`/`ErrMessageDeleted` → `FailedPrecondition`, `ErrNotAuthor` → `PermissionDenied`, `ErrMessageNotFound` → `NotFound`.
+Năm handler mỏng: `callerOf` → `parseRoomID` (gộp trong `callerAndRoom`) → `Mutator`. `GetEditHistory` là đường đọc: kiểm khoá + `limit` (`domain.PageLimit`: 0 → 50, tối đa 100 = `store.MaxEditPage`) → `Admit(ReadEditHistory)` (A7) → `Find` tin (không có → `NotFound`) → `Allow` với `Author` = tác giả tin (D86; `DefaultPolicy` cho phép member) → tin đã xoá trả danh sách rỗng → `Edits.History(key, after, limit)` → `pbconv.MessageVersions`. Mã lỗi đi qua `pkg/grpcserver` như cũ: `ErrVersionConflict`/`ErrMessageDeleted` → `FailedPrecondition`, `access.ErrDenied`/`domain.ErrNotMember` → `PermissionDenied`, `ErrMessageNotFound` → `NotFound`.
 
 `grpcsrv.Deps` thêm `Mutator *mutate.Mutator`, `Edits store.Edits`, `Hidden store.Hidden` (bắt buộc; thiếu → `errMissingDeps`). `Hidden` chỉ được kiểm ở `New` trong task này và được lưu vào `Service` ở Task 10 (tránh field không đọc bị `unused` báo). `PageReader` thêm `Find` (memstore và mongostore đều có sẵn).
 
-Wiring: `access.Checker` của `mutate` dựng riêng trong `apps/core/service_wiring.go` bằng `access.NewChecker(st, nil)` (cùng policy mặc định `AllowMembers` như checker trong `grpcsrv` và actor). Tách file để `wiring.go` không phình; `wiring.go` bỏ import `grpcsrv`.
+Wiring: `access.Checker` của `mutate` dựng riêng trong `apps/core/service_wiring.go` bằng `access.NewChecker(st, nil)`, tức `access.DefaultPolicy` (Task 7), cùng mặc định với checker trong `grpcsrv` và actor. `DefaultPolicy` cho phép `ReadHistory`/`SendMessage`, nên `GetHistory` và gửi tin không đổi hành vi; chỉ sửa/xoá tin người khác bị từ chối. Tách file để `wiring.go` không phình; `wiring.go` bỏ import `grpcsrv`.
 
 **Files:**
 - Modify: `apps/core/internal/grpcsrv/core_service.go`
@@ -5324,15 +5590,16 @@ func TestEditHistoryChecksInputAndAccess(t *testing.T) {
 	}
 }
 
-func TestEditHistoryAsksThePolicy(t *testing.T) {
+func TestEditHistoryAsksThePolicyWithTheAuthor(t *testing.T) {
 	var got access.Request
 	deny := access.PolicyFunc(func(_ context.Context, r access.Request) error { got = r; return access.ErrDenied })
 	rg := newRig(t, options{policy: deny})
-	room := rg.createGroup(t, "acme", "alice")
+	room := rg.createGroup(t, "acme", "alice", "bob")
+	rg.send(t, as(t, "acme", "bob"), room, "c-1", "v0")
 	_, err := rg.client.GetEditHistory(as(t, "acme", "alice"), &chatimv1.GetEditHistoryRequest{RoomId: room, Seq: 1})
 	expectCode(t, err, codes.PermissionDenied)
-	if got.Action != access.ReadEditHistory || got.User != "alice" {
-		t.Fatalf("policy saw %+v, want read_edit_history by alice", got)
+	if got.Action != access.ReadEditHistory || got.User != "alice" || got.Author != "bob" {
+		t.Fatalf("policy saw %+v, want read_edit_history by alice on bob's message", got)
 	}
 }
 ```
@@ -5583,7 +5850,8 @@ func (s *Service) GetEditHistory(ctx context.Context, req *chatimv1.GetEditHisto
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.access.Authorize(ctx, access.ReadEditHistory, who.tenant, who.user, room); err != nil {
+	grant, err := s.access.Admit(ctx, access.ReadEditHistory, who.tenant, who.user, room)
+	if err != nil {
 		return nil, err
 	}
 	found, err := s.pages.Find(ctx, room, []store.MsgKey{key})
@@ -5592,6 +5860,10 @@ func (s *Service) GetEditHistory(ctx context.Context, req *chatimv1.GetEditHisto
 	}
 	if len(found) == 0 {
 		return nil, domain.ErrMessageNotFound
+	}
+	grant.Author = found[0].From
+	if err := s.access.Allow(ctx, grant); err != nil {
+		return nil, err
 	}
 	if found[0].Deleted {
 		return &chatimv1.GetEditHistoryResponse{}, nil
@@ -5678,8 +5950,8 @@ Expected: mọi package `ok` (wiring `apps/core` đổi; bootstrap của Task 4 
 **Step 7: INDEXES + commit**
 
 `INDEXES.csv`:
-- Dòng `apps/core/internal/grpcsrv`: purpose thay "CoreService handlers CreateRoom/SendMessage/GetHistory" bằng "CoreService handlers CreateRoom/SendMessage/GetHistory/EditMessage/DeleteMessage/HideMessage/ClearHistory/GetEditHistory"; nối "; change RPCs are thin calls into mutate.Mutator (callerAndRoom parses caller and room id); GetEditHistory checks the key and limit (PageLimit); asks access ReadEditHistory, finds the message (missing = NotFound, deleted = no versions) and maps Edits.History with pbconv.MessageVersions; Deps requires Mutator/Edits/Hidden; PageReader has Page and Find"; key_symbols thêm `Service.EditMessage;Service.DeleteMessage;Service.HideMessage;Service.ClearHistory;Service.GetEditHistory`; decisions thêm `;D82`.
-- Dòng `apps/core`: purpose nối "; service_wiring.go builds the mutate.Mutator (own access checker with the default policy) and the CoreService"; key_symbols thêm `wireService`.
+- Dòng `apps/core/internal/grpcsrv`: purpose thay "CoreService handlers CreateRoom/SendMessage/GetHistory" bằng "CoreService handlers CreateRoom/SendMessage/GetHistory/EditMessage/DeleteMessage/HideMessage/ClearHistory/GetEditHistory"; nối "; change RPCs are thin calls into mutate.Mutator (callerAndRoom parses caller and room id); GetEditHistory checks the key and limit (PageLimit); admits (access ReadEditHistory), finds the message (missing = NotFound), asks the policy with the message author, deleted = no versions and maps Edits.History with pbconv.MessageVersions; Deps requires Mutator/Edits/Hidden; PageReader has Page and Find"; key_symbols thêm `Service.EditMessage;Service.DeleteMessage;Service.HideMessage;Service.ClearHistory;Service.GetEditHistory`; decisions thêm `;D82;D86`.
+- Dòng `apps/core`: purpose nối "; service_wiring.go builds the mutate.Mutator (own access checker with access.DefaultPolicy) and the CoreService"; key_symbols thêm `wireService`.
 
 ```bash
 make fmt-check && make vet && make lint
@@ -5687,7 +5959,7 @@ git add apps/core/internal/grpcsrv/ apps/core/service_wiring.go apps/core/wiring
 git commit -m "feat(grpcsrv): serve edit, delete, hide, clear history and edit history" -- apps/core/internal/grpcsrv/ apps/core/service_wiring.go apps/core/wiring.go INDEXES.csv
 ```
 
-Task rủi ro: một reviewer (mã lỗi ra ngoài chỉ là sentinel, `GetEditHistory` kiểm quyền trước khi đọc tin, wiring dùng cùng store cho mọi port).
+Task rủi ro: một reviewer (mã lỗi ra ngoài chỉ là sentinel, `GetEditHistory` `Admit` trước khi đọc tin và hỏi policy với `Author` sau `Find`, wiring dùng cùng store cho mọi port).
 
 ---
 
@@ -6864,7 +7136,8 @@ Task rủi ro: một reviewer (thứ tự registry, record sửa chỉ ra `Activ
 - `effects`: `ports.go` thêm `EditReader`, `EditApplier`, `TextPurger` đúng hợp đồng. `awaitAcks(ctx, pending, errs, count func(*jetstream.PubAck))` + `countAll(*atomic.Uint64)` / `countStored(*atomic.Uint64)`; `MessageChanged.Republished()` chỉ đếm PubAck `Duplicate == false`. Lỗi nội bộ `errProjectionBehind` (wrap `apperr.ErrUnavailable`) khi `msg.Version < fact.Version` → record retry. Helper nội bộ `recordKey`, `gone` (drop khi `undeliverable` hoặc `store.ErrEditNotFound` hoặc `domain.ErrMessageNotFound`).
 - `effects.room_activity` nhận cả `EditInserted` (quyết định controller): `latestActivity` map record sửa thành `store.Activity{Room, Thread, Seq: 0, At: CommittedAt}`, khoá gộp `activityKey{room, thread, edit bool}`. Phụ thuộc part A: `TouchActivity` với `Seq == 0` chỉ nâng `lc`/`ab`, không đụng `ls`/`lm` (memstore và Mongo, có case trong contract `storetest`). Registry: `store.EditInserted: {activity.Effect(), editProjection.Effect(), msgChanged.Effect()}`.
 - `apps/core`: `effectCounters.republished` được phép nil (edit_projection); `workerSources` bỏ `reconcile_republished_total` cho effect đó. Help của hai metric được viết lại. Không thêm luật alert (các luật `sum`/`sum by (effect)` đã phủ).
-- Wiring: `apps/core/service_wiring.go` `wireService(st *mongostore.Store, router *actor.Router, pub *publish.Publisher, log *slog.Logger) (*grpcsrv.Service, error)` dựng `access.NewChecker(st, nil)` riêng cho `mutate`.
+- Wiring: `apps/core/service_wiring.go` `wireService(st *mongostore.Store, router *actor.Router, pub *publish.Publisher, log *slog.Logger) (*grpcsrv.Service, error)` dựng `access.NewChecker(st, nil)` (`DefaultPolicy`) riêng cho `mutate`.
+- `access` (Task 7, D86): `Request.Author`; `Checker.Admit` + `Checker.Allow` (`Authorize` = hai bước); `DefaultPolicy` là mặc định của `NewChecker` và actor. `mutate.target` = `Admit` → `Find` → `Allow(Author)`, dùng cho Edit/Delete/Hide; `GetEditHistory` cùng thứ tự trong `grpcsrv`.
 
 **Giả định về part A (kiểm khi ráp, sai thì chỉ sửa dòng tạo rig/wiring):**
 - memstore: `memstore.NewEdits() *memstore.Edits` (cài `store.Edits`, có `Append/At/Latest/History/Between/PurgeText`), `memstore.NewHidden() *memstore.Hidden` (cài `store.Hidden`), `(*memstore.Messages).ApplyEdit`, `(*memstore.Rooms).ClearHistory`, `Member` trả `ClearedBeforeSeq`, `Find/Page` trả `Version/Deleted/EditedAt`.
@@ -6875,9 +7148,9 @@ Task rủi ro: một reviewer (thứ tự registry, record sửa chỉ ra `Activ
 **Caller đã sửa trong part B:** `grpcsrv/harness_test.go`, `grpcsrv/fake_dependencies_test.go`, `grpcsrv/caller_identity_test.go` (deps + 5 RPC vào bảng caller), `apps/core/wiring.go` (bỏ import `grpcsrv`, gọi `wireService`), `effects/message_created.go` + `room_created.go` (`countAll`), `apps/core/metrics_wiring{,_test}.go`. Không caller nào khác dùng `grpcsrv.New`/`PageReader`/`awaitAcks` (đã grep).
 
 **Rủi ro:**
-- Chi phí fast path một lệnh sửa: `Authorize` (2 đọc: room + member) + `Find` + `Latest` + `Append` (majority) + `ApplyEdit` (majority) + `Find` lại (+ `PurgeText` khi xoá) ≈ 4 đọc + 2–3 ghi, nhiều hơn ngân sách §6.3 (1 reverse scan + 2 ghi) ở phần đọc. Có thể bỏ `Find` lần hai bằng cách dựng snapshot từ `msg` + fact nếu đo thấy nặng; giữ theo hợp đồng cho đơn giản và đúng (snapshot luôn là doc thật).
-- DM: người tạo DM là `RoleOwner` (`domain.NewRoom`), nên xoá được tin của người kia trong DM. Đúng chữ hợp đồng nhưng có thể không phải ý owner — hỏi.
-- Policy tenant (Phase 2) phải truyền vào **ba** chỗ: actor (`actor.WithPolicy`), checker của `grpcsrv` (`Deps.Policy`), checker của `mutate` (`service_wiring.go`). Nên gom về một biến trong wiring khi có policy thật.
+- Chi phí fast path một lệnh sửa: `Admit` (2 đọc: room + member) + `Find` + `Allow` (policy, không đọc store) + `Latest` + `Append` (majority) + `ApplyEdit` (majority) + `Find` lại (+ `PurgeText` khi xoá) ≈ 4 đọc + 2–3 ghi, nhiều hơn ngân sách §6.3 (1 reverse scan + 2 ghi) ở phần đọc. Có thể bỏ `Find` lần hai bằng cách dựng snapshot từ `msg` + fact nếu đo thấy nặng; giữ theo hợp đồng cho đơn giản và đúng (snapshot luôn là doc thật).
+- D86: `mutate` không có luật tác giả/owner; `access.DefaultPolicy` chỉ cho tác giả sửa/xoá, nên owner room và người tạo DM (`RoleOwner`) cũng không xoá được tin của người khác. Owner/moderator cần policy Phase 2.
+- Policy chat (Phase 2) phải truyền vào **ba** chỗ (cả ba hiện mặc định `access.DefaultPolicy`): actor (`actor.WithPolicy`), checker của `grpcsrv` (`Deps.Policy`), checker của `mutate` (`service_wiring.go`). Nên gom về một biến trong wiring khi có policy thật.
 - Retry cũ sau một lần sửa mới hơn (`BaseVersion + 1 < version hiện tại`) trả `ErrVersionConflict` dù lần đầu đã thành công; client phải đọc lại (D63 chấp nhận, chống ABA).
 - `msg_changed` gửi lại mọi fact sau `RECONCILE_DELAY` (không ack mark): một publish trùng mỗi lệnh đổi, JetStream bỏ trong `EVT_STREAM_DUPLICATES` 5m. Tải NATS +1 msg/lệnh đổi.
 - Hai cache loại room riêng (`msg_created`, `msg_changed`), mỗi cái tối đa `EFFECT_ROOM_CACHE` mục.
@@ -6885,14 +7158,14 @@ Task rủi ro: một reviewer (thứ tự registry, record sửa chỉ ra `Activ
 
 **Part C cần biết (Task 12–16):**
 - Task 12 resync: record `EditInserted` cần `Version`; quét `Edits.Between(room, from, to, limit)` (sắp `ts` rồi `_id`), id work `e:{room}-{th}-{seq}-v{ver}`; effect nhận record đó là `edit_projection` + `msg_changed` (đã đăng ký ở Task 11).
-- Task 13 route client + corecli + e2e: 4 RPC đổi (`EditMessage`, `DeleteMessage`, `HideMessage`, `ClearHistory`) định tuyến theo slot của room như `SendMessage` (D82), retry an toàn vì lệnh mang `base_version` (retry cùng nội dung = thành công). `GetEditHistory` đọc như `GetHistory` (core nào cũng được). Lỗi cần phân biệt ở CLI: `FailedPrecondition` (conflict/đã xoá), `PermissionDenied` (không phải tác giả), `NotFound`.
+- Task 13 route client + corecli + e2e: 4 RPC đổi (`EditMessage`, `DeleteMessage`, `HideMessage`, `ClearHistory`) định tuyến theo slot của room như `SendMessage` (D82), retry an toàn vì lệnh mang `base_version` (retry cùng nội dung = thành công). `GetEditHistory` đọc như `GetHistory` (core nào cũng được). Lỗi cần phân biệt ở CLI: `FailedPrecondition` (conflict/đã xoá), `PermissionDenied` (policy từ chối, mặc định: không phải tác giả), `NotFound`.
 - Task 14 itest gợi ý: (a) sửa/xoá qua gRPC trên Mongo thật → `GetHistory` thấy version/`deleted`, `GetEditHistory` đủ bản; (b) fact chèn thẳng vào `message_edits` (bỏ qua core) → worker `edit_projection` chiếu lên `messages` và `msg_changed` phát `msg_edited` id `{room}-0-{seq}-v1` lên `live.*`; (c) fast path enqueue bị từ chối → event vẫn tới sau `RECONCILE_DELAY` và `reconcile_republished_total{effect="msg_changed"}` tăng 1; khi fast path thành công thì không tăng. (d) sửa một tin cũ → `rooms.lc`/`ab` của room được nâng, `ls`/`lm` giữ nguyên (effect `room_activity` trên `EditInserted`).
-- Task 15 docs: D82 (mutate, không actor, vẫn theo slot; checker riêng), D83 (event = snapshot hiện tại + id theo version fact; retry enqueue lại cùng id; projection worker delay 0; `msg_changed` không publish snapshot cũ hơn fact; `Republished` của `msg_changed` chỉ đếm id stream chưa có), D84 (record 37 byte), D85 (view placeholder; clear kẹp về `Last`). CLAUDE.md: thêm đoạn "Change path" (`mutate`), cập nhật "Permission hook and reader pipeline" (5 action mới, `MaskDeleted`, `HideForViewer`, `Viewer` mới, `GetHistory` một lần `HiddenIn`), "Detectors" (effect mới, `effectCounters.republished` có thể nil). Design §9.2 đổi "Chưa xây" của bước 2–3 thành đã xây.
+- Task 15 docs: D82 (mutate, không actor, vẫn theo slot; checker riêng), D86 (quyền chỉ do `access.Policy`; `DefaultPolicy` chỉ tác giả sửa/xoá), D83 (event = snapshot hiện tại + id theo version fact; retry enqueue lại cùng id; projection worker delay 0; `msg_changed` không publish snapshot cũ hơn fact; `Republished` của `msg_changed` chỉ đếm id stream chưa có), D84 (record 37 byte), D85 (view placeholder; clear kẹp về `Last`). CLAUDE.md: thêm đoạn "Change path" (`mutate`), cập nhật "Permission hook and reader pipeline" (5 action mới, `MaskDeleted`, `HideForViewer`, `Viewer` mới, `GetHistory` một lần `HiddenIn`), "Detectors" (effect mới, `effectCounters.republished` có thể nil). Design §9.2 đổi "Chưa xây" của bước 2–3 thành đã xây.
 - Không có biến môi trường mới trong part B; `msg_changed` dùng `RECONCILE_DELAY` (`cfg.EffectDelay`) và `EFFECT_ROOM_CACHE` sẵn có, nên luật boot về delay (D65) áp luôn cho nó.
 
-**Câu hỏi cho owner (hành vi giữ như đã viết, controller chốt 2026-10-05):**
-- DM: người tạo là `RoleOwner` nên xoá được tin của người kia (đang: có).
-- `GetEditHistory` với tin người đọc đã ẩn/clear: vẫn trả các bản (đang: không xét ẩn/clear).
+**Đã chốt với owner (2026-10-05):**
+- D86: mặc định không ai sửa/xoá tin của người khác, kể cả owner room hay người tạo DM; owner/moderator cần policy Phase 2.
+- `GetEditHistory` với tin người đọc đã ẩn/clear: mặc định vẫn trả các bản (không xét ẩn/clear); policy có thể đổi (`ReadEditHistory` mang `Author`).
 
 **Đã chốt (controller):** `Prev` chỉ ở fact sửa; `msg_changed` chỉ đếm PubAck không trùng; `room_activity` nhận `EditInserted` (seq 0). Task 12 resync nên ghi rõ: room chỉ có sửa/xoá vẫn có `act_bucket` mới nhờ effect này.
 
@@ -8389,7 +8662,7 @@ Khẳng định trên hạ tầng thật (skip khi thiếu `CHATIM_IT_*`), dùng
 - (a) sửa qua RPC → `GetHistory` thấy text/version mới, `GetEditHistory` có bản gốc + bản sửa, live `msg_edited`; gửi lại đúng lệnh là retry thành công (D63).
 - (b) fact sửa ghi thẳng vào Mongo (bỏ qua core) → reader → work stream → `edit_projection` chiếu lên `messages` → `msg_changed` publish: chứng minh đường bù.
 - (c) xoá → text các bản trước bị dọn (gồm `prev` = bản gốc của fact v1, D75), `GetEditHistory` rỗng, history `deleted` không text, live `msg_deleted`; gửi lại lệnh xoá là retry thành công; sửa sau khi xoá → `FAILED_PRECONDITION`.
-- (d) hai lệnh sửa đồng thời cùng base: đúng một thắng, lệnh kia `FAILED_PRECONDITION`; bob không phải tác giả/owner → `PERMISSION_DENIED`; owner xoá được tin của member.
+- (d) hai lệnh sửa đồng thời cùng base: đúng một thắng, lệnh kia `FAILED_PRECONDITION`; bob (không phải tác giả) sửa/xoá → `PERMISSION_DENIED`; owner room sửa hay xoá tin của member cũng → `PERMISSION_DENIED` với policy mặc định (D86); bob xoá tin của chính mình được.
 - (e) ẩn + clear chỉ áp cho bob (placeholder `hidden`, không text, seq giữ), alice thấy đủ; `$max` không lùi; không có event thay đổi.
 
 Không có bước "thấy fail": các test xác nhận hành vi của Task 7–11. Test fail ở lần chạy đầu là lỗi của task trước: dừng và báo (không sửa test cho qua). Đặc biệt (c) gửi lại `DeleteMessage` cùng base sau khi đã xoá: nếu nhận `FAILED_PRECONDITION` (`ErrMessageDeleted`) thì `mutate` đang kiểm "đã xoá" trước khi nhận ra retry — báo controller (vi phạm D63, route client retry lệnh xoá).
@@ -8657,8 +8930,11 @@ func TestRealInfraConcurrentEditsOnOneBaseHaveOneWinner(t *testing.T) {
 	if _, err := client.EditMessage(caller(t.Context()), &chatimv1.EditMessageRequest{RoomId: roomID, Seq: bobSeq, Text: "not mine"}); status.Code(err) != codes.PermissionDenied {
 		t.Fatalf("the owner edits bob's message = %v, want PermissionDenied", err)
 	}
-	if _, err := client.DeleteMessage(caller(t.Context()), &chatimv1.DeleteMessageRequest{RoomId: roomID, Seq: bobSeq}); err != nil {
-		t.Fatalf("the owner deletes bob's message: %v", err)
+	if _, err := client.DeleteMessage(caller(t.Context()), &chatimv1.DeleteMessageRequest{RoomId: roomID, Seq: bobSeq}); status.Code(err) != codes.PermissionDenied {
+		t.Fatalf("the owner deletes bob's message = %v, want PermissionDenied with the default policy", err)
+	}
+	if _, err := client.DeleteMessage(callerAs(t.Context(), "bob"), &chatimv1.DeleteMessageRequest{RoomId: roomID, Seq: bobSeq}); err != nil {
+		t.Fatalf("bob deletes his own message: %v", err)
 	}
 }
 
@@ -8717,7 +8993,7 @@ Expected: mọi package `ok`, gồm `TestRealInfraEditShowsInHistoryEditHistoryA
 
 **Step 4: INDEXES.csv + commit**
 
-Dòng `apps/core`, cột tests: ngay sau mục `itest (resync drill republishes messages and an edit the reader missed)` thêm `;itest (edit shows in history/edit history/live; a resent edit succeeds);itest (workers project and publish an edit written straight to Mongo);itest (delete purges older texts, a resent delete succeeds, later edits fail);itest (concurrent edits on one base have one winner; author and owner rules);itest (hide and clear apply only to the reader and publish nothing)`. Kiểm 7 cột.
+Dòng `apps/core`, cột tests: ngay sau mục `itest (resync drill republishes messages and an edit the reader missed)` thêm `;itest (edit shows in history/edit history/live; a resent edit succeeds);itest (workers project and publish an edit written straight to Mongo);itest (delete purges older texts, a resent delete succeeds, later edits fail);itest (concurrent edits on one base have one winner; default policy: only the author edits or deletes; even the owner is denied);itest (hide and clear apply only to the reader and publish nothing)`. Kiểm 7 cột.
 
 ```bash
 make fmt-check && make vet && make lint
@@ -8776,16 +9052,16 @@ Expected: hai biểu thức như M2b.1; `SUCCESS: 15 rules found`. Không sửa 
 | `hidden` | ObjectId | Fact thưa theo người đọc | `u`, `r`, `th`, `s` | `{u, r, th, s}` unique | Đã xây (M2b.2) |
 ```
 
-- **§6.3**: tiêu đề `### 6.3 Lệnh đổi: fact + projection [Chưa xây]` → `### 6.3 Lệnh đổi: fact + projection [Đã xây sửa/xoá, M2b.2; ghim ở M2b.3]`. Câu đầu `Lệnh đổi không đi qua actor; vẫn được định tuyến tới core chủ slot.` → `Lệnh đổi không đi qua actor (package \`mutate\`, D82); vẫn được định tuyến tới core chủ slot.` Bước 4: `→ retry, trả thành công, không phát event;` → `→ retry, trả thành công (chạy lại projection; event cùng id bị stream bỏ trùng);`. Bước 6: câu `Reconciler chạy lại projection + event từ feed insert của \`message_edits\`; delay riêng: xoá 2–3s.` → `Không ack mark. Worker chạy lại projection (\`edit_projection\`, delay 0) và event (\`msg_changed\`, delay \`RECONCILE_DELAY\`) từ feed insert của \`message_edits\` (D83).` Thêm đoạn ngay trước dòng `Ngân sách: 1–3% tin …`:
+- **§6.3**: tiêu đề `### 6.3 Lệnh đổi: fact + projection [Chưa xây]` → `### 6.3 Lệnh đổi: fact + projection [Đã xây sửa/xoá, M2b.2; ghim ở M2b.3]`. Câu đầu `Lệnh đổi không đi qua actor; vẫn được định tuyến tới core chủ slot.` → `Lệnh đổi không đi qua actor (package \`mutate\`, D82); vẫn được định tuyến tới core chủ slot.` Bước 2: `để kiểm quyền (đúng tác giả; xoá thì tác giả hoặc owner room) và trạng thái (chưa bị xoá)` → `để kiểm trạng thái (chưa bị xoá); quyền đã hỏi \`access.Policy\` trước đó với tác giả của tin (D86: mặc định chỉ tác giả sửa/xoá; owner/moderator do policy Phase 2)`. Bước 4: `→ retry, trả thành công, không phát event;` → `→ retry, trả thành công (chạy lại projection; event cùng id bị stream bỏ trùng);`. Bước 6: câu `Reconciler chạy lại projection + event từ feed insert của \`message_edits\`; delay riêng: xoá 2–3s.` → `Không ack mark. Worker chạy lại projection (\`edit_projection\`, delay 0) và event (\`msg_changed\`, delay \`RECONCILE_DELAY\`) từ feed insert của \`message_edits\` (D83).` Thêm đoạn ngay trước dòng `Ngân sách: 1–3% tin …`:
 
 ```markdown
-**Đã xây (M2b.2, D82–D84):** `grpcsrv` gọi `mutate.Mutator`. `Edit`/`Delete`: `access.Checker.Authorize` (`EditMessage`/`DeleteMessage`) → `Find` tin + `Edits.Latest` (reverse scan một doc); version hiện tại = `max(v của tin, version fact cuối)` → sửa chỉ tác giả, xoá tác giả hoặc owner room (`PERMISSION_DENIED`); tin đã xoá hoặc `base_version` lệch → `FAILED_PRECONDITION`, trừ khi là retry (fact `base+1` đã có, cùng tác giả/loại/text) → `Edits.Append` fact `base+1` (v1 sửa có `prev`; `base_version ≥ MaxInt32` = conflict) → `Messages.ApplyEdit` (`$set v, ea, x, d` khi `v < ver`) → xoá thì `Edits.PurgeText` các bản ≤ v−1 → `Find` lại → enqueue `msg_edited`/`msg_deleted` (snapshot sau projection; lỗi enqueue bỏ qua, worker bù) → trả snapshot. `GetEditHistory` (quyền `ReadEditHistory`, A7) trả bản gốc (v0 từ `prev`) rồi từng fact theo version, tối đa 100 mỗi lần; tin đã xoá trả rỗng, tin không có → `NOT_FOUND`. `prev` chỉ nằm trên fact sửa v1 (không bao giờ trên fact xoá), nên `PurgeText` khi xoá dọn luôn bản gốc (D75). Wiring: `apps/core/service_wiring.go` dựng `access.Checker` + `mutate.Mutator` cho `grpcsrv`. Core chưa giới hạn thời gian sửa/xoá (policy theo tenant cắm qua `access.Policy` ở Phase 2).
+**Đã xây (M2b.2, D82–D84, D86):** `grpcsrv` gọi `mutate.Mutator`. `Edit`/`Delete`: `access.Checker.Admit` (`EditMessage`/`DeleteMessage`: tenant + membership) → `Find` tin (không có → `NOT_FOUND`) → `Checker.Allow` với `Author` = tác giả tin (chỉ policy quyết; mặc định `access.DefaultPolicy` cho sửa/xoá chỉ tác giả, kể cả owner của room cũng bị từ chối; từ chối → `PERMISSION_DENIED`, D86) → `Edits.Latest` (reverse scan một doc); version hiện tại = `max(v của tin, version fact cuối)`; tin đã xoá hoặc `base_version` lệch → `FAILED_PRECONDITION`, trừ khi là retry (fact `base+1` đã có, cùng tác giả/loại/text) → `Edits.Append` fact `base+1` (v1 sửa có `prev`; `base_version ≥ MaxInt32` = conflict) → `Messages.ApplyEdit` (`$set v, ea, x, d` khi `v < ver`) → xoá thì `Edits.PurgeText` các bản ≤ v−1 → `Find` lại → enqueue `msg_edited`/`msg_deleted` (snapshot sau projection; lỗi enqueue bỏ qua, worker bù) → trả snapshot. `GetEditHistory` (`Admit` → `Find` → `Allow` với `ReadEditHistory`, A7) trả bản gốc (v0 từ `prev`) rồi từng fact theo version, tối đa 100 mỗi lần; tin đã xoá trả rỗng, tin không có → `NOT_FOUND`. `prev` chỉ nằm trên fact sửa v1 (không bao giờ trên fact xoá), nên `PurgeText` khi xoá dọn luôn bản gốc (D75). Wiring: `apps/core/service_wiring.go` dựng `access.Checker` (`DefaultPolicy`) + `mutate.Mutator` cho `grpcsrv`. Core chưa giới hạn thời gian sửa/xoá và không có luật owner/moderator (module policy chat cắm qua `access.Policy` ở Phase 2).
 ```
 
 - **§6.4**: tiêu đề `### 6.4 Tập và vị trí đọc [Chưa xây]` → `### 6.4 Tập và vị trí đọc [Đã xây ẩn + clear, M2b.2; còn lại chưa]`. Thay `- Ẩn phía tôi: insert \`hidden\`; clear history: nâng \`cleared_before_seq\` trên member doc.` bằng:
 
 ```markdown
-- Ẩn phía tôi [Đã xây, M2b.2]: upsert `hidden {u, r, th, s}` (`mutate.Hide`, quyền `HideMessage`, tin phải tồn tại). Clear history [Đã xây, M2b.2]: `$max members.cb` (`mutate.ClearHistory`, quyền `ClearHistory`; `up_to_seq = 0` hoặc lớn hơn seq cuối → kẹp về `Last(room, 0)`), trả giá trị sau cập nhật nên không bao giờ lùi. Cả hai không phát event (owner 2026-10-05; đồng bộ đa thiết bị ở M3/M4) và chỉ áp lúc đọc qua `view.HideForViewer` (D85).
+- Ẩn phía tôi [Đã xây, M2b.2]: upsert `hidden {u, r, th, s}` (`mutate.Hide`: `Admit` → tin phải tồn tại → policy `HideMessage` với `Author`; mặc định cho phép). Clear history [Đã xây, M2b.2]: `$max members.cb` (`mutate.ClearHistory`, quyền `ClearHistory`; `up_to_seq = 0` hoặc lớn hơn seq cuối → kẹp về `Last(room, 0)`), trả giá trị sau cập nhật nên không bao giờ lùi. Cả hai không phát event (owner 2026-10-05; đồng bộ đa thiết bị ở M3/M4) và chỉ áp lúc đọc qua `view.HideForViewer` (D85).
 ```
 
 - **§8.2**: thay `lọc insert của \`messages\` và \`rooms\`` bằng `lọc insert của \`messages\`, \`rooms\` và \`message_edits\``; `(\`work.Record\`, chỉ khoá + \`CommittedAt\`, 33 byte, D80)` bằng `(\`work.Record\`, chỉ khoá + version + \`CommittedAt\`, 37 byte, D80, D84)`; `(\`m:{room}-{thread}-{seq}\`, \`r:{room}\`)` bằng `(\`m:{room}-{thread}-{seq}\`, \`r:{room}\`, \`e:{room}-{thread}-{seq}-v{ver}\`)`.
@@ -8798,10 +9074,12 @@ Expected: hai biểu thức như M2b.1; `SUCCESS: 15 rules found`. Không sửa 
 ```
 
   Đoạn **Resync (D69)**: thay câu `Chưa có thread và \`message_edits\`/\`pin_actions\` nên chỉ quét timeline chính; M2b.2/M2b.3 thêm quét \`{room, ts}\`.` bằng `Chưa có thread nên timeline chính là timeline duy nhất. M2b.2: sau timeline, mỗi room quét \`message_edits\` theo \`{r, ts}\` trong \`[from, to]\` (trang 1000, dời \`from\` tới \`ts\` cuối trang, bỏ trùng mép trang theo id record; một thời điểm đầy cả trang → \`ErrEditPageFull\`) → record \`EditInserted\`; \`pin_actions\` ở M2b.3. Fact sửa cũng chạy \`room_activity\` (chỉ \`lc/ab\`) nên room chỉ có sửa/xoá trong khoảng mất vẫn nằm trong chỉ mục activity.`
-- **§9.2**: tiêu đề `### 9.2 Reader pipeline + permission hook [Đã xây một phần]` → `### 9.2 Reader pipeline + permission hook [Đã xây cho \`GetHistory\`, \`GetEditHistory\` và lệnh đổi]`. Thay `**Chưa xây:** ẩn và mặt nạ xoá (bước 2, 3) thuộc M2b.2.` bằng:
+- **§9.2**: tiêu đề `### 9.2 Reader pipeline + permission hook [Đã xây một phần]` → `### 9.2 Reader pipeline + permission hook [Đã xây cho \`GetHistory\`, \`GetEditHistory\` và lệnh đổi]`. Bước 1: `(tenant, member, role, tác giả/owner, quyền đọc lịch sử sửa A7). Policy cắm sau (Phase 2).` → `(tenant, member, role, tác giả của tin đích, quyền đọc lịch sử sửa A7). Mặc định \`access.DefaultPolicy\` (sửa/xoá chỉ tác giả, D86); module policy chat (user → role → quyền) cắm sau (Phase 2).` Trong đoạn `**Đã xây (M2b.0):**` thay `\`access.AllowMembers\` là policy mặc định` bằng `\`access.AllowMembers\` là policy mặc định tới M2b.2, nay là \`access.DefaultPolicy\` (D86)`. Thay `**Chưa xây:** ẩn và mặt nạ xoá (bước 2, 3) thuộc M2b.2.` bằng:
 
 ```markdown
-**Đã xây (M2b.2, D85):** bước 2 là `view.HideForViewer` (seq ≤ `Member.ClearedBeforeSeq` hoặc trong `Hidden.HiddenIn(user, room, thread, seq đầu trang, seq cuối trang)` → `hidden = true`, không text), bước 3 là `view.MaskDeleted` (`deleted = true`, không text); seq, version, `edited_at` giữ nguyên nên phân trang theo seq vẫn đúng. `view.Default()` = `CollapseRetried → MaskDeleted → HideForViewer`. Lệnh đổi hỏi `access` với action `edit_message`, `delete_message`, `hide_message`, `clear_history`; `GetEditHistory` với `read_edit_history` (mặc định cho member).
+**Đã xây (M2b.2, D85):** bước 2 là `view.HideForViewer` (seq ≤ `Member.ClearedBeforeSeq` hoặc trong `Hidden.HiddenIn(user, room, thread, seq đầu trang, seq cuối trang)` → `hidden = true`, không text), bước 3 là `view.MaskDeleted` (`deleted = true`, không text); seq, version, `edited_at` giữ nguyên nên phân trang theo seq vẫn đúng. `view.Default()` = `CollapseRetried → MaskDeleted → HideForViewer`. Lệnh đổi hỏi `access` với action `edit_message`, `delete_message`, `hide_message`, `clear_history`; `GetEditHistory` với `read_edit_history`.
+
+**Đã xây (M2b.2, D86):** `access.Checker` tách `Admit` (room → tenant → membership, không hỏi policy) và `Allow` (hỏi policy); `Authorize` = hai bước. `Request.Author` là tác giả tin đích (rỗng với action theo room). Action trên một tin (sửa, xoá, ẩn, `GetEditHistory`) chạy `Admit` → `Find` tin → `Allow`; `clear_history`, `read_history`, `send_message` dùng `Authorize`/actor như cũ. `access.DefaultPolicy` là mặc định của `NewChecker` và actor: `edit_message`/`delete_message` khi `Author ≠ User` → `PERMISSION_DENIED`, mọi action khác cho member. Core không có luật riêng cho tác giả hay owner.
 ```
 
 - **§12**: dòng RC4, cột Metric: `\`reconcile_republished_total{effect}\` (worker gửi vì không có mark)` → `\`reconcile_republished_total{effect}\` (worker gửi vì không có mark; \`msg_changed\` không có mark, chỉ đếm khi PubAck không phải bản trùng, tức fast path đã mất event)`. Thay cả dòng PJ1 bằng:
@@ -8811,19 +9089,21 @@ Expected: hai biểu thức như M2b.1; `SUCCESS: 15 rules found`. Không sửa 
 ```
 
 - **§14**: dòng `| Core chết giữa fact và projection | … không retry thì reconciler sửa sau delay |` → `… không retry thì worker \`edit_projection\` sửa ngay khi record tới (delay 0) |`.
-- **§17.2**: thêm bốn dòng sau dòng `| D81 | …`:
+- **§17.2**: thêm năm dòng sau dòng `| D81 | …`:
 
 ```markdown
 | D82 | Lệnh đổi (sửa, xoá, ẩn, clear) chạy trong package `mutate`, gọi thẳng từ `grpcsrv`, không qua actor; client vẫn định tuyến theo slot của room | Đưa lệnh đổi vào mailbox actor của room; một actor riêng cho lệnh đổi | Lệnh đổi không cấp seq nên không cần thứ tự của actor; CAS trên khoá fact `room│thread│seq│ver` và `v < ver` của projection giữ đúng khi hai core cùng nhận lệnh (P1); không chen vào hàng gửi tin; định tuyến theo slot vẫn giữ cache ấm |
 | D83 | Event `msg_edited`/`msg_deleted` mang snapshot hiện tại của tin + `version` của fact, id `{room}-{th}-{seq}-v{ver}`, không ack mark; fast path enqueue sau projection, retry của lệnh đổi enqueue lại đúng id đó; worker chạy `room_activity` (chỉ `lc/ab`), `edit_projection` (delay 0) rồi `msg_changed` (delay `RECONCILE_DELAY`, chỉ đếm republish khi PubAck không phải bản trùng) từ insert của `message_edits` (thay "xoá delay 2–3s") | Event mang diff/text của fact; ack mark cho event đổi; delay xoá riêng 2–3s; projection chỉ ở fast path | Snapshot đúng cả khi event tới trễ hoặc lệch thứ tự (consumer giữ bản version lớn nhất); lệnh đổi hiếm (1–3%) nên publish lại sau delay rẻ và stream bỏ trùng theo id trong 5m, không cần không gian mark riêng (D65); projection delay 0 sửa ngay khi core chết giữa fact và projection; một delay chung đủ vì fast path đã đẩy event ngay |
 | D84 | `work.Record` thêm `Version` (`uint32`): 37 byte, id `e:{room}-{th}-{seq}-v{ver}` cho `EditInserted` | Kiểu record riêng cho fact sửa; id theo `_id` nhị phân | Một định dạng cho mọi kind; id đọc được và trùng phần đuôi với id event để truy vết; thêm 4 byte không đáng kể |
 | D85 | View: tin có `seq ≤ cleared_before_seq` hoặc trong `hidden` của người đọc → `hidden = true`, không nội dung; tin xoá → `deleted = true`, không nội dung; seq, version giữ nguyên; ẩn/clear không phát event | Bỏ hẳn tin khỏi trang; lọc trong truy vấn store; event `msg_hidden`/`history_cleared` | Phân trang theo seq vẫn đúng và client không tưởng là lỗ seq (R10); `messages` không có index phụ nên lọc ở view rẻ hơn; owner chốt 2026-10-05 không phát event cho ẩn/clear (đồng bộ đa thiết bị ở M3/M4) |
+| D86 | Quyền trên một tin (sửa, xoá, ẩn, đọc lịch sử sửa) chỉ do `access.Policy` quyết; core chỉ biết user có quyền hay không, không có luật tác giả/owner. Mặc định `access.DefaultPolicy`: không ai sửa/xoá tin của người khác (chỉ tác giả), action khác cho member. `access.Checker` tách `Admit` (tenant + membership) và `Allow` (policy, `Request.Author` = tác giả tin); action trên một tin chạy `Admit` → `Find` → `Allow`. User → role → quyền thuộc module policy chat (Phase 2) | Luật cứng trong core "sửa: tác giả; xoá: tác giả hoặc owner room" (`domain.ErrNotAuthor`) | Owner chốt 2026-10-05. Mỗi sản phẩm muốn luật khác (owner/moderator xoá, giới hạn thời gian theo tenant); luật cứng trong core không linh hoạt và phải sửa core mỗi lần đổi. Mặc định chặt (chỉ tác giả) an toàn khi chưa có policy; hỏi policy sau `Find` để policy thấy tác giả, trước nhận diện retry nên tác giả gửi lại vẫn được phép |
 ```
 
 **Step 3: Roadmap**
 
 `docs/roadmap.md`:
-- Dòng M2b.2: thay đuôi `(D70) | ⏭ Tiếp theo — cần plan |` bằng `(D70) | ✅ \`dev-done\` (trên \`feat/m2b\`, chưa merge \`main\`) — [plan](plans/2026-10-05-m2b2-edit-delete.md); \`message_edits\` + projection, 5 RPC, ẩn/clear ở reader pipeline (không event), effect \`edit_projection\` + \`msg_changed\` (thay delay xoá 2–3s), resync quét \`message_edits\` (D82–D85) |`.
+- Dòng M2b.2: thay đuôi `(D70) | ⏭ Tiếp theo — [plan](plans/2026-10-05-m2b2-edit-delete.md) sẵn sàng |` bằng `(D70) | ✅ \`dev-done\` (trên \`feat/m2b\`, chưa merge \`main\`) — [plan](plans/2026-10-05-m2b2-edit-delete.md); \`message_edits\` + projection, 5 RPC, ẩn/clear ở reader pipeline (không event), effect \`edit_projection\` + \`msg_changed\` (thay delay xoá 2–3s), quyền sửa/xoá chỉ qua \`access.Policy\`, mặc định chỉ tác giả, resync quét \`message_edits\` (D82–D86) |`.
+- Dòng Phase 2 `| 2 | Policy quyền | Chính sách quyền cắm vào permission hook (M2b.0) | Sau Phase 1 |` → `| 2 | Policy quyền | Module policy chat: ánh xạ user → role → quyền (owner/moderator xoá tin người khác, giới hạn thời gian sửa/xoá theo tenant…), cắm vào \`access.Policy\` (M2b.0) thay \`access.DefaultPolicy\` (sửa/xoá chỉ tác giả, D86) | Sau Phase 1 |`.
 - Dòng M2b.3: thay đuôi `event cho SysMsg (cid \`sys:{event_id}\`) | Chưa |` bằng `event cho SysMsg (cid \`sys:{event_id}\`) | ⏭ Tiếp theo — cần plan |`.
 
 (Mục "Mục mang sang M5" cập nhật ở Task 16, khi đã có danh sách Minor.)
@@ -8850,19 +9130,19 @@ Mỗi task trước sửa dòng của mình trong commit của nó; bước này
 ```bash
 for p in apps/core/internal/mutate apps/core/internal/domain apps/core/internal/store apps/core/internal/store/memstore apps/core/internal/store/mongostore apps/core/internal/work apps/core/internal/pbconv apps/core/internal/access apps/core/internal/grpcsrv apps/core/internal/view apps/core/internal/effects apps/core/internal/publish apps/core/internal/resync tools/internal/route tools/corecli/internal/e2e; do printf '%s ' "$p"; grep -c "^$p," INDEXES.csv; done
 grep -n "^apps/core/internal/mutate,\|^docs/plans/2026-10-05-m2b2" INDEXES.csv | cut -c1-120
-grep -n "EditInserted\|MessageChangeEventID\|MaskDeleted\|edit_projection\|ClearHistory" INDEXES.csv | cut -c1-80
+grep -n "EditInserted\|MessageChangeEventID\|MaskDeleted\|edit_projection\|ClearHistory\|DefaultPolicy" INDEXES.csv | cut -c1-80
 ```
 
-Expected: mỗi package đúng `1`; có dòng `mutate` và dòng plan M2b.2; grep cuối có kết quả ở các dòng `store`, `pbconv`, `view`, `effects`, `grpcsrv`, `work`. Thiếu dòng `mutate` thì thêm ngay sau dòng `apps/core/internal/metrics,...`:
+Expected: mỗi package đúng `1`; có dòng `mutate` và dòng plan M2b.2; grep cuối có kết quả ở các dòng `store`, `pbconv`, `view`, `effects`, `grpcsrv`, `work`, `access`. Thiếu dòng `mutate` thì thêm ngay sau dòng `apps/core/internal/metrics,...`:
 
 ```csv
-apps/core/internal/mutate,package,"Change commands outside the actor (D82): Edit/Delete authorize through access (edit_message/delete_message), read the message and the last fact (Edits.Latest), check author (delete: author or room owner), deleted state and base_version, insert the fact base+1 (v1 keeps prev), treat a duplicate with the same author/kind/text as a retry, project with Messages.ApplyEdit (v < ver), purge older texts on delete, enqueue msg_edited/msg_deleted and return the projected snapshot; Hide upserts hidden {u, r, th, s}; ClearHistory raises members.cb with $max (0 = last seq of the main timeline)",Mutator;New;Deps;Messages;HistoryClearer;EventPublisher;EditCmd;DeleteCmd;HideCmd;ClearCmd;Mutator.Edit;Mutator.Delete;Mutator.Hide;Mutator.ClearHistory,apps/core/internal/grpcsrv;apps/core,unit (memstore),D62;D63;D64;D75;D82
+apps/core/internal/mutate,package,"Change commands outside the actor (D82): Edit/Delete admit through access (edit_message/delete_message), read the message, ask access.Policy with the message author (default: author only; no author or owner rule in mutate, D86), read the last fact (Edits.Latest), check deleted state and base_version, insert the fact base+1 (v1 keeps prev), treat a duplicate with the same author/kind/text as a retry, project with Messages.ApplyEdit (v < ver), purge older texts on delete, enqueue msg_edited/msg_deleted and return the projected snapshot; Hide admits, finds the message, asks the policy with the author and upserts hidden {u, r, th, s}; ClearHistory raises members.cb with $max (0 = last seq of the main timeline)",Mutator;New;Deps;Messages;HistoryClearer;EventPublisher;EditCmd;DeleteCmd;HideCmd;ClearCmd;Mutator.Edit;Mutator.Delete;Mutator.Hide;Mutator.ClearHistory,apps/core/internal/grpcsrv;apps/core,unit (memstore),D62;D63;D64;D75;D82;D86
 ```
 
 Thiếu dòng plan thì thêm ngay sau dòng `docs/plans/2026-10-05-m2b1-effect-engine.md,...`:
 
 ```csv
-docs/plans/2026-10-05-m2b2-edit-delete.md,doc,"M2b.2 implementation plan: edit/delete as message_edits facts + messages projection (base_version CAS, ack after projection, purge on delete); hide (hidden) and clear history (members.cb) in the reader pipeline without events; GetEditHistory; package mutate; effects edit_projection + msg_changed; work record 37 bytes with Version; resync scans message_edits; corecli + e2e edit/delete",,everyone,,D62 D63 D64 D70 D75 D82 D83 D84 D85
+docs/plans/2026-10-05-m2b2-edit-delete.md,doc,"M2b.2 implementation plan: edit/delete as message_edits facts + messages projection (base_version CAS, ack after projection, purge on delete); hide (hidden) and clear history (members.cb) in the reader pipeline without events; GetEditHistory; package mutate; effects edit_projection + msg_changed; work record 37 bytes with Version; resync scans message_edits; corecli + e2e edit/delete; edit and delete rights decided by access.Policy (default: author only)",,everyone,,D62 D63 D64 D70 D75 D82 D83 D84 D85 D86
 ```
 
 Dòng nào khác còn mô tả cũ (vd. `view` còn "Default pipeline used by GetHistory" mà không nhắc `MaskDeleted`/`HideForViewer`, `work` còn "33 big-endian bytes") thì sửa theo hợp đồng chung và ghi vào báo cáo task nào đã quên.
@@ -8874,25 +9154,25 @@ Kiểm: `python3 -c "import csv;print({len(r) for r in csv.reader(open('INDEXES.
 - Mục Project, sau gạch đầu dòng `- M2b.1 (plan …)` thêm:
 
 ```markdown
-- M2b.2 (plan `docs/plans/2026-10-05-m2b2-edit-delete.md`): edit and delete as immutable facts in `message_edits` plus the `messages` projection (`v/d/ea`), `base_version` CAS, ack after the projection (D62–D64, D82); hide (`hidden`) and clear history (`members.cb`) applied per reader in `view`, no events (D85); `GetEditHistory`; worker effects `edit_projection` and `msg_changed` on `EditInserted` (D83, D84); resync scans `message_edits`; corecli/e2e edit and delete.
+- M2b.2 (plan `docs/plans/2026-10-05-m2b2-edit-delete.md`): edit and delete as immutable facts in `message_edits` plus the `messages` projection (`v/d/ea`), `base_version` CAS, ack after the projection (D62–D64, D82); hide (`hidden`) and clear history (`members.cb`) applied per reader in `view`, no events (D85); `GetEditHistory`; worker effects `edit_projection` and `msg_changed` on `EditInserted` (D83, D84); resync scans `message_edits`; corecli/e2e edit and delete; edit/delete rights only through `access.Policy`, default `access.DefaultPolicy` (author only, D86).
 ```
 
-  Câu `built on a data-class framework (§4) with decisions D61–D81` → `… D61–D85`; `Next is M2b.2 (edit + delete); its plan is not written yet.` → `Next is M2b.3 (reactions + pins); its plan is not written yet.`
+  Câu `built on a data-class framework (§4) with decisions D61–D81` → `… D61–D86`; `Next is M2b.2 (edit + delete); its plan is not written yet.` → `Next is M2b.3 (reactions + pins); its plan is not written yet.`
 - Mục Commands: dòng `make e2e …` đổi chú thích thành `# tools/corecli: create, send, history, kill core-1, verify no loss/dup, live events, then edit seq 1 and delete seq 2`.
 - **Storage ports**: `The ports are \`store.Messages\`, \`store.Rooms\` and \`store.ChangeFeed\`.` → `The ports are \`store.Messages\` , \`store.Rooms\`, \`store.MessageEditor\` (\`ApplyEdit\`), \`store.HistoryClearer\` (\`ClearHistory\`), \`store.Edits\`, \`store.Hidden\` and \`store.ChangeFeed\`.`
 - **Effect engine**: `(\`store.Change.Kind\`: \`MessageInserted\`, \`RoomInserted\`)` → `(\`store.Change.Kind\`: \`MessageInserted\`, \`RoomInserted\`, \`EditInserted\`)`; `watches the database for inserts into \`messages\` and \`rooms\`` → `watches the database for inserts into \`messages\`, \`rooms\` and \`message_edits\``; `(keys + \`CommittedAt\`, 33 bytes; id \`m:{room}-{thread}-{seq}\` or \`r:{room}\`)` → `(keys + version + \`CommittedAt\`, 37 bytes; id \`m:{room}-{thread}-{seq}\`, \`r:{room}\` or \`e:{room}-{thread}-{seq}-v{ver}\`)`; trong gạch Workers, `and \`room_created\` (delay \`RECONCILE_DELAY\`, no mark) for \`RoomInserted\`.` → `, \`room_created\` (delay \`RECONCILE_DELAY\`, no mark) for \`RoomInserted\`, and \`room_activity\` (\`Seq: 0\`, only \`lc/ab\`), \`edit_projection\` (delay 0) then \`msg_changed\` (delay \`RECONCILE_DELAY\`, no mark; counts a republish only when the PubAck is not a duplicate) for \`EditInserted\`.`; `replays the main timeline backwards into the work stream at \`-rate\`` → `replays the main timeline backwards, then the room's \`message_edits\` by \`{r, ts}\`, into the work stream at \`-rate\``.
 - Thêm khối mới ngay trước `**Permission hook and reader pipeline (\`access\`, \`view\`).**`:
 
 ```markdown
-**Edits (`apps/core/internal/mutate`; D62–D64, D82–D85).**
+**Edits (`apps/core/internal/mutate`; D62–D64, D82–D86).**
 - `EditMessage`, `DeleteMessage`, `HideMessage` and `ClearHistory` run in `mutate`, called by `grpcsrv`, not through actors; tools still route them by the room's slot.
-- Edit and delete insert an immutable fact into `message_edits` (`_id` = `room│thread│seq│ver`, 28B, the CAS; version = `base_version + 1`; v1 keeps `prev`), project it onto `messages` with `ApplyEdit` (only where `v < ver`), purge older fact texts on delete, then ack. A duplicate fact with the same author, kind and text is a retry and succeeds; a stale base or a deleted message is `FAILED_PRECONDITION`. Edit: author only; delete: author or room owner.
+- Edit and delete insert an immutable fact into `message_edits` (`_id` = `room│thread│seq│ver`, 28B, the CAS; version = `base_version + 1`; v1 keeps `prev`), project it onto `messages` with `ApplyEdit` (only where `v < ver`), purge older fact texts on delete, then ack. A duplicate fact with the same author, kind and text is a retry and succeeds; a stale base or a deleted message is `FAILED_PRECONDITION`. Rights come only from `access.Policy`, asked with the message author after `Find` and before retry recognition; `mutate` has no author or owner rule (D86).
 - The fast path enqueues `msg_edited`/`msg_deleted` (id `{room}-{thread}-{seq}-v{ver}`, current snapshot, no ack mark); a retry re-enqueues the same id. Workers rerun `edit_projection` and `msg_changed` from the `EditInserted` record, which heals a core dying between fact and projection; the stream drops the duplicate event by id.
 - Hide upserts `hidden {u, r, th, s}`; clear raises `members.cb` with `$max` (`up_to_seq` 0 or past the end is clamped to the last seq). Neither publishes an event. `GetEditHistory` (action `read_edit_history`) returns the original then each fact, nothing for a deleted message, `NOT_FOUND` for a missing one.
-- Wiring: `apps/core/service_wiring.go` (`wireService`) builds the `access.Checker` and the `mutate.Mutator` for `grpcsrv` (`Deps.Mutator`, `Edits`, `Hidden` are required).
+- Wiring: `apps/core/service_wiring.go` (`wireService`) builds the `access.Checker` (default policy) and the `mutate.Mutator` for `grpcsrv` (`Deps.Mutator`, `Edits`, `Hidden` are required).
 ```
 
-- **Permission hook and reader pipeline**: `\`SendMessage\` asks it in the actor (\`actor.WithPolicy\`), \`GetHistory\` in \`grpcsrv\`.` → `\`SendMessage\` asks it in the actor (\`actor.WithPolicy\`), edit/delete/hide/clear in \`mutate\`, \`GetHistory\` and \`GetEditHistory\` in \`grpcsrv\`.`; `Hidden and deleted masks are M2b.2.` → `\`view.MaskDeleted\` (deleted → no text) and \`view.HideForViewer\` (seq ≤ \`ClearedBeforeSeq\` or hidden by the reader → \`hidden\`, no text) follow it in \`view.Default()\`; seq and version are kept.`
+- **Permission hook and reader pipeline**: `then asks the policy (default \`AllowMembers\`).` → `then asks the policy. \`Checker.Admit\` checks tenant and membership only, \`Checker.Allow\` asks the policy with \`Request.Author\` (the target message's author, empty for room actions), \`Authorize\` does both; actions on one message (edit, delete, hide, edit history) run \`Admit\` → \`Find\` → \`Allow\`. The default policy of \`NewChecker\` and the actor is \`access.DefaultPolicy\`: edit/delete only by the author, every other action for any member (D86); the chat policy module (user → role → permission) plugs in at Phase 2.`; `\`SendMessage\` asks it in the actor (\`actor.WithPolicy\`), \`GetHistory\` in \`grpcsrv\`.` → `\`SendMessage\` asks it in the actor (\`actor.WithPolicy\`), edit/delete/hide/clear in \`mutate\`, \`GetHistory\` and \`GetEditHistory\` in \`grpcsrv\`.`; `Hidden and deleted masks are M2b.2.` → `\`view.MaskDeleted\` (deleted → no text) and \`view.HideForViewer\` (seq ≤ \`ClearedBeforeSeq\` or hidden by the reader → \`hidden\`, no text) follow it in \`view.Default()\`; seq and version are kept.`
 - **Docs**: trong gạch `docs/plans/`, sau `M2b.1: \`docs/plans/2026-10-05-m2b1-effect-engine.md\` (executed; results and known issues at its end).` thêm ` M2b.2: \`docs/plans/2026-10-05-m2b2-edit-delete.md\` (executed; results and known issues at its end).`
 
 - Mục **Detectors**: thêm câu "Edit effects add the labels `edit_projection` (only `effect_dropped_total`; its `effectCounters.republished` is nil) and `msg_changed` (both `effect_dropped_total` and `reconcile_republished_total`, which counts only PubAcks the stream did not flag as duplicates)."
@@ -8902,14 +9182,15 @@ Kiểm: `python3 -c "import csv;print({len(r) for r in csv.reader(open('INDEXES.
 ```bash
 grep -n "Chưa xây\]" docs/designs/261005-chatim-architecture.md | grep -n "6.3\|6.4\|9.2"
 grep -n "xoá 2–3s\|Hidden and deleted masks are M2b.2\|33 bytes\|Next is M2b.2" CLAUDE.md docs/designs/261005-chatim-architecture.md README.md
+grep -n "owner room\|default \`AllowMembers\`\|tác giả/owner" CLAUDE.md docs/designs/261005-chatim-architecture.md
 ```
 
-Expected: lệnh đầu không in gì; lệnh hai chỉ còn dòng lịch sử có ghi rõ "thay" (vd. D83 "thay \"xoá delay 2–3s\"", roadmap cột Phạm vi M2b.2).
+Expected: lệnh đầu không in gì; lệnh hai chỉ còn dòng lịch sử có ghi rõ "thay" (vd. D83 "thay \"xoá delay 2–3s\"", roadmap cột Phạm vi M2b.2); lệnh ba chỉ còn dòng D86 (phương án bỏ).
 
 **Step 8: Commit**
 
 ```bash
-git commit -m "docs: record the M2b.2 edit and delete design and decisions D82-D85" -- docs/designs/261005-chatim-architecture.md docs/roadmap.md README.md INDEXES.csv CLAUDE.md
+git commit -m "docs: record the M2b.2 edit and delete design and decisions D82-D86" -- docs/designs/261005-chatim-architecture.md docs/roadmap.md README.md INDEXES.csv CLAUDE.md
 ```
 
 ---
@@ -9053,11 +9334,11 @@ type Report struct {
 - Proto Go: `EditMessageRequest{RoomId, ThreadRoot, Seq, BaseVersion, Text}`, `ClearHistoryRequest{RoomId, UpToSeq}`, `GetEditHistoryRequest{…, AfterVersion, Limit uint32}`, `Message.{Version, Deleted, EditedAt, Hidden}`, `Event_MessageEdited`/`Event_MessageDeleted` với `{Message, Version}`, `EditKind_EDIT_KIND_ORIGINAL/TEXT/DELETE`.
 - `ClearHistory` trả giá trị `cb` sau `$max`; `HideMessage` từ chối seq không tồn tại.
 - Registry Task 11: `EditInserted: [room_activity, edit_projection, msg_changed]` theo đúng thứ tự (itest (b) và drill dựa vào việc projection xong trước khi event được publish); `edit_projection` chỉ xuất `effect_dropped_total`.
-- `GetEditHistory`: tin không có → `NOT_FOUND` (itest (a) khẳng định), đã xoá → rỗng. `ClearHistory` kẹp `up_to_seq` 0 hoặc quá seq cuối về `Last(room, 0)`. Mã lỗi: `ErrVersionConflict`/`ErrMessageDeleted` → `FailedPrecondition`, `ErrNotAuthor` → `PermissionDenied`, `ErrMessageNotFound` → `NotFound`.
+- `GetEditHistory`: tin không có → `NOT_FOUND` (itest (a) khẳng định), đã xoá → rỗng. `ClearHistory` kẹp `up_to_seq` 0 hoặc quá seq cuối về `Last(room, 0)`. Mã lỗi: `ErrVersionConflict`/`ErrMessageDeleted` → `FailedPrecondition`, `access.ErrDenied` (policy từ chối; mặc định: không phải tác giả, kể cả owner room, D86) → `PermissionDenied`, `ErrMessageNotFound` → `NotFound`.
 - Task 2 phải làm `tools/internal/route` biên dịch được sau khi `CoreServiceClient` có thêm 5 method (`make vet` biên dịch cả test): Task 13 xử lý cả hai cách (stub hoặc nhúng interface).
 
 **Rủi ro / việc controller cần quyết:**
-1. **Retry lệnh xoá (D63) phụ thuộc thứ tự kiểm trong `mutate` (Task 7).** Luồng hợp đồng bước 2 trả `ErrMessageDeleted` khi tin đã xoá *trước* bước nhận diện retry; vậy gửi lại `DeleteMessage` cùng base sau khi lần đầu đã thành công (ack mất) sẽ nhận `FAILED_PRECONDITION` thay vì thành công. Route client retry `DeleteMessage` khi timeout nên lỗi này lộ ra thật. Task 14 (c) khẳng định retry thành công; nên kiểm Task 7: nhận diện retry (`BaseVersion+1 == version hiện tại` và fact ở đó trùng tác giả/loại/text) phải chạy trước kiểm "đã xoá".
+1. **Retry lệnh xoá (D63) phụ thuộc thứ tự kiểm trong `mutate` (Task 7).** Luồng hợp đồng bước 2 trả `ErrMessageDeleted` khi tin đã xoá *trước* bước nhận diện retry; vậy gửi lại `DeleteMessage` cùng base sau khi lần đầu đã thành công (ack mất) sẽ nhận `FAILED_PRECONDITION` thay vì thành công. Route client retry `DeleteMessage` khi timeout nên lỗi này lộ ra thật. Task 14 (c) khẳng định retry thành công; nên kiểm Task 7: nhận diện retry (`BaseVersion+1 == version hiện tại` và fact ở đó trùng tác giả/loại/text) phải chạy trước kiểm "đã xoá". (Đã áp ở Task 7; policy hỏi trước retry, D86.)
 2. `ChatimRepublishSurge` không cần sửa: theo controller, `msg_changed` chỉ đếm republish khi PubAck không phải bản trùng (Task 15 Step 1 chỉ kiểm). Nếu Task 11 thực tế đếm mọi lần chạy thì luật này báo động giả ở 100–300 lệnh đổi/s: khi đó lọc `{effect="msg_created"}` (15 luật không đổi).
 3. Resync tìm room chỉ có sửa/xoá nhờ registry `EditInserted → [room_activity (Seq 0, chỉ lc/ab), edit_projection, msg_changed]` (controller xác nhận); Task 12/15 viết theo đó. Nếu Task 11 bỏ `room_activity` cho edit thì phải khôi phục câu "dùng `-room`" trong docs.
 4. `INDEXES.csv`, `CLAUDE.md`, `README.md`, thiết kế, roadmap đang có thay đổi chưa commit của owner (đổi link `docs/research` → `docs/archive/research`, report tổng hợp mới). `git commit -- INDEXES.csv` sẽ kéo cả thay đổi đó vào commit của task. Task 12–14 kiểm `git diff --quiet -- INDEXES.csv`, Task 15 Step 0 kiểm tất cả; controller nên để owner commit (hoặc xác nhận gộp) trước Task 12. Part A/B cũng sửa `INDEXES.csv` nên cùng rủi ro.
