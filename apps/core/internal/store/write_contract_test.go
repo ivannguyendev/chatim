@@ -1,0 +1,56 @@
+package store_test
+
+import (
+	"reflect"
+	"testing"
+
+	"github.com/ivannguyendev/chatim/apps/core/internal/store"
+)
+
+var allowedKinds = map[string]bool{
+	"read": true, "lifecycle": true, "reset": true,
+	"insert-unique": true, "cas": true, "monotonic-cas": true, "upsert": true, "version-bump": true,
+}
+
+var portMethods = map[string]string{
+	"Messages.Insert":   "insert-unique",
+	"Messages.Last":     "read",
+	"Messages.Page":     "read",
+	"Messages.Find":     "read",
+	"Rooms.Create":      "insert-unique",
+	"Rooms.Get":         "read",
+	"Rooms.Member":      "read",
+	"ChangeFeed.Open":   "read",
+	"ChangeFeed.Forget": "reset",
+	"Cursor.Next":       "read",
+	"Cursor.Confirm":    "monotonic-cas",
+	"Cursor.Close":      "lifecycle",
+}
+
+func TestEveryPortMethodHasAWriteContract(t *testing.T) {
+	ports := []reflect.Type{
+		reflect.TypeFor[store.Messages](),
+		reflect.TypeFor[store.Rooms](),
+		reflect.TypeFor[store.ChangeFeed](),
+		reflect.TypeFor[store.Cursor](),
+	}
+	seen := map[string]bool{}
+	for _, p := range ports {
+		for m := range p.Methods() {
+			name := p.Name() + "." + m.Name
+			seen[name] = true
+			kind, ok := portMethods[name]
+			switch {
+			case !ok:
+				t.Errorf("%s has no write contract: classify it here and add its storetest case", name)
+			case !allowedKinds[kind]:
+				t.Errorf("%s has kind %q; writes must be insert-unique, cas, monotonic-cas, upsert or version-bump", name, kind)
+			}
+		}
+	}
+	for name := range portMethods {
+		if !seen[name] {
+			t.Errorf("%s is classified but is not a port method", name)
+		}
+	}
+}
