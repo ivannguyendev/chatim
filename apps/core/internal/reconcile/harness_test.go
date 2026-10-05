@@ -57,6 +57,7 @@ type rig struct {
 	*reconcile.Reconciler
 	msgs  *memstore.Messages
 	rooms *memstore.Rooms
+	edits *memstore.Edits
 	feed  *memstore.Feed
 	base  int
 	owner *owner
@@ -66,9 +67,9 @@ type rig struct {
 
 func newRig(t *testing.T, wrap func(store.ChangeFeed) store.ChangeFeed) *rig {
 	t.Helper()
-	rg := &rig{msgs: memstore.NewMessages(), rooms: memstore.NewRooms(), owner: &owner{}, js: &publishtest.JetStream{}, sink: &testlog.Sink{}}
+	rg := &rig{msgs: memstore.NewMessages(), rooms: memstore.NewRooms(), edits: memstore.NewEdits(), owner: &owner{}, js: &publishtest.JetStream{}, sink: &testlog.Sink{}}
 	rg.createRoom(t, room)
-	rg.feed = memstore.NewFeed(rg.msgs, rg.rooms, nil)
+	rg.feed = memstore.NewFeed(rg.msgs, rg.rooms, rg.edits)
 	rg.base, _ = rg.feed.Confirmed()
 	rg.owner.leading.Store(true)
 	var feed store.ChangeFeed = rg.feed
@@ -118,6 +119,14 @@ func (rg *rig) insert(t *testing.T, r uint64, seqs ...uint64) {
 		if res := rg.msgs.Insert(t.Context(), []domain.Message{m}); res[0].Outcome != store.Inserted {
 			t.Fatalf("insert %d/%d: %+v", r, s, res)
 		}
+	}
+}
+
+func (rg *rig) edit(t *testing.T, r, seq uint64, version uint32) {
+	t.Helper()
+	e := domain.Edit{Room: r, Seq: seq, Version: version, Kind: domain.EditText, Tenant: tenant, By: "alice", Text: "edited", At: time.Now().UTC()}
+	if err := rg.edits.Append(t.Context(), e); err != nil {
+		t.Fatalf("append edit %d/%d v%d: %v", r, seq, version, err)
 	}
 }
 

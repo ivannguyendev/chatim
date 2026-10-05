@@ -30,23 +30,24 @@ func TestRecordOfKeepsOnlyKeysAndCommitTime(t *testing.T) {
 		t.Fatalf("RecordOf(room) = %+v, want %+v", got, want)
 	}
 	edit := store.Change{Kind: store.EditInserted, Edit: domain.Edit{Room: 42, Thread: 3, Seq: 9, Version: 2, Text: "x"}, CommittedAt: committed}
-	if got, want := work.RecordOf(edit), (work.Record{Kind: store.EditInserted, Room: 42, Thread: 3, Seq: 9, CommittedAt: committed}); got != want {
+	if got, want := work.RecordOf(edit), (work.Record{Kind: store.EditInserted, Room: 42, Thread: 3, Seq: 9, Version: 2, CommittedAt: committed}); got != want {
 		t.Fatalf("RecordOf(edit) = %+v, want %+v", got, want)
 	}
 }
 
-func TestRecordRoundTripsThroughThirtyThreeBytes(t *testing.T) {
+func TestRecordRoundTripsThroughThirtySevenBytes(t *testing.T) {
 	for _, r := range []work.Record{
 		{Kind: store.MessageInserted, Room: 42, Thread: 3, Seq: 9, CommittedAt: committed},
 		{Kind: store.RoomInserted, Room: math.MaxInt64, CommittedAt: committed},
 		{Kind: store.MessageInserted, Room: 1, Seq: math.MaxUint64, CommittedAt: committed},
+		{Kind: store.EditInserted, Room: 42, Thread: 3, Seq: 9, Version: math.MaxUint32, CommittedAt: committed},
 	} {
 		b := work.Encode(r)
-		if len(b) != work.RecordSize {
-			t.Fatalf("Encode(%+v) is %d bytes, want %d", r, len(b), work.RecordSize)
+		if len(b) != work.RecordSize || work.RecordSize != 37 {
+			t.Fatalf("Encode(%+v) is %d bytes, RecordSize %d; want 37", r, len(b), work.RecordSize)
 		}
 		got, err := work.Decode(b)
-		if err != nil || got.Kind != r.Kind || got.Room != r.Room || got.Thread != r.Thread || got.Seq != r.Seq || !got.CommittedAt.Equal(r.CommittedAt) {
+		if err != nil || got.Kind != r.Kind || got.Room != r.Room || got.Thread != r.Thread || got.Seq != r.Seq || got.Version != r.Version || !got.CommittedAt.Equal(r.CommittedAt) {
 			t.Fatalf("Decode(Encode(%+v)) = %+v, %v", r, got, err)
 		}
 	}
@@ -54,8 +55,8 @@ func TestRecordRoundTripsThroughThirtyThreeBytes(t *testing.T) {
 
 func TestEncodeIsBigEndianAndClampsTimesBeforeTheEpoch(t *testing.T) {
 	want := make([]byte, work.RecordSize)
-	want[0], want[8], want[16], want[24], want[32] = 1, 1, 2, 3, 4
-	if got := work.Encode(work.Record{Kind: store.MessageInserted, Room: 1, Thread: 2, Seq: 3, CommittedAt: time.Unix(0, 4)}); !bytes.Equal(got, want) {
+	want[0], want[8], want[16], want[24], want[28], want[36] = 3, 1, 2, 3, 5, 4
+	if got := work.Encode(work.Record{Kind: store.EditInserted, Room: 1, Thread: 2, Seq: 3, Version: 5, CommittedAt: time.Unix(0, 4)}); !bytes.Equal(got, want) {
 		t.Fatalf("Encode = %x, want %x", got, want)
 	}
 	got, err := work.Decode(work.Encode(work.Record{Kind: store.RoomInserted, Room: 5}))
@@ -67,7 +68,7 @@ func TestEncodeIsBigEndianAndClampsTimesBeforeTheEpoch(t *testing.T) {
 func TestDecodeRejectsBadRecords(t *testing.T) {
 	good := work.Encode(work.Record{Kind: store.RoomInserted, Room: 7, CommittedAt: committed})
 	zeroKind, unknownKind, pastInt64 := slices.Clone(good), slices.Clone(good), slices.Clone(good)
-	zeroKind[0], unknownKind[0], pastInt64[25] = 0, 9, 0x80
+	zeroKind[0], unknownKind[0], pastInt64[29] = 0, 9, 0x80
 	for name, b := range map[string][]byte{
 		"empty":           nil,
 		"short":           good[:work.RecordSize-1],
@@ -90,6 +91,8 @@ func TestIDsAreNaturalKeys(t *testing.T) {
 		"message":        {work.Record{Kind: store.MessageInserted, Room: 42, Seq: 7, CommittedAt: committed}, "m:42-0-7"},
 		"thread message": {work.Record{Kind: store.MessageInserted, Room: 42, Thread: 3, Seq: 9}, "m:42-3-9"},
 		"room":           {work.Record{Kind: store.RoomInserted, Room: 42, CommittedAt: committed}, "r:42"},
+		"edit":           {work.Record{Kind: store.EditInserted, Room: 42, Seq: 7, Version: 1}, "e:42-0-7-v1"},
+		"thread edit":    {work.Record{Kind: store.EditInserted, Room: 42, Thread: 3, Seq: 9, Version: 12}, "e:42-3-9-v12"},
 		"unknown kind":   {work.Record{Room: 42}, ""},
 	}
 	for name, c := range cases {
@@ -141,5 +144,14 @@ func TestMessageCarriesSubjectRecordAndID(t *testing.T) {
 	got, err := work.Decode(m.Data)
 	if err != nil || got.Room != 42 || got.Seq != 7 || !got.CommittedAt.Equal(committed) {
 		t.Fatalf("payload decodes to %+v, %v", got, err)
+	}
+}
+
+func TestKnownKindsAreTheThreeChangeKinds(t *testing.T) {
+	for k := range store.ChangeKind(6) {
+		want := k == store.MessageInserted || k == store.RoomInserted || k == store.EditInserted
+		if got := work.KnownKind(k); got != want {
+			t.Errorf("KnownKind(%d) = %v, want %v", k, got, want)
+		}
 	}
 }

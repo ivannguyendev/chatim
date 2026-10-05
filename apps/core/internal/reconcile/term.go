@@ -96,7 +96,7 @@ func (t *term) readFailure() error {
 }
 
 func (t *term) forward(ctx context.Context, c store.Change) error {
-	if c.Kind != store.MessageInserted && c.Kind != store.RoomInserted {
+	if !work.KnownKind(c.Kind) {
 		t.r.drop(ctx, fmt.Errorf("%w: unknown change kind %d", store.ErrCorruptChange, c.Kind))
 		t.win.done(c.Position)
 		return nil
