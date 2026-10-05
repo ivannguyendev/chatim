@@ -12,6 +12,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/reconcile"
 	"github.com/ivannguyendev/chatim/apps/core/internal/slot"
+	"github.com/ivannguyendev/chatim/apps/core/internal/work"
 	"github.com/ivannguyendev/chatim/pkg/envconfig"
 	"github.com/ivannguyendev/chatim/pkg/grpcserver"
 )
@@ -53,6 +54,7 @@ type Config struct {
 	CIDBatch            dedupe.BatchConfig
 	Publish             publish.Config
 	Stream              publish.StreamConfig
+	Work                work.StreamConfig
 	Slot                slot.Config
 	ReconcileEnabled    bool
 	Reconcile           reconcile.Config

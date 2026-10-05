@@ -16,6 +16,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/reconcile"
 	"github.com/ivannguyendev/chatim/apps/core/internal/slot"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
+	"github.com/ivannguyendev/chatim/apps/core/internal/work"
 	"github.com/ivannguyendev/chatim/pkg/admin"
 	"github.com/ivannguyendev/chatim/pkg/grpcserver"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
@@ -55,7 +56,10 @@ func prepare(ctx context.Context, cfg config.Config, cl *clients) error {
 	if err := mongostore.Bootstrap(ctx, cl.mongo.Database(cfg.MongoDB)); err != nil {
 		return fmt.Errorf("bootstrap mongo database %s: %w", cfg.MongoDB, config.RedactError(err, cfg.MongoURI))
 	}
-	return config.RedactError(publish.EnsureStream(ctx, cl.js, cfg.Stream), cfg.NATSURL)
+	if err := publish.EnsureStream(ctx, cl.js, cfg.Stream); err != nil {
+		return config.RedactError(err, cfg.NATSURL)
+	}
+	return config.RedactError(work.EnsureStream(ctx, cl.js, cfg.Work), cfg.NATSURL)
 }
 
 func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {

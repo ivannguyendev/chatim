@@ -10,8 +10,11 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/reconcile"
 	"github.com/ivannguyendev/chatim/apps/core/internal/slot"
+	"github.com/ivannguyendev/chatim/apps/core/internal/work"
 	"github.com/ivannguyendev/chatim/pkg/envconfig"
 )
+
+const workAckSlack = 30 * time.Second
 
 func (p *parser) components(c *Config) {
 	pendingTTL := p.span("CID_PENDING_TTL", dedupe.DefaultPendingTTL)
@@ -19,6 +22,7 @@ func (p *parser) components(c *Config) {
 	redisCooldown := p.span("REDIS_COOLDOWN", dedupe.DefaultCooldown)
 	subjectRoot := envconfig.String("EVT_SUBJECT_ROOT", "evt")
 	tick := p.span("SLOT_TICK", time.Second)
+	delay := p.span("RECONCILE_DELAY", reconcile.DefaultDelay)
 
 	c.Flush = flush.Config{
 		Shards:        p.count("FLUSH_SHARDS", 4),
@@ -62,6 +66,15 @@ func (p *parser) components(c *Config) {
 		MaxAge:      p.span("EVT_STREAM_MAX_AGE", publish.DefaultStreamMaxAge),
 		Duplicates:  p.span("EVT_STREAM_DUPLICATES", publish.DefaultStreamDuplicates),
 	}
+	c.Work = work.StreamConfig{
+		Name:        envconfig.String("WORK_STREAM", "CHATIM_WORK"),
+		SubjectRoot: envconfig.String("WORK_SUBJECT_ROOT", "work"),
+		Partitions:  p.count("WORK_PARTITIONS", work.DefaultPartitions),
+		Replicas:    c.Stream.Replicas,
+		MaxAge:      p.span("WORK_MAX_AGE", work.DefaultMaxAge),
+		Duplicates:  p.span("WORK_DUPLICATES", work.DefaultDuplicates),
+		AckWait:     delay + workAckSlack,
+	}
 	c.Slot = slot.Config{
 		CoreID:       c.CoreID,
 		Addr:         c.AdvertiseAddr,
@@ -73,7 +86,7 @@ func (p *parser) components(c *Config) {
 	c.ReconcileEnabled = p.flag("RECONCILE_ENABLED", true)
 	c.Reconcile = reconcile.Config{
 		SubjectRoot:     subjectRoot,
-		Delay:           p.span("RECONCILE_DELAY", reconcile.DefaultDelay),
+		Delay:           delay,
 		DuplicateWindow: c.Stream.Duplicates,
 		Window:          p.count("RECONCILE_WINDOW", reconcile.DefaultWindow),
 		Batch:           p.count("RECONCILE_BATCH", reconcile.DefaultBatch),
