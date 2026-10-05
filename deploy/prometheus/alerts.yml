@@ -8,7 +8,7 @@ groups:
           severity: critical
           guarantee: RC1
         annotations:
-          summary: No core runs the event reconciler; lost events are not republished.
+          summary: No core runs the change reader; committed changes do not reach the work stream.
       - alert: ChatimReconcilerLagging
         expr: max(chatim_core_reconcile_lag_seconds) > 120
         for: 5m
@@ -16,14 +16,14 @@ groups:
           severity: warning
           guarantee: RC1
         annotations:
-          summary: The reconciler is more than two minutes behind commits.
+          summary: Effect workers run more than two minutes behind their effect delay.
       - alert: ChatimReconcilerDropping
         expr: sum(increase(chatim_core_reconcile_dropped_total[15m])) > 0
         labels:
           severity: warning
           guarantee: RC1
         annotations:
-          summary: Committed changes could not become events.
+          summary: The change reader found corrupt changes it could not turn into work records.
       - alert: ChatimFeedHistoryLost
         expr: sum(increase(chatim_core_reconcile_history_lost_total[15m])) > 0
         labels:
@@ -62,7 +62,7 @@ groups:
           severity: warning
           guarantee: RC4
         annotations:
-          summary: The reconciler republishes more than 100 events per second.
+          summary: Effect workers send more than 100 events per second that had no ack mark.
       - alert: ChatimEventsDropped
         expr: sum(rate(chatim_core_publish_dropped_total[5m])) > 0
         for: 10m
@@ -70,7 +70,7 @@ groups:
           severity: warning
           guarantee: RC1
         annotations:
-          summary: The fast path keeps dropping events; delivery waits for the reconciler.
+          summary: The fast path keeps dropping events; delivery waits for the effect workers.
       - alert: ChatimRedisDegraded
         expr: max by (client) (chatim_core_redis_degraded) == 1
         for: 1m
@@ -100,3 +100,18 @@ groups:
           guarantee: P1
         annotations:
           summary: Actors keep yielding rooms after seq contention; check slot ownership.
+      - alert: ChatimWorkFailing
+        expr: sum(rate(chatim_core_work_failures_total[5m])) > 0
+        for: 10m
+        labels:
+          severity: warning
+          guarantee: RC1
+        annotations:
+          summary: Effect workers keep failing work records; events and room activity wait for retries.
+      - alert: ChatimEffectDropping
+        expr: sum by (effect) (increase(chatim_core_effect_dropped_total[15m])) > 0
+        labels:
+          severity: warning
+          guarantee: RC1
+        annotations:
+          summary: An effect gave up on work records whose document could not be read.

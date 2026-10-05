@@ -48,3 +48,10 @@ func wireEffects(cfg config.Config, cl *clients, st *mongostore.Store, marks *ev
 	}
 	return effectSet{workers: workers, msgCreated: msgCreated, roomCreated: roomCreated}, nil
 }
+
+func (fx effectSet) counters() map[string]effectCounters {
+	return map[string]effectCounters{
+		fx.msgCreated.Effect().Name:  {republished: fx.msgCreated.Republished, dropped: fx.msgCreated.Dropped},
+		fx.roomCreated.Effect().Name: {republished: fx.roomCreated.Republished, dropped: fx.roomCreated.Dropped},
+	}
+}

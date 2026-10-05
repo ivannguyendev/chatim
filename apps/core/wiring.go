@@ -135,6 +135,8 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 		cidDropped:   batch.Dropped,
 		loadShed:     limiter.Rejected,
 		oplogWindow:  oplogWindowSeconds(cl.mongo),
+		workers:      fx.workers.Stats,
+		effectCounts: fx.counters(),
 	}
 	if rec != nil {
 		p.reconcile = rec.Stats

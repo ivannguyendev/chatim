@@ -2,12 +2,15 @@ package main
 
 import (
 	"context"
+	"maps"
 	"math"
+	"slices"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
+	"github.com/ivannguyendev/chatim/apps/core/internal/effects"
 	"github.com/ivannguyendev/chatim/apps/core/internal/metrics"
 	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/reconcile"
@@ -15,6 +18,11 @@ import (
 )
 
 const oplogProbeTimeout = 2 * time.Second
+
+type effectCounters struct {
+	republished func() uint64
+	dropped     func() uint64
+}
 
 type probes struct {
 	drops        func() publish.Drops
@@ -24,12 +32,14 @@ type probes struct {
 	cidDropped   func() uint64
 	loadShed     func() int64
 	oplogWindow  func() float64
+	workers      func() effects.Stats
+	effectCounts map[string]effectCounters
 	reconcile    func() reconcile.Stats
 }
 
 func metricSources(p probes) []metrics.Source {
-	const dropHelp = "Events dropped before JetStream acked them; the reconciler republishes them."
-	const markHelp = "Ack marks not written; the reconciler republishes those events."
+	const dropHelp = "Events dropped before JetStream acked them; the effect workers send them again."
+	const markHelp = "Ack marks not written; the effect workers send those events again."
 	const degradedHelp = "1 while this redis client is degraded."
 	out := []metrics.Source{
 		{Name: "publish_dropped_total", Help: dropHelp, Labels: map[string]string{"reason": "queue_full"}, Read: func() float64 { return float64(p.drops().QueueFull) }},
@@ -46,18 +56,37 @@ func metricSources(p probes) []metrics.Source {
 		{Name: "grpc_load_shed_total", Help: "gRPC calls rejected by the in-flight limiter.", Read: func() float64 { return float64(p.loadShed()) }},
 		{Name: "mongo_oplog_window_seconds", Help: "Time span covered by the MongoDB oplog; NaN when unreadable.", Gauge: true, Read: p.oplogWindow},
 	}
+	out = append(out, workerSources(p.workers, p.effectCounts)...)
 	if p.reconcile != nil {
-		out = append(out, reconcileSources(p.reconcile)...)
+		out = append(out, readerSources(p.reconcile)...)
 	}
 	return out
 }
 
-func reconcileSources(stats func() reconcile.Stats) []metrics.Source {
+func workerSources(stats func() effects.Stats, counts map[string]effectCounters) []metrics.Source {
+	const republishHelp = "Events effect workers sent because no ack mark showed the fast path delivered them."
+	const dropHelp = "Work records an effect gave up on (missing room or corrupt document)."
+	out := []metrics.Source{
+		{Name: "reconcile_lag_seconds", Help: "How far the effect workers run behind each effect's delay.", Gauge: true, Read: func() float64 { return stats().Lag.Seconds() }},
+		{Name: "work_processed_total", Help: "Work records acked after every effect ran.", Read: func() float64 { return float64(stats().Processed) }},
+		{Name: "work_failures_total", Help: "Work records sent back for retry after an effect failed.", Read: func() float64 { return float64(stats().Failed) }},
+	}
+	for _, name := range slices.Sorted(maps.Keys(counts)) {
+		c, labels := counts[name], map[string]string{"effect": name}
+		out = append(out,
+			metrics.Source{Name: "reconcile_republished_total", Help: republishHelp, Labels: labels, Read: func() float64 { return float64(c.republished()) }},
+			metrics.Source{Name: "effect_dropped_total", Help: dropHelp, Labels: labels, Read: func() float64 { return float64(c.dropped()) }},
+		)
+	}
+	return out
+}
+
+func readerSources(stats func() reconcile.Stats) []metrics.Source {
 	return []metrics.Source{
-		{Name: "reconcile_running", Help: "1 while this core runs a reader term.", Gauge: true, Read: func() float64 { return flag(stats().Running) }},
+		{Name: "reconcile_running", Help: "1 while this core runs the change reader.", Gauge: true, Read: func() float64 { return flag(stats().Running) }},
 		{Name: "reconcile_terms_total", Help: "Reader terms started on this core.", Read: func() float64 { return float64(stats().Terms) }},
-		{Name: "reconcile_forwarded_total", Help: "Changes the reader sent to the work stream.", Read: func() float64 { return float64(stats().Forwarded) }},
-		{Name: "reconcile_dropped_total", Help: "Changes that could not become work records.", Read: func() float64 { return float64(stats().Dropped) }},
+		{Name: "reconcile_forwarded_total", Help: "Committed changes the reader sent to the work stream.", Read: func() float64 { return float64(stats().Forwarded) }},
+		{Name: "reconcile_dropped_total", Help: "Corrupt changes the reader could not turn into work records.", Read: func() float64 { return float64(stats().Dropped) }},
 		{Name: "reconcile_history_lost_total", Help: "Times the change feed position fell out of the oplog.", Read: func() float64 { return float64(stats().HistoryLost) }},
 	}
 }
