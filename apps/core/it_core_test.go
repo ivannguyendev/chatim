@@ -49,6 +49,15 @@ func startCore(t *testing.T, it *itInfra, env map[string]string) itCore {
 	return itCore{cfg: cfg, started: started}
 }
 
+func (c itCore) awaitTerm(t *testing.T) {
+	t.Helper()
+	select {
+	case <-c.started:
+	case <-time.After(itLiveLimit):
+		t.Fatalf("no reconcile term started within %v", itLiveLimit)
+	}
+}
+
 func parseRoom(t *testing.T, roomID string) uint64 {
 	t.Helper()
 	room, err := ids.ParseRoomID(roomID)

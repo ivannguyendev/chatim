@@ -1,88 +1,95 @@
 package main
 
 import (
-	"context"
-	"log/slog"
-	"os"
-	"slices"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
-	"github.com/ivannguyendev/chatim/apps/core/internal/work"
 	"github.com/ivannguyendev/chatim/pkg/ids"
+	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-func TestRealInfraReaderForwardsWritesThatSkippedTheCore(t *testing.T) {
-	it := realInfra(t)
-	cfg := it.coreConfig(t, map[string]string{"CORE_DRAIN_DELAY": "200ms", "RECONCILE_DELAY": "2s", "PUB_ACK_TIMEOUT": "500ms"})
-	termStarted := make(chan struct{})
-	logger := slog.New(&termStartSignal{
-		Handler: slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}),
-		once:    &sync.Once{},
-		started: termStarted,
-	})
-	ctx, cancel := context.WithCancel(context.Background())
-	core := &running{done: make(chan struct{})}
-	go func() {
-		defer close(core.done)
-		core.err = run(ctx, cfg, logger)
-	}()
-	t.Cleanup(func() {
-		cancel()
-		<-core.done
-	})
-	awaitReady(t, cfg, core)
-	select {
-	case <-termStarted:
-	case <-time.After(30 * time.Second):
-		t.Fatalf("reader did not start a term within 30s")
-	}
+const itActivityPoll = 100 * time.Millisecond
 
-	roomID := createRoom(t, dialCore(t, cfg))
-	room, err := ids.ParseRoomID(roomID)
-	if err != nil {
-		t.Fatalf("ParseRoomID(%s): %v", roomID, err)
+func itStore(it *itInfra, c itCore) *mongostore.Store {
+	return mongostore.New(it.mongo.Database(c.cfg.MongoDB), mongostore.Options{})
+}
+
+func awaitActivity(t *testing.T, st *mongostore.Store, room, seq uint64) domain.Room {
+	t.Helper()
+	deadline := time.Now().Add(itLiveLimit)
+	for {
+		r, err := st.Get(t.Context(), room)
+		if err != nil {
+			t.Fatalf("Get(%d): %v", room, err)
+		}
+		if r.LastSeq >= seq {
+			return r
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("room %d last seq = %d after %v, want %d", room, r.LastSeq, itLiveLimit, seq)
+		}
+		time.Sleep(itActivityPoll)
 	}
+}
+
+func TestRealInfraWorkersPublishWritesThatSkippedTheCore(t *testing.T) {
+	it := realInfra(t)
+	core := startCore(t, it, itFastEffects)
+	roomID := createRoom(t, dialCore(t, core.cfg))
+	room := parseRoom(t, roomID)
+	live := subscribeLive(t, it, core.cfg, roomID)
+	core.awaitTerm(t)
 
 	inserted := time.Now()
-	outside := domain.Message{Room: room, Seq: 1, Tenant: itTenant, From: "migrator", Kind: domain.KindText, Text: "written outside the core", CID: "outside-1", CreatedAt: time.Now().UTC().Truncate(time.Millisecond)}
-	st := mongostore.New(it.mongo.Database(cfg.MongoDB), mongostore.Options{})
+	outside := domain.Message{
+		Room: room, Seq: 1, Tenant: itTenant, From: "migrator", Kind: domain.KindText, Text: "written outside the core",
+		CID: "outside-1", CreatedAt: time.Now().UTC().Truncate(time.Millisecond),
+	}
+	st := itStore(it, core)
 	if res := st.Insert(t.Context(), []domain.Message{outside}); res[0].Outcome != store.Inserted {
 		t.Fatalf("insert outside the core: %+v", res)
 	}
-
-	want := []string{
-		work.Record{Kind: store.RoomInserted, Room: room}.ID(),
-		work.Record{Kind: store.MessageInserted, Room: room, Seq: 1}.ID(),
+	awaitLiveIDs(t, live, inserted, pbconv.MessageEventID(room, 0, 1))
+	if got := awaitActivity(t, st, room, 1); got.LastMsgAt.IsZero() || got.LastChangeAt.Before(got.LastMsgAt) {
+		t.Fatalf("room activity = %+v, want last message and change times", got)
 	}
-	awaitRecords(t, it, cfg.Work.Name, want)
-	t.Logf("records %v reached the work stream %v after the insert", want, time.Since(inserted))
 }
 
-func awaitRecords(t *testing.T, it *itInfra, stream string, want []string) {
-	t.Helper()
-	deadline := time.Now().Add(30 * time.Second)
-	poll := time.NewTicker(250 * time.Millisecond)
-	defer poll.Stop()
-	seen := map[string]bool{}
-	for {
-		got := it.streamIDs(t, stream)
-		for id, n := range got {
-			if n > 0 {
-				seen[id] = true
-			}
-		}
-		missing := slices.DeleteFunc(slices.Clone(want), func(id string) bool { return seen[id] })
-		if len(missing) == 0 {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("work stream %s lacks %v 30s after the insert; has %v", stream, missing, got)
-		}
-		<-poll.C
+func TestRealInfraRoomCreatedComesFromTheFastPathAndTheWorkers(t *testing.T) {
+	it := realInfra(t)
+	core := startCore(t, it, itFastEffects)
+	live := subscribeLive(t, it, core.cfg, "*")
+
+	began := time.Now()
+	fast := createRoom(t, dialCore(t, core.cfg))
+	awaitLiveIDs(t, live, began, pbconv.RoomCreatedEventID(parseRoom(t, fast)))
+
+	core.awaitTerm(t)
+	created := time.Now().UTC().Truncate(time.Millisecond)
+	outside := domain.Room{ID: ids.NewRoomID(), Tenant: itTenant, Type: domain.RoomGroup, Name: "outside", CreatedBy: "migrator", CreatedAt: created, MemberCount: 1}
+	owner := domain.Member{Room: outside.ID, Tenant: itTenant, User: "migrator", Role: domain.RoleOwner, JoinedAt: created}
+	if err := itStore(it, core).Create(t.Context(), outside, []domain.Member{owner}); err != nil {
+		t.Fatalf("create a room outside the core: %v", err)
+	}
+	awaitLiveIDs(t, live, time.Now(), pbconv.RoomCreatedEventID(outside.ID))
+}
+
+func TestRealInfraSendMessageMovesRoomActivity(t *testing.T) {
+	it := realInfra(t)
+	core := startCore(t, it, itFastEffects)
+	client := dialCore(t, core.cfg)
+	roomID := createRoom(t, client)
+	room := parseRoom(t, roomID)
+	resp, err := client.SendMessage(caller(t.Context()), &chatimv1.SendMessageRequest{RoomId: roomID, Cid: "activity-1", Text: "moves the room"})
+	if err != nil {
+		t.Fatalf("SendMessage: %v", err)
+	}
+	got := awaitActivity(t, itStore(it, core), room, resp.GetSeq())
+	if got.LastSeq != resp.GetSeq() || got.LastMsgAt.IsZero() || got.LastChangeAt.IsZero() {
+		t.Fatalf("room activity = %+v, want last seq %d with message and change times", got, resp.GetSeq())
 	}
 }
