@@ -13,7 +13,7 @@ import (
 const (
 	LeaderSlot uint16 = 0
 
-	DefaultDelay        = 30 * time.Second
+	DefaultDelay        = 5 * time.Second
 	DefaultWindow       = 1024
 	DefaultBatch        = 256
 	DefaultConfirmEvery = time.Second

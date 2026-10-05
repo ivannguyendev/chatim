@@ -52,7 +52,7 @@ func TestLoadDefaults(t *testing.T) {
 		},
 		ReconcileEnabled: true,
 		Reconcile: reconcile.Config{
-			SubjectRoot: "evt", Delay: 30 * time.Second, DuplicateWindow: 5 * time.Minute, Window: 1024, Batch: 256,
+			SubjectRoot: "evt", Delay: 5 * time.Second, DuplicateWindow: 5 * time.Minute, Window: 1024, Batch: 256,
 			ConfirmEvery: time.Second, Drain: time.Second, Poll: time.Second, RoomCache: 65536,
 		},
 		AckMarks: eventmark.Config{TTL: time.Hour, Timeout: 100 * time.Millisecond, Cooldown: time.Second},

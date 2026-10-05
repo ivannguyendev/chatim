@@ -104,7 +104,7 @@ Toàn bộ đọc qua `apps/core/internal/config`; thiếu thì dùng giá trị
 | `SLOT_TICK`, `SLOT_HEARTBEAT_TTL`, `SLOT_LEASE_TTL`, `SLOT_HOOK_TIMEOUT` | `1s` / `5s` / `10s` / `Tick/2` | Nhịp slot manager; `HookTimeout` suy ra từ `SLOT_TICK` nếu không đặt riêng (D26) |
 | `EVT_ACK_MARK_TTL` | `1h` | TTL bitmap mark đã ack trên Redis dedupe, làm mới theo chunk 8192 tin; dùng chung `REDIS_OP_TIMEOUT`/`REDIS_COOLDOWN` (D52) |
 | `RECONCILE_ENABLED` | `true` | Bật reconciler; chỉ core giữ slot 0 chạy nó. Tắt thì publisher vẫn ghi mark (D52) |
-| `RECONCILE_DELAY` | `30s` | D: chỉ xử lý thay đổi đã commit lâu hơn D; phải ngắn hơn `EVT_STREAM_DUPLICATES` |
+| `RECONCILE_DELAY` | `5s` | D: chỉ xử lý thay đổi đã commit lâu hơn D; phải dài hơn `PUB_ACK_TIMEOUT` + 10ms + 1s (cửa sổ và timeout của mark) và ngắn hơn `EVT_STREAM_DUPLICATES`; với mặc định 5s, `PUB_ACK_TIMEOUT` phải dưới khoảng 3,99s |
 | `RECONCILE_WINDOW`, `RECONCILE_BATCH` | `1024` / `256` | Số publish đang bay tối đa của reconciler (JetStream client riêng); số thay đổi tra mark trong một lần |
 | `RECONCILE_CONFIRM_EVERY` | `1s` | Nhịp lưu vị trí đã xác nhận và kiểm lại slot 0; reconciler không chặn lâu hơn mức này mà không qua bước đó |
 | `RECONCILE_DRAIN` | `1s` | Lúc dừng: chờ publish đang bay rồi lưu vị trí lần cuối; bước dừng reconciler chiếm `RECONCILE_DRAIN + 1s` |

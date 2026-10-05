@@ -20,7 +20,7 @@ import (
 
 func TestRealInfraReconcilerPublishesWritesThatSkippedTheCore(t *testing.T) {
 	it := realInfra(t)
-	cfg := it.coreConfig(t, map[string]string{"CORE_DRAIN_DELAY": "200ms", "RECONCILE_DELAY": "1s"})
+	cfg := it.coreConfig(t, map[string]string{"CORE_DRAIN_DELAY": "200ms", "RECONCILE_DELAY": "2s", "PUB_ACK_TIMEOUT": "500ms"})
 	termStarted := make(chan struct{})
 	logger := slog.New(&termStartSignal{
 		Handler: slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}),
