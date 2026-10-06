@@ -19,6 +19,7 @@ type reactionKey struct {
 type Reactions struct {
 	mu   sync.RWMutex
 	docs map[reactionKey]domain.Reaction
+	log  *Messages
 }
 
 func NewReactions() *Reactions { return &Reactions{docs: make(map[reactionKey]domain.Reaction)} }
@@ -43,6 +44,7 @@ func (s *Reactions) Set(ctx context.Context, r domain.Reaction) (domain.Reaction
 	next := r
 	next.Prev, next.N = cur.Emoji, cur.N+1
 	s.docs[k] = next
+	s.logChange(next)
 	return next, true, nil
 }
 
@@ -63,6 +65,7 @@ func (s *Reactions) Remove(ctx context.Context, key store.MsgKey, user string, a
 	next := cur
 	next.Prev, next.Emoji, next.N, next.At = cur.Emoji, "", cur.N+1, at
 	s.docs[k] = next
+	s.logChange(next)
 	return next, true, nil
 }
 
@@ -74,4 +77,10 @@ func (s *Reactions) Get(ctx context.Context, key store.MsgKey, user string) (dom
 	defer s.mu.RUnlock()
 	cur, ok := s.docs[reactionKey{key: key, user: user}]
 	return cur, ok, nil
+}
+
+func (s *Reactions) logChange(r domain.Reaction) {
+	if s.log != nil {
+		s.log.appendFact(logged{kind: store.ReactionChanged, reaction: r})
+	}
 }

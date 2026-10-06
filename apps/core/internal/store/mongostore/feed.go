@@ -64,11 +64,16 @@ func (f *Feed) Open(ctx context.Context) (store.Cursor, error) {
 }
 
 func feedPipeline() mongo.Pipeline {
-	match := bson.D{
+	facts := bson.A{messagesCollection, roomsCollection, editsCollection, reactionsCollection, pinActionsCollection}
+	inserts := bson.D{
 		{Key: "operationType", Value: "insert"},
-		{Key: "ns.coll", Value: bson.D{{Key: "$in", Value: bson.A{messagesCollection, roomsCollection, editsCollection}}}},
+		{Key: "ns.coll", Value: bson.D{{Key: "$in", Value: facts}}},
 	}
-	return mongo.Pipeline{{{Key: "$match", Value: match}}}
+	reactionChanges := bson.D{
+		{Key: "operationType", Value: bson.D{{Key: "$in", Value: bson.A{"update", "replace"}}}},
+		{Key: "ns.coll", Value: reactionsCollection},
+	}
+	return mongo.Pipeline{{{Key: "$match", Value: bson.D{{Key: "$or", Value: bson.A{inserts, reactionChanges}}}}}}
 }
 
 func (f *Feed) Forget(ctx context.Context) error {

@@ -17,6 +17,7 @@ var _ store.Pins = (*Pins)(nil)
 type Pins struct {
 	mu    sync.RWMutex
 	facts map[uint64][]domain.PinAction
+	log   *Messages
 }
 
 func NewPins() *Pins { return &Pins{facts: make(map[uint64][]domain.PinAction)} }
@@ -36,6 +37,9 @@ func (s *Pins) Append(ctx context.Context, a domain.PinAction) error {
 		return fmt.Errorf("append pin v%d of room %d: %w", a.PV, a.Room, store.ErrPinExists)
 	}
 	s.facts[a.Room] = slices.Insert(line, i, a)
+	if s.log != nil {
+		s.log.appendFact(logged{kind: store.PinInserted, pin: a})
+	}
 	return nil
 }
 

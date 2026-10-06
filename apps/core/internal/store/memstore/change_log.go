@@ -8,12 +8,20 @@ import (
 )
 
 type logged struct {
-	kind store.ChangeKind
-	msg  domain.Message
-	room domain.Room
-	edit domain.Edit
-	at   time.Time
+	kind     store.ChangeKind
+	msg      domain.Message
+	room     domain.Room
+	edit     domain.Edit
+	reaction domain.Reaction
+	pin      domain.PinAction
+	at       time.Time
 }
+
+type FeedOption func(log *Messages)
+
+func WithReactions(r *Reactions) FeedOption { return func(log *Messages) { r.attach(log) } }
+
+func WithPins(p *Pins) FeedOption { return func(log *Messages) { p.attach(log) } }
 
 func (s *Messages) appendLog(l logged) {
 	l.at = time.Now()
@@ -50,6 +58,18 @@ func (s *Rooms) attach(log *Messages) {
 }
 
 func (s *Edits) attach(log *Messages) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.log = log
+}
+
+func (s *Reactions) attach(log *Messages) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.log = log
+}
+
+func (s *Pins) attach(log *Messages) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.log = log

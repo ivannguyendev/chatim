@@ -45,3 +45,17 @@ func TestPinsContract(t *testing.T) {
 		return memstore.NewRooms(), memstore.NewPins()
 	})
 }
+
+func TestReactionFeedContract(t *testing.T) {
+	storetest.RunReactionFeed(t, func(*testing.T) (store.Reactions, store.ChangeFeed) {
+		reactions := memstore.NewReactions()
+		return reactions, memstore.NewFeed(memstore.NewMessages(), nil, nil, memstore.WithReactions(reactions))
+	})
+}
+
+func TestPinFeedContract(t *testing.T) {
+	storetest.RunPinFeed(t, func(*testing.T) (store.Pins, store.ChangeFeed) {
+		pins := memstore.NewPins()
+		return pins, memstore.NewFeed(memstore.NewMessages(), nil, nil, memstore.WithPins(pins))
+	})
+}

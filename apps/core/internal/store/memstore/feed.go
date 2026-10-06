@@ -20,12 +20,15 @@ type Feed struct {
 	lost      bool
 }
 
-func NewFeed(msgs *Messages, rooms *Rooms, edits *Edits) *Feed {
+func NewFeed(msgs *Messages, rooms *Rooms, edits *Edits, opts ...FeedOption) *Feed {
 	if rooms != nil {
 		rooms.attach(msgs)
 	}
 	if edits != nil {
 		edits.attach(msgs)
+	}
+	for _, opt := range opts {
+		opt(msgs)
 	}
 	return &Feed{msgs: msgs, confirmed: msgs.logLen(), known: true}
 }
@@ -86,7 +89,10 @@ func (c *cursor) Next(ctx context.Context) (store.Change, error) {
 		l, grew, ok := c.feed.msgs.logAt(c.next)
 		if ok {
 			c.next++
-			return store.Change{Kind: l.kind, Msg: l.msg, Room: l.room, Edit: l.edit, CommittedAt: l.at, Position: store.Position(strconv.Itoa(c.next))}, nil
+			return store.Change{
+				Kind: l.kind, Msg: l.msg, Room: l.room, Edit: l.edit, Reaction: l.reaction, Pin: l.pin,
+				CommittedAt: l.at, Position: store.Position(strconv.Itoa(c.next)),
+			}, nil
 		}
 		select {
 		case <-grew:

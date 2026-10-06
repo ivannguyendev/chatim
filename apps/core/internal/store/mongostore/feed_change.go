@@ -10,15 +10,26 @@ import (
 )
 
 type changeDoc struct {
-	Token        bson.Raw       `bson:"_id"`
-	ClusterTime  bson.Timestamp `bson:"clusterTime"`
-	WallTime     time.Time      `bson:"wallTime"`
-	NS           changeNS       `bson:"ns"`
-	FullDocument bson.Raw       `bson:"fullDocument"`
+	Token             bson.Raw       `bson:"_id"`
+	OperationType     string         `bson:"operationType"`
+	ClusterTime       bson.Timestamp `bson:"clusterTime"`
+	WallTime          time.Time      `bson:"wallTime"`
+	NS                changeNS       `bson:"ns"`
+	DocumentKey       changeKey      `bson:"documentKey"`
+	FullDocument      bson.Raw       `bson:"fullDocument"`
+	UpdateDescription changeUpdate   `bson:"updateDescription"`
 }
 
 type changeNS struct {
 	Coll string `bson:"coll"`
+}
+
+type changeKey struct {
+	ID bson.RawValue `bson:"_id"`
+}
+
+type changeUpdate struct {
+	UpdatedFields bson.Raw `bson:"updatedFields"`
 }
 
 func decodeChange(ev changeDoc) (store.Change, error) {
@@ -53,6 +64,10 @@ func decodeChange(ev changeDoc) (store.Change, error) {
 			return store.Change{}, err
 		}
 		return store.Change{Kind: store.EditInserted, Edit: e, CommittedAt: ev.WallTime}, nil
+	case reactionsCollection:
+		return decodeReactionChange(ev)
+	case pinActionsCollection:
+		return decodePinChange(ev)
 	default:
 		return store.Change{}, fmt.Errorf("%w: change on collection %q", errCorrupt, ev.NS.Coll)
 	}

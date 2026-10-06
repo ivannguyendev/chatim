@@ -22,3 +22,19 @@ func TestMongoEditFeedContract(t *testing.T) {
 		return s, NewFeed(db)
 	})
 }
+
+func TestMongoReactionFeedContract(t *testing.T) {
+	client := itClient(t)
+	storetest.RunReactionFeed(t, func(t *testing.T) (store.Reactions, store.ChangeFeed) {
+		s, db := itStore(t, client)
+		return s.Reactions(), NewFeed(db)
+	})
+}
+
+func TestMongoPinFeedContract(t *testing.T) {
+	client := itClient(t)
+	storetest.RunPinFeed(t, func(t *testing.T) (store.Pins, store.ChangeFeed) {
+		s, db := itStore(t, client)
+		return s.Pins(), NewFeed(db)
+	})
+}
