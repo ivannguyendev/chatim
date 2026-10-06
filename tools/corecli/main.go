@@ -21,9 +21,12 @@ commands:
   hide          hide a message for the caller only
   clear         hide the history up to a seq for the caller only
   edits         list the edit history of a message
+  react         set or change the caller's reaction on a message (-emoji "" removes it)
+  pin           pin a message in its room
+  unpin         unpin a message
   watch         print live events of a room from NATS
   slots         show how live cores share the slots
-  e2e           end-to-end scenario steps: setup, send, change, check
+  e2e           end-to-end scenario steps: setup, send, change, react-pin, check
 
 run "corecli <command> -h" for the flags of a command`
 
@@ -41,6 +44,9 @@ func realMain(args []string) int {
 		"hide":        hideCmd,
 		"clear":       clearCmd,
 		"edits":       editsCmd,
+		"react":       reactCmd,
+		"pin":         pinCmd,
+		"unpin":       unpinCmd,
 		"watch":       watchCmd,
 		"slots":       slotsCmd,
 		"e2e":         e2eCmd,

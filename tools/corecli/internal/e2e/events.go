@@ -18,12 +18,15 @@ type Event struct {
 	ID      string `json:"id"`
 	Seq     uint64 `json:"seq"`
 	CID     string `json:"cid"`
+	User    string `json:"user,omitempty"`
 	Version uint32 `json:"version,omitempty"`
 	Text    string `json:"text,omitempty"`
 	Subject string `json:"subject,omitempty"`
 }
 
 func (e Event) IsChange() bool { return e.Kind == KindEdited || e.Kind == KindDeleted }
+
+func (e Event) IsCreated() bool { return e.Kind == "" || e.Kind == KindCreated }
 
 func EventOf(subject string, ev *chatimv1.Event) (Event, bool) {
 	if created := ev.GetMessageCreated(); created != nil {
@@ -35,7 +38,7 @@ func EventOf(subject string, ev *chatimv1.Event) (Event, bool) {
 	if deleted := ev.GetMessageDeleted(); deleted != nil {
 		return changeOf(subject, ev, KindDeleted, deleted.GetMessage(), deleted.GetVersion()), true
 	}
-	return Event{}, false
+	return markOf(subject, ev)
 }
 
 func changeOf(subject string, ev *chatimv1.Event, kind string, m *chatimv1.Message, version uint32) Event {

@@ -34,7 +34,7 @@ finish() {
   fi
   rm -rf "$state"
   if [ "$result" = PASS ]; then
-    echo "e2e PASS: $first messages before and $after after killing $victim, no loss, no duplicate, every acked seq live; seq 1 edited and seq 2 deleted on history, edit history and live"
+    echo "e2e PASS: $first messages before and $after after killing $victim, no loss, no duplicate, every acked seq live; seq 1 edited and seq 2 deleted on history, edit history and live; seq 3 reacted then re-reacted and seq 4 pinned on replies, history and live"
     exit 0
   fi
   echo "e2e FAIL during: $step" >&2
@@ -94,5 +94,11 @@ step="phase 3 edit seq 1 and delete seq 2"
 echo "phase 3: edit seq 1, delete seq 2 (base version 0)"
 cli e2e change -state /state -edit 1 -delete 2
 step="phase 3 check"
+cli e2e check -state /state
+
+step="phase 4 react to seq 3 and pin seq 4"
+echo "phase 4: react to seq 3, change the emoji, pin seq 4"
+cli e2e react-pin -state /state -react 3 -pin 4
+step="phase 4 check"
 cli e2e check -state /state
 result=PASS

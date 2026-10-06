@@ -75,7 +75,7 @@ func CheckEvents(acks []Ack, room string, events []Event) (Coverage, error) {
 	seen := make(map[uint64]bool, len(acks))
 	var cov Coverage
 	for _, ev := range events {
-		if ev.IsChange() {
+		if !ev.IsCreated() {
 			continue
 		}
 		a, known := bySeq[ev.Seq]
