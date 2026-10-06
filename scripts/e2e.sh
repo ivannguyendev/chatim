@@ -34,7 +34,7 @@ finish() {
   fi
   rm -rf "$state"
   if [ "$result" = PASS ]; then
-    echo "e2e PASS: $first messages before and $after after killing $victim, no loss, no duplicate, every acked seq live"
+    echo "e2e PASS: $first messages before and $after after killing $victim, no loss, no duplicate, every acked seq live; seq 1 edited and seq 2 deleted on history, edit history and live"
     exit 0
   fi
   echo "e2e FAIL during: $step" >&2
@@ -89,4 +89,10 @@ step="restart $owner"
 restore
 step="both cores share the slots again"
 cli slots -cores 2 -wait 60s
+
+step="phase 3 edit seq 1 and delete seq 2"
+echo "phase 3: edit seq 1, delete seq 2 (base version 0)"
+cli e2e change -state /state -edit 1 -delete 2
+step="phase 3 check"
+cli e2e check -state /state
 result=PASS

@@ -16,9 +16,14 @@ commands:
   create-room   create a room through any live core
   send          send one message to the core serving the room
   history       read one history page of a room
+  edit          edit a message (-base: the version you saw)
+  delete        delete a message for everyone (-base: the version you saw)
+  hide          hide a message for the caller only
+  clear         hide the history up to a seq for the caller only
+  edits         list the edit history of a message
   watch         print live events of a room from NATS
   slots         show how live cores share the slots
-  e2e           end-to-end scenario steps: setup, send, check
+  e2e           end-to-end scenario steps: setup, send, change, check
 
 run "corecli <command> -h" for the flags of a command`
 
@@ -31,6 +36,11 @@ func realMain(args []string) int {
 		"create-room": createRoomCmd,
 		"send":        sendCmd,
 		"history":     historyCmd,
+		"edit":        editCmd,
+		"delete":      deleteCmd,
+		"hide":        hideCmd,
+		"clear":       clearCmd,
+		"edits":       editsCmd,
 		"watch":       watchCmd,
 		"slots":       slotsCmd,
 		"e2e":         e2eCmd,
