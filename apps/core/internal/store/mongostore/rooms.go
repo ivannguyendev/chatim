@@ -44,7 +44,8 @@ func (s *Store) Get(ctx context.Context, id uint64) (domain.Room, error) {
 		return domain.Room{}, fmt.Errorf("get room %d: %w", id, domain.ErrRoomNotFound)
 	}
 	var d roomDoc
-	if err := findOne(ctx, s.rooms, bson.D{{Key: "_id", Value: key}}, &d, domain.ErrRoomNotFound); err != nil {
+	withoutPins := options.FindOne().SetProjection(bson.D{{Key: "pins", Value: 0}, {Key: "pv", Value: 0}})
+	if err := findOne(ctx, s.rooms, bson.D{{Key: "_id", Value: key}}, &d, domain.ErrRoomNotFound, withoutPins); err != nil {
 		return domain.Room{}, fmt.Errorf("get room %d: %w", id, err)
 	}
 	return decodeRoom(d)
@@ -63,8 +64,8 @@ func (s *Store) Member(ctx context.Context, room uint64, user string) (domain.Me
 	return decodeMember(d)
 }
 
-func findOne(ctx context.Context, coll *mongo.Collection, filter bson.D, out any, missing error) error {
-	err := coll.FindOne(ctx, filter).Decode(out)
+func findOne(ctx context.Context, coll *mongo.Collection, filter bson.D, out any, missing error, opts ...options.Lister[options.FindOneOptions]) error {
+	err := coll.FindOne(ctx, filter, opts...).Decode(out)
 	if errors.Is(err, mongo.ErrNoDocuments) {
 		return missing
 	}

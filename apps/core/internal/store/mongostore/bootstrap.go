@@ -14,7 +14,7 @@ import (
 )
 
 func Bootstrap(ctx context.Context, db *mongo.Database) error {
-	for _, name := range []string{messagesCollection, editsCollection} {
+	for _, name := range []string{messagesCollection, editsCollection, reactionsCollection, pinActionsCollection} {
 		if err := ensureClustered(ctx, db, name); err != nil {
 			return err
 		}
@@ -30,8 +30,10 @@ func Bootstrap(ctx context.Context, db *mongo.Database) error {
 	}{
 		{membersCollection, memberIndexes()},
 		{roomsCollection, roomIndexes()},
-		{editsCollection, editIndexes()},
+		{editsCollection, roomTimeIndexes()},
 		{hiddenCollection, hiddenIndexes()},
+		{reactionsCollection, reactionIndexes()},
+		{pinActionsCollection, roomTimeIndexes()},
 	}
 	for _, ix := range indexes {
 		if err := ensureIndexes(ctx, db, ix.coll, ix.models); err != nil {
@@ -113,8 +115,12 @@ func roomIndexes() []mongo.IndexModel {
 	return []mongo.IndexModel{{Keys: bson.D{{Key: "ab", Value: 1}}}, {Keys: bson.D{{Key: "ca", Value: 1}}}}
 }
 
-func editIndexes() []mongo.IndexModel {
+func roomTimeIndexes() []mongo.IndexModel {
 	return []mongo.IndexModel{{Keys: bson.D{{Key: "r", Value: 1}, {Key: "ts", Value: 1}}}}
+}
+
+func reactionIndexes() []mongo.IndexModel {
+	return append([]mongo.IndexModel{{Keys: bson.D{{Key: "k", Value: 1}, {Key: "e", Value: 1}}}}, roomTimeIndexes()...)
 }
 
 func hiddenIndexes() []mongo.IndexModel {
