@@ -27,8 +27,8 @@ func TestHistoryReturnsReactionCountsButNotOnPlaceholders(t *testing.T) {
 	react(bob, 1, "👍")
 	react(carol, 1, "👍")
 	react(alice, 1, "❤️")
-	react(bob, 2, "🎉")
-	react(bob, 3, "👀")
+	react(bob, 2, "😂")
+	react(bob, 3, "😮")
 	if _, err := rg.client.DeleteMessage(alice, &chatimv1.DeleteMessageRequest{RoomId: room, Seq: 2}); err != nil {
 		t.Fatalf("DeleteMessage: %v", err)
 	}
@@ -36,7 +36,7 @@ func TestHistoryReturnsReactionCountsButNotOnPlaceholders(t *testing.T) {
 		t.Fatalf("HideMessage: %v", err)
 	}
 	first := pbconv.ReactionSummary(domain.ReactionSummary{Counts: []domain.ReactionCount{{Emoji: "👍", Count: 2}, {Emoji: "❤️", Count: 1}}, Version: 3})
-	third := pbconv.ReactionSummary(domain.ReactionSummary{Counts: []domain.ReactionCount{{Emoji: "👀", Count: 1}}, Version: 1})
+	third := pbconv.ReactionSummary(domain.ReactionSummary{Counts: []domain.ReactionCount{{Emoji: "😮", Count: 1}}, Version: 1})
 	cases := []struct {
 		name string
 		ctx  context.Context

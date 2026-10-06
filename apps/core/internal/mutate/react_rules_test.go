@@ -36,26 +36,26 @@ func (c *scriptedCounter) Touch(ctx context.Context, k store.MsgKey, cur domain.
 	return c.inner.Touch(ctx, k, cur, ws, tries)
 }
 
-func TestTheEmojiLimitCountsDistinctEmojisOfAMessage(t *testing.T) {
+func TestReactAcceptsOnlyTheConfiguredEmojis(t *testing.T) {
 	rg := newRig(t, nil)
 	d := rg.deps(t, nil)
-	d.Limits = mutate.Limits{MaxEmojis: 2}
+	d.Limits = mutate.Limits{Emojis: []string{"👍", "🎉"}}
 	rg.m = rg.build(t, d)
 	rg.send(t, 1, "alice", "hi")
-	rg.send(t, 2, "alice", "ho")
-	rg.mustReact(t, react("alice", 1, "👍"))
-	rg.mustReact(t, react("bob", 1, "❤️"))
-	if _, err := rg.m.React(t.Context(), react("carol", 1, "😂")); !errors.Is(err, domain.ErrTooManyEmojis) || !errors.Is(err, apperr.ErrFailedPrecondition) {
-		t.Fatalf("third emoji = %v, want ErrTooManyEmojis", err)
+	if _, err := rg.m.React(t.Context(), react("bob", 1, "❤️")); !errors.Is(err, domain.ErrEmojiNotAllowed) || !errors.Is(err, apperr.ErrInvalidArgument) {
+		t.Fatalf("unlisted emoji = %v, want ErrEmojiNotAllowed", err)
 	}
-	if _, found := rg.reaction(t, 1, "carol"); found {
-		t.Fatalf("a refused emoji was written")
+	if _, err := rg.m.React(t.Context(), react("mallory", 9, "❤️")); !errors.Is(err, domain.ErrEmojiNotAllowed) {
+		t.Fatalf("unlisted emoji from a stranger on an unknown message = %v, want ErrEmojiNotAllowed before any read", err)
 	}
-	got := rg.mustReact(t, react("carol", 1, "👍"))
-	if got.Reactions.Version != 3 || !slices.Contains(got.Reactions.Counts, domain.ReactionCount{Emoji: "👍", Count: 2}) {
-		t.Fatalf("known emoji at the limit = %+v, want 👍 counted twice at version 3", got)
+	if _, found := rg.reaction(t, 1, "bob"); found {
+		t.Fatalf("an unlisted emoji was written")
 	}
-	rg.mustReact(t, react("carol", 2, "😂"))
+	rg.mustReact(t, react("bob", 1, "🎉"))
+	rg.mustReact(t, react("carol", 1, "👍"))
+	if got := rg.mustReact(t, react("bob", 1, "")); got.Change != 2 || !sameSummary(got.Reactions, counts(3, domain.ReactionCount{Emoji: "👍", Count: 1})) {
+		t.Fatalf("removal = %+v, want change 2 leaving 👍 once at version 3", got)
+	}
 }
 
 func TestReactRejectsBadInputBeforeWriting(t *testing.T) {
@@ -73,6 +73,7 @@ func TestReactRejectsBadInputBeforeWriting(t *testing.T) {
 		{"not utf-8", react("bob", 1, "\xff"), apperr.ErrInvalidArgument},
 		{"thread", threaded, apperr.ErrInvalidArgument},
 		{"zero seq", react("bob", 0, "👍"), apperr.ErrInvalidArgument},
+		{"unlisted emoji", react("bob", 1, "🎉"), domain.ErrEmojiNotAllowed},
 		{"unknown message", react("bob", 9, "👍"), domain.ErrMessageNotFound},
 		{"stranger", react("mallory", 1, "👍"), domain.ErrNotMember},
 	}
@@ -150,26 +151,5 @@ func TestReactAsksThePolicyButIgnoresLockedKinds(t *testing.T) {
 	locked.send(t, 1, "alice", "hi")
 	if got := locked.mustReact(t, react("bob", 1, "👍")); got.Change != 1 {
 		t.Fatalf("React on a locked kind = %+v, want it allowed (D94)", got)
-	}
-}
-
-func TestLimitsFillDefaultsAndCheckBounds(t *testing.T) {
-	cases := []struct {
-		limits mutate.Limits
-		ok     bool
-	}{
-		{mutate.Limits{}, true},
-		{mutate.Limits{MaxEmojis: mutate.MaxEmojisCap, PinLimit: mutate.MaxPinLimit}, true},
-		{mutate.Limits{MaxEmojis: 1, PinLimit: 1}, true},
-		{mutate.Limits{MaxEmojis: mutate.MaxEmojisCap + 1}, false},
-		{mutate.Limits{PinLimit: mutate.MaxPinLimit + 1}, false},
-		{mutate.Limits{MaxEmojis: -1}, false},
-		{mutate.Limits{PinLimit: -1}, false},
-	}
-	for _, c := range cases {
-		err := c.limits.Validate()
-		if (err == nil) != c.ok || (err != nil && !errors.Is(err, apperr.ErrInvalidArgument)) {
-			t.Fatalf("%+v.Validate() = %v, want ok=%v", c.limits, err, c.ok)
-		}
 	}
 }

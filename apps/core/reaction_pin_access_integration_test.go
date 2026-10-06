@@ -77,7 +77,7 @@ func TestRealInfraDeletedMessagesTakeNoNewReactionOrPin(t *testing.T) {
 		t.Fatalf("DeleteMessage: %v", err)
 	}
 
-	if _, err := client.ReactMessage(bob, &chatimv1.ReactMessageRequest{RoomId: roomID, Seq: seq, Emoji: "🎉"}); status.Code(err) != codes.FailedPrecondition {
+	if _, err := client.ReactMessage(bob, &chatimv1.ReactMessageRequest{RoomId: roomID, Seq: seq, Emoji: "❤️"}); status.Code(err) != codes.FailedPrecondition {
 		t.Fatalf("react on a deleted message = %v, want FailedPrecondition", err)
 	}
 	if _, err := client.PinMessage(caller(t.Context()), &chatimv1.PinMessageRequest{RoomId: roomID, Seq: seq}); status.Code(err) != codes.FailedPrecondition {

@@ -72,7 +72,7 @@ func (c Config) componentErrors() []error {
 		{"SLOT_*, CORE_ID", c.Slot.Validate()},
 		{"EVT_ACK_MARK_TTL, REDIS_OP_TIMEOUT, REDIS_COOLDOWN", c.AckMarks.Validate()},
 		{"WORK_*, SLOT_TICK", c.Effects.Validate()},
-		{"REACTION_MAX_EMOJIS, PIN_LIMIT", c.Limits.Validate()},
+		{"REACTION_EMOJIS, PIN_LIMIT", c.Limits.Validate()},
 	}
 	if c.ReconcileEnabled {
 		parts = append(parts, struct {

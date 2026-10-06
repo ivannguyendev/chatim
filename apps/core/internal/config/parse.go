@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -91,6 +92,13 @@ func (p *parser) list(key string) []string {
 		}
 	}
 	return items
+}
+
+func (p *parser) listOr(key string, def []string) []string {
+	if items := p.list(key); len(items) > 0 {
+		return items
+	}
+	return slices.Clone(def)
 }
 
 func (p *parser) kinds(key string) []domain.Kind {

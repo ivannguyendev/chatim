@@ -64,7 +64,7 @@ func TestLoadDefaults(t *testing.T) {
 		EffectRoomCache:    65536,
 		Effects:            effects.Config{Partitions: 32, FetchBatch: 256, FetchWait: time.Second, RetryDelay: 5 * time.Second, Drain: time.Second, Poll: time.Second},
 		AckMarks:           eventmark.Config{TTL: time.Hour, Timeout: 100 * time.Millisecond, Cooldown: time.Second},
-		Limits:             mutate.Limits{MaxEmojis: 20, PinLimit: 50},
+		Limits:             mutate.Limits{Emojis: mutate.DefaultEmojis, PinLimit: 50},
 		ReactionCountDelay: time.Second,
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -112,7 +112,7 @@ func TestLoadOverrides(t *testing.T) {
 		Effects:            effects.Config{Partitions: 16, FetchBatch: 64, FetchWait: 500 * time.Millisecond, RetryDelay: 2 * time.Second, Drain: 500 * time.Millisecond, Poll: 500 * time.Millisecond},
 		AckMarks:           eventmark.Config{TTL: 30 * time.Minute, Timeout: 50 * time.Millisecond, Cooldown: 2 * time.Second},
 		LockedMessageKinds: []domain.Kind{domain.KindText},
-		Limits:             mutate.Limits{MaxEmojis: 30, PinLimit: 10},
+		Limits:             mutate.Limits{Emojis: []string{"🎉", "👍"}, PinLimit: 10},
 		ReactionCountDelay: 2 * time.Second,
 	}
 	if !reflect.DeepEqual(got, want) {

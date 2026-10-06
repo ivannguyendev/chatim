@@ -35,13 +35,16 @@ func (m *Mutator) React(ctx context.Context, c ReactCmd) (ReactResult, error) {
 		if err := domain.ValidateEmoji(c.Emoji); err != nil {
 			return ReactResult{}, err
 		}
+		if !slices.Contains(m.d.Limits.Emojis, c.Emoji) {
+			return ReactResult{}, domain.ErrEmojiNotAllowed
+		}
 	}
 	grant, msg, err := m.target(ctx, access.ReactMessage, c.Tenant, c.User, key)
 	if err != nil {
 		return ReactResult{}, err
 	}
-	if err := m.canReact(msg, c.Emoji); err != nil {
-		return ReactResult{}, err
+	if c.Emoji != "" && msg.Deleted {
+		return ReactResult{}, domain.ErrMessageDeleted
 	}
 	doc, changed, err := m.writeReaction(ctx, c, key)
 	if err != nil {
@@ -55,19 +58,7 @@ func (m *Mutator) React(ctx context.Context, c ReactCmd) (ReactResult, error) {
 	return ReactResult{Change: doc.N, Reactions: summary}, nil
 }
 
-func (m *Mutator) canReact(msg domain.Message, emoji string) error {
-	if emoji == "" {
-		return nil
-	}
-	if msg.Deleted {
-		return domain.ErrMessageDeleted
-	}
-	known := slices.ContainsFunc(msg.Reactions.Counts, func(rc domain.ReactionCount) bool { return rc.Emoji == emoji })
-	if !known && len(msg.Reactions.Counts) >= m.d.Limits.MaxEmojis {
-		return domain.ErrTooManyEmojis
-	}
-	return nil
-}
+func (m *Mutator) ReactionEmojis() []string { return slices.Clone(m.d.Limits.Emojis) }
 
 func (m *Mutator) writeReaction(ctx context.Context, c ReactCmd, key store.MsgKey) (domain.Reaction, bool, error) {
 	if c.Emoji == "" {

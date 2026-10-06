@@ -14,8 +14,8 @@ var (
 	ErrMessageNotFound = fmt.Errorf("message %w", apperr.ErrNotFound)
 	ErrMessageDeleted  = fmt.Errorf("message deleted: %w", apperr.ErrFailedPrecondition)
 	ErrVersionConflict = fmt.Errorf("message version conflict: %w", apperr.ErrFailedPrecondition)
-	ErrTooManyEmojis   = fmt.Errorf("too many reaction emojis: %w", apperr.ErrFailedPrecondition)
 	ErrTooManyPins     = fmt.Errorf("too many pinned messages: %w", apperr.ErrFailedPrecondition)
+	ErrEmojiNotAllowed = fmt.Errorf("emoji not allowed: %w", apperr.ErrInvalidArgument)
 )
 
 func CheckTenant(room Room, tenant string) error {

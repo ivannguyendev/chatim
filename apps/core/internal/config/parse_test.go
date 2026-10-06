@@ -2,6 +2,7 @@ package config_test
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -62,7 +63,6 @@ func TestLoadRejectsNonPositiveValues(t *testing.T) {
 		{"SLOT_HEARTBEAT_TTL", "0s"},
 		{"SLOT_LEASE_TTL", "0s"},
 		{"SLOT_HOOK_TIMEOUT", "0s"},
-		{"REACTION_MAX_EMOJIS", "0"},
 		{"PIN_LIMIT", "0"},
 		{"REACTION_COUNT_DELAY", "0s"},
 	}
@@ -100,5 +100,48 @@ func TestLoadRejectsAnUnknownLockedMessageKind(t *testing.T) {
 	_, err := config.Load()
 	if err == nil || !strings.Contains(err.Error(), "MESSAGE_LOCKED_KINDS") || !strings.Contains(err.Error(), "nope") {
 		t.Fatalf("Load() = %v, want an error naming MESSAGE_LOCKED_KINDS and nope", err)
+	}
+}
+
+func TestLoadReadsReactionEmojis(t *testing.T) {
+	tests := []struct {
+		value string
+		want  []string
+	}{
+		{"", []string{"👍", "❤️", "😂", "😮", "😢", "🙏"}},
+		{" , ", []string{"👍", "❤️", "😂", "😮", "😢", "🙏"}},
+		{" 🎉 , 👍 ,", []string{"🎉", "👍"}},
+	}
+	for _, tt := range tests {
+		setEnv(t, map[string]string{"REACTION_EMOJIS": tt.value})
+		got, err := config.Load()
+		if err != nil || !slices.Equal(got.Limits.Emojis, tt.want) {
+			t.Fatalf("REACTION_EMOJIS=%q gives %q, %v; want %q", tt.value, got.Limits.Emojis, err, tt.want)
+		}
+	}
+}
+
+func TestLoadRejectsBadReactionEmojis(t *testing.T) {
+	var many []string
+	for i := range 101 {
+		many = append(many, "e"+strconv.Itoa(i))
+	}
+	tests := []struct {
+		value, bad string
+	}{
+		{"👍,❤️,👍", "👍"},
+		{"👍," + strings.Repeat("x", 33), strings.Repeat("x", 33)},
+		{strings.Join(many, ","), "101"},
+	}
+	for _, tt := range tests {
+		setEnv(t, map[string]string{"REACTION_EMOJIS": tt.value})
+		_, err := config.Load()
+		if err == nil || !strings.Contains(err.Error(), "REACTION_EMOJIS") || !strings.Contains(err.Error(), tt.bad) {
+			t.Fatalf("REACTION_EMOJIS=%q: Load() = %v, want an error naming REACTION_EMOJIS and %q", tt.value, err, tt.bad)
+		}
+	}
+	setEnv(t, map[string]string{"REACTION_EMOJIS": strings.Join(many[:100], ",")})
+	if _, err := config.Load(); err != nil {
+		t.Fatalf("100 emojis: Load() = %v, want nil", err)
 	}
 }

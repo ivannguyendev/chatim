@@ -93,7 +93,7 @@ func TestNewRequiresEveryDependency(t *testing.T) {
 		"no pins":       func(d *mutate.Deps) { d.Pins = nil },
 		"no projector":  func(d *mutate.Deps) { d.Projector = nil },
 		"bad pin limit": func(d *mutate.Deps) { d.Limits = mutate.Limits{PinLimit: mutate.MaxPinLimit + 1} },
-		"bad limits":    func(d *mutate.Deps) { d.Limits = mutate.Limits{MaxEmojis: mutate.MaxEmojisCap + 1} },
+		"no emojis":     func(d *mutate.Deps) { d.Limits = mutate.Limits{Emojis: []string{}} },
 	} {
 		d := full
 		drop(&d)

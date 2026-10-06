@@ -114,8 +114,8 @@ func Load() (Config, error) {
 		ShutdownBudget:      p.span("CORE_SHUTDOWN_BUDGET", 28*time.Second),
 		LockedMessageKinds:  p.kinds("MESSAGE_LOCKED_KINDS"),
 		Limits: mutate.Limits{
-			MaxEmojis: p.count("REACTION_MAX_EMOJIS", mutate.DefaultMaxEmojis),
-			PinLimit:  p.count("PIN_LIMIT", mutate.DefaultPinLimit),
+			Emojis:   p.listOr("REACTION_EMOJIS", mutate.DefaultEmojis),
+			PinLimit: p.count("PIN_LIMIT", mutate.DefaultPinLimit),
 		},
 	}
 	c.AdvertiseAddr = p.advertiseAddr(c.CoreID, c.GRPCAddr)

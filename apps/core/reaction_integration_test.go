@@ -16,7 +16,7 @@ import (
 
 const itReactors = 24
 
-var itEmojis = []string{"👍", "🎉", "❤️"}
+var itEmojis = []string{"👍", "😂", "❤️"}
 
 func itReactorNames() []string {
 	users := []string{itUser}
@@ -69,7 +69,7 @@ func TestRealInfraWorkersPublishReactionChangesWrittenOutsideTheCore(t *testing.
 	steps := []struct {
 		n           uint32
 		emoji, prev string
-	}{{1, "👍", ""}, {2, "🎉", "👍"}, {3, "", "🎉"}}
+	}{{1, "👍", ""}, {2, "😂", "👍"}, {3, "", "😂"}}
 	for _, step := range steps {
 		n := step.n
 		at := time.Now().UTC().Truncate(time.Millisecond)

@@ -75,9 +75,7 @@ func TestLoadValidation(t *testing.T) {
 		{"zero cid batch queue", map[string]string{"CID_BATCH_QUEUE": "0"}, "CID_BATCH_QUEUE"},
 		{"reaction count delay above the reconcile delay", map[string]string{"REACTION_COUNT_DELAY": "5001ms"}, "REACTION_COUNT_DELAY must be positive and at most RECONCILE_DELAY"},
 		{"reaction count delay at the reconcile delay", map[string]string{"REACTION_COUNT_DELAY": "5s"}, ""},
-		{"emoji limit above the cap", map[string]string{"REACTION_MAX_EMOJIS": "101"}, "REACTION_MAX_EMOJIS, PIN_LIMIT"},
-		{"emoji limit at the cap", map[string]string{"REACTION_MAX_EMOJIS": "100"}, ""},
-		{"pin limit above the cap", map[string]string{"PIN_LIMIT": "1001"}, "REACTION_MAX_EMOJIS, PIN_LIMIT"},
+		{"pin limit above the cap", map[string]string{"PIN_LIMIT": "1001"}, "REACTION_EMOJIS, PIN_LIMIT"},
 		{"pin limit at the cap", map[string]string{"PIN_LIMIT": "1000"}, ""},
 		{"stop phases overflow", map[string]string{
 			"CORE_DRAIN_DELAY": "1000000h", "CORE_GRPC_SHUTDOWN": "1000000h", "CORE_PUBLISHER_DRAIN": "1000000h",
