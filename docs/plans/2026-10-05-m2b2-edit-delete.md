@@ -9397,4 +9397,13 @@ Lỗi Minor còn mở:
 
 Kiểm chứng trong lúc làm: `itest` xanh ở T4, T6, T11, T12, T14, T14b (T5 và T9 mỗi task fail một lần do itest flaky ở trên, chạy lại xanh); `make e2e` PASS trên 2 core ở T13 (phase 3 sửa seq 1, xoá seq 2, 2 event đổi); T15 `make alerts-check`: `SUCCESS: 15 rules found`, hai biểu thức `reconcile_republished_total`/`effect_dropped_total` như M2b.1.
 
-Kiểm chứng cuối (Task 16): chưa chạy; điền khi chạy theo mẫu ở Task 16 Step 9.
+Kiểm chứng cuối (Task 16, 2026-10-06, trên `5c892d6`):
+- `make fmt-check`, `make vet`, `make lint` (`0 issues.`) sạch; `make vuln`: `Your code is affected by 0 vulnerabilities` (kèm 1 lỗ hổng cấp module không được gọi, có từ trước).
+- `make test`: mọi package `ok` (40 package), gồm `mutate`, `view`, `effects`, `work`, `resync`, `store/...`, `tools/internal/route`, `tools/corecli/internal/e2e`.
+- `make itest`: không chạy lại; lần xanh cuối ở T14b (`23e1531`), sau đó chỉ đổi docs (`5c892d6`).
+- `make e2e`: `e2e PASS: 40 messages before and 40 after killing core-1, no loss, no duplicate, every acked seq live; seq 1 edited and seq 2 deleted on history, edit history and live` (phase 3: sửa seq 1, xoá seq 2 qua core-2, mỗi lệnh 1 lần thử, 2 event đổi trên live).
+- `/metrics` hai core: `reconcile_running` 1 ở core-1, 0 ở core-2; `reconcile_republished_total{effect="msg_changed"}` 0 + 0 (fast path đã publish cả hai thay đổi); `effect_dropped_total{effect="msg_changed"|"edit_projection"}` 0 cả hai core; `work_failures_total` 0 cả hai core; `work_processed_total` 2 + 83; `reconcile_republished_total{effect="room_created"}` 0 + 3 (đúng thiết kế: `room_created` không có mark, stream bỏ trùng theo id).
+- `make alerts-check`: `SUCCESS: 15 rules found`.
+- resync dry-run (15 phút): `resync rooms=6 room_records=5 message_records=80 edit_records=2 dry_run=true`, exit 0.
+- corebench 1000/s 30s: `sends due=30000 sent=30000 acked=30000 failed=0`; live 20 room `received=591 of acked=591 missing=0 duplicates=0`; p99 ack 42.8ms (p50 11.6ms), pacer lag p99 7.0ms; CPU_Speed_Limit 100 trước và sau.
+- Mức sẵn sàng: `dev-done` trên `feat/m2b` (chưa merge `main`; merge một lần sau M2b.4).
