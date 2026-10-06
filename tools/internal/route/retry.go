@@ -51,6 +51,15 @@ func attempt[T any](ctx context.Context, c *Client, pick func() (string, bool), 
 	return do(ctx, api)
 }
 
+func inRoom[T any](ctx context.Context, c *Client, roomID string, do rpc[T]) (T, Stats, error) {
+	pick, err := c.roomRoute(roomID)
+	if err != nil {
+		var zero T
+		return zero, Stats{}, err
+	}
+	return call(ctx, c, pick, retryIdempotent, do)
+}
+
 func retryUnavailable(code codes.Code) bool { return code == codes.Unavailable }
 
 func retryIdempotent(code codes.Code) bool {

@@ -84,21 +84,13 @@ func (c *Client) CreateRoom(ctx context.Context, req *chatimv1.CreateRoomRequest
 }
 
 func (c *Client) SendMessage(ctx context.Context, req *chatimv1.SendMessageRequest) (*chatimv1.SendMessageResponse, Stats, error) {
-	pick, err := c.roomRoute(req.GetRoomId())
-	if err != nil {
-		return nil, Stats{}, err
-	}
-	return call(ctx, c, pick, retryIdempotent, func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.SendMessageResponse, error) {
+	return inRoom(ctx, c, req.GetRoomId(), func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.SendMessageResponse, error) {
 		return api.SendMessage(ctx, req)
 	})
 }
 
 func (c *Client) GetHistory(ctx context.Context, req *chatimv1.GetHistoryRequest) (*chatimv1.GetHistoryResponse, Stats, error) {
-	pick, err := c.roomRoute(req.GetRoomId())
-	if err != nil {
-		return nil, Stats{}, err
-	}
-	return call(ctx, c, pick, retryIdempotent, func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.GetHistoryResponse, error) {
+	return inRoom(ctx, c, req.GetRoomId(), func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.GetHistoryResponse, error) {
 		return api.GetHistory(ctx, req)
 	})
 }
