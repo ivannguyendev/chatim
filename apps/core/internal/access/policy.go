@@ -3,6 +3,7 @@ package access
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
@@ -26,6 +27,7 @@ type Request struct {
 	Action Action
 	User   string
 	Author string
+	Kind   domain.Kind
 	Room   domain.Room
 	Member domain.Member
 }
@@ -42,10 +44,15 @@ type AllowMembers struct{}
 
 func (AllowMembers) Check(context.Context, Request) error { return nil }
 
-type DefaultPolicy struct{}
+type DefaultPolicy struct {
+	LockedKinds []domain.Kind
+}
 
-func (DefaultPolicy) Check(_ context.Context, req Request) error {
-	if (req.Action == EditMessage || req.Action == DeleteMessage) && req.Author != req.User {
+func (p DefaultPolicy) Check(_ context.Context, req Request) error {
+	if req.Action != EditMessage && req.Action != DeleteMessage {
+		return nil
+	}
+	if slices.Contains(p.LockedKinds, req.Kind) || req.Author != req.User {
 		return ErrDenied
 	}
 	return nil

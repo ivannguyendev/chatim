@@ -88,6 +88,7 @@ func (m *Mutator) target(ctx context.Context, action access.Action, tenant, user
 		return access.Request{}, domain.Message{}, err
 	}
 	req.Author = msg.From
+	req.Kind = msg.Kind
 	if err := m.d.Access.Allow(ctx, req); err != nil {
 		return access.Request{}, domain.Message{}, err
 	}

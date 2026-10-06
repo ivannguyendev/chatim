@@ -117,6 +117,7 @@ Toàn bộ đọc qua `apps/core/internal/config`; thiếu thì dùng giá trị
 | `RECONCILE_CONFIRM_EVERY` | `1s` | Nhịp lưu vị trí đã xác nhận (prefix record work stream đã ack) và kiểm lại slot 0; `WORK_DUPLICATES` phải dài hơn `RECONCILE_CONFIRM_EVERY + RECONCILE_DRAIN` |
 | `RECONCILE_DRAIN` | `1s` | Lúc dừng: chờ publish đang bay rồi lưu vị trí lần cuối; bước dừng reader chiếm `RECONCILE_DRAIN + 1s` |
 | `RECONCILE_ROOM_CACHE` | `65536` | Số room giữ `room_type` trong cache của effect `msg_created` |
+| `MESSAGE_LOCKED_KINDS` | (rỗng) | Danh sách loại tin, cách nhau bằng dấu phẩy, mà policy mặc định không cho ai sửa/xoá, kể cả tác giả; tên hợp lệ: `text`; tên lạ thì core không khởi động (D87) |
 
 ## Cổng
 

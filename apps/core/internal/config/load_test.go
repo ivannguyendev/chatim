@@ -9,6 +9,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
+	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/effects"
 	"github.com/ivannguyendev/chatim/apps/core/internal/eventmark"
 	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
@@ -103,10 +104,11 @@ func TestLoadOverrides(t *testing.T) {
 			SubjectRoot: "work_it", Partitions: 16, Window: 64, Batch: 32,
 			ConfirmEvery: 2 * time.Second, Drain: 500 * time.Millisecond, Poll: 500 * time.Millisecond,
 		},
-		EffectDelay:     20 * time.Second,
-		EffectRoomCache: 128,
-		Effects:         effects.Config{Partitions: 16, FetchBatch: 64, FetchWait: 500 * time.Millisecond, RetryDelay: 2 * time.Second, Drain: 500 * time.Millisecond, Poll: 500 * time.Millisecond},
-		AckMarks:        eventmark.Config{TTL: 30 * time.Minute, Timeout: 50 * time.Millisecond, Cooldown: 2 * time.Second},
+		EffectDelay:        20 * time.Second,
+		EffectRoomCache:    128,
+		Effects:            effects.Config{Partitions: 16, FetchBatch: 64, FetchWait: 500 * time.Millisecond, RetryDelay: 2 * time.Second, Drain: 500 * time.Millisecond, Poll: 500 * time.Millisecond},
+		AckMarks:           eventmark.Config{TTL: 30 * time.Minute, Timeout: 50 * time.Millisecond, Cooldown: 2 * time.Second},
+		LockedMessageKinds: []domain.Kind{domain.KindText},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Load() =\n%#v\nwant\n%#v", got, want)

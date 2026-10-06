@@ -6,14 +6,15 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
+	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/grpcsrv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
 )
 
-func wireService(st *mongostore.Store, router *actor.Router, pub *publish.Publisher, log *slog.Logger) (*grpcsrv.Service, error) {
-	checker, err := access.NewChecker(st, nil)
+func wireService(st *mongostore.Store, router *actor.Router, pub *publish.Publisher, lockedKinds []domain.Kind, log *slog.Logger) (*grpcsrv.Service, error) {
+	checker, err := access.NewChecker(st, access.DefaultPolicy{LockedKinds: lockedKinds})
 	if err != nil {
 		return nil, fmt.Errorf("wire access checker: %w", err)
 	}

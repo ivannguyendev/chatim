@@ -1,10 +1,26 @@
 package domain
 
-import "time"
+import (
+	"fmt"
+	"time"
+
+	"github.com/ivannguyendev/chatim/pkg/apperr"
+)
 
 type Kind uint8
 
 const KindText Kind = 1
+
+var kindNames = map[string]Kind{
+	"text": KindText,
+}
+
+func ParseKind(name string) (Kind, error) {
+	if k, ok := kindNames[name]; ok {
+		return k, nil
+	}
+	return 0, fmt.Errorf("%w: unknown message kind %q", apperr.ErrInvalidArgument, name)
+}
 
 type Message struct {
 	Room      uint64

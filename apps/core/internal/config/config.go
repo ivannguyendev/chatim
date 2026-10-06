@@ -7,6 +7,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
+	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/effects"
 	"github.com/ivannguyendev/chatim/apps/core/internal/eventmark"
 	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
@@ -63,6 +64,7 @@ type Config struct {
 	EffectRoomCache     int
 	Effects             effects.Config
 	AckMarks            eventmark.Config
+	LockedMessageKinds  []domain.Kind
 }
 
 type StopPlan struct {
@@ -107,6 +109,7 @@ func Load() (Config, error) {
 		GRPCShutdown:        p.span("CORE_GRPC_SHUTDOWN", 5*time.Second),
 		PublisherDrain:      p.span("CORE_PUBLISHER_DRAIN", 5*time.Second),
 		ShutdownBudget:      p.span("CORE_SHUTDOWN_BUDGET", 28*time.Second),
+		LockedMessageKinds:  p.kinds("MESSAGE_LOCKED_KINDS"),
 	}
 	c.AdvertiseAddr = p.advertiseAddr(c.CoreID, c.GRPCAddr)
 	p.components(&c)

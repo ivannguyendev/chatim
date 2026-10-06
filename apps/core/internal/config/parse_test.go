@@ -1,10 +1,12 @@
 package config_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
+	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 )
 
 func TestLoadJoinsAllParseErrors(t *testing.T) {
@@ -69,5 +71,31 @@ func TestLoadRejectsNonPositiveValues(t *testing.T) {
 				t.Fatalf("Load() with %s=%s = %v, want an error naming %s", tt.key, tt.value, err, tt.key)
 			}
 		})
+	}
+}
+
+func TestLoadReadsLockedMessageKinds(t *testing.T) {
+	tests := []struct {
+		value string
+		want  []domain.Kind
+	}{
+		{"", nil},
+		{" text , ", []domain.Kind{domain.KindText}},
+		{",text,,text", []domain.Kind{domain.KindText, domain.KindText}},
+	}
+	for _, tt := range tests {
+		setEnv(t, map[string]string{"MESSAGE_LOCKED_KINDS": tt.value})
+		got, err := config.Load()
+		if err != nil || !slices.Equal(got.LockedMessageKinds, tt.want) {
+			t.Fatalf("MESSAGE_LOCKED_KINDS=%q gives %v, %v; want %v", tt.value, got.LockedMessageKinds, err, tt.want)
+		}
+	}
+}
+
+func TestLoadRejectsAnUnknownLockedMessageKind(t *testing.T) {
+	setEnv(t, map[string]string{"MESSAGE_LOCKED_KINDS": "text,nope"})
+	_, err := config.Load()
+	if err == nil || !strings.Contains(err.Error(), "MESSAGE_LOCKED_KINDS") || !strings.Contains(err.Error(), "nope") {
+		t.Fatalf("Load() = %v, want an error naming MESSAGE_LOCKED_KINDS and nope", err)
 	}
 }
