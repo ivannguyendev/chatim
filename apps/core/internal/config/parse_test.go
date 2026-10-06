@@ -62,6 +62,9 @@ func TestLoadRejectsNonPositiveValues(t *testing.T) {
 		{"SLOT_HEARTBEAT_TTL", "0s"},
 		{"SLOT_LEASE_TTL", "0s"},
 		{"SLOT_HOOK_TIMEOUT", "0s"},
+		{"REACTION_MAX_EMOJIS", "0"},
+		{"PIN_LIMIT", "0"},
+		{"REACTION_COUNT_DELAY", "0s"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.key, func(t *testing.T) {

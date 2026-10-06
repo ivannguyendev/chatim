@@ -11,6 +11,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/effects"
 	"github.com/ivannguyendev/chatim/apps/core/internal/eventmark"
 	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
+	"github.com/ivannguyendev/chatim/apps/core/internal/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/reconcile"
 	"github.com/ivannguyendev/chatim/apps/core/internal/slot"
@@ -65,6 +66,8 @@ type Config struct {
 	Effects             effects.Config
 	AckMarks            eventmark.Config
 	LockedMessageKinds  []domain.Kind
+	Limits              mutate.Limits
+	ReactionCountDelay  time.Duration
 }
 
 type StopPlan struct {
@@ -110,6 +113,10 @@ func Load() (Config, error) {
 		PublisherDrain:      p.span("CORE_PUBLISHER_DRAIN", 5*time.Second),
 		ShutdownBudget:      p.span("CORE_SHUTDOWN_BUDGET", 28*time.Second),
 		LockedMessageKinds:  p.kinds("MESSAGE_LOCKED_KINDS"),
+		Limits: mutate.Limits{
+			MaxEmojis: p.count("REACTION_MAX_EMOJIS", mutate.DefaultMaxEmojis),
+			PinLimit:  p.count("PIN_LIMIT", mutate.DefaultPinLimit),
+		},
 	}
 	c.AdvertiseAddr = p.advertiseAddr(c.CoreID, c.GRPCAddr)
 	p.components(&c)
