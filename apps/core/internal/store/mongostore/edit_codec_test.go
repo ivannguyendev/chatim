@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"math"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -103,7 +104,7 @@ func TestMessageCodecCarriesEditStateButNotTheHiddenFlag(t *testing.T) {
 		t.Fatalf("decodeMessage = %+v, %v; want %+v", got, err, stored)
 	}
 	got.CreatedAt, got.EditedAt = stored.CreatedAt, stored.EditedAt
-	if got != stored {
+	if !reflect.DeepEqual(got, stored) {
 		t.Fatalf("decoded %+v, want %+v", got, stored)
 	}
 }

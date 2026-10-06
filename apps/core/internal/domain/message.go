@@ -36,4 +36,5 @@ type Message struct {
 	Deleted   bool
 	EditedAt  time.Time
 	Hidden    bool
+	Reactions ReactionSummary
 }

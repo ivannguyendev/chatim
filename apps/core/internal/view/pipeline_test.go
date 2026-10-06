@@ -1,6 +1,7 @@
 package view_test
 
 import (
+	"reflect"
 	"slices"
 	"testing"
 
@@ -27,7 +28,7 @@ func TestCollapseRetriedKeepsTheLowestSeqOfEachSend(t *testing.T) {
 	if want := []uint64{4, 5, 6, 7, 8}; !slices.Equal(seqs(got), want) {
 		t.Fatalf("seqs = %v, want %v", seqs(got), want)
 	}
-	if !slices.Equal(page, before) {
+	if !reflect.DeepEqual(page, before) {
 		t.Fatalf("input page was modified")
 	}
 }

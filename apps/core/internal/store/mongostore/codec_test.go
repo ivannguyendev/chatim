@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"math"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -71,7 +72,7 @@ func TestMessageCodecRoundTrip(t *testing.T) {
 		t.Fatalf("CreatedAt = %v, want %v", got.CreatedAt, m.CreatedAt)
 	}
 	got.CreatedAt = m.CreatedAt
-	if got != m {
+	if !reflect.DeepEqual(got, m) {
 		t.Fatalf("decoded %+v, want %+v", got, m)
 	}
 }

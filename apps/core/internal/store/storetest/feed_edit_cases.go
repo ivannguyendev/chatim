@@ -17,7 +17,7 @@ func RunEditFeed(t *testing.T, open func(t *testing.T) (store.Edits, store.Chang
 		got := nextChanges(t, cur, len(want))
 		facts := make([]domain.Edit, len(got))
 		for i, c := range got {
-			if c.Kind != store.EditInserted || c.Msg != (domain.Message{}) || c.Room != (domain.Room{}) {
+			if c.Kind != store.EditInserted || c.Msg.Seq != 0 || c.Room != (domain.Room{}) {
 				t.Fatalf("change %d = %+v, want only an edit", i, c)
 			}
 			facts[i] = c.Edit

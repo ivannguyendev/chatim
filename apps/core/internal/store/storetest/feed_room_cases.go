@@ -39,7 +39,7 @@ func assertChangedRoom(t *testing.T, c store.Change, want domain.Room) {
 	got := c.Room
 	gotAt, wantAt := got.CreatedAt, want.CreatedAt
 	got.CreatedAt, want.CreatedAt = time.Time{}, time.Time{}
-	if got != want || !gotAt.Equal(wantAt) || c.Msg != (domain.Message{}) {
+	if got != want || !gotAt.Equal(wantAt) || c.Msg.Seq != 0 {
 		t.Fatalf("room change = %+v at %v with message %+v, want %+v at %v and no message", got, gotAt, c.Msg, want, wantAt)
 	}
 }

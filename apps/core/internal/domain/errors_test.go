@@ -21,6 +21,8 @@ func TestDomainErrorsWrapAppKinds(t *testing.T) {
 		{domain.ErrMessageNotFound, apperr.ErrNotFound},
 		{domain.ErrMessageDeleted, apperr.ErrFailedPrecondition},
 		{domain.ErrVersionConflict, apperr.ErrFailedPrecondition},
+		{domain.ErrTooManyEmojis, apperr.ErrFailedPrecondition},
+		{domain.ErrTooManyPins, apperr.ErrFailedPrecondition},
 	}
 	for _, tt := range tests {
 		t.Run(tt.err.Error(), func(t *testing.T) {

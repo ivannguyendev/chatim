@@ -1,6 +1,7 @@
 package view_test
 
 import (
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -23,10 +24,10 @@ func TestMaskDeletedDropsOnlyTheTextOfDeletedMessages(t *testing.T) {
 	before := slices.Clone(page)
 	want := slices.Clone(page)
 	want[1].Text = ""
-	if got := view.MaskDeleted(view.Viewer{User: "bob"}, page); !slices.Equal(got, want) {
+	if got := view.MaskDeleted(view.Viewer{User: "bob"}, page); !reflect.DeepEqual(got, want) {
 		t.Fatalf("masked = %+v, want %+v", got, want)
 	}
-	if !slices.Equal(page, before) {
+	if !reflect.DeepEqual(page, before) {
 		t.Fatalf("input page was modified")
 	}
 }
@@ -42,10 +43,10 @@ func TestHideForViewerHidesClearedAndHiddenSeqs(t *testing.T) {
 			t.Fatalf("message %d = %+v, want hidden=%v with seq and cid kept", i, m, hidden)
 		}
 	}
-	if !slices.Equal(page, before) {
+	if !reflect.DeepEqual(page, before) {
 		t.Fatalf("input page was modified")
 	}
-	if got := view.HideForViewer(view.Viewer{}, page); !slices.Equal(got, page) {
+	if got := view.HideForViewer(view.Viewer{}, page); !reflect.DeepEqual(got, page) {
 		t.Fatalf("zero viewer hid %+v", got)
 	}
 }
