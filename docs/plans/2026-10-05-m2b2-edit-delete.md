@@ -9346,3 +9346,55 @@ type Report struct {
 6. `make e2e` ở Task 13 cần image core có Task 9–11; e2e phase 3 chỉ dựa vào fast path (event từ `mutate`), không cần worker, nên chạy được ngay sau Task 9.
 7. itest (d) dựa vào hai RPC tới gần đồng thời; mọi cách xen kẽ đều cho một thắng + một `FAILED_PRECONDITION` (base lệch hoặc trùng khoá khác text), nên không flaky theo thời điểm.
 
+---
+
+## Kết quả thực thi
+
+Commit từng task (nhánh `feat/m2b`):
+
+- Chuẩn bị: `7013b3f` plan; `bffdf68` archive hồ sơ phản biện sau báo cáo tổng hợp (docs của owner); `c9998f4` sửa plan theo D86 (quyền sửa/xoá do policy quyết, mặc định chỉ tác giả). T0: baseline `fmt-check`/`vet`/`lint`/`test` xanh.
+- T1 `861dfbb` domain; T2 `48ae3f4` proto + pbconv + kind publish; T3 `bef148e` port store + memstore + `storetest`; T4 `7261aca` mongostore.
+- T5 `7868cbc` feed `EditInserted`; T6 `0d17035` `work.Record` 37 byte + reader chuyển `EditInserted`.
+- T7 `f2a2a6d` access (`DefaultPolicy`, `Admit`/`Allow`, `Author`), `bc9f830` mutate sửa/xoá + `pbconv` event đổi; T8 `cbc8314` mutate ẩn/clear.
+- T9 `10f55d6` grpcsrv 5 RPC + `service_wiring.go`; T10 `d29c6ac` `view.MaskDeleted`/`HideForViewer` + viewer trong `GetHistory`.
+- T11 `089a25f` effect `edit_projection` + `msg_changed` + metric; T12 `7237d7a` resync quét `message_edits`.
+- T13 `5ef7bd8` route, `87bfd85` corecli + e2e phase 3; T14 `d06b9a9` itest sửa/xoá/ẩn/clear, `999fcfd` sửa itest flaky (xem dưới).
+- T14b `23e1531` (owner thêm 2026-10-06, D87): `domain.ParseKind`, `access.Request.Kind`, `DefaultPolicy.LockedKinds`, `mutate` gắn `Kind` của tin đích, config `MESSAGE_LOCKED_KINDS`, chỉ checker của `mutate` nhận, dòng README.
+- T15 commit docs này.
+
+Quyết định của owner trong lúc làm:
+
+- 2026-10-05 (D86): quyền trên một tin chỉ do `access.Policy` quyết; mặc định chỉ tác giả sửa/xoá; owner/moderator thuộc module policy Phase 2.
+- 2026-10-05 (D85): ẩn và clear history không phát event; đồng bộ đa thiết bị ở M3/M4.
+- 2026-10-06 (D87): core không chặn cứng sửa/xoá theo loại tin (vd. tin hệ thống); config `MESSAGE_LOCKED_KINDS` quyết, mặc định không khoá. Thêm Task 14b, sau Task 14. Trả lời câu hỏi Minor T7 "mutate không kiểm `msg.Kind`".
+
+Lệch so với plan:
+
+- T4: đuôi cột decisions của dòng `mongostore` trong `INDEXES.csv` khác chỗ plan trích (thật: `D9;D10;D21;D35;D52;D76;D69`) → gộp.
+- T6: `record.go` 126 dòng, plan ước ≤ 125.
+- T7: test và code viết cùng lúc; bước red kiểm lại sau (lỗi quy trình, code không lệch).
+- T9, T14: dòng `grpcsrv` (cột purpose) và `apps/core` (cột tests) của `INDEXES.csv` giờ có ngoặc kép vì chứa dấu phẩy.
+- T10: bước red của test `grpcsrv` mới fail lúc chạy chứ không lúc biên dịch (RPC đã có từ T9); lý do đúng như mong đợi.
+- T12: `editPage = store.MaxEditScan` (plan cho phép).
+- T14: thêm commit `999fcfd` ngoài plan để sửa itest flaky.
+- T15: thêm dòng `D85` vào cột decisions của `grpcsrv` (T10 bỏ sót); thêm D87 vào thiết kế, roadmap, `CLAUDE.md`, `INDEXES.csv`; mục M5 của roadmap cập nhật luôn ở T15.
+
+Lỗi đã biết, đã sửa:
+
+- `TestRealInfraSendMessageMovesRoomActivity` flaky (thấy ở T5, T9; ~1/25 lần chạy riêng, ~1/4 lần chạy cả `itest`; tái hiện ở `10f55d6`, không do M2b.2). Nguyên nhân: core test mới khởi động còn đang chia slot, `SendMessage` nhận `Unavailable` "room actor retired after its slot moved: retry later" (đường D77), test coi lỗi retry được là lỗi chết. Sửa `999fcfd` (chỉ test): `sendRetrying` gửi lại cùng cid khi `Unavailable`, tối đa 5s, như `tools/internal/route`; 15/15 lần xanh, đường retry chạy một lần.
+
+Lỗi Minor còn mở:
+
+1. T4: Mongo `ClearHistory` từ chối seq > `MaxInt64`, memstore nhận (chưa test); `HiddenIn` trả rỗng với đầu vào ngoài khoảng (cả hai adapter); `ApplyEdit` trả nil cả khi version cũ lẫn khi tin không còn (mutate phải kiểm tồn tại trước); `e.At` bằng 0 lưu thành năm 1 (mutator luôn đặt `At`); phép đổi `to` trong `HiddenIn` khó đọc; `Between` cùng `ts` dựa vào `_id` trong sort (đúng).
+2. T6: record 33 byte còn tồn trong work stream sau khi deploy bị `Queue` Term như bản ghi hỏng (`BadRecordsError`, đếm vào metric failures). Chưa có dữ liệu prod; khi có thì xả work stream trước khi nâng cấp hoặc `/app resync` khoảng đó.
+3. T7: `Edit` kiểm text trước khoá (cả hai `ErrInvalidArgument`); retry chỉ được nhận khi version hiện tại = `base+1` (tác giả sửa tiếp giữa lúc mất ack và lúc retry → `ErrVersionConflict`, phạm vi D63); `matches()` bỏ qua tenant (`Admit` đã ghim); `New` đòi `Hidden`/`Rooms` dù `Edit`/`Delete` không dùng; `Find` lại sau commit lỗi thì trả lỗi dù fact đã commit (retry idempotent).
+4. T9: `GetEditHistory` chỉ xem cờ `Deleted` của projection, nên giữa lúc insert fact xoá và projection (core chết; `edit_projection` delay 0 sửa) lịch sử còn trả text; member dò được seq có tồn tại (theo spec); chưa test giới hạn `limit`/phân trang của `GetEditHistory`.
+5. T11: vì Minor 1 (`ApplyEdit` nil khi tin không còn), nhánh `ErrMessageNotFound` của `edit_projection` không bao giờ chạy; fact mồ côi chỉ được đếm khi `msg_changed` drop sau `RECONCILE_DELAY` (fact xoá vẫn dọn text mồ côi). `msg_changed` làm `At` + `Find` cho từng record, chưa gom theo room (đủ ở 100–300 lệnh/s; cần gom khi xả backlog). Thiếu test: `edit_projection` drop khi fact hỏng/không còn; lỗi projection → `Nak` cùng lượt; thứ tự registry `EditInserted` trong `apps/core`. Record v1 retry publish snapshot hiện tại (vd. v3) dưới id v1 là đúng thiết kế (D83), không "sửa".
+6. T12: resync trả `ErrEditPageFull` khi một thời điểm có ≥ 1000 fact sửa của một room (chỉ báo lỗi, chưa phân trang theo `_id`).
+7. T13: CLI chỉ in `failed precondition` khi base cũ (lỗi sentinel, theo thiết kế).
+8. T14b: `ParseKind` phân biệt hoa thường; tên lặp trong `MESSAGE_LOCKED_KINDS` được giữ (vô hại); `MESSAGE_LOCKED_KINDS` không có trong `Config.LogValue`.
+9. File gần 200 dòng (lần sửa sau phải tách): `effects/harness_test.go` 199; `mongostore/codec_test.go` 191; `mongostore/bootstrap_integration_test.go` 188; `resync/scan_test.go` 182; `mongostore/codec.go` 181; `grpcsrv/harness_test.go` 181.
+
+Kiểm chứng trong lúc làm: `itest` xanh ở T4, T6, T11, T12, T14, T14b (T5 và T9 mỗi task fail một lần do itest flaky ở trên, chạy lại xanh); `make e2e` PASS trên 2 core ở T13 (phase 3 sửa seq 1, xoá seq 2, 2 event đổi); T15 `make alerts-check`: `SUCCESS: 15 rules found`, hai biểu thức `reconcile_republished_total`/`effect_dropped_total` như M2b.1.
+
+Kiểm chứng cuối (Task 16): chưa chạy; điền khi chạy theo mẫu ở Task 16 Step 9.

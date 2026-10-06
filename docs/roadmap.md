@@ -15,17 +15,17 @@
 | 1 | M0–M2a.3 — Nền tảng, PoC dev, gửi tin + lịch sử | Monorepo, Go qua Docker, hạ tầng dev; slot ownership mềm; PoC R1–R5 trên dev; `CreateRoom`/`SendMessage`/`GetHistory` qua gRPC, actor + flusher, chống trùng cid 3 tầng gom giữa các room, ack trước Commit; event best-effort với id tự nhiên; reconciler từ change stream của `messages` + ack mark bitmap; 2 core trong compose; corebench và bench-cell | ✅ `dev-done`, đã merge vào `main` (PR #2, #5, #8–#11) |
 | 1 | **M2b.0 — Nền cơ chế** | Sửa lỗi mark của publisher (mark theo event id + loại, D65); `RECONCILE_DELAY` theo effect, `msg_created` ~5s; actor tự rút khi va doc core khác + retry backoff/jitter (D77); reader pipeline + permission hook, áp vào `GetHistory` (thiết kế §9.2); detector/alert cho guarantee đang có RC1–RC5, CD1–CD3 (D76); contract test: mọi write method của adapter là insert unique, CAS, upsert hoặc bump version | ✅ `dev-done` (trên `feat/m2b`, chưa merge `main`) — [plan](plans/2026-10-05-m2b0-mechanism-foundations.md); gồm `GET /metrics` và 13 luật alert (D78) |
 | 1 | M2b.1 — Effect engine | Reader trên slot 0 → JetStream work stream theo slot, id tự nhiên, worker ở mọi core, vị trí xác nhận theo work stream (D66); registry effect + chính sách (D65); chuyển reconcile `msg_created` sang engine; `room_created` là effect mới đầu tiên; room activity (`last_seq`, `last_msg_at`, `last_change_at`, `act_bucket`, ghi gom, D69); công cụ resync thủ công + diễn tập; đo xả backlog | ✅ `dev-done` (trên `feat/m2b`, chưa merge `main`) — [plan](plans/2026-10-05-m2b1-effect-engine.md); work stream 32 partition, worker mọi core, `room_created`, room activity, `/app resync`, 15 luật alert (D79–D81) |
-| 1 | M2b.2 — Sửa + xoá | Fact `message_edits` + projection `messages` (D62); `base_ver`, `prev` ở v1 (D63); ack sau projection (D64); delay xoá 2–3s; hợp đồng xoá (D75); `GetEditHistory`; quyền sửa/xoá do `access.Policy` quyết (mặc định chỉ tác giả, D86); ẩn phía tôi (`hidden` thưa) và clear history (`cleared_before_seq`) qua reader pipeline; index `{room, ts}` (D70) | ⏭ Tiếp theo — [plan](plans/2026-10-05-m2b2-edit-delete.md) sẵn sàng |
-| 1 | M2b.3 — Reaction + ghim | Tập reaction `{k, emoji, u}` + `n` (D68); counter recount CAS-ver (D67); `pin_actions` + `base_pv` + kiểm ≤50 pin trước commit; event cho SysMsg (cid `sys:{event_id}`) | Chưa |
+| 1 | M2b.2 — Sửa + xoá | Fact `message_edits` + projection `messages` (D62); `base_ver`, `prev` ở v1 (D63); ack sau projection (D64); delay xoá 2–3s; hợp đồng xoá (D75); `GetEditHistory`; quyền sửa/xoá do `access.Policy` quyết (mặc định chỉ tác giả, D86); ẩn phía tôi (`hidden` thưa) và clear history (`cleared_before_seq`) qua reader pipeline; index `{room, ts}` (D70) | ✅ `dev-done` (trên `feat/m2b`, chưa merge `main`) — [plan](plans/2026-10-05-m2b2-edit-delete.md); `message_edits` + projection, 5 RPC, ẩn/clear ở reader pipeline (không event), effect `edit_projection` + `msg_changed` (thay delay xoá 2–3s), quyền sửa/xoá chỉ qua `access.Policy`, mặc định chỉ tác giả, loại tin khoá theo config `MESSAGE_LOCKED_KINDS` (mặc định không khoá), resync quét `message_edits` (D82–D87) |
+| 1 | M2b.3 — Reaction + ghim | Tập reaction `{k, emoji, u}` + `n` (D68); counter recount CAS-ver (D67); `pin_actions` + `base_pv` + kiểm ≤50 pin trước commit; event cho SysMsg (cid `sys:{event_id}`) | ⏭ Tiếp theo — cần plan |
 | 1 | M2b.4 — Member + vị trí đọc | Fact member (thêm/bớt/rời/đổi role); `user_rooms {u│r}` (D72); `member_count`; event member trên subject user; vị trí đọc `$max` + event coalesce; đánh dấu chưa đọc (version + LWW) | Chưa |
 | 1 | M2c — Thread & tiện ích | Thread (`thread_count` là counter), mention, reply/forward (cid), bookmark | Chưa |
 | 1 | M3 — Đường đọc | **Trước khi viết plan: hỏi owner số thật** (thiết kế §2.3). `ListMyRooms` qua `user_rooms`; "có tin mới" đọc từ `messages`; room-tail cache; unread theo R17 mới (exact trong S, không thì `approx`, D73); sync token `room → last_seq` + full sync (D74); SDK reconnect jitter; API caller nội bộ cho SysMsg (`kind` + cờ unread); đồng bộ đa thiết bị qua subject user; `GetMessages`/`GetReactions`/`ListPins`/`ListBookmarks`; test sẵn sàng sharding trên cluster 2 shard | Chưa |
 | 1 | M4 — Gateway | WebSocket (gws), JWT/JWKS, frame protobuf, fanout theo interest, hàng đợi gửi có giới hạn, định tuyến theo slot; typing/presence ephemeral không qua core; subject user cho dữ liệu riêng; `member_removed` → unsubscribe; chế độ event không text cho tenant xoá chặt; không chuyển `kind`/cờ unread từ client; hằng số header tenant/user vào `pkg` | Chưa |
-| 1 | M5 — Hardening | Load test 100K kết nối, chaos test (kể cả R5 thật), OTel/Prometheus/Grafana, CI đầy đủ, ghim digest image, container theo uid, Sentinel (`FailoverClient`) cho cả hai Redis; mục mang sang từ M2b.0 và M2b.1 (xem dưới) | Chưa |
+| 1 | M5 — Hardening | Load test 100K kết nối, chaos test (kể cả R5 thật), OTel/Prometheus/Grafana, CI đầy đủ, ghim digest image, container theo uid, Sentinel (`FailoverClient`) cho cả hai Redis; mục mang sang từ M2b.0, M2b.1 và M2b.2 (xem dưới) | Chưa |
 | 1 | Channel | Room type channel (~200K subscriber, chỉ admin post): quyền post, fanout, counter lớn (bucket) | Chưa — chốt milestone sau M3 |
 | 1 | PoC prod-like (song song) | **Trước khi chạy: hỏi owner số thật.** Mongo rs 3 member NVMe, NATS 3 node, 2 host Linux, dữ liệu thật ≥1M tin; P1–P10 ở [poc/README.md](poc/README.md) → chốt database, go/no-go A1 | Chờ hạ tầng |
 | 2 | App `auth`, `api`, `events`, `push`, `migrator` | JWT/JWKS theo tenant; REST/BFF; gRPC stream cho app ngoài; push (badge xấp xỉ, D73); migrator dual-write/import (chế độ import im lặng để reconciler không phát hàng tỷ event) | Sau Phase 1 |
-| 2 | Policy quyền | Chính sách quyền cắm vào permission hook (M2b.0) | Sau Phase 1 |
+| 2 | Policy quyền | Module policy chat: ánh xạ user → role → quyền (owner/moderator xoá tin người khác, giới hạn thời gian sửa/xoá theo tenant…), cắm vào `access.Policy` (M2b.0) thay `access.DefaultPolicy` (sửa/xoá chỉ tác giả, D86; loại tin khoá qua `Request.Kind`, D87) | Sau Phase 1 |
 
 ## Thứ tự phụ thuộc
 
@@ -58,6 +58,16 @@ Từ M2b.1, chi tiết ở [plan, mục Kết quả thực thi](plans/2026-10-05
 - Bước dừng worker (`WORK_DRAIN + 1s` = 2s) có thể ngắn hơn thời gian chờ PubAck, nên dưới tải thấy "shutdown incomplete" (record bị `Nak`, không mất); cân nhắc luật `WORK_DRAIN` so với `PUB_ACK_TIMEOUT`.
 - Resync dừng ở tin cũ đầu tiên (giả định `CreatedAt` tăng đơn điệu theo seq; migrator hoặc lệch đồng hồ có thể làm dừng sớm).
 - Change stream cấp database cần quyền `changeStream` trên cả database (role prod).
+
+Từ M2b.2, chi tiết ở [plan, mục Kết quả thực thi](plans/2026-10-05-m2b2-edit-delete.md#kết-quả-thực-thi):
+
+- Resync: `ErrEditPageFull` khi một thời điểm có ≥ 1000 fact sửa của một room (chỉ báo lỗi, chưa phân trang theo `_id`).
+- `msg_changed` làm `At` + `Find` cho từng record, chưa gom theo room (đủ ở 100–300 lệnh đổi/s; cần gom khi xả backlog lớn).
+- `ApplyEdit` trả nil cả khi tin không còn, nên nhánh `ErrMessageNotFound` của `edit_projection` không bao giờ chạy; fact mồ côi chỉ bị `msg_changed` drop có đếm sau `RECONCILE_DELAY`.
+- Retry chỉ được nhận khi version hiện tại = `base+1`; tác giả sửa tiếp giữa lúc mất ack và lúc retry thì retry nhận `FAILED_PRECONDITION` (phạm vi D63).
+- Giữa insert fact xoá và projection (core chết, worker chưa sửa), `GetEditHistory` còn trả text cũ; cửa sổ có hạn (`edit_projection` delay 0).
+- Record work 33 byte còn tồn trong work stream lúc deploy bản 37 byte bị Term như bản ghi hỏng (`BadRecordsError`, đếm vào metric failures); chưa có dữ liệu prod, khi có thì xả work stream trước khi nâng cấp hoặc `/app resync` khoảng đó.
+- `MESSAGE_LOCKED_KINDS` không có trong `Config.LogValue`.
 
 ## Mức sẵn sàng
 

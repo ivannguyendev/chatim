@@ -102,14 +102,14 @@ Khoá nhị phân: các số `uint64` ghép big-endian nên thứ tự byte trù
 
 | Collection | `_id` / khoá | Lớp | Trường chính | Index | Trạng thái |
 |---|---|---|---|---|---|
-| `messages` (clustered) | 24B `room│thread│seq` | Fact (tạo) + projection (sửa/xoá) | f, kind, text, attachments, mentions, reply_to, forward_from, cid, ts, v, d, meta, reaction summary `{n, ver}` | **không có index phụ** | Đã xây (tạo) |
-| `message_edits` (clustered) | 28B `room│thread│seq│ver` | Fact | kind (`edit`/`delete`), text, attachments, meta, by, ts; v1 thêm `prev` (bản gốc) | `{room, ts}` (D70) | Chưa xây |
+| `messages` (clustered) | 24B `room│thread│seq` | Fact (tạo) + projection (sửa/xoá) | f, kind, text, attachments, mentions, reply_to, forward_from, cid, ts, v, d, ea (lần sửa cuối), meta, reaction summary `{n, ver}` | **không có index phụ** | Đã xây (tạo; sửa/xoá `v/d/ea`, M2b.2) |
+| `message_edits` (clustered) | 28B `room│thread│seq│ver` | Fact | `r`, `t`, `k` (`edit`/`delete`), `x` (text), `by`, `ts`; v1 thêm `p` (`prev`, bản gốc); xoá dọn `x`/`p` của bản ≤ v−1 | `{r, ts}` (D70) | Đã xây (M2b.2) |
 | `pin_actions` (clustered) | `room│pv` | Fact | op (`pin`/`unpin`), target, by, ts | `{room, ts}` | Chưa xây |
 | `rooms` | `room_id` | Metadata + projection | t, type, name, settings, pins + pv, member_count `{n, ver}`, last_seq, last_msg_at, last_change_at, act_bucket | `{t, dm_key}` unique partial; `{act_bucket}` (D69); `{ca}` (nhánh "tạo trong khoảng" của truy vấn resync, M2b.1) | Đã xây (tạo; activity ls/lm/lc/ab, M2b.1) |
-| `members` | ObjectId | Fact member + vị trí đọc | r, u, role, read_seq, cleared_before_seq, marked_unread `{v}`, muted_until | `{r, u}` unique | Đã xây (tạo) |
+| `members` | ObjectId | Fact member + vị trí đọc | r, u, role, read_seq, cleared_before_seq (`cb`), marked_unread `{v}`, muted_until | `{r, u}` unique | Đã xây (tạo; `cb` M2b.2) |
 | `user_rooms` | `u│r` | Projection từ fact member | t, role, joined_at | — (khoá theo user, shard theo user) | Chưa xây |
 | `reactions` | ObjectId | Tập | k (`room│thread│seq`), emoji, u, n | `{k, emoji, u}` unique (D68) | Chưa xây |
-| `hidden` | ObjectId | Fact thưa theo người đọc | u, r, thread_root, seq | `{u, r, thread_root, seq}` | Chưa xây |
+| `hidden` | ObjectId | Fact thưa theo người đọc | `u`, `r`, `th`, `s` | `{u, r, th, s}` unique | Đã xây (M2b.2) |
 | `thread_subs` | ObjectId | Tập | r, thread_root, u | `{r, thread_root, u}` unique | Chưa xây |
 | `bookmarks` | ObjectId | Tập | t, u, r, thread_root, seq, note, ts | `{t, u, ts:-1}` | Chưa xây |
 | `reconciler_state` | tên feed (`changes`) | Vận hành | token, at (cluster time) | — | Đã xây |
@@ -157,27 +157,29 @@ Khoá nhị phân: các số `uint64` ghép big-endian nên thứ tự byte trù
 
 Lỗ seq (lỗi ghi dở hiếm) chỉ là số không dùng. Client chèn tin theo seq; không có luật "lỗ cũ hơn 5s là void" (D71).
 
-### 6.3 Lệnh đổi: fact + projection [Chưa xây]
+### 6.3 Lệnh đổi: fact + projection [Đã xây sửa/xoá, M2b.2; ghim ở M2b.3]
 
-Áp cho sửa, xoá cho mọi người, ghim/bỏ ghim (D62–D64). Lệnh đổi không đi qua actor; vẫn được định tuyến tới core chủ slot.
+Áp cho sửa, xoá cho mọi người, ghim/bỏ ghim (D62–D64). Lệnh đổi không đi qua actor (package `mutate`, D82); vẫn được định tuyến tới core chủ slot.
 
 1. Lệnh mang `base_ver` (ghim: `base_pv`) là version client đang thấy.
-2. Đọc **fact cuối** trong range của tin (một reverse scan trên clustered key) để kiểm quyền (đúng tác giả; xoá thì tác giả hoặc owner room) và trạng thái (chưa bị xoá). Ràng buộc (≤50 pin) kiểm ở đây, **trước** khi commit fact, bằng fold fact hoặc projection đã tới version hiện tại.
+2. Đọc **fact cuối** trong range của tin (một reverse scan trên clustered key) để kiểm trạng thái (chưa bị xoá); quyền đã hỏi `access.Policy` trước đó với tác giả và loại của tin (D86: mặc định chỉ tác giả sửa/xoá; D87: loại tin bị khoá theo config; owner/moderator do policy Phase 2). Ràng buộc (≤50 pin) kiểm ở đây, **trước** khi commit fact, bằng fold fact hoặc projection đã tới version hiện tại.
 3. Insert fact `message_edits {_id: …│base_ver+1, kind, text, by, ts}`; fact v1 thêm `prev` = text đọc từ `messages` (lúc đó chưa edit nào thắng v1 nên projection còn bản gốc). Sửa và xoá dùng chung không gian version, nên "sửa thua xoá" là kết quả của CAS.
-4. Duplicate key → đọc fact ở version đó: cùng tác giả + cùng nội dung → retry, trả thành công, không phát event; khác → conflict kèm trạng thái hiện tại.
+4. Duplicate key → đọc fact ở version đó: cùng tác giả + cùng nội dung → retry, trả thành công (chạy lại projection; event cùng id bị stream bỏ trùng); khác → conflict kèm trạng thái hiện tại.
 5. Projection: `updateOne({_id, v: {$lt: ver}}, {$set: {text, v: ver, d}})`. **Ack sau projection** (D64, +1 RT majority; lệnh đổi không thuộc A1). Retry sau crash giữa fact và projection đi qua bước 4 rồi chạy lại projection.
-6. Event `msg_edited`/`msg_deleted` id `{room}-{th}-{seq}-v{ver}`, mang snapshot hiện tại. Reconciler chạy lại projection + event từ feed insert của `message_edits`; delay riêng: xoá 2–3s.
+6. Event `msg_edited`/`msg_deleted` id `{room}-{th}-{seq}-v{ver}`, mang snapshot hiện tại. Không ack mark. Worker chạy lại projection (`edit_projection`, delay 0) và event (`msg_changed`, delay `RECONCILE_DELAY`) từ feed insert của `message_edits` (D83).
 7. Ghim: fact `pin_actions {room│pv}` → projection `rooms.pins` + `pv` với `where pv < v`. "X đã ghim" sinh từ fact (A ghim rồi B bỏ ghim vẫn ra đủ hai thông báo).
 8. Xoá cho mọi người cũng dọn nội dung các bản sửa cũ (`$unset text` trên fact edit, giữ khoá; feed chỉ lấy insert nên không sinh effect). Phạm vi xoá theo R-xoá.
 
+**Đã xây (M2b.2, D82–D84, D86, D87):** `grpcsrv` gọi `mutate.Mutator`. `Edit`/`Delete`: `access.Checker.Admit` (`EditMessage`/`DeleteMessage`: tenant + membership) → `Find` tin (không có → `NOT_FOUND`) → `Checker.Allow` với `Author` = tác giả tin và `Kind` = loại tin (chỉ policy quyết; mặc định `access.DefaultPolicy` cho sửa/xoá chỉ tác giả, kể cả owner của room cũng bị từ chối, D86, và từ chối mọi người, kể cả tác giả, trên loại tin có trong `MESSAGE_LOCKED_KINDS`, mặc định rỗng, D87; từ chối → `PERMISSION_DENIED`) → `Edits.Latest` (reverse scan một doc); version hiện tại = `max(v của tin, version fact cuối)`; tin đã xoá hoặc `base_version` lệch → `FAILED_PRECONDITION`, trừ khi là retry (fact `base+1` đã có, cùng tác giả/loại/text) → `Edits.Append` fact `base+1` (v1 sửa có `prev`; `base_version ≥ MaxInt32` = conflict) → `Messages.ApplyEdit` (`$set v, ea, x, d` khi `v < ver`) → xoá thì `Edits.PurgeText` các bản ≤ v−1 → `Find` lại → enqueue `msg_edited`/`msg_deleted` (snapshot sau projection; lỗi enqueue bỏ qua, worker bù) → trả snapshot. `GetEditHistory` (`Admit` → `Find` → `Allow` với `ReadEditHistory`, A7) trả bản gốc (v0 từ `prev`) rồi từng fact theo version, tối đa 100 mỗi lần; tin đã xoá trả rỗng, tin không có → `NOT_FOUND`. `prev` chỉ nằm trên fact sửa v1 (không bao giờ trên fact xoá), nên `PurgeText` khi xoá dọn luôn bản gốc (D75). Wiring: `apps/core/service_wiring.go` dựng `access.Checker` (`DefaultPolicy{LockedKinds}` từ `MESSAGE_LOCKED_KINDS`) + `mutate.Mutator` cho `grpcsrv`; checker của `grpcsrv` và actor dùng `DefaultPolicy{}`, vì sửa/xoá chỉ đi qua `mutate`. Core chưa giới hạn thời gian sửa/xoá và không có luật owner/moderator (module policy chat cắm qua `access.Policy` ở Phase 2).
+
 Ngân sách: 1–3% tin (giả định §2.3) → 100–300 lệnh/s đỉnh, mỗi lệnh 1 reverse scan + 2 write majority không gom ≈ 200–600 RT/s thêm. Nếu đo thấy nặng thì gom qua flusher.
 
-### 6.4 Tập và vị trí đọc [Chưa xây]
+### 6.4 Tập và vị trí đọc [Đã xây ẩn + clear, M2b.2; còn lại chưa]
 
 - Reaction: upsert `{k, emoji, u}` với `n` tăng mỗi lần bật/tắt; event `reaction_changed` id `{k}-{u}-{emoji}-n{n}`; touch counter của target (§7).
 - Member: fact thêm/bớt/rời/đổi role; effect cập nhật `user_rooms`, touch `member_count`, event `member_added`/`member_removed` trên subject user để gateway sub/unsub.
 - Vị trí đọc: `members {$max read_seq}`; event `read_updated` coalesce. Đánh dấu chưa đọc hạ vị trí nên dùng version + last-writer-wins thay `$max`. SDK nâng `read_seq` khi user gửi tin, để tin của chính mình không tích sau `rs`.
-- Ẩn phía tôi: insert `hidden`; clear history: nâng `cleared_before_seq` trên member doc.
+- Ẩn phía tôi [Đã xây, M2b.2]: upsert `hidden {u, r, th, s}` (`mutate.Hide`: `Admit` → tin phải tồn tại → policy `HideMessage` với `Author`; mặc định cho phép). Clear history [Đã xây, M2b.2]: `$max members.cb` (`mutate.ClearHistory`, quyền `ClearHistory`; `up_to_seq = 0` hoặc lớn hơn seq cuối → kẹp về `Last(room, 0)`), trả giá trị sau cập nhật nên không bao giờ lùi. Cả hai không phát event (owner 2026-10-05; đồng bộ đa thiết bị ở M3/M4) và chỉ áp lúc đọc qua `view.HideForViewer` (D85).
 
 ## 7. Counter theo target [Chưa xây]
 
@@ -207,15 +209,15 @@ Event bị bỏ ở fast path: nack, timeout ack, quá nhiều publish đang bay
 
 ### 8.2 Reader [Đã xây, M2b.1]
 
-Package `reconcile` là reader, chạy trên core giữ slot 0, mỗi lần nhận slot 0 là một term (log `reconcile term started`). Đọc nhật ký commit qua `store.ChangeFeed`/`store.Cursor` (Mongo: change stream cấp database lọc insert của `messages` và `rooms`, vị trí ở `reconciler_state._id = "changes"`), dựng **record** (`work.Record`, chỉ khoá + `CommittedAt`, 33 byte, D80) và publish vào work stream với `Nats-Msg-Id` = id record (`m:{room}-{thread}-{seq}`, `r:{room}`), cửa sổ `RECONCILE_WINDOW`, retry vô hạn. Vị trí xác nhận = prefix record đã được work stream ack, lưu mỗi `RECONCILE_CONFIRM_EVERY`. Reader không chờ delay, không tra mark, không dựng event. Mất lịch sử (`ErrFeedHistoryLost`) → log Error, `Forget`, bắt đầu từ bây giờ, phục hồi bằng `/app resync` (D52, D81).
+Package `reconcile` là reader, chạy trên core giữ slot 0, mỗi lần nhận slot 0 là một term (log `reconcile term started`). Đọc nhật ký commit qua `store.ChangeFeed`/`store.Cursor` (Mongo: change stream cấp database lọc insert của `messages`, `rooms` và `message_edits`, vị trí ở `reconciler_state._id = "changes"`), dựng **record** (`work.Record`, chỉ khoá + version + `CommittedAt`, 37 byte, D80, D84) và publish vào work stream với `Nats-Msg-Id` = id record (`m:{room}-{thread}-{seq}`, `r:{room}`, `e:{room}-{thread}-{seq}-v{ver}`), cửa sổ `RECONCILE_WINDOW`, retry vô hạn. Vị trí xác nhận = prefix record đã được work stream ack, lưu mỗi `RECONCILE_CONFIRM_EVERY`. Reader không chờ delay, không tra mark, không dựng event. Mất lịch sử (`ErrFeedHistoryLost`) → log Error, `Forget`, bắt đầu từ bây giờ, phục hồi bằng `/app resync` (D52, D81).
 
-### 8.3 Effect engine [Đã xây phần M2b.1]
+### 8.3 Effect engine [Đã xây phần M2b.1, M2b.2]
 
 **Registry + chính sách (D65).** Mỗi loại thay đổi map tới danh sách effect; mỗi effect khai báo:
 
 | Chính sách | Ý nghĩa | Ví dụ |
 |---|---|---|
-| delay | Reconciler chờ bao lâu sau commit | `msg_created` ~5s (> `PUB_ACK_TIMEOUT` + cửa sổ mark); xoá 2–3s; counter vài giây |
+| delay | Reconciler chờ bao lâu sau commit | `msg_created`, `msg_changed` = `RECONCILE_DELAY` (~5s, > `PUB_ACK_TIMEOUT` + cửa sổ mark); projection sửa/xoá 0 (D83); counter vài giây |
 | coalesce | Gom theo target trong cửa sổ | counter W; `read_updated` N giây |
 | ack mark | Có ghi mark để reconciler bỏ qua hay không | Chỉ effect lưu lượng cao (`msg_created`); effect hiếm để reconciler chạy lại, JetStream bỏ trùng |
 | hội tụ | Chạy lại an toàn hay consumer phải tự idempotent | event, projection, counter: hội tụ; push, SysMsg: không |
@@ -232,12 +234,15 @@ Fast path và reconciler gọi cùng registry, nên kết quả không lệch (t
    | `MessageInserted` | `room_activity` | 0 | — | bulk `$max` lên `rooms`, 1 write/room/lô |
    | `MessageInserted` | `msg_created` | `RECONCILE_DELAY` | có | tra mark theo lô; `Find` tin chưa mark; publish + chờ PubAck |
    | `RoomInserted` | `room_created` | `RECONCILE_DELAY` | không | đọc room, publish (stream bỏ trùng với fast path `CreateRoom`) |
+   | `EditInserted` | `room_activity` | 0 | — | `Activity{Seq: 0}`: chỉ nâng `lc`/`ab` (`$max`), không đổi `ls`/`lm`; nhờ vậy resync tìm được room chỉ có sửa/xoá |
+   | `EditInserted` | `edit_projection` | 0 | — | `At` fact → `ApplyEdit` (`v < ver`); xoá thì `PurgeText` bản ≤ v−1; fact không còn → drop có đếm |
+   | `EditInserted` | `msg_changed` | `RECONCILE_DELAY` | không | `At` fact + `Find` tin + loại room → `msg_edited`/`msg_deleted` (snapshot hiện tại, id theo version fact); publish + chờ PubAck; stream bỏ trùng với fast path; chỉ đếm republish khi PubAck không phải bản trùng |
 4. Work stream có retention tự định cỡ (≈300–500B/tin, đỉnh 3–5MB/s, giữ 2h ≈ 22–36GB với R3; tính lại bằng số thật). Rủi ro mất (RC5) chỉ còn khi reader ngừng lâu hơn cửa sổ oplog.
 5. Không mở N change stream lọc `$mod`: mỗi cursor vẫn đọc và lọc toàn oplog phía server.
 
 **Room activity (D69).** Effect coalesce ghi `rooms.last_seq`, `last_msg_at`, `last_change_at` (mọi fact), `act_bucket = floor(ts/1h)` (đổi tối đa 1 lần/giờ/room), chỉ worker ghi, gom theo lô fetch (≤ `WORK_FETCH_BATCH` record → ≤ 1 write mỗi room mỗi lô); actor không ghi (owner chốt 2026-10-05). Chỉ dùng để sắp xếp room list và làm chỉ mục resync; **không** dùng để quyết định client đã có đủ tin (§9).
 
-**Resync (D69).** `/app resync -from -to [-tenant] [-room] [-rate] [-dry-run]` (D81, M2b.1): quét room `ab ≥ giờ(from)` hoặc `ca ∈ [from, to]`, record `RoomInserted` cho room tạo trong khoảng, scan ngược timeline chính tới khi `ts < from`, đẩy record vào work stream theo `-rate` (mặc định 500/s); diễn tập bằng itest `TestRealInfraResyncDrillRepublishesWritesTheReaderMissed`. Chưa có thread và `message_edits`/`pin_actions` nên chỉ quét timeline chính; M2b.2/M2b.3 thêm quét `{room, ts}`. Khi mất vị trí ngoài oplog: công cụ thủ công, có phạm vi (tenant/room), rate limit, diễn tập định kỳ. Quét room theo `act_bucket` trong khoảng mất, scan ngược `messages` tới khi `ts` ra khỏi khoảng, quét `message_edits`/`pin_actions` theo `{room, ts}`, chạy lại effect. Ack mark hết TTL 1h nên resync sinh trùng thật ngoài cửa sổ 5m; consumer bỏ trùng theo id. Rủi ro còn lại: room có activity write cũng mất trong khoảng đó và không có tin sau đó.
+**Resync (D69).** `/app resync -from -to [-tenant] [-room] [-rate] [-dry-run]` (D81, M2b.1): quét room `ab ≥ giờ(from)` hoặc `ca ∈ [from, to]`, record `RoomInserted` cho room tạo trong khoảng, scan ngược timeline chính tới khi `ts < from`, đẩy record vào work stream theo `-rate` (mặc định 500/s); diễn tập bằng itest `TestRealInfraResyncDrillRepublishesWritesTheReaderMissed`. Chưa có thread nên timeline chính là timeline duy nhất. M2b.2: sau timeline, mỗi room quét `message_edits` theo `{r, ts}` trong `[from, to]` (trang 1000, dời `from` tới `ts` cuối trang, bỏ trùng mép trang theo id record; một thời điểm đầy cả trang → `ErrEditPageFull`) → record `EditInserted`; `pin_actions` ở M2b.3. Fact sửa cũng chạy `room_activity` (chỉ `lc/ab`) nên room chỉ có sửa/xoá trong khoảng mất vẫn nằm trong chỉ mục activity. Khi mất vị trí ngoài oplog: công cụ thủ công, có phạm vi (tenant/room), rate limit, diễn tập định kỳ. Quét room theo `act_bucket` trong khoảng mất, scan ngược `messages` tới khi `ts` ra khỏi khoảng, quét `message_edits`/`pin_actions` theo `{room, ts}`, chạy lại effect. Ack mark hết TTL 1h nên resync sinh trùng thật ngoài cửa sổ 5m; consumer bỏ trùng theo id. Rủi ro còn lại: room có activity write cũng mất trong khoảng đó và không có tin sau đó.
 
 ## 9. Đường đọc
 
@@ -245,17 +250,21 @@ Fast path và reconciler gọi cùng registry, nên kết quả không lệch (t
 
 `GetHistory(room, thread, anchor, dir, limit≤100)` quét khoảng `_id` clustered, đọc thẳng store, không qua actor.
 
-### 9.2 Reader pipeline + permission hook [Đã xây một phần]
+### 9.2 Reader pipeline + permission hook [Đã xây cho `GetHistory`, `GetEditHistory` và lệnh đổi]
 
 Mọi API đọc (`GetHistory`, `GetMessages`, `ListMyRooms`, `GetEditHistory`…) chạy qua một pipeline sau khi đọc store:
-1. Permission hook: một interface duy nhất (tenant, member, role, tác giả/owner, quyền đọc lịch sử sửa A7). Policy cắm sau (Phase 2).
+1. Permission hook: một interface duy nhất (tenant, member, role, tác giả và loại của tin đích, quyền đọc lịch sử sửa A7). Mặc định `access.DefaultPolicy` (sửa/xoá chỉ tác giả, D86; loại tin khoá theo config, D87); module policy chat (user → role → quyền) cắm sau (Phase 2).
 2. Ẩn: seq ≤ `cleared_before_seq`; seq trong `hidden` → placeholder không nội dung (phân trang theo seq vẫn đúng).
 3. Mặt nạ xoá: tin `d` trả placeholder `deleted`.
 4. Gộp theo `(sender, cid)` để che lớp trùng CD2/CD3.
 
 Lệnh ghi cũng gọi cùng permission hook.
 
-**Đã xây (M2b.0):** bước 1 là `access.Policy` (interface một hàm `Check`) + `access.Checker` (luôn kiểm tenant và membership trước policy; `access.AllowMembers` là policy mặc định); `SendMessage` hỏi qua actor (`actor.WithPolicy`), `GetHistory` hỏi qua `grpcsrv`. Bước 4 là `view.Pipeline` với `view.CollapseRetried` (giữ seq nhỏ nhất của mỗi `(sender, cid)`); `view.Default()` dùng cho `GetHistory`. **Chưa xây:** ẩn và mặt nạ xoá (bước 2, 3) thuộc M2b.2.
+**Đã xây (M2b.0):** bước 1 là `access.Policy` (interface một hàm `Check`) + `access.Checker` (luôn kiểm tenant và membership trước policy; `access.AllowMembers` là policy mặc định tới M2b.2, nay là `access.DefaultPolicy` (D86)); `SendMessage` hỏi qua actor (`actor.WithPolicy`), `GetHistory` hỏi qua `grpcsrv`. Bước 4 là `view.Pipeline` với `view.CollapseRetried` (giữ seq nhỏ nhất của mỗi `(sender, cid)`); `view.Default()` dùng cho `GetHistory`.
+
+**Đã xây (M2b.2, D85):** bước 2 là `view.HideForViewer` (seq ≤ `Member.ClearedBeforeSeq` hoặc trong `Hidden.HiddenIn(user, room, thread, seq đầu trang, seq cuối trang)` → `hidden = true`, không text), bước 3 là `view.MaskDeleted` (`deleted = true`, không text); seq, version, `edited_at` giữ nguyên nên phân trang theo seq vẫn đúng. `view.Default()` = `CollapseRetried → MaskDeleted → HideForViewer`. Lệnh đổi hỏi `access` với action `edit_message`, `delete_message`, `hide_message`, `clear_history`; `GetEditHistory` với `read_edit_history`.
+
+**Đã xây (M2b.2, D86, D87):** `access.Checker` tách `Admit` (room → tenant → membership, không hỏi policy) và `Allow` (hỏi policy); `Authorize` = hai bước. `Request.Author` là tác giả tin đích, `Request.Kind` là loại tin đích (rỗng/0 với action theo room). Action trên một tin (sửa, xoá, ẩn, `GetEditHistory`) chạy `Admit` → `Find` tin → `Allow`; `clear_history`, `read_history`, `send_message` dùng `Authorize`/actor như cũ. `access.DefaultPolicy` là mặc định của `NewChecker` và actor: `edit_message`/`delete_message` trên loại tin nằm trong `LockedKinds` → `PERMISSION_DENIED` cho mọi người, kể cả tác giả (D87); khi `Author ≠ User` → `PERMISSION_DENIED`; mọi action khác cho member. `LockedKinds` đọc từ `MESSAGE_LOCKED_KINDS` (tên loại cách nhau dấu phẩy, phân biệt hoa thường, mặc định rỗng; tên lạ → lỗi boot; hiện chỉ có `text`, loại mới thêm một dòng vào `domain.kindNames`) và chỉ checker của `mutate` nhận. Core không có luật riêng cho tác giả, owner hay loại tin ngoài policy.
 
 ### 9.3 Room list, unread, sync [Chưa xây]
 
@@ -295,12 +304,12 @@ Mỗi guarantee có detector + alert ngay khi định nghĩa (D76), không đợ
 | RC1 | Mọi fact đã commit cuối cùng có event trên stream, trong delay của effect + lag reconciler | Metric tuổi thay đổi cũ nhất chưa xác nhận; alert khi vượt ngưỡng | `reconcile_lag_seconds` (worker chạy trễ so với delay của effect, xuất ở mọi core), `work_failures_total`, `effect_dropped_total{effect}`, `reconcile_running` (reader), `reconcile_dropped_total` (change hỏng reader bỏ); alert `ChatimReconcilerAbsent`, `ChatimReconcilerLagging`, `ChatimReconcilerDropping`, `ChatimWorkFailing`, `ChatimEffectDropping` |
 | RC2 | Event bù giống hệt event fast path (id, nội dung) | Test parity trong CI cho mọi loại event | (test parity, không có metric) |
 | RC3 | Reconciler/reader crash, restart, đổi chủ không làm mất gì | Itest; log `reconcile term started`; metric số term | `reconcile_terms_total`, `reconcile_forwarded_total` |
-| RC4 | Trùng được phép nhưng hiếm; người nhận bỏ theo id | Metric số event publish lại và số bản trùng bị stream từ chối | `reconcile_republished_total{effect}` (worker gửi vì không có mark), `publish_dropped_total{reason}`, `ack_marks_dropped_total{reason}`; alert `ChatimRepublishSurge`, `ChatimEventsDropped` |
+| RC4 | Trùng được phép nhưng hiếm; người nhận bỏ theo id | Metric số event publish lại và số bản trùng bị stream từ chối | `reconcile_republished_total{effect}` (worker gửi vì không có mark; `msg_changed` không có mark, chỉ đếm khi PubAck không phải bản trùng, tức fast path đã mất event), `publish_dropped_total{reason}`, `ack_marks_dropped_total{reason}`; alert `ChatimRepublishSurge`, `ChatimEventsDropped` |
 | RC5 | Khoảng mất ngoài oplog là mất hẳn | Alert log `change feed history lost`; metric cửa sổ oplog (giờ) và tuổi vị trí reader; alert khi cửa sổ < 2× ngưỡng; phục hồi bằng `/app resync` (D81) | `reconcile_history_lost_total`, `mongo_oplog_window_seconds` (NaN khi không đọc được); alert `ChatimFeedHistoryLost`, `ChatimOplogWindowShort`, `ChatimOplogWindowCritical`, `ChatimOplogWindowUnknown` |
 | CD1 | Retry cùng cid trong 15 phút trả đúng ack cũ, không thêm bản, trên mọi core | Số Commit/Abort bị bỏ khỏi hàng đợi settle; Redis vào chế độ suy giảm | `cid_settle_dropped_total`, `redis_degraded{client}`; alert `ChatimCIDSettleDropped` |
 | CD2 | Redis dedupe chết → chỉ LRU, trùng giữa core có thể xảy ra | Log/metric vào chế độ suy giảm; alert | `redis_degraded{client}`; alert `ChatimRedisDegraded` |
 | CD3 | Core chết giữa insert và Commit, retry sau 10s ở core khác, tin ngoài 100 tin gần nhất → trùng | Metric `ErrRetryLater` do `PendingElsewhere`; phía đọc gộp theo `(sender, cid)` | `cid_pending_elsewhere_total`; alert `ChatimCIDPendingElsewhere` |
-| PJ1 | Projection cuối cùng khớp fact cuối | Metric số projection/counter reconciler phải sửa | (chưa có projection) |
+| PJ1 | Projection cuối cùng khớp fact cuối | Worker chạy lại projection từ mọi fact (`edit_projection`, CAS `v < ver`, M2b.2); lỗi → retry qua work stream; fact không đọc được → drop có đếm; counter (M2b.3) chưa có | `work_failures_total`, `effect_dropped_total{effect="edit_projection"}`, `effect_dropped_total{effect="msg_changed"}`; alert `ChatimWorkFailing`, `ChatimEffectDropping` |
 
 Vận hành: oplog `minRetentionHours` ≥ 24h; định cỡ oplog theo byte (đỉnh 10K tin/s × 1–2KB ≈ 0,9–1,7TB/ngày); work stream retention theo §8.3; đo bộ nhớ NATS cho map chống trùng 5m (~3M id ở 10K tin/s); tốc độ xả backlog ≥ 3× ingest đỉnh (đo trên dev ở `docs/poc/README.md` (W1), chỉ kiểm công cụ).
 
@@ -322,7 +331,7 @@ Vận hành: oplog `minRetentionHours` ≥ 24h; định cỡ oplog theo byte (đ
 | Redis dedupe chết | Chống trùng chỉ còn LRU (CD2); không có mark → reconciler publish lại, stream bỏ trùng trong 5m |
 | Core chết | Core khác nhận slot ~5s; event chưa publish được reconciler bù; core nhận slot 0 đọc lại từ vị trí đã xác nhận |
 | Core chết giữa ack và Commit cid | Retry có thể nhận `ErrRetryLater` trong 10s; sau đó trùng chỉ khi tin ngoài 100 tin gần nhất (CD3) |
-| Core chết giữa fact và projection | Retry lệnh đổi đi qua nhánh duplicate key rồi chạy lại projection; không retry thì reconciler sửa sau delay |
+| Core chết giữa fact và projection | Retry lệnh đổi đi qua nhánh duplicate key rồi chạy lại projection; không retry thì worker `edit_projection` sửa ngay khi record tới (delay 0) |
 | Reader chậm/ngừng quá cửa sổ oplog | Alert RC5; `/app resync` (§8.3, D81) |
 | Gateway chết / reconnect hàng loạt | Client backoff + jitter; sync token; room-tail cache |
 | Room nóng | Mailbox có giới hạn, coalesce counter, rate limit post |
@@ -400,3 +409,9 @@ Quyết định D1–D60 giữ id cũ; chi tiết và phương án bị loại �
 | D79 | Work stream `CHATIM_WORK` (WorkQueue, file, `MaxAge` 2h, chống trùng 2m) chia 32 partition `work.p{n}` theo `slot % 32`; consumer durable `work-p{n}` do core giữ slot n tiêu thụ, kiểm `Owns(n)` trước mỗi fetch; ack khi mọi effect của record xong, lỗi → `Nak(WORK_RETRY_DELAY)` | Một consumer theo mỗi slot (1024); một consumer chung, worker tự lọc; partition theo core id; hàng đợi trên Redis | 32 đủ chia tải cho ≤ 32 core với ít consumer; gắn với slot nên worker thường chạy trên chủ room (cache ấm); WorkQueue tự xoá record đã ack nên retention theo backlog chứ không theo lưu lượng; Redis dedupe không bền (D44). Owner chốt 2026-10-05 |
 | D80 | Record work stream chỉ mang khoá (kind, room, thread, seq, `CommittedAt`; 33 byte), id `m:{room}-{thread}-{seq}` / `r:{room}`; worker đọc doc khi effect cần (`msg_created` chỉ `Find` tin chưa mark) | Đẩy doc đầy đủ; đẩy event dựng sẵn từ reader | Record nhỏ giữ work stream ≈ 33B/tin thay vì 300–500B (§8.3); phần lớn tin đã có mark nên không cần đọc lại; event chỉ dựng ở effect, dùng chung cho fast path và đường bù (RC2) |
 | D81 | Resync là subcommand `/app resync` của binary core: cùng image, secret, config; quét `rooms` theo `ab ≥ giờ(from)` hoặc `ca ∈ [from, to]`, scan ngược timeline chính, đẩy record vào work stream có `-rate`; worker chạy effect như bình thường | Binary riêng trong `tools/`; resync tự động khi history lost; tool publish event trực tiếp | Không thêm thứ phải deploy và cấp secret; đi qua work stream nên dùng chung registry + chính sách (delay, mark) và bỏ trùng theo id; tự động dễ sinh hàng triệu bản trùng (D69). Owner chốt 2026-10-05 |
+| D82 | Lệnh đổi (sửa, xoá, ẩn, clear) chạy trong package `mutate`, gọi thẳng từ `grpcsrv`, không qua actor; client vẫn định tuyến theo slot của room | Đưa lệnh đổi vào mailbox actor của room; một actor riêng cho lệnh đổi | Lệnh đổi không cấp seq nên không cần thứ tự của actor; CAS trên khoá fact `room│thread│seq│ver` và `v < ver` của projection giữ đúng khi hai core cùng nhận lệnh (P1); không chen vào hàng gửi tin; định tuyến theo slot vẫn giữ cache ấm |
+| D83 | Event `msg_edited`/`msg_deleted` mang snapshot hiện tại của tin + `version` của fact, id `{room}-{th}-{seq}-v{ver}`, không ack mark; fast path enqueue sau projection, retry của lệnh đổi enqueue lại đúng id đó; worker chạy `room_activity` (chỉ `lc/ab`), `edit_projection` (delay 0) rồi `msg_changed` (delay `RECONCILE_DELAY`, chỉ đếm republish khi PubAck không phải bản trùng) từ insert của `message_edits` (thay "xoá delay 2–3s") | Event mang diff/text của fact; ack mark cho event đổi; delay xoá riêng 2–3s; projection chỉ ở fast path | Snapshot đúng cả khi event tới trễ hoặc lệch thứ tự (consumer giữ bản version lớn nhất); lệnh đổi hiếm (1–3%) nên publish lại sau delay rẻ và stream bỏ trùng theo id trong 5m, không cần không gian mark riêng (D65); projection delay 0 sửa ngay khi core chết giữa fact và projection; một delay chung đủ vì fast path đã đẩy event ngay |
+| D84 | `work.Record` thêm `Version` (`uint32`): 37 byte, id `e:{room}-{th}-{seq}-v{ver}` cho `EditInserted` | Kiểu record riêng cho fact sửa; id theo `_id` nhị phân | Một định dạng cho mọi kind; id đọc được và trùng phần đuôi với id event để truy vết; thêm 4 byte không đáng kể |
+| D85 | View: tin có `seq ≤ cleared_before_seq` hoặc trong `hidden` của người đọc → `hidden = true`, không nội dung; tin xoá → `deleted = true`, không nội dung; seq, version giữ nguyên; ẩn/clear không phát event | Bỏ hẳn tin khỏi trang; lọc trong truy vấn store; event `msg_hidden`/`history_cleared` | Phân trang theo seq vẫn đúng và client không tưởng là lỗ seq (R10); `messages` không có index phụ nên lọc ở view rẻ hơn; owner chốt 2026-10-05 không phát event cho ẩn/clear (đồng bộ đa thiết bị ở M3/M4) |
+| D86 | Quyền trên một tin (sửa, xoá, ẩn, đọc lịch sử sửa) chỉ do `access.Policy` quyết; core chỉ biết user có quyền hay không, không có luật tác giả/owner. Mặc định `access.DefaultPolicy`: không ai sửa/xoá tin của người khác (chỉ tác giả), action khác cho member. `access.Checker` tách `Admit` (tenant + membership) và `Allow` (policy, `Request.Author` = tác giả tin); action trên một tin chạy `Admit` → `Find` → `Allow`. User → role → quyền thuộc module policy chat (Phase 2) | Luật cứng trong core "sửa: tác giả; xoá: tác giả hoặc owner room" (`domain.ErrNotAuthor`) | Owner chốt 2026-10-05. Mỗi sản phẩm muốn luật khác (owner/moderator xoá, giới hạn thời gian theo tenant); luật cứng trong core không linh hoạt và phải sửa core mỗi lần đổi. Mặc định chặt (chỉ tác giả) an toàn khi chưa có policy; hỏi policy sau `Find` để policy thấy tác giả, trước nhận diện retry nên tác giả gửi lại vẫn được phép |
+| D87 | Core không chặn cứng sửa/xoá theo loại tin (vd. tin hệ thống sau này). Config `MESSAGE_LOCKED_KINDS` (tên loại cách nhau dấu phẩy, phân biệt hoa thường; mặc định rỗng = không khoá; tên lạ → lỗi boot) nạp vào `access.DefaultPolicy.LockedKinds`; policy từ chối `edit_message`/`delete_message` trên loại bị khoá, kể cả tác giả. `access.Request.Kind` mang loại của tin đích nên module policy chat (Phase 2) cũng dùng được. Hiện chỉ có `text`; loại mới thêm một dòng vào `domain.kindNames`. Chỉ checker của `mutate` nhận config | Chặn cứng trong core (vd. tin hệ thống không bao giờ sửa/xoá được) | Owner chốt 2026-10-06. Theo D86, core không giữ luật quyền; mỗi sản phẩm tự chọn loại nào khoá. Mặc định không khoá nên hành vi y như D86; sửa/xoá chỉ đi qua `mutate` nên chỉ checker đó cần config |
