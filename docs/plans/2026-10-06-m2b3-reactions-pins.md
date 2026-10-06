@@ -1,6 +1,8 @@
 # M2b.3 — Reaction + ghim — Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: dùng `subagent-driven-development` (cùng phiên) hoặc `separate-driven-development` (phiên riêng) để thực thi plan này theo từng task. Implementer dùng skill `go-lang`.
+>
+> **Tóm tắt cho owner:** [2026-10-06-m2b3-reactions-pins-summary.md](2026-10-06-m2b3-reactions-pins-summary.md)
 
 **Goal:** Reaction một emoji cho mỗi (user, tin) theo lớp **tập** (§4): doc `reactions` `_id = k│u` mang change number `n`, event `reaction_changed`; số đếm theo emoji là **aggregate** `messages.rx` ghi bằng recount CAS (§7, không `$inc`), touch ở fast path và ở worker, event `counts_changed`. Ghim/bỏ ghim theo **fact + projection** (D62): fact `pin_actions` `room│pv` với pv dày, projection `rooms.pins` + `pv` bằng fold + CAS, event `msg_pinned`/`msg_unpinned`. Feed thêm insert/update/replace của `reactions` và insert của `pin_actions`; bốn effect mới trên work stream; resync quét thêm hai collection.
 
@@ -13331,3 +13333,13 @@ Kiểm chứng cuối (Task 18, 2026-10-06, trên `7d17bb8`):
 - resync dry-run (15 phút): `resync rooms=2 room_records=1 message_records=80 edit_records=2 reaction_records=1 pin_records=1 dry_run=true`, exit 0.
 - corebench 1000/s 30s: failed=0, missing=0, duplicates=0 (583 event live trên 20 room), p99 ack 60.9ms, pacer lag p99 6.0ms; CPU_Speed_Limit 100 trước khi chạy, 72 sau khi chạy.
 - Mức sẵn sàng: `dev-done` trên `feat/m2b` (chưa merge `main`; merge một lần sau M2b.4).
+
+### Sửa theo owner (2026-10-06)
+
+Sau kiểm chứng cuối, owner sửa hai điểm của reaction; code đã sửa theo, các task ở trên giữ nguyên làm lịch sử.
+
+1. **Đặt reaction bằng một upsert** (`ddd15fd`): `Reactions.Set` = `FindOneAndUpdate({_id}, pipeline, upsert, ReturnDocument Before)`. Pipeline dùng `$cond` giữ `pe/e/n/ts` khi emoji đang lưu bằng emoji mới, nên doc không đổi byte nào: không có entry oplog, không có change trên feed. Filter chỉ là phép bằng trên `_id` unique nên server tự retry upsert trùng khoá. Kết quả suy từ doc trước ghi: không có doc → N=1; cùng emoji → no-op; khác → N+1, Prev = emoji cũ. Bỏ vòng thử lại, lần đọc lại majority và `store.ErrReactionContended`; gỡ (emoji rỗng) giữ nguyên là update không upsert. Lý do: upsert có filter `e ≠ emoji` không được server tự retry nên phải đọc lại và thử lại, kéo theo Minor 1 (`UNAVAILABLE` giả, `n` cũ ở nhánh no-op); filter chỉ trên `_id` bỏ hẳn nhánh đó. Thiết kế: D89 viết lại.
+2. **Danh sách emoji cố định, D95** (`7c8d316` mutate + config, `c231608` RPC `GetReactionSettings`, `841789e` corecli + e2e): env `REACTION_EMOJIS` (dấu phẩy, mặc định `👍,❤️,😂,😮,😢,🙏`, để trống = mặc định); boot kiểm không rỗng, emoji hợp lệ, không lặp, ≤ 100; emoji ngoài danh sách → `INVALID_ARGUMENT` (`domain.ErrEmojiNotAllowed`), kiểm trước membership/policy. `GetReactionSettings` trả danh sách theo thứ tự config (không route theo room, cần metadata caller); corecli có lệnh `reaction-settings`; e2e react list[0] rồi list[1] và kiểm 🎉 bị từ chối. Bỏ hẳn `REACTION_MAX_EMOJIS`, `ErrTooManyEmojis`, `Limits.MaxEmojis` và giới hạn mềm "tối đa N loại emoji mỗi tin"; độ dài danh sách là giới hạn. Lý do: owner muốn danh sách khai báo trước và frontend chỉ đọc danh sách đó; Minor 4 (user duy nhất của emoji không đổi được emoji ở giới hạn) hết theo.
+3. Docs (commit docs này): thiết kế §4, §6.4, D89, thêm D95; roadmap (dòng M2b.3, bỏ hai mục "Từ M2b.3" đã hết, thêm quy tắc file tóm tắt plan); `CLAUDE.md`; `INDEXES.csv`; dòng tóm tắt cho owner ở đầu plan này.
+
+Kiểm chứng: `make itest` xanh; `make e2e` PASS (phase 4: 👍 rồi ❤️ trên seq 3, 🎉 bị từ chối với `InvalidArgument`). Review không có lỗi Critical/Important.
