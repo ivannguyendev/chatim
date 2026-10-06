@@ -13275,3 +13275,48 @@ git push origin feat/m2b
 Expected: push thành công; `git status` sạch; `git log origin/feat/m2b -1` là commit này.
 
 ---
+
+## Kết quả thực thi
+
+Commit từng task (nhánh `feat/m2b`):
+
+- Chuẩn bị: `a33611d` plan (đã sửa theo review trước khi commit: `pin_projection` chỉ drop `ErrRoomNotFound`; resync cần `-room` cho room chỉ có reaction/ghim trong khoảng mất; Nak kind lạ không giới hạn; event reaction trung gian có thể mất). T1: baseline `fmt-check`/`vet`/`lint`/`test` xanh.
+- T2 `a68cfe2` domain + keys; T3 `d1af561` proto + pbconv + kind publish; T4 `8e8fccf` port store + memstore + `storetest` (25 subtest contract); T5 `c30531d` mongostore; T6 `df567ec` feed; T7 `3abaa6c` `work.Record` + Nak kind lạ + `room_activity` + README (push `a33611d..3abaa6c`); T8 `171855f` `counter` + `pinproj`.
+- T9 `d5bd38c` access, `0e73c87` `mutate.React`; T10 `56f385d` `mutate.Pin`/`Unpin`; T11 `6e56626` config, `cb88a4c` grpcsrv + wiring + README; T12 `bf9f530` view + `GetHistory`; T13 `5ceb97f` effect + metrics + luật 16 (push `3abaa6c..5ceb97f`).
+- T14 `82c4792` resync (một `scanByTime` dùng chung); T15 `31a5fc2`, `2a89f7e` route + corecli/e2e; T16 `c24d866` itest; T17 commit docs này.
+
+Quyết định của owner trong lúc làm:
+
+- Không có ngoài các quyết định 2026-10-06 ở đầu plan.
+
+Lệch so với plan:
+
+- GAP-1: `mongostore.Store` có accessor `Reactions()`/`Pins()` trả sub-store cho port `store.Reactions`/`store.Pins`; `SetReactions`, `PinState`, `ApplyPins` vẫn ở `*Store`. Các task sau dùng đúng cách này.
+- T2: `pkg/keys/keys.go` 96 dòng, plan ước ≤ 95 (plan đếm sai).
+- T2, T3, T11: cột purpose của các dòng `domain`, `pkg/keys`, `core.proto`, `pbconv`, `README.md` trong `INDEXES.csv` giờ có ngoặc kép vì chứa dấu phẩy (text giữ nguyên).
+- T5, T6: sửa biên dịch trong test (`bson.Raw(data)` ở `reaction_codec_test`, test pipeline feed); code không đổi.
+- T7: test `TestRealWorkQueueDefersRecordsOfUnknownKinds` của plan assert `Deferred == 1` nhưng `Fetch(10, 2s)` với Nak 200ms giao lại record ~9 lần trong một lần pull; controller duyệt sửa chỉ ở test (fetch lô 1). Hệ quả ghi vào D91 (xem Minor 3).
+- T11: bước red thấy `Unimplemented` chứ không `Internal` (`pkg/grpcserver` truyền nguyên `Unimplemented`; plan đoán sai); lý do fail vẫn đúng.
+- T13: sửa cơ học để qua lint/biên dịch: helper `built[T]` (gọi hàm nhiều giá trị), `strings.Builder` theo perfsprint, gofmt. Lỗi quy trình: không có bước red riêng (code không lệch).
+- T15: errorlint `%v` → `%w` trong `deletedTakesNoMark`.
+- T17: dòng plan M2b.3 trong `INDEXES.csv` (có từ commit plan) thay bằng bản đầy đủ của Step 6; README thêm giới hạn `-room` vào đoạn `/app resync`; ghi thêm vào thiết kế các điểm đã biết của D88, D89, D91, D93 (từ review).
+
+Lỗi đã biết, đã sửa:
+
+- Không có lỗi runtime. Itest flaky của M2b.2 đã sửa từ trước (`sendRetrying`); mọi `make itest` của M2b.3 xanh (T7 xanh ở lần chạy thứ hai, sau khi sửa test ở trên).
+
+Lỗi Minor còn mở:
+
+1. T5: `Reactions.Set` đọc lại sau trùng khoá bằng majority, nên write chưa majority có thể làm hết 3 lượt (`ErrReactionContended` → `UNAVAILABLE` giả) hoặc trả `n` cũ ở nhánh no-op; đọc local trên primary sẽ sửa (câu hỏi còn mở). `Pins` đọc local trên primary còn `Reactions` đọc majority (chưa ghi lý do). `Count` mở causal session cả khi không có witness. `PinState` với id > `MaxInt64` → `ErrRoomNotFound`. Decoder không đối chiếu field của doc với `_id`. `{r, ts}` của `reactions` không có prefix `_id` nên `Between` của resync sẽ scatter-gather khi đã shard (công cụ thủ công, chấp nhận, D88). Tombstone không bao giờ dọn (cố ý, D88).
+2. T6: `AsInt64OK` cắt `n` kiểu double không nguyên; `n == 0` bị từ chối ở nhánh update nhưng `decodeReaction` (insert/replace) nhận (không nhất quán, vô hại); test pipeline không assert nội dung `$in` của update/replace (itest phủ); chưa kiểm Mongo phát update hay replace cho `FindOneAndUpdate` pipeline (cả hai đều xử lý); cột decisions dòng `mongostore` ghi `D92;D91` (thứ tự).
+3. T7: `Encode` bỏ im lặng user không hợp lệ → record `ReactionChanged` 37 byte bị Term không đếm (không tới được: user đã qua `ValidUser`); lỗi của `Nak`/`Term` bị bỏ qua (giao lại sau `AckWait`); `Decode` chặn độ dài ở `MaxRecordSize` nên đuôi dài hơn sau này bị Term (D91 phủ); `queue_test` không assert record đã Nak không bao giờ được ack (đúng theo cấu trúc). D91: Nak kind lạ không giới hạn nên `ChatimWorkFailing` kêu trong lúc còn core cũ; một fetch có thể đếm cùng record kind lạ nhiều lần khi `WORK_FETCH_WAIT` > `WORK_RETRY_DELAY` (hiếm với mặc định 1s so với 5s).
+4. T9: ở giới hạn `REACTION_MAX_EMOJIS`, user là người duy nhất react emoji của mình cũng không đổi sang emoji mới được dù số loại emoji giữ nguyên (luật "emoji mới khi ≥ Max", giới hạn mềm D89; owner có thể xem lại). Thứ tự kiểm (policy trước tin xoá, `validKey` trước emoji) chưa ghim bằng test; nhánh no-op trả summary đọc trước khi ghi (mềm); interface `CounterToucher` ở `react.go` còn `Deps` ở `mutator.go` (thẩm mỹ).
+5. T10: chưa có unit test đồng thời thật (itest T16 (d) phủ `PIN_LIMIT` khi đồng thời); nhận diện retry không so tenant (theo room, vô hại); core chết sau `Append` trước enqueue → retry là no-op đúng trạng thái, không event (worker `pin_event` phát lại từ fact); không kiểm ctx giữa các lượt (store trả `ctx.Err`).
+6. T11: test mức RPC không phủ `TooManyEmojis`/`TooManyPins`/`Unavailable` (mutate phủ); parse `REACTION_COUNT_DELAY` dựa vào thứ tự gọi sau khi `EffectDelay` đã đặt; thread bị từ chối (chỉ timeline chính, `ValidateThread`).
+7. T13: lỗi `publish.Message` đếm drop một lần mỗi nhóm chứ không mỗi record; ba cache loại room mới theo effect (bộ nhớ); `cmp.Or` biến `Delay` 0 thành 1s (config cấm 0); `reaction_counter` drop có đếm cả lỗi vĩnh viễn `ErrInvalidArgument`. D93: bốn event mới không có ack mark; event reaction trung gian có thể mất, chỉ trạng thái cuối được bảo đảm (lớp tập).
+8. T14: resync `ErrReactionPageFull`/`ErrPinPageFull` khi một thời điểm đầy một trang 1000 (như `ErrEditPageFull`); room chỉ có reaction/ghim trong khoảng mất không được chọn theo `ab`, phải chạy `-room` (D91).
+9. File gần 200 dòng (lần sửa sau phải tách): `proto/chatim/v1/core.proto` 221 (từ 165, vượt 200); `mongostore/codec_test.go` 192; `counter/counter_test.go` 189; `mongostore/codec.go` 187; `resync/scan_test.go` 187 (chuyển `world` sang `world_test.go`); `grpcsrv/harness_test.go` 183; `config/load_test.go` 181.
+
+Kiểm chứng trong lúc làm: `itest` xanh ở T5 (index phủ `k_1_e_1`, không FETCH), T6, T7, T9, T10, T11, T13, T14, T16 (6 itest mới PASS lần đầu, không skip; cả `make itest` xanh); `make e2e` PASS lần đầu ở T15 (phase 4: react 👍 rồi 🎉 trên seq 3, `change` 2, số đếm `v2`; ghim seq 4 `pv1`; lặp lệnh là no-op); `make alerts-check` `SUCCESS: 16 rules found` ở T13 và T17.
+
+Kiểm chứng cuối (Task 18, <YYYY-MM-DD>, trên `<sha>`):
