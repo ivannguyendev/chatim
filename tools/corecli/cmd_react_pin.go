@@ -29,6 +29,22 @@ func reactCmd(ctx context.Context, args []string) error {
 	})
 }
 
+func reactionSettingsCmd(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("reaction-settings", flag.ContinueOnError)
+	o := addOptions(fs)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	return withSession(ctx, o, func(ctx context.Context, s *session) error {
+		resp, st, err := s.client.GetReactionSettings(ctx, &chatimv1.GetReactionSettingsRequest{})
+		if err != nil {
+			return err
+		}
+		report("reaction-settings", st)
+		return printJSON(resp)
+	})
+}
+
 func pinCmd(ctx context.Context, args []string) error { return pinChangeCmd(ctx, "pin", args) }
 
 func unpinCmd(ctx context.Context, args []string) error { return pinChangeCmd(ctx, "unpin", args) }

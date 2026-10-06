@@ -23,3 +23,9 @@ func (c *Client) UnpinMessage(ctx context.Context, req *chatimv1.UnpinMessageReq
 		return api.UnpinMessage(ctx, req)
 	})
 }
+
+func (c *Client) GetReactionSettings(ctx context.Context, req *chatimv1.GetReactionSettingsRequest) (*chatimv1.GetReactionSettingsResponse, Stats, error) {
+	return call(ctx, c, c.loc.AnyAddr, retryIdempotent, func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.GetReactionSettingsResponse, error) {
+		return api.GetReactionSettings(ctx, req)
+	})
+}

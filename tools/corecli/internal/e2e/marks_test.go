@@ -37,15 +37,15 @@ func TestEventOfReadsReactionCountAndPinEvents(t *testing.T) {
 	}{
 		{
 			&chatimv1.Event{Id: "42-0-3-e2e-user-n2", RoomId: "42", Seq: 3, Payload: &chatimv1.Event_ReactionChanged{
-				ReactionChanged: &chatimv1.ReactionChanged{User: reactor, Emoji: "🎉", PreviousEmoji: "👍", Change: 2},
+				ReactionChanged: &chatimv1.ReactionChanged{User: reactor, Emoji: "❤️", PreviousEmoji: "👍", Change: 2},
 			}},
-			e2e.Event{Kind: e2e.KindReaction, Room: "42", ID: "42-0-3-e2e-user-n2", Seq: 3, User: reactor, Version: 2, Text: "🎉", Subject: "s"},
+			e2e.Event{Kind: e2e.KindReaction, Room: "42", ID: "42-0-3-e2e-user-n2", Seq: 3, User: reactor, Version: 2, Text: "❤️", Subject: "s"},
 		},
 		{
 			&chatimv1.Event{Id: "42-0-3-reactions-v2", RoomId: "42", Seq: 3, Payload: &chatimv1.Event_CountsChanged{
-				CountsChanged: &chatimv1.CountsChanged{Counter: "reactions", Reactions: summary(2, "🎉")},
+				CountsChanged: &chatimv1.CountsChanged{Counter: "reactions", Reactions: summary(2, "❤️")},
 			}},
-			e2e.Event{Kind: e2e.KindCounts, Room: "42", ID: "42-0-3-reactions-v2", Seq: 3, Text: "🎉=1", Subject: "s"},
+			e2e.Event{Kind: e2e.KindCounts, Room: "42", ID: "42-0-3-reactions-v2", Seq: 3, Text: "❤️=1", Subject: "s"},
 		},
 		{
 			&chatimv1.Event{Id: "42-p1", RoomId: "42", Seq: 4, Payload: &chatimv1.Event_MessagePinned{
@@ -78,12 +78,12 @@ func TestCheckEventsSkipsReactionAndPinEvents(t *testing.T) {
 }
 
 func TestCheckReactAndPinReplies(t *testing.T) {
-	want := e2e.Reaction{Seq: 3, Emoji: "🎉", Change: 2, Version: 2}
-	if err := e2e.CheckReactReply(want, 2, summary(2, "🎉")); err != nil {
+	want := e2e.Reaction{Seq: 3, Emoji: "❤️", Change: 2, Version: 2}
+	if err := e2e.CheckReactReply(want, 2, summary(2, "❤️")); err != nil {
 		t.Fatalf("CheckReactReply(good) = %v", err)
 	}
-	expectErr(t, e2e.CheckReactReply(want, 1, summary(2, "🎉")), "change 1")
-	expectErr(t, e2e.CheckReactReply(want, 2, summary(1, "🎉")), "version 1")
+	expectErr(t, e2e.CheckReactReply(want, 1, summary(2, "❤️")), "change 1")
+	expectErr(t, e2e.CheckReactReply(want, 2, summary(1, "❤️")), "version 1")
 	expectErr(t, e2e.CheckReactReply(want, 2, summary(2, "👍")), "👍=1")
 	pin := e2e.Pin{Seq: 4, Version: 1}
 	good := []*chatimv1.Pin{{Seq: 4, By: reactor, PinVersion: 1, PinnedAt: timestamppb.Now()}}
@@ -97,9 +97,9 @@ func TestCheckReactAndPinReplies(t *testing.T) {
 
 func TestCheckReactionsWantsCountsOnTheReactedSeqOnly(t *testing.T) {
 	as := acks(3)
-	want := []e2e.Reaction{{Seq: 2, Emoji: "🎉", Change: 2, Version: 2}}
+	want := []e2e.Reaction{{Seq: 2, Emoji: "❤️", Change: 2, Version: 2}}
 	page := messagesOf(as)
-	page[1].Reactions = summary(2, "🎉")
+	page[1].Reactions = summary(2, "❤️")
 	if err := e2e.CheckReactions(want, page); err != nil {
 		t.Fatalf("CheckReactions(reacted) = %v", err)
 	}
@@ -109,17 +109,17 @@ func TestCheckReactionsWantsCountsOnTheReactedSeqOnly(t *testing.T) {
 	expectErr(t, e2e.CheckReactions(nil, page), "want none")
 	expectErr(t, e2e.CheckReactions(want, messagesOf(as)), "seq 2")
 	stale := messagesOf(as)
-	stale[1].Reactions = summary(1, "🎉")
+	stale[1].Reactions = summary(1, "❤️")
 	expectErr(t, e2e.CheckReactions(want, stale), "version 1")
 	expectErr(t, e2e.CheckReactions(want, page[:1]), "missing")
 }
 
 func TestCheckMarkEventsWantsTheFinalIDs(t *testing.T) {
-	reactions := []e2e.Reaction{{Seq: 3, Emoji: "🎉", Change: 2, Version: 2}}
+	reactions := []e2e.Reaction{{Seq: 3, Emoji: "❤️", Change: 2, Version: 2}}
 	pins := []e2e.Pin{{Seq: 4, Version: 1}}
-	final := e2e.Event{Kind: e2e.KindReaction, Room: room, ID: e2e.ReactionEventID(room, 3, reactor, 2), Seq: 3, User: reactor, Version: 2, Text: "🎉"}
+	final := e2e.Event{Kind: e2e.KindReaction, Room: room, ID: e2e.ReactionEventID(room, 3, reactor, 2), Seq: 3, User: reactor, Version: 2, Text: "❤️"}
 	earlier := e2e.Event{Kind: e2e.KindReaction, Room: room, ID: e2e.ReactionEventID(room, 3, reactor, 1), Seq: 3, User: reactor, Version: 1, Text: "👍"}
-	counts := e2e.Event{Kind: e2e.KindCounts, Room: room, ID: e2e.CountsEventID(room, 3, 2), Seq: 3, Text: "🎉=1"}
+	counts := e2e.Event{Kind: e2e.KindCounts, Room: room, ID: e2e.CountsEventID(room, 3, 2), Seq: 3, Text: "❤️=1"}
 	pinned := e2e.Event{Kind: e2e.KindPinned, Room: room, ID: e2e.PinEventID(room, 1), Seq: 4, CID: "a-d"}
 	created := e2e.Event{Kind: e2e.KindCreated, Room: room, ID: e2e.MessageEventID(room, 1), Seq: 1}
 	missing, err := e2e.CheckMarkEvents(room, reactor, reactions, pins, []e2e.Event{created, earlier, final})
@@ -132,10 +132,10 @@ func TestCheckMarkEventsWantsTheFinalIDs(t *testing.T) {
 	wrongText := final
 	wrongText.Text = "👍"
 	bad := map[string]e2e.Event{
-		"room 7":              {Kind: e2e.KindCounts, Room: "7", ID: counts.ID, Seq: 3, Text: "🎉=1"},
+		"room 7":              {Kind: e2e.KindCounts, Room: "7", ID: counts.ID, Seq: 3, Text: "❤️=1"},
 		"unexpected":          {Kind: e2e.KindReaction, Room: room, ID: e2e.ReactionEventID(room, 5, reactor, 1), Seq: 5, User: reactor, Version: 1},
 		`by "bob"`:            {Kind: e2e.KindReaction, Room: room, ID: e2e.ReactionEventID(room, 3, "bob", 1), Seq: 3, User: "bob", Version: 1},
-		"want counts_changed": {Kind: e2e.KindReaction, Room: room, ID: counts.ID, Seq: 3, User: reactor, Text: "🎉=1"},
+		"want counts_changed": {Kind: e2e.KindReaction, Room: room, ID: counts.ID, Seq: 3, User: reactor, Text: "❤️=1"},
 		`"👍", want`:           wrongText,
 	}
 	for part, ev := range bad {

@@ -17,12 +17,13 @@ import (
 	"github.com/ivannguyendev/chatim/tools/internal/route"
 )
 
-const (
-	firstEmoji  = "👍"
-	secondEmoji = "🎉"
-)
+const unlistedEmoji = "🎉"
 
-var errMarkedTwice = errors.New("this scenario already holds its reaction and pin")
+var (
+	errMarkedTwice = errors.New("this scenario already holds its reaction and pin")
+	errFewEmojis   = errors.New("the core lists fewer than two reaction emojis")
+	errEmojiListed = fmt.Errorf("the core lists %s, which the scenario needs unlisted", unlistedEmoji)
+)
 
 func e2eReactPin(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("e2e react-pin", flag.ContinueOnError)
@@ -44,24 +45,31 @@ func e2eReactPin(ctx context.Context, args []string) error {
 		return fmt.Errorf("-react %d and -pin %d must be acked seq that are not deleted", *react, *pin)
 	}
 	o.tenant, o.user = st.Tenant, st.User
+	var emojis []string
 	var r e2e.Reaction
 	var p e2e.Pin
 	err = withSession(ctx, o, func(ctx context.Context, s *session) error {
 		var err error
-		if r, err = reactThenChange(ctx, s.client, st.Room, *react); err != nil {
+		if emojis, err = reactionEmojis(ctx, s.client); err != nil {
+			return err
+		}
+		if err = unlistedIsInvalid(ctx, s.client, st.Room, *react); err != nil {
+			return err
+		}
+		if r, err = reactThenChange(ctx, s.client, st.Room, *react, emojis[0], emojis[1]); err != nil {
 			return err
 		}
 		if p, err = pinTwice(ctx, s.client, st.Room, st.User, *pin); err != nil {
 			return err
 		}
-		return deletedTakesNoMark(ctx, s.client, st)
+		return deletedTakesNoMark(ctx, s.client, st, emojis[0])
 	})
 	if err != nil {
 		return err
 	}
 	st.Reactions, st.Pins = []e2e.Reaction{r}, []e2e.Pin{p}
-	fmt.Fprintf(os.Stderr, "seq %d reacted %s then %s (change %d, counts version %d), seq %d pinned (pin version %d); repeats were no-ops\n",
-		r.Seq, firstEmoji, r.Emoji, r.Change, r.Version, p.Seq, p.Version)
+	fmt.Fprintf(os.Stderr, "seq %d reacted %s then %s (change %d, counts version %d), %s refused, seq %d pinned (pin version %d); repeats were no-ops\n",
+		r.Seq, emojis[0], r.Emoji, r.Change, r.Version, unlistedEmoji, p.Seq, p.Version)
 	return e2e.Save(statePath(*dir), st)
 }
 
@@ -71,11 +79,35 @@ func markable(st e2e.State, seq uint64) bool {
 	return acked && !deleted
 }
 
-func reactThenChange(ctx context.Context, cl *route.Client, room string, seq uint64) (e2e.Reaction, error) {
+func reactionEmojis(ctx context.Context, cl *route.Client) ([]string, error) {
+	resp, stats, err := cl.GetReactionSettings(ctx, &chatimv1.GetReactionSettingsRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("reaction settings: %w", err)
+	}
+	report("reaction settings", stats)
+	switch emojis := resp.GetEmojis(); {
+	case len(emojis) < 2:
+		return nil, errFewEmojis
+	case slices.Contains(emojis, unlistedEmoji):
+		return nil, errEmojiListed
+	default:
+		return emojis, nil
+	}
+}
+
+func unlistedIsInvalid(ctx context.Context, cl *route.Client, room string, seq uint64) error {
+	_, _, err := cl.ReactMessage(ctx, &chatimv1.ReactMessageRequest{RoomId: room, Seq: seq, Emoji: unlistedEmoji})
+	if status.Code(err) != codes.InvalidArgument {
+		return fmt.Errorf("react %s on seq %d = %w, want InvalidArgument", unlistedEmoji, seq, err)
+	}
+	return nil
+}
+
+func reactThenChange(ctx context.Context, cl *route.Client, room string, seq uint64, first, second string) (e2e.Reaction, error) {
 	steps := []e2e.Reaction{
-		{Seq: seq, Emoji: firstEmoji, Change: 1, Version: 1},
-		{Seq: seq, Emoji: secondEmoji, Change: 2, Version: 2},
-		{Seq: seq, Emoji: secondEmoji, Change: 2, Version: 2},
+		{Seq: seq, Emoji: first, Change: 1, Version: 1},
+		{Seq: seq, Emoji: second, Change: 2, Version: 2},
+		{Seq: seq, Emoji: second, Change: 2, Version: 2},
 	}
 	for i, want := range steps {
 		resp, stats, err := cl.ReactMessage(ctx, &chatimv1.ReactMessageRequest{RoomId: room, Seq: seq, Emoji: want.Emoji})
@@ -105,12 +137,12 @@ func pinTwice(ctx context.Context, cl *route.Client, room, user string, seq uint
 	return want, nil
 }
 
-func deletedTakesNoMark(ctx context.Context, cl *route.Client, st e2e.State) error {
+func deletedTakesNoMark(ctx context.Context, cl *route.Client, st e2e.State, emoji string) error {
 	for _, c := range st.Changes {
 		if !c.Deleted {
 			continue
 		}
-		_, _, err := cl.ReactMessage(ctx, &chatimv1.ReactMessageRequest{RoomId: st.Room, Seq: c.Seq, Emoji: firstEmoji})
+		_, _, err := cl.ReactMessage(ctx, &chatimv1.ReactMessageRequest{RoomId: st.Room, Seq: c.Seq, Emoji: emoji})
 		if status.Code(err) != codes.FailedPrecondition {
 			return fmt.Errorf("react on deleted seq %d = %w, want FailedPrecondition", c.Seq, err)
 		}

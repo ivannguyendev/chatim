@@ -29,3 +29,10 @@ func (f *fakeCore) UnpinMessage(ctx context.Context, _ *chatimv1.UnpinMessageReq
 	}
 	return &chatimv1.UnpinMessageResponse{PinVersion: 2}, nil
 }
+
+func (f *fakeCore) GetReactionSettings(ctx context.Context, _ *chatimv1.GetReactionSettingsRequest, _ ...grpc.CallOption) (*chatimv1.GetReactionSettingsResponse, error) {
+	if err := f.next(ctx); err != nil {
+		return nil, err
+	}
+	return &chatimv1.GetReactionSettingsResponse{Emojis: []string{"👍", "❤️"}}, nil
+}

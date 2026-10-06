@@ -18,7 +18,7 @@ func TestStateRoundTripsThroughAFile(t *testing.T) {
 	want := e2e.State{
 		Tenant: "e2e", User: "alice", Room: room, Owner: "core-1", Acks: acks(3),
 		Changes:   []e2e.Change{e2e.EditOf(1), e2e.DeleteOf(2)},
-		Reactions: []e2e.Reaction{{Seq: 3, Emoji: "🎉", Change: 2, Version: 2}},
+		Reactions: []e2e.Reaction{{Seq: 3, Emoji: "❤️", Change: 2, Version: 2}},
 		Pins:      []e2e.Pin{{Seq: 4, Version: 1}},
 	}
 	if err := e2e.Save(path, want); err != nil {
