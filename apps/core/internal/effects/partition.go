@@ -45,7 +45,7 @@ func (w *Workers) fetchFailed(ctx context.Context, p int, err error) {
 		return
 	}
 	if bad, ok := errors.AsType[work.BadRecordsError](err); ok {
-		w.failed.Add(bad.Terminated)
+		w.failed.Add(bad.Terminated + bad.Deferred)
 	}
 	w.fails.warn(ctx, fetchFailedMsg, "partition", p, "err", err)
 }

@@ -33,6 +33,14 @@ func TestRecordOfKeepsOnlyKeysAndCommitTime(t *testing.T) {
 	if got, want := work.RecordOf(edit), (work.Record{Kind: store.EditInserted, Room: 42, Thread: 3, Seq: 9, Version: 2, CommittedAt: committed}); got != want {
 		t.Fatalf("RecordOf(edit) = %+v, want %+v", got, want)
 	}
+	reaction := store.Change{Kind: store.ReactionChanged, Reaction: domain.Reaction{Room: 42, Thread: 3, Seq: 9, User: "bob", N: 4, Emoji: "👍"}, CommittedAt: committed}
+	if got, want := work.RecordOf(reaction), (work.Record{Kind: store.ReactionChanged, Room: 42, Thread: 3, Seq: 9, Version: 4, User: "bob", CommittedAt: committed}); got != want {
+		t.Fatalf("RecordOf(reaction) = %+v, want %+v", got, want)
+	}
+	pin := store.Change{Kind: store.PinInserted, Pin: domain.PinAction{Room: 42, PV: 6, Op: domain.PinOpPin, Thread: 3, Seq: 9, By: "bob"}, CommittedAt: committed}
+	if got, want := work.RecordOf(pin), (work.Record{Kind: store.PinInserted, Room: 42, Seq: 6, CommittedAt: committed}); got != want {
+		t.Fatalf("RecordOf(pin) = %+v, want %+v", got, want)
+	}
 }
 
 func TestRecordRoundTripsThroughThirtySevenBytes(t *testing.T) {
@@ -88,12 +96,15 @@ func TestIDsAreNaturalKeys(t *testing.T) {
 		r    work.Record
 		want string
 	}{
-		"message":        {work.Record{Kind: store.MessageInserted, Room: 42, Seq: 7, CommittedAt: committed}, "m:42-0-7"},
-		"thread message": {work.Record{Kind: store.MessageInserted, Room: 42, Thread: 3, Seq: 9}, "m:42-3-9"},
-		"room":           {work.Record{Kind: store.RoomInserted, Room: 42, CommittedAt: committed}, "r:42"},
-		"edit":           {work.Record{Kind: store.EditInserted, Room: 42, Seq: 7, Version: 1}, "e:42-0-7-v1"},
-		"thread edit":    {work.Record{Kind: store.EditInserted, Room: 42, Thread: 3, Seq: 9, Version: 12}, "e:42-3-9-v12"},
-		"unknown kind":   {work.Record{Room: 42}, ""},
+		"message":         {work.Record{Kind: store.MessageInserted, Room: 42, Seq: 7, CommittedAt: committed}, "m:42-0-7"},
+		"thread message":  {work.Record{Kind: store.MessageInserted, Room: 42, Thread: 3, Seq: 9}, "m:42-3-9"},
+		"room":            {work.Record{Kind: store.RoomInserted, Room: 42, CommittedAt: committed}, "r:42"},
+		"edit":            {work.Record{Kind: store.EditInserted, Room: 42, Seq: 7, Version: 1}, "e:42-0-7-v1"},
+		"thread edit":     {work.Record{Kind: store.EditInserted, Room: 42, Thread: 3, Seq: 9, Version: 12}, "e:42-3-9-v12"},
+		"reaction":        {work.Record{Kind: store.ReactionChanged, Room: 42, Seq: 7, Version: 3, User: "bob"}, "x:42-0-7-bob-n3"},
+		"thread reaction": {work.Record{Kind: store.ReactionChanged, Room: 42, Thread: 3, Seq: 9, Version: 1, User: "a-n1"}, "x:42-3-9-a-n1-n1"},
+		"pin":             {work.Record{Kind: store.PinInserted, Room: 42, Seq: 5}, "p:42-p5"},
+		"unknown kind":    {work.Record{Room: 42}, ""},
 	}
 	for name, c := range cases {
 		if got := c.r.ID(); got != c.want {
@@ -147,9 +158,9 @@ func TestMessageCarriesSubjectRecordAndID(t *testing.T) {
 	}
 }
 
-func TestKnownKindsAreTheThreeChangeKinds(t *testing.T) {
-	for k := range store.ChangeKind(6) {
-		want := k == store.MessageInserted || k == store.RoomInserted || k == store.EditInserted
+func TestKnownKindsAreTheFiveChangeKinds(t *testing.T) {
+	for k := range store.ChangeKind(8) {
+		want := k >= store.MessageInserted && k <= store.PinInserted
 		if got := work.KnownKind(k); got != want {
 			t.Errorf("KnownKind(%d) = %v, want %v", k, got, want)
 		}

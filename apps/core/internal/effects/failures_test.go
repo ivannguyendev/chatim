@@ -21,7 +21,7 @@ type badOnce struct {
 func (b *badOnce) Fetch(ctx context.Context, limit int, wait time.Duration) ([]work.Delivery, error) {
 	if !b.served {
 		b.served = true
-		return nil, work.BadRecordsError{Terminated: 2}
+		return nil, work.BadRecordsError{Terminated: 2, Deferred: 3}
 	}
 	return b.Queue.Fetch(ctx, limit, wait)
 }
@@ -33,8 +33,8 @@ func TestUndecodableRecordsCountAsFailures(t *testing.T) {
 		}).start(t)
 		time.Sleep(2 * tick)
 		synctest.Wait()
-		if got := rg.Stats().Failed; got != 2 {
-			t.Fatalf("failed = %d, want the 2 terminated records", got)
+		if got := rg.Stats().Failed; got != 5 {
+			t.Fatalf("failed = %d, want the 2 terminated and 3 deferred records", got)
 		}
 		if got := rg.sink.Count(fetchFailedMsg); got != 1 {
 			t.Fatalf("%q logged %d times, want 1", fetchFailedMsg, got)

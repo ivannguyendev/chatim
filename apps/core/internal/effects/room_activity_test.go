@@ -104,3 +104,22 @@ func TestRoomActivityTouchesOnlyTheChangeTimeForEdits(t *testing.T) {
 		t.Fatalf("TouchActivity calls = %+v, want one call with %+v (edits as seq 0, kept apart from the new message)", spy.calls, want)
 	}
 }
+
+func TestRoomActivityTouchesOnlyTheChangeTimeForReactionsAndPins(t *testing.T) {
+	spy := &touchSpy{}
+	t1, t2 := activityAt, activityAt.Add(time.Second)
+	recs := []work.Record{
+		{Kind: store.ReactionChanged, Room: 101, Seq: 5, Version: 2, User: "bob", CommittedAt: t1},
+		{Kind: store.PinInserted, Room: 101, Seq: 9, CommittedAt: t2},
+		activityRecord(101, 0, 4, t1),
+		{Kind: store.PinInserted, Room: 202, Seq: 3, CommittedAt: t1},
+	}
+	errs := effects.NewRoomActivity(spy).Effect().Run(t.Context(), recs)
+	if len(errs) != len(recs) || slices.ContainsFunc(errs, func(err error) bool { return err != nil }) {
+		t.Fatalf("Run errors = %v, want %d nils", errs, len(recs))
+	}
+	want := []store.Activity{{Room: 101, At: t2}, {Room: 101, Seq: 4, At: t1}, {Room: 202, At: t1}}
+	if len(spy.calls) != 1 || !slices.Equal(spy.calls[0], want) {
+		t.Fatalf("TouchActivity calls = %+v, want one call with %+v (reactions and pins as seq 0, never the message seq or pv)", spy.calls, want)
+	}
+}

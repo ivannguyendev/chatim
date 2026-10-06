@@ -53,9 +53,11 @@ func wireEffects(cfg config.Config, cl *clients, st *mongostore.Store, marks *ev
 		store.MessageInserted: {activity.Effect(), fx.msgCreated.Effect()},
 		store.RoomInserted:    {fx.roomCreated.Effect()},
 		store.EditInserted:    {activity.Effect(), fx.editProjection.Effect(), fx.msgChanged.Effect()},
+		store.ReactionChanged: {activity.Effect()},
+		store.PinInserted:     {activity.Effect()},
 	}
 	fx.workers, err = effects.New(effects.Deps{
-		Queue:    func(p int) work.Queue { return work.NewQueue(cl.effectsJS, cfg.Work.Name, p) },
+		Queue:    func(p int) work.Queue { return work.NewQueue(cl.effectsJS, cfg.Work.Name, p, cfg.Effects.RetryDelay) },
 		Owner:    owner,
 		Registry: registry,
 	}, cfg.Effects, log)

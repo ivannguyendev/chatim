@@ -18,7 +18,7 @@ type RoomActivity struct {
 
 type activityKey struct {
 	room, thread uint64
-	edit         bool
+	msg          bool
 }
 
 const RoomActivityName = "room_activity"
@@ -47,12 +47,12 @@ func latestActivity(recs []work.Record) []store.Activity {
 	at := make(map[activityKey]int, len(recs))
 	out := make([]store.Activity, 0, len(recs))
 	for _, r := range recs {
-		edit := r.Kind == store.EditInserted
-		seq := r.Seq
-		if edit {
-			seq = 0
+		msg := r.Kind == store.MessageInserted
+		seq := uint64(0)
+		if msg {
+			seq = r.Seq
 		}
-		k := activityKey{r.Room, r.Thread, edit}
+		k := activityKey{r.Room, r.Thread, msg}
 		i, ok := at[k]
 		if !ok {
 			at[k] = len(out)

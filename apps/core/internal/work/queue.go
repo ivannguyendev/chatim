@@ -22,23 +22,33 @@ type Queue interface {
 
 type BadRecordsError struct {
 	Terminated uint64
+	Deferred   uint64
 }
 
 func (e BadRecordsError) Error() string {
-	return strconv.FormatUint(e.Terminated, 10) + " undecodable work records terminated"
+	return strconv.FormatUint(e.Terminated, 10) + " undecodable work records terminated, " +
+		strconv.FormatUint(e.Deferred, 10) + " records of unknown kinds deferred"
+}
+
+func (e BadRecordsError) orNil() error {
+	if e.Terminated == 0 && e.Deferred == 0 {
+		return nil
+	}
+	return e
 }
 
 func (BadRecordsError) Unwrap() error { return ErrBadRecord }
 
 type jetStreamQueue struct {
-	js        jetstream.JetStream
-	stream    string
-	partition int
-	consumer  jetstream.Consumer
+	js         jetstream.JetStream
+	stream     string
+	partition  int
+	retryDelay time.Duration
+	consumer   jetstream.Consumer
 }
 
-func NewQueue(js jetstream.JetStream, stream string, partition int) Queue {
-	return &jetStreamQueue{js: js, stream: stream, partition: partition}
+func NewQueue(js jetstream.JetStream, stream string, partition int, retryDelay time.Duration) Queue {
+	return &jetStreamQueue{js: js, stream: stream, partition: partition, retryDelay: retryDelay}
 }
 
 func (q *jetStreamQueue) Fetch(ctx context.Context, limit int, wait time.Duration) ([]Delivery, error) {
@@ -58,26 +68,30 @@ func (q *jetStreamQueue) Fetch(ctx context.Context, limit int, wait time.Duratio
 	if err != nil {
 		return nil, fmt.Errorf("fetch work partition %d: %w", q.partition, err)
 	}
-	return collect(ctx, batch)
+	return collect(ctx, batch, q.retryDelay)
 }
 
-func collect(ctx context.Context, batch jetstream.MessageBatch) ([]Delivery, error) {
+func collect(ctx context.Context, batch jetstream.MessageBatch, retryDelay time.Duration) ([]Delivery, error) {
 	var out []Delivery
-	var bad uint64
+	var bad BadRecordsError
 	msgs := batch.Messages()
 	for {
 		select {
 		case m, open := <-msgs:
 			if !open {
-				return out, errors.Join(fetchError(ctx, batch.Error()), badRecords(bad))
+				return out, errors.Join(fetchError(ctx, batch.Error()), bad.orNil())
 			}
 			r, err := Decode(m.Data())
-			if err != nil {
+			switch {
+			case errors.Is(err, ErrUnknownKind):
+				_ = m.NakWithDelay(retryDelay)
+				bad.Deferred++
+			case err != nil:
 				_ = m.Term()
-				bad++
-				continue
+				bad.Terminated++
+			default:
+				out = append(out, jetStreamDelivery{msg: m, rec: r})
 			}
-			out = append(out, jetStreamDelivery{msg: m, rec: r})
 		case <-ctx.Done():
 			return out, ctx.Err()
 		}
@@ -89,13 +103,6 @@ func fetchError(ctx context.Context, err error) error {
 		return nil
 	}
 	return err
-}
-
-func badRecords(n uint64) error {
-	if n == 0 {
-		return nil
-	}
-	return BadRecordsError{Terminated: n}
 }
 
 type jetStreamDelivery struct {

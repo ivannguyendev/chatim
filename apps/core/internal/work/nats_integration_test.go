@@ -102,7 +102,7 @@ func TestRealWorkQueueFetchesAcksAndRedeliversNaks(t *testing.T) {
 		}
 		want = append(want, r)
 	}
-	q := work.NewQueue(js, cfg.Name, 1)
+	q := work.NewQueue(js, cfg.Name, 1, time.Second)
 	ds, err := q.Fetch(t.Context(), 10, 2*time.Second)
 	if err != nil || len(ds) != 3 {
 		t.Fatalf("Fetch = %d deliveries, %v; want 3", len(ds), err)
@@ -138,7 +138,7 @@ func TestRealWorkQueueTerminatesUndecodableRecords(t *testing.T) {
 	if _, err := js.PublishMsg(t.Context(), junk); err != nil {
 		t.Fatalf("publish junk: %v", err)
 	}
-	ds, err := work.NewQueue(js, cfg.Name, 2).Fetch(t.Context(), 10, 2*time.Second)
+	ds, err := work.NewQueue(js, cfg.Name, 2, time.Second).Fetch(t.Context(), 10, 2*time.Second)
 	var bad work.BadRecordsError
 	if len(ds) != 0 || !errors.As(err, &bad) || bad.Terminated != 1 || !errors.Is(err, work.ErrBadRecord) {
 		t.Fatalf("Fetch of junk = %d deliveries, %v; want none and one terminated bad record", len(ds), err)

@@ -55,21 +55,26 @@ func (b *busyFeed) Open(ctx context.Context) (store.Cursor, error) {
 
 type rig struct {
 	*reconcile.Reconciler
-	msgs  *memstore.Messages
-	rooms *memstore.Rooms
-	edits *memstore.Edits
-	feed  *memstore.Feed
-	base  int
-	owner *owner
-	js    *publishtest.JetStream
-	sink  *testlog.Sink
+	msgs      *memstore.Messages
+	rooms     *memstore.Rooms
+	edits     *memstore.Edits
+	reactions *memstore.Reactions
+	pins      *memstore.Pins
+	feed      *memstore.Feed
+	base      int
+	owner     *owner
+	js        *publishtest.JetStream
+	sink      *testlog.Sink
 }
 
 func newRig(t *testing.T, wrap func(store.ChangeFeed) store.ChangeFeed) *rig {
 	t.Helper()
-	rg := &rig{msgs: memstore.NewMessages(), rooms: memstore.NewRooms(), edits: memstore.NewEdits(), owner: &owner{}, js: &publishtest.JetStream{}, sink: &testlog.Sink{}}
+	rg := &rig{
+		msgs: memstore.NewMessages(), rooms: memstore.NewRooms(), edits: memstore.NewEdits(), reactions: memstore.NewReactions(), pins: memstore.NewPins(),
+		owner: &owner{}, js: &publishtest.JetStream{}, sink: &testlog.Sink{},
+	}
 	rg.createRoom(t, room)
-	rg.feed = memstore.NewFeed(rg.msgs, rg.rooms, rg.edits)
+	rg.feed = memstore.NewFeed(rg.msgs, rg.rooms, rg.edits, memstore.WithReactions(rg.reactions), memstore.WithPins(rg.pins))
 	rg.base, _ = rg.feed.Confirmed()
 	rg.owner.leading.Store(true)
 	var feed store.ChangeFeed = rg.feed
