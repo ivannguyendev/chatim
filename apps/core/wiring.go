@@ -127,15 +127,16 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 	}, log)
 	chatimv1.RegisterCoreServiceServer(a.grpc, svc)
 	p := probes{
-		drops:        cl.pubCounters.Drops,
-		router:       router.Stats,
-		cidDegraded:  cids.Degraded,
-		markDegraded: marks.Degraded,
-		cidDropped:   batch.Dropped,
-		loadShed:     limiter.Rejected,
-		oplogWindow:  oplogWindowSeconds(cl.mongo),
-		workers:      fx.workers.Stats,
-		effectCounts: fx.counters(),
+		drops:          cl.pubCounters.Drops,
+		router:         router.Stats,
+		cidDegraded:    cids.Degraded,
+		markDegraded:   marks.Degraded,
+		cidDropped:     batch.Dropped,
+		loadShed:       limiter.Rejected,
+		oplogWindow:    oplogWindowSeconds(cl.mongo),
+		workers:        fx.workers.Stats,
+		effectCounts:   fx.counters(),
+		counterRepairs: fx.counterRepairs(),
 	}
 	if rec != nil {
 		p.reconcile = rec.Stats

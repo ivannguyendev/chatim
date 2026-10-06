@@ -30,3 +30,19 @@ type EditApplier interface {
 type TextPurger interface {
 	PurgeText(ctx context.Context, key store.MsgKey, upTo uint32) error
 }
+
+type ReactionReader interface {
+	Get(ctx context.Context, key store.MsgKey, user string) (domain.Reaction, bool, error)
+}
+
+type CounterToucher interface {
+	Touch(ctx context.Context, key store.MsgKey, cur domain.ReactionSummary, witnesses []store.Witness, tries int) (domain.ReactionSummary, bool, error)
+}
+
+type PinFacts interface {
+	At(ctx context.Context, room, pv uint64) (domain.PinAction, error)
+}
+
+type PinProjecter interface {
+	Project(ctx context.Context, room, target uint64) (domain.PinState, error)
+}

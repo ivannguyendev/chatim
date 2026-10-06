@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -27,10 +28,13 @@ func fakeProbes(withReader bool) probes {
 		oplogWindow:  func() float64 { return 0 },
 		workers:      func() effects.Stats { return effects.Stats{Processed: 7, Failed: 2, Lag: 3 * time.Second} },
 		effectCounts: map[string]effectCounters{
-			"msg_created":     {republished: func() uint64 { return 5 }, dropped: zero},
-			"room_created":    {republished: zero, dropped: func() uint64 { return 1 }},
-			"edit_projection": {dropped: func() uint64 { return 4 }},
+			"msg_created":      {republished: func() uint64 { return 5 }, dropped: zero},
+			"room_created":     {republished: zero, dropped: func() uint64 { return 1 }},
+			"edit_projection":  {dropped: func() uint64 { return 4 }},
+			"reaction_counter": {republished: func() uint64 { return 8 }, dropped: func() uint64 { return 2 }},
+			"pin_projection":   {dropped: func() uint64 { return 3 }},
 		},
+		counterRepairs: map[string]func() uint64{"reactions": func() uint64 { return 6 }},
 	}
 	if withReader {
 		p.reconcile = func() reconcile.Stats { return reconcile.Stats{} }
@@ -51,6 +55,7 @@ func TestCoreMetricSourcesCoverEveryGuarantee(t *testing.T) {
 		"publish_dropped_total", "ack_marks_dropped_total", "redis_degraded", "cid_settle_dropped_total",
 		"cid_pending_elsewhere_total", "room_yields_total", "grpc_load_shed_total", "mongo_oplog_window_seconds",
 		"reconcile_lag_seconds", "reconcile_republished_total", "effect_dropped_total", "work_processed_total", "work_failures_total",
+		"counter_repaired_total",
 	}
 	on := sourceNames(metricSources(fakeProbes(true)))
 	for _, name := range append(everyCore, readerMetrics...) {
@@ -77,24 +82,32 @@ func TestCoreMetricSourcesCoverEveryGuarantee(t *testing.T) {
 func TestEffectMetricsReadTheirEffectByLabel(t *testing.T) {
 	got := map[string]float64{}
 	for _, s := range metricSources(fakeProbes(false)) {
-		key := s.Name
-		if effect := s.Labels["effect"]; effect != "" {
-			key += "{" + effect + "}"
+		var key strings.Builder
+		key.WriteString(s.Name)
+		for _, label := range []string{s.Labels["effect"], s.Labels["counter"]} {
+			if label != "" {
+				key.WriteString("{" + label + "}")
+			}
 		}
-		got[key] = s.Read()
+		got[key.String()] = s.Read()
 	}
 	want := map[string]float64{
 		"reconcile_lag_seconds": 3, "work_processed_total": 7, "work_failures_total": 2,
 		"reconcile_republished_total{msg_created}": 5, "reconcile_republished_total{room_created}": 0,
 		"effect_dropped_total{msg_created}": 0, "effect_dropped_total{room_created}": 1,
-		"effect_dropped_total{edit_projection}": 4,
+		"effect_dropped_total{edit_projection}":         4,
+		"reconcile_republished_total{reaction_counter}": 8, "effect_dropped_total{reaction_counter}": 2,
+		"effect_dropped_total{pin_projection}": 3,
+		"counter_repaired_total{reactions}":    6,
 	}
 	for key, v := range want {
 		if g, ok := got[key]; !ok || g != v {
 			t.Errorf("%s = %v (present %v), want %v", key, g, ok, v)
 		}
 	}
-	if _, ok := got["reconcile_republished_total{edit_projection}"]; ok {
-		t.Errorf("edit_projection never publishes, but reconcile_republished_total is exported for it")
+	for _, silent := range []string{"edit_projection", "pin_projection"} {
+		if _, ok := got["reconcile_republished_total{"+silent+"}"]; ok {
+			t.Errorf("%s never publishes, but reconcile_republished_total is exported for it", silent)
+		}
 	}
 }

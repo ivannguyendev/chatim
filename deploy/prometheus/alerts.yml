@@ -115,3 +115,11 @@ groups:
           guarantee: RC1
         annotations:
           summary: An effect gave up on work records whose document could not be read.
+      - alert: ChatimCounterRepairSurge
+        expr: sum by (counter) (rate(chatim_core_counter_repaired_total[5m])) > 1
+        for: 10m
+        labels:
+          severity: warning
+          guarantee: CT1
+        annotations:
+          summary: Effect workers keep rewriting counter summaries the fast path left stale; check fast path touch failures and hot targets.

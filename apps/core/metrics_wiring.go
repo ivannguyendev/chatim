@@ -25,16 +25,17 @@ type effectCounters struct {
 }
 
 type probes struct {
-	drops        func() publish.Drops
-	router       func() actor.Stats
-	cidDegraded  func() bool
-	markDegraded func() bool
-	cidDropped   func() uint64
-	loadShed     func() int64
-	oplogWindow  func() float64
-	workers      func() effects.Stats
-	effectCounts map[string]effectCounters
-	reconcile    func() reconcile.Stats
+	drops          func() publish.Drops
+	router         func() actor.Stats
+	cidDegraded    func() bool
+	markDegraded   func() bool
+	cidDropped     func() uint64
+	loadShed       func() int64
+	oplogWindow    func() float64
+	workers        func() effects.Stats
+	effectCounts   map[string]effectCounters
+	counterRepairs map[string]func() uint64
+	reconcile      func() reconcile.Stats
 }
 
 func metricSources(p probes) []metrics.Source {
@@ -57,6 +58,7 @@ func metricSources(p probes) []metrics.Source {
 		{Name: "mongo_oplog_window_seconds", Help: "Time span covered by the MongoDB oplog; NaN when unreadable.", Gauge: true, Read: p.oplogWindow},
 	}
 	out = append(out, workerSources(p.workers, p.effectCounts)...)
+	out = append(out, counterSources(p.counterRepairs)...)
 	if p.reconcile != nil {
 		out = append(out, readerSources(p.reconcile)...)
 	}
@@ -64,8 +66,8 @@ func metricSources(p probes) []metrics.Source {
 }
 
 func workerSources(stats func() effects.Stats, counts map[string]effectCounters) []metrics.Source {
-	const republishHelp = "Events effect workers sent and JetStream acked; msg_created sends only unmarked events, msg_changed counts only ids the stream had not stored."
-	const dropHelp = "Work records an effect gave up on (missing room, message or edit fact, or a corrupt document)."
+	const republishHelp = "Events effect workers sent and JetStream acked; msg_created sends only unmarked events, the other event effects count only ids the stream had not stored."
+	const dropHelp = "Work records an effect gave up on (missing room, message, edit fact, reaction or pin fact, or a corrupt document)."
 	out := []metrics.Source{
 		{Name: "reconcile_lag_seconds", Help: "How far the effect workers run behind each effect's delay.", Gauge: true, Read: func() float64 { return stats().Lag.Seconds() }},
 		{Name: "work_processed_total", Help: "Work records acked after every effect ran.", Read: func() float64 { return float64(stats().Processed) }},
@@ -77,6 +79,16 @@ func workerSources(stats func() effects.Stats, counts map[string]effectCounters)
 			out = append(out, metrics.Source{Name: "reconcile_republished_total", Help: republishHelp, Labels: labels, Read: func() float64 { return float64(c.republished()) }})
 		}
 		out = append(out, metrics.Source{Name: "effect_dropped_total", Help: dropHelp, Labels: labels, Read: func() float64 { return float64(c.dropped()) }})
+	}
+	return out
+}
+
+func counterSources(repairs map[string]func() uint64) []metrics.Source {
+	const help = "Counter summaries the effect workers rewrote because the fast path left them stale."
+	out := make([]metrics.Source, 0, len(repairs))
+	for _, name := range slices.Sorted(maps.Keys(repairs)) {
+		read := repairs[name]
+		out = append(out, metrics.Source{Name: "counter_repaired_total", Help: help, Labels: map[string]string{"counter": name}, Read: func() float64 { return float64(read()) }})
 	}
 	return out
 }

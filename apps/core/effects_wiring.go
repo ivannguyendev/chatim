@@ -7,17 +7,22 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
 	"github.com/ivannguyendev/chatim/apps/core/internal/effects"
 	"github.com/ivannguyendev/chatim/apps/core/internal/eventmark"
+	"github.com/ivannguyendev/chatim/apps/core/internal/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
 	"github.com/ivannguyendev/chatim/apps/core/internal/work"
 )
 
 type effectSet struct {
-	workers        *effects.Workers
-	msgCreated     *effects.MessageCreated
-	roomCreated    *effects.RoomCreated
-	editProjection *effects.EditProjection
-	msgChanged     *effects.MessageChanged
+	workers         *effects.Workers
+	msgCreated      *effects.MessageCreated
+	roomCreated     *effects.RoomCreated
+	editProjection  *effects.EditProjection
+	msgChanged      *effects.MessageChanged
+	reactionCounter *effects.ReactionCounter
+	reactionEvent   *effects.ReactionEvent
+	pinProjection   *effects.PinProjection
+	pinEvent        *effects.PinEvent
 }
 
 func wireEffects(cfg config.Config, cl *clients, st *mongostore.Store, marks *eventmark.Store, owner effects.Owner, log *slog.Logger) (effectSet, error) {
@@ -48,13 +53,16 @@ func wireEffects(cfg config.Config, cl *clients, st *mongostore.Store, marks *ev
 	if err != nil {
 		return effectSet{}, fmt.Errorf("wire msg_changed effect: %w", err)
 	}
+	if err = fx.wireReactionPinEffects(cfg, cl, st); err != nil {
+		return effectSet{}, err
+	}
 	activity := effects.NewRoomActivity(st)
 	registry := effects.Registry{
 		store.MessageInserted: {activity.Effect(), fx.msgCreated.Effect()},
 		store.RoomInserted:    {fx.roomCreated.Effect()},
 		store.EditInserted:    {activity.Effect(), fx.editProjection.Effect(), fx.msgChanged.Effect()},
-		store.ReactionChanged: {activity.Effect()},
-		store.PinInserted:     {activity.Effect()},
+		store.ReactionChanged: {activity.Effect(), fx.reactionCounter.Effect(), fx.reactionEvent.Effect()},
+		store.PinInserted:     {activity.Effect(), fx.pinProjection.Effect(), fx.pinEvent.Effect()},
 	}
 	fx.workers, err = effects.New(effects.Deps{
 		Queue:    func(p int) work.Queue { return work.NewQueue(cl.effectsJS, cfg.Work.Name, p, cfg.Effects.RetryDelay) },
@@ -69,9 +77,17 @@ func wireEffects(cfg config.Config, cl *clients, st *mongostore.Store, marks *ev
 
 func (fx effectSet) counters() map[string]effectCounters {
 	return map[string]effectCounters{
-		fx.msgCreated.Effect().Name:     {republished: fx.msgCreated.Republished, dropped: fx.msgCreated.Dropped},
-		fx.roomCreated.Effect().Name:    {republished: fx.roomCreated.Republished, dropped: fx.roomCreated.Dropped},
-		fx.msgChanged.Effect().Name:     {republished: fx.msgChanged.Republished, dropped: fx.msgChanged.Dropped},
-		fx.editProjection.Effect().Name: {dropped: fx.editProjection.Dropped},
+		fx.msgCreated.Effect().Name:      {republished: fx.msgCreated.Republished, dropped: fx.msgCreated.Dropped},
+		fx.roomCreated.Effect().Name:     {republished: fx.roomCreated.Republished, dropped: fx.roomCreated.Dropped},
+		fx.msgChanged.Effect().Name:      {republished: fx.msgChanged.Republished, dropped: fx.msgChanged.Dropped},
+		fx.editProjection.Effect().Name:  {dropped: fx.editProjection.Dropped},
+		fx.reactionCounter.Effect().Name: {republished: fx.reactionCounter.Republished, dropped: fx.reactionCounter.Dropped},
+		fx.reactionEvent.Effect().Name:   {republished: fx.reactionEvent.Republished, dropped: fx.reactionEvent.Dropped},
+		fx.pinEvent.Effect().Name:        {republished: fx.pinEvent.Republished, dropped: fx.pinEvent.Dropped},
+		fx.pinProjection.Effect().Name:   {dropped: fx.pinProjection.Dropped},
 	}
+}
+
+func (fx effectSet) counterRepairs() map[string]func() uint64 {
+	return map[string]func() uint64{pbconv.ReactionsCounter: fx.reactionCounter.Repaired}
 }
