@@ -13315,8 +13315,19 @@ Lỗi Minor còn mở:
 6. T11: test mức RPC không phủ `TooManyEmojis`/`TooManyPins`/`Unavailable` (mutate phủ); parse `REACTION_COUNT_DELAY` dựa vào thứ tự gọi sau khi `EffectDelay` đã đặt; thread bị từ chối (chỉ timeline chính, `ValidateThread`).
 7. T13: lỗi `publish.Message` đếm drop một lần mỗi nhóm chứ không mỗi record; ba cache loại room mới theo effect (bộ nhớ); `cmp.Or` biến `Delay` 0 thành 1s (config cấm 0); `reaction_counter` drop có đếm cả lỗi vĩnh viễn `ErrInvalidArgument`. D93: bốn event mới không có ack mark; event reaction trung gian có thể mất, chỉ trạng thái cuối được bảo đảm (lớp tập).
 8. T14: resync `ErrReactionPageFull`/`ErrPinPageFull` khi một thời điểm đầy một trang 1000 (như `ErrEditPageFull`); room chỉ có reaction/ghim trong khoảng mất không được chọn theo `ab`, phải chạy `-room` (D91).
-9. File gần 200 dòng (lần sửa sau phải tách): `proto/chatim/v1/core.proto` 221 (từ 165, vượt 200); `mongostore/codec_test.go` 192; `counter/counter_test.go` 189; `mongostore/codec.go` 187; `resync/scan_test.go` 187 (chuyển `world` sang `world_test.go`); `grpcsrv/harness_test.go` 183; `config/load_test.go` 181.
+9. File gần 200 dòng (lần sửa sau phải tách): `proto/chatim/v1/core.proto` 221 (từ 165, vượt 200; đã tách ở `7d17bb8`, còn 170); `mongostore/codec_test.go` 192; `counter/counter_test.go` 189; `mongostore/codec.go` 187; `resync/scan_test.go` 187 (chuyển `world` sang `world_test.go`); `grpcsrv/harness_test.go` 183; `config/load_test.go` 181.
 
 Kiểm chứng trong lúc làm: `itest` xanh ở T5 (index phủ `k_1_e_1`, không FETCH), T6, T7, T9, T10, T11, T13, T14, T16 (6 itest mới PASS lần đầu, không skip; cả `make itest` xanh); `make e2e` PASS lần đầu ở T15 (phase 4: react 👍 rồi 🎉 trên seq 3, `change` 2, số đếm `v2`; ghim seq 4 `pv1`; lặp lệnh là no-op); `make alerts-check` `SUCCESS: 16 rules found` ở T13 và T17.
 
-Kiểm chứng cuối (Task 18, <YYYY-MM-DD>, trên `<sha>`):
+Kiểm chứng cuối (Task 18, 2026-10-06, trên `7d17bb8`):
+
+- Trước Task 18: `7d17bb8` `refactor(proto): move reaction and pin messages into their own file` đưa `ReactionCount`, `ReactionSummary`, `Pin` và request/response của React/Pin/Unpin sang `proto/chatim/v1/reactions_pins.proto` (57 dòng; cùng package, `core.proto` và `events.proto` import), `core.proto` còn 170 dòng; không đổi tên hay số field, API Go của `pkg/pb` giữ nguyên. `make buf-lint` sạch. `buf breaking` với luật FILE của `buf.yaml`: so với `main` exit 0 (mọi message bị chuyển đều mới ở M2b.3); so với HEAD cũ của nhánh báo 9 lỗi "message was deleted from file" (đúng với việc chuyển file, tương thích wire; luật PACKAGE exit 0). `buf.yaml` giữ nguyên.
+- `make fmt-check`, `make vet`, `make lint` sạch; `make vuln`: `Your code is affected by 0 vulnerabilities` (1 lỗ hổng cấp module, code không gọi tới).
+- `make test`: mọi package `ok` (42 package).
+- `make itest`: chạy lại cả repo vì code sinh đã đổi, xanh (42 package `ok`; `mongostore` 52s, `apps/core` 52s).
+- `make e2e`: `e2e PASS: 40 messages before and 40 after killing core-1, no loss, no duplicate, every acked seq live; seq 1 edited and seq 2 deleted on history, edit history and live; seq 3 reacted then re-reacted and seq 4 pinned on replies, history and live` (phase 4: mỗi lệnh react 1–3 và pin 1–2 đều 1 lần thử, core-1 xử lý; react 👍 rồi 🎉, `change` 2, số đếm `v2`; ghim seq 4 `pv1`; lặp lệnh là no-op).
+- `/metrics` hai core: `reconcile_running` 1 ở core-1, 0 ở core-2; `effect_dropped_total` của `reaction_event`, `reaction_counter`, `pin_projection`, `pin_event` (và các nhãn cũ) đều 0 ở cả hai; `reconcile_republished_total` của `reaction_event`, `reaction_counter`, `pin_event` đều 0 (không có nhãn `pin_projection`); `counter_repaired_total{counter="reactions"}` 0; `work_failures_total` 0; `work_processed_total` 14 (core-1) + 72 (core-2). Ngoài phạm vi kiểm: `reconcile_republished_total{effect="room_created"}` 1 ở core-2 (nhãn cũ).
+- `make alerts-check`: `SUCCESS: 16 rules found`.
+- resync dry-run (15 phút): `resync rooms=2 room_records=1 message_records=80 edit_records=2 reaction_records=1 pin_records=1 dry_run=true`, exit 0.
+- corebench 1000/s 30s: failed=0, missing=0, duplicates=0 (583 event live trên 20 room), p99 ack 60.9ms, pacer lag p99 6.0ms; CPU_Speed_Limit 100 trước khi chạy, 72 sau khi chạy.
+- Mức sẵn sàng: `dev-done` trên `feat/m2b` (chưa merge `main`; merge một lần sau M2b.4).
