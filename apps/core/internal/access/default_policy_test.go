@@ -57,3 +57,26 @@ func TestDefaultPolicyLocksEditAndDeleteOfConfiguredKinds(t *testing.T) {
 		}
 	}
 }
+
+func TestDefaultPolicyLetsMembersReactAndPinAnyMessage(t *testing.T) {
+	names := map[access.Action]string{
+		access.ReactMessage: "react_message",
+		access.PinMessage:   "pin_message",
+		access.UnpinMessage: "unpin_message",
+	}
+	policies := map[string]access.DefaultPolicy{
+		"nothing locked": {},
+		"text locked":    {LockedKinds: []domain.Kind{domain.KindText}},
+	}
+	for action, name := range names {
+		if string(action) != name {
+			t.Fatalf("action %q, want %q", action, name)
+		}
+		for label, p := range policies {
+			req := access.Request{Action: action, User: "bob", Author: "alice", Kind: domain.KindText}
+			if err := p.Check(t.Context(), req); err != nil {
+				t.Fatalf("%s: %s by bob on alice's message = %v, want nil", label, action, err)
+			}
+		}
+	}
+}

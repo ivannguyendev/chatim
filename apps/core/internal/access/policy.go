@@ -19,6 +19,9 @@ const (
 	HideMessage     Action = "hide_message"
 	ClearHistory    Action = "clear_history"
 	ReadEditHistory Action = "read_edit_history"
+	ReactMessage    Action = "react_message"
+	PinMessage      Action = "pin_message"
+	UnpinMessage    Action = "unpin_message"
 )
 
 var ErrDenied = fmt.Errorf("action denied: %w", apperr.ErrPermissionDenied)
