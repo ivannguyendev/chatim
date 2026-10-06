@@ -21,6 +21,10 @@ message Event {
     RoomCreated room_created = 21;
     MessageEdited message_edited = 22;
     MessageDeleted message_deleted = 23;
+    ReactionChanged reaction_changed = 24;
+    CountsChanged counts_changed = 25;
+    MessagePinned message_pinned = 26;
+    MessageUnpinned message_unpinned = 27;
   }
 }
 
@@ -40,4 +44,26 @@ message MessageEdited {
 message MessageDeleted {
   Message message = 1;
   uint32 version = 2;
+}
+
+message ReactionChanged {
+  string user = 1;
+  string emoji = 2;
+  string previous_emoji = 3;
+  uint32 change = 4;
+}
+
+message CountsChanged {
+  string counter = 1;
+  ReactionSummary reactions = 2;
+}
+
+message MessagePinned {
+  Message message = 1;
+  uint64 pin_version = 2;
+}
+
+message MessageUnpinned {
+  Message message = 1;
+  uint64 pin_version = 2;
 }

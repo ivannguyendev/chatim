@@ -27,6 +27,9 @@ const (
 	CoreService_HideMessage_FullMethodName    = "/chatim.v1.CoreService/HideMessage"
 	CoreService_ClearHistory_FullMethodName   = "/chatim.v1.CoreService/ClearHistory"
 	CoreService_GetEditHistory_FullMethodName = "/chatim.v1.CoreService/GetEditHistory"
+	CoreService_ReactMessage_FullMethodName   = "/chatim.v1.CoreService/ReactMessage"
+	CoreService_PinMessage_FullMethodName     = "/chatim.v1.CoreService/PinMessage"
+	CoreService_UnpinMessage_FullMethodName   = "/chatim.v1.CoreService/UnpinMessage"
 )
 
 // CoreServiceClient is the client API for CoreService service.
@@ -41,6 +44,9 @@ type CoreServiceClient interface {
 	HideMessage(ctx context.Context, in *HideMessageRequest, opts ...grpc.CallOption) (*HideMessageResponse, error)
 	ClearHistory(ctx context.Context, in *ClearHistoryRequest, opts ...grpc.CallOption) (*ClearHistoryResponse, error)
 	GetEditHistory(ctx context.Context, in *GetEditHistoryRequest, opts ...grpc.CallOption) (*GetEditHistoryResponse, error)
+	ReactMessage(ctx context.Context, in *ReactMessageRequest, opts ...grpc.CallOption) (*ReactMessageResponse, error)
+	PinMessage(ctx context.Context, in *PinMessageRequest, opts ...grpc.CallOption) (*PinMessageResponse, error)
+	UnpinMessage(ctx context.Context, in *UnpinMessageRequest, opts ...grpc.CallOption) (*UnpinMessageResponse, error)
 }
 
 type coreServiceClient struct {
@@ -131,6 +137,36 @@ func (c *coreServiceClient) GetEditHistory(ctx context.Context, in *GetEditHisto
 	return out, nil
 }
 
+func (c *coreServiceClient) ReactMessage(ctx context.Context, in *ReactMessageRequest, opts ...grpc.CallOption) (*ReactMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReactMessageResponse)
+	err := c.cc.Invoke(ctx, CoreService_ReactMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) PinMessage(ctx context.Context, in *PinMessageRequest, opts ...grpc.CallOption) (*PinMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PinMessageResponse)
+	err := c.cc.Invoke(ctx, CoreService_PinMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) UnpinMessage(ctx context.Context, in *UnpinMessageRequest, opts ...grpc.CallOption) (*UnpinMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UnpinMessageResponse)
+	err := c.cc.Invoke(ctx, CoreService_UnpinMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CoreServiceServer is the server API for CoreService service.
 // All implementations must embed UnimplementedCoreServiceServer
 // for forward compatibility.
@@ -143,6 +179,9 @@ type CoreServiceServer interface {
 	HideMessage(context.Context, *HideMessageRequest) (*HideMessageResponse, error)
 	ClearHistory(context.Context, *ClearHistoryRequest) (*ClearHistoryResponse, error)
 	GetEditHistory(context.Context, *GetEditHistoryRequest) (*GetEditHistoryResponse, error)
+	ReactMessage(context.Context, *ReactMessageRequest) (*ReactMessageResponse, error)
+	PinMessage(context.Context, *PinMessageRequest) (*PinMessageResponse, error)
+	UnpinMessage(context.Context, *UnpinMessageRequest) (*UnpinMessageResponse, error)
 	mustEmbedUnimplementedCoreServiceServer()
 }
 
@@ -176,6 +215,15 @@ func (UnimplementedCoreServiceServer) ClearHistory(context.Context, *ClearHistor
 }
 func (UnimplementedCoreServiceServer) GetEditHistory(context.Context, *GetEditHistoryRequest) (*GetEditHistoryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetEditHistory not implemented")
+}
+func (UnimplementedCoreServiceServer) ReactMessage(context.Context, *ReactMessageRequest) (*ReactMessageResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReactMessage not implemented")
+}
+func (UnimplementedCoreServiceServer) PinMessage(context.Context, *PinMessageRequest) (*PinMessageResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PinMessage not implemented")
+}
+func (UnimplementedCoreServiceServer) UnpinMessage(context.Context, *UnpinMessageRequest) (*UnpinMessageResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UnpinMessage not implemented")
 }
 func (UnimplementedCoreServiceServer) mustEmbedUnimplementedCoreServiceServer() {}
 func (UnimplementedCoreServiceServer) testEmbeddedByValue()                     {}
@@ -342,6 +390,60 @@ func _CoreService_GetEditHistory_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CoreService_ReactMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReactMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).ReactMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_ReactMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).ReactMessage(ctx, req.(*ReactMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_PinMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PinMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).PinMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_PinMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).PinMessage(ctx, req.(*PinMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_UnpinMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnpinMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).UnpinMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_UnpinMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).UnpinMessage(ctx, req.(*UnpinMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CoreService_ServiceDesc is the grpc.ServiceDesc for CoreService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -380,6 +482,18 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetEditHistory",
 			Handler:    _CoreService_GetEditHistory_Handler,
+		},
+		{
+			MethodName: "ReactMessage",
+			Handler:    _CoreService_ReactMessage_Handler,
+		},
+		{
+			MethodName: "PinMessage",
+			Handler:    _CoreService_PinMessage_Handler,
+		},
+		{
+			MethodName: "UnpinMessage",
+			Handler:    _CoreService_UnpinMessage_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

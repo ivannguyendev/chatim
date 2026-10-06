@@ -38,6 +38,10 @@ type Event struct {
 	//	*Event_RoomCreated
 	//	*Event_MessageEdited
 	//	*Event_MessageDeleted
+	//	*Event_ReactionChanged
+	//	*Event_CountsChanged
+	//	*Event_MessagePinned
+	//	*Event_MessageUnpinned
 	Payload       isEvent_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -172,6 +176,42 @@ func (x *Event) GetMessageDeleted() *MessageDeleted {
 	return nil
 }
 
+func (x *Event) GetReactionChanged() *ReactionChanged {
+	if x != nil {
+		if x, ok := x.Payload.(*Event_ReactionChanged); ok {
+			return x.ReactionChanged
+		}
+	}
+	return nil
+}
+
+func (x *Event) GetCountsChanged() *CountsChanged {
+	if x != nil {
+		if x, ok := x.Payload.(*Event_CountsChanged); ok {
+			return x.CountsChanged
+		}
+	}
+	return nil
+}
+
+func (x *Event) GetMessagePinned() *MessagePinned {
+	if x != nil {
+		if x, ok := x.Payload.(*Event_MessagePinned); ok {
+			return x.MessagePinned
+		}
+	}
+	return nil
+}
+
+func (x *Event) GetMessageUnpinned() *MessageUnpinned {
+	if x != nil {
+		if x, ok := x.Payload.(*Event_MessageUnpinned); ok {
+			return x.MessageUnpinned
+		}
+	}
+	return nil
+}
+
 type isEvent_Payload interface {
 	isEvent_Payload()
 }
@@ -192,6 +232,22 @@ type Event_MessageDeleted struct {
 	MessageDeleted *MessageDeleted `protobuf:"bytes,23,opt,name=message_deleted,json=messageDeleted,proto3,oneof"`
 }
 
+type Event_ReactionChanged struct {
+	ReactionChanged *ReactionChanged `protobuf:"bytes,24,opt,name=reaction_changed,json=reactionChanged,proto3,oneof"`
+}
+
+type Event_CountsChanged struct {
+	CountsChanged *CountsChanged `protobuf:"bytes,25,opt,name=counts_changed,json=countsChanged,proto3,oneof"`
+}
+
+type Event_MessagePinned struct {
+	MessagePinned *MessagePinned `protobuf:"bytes,26,opt,name=message_pinned,json=messagePinned,proto3,oneof"`
+}
+
+type Event_MessageUnpinned struct {
+	MessageUnpinned *MessageUnpinned `protobuf:"bytes,27,opt,name=message_unpinned,json=messageUnpinned,proto3,oneof"`
+}
+
 func (*Event_MessageCreated) isEvent_Payload() {}
 
 func (*Event_RoomCreated) isEvent_Payload() {}
@@ -199,6 +255,14 @@ func (*Event_RoomCreated) isEvent_Payload() {}
 func (*Event_MessageEdited) isEvent_Payload() {}
 
 func (*Event_MessageDeleted) isEvent_Payload() {}
+
+func (*Event_ReactionChanged) isEvent_Payload() {}
+
+func (*Event_CountsChanged) isEvent_Payload() {}
+
+func (*Event_MessagePinned) isEvent_Payload() {}
+
+func (*Event_MessageUnpinned) isEvent_Payload() {}
 
 type MessageCreated struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -392,11 +456,235 @@ func (x *MessageDeleted) GetVersion() uint32 {
 	return 0
 }
 
+type ReactionChanged struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	User          string                 `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
+	Emoji         string                 `protobuf:"bytes,2,opt,name=emoji,proto3" json:"emoji,omitempty"`
+	PreviousEmoji string                 `protobuf:"bytes,3,opt,name=previous_emoji,json=previousEmoji,proto3" json:"previous_emoji,omitempty"`
+	Change        uint32                 `protobuf:"varint,4,opt,name=change,proto3" json:"change,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReactionChanged) Reset() {
+	*x = ReactionChanged{}
+	mi := &file_chatim_v1_events_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReactionChanged) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReactionChanged) ProtoMessage() {}
+
+func (x *ReactionChanged) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_events_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReactionChanged.ProtoReflect.Descriptor instead.
+func (*ReactionChanged) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_events_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ReactionChanged) GetUser() string {
+	if x != nil {
+		return x.User
+	}
+	return ""
+}
+
+func (x *ReactionChanged) GetEmoji() string {
+	if x != nil {
+		return x.Emoji
+	}
+	return ""
+}
+
+func (x *ReactionChanged) GetPreviousEmoji() string {
+	if x != nil {
+		return x.PreviousEmoji
+	}
+	return ""
+}
+
+func (x *ReactionChanged) GetChange() uint32 {
+	if x != nil {
+		return x.Change
+	}
+	return 0
+}
+
+type CountsChanged struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Counter       string                 `protobuf:"bytes,1,opt,name=counter,proto3" json:"counter,omitempty"`
+	Reactions     *ReactionSummary       `protobuf:"bytes,2,opt,name=reactions,proto3" json:"reactions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CountsChanged) Reset() {
+	*x = CountsChanged{}
+	mi := &file_chatim_v1_events_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CountsChanged) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CountsChanged) ProtoMessage() {}
+
+func (x *CountsChanged) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_events_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CountsChanged.ProtoReflect.Descriptor instead.
+func (*CountsChanged) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_events_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *CountsChanged) GetCounter() string {
+	if x != nil {
+		return x.Counter
+	}
+	return ""
+}
+
+func (x *CountsChanged) GetReactions() *ReactionSummary {
+	if x != nil {
+		return x.Reactions
+	}
+	return nil
+}
+
+type MessagePinned struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Message       *Message               `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	PinVersion    uint64                 `protobuf:"varint,2,opt,name=pin_version,json=pinVersion,proto3" json:"pin_version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MessagePinned) Reset() {
+	*x = MessagePinned{}
+	mi := &file_chatim_v1_events_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MessagePinned) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MessagePinned) ProtoMessage() {}
+
+func (x *MessagePinned) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_events_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MessagePinned.ProtoReflect.Descriptor instead.
+func (*MessagePinned) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_events_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *MessagePinned) GetMessage() *Message {
+	if x != nil {
+		return x.Message
+	}
+	return nil
+}
+
+func (x *MessagePinned) GetPinVersion() uint64 {
+	if x != nil {
+		return x.PinVersion
+	}
+	return 0
+}
+
+type MessageUnpinned struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Message       *Message               `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	PinVersion    uint64                 `protobuf:"varint,2,opt,name=pin_version,json=pinVersion,proto3" json:"pin_version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MessageUnpinned) Reset() {
+	*x = MessageUnpinned{}
+	mi := &file_chatim_v1_events_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MessageUnpinned) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MessageUnpinned) ProtoMessage() {}
+
+func (x *MessageUnpinned) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_events_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MessageUnpinned.ProtoReflect.Descriptor instead.
+func (*MessageUnpinned) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_events_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *MessageUnpinned) GetMessage() *Message {
+	if x != nil {
+		return x.Message
+	}
+	return nil
+}
+
+func (x *MessageUnpinned) GetPinVersion() uint64 {
+	if x != nil {
+		return x.PinVersion
+	}
+	return 0
+}
+
 var File_chatim_v1_events_proto protoreflect.FileDescriptor
 
 const file_chatim_v1_events_proto_rawDesc = "" +
 	"\n" +
-	"\x16chatim/v1/events.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x91\x04\n" +
+	"\x16chatim/v1/events.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa9\x06\n" +
 	"\x05Event\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06tenant\x18\x02 \x01(\tR\x06tenant\x12\x17\n" +
@@ -410,7 +698,11 @@ const file_chatim_v1_events_proto_rawDesc = "" +
 	"\x0fmessage_created\x18\x14 \x01(\v2\x19.chatim.v1.MessageCreatedH\x00R\x0emessageCreated\x12;\n" +
 	"\froom_created\x18\x15 \x01(\v2\x16.chatim.v1.RoomCreatedH\x00R\vroomCreated\x12A\n" +
 	"\x0emessage_edited\x18\x16 \x01(\v2\x18.chatim.v1.MessageEditedH\x00R\rmessageEdited\x12D\n" +
-	"\x0fmessage_deleted\x18\x17 \x01(\v2\x19.chatim.v1.MessageDeletedH\x00R\x0emessageDeletedB\t\n" +
+	"\x0fmessage_deleted\x18\x17 \x01(\v2\x19.chatim.v1.MessageDeletedH\x00R\x0emessageDeleted\x12G\n" +
+	"\x10reaction_changed\x18\x18 \x01(\v2\x1a.chatim.v1.ReactionChangedH\x00R\x0freactionChanged\x12A\n" +
+	"\x0ecounts_changed\x18\x19 \x01(\v2\x18.chatim.v1.CountsChangedH\x00R\rcountsChanged\x12A\n" +
+	"\x0emessage_pinned\x18\x1a \x01(\v2\x18.chatim.v1.MessagePinnedH\x00R\rmessagePinned\x12G\n" +
+	"\x10message_unpinned\x18\x1b \x01(\v2\x1a.chatim.v1.MessageUnpinnedH\x00R\x0fmessageUnpinnedB\t\n" +
 	"\apayloadJ\x04\b\a\x10\bR\x03pts\">\n" +
 	"\x0eMessageCreated\x12,\n" +
 	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\"2\n" +
@@ -421,7 +713,23 @@ const file_chatim_v1_events_proto_rawDesc = "" +
 	"\aversion\x18\x02 \x01(\rR\aversion\"X\n" +
 	"\x0eMessageDeleted\x12,\n" +
 	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\rR\aversionB\x9c\x01\n" +
+	"\aversion\x18\x02 \x01(\rR\aversion\"z\n" +
+	"\x0fReactionChanged\x12\x12\n" +
+	"\x04user\x18\x01 \x01(\tR\x04user\x12\x14\n" +
+	"\x05emoji\x18\x02 \x01(\tR\x05emoji\x12%\n" +
+	"\x0eprevious_emoji\x18\x03 \x01(\tR\rpreviousEmoji\x12\x16\n" +
+	"\x06change\x18\x04 \x01(\rR\x06change\"c\n" +
+	"\rCountsChanged\x12\x18\n" +
+	"\acounter\x18\x01 \x01(\tR\acounter\x128\n" +
+	"\treactions\x18\x02 \x01(\v2\x1a.chatim.v1.ReactionSummaryR\treactions\"^\n" +
+	"\rMessagePinned\x12,\n" +
+	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\x12\x1f\n" +
+	"\vpin_version\x18\x02 \x01(\x04R\n" +
+	"pinVersion\"`\n" +
+	"\x0fMessageUnpinned\x12,\n" +
+	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\x12\x1f\n" +
+	"\vpin_version\x18\x02 \x01(\x04R\n" +
+	"pinVersionB\x9c\x01\n" +
 	"\rcom.chatim.v1B\vEventsProtoP\x01Z9github.com/ivannguyendev/chatim/pkg/pb/chatim/v1;chatimv1\xa2\x02\x03CXX\xaa\x02\tChatim.V1\xca\x02\tChatim\\V1\xe2\x02\x15Chatim\\V1\\GPBMetadata\xea\x02\n" +
 	"Chatim::V1b\x06proto3"
 
@@ -437,34 +745,46 @@ func file_chatim_v1_events_proto_rawDescGZIP() []byte {
 	return file_chatim_v1_events_proto_rawDescData
 }
 
-var file_chatim_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_chatim_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_chatim_v1_events_proto_goTypes = []any{
 	(*Event)(nil),                 // 0: chatim.v1.Event
 	(*MessageCreated)(nil),        // 1: chatim.v1.MessageCreated
 	(*RoomCreated)(nil),           // 2: chatim.v1.RoomCreated
 	(*MessageEdited)(nil),         // 3: chatim.v1.MessageEdited
 	(*MessageDeleted)(nil),        // 4: chatim.v1.MessageDeleted
-	(RoomType)(0),                 // 5: chatim.v1.RoomType
-	(*timestamppb.Timestamp)(nil), // 6: google.protobuf.Timestamp
-	(*Message)(nil),               // 7: chatim.v1.Message
-	(*Room)(nil),                  // 8: chatim.v1.Room
+	(*ReactionChanged)(nil),       // 5: chatim.v1.ReactionChanged
+	(*CountsChanged)(nil),         // 6: chatim.v1.CountsChanged
+	(*MessagePinned)(nil),         // 7: chatim.v1.MessagePinned
+	(*MessageUnpinned)(nil),       // 8: chatim.v1.MessageUnpinned
+	(RoomType)(0),                 // 9: chatim.v1.RoomType
+	(*timestamppb.Timestamp)(nil), // 10: google.protobuf.Timestamp
+	(*Message)(nil),               // 11: chatim.v1.Message
+	(*Room)(nil),                  // 12: chatim.v1.Room
+	(*ReactionSummary)(nil),       // 13: chatim.v1.ReactionSummary
 }
 var file_chatim_v1_events_proto_depIdxs = []int32{
-	5,  // 0: chatim.v1.Event.room_type:type_name -> chatim.v1.RoomType
-	6,  // 1: chatim.v1.Event.ts:type_name -> google.protobuf.Timestamp
+	9,  // 0: chatim.v1.Event.room_type:type_name -> chatim.v1.RoomType
+	10, // 1: chatim.v1.Event.ts:type_name -> google.protobuf.Timestamp
 	1,  // 2: chatim.v1.Event.message_created:type_name -> chatim.v1.MessageCreated
 	2,  // 3: chatim.v1.Event.room_created:type_name -> chatim.v1.RoomCreated
 	3,  // 4: chatim.v1.Event.message_edited:type_name -> chatim.v1.MessageEdited
 	4,  // 5: chatim.v1.Event.message_deleted:type_name -> chatim.v1.MessageDeleted
-	7,  // 6: chatim.v1.MessageCreated.message:type_name -> chatim.v1.Message
-	8,  // 7: chatim.v1.RoomCreated.room:type_name -> chatim.v1.Room
-	7,  // 8: chatim.v1.MessageEdited.message:type_name -> chatim.v1.Message
-	7,  // 9: chatim.v1.MessageDeleted.message:type_name -> chatim.v1.Message
-	10, // [10:10] is the sub-list for method output_type
-	10, // [10:10] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	5,  // 6: chatim.v1.Event.reaction_changed:type_name -> chatim.v1.ReactionChanged
+	6,  // 7: chatim.v1.Event.counts_changed:type_name -> chatim.v1.CountsChanged
+	7,  // 8: chatim.v1.Event.message_pinned:type_name -> chatim.v1.MessagePinned
+	8,  // 9: chatim.v1.Event.message_unpinned:type_name -> chatim.v1.MessageUnpinned
+	11, // 10: chatim.v1.MessageCreated.message:type_name -> chatim.v1.Message
+	12, // 11: chatim.v1.RoomCreated.room:type_name -> chatim.v1.Room
+	11, // 12: chatim.v1.MessageEdited.message:type_name -> chatim.v1.Message
+	11, // 13: chatim.v1.MessageDeleted.message:type_name -> chatim.v1.Message
+	13, // 14: chatim.v1.CountsChanged.reactions:type_name -> chatim.v1.ReactionSummary
+	11, // 15: chatim.v1.MessagePinned.message:type_name -> chatim.v1.Message
+	11, // 16: chatim.v1.MessageUnpinned.message:type_name -> chatim.v1.Message
+	17, // [17:17] is the sub-list for method output_type
+	17, // [17:17] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_chatim_v1_events_proto_init() }
@@ -478,6 +798,10 @@ func file_chatim_v1_events_proto_init() {
 		(*Event_RoomCreated)(nil),
 		(*Event_MessageEdited)(nil),
 		(*Event_MessageDeleted)(nil),
+		(*Event_ReactionChanged)(nil),
+		(*Event_CountsChanged)(nil),
+		(*Event_MessagePinned)(nil),
+		(*Event_MessageUnpinned)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -485,7 +809,7 @@ func file_chatim_v1_events_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_chatim_v1_events_proto_rawDesc), len(file_chatim_v1_events_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

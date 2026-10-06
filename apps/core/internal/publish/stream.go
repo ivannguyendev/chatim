@@ -16,10 +16,14 @@ const (
 	DefaultStreamMaxAge     = 7 * 24 * time.Hour
 	DefaultStreamDuplicates = 5 * time.Minute
 
-	msgCreated  = "msg_created"
-	roomCreated = "room_created"
-	msgEdited   = "msg_edited"
-	msgDeleted  = "msg_deleted"
+	msgCreated      = "msg_created"
+	roomCreated     = "room_created"
+	msgEdited       = "msg_edited"
+	msgDeleted      = "msg_deleted"
+	reactionChanged = "reaction_changed"
+	countsChanged   = "counts_changed"
+	msgPinned       = "msg_pinned"
+	msgUnpinned     = "msg_unpinned"
 )
 
 type StreamManager interface {

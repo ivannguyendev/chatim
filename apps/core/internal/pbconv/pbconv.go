@@ -91,6 +91,7 @@ func Message(m domain.Message) *chatimv1.Message {
 		Deleted:    m.Deleted,
 		EditedAt:   optionalTime(m.EditedAt),
 		Hidden:     m.Hidden,
+		Reactions:  ReactionSummary(m.Reactions),
 	}
 }
 

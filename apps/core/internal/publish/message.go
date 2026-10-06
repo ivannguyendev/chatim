@@ -37,6 +37,14 @@ func eventKind(ev *chatimv1.Event) (string, bool) {
 		return msgEdited, true
 	case *chatimv1.Event_MessageDeleted:
 		return msgDeleted, true
+	case *chatimv1.Event_ReactionChanged:
+		return reactionChanged, true
+	case *chatimv1.Event_CountsChanged:
+		return countsChanged, true
+	case *chatimv1.Event_MessagePinned:
+		return msgPinned, true
+	case *chatimv1.Event_MessageUnpinned:
+		return msgUnpinned, true
 	default:
 		return "", false
 	}
