@@ -60,11 +60,12 @@ func (p *publishSpy) published() []string {
 type world struct {
 	rooms *memstore.Rooms
 	msgs  *memstore.Messages
+	edits *memstore.Edits
 }
 
 func newWorld(t *testing.T) world {
 	t.Helper()
-	w := world{rooms: memstore.NewRooms(), msgs: memstore.NewMessages()}
+	w := world{rooms: memstore.NewRooms(), msgs: memstore.NewMessages(), edits: memstore.NewEdits()}
 	old := lostFrom.Add(-48 * time.Hour)
 	w.room(t, busyRoom, "acme", old)
 	w.room(t, newRoom, "acme", lostFrom.Add(10*time.Minute))
@@ -109,7 +110,7 @@ func (w world) messages(t *testing.T, room uint64, n int, first time.Time) {
 }
 
 func (w world) deps(pub resync.Publisher) resync.Deps {
-	return resync.Deps{Rooms: w.rooms, Pages: w.msgs, Pub: pub}
+	return resync.Deps{Rooms: w.rooms, Pages: w.msgs, Edits: w.edits, Pub: pub}
 }
 
 func TestResyncPublishesRecordsOfTheLostRangeOnly(t *testing.T) {

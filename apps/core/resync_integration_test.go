@@ -41,6 +41,14 @@ func TestRealInfraResyncDrillRepublishesWritesTheReaderMissed(t *testing.T) {
 			t.Fatalf("insert missed[%d]: %+v", i, res)
 		}
 	}
+	edit := domain.Edit{
+		Room: room, Seq: 1, Version: 1, Kind: domain.EditText, Tenant: itTenant, By: "migrator",
+		Text: "edited while the reader was down", Prev: "missed by the reader", At: time.Now().UTC().Truncate(time.Millisecond),
+	}
+	if err := st.Append(t.Context(), edit); err != nil {
+		t.Fatalf("append an edit the reader missed: %v", err)
+	}
+	want = append(want, pbconv.MessageChangeEventID(room, 0, 1, 1))
 	assertNoLiveIDs(t, live, 3*time.Second, want...)
 
 	opts := resync.Options{From: began.Add(-time.Minute), To: time.Now().UTC().Add(time.Minute), Tenant: itTenant, Rate: 100}
@@ -49,8 +57,12 @@ func TestRealInfraResyncDrillRepublishesWritesTheReaderMissed(t *testing.T) {
 	if err := runResync(t.Context(), core.cfg, opts, quiet, &out); err != nil {
 		t.Fatalf("runResync: %v (output %q)", err, out.String())
 	}
-	if got := strings.TrimSpace(out.String()); got != "resync rooms=1 room_records=1 message_records=3 dry_run=false" {
-		t.Fatalf("resync output = %q, want one room, its room record and three message records", got)
+	if got := strings.TrimSpace(out.String()); got != "resync rooms=1 room_records=1 message_records=3 edit_records=1 dry_run=false" {
+		t.Fatalf("resync output = %q, want one room, its room record, three message records and one edit record", got)
 	}
 	awaitLiveIDs(t, live, ran, want...)
+	got, err := st.Find(t.Context(), room, []store.MsgKey{{Room: room, Seq: 1}})
+	if err != nil || len(got) != 1 || got[0].Version != 1 || got[0].Text != edit.Text {
+		t.Fatalf("seq 1 after resync = %+v, %v; want the missed edit projected at version 1", got, err)
+	}
 }

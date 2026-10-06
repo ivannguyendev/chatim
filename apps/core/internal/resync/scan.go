@@ -35,6 +35,7 @@ type Publisher interface {
 type Deps struct {
 	Rooms Rooms
 	Pages Pages
+	Edits Edits
 	Pub   Publisher
 }
 
@@ -44,12 +45,12 @@ type Target struct {
 }
 
 type Report struct {
-	Rooms, RoomRecords, MessageRecords int
-	DryRun                             bool
+	Rooms, RoomRecords, MessageRecords, EditRecords int
+	DryRun                                          bool
 }
 
 func (r Report) String() string {
-	return fmt.Sprintf("resync rooms=%d room_records=%d message_records=%d dry_run=%t", r.Rooms, r.RoomRecords, r.MessageRecords, r.DryRun)
+	return fmt.Sprintf("resync rooms=%d room_records=%d message_records=%d edit_records=%d dry_run=%t", r.Rooms, r.RoomRecords, r.MessageRecords, r.EditRecords, r.DryRun)
 }
 
 type scanner struct {
@@ -107,7 +108,10 @@ func (s *scanner) room(ctx context.Context, r domain.Room) error {
 		}
 		s.rep.RoomRecords++
 	}
-	return s.timeline(ctx, r.ID)
+	if err := s.timeline(ctx, r.ID); err != nil {
+		return err
+	}
+	return s.edits(ctx, r.ID)
 }
 
 func (s *scanner) timeline(ctx context.Context, room uint64) error {
