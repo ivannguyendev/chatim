@@ -60,6 +60,15 @@ var changeCalls = map[string]changeCall{
 	"edits": func(ctx context.Context, c *route.Client, room string) (proto.Message, route.Stats, error) {
 		return reply(c.GetEditHistory(ctx, &chatimv1.GetEditHistoryRequest{RoomId: room, Seq: 3, AfterVersion: 4, Limit: 10}))
 	},
+	"react": func(ctx context.Context, c *route.Client, room string) (proto.Message, route.Stats, error) {
+		return reply(c.ReactMessage(ctx, &chatimv1.ReactMessageRequest{RoomId: room, Seq: 3, Emoji: "👍"}))
+	},
+	"pin": func(ctx context.Context, c *route.Client, room string) (proto.Message, route.Stats, error) {
+		return reply(c.PinMessage(ctx, &chatimv1.PinMessageRequest{RoomId: room, Seq: 3}))
+	},
+	"unpin": func(ctx context.Context, c *route.Client, room string) (proto.Message, route.Stats, error) {
+		return reply(c.UnpinMessage(ctx, &chatimv1.UnpinMessageRequest{RoomId: room, Seq: 3}))
+	},
 }
 
 var changeReplies = map[string]proto.Message{
@@ -68,6 +77,9 @@ var changeReplies = map[string]proto.Message{
 	"hide":   &chatimv1.HideMessageResponse{},
 	"clear":  &chatimv1.ClearHistoryResponse{ClearedBeforeSeq: 9},
 	"edits":  &chatimv1.GetEditHistoryResponse{Versions: []*chatimv1.MessageVersion{{Version: 5}}},
+	"react":  &chatimv1.ReactMessageResponse{Change: 1, Reactions: &chatimv1.ReactionSummary{Counts: []*chatimv1.ReactionCount{{Emoji: "👍", Count: 1}}, Version: 1}},
+	"pin":    &chatimv1.PinMessageResponse{PinVersion: 1, Pins: []*chatimv1.Pin{{Seq: 3, PinVersion: 1}}},
+	"unpin":  &chatimv1.UnpinMessageResponse{PinVersion: 2},
 }
 
 func TestChangeCallsRouteByRoomAndRetryAttemptTimeouts(t *testing.T) {
