@@ -2,11 +2,11 @@ package mongostore
 
 import (
 	"bytes"
-	"errors"
 	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 
@@ -51,6 +51,24 @@ func TestReactionDocumentLayout(t *testing.T) {
 	if _, k, ok := raw.Lookup("k").BinaryOK(); !ok || !bytes.Equal(k, keys.Msg(itRoom, 0, 1)) {
 		t.Fatalf("stored k = %s, want keys.Msg", raw.Lookup("k"))
 	}
+	var stored []bson.Raw
+	for i, e := range []string{"👍", "👍"} {
+		r.Emoji, r.At = e, codecTime.Add(time.Duration(i+1)*time.Second)
+		if _, _, err := s.Reactions().Set(t.Context(), r); err != nil {
+			t.Fatalf("Set(%s): %v", e, err)
+		}
+		raw, err := db.Collection(reactionsCollection).FindOne(t.Context(), bson.D{{Key: "_id", Value: keys.Reaction(itRoom, 0, 1, "alice")}}).Raw()
+		if err != nil {
+			t.Fatalf("FindOne raw: %v", err)
+		}
+		if got, want := fieldNames(t, raw), []string{"_id", "k", "r", "t", "u", "pe", "e", "n", "ts"}; !slices.Equal(got, want) {
+			t.Fatalf("stored fields after Set(%s) = %v, want %v", e, got, want)
+		}
+		stored = append(stored, raw)
+	}
+	if !bytes.Equal(stored[0], stored[1]) {
+		t.Fatalf("Set of the same emoji changed the doc: %s -> %s", stored[0], stored[1])
+	}
 }
 
 func TestReactionSetCountsEveryChangeOnceUnderRacingDevices(t *testing.T) {
@@ -64,8 +82,8 @@ func TestReactionSetCountsEveryChangeOnceUnderRacingDevices(t *testing.T) {
 			for range 10 {
 				r := domain.Reaction{Room: itRoom, Seq: 1, Tenant: "acme", User: "alice", Emoji: e, At: codecTime}
 				_, changed, err := reactions.Set(t.Context(), r)
-				if err != nil && !errors.Is(err, store.ErrReactionContended) {
-					t.Errorf("Set(%s) = %v, want nil or ErrReactionContended", e, err)
+				if err != nil {
+					t.Errorf("Set(%s) = %v, want nil", e, err)
 				}
 				if changed {
 					changes.Add(1)
@@ -77,5 +95,40 @@ func TestReactionSetCountsEveryChangeOnceUnderRacingDevices(t *testing.T) {
 	got, ok, err := reactions.Get(t.Context(), store.MsgKey{Room: itRoom, Seq: 1}, "alice")
 	if err != nil || !ok || int64(got.N) != changes.Load() || !slices.Contains(emojis, got.Emoji) {
 		t.Fatalf("final = %+v, %v, %v; want change number %d and one of %v", got, ok, err, changes.Load(), emojis)
+	}
+}
+
+func TestReactionSetOfTheSameUserRacingOnANewReactionNeverFails(t *testing.T) {
+	s, _ := itStore(t, itClient(t))
+	reactions := s.Reactions()
+	for round := range uint64(40) {
+		seq := round + 1
+		emojis := [2]string{"👍", "👍"}
+		if round%2 == 1 {
+			emojis[1] = "❤️"
+		}
+		start := make(chan struct{})
+		var changes atomic.Int64
+		var wg sync.WaitGroup
+		for _, e := range emojis {
+			wg.Go(func() {
+				<-start
+				r := domain.Reaction{Room: itRoom, Seq: seq, Tenant: "acme", User: "alice", Emoji: e, At: codecTime}
+				_, changed, err := reactions.Set(t.Context(), r)
+				if err != nil {
+					t.Errorf("round %d: Set(%s) = %v, want nil", round, e, err)
+				}
+				if changed {
+					changes.Add(1)
+				}
+			})
+		}
+		close(start)
+		wg.Wait()
+		got, ok, err := reactions.Get(t.Context(), store.MsgKey{Room: itRoom, Seq: seq}, "alice")
+		want := int64(len(slices.Compact(emojis[:])))
+		if err != nil || !ok || int64(got.N) != changes.Load() || changes.Load() != want {
+			t.Fatalf("round %d: final = %+v, %v, %v after %d changes; want change number %d", round, got, ok, err, changes.Load(), want)
+		}
 	}
 }

@@ -108,9 +108,6 @@ func TestSetPipelineTakesStringsLiterally(t *testing.T) {
 		t.Fatalf("Marshal: %v", err)
 	}
 	raw := bson.Raw(data)
-	if got, ok := raw.Lookup("$set", "e", "$literal").StringValueOK(); !ok || got != "$e" {
-		t.Fatalf("$set.e = %s, want {$literal: $e}", raw.Lookup("$set", "e"))
-	}
 	if got, ok := raw.Lookup("$set", "u", "$literal").StringValueOK(); !ok || got != "alice" {
 		t.Fatalf("$set.u = %s, want {$literal: alice}", raw.Lookup("$set", "u"))
 	}

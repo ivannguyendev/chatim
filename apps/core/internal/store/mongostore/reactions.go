@@ -15,8 +15,6 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/keys"
 )
 
-const reactionTries = 3
-
 type Reactions struct {
 	coll   *mongo.Collection
 	client *mongo.Client
@@ -33,28 +31,29 @@ func (r *Reactions) Set(ctx context.Context, x domain.Reaction) (domain.Reaction
 	if err != nil {
 		return domain.Reaction{}, false, err
 	}
-	key := store.ReactionKeyOf(x)
-	filter := bson.D{{Key: "_id", Value: reactionID(key, x.User)}, {Key: "e", Value: bson.D{{Key: "$ne", Value: x.Emoji}}}}
-	opts := options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After)
-	for range reactionTries {
-		var d reactionDoc
-		err := r.coll.FindOneAndUpdate(ctx, filter, setReaction(x, room), opts).Decode(&d)
-		if err == nil {
-			got, err := decodeReaction(d)
-			return got, err == nil, err
-		}
-		if !mongo.IsDuplicateKeyError(err) {
-			return domain.Reaction{}, false, fmt.Errorf("set reaction of %q on %d/%d/%d: %w", x.User, x.Room, x.Thread, x.Seq, err)
-		}
-		cur, ok, err := r.Get(ctx, key, x.User)
-		if err != nil {
-			return domain.Reaction{}, false, err
-		}
-		if ok && cur.Emoji == x.Emoji {
-			return cur, false, nil
-		}
+	filter := bson.D{{Key: "_id", Value: reactionID(store.ReactionKeyOf(x), x.User)}}
+	opts := options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.Before)
+	var d reactionDoc
+	err = r.coll.FindOneAndUpdate(ctx, filter, setReaction(x, room), opts).Decode(&d)
+	switch {
+	case errors.Is(err, mongo.ErrNoDocuments):
+		return setResult(x, domain.Reaction{}), true, nil
+	case err != nil:
+		return domain.Reaction{}, false, fmt.Errorf("set reaction of %q on %d/%d/%d: %w", x.User, x.Room, x.Thread, x.Seq, err)
 	}
-	return domain.Reaction{}, false, fmt.Errorf("set reaction of %q on %d/%d/%d: %w", x.User, x.Room, x.Thread, x.Seq, store.ErrReactionContended)
+	before, err := decodeReaction(d)
+	switch {
+	case err != nil:
+		return domain.Reaction{}, false, err
+	case before.Emoji == x.Emoji:
+		return before, false, nil
+	}
+	return setResult(x, before), true, nil
+}
+
+func setResult(x, before domain.Reaction) domain.Reaction {
+	x.Prev, x.N, x.At = before.Emoji, before.N+1, time.UnixMilli(x.At.UnixMilli()).UTC()
+	return x
 }
 
 func (r *Reactions) Remove(ctx context.Context, key store.MsgKey, user string, at time.Time) (domain.Reaction, bool, error) {
@@ -93,15 +92,19 @@ func reactionID(key store.MsgKey, user string) []byte {
 }
 
 func setReaction(x domain.Reaction, room int64) mongo.Pipeline {
+	same := bson.D{{Key: "$eq", Value: bson.A{"$e", literal(x.Emoji)}}}
+	keep := func(field string, next any) bson.D {
+		return bson.D{{Key: "$cond", Value: bson.A{same, "$" + field, next}}}
+	}
 	set := bson.D{
 		{Key: "k", Value: keys.Msg(x.Room, x.Thread, x.Seq)},
 		{Key: "r", Value: room},
 		{Key: "t", Value: literal(x.Tenant)},
 		{Key: "u", Value: literal(x.User)},
-		{Key: "pe", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$e", ""}}}},
-		{Key: "e", Value: literal(x.Emoji)},
-		{Key: "n", Value: nextChange()},
-		{Key: "ts", Value: x.At},
+		{Key: "pe", Value: keep("pe", bson.D{{Key: "$ifNull", Value: bson.A{"$e", ""}}})},
+		{Key: "e", Value: keep("e", literal(x.Emoji))},
+		{Key: "n", Value: keep("n", nextChange())},
+		{Key: "ts", Value: keep("ts", x.At)},
 	}
 	return mongo.Pipeline{{{Key: "$set", Value: set}}}
 }

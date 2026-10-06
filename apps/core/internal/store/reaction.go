@@ -11,10 +11,7 @@ import (
 
 const MaxReactionScan = 1000
 
-var (
-	ErrStaleRead         = fmt.Errorf("read is behind a witnessed write: %w", apperr.ErrUnavailable)
-	ErrReactionContended = fmt.Errorf("reaction write contended: %w", apperr.ErrUnavailable)
-)
+var ErrStaleRead = fmt.Errorf("read is behind a witnessed write: %w", apperr.ErrUnavailable)
 
 type Witness struct {
 	User string

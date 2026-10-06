@@ -14,7 +14,6 @@ import (
 func TestReactionAndPinErrorsWrapAppKinds(t *testing.T) {
 	for _, c := range []struct{ err, kind error }{
 		{store.ErrStaleRead, apperr.ErrUnavailable},
-		{store.ErrReactionContended, apperr.ErrUnavailable},
 		{store.ErrPinExists, apperr.ErrAlreadyExists},
 		{store.ErrPinNotFound, apperr.ErrNotFound},
 	} {
