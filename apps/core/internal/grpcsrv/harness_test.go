@@ -21,6 +21,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/grpcsrv"
+	"github.com/ivannguyendev/chatim/apps/core/internal/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 	"github.com/ivannguyendev/chatim/pkg/grpcserver"
@@ -63,6 +64,7 @@ type options struct {
 	limiter *resilience.Limiter
 	policy  access.Policy
 	events  grpcsrv.EventPublisher
+	limits  mutate.Limits
 }
 
 func newRig(t *testing.T, o options) *rig {

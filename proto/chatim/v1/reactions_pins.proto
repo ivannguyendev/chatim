@@ -55,3 +55,9 @@ message UnpinMessageResponse {
   uint64 pin_version = 1;
   repeated Pin pins = 2;
 }
+
+message GetReactionSettingsRequest {}
+
+message GetReactionSettingsResponse {
+  repeated string emojis = 1;
+}

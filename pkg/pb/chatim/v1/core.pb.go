@@ -1537,7 +1537,7 @@ const file_chatim_v1_core_proto_rawDesc = "" +
 	"\x15EDIT_KIND_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12EDIT_KIND_ORIGINAL\x10\x01\x12\x12\n" +
 	"\x0eEDIT_KIND_TEXT\x10\x02\x12\x14\n" +
-	"\x10EDIT_KIND_DELETE\x10\x032\xf6\x06\n" +
+	"\x10EDIT_KIND_DELETE\x10\x032\xdc\a\n" +
 	"\vCoreService\x12I\n" +
 	"\n" +
 	"CreateRoom\x12\x1c.chatim.v1.CreateRoomRequest\x1a\x1d.chatim.v1.CreateRoomResponse\x12L\n" +
@@ -1552,7 +1552,8 @@ const file_chatim_v1_core_proto_rawDesc = "" +
 	"\fReactMessage\x12\x1e.chatim.v1.ReactMessageRequest\x1a\x1f.chatim.v1.ReactMessageResponse\x12I\n" +
 	"\n" +
 	"PinMessage\x12\x1c.chatim.v1.PinMessageRequest\x1a\x1d.chatim.v1.PinMessageResponse\x12O\n" +
-	"\fUnpinMessage\x12\x1e.chatim.v1.UnpinMessageRequest\x1a\x1f.chatim.v1.UnpinMessageResponseB\x9a\x01\n" +
+	"\fUnpinMessage\x12\x1e.chatim.v1.UnpinMessageRequest\x1a\x1f.chatim.v1.UnpinMessageResponse\x12d\n" +
+	"\x13GetReactionSettings\x12%.chatim.v1.GetReactionSettingsRequest\x1a&.chatim.v1.GetReactionSettingsResponseB\x9a\x01\n" +
 	"\rcom.chatim.v1B\tCoreProtoP\x01Z9github.com/ivannguyendev/chatim/pkg/pb/chatim/v1;chatimv1\xa2\x02\x03CXX\xaa\x02\tChatim.V1\xca\x02\tChatim\\V1\xe2\x02\x15Chatim\\V1\\GPBMetadata\xea\x02\n" +
 	"Chatim::V1b\x06proto3"
 
@@ -1571,37 +1572,39 @@ func file_chatim_v1_core_proto_rawDescGZIP() []byte {
 var file_chatim_v1_core_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
 var file_chatim_v1_core_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_chatim_v1_core_proto_goTypes = []any{
-	(RoomType)(0),                  // 0: chatim.v1.RoomType
-	(MessageKind)(0),               // 1: chatim.v1.MessageKind
-	(HistoryAnchor)(0),             // 2: chatim.v1.HistoryAnchor
-	(EditKind)(0),                  // 3: chatim.v1.EditKind
-	(*Room)(nil),                   // 4: chatim.v1.Room
-	(*Message)(nil),                // 5: chatim.v1.Message
-	(*MessageVersion)(nil),         // 6: chatim.v1.MessageVersion
-	(*CreateRoomRequest)(nil),      // 7: chatim.v1.CreateRoomRequest
-	(*CreateRoomResponse)(nil),     // 8: chatim.v1.CreateRoomResponse
-	(*SendMessageRequest)(nil),     // 9: chatim.v1.SendMessageRequest
-	(*SendMessageResponse)(nil),    // 10: chatim.v1.SendMessageResponse
-	(*GetHistoryRequest)(nil),      // 11: chatim.v1.GetHistoryRequest
-	(*GetHistoryResponse)(nil),     // 12: chatim.v1.GetHistoryResponse
-	(*EditMessageRequest)(nil),     // 13: chatim.v1.EditMessageRequest
-	(*EditMessageResponse)(nil),    // 14: chatim.v1.EditMessageResponse
-	(*DeleteMessageRequest)(nil),   // 15: chatim.v1.DeleteMessageRequest
-	(*DeleteMessageResponse)(nil),  // 16: chatim.v1.DeleteMessageResponse
-	(*HideMessageRequest)(nil),     // 17: chatim.v1.HideMessageRequest
-	(*HideMessageResponse)(nil),    // 18: chatim.v1.HideMessageResponse
-	(*ClearHistoryRequest)(nil),    // 19: chatim.v1.ClearHistoryRequest
-	(*ClearHistoryResponse)(nil),   // 20: chatim.v1.ClearHistoryResponse
-	(*GetEditHistoryRequest)(nil),  // 21: chatim.v1.GetEditHistoryRequest
-	(*GetEditHistoryResponse)(nil), // 22: chatim.v1.GetEditHistoryResponse
-	(*timestamppb.Timestamp)(nil),  // 23: google.protobuf.Timestamp
-	(*ReactionSummary)(nil),        // 24: chatim.v1.ReactionSummary
-	(*ReactMessageRequest)(nil),    // 25: chatim.v1.ReactMessageRequest
-	(*PinMessageRequest)(nil),      // 26: chatim.v1.PinMessageRequest
-	(*UnpinMessageRequest)(nil),    // 27: chatim.v1.UnpinMessageRequest
-	(*ReactMessageResponse)(nil),   // 28: chatim.v1.ReactMessageResponse
-	(*PinMessageResponse)(nil),     // 29: chatim.v1.PinMessageResponse
-	(*UnpinMessageResponse)(nil),   // 30: chatim.v1.UnpinMessageResponse
+	(RoomType)(0),                       // 0: chatim.v1.RoomType
+	(MessageKind)(0),                    // 1: chatim.v1.MessageKind
+	(HistoryAnchor)(0),                  // 2: chatim.v1.HistoryAnchor
+	(EditKind)(0),                       // 3: chatim.v1.EditKind
+	(*Room)(nil),                        // 4: chatim.v1.Room
+	(*Message)(nil),                     // 5: chatim.v1.Message
+	(*MessageVersion)(nil),              // 6: chatim.v1.MessageVersion
+	(*CreateRoomRequest)(nil),           // 7: chatim.v1.CreateRoomRequest
+	(*CreateRoomResponse)(nil),          // 8: chatim.v1.CreateRoomResponse
+	(*SendMessageRequest)(nil),          // 9: chatim.v1.SendMessageRequest
+	(*SendMessageResponse)(nil),         // 10: chatim.v1.SendMessageResponse
+	(*GetHistoryRequest)(nil),           // 11: chatim.v1.GetHistoryRequest
+	(*GetHistoryResponse)(nil),          // 12: chatim.v1.GetHistoryResponse
+	(*EditMessageRequest)(nil),          // 13: chatim.v1.EditMessageRequest
+	(*EditMessageResponse)(nil),         // 14: chatim.v1.EditMessageResponse
+	(*DeleteMessageRequest)(nil),        // 15: chatim.v1.DeleteMessageRequest
+	(*DeleteMessageResponse)(nil),       // 16: chatim.v1.DeleteMessageResponse
+	(*HideMessageRequest)(nil),          // 17: chatim.v1.HideMessageRequest
+	(*HideMessageResponse)(nil),         // 18: chatim.v1.HideMessageResponse
+	(*ClearHistoryRequest)(nil),         // 19: chatim.v1.ClearHistoryRequest
+	(*ClearHistoryResponse)(nil),        // 20: chatim.v1.ClearHistoryResponse
+	(*GetEditHistoryRequest)(nil),       // 21: chatim.v1.GetEditHistoryRequest
+	(*GetEditHistoryResponse)(nil),      // 22: chatim.v1.GetEditHistoryResponse
+	(*timestamppb.Timestamp)(nil),       // 23: google.protobuf.Timestamp
+	(*ReactionSummary)(nil),             // 24: chatim.v1.ReactionSummary
+	(*ReactMessageRequest)(nil),         // 25: chatim.v1.ReactMessageRequest
+	(*PinMessageRequest)(nil),           // 26: chatim.v1.PinMessageRequest
+	(*UnpinMessageRequest)(nil),         // 27: chatim.v1.UnpinMessageRequest
+	(*GetReactionSettingsRequest)(nil),  // 28: chatim.v1.GetReactionSettingsRequest
+	(*ReactMessageResponse)(nil),        // 29: chatim.v1.ReactMessageResponse
+	(*PinMessageResponse)(nil),          // 30: chatim.v1.PinMessageResponse
+	(*UnpinMessageResponse)(nil),        // 31: chatim.v1.UnpinMessageResponse
+	(*GetReactionSettingsResponse)(nil), // 32: chatim.v1.GetReactionSettingsResponse
 }
 var file_chatim_v1_core_proto_depIdxs = []int32{
 	0,  // 0: chatim.v1.Room.type:type_name -> chatim.v1.RoomType
@@ -1631,19 +1634,21 @@ var file_chatim_v1_core_proto_depIdxs = []int32{
 	25, // 24: chatim.v1.CoreService.ReactMessage:input_type -> chatim.v1.ReactMessageRequest
 	26, // 25: chatim.v1.CoreService.PinMessage:input_type -> chatim.v1.PinMessageRequest
 	27, // 26: chatim.v1.CoreService.UnpinMessage:input_type -> chatim.v1.UnpinMessageRequest
-	8,  // 27: chatim.v1.CoreService.CreateRoom:output_type -> chatim.v1.CreateRoomResponse
-	10, // 28: chatim.v1.CoreService.SendMessage:output_type -> chatim.v1.SendMessageResponse
-	12, // 29: chatim.v1.CoreService.GetHistory:output_type -> chatim.v1.GetHistoryResponse
-	14, // 30: chatim.v1.CoreService.EditMessage:output_type -> chatim.v1.EditMessageResponse
-	16, // 31: chatim.v1.CoreService.DeleteMessage:output_type -> chatim.v1.DeleteMessageResponse
-	18, // 32: chatim.v1.CoreService.HideMessage:output_type -> chatim.v1.HideMessageResponse
-	20, // 33: chatim.v1.CoreService.ClearHistory:output_type -> chatim.v1.ClearHistoryResponse
-	22, // 34: chatim.v1.CoreService.GetEditHistory:output_type -> chatim.v1.GetEditHistoryResponse
-	28, // 35: chatim.v1.CoreService.ReactMessage:output_type -> chatim.v1.ReactMessageResponse
-	29, // 36: chatim.v1.CoreService.PinMessage:output_type -> chatim.v1.PinMessageResponse
-	30, // 37: chatim.v1.CoreService.UnpinMessage:output_type -> chatim.v1.UnpinMessageResponse
-	27, // [27:38] is the sub-list for method output_type
-	16, // [16:27] is the sub-list for method input_type
+	28, // 27: chatim.v1.CoreService.GetReactionSettings:input_type -> chatim.v1.GetReactionSettingsRequest
+	8,  // 28: chatim.v1.CoreService.CreateRoom:output_type -> chatim.v1.CreateRoomResponse
+	10, // 29: chatim.v1.CoreService.SendMessage:output_type -> chatim.v1.SendMessageResponse
+	12, // 30: chatim.v1.CoreService.GetHistory:output_type -> chatim.v1.GetHistoryResponse
+	14, // 31: chatim.v1.CoreService.EditMessage:output_type -> chatim.v1.EditMessageResponse
+	16, // 32: chatim.v1.CoreService.DeleteMessage:output_type -> chatim.v1.DeleteMessageResponse
+	18, // 33: chatim.v1.CoreService.HideMessage:output_type -> chatim.v1.HideMessageResponse
+	20, // 34: chatim.v1.CoreService.ClearHistory:output_type -> chatim.v1.ClearHistoryResponse
+	22, // 35: chatim.v1.CoreService.GetEditHistory:output_type -> chatim.v1.GetEditHistoryResponse
+	29, // 36: chatim.v1.CoreService.ReactMessage:output_type -> chatim.v1.ReactMessageResponse
+	30, // 37: chatim.v1.CoreService.PinMessage:output_type -> chatim.v1.PinMessageResponse
+	31, // 38: chatim.v1.CoreService.UnpinMessage:output_type -> chatim.v1.UnpinMessageResponse
+	32, // 39: chatim.v1.CoreService.GetReactionSettings:output_type -> chatim.v1.GetReactionSettingsResponse
+	28, // [28:40] is the sub-list for method output_type
+	16, // [16:28] is the sub-list for method input_type
 	16, // [16:16] is the sub-list for extension type_name
 	16, // [16:16] is the sub-list for extension extendee
 	0,  // [0:16] is the sub-list for field type_name

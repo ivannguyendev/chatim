@@ -19,17 +19,18 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	CoreService_CreateRoom_FullMethodName     = "/chatim.v1.CoreService/CreateRoom"
-	CoreService_SendMessage_FullMethodName    = "/chatim.v1.CoreService/SendMessage"
-	CoreService_GetHistory_FullMethodName     = "/chatim.v1.CoreService/GetHistory"
-	CoreService_EditMessage_FullMethodName    = "/chatim.v1.CoreService/EditMessage"
-	CoreService_DeleteMessage_FullMethodName  = "/chatim.v1.CoreService/DeleteMessage"
-	CoreService_HideMessage_FullMethodName    = "/chatim.v1.CoreService/HideMessage"
-	CoreService_ClearHistory_FullMethodName   = "/chatim.v1.CoreService/ClearHistory"
-	CoreService_GetEditHistory_FullMethodName = "/chatim.v1.CoreService/GetEditHistory"
-	CoreService_ReactMessage_FullMethodName   = "/chatim.v1.CoreService/ReactMessage"
-	CoreService_PinMessage_FullMethodName     = "/chatim.v1.CoreService/PinMessage"
-	CoreService_UnpinMessage_FullMethodName   = "/chatim.v1.CoreService/UnpinMessage"
+	CoreService_CreateRoom_FullMethodName          = "/chatim.v1.CoreService/CreateRoom"
+	CoreService_SendMessage_FullMethodName         = "/chatim.v1.CoreService/SendMessage"
+	CoreService_GetHistory_FullMethodName          = "/chatim.v1.CoreService/GetHistory"
+	CoreService_EditMessage_FullMethodName         = "/chatim.v1.CoreService/EditMessage"
+	CoreService_DeleteMessage_FullMethodName       = "/chatim.v1.CoreService/DeleteMessage"
+	CoreService_HideMessage_FullMethodName         = "/chatim.v1.CoreService/HideMessage"
+	CoreService_ClearHistory_FullMethodName        = "/chatim.v1.CoreService/ClearHistory"
+	CoreService_GetEditHistory_FullMethodName      = "/chatim.v1.CoreService/GetEditHistory"
+	CoreService_ReactMessage_FullMethodName        = "/chatim.v1.CoreService/ReactMessage"
+	CoreService_PinMessage_FullMethodName          = "/chatim.v1.CoreService/PinMessage"
+	CoreService_UnpinMessage_FullMethodName        = "/chatim.v1.CoreService/UnpinMessage"
+	CoreService_GetReactionSettings_FullMethodName = "/chatim.v1.CoreService/GetReactionSettings"
 )
 
 // CoreServiceClient is the client API for CoreService service.
@@ -47,6 +48,7 @@ type CoreServiceClient interface {
 	ReactMessage(ctx context.Context, in *ReactMessageRequest, opts ...grpc.CallOption) (*ReactMessageResponse, error)
 	PinMessage(ctx context.Context, in *PinMessageRequest, opts ...grpc.CallOption) (*PinMessageResponse, error)
 	UnpinMessage(ctx context.Context, in *UnpinMessageRequest, opts ...grpc.CallOption) (*UnpinMessageResponse, error)
+	GetReactionSettings(ctx context.Context, in *GetReactionSettingsRequest, opts ...grpc.CallOption) (*GetReactionSettingsResponse, error)
 }
 
 type coreServiceClient struct {
@@ -167,6 +169,16 @@ func (c *coreServiceClient) UnpinMessage(ctx context.Context, in *UnpinMessageRe
 	return out, nil
 }
 
+func (c *coreServiceClient) GetReactionSettings(ctx context.Context, in *GetReactionSettingsRequest, opts ...grpc.CallOption) (*GetReactionSettingsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetReactionSettingsResponse)
+	err := c.cc.Invoke(ctx, CoreService_GetReactionSettings_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CoreServiceServer is the server API for CoreService service.
 // All implementations must embed UnimplementedCoreServiceServer
 // for forward compatibility.
@@ -182,6 +194,7 @@ type CoreServiceServer interface {
 	ReactMessage(context.Context, *ReactMessageRequest) (*ReactMessageResponse, error)
 	PinMessage(context.Context, *PinMessageRequest) (*PinMessageResponse, error)
 	UnpinMessage(context.Context, *UnpinMessageRequest) (*UnpinMessageResponse, error)
+	GetReactionSettings(context.Context, *GetReactionSettingsRequest) (*GetReactionSettingsResponse, error)
 	mustEmbedUnimplementedCoreServiceServer()
 }
 
@@ -224,6 +237,9 @@ func (UnimplementedCoreServiceServer) PinMessage(context.Context, *PinMessageReq
 }
 func (UnimplementedCoreServiceServer) UnpinMessage(context.Context, *UnpinMessageRequest) (*UnpinMessageResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UnpinMessage not implemented")
+}
+func (UnimplementedCoreServiceServer) GetReactionSettings(context.Context, *GetReactionSettingsRequest) (*GetReactionSettingsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetReactionSettings not implemented")
 }
 func (UnimplementedCoreServiceServer) mustEmbedUnimplementedCoreServiceServer() {}
 func (UnimplementedCoreServiceServer) testEmbeddedByValue()                     {}
@@ -444,6 +460,24 @@ func _CoreService_UnpinMessage_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CoreService_GetReactionSettings_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetReactionSettingsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).GetReactionSettings(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_GetReactionSettings_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).GetReactionSettings(ctx, req.(*GetReactionSettingsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CoreService_ServiceDesc is the grpc.ServiceDesc for CoreService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -494,6 +528,10 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UnpinMessage",
 			Handler:    _CoreService_UnpinMessage_Handler,
+		},
+		{
+			MethodName: "GetReactionSettings",
+			Handler:    _CoreService_GetReactionSettings_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

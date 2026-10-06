@@ -546,6 +546,86 @@ func (x *UnpinMessageResponse) GetPins() []*Pin {
 	return nil
 }
 
+type GetReactionSettingsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetReactionSettingsRequest) Reset() {
+	*x = GetReactionSettingsRequest{}
+	mi := &file_chatim_v1_reactions_pins_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetReactionSettingsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetReactionSettingsRequest) ProtoMessage() {}
+
+func (x *GetReactionSettingsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_reactions_pins_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetReactionSettingsRequest.ProtoReflect.Descriptor instead.
+func (*GetReactionSettingsRequest) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_reactions_pins_proto_rawDescGZIP(), []int{9}
+}
+
+type GetReactionSettingsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Emojis        []string               `protobuf:"bytes,1,rep,name=emojis,proto3" json:"emojis,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetReactionSettingsResponse) Reset() {
+	*x = GetReactionSettingsResponse{}
+	mi := &file_chatim_v1_reactions_pins_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetReactionSettingsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetReactionSettingsResponse) ProtoMessage() {}
+
+func (x *GetReactionSettingsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_reactions_pins_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetReactionSettingsResponse.ProtoReflect.Descriptor instead.
+func (*GetReactionSettingsResponse) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_reactions_pins_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *GetReactionSettingsResponse) GetEmojis() []string {
+	if x != nil {
+		return x.Emojis
+	}
+	return nil
+}
+
 var File_chatim_v1_reactions_pins_proto protoreflect.FileDescriptor
 
 const file_chatim_v1_reactions_pins_proto_rawDesc = "" +
@@ -591,7 +671,10 @@ const file_chatim_v1_reactions_pins_proto_rawDesc = "" +
 	"\x14UnpinMessageResponse\x12\x1f\n" +
 	"\vpin_version\x18\x01 \x01(\x04R\n" +
 	"pinVersion\x12\"\n" +
-	"\x04pins\x18\x02 \x03(\v2\x0e.chatim.v1.PinR\x04pinsB\xa3\x01\n" +
+	"\x04pins\x18\x02 \x03(\v2\x0e.chatim.v1.PinR\x04pins\"\x1c\n" +
+	"\x1aGetReactionSettingsRequest\"5\n" +
+	"\x1bGetReactionSettingsResponse\x12\x16\n" +
+	"\x06emojis\x18\x01 \x03(\tR\x06emojisB\xa3\x01\n" +
 	"\rcom.chatim.v1B\x12ReactionsPinsProtoP\x01Z9github.com/ivannguyendev/chatim/pkg/pb/chatim/v1;chatimv1\xa2\x02\x03CXX\xaa\x02\tChatim.V1\xca\x02\tChatim\\V1\xe2\x02\x15Chatim\\V1\\GPBMetadata\xea\x02\n" +
 	"Chatim::V1b\x06proto3"
 
@@ -607,30 +690,32 @@ func file_chatim_v1_reactions_pins_proto_rawDescGZIP() []byte {
 	return file_chatim_v1_reactions_pins_proto_rawDescData
 }
 
-var file_chatim_v1_reactions_pins_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_chatim_v1_reactions_pins_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_chatim_v1_reactions_pins_proto_goTypes = []any{
-	(*ReactionCount)(nil),         // 0: chatim.v1.ReactionCount
-	(*ReactionSummary)(nil),       // 1: chatim.v1.ReactionSummary
-	(*Pin)(nil),                   // 2: chatim.v1.Pin
-	(*ReactMessageRequest)(nil),   // 3: chatim.v1.ReactMessageRequest
-	(*ReactMessageResponse)(nil),  // 4: chatim.v1.ReactMessageResponse
-	(*PinMessageRequest)(nil),     // 5: chatim.v1.PinMessageRequest
-	(*PinMessageResponse)(nil),    // 6: chatim.v1.PinMessageResponse
-	(*UnpinMessageRequest)(nil),   // 7: chatim.v1.UnpinMessageRequest
-	(*UnpinMessageResponse)(nil),  // 8: chatim.v1.UnpinMessageResponse
-	(*timestamppb.Timestamp)(nil), // 9: google.protobuf.Timestamp
+	(*ReactionCount)(nil),               // 0: chatim.v1.ReactionCount
+	(*ReactionSummary)(nil),             // 1: chatim.v1.ReactionSummary
+	(*Pin)(nil),                         // 2: chatim.v1.Pin
+	(*ReactMessageRequest)(nil),         // 3: chatim.v1.ReactMessageRequest
+	(*ReactMessageResponse)(nil),        // 4: chatim.v1.ReactMessageResponse
+	(*PinMessageRequest)(nil),           // 5: chatim.v1.PinMessageRequest
+	(*PinMessageResponse)(nil),          // 6: chatim.v1.PinMessageResponse
+	(*UnpinMessageRequest)(nil),         // 7: chatim.v1.UnpinMessageRequest
+	(*UnpinMessageResponse)(nil),        // 8: chatim.v1.UnpinMessageResponse
+	(*GetReactionSettingsRequest)(nil),  // 9: chatim.v1.GetReactionSettingsRequest
+	(*GetReactionSettingsResponse)(nil), // 10: chatim.v1.GetReactionSettingsResponse
+	(*timestamppb.Timestamp)(nil),       // 11: google.protobuf.Timestamp
 }
 var file_chatim_v1_reactions_pins_proto_depIdxs = []int32{
-	0, // 0: chatim.v1.ReactionSummary.counts:type_name -> chatim.v1.ReactionCount
-	9, // 1: chatim.v1.Pin.pinned_at:type_name -> google.protobuf.Timestamp
-	1, // 2: chatim.v1.ReactMessageResponse.reactions:type_name -> chatim.v1.ReactionSummary
-	2, // 3: chatim.v1.PinMessageResponse.pins:type_name -> chatim.v1.Pin
-	2, // 4: chatim.v1.UnpinMessageResponse.pins:type_name -> chatim.v1.Pin
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	0,  // 0: chatim.v1.ReactionSummary.counts:type_name -> chatim.v1.ReactionCount
+	11, // 1: chatim.v1.Pin.pinned_at:type_name -> google.protobuf.Timestamp
+	1,  // 2: chatim.v1.ReactMessageResponse.reactions:type_name -> chatim.v1.ReactionSummary
+	2,  // 3: chatim.v1.PinMessageResponse.pins:type_name -> chatim.v1.Pin
+	2,  // 4: chatim.v1.UnpinMessageResponse.pins:type_name -> chatim.v1.Pin
+	5,  // [5:5] is the sub-list for method output_type
+	5,  // [5:5] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_chatim_v1_reactions_pins_proto_init() }
@@ -644,7 +729,7 @@ func file_chatim_v1_reactions_pins_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_chatim_v1_reactions_pins_proto_rawDesc), len(file_chatim_v1_reactions_pins_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

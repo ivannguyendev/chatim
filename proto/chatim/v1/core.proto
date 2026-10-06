@@ -17,6 +17,7 @@ service CoreService {
   rpc ReactMessage(ReactMessageRequest) returns (ReactMessageResponse);
   rpc PinMessage(PinMessageRequest) returns (PinMessageResponse);
   rpc UnpinMessage(UnpinMessageRequest) returns (UnpinMessageResponse);
+  rpc GetReactionSettings(GetReactionSettingsRequest) returns (GetReactionSettingsResponse);
 }
 
 enum RoomType {
