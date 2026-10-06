@@ -3,6 +3,7 @@ syntax = "proto3";
 package chatim.v1;
 
 import "chatim/v1/core.proto";
+import "chatim/v1/reactions_pins.proto";
 import "google/protobuf/timestamp.proto";
 
 message Event {

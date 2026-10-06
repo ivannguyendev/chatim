@@ -684,7 +684,7 @@ var File_chatim_v1_events_proto protoreflect.FileDescriptor
 
 const file_chatim_v1_events_proto_rawDesc = "" +
 	"\n" +
-	"\x16chatim/v1/events.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa9\x06\n" +
+	"\x16chatim/v1/events.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa9\x06\n" +
 	"\x05Event\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06tenant\x18\x02 \x01(\tR\x06tenant\x12\x17\n" +
@@ -793,6 +793,7 @@ func file_chatim_v1_events_proto_init() {
 		return
 	}
 	file_chatim_v1_core_proto_init()
+	file_chatim_v1_reactions_pins_proto_init()
 	file_chatim_v1_events_proto_msgTypes[0].OneofWrappers = []any{
 		(*Event_MessageCreated)(nil),
 		(*Event_RoomCreated)(nil),
