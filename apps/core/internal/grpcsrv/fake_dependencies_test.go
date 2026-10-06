@@ -10,6 +10,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/counter"
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/pinproj"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
@@ -55,7 +56,7 @@ func (f *fakeSender) sent() []actor.SendCmd {
 func memStores() *rig {
 	return &rig{
 		rooms: memstore.NewRooms(), msgs: memstore.NewMessages(), edits: memstore.NewEdits(), hidden: memstore.NewHidden(),
-		reactions: memstore.NewReactions(),
+		reactions: memstore.NewReactions(), pins: memstore.NewPins(),
 	}
 }
 
@@ -69,13 +70,17 @@ func newMutator(t *testing.T, rg *rig, o options) *mutate.Mutator {
 	if err != nil {
 		t.Fatalf("counter.New: %v", err)
 	}
+	projector, err := pinproj.New(rg.pins, rg.rooms)
+	if err != nil {
+		t.Fatalf("pinproj.New: %v", err)
+	}
 	var events mutate.EventPublisher = nopPublisher{}
 	if o.events != nil {
 		events = o.events
 	}
 	m, err := mutate.New(mutate.Deps{
 		Access: checker, Messages: rg.msgs, Edits: rg.edits, Hidden: rg.hidden, Rooms: rg.rooms, Events: events, Now: o.now,
-		Reactions: rg.reactions, Counter: counts,
+		Reactions: rg.reactions, Counter: counts, Pins: rg.pins, Projector: projector,
 	})
 	if err != nil {
 		t.Fatalf("mutate.New: %v", err)

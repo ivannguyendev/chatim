@@ -53,6 +53,7 @@ type rig struct {
 	edits     *memstore.Edits
 	hidden    *memstore.Hidden
 	reactions *memstore.Reactions
+	pins      *memstore.Pins
 }
 
 type options struct {

@@ -82,15 +82,18 @@ func TestNewRequiresEveryDependency(t *testing.T) {
 	full := rg.deps(t, nil)
 	full.Now = nil
 	for name, drop := range map[string]func(d *mutate.Deps){
-		"no access":    func(d *mutate.Deps) { d.Access = nil },
-		"no messages":  func(d *mutate.Deps) { d.Messages = nil },
-		"no edits":     func(d *mutate.Deps) { d.Edits = nil },
-		"no hidden":    func(d *mutate.Deps) { d.Hidden = nil },
-		"no rooms":     func(d *mutate.Deps) { d.Rooms = nil },
-		"no events":    func(d *mutate.Deps) { d.Events = nil },
-		"no reactions": func(d *mutate.Deps) { d.Reactions = nil },
-		"no counter":   func(d *mutate.Deps) { d.Counter = nil },
-		"bad limits":   func(d *mutate.Deps) { d.Limits = mutate.Limits{MaxEmojis: mutate.MaxEmojisCap + 1} },
+		"no access":     func(d *mutate.Deps) { d.Access = nil },
+		"no messages":   func(d *mutate.Deps) { d.Messages = nil },
+		"no edits":      func(d *mutate.Deps) { d.Edits = nil },
+		"no hidden":     func(d *mutate.Deps) { d.Hidden = nil },
+		"no rooms":      func(d *mutate.Deps) { d.Rooms = nil },
+		"no events":     func(d *mutate.Deps) { d.Events = nil },
+		"no reactions":  func(d *mutate.Deps) { d.Reactions = nil },
+		"no counter":    func(d *mutate.Deps) { d.Counter = nil },
+		"no pins":       func(d *mutate.Deps) { d.Pins = nil },
+		"no projector":  func(d *mutate.Deps) { d.Projector = nil },
+		"bad pin limit": func(d *mutate.Deps) { d.Limits = mutate.Limits{PinLimit: mutate.MaxPinLimit + 1} },
+		"bad limits":    func(d *mutate.Deps) { d.Limits = mutate.Limits{MaxEmojis: mutate.MaxEmojisCap + 1} },
 	} {
 		d := full
 		drop(&d)

@@ -12,6 +12,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/counter"
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/pinproj"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
@@ -57,6 +58,7 @@ type rig struct {
 	edits     *memstore.Edits
 	hidden    *memstore.Hidden
 	reactions *memstore.Reactions
+	pins      *memstore.Pins
 	events    *recordingEvents
 	now       time.Time
 }
@@ -65,7 +67,8 @@ func newRig(t *testing.T, policy access.Policy) *rig {
 	t.Helper()
 	rg := &rig{
 		msgs: memstore.NewMessages(), rooms: memstore.NewRooms(), edits: memstore.NewEdits(), hidden: memstore.NewHidden(),
-		reactions: memstore.NewReactions(), events: &recordingEvents{}, now: created.Add(time.Minute + 1500*time.Microsecond),
+		reactions: memstore.NewReactions(), pins: memstore.NewPins(), events: &recordingEvents{},
+		now: created.Add(time.Minute + 1500*time.Microsecond),
 	}
 	r := domain.Room{ID: room, Tenant: tenant, Type: domain.RoomGroup, Name: "team", CreatedBy: "alice", CreatedAt: created, MemberCount: 3}
 	members := []domain.Member{
@@ -90,9 +93,13 @@ func (rg *rig) deps(t *testing.T, policy access.Policy) mutate.Deps {
 	if err != nil {
 		t.Fatalf("counter.New: %v", err)
 	}
+	projector, err := pinproj.New(rg.pins, rg.rooms)
+	if err != nil {
+		t.Fatalf("pinproj.New: %v", err)
+	}
 	return mutate.Deps{
 		Access: checker, Messages: rg.msgs, Edits: rg.edits, Hidden: rg.hidden, Rooms: rg.rooms, Events: rg.events,
-		Reactions: rg.reactions, Counter: counts, Now: func() time.Time { return rg.now },
+		Reactions: rg.reactions, Counter: counts, Pins: rg.pins, Projector: projector, Now: func() time.Time { return rg.now },
 	}
 }
 
