@@ -84,7 +84,7 @@ func TestRealInfraSendMessageMovesRoomActivity(t *testing.T) {
 	client := dialCore(t, core.cfg)
 	roomID := createRoom(t, client)
 	room := parseRoom(t, roomID)
-	resp, err := client.SendMessage(caller(t.Context()), &chatimv1.SendMessageRequest{RoomId: roomID, Cid: "activity-1", Text: "moves the room"})
+	resp, err := sendRetrying(caller(t.Context()), client, &chatimv1.SendMessageRequest{RoomId: roomID, Cid: "activity-1", Text: "moves the room"})
 	if err != nil {
 		t.Fatalf("SendMessage: %v", err)
 	}

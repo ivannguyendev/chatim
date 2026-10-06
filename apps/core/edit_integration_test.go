@@ -25,7 +25,7 @@ func callerAs(ctx context.Context, user string) context.Context {
 
 func sendAs(t *testing.T, client chatimv1.CoreServiceClient, user, roomID, cid, text string) uint64 {
 	t.Helper()
-	resp, err := client.SendMessage(callerAs(t.Context(), user), &chatimv1.SendMessageRequest{RoomId: roomID, Cid: cid, Text: text})
+	resp, err := sendRetrying(callerAs(t.Context(), user), client, &chatimv1.SendMessageRequest{RoomId: roomID, Cid: cid, Text: text})
 	if err != nil {
 		t.Fatalf("SendMessage(%s as %s): %v", cid, user, err)
 	}
