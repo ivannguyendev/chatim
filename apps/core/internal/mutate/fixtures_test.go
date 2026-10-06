@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/access"
+	"github.com/ivannguyendev/chatim/apps/core/internal/counter"
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -50,20 +51,21 @@ func (r *recordingEvents) list() ([]uint64, []*chatimv1.Event) {
 }
 
 type rig struct {
-	m      *mutate.Mutator
-	msgs   *memstore.Messages
-	rooms  *memstore.Rooms
-	edits  *memstore.Edits
-	hidden *memstore.Hidden
-	events *recordingEvents
-	now    time.Time
+	m         *mutate.Mutator
+	msgs      *memstore.Messages
+	rooms     *memstore.Rooms
+	edits     *memstore.Edits
+	hidden    *memstore.Hidden
+	reactions *memstore.Reactions
+	events    *recordingEvents
+	now       time.Time
 }
 
 func newRig(t *testing.T, policy access.Policy) *rig {
 	t.Helper()
 	rg := &rig{
 		msgs: memstore.NewMessages(), rooms: memstore.NewRooms(), edits: memstore.NewEdits(), hidden: memstore.NewHidden(),
-		events: &recordingEvents{}, now: created.Add(time.Minute + 1500*time.Microsecond),
+		reactions: memstore.NewReactions(), events: &recordingEvents{}, now: created.Add(time.Minute + 1500*time.Microsecond),
 	}
 	r := domain.Room{ID: room, Tenant: tenant, Type: domain.RoomGroup, Name: "team", CreatedBy: "alice", CreatedAt: created, MemberCount: 3}
 	members := []domain.Member{
@@ -74,24 +76,40 @@ func newRig(t *testing.T, policy access.Policy) *rig {
 	if err := rg.rooms.Create(t.Context(), r, members); err != nil {
 		t.Fatalf("create room: %v", err)
 	}
-	rg.m = rg.mutator(t, policy, rg.edits)
+	rg.m = rg.build(t, rg.deps(t, policy))
 	return rg
 }
 
-func (rg *rig) mutator(t *testing.T, policy access.Policy, edits store.Edits) *mutate.Mutator {
+func (rg *rig) deps(t *testing.T, policy access.Policy) mutate.Deps {
 	t.Helper()
 	checker, err := access.NewChecker(rg.rooms, policy)
 	if err != nil {
 		t.Fatalf("NewChecker: %v", err)
 	}
-	m, err := mutate.New(mutate.Deps{
-		Access: checker, Messages: rg.msgs, Edits: edits, Hidden: rg.hidden, Rooms: rg.rooms, Events: rg.events,
-		Now: func() time.Time { return rg.now },
-	})
+	counts, err := counter.New(rg.msgs, rg.reactions)
+	if err != nil {
+		t.Fatalf("counter.New: %v", err)
+	}
+	return mutate.Deps{
+		Access: checker, Messages: rg.msgs, Edits: rg.edits, Hidden: rg.hidden, Rooms: rg.rooms, Events: rg.events,
+		Reactions: rg.reactions, Counter: counts, Now: func() time.Time { return rg.now },
+	}
+}
+
+func (rg *rig) build(t *testing.T, d mutate.Deps) *mutate.Mutator {
+	t.Helper()
+	m, err := mutate.New(d)
 	if err != nil {
 		t.Fatalf("mutate.New: %v", err)
 	}
 	return m
+}
+
+func (rg *rig) mutator(t *testing.T, policy access.Policy, edits store.Edits) *mutate.Mutator {
+	t.Helper()
+	d := rg.deps(t, policy)
+	d.Edits = edits
+	return rg.build(t, d)
 }
 
 func (rg *rig) send(t *testing.T, seq uint64, from, text string) domain.Message {

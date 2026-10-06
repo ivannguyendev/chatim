@@ -9,13 +9,12 @@ import (
 	"google.golang.org/grpc/metadata"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/grpcsrv"
-	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 func TestNewRequiresEveryDependency(t *testing.T) {
-	rg := &rig{rooms: memstore.NewRooms(), msgs: memstore.NewMessages(), edits: memstore.NewEdits(), hidden: memstore.NewHidden()}
+	rg := memStores()
 	full := grpcsrv.Deps{Sender: &fakeSender{}, Rooms: rg.rooms, Pages: rg.msgs, Mutator: newMutator(t, rg, options{}), Edits: rg.edits, Hidden: rg.hidden}
 	for name, drop := range map[string]func(d *grpcsrv.Deps){
 		"no sender":  func(d *grpcsrv.Deps) { d.Sender = nil },

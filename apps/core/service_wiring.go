@@ -6,6 +6,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
+	"github.com/ivannguyendev/chatim/apps/core/internal/counter"
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/grpcsrv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/mutate"
@@ -18,7 +19,15 @@ func wireService(st *mongostore.Store, router *actor.Router, pub *publish.Publis
 	if err != nil {
 		return nil, fmt.Errorf("wire access checker: %w", err)
 	}
-	mut, err := mutate.New(mutate.Deps{Access: checker, Messages: st, Edits: st, Hidden: st, Rooms: st, Events: pub})
+	reactions := st.Reactions()
+	counts, err := counter.New(st, reactions)
+	if err != nil {
+		return nil, fmt.Errorf("wire reaction counter: %w", err)
+	}
+	mut, err := mutate.New(mutate.Deps{
+		Access: checker, Messages: st, Edits: st, Hidden: st, Rooms: st, Events: pub,
+		Reactions: reactions, Counter: counts,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("wire mutator: %w", err)
 	}

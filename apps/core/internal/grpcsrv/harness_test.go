@@ -47,11 +47,12 @@ var (
 )
 
 type rig struct {
-	client chatimv1.CoreServiceClient
-	rooms  *memstore.Rooms
-	msgs   *memstore.Messages
-	edits  *memstore.Edits
-	hidden *memstore.Hidden
+	client    chatimv1.CoreServiceClient
+	rooms     *memstore.Rooms
+	msgs      *memstore.Messages
+	edits     *memstore.Edits
+	hidden    *memstore.Hidden
+	reactions *memstore.Reactions
 }
 
 type options struct {
@@ -65,7 +66,7 @@ type options struct {
 
 func newRig(t *testing.T, o options) *rig {
 	t.Helper()
-	rg := &rig{rooms: memstore.NewRooms(), msgs: memstore.NewMessages(), edits: memstore.NewEdits(), hidden: memstore.NewHidden()}
+	rg := memStores()
 	if o.sender == nil {
 		o.sender = startRouter(t, rg)
 	}

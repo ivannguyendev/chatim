@@ -7,8 +7,10 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
+	"github.com/ivannguyendev/chatim/apps/core/internal/counter"
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -50,17 +52,31 @@ func (f *fakeSender) sent() []actor.SendCmd {
 	return append([]actor.SendCmd(nil), f.cmds...)
 }
 
+func memStores() *rig {
+	return &rig{
+		rooms: memstore.NewRooms(), msgs: memstore.NewMessages(), edits: memstore.NewEdits(), hidden: memstore.NewHidden(),
+		reactions: memstore.NewReactions(),
+	}
+}
+
 func newMutator(t *testing.T, rg *rig, o options) *mutate.Mutator {
 	t.Helper()
 	checker, err := access.NewChecker(rg.rooms, o.policy)
 	if err != nil {
 		t.Fatalf("NewChecker: %v", err)
 	}
+	counts, err := counter.New(rg.msgs, rg.reactions)
+	if err != nil {
+		t.Fatalf("counter.New: %v", err)
+	}
 	var events mutate.EventPublisher = nopPublisher{}
 	if o.events != nil {
 		events = o.events
 	}
-	m, err := mutate.New(mutate.Deps{Access: checker, Messages: rg.msgs, Edits: rg.edits, Hidden: rg.hidden, Rooms: rg.rooms, Events: events, Now: o.now})
+	m, err := mutate.New(mutate.Deps{
+		Access: checker, Messages: rg.msgs, Edits: rg.edits, Hidden: rg.hidden, Rooms: rg.rooms, Events: events, Now: o.now,
+		Reactions: rg.reactions, Counter: counts,
+	})
 	if err != nil {
 		t.Fatalf("mutate.New: %v", err)
 	}
