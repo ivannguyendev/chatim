@@ -13,32 +13,48 @@ import (
 )
 
 type effectSet struct {
-	workers     *effects.Workers
-	msgCreated  *effects.MessageCreated
-	roomCreated *effects.RoomCreated
+	workers        *effects.Workers
+	msgCreated     *effects.MessageCreated
+	roomCreated    *effects.RoomCreated
+	editProjection *effects.EditProjection
+	msgChanged     *effects.MessageChanged
 }
 
 func wireEffects(cfg config.Config, cl *clients, st *mongostore.Store, marks *eventmark.Store, owner effects.Owner, log *slog.Logger) (effectSet, error) {
-	msgCreated, err := effects.NewMessageCreated(
+	fx := effectSet{}
+	var err error
+	fx.msgCreated, err = effects.NewMessageCreated(
 		effects.MessageCreatedDeps{Marks: marks, Messages: st, Rooms: st, JS: cl.effectsJS},
 		effects.MessageCreatedConfig{SubjectRoot: cfg.Stream.SubjectRoot, Delay: cfg.EffectDelay, RoomCache: cfg.EffectRoomCache},
 	)
 	if err != nil {
 		return effectSet{}, fmt.Errorf("wire msg_created effect: %w", err)
 	}
-	roomCreated, err := effects.NewRoomCreated(
+	fx.roomCreated, err = effects.NewRoomCreated(
 		effects.RoomCreatedDeps{Rooms: st, JS: cl.effectsJS},
 		effects.RoomCreatedConfig{SubjectRoot: cfg.Stream.SubjectRoot, Delay: cfg.EffectDelay},
 	)
 	if err != nil {
 		return effectSet{}, fmt.Errorf("wire room_created effect: %w", err)
 	}
+	fx.editProjection, err = effects.NewEditProjection(effects.EditProjectionDeps{Edits: st, Messages: st, Purger: st})
+	if err != nil {
+		return effectSet{}, fmt.Errorf("wire edit_projection effect: %w", err)
+	}
+	fx.msgChanged, err = effects.NewMessageChanged(
+		effects.MessageChangedDeps{Edits: st, Messages: st, Rooms: st, JS: cl.effectsJS},
+		effects.MessageChangedConfig{SubjectRoot: cfg.Stream.SubjectRoot, Delay: cfg.EffectDelay, RoomCache: cfg.EffectRoomCache},
+	)
+	if err != nil {
+		return effectSet{}, fmt.Errorf("wire msg_changed effect: %w", err)
+	}
 	activity := effects.NewRoomActivity(st)
 	registry := effects.Registry{
-		store.MessageInserted: {activity.Effect(), msgCreated.Effect()},
-		store.RoomInserted:    {roomCreated.Effect()},
+		store.MessageInserted: {activity.Effect(), fx.msgCreated.Effect()},
+		store.RoomInserted:    {fx.roomCreated.Effect()},
+		store.EditInserted:    {activity.Effect(), fx.editProjection.Effect(), fx.msgChanged.Effect()},
 	}
-	workers, err := effects.New(effects.Deps{
+	fx.workers, err = effects.New(effects.Deps{
 		Queue:    func(p int) work.Queue { return work.NewQueue(cl.effectsJS, cfg.Work.Name, p) },
 		Owner:    owner,
 		Registry: registry,
@@ -46,12 +62,14 @@ func wireEffects(cfg config.Config, cl *clients, st *mongostore.Store, marks *ev
 	if err != nil {
 		return effectSet{}, fmt.Errorf("wire effect workers: %w", err)
 	}
-	return effectSet{workers: workers, msgCreated: msgCreated, roomCreated: roomCreated}, nil
+	return fx, nil
 }
 
 func (fx effectSet) counters() map[string]effectCounters {
 	return map[string]effectCounters{
-		fx.msgCreated.Effect().Name:  {republished: fx.msgCreated.Republished, dropped: fx.msgCreated.Dropped},
-		fx.roomCreated.Effect().Name: {republished: fx.roomCreated.Republished, dropped: fx.roomCreated.Dropped},
+		fx.msgCreated.Effect().Name:     {republished: fx.msgCreated.Republished, dropped: fx.msgCreated.Dropped},
+		fx.roomCreated.Effect().Name:    {republished: fx.roomCreated.Republished, dropped: fx.roomCreated.Dropped},
+		fx.msgChanged.Effect().Name:     {republished: fx.msgChanged.Republished, dropped: fx.msgChanged.Dropped},
+		fx.editProjection.Effect().Name: {dropped: fx.editProjection.Dropped},
 	}
 }

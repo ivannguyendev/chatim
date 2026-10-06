@@ -86,3 +86,21 @@ func TestRoomActivityNeverMovesAStoredRoomBack(t *testing.T) {
 		t.Fatalf("room = %+v, %v; want last seq 9 at %v", got, err, activityAt.Add(2*time.Minute))
 	}
 }
+
+func TestRoomActivityTouchesOnlyTheChangeTimeForEdits(t *testing.T) {
+	spy := &touchSpy{}
+	t1, t2 := activityAt, activityAt.Add(time.Second)
+	recs := []work.Record{
+		{Kind: store.EditInserted, Room: 101, Seq: 5, Version: 2, CommittedAt: t1},
+		{Kind: store.EditInserted, Room: 101, Seq: 3, Version: 1, CommittedAt: t2},
+		activityRecord(101, 0, 4, t1),
+	}
+	errs := effects.NewRoomActivity(spy).Effect().Run(t.Context(), recs)
+	if len(errs) != len(recs) || slices.ContainsFunc(errs, func(err error) bool { return err != nil }) {
+		t.Fatalf("Run errors = %v, want %d nils", errs, len(recs))
+	}
+	want := []store.Activity{{Room: 101, At: t2}, {Room: 101, Seq: 4, At: t1}}
+	if len(spy.calls) != 1 || !slices.Equal(spy.calls[0], want) {
+		t.Fatalf("TouchActivity calls = %+v, want one call with %+v (edits as seq 0, kept apart from the new message)", spy.calls, want)
+	}
+}

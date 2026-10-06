@@ -72,7 +72,7 @@ func (e *MessageCreated) run(ctx context.Context, recs []work.Record) []error {
 	for _, idx := range e.unmarkedByRoom(ctx, keys) {
 		pending = e.publishRoom(ctx, keys, idx, errs, pending)
 	}
-	awaitAcks(ctx, pending, errs, &e.republished)
+	awaitAcks(ctx, pending, errs, countAll(&e.republished))
 	return errs
 }
 

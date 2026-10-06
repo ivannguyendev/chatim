@@ -27,8 +27,9 @@ func fakeProbes(withReader bool) probes {
 		oplogWindow:  func() float64 { return 0 },
 		workers:      func() effects.Stats { return effects.Stats{Processed: 7, Failed: 2, Lag: 3 * time.Second} },
 		effectCounts: map[string]effectCounters{
-			"msg_created":  {republished: func() uint64 { return 5 }, dropped: zero},
-			"room_created": {republished: zero, dropped: func() uint64 { return 1 }},
+			"msg_created":     {republished: func() uint64 { return 5 }, dropped: zero},
+			"room_created":    {republished: zero, dropped: func() uint64 { return 1 }},
+			"edit_projection": {dropped: func() uint64 { return 4 }},
 		},
 	}
 	if withReader {
@@ -86,10 +87,14 @@ func TestEffectMetricsReadTheirEffectByLabel(t *testing.T) {
 		"reconcile_lag_seconds": 3, "work_processed_total": 7, "work_failures_total": 2,
 		"reconcile_republished_total{msg_created}": 5, "reconcile_republished_total{room_created}": 0,
 		"effect_dropped_total{msg_created}": 0, "effect_dropped_total{room_created}": 1,
+		"effect_dropped_total{edit_projection}": 4,
 	}
 	for key, v := range want {
 		if g, ok := got[key]; !ok || g != v {
 			t.Errorf("%s = %v (present %v), want %v", key, g, ok, v)
 		}
+	}
+	if _, ok := got["reconcile_republished_total{edit_projection}"]; ok {
+		t.Errorf("edit_projection never publishes, but reconcile_republished_total is exported for it")
 	}
 }

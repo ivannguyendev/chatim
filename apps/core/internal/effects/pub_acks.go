@@ -27,15 +27,27 @@ func send(js publish.JetStream, msg *nats.Msg, i int, errs []error, pending []pe
 	return append(pending, pendingAck{index: i, future: f})
 }
 
-func awaitAcks(ctx context.Context, pending []pendingAck, errs []error, acked *atomic.Uint64) {
+func awaitAcks(ctx context.Context, pending []pendingAck, errs []error, count func(*jetstream.PubAck)) {
 	for _, p := range pending {
 		select {
-		case <-p.future.Ok():
-			acked.Add(1)
+		case ack := <-p.future.Ok():
+			count(ack)
 		case err := <-p.future.Err():
 			errs[p.index] = err
 		case <-ctx.Done():
 			errs[p.index] = ctx.Err()
+		}
+	}
+}
+
+func countAll(n *atomic.Uint64) func(*jetstream.PubAck) {
+	return func(*jetstream.PubAck) { n.Add(1) }
+}
+
+func countStored(n *atomic.Uint64) func(*jetstream.PubAck) {
+	return func(ack *jetstream.PubAck) {
+		if ack != nil && !ack.Duplicate {
+			n.Add(1)
 		}
 	}
 }

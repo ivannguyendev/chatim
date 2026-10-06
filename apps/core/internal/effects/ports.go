@@ -18,3 +18,15 @@ type MessageFinder interface {
 type RoomReader interface {
 	Get(ctx context.Context, id uint64) (domain.Room, error)
 }
+
+type EditReader interface {
+	At(ctx context.Context, key store.MsgKey, version uint32) (domain.Edit, error)
+}
+
+type EditApplier interface {
+	ApplyEdit(ctx context.Context, e domain.Edit) error
+}
+
+type TextPurger interface {
+	PurgeText(ctx context.Context, key store.MsgKey, upTo uint32) error
+}

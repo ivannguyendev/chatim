@@ -64,8 +64,8 @@ func metricSources(p probes) []metrics.Source {
 }
 
 func workerSources(stats func() effects.Stats, counts map[string]effectCounters) []metrics.Source {
-	const republishHelp = "Events effect workers sent because no ack mark showed the fast path delivered them."
-	const dropHelp = "Work records an effect gave up on (missing room or corrupt document)."
+	const republishHelp = "Events effect workers sent and JetStream acked; msg_created sends only unmarked events, msg_changed counts only ids the stream had not stored."
+	const dropHelp = "Work records an effect gave up on (missing room, message or edit fact, or a corrupt document)."
 	out := []metrics.Source{
 		{Name: "reconcile_lag_seconds", Help: "How far the effect workers run behind each effect's delay.", Gauge: true, Read: func() float64 { return stats().Lag.Seconds() }},
 		{Name: "work_processed_total", Help: "Work records acked after every effect ran.", Read: func() float64 { return float64(stats().Processed) }},
@@ -73,10 +73,10 @@ func workerSources(stats func() effects.Stats, counts map[string]effectCounters)
 	}
 	for _, name := range slices.Sorted(maps.Keys(counts)) {
 		c, labels := counts[name], map[string]string{"effect": name}
-		out = append(out,
-			metrics.Source{Name: "reconcile_republished_total", Help: republishHelp, Labels: labels, Read: func() float64 { return float64(c.republished()) }},
-			metrics.Source{Name: "effect_dropped_total", Help: dropHelp, Labels: labels, Read: func() float64 { return float64(c.dropped()) }},
-		)
+		if c.republished != nil {
+			out = append(out, metrics.Source{Name: "reconcile_republished_total", Help: republishHelp, Labels: labels, Read: func() float64 { return float64(c.republished()) }})
+		}
+		out = append(out, metrics.Source{Name: "effect_dropped_total", Help: dropHelp, Labels: labels, Read: func() float64 { return float64(c.dropped()) }})
 	}
 	return out
 }

@@ -16,7 +16,10 @@ type RoomActivity struct {
 	rooms ActivityWriter
 }
 
-type activityKey struct{ room, thread uint64 }
+type activityKey struct {
+	room, thread uint64
+	edit         bool
+}
 
 const RoomActivityName = "room_activity"
 
@@ -44,14 +47,19 @@ func latestActivity(recs []work.Record) []store.Activity {
 	at := make(map[activityKey]int, len(recs))
 	out := make([]store.Activity, 0, len(recs))
 	for _, r := range recs {
-		k := activityKey{r.Room, r.Thread}
+		edit := r.Kind == store.EditInserted
+		seq := r.Seq
+		if edit {
+			seq = 0
+		}
+		k := activityKey{r.Room, r.Thread, edit}
 		i, ok := at[k]
 		if !ok {
 			at[k] = len(out)
-			out = append(out, store.Activity{Room: r.Room, Thread: r.Thread, Seq: r.Seq, At: r.CommittedAt})
+			out = append(out, store.Activity{Room: r.Room, Thread: r.Thread, Seq: seq, At: r.CommittedAt})
 			continue
 		}
-		out[i].Seq = max(out[i].Seq, r.Seq)
+		out[i].Seq = max(out[i].Seq, seq)
 		if r.CommittedAt.After(out[i].At) {
 			out[i].At = r.CommittedAt
 		}
