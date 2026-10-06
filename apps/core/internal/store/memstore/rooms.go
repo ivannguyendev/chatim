@@ -23,11 +23,12 @@ type Rooms struct {
 	mu      sync.RWMutex
 	rooms   map[uint64]domain.Room
 	members map[memberKey]domain.Member
+	pins    map[uint64]domain.PinState
 	log     *Messages
 }
 
 func NewRooms() *Rooms {
-	return &Rooms{rooms: make(map[uint64]domain.Room), members: make(map[memberKey]domain.Member)}
+	return &Rooms{rooms: make(map[uint64]domain.Room), members: make(map[memberKey]domain.Member), pins: make(map[uint64]domain.PinState)}
 }
 
 func (s *Rooms) Create(ctx context.Context, r domain.Room, members []domain.Member) error {

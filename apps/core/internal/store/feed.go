@@ -23,6 +23,8 @@ const (
 	MessageInserted ChangeKind = iota + 1
 	RoomInserted
 	EditInserted
+	ReactionChanged
+	PinInserted
 )
 
 type Change struct {
@@ -30,6 +32,8 @@ type Change struct {
 	Msg         domain.Message
 	Room        domain.Room
 	Edit        domain.Edit
+	Reaction    domain.Reaction
+	Pin         domain.PinAction
 	CommittedAt time.Time
 	Position    Position
 }

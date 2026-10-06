@@ -33,3 +33,15 @@ func TestEditFeedContract(t *testing.T) {
 		return edits, memstore.NewFeed(msgs, nil, edits)
 	})
 }
+
+func TestReactionsContract(t *testing.T) {
+	storetest.RunReactions(t, func(*testing.T) (storetest.ReactableMessages, store.Reactions) {
+		return memstore.NewMessages(), memstore.NewReactions()
+	})
+}
+
+func TestPinsContract(t *testing.T) {
+	storetest.RunPins(t, func(*testing.T) (storetest.PinnableRooms, store.Pins) {
+		return memstore.NewRooms(), memstore.NewPins()
+	})
+}

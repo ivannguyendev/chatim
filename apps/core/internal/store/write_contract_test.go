@@ -38,6 +38,19 @@ var portMethods = map[string]string{
 	"Edits.PurgeText":             "purge",
 	"Hidden.Hide":                 "upsert",
 	"Hidden.HiddenIn":             "read",
+
+	"Reactions.Set":                  "version-bump",
+	"Reactions.Remove":               "version-bump",
+	"Reactions.Get":                  "read",
+	"Reactions.Count":                "read",
+	"Reactions.Between":              "read",
+	"ReactionSummaries.SetReactions": "cas",
+	"Pins.Append":                    "insert-unique",
+	"Pins.At":                        "read",
+	"Pins.After":                     "read",
+	"Pins.Between":                   "read",
+	"PinProjector.PinState":          "read",
+	"PinProjector.ApplyPins":         "cas",
 }
 
 func TestEveryPortMethodHasAWriteContract(t *testing.T) {
@@ -50,6 +63,10 @@ func TestEveryPortMethodHasAWriteContract(t *testing.T) {
 		reflect.TypeFor[store.HistoryClearer](),
 		reflect.TypeFor[store.Edits](),
 		reflect.TypeFor[store.Hidden](),
+		reflect.TypeFor[store.Reactions](),
+		reflect.TypeFor[store.ReactionSummaries](),
+		reflect.TypeFor[store.Pins](),
+		reflect.TypeFor[store.PinProjector](),
 	}
 	seen := map[string]bool{}
 	for _, p := range ports {
