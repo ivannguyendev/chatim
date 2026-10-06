@@ -71,6 +71,18 @@ func TestEveryRPCChecksCallerIdentityFirst(t *testing.T) {
 			_, err := rg.client.GetEditHistory(ctx, &chatimv1.GetEditHistoryRequest{RoomId: "42", Seq: 1})
 			return err
 		},
+		"ReactMessage": func(ctx context.Context) error {
+			_, err := rg.client.ReactMessage(ctx, &chatimv1.ReactMessageRequest{RoomId: "42", Seq: 1, Emoji: "👍"})
+			return err
+		},
+		"PinMessage": func(ctx context.Context) error {
+			_, err := rg.client.PinMessage(ctx, &chatimv1.PinMessageRequest{RoomId: "42", Seq: 1})
+			return err
+		},
+		"UnpinMessage": func(ctx context.Context) error {
+			_, err := rg.client.UnpinMessage(ctx, &chatimv1.UnpinMessageRequest{RoomId: "42", Seq: 1})
+			return err
+		},
 	}
 	callers := []struct {
 		name  string

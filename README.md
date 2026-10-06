@@ -119,6 +119,9 @@ Toàn bộ đọc qua `apps/core/internal/config`; thiếu thì dùng giá trị
 | `RECONCILE_DRAIN` | `1s` | Lúc dừng: chờ publish đang bay rồi lưu vị trí lần cuối; bước dừng reader chiếm `RECONCILE_DRAIN + 1s` |
 | `RECONCILE_ROOM_CACHE` | `65536` | Số room giữ `room_type` trong cache của effect `msg_created` |
 | `MESSAGE_LOCKED_KINDS` | (rỗng) | Danh sách loại tin, cách nhau bằng dấu phẩy, mà policy mặc định không cho ai sửa/xoá, kể cả tác giả; tên hợp lệ: `text`; tên lạ thì core không khởi động (D87) |
+| `REACTION_MAX_EMOJIS` | `20` | Số loại emoji tối đa trên một tin (1–100). Giới hạn mềm: đọc từ số đếm `messages.rx` nên hai lệnh đồng thời có thể vượt một chút; gỡ reaction và emoji đã có trên tin không bị chặn (D89) |
+| `PIN_LIMIT` | `50` | Số tin ghim tối đa mỗi room (1–1000), chính xác vì pv dày; ghim lại tin đã ghim vẫn thành công (D92) |
+| `REACTION_COUNT_DELAY` | `1s` | Delay của effect `reaction_counter`: worker đếm lại `messages.rx` một lần mỗi tin mỗi lô sau `CommittedAt + D`; phải dương và không quá `RECONCILE_DELAY` (D90) |
 
 ## Cổng
 

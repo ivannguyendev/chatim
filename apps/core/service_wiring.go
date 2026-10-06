@@ -15,7 +15,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
 )
 
-func wireService(st *mongostore.Store, router *actor.Router, pub *publish.Publisher, lockedKinds []domain.Kind, log *slog.Logger) (*grpcsrv.Service, error) {
+func wireService(st *mongostore.Store, router *actor.Router, pub *publish.Publisher, lockedKinds []domain.Kind, limits mutate.Limits, log *slog.Logger) (*grpcsrv.Service, error) {
 	checker, err := access.NewChecker(st, access.DefaultPolicy{LockedKinds: lockedKinds})
 	if err != nil {
 		return nil, fmt.Errorf("wire access checker: %w", err)
@@ -31,7 +31,7 @@ func wireService(st *mongostore.Store, router *actor.Router, pub *publish.Publis
 	}
 	mut, err := mutate.New(mutate.Deps{
 		Access: checker, Messages: st, Edits: st, Hidden: st, Rooms: st, Events: pub,
-		Reactions: reactions, Counter: counts, Pins: pins, Projector: projector,
+		Reactions: reactions, Counter: counts, Pins: pins, Projector: projector, Limits: limits,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("wire mutator: %w", err)
