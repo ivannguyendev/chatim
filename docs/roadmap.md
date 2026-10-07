@@ -7,7 +7,22 @@
 - Mỗi milestone có plan riêng trong `docs/plans/`, viết **trước khi code**, theo skill `writing-plans`: từng bước TDD, file, test, lệnh chạy, "Expected". Người thực thi gặp chỗ plan không nói tới thì dừng và báo.
 - Plan mở đầu bằng bảng **tính năng → lớp dữ liệu** ([thiết kế §4](designs/261005-chatim-architecture.md#4-khung-lớp-dữ-liệu-bắt-buộc-cho-mọi-plan)). Mỗi tính năng khai báo: fact (lệnh atomic nào, doc nào), cách idempotent (cid hoặc `base_ver`), effect + chính sách, quyền (permission hook), view theo người đọc, dòng trong danh mục event, ngân sách khuếch đại ở nhóm 5K và channel 200K, guarantee + detector. Tính năng không khớp lớp nào thì dừng, thiết kế lớp đó trước.
 - Bộ test chung mỗi PR: fact sinh đúng effect; no-op không sinh effect; lỗi không sinh effect; parity fast path / reconciler; chạy effect hai lần cho cùng kết quả.
-- Mỗi plan có file tóm tắt đi kèm `docs/plans/<plan>-summary.md` (owner chốt 2026-10-06): 1–2 trang, tiếng Việt, không có code, viết trước khi thực thi. Nội dung: người dùng thấy gì; owner đã chốt gì (kèm ngày); lựa chọn kỹ thuật team tự quyết (mỗi cái một dòng); giới hạn còn lại. Owner duyệt file tóm tắt; plan đầy đủ dành cho AI thực thi.
+- Mỗi plan có file **tóm tắt kỹ thuật** đi kèm `docs/plans/<plan>-summary.md` (owner chốt 2026-10-06, sửa 2026-10-07), tiếng Việt, không có code Go, viết **trước khi thực thi**; owner phản biện và duyệt bản này, plan chi tiết chỉ dành cho AI. Nội dung bắt buộc:
+  1. bảng thuật ngữ;
+  2. bức tranh chung có sơ đồ;
+  3. bảng field đầy đủ (tên, nghĩa, ví dụ, dùng để làm gì);
+  4. luồng xử lý từng use case có sơ đồ sequence, ghi rõ đọc/ghi gì, kiểm gì, mã lỗi gRPC;
+  5. cơ chế đúng đắn và các ca chạy đua;
+  6. event và subject;
+  7. thư viện và hạ tầng;
+  8. quyết định kèm phương án bị loại và lý do;
+  9. chi phí và tải;
+  10. rủi ro và giới hạn;
+  11. điểm đội tự chọn để owner phản biện;
+  12. kiểm thử, mỗi mục chứng minh gì.
+
+  Chỗ nào làm việc phải xếp hàng (đánh số liên tục, khoá chung) phải nêu rõ.
+- Tên field DB (owner chốt 2026-10-07): tiếng Anh đầy đủ, từ cơ bản, cho mọi collection trừ `messages` (giữ tên ngắn, có bảng tra trong thiết kế §5); audit `updated_at` / `updated_by`; bộ đếm chỉ tăng, có lỗ đuôi `_ver`; id chống gửi lại `request_id`.
 
 ## Milestone
 
@@ -18,7 +33,7 @@
 | 1 | M2b.1 — Effect engine | Reader trên slot 0 → JetStream work stream theo slot, id tự nhiên, worker ở mọi core, vị trí xác nhận theo work stream (D66); registry effect + chính sách (D65); chuyển reconcile `msg_created` sang engine; `room_created` là effect mới đầu tiên; room activity (`last_seq`, `last_msg_at`, `last_change_at`, `act_bucket`, ghi gom, D69); công cụ resync thủ công + diễn tập; đo xả backlog | ✅ `dev-done` (trên `feat/m2b`, chưa merge `main`) — [plan](plans/2026-10-05-m2b1-effect-engine.md); work stream 32 partition, worker mọi core, `room_created`, room activity, `/app resync`, 15 luật alert (D79–D81) |
 | 1 | M2b.2 — Sửa + xoá | Fact `message_edits` + projection `messages` (D62); `base_ver`, `prev` ở v1 (D63); ack sau projection (D64); delay xoá 2–3s; hợp đồng xoá (D75); `GetEditHistory`; quyền sửa/xoá do `access.Policy` quyết (mặc định chỉ tác giả, D86); ẩn phía tôi (`hidden` thưa) và clear history (`cleared_before_seq`) qua reader pipeline; index `{room, ts}` (D70) | ✅ `dev-done` (trên `feat/m2b`, chưa merge `main`) — [plan](plans/2026-10-05-m2b2-edit-delete.md); `message_edits` + projection, 5 RPC, ẩn/clear ở reader pipeline (không event), effect `edit_projection` + `msg_changed` (thay delay xoá 2–3s), quyền sửa/xoá chỉ qua `access.Policy`, mặc định chỉ tác giả, loại tin khoá theo config `MESSAGE_LOCKED_KINDS` (mặc định không khoá), resync quét `message_edits` (D82–D87) |
 | 1 | M2b.3 — Reaction + ghim | Tập reaction một emoji mỗi (user, tin), `reactions {_id: k│u}` + `n` (D88, D89, thay D68); counter recount CAS-ver với witness (D90, tinh chỉnh D67); `pin_actions` pv dày, bỏ `base_pv`, `PIN_LIMIT` chính xác (D92); event `reaction_changed`/`counts_changed`/`msg_pinned`/`msg_unpinned`, cid SysMsg `sys-{event_id}` (D93); quyền member (D94); emoji chỉ trong danh sách cố định `REACTION_EMOJIS`, frontend đọc qua `GetReactionSettings` (D95) | ✅ `dev-done` (trên `feat/m2b`, chưa merge `main`) — [plan](plans/2026-10-06-m2b3-reactions-pins.md); 4 RPC (thêm `GetReactionSettings`), `Message.reactions` trong `GetHistory`, package `counter` + `pinproj`, feed update/replace của `reactions`, 4 effect mới, `counter_repaired_total` + 16 luật alert, resync quét `reactions` + `pin_actions` (D88–D95) |
-| 1 | M2b.4 — Member + vị trí đọc | Fact member (thêm/bớt/rời/đổi role); `user_rooms {u│r}` (D72); `member_count`; event member trên subject user; vị trí đọc `$max` + event coalesce; đánh dấu chưa đọc (version + LWW) | ⏭ Tiếp theo — [plan](plans/2026-10-06-m2b4-members-read.md) + [tóm tắt](plans/2026-10-06-m2b4-members-read-summary.md), chờ owner duyệt tóm tắt |
+| 1 | M2b.4 — Member + vị trí đọc | Đổi tên field các collection đã làm (trừ `messages`), xoá lịch sử theo thời gian; member lớp tập (mỗi (room, user) một doc, `ver` riêng, không đánh số liên tục), `request_id` chống gửi lại, luật owner bằng CAS `owners_ver` + `pending_owner_change`, số member do worker đếm lại; vị trí đọc + đánh dấu chưa đọc, "đã xem" chỉ ra room khi DM hoặc ≤ 20 người (D96–D108) | ⏭ Tiếp theo — [plan](plans/2026-10-06-m2b4-members-read.md) + [tóm tắt kỹ thuật](plans/2026-10-06-m2b4-members-read-summary.md), chờ owner duyệt tóm tắt |
 | 1 | M2c — Thread & tiện ích | Thread (`thread_count` là counter), mention, reply/forward (cid), bookmark | Chưa |
 | 1 | M3 — Đường đọc | **Trước khi viết plan: hỏi owner số thật** (thiết kế §2.3). `ListMyRooms` qua `user_rooms`; "có tin mới" đọc từ `messages`; room-tail cache; unread theo R17 mới (exact trong S, không thì `approx`, D73); sync token `room → last_seq` + full sync (D74); SDK reconnect jitter; API caller nội bộ cho SysMsg (`kind` + cờ unread); đồng bộ đa thiết bị qua subject user; `GetMessages`/`GetReactions`/`ListPins`/`ListBookmarks`; test sẵn sàng sharding trên cluster 2 shard | Chưa |
 | 1 | M4 — Gateway | WebSocket (gws), JWT/JWKS, frame protobuf, fanout theo interest, hàng đợi gửi có giới hạn, định tuyến theo slot; typing/presence ephemeral không qua core; subject user cho dữ liệu riêng; `member_removed` → unsubscribe; chế độ event không text cho tenant xoá chặt; không chuyển `kind`/cờ unread từ client; hằng số header tenant/user vào `pkg` | Chưa |
