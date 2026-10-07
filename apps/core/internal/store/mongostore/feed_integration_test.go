@@ -38,3 +38,11 @@ func TestMongoPinFeedContract(t *testing.T) {
 		return s.Pins(), NewFeed(db)
 	})
 }
+
+func TestMongoMemberFeedContract(t *testing.T) {
+	client := itClient(t)
+	storetest.RunMemberFeed(t, func(t *testing.T) (storetest.MemberRooms, store.Hidden, store.ChangeFeed) {
+		s, db := itStore(t, client)
+		return s, s.Hidden(), NewFeed(db)
+	})
+}

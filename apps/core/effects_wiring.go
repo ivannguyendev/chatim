@@ -58,11 +58,16 @@ func wireEffects(cfg config.Config, cl *clients, st *mongostore.Store, marks *ev
 	}
 	activity := effects.NewRoomActivity(st)
 	registry := effects.Registry{
-		store.MessageInserted: {activity.Effect(), fx.msgCreated.Effect()},
-		store.RoomInserted:    {fx.roomCreated.Effect()},
-		store.EditInserted:    {activity.Effect(), fx.editProjection.Effect(), fx.msgChanged.Effect()},
-		store.ReactionChanged: {activity.Effect(), fx.reactionCounter.Effect(), fx.reactionEvent.Effect()},
-		store.PinInserted:     {activity.Effect(), fx.pinProjection.Effect(), fx.pinEvent.Effect()},
+		store.MessageInserted:  {activity.Effect(), fx.msgCreated.Effect()},
+		store.RoomInserted:     {fx.roomCreated.Effect()},
+		store.EditInserted:     {activity.Effect(), fx.editProjection.Effect(), fx.msgChanged.Effect()},
+		store.ReactionChanged:  {activity.Effect(), fx.reactionCounter.Effect(), fx.reactionEvent.Effect()},
+		store.PinInserted:      {activity.Effect(), fx.pinProjection.Effect(), fx.pinEvent.Effect()},
+		store.MemberChanged:    {activity.Effect()},
+		store.ReadChanged:      {},
+		store.MessageHidden:    {},
+		store.HistoryCleared:   {},
+		store.MemberCountCheck: {},
 	}
 	fx.workers, err = effects.New(effects.Deps{
 		Queue:    func(p int) work.Queue { return work.NewQueue(cl.effectsJS, cfg.Work.Name, p, cfg.Effects.RetryDelay) },

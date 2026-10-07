@@ -5,11 +5,13 @@ import (
 	"testing"
 	"time"
 
+	"go.mongodb.org/mongo-driver/v2/bson"
+
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
-func TestFeedSkipsSummaryPinActivityEditHideAndClearWrites(t *testing.T) {
+func TestFeedSkipsSummaryPinActivityAndCountWrites(t *testing.T) {
 	s, db := itStore(t, itClient(t))
 	ctx := t.Context()
 	room := domain.Room{ID: itRoom, Tenant: "acme", Type: domain.RoomGroup, Name: "Team", CreatedBy: "alice", CreatedAt: codecTime, MemberCount: 1}
@@ -18,6 +20,14 @@ func TestFeedSkipsSummaryPinActivityEditHideAndClearWrites(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 	seedTimeline(t, s, itRoom, 0, 1)
+	m := msgAt(itRoom, 0, 1)
+	key := store.KeyOf(m)
+	if err := s.Hidden().Hide(ctx, "alice", key, codecTime); err != nil {
+		t.Fatalf("Hide: %v", err)
+	}
+	if _, _, err := s.ClearHistory(ctx, itRoom, "alice", codecTime.Add(time.Minute)); err != nil {
+		t.Fatalf("ClearHistory: %v", err)
+	}
 	cur, err := NewFeed(db).Open(ctx)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
@@ -25,13 +35,27 @@ func TestFeedSkipsSummaryPinActivityEditHideAndClearWrites(t *testing.T) {
 	t.Cleanup(func() { _ = cur.Close(context.Background()) })
 	wait, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	for _, want := range []store.ChangeKind{store.RoomInserted, store.MessageInserted} {
+	for _, want := range []store.ChangeKind{store.RoomInserted, store.MemberChanged, store.MessageInserted, store.MessageHidden, store.HistoryCleared} {
 		if c, err := cur.Next(wait); err != nil || c.Kind != want {
 			t.Fatalf("Next = %+v, %v; want kind %d", c, err, want)
 		}
 	}
-	m := msgAt(itRoom, 0, 1)
-	key := store.KeyOf(m)
+	skippedWrites(t, s, key)
+	if _, err := s.rooms.UpdateOne(ctx, bson.D{{Key: "_id", Value: int64(itRoom)}}, bson.D{{Key: "$inc", Value: bson.D{{Key: "owners_ver", Value: int64(1)}}}}); err != nil {
+		t.Fatalf("inc owners_ver: %v", err)
+	}
+	if _, _, err := s.Reactions().Set(ctx, domain.Reaction{Room: itRoom, Seq: 1, Tenant: "acme", User: "alice", Emoji: "👍", At: codecTime}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	c, err := cur.Next(wait)
+	if err != nil || c.Kind != store.ReactionChanged || c.Reaction.User != "alice" || c.Reaction.N != 1 {
+		t.Fatalf("next change = %+v, %v; want only the reaction after the skipped writes", c, err)
+	}
+}
+
+func skippedWrites(t *testing.T, s *Store, key store.MsgKey) {
+	t.Helper()
+	ctx := t.Context()
 	sum := domain.ReactionSummary{Counts: []domain.ReactionCount{{Emoji: "👍", Count: 1}}, Version: 1}
 	if ok, err := s.SetReactions(ctx, key, 0, sum); err != nil || !ok {
 		t.Fatalf("SetReactions = %v, %v", ok, err)
@@ -47,17 +71,21 @@ func TestFeedSkipsSummaryPinActivityEditHideAndClearWrites(t *testing.T) {
 	if err := s.ApplyEdit(ctx, edit); err != nil {
 		t.Fatalf("ApplyEdit: %v", err)
 	}
-	if err := s.Hidden().Hide(ctx, "bob", key, codecTime); err != nil {
-		t.Fatalf("Hide: %v", err)
+	if err := s.Hidden().Hide(ctx, "alice", key, codecTime.Add(time.Hour)); err != nil {
+		t.Fatalf("Hide again: %v", err)
 	}
-	if _, _, err := s.ClearHistory(ctx, itRoom, "alice", codecTime); err != nil {
-		t.Fatalf("ClearHistory: %v", err)
+	if _, raised, err := s.ClearHistory(ctx, itRoom, "alice", codecTime); err != nil || raised {
+		t.Fatalf("ClearHistory(earlier) = %v, %v; want no raise", raised, err)
 	}
-	if _, _, err := s.Reactions().Set(ctx, domain.Reaction{Room: itRoom, Seq: 1, Tenant: "acme", User: "alice", Emoji: "👍", At: codecTime}); err != nil {
-		t.Fatalf("Set: %v", err)
+	j := domain.Join{Room: itRoom, Tenant: "acme", RequestID: "req-again", By: "alice", At: codecTime.Add(time.Hour)}
+	if res, err := s.AddMembers(ctx, j, []string{"alice"}); err != nil || res.Changed != 0 {
+		t.Fatalf("AddMembers(active) = %+v, %v; want no change", res, err)
 	}
-	c, err := cur.Next(wait)
-	if err != nil || c.Kind != store.ReactionChanged || c.Reaction.User != "alice" || c.Reaction.N != 1 {
-		t.Fatalf("next change = %+v, %v; want only the reaction after the summary, pin, activity, edit, hide and clear writes", c, err)
+	c, err := s.AddMemberCount(ctx, itRoom, 1)
+	if err != nil {
+		t.Fatalf("AddMemberCount: %v", err)
+	}
+	if _, ok, err := s.SetMemberCount(ctx, itRoom, c.Ver, 1); err != nil || !ok {
+		t.Fatalf("SetMemberCount = %v, %v", ok, err)
 	}
 }

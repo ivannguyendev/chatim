@@ -16,16 +16,24 @@ func feedRooms(t *testing.T, msgs store.Messages, rooms store.Rooms, feed store.
 	insertEach(t, msgs, msg(roomA, mainThread, 1))
 	mustCreate(t, rooms, second, secondMembers)
 	insertEach(t, msgs, msg(roomB, mainThread, 1))
-	got := nextChanges(t, cur, 4)
-	kinds := []store.ChangeKind{store.RoomInserted, store.MessageInserted, store.RoomInserted, store.MessageInserted}
+	got := nextChanges(t, cur, 8)
+	kinds := []store.ChangeKind{
+		store.RoomInserted, store.MemberChanged, store.MemberChanged, store.MessageInserted,
+		store.RoomInserted, store.MemberChanged, store.MemberChanged, store.MessageInserted,
+	}
 	for i, c := range got {
 		if c.Kind != kinds[i] {
 			t.Fatalf("change %d kind = %d, want %d", i, c.Kind, kinds[i])
 		}
 	}
 	assertChangedRoom(t, got[0], first)
-	assertChangedRoom(t, got[2], second)
-	msgChanges := []store.Change{got[1], got[3]}
+	assertChangedRoom(t, got[4], second)
+	for i, c := range []store.Change{got[1], got[2], got[5], got[6]} {
+		if want := []string{"alice", "bob"}[i%2]; c.Member.User != want || c.Member.Ver != 1 || c.Room != (domain.Room{}) {
+			t.Fatalf("creation member change %d = %+v, want %q at ver 1", i, c, want)
+		}
+	}
+	msgChanges := []store.Change{got[3], got[7]}
 	assertMessages(t, messagesOf(msgChanges), []domain.Message{msg(roomA, mainThread, 1), msg(roomB, mainThread, 1)})
 	for _, c := range msgChanges {
 		if c.Room != (domain.Room{}) {

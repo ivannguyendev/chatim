@@ -50,14 +50,15 @@ func (s *Rooms) Create(ctx context.Context, r domain.Room, members []domain.Memb
 	}
 	r.MemberCountVer = 1
 	s.rooms[r.ID] = r
+	if s.log != nil {
+		s.log.appendFact(logged{kind: store.RoomInserted, room: r})
+	}
 	for _, m := range members {
 		k := memberKey{m.Room, m.User}
 		if _, ok := s.members[k]; !ok {
 			s.members[k] = stamped(store.CreationMember(r, m))
+			s.logMemberLocked(store.MemberChanged, s.members[k])
 		}
-	}
-	if s.log != nil {
-		s.log.appendFact(logged{kind: store.RoomInserted, room: r})
 	}
 	return nil
 }
@@ -107,5 +108,6 @@ func (s *Rooms) ClearHistory(ctx context.Context, room uint64, user string, at t
 	}
 	m.ClearedAt, m.LastChangeAt = at, later(m.LastChangeAt, at)
 	s.members[k] = m
+	s.logMemberLocked(store.HistoryCleared, m)
 	return at, true, nil
 }

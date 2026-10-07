@@ -91,7 +91,7 @@ func (c *cursor) Next(ctx context.Context) (store.Change, error) {
 			c.next++
 			return store.Change{
 				Kind: l.kind, Msg: l.msg, Room: l.room, Edit: l.edit, Reaction: l.reaction, Pin: l.pin,
-				CommittedAt: l.at, Position: store.Position(strconv.Itoa(c.next)),
+				Member: l.member, Hidden: l.hidden, CommittedAt: l.at, Position: store.Position(strconv.Itoa(c.next)),
 			}, nil
 		}
 		select {

@@ -68,6 +68,10 @@ func decodeChange(ev changeDoc) (store.Change, error) {
 		return decodeReactionChange(ev)
 	case pinActionsCollection:
 		return decodePinChange(ev)
+	case membersCollection:
+		return decodeMemberChange(ev)
+	case hiddenCollection:
+		return decodeHiddenChange(ev)
 	default:
 		return store.Change{}, fmt.Errorf("%w: change on collection %q", errCorrupt, ev.NS.Coll)
 	}

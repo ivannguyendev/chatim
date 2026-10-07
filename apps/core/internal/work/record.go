@@ -39,8 +39,12 @@ type Record struct {
 }
 
 func KnownKind(k store.ChangeKind) bool {
+	return k >= store.MessageInserted && k <= store.MemberCountCheck
+}
+
+func carriesUser(k store.ChangeKind) bool {
 	switch k {
-	case store.MessageInserted, store.RoomInserted, store.EditInserted, store.ReactionChanged, store.PinInserted:
+	case store.ReactionChanged, store.MemberChanged, store.ReadChanged, store.MessageHidden, store.HistoryCleared:
 		return true
 	default:
 		return false
@@ -93,6 +97,16 @@ func (r Record) ID() string {
 		return "x:" + pbconv.ReactionEventID(r.Room, r.Thread, r.Seq, r.User, r.Version)
 	case store.PinInserted:
 		return "p:" + pbconv.PinEventID(r.Room, r.Seq)
+	case store.MemberChanged:
+		return "g:" + pbconv.MemberEventID(r.Room, r.User, r.Version)
+	case store.ReadChanged:
+		return "d:" + pbconv.ReadEventID(r.Room, r.User, uint64(r.Version))
+	case store.MessageHidden:
+		return "h:" + pbconv.HiddenEventID(r.Room, r.User, r.Thread, r.Seq)
+	case store.HistoryCleared:
+		return "c:" + pbconv.ClearedEventID(r.Room, r.User, r.CommittedAt)
+	case store.MemberCountCheck:
+		return "k:" + pbconv.RoomID(r.Room) + "-" + strconv.FormatUint(uint64(r.Version), 10)
 	default:
 		return ""
 	}

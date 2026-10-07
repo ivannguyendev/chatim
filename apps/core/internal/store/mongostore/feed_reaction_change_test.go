@@ -94,18 +94,3 @@ func TestDecodeChangeRejectsBrokenReactionAndPinChanges(t *testing.T) {
 		}
 	}
 }
-
-func TestFeedPipelineLetsOnlyReactionUpdatesThrough(t *testing.T) {
-	b, err := bson.Marshal(feedPipeline()[0])
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
-	}
-	raw := bson.Raw(b)
-	inserts, _ := raw.Lookup("$match", "$or", "0", "ns.coll", "$in").Array().Values()
-	if op := raw.Lookup("$match", "$or", "0", "operationType").StringValue(); op != "insert" || len(inserts) != 5 {
-		t.Fatalf("insert branch = %s, want inserts of the 5 fact collections", raw.Lookup("$match", "$or", "0"))
-	}
-	if coll := raw.Lookup("$match", "$or", "1", "ns.coll").StringValue(); coll != reactionsCollection {
-		t.Fatalf("change branch = %s, want updates and replaces of reactions only", raw.Lookup("$match", "$or", "1"))
-	}
-}

@@ -63,3 +63,10 @@ func TestPinFeedContract(t *testing.T) {
 func TestMembersContract(t *testing.T) {
 	storetest.RunMembers(t, func(*testing.T) storetest.MemberRooms { return memstore.NewRooms() })
 }
+
+func TestMemberFeedContract(t *testing.T) {
+	storetest.RunMemberFeed(t, func(*testing.T) (storetest.MemberRooms, store.Hidden, store.ChangeFeed) {
+		rooms, hidden := memstore.NewRooms(), memstore.NewHidden()
+		return rooms, hidden, memstore.NewFeed(memstore.NewMessages(), rooms, nil, memstore.WithHidden(hidden))
+	})
+}

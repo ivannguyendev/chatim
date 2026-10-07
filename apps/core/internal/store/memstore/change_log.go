@@ -14,6 +14,8 @@ type logged struct {
 	edit     domain.Edit
 	reaction domain.Reaction
 	pin      domain.PinAction
+	member   domain.Member
+	hidden   domain.HiddenMessage
 	at       time.Time
 }
 
@@ -22,6 +24,8 @@ type FeedOption func(log *Messages)
 func WithReactions(r *Reactions) FeedOption { return func(log *Messages) { r.attach(log) } }
 
 func WithPins(p *Pins) FeedOption { return func(log *Messages) { p.attach(log) } }
+
+func WithHidden(h *Hidden) FeedOption { return func(log *Messages) { h.attach(log) } }
 
 func (s *Messages) appendLog(l logged) {
 	l.at = time.Now()
@@ -73,4 +77,23 @@ func (s *Pins) attach(log *Messages) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.log = log
+}
+
+func (s *Hidden) attach(log *Messages) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.log = log
+}
+
+func (s *Rooms) logMemberLocked(kind store.ChangeKind, m domain.Member) {
+	if s.log == nil {
+		return
+	}
+	if kind == store.ReadChanged {
+		m = domain.Member{Room: m.Room, User: m.User, ReadVer: m.ReadVer}
+	}
+	if kind == store.HistoryCleared {
+		m = domain.Member{Room: m.Room, User: m.User}
+	}
+	s.log.appendFact(logged{kind: kind, member: m})
 }

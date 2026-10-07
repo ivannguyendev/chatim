@@ -38,21 +38,46 @@ func TestForwardsAMessageInsertAtOnceAsARecordOnItsPartition(t *testing.T) {
 	})
 }
 
-func TestForwardsARoomInsertAsARoomRecord(t *testing.T) {
+func TestForwardsARoomInsertAndItsCreationMember(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rg := newRig(t, nil).start(t)
 		synctest.Wait()
 		rg.createRoom(t, otherRoom)
 		synctest.Wait()
 		stored := rg.js.Stored()
-		if got := storedIDs(rg.js); !slices.Equal(got, []string{roomRecordID(otherRoom)}) {
-			t.Fatalf("stored = %v, want only %s", got, roomRecordID(otherRoom))
+		member := work.Record{Kind: store.MemberChanged, Room: otherRoom, Version: 1, User: "alice"}.ID()
+		if got := storedIDs(rg.js); !slices.Equal(got, []string{roomRecordID(otherRoom), member}) {
+			t.Fatalf("stored = %v, want %s then %s", got, roomRecordID(otherRoom), member)
 		}
-		if want := work.Subject(setup.SubjectRoot, work.Partition(otherRoom, setup.Partitions)); stored[0].Subject != want {
-			t.Fatalf("subject = %q, want %q", stored[0].Subject, want)
+		want := work.Subject(setup.SubjectRoot, work.Partition(otherRoom, setup.Partitions))
+		for _, m := range stored {
+			if m.Subject != want {
+				t.Fatalf("subject = %q, want %q", m.Subject, want)
+			}
 		}
 		if got, err := work.Decode(stored[0].Data); err != nil || got.Kind != store.RoomInserted || got.Room != otherRoom {
 			t.Fatalf("record = %+v, %v; want a room record for %d", got, err, otherRoom)
+		}
+		if got, err := work.Decode(stored[1].Data); err != nil || got.Kind != store.MemberChanged || got.User != "alice" || got.Version != 1 {
+			t.Fatalf("record = %+v, %v; want alice's creation member at ver 1", got, err)
+		}
+	})
+}
+
+func TestForwardsAReadPositionChange(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		rg := newRig(t, nil).start(t)
+		synctest.Wait()
+		if _, _, err := rg.rooms.MarkRead(t.Context(), room, "alice", 7); err != nil {
+			t.Fatalf("MarkRead: %v", err)
+		}
+		synctest.Wait()
+		want := work.Record{Kind: store.ReadChanged, Room: room, Version: 1, User: "alice"}.ID()
+		if got := storedIDs(rg.js); !slices.Equal(got, []string{want}) {
+			t.Fatalf("stored = %v, want only %s", got, want)
+		}
+		if got, err := work.Decode(rg.js.Stored()[0].Data); err != nil || got.Kind != store.ReadChanged || got.User != "alice" || got.Version != 1 {
+			t.Fatalf("record = %+v, %v; want alice's read ver 1", got, err)
 		}
 	})
 }

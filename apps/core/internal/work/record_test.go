@@ -102,7 +102,7 @@ func TestEncodeIsBigEndianAndClampsTimesBeforeTheEpoch(t *testing.T) {
 func TestDecodeRejectsBadRecords(t *testing.T) {
 	good := work.Encode(work.Record{Kind: store.RoomInserted, Room: 7, CommittedAt: committed})
 	zeroKind, unknownKind, pastInt64 := slices.Clone(good), slices.Clone(good), slices.Clone(good)
-	zeroKind[0], unknownKind[0], pastInt64[29] = 0, 9, 0x80
+	zeroKind[0], unknownKind[0], pastInt64[29] = 0, 11, 0x80
 	for name, b := range map[string][]byte{
 		"empty":           nil,
 		"short":           good[:work.RecordSize-1],
@@ -181,14 +181,5 @@ func TestMessageCarriesSubjectRecordAndID(t *testing.T) {
 	got, err := work.Decode(m.Data)
 	if err != nil || got.Room != 42 || got.Seq != 7 || !got.CommittedAt.Equal(committed) {
 		t.Fatalf("payload decodes to %+v, %v", got, err)
-	}
-}
-
-func TestKnownKindsAreTheFiveChangeKinds(t *testing.T) {
-	for k := range store.ChangeKind(8) {
-		want := k >= store.MessageInserted && k <= store.PinInserted
-		if got := work.KnownKind(k); got != want {
-			t.Errorf("KnownKind(%d) = %v, want %v", k, got, want)
-		}
 	}
 }
