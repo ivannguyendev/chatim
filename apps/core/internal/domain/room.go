@@ -13,29 +13,22 @@ type Role string
 
 const (
 	RoleOwner  Role = "owner"
+	RoleAdmin  Role = "admin"
 	RoleMember Role = "member"
 )
 
 type Room struct {
-	ID           uint64
-	Tenant       string
-	Type         RoomType
-	Name         string
-	CreatedBy    string
-	CreatedAt    time.Time
-	MemberCount  int
-	LastSeq      uint64
-	LastMsgAt    time.Time
-	LastChangeAt time.Time
-}
-
-type Member struct {
-	Room      uint64
-	Tenant    string
-	User      string
-	Role      Role
-	JoinedAt  time.Time
-	ClearedAt time.Time
+	ID             uint64
+	Tenant         string
+	Type           RoomType
+	Name           string
+	CreatedBy      string
+	CreatedAt      time.Time
+	MemberCount    int
+	LastSeq        uint64
+	LastMsgAt      time.Time
+	LastChangeAt   time.Time
+	MemberCountVer uint64
 }
 
 func ParseRoomType(s string) (RoomType, error) {

@@ -31,13 +31,17 @@ func NewRoom(tenant, creator string, typ RoomType, name string, members []string
 	if err != nil {
 		return Room{}, nil, err
 	}
+	requestID := CreationRequestID(id)
 	out := make([]Member, len(users))
 	for i, u := range users {
 		role := RoleMember
 		if u == creator {
 			role = RoleOwner
 		}
-		out[i] = Member{Room: id, Tenant: tenant, User: u, Role: role, JoinedAt: now}
+		out[i] = Member{
+			Room: id, Tenant: tenant, User: u, Role: role, JoinedAt: now, State: MemberActive, Ver: 1,
+			RequestID: requestID, UpdatedAt: now, UpdatedBy: creator, LastChangeAt: now,
+		}
 	}
 	room := Room{ID: id, Tenant: tenant, Type: typ, Name: name, CreatedBy: creator, CreatedAt: now, MemberCount: len(out)}
 	return room, out, nil

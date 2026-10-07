@@ -47,10 +47,16 @@ func TestNewRoomBuildsRoomAndMembers(t *testing.T) {
 	if room != wantRoom {
 		t.Errorf("room = %+v, want %+v", room, wantRoom)
 	}
+	created := func(user string, role domain.Role) domain.Member {
+		return domain.Member{
+			Room: 42, Tenant: "acme", User: user, Role: role, JoinedAt: now, State: domain.MemberActive, Ver: 1,
+			RequestID: "42-created", UpdatedAt: now, UpdatedBy: "alice", LastChangeAt: now,
+		}
+	}
 	wantMembers := []domain.Member{
-		{Room: 42, Tenant: "acme", User: "bob", Role: domain.RoleMember, JoinedAt: now},
-		{Room: 42, Tenant: "acme", User: "alice", Role: domain.RoleOwner, JoinedAt: now},
-		{Room: 42, Tenant: "acme", User: "carol", Role: domain.RoleMember, JoinedAt: now},
+		created("bob", domain.RoleMember),
+		created("alice", domain.RoleOwner),
+		created("carol", domain.RoleMember),
 	}
 	if !slices.Equal(members, wantMembers) {
 		t.Errorf("members = %+v, want %+v", members, wantMembers)
