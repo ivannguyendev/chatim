@@ -13,12 +13,12 @@ import (
 )
 
 func Bootstrap(ctx context.Context, db *mongo.Database) error {
-	for _, name := range []string{messagesCollection, editsCollection, reactionsCollection, pinActionsCollection} {
+	for _, name := range []string{messagesCollection, editsCollection, reactionsCollection, pinActionsCollection, membersCollection} {
 		if err := ensureClustered(ctx, db, name); err != nil {
 			return err
 		}
 	}
-	for _, name := range []string{roomsCollection, membersCollection, reconcilerStateCollection, hiddenCollection} {
+	for _, name := range []string{roomsCollection, reconcilerStateCollection, hiddenCollection} {
 		if err := createCollection(ctx, db, name); err != nil {
 			return err
 		}
@@ -88,8 +88,11 @@ func createCollection(ctx context.Context, db *mongo.Database, name string, opts
 
 func memberIndexes() []mongo.IndexModel {
 	return []mongo.IndexModel{
-		{Keys: bson.D{{Key: "room_id", Value: 1}, {Key: "user_id", Value: 1}}, Options: options.Index().SetUnique(true)},
-		{Keys: bson.D{{Key: "tenant", Value: 1}, {Key: "user_id", Value: 1}, {Key: "room_id", Value: 1}}},
+		{Keys: bson.D{
+			{Key: "room_id", Value: 1}, {Key: "state", Value: 1}, {Key: "role", Value: 1},
+			{Key: "priority", Value: -1}, {Key: "joined_at", Value: 1}, {Key: "user_id", Value: 1},
+		}},
+		{Keys: bson.D{{Key: "tenant", Value: 1}, {Key: "user_id", Value: 1}, {Key: "state", Value: 1}, {Key: "room_id", Value: 1}}},
 	}
 }
 

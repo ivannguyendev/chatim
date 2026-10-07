@@ -29,7 +29,9 @@ func (s *Rooms) AddMembers(ctx context.Context, j domain.Join, users []string) (
 		k := memberKey{j.Room, u}
 		cur := s.members[k]
 		if !cur.Active() {
-			s.members[k] = stamped(j.Apply(cur, u))
+			next := stamped(j.Apply(cur, u))
+			next.LastChangeAt = later(cur.LastChangeAt, next.LastChangeAt)
+			s.members[k] = next
 			out.Changed++
 		}
 		out.Members[i] = s.members[k]
@@ -104,7 +106,7 @@ func withMembership(stored, next domain.Member) domain.Member {
 	stored.Role, stored.State, stored.Priority, stored.Ver = next.Role, next.State, next.Priority, next.Ver
 	stored.PreviousRole, stored.PreviousState, stored.PreviousPriority = next.PreviousRole, next.PreviousState, next.PreviousPriority
 	stored.RequestID, stored.UpdatedBy = next.RequestID, next.UpdatedBy
-	stored.UpdatedAt, stored.LastChangeAt = toMillis(next.UpdatedAt), toMillis(next.LastChangeAt)
+	stored.UpdatedAt, stored.LastChangeAt = toMillis(next.UpdatedAt), later(stored.LastChangeAt, toMillis(next.LastChangeAt))
 	return stored
 }
 
@@ -112,6 +114,13 @@ func stamped(m domain.Member) domain.Member {
 	m.JoinedAt, m.ClearedAt = toMillis(m.JoinedAt), toMillis(m.ClearedAt)
 	m.UpdatedAt, m.LastChangeAt = toMillis(m.UpdatedAt), toMillis(m.LastChangeAt)
 	return m
+}
+
+func later(a, b time.Time) time.Time {
+	if b.After(a) {
+		return b
+	}
+	return a
 }
 
 func toMillis(t time.Time) time.Time {

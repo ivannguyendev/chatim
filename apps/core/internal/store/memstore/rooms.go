@@ -105,7 +105,7 @@ func (s *Rooms) ClearHistory(ctx context.Context, room uint64, user string, at t
 	if at = toMillis(at); !at.After(m.ClearedAt) {
 		return m.ClearedAt, false, nil
 	}
-	m.ClearedAt, m.LastChangeAt = at, at
+	m.ClearedAt, m.LastChangeAt = at, later(m.LastChangeAt, at)
 	s.members[k] = m
 	return at, true, nil
 }

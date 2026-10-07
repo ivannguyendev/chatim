@@ -103,6 +103,7 @@ func addMembersMixed(t *testing.T, s MemberRooms) {
 		t.Fatalf("AddMembers = %+v, %v; want 2 changed", res, err)
 	}
 	want := []domain.Member{j.Apply(domain.Member{}, "carol"), j.Apply(gone, "bob"), alice}
+	want[1].LastChangeAt = read.LastChangeAt
 	assertMembers(t, "AddMembers", res.Members, want)
 	assertMembers(t, "MembersOf", membersOf(t, s, roomA, "carol", "bob", "alice"), want)
 	back := want[1]

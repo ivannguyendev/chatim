@@ -34,6 +34,11 @@ var (
 	_ store.Reactions         = (*Reactions)(nil)
 	_ store.Pins              = (*Pins)(nil)
 	_ store.Hidden            = (*Hidden)(nil)
+	_ store.MemberWriter      = (*Store)(nil)
+	_ store.MemberReader      = (*Store)(nil)
+	_ store.OwnerChanges      = (*Store)(nil)
+	_ store.MemberCounts      = (*Store)(nil)
+	_ store.ReadPositions     = (*Store)(nil)
 )
 
 type Options struct {
@@ -41,14 +46,16 @@ type Options struct {
 }
 
 type Store struct {
-	messages  *mongo.Collection
-	committed *mongo.Collection
-	rooms     *mongo.Collection
-	members   *mongo.Collection
-	edits     *mongo.Collection
-	hidden    *Hidden
-	reactions *Reactions
-	pins      *Pins
+	client           *mongo.Client
+	committedMembers *mongo.Collection
+	messages         *mongo.Collection
+	committed        *mongo.Collection
+	rooms            *mongo.Collection
+	members          *mongo.Collection
+	edits            *mongo.Collection
+	hidden           *Hidden
+	reactions        *Reactions
+	pins             *Pins
 }
 
 func New(db *mongo.Database, opts Options) *Store {
@@ -58,14 +65,16 @@ func New(db *mongo.Database, opts Options) *Store {
 	majority := options.Collection().SetReadPreference(readpref.Primary()).SetReadConcern(readconcern.Majority())
 	reacted := options.Collection().SetWriteConcern(wc).SetReadPreference(readpref.Primary()).SetReadConcern(readconcern.Majority())
 	return &Store{
-		messages:  db.Collection(messagesCollection, local),
-		committed: db.Collection(messagesCollection, majority),
-		rooms:     db.Collection(roomsCollection, primary),
-		members:   db.Collection(membersCollection, primary),
-		edits:     db.Collection(editsCollection, primary),
-		hidden:    &Hidden{coll: db.Collection(hiddenCollection, primary)},
-		reactions: &Reactions{coll: db.Collection(reactionsCollection, reacted), client: db.Client()},
-		pins:      &Pins{coll: db.Collection(pinActionsCollection, primary)},
+		client:           db.Client(),
+		committedMembers: db.Collection(membersCollection, majority),
+		messages:         db.Collection(messagesCollection, local),
+		committed:        db.Collection(messagesCollection, majority),
+		rooms:            db.Collection(roomsCollection, primary),
+		members:          db.Collection(membersCollection, primary),
+		edits:            db.Collection(editsCollection, primary),
+		hidden:           &Hidden{coll: db.Collection(hiddenCollection, primary)},
+		reactions:        &Reactions{coll: db.Collection(reactionsCollection, reacted), client: db.Client()},
+		pins:             &Pins{coll: db.Collection(pinActionsCollection, primary)},
 	}
 }
 

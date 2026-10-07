@@ -13,6 +13,7 @@ func readPositionCases() []memberCase {
 		{"mark read only raises and mark unread only lowers, one read ver per change", readMoves},
 		{"read positions never touch the membership ver", readKeepsVer},
 		{"read positions and clear history need an active member", readNeedsActive},
+		{"a clear earlier than a read change keeps the last change time", clearKeepsLastChange},
 		{"mark read rejects a seq past int64", readInvalid},
 	}
 }
@@ -73,7 +74,7 @@ func readKeepsVer(t *testing.T, s MemberRooms) {
 	admin := bob.Next(domain.RoleAdmin, domain.MemberActive, 0, "req-up", "alice", secs(5))
 	mustApplyMember(t, s, bob, admin)
 	want := admin
-	want.ReadSeq, want.ReadVer = 8, 3
+	want.ReadSeq, want.ReadVer, want.LastChangeAt = 8, 3, after.LastChangeAt
 	assertMembers(t, "MembersOf", membersOf(t, s, roomA, "bob"), []domain.Member{want})
 }
 
@@ -99,5 +100,19 @@ func readInvalid(t *testing.T, s MemberRooms) {
 	assertErrorIs(t, "MarkUnread(past int64)", err, apperr.ErrInvalidArgument)
 	if got := docOf(t, s, roomA, "bob"); got.ReadSeq != 0 || got.ReadVer != 0 {
 		t.Fatalf("doc after rejected marks = %+v, want read seq 0 ver 0", got)
+	}
+}
+
+func clearKeepsLastChange(t *testing.T, s MemberRooms) {
+	crew(t, s)
+	mark(t, s, false, 5)
+	before := docOf(t, s, roomA, "bob")
+	cleared, changed, err := s.ClearHistory(t.Context(), roomA, "bob", secs(5))
+	if err != nil || !changed || !cleared.Equal(secs(5)) {
+		t.Fatalf("ClearHistory(%v) = %v, %v, %v; want cleared at %v", secs(5), cleared, changed, err, secs(5))
+	}
+	after := docOf(t, s, roomA, "bob")
+	if !after.ClearedAt.Equal(secs(5)) || !after.LastChangeAt.Equal(before.LastChangeAt) {
+		t.Fatalf("doc after an earlier clear = %+v, want cleared at %v and last change kept at %v", after, secs(5), before.LastChangeAt)
 	}
 }

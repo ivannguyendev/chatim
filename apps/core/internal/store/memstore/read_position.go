@@ -35,7 +35,7 @@ func (s *Rooms) moveRead(ctx context.Context, room uint64, user string, seq uint
 	if !moves(m.ReadSeq) {
 		return positionOf(m), false, nil
 	}
-	m.ReadSeq, m.ReadVer, m.LastChangeAt = seq, m.ReadVer+1, toMillis(time.Now())
+	m.ReadSeq, m.ReadVer, m.LastChangeAt = seq, m.ReadVer+1, later(m.LastChangeAt, toMillis(time.Now()))
 	s.members[k] = m
 	return positionOf(m), true, nil
 }

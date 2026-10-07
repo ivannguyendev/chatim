@@ -140,16 +140,3 @@ func TestMessageCodecRejectsOutOfRangeVersions(t *testing.T) {
 		t.Fatalf("decodeMessage(negative version) = %v, want errCorrupt", err)
 	}
 }
-
-func TestMemberCodecReadsClearedAt(t *testing.T) {
-	doc := encodeMember(domain.Member{Room: 7_340_000_001, Tenant: "acme", User: "bob", Role: domain.RoleMember, JoinedAt: codecTime}, 7_340_000_001)
-	doc.ClearedAt = codecTime.Add(time.Minute)
-	back, raw := roundTrip(t, doc)
-	if got := fieldNames(t, raw); !slices.Contains(got, "cleared_at") {
-		t.Fatalf("fields = %v, want cleared_at", got)
-	}
-	got, err := decodeMember(back)
-	if err != nil || !got.ClearedAt.Equal(doc.ClearedAt) {
-		t.Fatalf("decodeMember = %+v, %v; want cleared at %v", got, err, doc.ClearedAt)
-	}
-}

@@ -128,13 +128,13 @@ func TestDecodeMessageRejectsCorruptDocument(t *testing.T) {
 }
 
 func TestRoomCodecRoundTrip(t *testing.T) {
-	r := domain.Room{ID: 7_340_000_001, Tenant: "acme", Type: domain.RoomGroup, Name: "Team", CreatedBy: "alice", CreatedAt: codecTime, MemberCount: 2}
+	r := domain.Room{ID: 7_340_000_001, Tenant: "acme", Type: domain.RoomGroup, Name: "Team", CreatedBy: "alice", CreatedAt: codecTime, MemberCount: 2, MemberCountVer: 3}
 	doc, err := encodeRoom(r)
 	if err != nil {
 		t.Fatalf("encodeRoom: %v", err)
 	}
 	back, raw := roundTrip(t, doc)
-	if got, want := fieldNames(t, raw), []string{"_id", "tenant", "type", "name", "created_by", "created_at", "member_count"}; !slices.Equal(got, want) {
+	if got, want := fieldNames(t, raw), []string{"_id", "tenant", "type", "name", "created_by", "created_at", "member_count", "member_count_ver"}; !slices.Equal(got, want) {
 		t.Fatalf("fields = %v, want %v", got, want)
 	}
 	got, err := decodeRoom(back)
@@ -159,34 +159,5 @@ func TestRoomCodecDecodesActivity(t *testing.T) {
 	d.LastSeq = -1
 	if _, err := decodeRoom(d); !errors.Is(err, errCorrupt) {
 		t.Fatalf("decodeRoom(negative last seq) = %v, want errCorrupt", err)
-	}
-}
-
-func TestMemberCodecRoundTrip(t *testing.T) {
-	m := domain.Member{Room: 7_340_000_001, Tenant: "acme", User: "bob", Role: domain.RoleMember, JoinedAt: codecTime}
-	back, raw := roundTrip(t, encodeMember(m, int64(m.Room)))
-	if got, want := fieldNames(t, raw), []string{"room_id", "user_id", "tenant", "role", "joined_at"}; !slices.Equal(got, want) {
-		t.Fatalf("fields = %v, want %v", got, want)
-	}
-	got, err := decodeMember(back)
-	if err != nil || !got.JoinedAt.Equal(m.JoinedAt) {
-		t.Fatalf("decodeMember = %+v, %v; want %+v", got, err, m)
-	}
-	got.JoinedAt = m.JoinedAt
-	if got != m {
-		t.Fatalf("decoded %+v, want %+v", got, m)
-	}
-}
-
-func TestRoomIDAboveMaxInt64IsRejected(t *testing.T) {
-	r := domain.Room{ID: math.MaxInt64 + 1, Tenant: "acme", Type: domain.RoomDM}
-	if _, err := encodeRoom(r); !errors.Is(err, apperr.ErrInvalidArgument) {
-		t.Fatalf("encodeRoom error = %v, want ErrInvalidArgument", err)
-	}
-	if _, err := decodeRoom(roomDoc{ID: -1}); err == nil {
-		t.Fatal("decodeRoom accepted a negative id")
-	}
-	if _, err := decodeMember(memberDoc{Room: -1}); err == nil {
-		t.Fatal("decodeMember accepted a negative room")
 	}
 }

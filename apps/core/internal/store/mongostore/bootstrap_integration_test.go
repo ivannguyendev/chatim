@@ -73,7 +73,7 @@ func assertClusteredLayout(t *testing.T, db *mongo.Database, name string) {
 func assertMemberIndexes(t *testing.T, db *mongo.Database) {
 	t.Helper()
 	got := indexKeys(t, db.Collection(membersCollection))
-	want := map[string]bool{"_id:1": false, "room_id:1,user_id:1": true, "tenant:1,user_id:1,room_id:1": false}
+	want := map[string]bool{"room_id:1,state:1,role:1,priority:-1,joined_at:1,user_id:1": false, "tenant:1,user_id:1,state:1,room_id:1": false}
 	for k, unique := range want {
 		if u, ok := got[k]; !ok || u != unique {
 			t.Fatalf("members indexes = %v, want %s with unique=%v", got, k, unique)

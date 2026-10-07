@@ -18,19 +18,22 @@ func (s *Store) Create(ctx context.Context, r domain.Room, members []domain.Memb
 	if err := store.ValidateRoom(r, members); err != nil {
 		return err
 	}
+	r.MemberCountVer = 1
 	room, err := encodeRoom(r)
 	if err != nil {
 		return err
+	}
+	docs := make([]any, len(members))
+	for i, m := range members {
+		if docs[i], err = encodeMember(store.CreationMember(r, m)); err != nil {
+			return err
+		}
 	}
 	if _, err := s.rooms.InsertOne(ctx, room); err != nil {
 		if mongo.IsDuplicateKeyError(err) {
 			return fmt.Errorf("create room %d: %w", r.ID, store.ErrRoomExists)
 		}
 		return fmt.Errorf("create room %d: %w", r.ID, err)
-	}
-	docs := make([]any, len(members))
-	for i, m := range members {
-		docs[i] = encodeMember(m, room.ID)
 	}
 	_, err = s.members.InsertMany(ctx, docs, options.InsertMany().SetOrdered(false))
 	if err != nil && !onlyDuplicateKeys(err) {
@@ -53,13 +56,8 @@ func (s *Store) Get(ctx context.Context, id uint64) (domain.Room, error) {
 }
 
 func (s *Store) Member(ctx context.Context, room uint64, user string) (domain.Member, error) {
-	key, err := toInt64("room id", room)
-	if err != nil {
-		return domain.Member{}, fmt.Errorf("member %q of room %d: %w", user, room, domain.ErrNotMember)
-	}
 	var d memberDoc
-	filter := bson.D{{Key: "room_id", Value: key}, {Key: "user_id", Value: user}}
-	if err := findOne(ctx, s.members, filter, &d, domain.ErrNotMember); err != nil {
+	if err := findOne(ctx, s.members, activeMemberFilter(room, user), &d, domain.ErrNotMember); err != nil {
 		return domain.Member{}, fmt.Errorf("member %q of room %d: %w", user, room, err)
 	}
 	return decodeMember(d)
@@ -77,24 +75,22 @@ func (s *Store) ClearHistory(ctx context.Context, room uint64, user string, at t
 	if err := store.ValidateMarkTime(at); err != nil {
 		return time.Time{}, false, err
 	}
-	key, err := toInt64("room id", room)
-	if err != nil {
-		return time.Time{}, false, fmt.Errorf("clear history of %q in room %d: %w", user, room, domain.ErrNotMember)
-	}
 	at = time.UnixMilli(at.UnixMilli()).UTC()
-	filter := bson.D{{Key: "room_id", Value: key}, {Key: "user_id", Value: user}}
-	update := bson.D{{Key: "$max", Value: bson.D{{Key: "cleared_at", Value: at}}}}
-	opts := options.FindOneAndUpdate().SetReturnDocument(options.Before)
-	var d memberDoc
-	err = s.members.FindOneAndUpdate(ctx, filter, update, opts).Decode(&d)
+	filter := append(activeMemberFilter(room, user), bson.E{Key: "cleared_at", Value: bson.D{{Key: "$not", Value: bson.D{{Key: "$gte", Value: at}}}}})
+	update := bson.D{
+		{Key: "$set", Value: bson.D{{Key: "cleared_at", Value: at}}},
+		{Key: "$max", Value: bson.D{{Key: "last_change_at", Value: at}}},
+	}
+	res, err := s.members.UpdateOne(ctx, filter, update)
 	switch {
-	case errors.Is(err, mongo.ErrNoDocuments):
-		return time.Time{}, false, fmt.Errorf("clear history of %q in room %d: %w", user, room, domain.ErrNotMember)
 	case err != nil:
 		return time.Time{}, false, fmt.Errorf("clear history of %q in room %d: %w", user, room, err)
+	case res.MatchedCount == 1:
+		return at, true, nil
 	}
-	if !at.After(d.ClearedAt) {
-		return d.ClearedAt, false, nil
+	var d memberDoc
+	if err := findOne(ctx, s.members, activeMemberFilter(room, user), &d, domain.ErrNotMember); err != nil {
+		return time.Time{}, false, fmt.Errorf("clear history of %q in room %d: %w", user, room, err)
 	}
-	return at, true, nil
+	return d.ClearedAt, false, nil
 }

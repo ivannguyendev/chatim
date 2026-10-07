@@ -29,25 +29,17 @@ type messageDoc struct {
 }
 
 type roomDoc struct {
-	ID           int64           `bson:"_id"`
-	Tenant       string          `bson:"tenant"`
-	Type         domain.RoomType `bson:"type"`
-	Name         string          `bson:"name"`
-	CreatedBy    string          `bson:"created_by"`
-	CreatedAt    time.Time       `bson:"created_at"`
-	MemberCount  int             `bson:"member_count"`
-	LastSeq      int64           `bson:"last_seq,omitempty"`
-	LastMsgAt    time.Time       `bson:"last_message_at,omitempty"`
-	LastChangeAt time.Time       `bson:"last_change_at,omitempty"`
-}
-
-type memberDoc struct {
-	Room      int64       `bson:"room_id"`
-	User      string      `bson:"user_id"`
-	Tenant    string      `bson:"tenant"`
-	Role      domain.Role `bson:"role"`
-	JoinedAt  time.Time   `bson:"joined_at"`
-	ClearedAt time.Time   `bson:"cleared_at,omitempty"`
+	ID             int64           `bson:"_id"`
+	Tenant         string          `bson:"tenant"`
+	Type           domain.RoomType `bson:"type"`
+	Name           string          `bson:"name"`
+	CreatedBy      string          `bson:"created_by"`
+	CreatedAt      time.Time       `bson:"created_at"`
+	MemberCount    int             `bson:"member_count"`
+	MemberCountVer int64           `bson:"member_count_ver,omitempty"`
+	LastSeq        int64           `bson:"last_seq,omitempty"`
+	LastMsgAt      time.Time       `bson:"last_message_at,omitempty"`
+	LastChangeAt   time.Time       `bson:"last_change_at,omitempty"`
 }
 
 func encodeMessage(m domain.Message) (messageDoc, error) {
@@ -122,14 +114,19 @@ func encodeRoom(r domain.Room) (roomDoc, error) {
 	if err != nil {
 		return roomDoc{}, err
 	}
+	memberCountVer, err := toInt64("member count ver", r.MemberCountVer)
+	if err != nil {
+		return roomDoc{}, err
+	}
 	return roomDoc{
-		ID:          id,
-		Tenant:      r.Tenant,
-		Type:        r.Type,
-		Name:        r.Name,
-		CreatedBy:   r.CreatedBy,
-		CreatedAt:   r.CreatedAt,
-		MemberCount: r.MemberCount,
+		ID:             id,
+		Tenant:         r.Tenant,
+		Type:           r.Type,
+		Name:           r.Name,
+		CreatedBy:      r.CreatedBy,
+		CreatedAt:      r.CreatedAt,
+		MemberCount:    r.MemberCount,
+		MemberCountVer: memberCountVer,
 	}, nil
 }
 
@@ -142,30 +139,23 @@ func decodeRoom(d roomDoc) (domain.Room, error) {
 	if err != nil {
 		return domain.Room{}, err
 	}
-	return domain.Room{
-		ID:           id,
-		Tenant:       d.Tenant,
-		Type:         d.Type,
-		Name:         d.Name,
-		CreatedBy:    d.CreatedBy,
-		CreatedAt:    d.CreatedAt,
-		MemberCount:  d.MemberCount,
-		LastSeq:      lastSeq,
-		LastMsgAt:    d.LastMsgAt,
-		LastChangeAt: d.LastChangeAt,
-	}, nil
-}
-
-func encodeMember(m domain.Member, room int64) memberDoc {
-	return memberDoc{Room: room, User: m.User, Tenant: m.Tenant, Role: m.Role, JoinedAt: m.JoinedAt}
-}
-
-func decodeMember(d memberDoc) (domain.Member, error) {
-	room, err := toUint64("member room", d.Room)
+	memberCountVer, err := toUint64("room member count ver", d.MemberCountVer)
 	if err != nil {
-		return domain.Member{}, err
+		return domain.Room{}, err
 	}
-	return domain.Member{Room: room, Tenant: d.Tenant, User: d.User, Role: d.Role, JoinedAt: d.JoinedAt, ClearedAt: d.ClearedAt}, nil
+	return domain.Room{
+		ID:             id,
+		Tenant:         d.Tenant,
+		Type:           d.Type,
+		Name:           d.Name,
+		CreatedBy:      d.CreatedBy,
+		CreatedAt:      d.CreatedAt,
+		MemberCount:    d.MemberCount,
+		LastSeq:        lastSeq,
+		LastMsgAt:      d.LastMsgAt,
+		LastChangeAt:   d.LastChangeAt,
+		MemberCountVer: memberCountVer,
+	}, nil
 }
 
 func toInt64(field string, v uint64) (int64, error) {
