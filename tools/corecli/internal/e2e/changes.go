@@ -91,17 +91,17 @@ func CheckVersions(acks []Ack, c Change, got []*chatimv1.MessageVersion, author 
 		return fmt.Errorf("seq %d was never acked", c.Seq)
 	}
 	want := []*chatimv1.MessageVersion{
-		{Version: 0, Kind: chatimv1.EditKind_EDIT_KIND_ORIGINAL, Text: TextFor(acks[i].CID), By: author},
-		{Version: c.Version, Kind: chatimv1.EditKind_EDIT_KIND_TEXT, Text: c.Text, By: author},
+		{Ver: 0, Kind: chatimv1.EditKind_EDIT_KIND_ORIGINAL, Text: TextFor(acks[i].CID), By: author},
+		{Ver: c.Version, Kind: chatimv1.EditKind_EDIT_KIND_TEXT, Text: c.Text, By: author},
 	}
 	if len(got) != len(want) {
 		return fmt.Errorf("seq %d has %d versions, want %d", c.Seq, len(got), len(want))
 	}
 	for j, w := range want {
 		g := got[j]
-		if g.GetVersion() != w.GetVersion() || g.GetKind() != w.GetKind() || g.GetText() != w.GetText() || g.GetBy() != w.GetBy() || g.GetAt() == nil {
+		if g.GetVer() != w.GetVer() || g.GetKind() != w.GetKind() || g.GetText() != w.GetText() || g.GetBy() != w.GetBy() || g.GetAt() == nil {
 			return fmt.Errorf("seq %d entry %d = (v%d %s %q by %q), want (v%d %s %q by %q)",
-				c.Seq, j, g.GetVersion(), g.GetKind(), g.GetText(), g.GetBy(), w.GetVersion(), w.GetKind(), w.GetText(), w.GetBy())
+				c.Seq, j, g.GetVer(), g.GetKind(), g.GetText(), g.GetBy(), w.GetVer(), w.GetKind(), w.GetText(), w.GetBy())
 		}
 	}
 	return nil

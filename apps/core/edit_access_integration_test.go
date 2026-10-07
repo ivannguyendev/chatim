@@ -58,12 +58,12 @@ func TestRealInfraConcurrentEditsOnOneBaseHaveOneWinner(t *testing.T) {
 	if winner < 0 || status.Code(errs[1-winner]) != codes.FailedPrecondition {
 		t.Fatalf("concurrent edits returned %v, want one success and one FailedPrecondition", errs)
 	}
-	if m := historyAs(t, client, itUser, roomID)[seq]; m.GetText() != texts[winner] || m.GetVersion() != 1 {
+	if m := historyAs(t, client, itUser, roomID)[seq]; m.GetText() != texts[winner] || m.GetVer() != 1 {
 		t.Fatalf("history shows %v, want the winner %q at version 1", m, texts[winner])
 	}
 
 	bobSeq := sendAs(t, client, "bob", roomID, "edit-d-bob", "from bob")
-	if _, err := client.DeleteMessage(callerAs(t.Context(), "bob"), &chatimv1.DeleteMessageRequest{RoomId: roomID, Seq: seq, BaseVersion: 1}); status.Code(err) != codes.PermissionDenied {
+	if _, err := client.DeleteMessage(callerAs(t.Context(), "bob"), &chatimv1.DeleteMessageRequest{RoomId: roomID, Seq: seq, BaseVer: 1}); status.Code(err) != codes.PermissionDenied {
 		t.Fatalf("bob deletes alice's message = %v, want PermissionDenied", err)
 	}
 	if _, err := client.EditMessage(caller(t.Context()), &chatimv1.EditMessageRequest{RoomId: roomID, Seq: bobSeq, Text: "not mine"}); status.Code(err) != codes.PermissionDenied {

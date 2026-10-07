@@ -87,20 +87,20 @@ func TestRealInfraEditShowsInHistoryEditHistoryAndLive(t *testing.T) {
 	req := &chatimv1.EditMessageRequest{RoomId: roomID, Seq: seq, Text: "after"}
 	for attempt := range 2 {
 		resp, err := client.EditMessage(caller(t.Context()), req)
-		if m := resp.GetMessage(); err != nil || m.GetVersion() != 1 || m.GetText() != "after" || m.GetDeleted() || m.GetEditedAt() == nil {
+		if m := resp.GetMessage(); err != nil || m.GetVer() != 1 || m.GetText() != "after" || m.GetDeleted() || m.GetEditedAt() == nil {
 			t.Fatalf("EditMessage attempt %d = %v, %v; want version 1 with the new text", attempt+1, m, err)
 		}
 	}
 	ev := awaitLiveEvent(t, live, pbconv.MessageChangeEventID(room, 0, seq, 1))
-	if e := ev.GetMessageEdited(); e.GetVersion() != 1 || e.GetMessage().GetText() != "after" || ev.GetActor() != itUser {
+	if e := ev.GetMessageEdited(); e.GetVer() != 1 || e.GetMessage().GetText() != "after" || ev.GetActor() != itUser {
 		t.Fatalf("msg_edited event = %v, want version 1 with the new text by %s", ev, itUser)
 	}
-	if m := historyAs(t, client, itUser, roomID)[seq]; m.GetText() != "after" || m.GetVersion() != 1 || m.GetDeleted() || m.GetHidden() {
+	if m := historyAs(t, client, itUser, roomID)[seq]; m.GetText() != "after" || m.GetVer() != 1 || m.GetDeleted() || m.GetHidden() {
 		t.Fatalf("history shows %v, want the edited text at version 1", m)
 	}
 	v := editHistory(t, client, roomID, seq)
 	if len(v) != 2 || v[0].GetKind() != chatimv1.EditKind_EDIT_KIND_ORIGINAL || v[0].GetText() != "before" ||
-		v[1].GetKind() != chatimv1.EditKind_EDIT_KIND_TEXT || v[1].GetText() != "after" || v[1].GetVersion() != 1 || v[1].GetBy() != itUser {
+		v[1].GetKind() != chatimv1.EditKind_EDIT_KIND_TEXT || v[1].GetText() != "after" || v[1].GetVer() != 1 || v[1].GetBy() != itUser {
 		t.Fatalf("edit history = %v, want the original then version 1", v)
 	}
 	missing := &chatimv1.GetEditHistoryRequest{RoomId: roomID, Seq: seq + 1000, Limit: 100}
@@ -128,7 +128,7 @@ func TestRealInfraWorkersProjectAnEditWrittenOutsideTheCore(t *testing.T) {
 		t.Fatalf("append an edit outside the core: %v", err)
 	}
 	ev := awaitLiveEvent(t, live, pbconv.MessageChangeEventID(room, 0, seq, 1))
-	if m := ev.GetMessageEdited().GetMessage(); m.GetText() != fact.Text || m.GetVersion() != 1 {
+	if m := ev.GetMessageEdited().GetMessage(); m.GetText() != fact.Text || m.GetVer() != 1 {
 		t.Fatalf("msg_edited from the workers = %v, want the projected snapshot at version 1", ev)
 	}
 	got, err := st.Find(t.Context(), room, []store.MsgKey{{Room: room, Seq: seq}})
@@ -149,15 +149,15 @@ func TestRealInfraDeletePurgesOlderTextsAndBlocksLaterEdits(t *testing.T) {
 		t.Fatalf("EditMessage: %v", err)
 	}
 
-	del := &chatimv1.DeleteMessageRequest{RoomId: roomID, Seq: seq, BaseVersion: 1}
+	del := &chatimv1.DeleteMessageRequest{RoomId: roomID, Seq: seq, BaseVer: 1}
 	for attempt := range 2 {
 		resp, err := client.DeleteMessage(caller(t.Context()), del)
-		if m := resp.GetMessage(); err != nil || !m.GetDeleted() || m.GetText() != "" || m.GetVersion() != 2 {
+		if m := resp.GetMessage(); err != nil || !m.GetDeleted() || m.GetText() != "" || m.GetVer() != 2 {
 			t.Fatalf("DeleteMessage attempt %d = %v, %v; want deleted at version 2 without text", attempt+1, m, err)
 		}
 	}
 	ev := awaitLiveEvent(t, live, pbconv.MessageChangeEventID(room, 0, seq, 2))
-	if d := ev.GetMessageDeleted(); d.GetVersion() != 2 || !d.GetMessage().GetDeleted() || d.GetMessage().GetText() != "" {
+	if d := ev.GetMessageDeleted(); d.GetVer() != 2 || !d.GetMessage().GetDeleted() || d.GetMessage().GetText() != "" {
 		t.Fatalf("msg_deleted event = %v, want version 2 without text", ev)
 	}
 	facts, err := itStore(it, core).History(t.Context(), store.MsgKey{Room: room, Seq: seq}, 0, store.MaxEditPage)
@@ -167,10 +167,10 @@ func TestRealInfraDeletePurgesOlderTextsAndBlocksLaterEdits(t *testing.T) {
 	if v := editHistory(t, client, roomID, seq); len(v) != 0 {
 		t.Fatalf("edit history of a deleted message = %v, want none", v)
 	}
-	if m := historyAs(t, client, itUser, roomID)[seq]; !m.GetDeleted() || m.GetText() != "" || m.GetVersion() != 2 {
+	if m := historyAs(t, client, itUser, roomID)[seq]; !m.GetDeleted() || m.GetText() != "" || m.GetVer() != 2 {
 		t.Fatalf("history shows %v, want a deleted placeholder at version 2", m)
 	}
-	late := &chatimv1.EditMessageRequest{RoomId: roomID, Seq: seq, BaseVersion: 2, Text: "too late"}
+	late := &chatimv1.EditMessageRequest{RoomId: roomID, Seq: seq, BaseVer: 2, Text: "too late"}
 	if _, err := client.EditMessage(caller(t.Context()), late); status.Code(err) != codes.FailedPrecondition {
 		t.Fatalf("EditMessage after delete = %v, want FailedPrecondition", err)
 	}

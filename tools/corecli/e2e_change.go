@@ -75,9 +75,9 @@ func applyChange(ctx context.Context, cl *route.Client, room string, c e2e.Chang
 	if err != nil {
 		return fmt.Errorf("%s seq %d: %w", c.Kind(), c.Seq, err)
 	}
-	if m.GetVersion() != c.Version || m.GetText() != c.Text || m.GetDeleted() != c.Deleted || m.GetEditedAt() == nil {
+	if m.GetVer() != c.Version || m.GetText() != c.Text || m.GetDeleted() != c.Deleted || m.GetEditedAt() == nil {
 		return fmt.Errorf("%s seq %d returned version %d text %q deleted %v, want version %d text %q deleted %v",
-			c.Kind(), c.Seq, m.GetVersion(), m.GetText(), m.GetDeleted(), c.Version, c.Text, c.Deleted)
+			c.Kind(), c.Seq, m.GetVer(), m.GetText(), m.GetDeleted(), c.Version, c.Text, c.Deleted)
 	}
 	report(c.Kind()+" seq "+strconv.FormatUint(c.Seq, 10), stats)
 	return nil

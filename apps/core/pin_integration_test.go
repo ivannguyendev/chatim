@@ -37,7 +37,7 @@ func TestRealInfraWorkersProjectAPinFactWrittenOutsideTheCore(t *testing.T) {
 	}
 	pinnedID := pbconv.PinEventID(room, 1)
 	ev := awaitLiveEvents(t, live, pinnedID)[pinnedID]
-	if p := ev.GetMessagePinned(); p.GetPinVersion() != 1 || p.GetMessage().GetSeq() != first || p.GetMessage().GetText() != "pinned outside the core" || ev.GetActor() != itUser {
+	if p := ev.GetMessagePinned(); p.GetPinVer() != 1 || p.GetMessage().GetSeq() != first || p.GetMessage().GetText() != "pinned outside the core" || ev.GetActor() != itUser {
 		t.Fatalf("msg_pinned from the workers = %v, want seq %d at pin version 1 by %s", ev, first, itUser)
 	}
 	state, err := st.PinState(t.Context(), room)
@@ -46,18 +46,18 @@ func TestRealInfraWorkersProjectAPinFactWrittenOutsideTheCore(t *testing.T) {
 	}
 
 	resp, err := client.PinMessage(caller(t.Context()), &chatimv1.PinMessageRequest{RoomId: roomID, Seq: second})
-	if err != nil || resp.GetPinVersion() != 2 || !slices.Equal(pinnedSeqs(resp.GetPins()), []uint64{second, first}) {
+	if err != nil || resp.GetPinVer() != 2 || !slices.Equal(pinnedSeqs(resp.GetPins()), []uint64{second, first}) {
 		t.Fatalf("PinMessage = %v, %v; want version 2 with the new pin first", resp, err)
 	}
 	unpin := &chatimv1.UnpinMessageRequest{RoomId: roomID, Seq: first}
 	for attempt := range 2 {
 		resp, err := client.UnpinMessage(caller(t.Context()), unpin)
-		if err != nil || resp.GetPinVersion() != 3 || !slices.Equal(pinnedSeqs(resp.GetPins()), []uint64{second}) {
+		if err != nil || resp.GetPinVer() != 3 || !slices.Equal(pinnedSeqs(resp.GetPins()), []uint64{second}) {
 			t.Fatalf("UnpinMessage attempt %d = %v, %v; want version 3 with only seq %d", attempt+1, resp, err, second)
 		}
 	}
 	unpinnedID := pbconv.PinEventID(room, 3)
-	if u := awaitLiveEvents(t, live, unpinnedID)[unpinnedID].GetMessageUnpinned(); u.GetPinVersion() != 3 || u.GetMessage().GetSeq() != first {
+	if u := awaitLiveEvents(t, live, unpinnedID)[unpinnedID].GetMessageUnpinned(); u.GetPinVer() != 3 || u.GetMessage().GetSeq() != first {
 		t.Fatalf("msg_unpinned = %v, want seq %d at pin version 3", u, first)
 	}
 }

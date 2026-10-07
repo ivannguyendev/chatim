@@ -15,13 +15,13 @@ func MessageChangeEventID(room, thread, seq uint64, version uint32) string {
 
 func MessageEdited(roomType domain.RoomType, m domain.Message, e domain.Edit) *chatimv1.Event {
 	ev := messageChange(roomType, m, e)
-	ev.Payload = &chatimv1.Event_MessageEdited{MessageEdited: &chatimv1.MessageEdited{Message: Message(m), Version: e.Version}}
+	ev.Payload = &chatimv1.Event_MessageEdited{MessageEdited: &chatimv1.MessageEdited{Message: Message(m), Ver: e.Version}}
 	return ev
 }
 
 func MessageDeleted(roomType domain.RoomType, m domain.Message, e domain.Edit) *chatimv1.Event {
 	ev := messageChange(roomType, m, e)
-	ev.Payload = &chatimv1.Event_MessageDeleted{MessageDeleted: &chatimv1.MessageDeleted{Message: Message(m), Version: e.Version}}
+	ev.Payload = &chatimv1.Event_MessageDeleted{MessageDeleted: &chatimv1.MessageDeleted{Message: Message(m), Ver: e.Version}}
 	return ev
 }
 
@@ -46,7 +46,7 @@ func MessageVersions(m domain.Message, edits []domain.Edit, after uint32) []*cha
 		})
 	}
 	for _, e := range edits {
-		out = append(out, &chatimv1.MessageVersion{Version: e.Version, Kind: editKind(e.Kind), Text: e.Text, By: e.By, At: timestamppb.New(e.At)})
+		out = append(out, &chatimv1.MessageVersion{Ver: e.Version, Kind: editKind(e.Kind), Text: e.Text, By: e.By, At: timestamppb.New(e.At)})
 	}
 	return out
 }

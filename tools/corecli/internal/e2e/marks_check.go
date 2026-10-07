@@ -16,9 +16,9 @@ type markWant struct {
 
 func CheckReactReply(want Reaction, change uint32, got *chatimv1.ReactionSummary) error {
 	counts, wantCounts := FormatCounts(got.GetCounts()), want.Emoji+"=1"
-	if change != want.Change || got.GetVersion() != want.Version || counts != wantCounts {
+	if change != want.Change || got.GetVer() != want.Version || counts != wantCounts {
 		return fmt.Errorf("react on seq %d returned change %d counts %q version %d, want change %d counts %q version %d",
-			want.Seq, change, counts, got.GetVersion(), want.Change, wantCounts, want.Version)
+			want.Seq, change, counts, got.GetVer(), want.Change, wantCounts, want.Version)
 	}
 	return nil
 }
@@ -28,9 +28,9 @@ func CheckPinReply(want Pin, by string, version uint64, pins []*chatimv1.Pin) er
 		return fmt.Errorf("pin of seq %d returned version %d with %d pin(s), want version %d with one pin", want.Seq, version, len(pins), want.Version)
 	}
 	p := pins[0]
-	if p.GetSeq() != want.Seq || p.GetThreadRoot() != 0 || p.GetBy() != by || p.GetPinVersion() != want.Version || p.GetPinnedAt() == nil {
+	if p.GetSeq() != want.Seq || p.GetThreadRoot() != 0 || p.GetBy() != by || p.GetPinVer() != want.Version || p.GetPinnedAt() == nil {
 		return fmt.Errorf("pin = (seq %d thread %d by %q version %d), want (seq %d thread 0 by %q version %d)",
-			p.GetSeq(), p.GetThreadRoot(), p.GetBy(), p.GetPinVersion(), want.Seq, by, want.Version)
+			p.GetSeq(), p.GetThreadRoot(), p.GetBy(), p.GetPinVer(), want.Seq, by, want.Version)
 	}
 	return nil
 }
@@ -42,7 +42,7 @@ func CheckReactions(want []Reaction, got []*chatimv1.Message) error {
 	}
 	seen := 0
 	for _, m := range got {
-		counts, version := FormatCounts(m.GetReactions().GetCounts()), m.GetReactions().GetVersion()
+		counts, version := FormatCounts(m.GetReactions().GetCounts()), m.GetReactions().GetVer()
 		r, ok := bySeq[m.GetSeq()]
 		switch {
 		case !ok && (counts != "" || version != 0):

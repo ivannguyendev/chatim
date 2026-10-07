@@ -67,7 +67,7 @@ message Message {
   string text = 7;
   string cid = 8;
   google.protobuf.Timestamp created_at = 9;
-  uint32 version = 10;
+  uint32 ver = 10;
   bool deleted = 11;
   google.protobuf.Timestamp edited_at = 12;
   bool hidden = 13;
@@ -75,7 +75,7 @@ message Message {
 }
 
 message MessageVersion {
-  uint32 version = 1;
+  uint32 ver = 1;
   EditKind kind = 2;
   string text = 3;
   string by = 4;
@@ -122,7 +122,7 @@ message EditMessageRequest {
   string room_id = 1;
   uint64 thread_root = 2;
   uint64 seq = 3;
-  uint32 base_version = 4;
+  uint32 base_ver = 4;
   string text = 5;
 }
 
@@ -134,7 +134,7 @@ message DeleteMessageRequest {
   string room_id = 1;
   uint64 thread_root = 2;
   uint64 seq = 3;
-  uint32 base_version = 4;
+  uint32 base_ver = 4;
 }
 
 message DeleteMessageResponse {
@@ -162,7 +162,7 @@ message GetEditHistoryRequest {
   string room_id = 1;
   uint64 thread_root = 2;
   uint64 seq = 3;
-  uint32 after_version = 4;
+  uint32 after_ver = 4;
   uint32 limit = 5;
 }
 

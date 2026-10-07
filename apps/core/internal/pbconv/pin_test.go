@@ -26,9 +26,9 @@ func pinEnvelope(id string) *chatimv1.Event {
 func TestPinChangedPicksTheEventByOp(t *testing.T) {
 	m := sample()
 	wantPin := pinEnvelope("9007199254740993-p3")
-	wantPin.Payload = &chatimv1.Event_MessagePinned{MessagePinned: &chatimv1.MessagePinned{Message: pbconv.Message(m), PinVersion: 3}}
+	wantPin.Payload = &chatimv1.Event_MessagePinned{MessagePinned: &chatimv1.MessagePinned{Message: pbconv.Message(m), PinVer: 3}}
 	wantUnpin := pinEnvelope("9007199254740993-p4")
-	wantUnpin.Payload = &chatimv1.Event_MessageUnpinned{MessageUnpinned: &chatimv1.MessageUnpinned{Message: pbconv.Message(m), PinVersion: 4}}
+	wantUnpin.Payload = &chatimv1.Event_MessageUnpinned{MessageUnpinned: &chatimv1.MessageUnpinned{Message: pbconv.Message(m), PinVer: 4}}
 	pin, unpin := pinFact(domain.PinOpPin, 3), pinFact(domain.PinOpUnpin, 4)
 	cases := []struct {
 		name      string
@@ -58,8 +58,8 @@ func TestPinChangedDropsTheTextOfADeletedMessage(t *testing.T) {
 func TestPinsListsEveryPin(t *testing.T) {
 	pins := []domain.Pin{{Seq: 9, By: "bob", At: reactedAt, PV: 4}, {Thread: 3, Seq: 7, By: "alice", At: sentAt, PV: 1}}
 	want := []*chatimv1.Pin{
-		{Seq: 9, By: "bob", PinnedAt: timestamppb.New(reactedAt), PinVersion: 4},
-		{ThreadRoot: 3, Seq: 7, By: "alice", PinnedAt: timestamppb.New(sentAt), PinVersion: 1},
+		{Seq: 9, By: "bob", PinnedAt: timestamppb.New(reactedAt), PinVer: 4},
+		{ThreadRoot: 3, Seq: 7, By: "alice", PinnedAt: timestamppb.New(sentAt), PinVer: 1},
 	}
 	if got := pbconv.Pins(pins); !slices.EqualFunc(got, want, func(a, b *chatimv1.Pin) bool { return proto.Equal(a, b) }) {
 		t.Fatalf("Pins = %v, want %v", got, want)

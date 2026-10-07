@@ -23,12 +23,12 @@ func TestReactionSummary(t *testing.T) {
 		t.Fatalf("ReactionSummary(zero) = %v, want nil", got)
 	}
 	s := counts(domain.ReactionCount{Emoji: "👍", Count: 2}, domain.ReactionCount{Emoji: "$e", Count: 1})
-	want := &chatimv1.ReactionSummary{Counts: []*chatimv1.ReactionCount{{Emoji: "👍", Count: 2}, {Emoji: "$e", Count: 1}}, Version: 3}
+	want := &chatimv1.ReactionSummary{Counts: []*chatimv1.ReactionCount{{Emoji: "👍", Count: 2}, {Emoji: "$e", Count: 1}}, Ver: 3}
 	if got := pbconv.ReactionSummary(s); !proto.Equal(got, want) {
 		t.Fatalf("ReactionSummary = %v, want %v", got, want)
 	}
 	cleared := pbconv.ReactionSummary(domain.ReactionSummary{Version: 4})
-	if cleared == nil || len(cleared.GetCounts()) != 0 || cleared.GetVersion() != 4 {
+	if cleared == nil || len(cleared.GetCounts()) != 0 || cleared.GetVer() != 4 {
 		t.Fatalf("ReactionSummary(all removed) = %v, want version 4 and no counts", cleared)
 	}
 }

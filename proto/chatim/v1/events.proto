@@ -39,12 +39,12 @@ message RoomCreated {
 
 message MessageEdited {
   Message message = 1;
-  uint32 version = 2;
+  uint32 ver = 2;
 }
 
 message MessageDeleted {
   Message message = 1;
-  uint32 version = 2;
+  uint32 ver = 2;
 }
 
 message ReactionChanged {
@@ -61,10 +61,10 @@ message CountsChanged {
 
 message MessagePinned {
   Message message = 1;
-  uint64 pin_version = 2;
+  uint64 pin_ver = 2;
 }
 
 message MessageUnpinned {
   Message message = 1;
-  uint64 pin_version = 2;
+  uint64 pin_ver = 2;
 }

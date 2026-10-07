@@ -326,7 +326,7 @@ type Message struct {
 	Text          string                 `protobuf:"bytes,7,opt,name=text,proto3" json:"text,omitempty"`
 	Cid           string                 `protobuf:"bytes,8,opt,name=cid,proto3" json:"cid,omitempty"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	Version       uint32                 `protobuf:"varint,10,opt,name=version,proto3" json:"version,omitempty"`
+	Ver           uint32                 `protobuf:"varint,10,opt,name=ver,proto3" json:"ver,omitempty"`
 	Deleted       bool                   `protobuf:"varint,11,opt,name=deleted,proto3" json:"deleted,omitempty"`
 	EditedAt      *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=edited_at,json=editedAt,proto3" json:"edited_at,omitempty"`
 	Hidden        bool                   `protobuf:"varint,13,opt,name=hidden,proto3" json:"hidden,omitempty"`
@@ -421,9 +421,9 @@ func (x *Message) GetCreatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
-func (x *Message) GetVersion() uint32 {
+func (x *Message) GetVer() uint32 {
 	if x != nil {
-		return x.Version
+		return x.Ver
 	}
 	return 0
 }
@@ -458,7 +458,7 @@ func (x *Message) GetReactions() *ReactionSummary {
 
 type MessageVersion struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Version       uint32                 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	Ver           uint32                 `protobuf:"varint,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	Kind          EditKind               `protobuf:"varint,2,opt,name=kind,proto3,enum=chatim.v1.EditKind" json:"kind,omitempty"`
 	Text          string                 `protobuf:"bytes,3,opt,name=text,proto3" json:"text,omitempty"`
 	By            string                 `protobuf:"bytes,4,opt,name=by,proto3" json:"by,omitempty"`
@@ -497,9 +497,9 @@ func (*MessageVersion) Descriptor() ([]byte, []int) {
 	return file_chatim_v1_core_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *MessageVersion) GetVersion() uint32 {
+func (x *MessageVersion) GetVer() uint32 {
 	if x != nil {
-		return x.Version
+		return x.Ver
 	}
 	return 0
 }
@@ -881,7 +881,7 @@ type EditMessageRequest struct {
 	RoomId        string                 `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
 	ThreadRoot    uint64                 `protobuf:"varint,2,opt,name=thread_root,json=threadRoot,proto3" json:"thread_root,omitempty"`
 	Seq           uint64                 `protobuf:"varint,3,opt,name=seq,proto3" json:"seq,omitempty"`
-	BaseVersion   uint32                 `protobuf:"varint,4,opt,name=base_version,json=baseVersion,proto3" json:"base_version,omitempty"`
+	BaseVer       uint32                 `protobuf:"varint,4,opt,name=base_ver,json=baseVer,proto3" json:"base_ver,omitempty"`
 	Text          string                 `protobuf:"bytes,5,opt,name=text,proto3" json:"text,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -938,9 +938,9 @@ func (x *EditMessageRequest) GetSeq() uint64 {
 	return 0
 }
 
-func (x *EditMessageRequest) GetBaseVersion() uint32 {
+func (x *EditMessageRequest) GetBaseVer() uint32 {
 	if x != nil {
-		return x.BaseVersion
+		return x.BaseVer
 	}
 	return 0
 }
@@ -1001,7 +1001,7 @@ type DeleteMessageRequest struct {
 	RoomId        string                 `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
 	ThreadRoot    uint64                 `protobuf:"varint,2,opt,name=thread_root,json=threadRoot,proto3" json:"thread_root,omitempty"`
 	Seq           uint64                 `protobuf:"varint,3,opt,name=seq,proto3" json:"seq,omitempty"`
-	BaseVersion   uint32                 `protobuf:"varint,4,opt,name=base_version,json=baseVersion,proto3" json:"base_version,omitempty"`
+	BaseVer       uint32                 `protobuf:"varint,4,opt,name=base_ver,json=baseVer,proto3" json:"base_ver,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1057,9 +1057,9 @@ func (x *DeleteMessageRequest) GetSeq() uint64 {
 	return 0
 }
 
-func (x *DeleteMessageRequest) GetBaseVersion() uint32 {
+func (x *DeleteMessageRequest) GetBaseVer() uint32 {
 	if x != nil {
-		return x.BaseVersion
+		return x.BaseVer
 	}
 	return 0
 }
@@ -1305,7 +1305,7 @@ type GetEditHistoryRequest struct {
 	RoomId        string                 `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
 	ThreadRoot    uint64                 `protobuf:"varint,2,opt,name=thread_root,json=threadRoot,proto3" json:"thread_root,omitempty"`
 	Seq           uint64                 `protobuf:"varint,3,opt,name=seq,proto3" json:"seq,omitempty"`
-	AfterVersion  uint32                 `protobuf:"varint,4,opt,name=after_version,json=afterVersion,proto3" json:"after_version,omitempty"`
+	AfterVer      uint32                 `protobuf:"varint,4,opt,name=after_ver,json=afterVer,proto3" json:"after_ver,omitempty"`
 	Limit         uint32                 `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1362,9 +1362,9 @@ func (x *GetEditHistoryRequest) GetSeq() uint64 {
 	return 0
 }
 
-func (x *GetEditHistoryRequest) GetAfterVersion() uint32 {
+func (x *GetEditHistoryRequest) GetAfterVer() uint32 {
 	if x != nil {
-		return x.AfterVersion
+		return x.AfterVer
 	}
 	return 0
 }
@@ -1434,7 +1434,7 @@ const file_chatim_v1_core_proto_rawDesc = "" +
 	"created_by\x18\x05 \x01(\tR\tcreatedBy\x129\n" +
 	"\n" +
 	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12!\n" +
-	"\fmember_count\x18\a \x01(\x05R\vmemberCount\"\xc4\x03\n" +
+	"\fmember_count\x18\a \x01(\x05R\vmemberCount\"\xbc\x03\n" +
 	"\aMessage\x12\x17\n" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x1f\n" +
 	"\vthread_root\x18\x02 \x01(\x04R\n" +
@@ -1445,15 +1445,15 @@ const file_chatim_v1_core_proto_rawDesc = "" +
 	"\x04text\x18\a \x01(\tR\x04text\x12\x10\n" +
 	"\x03cid\x18\b \x01(\tR\x03cid\x129\n" +
 	"\n" +
-	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x18\n" +
-	"\aversion\x18\n" +
-	" \x01(\rR\aversion\x12\x18\n" +
+	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x10\n" +
+	"\x03ver\x18\n" +
+	" \x01(\rR\x03ver\x12\x18\n" +
 	"\adeleted\x18\v \x01(\bR\adeleted\x127\n" +
 	"\tedited_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\beditedAt\x12\x16\n" +
 	"\x06hidden\x18\r \x01(\bR\x06hidden\x128\n" +
-	"\treactions\x18\x0e \x01(\v2\x1a.chatim.v1.ReactionSummaryR\treactionsJ\x04\b\x04\x10\x05R\x03pts\"\xa3\x01\n" +
-	"\x0eMessageVersion\x12\x18\n" +
-	"\aversion\x18\x01 \x01(\rR\aversion\x12'\n" +
+	"\treactions\x18\x0e \x01(\v2\x1a.chatim.v1.ReactionSummaryR\treactionsJ\x04\b\x04\x10\x05R\x03pts\"\x9b\x01\n" +
+	"\x0eMessageVersion\x12\x10\n" +
+	"\x03ver\x18\x01 \x01(\rR\x03ver\x12'\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x13.chatim.v1.EditKindR\x04kind\x12\x12\n" +
 	"\x04text\x18\x03 \x01(\tR\x04text\x12\x0e\n" +
 	"\x02by\x18\x04 \x01(\tR\x02by\x12*\n" +
@@ -1482,22 +1482,22 @@ const file_chatim_v1_core_proto_rawDesc = "" +
 	"\x03seq\x18\x04 \x01(\x04R\x03seq\x12\x14\n" +
 	"\x05limit\x18\x05 \x01(\x05R\x05limit\"D\n" +
 	"\x12GetHistoryResponse\x12.\n" +
-	"\bmessages\x18\x01 \x03(\v2\x12.chatim.v1.MessageR\bmessages\"\x97\x01\n" +
+	"\bmessages\x18\x01 \x03(\v2\x12.chatim.v1.MessageR\bmessages\"\x8f\x01\n" +
 	"\x12EditMessageRequest\x12\x17\n" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x1f\n" +
 	"\vthread_root\x18\x02 \x01(\x04R\n" +
 	"threadRoot\x12\x10\n" +
-	"\x03seq\x18\x03 \x01(\x04R\x03seq\x12!\n" +
-	"\fbase_version\x18\x04 \x01(\rR\vbaseVersion\x12\x12\n" +
+	"\x03seq\x18\x03 \x01(\x04R\x03seq\x12\x19\n" +
+	"\bbase_ver\x18\x04 \x01(\rR\abaseVer\x12\x12\n" +
 	"\x04text\x18\x05 \x01(\tR\x04text\"C\n" +
 	"\x13EditMessageResponse\x12,\n" +
-	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\"\x85\x01\n" +
+	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\"}\n" +
 	"\x14DeleteMessageRequest\x12\x17\n" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x1f\n" +
 	"\vthread_root\x18\x02 \x01(\x04R\n" +
 	"threadRoot\x12\x10\n" +
-	"\x03seq\x18\x03 \x01(\x04R\x03seq\x12!\n" +
-	"\fbase_version\x18\x04 \x01(\rR\vbaseVersion\"E\n" +
+	"\x03seq\x18\x03 \x01(\x04R\x03seq\x12\x19\n" +
+	"\bbase_ver\x18\x04 \x01(\rR\abaseVer\"E\n" +
 	"\x15DeleteMessageResponse\x12,\n" +
 	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\"`\n" +
 	"\x12HideMessageRequest\x12\x17\n" +
@@ -1510,13 +1510,13 @@ const file_chatim_v1_core_proto_rawDesc = "" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x1a\n" +
 	"\tup_to_seq\x18\x02 \x01(\x04R\aupToSeq\"D\n" +
 	"\x14ClearHistoryResponse\x12,\n" +
-	"\x12cleared_before_seq\x18\x01 \x01(\x04R\x10clearedBeforeSeq\"\x9e\x01\n" +
+	"\x12cleared_before_seq\x18\x01 \x01(\x04R\x10clearedBeforeSeq\"\x96\x01\n" +
 	"\x15GetEditHistoryRequest\x12\x17\n" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x1f\n" +
 	"\vthread_root\x18\x02 \x01(\x04R\n" +
 	"threadRoot\x12\x10\n" +
-	"\x03seq\x18\x03 \x01(\x04R\x03seq\x12#\n" +
-	"\rafter_version\x18\x04 \x01(\rR\fafterVersion\x12\x14\n" +
+	"\x03seq\x18\x03 \x01(\x04R\x03seq\x12\x1b\n" +
+	"\tafter_ver\x18\x04 \x01(\rR\bafterVer\x12\x14\n" +
 	"\x05limit\x18\x05 \x01(\rR\x05limit\"O\n" +
 	"\x16GetEditHistoryResponse\x125\n" +
 	"\bversions\x18\x01 \x03(\v2\x19.chatim.v1.MessageVersionR\bversions*L\n" +

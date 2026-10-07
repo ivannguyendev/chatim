@@ -89,7 +89,7 @@ func TestRealInfraWorkersPublishReactionChangesWrittenOutsideTheCore(t *testing.
 			t.Fatalf("reaction_changed %d = %v, want %q after %q by bob", n, r, step.emoji, step.prev)
 		}
 		c := evs[countsID].GetCountsChanged()
-		if c.GetCounter() != pbconv.ReactionsCounter || c.GetReactions().GetVersion() != uint64(n) || !sameCounts(c.GetReactions(), countsOf(step.emoji)) {
+		if c.GetCounter() != pbconv.ReactionsCounter || c.GetReactions().GetVer() != uint64(n) || !sameCounts(c.GetReactions(), countsOf(step.emoji)) {
 			t.Fatalf("counts_changed %d = %v, want the counts of %q at version %d", n, c, step.emoji, n)
 		}
 	}
@@ -126,7 +126,7 @@ func TestRealInfraConcurrentReactionsConvergeToExactCounts(t *testing.T) {
 		t.Fatalf("Count = %+v, %v; want %+v", facts, err, second)
 	}
 	m := historyAs(t, client, "r1", roomID)[seq]
-	if !sameCounts(m.GetReactions(), second) || m.GetReactions().GetVersion() < after.Version {
+	if !sameCounts(m.GetReactions(), second) || m.GetReactions().GetVer() < after.Version {
 		t.Fatalf("history shows %v, want %+v at version %d or later", m.GetReactions(), second, after.Version)
 	}
 }

@@ -46,10 +46,10 @@ func reply[T proto.Message](resp T, st route.Stats, err error) (proto.Message, r
 
 var changeCalls = map[string]changeCall{
 	"edit": func(ctx context.Context, c *route.Client, room string) (proto.Message, route.Stats, error) {
-		return reply(c.EditMessage(ctx, &chatimv1.EditMessageRequest{RoomId: room, Seq: 3, BaseVersion: 1, Text: "new"}))
+		return reply(c.EditMessage(ctx, &chatimv1.EditMessageRequest{RoomId: room, Seq: 3, BaseVer: 1, Text: "new"}))
 	},
 	"delete": func(ctx context.Context, c *route.Client, room string) (proto.Message, route.Stats, error) {
-		return reply(c.DeleteMessage(ctx, &chatimv1.DeleteMessageRequest{RoomId: room, Seq: 3, BaseVersion: 2}))
+		return reply(c.DeleteMessage(ctx, &chatimv1.DeleteMessageRequest{RoomId: room, Seq: 3, BaseVer: 2}))
 	},
 	"hide": func(ctx context.Context, c *route.Client, room string) (proto.Message, route.Stats, error) {
 		return reply(c.HideMessage(ctx, &chatimv1.HideMessageRequest{RoomId: room, Seq: 3}))
@@ -58,7 +58,7 @@ var changeCalls = map[string]changeCall{
 		return reply(c.ClearHistory(ctx, &chatimv1.ClearHistoryRequest{RoomId: room, UpToSeq: 9}))
 	},
 	"edits": func(ctx context.Context, c *route.Client, room string) (proto.Message, route.Stats, error) {
-		return reply(c.GetEditHistory(ctx, &chatimv1.GetEditHistoryRequest{RoomId: room, Seq: 3, AfterVersion: 4, Limit: 10}))
+		return reply(c.GetEditHistory(ctx, &chatimv1.GetEditHistoryRequest{RoomId: room, Seq: 3, AfterVer: 4, Limit: 10}))
 	},
 	"react": func(ctx context.Context, c *route.Client, room string) (proto.Message, route.Stats, error) {
 		return reply(c.ReactMessage(ctx, &chatimv1.ReactMessageRequest{RoomId: room, Seq: 3, Emoji: "👍"}))
@@ -72,14 +72,14 @@ var changeCalls = map[string]changeCall{
 }
 
 var changeReplies = map[string]proto.Message{
-	"edit":   &chatimv1.EditMessageResponse{Message: &chatimv1.Message{RoomId: "42", Seq: 3, Version: 2, Text: "new"}},
-	"delete": &chatimv1.DeleteMessageResponse{Message: &chatimv1.Message{RoomId: "42", Seq: 3, Version: 3, Deleted: true}},
+	"edit":   &chatimv1.EditMessageResponse{Message: &chatimv1.Message{RoomId: "42", Seq: 3, Ver: 2, Text: "new"}},
+	"delete": &chatimv1.DeleteMessageResponse{Message: &chatimv1.Message{RoomId: "42", Seq: 3, Ver: 3, Deleted: true}},
 	"hide":   &chatimv1.HideMessageResponse{},
 	"clear":  &chatimv1.ClearHistoryResponse{ClearedBeforeSeq: 9},
-	"edits":  &chatimv1.GetEditHistoryResponse{Versions: []*chatimv1.MessageVersion{{Version: 5}}},
-	"react":  &chatimv1.ReactMessageResponse{Change: 1, Reactions: &chatimv1.ReactionSummary{Counts: []*chatimv1.ReactionCount{{Emoji: "👍", Count: 1}}, Version: 1}},
-	"pin":    &chatimv1.PinMessageResponse{PinVersion: 1, Pins: []*chatimv1.Pin{{Seq: 3, PinVersion: 1}}},
-	"unpin":  &chatimv1.UnpinMessageResponse{PinVersion: 2},
+	"edits":  &chatimv1.GetEditHistoryResponse{Versions: []*chatimv1.MessageVersion{{Ver: 5}}},
+	"react":  &chatimv1.ReactMessageResponse{Change: 1, Reactions: &chatimv1.ReactionSummary{Counts: []*chatimv1.ReactionCount{{Emoji: "👍", Count: 1}}, Ver: 1}},
+	"pin":    &chatimv1.PinMessageResponse{PinVer: 1, Pins: []*chatimv1.Pin{{Seq: 3, PinVer: 1}}},
+	"unpin":  &chatimv1.UnpinMessageResponse{PinVer: 2},
 }
 
 func TestChangeCallsRouteByRoomAndRetryAttemptTimeouts(t *testing.T) {

@@ -11,8 +11,8 @@ import (
 
 func changedPage(want []e2e.Ack) []*chatimv1.Message {
 	got := messagesOf(want)
-	got[0].Text, got[0].Version = e2e.EditTextFor(1), 1
-	got[1].Text, got[1].Version, got[1].Deleted = "", 1, true
+	got[0].Text, got[0].Ver = e2e.EditTextFor(1), 1
+	got[1].Text, got[1].Ver, got[1].Deleted = "", 1, true
 	return got
 }
 
@@ -63,8 +63,8 @@ func TestCheckVersionsWantsTheOriginalThenTheEdit(t *testing.T) {
 	as := acks(2)
 	at := timestamppb.Now()
 	good := []*chatimv1.MessageVersion{
-		{Version: 0, Kind: chatimv1.EditKind_EDIT_KIND_ORIGINAL, Text: e2e.TextFor(as[0].CID), By: sender, At: at},
-		{Version: 1, Kind: chatimv1.EditKind_EDIT_KIND_TEXT, Text: e2e.EditTextFor(1), By: sender, At: at},
+		{Ver: 0, Kind: chatimv1.EditKind_EDIT_KIND_ORIGINAL, Text: e2e.TextFor(as[0].CID), By: sender, At: at},
+		{Ver: 1, Kind: chatimv1.EditKind_EDIT_KIND_TEXT, Text: e2e.EditTextFor(1), By: sender, At: at},
 	}
 	if err := e2e.CheckVersions(as, e2e.EditOf(1), good, sender); err != nil {
 		t.Fatalf("CheckVersions(edit) = %v", err)

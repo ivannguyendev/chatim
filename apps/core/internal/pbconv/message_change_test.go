@@ -38,12 +38,12 @@ func TestMessageCarriesEditState(t *testing.T) {
 	m.Text, m.Version, m.Deleted, m.EditedAt, m.Hidden = "", 3, true, editedAt, true
 	want := &chatimv1.Message{
 		RoomId: "9007199254740993", Seq: 7, Sender: "alice", Kind: chatimv1.MessageKind_MESSAGE_KIND_TEXT,
-		Cid: "c-1", CreatedAt: timestamppb.New(sentAt), Version: 3, Deleted: true, EditedAt: timestamppb.New(editedAt), Hidden: true,
+		Cid: "c-1", CreatedAt: timestamppb.New(sentAt), Ver: 3, Deleted: true, EditedAt: timestamppb.New(editedAt), Hidden: true,
 	}
 	if got := pbconv.Message(m); !proto.Equal(got, want) {
 		t.Fatalf("Message = %v, want %v", got, want)
 	}
-	if got := pbconv.Message(sample()); got.GetEditedAt() != nil || got.GetVersion() != 0 {
+	if got := pbconv.Message(sample()); got.GetEditedAt() != nil || got.GetVer() != 0 {
 		t.Fatalf("unedited message = %v, want no edited_at and version 0", got)
 	}
 }
@@ -70,7 +70,7 @@ func changeEnvelope() *chatimv1.Event {
 func TestMessageEditedEnvelope(t *testing.T) {
 	m, e := changeOf(domain.EditText)
 	want := changeEnvelope()
-	want.Payload = &chatimv1.Event_MessageEdited{MessageEdited: &chatimv1.MessageEdited{Message: pbconv.Message(m), Version: 2}}
+	want.Payload = &chatimv1.Event_MessageEdited{MessageEdited: &chatimv1.MessageEdited{Message: pbconv.Message(m), Ver: 2}}
 	if got := pbconv.MessageEdited(domain.RoomGroup, m, e); !proto.Equal(got, want) {
 		t.Fatalf("MessageEdited = %v, want %v", got, want)
 	}
@@ -79,7 +79,7 @@ func TestMessageEditedEnvelope(t *testing.T) {
 func TestMessageDeletedEnvelope(t *testing.T) {
 	m, e := changeOf(domain.EditDelete)
 	want := changeEnvelope()
-	want.Payload = &chatimv1.Event_MessageDeleted{MessageDeleted: &chatimv1.MessageDeleted{Message: pbconv.Message(m), Version: 2}}
+	want.Payload = &chatimv1.Event_MessageDeleted{MessageDeleted: &chatimv1.MessageDeleted{Message: pbconv.Message(m), Ver: 2}}
 	got := pbconv.MessageDeleted(domain.RoomGroup, m, e)
 	if !proto.Equal(got, want) {
 		t.Fatalf("MessageDeleted = %v, want %v", got, want)
@@ -94,8 +94,8 @@ func TestMessageVersionsStartWithTheOriginalOnlyOnTheFirstPage(t *testing.T) {
 	v1 := domain.Edit{Room: m.Room, Seq: m.Seq, Version: 1, Kind: domain.EditText, By: "alice", Text: "v1", Prev: "xin chào", At: editedAt}
 	v2 := domain.Edit{Room: m.Room, Seq: m.Seq, Version: 2, Kind: domain.EditDelete, By: "bob", At: editedAt.Add(time.Minute)}
 	original := &chatimv1.MessageVersion{Kind: chatimv1.EditKind_EDIT_KIND_ORIGINAL, Text: "xin chào", By: "alice", At: timestamppb.New(sentAt)}
-	first := &chatimv1.MessageVersion{Version: 1, Kind: chatimv1.EditKind_EDIT_KIND_TEXT, Text: "v1", By: "alice", At: timestamppb.New(editedAt)}
-	second := &chatimv1.MessageVersion{Version: 2, Kind: chatimv1.EditKind_EDIT_KIND_DELETE, By: "bob", At: timestamppb.New(editedAt.Add(time.Minute))}
+	first := &chatimv1.MessageVersion{Ver: 1, Kind: chatimv1.EditKind_EDIT_KIND_TEXT, Text: "v1", By: "alice", At: timestamppb.New(editedAt)}
+	second := &chatimv1.MessageVersion{Ver: 2, Kind: chatimv1.EditKind_EDIT_KIND_DELETE, By: "bob", At: timestamppb.New(editedAt.Add(time.Minute))}
 	cases := []struct {
 		name  string
 		edits []domain.Edit

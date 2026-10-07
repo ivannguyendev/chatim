@@ -28,7 +28,7 @@ func ReactionSummary(s domain.ReactionSummary) *chatimv1.ReactionSummary {
 	for i, c := range s.Counts {
 		counts[i] = &chatimv1.ReactionCount{Emoji: c.Emoji, Count: c.Count}
 	}
-	return &chatimv1.ReactionSummary{Counts: counts, Version: s.Version}
+	return &chatimv1.ReactionSummary{Counts: counts, Ver: s.Version}
 }
 
 func ReactionChanged(roomType domain.RoomType, r domain.Reaction) *chatimv1.Event {

@@ -31,14 +31,14 @@ func TestEditAndDeleteThroughTheService(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EditMessage: %v", err)
 	}
-	if m := edited.GetMessage(); m.GetVersion() != 1 || m.GetText() != "hello" || m.GetEditedAt() == nil || m.GetDeleted() {
+	if m := edited.GetMessage(); m.GetVer() != 1 || m.GetText() != "hello" || m.GetEditedAt() == nil || m.GetDeleted() {
 		t.Fatalf("edited = %v, want version 1 with the new text", m)
 	}
-	deleted, err := rg.client.DeleteMessage(alice, &chatimv1.DeleteMessageRequest{RoomId: room, Seq: 1, BaseVersion: 1})
+	deleted, err := rg.client.DeleteMessage(alice, &chatimv1.DeleteMessageRequest{RoomId: room, Seq: 1, BaseVer: 1})
 	if err != nil {
 		t.Fatalf("DeleteMessage: %v", err)
 	}
-	if m := deleted.GetMessage(); !m.GetDeleted() || m.GetText() != "" || m.GetVersion() != 2 {
+	if m := deleted.GetMessage(); !m.GetDeleted() || m.GetText() != "" || m.GetVer() != 2 {
 		t.Fatalf("deleted = %v, want a deleted message at version 2", m)
 	}
 	id := roomNumber(t, room)
@@ -70,14 +70,14 @@ func TestChangeErrorsKeepTheirCodes(t *testing.T) {
 		code codes.Code
 	}{
 		{"stale base", edit(alice, &chatimv1.EditMessageRequest{RoomId: room, Seq: 1, Text: "v2"}), codes.FailedPrecondition},
-		{"not the author", edit(bob, &chatimv1.EditMessageRequest{RoomId: room, Seq: 1, BaseVersion: 1, Text: "v2"}), codes.PermissionDenied},
+		{"not the author", edit(bob, &chatimv1.EditMessageRequest{RoomId: room, Seq: 1, BaseVer: 1, Text: "v2"}), codes.PermissionDenied},
 		{"unknown message", edit(alice, &chatimv1.EditMessageRequest{RoomId: room, Seq: 9, Text: "v2"}), codes.NotFound},
-		{"other tenant", edit(as(t, "other", "alice"), &chatimv1.EditMessageRequest{RoomId: room, Seq: 1, BaseVersion: 1, Text: "v2"}), codes.NotFound},
+		{"other tenant", edit(as(t, "other", "alice"), &chatimv1.EditMessageRequest{RoomId: room, Seq: 1, BaseVer: 1, Text: "v2"}), codes.NotFound},
 		{"bad room id", edit(alice, &chatimv1.EditMessageRequest{RoomId: "x", Seq: 1, Text: "v2"}), codes.InvalidArgument},
-		{"empty text", edit(alice, &chatimv1.EditMessageRequest{RoomId: room, Seq: 1, BaseVersion: 1}), codes.InvalidArgument},
-		{"thread", edit(alice, &chatimv1.EditMessageRequest{RoomId: room, ThreadRoot: 1, Seq: 1, BaseVersion: 1, Text: "v2"}), codes.InvalidArgument},
+		{"empty text", edit(alice, &chatimv1.EditMessageRequest{RoomId: room, Seq: 1, BaseVer: 1}), codes.InvalidArgument},
+		{"thread", edit(alice, &chatimv1.EditMessageRequest{RoomId: room, ThreadRoot: 1, Seq: 1, BaseVer: 1, Text: "v2"}), codes.InvalidArgument},
 		{"member deletes another's message", func() error {
-			_, err := rg.client.DeleteMessage(bob, &chatimv1.DeleteMessageRequest{RoomId: room, Seq: 1, BaseVersion: 1})
+			_, err := rg.client.DeleteMessage(bob, &chatimv1.DeleteMessageRequest{RoomId: room, Seq: 1, BaseVer: 1})
 			return err
 		}, codes.PermissionDenied},
 		{"hide an unknown message", func() error {
@@ -92,10 +92,10 @@ func TestChangeErrorsKeepTheirCodes(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { expectCode(t, c.call(), c.code) })
 	}
-	if _, err := rg.client.DeleteMessage(alice, &chatimv1.DeleteMessageRequest{RoomId: room, Seq: 1, BaseVersion: 1}); err != nil {
+	if _, err := rg.client.DeleteMessage(alice, &chatimv1.DeleteMessageRequest{RoomId: room, Seq: 1, BaseVer: 1}); err != nil {
 		t.Fatalf("DeleteMessage: %v", err)
 	}
-	expectCode(t, edit(alice, &chatimv1.EditMessageRequest{RoomId: room, Seq: 1, BaseVersion: 2, Text: "back"})(), codes.FailedPrecondition)
+	expectCode(t, edit(alice, &chatimv1.EditMessageRequest{RoomId: room, Seq: 1, BaseVer: 2, Text: "back"})(), codes.FailedPrecondition)
 }
 
 func TestHideAndClearHistoryThroughTheService(t *testing.T) {

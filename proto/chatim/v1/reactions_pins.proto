@@ -11,7 +11,7 @@ message ReactionCount {
 
 message ReactionSummary {
   repeated ReactionCount counts = 1;
-  uint64 version = 2;
+  uint64 ver = 2;
 }
 
 message Pin {
@@ -19,7 +19,7 @@ message Pin {
   uint64 seq = 2;
   string by = 3;
   google.protobuf.Timestamp pinned_at = 4;
-  uint64 pin_version = 5;
+  uint64 pin_ver = 5;
 }
 
 message ReactMessageRequest {
@@ -41,7 +41,7 @@ message PinMessageRequest {
 }
 
 message PinMessageResponse {
-  uint64 pin_version = 1;
+  uint64 pin_ver = 1;
   repeated Pin pins = 2;
 }
 
@@ -52,7 +52,7 @@ message UnpinMessageRequest {
 }
 
 message UnpinMessageResponse {
-  uint64 pin_version = 1;
+  uint64 pin_ver = 1;
   repeated Pin pins = 2;
 }
 

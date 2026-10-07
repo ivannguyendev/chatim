@@ -13,7 +13,7 @@ import (
 const reactor = "e2e-user"
 
 func summary(version uint64, emoji string) *chatimv1.ReactionSummary {
-	return &chatimv1.ReactionSummary{Counts: []*chatimv1.ReactionCount{{Emoji: emoji, Count: 1}}, Version: version}
+	return &chatimv1.ReactionSummary{Counts: []*chatimv1.ReactionCount{{Emoji: emoji, Count: 1}}, Ver: version}
 }
 
 func TestMarkEventIDsMatchTheCore(t *testing.T) {
@@ -49,13 +49,13 @@ func TestEventOfReadsReactionCountAndPinEvents(t *testing.T) {
 		},
 		{
 			&chatimv1.Event{Id: "42-p1", RoomId: "42", Seq: 4, Payload: &chatimv1.Event_MessagePinned{
-				MessagePinned: &chatimv1.MessagePinned{Message: msg, PinVersion: 1},
+				MessagePinned: &chatimv1.MessagePinned{Message: msg, PinVer: 1},
 			}},
 			e2e.Event{Kind: e2e.KindPinned, Room: "42", ID: "42-p1", Seq: 4, CID: "a-d", Subject: "s"},
 		},
 		{
 			&chatimv1.Event{Id: "42-p2", RoomId: "42", Seq: 4, Payload: &chatimv1.Event_MessageUnpinned{
-				MessageUnpinned: &chatimv1.MessageUnpinned{Message: msg, PinVersion: 2},
+				MessageUnpinned: &chatimv1.MessageUnpinned{Message: msg, PinVer: 2},
 			}},
 			e2e.Event{Kind: e2e.KindUnpinned, Room: "42", ID: "42-p2", Seq: 4, CID: "a-d", Subject: "s"},
 		},
@@ -86,7 +86,7 @@ func TestCheckReactAndPinReplies(t *testing.T) {
 	expectErr(t, e2e.CheckReactReply(want, 2, summary(1, "❤️")), "version 1")
 	expectErr(t, e2e.CheckReactReply(want, 2, summary(2, "👍")), "👍=1")
 	pin := e2e.Pin{Seq: 4, Version: 1}
-	good := []*chatimv1.Pin{{Seq: 4, By: reactor, PinVersion: 1, PinnedAt: timestamppb.Now()}}
+	good := []*chatimv1.Pin{{Seq: 4, By: reactor, PinVer: 1, PinnedAt: timestamppb.Now()}}
 	if err := e2e.CheckPinReply(pin, reactor, 1, good); err != nil {
 		t.Fatalf("CheckPinReply(good) = %v", err)
 	}

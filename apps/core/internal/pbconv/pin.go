@@ -13,13 +13,13 @@ func PinEventID(room, pv uint64) string { return RoomID(room) + "-p" + strconv.F
 
 func MessagePinned(roomType domain.RoomType, m domain.Message, a domain.PinAction) *chatimv1.Event {
 	ev := pinEvent(roomType, a)
-	ev.Payload = &chatimv1.Event_MessagePinned{MessagePinned: &chatimv1.MessagePinned{Message: Message(m), PinVersion: a.PV}}
+	ev.Payload = &chatimv1.Event_MessagePinned{MessagePinned: &chatimv1.MessagePinned{Message: Message(m), PinVer: a.PV}}
 	return ev
 }
 
 func MessageUnpinned(roomType domain.RoomType, m domain.Message, a domain.PinAction) *chatimv1.Event {
 	ev := pinEvent(roomType, a)
-	ev.Payload = &chatimv1.Event_MessageUnpinned{MessageUnpinned: &chatimv1.MessageUnpinned{Message: Message(m), PinVersion: a.PV}}
+	ev.Payload = &chatimv1.Event_MessageUnpinned{MessageUnpinned: &chatimv1.MessageUnpinned{Message: Message(m), PinVer: a.PV}}
 	return ev
 }
 
@@ -36,7 +36,7 @@ func PinChanged(roomType domain.RoomType, m domain.Message, a domain.PinAction) 
 func Pins(pins []domain.Pin) []*chatimv1.Pin {
 	out := make([]*chatimv1.Pin, len(pins))
 	for i, p := range pins {
-		out[i] = &chatimv1.Pin{ThreadRoot: p.Thread, Seq: p.Seq, By: p.By, PinnedAt: timestamppb.New(p.At), PinVersion: p.PV}
+		out[i] = &chatimv1.Pin{ThreadRoot: p.Thread, Seq: p.Seq, By: p.By, PinnedAt: timestamppb.New(p.At), PinVer: p.PV}
 	}
 	return out
 }

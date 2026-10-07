@@ -62,7 +62,7 @@ func editCmd(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	req := &chatimv1.EditMessageRequest{RoomId: *msg.room, ThreadRoot: *msg.thread, Seq: *msg.seq, BaseVersion: baseVersion, Text: *text}
+	req := &chatimv1.EditMessageRequest{RoomId: *msg.room, ThreadRoot: *msg.thread, Seq: *msg.seq, BaseVer: baseVersion, Text: *text}
 	return withSession(ctx, o, func(ctx context.Context, s *session) error {
 		resp, st, err := s.client.EditMessage(ctx, req)
 		if err != nil {
@@ -85,7 +85,7 @@ func deleteCmd(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	req := &chatimv1.DeleteMessageRequest{RoomId: *msg.room, ThreadRoot: *msg.thread, Seq: *msg.seq, BaseVersion: baseVersion}
+	req := &chatimv1.DeleteMessageRequest{RoomId: *msg.room, ThreadRoot: *msg.thread, Seq: *msg.seq, BaseVer: baseVersion}
 	return withSession(ctx, o, func(ctx context.Context, s *session) error {
 		resp, st, err := s.client.DeleteMessage(ctx, req)
 		if err != nil {
@@ -156,7 +156,7 @@ func editsCmd(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	req := &chatimv1.GetEditHistoryRequest{RoomId: *msg.room, ThreadRoot: *msg.thread, Seq: *msg.seq, AfterVersion: afterVersion, Limit: size}
+	req := &chatimv1.GetEditHistoryRequest{RoomId: *msg.room, ThreadRoot: *msg.thread, Seq: *msg.seq, AfterVer: afterVersion, Limit: size}
 	return withSession(ctx, o, func(ctx context.Context, s *session) error {
 		resp, st, err := s.client.GetEditHistory(ctx, req)
 		if err != nil {

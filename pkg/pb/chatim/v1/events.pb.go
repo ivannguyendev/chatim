@@ -355,7 +355,7 @@ func (x *RoomCreated) GetRoom() *Room {
 type MessageEdited struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Message       *Message               `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
-	Version       uint32                 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	Ver           uint32                 `protobuf:"varint,2,opt,name=ver,proto3" json:"ver,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -397,9 +397,9 @@ func (x *MessageEdited) GetMessage() *Message {
 	return nil
 }
 
-func (x *MessageEdited) GetVersion() uint32 {
+func (x *MessageEdited) GetVer() uint32 {
 	if x != nil {
-		return x.Version
+		return x.Ver
 	}
 	return 0
 }
@@ -407,7 +407,7 @@ func (x *MessageEdited) GetVersion() uint32 {
 type MessageDeleted struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Message       *Message               `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
-	Version       uint32                 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	Ver           uint32                 `protobuf:"varint,2,opt,name=ver,proto3" json:"ver,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -449,9 +449,9 @@ func (x *MessageDeleted) GetMessage() *Message {
 	return nil
 }
 
-func (x *MessageDeleted) GetVersion() uint32 {
+func (x *MessageDeleted) GetVer() uint32 {
 	if x != nil {
-		return x.Version
+		return x.Ver
 	}
 	return 0
 }
@@ -579,7 +579,7 @@ func (x *CountsChanged) GetReactions() *ReactionSummary {
 type MessagePinned struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Message       *Message               `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
-	PinVersion    uint64                 `protobuf:"varint,2,opt,name=pin_version,json=pinVersion,proto3" json:"pin_version,omitempty"`
+	PinVer        uint64                 `protobuf:"varint,2,opt,name=pin_ver,json=pinVer,proto3" json:"pin_ver,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -621,9 +621,9 @@ func (x *MessagePinned) GetMessage() *Message {
 	return nil
 }
 
-func (x *MessagePinned) GetPinVersion() uint64 {
+func (x *MessagePinned) GetPinVer() uint64 {
 	if x != nil {
-		return x.PinVersion
+		return x.PinVer
 	}
 	return 0
 }
@@ -631,7 +631,7 @@ func (x *MessagePinned) GetPinVersion() uint64 {
 type MessageUnpinned struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Message       *Message               `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
-	PinVersion    uint64                 `protobuf:"varint,2,opt,name=pin_version,json=pinVersion,proto3" json:"pin_version,omitempty"`
+	PinVer        uint64                 `protobuf:"varint,2,opt,name=pin_ver,json=pinVer,proto3" json:"pin_ver,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -673,9 +673,9 @@ func (x *MessageUnpinned) GetMessage() *Message {
 	return nil
 }
 
-func (x *MessageUnpinned) GetPinVersion() uint64 {
+func (x *MessageUnpinned) GetPinVer() uint64 {
 	if x != nil {
-		return x.PinVersion
+		return x.PinVer
 	}
 	return 0
 }
@@ -707,13 +707,13 @@ const file_chatim_v1_events_proto_rawDesc = "" +
 	"\x0eMessageCreated\x12,\n" +
 	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\"2\n" +
 	"\vRoomCreated\x12#\n" +
-	"\x04room\x18\x01 \x01(\v2\x0f.chatim.v1.RoomR\x04room\"W\n" +
+	"\x04room\x18\x01 \x01(\v2\x0f.chatim.v1.RoomR\x04room\"O\n" +
 	"\rMessageEdited\x12,\n" +
-	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\rR\aversion\"X\n" +
+	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\x12\x10\n" +
+	"\x03ver\x18\x02 \x01(\rR\x03ver\"P\n" +
 	"\x0eMessageDeleted\x12,\n" +
-	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\rR\aversion\"z\n" +
+	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\x12\x10\n" +
+	"\x03ver\x18\x02 \x01(\rR\x03ver\"z\n" +
 	"\x0fReactionChanged\x12\x12\n" +
 	"\x04user\x18\x01 \x01(\tR\x04user\x12\x14\n" +
 	"\x05emoji\x18\x02 \x01(\tR\x05emoji\x12%\n" +
@@ -721,15 +721,13 @@ const file_chatim_v1_events_proto_rawDesc = "" +
 	"\x06change\x18\x04 \x01(\rR\x06change\"c\n" +
 	"\rCountsChanged\x12\x18\n" +
 	"\acounter\x18\x01 \x01(\tR\acounter\x128\n" +
-	"\treactions\x18\x02 \x01(\v2\x1a.chatim.v1.ReactionSummaryR\treactions\"^\n" +
+	"\treactions\x18\x02 \x01(\v2\x1a.chatim.v1.ReactionSummaryR\treactions\"V\n" +
 	"\rMessagePinned\x12,\n" +
-	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\x12\x1f\n" +
-	"\vpin_version\x18\x02 \x01(\x04R\n" +
-	"pinVersion\"`\n" +
+	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\x12\x17\n" +
+	"\apin_ver\x18\x02 \x01(\x04R\x06pinVer\"X\n" +
 	"\x0fMessageUnpinned\x12,\n" +
-	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\x12\x1f\n" +
-	"\vpin_version\x18\x02 \x01(\x04R\n" +
-	"pinVersionB\x9c\x01\n" +
+	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\x12\x17\n" +
+	"\apin_ver\x18\x02 \x01(\x04R\x06pinVerB\x9c\x01\n" +
 	"\rcom.chatim.v1B\vEventsProtoP\x01Z9github.com/ivannguyendev/chatim/pkg/pb/chatim/v1;chatimv1\xa2\x02\x03CXX\xaa\x02\tChatim.V1\xca\x02\tChatim\\V1\xe2\x02\x15Chatim\\V1\\GPBMetadata\xea\x02\n" +
 	"Chatim::V1b\x06proto3"
 

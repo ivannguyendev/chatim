@@ -55,9 +55,9 @@ func CheckPage(want []Ack, changes []Change, got []*chatimv1.Message, room, send
 			return fmt.Errorf("seq %d has sender %q, want %q", a.Seq, m.GetSender(), sender)
 		case m.GetText() != text:
 			return fmt.Errorf("seq %d has text %q, want %q", a.Seq, m.GetText(), text)
-		case m.GetVersion() != version || m.GetDeleted() != deleted || m.GetHidden():
+		case m.GetVer() != version || m.GetDeleted() != deleted || m.GetHidden():
 			return fmt.Errorf("seq %d has version %d deleted %v hidden %v, want version %d deleted %v hidden false",
-				a.Seq, m.GetVersion(), m.GetDeleted(), m.GetHidden(), version, deleted)
+				a.Seq, m.GetVer(), m.GetDeleted(), m.GetHidden(), version, deleted)
 		}
 	}
 	return nil

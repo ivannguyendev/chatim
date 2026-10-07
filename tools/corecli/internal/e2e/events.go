@@ -33,10 +33,10 @@ func EventOf(subject string, ev *chatimv1.Event) (Event, bool) {
 		return Event{Kind: KindCreated, Room: ev.GetRoomId(), ID: ev.GetId(), Seq: ev.GetSeq(), CID: created.GetMessage().GetCid(), Subject: subject}, true
 	}
 	if edited := ev.GetMessageEdited(); edited != nil {
-		return changeOf(subject, ev, KindEdited, edited.GetMessage(), edited.GetVersion()), true
+		return changeOf(subject, ev, KindEdited, edited.GetMessage(), edited.GetVer()), true
 	}
 	if deleted := ev.GetMessageDeleted(); deleted != nil {
-		return changeOf(subject, ev, KindDeleted, deleted.GetMessage(), deleted.GetVersion()), true
+		return changeOf(subject, ev, KindDeleted, deleted.GetMessage(), deleted.GetVer()), true
 	}
 	return markOf(subject, ev)
 }

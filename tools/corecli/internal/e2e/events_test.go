@@ -18,14 +18,14 @@ func TestEventOfKeepsMessageEventsOnly(t *testing.T) {
 		t.Fatalf("EventOf(msg_created) = %+v, %v; want %+v, true", got, ok, want)
 	}
 	edited := &chatimv1.Event{Id: "42-0-3-v1", RoomId: "42", Payload: &chatimv1.Event_MessageEdited{MessageEdited: &chatimv1.MessageEdited{
-		Version: 1, Message: &chatimv1.Message{RoomId: "42", Seq: 3, Cid: "a-c", Text: "new", Version: 1},
+		Ver: 1, Message: &chatimv1.Message{RoomId: "42", Seq: 3, Cid: "a-c", Text: "new", Ver: 1},
 	}}}
 	wantEdited := e2e.Event{Kind: e2e.KindEdited, Room: "42", ID: "42-0-3-v1", Seq: 3, CID: "a-c", Version: 1, Text: "new", Subject: "s"}
 	if got, ok := e2e.EventOf("s", edited); !ok || got != wantEdited || !got.IsChange() {
 		t.Fatalf("EventOf(msg_edited) = %+v, %v; want %+v, true", got, ok, wantEdited)
 	}
 	deleted := &chatimv1.Event{Id: "42-0-3-v2", RoomId: "42", Payload: &chatimv1.Event_MessageDeleted{MessageDeleted: &chatimv1.MessageDeleted{
-		Version: 2, Message: &chatimv1.Message{RoomId: "42", Seq: 3, Cid: "a-c", Deleted: true, Version: 2},
+		Ver: 2, Message: &chatimv1.Message{RoomId: "42", Seq: 3, Cid: "a-c", Deleted: true, Ver: 2},
 	}}}
 	wantDeleted := e2e.Event{Kind: e2e.KindDeleted, Room: "42", ID: "42-0-3-v2", Seq: 3, CID: "a-c", Version: 2, Subject: "s"}
 	if got, ok := e2e.EventOf("s", deleted); !ok || got != wantDeleted || !got.IsChange() {

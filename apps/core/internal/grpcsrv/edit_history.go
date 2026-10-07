@@ -44,9 +44,9 @@ func (s *Service) GetEditHistory(ctx context.Context, req *chatimv1.GetEditHisto
 	if found[0].Deleted {
 		return &chatimv1.GetEditHistoryResponse{}, nil
 	}
-	edits, err := s.edits.History(ctx, key, req.GetAfterVersion(), limit)
+	edits, err := s.edits.History(ctx, key, req.GetAfterVer(), limit)
 	if err != nil {
 		return nil, err
 	}
-	return &chatimv1.GetEditHistoryResponse{Versions: pbconv.MessageVersions(found[0], edits, req.GetAfterVersion())}, nil
+	return &chatimv1.GetEditHistoryResponse{Versions: pbconv.MessageVersions(found[0], edits, req.GetAfterVer())}, nil
 }

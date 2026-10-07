@@ -27,10 +27,10 @@ func TestRealInfraMembersReactAndPinEvenOnLockedKinds(t *testing.T) {
 	if resp, err := client.ReactMessage(bob, &chatimv1.ReactMessageRequest{RoomId: roomID, Seq: seq, Emoji: "👍"}); err != nil || resp.GetChange() != 1 {
 		t.Fatalf("bob reacts to alice's locked message = %v, %v; want change 1", resp, err)
 	}
-	if resp, err := client.PinMessage(bob, &chatimv1.PinMessageRequest{RoomId: roomID, Seq: seq}); err != nil || resp.GetPinVersion() != 1 {
+	if resp, err := client.PinMessage(bob, &chatimv1.PinMessageRequest{RoomId: roomID, Seq: seq}); err != nil || resp.GetPinVer() != 1 {
 		t.Fatalf("bob pins alice's locked message = %v, %v; want pin version 1", resp, err)
 	}
-	if resp, err := client.UnpinMessage(bob, &chatimv1.UnpinMessageRequest{RoomId: roomID, Seq: seq}); err != nil || resp.GetPinVersion() != 2 || len(resp.GetPins()) != 0 {
+	if resp, err := client.UnpinMessage(bob, &chatimv1.UnpinMessageRequest{RoomId: roomID, Seq: seq}); err != nil || resp.GetPinVer() != 2 || len(resp.GetPins()) != 0 {
 		t.Fatalf("bob unpins it = %v, %v; want pin version 2 and no pins", resp, err)
 	}
 
@@ -88,7 +88,7 @@ func TestRealInfraDeletedMessagesTakeNoNewReactionOrPin(t *testing.T) {
 		t.Fatalf("remove on a deleted message = %v, %v; want change 2 and no counts", removed, err)
 	}
 	unpinned, err := client.UnpinMessage(caller(t.Context()), &chatimv1.UnpinMessageRequest{RoomId: roomID, Seq: seq})
-	if err != nil || unpinned.GetPinVersion() != 2 || len(unpinned.GetPins()) != 0 {
+	if err != nil || unpinned.GetPinVer() != 2 || len(unpinned.GetPins()) != 0 {
 		t.Fatalf("unpin of a deleted message = %v, %v; want pin version 2 and no pins", unpinned, err)
 	}
 	if m := historyAs(t, client, "bob", roomID)[seq]; !m.GetDeleted() || m.GetText() != "" || m.GetReactions() != nil {

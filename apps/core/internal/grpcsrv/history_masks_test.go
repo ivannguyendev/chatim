@@ -63,7 +63,7 @@ func TestHistoryShowsPlaceholdersPerViewer(t *testing.T) {
 			t.Fatalf("%s got %d messages, want %d", c.name, len(msgs), len(c.want))
 		}
 		for i, m := range msgs {
-			if got := (shown{m.GetSeq(), m.GetText(), m.GetDeleted(), m.GetHidden(), m.GetVersion()}); got != c.want[i] {
+			if got := (shown{m.GetSeq(), m.GetText(), m.GetDeleted(), m.GetHidden(), m.GetVer()}); got != c.want[i] {
 				t.Fatalf("%s message %d = %+v, want %+v", c.name, i, got, c.want[i])
 			}
 		}

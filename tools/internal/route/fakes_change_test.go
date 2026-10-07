@@ -12,7 +12,7 @@ func (f *fakeCore) EditMessage(ctx context.Context, in *chatimv1.EditMessageRequ
 	if err := f.next(ctx); err != nil {
 		return nil, err
 	}
-	m := &chatimv1.Message{RoomId: in.GetRoomId(), Seq: in.GetSeq(), Version: in.GetBaseVersion() + 1, Text: in.GetText()}
+	m := &chatimv1.Message{RoomId: in.GetRoomId(), Seq: in.GetSeq(), Ver: in.GetBaseVer() + 1, Text: in.GetText()}
 	return &chatimv1.EditMessageResponse{Message: m}, nil
 }
 
@@ -20,7 +20,7 @@ func (f *fakeCore) DeleteMessage(ctx context.Context, in *chatimv1.DeleteMessage
 	if err := f.next(ctx); err != nil {
 		return nil, err
 	}
-	m := &chatimv1.Message{RoomId: in.GetRoomId(), Seq: in.GetSeq(), Version: in.GetBaseVersion() + 1, Deleted: true}
+	m := &chatimv1.Message{RoomId: in.GetRoomId(), Seq: in.GetSeq(), Ver: in.GetBaseVer() + 1, Deleted: true}
 	return &chatimv1.DeleteMessageResponse{Message: m}, nil
 }
 
@@ -42,5 +42,5 @@ func (f *fakeCore) GetEditHistory(ctx context.Context, in *chatimv1.GetEditHisto
 	if err := f.next(ctx); err != nil {
 		return nil, err
 	}
-	return &chatimv1.GetEditHistoryResponse{Versions: []*chatimv1.MessageVersion{{Version: in.GetAfterVersion() + 1}}}, nil
+	return &chatimv1.GetEditHistoryResponse{Versions: []*chatimv1.MessageVersion{{Ver: in.GetAfterVer() + 1}}}, nil
 }

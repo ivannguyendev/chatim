@@ -31,7 +31,7 @@ func (s *Service) PinMessage(ctx context.Context, req *chatimv1.PinMessageReques
 	if err != nil {
 		return nil, err
 	}
-	return &chatimv1.PinMessageResponse{PinVersion: state.Version, Pins: pbconv.Pins(state.Pins)}, nil
+	return &chatimv1.PinMessageResponse{PinVer: state.Version, Pins: pbconv.Pins(state.Pins)}, nil
 }
 
 func (s *Service) UnpinMessage(ctx context.Context, req *chatimv1.UnpinMessageRequest) (*chatimv1.UnpinMessageResponse, error) {
@@ -43,7 +43,7 @@ func (s *Service) UnpinMessage(ctx context.Context, req *chatimv1.UnpinMessageRe
 	if err != nil {
 		return nil, err
 	}
-	return &chatimv1.UnpinMessageResponse{PinVersion: state.Version, Pins: pbconv.Pins(state.Pins)}, nil
+	return &chatimv1.UnpinMessageResponse{PinVer: state.Version, Pins: pbconv.Pins(state.Pins)}, nil
 }
 
 func pinCmdOf(ctx context.Context, roomID string, thread, seq uint64) (mutate.PinCmd, error) {

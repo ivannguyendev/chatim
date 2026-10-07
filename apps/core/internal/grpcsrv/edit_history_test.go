@@ -21,7 +21,7 @@ type versionRow struct {
 func versionRows(vs []*chatimv1.MessageVersion) []versionRow {
 	out := make([]versionRow, len(vs))
 	for i, v := range vs {
-		out[i] = versionRow{v.GetVersion(), v.GetKind(), v.GetText(), v.GetBy()}
+		out[i] = versionRow{v.GetVer(), v.GetKind(), v.GetText(), v.GetBy()}
 	}
 	return out
 }
@@ -32,7 +32,7 @@ func (rg *rig) editTwice(t *testing.T, ctx context.Context, room string) {
 		base uint32
 		text string
 	}{{0, "v1"}, {1, "v2"}} {
-		if _, err := rg.client.EditMessage(ctx, &chatimv1.EditMessageRequest{RoomId: room, Seq: 1, BaseVersion: e.base, Text: e.text}); err != nil {
+		if _, err := rg.client.EditMessage(ctx, &chatimv1.EditMessageRequest{RoomId: room, Seq: 1, BaseVer: e.base, Text: e.text}); err != nil {
 			t.Fatalf("EditMessage(%s): %v", e.text, err)
 		}
 	}
@@ -59,7 +59,7 @@ func TestEditHistoryListsEveryVersion(t *testing.T) {
 	if at := resp.GetVersions()[0].GetAt(); !proto.Equal(at, sent.GetCreatedAt()) {
 		t.Fatalf("original at = %v, want the send time %v", at, sent.GetCreatedAt())
 	}
-	after, err := rg.client.GetEditHistory(bob, &chatimv1.GetEditHistoryRequest{RoomId: room, Seq: 1, AfterVersion: 1})
+	after, err := rg.client.GetEditHistory(bob, &chatimv1.GetEditHistoryRequest{RoomId: room, Seq: 1, AfterVer: 1})
 	if err != nil || !slices.Equal(versionRows(after.GetVersions()), want[2:]) {
 		t.Fatalf("after v1 = %v, %v; want only v2", after, err)
 	}
@@ -71,7 +71,7 @@ func TestEditHistoryOfADeletedMessageIsEmpty(t *testing.T) {
 	alice := as(t, "acme", "alice")
 	rg.send(t, alice, room, "c-1", "v0")
 	rg.editTwice(t, alice, room)
-	if _, err := rg.client.DeleteMessage(alice, &chatimv1.DeleteMessageRequest{RoomId: room, Seq: 1, BaseVersion: 2}); err != nil {
+	if _, err := rg.client.DeleteMessage(alice, &chatimv1.DeleteMessageRequest{RoomId: room, Seq: 1, BaseVer: 2}); err != nil {
 		t.Fatalf("DeleteMessage: %v", err)
 	}
 	resp, err := rg.client.GetEditHistory(alice, &chatimv1.GetEditHistoryRequest{RoomId: room, Seq: 1})

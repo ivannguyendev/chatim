@@ -15,7 +15,7 @@ func (s *Service) EditMessage(ctx context.Context, req *chatimv1.EditMessageRequ
 	}
 	m, err := s.mutator.Edit(ctx, mutate.EditCmd{
 		Tenant: who.tenant, User: who.user, Room: room, Thread: req.GetThreadRoot(), Seq: req.GetSeq(),
-		BaseVersion: req.GetBaseVersion(), Text: req.GetText(),
+		BaseVersion: req.GetBaseVer(), Text: req.GetText(),
 	})
 	if err != nil {
 		return nil, err
@@ -29,7 +29,7 @@ func (s *Service) DeleteMessage(ctx context.Context, req *chatimv1.DeleteMessage
 		return nil, err
 	}
 	m, err := s.mutator.Delete(ctx, mutate.DeleteCmd{
-		Tenant: who.tenant, User: who.user, Room: room, Thread: req.GetThreadRoot(), Seq: req.GetSeq(), BaseVersion: req.GetBaseVersion(),
+		Tenant: who.tenant, User: who.user, Room: room, Thread: req.GetThreadRoot(), Seq: req.GetSeq(), BaseVersion: req.GetBaseVer(),
 	})
 	if err != nil {
 		return nil, err

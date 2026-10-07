@@ -32,14 +32,14 @@ func TestReactAndPinThroughTheService(t *testing.T) {
 		t.Fatalf("reactions = %v then %v, want change 1 each and %v", first, second, want)
 	}
 	pinned, err := rg.client.PinMessage(bob, &chatimv1.PinMessageRequest{RoomId: room, Seq: 1})
-	if err != nil || pinned.GetPinVersion() != 1 || len(pinned.GetPins()) != 1 {
+	if err != nil || pinned.GetPinVer() != 1 || len(pinned.GetPins()) != 1 {
 		t.Fatalf("PinMessage = %v, %v; want one pin at version 1", pinned, err)
 	}
-	if p := pinned.GetPins()[0]; p.GetSeq() != 1 || p.GetBy() != "bob" || p.GetPinVersion() != 1 || p.GetPinnedAt() == nil {
+	if p := pinned.GetPins()[0]; p.GetSeq() != 1 || p.GetBy() != "bob" || p.GetPinVer() != 1 || p.GetPinnedAt() == nil {
 		t.Fatalf("pin = %v, want seq 1 pinned by bob at version 1", p)
 	}
 	unpinned, err := rg.client.UnpinMessage(alice, &chatimv1.UnpinMessageRequest{RoomId: room, Seq: 1})
-	if err != nil || unpinned.GetPinVersion() != 2 || len(unpinned.GetPins()) != 0 {
+	if err != nil || unpinned.GetPinVer() != 2 || len(unpinned.GetPins()) != 0 {
 		t.Fatalf("UnpinMessage = %v, %v; want no pins at version 2", unpinned, err)
 	}
 	id := roomNumber(t, room)

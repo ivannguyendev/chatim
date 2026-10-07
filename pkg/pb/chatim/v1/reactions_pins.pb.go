@@ -77,7 +77,7 @@ func (x *ReactionCount) GetCount() uint32 {
 type ReactionSummary struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Counts        []*ReactionCount       `protobuf:"bytes,1,rep,name=counts,proto3" json:"counts,omitempty"`
-	Version       uint64                 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	Ver           uint64                 `protobuf:"varint,2,opt,name=ver,proto3" json:"ver,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -119,9 +119,9 @@ func (x *ReactionSummary) GetCounts() []*ReactionCount {
 	return nil
 }
 
-func (x *ReactionSummary) GetVersion() uint64 {
+func (x *ReactionSummary) GetVer() uint64 {
 	if x != nil {
-		return x.Version
+		return x.Ver
 	}
 	return 0
 }
@@ -132,7 +132,7 @@ type Pin struct {
 	Seq           uint64                 `protobuf:"varint,2,opt,name=seq,proto3" json:"seq,omitempty"`
 	By            string                 `protobuf:"bytes,3,opt,name=by,proto3" json:"by,omitempty"`
 	PinnedAt      *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=pinned_at,json=pinnedAt,proto3" json:"pinned_at,omitempty"`
-	PinVersion    uint64                 `protobuf:"varint,5,opt,name=pin_version,json=pinVersion,proto3" json:"pin_version,omitempty"`
+	PinVer        uint64                 `protobuf:"varint,5,opt,name=pin_ver,json=pinVer,proto3" json:"pin_ver,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -195,9 +195,9 @@ func (x *Pin) GetPinnedAt() *timestamppb.Timestamp {
 	return nil
 }
 
-func (x *Pin) GetPinVersion() uint64 {
+func (x *Pin) GetPinVer() uint64 {
 	if x != nil {
-		return x.PinVersion
+		return x.PinVer
 	}
 	return 0
 }
@@ -384,7 +384,7 @@ func (x *PinMessageRequest) GetSeq() uint64 {
 
 type PinMessageResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	PinVersion    uint64                 `protobuf:"varint,1,opt,name=pin_version,json=pinVersion,proto3" json:"pin_version,omitempty"`
+	PinVer        uint64                 `protobuf:"varint,1,opt,name=pin_ver,json=pinVer,proto3" json:"pin_ver,omitempty"`
 	Pins          []*Pin                 `protobuf:"bytes,2,rep,name=pins,proto3" json:"pins,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -420,9 +420,9 @@ func (*PinMessageResponse) Descriptor() ([]byte, []int) {
 	return file_chatim_v1_reactions_pins_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *PinMessageResponse) GetPinVersion() uint64 {
+func (x *PinMessageResponse) GetPinVer() uint64 {
 	if x != nil {
-		return x.PinVersion
+		return x.PinVer
 	}
 	return 0
 }
@@ -496,7 +496,7 @@ func (x *UnpinMessageRequest) GetSeq() uint64 {
 
 type UnpinMessageResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	PinVersion    uint64                 `protobuf:"varint,1,opt,name=pin_version,json=pinVersion,proto3" json:"pin_version,omitempty"`
+	PinVer        uint64                 `protobuf:"varint,1,opt,name=pin_ver,json=pinVer,proto3" json:"pin_ver,omitempty"`
 	Pins          []*Pin                 `protobuf:"bytes,2,rep,name=pins,proto3" json:"pins,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -532,9 +532,9 @@ func (*UnpinMessageResponse) Descriptor() ([]byte, []int) {
 	return file_chatim_v1_reactions_pins_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *UnpinMessageResponse) GetPinVersion() uint64 {
+func (x *UnpinMessageResponse) GetPinVer() uint64 {
 	if x != nil {
-		return x.PinVersion
+		return x.PinVer
 	}
 	return 0
 }
@@ -633,18 +633,17 @@ const file_chatim_v1_reactions_pins_proto_rawDesc = "" +
 	"\x1echatim/v1/reactions_pins.proto\x12\tchatim.v1\x1a\x1fgoogle/protobuf/timestamp.proto\";\n" +
 	"\rReactionCount\x12\x14\n" +
 	"\x05emoji\x18\x01 \x01(\tR\x05emoji\x12\x14\n" +
-	"\x05count\x18\x02 \x01(\rR\x05count\"]\n" +
+	"\x05count\x18\x02 \x01(\rR\x05count\"U\n" +
 	"\x0fReactionSummary\x120\n" +
-	"\x06counts\x18\x01 \x03(\v2\x18.chatim.v1.ReactionCountR\x06counts\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x04R\aversion\"\xa2\x01\n" +
+	"\x06counts\x18\x01 \x03(\v2\x18.chatim.v1.ReactionCountR\x06counts\x12\x10\n" +
+	"\x03ver\x18\x02 \x01(\x04R\x03ver\"\x9a\x01\n" +
 	"\x03Pin\x12\x1f\n" +
 	"\vthread_root\x18\x01 \x01(\x04R\n" +
 	"threadRoot\x12\x10\n" +
 	"\x03seq\x18\x02 \x01(\x04R\x03seq\x12\x0e\n" +
 	"\x02by\x18\x03 \x01(\tR\x02by\x127\n" +
-	"\tpinned_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\bpinnedAt\x12\x1f\n" +
-	"\vpin_version\x18\x05 \x01(\x04R\n" +
-	"pinVersion\"w\n" +
+	"\tpinned_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\bpinnedAt\x12\x17\n" +
+	"\apin_ver\x18\x05 \x01(\x04R\x06pinVer\"w\n" +
 	"\x13ReactMessageRequest\x12\x17\n" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x1f\n" +
 	"\vthread_root\x18\x02 \x01(\x04R\n" +
@@ -658,19 +657,17 @@ const file_chatim_v1_reactions_pins_proto_rawDesc = "" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x1f\n" +
 	"\vthread_root\x18\x02 \x01(\x04R\n" +
 	"threadRoot\x12\x10\n" +
-	"\x03seq\x18\x03 \x01(\x04R\x03seq\"Y\n" +
-	"\x12PinMessageResponse\x12\x1f\n" +
-	"\vpin_version\x18\x01 \x01(\x04R\n" +
-	"pinVersion\x12\"\n" +
+	"\x03seq\x18\x03 \x01(\x04R\x03seq\"Q\n" +
+	"\x12PinMessageResponse\x12\x17\n" +
+	"\apin_ver\x18\x01 \x01(\x04R\x06pinVer\x12\"\n" +
 	"\x04pins\x18\x02 \x03(\v2\x0e.chatim.v1.PinR\x04pins\"a\n" +
 	"\x13UnpinMessageRequest\x12\x17\n" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x1f\n" +
 	"\vthread_root\x18\x02 \x01(\x04R\n" +
 	"threadRoot\x12\x10\n" +
-	"\x03seq\x18\x03 \x01(\x04R\x03seq\"[\n" +
-	"\x14UnpinMessageResponse\x12\x1f\n" +
-	"\vpin_version\x18\x01 \x01(\x04R\n" +
-	"pinVersion\x12\"\n" +
+	"\x03seq\x18\x03 \x01(\x04R\x03seq\"S\n" +
+	"\x14UnpinMessageResponse\x12\x17\n" +
+	"\apin_ver\x18\x01 \x01(\x04R\x06pinVer\x12\"\n" +
 	"\x04pins\x18\x02 \x03(\v2\x0e.chatim.v1.PinR\x04pins\"\x1c\n" +
 	"\x1aGetReactionSettingsRequest\"5\n" +
 	"\x1bGetReactionSettingsResponse\x12\x16\n" +

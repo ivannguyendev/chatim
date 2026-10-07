@@ -127,7 +127,7 @@ func pinTwice(ctx context.Context, cl *route.Client, room, user string, seq uint
 	for i := range 2 {
 		resp, stats, err := cl.PinMessage(ctx, &chatimv1.PinMessageRequest{RoomId: room, Seq: seq})
 		if err == nil {
-			err = e2e.CheckPinReply(want, user, resp.GetPinVersion(), resp.GetPins())
+			err = e2e.CheckPinReply(want, user, resp.GetPinVer(), resp.GetPins())
 		}
 		if err != nil {
 			return e2e.Pin{}, fmt.Errorf("pin %d of seq %d: %w", i+1, seq, err)

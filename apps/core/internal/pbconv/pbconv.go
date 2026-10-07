@@ -87,7 +87,7 @@ func Message(m domain.Message) *chatimv1.Message {
 		Text:       m.Text,
 		Cid:        m.CID,
 		CreatedAt:  timestamppb.New(m.CreatedAt),
-		Version:    m.Version,
+		Ver:        m.Version,
 		Deleted:    m.Deleted,
 		EditedAt:   optionalTime(m.EditedAt),
 		Hidden:     m.Hidden,

@@ -61,7 +61,7 @@ func TestCheckPageWantsExactlyTheAckedMessagesInSeqOrder(t *testing.T) {
 		"sender":  func(m *chatimv1.Message) { m.Sender = "bob" },
 		"room":    func(m *chatimv1.Message) { m.RoomId = "7" },
 		"thread":  func(m *chatimv1.Message) { m.ThreadRoot = 1 },
-		"version": func(m *chatimv1.Message) { m.Version = 1 },
+		"version": func(m *chatimv1.Message) { m.Ver = 1 },
 		"hidden":  func(m *chatimv1.Message) { m.Hidden = true },
 	}
 	for field, spoil := range cases {
