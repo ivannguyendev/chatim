@@ -44,7 +44,7 @@ var valid = work.StreamConfig{
 	MaxAge: 2 * time.Hour, Duplicates: 2 * time.Minute, AckWait: 35 * time.Second,
 }
 
-func TestEnsureStreamCreatesAWorkQueueAndAConsumerPerPartition(t *testing.T) {
+func TestEnsureStreamCreatesAWorkQueueWithSchedulesAndAConsumerPerPartition(t *testing.T) {
 	spy := &spyAdmin{}
 	if err := work.EnsureStream(t.Context(), spy, valid); err != nil {
 		t.Fatalf("EnsureStream: %v", err)
@@ -52,6 +52,7 @@ func TestEnsureStreamCreatesAWorkQueueAndAConsumerPerPartition(t *testing.T) {
 	wantStream := jetstream.StreamConfig{
 		Name: "CHATIM_WORK", Subjects: []string{"work.>"}, Retention: jetstream.WorkQueuePolicy,
 		Storage: jetstream.FileStorage, Replicas: 1, MaxAge: 2 * time.Hour, Duplicates: 2 * time.Minute,
+		AllowMsgSchedules: true,
 	}
 	if !reflect.DeepEqual(spy.streams, []jetstream.StreamConfig{wantStream}) {
 		t.Fatalf("streams = %+v, want %+v", spy.streams, wantStream)

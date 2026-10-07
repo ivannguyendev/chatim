@@ -19,7 +19,7 @@ import (
 
 const itNATSURLEnv = "CHATIM_IT_NATS_URL"
 
-func realWork(t *testing.T) (jetstream.JetStream, work.StreamConfig) {
+func itJetStream(t *testing.T) jetstream.JetStream {
 	t.Helper()
 	url := os.Getenv(itNATSURLEnv)
 	if url == "" {
@@ -34,17 +34,17 @@ func realWork(t *testing.T) (jetstream.JetStream, work.StreamConfig) {
 	if err != nil {
 		t.Fatalf("jetstream.New: %v", err)
 	}
+	return js
+}
+
+func itWorkConfig(t *testing.T, js jetstream.JetStream) work.StreamConfig {
+	t.Helper()
 	var b [6]byte
 	_, _ = rand.Read(b[:])
 	suffix := hex.EncodeToString(b[:])
 	cfg := work.StreamConfig{
 		Name: "IT_WORK_" + strings.ToUpper(suffix), SubjectRoot: "itwork" + suffix, Partitions: 4, Replicas: 1,
 		MaxAge: time.Hour, Duplicates: time.Minute, AckWait: 30 * time.Second,
-	}
-	for range 2 {
-		if err := work.EnsureStream(t.Context(), js, cfg); err != nil {
-			t.Fatalf("EnsureStream: %v", err)
-		}
 	}
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -53,6 +53,18 @@ func realWork(t *testing.T) (jetstream.JetStream, work.StreamConfig) {
 			t.Errorf("delete stream %s: %v", cfg.Name, err)
 		}
 	})
+	return cfg
+}
+
+func realWork(t *testing.T) (jetstream.JetStream, work.StreamConfig) {
+	t.Helper()
+	js := itJetStream(t)
+	cfg := itWorkConfig(t, js)
+	for range 2 {
+		if err := work.EnsureStream(t.Context(), js, cfg); err != nil {
+			t.Fatalf("EnsureStream: %v", err)
+		}
+	}
 	return js, cfg
 }
 

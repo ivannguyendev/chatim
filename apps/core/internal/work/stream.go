@@ -85,13 +85,14 @@ func EnsureStream(ctx context.Context, js Admin, c StreamConfig) error {
 
 func (c StreamConfig) stream() jetstream.StreamConfig {
 	return jetstream.StreamConfig{
-		Name:       c.Name,
-		Subjects:   []string{c.SubjectRoot + ".>"},
-		Retention:  jetstream.WorkQueuePolicy,
-		Storage:    jetstream.FileStorage,
-		Replicas:   c.Replicas,
-		MaxAge:     c.MaxAge,
-		Duplicates: c.Duplicates,
+		Name:              c.Name,
+		Subjects:          []string{c.SubjectRoot + ".>"},
+		Retention:         jetstream.WorkQueuePolicy,
+		Storage:           jetstream.FileStorage,
+		Replicas:          c.Replicas,
+		MaxAge:            c.MaxAge,
+		Duplicates:        c.Duplicates,
+		AllowMsgSchedules: true,
 	}
 }
 
