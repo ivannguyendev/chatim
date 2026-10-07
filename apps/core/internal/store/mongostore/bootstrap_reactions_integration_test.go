@@ -11,13 +11,10 @@ func TestBootstrapCreatesReactionAndPinCollections(t *testing.T) {
 	}
 	assertClusteredLayout(t, db, reactionsCollection)
 	assertClusteredLayout(t, db, pinActionsCollection)
-	if got := indexKeys(t, db.Collection(reactionsCollection)); !hasIndex(got, "k:1,e:1", false) || !hasIndex(got, "r:1,ts:1", false) {
-		t.Fatalf("reactions indexes = %v, want non-unique k:1,e:1 and r:1,ts:1", got)
+	if got := indexKeys(t, db.Collection(reactionsCollection)); !hasIndex(got, "message_key:1,emoji:1", false) || !hasIndex(got, "room_id:1,updated_at:1", false) {
+		t.Fatalf("reactions indexes = %v, want non-unique message_key:1,emoji:1 and room_id:1,updated_at:1", got)
 	}
-	if got := indexKeys(t, db.Collection(pinActionsCollection)); !hasIndex(got, "r:1,ts:1", false) {
-		t.Fatalf("pin_actions indexes = %v, want non-unique r:1,ts:1", got)
-	}
-	if got := indexKeys(t, db.Collection(editsCollection)); !hasIndex(got, "r:1,ts:1", false) {
-		t.Fatalf("message_edits indexes = %v, want non-unique r:1,ts:1 after the rename", got)
+	if got := indexKeys(t, db.Collection(pinActionsCollection)); !hasIndex(got, "room_id:1,created_at:1", false) {
+		t.Fatalf("pin_actions indexes = %v, want non-unique room_id:1,created_at:1", got)
 	}
 }

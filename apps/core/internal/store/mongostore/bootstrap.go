@@ -2,7 +2,6 @@ package mongostore
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -49,30 +48,13 @@ func ensureFeedAnchor(ctx context.Context, db *mongo.Database) error {
 		SetReadConcern(readconcern.Majority()).
 		SetWriteConcern(writeconcern.Majority())
 	state := db.Collection(reconcilerStateCollection, majority)
-	start, err := feedStart(ctx, state)
-	if err != nil {
-		return err
-	}
-	keepOrStart := bson.D{{Key: "$ifNull", Value: bson.A{"$at", start}}}
-	update := mongo.Pipeline{{{Key: "$set", Value: bson.D{{Key: "at", Value: keepOrStart}}}}}
+	keepOrNow := bson.D{{Key: "$ifNull", Value: bson.A{"$cluster_time", "$$CLUSTER_TIME"}}}
+	update := mongo.Pipeline{{{Key: "$set", Value: bson.D{{Key: "cluster_time", Value: keepOrNow}}}}}
 	filter := bson.D{{Key: "_id", Value: changesFeedID}}
 	if _, err := state.UpdateOne(ctx, filter, update, options.UpdateOne().SetUpsert(true)); err != nil && !mongo.IsDuplicateKeyError(err) {
 		return fmt.Errorf("bootstrap %s: anchor change feed: %w", reconcilerStateCollection, err)
 	}
 	return nil
-}
-
-func feedStart(ctx context.Context, state *mongo.Collection) (any, error) {
-	var old feedPosition
-	err := state.FindOne(ctx, bson.D{{Key: "_id", Value: legacyMessagesFeedID}}).Decode(&old)
-	switch {
-	case errors.Is(err, mongo.ErrNoDocuments) || (err == nil && old.At.IsZero()):
-		return "$$CLUSTER_TIME", nil
-	case err != nil:
-		return nil, fmt.Errorf("bootstrap %s: read the messages feed position: %w", reconcilerStateCollection, err)
-	default:
-		return old.At, nil
-	}
 }
 
 func ensureClustered(ctx context.Context, db *mongo.Database, name string) error {
@@ -106,26 +88,32 @@ func createCollection(ctx context.Context, db *mongo.Database, name string, opts
 
 func memberIndexes() []mongo.IndexModel {
 	return []mongo.IndexModel{
-		{Keys: bson.D{{Key: "r", Value: 1}, {Key: "u", Value: 1}}, Options: options.Index().SetUnique(true)},
-		{Keys: bson.D{{Key: "t", Value: 1}, {Key: "u", Value: 1}, {Key: "r", Value: 1}}},
+		{Keys: bson.D{{Key: "room_id", Value: 1}, {Key: "user_id", Value: 1}}, Options: options.Index().SetUnique(true)},
+		{Keys: bson.D{{Key: "tenant", Value: 1}, {Key: "user_id", Value: 1}, {Key: "room_id", Value: 1}}},
 	}
 }
 
 func roomIndexes() []mongo.IndexModel {
-	return []mongo.IndexModel{{Keys: bson.D{{Key: "ab", Value: 1}}}, {Keys: bson.D{{Key: "ca", Value: 1}}}}
+	return []mongo.IndexModel{{Keys: bson.D{{Key: "activity_bucket", Value: 1}}}, {Keys: bson.D{{Key: "created_at", Value: 1}}}}
 }
 
 func roomTimeIndexes() []mongo.IndexModel {
-	return []mongo.IndexModel{{Keys: bson.D{{Key: "r", Value: 1}, {Key: "ts", Value: 1}}}}
+	return []mongo.IndexModel{{Keys: bson.D{{Key: "room_id", Value: 1}, {Key: "created_at", Value: 1}}}}
 }
 
 func reactionIndexes() []mongo.IndexModel {
-	return append([]mongo.IndexModel{{Keys: bson.D{{Key: "k", Value: 1}, {Key: "e", Value: 1}}}}, roomTimeIndexes()...)
+	return []mongo.IndexModel{
+		{Keys: bson.D{{Key: "message_key", Value: 1}, {Key: "emoji", Value: 1}}},
+		{Keys: bson.D{{Key: "room_id", Value: 1}, {Key: "updated_at", Value: 1}}},
+	}
 }
 
 func hiddenIndexes() []mongo.IndexModel {
-	keys := bson.D{{Key: "u", Value: 1}, {Key: "r", Value: 1}, {Key: "th", Value: 1}, {Key: "s", Value: 1}}
-	return []mongo.IndexModel{{Keys: keys, Options: options.Index().SetUnique(true)}}
+	keys := bson.D{{Key: "user_id", Value: 1}, {Key: "room_id", Value: 1}, {Key: "thread_root", Value: 1}, {Key: "seq", Value: 1}}
+	return []mongo.IndexModel{
+		{Keys: keys, Options: options.Index().SetUnique(true)},
+		{Keys: bson.D{{Key: "room_id", Value: 1}, {Key: "created_at", Value: 1}}},
+	}
 }
 
 func ensureIndexes(ctx context.Context, db *mongo.Database, coll string, models []mongo.IndexModel) error {

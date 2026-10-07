@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/tools/internal/route"
@@ -55,7 +56,7 @@ var changeCalls = map[string]changeCall{
 		return reply(c.HideMessage(ctx, &chatimv1.HideMessageRequest{RoomId: room, Seq: 3}))
 	},
 	"clear": func(ctx context.Context, c *route.Client, room string) (proto.Message, route.Stats, error) {
-		return reply(c.ClearHistory(ctx, &chatimv1.ClearHistoryRequest{RoomId: room, UpToSeq: 9}))
+		return reply(c.ClearHistory(ctx, &chatimv1.ClearHistoryRequest{RoomId: room}))
 	},
 	"edits": func(ctx context.Context, c *route.Client, room string) (proto.Message, route.Stats, error) {
 		return reply(c.GetEditHistory(ctx, &chatimv1.GetEditHistoryRequest{RoomId: room, Seq: 3, AfterVer: 4, Limit: 10}))
@@ -75,7 +76,7 @@ var changeReplies = map[string]proto.Message{
 	"edit":   &chatimv1.EditMessageResponse{Message: &chatimv1.Message{RoomId: "42", Seq: 3, Ver: 2, Text: "new"}},
 	"delete": &chatimv1.DeleteMessageResponse{Message: &chatimv1.Message{RoomId: "42", Seq: 3, Ver: 3, Deleted: true}},
 	"hide":   &chatimv1.HideMessageResponse{},
-	"clear":  &chatimv1.ClearHistoryResponse{ClearedBeforeSeq: 9},
+	"clear":  &chatimv1.ClearHistoryResponse{ClearedAt: timestamppb.New(time.UnixMilli(2))},
 	"edits":  &chatimv1.GetEditHistoryResponse{Versions: []*chatimv1.MessageVersion{{Ver: 5}}},
 	"react":  &chatimv1.ReactMessageResponse{Change: 1, Reactions: &chatimv1.ReactionSummary{Counts: []*chatimv1.ReactionCount{{Emoji: "👍", Count: 1}}, Ver: 1}},
 	"pin":    &chatimv1.PinMessageResponse{PinVer: 1, Pins: []*chatimv1.Pin{{Seq: 3, PinVer: 1}}},

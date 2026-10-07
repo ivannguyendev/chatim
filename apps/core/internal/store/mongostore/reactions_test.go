@@ -16,10 +16,10 @@ func TestSetPipelineKeepsEveryChangedFieldWhenTheEmojiIsAlreadySet(t *testing.T)
 		t.Fatalf("Marshal: %v", err)
 	}
 	raw := bson.Raw(data)
-	for _, field := range []string{"pe", "e", "n", "ts"} {
+	for _, field := range []string{"previous_emoji", "emoji", "ver", "updated_at"} {
 		cond := raw.Lookup("$set", field)
-		if got, ok := raw.Lookup("$set", field, "$cond", "0", "$eq", "0").StringValueOK(); !ok || got != "$e" {
-			t.Fatalf("$set.%s if = %s, want {$eq: [$e, emoji]}", field, cond)
+		if got, ok := raw.Lookup("$set", field, "$cond", "0", "$eq", "0").StringValueOK(); !ok || got != "$emoji" {
+			t.Fatalf("$set.%s if = %s, want {$eq: [$emoji, emoji]}", field, cond)
 		}
 		if got, ok := raw.Lookup("$set", field, "$cond", "0", "$eq", "1", "$literal").StringValueOK(); !ok || got != "$e" {
 			t.Fatalf("$set.%s if = %s, want the emoji as a literal", field, cond)
@@ -28,8 +28,8 @@ func TestSetPipelineKeepsEveryChangedFieldWhenTheEmojiIsAlreadySet(t *testing.T)
 			t.Fatalf("$set.%s then = %s, want $%s", field, cond, field)
 		}
 	}
-	if got, ok := raw.Lookup("$set", "e", "$cond", "2", "$literal").StringValueOK(); !ok || got != "$e" {
-		t.Fatalf("$set.e else = %s, want {$literal: $e}", raw.Lookup("$set", "e"))
+	if got, ok := raw.Lookup("$set", "emoji", "$cond", "2", "$literal").StringValueOK(); !ok || got != "$e" {
+		t.Fatalf("$set.emoji else = %s, want {$literal: $e}", raw.Lookup("$set", "emoji"))
 	}
 }
 

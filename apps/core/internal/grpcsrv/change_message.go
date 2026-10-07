@@ -3,6 +3,8 @@ package grpcsrv
 import (
 	"context"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	"github.com/ivannguyendev/chatim/apps/core/internal/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/pbconv"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
@@ -54,11 +56,11 @@ func (s *Service) ClearHistory(ctx context.Context, req *chatimv1.ClearHistoryRe
 	if err != nil {
 		return nil, err
 	}
-	n, err := s.mutator.ClearHistory(ctx, mutate.ClearCmd{Tenant: who.tenant, User: who.user, Room: room, UpToSeq: req.GetUpToSeq()})
+	at, err := s.mutator.ClearHistory(ctx, mutate.ClearCmd{Tenant: who.tenant, User: who.user, Room: room})
 	if err != nil {
 		return nil, err
 	}
-	return &chatimv1.ClearHistoryResponse{ClearedBeforeSeq: n}, nil
+	return &chatimv1.ClearHistoryResponse{ClearedAt: timestamppb.New(at)}, nil
 }
 
 func callerAndRoom(ctx context.Context, roomID string) (caller, uint64, error) {

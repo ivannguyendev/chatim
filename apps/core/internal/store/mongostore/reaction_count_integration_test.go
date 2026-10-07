@@ -52,8 +52,8 @@ func TestReactionCountIsCoveredByTheEmojiIndex(t *testing.T) {
 			indexes = append(indexes, name)
 		}
 	})
-	if !slices.Contains(indexes, "k_1_e_1") || slices.Contains(stages, "FETCH") || slices.Contains(stages, "COLLSCAN") {
-		t.Fatalf("winning plan stages %v on indexes %v, want a covered scan of k_1_e_1 without FETCH", stages, indexes)
+	if !slices.Contains(indexes, "message_key_1_emoji_1") || slices.Contains(stages, "FETCH") || slices.Contains(stages, "COLLSCAN") {
+		t.Fatalf("winning plan stages %v on indexes %v, want a covered scan of message_key_1_emoji_1 without FETCH", stages, indexes)
 	}
 	got, err := s.Reactions().Count(t.Context(), key, []store.Witness{{User: "alice", N: 1}})
 	if err != nil || !slices.Equal(got, []domain.ReactionCount{{Emoji: "👍", Count: 2}, {Emoji: "❤️", Count: 1}}) {

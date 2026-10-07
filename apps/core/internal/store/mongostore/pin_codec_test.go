@@ -26,7 +26,7 @@ func TestPinActionCodecRoundTrip(t *testing.T) {
 		t.Fatalf("_id = %x, op = %d; want keys.Pin and 2", doc.ID, doc.Op)
 	}
 	back, raw := roundTrip(t, doc)
-	if got, want := fieldNames(t, raw), []string{"_id", "r", "t", "op", "th", "s", "by", "ts"}; !slices.Equal(got, want) {
+	if got, want := fieldNames(t, raw), []string{"_id", "room_id", "tenant", "action", "thread_root", "seq", "created_by", "created_at"}; !slices.Equal(got, want) {
 		t.Fatalf("fields = %v, want %v", got, want)
 	}
 	got, err := decodePinAction(back)
@@ -81,8 +81,11 @@ func TestPinStateCodecRoundTrip(t *testing.T) {
 		t.Fatalf("encodePinState = %d, %v; want pv 5", pv, err)
 	}
 	back, raw := roundTrip(t, pinStateDoc{Pins: pins, PV: pv})
-	if got, want := fieldNames(t, raw), []string{"pins", "pv"}; !slices.Equal(got, want) {
+	if got, want := fieldNames(t, raw), []string{"pins", "pin_ver"}; !slices.Equal(got, want) {
 		t.Fatalf("fields = %v, want %v", got, want)
+	}
+	if got, want := fieldNames(t, raw.Lookup("pins", "1").Document()), []string{"thread_root", "seq", "pinned_by", "pinned_at", "pin_ver"}; !slices.Equal(got, want) {
+		t.Fatalf("pin fields = %v, want %v", got, want)
 	}
 	got, err := decodePinState(back)
 	if err != nil || got.Version != 5 || len(got.Pins) != 2 || got.Pins[0].Seq != 9 || got.Pins[1].Thread != 2 || !got.Pins[1].At.Equal(codecTime) {

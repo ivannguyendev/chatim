@@ -32,7 +32,7 @@ func TestDecodeChangeReadsReactionUpdatesFromTheKey(t *testing.T) {
 	id := keys.Reaction(7_340_000_001, 3, 42, "bob")
 	want := domain.Reaction{Room: 7_340_000_001, Thread: 3, Seq: 42, User: "bob", N: 2}
 	for name, n := range map[string]any{"int32": int32(2), "int64": int64(2), "double": float64(2)} {
-		got, err := decodeChange(reactionUpdate(t, id, bson.D{{Key: "pe", Value: "👍"}, {Key: "e", Value: ""}, {Key: "n", Value: n}}))
+		got, err := decodeChange(reactionUpdate(t, id, bson.D{{Key: "previous_emoji", Value: "👍"}, {Key: "emoji", Value: ""}, {Key: "ver", Value: n}}))
 		if err != nil || got.Kind != store.ReactionChanged || got.Reaction != want || !got.CommittedAt.Equal(codecTime) || got.Msg.Seq != 0 {
 			t.Fatalf("%s: update change = %+v, %v; want %+v", name, got, err, want)
 		}
@@ -77,15 +77,16 @@ func TestDecodeChangeReadsPinFacts(t *testing.T) {
 func TestDecodeChangeRejectsBrokenReactionAndPinChanges(t *testing.T) {
 	id := keys.Reaction(7_340_000_001, 0, 42, "bob")
 	cases := map[string]changeDoc{
-		"update without n":       reactionUpdate(t, id, bson.D{{Key: "e", Value: "x"}}),
-		"update with n 0":        reactionUpdate(t, id, bson.D{{Key: "n", Value: int32(0)}}),
-		"update with n too big":  reactionUpdate(t, id, bson.D{{Key: "n", Value: int64(math.MaxUint32) + 1}}),
-		"update with string n":   reactionUpdate(t, id, bson.D{{Key: "n", Value: "2"}}),
-		"update of a short key":  reactionUpdate(t, keys.Msg(1, 0, 1), bson.D{{Key: "n", Value: int32(2)}}),
-		"update of a bad user":   reactionUpdate(t, keys.Reaction(1, 0, 1, "a.b"), bson.D{{Key: "n", Value: int32(2)}}),
-		"update of a string key": reactionUpdate(t, "x", bson.D{{Key: "n", Value: int32(2)}}),
-		"insert of a bad key":    changeOn(t, reactionsCollection, bson.D{{Key: "_id", Value: []byte{1, 2}}}),
-		"insert of a bad pin":    changeOn(t, pinActionsCollection, bson.D{{Key: "_id", Value: []byte{1}}}),
+		"update without ver":      reactionUpdate(t, id, bson.D{{Key: "emoji", Value: "x"}}),
+		"update with the old n":   reactionUpdate(t, id, bson.D{{Key: "n", Value: int32(2)}}),
+		"update with ver 0":       reactionUpdate(t, id, bson.D{{Key: "ver", Value: int32(0)}}),
+		"update with ver too big": reactionUpdate(t, id, bson.D{{Key: "ver", Value: int64(math.MaxUint32) + 1}}),
+		"update with string ver":  reactionUpdate(t, id, bson.D{{Key: "ver", Value: "2"}}),
+		"update of a short key":   reactionUpdate(t, keys.Msg(1, 0, 1), bson.D{{Key: "ver", Value: int32(2)}}),
+		"update of a bad user":    reactionUpdate(t, keys.Reaction(1, 0, 1, "a.b"), bson.D{{Key: "ver", Value: int32(2)}}),
+		"update of a string key":  reactionUpdate(t, "x", bson.D{{Key: "ver", Value: int32(2)}}),
+		"insert of a bad key":     changeOn(t, reactionsCollection, bson.D{{Key: "_id", Value: []byte{1, 2}}}),
+		"insert of a bad pin":     changeOn(t, pinActionsCollection, bson.D{{Key: "_id", Value: []byte{1}}}),
 	}
 	for name, ev := range cases {
 		if _, err := decodeChange(ev); !errors.Is(err, errCorrupt) {

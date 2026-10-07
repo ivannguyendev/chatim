@@ -5,10 +5,12 @@ import (
 	"errors"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
@@ -29,6 +31,10 @@ func TestHideNeedsAnExistingMessage(t *testing.T) {
 	if seqs, err := rg.hidden.HiddenIn(t.Context(), "alice", room, 0, 1, 1); err != nil || len(seqs) != 0 {
 		t.Fatalf("alice hidden = %v, %v; want none", seqs, err)
 	}
+	marks, err := rg.hidden.Between(t.Context(), room, created, rg.at(), store.MaxHiddenScan)
+	if err != nil || len(marks) != 1 || !marks[0].At.Equal(rg.at()) {
+		t.Fatalf("hidden marks = %+v, %v; want one at the server time %v", marks, err, rg.at())
+	}
 	cases := []struct {
 		name string
 		err  error
@@ -48,47 +54,37 @@ func TestHideNeedsAnExistingMessage(t *testing.T) {
 	}
 }
 
-func TestClearHistoryOnlyRaisesTheMark(t *testing.T) {
+func TestClearHistoryMarksTheServerTimeAndOnlyRaisesIt(t *testing.T) {
 	rg := newRig(t, nil)
-	for seq := range uint64(3) {
-		rg.send(t, seq+1, "alice", "m")
+	rg.send(t, 1, "alice", "m")
+	clearAt := func(user string, now time.Time) (time.Time, error) {
+		rg.now = now
+		return rg.m.ClearHistory(t.Context(), mutate.ClearCmd{Tenant: tenant, User: user, Room: room})
 	}
-	clearTo := func(user string, upTo uint64) uint64 {
-		t.Helper()
-		n, err := rg.m.ClearHistory(t.Context(), mutate.ClearCmd{Tenant: tenant, User: user, Room: room, UpToSeq: upTo})
-		if err != nil {
-			t.Fatalf("ClearHistory(%s, %d): %v", user, upTo, err)
-		}
-		return n
+	first := rg.now
+	got, err := clearAt("bob", first)
+	if want := first.Truncate(time.Millisecond); err != nil || !got.Equal(want) {
+		t.Fatalf("ClearHistory = %v, %v; want the server time %v cut to ms", got, err, want)
 	}
-	cases := []struct {
-		user       string
-		upTo, want uint64
-	}{
-		{"bob", 0, 3},
-		{"bob", 1, 3},
-		{"alice", 2, 2},
-		{"carol", 99, 3},
+	if got, err := clearAt("bob", first.Add(-time.Hour)); err != nil || !got.Equal(first.Truncate(time.Millisecond)) {
+		t.Fatalf("ClearHistory with an earlier clock = %v, %v; want the mark kept at %v", got, err, first.Truncate(time.Millisecond))
 	}
-	for _, c := range cases {
-		if got := clearTo(c.user, c.upTo); got != c.want {
-			t.Fatalf("ClearHistory(%s, %d) = %d, want %d", c.user, c.upTo, got, c.want)
-		}
+	later := first.Add(time.Minute)
+	if got, err := clearAt("bob", later); err != nil || !got.Equal(later.Truncate(time.Millisecond)) {
+		t.Fatalf("ClearHistory later = %v, %v; want %v", got, err, later.Truncate(time.Millisecond))
 	}
 	m, err := rg.rooms.Member(t.Context(), room, "bob")
-	if err != nil || m.ClearedBeforeSeq != 3 {
-		t.Fatalf("bob member = %+v, %v; want cleared before 3", m, err)
+	if err != nil || !m.ClearedAt.Equal(later.Truncate(time.Millisecond)) {
+		t.Fatalf("bob member = %+v, %v; want cleared at %v", m, err, later.Truncate(time.Millisecond))
+	}
+	if alice, err := rg.rooms.Member(t.Context(), room, "alice"); err != nil || !alice.ClearedAt.IsZero() {
+		t.Fatalf("alice member = %+v, %v; want no mark", alice, err)
+	}
+	if _, err := clearAt("mallory", later); !errors.Is(err, apperr.ErrPermissionDenied) {
+		t.Fatalf("ClearHistory of a non member = %v, want PermissionDenied", err)
 	}
 	if _, events := rg.events.list(); len(events) != 0 {
 		t.Fatalf("clear enqueued %v, want no event", events)
-	}
-}
-
-func TestClearHistoryOfAnEmptyRoomKeepsZero(t *testing.T) {
-	rg := newRig(t, nil)
-	n, err := rg.m.ClearHistory(t.Context(), mutate.ClearCmd{Tenant: tenant, User: "bob", Room: room})
-	if err != nil || n != 0 {
-		t.Fatalf("ClearHistory = %d, %v; want 0", n, err)
 	}
 }
 

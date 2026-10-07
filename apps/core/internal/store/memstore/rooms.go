@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -82,18 +83,23 @@ func (s *Rooms) Member(ctx context.Context, room uint64, user string) (domain.Me
 	return m, nil
 }
 
-func (s *Rooms) ClearHistory(ctx context.Context, room uint64, user string, seq uint64) (uint64, error) {
+func (s *Rooms) ClearHistory(ctx context.Context, room uint64, user string, at time.Time) (time.Time, error) {
 	if err := ctx.Err(); err != nil {
-		return 0, err
+		return time.Time{}, err
+	}
+	if err := store.ValidateMarkTime(at); err != nil {
+		return time.Time{}, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	k := memberKey{room, user}
 	m, ok := s.members[k]
 	if !ok {
-		return 0, domain.ErrNotMember
+		return time.Time{}, domain.ErrNotMember
 	}
-	m.ClearedBeforeSeq = max(m.ClearedBeforeSeq, seq)
+	if at = time.UnixMilli(at.UnixMilli()).UTC(); at.After(m.ClearedAt) {
+		m.ClearedAt = at
+	}
 	s.members[k] = m
-	return m.ClearedBeforeSeq, nil
+	return m.ClearedAt, nil
 }

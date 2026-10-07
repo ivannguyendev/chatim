@@ -2,8 +2,10 @@ package route_test
 
 import (
 	"context"
+	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
@@ -35,7 +37,7 @@ func (f *fakeCore) ClearHistory(ctx context.Context, in *chatimv1.ClearHistoryRe
 	if err := f.next(ctx); err != nil {
 		return nil, err
 	}
-	return &chatimv1.ClearHistoryResponse{ClearedBeforeSeq: in.GetUpToSeq()}, nil
+	return &chatimv1.ClearHistoryResponse{ClearedAt: timestamppb.New(time.UnixMilli(int64(len(in.GetRoomId()))))}, nil
 }
 
 func (f *fakeCore) GetEditHistory(ctx context.Context, in *chatimv1.GetEditHistoryRequest, _ ...grpc.CallOption) (*chatimv1.GetEditHistoryResponse, error) {

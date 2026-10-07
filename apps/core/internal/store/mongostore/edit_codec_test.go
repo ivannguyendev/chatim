@@ -31,7 +31,7 @@ func TestEditCodecRoundTrip(t *testing.T) {
 		t.Fatalf("_id = %x, r = %d; want keys.Edit and the room", doc.ID, doc.Room)
 	}
 	back, raw := roundTrip(t, doc)
-	if got, want := fieldNames(t, raw), []string{"_id", "r", "t", "k", "by", "x", "p", "ts"}; !slices.Equal(got, want) {
+	if got, want := fieldNames(t, raw), []string{"_id", "room_id", "tenant", "kind", "created_by", "text", "p", "created_at"}; !slices.Equal(got, want) {
 		t.Fatalf("fields = %v, want %v", got, want)
 	}
 	got, err := decodeEdit(back)
@@ -52,7 +52,7 @@ func TestDeleteFactStoresNoText(t *testing.T) {
 		t.Fatalf("encodeEdit: %v", err)
 	}
 	_, raw := roundTrip(t, doc)
-	if got, want := fieldNames(t, raw), []string{"_id", "r", "t", "k", "by", "ts"}; !slices.Equal(got, want) {
+	if got, want := fieldNames(t, raw), []string{"_id", "room_id", "tenant", "kind", "created_by", "created_at"}; !slices.Equal(got, want) {
 		t.Fatalf("fields = %v, want %v", got, want)
 	}
 }
@@ -125,15 +125,15 @@ func TestMessageCodecRejectsOutOfRangeVersions(t *testing.T) {
 	}
 }
 
-func TestMemberCodecReadsClearedBefore(t *testing.T) {
+func TestMemberCodecReadsClearedAt(t *testing.T) {
 	doc := encodeMember(domain.Member{Room: 7_340_000_001, Tenant: "acme", User: "bob", Role: domain.RoleMember, JoinedAt: codecTime}, 7_340_000_001)
-	doc.ClearedBefore = 42
-	got, err := decodeMember(doc)
-	if err != nil || got.ClearedBeforeSeq != 42 {
-		t.Fatalf("decodeMember = %+v, %v; want cleared before 42", got, err)
+	doc.ClearedAt = codecTime.Add(time.Minute)
+	back, raw := roundTrip(t, doc)
+	if got := fieldNames(t, raw); !slices.Contains(got, "cleared_at") {
+		t.Fatalf("fields = %v, want cleared_at", got)
 	}
-	doc.ClearedBefore = -1
-	if _, err := decodeMember(doc); !errors.Is(err, errCorrupt) {
-		t.Fatalf("decodeMember(negative cb) = %v, want errCorrupt", err)
+	got, err := decodeMember(back)
+	if err != nil || !got.ClearedAt.Equal(doc.ClearedAt) {
+		t.Fatalf("decodeMember = %+v, %v; want cleared at %v", got, err, doc.ClearedAt)
 	}
 }

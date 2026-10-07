@@ -3,6 +3,7 @@ package view_test
 import (
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/view"
@@ -12,7 +13,7 @@ var thumbs = []domain.ReactionCount{{Emoji: "👍", Count: 2}}
 
 func reacted(seq uint64, deleted bool) domain.Message {
 	return domain.Message{
-		Room: 7, Seq: seq, From: "alice", Text: "t", Deleted: deleted,
+		Room: 7, Seq: seq, From: "alice", Text: "t", Deleted: deleted, CreatedAt: editedAt.Add(time.Duration(seq) * time.Second),
 		Reactions: domain.ReactionSummary{Counts: slices.Clone(thumbs), Version: 3},
 	}
 }
@@ -31,7 +32,7 @@ func TestPlaceholdersCarryNoReactionCounts(t *testing.T) {
 	if !counted(masked[0]) || !uncounted(masked[1]) || !counted(masked[2]) {
 		t.Fatalf("MaskDeleted reactions = %+v, want only the deleted seq 2 without counts", masked)
 	}
-	hidden := view.HideForViewer(view.Viewer{ClearedBeforeSeq: 1, HiddenSeqs: map[uint64]bool{3: true}}, page)
+	hidden := view.HideForViewer(view.Viewer{ClearedAt: editedAt.Add(time.Second), HiddenSeqs: map[uint64]bool{3: true}}, page)
 	if !uncounted(hidden[0]) || !counted(hidden[1]) || !uncounted(hidden[2]) {
 		t.Fatalf("HideForViewer reactions = %+v, want seq 1 and 3 without counts", hidden)
 	}

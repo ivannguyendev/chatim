@@ -89,15 +89,18 @@ func seqAnchor(a store.Anchor, seq uint64) (store.Anchor, uint64, error) {
 }
 
 func (s *Service) viewerOf(ctx context.Context, user string, grant access.Request, q store.PageQuery, page []domain.Message) (view.Viewer, error) {
-	v := view.Viewer{User: user, Room: grant.Room, ClearedBeforeSeq: grant.Member.ClearedBeforeSeq}
+	v := view.Viewer{User: user, Room: grant.Room, ClearedAt: grant.Member.ClearedAt}
 	if len(page) == 0 {
 		return v, nil
 	}
-	lo, hi := page[0].Seq, page[0].Seq
+	lo, hi, newest := page[0].Seq, page[0].Seq, page[0].CreatedAt
 	for _, m := range page[1:] {
 		lo, hi = min(lo, m.Seq), max(hi, m.Seq)
+		if m.CreatedAt.After(newest) {
+			newest = m.CreatedAt
+		}
 	}
-	if hi <= v.ClearedBeforeSeq {
+	if v.Cleared(newest) {
 		return v, nil
 	}
 	seqs, err := s.hidden.HiddenIn(ctx, user, q.Room, q.Thread, lo, hi)

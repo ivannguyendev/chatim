@@ -60,7 +60,7 @@ func (r *Reactions) Remove(ctx context.Context, key store.MsgKey, user string, a
 	if err := store.ValidateReactionTarget(key, user); err != nil {
 		return domain.Reaction{}, false, err
 	}
-	filter := bson.D{{Key: "_id", Value: reactionID(key, user)}, {Key: "e", Value: bson.D{{Key: "$ne", Value: ""}}}}
+	filter := bson.D{{Key: "_id", Value: reactionID(key, user)}, {Key: "emoji", Value: bson.D{{Key: "$ne", Value: ""}}}}
 	var d reactionDoc
 	err := r.coll.FindOneAndUpdate(ctx, filter, removeReaction(at), options.FindOneAndUpdate().SetReturnDocument(options.After)).Decode(&d)
 	switch {
@@ -92,35 +92,35 @@ func reactionID(key store.MsgKey, user string) []byte {
 }
 
 func setReaction(x domain.Reaction, room int64) mongo.Pipeline {
-	same := bson.D{{Key: "$eq", Value: bson.A{"$e", literal(x.Emoji)}}}
+	same := bson.D{{Key: "$eq", Value: bson.A{"$emoji", literal(x.Emoji)}}}
 	keep := func(field string, next any) bson.D {
 		return bson.D{{Key: "$cond", Value: bson.A{same, "$" + field, next}}}
 	}
 	set := bson.D{
-		{Key: "k", Value: keys.Msg(x.Room, x.Thread, x.Seq)},
-		{Key: "r", Value: room},
-		{Key: "t", Value: literal(x.Tenant)},
-		{Key: "u", Value: literal(x.User)},
-		{Key: "pe", Value: keep("pe", bson.D{{Key: "$ifNull", Value: bson.A{"$e", ""}}})},
-		{Key: "e", Value: keep("e", literal(x.Emoji))},
-		{Key: "n", Value: keep("n", nextChange())},
-		{Key: "ts", Value: keep("ts", x.At)},
+		{Key: "message_key", Value: keys.Msg(x.Room, x.Thread, x.Seq)},
+		{Key: "room_id", Value: room},
+		{Key: "tenant", Value: literal(x.Tenant)},
+		{Key: "user_id", Value: literal(x.User)},
+		{Key: "previous_emoji", Value: keep("previous_emoji", bson.D{{Key: "$ifNull", Value: bson.A{"$emoji", ""}}})},
+		{Key: "emoji", Value: keep("emoji", literal(x.Emoji))},
+		{Key: "ver", Value: keep("ver", nextChange())},
+		{Key: "updated_at", Value: keep("updated_at", x.At)},
 	}
 	return mongo.Pipeline{{{Key: "$set", Value: set}}}
 }
 
 func removeReaction(at time.Time) mongo.Pipeline {
 	set := bson.D{
-		{Key: "pe", Value: "$e"},
-		{Key: "e", Value: ""},
-		{Key: "n", Value: nextChange()},
-		{Key: "ts", Value: at},
+		{Key: "previous_emoji", Value: "$emoji"},
+		{Key: "emoji", Value: ""},
+		{Key: "ver", Value: nextChange()},
+		{Key: "updated_at", Value: at},
 	}
 	return mongo.Pipeline{{{Key: "$set", Value: set}}}
 }
 
 func nextChange() bson.D {
-	return bson.D{{Key: "$add", Value: bson.A{bson.D{{Key: "$ifNull", Value: bson.A{"$n", 0}}}, 1}}}
+	return bson.D{{Key: "$add", Value: bson.A{bson.D{{Key: "$ifNull", Value: bson.A{"$ver", 0}}}, 1}}}
 }
 
 func literal(v string) bson.D { return bson.D{{Key: "$literal", Value: v}} }

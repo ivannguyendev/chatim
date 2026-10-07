@@ -19,7 +19,6 @@ import (
 
 const (
 	changesFeedID           = "changes"
-	legacyMessagesFeedID    = "messages"
 	changeStreamHistoryLost = 286
 	feedMaxAwait            = time.Second
 )
@@ -32,8 +31,8 @@ type Feed struct {
 }
 
 type feedPosition struct {
-	Token bson.Raw       `bson:"token"`
-	At    bson.Timestamp `bson:"at"`
+	Token bson.Raw       `bson:"resume_token"`
+	At    bson.Timestamp `bson:"cluster_time"`
 }
 
 func NewFeed(db *mongo.Database) *Feed {
@@ -77,8 +76,7 @@ func feedPipeline() mongo.Pipeline {
 }
 
 func (f *Feed) Forget(ctx context.Context) error {
-	filter := bson.D{{Key: "_id", Value: bson.D{{Key: "$in", Value: bson.A{changesFeedID, legacyMessagesFeedID}}}}}
-	if _, err := f.state.DeleteMany(ctx, filter); err != nil {
+	if _, err := f.state.DeleteOne(ctx, bson.D{{Key: "_id", Value: changesFeedID}}); err != nil {
 		return fmt.Errorf("forget change feed position: %w", err)
 	}
 	return nil
@@ -117,8 +115,8 @@ func (c *feedCursor) Confirm(ctx context.Context, pos store.Position) error {
 	if err := bson.Unmarshal(pos, &p); err != nil || len(p.Token) == 0 {
 		return fmt.Errorf("%w: change feed position", apperr.ErrInvalidArgument)
 	}
-	filter := bson.D{{Key: "_id", Value: changesFeedID}, {Key: "at", Value: bson.D{{Key: "$lt", Value: p.At}}}}
-	update := bson.D{{Key: "$set", Value: bson.D{{Key: "token", Value: p.Token}, {Key: "at", Value: p.At}}}}
+	filter := bson.D{{Key: "_id", Value: changesFeedID}, {Key: "cluster_time", Value: bson.D{{Key: "$lt", Value: p.At}}}}
+	update := bson.D{{Key: "$set", Value: bson.D{{Key: "resume_token", Value: p.Token}, {Key: "cluster_time", Value: p.At}}}}
 	_, err := c.state.UpdateOne(ctx, filter, update, options.UpdateOne().SetUpsert(true))
 	if err != nil && !mongo.IsDuplicateKeyError(err) {
 		return fmt.Errorf("confirm change feed position: %w", err)

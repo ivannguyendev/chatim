@@ -11,14 +11,14 @@ import (
 
 type reactionDoc struct {
 	ID     []byte    `bson:"_id"`
-	Key    []byte    `bson:"k"`
-	Room   int64     `bson:"r"`
-	Tenant string    `bson:"t"`
-	User   string    `bson:"u"`
-	Prev   string    `bson:"pe"`
-	Emoji  string    `bson:"e"`
-	N      int64     `bson:"n"`
-	At     time.Time `bson:"ts"`
+	Key    []byte    `bson:"message_key"`
+	Room   int64     `bson:"room_id"`
+	Tenant string    `bson:"tenant"`
+	User   string    `bson:"user_id"`
+	Prev   string    `bson:"previous_emoji"`
+	Emoji  string    `bson:"emoji"`
+	N      int64     `bson:"ver"`
+	At     time.Time `bson:"updated_at"`
 }
 
 type reactionsDoc struct {

@@ -18,7 +18,7 @@ func TestNewMessagesAndMembersCarryNoEditOrClearState(t *testing.T) {
 	if m.Version != 0 || m.Deleted || !m.EditedAt.IsZero() || m.Hidden {
 		t.Fatalf("new message %+v carries edit state, want version 0 and no flags", m)
 	}
-	if (domain.Member{Room: 1, User: "alice"}).ClearedBeforeSeq != 0 {
+	if !(domain.Member{Room: 1, User: "alice"}).ClearedAt.IsZero() {
 		t.Fatal("a new member starts with cleared history")
 	}
 }

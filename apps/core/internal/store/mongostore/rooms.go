@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -44,7 +45,7 @@ func (s *Store) Get(ctx context.Context, id uint64) (domain.Room, error) {
 		return domain.Room{}, fmt.Errorf("get room %d: %w", id, domain.ErrRoomNotFound)
 	}
 	var d roomDoc
-	withoutPins := options.FindOne().SetProjection(bson.D{{Key: "pins", Value: 0}, {Key: "pv", Value: 0}})
+	withoutPins := options.FindOne().SetProjection(bson.D{{Key: "pins", Value: 0}, {Key: "pin_ver", Value: 0}})
 	if err := findOne(ctx, s.rooms, bson.D{{Key: "_id", Value: key}}, &d, domain.ErrRoomNotFound, withoutPins); err != nil {
 		return domain.Room{}, fmt.Errorf("get room %d: %w", id, err)
 	}
@@ -57,7 +58,7 @@ func (s *Store) Member(ctx context.Context, room uint64, user string) (domain.Me
 		return domain.Member{}, fmt.Errorf("member %q of room %d: %w", user, room, domain.ErrNotMember)
 	}
 	var d memberDoc
-	filter := bson.D{{Key: "r", Value: key}, {Key: "u", Value: user}}
+	filter := bson.D{{Key: "room_id", Value: key}, {Key: "user_id", Value: user}}
 	if err := findOne(ctx, s.members, filter, &d, domain.ErrNotMember); err != nil {
 		return domain.Member{}, fmt.Errorf("member %q of room %d: %w", user, room, err)
 	}
@@ -72,29 +73,24 @@ func findOne(ctx context.Context, coll *mongo.Collection, filter bson.D, out any
 	return err
 }
 
-func (s *Store) ClearHistory(ctx context.Context, room uint64, user string, seq uint64) (uint64, error) {
+func (s *Store) ClearHistory(ctx context.Context, room uint64, user string, at time.Time) (time.Time, error) {
+	if err := store.ValidateMarkTime(at); err != nil {
+		return time.Time{}, err
+	}
 	key, err := toInt64("room id", room)
 	if err != nil {
-		return 0, fmt.Errorf("clear history of %q in room %d: %w", user, room, domain.ErrNotMember)
+		return time.Time{}, fmt.Errorf("clear history of %q in room %d: %w", user, room, domain.ErrNotMember)
 	}
-	upTo, err := toInt64("seq", seq)
-	if err != nil {
-		return 0, err
-	}
-	filter := bson.D{{Key: "r", Value: key}, {Key: "u", Value: user}}
-	update := bson.D{{Key: "$max", Value: bson.D{{Key: "cb", Value: upTo}}}}
+	filter := bson.D{{Key: "room_id", Value: key}, {Key: "user_id", Value: user}}
+	update := bson.D{{Key: "$max", Value: bson.D{{Key: "cleared_at", Value: at}}}}
 	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
 	var d memberDoc
 	err = s.members.FindOneAndUpdate(ctx, filter, update, opts).Decode(&d)
 	switch {
 	case errors.Is(err, mongo.ErrNoDocuments):
-		return 0, fmt.Errorf("clear history of %q in room %d: %w", user, room, domain.ErrNotMember)
+		return time.Time{}, fmt.Errorf("clear history of %q in room %d: %w", user, room, domain.ErrNotMember)
 	case err != nil:
-		return 0, fmt.Errorf("clear history of %q in room %d: %w", user, room, err)
+		return time.Time{}, fmt.Errorf("clear history of %q in room %d: %w", user, room, err)
 	}
-	m, err := decodeMember(d)
-	if err != nil {
-		return 0, err
-	}
-	return m.ClearedBeforeSeq, nil
+	return d.ClearedAt, nil
 }

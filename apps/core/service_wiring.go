@@ -30,13 +30,13 @@ func wireService(st *mongostore.Store, router *actor.Router, pub *publish.Publis
 		return nil, fmt.Errorf("wire pin projector: %w", err)
 	}
 	mut, err := mutate.New(mutate.Deps{
-		Access: checker, Messages: st, Edits: st, Hidden: st, Rooms: st, Events: pub,
+		Access: checker, Messages: st, Edits: st, Hidden: st.Hidden(), Rooms: st, Events: pub,
 		Reactions: reactions, Counter: counts, Pins: pins, Projector: projector, Limits: limits,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("wire mutator: %w", err)
 	}
-	svc, err := grpcsrv.New(grpcsrv.Deps{Sender: router, Rooms: st, Pages: st, Events: pub, Mutator: mut, Edits: st, Hidden: st}, log)
+	svc, err := grpcsrv.New(grpcsrv.Deps{Sender: router, Rooms: st, Pages: st, Events: pub, Mutator: mut, Edits: st, Hidden: st.Hidden()}, log)
 	if err != nil {
 		return nil, fmt.Errorf("wire core service: %w", err)
 	}

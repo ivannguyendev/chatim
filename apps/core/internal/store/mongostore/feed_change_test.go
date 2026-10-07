@@ -44,7 +44,7 @@ func TestDecodeChangeReadsMessagesAndRooms(t *testing.T) {
 
 func TestDecodeChangeRejectsOtherCollectionsAndBrokenDocuments(t *testing.T) {
 	cases := map[string]changeDoc{
-		"members insert":   changeOn(t, membersCollection, bson.D{{Key: "u", Value: "bob"}}),
+		"members insert":   changeOn(t, membersCollection, bson.D{{Key: "user_id", Value: "bob"}}),
 		"bad message id":   changeOn(t, messagesCollection, bson.D{{Key: "_id", Value: []byte{1, 2}}}),
 		"negative room id": changeOn(t, roomsCollection, bson.D{{Key: "_id", Value: int64(-1)}}),
 		"bad edit id":      changeOn(t, editsCollection, bson.D{{Key: "_id", Value: []byte{1, 2}}}),

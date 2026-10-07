@@ -61,8 +61,8 @@ func (s *Store) Between(ctx context.Context, room uint64, from, to time.Time, li
 	if err != nil {
 		return nil, err
 	}
-	filter := bson.D{{Key: "r", Value: r}, {Key: "ts", Value: bson.D{{Key: "$gte", Value: from}, {Key: "$lte", Value: to}}}}
-	return s.findEdits(ctx, filter, bson.D{{Key: "ts", Value: 1}, {Key: "_id", Value: 1}}, limit)
+	filter := bson.D{{Key: "room_id", Value: r}, {Key: "created_at", Value: bson.D{{Key: "$gte", Value: from}, {Key: "$lte", Value: to}}}}
+	return s.findEdits(ctx, filter, bson.D{{Key: "created_at", Value: 1}, {Key: "_id", Value: 1}}, limit)
 }
 
 func (s *Store) PurgeText(ctx context.Context, key store.MsgKey, upTo uint32) error {
@@ -73,7 +73,7 @@ func (s *Store) PurgeText(ctx context.Context, key store.MsgKey, upTo uint32) er
 		{Key: "$gte", Value: keys.Edit(key.Room, key.Thread, key.Seq, 1)},
 		{Key: "$lte", Value: keys.Edit(key.Room, key.Thread, key.Seq, upTo)},
 	}}}
-	update := bson.D{{Key: "$unset", Value: bson.D{{Key: "x", Value: ""}, {Key: "p", Value: ""}}}}
+	update := bson.D{{Key: "$unset", Value: bson.D{{Key: "text", Value: ""}, {Key: "p", Value: ""}}}}
 	if _, err := s.edits.UpdateMany(ctx, filter, update); err != nil {
 		return fmt.Errorf("purge text of %d/%d/%d up to v%d: %w", key.Room, key.Thread, key.Seq, upTo, err)
 	}

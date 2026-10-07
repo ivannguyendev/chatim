@@ -13,11 +13,12 @@ func TestBootstrapCreatesEditAndHiddenCollections(t *testing.T) {
 		}
 	}
 	assertClusteredLayout(t, db, editsCollection)
-	if got := indexKeys(t, db.Collection(editsCollection)); !hasIndex(got, "r:1,ts:1", false) {
-		t.Fatalf("message_edits indexes = %v, want non-unique r:1,ts:1", got)
+	if got := indexKeys(t, db.Collection(editsCollection)); !hasIndex(got, "room_id:1,created_at:1", false) {
+		t.Fatalf("message_edits indexes = %v, want non-unique room_id:1,created_at:1", got)
 	}
-	if got := indexKeys(t, db.Collection(hiddenCollection)); !hasIndex(got, "u:1,r:1,th:1,s:1", true) {
-		t.Fatalf("hidden indexes = %v, want unique u:1,r:1,th:1,s:1", got)
+	got := indexKeys(t, db.Collection(hiddenCollection))
+	if !hasIndex(got, "user_id:1,room_id:1,thread_root:1,seq:1", true) || !hasIndex(got, "room_id:1,created_at:1", false) {
+		t.Fatalf("hidden indexes = %v, want unique user_id:1,room_id:1,thread_root:1,seq:1 and room_id:1,created_at:1", got)
 	}
 }
 

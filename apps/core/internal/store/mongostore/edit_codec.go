@@ -13,13 +13,13 @@ import (
 
 type editDoc struct {
 	ID     []byte          `bson:"_id"`
-	Room   int64           `bson:"r"`
-	Tenant string          `bson:"t"`
-	Kind   domain.EditKind `bson:"k"`
-	By     string          `bson:"by"`
-	Text   string          `bson:"x,omitempty"`
+	Room   int64           `bson:"room_id"`
+	Tenant string          `bson:"tenant"`
+	Kind   domain.EditKind `bson:"kind"`
+	By     string          `bson:"created_by"`
+	Text   string          `bson:"text,omitempty"`
 	Prev   string          `bson:"p,omitempty"`
-	At     time.Time       `bson:"ts"`
+	At     time.Time       `bson:"created_at"`
 }
 
 func encodeEdit(e domain.Edit) (editDoc, error) {

@@ -42,14 +42,14 @@ func TestReactionDocumentLayout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FindOne raw: %v", err)
 	}
-	if got, want := fieldNames(t, raw), []string{"_id", "k", "r", "t", "u", "pe", "e", "n", "ts"}; !slices.Equal(got, want) {
+	if got, want := fieldNames(t, raw), []string{"_id", "message_key", "room_id", "tenant", "user_id", "previous_emoji", "emoji", "ver", "updated_at"}; !slices.Equal(got, want) {
 		t.Fatalf("stored fields = %v, want %v", got, want)
 	}
-	if e := raw.Lookup("e").StringValue(); e != "$e" {
+	if e := raw.Lookup("emoji").StringValue(); e != "$e" {
 		t.Fatalf("stored emoji = %q, want $e", e)
 	}
-	if _, k, ok := raw.Lookup("k").BinaryOK(); !ok || !bytes.Equal(k, keys.Msg(itRoom, 0, 1)) {
-		t.Fatalf("stored k = %s, want keys.Msg", raw.Lookup("k"))
+	if _, k, ok := raw.Lookup("message_key").BinaryOK(); !ok || !bytes.Equal(k, keys.Msg(itRoom, 0, 1)) {
+		t.Fatalf("stored message_key = %s, want keys.Msg", raw.Lookup("message_key"))
 	}
 	var stored []bson.Raw
 	for i, e := range []string{"👍", "👍"} {
@@ -61,7 +61,7 @@ func TestReactionDocumentLayout(t *testing.T) {
 		if err != nil {
 			t.Fatalf("FindOne raw: %v", err)
 		}
-		if got, want := fieldNames(t, raw), []string{"_id", "k", "r", "t", "u", "pe", "e", "n", "ts"}; !slices.Equal(got, want) {
+		if got, want := fieldNames(t, raw), []string{"_id", "message_key", "room_id", "tenant", "user_id", "previous_emoji", "emoji", "ver", "updated_at"}; !slices.Equal(got, want) {
 			t.Fatalf("stored fields after Set(%s) = %v, want %v", e, got, want)
 		}
 		stored = append(stored, raw)

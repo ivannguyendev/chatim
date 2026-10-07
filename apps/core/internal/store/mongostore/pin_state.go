@@ -17,7 +17,7 @@ func (s *Store) PinState(ctx context.Context, room uint64) (domain.PinState, err
 		return domain.PinState{}, fmt.Errorf("pins of room %d: %w", room, domain.ErrRoomNotFound)
 	}
 	var d pinStateDoc
-	onlyPins := options.FindOne().SetProjection(bson.D{{Key: "pins", Value: 1}, {Key: "pv", Value: 1}})
+	onlyPins := options.FindOne().SetProjection(bson.D{{Key: "pins", Value: 1}, {Key: "pin_ver", Value: 1}})
 	if err := findOne(ctx, s.rooms, bson.D{{Key: "_id", Value: key}}, &d, domain.ErrRoomNotFound, onlyPins); err != nil {
 		return domain.PinState{}, fmt.Errorf("pins of room %d: %w", room, err)
 	}
@@ -40,8 +40,8 @@ func (s *Store) ApplyPins(ctx context.Context, room, base uint64, st domain.PinS
 	if err != nil {
 		return false, err
 	}
-	filter := bson.D{{Key: "_id", Value: key}, versionIs("pv", from)}
-	update := bson.D{{Key: "$set", Value: bson.D{{Key: "pins", Value: pins}, {Key: "pv", Value: pv}}}}
+	filter := bson.D{{Key: "_id", Value: key}, versionIs("pin_ver", from)}
+	update := bson.D{{Key: "$set", Value: bson.D{{Key: "pins", Value: pins}, {Key: "pin_ver", Value: pv}}}}
 	res, err := s.rooms.UpdateOne(ctx, filter, update)
 	if err != nil {
 		return false, fmt.Errorf("apply pins v%d to room %d: %w", st.Version, room, err)

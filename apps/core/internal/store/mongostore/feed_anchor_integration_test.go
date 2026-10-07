@@ -2,62 +2,70 @@ package mongostore
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
-func setMessagesPosition(t *testing.T, db *mongo.Database, at bson.Timestamp) {
+func feedStateFields(t *testing.T, db *mongo.Database) []string {
 	t.Helper()
-	filter := bson.D{{Key: "_id", Value: legacyMessagesFeedID}}
-	update := bson.D{{Key: "$set", Value: bson.D{{Key: "at", Value: at}}}}
-	if _, err := db.Collection(reconcilerStateCollection).UpdateOne(t.Context(), filter, update, options.UpdateOne().SetUpsert(true)); err != nil {
-		t.Fatalf("set the messages position: %v", err)
+	raw, err := db.Collection(reconcilerStateCollection).FindOne(t.Context(), bson.D{{Key: "_id", Value: changesFeedID}}).Raw()
+	if err != nil {
+		t.Fatalf("load feed state: %v", err)
 	}
+	return fieldNames(t, raw)
 }
 
-func TestBootstrapCarriesTheMessagesPositionOverWithoutLosingWrites(t *testing.T) {
+func TestFeedAnchorUsesFullFieldNames(t *testing.T) {
 	s, db := itStore(t, itClient(t))
-	old := feedState(t, db).At
-	if _, err := db.Collection(reconcilerStateCollection).DeleteOne(t.Context(), bson.D{{Key: "_id", Value: changesFeedID}}); err != nil {
-		t.Fatalf("drop the changes position: %v", err)
+	if got, want := feedStateFields(t, db), []string{"_id", "cluster_time"}; !slices.Equal(got, want) {
+		t.Fatalf("anchor fields = %v, want %v", got, want)
 	}
-	setMessagesPosition(t, db, old)
-	m := sampleMessage()
-	if res := s.Insert(t.Context(), []domain.Message{m}); res[0].Outcome != store.Inserted {
-		t.Fatalf("Insert = %+v, want inserted", res)
-	}
-	bootstrapTwice(t, db, feedPosition{At: old})
-	setMessagesPosition(t, db, bson.Timestamp{T: old.T + 60, I: 1})
-	bootstrapTwice(t, db, feedPosition{At: old})
 	cur, err := NewFeed(db).Open(t.Context())
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
 	t.Cleanup(func() { _ = cur.Close(context.Background()) })
+	if res := s.Insert(t.Context(), []domain.Message{sampleMessage()}); res[0].Outcome != store.Inserted {
+		t.Fatalf("Insert = %+v, want inserted", res)
+	}
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	c, err := cur.Next(ctx)
-	if err != nil || c.Kind != store.MessageInserted || c.Msg.CID != m.CID {
-		t.Fatalf("first change after the carry-over = %+v, %v; want the message written after the old position", c, err)
+	if err != nil {
+		t.Fatalf("Next: %v", err)
+	}
+	if err := cur.Confirm(t.Context(), c.Position); err != nil {
+		t.Fatalf("Confirm: %v", err)
+	}
+	got := feedStateFields(t, db)
+	slices.Sort(got)
+	if want := []string{"_id", "cluster_time", "resume_token"}; !slices.Equal(got, want) {
+		t.Fatalf("confirmed fields = %v, want %v", got, want)
 	}
 }
 
-func TestForgetClearsTheOldAndTheNewPosition(t *testing.T) {
+func TestForgetClearsThePosition(t *testing.T) {
 	_, db := itStore(t, itClient(t))
-	setMessagesPosition(t, db, bson.Timestamp{T: 1, I: 1})
+	state := db.Collection(reconcilerStateCollection)
+	if _, err := state.InsertOne(t.Context(), bson.D{{Key: "_id", Value: "messages"}, {Key: "at", Value: bson.Timestamp{T: 1, I: 1}}}); err != nil {
+		t.Fatalf("insert an unrelated position: %v", err)
+	}
 	if err := NewFeed(db).Forget(t.Context()); err != nil {
 		t.Fatalf("Forget: %v", err)
 	}
-	n, err := db.Collection(reconcilerStateCollection).CountDocuments(t.Context(), bson.D{})
-	if err != nil || n != 0 {
-		t.Fatalf("reconciler_state holds %d documents after Forget (%v), want none", n, err)
+	ids, err := state.Distinct(t.Context(), "_id", bson.D{}).Raw()
+	if err != nil {
+		t.Fatalf("Distinct: %v", err)
+	}
+	if vals, _ := ids.Values(); len(vals) != 1 || vals[0].StringValue() != "messages" {
+		t.Fatalf("reconciler_state ids after Forget = %s, want only the unrelated doc", ids)
 	}
 	if err := Bootstrap(t.Context(), db); err != nil {
 		t.Fatalf("Bootstrap: %v", err)

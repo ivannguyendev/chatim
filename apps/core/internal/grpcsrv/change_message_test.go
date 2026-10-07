@@ -97,25 +97,3 @@ func TestChangeErrorsKeepTheirCodes(t *testing.T) {
 	}
 	expectCode(t, edit(alice, &chatimv1.EditMessageRequest{RoomId: room, Seq: 1, BaseVer: 2, Text: "back"})(), codes.FailedPrecondition)
 }
-
-func TestHideAndClearHistoryThroughTheService(t *testing.T) {
-	rg := newRig(t, options{})
-	room := rg.createGroup(t, "acme", "alice", "bob")
-	alice, bob := as(t, "acme", "alice"), as(t, "acme", "bob")
-	rg.send(t, alice, room, "c-1", "a")
-	rg.send(t, alice, room, "c-2", "b")
-	if _, err := rg.client.HideMessage(bob, &chatimv1.HideMessageRequest{RoomId: room, Seq: 2}); err != nil {
-		t.Fatalf("HideMessage: %v", err)
-	}
-	if seqs, err := rg.hidden.HiddenIn(t.Context(), "bob", roomNumber(t, room), 0, 1, 2); err != nil || !slices.Equal(seqs, []uint64{2}) {
-		t.Fatalf("bob hidden = %v, %v; want [2]", seqs, err)
-	}
-	cleared, err := rg.client.ClearHistory(bob, &chatimv1.ClearHistoryRequest{RoomId: room})
-	if err != nil || cleared.GetClearedBeforeSeq() != 2 {
-		t.Fatalf("ClearHistory = %v, %v; want cleared before 2", cleared, err)
-	}
-	again, err := rg.client.ClearHistory(bob, &chatimv1.ClearHistoryRequest{RoomId: room, UpToSeq: 1})
-	if err != nil || again.GetClearedBeforeSeq() != 2 {
-		t.Fatalf("lower ClearHistory = %v, %v; want the mark kept at 2", again, err)
-	}
-}

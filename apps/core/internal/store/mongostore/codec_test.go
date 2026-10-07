@@ -134,7 +134,7 @@ func TestRoomCodecRoundTrip(t *testing.T) {
 		t.Fatalf("encodeRoom: %v", err)
 	}
 	back, raw := roundTrip(t, doc)
-	if got, want := fieldNames(t, raw), []string{"_id", "t", "ty", "n", "cb", "ca", "mc"}; !slices.Equal(got, want) {
+	if got, want := fieldNames(t, raw), []string{"_id", "tenant", "type", "name", "created_by", "created_at", "member_count"}; !slices.Equal(got, want) {
 		t.Fatalf("fields = %v, want %v", got, want)
 	}
 	got, err := decodeRoom(back)
@@ -165,7 +165,7 @@ func TestRoomCodecDecodesActivity(t *testing.T) {
 func TestMemberCodecRoundTrip(t *testing.T) {
 	m := domain.Member{Room: 7_340_000_001, Tenant: "acme", User: "bob", Role: domain.RoleMember, JoinedAt: codecTime}
 	back, raw := roundTrip(t, encodeMember(m, int64(m.Room)))
-	if got, want := fieldNames(t, raw), []string{"r", "u", "t", "ro", "ja"}; !slices.Equal(got, want) {
+	if got, want := fieldNames(t, raw), []string{"room_id", "user_id", "tenant", "role", "joined_at"}; !slices.Equal(got, want) {
 		t.Fatalf("fields = %v, want %v", got, want)
 	}
 	got, err := decodeMember(back)

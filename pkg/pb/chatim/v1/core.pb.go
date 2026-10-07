@@ -1207,7 +1207,6 @@ func (*HideMessageResponse) Descriptor() ([]byte, []int) {
 type ClearHistoryRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	RoomId        string                 `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
-	UpToSeq       uint64                 `protobuf:"varint,2,opt,name=up_to_seq,json=upToSeq,proto3" json:"up_to_seq,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1249,18 +1248,11 @@ func (x *ClearHistoryRequest) GetRoomId() string {
 	return ""
 }
 
-func (x *ClearHistoryRequest) GetUpToSeq() uint64 {
-	if x != nil {
-		return x.UpToSeq
-	}
-	return 0
-}
-
 type ClearHistoryResponse struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	ClearedBeforeSeq uint64                 `protobuf:"varint,1,opt,name=cleared_before_seq,json=clearedBeforeSeq,proto3" json:"cleared_before_seq,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ClearedAt     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=cleared_at,json=clearedAt,proto3" json:"cleared_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ClearHistoryResponse) Reset() {
@@ -1293,11 +1285,11 @@ func (*ClearHistoryResponse) Descriptor() ([]byte, []int) {
 	return file_chatim_v1_core_proto_rawDescGZIP(), []int{16}
 }
 
-func (x *ClearHistoryResponse) GetClearedBeforeSeq() uint64 {
+func (x *ClearHistoryResponse) GetClearedAt() *timestamppb.Timestamp {
 	if x != nil {
-		return x.ClearedBeforeSeq
+		return x.ClearedAt
 	}
-	return 0
+	return nil
 }
 
 type GetEditHistoryRequest struct {
@@ -1505,12 +1497,12 @@ const file_chatim_v1_core_proto_rawDesc = "" +
 	"\vthread_root\x18\x02 \x01(\x04R\n" +
 	"threadRoot\x12\x10\n" +
 	"\x03seq\x18\x03 \x01(\x04R\x03seq\"\x15\n" +
-	"\x13HideMessageResponse\"J\n" +
+	"\x13HideMessageResponse\"?\n" +
 	"\x13ClearHistoryRequest\x12\x17\n" +
-	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x1a\n" +
-	"\tup_to_seq\x18\x02 \x01(\x04R\aupToSeq\"D\n" +
-	"\x14ClearHistoryResponse\x12,\n" +
-	"\x12cleared_before_seq\x18\x01 \x01(\x04R\x10clearedBeforeSeq\"\x96\x01\n" +
+	"\aroom_id\x18\x01 \x01(\tR\x06roomIdJ\x04\b\x02\x10\x03R\tup_to_seq\"k\n" +
+	"\x14ClearHistoryResponse\x129\n" +
+	"\n" +
+	"cleared_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\tclearedAtJ\x04\b\x01\x10\x02R\x12cleared_before_seq\"\x96\x01\n" +
 	"\x15GetEditHistoryRequest\x12\x17\n" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x1f\n" +
 	"\vthread_root\x18\x02 \x01(\x04R\n" +
@@ -1622,36 +1614,37 @@ var file_chatim_v1_core_proto_depIdxs = []int32{
 	5,  // 12: chatim.v1.GetHistoryResponse.messages:type_name -> chatim.v1.Message
 	5,  // 13: chatim.v1.EditMessageResponse.message:type_name -> chatim.v1.Message
 	5,  // 14: chatim.v1.DeleteMessageResponse.message:type_name -> chatim.v1.Message
-	6,  // 15: chatim.v1.GetEditHistoryResponse.versions:type_name -> chatim.v1.MessageVersion
-	7,  // 16: chatim.v1.CoreService.CreateRoom:input_type -> chatim.v1.CreateRoomRequest
-	9,  // 17: chatim.v1.CoreService.SendMessage:input_type -> chatim.v1.SendMessageRequest
-	11, // 18: chatim.v1.CoreService.GetHistory:input_type -> chatim.v1.GetHistoryRequest
-	13, // 19: chatim.v1.CoreService.EditMessage:input_type -> chatim.v1.EditMessageRequest
-	15, // 20: chatim.v1.CoreService.DeleteMessage:input_type -> chatim.v1.DeleteMessageRequest
-	17, // 21: chatim.v1.CoreService.HideMessage:input_type -> chatim.v1.HideMessageRequest
-	19, // 22: chatim.v1.CoreService.ClearHistory:input_type -> chatim.v1.ClearHistoryRequest
-	21, // 23: chatim.v1.CoreService.GetEditHistory:input_type -> chatim.v1.GetEditHistoryRequest
-	25, // 24: chatim.v1.CoreService.ReactMessage:input_type -> chatim.v1.ReactMessageRequest
-	26, // 25: chatim.v1.CoreService.PinMessage:input_type -> chatim.v1.PinMessageRequest
-	27, // 26: chatim.v1.CoreService.UnpinMessage:input_type -> chatim.v1.UnpinMessageRequest
-	28, // 27: chatim.v1.CoreService.GetReactionSettings:input_type -> chatim.v1.GetReactionSettingsRequest
-	8,  // 28: chatim.v1.CoreService.CreateRoom:output_type -> chatim.v1.CreateRoomResponse
-	10, // 29: chatim.v1.CoreService.SendMessage:output_type -> chatim.v1.SendMessageResponse
-	12, // 30: chatim.v1.CoreService.GetHistory:output_type -> chatim.v1.GetHistoryResponse
-	14, // 31: chatim.v1.CoreService.EditMessage:output_type -> chatim.v1.EditMessageResponse
-	16, // 32: chatim.v1.CoreService.DeleteMessage:output_type -> chatim.v1.DeleteMessageResponse
-	18, // 33: chatim.v1.CoreService.HideMessage:output_type -> chatim.v1.HideMessageResponse
-	20, // 34: chatim.v1.CoreService.ClearHistory:output_type -> chatim.v1.ClearHistoryResponse
-	22, // 35: chatim.v1.CoreService.GetEditHistory:output_type -> chatim.v1.GetEditHistoryResponse
-	29, // 36: chatim.v1.CoreService.ReactMessage:output_type -> chatim.v1.ReactMessageResponse
-	30, // 37: chatim.v1.CoreService.PinMessage:output_type -> chatim.v1.PinMessageResponse
-	31, // 38: chatim.v1.CoreService.UnpinMessage:output_type -> chatim.v1.UnpinMessageResponse
-	32, // 39: chatim.v1.CoreService.GetReactionSettings:output_type -> chatim.v1.GetReactionSettingsResponse
-	28, // [28:40] is the sub-list for method output_type
-	16, // [16:28] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	23, // 15: chatim.v1.ClearHistoryResponse.cleared_at:type_name -> google.protobuf.Timestamp
+	6,  // 16: chatim.v1.GetEditHistoryResponse.versions:type_name -> chatim.v1.MessageVersion
+	7,  // 17: chatim.v1.CoreService.CreateRoom:input_type -> chatim.v1.CreateRoomRequest
+	9,  // 18: chatim.v1.CoreService.SendMessage:input_type -> chatim.v1.SendMessageRequest
+	11, // 19: chatim.v1.CoreService.GetHistory:input_type -> chatim.v1.GetHistoryRequest
+	13, // 20: chatim.v1.CoreService.EditMessage:input_type -> chatim.v1.EditMessageRequest
+	15, // 21: chatim.v1.CoreService.DeleteMessage:input_type -> chatim.v1.DeleteMessageRequest
+	17, // 22: chatim.v1.CoreService.HideMessage:input_type -> chatim.v1.HideMessageRequest
+	19, // 23: chatim.v1.CoreService.ClearHistory:input_type -> chatim.v1.ClearHistoryRequest
+	21, // 24: chatim.v1.CoreService.GetEditHistory:input_type -> chatim.v1.GetEditHistoryRequest
+	25, // 25: chatim.v1.CoreService.ReactMessage:input_type -> chatim.v1.ReactMessageRequest
+	26, // 26: chatim.v1.CoreService.PinMessage:input_type -> chatim.v1.PinMessageRequest
+	27, // 27: chatim.v1.CoreService.UnpinMessage:input_type -> chatim.v1.UnpinMessageRequest
+	28, // 28: chatim.v1.CoreService.GetReactionSettings:input_type -> chatim.v1.GetReactionSettingsRequest
+	8,  // 29: chatim.v1.CoreService.CreateRoom:output_type -> chatim.v1.CreateRoomResponse
+	10, // 30: chatim.v1.CoreService.SendMessage:output_type -> chatim.v1.SendMessageResponse
+	12, // 31: chatim.v1.CoreService.GetHistory:output_type -> chatim.v1.GetHistoryResponse
+	14, // 32: chatim.v1.CoreService.EditMessage:output_type -> chatim.v1.EditMessageResponse
+	16, // 33: chatim.v1.CoreService.DeleteMessage:output_type -> chatim.v1.DeleteMessageResponse
+	18, // 34: chatim.v1.CoreService.HideMessage:output_type -> chatim.v1.HideMessageResponse
+	20, // 35: chatim.v1.CoreService.ClearHistory:output_type -> chatim.v1.ClearHistoryResponse
+	22, // 36: chatim.v1.CoreService.GetEditHistory:output_type -> chatim.v1.GetEditHistoryResponse
+	29, // 37: chatim.v1.CoreService.ReactMessage:output_type -> chatim.v1.ReactMessageResponse
+	30, // 38: chatim.v1.CoreService.PinMessage:output_type -> chatim.v1.PinMessageResponse
+	31, // 39: chatim.v1.CoreService.UnpinMessage:output_type -> chatim.v1.UnpinMessageResponse
+	32, // 40: chatim.v1.CoreService.GetReactionSettings:output_type -> chatim.v1.GetReactionSettingsResponse
+	29, // [29:41] is the sub-list for method output_type
+	17, // [17:29] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_chatim_v1_core_proto_init() }

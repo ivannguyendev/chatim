@@ -11,26 +11,26 @@ import (
 
 type pinActionDoc struct {
 	ID     []byte    `bson:"_id"`
-	Room   int64     `bson:"r"`
-	Tenant string    `bson:"t"`
-	Op     int32     `bson:"op"`
-	Thread int64     `bson:"th"`
-	Seq    int64     `bson:"s"`
-	By     string    `bson:"by"`
-	At     time.Time `bson:"ts"`
+	Room   int64     `bson:"room_id"`
+	Tenant string    `bson:"tenant"`
+	Op     int32     `bson:"action"`
+	Thread int64     `bson:"thread_root"`
+	Seq    int64     `bson:"seq"`
+	By     string    `bson:"created_by"`
+	At     time.Time `bson:"created_at"`
 }
 
 type pinDoc struct {
-	Thread int64     `bson:"th"`
-	Seq    int64     `bson:"s"`
-	By     string    `bson:"by"`
-	At     time.Time `bson:"ts"`
-	PV     int64     `bson:"pv"`
+	Thread int64     `bson:"thread_root"`
+	Seq    int64     `bson:"seq"`
+	By     string    `bson:"pinned_by"`
+	At     time.Time `bson:"pinned_at"`
+	PV     int64     `bson:"pin_ver"`
 }
 
 type pinStateDoc struct {
 	Pins []pinDoc `bson:"pins"`
-	PV   int64    `bson:"pv"`
+	PV   int64    `bson:"pin_ver"`
 }
 
 func encodePinAction(a domain.PinAction) (pinActionDoc, error) {

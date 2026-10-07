@@ -1,10 +1,13 @@
 package memstore
 
 import (
+	"cmp"
 	"context"
 	"slices"
 	"sync"
+	"time"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
@@ -17,21 +20,27 @@ type hiddenKey struct {
 
 type Hidden struct {
 	mu   sync.RWMutex
-	seqs map[hiddenKey]struct{}
+	seqs map[hiddenKey]time.Time
 }
 
-func NewHidden() *Hidden { return &Hidden{seqs: make(map[hiddenKey]struct{})} }
+func NewHidden() *Hidden { return &Hidden{seqs: make(map[hiddenKey]time.Time)} }
 
-func (s *Hidden) Hide(ctx context.Context, user string, key store.MsgKey) error {
+func (s *Hidden) Hide(ctx context.Context, user string, key store.MsgKey, at time.Time) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if err := key.Validate(); err != nil {
 		return err
 	}
+	if err := store.ValidateMarkTime(at); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.seqs[hiddenKey{user: user, key: key}] = struct{}{}
+	k := hiddenKey{user: user, key: key}
+	if _, ok := s.seqs[k]; !ok {
+		s.seqs[k] = time.UnixMilli(at.UnixMilli()).UTC()
+	}
 	return nil
 }
 
@@ -49,4 +58,27 @@ func (s *Hidden) HiddenIn(ctx context.Context, user string, room, thread, from, 
 	}
 	slices.Sort(out)
 	return out, nil
+}
+
+func (s *Hidden) Between(ctx context.Context, room uint64, from, to time.Time, limit int) ([]domain.HiddenMessage, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := store.ValidateLimit(limit, store.MaxHiddenScan); err != nil {
+		return nil, err
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := []domain.HiddenMessage{}
+	for k, at := range s.seqs {
+		if k.key.Room == room && !at.Before(from) && !at.After(to) {
+			out = append(out, domain.HiddenMessage{User: k.user, Room: room, Thread: k.key.Thread, Seq: k.key.Seq, At: at})
+		}
+	}
+	slices.SortFunc(out, byHideTimeThenKey)
+	return out[:min(len(out), limit)], nil
+}
+
+func byHideTimeThenKey(a, b domain.HiddenMessage) int {
+	return cmp.Or(a.At.Compare(b.At), cmp.Compare(a.User, b.User), cmp.Compare(a.Thread, b.Thread), cmp.Compare(a.Seq, b.Seq))
 }

@@ -30,24 +30,24 @@ type messageDoc struct {
 
 type roomDoc struct {
 	ID           int64           `bson:"_id"`
-	Tenant       string          `bson:"t"`
-	Type         domain.RoomType `bson:"ty"`
-	Name         string          `bson:"n"`
-	CreatedBy    string          `bson:"cb"`
-	CreatedAt    time.Time       `bson:"ca"`
-	MemberCount  int             `bson:"mc"`
-	LastSeq      int64           `bson:"ls,omitempty"`
-	LastMsgAt    time.Time       `bson:"lm,omitempty"`
-	LastChangeAt time.Time       `bson:"lc,omitempty"`
+	Tenant       string          `bson:"tenant"`
+	Type         domain.RoomType `bson:"type"`
+	Name         string          `bson:"name"`
+	CreatedBy    string          `bson:"created_by"`
+	CreatedAt    time.Time       `bson:"created_at"`
+	MemberCount  int             `bson:"member_count"`
+	LastSeq      int64           `bson:"last_seq,omitempty"`
+	LastMsgAt    time.Time       `bson:"last_message_at,omitempty"`
+	LastChangeAt time.Time       `bson:"last_change_at,omitempty"`
 }
 
 type memberDoc struct {
-	Room          int64       `bson:"r"`
-	User          string      `bson:"u"`
-	Tenant        string      `bson:"t"`
-	Role          domain.Role `bson:"ro"`
-	JoinedAt      time.Time   `bson:"ja"`
-	ClearedBefore int64       `bson:"cb,omitempty"`
+	Room      int64       `bson:"room_id"`
+	User      string      `bson:"user_id"`
+	Tenant    string      `bson:"tenant"`
+	Role      domain.Role `bson:"role"`
+	JoinedAt  time.Time   `bson:"joined_at"`
+	ClearedAt time.Time   `bson:"cleared_at,omitempty"`
 }
 
 func encodeMessage(m domain.Message) (messageDoc, error) {
@@ -165,11 +165,7 @@ func decodeMember(d memberDoc) (domain.Member, error) {
 	if err != nil {
 		return domain.Member{}, err
 	}
-	cleared, err := toUint64("member cleared before seq", d.ClearedBefore)
-	if err != nil {
-		return domain.Member{}, err
-	}
-	return domain.Member{Room: room, Tenant: d.Tenant, User: d.User, Role: d.Role, JoinedAt: d.JoinedAt, ClearedBeforeSeq: cleared}, nil
+	return domain.Member{Room: room, Tenant: d.Tenant, User: d.User, Role: d.Role, JoinedAt: d.JoinedAt, ClearedAt: d.ClearedAt}, nil
 }
 
 func toInt64(field string, v uint64) (int64, error) {

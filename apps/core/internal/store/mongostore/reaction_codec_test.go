@@ -108,10 +108,10 @@ func TestSetPipelineTakesStringsLiterally(t *testing.T) {
 		t.Fatalf("Marshal: %v", err)
 	}
 	raw := bson.Raw(data)
-	if got, ok := raw.Lookup("$set", "u", "$literal").StringValueOK(); !ok || got != "alice" {
-		t.Fatalf("$set.u = %s, want {$literal: alice}", raw.Lookup("$set", "u"))
+	if got, ok := raw.Lookup("$set", "user_id", "$literal").StringValueOK(); !ok || got != "alice" {
+		t.Fatalf("$set.user_id = %s, want {$literal: alice}", raw.Lookup("$set", "user_id"))
 	}
-	if _, k, ok := raw.Lookup("$set", "k").BinaryOK(); !ok || len(k) != keys.MsgLen {
-		t.Fatalf("$set.k = %s, want the 24-byte message key", raw.Lookup("$set", "k"))
+	if _, k, ok := raw.Lookup("$set", "message_key").BinaryOK(); !ok || len(k) != keys.MsgLen {
+		t.Fatalf("$set.message_key = %s, want the 24-byte message key", raw.Lookup("$set", "message_key"))
 	}
 }

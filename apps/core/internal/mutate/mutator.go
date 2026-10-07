@@ -21,7 +21,7 @@ type Messages interface {
 }
 
 type HistoryClearer interface {
-	ClearHistory(ctx context.Context, room uint64, user string, seq uint64) (uint64, error)
+	ClearHistory(ctx context.Context, room uint64, user string, at time.Time) (time.Time, error)
 }
 
 type EventPublisher interface {

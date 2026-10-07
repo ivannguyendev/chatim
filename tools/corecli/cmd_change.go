@@ -118,14 +118,13 @@ func clearCmd(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("clear", flag.ContinueOnError)
 	o := addOptions(fs)
 	room := fs.String("room", "", "room id")
-	upTo := fs.Uint64("up-to", 0, "hide main-timeline messages up to this seq for the caller, 0 for the latest")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *room == "" {
 		return errRoomRequired
 	}
-	req := &chatimv1.ClearHistoryRequest{RoomId: *room, UpToSeq: *upTo}
+	req := &chatimv1.ClearHistoryRequest{RoomId: *room}
 	return withSession(ctx, o, func(ctx context.Context, s *session) error {
 		resp, st, err := s.client.ClearHistory(ctx, req)
 		if err != nil {

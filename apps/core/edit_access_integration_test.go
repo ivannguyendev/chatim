@@ -91,28 +91,29 @@ func TestRealInfraHideAndClearApplyOnlyToTheReader(t *testing.T) {
 	if _, err := client.HideMessage(bob, &chatimv1.HideMessageRequest{RoomId: roomID, Seq: 3}); err != nil {
 		t.Fatalf("HideMessage: %v", err)
 	}
-	if resp, err := client.ClearHistory(bob, &chatimv1.ClearHistoryRequest{RoomId: roomID, UpToSeq: 1}); err != nil || resp.GetClearedBeforeSeq() != 1 {
-		t.Fatalf("ClearHistory(1) = %v, %v; want cleared before seq 1", resp, err)
-	}
 	got := historyAs(t, client, "bob", roomID)
-	if len(got) != 3 || !hiddenOnly(got[1]) || got[2].GetHidden() || got[2].GetText() != "visible 2" || !hiddenOnly(got[3]) {
-		t.Fatalf("bob's history = %v, want seq 1 cleared, seq 2 visible, seq 3 hidden, every seq kept", got)
+	if len(got) != 3 || got[1].GetHidden() || got[2].GetHidden() || !hiddenOnly(got[3]) {
+		t.Fatalf("bob's history = %v, want only seq 3 hidden, every seq kept", got)
 	}
+	resp, err := client.ClearHistory(bob, &chatimv1.ClearHistoryRequest{RoomId: roomID})
+	if err != nil || resp.GetClearedAt() == nil {
+		t.Fatalf("ClearHistory = %v, %v; want a cleared_at mark", resp, err)
+	}
+	mark := resp.GetClearedAt().AsTime()
+	sendAs(t, client, itUser, roomID, "hide-4", "visible 4")
 	for seq, m := range historyAs(t, client, itUser, roomID) {
 		if m.GetHidden() || m.GetText() != "visible "+strconv.FormatUint(seq, 10) {
 			t.Fatalf("alice sees seq %d as %v, want it visible", seq, m)
 		}
 	}
-	if resp, err := client.ClearHistory(bob, &chatimv1.ClearHistoryRequest{RoomId: roomID}); err != nil || resp.GetClearedBeforeSeq() != 3 {
-		t.Fatalf("ClearHistory(latest) = %v, %v; want cleared before seq 3", resp, err)
-	}
-	if resp, err := client.ClearHistory(bob, &chatimv1.ClearHistoryRequest{RoomId: roomID, UpToSeq: 1}); err != nil || resp.GetClearedBeforeSeq() != 3 {
-		t.Fatalf("ClearHistory(1) after 3 = %v, %v; want it to stay at 3", resp, err)
-	}
+	created := historyAs(t, client, itUser, roomID)[4].GetCreatedAt().AsTime()
 	for seq, m := range historyAs(t, client, "bob", roomID) {
-		if !hiddenOnly(m) {
-			t.Fatalf("bob sees seq %d as %v after clearing everything, want a hidden placeholder", seq, m)
+		if cleared := seq < 4 || !created.After(mark); cleared != hiddenOnly(m) {
+			t.Fatalf("bob sees seq %d as %v after clearing at %v (seq 4 sent at %v), want hidden=%v", seq, m, mark, created, cleared)
 		}
+	}
+	if again, err := client.ClearHistory(bob, &chatimv1.ClearHistoryRequest{RoomId: roomID}); err != nil || again.GetClearedAt().AsTime().Before(mark) {
+		t.Fatalf("ClearHistory again = %v, %v; want the mark never to go back from %v", again, err, mark)
 	}
 	assertNoChangeEvents(t, live, 3*time.Second)
 }

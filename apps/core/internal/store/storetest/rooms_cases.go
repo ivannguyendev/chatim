@@ -59,10 +59,10 @@ func assertMember(t *testing.T, s store.Rooms, want domain.Member) {
 	if err != nil {
 		t.Fatalf("Member(%d, %q): %v", want.Room, want.User, err)
 	}
-	gotAt, wantAt := got.JoinedAt, want.JoinedAt
-	got.JoinedAt, want.JoinedAt = time.Time{}, time.Time{}
-	if got != want || !gotAt.Equal(wantAt) {
-		t.Fatalf("Member(%d, %q) = %+v at %v, want %+v at %v", want.Room, want.User, got, gotAt, want, wantAt)
+	gotAt, wantAt, gotCleared, wantCleared := got.JoinedAt, want.JoinedAt, got.ClearedAt, want.ClearedAt
+	got.JoinedAt, want.JoinedAt, got.ClearedAt, want.ClearedAt = time.Time{}, time.Time{}, time.Time{}, time.Time{}
+	if got != want || !gotAt.Equal(wantAt) || !gotCleared.Equal(wantCleared) {
+		t.Fatalf("Member(%d, %q) = %+v at %v cleared %v, want %+v at %v cleared %v", want.Room, want.User, got, gotAt, gotCleared, want, wantAt, wantCleared)
 	}
 }
 

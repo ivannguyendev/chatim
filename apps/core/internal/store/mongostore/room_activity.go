@@ -35,9 +35,9 @@ func (s *Store) TouchActivity(ctx context.Context, acts []store.Activity) error 
 
 func activityFields(a store.Activity, seq int64) bson.D {
 	at := a.At.UTC()
-	fields := bson.D{{Key: "lc", Value: at}, {Key: "ab", Value: store.HourBucket(at)}}
+	fields := bson.D{{Key: "last_change_at", Value: at}, {Key: "activity_bucket", Value: store.HourBucket(at)}}
 	if a.Thread == 0 && a.Seq > 0 {
-		fields = append(fields, bson.E{Key: "ls", Value: seq}, bson.E{Key: "lm", Value: at})
+		fields = append(fields, bson.E{Key: "last_seq", Value: seq}, bson.E{Key: "last_message_at", Value: at})
 	}
 	return fields
 }
@@ -74,12 +74,12 @@ func activeFilter(q store.ActiveQuery, after int64) bson.D {
 	filter := bson.D{
 		{Key: "_id", Value: bson.D{{Key: "$gt", Value: after}}},
 		{Key: "$or", Value: bson.A{
-			bson.D{{Key: "ab", Value: bson.D{{Key: "$gte", Value: store.HourBucket(q.From)}}}},
-			bson.D{{Key: "ca", Value: bson.D{{Key: "$gte", Value: q.From}, {Key: "$lte", Value: q.To}}}},
+			bson.D{{Key: "activity_bucket", Value: bson.D{{Key: "$gte", Value: store.HourBucket(q.From)}}}},
+			bson.D{{Key: "created_at", Value: bson.D{{Key: "$gte", Value: q.From}, {Key: "$lte", Value: q.To}}}},
 		}},
 	}
 	if q.Tenant != "" {
-		filter = append(filter, bson.E{Key: "t", Value: q.Tenant})
+		filter = append(filter, bson.E{Key: "tenant", Value: q.Tenant})
 	}
 	return filter
 }

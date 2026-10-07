@@ -60,8 +60,8 @@ func (p *Pins) Between(ctx context.Context, room uint64, from, to time.Time, lim
 	if err != nil {
 		return nil, err
 	}
-	filter := bson.D{{Key: "r", Value: rid}, {Key: "ts", Value: bson.D{{Key: "$gte", Value: from}, {Key: "$lte", Value: to}}}}
-	return p.find(ctx, filter, bson.D{{Key: "ts", Value: 1}, {Key: "_id", Value: 1}}, limit)
+	filter := bson.D{{Key: "room_id", Value: rid}, {Key: "created_at", Value: bson.D{{Key: "$gte", Value: from}, {Key: "$lte", Value: to}}}}
+	return p.find(ctx, filter, bson.D{{Key: "created_at", Value: 1}, {Key: "_id", Value: 1}}, limit)
 }
 
 func (p *Pins) find(ctx context.Context, filter, sort bson.D, limit int) ([]domain.PinAction, error) {

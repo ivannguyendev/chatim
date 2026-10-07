@@ -15,8 +15,8 @@ import (
 )
 
 type witnessDoc struct {
-	User string `bson:"u"`
-	N    int64  `bson:"n"`
+	User string `bson:"user_id"`
+	N    int64  `bson:"ver"`
 }
 
 type countRow struct {
@@ -52,7 +52,7 @@ func (r *Reactions) witnessed(ctx context.Context, key store.MsgKey, witnesses [
 		}
 		need[w.User] = max(need[w.User], w.N)
 	}
-	opts := options.Find().SetProjection(bson.D{{Key: "u", Value: 1}, {Key: "n", Value: 1}})
+	opts := options.Find().SetProjection(bson.D{{Key: "user_id", Value: 1}, {Key: "ver", Value: 1}})
 	cur, err := r.coll.Find(ctx, bson.D{{Key: "_id", Value: bson.D{{Key: "$in", Value: ids}}}}, opts)
 	if err != nil {
 		return fmt.Errorf("read reaction witnesses of %d/%d/%d: %w", key.Room, key.Thread, key.Seq, err)
@@ -74,8 +74,8 @@ func (r *Reactions) witnessed(ctx context.Context, key store.MsgKey, witnesses [
 }
 
 func countPipeline(key store.MsgKey) mongo.Pipeline {
-	match := bson.D{{Key: "k", Value: keys.Msg(key.Room, key.Thread, key.Seq)}, {Key: "e", Value: bson.D{{Key: "$gt", Value: ""}}}}
-	group := bson.D{{Key: "_id", Value: "$e"}, {Key: "n", Value: bson.D{{Key: "$sum", Value: 1}}}}
+	match := bson.D{{Key: "message_key", Value: keys.Msg(key.Room, key.Thread, key.Seq)}, {Key: "emoji", Value: bson.D{{Key: "$gt", Value: ""}}}}
+	group := bson.D{{Key: "_id", Value: "$emoji"}, {Key: "n", Value: bson.D{{Key: "$sum", Value: 1}}}}
 	return mongo.Pipeline{{{Key: "$match", Value: match}}, {{Key: "$group", Value: group}}}
 }
 
@@ -108,8 +108,8 @@ func (r *Reactions) Between(ctx context.Context, room uint64, from, to time.Time
 	if err != nil {
 		return nil, err
 	}
-	filter := bson.D{{Key: "r", Value: rid}, {Key: "ts", Value: bson.D{{Key: "$gte", Value: from}, {Key: "$lte", Value: to}}}}
-	opts := options.Find().SetSort(bson.D{{Key: "ts", Value: 1}, {Key: "_id", Value: 1}}).SetLimit(int64(limit))
+	filter := bson.D{{Key: "room_id", Value: rid}, {Key: "updated_at", Value: bson.D{{Key: "$gte", Value: from}, {Key: "$lte", Value: to}}}}
+	opts := options.Find().SetSort(bson.D{{Key: "updated_at", Value: 1}, {Key: "_id", Value: 1}}).SetLimit(int64(limit))
 	cur, err := r.coll.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, fmt.Errorf("reactions of room %d between %v and %v: %w", room, from, to, err)

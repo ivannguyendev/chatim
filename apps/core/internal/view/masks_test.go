@@ -34,8 +34,11 @@ func TestMaskDeletedDropsOnlyTheTextOfDeletedMessages(t *testing.T) {
 
 func TestHideForViewerHidesClearedAndHiddenSeqs(t *testing.T) {
 	page := []domain.Message{textMsg(1, "a"), textMsg(2, "b"), textMsg(3, "c"), textMsg(4, "d")}
+	for i := range page {
+		page[i].CreatedAt = editedAt.Add(time.Duration(i) * time.Second)
+	}
 	before := slices.Clone(page)
-	v := view.Viewer{User: "bob", ClearedBeforeSeq: 1, HiddenSeqs: map[uint64]bool{3: true}}
+	v := view.Viewer{User: "bob", ClearedAt: editedAt, HiddenSeqs: map[uint64]bool{3: true}}
 	got := view.HideForViewer(v, page)
 	for i, m := range got {
 		hidden := m.Seq == 1 || m.Seq == 3
@@ -48,6 +51,27 @@ func TestHideForViewerHidesClearedAndHiddenSeqs(t *testing.T) {
 	}
 	if got := view.HideForViewer(view.Viewer{}, page); !reflect.DeepEqual(got, page) {
 		t.Fatalf("zero viewer hid %+v", got)
+	}
+}
+
+func TestClearedHidesEveryMessageUpToTheMarkTime(t *testing.T) {
+	mark := editedAt.Add(time.Minute)
+	page := []domain.Message{
+		{Room: 7, Thread: 0, Seq: 1, Text: "before", CreatedAt: mark.Add(-time.Second)},
+		{Room: 7, Thread: 9, Seq: 2, Text: "same ms in a thread", CreatedAt: mark},
+		{Room: 7, Thread: 0, Seq: 3, Text: "after", CreatedAt: mark.Add(time.Millisecond)},
+	}
+	got := view.HideForViewer(view.Viewer{User: "bob", ClearedAt: mark}, page)
+	for i, want := range []bool{true, true, false} {
+		if got[i].Hidden != want || (got[i].Text == "") != want {
+			t.Fatalf("message %d = %+v, want hidden=%v", i, got[i], want)
+		}
+	}
+	if (view.Viewer{}).Cleared(mark) || !(view.Viewer{ClearedAt: mark}).Cleared(mark) || (view.Viewer{ClearedAt: mark}).Cleared(mark.Add(time.Millisecond)) {
+		t.Fatal("Cleared: want a zero mark to clear nothing and a mark to clear up to and including its time")
+	}
+	if got := view.HideForViewer(view.Viewer{User: "bob"}, page); !reflect.DeepEqual(got, page) {
+		t.Fatalf("zero mark hid %+v", got)
 	}
 }
 

@@ -41,9 +41,9 @@ func reactionFromUpdate(ev changeDoc) (domain.Reaction, error) {
 	if err := domain.ValidUser(user); err != nil {
 		return domain.Reaction{}, fmt.Errorf("%w: reaction update user: %w", errCorrupt, err)
 	}
-	raw, ok := ev.UpdateDescription.UpdatedFields.Lookup("n").AsInt64OK()
+	raw, ok := ev.UpdateDescription.UpdatedFields.Lookup("ver").AsInt64OK()
 	if !ok {
-		return domain.Reaction{}, fmt.Errorf("%w: reaction update without a numeric n", errCorrupt)
+		return domain.Reaction{}, fmt.Errorf("%w: reaction update without a numeric ver", errCorrupt)
 	}
 	n, err := narrowUint32("reaction change", raw)
 	if err != nil {

@@ -29,11 +29,11 @@ var (
 	_ store.MessageEditor     = (*Store)(nil)
 	_ store.HistoryClearer    = (*Store)(nil)
 	_ store.Edits             = (*Store)(nil)
-	_ store.Hidden            = (*Store)(nil)
 	_ store.ReactionSummaries = (*Store)(nil)
 	_ store.PinProjector      = (*Store)(nil)
 	_ store.Reactions         = (*Reactions)(nil)
 	_ store.Pins              = (*Pins)(nil)
+	_ store.Hidden            = (*Hidden)(nil)
 )
 
 type Options struct {
@@ -46,7 +46,7 @@ type Store struct {
 	rooms     *mongo.Collection
 	members   *mongo.Collection
 	edits     *mongo.Collection
-	hidden    *mongo.Collection
+	hidden    *Hidden
 	reactions *Reactions
 	pins      *Pins
 }
@@ -63,7 +63,7 @@ func New(db *mongo.Database, opts Options) *Store {
 		rooms:     db.Collection(roomsCollection, primary),
 		members:   db.Collection(membersCollection, primary),
 		edits:     db.Collection(editsCollection, primary),
-		hidden:    db.Collection(hiddenCollection, primary),
+		hidden:    &Hidden{coll: db.Collection(hiddenCollection, primary)},
 		reactions: &Reactions{coll: db.Collection(reactionsCollection, reacted), client: db.Client()},
 		pins:      &Pins{coll: db.Collection(pinActionsCollection, primary)},
 	}
@@ -72,3 +72,5 @@ func New(db *mongo.Database, opts Options) *Store {
 func (s *Store) Reactions() *Reactions { return s.reactions }
 
 func (s *Store) Pins() *Pins { return s.pins }
+
+func (s *Store) Hidden() *Hidden { return s.hidden }

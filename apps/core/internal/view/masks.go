@@ -17,7 +17,7 @@ func MaskDeleted(_ Viewer, msgs []domain.Message) []domain.Message {
 
 func HideForViewer(v Viewer, msgs []domain.Message) []domain.Message {
 	return eachCopy(msgs, func(m *domain.Message) {
-		if m.Seq <= v.ClearedBeforeSeq || v.HiddenSeqs[m.Seq] {
+		if v.Cleared(m.CreatedAt) || v.HiddenSeqs[m.Seq] {
 			m.Hidden = true
 			m.Text = ""
 			m.Reactions = domain.ReactionSummary{}
