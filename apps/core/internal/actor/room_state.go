@@ -82,13 +82,13 @@ func (a *actor) admit(ctx context.Context, q *request) *entry {
 }
 
 func (a *actor) member(ctx context.Context, user string) (domain.Member, error) {
-	if m, ok := a.members.get(user); ok {
+	if m, ok := a.members.Get(user); ok {
 		return m, nil
 	}
 	m, err := a.r.rooms.Member(ctx, a.id, user)
 	switch {
 	case err == nil:
-		a.members.put(user, m)
+		a.members.Put(user, m)
 		return m, nil
 	case errors.Is(err, domain.ErrNotMember):
 		return domain.Member{}, domain.ErrNotMember

@@ -8,17 +8,30 @@ import (
 
 const (
 	keyPrefix       = "chatim:cid:"
+	requestPrefix   = "chatim:req:"
 	pendingPrefix   = "p:"
 	committedPrefix = "c:"
+)
+
+type Space uint8
+
+const (
+	SpaceCID Space = iota
+	SpaceRequest
 )
 
 type Key struct {
 	Room      uint64
 	User, CID string
+	Space     Space
 }
 
 func (k Key) String() string {
-	return keyPrefix + strconv.FormatUint(k.Room, 10) + ":" + k.User + ":" + k.CID
+	prefix := keyPrefix
+	if k.Space == SpaceRequest {
+		prefix = requestPrefix
+	}
+	return prefix + strconv.FormatUint(k.Room, 10) + ":" + k.User + ":" + k.CID
 }
 
 type Record struct {

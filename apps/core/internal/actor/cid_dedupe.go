@@ -1,6 +1,10 @@
 package actor
 
-import "time"
+import (
+	"time"
+
+	"github.com/ivannguyendev/chatim/pkg/lru"
+)
 
 type dedupeKey struct{ user, cid string }
 
@@ -11,12 +15,12 @@ type cachedAck struct {
 
 type cidCache struct {
 	pending map[dedupeKey][]*request
-	acks    *lru[dedupeKey, cachedAck]
+	acks    *lru.Cache[dedupeKey, cachedAck]
 	ttl     time.Duration
 }
 
 func newCIDCache(limit int, ttl time.Duration) cidCache {
-	return cidCache{pending: make(map[dedupeKey][]*request), acks: newLRU[dedupeKey, cachedAck](limit), ttl: ttl}
+	return cidCache{pending: make(map[dedupeKey][]*request), acks: lru.New[dedupeKey, cachedAck](limit), ttl: ttl}
 }
 
 func (d *cidCache) join(k dedupeKey, q *request) bool {
@@ -33,12 +37,12 @@ func (d *cidCache) join(k dedupeKey, q *request) bool {
 }
 
 func (d *cidCache) committed(k dedupeKey) (Ack, bool) {
-	c, ok := d.acks.get(k)
+	c, ok := d.acks.Get(k)
 	if !ok {
 		return Ack{}, false
 	}
 	if !time.Now().Before(c.expires) {
-		d.acks.remove(k)
+		d.acks.Remove(k)
 		return Ack{}, false
 	}
 	return c.ack, true
@@ -60,5 +64,5 @@ func (d *cidCache) fail(k dedupeKey, err error) {
 }
 
 func (d *cidCache) seed(k dedupeKey, ack Ack) {
-	d.acks.put(k, cachedAck{ack: ack, expires: time.Now().Add(d.ttl)})
+	d.acks.Put(k, cachedAck{ack: ack, expires: time.Now().Add(d.ttl)})
 }

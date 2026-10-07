@@ -12,7 +12,7 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/slotmap"
 )
 
-type registry interface {
+type Registry interface {
 	Reserve(ctx context.Context, keys []Key) ([]Verdict, error)
 	Commit(ctx context.Context, entries []Entry) error
 	Abort(ctx context.Context, keys []Key) error
@@ -49,7 +49,7 @@ type batchShard struct {
 }
 
 type Batcher struct {
-	store    registry
+	store    Registry
 	cfg      BatchConfig
 	log      *slog.Logger
 	shards   []*batchShard
@@ -65,7 +65,7 @@ type Batcher struct {
 	done     chan struct{}
 }
 
-func NewBatcher(store registry, cfg BatchConfig, log *slog.Logger) (*Batcher, error) {
+func NewBatcher(store Registry, cfg BatchConfig, log *slog.Logger) (*Batcher, error) {
 	if store == nil {
 		return nil, fmt.Errorf("%w: cid batcher needs a store", apperr.ErrInvalidArgument)
 	}

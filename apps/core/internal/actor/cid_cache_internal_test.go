@@ -6,23 +6,6 @@ import (
 	"time"
 )
 
-func TestLRUEvictsLeastRecentlyUsed(t *testing.T) {
-	c := newLRU[string, int](2)
-	c.put("a", 1)
-	c.put("b", 2)
-	if v, ok := c.get("a"); !ok || v != 1 {
-		t.Fatalf("get(a) = %d, %v", v, ok)
-	}
-	c.put("c", 3)
-	if _, ok := c.get("b"); ok {
-		t.Fatal("b survived although it was least recently used")
-	}
-	c.put("a", 10)
-	if v, _ := c.get("a"); v != 10 || c.len() != 2 {
-		t.Fatalf("after update: a = %d, len = %d", v, c.len())
-	}
-}
-
 func TestCIDCacheBoundsCommittedAcksButNeverPendingOnes(t *testing.T) {
 	d := newCIDCache(2, time.Minute)
 	pending := dedupeKey{user: "alice", cid: "p"}
@@ -35,7 +18,7 @@ func TestCIDCacheBoundsCommittedAcksButNeverPendingOnes(t *testing.T) {
 		d.join(k, newRequest(SendCmd{}))
 		d.commit(k, Ack{Seq: 1})
 	}
-	if n := d.acks.len(); n != 2 {
+	if n := d.acks.Len(); n != 2 {
 		t.Fatalf("committed acks = %d, want bounded to 2", n)
 	}
 	waiter := newRequest(SendCmd{})
