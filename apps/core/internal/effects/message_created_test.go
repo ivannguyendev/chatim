@@ -37,7 +37,7 @@ func TestMsgCreatedRepublishesOnlyUnmarkedMessagesLikeTheFastPath(t *testing.T) 
 	if got := storedEventIDs(rg.js); !slices.Equal(got, want) {
 		t.Fatalf("stored = %v, want %v", got, want)
 	}
-	if subj := rg.js.Stored()[0].Subject; subj != "evt.acme.room.4242.msg_created" {
+	if subj := rg.js.Stored()[0].Subject; subj != "evt.acme.message.4242.msg_created" {
 		t.Fatalf("subject = %q", subj)
 	}
 	events, err := rg.js.Events()

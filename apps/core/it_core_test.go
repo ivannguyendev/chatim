@@ -70,7 +70,7 @@ func parseRoom(t *testing.T, roomID string) uint64 {
 func subscribeLive(t *testing.T, it *itInfra, cfg config.Config, roomID string) <-chan *nats.Msg {
 	t.Helper()
 	live := make(chan *nats.Msg, 256)
-	sub, err := it.nc.ChanSubscribe(cfg.Stream.LiveRoot+"."+itTenant+".room."+roomID+".>", live)
+	sub, err := it.nc.ChanSubscribe(cfg.Stream.LiveRoot+"."+itTenant+".*."+roomID+".>", live)
 	if err != nil {
 		t.Fatalf("subscribe live: %v", err)
 	}

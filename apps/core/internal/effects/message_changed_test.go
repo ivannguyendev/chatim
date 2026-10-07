@@ -32,8 +32,8 @@ func TestMsgChangedPublishesTheCurrentSnapshot(t *testing.T) {
 		text    string
 		subject string
 	}{
-		{"edit", domain.EditText, "v1", "evt.acme.room.4242.msg_edited"},
-		{"delete", domain.EditDelete, "", "evt.acme.room.4242.msg_deleted"},
+		{"edit", domain.EditText, "v1", "evt.acme.message.4242.msg_edited"},
+		{"delete", domain.EditDelete, "", "evt.acme.message.4242.msg_deleted"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

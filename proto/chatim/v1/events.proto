@@ -3,6 +3,7 @@ syntax = "proto3";
 package chatim.v1;
 
 import "chatim/v1/core.proto";
+import "chatim/v1/members.proto";
 import "chatim/v1/reactions_pins.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -26,6 +27,14 @@ message Event {
     CountsChanged counts_changed = 25;
     MessagePinned message_pinned = 26;
     MessageUnpinned message_unpinned = 27;
+    MemberAdded member_added = 28;
+    MemberRemoved member_removed = 29;
+    MemberRoleChanged member_role_changed = 30;
+    MemberCountChanged member_count_changed = 31;
+    ReadUpdated read_updated = 32;
+    MemberPriorityChanged member_priority_changed = 33;
+    MessageHidden message_hidden = 34;
+    HistoryCleared history_cleared = 35;
   }
 }
 

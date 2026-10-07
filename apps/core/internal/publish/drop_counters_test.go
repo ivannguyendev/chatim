@@ -36,7 +36,7 @@ func TestRefusedPublishesAreCounted(t *testing.T) {
 func TestAsyncFailuresAreCounted(t *testing.T) {
 	c := &publish.Counters{}
 	handle := publish.AsyncFailureHandler((&testlog.Sink{}).Logger(), c)
-	msg := &nats.Msg{Subject: "evt.acme.room.101.msg_created", Header: nats.Header{}}
+	msg := &nats.Msg{Subject: "evt.acme.message.101.msg_created", Header: nats.Header{}}
 	msg.Header.Set(jetstream.MsgIDHeader, "101-0-1")
 	for range 4 {
 		handle(nil, msg, errRefused)

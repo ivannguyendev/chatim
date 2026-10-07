@@ -1416,7 +1416,7 @@ var File_chatim_v1_core_proto protoreflect.FileDescriptor
 
 const file_chatim_v1_core_proto_rawDesc = "" +
 	"\n" +
-	"\x14chatim/v1/core.proto\x12\tchatim.v1\x1a\x1echatim/v1/reactions_pins.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe8\x01\n" +
+	"\x14chatim/v1/core.proto\x12\tchatim.v1\x1a\x17chatim/v1/members.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe8\x01\n" +
 	"\x04Room\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06tenant\x18\x02 \x01(\tR\x06tenant\x12'\n" +
@@ -1529,7 +1529,7 @@ const file_chatim_v1_core_proto_rawDesc = "" +
 	"\x15EDIT_KIND_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12EDIT_KIND_ORIGINAL\x10\x01\x12\x12\n" +
 	"\x0eEDIT_KIND_TEXT\x10\x02\x12\x14\n" +
-	"\x10EDIT_KIND_DELETE\x10\x032\xdc\a\n" +
+	"\x10EDIT_KIND_DELETE\x10\x032\x8d\f\n" +
 	"\vCoreService\x12I\n" +
 	"\n" +
 	"CreateRoom\x12\x1c.chatim.v1.CreateRoomRequest\x1a\x1d.chatim.v1.CreateRoomResponse\x12L\n" +
@@ -1545,7 +1545,16 @@ const file_chatim_v1_core_proto_rawDesc = "" +
 	"\n" +
 	"PinMessage\x12\x1c.chatim.v1.PinMessageRequest\x1a\x1d.chatim.v1.PinMessageResponse\x12O\n" +
 	"\fUnpinMessage\x12\x1e.chatim.v1.UnpinMessageRequest\x1a\x1f.chatim.v1.UnpinMessageResponse\x12d\n" +
-	"\x13GetReactionSettings\x12%.chatim.v1.GetReactionSettingsRequest\x1a&.chatim.v1.GetReactionSettingsResponseB\x9a\x01\n" +
+	"\x13GetReactionSettings\x12%.chatim.v1.GetReactionSettingsRequest\x1a&.chatim.v1.GetReactionSettingsResponse\x12I\n" +
+	"\n" +
+	"AddMembers\x12\x1c.chatim.v1.AddMembersRequest\x1a\x1d.chatim.v1.AddMembersResponse\x12O\n" +
+	"\fRemoveMember\x12\x1e.chatim.v1.RemoveMemberRequest\x1a\x1f.chatim.v1.RemoveMemberResponse\x12F\n" +
+	"\tLeaveRoom\x12\x1b.chatim.v1.LeaveRoomRequest\x1a\x1c.chatim.v1.LeaveRoomResponse\x12[\n" +
+	"\x10ChangeMemberRole\x12\".chatim.v1.ChangeMemberRoleRequest\x1a#.chatim.v1.ChangeMemberRoleResponse\x12^\n" +
+	"\x11SetMemberPriority\x12#.chatim.v1.SetMemberPriorityRequest\x1a$.chatim.v1.SetMemberPriorityResponse\x12C\n" +
+	"\bMarkRead\x12\x1a.chatim.v1.MarkReadRequest\x1a\x1b.chatim.v1.MarkReadResponse\x12I\n" +
+	"\n" +
+	"MarkUnread\x12\x1c.chatim.v1.MarkUnreadRequest\x1a\x1d.chatim.v1.MarkUnreadResponseB\x9a\x01\n" +
 	"\rcom.chatim.v1B\tCoreProtoP\x01Z9github.com/ivannguyendev/chatim/pkg/pb/chatim/v1;chatimv1\xa2\x02\x03CXX\xaa\x02\tChatim.V1\xca\x02\tChatim\\V1\xe2\x02\x15Chatim\\V1\\GPBMetadata\xea\x02\n" +
 	"Chatim::V1b\x06proto3"
 
@@ -1593,10 +1602,24 @@ var file_chatim_v1_core_proto_goTypes = []any{
 	(*PinMessageRequest)(nil),           // 26: chatim.v1.PinMessageRequest
 	(*UnpinMessageRequest)(nil),         // 27: chatim.v1.UnpinMessageRequest
 	(*GetReactionSettingsRequest)(nil),  // 28: chatim.v1.GetReactionSettingsRequest
-	(*ReactMessageResponse)(nil),        // 29: chatim.v1.ReactMessageResponse
-	(*PinMessageResponse)(nil),          // 30: chatim.v1.PinMessageResponse
-	(*UnpinMessageResponse)(nil),        // 31: chatim.v1.UnpinMessageResponse
-	(*GetReactionSettingsResponse)(nil), // 32: chatim.v1.GetReactionSettingsResponse
+	(*AddMembersRequest)(nil),           // 29: chatim.v1.AddMembersRequest
+	(*RemoveMemberRequest)(nil),         // 30: chatim.v1.RemoveMemberRequest
+	(*LeaveRoomRequest)(nil),            // 31: chatim.v1.LeaveRoomRequest
+	(*ChangeMemberRoleRequest)(nil),     // 32: chatim.v1.ChangeMemberRoleRequest
+	(*SetMemberPriorityRequest)(nil),    // 33: chatim.v1.SetMemberPriorityRequest
+	(*MarkReadRequest)(nil),             // 34: chatim.v1.MarkReadRequest
+	(*MarkUnreadRequest)(nil),           // 35: chatim.v1.MarkUnreadRequest
+	(*ReactMessageResponse)(nil),        // 36: chatim.v1.ReactMessageResponse
+	(*PinMessageResponse)(nil),          // 37: chatim.v1.PinMessageResponse
+	(*UnpinMessageResponse)(nil),        // 38: chatim.v1.UnpinMessageResponse
+	(*GetReactionSettingsResponse)(nil), // 39: chatim.v1.GetReactionSettingsResponse
+	(*AddMembersResponse)(nil),          // 40: chatim.v1.AddMembersResponse
+	(*RemoveMemberResponse)(nil),        // 41: chatim.v1.RemoveMemberResponse
+	(*LeaveRoomResponse)(nil),           // 42: chatim.v1.LeaveRoomResponse
+	(*ChangeMemberRoleResponse)(nil),    // 43: chatim.v1.ChangeMemberRoleResponse
+	(*SetMemberPriorityResponse)(nil),   // 44: chatim.v1.SetMemberPriorityResponse
+	(*MarkReadResponse)(nil),            // 45: chatim.v1.MarkReadResponse
+	(*MarkUnreadResponse)(nil),          // 46: chatim.v1.MarkUnreadResponse
 }
 var file_chatim_v1_core_proto_depIdxs = []int32{
 	0,  // 0: chatim.v1.Room.type:type_name -> chatim.v1.RoomType
@@ -1628,20 +1651,34 @@ var file_chatim_v1_core_proto_depIdxs = []int32{
 	26, // 26: chatim.v1.CoreService.PinMessage:input_type -> chatim.v1.PinMessageRequest
 	27, // 27: chatim.v1.CoreService.UnpinMessage:input_type -> chatim.v1.UnpinMessageRequest
 	28, // 28: chatim.v1.CoreService.GetReactionSettings:input_type -> chatim.v1.GetReactionSettingsRequest
-	8,  // 29: chatim.v1.CoreService.CreateRoom:output_type -> chatim.v1.CreateRoomResponse
-	10, // 30: chatim.v1.CoreService.SendMessage:output_type -> chatim.v1.SendMessageResponse
-	12, // 31: chatim.v1.CoreService.GetHistory:output_type -> chatim.v1.GetHistoryResponse
-	14, // 32: chatim.v1.CoreService.EditMessage:output_type -> chatim.v1.EditMessageResponse
-	16, // 33: chatim.v1.CoreService.DeleteMessage:output_type -> chatim.v1.DeleteMessageResponse
-	18, // 34: chatim.v1.CoreService.HideMessage:output_type -> chatim.v1.HideMessageResponse
-	20, // 35: chatim.v1.CoreService.ClearHistory:output_type -> chatim.v1.ClearHistoryResponse
-	22, // 36: chatim.v1.CoreService.GetEditHistory:output_type -> chatim.v1.GetEditHistoryResponse
-	29, // 37: chatim.v1.CoreService.ReactMessage:output_type -> chatim.v1.ReactMessageResponse
-	30, // 38: chatim.v1.CoreService.PinMessage:output_type -> chatim.v1.PinMessageResponse
-	31, // 39: chatim.v1.CoreService.UnpinMessage:output_type -> chatim.v1.UnpinMessageResponse
-	32, // 40: chatim.v1.CoreService.GetReactionSettings:output_type -> chatim.v1.GetReactionSettingsResponse
-	29, // [29:41] is the sub-list for method output_type
-	17, // [17:29] is the sub-list for method input_type
+	29, // 29: chatim.v1.CoreService.AddMembers:input_type -> chatim.v1.AddMembersRequest
+	30, // 30: chatim.v1.CoreService.RemoveMember:input_type -> chatim.v1.RemoveMemberRequest
+	31, // 31: chatim.v1.CoreService.LeaveRoom:input_type -> chatim.v1.LeaveRoomRequest
+	32, // 32: chatim.v1.CoreService.ChangeMemberRole:input_type -> chatim.v1.ChangeMemberRoleRequest
+	33, // 33: chatim.v1.CoreService.SetMemberPriority:input_type -> chatim.v1.SetMemberPriorityRequest
+	34, // 34: chatim.v1.CoreService.MarkRead:input_type -> chatim.v1.MarkReadRequest
+	35, // 35: chatim.v1.CoreService.MarkUnread:input_type -> chatim.v1.MarkUnreadRequest
+	8,  // 36: chatim.v1.CoreService.CreateRoom:output_type -> chatim.v1.CreateRoomResponse
+	10, // 37: chatim.v1.CoreService.SendMessage:output_type -> chatim.v1.SendMessageResponse
+	12, // 38: chatim.v1.CoreService.GetHistory:output_type -> chatim.v1.GetHistoryResponse
+	14, // 39: chatim.v1.CoreService.EditMessage:output_type -> chatim.v1.EditMessageResponse
+	16, // 40: chatim.v1.CoreService.DeleteMessage:output_type -> chatim.v1.DeleteMessageResponse
+	18, // 41: chatim.v1.CoreService.HideMessage:output_type -> chatim.v1.HideMessageResponse
+	20, // 42: chatim.v1.CoreService.ClearHistory:output_type -> chatim.v1.ClearHistoryResponse
+	22, // 43: chatim.v1.CoreService.GetEditHistory:output_type -> chatim.v1.GetEditHistoryResponse
+	36, // 44: chatim.v1.CoreService.ReactMessage:output_type -> chatim.v1.ReactMessageResponse
+	37, // 45: chatim.v1.CoreService.PinMessage:output_type -> chatim.v1.PinMessageResponse
+	38, // 46: chatim.v1.CoreService.UnpinMessage:output_type -> chatim.v1.UnpinMessageResponse
+	39, // 47: chatim.v1.CoreService.GetReactionSettings:output_type -> chatim.v1.GetReactionSettingsResponse
+	40, // 48: chatim.v1.CoreService.AddMembers:output_type -> chatim.v1.AddMembersResponse
+	41, // 49: chatim.v1.CoreService.RemoveMember:output_type -> chatim.v1.RemoveMemberResponse
+	42, // 50: chatim.v1.CoreService.LeaveRoom:output_type -> chatim.v1.LeaveRoomResponse
+	43, // 51: chatim.v1.CoreService.ChangeMemberRole:output_type -> chatim.v1.ChangeMemberRoleResponse
+	44, // 52: chatim.v1.CoreService.SetMemberPriority:output_type -> chatim.v1.SetMemberPriorityResponse
+	45, // 53: chatim.v1.CoreService.MarkRead:output_type -> chatim.v1.MarkReadResponse
+	46, // 54: chatim.v1.CoreService.MarkUnread:output_type -> chatim.v1.MarkUnreadResponse
+	36, // [36:55] is the sub-list for method output_type
+	17, // [17:36] is the sub-list for method input_type
 	17, // [17:17] is the sub-list for extension type_name
 	17, // [17:17] is the sub-list for extension extendee
 	0,  // [0:17] is the sub-list for field type_name
@@ -1652,6 +1689,7 @@ func file_chatim_v1_core_proto_init() {
 	if File_chatim_v1_core_proto != nil {
 		return
 	}
+	file_chatim_v1_members_proto_init()
 	file_chatim_v1_reactions_pins_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{

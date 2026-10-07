@@ -68,7 +68,7 @@ func TestRealJetStreamDedupesByMsgIDAndRepublishesLive(t *testing.T) {
 	cfg := fastSetup
 	it := realStream(t, cfg)
 	cfg.SubjectRoot = it.cfg.SubjectRoot
-	live, err := it.nc.SubscribeSync(it.cfg.LiveRoot + ".acme.room.101.evt.msg_created")
+	live, err := it.nc.SubscribeSync(it.cfg.LiveRoot + ".acme.message.101.evt.msg_created")
 	if err != nil {
 		t.Fatalf("subscribe live: %v", err)
 	}

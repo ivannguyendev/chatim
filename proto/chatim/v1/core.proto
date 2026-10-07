@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package chatim.v1;
 
+import "chatim/v1/members.proto";
 import "chatim/v1/reactions_pins.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -18,6 +19,13 @@ service CoreService {
   rpc PinMessage(PinMessageRequest) returns (PinMessageResponse);
   rpc UnpinMessage(UnpinMessageRequest) returns (UnpinMessageResponse);
   rpc GetReactionSettings(GetReactionSettingsRequest) returns (GetReactionSettingsResponse);
+  rpc AddMembers(AddMembersRequest) returns (AddMembersResponse);
+  rpc RemoveMember(RemoveMemberRequest) returns (RemoveMemberResponse);
+  rpc LeaveRoom(LeaveRoomRequest) returns (LeaveRoomResponse);
+  rpc ChangeMemberRole(ChangeMemberRoleRequest) returns (ChangeMemberRoleResponse);
+  rpc SetMemberPriority(SetMemberPriorityRequest) returns (SetMemberPriorityResponse);
+  rpc MarkRead(MarkReadRequest) returns (MarkReadResponse);
+  rpc MarkUnread(MarkUnreadRequest) returns (MarkUnreadResponse);
 }
 
 enum RoomType {

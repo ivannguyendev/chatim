@@ -17,8 +17,8 @@ func TestMessageChangesGoToTheirOwnSubjectsWithoutAMark(t *testing.T) {
 		ev      *chatimv1.Event
 		subject string
 	}{
-		"edited":  {pbconv.MessageEdited(domain.RoomGroup, m, e), "evt.acme.room.101.msg_edited"},
-		"deleted": {pbconv.MessageDeleted(domain.RoomGroup, m, e), "evt.acme.room.101.msg_deleted"},
+		"edited":  {pbconv.MessageEdited(domain.RoomGroup, m, e), "evt.acme.message.101.msg_edited"},
+		"deleted": {pbconv.MessageDeleted(domain.RoomGroup, m, e), "evt.acme.message.101.msg_deleted"},
 	}
 	for name, c := range cases {
 		msg, err := publish.Message("evt", roomA, c.ev)

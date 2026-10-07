@@ -43,7 +43,7 @@ func watchCmd(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	subject := *liveRoot + "." + *tenant + ".room." + *room + ".>"
+	subject := *liveRoot + "." + *tenant + ".*." + *room + ".>"
 	return errors.Join(watch(ctx, *url, subject, w), w.Close())
 }
 

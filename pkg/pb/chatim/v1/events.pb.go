@@ -42,6 +42,14 @@ type Event struct {
 	//	*Event_CountsChanged
 	//	*Event_MessagePinned
 	//	*Event_MessageUnpinned
+	//	*Event_MemberAdded
+	//	*Event_MemberRemoved
+	//	*Event_MemberRoleChanged
+	//	*Event_MemberCountChanged
+	//	*Event_ReadUpdated
+	//	*Event_MemberPriorityChanged
+	//	*Event_MessageHidden
+	//	*Event_HistoryCleared
 	Payload       isEvent_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -212,6 +220,78 @@ func (x *Event) GetMessageUnpinned() *MessageUnpinned {
 	return nil
 }
 
+func (x *Event) GetMemberAdded() *MemberAdded {
+	if x != nil {
+		if x, ok := x.Payload.(*Event_MemberAdded); ok {
+			return x.MemberAdded
+		}
+	}
+	return nil
+}
+
+func (x *Event) GetMemberRemoved() *MemberRemoved {
+	if x != nil {
+		if x, ok := x.Payload.(*Event_MemberRemoved); ok {
+			return x.MemberRemoved
+		}
+	}
+	return nil
+}
+
+func (x *Event) GetMemberRoleChanged() *MemberRoleChanged {
+	if x != nil {
+		if x, ok := x.Payload.(*Event_MemberRoleChanged); ok {
+			return x.MemberRoleChanged
+		}
+	}
+	return nil
+}
+
+func (x *Event) GetMemberCountChanged() *MemberCountChanged {
+	if x != nil {
+		if x, ok := x.Payload.(*Event_MemberCountChanged); ok {
+			return x.MemberCountChanged
+		}
+	}
+	return nil
+}
+
+func (x *Event) GetReadUpdated() *ReadUpdated {
+	if x != nil {
+		if x, ok := x.Payload.(*Event_ReadUpdated); ok {
+			return x.ReadUpdated
+		}
+	}
+	return nil
+}
+
+func (x *Event) GetMemberPriorityChanged() *MemberPriorityChanged {
+	if x != nil {
+		if x, ok := x.Payload.(*Event_MemberPriorityChanged); ok {
+			return x.MemberPriorityChanged
+		}
+	}
+	return nil
+}
+
+func (x *Event) GetMessageHidden() *MessageHidden {
+	if x != nil {
+		if x, ok := x.Payload.(*Event_MessageHidden); ok {
+			return x.MessageHidden
+		}
+	}
+	return nil
+}
+
+func (x *Event) GetHistoryCleared() *HistoryCleared {
+	if x != nil {
+		if x, ok := x.Payload.(*Event_HistoryCleared); ok {
+			return x.HistoryCleared
+		}
+	}
+	return nil
+}
+
 type isEvent_Payload interface {
 	isEvent_Payload()
 }
@@ -248,6 +328,38 @@ type Event_MessageUnpinned struct {
 	MessageUnpinned *MessageUnpinned `protobuf:"bytes,27,opt,name=message_unpinned,json=messageUnpinned,proto3,oneof"`
 }
 
+type Event_MemberAdded struct {
+	MemberAdded *MemberAdded `protobuf:"bytes,28,opt,name=member_added,json=memberAdded,proto3,oneof"`
+}
+
+type Event_MemberRemoved struct {
+	MemberRemoved *MemberRemoved `protobuf:"bytes,29,opt,name=member_removed,json=memberRemoved,proto3,oneof"`
+}
+
+type Event_MemberRoleChanged struct {
+	MemberRoleChanged *MemberRoleChanged `protobuf:"bytes,30,opt,name=member_role_changed,json=memberRoleChanged,proto3,oneof"`
+}
+
+type Event_MemberCountChanged struct {
+	MemberCountChanged *MemberCountChanged `protobuf:"bytes,31,opt,name=member_count_changed,json=memberCountChanged,proto3,oneof"`
+}
+
+type Event_ReadUpdated struct {
+	ReadUpdated *ReadUpdated `protobuf:"bytes,32,opt,name=read_updated,json=readUpdated,proto3,oneof"`
+}
+
+type Event_MemberPriorityChanged struct {
+	MemberPriorityChanged *MemberPriorityChanged `protobuf:"bytes,33,opt,name=member_priority_changed,json=memberPriorityChanged,proto3,oneof"`
+}
+
+type Event_MessageHidden struct {
+	MessageHidden *MessageHidden `protobuf:"bytes,34,opt,name=message_hidden,json=messageHidden,proto3,oneof"`
+}
+
+type Event_HistoryCleared struct {
+	HistoryCleared *HistoryCleared `protobuf:"bytes,35,opt,name=history_cleared,json=historyCleared,proto3,oneof"`
+}
+
 func (*Event_MessageCreated) isEvent_Payload() {}
 
 func (*Event_RoomCreated) isEvent_Payload() {}
@@ -263,6 +375,22 @@ func (*Event_CountsChanged) isEvent_Payload() {}
 func (*Event_MessagePinned) isEvent_Payload() {}
 
 func (*Event_MessageUnpinned) isEvent_Payload() {}
+
+func (*Event_MemberAdded) isEvent_Payload() {}
+
+func (*Event_MemberRemoved) isEvent_Payload() {}
+
+func (*Event_MemberRoleChanged) isEvent_Payload() {}
+
+func (*Event_MemberCountChanged) isEvent_Payload() {}
+
+func (*Event_ReadUpdated) isEvent_Payload() {}
+
+func (*Event_MemberPriorityChanged) isEvent_Payload() {}
+
+func (*Event_MessageHidden) isEvent_Payload() {}
+
+func (*Event_HistoryCleared) isEvent_Payload() {}
 
 type MessageCreated struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -684,7 +812,8 @@ var File_chatim_v1_events_proto protoreflect.FileDescriptor
 
 const file_chatim_v1_events_proto_rawDesc = "" +
 	"\n" +
-	"\x16chatim/v1/events.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa9\x06\n" +
+	"\x16chatim/v1/events.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x17chatim/v1/members.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xee\n" +
+	"\n" +
 	"\x05Event\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06tenant\x18\x02 \x01(\tR\x06tenant\x12\x17\n" +
@@ -702,7 +831,15 @@ const file_chatim_v1_events_proto_rawDesc = "" +
 	"\x10reaction_changed\x18\x18 \x01(\v2\x1a.chatim.v1.ReactionChangedH\x00R\x0freactionChanged\x12A\n" +
 	"\x0ecounts_changed\x18\x19 \x01(\v2\x18.chatim.v1.CountsChangedH\x00R\rcountsChanged\x12A\n" +
 	"\x0emessage_pinned\x18\x1a \x01(\v2\x18.chatim.v1.MessagePinnedH\x00R\rmessagePinned\x12G\n" +
-	"\x10message_unpinned\x18\x1b \x01(\v2\x1a.chatim.v1.MessageUnpinnedH\x00R\x0fmessageUnpinnedB\t\n" +
+	"\x10message_unpinned\x18\x1b \x01(\v2\x1a.chatim.v1.MessageUnpinnedH\x00R\x0fmessageUnpinned\x12;\n" +
+	"\fmember_added\x18\x1c \x01(\v2\x16.chatim.v1.MemberAddedH\x00R\vmemberAdded\x12A\n" +
+	"\x0emember_removed\x18\x1d \x01(\v2\x18.chatim.v1.MemberRemovedH\x00R\rmemberRemoved\x12N\n" +
+	"\x13member_role_changed\x18\x1e \x01(\v2\x1c.chatim.v1.MemberRoleChangedH\x00R\x11memberRoleChanged\x12Q\n" +
+	"\x14member_count_changed\x18\x1f \x01(\v2\x1d.chatim.v1.MemberCountChangedH\x00R\x12memberCountChanged\x12;\n" +
+	"\fread_updated\x18  \x01(\v2\x16.chatim.v1.ReadUpdatedH\x00R\vreadUpdated\x12Z\n" +
+	"\x17member_priority_changed\x18! \x01(\v2 .chatim.v1.MemberPriorityChangedH\x00R\x15memberPriorityChanged\x12A\n" +
+	"\x0emessage_hidden\x18\" \x01(\v2\x18.chatim.v1.MessageHiddenH\x00R\rmessageHidden\x12D\n" +
+	"\x0fhistory_cleared\x18# \x01(\v2\x19.chatim.v1.HistoryClearedH\x00R\x0ehistoryClearedB\t\n" +
 	"\apayloadJ\x04\b\a\x10\bR\x03pts\">\n" +
 	"\x0eMessageCreated\x12,\n" +
 	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\"2\n" +
@@ -756,9 +893,17 @@ var file_chatim_v1_events_proto_goTypes = []any{
 	(*MessageUnpinned)(nil),       // 8: chatim.v1.MessageUnpinned
 	(RoomType)(0),                 // 9: chatim.v1.RoomType
 	(*timestamppb.Timestamp)(nil), // 10: google.protobuf.Timestamp
-	(*Message)(nil),               // 11: chatim.v1.Message
-	(*Room)(nil),                  // 12: chatim.v1.Room
-	(*ReactionSummary)(nil),       // 13: chatim.v1.ReactionSummary
+	(*MemberAdded)(nil),           // 11: chatim.v1.MemberAdded
+	(*MemberRemoved)(nil),         // 12: chatim.v1.MemberRemoved
+	(*MemberRoleChanged)(nil),     // 13: chatim.v1.MemberRoleChanged
+	(*MemberCountChanged)(nil),    // 14: chatim.v1.MemberCountChanged
+	(*ReadUpdated)(nil),           // 15: chatim.v1.ReadUpdated
+	(*MemberPriorityChanged)(nil), // 16: chatim.v1.MemberPriorityChanged
+	(*MessageHidden)(nil),         // 17: chatim.v1.MessageHidden
+	(*HistoryCleared)(nil),        // 18: chatim.v1.HistoryCleared
+	(*Message)(nil),               // 19: chatim.v1.Message
+	(*Room)(nil),                  // 20: chatim.v1.Room
+	(*ReactionSummary)(nil),       // 21: chatim.v1.ReactionSummary
 }
 var file_chatim_v1_events_proto_depIdxs = []int32{
 	9,  // 0: chatim.v1.Event.room_type:type_name -> chatim.v1.RoomType
@@ -771,18 +916,26 @@ var file_chatim_v1_events_proto_depIdxs = []int32{
 	6,  // 7: chatim.v1.Event.counts_changed:type_name -> chatim.v1.CountsChanged
 	7,  // 8: chatim.v1.Event.message_pinned:type_name -> chatim.v1.MessagePinned
 	8,  // 9: chatim.v1.Event.message_unpinned:type_name -> chatim.v1.MessageUnpinned
-	11, // 10: chatim.v1.MessageCreated.message:type_name -> chatim.v1.Message
-	12, // 11: chatim.v1.RoomCreated.room:type_name -> chatim.v1.Room
-	11, // 12: chatim.v1.MessageEdited.message:type_name -> chatim.v1.Message
-	11, // 13: chatim.v1.MessageDeleted.message:type_name -> chatim.v1.Message
-	13, // 14: chatim.v1.CountsChanged.reactions:type_name -> chatim.v1.ReactionSummary
-	11, // 15: chatim.v1.MessagePinned.message:type_name -> chatim.v1.Message
-	11, // 16: chatim.v1.MessageUnpinned.message:type_name -> chatim.v1.Message
-	17, // [17:17] is the sub-list for method output_type
-	17, // [17:17] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	11, // 10: chatim.v1.Event.member_added:type_name -> chatim.v1.MemberAdded
+	12, // 11: chatim.v1.Event.member_removed:type_name -> chatim.v1.MemberRemoved
+	13, // 12: chatim.v1.Event.member_role_changed:type_name -> chatim.v1.MemberRoleChanged
+	14, // 13: chatim.v1.Event.member_count_changed:type_name -> chatim.v1.MemberCountChanged
+	15, // 14: chatim.v1.Event.read_updated:type_name -> chatim.v1.ReadUpdated
+	16, // 15: chatim.v1.Event.member_priority_changed:type_name -> chatim.v1.MemberPriorityChanged
+	17, // 16: chatim.v1.Event.message_hidden:type_name -> chatim.v1.MessageHidden
+	18, // 17: chatim.v1.Event.history_cleared:type_name -> chatim.v1.HistoryCleared
+	19, // 18: chatim.v1.MessageCreated.message:type_name -> chatim.v1.Message
+	20, // 19: chatim.v1.RoomCreated.room:type_name -> chatim.v1.Room
+	19, // 20: chatim.v1.MessageEdited.message:type_name -> chatim.v1.Message
+	19, // 21: chatim.v1.MessageDeleted.message:type_name -> chatim.v1.Message
+	21, // 22: chatim.v1.CountsChanged.reactions:type_name -> chatim.v1.ReactionSummary
+	19, // 23: chatim.v1.MessagePinned.message:type_name -> chatim.v1.Message
+	19, // 24: chatim.v1.MessageUnpinned.message:type_name -> chatim.v1.Message
+	25, // [25:25] is the sub-list for method output_type
+	25, // [25:25] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_chatim_v1_events_proto_init() }
@@ -791,6 +944,7 @@ func file_chatim_v1_events_proto_init() {
 		return
 	}
 	file_chatim_v1_core_proto_init()
+	file_chatim_v1_members_proto_init()
 	file_chatim_v1_reactions_pins_proto_init()
 	file_chatim_v1_events_proto_msgTypes[0].OneofWrappers = []any{
 		(*Event_MessageCreated)(nil),
@@ -801,6 +955,14 @@ func file_chatim_v1_events_proto_init() {
 		(*Event_CountsChanged)(nil),
 		(*Event_MessagePinned)(nil),
 		(*Event_MessageUnpinned)(nil),
+		(*Event_MemberAdded)(nil),
+		(*Event_MemberRemoved)(nil),
+		(*Event_MemberRoleChanged)(nil),
+		(*Event_MemberCountChanged)(nil),
+		(*Event_ReadUpdated)(nil),
+		(*Event_MemberPriorityChanged)(nil),
+		(*Event_MessageHidden)(nil),
+		(*Event_HistoryCleared)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

@@ -51,7 +51,7 @@ func TestReactionCounterTouchesEachMessageOnceWithEveryWitness(t *testing.T) {
 	if !slices.Equal(ids, []string{pbconv.ReactionCountsEventID(room, 0, 1, 1), pbconv.ReactionCountsEventID(room, 0, 2, 1)}) {
 		t.Fatalf("stored = %v", ids)
 	}
-	if subj := rg.js.Stored()[0].Subject; subj != "evt.acme.room.4242.counts_changed" {
+	if subj := rg.js.Stored()[0].Subject; subj != "evt.acme.message.4242.counts_changed" {
 		t.Fatalf("subject = %q", subj)
 	}
 	events, err := rg.js.Events()

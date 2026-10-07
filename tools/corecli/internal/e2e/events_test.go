@@ -8,7 +8,7 @@ import (
 )
 
 func TestEventOfKeepsMessageEventsOnly(t *testing.T) {
-	const subject = "live.e2e.room.42.evt.msg_created"
+	const subject = "live.e2e.message.42.evt.msg_created"
 	created := &chatimv1.Event{
 		Id: "42-0-3", RoomId: "42", Seq: 3,
 		Payload: &chatimv1.Event_MessageCreated{MessageCreated: &chatimv1.MessageCreated{Message: &chatimv1.Message{Cid: "a-c"}}},

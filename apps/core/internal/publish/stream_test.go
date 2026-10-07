@@ -43,8 +43,8 @@ func TestEnsureStreamConfiguresDedupeAndRepublish(t *testing.T) {
 		t.Fatalf("storage %v replicas %d", c.Storage, c.Replicas)
 	case c.MaxAge != 7*24*time.Hour || c.Duplicates != 5*time.Minute:
 		t.Fatalf("max age %v duplicates %v", c.MaxAge, c.Duplicates)
-	case c.RePublish == nil || c.RePublish.Source != "evt.*.room.*.*" ||
-		c.RePublish.Destination != "live.{{wildcard(1)}}.room.{{wildcard(2)}}.evt.{{wildcard(3)}}":
+	case c.RePublish == nil || c.RePublish.Source != "evt.*.*.*.*" ||
+		c.RePublish.Destination != "live.{{wildcard(1)}}.{{wildcard(2)}}.{{wildcard(3)}}.evt.{{wildcard(4)}}":
 		t.Fatalf("republish %+v", c.RePublish)
 	}
 	spy.err = errors.New("no jetstream")
@@ -81,7 +81,7 @@ func TestPublishedMessageCarriesSubjectMsgIDAndEvent(t *testing.T) {
 	rg.enqueue(t, roomA, 7)
 	eventually(t, "event stored", func() bool { return len(rg.js.Stored()) == 1 })
 	m := rg.js.Stored()[0]
-	if m.Subject != "evt.acme.room.101.msg_created" || publishtest.MsgID(m) != "101-0-7" {
+	if m.Subject != "evt.acme.message.101.msg_created" || publishtest.MsgID(m) != "101-0-7" {
 		t.Fatalf("subject %q msg id %q", m.Subject, publishtest.MsgID(m))
 	}
 	got, err := rg.js.Events()

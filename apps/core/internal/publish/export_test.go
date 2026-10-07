@@ -1,3 +1,6 @@
 package publish
 
-var MarkKey = markKey
+var (
+	MarkKey    = markKey
+	SubjectFor = subjectFor
+)

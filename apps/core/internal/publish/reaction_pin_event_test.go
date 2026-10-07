@@ -23,8 +23,8 @@ func TestReactionAndPinEventsGoToTheirOwnSubjectsWithoutAMark(t *testing.T) {
 		ev          *chatimv1.Event
 		subject, id string
 	}{
-		"reaction": {pbconv.ReactionChanged(domain.RoomGroup, r), "evt.acme.room.101.reaction_changed", "101-0-7-bob-n1"},
-		"counts":   {pbconv.CountsChanged(domain.RoomGroup, m, sentAt), "evt.acme.room.101.counts_changed", "101-0-7-reactions-v2"},
+		"reaction": {pbconv.ReactionChanged(domain.RoomGroup, r), "evt.acme.message.101.reaction_changed", "101-0-7-bob-n1"},
+		"counts":   {pbconv.CountsChanged(domain.RoomGroup, m, sentAt), "evt.acme.message.101.counts_changed", "101-0-7-reactions-v2"},
 		"pinned":   {pbconv.PinChanged(domain.RoomGroup, m, pin), "evt.acme.room.101.msg_pinned", "101-p3"},
 		"unpinned": {pbconv.PinChanged(domain.RoomGroup, m, unpin), "evt.acme.room.101.msg_unpinned", "101-p4"},
 	}

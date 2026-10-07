@@ -34,7 +34,7 @@ func TestReactionEventPublishesTheCurrentChange(t *testing.T) {
 	if got := storedEventIDs(rg.js); !slices.Equal(got, []string{pbconv.ReactionEventID(room, 0, 1, "bob", 1)}) {
 		t.Fatalf("stored = %v", got)
 	}
-	if subj := rg.js.Stored()[0].Subject; subj != "evt.acme.room.4242.reaction_changed" {
+	if subj := rg.js.Stored()[0].Subject; subj != "evt.acme.message.4242.reaction_changed" {
 		t.Fatalf("subject = %q", subj)
 	}
 	events, err := rg.js.Events()

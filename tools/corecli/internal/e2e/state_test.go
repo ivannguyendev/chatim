@@ -59,11 +59,11 @@ func TestEventOfReadsTheCreatedMessage(t *testing.T) {
 	ev := &chatimv1.Event{RoomId: room, Id: "42-0-4", Seq: 4, Payload: &chatimv1.Event_MessageCreated{
 		MessageCreated: &chatimv1.MessageCreated{Message: &chatimv1.Message{Cid: "a-4"}},
 	}}
-	got, ok := e2e.EventOf("live.e2e.room.42.evt.msg_created", ev)
+	got, ok := e2e.EventOf("live.e2e.message.42.evt.msg_created", ev)
 	if !ok {
 		t.Fatal("EventOf skipped a message_created event")
 	}
-	want := e2e.Event{Kind: e2e.KindCreated, Room: room, ID: "42-0-4", Seq: 4, CID: "a-4", Subject: "live.e2e.room.42.evt.msg_created"}
+	want := e2e.Event{Kind: e2e.KindCreated, Room: room, ID: "42-0-4", Seq: 4, CID: "a-4", Subject: "live.e2e.message.42.evt.msg_created"}
 	if got != want {
 		t.Fatalf("EventOf = %+v, want %+v", got, want)
 	}

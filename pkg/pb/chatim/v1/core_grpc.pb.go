@@ -31,6 +31,13 @@ const (
 	CoreService_PinMessage_FullMethodName          = "/chatim.v1.CoreService/PinMessage"
 	CoreService_UnpinMessage_FullMethodName        = "/chatim.v1.CoreService/UnpinMessage"
 	CoreService_GetReactionSettings_FullMethodName = "/chatim.v1.CoreService/GetReactionSettings"
+	CoreService_AddMembers_FullMethodName          = "/chatim.v1.CoreService/AddMembers"
+	CoreService_RemoveMember_FullMethodName        = "/chatim.v1.CoreService/RemoveMember"
+	CoreService_LeaveRoom_FullMethodName           = "/chatim.v1.CoreService/LeaveRoom"
+	CoreService_ChangeMemberRole_FullMethodName    = "/chatim.v1.CoreService/ChangeMemberRole"
+	CoreService_SetMemberPriority_FullMethodName   = "/chatim.v1.CoreService/SetMemberPriority"
+	CoreService_MarkRead_FullMethodName            = "/chatim.v1.CoreService/MarkRead"
+	CoreService_MarkUnread_FullMethodName          = "/chatim.v1.CoreService/MarkUnread"
 )
 
 // CoreServiceClient is the client API for CoreService service.
@@ -49,6 +56,13 @@ type CoreServiceClient interface {
 	PinMessage(ctx context.Context, in *PinMessageRequest, opts ...grpc.CallOption) (*PinMessageResponse, error)
 	UnpinMessage(ctx context.Context, in *UnpinMessageRequest, opts ...grpc.CallOption) (*UnpinMessageResponse, error)
 	GetReactionSettings(ctx context.Context, in *GetReactionSettingsRequest, opts ...grpc.CallOption) (*GetReactionSettingsResponse, error)
+	AddMembers(ctx context.Context, in *AddMembersRequest, opts ...grpc.CallOption) (*AddMembersResponse, error)
+	RemoveMember(ctx context.Context, in *RemoveMemberRequest, opts ...grpc.CallOption) (*RemoveMemberResponse, error)
+	LeaveRoom(ctx context.Context, in *LeaveRoomRequest, opts ...grpc.CallOption) (*LeaveRoomResponse, error)
+	ChangeMemberRole(ctx context.Context, in *ChangeMemberRoleRequest, opts ...grpc.CallOption) (*ChangeMemberRoleResponse, error)
+	SetMemberPriority(ctx context.Context, in *SetMemberPriorityRequest, opts ...grpc.CallOption) (*SetMemberPriorityResponse, error)
+	MarkRead(ctx context.Context, in *MarkReadRequest, opts ...grpc.CallOption) (*MarkReadResponse, error)
+	MarkUnread(ctx context.Context, in *MarkUnreadRequest, opts ...grpc.CallOption) (*MarkUnreadResponse, error)
 }
 
 type coreServiceClient struct {
@@ -179,6 +193,76 @@ func (c *coreServiceClient) GetReactionSettings(ctx context.Context, in *GetReac
 	return out, nil
 }
 
+func (c *coreServiceClient) AddMembers(ctx context.Context, in *AddMembersRequest, opts ...grpc.CallOption) (*AddMembersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AddMembersResponse)
+	err := c.cc.Invoke(ctx, CoreService_AddMembers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) RemoveMember(ctx context.Context, in *RemoveMemberRequest, opts ...grpc.CallOption) (*RemoveMemberResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveMemberResponse)
+	err := c.cc.Invoke(ctx, CoreService_RemoveMember_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) LeaveRoom(ctx context.Context, in *LeaveRoomRequest, opts ...grpc.CallOption) (*LeaveRoomResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LeaveRoomResponse)
+	err := c.cc.Invoke(ctx, CoreService_LeaveRoom_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) ChangeMemberRole(ctx context.Context, in *ChangeMemberRoleRequest, opts ...grpc.CallOption) (*ChangeMemberRoleResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ChangeMemberRoleResponse)
+	err := c.cc.Invoke(ctx, CoreService_ChangeMemberRole_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) SetMemberPriority(ctx context.Context, in *SetMemberPriorityRequest, opts ...grpc.CallOption) (*SetMemberPriorityResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetMemberPriorityResponse)
+	err := c.cc.Invoke(ctx, CoreService_SetMemberPriority_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) MarkRead(ctx context.Context, in *MarkReadRequest, opts ...grpc.CallOption) (*MarkReadResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MarkReadResponse)
+	err := c.cc.Invoke(ctx, CoreService_MarkRead_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) MarkUnread(ctx context.Context, in *MarkUnreadRequest, opts ...grpc.CallOption) (*MarkUnreadResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MarkUnreadResponse)
+	err := c.cc.Invoke(ctx, CoreService_MarkUnread_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CoreServiceServer is the server API for CoreService service.
 // All implementations must embed UnimplementedCoreServiceServer
 // for forward compatibility.
@@ -195,6 +279,13 @@ type CoreServiceServer interface {
 	PinMessage(context.Context, *PinMessageRequest) (*PinMessageResponse, error)
 	UnpinMessage(context.Context, *UnpinMessageRequest) (*UnpinMessageResponse, error)
 	GetReactionSettings(context.Context, *GetReactionSettingsRequest) (*GetReactionSettingsResponse, error)
+	AddMembers(context.Context, *AddMembersRequest) (*AddMembersResponse, error)
+	RemoveMember(context.Context, *RemoveMemberRequest) (*RemoveMemberResponse, error)
+	LeaveRoom(context.Context, *LeaveRoomRequest) (*LeaveRoomResponse, error)
+	ChangeMemberRole(context.Context, *ChangeMemberRoleRequest) (*ChangeMemberRoleResponse, error)
+	SetMemberPriority(context.Context, *SetMemberPriorityRequest) (*SetMemberPriorityResponse, error)
+	MarkRead(context.Context, *MarkReadRequest) (*MarkReadResponse, error)
+	MarkUnread(context.Context, *MarkUnreadRequest) (*MarkUnreadResponse, error)
 	mustEmbedUnimplementedCoreServiceServer()
 }
 
@@ -240,6 +331,27 @@ func (UnimplementedCoreServiceServer) UnpinMessage(context.Context, *UnpinMessag
 }
 func (UnimplementedCoreServiceServer) GetReactionSettings(context.Context, *GetReactionSettingsRequest) (*GetReactionSettingsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetReactionSettings not implemented")
+}
+func (UnimplementedCoreServiceServer) AddMembers(context.Context, *AddMembersRequest) (*AddMembersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AddMembers not implemented")
+}
+func (UnimplementedCoreServiceServer) RemoveMember(context.Context, *RemoveMemberRequest) (*RemoveMemberResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RemoveMember not implemented")
+}
+func (UnimplementedCoreServiceServer) LeaveRoom(context.Context, *LeaveRoomRequest) (*LeaveRoomResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method LeaveRoom not implemented")
+}
+func (UnimplementedCoreServiceServer) ChangeMemberRole(context.Context, *ChangeMemberRoleRequest) (*ChangeMemberRoleResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ChangeMemberRole not implemented")
+}
+func (UnimplementedCoreServiceServer) SetMemberPriority(context.Context, *SetMemberPriorityRequest) (*SetMemberPriorityResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetMemberPriority not implemented")
+}
+func (UnimplementedCoreServiceServer) MarkRead(context.Context, *MarkReadRequest) (*MarkReadResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method MarkRead not implemented")
+}
+func (UnimplementedCoreServiceServer) MarkUnread(context.Context, *MarkUnreadRequest) (*MarkUnreadResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method MarkUnread not implemented")
 }
 func (UnimplementedCoreServiceServer) mustEmbedUnimplementedCoreServiceServer() {}
 func (UnimplementedCoreServiceServer) testEmbeddedByValue()                     {}
@@ -478,6 +590,132 @@ func _CoreService_GetReactionSettings_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CoreService_AddMembers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddMembersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).AddMembers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_AddMembers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).AddMembers(ctx, req.(*AddMembersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_RemoveMember_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveMemberRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).RemoveMember(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_RemoveMember_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).RemoveMember(ctx, req.(*RemoveMemberRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_LeaveRoom_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LeaveRoomRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).LeaveRoom(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_LeaveRoom_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).LeaveRoom(ctx, req.(*LeaveRoomRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_ChangeMemberRole_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ChangeMemberRoleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).ChangeMemberRole(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_ChangeMemberRole_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).ChangeMemberRole(ctx, req.(*ChangeMemberRoleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_SetMemberPriority_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetMemberPriorityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).SetMemberPriority(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_SetMemberPriority_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).SetMemberPriority(ctx, req.(*SetMemberPriorityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_MarkRead_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MarkReadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).MarkRead(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_MarkRead_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).MarkRead(ctx, req.(*MarkReadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_MarkUnread_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MarkUnreadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).MarkUnread(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_MarkUnread_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).MarkUnread(ctx, req.(*MarkUnreadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CoreService_ServiceDesc is the grpc.ServiceDesc for CoreService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -532,6 +770,34 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetReactionSettings",
 			Handler:    _CoreService_GetReactionSettings_Handler,
+		},
+		{
+			MethodName: "AddMembers",
+			Handler:    _CoreService_AddMembers_Handler,
+		},
+		{
+			MethodName: "RemoveMember",
+			Handler:    _CoreService_RemoveMember_Handler,
+		},
+		{
+			MethodName: "LeaveRoom",
+			Handler:    _CoreService_LeaveRoom_Handler,
+		},
+		{
+			MethodName: "ChangeMemberRole",
+			Handler:    _CoreService_ChangeMemberRole_Handler,
+		},
+		{
+			MethodName: "SetMemberPriority",
+			Handler:    _CoreService_SetMemberPriority_Handler,
+		},
+		{
+			MethodName: "MarkRead",
+			Handler:    _CoreService_MarkRead_Handler,
+		},
+		{
+			MethodName: "MarkUnread",
+			Handler:    _CoreService_MarkUnread_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

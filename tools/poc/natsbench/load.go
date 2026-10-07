@@ -31,7 +31,7 @@ func load(ctx context.Context, c config, js jetstream.JetStream) error {
 	subs := make([]*nats.Subscription, 0, c.subs)
 	for room := range c.subs {
 		i := room % c.conns
-		sub, err := conns[i].ChanSubscribe(fmt.Sprintf("live.t1.room.%d.>", room), inboxes[i])
+		sub, err := conns[i].ChanSubscribe(fmt.Sprintf("live.t1.*.%d.>", room), inboxes[i])
 		if err != nil {
 			return fmt.Errorf("subscribe room %d: %w", room, err)
 		}
@@ -78,7 +78,7 @@ func load(ctx context.Context, c config, js jetstream.JetStream) error {
 					return
 				case <-tick.C:
 				}
-				subj := fmt.Sprintf("evt.t1.room.%d.msg_created", rng.IntN(c.subs))
+				subj := fmt.Sprintf("evt.t1.message.%d.msg_created", rng.IntN(c.subs))
 				begin := time.Now()
 				if _, err := js.Publish(ctx, subj, stamp(c.size)); err != nil {
 					failed.Add(1)

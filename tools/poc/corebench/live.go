@@ -34,7 +34,7 @@ func startWatch(c config, rooms []room, run string) (*liveWatch, error) {
 	}
 	w := &liveWatch{nc: nc, live: openloop.NewLive(c.plan.WarmupShots()), rooms: len(rooms)}
 	for _, r := range rooms {
-		subject := c.liveRoot + "." + c.tenant + ".room." + r.id + ".>"
+		subject := c.liveRoot + "." + c.tenant + ".*." + r.id + ".>"
 		sub, err := nc.Subscribe(subject, func(m *nats.Msg) { w.observe(run, m) })
 		if err == nil {
 			err = sub.SetPendingLimits(-1, -1)
