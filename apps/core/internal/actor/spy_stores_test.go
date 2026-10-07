@@ -74,10 +74,11 @@ func (m *spyMessages) counts() (lasts, pages, finds int) {
 
 type spyRooms struct {
 	*memstore.Rooms
-	mu        sync.Mutex
-	members   int
-	getErr    error
-	memberErr error
+	mu         sync.Mutex
+	members    int
+	getErr     error
+	memberErr  error
+	memberHook func(context.Context)
 }
 
 func (r *spyRooms) Get(ctx context.Context, id uint64) (domain.Room, error) {
@@ -93,12 +94,22 @@ func (r *spyRooms) Get(ctx context.Context, id uint64) (domain.Room, error) {
 func (r *spyRooms) Member(ctx context.Context, room uint64, user string) (domain.Member, error) {
 	r.mu.Lock()
 	r.members++
-	err := r.memberErr
+	err, hook := r.memberErr, r.memberHook
 	r.mu.Unlock()
 	if err != nil {
 		return domain.Member{}, err
 	}
-	return r.Rooms.Member(ctx, room, user)
+	m, err := r.Rooms.Member(ctx, room, user)
+	if hook != nil {
+		hook(ctx)
+	}
+	return m, err
+}
+
+func (r *spyRooms) setMemberHook(hook func(context.Context)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.memberHook = hook
 }
 
 func (r *spyRooms) memberCalls() int {

@@ -6,7 +6,6 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
-	"github.com/ivannguyendev/chatim/pkg/lru"
 )
 
 type entry struct {
@@ -38,7 +37,7 @@ type actor struct {
 	last    uint64
 	stale   bool
 	dirty   bool
-	members *lru.Cache[string, domain.Member]
+	members *memberCache
 	cache   cidCache
 	retries []*entry
 	flight  *group
@@ -58,7 +57,7 @@ func newActor(r *Router, id uint64) *actor {
 		retire:  make(chan struct{}),
 		gone:    make(chan struct{}),
 		dirty:   true,
-		members: lru.New[string, domain.Member](memberCacheSize),
+		members: newMemberCache(),
 		cache:   newCIDCache(cidCacheSize, cidCacheTTL),
 	}
 }
