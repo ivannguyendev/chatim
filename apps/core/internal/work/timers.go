@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -88,7 +89,7 @@ func (t *Timers) Disarm(ctx context.Context, tm Timer) {
 	if err == nil {
 		err = s.DeleteMsg(ctx, tm.Seq)
 	}
-	if err != nil {
+	if err != nil && !errors.Is(err, jetstream.ErrMsgNotFound) {
 		t.log.WarnContext(ctx, disarmFailedMsg, "stream", t.stream, "seq", tm.Seq, "err", err)
 	}
 }

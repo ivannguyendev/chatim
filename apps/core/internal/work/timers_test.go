@@ -140,6 +140,8 @@ func TestDisarmDeletesTheTimerAndOnlyLogsFailures(t *testing.T) {
 	if len(js.stream.deleted) != 2 || js.stream.deleted[0] != 41 || js.stream.deleted[1] != 43 || js.streamCalls != 1 {
 		t.Fatalf("deleted %v with %d stream lookups, want 41 and 43 with one lookup", js.stream.deleted, js.streamCalls)
 	}
+	js.stream.err = jetstream.ErrMsgNotFound
+	tm.Disarm(t.Context(), Timer{Seq: 46})
 	js.stream.err = errNATS
 	tm.Disarm(t.Context(), Timer{Seq: 44})
 	failing := newTestTimers(t, &fakeTimerJS{streamErr: errNATS}, sink)
