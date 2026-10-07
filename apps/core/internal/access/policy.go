@@ -22,6 +22,13 @@ const (
 	ReactMessage    Action = "react_message"
 	PinMessage      Action = "pin_message"
 	UnpinMessage    Action = "unpin_message"
+
+	AddMembers        Action = "add_members"
+	RemoveMember      Action = "remove_member"
+	LeaveRoom         Action = "leave_room"
+	ChangeMemberRole  Action = "change_member_role"
+	SetMemberPriority Action = "set_member_priority"
+	MarkRead          Action = "mark_read"
 )
 
 var ErrDenied = fmt.Errorf("action denied: %w", apperr.ErrPermissionDenied)
@@ -33,6 +40,8 @@ type Request struct {
 	Kind   domain.Kind
 	Room   domain.Room
 	Member domain.Member
+	Target domain.Member
+	Role   domain.Role
 }
 
 type Policy interface {
@@ -52,11 +61,24 @@ type DefaultPolicy struct {
 }
 
 func (p DefaultPolicy) Check(_ context.Context, req Request) error {
-	if req.Action != EditMessage && req.Action != DeleteMessage {
+	switch req.Action {
+	case EditMessage, DeleteMessage:
+		return denyUnless(!slices.Contains(p.LockedKinds, req.Kind) && req.Author == req.User)
+	case AddMembers:
+		return denyUnless(req.Member.Role == domain.RoleOwner || req.Member.Role == domain.RoleAdmin)
+	case RemoveMember:
+		return denyUnless(req.Member.Role == domain.RoleOwner ||
+			(req.Member.Role == domain.RoleAdmin && req.Target.Role == domain.RoleMember))
+	case ChangeMemberRole, SetMemberPriority:
+		return denyUnless(req.Member.Role == domain.RoleOwner)
+	default:
 		return nil
 	}
-	if slices.Contains(p.LockedKinds, req.Kind) || req.Author != req.User {
-		return ErrDenied
+}
+
+func denyUnless(allowed bool) error {
+	if allowed {
+		return nil
 	}
-	return nil
+	return ErrDenied
 }
