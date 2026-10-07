@@ -73,24 +73,28 @@ func findOne(ctx context.Context, coll *mongo.Collection, filter bson.D, out any
 	return err
 }
 
-func (s *Store) ClearHistory(ctx context.Context, room uint64, user string, at time.Time) (time.Time, error) {
+func (s *Store) ClearHistory(ctx context.Context, room uint64, user string, at time.Time) (time.Time, bool, error) {
 	if err := store.ValidateMarkTime(at); err != nil {
-		return time.Time{}, err
+		return time.Time{}, false, err
 	}
 	key, err := toInt64("room id", room)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("clear history of %q in room %d: %w", user, room, domain.ErrNotMember)
+		return time.Time{}, false, fmt.Errorf("clear history of %q in room %d: %w", user, room, domain.ErrNotMember)
 	}
+	at = time.UnixMilli(at.UnixMilli()).UTC()
 	filter := bson.D{{Key: "room_id", Value: key}, {Key: "user_id", Value: user}}
 	update := bson.D{{Key: "$max", Value: bson.D{{Key: "cleared_at", Value: at}}}}
-	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
+	opts := options.FindOneAndUpdate().SetReturnDocument(options.Before)
 	var d memberDoc
 	err = s.members.FindOneAndUpdate(ctx, filter, update, opts).Decode(&d)
 	switch {
 	case errors.Is(err, mongo.ErrNoDocuments):
-		return time.Time{}, fmt.Errorf("clear history of %q in room %d: %w", user, room, domain.ErrNotMember)
+		return time.Time{}, false, fmt.Errorf("clear history of %q in room %d: %w", user, room, domain.ErrNotMember)
 	case err != nil:
-		return time.Time{}, fmt.Errorf("clear history of %q in room %d: %w", user, room, err)
+		return time.Time{}, false, fmt.Errorf("clear history of %q in room %d: %w", user, room, err)
 	}
-	return d.ClearedAt, nil
+	if !at.After(d.ClearedAt) {
+		return d.ClearedAt, false, nil
+	}
+	return at, true, nil
 }

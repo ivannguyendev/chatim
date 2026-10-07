@@ -21,15 +21,19 @@ type memberKey struct {
 }
 
 type Rooms struct {
-	mu      sync.RWMutex
-	rooms   map[uint64]domain.Room
-	members map[memberKey]domain.Member
-	pins    map[uint64]domain.PinState
-	log     *Messages
+	mu        sync.RWMutex
+	rooms     map[uint64]domain.Room
+	members   map[memberKey]domain.Member
+	pins      map[uint64]domain.PinState
+	ownersVer map[uint64]uint64
+	log       *Messages
 }
 
 func NewRooms() *Rooms {
-	return &Rooms{rooms: make(map[uint64]domain.Room), members: make(map[memberKey]domain.Member), pins: make(map[uint64]domain.PinState)}
+	return &Rooms{
+		rooms: make(map[uint64]domain.Room), members: make(map[memberKey]domain.Member),
+		pins: make(map[uint64]domain.PinState), ownersVer: make(map[uint64]uint64),
+	}
 }
 
 func (s *Rooms) Create(ctx context.Context, r domain.Room, members []domain.Member) error {
@@ -44,11 +48,12 @@ func (s *Rooms) Create(ctx context.Context, r domain.Room, members []domain.Memb
 	if _, ok := s.rooms[r.ID]; ok {
 		return fmt.Errorf("create room %d: %w", r.ID, store.ErrRoomExists)
 	}
+	r.MemberCountVer = 1
 	s.rooms[r.ID] = r
 	for _, m := range members {
 		k := memberKey{m.Room, m.User}
 		if _, ok := s.members[k]; !ok {
-			s.members[k] = m
+			s.members[k] = stamped(store.CreationMember(r, m))
 		}
 	}
 	if s.log != nil {
@@ -77,29 +82,30 @@ func (s *Rooms) Member(ctx context.Context, room uint64, user string) (domain.Me
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	m, ok := s.members[memberKey{room, user}]
-	if !ok {
+	if !ok || !m.Active() {
 		return domain.Member{}, domain.ErrNotMember
 	}
 	return m, nil
 }
 
-func (s *Rooms) ClearHistory(ctx context.Context, room uint64, user string, at time.Time) (time.Time, error) {
+func (s *Rooms) ClearHistory(ctx context.Context, room uint64, user string, at time.Time) (time.Time, bool, error) {
 	if err := ctx.Err(); err != nil {
-		return time.Time{}, err
+		return time.Time{}, false, err
 	}
 	if err := store.ValidateMarkTime(at); err != nil {
-		return time.Time{}, err
+		return time.Time{}, false, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	k := memberKey{room, user}
 	m, ok := s.members[k]
-	if !ok {
-		return time.Time{}, domain.ErrNotMember
+	if !ok || !m.Active() {
+		return time.Time{}, false, domain.ErrNotMember
 	}
-	if at = time.UnixMilli(at.UnixMilli()).UTC(); at.After(m.ClearedAt) {
-		m.ClearedAt = at
+	if at = toMillis(at); !at.After(m.ClearedAt) {
+		return m.ClearedAt, false, nil
 	}
+	m.ClearedAt, m.LastChangeAt = at, at
 	s.members[k] = m
-	return m.ClearedAt, nil
+	return at, true, nil
 }

@@ -2,6 +2,7 @@ package work
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"time"
 
@@ -51,7 +52,7 @@ func RecordOf(c store.Change) Record {
 	switch c.Kind {
 	case store.MessageInserted:
 		r.Room, r.Thread, r.Seq = c.Msg.Room, c.Msg.Thread, c.Msg.Seq
-	case store.RoomInserted:
+	case store.RoomInserted, store.MemberCountCheck:
 		r.Room = c.Room.ID
 	case store.EditInserted:
 		r.Room, r.Thread, r.Seq, r.Version = c.Edit.Room, c.Edit.Thread, c.Edit.Seq, c.Edit.Version
@@ -60,8 +61,24 @@ func RecordOf(c store.Change) Record {
 		r.Room, r.Thread, r.Seq, r.Version, r.User = x.Room, x.Thread, x.Seq, x.N, x.User
 	case store.PinInserted:
 		r.Room, r.Seq = c.Pin.Room, c.Pin.PV
+	case store.MemberChanged:
+		r.Room, r.Version, r.User = c.Member.Room, c.Member.Ver, c.Member.User
+	case store.ReadChanged:
+		r.Room, r.Version, r.User = c.Member.Room, narrowVersion(c.Member.ReadVer), c.Member.User
+	case store.MessageHidden:
+		h := c.Hidden
+		r.Room, r.Thread, r.Seq, r.User = h.Room, h.Thread, h.Seq, h.User
+	case store.HistoryCleared:
+		r.Room, r.User = c.Member.Room, c.Member.User
 	}
 	return r
+}
+
+func narrowVersion(v uint64) uint32 {
+	if v > math.MaxUint32 {
+		return math.MaxUint32
+	}
+	return uint32(v)
 }
 
 func (r Record) ID() string {

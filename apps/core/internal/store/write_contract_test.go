@@ -9,7 +9,7 @@ import (
 
 var allowedKinds = map[string]bool{
 	"read": true, "lifecycle": true, "reset": true, "purge": true,
-	"insert-unique": true, "cas": true, "monotonic-cas": true, "monotonic-max": true, "upsert": true, "version-bump": true,
+	"insert-unique": true, "cas": true, "monotonic-cas": true, "monotonic-max": true, "upsert": true, "version-bump": true, "transaction": true,
 }
 
 var portMethods = map[string]string{
@@ -52,6 +52,17 @@ var portMethods = map[string]string{
 	"Pins.Between":                   "read",
 	"PinProjector.PinState":          "read",
 	"PinProjector.ApplyPins":         "cas",
+
+	"MemberWriter.AddMembers":     "version-bump",
+	"MemberWriter.ApplyMember":    "cas",
+	"MemberReader.MembersOf":      "read",
+	"MemberReader.MembersBetween": "read",
+	"OwnerChanges.ChangeOwners":   "transaction",
+	"MemberCounts.AddMemberCount": "version-bump",
+	"MemberCounts.CountMembers":   "read",
+	"MemberCounts.SetMemberCount": "cas",
+	"ReadPositions.MarkRead":      "version-bump",
+	"ReadPositions.MarkUnread":    "version-bump",
 }
 
 func TestEveryPortMethodHasAWriteContract(t *testing.T) {
@@ -68,6 +79,11 @@ func TestEveryPortMethodHasAWriteContract(t *testing.T) {
 		reflect.TypeFor[store.ReactionSummaries](),
 		reflect.TypeFor[store.Pins](),
 		reflect.TypeFor[store.PinProjector](),
+		reflect.TypeFor[store.MemberWriter](),
+		reflect.TypeFor[store.MemberReader](),
+		reflect.TypeFor[store.OwnerChanges](),
+		reflect.TypeFor[store.MemberCounts](),
+		reflect.TypeFor[store.ReadPositions](),
 	}
 	seen := map[string]bool{}
 	for _, p := range ports {
@@ -79,7 +95,7 @@ func TestEveryPortMethodHasAWriteContract(t *testing.T) {
 			case !ok:
 				t.Errorf("%s has no write contract: classify it here and add its storetest case", name)
 			case !allowedKinds[kind]:
-				t.Errorf("%s has kind %q; writes must be insert-unique, cas, monotonic-cas, monotonic-max, upsert, version-bump or purge", name, kind)
+				t.Errorf("%s has kind %q; writes must be insert-unique, cas, monotonic-cas, monotonic-max, upsert, version-bump, purge or transaction", name, kind)
 			}
 		}
 	}

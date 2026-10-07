@@ -117,11 +117,11 @@ func editsCancelled(t *testing.T, s editStores) {
 	assertErrorIs(t, "Latest", err, context.Canceled)
 	assertErrorIs(t, "ApplyEdit", s.msgs.ApplyEdit(ctx, e), context.Canceled)
 	assertErrorIs(t, "Hide", s.hidden.Hide(ctx, "bob", store.KeyOf(m), baseTime), context.Canceled)
-	_, err = s.rooms.ClearHistory(ctx, roomA, "alice", baseTime)
+	_, _, err = s.rooms.ClearHistory(ctx, roomA, "alice", baseTime)
 	assertErrorIs(t, "ClearHistory", err, context.Canceled)
 	if _, ok, err := s.edits.Latest(t.Context(), store.EditKeyOf(e)); ok || err != nil {
 		t.Fatalf("Latest after a cancelled Append = %v, %v; want nothing stored", ok, err)
 	}
 	assertStored(t, s.msgs, m)
-	assertMember(t, s.rooms, members[0])
+	assertMember(t, s.rooms, created(members[0]))
 }

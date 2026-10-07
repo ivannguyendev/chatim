@@ -62,27 +62,31 @@ func clearForward(t *testing.T, s editStores) {
 	room, members := teamOf(roomA)
 	mustCreate(t, s.rooms, room, members)
 	at := func(sec int) time.Time { return baseTime.Add(time.Duration(sec) * time.Second) }
-	for _, step := range []struct{ at, want time.Time }{{at(5), at(5)}, {at(3), at(5)}, {at(9), at(9)}, {at(9), at(9)}} {
-		got, err := s.rooms.ClearHistory(t.Context(), roomA, "alice", step.at)
-		if err != nil || !got.Equal(step.want) {
-			t.Fatalf("ClearHistory(alice, %v) = %v, %v; want %v", step.at, got, err, step.want)
+	steps := []struct {
+		at, want time.Time
+		rose     bool
+	}{{at(5), at(5), true}, {at(3), at(5), false}, {at(9), at(9), true}, {at(9), at(9), false}}
+	for _, step := range steps {
+		got, rose, err := s.rooms.ClearHistory(t.Context(), roomA, "alice", step.at)
+		if err != nil || !got.Equal(step.want) || rose != step.rose {
+			t.Fatalf("ClearHistory(alice, %v) = %v, %v, %v; want %v, %v", step.at, got, rose, err, step.want, step.rose)
 		}
 	}
-	alice := members[0]
-	alice.ClearedAt = at(9)
+	alice := created(members[0])
+	alice.ClearedAt, alice.LastChangeAt = at(9), at(9)
 	assertMember(t, s.rooms, alice)
-	assertMember(t, s.rooms, members[1])
-	_, err := s.rooms.ClearHistory(t.Context(), roomA, "bob", time.Time{})
+	assertMember(t, s.rooms, created(members[1]))
+	_, _, err := s.rooms.ClearHistory(t.Context(), roomA, "bob", time.Time{})
 	assertErrorIs(t, "ClearHistory(zero time)", err, apperr.ErrInvalidArgument)
-	assertMember(t, s.rooms, members[1])
+	assertMember(t, s.rooms, created(members[1]))
 }
 
 func clearNotMember(t *testing.T, s editStores) {
 	room, members := teamOf(roomA)
 	mustCreate(t, s.rooms, room, members)
-	_, err := s.rooms.ClearHistory(t.Context(), roomA, "carol", baseTime)
+	_, _, err := s.rooms.ClearHistory(t.Context(), roomA, "carol", baseTime)
 	assertErrorIs(t, "ClearHistory(non member)", err, domain.ErrNotMember)
-	_, err = s.rooms.ClearHistory(t.Context(), roomB, "alice", baseTime)
+	_, _, err = s.rooms.ClearHistory(t.Context(), roomB, "alice", baseTime)
 	assertErrorIs(t, "ClearHistory(missing room)", err, domain.ErrNotMember)
 	assertNotMember(t, s.rooms, roomA, "carol")
 	assertNotMember(t, s.rooms, roomB, "alice")

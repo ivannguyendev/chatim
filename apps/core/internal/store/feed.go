@@ -25,6 +25,11 @@ const (
 	EditInserted
 	ReactionChanged
 	PinInserted
+	MemberChanged
+	ReadChanged
+	MessageHidden
+	HistoryCleared
+	MemberCountCheck
 )
 
 type Change struct {
@@ -34,6 +39,8 @@ type Change struct {
 	Edit        domain.Edit
 	Reaction    domain.Reaction
 	Pin         domain.PinAction
+	Member      domain.Member
+	Hidden      domain.HiddenMessage
 	CommittedAt time.Time
 	Position    Position
 }

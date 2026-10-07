@@ -50,7 +50,7 @@ func TestFeedSkipsSummaryPinActivityEditHideAndClearWrites(t *testing.T) {
 	if err := s.Hidden().Hide(ctx, "bob", key, codecTime); err != nil {
 		t.Fatalf("Hide: %v", err)
 	}
-	if _, err := s.ClearHistory(ctx, itRoom, "alice", codecTime); err != nil {
+	if _, _, err := s.ClearHistory(ctx, itRoom, "alice", codecTime); err != nil {
 		t.Fatalf("ClearHistory: %v", err)
 	}
 	if _, _, err := s.Reactions().Set(ctx, domain.Reaction{Room: itRoom, Seq: 1, Tenant: "acme", User: "alice", Emoji: "👍", At: codecTime}); err != nil {

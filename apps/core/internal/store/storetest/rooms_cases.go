@@ -22,11 +22,15 @@ func roomsCases() []roomsCase {
 }
 
 func group(id uint64, name string, members int) domain.Room {
-	return domain.Room{ID: id, Tenant: tenant, Type: domain.RoomGroup, Name: name, CreatedBy: "alice", CreatedAt: baseTime, MemberCount: members}
+	return domain.Room{ID: id, Tenant: tenant, Type: domain.RoomGroup, Name: name, CreatedBy: "alice", CreatedAt: baseTime, MemberCount: members, MemberCountVer: 1}
 }
 
 func member(room uint64, user string, role domain.Role) domain.Member {
 	return domain.Member{Room: room, Tenant: tenant, User: user, Role: role, JoinedAt: baseTime}
+}
+
+func created(m domain.Member) domain.Member {
+	return store.CreationMember(group(m.Room, "Team", 0), m)
 }
 
 func teamOf(room uint64) (domain.Room, []domain.Member) {
@@ -59,10 +63,8 @@ func assertMember(t *testing.T, s store.Rooms, want domain.Member) {
 	if err != nil {
 		t.Fatalf("Member(%d, %q): %v", want.Room, want.User, err)
 	}
-	gotAt, wantAt, gotCleared, wantCleared := got.JoinedAt, want.JoinedAt, got.ClearedAt, want.ClearedAt
-	got.JoinedAt, want.JoinedAt, got.ClearedAt, want.ClearedAt = time.Time{}, time.Time{}, time.Time{}, time.Time{}
-	if got != want || !gotAt.Equal(wantAt) || !gotCleared.Equal(wantCleared) {
-		t.Fatalf("Member(%d, %q) = %+v at %v cleared %v, want %+v at %v cleared %v", want.Room, want.User, got, gotAt, gotCleared, want, wantAt, wantCleared)
+	if !sameMember(got, want) {
+		t.Fatalf("Member(%d, %q) = %+v,\nwant %+v", want.Room, want.User, got, want)
 	}
 }
 
@@ -83,7 +85,7 @@ func roomsCreate(t *testing.T, s store.Rooms) {
 	mustCreate(t, s, room, members)
 	assertRoom(t, s, room)
 	for _, m := range members {
-		assertMember(t, s, m)
+		assertMember(t, s, created(m))
 	}
 }
 
@@ -96,7 +98,7 @@ func roomsCreateExisting(t *testing.T, s store.Rooms) {
 	assertErrorIs(t, "Create", err, apperr.ErrAlreadyExists)
 	assertRoom(t, s, room)
 	for _, m := range members {
-		assertMember(t, s, m)
+		assertMember(t, s, created(m))
 	}
 	assertNotMember(t, s, roomA, "dave")
 }
@@ -146,7 +148,7 @@ func roomsMembership(t *testing.T, s store.Rooms) {
 	assertNotMember(t, s, roomA, "carol")
 	assertNotMember(t, s, roomB, "alice")
 	mustCreate(t, s, group(roomB, "Other", 1), []domain.Member{member(roomB, "carol", domain.RoleOwner)})
-	assertMember(t, s, member(roomB, "carol", domain.RoleOwner))
+	assertMember(t, s, created(member(roomB, "carol", domain.RoleOwner)))
 	assertNotMember(t, s, roomB, "alice")
 	assertNotMember(t, s, roomA, "carol")
 	assertNotMember(t, s, roomA, "Alice")

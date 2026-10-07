@@ -43,6 +43,32 @@ func TestRecordOfKeepsOnlyKeysAndCommitTime(t *testing.T) {
 	}
 }
 
+func TestRecordOfMemberSetChanges(t *testing.T) {
+	m := domain.Member{Room: 42, User: "bob", Role: domain.RoleAdmin, State: domain.MemberActive, Ver: 5, ReadSeq: 30, ReadVer: 8}
+	h := domain.HiddenMessage{User: "bob", Room: 42, Thread: 3, Seq: 9, At: committed}
+	cases := map[store.ChangeKind]struct {
+		c    store.Change
+		want work.Record
+	}{
+		store.MemberChanged:    {store.Change{Member: m}, work.Record{Room: 42, Version: 5, User: "bob"}},
+		store.ReadChanged:      {store.Change{Member: domain.Member{Room: 42, User: "bob", ReadVer: 8}}, work.Record{Room: 42, Version: 8, User: "bob"}},
+		store.MessageHidden:    {store.Change{Hidden: h}, work.Record{Room: 42, Thread: 3, Seq: 9, User: "bob"}},
+		store.HistoryCleared:   {store.Change{Member: domain.Member{Room: 42, User: "bob"}}, work.Record{Room: 42, User: "bob"}},
+		store.MemberCountCheck: {store.Change{Room: domain.Room{ID: 42}}, work.Record{Room: 42}},
+	}
+	for kind, tc := range cases {
+		tc.c.Kind, tc.c.CommittedAt = kind, committed
+		tc.want.Kind, tc.want.CommittedAt = kind, committed
+		if got := work.RecordOf(tc.c); got != tc.want {
+			t.Errorf("RecordOf(kind %d) = %+v, want %+v", kind, got, tc.want)
+		}
+	}
+	huge := store.Change{Kind: store.ReadChanged, Member: domain.Member{Room: 42, User: "bob", ReadVer: math.MaxUint32 + 1}}
+	if got := work.RecordOf(huge); got.Version != math.MaxUint32 {
+		t.Fatalf("RecordOf(read ver past uint32) version = %d, want it held at MaxUint32", got.Version)
+	}
+}
+
 func TestRecordRoundTripsThroughThirtySevenBytes(t *testing.T) {
 	for _, r := range []work.Record{
 		{Kind: store.MessageInserted, Room: 42, Thread: 3, Seq: 9, CommittedAt: committed},

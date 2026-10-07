@@ -33,5 +33,6 @@ func (m *Mutator) ClearHistory(ctx context.Context, c ClearCmd) (time.Time, erro
 	if _, err := m.d.Access.Authorize(ctx, access.ClearHistory, c.Tenant, c.User, c.Room); err != nil {
 		return time.Time{}, err
 	}
-	return m.d.Rooms.ClearHistory(ctx, c.Room, c.User, m.now())
+	at, _, err := m.d.Rooms.ClearHistory(ctx, c.Room, c.User, m.now())
+	return at, err
 }

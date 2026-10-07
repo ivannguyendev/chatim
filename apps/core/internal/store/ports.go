@@ -27,7 +27,7 @@ type MessageEditor interface {
 }
 
 type HistoryClearer interface {
-	ClearHistory(ctx context.Context, room uint64, user string, at time.Time) (time.Time, error)
+	ClearHistory(ctx context.Context, room uint64, user string, at time.Time) (time.Time, bool, error)
 }
 
 type Edits interface {
