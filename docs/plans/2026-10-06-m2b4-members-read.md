@@ -14,17 +14,17 @@
 - `apps/core/internal/store`: port `MemberWriter`, `MemberReader`, `OwnerChanges` (transaction), `MemberCounts` (`$inc` + recount), `ReadPositions`; `ChangeKind` `MemberChanged` (6), `ReadChanged` (7) (Task 4).
 - `store/memstore`, `store/storetest`: cài và hợp đồng của 5 port, kể cả ngữ nghĩa transaction (Task 4, 6).
 - `store/mongostore`: tên field mới (Task 1); `members` clustered, `BulkWrite` upsert pipeline, transaction đổi owner (Task 5); feed member (Task 6).
-- `apps/core/internal/work` + `reconcile`: record `MemberChanged` (id `g:`) và `ReadChanged` (id `d:`), đuôi user (Task 4, 6).
+- `apps/core/internal/work` + `reconcile`: record `MemberChanged` (id `g:`), `ReadChanged` (id `d:`), `MessageHidden`, `HistoryCleared`, đuôi user (Task 4, 6); `work.Timers` hẹn phiếu `MemberCountCheck` bằng message schedule của NATS (Task 6).
 - `apps/core/internal/pbconv` + `publish`: id/event member, số member, vị trí đọc; subject theo loại dữ liệu `evt.{t}.{room|member|message}.{rid}.{kind}` cho **mọi** event, kể cả event đã có; RePublish `evt.*.*.*.*` (Task 3).
 - `apps/core/internal/dedupe`: `Space`, `RequestKey`, `Requests` trên namespace `chatim:req:` (Task 7).
 - `apps/core/internal/actor`: cache member theo thế hệ + TTL 10s, `Router.ForgetMembers` (Task 8).
 - `apps/core/internal/memberwatch` (mới): mọi core nghe event member trên `live.*` và quên cache member của room (Task 16).
 - `apps/core/internal/access`: 6 action mới, `Request.Target/Role`, `DefaultPolicy` (Task 9).
 - `apps/core/internal/ownership` (mới): luật owner thuần (kế nhiệm, owner cuối, lập kế hoạch ghi) chạy bên trong transaction (Task 10).
-- `apps/core/internal/mutate`: 5 lệnh member (thêm `SetMemberPriority`) + `$inc` số member + metric `member_count_skipped_total` (Task 11), event ẩn tin và xoá lịch sử (Task 13), `MarkRead`/`MarkUnread` (Task 13), clear history theo thời gian và dòng `ver 0` (Task 1).
+- `apps/core/internal/mutate`: 5 lệnh member (thêm `SetMemberPriority`) + `$inc` số member có phiếu hẹn đếm lại (Task 11), event ẩn tin và xoá lịch sử, `MarkRead`/`MarkUnread` (Task 13), clear history theo thời gian và dòng `ver 0` (Task 1).
 - `apps/core/internal/grpcsrv`: `CreateRoom` phát `member_added` cho người tạo (Task 12), 7 RPC (Task 14).
-- `apps/core/internal/config`: `MEMBER_BATCH_MAX` (Task 14).
-- `apps/core/internal/effects`: `member_event`, `member_count_event`, `read_event`, `hidden_event`, `history_cleared_event`, bỏ qua dòng `ver 0` ở `edit_projection`/`msg_changed` (Task 1, 15); `deploy/prometheus/alerts.yml`: luật `ChatimMemberCountSkipped` (Task 15).
+- `apps/core/internal/config`: `MEMBER_BATCH_MAX`, `MEMBER_COUNT_CHECK_DELAY` (Task 14).
+- `apps/core/internal/effects`: `member_event`, `member_count_event`, `read_event`, `hidden_event`, `history_cleared_event`, `member_count_repair`, bỏ qua dòng `ver 0` ở `edit_projection`/`msg_changed` (Task 1, 15).
 - `apps/core/internal/resync` + `apps/core`: quét doc `members` theo `last_change_at` và `hidden` theo `created_at`; subcommand `/app recount` (Task 17).
 - `tools/internal/route`, `tools/corecli`, `scripts/e2e.sh`: lệnh member/đọc, phase e2e 5 (Task 18).
 
@@ -42,7 +42,7 @@
 - **D99** `AddMembers`: `request_id` bắt buộc, dedupe `chatim:req:{room}:{user}:{request_id}` (RAM LRU + Redis dedupe, TTL `CID_COMMITTED_TTL`); một `BulkWrite(ordered:false)` upsert pipeline `$cond` (doc active giữ nguyên, không oplog); kết quả suy từ doc sau ghi (`domain.AddedBy`); người vào lại luôn role `member`; `read_seq = max(cũ, seq cuối)`; giữ `cleared_at`. Giới hạn: chỉ trong 15 phút và khi Redis còn khoá.
 - **D100** Lệnh đụng owner (owner rời, xoá owner, hạ owner, nâng lên owner) chạy trong **một transaction MongoDB**: đọc owner và các doc, quyết định bằng hàm thuần (`ownership.Plan`), nâng người kế nhiệm trước rồi hạ/cho rời, `$inc rooms.owners_ver` (điểm va chạm chống write skew), commit. Chạy đúng một lần bằng `StartTransaction`/`CommitTransaction` (không `WithTransaction`); va chạm → `ErrRetryLater` (`UNAVAILABLE`). memstore cho cùng ngữ nghĩa. Đây là **ngoại lệ duy nhất** của §5.1. Lệnh thường (xoá/rời/đổi role không đụng owner) là một update có điều kiện `ver`; trượt → `ErrRetryLater` ngay. **Không có vòng thử lại bên trong core** ở mọi code mới (dòng không số). Không `pending_owner_change`, không `owner_guard`.
 - **D101** Quyền mặc định: owner làm mọi việc; admin thêm người và xoá người có role `member`; chỉ owner đổi role; ai cũng tự rời. DM cố định (`FAILED_PRECONDITION`). Policy được hỏi **trước** khi lộ việc đích có tồn tại hay không, với role giả `member` khi đích không có doc **hoặc** đã rời (tombstone); xoá người đã rời là thành công không làm gì, kể cả khi họ từng là admin. Chỉ owner đặt `priority` (action `set_member_priority`). Bảng mã lỗi ở "Hợp đồng chung → mutate".
-- **D102** `member_count` đổi bằng `$inc {member_count: n, member_count_ver: 1}` (một `FindOneAndUpdate` trên `rooms`, trả doc sau ghi) ngay trong lệnh member, với `n` = số doc **thực sự đổi trạng thái** trong lần ghi đó (thêm: `UpsertedCount + ModifiedCount` của `BulkWrite`; xoá/rời doc active: −1; đổi role: 0; `n = 0` thì không ghi). Không transaction (lệnh member của cùng room chạy song song); riêng đường owner, `$inc` nằm trong transaction sẵn có. `$inc` lỗi sau khi member đã ghi → lệnh vẫn thành công, log + `member_count_skipped_total` + alert `ChatimMemberCountSkipped`; sửa bằng `/app recount -room` (đếm phủ index `{room_id, state}`, đặt lại, `$inc member_count_ver`, phát event). Core chết giữa hai lần ghi → số lệch không được đếm vào metric; `recount -dry-run` cho thấy. `Rooms.Create` ghi `member_count` = số người lúc tạo, `member_count_ver = 1`. Event `member_count_changed` id `{room}-members-v{member_count_ver}` phát ở đường nhanh; worker `member_count_event` phát lại số **hiện tại** của room sau mỗi lô record member (stream bỏ trùng theo id), nên trạng thái cuối luôn được phát. Bỏ worker đếm lại, witness, `MEMBER_COUNT_DELAY`. Phương án bị loại: Redis set (RAM ~25–35GB ở giả định §2.3, lệch khi event mất hoặc đến sai thứ tự, mất khi Redis đầy, thiếu role), worker đếm lại (phức tạp), `$inc` trong transaction (mọi lệnh member cùng room tranh doc room). Sửa D67 cho `member_count`.
+- **D102** `member_count` đổi bằng `$inc {member_count: n, member_count_ver: 1}` (một `FindOneAndUpdate` trên `rooms`, trả doc sau ghi) ngay trong lệnh member, với `n` = số doc **thực sự đổi trạng thái** (thêm: `UpsertedCount + ModifiedCount` của `BulkWrite`; xoá/rời doc active: −1; đổi role/priority: 0). Không transaction; riêng đường owner, `$inc` nằm trong transaction sẵn có. **Phiếu hẹn đếm lại** (phiếu hẹn sinh tồn, cơ chế chung D111 / thiết kế §7.1, owner chốt 2026-10-07): lệnh có thể đổi số (thêm; xoá/rời đường thường) **trước** khi ghi member hẹn một message schedule của NATS (`WithScheduleAt(now + MEMBER_COUNT_CHECK_DELAY)`, mặc định 5s, phải > `CORE_REQUEST_DEADLINE`) trên subject `work.timer.{room}.{op}` của `CHATIM_WORK`, target `work.p{slot % 32}`, payload record `MemberCountCheck` (10) id `k:{room}-{op}`; hẹn lỗi → `ErrRetryLater`, chưa ghi gì. Ghi member → `$inc` → xoá phiếu (`DeleteMsg` theo seq của PubAck). Lỗi hay core chết ở giữa → phiếu bật, worker `member_count_repair` đếm lại (phủ index `{room_id, state}`), ghi có điều kiện `member_count_ver`, đọc lại: `ver` đã nhảy tiếp → hẹn phiếu mới; trượt CAS → Nak. Xoá phiếu lỗi → phiếu bật, đếm lại vô hại. Sửa đếm vào `counter_repaired_total{counter="members"}` (alert `ChatimCounterRepairSurge` sẵn có; alert giữ 16 luật). `Rooms.Create` ghi `member_count` = số người lúc tạo, `member_count_ver = 1`. Event `member_count_changed` id `{room}-members-v{member_count_ver}`; worker `member_count_event` phát lại số hiện tại. `/app recount` giữ cho vận hành tay. Phương án bị loại: Redis set; worker đếm lại sau mỗi đổi; `$inc` trong transaction; số dự kiến trên Redis; cờ "cần đếm lại" (không bắt được core chết). Sửa D67 cho `member_count`.
 - **D103** Feed thêm insert/replace của `members`, update có `updatedFields.ver` (kind `MemberChanged` (6), version = `ver`, record id `g:{room}-mb-{user}-v{ver}`) và update có `updatedFields.read_ver` mà không có `ver` (kind `ReadChanged` (7), version = `read_ver`, record id `d:{room}-rd-{user}-v{read_ver}`); cả hai có đuôi user. Registry `MemberChanged → room_activity (0) → member_event (RECONCILE_DELAY) → member_count_event (RECONCILE_DELAY)`; `ReadChanged → read_event (RECONCILE_DELAY)`. `cleared_at` vẫn không vào feed. Resync quét doc member theo `updated_at` (cho cả hai kind).
 - **D104** Mỗi thay đổi doc member phát **một** event `member_added`/`member_removed`/`member_role_changed` id `{room}-mb-{user}-v{ver}` trên subject `evt.{t}.member.{rid}.{kind}`, kể cả doc tạo cùng room. Core không có subject user, không `recipient`: chuyển event tới ai (user, bao nhiêu user/room, notification) là việc của app phân phối thiết kế sau; payload mang `user` để app đó định tuyến. Payload không có `new_owner`; không ack mark. Bảo đảm phát: fast path + worker `member_event` (bản của `ver` hiện tại; bản trung gian bị vượt có thể mất, chỉ trạng thái cuối được bảo đảm — như reaction, D93).
 - **D105** Vị trí đọc: `MarkRead`/`MarkUnread` chỉ cập nhật doc của người đọc (`read_seq`, `read_ver`) bằng toán tử thường, không đụng `ver`; mỗi lần vị trí thực sự đổi phát **một** `read_updated` id `{room}-rd-{user}-v{read_ver}` trên subject `member` (vị trí đọc nằm trên doc member). Bảo đảm phát: update có `read_ver` vào feed (kind `ReadChanged`), worker `read_event` phát lại bản của `read_ver` hiện tại (trạng thái cuối). Ai nhận "đã đọc/đã xem" do app phân phối quyết định sau; không `READ_RECEIPT_*`, không bước dừng mới (kế hoạch dừng giữ 26.2s). Chi phí: mỗi lần đổi vị trí đọc thêm một record work stream (cần số thật lượt đọc/s trước khi định cỡ).
@@ -146,7 +146,7 @@ Tên dưới đây là hợp đồng giữa các task. Field mới của struct 
 
 - `ValidateEdit` (Task 1): `Version ≤ MaxInt32`; `Version == 0` ⇔ `Kind == EditOriginal`; kind ∈ {text, delete, original}. `Edits.Append` của dòng `ver 0` trùng khoá trả `ErrEditExists` như mọi dòng (người gọi coi là đã có). `Edits.Latest` và `Edits.History(after)` chỉ trả dòng `ver ≥ 1` (như cũ: khoảng `> after`). `Edits.At(key, 0)` đọc được dòng `ver 0`. `Edits.PurgeText(key, upTo)` xoá `text` của các dòng `0..upTo` (kể cả `upTo == 0`).
 - `HistoryClearer.ClearHistory(ctx, room, user, at time.Time) (time.Time, error)` (Task 1): `$max cleared_at = at`, trả giá trị sau ghi; không có doc → `domain.ErrNotMember`. Task 5 thêm điều kiện `state: 1` (Task 4 cho memstore).
-- `MaxMemberScan = 1000`; `MemberChanged ChangeKind = 6`; `ReadChanged ChangeKind = 7`; `MessageHidden ChangeKind = 8` (`Change.Hidden` = user, thread, seq); `HistoryCleared ChangeKind = 9` (`Change.Member` có `Room`, `User`); `Change.Member domain.Member` (ngay sau `Pin`; với `ReadChanged` chỉ có `Room`, `User`, `ReadVer`).
+- `MaxMemberScan = 1000`; `MemberChanged ChangeKind = 6`; `ReadChanged ChangeKind = 7`; `MessageHidden ChangeKind = 8` (`Change.Hidden` = user, thread, seq); `HistoryCleared ChangeKind = 9` (`Change.Member` có `Room`, `User`); `MemberCountCheck ChangeKind = 10` (không bao giờ đến từ feed, chỉ từ phiếu hẹn); `Change.Member domain.Member` (ngay sau `Pin`; với `ReadChanged` chỉ có `Room`, `User`, `ReadVer`).
 - Port mới (file `store/member.go`):
 
 | Port | Method | Hợp đồng | Write contract |
@@ -158,7 +158,7 @@ Tên dưới đây là hợp đồng giữa các task. Field mới của struct 
 | `OwnerChanges` | `ChangeOwners(ctx, room uint64, users []string, decide OwnerDecision) ([]domain.Member, error)` | xem dưới | `transaction` (kind mới) |
 | `MemberCounts` | `AddMemberCount(ctx, room, delta int) (domain.MemberCount, error)` | `delta ≠ 0` (0 → `ErrInvalidArgument`); `$inc member_count delta, member_count_ver 1`, trả giá trị sau ghi; room không có → `ErrRoomNotFound` | `version-bump` |
 | | `CountMembers(ctx, room) (int, error)` | số doc `state == 1` (phủ index), đọc majority | `read` |
-| | `SetMemberCount(ctx, room, count int) (domain.MemberCount, error)` | `count ≥ 0`; `$set member_count`, `$inc member_count_ver 1`, trả giá trị sau ghi; chỉ cho `/app recount` | `version-bump` |
+| | `SetMemberCount(ctx, room, base uint64, count int) (domain.MemberCount, bool, error)` | `count ≥ 0`; khi `member_count_ver == base`: `$set member_count`, `$inc member_count_ver 1`, trả giá trị sau ghi và `true`; trượt → `false`; dùng cho worker `member_count_repair` và `/app recount` | `cas` |
 | `ReadPositions` | `MarkRead(ctx, room, user, seq) (domain.ReadPosition, bool, error)` | member active và `read_seq < seq` → `read_seq = seq`, `read_ver + 1`, trả vị trí mới và `true`; không đổi → vị trí hiện tại, `false`; không active → `ErrNotMember`. Mỗi lần đổi sinh một change `ReadChanged` | `version-bump` |
 | | `MarkUnread(ctx, room, user, to) (domain.ReadPosition, bool, error)` | như trên với điều kiện `read_seq > to`, đặt `read_seq = to` | `version-bump` |
 
@@ -188,6 +188,8 @@ Tên dưới đây là hợp đồng giữa các task. Field mới của struct 
 - `RecordOf`: `MemberChanged` → `Room`, `User = Member.User`, `Version = Member.Ver`; `ReadChanged` → `Room`, `User`, `Version = Member.ReadVer` (thread, seq 0).
 - `KnownKind` nhận `MemberChanged`, `ReadChanged`; `checkKind` bắt buộc đuôi user hợp lệ cho `ReactionChanged`, `MemberChanged`, `ReadChanged`, cấm cho kind khác; `ID()` → `"g:" + pbconv.MemberEventID(room, user, ver)` và `"d:" + pbconv.ReadEventID(room, user, read_ver)`.
 - `MessageHidden` → `Room`, `Thread`, `Seq`, `User` (đuôi user), version 0, id `"h:" + pbconv.HiddenEventID(…)`; `HistoryCleared` → `Room`, `User`, id `"c:{room}-cl-{user}-{CommittedAt unix ms}"`. `KnownKind`/`checkKind` nhận cả hai, đuôi user bắt buộc.
+- `MemberCountCheck` → chỉ `Room`, `Version` = op ngẫu nhiên (uint32), không đuôi user, id `"k:{room}-{op}"`.
+- `work.Timers` (Task 6): `NewTimers(js, streamName, subjectRoot, partitions, delay)`; `Arm(ctx, room) (Timer{Seq uint64}, error)` publish record `MemberCountCheck` lên `{root}.timer.{room}.{op}` với `WithScheduleAt(now + delay)` và `WithScheduleTarget({root}.p{slot(room) % partitions})`, chờ PubAck; `Disarm(ctx, t)` = `DeleteMsg(stream, t.Seq)`, lỗi chỉ log (phiếu bật thì đếm lại vô hại). Stream `CHATIM_WORK` bật `AllowMsgSchedules` trong `EnsureStream`.
 - Reader forward kind mới không đổi code. Dòng `message_edits` `ver 0` đi như một record sửa bình thường (`e:{room}-{th}-{seq}-v0`); worker bỏ qua.
 
 ### `pbconv` + proto + `publish` (Task 3)
@@ -242,8 +244,8 @@ Tên dưới đây là hợp đồng giữa các task. Field mới của struct 
 
 - `ClearCmd{Tenant, User string; Room uint64}`; `ClearHistory(ctx, c) (time.Time, error)` (Task 1).
 - `Limits.MemberBatch int`: 0 → `DefaultMemberBatch` (500); hợp lệ `MinMemberBatch` (2) .. `domain.MaxMemberBatch`; `(*Mutator) MemberBatch() int`.
-- `Deps` thêm (Task 11) `Members MemberStore` (= `store.MemberWriter` + `MembersOf` + `store.OwnerChanges` + `AddMemberCount`), `Log *slog.Logger` (nil → `slog.Default()`), `Requests RequestDedupe` (`Begin/Finish/Cancel` của `dedupe.Requests`), `Forget MemberForgetter` (`ForgetMembers(room)`), `NewRequestID func() string` (nil → 17 byte ngẫu nhiên dạng hex); (Task 13) `Reads store.ReadPositions`. Thiếu dep bắt buộc → `errMissingDeps` (sửa thông điệp).
-- Số member (D102): sau ghi member, `delta ≠ 0` (thêm: `JoinResult.Changed`; xoá/rời doc active: −1) → `Members.AddMemberCount(room, delta)`; thành công → event `MemberCountChanged(room, c, caller, now)` đi cùng lần `Enqueue` của event member (sau chúng); lỗi → `Log.Error("member count skipped", room, delta, err)`, tăng bộ đếm atomic, lệnh **vẫn thành công**. Đường owner lấy số từ `OwnerResult.Count` (không gọi `AddMemberCount`). `(*Mutator) MemberCountSkipped() uint64` cho metric.
+- `Deps` thêm (Task 11) `Members MemberStore` (= `store.MemberWriter` + `MembersOf` + `store.OwnerChanges` + `AddMemberCount`), `Log *slog.Logger` (nil → `slog.Default()`), `Requests RequestDedupe` (`Begin/Finish/Cancel` của `dedupe.Requests`), `Timers CountTimers` (`work.Timers`), `Forget MemberForgetter` (`ForgetMembers(room)`), `NewRequestID func() string` (nil → 17 byte ngẫu nhiên dạng hex); (Task 13) `Reads store.ReadPositions`. Thiếu dep bắt buộc → `errMissingDeps` (sửa thông điệp).
+- Số member (D102): `Deps.Timers CountTimers` (`Arm(ctx, room) (Timer, error)`, `Disarm(ctx, Timer)`). Lệnh có thể đổi số (AddMembers đường `RequestNew`; Remove/Leave đường thường khi đích active) gọi `Arm` **trước** ghi member; lỗi → `Requests.Cancel` (AddMembers) và `ErrRetryLater`. Sau ghi: `delta ≠ 0` → `AddMemberCount(room, delta)`; thành công → `Disarm` và event `MemberCountChanged(room, c, caller, now)` (sau event member); `delta = 0` → `Disarm`; `$inc` lỗi → log, **không** `Disarm` (phiếu sẽ sửa), lệnh vẫn thành công. Đường owner không `Arm` (đã trong transaction).
 - Lệnh: `AddMembersCmd{Tenant, User string; Room uint64; Users []string; RequestID string}` → `[]domain.Member`; `RemoveMemberCmd{…; Target string}`, `LeaveRoomCmd{Tenant, User; Room}`, `ChangeRoleCmd{…; Target string; Role domain.Role}`, `SetPriorityCmd{…; Target string; Priority int32}` → `MemberResult{Member domain.Member; Changed bool; Successor string; PreviousRole domain.Role; PreviousPriority int32}`; `ReadCmd{Tenant, User string; Room, Seq uint64}` → `MarkRead`/`MarkUnread` trả `domain.ReadPosition`.
 - Mã lỗi:
 
@@ -263,6 +265,7 @@ Tên dưới đây là hợp đồng giữa các task. Field mới của struct 
 | Env | Field | Mặc định | Kiểm |
 |---|---|---|---|
 | `MEMBER_BATCH_MAX` | `Config.Limits.MemberBatch` | 500 | > 0 khi parse; `mutate.Limits` 2..1000 |
+| `MEMBER_COUNT_CHECK_DELAY` | `Config.MemberCountCheckDelay` | 5s | > `CORE_REQUEST_DEADLINE` |
 
 Kế hoạch dừng không đổi (26.2s / 28s). Không env `READ_RECEIPT_*`.
 
@@ -270,13 +273,13 @@ Kế hoạch dừng không đổi (26.2s / 28s). Không env `READ_RECEIPT_*`.
 
 - `edit_projection` và `msg_changed`: record `EditInserted` có `Version == 0` → trả nil ngay (không đọc store, không drop, không event).
 - `MemberEventName = "member_event"`, `MemberCountEventName = "member_count_event"`, `ReadEventName = "read_event"`.
-- Registry cuối: `store.MemberChanged` → `room_activity` (0) → `member_event` (`RECONCILE_DELAY`) → `member_count_event` (`RECONCILE_DELAY`); `store.ReadChanged` → `read_event`; `store.MessageHidden` → `hidden_event`; `store.HistoryCleared` → `history_cleared_event` (cả ba `RECONCILE_DELAY`). Tên: `HiddenEventName = "hidden_event"`, `HistoryClearedEventName = "history_cleared_event"`.
-- Metric: `effect_dropped_total{effect}` và `reconcile_republished_total{effect}` cho năm effect (qua `counters()`); `chatim_core_member_count_skipped_total` (từ `Mutator.MemberCountSkipped()`). Alert thêm **một** luật `ChatimMemberCountSkipped` (`increase(...[10m]) > 0`, warning, mô tả bảo chạy `/app recount -room` theo log) → **17 luật**.
+- Registry cuối: `store.MemberChanged` → `room_activity` (0) → `member_event` (`RECONCILE_DELAY`) → `member_count_event` (`RECONCILE_DELAY`); `store.ReadChanged` → `read_event`; `store.MessageHidden` → `hidden_event`; `store.HistoryCleared` → `history_cleared_event` (cả ba `RECONCILE_DELAY`); `work.MemberCountCheck` → `member_count_repair` (delay 0, phiếu đã chờ đủ). Tên: `HiddenEventName = "hidden_event"`, `HistoryClearedEventName = "history_cleared_event"`, `MemberCountRepairName = "member_count_repair"`.
+- Metric: `effect_dropped_total{effect}` và `reconcile_republished_total{effect}` cho các effect mới (qua `counters()`); `member_count_repair` đếm sửa vào `counter_repaired_total{counter="members"}`. Không luật alert mới (16 luật; `ChatimCounterRepairSurge` sẵn có phủ).
 
 ### `resync` (Task 17)
 
 - `Deps.Members` (port `MembersBetween`, đặt trước `Pub`), `Report.MemberRecords` (in `member_records=%d` trước `dry_run`), `ErrMemberPageFull`.
-- `/app recount -room ID [-dry-run]` (`apps/core/recount_command.go`, dispatch trong `main.go` cạnh `resync`): Mongo + NATS, cùng config và redaction như resync; đọc room (`ErrRoomNotFound` → exit lỗi), `CountMembers`; in `room=… stored=… counted=…`; `-dry-run` dừng ở đó; không thì `SetMemberCount` rồi publish `MemberCountChanged(room, c, "", now)` và chờ PubAck, in `member_count_ver=…`. Không khoá room: chạy khi room đang có lệnh member song song có thể lệch lại, chạy lại là đủ (ghi trong README).
+- `/app recount -room ID [-dry-run]` (`apps/core/recount_command.go`, dispatch trong `main.go` cạnh `resync`): Mongo + NATS, cùng config và redaction như resync; đọc room (`ErrRoomNotFound` → exit lỗi), `CountMembers`; in `room=… stored=… counted=…`; `-dry-run` dừng ở đó; không thì `SetMemberCount(room, ver đã đọc, n)` (trượt → in và exit lỗi, chạy lại) rồi publish `MemberCountChanged(room, c, "", now)` và chờ PubAck, in `member_count_ver=…`. Lệnh này cho vận hành tay; bình thường phiếu hẹn tự sửa (D102).
 
 ### Route + corecli (Task 18)
 
@@ -294,7 +297,7 @@ Kế hoạch dừng không đổi (26.2s / 28s). Không env `READ_RECEIPT_*`.
 | 3 | Proto `members.proto` + `make proto` + `pbconv` + `publish` (subject theo loại dữ liệu cho mọi event) + itest RePublish | cao | 2 | ★ |
 | 4 | Store port + memstore + storetest `RunMembers` (cả `ChangeOwners`) + write contract + `RecordOf` | cao | 2, 3 | ★ |
 | 5 | mongostore: `members` clustered, codec, index, 5 port (`$inc` số member), transaction đổi owner. Sau commit: `make infra-reset` | cao | 4 | ★ |
-| 6 | Feed member + vị trí đọc + `RunMemberFeed` + `work` + registry tạm + itest feed-skip. **Push** | cao | 4, 5 | ★ |
+| 6 | Feed member + vị trí đọc + `RunMemberFeed` + `work` + phiếu hẹn `work.Timers` + registry tạm + itest feed-skip. **Push** | cao | 4, 5 | ★ |
 | 7 | `pkg/lru` (chuyển từ `actor`) + `dedupe.Requests` | cao | 1 | ★ |
 | 8 | Actor: cache member theo thế hệ + TTL, `ForgetMembers` | cao | 7 | ★ |
 | 9 | `access`: 6 action, `Target`/`Role`, `DefaultPolicy` | cao | 2 | ★ |
@@ -302,8 +305,8 @@ Kế hoạch dừng không đổi (26.2s / 28s). Không env `READ_RECEIPT_*`.
 | 11 | `mutate`: `AddMembers`, `RemoveMember`, `LeaveRoom`, `ChangeMemberRole`, `SetMemberPriority`, `$inc` số member, `Limits.MemberBatch`, wiring | cao | 3, 4, 7–10 | ★ |
 | 12 | `CreateRoom`: trần mỗi lệnh, `member_added` cho từng người tạo, bỏ trần 5000 | cao | 11 | ★ |
 | 13 | `mutate.MarkRead`/`MarkUnread` + `read_updated`; event ẩn tin, xoá lịch sử | trung bình | 3, 11 | ★ |
-| 14 | Config (1 env) + 7 RPC `grpcsrv` + README. **Push** | cao | 12, 13 | ★ |
-| 15 | Effect `member_event`, `member_count_event`, `read_event`, `hidden_event`, `history_cleared_event` + registry + metric + alert + wiring | cao | 6, 14 | ★ |
+| 14 | Config (2 env) + 7 RPC `grpcsrv` + README. **Push** | cao | 12, 13 | ★ |
+| 15 | Effect `member_event`, `member_count_event`, `read_event`, `hidden_event`, `history_cleared_event`, `member_count_repair` + registry + metric + wiring | cao | 6, 14 | ★ |
 | 16 | `memberwatch`: mọi core nghe event member, quên cache | trung bình | 3, 8, 15 | ★ |
 | 17 | Resync member + `/app recount` | trung bình | 5, 6 | — |
 | 18 | Route + corecli + e2e member/đọc | thấp | 14 | — |
@@ -482,7 +485,7 @@ Task 7, 9, 10 khác file nhau: review task này được trong khi task kế đa
 - `member_cases.go`: create ghi doc tạo active `ver 1` `{room}-created` (kể cả fixture thiếu field); `Rooms.Member` từ chối tombstone; `MembersOf` theo thứ tự, bỏ user không có doc; `AddMembers` thêm mới, thêm lại tombstone (role member, `read_seq` max, giữ `cleared_at`), giữ nguyên doc active (không đổi `ver`, `updated_at`), trả doc sau ghi theo thứ tự; validate join sai → `ErrInvalidArgument`.
 - `member_change_cases.go`: `ApplyMember` khớp ghi đúng field (gồm `priority`, `previous_priority`, `last_change_at`); `ver` cũ → `false`; không có doc → `false`; chỉ đổi field membership. `MembersBetween` khoảng kín, thứ tự, limit.
 - `owner_change_cases.go`: (a) view đúng (`Docs` theo thứ tự, `Owners` ≤ 2 sắp `joined_at`/user, `Candidates` = admin đứng đầu rồi member đứng đầu theo `priority` giảm dần, `joined_at`, user); (b) kế hoạch 2 write ghi cả hai, đúng thứ tự, `owners_ver + 1`; (c) `decide` lỗi → không ghi gì, `owners_ver` giữ; (d) write thứ hai có `Cur.Ver` cũ → `ErrRetryLater`, write thứ nhất **không** được áp; (d2) owner cuối rời → `member_count − 1`, `member_count_ver + 1` cùng commit, `CountChanged`; đổi role không đổi số; (e) kế hoạch rỗng → không ghi, `owners_ver` giữ; (f) một `ChangeOwners` khác commit ngay bên trong `decide` → transaction ngoài `ErrRetryLater`, không ghi gì của nó; (g) room không có → `ErrRoomNotFound`.
-- `member_count_cases.go`: room mới có `member_count` = số người tạo, `member_count_ver 1`; `AddMemberCount(+2)` rồi `(−1)` trả đúng số và `ver` 2, 3; `delta 0` → `ErrInvalidArgument`; room không có → `ErrRoomNotFound`; `CountMembers` chỉ đếm doc active; `SetMemberCount` đặt số, `ver + 1`, số âm → `ErrInvalidArgument`.
+- `member_count_cases.go`: room mới có `member_count` = số người tạo, `member_count_ver 1`; `AddMemberCount(+2)` rồi `(−1)` trả đúng số và `ver` 2, 3; `delta 0` → `ErrInvalidArgument`; room không có → `ErrRoomNotFound`; `CountMembers` chỉ đếm doc active; `SetMemberCount(base)` đặt số và `ver + 1` khi `ver == base`, `base` sai → `false`, số âm → `ErrInvalidArgument`.
 - `member_cases.go` thêm: `AddMembers` trả `Changed` = số doc mới + tombstone được thêm lại; gọi lại cùng danh sách → `Changed 0`.
 - `read_position_cases.go`: `MarkRead` chỉ nâng, `MarkUnread` chỉ hạ, mỗi lần đổi `read_ver + 1`; không đổi → `false`; tombstone → `ErrNotMember`; sau ba lần đổi vị trí, `ApplyMember` với `ver 1` vẫn khớp (vị trí đọc không đụng `ver`); clear history chỉ member active.
 - `member_validate_test.go`: `TestValidateJoin`, `TestValidateMemberChangeAcceptsOneStep`, `TestValidateReadSeq`, `TestCreationMemberIsActiveAtVerOne`.
@@ -511,7 +514,7 @@ Task 7, 9, 10 khác file nhau: review task này được trong khi task kế đa
 3. `AddMembers` = **một** `BulkWrite(ordered:false)` các `UpdateOne({_id}, pipeline, upsert)`, `Changed = UpsertedCount + ModifiedCount`, rồi `MembersOf` (primary) trả doc sau ghi.
 4. `ApplyMember` = `UpdateOne({_id, ver: cur.Ver}, $set role/state/priority/previous_role/previous_state/previous_priority/request_id/updated_by/updated_at/last_change_at, $inc ver 1)`.
 5. `MarkRead`/`MarkUnread` = `FindOneAndUpdate({_id, state: 1, read_seq: {$lt|$gt}}, $set read_seq + last_change_at, $inc read_ver, After)`; không khớp → `FindOne({_id, state: 1})` phân biệt "không active" (`ErrNotMember`) với "không đổi". `ClearHistory` thêm `state: 1`. `Rooms.Member` = `FindOne({_id, state: 1})`.
-6. `AddMemberCount` = `FindOneAndUpdate({_id: room}, {$inc: {member_count, member_count_ver}}, After)`, không có doc → `ErrRoomNotFound`; `CountMembers` = `CountDocuments({room_id, state: 1})` read concern majority; `SetMemberCount` = `FindOneAndUpdate` `$set member_count` + `$inc member_count_ver`. `Rooms.Get` đọc `member_count_ver`; `Rooms.Create` ghi `member_count_ver: 1`.
+6. `AddMemberCount` = `FindOneAndUpdate({_id: room}, {$inc: {member_count, member_count_ver}}, After)`, không có doc → `ErrRoomNotFound`; `CountMembers` = `CountDocuments({room_id, state: 1})` read concern majority; `SetMemberCount` = `FindOneAndUpdate({_id, member_count_ver: base}, $set member_count + $inc member_count_ver, After)`, không khớp → `false`. `Rooms.Get` đọc `member_count_ver`; `Rooms.Create` ghi `member_count_ver: 1`.
 7. `ChangeOwners` bằng transaction một lần.
 
 **Kỹ thuật.**
@@ -538,11 +541,11 @@ Task 7, 9, 10 khác file nhau: review task này được trong khi task kế đa
 
 ---
 
-### Task 6: ★ Feed member + vị trí đọc + `RunMemberFeed` + `work` + registry tạm + itest feed-skip. **Push**
+### Task 6: ★ Feed member + vị trí đọc + `RunMemberFeed` + `work` + phiếu hẹn `work.Timers` + registry tạm + itest feed-skip. **Push**
 
-**Mục tiêu.** Mọi đổi membership (đổi `ver`) vào feed thành `MemberChanged`, mọi đổi vị trí đọc thành `ReadChanged` (D103), mỗi lần clear thực sự nâng mốc thành `HistoryCleared`, mỗi lần ẩn tin mới thành `MessageHidden` (D109); số member và `owners_ver` **không bao giờ** vào.
+**Mục tiêu.** Mọi đổi membership (đổi `ver`) vào feed thành `MemberChanged`, mọi đổi vị trí đọc thành `ReadChanged` (D103), mỗi lần clear thực sự nâng mốc thành `HistoryCleared`, mỗi lần ẩn tin mới thành `MessageHidden` (D109); số member và `owners_ver` **không bao giờ** vào. Thêm phiếu hẹn đếm lại số member bằng message schedule của NATS (D102).
 
-**Files.** Sửa `memstore/change_log.go`, `feed.go`, `rooms.go`, `members.go`, `owner_changes.go`, `memstore_test.go`; sửa `mongostore/feed.go`, `feed_change.go`; tạo `mongostore/feed_member_change.go`, `feed_member_change_test.go`; sửa `mongostore/feed_change_test.go`, `feed_reaction_change_test.go`, `feed_integration_test.go`, `feed_skip_integration_test.go`. Tạo `storetest/feed_member_cases.go`; sửa `storetest/feed_room_cases.go`. Sửa `work/record.go`, `record_codec.go`, `record_test.go`, `record_tail_test.go`; `reconcile/forward_test.go`, `reconcile/stats_test.go`; `apps/core/effects_wiring.go`. `INDEXES.csv`: `store/mongostore`, `store/memstore`, `store/storetest`, `work`, `reconcile`, `apps/core`.
+**Files.** Sửa `memstore/change_log.go`, `feed.go`, `rooms.go`, `members.go`, `owner_changes.go`, `memstore_test.go`; sửa `mongostore/feed.go`, `feed_change.go`; tạo `mongostore/feed_member_change.go`, `feed_member_change_test.go`; sửa `mongostore/feed_change_test.go`, `feed_reaction_change_test.go`, `feed_integration_test.go`, `feed_skip_integration_test.go`. Tạo `storetest/feed_member_cases.go`; sửa `storetest/feed_room_cases.go`. Sửa `work/record.go`, `record_codec.go`, `record_test.go`, `record_tail_test.go`, `work/stream.go` (`AllowMsgSchedules`), `stream_test.go`; tạo `work/timers.go`, `timers_test.go`, `timers_integration_test.go`; `reconcile/forward_test.go`, `reconcile/stats_test.go`; `apps/core/effects_wiring.go`. `INDEXES.csv`: `store/mongostore`, `store/memstore`, `store/storetest`, `work`, `reconcile`, `apps/core`.
 
 **Todo.**
 1. Mongo `$match` theo hợp đồng; `feed_member_change.go`: insert/replace → giải mã `fullDocument`; update → `keys.ParseMember(documentKey._id)`; có `updatedFields.ver` (int32/int64/double, 1..`MaxUint32`, user hợp lệ, không thì `errCorrupt`) → `Change{Kind: MemberChanged, Member: {Room, User, Ver}}`; không có `ver` mà có `updatedFields.read_ver` (≥ 1) → `Change{Kind: ReadChanged, Member: {Room, User, ReadVer}}`; chỉ có `cleared_at` → `Change{Kind: HistoryCleared, Member: {Room, User}}`. Insert `hidden` → `Change{Kind: MessageHidden, Hidden: {User, Room, Thread, Seq}}`.
@@ -550,6 +553,7 @@ Task 7, 9, 10 khác file nhau: review task này được trong khi task kế đa
 3. `work`: `KnownKind`, `checkKind`, `ID()` theo hợp đồng.
 4. `effects_wiring.go` đăng ký tạm `store.MemberChanged: {activity.Effect()}` và `store.ReadChanged`, `store.MessageHidden`, `store.HistoryCleared` với danh sách effect rỗng (không đăng ký thì worker Nak kind 6–9 mãi; nếu registry từ chối danh sách rỗng thì dừng và báo); Task 15 thêm effect thật.
 5. storetest `RunMemberFeed`; Mongo chạy cùng bộ.
+6. `work.Timers` theo hợp đồng; `EnsureStream` của `CHATIM_WORK` bật `AllowMsgSchedules` (`CreateOrUpdateStream` sửa stream cũ). Kind `MemberCountCheck` đăng ký tạm với danh sách effect rỗng tới Task 15.
 
 **Kỹ thuật.** Change stream trả từng thao tác trong transaction như event riêng; decoder không cần biết transaction. Upsert chèn → `insert`; pipeline update trên tombstone → `update` có `ver` (và `read_ver`) trong `updatedFields` → chỉ `MemberChanged` (giữ nhánh `replace` cho an toàn). `MarkRead`/`MarkUnread` (`$set read_seq`, `$inc read_ver`) → `update` chỉ có `read_seq`, `read_ver` → `ReadChanged`.
 
@@ -562,11 +566,14 @@ Task 7, 9, 10 khác file nhau: review task này được trong khi task kế đa
 - `work`: `TestKnownKindsAreTheNineChangeKinds`; record member/đọc/ẩn/clear phải có user hợp lệ, kind khác không được có user; id `g:777-mb-alice-v1`, `d:777-rd-alice-v3`, `h:777-hd-alice-0-5`, `c:777-cl-alice-…`.
 - `reconcile`: `TestForwardsARoomInsertAndItsCreationMember`, `TestForwardsAReadPositionChange`; stats đếm thêm record member và đọc.
 
+- `timers_test.go`: record `MemberCountCheck` mã hoá/giải mã, id `k:777-…`; `Arm` dùng đúng subject, thời điểm, target theo slot.
+- `timers_integration_test.go` (NATS 2.15 thật): `TestRealJetStreamFiresAnArmedTimerAfterItsDelay` (delay 1s trong test → record tới `work.p{n}` sau ~1s, không sớm hơn); `TestRealJetStreamNeverFiresADisarmedTimer` (Arm rồi Disarm → chờ delay + 1s, không có gì tới); `TestEnsureStreamTurnsOnSchedulesOnAnOldWorkStream`. NATS từ chối `AllowMsgSchedules` trên stream WorkQueue, hoặc phiếu đã xoá vẫn bật → **dừng, báo** kèm lỗi nguyên văn.
+
 **Lệnh.** Unit các package đụng; `make itest`; rồi `git push origin feat/m2b`.
 
 **Done khi.** Unit + itest xanh; push xong.
 
-**Commit.** `feat(store): feed membership, read position, hide and clear changes into the work stream` — `apps/core/internal/store/ apps/core/internal/work/ apps/core/internal/reconcile/forward_test.go apps/core/internal/reconcile/stats_test.go apps/core/effects_wiring.go INDEXES.csv`.
+**Commit.** `feat(store): feed membership, read position, hide and clear changes into the work stream`; rồi `feat(work): arm and disarm member count check timers with nats message schedules` — `apps/core/internal/work/ INDEXES.csv` — `apps/core/internal/store/ apps/core/internal/work/ apps/core/internal/reconcile/forward_test.go apps/core/internal/reconcile/stats_test.go apps/core/effects_wiring.go INDEXES.csv`.
 
 **Review:** có (★).
 
@@ -710,8 +717,8 @@ Task 7, 9, 10 khác file nhau: review task này được trong khi task kế đa
    1. `ValidCID(RequestID)`; từng user `ValidUser`; khử trùng giữ thứ tự; rỗng → invalid users; quá `MemberBatch` → `ErrTooManyMembers`.
    2. `Admit(add_members)` → DM → `ErrDirectRoom` → `Allow`.
    3. `Requests.Begin(RequestKey(room, caller, request_id))`: `Busy` → `ErrRetryLater`; `Done` → `MembersOf(room, users)` lọc `AddedBy(doc, request_id, caller)` → trả (không ghi, không event); `New` → bước 4.
-   4. `Messages.Last(room, 0)` một lần → `Members.AddMembers(Join{…, At: now, ReadSeq: last}, users)`; lỗi → `Requests.Cancel`, trả lỗi.
-   5. `Forget.ForgetMembers(room)` → `JoinResult.Changed > 0` thì `AddMemberCount(room, Changed)` (lỗi → log + bộ đếm skipped, đi tiếp) → lọc `AddedBy` → **một** `Events.Enqueue` gồm `pbconv.MemberEvent` của từng người được thêm rồi `MemberCountChanged` (khi `$inc` thành công) (lỗi enqueue bỏ qua) → `Requests.Finish(key, Record{Seq: len(users), CreatedAt: now})` → trả doc đã thêm.
+   4. `Timers.Arm(room)` (lỗi → `Requests.Cancel`, `ErrRetryLater`) → `Messages.Last(room, 0)` một lần → `Members.AddMembers(Join{…, At: now, ReadSeq: last}, users)`; lỗi → `Requests.Cancel`, trả lỗi (phiếu để nguyên, bật thì đếm lại vô hại).
+   5. `Forget.ForgetMembers(room)` → `JoinResult.Changed > 0` thì `AddMemberCount(room, Changed)` (thành công → `Disarm`; lỗi → log, không `Disarm`, đi tiếp); `Changed == 0` → `Disarm` → lọc `AddedBy` → **một** `Events.Enqueue` gồm `pbconv.MemberEvent` của từng người được thêm rồi `MemberCountChanged` (khi `$inc` thành công) (lỗi enqueue bỏ qua) → `Requests.Finish(key, Record{Seq: len(users), CreatedAt: now})` → trả doc đã thêm.
 3. **`RemoveMember`, `LeaveRoom`, `ChangeMemberRole`, `SetMemberPriority`**:
    1. Validate: xoá chính mình → `ErrInvalidArgument`; đích `ValidUser`; role hợp lệ.
    2. `Admit(action)`. `LeaveRoom` gặp `ErrNotMember` → `MembersOf` có tombstone → `{Member: doc, Changed: false}`; không có doc → `ErrNotMember`. Room DM → `ErrDirectRoom`.
@@ -721,7 +728,7 @@ Task 7, 9, 10 khác file nhau: review task này được trong khi task kế đa
    6. Đích thiếu → `ErrMemberNotFound`; tombstone: xoá → no-op, đổi role/priority → `ErrMemberNotFound`; cùng role/priority → no-op (`PreviousRole`/`PreviousPriority` = giá trị hiện tại).
    6b. `SetMemberPriority` không bao giờ đụng owner nên luôn đi đường thường (`ownership.Affects` trả false); DM → `ErrDirectRoom`; mọi `int32` hợp lệ.
    7. `ownership.Affects(doc, action, role)` → đường transaction: `Members.ChangeOwners(room, [caller, target], decide)` với `decide` là closure gọi `ownership.Plan` (truyền `Allow` = gọi lại `Access.Allow` với doc mới). Kết quả rỗng → no-op; có → `Successor` là write đầu khi có hai write; số member lấy từ `OwnerResult.Count` khi `CountChanged`.
-   8. Không thì `ApplyMember(doc, doc.Next(…))`; `false` → `ErrRetryLater` **ngay**; khớp và doc chuyển active → removed → `AddMemberCount(room, −1)` (lỗi → log + skipped, vẫn thành công).
+   8. Không thì: xoá/rời một doc active → `Timers.Arm` trước (lỗi → `ErrRetryLater`); `ApplyMember(doc, doc.Next(…))`; `false` → `Disarm`, `ErrRetryLater` **ngay**; khớp → `AddMemberCount(room, −1)` → thành công thì `Disarm`, lỗi thì log, không `Disarm`, vẫn thành công. Đổi role/priority không `Arm`.
    9. Đổi → `Forget` → một `Enqueue` gồm `MemberEvent` của từng doc đã ghi theo thứ tự (kế nhiệm trước), rồi `MemberCountChanged` khi số đã đổi → `MemberResult`.
 4. `mutate.New` bắt buộc các dep mới; sửa rig `mutate`, `TestNewRequiresEveryDependency`, rig `grpcsrv` (`fake_dependencies_test.go`: router của rig làm `Forget` nếu có, không thì một forgetter rỗng; `dedupe.NewRequests` trên registry chấp nhận mọi thứ), và `apps/core/service_wiring.go` chuyển sang một struct tham số `serviceDeps` (store, router, publisher, cid batcher, config, logger) để dựng `dedupe.NewRequests(cidBatcher, cfg.Dedupe.CommittedTTL)`, truyền router làm `Forget` và logger (đã redaction) làm `Log`.
 
@@ -729,13 +736,13 @@ Task 7, 9, 10 khác file nhau: review task này được trong khi task kế đa
 - `Last` đọc một lần trước ghi; người vào thấy toàn bộ lịch sử, tin cũ coi như đã đọc.
 - Khe kiểm-rồi-ghi ở đường thường được chấp nhận (§8 bản tóm tắt): admin bị hạ sau khi `Admit` nhưng trước ghi thì lần xoá vẫn rơi. Đường transaction kiểm lại caller và policy trên doc đọc trong transaction.
 - `ErrRetryLater` chỉ sinh từ CAS trượt, transaction va chạm hoặc `RequestBusy`; core không tự gọi lại.
-- `$inc` số member nằm **sau** ghi member và không bao giờ biến lệnh thành lỗi: gửi lại sau khi member đã ghi luôn có `Changed 0`, nên trả lỗi cũng không sửa được số. Lệch được đếm vào `member_count_skipped_total` và sửa bằng `/app recount` (Task 17).
+- `$inc` số member nằm **sau** ghi member và không bao giờ biến lệnh thành lỗi: gửi lại sau khi member đã ghi luôn có `Changed 0`, nên trả lỗi cũng không sửa được số. Phiếu hẹn (đặt trước ghi member, chỉ xoá khi `$inc` xong) bật sau `MEMBER_COUNT_CHECK_DELAY` và worker `member_count_repair` sửa (Task 15), kể cả khi core chết giữa chừng.
 - Test member dùng room riêng tạo bằng `domain.NewRoom` để doc có đủ field; room fixture cũ không dùng cho member. Dedupe dùng `dedupe.Requests` thật trên một registry trong bộ nhớ có ngữ nghĩa Redis (pending/committed/abort), để test được "core khởi động lại" (`Requests` mới, cùng registry).
 
 **Test.**
 - `limits_test.go`: `TestMemberBatchDefaultsTo500AndChecksBounds` (1 và 1001 lỗi).
-- `members_test.go`: `TestAddMembersWritesForgetsAnnouncesAndCommitsTheRequest`; `TestAddingActiveMembersChangesNothing`; `TestReAddingRestoresAccessAsAMemberAndRaisesTheReadPosition`; `TestARetryWithTheSameRequestNeverReAddsSomeoneRemovedSince` (kể cả sau "khởi động lại"); `TestARequestStillRunningElsewhereIsRetryLater`; `TestAFailedAddCancelsTheRequestAndEventFailuresAreIgnored`; `TestABatchOfTheMaximumSizeIsOneWrite`; `TestAddMembersRaisesTheCountByTheDocsItChanged` (thêm 3 trong đó 1 đã active → +2, event số member sau event member; gửi lại → không `$inc`); `TestAFailedCountIncrementStillSucceedsAndIsCounted` (store giả lỗi `AddMemberCount` → reply OK, `MemberCountSkipped() == 1`, không event số member).
-- `member_change_test.go`: `TestRemoveMemberLeavesATombstoneAndRepeatsAsANoOp` (gồm admin xoá một cựu admin đã rời → OK, `Changed = false`); `TestLeaveRoomIsDesiredState` (tombstone → no-op; chưa từng là member → `PERMISSION_DENIED`); `TestChangeMemberRoleIsDesiredState`; `TestSetMemberPriorityIsOwnerOnlyAndDesiredState` (owner đặt → event `member_priority_changed`, `ver + 1`; admin → `PERMISSION_DENIED`; cùng số → no-op; không đổi số member); `TestOwnerChangesGoThroughTheOwnerTransaction` (owner cuối rời → kế nhiệm admin, `Successor` trong kết quả, event kế nhiệm trước đích, số member −1 từ transaction, không gọi `AddMemberCount`); `TestRemovingAnActiveMemberLowersTheCountOnce` (xoá lại tombstone → không `$inc`; đổi role → không `$inc`).
+- `members_test.go`: `TestAddMembersWritesForgetsAnnouncesAndCommitsTheRequest`; `TestAddingActiveMembersChangesNothing`; `TestReAddingRestoresAccessAsAMemberAndRaisesTheReadPosition`; `TestARetryWithTheSameRequestNeverReAddsSomeoneRemovedSince` (kể cả sau "khởi động lại"); `TestARequestStillRunningElsewhereIsRetryLater`; `TestAFailedAddCancelsTheRequestAndEventFailuresAreIgnored`; `TestABatchOfTheMaximumSizeIsOneWrite`; `TestAddMembersRaisesTheCountByTheDocsItChanged` (thêm 3 trong đó 1 đã active → +2, event số member sau event member; gửi lại → không `$inc`); `TestAFailedCountIncrementStillSucceedsAndLeavesTheTimerArmed` (store giả lỗi `AddMemberCount` → reply OK, phiếu không bị xoá, không event số member); `TestTheTimerIsArmedBeforeTheMemberWriteAndDisarmedAfterTheCount` (thứ tự gọi); `TestAFailedArmWritesNothingAndIsRetryLater`.
+- `member_change_test.go`: `TestRemoveMemberLeavesATombstoneAndRepeatsAsANoOp` (gồm admin xoá một cựu admin đã rời → OK, `Changed = false`); `TestLeaveRoomIsDesiredState` (tombstone → no-op; chưa từng là member → `PERMISSION_DENIED`); `TestChangeMemberRoleIsDesiredState`; `TestSetMemberPriorityIsOwnerOnlyAndDesiredState` (owner đặt → event `member_priority_changed`, `ver + 1`; admin → `PERMISSION_DENIED`; cùng số → no-op; không đổi số member); `TestOwnerChangesGoThroughTheOwnerTransaction` (owner cuối rời → kế nhiệm admin, `Successor` trong kết quả, event kế nhiệm trước đích, số member −1 từ transaction, không gọi `AddMemberCount`, không `Arm`); `TestRemovingAnActiveMemberLowersTheCountOnce` (xoá lại tombstone → không `Arm`, không `$inc`; đổi role → không `Arm`).
 - `member_rules_test.go`: `TestMemberCommandsFollowTheDefaultPolicy` (gồm "member removes zed" và "member sets role of zed" → `PERMISSION_DENIED`, owner/admin xoá zed → `NOT_FOUND`); `TestMemberCommandsAskThePolicyWithCallerTargetAndRole`; `TestDirectRoomsKeepTheirTwoMembers`; `TestMemberCommandsRejectBadInputFirst`; `TestTheLastOwnerCannotStepDown`.
 - `member_race_test.go` (wrapper store chạy "đối thủ" ngay trước `ApplyMember`/trong `decide`): `TestALostCASIsRetryLaterAndWritesNothing`; `TestAnAdminDemotedJustBeforeTheWriteStillRemoves` (khe chấp nhận); `TestATargetPromotedMeanwhileMakesThePlainWriteFail` (CAS trượt → `ErrRetryLater`; gọi lại → đi đường transaction); `TestTwoOwnersLeavingAtOnceOneGetsRetryLater`.
 - Test `mutate` cũ, rig `grpcsrv` xanh.
@@ -814,22 +821,22 @@ Task 7, 9, 10 khác file nhau: review task này được trong khi task kế đa
 
 ---
 
-### Task 14: ★ Config (1 env) + 7 RPC `grpcsrv` + README. **Push**
+### Task 14: ★ Config (2 env) + 7 RPC `grpcsrv` + README. **Push**
 
-**Mục tiêu.** Mở 7 RPC cho client và env `MEMBER_BATCH_MAX` (D107). Không thêm bước dừng, kế hoạch dừng giữ 26.2s.
+**Mục tiêu.** Mở 7 RPC cho client và env `MEMBER_BATCH_MAX` (D107), `MEMBER_COUNT_CHECK_DELAY` (D102). Không thêm bước dừng, kế hoạch dừng giữ 26.2s.
 
-**Files.** Sửa `config/config.go`, `components.go`; test `config/env_test.go`, `load_test.go`, `parse_test.go`. Tạo `grpcsrv/members.go`, `grpcsrv/read.go`, `grpcsrv/members_test.go`, `grpcsrv/read_test.go`; sửa `grpcsrv/caller_identity_test.go`. Sửa `apps/core/wiring.go` (truyền `Limits.MemberBatch`). `README.md` bảng env. `INDEXES.csv`: `config`, `grpcsrv`, `apps/core`, `README.md`.
+**Files.** Sửa `config/config.go`, `components.go`, `validate.go`; test `config/env_test.go`, `load_test.go`, `parse_test.go`, `validate_test.go`. Tạo `grpcsrv/members.go`, `grpcsrv/read.go`, `grpcsrv/members_test.go`, `grpcsrv/read_test.go`; sửa `grpcsrv/caller_identity_test.go`. Sửa `apps/core/wiring.go` (truyền `Limits.MemberBatch`). `README.md` bảng env. `INDEXES.csv`: `config`, `grpcsrv`, `apps/core`, `README.md`.
 
 **Todo.**
-1. Config theo bảng hợp đồng: `MEMBER_BATCH_MAX` → `Config.Limits.MemberBatch` (parse > 0, rồi `mutate.Limits` kiểm 2..1000). Khoá lỗi thành phần gộp `MEMBER_BATCH_MAX` cạnh `REACTION_EMOJIS, PIN_LIMIT`.
+1. Config theo bảng hợp đồng: `MEMBER_BATCH_MAX` → `Config.Limits.MemberBatch` (parse > 0, rồi `mutate.Limits` kiểm 2..1000); `MEMBER_COUNT_CHECK_DELAY` → `Config.MemberCountCheckDelay` (luật chéo `> CORE_REQUEST_DEADLINE`), truyền vào `work.NewTimers` ở wiring. Khoá lỗi thành phần gộp `MEMBER_BATCH_MAX` cạnh `REACTION_EMOJIS, PIN_LIMIT`.
 2. `grpcsrv/members.go` (5 RPC) và `grpcsrv/read.go` (2 RPC): `callerAndRoom` → `Mutator.*` → response theo bảng Task 3. `ChangeMemberRole` đổi role qua `pbconv.DomainMemberRole` **sau** khi kiểm caller. `LeaveRoom` trả `new_owner` = `MemberResult.Successor`. `grpcsrv.Deps` không thêm field.
-3. README: dòng env mới (mặc định, ràng buộc).
+3. README: hai dòng env mới (mặc định, ràng buộc).
 4. Push sau commit thứ hai.
 
 **Kỹ thuật.** Mã lỗi đi qua `pkg/grpcserver` như cũ (bảng mã lỗi ở hợp đồng `mutate`). Client nhận `UNAVAILABLE` phải tự gọi lại; route client trong `tools` đã làm vậy.
 
 **Test.**
-- Config: `TestMemberBatchMaxDefaultsAndBounds` (0, 1, 1001 lỗi; 2, 1000 nhận); bảng env của `env_test.go` có env mới; kế hoạch dừng mặc định vẫn 26.2s.
+- Config: `TestMemberBatchMaxDefaultsAndBounds` (0, 1, 1001 lỗi; 2, 1000 nhận); `TestMemberCountCheckDelayMustOutliveARequest`; bảng env của `env_test.go` có hai env mới; kế hoạch dừng mặc định vẫn 26.2s.
 - `members_test.go`: `TestMemberChangesThroughTheService` (thêm, đổi role, đặt priority, xoá, rời với `new_owner`); `TestARemovedMemberCanNeitherSendNorReadUntilAddedBack`; `TestARetriedAddNeverBringsBackSomeoneRemovedSince`; `TestMemberErrorsKeepTheirCodes` (bảng: DM, owner cuối, người lạ, member xoá người lạ → `PERMISSION_DENIED`, admin xoá người lạ → `NOT_FOUND`, xoá chính mình, role `UNSPECIFIED`, quá batch, CAS trượt → `UNAVAILABLE`).
 - `read_test.go`: `TestReadPositionThroughTheService` (`MarkRead(0)`, kẹp, `MarkUnread(0)` → `INVALID_ARGUMENT`; event `read_updated` có actor = caller).
 - `caller_identity_test.go`: 7 RPC mới từ chối metadata thiếu tenant/user.
@@ -839,18 +846,18 @@ Task 7, 9, 10 khác file nhau: review task này được trong khi task kế đa
 **Done khi.** Xanh; push xong.
 
 **Commit.**
-- `feat(config): member batch cap` — `apps/core/internal/config/ INDEXES.csv`.
+- `feat(config): member batch cap and member count check delay` — `apps/core/internal/config/ INDEXES.csv`.
 - `feat(grpcsrv): member and read position rpcs` — `apps/core/internal/grpcsrv/ apps/core/wiring.go README.md INDEXES.csv`.
 
 **Review:** có (★).
 
 ---
 
-### Task 15: ★ Effect `member_event`, `member_count_event`, `read_event`, `hidden_event`, `history_cleared_event` + registry + metric + alert + wiring
+### Task 15: ★ Effect `member_event`, `member_count_event`, `read_event`, `hidden_event`, `history_cleared_event`, `member_count_repair` + registry + metric + wiring
 
-**Mục tiêu.** Bảo đảm mọi event member, số member, vị trí đọc, ẩn tin và xoá lịch sử được phát (D102, D104, D105, D109): worker phát lại trạng thái hiện tại từ record `MemberChanged`/`ReadChanged`; metric và alert cho số member bị lỡ `$inc`.
+**Mục tiêu.** Bảo đảm mọi event member, số member, vị trí đọc, ẩn tin và xoá lịch sử được phát (D102, D104, D105, D109): worker phát lại trạng thái hiện tại từ record `MemberChanged`/`ReadChanged`; worker `member_count_repair` sửa số member khi phiếu hẹn bật.
 
-**Files.** Sửa `effects/ports.go` (`MemberLookup`, `RoomLookup` nếu chưa có), `effects/event_publisher.go` (giữ `each`); tạo `effects/member_event.go`, `member_count_event.go`, `read_event.go`, `hidden_event.go`, `history_cleared_event.go`, `member_fixtures_test.go`, `member_event_test.go`, `member_count_event_test.go`, `read_event_test.go`, `member_constructors_test.go`. Sửa `apps/core/effects_wiring.go`, `effects_wiring_test.go`, `metrics_wiring.go`, `metrics_wiring_test.go`, `wiring.go` (một dòng nếu cần); tạo `apps/core/member_effects_wiring.go`. Sửa `deploy/prometheus/alerts.yml`. `INDEXES.csv`: `effects`, `apps/core`, `deploy/prometheus/alerts.yml`.
+**Files.** Sửa `effects/ports.go` (`MemberLookup`, `RoomLookup` nếu chưa có), `effects/event_publisher.go` (giữ `each`); tạo `effects/member_event.go`, `member_count_event.go`, `read_event.go`, `hidden_event.go`, `history_cleared_event.go`, `member_count_repair.go`, `member_count_repair_test.go`, `member_fixtures_test.go`, `member_event_test.go`, `member_count_event_test.go`, `read_event_test.go`, `member_constructors_test.go`. Sửa `apps/core/effects_wiring.go`, `effects_wiring_test.go`, `metrics_wiring.go`, `metrics_wiring_test.go`, `wiring.go` (một dòng nếu cần); tạo `apps/core/member_effects_wiring.go`. `INDEXES.csv`: `effects`, `apps/core`, `deploy/prometheus/alerts.yml`.
 
 **Todo.**
 1. **`member_event`** (delay `RECONCILE_DELAY`): mỗi record `MembersOf(room, [user])`; không có doc → drop; `doc.Ver > rec.Version` → nil (record mới hơn lo); `<` → `store.ErrStaleRead` (Nak); `==` → loại room (cache `roomTypes`) → `pbconv.MemberEvent` → publish (nil event → nil), chờ PubAck. `Republished` chỉ đếm PubAck không phải bản trùng. Drop khi room không còn hoặc doc hỏng (`ErrInvalidArgument`), như `reaction_event`.
@@ -858,7 +865,7 @@ Task 7, 9, 10 khác file nhau: review task này được trong khi task kế đa
 3. **`read_event`** (delay `RECONCILE_DELAY`) cho `ReadChanged`: `MembersOf(room, [user])`; không có doc → drop; `doc.ReadVer > rec.Version` → nil; `<` → `ErrStaleRead`; `==` → publish `ReadUpdated(room, user, {doc.ReadSeq, doc.ReadVer}, now)`, chờ PubAck.
 3b. **`hidden_event`**: `Hidden` có doc (user, room, thread, seq) → publish `MessageHidden` (giờ = `created_at` của doc); không có → drop. **`history_cleared_event`**: đọc doc member; `cleared_at` zero hoặc không có doc → drop; có → publish `HistoryCleared` với mốc **hiện tại** (id theo mốc, nên mốc cũ hơn đã bị vượt không phát lại).
 4. Registry cuối thay dòng tạm Task 6 (bảng hợp đồng `effects`); wiring trong `member_effects_wiring.go` (`wireEffects` không đổi chữ ký); `counters()` thêm năm effect (republished + dropped). Câu help `dropHelp` trong `workerSources` thêm "member doc".
-5. Metric `chatim_core_member_count_skipped_total` (`CounterFunc` từ `Mutator.MemberCountSkipped`); luật `ChatimMemberCountSkipped` trong `alerts.yml` (17 luật).
+5. **`member_count_repair`** (record `MemberCountCheck`, delay 0): `Rooms.Get` (ver `v`) → `CountMembers` → bằng số đang lưu: nil → khác: `SetMemberCount(room, v, n)`; `false` → lỗi (Nak); `true` → publish `MemberCountChanged`, tăng `counter_repaired_total{counter="members"}`, đọc lại room: `ver > v + 1` (có `$inc` khác chen vào lúc đếm) → `Timers.Arm(room)` phiếu mới. Room không có → drop. Không vòng lặp.
 
 **Kỹ thuật.** Không vòng lặp trong effect: lỗi → Nak, record quay lại. Chỉ trạng thái cuối được bảo đảm (event trung gian bị doc mới hơn vượt thì không phát lại), như `reaction_event`. `harness_test.go` của `effects` đang 199 dòng: fixture mới để ở `member_fixtures_test.go`.
 
@@ -867,15 +874,16 @@ Task 7, 9, 10 khác file nhau: review task này được trong khi task kế đa
 - `member_count_event_test.go`: `TestMemberCountEventPublishesTheCurrentCountOncePerRoom`; `TestMemberCountEventDropsAGoneRoomAndRetriesWhenTheStoreFails`.
 - `read_event_test.go`: `TestReadEventRepublishesTheCurrentPosition`; `TestReadEventSkipsANewerPositionAndRetriesAnOlderOne`.
 - `hidden_event_test.go`, `history_cleared_event_test.go`: phát lại trạng thái hiện tại; drop khi không còn.
+- `member_count_repair_test.go`: `TestRepairLeavesACorrectCountAlone`; `TestRepairFixesADriftedCountAndAnnouncesIt`; `TestRepairNaksWhenTheCountMovedDuringIt` (CAS trượt); `TestRepairArmsAnotherTimerWhenAnIncrementSlippedIn`; `TestRepairDropsAGoneRoom`.
 - `member_constructors_test.go`: `TestNewMemberEffectsRejectBadInput`.
-- `effects_wiring_test.go`: `TestEffectSetExportsEveryEffect` (registry `MemberChanged`, `ReadChanged`, `MessageHidden`, `HistoryCleared` đúng thứ tự, delay không giảm); `metrics_wiring_test.go`: nhãn năm effect và `member_count_skipped_total` có trên `/metrics`.
+- `effects_wiring_test.go`: `TestEffectSetExportsEveryEffect` (registry `MemberChanged`, `ReadChanged`, `MessageHidden`, `HistoryCleared`, `MemberCountCheck` đúng thứ tự, delay không giảm); `metrics_wiring_test.go`: nhãn các effect mới và `counter_repaired_total{counter="members"}` có trên `/metrics`.
 - Test `reaction_event`, `pin_event` cũ xanh nguyên.
 
-**Lệnh.** Unit `./apps/core/internal/effects/... ./apps/core/` (`-count=5` cho `effects`); fmt/vet/lint; `make alerts-check` (17 luật); `make itest`.
+**Lệnh.** Unit `./apps/core/internal/effects/... ./apps/core/` (`-count=5` cho `effects`); fmt/vet/lint; `make alerts-check` (16 luật, không đổi); `make itest`.
 
-**Done khi.** Xanh; `make alerts-check` báo 17 luật.
+**Done khi.** Xanh; `make alerts-check` báo 16 luật.
 
-**Commit.** `feat(effects): republish member, member count, read position, hidden and cleared events` — `apps/core/internal/effects/ apps/core/effects_wiring.go apps/core/effects_wiring_test.go apps/core/member_effects_wiring.go apps/core/metrics_wiring.go apps/core/metrics_wiring_test.go apps/core/wiring.go deploy/prometheus/alerts.yml INDEXES.csv`.
+**Commit.** `feat(effects): republish member, read, hidden and cleared events and repair member counts` — `apps/core/internal/effects/ apps/core/effects_wiring.go apps/core/effects_wiring_test.go apps/core/member_effects_wiring.go apps/core/metrics_wiring.go apps/core/metrics_wiring_test.go apps/core/wiring.go INDEXES.csv`.
 
 **Review:** có (★).
 
@@ -988,6 +996,7 @@ Sau bước 11: phase 5 check (`e2e check` như cũ, người gọi `e2e-user`).
 - `TestRealInfraTwoOwnersRemovingEachOtherLeaveOneOwner` — đúng một thành công; bên kia sau khi gọi lại nhận `PERMISSION_DENIED`.
 - `TestRealInfraEachChangeGoesToTheSubjectOfItsData` — tạo room, gửi tin, thêm người, đánh dấu đọc: `room_created`/`member_count_changed` trên `live.{t}.room.{rid}…`, `member_added`/`read_updated` trên `live.{t}.member.{rid}…`, `msg_created` trên `live.{t}.message.{rid}…`; mỗi thay đổi đúng một event.
 - `TestRealInfraMemberCountFollowsEachCommand` — thêm 3 (1 đã ở room) → +2; xoá 1 → −1; `member_count` bằng đếm thật, mỗi event `member_count_changed` mang đúng số và `ver` đã lưu.
+- `TestRealInfraACountMissedByACrashIsRepairedByItsTimer` — core với `MEMBER_COUNT_CHECK_DELAY` ngắn (test) và store bọc làm `AddMemberCount` lỗi (giả core chết sau ghi member): thêm 2 người → reply OK, số chưa đổi; sau delay worker sửa đúng số, phát `member_count_changed`, `counter_repaired_total{counter="members"}` tăng 1. Lệnh bình thường không để lại phiếu nào (xoá kịp).
 - `TestRealInfraLostMemberAndReadEventsAreRepublished` — core chạy với fast path event không tới stream (cách các itest reconcile M2b.1/M2b.2 đang làm, xem `itFastEffects`); thêm người, đánh dấu đọc → worker phát `member_added`, `member_count_changed`, `read_updated` của trạng thái hiện tại.
 - `TestRealInfraRemovedMemberIsDeniedAtOnceThroughTheActorCache` — xoá cùng core → gửi, `GetHistory`, `MarkRead` bị từ chối ngay.
 - `TestRealInfraARemovalOnAnotherCoreReachesTheActorThroughTheMemberEvent` — hai core; bob gửi qua core-1 (actor nhớ bob); xoá bob qua core-2 → chờ event `member_removed`, rồi bob gửi qua core-1 bị từ chối (trước khi TTL 10s hết).
@@ -997,7 +1006,7 @@ Sau bước 11: phase 5 check (`e2e check` như cũ, người gọi `e2e-user`).
 - `TestRealInfraClearHistoryHidesByTimeAndSurvivesARejoin`.
 - `TestRealInfraReaderStateChangesEnterTheWorkStream` — subscribe subject work stream; thêm `dave` → record `g:`; `MarkRead` → `d:`; `ClearHistory` → `c:`; ẩn tin → `h:`; `AddMemberCount` không sinh record; doc `dave` giữ `ver 1`.
 
-**Kỹ thuật.** Không có bước "thấy fail": test xác nhận hành vi Task 2–17; fail là lỗi task trước → dừng và báo (gợi ý: owner → Task 5/10/11; subject → Task 3; count → Task 5/11; event phát lại → Task 6/15; quên cache xuyên core → Task 16; cache → Task 8/11; request → Task 7/11; clear → Task 1/5; record thừa → Task 5/6). Trạng thái lưu chờ bằng `awaitStored`; live event chờ theo id. Trước khi tạo file, grep tên helper định dùng để tránh trùng.
+**Kỹ thuật.** Không có bước "thấy fail": test xác nhận hành vi Task 2–17; fail là lỗi task trước → dừng và báo (gợi ý: owner → Task 5/10/11; subject → Task 3; count → Task 5/6/11/15; event phát lại → Task 6/15; quên cache xuyên core → Task 16; cache → Task 8/11; request → Task 7/11; clear → Task 1/5; record thừa → Task 5/6). Trạng thái lưu chờ bằng `awaitStored`; live event chờ theo id. Trước khi tạo file, grep tên helper định dùng để tránh trùng.
 
 **Lệnh.** `make itest`.
 
@@ -1017,11 +1026,11 @@ Sau bước 11: phase 5 check (`e2e check` như cũ, người gọi `e2e-user`).
 1. Cây làm việc sạch ngoài docs của owner; `wc -l` mọi file code đụng ở M2b.4 < 200.
 2. Thiết kế `docs/designs/261005-chatim-architecture.md`: §5 một bảng field cho mỗi collection (tên đầy đủ), `messages` giữ tên ngắn kèm bảng nghĩa; doc `members`, field mới `rooms`, `message_edits` dòng `ver 0`; §4 lớp tập member, vị trí đọc; §5.1 ghi **ngoại lệ duy nhất** (transaction đổi owner); §6–§9 luồng member, owner, số member (`$inc` + recount), event; §10/§11 subject theo loại dữ liệu (`room`, `member`, `message`; gateway sub `live.{t}.*.{rid}.>`; chuyển phát tới user do app phân phối thiết kế sau); §12 guarantee (owner luôn còn khi còn member; mọi event member/số member/đọc được phát lại; số member lệch có metric + alert + recount); Decision Log thêm D96–D110, sửa D49, D67, D72, D75, D85.
 3. `docs/roadmap.md`: dòng M2b.4 done, luật bản tóm tắt kỹ thuật, luật tên field.
-4. `CLAUDE.md`: mục Done, tên field, Key encoding (`keys.Member`), Storage ports, send path (subject `evt.{t}.message.{rid}.msg_created`), effect engine (registry member/đọc), khối member, priority, vị trí đọc, ẩn/clear có event, `memberwatch`, Detectors (17 luật), Lifecycle (26.2s không đổi), lệnh `/app recount`, Shard-readiness (ngoại lệ transaction), Docs.
+4. `CLAUDE.md`: mục Done, tên field, Key encoding (`keys.Member`), Storage ports, send path (subject `evt.{t}.message.{rid}.msg_created`), effect engine (registry member/đọc), khối member, priority, vị trí đọc, ẩn/clear có event, `memberwatch`, phiếu hẹn đếm lại số member, Detectors (16 luật), Lifecycle (26.2s không đổi), lệnh `/app recount`, Shard-readiness (ngoại lệ transaction), Docs.
 5. `README.md`: dòng `clear -room ID` bỏ `[-up-to N]`; lệnh member mới; subject theo loại dữ liệu.
 6. `INDEXES.csv`: dòng của plan và bản tóm tắt; kiểm `{7}`.
 7. Mục "Kết quả thực thi" cuối plan: mỗi task một dòng (commit, kết quả, sửa cơ học, Minor).
-8. Kiểm chứng: `make fmt-check`, `make vet`, `make lint`, `make vuln`, `make test`; `make infra-reset`, `make infra-up`, `make itest`; `make image TARGET=apps/core`, `make core-up`, `make e2e`; `/metrics` trên cả hai core có nhãn `member_event`, `member_count_event`, `read_event`, `hidden_event`, `history_cleared_event`, `member_count_skipped_total`, `member_cache_forgets_total`; `make alerts-check` 17 luật; `docker exec chatim-core-1 /app resync -from … -to … -dry-run` in `member_records`; `docker exec chatim-core-1 /app recount -room <room e2e> -dry-run` in hai số bằng nhau; corebench ngắn `make poc TOOL=corebench ARGS="-rate 1000 -duration 30s"` không lỗi.
+8. Kiểm chứng: `make fmt-check`, `make vet`, `make lint`, `make vuln`, `make test`; `make infra-reset`, `make infra-up`, `make itest`; `make image TARGET=apps/core`, `make core-up`, `make e2e`; `/metrics` trên cả hai core có nhãn `member_event`, `member_count_event`, `read_event`, `hidden_event`, `history_cleared_event`, `member_count_repair`, `counter_repaired_total{counter="members"}`, `member_cache_forgets_total`; `make alerts-check` 16 luật; `docker exec chatim-core-1 /app resync -from … -to … -dry-run` in `member_records`; `docker exec chatim-core-1 /app recount -room <room e2e> -dry-run` in hai số bằng nhau; corebench ngắn `make poc TOOL=corebench ARGS="-rate 1000 -duration 30s"` không lỗi.
 9. Checklist merge theo `docs/git-workflow.md` (plan done; fmt-check, vet, lint, test, itest, e2e xanh; không Critical/Important mở; roadmap, Decision Log, INDEXES, CLAUDE.md cập nhật; mức `dev-done`); nháp mô tả PR vào `bin/` (gitignored). **Không mở PR**: controller hỏi owner.
 10. Push.
 
@@ -1038,7 +1047,7 @@ Sau bước 11: phase 5 check (`e2e check` như cũ, người gọi `e2e-user`).
 2. Đọc, chưa đọc, clear history chỉ dùng toán tử thường, không bao giờ đụng `ver`, không pipeline/replace/upsert. Đổi vị trí đọc vào feed thành `ReadChanged`, clear nâng mốc thành `HistoryCleared`, ẩn mới thành `MessageHidden`; số member và `owners_ver` không vào feed.
 3. Người bị xoá/rời mất quyền: `Rooms.Member` lọc `state == 1`; lệnh qua `mutate` từ chối ngay; gửi tin qua actor của core khác bị chặn khi event `member_removed` tới (`memberwatch`), muộn nhất 10s (TTL).
 4. `ver`, `read_ver`, `member_count_ver`, `owners_ver` chỉ tăng; tombstone không bao giờ bị xoá, nên id event không lặp.
-5. Fast path không báo lỗi vì event: lỗi enqueue và `Forget` bỏ qua sau khi ghi; worker phát lại trạng thái hiện tại. `member_count` chỉ đổi bằng `$inc` trong lệnh member (đường owner trong transaction), `Rooms.Create` và `/app recount`; `$inc` lỗi không làm lệnh lỗi, chỉ tăng `member_count_skipped_total`.
+5. Fast path không báo lỗi vì event: lỗi enqueue và `Forget` bỏ qua sau khi ghi; worker phát lại trạng thái hiện tại. `member_count` chỉ đổi bằng `$inc` trong lệnh member (đường owner trong transaction), `Rooms.Create`, worker `member_count_repair` và `/app recount`; `$inc` lỗi không làm lệnh lỗi. Mọi lệnh có thể đổi số đặt phiếu hẹn **trước** khi ghi member và chỉ xoá phiếu khi `$inc` xong, nên lỗi hay core chết ở giữa luôn được sửa sau `MEMBER_COUNT_CHECK_DELAY`.
 6. Mỗi thay đổi đúng một event, trên subject theo loại dữ liệu (D108); core không có subject user, không chọn người nhận.
 7. Không vòng thử lại bên trong core ở code mới; vòng gọi lại chỉ ở client (route) và test.
 
@@ -1057,6 +1066,7 @@ Sau bước 11: phase 5 check (`e2e check` như cũ, người gọi `e2e-user`).
 | đã đọc | `{room}-rd-{u}-v{read_ver}` | `d:` + event id | `member` |
 | ẩn tin | `{room}-hd-{u}-{th}-{seq}` | `h:` + event id | `member` |
 | xoá lịch sử | `{room}-cl-{u}-{cleared_at ms}` | `c:{room}-cl-{u}-{CommittedAt ms}` | `member` |
+| phiếu hẹn đếm lại số member | — | `k:{room}-{op}` (subject hẹn `work.timer.{room}.{op}`) | — |
 
 **Ai sửa file chung (tuần tự).**
 
@@ -1070,7 +1080,7 @@ Sau bước 11: phase 5 check (`e2e check` như cũ, người gọi `e2e-user`).
 | `proto/chatim/v1/*`, `pkg/pb/chatim/v1/*` | 1 → 3 |
 | `pbconv/*` | 1 → 3 |
 | `publish/*`, `effects/*_test.go` subject, `tools/corecli/cmd_watch.go`, `tools/poc/corebench/live.go` | 3 |
-| `work/*` | 4 → 6 |
+| `work/*` | 4 → 6 (+ `work.Timers`) |
 | `pkg/lru`, `dedupe/*` | 7 |
 | `actor/*` | 7 → 8 |
 | `memberwatch/*`, `apps/core/memberwatch_wiring.go` | 16 |
@@ -1084,7 +1094,7 @@ Sau bước 11: phase 5 check (`e2e check` như cũ, người gọi `e2e-user`).
 | `apps/core/service_wiring.go` | 11 → 13 |
 | `apps/core/wiring.go` | 11 → 14 → 15 → 16 |
 | `apps/core/effects_wiring.go` | 6 → 15 |
-| `apps/core/metrics_wiring.go`, `member_effects_wiring.go`, `deploy/prometheus/alerts.yml` | 15 |
+| `apps/core/metrics_wiring.go`, `member_effects_wiring.go` | 15 |
 | `config/*` | 14 |
 | `resync/*`, `apps/core/resync_command.go`, `recount_command.go`, `main.go` | 17 |
 | `tools/internal/route/*`, `tools/corecli/*`, `scripts/e2e.sh` | 1 → 3 → 18 |
@@ -1096,13 +1106,13 @@ Sau bước 11: phase 5 check (`e2e check` như cũ, người gọi `e2e-user`).
 - Task 1 → 5: `members` chưa clustered, chưa có `state`; `Rooms.Member` như cũ.
 - Task 4 → 5: vài case contract Mongo đỏ tạm (đã ghi ở Task 4); không chạy `make itest` ở Task 4.
 - Task 5 → 6: Mongo ghi `ver` nhưng feed chưa xem `members`.
-- Task 5 → 11: `AddMemberCount` chưa ai gọi. Task 6 → 15: worker chỉ chạy `room_activity` cho record member và ack ngay record đọc; event member/đọc chỉ có ở đường nhanh.
+- Task 5 → 11: `AddMemberCount` chưa ai gọi. Task 6 → 15: phiếu hẹn bật nhưng worker chưa có effect cho `MemberCountCheck` (danh sách rỗng, ack ngay). Task 6 → 15: worker chỉ chạy `room_activity` cho record member và ack ngay record đọc; event member/đọc chỉ có ở đường nhanh.
 - Task 7 → 11: `dedupe.Requests` chưa ai gọi. Task 8 → 11: `ForgetMembers` chưa ai gọi (chỉ TTL).
 - Task 11 → 12: `CreateRoom` chưa phát `member_added` cho người tạo. Task 11 → 14: lệnh member và đọc chưa có RPC.
 
 **Rolling deploy.** Tên field đổi và `members` đổi khoá nên không có đường nâng cấp tại chỗ: dev `make infra-reset`; prod go-live thẳng từ bản này. Core cũ khởi động lại sẽ ghi đè luật RePublish (`EnsureStream`; subject `member`/`message` ngừng tới `live.*`) và Nak kind 6–9; subject của tin đổi từ `…room…` sang `…message…` → nâng mọi core và mọi consumer cùng lúc. Transaction cần Mongo replica set (dev rs0, prod giống). Proto đổi tên field giữ số field nên wire tương thích; tên JSON đổi (chưa có client ngoài).
 
-**Detector.** Sau Task 15 `/metrics` có `effect_dropped_total{effect}` và `reconcile_republished_total{effect}` cho `member_event`, `member_count_event`, `read_event`, `hidden_event`, `history_cleared_event`; `work_failures_total` bắt Nak của năm effect; sau Task 16 có `member_cache_forgets_total`, `member_watch_malformed_total`; `member_count_skipped_total` + `ChatimMemberCountSkipped` cho số member lỡ `$inc`. Không metric hay luật mới cho owner (transaction không để lại trạng thái nửa vời). `make alerts-check` 17 luật.
+**Detector.** Sau Task 15 `/metrics` có `effect_dropped_total{effect}` và `reconcile_republished_total{effect}` cho `member_event`, `member_count_event`, `read_event`, `hidden_event`, `history_cleared_event`; `work_failures_total` bắt Nak của năm effect; sau Task 16 có `member_cache_forgets_total`, `member_watch_malformed_total`; `member_count_repair` ghi vào `counter_repaired_total{counter="members"}` (alert `ChatimCounterRepairSurge` sẵn có). Không metric hay luật mới cho owner (transaction không để lại trạng thái nửa vời). `make alerts-check` 16 luật.
 
 ---
 
