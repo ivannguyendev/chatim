@@ -2,18 +2,21 @@
 
 > Plan chi tiết (cho AI): [2026-10-06-m2b4-members-read.md](2026-10-06-m2b4-members-read.md). Trạng thái: **chờ owner phản biện và duyệt bản này rồi mới thực thi.** Mục 9 liệt kê những điểm đội tự chọn để anh phản biện.
 >
-> Lưu ý: bản plan M2b.4 trước (đánh số liên tục `mv`) đã **huỷ hoàn toàn**. Số quyết định D96–D107 được dùng lại cho thiết kế mới này với nghĩa khác.
+> Lưu ý: bản plan M2b.4 trước (đánh số liên tục `mv`) đã **huỷ hoàn toàn**. Số quyết định D96–D108 được dùng lại cho thiết kế mới này với nghĩa khác.
 
 ## 0. Thuật ngữ dùng trong bản này
 
 | Từ | Nghĩa |
 |---|---|
-| CAS (ghi có điều kiện) | Ghi chỉ khi một giá trị vẫn như lúc mình đọc, ví dụ "chỉ ghi nếu `owners_ver` vẫn là 4". Hai bên ghi cùng lúc thì chỉ một bên thắng; bên thua đọc lại rồi thử lại |
+| CAS (ghi có điều kiện) | Ghi chỉ khi một giá trị vẫn như lúc mình đọc, ví dụ "chỉ ghi nếu `ver` của Bob vẫn là 3". Hai bên ghi cùng lúc thì chỉ một bên thắng; bên thua nhận lỗi `UNAVAILABLE` và app gọi lại |
+| transaction | Gói nhiều lần ghi thành một khối: hoặc xong hết, hoặc không có gì được ghi. Chỉ dùng cho lệnh đổi owner |
 | tombstone | Doc không bị xoá mà chỉ đánh dấu "đã rời" (`state = 2`), để giữ lịch sử và các bộ đếm |
-| change stream / oplog | Nhật ký thay đổi của Mongo; core đọc nó để biết doc nào vừa đổi và làm việc chạy nền |
-| work stream / worker / Nak | Hàng đợi việc chạy nền trên NATS (M2b.1). Worker ở mọi core lấy việc ra làm; làm chưa được thì trả lại (Nak) để lát nữa làm lại |
-| RePublish | Luật của NATS chép event từ stream lưu trữ sang subject `live.*` để gateway nghe |
-| witness | Bước kiểm "đã thấy đúng thay đổi vừa ghi chưa" trước khi đếm (mục 3.7) |
+| nhật ký thay đổi (change stream / oplog) | Mongo tự ghi mọi thay đổi vào một nhật ký nằm trong chính Mongo; core chết cũng không mất |
+| phiếu việc / hàng đợi việc (work stream) | Mỗi thay đổi được chép thành một "phiếu việc" ngắn, bỏ vào hàng đợi trên NATS (có từ M2b.1) |
+| worker / Nak | Phần chạy nền ở mọi core, lấy phiếu ra làm; làm chưa được thì trả phiếu lại (Nak) để làm lại sau |
+| subject | "Địa chỉ" của một event trên NATS, ví dụ `evt.acme.member.777.member_added`. Ai cần thì đăng ký nghe theo địa chỉ |
+| RePublish | Luật của NATS chép event từ stream lưu trữ sang subject `live.*` để app khác nghe |
+| `$inc` | Lệnh Mongo cộng/trừ thẳng một số trên doc, ví dụ `member_count + 2` |
 | P8 | Nguyên tắc trong thiết kế: kết nối lại thì lấy trạng thái mới nhất, không phát lại event cũ |
 
 ## 1. Bức tranh chung
@@ -29,17 +32,23 @@ flowchart LR
   CORE -->|ghi doc members, rooms| M[(MongoDB)]
   CORE -->|event ngay| P[publisher]
   P --> E[(NATS CHATIM_EVT)]
-  E -->|RePublish| L[live.* : subject room + subject user]
+  E -->|RePublish| L[live.* : subject room / member / message]
+  L --> APP[app phân phối, thiết kế sau: chọn gửi tới ai]
   M -->|change stream| R[reader slot 0]
   R --> W[(work stream CHATIM_WORK)]
-  W --> WK[worker mọi core: đếm số member, canh owner, phát lại event]
-  WK --> M
+  W --> WK[worker mọi core: phát lại event bị rớt]
   WK --> P
 ```
 
-- Lệnh của client tới core giữ slot của room. Core kiểm quyền, ghi doc, phát event rồi trả lời ngay.
-- Mọi thay đổi trên Mongo đi qua change stream, rồi work stream, rồi worker (engine M2b.1 đang chạy).
-- Worker làm phần chậm: đếm lại số member, canh luật owner, phát lại event bị mất.
+- Lệnh của client tới core giữ slot của room. Core kiểm quyền, ghi doc, cộng/trừ số member, phát event rồi trả lời ngay.
+- **Core chỉ bảo đảm mọi event được phát; không chọn người nhận.** Mỗi event đi một subject theo loại dữ liệu (`room`, `member`, `message`, mục 4). Chuyển tới user nào, bao nhiêu user, bao nhiêu room, thông báo đẩy… là việc của một app phân phối thiết kế sau (owner chốt 2026-10-07).
+- **Việc chạy nền diễn ra thế nào** (engine M2b.1 đang chạy). Ví dụ admin thêm Bob vào room 777:
+  1. Core ghi doc member của Bob, cộng `member_count` của room, phát event `member_added` và `member_count_changed`, rồi **trả lời admin ngay**.
+  2. Mongo tự ghi vào nhật ký thay đổi: "doc member (room 777, Bob) vừa đổi, `ver` 1".
+  3. Một core (core giữ slot 0, gọi là reader) đọc nhật ký và chép mỗi thay đổi thành **phiếu việc** "room 777, Bob, ver 1", bỏ vào hàng đợi việc trên NATS.
+  4. Hàng đợi chia 32 ngăn **theo room**: phiếu của room 777 luôn vào cùng một ngăn, và mỗi ngăn chỉ một core xử lý.
+  5. Worker của core đó lấy một lô phiếu, đợi khoảng 5 giây (`RECONCILE_DELAY`), đọc trạng thái hiện tại và **phát lại** event (NATS bỏ bản trùng theo id nếu bước 1 đã phát được), xong thì xoá phiếu. Lỗi thì trả phiếu lại để làm sau.
+- **Vì sao tách ra như vậy:** lệnh trả lời nhanh; event ở bước 1 có thể rớt (NATS chậm, core chết ngay sau khi ghi), phiếu việc vẫn còn trong hàng đợi nên event luôn được phát lại.
 
 ## 2. Dữ liệu và tên field
 
@@ -49,7 +58,7 @@ flowchart LR
 |---|---|
 | `rooms` | `t`→`tenant`, `ty`→`type`, `n`→`name`, `cb`→`created_by`, `ca`→`created_at`, `mc`→`member_count`, `ls`→`last_seq`, `lm`→`last_message_at`, `lc`→`last_change_at`, `ab`→`activity_bucket`, `pv`→`pin_ver`; phần tử `pins` thành `{thread_root, seq, pinned_by, pinned_at, pin_ver}` |
 | `members` | `r`→`room_id`, `u`→`user_id`, `t`→`tenant`, `ro`→`role`, `ja`→`joined_at`, `cb` (seq) → `cleared_at` (thời gian) |
-| `message_edits` | `r`→`room_id`, `t`→`tenant`, `k`→`kind`, `by`→`created_by`, `x`→`text`, `p`→`previous_text`, `ts`→`created_at` |
+| `message_edits` | `r`→`room_id`, `t`→`tenant`, `k`→`kind`, `by`→`created_by`, `x`→`text`, `ts`→`created_at`; **bỏ** `p` (xem 2.4) |
 | `hidden` | `u`→`user_id`, `r`→`room_id`, `th`→`thread_root`, `s`→`seq` |
 | `reactions` | `k`→`message_key`, `r`→`room_id`, `t`→`tenant`, `u`→`user_id`, `e`→`emoji`, `pe`→`previous_emoji`, `n`→`ver`, `ts`→`updated_at` |
 | `pin_actions` | `r`→`room_id`, `t`→`tenant`, `op`→`action`, `th`→`thread_root`, `s`→`seq`, `by`→`created_by`, `ts`→`created_at` |
@@ -96,10 +105,21 @@ Index:
 
 | Field | Nghĩa | Ví dụ |
 |---|---|---|
-| `member_count` | Số member đang ở room; worker ghi, trễ khoảng 1s | 5000 |
-| `member_count_ver` | Số lần `member_count` được ghi lại; chặn lượt đếm cũ ghi đè số mới | 37 |
-| `owners_ver` | Số lần danh sách owner đổi; hai lệnh đổi owner chạy cùng lúc thì chỉ một lệnh thắng | 4 |
-| `pending_owner_change` | Thay đổi owner đã chốt nhưng chưa ghi xong: ai, làm gì, ai lên thay, kèm `ver` của từng người lúc chốt. Dùng để làm nốt nếu core chết giữa chừng | `{action: leave, user_id: an, successor_id: binh}` |
+| `member_count` | Số member đang ở room (đã có từ trước, tên cũ `mc`). Cộng/trừ ngay trong lệnh thêm/xoá/rời bằng `$inc` (mục 3.7) | 5000 |
+| `member_count_ver` | Tăng 1 mỗi lần `member_count` đổi; dùng làm id event `member_count_changed`, client giữ số có `ver` lớn hơn | 37 |
+| `owners_ver` | Số lần danh sách owner đổi. Mỗi lệnh đổi owner tăng nó trong transaction, để hai lệnh đổi owner chạy cùng lúc va nhau và chỉ một lệnh thắng (mục 3.3) | 4 |
+
+### 2.4 Ghi chú cho một số field
+
+- **Danh sách room của user là một phần của `members`.** Không có collection `user_rooms` riêng: câu "Bob đang ở những room nào" tra bằng index thứ hai `{tenant, user_id, state, room_id}` trên chính `members`. Mỗi lần ghi doc member, Mongo cập nhật cả hai index trong cùng một lần ghi, nên hai cách tra không bao giờ lệch nhau. Chỉ khi shard Mongo (member chia theo room) mới cân nhắc tách một bản xếp theo user.
+- **`activity_bucket` (`rooms`)**: giờ cuối cùng room có thay đổi, làm tròn xuống theo giờ. Ví dụ tin lúc 09:42 → "09:00"; tin lúc 09:58 không đổi; tin lúc 10:03 → "10:00". Chỉ dùng cho công cụ `/app resync` tìm room có hoạt động trong khoảng thời gian bị mất. Không đánh index thẳng trên `last_change_at` vì field đó đổi theo từng tin; `activity_bucket` đổi tối đa 1 lần mỗi giờ mỗi room.
+- **`read_seq` (`members`)**: vị trí đọc, tức đã đọc tới tin số mấy. Ví dụ room có 520 tin, Bob đọc tới tin 500 → `read_seq` = 500, chưa đọc là tin 501–520 (đếm unread để M3). Dùng số tin, không dùng thời gian, vì phải khớp chính xác thứ tự tin mọi người cùng thấy.
+- **`message_edits`: mỗi dòng là một phiên bản nội dung của tin**, theo thứ tự `ver`, chỉ có field `text` (cùng `kind`, `created_by`, `created_at`).
+  - Ví dụ: gửi "Họp 9h", sửa thành "Họp 10h", rồi "Họp 10h30" → dòng `ver 0` = "Họp 9h", dòng `ver 1` = "Họp 10h", dòng `ver 2` = "Họp 10h30"; `messages` giữ bản hiện tại "Họp 10h30".
+  - Dòng `ver 0` được ghi ở lần **sửa** đầu tiên, ghi "nếu chưa có" nên chạy lại hay chạy song song vẫn đúng. Tin chưa từng sửa thì không có dòng nào. Xoá một tin chưa từng sửa thì không ghi dòng `ver 0` (text sẽ bị xoá ngay, ghi ra là thừa).
+  - Kiểu của dòng `ver 0` là `original`; người tạo và thời gian là người gửi và lúc gửi. `GetEditHistory` chỉ đưa dòng này lên đầu ở trang đầu.
+  - `GetEditHistory` trả các dòng theo `ver`. Xoá tin cho mọi người thì xoá `text` của mọi dòng (D75).
+  - Bỏ field cũ `previous_text`; worker bỏ qua dòng `ver 0` vì nó không phải một lần sửa (không phát event, không cập nhật `messages`).
 
 ## 3. Luồng xử lý
 
@@ -111,6 +131,7 @@ sequenceDiagram
   participant C as core
   participant R as Redis dedupe
   participant M as Mongo members
+  participant RM as Mongo rooms
   participant N as NATS
   A->>C: AddMembers(room, [bob, chi], request_id)
   C->>M: đọc doc của admin (còn trong room? role owner/admin?)
@@ -124,7 +145,8 @@ sequenceDiagram
     C->>M: 1 BulkWrite: upsert doc bob, chi
     Note over M: doc đang active → giữ nguyên (không ghi, không event)<br/>chưa có hoặc đã rời → active, role=member, ver+1,<br/>read_seq = max(cũ, tin mới nhất), giữ cleared_at
     C->>C: quên cache member của actor (trên core này)
-    C->>N: mỗi người một bản room + một bản riêng (member_added)
+    C->>RM: $inc member_count + n, member_count_ver + 1 (n = số doc vừa đổi thật)
+    C->>N: member_added mỗi người (subject member), rồi member_count_changed (subject room)
     C->>R: đánh dấu request_id đã xong
     C-->>A: [bob ver 1, chi ver 3]
   end
@@ -141,19 +163,20 @@ sequenceDiagram
    - **Chỉ trong 15 phút:** sau `CID_COMMITTED_TTL`, gửi lại cùng `request_id` được coi là lệnh mới và **có thể thêm lại** người đã bị xoá. App không nên tự gửi lại một lệnh thêm người đã quá vài phút.
    - **Giới hạn:** Redis dedupe không lưu xuống đĩa, và tự xoá khoá cũ khi đầy bộ nhớ. Nếu Redis lỗi hoặc khoá bị xoá sớm, chỉ còn RAM của từng core chống trùng. Khi đó lần gửi lại tới **core khác** vẫn có thể thêm lại người đó (giống giới hạn của tin nhắn, CD2).
    - **`request_id` phải mới cho mỗi lệnh.** Dùng lại một `request_id` với danh sách người khác thì lệnh không thêm ai mà vẫn báo thành công.
-   - Ghi thất bại thì khoá `request_id` được nhả để thử lại được.
+   - Ghi thất bại thì khoá `request_id` được nhả để app gọi lại được.
 3. **Ghi:** một lệnh `BulkWrite` cho k người, mỗi người một upsert lọc đúng `_id`.
    - Thêm những người khác nhau không bao giờ tranh nhau.
    - Hai lệnh cùng thêm Bob: khoá `_id` bảo đảm chỉ một lần ghi đổi doc; lần kia thấy Bob đã active nên không làm gì.
 4. **Người vào lại** luôn có role `member`, không lấy lại role cũ. Vị trí đọc không bao giờ lùi.
-5. **Số member** không cập nhật trong lệnh; worker ghi sau khoảng 1s (mục 3.7).
+5. **Số member** cộng ngay trong lệnh bằng `$inc`, theo số người thực sự vào (mục 3.7).
 6. **Lỗi khi phát event** ở bước này được bỏ qua (lệnh vẫn thành công); worker phát bù sau.
+7. Event `member_added` mang cả vị trí đọc mới (`read_seq`, `read_ver`), vì vào room đặt vị trí đọc = tin cuối.
 
 ### 3.2 Xoá người, rời room, đổi role giữa member và admin (không đụng owner)
 
 - Một lệnh update trên đúng doc của người đó, có điều kiện "`ver` vẫn như lúc tôi đọc". Đổi `state` (xoá hoặc rời) hoặc `role`, rồi `ver+1`.
-- Trượt nghĩa là có người vừa đổi doc này: đọc lại **cả người gọi lẫn người đích**, kiểm lại quyền, thử tối đa 3 lần, hết thì `UNAVAILABLE`.
-- Không đụng doc người khác, không đụng doc room.
+- Trượt nghĩa là có người vừa đổi doc này: trả `UNAVAILABLE` **ngay**, không tự thử lại; app gọi lại thì lệnh đọc lại và kiểm lại quyền từ đầu (owner chốt 2026-10-07: không có vòng thử lại bên trong core).
+- Không đụng doc người khác. Xoá/rời một người đang ở room thì trừ `member_count` 1 bằng `$inc` (mục 3.7); đổi role không đổi số.
 - **Quyền mặc định** (owner chốt 2026-10-06):
   - owner làm mọi việc;
   - admin chỉ **thêm người** và **xoá người có role member**; admin không xoá được admin hay owner;
@@ -165,50 +188,44 @@ sequenceDiagram
 |---|---|
 | Xoá chính mình | `INVALID_ARGUMENT` (muốn rời dùng `LeaveRoom`) |
 | Owner/admin xoá người chưa từng là member | `NOT_FOUND` |
-| Xoá người đã rời | Thành công, không đổi gì |
+| Xoá người đã rời (kể cả người từng là admin) | Thành công, không đổi gì. Quyền được kiểm như thể họ là member thường, nên admin không bị từ chối và không dò được role cũ |
 | Đổi role người đã rời hoặc chưa từng là member | `NOT_FOUND` |
 | Người chưa từng là member gọi rời | `PERMISSION_DENIED` (không cho dò room) |
 | Người đã rời gọi rời lần nữa | Thành công, không đổi gì |
 
 ### 3.3 Lệnh đụng owner: owner rời, xoá owner, hạ owner, nâng ai lên owner
 
-Đây là chỗ duy nhất các lệnh trong cùng room **tranh nhau** trên một doc chung (doc room). Không có hàng đợi: lệnh thua đọc lại, thử tối đa 3 lần, hết thì trả `UNAVAILABLE` để app thử lại. Lệnh owner hiếm nên gần như không tranh.
+Lệnh này phải ghi nhiều doc cùng lúc (nâng người kế nhiệm, hạ hoặc cho người cũ rời), nên dùng **transaction của Mongo**: hoặc xong hết, hoặc không có gì được ghi. Đây là **ngoại lệ duy nhất** của quy tắc "không dùng transaction nhiều doc" (thiết kế §5.1), chấp nhận vì lệnh này rất hiếm (owner chốt 2026-10-07).
 
 ```mermaid
 sequenceDiagram
   participant An as An (owner)
   participant C as core
-  participant RM as Mongo rooms
-  participant M as Mongo members
+  participant DB as Mongo (một transaction)
   An->>C: LeaveRoom
-  C->>RM: đọc owners_ver = 4, pending_owner_change
-  Note over C: có pending dở dang → làm nốt trước
-  C->>M: danh sách owner đang active = [An]
+  C->>DB: BẮT ĐẦU transaction
+  C->>DB: đọc danh sách owner đang active = [An], đọc doc An
   Note over C: An là owner cuối → chọn kế nhiệm:<br/>admin vào sớm nhất, không có thì member vào sớm nhất, hoà theo user id → Bình
-  C->>RM: CHỐT (CAS): chỉ khi owners_ver == 4 và không có pending:<br/>owners_ver = 5, pending = {An rời, Bình lên owner, ver của từng người}
-  C->>M: (1) Bình: role = owner (chỉ khi ver của Bình vẫn như lúc chốt)
-  C->>M: (2) An: state = rời (chỉ khi ver của An vẫn như lúc chốt)
-  C->>RM: xoá pending (chỉ khi owners_ver vẫn = 5)
-  C-->>An: đã rời, new_owner = Bình
+  C->>DB: Bình: role = owner
+  C->>DB: An: state = rời
+  C->>DB: rooms.owners_ver + 1, member_count − 1, member_count_ver + 1
+  C->>DB: COMMIT
+  alt commit thành công
+    C-->>An: đã rời, new_owner = Bình
+  else va với lệnh owner khác
+    C-->>An: UNAVAILABLE (không có gì được ghi; app gọi lại)
+  end
 ```
 
 **Vì sao đúng:**
-- **Chốt trước, ghi sau.** Bước "CHỐT" là một lần ghi có điều kiện trên doc room, nên tại một thời điểm chỉ một thay đổi owner được chốt.
-- **Hai owner rời cùng lúc.** An và Bình là hai owner cuối, cùng bấm rời. Cả hai đọc `owners_ver = 4`, chỉ An chốt được (thành 5). Bình chốt trượt, đọc lại: lúc này An đã rời, Bình là owner cuối, nên lệnh của Bình chọn người kế nhiệm (ví dụ Chi) rồi mới cho Bình rời.
-- **Nâng trước, hạ sau.** Người kế nhiệm thành owner trước khi người cũ bị hạ hoặc rời, nên giữa hai lần ghi vẫn có ít nhất một owner.
-- **Bất biến chính xác: group còn member đang ở thì luôn còn owner.** Owner cuối rời khi không còn ai khác thì group rỗng, không owner.
-- **Người kế nhiệm vừa bị đổi giữa lúc chốt và lúc nâng** (ví dụ vừa tự rời): bỏ pending, không hạ người cũ, trả `UNAVAILABLE`; app thử lại thì chọn người kế nhiệm khác.
-- **Core chết sau khi đã ghi ít nhất một doc member, trước khi xong:** `pending_owner_change` còn trên doc room.
-  - Lệnh owner kế tiếp thấy nó thì làm nốt trước.
-  - Nếu không có lệnh nào, worker `owner_guard` (sau `RECONCILE_DELAY`, khoảng 5s) thấy thay đổi member trên change stream và làm nốt, rồi tăng metric `owner_repaired_total` (alert `ChatimOwnerRepaired`).
-  - Mỗi bước ghi kèm điều kiện `ver` lưu trong pending, nên chạy lại không làm sai.
-- **Core chết ngay sau bước chốt, chưa ghi doc member nào:**
-  - Chưa ai bị đổi (An vẫn là owner), nên luật vẫn đúng.
-  - Không có doc member nào đổi, nên change stream không báo và worker không biết.
-  - Phần dở dang được làm nốt khi An bấm rời lần nữa (app tự thử lại khi nhận lỗi), hoặc khi có lệnh owner tiếp theo trong room.
-- **`owner_guard` còn tự sửa khi room không còn owner** mà vẫn có member (chỉ xảy ra khi có lỗi bất thường): tự chọn người kế nhiệm theo đúng luật và nâng lên owner (`updated_by` rỗng), có metric và alert. Không chạy cho DM.
-- **Đường thường không thể hạ owner.** Lệnh xoá/rời/đổi role thường chỉ ghi khi đã kiểm người đích không phải owner, và ghi theo đúng `ver` đã kiểm.
+- **Xong hết hoặc không gì cả.** Core chết giữa chừng thì transaction bị huỷ, không có trạng thái nửa vời. Không cần phiếu ghi nhớ, không cần việc chạy nền làm nốt.
+- **Hai owner rời cùng lúc.** An và Bình là hai owner cuối, cùng bấm rời. Mỗi transaction chỉ sửa doc của người rời; nếu chỉ có vậy, Mongo coi là không đụng nhau và cho cả hai qua, room mất owner. Vì vậy mỗi transaction đều **tăng `rooms.owners_ver`**, một chỗ ghi chung: hai transaction cùng ghi một chỗ thì Mongo chỉ cho một cái thắng; cái thua thường bị Mongo báo lỗi `WriteConflict` ngay lúc ghi (trước commit), kết quả như nhau: không ghi gì, nhận `UNAVAILABLE`; app gọi lại thì đọc thấy An đã rời, Bình là owner cuối, nên chọn người kế nhiệm (ví dụ Chi) trước khi cho Bình rời.
+- **Không tự thử lại.** Transaction chạy đúng một lần; va chạm thì trả `UNAVAILABLE` để app gọi lại.
+- **Số member trong transaction:** owner rời hoặc bị xoá thì `member_count − 1` nằm luôn trong transaction, nên luôn đúng.
+- **Bất biến: group còn member đang ở thì luôn còn owner.** Owner cuối rời khi không còn ai khác thì group rỗng, không owner.
+- **Đường thường không thể hạ owner.** Lệnh xoá/rời/đổi role thường chỉ ghi khi đã kiểm người đích không phải owner, và ghi có điều kiện theo `ver` đã kiểm.
 - **Owner cuối tự hạ role** → `FAILED_PRECONDITION`.
+- **Cần Mongo chạy replica set** (dev và prod đều vậy). Sau này nếu shard, transaction này có thể chạm hai shard (`members` và `rooms`); chấp nhận vì hiếm.
 
 ### 3.4 Người bị xoá mất quyền ngay
 
@@ -223,52 +240,52 @@ sequenceDiagram
 1. `MarkRead(seq)` chỉ nâng: ghi khi `read_seq < seq`, đặt `read_seq = seq` và `read_ver + 1`.
    - Seq lớn hơn tin cuối thật thì kẹp về tin cuối; seq 0 nghĩa là "đọc hết".
 2. `MarkUnread(seq)` chỉ hạ: `read_seq = seq − 1`, `read_ver + 1`. Seq 0 → `INVALID_ARGUMENT`.
-3. Chỉ member đang ở room được gọi. Lệnh dùng toán tử ghi thường, **không bao giờ** đụng `ver`. Change stream chỉ lấy thay đổi có `ver`, nên đọc tin **không** sinh việc chạy nền; itest chứng minh điều này. Đọc tin vẫn ghi vào oplog của Mongo.
-4. Đổi xong thì đưa cho `readcast` (mục 3.6).
+3. Chỉ member đang ở room được gọi. Lệnh dùng toán tử ghi thường, **không bao giờ** đụng `ver` (nên không bị nhầm là đổi thành viên).
+4. Đổi xong thì phát **một** event `read_updated` (mục 3.6).
 
-### 3.6 "Đã xem" (`read_updated`)
+### 3.6 Event `read_updated`
 
-- `readcast` là một goroutine trong core.
-- Lần đổi đầu tiên của (room, user) gửi ngay. Các lần sau trong cửa sổ `READ_RECEIPT_WINDOW` (mặc định 1 giây, cho chỉnh 1–2s) chỉ giữ bản mới nhất; hết cửa sổ thì gửi.
-- **Gửi đi đâu:**
-  - DM, hoặc group có `member_count ≤ READ_RECEIPT_MAX_MEMBERS` (mặc định 20, trần cứng 50): gửi ra subject của room, mọi người thấy "đã xem".
-  - Group lớn hơn: **chỉ** gửi về subject riêng của user (`evt.{tenant}.user.{uid}.read_updated`), để đồng bộ thiết bị của chính người đó. Không bao giờ phát ra room.
-- **Ngưỡng 20 so với `member_count`**, mà số này cập nhật trễ khoảng 1s. Group vừa vượt 20 người thì trong 1 giây đó "đã xem" có thể vẫn phát ra room.
-- **Bộ gộp có giới hạn 65.536 cặp (room, user).** Khi đầy, lần đổi mới được gửi thẳng, không gộp, và đếm vào `read_events_unbatched_total`.
-- Best-effort: mất thì lần đọc sau gửi vị trí mới. Khi tắt core có một bước 1 giây để xả phần đang gộp. Tổng thời gian tắt core lên 27,2s trên ngân sách 28s.
+- Khi một người đọc, core **chỉ** cập nhật dữ liệu của chính người đó (`read_seq`, `read_ver`), rồi phát **một** event `read_updated` mỗi lần vị trí đọc thực sự đổi, trên subject `member` (vị trí đọc nằm trên doc member).
+- **Bảo đảm phát** (owner chốt 2026-10-07: mọi event đều phải được phát): thay đổi `read_ver` cũng vào nhật ký thay đổi thành phiếu việc loại "đọc"; worker đợi `RECONCILE_DELAY` rồi phát lại `read_updated` của vị trí **hiện tại** (NATS bỏ bản trùng).
+  - Ví dụ: Bob đọc tới 500 (`read_ver` 7) rồi 520 (`read_ver` 8), event 7 rớt. Worker thấy doc đang ở `read_ver` 8 nên chỉ phát lại 8; số 7 đã cũ, không phát. Trạng thái cuối luôn tới.
+- **Ai nhận** (điện thoại/laptop của Bob, người khác thấy "đã xem", bao nhiêu kênh) do app phân phối quyết định sau.
+- **Chi phí:** mỗi lần vị trí đọc đổi thêm một phiếu việc (mục 7). Cần số thật "lượt đánh dấu đọc mỗi giây" trước khi định cỡ hàng đợi việc.
 
-### 3.7 Đếm số member (hội tụ sau khoảng 1s)
+### 3.7 Số member: cộng/trừ ngay trong lệnh (`$inc`)
 
 ```mermaid
 sequenceDiagram
+  participant A as Admin
+  participant C as core
   participant M as Mongo members
-  participant R as reader (slot 0)
-  participant W as work stream
-  participant K as worker member_counter
   participant RM as Mongo rooms
-  M->>R: change stream: doc bob đổi (ver 3)
-  R->>W: việc "room 777, bob, ver 3"
-  W->>K: một lô việc (≤ WORK_FETCH_BATCH, mặc định 256), gom theo room
-  Note over K: đợi MEMBER_COUNT_DELAY (1s)
-  K->>RM: đọc member_count = 4999, member_count_ver = 37
-  K->>M: witness: đọc lại doc bob, phải thấy ver ≥ 3
-  K->>M: đếm doc state=1 của room 777 (đếm khoá index, không đọc doc)
-  K->>RM: ghi 5000 chỉ khi member_count_ver vẫn = 37 → thành 38
-  K->>K: phát event member_count_changed
+  A->>C: AddMembers(room 777, [bob, chi, dan])
+  C->>M: BulkWrite 3 upsert
+  M-->>C: 1 doc mới (bob) + 1 doc vào lại (chi); dan đã ở sẵn, không đổi → n = 2
+  C->>RM: $inc member_count +2, member_count_ver +1 → 5002, ver 38
+  C->>C: phát member_count_changed {5002, ver 38}
+  C-->>A: OK
 ```
 
-- **Một room một lần đếm mỗi lô.** 1000 người vào một channel trong 1 giây vẫn chỉ khoảng 1 lần đếm mỗi giây.
-- **Chi phí đếm (ước tính, chưa đo):** đếm khoá trên index `{room_id, state}`. Group 5K khoảng 1ms, channel 200K khoảng 20–60ms CPU của Mongo.
-- **Witness:** trước khi đếm, đọc lại (majority) doc của những người vừa đổi để chắc đã thấy đúng `ver` trong việc. Chưa thấy (ví dụ Mongo vừa đổi primary) thì trả việc lại (Nak) để làm lại sau. Nhờ vậy không bao giờ đếm thiếu người vừa vào.
-- **Ghi có điều kiện** `member_count_ver` không đổi; đếm ra bằng số cũ thì không ghi. Ghi trượt 3 lần liền thì trả việc lại.
-- **Ràng buộc cấu hình:** `MEMBER_COUNT_DELAY` phải ≤ `RECONCILE_DELAY`.
-- **Chưa dùng bucket.** Chỉ khi đo prod-like thấy nặng mới chia member theo `hash(user) % K`. Bước đầu tiên khi cần là tăng delay cho room rất lớn.
+- **`n` là số doc thực sự đổi trạng thái** trong lần ghi đó, Mongo trả sẵn (`UpsertedCount + ModifiedCount`):
+  - thêm Bob, Chi, Dan mà Dan đã ở sẵn → `n = 2`;
+  - app gửi lại đúng lệnh đó → cả ba đã ở, `n = 0`, không cộng (không đếm trùng);
+  - xoá/rời một người đang ở → `−1`; xoá người đã rời → không trừ; đổi role → không đổi.
+- **Không transaction** (owner chốt 2026-10-07): lệnh thêm/xoá của nhiều người trong cùng room vẫn chạy song song; `$inc` trên doc room không bao giờ báo lỗi va chạm. Riêng lệnh owner thì `$inc` nằm trong transaction sẵn có.
+- **Khe hở:** ghi member xong nhưng `$inc` lỗi (Mongo lỗi mạng, core chết đúng giữa hai lần ghi) → số **lệch** mãi, vì gửi lại lệnh thì `n = 0`.
+  - Lệnh vẫn trả **thành công** (member đã vào; trả lỗi cũng không sửa được số).
+  - Core ghi log kèm room id và tăng metric `member_count_skipped_total`; alert `ChatimMemberCountSkipped` báo cho vận hành.
+  - Sửa bằng lệnh `/app recount -room 777`: đếm doc đang ở room trên index `{room_id, state}` (group 5K khoảng 1ms, channel 200K khoảng 20–60ms, ước tính), đặt lại `member_count`, tăng `member_count_ver`, phát event. `-dry-run` chỉ in số đang lưu và số đếm được.
+  - Core chết đúng giữa hai lần ghi thì không kịp tăng metric; `recount -dry-run` vẫn cho thấy lệch.
+  - Chạy recount đúng lúc room đang có lệnh thêm/xoá có thể lệch lại; chạy lại là đủ.
+- **Event `member_count_changed`:** phát ngay trong lệnh; nếu rớt, worker `member_count_event` (chạy theo phiếu việc của doc member) phát lại số **hiện tại** của room. Tạo room thì số có sẵn trong `room_created`, `member_count_ver = 1`.
 
 ### 3.8 Tạo room (`CreateRoom`)
 
 - Ghi doc room, rồi doc từng member ban đầu (`ver = 1`, `request_id = {room}-created`).
 - Giới hạn mỗi lệnh `MEMBER_BATCH_MAX` (mặc định 500). Bỏ giới hạn cứng 5000 member cũ; core không giới hạn tổng số member.
-- Phát `room_created`, và **bản riêng** `member_added` cho từng người để gateway biết họ vừa vào room mới. Không phát bản room, để tránh 500 event cùng lúc.
+- Ghi `member_count` = số người lúc tạo, `member_count_ver` = 1.
+- Phát `room_created` (subject `room`) và `member_added` cho từng người (subject `member`); mọi thay đổi đều có event, kể cả lúc tạo.
 
 ### 3.9 Xoá lịch sử phía tôi (đổi sang thời gian)
 
@@ -277,18 +294,24 @@ sequenceDiagram
 - Chấp nhận lệch vài mili-giây với tin gửi sát lúc bấm. Tin gửi **cùng mili-giây** với lúc bấm cũng bị ẩn.
 - **Thay đổi API (breaking):** bỏ tham số `up_to_seq` (đánh dấu `reserved`), nên app không còn chọn mốc theo số tin. Kết quả trả `cleared_at`. `corecli clear` bỏ cờ `-up-to`.
 
-## 4. Event và nơi nhận
+## 4. Event và subject
 
-| Event | Id (chống trùng) | Gửi tới | Phát lại khi mất |
+**Subject theo loại dữ liệu** (owner chốt 2026-10-07): event của room đi subject room, của member đi subject member, của tin đi subject message. Cùng dạng `evt.{tenant}.{loại}.{room}.{kind}`, RePublish thành `live.{tenant}.{loại}.{room}.evt.{kind}`.
+
+| Subject | Event | Id (chống trùng) | Phát lại khi rớt |
 |---|---|---|---|
-| `member_added`, `member_removed` (lý do: bị xoá / tự rời), `member_role_changed` | Bản room `{room}-mb-{user}-v{ver}`; bản user `{room}-mb-{user}-v{ver}-u` | Mỗi thay đổi có 2 bản: subject room (bỏ khi tạo room) và subject riêng `evt.{tenant}.user.{user}.…` | Có, nhưng chỉ cho **trạng thái hiện tại** của doc |
-| `member_count_changed` | `{room}-members-v{member_count_ver}` | Subject room | Có (worker đếm phát) |
-| `read_updated` | `{room}-rd-{user}-v{read_ver}` | Subject room (DM / ≤ 20) hoặc subject user | Không (best-effort) |
+| `evt.{t}.room.{rid}.…` | `room_created` | `{room}-created` | Có (đã có) |
+| | `msg_pinned`, `msg_unpinned` (danh sách ghim nằm trên doc room) | `{room}-p{pin_ver}` | Có (đã có) |
+| | `member_count_changed` (số member là field của room) | `{room}-members-v{member_count_ver}` | Có, số hiện tại |
+| `evt.{t}.member.{rid}.…` | `member_added` (kèm vị trí đọc), `member_removed` (bị xoá / tự rời), `member_role_changed` | `{room}-mb-{user}-v{ver}` | Có, trạng thái hiện tại của doc |
+| | `read_updated` | `{room}-rd-{user}-v{read_ver}` | Có, vị trí hiện tại |
+| `evt.{t}.message.{rid}.…` | `msg_created`, `msg_edited`, `msg_deleted`, `reaction_changed`, `counts_changed` | như cũ | Có (đã có) |
 
-- **Envelope** thêm field `recipient`: có giá trị thì publisher gửi tới subject user.
-- **Luật RePublish** của stream mở rộng từ `evt.*.room.*.*` thành `evt.*.*.*.*`, để subject user cũng tới `live.*`. NATS 2.15 nhận đổi luật trên stream có sẵn; đã thử thật khi viết plan.
-- **Thứ tự:** hai event về cùng một người thì `ver` lớn hơn là mới hơn, client bỏ event cũ. Event về hai người khác nhau không cần thứ tự. Mất kết nối lâu thì client tải lại danh sách member (P8).
-- **Event trung gian có thể mất hẳn:** worker chỉ phát lại event của trạng thái hiện tại. Ví dụ Bob được thêm (ver 1) rồi bị xoá ngay (ver 2), và event "được thêm" bị rớt ở đường nhanh: worker chỉ phát "bị xoá". Trạng thái cuối luôn đúng.
+- **Đổi subject của event đã có:** trước đây mọi event (kể cả tin) đi `evt.{t}.room.{rid}.…`; nay tin và reaction chuyển sang `message`. Chưa go-live nên không cần chạy song song hai kiểu. Luật RePublish đổi từ `evt.*.room.*.*` thành `evt.*.*.*.*` (một luật cho cả ba loại); NATS nhận đổi luật trên stream có sẵn, itest kiểm.
+- **Muốn mọi event của room 777:** nghe `live.{t}.*.777.>`. Chỉ tin nhắn: `live.{t}.message.777.>`. Chỉ member: `live.{t}.member.777.>`.
+- **Core không chọn người nhận.** Không có subject riêng theo user; payload member/đọc mang `user` để app phân phối (thiết kế sau) tự định tuyến.
+- **Thứ tự:** hai event về cùng một người thì `ver` (hoặc `read_ver`) lớn hơn là mới hơn, client bỏ event cũ. Mất kết nối lâu thì client tải lại (P8).
+- **Event trung gian có thể mất hẳn:** worker chỉ phát lại event của trạng thái hiện tại. Ví dụ Bob được thêm (ver 1) rồi bị xoá ngay (ver 2), và event "được thêm" bị rớt ở đường nhanh: worker chỉ phát "bị xoá". Trạng thái cuối luôn đúng (như reaction ở M2b.3).
 - **`new_owner`:** người kế nhiệm owner nhận event `member_role_changed` của chính họ, nên event `member_removed` của người rời không mang `new_owner`. Phản hồi của lệnh `LeaveRoom` vẫn trả `new_owner`.
 
 ## 5. Thư viện và hạ tầng
@@ -296,17 +319,18 @@ sequenceDiagram
 - **MongoDB (mongo-driver v2):**
   - collection clustered theo `_id`;
   - `BulkWrite` không thứ tự với upsert dạng pipeline `$cond`: doc đang active giữ nguyên, không sinh oplog;
-  - `UpdateOne` / `FindOneAndUpdate` có điều kiện (CAS) cho xoá, đổi role, chốt owner, đếm;
-  - đếm phủ index trong causal session (đọc witness rồi đếm cùng phiên);
-  - change stream lọc theo `updateDescription.updatedFields.ver`.
+  - `UpdateOne` có điều kiện (CAS theo `ver`) cho xoá, đổi role;
+  - `FindOneAndUpdate` với `$inc` cho số member;
+  - transaction một lần (`StartTransaction` / `CommitTransaction`, không dùng vòng tự thử lại của driver) cho lệnh đổi owner;
+  - đếm phủ index cho `/app recount`;
+  - change stream lọc theo `updateDescription.updatedFields.ver` (đổi thành viên) và `read_ver` (đổi vị trí đọc).
 - **Redis dedupe:** dùng lại script Lua và batcher chống trùng `cid` sẵn có, với namespace mới `chatim:req:{room}:{user}:{request_id}`.
 - **NATS JetStream:**
   - `Nats-Msg-Id` chống trùng event (cửa sổ 5 phút);
-  - RePublish ra `live.*`;
+  - RePublish ra `live.*` (một luật cho subject `room`, `member`, `message`);
   - work stream `CHATIM_WORK` cho việc chạy nền.
-- **Go:** `testing/synctest` và goleak cho thành phần có goroutine (`readcast`, cache actor). Package mới:
-  - `ownership`: luật owner, làm nốt, tự sửa;
-  - `readcast`: gộp "đã xem";
+- **Go:** `testing/synctest` và goleak cho thành phần có goroutine (cache actor). Package mới:
+  - `ownership`: luật owner (chọn người kế nhiệm, owner cuối không tự hạ), chạy trong transaction;
   - `pkg/lru`: cache dùng chung, chuyển từ actor.
 
 ## 6. Quyết định kỹ thuật và phương án đã loại
@@ -317,46 +341,51 @@ sequenceDiagram
 | D97 | Xoá lịch sử theo thời gian | Theo số tin | Một mốc dùng cho mọi timeline kể cả thread; chấp nhận lệch vài ms |
 | D98 | Mỗi (room, user) một doc, `ver` riêng | Nhật ký thay đổi member đánh số liên tục cho cả room (plan cũ) | Số liên tục bắt mọi thay đổi trong room tranh một số, khoảng 100–200 lệnh/s mỗi room (ước tính của reviewer khi đánh giá plan cũ) |
 | D99 | `AddMembers` có `request_id`, chống gửi lại `CID_COMMITTED_TTL` | Không chống | Gửi lại muộn có thể thêm lại người vừa bị xoá |
-| D100 | Lệnh đụng owner: chốt trên doc room, nâng trước hạ sau | Ghi member trước rồi kiểm; hoặc khoá chung mọi lệnh member | Kiểm sau không cứu được ca hai owner rời cùng lúc; khoá chung lại thành tranh nhau |
+| D100 | Lệnh đụng owner chạy trong **một transaction Mongo** (kiểm, nâng kế nhiệm, hạ/rời, tăng `owners_ver`), chạy một lần; va chạm → `UNAVAILABLE` | Phiếu ghi nhớ trên doc room + việc chạy nền làm nốt; ghi rời từng doc rồi kiểm | Owner chốt 2026-10-07: đơn giản, không trạng thái nửa vời. Ngoại lệ duy nhất của §5.1, vì lệnh hiếm |
 | D101 | Quyền mặc định như mục 3.2; DM cố định; mã lỗi như các bảng trên | — | Owner chốt 2026-10-06 |
-| D102 | Số member do worker đếm lại, hội tụ ~1s | Cập nhật ngay trong lệnh (`$inc`) | `$inc` lệch vĩnh viễn khi lỗi (D67) và tranh nhau trên doc room |
-| D103 | Change stream chỉ lấy thay đổi member có `ver`; việc có đuôi user | Lấy mọi update | Đọc tin sinh rất nhiều update, không được vào work stream |
-| D104 | Event có bản room và bản user; không có bản room khi tạo room | Chỉ bản room | Người vừa được thêm chưa nghe room nên phải nhận qua kênh riêng |
-| D105 | "Đã xem" chỉ ra room khi DM hoặc ≤ 20 người (trần 50) | ≤ 100 | Group 100 người, mỗi người đọc khoảng 3 giây một lần, mỗi lần giao tới 100 người: khoảng 3.300 lần giao mỗi giây mỗi room |
+| D102 | Số member cộng/trừ bằng `$inc` ngay trong lệnh theo số doc thực sự đổi, không transaction; `$inc` lỗi → lệnh vẫn OK, metric + alert, sửa bằng `/app recount` | (a) Redis set chứa member mỗi room, đếm bằng Redis; (b) worker đếm lại từ Mongo sau ~1s; (c) `$inc` trong transaction | Owner chốt 2026-10-07. (a): một bản sao toàn bộ member trong RAM (~25–35GB ở giả định 500 triệu doc), lệch khi event mất hoặc đến sai thứ tự, mất âm thầm khi Redis đầy, thiếu role/ngày vào. (b): phức tạp, owner thấy không cần. (c): mọi lệnh thêm/xoá cùng room tranh doc room, lệnh trùng lúc bị `UNAVAILABLE` |
+| D103 | Change stream lấy thay đổi member có `ver` và thay đổi vị trí đọc có `read_ver`; mỗi loại một kiểu phiếu việc | Không đưa vị trí đọc vào (bản trước) | Owner chốt 2026-10-07: mọi event phải được phát, nên vị trí đọc cũng cần phiếu để phát lại |
+| D104 | Mỗi thay đổi doc member một event trên subject `member`, kể cả lúc tạo room | Hai bản (room + riêng user) qua field `recipient` (bản trước) | Owner chốt 2026-10-07: core chỉ phát; chuyển tới ai do app khác thiết kế sau |
+| D105 | Đọc tin chỉ cập nhật dữ liệu của người đọc, phát một `read_updated` (subject `member`), worker phát lại | Chỉ gửi kênh riêng người đọc, không phát lại (bản trước) | Như D103, D104 |
 | D106 | Cache member của actor: quên ngay + hết hạn 10s | Không cache; cache mãi | Không cache thì mỗi tin gửi thêm một lần đọc DB; cache mãi thì người bị xoá vẫn gửi được |
 | D107 | Giới hạn mỗi lệnh 500 (2..1000), bỏ trần 5000 | Trần tổng số member | Owner chốt không giới hạn tổng; 1 sẽ chặn mọi DM |
-| D108 | Guarantee OW1 "còn member thì có owner" + metric + alert (17 luật) | Không đo | Quy tắc dự án: guarantee mới phải có detector |
-| — | Bỏ `user_rooms` ở M2b.4 | Làm ngay | Chưa shard thì index trên `members` đủ dùng |
+| D108 | Subject theo loại dữ liệu: `room`, `member`, `message` (mục 4), áp cho cả event cũ | Mọi event chung subject room | Owner chốt 2026-10-07 |
+| — | Xoá tin chưa từng sửa không ghi dòng `ver 0` | Luôn ghi dòng gốc | Text bị xoá ngay, ghi ra là thừa |
+| — | Xoá người đã rời: kiểm quyền như member thường, thành công không đổi gì | Kiểm theo role cũ (admin không xoá được cựu admin) | Giống ca "không có người", không dò được role cũ |
+| — | Không vòng thử lại bên trong core: va chạm trả `UNAVAILABLE`, app gọi lại | Thử tối đa N lần | Owner chốt 2026-10-07: lỗi rõ ràng, không độ phức tạp ẩn |
+| — | `message_edits`: mỗi dòng một phiên bản `text`; dòng `ver 0` = nội dung lúc gửi, ghi ở lần sửa đầu | Field `previous_text` riêng trên dòng sửa đầu tiên | Owner chốt 2026-10-07: mỗi dòng chỉ một `text`, dễ hiểu |
+| — | Danh sách room của user là index thứ hai của `members`, không có collection `user_rooms` | Collection `user_rooms` riêng, ghi kèm mỗi lần ghi member | Hai collection ghi rời nhau có thể lệch khi core chết giữa chừng (Mongo không ghi nguyên khối hai doc nếu không dùng transaction); một collection hai index thì không bao giờ lệch. Chỉ tách khi shard |
 | — | Ghim giữ đánh số liên tục `pin_ver` | Đổi sang mỗi tin ghim một doc | Owner chốt: ghim rất hiếm, giữ giới hạn 50 chính xác |
 
 ## 7. Chi phí và tải
 
-| Lệnh | Đọc | Ghi | Event |
-|---|---|---|---|
-| Thêm k người | 2 (kiểm quyền) + 1 Redis + 1 (tin cuối) + 1 (đọc lại k doc) | 1 BulkWrite k doc | 2k ngay (bản room + bản user); worker phát lại, stream bỏ trùng |
-| Xoá / rời / đổi role thường | 3 | 1 | 2 |
-| Lệnh owner | khoảng 5 | 1 chốt + 2–3 doc + 1 xoá pending | 2–4 |
-| Đọc / chưa đọc | 2 (+1 nếu kẹp) | 1 | ≤ 2 mỗi cửa sổ mỗi (room, user) |
-| Đếm số member (worker) | witness k + đếm index ≤ N khoá | ≤ 1 | 1 |
+| Lệnh | Đọc | Ghi | Event | Phiếu việc |
+|---|---|---|---|---|
+| Thêm k người | 2 (kiểm quyền) + 1 Redis + 1 (tin cuối) + 1 (đọc lại k doc) | 1 BulkWrite k doc + 1 `$inc` room | k `member_added` + 1 `member_count_changed` | k |
+| Xoá / rời / đổi role thường | 3 | 1 (+1 `$inc` khi xoá/rời) | 1 (+1 số member) | 1 |
+| Lệnh owner | khoảng 5 trong transaction (room, doc người gọi và đích, owner, người kế nhiệm admin, member) | 1 transaction: 1–2 doc member + doc room | 2–3 | 1–2 |
+| Đọc / chưa đọc | 2 (+1 nếu kẹp) | 1 | 1 `read_updated` mỗi lần vị trí đọc đổi | 1 |
+| `/app recount` (vận hành) | 1 room + đếm index ≤ N khoá | 1 | 1 | 0 |
 
-- Group 5K: mọi lệnh O(1) hoặc O(k); đếm khoảng 1ms (ước tính).
-- Channel 200K: đếm 20–60ms (ước tính), tối đa khoảng 1 lần/s mỗi room nóng.
-- Thêm/xoá member song song, giới hạn chỉ là sức Mongo. Lệnh owner tranh nhau theo room nhưng hiếm.
+- Group 5K: mọi lệnh O(1) hoặc O(k).
+- Thêm/xoá member song song, giới hạn chỉ là sức Mongo; `$inc` trên doc room là một lần ghi nhỏ, Mongo xếp hàng ở mức doc nhưng không báo lỗi. Lệnh owner tranh nhau theo room nhưng hiếm.
+- **Vị trí đọc vào hàng đợi việc:** mỗi lần đổi vị trí đọc = 1 phiếu + 1 lần worker đọc doc (+1 event nếu rớt). Nếu lượt đọc/s cao hơn nhiều lượt gửi tin thì hàng đợi việc tăng tương ứng. Cần số thật trước khi định cỡ.
 
 ## 8. Rủi ro và giới hạn còn lại
 
 - **10 giây ở core khác:** người bị xoá còn gửi được tối đa 10 giây qua core không xử lý lệnh xoá. Đọc lịch sử và mọi lệnh khác bị chặn ngay.
 - **Chống gửi lại chỉ có hiệu lực trong 15 phút,** và Redis dedupe lỗi hoặc tự xoá khoá thì lần gửi lại `AddMembers` tới core khác có thể thêm lại người vừa bị xoá.
-- **Khe "kiểm rồi mới ghi":** admin bị hạ đúng lúc đang xoá một người thì lệnh xoá đã được duyệt vẫn ghi. Không chặn tuyệt đối được nếu không dùng transaction nhiều doc (bị cấm vì sharding).
-- **Thêm 500 người sinh 1.000 event** (500 bản room + 500 bản user). Tin hệ thống gộp nhờ `request_id`.
+- **Khe "kiểm rồi mới ghi" ở lệnh thường:** admin bị hạ đúng lúc đang xoá một member thường thì lệnh xoá đã được duyệt vẫn ghi. Chỉ lệnh owner dùng transaction; lệnh thường giữ một lần ghi có điều kiện cho nhanh.
+- **Thêm 500 người sinh 501 event** (500 `member_added` + 1 số member). Tin hệ thống gộp nhờ `request_id`.
+- **Số member có thể lệch** khi `$inc` lỗi hoặc core chết giữa hai lần ghi; có metric + alert (trừ ca core chết), sửa bằng `/app recount`.
 - **Event trung gian của một người có thể mất hẳn;** chỉ trạng thái cuối được phát lại.
 - **Không có thứ tự chung** của các thay đổi member trong room, chỉ có thứ tự theo từng người.
-- **Thay đổi owner kẹt** nếu core chết ngay sau bước chốt: được làm nốt ở lần thử lại hoặc lệnh owner kế tiếp, không phải ở worker.
-- **Đọc tin vẫn ghi oplog** (không vào work stream). Cần số thật để định cỡ oplog.
+- **Đọc tin ghi oplog và vào hàng đợi việc** (để bảo đảm `read_updated`). Cần số thật để định cỡ oplog và hàng đợi việc.
 - **Nâng cấp:**
   - Đổi tên field và đổi khoá `members` nên không có đường nâng cấp tại chỗ. Prod chưa chạy, nên go-live thẳng từ bản này.
   - Dev phải `make infra-reset` hai lần: sau task đổi tên, và sau task `members`. Giữa hai lần đó `members` tạm chưa clustered.
-  - Mọi core phải nâng cùng lúc: core cũ khởi động lại sẽ ghi đè luật RePublish (event subject user ngừng tới `live.*`) và trả lại việc loại mới.
+  - Mọi core và mọi app nghe event phải nâng cùng lúc: subject của tin đổi sang `message`; core cũ khởi động lại sẽ ghi đè luật RePublish (event `member`/`message` ngừng tới `live.*`) và trả lại phiếu việc loại mới.
+- **Va chạm trả lỗi thay vì tự thử lại:** app phải tự gọi lại khi nhận `UNAVAILABLE` (route client trong `tools` đã làm vậy).
 - **API thay đổi:**
   - `ClearHistory` bỏ `up_to_seq`; corecli bỏ `-up-to`.
   - Field proto đã có đổi tên theo quy tắc `ver`/`_ver` (chỉ đổi tên, giữ số field, nên tương thích wire): `version` → `ver`, `base_version` → `base_ver`, `after_version` → `after_ver`, `pin_version` → `pin_ver`.
@@ -367,40 +396,39 @@ sequenceDiagram
 | Điểm | Giá trị chọn | Lý do |
 |---|---|---|
 | TTL cache member của actor | 10 giây | Cân bằng giữa đọc DB khi gửi tin và độ trễ chặn người bị xoá ở core khác |
-| Cửa sổ gộp "đã xem" | 1 giây (cho chỉnh 1–2s) | Owner nói 1–2s |
-| Ngưỡng "đã xem" ra room | 20, trần cứng 50 | Theo lưu ý của owner |
-| Delay đếm số member | 1 giây | Owner chấp nhận hội tụ khoảng 1s |
 | Giới hạn mỗi lệnh thêm | 500, cho chỉnh 2..1000 | Suy luận của đội: giữ lệnh trong hạn 3 giây của một request (`CORE_REQUEST_DEADLINE`); 1 sẽ chặn DM |
 | `request_id` cho xoá / rời / đổi role | Server tự sinh, client không gửi | Các lệnh này là "trạng thái mong muốn", gửi lại không gây hại |
 | Luật chọn người kế nhiệm | Admin vào sớm nhất → member vào sớm nhất → user id nhỏ nhất | Owner chốt 2026-10-06 |
 | Người vào lại | Luôn role `member`; giữ mốc xoá lịch sử của họ | Không vô tình trả lại quyền admin cũ |
-| Tự sửa owner (`owner_guard`) | Tự nâng người kế nhiệm khi room còn member mà không còn owner | Giữ luật owner khi có sự cố; có alert báo |
-| Alert mới | `ChatimOwnerRepaired` (17 luật) | Mỗi lần phải tự sửa owner là dấu hiệu core chết giữa chừng |
+| `member_count_changed`, ghim | Subject `room` | Dữ liệu nằm trên doc room; nếu anh muốn ghim đi subject `message` hoặc số member đi subject `member` thì chỉ đổi bảng ánh xạ |
+| Alert số member lệch | Cảnh báo khi `member_count_skipped_total` tăng trong 10 phút | Vận hành biết room nào cần `/app recount` (theo log) |
 
 ## 10. Kiểm thử, mỗi mục chứng minh gì
 
 - **Unit:**
-  - luật quyền mặc định;
+  - luật quyền mặc định (kể cả xoá người đã rời từng là admin);
   - chọn người kế nhiệm;
   - owner cuối không tự hạ;
-  - gộp "đã xem": gửi ngay lần đầu, giữ bản mới nhất, xả khi tắt;
+  - thêm người: `$inc` đúng số doc thực sự đổi, gửi lại không cộng; xoá người đã rời không trừ; `$inc` lỗi vẫn trả OK và tăng metric;
+  - đọc / chưa đọc phát đúng một `read_updated` mỗi lần đổi;
+  - mỗi kind đi đúng subject `room` / `member` / `message`;
+  - worker phát lại trạng thái hiện tại của member, số member, vị trí đọc;
   - cache actor hết hạn và bị quên;
   - chống gửi lại `request_id`, kể cả khi core khởi động lại;
-  - ca chạy đua: hai owner rời cùng lúc (24 room, mỗi room hai goroutine thật), admin bị hạ đúng lúc đang xoá.
-- **Contract store** (chạy trên cả bộ nhớ và Mongo thật): thêm, xoá, đổi role, chốt và làm nốt owner, đếm có witness, đọc / chưa đọc, xoá lịch sử theo thời gian.
+  - va chạm trả `UNAVAILABLE` ngay, không ghi gì hai lần; hai owner rời cùng lúc: một thắng, một nhận `UNAVAILABLE`, gọi lại thì chọn người kế nhiệm.
+- **Contract store** (chạy trên cả bộ nhớ và Mongo thật): thêm (trả số doc đổi), xoá, đổi role, transaction đổi owner (lỗi giữa chừng không ghi gì, số member trừ đúng một lần), `$inc` và đặt lại số member, đọc / chưa đọc (vào nhật ký thay đổi), xoá lịch sử theo thời gian (không vào).
 - **Itest trên hạ tầng thật:**
-  - hai owner rời cùng lúc: luôn còn owner;
-  - core chết sau khi đã ghi một phần thay đổi owner: worker làm nốt và metric tăng;
-  - room còn member mà không còn owner: worker tự nâng người kế nhiệm;
+  - hai owner rời cùng lúc, lặp nhiều vòng: luôn còn owner trong khi còn member, số member đúng;
   - người bị xoá gửi tin và đọc lịch sử bị từ chối;
   - gửi lại `AddMembers` cùng `request_id` sau khi người đó bị xoá: không thêm lại;
-  - đọc, chưa đọc, xoá lịch sử **không** vào work stream (nghe trực tiếp subject của work stream);
-  - số member hội tụ;
-  - event tới subject user qua RePublish.
+  - mỗi thay đổi tới đúng subject `room` / `member` / `message` qua RePublish;
+  - event đường nhanh bị chặn: worker vẫn phát `member_added`, `member_count_changed`, `read_updated`;
+  - đọc tin vào hàng đợi việc, xoá lịch sử thì không;
+  - `/app recount` sửa số bị sửa tay.
 - **E2e trên cụm hai core:**
-  - thêm người: họ nhận event riêng, thấy lịch sử, không có tin chưa đọc;
+  - thêm người: `member_added` trên subject `member`, số member trên subject `room`; họ thấy lịch sử, không có tin chưa đọc;
   - đổi role;
-  - đọc và chưa đọc: DM thấy "đã xem" trên room, group 22 người chỉ trên kênh riêng;
+  - đọc và chưa đọc: `read_updated` trên subject `member`;
   - xoá người: họ không gửi hay đọc được nữa;
   - gửi lại cùng `request_id`: không thêm lại;
   - owner cuối rời: quyền owner chuyển;
