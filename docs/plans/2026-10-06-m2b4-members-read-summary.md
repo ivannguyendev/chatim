@@ -48,7 +48,7 @@ flowchart LR
 | Collection | Tên cũ → tên mới |
 |---|---|
 | `rooms` | `t`→`tenant`, `ty`→`type`, `n`→`name`, `cb`→`created_by`, `ca`→`created_at`, `mc`→`member_count`, `ls`→`last_seq`, `lm`→`last_message_at`, `lc`→`last_change_at`, `ab`→`activity_bucket`, `pv`→`pin_ver`; phần tử `pins` thành `{thread_root, seq, pinned_by, pinned_at, pin_ver}` |
-| `members` | `r`→`room_id`, `u`→`user_id`, `t`→`tenant`, `ro`→`role`, `ja`→`joined_at`, `cb` (seq) → `cleared_before_time` (thời gian) |
+| `members` | `r`→`room_id`, `u`→`user_id`, `t`→`tenant`, `ro`→`role`, `ja`→`joined_at`, `cb` (seq) → `cleared_at` (thời gian) |
 | `message_edits` | `r`→`room_id`, `t`→`tenant`, `k`→`kind`, `by`→`created_by`, `x`→`text`, `p`→`previous_text`, `ts`→`created_at` |
 | `hidden` | `u`→`user_id`, `r`→`room_id`, `th`→`thread_root`, `s`→`seq` |
 | `reactions` | `k`→`message_key`, `r`→`room_id`, `t`→`tenant`, `u`→`user_id`, `e`→`emoji`, `pe`→`previous_emoji`, `n`→`ver`, `ts`→`updated_at` |
@@ -84,7 +84,7 @@ flowchart LR
 | `previous_role`, `previous_state` | Trạng thái ngay trước lần đổi cuối, để event biết đây là "vào", "rời" hay "đổi role" | member, 1 |
 | `request_id` | Lệnh đã gây ra lần đổi cuối; dùng chống gửi lại và gộp tin hệ thống "A thêm X và 499 người khác" | `req-7f3a…` |
 | `updated_at`, `updated_by` | Lúc nào, ai làm lần đổi cuối | 09:00, alice |
-| `cleared_before_time` | Mốc "xoá lịch sử phía tôi": tin gửi trước hoặc đúng mốc này bị ẩn với riêng người này | 2026-10-07 10:05:03.120 |
+| `cleared_at` | Mốc "xoá lịch sử phía tôi": tin gửi trước hoặc đúng mốc này bị ẩn với riêng người này | 2026-10-07 10:05:03.120 |
 | `read_seq` | Đã đọc tới tin số mấy | 500 |
 | `read_ver` | Số lần vị trí đọc đổi, để hai thiết bị biết bản nào mới hơn | 12 |
 
@@ -122,7 +122,7 @@ sequenceDiagram
     C-->>A: UNAVAILABLE (thử lại sau)
   else lần đầu
     C->>M: 1 BulkWrite: upsert doc bob, chi
-    Note over M: doc đang active → giữ nguyên (không ghi, không event)<br/>chưa có hoặc đã rời → active, role=member, ver+1,<br/>read_seq = max(cũ, tin mới nhất), giữ cleared_before_time
+    Note over M: doc đang active → giữ nguyên (không ghi, không event)<br/>chưa có hoặc đã rời → active, role=member, ver+1,<br/>read_seq = max(cũ, tin mới nhất), giữ cleared_at
     C->>C: quên cache member của actor (trên core này)
     C->>N: mỗi người một bản room + một bản riêng (member_added)
     C->>R: đánh dấu request_id đã xong
@@ -272,10 +272,10 @@ sequenceDiagram
 
 ### 3.9 Xoá lịch sử phía tôi (đổi sang thời gian)
 
-- `ClearHistory`: `cleared_before_time = max(cũ, giờ server lúc nhận lệnh)`. Chỉ member đang ở room được gọi.
+- `ClearHistory`: `cleared_at = max(cũ, giờ server lúc nhận lệnh)`. Chỉ member đang ở room được gọi.
 - Khi đọc lịch sử, tin có thời điểm gửi (`ts` trong `messages`) ≤ mốc bị ẩn với riêng người đó, trên mọi timeline (kể cả thread sau này).
 - Chấp nhận lệch vài mili-giây với tin gửi sát lúc bấm. Tin gửi **cùng mili-giây** với lúc bấm cũng bị ẩn.
-- **Thay đổi API (breaking):** bỏ tham số `up_to_seq` (đánh dấu `reserved`), nên app không còn chọn mốc theo số tin. Kết quả trả `cleared_before_time`. `corecli clear` bỏ cờ `-up-to`.
+- **Thay đổi API (breaking):** bỏ tham số `up_to_seq` (đánh dấu `reserved`), nên app không còn chọn mốc theo số tin. Kết quả trả `cleared_at`. `corecli clear` bỏ cờ `-up-to`.
 
 ## 4. Event và nơi nhận
 

@@ -4,7 +4,7 @@
 >
 > **Tóm tắt kỹ thuật cho owner:** [2026-10-06-m2b4-members-read-summary.md](2026-10-06-m2b4-members-read-summary.md)
 
-**Goal:** Trước hết đổi tên mọi field của các collection đã xây (trừ `messages`) sang từ tiếng Anh đầy đủ, và đổi clear history sang mốc thời gian `cleared_before_time`. Sau đó làm member theo **lớp tập** (§4): mỗi (room, user) một doc `members` clustered `_id = room│user`, mang `ver` riêng (chỉ tăng, được có lỗ); xoá/rời để tombstone `state = 2`. `AddMembers` mang `request_id` (dedupe như cid). Lệnh chạm tới owner đi qua CAS `rooms.owners_ver` + `pending_owner_change` (thăng người kế nhiệm trước), nên room luôn còn owner; effect `owner_guard` vá khi core chết giữa chừng. `member_count` là **aggregate** đếm lại bằng `counter` tổng quát hoá (CAS `member_count_ver`, hội tụ ~1s, chỉ worker ghi). Vị trí đọc `read_seq/read_ver` là lớp **tần suất cao gộp được**: chỉ toán tử thường, không đụng `ver`, nên không bao giờ vào feed; `read_updated` qua `readcast`. Event member có bản room và bản user (`recipient` → `evt.{t}.user.{u}.{type}`).
+**Goal:** Trước hết đổi tên mọi field của các collection đã xây (trừ `messages`) sang từ tiếng Anh đầy đủ, và đổi clear history sang mốc thời gian `cleared_at`. Sau đó làm member theo **lớp tập** (§4): mỗi (room, user) một doc `members` clustered `_id = room│user`, mang `ver` riêng (chỉ tăng, được có lỗ); xoá/rời để tombstone `state = 2`. `AddMembers` mang `request_id` (dedupe như cid). Lệnh chạm tới owner đi qua CAS `rooms.owners_ver` + `pending_owner_change` (thăng người kế nhiệm trước), nên room luôn còn owner; effect `owner_guard` vá khi core chết giữa chừng. `member_count` là **aggregate** đếm lại bằng `counter` tổng quát hoá (CAS `member_count_ver`, hội tụ ~1s, chỉ worker ghi). Vị trí đọc `read_seq/read_ver` là lớp **tần suất cao gộp được**: chỉ toán tử thường, không đụng `ver`, nên không bao giờ vào feed; `read_updated` qua `readcast`. Event member có bản room và bản user (`recipient` → `evt.{t}.user.{u}.{type}`).
 
 **Architecture:**
 - Task 1: đổi tên field (codec, index, feed, storetest, itest) + clear history theo thời gian (proto, `view`, `mutate`, `grpcsrv`, corecli). `make infra-reset`.
@@ -30,16 +30,16 @@ Owner chốt 2026-10-07:
 - Không đánh số dày ở chỗ mới; member là lớp tập, mỗi doc một counter riêng; không có log fact member.
 - Tên field là từ tiếng Anh cơ bản, đầy đủ, trừ `messages`. Audit `updated_at/updated_by`; counter chỉ tăng, có lỗ, đuôi `_ver`; không dùng `version`, `change_number`. Ghim giữ pv dày (đổi tên `pin_ver`).
 - Đổi tên các collection đã xây là task đầu; sau đó `make infra-reset` (chưa có dữ liệu prod).
-- Clear history theo thời gian `cleared_before_time` (giờ server, `$max`); `up_to_seq` reserved.
+- Clear history theo thời gian `cleared_at` (giờ server, `$max`); `up_to_seq` reserved.
 - `AddMembers` mang `request_id`, dedupe RAM LRU + dedupe Redis, namespace riêng, TTL ~15m.
 - Read receipt: DB chỉ nâng; event tới subject user để đồng bộ thiết bị; phát cho room chỉ khi DM hoặc `member_count ≤ READ_RECEIPT_MAX_MEMBERS` (mặc định 20, trần cứng 50); cửa sổ gộp 1–2s.
 - `member_count` hội tụ sau ~1s, chỉ qua recount §7. Bỏ `user_rooms`; "phòng của user" dùng index `members {tenant, user_id, state, room_id}`.
 
 Quyết định mới, Task 20 ghi vào Decision Log (§17.2). **D96–D107 của plan cũ (commit a560214, chưa từng thực thi, chưa vào Decision Log) bị huỷ toàn bộ**: fact `member_actions`, mv dày, settle-first, `memberproj`, `user_rooms` (D101 cũ), gập `mc` từ fact (D98 cũ) không còn. Số id được dùng lại từ D96:
 - **D96** Tên field đầy đủ cho mọi collection trừ `messages` (bảng đổi tên ở dưới); counter `_ver`; audit `updated_at/updated_by`; fact dùng `created_at/created_by`; `reconciler_state {resume_token, cluster_time}`; bỏ đường đọc vị trí feed cũ `_id: "messages"`. Rolling deploy không áp dụng (dev reset).
-- **D97** Clear history theo thời gian: `members.cleared_before_time` = giờ server lúc gọi (`$max`, ms), ẩn tin `created_at ≤` mốc trên mọi timeline; lệch vài ms quanh lúc bấm chấp nhận; chỉ member active. `ClearHistoryRequest.up_to_seq` reserved, response trả `cleared_before_time`. Sửa D85/D72 phần `cleared_before_seq`.
+- **D97** Clear history theo thời gian: `members.cleared_at` = giờ server lúc gọi (`$max`, ms), ẩn tin `created_at ≤` mốc trên mọi timeline; lệch vài ms quanh lúc bấm chấp nhận; chỉ member active. `ClearHistoryRequest.up_to_seq` reserved, response trả `cleared_at`. Sửa D85/D72 phần `cleared_before_seq`.
 - **D98** Member lớp tập: `members` clustered `_id = keys.Member(room, user)`; `state` 1/2 luôn ghi rõ; `ver` (≤ MaxUint32) tăng mỗi lần đổi membership; `previous_role/previous_state`, `request_id`, `updated_*`; đọc/clear/mute không đụng `ver`. Index `{room_id, state, role, joined_at, user_id}` và `{tenant, user_id, state, room_id}`. Không quét khoảng `_id` (BinData so độ dài trước byte). Thay `user_rooms` của D72 (trả lại dạng projection khi shard).
-- **D99** `AddMembers`: `request_id` bắt buộc, dedupe `chatim:req:{room}:{user}:{request_id}` (RAM LRU + Redis, TTL `CID_COMMITTED_TTL`); một `BulkWrite(ordered:false)` upsert pipeline `$cond` (doc active giữ nguyên byte); kết quả suy từ doc sau ghi (`domain.AddedBy`); luôn role `member`; `read_seq = max(read_seq, seq cuối)`; giữ `cleared_before_time`.
+- **D99** `AddMembers`: `request_id` bắt buộc, dedupe `chatim:req:{room}:{user}:{request_id}` (RAM LRU + Redis, TTL `CID_COMMITTED_TTL`); một `BulkWrite(ordered:false)` upsert pipeline `$cond` (doc active giữ nguyên byte); kết quả suy từ doc sau ghi (`domain.AddedBy`); luôn role `member`; `read_seq = max(read_seq, seq cuối)`; giữ `cleared_at`.
 - **D100** Xoá/rời/đổi role không chạm owner = một update có điều kiện `ver`; lệnh chạm owner = CAS `rooms {owners_ver: k, pending_owner_change: null}` → thăng kế nhiệm trước → hạ/xoá đích (mỗi bước CAS theo `ver` đã ghi trong pending) → xoá pending khi `owners_ver == k+1`; ≤3 lượt rồi `ErrRetryLater`. Bất biến: group còn member active thì còn owner active. Effect `owner_guard` hoàn tất pending cũ hoặc chọn kế nhiệm.
 - **D101** Action `add_members`, `remove_member`, `leave_room`, `change_member_role`, `mark_read`; `Request.Target`, `Request.Role`; `DefaultPolicy` theo owner chốt. DM → `FAILED_PRECONDITION`; owner cuối tự hạ → `ErrLastOwner`; `RemoveMember(self)` → `INVALID_ARGUMENT`; người chưa từng là member rời → `PERMISSION_DENIED`; tombstone rời → no-op; xoá/đổi role người không active → `NOT_FOUND`.
 - **D102** `member_count` = aggregate (tinh chỉnh D67): chỉ worker `member_counter` ghi, recount có witness `(user, max ver)`, đếm phủ index `{room_id, state}`, CAS `member_count_ver`; event `member_count_changed`; `counter` tổng quát hoá `Loop[V]`.
@@ -83,17 +83,17 @@ Quyết định mới, Task 20 ghi vào Decision Log (§17.2). **D96–D107 củ
 | Lệnh chạm owner | Tập + CAS đầu room | CAS `rooms.owners_ver` + `pending_owner_change` → thăng kế nhiệm → hạ/xoá đích → xoá pending | pending mang `ver` từng doc; chạy lại an toàn | `owner_guard` (`RECONCILE_DELAY`, 1 lần/room/lô) | như trên | — | như trên (kế nhiệm có `member_role_changed`) | +1 read state, ≤2 read index, 1 CAS, 2–3 write | như 5K (hiếm) | OW1 (mới): `owner_repaired_total`, alert `ChatimOwnerRepaired`; `effect_dropped_total{effect="owner_guard"}` |
 | Số member | Aggregate theo room | recount `{room_id, state:1}` phủ index + CAS `member_count_ver` (thiếu = 0) | recount tuyệt đối; bằng → không ghi | chỉ worker `member_counter`; phát lại `member_count_changed` của ver hiện tại | — | `Room.member_count` (trễ ~1s) | `member_count_changed` `{room}-members-v{ver}` | 1 read witness k + 1 count ≤5K khoá + ≤1 CAS + 1 event/room/lô | ≤200K khoá/lần, ≤1 lần/s/room; bucket để milestone Channel | CT1 mở rộng: `effect_dropped_total{effect="member_counter"}`, `work_failures_total` |
 | Vị trí đọc / chưa đọc | Tần suất cao gộp được | `updateOne {_id, state:1, read_seq: {$lt\|$gt}}` `$set read_seq` + `$inc read_ver` | chỉ nâng / chỉ hạ; `read_ver` LWW | không effect, không feed | `mark_read` | trả `{read_seq, read_ver}` | `read_updated` `{room}-rd-{u}-v{read_ver}` qua `readcast` | 2 read admit + ≤1 `Last` + 1 write + ≤2 event/W/(room,user) | như 5K; luôn subject user | best-effort; `read_events_unbatched_total` |
-| Clear history | Giá trị theo người đọc | `$max cleared_before_time = now` (member active) | `$max` | không | `clear_history` | `HideForViewer` so `CreatedAt` | không | 2 read + 1 write | như 5K | không |
+| Clear history | Giá trị theo người đọc | `$max cleared_at = now` (member active) | `$max` | không | `clear_history` | `HideForViewer` so `CreatedAt` | không | 2 read + 1 write | như 5K | không |
 | Phòng của user | (index) | — | — | — | — | M3 `ListMyRooms` | — | — | range index `{tenant, user_id, state, room_id}` | — |
 
 ## Bảng đổi tên field (Task 1)
 
-`messages` **giữ nguyên** (`_id`, `t`, `f`, `k`, `x`, `c`, `ts`, `v`, `d`, `ea`, `rx {c: [{e, n}], v}`); Task 20 ghi bảng ánh xạ vào thiết kế §5. Tên Go (struct domain, field Go) **không đổi** trừ `ClearedBeforeSeq` → `ClearedBeforeTime`. Tên `_id` và giá trị `_id` không đổi.
+`messages` **giữ nguyên** (`_id`, `t`, `f`, `k`, `x`, `c`, `ts`, `v`, `d`, `ea`, `rx {c: [{e, n}], v}`); Task 20 ghi bảng ánh xạ vào thiết kế §5. Tên Go (struct domain, field Go) **không đổi** trừ `ClearedBeforeSeq` → `ClearedAt`. Tên `_id` và giá trị `_id` không đổi.
 
 | Collection | Cũ → mới |
 |---|---|
 | `rooms` | `t` → `tenant`; `ty` → `type`; `n` → `name`; `cb` → `created_by`; `ca` → `created_at`; `mc` → `member_count`; `ls` → `last_seq`; `lm` → `last_message_at`; `lc` → `last_change_at`; `ab` → `activity_bucket`; `pins[]` giữ tên, phần tử `{th, s, by, ts, pv}` → `{thread_root, seq, pinned_by, pinned_at, pin_ver}`; `pv` → `pin_ver` |
-| `members` | `r` → `room_id`; `u` → `user_id`; `t` → `tenant`; `ro` → `role`; `ja` → `joined_at`; `cb` (int64 seq) → `cleared_before_time` (date) |
+| `members` | `r` → `room_id`; `u` → `user_id`; `t` → `tenant`; `ro` → `role`; `ja` → `joined_at`; `cb` (int64 seq) → `cleared_at` (date) |
 | `message_edits` | `r` → `room_id`; `t` → `tenant`; `k` → `kind`; `by` → `created_by`; `x` → `text`; `p` → `previous_text`; `ts` → `created_at` |
 | `hidden` | `u` → `user_id`; `r` → `room_id`; `th` → `thread_root`; `s` → `seq` |
 | `reactions` | `k` → `message_key`; `r` → `room_id`; `t` → `tenant`; `u` → `user_id`; `e` → `emoji`; `pe` → `previous_emoji`; `n` → `ver`; `ts` → `updated_at` |
@@ -110,9 +110,9 @@ Index (tên tự sinh theo khoá, `Bootstrap` tạo mới sau reset):
 | `reactions` | `{k:1,e:1}` → `{message_key:1,emoji:1}`; `{r:1,ts:1}` → `{room_id:1,updated_at:1}` (hàm riêng, không dùng `roomTimeIndexes`) |
 | `hidden` | `{u,r,th,s}` unique → `{user_id:1,room_id:1,thread_root:1,seq:1}` unique |
 
-Chỗ dùng tên thô ngoài codec (phải đổi cùng): `rooms.go` (projection `{pins:0, pin_ver:0}`, filter member, `$max cleared_before_time`), `pin_state.go` (projection + CAS `versionIs("pin_ver", …)`), `room_activity.go` (`$max last_change_at/activity_bucket/last_seq/last_message_at`; `ActiveRooms` lọc `activity_bucket`, `created_at`, `tenant`), `edits.go` (`Between` lọc/sắp `room_id, created_at`; `PurgeText` `$unset text, previous_text`), `pins.go` (`Between`), `hidden.go`, `reactions.go` (pipeline `$cond` trên `emoji`, `$ifNull ver`), `reaction_count.go` (witness projection `{user_id, ver}`, aggregate `{$match: {message_key, emoji: {$gt: ""}}}`, `{$group: {_id: "$emoji", count: {$sum: 1}}}`, `Between` theo `updated_at`), `feed.go` (`feedPosition`), `feed_reaction_change.go` (**`updatedFields.n` → `updatedFields.ver`**), `bootstrap.go` (`$ifNull ["$cluster_time", start]`). Test thô: `feed_anchor_integration_test.go`, `feed_change_test.go`, `feed_reaction_change_test.go`, `bootstrap*_integration_test.go`.
+Chỗ dùng tên thô ngoài codec (phải đổi cùng): `rooms.go` (projection `{pins:0, pin_ver:0}`, filter member, `$max cleared_at`), `pin_state.go` (projection + CAS `versionIs("pin_ver", …)`), `room_activity.go` (`$max last_change_at/activity_bucket/last_seq/last_message_at`; `ActiveRooms` lọc `activity_bucket`, `created_at`, `tenant`), `edits.go` (`Between` lọc/sắp `room_id, created_at`; `PurgeText` `$unset text, previous_text`), `pins.go` (`Between`), `hidden.go`, `reactions.go` (pipeline `$cond` trên `emoji`, `$ifNull ver`), `reaction_count.go` (witness projection `{user_id, ver}`, aggregate `{$match: {message_key, emoji: {$gt: ""}}}`, `{$group: {_id: "$emoji", count: {$sum: 1}}}`, `Between` theo `updated_at`), `feed.go` (`feedPosition`), `feed_reaction_change.go` (**`updatedFields.n` → `updatedFields.ver`**), `bootstrap.go` (`$ifNull ["$cluster_time", start]`). Test thô: `feed_anchor_integration_test.go`, `feed_change_test.go`, `feed_reaction_change_test.go`, `bootstrap*_integration_test.go`.
 
-Proto (Task 1): `ClearHistoryRequest { string room_id = 1; reserved 2; reserved "up_to_seq"; }`, `ClearHistoryResponse { reserved 1; reserved "cleared_before_seq"; google.protobuf.Timestamp cleared_before_time = 2; }`. **Không id event/record nào đổi** (`-n{n}` của reaction là id, không phải field).
+Proto (Task 1): `ClearHistoryRequest { string room_id = 1; reserved 2; reserved "up_to_seq"; }`, `ClearHistoryResponse { reserved 1; reserved "cleared_before_seq"; google.protobuf.Timestamp cleared_at = 2; }`. **Không id event/record nào đổi** (`-n{n}` của reaction là id, không phải field).
 
 ## Hợp đồng chung (mọi task phải khớp đúng chữ ký này)
 
@@ -121,20 +121,20 @@ Struct/interface viết gọn một dòng chỉ là ký hiệu; code thật đ�
 ### Clear history theo thời gian (Task 1)
 
 ```go
-type Member struct { Room uint64; Tenant, User string; Role Role; JoinedAt time.Time; ClearedBeforeTime time.Time }
+type Member struct { Room uint64; Tenant, User string; Role Role; JoinedAt time.Time; ClearedAt time.Time }
 
 type HistoryClearer interface { ClearHistory(ctx context.Context, room uint64, user string, at time.Time) (time.Time, error) }
 
-type Viewer struct { User string; Room domain.Room; ClearedBeforeTime time.Time; HiddenSeqs map[uint64]bool }
+type Viewer struct { User string; Room domain.Room; ClearedAt time.Time; HiddenSeqs map[uint64]bool }
 
 type ClearCmd struct{ Tenant, User string; Room uint64 }
 func (m *Mutator) ClearHistory(ctx context.Context, c ClearCmd) (time.Time, error)
 ```
 
-- `ClearHistory(at)`: `$max cleared_before_time = at`, trả giá trị sau ghi (`FindOneAndUpdate` After); không có doc → `domain.ErrNotMember`. Task 5 thêm điều kiện `state: 1`.
+- `ClearHistory(at)`: `$max cleared_at = at`, trả giá trị sau ghi (`FindOneAndUpdate` After); không có doc → `domain.ErrNotMember`. Task 5 thêm điều kiện `state: 1`.
 - `mutate.ClearHistory`: `Authorize(ClearHistory)` → `Rooms.ClearHistory(room, user, m.now())` (bỏ `Messages.Last`).
-- `view.HideForViewer`: ẩn khi `!v.ClearedBeforeTime.IsZero() && !m.CreatedAt.After(v.ClearedBeforeTime)` hoặc seq trong `HiddenSeqs`. `grpcsrv.viewerOf`: bỏ `HiddenIn` khi `CreatedAt` lớn nhất của trang ≤ mốc.
-- `grpcsrv.ClearHistory` trả `ClearedBeforeTime: timestamppb.New(t)`. `corecli clear` bỏ `-seq`; route giữ nguyên chữ ký.
+- `view.HideForViewer`: ẩn khi `!v.ClearedAt.IsZero() && !m.CreatedAt.After(v.ClearedAt)` hoặc seq trong `HiddenSeqs`. `grpcsrv.viewerOf`: bỏ `HiddenIn` khi `CreatedAt` lớn nhất của trang ≤ mốc.
+- `grpcsrv.ClearHistory` trả `ClearedAt: timestamppb.New(t)`. `corecli clear` bỏ `-seq`; route giữ nguyên chữ ký.
 
 ### `pkg/keys` (Task 2)
 
@@ -190,8 +190,8 @@ func AddedBy(m Member, requestID, by string) bool
 ```
 
 - `ParseRole`: `owner|admin|member`, khác → `invalid("role")`. `CreationRequestID(room)` = `strconv.FormatUint(room, 10) + "-created"` (hợp lệ theo `ValidCID`).
-- `Next`: bản sao `m` với `Role/State` mới, `PreviousRole = m.Role`, `PreviousState = m.State`, `Ver = m.Ver + 1`, `RequestID`, `UpdatedBy = by`, `UpdatedAt = at`; giữ `JoinedAt`, `ClearedBeforeTime`, `ReadSeq`, `ReadVer`. Ngữ nghĩa chuẩn của `ApplyMember` cho mọi adapter.
-- `Join.Apply(cur, user)` (ngữ nghĩa chuẩn của `AddMembers`; `cur` zero = chưa có doc): `cur.Active()` → trả `cur` y nguyên. Không thì `{Room, Tenant, User: user, Role: RoleMember, State: MemberActive, JoinedAt: At, Ver: cur.Ver+1, PreviousRole: cur.Role, PreviousState: cur.State, RequestID, UpdatedBy: By, UpdatedAt: At, ReadSeq: max(cur.ReadSeq, j.ReadSeq), ReadVer: cur.ReadVer+1, ClearedBeforeTime: cur.ClearedBeforeTime}`.
+- `Next`: bản sao `m` với `Role/State` mới, `PreviousRole = m.Role`, `PreviousState = m.State`, `Ver = m.Ver + 1`, `RequestID`, `UpdatedBy = by`, `UpdatedAt = at`; giữ `JoinedAt`, `ClearedAt`, `ReadSeq`, `ReadVer`. Ngữ nghĩa chuẩn của `ApplyMember` cho mọi adapter.
+- `Join.Apply(cur, user)` (ngữ nghĩa chuẩn của `AddMembers`; `cur` zero = chưa có doc): `cur.Active()` → trả `cur` y nguyên. Không thì `{Room, Tenant, User: user, Role: RoleMember, State: MemberActive, JoinedAt: At, Ver: cur.Ver+1, PreviousRole: cur.Role, PreviousState: cur.State, RequestID, UpdatedBy: By, UpdatedAt: At, ReadSeq: max(cur.ReadSeq, j.ReadSeq), ReadVer: cur.ReadVer+1, ClearedAt: cur.ClearedAt}`.
 - `AddedBy(m, rid, by)` = `m.Active() && m.RequestID == rid && m.UpdatedBy == by`.
 - `NewRoom` (Task 2): mỗi member có `State: MemberActive, Ver: 1, RequestID: CreationRequestID(id), UpdatedAt: now, UpdatedBy: creator` (`ReadSeq/ReadVer` 0). Task 13 bỏ `maxGroupMembers` (DM vẫn đúng 2; group ≥ 1).
 
@@ -239,7 +239,7 @@ func ValidateOwnerChange(c domain.OwnerChange) error
 - `Rooms.Member`: doc không có **hoặc** `state ≠ 1` → `domain.ErrNotMember`. `Rooms.Get` đọc thêm `member_count_ver` (thiếu = 0). `Rooms.Create(r, members)` giữ chữ ký: insert room (`member_count = len`, không `member_count_ver`) rồi insert member đã có đủ field từ `NewRoom` (trùng khoá bỏ qua như cũ). `HistoryClearer.ClearHistory`: chỉ member active.
 - `ValidateJoin`: room ≠ 0, `ValidTenant`, `ValidCID(RequestID)`, `ValidUser(By)`, `At` khác zero, `ReadSeq ≤ MaxInt64`, users 1..`domain.MaxMemberBatch`, mỗi `ValidUser`, không lặp. `ValidateMemberChange`: cùng room/user, `cur.Ver ≥ 1`, `next.Ver == cur.Ver+1 ≤ MaxUint32`, state 1|2, role hợp lệ, `ValidCID(next.RequestID)`, `next.UpdatedBy` hợp lệ hoặc rỗng. `ValidateOwnerChange`: action hợp lệ; `repair` → `User == ""`, `Successor` hợp lệ; khác → `User` hợp lệ, `UserVer ≥ 1`; `change_role` → `Role` hợp lệ; `Successor != ""` ⇔ `SuccessorVer ≥ 1`; `RequestID` hợp lệ.
 - `AddMembers(j, users)`: mỗi user ghi `j.Apply(cur, user)` (no-op khi active, không ghi gì); trả doc **sau ghi** theo thứ tự `users` (đọc lại sau bulk). Không đụng `rooms`.
-- `ApplyMember(cur, next)`: `ValidateMemberChange`; ghi khi doc vẫn có `ver == cur.Ver` → `(true, nil)`; trượt hoặc không có doc → `(false, nil)`. Ghi đúng các field `Next` đổi; không đụng `read_*`, `cleared_before_time`, `joined_at`.
+- `ApplyMember(cur, next)`: `ValidateMemberChange`; ghi khi doc vẫn có `ver == cur.Ver` → `(true, nil)`; trượt hoặc không có doc → `(false, nil)`. Ghi đúng các field `Next` đổi; không đụng `read_*`, `cleared_at`, `joined_at`.
 - `MembersOf(room, users)`: doc mọi state; user không có doc bị bỏ; ≤ `MaxMemberBatch + 1` user. `Owners(limit)`: owner active, sắp `joined_at` rồi `user_id`, limit 1..`MaxMemberScan`. `Successor`: member active role ≠ owner: admin trước member, rồi `joined_at`, rồi `user_id`; không có → `false`. `MembersBetween`: doc mọi state của room có `updated_at ∈ [from, to]`, sắp `updated_at` rồi `_id`, limit 1..`MaxMemberScan` (`ValidateLimit`).
 - `OwnerState`: room không có → `domain.ErrRoomNotFound`. `BeginOwnerChange(room, base, c)`: `ValidateOwnerChange`; `$set owners_ver: base+1, pending_owner_change: c` chỉ khi `owners_ver == base` (base 0 → không tồn tại) **và** `pending_owner_change` null/thiếu; trượt → `(false, nil)`. `EndOwnerChange(room, ver)`: `$unset pending_owner_change` khi `owners_ver == ver`; không khớp → `(false, nil)`.
 - `CountMembers(room, ws)`: mọi witness phải có doc `ver ≥ N`, không thì `ErrStaleRead`; trả số doc `state == 1`. `SetMemberCount(room, base, c)`: cần `c.Ver == base+1`; `$set member_count, member_count_ver` khi `member_count_ver == base` (base 0 → không tồn tại); trượt/không có room → `(false, nil)`.
@@ -250,10 +250,10 @@ func ValidateOwnerChange(c domain.OwnerChange) error
 
 ### Mongo (Task 5; feed Task 6)
 
-- `members` (clustered, `ensureClustered`): `{_id: keys.Member(room, user), room_id: int64, tenant, user_id, role, state: int32, joined_at, ver: int64, previous_role, previous_state: int32, request_id, updated_at, updated_by, cleared_before_time (omitempty), read_seq: int64, read_ver: int64}`. `state`, `ver`, `read_seq`, `read_ver` **luôn ghi** (filter `$lt` không khớp field thiếu). `memberIndexes()` = `{room_id:1, state:1, role:1, joined_at:1, user_id:1}` và `{tenant:1, user_id:1, state:1, room_id:1}`; bỏ hai index cũ. File mới `member_codec.go` (chuyển `memberDoc`, `encodeMember`, `decodeMember` ra khỏi `codec.go`), `members.go`, `member_owner.go`, `member_count.go`, `read_position.go`.
+- `members` (clustered, `ensureClustered`): `{_id: keys.Member(room, user), room_id: int64, tenant, user_id, role, state: int32, joined_at, ver: int64, previous_role, previous_state: int32, request_id, updated_at, updated_by, cleared_at (omitempty), read_seq: int64, read_ver: int64}`. `state`, `ver`, `read_seq`, `read_ver` **luôn ghi** (filter `$lt` không khớp field thiếu). `memberIndexes()` = `{room_id:1, state:1, role:1, joined_at:1, user_id:1}` và `{tenant:1, user_id:1, state:1, room_id:1}`; bỏ hai index cũ. File mới `member_codec.go` (chuyển `memberDoc`, `encodeMember`, `decodeMember` ra khỏi `codec.go`), `members.go`, `member_owner.go`, `member_count.go`, `read_position.go`.
 - `rooms` thêm `member_count_ver: int64` (omitempty), `owners_ver: int64`, `pending_owner_change: {action, user_id, user_ver, role, successor_id, successor_ver, request_id, updated_by, updated_at}` (omitempty). `Rooms.Get` giữ projection loại `pins`, `pin_ver`.
 - `AddMembers` = một `BulkWrite(ordered:false)` các `UpdateOne({_id}, pipeline, upsert)`; pipeline một `$set`, `active := {$eq: ["$state", 1]}`, mọi field ngoài `room_id/tenant/user_id/state` là `{$cond: [active, "$<field>", <mới>]}`; `previous_role: $ifNull ["$role", ""]`, `previous_state: $ifNull ["$state", 0]`, `ver/read_ver: $ifNull + 1`, `read_seq: {$max: [{$ifNull: ["$read_seq", 0]}, j.ReadSeq]}`; mọi chuỗi người dùng qua `$literal`. Filter chỉ `_id` bằng nên server tự retry upsert trùng khoá. Sau đó `MembersOf` (primary) trả doc sau ghi.
-- `ApplyMember` = `UpdateOne({_id, ver: cur.Ver}, {$set: {role, state, previous_role, previous_state, request_id, updated_by, updated_at}, $inc: {ver: 1}})`. `MarkRead` = `FindOneAndUpdate({_id, state: 1, read_seq: {$lt: s}}, {$set: {read_seq: s}, $inc: {read_ver: 1}}, After)`; không khớp → `FindOne({_id})` phân biệt active / không. `ClearHistory` = `FindOneAndUpdate({_id, state: 1}, {$max: {cleared_before_time: at}}, After)`. **Ba lệnh này không bao giờ dùng pipeline, replace hay upsert.**
+- `ApplyMember` = `UpdateOne({_id, ver: cur.Ver}, {$set: {role, state, previous_role, previous_state, request_id, updated_by, updated_at}, $inc: {ver: 1}})`. `MarkRead` = `FindOneAndUpdate({_id, state: 1, read_seq: {$lt: s}}, {$set: {read_seq: s}, $inc: {read_ver: 1}}, After)`; không khớp → `FindOne({_id})` phân biệt active / không. `ClearHistory` = `FindOneAndUpdate({_id, state: 1}, {$max: {cleared_at: at}}, After)`. **Ba lệnh này không bao giờ dùng pipeline, replace hay upsert.**
 - `CountMembers`: đọc witness `{_id: {$in}}` projection `{user_id, ver}` majority trong session causal, rồi `CountDocuments({room_id, state: 1})` cùng session (phủ index). `Owners`/`Successor`: `Find({room_id, state: 1, role})` sắp `{joined_at:1, user_id:1}`. `MembersBetween`: `Find({room_id, updated_at: {$gte, $lte}})` sắp `{updated_at:1, _id:1}` (dùng tiền tố `room_id` của index đếm; không index thời gian).
 - `Store` cài 5 port (tên method không trùng method cũ của `*Store`; vì `Edits.Between` đã có nên là `MembersBetween`). Index `{tenant, user_id, state, room_id}` chỉ chuẩn bị cho M3 `ListMyRooms`; M2b.4 **không** thêm port "phòng của user" (YAGNI).
 - Feed `$match` (Task 6) = `$or` của: insert trên `[messages, rooms, message_edits, reactions, pin_actions, members]`; update/replace trên `reactions`; replace trên `members`; `{operationType: "update", "ns.coll": "members", "updateDescription.updatedFields.ver": {$exists: true}}`. File mới `feed_member_change.go`: insert/replace → giải mã `fullDocument`; update → `keys.ParseMember(documentKey._id)` + `updatedFields.ver` (1..`MaxUint32`, user hợp lệ, không thì `errCorrupt`) → `Change{Kind: MemberChanged, Member: {Room, User, Ver}}` (update chỉ chắc có ba field này).
@@ -558,7 +558,7 @@ Ghi chú phụ thuộc:
   1. Group có member active thì có owner active ở mọi thời điểm: chỉ đường owner (CAS `owners_ver`) đổi role owner hay xoá owner, và luôn thăng kế nhiệm trước khi hạ/xoá đích; đường thường chỉ ghi khi đã kiểm đích không phải owner và CAS theo `ver` của đúng doc đã kiểm.
   2. Đọc, đánh dấu chưa đọc, clear history (và mute sau này) chỉ dùng toán tử thường, **không bao giờ** đụng `ver`, không pipeline/replace/upsert → không vào feed, không vào work stream.
   3. Người bị xoá/rời không còn quyền: `Rooms.Member` lọc `state == 1`; lệnh đổi qua `mutate` từ chối ngay; gửi tin qua actor của core khác ≤ TTL 10s.
-  4. `ver`, `read_ver`, `member_count_ver`, `owners_ver` chỉ tăng; tombstone không bao giờ bị xoá (giữ `ver`, `read_*`, `cleared_before_time`), nên id event không lặp.
+  4. `ver`, `read_ver`, `member_count_ver`, `owners_ver` chỉ tăng; tombstone không bao giờ bị xoá (giữ `ver`, `read_*`, `cleared_at`), nên id event không lặp.
   5. Fast path không báo lỗi vì effect: lỗi enqueue, `Forget` bỏ qua sau khi ghi; worker hội tụ. `member_count` chỉ worker ghi.
   6. Bản user chỉ gửi cho chính user của doc đổi; doc tạo cùng room không có bản room.
 - **Id event và record** (`{room}-` rồi token thứ hai phân biệt loại: số, `created`, `p\d`, `mb-`, `members-v`, `rd-`):
@@ -658,7 +658,7 @@ Ghi chú phụ thuộc:
 Toàn bộ M2b dùng chung nhánh `feat/m2b`. Task này đồng bộ nhánh, chụp baseline xanh, rồi làm hai việc nền cho mọi task sau (D96, D97):
 
 1. **Đổi tên field** của mọi collection đã xây, trừ `messages`, theo "Bảng đổi tên field" ở trên: codec (tag `bson`), mọi tên thô trong filter/update/pipeline/projection, index của `Bootstrap`, `$match`/decoder của feed (`updatedFields.n` → `updatedFields.ver`), test thô và itest. Tên Go không đổi (trừ `ClearedBeforeSeq`). Không id event/record nào đổi. Doc vị trí feed cũ `_id: "messages"` bị bỏ hẳn (`legacyMessagesFeedID`, `feedStart`, test carry-over); `Forget` chỉ xoá doc `changes`.
-2. **Clear history theo thời gian:** `members.cleared_before_time` (date, `$max`) = giờ server lúc gọi (`Mutator.now()`, đã cắt ms). `view.HideForViewer` ẩn tin có `CreatedAt ≤` mốc trên mọi timeline. `ClearHistoryRequest.up_to_seq` và `ClearHistoryResponse.cleared_before_seq` thành reserved; response trả `cleared_before_time`. `mutate.ClearHistory` không còn đọc `Messages.Last`. Trường hợp mốc trùng ms với một tin gửi ngay sau đó: tin đó bị ẩn (chấp nhận, D97); test chỉ khẳng định theo mô hình "`CreatedAt ≤` mốc thì ẩn", không đoán thời điểm.
+2. **Clear history theo thời gian:** `members.cleared_at` (date, `$max`) = giờ server lúc gọi (`Mutator.now()`, đã cắt ms). `view.HideForViewer` ẩn tin có `CreatedAt ≤` mốc trên mọi timeline. `ClearHistoryRequest.up_to_seq` và `ClearHistoryResponse.cleared_before_seq` thành reserved; response trả `cleared_at`. `mutate.ClearHistory` không còn đọc `Messages.Last`. Trường hợp mốc trùng ms với một tin gửi ngay sau đó: tin đó bị ẩn (chấp nhận, D97); test chỉ khẳng định theo mô hình "`CreatedAt ≤` mốc thì ẩn", không đoán thời điểm.
 
 Thêm ngoài hợp đồng (nhỏ, giữ DRY): `func (v view.Viewer) Cleared(createdAt time.Time) bool` — điều kiện ẩn theo mốc, dùng chung cho `HideForViewer` và `grpcsrv.viewerOf` (bỏ `HiddenIn` khi tin mới nhất của trang đã bị clear).
 
@@ -732,10 +732,10 @@ bằng:
 		t.Fatalf("bob's history = %v, want seq 1 and 2 visible, seq 3 hidden, every seq kept", got)
 	}
 	resp, err := client.ClearHistory(bob, &chatimv1.ClearHistoryRequest{RoomId: roomID})
-	if err != nil || resp.GetClearedBeforeTime() == nil {
+	if err != nil || resp.GetClearedAt() == nil {
 		t.Fatalf("ClearHistory = %v, %v; want the cleared-before time", resp, err)
 	}
-	mark := resp.GetClearedBeforeTime().AsTime()
+	mark := resp.GetClearedAt().AsTime()
 	for seq, m := range historyAs(t, client, "bob", roomID) {
 		if !hiddenOnly(m) || m.GetCreatedAt().AsTime().After(mark) {
 			t.Fatalf("bob sees seq %d as %v after clearing at %v, want a hidden placeholder", seq, m, mark)
@@ -771,7 +771,7 @@ bằng:
 		t.Fatalf("bob sees seq 4 sent at %v as %v, want hidden=%v against the mark %v", later.GetCreatedAt().AsTime(), later, hidden, mark)
 	}
 	again, err := client.ClearHistory(bob, &chatimv1.ClearHistoryRequest{RoomId: roomID})
-	if err != nil || again.GetClearedBeforeTime().AsTime().Before(mark) {
+	if err != nil || again.GetClearedAt().AsTime().Before(mark) {
 		t.Fatalf("second ClearHistory = %v, %v; want a mark not before %v", again, err, mark)
 	}
 ```
@@ -788,7 +788,7 @@ bằng:
 
 ```go
 	}
-	if !(domain.Member{Room: 1, User: "alice"}).ClearedBeforeTime.IsZero() {
+	if !(domain.Member{Room: 1, User: "alice"}).ClearedAt.IsZero() {
 		t.Fatal("a new member starts with cleared history")
 ```
 
@@ -844,12 +844,12 @@ bằng:
 
 ```go
 	cleared, err := rg.client.ClearHistory(bob, &chatimv1.ClearHistoryRequest{RoomId: room})
-	if err != nil || !cleared.GetClearedBeforeTime().AsTime().Equal(mark) {
+	if err != nil || !cleared.GetClearedAt().AsTime().Equal(mark) {
 		t.Fatalf("ClearHistory = %v, %v; want cleared before %v", cleared, err, mark)
 	}
 	clock.Store(mark.Add(-time.Minute).UnixMilli())
 	again, err := rg.client.ClearHistory(bob, &chatimv1.ClearHistoryRequest{RoomId: room})
-	if err != nil || !again.GetClearedBeforeTime().AsTime().Equal(mark) {
+	if err != nil || !again.GetClearedAt().AsTime().Equal(mark) {
 		t.Fatalf("ClearHistory with an earlier clock = %v, %v; want the mark kept at %v", again, err, mark)
 	}
 ```
@@ -1010,7 +1010,7 @@ func TestClearHistoryMarksTheServerTimeAndOnlyRaisesIt(t *testing.T) {
 		}
 	}
 	m, err := rg.rooms.Member(t.Context(), room, "bob")
-	if err != nil || !m.ClearedBeforeTime.Equal(mark.Add(time.Second+time.Millisecond)) {
+	if err != nil || !m.ClearedAt.Equal(mark.Add(time.Second+time.Millisecond)) {
 		t.Fatalf("bob member = %+v, %v; want cleared before %v", m, err, mark.Add(time.Second+time.Millisecond))
 	}
 	if _, events := rg.events.list(); len(events) != 0 {
@@ -1190,15 +1190,15 @@ func TestMemberCodecReadsClearedBefore(t *testing.T) {
 bằng:
 
 ```go
-func TestMemberCodecReadsClearedBeforeTime(t *testing.T) {
+func TestMemberCodecReadsClearedAt(t *testing.T) {
 	doc := encodeMember(domain.Member{Room: 7_340_000_001, Tenant: "acme", User: "bob", Role: domain.RoleMember, JoinedAt: codecTime}, 7_340_000_001)
 	doc.ClearedBefore = codecTime.Add(time.Hour)
 	_, raw := roundTrip(t, doc)
-	if got := raw.Lookup("cleared_before_time").Time(); !got.Equal(doc.ClearedBefore) {
-		t.Fatalf("stored cleared_before_time = %v, want %v as a date", got, doc.ClearedBefore)
+	if got := raw.Lookup("cleared_at").Time(); !got.Equal(doc.ClearedBefore) {
+		t.Fatalf("stored cleared_at = %v, want %v as a date", got, doc.ClearedBefore)
 	}
 	got, err := decodeMember(doc)
-	if err != nil || !got.ClearedBeforeTime.Equal(codecTime.Add(time.Hour)) {
+	if err != nil || !got.ClearedAt.Equal(codecTime.Add(time.Hour)) {
 		t.Fatalf("decodeMember = %+v, %v; want cleared before %v", got, err, codecTime.Add(time.Hour))
 	}
 ```
@@ -1541,8 +1541,8 @@ bằng:
 
 ```go
 	}
-	gotAt, wantAt, gotCleared, wantCleared := got.JoinedAt, want.JoinedAt, got.ClearedBeforeTime, want.ClearedBeforeTime
-	got.JoinedAt, want.JoinedAt, got.ClearedBeforeTime, want.ClearedBeforeTime = time.Time{}, time.Time{}, time.Time{}, time.Time{}
+	gotAt, wantAt, gotCleared, wantCleared := got.JoinedAt, want.JoinedAt, got.ClearedAt, want.ClearedAt
+	got.JoinedAt, want.JoinedAt, got.ClearedAt, want.ClearedAt = time.Time{}, time.Time{}, time.Time{}, time.Time{}
 	if got != want || !gotAt.Equal(wantAt) || !gotCleared.Equal(wantCleared) {
 		t.Fatalf("Member(%d, %q) = %+v at %v cleared %v, want %+v at %v cleared %v", want.Room, want.User, got, gotAt, gotCleared, want, wantAt, wantCleared)
 	}
@@ -1588,7 +1588,7 @@ bằng:
 		}
 	}
 	alice := members[0]
-	alice.ClearedBeforeTime = at(9)
+	alice.ClearedAt = at(9)
 	assertMember(t, s.rooms, alice)
 ```
 
@@ -1642,7 +1642,7 @@ bằng:
 
 ```go
 	before := slices.Clone(page)
-	v := view.Viewer{User: "bob", ClearedBeforeTime: sentAt(1), HiddenSeqs: map[uint64]bool{3: true}}
+	v := view.Viewer{User: "bob", ClearedAt: sentAt(1), HiddenSeqs: map[uint64]bool{3: true}}
 	got := view.HideForViewer(v, page)
 ```
 
@@ -1674,13 +1674,13 @@ func TestClearedHidesEveryMessageUpToTheMarkTime(t *testing.T) {
 		{"one millisecond after", mark, mark.Add(time.Millisecond), false},
 	}
 	for _, c := range cases {
-		if got := (view.Viewer{ClearedBeforeTime: c.mark}).Cleared(c.at); got != c.wantClear {
+		if got := (view.Viewer{ClearedAt: c.mark}).Cleared(c.at); got != c.wantClear {
 			t.Errorf("%s: Cleared = %v, want %v", c.name, got, c.wantClear)
 		}
 	}
 	side := textMsg(1, "side")
 	side.Thread = 7
-	got := view.HideForViewer(view.Viewer{ClearedBeforeTime: mark}, []domain.Message{side, textMsg(3, "later")})
+	got := view.HideForViewer(view.Viewer{ClearedAt: mark}, []domain.Message{side, textMsg(3, "later")})
 	if !got[0].Hidden || got[1].Hidden {
 		t.Fatalf("hidden = %v, %v; want the thread message before the mark hidden and the later one shown", got[0].Hidden, got[1].Hidden)
 	}
@@ -1715,7 +1715,7 @@ bằng:
 
 ```go
 	}
-	hidden := view.HideForViewer(view.Viewer{ClearedBeforeTime: sentAt(1), HiddenSeqs: map[uint64]bool{3: true}}, page)
+	hidden := view.HideForViewer(view.Viewer{ClearedAt: sentAt(1), HiddenSeqs: map[uint64]bool{3: true}}, page)
 	if !uncounted(hidden[0]) || !counted(hidden[1]) || !uncounted(hidden[2]) {
 ```
 
@@ -1760,7 +1760,7 @@ bằng:
 
 ```go
 	"hide":   &chatimv1.HideMessageResponse{},
-	"clear":  &chatimv1.ClearHistoryResponse{ClearedBeforeTime: timestamppb.New(clearedAt)},
+	"clear":  &chatimv1.ClearHistoryResponse{ClearedAt: timestamppb.New(clearedAt)},
 	"edits":  &chatimv1.GetEditHistoryResponse{Versions: []*chatimv1.MessageVersion{{Version: 5}}},
 ```
 
@@ -1802,7 +1802,7 @@ func (f *fakeCore) ClearHistory(ctx context.Context, _ *chatimv1.ClearHistoryReq
 	if err := f.next(ctx); err != nil {
 		return nil, err
 	}
-	return &chatimv1.ClearHistoryResponse{ClearedBeforeTime: timestamppb.New(clearedAt)}, nil
+	return &chatimv1.ClearHistoryResponse{ClearedAt: timestamppb.New(clearedAt)}, nil
 }
 ```
 
@@ -1811,12 +1811,12 @@ func (f *fakeCore) ClearHistory(ctx context.Context, _ *chatimv1.ClearHistoryReq
 Run: `make -s go ARGS="test -race -shuffle=on ./apps/core/internal/domain/... ./apps/core/internal/store/... ./apps/core/internal/view/... ./apps/core/internal/mutate/... ./apps/core/internal/grpcsrv/... ./tools/internal/route/..."`
 
 Expected: `ok` chỉ ở `apps/core/internal/store`; `FAIL ... [build failed]` ở `domain`, `view`, `store/storetest` (kéo theo `store/memstore`, `store/mongostore`), `mutate`, `grpcsrv`, `tools/internal/route`. Lỗi biên dịch đầu tiên mỗi package:
-- `domain`: `apps/core/internal/domain/edit_test.go:21:46: (domain.Member{…}).ClearedBeforeTime undefined (type domain.Member has no field or method ClearedBeforeTime)`
-- `view`: `apps/core/internal/view/masks_test.go:40:32: unknown field ClearedBeforeTime in struct literal of type view.Viewer`
+- `domain`: `apps/core/internal/domain/edit_test.go:21:46: (domain.Member{…}).ClearedAt undefined (type domain.Member has no field or method ClearedAt)`
+- `view`: `apps/core/internal/view/masks_test.go:40:32: unknown field ClearedAt in struct literal of type view.Viewer`
 - `storetest`: `apps/core/internal/store/storetest/apply_cases.go:120:53: cannot use baseTime (variable of struct type time.Time) as uint64 value in argument to s.rooms.ClearHistory`
-- `route`: `tools/internal/route/changes_test.go:79:43: unknown field ClearedBeforeTime in struct literal of type chatimv1.ClearHistoryResponse`
+- `route`: `tools/internal/route/changes_test.go:79:43: unknown field ClearedAt in struct literal of type chatimv1.ClearHistoryResponse`
 - `mutate`: `apps/core/internal/mutate/hide_clear_test.go:62:10: cannot use got (variable of type uint64) as "time".Time value in return statement`
-- `grpcsrv`: `apps/core/internal/grpcsrv/change_message_test.go:119:28: cleared.GetClearedBeforeTime undefined (type *chatimv1.ClearHistoryResponse has no field or method GetClearedBeforeTime)`
+- `grpcsrv`: `apps/core/internal/grpcsrv/change_message_test.go:119:28: cleared.GetClearedAt undefined (type *chatimv1.ClearHistoryResponse has no field or method GetClearedAt)`
 
 Số dòng:cột có thể lệch vài đơn vị nếu file đã được gofmt khác; nội dung lỗi phải giống. Kiểm tên field (codec/layout) chạy được sau Step 6.
 
@@ -1847,7 +1847,7 @@ message ClearHistoryRequest {
 message ClearHistoryResponse {
   reserved 1;
   reserved "cleared_before_seq";
-  google.protobuf.Timestamp cleared_before_time = 2;
+  google.protobuf.Timestamp cleared_at = 2;
 }
 ```
 
@@ -1880,7 +1880,7 @@ type Member struct {
 	User              string
 	Role              Role
 	JoinedAt          time.Time
-	ClearedBeforeTime time.Time
+	ClearedAt time.Time
 }
 ```
 
@@ -1918,7 +1918,7 @@ bằng:
 	if err != nil {
 		return nil, err
 	}
-	return &chatimv1.ClearHistoryResponse{ClearedBeforeTime: timestamppb.New(at)}, nil
+	return &chatimv1.ClearHistoryResponse{ClearedAt: timestamppb.New(at)}, nil
 }
 ```
 
@@ -1942,7 +1942,7 @@ bằng:
 
 ```go
 func (s *Service) viewerOf(ctx context.Context, user string, grant access.Request, q store.PageQuery, page []domain.Message) (view.Viewer, error) {
-	v := view.Viewer{User: user, Room: grant.Room, ClearedBeforeTime: grant.Member.ClearedBeforeTime}
+	v := view.Viewer{User: user, Room: grant.Room, ClearedAt: grant.Member.ClearedAt}
 	if len(page) == 0 {
 		return v, nil
 	}
@@ -2080,11 +2080,11 @@ bằng:
 	if !ok {
 		return time.Time{}, domain.ErrNotMember
 	}
-	if at.After(m.ClearedBeforeTime) {
-		m.ClearedBeforeTime = at
+	if at.After(m.ClearedAt) {
+		m.ClearedAt = at
 	}
 	s.members[k] = m
-	return m.ClearedBeforeTime, nil
+	return m.ClearedAt, nil
 }
 ```
 
@@ -2253,7 +2253,7 @@ type memberDoc struct {
 	Tenant        string      `bson:"tenant"`
 	Role          domain.Role `bson:"role"`
 	JoinedAt      time.Time   `bson:"joined_at"`
-	ClearedBefore time.Time   `bson:"cleared_before_time,omitempty"`
+	ClearedBefore time.Time   `bson:"cleared_at,omitempty"`
 }
 ```
 
@@ -2273,7 +2273,7 @@ bằng:
 
 ```go
 	}
-	return domain.Member{Room: room, Tenant: d.Tenant, User: d.User, Role: d.Role, JoinedAt: d.JoinedAt, ClearedBeforeTime: d.ClearedBefore}, nil
+	return domain.Member{Room: room, Tenant: d.Tenant, User: d.User, Role: d.Role, JoinedAt: d.JoinedAt, ClearedAt: d.ClearedBefore}, nil
 }
 ```
 
@@ -2898,7 +2898,7 @@ func (s *Store) ClearHistory(ctx context.Context, room uint64, user string, at t
 		return time.Time{}, fmt.Errorf("clear history of %q in room %d: %w", user, room, domain.ErrNotMember)
 	}
 	filter := bson.D{{Key: "room_id", Value: key}, {Key: "user_id", Value: user}}
-	update := bson.D{{Key: "$max", Value: bson.D{{Key: "cleared_before_time", Value: at}}}}
+	update := bson.D{{Key: "$max", Value: bson.D{{Key: "cleared_at", Value: at}}}}
 	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
 ```
 
@@ -2992,12 +2992,12 @@ bằng:
 type Viewer struct {
 	User              string
 	Room              domain.Room
-	ClearedBeforeTime time.Time
+	ClearedAt time.Time
 	HiddenSeqs        map[uint64]bool
 }
 
 func (v Viewer) Cleared(createdAt time.Time) bool {
-	return !v.ClearedBeforeTime.IsZero() && !createdAt.After(v.ClearedBeforeTime)
+	return !v.ClearedAt.IsZero() && !createdAt.After(v.ClearedAt)
 }
 ```
 
@@ -3070,7 +3070,7 @@ Expected: PASS mọi package. Riêng mongostore: `TestMongoStoreContract`, `Test
 
 INDEXES.csv:
 - dòng `apps/core/internal/store/mongostore`, cột `purpose`: thay `message_edits (index {r:1, ts:1}), reactions (indexes {k:1, e:1} for a covered count and {r:1, ts:1}) and pin_actions (index {r:1, ts:1}), hidden (unique {u:1, r:1, th:1, s:1}) + rooms/members indexes + reconciler_state and writes the change feed anchor (reconciler_state _id changes) once if missing, carried over from the old _id messages position when present, else cluster time;` bằng `message_edits (index {room_id:1, created_at:1}), reactions (indexes {message_key:1, emoji:1} for a covered count and {room_id:1, updated_at:1}) and pin_actions (index {room_id:1, created_at:1}), hidden (unique {user_id:1, room_id:1, thread_root:1, seq:1}) + rooms/members indexes + reconciler_state and writes the change feed anchor (reconciler_state _id changes, field cluster_time) once if missing, at the cluster time; every collection but messages uses full English field names (D96);`.
-- dòng `apps/core/internal/store/mongostore`, cột `purpose`: thay `Between {r, ts} sorted ts,_id; PurgeText $unset x/p up to a version), hidden insert-or-ignore + covered HiddenIn, members cb via FindOneAndUpdate $max;` bằng `Between {room_id, created_at} sorted created_at,_id; PurgeText $unset text/previous_text up to a version), hidden insert-or-ignore + covered HiddenIn, members cleared_before_time (a date) via FindOneAndUpdate $max;`.
+- dòng `apps/core/internal/store/mongostore`, cột `purpose`: thay `Between {r, ts} sorted ts,_id; PurgeText $unset x/p up to a version), hidden insert-or-ignore + covered HiddenIn, members cb via FindOneAndUpdate $max;` bằng `Between {room_id, created_at} sorted created_at,_id; PurgeText $unset text/previous_text up to a version), hidden insert-or-ignore + covered HiddenIn, members cleared_at (a date) via FindOneAndUpdate $max;`.
 - dòng `apps/core/internal/store/mongostore`, cột `purpose`: thay `with a pipeline (t/u/e as $literal; $cond on e == emoji keeps pe/e/n/ts, so a same-emoji set leaves the doc byte-identical with no oplog entry; else pe = old e, n + 1)` bằng `with a pipeline (tenant/user_id/emoji as $literal; $cond on emoji == the new emoji keeps previous_emoji/emoji/ver/updated_at, so a same-emoji set leaves the doc byte-identical with no oplog entry; else previous_emoji = old emoji, ver + 1)`.
 - dòng `apps/core/internal/store/mongostore`, cột `purpose`: thay `Remove = FindOneAndUpdate on {_id: k|u, e != ''}` bằng `Remove = FindOneAndUpdate on {_id: k|u, emoji != ''}`.
 - dòng `apps/core/internal/store/mongostore`, cột `purpose`: thay `After clustered _id range, Between {r, ts}); rooms.pins/pv read only by PinState (projection; Rooms.Get excludes them) and written by ApplyPins (CAS on pv);` bằng `After clustered _id range, Between {room_id, created_at}); rooms.pins/pin_ver read only by PinState (projection; Rooms.Get excludes them) and written by ApplyPins (CAS on pin_ver);`.
@@ -3084,16 +3084,16 @@ INDEXES.csv:
 - dòng `apps/core/internal/store/memstore`, cột `decisions`: thay `D52` bằng `D52;D97`.
 - dòng `apps/core/internal/store/storetest`, cột `purpose`: thay `clear history $max and non member` bằng `clear history keeps the later time and non member`.
 - dòng `apps/core/internal/store/storetest`, cột `decisions`: thay `D52;D88;D89;D90;D92` bằng `D52;D88;D89;D90;D92;D97`.
-- dòng `apps/core/internal/domain`, cột `purpose`: thay `Member.ClearedBeforeSeq;` bằng `Member.ClearedBeforeTime (time-based clear history, D97);`.
+- dòng `apps/core/internal/domain`, cột `purpose`: thay `Member.ClearedBeforeSeq;` bằng `Member.ClearedAt (time-based clear history, D97);`.
 - dòng `apps/core/internal/domain`, cột `decisions`: thay `D92;D95` bằng `D92;D95;D97`.
-- dòng `apps/core/internal/view`, cột `purpose`: thay `HideForViewer turns seq <= ClearedBeforeSeq or seqs in HiddenSeqs into hidden placeholders` bằng `HideForViewer turns messages created at or before ClearedBeforeTime (Viewer.Cleared; every timeline) or seqs in HiddenSeqs into hidden placeholders`.
+- dòng `apps/core/internal/view`, cột `purpose`: thay `HideForViewer turns seq <= ClearedBeforeSeq or seqs in HiddenSeqs into hidden placeholders` bằng `HideForViewer turns messages created at or before ClearedAt (Viewer.Cleared; every timeline) or seqs in HiddenSeqs into hidden placeholders`.
 - dòng `apps/core/internal/view`, cột `key_symbols`: thay `Viewer;` bằng `Viewer;Viewer.Cleared;`.
 - dòng `apps/core/internal/view`, cột `decisions`: thay `D65;D85;D90` bằng `D65;D85;D90;D97`.
 - dòng `apps/core/internal/mutate`, cột `purpose`: thay `ClearHistory (UpToSeq 0 or past the last seq clamps to Messages.Last; $max on the member; returns the new mark)` bằng `ClearHistory (marks the server time, $max on the member; returns the mark)`.
 - dòng `apps/core/internal/mutate`, cột `decisions`: thay `D92;D95` bằng `D92;D95;D97`.
-- dòng `apps/core/internal/grpcsrv`, cột `purpose`: thay `GetHistory builds the view.Viewer from the member's cleared mark and one Hidden.HiddenIn over the page's seq range (skipped for an empty or fully cleared page);` bằng `GetHistory builds the view.Viewer from the member's cleared time and one Hidden.HiddenIn over the page's seq range (skipped for an empty page or one whose newest message is cleared); ClearHistory returns cleared_before_time;`.
+- dòng `apps/core/internal/grpcsrv`, cột `purpose`: thay `GetHistory builds the view.Viewer from the member's cleared mark and one Hidden.HiddenIn over the page's seq range (skipped for an empty or fully cleared page);` bằng `GetHistory builds the view.Viewer from the member's cleared time and one Hidden.HiddenIn over the page's seq range (skipped for an empty page or one whose newest message is cleared); ClearHistory returns cleared_at;`.
 - dòng `apps/core/internal/grpcsrv`, cột `decisions`: thay `D94;D95` bằng `D94;D95;D97`.
-- dòng `proto/chatim/v1/core.proto`, cột `purpose`: thay `requests carry no tenant/user (metadata); pts reserved (D48)` bằng `requests carry no tenant/user (metadata); pts reserved (D48); ClearHistoryRequest.up_to_seq and ClearHistoryResponse.cleared_before_seq reserved, the response returns cleared_before_time (D97)`.
+- dòng `proto/chatim/v1/core.proto`, cột `purpose`: thay `requests carry no tenant/user (metadata); pts reserved (D48)` bằng `requests carry no tenant/user (metadata); pts reserved (D48); ClearHistoryRequest.up_to_seq and ClearHistoryResponse.cleared_before_seq reserved, the response returns cleared_at (D97)`.
 - dòng `proto/chatim/v1/core.proto`, cột `decisions`: thay `D95` bằng `D95;D97`.
 - dòng `tools/corecli`, cột `purpose`: thay `create-room/send/history/edit/delete/hide/clear/edits` bằng `create-room/send/history/edit/delete/hide/clear (up to now, no seq)/edits`.
 - dòng `tools/corecli`, cột `decisions`: thay `D95` bằng `D95;D97`.
@@ -3123,8 +3123,8 @@ Expected: `infra-reset` xoá volume (database `chatim`, stream NATS, Redis); `in
 ### Task 2: `domain` (role admin, `MemberState`, field member, `Join`, `OwnerChange`…, lỗi, `NewRoom` điền field) + `keys.Member`
 
 Đặt kiểu dữ liệu chung cho mọi task sau (D98–D101, D105). `Member` là doc của lớp tập: một doc mỗi (room, user), `State` 1/2 luôn rõ, `Ver` tăng mỗi lần đổi membership (thêm, rời, thêm lại, đổi role), `PreviousRole/PreviousState` cho event biết loại đổi, `RequestID` là lệnh gây đổi cuối. `Member.Next` và `Join.Apply` là hai hàm thuần định nghĩa ngữ nghĩa cho mọi adapter (memstore Task 4, Mongo Task 5 viết lại đúng như vậy bằng update/pipeline), nên fast path và worker cho cùng kết quả:
-- `Next(role, state, rid, by, at)`: chỉ đổi membership, `Ver + 1`; giữ `JoinedAt`, `ClearedBeforeTime`, `ReadSeq`, `ReadVer`.
-- `Join.Apply(cur, user)`: doc active → trả `cur` y nguyên (no-op, không ghi). Chưa có doc hoặc tombstone → active, role **luôn** `member`, `JoinedAt = At`, `Ver + 1`, `ReadSeq = max(cur, j)` (vào lại không hạ vị trí đọc), `ReadVer + 1` (id `read_updated` không lặp), giữ `ClearedBeforeTime`.
+- `Next(role, state, rid, by, at)`: chỉ đổi membership, `Ver + 1`; giữ `JoinedAt`, `ClearedAt`, `ReadSeq`, `ReadVer`.
+- `Join.Apply(cur, user)`: doc active → trả `cur` y nguyên (no-op, không ghi). Chưa có doc hoặc tombstone → active, role **luôn** `member`, `JoinedAt = At`, `Ver + 1`, `ReadSeq = max(cur, j)` (vào lại không hạ vị trí đọc), `ReadVer + 1` (id `read_updated` không lặp), giữ `ClearedAt`.
 
 `Room` và `Member` vẫn so sánh được bằng `==` (field mới là số, chuỗi, `time.Time`). `OwnerState.Pending` là con trỏ: so sánh bằng `==` chỉ so địa chỉ, test dùng `reflect.DeepEqual`.
 
@@ -3213,7 +3213,7 @@ func TestCreationRequestIDIsAValidCID(t *testing.T) {
 func TestNextMovesMembershipAndKeepsReaderState(t *testing.T) {
 	cur := domain.Member{
 		Room: 7, Tenant: "acme", User: "bob", Role: domain.RoleAdmin, State: domain.MemberActive, JoinedAt: joinAt, Ver: 4,
-		ClearedBeforeTime: joinAt.Add(time.Hour), ReadSeq: 9, ReadVer: 3, RequestID: "r-1", UpdatedBy: "alice", UpdatedAt: joinAt,
+		ClearedAt: joinAt.Add(time.Hour), ReadSeq: 9, ReadVer: 3, RequestID: "r-1", UpdatedBy: "alice", UpdatedAt: joinAt,
 	}
 	got := cur.Next(domain.RoleAdmin, domain.MemberRemoved, "r-2", "bob", joinAt.Add(time.Minute))
 	want := cur
@@ -3236,13 +3236,13 @@ func TestJoinApplyAddsReAddsAndKeepsActiveMembers(t *testing.T) {
 	}
 	gone := domain.Member{
 		Room: 7, Tenant: "acme", User: "bob", Role: domain.RoleAdmin, State: domain.MemberRemoved, JoinedAt: joinAt, Ver: 6,
-		ClearedBeforeTime: joinAt.Add(time.Minute), ReadSeq: 55, ReadVer: 8, RequestID: "r-3", UpdatedBy: "bob", UpdatedAt: joinAt,
+		ClearedAt: joinAt.Add(time.Minute), ReadSeq: 55, ReadVer: 8, RequestID: "r-3", UpdatedBy: "bob", UpdatedAt: joinAt,
 	}
 	back := j.Apply(gone, "bob")
 	want = domain.Member{
 		Room: 7, Tenant: "acme", User: "bob", Role: domain.RoleMember, State: domain.MemberActive, JoinedAt: j.At, Ver: 7,
 		PreviousRole: domain.RoleAdmin, PreviousState: domain.MemberRemoved, RequestID: "r-9", UpdatedBy: "alice", UpdatedAt: j.At,
-		ReadSeq: 55, ReadVer: 9, ClearedBeforeTime: joinAt.Add(time.Minute),
+		ReadSeq: 55, ReadVer: 9, ClearedAt: joinAt.Add(time.Minute),
 	}
 	if back != want {
 		t.Fatalf("Apply(tombstone) = %+v, want %+v", back, want)
@@ -3384,14 +3384,14 @@ type Room struct {
 thay:
 
 ```go
-	ClearedBeforeTime time.Time
+	ClearedAt time.Time
 }
 ```
 
 bằng:
 
 ```go
-	ClearedBeforeTime time.Time
+	ClearedAt time.Time
 	State             MemberState
 	Ver               uint32
 	PreviousRole      Role
@@ -3464,7 +3464,7 @@ func (j Join) Apply(cur Member, user string) Member {
 		Room: j.Room, Tenant: j.Tenant, User: user, Role: RoleMember, State: MemberActive, JoinedAt: j.At,
 		Ver: cur.Ver + 1, PreviousRole: cur.Role, PreviousState: cur.State,
 		RequestID: j.RequestID, UpdatedBy: j.By, UpdatedAt: j.At,
-		ReadSeq: max(cur.ReadSeq, j.ReadSeq), ReadVer: cur.ReadVer + 1, ClearedBeforeTime: cur.ClearedBeforeTime,
+		ReadSeq: max(cur.ReadSeq, j.ReadSeq), ReadVer: cur.ReadVer + 1, ClearedAt: cur.ClearedAt,
 	}
 }
 
@@ -4835,8 +4835,8 @@ thay:
 
 ```go
 	}
-	gotAt, wantAt, gotCleared, wantCleared := got.JoinedAt, want.JoinedAt, got.ClearedBeforeTime, want.ClearedBeforeTime
-	got.JoinedAt, want.JoinedAt, got.ClearedBeforeTime, want.ClearedBeforeTime = time.Time{}, time.Time{}, time.Time{}, time.Time{}
+	gotAt, wantAt, gotCleared, wantCleared := got.JoinedAt, want.JoinedAt, got.ClearedAt, want.ClearedAt
+	got.JoinedAt, want.JoinedAt, got.ClearedAt, want.ClearedAt = time.Time{}, time.Time{}, time.Time{}, time.Time{}
 	if got != want || !gotAt.Equal(wantAt) || !gotCleared.Equal(wantCleared) {
 		t.Fatalf("Member(%d, %q) = %+v at %v cleared %v, want %+v at %v cleared %v", want.Room, want.User, got, gotAt, gotCleared, want, wantAt, wantCleared)
 	}
@@ -4901,9 +4901,9 @@ func joinOf(room uint64, requestID string, after time.Duration, readSeq uint64) 
 }
 
 func sameMember(a, b domain.Member) bool {
-	at := a.JoinedAt.Equal(b.JoinedAt) && a.UpdatedAt.Equal(b.UpdatedAt) && a.ClearedBeforeTime.Equal(b.ClearedBeforeTime)
-	a.JoinedAt, a.UpdatedAt, a.ClearedBeforeTime = time.Time{}, time.Time{}, time.Time{}
-	b.JoinedAt, b.UpdatedAt, b.ClearedBeforeTime = time.Time{}, time.Time{}, time.Time{}
+	at := a.JoinedAt.Equal(b.JoinedAt) && a.UpdatedAt.Equal(b.UpdatedAt) && a.ClearedAt.Equal(b.ClearedAt)
+	a.JoinedAt, a.UpdatedAt, a.ClearedAt = time.Time{}, time.Time{}, time.Time{}
+	b.JoinedAt, b.UpdatedAt, b.ClearedAt = time.Time{}, time.Time{}, time.Time{}
 	return at && a == b
 }
 
@@ -4961,12 +4961,12 @@ func membersAdded(t *testing.T, s MemberRooms) {
 	if _, err := s.ClearHistory(t.Context(), roomA, "carol", baseTime.Add(90*time.Second)); err != nil {
 		t.Fatalf("ClearHistory(carol): %v", err)
 	}
-	carol.ClearedBeforeTime = baseTime.Add(90 * time.Second)
+	carol.ClearedAt = baseTime.Add(90 * time.Second)
 	gone := carol.Next(domain.RoleMember, domain.MemberRemoved, "r-3", "carol", baseTime.Add(3*time.Minute))
 	mustApplyMember(t, s, carol, gone, true)
 	back := joinOf(roomA, "r-4", 4*time.Minute, 5)
 	want := back.Apply(gone, "carol")
-	if want.Ver != 3 || want.ReadSeq != 7 || want.ReadVer != 2 || !want.ClearedBeforeTime.Equal(carol.ClearedBeforeTime) {
+	if want.Ver != 3 || want.ReadSeq != 7 || want.ReadVer != 2 || !want.ClearedAt.Equal(carol.ClearedAt) {
 		t.Fatalf("Join.Apply(tombstone) = %+v, want ver 3, read seq 7 v2 and the clear mark kept", want)
 	}
 	assertMembers(t, "AddMembers(re-add)", mustAdd(t, s, back, "carol"), []domain.Member{want})
@@ -6075,9 +6075,9 @@ Expected: `{7}`; `20 files changed`.
 `members` thành collection clustered `_id = keys.Member(room, user)` (D98); hai index cũ (`{room_id, user_id}` unique, `{tenant, user_id, room_id}`) thay bằng `{room_id:1, state:1, role:1, joined_at:1, user_id:1}` (đếm active phủ index, owner, kế nhiệm, resync theo room) và `{tenant:1, user_id:1, state:1, room_id:1}` (chỉ chuẩn bị cho M3 `ListMyRooms`, không có port). `Bootstrap` gặp `members` cũ không clustered → `ErrNotClustered` (dev đã reset ở Task 1; Step 7 reset lại).
 
 Mongo cài đúng ngữ nghĩa của storetest Task 4 (bảng ở "Hợp đồng chung → Mongo"):
-- Codec `member_codec.go` (chuyển `memberDoc`, `encodeMember`, `decodeMember` khỏi `codec.go`): thứ tự field `_id, room_id, tenant, user_id, role, state, joined_at, ver, previous_role, previous_state, request_id, updated_at, updated_by, cleared_before_time (omitempty), read_seq, read_ver`. `state`, `ver`, `read_seq`, `read_ver` **luôn ghi** (`$lt` không khớp field thiếu). Số ghi int64; đọc qua field int64 của struct (driver nhận int32/int64/double nguyên). `ver > MaxUint32`, số âm, `state ∉ {1,2}`, `previous_state ∉ {0,1,2}` → `errCorrupt`.
-- `AddMembers` = **một** `BulkWrite(ordered:false)` các `UpdateOne({_id}, pipeline, upsert)`; pipeline một `$set` (`member_join.go`): `active := {$eq: ["$state", 1]}`; mọi field ngoài `room_id/tenant/user_id/state` là `{$cond: [active, "$<field>", <mới>]}` nên doc active giữ nguyên byte (không oplog, không feed); chuỗi người dùng qua `$literal`; `ver`/`read_ver` = `$ifNull + 1` (int64), `read_seq = $max(read_seq, j.ReadSeq)`; `cleared_before_time` không đụng. Filter chỉ `_id` bằng nên server tự retry upsert trùng khoá. Sau đó `MembersOf` (primary) trả doc sau ghi.
-- `ApplyMember` = `UpdateOne({_id, ver}, {$set: role, state, previous_role, previous_state, request_id, updated_by, updated_at; $inc: {ver: 1}})`. `MarkRead/MarkUnread` = `FindOneAndUpdate({_id, state: 1, read_seq: {$lt|$gt: s}}, {$set: {read_seq}, $inc: {read_ver: 1}}, After)`; không khớp → `FindOne({_id, state: 1})` (không có → `ErrNotMember`, có → vị trí hiện tại, `false`). `ClearHistory` = `FindOneAndUpdate({_id, state: 1}, {$max: {cleared_before_time}})`. `Rooms.Member` = `FindOne({_id, state: 1})`. **Ba lệnh đọc/clear không dùng pipeline, replace hay upsert.**
+- Codec `member_codec.go` (chuyển `memberDoc`, `encodeMember`, `decodeMember` khỏi `codec.go`): thứ tự field `_id, room_id, tenant, user_id, role, state, joined_at, ver, previous_role, previous_state, request_id, updated_at, updated_by, cleared_at (omitempty), read_seq, read_ver`. `state`, `ver`, `read_seq`, `read_ver` **luôn ghi** (`$lt` không khớp field thiếu). Số ghi int64; đọc qua field int64 của struct (driver nhận int32/int64/double nguyên). `ver > MaxUint32`, số âm, `state ∉ {1,2}`, `previous_state ∉ {0,1,2}` → `errCorrupt`.
+- `AddMembers` = **một** `BulkWrite(ordered:false)` các `UpdateOne({_id}, pipeline, upsert)`; pipeline một `$set` (`member_join.go`): `active := {$eq: ["$state", 1]}`; mọi field ngoài `room_id/tenant/user_id/state` là `{$cond: [active, "$<field>", <mới>]}` nên doc active giữ nguyên byte (không oplog, không feed); chuỗi người dùng qua `$literal`; `ver`/`read_ver` = `$ifNull + 1` (int64), `read_seq = $max(read_seq, j.ReadSeq)`; `cleared_at` không đụng. Filter chỉ `_id` bằng nên server tự retry upsert trùng khoá. Sau đó `MembersOf` (primary) trả doc sau ghi.
+- `ApplyMember` = `UpdateOne({_id, ver}, {$set: role, state, previous_role, previous_state, request_id, updated_by, updated_at; $inc: {ver: 1}})`. `MarkRead/MarkUnread` = `FindOneAndUpdate({_id, state: 1, read_seq: {$lt|$gt: s}}, {$set: {read_seq}, $inc: {read_ver: 1}}, After)`; không khớp → `FindOne({_id, state: 1})` (không có → `ErrNotMember`, có → vị trí hiện tại, `false`). `ClearHistory` = `FindOneAndUpdate({_id, state: 1}, {$max: {cleared_at}})`. `Rooms.Member` = `FindOne({_id, state: 1})`. **Ba lệnh đọc/clear không dùng pipeline, replace hay upsert.**
 - `rooms` thêm `member_count_ver` (omitempty, `Rooms.Get` đọc), `owners_ver`, `pending_owner_change {action, user_id, user_ver, role, successor_id, successor_ver, request_id, updated_by, updated_at}` (chỉ `OwnerState` đọc qua projection). `Create` không ghi `owners_ver`/`member_count_ver` (CAS base 0 = thiếu, `versionIs`).
 - `CountMembers` = đọc witness `{_id: $in}` + `CountDocuments({room_id, state: 1})` trong một session causal majority (`Store.witnessed`, như `Reactions.Count`); itest kiểm explain phủ index `room_id_1_state_1_role_1_joined_at_1_user_id_1`, không `FETCH`.
 - Mọi chuyển `uint64 → int64` qua `toInt64` (gosec G115); room id > MaxInt64 trong ghi → `ErrInvalidArgument`.
@@ -6145,15 +6145,15 @@ bằng:
 
 ```go
 
-func TestMemberCodecReadsClearedBeforeTime(t *testing.T) {
+func TestMemberCodecReadsClearedAt(t *testing.T) {
 	doc := encodeMember(domain.Member{Room: 7_340_000_001, Tenant: "acme", User: "bob", Role: domain.RoleMember, JoinedAt: codecTime}, 7_340_000_001)
 	doc.ClearedBefore = codecTime.Add(time.Hour)
 	_, raw := roundTrip(t, doc)
-	if got := raw.Lookup("cleared_before_time").Time(); !got.Equal(doc.ClearedBefore) {
-		t.Fatalf("stored cleared_before_time = %v, want %v as a date", got, doc.ClearedBefore)
+	if got := raw.Lookup("cleared_at").Time(); !got.Equal(doc.ClearedBefore) {
+		t.Fatalf("stored cleared_at = %v, want %v as a date", got, doc.ClearedBefore)
 	}
 	got, err := decodeMember(doc)
-	if err != nil || !got.ClearedBeforeTime.Equal(codecTime.Add(time.Hour)) {
+	if err != nil || !got.ClearedAt.Equal(codecTime.Add(time.Hour)) {
 		t.Fatalf("decodeMember = %+v, %v; want cleared before %v", got, err, codecTime.Add(time.Hour))
 	}
 }
@@ -6188,14 +6188,14 @@ import (
 
 var memberFields = []string{
 	"_id", "room_id", "tenant", "user_id", "role", "state", "joined_at", "ver", "previous_role", "previous_state",
-	"request_id", "updated_at", "updated_by", "cleared_before_time", "read_seq", "read_ver",
+	"request_id", "updated_at", "updated_by", "cleared_at", "read_seq", "read_ver",
 }
 
 func sampleMember() domain.Member {
 	return domain.Member{
 		Room: 7_340_000_001, Tenant: "acme", User: "bob", Role: domain.RoleAdmin, State: domain.MemberActive, JoinedAt: codecTime,
 		Ver: 3, PreviousRole: domain.RoleMember, PreviousState: domain.MemberActive, RequestID: "r-1", UpdatedAt: codecTime.Add(time.Minute),
-		UpdatedBy: "alice", ClearedBeforeTime: codecTime.Add(time.Hour), ReadSeq: 9, ReadVer: 2,
+		UpdatedBy: "alice", ClearedAt: codecTime.Add(time.Hour), ReadSeq: 9, ReadVer: 2,
 	}
 }
 
@@ -6210,18 +6210,18 @@ func TestMemberCodecRoundTrip(t *testing.T) {
 		t.Fatalf("fields = %v, want %v", got, memberFields)
 	}
 	got, err := decodeMember(back)
-	if err != nil || !got.JoinedAt.Equal(m.JoinedAt) || !got.UpdatedAt.Equal(m.UpdatedAt) || !got.ClearedBeforeTime.Equal(m.ClearedBeforeTime) {
+	if err != nil || !got.JoinedAt.Equal(m.JoinedAt) || !got.UpdatedAt.Equal(m.UpdatedAt) || !got.ClearedAt.Equal(m.ClearedAt) {
 		t.Fatalf("decodeMember = %+v, %v; want %+v", got, err, m)
 	}
-	got.JoinedAt, got.UpdatedAt, got.ClearedBeforeTime = m.JoinedAt, m.UpdatedAt, m.ClearedBeforeTime
+	got.JoinedAt, got.UpdatedAt, got.ClearedAt = m.JoinedAt, m.UpdatedAt, m.ClearedAt
 	if got != m {
 		t.Fatalf("decoded %+v, want %+v", got, m)
 	}
 	fresh := m
-	fresh.ClearedBeforeTime, fresh.ReadSeq, fresh.ReadVer = time.Time{}, 0, 0
+	fresh.ClearedAt, fresh.ReadSeq, fresh.ReadVer = time.Time{}, 0, 0
 	doc, _ = encodeMember(fresh)
 	_, raw = roundTrip(t, doc)
-	if got, want := fieldNames(t, raw), slices.DeleteFunc(slices.Clone(memberFields), func(f string) bool { return f == "cleared_before_time" }); !slices.Equal(got, want) {
+	if got, want := fieldNames(t, raw), slices.DeleteFunc(slices.Clone(memberFields), func(f string) bool { return f == "cleared_at" }); !slices.Equal(got, want) {
 		t.Fatalf("fields without a clear mark = %v, want %v with read_seq and read_ver always written", got, want)
 	}
 }
@@ -6265,7 +6265,7 @@ func TestJoinPipelineKeepsActiveDocsAndTakesStringsLiterally(t *testing.T) {
 	for i, e := range set {
 		names[i] = e.Key()
 	}
-	if want := slices.DeleteFunc(slices.Clone(memberFields), func(f string) bool { return f == "_id" || f == "cleared_before_time" }); !slices.Equal(names, want) {
+	if want := slices.DeleteFunc(slices.Clone(memberFields), func(f string) bool { return f == "_id" || f == "cleared_at" }); !slices.Equal(names, want) {
 		t.Fatalf("$set fields = %v, want %v", names, want)
 	}
 	for field, want := range map[string]string{"user_id": "$u", "request_id": "$r", "updated_by": "$by", "tenant": "acme"} {
@@ -6405,7 +6405,7 @@ func TestMemberDocumentLayoutAndNoOpAdd(t *testing.T) {
 	if _, err := s.AddMembers(t.Context(), j, []string{"bob"}); err != nil {
 		t.Fatalf("AddMembers: %v", err)
 	}
-	want := slices.DeleteFunc(slices.Clone(memberFields), func(f string) bool { return f == "cleared_before_time" })
+	want := slices.DeleteFunc(slices.Clone(memberFields), func(f string) bool { return f == "cleared_at" })
 	for _, user := range []string{"alice", "bob"} {
 		raw := rawMember(t, s, user)
 		if got := fieldNames(t, raw); !slices.Equal(got, want) {
@@ -6495,7 +6495,7 @@ type memberDoc struct {
 	Tenant        string      `bson:"tenant"`
 	Role          domain.Role `bson:"role"`
 	JoinedAt      time.Time   `bson:"joined_at"`
-	ClearedBefore time.Time   `bson:"cleared_before_time,omitempty"`
+	ClearedBefore time.Time   `bson:"cleared_at,omitempty"`
 }
 ```
 
@@ -6544,7 +6544,7 @@ func decodeMember(d memberDoc) (domain.Member, error) {
 	if err != nil {
 		return domain.Member{}, err
 	}
-	return domain.Member{Room: room, Tenant: d.Tenant, User: d.User, Role: d.Role, JoinedAt: d.JoinedAt, ClearedBeforeTime: d.ClearedBefore}, nil
+	return domain.Member{Room: room, Tenant: d.Tenant, User: d.User, Role: d.Role, JoinedAt: d.JoinedAt, ClearedAt: d.ClearedBefore}, nil
 }
 ```
 
@@ -6599,7 +6599,7 @@ type memberDoc struct {
 	RequestID     string      `bson:"request_id"`
 	UpdatedAt     time.Time   `bson:"updated_at"`
 	UpdatedBy     string      `bson:"updated_by"`
-	ClearedBefore time.Time   `bson:"cleared_before_time,omitempty"`
+	ClearedBefore time.Time   `bson:"cleared_at,omitempty"`
 	ReadSeq       int64       `bson:"read_seq"`
 	ReadVer       int64       `bson:"read_ver"`
 }
@@ -6617,7 +6617,7 @@ func encodeMember(m domain.Member) (memberDoc, error) {
 	return memberDoc{
 		ID: keys.Member(m.Room, m.User), Room: room, Tenant: m.Tenant, User: m.User, Role: m.Role, State: int32(m.State),
 		JoinedAt: m.JoinedAt, Ver: int64(m.Ver), PreviousRole: m.PreviousRole, PreviousState: int32(m.PreviousState),
-		RequestID: m.RequestID, UpdatedAt: m.UpdatedAt, UpdatedBy: m.UpdatedBy, ClearedBefore: m.ClearedBeforeTime,
+		RequestID: m.RequestID, UpdatedAt: m.UpdatedAt, UpdatedBy: m.UpdatedBy, ClearedBefore: m.ClearedAt,
 		ReadSeq: readSeq, ReadVer: readVer,
 	}, nil
 }
@@ -6635,7 +6635,7 @@ func decodeMember(d memberDoc) (domain.Member, error) {
 		return domain.Member{}, fmt.Errorf("%w: member state %d after %d", errCorrupt, d.State, d.PreviousState)
 	}
 	return domain.Member{
-		Room: room, Tenant: d.Tenant, User: d.User, Role: d.Role, JoinedAt: d.JoinedAt, ClearedBeforeTime: d.ClearedBefore,
+		Room: room, Tenant: d.Tenant, User: d.User, Role: d.Role, JoinedAt: d.JoinedAt, ClearedAt: d.ClearedBefore,
 		State: state, Ver: ver, PreviousRole: d.PreviousRole, PreviousState: prev, RequestID: d.RequestID,
 		UpdatedAt: d.UpdatedAt, UpdatedBy: d.UpdatedBy, ReadSeq: readSeq, ReadVer: readVer,
 	}, nil
@@ -6874,7 +6874,7 @@ func (s *Store) ClearHistory(ctx context.Context, room uint64, user string, at t
 		return time.Time{}, fmt.Errorf("clear history of %q in room %d: %w", user, room, domain.ErrNotMember)
 	}
 	filter := bson.D{{Key: "room_id", Value: key}, {Key: "user_id", Value: user}}
-	update := bson.D{{Key: "$max", Value: bson.D{{Key: "cleared_before_time", Value: at}}}}
+	update := bson.D{{Key: "$max", Value: bson.D{{Key: "cleared_at", Value: at}}}}
 	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
 	var d memberDoc
 	err = s.members.FindOneAndUpdate(ctx, filter, update, opts).Decode(&d)
@@ -6885,7 +6885,7 @@ bằng:
 
 ```go
 func (s *Store) ClearHistory(ctx context.Context, room uint64, user string, at time.Time) (time.Time, error) {
-	update := bson.D{{Key: "$max", Value: bson.D{{Key: "cleared_before_time", Value: at}}}}
+	update := bson.D{{Key: "$max", Value: bson.D{{Key: "cleared_at", Value: at}}}}
 	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
 	var d memberDoc
 	err := s.members.FindOneAndUpdate(ctx, activeMember(room, user), update, opts).Decode(&d)
@@ -7342,7 +7342,7 @@ Expected: PASS mọi package. Riêng mongostore: `TestMongoMembersContract` (10 
 
 INDEXES.csv:
 - dòng `apps/core/internal/store/mongostore`, cột `purpose`: thay `pin_actions (index {room_id:1, created_at:1}), hidden` bằng `pin_actions (index {room_id:1, created_at:1}), members (clustered, _id = keys.Member(room, user), indexes {room_id:1, state:1, role:1, joined_at:1, user_id:1} and {tenant:1, user_id:1, state:1, room_id:1}; an old unclustered members collection fails with ErrNotClustered), hidden`.
-- dòng `apps/core/internal/store/mongostore`, cột `purpose`: thay `members cleared_before_time (a date) via FindOneAndUpdate $max;` bằng `members cleared_before_time (a date) via FindOneAndUpdate $max on {_id, state: 1}; member set ports (member_codec.go, members.go, member_join.go, member_owner.go, member_count.go, read_position.go): Create inserts creation docs (CreationMember), Member reads {_id, state: 1}; AddMembers = one unordered BulkWrite of _id-only upserts with a $set pipeline ($cond on state == 1 keeps every field so an active doc stays byte-identical; strings as $literal; ver/read_ver $ifNull + 1, read_seq $max) then MembersOf on the primary; ApplyMember = UpdateOne {_id, ver} $set membership fields + $inc ver; MembersOf {_id: $in} in the order of users; Owners/Successor on {room_id, state: 1, role} sorted joined_at, user_id; MembersBetween {room_id, updated_at} sorted updated_at, _id; rooms.owners_ver + pending_owner_change (BeginOwnerChange CAS on owners_ver with pending null, EndOwnerChange $unset while owners_ver matches); CountMembers = witness read + covered count of {room_id, state: 1} in one causal majority session; SetMemberCount CAS on member_count_ver; MarkRead/MarkUnread = FindOneAndUpdate {_id, state: 1, read_seq $lt/$gt} $set read_seq + $inc read_ver (plain operators, never ver); state, ver, read_seq and read_ver are always written;`.
+- dòng `apps/core/internal/store/mongostore`, cột `purpose`: thay `members cleared_at (a date) via FindOneAndUpdate $max;` bằng `members cleared_at (a date) via FindOneAndUpdate $max on {_id, state: 1}; member set ports (member_codec.go, members.go, member_join.go, member_owner.go, member_count.go, read_position.go): Create inserts creation docs (CreationMember), Member reads {_id, state: 1}; AddMembers = one unordered BulkWrite of _id-only upserts with a $set pipeline ($cond on state == 1 keeps every field so an active doc stays byte-identical; strings as $literal; ver/read_ver $ifNull + 1, read_seq $max) then MembersOf on the primary; ApplyMember = UpdateOne {_id, ver} $set membership fields + $inc ver; MembersOf {_id: $in} in the order of users; Owners/Successor on {room_id, state: 1, role} sorted joined_at, user_id; MembersBetween {room_id, updated_at} sorted updated_at, _id; rooms.owners_ver + pending_owner_change (BeginOwnerChange CAS on owners_ver with pending null, EndOwnerChange $unset while owners_ver matches); CountMembers = witness read + covered count of {room_id, state: 1} in one causal majority session; SetMemberCount CAS on member_count_ver; MarkRead/MarkUnread = FindOneAndUpdate {_id, state: 1, read_seq $lt/$gt} $set read_seq + $inc read_ver (plain operators, never ver); state, ver, read_seq and read_ver are always written;`.
 - dòng `apps/core/internal/store/mongostore`, cột `key_symbols`: thay `New;Store;` bằng `New;Store;Store.AddMembers;Store.ApplyMember;Store.MembersOf;Store.Owners;Store.Successor;Store.MembersBetween;Store.OwnerState;Store.BeginOwnerChange;Store.EndOwnerChange;Store.CountMembers;Store.SetMemberCount;Store.MarkRead;Store.MarkUnread;`.
 - dòng `apps/core/internal/store/mongostore`, cột `tests`: thay `itest (explain shows bounded clustered scan)` bằng `itest (explain shows bounded clustered scan; member count covered by the room/state index; an active member add leaves the doc byte-identical)`.
 - dòng `apps/core/internal/store/mongostore`, cột `decisions`: thay `D96;D97` bằng `D96;D97;D98;D99;D100;D102;D105`.
@@ -8004,14 +8004,14 @@ bằng:
 thay:
 
 ```go
-	return m.ClearedBeforeTime, nil
+	return m.ClearedAt, nil
 }
 ```
 
 bằng:
 
 ```go
-	return m.ClearedBeforeTime, nil
+	return m.ClearedAt, nil
 }
 
 func (s *Rooms) logRoom(r domain.Room) {
@@ -16334,7 +16334,7 @@ Lệnh member và đọc đều idempotent theo hợp đồng (`AddMembers` qua 
 | 6 | `e2e-carol` gửi tin, đọc lịch sử, `MarkRead` | cả ba `PERMISSION_DENIED` | — |
 | 7 | `e2e-user` gửi lại `AddMembers(e2e-bob, e2e-carol)` cùng `request_id` `e2e-add-1`; `e2e-carol` đọc lịch sử | `added []` (không thêm lại carol); `PERMISSION_DENIED` | — |
 | 8 | `e2e-bob` `MarkUnread(N)`, rồi `MarkRead(0)` | `{N−1, 2}`, rồi `{N, 3}` | `{room}-rd-e2e-bob-v2` (gửi ngay) và `{room}-rd-e2e-bob-v3` (phần đuôi sau `READ_RECEIPT_WINDOW`) → room (2 member ≤ 20) |
-| 9 | `e2e-bob` `ClearHistory`; `e2e-user` gửi tin seq N+1; `e2e-bob` đọc trang LATEST 2 tin | có `cleared_before_time`; seq N+1; seq N `hidden`, seq N+1 hiện text | — |
+| 9 | `e2e-bob` `ClearHistory`; `e2e-user` gửi tin seq N+1; `e2e-bob` đọc trang LATEST 2 tin | có `cleared_at`; seq N+1; seq N `hidden`, seq N+1 hiện text | — |
 | 10 | `e2e-user` thêm 20 người `e2e-m01..e2e-m20` (`request_id` `e2e-add-2`); **chờ** count; `e2e-bob` `MarkRead(0)` | `added` 20 người ver 1; `{N+1, 4}` | `{room}-members-v3` (22) → room; `{room}-rd-e2e-bob-v4` → **user** bob, `recipient` bob (22 > 20) |
 | 11 | `e2e-user` (owner cuối) rời; lặp lại; `e2e-user` đọc lịch sử | `{changed, ver 2, new_owner e2e-bob}`; lặp `{ver 2}`; `PERMISSION_DENIED` | `{room}-mb-e2e-bob-v3` → room + user bob (`member_role_changed` owner ← admin); `{room}-mb-e2e-user-v2` → room + user e2e-user (`member_removed` left, previous owner) |
 | 12 | `e2e-bob` (owner mới) thêm lại `e2e-user` (`request_id` `e2e-add-3`), lặp; đặt `e2e-user` = owner, lặp; `e2e-user` `MarkRead(0)` | `added [e2e-user:3]` hai lần; `{changed, ver 4, previous member}`/`{ver 4}`; `{N+1, 1}` | `{room}-mb-e2e-user-v3` (`member_added` member) và `{room}-mb-e2e-user-v4` (`member_role_changed` owner ← member), mỗi cái bản room + bản user |
@@ -16351,7 +16351,7 @@ Trước khi bắt đầu, kiểm tên proto và tên trùng (chỉ đọc):
 ```bash
 grep -n "func (c \*coreServiceClient) \(AddMembers\|RemoveMember\|LeaveRoom\|ChangeMemberRole\|MarkRead\|MarkUnread\)" pkg/pb/chatim/v1/core_grpc.pb.go
 grep -n "MemberRole_MEMBER_ROLE_\(OWNER\|ADMIN\|MEMBER\) \|MemberRemovedReason_MEMBER_REMOVED_REASON_\(LEFT\|REMOVED\) " pkg/pb/chatim/v1/*.pb.go | head
-grep -n "func (x \*Event) GetRecipient\|func (x \*Event) GetMemberCountChanged\|func (x \*ReadUpdated) GetReadVer\|func (x \*AddedMember) GetVer\|func (x \*ClearHistoryResponse) GetClearedBeforeTime" pkg/pb/chatim/v1/*.pb.go
+grep -n "func (x \*Event) GetRecipient\|func (x \*Event) GetMemberCountChanged\|func (x \*ReadUpdated) GetReadVer\|func (x \*AddedMember) GetVer\|func (x \*ClearHistoryResponse) GetClearedAt" pkg/pb/chatim/v1/*.pb.go
 grep -n "func wantCode\|func twice\|liveEvents\|func openLive\|memberScenario" tools/corecli/*.go
 grep -n "func RoomSubject\|func UserSubject\|type Scope" tools/corecli/internal/e2e/*.go
 git diff --quiet -- INDEXES.csv; echo "INDEXES dirty=$?"
@@ -17391,8 +17391,8 @@ func (m *memberScenario) clearByTime(context.Context) error {
 	if err != nil {
 		return fmt.Errorf("clear history as %s: %w", m.peer, err)
 	}
-	if resp.GetClearedBeforeTime() == nil {
-		return fmt.Errorf("clear history as %s returned no cleared_before_time", m.peer)
+	if resp.GetClearedAt() == nil {
+		return fmt.Errorf("clear history as %s returned no cleared_at", m.peer)
 	}
 	sent, _, err := m.cl.SendMessage(m.as(m.st.User), &chatimv1.SendMessageRequest{RoomId: m.st.Room, Cid: afterClearCID, Text: e2e.TextFor(afterClearCID)})
 	if err != nil {
@@ -17761,7 +17761,7 @@ Khẳng định trên hạ tầng thật (skip khi thiếu `CHATIM_IT_*`), dùng
 - (e) **Read receipt**: với `READ_RECEIPT_MAX_MEMBERS=2`, group 3 người → `read_updated` chỉ trên subject user (`recipient`); DM → subject room; `MarkUnread` rồi `MarkRead` trong cửa sổ → bản cuối tới.
 - (f) **Người bị xoá bị từ chối ngay**: `bob` gửi hai tin (cache actor có `bob`), `alice` xoá `bob` cùng core → lệnh gửi kế tiếp của `bob` `PERMISSION_DENIED` ngay (không đợi TTL 10s), `GetHistory`, `MarkRead` cũng vậy; `alice` vẫn gửi được.
 - (g) **Retry cùng `request_id` sau khi bị xoá không thêm lại**: thêm `erin` với `request_id` R, lặp R → cùng kết quả; xoá `erin`; lặp R → `added` rỗng, `erin` vẫn tombstone và bị từ chối đọc; `request_id` mới → `erin` vào lại ở ver 3.
-- (h) **Clear history theo thời gian**: `bob` clear → mốc T = `cleared_before_time` đã lưu, `ver` không đổi; tin trước T ẩn, tin sau T hiện; bị xoá rồi thêm lại vẫn giữ T, `read_seq` nâng lên tin mới nhất.
+- (h) **Clear history theo thời gian**: `bob` clear → mốc T = `cleared_at` đã lưu, `ver` không đổi; tin trước T ẩn, tin sau T hiện; bị xoá rồi thêm lại vẫn giữ T, `read_seq` nâng lên tin mới nhất.
 - (i) **Đọc/clear không vào work stream**: subscribe subject work stream; thêm `dave` → record `g:{room}-mb-dave-v1` tới; `MarkRead`, `MarkUnread`, `ClearHistory` của `dave` rồi một tin mốc → record `m:` của tin mốc tới mà không có record `g:` nào khác; doc `dave` giữ `ver 1`, `updated_at` cũ.
 
 Không có bước "thấy fail": các test xác nhận hành vi của Task 2–17. Test fail ở lần chạy đầu là lỗi của task trước: dừng và báo (không sửa test cho qua). Gợi ý: (a) pending còn → `Guard`/`finish` (Task 11) hoặc registry (Task 16); (b) hai owner còn hoặc không còn owner → CAS `owners_ver` (Task 5/11); (c) bản user không tới → `recipient`/RePublish (Task 3); (d) count kẹt → `member_counter` (Task 16) hoặc feed `updatedFields.ver` (Task 6); (e) subject sai → `readcast` (Task 14); (f) gửi lần ba thành công → `ForgetMembers` (Task 9/12); (g) `erin` vào lại → `dedupe.Requests`/`AddedBy` (Task 8/12); (h) mốc khác → `ClearHistory` (Task 1/5); (i) có record `g:` thừa → lệnh đọc đụng `ver` hoặc feed lọc sai (Task 5/6).
@@ -17926,10 +17926,10 @@ func clearHistoryAs(t *testing.T, client chatimv1.CoreServiceClient, as, roomID 
 	resp, err := retryingUnavailable(callerAs(t.Context(), as), func(ctx context.Context) (*chatimv1.ClearHistoryResponse, error) {
 		return client.ClearHistory(ctx, &chatimv1.ClearHistoryRequest{RoomId: roomID})
 	})
-	if err != nil || resp.GetClearedBeforeTime() == nil {
+	if err != nil || resp.GetClearedAt() == nil {
 		t.Fatalf("ClearHistory as %s = %v, %v; want a cleared before time", as, resp, err)
 	}
-	return resp.GetClearedBeforeTime().AsTime()
+	return resp.GetClearedAt().AsTime()
 }
 
 func ownerRepaired(ctx context.Context, cfg config.Config) (float64, error) {
@@ -18354,8 +18354,8 @@ func TestRealInfraClearHistoryHidesByTimeAndSurvivesARejoin(t *testing.T) {
 	cleared := clearHistoryAs(t, client, "bob", roomID)
 	st := itStore(it, core)
 	before := storedMember(t, st, room, "bob")
-	if !before.ClearedBeforeTime.Equal(cleared) || before.Ver != 1 {
-		t.Fatalf("bob = %+v, want cleared_before_time %v and version 1 (clear never touches ver)", before, cleared)
+	if !before.ClearedAt.Equal(cleared) || before.Ver != 1 {
+		t.Fatalf("bob = %+v, want cleared_at %v and version 1 (clear never touches ver)", before, cleared)
 	}
 	sendAs(t, client, itUser, roomID, "after-1", "after the clear")
 	if resp, err := removeMemberAs(t, client, itUser, roomID, "bob"); err != nil || resp.GetVer() != 2 {
@@ -18366,7 +18366,7 @@ func TestRealInfraClearHistoryHidesByTimeAndSurvivesARejoin(t *testing.T) {
 		t.Fatalf("re-add = %v, want bob at version 3", resp)
 	}
 	after := storedMember(t, st, room, "bob")
-	if !after.ClearedBeforeTime.Equal(cleared) || after.ReadSeq != 5 || after.State != domain.MemberActive {
+	if !after.ClearedAt.Equal(cleared) || after.ReadSeq != 5 || after.State != domain.MemberActive {
 		t.Fatalf("bob after the re-add = %+v, want the clear mark kept and read_seq raised to 5", after)
 	}
 	history := historyAs(t, client, "bob", roomID)
@@ -18452,7 +18452,7 @@ Ghi chú (i): subscription NATS thường trên subject của work stream thấy
 **Step 3: Biên dịch**
 
 Run: `make -s go ARGS="vet ./apps/core/"` rồi `make -s go ARGS="test -race -shuffle=on ./apps/core/"`
-Expected: vet sạch; test PASS (itest skip). Lỗi tên (`st.MembersOf`, `st.Owners`, `st.OwnerState`, `st.BeginOwnerChange`, getter proto `GetVer`, `GetReadVer`, `GetRequestId`, `GetClearedBeforeTime`) nghĩa là Part A/B đặt tên khác hợp đồng: chỉ sửa tên trong test, ghi vào báo cáo. `wc -l apps/core/*member*_test.go apps/core/it_members_test.go` → mỗi file < 200 (`it_members_test.go` ~170, `member_owner_integration_test.go` ~183, `member_events_integration_test.go` ~117, `member_access_integration_test.go` ~111, `member_feed_integration_test.go` ~55). `member_owner_integration_test.go` ≥ 195 → chuyển `TestRealInfraTwoOwnersRemovingEachOtherLeaveOneOwner` sang file mới `member_race_integration_test.go`.
+Expected: vet sạch; test PASS (itest skip). Lỗi tên (`st.MembersOf`, `st.Owners`, `st.OwnerState`, `st.BeginOwnerChange`, getter proto `GetVer`, `GetReadVer`, `GetRequestId`, `GetClearedAt`) nghĩa là Part A/B đặt tên khác hợp đồng: chỉ sửa tên trong test, ghi vào báo cáo. `wc -l apps/core/*member*_test.go apps/core/it_members_test.go` → mỗi file < 200 (`it_members_test.go` ~170, `member_owner_integration_test.go` ~183, `member_events_integration_test.go` ~117, `member_access_integration_test.go` ~111, `member_feed_integration_test.go` ~55). `member_owner_integration_test.go` ≥ 195 → chuyển `TestRealInfraTwoOwnersRemovingEachOtherLeaveOneOwner` sang file mới `member_race_integration_test.go`.
 
 **Step 4: Chạy trên hạ tầng thật**
 
@@ -18612,7 +18612,7 @@ between(DESIGN, "| Lớp | Ví dụ | Ghi | Event | Sửa lỗi |", "Mỗi tính
 | State có version (projection) | `messages` hiện tại, `rooms.pins`, room activity | Effect `set … where ver < v` từ fact (ghim: fold fact sau `pin_ver` + CAS `pin_ver == p`, D92); không bao giờ từ chối fact đã commit | Không có event riêng (event thuộc fact) | Reconciler chạy lại projection |
 | Tập (target, user) | reaction (một emoji mỗi (user, tin), D88), member (một doc mỗi (room, user), D98), thread_subs, bookmark | Một lệnh atomic trên doc `_id = target│user`, mỗi doc một counter `ver` riêng (chỉ tăng, được có lỗ); cùng giá trị thì doc giữ nguyên, không ghi; gỡ/rời để lại tombstone (D89, D98). Member: `AddMembers` = upsert pipeline `$cond` + `request_id` (D99); xoá/rời/đổi role = update có điều kiện `ver`; lệnh chạm owner qua CAS `rooms.owners_ver` (D100) | Id theo doc + `ver` (reaction `{room}-{th}-{seq}-{user}-n{ver}`, D93; member `{room}-mb-{user}-v{ver}` + bản user `…-u`, D104); feed insert/replace và update có `ver`, doc hiện tại thắng | Worker phát lại doc hiện tại (`reaction_event`, `member_event`); `owner_guard` hoàn tất thay đổi owner dở (D100) |
 | Aggregate theo target | số reaction theo emoji, `thread_count`, `member_count` | Recount CAS-ver với witness (§7, D90); `member_count` chỉ worker ghi, hội tụ ~1s (D102) | `counts_changed` `{target}-{counter}-v{ver}` (reaction `{room}-{th}-{seq}-reactions-v{v}`, D93); `member_count_changed` `{room}-members-v{member_count_ver}` (D102) | Touch của worker (`reaction_counter`, `member_counter`) |
-| Giá trị theo người đọc | unread, `mention_unread`, view ẩn/đã xoá | Không lưu; tính lúc đọc từ fact thưa (`hidden`) và mốc `members.cleared_before_time` (D97) | Không | Không cần |
+| Giá trị theo người đọc | unread, `mention_unread`, view ẩn/đã xoá | Không lưu; tính lúc đọc từ fact thưa (`hidden`) và mốc `members.cleared_at` (D97) | Không | Không cần |
 | Tần suất cao gộp được | vị trí đọc, đánh dấu chưa đọc | `members.read_seq/read_ver`: `MarkRead` chỉ nâng (`$lt`), `MarkUnread` chỉ hạ (`$gt`), mỗi lần đổi `read_ver + 1`; chỉ toán tử thường, không đụng `ver` nên không vào feed (D105) | `read_updated` `{room}-rd-{user}-v{read_ver}` qua `readcast`: lần đầu gửi ngay, phần đuôi gộp trong `READ_RECEIPT_WINDOW` mỗi (room, user); subject room khi DM hoặc nhóm ≤ `READ_RECEIPT_MAX_MEMBERS`, không thì subject user (D105) | Không ack mark, không đường bù (best-effort) |
 | Ephemeral | typing, presence | Không lưu; gateway ↔ NATS core, không qua core | Subject `live.*.eph.*` | Không |
 """)
@@ -18677,7 +18677,7 @@ between(DESIGN, "| Collection | `_id` / khoá | Lớp | Trường chính | Index
 | `previous_role`, `previous_state` | string, int32 | lần đổi cuối đến từ đâu (event phân biệt thêm, xoá, rời, đổi role) |
 | `request_id` | string | lệnh làm lần đổi cuối (`AddMembers` của client; tạo room = `{room}-created`; lệnh khác do server sinh) |
 | `updated_at`, `updated_by` | date, string | lần đổi membership cuối; `updated_by` rỗng khi `owner_guard` sửa |
-| `cleared_before_time` | date | mốc clear history, chỉ `$max` (D97) |
+| `cleared_at` | date | mốc clear history, chỉ `$max` (D97) |
 | `read_seq`, `read_ver` | int64 | vị trí đọc và số lần nó đổi (D105) |
 
 `message_edits`: `_id` (28B), `room_id`, `tenant`, `kind` (1 sửa, 2 xoá), `created_by`, `text` (bản mới; xoá dọn text của bản ≤ v−1), `previous_text` (chỉ ở v1: bản gốc), `created_at`.
@@ -18711,7 +18711,7 @@ between(DESIGN, "### 6.4 Tập và vị trí đọc", "## 7. Counter theo target
 - Reaction [Đã xây, M2b.3, D88, D89, D93, D95]: một emoji cho mỗi (user, tin); emoji khác thay emoji cũ, emoji rỗng là gỡ ("nhiều trên một user" là reply/mention, M2c). Doc `reactions {_id: message_key│user, message_key, room_id, tenant, user_id, emoji, previous_emoji, ver, updated_at}`. Đặt = một upsert `FindOneAndUpdate({_id}, pipeline, upsert, trả doc trước ghi)`; pipeline dùng `$cond`: emoji đang lưu bằng emoji mới thì giữ nguyên `previous_emoji/emoji/ver/updated_at`, nên doc không đổi byte nào (không có entry oplog, không có change trên feed); khác thì `previous_emoji` = emoji cũ, `emoji` = emoji mới, `ver` = `ifNull(ver, 0) + 1`, `updated_at`. Filter chỉ là phép bằng trên `_id` unique nên server tự retry upsert bị trùng khoá: không có vòng thử lại, không đọc lại. Kết quả suy từ doc trước ghi: không có doc → `ver` 1; cùng emoji → no-op; khác → `ver+1`, `previous_emoji` = emoji cũ. Gỡ = `FindOneAndUpdate` filter `{_id, emoji ≠ ""}`, không upsert, để tombstone `emoji: ""` giữ `ver` (không bao giờ chèn tombstone khi chưa có doc). Đúng trạng thái sẵn → không ghi, không event, không touch. Không cid: lệnh là trạng thái mong muốn, retry trễ có thể đưa về trạng thái cũ (chấp nhận cho lớp tập). `ValidateEmoji`: UTF-8 hợp lệ, 1–32 byte, không ký tự điều khiển. Emoji phải nằm trong danh sách cố định `REACTION_EMOJIS` (mặc định `👍,❤️,😂,😮,😢,🙏`, D95); ngoài danh sách → `INVALID_ARGUMENT` (`domain.ErrEmojiNotAllowed`), kiểm trước membership/policy; độ dài danh sách là giới hạn số loại emoji mỗi tin. `GetReactionSettings` trả danh sách theo thứ tự config để frontend chỉ hiện các emoji đó. Tin đã xoá: đặt → `FAILED_PRECONDITION`, gỡ vẫn được. Quyền `react_message` (mặc định mọi member, D94). Sau khi ghi: enqueue `reaction_changed` (id `{room}-{th}-{seq}-{u}-n{ver}`, payload `{user, emoji, previous_emoji, change}`) → touch counter inline (§7) → enqueue `counts_changed` nếu `v` tăng → trả `{change, reactions}`. Worker `reaction_event` (delay `RECONCILE_DELAY`, không ack mark): `Get` doc; `ver == rec.ver` → phát doc hiện tại, `ver > rec.ver` → bỏ (record mới hơn lo), `ver < rec.ver` → `ErrStaleRead`, Nak. Vì vậy event trung gian có thể mất (fast path lỡ mà doc đã đổi tiếp); chỉ trạng thái cuối được bảo đảm (lớp tập, D93). `GetHistory` chỉ trả số đếm (`Message.reactions`); emoji của chính người đọc để M3 (`GetReactions`).
 - Member [Đã xây, M2b.4, D98–D101, D104, D106–D108]: lớp tập, một doc `members` mỗi (room, user) (field ở §5), mỗi doc một counter `ver`; không có log fact member, không đánh số dày theo room.
   - Quyền (D101, owner chốt 2026-10-06): action `add_members`, `remove_member`, `leave_room`, `change_member_role`, `mark_read`; `access.Request` thêm `Target` (doc đích) và `Role` (role yêu cầu). `DefaultPolicy`: owner mọi việc; admin thêm người và xoá người có role `member`; chỉ owner đổi role, xoá admin/owner; ai cũng tự rời. Một group nhiều owner. DM cố định 2 người: thêm/xoá/rời/đổi role → `FAILED_PRECONDITION` (`ErrDirectRoom`). `RemoveMember(self)` → `INVALID_ARGUMENT`; người chưa từng là member rời → `PERMISSION_DENIED`; rời lần nữa (tombstone) → no-op; xoá/đổi role người không active → `NOT_FOUND`.
-  - `AddMembers(users ≤ MEMBER_BATCH_MAX, request_id)` (D99, D107): validate → `Admit` + `Allow` → `Requests.Begin` trên khoá `chatim:req:{room}:{caller}:{request_id}` (RAM LRU rồi Redis dedupe, TTL `CID_COMMITTED_TTL`): đã xong → trả doc vẫn mang đúng `request_id` và người gọi (`domain.AddedBy`), nên retry trễ không thêm lại người đã bị xoá giữa chừng; đang chạy → `UNAVAILABLE` → `Messages.Last` một lần → một `BulkWrite(ordered:false)` upsert pipeline trên `_id`: doc active giữ nguyên byte (không oplog); thiếu hoặc tombstone → `state 1`, role luôn `member`, `joined_at`, `ver+1`, `previous_role/previous_state`, `request_id`, `updated_*`, `read_seq = max(read_seq, seq cuối)`, `read_ver+1`, giữ `cleared_before_time`; chuỗi người dùng qua `$literal`; filter chỉ `_id` nên server tự retry upsert trùng khoá → đọc lại doc sau ghi → `ForgetMembers` → enqueue event → Commit request. Người mới hoặc thêm lại thấy toàn bộ lịch sử, tin cũ coi như đã đọc.
+  - `AddMembers(users ≤ MEMBER_BATCH_MAX, request_id)` (D99, D107): validate → `Admit` + `Allow` → `Requests.Begin` trên khoá `chatim:req:{room}:{caller}:{request_id}` (RAM LRU rồi Redis dedupe, TTL `CID_COMMITTED_TTL`): đã xong → trả doc vẫn mang đúng `request_id` và người gọi (`domain.AddedBy`), nên retry trễ không thêm lại người đã bị xoá giữa chừng; đang chạy → `UNAVAILABLE` → `Messages.Last` một lần → một `BulkWrite(ordered:false)` upsert pipeline trên `_id`: doc active giữ nguyên byte (không oplog); thiếu hoặc tombstone → `state 1`, role luôn `member`, `joined_at`, `ver+1`, `previous_role/previous_state`, `request_id`, `updated_*`, `read_seq = max(read_seq, seq cuối)`, `read_ver+1`, giữ `cleared_at`; chuỗi người dùng qua `$literal`; filter chỉ `_id` nên server tự retry upsert trùng khoá → đọc lại doc sau ghi → `ForgetMembers` → enqueue event → Commit request. Người mới hoặc thêm lại thấy toàn bộ lịch sử, tin cũ coi như đã đọc.
   - Xoá/rời/đổi role không chạm owner: một `updateOne({_id, ver: k})` `$set` + `$inc ver`; trượt → đọc lại đích, kiểm lại, ≤3 lượt rồi `ErrRetryLater`. Rời/bị xoá giữ role trên tombstone; mất quyền đọc ngay (`Rooms.Member` lọc `state = 1`).
   - Lệnh chạm owner (owner rời/bị xoá/bị hạ, thăng owner; D100): đọc `rooms {owners_ver, pending_owner_change}`; có pending → hoàn tất trước; đọc owner active qua index (`Owners(room, 2)`); owner cuối tự hạ → `FAILED_PRECONDITION` (`ErrLastOwner`); owner cuối rời → kế nhiệm = admin vào sớm nhất, không có thì member vào sớm nhất, hoà theo user id (`Successor`); CAS `rooms {owners_ver: k, pending_owner_change: null}` → `{owners_ver: k+1, pending_owner_change: {…, user_ver, successor_ver}}`; thăng kế nhiệm **trước**, rồi hạ/xoá đích, mỗi bước là update có điều kiện `ver` đã ghi trong pending (chạy lại an toàn); xoá pending khi `owners_ver == k+1`; trượt CAS → ≤3 lượt rồi `ErrRetryLater`. Bất biến OW1: group còn member active thì còn owner active ở mọi thời điểm; đường thường không bao giờ ghi lên owner. Worker `owner_guard` hoàn tất pending của core đã chết, hoặc chọn kế nhiệm cho group không còn owner (`request_id = owners-v{k}`, `updated_by` rỗng).
   - `member_count` (D102): aggregate, chỉ worker `member_counter` ghi, hội tụ sau ~`MEMBER_COUNT_DELAY` (1s); lệnh không đụng.
@@ -18720,7 +18720,7 @@ between(DESIGN, "### 6.4 Tập và vị trí đọc", "## 7. Counter theo target
   - Ngân sách thêm k ở nhóm 5K: 2 read admit + 1 Redis + 1 `Last` + 1 bulk k upsert + 1 read k doc + (1+k) event; worker ≤1 write activity/room/lô + 1 recount/room/lô + 2k publish (bỏ trùng). Xoá/rời/đổi role: 2 read + 1 read đích + 1 write + 2 event. Đường owner: thêm 1 read state, ≤2 read index, 1 CAS, 2–3 write (hiếm). Thêm 500 người sinh 500 bản user.
   - Giới hạn: khoảng hở kiểm–ghi (admin bị hạ ngay sau khi lệnh xoá của họ đã được duyệt thì lệnh vẫn ghi; không transaction nhiều doc); rolling deploy phải nâng mọi core cùng lúc (D96, D103, D104).
 - Vị trí đọc [Đã xây, M2b.4, D105]: `members.read_seq/read_ver`. `MarkRead(seq)` = `FindOneAndUpdate({_id, state: 1, read_seq: {$lt: s}}, {$set: {read_seq: s}, $inc: {read_ver: 1}})` (seq 0 hoặc quá seq cuối = tin mới nhất, kẹp theo seq cuối thật); `MarkUnread(seq)` cùng dạng với `$gt` → `read_seq = seq − 1` (chỉ hạ, kiểu Slack); không đổi → trả vị trí hiện tại, không ghi, không event. Chỉ toán tử thường, không bao giờ pipeline/replace/upsert, không đụng `ver` nên không vào feed (vẫn là entry oplog). Quyền `mark_read` (cả `MarkUnread`). Đổi → `readcast.Offer`: lần đầu mỗi (room, user) gửi ngay; trong `READ_RECEIPT_WINDOW` (1s, 1–2s) giữ bản `read_ver` lớn nhất rồi gửi khi hết cửa sổ; map tối đa 65536 khoá, đầy hoặc sau `Close` → gửi thẳng, đếm `read_events_unbatched_total`. Event `read_updated {user, read_seq, read_ver}` id `{room}-rd-{user}-v{read_ver}`: subject room khi DM hoặc `member_count ≤ READ_RECEIPT_MAX_MEMBERS` (20, trần cứng 50), không thì subject user (đồng bộ thiết bị). Best-effort, không đường bù. Đếm unread để M3 (§9.3). SDK nâng `read_seq` khi user gửi tin, để tin của chính mình không tích sau vị trí đọc.
-- Ẩn phía tôi [Đã xây, M2b.2]: upsert `hidden {user_id, room_id, thread_root, seq}` (`mutate.Hide`: `Admit` → tin phải tồn tại → policy `HideMessage` với `Author`; mặc định cho phép). Clear history [Đã xây, M2b.2; theo thời gian từ M2b.4, D97]: `FindOneAndUpdate({_id, state: 1}, {$max: {cleared_before_time: giờ server}})` (`mutate.ClearHistory`, quyền `ClearHistory`), trả giá trị sau cập nhật nên không bao giờ lùi; ẩn tin `created_at ≤` mốc trên mọi timeline; lệch vài ms quanh lúc bấm chấp nhận; `ClearHistoryRequest.up_to_seq` reserved. Cả hai không phát event (owner 2026-10-05; đồng bộ đa thiết bị ở M3/M4) và chỉ áp lúc đọc qua `view.HideForViewer` (D85, D97).
+- Ẩn phía tôi [Đã xây, M2b.2]: upsert `hidden {user_id, room_id, thread_root, seq}` (`mutate.Hide`: `Admit` → tin phải tồn tại → policy `HideMessage` với `Author`; mặc định cho phép). Clear history [Đã xây, M2b.2; theo thời gian từ M2b.4, D97]: `FindOneAndUpdate({_id, state: 1}, {$max: {cleared_at: giờ server}})` (`mutate.ClearHistory`, quyền `ClearHistory`), trả giá trị sau cập nhật nên không bao giờ lùi; ẩn tin `created_at ≤` mốc trên mọi timeline; lệch vài ms quanh lúc bấm chấp nhận; `ClearHistoryRequest.up_to_seq` reserved. Cả hai không phát event (owner 2026-10-05; đồng bộ đa thiết bị ở M3/M4) và chỉ áp lúc đọc qua `view.HideForViewer` (D85, D97).
 """)
 
 line(DESIGN, "## 7. Counter theo target [Đã xây cho reaction, M2b.3]", "## 7. Counter theo target [Đã xây cho reaction M2b.3, `member_count` M2b.4]")
@@ -18763,8 +18763,8 @@ sub(DESIGN, "quét `message_edits`/`pin_actions` theo `{room, ts}`, chạy lại
 ```python
 from m2b4_docs_lib import DESIGN, after, line, sub
 
-sub(DESIGN, "2. Ẩn: seq ≤ `cleared_before_seq`; seq trong `hidden`", "2. Ẩn: tin có `created_at ≤ cleared_before_time` của người đọc (D97); seq trong `hidden`")
-sub(DESIGN, "bước 2 là `view.HideForViewer` (seq ≤ `Member.ClearedBeforeSeq` hoặc trong", "bước 2 là `view.HideForViewer` (`CreatedAt ≤ Member.ClearedBeforeTime` từ M2b.4, D97, trước đó seq ≤ `ClearedBeforeSeq`; hoặc trong")
+sub(DESIGN, "2. Ẩn: seq ≤ `cleared_before_seq`; seq trong `hidden`", "2. Ẩn: tin có `created_at ≤ cleared_at` của người đọc (D97); seq trong `hidden`")
+sub(DESIGN, "bước 2 là `view.HideForViewer` (seq ≤ `Member.ClearedBeforeSeq` hoặc trong", "bước 2 là `view.HideForViewer` (`CreatedAt ≤ Member.ClearedAt` từ M2b.4, D97, trước đó seq ≤ `ClearedBeforeSeq`; hoặc trong")
 line(DESIGN, "- **Phòng của tôi:** đọc `user_rooms` theo prefix `u` (D72).", "- **Phòng của tôi:** range trên index `members {tenant, user_id, state, room_id}` (D98; `user_rooms {u│r}` của D72 bỏ ở M2b.4, trở lại dạng projection khi shard); unread đếm từ `members.read_seq` (D105).")
 sub(DESIGN, "client kết nối → lấy room từ `user_rooms` →", "client kết nối → lấy room từ index `members {tenant, user_id, state, room_id}` →")
 sub(DESIGN, "`member_removed` → unsubscribe ngay; khoảng rò bằng độ trễ thu hồi.", "`member_removed` → unsubscribe ngay; khoảng rò bằng độ trễ thu hồi. Core phát bản user của event member (`recipient`, D104) và `read_updated` của nhóm lớn (D105) từ M2b.4.")
@@ -18782,12 +18782,12 @@ sub(DESIGN, "đếm lại sau `REACTION_COUNT_DELAY` |", "đếm lại sau `REAC
 after(DESIGN, "| Chi phí recount target nóng |", """| Recount `member_count` channel lớn | Trung bình | ~200K khoá phủ index (20–60ms) ≤ 1 lần/s/room nóng; tăng delay cho room lớn trước, bucket `hash(user) % K` khi metric cho thấy cần (milestone Channel, D102) |
 | Read update vẫn vào oplog | Thấp | `MarkRead`/`MarkUnread` không vào feed nhưng vẫn là entry oplog; định cỡ oplog theo số thật (§2.3) |""")
 sub(DESIGN, "(tinh chỉnh bởi D90: witness thay `afterClusterTime`)", "(tinh chỉnh bởi D90: witness thay `afterClusterTime`; `member_count` dùng chung `counter.Loop`, chỉ worker ghi, D102)")
-sub(DESIGN, "`user_rooms {u│r}`; `hidden` thưa + `cleared_before_seq`, query theo lô", "`user_rooms {u│r}` (bỏ ở M2b.4, D98: index `members {tenant, user_id, state, room_id}`, projection lại khi shard); `hidden` thưa + `cleared_before_seq` (thay bởi `cleared_before_time`, D97), query theo lô")
-sub(DESIGN, "| D85 | View: tin có `seq ≤ cleared_before_seq` hoặc", "| D85 | View: tin có `seq ≤ cleared_before_seq` (từ M2b.4: `created_at ≤ cleared_before_time`, D97) hoặc")
+sub(DESIGN, "`user_rooms {u│r}`; `hidden` thưa + `cleared_before_seq`, query theo lô", "`user_rooms {u│r}` (bỏ ở M2b.4, D98: index `members {tenant, user_id, state, room_id}`, projection lại khi shard); `hidden` thưa + `cleared_before_seq` (thay bởi `cleared_at`, D97), query theo lô")
+sub(DESIGN, "| D85 | View: tin có `seq ≤ cleared_before_seq` hoặc", "| D85 | View: tin có `seq ≤ cleared_before_seq` (từ M2b.4: `created_at ≤ cleared_at`, D97) hoặc")
 after(DESIGN, "| D95 |", """| D96 | Tên field đầy đủ, từ tiếng Anh cơ bản cho mọi collection trừ `messages` (bảng §5): counter chỉ tăng, được có lỗ, đuôi `_ver` (`ver`, `read_ver`, `member_count_ver`, `owners_ver`, `pin_ver`); audit `updated_at/updated_by`; fact `created_at/created_by`; `reconciler_state {resume_token, cluster_time}`; bỏ đường đọc vị trí feed cũ `_id: "messages"`. Không có đường nâng cấp tại chỗ: dev `make infra-reset`, prod go-live từ bản này | Giữ tên ngắn; đổi dần theo collection; `version`, `change_number` | Owner chốt 2026-10-07: tên đọc được khi vận hành và trong plan; `messages` giữ tên ngắn vì là collection lớn nhất; chưa có dữ liệu prod |
-| D97 | Clear history theo thời gian: `members.cleared_before_time` = giờ server lúc gọi (`$max`, ms), ẩn tin `created_at ≤` mốc trên mọi timeline; chỉ member active; `ClearHistoryRequest.up_to_seq` reserved, response trả `cleared_before_time`; lệch vài ms quanh lúc bấm chấp nhận (sửa D72, D85 phần `cleared_before_seq`) | `cleared_before_seq` theo seq | Seq chỉ đúng cho một timeline; thread (M2c) cần một mốc chung cho mọi timeline; owner chốt 2026-10-07 |
+| D97 | Clear history theo thời gian: `members.cleared_at` = giờ server lúc gọi (`$max`, ms), ẩn tin `created_at ≤` mốc trên mọi timeline; chỉ member active; `ClearHistoryRequest.up_to_seq` reserved, response trả `cleared_at`; lệch vài ms quanh lúc bấm chấp nhận (sửa D72, D85 phần `cleared_before_seq`) | `cleared_before_seq` theo seq | Seq chỉ đúng cho một timeline; thread (M2c) cần một mốc chung cho mọi timeline; owner chốt 2026-10-07 |
 | D98 | Member là lớp tập: `members` clustered `_id = keys.Member(room, user)`; `state` 1/2 luôn ghi rõ; `ver` (≤ MaxUint32) tăng mỗi lần đổi membership; `previous_role/previous_state`, `request_id`, `updated_*`; đọc/clear/mute không đụng `ver`; index `{room_id, state, role, joined_at, user_id}` (đếm, owner, kế nhiệm) và `{tenant, user_id, state, room_id}` (phòng của user); không quét khoảng `_id` (BinData so độ dài trước); bỏ `user_rooms` của D72 tới khi shard | Fact `member_actions` mv dày + projection settle-first (plan M2b.4 bản đầu, chưa thực thi); `user_rooms` song song | Owner chốt 2026-10-07: không đánh số dày ở chỗ mới (mv dày tuần tự hoá mọi lệnh member của một room, ~100–200 lệnh/s); mỗi doc một counter đủ cho id event và CAS; ít collection hơn |
-| D99 | `AddMembers` mang `request_id` bắt buộc, dedupe `chatim:req:{room}:{user}:{request_id}` (RAM LRU + Redis dedupe, TTL `CID_COMMITTED_TTL`, cùng Lua và batcher với cid); một `BulkWrite(ordered:false)` upsert pipeline `$cond` (doc active giữ nguyên byte); kết quả suy từ doc sau ghi (`domain.AddedBy`: active, cùng `request_id` và người gọi); luôn role `member`; `read_seq = max(read_seq, seq cuối)`; giữ `cleared_before_time` | Trạng thái mong muốn không id; `FindOneAndUpdate` từng user | Retry trễ không được thêm lại người đã bị xoá giữa chừng; một bulk cho k user; dùng lại máy chống trùng có sẵn |
+| D99 | `AddMembers` mang `request_id` bắt buộc, dedupe `chatim:req:{room}:{user}:{request_id}` (RAM LRU + Redis dedupe, TTL `CID_COMMITTED_TTL`, cùng Lua và batcher với cid); một `BulkWrite(ordered:false)` upsert pipeline `$cond` (doc active giữ nguyên byte); kết quả suy từ doc sau ghi (`domain.AddedBy`: active, cùng `request_id` và người gọi); luôn role `member`; `read_seq = max(read_seq, seq cuối)`; giữ `cleared_at` | Trạng thái mong muốn không id; `FindOneAndUpdate` từng user | Retry trễ không được thêm lại người đã bị xoá giữa chừng; một bulk cho k user; dùng lại máy chống trùng có sẵn |
 | D100 | Xoá/rời/đổi role không chạm owner = một update có điều kiện `ver`; lệnh chạm owner = CAS `rooms {owners_ver: k, pending_owner_change: null}` → thăng kế nhiệm trước → hạ/xoá đích (mỗi bước CAS theo `ver` ghi trong pending) → xoá pending khi `owners_ver == k+1`; ≤3 lượt rồi `ErrRetryLater`; owner cuối không tự hạ (`ErrLastOwner`); owner cuối rời → admin vào sớm nhất, không có thì member vào sớm nhất, hoà theo user id; effect `owner_guard` hoàn tất pending cũ hoặc chọn kế nhiệm | Transaction nhiều doc; cấm owner cuối rời; kiểm owner trong RAM | Bất biến OW1 giữ ở mọi thời điểm không cần transaction; đường thường không bao giờ ghi lên owner; owner chốt 2026-10-06 |
 | D101 | Action `add_members`, `remove_member`, `leave_room`, `change_member_role`, `mark_read`; `Request.Target`, `Request.Role`; `DefaultPolicy`: owner mọi việc, admin thêm người và xoá member thường, chỉ owner đổi role hay xoá admin/owner, ai cũng tự rời. DM → `FAILED_PRECONDITION`; `RemoveMember(self)` → `INVALID_ARGUMENT`; người chưa từng là member rời → `PERMISSION_DENIED`; tombstone rời → no-op; xoá/đổi role người không active → `NOT_FOUND` | Luật cứng trong `mutate`; một owner duy nhất | Owner chốt 2026-10-06, như D86: luật nằm ở `access.Policy`, module policy chat (Phase 2) thay được |
 | D102 | `member_count` là aggregate (tinh chỉnh D67): chỉ worker `member_counter` ghi, recount có witness `(user, max ver)`, đếm phủ index `{room_id, state}`, CAS `member_count_ver`; event `member_count_changed`; `counter` tổng quát hoá thành `Loop[V]`; hội tụ ~1s | Lệnh tự `$inc`; gập số từ fact | Owner chốt 2026-10-07: chấp nhận trễ ~1s; một đường ghi duy nhất, đúng sau mọi đua |
@@ -18807,7 +18807,7 @@ from m2b4_docs_lib import DATE, README, ROADMAP, after, before, line, sub
 sub(ROADMAP, "> Cập nhật: 2026-10-06 (M2b.3 xong;", f"> Cập nhật: {DATE} (M2b.4 xong, M2b.0–M2b.4 chờ một PR merge `main`;")
 line(ROADMAP, "- Mỗi plan có file tóm tắt đi kèm", """- Mỗi plan có file tóm tắt **kỹ thuật** đi kèm `docs/plans/<plan>-summary.md` (owner chốt 2026-10-06, sửa 2026-10-07): tiếng Việt, không có code, viết trước khi thực thi; owner đọc và phản biện, plan chỉ được thực thi khi owner đã duyệt bản tóm tắt. Nội dung bắt buộc: luồng chính (từng bước, ai đọc và ghi gì); field và collection (tên đầy đủ, kiểu, index); cơ chế (CAS, idempotent, effect, id event); quyết định mới (số D, phương án bị loại, lý do); chi phí (read, write, event mỗi lệnh ở nhóm 5K và channel 200K); rủi ro và giới hạn còn lại; cách kiểm (unit, itest, e2e). Plan đầy đủ dành cho AI thực thi.
 - Tên field của collection (trừ `messages`) là từ tiếng Anh cơ bản, đầy đủ; counter chỉ tăng, được có lỗ, có đuôi `_ver`; audit là `updated_at/updated_by`; fact dùng `created_at/created_by`; không dùng `version`, `change_number` (D96). Không đánh số dày ở chỗ mới nếu lớp tập đủ (D98).""")
-line(ROADMAP, "| 1 | M2b.4 — Member + vị trí đọc |", "| 1 | M2b.4 — Member + vị trí đọc | Đổi tên field mọi collection trừ `messages` (D96); clear history theo thời gian `cleared_before_time` (D97); member lớp tập `members {_id: room│user}` + `ver` mỗi doc (D98); `AddMembers` có `request_id` dedupe (D99); lệnh chạm owner qua CAS `rooms.owners_ver` + `pending_owner_change`, effect `owner_guard` (D100, OW1/D108); quyền owner/admin/member, DM cố định (D101); `member_count` recount chỉ worker, hội tụ ~1s (D102); feed + effect + resync member (D103); event member bản room + bản user qua `recipient` và RePublish `evt.*.*.*.*` (D104); vị trí đọc `read_seq/read_ver` + `read_updated` gộp qua `readcast` (D105); cache member của actor theo thế hệ + TTL (D106); `MEMBER_BATCH_MAX` (D107) | ✅ `dev-done` (trên `feat/m2b`, chưa merge `main`) — [plan](plans/2026-10-06-m2b4-members-read.md), [tóm tắt](plans/2026-10-06-m2b4-members-read-summary.md); 6 RPC, package `ownership`, `readcast`, `pkg/lru`, 3 effect mới, `owner_repaired_total` + `read_events_unbatched_total`, 17 luật alert, resync quét `members`, e2e phase 5 (D96–D108) |")
+line(ROADMAP, "| 1 | M2b.4 — Member + vị trí đọc |", "| 1 | M2b.4 — Member + vị trí đọc | Đổi tên field mọi collection trừ `messages` (D96); clear history theo thời gian `cleared_at` (D97); member lớp tập `members {_id: room│user}` + `ver` mỗi doc (D98); `AddMembers` có `request_id` dedupe (D99); lệnh chạm owner qua CAS `rooms.owners_ver` + `pending_owner_change`, effect `owner_guard` (D100, OW1/D108); quyền owner/admin/member, DM cố định (D101); `member_count` recount chỉ worker, hội tụ ~1s (D102); feed + effect + resync member (D103); event member bản room + bản user qua `recipient` và RePublish `evt.*.*.*.*` (D104); vị trí đọc `read_seq/read_ver` + `read_updated` gộp qua `readcast` (D105); cache member của actor theo thế hệ + TTL (D106); `MEMBER_BATCH_MAX` (D107) | ✅ `dev-done` (trên `feat/m2b`, chưa merge `main`) — [plan](plans/2026-10-06-m2b4-members-read.md), [tóm tắt](plans/2026-10-06-m2b4-members-read-summary.md); 6 RPC, package `ownership`, `readcast`, `pkg/lru`, 3 effect mới, `owner_repaired_total` + `read_events_unbatched_total`, 17 luật alert, resync quét `members`, e2e phase 5 (D96–D108) |")
 line(ROADMAP, "| 1 | M2c — Thread & tiện ích |", "| 1 | M2c — Thread & tiện ích | Thread (`thread_count` là counter), mention, reply/forward (cid), bookmark | ⏭ Tiếp theo — cần plan (sau khi merge `feat/m2b` vào `main`) |")
 sub(ROADMAP, "`ListMyRooms` qua `user_rooms`;", "`ListMyRooms` qua index `members {tenant, user_id, state, room_id}` (D98; `user_rooms` trở lại dạng projection khi shard); unread tính từ `members.read_seq` (D105);")
 sub(ROADMAP, "`member_removed` → unsubscribe;", "`member_removed` → unsubscribe (bản user của event member và `read_updated` có từ M2b.4, D104, D105);")
@@ -18844,9 +18844,9 @@ sub(README, "Mặc định các mốc là 26.2s (gồm", "Mặc định các m�
 ```python
 from m2b4_docs_lib import CLAUDE, after, before, line, sub
 
-after(CLAUDE, "- M2b.3 (plan `docs/plans/2026-10-06-m2b3-reactions-pins.md`)", "- M2b.4 (plan `docs/plans/2026-10-06-m2b4-members-read.md`, summary `docs/plans/2026-10-06-m2b4-members-read-summary.md`): full English field names for every collection but `messages` (D96); time-based clear history `members.cleared_before_time` (D97); members as a set class, one clustered `members` doc per (room, user) with its own `ver` and a tombstone `state: 2` (D98); `AddMembers` with a deduplicated `request_id` (D99); owner-affecting commands through a CAS on `rooms.owners_ver` + `pending_owner_change`, successor first, and the `owner_guard` effect (D100, OW1/D108); owner/admin/member policy, DMs fixed (D101); `member_count` recounted only by the `member_counter` worker (D102); feed kind `MemberChanged` and member resync (D103); member events with a room copy and a user copy through the envelope `recipient` and RePublish `evt.*.*.*.*` (D104); read position `read_seq/read_ver` with plain operators and `read_updated` through `readcast` (D105); actor member cache by generation + 10s TTL (D106); `MEMBER_BATCH_MAX` (D107); corecli member commands and e2e phase 5.")
+after(CLAUDE, "- M2b.3 (plan `docs/plans/2026-10-06-m2b3-reactions-pins.md`)", "- M2b.4 (plan `docs/plans/2026-10-06-m2b4-members-read.md`, summary `docs/plans/2026-10-06-m2b4-members-read-summary.md`): full English field names for every collection but `messages` (D96); time-based clear history `members.cleared_at` (D97); members as a set class, one clustered `members` doc per (room, user) with its own `ver` and a tombstone `state: 2` (D98); `AddMembers` with a deduplicated `request_id` (D99); owner-affecting commands through a CAS on `rooms.owners_ver` + `pending_owner_change`, successor first, and the `owner_guard` effect (D100, OW1/D108); owner/admin/member policy, DMs fixed (D101); `member_count` recounted only by the `member_counter` worker (D102); feed kind `MemberChanged` and member resync (D103); member events with a room copy and a user copy through the envelope `recipient` and RePublish `evt.*.*.*.*` (D104); read position `read_seq/read_ver` with plain operators and `read_updated` through `readcast` (D105); actor member cache by generation + 10s TTL (D106); `MEMBER_BATCH_MAX` (D107); corecli member commands and e2e phase 5.")
 sub(CLAUDE, "room activity `ls/lm/lc/ab` with `$max`", "room activity `last_seq/last_message_at/last_change_at/activity_bucket` (short names until M2b.4) with `$max`")
-sub(CLAUDE, "clear history (`members.cb`)", "clear history (`members.cb`; the time mark `members.cleared_before_time` since M2b.4, D97)")
+sub(CLAUDE, "clear history (`members.cb`)", "clear history (`members.cb`; the time mark `members.cleared_at` since M2b.4, D97)")
 sub(CLAUDE, "with decisions D61–D95", "with decisions D61–D108")
 sub(CLAUDE, "M2b.3 (reactions + pins) is done on `feat/m2b`; next is M2b.4 (members + read position); its plan is not written yet.", "M2b.4 (members + read position) is done on `feat/m2b`; next is one PR that merges `feat/m2b` (M2b.0–M2b.4) into `main` once the owner agrees, then M2c (threads and extras), whose plan is not written yet.")
 sub(CLAUDE, "then edit seq 1 and delete seq 2, then react to seq 3 and pin seq 4", "then edit seq 1 and delete seq 2, then react to seq 3 and pin seq 4, then the member phase (DM fixed, add/promote/remove, same request_id retry, unread/read, clear history, read receipts on the user subject of a big group, the last owner leaving and coming back)")
@@ -18868,7 +18868,7 @@ sub(CLAUDE, "- `CreateRoom` publishes `room_created` on the fast path too;", "- 
 sub(CLAUDE, "(scans rooms with `ab >= hour(from)` or `ca` in range, replays the main timeline backwards, then the room's `message_edits`, `reactions` (current docs) and `pin_actions` by `{r, ts}`, into the work stream at `-rate`)", "(scans rooms with `activity_bucket >= hour(from)` or `created_at` in range, replays the main timeline backwards, then the room's `message_edits` and `pin_actions` by `{room_id, created_at}`, `reactions` (current docs) by `{room_id, updated_at}` and `members` (current docs) by `updated_at`, into the work stream at `-rate`)")
 sub(CLAUDE, "`{_id: \"changes\", at: $$CLUSTER_TIME}` only when no `at` exists", "`{_id: \"changes\", cluster_time: $$CLUSTER_TIME}` only when no `cluster_time` exists")
 line(CLAUDE, "- Room activity (`rooms.ls/lm/lc/ab`, D69)", "- Room activity (`rooms.last_seq/last_message_at/last_change_at/activity_bucket`, D69) is written only by the `room_activity` worker effect; `activity_bucket` is the hour of the last change and is indexed (`{activity_bucket: 1}`, plus `{created_at: 1}` for the resync query).")
-sub(CLAUDE, "- Hide upserts `hidden {u, r, th, s}`; clear raises `members.cb` with `$max` (`up_to_seq` 0 or past the end is clamped to the last seq).", "- Hide upserts `hidden {user_id, room_id, thread_root, seq}`; clear raises `members.cleared_before_time` to the server time with `$max` (active members only; `view` hides messages with `created_at` up to the mark on every timeline; `up_to_seq` is reserved; D97).")
+sub(CLAUDE, "- Hide upserts `hidden {u, r, th, s}`; clear raises `members.cb` with `$max` (`up_to_seq` 0 or past the end is clamped to the last seq).", "- Hide upserts `hidden {user_id, room_id, thread_root, seq}`; clear raises `members.cleared_at` to the server time with `$max` (active members only; `view` hides messages with `created_at` up to the mark on every timeline; `up_to_seq` is reserved; D97).")
 sub(CLAUDE, "(`_id` = message key + user; fields `k r t u e pe n ts`; indexes `{k, e}`, `{r, ts}`; D88)", "(`_id` = message key + user; fields `message_key room_id tenant user_id emoji previous_emoji ver updated_at`; indexes `{message_key, emoji}`, `{room_id, updated_at}`; D88, D96)")
 sub(CLAUDE, "`$cond` keeps `pe/e/n/ts` when", "`$cond` keeps `previous_emoji/emoji/ver/updated_at` when")
 sub(CLAUDE, "otherwise `n+1` and `pe` = the old emoji.", "otherwise `ver+1` and `previous_emoji` = the old emoji.")
@@ -18878,8 +18878,8 @@ sub(CLAUDE, "`n < N` is `store.ErrStaleRead`), runs the covered aggregate on `{k
 sub(CLAUDE, "`pinproj.Projector.Current` folds `rooms.pins/pv`", "`pinproj.Projector.Current` folds `rooms.pins/pin_ver`")
 before(CLAUDE, "**Permission hook and reader pipeline (`access`, `view`).**", """**Members and read position (`mutate`, `ownership`, `readcast`, `effects`; D96–D108).**
 - `AddMembers`, `RemoveMember`, `LeaveRoom`, `ChangeMemberRole`, `MarkRead` and `MarkUnread` run in `mutate`, called by `grpcsrv` (`grpcsrv/members.go`, `grpcsrv/read.go`), routed by the room's slot. Policy (D101): owners do everything; admins add people and remove plain members; only owners change roles or remove admins and owners; anyone leaves. A DM is `FAILED_PRECONDITION` (`ErrDirectRoom`); `RemoveMember(self)` is `INVALID_ARGUMENT`; the last owner cannot step down (`ErrLastOwner`).
-- `members` doc (D98): clustered `_id` = room + user; `role`, `state` (1 active, 2 tombstone), `joined_at`, `ver`, `previous_role/previous_state`, `request_id`, `updated_at/updated_by`, `cleared_before_time`, `read_seq/read_ver`; indexes `{room_id, state, role, joined_at, user_id}` and `{tenant, user_id, state, room_id}`. `Rooms.Member` returns `ErrNotMember` unless `state` is 1, so a removed user loses read and send at once.
-- `AddMembers` (D99, D107): ≤ `MEMBER_BATCH_MAX` (500) users and a required `request_id`, deduplicated on `chatim:req:{room}:{caller}:{request_id}` (`dedupe.Requests`: RAM LRU, then the dedupe Redis). Done → returns the docs still carrying that request id (`domain.AddedBy`), so a late retry never re-adds someone removed in between; busy → `UNAVAILABLE`. Writes one `BulkWrite(ordered:false)` of pipeline upserts on `_id` that leave an active doc byte-identical; a (re)join is always role `member`, raises `read_seq` to the last seq and keeps `cleared_before_time`.
+- `members` doc (D98): clustered `_id` = room + user; `role`, `state` (1 active, 2 tombstone), `joined_at`, `ver`, `previous_role/previous_state`, `request_id`, `updated_at/updated_by`, `cleared_at`, `read_seq/read_ver`; indexes `{room_id, state, role, joined_at, user_id}` and `{tenant, user_id, state, room_id}`. `Rooms.Member` returns `ErrNotMember` unless `state` is 1, so a removed user loses read and send at once.
+- `AddMembers` (D99, D107): ≤ `MEMBER_BATCH_MAX` (500) users and a required `request_id`, deduplicated on `chatim:req:{room}:{caller}:{request_id}` (`dedupe.Requests`: RAM LRU, then the dedupe Redis). Done → returns the docs still carrying that request id (`domain.AddedBy`), so a late retry never re-adds someone removed in between; busy → `UNAVAILABLE`. Writes one `BulkWrite(ordered:false)` of pipeline upserts on `_id` that leave an active doc byte-identical; a (re)join is always role `member`, raises `read_seq` to the last seq and keeps `cleared_at`.
 - Remove, leave and role changes that do not touch an owner are one `updateOne({_id, ver: k})`; anything that touches the owner role goes through `ownership.Coordinator.Apply` (D100): CAS `rooms {owners_ver: k, pending_owner_change: null}`, promote the successor first (earliest admin, else earliest member, ties by user id), then demote or remove the target, each step conditional on the `ver` recorded in the pending change, then clear it; ≤3 rounds, then `ErrRetryLater`. The `owner_guard` effect finishes a pending change left by a dead core or promotes a successor in a group with no owner (`owner_repaired_total`, alert `ChatimOwnerRepaired`).
 - `member_count` (D102) is written only by the `member_counter` effect (`counter.Loop` + `counter.MemberToucher`: witnesses, covered count, CAS `member_count_ver`), converging after ~`MEMBER_COUNT_DELAY` (1s); event `member_count_changed` `{room}-members-v{ver}`.
 - Events (D104, no ack marks): `member_added`, `member_removed` (reason removed or left), `member_role_changed`; a room copy `{room}-mb-{user}-v{ver}` and a user copy `…-u` with the envelope `recipient` on `evt.{t}.user.{u}.{type}`; a doc created with the room has only the user copy. The stream RePublishes `evt.*.*.*.*` to `live.{1}.{2}.{3}.evt.{4}`; an old core restarting rewrites the rule, so upgrade every core together.
@@ -18889,7 +18889,7 @@ before(CLAUDE, "**Permission hook and reader pipeline (`access`, `view`).**", ""
 """)
 sub(CLAUDE, "every other action for any member (D86);", "every other message action for any member (D86); member actions follow D101;")
 sub(CLAUDE, "edit/delete/hide/clear/react/pin/unpin in `mutate`", "edit/delete/hide/clear/react/pin/unpin, member commands and read positions in `mutate`")
-sub(CLAUDE, "(seq ≤ `ClearedBeforeSeq` or hidden by the reader", "(`CreatedAt` ≤ `ClearedBeforeTime` or hidden by the reader")
+sub(CLAUDE, "(seq ≤ `ClearedBeforeSeq` or hidden by the reader", "(`CreatedAt` ≤ `ClearedAt` or hidden by the reader")
 sub(CLAUDE, "`counter_repaired_total{counter}` counts summaries the workers rewrote.", "`counter_repaired_total{counter}` counts summaries the workers rewrote. Member effects add `member_counter` and `member_event` (both counters) and `owner_guard` (only `effect_dropped_total`); `member_counter` is the only writer of `member_count`, so it never counts into `counter_repaired_total`; `owner_repaired_total` counts owner repairs (OW1); `read_events_unbatched_total` counts read receipts sent without coalescing (diagnostic, no rule).")
 sub(CLAUDE, "`deploy/prometheus/alerts.yml` (16 rules)", "`deploy/prometheus/alerts.yml` (17 rules)")
 sub(CLAUDE, "Start order: publisher → flusher", "Start order: publisher → read events (`readcast`) → flusher")
