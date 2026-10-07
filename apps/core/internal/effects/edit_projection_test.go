@@ -48,8 +48,8 @@ func TestEditProjectionPurgesOlderTextOnDelete(t *testing.T) {
 		t.Fatalf("stored = %+v, want deleted at v2 and the late v1 ignored", got)
 	}
 	v1, err := rg.edits.At(t.Context(), store.MsgKey{Room: room, Seq: 1}, 1)
-	if err != nil || v1.Text != "" || v1.Prev != "" {
-		t.Fatalf("v1 = %+v, %v; want its text and prev purged", v1, err)
+	if err != nil || v1.Text != "" {
+		t.Fatalf("v1 = %+v, %v; want its text purged", v1, err)
 	}
 }
 
@@ -71,6 +71,16 @@ func TestEditProjectionRetriesWhenTheStoreFails(t *testing.T) {
 	}
 	if errs := eff.Effect().Run(t.Context(), editRecs(room, 1, 1)); len(errs) != 1 || !errors.Is(errs[0], errBoom) || eff.Dropped() != 0 {
 		t.Fatalf("errs = %v, dropped %d; want a retryable failure", errs, eff.Dropped())
+	}
+}
+
+func TestEditProjectionSkipsTheOriginalRow(t *testing.T) {
+	eff, err := effects.NewEditProjection(effects.EditProjectionDeps{Edits: brokenStore{}, Messages: brokenStore{}, Purger: brokenStore{}})
+	if err != nil {
+		t.Fatalf("NewEditProjection: %v", err)
+	}
+	if errs := eff.Effect().Run(t.Context(), editRecs(room, 1, 0)); !allNil(errs, 1) || eff.Dropped() != 0 {
+		t.Fatalf("errs = %v, dropped %d; want nil without reading the store and no drop", errs, eff.Dropped())
 	}
 }
 

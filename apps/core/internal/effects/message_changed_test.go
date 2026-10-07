@@ -120,6 +120,20 @@ func TestMsgChangedRetriesWhenTheStoreFails(t *testing.T) {
 	}
 }
 
+func TestMessageChangedSkipsTheOriginalRow(t *testing.T) {
+	js := &publishtest.JetStream{}
+	eff, err := effects.NewMessageChanged(
+		effects.MessageChangedDeps{Edits: brokenStore{}, Messages: brokenStore{}, Rooms: brokenStore{}, JS: js},
+		effects.MessageChangedConfig{SubjectRoot: "evt"},
+	)
+	if err != nil {
+		t.Fatalf("NewMessageChanged: %v", err)
+	}
+	if errs := eff.Effect().Run(t.Context(), editRecs(room, 1, 0)); !allNil(errs, 1) || eff.Dropped() != 0 || len(js.Attempts()) != 0 {
+		t.Fatalf("errs = %v, dropped %d, attempts %d; want nil, no store read, no drop and no event", errs, eff.Dropped(), len(js.Attempts()))
+	}
+}
+
 func TestMsgChangedWaitsForThePubAck(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rg := newEditRig(t)

@@ -18,7 +18,7 @@ func factCases() []editCase {
 		{"latest is the highest version of that message only", factsLatest},
 		{"history ascends after a version up to the limit", factsHistory},
 		{"between returns the room facts in a time range by time then key", factsBetween},
-		{"purge text clears text and prev up to a version of that message only", factsPurge},
+		{"purge text clears text up to a version of that message only", factsPurge},
 		{"invalid facts and limits are rejected", factsInvalid},
 	}
 }
@@ -128,7 +128,7 @@ func factsPurge(t *testing.T, s editStores) {
 	if err := s.edits.PurgeText(t.Context(), key, 0); err != nil {
 		t.Fatalf("PurgeText(up to 0): %v", err)
 	}
-	v1.Text, v1.Prev, v2.Text = "", "", ""
+	v1.Text, v2.Text = "", ""
 	for _, want := range []domain.Edit{v1, v2, v3, neighbour} {
 		assertEditAt(t, s.edits, want)
 	}
@@ -141,8 +141,7 @@ func factsInvalid(t *testing.T, s editStores) {
 		"zero version":            func(e *domain.Edit) { e.Version = 0 },
 		"version above max int32": func(e *domain.Edit) { e.Version = math.MaxInt32 + 1 },
 		"zero kind":               func(e *domain.Edit) { e.Kind = 0 },
-		"prev on a delete fact":   func(e *domain.Edit) { e.Kind, e.Text = domain.EditDelete, "" },
-		"prev after version 1":    func(e *domain.Edit) { e.Version = 2 },
+		"original kind above 0":   func(e *domain.Edit) { e.Kind = domain.EditOriginal },
 	} {
 		e := fact(roomA, mainThread, 1, 1)
 		mutate(&e)

@@ -11,7 +11,7 @@ import (
 
 func TestMessageChangedPicksTheEventByFactKind(t *testing.T) {
 	m := sample()
-	edit := domain.Edit{Room: m.Room, Seq: m.Seq, Version: 1, Kind: domain.EditText, Tenant: "acme", By: "alice", Text: "sửa", Prev: m.Text, At: sentAt}
+	edit := domain.Edit{Room: m.Room, Seq: m.Seq, Version: 1, Kind: domain.EditText, Tenant: "acme", By: "alice", Text: "sửa", At: sentAt}
 	if got, want := pbconv.MessageChanged(domain.RoomGroup, m, edit), pbconv.MessageEdited(domain.RoomGroup, m, edit); !proto.Equal(got, want) {
 		t.Fatalf("edit fact: got %v, want %v", got, want)
 	}

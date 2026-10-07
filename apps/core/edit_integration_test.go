@@ -122,7 +122,7 @@ func TestRealInfraWorkersProjectAnEditWrittenOutsideTheCore(t *testing.T) {
 	st := itStore(it, core)
 	fact := domain.Edit{
 		Room: room, Seq: seq, Version: 1, Kind: domain.EditText, Tenant: itTenant, By: itUser,
-		Text: "edited outside the core", Prev: "original", At: time.Now().UTC().Truncate(time.Millisecond),
+		Text: "edited outside the core", At: time.Now().UTC().Truncate(time.Millisecond),
 	}
 	if err := st.Append(t.Context(), fact); err != nil {
 		t.Fatalf("append an edit outside the core: %v", err)
@@ -161,8 +161,11 @@ func TestRealInfraDeletePurgesOlderTextsAndBlocksLaterEdits(t *testing.T) {
 		t.Fatalf("msg_deleted event = %v, want version 2 without text", ev)
 	}
 	facts, err := itStore(it, core).History(t.Context(), store.MsgKey{Room: room, Seq: seq}, 0, store.MaxEditPage)
-	if err != nil || len(facts) != 2 || facts[0].Text != "" || facts[0].Prev != "" || facts[1].Kind != domain.EditDelete {
-		t.Fatalf("facts after delete = %+v, %v; want v1 without text or prev, then the delete", facts, err)
+	if err != nil || len(facts) != 2 || facts[0].Text != "" || facts[1].Kind != domain.EditDelete {
+		t.Fatalf("facts after delete = %+v, %v; want v1 without text, then the delete", facts, err)
+	}
+	if row, err := itStore(it, core).At(t.Context(), store.MsgKey{Room: room, Seq: seq}, 0); err != nil || row.Kind != domain.EditOriginal || row.Text != "" {
+		t.Fatalf("original row after delete = %+v, %v; want it kept without text", row, err)
 	}
 	if v := editHistory(t, client, roomID, seq); len(v) != 0 {
 		t.Fatalf("edit history of a deleted message = %v, want none", v)

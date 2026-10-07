@@ -64,7 +64,7 @@ func (s *Edits) Latest(ctx context.Context, key store.MsgKey) (domain.Edit, bool
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	line := s.facts[key]
-	if len(line) == 0 {
+	if len(line) == 0 || line[len(line)-1].Version == 0 {
 		return domain.Edit{}, false, nil
 	}
 	return line[len(line)-1], true, nil
@@ -120,7 +120,7 @@ func (s *Edits) PurgeText(ctx context.Context, key store.MsgKey, upTo uint32) er
 	line := s.facts[key]
 	for i := range line {
 		if line[i].Version <= upTo {
-			line[i].Text, line[i].Prev = "", ""
+			line[i].Text = ""
 		}
 	}
 	return nil

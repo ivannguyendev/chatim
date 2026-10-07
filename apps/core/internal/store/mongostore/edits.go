@@ -66,14 +66,11 @@ func (s *Store) Between(ctx context.Context, room uint64, from, to time.Time, li
 }
 
 func (s *Store) PurgeText(ctx context.Context, key store.MsgKey, upTo uint32) error {
-	if upTo == 0 {
-		return ctx.Err()
-	}
 	filter := bson.D{{Key: "_id", Value: bson.D{
-		{Key: "$gte", Value: keys.Edit(key.Room, key.Thread, key.Seq, 1)},
+		{Key: "$gte", Value: keys.Edit(key.Room, key.Thread, key.Seq, 0)},
 		{Key: "$lte", Value: keys.Edit(key.Room, key.Thread, key.Seq, upTo)},
 	}}}
-	update := bson.D{{Key: "$unset", Value: bson.D{{Key: "text", Value: ""}, {Key: "p", Value: ""}}}}
+	update := bson.D{{Key: "$unset", Value: bson.D{{Key: "text", Value: ""}}}}
 	if _, err := s.edits.UpdateMany(ctx, filter, update); err != nil {
 		return fmt.Errorf("purge text of %d/%d/%d up to v%d: %w", key.Room, key.Thread, key.Seq, upTo, err)
 	}

@@ -65,6 +65,9 @@ func (e *MessageChanged) run(ctx context.Context, recs []work.Record) []error {
 	errs := make([]error, len(recs))
 	var pending []pendingAck
 	for i, r := range recs {
+		if r.Version == 0 {
+			continue
+		}
 		ev, err := e.event(ctx, r)
 		switch {
 		case gone(err):

@@ -27,15 +27,25 @@ func ValidateEdit(e domain.Edit) error {
 		return err
 	}
 	switch {
-	case e.Version == 0 || e.Version > math.MaxInt32:
+	case e.Version > math.MaxInt32:
 		return invalid("version")
-	case e.Kind != domain.EditText && e.Kind != domain.EditDelete:
+	case e.Kind != domain.EditText && e.Kind != domain.EditDelete && e.Kind != domain.EditOriginal:
 		return invalid("edit kind")
-	case e.Prev != "" && (e.Kind != domain.EditText || e.Version != 1):
-		return invalid("prev")
+	case (e.Version == 0) != (e.Kind == domain.EditOriginal):
+		return invalid("version")
 	default:
 		return nil
 	}
+}
+
+func ValidateProjectedEdit(e domain.Edit) error {
+	if err := ValidateEdit(e); err != nil {
+		return err
+	}
+	if e.Kind == domain.EditOriginal {
+		return invalid("edit kind")
+	}
+	return nil
 }
 
 func ValidateLimit(limit, maxLimit int) error {

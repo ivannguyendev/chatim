@@ -65,7 +65,7 @@ func TestDecodeChangeReadsEdits(t *testing.T) {
 	}
 	got, err := decodeChange(changeOn(t, editsCollection, doc))
 	if err != nil || got.Kind != store.EditInserted || store.EditKeyOf(got.Edit) != store.EditKeyOf(e) || got.Edit.Version != e.Version ||
-		got.Edit.Text != e.Text || got.Edit.Prev != e.Prev || !got.CommittedAt.Equal(codecTime) || got.Msg.Room != 0 || got.Room.ID != 0 {
+		got.Edit.Text != e.Text || !got.CommittedAt.Equal(codecTime) || got.Msg.Room != 0 || got.Room.ID != 0 {
 		t.Fatalf("edit change = %+v, %v", got, err)
 	}
 }

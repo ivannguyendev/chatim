@@ -14,9 +14,6 @@ import (
 func (w world) edit(t *testing.T, room, seq uint64, version uint32, at time.Time) string {
 	t.Helper()
 	e := domain.Edit{Room: room, Seq: seq, Version: version, Kind: domain.EditText, Tenant: "acme", By: "alice", Text: "edited", At: at}
-	if version == 1 {
-		e.Prev = "hi"
-	}
 	if err := w.edits.Append(t.Context(), e); err != nil {
 		t.Fatalf("Append(%d/%d v%d): %v", room, seq, version, err)
 	}

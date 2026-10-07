@@ -53,6 +53,9 @@ func (e *EditProjection) run(ctx context.Context, recs []work.Record) []error {
 }
 
 func (e *EditProjection) apply(ctx context.Context, r work.Record) error {
+	if r.Version == 0 {
+		return nil
+	}
 	key := recordKey(r)
 	fact, err := e.deps.Edits.At(ctx, key, r.Version)
 	if err != nil {

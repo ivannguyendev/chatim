@@ -79,7 +79,10 @@ func (m *Mutator) commit(ctx context.Context, c change, msg domain.Message) (dom
 	case c.base != max(msg.Version, latest.Version):
 		return domain.Edit{}, domain.ErrVersionConflict
 	}
-	fact := c.fact(msg, next, m.now())
+	if err := m.keepOriginal(ctx, c, msg, next); err != nil {
+		return domain.Edit{}, err
+	}
+	fact := c.fact(next, m.now())
 	switch err := m.d.Edits.Append(ctx, fact); {
 	case errors.Is(err, store.ErrEditExists):
 		return m.recognize(ctx, c, next)
@@ -87,6 +90,20 @@ func (m *Mutator) commit(ctx context.Context, c change, msg domain.Message) (dom
 		return domain.Edit{}, err
 	}
 	return fact, nil
+}
+
+func (m *Mutator) keepOriginal(ctx context.Context, c change, msg domain.Message, next uint32) error {
+	if next != 1 || c.kind != domain.EditText {
+		return nil
+	}
+	row := domain.Edit{
+		Room: c.key.Room, Thread: c.key.Thread, Seq: c.key.Seq, Version: 0, Kind: domain.EditOriginal,
+		Tenant: c.tenant, By: msg.From, Text: msg.Text, At: msg.CreatedAt,
+	}
+	if err := m.d.Edits.Append(ctx, row); err != nil && !errors.Is(err, store.ErrEditExists) {
+		return err
+	}
+	return nil
 }
 
 func (m *Mutator) recognize(ctx context.Context, c change, version uint32) (domain.Edit, error) {
@@ -114,13 +131,9 @@ func (c change) matches(e domain.Edit) bool {
 	return e.By == c.user && e.Kind == c.kind && e.Text == c.text
 }
 
-func (c change) fact(msg domain.Message, version uint32, at time.Time) domain.Edit {
-	f := domain.Edit{
+func (c change) fact(version uint32, at time.Time) domain.Edit {
+	return domain.Edit{
 		Room: c.key.Room, Thread: c.key.Thread, Seq: c.key.Seq, Version: version, Kind: c.kind,
 		Tenant: c.tenant, By: c.user, Text: c.text, At: at,
 	}
-	if version == 1 && c.kind == domain.EditText {
-		f.Prev = msg.Text
-	}
-	return f
 }

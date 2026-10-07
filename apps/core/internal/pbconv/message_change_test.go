@@ -89,26 +89,25 @@ func TestMessageDeletedEnvelope(t *testing.T) {
 	}
 }
 
-func TestMessageVersionsStartWithTheOriginalOnlyOnTheFirstPage(t *testing.T) {
+func TestMessageVersionsMapsEachRowInVerOrder(t *testing.T) {
 	m := sample()
-	v1 := domain.Edit{Room: m.Room, Seq: m.Seq, Version: 1, Kind: domain.EditText, By: "alice", Text: "v1", Prev: "xin chào", At: editedAt}
+	row := domain.Edit{Room: m.Room, Seq: m.Seq, Version: 0, Kind: domain.EditOriginal, By: "alice", Text: "xin chào", At: sentAt}
+	v1 := domain.Edit{Room: m.Room, Seq: m.Seq, Version: 1, Kind: domain.EditText, By: "alice", Text: "v1", At: editedAt}
 	v2 := domain.Edit{Room: m.Room, Seq: m.Seq, Version: 2, Kind: domain.EditDelete, By: "bob", At: editedAt.Add(time.Minute)}
-	original := &chatimv1.MessageVersion{Kind: chatimv1.EditKind_EDIT_KIND_ORIGINAL, Text: "xin chào", By: "alice", At: timestamppb.New(sentAt)}
+	original := &chatimv1.MessageVersion{Ver: 0, Kind: chatimv1.EditKind_EDIT_KIND_ORIGINAL, Text: "xin chào", By: "alice", At: timestamppb.New(sentAt)}
 	first := &chatimv1.MessageVersion{Ver: 1, Kind: chatimv1.EditKind_EDIT_KIND_TEXT, Text: "v1", By: "alice", At: timestamppb.New(editedAt)}
 	second := &chatimv1.MessageVersion{Ver: 2, Kind: chatimv1.EditKind_EDIT_KIND_DELETE, By: "bob", At: timestamppb.New(editedAt.Add(time.Minute))}
 	cases := []struct {
-		name  string
-		edits []domain.Edit
-		after uint32
-		want  []*chatimv1.MessageVersion
+		name string
+		rows []domain.Edit
+		want []*chatimv1.MessageVersion
 	}{
-		{"first page", []domain.Edit{v1, v2}, 0, []*chatimv1.MessageVersion{original, first, second}},
-		{"next page", []domain.Edit{v2}, 1, []*chatimv1.MessageVersion{second}},
-		{"never edited", nil, 0, nil},
-		{"first page without version 1", []domain.Edit{v2}, 0, []*chatimv1.MessageVersion{second}},
+		{"original then edits", []domain.Edit{row, v1, v2}, []*chatimv1.MessageVersion{original, first, second}},
+		{"edits only", []domain.Edit{v2}, []*chatimv1.MessageVersion{second}},
+		{"nothing", nil, []*chatimv1.MessageVersion{}},
 	}
 	for _, c := range cases {
-		got := pbconv.MessageVersions(m, c.edits, c.after)
+		got := pbconv.MessageVersions(c.rows)
 		if !slices.EqualFunc(got, c.want, func(a, b *chatimv1.MessageVersion) bool { return proto.Equal(a, b) }) {
 			t.Errorf("%s: MessageVersions = %v, want %v", c.name, got, c.want)
 		}

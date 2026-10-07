@@ -17,7 +17,7 @@ import (
 func sampleEdit() domain.Edit {
 	return domain.Edit{
 		Room: 7_340_000_001, Thread: 3, Seq: 42, Version: 1, Kind: domain.EditText, Tenant: "acme", By: "alice",
-		Text: "đã sửa", Prev: "xin chào", At: codecTime.Add(time.Minute),
+		Text: "đã sửa", At: codecTime.Add(time.Minute),
 	}
 }
 
@@ -31,7 +31,7 @@ func TestEditCodecRoundTrip(t *testing.T) {
 		t.Fatalf("_id = %x, r = %d; want keys.Edit and the room", doc.ID, doc.Room)
 	}
 	back, raw := roundTrip(t, doc)
-	if got, want := fieldNames(t, raw), []string{"_id", "room_id", "tenant", "kind", "created_by", "text", "p", "created_at"}; !slices.Equal(got, want) {
+	if got, want := fieldNames(t, raw), []string{"_id", "room_id", "tenant", "kind", "created_by", "text", "created_at"}; !slices.Equal(got, want) {
 		t.Fatalf("fields = %v, want %v", got, want)
 	}
 	got, err := decodeEdit(back)
@@ -46,7 +46,7 @@ func TestEditCodecRoundTrip(t *testing.T) {
 
 func TestDeleteFactStoresNoText(t *testing.T) {
 	e := sampleEdit()
-	e.Version, e.Kind, e.Text, e.Prev = 2, domain.EditDelete, "", ""
+	e.Version, e.Kind, e.Text = 2, domain.EditDelete, ""
 	doc, err := encodeEdit(e)
 	if err != nil {
 		t.Fatalf("encodeEdit: %v", err)
@@ -54,6 +54,22 @@ func TestDeleteFactStoresNoText(t *testing.T) {
 	_, raw := roundTrip(t, doc)
 	if got, want := fieldNames(t, raw), []string{"_id", "room_id", "tenant", "kind", "created_by", "created_at"}; !slices.Equal(got, want) {
 		t.Fatalf("fields = %v, want %v", got, want)
+	}
+}
+
+func TestOriginalRowRoundTripsAtVerZero(t *testing.T) {
+	e := sampleEdit()
+	e.Version, e.Kind, e.Text = 0, domain.EditOriginal, "xin chào"
+	doc, err := encodeEdit(e)
+	if err != nil {
+		t.Fatalf("encodeEdit: %v", err)
+	}
+	back, raw := roundTrip(t, doc)
+	if got, want := fieldNames(t, raw), []string{"_id", "room_id", "tenant", "kind", "created_by", "text", "created_at"}; !slices.Equal(got, want) {
+		t.Fatalf("fields = %v, want %v", got, want)
+	}
+	if got, err := decodeEdit(back); err != nil || got.Version != 0 || got.Kind != domain.EditOriginal || got.Text != "xin chào" {
+		t.Fatalf("decodeEdit = %+v, %v; want the original row", got, err)
 	}
 }
 

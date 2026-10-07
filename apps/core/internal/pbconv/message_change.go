@@ -38,14 +38,9 @@ func messageChange(roomType domain.RoomType, m domain.Message, e domain.Edit) *c
 	}
 }
 
-func MessageVersions(m domain.Message, edits []domain.Edit, after uint32) []*chatimv1.MessageVersion {
-	out := make([]*chatimv1.MessageVersion, 0, len(edits)+1)
-	if after == 0 && len(edits) > 0 && edits[0].Version == 1 {
-		out = append(out, &chatimv1.MessageVersion{
-			Kind: chatimv1.EditKind_EDIT_KIND_ORIGINAL, Text: edits[0].Prev, By: m.From, At: timestamppb.New(m.CreatedAt),
-		})
-	}
-	for _, e := range edits {
+func MessageVersions(rows []domain.Edit) []*chatimv1.MessageVersion {
+	out := make([]*chatimv1.MessageVersion, 0, len(rows))
+	for _, e := range rows {
 		out = append(out, &chatimv1.MessageVersion{Ver: e.Version, Kind: editKind(e.Kind), Text: e.Text, By: e.By, At: timestamppb.New(e.At)})
 	}
 	return out
@@ -57,6 +52,8 @@ func editKind(k domain.EditKind) chatimv1.EditKind {
 		return chatimv1.EditKind_EDIT_KIND_TEXT
 	case domain.EditDelete:
 		return chatimv1.EditKind_EDIT_KIND_DELETE
+	case domain.EditOriginal:
+		return chatimv1.EditKind_EDIT_KIND_ORIGINAL
 	default:
 		return chatimv1.EditKind_EDIT_KIND_UNSPECIFIED
 	}

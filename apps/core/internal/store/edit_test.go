@@ -36,13 +36,9 @@ func TestValidateEdit(t *testing.T) {
 		{"max int32 version", func(e *domain.Edit) { e.Version = math.MaxInt32 }, ""},
 		{"zero room", func(e *domain.Edit) { e.Room = 0 }, "room"},
 		{"zero seq", func(e *domain.Edit) { e.Seq = 0 }, "seq"},
-		{"zero version", func(e *domain.Edit) { e.Version = 0 }, "version"},
 		{"version above max int32", func(e *domain.Edit) { e.Version = math.MaxInt32 + 1 }, "version"},
 		{"zero kind", func(e *domain.Edit) { e.Kind = 0 }, "edit kind"},
-		{"kind past delete", func(e *domain.Edit) { e.Kind = domain.EditDelete + 1 }, "edit kind"},
-		{"prev on the first edit", func(e *domain.Edit) { e.Prev = "original" }, ""},
-		{"prev on a delete", func(e *domain.Edit) { e.Kind, e.Prev = domain.EditDelete, "original" }, "prev"},
-		{"prev after version 1", func(e *domain.Edit) { e.Version, e.Prev = 2, "original" }, "prev"},
+		{"kind past original", func(e *domain.Edit) { e.Kind = domain.EditOriginal + 1 }, "edit kind"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -56,6 +52,28 @@ func TestValidateEdit(t *testing.T) {
 				t.Fatalf("ValidateEdit = %v, want ErrInvalidArgument naming %q", err, tt.field)
 			}
 		})
+	}
+}
+
+func TestValidateEditTiesVerZeroToTheOriginalKind(t *testing.T) {
+	cases := []struct {
+		version uint32
+		kind    domain.EditKind
+		ok      bool
+	}{
+		{0, domain.EditOriginal, true},
+		{0, domain.EditText, false},
+		{0, domain.EditDelete, false},
+		{1, domain.EditOriginal, false},
+		{7, domain.EditOriginal, false},
+		{1, domain.EditText, true},
+		{2, domain.EditDelete, true},
+	}
+	for _, c := range cases {
+		err := store.ValidateEdit(domain.Edit{Room: 1, Seq: 1, Version: c.version, Kind: c.kind, Text: "hi"})
+		if c.ok != (err == nil) || (!c.ok && !errors.Is(err, apperr.ErrInvalidArgument)) {
+			t.Errorf("ValidateEdit(v%d, kind %d) = %v, want ok=%v", c.version, c.kind, err, c.ok)
+		}
 	}
 }
 

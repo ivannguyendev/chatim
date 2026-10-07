@@ -43,7 +43,7 @@ func TestFeedSkipsSummaryPinActivityEditHideAndClearWrites(t *testing.T) {
 	if err := s.TouchActivity(ctx, []store.Activity{{Room: itRoom, Seq: 1, At: codecTime}}); err != nil {
 		t.Fatalf("TouchActivity: %v", err)
 	}
-	edit := domain.Edit{Room: itRoom, Seq: 1, Version: 1, Kind: domain.EditText, Tenant: "acme", By: "alice", Text: "sửa", Prev: m.Text, At: codecTime}
+	edit := domain.Edit{Room: itRoom, Seq: 1, Version: 1, Kind: domain.EditText, Tenant: "acme", By: "alice", Text: "sửa", At: codecTime}
 	if err := s.ApplyEdit(ctx, edit); err != nil {
 		t.Fatalf("ApplyEdit: %v", err)
 	}

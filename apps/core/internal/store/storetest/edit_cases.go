@@ -34,7 +34,7 @@ type editCase struct {
 
 func RunEdits(t *testing.T, open func(t *testing.T) (EditableMessages, ClearableRooms, store.Edits, store.Hidden)) {
 	t.Helper()
-	for _, c := range slices.Concat(factCases(), applyCases(), viewerCases()) {
+	for _, c := range slices.Concat(factCases(), originalCases(), applyCases(), viewerCases()) {
 		t.Run(c.name, func(t *testing.T) {
 			msgs, rooms, edits, hidden := open(t)
 			c.run(t, editStores{msgs: msgs, rooms: rooms, edits: edits, hidden: hidden})
@@ -48,15 +48,19 @@ func fact(room, thread, seq uint64, version uint32) domain.Edit {
 		Text: fmt.Sprintf("edit %d/%d/%d v%d", room, thread, seq, version),
 		At:   baseTime.Add(time.Duration(version) * time.Second),
 	}
-	if version == 1 {
-		e.Prev = msg(room, thread, seq).Text
-	}
 	return e
+}
+
+func original(room, thread, seq uint64) domain.Edit {
+	m := msg(room, thread, seq)
+	return domain.Edit{
+		Room: room, Thread: thread, Seq: seq, Version: 0, Kind: domain.EditOriginal, Tenant: tenant, By: m.From, Text: m.Text, At: m.CreatedAt,
+	}
 }
 
 func deletion(room, thread, seq uint64, version uint32) domain.Edit {
 	e := fact(room, thread, seq, version)
-	e.Kind, e.Text, e.Prev = domain.EditDelete, "", ""
+	e.Kind, e.Text = domain.EditDelete, ""
 	return e
 }
 

@@ -52,9 +52,6 @@ func (rg *editRig) original(t *testing.T, r, seq uint64) {
 func (rg *editRig) appendFact(t *testing.T, r, seq uint64, v uint32, kind domain.EditKind, text string) domain.Edit {
 	t.Helper()
 	e := domain.Edit{Room: r, Seq: seq, Version: v, Kind: kind, Tenant: tenant, By: "alice", Text: text, At: time.Now().UTC().Truncate(time.Millisecond)}
-	if v == 1 && kind == domain.EditText {
-		e.Prev = "v0"
-	}
 	if err := rg.edits.Append(t.Context(), e); err != nil {
 		t.Fatalf("append v%d: %v", v, err)
 	}

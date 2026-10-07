@@ -14,7 +14,7 @@ func (s *Messages) ApplyEdit(ctx context.Context, e domain.Edit) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if err := store.ValidateEdit(e); err != nil {
+	if err := store.ValidateProjectedEdit(e); err != nil {
 		return err
 	}
 	s.mu.Lock()

@@ -2,6 +2,7 @@ package grpcsrv
 
 import (
 	"context"
+	"errors"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
@@ -44,9 +45,17 @@ func (s *Service) GetEditHistory(ctx context.Context, req *chatimv1.GetEditHisto
 	if found[0].Deleted {
 		return &chatimv1.GetEditHistoryResponse{}, nil
 	}
-	edits, err := s.edits.History(ctx, key, req.GetAfterVer(), limit)
-	if err != nil {
-		return nil, err
+	rows, err := s.edits.History(ctx, key, req.GetAfterVer(), limit)
+	if err != nil || len(rows) == 0 {
+		return &chatimv1.GetEditHistoryResponse{}, err
 	}
-	return &chatimv1.GetEditHistoryResponse{Versions: pbconv.MessageVersions(found[0], edits, req.GetAfterVer())}, nil
+	if req.GetAfterVer() == 0 {
+		switch row, err := s.edits.At(ctx, key, 0); {
+		case err == nil:
+			rows = append([]domain.Edit{row}, rows...)
+		case !errors.Is(err, store.ErrEditNotFound):
+			return nil, err
+		}
+	}
+	return &chatimv1.GetEditHistoryResponse{Versions: pbconv.MessageVersions(rows)}, nil
 }

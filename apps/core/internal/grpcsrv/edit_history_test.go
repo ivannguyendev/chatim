@@ -9,6 +9,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/access"
+	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -38,7 +39,7 @@ func (rg *rig) editTwice(t *testing.T, ctx context.Context, room string) {
 	}
 }
 
-func TestEditHistoryListsEveryVersion(t *testing.T) {
+func TestEditHistoryStartsWithTheOriginalRow(t *testing.T) {
 	rg := newRig(t, options{})
 	room := rg.createGroup(t, "acme", "alice", "bob")
 	alice, bob := as(t, "acme", "alice"), as(t, "acme", "bob")
@@ -59,9 +60,44 @@ func TestEditHistoryListsEveryVersion(t *testing.T) {
 	if at := resp.GetVersions()[0].GetAt(); !proto.Equal(at, sent.GetCreatedAt()) {
 		t.Fatalf("original at = %v, want the send time %v", at, sent.GetCreatedAt())
 	}
-	after, err := rg.client.GetEditHistory(bob, &chatimv1.GetEditHistoryRequest{RoomId: room, Seq: 1, AfterVer: 1})
-	if err != nil || !slices.Equal(versionRows(after.GetVersions()), want[2:]) {
-		t.Fatalf("after v1 = %v, %v; want only v2", after, err)
+}
+
+func TestEditHistoryAfterAVerSkipsTheOriginalRow(t *testing.T) {
+	rg := newRig(t, options{})
+	room := rg.createGroup(t, "acme", "alice")
+	alice := as(t, "acme", "alice")
+	rg.send(t, alice, room, "c-1", "v0")
+	rg.editTwice(t, alice, room)
+	cases := []struct {
+		after, limit uint32
+		want         []versionRow
+	}{
+		{0, 1, []versionRow{{0, chatimv1.EditKind_EDIT_KIND_ORIGINAL, "v0", "alice"}, {1, chatimv1.EditKind_EDIT_KIND_TEXT, "v1", "alice"}}},
+		{1, 10, []versionRow{{2, chatimv1.EditKind_EDIT_KIND_TEXT, "v2", "alice"}}},
+		{2, 10, []versionRow{}},
+	}
+	for _, c := range cases {
+		resp, err := rg.client.GetEditHistory(alice, &chatimv1.GetEditHistoryRequest{RoomId: room, Seq: 1, AfterVer: c.after, Limit: c.limit})
+		if got := versionRows(resp.GetVersions()); err != nil || !slices.Equal(got, c.want) {
+			t.Fatalf("after %d limit %d = %+v, %v; want %+v", c.after, c.limit, got, err, c.want)
+		}
+	}
+}
+
+func TestEditHistoryHidesALoneOriginalRow(t *testing.T) {
+	rg := newRig(t, options{})
+	room := rg.createGroup(t, "acme", "alice")
+	alice := as(t, "acme", "alice")
+	sent := rg.send(t, alice, room, "c-1", "v0")
+	row := domain.Edit{
+		Room: roomNumber(t, room), Seq: 1, Version: 0, Kind: domain.EditOriginal, Tenant: "acme", By: "alice", Text: "v0", At: sent.GetCreatedAt().AsTime(),
+	}
+	if err := rg.edits.Append(t.Context(), row); err != nil {
+		t.Fatalf("Append original: %v", err)
+	}
+	resp, err := rg.client.GetEditHistory(alice, &chatimv1.GetEditHistoryRequest{RoomId: room, Seq: 1})
+	if err != nil || len(resp.GetVersions()) != 0 {
+		t.Fatalf("GetEditHistory = %v, %v; want no versions while only the original row exists", resp, err)
 	}
 }
 

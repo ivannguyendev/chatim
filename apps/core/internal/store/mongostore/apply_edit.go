@@ -12,7 +12,7 @@ import (
 )
 
 func (s *Store) ApplyEdit(ctx context.Context, e domain.Edit) error {
-	if err := store.ValidateEdit(e); err != nil {
+	if err := store.ValidateProjectedEdit(e); err != nil {
 		return err
 	}
 	version, err := toInt32("version", e.Version)

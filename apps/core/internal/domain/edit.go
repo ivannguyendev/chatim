@@ -7,6 +7,7 @@ type EditKind uint8
 const (
 	EditText EditKind = iota + 1
 	EditDelete
+	EditOriginal
 )
 
 type Edit struct {
@@ -18,6 +19,5 @@ type Edit struct {
 	Tenant  string
 	By      string
 	Text    string
-	Prev    string
 	At      time.Time
 }

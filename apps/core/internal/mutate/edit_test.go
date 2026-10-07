@@ -37,7 +37,7 @@ func TestEditWritesVersionOneWithTheOriginalText(t *testing.T) {
 	if s := rg.stored(t, 1); s.Version != 1 || s.Text != "hello there" {
 		t.Fatalf("stored = %+v, want the projection applied before the ack", s)
 	}
-	want := domain.Edit{Room: room, Seq: 1, Version: 1, Kind: domain.EditText, Tenant: tenant, By: "alice", Text: "hello there", Prev: "hello", At: rg.at()}
+	want := domain.Edit{Room: room, Seq: 1, Version: 1, Kind: domain.EditText, Tenant: tenant, By: "alice", Text: "hello there", At: rg.at()}
 	if facts := rg.facts(t, 1); len(facts) != 1 || !sameEdit(facts[0], want) {
 		t.Fatalf("facts = %+v, want %+v", facts, want)
 	}
@@ -61,8 +61,8 @@ func TestEditsBuildOnTheVersionTheClientSaw(t *testing.T) {
 		t.Fatalf("second edit = %+v, %v; want version 2", got, err)
 	}
 	facts := rg.facts(t, 1)
-	if len(facts) != 2 || facts[0].Prev != "v0" || facts[1].Version != 2 || facts[1].Prev != "" {
-		t.Fatalf("facts = %+v, want v1 with prev v0 and v2 without prev", facts)
+	if len(facts) != 2 || facts[0].Text != "v1" || facts[1].Version != 2 || facts[1].Text != "v2" {
+		t.Fatalf("facts = %+v, want v1 then v2", facts)
 	}
 	if _, events := rg.events.list(); len(events) != 2 || events[1].GetId() != pbconv.MessageChangeEventID(room, 0, 1, 2) {
 		t.Fatalf("events = %v, want a second event with the v2 id", events)
@@ -111,7 +111,7 @@ func TestRetriedEditSucceedsWithoutASecondFact(t *testing.T) {
 func TestRetryAfterACrashFinishesTheProjection(t *testing.T) {
 	rg := newRig(t, nil)
 	rg.send(t, 1, "alice", "v0")
-	fact := domain.Edit{Room: room, Seq: 1, Version: 1, Kind: domain.EditText, Tenant: tenant, By: "alice", Text: "v1", Prev: "v0", At: created.Add(time.Second)}
+	fact := domain.Edit{Room: room, Seq: 1, Version: 1, Kind: domain.EditText, Tenant: tenant, By: "alice", Text: "v1", At: created.Add(time.Second)}
 	if err := rg.edits.Append(t.Context(), fact); err != nil {
 		t.Fatalf("Append: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestDuplicateVersionIsARetryOnlyForTheSameChange(t *testing.T) {
 	rg := newRig(t, nil)
 	rg.send(t, 1, "alice", "v0")
 	rg.m = rg.mutator(t, nil, laggingEdits{rg.edits})
-	other := domain.Edit{Room: room, Seq: 1, Version: 1, Kind: domain.EditText, Tenant: tenant, By: "alice", Text: "from another device", Prev: "v0", At: created}
+	other := domain.Edit{Room: room, Seq: 1, Version: 1, Kind: domain.EditText, Tenant: tenant, By: "alice", Text: "from another device", At: created}
 	if err := rg.edits.Append(t.Context(), other); err != nil {
 		t.Fatalf("Append: %v", err)
 	}

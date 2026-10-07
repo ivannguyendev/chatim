@@ -18,7 +18,6 @@ type editDoc struct {
 	Kind   domain.EditKind `bson:"kind"`
 	By     string          `bson:"created_by"`
 	Text   string          `bson:"text,omitempty"`
-	Prev   string          `bson:"p,omitempty"`
 	At     time.Time       `bson:"created_at"`
 }
 
@@ -40,7 +39,6 @@ func encodeEdit(e domain.Edit) (editDoc, error) {
 		Kind:   e.Kind,
 		By:     e.By,
 		Text:   e.Text,
-		Prev:   e.Prev,
 		At:     e.At,
 	}, nil
 }
@@ -59,7 +57,6 @@ func decodeEdit(d editDoc) (domain.Edit, error) {
 		Tenant:  d.Tenant,
 		By:      d.By,
 		Text:    d.Text,
-		Prev:    d.Prev,
 		At:      d.At,
 	}, nil
 }

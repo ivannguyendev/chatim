@@ -44,7 +44,7 @@ func TestRealInfraResyncDrillRepublishesWritesTheReaderMissed(t *testing.T) {
 	}
 	edit := domain.Edit{
 		Room: room, Seq: 1, Version: 1, Kind: domain.EditText, Tenant: itTenant, By: "migrator",
-		Text: "edited while the reader was down", Prev: "missed by the reader", At: time.Now().UTC().Truncate(time.Millisecond),
+		Text: "edited while the reader was down", At: time.Now().UTC().Truncate(time.Millisecond),
 	}
 	if err := st.Append(t.Context(), edit); err != nil {
 		t.Fatalf("append an edit the reader missed: %v", err)
