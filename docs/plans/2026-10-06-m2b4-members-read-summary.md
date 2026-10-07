@@ -357,7 +357,9 @@ sequenceDiagram
   - Đổi tên field và đổi khoá `members` nên không có đường nâng cấp tại chỗ. Prod chưa chạy, nên go-live thẳng từ bản này.
   - Dev phải `make infra-reset` hai lần: sau task đổi tên, và sau task `members`. Giữa hai lần đó `members` tạm chưa clustered.
   - Mọi core phải nâng cùng lúc: core cũ khởi động lại sẽ ghi đè luật RePublish (event subject user ngừng tới `live.*`) và trả lại việc loại mới.
-- **API thay đổi:** `ClearHistory` bỏ `up_to_seq`; corecli bỏ `-up-to`.
+- **API thay đổi:**
+  - `ClearHistory` bỏ `up_to_seq`; corecli bỏ `-up-to`.
+  - Field proto đã có đổi tên theo quy tắc `ver`/`_ver` (chỉ đổi tên, giữ số field, nên tương thích wire): `version` → `ver`, `base_version` → `base_ver`, `after_version` → `after_ver`, `pin_version` → `pin_ver`.
 - **Bỏ đường đọc vị trí feed cũ** `_id: "messages"` trong `reconciler_state` (không dùng từ M2b.1).
 
 ## 9. Điểm đội tự chọn, mời owner phản biện

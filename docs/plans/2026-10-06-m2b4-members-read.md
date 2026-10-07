@@ -455,7 +455,7 @@ message MemberCountChanged { int32 member_count = 1; uint64 member_count_ver = 2
 message ReadUpdated { string user = 1; uint64 read_seq = 2; uint64 read_ver = 3; }
 ```
 
-- Field proto **mới** dùng tên DB (`ver`, `read_ver`, `member_count_ver`, `request_id`); field proto cũ (`pin_version`, `change`) giữ nguyên. `core.proto`: import `members.proto`; service thêm `AddMembers`, `RemoveMember`, `LeaveRoom`, `ChangeMemberRole`, `MarkRead`, `MarkUnread`. `events.proto`: import `members.proto`; `Event` thêm `string recipient = 10;`; oneof `member_added = 28; member_removed = 29; member_role_changed = 30; member_count_changed = 31; read_updated = 32;`.
+- Field proto **mới** dùng tên DB (`ver`, `read_ver`, `member_count_ver`, `request_id`). Field proto cũ đổi theo cùng quy tắc ở Task 1 (owner chốt 2026-10-07, xem ghi chú controller). `core.proto`: import `members.proto`; service thêm `AddMembers`, `RemoveMember`, `LeaveRoom`, `ChangeMemberRole`, `MarkRead`, `MarkUnread`. `events.proto`: import `members.proto`; `Event` thêm `string recipient = 10;`; oneof `member_added = 28; member_removed = 29; member_role_changed = 30; member_count_changed = 31; read_updated = 32;`.
 - `publish`: hằng `memberAdded`, `memberRemoved`, `memberRoleChanged`, `memberCountChanged`, `readUpdated` (giá trị = tên payload snake_case) + `eventKind`. `Message`: `ev.GetRecipient() != ""` → phải `validToken`, subject `{root}.{t}.user.{recipient}.{kind}`; rỗng → `roomSubject`. RePublish `Source: root + ".*.*.*.*"`, `Destination: live + ".{{wildcard(1)}}.{{wildcard(2)}}.{{wildcard(3)}}.evt.{{wildcard(4)}}"`. `markKey` không mark loại mới. Itest: stream có luật cũ → `EnsureStream` luật mới không lỗi → event có recipient tới `live.{t}.user.{u}.evt.member_added`.
 
 ### `apps/core/internal/grpcsrv` (Task 13, 15)
@@ -637,6 +637,12 @@ Ghi chú phụ thuộc:
 - Xoá người đã rời (tombstone) = no-op (theo hợp đồng `mutate`); người chưa từng là member = `NOT_FOUND`; policy được hỏi trước nên member thường không dò được ai từng ở room.
 - `MEMBER_COUNT_DELAY`: Task 15 dùng hằng cục bộ 1s trong config; Task 16 có thể chuyển sang `effects.DefaultMemberCountDelay`.
 - Owner change chết ngay sau CAS (chưa ghi doc nào) không sinh record feed, nên `owner_guard` không thấy; được làm nốt ở lệnh owner kế tiếp hoặc lần thử lại. Bất biến vẫn giữ.
+- **Owner chốt (2026-10-07): đổi cả tên field proto đã có sang `ver`/`_ver`, làm trong Task 1.** Chỉ đổi tên, giữ nguyên số field (tương thích wire; tên JSON và getter Go đổi, nên sửa mọi chỗ gọi, kể cả corecli, route, e2e, test):
+  - `core.proto`: `Message.version` → `ver`; `MessageVersion.version` → `ver` (message `MessageVersion` → `MessageVer`); `EditMessageRequest.base_version`, `DeleteMessageRequest.base_version` → `base_ver`; `GetEditHistoryRequest.after_version` → `after_ver`; `GetEditHistoryResponse.versions` → `vers`.
+  - `events.proto`: `MessageEdited.version`, `MessageDeleted.version` → `ver`; `MessagePinned.pin_version`, `MessageUnpinned.pin_version` → `pin_ver`.
+  - `reactions_pins.proto`: `ReactionSummary.version` → `ver`; `Pin.pin_version`, `PinMessageResponse.pin_version`, `UnpinMessageResponse.pin_version` → `pin_ver`.
+  - Không thêm `reserved` (số field không đổi). `make proto`, `make buf-lint`; `buf breaking` theo luật FILE so với `main` sẽ báo đổi tên field trong message đã có trên `main` (M2a) — chấp nhận vì chưa có client ngoài, ghi vào D96.
+  - Tên Go nội bộ (`domain.Message.Version`…) giữ nguyên; quy tắc `_ver` áp cho tên dữ liệu (DB, proto, event id).
 - **Review sau ghép (2026-10-07):**
   - `changeMember` hỏi `allowMember` với đích giả role `member` khi đích không có / không active (`missing`), **trước** `ErrMemberNotFound`: member thường xoá/đổi role người lạ → `PERMISSION_DENIED`, owner/admin → `NOT_FOUND`. Task 12 thêm ca "member removes zed" và "member sets role of zed" vào `member_rules_test.go`, Task 15 thêm vào bảng `TestMemberErrorsKeepTheirCodes`, cả hai mong `PermissionDenied`.
   - `request_id` chỉ chống gửi lại trong `CID_COMMITTED_TTL` (15 phút) và khi Redis còn khoá; Task 20 ghi giới hạn này vào D99 và dòng README.
