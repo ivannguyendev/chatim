@@ -496,7 +496,7 @@ Vận hành: oplog `minRetentionHours` ≥ 24h; định cỡ oplog theo byte (đ
 | `internal/platform` | `slot`, `metrics`, `redisguard`, `testlog` | slot (§6.1), detector, hạ tầng |
 | `itest` | `itest` | test tích hợp cả core (`app.Run`) |
 
-Plan đã thực thi (`docs/plans/`) giữ đường dẫn cũ `apps/core/internal/<package>`; đọc theo bảng trên.
+Plan execute M2b.0–M2b.4 (nay ở `.claude/plans/`, local) giữ đường dẫn cũ `apps/core/internal/<package>`; đọc theo bảng trên.
 
 ## 14. Xử lý sự cố
 

@@ -33,7 +33,7 @@ feat/<milestone> ──một PR──▶ main ──tag vX.Y.Z──▶ image ch
 
 ## Definition of Done để merge vào main
 
-1. Mọi task trong `docs/plans/<milestone>.md` đã xong; bước nào cho kết quả khác "Expected" đã được báo và xử lý.
+1. Mọi task trong plan execute `.claude/plans/<plan>.md` đã xong và bản tóm tắt `docs/plans/<plan>-summary.md` đã cập nhật theo cái đã xây; bước nào cho kết quả khác "Expected" đã được báo và xử lý.
 2. Xanh: `make fmt-check`, `make vet`, `make lint`, `make test`, `make itest`, `make core-up && make e2e`.
 3. Không còn finding Critical/Important; finding Minor ghi vào plan hoặc docs.
 4. Cùng PR cập nhật: `docs/roadmap.md` (trạng thái và mức sẵn sàng), Decision Log trong design doc, `INDEXES.csv`, mục Done/Next trong `CLAUDE.md`.
