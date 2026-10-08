@@ -5,6 +5,8 @@ import (
 	"errors"
 	"slices"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
@@ -143,5 +145,25 @@ func TestACancelledRequestStillSettlesItsRequestAndTimer(t *testing.T) {
 	}
 	if got := rg.requestStatus(t, "owen", "r2"); got != dedupe.RequestNew {
 		t.Fatalf("request after a failed write on a cancelled context = %v, want released", got)
+	}
+}
+
+func TestASlowMemberWriteStillLeavesTheWholeSettleBudget(t *testing.T) {
+	rg := newMemberRig(t, nil)
+	f := rg.flaky(t)
+	synctest.Test(t, func(t *testing.T) {
+		f.afterWrite = func() { time.Sleep(2500 * time.Millisecond) }
+		if _, err := rg.m.AddMembers(t.Context(), add("owen", "r1", "zoe")); err != nil {
+			t.Fatalf("AddMembers: %v", err)
+		}
+	})
+	if got := rg.requestStatus(t, "owen", "r1"); got != dedupe.RequestDone {
+		t.Fatalf("request after a slow write = %v, want done", got)
+	}
+	if n := rg.timers.pending(); n != 0 {
+		t.Fatalf("armed timers = %d, calls %v; want the timer disarmed", n, rg.calls.list())
+	}
+	if got := rg.memberEvents(); !slices.Equal(got, []string{"added zoe", "count 5"}) {
+		t.Fatalf("events = %v, want the join and the new count", got)
 	}
 }

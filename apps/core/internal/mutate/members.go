@@ -46,16 +46,16 @@ func (m *Mutator) AddMembers(ctx context.Context, c AddMembersCmd) ([]domain.Mem
 }
 
 func (m *Mutator) join(ctx context.Context, r domain.Room, c AddMembersCmd, users []string, key dedupe.Key) ([]domain.Member, error) {
-	settle, done := settling(ctx)
-	defer done()
 	timer, err := m.armCount(ctx, r.ID)
 	if err != nil {
-		m.d.Requests.Cancel(settle, key)
+		m.cancelRequest(ctx, key)
 		return nil, err
 	}
 	now := m.now()
 	j := domain.Join{Room: r.ID, Tenant: c.Tenant, RequestID: c.RequestID, By: c.User, At: now}
 	res, err := m.write(ctx, j, users)
+	settle, done := settling(ctx)
+	defer done()
 	if err != nil {
 		m.d.Forget.ForgetMembers(r.ID)
 		m.d.Requests.Cancel(settle, key)
@@ -69,6 +69,12 @@ func (m *Mutator) join(ctx context.Context, r domain.Room, c AddMembersCmd, user
 	m.announce(r, added, count)
 	m.d.Requests.Finish(settle, key, dedupe.Record{Seq: uint64(len(users)), CreatedAt: now})
 	return added, nil
+}
+
+func (m *Mutator) cancelRequest(ctx context.Context, key dedupe.Key) {
+	settle, done := settling(ctx)
+	defer done()
+	m.d.Requests.Cancel(settle, key)
 }
 
 func (m *Mutator) write(ctx context.Context, j domain.Join, users []string) (store.JoinResult, error) {
