@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
@@ -17,8 +16,6 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
 	"github.com/ivannguyendev/chatim/apps/core/internal/work"
 )
-
-const memberCountCheckDelay = 5 * time.Second
 
 type serviceDeps struct {
 	store    *mongostore.Store
@@ -63,7 +60,7 @@ func wireMutator(d serviceDeps) (*mutate.Mutator, error) {
 		return nil, fmt.Errorf("wire request dedupe: %w", err)
 	}
 	w := d.cfg.Work
-	timers, err := work.NewTimers(d.timerJS, w.Name, w.SubjectRoot, w.Partitions, memberCountCheckDelay, work.WithTimerLogger(d.log))
+	timers, err := work.NewTimers(d.timerJS, w.Name, w.SubjectRoot, w.Partitions, d.cfg.MemberCountCheckDelay, work.WithTimerLogger(d.log))
 	if err != nil {
 		return nil, fmt.Errorf("wire member count timers: %w", err)
 	}

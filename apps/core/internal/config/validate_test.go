@@ -98,6 +98,27 @@ func TestLoadValidation(t *testing.T) {
 	}
 }
 
+func TestMemberCountCheckDelayMustOutliveARequest(t *testing.T) {
+	tests := []struct {
+		env     map[string]string
+		wantErr bool
+	}{
+		{map[string]string{"MEMBER_COUNT_CHECK_DELAY": "3s"}, true},
+		{map[string]string{"MEMBER_COUNT_CHECK_DELAY": "2s"}, true},
+		{map[string]string{"MEMBER_COUNT_CHECK_DELAY": "3001ms"}, false},
+		{map[string]string{"MEMBER_COUNT_CHECK_DELAY": "4s", "CORE_REQUEST_DEADLINE": "4s", "CORE_SHUTDOWN_BUDGET": "30s"}, true},
+		{map[string]string{"CORE_REQUEST_DEADLINE": "4999ms", "CORE_SHUTDOWN_BUDGET": "30s"}, false},
+	}
+	for _, tt := range tests {
+		setEnv(t, tt.env)
+		got, err := config.Load()
+		failed := err != nil && strings.Contains(err.Error(), "MEMBER_COUNT_CHECK_DELAY must be longer than CORE_REQUEST_DEADLINE")
+		if failed != tt.wantErr || (!tt.wantErr && err != nil) {
+			t.Fatalf("%v: Load() = %+v, %v; want rule broken %v", tt.env, got.MemberCountCheckDelay, err, tt.wantErr)
+		}
+	}
+}
+
 func TestLoadReportsEveryBrokenRule(t *testing.T) {
 	setEnv(t, map[string]string{"MONGO_URI": "", "FLUSH_SHARDS": "2000", "EVT_STREAM": "bad", "SLOT_LEASE_TTL": "2s", "PUB_ACK_TIMEOUT": "9s"})
 	_, err := config.Load()

@@ -65,6 +65,7 @@ func TestLoadRejectsNonPositiveValues(t *testing.T) {
 		{"SLOT_HOOK_TIMEOUT", "0s"},
 		{"PIN_LIMIT", "0"},
 		{"REACTION_COUNT_DELAY", "0s"},
+		{"MEMBER_COUNT_CHECK_DELAY", "0s"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.key, func(t *testing.T) {
@@ -143,5 +144,26 @@ func TestLoadRejectsBadReactionEmojis(t *testing.T) {
 	setEnv(t, map[string]string{"REACTION_EMOJIS": strings.Join(many[:100], ",")})
 	if _, err := config.Load(); err != nil {
 		t.Fatalf("100 emojis: Load() = %v, want nil", err)
+	}
+}
+
+func TestMemberBatchMaxDefaultsAndBounds(t *testing.T) {
+	setEnv(t, nil)
+	got, err := config.Load()
+	if err != nil || got.Limits.MemberBatch != 500 {
+		t.Fatalf("default MEMBER_BATCH_MAX = %d, %v; want 500", got.Limits.MemberBatch, err)
+	}
+	for _, value := range []string{"0", "1", "1001", "-3"} {
+		setEnv(t, map[string]string{"MEMBER_BATCH_MAX": value})
+		if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "MEMBER_BATCH_MAX") {
+			t.Fatalf("MEMBER_BATCH_MAX=%s: Load() = %v, want an error naming MEMBER_BATCH_MAX", value, err)
+		}
+	}
+	for _, want := range []int{2, 1000} {
+		setEnv(t, map[string]string{"MEMBER_BATCH_MAX": strconv.Itoa(want)})
+		got, err := config.Load()
+		if err != nil || got.Limits.MemberBatch != want {
+			t.Fatalf("MEMBER_BATCH_MAX=%d gives %d, %v; want it accepted", want, got.Limits.MemberBatch, err)
+		}
 	}
 }

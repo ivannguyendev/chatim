@@ -60,12 +60,13 @@ func TestLoadDefaults(t *testing.T) {
 			SubjectRoot: "work", Partitions: 32, Window: 1024, Batch: 256,
 			ConfirmEvery: time.Second, Drain: time.Second, Poll: time.Second,
 		},
-		EffectDelay:        5 * time.Second,
-		EffectRoomCache:    65536,
-		Effects:            effects.Config{Partitions: 32, FetchBatch: 256, FetchWait: time.Second, RetryDelay: 5 * time.Second, Drain: time.Second, Poll: time.Second},
-		AckMarks:           eventmark.Config{TTL: time.Hour, Timeout: 100 * time.Millisecond, Cooldown: time.Second},
-		Limits:             mutate.Limits{Emojis: mutate.DefaultEmojis, PinLimit: 50},
-		ReactionCountDelay: time.Second,
+		EffectDelay:           5 * time.Second,
+		EffectRoomCache:       65536,
+		Effects:               effects.Config{Partitions: 32, FetchBatch: 256, FetchWait: time.Second, RetryDelay: 5 * time.Second, Drain: time.Second, Poll: time.Second},
+		AckMarks:              eventmark.Config{TTL: time.Hour, Timeout: 100 * time.Millisecond, Cooldown: time.Second},
+		Limits:                mutate.Limits{Emojis: mutate.DefaultEmojis, PinLimit: 50, MemberBatch: 500},
+		ReactionCountDelay:    time.Second,
+		MemberCountCheckDelay: 5 * time.Second,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Load() =\n%#v\nwant\n%#v", got, want)
@@ -107,13 +108,14 @@ func TestLoadOverrides(t *testing.T) {
 			SubjectRoot: "work_it", Partitions: 16, Window: 64, Batch: 32,
 			ConfirmEvery: 2 * time.Second, Drain: 500 * time.Millisecond, Poll: 500 * time.Millisecond,
 		},
-		EffectDelay:        20 * time.Second,
-		EffectRoomCache:    128,
-		Effects:            effects.Config{Partitions: 16, FetchBatch: 64, FetchWait: 500 * time.Millisecond, RetryDelay: 2 * time.Second, Drain: 500 * time.Millisecond, Poll: 500 * time.Millisecond},
-		AckMarks:           eventmark.Config{TTL: 30 * time.Minute, Timeout: 50 * time.Millisecond, Cooldown: 2 * time.Second},
-		LockedMessageKinds: []domain.Kind{domain.KindText},
-		Limits:             mutate.Limits{Emojis: []string{"🎉", "👍"}, PinLimit: 10},
-		ReactionCountDelay: 2 * time.Second,
+		EffectDelay:           20 * time.Second,
+		EffectRoomCache:       128,
+		Effects:               effects.Config{Partitions: 16, FetchBatch: 64, FetchWait: 500 * time.Millisecond, RetryDelay: 2 * time.Second, Drain: 500 * time.Millisecond, Poll: 500 * time.Millisecond},
+		AckMarks:              eventmark.Config{TTL: 30 * time.Minute, Timeout: 50 * time.Millisecond, Cooldown: 2 * time.Second},
+		LockedMessageKinds:    []domain.Kind{domain.KindText},
+		Limits:                mutate.Limits{Emojis: []string{"🎉", "👍"}, PinLimit: 10, MemberBatch: 20},
+		ReactionCountDelay:    2 * time.Second,
+		MemberCountCheckDelay: 4 * time.Second,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Load() =\n%#v\nwant\n%#v", got, want)

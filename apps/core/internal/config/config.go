@@ -26,48 +26,49 @@ const (
 )
 
 type Config struct {
-	CoreID              string
-	GRPCAddr            string
-	AdvertiseAddr       string
-	AdminAddr           string
-	MongoURI            string
-	MongoDB             string
-	MongoUser           string
-	MongoPassword       string
-	MongoAuthSource     string
-	RedisAddr           string
-	RedisDB             int
-	RedisPassword       string
-	RedisDedupeAddr     string
-	RedisDedupeDB       int
-	RedisDedupePassword string
-	NATSURL             string
-	ConnectTimeout      time.Duration
-	RequestDeadline     time.Duration
-	SlowRPC             time.Duration
-	QueueWait           time.Duration
-	MaxInflight         int
-	DrainDelay          time.Duration
-	GRPCShutdown        time.Duration
-	PublisherDrain      time.Duration
-	ShutdownBudget      time.Duration
-	Flush               flush.Config
-	Actor               actor.Config
-	Dedupe              dedupe.Config
-	CIDBatch            dedupe.BatchConfig
-	Publish             publish.Config
-	Stream              publish.StreamConfig
-	Work                work.StreamConfig
-	Slot                slot.Config
-	ReconcileEnabled    bool
-	Reconcile           reconcile.Config
-	EffectDelay         time.Duration
-	EffectRoomCache     int
-	Effects             effects.Config
-	AckMarks            eventmark.Config
-	LockedMessageKinds  []domain.Kind
-	Limits              mutate.Limits
-	ReactionCountDelay  time.Duration
+	CoreID                string
+	GRPCAddr              string
+	AdvertiseAddr         string
+	AdminAddr             string
+	MongoURI              string
+	MongoDB               string
+	MongoUser             string
+	MongoPassword         string
+	MongoAuthSource       string
+	RedisAddr             string
+	RedisDB               int
+	RedisPassword         string
+	RedisDedupeAddr       string
+	RedisDedupeDB         int
+	RedisDedupePassword   string
+	NATSURL               string
+	ConnectTimeout        time.Duration
+	RequestDeadline       time.Duration
+	SlowRPC               time.Duration
+	QueueWait             time.Duration
+	MaxInflight           int
+	DrainDelay            time.Duration
+	GRPCShutdown          time.Duration
+	PublisherDrain        time.Duration
+	ShutdownBudget        time.Duration
+	Flush                 flush.Config
+	Actor                 actor.Config
+	Dedupe                dedupe.Config
+	CIDBatch              dedupe.BatchConfig
+	Publish               publish.Config
+	Stream                publish.StreamConfig
+	Work                  work.StreamConfig
+	Slot                  slot.Config
+	ReconcileEnabled      bool
+	Reconcile             reconcile.Config
+	EffectDelay           time.Duration
+	EffectRoomCache       int
+	Effects               effects.Config
+	AckMarks              eventmark.Config
+	LockedMessageKinds    []domain.Kind
+	Limits                mutate.Limits
+	ReactionCountDelay    time.Duration
+	MemberCountCheckDelay time.Duration
 }
 
 type StopPlan struct {
@@ -114,8 +115,9 @@ func Load() (Config, error) {
 		ShutdownBudget:      p.span("CORE_SHUTDOWN_BUDGET", 28*time.Second),
 		LockedMessageKinds:  p.kinds("MESSAGE_LOCKED_KINDS"),
 		Limits: mutate.Limits{
-			Emojis:   p.listOr("REACTION_EMOJIS", mutate.DefaultEmojis),
-			PinLimit: p.count("PIN_LIMIT", mutate.DefaultPinLimit),
+			Emojis:      p.listOr("REACTION_EMOJIS", mutate.DefaultEmojis),
+			PinLimit:    p.count("PIN_LIMIT", mutate.DefaultPinLimit),
+			MemberBatch: p.count("MEMBER_BATCH_MAX", mutate.DefaultMemberBatch),
 		},
 	}
 	c.AdvertiseAddr = p.advertiseAddr(c.CoreID, c.GRPCAddr)
