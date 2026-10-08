@@ -10,6 +10,12 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
+const settleTimeout = 2 * time.Second
+
+func settling(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), settleTimeout)
+}
+
 func (m *Mutator) armCount(ctx context.Context, room uint64) (work.Timer, error) {
 	t, err := m.d.Timers.Arm(ctx, room)
 	if err != nil {

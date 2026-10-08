@@ -93,18 +93,21 @@ func (m *Mutator) plainPath(ctx context.Context, op memberOp, r domain.Room, doc
 	}
 	ok, err := m.d.Members.ApplyMember(ctx, doc, next)
 	if err != nil {
+		m.d.Forget.ForgetMembers(r.ID)
 		return MemberResult{}, err
 	}
+	settle, done := settling(ctx)
+	defer done()
 	if !ok {
 		if delta != 0 {
-			m.d.Timers.Disarm(ctx, timer)
+			m.d.Timers.Disarm(settle, timer)
 		}
 		return MemberResult{}, domain.ErrRetryLater
 	}
 	m.d.Forget.ForgetMembers(r.ID)
 	var count *chatimv1.Event
 	if delta != 0 {
-		count = m.settleCount(ctx, r, timer, delta, op.caller, op.at)
+		count = m.settleCount(settle, r, timer, delta, op.caller, op.at)
 	}
 	m.announce(r, []domain.Member{next}, count)
 	return changed(next, doc, ""), nil

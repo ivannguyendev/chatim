@@ -46,25 +46,28 @@ func (m *Mutator) AddMembers(ctx context.Context, c AddMembersCmd) ([]domain.Mem
 }
 
 func (m *Mutator) join(ctx context.Context, r domain.Room, c AddMembersCmd, users []string, key dedupe.Key) ([]domain.Member, error) {
+	settle, done := settling(ctx)
+	defer done()
 	timer, err := m.armCount(ctx, r.ID)
 	if err != nil {
-		m.d.Requests.Cancel(ctx, key)
+		m.d.Requests.Cancel(settle, key)
 		return nil, err
 	}
 	now := m.now()
 	j := domain.Join{Room: r.ID, Tenant: c.Tenant, RequestID: c.RequestID, By: c.User, At: now}
 	res, err := m.write(ctx, j, users)
 	if err != nil {
-		m.d.Requests.Cancel(ctx, key)
+		m.d.Forget.ForgetMembers(r.ID)
+		m.d.Requests.Cancel(settle, key)
 		return nil, err
 	}
-	if res.Changed > 0 {
+	added := addedBy(res.Members, c.RequestID, c.User)
+	if len(added) > 0 || res.Changed > 0 {
 		m.d.Forget.ForgetMembers(r.ID)
 	}
-	count := m.settleCount(ctx, r, timer, res.Changed, c.User, now)
-	added := addedBy(res.Members, c.RequestID, c.User)
+	count := m.settleCount(settle, r, timer, res.Changed, c.User, now)
 	m.announce(r, added, count)
-	m.d.Requests.Finish(ctx, key, dedupe.Record{Seq: uint64(len(users)), CreatedAt: now})
+	m.d.Requests.Finish(settle, key, dedupe.Record{Seq: uint64(len(users)), CreatedAt: now})
 	return added, nil
 }
 

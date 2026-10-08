@@ -30,6 +30,7 @@ func (m *Mutator) ownerPath(ctx context.Context, op memberOp, req access.Request
 		return ownership.Plan(plan, v)
 	})
 	if err != nil {
+		m.d.Forget.ForgetMembers(op.room)
 		return MemberResult{}, err
 	}
 	if len(res.Written) == 0 {
