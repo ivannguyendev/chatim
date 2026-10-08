@@ -123,6 +123,8 @@ Toàn bộ đọc qua `apps/core/internal/config`; thiếu thì dùng giá trị
 | `REACTION_EMOJIS` | `👍,❤️,😂,😮,😢,🙏` | Danh sách emoji cố định được phép react, cách nhau bằng dấu phẩy, giữ thứ tự; để trống thì dùng mặc định. Core không khởi động nếu danh sách rỗng, có emoji không hợp lệ (`ValidateEmoji`), có emoji lặp, hoặc quá 100 emoji; lỗi nêu tên biến và emoji sai. `ReactMessage` với emoji ngoài danh sách trả `INVALID_ARGUMENT`; gỡ reaction (emoji rỗng) luôn được. Frontend đọc danh sách qua `GetReactionSettings` và chỉ cho chọn trong đó (D95) |
 | `PIN_LIMIT` | `50` | Số tin ghim tối đa mỗi room (1–1000), chính xác vì pv dày; ghim lại tin đã ghim vẫn thành công (D92) |
 | `REACTION_COUNT_DELAY` | `1s` | Delay của effect `reaction_counter`: worker đếm lại `messages.rx` một lần mỗi tin mỗi lô sau `CommittedAt + D`; phải dương và không quá `RECONCILE_DELAY` (D90) |
+| `MEMBER_BATCH_MAX` | `500` | Số người tối đa mỗi lệnh `CreateRoom` hoặc `AddMembers` (đếm sau khi bỏ trùng, 2–1000); quá thì `INVALID_ARGUMENT`. Core không giới hạn tổng số member của room (D107) |
+| `MEMBER_COUNT_CHECK_DELAY` | `5s` | Hạn của phiếu hẹn đếm lại `member_count` (message schedule NATS trên work stream, D102, D111): lệnh member có thể đổi số đặt phiếu trước khi ghi và xoá phiếu sau `$inc`; lỗi hay core chết ở giữa thì phiếu bật sau hạn này (làm tròn lên giây). Phải dài hơn `CORE_REQUEST_DEADLINE`; không thêm bước dừng |
 
 ## Cổng
 

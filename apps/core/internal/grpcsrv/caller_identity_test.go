@@ -83,6 +83,34 @@ func TestEveryRPCChecksCallerIdentityFirst(t *testing.T) {
 			_, err := rg.client.UnpinMessage(ctx, &chatimv1.UnpinMessageRequest{RoomId: "42", Seq: 1})
 			return err
 		},
+		"AddMembers": func(ctx context.Context) error {
+			_, err := rg.client.AddMembers(ctx, &chatimv1.AddMembersRequest{RoomId: "42", Users: []string{"bob"}, RequestId: "r-1"})
+			return err
+		},
+		"RemoveMember": func(ctx context.Context) error {
+			_, err := rg.client.RemoveMember(ctx, &chatimv1.RemoveMemberRequest{RoomId: "42", User: "bob"})
+			return err
+		},
+		"LeaveRoom": func(ctx context.Context) error {
+			_, err := rg.client.LeaveRoom(ctx, &chatimv1.LeaveRoomRequest{RoomId: "42"})
+			return err
+		},
+		"ChangeMemberRole": func(ctx context.Context) error {
+			_, err := rg.client.ChangeMemberRole(ctx, &chatimv1.ChangeMemberRoleRequest{RoomId: "42", User: "bob"})
+			return err
+		},
+		"SetMemberPriority": func(ctx context.Context) error {
+			_, err := rg.client.SetMemberPriority(ctx, &chatimv1.SetMemberPriorityRequest{RoomId: "42", User: "bob", Priority: 1})
+			return err
+		},
+		"MarkRead": func(ctx context.Context) error {
+			_, err := rg.client.MarkRead(ctx, &chatimv1.MarkReadRequest{RoomId: "42", Seq: 1})
+			return err
+		},
+		"MarkUnread": func(ctx context.Context) error {
+			_, err := rg.client.MarkUnread(ctx, &chatimv1.MarkUnreadRequest{RoomId: "42"})
+			return err
+		},
 	}
 	callers := []struct {
 		name  string
