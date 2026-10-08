@@ -116,7 +116,7 @@ func TestARefusedEventDoesNotFailTheChange(t *testing.T) {
 func TestNewRequiresEveryDependency(t *testing.T) {
 	rg := newRig(t, nil)
 	full := rg.deps(t, nil)
-	full.Now = nil
+	full.Now, full.NewRequestID = nil, nil
 	for name, drop := range map[string]func(d *mutate.Deps){
 		"no access":     func(d *mutate.Deps) { d.Access = nil },
 		"no messages":   func(d *mutate.Deps) { d.Messages = nil },
@@ -128,6 +128,11 @@ func TestNewRequiresEveryDependency(t *testing.T) {
 		"no counter":    func(d *mutate.Deps) { d.Counter = nil },
 		"no pins":       func(d *mutate.Deps) { d.Pins = nil },
 		"no projector":  func(d *mutate.Deps) { d.Projector = nil },
+		"no members":    func(d *mutate.Deps) { d.Members = nil },
+		"no requests":   func(d *mutate.Deps) { d.Requests = nil },
+		"no forget":     func(d *mutate.Deps) { d.Forget = nil },
+		"no timers":     func(d *mutate.Deps) { d.Timers = nil },
+		"bad batch":     func(d *mutate.Deps) { d.Limits = mutate.Limits{MemberBatch: 1} },
 		"bad pin limit": func(d *mutate.Deps) { d.Limits = mutate.Limits{PinLimit: mutate.MaxPinLimit + 1} },
 		"no emojis":     func(d *mutate.Deps) { d.Limits = mutate.Limits{Emojis: []string{}} },
 	} {

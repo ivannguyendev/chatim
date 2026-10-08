@@ -113,7 +113,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 		a.reconciler = rec
 	}
 	a.publisher, a.flusher, a.cidBatch, a.router, a.slots = pub, fl, batch, router, slots
-	svc, err := wireService(st, router, pub, cfg.LockedMessageKinds, cfg.Limits, log)
+	svc, err := wireService(serviceDeps{store: st, router: router, pub: pub, cidBatch: batch, timerJS: cl.js, cfg: cfg, log: log})
 	if err != nil {
 		return nil, err
 	}

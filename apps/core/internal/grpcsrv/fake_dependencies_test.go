@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
@@ -12,6 +13,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/pinproj"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
+	"github.com/ivannguyendev/chatim/apps/core/internal/work"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -28,6 +30,16 @@ func (acceptAllCIDs) Reserve(_ context.Context, keys []dedupe.Key) ([]dedupe.Ver
 func (acceptAllCIDs) Commit(context.Context, []dedupe.Entry) error { return nil }
 
 func (acceptAllCIDs) Abort(context.Context, []dedupe.Key) error { return nil }
+
+type nopTimers struct{}
+
+func (nopTimers) Arm(context.Context, uint64) (work.Timer, error) { return work.Timer{Seq: 1}, nil }
+
+func (nopTimers) Disarm(context.Context, work.Timer) {}
+
+type nopForgetter struct{}
+
+func (nopForgetter) ForgetMembers(uint64) {}
 
 type nopPublisher struct{}
 
@@ -78,9 +90,18 @@ func newMutator(t *testing.T, rg *rig, o options) *mutate.Mutator {
 	if o.events != nil {
 		events = o.events
 	}
+	var forget mutate.MemberForgetter = nopForgetter{}
+	if f, ok := o.sender.(mutate.MemberForgetter); ok {
+		forget = f
+	}
+	requests, err := dedupe.NewRequests(acceptAllCIDs{}, 15*time.Minute)
+	if err != nil {
+		t.Fatalf("NewRequests: %v", err)
+	}
 	m, err := mutate.New(mutate.Deps{
 		Access: checker, Messages: rg.msgs, Edits: rg.edits, Hidden: rg.hidden, Rooms: rg.rooms, Events: events, Now: o.now,
 		Reactions: rg.reactions, Counter: counts, Pins: rg.pins, Projector: projector, Limits: o.limits,
+		Members: rg.rooms, Requests: requests, Forget: forget, Timers: nopTimers{},
 	})
 	if err != nil {
 		t.Fatalf("mutate.New: %v", err)

@@ -64,3 +64,23 @@ func TestReactionEmojisListsTheConfiguredEmojisInOrder(t *testing.T) {
 		t.Fatalf("ReactionEmojis() = %q, want the configured list kept from New", got)
 	}
 }
+
+func TestMemberBatchDefaultsTo500AndChecksBounds(t *testing.T) {
+	rg := newRig(t, nil)
+	if got := rg.m.MemberBatch(); got != mutate.DefaultMemberBatch || mutate.DefaultMemberBatch != 500 {
+		t.Fatalf("MemberBatch() = %d with default %d, want 500", got, mutate.DefaultMemberBatch)
+	}
+	for _, n := range []int{mutate.MinMemberBatch, 2, 1000} {
+		d := rg.deps(t, nil)
+		d.Limits = mutate.Limits{MemberBatch: n}
+		if got := rg.build(t, d).MemberBatch(); got != n {
+			t.Fatalf("MemberBatch() = %d, want %d", got, n)
+		}
+	}
+	for _, n := range []int{1, 1001, -1} {
+		err := mutate.Limits{MemberBatch: n}.Validate()
+		if !errors.Is(err, apperr.ErrInvalidArgument) || !strings.Contains(err.Error(), strconv.Itoa(n)) {
+			t.Fatalf("Limits{MemberBatch: %d}.Validate() = %v, want ErrInvalidArgument naming it", n, err)
+		}
+	}
+}

@@ -3,6 +3,7 @@ package mutate
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/access"
@@ -12,7 +13,7 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-var errMissingDeps = fmt.Errorf("%w: mutator needs access, messages, edits, hidden, rooms, events, reactions, a counter, pins and a pin projector", apperr.ErrInvalidArgument)
+var errMissingDeps = fmt.Errorf("%w: mutator needs access, messages, edits, hidden, rooms, events, reactions, a counter, pins, a pin projector, members, request dedupe, a member forgetter and member count timers", apperr.ErrInvalidArgument)
 
 type Messages interface {
 	Find(ctx context.Context, room uint64, keys []store.MsgKey) ([]domain.Message, error)
@@ -41,6 +42,13 @@ type Deps struct {
 	Projector PinProjector
 	Limits    Limits
 	Now       func() time.Time
+
+	Members      MemberStore
+	Requests     RequestDedupe
+	Forget       MemberForgetter
+	Timers       CountTimers
+	Log          *slog.Logger
+	NewRequestID func() string
 }
 
 type EditCmd struct {
@@ -62,7 +70,8 @@ type Mutator struct {
 
 func New(d Deps) (*Mutator, error) {
 	if d.Access == nil || d.Messages == nil || d.Edits == nil || d.Hidden == nil || d.Rooms == nil || d.Events == nil ||
-		d.Reactions == nil || d.Counter == nil || d.Pins == nil || d.Projector == nil {
+		d.Reactions == nil || d.Counter == nil || d.Pins == nil || d.Projector == nil ||
+		d.Members == nil || d.Requests == nil || d.Forget == nil || d.Timers == nil {
 		return nil, errMissingDeps
 	}
 	d.Limits = d.Limits.withDefaults()
@@ -72,8 +81,16 @@ func New(d Deps) (*Mutator, error) {
 	if d.Now == nil {
 		d.Now = time.Now
 	}
+	if d.Log == nil {
+		d.Log = slog.Default()
+	}
+	if d.NewRequestID == nil {
+		d.NewRequestID = randomRequestID
+	}
 	return &Mutator{d: d}, nil
 }
+
+func (m *Mutator) MemberBatch() int { return m.d.Limits.MemberBatch }
 
 func (m *Mutator) now() time.Time { return m.d.Now().UTC().Truncate(time.Millisecond) }
 

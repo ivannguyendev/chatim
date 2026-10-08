@@ -61,6 +61,7 @@ type rig struct {
 	pins      *memstore.Pins
 	events    *recordingEvents
 	now       time.Time
+	memberParts
 }
 
 func newRig(t *testing.T, policy access.Policy) *rig {
@@ -79,6 +80,7 @@ func newRig(t *testing.T, policy access.Policy) *rig {
 	if err := rg.rooms.Create(t.Context(), r, members); err != nil {
 		t.Fatalf("create room: %v", err)
 	}
+	rg.memberParts = newMemberParts(t, rg.rooms)
 	rg.m = rg.build(t, rg.deps(t, policy))
 	return rg
 }
@@ -100,6 +102,7 @@ func (rg *rig) deps(t *testing.T, policy access.Policy) mutate.Deps {
 	return mutate.Deps{
 		Access: checker, Messages: rg.msgs, Edits: rg.edits, Hidden: rg.hidden, Rooms: rg.rooms, Events: rg.events,
 		Reactions: rg.reactions, Counter: counts, Pins: rg.pins, Projector: projector, Now: func() time.Time { return rg.now },
+		Members: rg.members, Requests: rg.requests, Forget: rg.forgets, Timers: rg.timers, NewRequestID: rg.requestIDs.next,
 	}
 }
 
