@@ -26,7 +26,7 @@ var (
 	errRecountRaced = errors.New("member count changed while recounting, run recount again")
 )
 
-type recountOptions struct {
+type RecountOptions struct {
 	Room   uint64
 	DryRun bool
 }
@@ -45,22 +45,22 @@ type recounter struct {
 	out   io.Writer
 }
 
-func parseRecountArgs(args []string, stderr io.Writer) (recountOptions, error) {
+func parseRecountArgs(args []string, stderr io.Writer) (RecountOptions, error) {
 	fs := cliflag.NewFlagSet("recount", cliflag.ContinueOnError)
 	fs.SetOutput(stderr)
-	var o recountOptions
+	var o RecountOptions
 	var room string
 	fs.StringVar(&room, "room", "", "room id to recount")
 	fs.BoolVar(&o.DryRun, "dry-run", false, "print the stored and counted numbers without writing")
 	if err := fs.Parse(args); err != nil {
-		return recountOptions{}, fmt.Errorf("%w: %w", errRecountUsage, err)
+		return RecountOptions{}, fmt.Errorf("%w: %w", errRecountUsage, err)
 	}
 	if fs.NArg() > 0 {
-		return recountOptions{}, fmt.Errorf("%w: unexpected arguments %v", errRecountUsage, fs.Args())
+		return RecountOptions{}, fmt.Errorf("%w: unexpected arguments %v", errRecountUsage, fs.Args())
 	}
 	id, err := ids.ParseRoomID(room)
 	if err != nil {
-		return recountOptions{}, fmt.Errorf("%w: -room: %w", errRecountUsage, err)
+		return RecountOptions{}, fmt.Errorf("%w: -room: %w", errRecountUsage, err)
 	}
 	o.Room = id
 	return o, nil
@@ -81,14 +81,14 @@ func recountMain(args []string) int {
 		return 1
 	}
 	log := redactedLogger(logger, cfg)
-	if err := runRecount(ctx, cfg, opts, log, os.Stdout); err != nil {
+	if err := RunRecount(ctx, cfg, opts, log, os.Stdout); err != nil {
 		log.ErrorContext(ctx, "recount failed", "err", err)
 		return 1
 	}
 	return 0
 }
 
-func runRecount(ctx context.Context, cfg config.Config, opts recountOptions, log *slog.Logger, out io.Writer) error {
+func RunRecount(ctx context.Context, cfg config.Config, opts RecountOptions, log *slog.Logger, out io.Writer) error {
 	c := &clients{}
 	defer c.close(ctx, log)
 	connectCtx, cancel := context.WithTimeout(ctx, cfg.ConnectTimeout)
@@ -105,7 +105,7 @@ func runRecount(ctx context.Context, cfg config.Config, opts recountOptions, log
 	return r.run(ctx, opts)
 }
 
-func (r recounter) run(ctx context.Context, opts recountOptions) error {
+func (r recounter) run(ctx context.Context, opts RecountOptions) error {
 	room, err := r.rooms.Get(ctx, opts.Room)
 	if err != nil {
 		return err

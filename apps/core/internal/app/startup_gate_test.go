@@ -124,7 +124,7 @@ func TestServeNeverOpensGRPCWhenStopRacesStartup(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	rg := startGate(t, ctx, &gatedRouter{running: make(chan struct{})}, idle{}, &fakeWatch{})
 	rg.awaitAdmin(t)
-	if err := probe(t.Context(), rg.adminAddr); err == nil {
+	if err := Probe(t.Context(), rg.adminAddr); err == nil {
 		t.Fatal("readyz answered 200 before the router ran")
 	}
 	cancel()
@@ -150,7 +150,7 @@ func TestServeOpensGRPCAndReadinessAfterACleanStart(t *testing.T) {
 	rg := startGate(t, ctx, &gatedRouter{running: running}, idle{}, &fakeWatch{})
 	rg.awaitAdmin(t)
 	deadline := time.Now().Add(gateLimit)
-	for probe(t.Context(), rg.adminAddr) != nil {
+	for Probe(t.Context(), rg.adminAddr) != nil {
 		if time.Now().After(deadline) {
 			t.Fatal("readyz never answered 200 after a clean start")
 		}

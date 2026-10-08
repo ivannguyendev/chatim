@@ -29,14 +29,14 @@ func resyncMain(args []string) int {
 		return 1
 	}
 	log := redactedLogger(logger, cfg)
-	if err := runResync(ctx, cfg, opts, log, os.Stdout); err != nil {
+	if err := RunResync(ctx, cfg, opts, log, os.Stdout); err != nil {
 		log.ErrorContext(ctx, "resync failed", "err", err)
 		return 1
 	}
 	return 0
 }
 
-func runResync(ctx context.Context, cfg config.Config, opts resync.Options, log *slog.Logger, out io.Writer) error {
+func RunResync(ctx context.Context, cfg config.Config, opts resync.Options, log *slog.Logger, out io.Writer) error {
 	c := &clients{}
 	defer c.close(ctx, log)
 	connectCtx, cancel := context.WithTimeout(ctx, cfg.ConnectTimeout)

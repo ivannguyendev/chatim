@@ -51,7 +51,7 @@ func TestRunFailsFastWhenMongoIsUnreachable(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 	begin := time.Now()
-	err = run(t.Context(), cfg, quiet)
+	err = Run(t.Context(), cfg, quiet)
 	if err == nil {
 		t.Fatal("run = nil, want a connect error")
 	}

@@ -1,4 +1,4 @@
-package app
+package itest
 
 import (
 	"context"
@@ -13,11 +13,14 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/app"
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
 	"github.com/ivannguyendev/chatim/pkg/ids"
 )
 
 const itLiveLimit = 30 * time.Second
+
+const itProbeTimeout = 2 * time.Second
 
 var itFastEffects = map[string]string{"CORE_DRAIN_DELAY": "200ms", "RECONCILE_DELAY": "2s", "PUB_ACK_TIMEOUT": "500ms"}
 
@@ -39,7 +42,7 @@ func startCore(t *testing.T, it *itInfra, env map[string]string) itCore {
 	core := &running{done: make(chan struct{})}
 	go func() {
 		defer close(core.done)
-		core.err = run(ctx, cfg, logger)
+		core.err = app.Run(ctx, cfg, logger)
 	}()
 	t.Cleanup(func() {
 		cancel()

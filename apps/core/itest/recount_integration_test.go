@@ -1,4 +1,4 @@
-package app
+package itest
 
 import (
 	"bytes"
@@ -8,6 +8,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/app"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
 )
@@ -35,7 +36,7 @@ func TestRealInfraRecountRestoresADriftedCount(t *testing.T) {
 
 	counts := fmt.Sprintf("room=%s stored=9 counted=2\n", roomID)
 	var out bytes.Buffer
-	if err := runRecount(t.Context(), core.cfg, recountOptions{Room: room, DryRun: true}, quiet, &out); err != nil || out.String() != counts {
+	if err := app.RunRecount(t.Context(), core.cfg, app.RecountOptions{Room: room, DryRun: true}, quiet, &out); err != nil || out.String() != counts {
 		t.Fatalf("dry run = %v, output %q; want %q", err, out.String(), counts)
 	}
 	if r, err := st.Get(t.Context(), room); err != nil || r.MemberCount != 9 || r.MemberCountVer != before.MemberCountVer {
@@ -43,7 +44,7 @@ func TestRealInfraRecountRestoresADriftedCount(t *testing.T) {
 	}
 
 	out.Reset()
-	if err := runRecount(t.Context(), core.cfg, recountOptions{Room: room}, quiet, &out); err != nil {
+	if err := app.RunRecount(t.Context(), core.cfg, app.RecountOptions{Room: room}, quiet, &out); err != nil {
 		t.Fatalf("recount: %v (output %q)", err, out.String())
 	}
 	ver := before.MemberCountVer + 1

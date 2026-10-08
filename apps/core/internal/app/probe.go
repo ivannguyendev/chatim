@@ -14,7 +14,7 @@ const (
 	probeBodyLimit = 4 << 10
 )
 
-func probe(ctx context.Context, adminAddr string) error {
+func Probe(ctx context.Context, adminAddr string) error {
 	target := "http://" + loopbackAddr(adminAddr) + "/readyz"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, http.NoBody)
 	if err != nil {

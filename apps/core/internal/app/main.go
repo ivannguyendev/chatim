@@ -49,7 +49,7 @@ func serveMain() int {
 		logger.ErrorContext(ctx, "invalid core config", "err", err)
 		return 1
 	}
-	if err := run(ctx, cfg, logger); err != nil {
+	if err := Run(ctx, cfg, logger); err != nil {
 		redactedLogger(logger, cfg).ErrorContext(ctx, "core exited with error", "err", err)
 		return 1
 	}
@@ -59,7 +59,7 @@ func serveMain() int {
 func probeMain() int {
 	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
 	defer cancel()
-	if err := probe(ctx, config.AdminAddr()); err != nil {
+	if err := Probe(ctx, config.AdminAddr()); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}

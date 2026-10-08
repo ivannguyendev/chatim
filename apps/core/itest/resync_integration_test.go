@@ -1,4 +1,4 @@
-package app
+package itest
 
 import (
 	"bytes"
@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/app"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/resync"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
@@ -69,8 +70,8 @@ func TestRealInfraResyncDrillRepublishesWritesTheReaderMissed(t *testing.T) {
 	opts := resync.Options{From: began.Add(-time.Minute), To: time.Now().UTC().Add(time.Minute), Tenant: itTenant, Rate: 100}
 	var out bytes.Buffer
 	ran := time.Now()
-	if err := runResync(t.Context(), core.cfg, opts, quiet, &out); err != nil {
-		t.Fatalf("runResync: %v (output %q)", err, out.String())
+	if err := app.RunResync(t.Context(), core.cfg, opts, quiet, &out); err != nil {
+		t.Fatalf("RunResync: %v (output %q)", err, out.String())
 	}
 	if got := strings.TrimSpace(out.String()); got != "resync rooms=1 room_records=1 message_records=3 edit_records=1 reaction_records=1 pin_records=1 member_records=2 hidden_records=1 dry_run=false" {
 		t.Fatalf("resync output = %q, want one room, its room record, three message, one edit, one reaction, one pin, two member and one hidden record", got)

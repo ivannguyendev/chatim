@@ -13,7 +13,7 @@ type tasks struct {
 	admin, publisher, flusher, cidBatch, router, slots, workers, reconciler, grpc *task
 }
 
-func run(ctx context.Context, cfg config.Config, log *slog.Logger) error {
+func Run(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	log = redactedLogger(log, cfg)
 	log.InfoContext(ctx, "starting core", "config", cfg.LogValue())
 	cl, err := connect(ctx, cfg, log)

@@ -1,4 +1,4 @@
-package app
+package itest
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/app"
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
@@ -38,7 +39,7 @@ func TestRealInfraStopUnderLoadKeepsEveryAckedMessage(t *testing.T) {
 	core := &running{done: make(chan struct{})}
 	go func() {
 		defer close(core.done)
-		core.err = run(ctx, cfg, logger)
+		core.err = app.Run(ctx, cfg, logger)
 	}()
 	t.Cleanup(func() {
 		cancel()
@@ -85,8 +86,8 @@ func awaitReady(t *testing.T, cfg config.Config, core *running) {
 			t.Fatalf("run returned before ready: %v", core.err)
 		default:
 		}
-		ctx, cancel := context.WithTimeout(t.Context(), probeTimeout)
-		err := probe(ctx, cfg.AdminAddr)
+		ctx, cancel := context.WithTimeout(t.Context(), itProbeTimeout)
+		err := app.Probe(ctx, cfg.AdminAddr)
 		cancel()
 		if err == nil {
 			return

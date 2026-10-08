@@ -59,7 +59,7 @@ func newRecounter(rooms recountRooms, pub *sentEvents, out *bytes.Buffer) recoun
 
 func TestRecountDryRunPrintsBothCountsAndWritesNothing(t *testing.T) {
 	rooms, pub, out := driftedRooms(t), &sentEvents{}, &bytes.Buffer{}
-	if err := newRecounter(rooms, pub, out).run(t.Context(), recountOptions{Room: recountRoom, DryRun: true}); err != nil {
+	if err := newRecounter(rooms, pub, out).run(t.Context(), RecountOptions{Room: recountRoom, DryRun: true}); err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	if got := out.String(); got != "room=7350000001 stored=5 counted=2\n" {
@@ -73,7 +73,7 @@ func TestRecountDryRunPrintsBothCountsAndWritesNothing(t *testing.T) {
 
 func TestRecountRestoresTheCountAndPublishesIt(t *testing.T) {
 	rooms, pub, out := driftedRooms(t), &sentEvents{}, &bytes.Buffer{}
-	if err := newRecounter(rooms, pub, out).run(t.Context(), recountOptions{Room: recountRoom}); err != nil {
+	if err := newRecounter(rooms, pub, out).run(t.Context(), RecountOptions{Room: recountRoom}); err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	if got := out.String(); got != "room=7350000001 stored=5 counted=2\nmember_count_ver=3\n" {
@@ -91,14 +91,14 @@ func TestRecountRestoresTheCountAndPublishesIt(t *testing.T) {
 
 func TestRecountFailsWhenTheCountMovesMeanwhile(t *testing.T) {
 	rooms, pub, out := driftedRooms(t), &sentEvents{}, &bytes.Buffer{}
-	err := newRecounter(racingCounts{rooms}, pub, out).run(t.Context(), recountOptions{Room: recountRoom})
+	err := newRecounter(racingCounts{rooms}, pub, out).run(t.Context(), RecountOptions{Room: recountRoom})
 	if !errors.Is(err, errRecountRaced) || len(pub.msgs) != 0 {
 		t.Fatalf("run = %v with %d events, want errRecountRaced and nothing sent", err, len(pub.msgs))
 	}
 }
 
 func TestRecountOfAMissingRoomFails(t *testing.T) {
-	err := newRecounter(memstore.NewRooms(), &sentEvents{}, &bytes.Buffer{}).run(t.Context(), recountOptions{Room: recountRoom})
+	err := newRecounter(memstore.NewRooms(), &sentEvents{}, &bytes.Buffer{}).run(t.Context(), RecountOptions{Room: recountRoom})
 	if !errors.Is(err, domain.ErrRoomNotFound) {
 		t.Fatalf("run = %v, want ErrRoomNotFound", err)
 	}
@@ -106,7 +106,7 @@ func TestRecountOfAMissingRoomFails(t *testing.T) {
 
 func TestParseRecountArgs(t *testing.T) {
 	got, err := parseRecountArgs([]string{"-room", "7350000001", "-dry-run"}, &bytes.Buffer{})
-	if err != nil || got != (recountOptions{Room: recountRoom, DryRun: true}) {
+	if err != nil || got != (RecountOptions{Room: recountRoom, DryRun: true}) {
 		t.Fatalf("parse = %+v, %v", got, err)
 	}
 	for _, args := range [][]string{nil, {"-dry-run"}, {"-room", "0"}, {"-room", "abc"}, {"-room", "1", "extra"}} {

@@ -23,13 +23,13 @@ func readyzServer(t *testing.T, status int) string {
 }
 
 func TestProbeSucceedsWhenReady(t *testing.T) {
-	if err := probe(t.Context(), readyzServer(t, http.StatusOK)); err != nil {
+	if err := Probe(t.Context(), readyzServer(t, http.StatusOK)); err != nil {
 		t.Fatalf("probe = %v, want nil", err)
 	}
 }
 
 func TestProbeFailsWhenNotReady(t *testing.T) {
-	if err := probe(t.Context(), readyzServer(t, http.StatusServiceUnavailable)); err == nil {
+	if err := Probe(t.Context(), readyzServer(t, http.StatusServiceUnavailable)); err == nil {
 		t.Fatal("probe = nil, want an error for 503")
 	}
 }
@@ -41,7 +41,7 @@ func TestProbeFailsWhenNothingListens(t *testing.T) {
 	}
 	addr := l.Addr().String()
 	_ = l.Close()
-	if err := probe(t.Context(), addr); err == nil {
+	if err := Probe(t.Context(), addr); err == nil {
 		t.Fatal("probe = nil, want an error when the admin port is closed")
 	}
 }
@@ -59,7 +59,7 @@ func TestProbeGivesUpOnASlowServer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
 	begin := time.Now()
-	if err := probe(ctx, srv.Listener.Addr().String()); err == nil {
+	if err := Probe(ctx, srv.Listener.Addr().String()); err == nil {
 		t.Fatal("probe = nil, want a timeout")
 	}
 	if took := time.Since(begin); took > probeTimeout {
