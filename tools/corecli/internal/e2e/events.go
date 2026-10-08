@@ -38,7 +38,10 @@ func EventOf(subject string, ev *chatimv1.Event) (Event, bool) {
 	if deleted := ev.GetMessageDeleted(); deleted != nil {
 		return changeOf(subject, ev, KindDeleted, deleted.GetMessage(), deleted.GetVer()), true
 	}
-	return markOf(subject, ev)
+	if out, ok := markOf(subject, ev); ok {
+		return out, true
+	}
+	return memberOf(subject, ev)
 }
 
 func changeOf(subject string, ev *chatimv1.Event, kind string, m *chatimv1.Message, version uint32) Event {

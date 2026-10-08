@@ -7,7 +7,7 @@ import (
 	"github.com/ivannguyendev/chatim/tools/corecli/internal/e2e"
 )
 
-func TestEventOfKeepsMessageEventsOnly(t *testing.T) {
+func TestEventOfReadsMessageEventsAndSkipsAnEmptyPayload(t *testing.T) {
 	const subject = "live.e2e.message.42.evt.msg_created"
 	created := &chatimv1.Event{
 		Id: "42-0-3", RoomId: "42", Seq: 3,
@@ -30,13 +30,6 @@ func TestEventOfKeepsMessageEventsOnly(t *testing.T) {
 	wantDeleted := e2e.Event{Kind: e2e.KindDeleted, Room: "42", ID: "42-0-3-v2", Seq: 3, CID: "a-c", Version: 2, Subject: "s"}
 	if got, ok := e2e.EventOf("s", deleted); !ok || got != wantDeleted || !got.IsChange() {
 		t.Fatalf("EventOf(msg_deleted) = %+v, %v; want %+v, true", got, ok, wantDeleted)
-	}
-	room := &chatimv1.Event{
-		Id: "42-created", RoomId: "42",
-		Payload: &chatimv1.Event_RoomCreated{RoomCreated: &chatimv1.RoomCreated{Room: &chatimv1.Room{Id: "42"}}},
-	}
-	if got, ok := e2e.EventOf("live.e2e.room.42.evt.room_created", room); ok {
-		t.Fatalf("EventOf(room_created) = %+v, true; want it skipped", got)
 	}
 	if got, ok := e2e.EventOf(subject, &chatimv1.Event{Id: "42-0-4", RoomId: "42", Seq: 4}); ok {
 		t.Fatalf("EventOf(no payload) = %+v, true; want it skipped", got)

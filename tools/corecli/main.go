@@ -25,9 +25,16 @@ commands:
   reaction-settings  print the reaction emojis the core accepts, as JSON
   pin                pin a message in its room
   unpin              unpin a message
+  add-members        add users to a group (-request-id: reuse it to retry)
+  remove-member      remove -target from a group
+  leave              leave a room as the caller
+  set-role           set the role of -target: owner, admin or member
+  set-priority       set the priority of -target
+  read               mark the room read up to -seq (0: the last message)
+  unread             mark the room unread from -seq
   watch              print live events of a room from NATS
   slots              show how live cores share the slots
-  e2e                end-to-end scenario steps: setup, send, change, react-pin, check
+  e2e                end-to-end scenario steps: setup, send, change, react-pin, members, check
 
 run "corecli <command> -h" for the flags of a command`
 
@@ -49,6 +56,13 @@ func realMain(args []string) int {
 		"reaction-settings": reactionSettingsCmd,
 		"pin":               pinCmd,
 		"unpin":             unpinCmd,
+		"add-members":       addMembersCmd,
+		"remove-member":     removeMemberCmd,
+		"leave":             leaveCmd,
+		"set-role":          setRoleCmd,
+		"set-priority":      setPriorityCmd,
+		"read":              readCmd,
+		"unread":            unreadCmd,
 		"watch":             watchCmd,
 		"slots":             slotsCmd,
 		"e2e":               e2eCmd,

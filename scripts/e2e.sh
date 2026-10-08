@@ -34,7 +34,7 @@ finish() {
   fi
   rm -rf "$state"
   if [ "$result" = PASS ]; then
-    echo "e2e PASS: $first messages before and $after after killing $victim, no loss, no duplicate, every acked seq live; seq 1 edited and seq 2 deleted on history, edit history and live; seq 3 reacted with the first then the second emoji from GetReactionSettings and an unlisted emoji refused, seq 4 pinned, on replies, history and live"
+    echo "e2e PASS: $first messages before and $after after killing $victim, no loss, no duplicate, every acked seq live; seq 1 edited and seq 2 deleted on history, edit history and live; seq 3 reacted with the first then the second emoji from GetReactionSettings and an unlisted emoji refused, seq 4 pinned, on replies, history and live; members added, promoted, removed and refused, read positions, hide and clear, the last owner leaving and coming back, on replies, history and live room, member and message subjects"
     exit 0
   fi
   echo "e2e FAIL during: $step" >&2
@@ -100,5 +100,11 @@ step="phase 4 react to seq 3 and pin seq 4"
 echo "phase 4: read the reaction emojis, refuse an unlisted one, react to seq 3, change the emoji, pin seq 4"
 cli e2e react-pin -state /state -react 3 -pin 4
 step="phase 4 check"
+cli e2e check -state /state
+
+step="phase 5 members and read positions"
+echo "phase 5: direct room refusals, add e2e-bob and e2e-carol, role and priority, removal, read positions, hide and clear, the owner leaves and comes back"
+cli e2e members -state /state
+step="phase 5 check"
 cli e2e check -state /state
 result=PASS

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,7 +9,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -25,10 +23,9 @@ const flushTimeout = 5 * time.Second
 
 func watchCmd(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
-	url := fs.String("nats", cmp.Or(os.Getenv("NATS_URL"), "nats://chatim-nats:4222"), "NATS URL (env NATS_URL)")
+	live := addLiveFlags(fs)
 	tenant := fs.String("tenant", "e2e", "tenant of the room")
 	room := fs.String("room", "", "room id")
-	liveRoot := fs.String("live-root", "live", "live subject root, EVT_LIVE_ROOT of the cores")
 	out := fs.String("out", "", "append events as JSON lines to this file instead of stdout")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -36,15 +33,15 @@ func watchCmd(ctx context.Context, args []string) error {
 	if _, err := ids.ParseRoomID(*room); err != nil {
 		return fmt.Errorf("-room: %w", err)
 	}
-	if *tenant == "" || strings.ContainsAny(*tenant, ".*> ") || strings.ContainsAny(*liveRoot, ".*> ") {
-		return errors.New("-tenant and -live-root must be single subject tokens")
+	if err := singleTokens(*tenant, *live.root); err != nil {
+		return err
 	}
 	w, err := openOutput(*out)
 	if err != nil {
 		return err
 	}
-	subject := *liveRoot + "." + *tenant + ".*." + *room + ".>"
-	return errors.Join(watch(ctx, *url, subject, w), w.Close())
+	subject := *live.root + "." + *tenant + ".*." + *room + ".>"
+	return errors.Join(watch(ctx, *live.url, subject, w), w.Close())
 }
 
 func watch(ctx context.Context, url, subject string, w io.Writer) error {

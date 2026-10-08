@@ -15,13 +15,13 @@ import (
 	"github.com/ivannguyendev/chatim/tools/corecli/internal/e2e"
 )
 
-const e2eUsage = "usage: corecli e2e setup|send|change|react-pin|check [flags]"
+const e2eUsage = "usage: corecli e2e setup|send|change|react-pin|members|check [flags]"
 
 func e2eCmd(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return errors.New(e2eUsage)
 	}
-	steps := map[string]command{"setup": e2eSetup, "send": e2eSend, "change": e2eChange, "react-pin": e2eReactPin, "check": e2eCheck}
+	steps := map[string]command{"setup": e2eSetup, "send": e2eSend, "change": e2eChange, "react-pin": e2eReactPin, "members": e2eMembers, "check": e2eCheck}
 	step, ok := steps[args[0]]
 	if !ok {
 		return errors.New(e2eUsage)
@@ -45,14 +45,14 @@ func e2eSetup(ctx context.Context, args []string) error {
 			return fmt.Errorf("core %q owns no slot", *owner)
 		}
 		for i := range *tries {
-			room, rt, err := createRoomOnSlot(ctx, s, o.user)
+			room, members, rt, err := createRoomOnSlot(ctx, s, o.user)
 			if err != nil {
 				return err
 			}
 			if !rt.Owner || (*owner != "" && rt.Core != *owner) {
 				continue
 			}
-			st := e2e.State{Tenant: o.tenant, User: o.user, Room: room, Owner: rt.Core}
+			st := e2e.State{Tenant: o.tenant, User: o.user, Room: room, Owner: rt.Core, Members: members}
 			if err := e2e.Save(statePath(*dir), st); err != nil {
 				return err
 			}
@@ -64,9 +64,9 @@ func e2eSetup(ctx context.Context, args []string) error {
 	})
 }
 
-func createRoomOnSlot(ctx context.Context, s *session, user string) (string, slotmap.Route, error) {
+func createRoomOnSlot(ctx context.Context, s *session, user string) (string, int32, slotmap.Route, error) {
 	if err := s.res.Refresh(ctx); err != nil {
-		return "", slotmap.Route{}, fmt.Errorf("load slot table: %w", err)
+		return "", 0, slotmap.Route{}, fmt.Errorf("load slot table: %w", err)
 	}
 	req := &chatimv1.CreateRoomRequest{
 		Type:    chatimv1.RoomType_ROOM_TYPE_GROUP,
@@ -75,11 +75,11 @@ func createRoomOnSlot(ctx context.Context, s *session, user string) (string, slo
 	}
 	resp, _, err := s.client.CreateRoom(ctx, req)
 	if err != nil {
-		return "", slotmap.Route{}, fmt.Errorf("create room: %w", err)
+		return "", 0, slotmap.Route{}, fmt.Errorf("create room: %w", err)
 	}
 	room := resp.GetRoom().GetId()
 	rt, _ := s.res.Slot(slotOf(room))
-	return room, rt, nil
+	return room, resp.GetRoom().GetMemberCount(), rt, nil
 }
 
 func slotOf(room string) uint16 {
