@@ -287,14 +287,14 @@ sequenceDiagram
   - Lệnh vẫn trả **thành công** khi `$inc` lỗi (member đã vào); phiếu lo phần còn lại.
   - Lần sửa nào cũng đếm vào `counter_repaired_total{counter="members"}` (alert `ChatimCounterRepairSurge` có sẵn). Không cần alert mới, không cần người chạy tay.
   - `/app recount -room 777 [-dry-run]` vẫn có cho vận hành tay.
-- **Event `member_count_changed`:** phát ngay trong lệnh; nếu rớt, worker `member_count_event` (chạy theo phiếu việc của doc member) phát lại số **hiện tại** của room. Tạo room thì số có sẵn trong `room_created`, `member_count_ver = 1`.
+- **Event `member_count_changed`:** phát ngay trong lệnh; nếu rớt, worker `member_count_event` (chạy theo phiếu việc của doc member) phát lại số **hiện tại** của room. Tạo room cũng phát `{room}-members-v1` ngay (owner chốt 2026-10-08), nên worker không phải "cứu" event này và metric phát lại không bị nhiễu.
 
 ### 3.8 Tạo room (`CreateRoom`)
 
 - Ghi doc room, rồi doc từng member ban đầu (`ver = 1`, `request_id = {room}-created`).
 - Giới hạn mỗi lệnh `MEMBER_BATCH_MAX` (mặc định 500). Bỏ giới hạn cứng 5000 member cũ; core không giới hạn tổng số member.
 - Ghi `member_count` = số người lúc tạo, `member_count_ver` = 1.
-- Phát `room_created` (subject `room`) và `member_added` cho từng người (subject `member`); mọi thay đổi đều có event, kể cả lúc tạo.
+- Phát `room_created` (subject `room`), `member_added` cho từng người (subject `member`) và `member_count_changed` `{room}-members-v1` (subject `room`); mọi thay đổi đều có event, kể cả lúc tạo.
 
 ### 3.9 Xoá lịch sử phía tôi (đổi sang thời gian)
 

@@ -12,7 +12,7 @@ func createdIDs(room uint64, users ...string) []string {
 	for _, u := range users {
 		ids = append(ids, pbconv.MemberEventID(room, u, 1))
 	}
-	return ids
+	return append(ids, pbconv.MemberCountEventID(room, 1))
 }
 
 func eventIDs(events []*chatimv1.Event) []string {

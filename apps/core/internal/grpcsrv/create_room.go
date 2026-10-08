@@ -50,12 +50,13 @@ func (s *Service) CreateRoom(ctx context.Context, req *chatimv1.CreateRoomReques
 }
 
 func creationEvents(room domain.Room, members []domain.Member) []*chatimv1.Event {
-	events := make([]*chatimv1.Event, 0, len(members)+1)
+	events := make([]*chatimv1.Event, 0, len(members)+2)
 	events = append(events, pbconv.RoomCreated(room))
 	for _, m := range members {
 		if ev := pbconv.MemberEvent(room.Type, m); ev != nil {
 			events = append(events, ev)
 		}
 	}
-	return events
+	count := domain.MemberCount{Count: room.MemberCount, Ver: 1}
+	return append(events, pbconv.MemberCountChanged(room, count, room.CreatedBy, room.CreatedAt))
 }

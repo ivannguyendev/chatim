@@ -215,7 +215,7 @@ Không có đường nâng cấp tại chỗ cho đổi tên field và khoá `me
 4. `flush.Flusher` gom `insertMany(ordered:false, w:majority)` mỗi 2ms hoặc 256 doc; nhóm không kịp deadline thì không gửi (`ErrNotSent`, D33).
 5. Kết quả: `Inserted`, `Duplicate`, `Unknown`, `Rejected` (D30). `Duplicate`/`Unknown` đối chiếu bằng `Find` majority theo `(from, cid)`: doc của mình → đã ghi; doc core khác → nạp lại `last_seq`, gán lại (≤3, D31); `Unknown` không thấy → gửi lại đúng seq (≤3). Mỗi entry có ngân sách tuyệt đối = `CID_PENDING_TTL` tính từ Reserve (D32).
 6. Xong nhóm (D59): ack (ghi LRU trước) → enqueue event vào publisher → Commit vào batcher → Abort cho entry lỗi. Không bao giờ ack tin chưa ghi.
-7. `CreateRoom` ghi room trước, member sau (D35): `member_count` = số người lúc tạo, `member_count_ver = 1`, mỗi doc member `ver 1`, `request_id = {room}-created`; tối đa `MEMBER_BATCH_MAX` người mỗi lệnh (D107); phát `room_created` (subject `room`) và một `member_added` cho từng người (subject `member`, D104).
+7. `CreateRoom` ghi room trước, member sau (D35): `member_count` = số người lúc tạo, `member_count_ver = 1`, mỗi doc member `ver 1`, `request_id = {room}-created`; tối đa `MEMBER_BATCH_MAX` người mỗi lệnh (D107); phát `room_created` (subject `room`), một `member_added` cho từng người (subject `member`, D104) và `member_count_changed` `{room}-members-v1` (subject `room`).
 
 Lỗ seq (lỗi ghi dở hiếm) chỉ là số không dùng. Client chèn tin theo seq; không có luật "lỗ cũ hơn 5s là void" (D71).
 
@@ -471,7 +471,6 @@ Mỗi guarantee có detector + alert ngay khi định nghĩa (D76), không đợ
 - Khe "kiểm rồi mới ghi" của đường thường: admin bị hạ đúng lúc đang xoá một member thường thì lệnh đã duyệt vẫn ghi.
 - Dedupe `request_id` chỉ trong 15 phút và khi Redis dedupe còn khoá (D99).
 - Mỗi lần đổi vị trí đọc ghi oplog và thêm một record work stream; cần số thật lượt đọc/s trước khi định cỡ oplog và work stream.
-- `CreateRoom` không phát `member_count_changed` ở fast path (số có trong `room_created`); worker `member_count_event` phát `{room}-members-v1` sau `RECONCILE_DELAY` và đếm nó vào `reconcile_republished_total{effect="member_count_event"}`, nên metric này tăng theo số room tạo mới (ngưỡng `ChatimRepublishSurge` > 100/s trong 10m).
 
 Vận hành: oplog `minRetentionHours` ≥ 24h; định cỡ oplog theo byte (đỉnh 10K tin/s × 1–2KB ≈ 0,9–1,7TB/ngày); work stream retention theo §8.3; đo bộ nhớ NATS cho map chống trùng 5m (~3M id ở 10K tin/s); tốc độ xả backlog ≥ 3× ingest đỉnh (đo trên dev ở `docs/poc/README.md` (W1), chỉ kiểm công cụ).
 

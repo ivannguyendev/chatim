@@ -104,7 +104,6 @@ Từ M2b.4, chi tiết ở [plan, mục Kết quả thực thi](plans/2026-10-06
 - Transaction owner: abort/`EndSession` dùng `WithoutCancel` không hạn (nên thêm timeout); lỗi mạng/deadline không nhãn trả nguyên thay vì `ErrRetryLater`; query owner sắp trong RAM.
 - `MembersBetween` quét mọi member của room rồi sắp (cần index `{room_id, last_change_at}` nếu resync room lớn chậm); resync phát lại `ReadChanged` cho mọi member vừa vào.
 - `/app recount` vẫn ghi và tăng `member_count_ver` khi số đã đúng (worker thì không).
-- `CreateRoom` không phát `member_count_changed` ở fast path, nên worker phát `{room}-members-v1` và đếm vào `reconcile_republished_total{effect="member_count_event"}` cho mỗi room mới.
 - Bản ghi `ReadChanged` bị chặn ở `MaxUint32` không bao giờ phát lại (sau 4 tỷ lần đổi vị trí đọc).
 - `GetEditHistory` trang đầu có thể trả `limit+1` dòng (thêm dòng `ver 0`).
 - Itest đua hiếm `TestReactionSetOfTheSameUserRacingOnANewReactionNeverFails` (Mongo `DurationOverflow`), theo dõi.

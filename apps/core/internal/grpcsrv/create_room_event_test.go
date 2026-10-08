@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
@@ -60,7 +61,7 @@ func TestCreateRoomEnqueuesRoomCreatedAndTheFirstMembers(t *testing.T) {
 	if want := createdIDs(42, "bob", "alice", "carol"); !slices.Equal(eventIDs(got), want) || events.enqueueCalls() != 1 {
 		t.Fatalf("enqueued %v in %d calls, want %v in one", eventIDs(got), events.enqueueCalls(), want)
 	}
-	if !slices.Equal(rooms, []uint64{42, 42, 42, 42}) {
+	if !slices.Equal(rooms, []uint64{42, 42, 42, 42, 42}) {
 		t.Fatalf("enqueued for rooms %v, want 42 only", rooms)
 	}
 	stored, err := rg.rooms.Get(t.Context(), 42)
@@ -75,16 +76,17 @@ func TestCreateRoomEnqueuesRoomCreatedAndTheFirstMembers(t *testing.T) {
 		}
 		want = append(want, pbconv.MemberEvent(stored.Type, m))
 	}
+	want = append(want, pbconv.MemberCountChanged(stored, domain.MemberCount{Count: 3, Ver: 1}, "alice", clock))
 	for i, ev := range got {
 		if !proto.Equal(ev, want[i]) {
 			t.Errorf("event %d = %v, want %v", i, ev, want[i])
 		}
-		if _, ok := ev.GetPayload().(*chatimv1.Event_MemberAdded); i > 0 && !ok {
+		if _, ok := ev.GetPayload().(*chatimv1.Event_MemberAdded); i > 0 && i < len(got)-1 && !ok {
 			t.Errorf("event %d payload = %T, want member_added", i, ev.GetPayload())
 		}
 	}
-	wantSubjects := []string{"evt.acme.room.42.room_created", "evt.acme.member.42.member_added"}
-	for i, ev := range got[:2] {
+	wantSubjects := []string{"evt.acme.room.42.room_created", "evt.acme.member.42.member_added", "evt.acme.room.42.member_count_changed"}
+	for i, ev := range []*chatimv1.Event{got[0], got[1], got[len(got)-1]} {
 		msg, err := publish.Message("evt", 42, ev)
 		if err != nil || msg.Subject != wantSubjects[i] {
 			t.Errorf("subject of event %d = %v, %v; want %s", i, msg, err, wantSubjects[i])
@@ -121,7 +123,7 @@ func TestCreateRoomEnqueuesOnlyForTheStoredRoom(t *testing.T) {
 		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Members: []string{"alice"},
 	})
 	expectCode(t, err, codes.InvalidArgument)
-	if rooms, _ := events.enqueued(); !slices.Equal(rooms, []uint64{3, 3, 3}) {
+	if rooms, _ := events.enqueued(); !slices.Equal(rooms, []uint64{3, 3, 3, 3}) {
 		t.Fatalf("enqueued for rooms %v, want only 3", rooms)
 	}
 }
