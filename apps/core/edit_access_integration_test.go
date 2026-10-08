@@ -13,17 +13,47 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/pbconv"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-func assertNoChangeEvents(t *testing.T, live <-chan *nats.Msg, wait time.Duration) {
+func messageChange(m *nats.Msg) bool {
+	tokens := strings.Split(m.Subject, ".")
+	return len(tokens) > 2 && tokens[2] == "message" && strings.Contains(m.Header.Get(jetstream.MsgIDHeader), "-v")
+}
+
+func awaitMemberEvents(t *testing.T, live <-chan *nats.Msg, liveRoot, roomID string, want map[string]string) {
+	t.Helper()
+	deadline := time.After(itLiveLimit)
+	for len(want) > 0 {
+		select {
+		case m := <-live:
+			id := m.Header.Get(jetstream.MsgIDHeader)
+			if messageChange(m) {
+				t.Fatalf("message change event %s on %s arrived, want none for hide and clear", id, m.Subject)
+			}
+			kind, ok := want[id]
+			if !ok {
+				continue
+			}
+			if subject := liveRoot + "." + itTenant + ".member." + roomID + ".evt." + kind; m.Subject != subject {
+				t.Fatalf("event %s on %s, want %s", id, m.Subject, subject)
+			}
+			delete(want, id)
+		case <-deadline:
+			t.Fatalf("member events %v did not arrive within %v", want, itLiveLimit)
+		}
+	}
+}
+
+func assertNoMessageChanges(t *testing.T, live <-chan *nats.Msg, wait time.Duration) {
 	t.Helper()
 	timeout := time.After(wait)
 	for {
 		select {
 		case m := <-live:
-			if id := m.Header.Get(jetstream.MsgIDHeader); strings.Contains(id, "-v") {
-				t.Fatalf("live change event %s arrived, want none for hide and clear", id)
+			if messageChange(m) {
+				t.Fatalf("message change event %s on %s arrived, want none for hide and clear", m.Header.Get(jetstream.MsgIDHeader), m.Subject)
 			}
 		case <-timeout:
 			return
@@ -77,7 +107,7 @@ func TestRealInfraConcurrentEditsOnOneBaseHaveOneWinner(t *testing.T) {
 	}
 }
 
-func TestRealInfraHideAndClearApplyOnlyToTheReader(t *testing.T) {
+func TestRealInfraHideAndClearApplyOnlyToTheReaderAndAnnounceIt(t *testing.T) {
 	it := realInfra(t)
 	core := startCore(t, it, itFastEffects)
 	client := dialCore(t, core.cfg)
@@ -115,5 +145,13 @@ func TestRealInfraHideAndClearApplyOnlyToTheReader(t *testing.T) {
 	if again, err := client.ClearHistory(bob, &chatimv1.ClearHistoryRequest{RoomId: roomID}); err != nil || again.GetClearedAt().AsTime().Before(mark) {
 		t.Fatalf("ClearHistory again = %v, %v; want the mark never to go back from %v", again, err, mark)
 	}
-	assertNoChangeEvents(t, live, 3*time.Second)
+	room, err := strconv.ParseUint(roomID, 10, 64)
+	if err != nil {
+		t.Fatalf("room id %q: %v", roomID, err)
+	}
+	awaitMemberEvents(t, live, core.cfg.Stream.LiveRoot, roomID, map[string]string{
+		pbconv.HiddenEventID(room, "bob", 0, 3):  "message_hidden",
+		pbconv.ClearedEventID(room, "bob", mark): "history_cleared",
+	})
+	assertNoMessageChanges(t, live, 3*time.Second)
 }

@@ -27,7 +27,7 @@ func (m movingCounter) CountMembers(ctx context.Context, r uint64) (int, error) 
 	return n, err
 }
 
-func TestRepairLeavesACorrectCountAlone(t *testing.T) {
+func TestACorrectCountArmsNothing(t *testing.T) {
 	rg := newMemberRig(t)
 	if e := rg.repair.Effect(); e.Name != effects.MemberCountRepairName || e.Delay != 0 {
 		t.Fatalf("effect = %q delay %v, want %q delay 0", e.Name, e.Delay, effects.MemberCountRepairName)
@@ -36,8 +36,30 @@ func TestRepairLeavesACorrectCountAlone(t *testing.T) {
 	if errs := rg.repair.Effect().Run(t.Context(), []work.Record{countCheck(room, 7)}); !allNil(errs, 1) {
 		t.Fatalf("errs = %v", errs)
 	}
-	if after := rg.stored(t); after.MemberCountVer != before.MemberCountVer || len(rg.js.Attempts()) != 0 || rg.repair.Repaired() != 0 || len(rg.timers.rooms()) != 0 {
-		t.Fatalf("ver %d -> %d, attempts %d, repaired %d, armed %v; want nothing touched", before.MemberCountVer, after.MemberCountVer, len(rg.js.Attempts()), rg.repair.Repaired(), rg.timers.rooms())
+	if after := rg.stored(t); after.MemberCountVer != before.MemberCountVer || rg.repair.Repaired() != 0 || len(rg.timers.rooms()) != 0 {
+		t.Fatalf("ver %d -> %d, repaired %d, armed %v; want the count untouched", before.MemberCountVer, after.MemberCountVer, rg.repair.Repaired(), rg.timers.rooms())
+	}
+	if got := storedEventIDs(rg.js); !slices.Equal(got, []string{pbconv.MemberCountEventID(room, before.MemberCountVer)}) {
+		t.Fatalf("stored = %v, want the current count announced again", got)
+	}
+}
+
+func TestRepairRepublishesACorrectCountWhoseEventWasLost(t *testing.T) {
+	rg := newMemberRig(t)
+	rg.join(t, "bob")
+	rg.js.RefuseWhen(func(*nats.Msg) error { return errBoom })
+	if errs := rg.repair.Effect().Run(t.Context(), []work.Record{countCheck(room, 7)}); len(errs) != 1 || !errors.Is(errs[0], errBoom) {
+		t.Fatalf("errs = %v, want a retry when the announcement fails", errs)
+	}
+	if r := rg.stored(t); r.MemberCount != 2 || r.MemberCountVer != 2 || len(rg.js.Stored()) != 0 {
+		t.Fatalf("count %d ver %d stored %d; want the repair written and its event lost", r.MemberCount, r.MemberCountVer, len(rg.js.Stored()))
+	}
+	rg.js.RefuseWhen(nil)
+	if errs := rg.repair.Effect().Run(t.Context(), []work.Record{countCheck(room, 7)}); !allNil(errs, 1) {
+		t.Fatalf("errs = %v", errs)
+	}
+	if got := storedEventIDs(rg.js); !slices.Equal(got, []string{pbconv.MemberCountEventID(room, 2)}) || rg.repair.Repaired() != 1 || rg.repair.Republished() != 1 {
+		t.Fatalf("stored %v, repaired %d, republished %d; want the lost event sent on the retry without another repair", got, rg.repair.Repaired(), rg.repair.Republished())
 	}
 }
 
@@ -59,8 +81,8 @@ func TestRepairFixesADriftedCountAndAnnouncesIt(t *testing.T) {
 	if want := pbconv.MemberCountChanged(r, domain.MemberCount{Count: 3, Ver: 2}, "", memberNow); err != nil || !proto.Equal(events[0], want) {
 		t.Fatalf("event = %v, %v; want %v", events, err, want)
 	}
-	if armed := rg.timers.rooms(); len(armed) != 0 {
-		t.Fatalf("armed %v, want no new timer when nothing slipped in", armed)
+	if armed := rg.timers.rooms(); !slices.Equal(armed, []uint64{room}) {
+		t.Fatalf("armed %v, want one follow-up timer for the room", armed)
 	}
 }
 
@@ -78,24 +100,48 @@ func TestRepairNaksWhenTheCountMovedDuringIt(t *testing.T) {
 	if len(rg.js.Attempts()) != 0 || rg.repair.Repaired() != 0 || rg.repair.Dropped() != 0 {
 		t.Fatalf("attempts %d, repaired %d, dropped %d; want nothing", len(rg.js.Attempts()), rg.repair.Repaired(), rg.repair.Dropped())
 	}
+	if armed := rg.timers.rooms(); !slices.Equal(armed, []uint64{room}) {
+		t.Fatalf("armed %v, want the follow-up timer left armed", armed)
+	}
 }
 
-func TestRepairArmsAnotherTimerWhenAnIncrementSlippedIn(t *testing.T) {
+type orderedCounter struct {
+	effects.MemberCounter
+	calls *[]string
+}
+
+func (o orderedCounter) SetMemberCount(ctx context.Context, r, base uint64, n int) (domain.MemberCount, bool, error) {
+	*o.calls = append(*o.calls, "set")
+	return o.MemberCounter.SetMemberCount(ctx, r, base, n)
+}
+
+func TestRepairArmsAFollowUpTimerBeforeItWrites(t *testing.T) {
 	rg := newMemberRig(t)
 	rg.join(t, "bob")
-	rg.js.RefuseWhen(func(*nats.Msg) error { rg.bump(t, 1); return nil })
+	var calls []string
+	rg.timers.onArm = func() { calls = append(calls, "arm") }
+	rg.repair = built(effects.NewMemberCountRepair(effects.MemberCountRepairDeps{
+		Rooms: rg.rooms, Timers: rg.timers, JS: rg.js, Counts: orderedCounter{MemberCounter: rg.rooms, calls: &calls},
+	}, effects.MemberCountRepairConfig{SubjectRoot: "evt"}))(t)
 	if errs := rg.repair.Effect().Run(t.Context(), []work.Record{countCheck(room, 7)}); !allNil(errs, 1) {
 		t.Fatalf("errs = %v", errs)
 	}
-	if armed := rg.timers.rooms(); !slices.Equal(armed, []uint64{room}) || rg.repair.Repaired() != 1 {
-		t.Fatalf("armed %v, repaired %d; want one new timer for the room", armed, rg.repair.Repaired())
+	if !slices.Equal(calls, []string{"arm", "set"}) || !slices.Equal(rg.timers.rooms(), []uint64{room}) || rg.repair.Repaired() != 1 {
+		t.Fatalf("calls %v, armed %v, repaired %d; want the follow-up timer armed before the write", calls, rg.timers.rooms(), rg.repair.Repaired())
 	}
+}
+
+func TestAFailedArmWritesNothing(t *testing.T) {
+	rg := newMemberRig(t)
+	rg.join(t, "bob")
 	rg.timers.err = errBoom
-	rg.js.RefuseWhen(func(*nats.Msg) error { rg.bump(t, -1); return nil })
-	rg.bump(t, 5)
-	errs := rg.repair.Effect().Run(t.Context(), []work.Record{countCheck(room, 8)})
+	before := rg.stored(t)
+	errs := rg.repair.Effect().Run(t.Context(), []work.Record{countCheck(room, 7)})
 	if len(errs) != 1 || !errors.Is(errs[0], errBoom) {
-		t.Fatalf("errs = %v, want a retry when the new timer is not armed", errs)
+		t.Fatalf("errs = %v, want a retry when the follow-up timer is not armed", errs)
+	}
+	if after := rg.stored(t); after != before || len(rg.js.Attempts()) != 0 || rg.repair.Repaired() != 0 {
+		t.Fatalf("room %+v -> %+v, attempts %d, repaired %d; want nothing written or sent", before, after, len(rg.js.Attempts()), rg.repair.Repaired())
 	}
 }
 

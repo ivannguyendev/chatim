@@ -76,7 +76,15 @@ func (e *MemberCountRepair) repair(ctx context.Context, room uint64) error {
 		return err
 	}
 	n, err := e.deps.Counts.CountMembers(ctx, room)
-	if err != nil || n == r.MemberCount {
+	switch {
+	case err != nil:
+		return err
+	case n == r.MemberCount && r.MemberCountVer >= 1:
+		return e.announce(ctx, r, domain.MemberCount{Count: r.MemberCount, Ver: r.MemberCountVer})
+	case n == r.MemberCount:
+		return nil
+	}
+	if _, err := e.deps.Timers.Arm(ctx, room); err != nil {
 		return err
 	}
 	c, ok, err := e.deps.Counts.SetMemberCount(ctx, room, r.MemberCountVer, n)
@@ -87,10 +95,7 @@ func (e *MemberCountRepair) repair(ctx context.Context, room uint64) error {
 		return errCountMoved
 	}
 	e.repaired.Add(1)
-	if err := e.announce(ctx, r, c); err != nil {
-		return err
-	}
-	return e.rearm(ctx, room, c.Ver)
+	return e.announce(ctx, r, c)
 }
 
 func (e *MemberCountRepair) announce(ctx context.Context, r domain.Room, c domain.MemberCount) error {
@@ -98,13 +103,4 @@ func (e *MemberCountRepair) announce(ctx context.Context, r domain.Room, c domai
 	ev := pbconv.MemberCountChanged(r, c, "", e.deps.Now().UTC().Truncate(time.Millisecond))
 	awaitAcks(ctx, e.queue(nil, errs, 0, r.ID, ev), errs, countStored(&e.republished))
 	return errs[0]
-}
-
-func (e *MemberCountRepair) rearm(ctx context.Context, room, ver uint64) error {
-	after, err := e.deps.Rooms.Get(ctx, room)
-	if err != nil || after.MemberCountVer <= ver {
-		return err
-	}
-	_, err = e.deps.Timers.Arm(ctx, room)
-	return err
 }
