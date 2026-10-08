@@ -67,7 +67,7 @@ func metricSources(p probes) []metrics.Source {
 
 func workerSources(stats func() effects.Stats, counts map[string]effectCounters) []metrics.Source {
 	const republishHelp = "Events effect workers sent and JetStream acked; msg_created sends only unmarked events, the other event effects count only ids the stream had not stored."
-	const dropHelp = "Work records an effect gave up on (missing room, message, edit fact, reaction or pin fact, or a corrupt document)."
+	const dropHelp = "Work records an effect gave up on (missing room, message, edit fact, reaction, pin fact, member doc, clear mark or hide, or a corrupt document)."
 	out := []metrics.Source{
 		{Name: "reconcile_lag_seconds", Help: "How far the effect workers run behind each effect's delay.", Gauge: true, Read: func() float64 { return stats().Lag.Seconds() }},
 		{Name: "work_processed_total", Help: "Work records acked after every effect ran.", Read: func() float64 { return float64(stats().Processed) }},

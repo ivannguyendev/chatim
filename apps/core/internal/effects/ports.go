@@ -5,6 +5,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
+	"github.com/ivannguyendev/chatim/apps/core/internal/work"
 )
 
 type Marks interface {
@@ -45,4 +46,21 @@ type PinFacts interface {
 
 type PinProjecter interface {
 	Project(ctx context.Context, room, target uint64) (domain.PinState, error)
+}
+
+type MemberLookup interface {
+	MembersOf(ctx context.Context, room uint64, users []string) ([]domain.Member, error)
+}
+
+type HiddenLookup interface {
+	Get(ctx context.Context, user string, key store.MsgKey) (domain.HiddenMessage, bool, error)
+}
+
+type MemberCounter interface {
+	CountMembers(ctx context.Context, room uint64) (int, error)
+	SetMemberCount(ctx context.Context, room, base uint64, count int) (domain.MemberCount, bool, error)
+}
+
+type CountTimers interface {
+	Arm(ctx context.Context, room uint64) (work.Timer, error)
 }

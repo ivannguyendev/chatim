@@ -22,7 +22,7 @@ type serviceDeps struct {
 	router   *actor.Router
 	pub      *publish.Publisher
 	cidBatch *dedupe.Batcher
-	timerJS  work.TimerJetStream
+	timers   *work.Timers
 	cfg      config.Config
 	log      *slog.Logger
 }
@@ -59,15 +59,10 @@ func wireMutator(d serviceDeps) (*mutate.Mutator, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wire request dedupe: %w", err)
 	}
-	w := d.cfg.Work
-	timers, err := work.NewTimers(d.timerJS, w.Name, w.SubjectRoot, w.Partitions, d.cfg.MemberCountCheckDelay, work.WithTimerLogger(d.log))
-	if err != nil {
-		return nil, fmt.Errorf("wire member count timers: %w", err)
-	}
 	mut, err := mutate.New(mutate.Deps{
 		Access: checker, Messages: st, Edits: st, Hidden: st.Hidden(), Rooms: st, Events: d.pub,
 		Reactions: reactions, Counter: counts, Pins: pins, Projector: projector, Limits: d.cfg.Limits,
-		Members: st, Requests: requests, Forget: d.router, Timers: timers, Reads: st, Log: d.log,
+		Members: st, Requests: requests, Forget: d.router, Timers: d.timers, Reads: st, Log: d.log,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("wire mutator: %w", err)

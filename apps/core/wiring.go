@@ -97,7 +97,12 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wire slot manager: %w", err)
 	}
-	fx, err := wireEffects(cfg, cl, st, marks, slots, log)
+	w := cfg.Work
+	timers, err := work.NewTimers(cl.js, w.Name, w.SubjectRoot, w.Partitions, cfg.MemberCountCheckDelay, work.WithTimerLogger(log))
+	if err != nil {
+		return nil, fmt.Errorf("wire member count timers: %w", err)
+	}
+	fx, err := wireEffects(cfg, cl, st, marks, slots, timers, log)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +118,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 		a.reconciler = rec
 	}
 	a.publisher, a.flusher, a.cidBatch, a.router, a.slots = pub, fl, batch, router, slots
-	svc, err := wireService(serviceDeps{store: st, router: router, pub: pub, cidBatch: batch, timerJS: cl.js, cfg: cfg, log: log})
+	svc, err := wireService(serviceDeps{store: st, router: router, pub: pub, cidBatch: batch, timers: timers, cfg: cfg, log: log})
 	if err != nil {
 		return nil, err
 	}

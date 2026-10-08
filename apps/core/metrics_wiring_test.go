@@ -33,8 +33,10 @@ func fakeProbes(withReader bool) probes {
 			"edit_projection":  {dropped: func() uint64 { return 4 }},
 			"reaction_counter": {republished: func() uint64 { return 8 }, dropped: func() uint64 { return 2 }},
 			"pin_projection":   {dropped: func() uint64 { return 3 }},
+			"member_event":     {republished: func() uint64 { return 9 }, dropped: func() uint64 { return 10 }},
+			"read_event":       {republished: func() uint64 { return 11 }, dropped: zero},
 		},
-		counterRepairs: map[string]func() uint64{"reactions": func() uint64 { return 6 }},
+		counterRepairs: map[string]func() uint64{"reactions": func() uint64 { return 6 }, "members": func() uint64 { return 12 }},
 	}
 	if withReader {
 		p.reconcile = func() reconcile.Stats { return reconcile.Stats{} }
@@ -97,8 +99,10 @@ func TestEffectMetricsReadTheirEffectByLabel(t *testing.T) {
 		"effect_dropped_total{msg_created}": 0, "effect_dropped_total{room_created}": 1,
 		"effect_dropped_total{edit_projection}":         4,
 		"reconcile_republished_total{reaction_counter}": 8, "effect_dropped_total{reaction_counter}": 2,
-		"effect_dropped_total{pin_projection}": 3,
-		"counter_repaired_total{reactions}":    6,
+		"effect_dropped_total{pin_projection}":      3,
+		"counter_repaired_total{reactions}":         6,
+		"reconcile_republished_total{member_event}": 9, "effect_dropped_total{member_event}": 10,
+		"reconcile_republished_total{read_event}": 11, "counter_repaired_total{members}": 12,
 	}
 	for key, v := range want {
 		if g, ok := got[key]; !ok || g != v {

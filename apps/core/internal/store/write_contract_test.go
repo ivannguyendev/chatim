@@ -38,6 +38,7 @@ var portMethods = map[string]string{
 	"Edits.PurgeText":             "purge",
 	"Hidden.Hide":                 "upsert",
 	"Hidden.HiddenIn":             "read",
+	"Hidden.Get":                  "read",
 	"Hidden.Between":              "read",
 
 	"Reactions.Set":                  "version-bump",

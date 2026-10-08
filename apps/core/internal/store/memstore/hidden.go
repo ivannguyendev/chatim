@@ -66,6 +66,22 @@ func (s *Hidden) HiddenIn(ctx context.Context, user string, room, thread, from, 
 	return out, nil
 }
 
+func (s *Hidden) Get(ctx context.Context, user string, key store.MsgKey) (domain.HiddenMessage, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.HiddenMessage{}, false, err
+	}
+	if err := key.Validate(); err != nil {
+		return domain.HiddenMessage{}, false, err
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	at, ok := s.seqs[hiddenKey{user: user, key: key}]
+	if !ok {
+		return domain.HiddenMessage{}, false, nil
+	}
+	return domain.HiddenMessage{User: user, Room: key.Room, Thread: key.Thread, Seq: key.Seq, At: at}, true, nil
+}
+
 func (s *Hidden) Between(ctx context.Context, room uint64, from, to time.Time, limit int) ([]domain.HiddenMessage, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

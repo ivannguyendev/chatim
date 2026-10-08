@@ -2,6 +2,7 @@ package mongostore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -44,6 +45,24 @@ func (h *Hidden) Hide(ctx context.Context, user string, key store.MsgKey, at tim
 		return false, fmt.Errorf("hide %d/%d/%d for %q: %w", key.Room, key.Thread, key.Seq, user, err)
 	}
 	return res.UpsertedCount > 0, nil
+}
+
+func (h *Hidden) Get(ctx context.Context, user string, key store.MsgKey) (domain.HiddenMessage, bool, error) {
+	doc, err := encodeHidden(user, key)
+	if err != nil {
+		return domain.HiddenMessage{}, false, err
+	}
+	filter := bson.D{{Key: "user_id", Value: doc.User}, {Key: "room_id", Value: doc.Room}, {Key: "thread_root", Value: doc.Thread}, {Key: "seq", Value: doc.Seq}}
+	var got hiddenDoc
+	err = h.coll.FindOne(ctx, filter).Decode(&got)
+	switch {
+	case errors.Is(err, mongo.ErrNoDocuments):
+		return domain.HiddenMessage{}, false, nil
+	case err != nil:
+		return domain.HiddenMessage{}, false, fmt.Errorf("hidden %d/%d/%d of %q: %w", key.Room, key.Thread, key.Seq, user, err)
+	}
+	out, err := decodeHidden(got)
+	return out, err == nil, err
 }
 
 func encodeHidden(user string, key store.MsgKey) (hiddenDoc, error) {

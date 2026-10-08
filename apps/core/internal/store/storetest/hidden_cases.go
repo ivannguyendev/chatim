@@ -94,3 +94,24 @@ func hiddenInvalid(t *testing.T, s editStores) {
 		t.Fatalf("HiddenIn after a rejected hide = %v, %v; want none", got, err)
 	}
 }
+
+func hiddenGet(t *testing.T, s editStores) {
+	first, other := hiddenMark("bob", roomA, sideThread, 4, 1), hiddenMark("carol", roomA, sideThread, 5, 2)
+	mustHide(t, s.hidden, first, other)
+	mustHide(t, s.hidden, hiddenMark("bob", roomA, sideThread, 4, 9))
+	got, found, err := s.hidden.Get(t.Context(), "bob", msgKey(roomA, sideThread, 4))
+	if err != nil || !found || !sameHidden(got, first) {
+		t.Fatalf("Get(bob, 4) = %+v, %v, %v; want %+v with the first hide time", got, found, err, first)
+	}
+	for _, miss := range []struct {
+		user string
+		key  store.MsgKey
+	}{{"carol", msgKey(roomA, sideThread, 4)}, {"bob", msgKey(roomA, mainThread, 4)}, {"bob", msgKey(roomB, sideThread, 4)}} {
+		got, found, err := s.hidden.Get(t.Context(), miss.user, miss.key)
+		if err != nil || found {
+			t.Fatalf("Get(%q, %+v) = %+v, %v, %v; want not found", miss.user, miss.key, got, found, err)
+		}
+	}
+	_, _, err = s.hidden.Get(t.Context(), "bob", msgKey(0, mainThread, 1))
+	assertErrorIs(t, "Get(room 0)", err, apperr.ErrInvalidArgument)
+}
