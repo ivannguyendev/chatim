@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"math"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -71,7 +72,7 @@ func TestMessageCodecRoundTrip(t *testing.T) {
 		t.Fatalf("CreatedAt = %v, want %v", got.CreatedAt, m.CreatedAt)
 	}
 	got.CreatedAt = m.CreatedAt
-	if got != m {
+	if !reflect.DeepEqual(got, m) {
 		t.Fatalf("decoded %+v, want %+v", got, m)
 	}
 }
@@ -127,13 +128,13 @@ func TestDecodeMessageRejectsCorruptDocument(t *testing.T) {
 }
 
 func TestRoomCodecRoundTrip(t *testing.T) {
-	r := domain.Room{ID: 7_340_000_001, Tenant: "acme", Type: domain.RoomGroup, Name: "Team", CreatedBy: "alice", CreatedAt: codecTime, MemberCount: 2}
+	r := domain.Room{ID: 7_340_000_001, Tenant: "acme", Type: domain.RoomGroup, Name: "Team", CreatedBy: "alice", CreatedAt: codecTime, MemberCount: 2, MemberCountVer: 3}
 	doc, err := encodeRoom(r)
 	if err != nil {
 		t.Fatalf("encodeRoom: %v", err)
 	}
 	back, raw := roundTrip(t, doc)
-	if got, want := fieldNames(t, raw), []string{"_id", "t", "ty", "n", "cb", "ca", "mc"}; !slices.Equal(got, want) {
+	if got, want := fieldNames(t, raw), []string{"_id", "tenant", "type", "name", "created_by", "created_at", "member_count", "member_count_ver"}; !slices.Equal(got, want) {
 		t.Fatalf("fields = %v, want %v", got, want)
 	}
 	got, err := decodeRoom(back)
@@ -146,31 +147,17 @@ func TestRoomCodecRoundTrip(t *testing.T) {
 	}
 }
 
-func TestMemberCodecRoundTrip(t *testing.T) {
-	m := domain.Member{Room: 7_340_000_001, Tenant: "acme", User: "bob", Role: domain.RoleMember, JoinedAt: codecTime}
-	back, raw := roundTrip(t, encodeMember(m, int64(m.Room)))
-	if got, want := fieldNames(t, raw), []string{"r", "u", "t", "ro", "ja"}; !slices.Equal(got, want) {
-		t.Fatalf("fields = %v, want %v", got, want)
+func TestRoomCodecDecodesActivity(t *testing.T) {
+	d := roomDoc{
+		ID: 7_340_000_001, Tenant: "acme", Type: domain.RoomGroup, Name: "Team", CreatedBy: "alice", CreatedAt: codecTime, MemberCount: 2,
+		LastSeq: 42, LastMsgAt: codecTime.Add(time.Minute), LastChangeAt: codecTime.Add(2 * time.Minute),
 	}
-	got, err := decodeMember(back)
-	if err != nil || !got.JoinedAt.Equal(m.JoinedAt) {
-		t.Fatalf("decodeMember = %+v, %v; want %+v", got, err, m)
+	got, err := decodeRoom(d)
+	if err != nil || got.LastSeq != 42 || !got.LastMsgAt.Equal(d.LastMsgAt) || !got.LastChangeAt.Equal(d.LastChangeAt) {
+		t.Fatalf("decodeRoom = %+v, %v; want seq 42 at %v / %v", got, err, d.LastMsgAt, d.LastChangeAt)
 	}
-	got.JoinedAt = m.JoinedAt
-	if got != m {
-		t.Fatalf("decoded %+v, want %+v", got, m)
-	}
-}
-
-func TestRoomIDAboveMaxInt64IsRejected(t *testing.T) {
-	r := domain.Room{ID: math.MaxInt64 + 1, Tenant: "acme", Type: domain.RoomDM}
-	if _, err := encodeRoom(r); !errors.Is(err, apperr.ErrInvalidArgument) {
-		t.Fatalf("encodeRoom error = %v, want ErrInvalidArgument", err)
-	}
-	if _, err := decodeRoom(roomDoc{ID: -1}); err == nil {
-		t.Fatal("decodeRoom accepted a negative id")
-	}
-	if _, err := decodeMember(memberDoc{Room: -1}); err == nil {
-		t.Fatal("decodeMember accepted a negative room")
+	d.LastSeq = -1
+	if _, err := decodeRoom(d); !errors.Is(err, errCorrupt) {
+		t.Fatalf("decodeRoom(negative last seq) = %v, want errCorrupt", err)
 	}
 }

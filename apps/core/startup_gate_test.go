@@ -54,7 +54,7 @@ type gateRig struct {
 	done      chan error
 }
 
-func startGate(t *testing.T, ctx context.Context, router *gatedRouter, slots runner) *gateRig {
+func startGate(t *testing.T, ctx context.Context, router *gatedRouter, slots runner, watch *fakeWatch) *gateRig {
 	t.Helper()
 	sink := &testlog.Sink{}
 	log := sink.Logger()
@@ -66,7 +66,8 @@ func startGate(t *testing.T, ctx context.Context, router *gatedRouter, slots run
 		cfg: cfg, log: log,
 		admin:     admin.New(admin.Config{ShutdownTimeout: config.CloseTimeout}, log),
 		grpc:      grpcserver.New(grpcserver.Config{ShutdownTimeout: time.Second}, log),
-		publisher: idle{}, flusher: idle{}, cidBatch: idle{}, router: router, slots: slots,
+		publisher: idle{}, flusher: idle{}, cidBatch: idle{}, router: router, slots: slots, workers: idle{},
+		memberWatch: watch,
 	}
 	lis, err := listenAll(t.Context(), "127.0.0.1:0", "127.0.0.1:0")
 	if err != nil {
@@ -121,7 +122,7 @@ func (rg *gateRig) assertGRPCNeverServed(t *testing.T) {
 
 func TestServeNeverOpensGRPCWhenStopRacesStartup(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
-	rg := startGate(t, ctx, &gatedRouter{running: make(chan struct{})}, idle{})
+	rg := startGate(t, ctx, &gatedRouter{running: make(chan struct{})}, idle{}, &fakeWatch{})
 	rg.awaitAdmin(t)
 	if err := probe(t.Context(), rg.adminAddr); err == nil {
 		t.Fatal("readyz answered 200 before the router ran")
@@ -135,7 +136,7 @@ func TestServeNeverOpensGRPCWhenStopRacesStartup(t *testing.T) {
 
 func TestServeNeverOpensGRPCWhenASiblingFailsAtStartup(t *testing.T) {
 	failing := idle{run: func(context.Context) error { return errBroken }}
-	rg := startGate(t, t.Context(), &gatedRouter{running: make(chan struct{})}, failing)
+	rg := startGate(t, t.Context(), &gatedRouter{running: make(chan struct{})}, failing, &fakeWatch{})
 	if err := rg.wait(t); !errors.Is(err, errBroken) {
 		t.Fatalf("serve = %v, want the failing sibling's error", err)
 	}
@@ -146,7 +147,7 @@ func TestServeOpensGRPCAndReadinessAfterACleanStart(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	running := make(chan struct{})
 	close(running)
-	rg := startGate(t, ctx, &gatedRouter{running: running}, idle{})
+	rg := startGate(t, ctx, &gatedRouter{running: running}, idle{}, &fakeWatch{})
 	rg.awaitAdmin(t)
 	deadline := time.Now().Add(gateLimit)
 	for probe(t.Context(), rg.adminAddr) != nil {

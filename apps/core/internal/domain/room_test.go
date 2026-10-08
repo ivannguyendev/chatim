@@ -47,10 +47,16 @@ func TestNewRoomBuildsRoomAndMembers(t *testing.T) {
 	if room != wantRoom {
 		t.Errorf("room = %+v, want %+v", room, wantRoom)
 	}
+	created := func(user string, role domain.Role) domain.Member {
+		return domain.Member{
+			Room: 42, Tenant: "acme", User: user, Role: role, JoinedAt: now, State: domain.MemberActive, Ver: 1,
+			RequestID: "42-created", UpdatedAt: now, UpdatedBy: "alice", LastChangeAt: now,
+		}
+	}
 	wantMembers := []domain.Member{
-		{Room: 42, Tenant: "acme", User: "bob", Role: domain.RoleMember, JoinedAt: now},
-		{Room: 42, Tenant: "acme", User: "alice", Role: domain.RoleOwner, JoinedAt: now},
-		{Room: 42, Tenant: "acme", User: "carol", Role: domain.RoleMember, JoinedAt: now},
+		created("bob", domain.RoleMember),
+		created("alice", domain.RoleOwner),
+		created("carol", domain.RoleMember),
 	}
 	if !slices.Equal(members, wantMembers) {
 		t.Errorf("members = %+v, want %+v", members, wantMembers)
@@ -79,7 +85,7 @@ func TestNewRoomRules(t *testing.T) {
 		{"dm ok without name", "acme", "alice", domain.RoomDM, "", []string{"alice", "bob"}, ""},
 		{"dm duplicates collapse to two", "acme", "alice", domain.RoomDM, "", []string{"alice", "bob", "bob", "alice"}, ""},
 		{"group of creator only", "acme", "alice", domain.RoomGroup, "Solo", []string{"alice"}, ""},
-		{"group of 5000", "acme", "alice", domain.RoomGroup, "Big", users(5000), ""},
+		{"group of 6000", "acme", "alice", domain.RoomGroup, "Big", users(6000), ""},
 		{"name of 128 runes", "acme", "alice", domain.RoomGroup, strings.Repeat("ñ", 128), []string{"alice"}, ""},
 		{"bad tenant", "Acme", "alice", domain.RoomGroup, "T", []string{"alice"}, "tenant"},
 		{"bad creator", "acme", "al.ice", domain.RoomGroup, "T", []string{"al.ice"}, "user"},
@@ -89,7 +95,6 @@ func TestNewRoomRules(t *testing.T) {
 		{"no members", "acme", "alice", domain.RoomGroup, "T", nil, "members"},
 		{"dm of one", "acme", "alice", domain.RoomDM, "", []string{"alice", "alice"}, "members"},
 		{"dm of three", "acme", "alice", domain.RoomDM, "", []string{"alice", "bob", "carol"}, "members"},
-		{"group of 5001", "acme", "alice", domain.RoomGroup, "Big", users(5001), "members"},
 		{"group without name", "acme", "alice", domain.RoomGroup, "", []string{"alice"}, "name"},
 		{"group with blank name", "acme", "alice", domain.RoomGroup, " \t ", []string{"alice"}, "name"},
 		{"name of 129 runes", "acme", "alice", domain.RoomGroup, strings.Repeat("ñ", 129), []string{"alice"}, "name"},

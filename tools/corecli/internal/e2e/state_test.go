@@ -15,7 +15,12 @@ func TestStateRoundTripsThroughAFile(t *testing.T) {
 	if _, err := e2e.Load(path); err == nil {
 		t.Fatal("Load of a missing state succeeded")
 	}
-	want := e2e.State{Tenant: "e2e", User: "alice", Room: room, Owner: "core-1", Acks: acks(3)}
+	want := e2e.State{
+		Tenant: "e2e", User: "alice", Room: room, Owner: "core-1", Acks: acks(3),
+		Changes:   []e2e.Change{e2e.EditOf(1), e2e.DeleteOf(2)},
+		Reactions: []e2e.Reaction{{Seq: 3, Emoji: "❤️", Change: 2, Version: 2}},
+		Pins:      []e2e.Pin{{Seq: 4, Version: 1}},
+	}
 	if err := e2e.Save(path, want); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -54,8 +59,11 @@ func TestEventOfReadsTheCreatedMessage(t *testing.T) {
 	ev := &chatimv1.Event{RoomId: room, Id: "42-0-4", Seq: 4, Payload: &chatimv1.Event_MessageCreated{
 		MessageCreated: &chatimv1.MessageCreated{Message: &chatimv1.Message{Cid: "a-4"}},
 	}}
-	got := e2e.EventOf("live.e2e.room.42.evt.msg_created", ev)
-	want := e2e.Event{Room: room, ID: "42-0-4", Seq: 4, CID: "a-4", Subject: "live.e2e.room.42.evt.msg_created"}
+	got, ok := e2e.EventOf("live.e2e.message.42.evt.msg_created", ev)
+	if !ok {
+		t.Fatal("EventOf skipped a message_created event")
+	}
+	want := e2e.Event{Kind: e2e.KindCreated, Room: room, ID: "42-0-4", Seq: 4, CID: "a-4", Subject: "live.e2e.message.42.evt.msg_created"}
 	if got != want {
 		t.Fatalf("EventOf = %+v, want %+v", got, want)
 	}

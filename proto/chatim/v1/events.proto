@@ -3,6 +3,8 @@ syntax = "proto3";
 package chatim.v1;
 
 import "chatim/v1/core.proto";
+import "chatim/v1/members.proto";
+import "chatim/v1/reactions_pins.proto";
 import "google/protobuf/timestamp.proto";
 
 message Event {
@@ -18,9 +20,60 @@ message Event {
   google.protobuf.Timestamp ts = 9;
   oneof payload {
     MessageCreated message_created = 20;
+    RoomCreated room_created = 21;
+    MessageEdited message_edited = 22;
+    MessageDeleted message_deleted = 23;
+    ReactionChanged reaction_changed = 24;
+    CountsChanged counts_changed = 25;
+    MessagePinned message_pinned = 26;
+    MessageUnpinned message_unpinned = 27;
+    MemberAdded member_added = 28;
+    MemberRemoved member_removed = 29;
+    MemberRoleChanged member_role_changed = 30;
+    MemberCountChanged member_count_changed = 31;
+    ReadUpdated read_updated = 32;
+    MemberPriorityChanged member_priority_changed = 33;
+    MessageHidden message_hidden = 34;
+    HistoryCleared history_cleared = 35;
   }
 }
 
 message MessageCreated {
   Message message = 1;
+}
+
+message RoomCreated {
+  Room room = 1;
+}
+
+message MessageEdited {
+  Message message = 1;
+  uint32 ver = 2;
+}
+
+message MessageDeleted {
+  Message message = 1;
+  uint32 ver = 2;
+}
+
+message ReactionChanged {
+  string user = 1;
+  string emoji = 2;
+  string previous_emoji = 3;
+  uint32 change = 4;
+}
+
+message CountsChanged {
+  string counter = 1;
+  ReactionSummary reactions = 2;
+}
+
+message MessagePinned {
+  Message message = 1;
+  uint64 pin_ver = 2;
+}
+
+message MessageUnpinned {
+  Message message = 1;
+  uint64 pin_ver = 2;
 }

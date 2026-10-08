@@ -23,6 +23,9 @@ const (
 	findBackoff     = 5 * time.Millisecond
 	maxFindBackoff  = 200 * time.Millisecond
 
+	contentionBackoff    = 5 * time.Millisecond
+	maxContentionBackoff = 200 * time.Millisecond
+
 	reservationMargin = time.Second
 )
 

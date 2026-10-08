@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
@@ -57,7 +58,12 @@ func (a *actor) admit(ctx context.Context, q *request) *entry {
 		q.answer(Ack{}, err)
 		return nil
 	}
-	if err := a.member(ctx, c.User); err != nil {
+	m, err := a.member(ctx, c.User)
+	if err != nil {
+		q.answer(Ack{}, err)
+		return nil
+	}
+	if err := a.r.policy.Check(ctx, access.Request{Action: access.SendMessage, User: c.User, Room: a.room, Member: m}); err != nil {
 		q.answer(Ack{}, err)
 		return nil
 	}
@@ -73,21 +79,4 @@ func (a *actor) admit(ctx context.Context, q *request) *entry {
 		Text:   c.Text,
 		CID:    c.CID,
 	}}
-}
-
-func (a *actor) member(ctx context.Context, user string) error {
-	if _, ok := a.members.get(user); ok {
-		return nil
-	}
-	_, err := a.r.rooms.Member(ctx, a.id, user)
-	switch {
-	case err == nil:
-		a.members.put(user, struct{}{})
-		return nil
-	case errors.Is(err, domain.ErrNotMember):
-		return domain.ErrNotMember
-	default:
-		a.r.log.WarnContext(ctx, "membership check failed", "room", a.id, "err", err)
-		return errUnavailable
-	}
 }

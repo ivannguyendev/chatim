@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+
+	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
 )
 
 var (
@@ -12,7 +14,7 @@ var (
 	subjectRootPattern = regexp.MustCompile(`^[a-z0-9_]+$`)
 )
 
-const stopPhases = "CORE_DRAIN_DELAY + CORE_GRPC_SHUTDOWN + RECONCILE_DRAIN + 1s + CORE_REQUEST_DEADLINE (router drain) + " +
+const stopPhases = "CORE_DRAIN_DELAY + CORE_GRPC_SHUTDOWN + RECONCILE_DRAIN + 1s + WORK_DRAIN + 1s + CORE_REQUEST_DEADLINE (router drain) + " +
 	"2 x REDIS_OP_TIMEOUT (cid batcher drain) + FLUSH_INSERT_TIMEOUT (flusher drain) + CORE_PUBLISHER_DRAIN + slot release + client close"
 
 type rule struct {
@@ -30,13 +32,21 @@ func (c Config) validate() error {
 		{streamNamePattern.MatchString(c.Stream.Name), "EVT_STREAM must match " + streamNamePattern.String()},
 		{subjectRootPattern.MatchString(c.Stream.SubjectRoot), "EVT_SUBJECT_ROOT must match " + subjectRootPattern.String()},
 		{subjectRootPattern.MatchString(c.Stream.LiveRoot), "EVT_LIVE_ROOT must match " + subjectRootPattern.String()},
+		{streamNamePattern.MatchString(c.Work.Name), "WORK_STREAM must match " + streamNamePattern.String()},
+		{subjectRootPattern.MatchString(c.Work.SubjectRoot), "WORK_SUBJECT_ROOT must match " + subjectRootPattern.String()},
+		{c.Work.Name != c.Stream.Name, "WORK_STREAM must differ from EVT_STREAM"},
+		{c.Work.SubjectRoot != c.Stream.SubjectRoot && c.Work.SubjectRoot != c.Stream.LiveRoot, "WORK_SUBJECT_ROOT must differ from EVT_SUBJECT_ROOT and EVT_LIVE_ROOT"},
 		{c.RequestDeadline < c.GRPCShutdown, "CORE_REQUEST_DEADLINE must be shorter than CORE_GRPC_SHUTDOWN"},
 		{c.QueueWait <= c.RequestDeadline/10, "CORE_QUEUE_WAIT must be at most a tenth of CORE_REQUEST_DEADLINE"},
 		{c.Flush.InsertTimeout < c.RequestDeadline, "FLUSH_INSERT_TIMEOUT must be shorter than CORE_REQUEST_DEADLINE"},
 		{c.Dedupe.Timeout <= c.RequestDeadline/10, "REDIS_OP_TIMEOUT must be at most a tenth of CORE_REQUEST_DEADLINE"},
 		{c.Actor.MaxGroup <= c.Flush.MaxBatch, "ACTOR_MAX_GROUP must not exceed FLUSH_MAX_BATCH"},
 		{c.Publish.AckTimeout < c.PublisherDrain, "PUB_ACK_TIMEOUT must be shorter than CORE_PUBLISHER_DRAIN"},
-		{!c.ReconcileEnabled || c.Reconcile.Delay < c.Stream.Duplicates, "RECONCILE_DELAY must be shorter than EVT_STREAM_DUPLICATES"},
+		{c.EffectDelay < c.Stream.Duplicates, "RECONCILE_DELAY must be shorter than EVT_STREAM_DUPLICATES"},
+		{c.EffectDelay > publish.MarkDeadline(c.Publish.AckTimeout), "RECONCILE_DELAY must be longer than PUB_ACK_TIMEOUT plus the ack mark window and timeout"},
+		{c.Work.Duplicates > c.Reconcile.ConfirmEvery+c.Reconcile.Drain, "WORK_DUPLICATES must be longer than RECONCILE_CONFIRM_EVERY + RECONCILE_DRAIN"},
+		{c.ReactionCountDelay > 0 && c.ReactionCountDelay <= c.EffectDelay, "REACTION_COUNT_DELAY must be positive and at most RECONCILE_DELAY"},
+		{c.MemberCountCheckDelay > c.RequestDeadline, "MEMBER_COUNT_CHECK_DELAY must be longer than CORE_REQUEST_DEADLINE"},
 		{plan.fitsWithin(c.ShutdownBudget), fmt.Sprintf("%s = %v must be shorter than CORE_SHUTDOWN_BUDGET %v", stopPhases, plan.total(), c.ShutdownBudget)},
 	}
 	var errs []error
@@ -59,8 +69,11 @@ func (c Config) componentErrors() []error {
 		{"CID_BATCH_*", c.CIDBatch.Validate()},
 		{"PUB_*, EVT_SUBJECT_ROOT", c.Publish.Validate()},
 		{"EVT_*", c.Stream.Validate()},
+		{"WORK_*, EVT_STREAM_REPLICAS, RECONCILE_DELAY", c.Work.Validate()},
 		{"SLOT_*, CORE_ID", c.Slot.Validate()},
 		{"EVT_ACK_MARK_TTL, REDIS_OP_TIMEOUT, REDIS_COOLDOWN", c.AckMarks.Validate()},
+		{"WORK_*, SLOT_TICK", c.Effects.Validate()},
+		{"REACTION_EMOJIS, PIN_LIMIT, MEMBER_BATCH_MAX", c.Limits.Validate()},
 	}
 	if c.ReconcileEnabled {
 		parts = append(parts, struct {

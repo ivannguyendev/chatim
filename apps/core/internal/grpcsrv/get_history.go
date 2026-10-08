@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
+	"github.com/ivannguyendev/chatim/apps/core/internal/view"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
@@ -25,30 +27,24 @@ func (s *Service) GetHistory(ctx context.Context, req *chatimv1.GetHistoryReques
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authorizeRead(ctx, q.Room, who); err != nil {
+	grant, err := s.access.Authorize(ctx, access.ReadHistory, who.tenant, who.user, q.Room)
+	if err != nil {
 		return nil, err
 	}
 	page, err := s.pages.Page(ctx, q)
 	if err != nil {
 		return nil, err
 	}
+	viewer, err := s.viewerOf(ctx, who.user, grant, q, page)
+	if err != nil {
+		return nil, err
+	}
+	page = s.view.Apply(viewer, page)
 	out := make([]*chatimv1.Message, len(page))
 	for i, m := range page {
 		out[i] = pbconv.Message(m)
 	}
 	return &chatimv1.GetHistoryResponse{Messages: out}, nil
-}
-
-func (s *Service) authorizeRead(ctx context.Context, room uint64, who caller) error {
-	r, err := s.rooms.Get(ctx, room)
-	if err != nil {
-		return err
-	}
-	if err := domain.CheckTenant(r, who.tenant); err != nil {
-		return err
-	}
-	_, err = s.rooms.Member(ctx, room, who.user)
-	return err
 }
 
 func pageQueryOf(req *chatimv1.GetHistoryRequest) (store.PageQuery, error) {
@@ -90,4 +86,30 @@ func seqAnchor(a store.Anchor, seq uint64) (store.Anchor, uint64, error) {
 		return 0, 0, errAnchorSeq
 	}
 	return a, seq, nil
+}
+
+func (s *Service) viewerOf(ctx context.Context, user string, grant access.Request, q store.PageQuery, page []domain.Message) (view.Viewer, error) {
+	v := view.Viewer{User: user, Room: grant.Room, ClearedAt: grant.Member.ClearedAt}
+	if len(page) == 0 {
+		return v, nil
+	}
+	lo, hi, newest := page[0].Seq, page[0].Seq, page[0].CreatedAt
+	for _, m := range page[1:] {
+		lo, hi = min(lo, m.Seq), max(hi, m.Seq)
+		if m.CreatedAt.After(newest) {
+			newest = m.CreatedAt
+		}
+	}
+	if v.Cleared(newest) {
+		return v, nil
+	}
+	seqs, err := s.hidden.HiddenIn(ctx, user, q.Room, q.Thread, lo, hi)
+	if err != nil {
+		return view.Viewer{}, err
+	}
+	v.HiddenSeqs = make(map[uint64]bool, len(seqs))
+	for _, seq := range seqs {
+		v.HiddenSeqs[seq] = true
+	}
+	return v, nil
 }

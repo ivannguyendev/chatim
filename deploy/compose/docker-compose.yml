@@ -27,7 +27,7 @@ x-core: &core
   profiles: ["app"]
   restart: unless-stopped
   mem_limit: 1g
-  stop_grace_period: 30s
+  stop_grace_period: 33s
   secrets: [mongo_password, redis_password, redis_dedupe_password]
   depends_on:
     mongodb-init:

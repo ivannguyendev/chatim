@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -19,6 +20,8 @@ func RoomID(room uint64) string { return strconv.FormatUint(room, 10) }
 func MessageEventID(room, thread, seq uint64) string {
 	return RoomID(room) + "-" + strconv.FormatUint(thread, 10) + "-" + strconv.FormatUint(seq, 10)
 }
+
+func RoomCreatedEventID(room uint64) string { return RoomID(room) + "-created" }
 
 func RoomType(t domain.RoomType) chatimv1.RoomType {
 	switch t {
@@ -84,7 +87,19 @@ func Message(m domain.Message) *chatimv1.Message {
 		Text:       m.Text,
 		Cid:        m.CID,
 		CreatedAt:  timestamppb.New(m.CreatedAt),
+		Ver:        m.Version,
+		Deleted:    m.Deleted,
+		EditedAt:   optionalTime(m.EditedAt),
+		Hidden:     m.Hidden,
+		Reactions:  ReactionSummary(m.Reactions),
 	}
+}
+
+func optionalTime(t time.Time) *timestamppb.Timestamp {
+	if t.IsZero() {
+		return nil
+	}
+	return timestamppb.New(t)
 }
 
 func MessageCreated(roomType domain.RoomType, m domain.Message) *chatimv1.Event {
@@ -98,5 +113,17 @@ func MessageCreated(roomType domain.RoomType, m domain.Message) *chatimv1.Event 
 		Actor:      m.From,
 		Ts:         timestamppb.New(m.CreatedAt),
 		Payload:    &chatimv1.Event_MessageCreated{MessageCreated: &chatimv1.MessageCreated{Message: Message(m)}},
+	}
+}
+
+func RoomCreated(r domain.Room) *chatimv1.Event {
+	return &chatimv1.Event{
+		Id:       RoomCreatedEventID(r.ID),
+		Tenant:   r.Tenant,
+		RoomId:   RoomID(r.ID),
+		RoomType: RoomType(r.Type),
+		Actor:    r.CreatedBy,
+		Ts:       timestamppb.New(r.CreatedAt),
+		Payload:  &chatimv1.Event_RoomCreated{RoomCreated: &chatimv1.RoomCreated{Room: Room(r)}},
 	}
 }

@@ -152,3 +152,5 @@ func offset(k store.MsgKey) int64 {
 	}
 	return int64(bit)
 }
+
+func (s *Store) Degraded() bool { return s.guard.Degraded() }

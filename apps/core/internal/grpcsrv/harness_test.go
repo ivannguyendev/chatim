@@ -17,9 +17,11 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/grpcsrv"
+	"github.com/ivannguyendev/chatim/apps/core/internal/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 	"github.com/ivannguyendev/chatim/pkg/grpcserver"
@@ -34,20 +36,25 @@ var (
 	actorConfig = actor.Config{Mailbox: 16, Idle: time.Minute, MaxGroup: 8, MaxActors: 64, GroupDeadline: 2 * time.Second, ReservationTTL: 10 * time.Second}
 	flushConfig = flush.Config{Shards: 2, Window: time.Millisecond, MaxBatch: 64, QueueSize: 64, InsertTimeout: 500 * time.Millisecond}
 	sentinels   = map[codes.Code]string{
-		codes.NotFound:          apperr.ErrNotFound.Error(),
-		codes.InvalidArgument:   apperr.ErrInvalidArgument.Error(),
-		codes.PermissionDenied:  apperr.ErrPermissionDenied.Error(),
-		codes.Unauthenticated:   apperr.ErrUnauthenticated.Error(),
-		codes.Unavailable:       apperr.ErrUnavailable.Error(),
-		codes.ResourceExhausted: apperr.ErrResourceExhausted.Error(),
-		codes.Internal:          "internal error",
+		codes.NotFound:           apperr.ErrNotFound.Error(),
+		codes.InvalidArgument:    apperr.ErrInvalidArgument.Error(),
+		codes.FailedPrecondition: apperr.ErrFailedPrecondition.Error(),
+		codes.PermissionDenied:   apperr.ErrPermissionDenied.Error(),
+		codes.Unauthenticated:    apperr.ErrUnauthenticated.Error(),
+		codes.Unavailable:        apperr.ErrUnavailable.Error(),
+		codes.ResourceExhausted:  apperr.ErrResourceExhausted.Error(),
+		codes.Internal:           "internal error",
 	}
 )
 
 type rig struct {
-	client chatimv1.CoreServiceClient
-	rooms  *memstore.Rooms
-	msgs   *memstore.Messages
+	client    chatimv1.CoreServiceClient
+	rooms     *memstore.Rooms
+	msgs      *memstore.Messages
+	edits     *memstore.Edits
+	hidden    *memstore.Hidden
+	reactions *memstore.Reactions
+	pins      *memstore.Pins
 }
 
 type options struct {
@@ -55,15 +62,21 @@ type options struct {
 	newID   func() uint64
 	now     func() time.Time
 	limiter *resilience.Limiter
+	policy  access.Policy
+	events  grpcsrv.EventPublisher
+	limits  mutate.Limits
 }
 
 func newRig(t *testing.T, o options) *rig {
 	t.Helper()
-	rg := &rig{rooms: memstore.NewRooms(), msgs: memstore.NewMessages()}
+	rg := memStores()
 	if o.sender == nil {
 		o.sender = startRouter(t, rg)
 	}
-	svc, err := grpcsrv.New(grpcsrv.Deps{Sender: o.sender, Rooms: rg.rooms, Pages: rg.msgs, NewID: o.newID, Now: o.now}, quiet)
+	svc, err := grpcsrv.New(grpcsrv.Deps{
+		Sender: o.sender, Rooms: rg.rooms, Pages: rg.msgs, NewID: o.newID, Now: o.now, Policy: o.policy, Events: o.events,
+		Mutator: newMutator(t, rg, o), Edits: rg.edits, Hidden: rg.hidden,
+	}, quiet)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

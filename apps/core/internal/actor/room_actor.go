@@ -37,12 +37,15 @@ type actor struct {
 	last    uint64
 	stale   bool
 	dirty   bool
-	members *lru[string, struct{}]
+	members *memberCache
 	cache   cidCache
 	retries []*entry
 	flight  *group
 	landed  []landing
 	failed  []failure
+
+	contended      bool
+	contentionWait time.Duration
 }
 
 func newActor(r *Router, id uint64) *actor {
@@ -54,7 +57,7 @@ func newActor(r *Router, id uint64) *actor {
 		retire:  make(chan struct{}),
 		gone:    make(chan struct{}),
 		dirty:   true,
-		members: newLRU[string, struct{}](memberCacheSize),
+		members: newMemberCache(),
 		cache:   newCIDCache(cidCacheSize, cidCacheTTL),
 	}
 }
@@ -123,6 +126,7 @@ func (a *actor) run(ctx context.Context) {
 		select {
 		case res := <-a.results:
 			a.settle(res)
+			a.afterContention(ctx)
 		case <-ctx.Done():
 			a.exit(errStopped)
 			return

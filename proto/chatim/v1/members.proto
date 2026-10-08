@@ -1,0 +1,153 @@
+syntax = "proto3";
+
+package chatim.v1;
+
+import "google/protobuf/timestamp.proto";
+
+enum MemberRole {
+  MEMBER_ROLE_UNSPECIFIED = 0;
+  MEMBER_ROLE_OWNER = 1;
+  MEMBER_ROLE_ADMIN = 2;
+  MEMBER_ROLE_MEMBER = 3;
+}
+
+enum MemberRemovedReason {
+  MEMBER_REMOVED_REASON_UNSPECIFIED = 0;
+  MEMBER_REMOVED_REASON_REMOVED = 1;
+  MEMBER_REMOVED_REASON_LEFT = 2;
+}
+
+message AddedMember {
+  string user = 1;
+  uint32 ver = 2;
+}
+
+message AddMembersRequest {
+  string room_id = 1;
+  repeated string users = 2;
+  string request_id = 3;
+}
+
+message AddMembersResponse {
+  repeated AddedMember added = 1;
+}
+
+message RemoveMemberRequest {
+  string room_id = 1;
+  string user = 2;
+}
+
+message RemoveMemberResponse {
+  bool changed = 1;
+  uint32 ver = 2;
+}
+
+message LeaveRoomRequest {
+  string room_id = 1;
+}
+
+message LeaveRoomResponse {
+  bool changed = 1;
+  uint32 ver = 2;
+  string new_owner = 3;
+}
+
+message ChangeMemberRoleRequest {
+  string room_id = 1;
+  string user = 2;
+  MemberRole role = 3;
+}
+
+message ChangeMemberRoleResponse {
+  bool changed = 1;
+  uint32 ver = 2;
+  MemberRole previous_role = 3;
+}
+
+message SetMemberPriorityRequest {
+  string room_id = 1;
+  string user = 2;
+  int32 priority = 3;
+}
+
+message SetMemberPriorityResponse {
+  bool changed = 1;
+  uint32 ver = 2;
+  int32 previous_priority = 3;
+}
+
+message MarkReadRequest {
+  string room_id = 1;
+  uint64 seq = 2;
+}
+
+message MarkReadResponse {
+  uint64 read_seq = 1;
+  uint64 read_ver = 2;
+}
+
+message MarkUnreadRequest {
+  string room_id = 1;
+  uint64 seq = 2;
+}
+
+message MarkUnreadResponse {
+  uint64 read_seq = 1;
+  uint64 read_ver = 2;
+}
+
+message MemberAdded {
+  string user = 1;
+  MemberRole role = 2;
+  google.protobuf.Timestamp joined_at = 3;
+  uint32 ver = 4;
+  string request_id = 5;
+  uint64 read_seq = 6;
+  uint64 read_ver = 7;
+}
+
+message MemberRemoved {
+  string user = 1;
+  MemberRemovedReason reason = 2;
+  MemberRole previous_role = 3;
+  uint32 ver = 4;
+  string request_id = 5;
+}
+
+message MemberRoleChanged {
+  string user = 1;
+  MemberRole role = 2;
+  MemberRole previous_role = 3;
+  uint32 ver = 4;
+  string request_id = 5;
+}
+
+message MemberPriorityChanged {
+  string user = 1;
+  int32 priority = 2;
+  int32 previous_priority = 3;
+  uint32 ver = 4;
+  string request_id = 5;
+}
+
+message MemberCountChanged {
+  int32 member_count = 1;
+  uint64 member_count_ver = 2;
+}
+
+message ReadUpdated {
+  string user = 1;
+  uint64 read_seq = 2;
+  uint64 read_ver = 3;
+}
+
+message MessageHidden {
+  string user = 1;
+  uint64 thread_root = 2;
+  uint64 seq = 3;
+}
+
+message HistoryCleared {
+  string user = 1;
+  google.protobuf.Timestamp cleared_at = 2;
+}

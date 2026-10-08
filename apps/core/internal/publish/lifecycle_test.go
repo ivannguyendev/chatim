@@ -133,7 +133,7 @@ func TestNewRejectsMissingDependenciesAndBadConfig(t *testing.T) {
 	if _, err := publish.New(js, publish.Config{SubjectRoot: "evt"}, nil); err != nil {
 		t.Errorf("New with defaults = %v", err)
 	}
-	if n := len(publish.Config{}.JetStreamOptions(nil)); n != 3 {
+	if n := len(publish.Config{}.JetStreamOptions(nil, nil)); n != 3 {
 		t.Errorf("JetStreamOptions returned %d options, want 3", n)
 	}
 }

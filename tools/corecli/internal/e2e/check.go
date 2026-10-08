@@ -31,12 +31,17 @@ func CheckAcks(acks []Ack) error {
 	return nil
 }
 
-func CheckPage(want []Ack, got []*chatimv1.Message, room, sender string) error {
+func CheckPage(want []Ack, changes []Change, got []*chatimv1.Message, room, sender string) error {
 	if len(got) != len(want) {
 		return fmt.Errorf("history returned %d messages, want %d", len(got), len(want))
 	}
+	bySeq := make(map[uint64]Change, len(changes))
+	for _, c := range changes {
+		bySeq[c.Seq] = c
+	}
 	for i, m := range got {
 		a := want[i]
+		text, version, deleted := expected(a, bySeq)
 		switch {
 		case m.GetSeq() != a.Seq:
 			return fmt.Errorf("message %d has seq %d, want %d", i, m.GetSeq(), a.Seq)
@@ -48,8 +53,11 @@ func CheckPage(want []Ack, got []*chatimv1.Message, room, sender string) error {
 			return fmt.Errorf("seq %d is in thread %d, want the main timeline", a.Seq, m.GetThreadRoot())
 		case m.GetSender() != sender:
 			return fmt.Errorf("seq %d has sender %q, want %q", a.Seq, m.GetSender(), sender)
-		case m.GetText() != TextFor(a.CID):
-			return fmt.Errorf("seq %d has text %q, want %q", a.Seq, m.GetText(), TextFor(a.CID))
+		case m.GetText() != text:
+			return fmt.Errorf("seq %d has text %q, want %q", a.Seq, m.GetText(), text)
+		case m.GetVer() != version || m.GetDeleted() != deleted || m.GetHidden():
+			return fmt.Errorf("seq %d has version %d deleted %v hidden %v, want version %d deleted %v hidden false",
+				a.Seq, m.GetVer(), m.GetDeleted(), m.GetHidden(), version, deleted)
 		}
 	}
 	return nil
@@ -67,6 +75,9 @@ func CheckEvents(acks []Ack, room string, events []Event) (Coverage, error) {
 	seen := make(map[uint64]bool, len(acks))
 	var cov Coverage
 	for _, ev := range events {
+		if !ev.IsCreated() {
+			continue
+		}
 		a, known := bySeq[ev.Seq]
 		switch {
 		case ev.Room != room:

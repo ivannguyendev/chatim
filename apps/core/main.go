@@ -11,7 +11,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
 )
 
-const usage = "usage: core [serve|probe]"
+const usage = "usage: core [serve|probe|resync -from RFC3339 -to RFC3339 [-tenant T] [-room ID] [-rate N] [-dry-run]|recount -room ID [-dry-run]]"
 
 func main() { os.Exit(realMain(os.Args[1:])) }
 
@@ -21,6 +21,10 @@ func realMain(args []string) int {
 		cmd = args[0]
 	}
 	switch {
+	case cmd == "resync":
+		return resyncMain(args[1:])
+	case cmd == "recount":
+		return recountMain(args[1:])
 	case len(args) > 1:
 		fmt.Fprintln(os.Stderr, usage)
 		return 2

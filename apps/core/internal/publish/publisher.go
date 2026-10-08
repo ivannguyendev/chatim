@@ -12,7 +12,6 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
-	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/pkg/slotmap"
@@ -40,18 +39,19 @@ type shard struct {
 }
 
 type Publisher struct {
-	js      JetStream
-	cfg     Config
-	log     *slog.Logger
-	fails   failureLog
-	shards  []*shard
-	mu      sync.RWMutex
-	closed  bool
-	started atomic.Bool
-	abort   chan struct{}
-	stop    sync.Once
-	done    chan struct{}
-	marks   *ackMarks
+	js       JetStream
+	cfg      Config
+	log      *slog.Logger
+	fails    failureLog
+	shards   []*shard
+	mu       sync.RWMutex
+	closed   bool
+	started  atomic.Bool
+	abort    chan struct{}
+	stop     sync.Once
+	done     chan struct{}
+	marks    *ackMarks
+	counters *Counters
 }
 
 func New(js JetStream, cfg Config, log *slog.Logger, opts ...Option) (*Publisher, error) {
@@ -65,9 +65,12 @@ func New(js JetStream, cfg Config, log *slog.Logger, opts ...Option) (*Publisher
 	if log == nil {
 		log = slog.Default()
 	}
-	p := &Publisher{js: js, cfg: cfg, log: log, fails: failureLog{log: log}, shards: make([]*shard, cfg.Shards), abort: make(chan struct{}), done: make(chan struct{})}
+	p := &Publisher{js: js, cfg: cfg, log: log, fails: failureLog{log: log}, shards: make([]*shard, cfg.Shards), abort: make(chan struct{}), done: make(chan struct{}), counters: &Counters{}}
 	for _, opt := range opts {
 		opt(p)
+	}
+	if p.marks != nil {
+		p.marks.counters = p.counters
 	}
 	for i := range p.shards {
 		p.shards[i] = &shard{queue: make(chan item, cfg.QueueSize)}
@@ -120,14 +123,18 @@ func (p *Publisher) publish(it item) {
 		msg, err := Message(p.cfg.SubjectRoot, it.room, ev)
 		if err != nil {
 			p.fails.record("dropping malformed event", ev.GetId(), err)
+			p.counters.malformed.Add(1)
 			continue
 		}
 		f, err := p.js.PublishMsgAsync(msg, jetstream.WithRetryAttempts(p.cfg.Attempts), jetstream.WithRetryWait(p.cfg.RetryBackoff))
 		if err != nil {
 			p.fails.record("event publish refused; reconciliation must republish it", ev.GetId(), err)
+			p.counters.refused.Add(1)
 			continue
 		}
-		p.marks.track(store.MsgKey{Room: it.room, Thread: ev.GetThreadRoot(), Seq: ev.GetSeq()}, f)
+		if key, ok := markKey(it.room, ev); ok {
+			p.marks.track(key, f)
+		}
 	}
 }
 
@@ -146,6 +153,7 @@ func (p *Publisher) Enqueue(room uint64, events []*chatimv1.Event) error {
 		s.full.Store(false)
 		return nil
 	default:
+		p.counters.queueFull.Add(int64(len(events)))
 		if s.full.CompareAndSwap(false, true) {
 			p.log.Warn("publish queue full; dropping events", "room", room, "events", len(events))
 		}

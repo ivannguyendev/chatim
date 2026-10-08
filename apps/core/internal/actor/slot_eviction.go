@@ -36,9 +36,7 @@ func (r *Router) retireSlots(slots []uint16) []<-chan struct{} {
 		if !moved[slotmap.Of(room)] {
 			continue
 		}
-		if !a.retireRequested() {
-			close(a.retire)
-		}
+		a.requestRetire()
 		gone = append(gone, a.gone)
 	}
 	return gone
@@ -50,6 +48,12 @@ func (a *actor) retireRequested() bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func (a *actor) requestRetire() {
+	if !a.retireRequested() {
+		close(a.retire)
 	}
 }
 

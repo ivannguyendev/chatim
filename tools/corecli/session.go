@@ -42,6 +42,12 @@ type session struct {
 }
 
 func withSession(ctx context.Context, o *options, run func(ctx context.Context, s *session) error) error {
+	return withRoutes(ctx, o, func(ctx context.Context, s *session) error {
+		return run(route.WithCaller(ctx, o.tenant, o.user), s)
+	})
+}
+
+func withRoutes(ctx context.Context, o *options, run func(ctx context.Context, s *session) error) error {
 	rs, err := route.Open(ctx, route.SessionConfig{
 		RedisAddr:     o.redis,
 		RedisDB:       o.redisDB,
@@ -54,7 +60,7 @@ func withSession(ctx context.Context, o *options, run func(ctx context.Context, 
 		return err
 	}
 	s := &session{res: rs.Resolver, client: rs.Client}
-	return errors.Join(run(route.WithCaller(ctx, o.tenant, o.user), s), rs.Close())
+	return errors.Join(run(ctx, s), rs.Close())
 }
 
 func report(call string, st route.Stats) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -127,7 +128,10 @@ func assertErrorIs(t *testing.T, op string, err, want error) {
 }
 
 func sameMessage(a, b domain.Message) bool {
-	at, bt := a.CreatedAt, b.CreatedAt
-	a.CreatedAt, b.CreatedAt = time.Time{}, time.Time{}
-	return a == b && at.Equal(bt)
+	at, bt, ae, be := a.CreatedAt, b.CreatedAt, a.EditedAt, b.EditedAt
+	ar, br := a.Reactions, b.Reactions
+	a.CreatedAt, b.CreatedAt, a.EditedAt, b.EditedAt = time.Time{}, time.Time{}, time.Time{}, time.Time{}
+	a.Reactions, b.Reactions = domain.ReactionSummary{}, domain.ReactionSummary{}
+	sameReactions := ar.Version == br.Version && slices.Equal(ar.Counts, br.Counts)
+	return reflect.DeepEqual(a, b) && at.Equal(bt) && ae.Equal(be) && sameReactions
 }

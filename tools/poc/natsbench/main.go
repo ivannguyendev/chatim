@@ -87,8 +87,8 @@ func run(ctx context.Context, c config) error {
 		MaxAge:     time.Hour,
 		Duplicates: 2 * time.Minute,
 		RePublish: &jetstream.RePublish{
-			Source:      "evt.*.room.*.*",
-			Destination: "live.{{wildcard(1)}}.room.{{wildcard(2)}}.evt.{{wildcard(3)}}",
+			Source:      "evt.*.*.*.*",
+			Destination: "live.{{wildcard(1)}}.{{wildcard(2)}}.{{wildcard(3)}}.evt.{{wildcard(4)}}",
 		},
 	})
 	if err != nil {
@@ -102,7 +102,7 @@ func run(ctx context.Context, c config) error {
 }
 
 func checkRepublish(ctx context.Context, nc *nats.Conn, js jetstream.JetStream) error {
-	sub, err := nc.SubscribeSync("live.t1.room.42.evt.msg_created")
+	sub, err := nc.SubscribeSync("live.t1.message.42.evt.msg_created")
 	if err != nil {
 		return err
 	}
@@ -110,7 +110,7 @@ func checkRepublish(ctx context.Context, nc *nats.Conn, js jetstream.JetStream) 
 	if err := nc.Flush(); err != nil {
 		return err
 	}
-	if _, err := js.Publish(ctx, "evt.t1.room.42.msg_created", stamp(16)); err != nil {
+	if _, err := js.Publish(ctx, "evt.t1.message.42.msg_created", stamp(16)); err != nil {
 		return fmt.Errorf("publish probe: %w", err)
 	}
 	if _, err := sub.NextMsg(2 * time.Second); err != nil {

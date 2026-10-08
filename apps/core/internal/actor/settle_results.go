@@ -78,8 +78,7 @@ func (a *actor) resolve(open []*entry, found []domain.Message) []*entry {
 		case ok && doc.From == e.msg.From && doc.CID == e.msg.CID:
 			a.commit(e, doc)
 		case ok:
-			a.stale = true
-			a.requeue(e, false, errSeqContention)
+			a.contend(e)
 		case e.dup:
 			unresolved = append(unresolved, e)
 		default:

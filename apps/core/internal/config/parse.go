@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/pkg/envconfig"
 )
 
@@ -80,6 +82,36 @@ func (p *parser) flag(key string, def bool) bool {
 		p.fail(err)
 	}
 	return v
+}
+
+func (p *parser) list(key string) []string {
+	var items []string
+	for item := range strings.SplitSeq(os.Getenv(key), ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			items = append(items, item)
+		}
+	}
+	return items
+}
+
+func (p *parser) listOr(key string, def []string) []string {
+	if items := p.list(key); len(items) > 0 {
+		return items
+	}
+	return slices.Clone(def)
+}
+
+func (p *parser) kinds(key string) []domain.Kind {
+	var kinds []domain.Kind
+	for _, name := range p.list(key) {
+		k, err := domain.ParseKind(name)
+		if err != nil {
+			p.fail(fmt.Errorf("%s: %w", key, err))
+			continue
+		}
+		kinds = append(kinds, k)
+	}
+	return kinds
 }
 
 func (p *parser) secret(key string) string {

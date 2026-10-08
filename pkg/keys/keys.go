@@ -6,9 +6,11 @@ import (
 )
 
 const (
-	MsgLen   = 24
-	EventLen = 16
-	EditLen  = 28
+	MsgLen          = 24
+	EventLen        = 16
+	EditLen         = 28
+	PinLen          = 16
+	MaxReactionUser = 64
 )
 
 var ErrLength = errors.New("keys: invalid key length")
@@ -58,6 +60,33 @@ func ParseEdit(b []byte) (room, threadRoot, seq uint64, version uint32, err erro
 		return 0, 0, 0, 0, ErrLength
 	}
 	return be.Uint64(b[0:8]), be.Uint64(b[8:16]), be.Uint64(b[16:24]), be.Uint32(b[24:28]), nil
+}
+
+func Reaction(room, threadRoot, seq uint64, user string) []byte {
+	b := make([]byte, MsgLen, MsgLen+len(user))
+	putMsg(b, room, threadRoot, seq)
+	return append(b, user...)
+}
+
+func ParseReaction(b []byte) (room, threadRoot, seq uint64, user string, err error) {
+	if len(b) <= MsgLen || len(b) > MsgLen+MaxReactionUser {
+		return 0, 0, 0, "", ErrLength
+	}
+	return be.Uint64(b[0:8]), be.Uint64(b[8:16]), be.Uint64(b[16:24]), string(b[MsgLen:]), nil
+}
+
+func Pin(room, pv uint64) []byte {
+	b := make([]byte, PinLen)
+	be.PutUint64(b[0:8], room)
+	be.PutUint64(b[8:16], pv)
+	return b
+}
+
+func ParsePin(b []byte) (room, pv uint64, err error) {
+	if len(b) != PinLen {
+		return 0, 0, ErrLength
+	}
+	return be.Uint64(b[0:8]), be.Uint64(b[8:16]), nil
 }
 
 func putMsg(b []byte, room, threadRoot, seq uint64) {

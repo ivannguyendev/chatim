@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/tools/internal/route"
@@ -53,10 +54,12 @@ func fixed(addr string) func(int) (string, bool) {
 }
 
 type fakeCore struct {
+	chatimv1.CoreServiceClient
 	mu      sync.Mutex
 	fail    []error
 	block   int
 	sends   []*chatimv1.SendMessageRequest
+	seen    []proto.Message
 	callers []metadata.MD
 }
 

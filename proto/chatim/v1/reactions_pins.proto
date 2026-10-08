@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package chatim.v1;
+
+import "google/protobuf/timestamp.proto";
+
+message ReactionCount {
+  string emoji = 1;
+  uint32 count = 2;
+}
+
+message ReactionSummary {
+  repeated ReactionCount counts = 1;
+  uint64 ver = 2;
+}
+
+message Pin {
+  uint64 thread_root = 1;
+  uint64 seq = 2;
+  string by = 3;
+  google.protobuf.Timestamp pinned_at = 4;
+  uint64 pin_ver = 5;
+}
+
+message ReactMessageRequest {
+  string room_id = 1;
+  uint64 thread_root = 2;
+  uint64 seq = 3;
+  string emoji = 4;
+}
+
+message ReactMessageResponse {
+  uint32 change = 1;
+  ReactionSummary reactions = 2;
+}
+
+message PinMessageRequest {
+  string room_id = 1;
+  uint64 thread_root = 2;
+  uint64 seq = 3;
+}
+
+message PinMessageResponse {
+  uint64 pin_ver = 1;
+  repeated Pin pins = 2;
+}
+
+message UnpinMessageRequest {
+  string room_id = 1;
+  uint64 thread_root = 2;
+  uint64 seq = 3;
+}
+
+message UnpinMessageResponse {
+  uint64 pin_ver = 1;
+  repeated Pin pins = 2;
+}
+
+message GetReactionSettingsRequest {}
+
+message GetReactionSettingsResponse {
+  repeated string emojis = 1;
+}

@@ -9,11 +9,15 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
+	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/effects"
 	"github.com/ivannguyendev/chatim/apps/core/internal/eventmark"
 	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
+	"github.com/ivannguyendev/chatim/apps/core/internal/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/reconcile"
 	"github.com/ivannguyendev/chatim/apps/core/internal/slot"
+	"github.com/ivannguyendev/chatim/apps/core/internal/work"
 )
 
 const day = 24 * time.Hour
@@ -34,7 +38,7 @@ func TestLoadDefaults(t *testing.T) {
 		RedisDedupeAddr: "chatim-redis-dedupe:6379",
 		NATSURL:         "nats://chatim-nats:4222", ConnectTimeout: 10 * time.Second, RequestDeadline: 3 * time.Second,
 		SlowRPC: 500 * time.Millisecond, QueueWait: 25 * time.Millisecond, MaxInflight: 2048, DrainDelay: 2 * time.Second, GRPCShutdown: 5 * time.Second,
-		PublisherDrain: 5 * time.Second, ShutdownBudget: 25 * time.Second,
+		PublisherDrain: 5 * time.Second, ShutdownBudget: 28 * time.Second,
 		Flush: flush.Config{Shards: 4, Window: 2 * time.Millisecond, MaxBatch: 256, QueueSize: 1024, InsertTimeout: time.Second},
 		Actor: actor.Config{
 			Mailbox: 1024, Idle: 5 * time.Minute, MaxGroup: 64, MaxActors: 100000,
@@ -46,16 +50,23 @@ func TestLoadDefaults(t *testing.T) {
 			SubjectRoot: "evt", Shards: 4, QueueSize: 1024, MaxPending: 256, AckTimeout: 2 * time.Second,
 		},
 		Stream: publish.StreamConfig{Name: "CHATIM_EVT", SubjectRoot: "evt", LiveRoot: "live", Replicas: 1, MaxAge: 7 * day, Duplicates: 5 * time.Minute},
+		Work:   work.StreamConfig{Name: "CHATIM_WORK", SubjectRoot: "work", Partitions: 32, Replicas: 1, MaxAge: 2 * time.Hour, Duplicates: 2 * time.Minute, AckWait: 35 * time.Second},
 		Slot: slot.Config{
 			CoreID: host, Addr: host + ":9000", Tick: time.Second, HeartbeatTTL: 5 * time.Second,
 			LeaseTTL: 10 * time.Second, HookTimeout: 500 * time.Millisecond,
 		},
 		ReconcileEnabled: true,
 		Reconcile: reconcile.Config{
-			SubjectRoot: "evt", Delay: 30 * time.Second, DuplicateWindow: 5 * time.Minute, Window: 1024, Batch: 256,
-			ConfirmEvery: time.Second, Drain: time.Second, Poll: time.Second, RoomCache: 65536,
+			SubjectRoot: "work", Partitions: 32, Window: 1024, Batch: 256,
+			ConfirmEvery: time.Second, Drain: time.Second, Poll: time.Second,
 		},
-		AckMarks: eventmark.Config{TTL: time.Hour, Timeout: 100 * time.Millisecond, Cooldown: time.Second},
+		EffectDelay:           5 * time.Second,
+		EffectRoomCache:       65536,
+		Effects:               effects.Config{Partitions: 32, FetchBatch: 256, FetchWait: time.Second, RetryDelay: 5 * time.Second, Drain: time.Second, Poll: time.Second},
+		AckMarks:              eventmark.Config{TTL: time.Hour, Timeout: 100 * time.Millisecond, Cooldown: time.Second},
+		Limits:                mutate.Limits{Emojis: mutate.DefaultEmojis, PinLimit: 50, MemberBatch: 500},
+		ReactionCountDelay:    time.Second,
+		MemberCountCheckDelay: 5 * time.Second,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Load() =\n%#v\nwant\n%#v", got, want)
@@ -87,16 +98,24 @@ func TestLoadOverrides(t *testing.T) {
 			SubjectRoot: "evt_it", Shards: 2, QueueSize: 512, MaxPending: 128, AckTimeout: time.Second,
 		},
 		Stream: publish.StreamConfig{Name: "CHATIM_EVT_IT", SubjectRoot: "evt_it", LiveRoot: "live_it", Replicas: 3, MaxAge: 2 * day, Duplicates: 5 * time.Minute},
+		Work:   work.StreamConfig{Name: "CHATIM_WORK_IT", SubjectRoot: "work_it", Partitions: 16, Replicas: 3, MaxAge: time.Hour, Duplicates: 3 * time.Minute, AckWait: 50 * time.Second},
 		Slot: slot.Config{
 			CoreID: "core-a", Addr: "10.0.0.5:7000", Tick: 500 * time.Millisecond, HeartbeatTTL: 3 * time.Second,
 			LeaseTTL: 6 * time.Second, HookTimeout: 200 * time.Millisecond,
 		},
 		ReconcileEnabled: false,
 		Reconcile: reconcile.Config{
-			SubjectRoot: "evt_it", Delay: 20 * time.Second, DuplicateWindow: 5 * time.Minute, Window: 64, Batch: 32,
-			ConfirmEvery: 2 * time.Second, Drain: 500 * time.Millisecond, Poll: 500 * time.Millisecond, RoomCache: 128,
+			SubjectRoot: "work_it", Partitions: 16, Window: 64, Batch: 32,
+			ConfirmEvery: 2 * time.Second, Drain: 500 * time.Millisecond, Poll: 500 * time.Millisecond,
 		},
-		AckMarks: eventmark.Config{TTL: 30 * time.Minute, Timeout: 50 * time.Millisecond, Cooldown: 2 * time.Second},
+		EffectDelay:           20 * time.Second,
+		EffectRoomCache:       128,
+		Effects:               effects.Config{Partitions: 16, FetchBatch: 64, FetchWait: 500 * time.Millisecond, RetryDelay: 2 * time.Second, Drain: 500 * time.Millisecond, Poll: 500 * time.Millisecond},
+		AckMarks:              eventmark.Config{TTL: 30 * time.Minute, Timeout: 50 * time.Millisecond, Cooldown: 2 * time.Second},
+		LockedMessageKinds:    []domain.Kind{domain.KindText},
+		Limits:                mutate.Limits{Emojis: []string{"🎉", "👍"}, PinLimit: 10, MemberBatch: 20},
+		ReactionCountDelay:    2 * time.Second,
+		MemberCountCheckDelay: 4 * time.Second,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Load() =\n%#v\nwant\n%#v", got, want)

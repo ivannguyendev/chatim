@@ -154,6 +154,7 @@ func TestReassignLimitFailsWithRetryLater(t *testing.T) {
 		rg.start(t)
 		_, err := rg.Send(t.Context(), cmd(roomA, "alice", "c1"))
 		expectErr(t, err, domain.ErrRetryLater)
+		synctest.Wait()
 		assertGroupSeqs(t, rg, []uint64{1}, []uint64{2}, []uint64{3}, []uint64{4})
 		if docs := storedCIDs(t, rg.msgs.Messages, roomA)["c1"]; len(docs) != 0 {
 			t.Fatalf("failed message stored %d times", len(docs))

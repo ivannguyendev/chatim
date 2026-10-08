@@ -56,27 +56,37 @@ func keyPattern(t *testing.T, keys bson.Raw) string {
 	return strings.Join(parts, ",")
 }
 
-func assertMessagesLayout(t *testing.T, db *mongo.Database) {
+func assertClusteredLayout(t *testing.T, db *mongo.Database, name string) {
 	t.Helper()
-	opts := collectionOptions(t, db, messagesCollection)
+	opts := collectionOptions(t, db, name)
 	if v, ok := opts.Lookup("clusteredIndex", "key", "_id").AsInt64OK(); !ok || v != 1 {
-		t.Fatalf("messages options %s: want clusteredIndex key {_id: 1}", opts)
+		t.Fatalf("%s options %s: want clusteredIndex key {_id: 1}", name, opts)
 	}
 	if u, ok := opts.Lookup("clusteredIndex", "unique").BooleanOK(); !ok || !u {
-		t.Fatalf("messages options %s: want a unique clustered index", opts)
+		t.Fatalf("%s options %s: want a unique clustered index", name, opts)
 	}
 	if c, _ := opts.Lookup("storageEngine", "wiredTiger", "configString").StringValueOK(); c != "block_compressor=zstd" {
-		t.Fatalf("messages configString = %q, want block_compressor=zstd", c)
+		t.Fatalf("%s configString = %q, want block_compressor=zstd", name, c)
 	}
 }
 
 func assertMemberIndexes(t *testing.T, db *mongo.Database) {
 	t.Helper()
 	got := indexKeys(t, db.Collection(membersCollection))
-	want := map[string]bool{"_id:1": false, "r:1,u:1": true, "t:1,u:1,r:1": false}
+	want := map[string]bool{"room_id:1,state:1,role:1,priority:-1,joined_at:1,user_id:1": false, "tenant:1,user_id:1,state:1,room_id:1": false}
 	for k, unique := range want {
 		if u, ok := got[k]; !ok || u != unique {
 			t.Fatalf("members indexes = %v, want %s with unique=%v", got, k, unique)
+		}
+	}
+}
+
+func assertRoomIndexes(t *testing.T, db *mongo.Database) {
+	t.Helper()
+	got := indexKeys(t, db.Collection(roomsCollection))
+	for _, k := range []string{"activity_bucket:1", "created_at:1"} {
+		if unique, ok := got[k]; !ok || unique {
+			t.Fatalf("rooms indexes = %v, want non-unique %s", got, k)
 		}
 	}
 }
@@ -96,8 +106,9 @@ func TestBootstrapIsIdempotent(t *testing.T) {
 	if err := Bootstrap(t.Context(), db); err != nil {
 		t.Fatalf("Bootstrap with data: %v", err)
 	}
-	assertMessagesLayout(t, db)
+	assertClusteredLayout(t, db, messagesCollection)
 	assertMemberIndexes(t, db)
+	assertRoomIndexes(t, db)
 	collectionOptions(t, db, roomsCollection)
 	collectionOptions(t, db, reconcilerStateCollection)
 	got, err := s.Find(t.Context(), m.Room, []store.MsgKey{store.KeyOf(m)})
@@ -127,7 +138,7 @@ func TestBootstrapRejectsUnclusteredMessages(t *testing.T) {
 func feedState(t *testing.T, db *mongo.Database) feedPosition {
 	t.Helper()
 	var p feedPosition
-	if err := db.Collection(reconcilerStateCollection).FindOne(t.Context(), bson.D{{Key: "_id", Value: messagesFeedID}}).Decode(&p); err != nil {
+	if err := db.Collection(reconcilerStateCollection).FindOne(t.Context(), bson.D{{Key: "_id", Value: changesFeedID}}).Decode(&p); err != nil {
 		t.Fatalf("load feed state: %v", err)
 	}
 	return p

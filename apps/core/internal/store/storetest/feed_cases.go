@@ -13,15 +13,15 @@ const feedWait = 10 * time.Second
 
 type feedCase struct {
 	name string
-	run  func(t *testing.T, msgs store.Messages, feed store.ChangeFeed)
+	run  func(t *testing.T, msgs store.Messages, rooms store.Rooms, feed store.ChangeFeed)
 }
 
-func RunFeed(t *testing.T, open func(t *testing.T) (store.Messages, store.ChangeFeed)) {
+func RunFeed(t *testing.T, open func(t *testing.T) (store.Messages, store.Rooms, store.ChangeFeed)) {
 	t.Helper()
 	for _, c := range feedCases() {
 		t.Run(c.name, func(t *testing.T) {
-			msgs, feed := open(t)
-			c.run(t, msgs, feed)
+			msgs, rooms, feed := open(t)
+			c.run(t, msgs, rooms, feed)
 		})
 	}
 }
@@ -29,6 +29,7 @@ func RunFeed(t *testing.T, open func(t *testing.T) (store.Messages, store.Change
 func feedCases() []feedCase {
 	return []feedCase{
 		{"new inserts come out in commit order with their content", feedOrder},
+		{"room inserts and their creation members come out in commit order", feedRooms},
 		{"inserts after bootstrap but before the first open are read", feedStartsAtBootstrap},
 		{"reopen resumes after the confirmed position", feedResume},
 		{"an older confirm does not move the position back", feedNoRewind},
@@ -93,14 +94,14 @@ func insertEach(t *testing.T, s store.Messages, msgs ...domain.Message) {
 	}
 }
 
-func feedOrder(t *testing.T, msgs store.Messages, feed store.ChangeFeed) {
+func feedOrder(t *testing.T, msgs store.Messages, _ store.Rooms, feed store.ChangeFeed) {
 	cur := openCursor(t, feed)
 	want := []domain.Message{msg(roomA, mainThread, 1), msg(roomB, sideThread, 1), msg(roomA, mainThread, 2)}
 	insertEach(t, msgs, want...)
 	assertMessages(t, messagesOf(nextChanges(t, cur, len(want))), want)
 }
 
-func feedStartsAtBootstrap(t *testing.T, msgs store.Messages, feed store.ChangeFeed) {
+func feedStartsAtBootstrap(t *testing.T, msgs store.Messages, _ store.Rooms, feed store.ChangeFeed) {
 	early := msg(roomA, mainThread, 1)
 	insertEach(t, msgs, early)
 	cur := openCursor(t, feed)
@@ -110,7 +111,7 @@ func feedStartsAtBootstrap(t *testing.T, msgs store.Messages, feed store.ChangeF
 	assertMessages(t, messagesOf(nextChanges(t, cur, 1)), []domain.Message{later})
 }
 
-func feedResume(t *testing.T, msgs store.Messages, feed store.ChangeFeed) {
+func feedResume(t *testing.T, msgs store.Messages, _ store.Rooms, feed store.ChangeFeed) {
 	cur := openCursor(t, feed)
 	all := span(roomA, mainThread, 1, 3)
 	insertEach(t, msgs, all...)
@@ -121,7 +122,7 @@ func feedResume(t *testing.T, msgs store.Messages, feed store.ChangeFeed) {
 	assertMessages(t, messagesOf(nextChanges(t, again, 1)), all[2:])
 }
 
-func feedNoRewind(t *testing.T, msgs store.Messages, feed store.ChangeFeed) {
+func feedNoRewind(t *testing.T, msgs store.Messages, _ store.Rooms, feed store.ChangeFeed) {
 	cur := openCursor(t, feed)
 	all := span(roomA, mainThread, 1, 3)
 	insertEach(t, msgs, all...)
@@ -133,7 +134,7 @@ func feedNoRewind(t *testing.T, msgs store.Messages, feed store.ChangeFeed) {
 	assertMessages(t, messagesOf(nextChanges(t, again, 1)), all[2:])
 }
 
-func feedForget(t *testing.T, msgs store.Messages, feed store.ChangeFeed) {
+func feedForget(t *testing.T, msgs store.Messages, _ store.Rooms, feed store.ChangeFeed) {
 	cur := openCursor(t, feed)
 	insertEach(t, msgs, span(roomA, mainThread, 1, 2)...)
 	got := nextChanges(t, cur, 2)

@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
@@ -15,8 +14,6 @@ import (
 const (
 	DefaultStreamMaxAge     = 7 * 24 * time.Hour
 	DefaultStreamDuplicates = 5 * time.Minute
-
-	msgCreated = "msg_created"
 )
 
 type StreamManager interface {
@@ -64,8 +61,8 @@ func (c StreamConfig) jetstream() jetstream.StreamConfig {
 		MaxAge:     c.MaxAge,
 		Duplicates: c.Duplicates,
 		RePublish: &jetstream.RePublish{
-			Source:      c.SubjectRoot + ".*.room.*.*",
-			Destination: c.LiveRoot + ".{{wildcard(1)}}.room.{{wildcard(2)}}.evt.{{wildcard(3)}}",
+			Source:      c.SubjectRoot + ".*.*.*.*",
+			Destination: c.LiveRoot + ".{{wildcard(1)}}.{{wildcard(2)}}.{{wildcard(3)}}.evt.{{wildcard(4)}}",
 		},
 	}
 }
@@ -82,8 +79,4 @@ func EnsureStream(ctx context.Context, js StreamManager, c StreamConfig) error {
 		return fmt.Errorf("ensure stream %s: %w", c.Name, err)
 	}
 	return nil
-}
-
-func roomSubject(root, tenant string, room uint64, kind string) string {
-	return root + "." + tenant + ".room." + strconv.FormatUint(room, 10) + "." + kind
 }

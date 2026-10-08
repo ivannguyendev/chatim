@@ -48,24 +48,26 @@ func TestCheckAcksWantsContiguousSeqWithDistinctCIDs(t *testing.T) {
 
 func TestCheckPageWantsExactlyTheAckedMessagesInSeqOrder(t *testing.T) {
 	want := acks(4)
-	if err := e2e.CheckPage(want, messagesOf(want), room, sender); err != nil {
+	if err := e2e.CheckPage(want, nil, messagesOf(want), room, sender); err != nil {
 		t.Fatalf("CheckPage(valid) = %v", err)
 	}
-	expectErr(t, e2e.CheckPage(want, messagesOf(want[:3]), room, sender), "3 messages")
+	expectErr(t, e2e.CheckPage(want, nil, messagesOf(want[:3]), room, sender), "3 messages")
 	swapped := messagesOf(want)
 	swapped[1], swapped[2] = swapped[2], swapped[1]
-	expectErr(t, e2e.CheckPage(want, swapped, room, sender), "seq")
+	expectErr(t, e2e.CheckPage(want, nil, swapped, room, sender), "seq")
 	cases := map[string]func(m *chatimv1.Message){
-		"cid":    func(m *chatimv1.Message) { m.Cid = "other" },
-		"text":   func(m *chatimv1.Message) { m.Text = "other" },
-		"sender": func(m *chatimv1.Message) { m.Sender = "bob" },
-		"room":   func(m *chatimv1.Message) { m.RoomId = "7" },
-		"thread": func(m *chatimv1.Message) { m.ThreadRoot = 1 },
+		"cid":     func(m *chatimv1.Message) { m.Cid = "other" },
+		"text":    func(m *chatimv1.Message) { m.Text = "other" },
+		"sender":  func(m *chatimv1.Message) { m.Sender = "bob" },
+		"room":    func(m *chatimv1.Message) { m.RoomId = "7" },
+		"thread":  func(m *chatimv1.Message) { m.ThreadRoot = 1 },
+		"version": func(m *chatimv1.Message) { m.Ver = 1 },
+		"hidden":  func(m *chatimv1.Message) { m.Hidden = true },
 	}
 	for field, spoil := range cases {
 		got := messagesOf(want)
 		spoil(got[2])
-		expectErr(t, e2e.CheckPage(want, got, room, sender), field)
+		expectErr(t, e2e.CheckPage(want, nil, got, room, sender), field)
 	}
 }
 

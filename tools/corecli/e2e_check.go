@@ -49,7 +49,8 @@ func e2eCheck(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "live ok: an event for each of %d seq, %d duplicate(s) dropped\n", cov.Distinct, cov.Duplicates)
+	fmt.Fprintf(os.Stderr, "live ok: an event for each of %d seq, %d duplicate(s) dropped, %d change event(s), %d reaction(s), %d pin(s)\n",
+		cov.Distinct, cov.Duplicates, len(st.Changes), len(st.Reactions), len(st.Pins))
 	return nil
 }
 
@@ -57,14 +58,14 @@ func checkHistory(ctx context.Context, cl *route.Client, st e2e.State, limit int
 	n, size := len(st.Acks), int(limit)
 	latest, err := page(ctx, cl, st.Room, chatimv1.HistoryAnchor_HISTORY_ANCHOR_LATEST, 0, limit)
 	if err == nil {
-		err = e2e.CheckPage(st.Acks[max(0, n-size):], latest, st.Room, st.User)
+		err = e2e.CheckPage(st.Acks[max(0, n-size):], st.Changes, latest, st.Room, st.User)
 	}
 	if err != nil {
 		return fmt.Errorf("LATEST page: %w", err)
 	}
 	oldest, err := page(ctx, cl, st.Room, chatimv1.HistoryAnchor_HISTORY_ANCHOR_OLDEST, 0, limit)
 	if err == nil {
-		err = e2e.CheckPage(st.Acks[:min(n, size)], oldest, st.Room, st.User)
+		err = e2e.CheckPage(st.Acks[:min(n, size)], st.Changes, oldest, st.Room, st.User)
 	}
 	if err != nil {
 		return fmt.Errorf("OLDEST page: %w", err)
@@ -72,7 +73,10 @@ func checkHistory(ctx context.Context, cl *route.Client, st e2e.State, limit int
 	for _, forward := range []bool{true, false} {
 		all, err := walk(ctx, cl, st.Room, limit, n/size+2, forward)
 		if err == nil {
-			err = e2e.CheckPage(st.Acks, all, st.Room, st.User)
+			err = e2e.CheckPage(st.Acks, st.Changes, all, st.Room, st.User)
+		}
+		if err == nil {
+			err = e2e.CheckReactions(st.Reactions, all)
 		}
 		if err != nil {
 			return fmt.Errorf("history walk (forward %v): %w", forward, err)
@@ -116,13 +120,21 @@ func awaitEvents(ctx context.Context, st e2e.State, path string, wait time.Durat
 			return e2e.Coverage{}, err
 		}
 		cov, err := e2e.CheckEvents(st.Acks, st.Room, evs)
+		var changes, marks []string
+		if err == nil {
+			changes, err = e2e.CheckChangeEvents(st.Room, st.Changes, evs)
+		}
+		if err == nil {
+			marks, err = e2e.CheckMarkEvents(st.Room, st.User, st.Reactions, st.Pins, evs)
+		}
 		switch {
 		case err != nil:
 			return cov, fmt.Errorf("live events: %w", err)
-		case cov.MissingCount == 0:
+		case cov.MissingCount == 0 && len(changes) == 0 && len(marks) == 0:
 			return cov, nil
 		case time.Now().After(deadline):
-			return cov, fmt.Errorf("%d of %d seq have no live event after %v, first missing %v", cov.MissingCount, len(st.Acks), wait, cov.Missing)
+			return cov, fmt.Errorf("after %v: %d of %d seq have no live event (first missing %v); change events missing %v; reaction and pin events missing %v",
+				wait, cov.MissingCount, len(st.Acks), cov.Missing, changes, marks)
 		case !backoff.Pause(ctx, eventPoll):
 			return cov, ctx.Err()
 		}

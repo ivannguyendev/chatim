@@ -70,3 +70,32 @@ func TestDomainRoomTypeAcceptsOnlyKnownTypes(t *testing.T) {
 		}
 	}
 }
+
+func TestRoomCreatedEventIDIsTheDecimalRoomWithASuffix(t *testing.T) {
+	cases := map[uint64]string{
+		1:                     "1-created",
+		9_007_199_254_740_993: "9007199254740993-created",
+		math.MaxInt64:         "9223372036854775807-created",
+	}
+	for room, want := range cases {
+		if got := pbconv.RoomCreatedEventID(room); got != want {
+			t.Errorf("RoomCreatedEventID(%d) = %q, want %q", room, got, want)
+		}
+	}
+}
+
+func TestRoomCreatedEnvelope(t *testing.T) {
+	room := domain.Room{ID: 9_007_199_254_740_993, Tenant: "acme", Type: domain.RoomGroup, Name: "Team", CreatedBy: "alice", CreatedAt: sentAt, MemberCount: 3}
+	want := &chatimv1.Event{
+		Id: "9007199254740993-created", Tenant: "acme", RoomId: "9007199254740993", RoomType: chatimv1.RoomType_ROOM_TYPE_GROUP,
+		Actor: "alice", Ts: timestamppb.New(sentAt),
+		Payload: &chatimv1.Event_RoomCreated{RoomCreated: &chatimv1.RoomCreated{Room: pbconv.Room(room)}},
+	}
+	got := pbconv.RoomCreated(room)
+	if !proto.Equal(got, want) {
+		t.Fatalf("RoomCreated = %v, want %v", got, want)
+	}
+	if got.GetThreadRoot() != 0 || got.GetSeq() != 0 || !got.GetTs().AsTime().Equal(sentAt) {
+		t.Fatalf("thread %d seq %d ts %v, want 0, 0 and %v", got.GetThreadRoot(), got.GetSeq(), got.GetTs().AsTime(), sentAt)
+	}
+}

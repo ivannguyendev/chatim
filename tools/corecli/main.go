@@ -13,12 +13,28 @@ import (
 const usage = `usage: corecli <command> [flags]
 
 commands:
-  create-room   create a room through any live core
-  send          send one message to the core serving the room
-  history       read one history page of a room
-  watch         print live events of a room from NATS
-  slots         show how live cores share the slots
-  e2e           end-to-end scenario steps: setup, send, check
+  create-room        create a room through any live core
+  send               send one message to the core serving the room
+  history            read one history page of a room
+  edit               edit a message (-base: the version you saw)
+  delete             delete a message for everyone (-base: the version you saw)
+  hide               hide a message for the caller only
+  clear              hide the history up to a seq for the caller only
+  edits              list the edit history of a message
+  react              set or change the caller's reaction on a message (-emoji "" removes it)
+  reaction-settings  print the reaction emojis the core accepts, as JSON
+  pin                pin a message in its room
+  unpin              unpin a message
+  add-members        add users to a group (-request-id: reuse it to retry)
+  remove-member      remove -target from a group
+  leave              leave a room as the caller
+  set-role           set the role of -target: owner, admin or member
+  set-priority       set the priority of -target
+  read               mark the room read up to -seq (0: the last message)
+  unread             mark the room unread from -seq
+  watch              print live events of a room from NATS
+  slots              show how live cores share the slots
+  e2e                end-to-end scenario steps: setup, send, change, react-pin, members, check
 
 run "corecli <command> -h" for the flags of a command`
 
@@ -28,12 +44,28 @@ func main() { os.Exit(realMain(os.Args[1:])) }
 
 func realMain(args []string) int {
 	commands := map[string]command{
-		"create-room": createRoomCmd,
-		"send":        sendCmd,
-		"history":     historyCmd,
-		"watch":       watchCmd,
-		"slots":       slotsCmd,
-		"e2e":         e2eCmd,
+		"create-room":       createRoomCmd,
+		"send":              sendCmd,
+		"history":           historyCmd,
+		"edit":              editCmd,
+		"delete":            deleteCmd,
+		"hide":              hideCmd,
+		"clear":             clearCmd,
+		"edits":             editsCmd,
+		"react":             reactCmd,
+		"reaction-settings": reactionSettingsCmd,
+		"pin":               pinCmd,
+		"unpin":             unpinCmd,
+		"add-members":       addMembersCmd,
+		"remove-member":     removeMemberCmd,
+		"leave":             leaveCmd,
+		"set-role":          setRoleCmd,
+		"set-priority":      setPriorityCmd,
+		"read":              readCmd,
+		"unread":            unreadCmd,
+		"watch":             watchCmd,
+		"slots":             slotsCmd,
+		"e2e":               e2eCmd,
 	}
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, usage)

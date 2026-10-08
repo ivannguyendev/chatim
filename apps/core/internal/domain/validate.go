@@ -7,11 +7,11 @@ import (
 )
 
 const (
-	maxTextBytes    = 16384
-	maxNameRunes    = 128
-	maxGroupMembers = 5000
-	defaultPage     = 50
-	maxPage         = 100
+	maxTextBytes = 16384
+	maxNameRunes = 128
+	dmMembers    = 2
+	defaultPage  = 50
+	maxPage      = 100
 )
 
 func NewRoom(tenant, creator string, typ RoomType, name string, members []string, now time.Time, id uint64) (Room, []Member, error) {
@@ -31,13 +31,17 @@ func NewRoom(tenant, creator string, typ RoomType, name string, members []string
 	if err != nil {
 		return Room{}, nil, err
 	}
+	requestID := CreationRequestID(id)
 	out := make([]Member, len(users))
 	for i, u := range users {
 		role := RoleMember
 		if u == creator {
 			role = RoleOwner
 		}
-		out[i] = Member{Room: id, Tenant: tenant, User: u, Role: role, JoinedAt: now}
+		out[i] = Member{
+			Room: id, Tenant: tenant, User: u, Role: role, JoinedAt: now, State: MemberActive, Ver: 1,
+			RequestID: requestID, UpdatedAt: now, UpdatedBy: creator, LastChangeAt: now,
+		}
 	}
 	room := Room{ID: id, Tenant: tenant, Type: typ, Name: name, CreatedBy: creator, CreatedAt: now, MemberCount: len(out)}
 	return room, out, nil
@@ -54,12 +58,8 @@ func validateName(typ RoomType, name string) error {
 }
 
 func distinctMembers(typ RoomType, creator string, members []string) ([]string, error) {
-	minN, maxN := 1, maxGroupMembers
-	if typ == RoomDM {
-		minN, maxN = 2, 2
-	}
-	seen := make(map[string]struct{}, min(len(members), maxN+1))
-	users := make([]string, 0, min(len(members), maxN))
+	seen := make(map[string]struct{}, len(members))
+	users := make([]string, 0, len(members))
 	for _, u := range members {
 		if err := ValidUser(u); err != nil {
 			return nil, err
@@ -67,13 +67,10 @@ func distinctMembers(typ RoomType, creator string, members []string) ([]string, 
 		if _, dup := seen[u]; dup {
 			continue
 		}
-		if len(users) == maxN {
-			return nil, invalid("members")
-		}
 		seen[u] = struct{}{}
 		users = append(users, u)
 	}
-	if _, ok := seen[creator]; !ok || len(users) < minN {
+	if _, ok := seen[creator]; !ok || (typ == RoomDM && len(users) != dmMembers) {
 		return nil, invalid("members")
 	}
 	return users, nil

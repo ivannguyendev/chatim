@@ -13,21 +13,39 @@ import (
 )
 
 type Event struct {
+	Kind    string `json:"kind,omitempty"`
 	Room    string `json:"room"`
 	ID      string `json:"id"`
 	Seq     uint64 `json:"seq"`
 	CID     string `json:"cid"`
+	User    string `json:"user,omitempty"`
+	Version uint32 `json:"version,omitempty"`
+	Text    string `json:"text,omitempty"`
 	Subject string `json:"subject,omitempty"`
 }
 
-func EventOf(subject string, ev *chatimv1.Event) Event {
-	return Event{
-		Room:    ev.GetRoomId(),
-		ID:      ev.GetId(),
-		Seq:     ev.GetSeq(),
-		CID:     ev.GetMessageCreated().GetMessage().GetCid(),
-		Subject: subject,
+func (e Event) IsChange() bool { return e.Kind == KindEdited || e.Kind == KindDeleted }
+
+func (e Event) IsCreated() bool { return e.Kind == "" || e.Kind == KindCreated }
+
+func EventOf(subject string, ev *chatimv1.Event) (Event, bool) {
+	if created := ev.GetMessageCreated(); created != nil {
+		return Event{Kind: KindCreated, Room: ev.GetRoomId(), ID: ev.GetId(), Seq: ev.GetSeq(), CID: created.GetMessage().GetCid(), Subject: subject}, true
 	}
+	if edited := ev.GetMessageEdited(); edited != nil {
+		return changeOf(subject, ev, KindEdited, edited.GetMessage(), edited.GetVer()), true
+	}
+	if deleted := ev.GetMessageDeleted(); deleted != nil {
+		return changeOf(subject, ev, KindDeleted, deleted.GetMessage(), deleted.GetVer()), true
+	}
+	if out, ok := markOf(subject, ev); ok {
+		return out, true
+	}
+	return memberOf(subject, ev)
+}
+
+func changeOf(subject string, ev *chatimv1.Event, kind string, m *chatimv1.Message, version uint32) Event {
+	return Event{Kind: kind, Room: m.GetRoomId(), ID: ev.GetId(), Seq: m.GetSeq(), CID: m.GetCid(), Version: version, Text: m.GetText(), Subject: subject}
 }
 
 func ReadEvents(path string) ([]Event, error) {

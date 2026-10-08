@@ -1,10 +1,13 @@
 package config_test
 
 import (
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
+	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 )
 
 func TestLoadJoinsAllParseErrors(t *testing.T) {
@@ -60,6 +63,9 @@ func TestLoadRejectsNonPositiveValues(t *testing.T) {
 		{"SLOT_HEARTBEAT_TTL", "0s"},
 		{"SLOT_LEASE_TTL", "0s"},
 		{"SLOT_HOOK_TIMEOUT", "0s"},
+		{"PIN_LIMIT", "0"},
+		{"REACTION_COUNT_DELAY", "0s"},
+		{"MEMBER_COUNT_CHECK_DELAY", "0s"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.key, func(t *testing.T) {
@@ -69,5 +75,95 @@ func TestLoadRejectsNonPositiveValues(t *testing.T) {
 				t.Fatalf("Load() with %s=%s = %v, want an error naming %s", tt.key, tt.value, err, tt.key)
 			}
 		})
+	}
+}
+
+func TestLoadReadsLockedMessageKinds(t *testing.T) {
+	tests := []struct {
+		value string
+		want  []domain.Kind
+	}{
+		{"", nil},
+		{" text , ", []domain.Kind{domain.KindText}},
+		{",text,,text", []domain.Kind{domain.KindText, domain.KindText}},
+	}
+	for _, tt := range tests {
+		setEnv(t, map[string]string{"MESSAGE_LOCKED_KINDS": tt.value})
+		got, err := config.Load()
+		if err != nil || !slices.Equal(got.LockedMessageKinds, tt.want) {
+			t.Fatalf("MESSAGE_LOCKED_KINDS=%q gives %v, %v; want %v", tt.value, got.LockedMessageKinds, err, tt.want)
+		}
+	}
+}
+
+func TestLoadRejectsAnUnknownLockedMessageKind(t *testing.T) {
+	setEnv(t, map[string]string{"MESSAGE_LOCKED_KINDS": "text,nope"})
+	_, err := config.Load()
+	if err == nil || !strings.Contains(err.Error(), "MESSAGE_LOCKED_KINDS") || !strings.Contains(err.Error(), "nope") {
+		t.Fatalf("Load() = %v, want an error naming MESSAGE_LOCKED_KINDS and nope", err)
+	}
+}
+
+func TestLoadReadsReactionEmojis(t *testing.T) {
+	tests := []struct {
+		value string
+		want  []string
+	}{
+		{"", []string{"👍", "❤️", "😂", "😮", "😢", "🙏"}},
+		{" , ", []string{"👍", "❤️", "😂", "😮", "😢", "🙏"}},
+		{" 🎉 , 👍 ,", []string{"🎉", "👍"}},
+	}
+	for _, tt := range tests {
+		setEnv(t, map[string]string{"REACTION_EMOJIS": tt.value})
+		got, err := config.Load()
+		if err != nil || !slices.Equal(got.Limits.Emojis, tt.want) {
+			t.Fatalf("REACTION_EMOJIS=%q gives %q, %v; want %q", tt.value, got.Limits.Emojis, err, tt.want)
+		}
+	}
+}
+
+func TestLoadRejectsBadReactionEmojis(t *testing.T) {
+	var many []string
+	for i := range 101 {
+		many = append(many, "e"+strconv.Itoa(i))
+	}
+	tests := []struct {
+		value, bad string
+	}{
+		{"👍,❤️,👍", "👍"},
+		{"👍," + strings.Repeat("x", 33), strings.Repeat("x", 33)},
+		{strings.Join(many, ","), "101"},
+	}
+	for _, tt := range tests {
+		setEnv(t, map[string]string{"REACTION_EMOJIS": tt.value})
+		_, err := config.Load()
+		if err == nil || !strings.Contains(err.Error(), "REACTION_EMOJIS") || !strings.Contains(err.Error(), tt.bad) {
+			t.Fatalf("REACTION_EMOJIS=%q: Load() = %v, want an error naming REACTION_EMOJIS and %q", tt.value, err, tt.bad)
+		}
+	}
+	setEnv(t, map[string]string{"REACTION_EMOJIS": strings.Join(many[:100], ",")})
+	if _, err := config.Load(); err != nil {
+		t.Fatalf("100 emojis: Load() = %v, want nil", err)
+	}
+}
+
+func TestMemberBatchMaxDefaultsAndBounds(t *testing.T) {
+	setEnv(t, nil)
+	got, err := config.Load()
+	if err != nil || got.Limits.MemberBatch != 500 {
+		t.Fatalf("default MEMBER_BATCH_MAX = %d, %v; want 500", got.Limits.MemberBatch, err)
+	}
+	for _, value := range []string{"0", "1", "1001", "-3"} {
+		setEnv(t, map[string]string{"MEMBER_BATCH_MAX": value})
+		if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "MEMBER_BATCH_MAX") {
+			t.Fatalf("MEMBER_BATCH_MAX=%s: Load() = %v, want an error naming MEMBER_BATCH_MAX", value, err)
+		}
+	}
+	for _, want := range []int{2, 1000} {
+		setEnv(t, map[string]string{"MEMBER_BATCH_MAX": strconv.Itoa(want)})
+		got, err := config.Load()
+		if err != nil || got.Limits.MemberBatch != want {
+			t.Fatalf("MEMBER_BATCH_MAX=%d gives %d, %v; want it accepted", want, got.Limits.MemberBatch, err)
+		}
 	}
 }

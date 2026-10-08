@@ -9,24 +9,28 @@ import (
 	"google.golang.org/grpc/metadata"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/grpcsrv"
-	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 func TestNewRequiresEveryDependency(t *testing.T) {
-	rooms, msgs, sender := memstore.NewRooms(), memstore.NewMessages(), &fakeSender{}
-	cases := map[string]grpcsrv.Deps{
-		"no sender": {Rooms: rooms, Pages: msgs},
-		"no rooms":  {Sender: sender, Pages: msgs},
-		"no pages":  {Sender: sender, Rooms: rooms},
-	}
-	for name, deps := range cases {
+	rg := memStores()
+	full := grpcsrv.Deps{Sender: &fakeSender{}, Rooms: rg.rooms, Pages: rg.msgs, Mutator: newMutator(t, rg, options{}), Edits: rg.edits, Hidden: rg.hidden}
+	for name, drop := range map[string]func(d *grpcsrv.Deps){
+		"no sender":  func(d *grpcsrv.Deps) { d.Sender = nil },
+		"no rooms":   func(d *grpcsrv.Deps) { d.Rooms = nil },
+		"no pages":   func(d *grpcsrv.Deps) { d.Pages = nil },
+		"no mutator": func(d *grpcsrv.Deps) { d.Mutator = nil },
+		"no edits":   func(d *grpcsrv.Deps) { d.Edits = nil },
+		"no hidden":  func(d *grpcsrv.Deps) { d.Hidden = nil },
+	} {
+		deps := full
+		drop(&deps)
 		if _, err := grpcsrv.New(deps, quiet); !errors.Is(err, apperr.ErrInvalidArgument) {
 			t.Errorf("%s: New = %v, want ErrInvalidArgument", name, err)
 		}
 	}
-	if _, err := grpcsrv.New(grpcsrv.Deps{Sender: sender, Rooms: rooms, Pages: msgs}, nil); err != nil {
+	if _, err := grpcsrv.New(full, nil); err != nil {
 		t.Errorf("New with defaults = %v, want nil", err)
 	}
 }
@@ -45,6 +49,66 @@ func TestEveryRPCChecksCallerIdentityFirst(t *testing.T) {
 		},
 		"GetHistory": func(ctx context.Context) error {
 			_, err := rg.client.GetHistory(ctx, &chatimv1.GetHistoryRequest{RoomId: "42"})
+			return err
+		},
+		"EditMessage": func(ctx context.Context) error {
+			_, err := rg.client.EditMessage(ctx, &chatimv1.EditMessageRequest{RoomId: "42", Seq: 1, Text: "hi"})
+			return err
+		},
+		"DeleteMessage": func(ctx context.Context) error {
+			_, err := rg.client.DeleteMessage(ctx, &chatimv1.DeleteMessageRequest{RoomId: "42", Seq: 1})
+			return err
+		},
+		"HideMessage": func(ctx context.Context) error {
+			_, err := rg.client.HideMessage(ctx, &chatimv1.HideMessageRequest{RoomId: "42", Seq: 1})
+			return err
+		},
+		"ClearHistory": func(ctx context.Context) error {
+			_, err := rg.client.ClearHistory(ctx, &chatimv1.ClearHistoryRequest{RoomId: "42"})
+			return err
+		},
+		"GetEditHistory": func(ctx context.Context) error {
+			_, err := rg.client.GetEditHistory(ctx, &chatimv1.GetEditHistoryRequest{RoomId: "42", Seq: 1})
+			return err
+		},
+		"ReactMessage": func(ctx context.Context) error {
+			_, err := rg.client.ReactMessage(ctx, &chatimv1.ReactMessageRequest{RoomId: "42", Seq: 1, Emoji: "👍"})
+			return err
+		},
+		"PinMessage": func(ctx context.Context) error {
+			_, err := rg.client.PinMessage(ctx, &chatimv1.PinMessageRequest{RoomId: "42", Seq: 1})
+			return err
+		},
+		"UnpinMessage": func(ctx context.Context) error {
+			_, err := rg.client.UnpinMessage(ctx, &chatimv1.UnpinMessageRequest{RoomId: "42", Seq: 1})
+			return err
+		},
+		"AddMembers": func(ctx context.Context) error {
+			_, err := rg.client.AddMembers(ctx, &chatimv1.AddMembersRequest{RoomId: "42", Users: []string{"bob"}, RequestId: "r-1"})
+			return err
+		},
+		"RemoveMember": func(ctx context.Context) error {
+			_, err := rg.client.RemoveMember(ctx, &chatimv1.RemoveMemberRequest{RoomId: "42", User: "bob"})
+			return err
+		},
+		"LeaveRoom": func(ctx context.Context) error {
+			_, err := rg.client.LeaveRoom(ctx, &chatimv1.LeaveRoomRequest{RoomId: "42"})
+			return err
+		},
+		"ChangeMemberRole": func(ctx context.Context) error {
+			_, err := rg.client.ChangeMemberRole(ctx, &chatimv1.ChangeMemberRoleRequest{RoomId: "42", User: "bob"})
+			return err
+		},
+		"SetMemberPriority": func(ctx context.Context) error {
+			_, err := rg.client.SetMemberPriority(ctx, &chatimv1.SetMemberPriorityRequest{RoomId: "42", User: "bob", Priority: 1})
+			return err
+		},
+		"MarkRead": func(ctx context.Context) error {
+			_, err := rg.client.MarkRead(ctx, &chatimv1.MarkReadRequest{RoomId: "42", Seq: 1})
+			return err
+		},
+		"MarkUnread": func(ctx context.Context) error {
+			_, err := rg.client.MarkUnread(ctx, &chatimv1.MarkUnreadRequest{RoomId: "42"})
 			return err
 		},
 	}

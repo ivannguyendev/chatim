@@ -17,8 +17,30 @@ var (
 
 type Position []byte
 
+type ChangeKind uint8
+
+const (
+	MessageInserted ChangeKind = iota + 1
+	RoomInserted
+	EditInserted
+	ReactionChanged
+	PinInserted
+	MemberChanged
+	ReadChanged
+	MessageHidden
+	HistoryCleared
+	MemberCountCheck
+)
+
 type Change struct {
+	Kind        ChangeKind
 	Msg         domain.Message
+	Room        domain.Room
+	Edit        domain.Edit
+	Reaction    domain.Reaction
+	Pin         domain.PinAction
+	Member      domain.Member
+	Hidden      domain.HiddenMessage
 	CommittedAt time.Time
 	Position    Position
 }

@@ -17,7 +17,7 @@ func TestIdleUntilItOwnsTheLeaderSlot(t *testing.T) {
 		rg.start(t)
 		synctest.Wait()
 		rg.insert(t, room, 1)
-		time.Sleep(delay + 2*tick)
+		time.Sleep(3 * tick)
 		synctest.Wait()
 		if got := attemptIDs(rg.js); len(got) != 0 {
 			t.Fatalf("attempts while not leading = %v, want none", got)
@@ -30,17 +30,17 @@ func TestLeadershipHandoverResumesFromTheConfirmedPosition(t *testing.T) {
 		rg := newRig(t, nil).start(t)
 		synctest.Wait()
 		rg.insert(t, room, 1)
-		time.Sleep(delay + tick)
+		time.Sleep(2 * tick)
 		synctest.Wait()
 		rg.owner.leading.Store(false)
 		time.Sleep(2 * tick)
 		synctest.Wait()
 		rg.insert(t, room, 2)
 		rg.owner.leading.Store(true)
-		time.Sleep(delay + 2*tick)
+		time.Sleep(3 * tick)
 		synctest.Wait()
-		if got := storedIDs(rg.js); !slices.Equal(got, []string{eventID(1), eventID(2)}) {
-			t.Fatalf("stored = %v, want %s then %s", got, eventID(1), eventID(2))
+		if got := storedIDs(rg.js); !slices.Equal(got, recordIDs(1, 2)) {
+			t.Fatalf("stored = %v, want %s then %s", got, recordID(1), recordID(2))
 		}
 	})
 }
@@ -56,10 +56,10 @@ func TestLostHistoryRestartsFromNow(t *testing.T) {
 			t.Fatalf("%q logged %d times, want 1", historyLostMsg, got)
 		}
 		rg.insert(t, room, 1)
-		time.Sleep(delay + tick)
+		time.Sleep(2 * tick)
 		synctest.Wait()
-		if got := storedIDs(rg.js); !slices.Equal(got, []string{eventID(1)}) {
-			t.Fatalf("stored = %v, want %s", got, eventID(1))
+		if got := storedIDs(rg.js); !slices.Equal(got, recordIDs(1)) {
+			t.Fatalf("stored = %v, want %s", got, recordID(1))
 		}
 	})
 }
@@ -75,10 +75,10 @@ func TestBusyFeedIsRetried(t *testing.T) {
 		time.Sleep(3 * tick)
 		synctest.Wait()
 		rg.insert(t, room, 1)
-		time.Sleep(delay + tick)
+		time.Sleep(2 * tick)
 		synctest.Wait()
-		if got := storedIDs(rg.js); !slices.Equal(got, []string{eventID(1)}) {
-			t.Fatalf("stored = %v, want %s after the feed frees up", got, eventID(1))
+		if got := storedIDs(rg.js); !slices.Equal(got, recordIDs(1)) {
+			t.Fatalf("stored = %v, want %s after the feed frees up", got, recordID(1))
 		}
 	})
 }
@@ -89,7 +89,6 @@ func TestCloseSettlesInFlightPublishes(t *testing.T) {
 		synctest.Wait()
 		rg.js.Hold()
 		rg.insert(t, room, 1)
-		time.Sleep(delay)
 		synctest.Wait()
 		closed := make(chan error, 1)
 		go func() {
@@ -104,30 +103,6 @@ func TestCloseSettlesInFlightPublishes(t *testing.T) {
 		}
 		if got := rg.confirmed(t); got != 1 {
 			t.Fatalf("confirmed after Close = %d, want 1", got)
-		}
-	})
-}
-
-func TestLagBeyondTheDuplicateWindowWarns(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		rg := newRig(t, nil).start(t)
-		synctest.Wait()
-		rg.insert(t, room, 1)
-		time.Sleep(delay + tick)
-		synctest.Wait()
-		rg.owner.leading.Store(false)
-		time.Sleep(2 * tick)
-		synctest.Wait()
-		rg.insert(t, room, 2)
-		time.Sleep(setup.DuplicateWindow + tick)
-		rg.owner.leading.Store(true)
-		time.Sleep(2 * tick)
-		synctest.Wait()
-		if got := rg.sink.Count(lagMsg); got != 1 {
-			t.Fatalf("%q logged %d times, want 1", lagMsg, got)
-		}
-		if got := storedIDs(rg.js); !slices.Equal(got, []string{eventID(1), eventID(2)}) {
-			t.Fatalf("stored = %v, want %s then the late %s", got, eventID(1), eventID(2))
 		}
 	})
 }

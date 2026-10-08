@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
@@ -62,6 +63,13 @@ func (q PageQuery) Validate() error {
 	default:
 		return invalid("anchor")
 	}
+}
+
+func ValidateVersionBump(base, next uint64) error {
+	if next <= base || next > math.MaxInt64 {
+		return invalid("version")
+	}
+	return nil
 }
 
 func invalid(field string) error {

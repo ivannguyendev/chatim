@@ -76,7 +76,7 @@ func (f *fakeRegistry) calls() (reserves [][]Key, commits [][]Entry, aborts [][]
 	return slices.Clone(f.reserves), slices.Clone(f.commits), slices.Clone(f.aborts)
 }
 
-func startBatcher(t *testing.T, reg registry, cfg BatchConfig) (*Batcher, *testlog.Sink) {
+func startBatcher(t *testing.T, reg Registry, cfg BatchConfig) (*Batcher, *testlog.Sink) {
 	t.Helper()
 	sink := &testlog.Sink{}
 	b, err := NewBatcher(reg, cfg, sink.Logger())

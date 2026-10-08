@@ -18,6 +18,15 @@ func TestDomainErrorsWrapAppKinds(t *testing.T) {
 		{domain.ErrNotMember, apperr.ErrPermissionDenied},
 		{domain.ErrBusy, apperr.ErrResourceExhausted},
 		{domain.ErrRetryLater, apperr.ErrUnavailable},
+		{domain.ErrMessageNotFound, apperr.ErrNotFound},
+		{domain.ErrMessageDeleted, apperr.ErrFailedPrecondition},
+		{domain.ErrVersionConflict, apperr.ErrFailedPrecondition},
+		{domain.ErrEmojiNotAllowed, apperr.ErrInvalidArgument},
+		{domain.ErrTooManyPins, apperr.ErrFailedPrecondition},
+		{domain.ErrDirectRoom, apperr.ErrFailedPrecondition},
+		{domain.ErrLastOwner, apperr.ErrFailedPrecondition},
+		{domain.ErrMemberNotFound, apperr.ErrNotFound},
+		{domain.ErrTooManyMembers, apperr.ErrInvalidArgument},
 	}
 	for _, tt := range tests {
 		t.Run(tt.err.Error(), func(t *testing.T) {

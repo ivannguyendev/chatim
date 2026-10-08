@@ -10,11 +10,12 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/eventmark"
 	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
-	"github.com/ivannguyendev/chatim/apps/core/internal/grpcsrv"
+	"github.com/ivannguyendev/chatim/apps/core/internal/metrics"
 	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/reconcile"
 	"github.com/ivannguyendev/chatim/apps/core/internal/slot"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
+	"github.com/ivannguyendev/chatim/apps/core/internal/work"
 	"github.com/ivannguyendev/chatim/pkg/admin"
 	"github.com/ivannguyendev/chatim/pkg/grpcserver"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
@@ -36,16 +37,18 @@ type gate interface {
 }
 
 type app struct {
-	cfg        config.Config
-	log        *slog.Logger
-	admin      *admin.Server
-	grpc       *grpcserver.Server
-	publisher  drainer
-	flusher    drainer
-	cidBatch   drainer
-	router     gate
-	slots      runner
-	reconciler drainer
+	cfg         config.Config
+	log         *slog.Logger
+	admin       *admin.Server
+	grpc        *grpcserver.Server
+	publisher   drainer
+	flusher     drainer
+	cidBatch    drainer
+	router      gate
+	slots       runner
+	workers     drainer
+	reconciler  drainer
+	memberWatch memberWatcher
 }
 
 func prepare(ctx context.Context, cfg config.Config, cl *clients) error {
@@ -54,7 +57,10 @@ func prepare(ctx context.Context, cfg config.Config, cl *clients) error {
 	if err := mongostore.Bootstrap(ctx, cl.mongo.Database(cfg.MongoDB)); err != nil {
 		return fmt.Errorf("bootstrap mongo database %s: %w", cfg.MongoDB, config.RedactError(err, cfg.MongoURI))
 	}
-	return config.RedactError(publish.EnsureStream(ctx, cl.js, cfg.Stream), cfg.NATSURL)
+	if err := publish.EnsureStream(ctx, cl.js, cfg.Stream); err != nil {
+		return config.RedactError(err, cfg.NATSURL)
+	}
+	return config.RedactError(work.EnsureStream(ctx, cl.js, cfg.Work), cfg.NATSURL)
 }
 
 func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
@@ -72,7 +78,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wire event ack marks: %w", err)
 	}
-	pub, err := publish.New(cl.js, cfg.Publish, log, publish.WithAckMarks(marks))
+	pub, err := publish.New(cl.js, cfg.Publish, log, publish.WithAckMarks(marks), publish.WithCounters(cl.pubCounters))
 	if err != nil {
 		return nil, fmt.Errorf("wire publisher: %w", err)
 	}
@@ -84,6 +90,11 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wire router: %w", err)
 	}
+	watch, err := wireMemberWatch(cfg, cl.nats, router, log)
+	if err != nil {
+		return nil, err
+	}
+	a.memberWatch = watch
 	slotCfg := cfg.Slot
 	slotCfg.BeforeRelease = router.EvictSlots
 	slotCfg.AfterLose = router.EvictSlots
@@ -92,9 +103,20 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wire slot manager: %w", err)
 	}
+	w := cfg.Work
+	timers, err := work.NewTimers(cl.js, w.Name, w.SubjectRoot, w.Partitions, cfg.MemberCountCheckDelay, work.WithTimerLogger(log))
+	if err != nil {
+		return nil, fmt.Errorf("wire member count timers: %w", err)
+	}
+	fx, err := wireEffects(cfg, cl, st, marks, slots, timers, log)
+	if err != nil {
+		return nil, err
+	}
+	a.workers = fx.workers
+	var rec *reconcile.Reconciler
 	if cfg.ReconcileEnabled {
-		rec, err := reconcile.New(reconcile.Deps{
-			Feed: mongostore.NewFeed(cl.mongo.Database(cfg.MongoDB)), Rooms: st, Marks: marks, Owner: slots, JS: cl.reconcileJS,
+		rec, err = reconcile.New(reconcile.Deps{
+			Feed: mongostore.NewFeed(cl.mongo.Database(cfg.MongoDB)), Owner: slots, JS: cl.reconcileJS,
 		}, cfg.Reconcile, log)
 		if err != nil {
 			return nil, fmt.Errorf("wire reconciler: %w", err)
@@ -102,18 +124,40 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 		a.reconciler = rec
 	}
 	a.publisher, a.flusher, a.cidBatch, a.router, a.slots = pub, fl, batch, router, slots
-	svc, err := grpcsrv.New(grpcsrv.Deps{Sender: router, Rooms: st, Pages: st}, log)
+	svc, err := wireService(serviceDeps{store: st, router: router, pub: pub, cidBatch: batch, timers: timers, cfg: cfg, log: log})
 	if err != nil {
-		return nil, fmt.Errorf("wire core service: %w", err)
+		return nil, err
 	}
+	limiter := resilience.NewLimiter(cfg.MaxInflight, cfg.QueueWait)
 	a.grpc = grpcserver.New(grpcserver.Config{
 		Addr:            cfg.GRPCAddr,
 		ShutdownTimeout: cfg.GRPCShutdown,
 		RequestDeadline: cfg.RequestDeadline,
 		SlowRPC:         cfg.SlowRPC,
-		Limiter:         resilience.NewLimiter(cfg.MaxInflight, cfg.QueueWait),
+		Limiter:         limiter,
 	}, log)
 	chatimv1.RegisterCoreServiceServer(a.grpc, svc)
-	a.admin = admin.New(admin.Config{Addr: cfg.AdminAddr, ShutdownTimeout: config.CloseTimeout}, log)
+	p := probes{
+		drops:           cl.pubCounters.Drops,
+		router:          router.Stats,
+		cidDegraded:     cids.Degraded,
+		markDegraded:    marks.Degraded,
+		cidDropped:      batch.Dropped,
+		loadShed:        limiter.Rejected,
+		oplogWindow:     oplogWindowSeconds(cl.mongo),
+		workers:         fx.workers.Stats,
+		effectCounts:    fx.counters(),
+		counterRepairs:  fx.counterRepairs(),
+		memberForgets:   watch.Forgets,
+		memberMalformed: watch.Malformed,
+	}
+	if rec != nil {
+		p.reconcile = rec.Stats
+	}
+	handler, err := metrics.Handler(metricSources(p))
+	if err != nil {
+		return nil, fmt.Errorf("wire metrics: %w", err)
+	}
+	a.admin = admin.New(admin.Config{Addr: cfg.AdminAddr, ShutdownTimeout: config.CloseTimeout, Metrics: handler}, log)
 	return a, nil
 }
