@@ -132,6 +132,7 @@ func TestNewRequiresEveryDependency(t *testing.T) {
 		"no requests":   func(d *mutate.Deps) { d.Requests = nil },
 		"no forget":     func(d *mutate.Deps) { d.Forget = nil },
 		"no timers":     func(d *mutate.Deps) { d.Timers = nil },
+		"no reads":      func(d *mutate.Deps) { d.Reads = nil },
 		"bad batch":     func(d *mutate.Deps) { d.Limits = mutate.Limits{MemberBatch: 1} },
 		"bad pin limit": func(d *mutate.Deps) { d.Limits = mutate.Limits{PinLimit: mutate.MaxPinLimit + 1} },
 		"no emojis":     func(d *mutate.Deps) { d.Limits = mutate.Limits{Emojis: []string{}} },

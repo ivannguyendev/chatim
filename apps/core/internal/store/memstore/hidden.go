@@ -26,28 +26,28 @@ type Hidden struct {
 
 func NewHidden() *Hidden { return &Hidden{seqs: make(map[hiddenKey]time.Time)} }
 
-func (s *Hidden) Hide(ctx context.Context, user string, key store.MsgKey, at time.Time) error {
+func (s *Hidden) Hide(ctx context.Context, user string, key store.MsgKey, at time.Time) (bool, error) {
 	if err := ctx.Err(); err != nil {
-		return err
+		return false, err
 	}
 	if err := key.Validate(); err != nil {
-		return err
+		return false, err
 	}
 	if err := store.ValidateMarkTime(at); err != nil {
-		return err
+		return false, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	k := hiddenKey{user: user, key: key}
 	if _, ok := s.seqs[k]; ok {
-		return nil
+		return false, nil
 	}
 	at = time.UnixMilli(at.UnixMilli()).UTC()
 	s.seqs[k] = at
 	if s.log != nil {
 		s.log.appendFact(logged{kind: store.MessageHidden, hidden: domain.HiddenMessage{User: user, Room: key.Room, Thread: key.Thread, Seq: key.Seq, At: at}})
 	}
-	return nil
+	return true, nil
 }
 
 func (s *Hidden) HiddenIn(ctx context.Context, user string, room, thread, from, to uint64) ([]uint64, error) {

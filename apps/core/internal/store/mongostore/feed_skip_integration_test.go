@@ -22,7 +22,7 @@ func TestFeedSkipsSummaryPinActivityAndCountWrites(t *testing.T) {
 	seedTimeline(t, s, itRoom, 0, 1)
 	m := msgAt(itRoom, 0, 1)
 	key := store.KeyOf(m)
-	if err := s.Hidden().Hide(ctx, "alice", key, codecTime); err != nil {
+	if _, err := s.Hidden().Hide(ctx, "alice", key, codecTime); err != nil {
 		t.Fatalf("Hide: %v", err)
 	}
 	if _, _, err := s.ClearHistory(ctx, itRoom, "alice", codecTime.Add(time.Minute)); err != nil {
@@ -71,8 +71,8 @@ func skippedWrites(t *testing.T, s *Store, key store.MsgKey) {
 	if err := s.ApplyEdit(ctx, edit); err != nil {
 		t.Fatalf("ApplyEdit: %v", err)
 	}
-	if err := s.Hidden().Hide(ctx, "alice", key, codecTime.Add(time.Hour)); err != nil {
-		t.Fatalf("Hide again: %v", err)
+	if fresh, err := s.Hidden().Hide(ctx, "alice", key, codecTime.Add(time.Hour)); err != nil || fresh {
+		t.Fatalf("Hide again = %v, %v; want not newly hidden", fresh, err)
 	}
 	if _, raised, err := s.ClearHistory(ctx, itRoom, "alice", codecTime); err != nil || raised {
 		t.Fatalf("ClearHistory(earlier) = %v, %v; want no raise", raised, err)

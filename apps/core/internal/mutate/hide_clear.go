@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/access"
+	"github.com/ivannguyendev/chatim/apps/core/internal/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
@@ -23,16 +24,33 @@ func (m *Mutator) Hide(ctx context.Context, c HideCmd) error {
 	if err := validKey(key); err != nil {
 		return err
 	}
-	if _, _, err := m.target(ctx, access.HideMessage, c.Tenant, c.User, key); err != nil {
+	req, _, err := m.target(ctx, access.HideMessage, c.Tenant, c.User, key)
+	if err != nil {
 		return err
 	}
-	return m.d.Hidden.Hide(ctx, c.User, key, m.now())
+	now := m.now()
+	fresh, err := m.d.Hidden.Hide(ctx, c.User, key, now)
+	if err != nil {
+		return err
+	}
+	if fresh {
+		m.tell(c.Room, pbconv.MessageHidden(req.Room, c.User, c.Thread, c.Seq, now))
+	}
+	return nil
 }
 
 func (m *Mutator) ClearHistory(ctx context.Context, c ClearCmd) (time.Time, error) {
-	if _, err := m.d.Access.Authorize(ctx, access.ClearHistory, c.Tenant, c.User, c.Room); err != nil {
+	req, err := m.d.Access.Authorize(ctx, access.ClearHistory, c.Tenant, c.User, c.Room)
+	if err != nil {
 		return time.Time{}, err
 	}
-	at, _, err := m.d.Rooms.ClearHistory(ctx, c.Room, c.User, m.now())
-	return at, err
+	now := m.now()
+	at, rose, err := m.d.Rooms.ClearHistory(ctx, c.Room, c.User, now)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if rose {
+		m.tell(c.Room, pbconv.HistoryCleared(req.Room, c.User, at, now))
+	}
+	return at, nil
 }

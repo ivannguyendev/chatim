@@ -70,7 +70,7 @@ func wireMutator(d serviceDeps) (*mutate.Mutator, error) {
 	mut, err := mutate.New(mutate.Deps{
 		Access: checker, Messages: st, Edits: st, Hidden: st.Hidden(), Rooms: st, Events: d.pub,
 		Reactions: reactions, Counter: counts, Pins: pins, Projector: projector, Limits: d.cfg.Limits,
-		Members: st, Requests: requests, Forget: d.router, Timers: timers, Log: d.log,
+		Members: st, Requests: requests, Forget: d.router, Timers: timers, Reads: st, Log: d.log,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("wire mutator: %w", err)

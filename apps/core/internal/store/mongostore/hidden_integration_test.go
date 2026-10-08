@@ -14,8 +14,8 @@ func TestHiddenDocumentLayoutKeepsTheFirstHideTime(t *testing.T) {
 	s, db := itStore(t, itClient(t))
 	key := store.MsgKey{Room: itRoom, Thread: 3, Seq: 9}
 	for i := range 2 {
-		if err := s.Hidden().Hide(t.Context(), "bob", key, codecTime.Add(time.Duration(i)*time.Hour)); err != nil {
-			t.Fatalf("Hide #%d: %v", i+1, err)
+		if fresh, err := s.Hidden().Hide(t.Context(), "bob", key, codecTime.Add(time.Duration(i)*time.Hour)); err != nil || fresh != (i == 0) {
+			t.Fatalf("Hide #%d = %v, %v; want newly hidden %v", i+1, fresh, err, i == 0)
 		}
 	}
 	raws, err := db.Collection(hiddenCollection).Find(t.Context(), bson.D{})

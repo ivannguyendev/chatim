@@ -40,7 +40,7 @@ type Edits interface {
 }
 
 type Hidden interface {
-	Hide(ctx context.Context, user string, key MsgKey, at time.Time) error
+	Hide(ctx context.Context, user string, key MsgKey, at time.Time) (bool, error)
 	HiddenIn(ctx context.Context, user string, room, thread, from, to uint64) ([]uint64, error)
 	Between(ctx context.Context, room uint64, from, to time.Time, limit int) ([]domain.HiddenMessage, error)
 }

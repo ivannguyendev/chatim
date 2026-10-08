@@ -116,7 +116,8 @@ func editsCancelled(t *testing.T, s editStores) {
 	_, _, err := s.edits.Latest(ctx, store.EditKeyOf(e))
 	assertErrorIs(t, "Latest", err, context.Canceled)
 	assertErrorIs(t, "ApplyEdit", s.msgs.ApplyEdit(ctx, e), context.Canceled)
-	assertErrorIs(t, "Hide", s.hidden.Hide(ctx, "bob", store.KeyOf(m), baseTime), context.Canceled)
+	_, err = s.hidden.Hide(ctx, "bob", store.KeyOf(m), baseTime)
+	assertErrorIs(t, "Hide", err, context.Canceled)
 	_, _, err = s.rooms.ClearHistory(ctx, roomA, "alice", baseTime)
 	assertErrorIs(t, "ClearHistory", err, context.Canceled)
 	if _, ok, err := s.edits.Latest(t.Context(), store.EditKeyOf(e)); ok || err != nil {

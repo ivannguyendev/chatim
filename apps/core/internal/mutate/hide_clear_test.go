@@ -10,6 +10,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
@@ -49,9 +50,6 @@ func TestHideNeedsAnExistingMessage(t *testing.T) {
 			t.Fatalf("%s: Hide = %v, want %v", c.name, c.err, c.want)
 		}
 	}
-	if _, events := rg.events.list(); len(events) != 0 {
-		t.Fatalf("hide enqueued %v, want no event", events)
-	}
 }
 
 func TestClearHistoryMarksTheServerTimeAndOnlyRaisesIt(t *testing.T) {
@@ -83,9 +81,6 @@ func TestClearHistoryMarksTheServerTimeAndOnlyRaisesIt(t *testing.T) {
 	if _, err := clearAt("mallory", later); !errors.Is(err, apperr.ErrPermissionDenied) {
 		t.Fatalf("ClearHistory of a non member = %v, want PermissionDenied", err)
 	}
-	if _, events := rg.events.list(); len(events) != 0 {
-		t.Fatalf("clear enqueued %v, want no event", events)
-	}
 }
 
 func TestHideAndClearAskThePolicy(t *testing.T) {
@@ -101,5 +96,54 @@ func TestHideAndClearAskThePolicy(t *testing.T) {
 	}
 	if len(asked) != 2 || asked[0].Action != access.HideMessage || asked[0].Author != "alice" || asked[1].Action != access.ClearHistory || asked[1].Author != "" {
 		t.Fatalf("policy asked %+v, want hide_message on alice's message, then clear_history without an author", asked)
+	}
+}
+
+func TestHidingSendsOneMessageHiddenAndHidingAgainSendsNothing(t *testing.T) {
+	rg := newRig(t, nil)
+	rg.send(t, 1, "alice", "hi")
+	rg.send(t, 2, "alice", "yo")
+	hide := func(seq uint64) {
+		t.Helper()
+		if err := rg.m.Hide(t.Context(), mutate.HideCmd{Tenant: tenant, User: "bob", Room: room, Seq: seq}); err != nil {
+			t.Fatalf("Hide(%d): %v", seq, err)
+		}
+	}
+	hide(1)
+	hide(1)
+	rooms, events := rg.events.list()
+	if len(events) != 1 || rooms[0] != room {
+		t.Fatalf("hiding twice enqueued %v to %v, want one event", events, rooms)
+	}
+	ev, h := events[0], events[0].GetMessageHidden()
+	if ev.GetId() != pbconv.HiddenEventID(room, "bob", 0, 1) || ev.GetActor() != "bob" || !ev.GetTs().AsTime().Equal(rg.at()) ||
+		h.GetUser() != "bob" || h.GetThreadRoot() != 0 || h.GetSeq() != 1 {
+		t.Fatalf("event = %v, want message_hidden of seq 1 by bob at %v", ev, rg.at())
+	}
+	rg.events.err = errBoom
+	hide(2)
+	if _, events := rg.events.list(); len(events) != 2 || events[1].GetMessageHidden().GetSeq() != 2 {
+		t.Fatalf("events = %v, want a second message_hidden despite the enqueue error", events)
+	}
+}
+
+func TestClearingSendsHistoryClearedOnlyWhenTheMarkRises(t *testing.T) {
+	rg := newRig(t, nil)
+	first, later := rg.now, rg.now.Add(time.Minute)
+	for _, now := range []time.Time{first, first.Add(-time.Hour), first, later} {
+		rg.now = now
+		if _, err := rg.m.ClearHistory(t.Context(), mutate.ClearCmd{Tenant: tenant, User: "bob", Room: room}); err != nil {
+			t.Fatalf("ClearHistory at %v: %v", now, err)
+		}
+	}
+	_, events := rg.events.list()
+	if len(events) != 2 {
+		t.Fatalf("events = %v, want one history_cleared per rise", events)
+	}
+	for i, at := range []time.Time{first.Truncate(time.Millisecond), later.Truncate(time.Millisecond)} {
+		ev, c := events[i], events[i].GetHistoryCleared()
+		if ev.GetId() != pbconv.ClearedEventID(room, "bob", at) || ev.GetActor() != "bob" || c.GetUser() != "bob" || !c.GetClearedAt().AsTime().Equal(at) {
+			t.Fatalf("event %d = %v, want history_cleared of bob at %v", i, ev, at)
+		}
 	}
 }

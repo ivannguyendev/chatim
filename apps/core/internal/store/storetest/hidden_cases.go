@@ -18,7 +18,7 @@ func hiddenMark(user string, room, thread, seq uint64, sec int) domain.HiddenMes
 func mustHide(t *testing.T, s store.Hidden, marks ...domain.HiddenMessage) {
 	t.Helper()
 	for _, h := range marks {
-		if err := s.Hide(t.Context(), h.User, msgKey(h.Room, h.Thread, h.Seq), h.At); err != nil {
+		if _, err := s.Hide(t.Context(), h.User, msgKey(h.Room, h.Thread, h.Seq), h.At); err != nil {
 			t.Fatalf("Hide(%+v): %v", h, err)
 		}
 	}
@@ -41,7 +41,12 @@ func hideKeepsFirstTime(t *testing.T, s editStores) {
 	first := hiddenMark("bob", roomA, mainThread, 3, 1)
 	again := first
 	again.At = baseTime.Add(time.Hour)
-	mustHide(t, s.hidden, first, again)
+	for i, h := range []domain.HiddenMessage{first, again} {
+		fresh, err := s.hidden.Hide(t.Context(), h.User, msgKey(h.Room, h.Thread, h.Seq), h.At)
+		if err != nil || fresh != (i == 0) {
+			t.Fatalf("Hide #%d = %v, %v; want newly hidden %v", i+1, fresh, err, i == 0)
+		}
+	}
 	got, err := s.hidden.Between(t.Context(), roomA, baseTime, baseTime.Add(2*time.Hour), store.MaxHiddenScan)
 	if err != nil {
 		t.Fatalf("Between: %v", err)
@@ -82,7 +87,7 @@ func hiddenInvalid(t *testing.T, s editStores) {
 		_, err := s.hidden.Between(t.Context(), roomA, baseTime, baseTime.Add(time.Hour), limit)
 		assertErrorIs(t, fmt.Sprintf("Between(limit %d)", limit), err, apperr.ErrInvalidArgument)
 	}
-	err := s.hidden.Hide(t.Context(), "bob", msgKey(roomA, mainThread, 1), time.Time{})
+	_, err := s.hidden.Hide(t.Context(), "bob", msgKey(roomA, mainThread, 1), time.Time{})
 	assertErrorIs(t, "Hide(zero time)", err, apperr.ErrInvalidArgument)
 	got, err := s.hidden.HiddenIn(t.Context(), "bob", roomA, mainThread, 1, 1)
 	if err != nil || len(got) != 0 {

@@ -23,18 +23,18 @@ func viewerCases() []editCase {
 }
 
 func hidePerViewer(t *testing.T, s editStores) {
-	hide := func(user string, k store.MsgKey) {
+	hide := func(user string, k store.MsgKey, want bool) {
 		t.Helper()
-		if err := s.hidden.Hide(t.Context(), user, k, baseTime); err != nil {
-			t.Fatalf("Hide(%q, %+v): %v", user, k, err)
+		if fresh, err := s.hidden.Hide(t.Context(), user, k, baseTime); err != nil || fresh != want {
+			t.Fatalf("Hide(%q, %+v) = %v, %v; want newly hidden %v", user, k, fresh, err, want)
 		}
 	}
-	hide("bob", msgKey(roomA, mainThread, 7))
-	hide("bob", msgKey(roomA, mainThread, 3))
-	hide("bob", msgKey(roomA, mainThread, 3))
-	hide("bob", msgKey(roomA, sideThread, 4))
-	hide("bob", msgKey(roomB, mainThread, 5))
-	hide("carol", msgKey(roomA, mainThread, 5))
+	hide("bob", msgKey(roomA, mainThread, 7), true)
+	hide("bob", msgKey(roomA, mainThread, 3), true)
+	hide("bob", msgKey(roomA, mainThread, 3), false)
+	hide("bob", msgKey(roomA, sideThread, 4), true)
+	hide("bob", msgKey(roomB, mainThread, 5), true)
+	hide("carol", msgKey(roomA, mainThread, 5), true)
 	cases := []struct {
 		user                   string
 		room, thread, from, to uint64
@@ -55,7 +55,8 @@ func hidePerViewer(t *testing.T, s editStores) {
 			t.Fatalf("HiddenIn(%q, %d, %d, %d..%d) = %v, %v; want %v", c.user, c.room, c.thread, c.from, c.to, got, err, c.want)
 		}
 	}
-	assertErrorIs(t, "Hide(seq 0)", s.hidden.Hide(t.Context(), "bob", msgKey(roomA, mainThread, 0), baseTime), apperr.ErrInvalidArgument)
+	_, err := s.hidden.Hide(t.Context(), "bob", msgKey(roomA, mainThread, 0), baseTime)
+	assertErrorIs(t, "Hide(seq 0)", err, apperr.ErrInvalidArgument)
 }
 
 func clearForward(t *testing.T, s editStores) {

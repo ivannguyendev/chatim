@@ -26,20 +26,24 @@ type hiddenDoc struct {
 	CreatedAt time.Time `bson:"created_at,omitempty"`
 }
 
-func (h *Hidden) Hide(ctx context.Context, user string, key store.MsgKey, at time.Time) error {
+func (h *Hidden) Hide(ctx context.Context, user string, key store.MsgKey, at time.Time) (bool, error) {
 	if err := store.ValidateMarkTime(at); err != nil {
-		return err
+		return false, err
 	}
 	doc, err := encodeHidden(user, key)
 	if err != nil {
-		return err
+		return false, err
 	}
 	filter := bson.D{{Key: "user_id", Value: doc.User}, {Key: "room_id", Value: doc.Room}, {Key: "thread_root", Value: doc.Thread}, {Key: "seq", Value: doc.Seq}}
 	update := bson.D{{Key: "$setOnInsert", Value: bson.D{{Key: "created_at", Value: at}}}}
-	if _, err := h.coll.UpdateOne(ctx, filter, update, options.UpdateOne().SetUpsert(true)); err != nil && !mongo.IsDuplicateKeyError(err) {
-		return fmt.Errorf("hide %d/%d/%d for %q: %w", key.Room, key.Thread, key.Seq, user, err)
+	res, err := h.coll.UpdateOne(ctx, filter, update, options.UpdateOne().SetUpsert(true))
+	switch {
+	case mongo.IsDuplicateKeyError(err):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("hide %d/%d/%d for %q: %w", key.Room, key.Thread, key.Seq, user, err)
 	}
-	return nil
+	return res.UpsertedCount > 0, nil
 }
 
 func encodeHidden(user string, key store.MsgKey) (hiddenDoc, error) {
