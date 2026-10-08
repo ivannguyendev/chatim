@@ -9,7 +9,7 @@ import (
 	"go.uber.org/goleak"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
-	"github.com/ivannguyendev/chatim/apps/core/internal/testlog"
+	"github.com/ivannguyendev/chatim/apps/core/internal/platform/testlog"
 )
 
 func TestMain(m *testing.M) {

@@ -11,7 +11,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
-	"github.com/ivannguyendev/chatim/apps/core/internal/pbconv"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 

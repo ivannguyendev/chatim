@@ -12,9 +12,9 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
-	"github.com/ivannguyendev/chatim/apps/core/internal/grpcsrv"
-	"github.com/ivannguyendev/chatim/apps/core/internal/pbconv"
+	"github.com/ivannguyendev/chatim/apps/core/internal/api/grpcsrv"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )

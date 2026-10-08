@@ -3,7 +3,7 @@ package config
 import (
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/effects"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/effects"
 )
 
 const defaultMemberCountCheckDelay = 5 * time.Second

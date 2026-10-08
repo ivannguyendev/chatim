@@ -11,8 +11,8 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
-	"github.com/ivannguyendev/chatim/apps/core/internal/pbconv"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
 )
 

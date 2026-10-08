@@ -3,10 +3,10 @@ package main
 import (
 	"fmt"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/change/counter"
+	"github.com/ivannguyendev/chatim/apps/core/internal/change/pinproj"
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
-	"github.com/ivannguyendev/chatim/apps/core/internal/counter"
-	"github.com/ivannguyendev/chatim/apps/core/internal/effects"
-	"github.com/ivannguyendev/chatim/apps/core/internal/pinproj"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/effects"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
 )
 

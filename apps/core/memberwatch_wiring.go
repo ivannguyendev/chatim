@@ -7,10 +7,10 @@ import (
 
 	"github.com/nats-io/nats.go"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
-	"github.com/ivannguyendev/chatim/apps/core/internal/memberwatch"
-	"github.com/ivannguyendev/chatim/apps/core/internal/metrics"
+	"github.com/ivannguyendev/chatim/apps/core/internal/platform/metrics"
+	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
+	"github.com/ivannguyendev/chatim/apps/core/internal/send/memberwatch"
 )
 
 type memberWatcher interface {

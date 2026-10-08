@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
-	"github.com/ivannguyendev/chatim/apps/core/internal/pbconv"
-	"github.com/ivannguyendev/chatim/apps/core/internal/resync"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/resync"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
 )

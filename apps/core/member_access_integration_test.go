@@ -9,7 +9,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/pbconv"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 

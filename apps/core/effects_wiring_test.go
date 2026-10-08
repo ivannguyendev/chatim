@@ -7,14 +7,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/counter"
-	"github.com/ivannguyendev/chatim/apps/core/internal/effects"
-	"github.com/ivannguyendev/chatim/apps/core/internal/pbconv"
-	"github.com/ivannguyendev/chatim/apps/core/internal/pinproj"
-	"github.com/ivannguyendev/chatim/apps/core/internal/publish/publishtest"
+	"github.com/ivannguyendev/chatim/apps/core/internal/change/counter"
+	"github.com/ivannguyendev/chatim/apps/core/internal/change/pinproj"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/effects"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish/publishtest"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
-	"github.com/ivannguyendev/chatim/apps/core/internal/work"
 )
 
 type noMarks struct{}

@@ -6,7 +6,7 @@ import (
 	"net"
 	"regexp"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 )
 
 var (

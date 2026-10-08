@@ -10,7 +10,7 @@ import (
 
 	"google.golang.org/grpc/metadata"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/grpcsrv"
+	"github.com/ivannguyendev/chatim/apps/core/internal/api/grpcsrv"
 	"github.com/ivannguyendev/chatim/pkg/ids"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )

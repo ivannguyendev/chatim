@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
-	"github.com/ivannguyendev/chatim/apps/core/internal/effects"
-	"github.com/ivannguyendev/chatim/apps/core/internal/metrics"
-	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
-	"github.com/ivannguyendev/chatim/apps/core/internal/reconcile"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/effects"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/reconcile"
+	"github.com/ivannguyendev/chatim/apps/core/internal/platform/metrics"
+	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
 )
 
 var readerMetrics = []string{

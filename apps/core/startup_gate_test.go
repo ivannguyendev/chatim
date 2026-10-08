@@ -13,8 +13,8 @@ import (
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
-	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
-	"github.com/ivannguyendev/chatim/apps/core/internal/testlog"
+	"github.com/ivannguyendev/chatim/apps/core/internal/platform/testlog"
+	"github.com/ivannguyendev/chatim/apps/core/internal/send/flush"
 	"github.com/ivannguyendev/chatim/pkg/admin"
 	"github.com/ivannguyendev/chatim/pkg/grpcserver"
 )

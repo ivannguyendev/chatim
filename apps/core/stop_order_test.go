@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
-	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
+	"github.com/ivannguyendev/chatim/apps/core/internal/send/flush"
 	"github.com/ivannguyendev/chatim/pkg/admin"
 	"github.com/ivannguyendev/chatim/pkg/grpcserver"
 )

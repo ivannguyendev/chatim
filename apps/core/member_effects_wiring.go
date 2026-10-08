@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
-	"github.com/ivannguyendev/chatim/apps/core/internal/effects"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/effects"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
 )
 

@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 )
 
 const MaxMemberScan = 1000

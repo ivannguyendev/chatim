@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 

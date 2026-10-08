@@ -15,8 +15,8 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
-	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
-	"github.com/ivannguyendev/chatim/apps/core/internal/pbconv"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/pkg/slotmap"

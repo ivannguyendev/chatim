@@ -76,7 +76,7 @@ Compose đọc `CORE_GOGC` (mặc định 100, thành `GOGC` của core) và `RE
 
 R5 (soft-ownership khi Redis mất dữ liệu), chạy nhiều lần cho chắc:
 
-    make go ARGS="test -race -count=20 -timeout 20m ./apps/core/internal/slot/"
+    make go ARGS="test -race -count=20 -timeout 20m ./apps/core/internal/platform/slot/"
 
 ## Biến môi trường `apps/core`
 

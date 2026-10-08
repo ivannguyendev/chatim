@@ -11,7 +11,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"

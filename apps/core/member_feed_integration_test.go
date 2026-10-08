@@ -9,15 +9,15 @@ import (
 
 	"github.com/nats-io/nats.go"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/access"
-	"github.com/ivannguyendev/chatim/apps/core/internal/counter"
-	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
-	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
-	"github.com/ivannguyendev/chatim/apps/core/internal/mutate"
-	"github.com/ivannguyendev/chatim/apps/core/internal/pbconv"
-	"github.com/ivannguyendev/chatim/apps/core/internal/pinproj"
+	"github.com/ivannguyendev/chatim/apps/core/internal/change/counter"
+	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/change/pinproj"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
+	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
-	"github.com/ivannguyendev/chatim/apps/core/internal/work"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 

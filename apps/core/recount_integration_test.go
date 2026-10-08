@@ -8,7 +8,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/pbconv"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
 )
 

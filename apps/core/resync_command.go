@@ -10,7 +10,7 @@ import (
 	"syscall"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
-	"github.com/ivannguyendev/chatim/apps/core/internal/resync"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/resync"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
 )
 

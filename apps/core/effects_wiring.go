@@ -6,12 +6,12 @@ import (
 	"maps"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
-	"github.com/ivannguyendev/chatim/apps/core/internal/effects"
-	"github.com/ivannguyendev/chatim/apps/core/internal/eventmark"
-	"github.com/ivannguyendev/chatim/apps/core/internal/pbconv"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/effects"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventmark"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
-	"github.com/ivannguyendev/chatim/apps/core/internal/work"
 )
 
 type effectSet struct {

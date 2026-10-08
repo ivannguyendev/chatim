@@ -4,17 +4,17 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/access"
-	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
+	"github.com/ivannguyendev/chatim/apps/core/internal/api/grpcsrv"
+	"github.com/ivannguyendev/chatim/apps/core/internal/change/counter"
+	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/change/pinproj"
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
-	"github.com/ivannguyendev/chatim/apps/core/internal/counter"
-	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
-	"github.com/ivannguyendev/chatim/apps/core/internal/grpcsrv"
-	"github.com/ivannguyendev/chatim/apps/core/internal/mutate"
-	"github.com/ivannguyendev/chatim/apps/core/internal/pinproj"
-	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
+	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
+	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
-	"github.com/ivannguyendev/chatim/apps/core/internal/work"
 )
 
 type serviceDeps struct {
