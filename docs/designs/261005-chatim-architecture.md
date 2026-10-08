@@ -481,6 +481,22 @@ Vận hành: oplog `minRetentionHours` ≥ 24h; định cỡ oplog theo byte (đ
 - **Bảo mật:** JWT EdDSA/RS256 theo JWKS tenant; mTLS nội bộ; core kiểm room thuộc tenant ở mọi thao tác; kiểm đầu vào theo A6, UTF-8 hợp lệ; không log nội dung tin.
 - **Vòng đời core:** config kiểm ở boot (`apps/core/internal/config`, mỗi component có `Validate()`). Khởi động: publisher → flusher → cid batcher → router → slot manager → workers → reader → `memberwatch` (subscribe sau khi router chạy) → gRPC (chỉ mở sau khi khởi động sạch, D40). Dừng: `/readyz` false → drain → gRPC → reader (`RECONCILE_DRAIN + 1s`) → workers (`WORK_DRAIN + 1s`) → `memberwatch` (Unsubscribe, tức thì, không thêm mốc) → router → cid batcher → flusher → publisher → nhả slot → đóng client, trong `CORE_SHUTDOWN_BUDGET` (26.2s/28s; tăng mốc nào phải tăng budget và `stop_grace_period` 33s). Mỗi RPC có `CORE_REQUEST_DEADLINE` (D42); client gRPC tắt service config từ DNS (D43). Core có ba JetStream client: publisher fast path (cũng dùng cho phiếu hẹn `work.Timers` và kết nối NATS core của `memberwatch`), reader, worker (`WORK_PARTITIONS × WORK_FETCH_BATCH` publish đang bay). Subcommand một lần: `/app resync` (§8.3) và `/app recount -room ID [-dry-run]` (Mongo + NATS, cùng config/redaction; in `room=… stored=… counted=…`; không `-dry-run` thì `SetMemberCount` CAS rồi publish `member_count_changed`, D102).
 - Monorepo một module, một Dockerfile `ARG TARGET`; Go chạy trong `golang:1.26` qua `make` (D20, D22); code không comment (D23).
+- **Bố cục package core** (2026-10-08, trước M2c): `apps/core/main.go` chỉ gọi `app.Main`; package giữ tên ngắn, gom thư mục theo luồng, phụ thuộc đi xuống `app` → `api` → `send`/`change`/`event` → `model`, `store`, `platform` (ngoại lệ: `mutate` → `work` cho phiếu hẹn). Sơ đồ: [2026-10-04-chat-architecture-components.md](./2026-10-04-chat-architecture-components.md).
+
+| Nhóm `apps/core/…` | Package | Vai trò |
+|---|---|---|
+| `internal/app` | (wiring cũ ở `apps/core`) | dựng component, vòng đời, lệnh `serve/probe/resync/recount` |
+| `internal/config` | `config` | đọc + kiểm config lúc boot |
+| `internal/api` | `grpcsrv`, `view` | biên gRPC, đường đọc (§9) |
+| `internal/model` | `domain`, `pbconv`, `access` | kiểu, chuyển proto/event, permission hook (§4, §9.2) |
+| `internal/send` | `actor`, `dedupe`, `flush`, `memberwatch` | gửi tin (§6.2) |
+| `internal/change` | `mutate`, `ownership`, `counter`, `pinproj` | lệnh đổi, projection, counter (§6.3–§7); `counter`, `pinproj` cũng do worker gọi |
+| `internal/event` | `publish`, `eventmark`, `work`, `effects`, `reconcile`, `resync` | effect engine (§8, §11) |
+| `internal/store` | `store`, `memstore`, `mongostore`, `storetest` | port lưu trữ + adapter |
+| `internal/platform` | `slot`, `metrics`, `redisguard`, `testlog` | slot (§6.1), detector, hạ tầng |
+| `itest` | `itest` | test tích hợp cả core (`app.Run`) |
+
+Plan đã thực thi (`docs/plans/`) giữ đường dẫn cũ `apps/core/internal/<package>`; đọc theo bảng trên.
 
 ## 14. Xử lý sự cố
 

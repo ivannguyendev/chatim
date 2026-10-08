@@ -19,7 +19,16 @@ Hạ tầng: MongoDB (replica set), Redis, NATS JetStream.
 ## Cấu trúc
 
 ```
-apps/core/               # main.go + internal/{actor,mutate,ownership,memberwatch,counter,pinproj,view,access,flush,dedupe,publish,eventmark,reconcile,effects,work,resync,slot,grpcsrv,store,pbconv,config,domain,…}
+apps/core/               # main.go (gọi app.Main); itest/: test tích hợp cả core (cần infra thật)
+  internal/app/          # wiring, vòng đời, lệnh serve/probe/resync/recount
+  internal/config/       # đọc + kiểm config lúc boot
+  internal/api/          # grpcsrv, view (đường đọc, biên gRPC)
+  internal/model/        # domain, pbconv, access (kiểu, chuyển proto, permission hook)
+  internal/send/         # actor, dedupe, flush, memberwatch (gửi tin)
+  internal/change/       # mutate, ownership, counter, pinproj (lệnh đổi, projection, counter)
+  internal/event/        # publish, eventmark, work, effects, reconcile, resync (effect engine)
+  internal/store/        # port + memstore, mongostore, storetest
+  internal/platform/     # slot, metrics, redisguard, testlog (hạ tầng cụm)
 pkg/                     # dùng chung: keys, ids, lru, slotmap, apperr, envconfig, resilience, admin, grpcserver, grpcclient, backoff, pb
 proto/chatim/v1/         # định nghĩa protobuf (buf) → pkg/pb
 tools/                   # corecli, internal/route; poc/: corebench, mongobench, postgresbench, natsbench, wsbench

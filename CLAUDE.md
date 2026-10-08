@@ -95,7 +95,7 @@ make poc TOOL=corebench ARGS="-rate 5000 -duration 60s -watch 20"   # needs core
 
 - `make poc` builds `bin/<tool>` and runs it on the compose network `chatim_default`. `POC_FLAGS` passes extra `docker run` flags. `MONGO_URI`, `PG_URI` and `REDIS_PASSWORD` are built from `.env`, exported by make and passed as bare `-e NAME`, so no password shows up in the echoed command.
 - Inside that network, services are reached by name: `chatim-mongodb:27017`, `chatim-redis:6379`, `chatim-redis-dedupe:6379`, `chatim-nats:4222`, `chatim-core-1:9000`.
-- Integration tests skip unless the `CHATIM_IT_*` env vars are set. There are no build tags.
+- Integration tests skip unless the `CHATIM_IT_*` env vars are set. There are no build tags. Unit tests sit next to their code; only whole-core integration tests live apart, in `apps/core/itest`.
 - The `apps/core` env vars, their defaults and the ports are listed in README.md.
 
 ## Code index
@@ -108,6 +108,7 @@ When you add, remove or rename a package, or change its purpose or key symbols, 
 
 There is one module, `github.com/ivannguyendev/chatim`, and one Dockerfile (`deploy/docker/Dockerfile`, `ARG TARGET`).
 - Each app lives in `apps/<app>/` with `main.go` and `internal/`.
+- `apps/core/main.go` only calls `app.Main`; wiring lives in `apps/core/internal/app`, whole-core integration tests in `apps/core/itest` (they start cores with `app.Run`). Packages are grouped by flow (design §13, names follow design §6.2/§6.3): `api/` (grpcsrv, view), `model/` (domain, pbconv, access), `send/` (actor, dedupe, flush, memberwatch), `change/` (mutate, ownership, counter, pinproj), `event/` (publish, eventmark, work, effects, reconcile, resync), `store/`, `platform/` (slot, metrics, redisguard, testlog), plus `config/`. Package names stay short (`actor`, not `sendactor`); a new package goes into the group of its flow.
 - `pkg/` holds shared code and no business logic.
 - `tools/` holds `corecli`, `corebench` and `tools/internal/route`, a slot-routed gRPC client whose retries keep the same cid.
 - Communication is one-way: gateway → core over gRPC unary, core → JetStream, gateway ← NATS.
@@ -252,6 +253,7 @@ Rules:
 ## Docs
 
 - `docs/designs/261005-chatim-architecture.md`: the single source of truth: requirements (R17 revised), principles P1–P8, the data-class framework every plan must use (§4), data model, write path (built and planned), counter, effect engine, read path, gateway, guarantees with detectors, and the Decision Log (D1–D60 kept by id, new D61–D111). Add new decisions there.
+- `docs/designs/2026-10-04-chat-architecture-components.md`: component view: macro diagram, the `apps/core` package groups with dependency direction, and sequence diagrams of send, change, effect engine and slots. Follows the main design.
 - `docs/roadmap.md`: plan-writing rules, milestones M2b.0 → M5, dependencies, readiness.
 - Every plan has a companion technical summary `docs/plans/<plan>-summary.md` (Vietnamese, no Go code, written before execution) that the owner critiques and approves: glossary, diagrams, full field table with examples, per-use-case flows, correctness and races, events, libraries, decisions with rejected alternatives, costs, risks, team-chosen points, tests; anything that serialises work must be called out. The full plan is for AI implementers and contains no code: per task it lists goal, files, todos, technique, contracts in prose, tests and what they prove, commands, done criteria and commit; implementers write the code with TDD (rule in `docs/roadmap.md`, overrides the `writing-plans` "complete code" guidance). Commands never retry internally: a CAS or transaction conflict returns `ErrRetryLater` at once, workers Nak. When a derived value (counter, projection) is written inline after the main write without a shared transaction, use the survival timer (design §7.1, D111): arm a NATS scheduled repair before the main write, disarm after the derived write. DB field names are full basic English words except in `messages`; counters end in `_ver`; `updated_at`/`updated_by`; `request_id` for retry dedupe.
 - `docs/plans/`: per-milestone plans written with `writing-plans` before coding, executed with `subagent-driven-development` or `separate-driven-development`. M2b.0: `docs/plans/2026-10-05-m2b0-mechanism-foundations.md` (executed; results and known issues at its end). M2b.1: `docs/plans/2026-10-05-m2b1-effect-engine.md` (executed; results and known issues at its end). M2b.2: `docs/plans/2026-10-05-m2b2-edit-delete.md` (executed; results and known issues at its end). M2b.3: `docs/plans/2026-10-06-m2b3-reactions-pins.md` (executed; results and known issues at its end). M2b.4: `docs/plans/2026-10-06-m2b4-members-read.md` + `…-summary.md` (executed; results and known issues at its end).
