@@ -59,16 +59,16 @@ func TestResyncPublishesReactionsAndPinsOfTheLostRangeAfterTheEdits(t *testing.T
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	want := resync.Report{Rooms: 2, RoomRecords: 1, MessageRecords: 61, EditRecords: 1, ReactionRecords: 2, PinRecords: 1}
+	want := resync.Report{Rooms: 2, RoomRecords: 1, MessageRecords: 61, EditRecords: 1, ReactionRecords: 2, PinRecords: 1, MemberRecords: 1}
 	if rep != want {
 		t.Fatalf("report = %+v, want %+v", rep, want)
 	}
 	got := pub.published()
-	tail := []string{edit, changed, removed, pinned, work.Record{Kind: store.RoomInserted, Room: newRoom}.ID()}
-	if len(got) != 66 || !slices.Equal(got[61:], tail) {
-		t.Fatalf("published %d ids ending %v, want 61 messages then %v", len(got), got[max(0, len(got)-5):], tail)
+	tail := []string{edit, changed, removed, pinned, work.Record{Kind: store.RoomInserted, Room: newRoom}.ID(), memberID(newRoom, "alice", 1)}
+	if len(got) != 67 || !slices.Equal(got[61:], tail) {
+		t.Fatalf("published %d ids ending %v, want 61 messages then %v", len(got), got[max(0, len(got)-6):], tail)
 	}
-	if rep.String() != "resync rooms=2 room_records=1 message_records=61 edit_records=1 reaction_records=2 pin_records=1 dry_run=false" {
+	if rep.String() != "resync rooms=2 room_records=1 message_records=61 edit_records=1 reaction_records=2 pin_records=1 member_records=1 hidden_records=0 dry_run=false" {
 		t.Fatalf("report line = %q", rep.String())
 	}
 }

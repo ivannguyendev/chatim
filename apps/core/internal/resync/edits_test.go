@@ -30,15 +30,15 @@ func TestResyncPublishesEditsOfTheLostRangeAfterTheTimeline(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if want := (resync.Report{Rooms: 2, RoomRecords: 1, MessageRecords: 61, EditRecords: 1}); rep != want {
+	if want := (resync.Report{Rooms: 2, RoomRecords: 1, MessageRecords: 61, EditRecords: 1, MemberRecords: 1}); rep != want {
 		t.Fatalf("report = %+v, want %+v", rep, want)
 	}
 	got := pub.published()
 	roomRecord := work.Record{Kind: store.RoomInserted, Room: newRoom}.ID()
-	if len(got) != 63 || got[61] != inRange || got[62] != roomRecord {
+	if len(got) != 64 || got[61] != inRange || got[62] != roomRecord {
 		t.Fatalf("published %d ids ending %v, want 61 messages, then %s, then %s", len(got), got[max(0, len(got)-3):], inRange, roomRecord)
 	}
-	if rep.String() != "resync rooms=2 room_records=1 message_records=61 edit_records=1 reaction_records=0 pin_records=0 dry_run=false" {
+	if rep.String() != "resync rooms=2 room_records=1 message_records=61 edit_records=1 reaction_records=0 pin_records=0 member_records=1 hidden_records=0 dry_run=false" {
 		t.Fatalf("report line = %q", rep.String())
 	}
 }

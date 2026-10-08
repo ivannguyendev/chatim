@@ -59,7 +59,11 @@ func TestRealInfraResyncDrillRepublishesWritesTheReaderMissed(t *testing.T) {
 	if err := itPins(st).Append(t.Context(), pin); err != nil {
 		t.Fatalf("append a pin the reader missed: %v", err)
 	}
+	if _, err := st.Hidden().Hide(t.Context(), "migrator", store.MsgKey{Room: room, Seq: 3}, marked); err != nil {
+		t.Fatalf("hide a message the reader missed: %v", err)
+	}
 	want = append(want, pbconv.ReactionEventID(room, 0, 2, "migrator", 1), pbconv.ReactionCountsEventID(room, 0, 2, 1), pbconv.PinEventID(room, 1))
+	want = append(want, pbconv.HiddenEventID(room, "migrator", 0, 3))
 	assertNoLiveIDs(t, live, 3*time.Second, want...)
 
 	opts := resync.Options{From: began.Add(-time.Minute), To: time.Now().UTC().Add(time.Minute), Tenant: itTenant, Rate: 100}
@@ -68,8 +72,8 @@ func TestRealInfraResyncDrillRepublishesWritesTheReaderMissed(t *testing.T) {
 	if err := runResync(t.Context(), core.cfg, opts, quiet, &out); err != nil {
 		t.Fatalf("runResync: %v (output %q)", err, out.String())
 	}
-	if got := strings.TrimSpace(out.String()); got != "resync rooms=1 room_records=1 message_records=3 edit_records=1 reaction_records=1 pin_records=1 dry_run=false" {
-		t.Fatalf("resync output = %q, want one room, its room record, three message, one edit, one reaction and one pin record", got)
+	if got := strings.TrimSpace(out.String()); got != "resync rooms=1 room_records=1 message_records=3 edit_records=1 reaction_records=1 pin_records=1 member_records=2 hidden_records=1 dry_run=false" {
+		t.Fatalf("resync output = %q, want one room, its room record, three message, one edit, one reaction, one pin, two member and one hidden record", got)
 	}
 	awaitLiveIDs(t, live, ran, want...)
 	got, err := st.Find(t.Context(), room, []store.MsgKey{{Room: room, Seq: 1}})

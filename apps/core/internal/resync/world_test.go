@@ -60,13 +60,14 @@ type world struct {
 	edits     *memstore.Edits
 	reactions *memstore.Reactions
 	pins      *memstore.Pins
+	hidden    *memstore.Hidden
 }
 
 func newWorld(t *testing.T) world {
 	t.Helper()
 	w := world{
 		rooms: memstore.NewRooms(), msgs: memstore.NewMessages(), edits: memstore.NewEdits(),
-		reactions: memstore.NewReactions(), pins: memstore.NewPins(),
+		reactions: memstore.NewReactions(), pins: memstore.NewPins(), hidden: memstore.NewHidden(),
 	}
 	old := lostFrom.Add(-48 * time.Hour)
 	w.room(t, busyRoom, "acme", old)
@@ -112,5 +113,5 @@ func (w world) messages(t *testing.T, room uint64, n int, first time.Time) {
 }
 
 func (w world) deps(pub resync.Publisher) resync.Deps {
-	return resync.Deps{Rooms: w.rooms, Pages: w.msgs, Edits: w.edits, Reactions: w.reactions, Pins: w.pins, Pub: pub}
+	return resync.Deps{Rooms: w.rooms, Pages: w.msgs, Edits: w.edits, Reactions: w.reactions, Pins: w.pins, Members: w.rooms, Hidden: w.hidden, Pub: pub}
 }

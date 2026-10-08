@@ -50,7 +50,7 @@ func runResync(ctx context.Context, cfg config.Config, opts resync.Options, log 
 	}
 	st := mongostore.New(c.mongo.Database(cfg.MongoDB), mongostore.Options{})
 	target := resync.Target{SubjectRoot: cfg.Work.SubjectRoot, Partitions: cfg.Work.Partitions}
-	deps := resync.Deps{Rooms: st, Pages: st, Edits: st, Reactions: st.Reactions(), Pins: st.Pins(), Pub: c.js}
+	deps := resync.Deps{Rooms: st, Pages: st, Edits: st, Reactions: st.Reactions(), Pins: st.Pins(), Members: st, Hidden: st.Hidden(), Pub: c.js}
 	rep, err := resync.Run(ctx, deps, target, opts)
 	fmt.Fprintln(out, rep)
 	return err

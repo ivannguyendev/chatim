@@ -24,12 +24,12 @@ func TestResyncPublishesRecordsOfTheLostRangeOnly(t *testing.T) {
 	for seq := uint64(91); seq >= 31; seq-- {
 		want = append(want, work.Record{Kind: store.MessageInserted, Room: busyRoom, Seq: seq}.ID())
 	}
-	want = append(want, work.Record{Kind: store.RoomInserted, Room: newRoom}.ID())
+	want = append(want, work.Record{Kind: store.RoomInserted, Room: newRoom}.ID(), memberID(newRoom, "alice", 1))
 	if got := pub.published(); !slices.Equal(got, want) {
 		t.Fatalf("published %d ids %v,\nwant %d ids %v", len(got), got, len(want), want)
 	}
-	if rep != (resync.Report{Rooms: 2, RoomRecords: 1, MessageRecords: 61}) {
-		t.Fatalf("report = %+v, want 2 rooms, 1 room record, 61 message records", rep)
+	if rep != (resync.Report{Rooms: 2, RoomRecords: 1, MessageRecords: 61, MemberRecords: 1}) {
+		t.Fatalf("report = %+v, want 2 rooms, 1 room record, 61 message records, 1 member record", rep)
 	}
 }
 
@@ -51,7 +51,7 @@ func TestResyncDryRunCountsWithoutPublishingOrPacing(t *testing.T) {
 	w := newWorld(t)
 	pub := &publishSpy{}
 	rep, err := resync.Run(t.Context(), w.deps(pub), target, resync.Options{From: lostFrom, To: lostTo, Tenant: "acme", Rate: 1, DryRun: true})
-	if err != nil || rep != (resync.Report{Rooms: 2, RoomRecords: 1, MessageRecords: 61, DryRun: true}) || len(pub.published()) != 0 {
+	if err != nil || rep != (resync.Report{Rooms: 2, RoomRecords: 1, MessageRecords: 61, MemberRecords: 1, DryRun: true}) || len(pub.published()) != 0 {
 		t.Fatalf("dry run = %+v, %v with %d published; want counts only", rep, err, len(pub.published()))
 	}
 }

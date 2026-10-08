@@ -14,6 +14,7 @@ type timeScan[T any] struct {
 	full    error
 	between func(ctx context.Context, room uint64, from, to time.Time, limit int) ([]T, error)
 	record  func(T) work.Record
+	extra   func(T) []work.Record
 	counted *int
 }
 
@@ -51,10 +52,19 @@ func emitTimePage[T any](ctx context.Context, s *scanner, ts timeScan[T], page [
 		if edge[id] {
 			continue
 		}
-		if err := s.emit(ctx, rec); err != nil {
-			return nil, err
+		for _, r := range ts.records(rec, item) {
+			if err := s.emit(ctx, r); err != nil {
+				return nil, err
+			}
+			*ts.counted++
 		}
-		*ts.counted++
 	}
 	return next, nil
+}
+
+func (ts timeScan[T]) records(first work.Record, item T) []work.Record {
+	if ts.extra == nil {
+		return []work.Record{first}
+	}
+	return append([]work.Record{first}, ts.extra(item)...)
 }

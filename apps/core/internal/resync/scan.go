@@ -38,6 +38,8 @@ type Deps struct {
 	Edits     Edits
 	Reactions Reactions
 	Pins      Pins
+	Members   Members
+	Hidden    Hidden
 	Pub       Publisher
 }
 
@@ -48,12 +50,13 @@ type Target struct {
 
 type Report struct {
 	Rooms, RoomRecords, MessageRecords, EditRecords, ReactionRecords, PinRecords int
+	MemberRecords, HiddenRecords                                                 int
 	DryRun                                                                       bool
 }
 
 func (r Report) String() string {
-	return fmt.Sprintf("resync rooms=%d room_records=%d message_records=%d edit_records=%d reaction_records=%d pin_records=%d dry_run=%t",
-		r.Rooms, r.RoomRecords, r.MessageRecords, r.EditRecords, r.ReactionRecords, r.PinRecords, r.DryRun)
+	return fmt.Sprintf("resync rooms=%d room_records=%d message_records=%d edit_records=%d reaction_records=%d pin_records=%d member_records=%d hidden_records=%d dry_run=%t",
+		r.Rooms, r.RoomRecords, r.MessageRecords, r.EditRecords, r.ReactionRecords, r.PinRecords, r.MemberRecords, r.HiddenRecords, r.DryRun)
 }
 
 type scanner struct {
@@ -111,7 +114,7 @@ func (s *scanner) room(ctx context.Context, r domain.Room) error {
 		}
 		s.rep.RoomRecords++
 	}
-	for _, scan := range []func(context.Context, uint64) error{s.timeline, s.edits, s.reactions, s.pins} {
+	for _, scan := range []func(context.Context, uint64) error{s.timeline, s.edits, s.reactions, s.pins, s.members, s.hidden} {
 		if err := scan(ctx, r.ID); err != nil {
 			return err
 		}
