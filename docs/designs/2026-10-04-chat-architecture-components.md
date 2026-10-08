@@ -65,7 +65,7 @@ apps/core/
     platform/      slot, metrics, redisguard, testlog
 ```
 
-Phụ thuộc đi xuống; ngoại lệ duy nhất là `change/mutate` → `event/work` (phiếu hẹn sinh tồn):
+Phụ thuộc đi xuống; hai ngoại lệ đi ngang từ `change/mutate`: → `event/work` (phiếu hẹn sinh tồn) và → `send/dedupe` (`dedupe.Requests` cho `request_id` của `AddMembers`):
 
 ```mermaid
 flowchart TB
@@ -88,6 +88,7 @@ flowchart TB
     change --> model
     change --> store
     change -->|work.Timers| event
+    change -->|dedupe.Requests| send
     event --> model
     event --> store
     send -->|redisguard| platform

@@ -421,7 +421,7 @@ Theo một tin nhắn (không phụ thuộc số member, nên nhóm 5K và chann
 | Work stream | — | record giữ tới khi ack (WorkQueue) | 1 fetch mỗi lô, 1 ack mỗi record |
 
 - Theo một room tạo: 1 record, 1 `Rooms.Get`, 1 publish trùng bị stream bỏ.
-- Work stream chỉ chứa backlog chưa xử lý; ước tính retention ở thiết kế §8.3 (≈300–500B/tin, 2h) là ước tính cũ chưa đo lại với record 33 byte.
+- Work stream chỉ chứa backlog chưa xử lý; thiết kế §8.3 đã tính lại retention theo record 37 byte (~130–200B/record trên đĩa gồm overhead, 2026-10-09), vẫn là ước tính chưa đo.
 - Đo dev (W1, mục 13): 36000 record xả trong ~4s, ≥ 9000 record/s với 2 core; mục tiêu thiết kế ≥ 3× ingest đỉnh (D66), số prod đo ở P3.
 - Resync: mỗi room đọc ngược từ tin mới nhất tới `from`, nên room rất bận sau `to` tốn đọc tương ứng; `ActiveRooms` phân trang `$or` + sort `_id` có thể đọc lại phần đầu khoảng (~N²/500 khoá index), chấp nhận cho công cụ tay.
 
