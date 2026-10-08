@@ -1,6 +1,6 @@
 # M2b.4 — Member + vị trí đọc: tóm tắt kỹ thuật cho owner
 
-> Plan chi tiết (cho AI): [2026-10-06-m2b4-members-read.md](2026-10-06-m2b4-members-read.md). Trạng thái: **chờ owner phản biện và duyệt bản này rồi mới thực thi.** Mục 9 liệt kê những điểm đội tự chọn để anh phản biện.
+> Plan chi tiết (cho AI): [2026-10-06-m2b4-members-read.md](2026-10-06-m2b4-members-read.md). Trạng thái: **owner đã duyệt; đã thực thi xong (2026-10-08), `dev-done` trên `feat/m2b`.** Kết quả, lệch so với plan và Minor ở mục "Kết quả thực thi" cuối plan; quyết định D96–D111 đã vào Decision Log của thiết kế. Mục 9 liệt kê những điểm đội tự chọn để anh phản biện.
 >
 > Lưu ý: bản plan M2b.4 trước (đánh số liên tục `mv`) đã **huỷ hoàn toàn**. Số quyết định D96–D110 được dùng lại cho thiết kế mới này với nghĩa khác.
 
@@ -282,7 +282,7 @@ sequenceDiagram
   1. **Trước** khi ghi member, core hẹn một phiếu "đếm lại room 777" tự bật sau 5 giây (`MEMBER_COUNT_CHECK_DELAY`). Phiếu là message hẹn giờ của NATS (có sẵn từ NATS 2.12, ta chạy 2.15), lưu trên JetStream nên core chết vẫn còn. Hẹn lỗi → `UNAVAILABLE`, chưa ghi gì.
   2. Ghi member → `$inc` số member → **xoá phiếu**.
   3. Lỗi hoặc core chết ở bước 2 → phiếu bật sau 5 giây; worker `member_count_repair` đếm doc đang ở room trên index (group 5K khoảng 1ms, channel 200K khoảng 20–60ms, ước tính), ghi lại có điều kiện `member_count_ver`, phát `member_count_changed`.
-  4. Đọc lại sau khi ghi: nếu `member_count_ver` đã nhảy tiếp (một lệnh khác chen `$inc` đúng lúc đếm) thì hẹn thêm một phiếu, lần sau sửa nốt.
+  4. Trước khi ghi số sửa, worker hẹn thêm một phiếu 5 giây nữa. Nếu đúng lúc đếm có lệnh khác vừa ghi member mà chưa `$inc`, lần đếm sau (khi lệnh đó chắc chắn đã xong) sẽ sửa nốt. Số đã đúng thì chỉ phát lại event, không ghi, không hẹn — nên không lặp.
   - **Vì sao 5 giây, không phải 1 giây:** mỗi lệnh có hạn 3 giây. Nếu phiếu bật lúc lệnh còn chạy (ví dụ Mongo chậm 1,5s) thì lần đếm tính cả Bob, rồi `$inc` của lệnh cộng thêm lần nữa → chính lần sửa gây lệch.
   - Lệnh vẫn trả **thành công** khi `$inc` lỗi (member đã vào); phiếu lo phần còn lại.
   - Lần sửa nào cũng đếm vào `counter_repaired_total{counter="members"}` (alert `ChatimCounterRepairSurge` có sẵn). Không cần alert mới, không cần người chạy tay.
