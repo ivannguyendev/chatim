@@ -27,6 +27,14 @@ func TestRealMainRejectsUnknownCommands(t *testing.T) {
 	}
 }
 
+func TestRecountNeedsARoom(t *testing.T) {
+	for _, args := range [][]string{{"recount"}, {"recount", "-dry-run"}, {"recount", "-room", "abc"}} {
+		if got := realMain(args); got != 2 {
+			t.Errorf("realMain(%v) = %d, want 2", args, got)
+		}
+	}
+}
+
 func TestRealMainServeFailsOnInvalidConfig(t *testing.T) {
 	t.Setenv("MONGO_URI", "")
 	if got := realMain(nil); got != 1 {
