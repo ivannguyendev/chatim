@@ -67,6 +67,25 @@ func TestCreateRoomRejectsBadInput(t *testing.T) {
 	}
 }
 
+func TestCreateRoomCapsTheMembersOfOneRequest(t *testing.T) {
+	newID, calls := idSequence(9)
+	rg := newRig(t, options{sender: &fakeSender{}, newID: newID})
+	full := manyUsers("alice", 500)
+	_, err := rg.client.CreateRoom(as(t, "acme", "alice"), &chatimv1.CreateRoomRequest{
+		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "Big", Members: append(full, "alice"),
+	})
+	expectCode(t, err, codes.InvalidArgument)
+	if calls() != 0 {
+		t.Fatalf("drew %d ids for a request over the cap, want 0", calls())
+	}
+	resp, err := rg.client.CreateRoom(as(t, "acme", "alice"), &chatimv1.CreateRoomRequest{
+		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "Big", Members: full,
+	})
+	if err != nil || resp.GetRoom().GetMemberCount() != 500 {
+		t.Fatalf("CreateRoom of 500 = %v, %v; want 500 members", resp.GetRoom(), err)
+	}
+}
+
 func TestCreateRoomRetriesWithFreshIDsWhileTaken(t *testing.T) {
 	newID, calls := idSequence(1, 2, 3)
 	rg := newRig(t, options{sender: &fakeSender{}, newID: newID})

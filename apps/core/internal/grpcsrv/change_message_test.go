@@ -43,11 +43,8 @@ func TestEditAndDeleteThroughTheService(t *testing.T) {
 	}
 	id := roomNumber(t, room)
 	_, got := events.enqueued()
-	var ids []string
-	for _, ev := range got {
-		ids = append(ids, ev.GetId())
-	}
-	want := []string{pbconv.RoomCreatedEventID(id), pbconv.MessageChangeEventID(id, 0, 1, 1), pbconv.MessageChangeEventID(id, 0, 1, 2)}
+	ids := eventIDs(got)
+	want := append(createdIDs(id, "alice", "bob"), pbconv.MessageChangeEventID(id, 0, 1, 1), pbconv.MessageChangeEventID(id, 0, 1, 2))
 	if !slices.Equal(ids, want) {
 		t.Fatalf("enqueued %v, want %v", ids, want)
 	}

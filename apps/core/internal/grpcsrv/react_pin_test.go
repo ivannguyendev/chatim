@@ -44,16 +44,12 @@ func TestReactAndPinThroughTheService(t *testing.T) {
 	}
 	id := roomNumber(t, room)
 	_, got := events.enqueued()
-	var ids []string
-	for _, ev := range got {
-		ids = append(ids, ev.GetId())
-	}
-	wantIDs := []string{
-		pbconv.RoomCreatedEventID(id),
+	ids := eventIDs(got)
+	wantIDs := append(createdIDs(id, "alice", "bob"),
 		pbconv.ReactionEventID(id, 0, 1, "bob", 1), pbconv.ReactionCountsEventID(id, 0, 1, 1),
 		pbconv.ReactionEventID(id, 0, 1, "alice", 1), pbconv.ReactionCountsEventID(id, 0, 1, 2),
 		pbconv.PinEventID(id, 1), pbconv.PinEventID(id, 2),
-	}
+	)
 	if !slices.Equal(ids, wantIDs) {
 		t.Fatalf("enqueued %v, want %v", ids, wantIDs)
 	}
