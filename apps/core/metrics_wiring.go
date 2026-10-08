@@ -25,17 +25,19 @@ type effectCounters struct {
 }
 
 type probes struct {
-	drops          func() publish.Drops
-	router         func() actor.Stats
-	cidDegraded    func() bool
-	markDegraded   func() bool
-	cidDropped     func() uint64
-	loadShed       func() int64
-	oplogWindow    func() float64
-	workers        func() effects.Stats
-	effectCounts   map[string]effectCounters
-	counterRepairs map[string]func() uint64
-	reconcile      func() reconcile.Stats
+	drops           func() publish.Drops
+	router          func() actor.Stats
+	cidDegraded     func() bool
+	markDegraded    func() bool
+	cidDropped      func() uint64
+	loadShed        func() int64
+	oplogWindow     func() float64
+	workers         func() effects.Stats
+	effectCounts    map[string]effectCounters
+	counterRepairs  map[string]func() uint64
+	reconcile       func() reconcile.Stats
+	memberForgets   func() uint64
+	memberMalformed func() uint64
 }
 
 func metricSources(p probes) []metrics.Source {
@@ -59,6 +61,7 @@ func metricSources(p probes) []metrics.Source {
 	}
 	out = append(out, workerSources(p.workers, p.effectCounts)...)
 	out = append(out, counterSources(p.counterRepairs)...)
+	out = append(out, memberWatchSources(p.memberForgets, p.memberMalformed)...)
 	if p.reconcile != nil {
 		out = append(out, readerSources(p.reconcile)...)
 	}

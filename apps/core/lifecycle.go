@@ -50,6 +50,9 @@ func (a *app) serve(ctx context.Context, adminLis, grpcLis net.Listener) error {
 		t.reconciler = sup.start("reconciler", a.reconciler.Run)
 	}
 	cause := a.awaitRouter(ctx, sup)
+	if cause == nil && ctx.Err() == nil {
+		cause = a.memberWatch.Start(ctx)
+	}
 	if cause != nil || ctx.Err() != nil {
 		_ = grpcLis.Close()
 		return a.shutdown(ctx, sup, t, cause)

@@ -36,7 +36,9 @@ func fakeProbes(withReader bool) probes {
 			"member_event":     {republished: func() uint64 { return 9 }, dropped: func() uint64 { return 10 }},
 			"read_event":       {republished: func() uint64 { return 11 }, dropped: zero},
 		},
-		counterRepairs: map[string]func() uint64{"reactions": func() uint64 { return 6 }, "members": func() uint64 { return 12 }},
+		counterRepairs:  map[string]func() uint64{"reactions": func() uint64 { return 6 }, "members": func() uint64 { return 12 }},
+		memberForgets:   func() uint64 { return 13 },
+		memberMalformed: func() uint64 { return 14 },
 	}
 	if withReader {
 		p.reconcile = func() reconcile.Stats { return reconcile.Stats{} }
@@ -57,7 +59,7 @@ func TestCoreMetricSourcesCoverEveryGuarantee(t *testing.T) {
 		"publish_dropped_total", "ack_marks_dropped_total", "redis_degraded", "cid_settle_dropped_total",
 		"cid_pending_elsewhere_total", "room_yields_total", "grpc_load_shed_total", "mongo_oplog_window_seconds",
 		"reconcile_lag_seconds", "reconcile_republished_total", "effect_dropped_total", "work_processed_total", "work_failures_total",
-		"counter_repaired_total",
+		"counter_repaired_total", "member_cache_forgets_total", "member_watch_malformed_total",
 	}
 	on := sourceNames(metricSources(fakeProbes(true)))
 	for _, name := range append(everyCore, readerMetrics...) {
@@ -103,6 +105,7 @@ func TestEffectMetricsReadTheirEffectByLabel(t *testing.T) {
 		"counter_repaired_total{reactions}":         6,
 		"reconcile_republished_total{member_event}": 9, "effect_dropped_total{member_event}": 10,
 		"reconcile_republished_total{read_event}": 11, "counter_repaired_total{members}": 12,
+		"member_cache_forgets_total": 13, "member_watch_malformed_total": 14,
 	}
 	for key, v := range want {
 		if g, ok := got[key]; !ok || g != v {

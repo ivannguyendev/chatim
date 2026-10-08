@@ -37,17 +37,18 @@ type gate interface {
 }
 
 type app struct {
-	cfg        config.Config
-	log        *slog.Logger
-	admin      *admin.Server
-	grpc       *grpcserver.Server
-	publisher  drainer
-	flusher    drainer
-	cidBatch   drainer
-	router     gate
-	slots      runner
-	workers    drainer
-	reconciler drainer
+	cfg         config.Config
+	log         *slog.Logger
+	admin       *admin.Server
+	grpc        *grpcserver.Server
+	publisher   drainer
+	flusher     drainer
+	cidBatch    drainer
+	router      gate
+	slots       runner
+	workers     drainer
+	reconciler  drainer
+	memberWatch memberWatcher
 }
 
 func prepare(ctx context.Context, cfg config.Config, cl *clients) error {
@@ -89,6 +90,11 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wire router: %w", err)
 	}
+	watch, err := wireMemberWatch(cfg, cl.nats, router, log)
+	if err != nil {
+		return nil, err
+	}
+	a.memberWatch = watch
 	slotCfg := cfg.Slot
 	slotCfg.BeforeRelease = router.EvictSlots
 	slotCfg.AfterLose = router.EvictSlots
@@ -132,16 +138,18 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*app, error) {
 	}, log)
 	chatimv1.RegisterCoreServiceServer(a.grpc, svc)
 	p := probes{
-		drops:          cl.pubCounters.Drops,
-		router:         router.Stats,
-		cidDegraded:    cids.Degraded,
-		markDegraded:   marks.Degraded,
-		cidDropped:     batch.Dropped,
-		loadShed:       limiter.Rejected,
-		oplogWindow:    oplogWindowSeconds(cl.mongo),
-		workers:        fx.workers.Stats,
-		effectCounts:   fx.counters(),
-		counterRepairs: fx.counterRepairs(),
+		drops:           cl.pubCounters.Drops,
+		router:          router.Stats,
+		cidDegraded:     cids.Degraded,
+		markDegraded:    marks.Degraded,
+		cidDropped:      batch.Dropped,
+		loadShed:        limiter.Rejected,
+		oplogWindow:     oplogWindowSeconds(cl.mongo),
+		workers:         fx.workers.Stats,
+		effectCounts:    fx.counters(),
+		counterRepairs:  fx.counterRepairs(),
+		memberForgets:   watch.Forgets,
+		memberMalformed: watch.Malformed,
 	}
 	if rec != nil {
 		p.reconcile = rec.Stats
