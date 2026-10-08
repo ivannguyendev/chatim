@@ -8,7 +8,7 @@ chatim is an internal, logically multi-tenant chat platform (CPaaS) in Go. Phase
 - `core`: rooms, members, messages, seq allocation, MongoDB storage, events to NATS JetStream.
 - `gateway`: WebSocket via gws, realtime fanout. Not built yet.
 
-Done on `feat/m2b` (shared branch for M2b.0 → M2b.4, one merge to `main` at the end; `dev-done`):
+Done and merged to `main` in PR #12 on 2026-10-08 (shared branch `feat/m2b`, `dev-done`):
 - M2b.0 (plan `docs/plans/2026-10-05-m2b0-mechanism-foundations.md`): ack marks only for `msg_created`, `RECONCILE_DELAY` default 5s with a boot rule (D65); actor backs off and yields the room on seq contention (D77); `access` permission hook and `view` reader pipeline on `GetHistory`; store write-contract test; detectors on `/metrics` and alert rules (D76, D78).
 - M2b.1 (plan `docs/plans/2026-10-05-m2b1-effect-engine.md`): change reader on slot 0 → `CHATIM_WORK` work stream (32 partitions by slot) → effect workers on every core (D79–D81); `room_created` (fast path + worker); room activity `ls/lm/lc/ab` with `$max`; `/app resync` with a drill itest; stop budget 28s.
 - M2b.2 (plan `docs/plans/2026-10-05-m2b2-edit-delete.md`): edit and delete as immutable facts in `message_edits` plus the `messages` projection (`v/d/ea`), `base_ver` CAS, ack after the projection (D62–D64, D82); hide (`hidden`) and clear history applied per reader in `view` (D85; events and time-based `cleared_at` since M2b.4); `GetEditHistory`; worker effects `edit_projection` and `msg_changed` on `EditInserted` (D83, D84); resync scans `message_edits`; corecli/e2e edit and delete; edit/delete rights only through `access.Policy`, default `access.DefaultPolicy` (author only, D86) with message kinds locked by config `MESSAGE_LOCKED_KINDS` (none by default, D87).
@@ -21,7 +21,7 @@ Done and merged to `main` (`dev-done`):
 - M2a.1 (PR #8–#10): no room-wide pts, natural event ids, best-effort events, a queue-only publisher on top of the nats.go async publisher (D47–D51).
 - M2a.2 + M2a.3 (PR #11): event reconciliation from the database change feed with acked marks on the dedupe Redis (D52); cross-room cid batching, ack before the cid Commit, a small warm dedupe Redis pool, acked marks in a 10ms window (D58–D60).
 
-The system mechanisms review closed on 2026-10-05 after two rounds with two external reviewers. The result is one design, `docs/designs/261005-chatim-architecture.md`, built on a data-class framework (§4) with decisions D61–D111, and a rewritten `docs/roadmap.md`. M2b.0–M2b.4 are done on `feat/m2b`; next is merging `feat/m2b` into `main` in one PR (owner opens it), then M2c. Old design, plans and PoC notes are in `docs/archive/` and are not updated. Project docs are written in Vietnamese.
+The system mechanisms review closed on 2026-10-05 after two rounds with two external reviewers. The result is one design, `docs/designs/261005-chatim-architecture.md`, built on a data-class framework (§4) with decisions D61–D111, and a rewritten `docs/roadmap.md`. M2b.0–M2b.4 are merged to `main` (PR #12); next is M2c (thread, mention, reply/forward, bookmark) on the shared branch `feat/m2c`. Old design, plans and PoC notes are in `docs/archive/` and are not updated. Project docs are written in Vietnamese.
 
 ## Hard rules
 
@@ -63,7 +63,7 @@ The user finds long review and test loops too slow. Run the cheapest check that 
 
 Full rules in `docs/git-workflow.md`.
 
-- Branches: short-lived `feat/<milestone>-<slug>`, `fix/<slug>`, `docs/<slug>` from `main`. No long-lived `prod`, `develop` or `release` branches.
+- Branches (standard, owner 2026-10-08; do not ask again): one shared branch per milestone, `feat/<milestone>` (e.g. `feat/m2c`) from `main`. Every part of the milestone is committed and pushed there, with no PR per part. When the whole milestone meets the Definition of Done, draft the PR description in `bin/<branch>-pr.md` and the owner opens and merges one PR. `fix/<slug>` for stray fixes on `main`, `docs/<slug>` for docs outside a milestone. No long-lived `prod`, `develop` or `release` branches.
 - `main` holds finished, green work (`dev-done`), not necessarily go-live. Merge by PR with a merge commit. Never commit directly to, force-push or rewrite `main`.
 - Merge only when the milestone's Definition of Done holds: plan tasks done; `fmt-check`, `vet`, `lint`, `test`, `itest`, `e2e` green; no open Critical/Important findings; roadmap, Decision Log, `INDEXES.csv` and this file updated in the same PR; the PR states the readiness level.
 - CI: `.github/workflows/ci.yml` job `checks` runs `make fmt-check`, `vet`, `lint` and `test` on every PR to `main`; branch protection requires it. `itest` and `e2e` still run on the dev machine.

@@ -1,10 +1,10 @@
 # Quy trình git — chatim
 
-> Cập nhật: 2026-10-03. Áp dụng cho mọi milestone từ M2b trở đi.
+> Cập nhật: 2026-10-08. Áp dụng cho mọi milestone từ M2b trở đi.
 
 ## Tóm tắt
 
-- `feat/*`, `fix/*`: việc đang làm. Sống ngắn, tạo từ `main`.
+- `feat/<milestone>`: một nhánh chung cho cả milestone (ví dụ `feat/m2c`), tạo từ `main`, merge một lần khi milestone xong. `fix/*`: sửa lỗi lẻ.
 - `main`: mọi thứ đã xong và test xanh. **Chưa chắc go-live.**
 - Tag `vX.Y.Z`: đánh dấu một commit trên `main` là một phiên bản release.
 - prod: server chạy image build từ một tag. **Không phải nhánh.**
@@ -12,15 +12,16 @@
 Không có nhánh `prod`, `develop` hay `release` thường trực.
 
 ```
-feat/<ms>-<slug> ──PR──▶ main ──tag vX.Y.Z──▶ image chatim/core:vX.Y.Z (ghim digest)
+feat/<milestone> ──một PR──▶ main ──tag vX.Y.Z──▶ image chatim/core:vX.Y.Z (ghim digest)
                                                   ├─▶ staging / prod-like
                                                   └─▶ prod  (cùng image, không build lại)
 ```
 
 ## Nhánh và PR
 
-- Tên nhánh: `feat/<milestone>-<slug>` (ví dụ `feat/m2b-edit-delete`), `fix/<slug>`, `docs/<slug>`.
-- Một nhánh = một milestone, hoặc một lát milestone nếu lát đó tự đạt Definition of Done.
+- **Chuẩn (owner chốt 2026-10-08, không hỏi lại):** mỗi milestone một nhánh chung `feat/<milestone>` (ví dụ `feat/m2c`). Mọi phần của milestone (các plan con, task, sửa sau review, cập nhật docs) commit và push trên nhánh đó; **không mở PR từng phần**. Khi cả milestone đạt Definition of Done thì mở **một** PR vào `main` và merge một lần. Đã làm vậy với M2a.2 + M2a.3 (PR #11) và M2b.0–M2b.4 (PR #12).
+- Controller soạn mô tả PR vào `bin/<nhánh>-pr.md` (gitignored); owner mở và merge PR trên GitHub.
+- Nhánh khác: `fix/<slug>` cho lỗi lẻ trên `main`, `docs/<slug>` cho docs không thuộc milestone nào.
 - Merge vào `main` qua PR, giữ merge commit. Xoá nhánh sau khi merge.
 - Không commit thẳng `main`, không force-push `main`, không rewrite history của `main`.
 
