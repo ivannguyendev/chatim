@@ -22,6 +22,11 @@ const (
 	ReactMessage    Action = "react_message"
 	PinMessage      Action = "pin_message"
 	UnpinMessage    Action = "unpin_message"
+	MentionAll      Action = "mention_all"
+	ForwardMessage  Action = "forward_message"
+	OpenDirect      Action = "open_direct"
+	SetBookmark     Action = "set_bookmark"
+	ReadReplies     Action = "read_replies"
 
 	AddMembers        Action = "add_members"
 	RemoveMember      Action = "remove_member"

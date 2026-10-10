@@ -64,7 +64,7 @@ func (c Config) componentErrors() []error {
 		err  error
 	}{
 		{"FLUSH_*", c.Flush.Validate()},
-		{"ACTOR_*, CID_PENDING_TTL, CORE_REQUEST_DEADLINE", c.Actor.Validate()},
+		{"ACTOR_*, MENTION_TARGETS_MAX, CID_PENDING_TTL, CORE_REQUEST_DEADLINE", c.Actor.Validate()},
 		{"CORE_ID, CID_*, REDIS_OP_TIMEOUT, REDIS_COOLDOWN", c.Dedupe.Validate()},
 		{"CID_BATCH_*", c.CIDBatch.Validate()},
 		{"PUB_*, EVT_SUBJECT_ROOT", c.Publish.Validate()},

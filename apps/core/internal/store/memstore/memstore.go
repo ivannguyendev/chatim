@@ -51,7 +51,7 @@ func (s *Messages) insertLocked(m domain.Message) store.Result {
 	if found {
 		return store.Result{Outcome: store.Duplicate}
 	}
-	m.Hidden, m.Reactions = false, domain.ReactionSummary{}
+	m.Hidden, m.Reactions, m.Replies = false, domain.ReactionSummary{}, domain.ReplyCount{}
 	s.lines[tl] = slices.Insert(line, i, m)
 	s.appendLog(logged{kind: store.MessageInserted, msg: m})
 	return store.Result{Outcome: store.Inserted}

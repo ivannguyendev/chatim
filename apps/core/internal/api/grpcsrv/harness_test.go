@@ -20,6 +20,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/api/grpcsrv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
@@ -33,7 +34,7 @@ func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
 
 var (
 	quiet       = slog.New(slog.DiscardHandler)
-	actorConfig = actor.Config{Mailbox: 16, Idle: time.Minute, MaxGroup: 8, MaxActors: 64, GroupDeadline: 2 * time.Second, ReservationTTL: 10 * time.Second}
+	actorConfig = actor.Config{Mailbox: 16, Idle: time.Minute, MaxGroup: 8, MaxActors: 64, GroupDeadline: 2 * time.Second, ReservationTTL: 10 * time.Second, MentionTargets: domain.DefaultMentionTargetsMax}
 	flushConfig = flush.Config{Shards: 2, Window: time.Millisecond, MaxBatch: 64, QueueSize: 64, InsertTimeout: 500 * time.Millisecond}
 	sentinels   = map[codes.Code]string{
 		codes.NotFound:           apperr.ErrNotFound.Error(),
@@ -63,6 +64,7 @@ type options struct {
 	now     func() time.Time
 	limiter *resilience.Limiter
 	policy  access.Policy
+	sendPol access.Policy
 	events  grpcsrv.EventPublisher
 	limits  mutate.Limits
 }
@@ -71,7 +73,7 @@ func newRig(t *testing.T, o options) *rig {
 	t.Helper()
 	rg := memStores()
 	if o.sender == nil {
-		o.sender = startRouter(t, rg)
+		o.sender = startRouter(t, rg, o.sendPol)
 	}
 	svc, err := grpcsrv.New(grpcsrv.Deps{
 		Sender: o.sender, Rooms: rg.rooms, Pages: rg.msgs, NewID: o.newID, Now: o.now, Policy: o.policy, Events: o.events,
@@ -84,13 +86,13 @@ func newRig(t *testing.T, o options) *rig {
 	return rg
 }
 
-func startRouter(t *testing.T, rg *rig) *actor.Router {
+func startRouter(t *testing.T, rg *rig, policy access.Policy) *actor.Router {
 	t.Helper()
 	fl, err := flush.New(rg.msgs, flushConfig)
 	if err != nil {
 		t.Fatalf("flush.New: %v", err)
 	}
-	router, err := actor.NewRouter(rg.msgs, rg.rooms, fl, acceptAllCIDs{}, nopPublisher{}, actorConfig, quiet)
+	router, err := actor.NewRouter(rg.msgs, rg.rooms, fl, acceptAllCIDs{}, nopPublisher{}, actorConfig, quiet, actor.WithPolicy(policy))
 	if err != nil {
 		t.Fatalf("NewRouter: %v", err)
 	}

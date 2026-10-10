@@ -107,9 +107,11 @@ func (s *Service) SendMessage(ctx context.Context, req *chatimv1.SendMessageRequ
 	if err != nil {
 		return nil, err
 	}
-	ack, err := s.sender.Send(ctx, actor.SendCmd{
-		Tenant: who.tenant, User: who.user, Room: room, Thread: req.GetThreadRoot(), CID: req.GetCid(), Text: req.GetText(),
-	})
+	cmd, err := s.sendCmd(ctx, who, room, req)
+	if err != nil {
+		return nil, err
+	}
+	ack, err := s.sender.Send(ctx, cmd)
 	if err != nil {
 		return nil, err
 	}

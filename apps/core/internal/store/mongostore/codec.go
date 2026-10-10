@@ -15,17 +15,22 @@ import (
 var errCorrupt = errors.New("mongostore: corrupt document")
 
 type messageDoc struct {
-	ID        []byte        `bson:"_id"`
-	Tenant    string        `bson:"t"`
-	From      string        `bson:"f"`
-	Kind      domain.Kind   `bson:"k"`
-	Text      string        `bson:"x"`
-	CID       string        `bson:"c"`
-	CreatedAt time.Time     `bson:"ts"`
-	Version   int32         `bson:"v,omitempty"`
-	Deleted   bool          `bson:"d,omitempty"`
-	EditedAt  time.Time     `bson:"ea,omitempty"`
-	Reactions *reactionsDoc `bson:"rx,omitempty"`
+	ID         []byte         `bson:"_id"`
+	Tenant     string         `bson:"t"`
+	From       string         `bson:"f"`
+	Kind       domain.Kind    `bson:"k"`
+	Text       string         `bson:"x"`
+	CID        string         `bson:"c"`
+	CreatedAt  time.Time      `bson:"ts"`
+	Version    int32          `bson:"v,omitempty"`
+	Deleted    bool           `bson:"d,omitempty"`
+	EditedAt   time.Time      `bson:"ea,omitempty"`
+	Reactions  *reactionsDoc  `bson:"rx,omitempty"`
+	ReplyTo    *replyDoc      `bson:"rp,omitempty"`
+	Replies    *replyCountDoc `bson:"rc,omitempty"`
+	Forward    *forwardDoc    `bson:"fw,omitempty"`
+	Mentions   []mentionDoc   `bson:"mt,omitempty"`
+	MentionAll bool           `bson:"ma,omitempty"`
 }
 
 type roomDoc struct {
@@ -53,7 +58,7 @@ func encodeMessage(m domain.Message) (messageDoc, error) {
 	if err != nil {
 		return messageDoc{}, err
 	}
-	return messageDoc{
+	d := messageDoc{
 		ID:        keys.Msg(m.Room, m.Thread, m.Seq),
 		Tenant:    m.Tenant,
 		From:      m.From,
@@ -64,7 +69,11 @@ func encodeMessage(m domain.Message) (messageDoc, error) {
 		Version:   version,
 		Deleted:   m.Deleted,
 		EditedAt:  m.EditedAt,
-	}, nil
+	}
+	if err := encodeLinks(m, &d); err != nil {
+		return messageDoc{}, err
+	}
+	return d, nil
 }
 
 func decodeMessage(d messageDoc) (domain.Message, error) {
@@ -80,7 +89,7 @@ func decodeMessage(d messageDoc) (domain.Message, error) {
 	if err != nil {
 		return domain.Message{}, err
 	}
-	return domain.Message{
+	m := domain.Message{
 		Room:      room,
 		Thread:    thread,
 		Seq:       seq,
@@ -94,7 +103,11 @@ func decodeMessage(d messageDoc) (domain.Message, error) {
 		Deleted:   d.Deleted,
 		EditedAt:  d.EditedAt,
 		Reactions: reactions,
-	}, nil
+	}
+	if err := decodeLinks(d, &m); err != nil {
+		return domain.Message{}, err
+	}
+	return m, nil
 }
 
 func decodeMessages(docs []messageDoc) ([]domain.Message, error) {

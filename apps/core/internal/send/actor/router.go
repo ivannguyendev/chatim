@@ -89,7 +89,8 @@ func (r *Router) Close(ctx context.Context) error {
 }
 
 func (r *Router) Send(ctx context.Context, c SendCmd) (Ack, error) {
-	if err := c.validate(); err != nil {
+	c, err := c.normalize(r.cfg.MentionTargets)
+	if err != nil {
 		return Ack{}, err
 	}
 	return r.await(ctx, newRequest(c))

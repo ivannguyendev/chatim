@@ -24,6 +24,11 @@ func TestDefaultPolicyLetsOnlyTheAuthorEditOrDelete(t *testing.T) {
 		{access.ClearHistory, "alice", "", nil},
 		{access.HideMessage, "alice", "bob", nil},
 		{access.ReadEditHistory, "alice", "bob", nil},
+		{access.MentionAll, "alice", "", nil},
+		{access.ForwardMessage, "alice", "bob", nil},
+		{access.OpenDirect, "alice", "", nil},
+		{access.SetBookmark, "alice", "bob", nil},
+		{access.ReadReplies, "alice", "bob", nil},
 	}
 	for _, tc := range cases {
 		err := access.DefaultPolicy{}.Check(t.Context(), access.Request{Action: tc.action, User: tc.user, Author: tc.author})

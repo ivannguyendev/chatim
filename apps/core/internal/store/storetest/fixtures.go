@@ -133,5 +133,14 @@ func sameMessage(a, b domain.Message) bool {
 	a.CreatedAt, b.CreatedAt, a.EditedAt, b.EditedAt = time.Time{}, time.Time{}, time.Time{}, time.Time{}
 	a.Reactions, b.Reactions = domain.ReactionSummary{}, domain.ReactionSummary{}
 	sameReactions := ar.Version == br.Version && slices.Equal(ar.Counts, br.Counts)
-	return reflect.DeepEqual(a, b) && at.Equal(bt) && ae.Equal(be) && sameReactions
+	af, bf := a.Forward, b.Forward
+	a.Forward, b.Forward = nil, nil
+	sameForward := (af == nil) == (bf == nil) && (af == nil || sameForwardRef(*af, *bf))
+	return reflect.DeepEqual(a, b) && at.Equal(bt) && ae.Equal(be) && sameReactions && sameForward
+}
+
+func sameForwardRef(a, b domain.ForwardRef) bool {
+	at, bt := a.SentAt, b.SentAt
+	a.SentAt, b.SentAt = time.Time{}, time.Time{}
+	return a == b && at.Equal(bt)
 }

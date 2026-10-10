@@ -63,7 +63,7 @@ func (a *actor) admit(ctx context.Context, q *request) *entry {
 		q.answer(Ack{}, err)
 		return nil
 	}
-	if err := a.r.policy.Check(ctx, access.Request{Action: access.SendMessage, User: c.User, Room: a.room, Member: m}); err != nil {
+	if err := a.allow(ctx, c, m); err != nil {
 		q.answer(Ack{}, err)
 		return nil
 	}
@@ -72,11 +72,24 @@ func (a *actor) admit(ctx context.Context, q *request) *entry {
 		return nil
 	}
 	return &entry{key: k, msg: domain.Message{
-		Room:   a.id,
-		Tenant: a.room.Tenant,
-		From:   c.User,
-		Kind:   domain.KindText,
-		Text:   c.Text,
-		CID:    c.CID,
+		Room:       a.id,
+		Tenant:     a.room.Tenant,
+		From:       c.User,
+		Kind:       domain.KindText,
+		Text:       c.Text,
+		CID:        c.CID,
+		ReplyTo:    c.ReplyTo,
+		Forward:    c.Forward,
+		Mentions:   c.Mentions,
+		MentionAll: c.MentionAll,
 	}}
+}
+
+func (a *actor) allow(ctx context.Context, c SendCmd, m domain.Member) error {
+	req := access.Request{Action: access.SendMessage, User: c.User, Room: a.room, Member: m}
+	if err := a.r.policy.Check(ctx, req); err != nil || !c.MentionAll {
+		return err
+	}
+	req.Action = access.MentionAll
+	return a.r.policy.Check(ctx, req)
 }

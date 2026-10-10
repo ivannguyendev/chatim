@@ -31,7 +31,7 @@ const (
 
 var (
 	quiet      = slog.New(slog.DiscardHandler)
-	baseConfig = actor.Config{Mailbox: 16, Idle: time.Minute, MaxGroup: 8, MaxActors: 8, GroupDeadline: time.Second, ReservationTTL: 10 * time.Second}
+	baseConfig = actor.Config{Mailbox: 16, Idle: time.Minute, MaxGroup: 8, MaxActors: 8, GroupDeadline: time.Second, ReservationTTL: 10 * time.Second, MentionTargets: domain.DefaultMentionTargetsMax}
 )
 
 type rig struct {

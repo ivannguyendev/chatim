@@ -48,6 +48,8 @@ func TestLoadRejectsNonPositiveValues(t *testing.T) {
 		{"ACTOR_IDLE", "-1s"},
 		{"ACTOR_MAX_GROUP", "0"},
 		{"ACTOR_MAX", "0"},
+		{"MENTION_TARGETS_MAX", "0"},
+		{"MENTION_TARGETS_MAX", "-1"},
 		{"CID_PENDING_TTL", "0s"},
 		{"CID_COMMITTED_TTL", "0s"},
 		{"REDIS_OP_TIMEOUT", "0s"},

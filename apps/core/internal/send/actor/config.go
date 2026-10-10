@@ -64,6 +64,10 @@ type SendCmd struct {
 	Tenant, User string
 	Room, Thread uint64
 	CID, Text    string
+	ReplyTo      *domain.ReplyRef
+	Forward      *domain.ForwardRef
+	Mentions     []domain.MentionTarget
+	MentionAll   bool
 }
 
 type Ack struct {
@@ -78,11 +82,12 @@ type Config struct {
 	MaxActors      int
 	GroupDeadline  time.Duration
 	ReservationTTL time.Duration
+	MentionTargets int
 }
 
 func (c Config) Validate() error {
 	switch {
-	case c.Mailbox <= 0 || c.Idle <= 0 || c.MaxGroup <= 0 || c.MaxActors <= 0 || c.GroupDeadline <= 0:
+	case c.Mailbox <= 0 || c.Idle <= 0 || c.MaxGroup <= 0 || c.MaxActors <= 0 || c.GroupDeadline <= 0 || c.MentionTargets <= 0:
 		return fmt.Errorf("%w: actor config %+v must be positive", apperr.ErrInvalidArgument, c)
 	case c.ReservationTTL <= c.GroupDeadline+reservationMargin:
 		return fmt.Errorf("%w: reservation ttl %v must exceed the group deadline %v plus %v", apperr.ErrInvalidArgument, c.ReservationTTL, c.GroupDeadline, reservationMargin)
@@ -91,9 +96,9 @@ func (c Config) Validate() error {
 	}
 }
 
-func (c SendCmd) validate() error {
+func (c SendCmd) normalize(mentionLimit int) (SendCmd, error) {
 	if c.Room == 0 {
-		return fmt.Errorf("%w: room", apperr.ErrInvalidArgument)
+		return SendCmd{}, fmt.Errorf("%w: room", apperr.ErrInvalidArgument)
 	}
 	for _, err := range []error{
 		domain.ValidTenant(c.Tenant),
@@ -101,12 +106,18 @@ func (c SendCmd) validate() error {
 		domain.ValidCID(c.CID),
 		domain.ValidateThread(c.Thread),
 		domain.ValidateText(c.Text),
+		domain.ValidateReply(c.ReplyTo),
 	} {
 		if err != nil {
-			return err
+			return SendCmd{}, err
 		}
 	}
-	return nil
+	mentions, err := domain.ValidateMentions(c.Mentions, mentionLimit)
+	if err != nil {
+		return SendCmd{}, err
+	}
+	c.Mentions = mentions
+	return c, nil
 }
 
 func ackOf(m domain.Message) Ack {

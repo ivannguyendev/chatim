@@ -42,7 +42,7 @@ func TestLoadDefaults(t *testing.T) {
 		Flush: flush.Config{Shards: 4, Window: 2 * time.Millisecond, MaxBatch: 256, QueueSize: 1024, InsertTimeout: time.Second},
 		Actor: actor.Config{
 			Mailbox: 1024, Idle: 5 * time.Minute, MaxGroup: 64, MaxActors: 100000,
-			GroupDeadline: 3 * time.Second, ReservationTTL: 10 * time.Second,
+			GroupDeadline: 3 * time.Second, ReservationTTL: 10 * time.Second, MentionTargets: 50,
 		},
 		Dedupe:   dedupe.Config{CoreID: host, PendingTTL: 10 * time.Second, CommittedTTL: 15 * time.Minute, Timeout: 100 * time.Millisecond, Cooldown: time.Second},
 		CIDBatch: dedupe.BatchConfig{Shards: 4, MaxKeys: 256, Queue: 4096},
@@ -90,7 +90,7 @@ func TestLoadOverrides(t *testing.T) {
 		Flush: flush.Config{Shards: 8, Window: 5 * time.Millisecond, MaxBatch: 512, QueueSize: 256, InsertTimeout: 500 * time.Millisecond},
 		Actor: actor.Config{
 			Mailbox: 64, Idle: time.Minute, MaxGroup: 32, MaxActors: 5000,
-			GroupDeadline: 2 * time.Second, ReservationTTL: 8 * time.Second,
+			GroupDeadline: 2 * time.Second, ReservationTTL: 8 * time.Second, MentionTargets: 20,
 		},
 		Dedupe:   dedupe.Config{CoreID: "core-a", PendingTTL: 8 * time.Second, CommittedTTL: 30 * time.Minute, Timeout: 50 * time.Millisecond, Cooldown: 2 * time.Second},
 		CIDBatch: dedupe.BatchConfig{Shards: 2, MaxKeys: 64, Queue: 512},

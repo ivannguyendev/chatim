@@ -7,6 +7,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/reconcile"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/slot"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
@@ -42,6 +43,7 @@ func (p *parser) components(c *Config) {
 		MaxActors:      p.count("ACTOR_MAX", 100000),
 		GroupDeadline:  c.RequestDeadline,
 		ReservationTTL: pendingTTL,
+		MentionTargets: p.count("MENTION_TARGETS_MAX", domain.DefaultMentionTargetsMax),
 	}
 	c.Dedupe = dedupe.Config{
 		CoreID:       c.CoreID,

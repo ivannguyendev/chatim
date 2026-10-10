@@ -79,19 +79,24 @@ func MessageKind(k domain.Kind) chatimv1.MessageKind {
 
 func Message(m domain.Message) *chatimv1.Message {
 	return &chatimv1.Message{
-		RoomId:     RoomID(m.Room),
-		ThreadRoot: m.Thread,
-		Seq:        m.Seq,
-		Sender:     m.From,
-		Kind:       MessageKind(m.Kind),
-		Text:       m.Text,
-		Cid:        m.CID,
-		CreatedAt:  timestamppb.New(m.CreatedAt),
-		Ver:        m.Version,
-		Deleted:    m.Deleted,
-		EditedAt:   optionalTime(m.EditedAt),
-		Hidden:     m.Hidden,
-		Reactions:  ReactionSummary(m.Reactions),
+		RoomId:         RoomID(m.Room),
+		ThreadRoot:     m.Thread,
+		Seq:            m.Seq,
+		Sender:         m.From,
+		Kind:           MessageKind(m.Kind),
+		Text:           m.Text,
+		Cid:            m.CID,
+		CreatedAt:      timestamppb.New(m.CreatedAt),
+		Ver:            m.Version,
+		Deleted:        m.Deleted,
+		EditedAt:       optionalTime(m.EditedAt),
+		Hidden:         m.Hidden,
+		Reactions:      ReactionSummary(m.Reactions),
+		ReplyTo:        ReplyRef(m.ReplyTo),
+		ForwardFrom:    ForwardRef(m.Forward),
+		MentionTargets: MentionTargets(m.Mentions),
+		MentionAll:     m.MentionAll,
+		ReplyCount:     ReplyCount(m.Replies),
 	}
 }
 
