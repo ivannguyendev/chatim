@@ -31,9 +31,15 @@ type effectSet struct {
 	hiddenEvent       *effects.HiddenEvent
 	historyCleared    *effects.HistoryClearedEvent
 	memberCountRepair *effects.MemberCountRepair
+	countRepair       *effects.CountRepair
 }
 
-func wireEffects(cfg config.Config, cl *clients, st *mongostore.Store, marks *eventmark.Store, owner effects.Owner, timers effects.CountTimers, log *slog.Logger) (effectSet, error) {
+type countTimers struct {
+	members  effects.CountTimers
+	messages effects.MessageCountTimers
+}
+
+func wireEffects(cfg config.Config, cl *clients, st *mongostore.Store, marks *eventmark.Store, owner effects.Owner, timers countTimers, log *slog.Logger) (effectSet, error) {
 	fx := effectSet{}
 	var err error
 	fx.msgCreated, err = effects.NewMessageCreated(
@@ -64,8 +70,15 @@ func wireEffects(cfg config.Config, cl *clients, st *mongostore.Store, marks *ev
 	if err = fx.wireReactionPinEffects(cfg, cl, st); err != nil {
 		return effectSet{}, err
 	}
-	if err = fx.wireMemberEffects(cfg, cl, st, timers); err != nil {
+	if err = fx.wireMemberEffects(cfg, cl, st, timers.members); err != nil {
 		return effectSet{}, err
+	}
+	fx.countRepair, err = effects.NewCountRepair(
+		effects.CountRepairDeps{Messages: st, Interactions: st.Interactions(), Counts: st, Timers: timers.messages, Rooms: st, JS: cl.effectsJS},
+		effects.CountRepairConfig{SubjectRoot: cfg.Stream.SubjectRoot, RoomCache: cfg.EffectRoomCache},
+	)
+	if err != nil {
+		return effectSet{}, fmt.Errorf("wire count_repair effect: %w", err)
 	}
 	fx.workers, err = effects.New(effects.Deps{
 		Queue:    func(p int) work.Queue { return work.NewQueue(cl.effectsJS, cfg.Work.Name, p, cfg.Effects.RetryDelay) },
@@ -80,16 +93,17 @@ func wireEffects(cfg config.Config, cl *clients, st *mongostore.Store, marks *ev
 
 func (fx effectSet) registry(activity effects.Effect) effects.Registry {
 	return effects.Registry{
-		store.MessageInserted:  {activity, fx.msgCreated.Effect()},
-		store.RoomInserted:     {fx.roomCreated.Effect()},
-		store.EditInserted:     {activity, fx.editProjection.Effect(), fx.msgChanged.Effect()},
-		store.ReactionChanged:  {activity, fx.reactionCounter.Effect(), fx.reactionEvent.Effect()},
-		store.PinInserted:      {activity, fx.pinProjection.Effect(), fx.pinEvent.Effect()},
-		store.MemberChanged:    {activity, fx.memberEvent.Effect(), fx.memberCountEvent.Effect()},
-		store.ReadChanged:      {fx.readEvent.Effect()},
-		store.MessageHidden:    {fx.hiddenEvent.Effect()},
-		store.HistoryCleared:   {fx.historyCleared.Effect()},
-		store.MemberCountCheck: {fx.memberCountRepair.Effect()},
+		store.MessageInserted:   {activity, fx.msgCreated.Effect()},
+		store.RoomInserted:      {fx.roomCreated.Effect()},
+		store.EditInserted:      {activity, fx.editProjection.Effect(), fx.msgChanged.Effect()},
+		store.ReactionChanged:   {activity, fx.reactionCounter.Effect(), fx.reactionEvent.Effect()},
+		store.PinInserted:       {activity, fx.pinProjection.Effect(), fx.pinEvent.Effect()},
+		store.MemberChanged:     {activity, fx.memberEvent.Effect(), fx.memberCountEvent.Effect()},
+		store.ReadChanged:       {fx.readEvent.Effect()},
+		store.MessageHidden:     {fx.hiddenEvent.Effect()},
+		store.HistoryCleared:    {fx.historyCleared.Effect()},
+		store.MemberCountCheck:  {fx.memberCountRepair.Effect()},
+		store.MessageCountCheck: {fx.countRepair.Effect()},
 	}
 }
 
@@ -104,13 +118,17 @@ func (fx effectSet) counters() map[string]effectCounters {
 		fx.reactionEvent.Effect().Name:   {republished: fx.reactionEvent.Republished, dropped: fx.reactionEvent.Dropped},
 		fx.pinEvent.Effect().Name:        {republished: fx.pinEvent.Republished, dropped: fx.pinEvent.Dropped},
 		fx.pinProjection.Effect().Name:   {dropped: fx.pinProjection.Dropped},
+		fx.countRepair.Effect().Name:     {republished: fx.countRepair.Republished, dropped: fx.countRepair.Dropped},
 	})
 	return out
 }
 
 func (fx effectSet) counterRepairs() map[string]func() uint64 {
 	return map[string]func() uint64{
-		pbconv.ReactionsCounter: fx.reactionCounter.Repaired,
-		effects.MembersCounter:  fx.memberCountRepair.Repaired,
+		pbconv.ReactionsCounter: func() uint64 {
+			return fx.reactionCounter.Repaired() + fx.countRepair.Repaired(pbconv.ReactionsCounter)
+		},
+		pbconv.RepliesCounter:  func() uint64 { return fx.countRepair.Repaired(pbconv.RepliesCounter) },
+		effects.MembersCounter: fx.memberCountRepair.Repaired,
 	}
 }

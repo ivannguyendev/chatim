@@ -23,7 +23,7 @@ type fakeTimers struct {
 	onArm func()
 }
 
-func (f *fakeTimers) Arm(_ context.Context, r uint64) (work.Timer, error) {
+func (f *fakeTimers) ArmMemberCountCheck(_ context.Context, r uint64) (work.Timer, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.err != nil {

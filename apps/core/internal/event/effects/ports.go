@@ -62,5 +62,19 @@ type MemberCounter interface {
 }
 
 type CountTimers interface {
-	Arm(ctx context.Context, room uint64) (work.Timer, error)
+	ArmMemberCountCheck(ctx context.Context, room uint64) (work.Timer, error)
+}
+
+type MessageCountReader interface {
+	CountReactions(ctx context.Context, key store.MsgKey) ([]domain.ReactionCount, error)
+	CountLiveReplies(ctx context.Context, parent store.MsgKey) (uint32, error)
+}
+
+type MessageCountWriter interface {
+	SetReactions(ctx context.Context, key store.MsgKey, base uint64, s domain.ReactionSummary) (bool, error)
+	SetReplyCount(ctx context.Context, key store.MsgKey, base uint64, n uint32) (bool, error)
+}
+
+type MessageCountTimers interface {
+	ArmMessageCountCheck(ctx context.Context, key store.MsgKey, counter string) (work.Timer, error)
 }

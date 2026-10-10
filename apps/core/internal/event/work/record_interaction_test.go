@@ -68,3 +68,19 @@ func TestInteractionAndCountCheckIDsAreNaturalKeys(t *testing.T) {
 		}
 	}
 }
+
+func TestCountCheckRecordsCarryOnlyAKnownCounter(t *testing.T) {
+	for _, counter := range []string{"bob", "members", "Replies", "reaction"} {
+		r := work.Record{Kind: store.MessageCountCheck, Room: 42, Seq: 7, Version: 5, User: counter, CommittedAt: committed}
+		if _, err := work.Decode(work.Encode(r)); !errors.Is(err, work.ErrBadRecord) || errors.Is(err, work.ErrUnknownKind) {
+			t.Errorf("Decode(count check of %q) = %v, want a malformed record", counter, err)
+		}
+		if id := r.ID(); id != "" {
+			t.Errorf("ID(count check of %q) = %q, want none", counter, id)
+		}
+	}
+	bookmark := work.Record{Kind: store.BookmarkChanged, Room: 42, Seq: 7, Version: 1, User: "bob", CommittedAt: committed}
+	if got, err := work.Decode(work.Encode(bookmark)); err != nil || got != bookmark {
+		t.Fatalf("Decode(bookmark by bob) = %+v, %v; want the user tail kept", got, err)
+	}
+}

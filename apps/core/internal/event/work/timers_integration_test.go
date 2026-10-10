@@ -13,7 +13,7 @@ import (
 
 const (
 	itTimerDelay     = time.Second
-	disarmFailMsg    = "member count check timer not disarmed; it will fire and recount"
+	disarmFailMsg    = "count check timer not disarmed; it will fire and recount"
 	itTimerPartition = 2
 )
 
@@ -30,9 +30,9 @@ func TestRealJetStreamFiresAnArmedTimerAfterItsDelay(t *testing.T) {
 	js, cfg := realWork(t)
 	room := roomsOnPartition(itTimerPartition, cfg.Partitions, 1)[0]
 	armedAt := time.Now()
-	timer, err := itTimers(t, js, cfg, &testlog.Sink{}).Arm(t.Context(), room)
+	timer, err := itTimers(t, js, cfg, &testlog.Sink{}).ArmMemberCountCheck(t.Context(), room)
 	if err != nil || timer.Seq == 0 {
-		t.Fatalf("Arm = %+v, %v; want a stream sequence", timer, err)
+		t.Fatalf("ArmMemberCountCheck = %+v, %v; want a stream sequence", timer, err)
 	}
 	q := work.NewQueue(js, cfg.Name, itTimerPartition, time.Second)
 	ds, err := q.Fetch(t.Context(), 1, itTimerDelay+3*time.Second)
@@ -58,9 +58,9 @@ func TestRealJetStreamNeverFiresADisarmedTimer(t *testing.T) {
 	sink := &testlog.Sink{}
 	tm := itTimers(t, js, cfg, sink)
 	room := roomsOnPartition(itTimerPartition, cfg.Partitions, 1)[0]
-	timer, err := tm.Arm(t.Context(), room)
+	timer, err := tm.ArmMemberCountCheck(t.Context(), room)
 	if err != nil {
-		t.Fatalf("Arm: %v", err)
+		t.Fatalf("ArmMemberCountCheck: %v", err)
 	}
 	tm.Disarm(t.Context(), timer)
 	if got := sink.Count(disarmFailMsg); got != 0 {

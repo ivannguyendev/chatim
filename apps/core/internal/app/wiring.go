@@ -108,7 +108,11 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wire member count timers: %w", err)
 	}
-	fx, err := wireEffects(cfg, cl, st, marks, slots, timers, log)
+	msgTimers, err := work.NewTimers(cl.js, w.Name, w.SubjectRoot, w.Partitions, cfg.MessageCountCheckDelay, work.WithTimerLogger(log))
+	if err != nil {
+		return nil, fmt.Errorf("wire message count timers: %w", err)
+	}
+	fx, err := wireEffects(cfg, cl, st, marks, slots, countTimers{members: timers, messages: msgTimers}, log)
 	if err != nil {
 		return nil, err
 	}

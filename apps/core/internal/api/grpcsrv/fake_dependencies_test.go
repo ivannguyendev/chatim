@@ -33,7 +33,9 @@ func (acceptAllCIDs) Abort(context.Context, []dedupe.Key) error { return nil }
 
 type nopTimers struct{}
 
-func (nopTimers) Arm(context.Context, uint64) (work.Timer, error) { return work.Timer{Seq: 1}, nil }
+func (nopTimers) ArmMemberCountCheck(context.Context, uint64) (work.Timer, error) {
+	return work.Timer{Seq: 1}, nil
+}
 
 func (nopTimers) Disarm(context.Context, work.Timer) {}
 

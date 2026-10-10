@@ -17,7 +17,7 @@ func ReactionEventID(room, thread, seq uint64, user string, change uint32) strin
 }
 
 func ReactionCountsEventID(room, thread, seq, version uint64) string {
-	return MessageEventID(room, thread, seq) + "-" + ReactionsCounter + "-v" + strconv.FormatUint(version, 10)
+	return MessageCountsEventID(room, thread, seq, ReactionsCounter, version)
 }
 
 func ReactionSummary(s domain.ReactionSummary) *chatimv1.ReactionSummary {

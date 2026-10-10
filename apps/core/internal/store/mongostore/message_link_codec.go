@@ -91,18 +91,26 @@ func decodeLinks(d messageDoc, m *domain.Message) error {
 		}
 	}
 	if c := d.Replies; c != nil {
-		n, err := narrowUint32("reply count", c.N)
+		rc, err := decodeReplyCount(*c)
 		if err != nil {
 			return err
 		}
-		v, err := toUint64("reply count version", c.Version)
-		if err != nil {
-			return err
-		}
-		m.Replies = domain.ReplyCount{N: n, Version: v}
+		m.Replies = rc
 	}
 	m.MentionAll = d.MentionAll
 	return nil
+}
+
+func decodeReplyCount(c replyCountDoc) (domain.ReplyCount, error) {
+	n, err := narrowUint32("reply count", c.N)
+	if err != nil {
+		return domain.ReplyCount{}, err
+	}
+	v, err := toUint64("reply count version", c.Version)
+	if err != nil {
+		return domain.ReplyCount{}, err
+	}
+	return domain.ReplyCount{N: n, Version: v}, nil
 }
 
 func keyFields(link string, thread, seq uint64) (int64, int64, error) {

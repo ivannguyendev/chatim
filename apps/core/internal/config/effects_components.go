@@ -6,7 +6,10 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/effects"
 )
 
-const defaultMemberCountCheckDelay = 5 * time.Second
+const (
+	defaultMemberCountCheckDelay  = 5 * time.Second
+	defaultMessageCountCheckDelay = 5 * time.Second
+)
 
 func (p *parser) workerConfig(c *Config) {
 	c.Effects = effects.Config{
@@ -19,4 +22,5 @@ func (p *parser) workerConfig(c *Config) {
 	}
 	c.ReactionCountDelay = p.span("REACTION_COUNT_DELAY", effects.DefaultCountDelay)
 	c.MemberCountCheckDelay = p.span("MEMBER_COUNT_CHECK_DELAY", defaultMemberCountCheckDelay)
+	c.MessageCountCheckDelay = p.span("MESSAGE_COUNT_CHECK_DELAY", defaultMessageCountCheckDelay)
 }

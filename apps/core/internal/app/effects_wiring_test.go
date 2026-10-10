@@ -51,9 +51,12 @@ func TestEffectSetExportsEveryEffect(t *testing.T) {
 		pinEvent:      built(effects.NewPinEvent(effects.PinEventDeps{Pins: pins, Messages: msgs, Rooms: rooms, JS: js}, events))(t),
 	}
 	withMemberEffects(t, &fx, rooms, js)
+	fx.countRepair = built(effects.NewCountRepair(
+		effects.CountRepairDeps{Messages: msgs, Interactions: reactions, Counts: msgs, Timers: noTimers{}, Rooms: rooms, JS: js},
+		effects.CountRepairConfig{SubjectRoot: "evt"}))(t)
 	counters := fx.counters()
 	want := []string{
-		effects.EditProjectionName, effects.HiddenEventName, effects.HistoryClearedEventName, effects.MemberCountEventName,
+		effects.CountRepairName, effects.EditProjectionName, effects.HiddenEventName, effects.HistoryClearedEventName, effects.MemberCountEventName,
 		effects.MemberCountRepairName, effects.MemberEventName, effects.MessageChangedName, effects.MessageCreatedName,
 		effects.PinEventName, effects.PinProjectionName, effects.ReactionCounterName, effects.ReactionEventName,
 		effects.ReadEventName, effects.RoomCreatedName,
@@ -67,15 +70,25 @@ func TestEffectSetExportsEveryEffect(t *testing.T) {
 			t.Errorf("%s: dropped set %v, republished set %v; want dropped always and republished only when it publishes", name, c.dropped != nil, c.republished != nil)
 		}
 	}
-	if repairs := fx.counterRepairs(); len(repairs) != 2 || repairs[pbconv.ReactionsCounter] == nil || repairs[effects.MembersCounter] == nil {
-		t.Errorf("counter repairs = %v, want %q and %q", repairs, pbconv.ReactionsCounter, effects.MembersCounter)
+	repairs := fx.counterRepairs()
+	if len(repairs) != 3 || repairs[pbconv.ReactionsCounter] == nil || repairs[pbconv.RepliesCounter] == nil || repairs[effects.MembersCounter] == nil {
+		t.Fatalf("counter repairs = %v, want %q, %q and %q", repairs, pbconv.ReactionsCounter, pbconv.RepliesCounter, effects.MembersCounter)
+	}
+	if repairs[pbconv.ReactionsCounter]() != 0 || repairs[pbconv.RepliesCounter]() != 0 {
+		t.Errorf("fresh repair counters are not zero")
 	}
 	assertMemberRegistry(t, fx.registry(effects.NewRoomActivity(rooms).Effect()))
 }
 
 type noTimers struct{}
 
-func (noTimers) Arm(context.Context, uint64) (work.Timer, error) { return work.Timer{}, nil }
+func (noTimers) ArmMemberCountCheck(context.Context, uint64) (work.Timer, error) {
+	return work.Timer{}, nil
+}
+
+func (noTimers) ArmMessageCountCheck(context.Context, store.MsgKey, string) (work.Timer, error) {
+	return work.Timer{}, nil
+}
 
 func withMemberEffects(t *testing.T, fx *effectSet, rooms *memstore.Rooms, js *publishtest.JetStream) {
 	t.Helper()
@@ -93,11 +106,12 @@ func withMemberEffects(t *testing.T, fx *effectSet, rooms *memstore.Rooms, js *p
 func assertMemberRegistry(t *testing.T, reg effects.Registry) {
 	t.Helper()
 	want := map[store.ChangeKind][]string{
-		store.MemberChanged:    {effects.RoomActivityName, effects.MemberEventName, effects.MemberCountEventName},
-		store.ReadChanged:      {effects.ReadEventName},
-		store.MessageHidden:    {effects.HiddenEventName},
-		store.HistoryCleared:   {effects.HistoryClearedEventName},
-		store.MemberCountCheck: {effects.MemberCountRepairName},
+		store.MemberChanged:     {effects.RoomActivityName, effects.MemberEventName, effects.MemberCountEventName},
+		store.ReadChanged:       {effects.ReadEventName},
+		store.MessageHidden:     {effects.HiddenEventName},
+		store.HistoryCleared:    {effects.HistoryClearedEventName},
+		store.MemberCountCheck:  {effects.MemberCountRepairName},
+		store.MessageCountCheck: {effects.CountRepairName},
 	}
 	for kind, names := range want {
 		var got []string
@@ -111,10 +125,14 @@ func assertMemberRegistry(t *testing.T, reg effects.Registry) {
 			t.Errorf("kind %d effects = %v, want %v", kind, got, names)
 		}
 	}
-	if d := reg[store.MemberCountCheck][0].Delay; d != 0 {
-		t.Errorf("member_count_repair delay = %v, want 0 (the timer already waited)", d)
+	for _, kind := range []store.ChangeKind{store.MemberCountCheck, store.MessageCountCheck} {
+		if d := reg[kind][0].Delay; d != 0 {
+			t.Errorf("kind %d repair delay = %v, want 0 (the timer already waited)", kind, d)
+		}
 	}
-	if len(reg) != int(store.MemberCountCheck) {
-		t.Errorf("registry has %d kinds, want every kind 1..%d", len(reg), store.MemberCountCheck)
+	for kind := store.MessageInserted; kind <= store.MessageCountCheck; kind++ {
+		if _, ok := reg[kind]; ok == (kind == store.BookmarkChanged) {
+			t.Errorf("kind %d registered %v; want every kind but bookmarks, which have no effect yet", kind, ok)
+		}
 	}
 }

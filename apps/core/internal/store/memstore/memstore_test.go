@@ -40,6 +40,10 @@ func TestInteractionsContract(t *testing.T) {
 	})
 }
 
+func TestMessageCountsContract(t *testing.T) {
+	storetest.RunMessageCounts(t, func(*testing.T) storetest.CountableMessages { return memstore.NewMessages() })
+}
+
 func TestPinsContract(t *testing.T) {
 	storetest.RunPins(t, func(*testing.T) (storetest.PinnableRooms, store.Pins) {
 		return memstore.NewRooms(), memstore.NewPins()

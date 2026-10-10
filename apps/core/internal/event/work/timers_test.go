@@ -80,12 +80,12 @@ func TestNewTimersRejectsBadConfig(t *testing.T) {
 	}
 }
 
-func TestArmPublishesACountCheckOnTheTimerSubjectAndKeepsItsSequence(t *testing.T) {
+func TestArmMemberCountCheckPublishesACountCheckOnTheTimerSubjectAndKeepsItsSequence(t *testing.T) {
 	js := &fakeTimerJS{}
 	tm := newTestTimers(t, js, &testlog.Sink{})
-	timer, err := tm.Arm(t.Context(), 777)
+	timer, err := tm.ArmMemberCountCheck(t.Context(), 777)
 	if err != nil || timer != (Timer{Seq: 41}) {
-		t.Fatalf("Arm = %+v, %v; want the PubAck sequence 41", timer, err)
+		t.Fatalf("ArmMemberCountCheck = %+v, %v; want the PubAck sequence 41", timer, err)
 	}
 	if len(js.msgs) != 1 || js.msgs[0].Subject != "work.timer.777.42" || js.optCounts[0] != 2 {
 		t.Fatalf("published %d msgs, first on %q with %v options; want one on work.timer.777.42 with the schedule time and target", len(js.msgs), js.msgs[0].Subject, js.optCounts)
@@ -122,11 +122,11 @@ func TestFireTimeRoundsUpToAWholeSecond(t *testing.T) {
 func TestArmFailsWithoutWritingAnything(t *testing.T) {
 	js := &fakeTimerJS{pubErr: errNATS}
 	tm := newTestTimers(t, js, &testlog.Sink{})
-	if _, err := tm.Arm(t.Context(), 777); !errors.Is(err, errNATS) {
-		t.Fatalf("Arm with NATS down = %v, want the publish error", err)
+	if _, err := tm.ArmMemberCountCheck(t.Context(), 777); !errors.Is(err, errNATS) {
+		t.Fatalf("ArmMemberCountCheck with NATS down = %v, want the publish error", err)
 	}
-	if _, err := tm.Arm(t.Context(), 0); !errors.Is(err, apperr.ErrInvalidArgument) || len(js.msgs) != 1 {
-		t.Fatalf("Arm(room 0) = %v after %d publishes, want ErrInvalidArgument and no publish", err, len(js.msgs))
+	if _, err := tm.ArmMemberCountCheck(t.Context(), 0); !errors.Is(err, apperr.ErrInvalidArgument) || len(js.msgs) != 1 {
+		t.Fatalf("ArmMemberCountCheck(room 0) = %v after %d publishes, want ErrInvalidArgument and no publish", err, len(js.msgs))
 	}
 }
 

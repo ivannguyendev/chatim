@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
@@ -72,7 +73,9 @@ func checkKind(r Record) error {
 		return fmt.Errorf("%w: kind 0", ErrBadRecord)
 	case !KnownKind(r.Kind):
 		return fmt.Errorf("%w %d", ErrUnknownKind, r.Kind)
-	case carriesTail(r.Kind) && domain.ValidUser(r.User) != nil:
+	case r.Kind == store.MessageCountCheck && !pbconv.MessageCounter(r.User):
+		return fmt.Errorf("%w: message count check of counter %q", ErrBadRecord, r.User)
+	case carriesUser(r.Kind) && domain.ValidUser(r.User) != nil:
 		return fmt.Errorf("%w: kind %d record without a valid tail", ErrBadRecord, r.Kind)
 	case !carriesTail(r.Kind) && r.User != "":
 		return fmt.Errorf("%w: kind %d carries a user", ErrBadRecord, r.Kind)

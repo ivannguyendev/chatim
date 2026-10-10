@@ -45,7 +45,7 @@ type fakeTimers struct {
 	err   error
 }
 
-func (f *fakeTimers) Arm(_ context.Context, room uint64) (work.Timer, error) {
+func (f *fakeTimers) ArmMemberCountCheck(_ context.Context, room uint64) (work.Timer, error) {
 	f.log.add("arm")
 	f.mu.Lock()
 	defer f.mu.Unlock()

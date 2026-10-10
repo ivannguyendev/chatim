@@ -118,6 +118,9 @@ func (r Record) ID() string {
 	case store.BookmarkChanged:
 		return "b:" + pbconv.BookmarkEventID(r.Room, r.Thread, r.Seq, r.User, r.Version)
 	case store.MessageCountCheck:
+		if !pbconv.MessageCounter(r.User) {
+			return ""
+		}
 		return "q:" + pbconv.MessageEventID(r.Room, r.Thread, r.Seq) + "-" + r.User + "-" + strconv.FormatUint(uint64(r.Version), 10)
 	default:
 		return ""

@@ -17,7 +17,7 @@ func settling(ctx context.Context) (context.Context, context.CancelFunc) {
 }
 
 func (m *Mutator) armCount(ctx context.Context, room uint64) (work.Timer, error) {
-	t, err := m.d.Timers.Arm(ctx, room)
+	t, err := m.d.Timers.ArmMemberCountCheck(ctx, room)
 	if err != nil {
 		m.d.Log.WarnContext(ctx, "member count check timer not armed; member command refused", "room", room, "err", err)
 		return work.Timer{}, domain.ErrRetryLater

@@ -84,7 +84,7 @@ func (e *MemberCountRepair) repair(ctx context.Context, room uint64) error {
 	case n == r.MemberCount:
 		return nil
 	}
-	if _, err := e.deps.Timers.Arm(ctx, room); err != nil {
+	if _, err := e.deps.Timers.ArmMemberCountCheck(ctx, room); err != nil {
 		return err
 	}
 	c, ok, err := e.deps.Counts.SetMemberCount(ctx, room, r.MemberCountVer, n)

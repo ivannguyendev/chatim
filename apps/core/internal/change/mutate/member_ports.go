@@ -27,7 +27,7 @@ type RequestDedupe interface {
 }
 
 type CountTimers interface {
-	Arm(ctx context.Context, room uint64) (work.Timer, error)
+	ArmMemberCountCheck(ctx context.Context, room uint64) (work.Timer, error)
 	Disarm(ctx context.Context, t work.Timer)
 }
 

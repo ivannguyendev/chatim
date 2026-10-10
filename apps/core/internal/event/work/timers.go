@@ -20,7 +20,7 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/slotmap"
 )
 
-const disarmFailedMsg = "member count check timer not disarmed; it will fire and recount"
+const disarmFailedMsg = "count check timer not disarmed; it will fire and recount"
 
 type Timer struct {
 	Seq uint64
@@ -51,7 +51,7 @@ type Timers struct {
 func NewTimers(js TimerJetStream, streamName, subjectRoot string, partitions int, delay time.Duration, opts ...TimerOption) (*Timers, error) {
 	switch {
 	case js == nil:
-		return nil, fmt.Errorf("%w: member count check timers need a jetstream client", apperr.ErrInvalidArgument)
+		return nil, fmt.Errorf("%w: count check timers need a jetstream client", apperr.ErrInvalidArgument)
 	case !subjectToken(streamName) || !subjectToken(subjectRoot):
 		return nil, fmt.Errorf("%w: timer stream %q and subject root %q must be single subject tokens", apperr.ErrInvalidArgument, streamName, subjectRoot)
 	case partitions <= 0 || partitions > slotmap.Count:
@@ -66,17 +66,35 @@ func NewTimers(js TimerJetStream, streamName, subjectRoot string, partitions int
 	return t, nil
 }
 
-func (t *Timers) Arm(ctx context.Context, room uint64) (Timer, error) {
+func (t *Timers) ArmMemberCountCheck(ctx context.Context, room uint64) (Timer, error) {
 	if room == 0 {
 		return Timer{}, fmt.Errorf("%w: member count check of room 0", apperr.ErrInvalidArgument)
 	}
-	op, at := t.op(), fireAt(t.now(), t.delay)
-	r := Record{Kind: store.MemberCountCheck, Room: room, Version: op, CommittedAt: at}
-	m := &nats.Msg{Subject: t.subject(room, op), Data: Encode(r), Header: nats.Header{}}
+	op := t.op()
+	r := Record{Kind: store.MemberCountCheck, Room: room, Version: op}
+	return t.arm(ctx, r, t.timerSubject(pbconv.RoomID(room), op))
+}
+
+func (t *Timers) ArmMessageCountCheck(ctx context.Context, key store.MsgKey, counter string) (Timer, error) {
+	if err := key.Validate(); err != nil {
+		return Timer{}, err
+	}
+	if !pbconv.MessageCounter(counter) {
+		return Timer{}, fmt.Errorf("%w: message count check of counter %q", apperr.ErrInvalidArgument, counter)
+	}
+	op := t.op()
+	r := Record{Kind: store.MessageCountCheck, Room: key.Room, Thread: key.Thread, Seq: key.Seq, Version: op, User: counter}
+	at := pbconv.RoomID(key.Room) + "." + strconv.FormatUint(key.Thread, 10) + "." + strconv.FormatUint(key.Seq, 10) + "." + counter
+	return t.arm(ctx, r, t.timerSubject(at, op))
+}
+
+func (t *Timers) arm(ctx context.Context, r Record, subject string) (Timer, error) {
+	r.CommittedAt = fireAt(t.now(), t.delay)
+	m := &nats.Msg{Subject: subject, Data: Encode(r), Header: nats.Header{}}
 	m.Header.Set(jetstream.MsgIDHeader, r.ID())
-	ack, err := t.js.PublishMsg(ctx, m, jetstream.WithScheduleAt(at), jetstream.WithScheduleTarget(t.target(room)))
+	ack, err := t.js.PublishMsg(ctx, m, jetstream.WithScheduleAt(r.CommittedAt), jetstream.WithScheduleTarget(t.target(r.Room)))
 	if err != nil {
-		return Timer{}, fmt.Errorf("arm member count check of room %d: %w", room, err)
+		return Timer{}, fmt.Errorf("arm count check %s: %w", r.ID(), err)
 	}
 	return Timer{Seq: ack.Sequence}, nil
 }
@@ -107,8 +125,8 @@ func (t *Timers) streamHandle(ctx context.Context) (jetstream.Stream, error) {
 	return t.handle, nil
 }
 
-func (t *Timers) subject(room uint64, op uint32) string {
-	return t.root + ".timer." + pbconv.RoomID(room) + "." + strconv.FormatUint(uint64(op), 10)
+func (t *Timers) timerSubject(target string, op uint32) string {
+	return t.root + ".timer." + target + "." + strconv.FormatUint(uint64(op), 10)
 }
 
 func (t *Timers) target(room uint64) string { return Subject(t.root, Partition(room, t.partitions)) }
