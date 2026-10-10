@@ -33,7 +33,7 @@ func wireService(d serviceDeps) (*grpcsrv.Service, error) {
 		return nil, err
 	}
 	st := d.store
-	svc, err := grpcsrv.New(grpcsrv.Deps{Sender: d.router, Rooms: st, Pages: st, Events: d.pub, Mutator: mut, Edits: st, Hidden: st.Hidden()}, d.log)
+	svc, err := grpcsrv.New(grpcsrv.Deps{Sender: d.router, Rooms: st, Pages: st, Events: d.pub, Mutator: mut, Edits: st, Hidden: st.Hidden(), Bookmarks: st.Interactions()}, d.log)
 	if err != nil {
 		return nil, fmt.Errorf("wire core service: %w", err)
 	}

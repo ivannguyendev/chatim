@@ -77,7 +77,7 @@ func newRig(t *testing.T, o options) *rig {
 	}
 	svc, err := grpcsrv.New(grpcsrv.Deps{
 		Sender: o.sender, Rooms: rg.rooms, Pages: rg.msgs, NewID: o.newID, Now: o.now, Policy: o.policy, Events: o.events,
-		Mutator: newMutator(t, rg, o), Edits: rg.edits, Hidden: rg.hidden,
+		Mutator: newMutator(t, rg, o), Edits: rg.edits, Hidden: rg.hidden, Bookmarks: rg.reactions,
 	}, quiet)
 	if err != nil {
 		t.Fatalf("New: %v", err)

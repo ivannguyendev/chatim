@@ -15,14 +15,15 @@ import (
 
 func TestNewRequiresEveryDependency(t *testing.T) {
 	rg := memStores()
-	full := grpcsrv.Deps{Sender: &fakeSender{}, Rooms: rg.rooms, Pages: rg.msgs, Mutator: newMutator(t, rg, options{}), Edits: rg.edits, Hidden: rg.hidden}
+	full := grpcsrv.Deps{Sender: &fakeSender{}, Rooms: rg.rooms, Pages: rg.msgs, Mutator: newMutator(t, rg, options{}), Edits: rg.edits, Hidden: rg.hidden, Bookmarks: rg.reactions}
 	for name, drop := range map[string]func(d *grpcsrv.Deps){
-		"no sender":  func(d *grpcsrv.Deps) { d.Sender = nil },
-		"no rooms":   func(d *grpcsrv.Deps) { d.Rooms = nil },
-		"no pages":   func(d *grpcsrv.Deps) { d.Pages = nil },
-		"no mutator": func(d *grpcsrv.Deps) { d.Mutator = nil },
-		"no edits":   func(d *grpcsrv.Deps) { d.Edits = nil },
-		"no hidden":  func(d *grpcsrv.Deps) { d.Hidden = nil },
+		"no sender":    func(d *grpcsrv.Deps) { d.Sender = nil },
+		"no rooms":     func(d *grpcsrv.Deps) { d.Rooms = nil },
+		"no pages":     func(d *grpcsrv.Deps) { d.Pages = nil },
+		"no mutator":   func(d *grpcsrv.Deps) { d.Mutator = nil },
+		"no edits":     func(d *grpcsrv.Deps) { d.Edits = nil },
+		"no hidden":    func(d *grpcsrv.Deps) { d.Hidden = nil },
+		"no bookmarks": func(d *grpcsrv.Deps) { d.Bookmarks = nil },
 	} {
 		deps := full
 		drop(&deps)
@@ -81,6 +82,14 @@ func TestEveryRPCChecksCallerIdentityFirst(t *testing.T) {
 		},
 		"UnpinMessage": func(ctx context.Context) error {
 			_, err := rg.client.UnpinMessage(ctx, &chatimv1.UnpinMessageRequest{RoomId: "42", Seq: 1})
+			return err
+		},
+		"SetBookmark": func(ctx context.Context) error {
+			_, err := rg.client.SetBookmark(ctx, &chatimv1.SetBookmarkRequest{RoomId: "42", Seq: 1, On: true})
+			return err
+		},
+		"ListBookmarks": func(ctx context.Context) error {
+			_, err := rg.client.ListBookmarks(ctx, &chatimv1.ListBookmarksRequest{})
 			return err
 		},
 		"AddMembers": func(ctx context.Context) error {

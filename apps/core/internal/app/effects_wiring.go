@@ -24,6 +24,7 @@ type effectSet struct {
 	reactionEvent   *effects.ReactionEvent
 	pinProjection   *effects.PinProjection
 	pinEvent        *effects.PinEvent
+	bookmarkEvent   *effects.BookmarkEvent
 
 	memberEvent       *effects.MemberEvent
 	memberCountEvent  *effects.MemberCountEvent
@@ -104,6 +105,7 @@ func (fx effectSet) registry(activity effects.Effect) effects.Registry {
 		store.HistoryCleared:    {fx.historyCleared.Effect()},
 		store.MemberCountCheck:  {fx.memberCountRepair.Effect()},
 		store.MessageCountCheck: {fx.countRepair.Effect()},
+		store.BookmarkChanged:   {activity, fx.bookmarkEvent.Effect()},
 	}
 }
 
@@ -119,6 +121,7 @@ func (fx effectSet) counters() map[string]effectCounters {
 		fx.pinEvent.Effect().Name:        {republished: fx.pinEvent.Republished, dropped: fx.pinEvent.Dropped},
 		fx.pinProjection.Effect().Name:   {dropped: fx.pinProjection.Dropped},
 		fx.countRepair.Effect().Name:     {republished: fx.countRepair.Republished, dropped: fx.countRepair.Dropped},
+		fx.bookmarkEvent.Effect().Name:   {republished: fx.bookmarkEvent.Republished, dropped: fx.bookmarkEvent.Dropped},
 	})
 	return out
 }

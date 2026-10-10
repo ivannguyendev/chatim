@@ -30,6 +30,9 @@ func (fx *effectSet) wireReactionPinEffects(cfg config.Config, cl *clients, st *
 	if fx.reactionEvent, err = effects.NewReactionEvent(effects.ReactionEventDeps{Reactions: interactions, Rooms: st, JS: cl.effectsJS}, events); err != nil {
 		return fmt.Errorf("wire reaction_event effect: %w", err)
 	}
+	if fx.bookmarkEvent, err = effects.NewBookmarkEvent(effects.BookmarkEventDeps{Bookmarks: interactions, Rooms: st, JS: cl.effectsJS}, events); err != nil {
+		return fmt.Errorf("wire bookmark_event effect: %w", err)
+	}
 	if fx.pinProjection, err = effects.NewPinProjection(projector); err != nil {
 		return fmt.Errorf("wire pin_projection effect: %w", err)
 	}

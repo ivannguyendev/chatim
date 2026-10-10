@@ -49,13 +49,14 @@ func everyKind() map[string]kindCase {
 		"read_updated":            {pbconv.ReadUpdated(room, "bob", domain.ReadPosition{Seq: 7, Ver: 2}, sentAt), "evt.acme.member.101.read_updated"},
 		"message_hidden":          {pbconv.MessageHidden(room, "bob", 0, 7, sentAt), "evt.acme.member.101.message_hidden"},
 		"history_cleared":         {pbconv.HistoryCleared(room, "bob", sentAt, sentAt), "evt.acme.member.101.history_cleared"},
+		"bookmark_changed":        {pbconv.BookmarkChanged(room, domain.Bookmark{Room: roomA, Seq: 7, Tenant: tenant, User: "bob", On: true, Ver: 1, At: sentAt}), "evt.acme.member.101.bookmark_changed"},
 	}
 }
 
 func TestEachKindGoesToTheSubjectOfItsData(t *testing.T) {
 	kinds := everyKind()
-	if len(kinds) != 16 {
-		t.Fatalf("table has %d kinds, want 16", len(kinds))
+	if len(kinds) != 17 {
+		t.Fatalf("table has %d kinds, want 17", len(kinds))
 	}
 	for name, c := range kinds {
 		msg, err := publish.Message("evt", roomA, c.ev)

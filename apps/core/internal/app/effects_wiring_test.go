@@ -49,6 +49,7 @@ func TestEffectSetExportsEveryEffect(t *testing.T) {
 		reactionEvent: built(effects.NewReactionEvent(effects.ReactionEventDeps{Reactions: reactions, Rooms: rooms, JS: js}, events))(t),
 		pinProjection: built(effects.NewPinProjection(built(pinproj.New(pins, rooms))(t)))(t),
 		pinEvent:      built(effects.NewPinEvent(effects.PinEventDeps{Pins: pins, Messages: msgs, Rooms: rooms, JS: js}, events))(t),
+		bookmarkEvent: built(effects.NewBookmarkEvent(effects.BookmarkEventDeps{Bookmarks: reactions, Rooms: rooms, JS: js}, events))(t),
 	}
 	withMemberEffects(t, &fx, rooms, js)
 	fx.countRepair = built(effects.NewCountRepair(
@@ -56,7 +57,7 @@ func TestEffectSetExportsEveryEffect(t *testing.T) {
 		effects.CountRepairConfig{SubjectRoot: "evt"}))(t)
 	counters := fx.counters()
 	want := []string{
-		effects.CountRepairName, effects.EditProjectionName, effects.HiddenEventName, effects.HistoryClearedEventName, effects.MemberCountEventName,
+		effects.BookmarkEventName, effects.CountRepairName, effects.EditProjectionName, effects.HiddenEventName, effects.HistoryClearedEventName, effects.MemberCountEventName,
 		effects.MemberCountRepairName, effects.MemberEventName, effects.MessageChangedName, effects.MessageCreatedName,
 		effects.PinEventName, effects.PinProjectionName, effects.ReactionCounterName, effects.ReactionEventName,
 		effects.ReadEventName, effects.RoomCreatedName,
@@ -112,6 +113,7 @@ func assertMemberRegistry(t *testing.T, reg effects.Registry) {
 		store.HistoryCleared:    {effects.HistoryClearedEventName},
 		store.MemberCountCheck:  {effects.MemberCountRepairName},
 		store.MessageCountCheck: {effects.CountRepairName},
+		store.BookmarkChanged:   {effects.RoomActivityName, effects.BookmarkEventName},
 	}
 	for kind, names := range want {
 		var got []string
@@ -131,8 +133,8 @@ func assertMemberRegistry(t *testing.T, reg effects.Registry) {
 		}
 	}
 	for kind := store.MessageInserted; kind <= store.MessageCountCheck; kind++ {
-		if _, ok := reg[kind]; ok == (kind == store.BookmarkChanged) {
-			t.Errorf("kind %d registered %v; want every kind but bookmarks, which have no effect yet", kind, ok)
+		if _, ok := reg[kind]; !ok {
+			t.Errorf("kind %d has no effects; want every kind registered", kind)
 		}
 	}
 }

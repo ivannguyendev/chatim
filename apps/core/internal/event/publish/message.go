@@ -30,6 +30,7 @@ const (
 	readUpdated           = "read_updated"
 	messageHidden         = "message_hidden"
 	historyCleared        = "history_cleared"
+	bookmarkChanged       = "bookmark_changed"
 
 	roomData    = "room"
 	memberData  = "member"
@@ -60,7 +61,7 @@ func subjectFor(root, tenant string, room uint64, kind string) (string, error) {
 	switch kind {
 	case roomCreated, msgPinned, msgUnpinned, memberCountChanged:
 		data = roomData
-	case memberAdded, memberRemoved, memberRoleChanged, memberPriorityChanged, readUpdated, messageHidden, historyCleared:
+	case memberAdded, memberRemoved, memberRoleChanged, memberPriorityChanged, readUpdated, messageHidden, historyCleared, bookmarkChanged:
 		data = memberData
 	case msgCreated, msgEdited, msgDeleted, reactionChanged, countsChanged:
 		data = messageData
@@ -104,6 +105,8 @@ func eventKind(ev *chatimv1.Event) string {
 		return messageHidden
 	case *chatimv1.Event_HistoryCleared:
 		return historyCleared
+	case *chatimv1.Event_BookmarkChanged:
+		return bookmarkChanged
 	default:
 		return ""
 	}

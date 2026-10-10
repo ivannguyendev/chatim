@@ -78,3 +78,7 @@ type MessageCountWriter interface {
 type MessageCountTimers interface {
 	ArmMessageCountCheck(ctx context.Context, key store.MsgKey, counter string) (work.Timer, error)
 }
+
+type BookmarkReader interface {
+	GetBookmark(ctx context.Context, key store.MsgKey, user string) (domain.Bookmark, bool, error)
+}
