@@ -65,21 +65,29 @@ func TestProjectIsStaleBeforeTheTargetFactIsVisible(t *testing.T) {
 	}
 }
 
-func TestProjectRereadsAfterALostCAS(t *testing.T) {
+func TestProjectReturnsContendedAfterALostCASAndTheNextCallSeesTheRival(t *testing.T) {
 	rooms, pins := newRooms(t), memstore.NewPins()
 	appendFacts(t, pins, fact(1, domain.PinOpPin, 3))
-	got, err := projector(t, pins, &rival{Rooms: rooms}).Project(t.Context(), room, 1)
+	p := projector(t, pins, &rival{Rooms: rooms})
+	if _, err := p.Project(t.Context(), room, 1); !errors.Is(err, pinproj.ErrContended) || !errors.Is(err, apperr.ErrUnavailable) {
+		t.Fatalf("Project after a rival write = %v, want ErrContended at once", err)
+	}
+	got, err := p.Project(t.Context(), room, 1)
 	if want := (domain.PinState{Pins: []domain.Pin{pinned(1, 3)}, Version: 1}); err != nil || !same(got, want) {
-		t.Fatalf("Project after a rival write = %+v, %v; want %+v", got, err, want)
+		t.Fatalf("Project again = %+v, %v; want the rival's state %+v", got, err, want)
 	}
 }
 
-func TestProjectGivesUpAfterMaxTries(t *testing.T) {
-	rooms, pins := &countingRooms{Rooms: newRooms(t), lose: pinproj.MaxTries}, memstore.NewPins()
+func TestProjectTriesTheCASOnce(t *testing.T) {
+	rooms, pins := &countingRooms{Rooms: newRooms(t), lose: 1}, memstore.NewPins()
 	appendFacts(t, pins, fact(1, domain.PinOpPin, 3))
-	_, err := projector(t, pins, rooms).Project(t.Context(), room, 1)
-	if !errors.Is(err, pinproj.ErrContended) || !errors.Is(err, apperr.ErrUnavailable) || rooms.applies != pinproj.MaxTries {
-		t.Fatalf("Project = %v after %d CAS tries, want ErrContended after %d", err, rooms.applies, pinproj.MaxTries)
+	p := projector(t, pins, rooms)
+	if _, err := p.Project(t.Context(), room, 1); !errors.Is(err, pinproj.ErrContended) || rooms.applies != 1 || storedState(t, rooms).Version != 0 {
+		t.Fatalf("Project = %v after %d CAS tries, stored %+v; want ErrContended after one try and no write", err, rooms.applies, storedState(t, rooms))
+	}
+	want := domain.PinState{Pins: []domain.Pin{pinned(1, 3)}, Version: 1}
+	if got, err := p.Project(t.Context(), room, 1); err != nil || !same(got, want) || rooms.applies != 2 {
+		t.Fatalf("Project again = %+v, %v after %d tries; want %+v after 2", got, err, rooms.applies, want)
 	}
 }
 

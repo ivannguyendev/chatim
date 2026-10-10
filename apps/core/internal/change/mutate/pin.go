@@ -11,8 +11,6 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-const pinTries = 3
-
 type PinProjector interface {
 	Current(ctx context.Context, room uint64) (domain.PinState, error)
 	Project(ctx context.Context, room, target uint64) (domain.PinState, error)
@@ -52,28 +50,26 @@ func (m *Mutator) pin(ctx context.Context, c PinCmd, op domain.PinOp, action acc
 }
 
 func (m *Mutator) commitPin(ctx context.Context, want domain.PinAction) (domain.PinState, domain.PinAction, bool, error) {
-	for range pinTries {
-		state, err := m.d.Projector.Current(ctx, want.Room)
-		if err != nil {
-			return domain.PinState{}, domain.PinAction{}, false, err
-		}
-		if state.Pinned(want.Thread, want.Seq) == (want.Op == domain.PinOpPin) {
-			return state, domain.PinAction{}, false, nil
-		}
-		if want.Op == domain.PinOpPin && len(state.Pins) >= m.d.Limits.PinLimit {
-			return domain.PinState{}, domain.PinAction{}, false, domain.ErrTooManyPins
-		}
-		fact := want
-		fact.PV = state.Version + 1
-		got, err := m.appendPin(ctx, fact)
-		switch {
-		case err != nil:
-			return domain.PinState{}, domain.PinAction{}, false, err
-		case got.PV != 0:
-			return state, got, true, nil
-		}
+	state, err := m.d.Projector.Current(ctx, want.Room)
+	if err != nil {
+		return domain.PinState{}, domain.PinAction{}, false, err
 	}
-	return domain.PinState{}, domain.PinAction{}, false, domain.ErrRetryLater
+	if state.Pinned(want.Thread, want.Seq) == (want.Op == domain.PinOpPin) {
+		return state, domain.PinAction{}, false, nil
+	}
+	if want.Op == domain.PinOpPin && len(state.Pins) >= m.d.Limits.PinLimit {
+		return domain.PinState{}, domain.PinAction{}, false, domain.ErrTooManyPins
+	}
+	fact := want
+	fact.PV = state.Version + 1
+	got, err := m.appendPin(ctx, fact)
+	switch {
+	case err != nil:
+		return domain.PinState{}, domain.PinAction{}, false, err
+	case got.PV == 0:
+		return domain.PinState{}, domain.PinAction{}, false, domain.ErrRetryLater
+	}
+	return state, got, true, nil
 }
 
 func (m *Mutator) appendPin(ctx context.Context, fact domain.PinAction) (domain.PinAction, error) {
