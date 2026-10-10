@@ -67,7 +67,6 @@ type Config struct {
 	AckMarks               eventmark.Config
 	LockedMessageKinds     []domain.Kind
 	Limits                 mutate.Limits
-	ReactionCountDelay     time.Duration
 	MemberCountCheckDelay  time.Duration
 	MessageCountCheckDelay time.Duration
 }

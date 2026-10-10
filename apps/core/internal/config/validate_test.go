@@ -73,8 +73,6 @@ func TestLoadValidation(t *testing.T) {
 		{"cid batch shards above slot count", map[string]string{"CID_BATCH_SHARDS": "2000"}, "CID_BATCH_*"},
 		{"cid batch shards at slot count", map[string]string{"CID_BATCH_SHARDS": "1024"}, ""},
 		{"zero cid batch queue", map[string]string{"CID_BATCH_QUEUE": "0"}, "CID_BATCH_QUEUE"},
-		{"reaction count delay above the reconcile delay", map[string]string{"REACTION_COUNT_DELAY": "5001ms"}, "REACTION_COUNT_DELAY must be positive and at most RECONCILE_DELAY"},
-		{"reaction count delay at the reconcile delay", map[string]string{"REACTION_COUNT_DELAY": "5s"}, ""},
 		{"pin limit above the cap", map[string]string{"PIN_LIMIT": "1001"}, "REACTION_EMOJIS, PIN_LIMIT"},
 		{"pin limit at the cap", map[string]string{"PIN_LIMIT": "1000"}, ""},
 		{"stop phases overflow", map[string]string{

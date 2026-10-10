@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/counter"
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/pinproj"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/effects"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish/publishtest"
@@ -14,10 +13,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
 )
 
-const (
-	countDelay        = time.Second
-	otherRoom  uint64 = 4343
-)
+const otherRoom uint64 = 4343
 
 var countedAt = time.Date(2026, 10, 6, 9, 0, 0, 0, time.UTC)
 
@@ -27,9 +23,8 @@ type reactRig struct {
 	reactions *memstore.Interactions
 	pins      *memstore.Pins
 	js        *publishtest.JetStream
-	touches   *spyCounter
 	projects  *spyProjector
-	counter   *effects.ReactionCounter
+	counts    *effects.CountEvent
 	event     *effects.ReactionEvent
 	pinProj   *effects.PinProjection
 	pinEvent  *effects.PinEvent
@@ -39,21 +34,16 @@ func newReactRig(t *testing.T) *reactRig {
 	t.Helper()
 	rg := &reactRig{msgs: memstore.NewMessages(), rooms: memstore.NewRooms(), reactions: memstore.NewInteractions(), pins: memstore.NewPins(), js: &publishtest.JetStream{}}
 	createRoom(t, rg.rooms, room)
-	counts, err := counter.New(rg.msgs, rg.reactions)
-	if err != nil {
-		t.Fatalf("counter.New: %v", err)
-	}
 	proj, err := pinproj.New(rg.pins, rg.rooms)
 	if err != nil {
 		t.Fatalf("pinproj.New: %v", err)
 	}
-	rg.touches, rg.projects = &spyCounter{inner: counts}, &spyProjector{inner: proj}
+	rg.projects = &spyProjector{inner: proj}
 	events := effects.MessageChangedConfig{SubjectRoot: "evt", Delay: delay, RoomCache: 16}
-	if rg.counter, err = effects.NewReactionCounter(
-		effects.ReactionCounterDeps{Messages: rg.msgs, Counter: rg.touches, Rooms: rg.rooms, JS: rg.js, Now: func() time.Time { return countedAt }},
-		effects.ReactionCounterConfig{SubjectRoot: "evt", Delay: countDelay, RoomCache: 16, Tries: 2},
+	if rg.counts, err = effects.NewCountEvent(
+		effects.CountEventDeps{Messages: rg.msgs, Rooms: rg.rooms, JS: rg.js, Now: func() time.Time { return countedAt }}, events,
 	); err != nil {
-		t.Fatalf("NewReactionCounter: %v", err)
+		t.Fatalf("NewCountEvent: %v", err)
 	}
 	if rg.event, err = effects.NewReactionEvent(effects.ReactionEventDeps{Reactions: rg.reactions, Rooms: rg.rooms, JS: rg.js}, events); err != nil {
 		t.Fatalf("NewReactionEvent: %v", err)

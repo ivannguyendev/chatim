@@ -2,36 +2,11 @@ package effects_test
 
 import (
 	"context"
-	"slices"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/effects"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
-
-type touchCall struct {
-	key       store.MsgKey
-	witnesses []store.Witness
-	tries     int
-}
-
-func sameTouch(a, b touchCall) bool {
-	return a.key == b.key && a.tries == b.tries && slices.Equal(a.witnesses, b.witnesses)
-}
-
-type spyCounter struct {
-	inner effects.CounterToucher
-	err   error
-	calls []touchCall
-}
-
-func (s *spyCounter) Touch(ctx context.Context, k store.MsgKey, cur domain.ReactionSummary, ws []store.Witness, tries int) (domain.ReactionSummary, bool, error) {
-	s.calls = append(s.calls, touchCall{key: k, witnesses: slices.Clone(ws), tries: tries})
-	if s.err != nil {
-		return domain.ReactionSummary{}, false, s.err
-	}
-	return s.inner.Touch(ctx, k, cur, ws, tries)
-}
 
 type projectCall struct{ room, target uint64 }
 

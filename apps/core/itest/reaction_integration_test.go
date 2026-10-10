@@ -54,6 +54,17 @@ func reactAll(t *testing.T, client chatimv1.CoreServiceClient, roomID string, se
 	return countsOf(emojis...)
 }
 
+func emojiDeltas(prev, next string) []store.EmojiDelta {
+	var out []store.EmojiDelta
+	if prev != "" {
+		out = append(out, store.EmojiDelta{Emoji: prev, Delta: -1})
+	}
+	if next != "" {
+		out = append(out, store.EmojiDelta{Emoji: next, Delta: 1})
+	}
+	return out
+}
+
 func TestRealInfraWorkersPublishReactionChangesWrittenOutsideTheCore(t *testing.T) {
 	it := realInfra(t)
 	core := startCore(t, it, itFastEffects)
@@ -82,6 +93,9 @@ func TestRealInfraWorkersPublishReactionChangesWrittenOutsideTheCore(t *testing.
 		}
 		if err != nil || !changed {
 			t.Fatalf("change %d outside the core = %v, %v; want a change", n, changed, err)
+		}
+		if _, err := st.AddReactionCounts(t.Context(), key, emojiDeltas(step.prev, step.emoji)); err != nil {
+			t.Fatalf("count change %d outside the core: %v", n, err)
 		}
 		reactionID, countsID := pbconv.ReactionEventID(room, 0, seq, "bob", n), pbconv.ReactionCountsEventID(room, 0, seq, uint64(n))
 		evs := awaitLiveEvents(t, live, reactionID, countsID)

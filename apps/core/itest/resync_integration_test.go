@@ -56,6 +56,9 @@ func TestRealInfraResyncDrillRepublishesWritesTheReaderMissed(t *testing.T) {
 	if _, _, err := itReactions(st).SetReaction(t.Context(), reaction); err != nil {
 		t.Fatalf("set a reaction the reader missed: %v", err)
 	}
+	if _, err := st.AddReactionCounts(t.Context(), store.MsgKey{Room: room, Seq: 2}, emojiDeltas("", "👍")); err != nil {
+		t.Fatalf("count a reaction the reader missed: %v", err)
+	}
 	pin := domain.PinAction{Room: room, PV: 1, Tenant: itTenant, Op: domain.PinOpPin, Seq: 3, By: "migrator", At: marked}
 	if err := itPins(st).Append(t.Context(), pin); err != nil {
 		t.Fatalf("append a pin the reader missed: %v", err)
@@ -84,7 +87,7 @@ func TestRealInfraResyncDrillRepublishesWritesTheReaderMissed(t *testing.T) {
 	counted, err := st.Find(t.Context(), room, []store.MsgKey{{Room: room, Seq: 2}})
 	if err != nil || len(counted) != 1 || counted[0].Reactions.Version != 1 ||
 		!slices.Equal(counted[0].Reactions.Counts, []domain.ReactionCount{{Emoji: "👍", Count: 1}}) {
-		t.Fatalf("seq 2 after resync = %+v, %v; want the missed reaction counted at version 1", counted, err)
+		t.Fatalf("seq 2 after resync = %+v, %v; want the inline count of the missed reaction kept at version 1", counted, err)
 	}
 	pins, err := st.PinState(t.Context(), room)
 	if err != nil || pins.Version != 1 || len(pins.Pins) != 1 || pins.Pins[0].Seq != 3 || pins.Pins[0].PV != 1 {

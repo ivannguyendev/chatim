@@ -3,8 +3,10 @@ package store_test
 import (
 	"errors"
 	"math"
+	"slices"
 	"testing"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
@@ -43,5 +45,20 @@ func TestValidateCountDelta(t *testing.T) {
 		if err := store.ValidateCountDelta(d); !errors.Is(err, apperr.ErrInvalidArgument) {
 			t.Errorf("ValidateCountDelta(%d) = %v, want ErrInvalidArgument", d, err)
 		}
+	}
+}
+
+func TestAddEmojiDeltasFoldsCountsAndDropsEmptyOnes(t *testing.T) {
+	cur := []domain.ReactionCount{{Emoji: "👍", Count: 2}, {Emoji: "❤️", Count: 1}}
+	got := store.AddEmojiDeltas(cur, []store.EmojiDelta{{Emoji: "❤️", Delta: -1}, {Emoji: "😂", Delta: 1}, {Emoji: "👍", Delta: 1}})
+	want := []domain.ReactionCount{{Emoji: "👍", Count: 3}, {Emoji: "😂", Count: 1}}
+	if !slices.Equal(got, want) {
+		t.Fatalf("AddEmojiDeltas = %v, want %v", got, want)
+	}
+	if got := store.AddEmojiDeltas(nil, []store.EmojiDelta{{Emoji: "👍", Delta: -1}}); len(got) != 0 {
+		t.Fatalf("AddEmojiDeltas below zero = %v, want nothing", got)
+	}
+	if !slices.Equal(cur, []domain.ReactionCount{{Emoji: "👍", Count: 2}, {Emoji: "❤️", Count: 1}}) {
+		t.Fatalf("AddEmojiDeltas changed its input to %v", cur)
 	}
 }

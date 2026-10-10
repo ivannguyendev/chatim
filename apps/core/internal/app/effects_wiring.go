@@ -15,16 +15,16 @@ import (
 )
 
 type effectSet struct {
-	workers         *effects.Workers
-	msgCreated      *effects.MessageCreated
-	roomCreated     *effects.RoomCreated
-	editProjection  *effects.EditProjection
-	msgChanged      *effects.MessageChanged
-	reactionCounter *effects.ReactionCounter
-	reactionEvent   *effects.ReactionEvent
-	pinProjection   *effects.PinProjection
-	pinEvent        *effects.PinEvent
-	bookmarkEvent   *effects.BookmarkEvent
+	workers        *effects.Workers
+	msgCreated     *effects.MessageCreated
+	roomCreated    *effects.RoomCreated
+	editProjection *effects.EditProjection
+	msgChanged     *effects.MessageChanged
+	countEvent     *effects.CountEvent
+	reactionEvent  *effects.ReactionEvent
+	pinProjection  *effects.PinProjection
+	pinEvent       *effects.PinEvent
+	bookmarkEvent  *effects.BookmarkEvent
 
 	memberEvent       *effects.MemberEvent
 	memberCountEvent  *effects.MemberCountEvent
@@ -97,7 +97,7 @@ func (fx effectSet) registry(activity effects.Effect) effects.Registry {
 		store.MessageInserted:   {activity, fx.msgCreated.Effect()},
 		store.RoomInserted:      {fx.roomCreated.Effect()},
 		store.EditInserted:      {activity, fx.editProjection.Effect(), fx.msgChanged.Effect()},
-		store.ReactionChanged:   {activity, fx.reactionCounter.Effect(), fx.reactionEvent.Effect()},
+		store.ReactionChanged:   {activity, fx.reactionEvent.Effect(), fx.countEvent.Effect()},
 		store.PinInserted:       {activity, fx.pinProjection.Effect(), fx.pinEvent.Effect()},
 		store.MemberChanged:     {activity, fx.memberEvent.Effect(), fx.memberCountEvent.Effect()},
 		store.ReadChanged:       {fx.readEvent.Effect()},
@@ -112,26 +112,24 @@ func (fx effectSet) registry(activity effects.Effect) effects.Registry {
 func (fx effectSet) counters() map[string]effectCounters {
 	out := fx.memberCounters()
 	maps.Copy(out, map[string]effectCounters{
-		fx.msgCreated.Effect().Name:      {republished: fx.msgCreated.Republished, dropped: fx.msgCreated.Dropped},
-		fx.roomCreated.Effect().Name:     {republished: fx.roomCreated.Republished, dropped: fx.roomCreated.Dropped},
-		fx.msgChanged.Effect().Name:      {republished: fx.msgChanged.Republished, dropped: fx.msgChanged.Dropped},
-		fx.editProjection.Effect().Name:  {dropped: fx.editProjection.Dropped},
-		fx.reactionCounter.Effect().Name: {republished: fx.reactionCounter.Republished, dropped: fx.reactionCounter.Dropped},
-		fx.reactionEvent.Effect().Name:   {republished: fx.reactionEvent.Republished, dropped: fx.reactionEvent.Dropped},
-		fx.pinEvent.Effect().Name:        {republished: fx.pinEvent.Republished, dropped: fx.pinEvent.Dropped},
-		fx.pinProjection.Effect().Name:   {dropped: fx.pinProjection.Dropped},
-		fx.countRepair.Effect().Name:     {republished: fx.countRepair.Republished, dropped: fx.countRepair.Dropped},
-		fx.bookmarkEvent.Effect().Name:   {republished: fx.bookmarkEvent.Republished, dropped: fx.bookmarkEvent.Dropped},
+		fx.msgCreated.Effect().Name:     {republished: fx.msgCreated.Republished, dropped: fx.msgCreated.Dropped},
+		fx.roomCreated.Effect().Name:    {republished: fx.roomCreated.Republished, dropped: fx.roomCreated.Dropped},
+		fx.msgChanged.Effect().Name:     {republished: fx.msgChanged.Republished, dropped: fx.msgChanged.Dropped},
+		fx.editProjection.Effect().Name: {dropped: fx.editProjection.Dropped},
+		fx.countEvent.Effect().Name:     {republished: fx.countEvent.Republished, dropped: fx.countEvent.Dropped},
+		fx.reactionEvent.Effect().Name:  {republished: fx.reactionEvent.Republished, dropped: fx.reactionEvent.Dropped},
+		fx.pinEvent.Effect().Name:       {republished: fx.pinEvent.Republished, dropped: fx.pinEvent.Dropped},
+		fx.pinProjection.Effect().Name:  {dropped: fx.pinProjection.Dropped},
+		fx.countRepair.Effect().Name:    {republished: fx.countRepair.Republished, dropped: fx.countRepair.Dropped},
+		fx.bookmarkEvent.Effect().Name:  {republished: fx.bookmarkEvent.Republished, dropped: fx.bookmarkEvent.Dropped},
 	})
 	return out
 }
 
 func (fx effectSet) counterRepairs() map[string]func() uint64 {
 	return map[string]func() uint64{
-		pbconv.ReactionsCounter: func() uint64 {
-			return fx.reactionCounter.Repaired() + fx.countRepair.Repaired(pbconv.ReactionsCounter)
-		},
-		pbconv.RepliesCounter:  func() uint64 { return fx.countRepair.Repaired(pbconv.RepliesCounter) },
-		effects.MembersCounter: fx.memberCountRepair.Repaired,
+		pbconv.ReactionsCounter: func() uint64 { return fx.countRepair.Repaired(pbconv.ReactionsCounter) },
+		pbconv.RepliesCounter:   func() uint64 { return fx.countRepair.Repaired(pbconv.RepliesCounter) },
+		effects.MembersCounter:  fx.memberCountRepair.Repaired,
 	}
 }

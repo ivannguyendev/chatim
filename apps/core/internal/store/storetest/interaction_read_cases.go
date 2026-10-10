@@ -3,20 +3,17 @@ package storetest
 import (
 	"context"
 	"fmt"
-	"slices"
 	"testing"
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
-	"github.com/ivannguyendev/chatim/pkg/apperr"
 	"github.com/ivannguyendev/chatim/pkg/keys"
 )
 
 func reactionReadCases() []interactionCase {
 	return []interactionCase{
 		{"count returns live emojis of that message only, sorted by count then emoji", reactCount},
-		{"count fails with a stale read while a witness is behind", reactWitness},
 		{"between returns reactions and tombstones of a room by time then key", reactBetween},
 		{"between orders one instant by _id like the database: shorter keys first", reactBetweenKeyLength},
 		{"cancelled context writes nothing", reactCancelled},
@@ -46,26 +43,6 @@ func reactCount(t *testing.T, s interactionStores) {
 	assertCounts(t, s.interactions, msgKey(roomA, sideThread, 1), []domain.ReactionCount{{Emoji: "❤️", Count: 1}})
 	assertCounts(t, s.interactions, msgKey(roomA, mainThread, 9), nil)
 	assertStoredReaction(t, s.interactions, changed(reactionOf(roomA, mainThread, 1, "erin", "$e"), "", 1))
-}
-
-func reactWitness(t *testing.T, s interactionStores) {
-	key := msgKey(roomA, mainThread, 1)
-	mustSet(t, s.interactions, reactionOf(roomA, mainThread, 1, "alice", "👍"), true)
-	mustSet(t, s.interactions, reactionOf(roomA, mainThread, 1, "bob", "❤️"), true)
-	mustRemove(t, s.interactions, key, "bob", baseTime.Add(time.Second), true)
-	got, err := s.interactions.CountWitnessed(t.Context(), key, []store.Witness{{User: "alice", N: 1}, {User: "bob", N: 2}, {User: "alice", N: 1}})
-	if err != nil || !slices.Equal(got, []domain.ReactionCount{{Emoji: "👍", Count: 1}}) {
-		t.Fatalf("CountWitnessed = %v, %v; want [{👍 1}]", got, err)
-	}
-	for name, ws := range map[string][]store.Witness{
-		"behind":            {{User: "alice", N: 2}},
-		"missing":           {{User: "carol", N: 1}},
-		"one of two behind": {{User: "alice", N: 1}, {User: "bob", N: 3}},
-	} {
-		_, err := s.interactions.CountWitnessed(t.Context(), key, ws)
-		assertErrorIs(t, "CountWitnessed("+name+")", err, store.ErrStaleRead)
-		assertErrorIs(t, "CountWitnessed("+name+")", err, apperr.ErrUnavailable)
-	}
 }
 
 func reactBetween(t *testing.T, s interactionStores) {
@@ -128,8 +105,6 @@ func reactCancelled(t *testing.T, s interactionStores) {
 	assertErrorIs(t, "Get", err, context.Canceled)
 	_, err = s.interactions.CountReactions(ctx, key)
 	assertErrorIs(t, "CountReactions", err, context.Canceled)
-	_, err = s.interactions.CountWitnessed(ctx, key, nil)
-	assertErrorIs(t, "CountWitnessed", err, context.Canceled)
 	_, _, err = s.interactions.SetBookmark(ctx, bookmarkAt(roomA, mainThread, 1, "alice", true, 0))
 	assertErrorIs(t, "SetBookmark", err, context.Canceled)
 	_, err = s.interactions.AddReply(ctx, replyAt(roomA, 1, 2, "alice", 0))

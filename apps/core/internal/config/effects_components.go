@@ -20,7 +20,6 @@ func (p *parser) workerConfig(c *Config) {
 		Drain:      p.span("WORK_DRAIN", effects.DefaultDrain),
 		Poll:       c.Slot.Tick,
 	}
-	c.ReactionCountDelay = p.span("REACTION_COUNT_DELAY", effects.DefaultCountDelay)
 	c.MemberCountCheckDelay = p.span("MEMBER_COUNT_CHECK_DELAY", defaultMemberCountCheckDelay)
 	c.MessageCountCheckDelay = p.span("MESSAGE_COUNT_CHECK_DELAY", defaultMessageCountCheckDelay)
 }

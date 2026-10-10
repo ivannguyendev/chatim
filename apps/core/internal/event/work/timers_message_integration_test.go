@@ -14,7 +14,7 @@ func TestRealJetStreamFiresAMessageCountCheckOnTheRoomPartition(t *testing.T) {
 	room := roomsOnPartition(itTimerPartition, cfg.Partitions, 1)[0]
 	tm := itTimers(t, js, cfg, &testlog.Sink{})
 	armedAt := time.Now()
-	key := store.MsgKey{Room: room, Thread: 3, Seq: 9}
+	key := store.MsgKey{Room: room, Seq: 9}
 	if _, err := tm.ArmMessageCountCheck(t.Context(), key, "replies"); err != nil {
 		t.Fatalf("ArmMessageCountCheck: %v", err)
 	}
@@ -33,7 +33,7 @@ func TestRealJetStreamFiresAMessageCountCheckOnTheRoomPartition(t *testing.T) {
 		}
 	}
 	got, ok := kinds[store.MessageCountCheck]
-	if !ok || got.Room != room || got.Thread != 3 || got.Seq != 9 || got.User != "replies" || got.CommittedAt.Before(armedAt.Add(itTimerDelay).Truncate(time.Second)) {
+	if !ok || got.Room != room || got.Thread != 0 || got.Seq != 9 || got.User != "replies" || got.CommittedAt.Before(armedAt.Add(itTimerDelay).Truncate(time.Second)) {
 		t.Fatalf("fired records = %+v, want a replies count check of %d/3/9 stamped with its fire time", kinds, room)
 	}
 	if _, ok := kinds[store.MemberCountCheck]; !ok {

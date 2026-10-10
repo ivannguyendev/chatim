@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/counter"
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/pinproj"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/effects"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish/publishtest"
@@ -43,13 +42,11 @@ func TestEffectSetExportsEveryEffect(t *testing.T) {
 		roomCreated:    built(effects.NewRoomCreated(effects.RoomCreatedDeps{Rooms: rooms, JS: js}, effects.RoomCreatedConfig{SubjectRoot: "evt"}))(t),
 		editProjection: built(effects.NewEditProjection(effects.EditProjectionDeps{Edits: edits, Messages: msgs, Purger: edits}))(t),
 		msgChanged:     built(effects.NewMessageChanged(effects.MessageChangedDeps{Edits: edits, Messages: msgs, Rooms: rooms, JS: js}, events))(t),
-		reactionCounter: built(effects.NewReactionCounter(
-			effects.ReactionCounterDeps{Messages: msgs, Counter: built(counter.New(msgs, reactions))(t), Rooms: rooms, JS: js},
-			effects.ReactionCounterConfig{SubjectRoot: "evt"}))(t),
-		reactionEvent: built(effects.NewReactionEvent(effects.ReactionEventDeps{Reactions: reactions, Rooms: rooms, JS: js}, events))(t),
-		pinProjection: built(effects.NewPinProjection(built(pinproj.New(pins, rooms))(t)))(t),
-		pinEvent:      built(effects.NewPinEvent(effects.PinEventDeps{Pins: pins, Messages: msgs, Rooms: rooms, JS: js}, events))(t),
-		bookmarkEvent: built(effects.NewBookmarkEvent(effects.BookmarkEventDeps{Bookmarks: reactions, Rooms: rooms, JS: js}, events))(t),
+		countEvent:     built(effects.NewCountEvent(effects.CountEventDeps{Messages: msgs, Rooms: rooms, JS: js}, events))(t),
+		reactionEvent:  built(effects.NewReactionEvent(effects.ReactionEventDeps{Reactions: reactions, Rooms: rooms, JS: js}, events))(t),
+		pinProjection:  built(effects.NewPinProjection(built(pinproj.New(pins, rooms))(t)))(t),
+		pinEvent:       built(effects.NewPinEvent(effects.PinEventDeps{Pins: pins, Messages: msgs, Rooms: rooms, JS: js}, events))(t),
+		bookmarkEvent:  built(effects.NewBookmarkEvent(effects.BookmarkEventDeps{Bookmarks: reactions, Rooms: rooms, JS: js}, events))(t),
 	}
 	withMemberEffects(t, &fx, rooms, js)
 	fx.countRepair = built(effects.NewCountRepair(
@@ -57,9 +54,9 @@ func TestEffectSetExportsEveryEffect(t *testing.T) {
 		effects.CountRepairConfig{SubjectRoot: "evt"}))(t)
 	counters := fx.counters()
 	want := []string{
-		effects.BookmarkEventName, effects.CountRepairName, effects.EditProjectionName, effects.HiddenEventName, effects.HistoryClearedEventName, effects.MemberCountEventName,
+		effects.BookmarkEventName, effects.CountEventName, effects.CountRepairName, effects.EditProjectionName, effects.HiddenEventName, effects.HistoryClearedEventName, effects.MemberCountEventName,
 		effects.MemberCountRepairName, effects.MemberEventName, effects.MessageChangedName, effects.MessageCreatedName,
-		effects.PinEventName, effects.PinProjectionName, effects.ReactionCounterName, effects.ReactionEventName,
+		effects.PinEventName, effects.PinProjectionName, effects.ReactionEventName,
 		effects.ReadEventName, effects.RoomCreatedName,
 	}
 	if got := slices.Sorted(maps.Keys(counters)); !slices.Equal(got, want) {
@@ -113,6 +110,7 @@ func assertMemberRegistry(t *testing.T, reg effects.Registry) {
 		store.HistoryCleared:    {effects.HistoryClearedEventName},
 		store.MemberCountCheck:  {effects.MemberCountRepairName},
 		store.MessageCountCheck: {effects.CountRepairName},
+		store.ReactionChanged:   {effects.RoomActivityName, effects.ReactionEventName, effects.CountEventName},
 		store.BookmarkChanged:   {effects.RoomActivityName, effects.BookmarkEventName},
 	}
 	for kind, names := range want {

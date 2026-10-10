@@ -101,8 +101,6 @@ func reactInvalid(t *testing.T, s interactionStores) {
 	assertErrorIs(t, "Remove(bad user)", err, apperr.ErrInvalidArgument)
 	_, err = s.interactions.CountReactions(t.Context(), msgKey(roomA, mainThread, 0))
 	assertErrorIs(t, "CountReactions(zero seq)", err, apperr.ErrInvalidArgument)
-	_, err = s.interactions.CountWitnessed(t.Context(), msgKey(roomA, mainThread, 0), nil)
-	assertErrorIs(t, "CountWitnessed(zero seq)", err, apperr.ErrInvalidArgument)
 	for _, limit := range []int{0, store.MaxInteractionScan + 1} {
 		_, err := s.interactions.Between(t.Context(), roomA, keys.ReactionKind, baseTime, baseTime.Add(time.Hour), limit)
 		assertErrorIs(t, "Between(bad limit)", err, apperr.ErrInvalidArgument)

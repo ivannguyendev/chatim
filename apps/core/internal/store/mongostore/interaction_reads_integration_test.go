@@ -67,9 +67,6 @@ func TestReactionCountIsCoveredByTheInteractionIndex(t *testing.T) {
 	if got, err := s.Interactions().CountReactions(t.Context(), key); err != nil || !slices.Equal(got, want) {
 		t.Fatalf("CountReactions = %v, %v; want %v", got, err, want)
 	}
-	if got, err := s.Interactions().CountWitnessed(t.Context(), key, []store.Witness{{User: "alice", N: 1}}); err != nil || !slices.Equal(got, want) {
-		t.Fatalf("CountWitnessed = %v, %v; want %v", got, err, want)
-	}
 }
 
 func TestRepliesAndBookmarksReadThroughTheirKeys(t *testing.T) {

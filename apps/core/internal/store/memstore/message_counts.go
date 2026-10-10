@@ -26,7 +26,7 @@ func (s *Messages) AddReactionCounts(ctx context.Context, key store.MsgKey, delt
 	if !ok {
 		return domain.ReactionSummary{}, domain.ErrMessageNotFound
 	}
-	m.Reactions = domain.ReactionSummary{Counts: addCounts(m.Reactions.Counts, deltas), Version: m.Reactions.Version + 1}
+	m.Reactions = domain.ReactionSummary{Counts: store.AddEmojiDeltas(m.Reactions.Counts, deltas), Version: m.Reactions.Version + 1}
 	return domain.ReactionSummary{Counts: slices.Clone(m.Reactions.Counts), Version: m.Reactions.Version}, nil
 }
 
@@ -77,24 +77,6 @@ func (s *Messages) messageLocked(key store.MsgKey) (*domain.Message, bool) {
 		return nil, false
 	}
 	return &line[i], true
-}
-
-func addCounts(cur []domain.ReactionCount, deltas []store.EmojiDelta) []domain.ReactionCount {
-	sums := make(map[string]int64, len(cur)+len(deltas))
-	for _, c := range cur {
-		sums[c.Emoji] = int64(c.Count)
-	}
-	for _, d := range deltas {
-		sums[d.Emoji] += int64(d.Delta)
-	}
-	out := make([]domain.ReactionCount, 0, len(sums))
-	for e, n := range sums {
-		if n > 0 {
-			out = append(out, domain.ReactionCount{Emoji: e, Count: clampCount(n)})
-		}
-	}
-	domain.SortReactionCounts(out)
-	return out
 }
 
 func clampCount(n int64) uint32 {

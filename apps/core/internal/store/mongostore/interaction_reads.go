@@ -32,10 +32,6 @@ func (r *Interactions) CountReactions(ctx context.Context, key store.MsgKey) ([]
 	if err := key.Validate(); err != nil {
 		return nil, err
 	}
-	return r.countLive(ctx, key)
-}
-
-func (r *Interactions) countLive(ctx context.Context, key store.MsgKey) ([]domain.ReactionCount, error) {
 	cur, err := r.coll.Aggregate(ctx, countPipeline(key))
 	if err != nil {
 		return nil, fmt.Errorf("count reactions of %d/%d/%d: %w", key.Room, key.Thread, key.Seq, err)

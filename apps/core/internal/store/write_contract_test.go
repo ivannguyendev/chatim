@@ -45,7 +45,6 @@ var portMethods = map[string]string{
 	"Interactions.RemoveReaction":    "version-bump",
 	"Interactions.GetReaction":       "read",
 	"Interactions.CountReactions":    "read",
-	"Interactions.CountWitnessed":    "read",
 	"Interactions.SetBookmark":       "version-bump",
 	"Interactions.GetBookmark":       "read",
 	"Interactions.Bookmarks":         "read",

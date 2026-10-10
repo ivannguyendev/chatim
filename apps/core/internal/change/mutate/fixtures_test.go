@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/counter"
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/pinproj"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
@@ -62,6 +61,7 @@ type rig struct {
 	events    *recordingEvents
 	now       time.Time
 	memberParts
+	reactionParts
 }
 
 func newRig(t *testing.T, policy access.Policy) *rig {
@@ -81,6 +81,7 @@ func newRig(t *testing.T, policy access.Policy) *rig {
 		t.Fatalf("create room: %v", err)
 	}
 	rg.memberParts = newMemberParts(t, rg.rooms)
+	rg.reactionParts = newReactionParts(rg.msgs, rg.reactions)
 	rg.m = rg.build(t, rg.deps(t, policy))
 	return rg
 }
@@ -91,17 +92,13 @@ func (rg *rig) deps(t *testing.T, policy access.Policy) mutate.Deps {
 	if err != nil {
 		t.Fatalf("NewChecker: %v", err)
 	}
-	counts, err := counter.New(rg.msgs, rg.reactions)
-	if err != nil {
-		t.Fatalf("counter.New: %v", err)
-	}
 	projector, err := pinproj.New(rg.pins, rg.rooms)
 	if err != nil {
 		t.Fatalf("pinproj.New: %v", err)
 	}
 	return mutate.Deps{
 		Access: checker, Messages: rg.msgs, Edits: rg.edits, Hidden: rg.hidden, Rooms: rg.rooms, Events: rg.events,
-		Interactions: rg.reactions, Counter: counts, Pins: rg.pins, Projector: projector, Now: func() time.Time { return rg.now },
+		Interactions: rg.writes, Counts: rg.counts, CountTimers: rg.msgTimers, Pins: rg.pins, Projector: projector, Now: func() time.Time { return rg.now },
 		Members: rg.members, Requests: rg.requests, Forget: rg.forgets, Timers: rg.timers, Reads: rg.rooms, NewRequestID: rg.requestIDs.next,
 	}
 }

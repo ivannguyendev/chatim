@@ -9,7 +9,6 @@ import (
 
 	"github.com/nats-io/nats.go"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/counter"
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/pinproj"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
@@ -54,10 +53,11 @@ func mutatorWithoutEvents(t *testing.T, it *itInfra, core itCore, members mutate
 	st, w := itStore(it, core), core.cfg.Work
 	return built(mutate.New(mutate.Deps{
 		Access: built(access.NewChecker(st, access.DefaultPolicy{}))(t), Messages: st, Edits: st, Hidden: st.Hidden(), Rooms: st,
-		Events: droppedEvents{}, Interactions: st.Interactions(), Counter: built(counter.New(st, st.Interactions()))(t), Pins: st.Pins(),
+		Events: droppedEvents{}, Interactions: st.Interactions(), Counts: st, Pins: st.Pins(),
 		Projector: built(pinproj.New(st.Pins(), st))(t), Limits: core.cfg.Limits, Members: members, Requests: freshRequests{},
 		Forget: noForget{}, Reads: st, Log: slog.New(slog.DiscardHandler),
-		Timers: built(work.NewTimers(it.js, w.Name, w.SubjectRoot, w.Partitions, core.cfg.MemberCountCheckDelay))(t),
+		Timers:      built(work.NewTimers(it.js, w.Name, w.SubjectRoot, w.Partitions, core.cfg.MemberCountCheckDelay))(t),
+		CountTimers: built(work.NewTimers(it.js, w.Name, w.SubjectRoot, w.Partitions, core.cfg.MessageCountCheckDelay))(t),
 	}))(t)
 }
 

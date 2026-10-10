@@ -45,3 +45,21 @@ func ValidateCountDelta(delta int) error {
 	}
 	return nil
 }
+
+func AddEmojiDeltas(cur []domain.ReactionCount, deltas []EmojiDelta) []domain.ReactionCount {
+	sums := make(map[string]int64, len(cur)+len(deltas))
+	for _, c := range cur {
+		sums[c.Emoji] = int64(c.Count)
+	}
+	for _, d := range deltas {
+		sums[d.Emoji] += int64(d.Delta)
+	}
+	out := make([]domain.ReactionCount, 0, len(sums))
+	for e, n := range sums {
+		if n > 0 {
+			out = append(out, domain.ReactionCount{Emoji: e, Count: uint32(min(n, math.MaxUint32))})
+		}
+	}
+	domain.SortReactionCounts(out)
+	return out
+}

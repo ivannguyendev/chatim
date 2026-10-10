@@ -11,10 +11,6 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-type CounterToucher interface {
-	Touch(ctx context.Context, key store.MsgKey, cur domain.ReactionSummary, witnesses []store.Witness, tries int) (domain.ReactionSummary, bool, error)
-}
-
 type ReactCmd struct {
 	Tenant, User      string
 	Room, Thread, Seq uint64
@@ -46,15 +42,27 @@ func (m *Mutator) React(ctx context.Context, c ReactCmd) (ReactResult, error) {
 	if c.Emoji != "" && msg.Deleted {
 		return ReactResult{}, domain.ErrMessageDeleted
 	}
+	timer, err := m.armReactionCount(ctx, key)
+	if err != nil {
+		return ReactResult{}, err
+	}
 	doc, changed, err := m.writeReaction(ctx, c, key)
 	if err != nil {
 		return ReactResult{}, err
 	}
+	settle, done := settling(ctx)
+	defer done()
 	if !changed {
+		m.d.CountTimers.Disarm(settle, timer)
 		return ReactResult{Change: doc.N, Reactions: msg.Reactions}, nil
 	}
-	_ = m.d.Events.Enqueue(key.Room, []*chatimv1.Event{pbconv.ReactionChanged(grant.Room.Type, doc)})
-	summary := m.touch(ctx, grant.Room.Type, msg, store.Witness{User: c.User, N: doc.N})
+	events := []*chatimv1.Event{pbconv.ReactionChanged(grant.Room.Type, doc)}
+	summary, counted := m.countReaction(settle, msg.Reactions, key, timer, reactionDeltas(doc))
+	if counted {
+		msg.Reactions = summary
+		events = append(events, pbconv.CountsChanged(grant.Room.Type, msg, m.now()))
+	}
+	_ = m.d.Events.Enqueue(key.Room, events)
 	return ReactResult{Change: doc.N, Reactions: summary}, nil
 }
 
@@ -67,17 +75,4 @@ func (m *Mutator) writeReaction(ctx context.Context, c ReactCmd, key store.MsgKe
 	return m.d.Interactions.SetReaction(ctx, domain.Reaction{
 		Room: key.Room, Thread: key.Thread, Seq: key.Seq, Tenant: c.Tenant, User: c.User, Emoji: c.Emoji, At: m.now(),
 	})
-}
-
-func (m *Mutator) touch(ctx context.Context, typ domain.RoomType, msg domain.Message, w store.Witness) domain.ReactionSummary {
-	key := store.KeyOf(msg)
-	summary, bumped, err := m.d.Counter.Touch(ctx, key, msg.Reactions, []store.Witness{w}, FastTouchTries)
-	if err != nil {
-		return msg.Reactions
-	}
-	if bumped {
-		msg.Reactions = summary
-		_ = m.d.Events.Enqueue(key.Room, []*chatimv1.Event{pbconv.CountsChanged(typ, msg, m.now())})
-	}
-	return summary
 }

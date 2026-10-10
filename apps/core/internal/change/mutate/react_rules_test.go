@@ -7,34 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/counter"
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
-	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
-
-type touchCall struct {
-	key       store.MsgKey
-	cur       domain.ReactionSummary
-	witnesses []store.Witness
-	tries     int
-}
-
-type scriptedCounter struct {
-	inner mutate.CounterToucher
-	err   error
-	calls []touchCall
-}
-
-func (c *scriptedCounter) Touch(ctx context.Context, k store.MsgKey, cur domain.ReactionSummary, ws []store.Witness, tries int) (domain.ReactionSummary, bool, error) {
-	c.calls = append(c.calls, touchCall{key: k, cur: cur, witnesses: slices.Clone(ws), tries: tries})
-	if c.err != nil {
-		return domain.ReactionSummary{}, false, c.err
-	}
-	return c.inner.Touch(ctx, k, cur, ws, tries)
-}
 
 func TestReactAcceptsOnlyTheConfiguredEmojis(t *testing.T) {
 	rg := newRig(t, nil)
@@ -88,51 +65,70 @@ func TestReactRejectsBadInputBeforeWriting(t *testing.T) {
 	if _, events := rg.events.list(); len(events) != 0 {
 		t.Fatalf("refused reactions enqueued %v", events)
 	}
+	if calls := rg.reactCalls.list(); len(calls) != 0 {
+		t.Fatalf("refused reactions reached %v", calls)
+	}
 }
 
-func TestReactTouchesTheCounterWithItsOwnWrite(t *testing.T) {
+func TestReactRefusesWithoutWritingWhenTheTimerIsNotArmed(t *testing.T) {
 	rg := newRig(t, nil)
-	d := rg.deps(t, nil)
-	spy := &scriptedCounter{inner: d.Counter}
-	d.Counter = spy
-	rg.m = rg.build(t, d)
 	rg.send(t, 1, "alice", "hi")
-	rg.mustReact(t, react("bob", 1, "👍"))
-	rg.mustReact(t, react("bob", 1, "❤️"))
-	rg.mustReact(t, react("bob", 1, "❤️"))
-	if len(spy.calls) != 2 {
-		t.Fatalf("touched %d times, want 2 (none for the no-op)", len(spy.calls))
+	rg.msgTimers.err = errBoom
+	if _, err := rg.m.React(t.Context(), react("bob", 1, "👍")); !errors.Is(err, domain.ErrRetryLater) || !errors.Is(err, apperr.ErrUnavailable) {
+		t.Fatalf("React without a timer = %v, want ErrRetryLater (UNAVAILABLE)", err)
 	}
-	last := spy.calls[1]
-	if last.key != key(1) || last.tries != mutate.FastTouchTries || !slices.Equal(last.witnesses, []store.Witness{{User: "bob", N: 2}}) ||
-		!sameSummary(last.cur, counts(1, domain.ReactionCount{Emoji: "👍", Count: 1})) {
-		t.Fatalf("touch = %+v, want seq 1, bob's change 2 as the witness, %d tries and the summary read before the write", last, mutate.FastTouchTries)
+	if calls := rg.reactCalls.list(); !slices.Equal(calls, []string{"arm"}) {
+		t.Fatalf("calls = %v, want only the failed arm", calls)
+	}
+	if _, found := rg.reaction(t, 1, "bob"); found || rg.stored(t, 1).Reactions.Version != 0 {
+		t.Fatalf("a reaction or count was written without a timer")
+	}
+	if _, events := rg.events.list(); len(events) != 0 {
+		t.Fatalf("enqueued %v without a timer", events)
 	}
 }
 
-func TestATouchFailureDoesNotFailTheReaction(t *testing.T) {
-	for _, cause := range []error{store.ErrStaleRead, counter.ErrContended, errBoom} {
-		rg := newRig(t, nil)
-		d := rg.deps(t, nil)
-		d.Counter = &scriptedCounter{err: cause}
-		rg.m = rg.build(t, d)
-		rg.send(t, 1, "alice", "hi")
-		got := rg.mustReact(t, react("bob", 1, "👍"))
-		if got.Change != 1 || !sameSummary(got.Reactions, domain.ReactionSummary{}) {
-			t.Fatalf("%v: React = %+v, want the write acked with the summary it read", cause, got)
-		}
-		if s := rg.stored(t, 1); s.Reactions.Version != 0 {
-			t.Fatalf("%v: summary %+v written without a touch", cause, s.Reactions)
-		}
-		if _, events := rg.events.list(); len(events) != 1 || events[0].GetReactionChanged() == nil {
-			t.Fatalf("%v: events = %v, want only reaction_changed", cause, events)
-		}
+func TestACountFailureKeepsTheTimerAndStillAcksTheReaction(t *testing.T) {
+	rg := newRig(t, nil)
+	rg.send(t, 1, "alice", "hi")
+	rg.mustReact(t, react("carol", 1, "👍"))
+	rg.counts.err = errBoom
+	got := rg.mustReact(t, react("bob", 1, "👍"))
+	want := counts(1, domain.ReactionCount{Emoji: "👍", Count: 2})
+	if got.Change != 1 || !sameSummary(got.Reactions, want) {
+		t.Fatalf("React = %+v, want change 1 with %+v folded on the summary it read", got, want)
+	}
+	if calls := rg.reactCalls.list(); !slices.Equal(calls[4:], []string{"arm", "write", "count"}) || rg.msgTimers.pending() != 1 {
+		t.Fatalf("calls = %v, pending %d; want the timer left armed after the failed count", calls, rg.msgTimers.pending())
+	}
+	if s := rg.stored(t, 1); s.Reactions.Version != 1 {
+		t.Fatalf("summary %+v changed by a failed count", s.Reactions)
+	}
+	if _, events := rg.events.list(); len(events) != 3 || events[2].GetReactionChanged() == nil {
+		t.Fatalf("events = %v, want only reaction_changed for bob", events)
 	}
 	refused := newRig(t, nil)
 	refused.events.err = errBoom
 	refused.send(t, 1, "alice", "hi")
 	if got := refused.mustReact(t, react("bob", 1, "👍")); got.Change != 1 || got.Reactions.Version != 1 {
 		t.Fatalf("React with refused events = %+v, want change 1 counted", got)
+	}
+}
+
+func TestAFailedReactionWriteKeepsTheTimerForAnUnknownOutcome(t *testing.T) {
+	rg := newRig(t, nil)
+	d := rg.deps(t, nil)
+	d.Interactions = loggedWrites{Interactions: rg.reactions, log: rg.reactCalls, err: errBoom}
+	rg.m = rg.build(t, d)
+	rg.send(t, 1, "alice", "hi")
+	if _, err := rg.m.React(t.Context(), react("bob", 1, "👍")); !errors.Is(err, errBoom) {
+		t.Fatalf("React = %v, want the store error", err)
+	}
+	if calls := rg.reactCalls.list(); !slices.Equal(calls, []string{"arm", "write"}) || rg.msgTimers.pending() != 1 {
+		t.Fatalf("calls = %v, pending %d; want the timer kept to recount a write that may have landed", calls, rg.msgTimers.pending())
+	}
+	if _, events := rg.events.list(); len(events) != 0 {
+		t.Fatalf("enqueued %v after a failed write", events)
 	}
 }
 

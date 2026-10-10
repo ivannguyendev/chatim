@@ -15,22 +15,22 @@ import (
 func TestArmMessageCountCheckPublishesOnItsOwnTimerSubject(t *testing.T) {
 	js := &fakeTimerJS{}
 	tm := newTestTimers(t, js, &testlog.Sink{})
-	key := store.MsgKey{Room: 777, Thread: 3, Seq: 9}
+	key := store.MsgKey{Room: 777, Seq: 9}
 	timer, err := tm.ArmMessageCountCheck(t.Context(), key, "replies")
 	if err != nil || timer != (Timer{Seq: 41}) {
 		t.Fatalf("ArmMessageCountCheck = %+v, %v; want the PubAck sequence 41", timer, err)
 	}
-	if len(js.msgs) != 1 || js.msgs[0].Subject != "work.timer.777.3.9.replies.42" || js.optCounts[0] != 2 {
-		t.Fatalf("published %d msgs, first on %q with %v options; want one on work.timer.777.3.9.replies.42 with the schedule time and target", len(js.msgs), js.msgs[0].Subject, js.optCounts)
+	if len(js.msgs) != 1 || js.msgs[0].Subject != "work.timer.777.0.9.replies.42" || js.optCounts[0] != 2 {
+		t.Fatalf("published %d msgs, first on %q with %v options; want one on work.timer.777.0.9.replies.42 with the schedule time and target", len(js.msgs), js.msgs[0].Subject, js.optCounts)
 	}
 	fire := time.Date(2026, 10, 8, 10, 0, 6, 0, time.UTC)
 	r, err := Decode(js.msgs[0].Data)
-	want := Record{Kind: store.MessageCountCheck, Room: 777, Thread: 3, Seq: 9, Version: 42, User: "replies", CommittedAt: fire}
+	want := Record{Kind: store.MessageCountCheck, Room: 777, Seq: 9, Version: 42, User: "replies", CommittedAt: fire}
 	if err != nil || r != want {
 		t.Fatalf("payload = %+v, %v; want %+v", r, err, want)
 	}
-	if id := js.msgs[0].Header.Get(jetstream.MsgIDHeader); id != "q:777-3-9-replies-42" {
-		t.Fatalf("Nats-Msg-Id = %q, want q:777-3-9-replies-42", id)
+	if id := js.msgs[0].Header.Get(jetstream.MsgIDHeader); id != "q:777-0-9-replies-42" {
+		t.Fatalf("Nats-Msg-Id = %q, want q:777-0-9-replies-42", id)
 	}
 	if _, err := tm.ArmMessageCountCheck(t.Context(), store.MsgKey{Room: 777, Seq: 9}, "reactions"); err != nil || js.msgs[1].Subject != "work.timer.777.0.9.reactions.42" {
 		t.Fatalf("reactions timer = %v on %q, want work.timer.777.0.9.reactions.42", err, js.msgs[1].Subject)
@@ -61,6 +61,7 @@ func TestArmMessageCountCheckRefusesBadKeysAndCounters(t *testing.T) {
 	}{
 		"zero room":       {store.MsgKey{Seq: 9}, "reactions"},
 		"zero seq":        {store.MsgKey{Room: 777}, "reactions"},
+		"thread":          {store.MsgKey{Room: 777, Thread: 3, Seq: 9}, "reactions"},
 		"members counter": {good, "members"},
 		"empty counter":   {good, ""},
 		"dotted counter":  {good, "replies.x"},

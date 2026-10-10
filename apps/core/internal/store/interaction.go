@@ -12,12 +12,7 @@ import (
 
 const MaxInteractionScan = 1000
 
-var ErrStaleRead = fmt.Errorf("read is behind a witnessed write: %w", apperr.ErrUnavailable)
-
-type Witness struct {
-	User string
-	N    uint32
-}
+var ErrStaleRead = fmt.Errorf("read is behind a known write: %w", apperr.ErrUnavailable)
 
 type Interaction struct {
 	Kind  keys.InteractionKind
@@ -38,7 +33,6 @@ type Interactions interface {
 	RemoveReaction(ctx context.Context, key MsgKey, user string, at time.Time) (domain.Reaction, bool, error)
 	GetReaction(ctx context.Context, key MsgKey, user string) (domain.Reaction, bool, error)
 	CountReactions(ctx context.Context, key MsgKey) ([]domain.ReactionCount, error)
-	CountWitnessed(ctx context.Context, key MsgKey, witnesses []Witness) ([]domain.ReactionCount, error)
 	SetBookmark(ctx context.Context, b domain.Bookmark) (domain.Bookmark, bool, error)
 	GetBookmark(ctx context.Context, key MsgKey, user string) (domain.Bookmark, bool, error)
 	Bookmarks(ctx context.Context, tenant, user string, before BookmarkCursor, limit int) ([]domain.Bookmark, error)

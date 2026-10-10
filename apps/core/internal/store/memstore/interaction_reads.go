@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"cmp"
 	"context"
-	"fmt"
 	"slices"
 	"time"
 
@@ -14,10 +13,6 @@ import (
 )
 
 func (s *Interactions) CountReactions(ctx context.Context, key store.MsgKey) ([]domain.ReactionCount, error) {
-	return s.CountWitnessed(ctx, key, nil)
-}
-
-func (s *Interactions) CountWitnessed(ctx context.Context, key store.MsgKey, witnesses []store.Witness) ([]domain.ReactionCount, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -26,11 +21,6 @@ func (s *Interactions) CountWitnessed(ctx context.Context, key store.MsgKey, wit
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	for _, w := range witnesses {
-		if cur, ok := s.reactions[userKey{key: key, user: w.User}]; !ok || cur.N < w.N {
-			return nil, fmt.Errorf("witness %q at change %d on %+v: %w", w.User, w.N, key, store.ErrStaleRead)
-		}
-	}
 	by := map[string]uint32{}
 	for k, r := range s.reactions {
 		if k.key == key && r.Emoji != "" {

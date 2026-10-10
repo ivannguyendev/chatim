@@ -13,7 +13,7 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-var errMissingDeps = fmt.Errorf("%w: mutator needs access, messages, edits, hidden, rooms, events, reactions, a counter, pins, a pin projector, members, request dedupe, a member forgetter, member count timers and read positions", apperr.ErrInvalidArgument)
+var errMissingDeps = fmt.Errorf("%w: mutator needs access, messages, edits, hidden, rooms, events, reactions, reaction counts, message count timers, pins, a pin projector, members, request dedupe, a member forgetter, member count timers and read positions", apperr.ErrInvalidArgument)
 
 type Messages interface {
 	Find(ctx context.Context, room uint64, keys []store.MsgKey) ([]domain.Message, error)
@@ -37,7 +37,8 @@ type Deps struct {
 	Rooms        HistoryClearer
 	Events       EventPublisher
 	Interactions store.Interactions
-	Counter      CounterToucher
+	Counts       ReactionCounts
+	CountTimers  MessageCountTimers
 	Pins         store.Pins
 	Projector    PinProjector
 	Limits       Limits
@@ -71,7 +72,7 @@ type Mutator struct {
 
 func New(d Deps) (*Mutator, error) {
 	if d.Access == nil || d.Messages == nil || d.Edits == nil || d.Hidden == nil || d.Rooms == nil || d.Events == nil ||
-		d.Interactions == nil || d.Counter == nil || d.Pins == nil || d.Projector == nil ||
+		d.Interactions == nil || d.Counts == nil || d.CountTimers == nil || d.Pins == nil || d.Projector == nil ||
 		d.Members == nil || d.Requests == nil || d.Forget == nil || d.Timers == nil || d.Reads == nil {
 		return nil, errMissingDeps
 	}

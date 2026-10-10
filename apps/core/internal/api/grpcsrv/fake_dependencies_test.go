@@ -6,13 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/counter"
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/pinproj"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
+	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
@@ -35,6 +35,10 @@ type nopTimers struct{}
 
 func (nopTimers) ArmMemberCountCheck(context.Context, uint64) (work.Timer, error) {
 	return work.Timer{Seq: 1}, nil
+}
+
+func (nopTimers) ArmMessageCountCheck(context.Context, store.MsgKey, string) (work.Timer, error) {
+	return work.Timer{}, nil
 }
 
 func (nopTimers) Disarm(context.Context, work.Timer) {}
@@ -80,10 +84,6 @@ func newMutator(t *testing.T, rg *rig, o options) *mutate.Mutator {
 	if err != nil {
 		t.Fatalf("NewChecker: %v", err)
 	}
-	counts, err := counter.New(rg.msgs, rg.reactions)
-	if err != nil {
-		t.Fatalf("counter.New: %v", err)
-	}
 	projector, err := pinproj.New(rg.pins, rg.rooms)
 	if err != nil {
 		t.Fatalf("pinproj.New: %v", err)
@@ -102,7 +102,7 @@ func newMutator(t *testing.T, rg *rig, o options) *mutate.Mutator {
 	}
 	m, err := mutate.New(mutate.Deps{
 		Access: checker, Messages: rg.msgs, Edits: rg.edits, Hidden: rg.hidden, Rooms: rg.rooms, Events: events, Now: o.now,
-		Interactions: rg.reactions, Counter: counts, Pins: rg.pins, Projector: projector, Limits: o.limits,
+		Interactions: rg.reactions, Counts: rg.msgs, CountTimers: nopTimers{}, Pins: rg.pins, Projector: projector, Limits: o.limits,
 		Members: rg.rooms, Requests: requests, Forget: forget, Timers: nopTimers{}, Reads: rg.rooms,
 	})
 	if err != nil {

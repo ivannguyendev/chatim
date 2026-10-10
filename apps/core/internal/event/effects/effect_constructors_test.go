@@ -12,9 +12,8 @@ import (
 
 func TestNewReactionAndPinEffectsRejectBadInput(t *testing.T) {
 	js, msgs, mem, reactions, pins := &publishtest.JetStream{}, memstore.NewMessages(), memstore.NewRooms(), memstore.NewInteractions(), memstore.NewPins()
-	counts, events, noRoot := &spyCounter{}, effects.MessageChangedConfig{SubjectRoot: "evt"}, effects.MessageChangedConfig{}
-	count := effects.ReactionCounterConfig{SubjectRoot: "evt"}
-	counterDeps := effects.ReactionCounterDeps{Messages: msgs, Counter: counts, Rooms: mem, JS: js}
+	events, noRoot := effects.MessageChangedConfig{SubjectRoot: "evt"}, effects.MessageChangedConfig{}
+	countDeps := effects.CountEventDeps{Messages: msgs, Rooms: mem, JS: js}
 	eventDeps := effects.ReactionEventDeps{Reactions: reactions, Rooms: mem, JS: js}
 	pinDeps := effects.PinEventDeps{Pins: pins, Messages: msgs, Rooms: mem, JS: js}
 	bad := map[string]func() error{
@@ -31,30 +30,19 @@ func TestNewReactionAndPinEffectsRejectBadInput(t *testing.T) {
 			return err
 		},
 		"reaction_event without a root": func() error { _, err := effects.NewReactionEvent(eventDeps, noRoot); return err },
-		"reaction_counter without messages": func() error {
-			_, err := effects.NewReactionCounter(effects.ReactionCounterDeps{Counter: counts, Rooms: mem, JS: js}, count)
+		"count_event without messages": func() error {
+			_, err := effects.NewCountEvent(effects.CountEventDeps{Rooms: mem, JS: js}, events)
 			return err
 		},
-		"reaction_counter without a counter": func() error {
-			_, err := effects.NewReactionCounter(effects.ReactionCounterDeps{Messages: msgs, Rooms: mem, JS: js}, count)
+		"count_event without rooms": func() error {
+			_, err := effects.NewCountEvent(effects.CountEventDeps{Messages: msgs, JS: js}, events)
 			return err
 		},
-		"reaction_counter without rooms": func() error {
-			_, err := effects.NewReactionCounter(effects.ReactionCounterDeps{Messages: msgs, Counter: counts, JS: js}, count)
+		"count_event without js": func() error {
+			_, err := effects.NewCountEvent(effects.CountEventDeps{Messages: msgs, Rooms: mem}, events)
 			return err
 		},
-		"reaction_counter without js": func() error {
-			_, err := effects.NewReactionCounter(effects.ReactionCounterDeps{Messages: msgs, Counter: counts, Rooms: mem}, count)
-			return err
-		},
-		"reaction_counter without a root": func() error {
-			_, err := effects.NewReactionCounter(counterDeps, effects.ReactionCounterConfig{})
-			return err
-		},
-		"reaction_counter with negative tries": func() error {
-			_, err := effects.NewReactionCounter(counterDeps, effects.ReactionCounterConfig{SubjectRoot: "evt", Tries: -1})
-			return err
-		},
+		"count_event without a root":         func() error { _, err := effects.NewCountEvent(countDeps, noRoot); return err },
 		"pin_projection without a projector": func() error { _, err := effects.NewPinProjection(nil); return err },
 		"pin_event without pins": func() error {
 			_, err := effects.NewPinEvent(effects.PinEventDeps{Messages: msgs, Rooms: mem, JS: js}, events)
@@ -79,9 +67,9 @@ func TestNewReactionAndPinEffectsRejectBadInput(t *testing.T) {
 			t.Fatalf("%s = %v, want ErrInvalidArgument", name, err)
 		}
 	}
-	ctr, err := effects.NewReactionCounter(counterDeps, count)
-	if err != nil || ctr.Effect().Delay != effects.DefaultCountDelay {
-		t.Fatalf("reaction_counter with defaults = %v, %v; want delay %v", ctr, err, effects.DefaultCountDelay)
+	ce, err := effects.NewCountEvent(countDeps, events)
+	if err != nil || ce.Effect().Delay != effects.DefaultDelay {
+		t.Fatalf("count_event with defaults = %v, %v; want delay %v", ce, err, effects.DefaultDelay)
 	}
 	ev, err := effects.NewReactionEvent(eventDeps, events)
 	if err != nil || ev.Effect().Delay != effects.DefaultDelay {

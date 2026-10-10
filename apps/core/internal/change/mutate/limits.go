@@ -13,7 +13,6 @@ const (
 	MaxEmojiList    = 100
 	DefaultPinLimit = 50
 	MaxPinLimit     = 1000
-	FastTouchTries  = 3
 
 	DefaultMemberBatch = 500
 	MinMemberBatch     = 2

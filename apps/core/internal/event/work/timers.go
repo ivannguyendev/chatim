@@ -14,6 +14,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
@@ -77,6 +78,9 @@ func (t *Timers) ArmMemberCountCheck(ctx context.Context, room uint64) (Timer, e
 
 func (t *Timers) ArmMessageCountCheck(ctx context.Context, key store.MsgKey, counter string) (Timer, error) {
 	if err := key.Validate(); err != nil {
+		return Timer{}, err
+	}
+	if err := domain.ValidateThread(key.Thread); err != nil {
 		return Timer{}, err
 	}
 	if !pbconv.MessageCounter(counter) {
