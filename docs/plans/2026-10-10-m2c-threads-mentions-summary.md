@@ -119,7 +119,7 @@ Collection `reactions` của M2b.3 bỏ; reaction chuyển sang đây (dữ li�
 | Tên | Mặc định | Nghĩa |
 |---|---|---|
 | `MENTION_TARGETS_MAX` | `50` | Đích mention mỗi tin, theo yêu cầu A6 của thiết kế §2.1 |
-| `COUNT_CHECK_DELAY` | `5s` | Hạn phiếu hẹn của số trên tin (như `MEMBER_COUNT_CHECK_DELAY`) |
+| `MESSAGE_COUNT_CHECK_DELAY` | `5s` | Hạn phiếu sửa số trên tin (reaction, trả lời); tách riêng với `MEMBER_COUNT_CHECK_DELAY` (phiếu sửa số member) |
 | `chatim:req:create:{tenant}:{user}:{request_id}` | TTL 15 phút | Chống tạo group trùng (Redis dedupe) |
 
 ## 4. Luồng xử lý
@@ -142,7 +142,7 @@ sequenceDiagram
   participant DB as MongoDB
   H->>MU: ReactMessage(777, 40, 👍)
   MU->>MU: Admit → Find tin → Allow
-  MU->>T: hẹn phiếu "kiểm số tin 40" sau COUNT_CHECK_DELAY
+  MU->>T: hẹn phiếu "kiểm số tin 40" sau MESSAGE_COUNT_CHECK_DELAY
   MU->>DB: upsert doc 40│reaction│hung, trả trạng thái cũ
   MU->>DB: $inc rx: 👍 +1, v +1 (một lần ghi)
   MU->>T: gỡ phiếu
@@ -207,7 +207,7 @@ sequenceDiagram
 
 | Ca | Kết quả | Vì sao |
 |---|---|---|
-| Core chết giữa ghi tương tác và `$inc` | Số đúng sau `COUNT_CHECK_DELAY` | Phiếu hẹn bật, đếm lại |
+| Core chết giữa ghi tương tác và `$inc` | Số đúng sau `MESSAGE_COUNT_CHECK_DELAY` | Phiếu hẹn bật, đếm lại |
 | Hai người react cùng tin cùng lúc | Số cộng đủ | `$inc` không mất cập nhật |
 | Phiếu bật đúng lúc có react mới | Không ghi đè số mới | Ghi có điều kiện trên `v`; trượt thì Nak |
 | Phiếu việc reply chạy hai lần | Cộng một lần | Chỉ cộng khi doc mới được tạo |
