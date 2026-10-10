@@ -28,7 +28,7 @@ The system mechanisms review closed on 2026-10-05 after two rounds with two exte
 
 ## Hard rules
 
-- **Never run `go` on the host.** All Go runs in `golang:1.26` through `make`. The host has Go 1.25, and nats.go v1.54 needs 1.26.
+- **Never run `go` on the host.** All Go runs in `golang:1.26.9` (pinned in the Makefile and Dockerfile) through `make`. The host has Go 1.25, and nats.go v1.54 needs 1.26.
 - **No comments in code.** This covers Go (including package and doc comments), tests, YAML, shell, the Makefile and `.env.example`. Names carry the meaning. Constraints that need explaining go in the design doc, plan prose or commit bodies. Generated `pkg/pb` is exempt.
 - Keep code files under 200 lines, and keep `make fmt-check` clean.
 - Use TDD for logic packages: `pkg/*`, `apps/*`, `tools/internal/*` and `tools/poc/internal/*`. PoC binaries in `tools/poc/<tool>` have no unit tests; run them to check them.

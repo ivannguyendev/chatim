@@ -40,7 +40,7 @@ docs/                    # nghiên cứu, thiết kế, plan, kết quả PoC
 
 ## Chạy hạ tầng dev
 
-Chỉ cần Docker; Go chạy trong container `golang:1.26` qua `make`.
+Chỉ cần Docker; Go chạy trong container `golang:1.26.9` qua `make`.
 
     cp .env.example .env        # đổi MONGO_ROOT_PASSWORD, REDIS_PASSWORD, REDIS_DEDUPE_PASSWORD (chữ, số, - hoặc _)
     make infra-up               # mongo rs0 :27117, redis state :6380, redis dedupe :6381, nats :4223 (monitor :8223)

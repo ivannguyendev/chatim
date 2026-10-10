@@ -27,7 +27,7 @@ feat/<milestone> ──một PR──▶ main ──tag vX.Y.Z──▶ image ch
 
 ## CI và bảo vệ nhánh
 
-- `.github/workflows/ci.yml`, job `checks`: chạy `make fmt-check`, `make vet`, `make lint`, `make test` trên mọi PR vào `main` và mỗi lần push lên `main`. Go vẫn chạy trong container `golang:1.26` qua `make`, giống máy dev.
+- `.github/workflows/ci.yml`, job `checks`: chạy `make fmt-check`, `make vet`, `make lint`, `make test` trên mọi PR vào `main` và mỗi lần push lên `main`. Go vẫn chạy trong container `golang:1.26.9` qua `make`, giống máy dev.
 - CI chỉ chạy unit test. `make itest` và `make core-up && make e2e` cần hạ tầng nên vẫn chạy trên máy dev (DoD bước 2).
 - Branch protection `main`: bắt buộc PR, bắt buộc status check `checks` xanh, không ai được bỏ qua.
 

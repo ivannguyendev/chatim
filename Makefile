@@ -6,7 +6,7 @@ export MONGO_URI := mongodb://$(MONGO_ROOT_USER):$(MONGO_ROOT_PASSWORD)@chatim-m
 export CHATIM_IT_MONGO_URI := $(MONGO_URI)
 export PG_URI := postgres://$(PG_USER):$(PG_PASSWORD)@chatim-postgres:5432/chatim_poc
 
-GO_IMAGE ?= golang:1.26
+GO_IMAGE ?= golang:1.26.9
 LINT_IMAGE ?= golangci/golangci-lint:v2.14.0
 BUF_IMAGE ?= bufbuild/buf:1.73.0
 PROM_IMAGE ?= prom/prometheus:v3.5.0
