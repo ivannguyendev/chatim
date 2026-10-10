@@ -1,162 +1,166 @@
-# M2c — Trả lời, mention, forward, bookmark, hai đường tạo room: tóm tắt kỹ thuật
+# M2c — Tương tác với tin, mention, forward, hai đường tạo room: tóm tắt kỹ thuật
 
-> Trạng thái: **bản để owner duyệt, chưa thực thi** (viết 2026-10-10, sửa cùng ngày theo phản biện của owner, nhánh chung `feat/m2c`). Hướng đi chốt qua brainstorm 2026-10-09 → 2026-10-10 (decision log local `.claude/plans/m2c-threads-mentions_design.md`, 2 reviewer độc lập + 1 research). Plan execute cho AI viết sau khi bản này được duyệt, ở `.claude/plans/2026-10-10-m2c-threads-mentions.md`. Gồm cả việc tồn đọng R1–R5 ([roadmap](../roadmap.md#việc-tồn-đọng-đưa-vào-m2c-owner-chốt-2026-10-09)). Quyết định mới ghi vào Decision Log của [thiết kế](../designs/261005-chatim-architecture.md) từ D112.
+> Trạng thái: **bản để owner duyệt, chưa thực thi** (viết 2026-10-10, sửa cùng ngày theo các vòng phản biện của owner; nhánh chung `feat/m2c`). Hướng đi chốt qua brainstorm 2026-10-09 → 2026-10-10 (decision log local `.claude/plans/m2c-threads-mentions_design.md`, 2 reviewer độc lập + 1 research). Plan execute cho AI viết sau khi bản này được duyệt, ở `.claude/plans/2026-10-10-m2c-threads-mentions.md`. Gồm việc tồn đọng R1–R5 ([roadmap](../roadmap.md#việc-tồn-đọng-đưa-vào-m2c-owner-chốt-2026-10-09)) và việc chuyển reaction của M2b.3 sang collection chung. Quyết định mới ghi vào Decision Log của [thiết kế](../designs/261005-chatim-architecture.md) từ D112.
 >
-> **[owner chốt]** là điểm owner đã quyết. Mọi điểm mặc định đã được owner xác nhận ngày 2026-10-10 (mục 11).
+> **[owner chốt]** là điểm owner đã quyết. Mọi điểm mặc định đã được owner xác nhận (mục 11).
 
 ## 1. Thuật ngữ
 
 | Từ | Nghĩa |
 |---|---|
-| trả lời có trích | Tin bình thường ở timeline chính, mang con trỏ `reply_to` tới một tin khác cùng room; client hiện phần trích ở trên. Đây là "thread" của sản phẩm: **không có nhánh chat riêng** **[owner chốt]** |
+| liên kết gắn vào tin | Mọi thứ nối một tin với một người, một tin khác hay một đích: reaction, reply, bookmark, mention. M2c xử lý chúng theo **2 dạng** (mục 2) |
+| tương tác | Người khác làm gì đó **với** một tin: react, trả lời, lưu (bookmark). Dạng 1 |
+| mention | Người gửi **chỉ định** user, nhóm hoặc `@all` ngay trong nội dung tin. Dạng 2 |
+| trả lời có trích (reply) | Tin bình thường ở timeline chính, mang `reply_to` tới một tin khác cùng room; client hiện ô trích ở trên. Đây là "thread" của sản phẩm: **không có nhánh chat riêng** **[owner chốt]** |
 | tin cha | Tin được trả lời |
-| số trả lời | Số tin trả lời trực tiếp một tin cha, không tính trả lời đã xoá ("2 trả lời") |
-| forward | Chép một tin từ room nguồn sang room đích, mang con trỏ `forward_from` |
-| đích mention | Thứ được nhắc trong tin: một user, một nhóm (`kind` + `id` do app đặt), hoặc `@all` của room |
-| projection | Dữ liệu suy ra từ fact, worker ghi lại được bất cứ lúc nào (thiết kế §4). Ở đây: `replies`, `threads`, `mentions` |
-| aggregate theo target | Một con số tính từ nhiều fact của một target, đếm lại rồi ghi có điều kiện trên `ver` (như số reaction, D90). Ở đây: số trả lời |
-| lớp tập | Mỗi phần tử (vd mỗi (tin, user)) một doc riêng có `ver` riêng; gỡ thì để tombstone (thiết kế §4). Ở đây: bookmark |
+| số trên tin | Con số hiện ngay dưới tin khi đọc lịch sử: reaction theo emoji (`rx`), số trả lời còn sống (`rc`) |
+| đếm lại | Cách tính số trên tin: đếm các tương tác còn sống của tin rồi ghi lên tin có điều kiện (CAS trên version của số). Chạy lại bao nhiêu lần cũng đúng; không dùng "+1" vì máy chết giữa chừng sẽ làm số sai mãi |
+| projection | Dữ liệu suy ra từ fact, worker dựng lại được bất cứ lúc nào (thiết kế §4) |
+| tombstone | Doc không xoá mà chuyển `state = 2` (đã gỡ) |
 | sổ tra DM | Bảng tra cặp user → room id của DM (`room_dms`); `rooms` vẫn là gốc |
 | bước "đảm bảo" | Chuỗi ghi chạy lại bao nhiêu lần cũng ra cùng kết quả; core chết giữa chừng thì lần gọi sau làm nốt |
 | phiếu hẹn sinh tồn | Message hẹn giờ của NATS đặt trước một cặp ghi không nguyên khối, xoá sau khi xong; không bị xoá thì tự bật và sửa (§7.1, D111) |
-| `$max` | Toán tử Mongo: chỉ ghi nếu giá trị mới lớn hơn; nhiều worker ghi theo thứ tự nào cũng ra cùng kết quả |
 | worker / Nak | Phần chạy nền ở mọi core, làm phiếu việc từ `CHATIM_WORK`; lỗi thì trả phiếu (Nak) để làm lại |
 
-## 2. Bức tranh chung
+## 2. Mô hình: 2 dạng liên kết gắn vào tin [owner chốt]
 
-Mọi tính năng xếp vào lớp dữ liệu sẵn có (thiết kế §4), không lớp mới:
+| | Dạng 1: tin nhận tương tác | Dạng 2: mention |
+|---|---|---|
+| Gồm | reaction, reply, bookmark | nhắc user, nhóm, `@all` |
+| Bản chất | Người khác làm gì đó **với** tin | Người gửi **chỉ định** đích trong tin |
+| Lưu ở | **một** collection `message_interactions`, phân biệt bằng `kind` | collection `mentions` |
+| Mỗi doc là | "user U react/lưu tin X", "tin Y trả lời tin X" | "tin X nhắc đích Y" |
+| Đường ghi | reaction, bookmark: lệnh của người dùng ghi một doc theo khoá. reply: worker dựng từ tin trả lời | worker dựng từ tin mới/sửa/xoá |
+| Event | `reaction_changed`, `bookmark_changed`; reply nằm trong `msg_created` | nằm trong `msg_created`/`msg_edited` |
+| Số trên tin | `rx` (reaction theo emoji), `rc` (số trả lời), **một** cơ chế đếm lại | không |
+| Đọc theo tin | "ai react", "các trả lời của tin này" (`GetReplies`) | không cần |
+| Đọc theo người/đích trên mọi room | "tin tôi đã lưu" (`ListBookmarks`) | "tin nhắc tôi" (`ListMentions`) |
+| Đọc theo room theo thời gian | resync; "trao đổi gần đây của room" (`ListThreads`) | resync |
 
-| Tính năng | Lớp | Ghi ở đâu | Event | Sửa lỗi |
-|---|---|---|---|---|
-| Trả lời có trích | Fact (tin) | `messages`, field `rp`, qua actor như tin thường | `msg_created` (thêm `reply_to`) | Như tin thường |
-| Danh sách trả lời của một tin | Projection | collection mới `replies` | không | Worker dựng lại từ phiếu tin |
-| Danh sách tin có trả lời của room | Projection `$max` | collection mới `threads` | không | Như trên |
-| Số trả lời | Aggregate (như số reaction) | `messages.rc` | `counts_changed` (counter `replies`) | Worker đếm lại |
-| Mention, `@all` | Field trên tin + projection index | `messages` (`mt`, `ma`) + collection mới `mentions` | trong `msg_created` | Worker dựng lại index từ phiếu tin |
-| Forward | Field trên tin | `messages`, field `fw` | trong `msg_created` | Như tin thường |
-| Bookmark | Tập | collection mới `bookmarks` | `bookmark_changed` | Worker phát lại doc hiện tại |
-| Mở DM | Sổ tra + bước "đảm bảo" | collection mới `room_dms`; `rooms`, `members` | `room_created`, `member_added`, `member_count_changed` (đã có) | Gọi lại → làm nốt; phiếu hẹn sửa số member |
-| Tạo group | Như CreateRoom hiện tại + `request_id` | `rooms`, `members` | như trên | Như trên |
+Ngoài 2 dạng, M2c còn có: **forward** (field trên tin), **hai đường tạo room** (`OpenDirectRoom` cho DM, `CreateRoom` cho group/channel) và việc tồn đọng **R1–R5**.
 
 ```mermaid
 flowchart LR
-  C[Client / app] -->|SendMessage có reply_to / forward_from / mention| G[grpcsrv]
-  G -->|kiểm reply_to, nguồn forward: đọc theo khoá| M[(MongoDB)]
+  C[Client / app] -->|SendMessage: reply_to, forward_from, mention| G[grpcsrv]
+  C -->|React, SetBookmark| MU[mutate]
+  C -->|GetReplies, ListThreads, ListBookmarks, ListMentions| G
+  C -->|OpenDirectRoom, CreateRoom| G
   G --> A[actor của room]
-  A -->|insertMany| M
-  A -->|msg_created| P[publisher]
-  C -->|OpenDirectRoom, CreateRoom, SetBookmark, GetReplies, ListThreads, ListMentions, ListBookmarks| G
+  A -->|insertMany| M[(MongoDB)]
+  MU -->|message_interactions| M
   G --> M
-  G --> P
+  A --> P[publisher]
+  MU --> P
   M -->|change stream| R[reader slot 0]
   R --> W[(CHATIM_WORK)]
-  W --> WK[worker: reply_index, reply_counter, mention_index, event phát lại]
+  W --> WK[worker: reply_index, mention_index, đếm rx/rc, event phát lại]
   WK --> M
   WK --> P
   P --> E[(CHATIM_EVT → live.*)]
 ```
 
-Ví dụ: Lan trả lời tin seq 40 của room 777 bằng "ok @minh @team-design".
-1. `grpcsrv` kiểm tin 40 có trong room 777 (một đọc theo khoá). Actor cấp seq 57 ở timeline chính, ghi tin với `rp = {th 0, s 40}` và đích mention, trả ack, phát `msg_created`.
-2. Mongo ghi nhật ký; reader chép thành phiếu `MessageInserted (777, 0, 57)`.
+Ví dụ một tin đi qua cả 2 dạng: Lan trả lời tin 40 của room 777 bằng "ok @minh @team-design" (tin mới seq 57).
+1. `grpcsrv` kiểm tin 40 có trong room. Actor ghi tin 57 với `rp = 40` và đích mention, trả ack, phát `msg_created`.
+2. Reader chép thành phiếu `MessageInserted (777, 0, 57)`.
 3. Worker:
-   - `reply_index`: ghi dòng `replies (777│0│40 │ 57)` và `threads (777│40)` `$max last_reply_seq = 57, last_reply_at`.
-   - `mention_index`: ghi 2 dòng `mentions` (`user:minh`, `group:team-design`).
-   - `reply_counter`: đếm `replies` của tin 40 được 3, ghi `messages(777│0│40).rc = {n 3, v 3}`, phát `counts_changed` (counter `replies`).
-4. Mọi người đang xem room thấy "3 trả lời" dưới tin 40; bấm vào thì `GetReplies` trả 3 tin. Minh mở "Tôi được nhắc tới" thấy tin 57; app thông báo nghe `msg_created` và tự bung `team-design` ra người.
-
-**Package dự kiến đụng tới:** `api/grpcsrv` (RPC mới, kiểm reply/forward), `send/actor` (R5), `send/dedupe` (request id tạo room), `change/mutate` (bookmark, R1), `change/pinproj` và `change/counter` (R1; `counter` dùng chung cho số trả lời), `event/effects` (`reply_index`, `reply_counter`, `mention_index`, `bookmark_event`; R3), `event/work`, `event/reconcile`, `event/resync`, `store/*` (5 collection mới), `model/domain`, `model/pbconv`, `model/access`, `proto/chatim/v1`, `tools/corecli` (e2e phase 6).
+   - **Dạng 1**: `reply_index` ghi doc `message_interactions` "tin 57 trả lời tin 40"; bộ đếm đếm lại reply còn sống của tin 40 = 2, ghi `rc = {n 2}` lên tin 40, phát `counts_changed`.
+   - **Dạng 2**: `mention_index` ghi 2 doc `mentions`: `user:minh`, `group:team-design`.
+4. Room thấy "2 trả lời" dưới tin 40; bấm vào → `GetReplies`. Minh mở "Tôi được nhắc tới" thấy tin 57. Sau đó Hùng 👍 tin 40 → doc reaction trong cùng collection, cùng bộ đếm (`rx`).
 
 ## 3. Dữ liệu và tên field
 
 Theo quy tắc tên (D96): `messages` giữ tên ngắn, collection khác dùng tiếng Anh đầy đủ.
 
-**Vì sao số ở `messages`, danh sách ở collection riêng:** `messages` (hàng tỷ tin) không có index phụ; mọi truy vấn phải theo khoá `room│seq`. Số đặt trên tin (`rx` của reaction, `rc` của trả lời) để **hiện ngay khi đọc trang lịch sử**, không tốn thêm truy vấn. Còn câu hỏi ngược "tin nào có trả lời", "các trả lời của tin 40", "tin nào nhắc Minh" thì phải hỏi collection riêng có khoá/index phù hợp (`threads`, `replies`, `mentions`), giống `reactions` đang làm cho reaction.
+**Vì sao số nằm trên tin, danh sách nằm ở collection riêng:** `messages` (hàng tỷ tin) không có index phụ, mọi truy vấn phải theo khoá `room│seq`. Số đặt trên tin để **hiện ngay khi đọc lịch sử**. Câu hỏi ngược ("các trả lời của tin 40", "tin tôi đã lưu", "tin nhắc tôi") phải hỏi collection có index phù hợp: `message_interactions`, `mentions`.
 
 ### 3.1 Field mới trên `messages` (tên ngắn)
 
-| Field | Tên đầy đủ | Nghĩa | Ví dụ | Dùng để |
-|---|---|---|---|---|
-| `rp` | reply_to | Tin cha, cùng room: `{th, s}` (`th` luôn 0) | `{th: 0, s: 40}` | Hiện trích dẫn; nội dung trích lấy lúc đọc |
-| `rc` | reply_count | Số trả lời: `{n, v}`, `v` là version của số (như `rx.v`) | `{n: 3, v: 3}` | Hiện "3 trả lời" trong `GetHistory` |
-| `fw` | forward_from | Nguồn gốc: `{r, th, s, f, ts}` = tin đầu tiên (room, thread, seq), tác giả gốc, lúc gửi gốc | `{r: 555, th: 0, s: 9, f: "lan", ts: …}` | Ô ghi chú "Lan: Báo giá 100 triệu"; dòng "chuyển tiếp từ …" là người gửi tin mới |
-| `mt` | mention_targets | Đích mention, tối đa 50: `[{k, i}]`, `k` = `user` hoặc `group` | `[{k: "user", i: "minh"}, {k: "group", i: "team-design"}]` | Event, index `mentions` |
-| `ma` | mention_all | Có `@all` | `true` | Như trên; quyền dùng do policy |
+| Field | Tên đầy đủ | Nghĩa | Ví dụ |
+|---|---|---|---|
+| `rp` | reply_to | Tin cha, cùng room: `{th, s}` (`th` luôn 0) | `{th: 0, s: 40}` |
+| `rc` | reply_count | Số trả lời còn sống: `{n, v}`, `v` là version của số (như `rx.v`) | `{n: 2, v: 3}` |
+| `fw` | forward_from | Nguồn gốc: `{r, th, s, f, ts}` = tin đầu tiên, tác giả gốc, lúc gửi gốc | `{r: 555, th: 0, s: 9, f: "lan", ts: …}` |
+| `mt` | mention_targets | Đích mention, tối đa 50: `[{k, i}]`, `k` = `user` hoặc `group` | `[{k: "user", i: "minh"}, {k: "group", i: "team-design"}]` |
+| `ma` | mention_all | Có `@all` | `true` |
 
-- Không có nhánh thread: `thread_root` vẫn nằm trong khoá nhưng luôn 0; cổng `ValidateThread` giữ nguyên.
-- Sửa tin **[owner chốt]**: mention có đổi thì lệnh sửa gửi danh sách mới (`mt`/`ma`); không gửi nghĩa là giữ nguyên. Dòng `message_edits` lưu `mention_targets`, `mention_all` của phiên bản đó; projection ghi đè `mt`/`ma` khi có đổi. `rp` và `fw` không đổi khi sửa.
+- `rx` (số reaction) giữ như M2b.3.
+- Không nhánh thread: `thread_root` vẫn trong khoá nhưng luôn 0; cổng `ValidateThread` giữ nguyên.
+- Sửa tin **[owner chốt]**: mention có đổi thì lệnh sửa gửi danh sách mới (`mt`/`ma`); không gửi nghĩa là giữ nguyên. Dòng `message_edits` lưu `mention_targets`, `mention_all` của phiên bản đó. `rp` và `fw` không đổi khi sửa.
 - Không có `@here` **[owner chốt]**.
 
-### 3.2 Collection mới `replies` (danh sách trả lời của một tin)
+### 3.2 Dạng 1: collection `message_interactions`
 
-`_id` = `khoá tin cha (24 byte) │ seq tin trả lời (8 byte)`, clustered, dài cố định 32 byte nên quét khoảng theo `_id` đúng thứ tự.
+**Khoá** (clustered): `_id = khoá tin (24 byte) │ kind (1 byte) │ phần riêng`
 
-| Field | Nghĩa | Ví dụ |
-|---|---|---|
-| `room_id`, `tenant` | Room, tenant | `777`, `acme` |
-| `parent_seq` | Seq tin cha | `40` |
-| `reply_seq` | Seq tin trả lời | `57` |
-| `sender_id` | Người trả lời | `lan` |
-| `state` | 1 còn, 2 tin trả lời đã bị xoá | `1` |
-| `created_at`, `updated_at` | Lúc trả lời, lúc đổi `state` | |
+| kind | Phần riêng | Nghĩa của một doc | Ai ghi |
+|---|---|---|---|
+| `reaction` | user (1..64 byte) | User react tin bằng một emoji (mỗi (tin, user) một reaction, D88/D89) | Lệnh `ReactMessage` |
+| `bookmark` | user | User lưu tin | Lệnh `SetBookmark` |
+| `reply` | `thread│seq` của tin trả lời (16 byte, dài cố định) | Tin trả lời tin cha | Worker `reply_index` |
 
-Không index phụ: "các trả lời của tin 40" = quét khoảng `_id` có tiền tố `777│0│40`; số trả lời = số dòng `state = 1` trong khoảng này. Tin trả lời bị xoá thì dòng chuyển `state = 2`, **không tính** vào số và không hiện trong danh sách **[owner chốt]**.
+- `kind` nằm trong `_id` nên change feed biết loại từ khoá, không cần đọc doc.
+- Mọi doc reply của một tin dài bằng nhau, nên quét khoảng `_id` theo tiền tố `khoá tin│reply` ra đúng danh sách trả lời theo thứ tự seq.
 
-### 3.3 Collection mới `threads` (tin có trả lời của room)
+**Field** (chung cho mọi kind):
 
-`_id` = `room│seq tin cha` (16 byte, clustered). Mỗi tin có ít nhất một trả lời một doc.
+| Field | Nghĩa | reaction | bookmark | reply |
+|---|---|---|---|---|
+| `message_key`, `room_id`, `tenant` | Tin, room, tenant | ✓ | ✓ | ✓ |
+| `kind` | Loại | `reaction` | `bookmark` | `reply` |
+| `actor_id` | Ai làm | người react | người lưu | người trả lời |
+| `value` | Giá trị | emoji | rỗng | rỗng |
+| `previous_value` | Giá trị trước (cho event) | emoji cũ | | |
+| `reply_seq` | Seq tin trả lời | | | `57` |
+| `state` | 1 còn, 2 đã gỡ | bỏ react | gỡ lưu | tin trả lời bị xoá |
+| `ver` | Số lần đổi (chỉ tăng) | ✓ | ✓ | ✓ |
+| `created_at`, `updated_at` | | ✓ | ✓ | ✓ |
 
-| Field | Nghĩa | Ví dụ |
-|---|---|---|
-| `room_id`, `tenant` | | `777`, `acme` |
-| `parent_seq` | Seq tin cha | `40` |
-| `last_reply_seq` | Seq trả lời mới nhất | `57` |
-| `last_reply_at` | Lúc trả lời mới nhất | `2026-10-10T09:15:02Z` |
-| `created_at`, `updated_at` | | |
+**Ví dụ** tin 777│0│40 có 2 reaction, 1 bookmark, 2 reply:
 
-Index `{room_id, last_reply_at}`: màn "trao đổi gần đây của room" (`ListThreads`) và resync. **Không** giữ số trả lời (nguồn duy nhất là `rc` trên tin, để khỏi lệch); màn liệt kê lấy số bằng một `$in` vào `messages`.
+| `_id` | kind | actor | value | state |
+|---|---|---|---|---|
+| 777│0│40 │ reaction │ hung | reaction | hung | 👍 | 1 |
+| 777│0│40 │ reaction │ lan | reaction | lan | ❤️ | 1 |
+| 777│0│40 │ bookmark │ minh | bookmark | minh | | 1 |
+| 777│0│40 │ reply │ 0│41 | reply | minh | | 1 |
+| 777│0│40 │ reply │ 0│57 | reply | lan | | 1 |
 
-### 3.4 Collection mới `mentions` (index mention)
+**3 index dùng chung:**
+
+| Index | Dùng cho |
+|---|---|
+| `{message_key, kind, state, value}` | Đếm reaction theo emoji (phủ index), đếm reply còn sống, "ai react tin này" |
+| `{tenant, actor_id, kind, state, updated_at: -1}` | "Tin tôi đã lưu" (`ListBookmarks`) |
+| `{room_id, kind, updated_at}` | Resync từng kind; "trao đổi gần đây của room" (`ListThreads`) |
+
+**Chuyển reaction của M2b.3 sang đây** (thuộc M2c):
+- Collection `reactions` bị bỏ; dữ liệu reaction hiện chỉ có ở dev (xoá bằng `make infra-reset` hoặc drop collection).
+- Hành vi giữ nguyên: một emoji mỗi (user, tin), emoji trong `REACTION_EMOJIS`, pipeline `$cond` giữ doc y nguyên khi chọn lại cùng emoji (D89), bộ đếm có witness (D90), event và id `reaction_changed`, `counts_changed` không đổi. Client không thấy khác.
+- Đổi: tên field (`emoji` → `value`, `previous_emoji` → `previous_value`, `user_id` → `actor_id`), gỡ reaction là `state = 2` thay cho `emoji: ""`, index đếm thành `{message_key, kind, state, value}`, khoá thêm byte `kind`.
+- Thay khoá/collection của D88 bằng quyết định mới (D112+); D89, D90, D93 giữ nghĩa.
+
+### 3.3 Dạng 2: collection `mentions`
 
 `_id` = `khoá tin │ loại đích │ id đích` (clustered; chỉ đọc/ghi theo khoá).
 
 | Field | Nghĩa | Ví dụ |
 |---|---|---|
-| `target` | Đích dạng chuỗi: `user:{id}`, `group:{id}`, `all:{room}` | `group:team-design` |
-| `tenant`, `room_id`, `thread_root`, `seq` | Vị trí tin | `acme`, `777`, `0`, `57` |
-| `sender_id` | Người gửi | `lan` |
-| `created_at` | Lúc gửi tin | |
+| `message_key`, `room_id`, `tenant` | Tin | |
+| `target` | Đích: `user:{id}`, `group:{id}`, `all:{room}` | `group:team-design` |
+| `sender_id` | Người gửi tin | `lan` |
 | `state` | 1 còn, 2 đã gỡ (sửa bỏ mention, tin bị xoá) | `1` |
-| `message_ver` | Phiên bản tin đã dựng dòng này | `2` |
-| `updated_at` | | |
+| `message_ver` | Phiên bản tin đã dựng doc này | `2` |
+| `created_at`, `updated_at` | Lúc gửi tin, lúc đổi | |
 
-Index `{tenant, target, state, created_at: -1}` (màn mention) và `{room_id, updated_at}` (resync). Tin 57 nhắc `@minh`, `@team-design`, `@all` → 3 dòng; room 200K người với `@all` vẫn **1 dòng**.
+Index `{tenant, target, state, created_at: -1}` (`ListMentions`) và `{room_id, updated_at}` (resync). Tin nhắc `@minh`, `@team-design`, `@all` → 3 doc; room 200K người với `@all` vẫn **1 doc**.
 
-### 3.5 Collection mới `bookmarks`
+### 3.4 Collection mới `room_dms` (sổ tra DM)
 
-`_id` = `khoá tin │ user` (clustered; giống `reactions`, D88).
-
-| Field | Nghĩa | Ví dụ |
-|---|---|---|
-| `message_key`, `room_id`, `tenant`, `thread_root`, `seq`, `user_id` | Khoá tách ra | |
-| `state` | 1 có bookmark, 2 đã gỡ (tombstone) | `1` |
-| `ver` | Số lần đổi | `1` |
-| `created_at`, `updated_at` | | |
-
-Index `{tenant, user_id, state, updated_at: -1}` (bookmark của tôi) và `{room_id, updated_at}` (resync). Không có ghi chú **[owner chốt]**.
-
-### 3.6 Collection mới `room_dms` (sổ tra DM)
-
-`_id` = chuỗi `tenant│user nhỏ│user lớn` (dấu `│` an toàn vì user id chỉ gồm `[A-Za-z0-9_-]`).
-
-| Field | Nghĩa | Ví dụ |
-|---|---|---|
-| `room_id` | Room DM của cặp này | `8812…` |
-| `created_at` | | |
+`_id` = chuỗi `tenant│user nhỏ│user lớn` (dấu `│` an toàn vì user id chỉ gồm `[A-Za-z0-9_-]`); field `room_id`, `created_at`.
 
 `rooms` vẫn là gốc: room DM là room bình thường. Trên `rooms` thêm `dm_key` (không unique) để kiểm "room này đúng là DM của cặp này". Index unique `{tenant, dm_key}` dự kiến trong thiết kế §5 **bị bỏ** (không giữ được khi shard `rooms` theo `_id`).
 
-### 3.7 Config, khoá Redis, giới hạn mới
+### 3.5 Config, khoá Redis, giới hạn mới
 
 | Tên | Mặc định | Nghĩa |
 |---|---|---|
@@ -168,7 +172,15 @@ Index `{tenant, user_id, state, updated_at: -1}` (bookmark của tôi) và `{roo
 
 ## 4. Luồng xử lý
 
-### 4.1 Gửi trả lời có trích
+### 4.1 Dạng 1, nguồn người dùng: reaction và bookmark
+
+- **Reaction** (`ReactMessage`): hành vi như M2b.3, chỉ đổi chỗ lưu. `Admit` → `Find` tin → `Allow` → một `FindOneAndUpdate` upsert theo `_id = khoá tin│reaction│user`; cùng emoji → doc y nguyên (không ghi, không event); khác → `ver + 1`, `previous_value`; gỡ → `state = 2`. Phát `reaction_changed`; số `rx` đếm lại (inline một lượt, lỗi bỏ qua; worker sửa — R1).
+- **Bookmark** (`SetBookmark(room, seq, on)`): `Admit` → tin phải tồn tại → upsert theo `_id = khoá tin│bookmark│user`; như cũ → không ghi; gỡ → `state = 2`, `ver + 1`. Phát `bookmark_changed`. Vượt `BOOKMARK_LIMIT` (đếm theo index của user, giới hạn mềm) → `FAILED_PRECONDITION`.
+- Worker phát lại doc hiện tại cho cả hai (`reaction_event` đã có, `bookmark_event` mới).
+
+### 4.2 Dạng 1, nguồn nội dung tin: reply
+
+**Gửi:**
 
 ```mermaid
 sequenceDiagram
@@ -179,7 +191,7 @@ sequenceDiagram
   C->>G: SendMessage(room 777, cid, text, reply_to 40)
   G->>G: kiểm định dạng, mention ≤50
   G->>DB: Find(777│0│40) — một đọc theo khoá
-  DB-->>G: có (kể cả đã xoá) / không
+  DB-->>G: có / không
   G->>A: SendCmd
   A->>A: Admit + policy send_message, cid, cấp seq 57
   A->>DB: insertMany (gom nhiều room)
@@ -187,49 +199,31 @@ sequenceDiagram
   A->>A: enqueue msg_created (có reply_to)
 ```
 
-- Tin cha không có → `NOT_FOUND`. Tin cha đã xoá (xoá khi chưa có trả lời) vẫn cho trả lời, ô trích hiện "đã xoá". Trả lời một tin trả lời được phép; danh sách chỉ gồm trả lời **trực tiếp** **[owner chốt]**.
+- Tin cha không có → `NOT_FOUND`. Tin cha đã xoá (xoá lúc chưa có trả lời) vẫn cho trả lời, ô trích hiện "đã xoá". Trả lời một tin trả lời được phép; danh sách chỉ gồm trả lời **trực tiếp** **[owner chốt]**.
 - Kiểm tin cha ở `grpcsrv`, không trong actor, để không làm chậm hàng đợi của room.
-- Va seq với core khác lúc chuyển slot: **trả `UNAVAILABLE` và nhường room ngay**, không gán lại seq (R5) **[owner chốt]**; client gửi lại cùng cid.
+- Va seq với core khác lúc chuyển slot: **`UNAVAILABLE` và nhường room ngay**, không gán lại seq (R5) **[owner chốt]**; client gửi lại cùng cid.
 
-### 4.2 Đếm và xem các trả lời
+**Dựng và đếm (worker):** từ phiếu `MessageInserted` có `rp`, và phiếu `EditInserted` loại xoá của một tin trả lời:
+1. `reply_index` (delay 0): tin mới → upsert doc `reply` (`$setOnInsert`, chạy lại không sinh bản thứ hai); tin trả lời bị xoá → doc chuyển `state = 2`.
+2. Đếm lại (delay `REPLY_COUNT_DELAY`, một lần mỗi tin cha mỗi lô): **cùng package `counter` với reaction**: đếm `{message_key, kind: reply, state: 1}` (phủ index) → bằng `rc` thì thôi → khác thì CAS `rc.v` → `counts_changed` (counter `replies`). Trượt CAS → Nak (R1).
 
-Từ phiếu `MessageInserted` có `rp`, và phiếu `EditInserted` loại xoá của một tin trả lời:
-1. Effect `reply_index` (delay 0): tin mới → upsert dòng `replies` theo `_id` (`$setOnInsert`, chạy lại không sinh bản thứ hai) và `threads` `$max last_reply_seq`, `$max last_reply_at`; tin trả lời bị xoá → dòng `replies` chuyển `state = 2`.
-2. Effect `reply_counter` (delay `REPLY_COUNT_DELAY`, một lần mỗi tin cha mỗi lô): đếm số dòng `state = 1` trong khoảng `replies` của tin cha (đọc majority), bằng `rc` hiện tại thì thôi, khác thì ghi `rc` có điều kiện `rc.v == v` cũ (CAS), phát `counts_changed` (counter `replies`). Trượt CAS → Nak, làm lại sau; không thử lại trong core (R1). Dùng chung package `counter` với số reaction.
+Fast path không cập nhật số trả lời: client thấy `msg_created` và tự cộng tạm; số đúng tới sau `REPLY_COUNT_DELAY`.
 
-Fast path không cập nhật số: client thấy `msg_created` của trả lời và tự cộng tạm trên màn; số đúng tới sau `REPLY_COUNT_DELAY` qua `counts_changed`.
+**Đọc:**
+- `GetHistory`: `rc`, `rx` có sẵn trên tin; thêm **một** `$in` lấy bản xem trước các tin cha được trích trong trang, áp view (xoá → không text, ẩn với người xem → `hidden`).
+- `GetReplies(room, seq, after, limit ≤ 50)`: `Admit` → quét `_id` theo tiền tố `khoá tin│reply`, bỏ `state = 2` → `messages` `$in` → view.
+- `ListThreads(room, before, limit ≤ 50)`: `Admit` → index `{room_id, kind: reply, updated_at}` đọc ngược, bỏ `state = 2`, gom tin cha không trùng (quét tối đa một số dòng mỗi trang, trả con trỏ) → `messages` `$in` (tin cha + `rc`) → view **[owner chốt: làm ở M2c]**.
 
-Đọc:
-- `GetHistory`: `rc` có sẵn trên tin; thêm **một** `$in` lấy bản xem trước các tin cha được trích trong trang, áp view (xoá → không text, ẩn với người xem → `hidden`).
-- `GetReplies(room, seq, after, limit ≤ 50)`: `Admit` → quét `replies` theo tiền tố → `messages` `$in` → view. Tin cha không có → `NOT_FOUND`.
-- `ListThreads(room, before, limit ≤ 50)`: `Admit` → index `{room_id, last_reply_at}` → `messages` `$in` (lấy tin cha + `rc`) → view; bỏ tin có `rc.n = 0` (mọi trả lời đã bị xoá) **[owner chốt: làm ở M2c]**.
+**Chặn xoá tin còn trả lời [owner chốt].** `DeleteMessage` (sau `Allow`, trước khi ghi fact xoá) đếm thẳng `{message_key, kind: reply, state: 1}` (đọc majority; không dùng `rc` vì trễ ~1s); còn ≥ 1 → `FAILED_PRECONDITION` (`ErrHasReplies`). Cửa sổ còn lại: trả lời vừa gửi nhưng worker chưa kịp ghi (thường dưới 1 giây) thì lệnh xoá vẫn qua; kết quả là tin "đã xoá" có một trả lời, giống trả lời một tin đã xoá, không mất dữ liệu.
 
-**Chặn xoá tin còn trả lời [owner chốt].** `DeleteMessage` (sau `Allow`, trước khi ghi fact xoá) đếm trực tiếp số dòng `state = 1` của tin trong `replies` (đọc majority, không dùng `rc` vì `rc` trễ ~1s); còn ≥ 1 → `FAILED_PRECONDITION` (`ErrHasReplies`). Muốn xoá thì phải xoá các trả lời trước. Cửa sổ còn lại: trả lời vừa gửi nhưng worker chưa kịp ghi vào `replies` (độ trễ reader, thường dưới 1 giây) thì lệnh xoá vẫn qua; kết quả là tin "đã xoá" có một trả lời, giống trả lời một tin đã xoá, không mất dữ liệu.
+### 4.3 Dạng 1, đọc theo người: `ListBookmarks`
 
-### 4.3 Forward
+`ListBookmarks(before, limit ≤ 50)`: index `{tenant, actor_id, kind: bookmark, state: 1, updated_at: -1}` → tin `$in` → view và quyền hiện tại; rời room hay tin đã xoá thì bookmark vẫn nằm trong danh sách, hiện "không còn xem được" **[owner chốt]**.
 
-```mermaid
-sequenceDiagram
-  participant C as Client (Lan)
-  participant G as grpcsrv
-  participant DB as MongoDB
-  participant A as actor room đích
-  C->>G: SendMessage(room 777, forward_from {555, 0, 9}, cid)
-  G->>DB: rooms(555) tenant? · members(555, lan) active? · messages(555│0│9) · hidden(lan, 555, 0, 9)
-  G->>G: chưa xoá, chưa ẩn, ts > cleared_at của Lan, policy forward_message
-  G->>A: SendCmd(text chép từ nguồn, fw {555, 0, 9, f, ts})
-  A-->>C: ack như tin thường
-```
-
-- Kiểm ở `grpcsrv` trước actor: bốn lần đọc theo khoá, chạy ở core nào cũng được.
-- Text lấy từ tin nguồn, client không sửa được; nguồn bị xoá sau đó thì bản forward không đổi (là bản chép). Không forward giữa tenant.
-- Hiển thị **[owner chốt]**: Lan viết "Báo giá 100 triệu" ở room A, Minh forward sang B, Hùng forward tiếp sang C. Ở room C: dòng "chuyển tiếp từ Hùng" (Hùng là người gửi tin mới), ô ghi chú "Lan: Báo giá 100 triệu". Forward lại một tin forward thì `fw` chép nguyên từ tin nguồn (vẫn trỏ Lan và tin ở room A); người forward trung gian (Minh) không lưu.
-- Lỗi: nguồn không có → `NOT_FOUND`; không phải member hoặc không được đọc → `PERMISSION_DENIED`; nguồn đã xoá → `FAILED_PRECONDITION`.
-
-### 4.4 Mention và màn "Tôi được nhắc tới"
+### 4.4 Dạng 2: mention và màn "Tôi được nhắc tới"
 
 - Gửi: client gửi `mt` (user/nhóm) và `ma`. Core chỉ kiểm định dạng, bỏ trùng, ≤ `MENTION_TARGETS_MAX`; **không** kiểm user có trong room, **không** bung nhóm **[owner chốt]**. `@all` qua policy `mention_all`: mặc định ai cũng dùng được, tenant chặn bằng policy **[owner chốt]**.
-- Index: effect `mention_index` (delay 0) từ `MessageInserted`/`EditInserted`: upsert dòng mỗi đích, tombstone đích bị sửa bỏ hoặc khi tin bị xoá; chỉ ghi khi `message_ver` của phiếu ≥ dòng hiện có.
+- Dựng: `mention_index` (delay 0) từ `MessageInserted`/`EditInserted`: upsert doc mỗi đích, `state = 2` cho đích bị sửa bỏ hoặc khi tin bị xoá; chỉ ghi khi `message_ver` của phiếu ≥ doc hiện có.
 - Đọc: `ListMentions(groups[{id, since?}], before, limit ≤ 50)`.
 
 ```mermaid
@@ -239,20 +233,33 @@ sequenceDiagram
   participant DB as MongoDB
   App->>G: ListMentions(user minh, groups [team-design since 11:00, role-qa], limit 50)
   G->>DB: members của minh (index {tenant, user_id, state, room_id}) → ~50 room
-  G->>DB: mỗi đích (user:minh, 2 group, all:{từng room}) đọc ngược index ≤50 dòng
-  G->>G: ghép theo created_at, bỏ dòng trước since của nhóm, lấy 50
+  G->>DB: mỗi đích (user:minh, 2 group, all:{từng room}) đọc ngược index ≤50 doc
+  G->>G: ghép theo created_at, bỏ doc trước since của nhóm, lấy 50
   G->>DB: messages $in theo khoá (≤50)
   G->>G: view: tin xoá, ẩn, trước cleared_at, room đã rời → bỏ
   G-->>App: 50 tin + con trỏ trang sau
 ```
 
-- App truyền nhóm của user và mốc `since` nếu muốn; core không có model nhóm **[owner chốt]**.
-- Số mention chưa đọc tính lúc đọc theo room, làm ở M3.
+- App truyền nhóm của user và mốc `since` nếu muốn; core không có model nhóm **[owner chốt]**. Số mention chưa đọc tính lúc đọc theo room, làm ở M3.
 
-### 4.5 Bookmark
+### 4.5 Forward
 
-- `SetBookmark(room, seq, on)`: tin phải tồn tại; người gọi là member active (`Admit`). Một upsert theo `_id`; giống trạng thái cũ → không ghi, không event; gỡ → `state = 2`, `ver + 1`. Event `bookmark_changed`.
-- `ListBookmarks(before, limit ≤ 50)`: index `{tenant, user_id, state, updated_at: -1}` → tin → view và quyền hiện tại (rời room hay tin đã xoá thì bookmark vẫn nằm trong danh sách, hiện "không còn xem được") **[owner chốt]**.
+```mermaid
+sequenceDiagram
+  participant C as Client (Hùng)
+  participant G as grpcsrv
+  participant DB as MongoDB
+  participant A as actor room đích
+  C->>G: SendMessage(room C, forward_from {roomB, 0, 9}, cid)
+  G->>DB: rooms(B) tenant? · members(B, hung) active? · messages(B│0│9) · hidden(hung, B, 0, 9)
+  G->>G: chưa xoá, chưa ẩn, ts > cleared_at của Hùng, policy forward_message
+  G->>A: SendCmd(text chép từ nguồn, fw = fw của nguồn nếu có, không thì trỏ tin nguồn)
+  A-->>C: ack như tin thường
+```
+
+- Kiểm ở `grpcsrv` trước actor: bốn lần đọc theo khoá, chạy ở core nào cũng được. Text lấy từ tin nguồn, client không sửa được; nguồn bị xoá sau đó thì bản forward không đổi. Không forward giữa tenant.
+- Hiển thị **[owner chốt]**: Lan viết "Báo giá 100 triệu" ở room A, Minh forward sang B, Hùng forward tiếp sang C. Ở room C: "chuyển tiếp từ Hùng" (người gửi tin mới), ô ghi chú "Lan: Báo giá 100 triệu". Người forward trung gian (Minh) không lưu.
+- Lỗi: nguồn không có → `NOT_FOUND`; không phải member hoặc không được đọc → `PERMISSION_DENIED`; nguồn đã xoá → `FAILED_PRECONDITION`.
 
 ### 4.6 Mở DM: `OpenDirectRoom(other_user)` [owner chốt]
 
@@ -276,22 +283,21 @@ sequenceDiagram
   end
 ```
 
-- Lan và Minh mở cùng lúc: cả hai nhận room 8812 (filter theo `_id`, Mongo tự xử lý đua), core không thử lại.
-- Core chết giữa chừng: lần mở sau của ai cũng làm nốt.
-- Hai người đều là `member`, DM không có owner. Nhắn cho chính mình → `INVALID_ARGUMENT`. Policy `open_direct` (mặc định mọi user trong tenant; chặn/block sau này cắm vào đây).
-- Room id ngẫu nhiên vô tình trùng một room khác (gần như không xảy ra): ghi sổ sang id mới bằng CAS rồi trả `UNAVAILABLE`, client gọi lại.
+- Lan và Minh mở cùng lúc: cả hai nhận room 8812 (filter theo `_id`, Mongo tự xử lý đua), core không thử lại. Core chết giữa chừng: lần mở sau làm nốt.
+- Hai người đều là `member`, DM không có owner. Nhắn cho chính mình → `INVALID_ARGUMENT`. Policy `open_direct` (mặc định mọi user trong tenant).
+- Room id ngẫu nhiên vô tình trùng room khác (gần như không xảy ra): ghi sổ sang id mới bằng CAS rồi `UNAVAILABLE`, client gọi lại.
 - Link DM dễ nhớ do app làm bằng cặp username (`…/dm/lan--minh/120`); không có alias **[owner chốt]**.
 
 ### 4.7 Tạo group: `CreateRoom` (chỉ group/channel) [owner chốt]
 
-- Không nhận loại DM nữa (`INVALID_ARGUMENT`).
+- Không nhận loại DM (`INVALID_ARGUMENT`).
 - `request_id` bắt buộc: dedupe `chatim:req:create:{tenant}:{user}:{request_id}` → đã xong thì trả room cũ; đang chạy ở core khác → `UNAVAILABLE`.
 - Room id ngẫu nhiên **một lần**; trùng → `UNAVAILABLE` (bỏ vòng bốc lại 3 lần).
 - Hẹn phiếu đếm lại member **trước** khi ghi room, gỡ **sau** khi ghi member (sửa lỗi hiện tại: core chết giữa room và member để `member_count` sai mãi).
 
 ### 4.8 Việc tồn đọng R1–R3
 
-- **R1** bỏ vòng thử lại nội bộ: ghim (append trùng `pin_ver` → `UNAVAILABLE` ngay), projection ghim (một lượt; fast path trượt CAS trả fold cục bộ, worker Nak), đếm reaction (touch một lượt, fast path bỏ qua lỗi, worker Nak). Số trả lời theo luôn luật này từ đầu.
+- **R1** bỏ vòng thử lại nội bộ: ghim (append trùng `pin_ver` → `UNAVAILABLE` ngay), projection ghim (một lượt; fast path trượt CAS trả fold cục bộ, worker Nak), đếm số trên tin (một lượt; fast path bỏ qua lỗi, worker Nak). Số trả lời theo luôn luật này.
 - **R2** review `Config.LogValue` (log mọi field không bí mật) và `GetEditHistory` (cửa sổ giữa fact xoá và projection): sửa hoặc ghi lý do giữ.
 - **R3** effect `room_created` chỉ đếm PubAck không trùng.
 
@@ -300,77 +306,79 @@ sequenceDiagram
 | Ca | Kết quả | Vì sao |
 |---|---|---|
 | Hai core cùng ghi một room lúc chuyển slot | Một tin thắng seq; bên thua `UNAVAILABLE`, nhường room; client gửi lại cùng cid | `_id` unique là CAS; cid chống trùng |
-| Phiếu `reply_index` chạy hai lần | Vẫn một dòng `replies`; `threads` không lùi | Upsert theo `_id`; `$max` |
-| Hai trả lời cho tin 40 cùng lúc | `rc` cuối = số dòng thật | Đếm lại rồi CAS `rc.v`; bên trượt Nak, lần sau đếm lại |
-| Trả lời bị xoá | Số giảm 1, trả lời biến khỏi danh sách | Dòng `replies` chuyển `state = 2`, worker đếm lại |
-| Xoá tin cha còn trả lời | `FAILED_PRECONDITION` | Lệnh xoá đếm thẳng `replies`; cửa sổ dưới 1 giây vô hại (mục 4.2) |
-| Sửa tin bỏ mention, phiếu sửa đến trước phiếu tin mới | Index đúng phiên bản mới | Chỉ ghi khi `message_ver` ≥ dòng hiện có |
+| User bấm cùng emoji / cùng bookmark hai lần | Không ghi, không event | Pipeline `$cond` giữ doc y nguyên |
+| Phiếu `reply_index` hoặc `mention_index` chạy hai lần | Không sinh bản thứ hai | Upsert theo `_id` |
+| Hai trả lời (hoặc hai reaction) cho tin 40 cùng lúc | Số cuối = số tương tác còn sống | Đếm lại rồi CAS version; bên trượt Nak, lần sau đếm lại |
+| Trả lời bị xoá | Số giảm 1, biến khỏi danh sách | Doc reply `state = 2`, đếm lại |
+| Xoá tin cha còn trả lời | `FAILED_PRECONDITION` | Lệnh xoá đếm thẳng doc reply; cửa sổ dưới 1 giây vô hại (4.2) |
+| Sửa tin bỏ mention, phiếu sửa đến trước phiếu tin mới | `mentions` đúng phiên bản mới | Chỉ ghi khi `message_ver` ≥ doc hiện có |
 | Lan và Minh mở DM cùng lúc | Cùng một room | `_id` của `room_dms` duy nhất |
 | Core chết giữa ghi sổ DM và tạo member | Lần mở sau làm nốt; phiếu hẹn sửa số member | Bước "đảm bảo", D111 |
 | Retry `CreateRoom` sau khi lần đầu đã ghi | Trả room cũ (trong 15 phút) | `request_id` |
 | Forward tin đúng lúc nó bị xoá ở nguồn | Kiểm sau khi xoá → `FAILED_PRECONDITION`; kiểm trước → bản forward là bản chép hợp lệ | Kiểm theo trạng thái lúc đọc |
 
-**Chỗ phải xếp hàng:** chỉ actor của room (đã có). Không có số đánh liên tục mới, không có khoá chung mới. Số trả lời của một tin nóng là một điểm tranh (CAS `rc.v`), như số reaction; gom W + K để milestone Channel.
+**Chỗ phải xếp hàng:** chỉ actor của room (đã có). Không có số đánh liên tục mới, không có khoá chung mới. Số trên một tin rất nóng (nhiều reaction/trả lời cùng lúc) là một điểm tranh CAS; gom W + K để milestone Channel (D90).
 
 ## 6. Event và subject
 
 | Subject | Kind | Id | Ghi chú |
 |---|---|---|---|
 | `message` | `msg_created` (đã có) | `{room}-{thread}-{seq}` | Thêm `reply_to`, `forward_from`, `mention_targets`, `mention_all` |
-| `message` | `counts_changed` (đã có, counter mới `replies`) | `{room}-0-{seq}-replies-v{v}` | Số trả lời hiện tại; chỉ trạng thái cuối được bảo đảm |
+| `message` | `reaction_changed` (đã có, không đổi) | `{room}-{thread}-{seq}-{user}-n{ver}` | |
+| `message` | `counts_changed` (đã có, thêm counter `replies`) | `{room}-0-{seq}-{counter}-v{v}` | `reactions` như cũ; `replies` mới |
 | `member` | `bookmark_changed` (mới) | `{room}-bm-0-{seq}-{user}-v{ver}` | Riêng tư theo user như `message_hidden`; gateway chỉ gửi cho chính user đó |
 | `room`/`member` | `room_created`, `member_added`, `member_count_changed` (đã có) | | Đường DM phát như CreateRoom |
 
-`replies`, `threads`, `mentions` là projection, không có event riêng và không vào feed. Feed thêm thay đổi của `bookmarks` (kind mới); worker phát lại doc hiện tại.
+Feed: insert/update/replace của `message_interactions` → kind lấy từ byte thứ 25 của `_id`: reaction → `ReactionChanged` (như cũ), bookmark → `BookmarkChanged` (mới), reply → bỏ qua (projection, dựng lại từ tin). `mentions` không vào feed.
 
 ## 7. Thư viện và hạ tầng
 
-- Không thư viện mới. Mongo: collection clustered, `$max`, upsert `$setOnInsert`, `FindOneAndUpdate` upsert, `countDocuments` trên khoảng `_id`. NATS: message schedule đã có.
-- 5 collection mới tạo ở bootstrap: `replies`, `threads`, `mentions`, `bookmarks`, `room_dms`. Shard sau này theo `{_id: 1}` (`replies`, `threads`, `mentions`, `bookmarks` bắt đầu bằng room/khoá tin). Truy vấn theo user (`{tenant, user_id, …}`, `{tenant, target, …}`) sẽ scatter-gather khi đã shard, giống "room của user" trên `members`.
-- Resync: `replies`, `threads`, `mentions` và số trả lời tự dựng lại từ phiếu tin (resync đã quét timeline chính); thêm quét `bookmarks` theo `updated_at`.
+- Không thư viện mới. Mongo: collection clustered, upsert `$setOnInsert`, pipeline `$cond`, `FindOneAndUpdate` upsert, đếm phủ index. NATS: message schedule đã có.
+- Collection mới tạo ở bootstrap: `message_interactions`, `mentions`, `room_dms`; bỏ `reactions`. Shard sau này theo `{_id: 1}` (`message_interactions`, `mentions` bắt đầu bằng khoá tin). Truy vấn theo user/đích (`{tenant, actor_id, …}`, `{tenant, target, …}`) sẽ scatter-gather khi đã shard, giống "room của user" trên `members`.
+- Resync: quét `message_interactions` theo `{room_id, kind, updated_at}` cho reaction và bookmark; reply, mention và số trên tin tự dựng lại từ phiếu tin (resync đã quét timeline chính).
 
 ## 8. Quyết định kỹ thuật và phương án đã loại
 
 | Quyết định | Phương án loại | Lý do |
 |---|---|---|
-| "Thread" = trả lời có trích ở timeline chính + số trả lời + danh sách trả lời | Nhánh chat riêng kiểu Slack/Discord (timeline, seq riêng, theo dõi thread, vị trí đọc thread) | Owner chốt: không làm nhánh riêng. Bỏ seq theo thread trong actor, `thread_subs`, mở cổng `thread_root ≠ 0` |
-| Số trả lời = đếm lại + CAS trên `messages.rc` (cùng cơ chế số reaction) | `$max` seq; `$inc` | Trả lời nằm rải ở timeline chính nên seq cuối không phải số trả lời; `$inc` mất/nhân số khi worker chết giữa hai lần ghi |
-| `threads` chỉ giữ thời điểm, không giữ số | Lưu số ở cả hai nơi | Một nguồn sự thật, không lệch |
-| Chặn xoá tin còn trả lời, đếm thẳng `replies` lúc xoá | Cho xoá, giữ chỗ "tin đã xoá"; dựa vào `rc` | Owner chốt chặn xoá; `rc` trễ ~1s nên đếm thẳng |
-| Forward: hiện người forward gần nhất + tác giả, nội dung gốc | Chỉ người forward; không ghi nguồn | Owner chốt |
-| Room id giữ số 63-bit ngẫu nhiên; DM qua sổ `room_dms` + bước "đảm bảo" | Id DM = băm(cặp user); ghép chuỗi; ObjectId/ULID | Băm: ~5% có cặp trùng ở 1 tỷ cặp → lộ DM. Ghép chuỗi/ObjectId/ULID không vừa khoá 8 byte, phải viết lại store; id theo thời gian gây điểm nóng khi shard |
-| Hai đường tạo room: `OpenDirectRoom`, `CreateRoom` (group) | Index unique `{tenant, dm_key}` trên `rooms`; tạo DM ngầm khi gửi tin đầu | Index unique không giữ được khi shard; core chết giữa chừng làm cặp mắc kẹt. Gửi tin cần room id để định tuyến và chống trùng cid; `room_created` phải trước `msg_created` |
-| Mention lưu theo đích, bung nhóm do nơi xử lý | Lưu phẳng tin × người nhận (Zulip, Matrix); bộ đếm trên dòng nhóm; search engine | Phẳng: `@all` room 200K = 200K dòng mỗi tin. Bộ đếm: mỗi người đọc khác nhau. Search engine ngoài Phase 1 |
-| Bỏ `@here`; không alias room | | Owner chốt |
-| Bookmark clustered `khoá tin│user` | ObjectId + `{tenant, user_id, created_at}` không unique (thiết kế §5 cũ) | Không unique thì ghi không idempotent, resync theo room không được |
-| Bỏ vòng gán lại seq của actor (R5) | Giữ làm ngoại lệ | Owner chốt; `_id` CAS đủ đúng, client retry cùng cid |
+| Liên kết gắn vào tin chia 2 dạng: tương tác (reaction, reply, bookmark) và mention | Thiết kế từng loại riêng | Owner chốt: thống nhất, không chắp vá; mỗi dạng một đường ghi, một kiểu đọc, một cơ chế đếm |
+| Dạng 1 một collection `message_interactions`, `kind` trong khoá; chuyển reaction M2b.3 sang | Mỗi loại một collection cùng khuôn | Owner chốt: một chỗ lưu, một index set, một lần resync; reaction mới chỉ có dữ liệu dev |
+| Mention là collection riêng | Gom mention vào `message_interactions` | Mention là chỉ định của người gửi, khoá theo đích (không theo user tương tác), đọc theo đích trên mọi room |
+| "Thread" = trả lời có trích ở timeline chính | Nhánh chat riêng kiểu Slack/Discord (timeline, seq riêng, theo dõi thread, vị trí đọc thread) | Owner chốt: không làm nhánh riêng; bỏ collection `threads`, `thread_subs`, seq theo thread trong actor |
+| Số trả lời = đếm lại + CAS trên `messages.rc`, cùng cơ chế số reaction | `$max` seq; `$inc` | Trả lời rải ở timeline chính nên seq cuối không phải số trả lời; `$inc` sai số khi worker chết giữa hai lần ghi |
+| Chặn xoá tin còn trả lời, đếm thẳng lúc xoá | Cho xoá, giữ chỗ "tin đã xoá"; dựa vào `rc` | Owner chốt chặn xoá; `rc` trễ ~1s |
+| Mention lưu theo đích, bung nhóm do nơi xử lý | Lưu phẳng tin × người nhận (Zulip, Matrix); search engine | Phẳng: `@all` room 200K = 200K doc mỗi tin. Search engine ngoài Phase 1 |
+| Room id giữ số 63-bit ngẫu nhiên; DM qua sổ `room_dms` + bước "đảm bảo" | Id DM = băm(cặp user); ghép chuỗi; ObjectId/ULID | Băm: ~5% có cặp trùng ở 1 tỷ cặp → lộ DM. Ghép chuỗi/ObjectId/ULID không vừa khoá 8 byte; id theo thời gian gây điểm nóng khi shard |
+| Hai đường tạo room: `OpenDirectRoom`, `CreateRoom` (group) | Index unique `{tenant, dm_key}`; tạo DM ngầm khi gửi tin đầu | Index unique không giữ được khi shard; core chết giữa chừng làm cặp mắc kẹt. Gửi tin cần room id để định tuyến và chống trùng cid |
+| Forward: hiện người forward + tác giả và nội dung gốc | Chỉ người forward; không ghi nguồn | Owner chốt |
+| Bỏ `@here`; không alias room; bỏ vòng gán lại seq (R5) | | Owner chốt |
 | Kiểm reply/forward ở `grpcsrv` trước actor | Kiểm trong actor | Actor chạy tuần tự theo room; đọc majority trong actor làm nghẽn room |
 
 ## 9. Chi phí và tải
 
 | Thao tác | Ghi | Đọc | Event |
 |---|---|---|---|
-| Gửi trả lời | 1 insert (gom) + worker: 1 upsert `replies` + 1 `$max` `threads` + ≤1 CAS `rc` | +1 đọc tin cha; worker 1 đếm khoảng nhỏ | `msg_created` + `counts_changed` |
+| Gửi trả lời | 1 insert (gom) + worker: 1 upsert doc reply + ≤1 CAS `rc` | +1 đọc tin cha; worker 1 đếm phủ index | `msg_created` + `counts_changed` |
+| React | 1 upsert + ≤1 CAS `rx` (như M2b.3) | như M2b.3 | `reaction_changed` + `counts_changed` |
+| Bookmark | 1 upsert | 1 đọc tin | `bookmark_changed` |
 | Tin có mention | + ≤51 upsert `mentions` (worker) | | không thêm |
-| `@all` ở channel 200K | + 1 dòng `mentions` | | không thêm |
+| `@all` ở channel 200K | + 1 doc `mentions` | | không thêm |
 | `GetHistory` 1 trang | | +1 `$in` (xem trước tin được trích) | |
-| `GetReplies` / `ListThreads` | | 1 quét khoảng/index + ≤50 đọc tin | |
-| `ListMentions` 1 trang | | ~1 + số nhóm + số room (~50) lượt đọc index, mỗi lượt ≤50 dòng; ≤50 đọc tin | |
+| `GetReplies` / `ListThreads` / `ListBookmarks` | | 1 quét khoảng/index + ≤50 đọc tin | |
+| `ListMentions` 1 trang | | ~1 + số nhóm + số room (~50) lượt đọc index, mỗi lượt ≤50 doc; ≤50 đọc tin | |
 | Forward | như gửi tin | +4 đọc theo khoá | `msg_created` |
-| Bookmark | 1 upsert | 1 đọc tin | 1 |
-| Mở DM đã có | | 1 đọc theo khoá | |
-| Mở DM mới | 1 upsert sổ + 1 room + 2 member + phiếu hẹn | | 4 |
+| Mở DM đã có / mới | 0 / 1 upsert sổ + 1 room + 2 member + phiếu hẹn | 1 đọc theo khoá | 0 / 4 |
 
-- Index mention: ở 10K tin/s, 1% có mention, ~3 đích → ~300 dòng/s × ~200 byte ≈ 5GB/ngày nếu đỉnh kéo dài cả ngày (thực tế thấp hơn nhiều).
-- `replies`: một dòng ~150 byte mỗi tin trả lời.
+- `mentions`: ở 10K tin/s, 1% có mention, ~3 đích → ~300 doc/s × ~200 byte ≈ 5GB/ngày nếu đỉnh kéo dài cả ngày (thực tế thấp hơn nhiều). Doc reply ~150 byte mỗi tin trả lời.
 - Băng thông: mỗi trả lời là `msg_created` tới mọi người nghe room; channel 200K là gánh của gateway.
 
 ## 10. Rủi ro và giới hạn
 
-- Tin có rất nhiều trả lời: mỗi lần đếm lại O(số trả lời), như reaction; gom W + K ở milestone Channel.
-- Số trả lời trễ ~`REPLY_COUNT_DELAY` so với tin trả lời (client tự cộng tạm).
-- Chặn xoá tin cha có cửa sổ dưới 1 giây (trả lời chưa vào `replies`).
-- Màn mention ghép ~50 room + N nhóm: nhiều lượt đọc mỗi trang; đo ở PoC prod-like, chậm thì gom `all:{room}` bằng `$in`.
+- Chuyển reaction sang collection mới đụng phần đã xây (store, feed, bộ đếm, resync, test hợp đồng); không có dữ liệu thật nên không cần migration, chỉ reset dev.
+- Tin có rất nhiều tương tác: mỗi lần đếm lại O(số tương tác của tin), như reaction; gom W + K ở milestone Channel.
+- Số trả lời trễ ~`REPLY_COUNT_DELAY` (client tự cộng tạm). Chặn xoá tin cha có cửa sổ dưới 1 giây.
+- `ListThreads` gom tin cha từ các trả lời gần đây: một tin có rất nhiều trả lời liên tiếp làm trang quét nhiều doc; giới hạn số doc quét mỗi trang.
+- Màn mention ghép ~50 room + N nhóm: đo ở PoC prod-like, chậm thì gom `all:{room}` bằng `$in`.
 - Dedupe `request_id` của `CreateRoom` chỉ giữ 15 phút và khi Redis còn khoá.
 - User id bị xoá rồi dùng lại thừa hưởng DM cũ: cấm dùng lại user id hoặc tombstone sổ DM (policy, sau).
 - Sửa tin mang cả mention: đổi đường sửa của M2b.2 (`message_edits` thêm field).
@@ -378,31 +386,32 @@ sequenceDiagram
 
 ## 11. Điểm owner đã xác nhận (2026-10-10)
 
-1. Số trả lời không tính trả lời đã xoá; tin còn trả lời thì không cho xoá.
-2. Trả lời của một trả lời được phép; danh sách của một tin chỉ gồm trả lời trực tiếp.
-3. `ListThreads` làm ở M2c.
-4. Sửa tin: mention có đổi thì gửi danh sách mới, không đổi thì không gửi.
-5. `@all` mặc định ai cũng dùng được, chặn qua policy.
-6. Forward: hiện "chuyển tiếp từ {người forward}", ô ghi chú có tên tác giả gốc và nội dung gốc.
-7. Bookmark: tối đa 1000 mỗi user (giới hạn mềm), không ghi chú; rời room hay tin bị xoá thì vẫn trong danh sách, hiện "không còn xem được".
-8. `ListBookmarks` và `ListMentions` làm ở M2c.
+1. Liên kết gắn vào tin chia 2 dạng; dạng 1 (reaction, reply, bookmark) một collection `message_interactions`, chuyển reaction M2b.3 sang; dạng 2 là `mentions`.
+2. Số trả lời không tính trả lời đã xoá; tin còn trả lời thì không cho xoá.
+3. Trả lời của một trả lời được phép; danh sách của một tin chỉ gồm trả lời trực tiếp.
+4. `ListThreads`, `ListBookmarks`, `ListMentions` làm ở M2c.
+5. Sửa tin: mention có đổi thì gửi danh sách mới, không đổi thì không gửi.
+6. `@all` mặc định ai cũng dùng được, chặn qua policy.
+7. Forward: hiện "chuyển tiếp từ {người forward}", ô ghi chú có tên tác giả gốc và nội dung gốc.
+8. Bookmark: tối đa 1000 mỗi user (giới hạn mềm), không ghi chú; rời room hay tin bị xoá thì vẫn trong danh sách, hiện "không còn xem được".
 
 ## 12. Kiểm thử, mỗi mục chứng minh gì
 
 | Test | Chứng minh |
 |---|---|
+| storetest `message_interactions` (mem + Mongo): ba kind trên cùng một tin | Khoá không lẫn kind; quét reply đúng thứ tự; đếm theo kind/state/value đúng |
+| Bộ test reaction M2b.3 chạy trên collection mới | Hành vi reaction không đổi sau khi chuyển |
 | grpcsrv: trả lời tin không có, tin đã xoá, tin room khác | Mã lỗi đúng; đã xoá vẫn cho trả lời |
-| actor: va seq core khác | `UNAVAILABLE` ngay, nhường room, không gán lại (R5) |
-| `reply_index` chạy hai lần, lệch thứ tự | Một dòng `replies`; `threads` không lùi |
-| `reply_counter` hai trả lời đua, CAS trượt, trả lời bị xoá | Số cuối = số trả lời còn sống; trượt thì Nak, không vòng thử lại |
+| actor: va seq core khác | `UNAVAILABLE` ngay, nhường room (R5) |
+| `reply_index` / `mention_index` chạy hai lần, lệch thứ tự | Không bản thứ hai; `mentions` theo phiên bản mới nhất |
+| Đếm lại `rc` khi hai trả lời đua, trả lời bị xoá | Số = trả lời còn sống; trượt thì Nak |
 | `DeleteMessage` tin còn trả lời / hết trả lời | `FAILED_PRECONDITION` / cho xoá |
-| `GetReplies`, `ListThreads` với tin xoá/ẩn/`cleared_at` | Che đúng, phân trang đúng |
-| `mention_index` sửa bỏ mention, phiếu đến lệch | Index theo phiên bản mới nhất |
-| `ListMentions` với `since`, room đã rời, tin xoá/ẩn | Ghép đúng thứ tự, che đúng |
-| forward: không member nguồn, nguồn ẩn/xoá, khác tenant; forward của forward | Mã lỗi đúng, text chép từ nguồn, `fw` giữ tác giả gốc |
+| `GetReplies`, `ListThreads`, `ListBookmarks`, `ListMentions` với tin xoá/ẩn/`cleared_at`, room đã rời, `since` | Che đúng, thứ tự và phân trang đúng |
+| Bookmark bấm hai lần, gỡ, vượt giới hạn | Không event thừa; tombstone; `FAILED_PRECONDITION` |
+| forward: không member nguồn, nguồn ẩn/xoá, khác tenant, forward của forward | Mã lỗi đúng; text chép từ nguồn; `fw` giữ tác giả gốc |
 | `OpenDirectRoom` song song, core chết giữa bước | Một room, lần sau làm nốt, số member đúng |
 | `CreateRoom` retry cùng `request_id`; gửi loại DM | Không tạo room thứ hai; DM bị từ chối |
-| storetest cho 5 collection mới (mem + Mongo) | Hai adapter cùng hợp đồng |
-| resync: trả lời, mention, bookmark trong khoảng mất | Dựng lại đủ |
+| Feed: update reaction/bookmark/reply | Kind đọc từ `_id`; reply không sinh phiếu |
+| Resync: reaction, bookmark, reply, mention trong khoảng mất | Dựng lại đủ |
 | R1–R3 | Một lượt rồi `UNAVAILABLE`/Nak; `room_created` không đếm bản trùng |
-| e2e phase 6 (corecli) | Mở DM hai lần ra cùng room; trả lời + số trả lời + `GetReplies` + `ListThreads`; mention + `ListMentions`; forward; bookmark; live event đủ id, kind, subject |
+| e2e phase 6 (corecli) | Mở DM hai lần ra cùng room; react như cũ; trả lời + số + `GetReplies` + `ListThreads`; chặn xoá tin còn trả lời; mention + `ListMentions`; forward; bookmark + `ListBookmarks`; live event đủ id, kind, subject |
