@@ -21,7 +21,7 @@ func (r *memberRun) directRoom() error {
 		return fmt.Errorf("open direct room: %w", err)
 	}
 	dm := resp.GetRoom().GetId()
-	r.dm = dm
+	r.dm, r.rooms = dm, append(r.rooms, dm)
 	_, _, err = r.cl.AddMembers(r.as(user), &chatimv1.AddMembersRequest{RoomId: dm, Users: []string{carol}, RequestId: "e2e-dm-add"})
 	if err = refused("add-members on the direct room", codes.FailedPrecondition, err); err != nil {
 		return err

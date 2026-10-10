@@ -62,7 +62,7 @@ func markOf(subject string, ev *chatimv1.Event) (Event, bool) {
 		r := ev.GetReactionChanged()
 		out.Kind, out.User, out.Text, out.Version = KindReaction, r.GetUser(), r.GetEmoji(), r.GetChange()
 	case ev.GetCountsChanged() != nil:
-		out.Kind, out.Text = KindCounts, FormatCounts(ev.GetCountsChanged().GetReactions().GetCounts())
+		out.Kind, out.Text = KindCounts, countsPayload(ev.GetCountsChanged())
 	case ev.GetMessagePinned() != nil:
 		out.Kind, out.CID = KindPinned, ev.GetMessagePinned().GetMessage().GetCid()
 	case ev.GetMessageUnpinned() != nil:

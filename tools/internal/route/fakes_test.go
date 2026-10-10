@@ -83,8 +83,8 @@ func (f *fakeCore) next(ctx context.Context) error {
 	return err
 }
 
-func (f *fakeCore) CreateRoom(ctx context.Context, _ *chatimv1.CreateRoomRequest, _ ...grpc.CallOption) (*chatimv1.CreateRoomResponse, error) {
-	if err := f.next(ctx); err != nil {
+func (f *fakeCore) CreateRoom(ctx context.Context, in *chatimv1.CreateRoomRequest, _ ...grpc.CallOption) (*chatimv1.CreateRoomResponse, error) {
+	if err := f.record(ctx, in); err != nil {
 		return nil, err
 	}
 	return &chatimv1.CreateRoomResponse{Room: &chatimv1.Room{Id: "42"}}, nil

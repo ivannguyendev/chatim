@@ -30,6 +30,7 @@ type memberRun struct {
 	root  string
 	wait  time.Duration
 	dm    string
+	rooms []string
 	n     uint64
 	wants []e2e.Want
 }
@@ -61,7 +62,7 @@ func e2eMembers(ctx context.Context, args []string) error {
 		return err
 	}
 	defer feed.Close()
-	r := &memberRun{st: &st, live: feed, root: *live.root, wait: *wait, n: uint64(len(st.Acks))}
+	r := &memberRun{st: &st, live: feed, root: *live.root, wait: *wait, rooms: []string{st.Room}, n: uint64(len(st.Acks))}
 	err = withRoutes(ctx, o, func(ctx context.Context, s *session) error {
 		r.base, r.cl = ctx, s.client
 		return r.run()
@@ -106,11 +107,7 @@ func (r *memberRun) count(ver uint64, n int32) e2e.Want {
 
 func (r *memberRun) expect(ws ...e2e.Want) error {
 	r.wants = append(r.wants, ws...)
-	rooms := []string{r.st.Room}
-	if r.dm != "" {
-		rooms = append(rooms, r.dm)
-	}
-	return r.live.await(r.base, rooms, r.wants, r.wait)
+	return r.live.await(r.base, r.rooms, r.wants, r.wait)
 }
 
 func refused(what string, want codes.Code, err error) error {

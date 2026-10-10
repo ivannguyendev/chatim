@@ -50,7 +50,7 @@ func classOf(kind string) string {
 	switch kind {
 	case KindRoomCreated, KindPinned, KindUnpinned, KindMemberCount:
 		return "room"
-	case KindMemberAdded, KindMemberRemoved, KindRoleChanged, KindPriorityChanged, KindRead, KindHidden, KindCleared:
+	case KindMemberAdded, KindMemberRemoved, KindRoleChanged, KindPriorityChanged, KindRead, KindHidden, KindCleared, KindBookmark:
 		return "member"
 	default:
 		return "message"

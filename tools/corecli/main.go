@@ -35,7 +35,7 @@ commands:
   unread             mark the room unread from -seq
   watch              print live events of a room from NATS
   slots              show how live cores share the slots
-  e2e                end-to-end scenario steps: setup, send, change, react-pin, members, check
+  e2e                end-to-end scenario steps: setup, send, change, react-pin, members, links, check
 
 run "corecli <command> -h" for the flags of a command`
 

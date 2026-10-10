@@ -78,7 +78,7 @@ func WithCaller(ctx context.Context, tenant, user string) context.Context {
 }
 
 func (c *Client) CreateRoom(ctx context.Context, req *chatimv1.CreateRoomRequest) (*chatimv1.CreateRoomResponse, Stats, error) {
-	return call(ctx, c, c.loc.AnyAddr, retryUnavailable, func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.CreateRoomResponse, error) {
+	return call(ctx, c, c.loc.AnyAddr, retryIdempotent, func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.CreateRoomResponse, error) {
 		return api.CreateRoom(ctx, req)
 	})
 }

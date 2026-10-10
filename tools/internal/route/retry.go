@@ -60,8 +60,6 @@ func inRoom[T any](ctx context.Context, c *Client, roomID string, do rpc[T]) (T,
 	return call(ctx, c, pick, retryIdempotent, do)
 }
 
-func retryUnavailable(code codes.Code) bool { return code == codes.Unavailable }
-
 func retryIdempotent(code codes.Code) bool {
 	switch code {
 	case codes.Unavailable, codes.ResourceExhausted, codes.DeadlineExceeded, codes.Aborted:
