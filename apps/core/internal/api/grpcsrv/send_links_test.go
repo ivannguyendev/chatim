@@ -104,7 +104,7 @@ func TestSendMessageRejectsBadLinks(t *testing.T) {
 		"reply to seq 0":    {RoomId: room, Cid: "c-2", Text: "re", ReplyTo: &chatimv1.ReplyRef{}},
 		"51 mentions":       {RoomId: room, Cid: "c-2", Text: "hi", Mentions: &chatimv1.MentionSet{Targets: many}},
 		"unknown mention":   {RoomId: room, Cid: "c-2", Text: "hi", Mentions: &chatimv1.MentionSet{Targets: []*chatimv1.MentionTarget{{Id: "x"}}}},
-		"forward":           {RoomId: room, Cid: "c-2", Text: "fw", ForwardFrom: &chatimv1.ForwardRef{RoomId: room, Seq: 1}},
+		"forward and reply": {RoomId: room, Cid: "c-2", Text: "fw", ForwardFrom: &chatimv1.ForwardRef{RoomId: room, Seq: 1}, ReplyTo: &chatimv1.ReplyRef{Seq: 1}},
 	}
 	for name, req := range cases {
 		t.Run(name, func(t *testing.T) {

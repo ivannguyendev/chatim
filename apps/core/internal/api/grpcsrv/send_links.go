@@ -2,22 +2,18 @@ package grpcsrv
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
-	"github.com/ivannguyendev/chatim/pkg/apperr"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-var errForwardNotSupported = fmt.Errorf("%w: forward_from not supported yet", apperr.ErrInvalidArgument)
-
 func (s *Service) sendCmd(ctx context.Context, who caller, room uint64, req *chatimv1.SendMessageRequest) (actor.SendCmd, error) {
 	if req.GetForwardFrom() != nil {
-		return actor.SendCmd{}, errForwardNotSupported
+		return s.forwardCmd(ctx, who, room, req)
 	}
 	reply := pbconv.DomainReplyRef(req.GetReplyTo())
 	if err := s.checkReply(ctx, who, room, reply); err != nil {
