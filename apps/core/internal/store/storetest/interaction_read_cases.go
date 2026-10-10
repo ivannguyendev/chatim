@@ -16,6 +16,7 @@ func reactionReadCases() []interactionCase {
 		{"count returns live emojis of that message only, sorted by count then emoji", reactCount},
 		{"between returns reactions and tombstones of a room by time then key", reactBetween},
 		{"between orders one instant by _id like the database: shorter keys first", reactBetweenKeyLength},
+		{"between pages after a cursor of (updated_at, _id) without repeating or skipping", reactBetweenAfterCursor},
 		{"cancelled context writes nothing", reactCancelled},
 	}
 }
@@ -71,7 +72,7 @@ func reactBetween(t *testing.T, s interactionStores) {
 		{roomA, to.Add(time.Hour), to.Add(2 * time.Hour), 10, nil},
 	}
 	for _, c := range cases {
-		got, err := s.interactions.Between(t.Context(), c.room, keys.ReactionKind, c.from, c.to, c.limit)
+		got, err := s.interactions.Between(t.Context(), store.InteractionScan{Room: c.room, Kind: keys.ReactionKind, From: c.from, To: c.to, Limit: c.limit})
 		if err != nil {
 			t.Fatalf("Between(%d, limit %d): %v", c.room, c.limit, err)
 		}
@@ -86,11 +87,35 @@ func reactBetweenKeyLength(t *testing.T, s interactionStores) {
 	dave := mustSet(t, s.interactions, reactAt(roomA, mainThread, 1, "dave", "👍", at), true)
 	al := mustSet(t, s.interactions, reactAt(roomA, mainThread, 9, "al", "👍", at), true)
 	eve := mustSet(t, s.interactions, reactAt(roomA, mainThread, 1, "eve", "👍", at), true)
-	got, err := s.interactions.Between(t.Context(), roomA, keys.ReactionKind, baseTime, baseTime.Add(time.Hour), 10)
+	got, err := s.interactions.Between(t.Context(), store.InteractionScan{Room: roomA, Kind: keys.ReactionKind, From: baseTime, To: baseTime.Add(time.Hour), Limit: 10})
 	if err != nil {
 		t.Fatalf("Between: %v", err)
 	}
 	assertInteractions(t, "Between(one instant)", got, reactionRefs(al, eve, bob, dave, carol))
+}
+
+func reactBetweenAfterCursor(t *testing.T, s interactionStores) {
+	at := 2 * time.Second
+	carol := mustSet(t, s.interactions, reactAt(roomA, mainThread, 2, "carol", "👍", at), true)
+	dave := mustSet(t, s.interactions, reactAt(roomA, mainThread, 1, "dave", "👍", at), true)
+	al := mustSet(t, s.interactions, reactAt(roomA, mainThread, 9, "al", "👍", at), true)
+	eve := mustSet(t, s.interactions, reactAt(roomA, mainThread, 1, "eve", "👍", at), true)
+	later := mustSet(t, s.interactions, reactAt(roomA, mainThread, 1, "bo", "👍", at+time.Millisecond), true)
+	want := reactionRefs(al, eve, dave, carol, later)
+	q := store.InteractionScan{Room: roomA, Kind: keys.ReactionKind, From: baseTime, To: baseTime.Add(time.Hour), Limit: 2}
+	var got []store.Interaction
+	for range want {
+		page, err := s.interactions.Between(t.Context(), q)
+		if err != nil {
+			t.Fatalf("Between(after %+v): %v", q.After, err)
+		}
+		got = append(got, page...)
+		if len(page) < q.Limit {
+			break
+		}
+		q.After = &page[len(page)-1]
+	}
+	assertInteractions(t, "Between(paged by cursor)", got, want)
 }
 
 func reactCancelled(t *testing.T, s interactionStores) {
@@ -117,7 +142,7 @@ func reactCancelled(t *testing.T, s interactionStores) {
 	assertErrorIs(t, "CountLiveReplies", err, context.Canceled)
 	_, err = s.interactions.Bookmarks(ctx, tenant, "alice", store.BookmarkCursor{}, 10)
 	assertErrorIs(t, "Bookmarks", err, context.Canceled)
-	_, err = s.interactions.Between(ctx, roomA, keys.ReactionKind, baseTime, baseTime.Add(time.Hour), 10)
+	_, err = s.interactions.Between(ctx, store.InteractionScan{Room: roomA, Kind: keys.ReactionKind, From: baseTime, To: baseTime.Add(time.Hour), Limit: 10})
 	assertErrorIs(t, "Between", err, context.Canceled)
 	_, err = s.msgs.SetReactions(ctx, key, 0, domain.ReactionSummary{Version: 1})
 	assertErrorIs(t, "SetReactions", err, context.Canceled)

@@ -68,7 +68,7 @@ func interactionKindsApart(t *testing.T, s interactionStores) {
 		keys.BookmarkKind: {{Kind: keys.BookmarkKind, Key: key, User: "alice", Ver: 2, At: off.At}},
 		keys.ReplyKind:    {{Kind: keys.ReplyKind, Key: key, User: "alice", Ver: 1, At: reply.At, Reply: store.ReplyKeyOf(reply)}},
 	} {
-		got, err := s.interactions.Between(t.Context(), roomA, kind, from, to, 10)
+		got, err := s.interactions.Between(t.Context(), store.InteractionScan{Room: roomA, Kind: kind, From: from, To: to, Limit: 10})
 		if err != nil {
 			t.Fatalf("Between(kind %d): %v", kind, err)
 		}

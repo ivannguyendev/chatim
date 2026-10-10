@@ -48,30 +48,21 @@ type Target struct {
 	Partitions  int
 }
 
-type Report struct {
-	Rooms, RoomRecords, MessageRecords, EditRecords, ReactionRecords, PinRecords int
-	MemberRecords, HiddenRecords                                                 int
-	DryRun                                                                       bool
-}
-
-func (r Report) String() string {
-	return fmt.Sprintf("resync rooms=%d room_records=%d message_records=%d edit_records=%d reaction_records=%d pin_records=%d member_records=%d hidden_records=%d dry_run=%t",
-		r.Rooms, r.RoomRecords, r.MessageRecords, r.EditRecords, r.ReactionRecords, r.PinRecords, r.MemberRecords, r.HiddenRecords, r.DryRun)
-}
-
 type scanner struct {
 	deps   Deps
 	target Target
 	opts   Options
 	tick   *time.Ticker
 	rep    Report
+	checks []countCheck
+	seen   map[countCheck]struct{}
 }
 
 func Run(ctx context.Context, deps Deps, target Target, opts Options) (Report, error) {
 	if err := opts.Validate(); err != nil {
 		return Report{DryRun: opts.DryRun}, err
 	}
-	s := &scanner{deps: deps, target: target, opts: opts, tick: time.NewTicker(time.Second / time.Duration(opts.Rate)), rep: Report{DryRun: opts.DryRun}}
+	s := &scanner{deps: deps, target: target, opts: opts, tick: time.NewTicker(time.Second / time.Duration(opts.Rate)), rep: Report{DryRun: opts.DryRun}, seen: map[countCheck]struct{}{}}
 	defer s.tick.Stop()
 	err := s.rooms(ctx)
 	return s.rep, err
@@ -109,12 +100,11 @@ func (s *scanner) rooms(ctx context.Context) error {
 func (s *scanner) room(ctx context.Context, r domain.Room) error {
 	s.rep.Rooms++
 	if s.inRange(r.CreatedAt) {
-		if err := s.emit(ctx, work.Record{Kind: store.RoomInserted, Room: r.ID, CommittedAt: r.CreatedAt}); err != nil {
+		if err := s.emitCounted(ctx, work.Record{Kind: store.RoomInserted, Room: r.ID, CommittedAt: r.CreatedAt}, &s.rep.RoomRecords); err != nil {
 			return err
 		}
-		s.rep.RoomRecords++
 	}
-	for _, scan := range []func(context.Context, uint64) error{s.timeline, s.edits, s.reactions, s.pins, s.members, s.hidden} {
+	for _, scan := range []func(context.Context, uint64) error{s.timeline, s.edits, s.interactions, s.pins, s.members, s.hidden, s.countChecks} {
 		if err := scan(ctx, r.ID); err != nil {
 			return err
 		}
@@ -136,10 +126,9 @@ func (s *scanner) timeline(ctx context.Context, room uint64) error {
 			if m.CreatedAt.After(s.opts.To) {
 				continue
 			}
-			if err := s.emit(ctx, work.Record{Kind: store.MessageInserted, Room: m.Room, Thread: m.Thread, Seq: m.Seq, CommittedAt: m.CreatedAt}); err != nil {
+			if err := s.emitCounted(ctx, messageRecord(m), &s.rep.MessageRecords); err != nil {
 				return err
 			}
-			s.rep.MessageRecords++
 		}
 		if len(page) < messagePage {
 			return nil
@@ -148,7 +137,20 @@ func (s *scanner) timeline(ctx context.Context, room uint64) error {
 	}
 }
 
+func messageRecord(m domain.Message) work.Record {
+	flags := uint32(store.ReplyMentionFlagsOf(m))
+	return work.Record{Kind: store.MessageInserted, Room: m.Room, Thread: m.Thread, Seq: m.Seq, Version: flags, CommittedAt: m.CreatedAt}
+}
+
 func (s *scanner) inRange(t time.Time) bool { return !t.Before(s.opts.From) && !t.After(s.opts.To) }
+
+func (s *scanner) emitCounted(ctx context.Context, rec work.Record, counted *int) error {
+	if err := s.emit(ctx, rec); err != nil {
+		return err
+	}
+	*counted++
+	return nil
+}
 
 func (s *scanner) emit(ctx context.Context, rec work.Record) error {
 	if s.opts.DryRun {

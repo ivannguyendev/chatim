@@ -3,7 +3,6 @@ package mongostore
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -63,25 +62,27 @@ func (r *Interactions) CountLiveReplies(ctx context.Context, parent store.MsgKey
 	return narrowUint32("reply count", n)
 }
 
-func (r *Interactions) Between(ctx context.Context, room uint64, kind keys.InteractionKind, from, to time.Time, limit int) ([]store.Interaction, error) {
-	if err := store.ValidateInteractionKind(kind); err != nil {
+func (r *Interactions) Between(ctx context.Context, q store.InteractionScan) ([]store.Interaction, error) {
+	if err := store.ValidateInteractionScan(q); err != nil {
 		return nil, err
 	}
-	if err := store.ValidateLimit(limit, store.MaxInteractionScan); err != nil {
-		return nil, err
-	}
-	rid, err := toInt64("room id", room)
+	rid, err := toInt64("room id", q.Room)
 	if err != nil {
 		return nil, err
 	}
 	filter := bson.D{
-		{Key: "room_id", Value: rid}, {Key: "kind", Value: interactionKindNames[kind]},
-		{Key: "updated_at", Value: bson.D{{Key: "$gte", Value: from}, {Key: "$lte", Value: to}}},
+		{Key: "room_id", Value: rid}, {Key: "kind", Value: interactionKindNames[q.Kind]},
+		{Key: "updated_at", Value: bson.D{{Key: "$gte", Value: q.From}, {Key: "$lte", Value: q.To}}},
 	}
-	opts := options.Find().SetSort(bson.D{{Key: "updated_at", Value: 1}, {Key: "_id", Value: 1}}).SetLimit(int64(limit))
+	if q.After != nil {
+		later := bson.D{{Key: "updated_at", Value: bson.D{{Key: "$gt", Value: q.After.At}}}}
+		tied := bson.D{{Key: "updated_at", Value: q.After.At}, {Key: "_id", Value: bson.D{{Key: "$gt", Value: store.InteractionID(*q.After)}}}}
+		filter = append(filter, bson.E{Key: "$or", Value: bson.A{later, tied}})
+	}
+	opts := options.Find().SetSort(bson.D{{Key: "updated_at", Value: 1}, {Key: "_id", Value: 1}}).SetLimit(int64(q.Limit))
 	docs, err := r.find(ctx, filter, opts)
 	if err != nil {
-		return nil, fmt.Errorf("interactions of room %d between %v and %v: %w", room, from, to, err)
+		return nil, fmt.Errorf("interactions of room %d between %v and %v: %w", q.Room, q.From, q.To, err)
 	}
 	return decodeAll(docs, decodeInteraction)
 }

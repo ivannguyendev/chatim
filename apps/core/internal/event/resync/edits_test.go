@@ -38,7 +38,7 @@ func TestResyncPublishesEditsOfTheLostRangeAfterTheTimeline(t *testing.T) {
 	if len(got) != 64 || got[61] != inRange || got[62] != roomRecord {
 		t.Fatalf("published %d ids ending %v, want 61 messages, then %s, then %s", len(got), got[max(0, len(got)-3):], inRange, roomRecord)
 	}
-	if rep.String() != "resync rooms=2 room_records=1 message_records=61 edit_records=1 reaction_records=0 pin_records=0 member_records=1 hidden_records=0 dry_run=false" {
+	if rep.String() != "resync rooms=2 room_records=1 message_records=61 edit_records=1 reaction_records=0 bookmark_records=0 pin_records=0 member_records=1 hidden_records=0 count_check_records=0 dry_run=false" {
 		t.Fatalf("report line = %q", rep.String())
 	}
 }

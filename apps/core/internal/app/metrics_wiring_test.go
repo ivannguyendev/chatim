@@ -28,15 +28,20 @@ func fakeProbes(withReader bool) probes {
 		oplogWindow:  func() float64 { return 0 },
 		workers:      func() effects.Stats { return effects.Stats{Processed: 7, Failed: 2, Lag: 3 * time.Second} },
 		effectCounts: map[string]effectCounters{
-			"msg_created":     {republished: func() uint64 { return 5 }, dropped: zero},
-			"room_created":    {republished: zero, dropped: func() uint64 { return 1 }},
-			"edit_projection": {dropped: func() uint64 { return 4 }},
-			"count_event":     {republished: func() uint64 { return 8 }, dropped: func() uint64 { return 2 }},
-			"pin_projection":  {dropped: func() uint64 { return 3 }},
-			"member_event":    {republished: func() uint64 { return 9 }, dropped: func() uint64 { return 10 }},
-			"read_event":      {republished: func() uint64 { return 11 }, dropped: zero},
+			"msg_created":         {republished: func() uint64 { return 5 }, dropped: zero},
+			"room_created":        {republished: zero, dropped: func() uint64 { return 1 }},
+			"edit_projection":     {dropped: func() uint64 { return 4 }},
+			"count_event":         {republished: func() uint64 { return 8 }, dropped: func() uint64 { return 2 }},
+			"pin_projection":      {dropped: func() uint64 { return 3 }},
+			"member_event":        {republished: func() uint64 { return 9 }, dropped: func() uint64 { return 10 }},
+			"read_event":          {republished: func() uint64 { return 11 }, dropped: zero},
+			"reply_mention_index": {republished: func() uint64 { return 15 }, dropped: func() uint64 { return 16 }},
+			"count_repair":        {republished: func() uint64 { return 17 }, dropped: func() uint64 { return 18 }},
+			"bookmark_event":      {republished: func() uint64 { return 19 }, dropped: func() uint64 { return 20 }},
 		},
-		counterRepairs:  map[string]func() uint64{"reactions": func() uint64 { return 6 }, "members": func() uint64 { return 12 }},
+		counterRepairs: map[string]func() uint64{
+			"reactions": func() uint64 { return 6 }, "replies": func() uint64 { return 21 }, "members": func() uint64 { return 12 },
+		},
 		memberForgets:   func() uint64 { return 13 },
 		memberMalformed: func() uint64 { return 14 },
 	}
@@ -106,6 +111,10 @@ func TestEffectMetricsReadTheirEffectByLabel(t *testing.T) {
 		"reconcile_republished_total{member_event}": 9, "effect_dropped_total{member_event}": 10,
 		"reconcile_republished_total{read_event}": 11, "counter_repaired_total{members}": 12,
 		"member_cache_forgets_total": 13, "member_watch_malformed_total": 14,
+		"reconcile_republished_total{reply_mention_index}": 15, "effect_dropped_total{reply_mention_index}": 16,
+		"reconcile_republished_total{count_repair}": 17, "effect_dropped_total{count_repair}": 18,
+		"reconcile_republished_total{bookmark_event}": 19, "effect_dropped_total{bookmark_event}": 20,
+		"counter_repaired_total{replies}": 21,
 	}
 	for key, v := range want {
 		if g, ok := got[key]; !ok || g != v {

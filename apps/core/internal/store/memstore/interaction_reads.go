@@ -1,11 +1,8 @@
 package memstore
 
 import (
-	"bytes"
-	"cmp"
 	"context"
 	"slices"
-	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -35,29 +32,24 @@ func (s *Interactions) CountReactions(ctx context.Context, key store.MsgKey) ([]
 	return out, nil
 }
 
-func (s *Interactions) Between(ctx context.Context, room uint64, kind keys.InteractionKind, from, to time.Time, limit int) ([]store.Interaction, error) {
+func (s *Interactions) Between(ctx context.Context, q store.InteractionScan) ([]store.Interaction, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if err := store.ValidateInteractionKind(kind); err != nil {
-		return nil, err
-	}
-	if err := store.ValidateLimit(limit, store.MaxInteractionScan); err != nil {
+	if err := store.ValidateInteractionScan(q); err != nil {
 		return nil, err
 	}
 	s.mu.RLock()
-	all := s.allOfKind(kind)
+	all := s.allOfKind(q.Kind)
 	s.mu.RUnlock()
 	out := []store.Interaction{}
 	for _, x := range all {
-		if x.Key.Room == room && !x.At.Before(from) && !x.At.After(to) {
+		if x.Key.Room == q.Room && !x.At.Before(q.From) && !x.At.After(q.To) && (q.After == nil || store.CompareInteractions(x, *q.After) > 0) {
 			out = append(out, x)
 		}
 	}
-	slices.SortFunc(out, func(a, b store.Interaction) int {
-		return cmp.Or(a.At.Compare(b.At), compareID(interactionID(a), interactionID(b)))
-	})
-	return out[:min(len(out), limit)], nil
+	slices.SortFunc(out, store.CompareInteractions)
+	return out[:min(len(out), q.Limit)], nil
 }
 
 func (s *Interactions) allOfKind(kind keys.InteractionKind) []store.Interaction {
@@ -77,16 +69,4 @@ func (s *Interactions) allOfKind(kind keys.InteractionKind) []store.Interaction 
 		}
 	}
 	return out
-}
-
-func interactionID(x store.Interaction) []byte {
-	msg := keys.Msg(x.Key.Room, x.Key.Thread, x.Key.Seq)
-	if x.Kind == keys.ReplyKind {
-		return keys.InteractionReply(msg, x.Reply.Thread, x.Reply.Seq)
-	}
-	return keys.InteractionUser(msg, x.Kind, x.User)
-}
-
-func compareID(a, b []byte) int {
-	return cmp.Or(cmp.Compare(len(a), len(b)), bytes.Compare(a, b))
 }

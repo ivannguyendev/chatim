@@ -68,7 +68,7 @@ func replyRemoveBeforeAdd(t *testing.T, s interactionStores) {
 	assertReplies(t, s.interactions, parent, 0, 10)
 	assertLiveReplies(t, s.interactions, parent, 0)
 	from, to := baseTime, baseTime.Add(2*time.Hour)
-	got, err := s.interactions.Between(t.Context(), roomA, keys.ReplyKind, from, to, 10)
+	got, err := s.interactions.Between(t.Context(), store.InteractionScan{Room: roomA, Kind: keys.ReplyKind, From: from, To: to, Limit: 10})
 	want := []store.Interaction{{Kind: keys.ReplyKind, Key: parent, User: "alice", Ver: 1, At: baseTime.Add(time.Hour), Reply: store.ReplyKeyOf(r3)}}
 	if err != nil {
 		t.Fatalf("Between(replies): %v", err)

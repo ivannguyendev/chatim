@@ -102,10 +102,10 @@ func reactInvalid(t *testing.T, s interactionStores) {
 	_, err = s.interactions.CountReactions(t.Context(), msgKey(roomA, mainThread, 0))
 	assertErrorIs(t, "CountReactions(zero seq)", err, apperr.ErrInvalidArgument)
 	for _, limit := range []int{0, store.MaxInteractionScan + 1} {
-		_, err := s.interactions.Between(t.Context(), roomA, keys.ReactionKind, baseTime, baseTime.Add(time.Hour), limit)
+		_, err := s.interactions.Between(t.Context(), store.InteractionScan{Room: roomA, Kind: keys.ReactionKind, From: baseTime, To: baseTime.Add(time.Hour), Limit: limit})
 		assertErrorIs(t, "Between(bad limit)", err, apperr.ErrInvalidArgument)
 	}
-	_, err = s.interactions.Between(t.Context(), roomA, keys.ReplyKind+1, baseTime, baseTime.Add(time.Hour), 10)
+	_, err = s.interactions.Between(t.Context(), store.InteractionScan{Room: roomA, Kind: keys.ReplyKind + 1, From: baseTime, To: baseTime.Add(time.Hour), Limit: 10})
 	assertErrorIs(t, "Between(bad kind)", err, apperr.ErrInvalidArgument)
 	assertNoReaction(t, s.interactions, msgKey(roomA, mainThread, 1), "alice")
 }

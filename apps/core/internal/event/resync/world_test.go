@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/resync"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
@@ -33,9 +35,10 @@ var (
 )
 
 type publishSpy struct {
-	mu  sync.Mutex
-	ids []string
-	err error
+	mu   sync.Mutex
+	ids  []string
+	recs []work.Record
+	err  error
 }
 
 func (p *publishSpy) PublishMsg(_ context.Context, m *nats.Msg, _ ...jetstream.PublishOpt) (*jetstream.PubAck, error) {
@@ -44,7 +47,12 @@ func (p *publishSpy) PublishMsg(_ context.Context, m *nats.Msg, _ ...jetstream.P
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	rec, err := work.Decode(m.Data)
+	if err != nil {
+		return nil, err
+	}
 	p.ids = append(p.ids, m.Header.Get(jetstream.MsgIDHeader))
+	p.recs = append(p.recs, rec)
 	return &jetstream.PubAck{}, nil
 }
 
@@ -52,6 +60,23 @@ func (p *publishSpy) published() []string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return slices.Clone(p.ids)
+}
+
+func (p *publishSpy) records() []work.Record {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Clone(p.recs)
+}
+
+func withoutOps(ids []string) []string {
+	out := make([]string, len(ids))
+	for i, id := range ids {
+		if strings.HasPrefix(id, "q:") {
+			id = id[:strings.LastIndex(id, "-")+1]
+		}
+		out[i] = id
+	}
+	return out
 }
 
 type world struct {

@@ -59,21 +59,24 @@ func TestResyncPublishesReactionsAndPinsOfTheLostRangeAfterTheEdits(t *testing.T
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	want := resync.Report{Rooms: 2, RoomRecords: 1, MessageRecords: 61, EditRecords: 1, ReactionRecords: 2, PinRecords: 1, MemberRecords: 1}
+	want := resync.Report{Rooms: 2, RoomRecords: 1, MessageRecords: 61, EditRecords: 1, ReactionRecords: 2, PinRecords: 1, MemberRecords: 1, CountCheckRecords: 2}
 	if rep != want {
 		t.Fatalf("report = %+v, want %+v", rep, want)
 	}
-	got := pub.published()
-	tail := []string{edit, changed, removed, pinned, work.Record{Kind: store.RoomInserted, Room: newRoom}.ID(), memberID(newRoom, "alice", 1)}
-	if len(got) != 67 || !slices.Equal(got[61:], tail) {
-		t.Fatalf("published %d ids ending %v, want 61 messages then %v", len(got), got[max(0, len(got)-6):], tail)
+	got := withoutOps(pub.published())
+	tail := []string{
+		edit, changed, removed, pinned, countCheckID(busyRoom, 40, "reactions"), countCheckID(busyRoom, 42, "reactions"),
+		work.Record{Kind: store.RoomInserted, Room: newRoom}.ID(), memberID(newRoom, "alice", 1),
 	}
-	if rep.String() != "resync rooms=2 room_records=1 message_records=61 edit_records=1 reaction_records=2 pin_records=1 member_records=1 hidden_records=0 dry_run=false" {
+	if len(got) != 69 || !slices.Equal(got[61:], tail) {
+		t.Fatalf("published %d ids ending %v, want 61 messages then %v", len(got), got[max(0, len(got)-8):], tail)
+	}
+	if rep.String() != "resync rooms=2 room_records=1 message_records=61 edit_records=1 reaction_records=2 bookmark_records=0 pin_records=1 member_records=1 hidden_records=0 count_check_records=2 dry_run=false" {
 		t.Fatalf("report line = %q", rep.String())
 	}
 }
 
-func TestResyncPagesReactionsAndPinsByTimeWithoutRepeatingThePageEdge(t *testing.T) {
+func TestResyncPagesReactionsByCursorAndPinsByTimeWithoutRepeatingThePageEdge(t *testing.T) {
 	w := newWorld(t)
 	for i := range uint32(1200) {
 		at := lostFrom.Add(time.Duration((i+1)/3) * time.Millisecond)
@@ -82,12 +85,12 @@ func TestResyncPagesReactionsAndPinsByTimeWithoutRepeatingThePageEdge(t *testing
 	}
 	opts := resync.Options{From: lostFrom, To: lostTo, Room: staleRoom, Rate: 1, DryRun: true}
 	rep, err := resync.Run(t.Context(), w.deps(&publishSpy{}), target, opts)
-	if err != nil || rep != (resync.Report{Rooms: 1, ReactionRecords: 1200, PinRecords: 1200, DryRun: true}) {
-		t.Fatalf("Run = %+v, %v; want 1200 reaction and 1200 pin records, each once", rep, err)
+	if err != nil || rep != (resync.Report{Rooms: 1, ReactionRecords: 1200, PinRecords: 1200, CountCheckRecords: 1, DryRun: true}) {
+		t.Fatalf("Run = %+v, %v; want 1200 reaction and 1200 pin records, each once, and one count check", rep, err)
 	}
 }
 
-func TestResyncStopsWhenOneInstantHoldsMoreReactionsOrPinsThanAPage(t *testing.T) {
+func TestResyncPagesOneInstantOfReactionsButStopsOnAFullPageOfPins(t *testing.T) {
 	at := lostFrom.Add(time.Minute)
 	opts := resync.Options{From: lostFrom, To: lostTo, Room: staleRoom, Rate: 1, DryRun: true}
 	w := newWorld(t)
@@ -95,8 +98,8 @@ func TestResyncStopsWhenOneInstantHoldsMoreReactionsOrPinsThanAPage(t *testing.T
 		w.react(t, staleRoom, 1, "u"+strconv.Itoa(i+1), "👍", at)
 	}
 	rep, err := resync.Run(t.Context(), w.deps(&publishSpy{}), target, opts)
-	if !errors.Is(err, resync.ErrReactionPageFull) || rep.ReactionRecords != 1000 {
-		t.Fatalf("Run = %+v, %v; want ErrReactionPageFull after one full page", rep, err)
+	if err != nil || rep.ReactionRecords != 1001 || rep.CountCheckRecords != 1 {
+		t.Fatalf("Run = %+v, %v; want all 1001 reactions of one instant and one count check", rep, err)
 	}
 	w = newWorld(t)
 	for pv := range uint64(1001) {

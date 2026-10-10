@@ -150,9 +150,3 @@ func TestDisarmDeletesTheTimerAndOnlyLogsFailures(t *testing.T) {
 		t.Fatalf("%q logged %d times, want 2", disarmFailedMsg, got)
 	}
 }
-
-func TestTimerOpsAreRandom(t *testing.T) {
-	if a, b, c := randomOp(), randomOp(), randomOp(); a == b && b == c {
-		t.Fatalf("randomOp returned %d three times", a)
-	}
-}

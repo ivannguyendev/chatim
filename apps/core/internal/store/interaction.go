@@ -40,7 +40,7 @@ type Interactions interface {
 	RemoveReply(ctx context.Context, r domain.Reply, at time.Time) (bool, error)
 	Replies(ctx context.Context, parent MsgKey, afterSeq uint64, limit int) ([]domain.Reply, error)
 	CountLiveReplies(ctx context.Context, parent MsgKey) (uint32, error)
-	Between(ctx context.Context, room uint64, kind keys.InteractionKind, from, to time.Time, limit int) ([]Interaction, error)
+	Between(ctx context.Context, q InteractionScan) ([]Interaction, error)
 }
 
 type ReactionSummaries interface {

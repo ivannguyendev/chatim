@@ -2,8 +2,6 @@ package work
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -14,7 +12,6 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
@@ -60,7 +57,7 @@ func NewTimers(js TimerJetStream, streamName, subjectRoot string, partitions int
 	case delay <= 0:
 		return nil, fmt.Errorf("%w: timer delay %v must be positive", apperr.ErrInvalidArgument, delay)
 	}
-	t := &Timers{js: js, stream: streamName, root: subjectRoot, partitions: partitions, delay: delay, log: slog.Default(), now: time.Now, op: randomOp}
+	t := &Timers{js: js, stream: streamName, root: subjectRoot, partitions: partitions, delay: delay, log: slog.Default(), now: time.Now, op: RandomOp}
 	for _, opt := range opts {
 		opt(t)
 	}
@@ -77,19 +74,12 @@ func (t *Timers) ArmMemberCountCheck(ctx context.Context, room uint64) (Timer, e
 }
 
 func (t *Timers) ArmMessageCountCheck(ctx context.Context, key store.MsgKey, counter string) (Timer, error) {
-	if err := key.Validate(); err != nil {
+	r, err := MessageCountCheck(key, counter, t.op(), time.Time{})
+	if err != nil {
 		return Timer{}, err
 	}
-	if err := domain.ValidateThread(key.Thread); err != nil {
-		return Timer{}, err
-	}
-	if !pbconv.MessageCounter(counter) {
-		return Timer{}, fmt.Errorf("%w: message count check of counter %q", apperr.ErrInvalidArgument, counter)
-	}
-	op := t.op()
-	r := Record{Kind: store.MessageCountCheck, Room: key.Room, Thread: key.Thread, Seq: key.Seq, Version: op, User: counter}
 	at := pbconv.RoomID(key.Room) + "." + strconv.FormatUint(key.Thread, 10) + "." + strconv.FormatUint(key.Seq, 10) + "." + counter
-	return t.arm(ctx, r, t.timerSubject(at, op))
+	return t.arm(ctx, r, t.timerSubject(at, r.Version))
 }
 
 func (t *Timers) arm(ctx context.Context, r Record, subject string) (Timer, error) {
@@ -141,10 +131,4 @@ func fireAt(now time.Time, delay time.Duration) time.Time {
 		return whole.Add(time.Second)
 	}
 	return at
-}
-
-func randomOp() uint32 {
-	var b [4]byte
-	_, _ = rand.Read(b[:])
-	return binary.BigEndian.Uint32(b[:])
 }
