@@ -12,7 +12,7 @@ type entry struct {
 	key        dedupeKey
 	msg        domain.Message
 	admittedAt time.Time
-	reassigns  int
+	unsent     int
 	resends    int
 	fixed      bool
 	dup        bool
@@ -35,7 +35,6 @@ type actor struct {
 
 	room    domain.Room
 	last    uint64
-	stale   bool
 	dirty   bool
 	members *memberCache
 	cache   cidCache
@@ -44,8 +43,7 @@ type actor struct {
 	landed  []landing
 	failed  []failure
 
-	contended      bool
-	contentionWait time.Duration
+	contended bool
 }
 
 func newActor(r *Router, id uint64) *actor {
@@ -126,7 +124,6 @@ func (a *actor) run(ctx context.Context) {
 		select {
 		case res := <-a.results:
 			a.settle(res)
-			a.afterContention(ctx)
 		case <-ctx.Done():
 			a.exit(errStopped)
 			return

@@ -2,11 +2,13 @@ package actor_test
 
 import (
 	"errors"
+	"slices"
 	"testing"
 	"testing/synctest"
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
 )
 
 func TestUnconfirmedWriteFailsAtDeadlineAndRetryGetsOriginalAck(t *testing.T) {
@@ -87,16 +89,34 @@ func TestSubmitFailureWritesNothingAndReusesTheSeq(t *testing.T) {
 	})
 }
 
-func TestResendsDoNotConsumeTheReassignBudget(t *testing.T) {
+func TestNotSentAndResendBudgetsAreSeparate(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rg := newRig(t, baseConfig)
-		rg.sub.then(lostUnknown, rg.sub.foreignFirst, rg.sub.foreignFirst, rg.sub.foreignFirst)
+		rg.sub.then(notSent, notSent, notSent, lostUnknown, lostUnknown, lostUnknown)
 		rg.start(t)
 		ack := mustSend(t, rg.Router, cmd(roomA, "alice", "c1"))
-		if ack.Seq != 4 {
-			t.Fatalf("ack seq %d, want 4 after one resend and three reassigns", ack.Seq)
+		if ack.Seq != 1 {
+			t.Fatalf("ack seq %d, want 1 after three unsent tries and three resends", ack.Seq)
 		}
-		assertGroupSeqs(t, rg, []uint64{1}, []uint64{1}, []uint64{2}, []uint64{3}, []uint64{4})
+		assertGroupSeqs(t, rg, []uint64{1}, []uint64{1}, []uint64{1}, []uint64{1}, []uint64{1}, []uint64{1}, []uint64{1})
 		assertStoredOnce(t, rg, "c1", ack)
+	})
+}
+
+func TestNotSentLimitFailsAndReleasesWithoutYielding(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		rg := newRig(t, baseConfig)
+		rg.sub.alwaysDo(notSent)
+		rg.start(t)
+		_, err := rg.Send(t.Context(), cmd(roomA, "alice", "c1"))
+		expectErr(t, err, domain.ErrRetryLater)
+		assertGroupSeqs(t, rg, []uint64{1}, []uint64{1}, []uint64{1}, []uint64{1})
+		if got, want := abortedKeys(rg), []dedupe.Key{remoteKey(roomA, "alice", "c1")}; !slices.Equal(got, want) {
+			t.Fatalf("aborted %v, want %v", got, want)
+		}
+		synctest.Wait()
+		if n, yields := rg.ActorCount(), rg.Stats().Yields; n != 1 || yields != 0 {
+			t.Fatalf("actors %d yields %d after unsent writes, want the actor kept and no yield", n, yields)
+		}
 	})
 }

@@ -41,6 +41,7 @@ func (a *actor) settle(res []store.Result) {
 	}
 	a.conclude(g.ctx)
 	a.reconcile(g.ctx, open)
+	a.contended = false
 	slices.SortFunc(a.retries, func(x, y *entry) int { return cmp.Compare(x.msg.Seq, y.msg.Seq) })
 }
 
@@ -50,6 +51,7 @@ func (a *actor) reconcile(ctx context.Context, open []*entry) {
 		found, err := a.r.msgs.Find(ctx, a.id, keysOf(open))
 		if err == nil {
 			open = a.resolve(open, found)
+			a.abandonRetries()
 			a.conclude(ctx)
 		}
 		if len(open) == 0 || !backoff.Pause(ctx, backoff.Jitter(wait)) {
@@ -89,7 +91,7 @@ func (a *actor) resolve(open []*entry, found []domain.Message) []*entry {
 }
 
 func (a *actor) requeue(e *entry, fixed bool, exhausted error) {
-	count := &e.reassigns
+	count := &e.unsent
 	if fixed {
 		count = &e.resends
 	}

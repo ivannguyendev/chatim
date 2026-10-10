@@ -87,7 +87,7 @@ func TestUnknownWriteThatIsAbsentIsRetriedAtTheSameSeq(t *testing.T) {
 	})
 }
 
-func TestDuplicateFromAnotherWriterIsReassignedAfterReloadedLast(t *testing.T) {
+func TestDuplicateFromAnotherWriterFailsAndTheRetryUsesTheReloadedLast(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rg := newRig(t, baseConfig)
 		rg.sub.then(func(msgs []domain.Message) []store.Result {
@@ -97,26 +97,28 @@ func TestDuplicateFromAnotherWriterIsReassignedAfterReloadedLast(t *testing.T) {
 			return rg.sub.insert(msgs)
 		})
 		rg.start(t)
+		_, err := rg.Send(t.Context(), cmd(roomA, "alice", "c1"))
+		expectErr(t, err, domain.ErrRetryLater)
+		synctest.Wait()
 		ack := mustSend(t, rg.Router, cmd(roomA, "alice", "c1"))
 		if ack.Seq != 6 {
-			t.Fatalf("reassigned to seq %d, want Last+1 = 6", ack.Seq)
+			t.Fatalf("client retry got seq %d, want Last+1 = 6", ack.Seq)
 		}
 		assertGroupSeqs(t, rg, []uint64{1}, []uint64{6})
 		assertStoredOnce(t, rg, "c1", ack)
 		if lasts, _, _ := rg.msgs.counts(); lasts != 2 {
-			t.Fatalf("Last called %d times, want load + reload", lasts)
+			t.Fatalf("Last called %d times, want one load per actor", lasts)
 		}
 	})
 }
 
 func TestDuplicateNotYetVisibleIsResolvedOnceVisible(t *testing.T) {
 	tests := map[string]struct {
-		writer  func(*fakeSubmitter) outcome
-		want    uint64
-		batches int
+		writer func(*fakeSubmitter) outcome
+		err    error
 	}{
-		"our earlier write": {func(s *fakeSubmitter) outcome { return s.landedDuplicate }, 1, 1},
-		"a foreign write":   {func(s *fakeSubmitter) outcome { return s.foreignFirst }, 2, 2},
+		"our earlier write": {func(s *fakeSubmitter) outcome { return s.landedDuplicate }, nil},
+		"a foreign write":   {func(s *fakeSubmitter) outcome { return s.foreignFirst }, domain.ErrRetryLater},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -131,39 +133,24 @@ func TestDuplicateNotYetVisibleIsResolvedOnceVisible(t *testing.T) {
 				}
 				rg.start(t)
 				begin := time.Now()
-				ack := mustSend(t, rg.Router, cmd(roomA, "alice", "c1"))
-				if ack.Seq != tt.want || len(rg.sub.sent()) != tt.batches {
-					t.Fatalf("ack seq %d after %d groups, want seq %d after %d", ack.Seq, len(rg.sub.sent()), tt.want, tt.batches)
+				ack, err := rg.Send(t.Context(), cmd(roomA, "alice", "c1"))
+				waited := time.Since(begin)
+				switch {
+				case tt.err != nil:
+					expectErr(t, err, tt.err)
+				case err != nil:
+					t.Fatalf("Send: %v", err)
+				default:
+					assertStoredOnce(t, rg, "c1", ack)
 				}
-				assertStoredOnce(t, rg, "c1", ack)
+				assertGroupSeqs(t, rg, []uint64{1})
 				if _, _, finds := rg.msgs.counts(); finds != 3 {
 					t.Fatalf("Find called %d times, want 3", finds)
 				}
-				if waited := time.Since(begin); waited <= 0 || waited >= baseConfig.GroupDeadline {
+				if waited <= 0 || waited >= baseConfig.GroupDeadline {
 					t.Fatalf("resolved after %v, want a backoff below the group deadline", waited)
 				}
 			})
 		})
 	}
-}
-
-func TestReassignLimitFailsWithRetryLater(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		rg := newRig(t, baseConfig)
-		rg.sub.alwaysDo(rg.sub.foreignFirst)
-		rg.start(t)
-		_, err := rg.Send(t.Context(), cmd(roomA, "alice", "c1"))
-		expectErr(t, err, domain.ErrRetryLater)
-		synctest.Wait()
-		assertGroupSeqs(t, rg, []uint64{1}, []uint64{2}, []uint64{3}, []uint64{4})
-		if docs := storedCIDs(t, rg.msgs.Messages, roomA)["c1"]; len(docs) != 0 {
-			t.Fatalf("failed message stored %d times", len(docs))
-		}
-		rg.sub.alwaysDo(nil)
-		ack := mustSend(t, rg.Router, cmd(roomA, "alice", "c1"))
-		if ack.Seq != 5 {
-			t.Fatalf("retry after contention got seq %d, want 5", ack.Seq)
-		}
-		assertStoredOnce(t, rg, "c1", ack)
-	})
 }

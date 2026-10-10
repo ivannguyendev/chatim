@@ -17,7 +17,7 @@ func TestOnlyDefiniteFailuresReleaseTheReservation(t *testing.T) {
 	}{
 		"rejected write":        {func(rg *rig) { rg.sub.then(rejected) }, true},
 		"submit refused":        {func(rg *rig) { rg.sub.err = domain.ErrBusy }, true},
-		"reassign limit":        {func(rg *rig) { rg.sub.alwaysDo(rg.sub.foreignFirst) }, true},
+		"seq taken elsewhere":   {func(rg *rig) { rg.sub.alwaysDo(rg.sub.foreignFirst) }, true},
 		"resend limit":          {func(rg *rig) { rg.sub.alwaysDo(lostUnknown) }, false},
 		"rejected resend":       {func(rg *rig) { rg.sub.then(lostUnknown, rejected) }, false},
 		"unconfirmed deadline":  {func(rg *rig) { rg.sub.then(rg.sub.landedUnknown); rg.msgs.findHook = findTimesOut }, false},

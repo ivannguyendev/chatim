@@ -30,17 +30,14 @@ func (a *actor) load(ctx context.Context) error {
 }
 
 func (a *actor) refresh(ctx context.Context) error {
-	if !a.stale && !a.dirty {
+	if !a.dirty {
 		return nil
 	}
 	seq, err := a.r.msgs.Last(ctx, a.id, 0)
 	if err != nil {
 		return fmt.Errorf("reload last seq: %w", err)
 	}
-	a.last, a.stale = max(a.last, seq), false
-	if !a.dirty {
-		return nil
-	}
+	a.last = max(a.last, seq)
 	page, err := a.r.msgs.Page(ctx, store.PageQuery{Room: a.id, Anchor: store.Latest, Limit: seedSize})
 	if err != nil {
 		return fmt.Errorf("seed cid cache: %w", err)

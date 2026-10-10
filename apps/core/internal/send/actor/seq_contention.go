@@ -1,31 +1,21 @@
 package actor
 
-import (
-	"context"
-
-	"github.com/ivannguyendev/chatim/pkg/backoff"
-)
-
 func (a *actor) contend(e *entry) {
-	a.stale = true
-	a.contended = true
-	if e.reassigns >= maxRequeues {
+	if !a.contended {
+		a.contended = true
 		a.r.yield(a)
 	}
-	a.requeue(e, false, errSeqContention)
+	a.fail(e, errSeqContention, false)
 }
 
-func (a *actor) afterContention(ctx context.Context) {
+func (a *actor) abandonRetries() {
 	if !a.contended {
-		a.contentionWait = 0
 		return
 	}
-	a.contended = false
-	if len(a.retries) == 0 || a.retireRequested() {
-		return
+	for _, e := range a.retries {
+		a.fail(e, errSeqContention, e.fixed)
 	}
-	a.contentionWait = min(max(2*a.contentionWait, contentionBackoff), maxContentionBackoff)
-	backoff.Pause(ctx, backoff.Jitter(a.contentionWait))
+	a.retries = nil
 }
 
 func (r *Router) yield(a *actor) {
