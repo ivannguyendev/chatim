@@ -1,6 +1,6 @@
 # Roadmap — chatim
 
-> Cập nhật: 2026-10-08 (M2b.0–M2b.4 đã merge `main`, PR #12; M2b.3 xong 2026-10-06; viết lại 2026-10-05 sau 2 vòng phản biện cơ chế hệ thống). Thiết kế: [designs/261005-chatim-architecture.md](designs/261005-chatim-architecture.md) · Báo cáo nghiên cứu cơ chế: [research/261005-system-mechanisms-synthesis-report.md](research/261005-system-mechanisms-synthesis-report.md) · PoC: [poc/README.md](poc/README.md) · Bản cũ (roadmap trước, plan M0–M2a.3, thiết kế Phase 1, 8 file phản biện cũ): [archive/](archive/README.md)
+> Cập nhật: 2026-10-10 (M2c xây xong trên `feat/m2c`, chờ PR; M2b.0–M2b.4 đã merge `main`, PR #12; M2b.3 xong 2026-10-06; viết lại 2026-10-05 sau 2 vòng phản biện cơ chế hệ thống). Thiết kế: [designs/261005-chatim-architecture.md](designs/261005-chatim-architecture.md) · Báo cáo nghiên cứu cơ chế: [research/261005-system-mechanisms-synthesis-report.md](research/261005-system-mechanisms-synthesis-report.md) · PoC: [poc/README.md](poc/README.md) · Bản cũ (roadmap trước, plan M0–M2a.3, thiết kế Phase 1, 8 file phản biện cũ): [archive/](archive/README.md)
 
 ## Quy tắc viết plan
 
@@ -35,11 +35,11 @@
 | 1 | M2b.2 — Sửa + xoá | Fact `message_edits` + projection `messages` (D62); `base_ver`, `prev` ở v1 (D63); ack sau projection (D64); delay xoá 2–3s; hợp đồng xoá (D75); `GetEditHistory`; quyền sửa/xoá do `access.Policy` quyết (mặc định chỉ tác giả, D86); ẩn phía tôi (`hidden` thưa) và clear history (`cleared_before_seq`, từ M2b.4 là `members.cleared_at`) qua reader pipeline; index `{room_id, created_at}` (D70) | ✅ `dev-done`, đã merge `main` (PR #12) — [tóm tắt kỹ thuật](plans/2026-10-05-m2b2-edit-delete-summary.md); `message_edits` + projection, 5 RPC, ẩn/clear ở reader pipeline (không event), effect `edit_projection` + `msg_changed` (thay delay xoá 2–3s), quyền sửa/xoá chỉ qua `access.Policy`, mặc định chỉ tác giả, loại tin khoá theo config `MESSAGE_LOCKED_KINDS` (mặc định không khoá), resync quét `message_edits` (D82–D87) |
 | 1 | M2b.3 — Reaction + ghim | Tập reaction một emoji mỗi (user, tin), `reactions {_id: k│u}` + `n` (D88, D89, thay D68); counter recount CAS-ver với witness (D90, tinh chỉnh D67); `pin_actions` pv dày, bỏ `base_pv`, `PIN_LIMIT` chính xác (D92); event `reaction_changed`/`counts_changed`/`msg_pinned`/`msg_unpinned`, cid SysMsg `sys-{event_id}` (D93); quyền member (D94); emoji chỉ trong danh sách cố định `REACTION_EMOJIS`, frontend đọc qua `GetReactionSettings` (D95) | ✅ `dev-done`, đã merge `main` (PR #12) — [tóm tắt kỹ thuật](plans/2026-10-06-m2b3-reactions-pins-summary.md); 4 RPC (thêm `GetReactionSettings`), `Message.reactions` trong `GetHistory`, package `counter` + `pinproj`, feed update/replace của `reactions`, 4 effect mới, `counter_repaired_total` + 16 luật alert, resync quét `reactions` + `pin_actions` (D88–D95) |
 | 1 | M2b.4 — Member + vị trí đọc | Đổi tên field các collection đã làm (trừ `messages`) và field proto `version` → `ver`; xoá lịch sử theo thời gian (`cleared_at`); `message_edits` mỗi dòng một `text`; member lớp tập (mỗi (room, user) một doc, `ver` riêng), danh sách room của user là index của `members`, `request_id` chống gửi lại; lệnh đụng owner chạy trong một transaction Mongo, xung đột trả `UNAVAILABLE` ngay, không thử lại nội bộ; `member_count` `$inc` trong lệnh + `/app recount`; người kế nhiệm theo role > `priority` (app đặt) > vào sớm nhất; vị trí đọc + chưa đọc; mọi event được bảo đảm phát (worker phát lại), kể cả ẩn tin và xoá lịch sử; subject theo loại dữ liệu `room`/`member`/`message`, chuyển tới ai do app khác thiết kế sau; mọi core nghe event member để quên cache (D96–D110) | ✅ `dev-done`, đã merge `main` (PR #12) — [tóm tắt kỹ thuật](plans/2026-10-06-m2b4-members-read-summary.md); 7 RPC member/đọc, `members` clustered + transaction owner, `$inc` số member + phiếu hẹn sinh tồn (D111), 6 effect mới, `memberwatch`, `/app recount`, resync quét `members` + `hidden`, e2e phase 5, 16 luật alert (D96–D111) |
-| 1 | M2c — Thread & tiện ích | Liên kết gắn vào tin theo 2 dạng: tương tác (reaction, trả lời có trích, bookmark) chung collection `message_interactions` (chuyển reaction M2b.3 sang, một cơ chế đếm `rx`/`rc`), mention theo đích (`mentions`) + màn "Tôi được nhắc tới"; mọi số trên tin `$inc` + phiếu hẹn sinh tồn; không có nhánh thread riêng; forward (cid); `OpenDirectRoom` (sổ `room_dms`) tách khỏi `CreateRoom` (group, `request_id`) — [tóm tắt kỹ thuật](plans/2026-10-10-m2c-threads-mentions-summary.md); cộng [việc tồn đọng R1–R5](#việc-tồn-đọng-đưa-vào-m2c-owner-chốt-2026-10-09) | ⏭ Tiếp theo, trên nhánh chung `feat/m2c` |
+| 1 | M2c — Thread & tiện ích | Liên kết gắn vào tin theo 2 dạng: tương tác (reaction, trả lời có trích, bookmark) chung collection `message_interactions` (chuyển reaction M2b.3 sang), mention theo đích (`mentions`) + `ListMentions`; mọi số trên tin (`rx`, `rc`) `$inc` + phiếu hẹn sinh tồn, delta không kẹp; không có nhánh thread riêng, chặn xoá tin còn trả lời; forward (cid); `OpenDirectRoom` (sổ `room_dms`) tách khỏi `CreateRoom` (group, `request_id`); [việc tồn đọng R1–R5](#việc-tồn-đọng-đưa-vào-m2c-owner-chốt-2026-10-09--đã-đóng) | ✅ xây xong 2026-10-10 trên nhánh chung `feat/m2c`, `dev-done` khi merge (một PR) — [tóm tắt kỹ thuật](plans/2026-10-10-m2c-threads-mentions-summary.md); 5 RPC mới (`OpenDirectRoom`, `SetBookmark`, `GetReplies`, `ListBookmarks`, `ListMentions`), 4 effect mới (`reply_mention_index`, `count_repair`, `count_event`, `bookmark_event`), bỏ `reaction_counter` và package `counter`, kind phiếu 11–12, resync quét `message_interactions` + phiếu đếm lại, e2e phase 6, 16 luật alert (D112–D119); [2 câu hỏi mở cho owner](#câu-hỏi-mở-cho-owner-từ-m2c) |
 | 1 | M3 — Đường đọc | **Trước khi viết plan: hỏi owner số thật** (thiết kế §2.3). `ListMyRooms` qua index "room của user" trên `members` (D98); "có tin mới" đọc từ `messages`; room-tail cache; unread theo R17 mới (exact trong S, không thì `approx`, D73); sync token `room → last_seq` + full sync (D74); SDK reconnect jitter; API caller nội bộ cho SysMsg (`kind` + cờ unread); đồng bộ đa thiết bị qua subject user; `GetMessages`/`GetReactions`/`ListPins`; `ListThreads` (các trao đổi gần đây của room) nếu cần; test sẵn sàng sharding trên cluster 2 shard | Chưa |
 | 1 | M4 — Gateway | WebSocket (gws), JWT/JWKS, frame protobuf, fanout theo interest, hàng đợi gửi có giới hạn, định tuyến theo slot; typing/presence ephemeral không qua core; sub `live.{t}.*.{rid}.>` theo room (D108); chọn người nhận event member/đọc qua app phân phối (thiết kế sau, D104); `member_removed` → unsubscribe; chế độ event không text cho tenant xoá chặt; không chuyển `kind`/cờ unread từ client; hằng số header tenant/user vào `pkg` | Chưa |
 | 1 | M5 — Hardening | Load test 100K kết nối, chaos test (kể cả R5 thật), OTel/Prometheus/Grafana, CI đầy đủ, ghim digest image, container theo uid, Sentinel (`FailoverClient`) cho cả hai Redis; mục mang sang từ M2b.0–M2b.4 (xem dưới) | Chưa |
-| 1 | Channel | Room type channel (~200K subscriber, chỉ admin post): quyền post, fanout, counter lớn (cửa sổ gom W + bucket `hash(u) % K` cho reaction, D90; bắt buộc trước khi channel go-live) | Chưa — chốt milestone sau M3 |
+| 1 | Channel | Room type channel (~200K subscriber, chỉ admin post): quyền post, fanout, số trên tin nóng (gom `counts_changed` của tin nhận nhiều react/s; bắt buộc trước khi channel go-live) | Chưa — chốt milestone sau M3 |
 | 1 | PoC prod-like (song song) | **Trước khi chạy: hỏi owner số thật.** Mongo rs 3 member NVMe, NATS 3 node, 2 host Linux, dữ liệu thật ≥1M tin; P1–P10 ở [poc/README.md](poc/README.md) → chốt database, go/no-go A1 | Chờ hạ tầng |
 | 2 | App `auth`, `api`, `events`, `push`, `migrator` | JWT/JWKS theo tenant; REST/BFF; gRPC stream cho app ngoài; push (badge xấp xỉ, D73); migrator dual-write/import (chế độ import im lặng để reconciler không phát hàng tỷ event) | Sau Phase 1 |
 | 2 | Policy quyền | Module policy chat: ánh xạ user → role → quyền (owner/moderator xoá tin người khác, giới hạn thời gian sửa/xoá theo tenant…), cắm vào `access.Policy` (M2b.0) thay `access.DefaultPolicy` (sửa/xoá chỉ tác giả, D86; loại tin khoá qua `Request.Kind`, D87) | Sau Phase 1 |
@@ -48,32 +48,27 @@
 
 - M2b.0 → M2b.1 → M2b.2 → M2b.3 → M2b.4 → M2c → M3 → M4 → M5.
 - M2b.0 là điều kiện của mọi milestone sau: permission hook, reader pipeline và detector dùng chung.
-- (owner 2026-10-05) M2b.0 → M2b.4 làm trên một nhánh chung `feat/m2b` (tạo từ `docs/system-mechanisms`), không PR từng phần; merge vào `main` một lần khi M2b.4 đạt Definition of Done. **2026-10-08: M2b.0–M2b.4 `dev-done`, đã merge `main` (PR #12)**; tiếp theo M2c. Từ nay mỗi milestone một nhánh chung `feat/<milestone>`, một PR (chuẩn trong [git-workflow.md](git-workflow.md#nhánh-và-pr)).
+- (owner 2026-10-05) M2b.0 → M2b.4 làm trên một nhánh chung `feat/m2b` (tạo từ `docs/system-mechanisms`), không PR từng phần; merge vào `main` một lần khi M2b.4 đạt Definition of Done. **2026-10-08: M2b.0–M2b.4 `dev-done`, đã merge `main` (PR #12)**. **2026-10-10: M2c xây xong trên `feat/m2c`**, chờ một PR; tiếp theo M3. Từ nay mỗi milestone một nhánh chung `feat/<milestone>`, một PR (chuẩn trong [git-workflow.md](git-workflow.md#nhánh-và-pr)).
 - M2b.1 phải xong trước mọi tính năng có fact mới, vì effect của chúng chạy trên engine.
 - PoC prod-like chạy song song, xong trước M5 (chốt database). Storage nằm sau port nên PostgreSQL chỉ cần thêm adapter.
 - Phase 2 bắt đầu khi M4 xong.
 
-## Việc tồn đọng đưa vào M2c (owner chốt 2026-10-09)
+## Việc tồn đọng đưa vào M2c (owner chốt 2026-10-09) — đã đóng
 
-Plan M2c (`.claude/plans/`) và bản tóm tắt `docs/plans/…-m2c-…-summary.md` phải có task cho từng mục; xong mục nào thì sửa docs ghi ở mục đó.
+Đóng hết ở M2c (2026-10-10), chi tiết ở [tóm tắt M2c](plans/2026-10-10-m2c-threads-mentions-summary.md) mục 4.7 và D113, D117–D119.
 
-- **R1 — Bỏ vòng thử lại nội bộ** (luật owner 2026-10-07: CAS trượt hay trùng khoá trả `ErrRetryLater` ngay, client gọi lại; worker Nak). Còn một lượt duy nhất ở:
-  - ghim: `change/mutate/pin.go` (`pinTries` 3, trùng `pin_ver` với fact khác → `ErrRetryLater` ngay);
-  - projection ghim: `change/pinproj/pinproj.go` (`MaxTries` 5 → 1; fast path trượt CAS trả fold cục bộ như hiện nay, worker `pin_projection` trượt thì Nak);
-  - counter reaction: không sửa riêng nữa; M2c đổi mọi số trên tin sang `$inc` + phiếu hẹn sinh tồn (bỏ `Touch`, `FastTouchTries`, `reaction_counter`).
-  - Test phải đổi: `pin_race_test.go` (`TestAnotherFactAtThePinVersionRetriesThenGivesUp`), `pinproj_test.go` (`TestProjectGivesUpAfterMaxTries`, `TestProjectRereadsAfterALostCAS`), `counter_test.go` (`TestTouchRereadsTheSummaryAfterALostCAS`, `TestTouchGivesUpAfterItsTries`, kiểm `errNoTries`), `react_rules_test.go` (`FastTouchTries`), `reaction_counter_test.go` và fixture `Tries` của `event/effects`.
-  - Docs khi xong: thiết kế §6.3 (ghim), §6.5 (câu luật chung), §7 (touch), D90, D92; `CLAUDE.md` mục Reactions and pins và Members.
-- **R2 — Review hai known issue của M2b.2**, sửa hoặc ghi lý do giữ:
-  - `Config.LogValue` (`apps/core/internal/config/redact.go`) chỉ log 23 field; thiếu `MESSAGE_LOCKED_KINDS`, `REACTION_EMOJIS`, `PIN_LIMIT`, `MEMBER_*`, `RECONCILE_*`, `WORK_*`, `CID_*`, `SLOT_*`, phần lớn `PUB_*`, `EVT_*`, `CORE_*`. Hướng: log mọi field không bí mật, bí mật vẫn che.
-  - `GetEditHistory` (`api/grpcsrv/edit_history.go`) chỉ xem cờ `Deleted` trên projection `messages`: giữa lúc insert fact xoá và projection (core chết, worker chưa sửa) vẫn trả text cũ. Xem có cần đọc fact cuối của `message_edits` hay chấp nhận cửa sổ (`edit_projection` delay 0).
-- **R3 — `room_created` đếm republish sai**: `event/effects/room_created.go` dùng `countAll` nên mọi room mới bị đếm vào `reconcile_republished_total{effect="room_created"}`; ≥100 room/s trong 10 phút làm `ChatimRepublishSurge` kêu dù không mất gì. Đổi sang `countStored` như các effect event khác, thêm test.
-- **R4 — Review cách sinh room id** (owner đề xuất 2026-10-09): DM = id ghép từ hai user id (tất định: tạo lại DM cũ trả room cũ); group/channel = id kiểu ObjectId hoặc ULID (có thời gian). Review phải trả lời:
-  - room id hiện là uint64 63-bit khác 0 (`pkg/ids`), là 8 byte đầu mọi `_id` (`pkg/keys`), `slot = mix64(room) % 1024`, proto gửi chuỗi thập phân; ObjectId 12 byte / ULID 16 byte không vừa → đổi khoá và proto, hay nén về 63-bit;
-  - id tăng theo thời gian dồn `_id` của room mới về cuối khoảng → điểm nóng ghi khi shard theo range `{_id: 1}` (thiết kế §5.1); slot vẫn rải nhờ `mix64`;
-  - DM từ user id 1..64 byte phải băm về 63-bit → xác suất trùng, xử lý khi trùng id nhưng khác cặp user;
-  - bỏ vòng bốc lại id ≤3 của `CreateRoom` (`api/grpcsrv/create_room.go` `createAttempts`, test `TestCreateRoomRetriesWithFreshIDsWhileTaken`, `TestCreateRoomGivesUpAfterThreeTakenIDs`): DM insert-nếu-chưa-có, group/channel trùng → `UNAVAILABLE`.
-  - Kết quả đưa vào bản tóm tắt M2c để owner duyệt.
-- **R5 — Điểm mở D77, cần thảo luận**: actor gán lại seq ≤3 vòng (jitter 5→200ms) khi va doc của core khác (lúc chuyển slot) rồi mới `ErrRetryLater` và nhường room. Chọn: giữ và ghi là ngoại lệ duy nhất của luật, hoặc bỏ (va lần đầu → `UNAVAILABLE` + nhường room; đổi 5 test actor, chạy R5 ~9 phút). Owner chốt khi duyệt tóm tắt M2c.
+- **R1 — Bỏ vòng thử lại nội bộ:** đóng. Ghim một lượt (append trùng `pin_ver` → `UNAVAILABLE`; `Project` một lượt, fast path trả fold cục bộ, worker Nak; D119); counter reaction không còn touch vì mọi số trên tin là `$inc` + phiếu hẹn (D113).
+- **R2 — Hai known issue của M2b.2:** đóng. `Config.LogValue` log mọi field không bí mật (duyệt tự động, có test bắt field mới); `GetEditHistory` trả rỗng khi fact mới nhất là xoá.
+- **R3 — `room_created` đếm republish sai:** đóng. Chỉ đếm PubAck không trùng.
+- **R4 — Cách sinh room id:** đóng. Giữ id 63-bit ngẫu nhiên; DM qua sổ `room_dms` + `OpenDirectRoom` (D117); `CreateRoom` chỉ group, `request_id`, rút id một lần, trùng → `UNAVAILABLE` (D118).
+- **R5 — Điểm mở D77:** đóng. Owner chọn bỏ: va doc core khác → `UNAVAILABLE` + nhường room ngay, không gán lại seq (D119); slot R5 `-count=20` xanh.
+
+## Câu hỏi mở cho owner (từ M2c)
+
+Hai câu ở cuối [tóm tắt M2c](plans/2026-10-10-m2c-threads-mentions-summary.md#câu-hỏi-cho-owner); chưa chặn merge, trả lời trước M3.
+
+- **`ListMentions` của user có > ~200 đích** (room + nhóm): giữ một truy vấn (Mongo sắp trong RAM khi quá ~200 nhánh `$or`) hay chia lô 200 đích, gộp trong app (nhiều truy vấn hơn) (D115).
+- **Gửi lại cùng seq khi insert `Unknown`** (thiết kế §6.2 bước 5, D31): actor gửi lại đúng doc đó ≤3 lần để giải kết quả chưa rõ (cùng `_id`, idempotent); giữ, hay bỏ theo luật "không thử lại nội bộ" (D119).
 
 ## Mục mang sang M5 (hardening)
 
@@ -129,6 +124,15 @@ Từ M2b.4, chi tiết ở [tóm tắt kỹ thuật, mục Kết quả thực th
 - Itest đua hiếm `TestReactionSetOfTheSameUserRacingOnANewReactionNeverFails` (Mongo `DurationOverflow`), theo dõi.
 - Test còn thiếu: `Begin`/`Finish` song song của `dedupe.Requests`; nối `Config.Limits.MemberBatch` vào `Mutator`; `Load()` của `MEMBER_COUNT_CHECK_DELAY`; watch start trước gRPC.
 
+Từ M2c, chi tiết ở [tóm tắt kỹ thuật, mục 10](plans/2026-10-10-m2c-threads-mentions-summary.md#10-rủi-ro):
+
+- `msg_created` còn đếm mọi PubAck (cả bản trùng) vào `reconcile_republished_total`; `LockedMessageKinds` log dạng số.
+- Sau va seq, các lệnh Duplicate khác trong nhóm vẫn chờ xác nhận tới hạn nhóm.
+- Resync chỉ quét timeline chính; dedupe phiếu đếm lại theo room trong RAM.
+- Chưa có itest đầu-cuối "`$inc` lỗi → phiếu bật sửa" và "chết giữa `AddReply` và `$inc`" (unit phủ).
+- React như cũ vẫn hẹn + gỡ phiếu; mỗi phiếu sửa tốn một lần đọc đích mention; mỗi trả lời một lượt hẹn/ghi/`$inc`/phát tuần tự trong worker (đo thông lượng ở PoC prod-like).
+- `domain.MsgKey` trùng hình dạng với `store.MsgKey`.
+
 ## Mức sẵn sàng
 
-Theo [git-workflow.md](git-workflow.md#mức-sẵn-sàng): `dev-done` → `prod-like validated` → `go-live`. M0–M2a.3: `dev-done`, đã merge vào `main` (M2a.2 + M2a.3 cùng PR #11). M2b.0–M2b.4: `dev-done`, đã merge vào `main` (PR #12, 2026-10-08). Go-live còn cần: oplog `minRetentionHours` ≥ 24h, alert RC5 và lag, đo bộ nhớ NATS, đo lại trên prod-like. Chưa milestone nào `prod-like validated`; chưa có tag release.
+Theo [git-workflow.md](git-workflow.md#mức-sẵn-sàng): `dev-done` → `prod-like validated` → `go-live`. M0–M2a.3: `dev-done`, đã merge vào `main` (M2a.2 + M2a.3 cùng PR #11). M2b.0–M2b.4: `dev-done`, đã merge vào `main` (PR #12, 2026-10-08). M2c: xây xong trên `feat/m2c` (2026-10-10), `dev-done` khi PR merge. Go-live còn cần: oplog `minRetentionHours` ≥ 24h, alert RC5 và lag, đo bộ nhớ NATS, đo lại trên prod-like. Chưa milestone nào `prod-like validated`; chưa có tag release.

@@ -1,6 +1,6 @@
 # Kiến trúc components hệ thống chatim
 
-> Ngày: 2026-10-04 · Cập nhật: 2026-10-08 (bố cục package core trước M2c)
+> Ngày: 2026-10-04 · Cập nhật: 2026-10-10 (M2c: bỏ package `counter`, effect và port mới)
 
 Tài liệu này vẽ components ở tầng vĩ mô và bố cục package bên trong `apps/core`. Nguồn sự thật vẫn là [261005-chatim-architecture.md](./261005-chatim-architecture.md); khi lệch, theo design.
 
@@ -59,7 +59,7 @@ apps/core/
     api/           grpcsrv, view
     model/         domain, pbconv, access
     send/          actor, dedupe, flush, memberwatch
-    change/        mutate, ownership, counter, pinproj
+    change/        mutate, ownership, pinproj
     event/         publish, eventmark, work, effects, reconcile, resync
     store/         store (port), memstore, mongostore, storetest
     platform/      slot, metrics, redisguard, testlog
@@ -72,7 +72,7 @@ flowchart TB
     app["app (+ config)"]
     api["api<br/>grpcsrv · view"]
     send["send<br/>actor · dedupe · flush · memberwatch"]
-    change["change<br/>mutate · ownership · counter · pinproj"]
+    change["change<br/>mutate · ownership · pinproj"]
     event["event<br/>publish · eventmark · work · effects · reconcile · resync"]
     model["model<br/>domain · pbconv · access"]
     store["store<br/>store · memstore · mongostore · storetest"]
@@ -98,7 +98,7 @@ flowchart TB
 
 | Nhóm | Package | Vai trò | Design |
 |---|---|---|---|
-| `api` | `grpcsrv` | đọc metadata tenant/user, gọi actor/mutate/store, trả lỗi domain | §9 |
+| `api` | `grpcsrv` | đọc metadata tenant/user, gọi actor/mutate/store, trả lỗi domain; kiểm trả lời/forward trước actor; bước "đảm bảo" tạo room (`OpenDirectRoom`, `CreateRoom`); `GetReplies`, `ListBookmarks`, `ListMentions` | §6.6, §9 |
 | | `view` | pipeline cho người đọc: gộp retry, che tin xoá/ẩn | §9.2 |
 | `model` | `domain` | kiểu và lỗi nghiệp vụ, validate | §4–§5 |
 | | `pbconv` | domain → proto, event id tự nhiên | §11 |
@@ -107,14 +107,13 @@ flowchart TB
 | | `dedupe` | cid/`request_id` qua LRU + Redis, batcher | §6.2, D58 |
 | | `flush` | gom `insertMany` theo shard | §6.2 |
 | | `memberwatch` | nghe `member_removed`/`member_role_changed`, xoá cache member của actor | D106 |
-| `change` | `mutate` | sửa/xoá/ẩn/clear/react/pin/member/read | §6.3–§6.5 |
+| `change` | `mutate` | sửa/xoá/ẩn/clear/react/bookmark/pin/member/read; `$inc` số trên tin bọc phiếu hẹn | §6.3–§7 |
 | | `ownership` | kế nhiệm owner trong transaction | D100 |
-| | `counter` | recount reaction có witness + CAS | §7, D90 |
 | | `pinproj` | fold pin fact + CAS | D92 |
 | `event` | `publish` | queue theo shard, `PublishMsgAsync`, ack mark | §8.1 |
 | | `eventmark` | bitmap ack mark trên Redis dedupe | D52, D60 |
 | | `work` | record, `CHATIM_WORK`, phiếu hẹn sinh tồn | §8.3, D111 |
-| | `effects` | worker mỗi partition, registry effect theo kind | §8.3 |
+| | `effects` | worker mỗi partition, registry effect theo kind (M2c: `reply_mention_index`, `count_repair`, `count_event`, `bookmark_event`) | §8.3 |
 | | `reconcile` | reader change feed trên chủ slot 0 | §8.2 |
 | | `resync` | phát lại một khoảng feed bị mất | §14 |
 | `store` | `store` | port + kiểu lưu trữ | §5 |
@@ -124,7 +123,7 @@ flowchart TB
 | | `redisguard` | cooldown khi Redis lỗi | D44 |
 | | `testlog` | tắt log Redis trong test | — |
 
-M2c: thread, reply/forward, mention đi qua `send`; bookmark (lớp tập) đi qua `change`; effect mới vào `event/effects`.
+M2c (đã xây): trả lời, forward, mention đi qua `api/grpcsrv` + `send` (kiểm trước actor); reaction, bookmark đi qua `change/mutate`; doc reply và `mentions` do effect `reply_mention_index` dựng; số trên tin sửa bằng `count_repair`.
 
 ## 3. Luồng gửi tin (`send`)
 
@@ -173,11 +172,11 @@ sequenceDiagram
     M->>AC: Admit (tenant + member)
     M->>DB: Find target
     M->>AC: Allow (policy với tác giả, kind)
-    opt giá trị dẫn xuất ghi ngoài transaction (member_count)
+    opt giá trị dẫn xuất ghi ngoài transaction (member_count, rx)
         M->>T: Arm phiếu hẹn
     end
     M->>DB: fact / CAS ver / transaction owner
-    M->>DB: projection hoặc counter (pinproj, counter)
+    M->>DB: projection hoặc $inc số (pinproj, member_count, rx)
     opt
         M->>T: Disarm
     end
@@ -198,11 +197,11 @@ sequenceDiagram
     participant R as Redis dedupe
     participant N as CHATIM_EVT
 
-    DB-->>Rd: insert/update/replace (kind 1–9)
+    DB-->>Rd: insert/update/replace (kind 1–9, 11)
     Rd->>W: work.Record, Nats-Msg-Id = record id
     Rd->>DB: lưu resume token sau prefix đã ack
     W-->>E: fetch batch
-    E->>DB: room_activity, edit_projection, pin_projection, reaction_counter …
+    E->>DB: room_activity, edit_projection, reply_mention_index, pin_projection, count_repair …
     E->>E: chờ RECONCILE_DELAY (5s)
     E->>R: msg_created: đọc ack mark
     alt chưa có mark / effect không dùng mark
