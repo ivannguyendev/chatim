@@ -28,7 +28,10 @@ func (m *Mentions) ApplyMentions(ctx context.Context, set store.MentionSet) erro
 	if err != nil {
 		return err
 	}
-	plan := store.PlanMentions(stored, set)
+	return m.write(ctx, set, room, store.PlanMentions(stored, set))
+}
+
+func (m *Mentions) write(ctx context.Context, set store.MentionSet, room int64, plan store.MentionPlan) error {
 	models := make([]mongo.WriteModel, 0, len(plan.Live)+len(plan.Retire))
 	for _, t := range plan.Live {
 		models = append(models, mongo.NewUpdateOneModel().SetFilter(notNewerThan(set, t)).
@@ -41,11 +44,8 @@ func (m *Mentions) ApplyMentions(ctx context.Context, set store.MentionSet) erro
 	if len(models) == 0 {
 		return nil
 	}
-	_, err = m.coll.BulkWrite(ctx, models, options.BulkWrite().SetOrdered(false))
-	switch {
-	case onlyDuplicateKeys(err):
-		return fmt.Errorf("apply mentions v%d of %d/%d/%d: a newer version landed: %w", set.Ver, set.Key.Room, set.Key.Thread, set.Key.Seq, domain.ErrRetryLater)
-	case err != nil:
+	_, err := m.coll.BulkWrite(ctx, models, options.BulkWrite().SetOrdered(false))
+	if err != nil && !onlyDuplicateKeys(err) {
 		return fmt.Errorf("apply mentions v%d of %d/%d/%d: %w", set.Ver, set.Key.Room, set.Key.Thread, set.Key.Seq, err)
 	}
 	return nil

@@ -3,6 +3,7 @@ package mongostore
 import (
 	"slices"
 	"testing"
+	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 
@@ -54,5 +55,24 @@ func TestMentionDocumentLayout(t *testing.T) {
 		if got := raw.Lookup("target").StringValue(); got != target {
 			t.Fatalf("stored target = %q, want %q", got, target)
 		}
+	}
+}
+
+func TestAnOlderMentionWriteLosingARaceSettles(t *testing.T) {
+	s, _ := itStore(t, itClient(t))
+	minh := domain.MentionTarget{Kind: domain.MentionUser, ID: "minh"}
+	key := store.MsgKey{Room: itRoom, Seq: 5}
+	newer := store.MentionSet{Key: key, Tenant: "acme", Sender: "alice", Ver: 3, Targets: []domain.MentionTarget{minh}, CreatedAt: codecTime, At: codecTime}
+	if err := s.Mentions().ApplyMentions(t.Context(), newer); err != nil {
+		t.Fatalf("ApplyMentions v3: %v", err)
+	}
+	older := newer
+	older.Ver, older.At = 1, codecTime.Add(time.Minute)
+	if err := s.Mentions().write(t.Context(), older, int64(itRoom), store.MentionPlan{Live: []domain.MentionTarget{minh}}); err != nil {
+		t.Fatalf("older write that lost the race = %v, want nil", err)
+	}
+	got, err := s.Mentions().MentionsOf(t.Context(), key)
+	if err != nil || len(got) != 1 || got[0].Ver != 3 || !got[0].Live || !got[0].UpdatedAt.Equal(codecTime) {
+		t.Fatalf("MentionsOf = %+v, %v; want the v3 doc unchanged", got, err)
 	}
 }

@@ -142,3 +142,15 @@ func TestSendMessageReadsNothingWithoutAReply(t *testing.T) {
 		t.Fatalf("sender got %d commands, want only the plain one", n)
 	}
 }
+
+func TestSendMessageRejectsAReplyInsideAThreadBeforeReading(t *testing.T) {
+	sender := &fakeSender{}
+	rg := newRig(t, options{sender: sender})
+	req := replyReq("42", "c-1", 1)
+	req.ThreadRoot = 7
+	_, err := rg.client.SendMessage(as(t, "acme", "alice"), req)
+	expectCode(t, err, codes.InvalidArgument)
+	if n := len(sender.sent()); n != 0 {
+		t.Fatalf("sender got %d commands, want none", n)
+	}
+}
