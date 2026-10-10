@@ -92,10 +92,15 @@ func TestMessageDeletedEnvelope(t *testing.T) {
 func TestMessageVersionsMapsEachRowInVerOrder(t *testing.T) {
 	m := sample()
 	row := domain.Edit{Room: m.Room, Seq: m.Seq, Version: 0, Kind: domain.EditOriginal, By: "alice", Text: "xin chào", At: sentAt}
-	v1 := domain.Edit{Room: m.Room, Seq: m.Seq, Version: 1, Kind: domain.EditText, By: "alice", Text: "v1", At: editedAt}
+	v1 := domain.Edit{
+		Room: m.Room, Seq: m.Seq, Version: 1, Kind: domain.EditText, By: "alice", Text: "v1", At: editedAt,
+		Mentions: []domain.MentionTarget{{Kind: domain.MentionGroup, ID: "ops"}}, MentionAll: true,
+	}
 	v2 := domain.Edit{Room: m.Room, Seq: m.Seq, Version: 2, Kind: domain.EditDelete, By: "bob", At: editedAt.Add(time.Minute)}
 	original := &chatimv1.MessageVersion{Ver: 0, Kind: chatimv1.EditKind_EDIT_KIND_ORIGINAL, Text: "xin chào", By: "alice", At: timestamppb.New(sentAt)}
-	first := &chatimv1.MessageVersion{Ver: 1, Kind: chatimv1.EditKind_EDIT_KIND_TEXT, Text: "v1", By: "alice", At: timestamppb.New(editedAt)}
+	first := &chatimv1.MessageVersion{Ver: 1, Kind: chatimv1.EditKind_EDIT_KIND_TEXT, Text: "v1", By: "alice", At: timestamppb.New(editedAt), Mentions: &chatimv1.MentionSet{
+		Targets: []*chatimv1.MentionTarget{{Kind: chatimv1.MentionKind_MENTION_KIND_GROUP, Id: "ops"}}, All: true,
+	}}
 	second := &chatimv1.MessageVersion{Ver: 2, Kind: chatimv1.EditKind_EDIT_KIND_DELETE, By: "bob", At: timestamppb.New(editedAt.Add(time.Minute))}
 	cases := []struct {
 		name string

@@ -28,7 +28,7 @@ type memberCase struct {
 
 func RunMembers(t *testing.T, open func(t *testing.T) MemberRooms) {
 	t.Helper()
-	for _, c := range slices.Concat(memberCases(), memberChangeCases(), ownerChangeCases(), memberCountCases(), readPositionCases()) {
+	for _, c := range slices.Concat(memberCases(), memberRoomCases(), memberChangeCases(), ownerChangeCases(), memberCountCases(), readPositionCases()) {
 		t.Run(c.name, func(t *testing.T) { c.run(t, open(t)) })
 	}
 }

@@ -55,15 +55,24 @@ func encodeLinks(m domain.Message, d *messageDoc) error {
 		}
 		d.Forward = &forwardDoc{Room: room, Thread: th, Seq: s, Author: f.Author, SentAt: f.SentAt}
 	}
-	for _, t := range m.Mentions {
+	mentions, err := encodeMessageMentions(m.Mentions)
+	if err != nil {
+		return err
+	}
+	d.Mentions, d.MentionAll = mentions, m.MentionAll
+	return nil
+}
+
+func encodeMessageMentions(targets []domain.MentionTarget) ([]mentionDoc, error) {
+	var out []mentionDoc
+	for _, t := range targets {
 		name, err := mentionKindName(t.Kind)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		d.Mentions = append(d.Mentions, mentionDoc{Kind: name, ID: t.ID})
+		out = append(out, mentionDoc{Kind: name, ID: t.ID})
 	}
-	d.MentionAll = m.MentionAll
-	return nil
+	return out, nil
 }
 
 func decodeLinks(d messageDoc, m *domain.Message) error {

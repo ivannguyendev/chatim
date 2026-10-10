@@ -2,6 +2,7 @@ package storetest
 
 import (
 	"fmt"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -34,7 +35,7 @@ type editCase struct {
 
 func RunEdits(t *testing.T, open func(t *testing.T) (EditableMessages, ClearableRooms, store.Edits, store.Hidden)) {
 	t.Helper()
-	for _, c := range slices.Concat(factCases(), originalCases(), applyCases(), viewerCases()) {
+	for _, c := range slices.Concat(factCases(), originalCases(), applyCases(), editMentionCases(), viewerCases()) {
 		t.Run(c.name, func(t *testing.T) {
 			msgs, rooms, edits, hidden := open(t)
 			c.run(t, editStores{msgs: msgs, rooms: rooms, edits: edits, hidden: hidden})
@@ -78,9 +79,9 @@ func mustAppend(t *testing.T, s store.Edits, facts ...domain.Edit) {
 }
 
 func sameEdit(a, b domain.Edit) bool {
-	at, bt := a.At, b.At
-	a.At, b.At = time.Time{}, time.Time{}
-	return a == b && at.Equal(bt)
+	at, bt, am, bm := a.At, b.At, a.Mentions, b.Mentions
+	a.At, b.At, a.Mentions, b.Mentions = time.Time{}, time.Time{}, nil, nil
+	return reflect.DeepEqual(a, b) && at.Equal(bt) && slices.Equal(am, bm)
 }
 
 func assertEdits(t *testing.T, op string, got, want []domain.Edit) {

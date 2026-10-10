@@ -20,16 +20,24 @@ type change struct {
 	base         uint32
 	kind         domain.EditKind
 	text         string
+	mentions     []domain.MentionTarget
+	all          bool
+	keepMentions bool
 }
 
 func (m *Mutator) Edit(ctx context.Context, c EditCmd) (domain.Message, error) {
 	if err := domain.ValidateText(c.Text); err != nil {
 		return domain.Message{}, err
 	}
-	return m.apply(ctx, change{
+	ch := change{
 		action: access.EditMessage, tenant: c.Tenant, user: c.User,
 		key: store.MsgKey{Room: c.Room, Thread: c.Thread, Seq: c.Seq}, base: c.BaseVersion, kind: domain.EditText, text: c.Text,
-	})
+	}
+	ch, err := m.withMentions(ch, c.Mentions)
+	if err != nil {
+		return domain.Message{}, err
+	}
+	return m.apply(ctx, ch)
 }
 
 func (m *Mutator) Delete(ctx context.Context, c DeleteCmd) (domain.Message, error) {
@@ -45,6 +53,9 @@ func (m *Mutator) apply(ctx context.Context, c change) (domain.Message, error) {
 	}
 	grant, msg, err := m.target(ctx, c.action, c.tenant, c.user, c.key)
 	if err != nil {
+		return domain.Message{}, err
+	}
+	if c, err = m.resolveMentions(ctx, c, grant, msg); err != nil {
 		return domain.Message{}, err
 	}
 	fact, err := m.commit(ctx, c, msg)
@@ -115,7 +126,7 @@ func (m *Mutator) keepOriginal(ctx context.Context, c change, msg domain.Message
 	}
 	row := domain.Edit{
 		Room: c.key.Room, Thread: c.key.Thread, Seq: c.key.Seq, Version: 0, Kind: domain.EditOriginal,
-		Tenant: c.tenant, By: msg.From, Text: msg.Text, At: msg.CreatedAt,
+		Tenant: c.tenant, By: msg.From, Text: msg.Text, At: msg.CreatedAt, Mentions: msg.Mentions, MentionAll: msg.MentionAll,
 	}
 	if err := m.d.Edits.Append(ctx, row); err != nil && !errors.Is(err, store.ErrEditExists) {
 		return err
@@ -144,13 +155,9 @@ func (m *Mutator) project(ctx context.Context, f domain.Edit) error {
 	return m.d.Edits.PurgeText(ctx, store.MsgKey{Room: f.Room, Thread: f.Thread, Seq: f.Seq}, f.Version-1)
 }
 
-func (c change) matches(e domain.Edit) bool {
-	return e.By == c.user && e.Kind == c.kind && e.Text == c.text
-}
-
 func (c change) fact(version uint32, at time.Time) domain.Edit {
 	return domain.Edit{
 		Room: c.key.Room, Thread: c.key.Thread, Seq: c.key.Seq, Version: version, Kind: c.kind,
-		Tenant: c.tenant, By: c.user, Text: c.text, At: at,
+		Tenant: c.tenant, By: c.user, Text: c.text, At: at, Mentions: c.mentions, MentionAll: c.all,
 	}
 }

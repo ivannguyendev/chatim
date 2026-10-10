@@ -18,7 +18,7 @@ func factCases() []editCase {
 		{"latest is the highest version of that message only", factsLatest},
 		{"history ascends after a version up to the limit", factsHistory},
 		{"between returns the room facts in a time range by time then key", factsBetween},
-		{"purge text clears text up to a version of that message only", factsPurge},
+		{"purge text clears text and mentions up to a version of that message only", factsPurge},
 		{"invalid facts and limits are rejected", factsInvalid},
 	}
 }
@@ -118,8 +118,8 @@ func factsBetween(t *testing.T, s editStores) {
 }
 
 func factsPurge(t *testing.T, s editStores) {
-	v1, v2, v3 := fact(roomA, mainThread, 1, 1), fact(roomA, mainThread, 1, 2), deletion(roomA, mainThread, 1, 3)
-	neighbour := fact(roomA, mainThread, 2, 1)
+	v1, v2, v3 := mentioning(fact(roomA, mainThread, 1, 1)), fact(roomA, mainThread, 1, 2), deletion(roomA, mainThread, 1, 3)
+	neighbour := mentioning(fact(roomA, mainThread, 2, 1))
 	mustAppend(t, s.edits, v1, v2, v3, neighbour)
 	key := store.EditKeyOf(v3)
 	if err := s.edits.PurgeText(t.Context(), key, 2); err != nil {
@@ -128,7 +128,7 @@ func factsPurge(t *testing.T, s editStores) {
 	if err := s.edits.PurgeText(t.Context(), key, 0); err != nil {
 		t.Fatalf("PurgeText(up to 0): %v", err)
 	}
-	v1.Text, v2.Text = "", ""
+	v1.Text, v2.Text, v1.Mentions, v1.MentionAll = "", "", nil, false
 	for _, want := range []domain.Edit{v1, v2, v3, neighbour} {
 		assertEditAt(t, s.edits, want)
 	}
@@ -142,6 +142,9 @@ func factsInvalid(t *testing.T, s editStores) {
 		"version above max int32": func(e *domain.Edit) { e.Version = math.MaxInt32 + 1 },
 		"zero kind":               func(e *domain.Edit) { e.Kind = 0 },
 		"original kind above 0":   func(e *domain.Edit) { e.Kind = domain.EditOriginal },
+		"duplicate mention":       func(e *domain.Edit) { e.Mentions = []domain.MentionTarget{mentionMinh, mentionMinh} },
+		"@all as a target":        func(e *domain.Edit) { e.Mentions = []domain.MentionTarget{mentionAll} },
+		"delete with mentions":    func(e *domain.Edit) { *e = mentioning(deletion(roomA, mainThread, 1, 1)) },
 	} {
 		e := fact(roomA, mainThread, 1, 1)
 		mutate(&e)

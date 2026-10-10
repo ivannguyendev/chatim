@@ -36,7 +36,7 @@ func RunMentions(t *testing.T, open func(t *testing.T) store.Mentions) {
 		{"MessagesStayApart", mentionsStayApart},
 		{"InvalidSetIsRejected", invalidMentionSet},
 	}
-	for _, c := range cases {
+	for _, c := range append(cases, mentionListCases()...) {
 		t.Run(c.name, func(t *testing.T) { c.run(t, open(t)) })
 	}
 }

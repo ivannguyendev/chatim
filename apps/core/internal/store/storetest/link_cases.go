@@ -21,9 +21,7 @@ func applyDeleteDropsLinks(t *testing.T, s editStores) {
 	mustInsert(t, s.msgs, []domain.Message{msg(roomA, mainThread, 1), m, edit})
 	gone, changed := deletion(roomA, mainThread, 2, 1), fact(roomA, mainThread, 3, 1)
 	mustApply(t, s.msgs, gone, changed)
-	want := edited(m, gone)
-	want.Mentions, want.MentionAll, want.Forward = nil, false, nil
-	assertStored(t, s.msgs, want, edited(edit, changed))
+	assertStored(t, s.msgs, edited(m, gone), edited(edit, changed))
 }
 
 func insertKeepsLinks(t *testing.T, s store.Messages) {

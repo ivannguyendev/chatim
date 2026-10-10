@@ -17,12 +17,19 @@ func (s *Service) EditMessage(ctx context.Context, req *chatimv1.EditMessageRequ
 	}
 	m, err := s.mutator.Edit(ctx, mutate.EditCmd{
 		Tenant: who.tenant, User: who.user, Room: room, Thread: req.GetThreadRoot(), Seq: req.GetSeq(),
-		BaseVersion: req.GetBaseVer(), Text: req.GetText(),
+		BaseVersion: req.GetBaseVer(), Text: req.GetText(), Mentions: editMentions(req.GetMentions()),
 	})
 	if err != nil {
 		return nil, err
 	}
 	return &chatimv1.EditMessageResponse{Message: pbconv.Message(m)}, nil
+}
+
+func editMentions(set *chatimv1.MentionSet) *mutate.MentionSet {
+	if set == nil {
+		return nil
+	}
+	return &mutate.MentionSet{Targets: pbconv.DomainMentionTargets(set.GetTargets()), All: set.GetAll()}
 }
 
 func (s *Service) DeleteMessage(ctx context.Context, req *chatimv1.DeleteMessageRequest) (*chatimv1.DeleteMessageResponse, error) {

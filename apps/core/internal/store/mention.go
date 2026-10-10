@@ -25,6 +25,7 @@ type MentionPlan struct {
 type Mentions interface {
 	ApplyMentions(ctx context.Context, s MentionSet) error
 	MentionsOf(ctx context.Context, key MsgKey) ([]domain.Mention, error)
+	List(ctx context.Context, q MentionQuery) ([]domain.Mention, error)
 }
 
 func ValidateMentionSet(s MentionSet) error {

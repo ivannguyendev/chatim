@@ -104,7 +104,20 @@ func (rg *indexRig) send(t *testing.T, seq uint64, edit func(*domain.Message)) w
 
 func (rg *indexRig) edit(t *testing.T, seq uint64, ver uint32, kind domain.EditKind) work.Record {
 	t.Helper()
-	e := domain.Edit{Room: room, Seq: seq, Version: ver, Kind: kind, Tenant: tenant, By: "alice", Text: "edited", At: indexedAt.Add(time.Minute)}
+	return rg.applyEdit(t, domain.Edit{Room: room, Seq: seq, Version: ver, Kind: kind, Tenant: tenant, By: "alice", Text: "edited", At: indexedAt.Add(time.Minute)})
+}
+
+func (rg *indexRig) editMentioning(t *testing.T, seq uint64, ver uint32, all bool, targets ...domain.MentionTarget) work.Record {
+	t.Helper()
+	return rg.applyEdit(t, domain.Edit{
+		Room: room, Seq: seq, Version: ver, Kind: domain.EditText, Tenant: tenant, By: "alice", Text: "edited", At: indexedAt.Add(time.Minute),
+		Mentions: targets, MentionAll: all,
+	})
+}
+
+func (rg *indexRig) applyEdit(t *testing.T, e domain.Edit) work.Record {
+	t.Helper()
+	seq, ver := e.Seq, e.Version
 	if err := rg.msgs.ApplyEdit(t.Context(), e); err != nil {
 		t.Fatalf("ApplyEdit v%d: %v", ver, err)
 	}

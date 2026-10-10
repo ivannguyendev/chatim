@@ -32,7 +32,7 @@ func TestMentionsOfANewMessageGetOneDocPerTarget(t *testing.T) {
 
 func TestDeletingAMessageRetiresItsMentions(t *testing.T) {
 	rg := newIndexRig(t)
-	if errs := rg.run(t, rg.send(t, 1, mentioning), rg.edit(t, 1, 1, domain.EditText)); !allNil(errs, 2) {
+	if errs := rg.run(t, rg.send(t, 1, mentioning), rg.editMentioning(t, 1, 1, true, mentionMinh)); !allNil(errs, 2) {
 		t.Fatalf("errs = %v", errs)
 	}
 	if got := rg.mentionsOf(t, 1); !got[mentionMinh].Live || got[mentionMinh].Ver != 1 {
@@ -45,6 +45,21 @@ func TestDeletingAMessageRetiresItsMentions(t *testing.T) {
 		if m.Live || m.Ver != 2 {
 			t.Errorf("%v = %+v, want retired at v2", target, m)
 		}
+	}
+}
+
+func TestAnEditThatDropsAMentionRetiresItsDoc(t *testing.T) {
+	rg := newIndexRig(t)
+	lan := domain.MentionTarget{Kind: domain.MentionUser, ID: "lan"}
+	if errs := rg.run(t, rg.send(t, 1, mentioning)); !allNil(errs, 1) {
+		t.Fatalf("errs = %v", errs)
+	}
+	if errs := rg.run(t, rg.editMentioning(t, 1, 1, false, lan)); !allNil(errs, 1) {
+		t.Fatalf("errs = %v", errs)
+	}
+	got := rg.mentionsOf(t, 1)
+	if len(got) != 3 || got[mentionMinh].Live || got[mentionAll].Live || !got[lan].Live || got[lan].Ver != 1 || got[mentionMinh].Ver != 1 {
+		t.Fatalf("mentions = %+v, want minh and @all retired and lan live at v1", got)
 	}
 }
 

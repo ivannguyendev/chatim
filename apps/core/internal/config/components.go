@@ -45,6 +45,7 @@ func (p *parser) components(c *Config) {
 		ReservationTTL: pendingTTL,
 		MentionTargets: p.count("MENTION_TARGETS_MAX", domain.DefaultMentionTargetsMax),
 	}
+	c.Limits.MentionTargets = c.Actor.MentionTargets
 	c.Dedupe = dedupe.Config{
 		CoreID:       c.CoreID,
 		PendingTTL:   pendingTTL,

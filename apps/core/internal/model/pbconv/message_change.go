@@ -41,7 +41,9 @@ func messageChange(roomType domain.RoomType, m domain.Message, e domain.Edit) *c
 func MessageVersions(rows []domain.Edit) []*chatimv1.MessageVersion {
 	out := make([]*chatimv1.MessageVersion, 0, len(rows))
 	for _, e := range rows {
-		out = append(out, &chatimv1.MessageVersion{Ver: e.Version, Kind: editKind(e.Kind), Text: e.Text, By: e.By, At: timestamppb.New(e.At)})
+		out = append(out, &chatimv1.MessageVersion{
+			Ver: e.Version, Kind: editKind(e.Kind), Text: e.Text, By: e.By, At: timestamppb.New(e.At), Mentions: MentionSet(e.Mentions, e.MentionAll),
+		})
 	}
 	return out
 }

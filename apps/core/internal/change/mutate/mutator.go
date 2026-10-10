@@ -58,6 +58,7 @@ type EditCmd struct {
 	Room, Thread, Seq uint64
 	BaseVersion       uint32
 	Text              string
+	Mentions          *MentionSet
 }
 
 type DeleteCmd struct {

@@ -39,8 +39,31 @@ func TestEditCodecRoundTrip(t *testing.T) {
 		t.Fatalf("decodeEdit = %+v, %v; want %+v", got, err, e)
 	}
 	got.At = e.At
-	if got != e {
+	if !reflect.DeepEqual(got, e) {
 		t.Fatalf("decoded %+v, want %+v", got, e)
+	}
+}
+
+var editMinh = domain.MentionTarget{Kind: domain.MentionUser, ID: "minh"}
+
+func TestEditCodecCarriesMentionsUnderFullNames(t *testing.T) {
+	e := sampleEdit()
+	e.Mentions, e.MentionAll = []domain.MentionTarget{editMinh, {Kind: domain.MentionGroup, ID: "team:ops"}}, true
+	doc, err := encodeEdit(e)
+	if err != nil {
+		t.Fatalf("encodeEdit: %v", err)
+	}
+	back, raw := roundTrip(t, doc)
+	want := []string{"_id", "room_id", "tenant", "kind", "created_by", "text", "created_at", "mention_targets", "mention_all"}
+	if got := fieldNames(t, raw); !slices.Equal(got, want) {
+		t.Fatalf("fields = %v, want %v", got, want)
+	}
+	if first := raw.Lookup("mention_targets", "0", "kind").StringValue(); first != "user" {
+		t.Fatalf("mention_targets.0.kind = %q, want user", first)
+	}
+	got, err := decodeEdit(back)
+	if err != nil || !slices.Equal(got.Mentions, e.Mentions) || !got.MentionAll {
+		t.Fatalf("decodeEdit = %+v, %v; want mentions %v and @all", got, err, e.Mentions)
 	}
 }
 
@@ -82,6 +105,9 @@ func TestEncodeEditRejectsInvalid(t *testing.T) {
 		"zero kind":               func(e *domain.Edit) { e.Kind = 0 },
 		"room above max int64":    func(e *domain.Edit) { e.Room = math.MaxInt64 + 1 },
 		"seq above max int64":     func(e *domain.Edit) { e.Seq = math.MaxInt64 + 1 },
+		"duplicate mention":       func(e *domain.Edit) { e.Mentions = []domain.MentionTarget{editMinh, editMinh} },
+		"@all as a target":        func(e *domain.Edit) { e.Mentions = []domain.MentionTarget{{Kind: domain.MentionAll}} },
+		"delete with @all":        func(e *domain.Edit) { e.Kind, e.Version, e.MentionAll = domain.EditDelete, 2, true },
 	} {
 		e := sampleEdit()
 		mutate(&e)

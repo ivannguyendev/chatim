@@ -20,4 +20,7 @@ type Edit struct {
 	By      string
 	Text    string
 	At      time.Time
+
+	Mentions   []MentionTarget
+	MentionAll bool
 }

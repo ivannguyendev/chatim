@@ -2,6 +2,7 @@ package mutate_test
 
 import (
 	"errors"
+	"reflect"
 	"slices"
 	"strconv"
 	"sync"
@@ -159,7 +160,7 @@ func del(user string, seq uint64, base uint32) mutate.DeleteCmd {
 }
 
 func sameEdit(a, b domain.Edit) bool {
-	at := a.At.Equal(b.At)
-	a.At, b.At = time.Time{}, time.Time{}
-	return at && a == b
+	at, mentions := a.At.Equal(b.At), slices.Equal(a.Mentions, b.Mentions)
+	a.At, b.At, a.Mentions, b.Mentions = time.Time{}, time.Time{}, nil, nil
+	return at && mentions && reflect.DeepEqual(a, b)
 }

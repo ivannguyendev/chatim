@@ -37,6 +37,7 @@ func (s *Edits) Append(ctx context.Context, e domain.Edit) error {
 	if found {
 		return fmt.Errorf("append edit v%d of %+v: %w", e.Version, key, store.ErrEditExists)
 	}
+	e.Mentions = slices.Clone(e.Mentions)
 	s.facts[key] = slices.Insert(line, i, e)
 	if s.log != nil {
 		s.log.appendFact(logged{kind: store.EditInserted, edit: e})
@@ -120,7 +121,7 @@ func (s *Edits) PurgeText(ctx context.Context, key store.MsgKey, upTo uint32) er
 	line := s.facts[key]
 	for i := range line {
 		if line[i].Version <= upTo {
-			line[i].Text = ""
+			line[i].Text, line[i].Mentions, line[i].MentionAll = "", nil, false
 		}
 	}
 	return nil

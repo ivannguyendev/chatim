@@ -64,7 +64,7 @@ func TestLoadDefaults(t *testing.T) {
 		EffectRoomCache:        65536,
 		Effects:                effects.Config{Partitions: 32, FetchBatch: 256, FetchWait: time.Second, RetryDelay: 5 * time.Second, Drain: time.Second, Poll: time.Second},
 		AckMarks:               eventmark.Config{TTL: time.Hour, Timeout: 100 * time.Millisecond, Cooldown: time.Second},
-		Limits:                 mutate.Limits{Emojis: mutate.DefaultEmojis, PinLimit: 50, MemberBatch: 500},
+		Limits:                 mutate.Limits{Emojis: mutate.DefaultEmojis, PinLimit: 50, MemberBatch: 500, MentionTargets: 50},
 		MemberCountCheckDelay:  5 * time.Second,
 		MessageCountCheckDelay: 5 * time.Second,
 	}
@@ -113,7 +113,7 @@ func TestLoadOverrides(t *testing.T) {
 		Effects:                effects.Config{Partitions: 16, FetchBatch: 64, FetchWait: 500 * time.Millisecond, RetryDelay: 2 * time.Second, Drain: 500 * time.Millisecond, Poll: 500 * time.Millisecond},
 		AckMarks:               eventmark.Config{TTL: 30 * time.Minute, Timeout: 50 * time.Millisecond, Cooldown: 2 * time.Second},
 		LockedMessageKinds:     []domain.Kind{domain.KindText},
-		Limits:                 mutate.Limits{Emojis: []string{"🎉", "👍"}, PinLimit: 10, MemberBatch: 20},
+		Limits:                 mutate.Limits{Emojis: []string{"🎉", "👍"}, PinLimit: 10, MemberBatch: 20, MentionTargets: 20},
 		MemberCountCheckDelay:  4 * time.Second,
 		MessageCountCheckDelay: 6 * time.Second,
 	}

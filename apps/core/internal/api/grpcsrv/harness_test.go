@@ -59,6 +59,7 @@ type rig struct {
 	reactions *memstore.Interactions
 	pins      *memstore.Pins
 	directs   *memstore.DirectRooms
+	mentions  *memstore.Mentions
 }
 
 type options struct {
@@ -84,7 +85,7 @@ func newRig(t *testing.T, o options) *rig {
 	svc, err := grpcsrv.New(grpcsrv.Deps{
 		Sender: o.sender, Rooms: rg.rooms, Pages: o.pageReader(rg.msgs), NewID: o.newID, Now: o.now, Policy: o.policy, Events: o.events,
 		Mutator: newMutator(t, rg, o), Edits: rg.edits, Hidden: rg.hidden, Bookmarks: rg.reactions, Replies: rg.reactions,
-		Members: membersOf(rg, o), Timers: nopTimers{}, Requests: newRequests(t, o.pending), Directs: rg.directs,
+		Members: membersOf(rg, o), Timers: nopTimers{}, Requests: newRequests(t, o.pending), Directs: rg.directs, Mentions: rg.mentions, MemberRooms: rg.rooms,
 	}, quiet)
 	if err != nil {
 		t.Fatalf("New: %v", err)

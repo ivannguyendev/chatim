@@ -39,6 +39,13 @@ func MentionTargets(targets []domain.MentionTarget) []*chatimv1.MentionTarget {
 	return out
 }
 
+func MentionSet(targets []domain.MentionTarget, all bool) *chatimv1.MentionSet {
+	if len(targets) == 0 && !all {
+		return nil
+	}
+	return &chatimv1.MentionSet{Targets: MentionTargets(targets), All: all}
+}
+
 func DomainMentionTargets(targets []*chatimv1.MentionTarget) []domain.MentionTarget {
 	if len(targets) == 0 {
 		return nil

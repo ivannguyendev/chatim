@@ -21,9 +21,10 @@ const (
 var DefaultEmojis = []string{"👍", "❤️", "😂", "😮", "😢", "🙏"}
 
 type Limits struct {
-	Emojis      []string
-	PinLimit    int
-	MemberBatch int
+	Emojis         []string
+	PinLimit       int
+	MemberBatch    int
+	MentionTargets int
 }
 
 func (l Limits) Validate() error { return l.withDefaults().validate() }
@@ -35,6 +36,7 @@ func (l Limits) withDefaults() Limits {
 	l.Emojis = slices.Clone(l.Emojis)
 	l.PinLimit = cmp.Or(l.PinLimit, DefaultPinLimit)
 	l.MemberBatch = cmp.Or(l.MemberBatch, DefaultMemberBatch)
+	l.MentionTargets = cmp.Or(l.MentionTargets, domain.DefaultMentionTargetsMax)
 	return l
 }
 
@@ -55,6 +57,9 @@ func (l Limits) validate() error {
 	}
 	if l.MemberBatch < MinMemberBatch || l.MemberBatch > domain.MaxMemberBatch {
 		return fmt.Errorf("%w: member batch %d must be %d to %d", apperr.ErrInvalidArgument, l.MemberBatch, MinMemberBatch, domain.MaxMemberBatch)
+	}
+	if l.MentionTargets < 1 {
+		return fmt.Errorf("%w: mention targets %d must be at least 1", apperr.ErrInvalidArgument, l.MentionTargets)
 	}
 	return nil
 }

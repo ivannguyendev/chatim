@@ -70,16 +70,24 @@ func (s *Service) ListBookmarks(ctx context.Context, req *chatimv1.ListBookmarks
 }
 
 func (s *Service) bookmarkedMessages(ctx context.Context, who caller, marks []domain.Bookmark) (map[store.MsgKey]domain.Message, error) {
+	keys := make([]store.MsgKey, len(marks))
+	for i, b := range marks {
+		keys[i] = store.BookmarkKeyOf(b)
+	}
+	return s.visibleMessages(ctx, who, keys)
+}
+
+func (s *Service) visibleMessages(ctx context.Context, who caller, keys []store.MsgKey) (map[store.MsgKey]domain.Message, error) {
 	groups := make(map[roomThread][]store.MsgKey)
 	var order []roomThread
-	for _, b := range marks {
-		g := roomThread{b.Room, b.Thread}
+	for _, k := range keys {
+		g := roomThread{k.Room, k.Thread}
 		if _, seen := groups[g]; !seen {
 			order = append(order, g)
 		}
-		groups[g] = append(groups[g], store.BookmarkKeyOf(b))
+		groups[g] = append(groups[g], k)
 	}
-	visible := make(map[store.MsgKey]domain.Message, len(marks))
+	visible := make(map[store.MsgKey]domain.Message, len(keys))
 	for _, g := range order {
 		if err := s.visibleIn(ctx, who, g, groups[g], visible); err != nil {
 			return nil, err

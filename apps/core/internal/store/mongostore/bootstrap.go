@@ -115,7 +115,7 @@ func interactionIndexes() []mongo.IndexModel {
 
 func mentionIndexes() []mongo.IndexModel {
 	return []mongo.IndexModel{
-		{Keys: bson.D{{Key: "tenant", Value: 1}, {Key: "target", Value: 1}, {Key: "state", Value: 1}, {Key: "created_at", Value: -1}}},
+		{Keys: bson.D{{Key: "tenant", Value: 1}, {Key: "target", Value: 1}, {Key: "state", Value: 1}, {Key: "created_at", Value: -1}, {Key: "message_key", Value: -1}}},
 		{Keys: bson.D{{Key: "message_key", Value: 1}}},
 	}
 }

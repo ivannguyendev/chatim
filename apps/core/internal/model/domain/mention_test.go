@@ -74,3 +74,20 @@ func TestValidateMentionsRejectsHugeListsBeforeDeduping(t *testing.T) {
 	_, err := domain.ValidateMentions(same, 2)
 	assertInvalid(t, err, "mentions")
 }
+
+func TestSameMentionsComparesValidatedTargetsAsASet(t *testing.T) {
+	for _, c := range []struct {
+		a, b []domain.MentionTarget
+		want bool
+	}{
+		{nil, nil, true},
+		{nil, []domain.MentionTarget{}, true},
+		{[]domain.MentionTarget{user("minh"), group("ops")}, []domain.MentionTarget{group("ops"), user("minh")}, true},
+		{[]domain.MentionTarget{user("minh")}, []domain.MentionTarget{group("minh")}, false},
+		{[]domain.MentionTarget{user("minh")}, []domain.MentionTarget{user("minh"), user("lan")}, false},
+	} {
+		if got := domain.SameMentions(c.a, c.b); got != c.want {
+			t.Fatalf("SameMentions(%v, %v) = %v, want %v", c.a, c.b, got, c.want)
+		}
+	}
+}

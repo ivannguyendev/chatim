@@ -22,6 +22,7 @@ type MemberWriter interface {
 type MemberReader interface {
 	MembersOf(ctx context.Context, room uint64, users []string) ([]domain.Member, error)
 	MembersBetween(ctx context.Context, room uint64, from, to time.Time, limit int) ([]domain.Member, error)
+	RoomsOf(ctx context.Context, tenant, user string) ([]uint64, error)
 }
 
 type OwnerView struct {

@@ -32,6 +32,7 @@ func TestLimitsFillDefaultsAndCheckBounds(t *testing.T) {
 		{"duplicate", mutate.Limits{Emojis: []string{"👍", "❤️", "👍"}}, "👍"},
 		{"pin limit over the cap", mutate.Limits{PinLimit: mutate.MaxPinLimit + 1}, "1001"},
 		{"negative pin limit", mutate.Limits{PinLimit: -1}, "-1"},
+		{"negative mention targets", mutate.Limits{MentionTargets: -2}, "-2"},
 	}
 	for _, c := range cases {
 		err := c.limits.Validate()

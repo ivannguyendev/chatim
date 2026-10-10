@@ -66,12 +66,17 @@ var portMethods = map[string]string{
 	"MemberWriter.ApplyMember":    "cas",
 	"MemberReader.MembersOf":      "read",
 	"MemberReader.MembersBetween": "read",
+	"MemberReader.RoomsOf":        "read",
 	"OwnerChanges.ChangeOwners":   "transaction",
 	"MemberCounts.AddMemberCount": "version-bump",
 	"MemberCounts.CountMembers":   "read",
 	"MemberCounts.SetMemberCount": "cas",
 	"ReadPositions.MarkRead":      "version-bump",
 	"ReadPositions.MarkUnread":    "version-bump",
+
+	"Mentions.ApplyMentions": "monotonic-cas",
+	"Mentions.MentionsOf":    "read",
+	"Mentions.List":          "read",
 
 	"DirectRooms.Claim":   "upsert",
 	"DirectRooms.Repoint": "cas",
@@ -97,6 +102,7 @@ func TestEveryPortMethodHasAWriteContract(t *testing.T) {
 		reflect.TypeFor[store.MemberCounts](),
 		reflect.TypeFor[store.ReadPositions](),
 		reflect.TypeFor[store.DirectRooms](),
+		reflect.TypeFor[store.Mentions](),
 	}
 	seen := map[string]bool{}
 	for _, p := range ports {

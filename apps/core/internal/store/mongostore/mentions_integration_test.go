@@ -25,7 +25,7 @@ func TestBootstrapCreatesMentions(t *testing.T) {
 	_, db := itStore(t, itClient(t))
 	assertClusteredLayout(t, db, mentionsCollection)
 	got := indexKeys(t, db.Collection(mentionsCollection))
-	for _, pattern := range []string{"tenant:1,target:1,state:1,created_at:-1", "message_key:1"} {
+	for _, pattern := range []string{"tenant:1,target:1,state:1,created_at:-1,message_key:-1", "message_key:1"} {
 		if !hasIndex(got, pattern, false) {
 			t.Fatalf("mentions indexes = %v, want non-unique %s", got, pattern)
 		}

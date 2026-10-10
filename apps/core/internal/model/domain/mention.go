@@ -50,3 +50,19 @@ func validMentionTarget(t MentionTarget) bool {
 	}
 	return true
 }
+
+func SameMentions(a, b []MentionTarget) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	want := make(map[MentionTarget]struct{}, len(a))
+	for _, t := range a {
+		want[t] = struct{}{}
+	}
+	for _, t := range b {
+		if _, ok := want[t]; !ok {
+			return false
+		}
+	}
+	return true
+}
