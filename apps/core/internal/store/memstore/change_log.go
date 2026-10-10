@@ -13,6 +13,7 @@ type logged struct {
 	room     domain.Room
 	edit     domain.Edit
 	reaction domain.Reaction
+	bookmark domain.Bookmark
 	pin      domain.PinAction
 	member   domain.Member
 	hidden   domain.HiddenMessage

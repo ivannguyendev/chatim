@@ -54,7 +54,7 @@ func TestDecodeRejectsMalformedTails(t *testing.T) {
 
 func TestDecodeDefersWellFormedUnknownKinds(t *testing.T) {
 	future := work.Encode(work.Record{Kind: store.RoomInserted, Room: 42, CommittedAt: committed})
-	future[0] = 11
+	future[0] = 13
 	for name, b := range map[string][]byte{"bare": future, "with a tail": append(slices.Clone(future), 2, 'a', 'b')} {
 		_, err := work.Decode(b)
 		if !errors.Is(err, work.ErrUnknownKind) || !errors.Is(err, work.ErrBadRecord) || !errors.Is(err, apperr.ErrInvalidArgument) {

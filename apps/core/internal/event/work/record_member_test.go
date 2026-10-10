@@ -9,9 +9,9 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
-func TestKnownKindsAreTheTenChangeKinds(t *testing.T) {
-	for k := range store.ChangeKind(13) {
-		want := k >= store.MessageInserted && k <= store.MemberCountCheck
+func TestKnownKindsAreTheTwelveChangeKinds(t *testing.T) {
+	for k := range store.ChangeKind(14) {
+		want := k >= store.MessageInserted && k <= store.MessageCountCheck
 		if got := work.KnownKind(k); got != want {
 			t.Errorf("KnownKind(%d) = %v, want %v", k, got, want)
 		}

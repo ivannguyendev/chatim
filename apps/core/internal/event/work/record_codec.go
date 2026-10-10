@@ -72,9 +72,9 @@ func checkKind(r Record) error {
 		return fmt.Errorf("%w: kind 0", ErrBadRecord)
 	case !KnownKind(r.Kind):
 		return fmt.Errorf("%w %d", ErrUnknownKind, r.Kind)
-	case carriesUser(r.Kind) && domain.ValidUser(r.User) != nil:
-		return fmt.Errorf("%w: kind %d record without a valid user", ErrBadRecord, r.Kind)
-	case !carriesUser(r.Kind) && r.User != "":
+	case carriesTail(r.Kind) && domain.ValidUser(r.User) != nil:
+		return fmt.Errorf("%w: kind %d record without a valid tail", ErrBadRecord, r.Kind)
+	case !carriesTail(r.Kind) && r.User != "":
 		return fmt.Errorf("%w: kind %d carries a user", ErrBadRecord, r.Kind)
 	default:
 		return nil

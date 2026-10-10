@@ -39,23 +39,27 @@ type Record struct {
 }
 
 func KnownKind(k store.ChangeKind) bool {
-	return k >= store.MessageInserted && k <= store.MemberCountCheck
+	return k >= store.MessageInserted && k <= store.MessageCountCheck
 }
 
 func carriesUser(k store.ChangeKind) bool {
 	switch k {
-	case store.ReactionChanged, store.MemberChanged, store.ReadChanged, store.MessageHidden, store.HistoryCleared:
+	case store.ReactionChanged, store.MemberChanged, store.ReadChanged, store.MessageHidden, store.HistoryCleared, store.BookmarkChanged:
 		return true
 	default:
 		return false
 	}
 }
 
+func carriesTail(k store.ChangeKind) bool {
+	return carriesUser(k) || k == store.MessageCountCheck
+}
+
 func RecordOf(c store.Change) Record {
 	r := Record{Kind: c.Kind, CommittedAt: c.CommittedAt}
 	switch c.Kind {
 	case store.MessageInserted:
-		r.Room, r.Thread, r.Seq = c.Msg.Room, c.Msg.Thread, c.Msg.Seq
+		r.Room, r.Thread, r.Seq, r.Version = c.Msg.Room, c.Msg.Thread, c.Msg.Seq, uint32(c.ReplyMentionFlags)
 	case store.RoomInserted, store.MemberCountCheck:
 		r.Room = c.Room.ID
 	case store.EditInserted:
@@ -74,6 +78,10 @@ func RecordOf(c store.Change) Record {
 		r.Room, r.Thread, r.Seq, r.User = h.Room, h.Thread, h.Seq, h.User
 	case store.HistoryCleared:
 		r.Room, r.User = c.Member.Room, c.Member.User
+	case store.BookmarkChanged:
+		b := c.Bookmark
+		r.Room, r.Thread, r.Seq, r.Version, r.User = b.Room, b.Thread, b.Seq, b.Ver, b.User
+	case store.MessageCountCheck:
 	}
 	return r
 }
@@ -107,6 +115,10 @@ func (r Record) ID() string {
 		return "c:" + pbconv.ClearedEventID(r.Room, r.User, r.CommittedAt)
 	case store.MemberCountCheck:
 		return "k:" + pbconv.RoomID(r.Room) + "-" + strconv.FormatUint(uint64(r.Version), 10)
+	case store.BookmarkChanged:
+		return "b:" + pbconv.BookmarkEventID(r.Room, r.Thread, r.Seq, r.User, r.Version)
+	case store.MessageCountCheck:
+		return "q:" + pbconv.MessageEventID(r.Room, r.Thread, r.Seq) + "-" + r.User + "-" + strconv.FormatUint(uint64(r.Version), 10)
 	default:
 		return ""
 	}

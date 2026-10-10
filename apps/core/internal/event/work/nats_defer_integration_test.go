@@ -15,7 +15,7 @@ import (
 func TestRealWorkQueueDefersRecordsOfUnknownKinds(t *testing.T) {
 	js, cfg := realWork(t)
 	data := work.Encode(work.Record{Kind: store.RoomInserted, Room: 5, CommittedAt: time.Now()})
-	data[0] = 11
+	data[0] = 13
 	future := &nats.Msg{Subject: work.Subject(cfg.SubjectRoot, 3), Data: data, Header: nats.Header{}}
 	future.Header.Set(jetstream.MsgIDHeader, "future-1")
 	if _, err := js.PublishMsg(t.Context(), future); err != nil {

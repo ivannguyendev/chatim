@@ -48,7 +48,7 @@ func batchOf(msgs ...*fakeMsg) fakeBatch {
 func TestCollectTermsMalformedAndDefersUnknownKinds(t *testing.T) {
 	good := &fakeMsg{data: Encode(Record{Kind: store.MessageInserted, Room: 1, Seq: 1})}
 	future := Encode(Record{Kind: store.RoomInserted, Room: 2})
-	future[0] = 11
+	future[0] = 13
 	unknown, junk := &fakeMsg{data: future}, &fakeMsg{data: []byte("junk")}
 	ds, err := collect(t.Context(), batchOf(good, unknown, junk), 7*time.Second)
 	var bad BadRecordsError

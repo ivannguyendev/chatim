@@ -30,19 +30,41 @@ const (
 	MessageHidden
 	HistoryCleared
 	MemberCountCheck
+	BookmarkChanged
+	MessageCountCheck
 )
 
+type ReplyMentionFlags uint32
+
+const (
+	HasReply ReplyMentionFlags = 1 << iota
+	HasMention
+)
+
+func ReplyMentionFlagsOf(m domain.Message) ReplyMentionFlags {
+	var f ReplyMentionFlags
+	if m.ReplyTo != nil {
+		f |= HasReply
+	}
+	if len(m.Mentions) > 0 || m.MentionAll {
+		f |= HasMention
+	}
+	return f
+}
+
 type Change struct {
-	Kind        ChangeKind
-	Msg         domain.Message
-	Room        domain.Room
-	Edit        domain.Edit
-	Reaction    domain.Reaction
-	Pin         domain.PinAction
-	Member      domain.Member
-	Hidden      domain.HiddenMessage
-	CommittedAt time.Time
-	Position    Position
+	Kind              ChangeKind
+	Msg               domain.Message
+	ReplyMentionFlags ReplyMentionFlags
+	Room              domain.Room
+	Edit              domain.Edit
+	Reaction          domain.Reaction
+	Bookmark          domain.Bookmark
+	Pin               domain.PinAction
+	Member            domain.Member
+	Hidden            domain.HiddenMessage
+	CommittedAt       time.Time
+	Position          Position
 }
 
 type ChangeFeed interface {

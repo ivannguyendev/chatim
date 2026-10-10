@@ -51,6 +51,7 @@ func TestMemberEventIDsNeverCollideWithOtherKinds(t *testing.T) {
 				add(pbconv.HiddenEventID(room, u, 0, v), fmt.Sprintf("hidden %d %s 0/%d", room, u, v))
 				add(pbconv.ClearedEventID(room, u, time.UnixMilli(int64(v))), fmt.Sprintf("cleared %d %s %d", room, u, v))
 				add(pbconv.ReactionEventID(room, 0, 1, u, uint32(v)), fmt.Sprintf("reaction %d %s n%d", room, u, v))
+				add(pbconv.BookmarkEventID(room, 0, 1, u, uint32(v)), fmt.Sprintf("bookmark %d %s 0/1 v%d", room, u, v))
 			}
 		}
 	}

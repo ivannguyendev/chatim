@@ -47,7 +47,7 @@ func TestPinsContract(t *testing.T) {
 }
 
 func TestReactionFeedContract(t *testing.T) {
-	storetest.RunReactionFeed(t, func(*testing.T) (store.Interactions, store.ChangeFeed) {
+	storetest.RunInteractionFeed(t, func(*testing.T) (store.Interactions, store.ChangeFeed) {
 		interactions := memstore.NewInteractions()
 		return interactions, memstore.NewFeed(memstore.NewMessages(), nil, nil, memstore.WithInteractions(interactions))
 	})

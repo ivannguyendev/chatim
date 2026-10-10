@@ -11,7 +11,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
-func TestFeedSkipsSummaryPinActivityCountBookmarkAndReplyWrites(t *testing.T) {
+func TestFeedSkipsSummaryPinActivityCountAndReplyWrites(t *testing.T) {
 	s, db := itStore(t, itClient(t))
 	ctx := t.Context()
 	room := domain.Room{ID: itRoom, Tenant: "acme", Type: domain.RoomGroup, Name: "Team", CreatedBy: "alice", CreatedAt: codecTime, MemberCount: 1}
@@ -94,12 +94,6 @@ func skippedWrites(t *testing.T, s *Store, key store.MsgKey) {
 func skippedInteractions(t *testing.T, s *Store, key store.MsgKey) {
 	t.Helper()
 	ctx, in := t.Context(), s.Interactions()
-	for _, on := range []bool{true, false} {
-		b := domain.Bookmark{Room: key.Room, Seq: key.Seq, Tenant: "acme", User: "alice", On: on, At: codecTime}
-		if _, changed, err := in.SetBookmark(ctx, b); err != nil || !changed {
-			t.Fatalf("SetBookmark(%v) = %v, %v", on, changed, err)
-		}
-	}
 	reply := domain.Reply{Parent: domain.MsgKey(key), Room: key.Room, Seq: key.Seq + 1, Tenant: "acme", From: "alice", At: codecTime}
 	if added, err := in.AddReply(ctx, reply); err != nil || !added {
 		t.Fatalf("AddReply = %v, %v", added, err)

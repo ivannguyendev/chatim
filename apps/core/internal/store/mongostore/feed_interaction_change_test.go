@@ -96,14 +96,34 @@ func TestDecodeChangeRejectsBrokenReactionAndPinChanges(t *testing.T) {
 	}
 }
 
-func TestDecodeChangeSkipsBookmarkAndReplyChanges(t *testing.T) {
-	key := keys.Msg(7_340_000_001, 0, 40)
-	bookmark, reply := keys.InteractionUser(key, keys.BookmarkKind, "minh"), keys.InteractionReply(key, 0, 57)
+func TestDecodeChangeReadsBookmarkChanges(t *testing.T) {
+	key := keys.Msg(7_340_000_001, 3, 40)
+	id := keys.InteractionUser(key, keys.BookmarkKind, "minh")
+	want := domain.Bookmark{Room: 7_340_000_001, Thread: 3, Seq: 40, User: "minh", Ver: 2}
+	got, err := decodeChange(reactionUpdate(t, id, bson.D{{Key: "state", Value: int32(2)}, {Key: "ver", Value: int32(2)}}))
+	if err != nil || got.Kind != store.BookmarkChanged || got.Bookmark != want || got.Reaction.N != 0 || !got.CommittedAt.Equal(codecTime) {
+		t.Fatalf("bookmark update = %+v, %v; want %+v", got, err, want)
+	}
+	doc := interactionDoc{ID: id, Key: key, Room: 7_340_000_001, Tenant: "acme", Kind: "bookmark", Actor: "minh", State: interactionLive, Ver: 1, CreatedAt: codecTime, UpdatedAt: codecTime}
+	for _, op := range []string{"insert", "replace"} {
+		ev := changeOn(t, interactionsCollection, doc)
+		ev.OperationType = op
+		got, err := decodeChange(ev)
+		b := got.Bookmark
+		if err != nil || got.Kind != store.BookmarkChanged || b.Room != want.Room || b.Thread != 3 || b.Seq != 40 || b.User != "minh" || b.Ver != 1 || !b.On || b.Tenant != "acme" {
+			t.Fatalf("bookmark %s = %+v, %v", op, got, err)
+		}
+	}
+	if _, err := decodeChange(reactionUpdate(t, id, bson.D{{Key: "state", Value: int32(2)}})); !errors.Is(err, errCorrupt) {
+		t.Fatalf("bookmark update without ver = %v, want errCorrupt", err)
+	}
+}
+
+func TestDecodeChangeSkipsReplyChanges(t *testing.T) {
+	reply := keys.InteractionReply(keys.Msg(7_340_000_001, 0, 40), 0, 57)
 	cases := map[string]changeDoc{
-		"bookmark update": reactionUpdate(t, bookmark, bson.D{{Key: "ver", Value: int32(2)}}),
-		"reply update":    reactionUpdate(t, reply, bson.D{{Key: "ver", Value: int32(2)}}),
-		"bookmark insert": changeOn(t, interactionsCollection, interactionDoc{ID: bookmark, Actor: "minh", State: interactionLive, Ver: 1}),
-		"reply insert":    changeOn(t, interactionsCollection, interactionDoc{ID: reply, Actor: "lan", State: interactionLive, Ver: 1}),
+		"reply update": reactionUpdate(t, reply, bson.D{{Key: "ver", Value: int32(2)}}),
+		"reply insert": changeOn(t, interactionsCollection, interactionDoc{ID: reply, Actor: "lan", State: interactionLive, Ver: 1}),
 	}
 	for name, ev := range cases {
 		if _, err := decodeChange(ev); !errors.Is(err, errSkipChange) {

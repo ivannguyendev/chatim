@@ -15,61 +15,81 @@ var errSkipChange = errors.New("mongostore: change does not enter the feed")
 
 func decodeInteractionChange(ev changeDoc) (store.Change, error) {
 	if ev.OperationType == "update" {
-		r, err := reactionFromUpdate(ev)
-		if err != nil {
-			return store.Change{}, err
-		}
-		return store.Change{Kind: store.ReactionChanged, Reaction: r, CommittedAt: ev.WallTime}, nil
+		return interactionFromUpdate(ev)
 	}
 	var d interactionDoc
 	if err := bson.Unmarshal(ev.FullDocument, &d); err != nil {
 		return store.Change{}, fmt.Errorf("%w: interaction document: %w", errCorrupt, err)
 	}
-	if err := skipUnlessReaction(d.ID); err != nil {
-		return store.Change{}, err
-	}
-	r, err := decodeReaction(d)
+	kind, err := interactionChangeKind(d.ID)
 	if err != nil {
 		return store.Change{}, err
 	}
-	return store.Change{Kind: store.ReactionChanged, Reaction: r, CommittedAt: ev.WallTime}, nil
+	c := store.Change{Kind: kind, CommittedAt: ev.WallTime}
+	if kind == store.BookmarkChanged {
+		c.Bookmark, err = decodeBookmark(d)
+	} else {
+		c.Reaction, err = decodeReaction(d)
+	}
+	if err != nil {
+		return store.Change{}, err
+	}
+	return c, nil
 }
 
-func skipUnlessReaction(id []byte) error {
+func interactionChangeKind(id []byte) (store.ChangeKind, error) {
 	_, kind, _, err := keys.ParseInteraction(id)
 	switch {
 	case err != nil:
-		return fmt.Errorf("%w: interaction _id: %w", errCorrupt, err)
-	case kind != keys.ReactionKind:
-		return errSkipChange
+		return 0, fmt.Errorf("%w: interaction _id: %w", errCorrupt, err)
+	case kind == keys.ReactionKind:
+		return store.ReactionChanged, nil
+	case kind == keys.BookmarkKind:
+		return store.BookmarkChanged, nil
+	default:
+		return 0, errSkipChange
 	}
-	return nil
 }
 
-func reactionFromUpdate(ev changeDoc) (domain.Reaction, error) {
+func interactionFromUpdate(ev changeDoc) (store.Change, error) {
 	_, id, ok := ev.DocumentKey.ID.BinaryOK()
 	if !ok {
-		return domain.Reaction{}, fmt.Errorf("%w: interaction update without a binary _id", errCorrupt)
+		return store.Change{}, fmt.Errorf("%w: interaction update without a binary _id", errCorrupt)
 	}
-	if err := skipUnlessReaction(id); err != nil {
-		return domain.Reaction{}, err
-	}
-	head, err := decodeHead(interactionDoc{ID: id, State: interactionLive}, keys.ReactionKind)
+	kind, err := interactionChangeKind(id)
 	if err != nil {
-		return domain.Reaction{}, fmt.Errorf("reaction update: %w", err)
+		return store.Change{}, err
 	}
+	head, err := decodeHead(interactionDoc{ID: id, State: interactionLive}, 0)
+	if err != nil {
+		return store.Change{}, fmt.Errorf("interaction update: %w", err)
+	}
+	ver, err := updatedVer(ev)
+	if err != nil {
+		return store.Change{}, err
+	}
+	k, c := head.key, store.Change{Kind: kind, CommittedAt: ev.WallTime}
+	if kind == store.BookmarkChanged {
+		c.Bookmark = domain.Bookmark{Room: k.Room, Thread: k.Thread, Seq: k.Seq, User: head.user, Ver: ver}
+	} else {
+		c.Reaction = domain.Reaction{Room: k.Room, Thread: k.Thread, Seq: k.Seq, User: head.user, N: ver}
+	}
+	return c, nil
+}
+
+func updatedVer(ev changeDoc) (uint32, error) {
 	raw, ok := ev.UpdateDescription.UpdatedFields.Lookup("ver").AsInt64OK()
 	if !ok {
-		return domain.Reaction{}, fmt.Errorf("%w: reaction update without a numeric ver", errCorrupt)
+		return 0, fmt.Errorf("%w: interaction update without a numeric ver", errCorrupt)
 	}
-	n, err := narrowUint32("reaction change", raw)
+	n, err := narrowUint32("interaction change", raw)
 	if err != nil {
-		return domain.Reaction{}, err
+		return 0, err
 	}
 	if n == 0 {
-		return domain.Reaction{}, fmt.Errorf("%w: reaction update with change 0", errCorrupt)
+		return 0, fmt.Errorf("%w: interaction update with change 0", errCorrupt)
 	}
-	return domain.Reaction{Room: head.key.Room, Thread: head.key.Thread, Seq: head.key.Seq, User: head.user, N: n}, nil
+	return n, nil
 }
 
 func decodePinChange(ev changeDoc) (store.Change, error) {

@@ -28,6 +28,9 @@ func (s *Interactions) SetBookmark(ctx context.Context, b domain.Bookmark) (doma
 	next := b
 	next.Ver = cur.Ver + 1
 	s.bookmarks[k] = next
+	if s.log != nil {
+		s.log.appendFact(logged{kind: store.BookmarkChanged, bookmark: next})
+	}
 	return next, true, nil
 }
 
