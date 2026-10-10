@@ -4,6 +4,7 @@ package chatim.v1;
 
 import "chatim/v1/core.proto";
 import "chatim/v1/members.proto";
+import "chatim/v1/message_links.proto";
 import "chatim/v1/reactions_pins.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -67,7 +68,7 @@ message ReactionChanged {
 message CountsChanged {
   string counter = 1;
   ReactionSummary reactions = 2;
-  uint32 reply_count = 3;
+  ReplyCount reply_count = 3;
 }
 
 message MessagePinned {

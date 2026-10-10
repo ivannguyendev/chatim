@@ -41,6 +41,11 @@ message ReplyPreview {
   bool hidden = 5;
 }
 
+message ReplyCount {
+  uint32 count = 1;
+  uint64 ver = 2;
+}
+
 message MentionGroup {
   string id = 1;
   google.protobuf.Timestamp since = 2;

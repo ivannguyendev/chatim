@@ -672,7 +672,7 @@ type CountsChanged struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Counter       string                 `protobuf:"bytes,1,opt,name=counter,proto3" json:"counter,omitempty"`
 	Reactions     *ReactionSummary       `protobuf:"bytes,2,opt,name=reactions,proto3" json:"reactions,omitempty"`
-	ReplyCount    uint32                 `protobuf:"varint,3,opt,name=reply_count,json=replyCount,proto3" json:"reply_count,omitempty"`
+	ReplyCount    *ReplyCount            `protobuf:"bytes,3,opt,name=reply_count,json=replyCount,proto3" json:"reply_count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -721,11 +721,11 @@ func (x *CountsChanged) GetReactions() *ReactionSummary {
 	return nil
 }
 
-func (x *CountsChanged) GetReplyCount() uint32 {
+func (x *CountsChanged) GetReplyCount() *ReplyCount {
 	if x != nil {
 		return x.ReplyCount
 	}
-	return 0
+	return nil
 }
 
 type MessagePinned struct {
@@ -836,7 +836,7 @@ var File_chatim_v1_events_proto protoreflect.FileDescriptor
 
 const file_chatim_v1_events_proto_rawDesc = "" +
 	"\n" +
-	"\x16chatim/v1/events.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x17chatim/v1/members.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb7\v\n" +
+	"\x16chatim/v1/events.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x17chatim/v1/members.proto\x1a\x1dchatim/v1/message_links.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb7\v\n" +
 	"\x05Event\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06tenant\x18\x02 \x01(\tR\x06tenant\x12\x17\n" +
@@ -879,11 +879,11 @@ const file_chatim_v1_events_proto_rawDesc = "" +
 	"\x04user\x18\x01 \x01(\tR\x04user\x12\x14\n" +
 	"\x05emoji\x18\x02 \x01(\tR\x05emoji\x12%\n" +
 	"\x0eprevious_emoji\x18\x03 \x01(\tR\rpreviousEmoji\x12\x16\n" +
-	"\x06change\x18\x04 \x01(\rR\x06change\"\x84\x01\n" +
+	"\x06change\x18\x04 \x01(\rR\x06change\"\x9b\x01\n" +
 	"\rCountsChanged\x12\x18\n" +
 	"\acounter\x18\x01 \x01(\tR\acounter\x128\n" +
-	"\treactions\x18\x02 \x01(\v2\x1a.chatim.v1.ReactionSummaryR\treactions\x12\x1f\n" +
-	"\vreply_count\x18\x03 \x01(\rR\n" +
+	"\treactions\x18\x02 \x01(\v2\x1a.chatim.v1.ReactionSummaryR\treactions\x126\n" +
+	"\vreply_count\x18\x03 \x01(\v2\x15.chatim.v1.ReplyCountR\n" +
 	"replyCount\"V\n" +
 	"\rMessagePinned\x12,\n" +
 	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\x12\x17\n" +
@@ -931,6 +931,7 @@ var file_chatim_v1_events_proto_goTypes = []any{
 	(*Message)(nil),               // 20: chatim.v1.Message
 	(*Room)(nil),                  // 21: chatim.v1.Room
 	(*ReactionSummary)(nil),       // 22: chatim.v1.ReactionSummary
+	(*ReplyCount)(nil),            // 23: chatim.v1.ReplyCount
 }
 var file_chatim_v1_events_proto_depIdxs = []int32{
 	9,  // 0: chatim.v1.Event.room_type:type_name -> chatim.v1.RoomType
@@ -957,13 +958,14 @@ var file_chatim_v1_events_proto_depIdxs = []int32{
 	20, // 21: chatim.v1.MessageEdited.message:type_name -> chatim.v1.Message
 	20, // 22: chatim.v1.MessageDeleted.message:type_name -> chatim.v1.Message
 	22, // 23: chatim.v1.CountsChanged.reactions:type_name -> chatim.v1.ReactionSummary
-	20, // 24: chatim.v1.MessagePinned.message:type_name -> chatim.v1.Message
-	20, // 25: chatim.v1.MessageUnpinned.message:type_name -> chatim.v1.Message
-	26, // [26:26] is the sub-list for method output_type
-	26, // [26:26] is the sub-list for method input_type
-	26, // [26:26] is the sub-list for extension type_name
-	26, // [26:26] is the sub-list for extension extendee
-	0,  // [0:26] is the sub-list for field type_name
+	23, // 24: chatim.v1.CountsChanged.reply_count:type_name -> chatim.v1.ReplyCount
+	20, // 25: chatim.v1.MessagePinned.message:type_name -> chatim.v1.Message
+	20, // 26: chatim.v1.MessageUnpinned.message:type_name -> chatim.v1.Message
+	27, // [27:27] is the sub-list for method output_type
+	27, // [27:27] is the sub-list for method input_type
+	27, // [27:27] is the sub-list for extension type_name
+	27, // [27:27] is the sub-list for extension extendee
+	0,  // [0:27] is the sub-list for field type_name
 }
 
 func init() { file_chatim_v1_events_proto_init() }
@@ -973,6 +975,7 @@ func file_chatim_v1_events_proto_init() {
 	}
 	file_chatim_v1_core_proto_init()
 	file_chatim_v1_members_proto_init()
+	file_chatim_v1_message_links_proto_init()
 	file_chatim_v1_reactions_pins_proto_init()
 	file_chatim_v1_events_proto_msgTypes[0].OneofWrappers = []any{
 		(*Event_MessageCreated)(nil),

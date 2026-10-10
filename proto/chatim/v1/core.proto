@@ -62,7 +62,7 @@ message Message {
   ForwardRef forward_from = 16;
   repeated MentionTarget mention_targets = 17;
   bool mention_all = 18;
-  uint32 reply_count = 19;
+  ReplyCount reply_count = 19;
   ReplyPreview reply_preview = 20;
 }
 
@@ -110,7 +110,6 @@ message SendMessageResponse {
   reserved "pts";
   uint64 seq = 1;
   google.protobuf.Timestamp created_at = 3;
-  uint64 thread_root = 4;
 }
 
 message GetHistoryRequest {
