@@ -93,6 +93,64 @@ func TestSeqContentionFailsTheRestOfTheGroupAndKeepsCommittedAcks(t *testing.T) 
 	})
 }
 
+func TestResendAbandonedByContentionKeepsItsReservation(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		rg := newRig(t, baseConfig)
+		rg.cids.trackPending()
+		rg.sub.hold()
+		rg.sub.then(rg.sub.insert, func(msgs []domain.Message) []store.Result {
+			taken := rg.sub.foreignFirst(msgs[:1])
+			return append(taken, lostUnknown(msgs[1:])...)
+		})
+		rg.start(t)
+		ctx := t.Context()
+		busy := sendAsync(ctx, rg.Router, cmd(roomA, "bob", "busy"))
+		synctest.Wait()
+		c1 := sendAsync(ctx, rg.Router, cmd(roomA, "alice", "c1"))
+		synctest.Wait()
+		c2 := sendAsync(ctx, rg.Router, cmd(roomA, "alice", "c2"))
+		synctest.Wait()
+		rg.sub.release()
+		synctest.Wait()
+		rg.sub.release()
+		if got := <-busy; got.err != nil {
+			t.Fatalf("busy: %v", got.err)
+		}
+		expectErr(t, (<-c1).err, domain.ErrRetryLater)
+		expectErr(t, (<-c2).err, domain.ErrRetryLater)
+		assertYielded(t, rg)
+		if got, want := abortedKeys(rg), []dedupe.Key{remoteKey(roomA, "alice", "c1")}; !slices.Equal(got, want) {
+			t.Fatalf("aborted %v, want only %v: the ambiguous c2 keeps p:{core}", got, want)
+		}
+		rg.sub.open()
+		_, err := rg.Send(ctx, cmd(roomA, "alice", "c2"))
+		expectErr(t, err, domain.ErrRetryLater)
+		assertGroupSeqs(t, rg, []uint64{1}, []uint64{2, 3})
+		if docs := storedCIDs(t, rg.msgs.Messages, roomA)["c2"]; len(docs) != 0 {
+			t.Fatalf("client retry of the ambiguous c2 stored %d copies while its reservation is held", len(docs))
+		}
+	})
+}
+
+func TestContentionWhileRetiringCountsNoYield(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		rg := newRig(t, baseConfig)
+		rg.sub.then(rg.sub.foreignFirst)
+		rg.sub.hold()
+		rg.start(t)
+		w := sendAsync(t.Context(), rg.Router, cmd(roomA, "alice", "x"))
+		synctest.Wait()
+		evicted := evictAsync(t.Context(), rg.Router, roomA)
+		synctest.Wait()
+		rg.sub.release()
+		expectErr(t, (<-w).err, domain.ErrRetryLater)
+		<-evicted
+		if got := rg.Stats().Yields; got != 0 {
+			t.Fatalf("yields = %d, want 0 when the slot move already retired the actor", got)
+		}
+	})
+}
+
 func TestCIDPendingOnAnotherCoreIsCounted(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rg := newRig(t, baseConfig)

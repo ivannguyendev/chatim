@@ -19,8 +19,9 @@ func (a *actor) abandonRetries() {
 }
 
 func (r *Router) yield(a *actor) {
-	r.yields.Add(1)
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	a.requestRetire()
+	if a.requestRetire() {
+		r.yields.Add(1)
+	}
 }

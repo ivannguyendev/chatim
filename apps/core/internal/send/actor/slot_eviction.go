@@ -51,10 +51,12 @@ func (a *actor) retireRequested() bool {
 	}
 }
 
-func (a *actor) requestRetire() {
-	if !a.retireRequested() {
-		close(a.retire)
+func (a *actor) requestRetire() bool {
+	if a.retireRequested() {
+		return false
 	}
+	close(a.retire)
+	return true
 }
 
 func (a *actor) retireNow(ctx context.Context, first *request) {

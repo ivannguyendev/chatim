@@ -13,6 +13,7 @@ type fakeRegistry struct {
 	mu        sync.Mutex
 	committed map[dedupe.Key]dedupe.Record
 	forced    map[dedupe.Key]dedupe.Status
+	pending   map[dedupe.Key]bool
 	err       error
 	delay     time.Duration
 	hold      chan struct{}
@@ -40,8 +41,13 @@ func (f *fakeRegistry) Reserve(_ context.Context, keys []dedupe.Key) ([]dedupe.V
 			out[i] = dedupe.Verdict{Status: status, Record: rec}
 		case done:
 			out[i] = dedupe.Verdict{Status: dedupe.Committed, Record: rec}
+		case f.pending[k]:
+			out[i] = dedupe.Verdict{Status: dedupe.PendingHere}
 		default:
 			out[i] = dedupe.Verdict{Status: dedupe.Reserved}
+			if f.pending != nil {
+				f.pending[k] = true
+			}
 		}
 	}
 	return out, nil
@@ -69,6 +75,7 @@ func (f *fakeRegistry) Commit(ctx context.Context, entries []dedupe.Entry) error
 	}
 	for _, e := range entries {
 		f.committed[e.Key] = e.Record
+		delete(f.pending, e.Key)
 	}
 	return nil
 }
@@ -77,6 +84,9 @@ func (f *fakeRegistry) Abort(_ context.Context, keys []dedupe.Key) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.aborts = append(f.aborts, slices.Clone(keys))
+	for _, k := range keys {
+		delete(f.pending, k)
+	}
 	return f.err
 }
 
@@ -90,6 +100,12 @@ func (f *fakeRegistry) force(k dedupe.Key, status dedupe.Status, rec dedupe.Reco
 		f.committed = map[dedupe.Key]dedupe.Record{}
 	}
 	f.forced[k], f.committed[k] = status, rec
+}
+
+func (f *fakeRegistry) trackPending() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.pending = map[dedupe.Key]bool{}
 }
 
 func (f *fakeRegistry) holdCommits() (release func()) {
