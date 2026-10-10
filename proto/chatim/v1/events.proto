@@ -35,6 +35,7 @@ message Event {
     MemberPriorityChanged member_priority_changed = 33;
     MessageHidden message_hidden = 34;
     HistoryCleared history_cleared = 35;
+    BookmarkChanged bookmark_changed = 36;
   }
 }
 
@@ -66,6 +67,7 @@ message ReactionChanged {
 message CountsChanged {
   string counter = 1;
   ReactionSummary reactions = 2;
+  uint32 reply_count = 3;
 }
 
 message MessagePinned {

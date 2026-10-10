@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package chatim.v1;
+
+import "chatim/v1/core.proto";
+import "chatim/v1/message_links.proto";
+
+message SetBookmarkRequest {
+  string room_id = 1;
+  uint64 thread_root = 2;
+  uint64 seq = 3;
+  bool on = 4;
+}
+
+message SetBookmarkResponse {
+  bool changed = 1;
+}
+
+message GetRepliesRequest {
+  string room_id = 1;
+  uint64 seq = 2;
+  uint64 after = 3;
+  uint32 limit = 4;
+}
+
+message GetRepliesResponse {
+  repeated Message messages = 1;
+  uint64 next = 2;
+}
+
+message BookmarkItem {
+  Message message = 1;
+  bool available = 2;
+}
+
+message ListBookmarksRequest {
+  string before = 1;
+  uint32 limit = 2;
+}
+
+message ListBookmarksResponse {
+  repeated BookmarkItem items = 1;
+  string next = 2;
+}
+
+message ListMentionsRequest {
+  repeated MentionGroup groups = 1;
+  string before = 2;
+  uint32 limit = 3;
+}
+
+message ListMentionsResponse {
+  repeated Message messages = 1;
+  string next = 2;
+}

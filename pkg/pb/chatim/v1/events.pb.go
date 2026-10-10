@@ -50,6 +50,7 @@ type Event struct {
 	//	*Event_MemberPriorityChanged
 	//	*Event_MessageHidden
 	//	*Event_HistoryCleared
+	//	*Event_BookmarkChanged
 	Payload       isEvent_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -292,6 +293,15 @@ func (x *Event) GetHistoryCleared() *HistoryCleared {
 	return nil
 }
 
+func (x *Event) GetBookmarkChanged() *BookmarkChanged {
+	if x != nil {
+		if x, ok := x.Payload.(*Event_BookmarkChanged); ok {
+			return x.BookmarkChanged
+		}
+	}
+	return nil
+}
+
 type isEvent_Payload interface {
 	isEvent_Payload()
 }
@@ -360,6 +370,10 @@ type Event_HistoryCleared struct {
 	HistoryCleared *HistoryCleared `protobuf:"bytes,35,opt,name=history_cleared,json=historyCleared,proto3,oneof"`
 }
 
+type Event_BookmarkChanged struct {
+	BookmarkChanged *BookmarkChanged `protobuf:"bytes,36,opt,name=bookmark_changed,json=bookmarkChanged,proto3,oneof"`
+}
+
 func (*Event_MessageCreated) isEvent_Payload() {}
 
 func (*Event_RoomCreated) isEvent_Payload() {}
@@ -391,6 +405,8 @@ func (*Event_MemberPriorityChanged) isEvent_Payload() {}
 func (*Event_MessageHidden) isEvent_Payload() {}
 
 func (*Event_HistoryCleared) isEvent_Payload() {}
+
+func (*Event_BookmarkChanged) isEvent_Payload() {}
 
 type MessageCreated struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -656,6 +672,7 @@ type CountsChanged struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Counter       string                 `protobuf:"bytes,1,opt,name=counter,proto3" json:"counter,omitempty"`
 	Reactions     *ReactionSummary       `protobuf:"bytes,2,opt,name=reactions,proto3" json:"reactions,omitempty"`
+	ReplyCount    uint32                 `protobuf:"varint,3,opt,name=reply_count,json=replyCount,proto3" json:"reply_count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -702,6 +719,13 @@ func (x *CountsChanged) GetReactions() *ReactionSummary {
 		return x.Reactions
 	}
 	return nil
+}
+
+func (x *CountsChanged) GetReplyCount() uint32 {
+	if x != nil {
+		return x.ReplyCount
+	}
+	return 0
 }
 
 type MessagePinned struct {
@@ -812,8 +836,7 @@ var File_chatim_v1_events_proto protoreflect.FileDescriptor
 
 const file_chatim_v1_events_proto_rawDesc = "" +
 	"\n" +
-	"\x16chatim/v1/events.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x17chatim/v1/members.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xee\n" +
-	"\n" +
+	"\x16chatim/v1/events.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x17chatim/v1/members.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb7\v\n" +
 	"\x05Event\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06tenant\x18\x02 \x01(\tR\x06tenant\x12\x17\n" +
@@ -839,7 +862,8 @@ const file_chatim_v1_events_proto_rawDesc = "" +
 	"\fread_updated\x18  \x01(\v2\x16.chatim.v1.ReadUpdatedH\x00R\vreadUpdated\x12Z\n" +
 	"\x17member_priority_changed\x18! \x01(\v2 .chatim.v1.MemberPriorityChangedH\x00R\x15memberPriorityChanged\x12A\n" +
 	"\x0emessage_hidden\x18\" \x01(\v2\x18.chatim.v1.MessageHiddenH\x00R\rmessageHidden\x12D\n" +
-	"\x0fhistory_cleared\x18# \x01(\v2\x19.chatim.v1.HistoryClearedH\x00R\x0ehistoryClearedB\t\n" +
+	"\x0fhistory_cleared\x18# \x01(\v2\x19.chatim.v1.HistoryClearedH\x00R\x0ehistoryCleared\x12G\n" +
+	"\x10bookmark_changed\x18$ \x01(\v2\x1a.chatim.v1.BookmarkChangedH\x00R\x0fbookmarkChangedB\t\n" +
 	"\apayloadJ\x04\b\a\x10\bR\x03pts\">\n" +
 	"\x0eMessageCreated\x12,\n" +
 	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\"2\n" +
@@ -855,10 +879,12 @@ const file_chatim_v1_events_proto_rawDesc = "" +
 	"\x04user\x18\x01 \x01(\tR\x04user\x12\x14\n" +
 	"\x05emoji\x18\x02 \x01(\tR\x05emoji\x12%\n" +
 	"\x0eprevious_emoji\x18\x03 \x01(\tR\rpreviousEmoji\x12\x16\n" +
-	"\x06change\x18\x04 \x01(\rR\x06change\"c\n" +
+	"\x06change\x18\x04 \x01(\rR\x06change\"\x84\x01\n" +
 	"\rCountsChanged\x12\x18\n" +
 	"\acounter\x18\x01 \x01(\tR\acounter\x128\n" +
-	"\treactions\x18\x02 \x01(\v2\x1a.chatim.v1.ReactionSummaryR\treactions\"V\n" +
+	"\treactions\x18\x02 \x01(\v2\x1a.chatim.v1.ReactionSummaryR\treactions\x12\x1f\n" +
+	"\vreply_count\x18\x03 \x01(\rR\n" +
+	"replyCount\"V\n" +
 	"\rMessagePinned\x12,\n" +
 	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\x12\x17\n" +
 	"\apin_ver\x18\x02 \x01(\x04R\x06pinVer\"X\n" +
@@ -901,9 +927,10 @@ var file_chatim_v1_events_proto_goTypes = []any{
 	(*MemberPriorityChanged)(nil), // 16: chatim.v1.MemberPriorityChanged
 	(*MessageHidden)(nil),         // 17: chatim.v1.MessageHidden
 	(*HistoryCleared)(nil),        // 18: chatim.v1.HistoryCleared
-	(*Message)(nil),               // 19: chatim.v1.Message
-	(*Room)(nil),                  // 20: chatim.v1.Room
-	(*ReactionSummary)(nil),       // 21: chatim.v1.ReactionSummary
+	(*BookmarkChanged)(nil),       // 19: chatim.v1.BookmarkChanged
+	(*Message)(nil),               // 20: chatim.v1.Message
+	(*Room)(nil),                  // 21: chatim.v1.Room
+	(*ReactionSummary)(nil),       // 22: chatim.v1.ReactionSummary
 }
 var file_chatim_v1_events_proto_depIdxs = []int32{
 	9,  // 0: chatim.v1.Event.room_type:type_name -> chatim.v1.RoomType
@@ -924,18 +951,19 @@ var file_chatim_v1_events_proto_depIdxs = []int32{
 	16, // 15: chatim.v1.Event.member_priority_changed:type_name -> chatim.v1.MemberPriorityChanged
 	17, // 16: chatim.v1.Event.message_hidden:type_name -> chatim.v1.MessageHidden
 	18, // 17: chatim.v1.Event.history_cleared:type_name -> chatim.v1.HistoryCleared
-	19, // 18: chatim.v1.MessageCreated.message:type_name -> chatim.v1.Message
-	20, // 19: chatim.v1.RoomCreated.room:type_name -> chatim.v1.Room
-	19, // 20: chatim.v1.MessageEdited.message:type_name -> chatim.v1.Message
-	19, // 21: chatim.v1.MessageDeleted.message:type_name -> chatim.v1.Message
-	21, // 22: chatim.v1.CountsChanged.reactions:type_name -> chatim.v1.ReactionSummary
-	19, // 23: chatim.v1.MessagePinned.message:type_name -> chatim.v1.Message
-	19, // 24: chatim.v1.MessageUnpinned.message:type_name -> chatim.v1.Message
-	25, // [25:25] is the sub-list for method output_type
-	25, // [25:25] is the sub-list for method input_type
-	25, // [25:25] is the sub-list for extension type_name
-	25, // [25:25] is the sub-list for extension extendee
-	0,  // [0:25] is the sub-list for field type_name
+	19, // 18: chatim.v1.Event.bookmark_changed:type_name -> chatim.v1.BookmarkChanged
+	20, // 19: chatim.v1.MessageCreated.message:type_name -> chatim.v1.Message
+	21, // 20: chatim.v1.RoomCreated.room:type_name -> chatim.v1.Room
+	20, // 21: chatim.v1.MessageEdited.message:type_name -> chatim.v1.Message
+	20, // 22: chatim.v1.MessageDeleted.message:type_name -> chatim.v1.Message
+	22, // 23: chatim.v1.CountsChanged.reactions:type_name -> chatim.v1.ReactionSummary
+	20, // 24: chatim.v1.MessagePinned.message:type_name -> chatim.v1.Message
+	20, // 25: chatim.v1.MessageUnpinned.message:type_name -> chatim.v1.Message
+	26, // [26:26] is the sub-list for method output_type
+	26, // [26:26] is the sub-list for method input_type
+	26, // [26:26] is the sub-list for extension type_name
+	26, // [26:26] is the sub-list for extension extendee
+	0,  // [0:26] is the sub-list for field type_name
 }
 
 func init() { file_chatim_v1_events_proto_init() }
@@ -963,6 +991,7 @@ func file_chatim_v1_events_proto_init() {
 		(*Event_MemberPriorityChanged)(nil),
 		(*Event_MessageHidden)(nil),
 		(*Event_HistoryCleared)(nil),
+		(*Event_BookmarkChanged)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

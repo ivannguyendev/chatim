@@ -2,31 +2,9 @@ syntax = "proto3";
 
 package chatim.v1;
 
-import "chatim/v1/members.proto";
+import "chatim/v1/message_links.proto";
 import "chatim/v1/reactions_pins.proto";
 import "google/protobuf/timestamp.proto";
-
-service CoreService {
-  rpc CreateRoom(CreateRoomRequest) returns (CreateRoomResponse);
-  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
-  rpc GetHistory(GetHistoryRequest) returns (GetHistoryResponse);
-  rpc EditMessage(EditMessageRequest) returns (EditMessageResponse);
-  rpc DeleteMessage(DeleteMessageRequest) returns (DeleteMessageResponse);
-  rpc HideMessage(HideMessageRequest) returns (HideMessageResponse);
-  rpc ClearHistory(ClearHistoryRequest) returns (ClearHistoryResponse);
-  rpc GetEditHistory(GetEditHistoryRequest) returns (GetEditHistoryResponse);
-  rpc ReactMessage(ReactMessageRequest) returns (ReactMessageResponse);
-  rpc PinMessage(PinMessageRequest) returns (PinMessageResponse);
-  rpc UnpinMessage(UnpinMessageRequest) returns (UnpinMessageResponse);
-  rpc GetReactionSettings(GetReactionSettingsRequest) returns (GetReactionSettingsResponse);
-  rpc AddMembers(AddMembersRequest) returns (AddMembersResponse);
-  rpc RemoveMember(RemoveMemberRequest) returns (RemoveMemberResponse);
-  rpc LeaveRoom(LeaveRoomRequest) returns (LeaveRoomResponse);
-  rpc ChangeMemberRole(ChangeMemberRoleRequest) returns (ChangeMemberRoleResponse);
-  rpc SetMemberPriority(SetMemberPriorityRequest) returns (SetMemberPriorityResponse);
-  rpc MarkRead(MarkReadRequest) returns (MarkReadResponse);
-  rpc MarkUnread(MarkUnreadRequest) returns (MarkUnreadResponse);
-}
 
 enum RoomType {
   ROOM_TYPE_UNSPECIFIED = 0;
@@ -80,6 +58,12 @@ message Message {
   google.protobuf.Timestamp edited_at = 12;
   bool hidden = 13;
   ReactionSummary reactions = 14;
+  ReplyRef reply_to = 15;
+  ForwardRef forward_from = 16;
+  repeated MentionTarget mention_targets = 17;
+  bool mention_all = 18;
+  uint32 reply_count = 19;
+  ReplyPreview reply_preview = 20;
 }
 
 message MessageVersion {
@@ -88,16 +72,27 @@ message MessageVersion {
   string text = 3;
   string by = 4;
   google.protobuf.Timestamp at = 5;
+  MentionSet mentions = 6;
 }
 
 message CreateRoomRequest {
   RoomType type = 1;
   string name = 2;
   repeated string members = 3;
+  string request_id = 4;
 }
 
 message CreateRoomResponse {
   Room room = 1;
+}
+
+message OpenDirectRoomRequest {
+  string other_user = 1;
+}
+
+message OpenDirectRoomResponse {
+  Room room = 1;
+  bool created = 2;
 }
 
 message SendMessageRequest {
@@ -105,6 +100,9 @@ message SendMessageRequest {
   uint64 thread_root = 2;
   string cid = 3;
   string text = 4;
+  ReplyRef reply_to = 5;
+  ForwardRef forward_from = 6;
+  MentionSet mentions = 7;
 }
 
 message SendMessageResponse {
@@ -112,6 +110,7 @@ message SendMessageResponse {
   reserved "pts";
   uint64 seq = 1;
   google.protobuf.Timestamp created_at = 3;
+  uint64 thread_root = 4;
 }
 
 message GetHistoryRequest {
@@ -132,6 +131,7 @@ message EditMessageRequest {
   uint64 seq = 3;
   uint32 base_ver = 4;
   string text = 5;
+  MentionSet mentions = 6;
 }
 
 message EditMessageResponse {

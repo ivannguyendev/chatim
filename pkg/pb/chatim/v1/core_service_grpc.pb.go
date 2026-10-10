@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.2
 // - protoc             (unknown)
-// source: chatim/v1/core.proto
+// source: chatim/v1/core_service.proto
 
 package chatimv1
 
@@ -20,6 +20,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	CoreService_CreateRoom_FullMethodName          = "/chatim.v1.CoreService/CreateRoom"
+	CoreService_OpenDirectRoom_FullMethodName      = "/chatim.v1.CoreService/OpenDirectRoom"
 	CoreService_SendMessage_FullMethodName         = "/chatim.v1.CoreService/SendMessage"
 	CoreService_GetHistory_FullMethodName          = "/chatim.v1.CoreService/GetHistory"
 	CoreService_EditMessage_FullMethodName         = "/chatim.v1.CoreService/EditMessage"
@@ -31,6 +32,10 @@ const (
 	CoreService_PinMessage_FullMethodName          = "/chatim.v1.CoreService/PinMessage"
 	CoreService_UnpinMessage_FullMethodName        = "/chatim.v1.CoreService/UnpinMessage"
 	CoreService_GetReactionSettings_FullMethodName = "/chatim.v1.CoreService/GetReactionSettings"
+	CoreService_SetBookmark_FullMethodName         = "/chatim.v1.CoreService/SetBookmark"
+	CoreService_GetReplies_FullMethodName          = "/chatim.v1.CoreService/GetReplies"
+	CoreService_ListBookmarks_FullMethodName       = "/chatim.v1.CoreService/ListBookmarks"
+	CoreService_ListMentions_FullMethodName        = "/chatim.v1.CoreService/ListMentions"
 	CoreService_AddMembers_FullMethodName          = "/chatim.v1.CoreService/AddMembers"
 	CoreService_RemoveMember_FullMethodName        = "/chatim.v1.CoreService/RemoveMember"
 	CoreService_LeaveRoom_FullMethodName           = "/chatim.v1.CoreService/LeaveRoom"
@@ -45,6 +50,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type CoreServiceClient interface {
 	CreateRoom(ctx context.Context, in *CreateRoomRequest, opts ...grpc.CallOption) (*CreateRoomResponse, error)
+	OpenDirectRoom(ctx context.Context, in *OpenDirectRoomRequest, opts ...grpc.CallOption) (*OpenDirectRoomResponse, error)
 	SendMessage(ctx context.Context, in *SendMessageRequest, opts ...grpc.CallOption) (*SendMessageResponse, error)
 	GetHistory(ctx context.Context, in *GetHistoryRequest, opts ...grpc.CallOption) (*GetHistoryResponse, error)
 	EditMessage(ctx context.Context, in *EditMessageRequest, opts ...grpc.CallOption) (*EditMessageResponse, error)
@@ -56,6 +62,10 @@ type CoreServiceClient interface {
 	PinMessage(ctx context.Context, in *PinMessageRequest, opts ...grpc.CallOption) (*PinMessageResponse, error)
 	UnpinMessage(ctx context.Context, in *UnpinMessageRequest, opts ...grpc.CallOption) (*UnpinMessageResponse, error)
 	GetReactionSettings(ctx context.Context, in *GetReactionSettingsRequest, opts ...grpc.CallOption) (*GetReactionSettingsResponse, error)
+	SetBookmark(ctx context.Context, in *SetBookmarkRequest, opts ...grpc.CallOption) (*SetBookmarkResponse, error)
+	GetReplies(ctx context.Context, in *GetRepliesRequest, opts ...grpc.CallOption) (*GetRepliesResponse, error)
+	ListBookmarks(ctx context.Context, in *ListBookmarksRequest, opts ...grpc.CallOption) (*ListBookmarksResponse, error)
+	ListMentions(ctx context.Context, in *ListMentionsRequest, opts ...grpc.CallOption) (*ListMentionsResponse, error)
 	AddMembers(ctx context.Context, in *AddMembersRequest, opts ...grpc.CallOption) (*AddMembersResponse, error)
 	RemoveMember(ctx context.Context, in *RemoveMemberRequest, opts ...grpc.CallOption) (*RemoveMemberResponse, error)
 	LeaveRoom(ctx context.Context, in *LeaveRoomRequest, opts ...grpc.CallOption) (*LeaveRoomResponse, error)
@@ -77,6 +87,16 @@ func (c *coreServiceClient) CreateRoom(ctx context.Context, in *CreateRoomReques
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CreateRoomResponse)
 	err := c.cc.Invoke(ctx, CoreService_CreateRoom_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) OpenDirectRoom(ctx context.Context, in *OpenDirectRoomRequest, opts ...grpc.CallOption) (*OpenDirectRoomResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(OpenDirectRoomResponse)
+	err := c.cc.Invoke(ctx, CoreService_OpenDirectRoom_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -193,6 +213,46 @@ func (c *coreServiceClient) GetReactionSettings(ctx context.Context, in *GetReac
 	return out, nil
 }
 
+func (c *coreServiceClient) SetBookmark(ctx context.Context, in *SetBookmarkRequest, opts ...grpc.CallOption) (*SetBookmarkResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetBookmarkResponse)
+	err := c.cc.Invoke(ctx, CoreService_SetBookmark_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) GetReplies(ctx context.Context, in *GetRepliesRequest, opts ...grpc.CallOption) (*GetRepliesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetRepliesResponse)
+	err := c.cc.Invoke(ctx, CoreService_GetReplies_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) ListBookmarks(ctx context.Context, in *ListBookmarksRequest, opts ...grpc.CallOption) (*ListBookmarksResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListBookmarksResponse)
+	err := c.cc.Invoke(ctx, CoreService_ListBookmarks_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) ListMentions(ctx context.Context, in *ListMentionsRequest, opts ...grpc.CallOption) (*ListMentionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListMentionsResponse)
+	err := c.cc.Invoke(ctx, CoreService_ListMentions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *coreServiceClient) AddMembers(ctx context.Context, in *AddMembersRequest, opts ...grpc.CallOption) (*AddMembersResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AddMembersResponse)
@@ -268,6 +328,7 @@ func (c *coreServiceClient) MarkUnread(ctx context.Context, in *MarkUnreadReques
 // for forward compatibility.
 type CoreServiceServer interface {
 	CreateRoom(context.Context, *CreateRoomRequest) (*CreateRoomResponse, error)
+	OpenDirectRoom(context.Context, *OpenDirectRoomRequest) (*OpenDirectRoomResponse, error)
 	SendMessage(context.Context, *SendMessageRequest) (*SendMessageResponse, error)
 	GetHistory(context.Context, *GetHistoryRequest) (*GetHistoryResponse, error)
 	EditMessage(context.Context, *EditMessageRequest) (*EditMessageResponse, error)
@@ -279,6 +340,10 @@ type CoreServiceServer interface {
 	PinMessage(context.Context, *PinMessageRequest) (*PinMessageResponse, error)
 	UnpinMessage(context.Context, *UnpinMessageRequest) (*UnpinMessageResponse, error)
 	GetReactionSettings(context.Context, *GetReactionSettingsRequest) (*GetReactionSettingsResponse, error)
+	SetBookmark(context.Context, *SetBookmarkRequest) (*SetBookmarkResponse, error)
+	GetReplies(context.Context, *GetRepliesRequest) (*GetRepliesResponse, error)
+	ListBookmarks(context.Context, *ListBookmarksRequest) (*ListBookmarksResponse, error)
+	ListMentions(context.Context, *ListMentionsRequest) (*ListMentionsResponse, error)
 	AddMembers(context.Context, *AddMembersRequest) (*AddMembersResponse, error)
 	RemoveMember(context.Context, *RemoveMemberRequest) (*RemoveMemberResponse, error)
 	LeaveRoom(context.Context, *LeaveRoomRequest) (*LeaveRoomResponse, error)
@@ -298,6 +363,9 @@ type UnimplementedCoreServiceServer struct{}
 
 func (UnimplementedCoreServiceServer) CreateRoom(context.Context, *CreateRoomRequest) (*CreateRoomResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateRoom not implemented")
+}
+func (UnimplementedCoreServiceServer) OpenDirectRoom(context.Context, *OpenDirectRoomRequest) (*OpenDirectRoomResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method OpenDirectRoom not implemented")
 }
 func (UnimplementedCoreServiceServer) SendMessage(context.Context, *SendMessageRequest) (*SendMessageResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SendMessage not implemented")
@@ -331,6 +399,18 @@ func (UnimplementedCoreServiceServer) UnpinMessage(context.Context, *UnpinMessag
 }
 func (UnimplementedCoreServiceServer) GetReactionSettings(context.Context, *GetReactionSettingsRequest) (*GetReactionSettingsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetReactionSettings not implemented")
+}
+func (UnimplementedCoreServiceServer) SetBookmark(context.Context, *SetBookmarkRequest) (*SetBookmarkResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetBookmark not implemented")
+}
+func (UnimplementedCoreServiceServer) GetReplies(context.Context, *GetRepliesRequest) (*GetRepliesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetReplies not implemented")
+}
+func (UnimplementedCoreServiceServer) ListBookmarks(context.Context, *ListBookmarksRequest) (*ListBookmarksResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListBookmarks not implemented")
+}
+func (UnimplementedCoreServiceServer) ListMentions(context.Context, *ListMentionsRequest) (*ListMentionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListMentions not implemented")
 }
 func (UnimplementedCoreServiceServer) AddMembers(context.Context, *AddMembersRequest) (*AddMembersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AddMembers not implemented")
@@ -388,6 +468,24 @@ func _CoreService_CreateRoom_Handler(srv interface{}, ctx context.Context, dec f
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(CoreServiceServer).CreateRoom(ctx, req.(*CreateRoomRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_OpenDirectRoom_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(OpenDirectRoomRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).OpenDirectRoom(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_OpenDirectRoom_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).OpenDirectRoom(ctx, req.(*OpenDirectRoomRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -590,6 +688,78 @@ func _CoreService_GetReactionSettings_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CoreService_SetBookmark_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetBookmarkRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).SetBookmark(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_SetBookmark_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).SetBookmark(ctx, req.(*SetBookmarkRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_GetReplies_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetRepliesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).GetReplies(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_GetReplies_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).GetReplies(ctx, req.(*GetRepliesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_ListBookmarks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListBookmarksRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).ListBookmarks(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_ListBookmarks_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).ListBookmarks(ctx, req.(*ListBookmarksRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_ListMentions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListMentionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).ListMentions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_ListMentions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).ListMentions(ctx, req.(*ListMentionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _CoreService_AddMembers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AddMembersRequest)
 	if err := dec(in); err != nil {
@@ -728,6 +898,10 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _CoreService_CreateRoom_Handler,
 		},
 		{
+			MethodName: "OpenDirectRoom",
+			Handler:    _CoreService_OpenDirectRoom_Handler,
+		},
+		{
 			MethodName: "SendMessage",
 			Handler:    _CoreService_SendMessage_Handler,
 		},
@@ -772,6 +946,22 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _CoreService_GetReactionSettings_Handler,
 		},
 		{
+			MethodName: "SetBookmark",
+			Handler:    _CoreService_SetBookmark_Handler,
+		},
+		{
+			MethodName: "GetReplies",
+			Handler:    _CoreService_GetReplies_Handler,
+		},
+		{
+			MethodName: "ListBookmarks",
+			Handler:    _CoreService_ListBookmarks_Handler,
+		},
+		{
+			MethodName: "ListMentions",
+			Handler:    _CoreService_ListMentions_Handler,
+		},
+		{
 			MethodName: "AddMembers",
 			Handler:    _CoreService_AddMembers_Handler,
 		},
@@ -801,5 +991,5 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "chatim/v1/core.proto",
+	Metadata: "chatim/v1/core_service.proto",
 }

@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package chatim.v1;
+
+import "google/protobuf/timestamp.proto";
+
+enum MentionKind {
+  MENTION_KIND_UNSPECIFIED = 0;
+  MENTION_KIND_USER = 1;
+  MENTION_KIND_GROUP = 2;
+}
+
+message ReplyRef {
+  uint64 thread_root = 1;
+  uint64 seq = 2;
+}
+
+message ForwardRef {
+  string room_id = 1;
+  uint64 thread_root = 2;
+  uint64 seq = 3;
+  string author = 4;
+  google.protobuf.Timestamp sent_at = 5;
+}
+
+message MentionTarget {
+  MentionKind kind = 1;
+  string id = 2;
+}
+
+message MentionSet {
+  repeated MentionTarget targets = 1;
+  bool all = 2;
+}
+
+message ReplyPreview {
+  uint64 seq = 1;
+  string sender = 2;
+  string text = 3;
+  bool deleted = 4;
+  bool hidden = 5;
+}
+
+message MentionGroup {
+  string id = 1;
+  google.protobuf.Timestamp since = 2;
+}

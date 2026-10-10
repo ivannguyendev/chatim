@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package chatim.v1;
+
+import "chatim/v1/core.proto";
+import "chatim/v1/members.proto";
+import "chatim/v1/reactions_pins.proto";
+import "chatim/v1/replies_bookmarks_mentions.proto";
+
+service CoreService {
+  rpc CreateRoom(CreateRoomRequest) returns (CreateRoomResponse);
+  rpc OpenDirectRoom(OpenDirectRoomRequest) returns (OpenDirectRoomResponse);
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+  rpc GetHistory(GetHistoryRequest) returns (GetHistoryResponse);
+  rpc EditMessage(EditMessageRequest) returns (EditMessageResponse);
+  rpc DeleteMessage(DeleteMessageRequest) returns (DeleteMessageResponse);
+  rpc HideMessage(HideMessageRequest) returns (HideMessageResponse);
+  rpc ClearHistory(ClearHistoryRequest) returns (ClearHistoryResponse);
+  rpc GetEditHistory(GetEditHistoryRequest) returns (GetEditHistoryResponse);
+  rpc ReactMessage(ReactMessageRequest) returns (ReactMessageResponse);
+  rpc PinMessage(PinMessageRequest) returns (PinMessageResponse);
+  rpc UnpinMessage(UnpinMessageRequest) returns (UnpinMessageResponse);
+  rpc GetReactionSettings(GetReactionSettingsRequest) returns (GetReactionSettingsResponse);
+  rpc SetBookmark(SetBookmarkRequest) returns (SetBookmarkResponse);
+  rpc GetReplies(GetRepliesRequest) returns (GetRepliesResponse);
+  rpc ListBookmarks(ListBookmarksRequest) returns (ListBookmarksResponse);
+  rpc ListMentions(ListMentionsRequest) returns (ListMentionsResponse);
+  rpc AddMembers(AddMembersRequest) returns (AddMembersResponse);
+  rpc RemoveMember(RemoveMemberRequest) returns (RemoveMemberResponse);
+  rpc LeaveRoom(LeaveRoomRequest) returns (LeaveRoomResponse);
+  rpc ChangeMemberRole(ChangeMemberRoleRequest) returns (ChangeMemberRoleResponse);
+  rpc SetMemberPriority(SetMemberPriorityRequest) returns (SetMemberPriorityResponse);
+  rpc MarkRead(MarkReadRequest) returns (MarkReadResponse);
+  rpc MarkUnread(MarkUnreadRequest) returns (MarkUnreadResponse);
+}
