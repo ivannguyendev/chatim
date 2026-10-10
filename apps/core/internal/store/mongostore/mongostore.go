@@ -21,7 +21,6 @@ const (
 	hiddenCollection          = "hidden"
 	interactionsCollection    = "message_interactions"
 	pinActionsCollection      = "pin_actions"
-	mentionsCollection        = "mentions"
 )
 
 var (
@@ -40,7 +39,6 @@ var (
 	_ store.OwnerChanges      = (*Store)(nil)
 	_ store.MemberCounts      = (*Store)(nil)
 	_ store.ReadPositions     = (*Store)(nil)
-	_ store.Mentions          = (*Mentions)(nil)
 )
 
 type Options struct {
@@ -58,7 +56,6 @@ type Store struct {
 	hidden           *Hidden
 	interactions     *Interactions
 	pins             *Pins
-	mentions         *Mentions
 }
 
 func New(db *mongo.Database, opts Options) *Store {
@@ -78,7 +75,6 @@ func New(db *mongo.Database, opts Options) *Store {
 		hidden:           &Hidden{coll: db.Collection(hiddenCollection, primary)},
 		interactions:     &Interactions{coll: db.Collection(interactionsCollection, interacted), client: db.Client()},
 		pins:             &Pins{coll: db.Collection(pinActionsCollection, primary)},
-		mentions:         &Mentions{coll: db.Collection(mentionsCollection, primary)},
 	}
 }
 
@@ -87,5 +83,3 @@ func (s *Store) Interactions() *Interactions { return s.interactions }
 func (s *Store) Pins() *Pins { return s.pins }
 
 func (s *Store) Hidden() *Hidden { return s.hidden }
-
-func (s *Store) Mentions() *Mentions { return s.mentions }
