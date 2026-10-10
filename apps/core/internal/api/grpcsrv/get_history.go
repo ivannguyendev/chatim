@@ -35,7 +35,7 @@ func (s *Service) GetHistory(ctx context.Context, req *chatimv1.GetHistoryReques
 	if err != nil {
 		return nil, err
 	}
-	viewer, err := s.viewerOf(ctx, who.user, grant, q, page)
+	viewer, err := s.viewerOf(ctx, who.user, grant, q, page, quotedSeqs(q.Room, page)...)
 	if err != nil {
 		return nil, err
 	}
@@ -43,6 +43,9 @@ func (s *Service) GetHistory(ctx context.Context, req *chatimv1.GetHistoryReques
 	out := make([]*chatimv1.Message, len(page))
 	for i, m := range page {
 		out[i] = pbconv.Message(m)
+	}
+	if err := s.addReplyPreviews(ctx, viewer, q.Room, page, out); err != nil {
+		return nil, err
 	}
 	return &chatimv1.GetHistoryResponse{Messages: out}, nil
 }
@@ -88,7 +91,7 @@ func seqAnchor(a store.Anchor, seq uint64) (store.Anchor, uint64, error) {
 	return a, seq, nil
 }
 
-func (s *Service) viewerOf(ctx context.Context, user string, grant access.Request, q store.PageQuery, page []domain.Message) (view.Viewer, error) {
+func (s *Service) viewerOf(ctx context.Context, user string, grant access.Request, q store.PageQuery, page []domain.Message, quoted ...uint64) (view.Viewer, error) {
 	v := view.Viewer{User: user, Room: grant.Room, ClearedAt: grant.Member.ClearedAt}
 	if len(page) == 0 {
 		return v, nil
@@ -99,6 +102,9 @@ func (s *Service) viewerOf(ctx context.Context, user string, grant access.Reques
 		if m.CreatedAt.After(newest) {
 			newest = m.CreatedAt
 		}
+	}
+	for _, seq := range quoted {
+		lo = min(lo, seq)
 	}
 	if v.Cleared(newest) {
 		return v, nil

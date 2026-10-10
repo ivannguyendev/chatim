@@ -78,3 +78,11 @@ func domainMentionKind(k chatimv1.MentionKind) domain.MentionKind {
 		return 0
 	}
 }
+
+func ReplyPreview(parent domain.Message) *chatimv1.ReplyPreview {
+	p := &chatimv1.ReplyPreview{Seq: parent.Seq, Sender: parent.From, Deleted: parent.Deleted, Hidden: parent.Hidden}
+	if !p.Deleted && !p.Hidden {
+		p.Text = parent.Text
+	}
+	return p
+}

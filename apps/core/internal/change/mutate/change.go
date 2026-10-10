@@ -79,6 +79,9 @@ func (m *Mutator) commit(ctx context.Context, c change, msg domain.Message) (dom
 	case c.base != max(msg.Version, latest.Version):
 		return domain.Edit{}, domain.ErrVersionConflict
 	}
+	if err := m.refuseReplied(ctx, c); err != nil {
+		return domain.Edit{}, err
+	}
 	if err := m.keepOriginal(ctx, c, msg, next); err != nil {
 		return domain.Edit{}, err
 	}
@@ -90,6 +93,20 @@ func (m *Mutator) commit(ctx context.Context, c change, msg domain.Message) (dom
 		return domain.Edit{}, err
 	}
 	return fact, nil
+}
+
+func (m *Mutator) refuseReplied(ctx context.Context, c change) error {
+	if c.kind != domain.EditDelete {
+		return nil
+	}
+	live, err := m.d.Interactions.CountLiveReplies(ctx, c.key)
+	if err != nil {
+		return err
+	}
+	if live > 0 {
+		return domain.ErrHasReplies
+	}
+	return nil
 }
 
 func (m *Mutator) keepOriginal(ctx context.Context, c change, msg domain.Message, next uint32) error {

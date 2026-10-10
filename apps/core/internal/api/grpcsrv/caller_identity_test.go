@@ -17,7 +17,7 @@ func TestNewRequiresEveryDependency(t *testing.T) {
 	rg := memStores()
 	full := grpcsrv.Deps{
 		Sender: &fakeSender{}, Rooms: rg.rooms, Pages: rg.msgs, Mutator: newMutator(t, rg, options{}), Edits: rg.edits, Hidden: rg.hidden, Bookmarks: rg.reactions,
-		Members: rg.rooms, Timers: nopTimers{}, Requests: newRequests(t, nil), Directs: rg.directs,
+		Replies: rg.reactions, Members: rg.rooms, Timers: nopTimers{}, Requests: newRequests(t, nil), Directs: rg.directs,
 	}
 	for name, drop := range map[string]func(d *grpcsrv.Deps){
 		"no sender":    func(d *grpcsrv.Deps) { d.Sender = nil },
@@ -27,6 +27,7 @@ func TestNewRequiresEveryDependency(t *testing.T) {
 		"no edits":     func(d *grpcsrv.Deps) { d.Edits = nil },
 		"no hidden":    func(d *grpcsrv.Deps) { d.Hidden = nil },
 		"no bookmarks": func(d *grpcsrv.Deps) { d.Bookmarks = nil },
+		"no replies":   func(d *grpcsrv.Deps) { d.Replies = nil },
 		"no members":   func(d *grpcsrv.Deps) { d.Members = nil },
 		"no timers":    func(d *grpcsrv.Deps) { d.Timers = nil },
 		"no requests":  func(d *grpcsrv.Deps) { d.Requests = nil },
@@ -101,6 +102,10 @@ func TestEveryRPCChecksCallerIdentityFirst(t *testing.T) {
 		},
 		"ListBookmarks": func(ctx context.Context) error {
 			_, err := rg.client.ListBookmarks(ctx, &chatimv1.ListBookmarksRequest{})
+			return err
+		},
+		"GetReplies": func(ctx context.Context) error {
+			_, err := rg.client.GetReplies(ctx, &chatimv1.GetRepliesRequest{RoomId: "42", Seq: 1})
 			return err
 		},
 		"AddMembers": func(ctx context.Context) error {
