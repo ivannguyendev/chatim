@@ -100,11 +100,15 @@ func TestSummaryCodecRoundTrip(t *testing.T) {
 	}
 	for name, d := range map[string]reactionsDoc{
 		"negative version": {Version: -1},
-		"negative count":   {Counts: []countDoc{{Emoji: "👍", N: -1}}, Version: 1},
+		"count too large":  {Counts: []countDoc{{Emoji: "👍", N: math.MaxUint32 + 1}}, Version: 1},
 	} {
 		if _, err := decodeSummary(&d); !errors.Is(err, errCorrupt) {
 			t.Errorf("%s: decodeSummary = %v, want errCorrupt", name, err)
 		}
+	}
+	leftover := reactionsDoc{Counts: []countDoc{{Emoji: "❤️", N: 1}, {Emoji: "👍", N: 0}, {Emoji: "😂", N: -1}}, Version: 3}
+	if got, err := decodeSummary(&leftover); err != nil || got.Version != 3 || !got.Unsettled || !slices.Equal(got.Counts, []domain.ReactionCount{{Emoji: "❤️", Count: 1}}) {
+		t.Errorf("decodeSummary(entries at or below zero) = %+v, %v; want only ❤️ at version 3, unsettled", got, err)
 	}
 }
 

@@ -3,8 +3,9 @@ package domain
 import "time"
 
 type ReplyCount struct {
-	N       uint32
-	Version uint64
+	N         uint32
+	Version   uint64
+	Unsettled bool
 }
 
 type Bookmark struct {

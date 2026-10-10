@@ -56,13 +56,12 @@ func (m *Mutator) React(ctx context.Context, c ReactCmd) (ReactResult, error) {
 		m.d.CountTimers.Disarm(settle, timer)
 		return ReactResult{Change: doc.N, Reactions: msg.Reactions}, nil
 	}
-	events := []*chatimv1.Event{pbconv.ReactionChanged(grant.Room.Type, doc)}
+	_ = m.d.Events.Enqueue(key.Room, []*chatimv1.Event{pbconv.ReactionChanged(grant.Room.Type, doc)})
 	summary, counted := m.countReaction(settle, msg.Reactions, key, timer, reactionDeltas(doc))
 	if counted {
 		msg.Reactions = summary
-		events = append(events, pbconv.CountsChanged(grant.Room.Type, msg, m.now()))
+		_ = m.d.Events.Enqueue(key.Room, []*chatimv1.Event{pbconv.CountsChanged(grant.Room.Type, msg, m.now())})
 	}
-	_ = m.d.Events.Enqueue(key.Room, events)
 	return ReactResult{Change: doc.N, Reactions: summary}, nil
 }
 

@@ -62,3 +62,17 @@ func TestAddEmojiDeltasFoldsCountsAndDropsEmptyOnes(t *testing.T) {
 		t.Fatalf("AddEmojiDeltas changed its input to %v", cur)
 	}
 }
+
+func TestAddRawEmojiDeltasKeepsEntriesAtOrBelowZeroAndCommutes(t *testing.T) {
+	up := []store.EmojiDelta{{Emoji: "👍", Delta: 1}}
+	down := []store.EmojiDelta{{Emoji: "👍", Delta: -1}}
+	a := store.AddRawEmojiDeltas(store.AddRawEmojiDeltas(nil, up), down)
+	b := store.AddRawEmojiDeltas(store.AddRawEmojiDeltas(nil, down), up)
+	if want := []domain.RawCount{{Emoji: "👍", N: 0}}; !slices.Equal(a, want) || !slices.Equal(b, want) {
+		t.Fatalf("+1 then -1 = %v, -1 then +1 = %v; want both %v", a, b, want)
+	}
+	got := store.AddRawEmojiDeltas([]domain.RawCount{{Emoji: "❤️", N: 1}}, []store.EmojiDelta{{Emoji: "😂", Delta: -1}, {Emoji: "👍", Delta: 2}})
+	if want := []domain.RawCount{{Emoji: "👍", N: 2}, {Emoji: "❤️", N: 1}, {Emoji: "😂", N: -1}}; !slices.Equal(got, want) {
+		t.Fatalf("AddRawEmojiDeltas = %v, want %v", got, want)
+	}
+}

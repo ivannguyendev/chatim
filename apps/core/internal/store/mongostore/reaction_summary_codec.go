@@ -37,15 +37,21 @@ func decodeSummary(d *reactionsDoc) (domain.ReactionSummary, error) {
 	if err != nil {
 		return domain.ReactionSummary{}, err
 	}
-	counts := make([]domain.ReactionCount, len(d.Counts))
+	raw := make([]domain.RawCount, len(d.Counts))
 	for i, c := range d.Counts {
-		n, err := narrowUint32("reaction count", c.N)
-		if err != nil {
+		if err := withinUint32("reaction count", c.N); err != nil {
 			return domain.ReactionSummary{}, err
 		}
-		counts[i] = domain.ReactionCount{Emoji: c.Emoji, Count: n}
+		raw[i] = domain.RawCount{Emoji: c.Emoji, N: c.N}
 	}
-	return domain.ReactionSummary{Counts: counts, Version: v}, nil
+	return domain.SettleReactions(raw, v), nil
+}
+
+func withinUint32(field string, v int64) error {
+	if v > math.MaxUint32 {
+		return fmt.Errorf("%w: %s %d out of range", errCorrupt, field, v)
+	}
+	return nil
 }
 
 func narrowUint32(field string, v int64) (uint32, error) {

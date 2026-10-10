@@ -11,7 +11,6 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
-	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
@@ -36,26 +35,6 @@ func (rg *rig) reaction(t *testing.T, seq uint64, user string) (domain.Reaction,
 	return doc, found
 }
 
-func (rg *rig) assertCounted(t *testing.T, calls []string, deltas ...store.EmojiDelta) {
-	t.Helper()
-	if got := rg.reactCalls.list(); !slices.Equal(got, calls) {
-		t.Fatalf("calls = %v, want %v", got, calls)
-	}
-	if n := rg.msgTimers.pending(); n != 0 {
-		t.Fatalf("%d count check timers left armed, want none", n)
-	}
-	got := rg.counts.list()
-	if len(deltas) == 0 {
-		if len(got) != 0 {
-			t.Fatalf("counted %+v, want nothing", got)
-		}
-		return
-	}
-	if len(got) == 0 || got[len(got)-1].key != key(1) || !slices.Equal(got[len(got)-1].deltas, deltas) {
-		t.Fatalf("counted %+v, want %v on seq 1 last", got, deltas)
-	}
-}
-
 func (rg *rig) mustReact(t *testing.T, c mutate.ReactCmd) mutate.ReactResult {
 	t.Helper()
 	got, err := rg.m.React(t.Context(), c)
@@ -67,14 +46,20 @@ func (rg *rig) mustReact(t *testing.T, c mutate.ReactCmd) mutate.ReactResult {
 
 var counted = []string{"arm", "write", "count", "disarm"}
 
-func up(emoji string) store.EmojiDelta { return store.EmojiDelta{Emoji: emoji, Delta: 1} }
-
-func down(emoji string) store.EmojiDelta { return store.EmojiDelta{Emoji: emoji, Delta: -1} }
-
 func TestReactWritesTheEmojiAndCountsItBeforeTheAck(t *testing.T) {
 	rg := newRig(t, nil)
 	rg.send(t, 1, "alice", "hi")
+	var early []string
+	rg.counts.before = func() {
+		_, evs := rg.events.list()
+		for _, ev := range evs {
+			early = append(early, ev.GetId())
+		}
+	}
 	got := rg.mustReact(t, react("bob", 1, "👍"))
+	if !slices.Equal(early, []string{pbconv.ReactionEventID(room, 0, 1, "bob", 1)}) {
+		t.Fatalf("enqueued before the count = %v, want reaction_changed only", early)
+	}
 	want := counts(1, domain.ReactionCount{Emoji: "👍", Count: 1})
 	if got.Change != 1 || !sameSummary(got.Reactions, want) {
 		t.Fatalf("React = %+v, want change 1 with %+v", got, want)

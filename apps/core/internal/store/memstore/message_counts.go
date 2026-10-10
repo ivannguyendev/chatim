@@ -26,8 +26,16 @@ func (s *Messages) AddReactionCounts(ctx context.Context, key store.MsgKey, delt
 	if !ok {
 		return domain.ReactionSummary{}, domain.ErrMessageNotFound
 	}
-	m.Reactions = domain.ReactionSummary{Counts: store.AddEmojiDeltas(m.Reactions.Counts, deltas), Version: m.Reactions.Version + 1}
-	return domain.ReactionSummary{Counts: slices.Clone(m.Reactions.Counts), Version: m.Reactions.Version}, nil
+	raw, held := s.rawCounts[key]
+	if !held {
+		raw = domain.RawCounts(m.Reactions.Counts)
+	}
+	raw = store.AddRawEmojiDeltas(raw, deltas)
+	m.Reactions = domain.SettleReactions(raw, m.Reactions.Version+1)
+	s.holdRaw(key, m.Reactions.Unsettled, raw)
+	out := m.Reactions
+	out.Counts = slices.Clone(out.Counts)
+	return out, nil
 }
 
 func (s *Messages) AddReplyCount(ctx context.Context, key store.MsgKey, delta int) (domain.ReplyCount, error) {
@@ -46,7 +54,17 @@ func (s *Messages) AddReplyCount(ctx context.Context, key store.MsgKey, delta in
 	if !ok {
 		return domain.ReplyCount{}, domain.ErrMessageNotFound
 	}
-	m.Replies = domain.ReplyCount{N: clampCount(int64(m.Replies.N) + int64(delta)), Version: m.Replies.Version + 1}
+	n, held := s.rawReply[key]
+	if !held {
+		n = int64(m.Replies.N)
+	}
+	n += int64(delta)
+	m.Replies = domain.SettleReplies(n, m.Replies.Version+1)
+	if m.Replies.Unsettled {
+		s.rawReply[key] = n
+	} else {
+		delete(s.rawReply, key)
+	}
 	return m.Replies, nil
 }
 
@@ -67,6 +85,7 @@ func (s *Messages) SetReplyCount(ctx context.Context, key store.MsgKey, base uin
 		return false, nil
 	}
 	m.Replies = domain.ReplyCount{N: n, Version: base + 1}
+	delete(s.rawReply, key)
 	return true, nil
 }
 
@@ -79,6 +98,10 @@ func (s *Messages) messageLocked(key store.MsgKey) (*domain.Message, bool) {
 	return &line[i], true
 }
 
-func clampCount(n int64) uint32 {
-	return uint32(min(max(n, 0), int64(^uint32(0))))
+func (s *Messages) holdRaw(key store.MsgKey, unsettled bool, raw []domain.RawCount) {
+	if unsettled {
+		s.rawCounts[key] = raw
+		return
+	}
+	delete(s.rawCounts, key)
 }

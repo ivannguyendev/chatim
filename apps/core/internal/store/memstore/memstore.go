@@ -15,14 +15,19 @@ var _ store.Messages = (*Messages)(nil)
 type timeline struct{ room, thread uint64 }
 
 type Messages struct {
-	mu    sync.RWMutex
-	lines map[timeline][]domain.Message
-	log   []logged
-	grew  chan struct{}
+	mu        sync.RWMutex
+	lines     map[timeline][]domain.Message
+	log       []logged
+	grew      chan struct{}
+	rawCounts map[store.MsgKey][]domain.RawCount
+	rawReply  map[store.MsgKey]int64
 }
 
 func NewMessages() *Messages {
-	return &Messages{lines: make(map[timeline][]domain.Message), grew: make(chan struct{})}
+	return &Messages{
+		lines: make(map[timeline][]domain.Message), grew: make(chan struct{}),
+		rawCounts: make(map[store.MsgKey][]domain.RawCount), rawReply: make(map[store.MsgKey]int64),
+	}
 }
 
 func (s *Messages) Insert(ctx context.Context, msgs []domain.Message) []store.Result {

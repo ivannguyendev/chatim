@@ -15,7 +15,7 @@ func reactionDeltaPipeline(deltas []store.EmojiDelta) mongo.Pipeline {
 	given := bson.D{{Key: "$literal", Value: lit}}
 	counts := bson.D{
 		{Key: "c", Value: bson.D{{Key: "$sortArray", Value: bson.D{
-			{Key: "input", Value: positive(bson.D{{Key: "$concatArrays", Value: bson.A{movedCounts(given), newCounts(given)}}})},
+			{Key: "input", Value: bson.D{{Key: "$concatArrays", Value: bson.A{movedCounts(given), newCounts(given)}}}},
 			{Key: "sortBy", Value: bson.D{{Key: "n", Value: -1}, {Key: "e", Value: 1}}},
 		}}}},
 		{Key: "v", Value: bumped("$rx.v")},
@@ -51,16 +51,8 @@ func newCounts(given bson.D) bson.D {
 	}}}
 }
 
-func positive(counts bson.D) bson.D {
-	return bson.D{{Key: "$filter", Value: bson.D{
-		{Key: "input", Value: counts},
-		{Key: "as", Value: "z"},
-		{Key: "cond", Value: bson.D{{Key: "$gt", Value: bson.A{"$$z.n", int64(0)}}}},
-	}}}
-}
-
 func replyDeltaPipeline(delta int) mongo.Pipeline {
-	n := bson.D{{Key: "$max", Value: bson.A{int64(0), bson.D{{Key: "$add", Value: bson.A{orZero("$rc.n"), int64(delta)}}}}}}
+	n := bson.D{{Key: "$add", Value: bson.A{orZero("$rc.n"), int64(delta)}}}
 	count := bson.D{{Key: "n", Value: n}, {Key: "v", Value: bumped("$rc.v")}}
 	return mongo.Pipeline{{{Key: "$set", Value: bson.D{{Key: "rc", Value: count}}}}}
 }

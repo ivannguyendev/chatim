@@ -24,7 +24,8 @@ func RunMessageCounts(t *testing.T, open func(t *testing.T) CountableMessages) {
 	cases := append([]countCase{
 		{"reaction deltas add, move and drop emojis in count order", reactionDeltas},
 		{"reaction deltas share the summary version with set reactions", reactionDeltasThenCAS},
-		{"a removal of an absent emoji stores nothing below zero", reactionDeltaBelowZero},
+		{"a removal of an absent emoji reads as no count", reactionDeltaBelowZero},
+		{"reaction deltas give the same counts in any order", reactionDeltasCommute},
 		{"reaction deltas on a missing message create nothing", reactionDeltasMissing},
 		{"reaction deltas need valid emojis and non-zero changes", reactionDeltasInvalid},
 	}, replyCountCases()...)
@@ -80,6 +81,24 @@ func reactionDeltaBelowZero(t *testing.T, s CountableMessages) {
 	mustAddReactions(t, s, key, summary(2, emojiCount("❤️", 1)), delta("👍", -1), delta("❤️", 1))
 	mustAddReactions(t, s, key, summary(3), delta("❤️", -3))
 	assertStored(t, s, withReactions(m, summary(3)))
+}
+
+func reactionDeltasCommute(t *testing.T, s CountableMessages) {
+	upFirst, downFirst := msg(roomA, mainThread, 1), msg(roomA, mainThread, 2)
+	mustInsert(t, s, []domain.Message{upFirst, downFirst})
+	up, down := store.KeyOf(upFirst), store.KeyOf(downFirst)
+	mustAddReactions(t, s, up, summary(1, emojiCount("👍", 1)), delta("👍", 1))
+	mustAddReactions(t, s, up, summary(2), delta("👍", -1))
+	mustAddReactions(t, s, down, summary(1), delta("👍", -1))
+	mustAddReactions(t, s, down, summary(2), delta("👍", 1))
+	assertStored(t, s, withReactions(upFirst, summary(2)), withReactions(downFirst, summary(2)))
+	got, err := s.Find(t.Context(), roomA, []store.MsgKey{up, down})
+	if err != nil || len(got) != 2 || got[0].Reactions.Unsettled != got[1].Reactions.Unsettled {
+		t.Fatalf("Find = %+v, %v; want both orders stored alike", got, err)
+	}
+	mustAddReactions(t, s, up, summary(3, emojiCount("👍", 1)), delta("👍", 1))
+	mustAddReactions(t, s, down, summary(3, emojiCount("👍", 1)), delta("👍", 1))
+	mustAddReactions(t, s, down, summary(4, emojiCount("👍", 2), emojiCount("❤️", 1)), delta("❤️", 1), delta("👍", 1))
 }
 
 func reactionDeltasMissing(t *testing.T, s CountableMessages) {

@@ -102,15 +102,14 @@ func decodeLinks(d messageDoc, m *domain.Message) error {
 }
 
 func decodeReplyCount(c replyCountDoc) (domain.ReplyCount, error) {
-	n, err := narrowUint32("reply count", c.N)
-	if err != nil {
+	if err := withinUint32("reply count", c.N); err != nil {
 		return domain.ReplyCount{}, err
 	}
 	v, err := toUint64("reply count version", c.Version)
 	if err != nil {
 		return domain.ReplyCount{}, err
 	}
-	return domain.ReplyCount{N: n, Version: v}, nil
+	return domain.SettleReplies(c.N, v), nil
 }
 
 func keyFields(link string, thread, seq uint64) (int64, int64, error) {

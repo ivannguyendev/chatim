@@ -2,6 +2,7 @@ package mongostore
 
 import (
 	"errors"
+	"math"
 	"reflect"
 	"slices"
 	"testing"
@@ -99,7 +100,7 @@ func TestMessageLinkCodecRejectsBadValues(t *testing.T) {
 	corrupt := map[string]func(d *messageDoc){
 		"reply seq":     func(d *messageDoc) { d.ReplyTo = &replyDoc{Seq: -1} },
 		"forward room":  func(d *messageDoc) { d.Forward = &forwardDoc{Room: -5, Seq: 1} },
-		"reply count n": func(d *messageDoc) { d.Replies = &replyCountDoc{N: -1} },
+		"reply count n": func(d *messageDoc) { d.Replies = &replyCountDoc{N: math.MaxUint32 + 1} },
 	}
 	for name, f := range corrupt {
 		d := good
@@ -107,6 +108,18 @@ func TestMessageLinkCodecRejectsBadValues(t *testing.T) {
 		if _, err := decodeMessage(d); !errors.Is(err, errCorrupt) {
 			t.Fatalf("%s: decodeMessage = %v, want errCorrupt", name, err)
 		}
+	}
+}
+
+func TestDecodeMessageSettlesAReplyCountBelowZero(t *testing.T) {
+	d, err := encodeMessage(linkedMessage())
+	if err != nil {
+		t.Fatalf("encodeMessage: %v", err)
+	}
+	d.Replies = &replyCountDoc{N: -1, Version: 4}
+	m, err := decodeMessage(d)
+	if err != nil || m.Replies != (domain.ReplyCount{N: 0, Version: 4, Unsettled: true}) {
+		t.Fatalf("decoded reply count %+v, %v; want 0 at version 4, unsettled", m.Replies, err)
 	}
 }
 

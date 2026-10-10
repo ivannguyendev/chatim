@@ -28,8 +28,9 @@ type ReactionCount struct {
 }
 
 type ReactionSummary struct {
-	Counts  []ReactionCount
-	Version uint64
+	Counts    []ReactionCount
+	Version   uint64
+	Unsettled bool
 }
 
 func ValidateEmoji(emoji string) error {

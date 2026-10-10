@@ -152,7 +152,7 @@ func (e *CountRepair) recount(ctx context.Context, t countTarget, m domain.Messa
 		write := func(ctx context.Context) (bool, error) {
 			return e.deps.Counts.SetReactions(ctx, t.key, base, next.Reactions)
 		}
-		return recount{same: slices.Equal(counts, m.Reactions.Counts), ver: base, next: next, write: write}, nil
+		return recount{same: !m.Reactions.Unsettled && slices.Equal(counts, m.Reactions.Counts), ver: base, next: next, write: write}, nil
 	case pbconv.RepliesCounter:
 		n, err := e.deps.Interactions.CountLiveReplies(ctx, t.key)
 		if err != nil {
@@ -161,7 +161,7 @@ func (e *CountRepair) recount(ctx context.Context, t countTarget, m domain.Messa
 		base := m.Replies.Version
 		next.Replies = domain.ReplyCount{N: n, Version: base + 1}
 		write := func(ctx context.Context) (bool, error) { return e.deps.Counts.SetReplyCount(ctx, t.key, base, n) }
-		return recount{same: n == m.Replies.N, ver: base, next: next, write: write}, nil
+		return recount{same: !m.Replies.Unsettled && n == m.Replies.N, ver: base, next: next, write: write}, nil
 	default:
 		return recount{}, fmt.Errorf("%w: message counter %q", apperr.ErrInvalidArgument, t.counter)
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
@@ -18,15 +19,19 @@ type countCall struct {
 }
 
 type spyCounts struct {
-	inner mutate.ReactionCounts
-	log   *callLog
-	mu    sync.Mutex
-	err   error
-	calls []countCall
+	inner  mutate.ReactionCounts
+	log    *callLog
+	mu     sync.Mutex
+	err    error
+	calls  []countCall
+	before func()
 }
 
 func (s *spyCounts) AddReactionCounts(ctx context.Context, key store.MsgKey, deltas []store.EmojiDelta) (domain.ReactionSummary, error) {
 	s.log.add("count")
+	if s.before != nil {
+		s.before()
+	}
 	s.mu.Lock()
 	s.calls = append(s.calls, countCall{key: key, deltas: slices.Clone(deltas)})
 	err := s.err
@@ -116,3 +121,27 @@ func newReactionParts(counts mutate.ReactionCounts, interactions store.Interacti
 		writes:     loggedWrites{Interactions: interactions, log: calls},
 	}
 }
+
+func (rg *rig) assertCounted(t *testing.T, calls []string, deltas ...store.EmojiDelta) {
+	t.Helper()
+	if got := rg.reactCalls.list(); !slices.Equal(got, calls) {
+		t.Fatalf("calls = %v, want %v", got, calls)
+	}
+	if n := rg.msgTimers.pending(); n != 0 {
+		t.Fatalf("%d count check timers left armed, want none", n)
+	}
+	got := rg.counts.list()
+	if len(deltas) == 0 {
+		if len(got) != 0 {
+			t.Fatalf("counted %+v, want nothing", got)
+		}
+		return
+	}
+	if len(got) == 0 || got[len(got)-1].key != key(1) || !slices.Equal(got[len(got)-1].deltas, deltas) {
+		t.Fatalf("counted %+v, want %v on seq 1 last", got, deltas)
+	}
+}
+
+func up(emoji string) store.EmojiDelta { return store.EmojiDelta{Emoji: emoji, Delta: 1} }
+
+func down(emoji string) store.EmojiDelta { return store.EmojiDelta{Emoji: emoji, Delta: -1} }

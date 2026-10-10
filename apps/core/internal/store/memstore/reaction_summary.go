@@ -28,5 +28,6 @@ func (s *Messages) SetReactions(ctx context.Context, key store.MsgKey, base uint
 		return false, nil
 	}
 	line[i].Reactions = domain.ReactionSummary{Counts: slices.Clone(sum.Counts), Version: sum.Version}
+	delete(s.rawCounts, key)
 	return true, nil
 }

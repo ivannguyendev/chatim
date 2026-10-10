@@ -1,8 +1,10 @@
 package store
 
 import (
+	"cmp"
 	"context"
 	"math"
+	"slices"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 )
@@ -47,19 +49,20 @@ func ValidateCountDelta(delta int) error {
 }
 
 func AddEmojiDeltas(cur []domain.ReactionCount, deltas []EmojiDelta) []domain.ReactionCount {
-	sums := make(map[string]int64, len(cur)+len(deltas))
-	for _, c := range cur {
-		sums[c.Emoji] = int64(c.Count)
-	}
+	return domain.SettleReactions(AddRawEmojiDeltas(domain.RawCounts(cur), deltas), 0).Counts
+}
+
+func AddRawEmojiDeltas(raw []domain.RawCount, deltas []EmojiDelta) []domain.RawCount {
+	out := slices.Clone(raw)
 	for _, d := range deltas {
-		sums[d.Emoji] += int64(d.Delta)
-	}
-	out := make([]domain.ReactionCount, 0, len(sums))
-	for e, n := range sums {
-		if n > 0 {
-			out = append(out, domain.ReactionCount{Emoji: e, Count: uint32(min(n, math.MaxUint32))})
+		if i := slices.IndexFunc(out, func(c domain.RawCount) bool { return c.Emoji == d.Emoji }); i >= 0 {
+			out[i].N += int64(d.Delta)
+			continue
 		}
+		out = append(out, domain.RawCount{Emoji: d.Emoji, N: int64(d.Delta)})
 	}
-	domain.SortReactionCounts(out)
+	slices.SortFunc(out, func(a, b domain.RawCount) int {
+		return cmp.Or(cmp.Compare(b.N, a.N), cmp.Compare(a.Emoji, b.Emoji))
+	})
 	return out
 }

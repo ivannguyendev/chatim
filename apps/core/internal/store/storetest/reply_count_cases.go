@@ -11,7 +11,8 @@ import (
 
 func replyCountCases() []countCase {
 	return []countCase{
-		{"reply deltas move the count and its version and stop at zero", replyDeltas},
+		{"reply deltas move the count and its version and read below zero as zero", replyDeltas},
+		{"reply deltas give the same count in any order", replyDeltasCommute},
 		{"set reply count writes only over the expected version", replyCountCAS},
 		{"reply counts of a missing message write nothing", replyCountMissing},
 		{"reply counts need a valid key, delta and version", replyCountInvalid},
@@ -45,8 +46,25 @@ func replyDeltas(t *testing.T, s CountableMessages) {
 	mustAddReplyCount(t, s, key, 1, domain.ReplyCount{N: 2, Version: 2})
 	mustAddReplyCount(t, s, key, -1, domain.ReplyCount{N: 1, Version: 3})
 	assertStored(t, s, withReplies(m, 1, 3), other)
-	mustAddReplyCount(t, s, key, -5, domain.ReplyCount{N: 0, Version: 4})
-	assertStored(t, s, withReplies(m, 0, 4), other)
+	mustAddReplyCount(t, s, key, -5, domain.ReplyCount{N: 0, Version: 4, Unsettled: true})
+	below := withReplies(m, 0, 4)
+	below.Replies.Unsettled = true
+	assertStored(t, s, below, other)
+	mustAddReplyCount(t, s, key, 6, domain.ReplyCount{N: 2, Version: 5})
+	assertStored(t, s, withReplies(m, 2, 5), other)
+}
+
+func replyDeltasCommute(t *testing.T, s CountableMessages) {
+	upFirst, downFirst := msg(roomA, mainThread, 1), msg(roomA, mainThread, 2)
+	mustInsert(t, s, []domain.Message{upFirst, downFirst})
+	up, down := store.KeyOf(upFirst), store.KeyOf(downFirst)
+	mustAddReplyCount(t, s, up, 1, domain.ReplyCount{N: 1, Version: 1})
+	mustAddReplyCount(t, s, up, -1, domain.ReplyCount{N: 0, Version: 2})
+	mustAddReplyCount(t, s, down, -1, domain.ReplyCount{N: 0, Version: 1, Unsettled: true})
+	mustAddReplyCount(t, s, down, 1, domain.ReplyCount{N: 0, Version: 2})
+	assertStored(t, s, withReplies(upFirst, 0, 2), withReplies(downFirst, 0, 2))
+	mustAddReplyCount(t, s, up, 1, domain.ReplyCount{N: 1, Version: 3})
+	mustAddReplyCount(t, s, down, 1, domain.ReplyCount{N: 1, Version: 3})
 }
 
 func replyCountCAS(t *testing.T, s CountableMessages) {
