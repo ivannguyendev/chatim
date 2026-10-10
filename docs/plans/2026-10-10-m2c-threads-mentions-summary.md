@@ -1,6 +1,6 @@
 # M2c — Tương tác với tin, mention, forward, tạo room: tóm tắt kỹ thuật
 
-> Trạng thái: **chờ owner duyệt, chưa thực thi**. Nhánh `feat/m2c`. Plan execute cho AI viết sau khi duyệt, ở `.claude/plans/2026-10-10-m2c-threads-mentions.md` (local). Quyết định mới ghi vào Decision Log của [thiết kế](../designs/261005-chatim-architecture.md) từ D112.
+> Trạng thái: **owner đã duyệt, đang thực thi**. Nhánh `feat/m2c`. Plan execute cho AI ở `.claude/plans/2026-10-10-m2c-threads-mentions.md` (local). Quyết định mới ghi vào Decision Log của [thiết kế](../designs/261005-chatim-architecture.md) từ D112.
 
 ## 1. Thuật ngữ
 
@@ -108,7 +108,7 @@ Collection `reactions` của M2b.3 bỏ; reaction chuyển sang đây (dữ li�
 
 ### 3.3 `mentions` (dạng 2)
 
-`_id` (clustered) = `khoá tin │ loại đích │ id đích`. Field: `message_key`, `room_id`, `tenant`, `target` (`user:minh`, `group:team-design`, `all:777`), `sender_id`, `state`, `message_ver`, `created_at`, `updated_at`. Index `{tenant, target, state, created_at: -1}` (`ListMentions`), `{room_id, updated_at}` (resync). Mỗi đích một doc: `@all` ở room 200K người vẫn 1 doc. Core không bung nhóm; nơi xử lý mention tự bung.
+`_id` (clustered) = `khoá tin │ loại đích │ id đích`. Field: `message_key`, `room_id`, `tenant`, `target` (`user:minh`, `group:team-design`, `all:777`), `sender_id`, `state`, `message_ver`, `created_at`, `updated_at`. Index `{tenant, target, state, created_at: -1}` (`ListMentions`); không cần index cho resync vì mention dựng lại từ phiếu tin. Mỗi đích một doc: `@all` ở room 200K người vẫn 1 doc. Core không bung nhóm; nơi xử lý mention tự bung.
 
 ### 3.4 `room_dms` (sổ DM)
 
@@ -212,6 +212,7 @@ sequenceDiagram
 | Phiếu bật đúng lúc có react mới | Không ghi đè số mới | Ghi có điều kiện trên `v`; trượt thì Nak |
 | Phiếu việc reply chạy hai lần | Cộng một lần | Chỉ cộng khi doc mới được tạo |
 | Xoá tin cha còn trả lời | `FAILED_PRECONDITION` | Đếm thẳng doc reply lúc xoá |
+| Xoá tin cha ngay sau khi có trả lời mới (worker chưa dựng doc reply, thường dưới một giây) | Xoá được; ô trích của trả lời hiện "đã xoá" | Doc reply chưa có nên đếm ra 0; giống trả lời một tin đã xoá |
 | Sửa tin bỏ mention, phiếu đến lệch thứ tự | `mentions` theo phiên bản mới nhất | So `message_ver` |
 | Hai người mở DM cùng lúc | Một room | `_id` của `room_dms` duy nhất |
 | Gửi lại `CreateRoom` | Room cũ (trong 15 phút) | `request_id` |
@@ -270,6 +271,7 @@ Không thư viện mới. Mongo: collection clustered, upsert `$setOnInsert`, pi
 | Thêm 2 thao tác NATS mỗi lệnh react | Hẹn và gỡ phiếu, ~1–2ms | Số luôn đúng và có ngay | Chấp nhận; như lệnh member hiện nay |
 | Tin rất nóng: nhiều `counts_changed` | Mỗi react một event số | Số tới client ngay | Đủ cho group ≤5K; milestone Channel gom event |
 | Phiếu sửa bị "đói" ở tin rất nóng | Tương tác liên tục làm `v` đổi mãi, phiếu Nak nhiều lần | Không ghi đè số mới | Chỉ xảy ra khi đã có lỗi trước đó; theo dõi metric sửa số |
+| Xoá tin cha lọt khi trả lời vừa gửi | Trong lúc worker chưa dựng doc reply, chặn xoá không thấy trả lời đó | Không thêm index trên `messages` (giữ shard-ready) | Chấp nhận; client đã hiện được trả lời của tin đã xoá |
 | Chuyển reaction sang collection mới | Đụng phần M2b.3 | Thống nhất chỗ lưu | Chạy lại toàn bộ test reaction; reset dữ liệu dev |
 
 ## 11. Điểm owner đã xác nhận
