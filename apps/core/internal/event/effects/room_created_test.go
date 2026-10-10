@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/effects"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish/publishtest"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
@@ -64,6 +65,26 @@ func TestRoomCreatedPublishesTheFastPathEvent(t *testing.T) {
 	}
 	if eff.Republished() != 1 || eff.Dropped() != 0 {
 		t.Fatalf("republished %d, dropped %d; want 1 and 0", eff.Republished(), eff.Dropped())
+	}
+}
+
+func TestRoomCreatedCountsOnlyEventsTheStreamLacked(t *testing.T) {
+	mem := memstore.NewRooms()
+	r := createRoom(t, mem, room)
+	js := &publishtest.JetStream{}
+	fast, err := publish.Message("evt", room, pbconv.RoomCreated(r))
+	if err != nil {
+		t.Fatalf("publish.Message: %v", err)
+	}
+	if _, err := js.PublishMsgAsync(fast); err != nil {
+		t.Fatalf("fast path publish: %v", err)
+	}
+	eff := newRoomCreated(t, mem, js)
+	if errs := eff.Effect().Run(t.Context(), roomRecs(room)); !allNil(errs, 1) {
+		t.Fatalf("errs = %v", errs)
+	}
+	if len(js.Stored()) != 1 || len(js.Attempts()) != 2 || eff.Republished() != 0 {
+		t.Fatalf("stored %d, attempts %d, republished %d; want 1, 2 and 0", len(js.Stored()), len(js.Attempts()), eff.Republished())
 	}
 }
 

@@ -71,6 +71,6 @@ func (e *RoomCreated) run(ctx context.Context, recs []work.Record) []error {
 		}
 		pending = send(e.deps.JS, msg, i, errs, pending)
 	}
-	awaitAcks(ctx, pending, errs, countAll(&e.republished))
+	awaitAcks(ctx, pending, errs, countStored(&e.republished))
 	return errs
 }
