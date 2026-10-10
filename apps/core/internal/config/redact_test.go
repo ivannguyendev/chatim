@@ -58,7 +58,7 @@ func TestConfigLogValueHidesSecrets(t *testing.T) {
 			t.Fatalf("summary leaks a secret: %s", out)
 		}
 	}
-	for _, want := range []string{"xxxxx@chatim-mongodb:27017", "xxxxx@chatim-nats:4222", `"stream":"CHATIM_EVT"`,
+	for _, want := range []string{"xxxxx@chatim-mongodb:27017", "xxxxx@chatim-nats:4222", `"stream":{"name":"CHATIM_EVT"`,
 		`"redis_auth":true`, `"redis_dedupe_addr":"chatim-redis-dedupe:6379"`, `"redis_dedupe_db":0`, `"redis_dedupe_auth":true`,
 	} {
 		if !strings.Contains(logged, want) {

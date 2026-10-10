@@ -49,6 +49,12 @@ func (s *Service) GetEditHistory(ctx context.Context, req *chatimv1.GetEditHisto
 	if err != nil || len(rows) == 0 {
 		return &chatimv1.GetEditHistoryResponse{}, err
 	}
+	switch deleting, err := s.deleting(ctx, key, rows, limit); {
+	case err != nil:
+		return nil, err
+	case deleting:
+		return &chatimv1.GetEditHistoryResponse{}, nil
+	}
 	if req.GetAfterVer() == 0 {
 		switch row, err := s.edits.At(ctx, key, 0); {
 		case err == nil:
@@ -58,4 +64,16 @@ func (s *Service) GetEditHistory(ctx context.Context, req *chatimv1.GetEditHisto
 		}
 	}
 	return &chatimv1.GetEditHistoryResponse{Versions: pbconv.MessageVersions(rows)}, nil
+}
+
+func (s *Service) deleting(ctx context.Context, key store.MsgKey, page []domain.Edit, limit int) (bool, error) {
+	last := page[len(page)-1]
+	if len(page) == limit {
+		latest, ok, err := s.edits.Latest(ctx, key)
+		if err != nil || !ok {
+			return false, err
+		}
+		last = latest
+	}
+	return last.Kind == domain.EditDelete, nil
 }

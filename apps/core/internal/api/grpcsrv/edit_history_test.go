@@ -116,6 +116,24 @@ func TestEditHistoryOfADeletedMessageIsEmpty(t *testing.T) {
 	}
 }
 
+func TestEditHistoryIsEmptyOnceADeleteFactIsStoredBeforeItsProjection(t *testing.T) {
+	rg := newRig(t, options{})
+	room := rg.createGroup(t, "acme", "alice")
+	alice := as(t, "acme", "alice")
+	sent := rg.send(t, alice, room, "c-1", "v0")
+	rg.editTwice(t, alice, room)
+	fact := domain.Edit{Room: roomNumber(t, room), Seq: 1, Version: 3, Kind: domain.EditDelete, Tenant: "acme", By: "alice", At: sent.GetCreatedAt().AsTime()}
+	if err := rg.edits.Append(t.Context(), fact); err != nil {
+		t.Fatalf("Append delete fact: %v", err)
+	}
+	for _, limit := range []uint32{0, 1, 3} {
+		resp, err := rg.client.GetEditHistory(alice, &chatimv1.GetEditHistoryRequest{RoomId: room, Seq: 1, Limit: limit})
+		if err != nil || len(resp.GetVersions()) != 0 {
+			t.Fatalf("limit %d: GetEditHistory = %v, %v; want no versions while the delete waits for its projection", limit, resp, err)
+		}
+	}
+}
+
 func TestEditHistoryChecksInputAndAccess(t *testing.T) {
 	rg := newRig(t, options{})
 	room := rg.createGroup(t, "acme", "alice")

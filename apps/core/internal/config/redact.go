@@ -2,6 +2,7 @@ package config
 
 import (
 	"log/slog"
+	"reflect"
 	"strings"
 )
 
@@ -9,32 +10,18 @@ const redacted = "xxxxx"
 
 var secretQueryKeys = []string{"pass", "secret", "token", "credential", "authmechanismproperties"}
 
+var secretFields = map[string]func(Config) slog.Attr{
+	"MongoURI":            func(c Config) slog.Attr { return slog.String("mongo_uri", RedactURL(c.MongoURI)) },
+	"MongoPassword":       func(c Config) slog.Attr { return slog.Bool("mongo_auth", c.mongoAuth()) },
+	"RedisPassword":       func(c Config) slog.Attr { return slog.Bool("redis_auth", c.RedisPassword != "") },
+	"RedisDedupePassword": func(c Config) slog.Attr { return slog.Bool("redis_dedupe_auth", c.RedisDedupePassword != "") },
+	"NATSURL":             func(c Config) slog.Attr { return slog.String("nats_url", RedactURL(c.NATSURL)) },
+}
+
+func (c Config) mongoAuth() bool { return c.MongoUser != "" || uriHasCredentials(c.MongoURI) }
+
 func (c Config) LogValue() slog.Value {
-	return slog.GroupValue(
-		slog.String("core_id", c.CoreID),
-		slog.String("grpc_addr", c.GRPCAddr),
-		slog.String("advertise_addr", c.AdvertiseAddr),
-		slog.String("admin_addr", c.AdminAddr),
-		slog.String("mongo_uri", RedactURL(c.MongoURI)),
-		slog.String("mongo_db", c.MongoDB),
-		slog.Bool("mongo_auth", c.MongoUser != "" || uriHasCredentials(c.MongoURI)),
-		slog.String("redis_addr", c.RedisAddr),
-		slog.Int("redis_db", c.RedisDB),
-		slog.Bool("redis_auth", c.RedisPassword != ""),
-		slog.String("redis_dedupe_addr", c.RedisDedupeAddr),
-		slog.Int("redis_dedupe_db", c.RedisDedupeDB),
-		slog.Bool("redis_dedupe_auth", c.RedisDedupePassword != ""),
-		slog.String("nats_url", RedactURL(c.NATSURL)),
-		slog.String("stream", c.Stream.Name),
-		slog.String("subject_root", c.Stream.SubjectRoot),
-		slog.String("live_root", c.Stream.LiveRoot),
-		slog.Duration("request_deadline", c.RequestDeadline),
-		slog.Int("max_inflight", c.MaxInflight),
-		slog.Int("flush_shards", c.Flush.Shards),
-		slog.Int("publish_shards", c.Publish.Shards),
-		slog.Int("actor_max", c.Actor.MaxActors),
-		slog.Duration("shutdown_budget", c.ShutdownBudget),
-	)
+	return slog.GroupValue(c.attrs(reflect.ValueOf(c), "")...)
 }
 
 func (c Config) String() string { return c.LogValue().String() }
