@@ -18,6 +18,7 @@ func reactionReadCases() []interactionCase {
 		{"count returns live emojis of that message only, sorted by count then emoji", reactCount},
 		{"count fails with a stale read while a witness is behind", reactWitness},
 		{"between returns reactions and tombstones of a room by time then key", reactBetween},
+		{"between orders one instant by _id like the database: shorter keys first", reactBetweenKeyLength},
 		{"cancelled context writes nothing", reactCancelled},
 	}
 }
@@ -101,6 +102,20 @@ func reactBetween(t *testing.T, s interactionStores) {
 	}
 }
 
+func reactBetweenKeyLength(t *testing.T, s interactionStores) {
+	at := 2 * time.Second
+	carol := mustSet(t, s.interactions, reactAt(roomA, mainThread, 2, "carol", "👍", at), true)
+	bob := mustSet(t, s.interactions, reactAt(roomA, mainThread, 3, "bob", "👍", at), true)
+	dave := mustSet(t, s.interactions, reactAt(roomA, mainThread, 1, "dave", "👍", at), true)
+	al := mustSet(t, s.interactions, reactAt(roomA, mainThread, 9, "al", "👍", at), true)
+	eve := mustSet(t, s.interactions, reactAt(roomA, mainThread, 1, "eve", "👍", at), true)
+	got, err := s.interactions.Between(t.Context(), roomA, keys.ReactionKind, baseTime, baseTime.Add(time.Hour), 10)
+	if err != nil {
+		t.Fatalf("Between: %v", err)
+	}
+	assertInteractions(t, "Between(one instant)", got, reactionRefs(al, eve, bob, dave, carol))
+}
+
 func reactCancelled(t *testing.T, s interactionStores) {
 	m := msg(roomA, mainThread, 1)
 	mustInsert(t, s.msgs, []domain.Message{m})
@@ -119,7 +134,7 @@ func reactCancelled(t *testing.T, s interactionStores) {
 	assertErrorIs(t, "SetBookmark", err, context.Canceled)
 	_, err = s.interactions.AddReply(ctx, replyAt(roomA, 1, 2, "alice", 0))
 	assertErrorIs(t, "AddReply", err, context.Canceled)
-	_, err = s.interactions.RemoveReply(ctx, key, msgKey(roomA, mainThread, 2), baseTime)
+	_, err = s.interactions.RemoveReply(ctx, replyAt(roomA, 1, 2, "alice", 0), baseTime)
 	assertErrorIs(t, "RemoveReply", err, context.Canceled)
 	_, err = s.interactions.Replies(ctx, key, 0, 10)
 	assertErrorIs(t, "Replies", err, context.Canceled)

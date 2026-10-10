@@ -80,7 +80,16 @@ func (r *Interactions) Bookmarks(ctx context.Context, tenant, user string, befor
 	if err := store.ValidateBookmarkQuery(tenant, user, limit); err != nil {
 		return nil, err
 	}
-	filter := bson.D{
+	filter, sort := bookmarkQuery(tenant, user, before)
+	docs, err := r.find(ctx, filter, options.Find().SetSort(sort).SetLimit(int64(limit)))
+	if err != nil {
+		return nil, fmt.Errorf("bookmarks of %q: %w", user, err)
+	}
+	return decodeAll(docs, decodeBookmark)
+}
+
+func bookmarkQuery(tenant, user string, before store.BookmarkCursor) (filter, sort bson.D) {
+	filter = bson.D{
 		{Key: "tenant", Value: tenant}, {Key: "actor_id", Value: user},
 		{Key: "kind", Value: interactionKindNames[keys.BookmarkKind]}, {Key: "state", Value: interactionLive},
 	}
@@ -92,10 +101,5 @@ func (r *Interactions) Bookmarks(ctx context.Context, tenant, user string, befor
 			bson.E{Key: "$or", Value: bson.A{older, tied}},
 		)
 	}
-	opts := options.Find().SetSort(bson.D{{Key: "updated_at", Value: -1}, {Key: "message_key", Value: -1}}).SetLimit(int64(limit))
-	docs, err := r.find(ctx, filter, opts)
-	if err != nil {
-		return nil, fmt.Errorf("bookmarks of %q: %w", user, err)
-	}
-	return decodeAll(docs, decodeBookmark)
+	return filter, bson.D{{Key: "updated_at", Value: -1}, {Key: "message_key", Value: -1}}
 }

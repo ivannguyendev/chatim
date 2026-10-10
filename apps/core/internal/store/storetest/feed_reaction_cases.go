@@ -18,7 +18,7 @@ func RunReactionFeed(t *testing.T, open func(t *testing.T) (store.Interactions, 
 		mustSet(t, reactions, reactionOf(roomA, mainThread, 1, "alice", "👍"), false)
 		mustSetBookmark(t, reactions, bookmarkAt(roomA, mainThread, 1, "alice", true, 0), true)
 		mustAddReply(t, reactions, replyAt(roomA, 1, 2, "alice", 0), true)
-		mustRemoveReply(t, reactions, key, msgKey(roomA, mainThread, 2), true)
+		mustRemoveReply(t, reactions, replyAt(roomA, 1, 2, "alice", 0), true)
 		mustSetBookmark(t, reactions, bookmarkAt(roomA, mainThread, 1, "alice", false, time.Second), true)
 		second := mustSet(t, reactions, reactAt(roomA, mainThread, 1, "alice", "❤️", time.Second), true)
 		removed := mustRemove(t, reactions, key, "alice", baseTime.Add(2*time.Second), true)

@@ -47,13 +47,13 @@ func ValidateBookmark(b domain.Bookmark) error {
 func ValidateReply(r domain.Reply) error {
 	parent := MsgKey(r.Parent)
 	switch {
-	case parent.Validate() != nil:
+	case parent.Validate() != nil || parent.Thread != 0:
 		return invalid("parent")
-	case ReplyKeyOf(r).Validate() != nil:
+	case ReplyKeyOf(r).Validate() != nil || r.Thread != 0:
 		return invalid("reply")
 	case r.Room != parent.Room:
 		return invalid("reply room")
-	case r.Thread == parent.Thread && r.Seq == parent.Seq:
+	case r.Seq == parent.Seq:
 		return invalid("reply")
 	case r.Tenant == "":
 		return invalid("tenant")
@@ -61,16 +61,6 @@ func ValidateReply(r domain.Reply) error {
 		return invalid("user")
 	}
 	return ValidateMarkTime(r.At)
-}
-
-func ValidateReplyTarget(parent, reply MsgKey) error {
-	if parent.Validate() != nil {
-		return invalid("parent")
-	}
-	if reply.Validate() != nil || reply.Room != parent.Room {
-		return invalid("reply")
-	}
-	return nil
 }
 
 func ValidateBookmarkQuery(tenant, user string, limit int) error {

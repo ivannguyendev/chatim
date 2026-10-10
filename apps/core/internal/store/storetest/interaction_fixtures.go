@@ -48,10 +48,10 @@ func mustAddReply(t *testing.T, s store.Interactions, r domain.Reply, wantInsert
 	}
 }
 
-func mustRemoveReply(t *testing.T, s store.Interactions, parent, reply store.MsgKey, wantRemoved bool) {
+func mustRemoveReply(t *testing.T, s store.Interactions, r domain.Reply, wantRemoved bool) {
 	t.Helper()
-	if ok, err := s.RemoveReply(t.Context(), parent, reply, baseTime.Add(time.Hour)); err != nil || ok != wantRemoved {
-		t.Fatalf("RemoveReply(%d from %d) = %v, %v; want removed %v", reply.Seq, parent.Seq, ok, err, wantRemoved)
+	if ok, err := s.RemoveReply(t.Context(), r, baseTime.Add(time.Hour)); err != nil || ok != wantRemoved {
+		t.Fatalf("RemoveReply(%d from %d) = %v, %v; want removed %v", r.Seq, r.Parent.Seq, ok, err, wantRemoved)
 	}
 }
 

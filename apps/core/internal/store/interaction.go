@@ -43,7 +43,7 @@ type Interactions interface {
 	GetBookmark(ctx context.Context, key MsgKey, user string) (domain.Bookmark, bool, error)
 	Bookmarks(ctx context.Context, tenant, user string, before BookmarkCursor, limit int) ([]domain.Bookmark, error)
 	AddReply(ctx context.Context, r domain.Reply) (bool, error)
-	RemoveReply(ctx context.Context, parent, reply MsgKey, at time.Time) (bool, error)
+	RemoveReply(ctx context.Context, r domain.Reply, at time.Time) (bool, error)
 	Replies(ctx context.Context, parent MsgKey, afterSeq uint64, limit int) ([]domain.Reply, error)
 	CountLiveReplies(ctx context.Context, parent MsgKey) (uint32, error)
 	Between(ctx context.Context, room uint64, kind keys.InteractionKind, from, to time.Time, limit int) ([]Interaction, error)

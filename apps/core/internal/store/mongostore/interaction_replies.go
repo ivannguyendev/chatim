@@ -2,6 +2,7 @@ package mongostore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -15,47 +16,65 @@ import (
 )
 
 func (r *Interactions) AddReply(ctx context.Context, x domain.Reply) (bool, error) {
-	if err := store.ValidateReply(x); err != nil {
-		return false, err
-	}
-	room, err := toInt64("room id", x.Room)
+	fields, err := replyFields(x)
 	if err != nil {
 		return false, err
 	}
-	seq, err := toInt64("reply seq", x.Seq)
-	if err != nil {
-		return false, err
-	}
-	parent := store.MsgKey(x.Parent)
-	insert := append(interactionFields(parent, room, x.Tenant, keys.ReplyKind, x.From),
-		bson.E{Key: "reply_seq", Value: seq},
+	fields = append(fields,
 		bson.E{Key: "state", Value: interactionLive},
 		bson.E{Key: "ver", Value: int64(1)},
 		bson.E{Key: "created_at", Value: x.At},
 		bson.E{Key: "updated_at", Value: x.At},
 	)
-	id := replyID(parent, store.ReplyKeyOf(x))
-	res, err := r.coll.UpdateOne(ctx, idIs(id), bson.D{{Key: "$setOnInsert", Value: insert}}, options.UpdateOne().SetUpsert(true))
+	res, err := r.coll.UpdateOne(ctx, idIs(replyIDOf(x)), bson.D{{Key: "$setOnInsert", Value: fields}}, options.UpdateOne().SetUpsert(true))
 	switch {
 	case mongo.IsDuplicateKeyError(err):
 		return false, nil
 	case err != nil:
-		return false, fmt.Errorf("add reply %d/%d to %d/%d/%d: %w", x.Thread, x.Seq, parent.Room, parent.Thread, parent.Seq, err)
+		return false, fmt.Errorf("add reply %d to %d/%d/%d: %w", x.Seq, x.Parent.Room, x.Parent.Thread, x.Parent.Seq, err)
 	}
 	return res.UpsertedCount > 0, nil
 }
 
-func (r *Interactions) RemoveReply(ctx context.Context, parent, reply store.MsgKey, at time.Time) (bool, error) {
-	if err := store.ValidateReplyTarget(parent, reply); err != nil {
+func (r *Interactions) RemoveReply(ctx context.Context, x domain.Reply, at time.Time) (bool, error) {
+	fields, err := replyFields(x)
+	if err != nil {
 		return false, err
 	}
-	filter := bson.D{{Key: "_id", Value: replyID(parent, reply)}, {Key: "state", Value: interactionLive}}
-	res, err := r.coll.UpdateOne(ctx, filter, removeInteraction(at, false))
-	if err != nil {
-		return false, fmt.Errorf("remove reply %d/%d from %d/%d/%d: %w", reply.Thread, reply.Seq, parent.Room, parent.Thread, parent.Seq, err)
+	if err := store.ValidateMarkTime(at); err != nil {
+		return false, err
 	}
-	return res.ModifiedCount == 1, nil
+	opts := options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.Before).SetProjection(bson.D{{Key: "state", Value: 1}})
+	var before struct {
+		State int64 `bson:"state"`
+	}
+	err = r.coll.FindOneAndUpdate(ctx, idIs(replyIDOf(x)), removeReply(fields, at), opts).Decode(&before)
+	switch {
+	case errors.Is(err, mongo.ErrNoDocuments):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("remove reply %d from %d/%d/%d: %w", x.Seq, x.Parent.Room, x.Parent.Thread, x.Parent.Seq, err)
+	}
+	return before.State == interactionLive, nil
 }
+
+func replyFields(x domain.Reply) (bson.D, error) {
+	if err := store.ValidateReply(x); err != nil {
+		return nil, err
+	}
+	room, err := toInt64("room id", x.Room)
+	if err != nil {
+		return nil, err
+	}
+	seq, err := toInt64("reply seq", x.Seq)
+	if err != nil {
+		return nil, err
+	}
+	fields := interactionFields(store.MsgKey(x.Parent), room, x.Tenant, keys.ReplyKind, x.From)
+	return append(fields, bson.E{Key: "reply_seq", Value: seq}), nil
+}
+
+func replyIDOf(x domain.Reply) []byte { return replyID(store.MsgKey(x.Parent), store.ReplyKeyOf(x)) }
 
 func (r *Interactions) Replies(ctx context.Context, parent store.MsgKey, afterSeq uint64, limit int) ([]domain.Reply, error) {
 	if err := parent.Validate(); err != nil {

@@ -104,7 +104,7 @@ func skippedInteractions(t *testing.T, s *Store, key store.MsgKey) {
 	if added, err := in.AddReply(ctx, reply); err != nil || !added {
 		t.Fatalf("AddReply = %v, %v", added, err)
 	}
-	if removed, err := in.RemoveReply(ctx, key, store.ReplyKeyOf(reply), codecTime); err != nil || !removed {
+	if removed, err := in.RemoveReply(ctx, reply, codecTime); err != nil || !removed {
 		t.Fatalf("RemoveReply = %v, %v", removed, err)
 	}
 }

@@ -64,6 +64,19 @@ func setBookmark(head bson.D, at time.Time) mongo.Pipeline {
 	return mongo.Pipeline{{{Key: "$set", Value: set}}}
 }
 
+func removeReply(fields bson.D, at time.Time) mongo.Pipeline {
+	live := bson.D{{Key: "$eq", Value: bson.A{"$state", interactionLive}}}
+	ver := bson.D{{Key: "$cond", Value: bson.A{live, nextChange(), bson.D{{Key: "$ifNull", Value: bson.A{"$ver", int64(1)}}}}}}
+	updated := bson.D{{Key: "$cond", Value: bson.A{live, at, bson.D{{Key: "$ifNull", Value: bson.A{"$updated_at", at}}}}}}
+	set := append(asLiterals(fields),
+		bson.E{Key: "state", Value: interactionRemoved},
+		bson.E{Key: "ver", Value: ver},
+		bson.E{Key: "created_at", Value: createdOnce(at)},
+		bson.E{Key: "updated_at", Value: updated},
+	)
+	return mongo.Pipeline{{{Key: "$set", Value: set}}}
+}
+
 func removeInteraction(at time.Time, keepValue bool) mongo.Pipeline {
 	set := bson.D{}
 	if keepValue {

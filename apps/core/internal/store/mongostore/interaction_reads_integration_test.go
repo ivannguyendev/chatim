@@ -85,13 +85,13 @@ func TestRepliesAndBookmarksReadThroughTheirKeys(t *testing.T) {
 	if stages, _ := winningPlan(t, db, replies); !slices.Contains(stages, "CLUSTERED_IXSCAN") || slices.Contains(stages, "SORT") {
 		t.Fatalf("replies plan stages %v, want a bounded clustered scan without SORT", stages)
 	}
-	bookmarks := bson.D{
-		{Key: "find", Value: interactionsCollection},
-		{Key: "filter", Value: bson.D{{Key: "tenant", Value: "acme"}, {Key: "actor_id", Value: "minh"}, {Key: "kind", Value: "bookmark"}, {Key: "state", Value: interactionLive}}},
-		{Key: "sort", Value: bson.D{{Key: "updated_at", Value: -1}, {Key: "message_key", Value: -1}}}, {Key: "limit", Value: 10},
-	}
-	const index = "tenant_1_actor_id_1_kind_1_state_1_updated_at_-1"
-	if _, indexes := winningPlan(t, db, bookmarks); !slices.Contains(indexes, index) {
-		t.Fatalf("bookmarks plan indexes %v, want %s", indexes, index)
+	const index = "tenant_1_actor_id_1_kind_1_state_1_updated_at_-1_message_key_-1"
+	for name, before := range map[string]store.BookmarkCursor{"first page": {}, "after a cursor": {At: codecTime, Key: parent}} {
+		filter, sort := bookmarkQuery("acme", "minh", before)
+		cmd := bson.D{{Key: "find", Value: interactionsCollection}, {Key: "filter", Value: filter}, {Key: "sort", Value: sort}, {Key: "limit", Value: 10}}
+		stages, indexes := winningPlan(t, db, cmd)
+		if !slices.Contains(indexes, index) || slices.Contains(stages, "SORT") || slices.Contains(stages, "COLLSCAN") {
+			t.Fatalf("bookmarks %s plan stages %v on indexes %v, want %s without SORT", name, stages, indexes, index)
+		}
 	}
 }

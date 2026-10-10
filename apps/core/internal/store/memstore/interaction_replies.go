@@ -28,18 +28,26 @@ func (s *Interactions) AddReply(ctx context.Context, r domain.Reply) (bool, erro
 	return true, nil
 }
 
-func (s *Interactions) RemoveReply(ctx context.Context, parent, reply store.MsgKey, at time.Time) (bool, error) {
+func (s *Interactions) RemoveReply(ctx context.Context, r domain.Reply, at time.Time) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
-	if err := store.ValidateReplyTarget(parent, reply); err != nil {
+	if err := store.ValidateReply(r); err != nil {
+		return false, err
+	}
+	if err := store.ValidateMarkTime(at); err != nil {
 		return false, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	k := replyKey{parent: parent, reply: reply}
+	k := replyKey{parent: store.MsgKey(r.Parent), reply: store.ReplyKeyOf(r)}
 	cur, ok := s.replies[k]
-	if !ok || !cur.Live {
+	switch {
+	case !ok:
+		r.Live, r.Ver, r.At = false, 1, at
+		s.replies[k] = r
+		return false, nil
+	case !cur.Live:
 		return false, nil
 	}
 	cur.Live, cur.Ver, cur.At = false, cur.Ver+1, at
@@ -61,13 +69,11 @@ func (s *Interactions) Replies(ctx context.Context, parent store.MsgKey, afterSe
 	defer s.mu.RUnlock()
 	out := []domain.Reply{}
 	for k, r := range s.replies {
-		if k.parent == parent && r.Live && (k.reply.Thread > 0 || k.reply.Seq > afterSeq) {
+		if k.parent == parent && r.Live && k.reply.Thread == 0 && k.reply.Seq > afterSeq {
 			out = append(out, r)
 		}
 	}
-	slices.SortFunc(out, func(a, b domain.Reply) int {
-		return cmp.Or(cmp.Compare(a.Thread, b.Thread), cmp.Compare(a.Seq, b.Seq))
-	})
+	slices.SortFunc(out, func(a, b domain.Reply) int { return cmp.Compare(a.Seq, b.Seq) })
 	return out[:min(len(out), limit)], nil
 }
 

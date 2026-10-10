@@ -88,6 +88,8 @@ func TestValidateBookmarkAndReply(t *testing.T) {
 		"valid":           {func(*domain.Reply) {}, ""},
 		"zero parent":     {func(r *domain.Reply) { r.Parent.Seq = 0 }, "parent"},
 		"zero reply seq":  {func(r *domain.Reply) { r.Seq = 0 }, "reply"},
+		"reply thread":    {func(r *domain.Reply) { r.Thread = 7 }, "reply"},
+		"parent thread":   {func(r *domain.Reply) { r.Parent.Thread = 7 }, "parent"},
 		"another room":    {func(r *domain.Reply) { r.Room = 2 }, "reply room"},
 		"itself":          {func(r *domain.Reply) { r.Seq = 1 }, "reply"},
 		"empty tenant":    {func(r *domain.Reply) { r.Tenant = "" }, "tenant"},
@@ -98,8 +100,6 @@ func TestValidateBookmarkAndReply(t *testing.T) {
 		c.mutate(&x)
 		assertField(t, "ValidateReply("+name+")", store.ValidateReply(x), c.field)
 	}
-	assertField(t, "ValidateReplyTarget(ok)", store.ValidateReplyTarget(store.MsgKey{Room: 1, Seq: 1}, store.MsgKey{Room: 1, Seq: 2}), "")
-	assertField(t, "ValidateReplyTarget(another room)", store.ValidateReplyTarget(store.MsgKey{Room: 1, Seq: 1}, store.MsgKey{Room: 2, Seq: 2}), "reply")
 	assertField(t, "ValidateBookmarkQuery(ok)", store.ValidateBookmarkQuery("acme", "bob", store.MaxPageLimit), "")
 	assertField(t, "ValidateBookmarkQuery(no tenant)", store.ValidateBookmarkQuery("", "bob", 1), "tenant")
 	assertField(t, "ValidateBookmarkQuery(limit)", store.ValidateBookmarkQuery("acme", "bob", 0), "limit")
