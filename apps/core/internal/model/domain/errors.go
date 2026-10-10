@@ -20,6 +20,8 @@ var (
 	ErrLastOwner       = fmt.Errorf("last owner cannot step down: %w", apperr.ErrFailedPrecondition)
 	ErrMemberNotFound  = fmt.Errorf("member %w", apperr.ErrNotFound)
 	ErrTooManyMembers  = fmt.Errorf("too many members: %w", apperr.ErrInvalidArgument)
+	ErrHasReplies      = fmt.Errorf("message has replies: %w", apperr.ErrFailedPrecondition)
+	ErrSelfDirect      = fmt.Errorf("direct room with yourself: %w", apperr.ErrInvalidArgument)
 )
 
 func CheckTenant(room Room, tenant string) error {
