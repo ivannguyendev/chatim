@@ -35,7 +35,7 @@
 | Số trên tin | `rx` (reaction theo emoji), `rc` (số trả lời), **một** cơ chế đếm lại | không |
 | Đọc theo tin | "ai react", "các trả lời của tin này" (`GetReplies`) | không cần |
 | Đọc theo người/đích trên mọi room | "tin tôi đã lưu" (`ListBookmarks`) | "tin nhắc tôi" (`ListMentions`) |
-| Đọc theo room theo thời gian | resync; "trao đổi gần đây của room" (`ListThreads`) | resync |
+| Đọc theo room theo thời gian | resync | resync |
 
 Ngoài 2 dạng, M2c còn có: **forward** (field trên tin), **hai đường tạo room** (`OpenDirectRoom` cho DM, `CreateRoom` cho group/channel) và việc tồn đọng **R1–R5**.
 
@@ -43,7 +43,7 @@ Ngoài 2 dạng, M2c còn có: **forward** (field trên tin), **hai đường t�
 flowchart LR
   C[Client / app] -->|SendMessage: reply_to, forward_from, mention| G[grpcsrv]
   C -->|React, SetBookmark| MU[mutate]
-  C -->|GetReplies, ListThreads, ListBookmarks, ListMentions| G
+  C -->|GetReplies, ListBookmarks, ListMentions| G
   C -->|OpenDirectRoom, CreateRoom| G
   G --> A[actor của room]
   A -->|insertMany| M[(MongoDB)]
@@ -131,7 +131,7 @@ Theo quy tắc tên (D96): `messages` giữ tên ngắn, collection khác dùng 
 |---|---|
 | `{message_key, kind, state, value}` | Đếm reaction theo emoji (phủ index), đếm reply còn sống, "ai react tin này" |
 | `{tenant, actor_id, kind, state, updated_at: -1}` | "Tin tôi đã lưu" (`ListBookmarks`) |
-| `{room_id, kind, updated_at}` | Resync từng kind; "trao đổi gần đây của room" (`ListThreads`) |
+| `{room_id, kind, updated_at}` | Resync từng kind |
 
 **Chuyển reaction của M2b.3 sang đây** (thuộc M2c):
 - Collection `reactions` bị bỏ; dữ liệu reaction hiện chỉ có ở dev (xoá bằng `make infra-reset` hoặc drop collection).
@@ -167,7 +167,6 @@ Index `{tenant, target, state, created_at: -1}` (`ListMentions`) và `{room_id, 
 | `MENTION_TARGETS_MAX` | `50` | Số đích mention mỗi tin (A6), đếm user + nhóm |
 | `MENTION_GROUPS_MAX` | `100` | Số nhóm người gọi truyền vào `ListMentions` |
 | `REPLY_COUNT_DELAY` | `1s` | Delay của worker đếm lại số trả lời (như `REACTION_COUNT_DELAY`) |
-| `BOOKMARK_LIMIT` | `1000` | Giới hạn mềm số bookmark mỗi user **[owner chốt]** |
 | khoá `chatim:req:create:{tenant}:{user}:{request_id}` | TTL `CID_COMMITTED_TTL` | Chống tạo group trùng khi retry (Redis dedupe) |
 
 ## 4. Luồng xử lý
@@ -175,7 +174,7 @@ Index `{tenant, target, state, created_at: -1}` (`ListMentions`) và `{room_id, 
 ### 4.1 Dạng 1, nguồn người dùng: reaction và bookmark
 
 - **Reaction** (`ReactMessage`): hành vi như M2b.3, chỉ đổi chỗ lưu. `Admit` → `Find` tin → `Allow` → một `FindOneAndUpdate` upsert theo `_id = khoá tin│reaction│user`; cùng emoji → doc y nguyên (không ghi, không event); khác → `ver + 1`, `previous_value`; gỡ → `state = 2`. Phát `reaction_changed`; số `rx` đếm lại (inline một lượt, lỗi bỏ qua; worker sửa — R1).
-- **Bookmark** (`SetBookmark(room, seq, on)`): `Admit` → tin phải tồn tại → upsert theo `_id = khoá tin│bookmark│user`; như cũ → không ghi; gỡ → `state = 2`, `ver + 1`. Phát `bookmark_changed`. Vượt `BOOKMARK_LIMIT` (đếm theo index của user, giới hạn mềm) → `FAILED_PRECONDITION`.
+- **Bookmark** (`SetBookmark(room, seq, on)`): `Admit` → tin phải tồn tại → upsert theo `_id = khoá tin│bookmark│user`; như cũ → không ghi; gỡ → `state = 2`, `ver + 1`. Phát `bookmark_changed`. Không giới hạn số bookmark mỗi user; chống lạm dụng bằng rate limit ở gateway/app **[owner chốt]**.
 - Worker phát lại doc hiện tại cho cả hai (`reaction_event` đã có, `bookmark_event` mới).
 
 ### 4.2 Dạng 1, nguồn nội dung tin: reply
@@ -212,7 +211,6 @@ Fast path không cập nhật số trả lời: client thấy `msg_created` và 
 **Đọc:**
 - `GetHistory`: `rc`, `rx` có sẵn trên tin; thêm **một** `$in` lấy bản xem trước các tin cha được trích trong trang, áp view (xoá → không text, ẩn với người xem → `hidden`).
 - `GetReplies(room, seq, after, limit ≤ 50)`: `Admit` → quét `_id` theo tiền tố `khoá tin│reply`, bỏ `state = 2` → `messages` `$in` → view.
-- `ListThreads(room, before, limit ≤ 50)`: `Admit` → index `{room_id, kind: reply, updated_at}` đọc ngược, bỏ `state = 2`, gom tin cha không trùng (quét tối đa một số dòng mỗi trang, trả con trỏ) → `messages` `$in` (tin cha + `rc`) → view **[owner chốt: làm ở M2c]**.
 
 **Chặn xoá tin còn trả lời [owner chốt].** `DeleteMessage` (sau `Allow`, trước khi ghi fact xoá) đếm thẳng `{message_key, kind: reply, state: 1}` (đọc majority; không dùng `rc` vì trễ ~1s); còn ≥ 1 → `FAILED_PRECONDITION` (`ErrHasReplies`). Cửa sổ còn lại: trả lời vừa gửi nhưng worker chưa kịp ghi (thường dưới 1 giây) thì lệnh xoá vẫn qua; kết quả là tin "đã xoá" có một trả lời, giống trả lời một tin đã xoá, không mất dữ liệu.
 
@@ -224,7 +222,7 @@ Fast path không cập nhật số trả lời: client thấy `msg_created` và 
 
 - Gửi: client gửi `mt` (user/nhóm) và `ma`. Core chỉ kiểm định dạng, bỏ trùng, ≤ `MENTION_TARGETS_MAX`; **không** kiểm user có trong room, **không** bung nhóm **[owner chốt]**. `@all` qua policy `mention_all`: mặc định ai cũng dùng được, tenant chặn bằng policy **[owner chốt]**.
 - Dựng: `mention_index` (delay 0) từ `MessageInserted`/`EditInserted`: upsert doc mỗi đích, `state = 2` cho đích bị sửa bỏ hoặc khi tin bị xoá; chỉ ghi khi `message_ver` của phiếu ≥ doc hiện có.
-- Đọc: `ListMentions(groups[{id, since?}], before, limit ≤ 50)`.
+- Đọc: `ListMentions(groups[{id, since?}], before, limit ≤ 50)`: **một** truy vấn trên index `{tenant, target, state, created_at: -1}` với điều kiện "đích thuộc danh sách" (`$in`), ví dụ `[user:minh, group:team-design, group:role-qa, all:777, all:778, …]`, mới nhất trước, lấy 50; Mongo đọc các khoảng index này trong một lần. Số đích mỗi lần gọi bị giới hạn: `MENTION_GROUPS_MAX` nhóm + các room user đang là member.
 
 ```mermaid
 sequenceDiagram
@@ -233,8 +231,8 @@ sequenceDiagram
   participant DB as MongoDB
   App->>G: ListMentions(user minh, groups [team-design since 11:00, role-qa], limit 50)
   G->>DB: members của minh (index {tenant, user_id, state, room_id}) → ~50 room
-  G->>DB: mỗi đích (user:minh, 2 group, all:{từng room}) đọc ngược index ≤50 doc
-  G->>G: ghép theo created_at, bỏ doc trước since của nhóm, lấy 50
+  G->>DB: một truy vấn mentions: target $in [user:minh, 2 group, all:{từng room}], mới nhất trước, 50 doc
+  G->>G: bỏ doc trước since của nhóm (lấy thêm trang nếu thiếu)
   G->>DB: messages $in theo khoá (≤50)
   G->>G: view: tin xoá, ẩn, trước cleared_at, room đã rời → bỏ
   G-->>App: 50 tin + con trỏ trang sau
@@ -364,36 +362,43 @@ Feed: insert/update/replace của `message_interactions` → kind lấy từ byt
 | Tin có mention | + ≤51 upsert `mentions` (worker) | | không thêm |
 | `@all` ở channel 200K | + 1 doc `mentions` | | không thêm |
 | `GetHistory` 1 trang | | +1 `$in` (xem trước tin được trích) | |
-| `GetReplies` / `ListThreads` / `ListBookmarks` | | 1 quét khoảng/index + ≤50 đọc tin | |
-| `ListMentions` 1 trang | | ~1 + số nhóm + số room (~50) lượt đọc index, mỗi lượt ≤50 doc; ≤50 đọc tin | |
+| `GetReplies` / `ListBookmarks` | | 1 quét khoảng/index + ≤50 đọc tin | |
+| `ListMentions` 1 trang | | 1 truy vấn index (`$in` các đích) + ≤50 đọc tin | |
 | Forward | như gửi tin | +4 đọc theo khoá | `msg_created` |
 | Mở DM đã có / mới | 0 / 1 upsert sổ + 1 room + 2 member + phiếu hẹn | 1 đọc theo khoá | 0 / 4 |
 
 - `mentions`: ở 10K tin/s, 1% có mention, ~3 đích → ~300 doc/s × ~200 byte ≈ 5GB/ngày nếu đỉnh kéo dài cả ngày (thực tế thấp hơn nhiều). Doc reply ~150 byte mỗi tin trả lời.
 - Băng thông: mỗi trả lời là `msg_created` tới mọi người nghe room; channel 200K là gánh của gateway.
 
-## 10. Rủi ro và giới hạn
+## 10. Rủi ro, đánh đổi và việc nên làm
 
-- Chuyển reaction sang collection mới đụng phần đã xây (store, feed, bộ đếm, resync, test hợp đồng); không có dữ liệu thật nên không cần migration, chỉ reset dev.
-- Tin có rất nhiều tương tác: mỗi lần đếm lại O(số tương tác của tin), như reaction; gom W + K ở milestone Channel.
-- Số trả lời trễ ~`REPLY_COUNT_DELAY` (client tự cộng tạm). Chặn xoá tin cha có cửa sổ dưới 1 giây.
-- `ListThreads` gom tin cha từ các trả lời gần đây: một tin có rất nhiều trả lời liên tiếp làm trang quét nhiều doc; giới hạn số doc quét mỗi trang.
-- Màn mention ghép ~50 room + N nhóm: đo ở PoC prod-like, chậm thì gom `all:{room}` bằng `$in`.
-- Dedupe `request_id` của `CreateRoom` chỉ giữ 15 phút và khi Redis còn khoá.
-- User id bị xoá rồi dùng lại thừa hưởng DM cũ: cấm dùng lại user id hoặc tombstone sổ DM (policy, sau).
-- Sửa tin mang cả mention: đổi đường sửa của M2b.2 (`message_edits` thêm field).
-- Số mention chưa đọc, unread nói chung: M3.
+| Rủi ro | Là gì (ví dụ) | Đánh đổi | Nên làm |
+|---|---|---|---|
+| Tin cực nóng | Mỗi lần có react/trả lời, worker đếm lại **toàn bộ** tương tác của tin. Tin có 10 reaction: đếm 10 dòng. Tin trong channel 200K có 50.000 reaction: mỗi lần đếm 50.000 dòng | Đếm lại thì số luôn đúng, không bao giờ lệch; kiểu "+1" rẻ hơn nhưng có thể lệch vĩnh viễn khi máy chết giữa chừng | M2c không làm gì: group tối đa 5K người (đếm vài ms) và worker gom nhiều tương tác trong một lô thành một lần đếm. Chia nhỏ bộ đếm khi làm milestone Channel |
+| Số trả lời trễ ~1 giây | Lan trả lời tin 40; số "2 → 3" do worker cập nhật sau ~1 giây | Gửi tin vẫn nhanh vì không thêm lần ghi nào lúc gửi | Client tự tăng số ngay khi nhận `msg_created` có `reply_to = 40`, rồi để số chính thức (`counts_changed`) ghi đè. Ghi vào hướng dẫn SDK |
+| Khe khi chặn xoá tin cha | Trả lời vừa gửi, worker chưa kịp ghi (dưới 1 giây) thì lệnh xoá tin cha vẫn qua | Đếm thẳng lúc xoá thay vì khoá cả room | Chấp nhận: kết quả là tin "đã xoá" có một trả lời, không mất dữ liệu |
+| Tạo group trùng | Client gửi lại `CreateRoom` cùng `request_id`; core nhớ `request_id` 15 phút trong Redis. Gửi lại sau 15 phút, hoặc Redis vừa mất khoá → có 2 group giống nhau | Nhớ bằng Redis rẻ, cùng cơ chế chống gửi trùng tin (cid) và thêm member trùng; nhớ mãi phải lưu Mongo | Chấp nhận: client thật gửi lại trong vài giây |
+| User id bị cấp lại | Tenant xoá user `minh`, sau này cấp id `minh` cho người khác → Minh mới mở DM với Lan sẽ vào room cũ, đọc được tin nhắn cũ | | **Luật tích hợp**: user id không bao giờ được cấp lại cho người khác (app auth/user giữ luật, core không code) |
+| `ListMentions` cho user ở rất nhiều room/nhóm | Danh sách đích trong một truy vấn dài (ví dụ 500 room) | Không bung mention ra từng người lúc ghi (ghi rẻ, ít dữ liệu), đổi lại lúc đọc phải hỏi theo nhiều đích | Một truy vấn `$in` + giới hạn số đích; đo ở PoC prod-like |
+| Chuyển reaction sang collection mới | Đụng phần đã xây ở M2b.3 (lưu, feed, đếm, resync, test) | Thống nhất một chỗ lưu cho mọi tương tác | Dữ liệu chỉ có ở dev nên reset là xong; chạy lại toàn bộ bộ test reaction |
+| Sửa tin mang cả mention | Đổi đường sửa tin của M2b.2 (`message_edits` thêm field) | | Test sửa tin có/không đổi mention |
+
+### Ngoài phạm vi M2c
+
+- `ListThreads` (các trao đổi gần đây của room): không ưu tiên; phải quét trả lời gần đây rồi lọc tin cha không trùng, tin có nhiều trả lời làm trang quét nhiều. Để M3 nếu cần.
+- Số mention chưa đọc, số tin chưa đọc: thuộc phần đọc (M3); M2c đã lưu đủ dữ liệu để M3 tính.
 
 ## 11. Điểm owner đã xác nhận (2026-10-10)
 
 1. Liên kết gắn vào tin chia 2 dạng; dạng 1 (reaction, reply, bookmark) một collection `message_interactions`, chuyển reaction M2b.3 sang; dạng 2 là `mentions`.
 2. Số trả lời không tính trả lời đã xoá; tin còn trả lời thì không cho xoá.
 3. Trả lời của một trả lời được phép; danh sách của một tin chỉ gồm trả lời trực tiếp.
-4. `ListThreads`, `ListBookmarks`, `ListMentions` làm ở M2c.
+4. `ListBookmarks`, `ListMentions` làm ở M2c; `ListThreads` để M3.
 5. Sửa tin: mention có đổi thì gửi danh sách mới, không đổi thì không gửi.
 6. `@all` mặc định ai cũng dùng được, chặn qua policy.
 7. Forward: hiện "chuyển tiếp từ {người forward}", ô ghi chú có tên tác giả gốc và nội dung gốc.
-8. Bookmark: tối đa 1000 mỗi user (giới hạn mềm), không ghi chú; rời room hay tin bị xoá thì vẫn trong danh sách, hiện "không còn xem được".
+8. Bookmark: không giới hạn số lượng (chống lạm dụng bằng rate limit ở gateway/app), không ghi chú; rời room hay tin bị xoá thì vẫn trong danh sách, hiện "không còn xem được".
+9. Luật tích hợp: user id không bao giờ được cấp lại cho người khác.
 
 ## 12. Kiểm thử, mỗi mục chứng minh gì
 
@@ -406,12 +411,13 @@ Feed: insert/update/replace của `message_interactions` → kind lấy từ byt
 | `reply_index` / `mention_index` chạy hai lần, lệch thứ tự | Không bản thứ hai; `mentions` theo phiên bản mới nhất |
 | Đếm lại `rc` khi hai trả lời đua, trả lời bị xoá | Số = trả lời còn sống; trượt thì Nak |
 | `DeleteMessage` tin còn trả lời / hết trả lời | `FAILED_PRECONDITION` / cho xoá |
-| `GetReplies`, `ListThreads`, `ListBookmarks`, `ListMentions` với tin xoá/ẩn/`cleared_at`, room đã rời, `since` | Che đúng, thứ tự và phân trang đúng |
-| Bookmark bấm hai lần, gỡ, vượt giới hạn | Không event thừa; tombstone; `FAILED_PRECONDITION` |
+| `GetReplies`, `ListBookmarks`, `ListMentions` với tin xoá/ẩn/`cleared_at`, room đã rời, `since` | Che đúng, thứ tự và phân trang đúng |
+| `ListMentions` với nhiều đích (user, nhiều nhóm, nhiều room) | Một truy vấn, đúng thứ tự thời gian, đúng giới hạn số đích |
+| Bookmark bấm hai lần, gỡ | Không event thừa; tombstone |
 | forward: không member nguồn, nguồn ẩn/xoá, khác tenant, forward của forward | Mã lỗi đúng; text chép từ nguồn; `fw` giữ tác giả gốc |
 | `OpenDirectRoom` song song, core chết giữa bước | Một room, lần sau làm nốt, số member đúng |
 | `CreateRoom` retry cùng `request_id`; gửi loại DM | Không tạo room thứ hai; DM bị từ chối |
 | Feed: update reaction/bookmark/reply | Kind đọc từ `_id`; reply không sinh phiếu |
 | Resync: reaction, bookmark, reply, mention trong khoảng mất | Dựng lại đủ |
 | R1–R3 | Một lượt rồi `UNAVAILABLE`/Nak; `room_created` không đếm bản trùng |
-| e2e phase 6 (corecli) | Mở DM hai lần ra cùng room; react như cũ; trả lời + số + `GetReplies` + `ListThreads`; chặn xoá tin còn trả lời; mention + `ListMentions`; forward; bookmark + `ListBookmarks`; live event đủ id, kind, subject |
+| e2e phase 6 (corecli) | Mở DM hai lần ra cùng room; react như cũ; trả lời + số + `GetReplies`; chặn xoá tin còn trả lời; mention + `ListMentions`; forward; bookmark + `ListBookmarks`; live event đủ id, kind, subject |
