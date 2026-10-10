@@ -2,6 +2,7 @@ package effects
 
 import (
 	"context"
+	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
@@ -77,4 +78,22 @@ type MessageCountTimers interface {
 
 type BookmarkReader interface {
 	GetBookmark(ctx context.Context, key store.MsgKey, user string) (domain.Bookmark, bool, error)
+}
+
+type ReplyLinks interface {
+	AddReply(ctx context.Context, r domain.Reply) (bool, error)
+	RemoveReply(ctx context.Context, r domain.Reply, at time.Time) (bool, error)
+}
+
+type ReplyCounter interface {
+	AddReplyCount(ctx context.Context, key store.MsgKey, delta int) (domain.ReplyCount, error)
+}
+
+type MentionWriter interface {
+	ApplyMentions(ctx context.Context, s store.MentionSet) error
+}
+
+type LinkTimers interface {
+	MessageCountTimers
+	Disarm(ctx context.Context, tm work.Timer)
 }

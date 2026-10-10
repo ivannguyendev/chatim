@@ -13,7 +13,7 @@ import (
 )
 
 func Bootstrap(ctx context.Context, db *mongo.Database) error {
-	for _, name := range []string{messagesCollection, editsCollection, interactionsCollection, pinActionsCollection, membersCollection} {
+	for _, name := range []string{messagesCollection, editsCollection, interactionsCollection, pinActionsCollection, membersCollection, mentionsCollection} {
 		if err := ensureClustered(ctx, db, name); err != nil {
 			return err
 		}
@@ -33,6 +33,7 @@ func Bootstrap(ctx context.Context, db *mongo.Database) error {
 		{hiddenCollection, hiddenIndexes()},
 		{interactionsCollection, interactionIndexes()},
 		{pinActionsCollection, roomTimeIndexes()},
+		{mentionsCollection, mentionIndexes()},
 	}
 	for _, ix := range indexes {
 		if err := ensureIndexes(ctx, db, ix.coll, ix.models); err != nil {
@@ -109,6 +110,13 @@ func interactionIndexes() []mongo.IndexModel {
 		{Keys: bson.D{{Key: "message_key", Value: 1}, {Key: "kind", Value: 1}, {Key: "state", Value: 1}, {Key: "value", Value: 1}}},
 		{Keys: bson.D{{Key: "tenant", Value: 1}, {Key: "actor_id", Value: 1}, {Key: "kind", Value: 1}, {Key: "state", Value: 1}, {Key: "updated_at", Value: -1}, {Key: "message_key", Value: -1}}},
 		{Keys: bson.D{{Key: "room_id", Value: 1}, {Key: "kind", Value: 1}, {Key: "updated_at", Value: 1}}},
+	}
+}
+
+func mentionIndexes() []mongo.IndexModel {
+	return []mongo.IndexModel{
+		{Keys: bson.D{{Key: "tenant", Value: 1}, {Key: "target", Value: 1}, {Key: "state", Value: 1}, {Key: "created_at", Value: -1}}},
+		{Keys: bson.D{{Key: "message_key", Value: 1}}},
 	}
 }
 

@@ -63,3 +63,9 @@ func (p *eventPublisher) queue(pending []pendingAck, errs []error, i int, room u
 	}
 	return send(p.js, msg, i, errs, pending)
 }
+
+func (p *eventPublisher) publishOne(ctx context.Context, room uint64, ev *chatimv1.Event) error {
+	errs := make([]error, 1)
+	awaitAcks(ctx, p.queue(nil, errs, 0, room, ev), errs, countStored(&p.republished))
+	return errs[0]
+}

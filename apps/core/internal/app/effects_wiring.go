@@ -33,11 +33,12 @@ type effectSet struct {
 	historyCleared    *effects.HistoryClearedEvent
 	memberCountRepair *effects.MemberCountRepair
 	countRepair       *effects.CountRepair
+	replyMentionIndex *effects.ReplyMentionIndex
 }
 
 type countTimers struct {
 	members  effects.CountTimers
-	messages effects.MessageCountTimers
+	messages effects.LinkTimers
 }
 
 func wireEffects(cfg config.Config, cl *clients, st *mongostore.Store, marks *eventmark.Store, owner effects.Owner, timers countTimers, log *slog.Logger) (effectSet, error) {
@@ -81,6 +82,15 @@ func wireEffects(cfg config.Config, cl *clients, st *mongostore.Store, marks *ev
 	if err != nil {
 		return effectSet{}, fmt.Errorf("wire count_repair effect: %w", err)
 	}
+	fx.replyMentionIndex, err = effects.NewReplyMentionIndex(
+		effects.ReplyMentionIndexDeps{
+			Messages: st, Replies: st.Interactions(), Counts: st, Mentions: st.Mentions(), Timers: timers.messages, Rooms: st, JS: cl.effectsJS,
+		},
+		effects.ReplyMentionIndexConfig{SubjectRoot: cfg.Stream.SubjectRoot, RoomCache: cfg.EffectRoomCache},
+	)
+	if err != nil {
+		return effectSet{}, fmt.Errorf("wire reply_mention_index effect: %w", err)
+	}
 	fx.workers, err = effects.New(effects.Deps{
 		Queue:    func(p int) work.Queue { return work.NewQueue(cl.effectsJS, cfg.Work.Name, p, cfg.Effects.RetryDelay) },
 		Owner:    owner,
@@ -94,9 +104,9 @@ func wireEffects(cfg config.Config, cl *clients, st *mongostore.Store, marks *ev
 
 func (fx effectSet) registry(activity effects.Effect) effects.Registry {
 	return effects.Registry{
-		store.MessageInserted:   {activity, fx.msgCreated.Effect()},
+		store.MessageInserted:   {activity, fx.replyMentionIndex.Effect(), fx.msgCreated.Effect()},
 		store.RoomInserted:      {fx.roomCreated.Effect()},
-		store.EditInserted:      {activity, fx.editProjection.Effect(), fx.msgChanged.Effect()},
+		store.EditInserted:      {activity, fx.editProjection.Effect(), fx.replyMentionIndex.Effect(), fx.msgChanged.Effect()},
 		store.ReactionChanged:   {activity, fx.reactionEvent.Effect(), fx.countEvent.Effect()},
 		store.PinInserted:       {activity, fx.pinProjection.Effect(), fx.pinEvent.Effect()},
 		store.MemberChanged:     {activity, fx.memberEvent.Effect(), fx.memberCountEvent.Effect()},
@@ -122,6 +132,9 @@ func (fx effectSet) counters() map[string]effectCounters {
 		fx.pinProjection.Effect().Name:  {dropped: fx.pinProjection.Dropped},
 		fx.countRepair.Effect().Name:    {republished: fx.countRepair.Republished, dropped: fx.countRepair.Dropped},
 		fx.bookmarkEvent.Effect().Name:  {republished: fx.bookmarkEvent.Republished, dropped: fx.bookmarkEvent.Dropped},
+		fx.replyMentionIndex.Effect().Name: {
+			republished: fx.replyMentionIndex.Republished, dropped: fx.replyMentionIndex.Dropped,
+		},
 	})
 	return out
 }

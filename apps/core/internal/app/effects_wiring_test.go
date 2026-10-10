@@ -52,12 +52,15 @@ func TestEffectSetExportsEveryEffect(t *testing.T) {
 	fx.countRepair = built(effects.NewCountRepair(
 		effects.CountRepairDeps{Messages: msgs, Interactions: reactions, Counts: msgs, Timers: noTimers{}, Rooms: rooms, JS: js},
 		effects.CountRepairConfig{SubjectRoot: "evt"}))(t)
+	fx.replyMentionIndex = built(effects.NewReplyMentionIndex(
+		effects.ReplyMentionIndexDeps{Messages: msgs, Replies: reactions, Counts: msgs, Mentions: memstore.NewMentions(), Timers: noTimers{}, Rooms: rooms, JS: js},
+		effects.ReplyMentionIndexConfig{SubjectRoot: "evt"}))(t)
 	counters := fx.counters()
 	want := []string{
 		effects.BookmarkEventName, effects.CountEventName, effects.CountRepairName, effects.EditProjectionName, effects.HiddenEventName, effects.HistoryClearedEventName, effects.MemberCountEventName,
 		effects.MemberCountRepairName, effects.MemberEventName, effects.MessageChangedName, effects.MessageCreatedName,
 		effects.PinEventName, effects.PinProjectionName, effects.ReactionEventName,
-		effects.ReadEventName, effects.RoomCreatedName,
+		effects.ReadEventName, effects.ReplyMentionIndexName, effects.RoomCreatedName,
 	}
 	if got := slices.Sorted(maps.Keys(counters)); !slices.Equal(got, want) {
 		t.Fatalf("effects with metrics = %v, want %v", got, want)
@@ -88,6 +91,8 @@ func (noTimers) ArmMessageCountCheck(context.Context, store.MsgKey, string) (wor
 	return work.Timer{}, nil
 }
 
+func (noTimers) Disarm(context.Context, work.Timer) {}
+
 func withMemberEffects(t *testing.T, fx *effectSet, rooms *memstore.Rooms, js *publishtest.JetStream) {
 	t.Helper()
 	events := effects.MessageChangedConfig{SubjectRoot: "evt", Delay: 3 * time.Second}
@@ -112,6 +117,8 @@ func assertMemberRegistry(t *testing.T, reg effects.Registry) {
 		store.MessageCountCheck: {effects.CountRepairName},
 		store.ReactionChanged:   {effects.RoomActivityName, effects.ReactionEventName, effects.CountEventName},
 		store.BookmarkChanged:   {effects.RoomActivityName, effects.BookmarkEventName},
+		store.MessageInserted:   {effects.RoomActivityName, effects.ReplyMentionIndexName, effects.MessageCreatedName},
+		store.EditInserted:      {effects.RoomActivityName, effects.EditProjectionName, effects.ReplyMentionIndexName, effects.MessageChangedName},
 	}
 	for kind, names := range want {
 		var got []string
