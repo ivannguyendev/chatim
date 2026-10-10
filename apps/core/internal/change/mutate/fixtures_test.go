@@ -57,7 +57,7 @@ type rig struct {
 	rooms     *memstore.Rooms
 	edits     *memstore.Edits
 	hidden    *memstore.Hidden
-	reactions *memstore.Reactions
+	reactions *memstore.Interactions
 	pins      *memstore.Pins
 	events    *recordingEvents
 	now       time.Time
@@ -68,7 +68,7 @@ func newRig(t *testing.T, policy access.Policy) *rig {
 	t.Helper()
 	rg := &rig{
 		msgs: memstore.NewMessages(), rooms: memstore.NewRooms(), edits: memstore.NewEdits(), hidden: memstore.NewHidden(),
-		reactions: memstore.NewReactions(), pins: memstore.NewPins(), events: &recordingEvents{},
+		reactions: memstore.NewInteractions(), pins: memstore.NewPins(), events: &recordingEvents{},
 		now: created.Add(time.Minute + 1500*time.Microsecond),
 	}
 	r := domain.Room{ID: room, Tenant: tenant, Type: domain.RoomGroup, Name: "team", CreatedBy: "alice", CreatedAt: created, MemberCount: 3}
@@ -101,7 +101,7 @@ func (rg *rig) deps(t *testing.T, policy access.Policy) mutate.Deps {
 	}
 	return mutate.Deps{
 		Access: checker, Messages: rg.msgs, Edits: rg.edits, Hidden: rg.hidden, Rooms: rg.rooms, Events: rg.events,
-		Reactions: rg.reactions, Counter: counts, Pins: rg.pins, Projector: projector, Now: func() time.Time { return rg.now },
+		Interactions: rg.reactions, Counter: counts, Pins: rg.pins, Projector: projector, Now: func() time.Time { return rg.now },
 		Members: rg.members, Requests: rg.requests, Forget: rg.forgets, Timers: rg.timers, Reads: rg.rooms, NewRequestID: rg.requestIDs.next,
 	}
 }

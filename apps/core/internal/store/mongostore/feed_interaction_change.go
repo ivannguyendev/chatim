@@ -1,6 +1,7 @@
 package mongostore
 
 import (
+	"errors"
 	"fmt"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -10,7 +11,9 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/keys"
 )
 
-func decodeReactionChange(ev changeDoc) (store.Change, error) {
+var errSkipChange = errors.New("mongostore: change does not enter the feed")
+
+func decodeInteractionChange(ev changeDoc) (store.Change, error) {
 	if ev.OperationType == "update" {
 		r, err := reactionFromUpdate(ev)
 		if err != nil {
@@ -18,9 +21,12 @@ func decodeReactionChange(ev changeDoc) (store.Change, error) {
 		}
 		return store.Change{Kind: store.ReactionChanged, Reaction: r, CommittedAt: ev.WallTime}, nil
 	}
-	var d reactionDoc
+	var d interactionDoc
 	if err := bson.Unmarshal(ev.FullDocument, &d); err != nil {
-		return store.Change{}, fmt.Errorf("%w: reaction document: %w", errCorrupt, err)
+		return store.Change{}, fmt.Errorf("%w: interaction document: %w", errCorrupt, err)
+	}
+	if err := skipUnlessReaction(d.ID); err != nil {
+		return store.Change{}, err
 	}
 	r, err := decodeReaction(d)
 	if err != nil {
@@ -29,17 +35,28 @@ func decodeReactionChange(ev changeDoc) (store.Change, error) {
 	return store.Change{Kind: store.ReactionChanged, Reaction: r, CommittedAt: ev.WallTime}, nil
 }
 
+func skipUnlessReaction(id []byte) error {
+	_, kind, _, err := keys.ParseInteraction(id)
+	switch {
+	case err != nil:
+		return fmt.Errorf("%w: interaction _id: %w", errCorrupt, err)
+	case kind != keys.ReactionKind:
+		return errSkipChange
+	}
+	return nil
+}
+
 func reactionFromUpdate(ev changeDoc) (domain.Reaction, error) {
 	_, id, ok := ev.DocumentKey.ID.BinaryOK()
 	if !ok {
-		return domain.Reaction{}, fmt.Errorf("%w: reaction update without a binary _id", errCorrupt)
+		return domain.Reaction{}, fmt.Errorf("%w: interaction update without a binary _id", errCorrupt)
 	}
-	room, thread, seq, user, err := keys.ParseReaction(id)
+	if err := skipUnlessReaction(id); err != nil {
+		return domain.Reaction{}, err
+	}
+	head, err := decodeHead(interactionDoc{ID: id, State: interactionLive}, keys.ReactionKind)
 	if err != nil {
-		return domain.Reaction{}, fmt.Errorf("%w: reaction update _id: %w", errCorrupt, err)
-	}
-	if err := domain.ValidUser(user); err != nil {
-		return domain.Reaction{}, fmt.Errorf("%w: reaction update user: %w", errCorrupt, err)
+		return domain.Reaction{}, fmt.Errorf("reaction update: %w", err)
 	}
 	raw, ok := ev.UpdateDescription.UpdatedFields.Lookup("ver").AsInt64OK()
 	if !ok {
@@ -52,7 +69,7 @@ func reactionFromUpdate(ev changeDoc) (domain.Reaction, error) {
 	if n == 0 {
 		return domain.Reaction{}, fmt.Errorf("%w: reaction update with change 0", errCorrupt)
 	}
-	return domain.Reaction{Room: room, Thread: thread, Seq: seq, User: user, N: n}, nil
+	return domain.Reaction{Room: head.key.Room, Thread: head.key.Thread, Seq: head.key.Seq, User: head.user, N: n}, nil
 }
 
 func decodePinChange(ev changeDoc) (store.Change, error) {

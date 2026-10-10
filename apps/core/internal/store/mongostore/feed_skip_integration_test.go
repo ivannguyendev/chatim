@@ -11,7 +11,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
-func TestFeedSkipsSummaryPinActivityAndCountWrites(t *testing.T) {
+func TestFeedSkipsSummaryPinActivityCountBookmarkAndReplyWrites(t *testing.T) {
 	s, db := itStore(t, itClient(t))
 	ctx := t.Context()
 	room := domain.Room{ID: itRoom, Tenant: "acme", Type: domain.RoomGroup, Name: "Team", CreatedBy: "alice", CreatedAt: codecTime, MemberCount: 1}
@@ -44,7 +44,7 @@ func TestFeedSkipsSummaryPinActivityAndCountWrites(t *testing.T) {
 	if _, err := s.rooms.UpdateOne(ctx, bson.D{{Key: "_id", Value: int64(itRoom)}}, bson.D{{Key: "$inc", Value: bson.D{{Key: "owners_ver", Value: int64(1)}}}}); err != nil {
 		t.Fatalf("inc owners_ver: %v", err)
 	}
-	if _, _, err := s.Reactions().Set(ctx, domain.Reaction{Room: itRoom, Seq: 1, Tenant: "acme", User: "alice", Emoji: "👍", At: codecTime}); err != nil {
+	if _, _, err := s.Interactions().SetReaction(ctx, domain.Reaction{Room: itRoom, Seq: 1, Tenant: "acme", User: "alice", Emoji: "👍", At: codecTime}); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
 	c, err := cur.Next(wait)
@@ -81,11 +81,30 @@ func skippedWrites(t *testing.T, s *Store, key store.MsgKey) {
 	if res, err := s.AddMembers(ctx, j, []string{"alice"}); err != nil || res.Changed != 0 {
 		t.Fatalf("AddMembers(active) = %+v, %v; want no change", res, err)
 	}
+	skippedInteractions(t, s, key)
 	c, err := s.AddMemberCount(ctx, itRoom, 1)
 	if err != nil {
 		t.Fatalf("AddMemberCount: %v", err)
 	}
 	if _, ok, err := s.SetMemberCount(ctx, itRoom, c.Ver, 1); err != nil || !ok {
 		t.Fatalf("SetMemberCount = %v, %v", ok, err)
+	}
+}
+
+func skippedInteractions(t *testing.T, s *Store, key store.MsgKey) {
+	t.Helper()
+	ctx, in := t.Context(), s.Interactions()
+	for _, on := range []bool{true, false} {
+		b := domain.Bookmark{Room: key.Room, Seq: key.Seq, Tenant: "acme", User: "alice", On: on, At: codecTime}
+		if _, changed, err := in.SetBookmark(ctx, b); err != nil || !changed {
+			t.Fatalf("SetBookmark(%v) = %v, %v", on, changed, err)
+		}
+	}
+	reply := domain.Reply{Parent: domain.MsgKey(key), Room: key.Room, Seq: key.Seq + 1, Tenant: "acme", From: "alice", At: codecTime}
+	if added, err := in.AddReply(ctx, reply); err != nil || !added {
+		t.Fatalf("AddReply = %v, %v", added, err)
+	}
+	if removed, err := in.RemoveReply(ctx, key, store.ReplyKeyOf(reply), codecTime); err != nil || !removed {
+		t.Fatalf("RemoveReply = %v, %v", removed, err)
 	}
 }

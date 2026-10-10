@@ -51,7 +51,7 @@ func (s *spyProjector) Project(ctx context.Context, r, target uint64) (domain.Pi
 
 type brokenReactions struct{}
 
-func (brokenReactions) Get(context.Context, store.MsgKey, string) (domain.Reaction, bool, error) {
+func (brokenReactions) GetReaction(context.Context, store.MsgKey, string) (domain.Reaction, bool, error) {
 	return domain.Reaction{}, false, errBoom
 }
 

@@ -53,7 +53,7 @@ type rig struct {
 	msgs      *memstore.Messages
 	edits     *memstore.Edits
 	hidden    *memstore.Hidden
-	reactions *memstore.Reactions
+	reactions *memstore.Interactions
 	pins      *memstore.Pins
 }
 

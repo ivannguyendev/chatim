@@ -3,23 +3,9 @@ package mongostore
 import (
 	"fmt"
 	"math"
-	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
-	"github.com/ivannguyendev/chatim/pkg/keys"
 )
-
-type reactionDoc struct {
-	ID     []byte    `bson:"_id"`
-	Key    []byte    `bson:"message_key"`
-	Room   int64     `bson:"room_id"`
-	Tenant string    `bson:"tenant"`
-	User   string    `bson:"user_id"`
-	Prev   string    `bson:"previous_emoji"`
-	Emoji  string    `bson:"emoji"`
-	N      int64     `bson:"ver"`
-	At     time.Time `bson:"updated_at"`
-}
 
 type reactionsDoc struct {
 	Counts  []countDoc `bson:"c"`
@@ -29,35 +15,6 @@ type reactionsDoc struct {
 type countDoc struct {
 	Emoji string `bson:"e"`
 	N     int64  `bson:"n"`
-}
-
-func decodeReaction(d reactionDoc) (domain.Reaction, error) {
-	room, thread, seq, user, err := keys.ParseReaction(d.ID)
-	if err != nil {
-		return domain.Reaction{}, fmt.Errorf("%w: reaction _id: %w", errCorrupt, err)
-	}
-	if err := domain.ValidUser(user); err != nil {
-		return domain.Reaction{}, fmt.Errorf("%w: reaction user: %w", errCorrupt, err)
-	}
-	n, err := narrowUint32("reaction change", d.N)
-	if err != nil {
-		return domain.Reaction{}, err
-	}
-	return domain.Reaction{
-		Room: room, Thread: thread, Seq: seq, Tenant: d.Tenant, User: user, Emoji: d.Emoji, Prev: d.Prev, N: n, At: d.At,
-	}, nil
-}
-
-func decodeReactions(docs []reactionDoc) ([]domain.Reaction, error) {
-	out := make([]domain.Reaction, len(docs))
-	for i, d := range docs {
-		r, err := decodeReaction(d)
-		if err != nil {
-			return nil, err
-		}
-		out[i] = r
-	}
-	return out, nil
 }
 
 func encodeSummary(s domain.ReactionSummary) (reactionsDoc, error) {

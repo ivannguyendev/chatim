@@ -34,9 +34,9 @@ func TestEditFeedContract(t *testing.T) {
 	})
 }
 
-func TestReactionsContract(t *testing.T) {
-	storetest.RunReactions(t, func(*testing.T) (storetest.ReactableMessages, store.Reactions) {
-		return memstore.NewMessages(), memstore.NewReactions()
+func TestInteractionsContract(t *testing.T) {
+	storetest.RunInteractions(t, func(*testing.T) (storetest.ReactableMessages, store.Interactions) {
+		return memstore.NewMessages(), memstore.NewInteractions()
 	})
 }
 
@@ -47,9 +47,9 @@ func TestPinsContract(t *testing.T) {
 }
 
 func TestReactionFeedContract(t *testing.T) {
-	storetest.RunReactionFeed(t, func(*testing.T) (store.Reactions, store.ChangeFeed) {
-		reactions := memstore.NewReactions()
-		return reactions, memstore.NewFeed(memstore.NewMessages(), nil, nil, memstore.WithReactions(reactions))
+	storetest.RunReactionFeed(t, func(*testing.T) (store.Interactions, store.ChangeFeed) {
+		interactions := memstore.NewInteractions()
+		return interactions, memstore.NewFeed(memstore.NewMessages(), nil, nil, memstore.WithInteractions(interactions))
 	})
 }
 

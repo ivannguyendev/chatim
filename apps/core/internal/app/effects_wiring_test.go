@@ -35,7 +35,7 @@ func built[T any](v T, err error) func(*testing.T) T {
 
 func TestEffectSetExportsEveryEffect(t *testing.T) {
 	msgs, rooms, edits := memstore.NewMessages(), memstore.NewRooms(), memstore.NewEdits()
-	reactions, pins, js := memstore.NewReactions(), memstore.NewPins(), &publishtest.JetStream{}
+	reactions, pins, js := memstore.NewInteractions(), memstore.NewPins(), &publishtest.JetStream{}
 	events := effects.MessageChangedConfig{SubjectRoot: "evt"}
 	fx := effectSet{
 		msgCreated: built(effects.NewMessageCreated(

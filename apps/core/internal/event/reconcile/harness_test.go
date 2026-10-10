@@ -58,7 +58,7 @@ type rig struct {
 	msgs      *memstore.Messages
 	rooms     *memstore.Rooms
 	edits     *memstore.Edits
-	reactions *memstore.Reactions
+	reactions *memstore.Interactions
 	pins      *memstore.Pins
 	feed      *memstore.Feed
 	base      int
@@ -70,11 +70,11 @@ type rig struct {
 func newRig(t *testing.T, wrap func(store.ChangeFeed) store.ChangeFeed) *rig {
 	t.Helper()
 	rg := &rig{
-		msgs: memstore.NewMessages(), rooms: memstore.NewRooms(), edits: memstore.NewEdits(), reactions: memstore.NewReactions(), pins: memstore.NewPins(),
+		msgs: memstore.NewMessages(), rooms: memstore.NewRooms(), edits: memstore.NewEdits(), reactions: memstore.NewInteractions(), pins: memstore.NewPins(),
 		owner: &owner{}, js: &publishtest.JetStream{}, sink: &testlog.Sink{},
 	}
 	rg.createRoom(t, room)
-	rg.feed = memstore.NewFeed(rg.msgs, rg.rooms, rg.edits, memstore.WithReactions(rg.reactions), memstore.WithPins(rg.pins))
+	rg.feed = memstore.NewFeed(rg.msgs, rg.rooms, rg.edits, memstore.WithInteractions(rg.reactions), memstore.WithPins(rg.pins))
 	rg.base, _ = rg.feed.Confirmed()
 	rg.owner.leading.Store(true)
 	var feed store.ChangeFeed = rg.feed

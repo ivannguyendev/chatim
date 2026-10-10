@@ -9,8 +9,8 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
-func summaryCases() []reactionCase {
-	return []reactionCase{
+func summaryCases() []interactionCase {
+	return []interactionCase{
 		{"set reactions writes only over the expected version", summaryCAS},
 		{"set reactions on a missing message writes nothing", summaryMissing},
 		{"insert never stores a reaction summary", summaryNotInserted},
@@ -35,7 +35,7 @@ func mustSetReactions(t *testing.T, s store.ReactionSummaries, key store.MsgKey,
 	}
 }
 
-func summaryCAS(t *testing.T, s reactionStores) {
+func summaryCAS(t *testing.T, s interactionStores) {
 	m, other := msg(roomA, mainThread, 1), msg(roomA, mainThread, 2)
 	mustInsert(t, s.msgs, []domain.Message{m, other})
 	key := store.KeyOf(m)
@@ -56,7 +56,7 @@ func summaryCAS(t *testing.T, s reactionStores) {
 	assertMessages(t, page, []domain.Message{withReactions(m, cleared), other})
 }
 
-func summaryMissing(t *testing.T, s reactionStores) {
+func summaryMissing(t *testing.T, s interactionStores) {
 	key := msgKey(roomA, mainThread, 1)
 	mustSetReactions(t, s.msgs, key, 0, summary(1, domain.ReactionCount{Emoji: "👍", Count: 1}), false)
 	if got, err := s.msgs.Find(t.Context(), roomA, []store.MsgKey{key}); err != nil || len(got) != 0 {
@@ -64,14 +64,14 @@ func summaryMissing(t *testing.T, s reactionStores) {
 	}
 }
 
-func summaryNotInserted(t *testing.T, s reactionStores) {
+func summaryNotInserted(t *testing.T, s interactionStores) {
 	m := msg(roomA, mainThread, 1)
 	mustInsert(t, s.msgs, []domain.Message{withReactions(m, summary(4, domain.ReactionCount{Emoji: "👍", Count: 1}))})
 	assertStored(t, s.msgs, m)
 	mustSetReactions(t, s.msgs, store.KeyOf(m), 0, summary(1, domain.ReactionCount{Emoji: "👍", Count: 1}), true)
 }
 
-func summaryInvalid(t *testing.T, s reactionStores) {
+func summaryInvalid(t *testing.T, s interactionStores) {
 	m := msg(roomA, mainThread, 1)
 	mustInsert(t, s.msgs, []domain.Message{m})
 	key := store.KeyOf(m)

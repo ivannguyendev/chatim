@@ -53,7 +53,7 @@ func TestRealInfraResyncDrillRepublishesWritesTheReaderMissed(t *testing.T) {
 	want = append(want, pbconv.MessageChangeEventID(room, 0, 1, 1))
 	marked := time.Now().UTC().Truncate(time.Millisecond)
 	reaction := domain.Reaction{Room: room, Seq: 2, Tenant: itTenant, User: "migrator", Emoji: "👍", At: marked}
-	if _, _, err := itReactions(st).Set(t.Context(), reaction); err != nil {
+	if _, _, err := itReactions(st).SetReaction(t.Context(), reaction); err != nil {
 		t.Fatalf("set a reaction the reader missed: %v", err)
 	}
 	pin := domain.PinAction{Room: room, PV: 1, Tenant: itTenant, Op: domain.PinOpPin, Seq: 3, By: "migrator", At: marked}

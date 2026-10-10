@@ -8,14 +8,18 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
-func RunReactionFeed(t *testing.T, open func(t *testing.T) (store.Reactions, store.ChangeFeed)) {
+func RunReactionFeed(t *testing.T, open func(t *testing.T) (store.Interactions, store.ChangeFeed)) {
 	t.Helper()
-	t.Run("reaction changes come out in commit order and no-ops add none", func(t *testing.T) {
+	t.Run("reaction changes come out in commit order and no-ops, bookmarks and replies add none", func(t *testing.T) {
 		reactions, feed := open(t)
 		cur := openCursor(t, feed)
 		key := msgKey(roomA, mainThread, 1)
 		first := mustSet(t, reactions, reactionOf(roomA, mainThread, 1, "alice", "👍"), true)
 		mustSet(t, reactions, reactionOf(roomA, mainThread, 1, "alice", "👍"), false)
+		mustSetBookmark(t, reactions, bookmarkAt(roomA, mainThread, 1, "alice", true, 0), true)
+		mustAddReply(t, reactions, replyAt(roomA, 1, 2, "alice", 0), true)
+		mustRemoveReply(t, reactions, key, msgKey(roomA, mainThread, 2), true)
+		mustSetBookmark(t, reactions, bookmarkAt(roomA, mainThread, 1, "alice", false, time.Second), true)
 		second := mustSet(t, reactions, reactAt(roomA, mainThread, 1, "alice", "❤️", time.Second), true)
 		removed := mustRemove(t, reactions, key, "alice", baseTime.Add(2*time.Second), true)
 		mustRemove(t, reactions, key, "alice", baseTime.Add(3*time.Second), false)

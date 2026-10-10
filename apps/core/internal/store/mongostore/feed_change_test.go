@@ -85,12 +85,12 @@ func TestFeedPipelineLetsOnlyReactionAndMemberChangesThrough(t *testing.T) {
 	for _, v := range inserts {
 		colls = append(colls, v.StringValue())
 	}
-	want := []string{messagesCollection, roomsCollection, editsCollection, reactionsCollection, pinActionsCollection, membersCollection, hiddenCollection}
+	want := []string{messagesCollection, roomsCollection, editsCollection, interactionsCollection, pinActionsCollection, membersCollection, hiddenCollection}
 	if op := branches[0].Document().Lookup("operationType").StringValue(); op != "insert" || !slices.Equal(colls, want) {
 		t.Fatalf("insert branch = %s, want inserts of %v", branches[0], want)
 	}
-	if coll := branches[1].Document().Lookup("ns.coll").StringValue(); coll != reactionsCollection {
-		t.Fatalf("reaction branch = %s, want updates and replaces of reactions", branches[1])
+	if coll := branches[1].Document().Lookup("ns.coll").StringValue(); coll != interactionsCollection {
+		t.Fatalf("interaction branch = %s, want updates and replaces of message_interactions", branches[1])
 	}
 	replaces := branches[2].Document()
 	if replaces.Lookup("operationType").StringValue() != "replace" || replaces.Lookup("ns.coll").StringValue() != membersCollection {

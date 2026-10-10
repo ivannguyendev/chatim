@@ -24,7 +24,7 @@ var countedAt = time.Date(2026, 10, 6, 9, 0, 0, 0, time.UTC)
 type reactRig struct {
 	msgs      *memstore.Messages
 	rooms     *memstore.Rooms
-	reactions *memstore.Reactions
+	reactions *memstore.Interactions
 	pins      *memstore.Pins
 	js        *publishtest.JetStream
 	touches   *spyCounter
@@ -37,7 +37,7 @@ type reactRig struct {
 
 func newReactRig(t *testing.T) *reactRig {
 	t.Helper()
-	rg := &reactRig{msgs: memstore.NewMessages(), rooms: memstore.NewRooms(), reactions: memstore.NewReactions(), pins: memstore.NewPins(), js: &publishtest.JetStream{}}
+	rg := &reactRig{msgs: memstore.NewMessages(), rooms: memstore.NewRooms(), reactions: memstore.NewInteractions(), pins: memstore.NewPins(), js: &publishtest.JetStream{}}
 	createRoom(t, rg.rooms, room)
 	counts, err := counter.New(rg.msgs, rg.reactions)
 	if err != nil {
@@ -89,9 +89,9 @@ func (rg *reactRig) react(t *testing.T, seq uint64, user, emoji string) {
 	at := time.Now().UTC().Truncate(time.Millisecond)
 	var err error
 	if emoji == "" {
-		_, _, err = rg.reactions.Remove(t.Context(), store.MsgKey{Room: room, Seq: seq}, user, at)
+		_, _, err = rg.reactions.RemoveReaction(t.Context(), store.MsgKey{Room: room, Seq: seq}, user, at)
 	} else {
-		_, _, err = rg.reactions.Set(t.Context(), domain.Reaction{Room: room, Seq: seq, Tenant: tenant, User: user, Emoji: emoji, At: at})
+		_, _, err = rg.reactions.SetReaction(t.Context(), domain.Reaction{Room: room, Seq: seq, Tenant: tenant, User: user, Emoji: emoji, At: at})
 	}
 	if err != nil {
 		t.Fatalf("%s reacts %q on seq %d: %v", user, emoji, seq, err)
@@ -100,7 +100,7 @@ func (rg *reactRig) react(t *testing.T, seq uint64, user, emoji string) {
 
 func (rg *reactRig) current(t *testing.T, seq uint64, user string) domain.Reaction {
 	t.Helper()
-	doc, found, err := rg.reactions.Get(t.Context(), store.MsgKey{Room: room, Seq: seq}, user)
+	doc, found, err := rg.reactions.GetReaction(t.Context(), store.MsgKey{Room: room, Seq: seq}, user)
 	if err != nil || !found {
 		t.Fatalf("reaction of %s on seq %d = %+v, %v, %v", user, seq, doc, found, err)
 	}

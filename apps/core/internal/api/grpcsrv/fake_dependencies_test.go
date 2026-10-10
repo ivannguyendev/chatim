@@ -68,7 +68,7 @@ func (f *fakeSender) sent() []actor.SendCmd {
 func memStores() *rig {
 	return &rig{
 		rooms: memstore.NewRooms(), msgs: memstore.NewMessages(), edits: memstore.NewEdits(), hidden: memstore.NewHidden(),
-		reactions: memstore.NewReactions(), pins: memstore.NewPins(),
+		reactions: memstore.NewInteractions(), pins: memstore.NewPins(),
 	}
 }
 
@@ -100,7 +100,7 @@ func newMutator(t *testing.T, rg *rig, o options) *mutate.Mutator {
 	}
 	m, err := mutate.New(mutate.Deps{
 		Access: checker, Messages: rg.msgs, Edits: rg.edits, Hidden: rg.hidden, Rooms: rg.rooms, Events: events, Now: o.now,
-		Reactions: rg.reactions, Counter: counts, Pins: rg.pins, Projector: projector, Limits: o.limits,
+		Interactions: rg.reactions, Counter: counts, Pins: rg.pins, Projector: projector, Limits: o.limits,
 		Members: rg.rooms, Requests: requests, Forget: forget, Timers: nopTimers{}, Reads: rg.rooms,
 	})
 	if err != nil {

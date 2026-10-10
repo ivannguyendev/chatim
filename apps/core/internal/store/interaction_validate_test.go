@@ -5,10 +5,12 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/keys"
 )
 
 func TestReactionAndPinErrorsWrapAppKinds(t *testing.T) {
@@ -70,6 +72,40 @@ func TestValidateReaction(t *testing.T) {
 	assertField(t, "ValidateReactionTarget(ok)", store.ValidateReactionTarget(store.MsgKey{Room: 1, Seq: 1}, "bob"), "")
 	assertField(t, "ValidateReactionTarget(zero seq)", store.ValidateReactionTarget(store.MsgKey{Room: 1}, "bob"), "seq")
 	assertField(t, "ValidateReactionTarget(bad user)", store.ValidateReactionTarget(store.MsgKey{Room: 1, Seq: 1}, "b b"), "user")
+}
+
+func TestValidateBookmarkAndReply(t *testing.T) {
+	at := time.UnixMilli(1)
+	b := domain.Bookmark{Room: 1, Seq: 1, Tenant: "acme", User: "bob", On: true, At: at}
+	assertField(t, "ValidateBookmark(ok)", store.ValidateBookmark(b), "")
+	b.At = time.Time{}
+	assertField(t, "ValidateBookmark(zero time)", store.ValidateBookmark(b), "time")
+	r := domain.Reply{Parent: domain.MsgKey{Room: 1, Seq: 1}, Room: 1, Seq: 2, Tenant: "acme", From: "bob", At: at}
+	for name, c := range map[string]struct {
+		mutate func(*domain.Reply)
+		field  string
+	}{
+		"valid":           {func(*domain.Reply) {}, ""},
+		"zero parent":     {func(r *domain.Reply) { r.Parent.Seq = 0 }, "parent"},
+		"zero reply seq":  {func(r *domain.Reply) { r.Seq = 0 }, "reply"},
+		"another room":    {func(r *domain.Reply) { r.Room = 2 }, "reply room"},
+		"itself":          {func(r *domain.Reply) { r.Seq = 1 }, "reply"},
+		"empty tenant":    {func(r *domain.Reply) { r.Tenant = "" }, "tenant"},
+		"user with a dot": {func(r *domain.Reply) { r.From = "b.b" }, "user"},
+		"zero time":       {func(r *domain.Reply) { r.At = time.Time{} }, "time"},
+	} {
+		x := r
+		c.mutate(&x)
+		assertField(t, "ValidateReply("+name+")", store.ValidateReply(x), c.field)
+	}
+	assertField(t, "ValidateReplyTarget(ok)", store.ValidateReplyTarget(store.MsgKey{Room: 1, Seq: 1}, store.MsgKey{Room: 1, Seq: 2}), "")
+	assertField(t, "ValidateReplyTarget(another room)", store.ValidateReplyTarget(store.MsgKey{Room: 1, Seq: 1}, store.MsgKey{Room: 2, Seq: 2}), "reply")
+	assertField(t, "ValidateBookmarkQuery(ok)", store.ValidateBookmarkQuery("acme", "bob", store.MaxPageLimit), "")
+	assertField(t, "ValidateBookmarkQuery(no tenant)", store.ValidateBookmarkQuery("", "bob", 1), "tenant")
+	assertField(t, "ValidateBookmarkQuery(limit)", store.ValidateBookmarkQuery("acme", "bob", 0), "limit")
+	for kind, field := range map[keys.InteractionKind]string{keys.ReactionKind: "", keys.BookmarkKind: "", keys.ReplyKind: "", 0: "interaction kind", 4: "interaction kind"} {
+		assertField(t, "ValidateInteractionKind", store.ValidateInteractionKind(kind), field)
+	}
 }
 
 func TestValidatePinAction(t *testing.T) {

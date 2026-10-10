@@ -33,7 +33,7 @@ type TextPurger interface {
 }
 
 type ReactionReader interface {
-	Get(ctx context.Context, key store.MsgKey, user string) (domain.Reaction, bool, error)
+	GetReaction(ctx context.Context, key store.MsgKey, user string) (domain.Reaction, bool, error)
 }
 
 type CounterToucher interface {

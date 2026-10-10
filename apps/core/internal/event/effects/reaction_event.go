@@ -54,7 +54,7 @@ func (e *ReactionEvent) run(ctx context.Context, recs []work.Record) []error {
 func reactionGone(err error) bool { return gone(err) || errors.Is(err, errNoReaction) }
 
 func (e *ReactionEvent) event(ctx context.Context, r work.Record) (*chatimv1.Event, error) {
-	doc, found, err := e.reactions.Get(ctx, recordKey(r), r.User)
+	doc, found, err := e.reactions.GetReaction(ctx, recordKey(r), r.User)
 	switch {
 	case err != nil:
 		return nil, err

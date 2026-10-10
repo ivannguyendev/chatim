@@ -30,18 +30,18 @@ type EventPublisher interface {
 }
 
 type Deps struct {
-	Access    *access.Checker
-	Messages  Messages
-	Edits     store.Edits
-	Hidden    store.Hidden
-	Rooms     HistoryClearer
-	Events    EventPublisher
-	Reactions store.Reactions
-	Counter   CounterToucher
-	Pins      store.Pins
-	Projector PinProjector
-	Limits    Limits
-	Now       func() time.Time
+	Access       *access.Checker
+	Messages     Messages
+	Edits        store.Edits
+	Hidden       store.Hidden
+	Rooms        HistoryClearer
+	Events       EventPublisher
+	Interactions store.Interactions
+	Counter      CounterToucher
+	Pins         store.Pins
+	Projector    PinProjector
+	Limits       Limits
+	Now          func() time.Time
 
 	Members      MemberStore
 	Requests     RequestDedupe
@@ -71,7 +71,7 @@ type Mutator struct {
 
 func New(d Deps) (*Mutator, error) {
 	if d.Access == nil || d.Messages == nil || d.Edits == nil || d.Hidden == nil || d.Rooms == nil || d.Events == nil ||
-		d.Reactions == nil || d.Counter == nil || d.Pins == nil || d.Projector == nil ||
+		d.Interactions == nil || d.Counter == nil || d.Pins == nil || d.Projector == nil ||
 		d.Members == nil || d.Requests == nil || d.Forget == nil || d.Timers == nil || d.Reads == nil {
 		return nil, errMissingDeps
 	}

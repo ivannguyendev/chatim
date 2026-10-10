@@ -46,8 +46,8 @@ func wireMutator(d serviceDeps) (*mutate.Mutator, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wire access checker: %w", err)
 	}
-	reactions, pins := st.Reactions(), st.Pins()
-	counts, err := counter.New(st, reactions)
+	interactions, pins := st.Interactions(), st.Pins()
+	counts, err := counter.New(st, interactions)
 	if err != nil {
 		return nil, fmt.Errorf("wire reaction counter: %w", err)
 	}
@@ -61,7 +61,7 @@ func wireMutator(d serviceDeps) (*mutate.Mutator, error) {
 	}
 	mut, err := mutate.New(mutate.Deps{
 		Access: checker, Messages: st, Edits: st, Hidden: st.Hidden(), Rooms: st, Events: d.pub,
-		Reactions: reactions, Counter: counts, Pins: pins, Projector: projector, Limits: d.cfg.Limits,
+		Interactions: interactions, Counter: counts, Pins: pins, Projector: projector, Limits: d.cfg.Limits,
 		Members: st, Requests: requests, Forget: d.router, Timers: d.timers, Reads: st, Log: d.log,
 	})
 	if err != nil {

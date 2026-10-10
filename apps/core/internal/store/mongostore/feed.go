@@ -63,16 +63,16 @@ func (f *Feed) Open(ctx context.Context) (store.Cursor, error) {
 }
 
 func feedPipeline() mongo.Pipeline {
-	facts := bson.A{messagesCollection, roomsCollection, editsCollection, reactionsCollection, pinActionsCollection, membersCollection, hiddenCollection}
+	facts := bson.A{messagesCollection, roomsCollection, editsCollection, interactionsCollection, pinActionsCollection, membersCollection, hiddenCollection}
 	inserts := bson.D{
 		{Key: "operationType", Value: "insert"},
 		{Key: "ns.coll", Value: bson.D{{Key: "$in", Value: facts}}},
 	}
-	reactionChanges := bson.D{
+	interactionChanges := bson.D{
 		{Key: "operationType", Value: bson.D{{Key: "$in", Value: bson.A{"update", "replace"}}}},
-		{Key: "ns.coll", Value: reactionsCollection},
+		{Key: "ns.coll", Value: interactionsCollection},
 	}
-	branches := append(bson.A{inserts, reactionChanges}, memberFeedBranches()...)
+	branches := append(bson.A{inserts, interactionChanges}, memberFeedBranches()...)
 	return mongo.Pipeline{{{Key: "$match", Value: bson.D{{Key: "$or", Value: branches}}}}}
 }
 
@@ -89,20 +89,40 @@ type feedCursor struct {
 }
 
 func (c *feedCursor) Next(ctx context.Context) (store.Change, error) {
+	for {
+		change, ev, err := c.next(ctx)
+		if errors.Is(err, errSkipChange) {
+			continue
+		}
+		if err != nil {
+			return store.Change{}, err
+		}
+		return withPosition(change, ev)
+	}
+}
+
+func (c *feedCursor) next(ctx context.Context) (store.Change, changeDoc, error) {
 	if !c.cs.Next(ctx) {
 		if err := c.cs.Err(); err != nil {
-			return store.Change{}, feedError("read change stream", err)
+			return store.Change{}, changeDoc{}, feedError("read change stream", err)
 		}
-		return store.Change{}, fmt.Errorf("read change stream: %w", apperr.ErrUnavailable)
+		return store.Change{}, changeDoc{}, fmt.Errorf("read change stream: %w", apperr.ErrUnavailable)
 	}
 	var ev changeDoc
 	if err := c.cs.Decode(&ev); err != nil {
-		return store.Change{}, fmt.Errorf("%w: decode change event: %w", store.ErrCorruptChange, err)
+		return store.Change{}, changeDoc{}, fmt.Errorf("%w: decode change event: %w", store.ErrCorruptChange, err)
 	}
 	change, err := decodeChange(ev)
-	if err != nil {
-		return store.Change{}, fmt.Errorf("%w: %w", store.ErrCorruptChange, err)
+	switch {
+	case errors.Is(err, errSkipChange):
+		return store.Change{}, ev, err
+	case err != nil:
+		return store.Change{}, ev, fmt.Errorf("%w: %w", store.ErrCorruptChange, err)
 	}
+	return change, ev, nil
+}
+
+func withPosition(change store.Change, ev changeDoc) (store.Change, error) {
 	pos, err := bson.Marshal(feedPosition{Token: ev.Token, At: ev.ClusterTime})
 	if err != nil {
 		return store.Change{}, fmt.Errorf("%w: encode position: %w", store.ErrCorruptChange, err)

@@ -62,9 +62,9 @@ func (m *Mutator) ReactionEmojis() []string { return slices.Clone(m.d.Limits.Emo
 
 func (m *Mutator) writeReaction(ctx context.Context, c ReactCmd, key store.MsgKey) (domain.Reaction, bool, error) {
 	if c.Emoji == "" {
-		return m.d.Reactions.Remove(ctx, key, c.User, m.now())
+		return m.d.Interactions.RemoveReaction(ctx, key, c.User, m.now())
 	}
-	return m.d.Reactions.Set(ctx, domain.Reaction{
+	return m.d.Interactions.SetReaction(ctx, domain.Reaction{
 		Room: key.Room, Thread: key.Thread, Seq: key.Seq, Tenant: c.Tenant, User: c.User, Emoji: c.Emoji, At: m.now(),
 	})
 }

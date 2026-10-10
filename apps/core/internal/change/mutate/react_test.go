@@ -28,7 +28,7 @@ func sameSummary(a, b domain.ReactionSummary) bool {
 
 func (rg *rig) reaction(t *testing.T, seq uint64, user string) (domain.Reaction, bool) {
 	t.Helper()
-	doc, found, err := rg.reactions.Get(t.Context(), key(seq), user)
+	doc, found, err := rg.reactions.GetReaction(t.Context(), key(seq), user)
 	if err != nil {
 		t.Fatalf("reaction of %s on seq %d: %v", user, seq, err)
 	}

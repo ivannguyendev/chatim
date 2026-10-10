@@ -64,8 +64,8 @@ func decodeChange(ev changeDoc) (store.Change, error) {
 			return store.Change{}, err
 		}
 		return store.Change{Kind: store.EditInserted, Edit: e, CommittedAt: ev.WallTime}, nil
-	case reactionsCollection:
-		return decodeReactionChange(ev)
+	case interactionsCollection:
+		return decodeInteractionChange(ev)
 	case pinActionsCollection:
 		return decodePinChange(ev)
 	case membersCollection:

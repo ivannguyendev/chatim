@@ -17,7 +17,7 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-func itReactions(st *mongostore.Store) store.Reactions { return st.Reactions() }
+func itReactions(st *mongostore.Store) store.Interactions { return st.Interactions() }
 
 func itPins(st *mongostore.Store) store.Pins { return st.Pins() }
 

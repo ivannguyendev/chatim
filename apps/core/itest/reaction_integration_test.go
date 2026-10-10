@@ -76,9 +76,9 @@ func TestRealInfraWorkersPublishReactionChangesWrittenOutsideTheCore(t *testing.
 		var changed bool
 		var err error
 		if step.emoji == "" {
-			_, changed, err = itReactions(st).Remove(t.Context(), key, "bob", at)
+			_, changed, err = itReactions(st).RemoveReaction(t.Context(), key, "bob", at)
 		} else {
-			_, changed, err = itReactions(st).Set(t.Context(), domain.Reaction{Room: room, Seq: seq, Tenant: itTenant, User: "bob", Emoji: step.emoji, At: at})
+			_, changed, err = itReactions(st).SetReaction(t.Context(), domain.Reaction{Room: room, Seq: seq, Tenant: itTenant, User: "bob", Emoji: step.emoji, At: at})
 		}
 		if err != nil || !changed {
 			t.Fatalf("change %d outside the core = %v, %v; want a change", n, changed, err)
@@ -121,7 +121,7 @@ func TestRealInfraConcurrentReactionsConvergeToExactCounts(t *testing.T) {
 	if before.Version == 0 || after.Version <= before.Version {
 		t.Fatalf("rx.v went from %d to %d, want it above zero and rising", before.Version, after.Version)
 	}
-	facts, err := itReactions(st).Count(t.Context(), key, nil)
+	facts, err := itReactions(st).CountReactions(t.Context(), key)
 	if err != nil || !slices.Equal(facts, second) {
 		t.Fatalf("Count = %+v, %v; want %+v", facts, err, second)
 	}

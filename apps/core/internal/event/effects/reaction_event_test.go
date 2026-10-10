@@ -83,7 +83,7 @@ func TestReactionEventDropsWhatIsGone(t *testing.T) {
 	rg := newReactRig(t)
 	rg.message(t, room, 1)
 	elsewhere := domain.Reaction{Room: 999, Seq: 1, Tenant: tenant, User: "bob", Emoji: "👍", At: time.Now().UTC().Truncate(time.Millisecond)}
-	if _, _, err := rg.reactions.Set(t.Context(), elsewhere); err != nil {
+	if _, _, err := rg.reactions.SetReaction(t.Context(), elsewhere); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
 	other := work.Record{Kind: store.ReactionChanged, Room: 999, Seq: 1, Version: 1, User: "bob", CommittedAt: time.Now()}

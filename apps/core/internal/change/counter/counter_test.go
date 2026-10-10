@@ -22,12 +22,12 @@ var (
 
 type rig struct {
 	msgs      *memstore.Messages
-	reactions *memstore.Reactions
+	reactions *memstore.Interactions
 }
 
 func newRig(t *testing.T) rig {
 	t.Helper()
-	rg := rig{msgs: memstore.NewMessages(), reactions: memstore.NewReactions()}
+	rg := rig{msgs: memstore.NewMessages(), reactions: memstore.NewInteractions()}
 	m := domain.Message{Room: 42, Seq: 1, Tenant: "acme", From: "alice", Kind: domain.KindText, Text: "hi", CID: "c-1", CreatedAt: at}
 	if res := rg.msgs.Insert(t.Context(), []domain.Message{m}); res[0].Outcome != store.Inserted {
 		t.Fatalf("Insert: %+v", res)
@@ -37,7 +37,7 @@ func newRig(t *testing.T) rig {
 
 func (rg rig) react(t *testing.T, user, emoji string) store.Witness {
 	t.Helper()
-	r, _, err := rg.reactions.Set(t.Context(), domain.Reaction{Room: 42, Seq: 1, Tenant: "acme", User: user, Emoji: emoji, At: at})
+	r, _, err := rg.reactions.SetReaction(t.Context(), domain.Reaction{Room: 42, Seq: 1, Tenant: "acme", User: user, Emoji: emoji, At: at})
 	if err != nil {
 		t.Fatalf("Set(%s by %s): %v", emoji, user, err)
 	}
@@ -101,7 +101,7 @@ func (l *loser) Find(ctx context.Context, room uint64, keys []store.MsgKey) ([]d
 
 type brokenCount struct{}
 
-func (brokenCount) Count(context.Context, store.MsgKey, []store.Witness) ([]domain.ReactionCount, error) {
+func (brokenCount) CountWitnessed(context.Context, store.MsgKey, []store.Witness) ([]domain.ReactionCount, error) {
 	return nil, errBroken
 }
 
@@ -176,7 +176,7 @@ func TestTouchStopsOnAStaleWitnessAndPassesStoreErrors(t *testing.T) {
 }
 
 func TestNewAndTouchRejectBadInput(t *testing.T) {
-	if _, err := counter.New(nil, memstore.NewReactions()); !errors.Is(err, apperr.ErrInvalidArgument) {
+	if _, err := counter.New(nil, memstore.NewInteractions()); !errors.Is(err, apperr.ErrInvalidArgument) {
 		t.Fatalf("New(nil messages) = %v, want ErrInvalidArgument", err)
 	}
 	if _, err := counter.New(memstore.NewMessages(), nil); !errors.Is(err, apperr.ErrInvalidArgument) {

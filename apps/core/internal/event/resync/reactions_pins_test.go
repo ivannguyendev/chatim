@@ -15,7 +15,7 @@ import (
 
 func (w world) react(t *testing.T, room, seq uint64, user, emoji string, at time.Time) string {
 	t.Helper()
-	r, changed, err := w.reactions.Set(t.Context(), domain.Reaction{Room: room, Seq: seq, Tenant: "acme", User: user, Emoji: emoji, At: at})
+	r, changed, err := w.reactions.SetReaction(t.Context(), domain.Reaction{Room: room, Seq: seq, Tenant: "acme", User: user, Emoji: emoji, At: at})
 	if err != nil || !changed {
 		t.Fatalf("Set(%d/%d %s %q) = %+v, %v, %v; want a change", room, seq, user, emoji, r, changed, err)
 	}
@@ -24,7 +24,7 @@ func (w world) react(t *testing.T, room, seq uint64, user, emoji string, at time
 
 func (w world) unreact(t *testing.T, room, seq uint64, user string, at time.Time) string {
 	t.Helper()
-	r, changed, err := w.reactions.Remove(t.Context(), store.MsgKey{Room: room, Seq: seq}, user, at)
+	r, changed, err := w.reactions.RemoveReaction(t.Context(), store.MsgKey{Room: room, Seq: seq}, user, at)
 	if err != nil || !changed {
 		t.Fatalf("Remove(%d/%d %s) = %+v, %v, %v; want a change", room, seq, user, r, changed, err)
 	}

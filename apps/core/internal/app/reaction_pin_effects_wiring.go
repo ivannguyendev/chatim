@@ -11,8 +11,8 @@ import (
 )
 
 func (fx *effectSet) wireReactionPinEffects(cfg config.Config, cl *clients, st *mongostore.Store) error {
-	reactions, pins := st.Reactions(), st.Pins()
-	counts, err := counter.New(st, reactions)
+	interactions, pins := st.Interactions(), st.Pins()
+	counts, err := counter.New(st, interactions)
 	if err != nil {
 		return fmt.Errorf("wire reaction counter: %w", err)
 	}
@@ -27,7 +27,7 @@ func (fx *effectSet) wireReactionPinEffects(cfg config.Config, cl *clients, st *
 	); err != nil {
 		return fmt.Errorf("wire reaction_counter effect: %w", err)
 	}
-	if fx.reactionEvent, err = effects.NewReactionEvent(effects.ReactionEventDeps{Reactions: reactions, Rooms: st, JS: cl.effectsJS}, events); err != nil {
+	if fx.reactionEvent, err = effects.NewReactionEvent(effects.ReactionEventDeps{Reactions: interactions, Rooms: st, JS: cl.effectsJS}, events); err != nil {
 		return fmt.Errorf("wire reaction_event effect: %w", err)
 	}
 	if fx.pinProjection, err = effects.NewPinProjection(projector); err != nil {

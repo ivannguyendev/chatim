@@ -14,7 +14,7 @@ import (
 func (rg *rig) react(t *testing.T, r, seq uint64, user, emoji string) {
 	t.Helper()
 	x := domain.Reaction{Room: r, Seq: seq, Tenant: tenant, User: user, Emoji: emoji, At: time.Now().UTC()}
-	if _, _, err := rg.reactions.Set(t.Context(), x); err != nil {
+	if _, _, err := rg.reactions.SetReaction(t.Context(), x); err != nil {
 		t.Fatalf("react %d/%d by %s: %v", r, seq, user, err)
 	}
 }

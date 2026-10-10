@@ -33,14 +33,14 @@ type Publisher interface {
 }
 
 type Deps struct {
-	Rooms     Rooms
-	Pages     Pages
-	Edits     Edits
-	Reactions Reactions
-	Pins      Pins
-	Members   Members
-	Hidden    Hidden
-	Pub       Publisher
+	Rooms        Rooms
+	Pages        Pages
+	Edits        Edits
+	Interactions Interactions
+	Pins         Pins
+	Members      Members
+	Hidden       Hidden
+	Pub          Publisher
 }
 
 type Target struct {

@@ -25,9 +25,9 @@ func TestMongoEditFeedContract(t *testing.T) {
 
 func TestMongoReactionFeedContract(t *testing.T) {
 	client := itClient(t)
-	storetest.RunReactionFeed(t, func(t *testing.T) (store.Reactions, store.ChangeFeed) {
+	storetest.RunReactionFeed(t, func(t *testing.T) (store.Interactions, store.ChangeFeed) {
 		s, db := itStore(t, client)
-		return s.Reactions(), NewFeed(db)
+		return s.Interactions(), NewFeed(db)
 	})
 }
 

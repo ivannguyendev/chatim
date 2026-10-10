@@ -11,7 +11,7 @@ import (
 )
 
 func TestNewReactionAndPinEffectsRejectBadInput(t *testing.T) {
-	js, msgs, mem, reactions, pins := &publishtest.JetStream{}, memstore.NewMessages(), memstore.NewRooms(), memstore.NewReactions(), memstore.NewPins()
+	js, msgs, mem, reactions, pins := &publishtest.JetStream{}, memstore.NewMessages(), memstore.NewRooms(), memstore.NewInteractions(), memstore.NewPins()
 	counts, events, noRoot := &spyCounter{}, effects.MessageChangedConfig{SubjectRoot: "evt"}, effects.MessageChangedConfig{}
 	count := effects.ReactionCounterConfig{SubjectRoot: "evt"}
 	counterDeps := effects.ReactionCounterDeps{Messages: msgs, Counter: counts, Rooms: mem, JS: js}

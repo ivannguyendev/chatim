@@ -16,7 +16,7 @@ type Messages interface {
 }
 
 type Reactions interface {
-	Count(ctx context.Context, key store.MsgKey, witnesses []store.Witness) ([]domain.ReactionCount, error)
+	CountWitnessed(ctx context.Context, key store.MsgKey, witnesses []store.Witness) ([]domain.ReactionCount, error)
 }
 
 var (
@@ -43,7 +43,7 @@ func (t *Toucher) Touch(ctx context.Context, key store.MsgKey, cur domain.Reacti
 		return cur, false, errNoTries
 	}
 	for range tries {
-		counts, err := t.reactions.Count(ctx, key, witnesses)
+		counts, err := t.reactions.CountWitnessed(ctx, key, witnesses)
 		if err != nil {
 			return cur, false, err
 		}
