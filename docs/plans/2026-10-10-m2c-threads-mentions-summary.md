@@ -72,7 +72,7 @@ flowchart LR
 | `rp` | Tin cha cùng room `{th, s}` (`th` luôn 0) | `{th: 0, s: 40}` |
 | `rc` | Số trả lời còn sống `{n, v}`; `v` tăng mỗi lần số đổi | `{n: 2, v: 2}` |
 | `fw` | Nguồn forward: tin gốc đầu tiên và tác giả gốc `{r, th, s, f, ts}` | `{r: 555, th: 0, s: 9, f: "lan", ts: …}` |
-| `mt` | Đích mention, tối đa 50: `[{k: user\|group, i}]` | `[{k: "user", i: "minh"}]` |
+| `mt` | Đích mention (tối đa 50 theo yêu cầu A6): `[{k: user\|group, i}]` | `[{k: "user", i: "minh"}]` |
 | `ma` | Có `@all` | `true` |
 
 `rx` (reaction) giữ dạng M2b.3 `{c: [{e, n}], v}`. `thread_root` vẫn trong khoá nhưng luôn 0. Dòng `message_edits` thêm `mention_targets`, `mention_all`.
@@ -118,8 +118,7 @@ Collection `reactions` của M2b.3 bỏ; reaction chuyển sang đây (dữ li�
 
 | Tên | Mặc định | Nghĩa |
 |---|---|---|
-| `MENTION_TARGETS_MAX` | `50` | Đích mention mỗi tin (A6) |
-| `MENTION_GROUPS_MAX` | `100` | Nhóm truyền vào `ListMentions` |
+| `MENTION_TARGETS_MAX` | `50` | Đích mention mỗi tin, theo yêu cầu A6 của thiết kế §2.1 |
 | `COUNT_CHECK_DELAY` | `5s` | Hạn phiếu hẹn của số trên tin (như `MEMBER_COUNT_CHECK_DELAY`) |
 | `chatim:req:create:{tenant}:{user}:{request_id}` | TTL 15 phút | Chống tạo group trùng (Redis dedupe) |
 
@@ -129,7 +128,7 @@ Collection `reactions` của M2b.3 bỏ; reaction chuyển sang đây (dữ li�
 
 Mọi kiểm tra cần đọc DB làm ở `grpcsrv` trước khi vào actor (actor chạy tuần tự theo room, không được chờ đọc).
 - **Trả lời:** đọc tin cha theo khoá; không có → `NOT_FOUND`. Tin cha đã xoá vẫn cho trả lời (ô trích hiện "đã xoá"). Trả lời một tin trả lời được.
-- **Mention:** kiểm định dạng, bỏ trùng, ≤ 50 đích; không kiểm user có trong room. `@all` qua policy `mention_all` (mặc định cho mọi người).
+- **Mention:** kiểm định dạng, bỏ trùng, ≤ 50 đích (A6); không kiểm user có trong room. `@all` qua policy `mention_all` (mặc định cho mọi người).
 - **Forward:** đọc room nguồn, member của người forward, tin nguồn, `hidden`; tin phải chưa xoá, chưa ẩn, sau `cleared_at` của người forward; policy `forward_message`. Text chép từ nguồn; `fw` = `fw` của nguồn nếu nguồn cũng là forward, không thì trỏ tin nguồn. Không giữa tenant. Lỗi: `NOT_FOUND` / `PERMISSION_DENIED` / `FAILED_PRECONDITION` (nguồn đã xoá).
 - Sau đó actor ghi tin như thường, phát `msg_created` (mang `reply_to`, `forward_from`, mention). Va seq với core khác lúc chuyển slot → `UNAVAILABLE` và nhường room ngay (R5).
 
@@ -159,18 +158,18 @@ sequenceDiagram
 
 - **Worker dựng trả lời** (từ phiếu tin có `rp`): hẹn phiếu → upsert doc reply → **chỉ khi doc mới được tạo** thì `rc` +1 → gỡ phiếu → `counts_changed`. Phiếu việc chạy lại sau sự cố không cộng lần hai (doc đã có); nếu lần trước chết trước khi cộng thì phiếu hẹn bật và đếm lại.
 - **Tin trả lời bị xoá** (phiếu sửa loại xoá): doc reply `state = 2` → `rc` −1, cùng cách bọc phiếu.
-- **`GetReplies(room, seq, after, limit ≤ 50)`:** quét `_id` theo tiền tố `tin cha│reply`, bỏ `state = 2`, lấy tin, áp view (xoá, ẩn, `cleared_at`).
+- **`GetReplies(room, seq, after)`** (mỗi trang tối đa 50, đọc tiếp bằng con trỏ): quét `_id` theo tiền tố `tin cha│reply`, bỏ `state = 2`, lấy tin, áp view (xoá, ẩn, `cleared_at`).
 - **Chặn xoá tin còn trả lời:** `DeleteMessage` đếm thẳng doc reply còn sống của tin (đọc majority); còn ≥ 1 → `FAILED_PRECONDITION`.
 
 ### 4.4 Bookmark
 
 - `SetBookmark(room, seq, on)`: `Admit`, tin phải tồn tại; một upsert doc `tin│bookmark│user`; như cũ → không ghi, không event; gỡ → `state = 2`. Phát `bookmark_changed`. Không giới hạn số lượng (chống lạm dụng bằng rate limit ở gateway/app). Không ghi chú.
-- `ListBookmarks(before, limit ≤ 50)`: index theo user → tin → view; rời room hay tin đã xoá thì vẫn trong danh sách, hiện "không còn xem được".
+- `ListBookmarks(before)` (mỗi trang tối đa 50, đọc tiếp bằng con trỏ): index theo user → tin → view; rời room hay tin đã xoá thì vẫn trong danh sách, hiện "không còn xem được".
 
 ### 4.5 Mention
 
 - Worker `mention_index` (từ phiếu tin mới/sửa/xoá): upsert doc mỗi đích; đích bị sửa bỏ hoặc tin bị xoá → `state = 2`; chỉ ghi khi `message_ver` của phiếu ≥ doc hiện có. Sửa tin: mention có đổi thì client gửi danh sách mới, không gửi = giữ nguyên.
-- `ListMentions(groups[{id, since?}], before, limit ≤ 50)`: người gọi truyền các nhóm của user (và mốc `since` nếu muốn); core thêm `user:{mình}` và `all:{room}` của các room user đang là member, rồi chạy **một** truy vấn "đích thuộc danh sách", mới nhất trước, 50 doc; bỏ doc trước `since`; lấy tin; áp view. Số đích bị giới hạn (`MENTION_GROUPS_MAX` + số room của user).
+- `ListMentions(groups[{id, since?}], before)` (mỗi trang tối đa 50, đọc tiếp bằng con trỏ): người gọi truyền các nhóm của user (và mốc `since` nếu muốn); core thêm `user:{mình}` và `all:{room}` của các room user đang là member, rồi chạy **một** truy vấn "đích thuộc danh sách", mới nhất trước, 50 doc; bỏ doc trước `since`; lấy tin; áp view. Không giới hạn số nhóm hay số room.
 
 ### 4.6 Tạo room
 
@@ -260,7 +259,8 @@ Không thư viện mới. Mongo: collection clustered, upsert `$setOnInsert`, pi
 | Tin có mention | worker ≤51 upsert | | | |
 | Forward | như gửi tin | +4 đọc theo khoá | | `msg_created` |
 | `GetHistory` 1 trang | | +1 `$in` (xem trước tin được trích) | | |
-| `GetReplies`, `ListBookmarks`, `ListMentions` | | 1 truy vấn index + 1 `$in` lấy tin | | |
+| `GetReplies`, `ListBookmarks` | | 1 truy vấn index + 1 `$in` lấy tin | | |
+| `ListMentions` | | 1 truy vấn index với danh sách đích (user, nhóm, `@all` các room của user; chi phí tăng theo số room/nhóm) + 1 `$in` lấy tin | | |
 | Mở DM đã có / mới | 0 / sổ + room + 2 member | 1 đọc | 0 / hẹn + gỡ | 0 / 4 |
 
 ## 10. Rủi ro
@@ -270,9 +270,6 @@ Không thư viện mới. Mongo: collection clustered, upsert `$setOnInsert`, pi
 | Thêm 2 thao tác NATS mỗi lệnh react | Hẹn và gỡ phiếu, ~1–2ms | Số luôn đúng và có ngay | Chấp nhận; như lệnh member hiện nay |
 | Tin rất nóng: nhiều `counts_changed` | Mỗi react một event số | Số tới client ngay | Đủ cho group ≤5K; milestone Channel gom event |
 | Phiếu sửa bị "đói" ở tin rất nóng | Tương tác liên tục làm `v` đổi mãi, phiếu Nak nhiều lần | Không ghi đè số mới | Chỉ xảy ra khi đã có lỗi trước đó; theo dõi metric sửa số |
-| Gửi lại `CreateRoom` sau 15 phút | Có thể ra 2 group | Nhớ bằng Redis rẻ, như cid | Chấp nhận; client gửi lại trong vài giây |
-| User id bị cấp lại cho người khác | Người mới vào DM cũ, đọc tin cũ | | Luật tích hợp: không bao giờ cấp lại user id |
-| `ListMentions` cho user ở rất nhiều room | Danh sách đích dài | Ghi rẻ, đọc gom nhiều đích | Giới hạn số đích; đo ở PoC prod-like |
 | Chuyển reaction sang collection mới | Đụng phần M2b.3 | Thống nhất chỗ lưu | Chạy lại toàn bộ test reaction; reset dữ liệu dev |
 
 ## 11. Điểm owner đã xác nhận
@@ -283,8 +280,9 @@ Không thư viện mới. Mongo: collection clustered, upsert `$setOnInsert`, pi
 4. `@all` mặc định cho mọi người, chặn qua policy; sửa tin chỉ gửi mention khi đổi.
 5. Forward hiện người forward, tác giả và nội dung gốc.
 6. Bookmark không giới hạn, không ghi chú, giữ cả khi không còn xem được.
-7. `OpenDirectRoom` + `room_dms`; `CreateRoom` chỉ group, có `request_id`; không alias; user id không cấp lại.
+7. `OpenDirectRoom` + `room_dms`; `CreateRoom` chỉ group, có `request_id`; không alias.
 8. `ListBookmarks`, `ListMentions` ở M2c; `ListThreads` để M3.
+9. Không đặt giới hạn dữ liệu nào ngoài yêu cầu có sẵn (≤50 đích mention mỗi tin, A6).
 
 ## 12. Kiểm thử
 
@@ -299,7 +297,7 @@ Không thư viện mới. Mongo: collection clustered, upsert `$setOnInsert`, pi
 | Trả lời tin không có, đã xoá, room khác | Mã lỗi đúng |
 | Forward: không member nguồn, nguồn ẩn/xoá, khác tenant, forward của forward | Mã lỗi đúng; `fw` giữ tác giả gốc |
 | `mention_index` sửa bỏ mention, phiếu lệch thứ tự | Theo phiên bản mới nhất |
-| `ListMentions` nhiều đích, `since`, room đã rời | Một truy vấn, che và thứ tự đúng |
+| `ListMentions` cho user ở rất nhiều room và nhóm, `since`, room đã rời | Một truy vấn, che và thứ tự đúng, không giới hạn số đích |
 | `GetReplies`, `ListBookmarks` với tin xoá/ẩn/`cleared_at` | Che đúng |
 | `OpenDirectRoom` song song, chết giữa bước; `CreateRoom` gửi lại, gửi loại DM | Một room; không trùng; DM bị từ chối |
 | R1, R3, R5 | Một lượt rồi `UNAVAILABLE`/Nak; `room_created` không đếm trùng; actor không gán lại seq |
