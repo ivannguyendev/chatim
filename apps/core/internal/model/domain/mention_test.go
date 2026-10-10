@@ -62,3 +62,15 @@ func TestValidateMentionsChecksKindAndID(t *testing.T) {
 		assertInvalid(t, err, "mentions")
 	}
 }
+
+func TestValidateMentionsRejectsHugeListsBeforeDeduping(t *testing.T) {
+	same := make([]domain.MentionTarget, 9)
+	for i := range same {
+		same[i] = user("minh")
+	}
+	if got, err := domain.ValidateMentions(same[:8], 2); err != nil || len(got) != 1 {
+		t.Fatalf("8 copies with max 2 = %v, %v; want one target", got, err)
+	}
+	_, err := domain.ValidateMentions(same, 2)
+	assertInvalid(t, err, "mentions")
+}

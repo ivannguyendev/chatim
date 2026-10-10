@@ -97,7 +97,6 @@ func TestMessageLinkCodecRejectsBadValues(t *testing.T) {
 		t.Fatalf("encodeMessage: %v", err)
 	}
 	corrupt := map[string]func(d *messageDoc){
-		"mention kind":  func(d *messageDoc) { d.Mentions = []mentionDoc{{Kind: "team", ID: "x"}} },
 		"reply seq":     func(d *messageDoc) { d.ReplyTo = &replyDoc{Seq: -1} },
 		"forward room":  func(d *messageDoc) { d.Forward = &forwardDoc{Room: -5, Seq: 1} },
 		"reply count n": func(d *messageDoc) { d.Replies = &replyCountDoc{N: -1} },
@@ -108,5 +107,24 @@ func TestMessageLinkCodecRejectsBadValues(t *testing.T) {
 		if _, err := decodeMessage(d); !errors.Is(err, errCorrupt) {
 			t.Fatalf("%s: decodeMessage = %v, want errCorrupt", name, err)
 		}
+	}
+}
+
+func TestDecodeMessageSkipsUnknownMentionKinds(t *testing.T) {
+	raw, err := bson.Marshal(bson.D{
+		{Key: "_id", Value: bson.Binary{Data: keys.Msg(7, 0, 1)}}, {Key: "t", Value: "acme"}, {Key: "f", Value: "alice"},
+		{Key: "k", Value: int32(domain.KindText)}, {Key: "x", Value: "hi"}, {Key: "c", Value: "c-1"}, {Key: "ts", Value: codecTime},
+		{Key: "mt", Value: bson.A{bson.D{{Key: "k", Value: "team"}, {Key: "i", Value: "x"}}, bson.D{{Key: "k", Value: "user"}, {Key: "i", Value: "minh"}}}},
+	})
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	var d messageDoc
+	if err := bson.Unmarshal(raw, &d); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	m, err := decodeMessage(d)
+	if err != nil || len(m.Mentions) != 1 || m.Mentions[0] != (domain.MentionTarget{Kind: domain.MentionUser, ID: "minh"}) {
+		t.Fatalf("decoded mentions %+v, %v; want only user minh", m.Mentions, err)
 	}
 }

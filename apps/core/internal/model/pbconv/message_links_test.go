@@ -75,3 +75,22 @@ func TestDomainLinksFromRequests(t *testing.T) {
 		t.Fatalf("DomainMentionTargets = %+v, want %+v", got, want)
 	}
 }
+
+func TestEventsOfADeletedMessageCarryNoContentLinks(t *testing.T) {
+	m := linked()
+	m.Deleted, m.Text = true, "leftover"
+	gone := domain.Edit{Room: m.Room, Seq: m.Seq, Version: 2, Kind: domain.EditDelete, By: "alice", At: sentAt}
+	pin := domain.PinAction{Room: m.Room, Seq: m.Seq, PV: 1, Op: domain.PinOpPin, By: "bob", At: sentAt}
+	for name, got := range map[string]*chatimv1.Message{
+		"msg_deleted": pbconv.MessageDeleted(domain.RoomGroup, m, gone).GetMessageDeleted().GetMessage(),
+		"msg_pinned":  pbconv.PinChanged(domain.RoomGroup, m, pin).GetMessagePinned().GetMessage(),
+		"msg_created": pbconv.MessageCreated(domain.RoomGroup, m).GetMessageCreated().GetMessage(),
+	} {
+		if got.GetText() != "" || got.GetMentionTargets() != nil || got.GetMentionAll() || got.GetForwardFrom() != nil || got.GetReplyCount() != nil {
+			t.Fatalf("%s carries content of a deleted message: %v", name, got)
+		}
+		if !proto.Equal(got.GetReplyTo(), &chatimv1.ReplyRef{Seq: 40}) || !got.GetDeleted() {
+			t.Fatalf("%s = %v, want the reply link and deleted kept", name, got)
+		}
+	}
+}

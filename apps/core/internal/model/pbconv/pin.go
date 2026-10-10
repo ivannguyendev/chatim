@@ -24,9 +24,6 @@ func MessageUnpinned(roomType domain.RoomType, m domain.Message, a domain.PinAct
 }
 
 func PinChanged(roomType domain.RoomType, m domain.Message, a domain.PinAction) *chatimv1.Event {
-	if m.Deleted {
-		m.Text = ""
-	}
 	if a.Op == domain.PinOpUnpin {
 		return MessageUnpinned(roomType, m, a)
 	}

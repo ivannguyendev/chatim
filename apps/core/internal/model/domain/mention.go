@@ -18,6 +18,9 @@ func ValidateMentions(targets []MentionTarget, limit int) ([]MentionTarget, erro
 	if len(targets) == 0 {
 		return nil, nil
 	}
+	if len(targets) > 4*limit {
+		return nil, invalid("mentions")
+	}
 	seen := make(map[MentionTarget]struct{}, len(targets))
 	out := make([]MentionTarget, 0, len(targets))
 	for _, t := range targets {

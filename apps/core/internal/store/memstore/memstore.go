@@ -51,6 +51,7 @@ func (s *Messages) insertLocked(m domain.Message) store.Result {
 	if found {
 		return store.Result{Outcome: store.Duplicate}
 	}
+	m = detached(m)
 	m.Hidden, m.Reactions, m.Replies = false, domain.ReactionSummary{}, domain.ReplyCount{}
 	s.lines[tl] = slices.Insert(line, i, m)
 	s.appendLog(logged{kind: store.MessageInserted, msg: m})
@@ -81,7 +82,7 @@ func (s *Messages) Page(ctx context.Context, q store.PageQuery) ([]domain.Messag
 	defer s.mu.RUnlock()
 	line := s.lines[timeline{q.Room, q.Thread}]
 	lo, hi := window(line, q)
-	return slices.Clone(line[lo:hi]), nil
+	return detachedAll(line[lo:hi]), nil
 }
 
 func window(line []domain.Message, q store.PageQuery) (lo, hi int) {
@@ -120,7 +121,7 @@ func (s *Messages) Find(ctx context.Context, room uint64, keys []store.MsgKey) (
 	for _, k := range wanted {
 		line := s.lines[timeline{k.Room, k.Thread}]
 		if i, ok := slices.BinarySearchFunc(line, k.Seq, bySeq); ok {
-			out = append(out, line[i])
+			out = append(out, detached(line[i]))
 		}
 	}
 	return out, nil

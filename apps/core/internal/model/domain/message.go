@@ -43,3 +43,13 @@ type Message struct {
 	MentionAll bool
 	Replies    ReplyCount
 }
+
+func (m Message) WithoutDeletedContent() Message {
+	if !m.Deleted {
+		return m
+	}
+	m.Text = ""
+	m.Mentions, m.MentionAll, m.Forward = nil, false, nil
+	m.Reactions, m.Replies = ReactionSummary{}, ReplyCount{}
+	return m
+}

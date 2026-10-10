@@ -38,15 +38,12 @@ func (s *Service) checkReply(ctx context.Context, who caller, room uint64, reply
 	if err := domain.ValidateReply(reply); err != nil {
 		return err
 	}
+	found, err := s.pages.Find(ctx, room, []store.MsgKey{{Room: room, Thread: reply.Thread, Seq: reply.Seq}})
+	if err != nil || len(found) > 0 {
+		return err
+	}
 	if _, err := s.access.Admit(ctx, access.SendMessage, who.tenant, who.user, room); err != nil {
 		return err
 	}
-	found, err := s.pages.Find(ctx, room, []store.MsgKey{{Room: room, Thread: reply.Thread, Seq: reply.Seq}})
-	if err != nil {
-		return err
-	}
-	if len(found) == 0 {
-		return domain.ErrMessageNotFound
-	}
-	return nil
+	return domain.ErrMessageNotFound
 }

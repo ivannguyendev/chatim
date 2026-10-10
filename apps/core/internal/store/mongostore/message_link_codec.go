@@ -86,11 +86,9 @@ func decodeLinks(d messageDoc, m *domain.Message) error {
 		m.Forward = &domain.ForwardRef{Room: room, Thread: th, Seq: s, Author: f.Author, SentAt: f.SentAt}
 	}
 	for _, t := range d.Mentions {
-		kind, err := mentionKindOf(t.Kind)
-		if err != nil {
-			return err
+		if kind, ok := mentionKindOf(t.Kind); ok {
+			m.Mentions = append(m.Mentions, domain.MentionTarget{Kind: kind, ID: t.ID})
 		}
-		m.Mentions = append(m.Mentions, domain.MentionTarget{Kind: kind, ID: t.ID})
 	}
 	if c := d.Replies; c != nil {
 		n, err := narrowUint32("reply count", c.N)
@@ -136,13 +134,13 @@ func mentionKindName(k domain.MentionKind) (string, error) {
 	}
 }
 
-func mentionKindOf(name string) (domain.MentionKind, error) {
+func mentionKindOf(name string) (domain.MentionKind, bool) {
 	switch name {
 	case mentionUserName:
-		return domain.MentionUser, nil
+		return domain.MentionUser, true
 	case mentionGroupName:
-		return domain.MentionGroup, nil
+		return domain.MentionGroup, true
 	default:
-		return 0, fmt.Errorf("%w: mention kind %q", errCorrupt, name)
+		return 0, false
 	}
 }

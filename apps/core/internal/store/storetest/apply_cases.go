@@ -12,6 +12,7 @@ func applyCases() []editCase {
 	return []editCase{
 		{"apply edit sets text, version and edited time on that message only", applyEdit},
 		{"apply delete clears the text and marks the message deleted", applyDelete},
+		{"apply delete drops mentions and the forward origin but keeps the reply link", applyDeleteDropsLinks},
 		{"apply at or below the stored version changes nothing", applyStale},
 		{"apply on a missing message creates nothing", applyMissing},
 		{"the view-only hidden flag is never stored", applyHiddenNeverStored},

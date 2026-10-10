@@ -31,7 +31,11 @@ func (s *Store) ApplyEdit(ctx context.Context, e domain.Edit) error {
 		text = ""
 	}
 	set := bson.D{{Key: "v", Value: version}, {Key: "ea", Value: e.At}, {Key: "x", Value: text}, {Key: "d", Value: deleted}}
-	if _, err := s.messages.UpdateOne(ctx, filter, bson.D{{Key: "$set", Value: set}}); err != nil {
+	update := bson.D{{Key: "$set", Value: set}}
+	if deleted {
+		update = append(update, bson.E{Key: "$unset", Value: bson.D{{Key: "mt", Value: ""}, {Key: "ma", Value: ""}, {Key: "fw", Value: ""}}})
+	}
+	if _, err := s.messages.UpdateOne(ctx, filter, update); err != nil {
 		return fmt.Errorf("apply edit v%d to %d/%d/%d: %w", e.Version, e.Room, e.Thread, e.Seq, err)
 	}
 	return nil

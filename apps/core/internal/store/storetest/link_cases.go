@@ -7,13 +7,28 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
+func linked(seq uint64) domain.Message {
+	m := msg(roomA, mainThread, seq)
+	m.ReplyTo = &domain.ReplyRef{Seq: 1}
+	m.Forward = &domain.ForwardRef{Room: roomB, Seq: 9, Author: "lan", SentAt: baseTime}
+	m.Mentions = []domain.MentionTarget{{Kind: domain.MentionUser, ID: "minh"}, {Kind: domain.MentionGroup, ID: "team-design"}}
+	m.MentionAll = true
+	return m
+}
+
+func applyDeleteDropsLinks(t *testing.T, s editStores) {
+	m, edit := linked(2), linked(3)
+	mustInsert(t, s.msgs, []domain.Message{msg(roomA, mainThread, 1), m, edit})
+	gone, changed := deletion(roomA, mainThread, 2, 1), fact(roomA, mainThread, 3, 1)
+	mustApply(t, s.msgs, gone, changed)
+	want := edited(m, gone)
+	want.Mentions, want.MentionAll, want.Forward = nil, false, nil
+	assertStored(t, s.msgs, want, edited(edit, changed))
+}
+
 func insertKeepsLinks(t *testing.T, s store.Messages) {
 	parent := msg(roomA, mainThread, 1)
-	reply := msg(roomA, mainThread, 2)
-	reply.ReplyTo = &domain.ReplyRef{Seq: 1}
-	reply.Forward = &domain.ForwardRef{Room: roomB, Seq: 9, Author: "lan", SentAt: baseTime}
-	reply.Mentions = []domain.MentionTarget{{Kind: domain.MentionUser, ID: "minh"}, {Kind: domain.MentionGroup, ID: "team-design"}}
-	reply.MentionAll = true
+	reply := linked(2)
 	counted := reply
 	counted.Replies = domain.ReplyCount{N: 4, Version: 4}
 	mustInsert(t, s, []domain.Message{parent, counted})

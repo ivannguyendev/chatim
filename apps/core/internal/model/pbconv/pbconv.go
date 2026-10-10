@@ -78,6 +78,7 @@ func MessageKind(k domain.Kind) chatimv1.MessageKind {
 }
 
 func Message(m domain.Message) *chatimv1.Message {
+	m = m.WithoutDeletedContent()
 	return &chatimv1.Message{
 		RoomId:         RoomID(m.Room),
 		ThreadRoot:     m.Thread,

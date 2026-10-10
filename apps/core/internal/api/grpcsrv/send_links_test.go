@@ -77,13 +77,18 @@ func TestSendMessageRejectsRepliesToMissingParents(t *testing.T) {
 	}
 }
 
-func TestSendMessageChecksMembershipBeforeTheParent(t *testing.T) {
+func TestSendMessageNeverTellsOutsidersWhetherTheParentExists(t *testing.T) {
 	rg := newRig(t, options{})
 	room := rg.createGroup(t, "acme", "alice", "bob")
-	_, err := rg.client.SendMessage(as(t, "acme", "mallory"), replyReq(room, "c-1", 9))
-	expectCode(t, err, codes.PermissionDenied)
-	_, err = rg.client.SendMessage(as(t, "other", "alice"), replyReq(room, "c-1", 9))
-	expectCode(t, err, codes.NotFound)
+	rg.send(t, as(t, "acme", "alice"), room, "c-1", "parent")
+	for name, seq := range map[string]uint64{"existing parent": 1, "missing parent": 9} {
+		t.Run(name, func(t *testing.T) {
+			_, err := rg.client.SendMessage(as(t, "acme", "mallory"), replyReq(room, "c-2", seq))
+			expectCode(t, err, codes.PermissionDenied)
+			_, err = rg.client.SendMessage(as(t, "other", "alice"), replyReq(room, "c-2", seq))
+			expectCode(t, err, codes.NotFound)
+		})
+	}
 }
 
 func TestSendMessageRejectsBadLinks(t *testing.T) {
