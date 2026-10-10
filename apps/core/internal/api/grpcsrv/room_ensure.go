@@ -29,6 +29,8 @@ type founding struct {
 	members []domain.Member
 	by      string
 	at      time.Time
+	resume  bool
+	claimed func(domain.Room)
 }
 
 func (f founding) join(room uint64) (domain.Join, []string) {
@@ -53,12 +55,15 @@ func (s *Service) ensureRoom(ctx context.Context, f founding) (domain.Room, bool
 		s.log.WarnContext(ctx, "member count check timer not armed; room not created", "room", f.room.ID, "err", err)
 		return domain.Room{}, false, domain.ErrRetryLater
 	}
-	room, inserted, err := s.insertRoom(ctx, f.room)
+	room, inserted, err := s.insertRoom(ctx, f)
 	if err != nil {
 		if errors.Is(err, errRoomIDTaken) {
 			s.disarm(ctx, timer)
 		}
 		return domain.Room{}, false, err
+	}
+	if f.claimed != nil {
+		f.claimed(room)
 	}
 	j, users := f.join(room.ID)
 	res, err := s.members.AddMembers(ctx, j, users)
@@ -68,9 +73,7 @@ func (s *Service) ensureRoom(ctx context.Context, f founding) (domain.Room, bool
 	settle, done := settling(ctx)
 	defer done()
 	count, counted := s.settleCount(settle, room.ID, timer, res.Changed)
-	if counted {
-		room.MemberCount, room.MemberCountVer = count.Count, count.Ver
-	}
+	room = s.settledRoom(settle, room, count, counted)
 	created := inserted || res.Changed > 0
 	if created {
 		_ = s.events.Enqueue(room.ID, foundingEvents(room, res.Members, count, counted, f))
@@ -78,7 +81,21 @@ func (s *Service) ensureRoom(ctx context.Context, f founding) (domain.Room, bool
 	return room, created, nil
 }
 
-func (s *Service) insertRoom(ctx context.Context, r domain.Room) (domain.Room, bool, error) {
+func (s *Service) settledRoom(ctx context.Context, room domain.Room, count domain.MemberCount, counted bool) domain.Room {
+	if counted {
+		room.MemberCount, room.MemberCountVer = count.Count, count.Ver
+		return room
+	}
+	stored, err := s.rooms.Get(ctx, room.ID)
+	if err != nil {
+		s.log.WarnContext(ctx, "new room not read back; replying with the count seen before", "room", room.ID, "err", err)
+		return room
+	}
+	return stored
+}
+
+func (s *Service) insertRoom(ctx context.Context, f founding) (domain.Room, bool, error) {
+	r := f.room
 	err := s.rooms.InsertRoom(ctx, r)
 	switch {
 	case err == nil:
@@ -91,10 +108,22 @@ func (s *Service) insertRoom(ctx context.Context, r domain.Room) (domain.Room, b
 	if err != nil {
 		return domain.Room{}, false, err
 	}
-	if r.Type != domain.RoomDM || stored.Tenant != r.Tenant || stored.DMKey != r.DMKey {
+	if !sameRoom(f, stored) {
 		return domain.Room{}, false, errRoomIDTaken
 	}
 	return stored, false, nil
+}
+
+func sameRoom(f founding, stored domain.Room) bool {
+	r := f.room
+	switch {
+	case stored.Tenant != r.Tenant || stored.Type != r.Type:
+		return false
+	case r.Type == domain.RoomDM:
+		return stored.DMKey == r.DMKey
+	default:
+		return f.resume && stored.CreatedBy == r.CreatedBy
+	}
 }
 
 func (s *Service) settleCount(ctx context.Context, room uint64, t work.Timer, delta int) (domain.MemberCount, bool) {

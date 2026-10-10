@@ -1,9 +1,12 @@
 package dedupe
 
 import (
+	"hash/fnv"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ivannguyendev/chatim/pkg/slotmap"
 )
 
 const (
@@ -38,6 +41,15 @@ func (k Key) String() string {
 	default:
 		return keyPrefix + strconv.FormatUint(k.Room, 10) + ":" + k.User + ":" + k.CID
 	}
+}
+
+func (k Key) shardSeed() uint64 {
+	if k.Space == SpaceCreate {
+		h := fnv.New64a()
+		_, _ = h.Write([]byte(k.Tenant + ":" + k.User))
+		return h.Sum64()
+	}
+	return uint64(slotmap.Of(k.Room))
 }
 
 type Record struct {

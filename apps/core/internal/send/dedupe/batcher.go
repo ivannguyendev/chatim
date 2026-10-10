@@ -9,7 +9,6 @@ import (
 	"sync/atomic"
 
 	"github.com/ivannguyendev/chatim/pkg/apperr"
-	"github.com/ivannguyendev/chatim/pkg/slotmap"
 )
 
 type Registry interface {
@@ -94,7 +93,7 @@ func (b *Batcher) Reserve(ctx context.Context, keys []Key) ([]Verdict, error) {
 		return nil, err
 	}
 	call := reserveCall{keys: keys, out: make(chan reserveResult, 1)}
-	if err := b.submit(ctx, b.shard(keys[0].Room), call); err != nil {
+	if err := b.submit(ctx, b.shard(keys[0]), call); err != nil {
 		return nil, err
 	}
 	select {
@@ -123,27 +122,27 @@ func (b *Batcher) submit(ctx context.Context, s *batchShard, call reserveCall) e
 
 func (b *Batcher) Commit(_ context.Context, entries []Entry) error {
 	if len(entries) > 0 {
-		b.settle(entries[0].Key.Room, settleCall{commits: entries})
+		b.settle(entries[0].Key, settleCall{commits: entries})
 	}
 	return nil
 }
 
 func (b *Batcher) Abort(_ context.Context, keys []Key) error {
 	if len(keys) > 0 {
-		b.settle(keys[0].Room, settleCall{aborts: keys})
+		b.settle(keys[0], settleCall{aborts: keys})
 	}
 	return nil
 }
 
-func (b *Batcher) settle(room uint64, call settleCall) {
-	s := b.shard(room)
+func (b *Batcher) settle(k Key, call settleCall) {
+	s := b.shard(k)
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	if b.closed {
 		n := call.size()
 		b.dropped.Add(uint64(max(n, 0)))
 		if b.late.CompareAndSwap(false, true) {
-			b.log.Warn("cid settle after close; dropping", "room", room, "keys", n)
+			b.log.Warn("cid settle after close; dropping", "room", k.Room, "keys", n)
 		}
 		return
 	}
@@ -154,7 +153,7 @@ func (b *Batcher) settle(room uint64, call settleCall) {
 		n := call.size()
 		b.dropped.Add(uint64(max(n, 0)))
 		if s.full.CompareAndSwap(false, true) {
-			b.log.Warn("cid settle queue full; dropping commits", "room", room, "keys", n)
+			b.log.Warn("cid settle queue full; dropping commits", "room", k.Room, "keys", n)
 		}
 	}
 }
@@ -186,6 +185,6 @@ func (b *Batcher) Close(ctx context.Context) error {
 
 func (b *Batcher) Dropped() uint64 { return b.dropped.Load() }
 
-func (b *Batcher) shard(room uint64) *batchShard {
-	return b.shards[int(slotmap.Of(room))%len(b.shards)]
+func (b *Batcher) shard(k Key) *batchShard {
+	return b.shards[k.shardSeed()%uint64(len(b.shards))]
 }

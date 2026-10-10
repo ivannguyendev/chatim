@@ -12,11 +12,24 @@ func TestCreateKeyNamesTenantUserAndRequestOnSlotZero(t *testing.T) {
 	if got := k.String(); got != "chatim:req:create:acme:alice:r1" {
 		t.Fatalf("create key = %q", got)
 	}
-	if k.Room != 0 || slotmap.Of(k.Room) != 0 {
-		t.Fatalf("create key room %d on slot %d, want room 0 on slot 0", k.Room, slotmap.Of(k.Room))
-	}
 	if CreateKey("acme", "alice", "r1") == CreateKey("other", "alice", "r1") {
 		t.Fatal("create keys of two tenants are equal")
+	}
+}
+
+func TestCreateKeysSpreadByTenantAndUserNotBySlotZero(t *testing.T) {
+	if CreateKey("acme", "alice", "r1").shardSeed() != CreateKey("acme", "alice", "r2").shardSeed() {
+		t.Fatal("two requests of one caller land on different shards")
+	}
+	seeds := map[uint64]bool{}
+	for _, u := range []string{"alice", "bob", "carol", "dave", "erin"} {
+		seeds[CreateKey("acme", u, "r1").shardSeed()%16] = true
+	}
+	if len(seeds) < 2 {
+		t.Fatalf("five callers share one of 16 shards: %v", seeds)
+	}
+	if k := RequestKey(42, "alice", "r1"); k.shardSeed() != uint64(slotmap.Of(42)) {
+		t.Fatalf("room key seed = %d, want slot %d", k.shardSeed(), slotmap.Of(42))
 	}
 }
 

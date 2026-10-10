@@ -71,5 +71,12 @@ func activeMembers(docs []domain.Member) int {
 func (s *Service) repoint(ctx context.Context, tenant, a, b string, taken uint64) {
 	next := s.newID()
 	moved, err := s.directs.Repoint(ctx, tenant, a, b, taken, next)
-	s.log.WarnContext(ctx, "direct room claim hit a taken room id", "room", taken, "next", next, "moved", moved, "err", err)
+	switch {
+	case err != nil:
+		s.log.WarnContext(ctx, "direct room claim not moved off a taken room id", "room", taken, "next", next, "err", err)
+	case moved:
+		s.log.WarnContext(ctx, "direct room claim moved off a taken room id", "room", taken, "next", next)
+	default:
+		s.log.DebugContext(ctx, "direct room claim already moved by another opener", "room", taken)
+	}
 }
