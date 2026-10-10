@@ -33,6 +33,19 @@ The system mechanisms review closed on 2026-10-05 after two rounds with two exte
 - Never commit `.env`, `bin/`, `rooms*.txt` or `real-texts*.txt` (the last holds real customer data). Never print values from `.env`.
 - When a plan step gives a result different from its "Expected", stop and report. Don't patch it until it passes.
 
+## Design checklist
+
+Check every brainstorm, summary and plan against this list before showing it to the owner.
+- Map each feature to a data class of design §4 (one write, event and repair path per class). Never design a per-feature patch; a feature that fits no class needs a new class first.
+- A derived value written inline (counter, projection, summary) is a direct write or `$inc` wrapped in the survival timer (design §7.1, D111); repair = recount + CAS on the version. Never recount on every change.
+- No internal retries: a CAS, duplicate-key or transaction conflict returns `ErrRetryLater` (`UNAVAILABLE`) at once; workers Nak; transactions run one attempt.
+- No data limit without a use case or an existing requirement (A6). A page size is pagination, not a limit.
+- Every change publishes an event with a worker republish path; subjects follow the data kind (`room`/`member`/`message`); core never picks recipients and never expands mention groups.
+- Shard-ready: room-prefixed clustered `_id`; no secondary index on `messages`; uniqueness only through `_id` (claim docs such as `room_dms`), never a unique secondary index; no transaction except D100.
+- Field names: full basic English words except `messages`; counters end in `_ver`; `updated_at`/`updated_by`; `request_id`.
+- Owner summaries: Vietnamese, plain words with examples, written from the final state (rewrite after a review round, never append patches). Risks list only real consequences of this plan, not other systems' operations and not mechanisms already accepted.
+- Ask the owner only pivotal questions, in plain words with an example; never re-ask an answered one.
+
 ## Verification and review budget
 
 The user finds long review and test loops too slow. Run the cheapest check that proves the change, and escalate only for the area that changed.
