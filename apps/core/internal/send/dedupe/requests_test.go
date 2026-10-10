@@ -150,13 +150,13 @@ func TestBeginFailsOnlyWhenTheCallerGaveUp(t *testing.T) {
 		r := newRequests(t, reg)
 		gone, cancel := context.WithCancel(t.Context())
 		cancel()
-		if _, err := r.Begin(gone, requestKey("r1")); !errors.Is(err, context.Canceled) {
+		if _, _, err := r.Begin(gone, requestKey("r1")); !errors.Is(err, context.Canceled) {
 			t.Fatalf("Begin with a cancelled caller = %v, want context.Canceled", err)
 		}
 		reg.hang = true
 		late, stop := context.WithTimeout(t.Context(), time.Second)
 		defer stop()
-		if _, err := r.Begin(late, requestKey("r2")); !errors.Is(err, context.DeadlineExceeded) {
+		if _, _, err := r.Begin(late, requestKey("r2")); !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("Begin past the caller deadline = %v, want context.DeadlineExceeded", err)
 		}
 	})

@@ -12,10 +12,13 @@ import (
 const historyPage = 100
 
 func (r *memberRun) directRoom() error {
-	user := r.st.User
-	resp, _, err := r.cl.CreateRoom(r.as(user), &chatimv1.CreateRoomRequest{Type: chatimv1.RoomType_ROOM_TYPE_DM, Members: []string{user, bob}})
+	user, peer := r.st.User, "e2e-dm-"+r.st.Room
+	resp, _, err := r.cl.OpenDirectRoom(r.as(user), &chatimv1.OpenDirectRoomRequest{OtherUser: peer})
+	if err == nil && !resp.GetCreated() {
+		err = fmt.Errorf("room %s already open, want a new one", resp.GetRoom().GetId())
+	}
 	if err != nil {
-		return fmt.Errorf("create direct room: %w", err)
+		return fmt.Errorf("open direct room: %w", err)
 	}
 	dm := resp.GetRoom().GetId()
 	r.dm = dm
@@ -23,7 +26,7 @@ func (r *memberRun) directRoom() error {
 	if err = refused("add-members on the direct room", codes.FailedPrecondition, err); err != nil {
 		return err
 	}
-	_, _, err = r.cl.RemoveMember(r.as(user), &chatimv1.RemoveMemberRequest{RoomId: dm, User: bob})
+	_, _, err = r.cl.RemoveMember(r.as(user), &chatimv1.RemoveMemberRequest{RoomId: dm, User: peer})
 	if err = refused("remove-member on the direct room", codes.FailedPrecondition, err); err != nil {
 		return err
 	}
@@ -31,7 +34,7 @@ func (r *memberRun) directRoom() error {
 	if err = refused("leave on the direct room", codes.FailedPrecondition, err); err != nil {
 		return err
 	}
-	_, _, err = r.cl.ChangeMemberRole(r.as(user), &chatimv1.ChangeMemberRoleRequest{RoomId: dm, User: bob, Role: chatimv1.MemberRole_MEMBER_ROLE_ADMIN})
+	_, _, err = r.cl.ChangeMemberRole(r.as(user), &chatimv1.ChangeMemberRoleRequest{RoomId: dm, User: peer, Role: chatimv1.MemberRole_MEMBER_ROLE_ADMIN})
 	if err = refused("set-role on the direct room", codes.FailedPrecondition, err); err != nil {
 		return err
 	}
@@ -43,16 +46,16 @@ func (r *memberRun) directRoom() error {
 	if err != nil {
 		return fmt.Errorf("send to the direct room: %w", err)
 	}
-	if err := r.markRead(dm, bob, 1, 1); err != nil {
+	if err := r.markRead(dm, peer, 1, 2); err != nil {
 		return err
 	}
 	return r.expect(
 		r.want(dm, e2e.KindRoomCreated, e2e.RoomCreatedEventID(dm), ""),
 		r.member(dm, e2e.KindMemberAdded, user, 1, ""),
-		r.member(dm, e2e.KindMemberAdded, bob, 1, ""),
+		r.member(dm, e2e.KindMemberAdded, peer, 1, ""),
 		r.want(dm, e2e.KindMemberCount, e2e.MemberCountEventID(dm, 1), e2e.CountPayload(2)),
 		r.want(dm, e2e.KindCreated, e2e.MessageEventID(dm, 1), ""),
-		r.want(dm, e2e.KindRead, e2e.ReadEventID(dm, bob, 1), e2e.ReadPayload(1, 1)),
+		r.want(dm, e2e.KindRead, e2e.ReadEventID(dm, peer, 2), e2e.ReadPayload(1, 2)),
 	)
 }
 

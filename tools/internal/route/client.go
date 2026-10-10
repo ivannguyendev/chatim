@@ -83,6 +83,12 @@ func (c *Client) CreateRoom(ctx context.Context, req *chatimv1.CreateRoomRequest
 	})
 }
 
+func (c *Client) OpenDirectRoom(ctx context.Context, req *chatimv1.OpenDirectRoomRequest) (*chatimv1.OpenDirectRoomResponse, Stats, error) {
+	return call(ctx, c, c.loc.AnyAddr, retryIdempotent, func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.OpenDirectRoomResponse, error) {
+		return api.OpenDirectRoom(ctx, req)
+	})
+}
+
 func (c *Client) SendMessage(ctx context.Context, req *chatimv1.SendMessageRequest) (*chatimv1.SendMessageResponse, Stats, error) {
 	return inRoom(ctx, c, req.GetRoomId(), func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.SendMessageResponse, error) {
 		return api.SendMessage(ctx, req)

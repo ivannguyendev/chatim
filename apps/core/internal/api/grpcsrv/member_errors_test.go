@@ -22,9 +22,9 @@ func TestMemberErrorsKeepTheirCodes(t *testing.T) {
 	if _, err := rg.client.ChangeMemberRole(alice, &chatimv1.ChangeMemberRoleRequest{RoomId: room, User: "carol", Role: chatimv1.MemberRole_MEMBER_ROLE_ADMIN}); err != nil {
 		t.Fatalf("ChangeMemberRole: %v", err)
 	}
-	dm, err := rg.client.CreateRoom(alice, &chatimv1.CreateRoomRequest{Type: chatimv1.RoomType_ROOM_TYPE_DM, Members: []string{"alice", "bob"}})
+	dm, err := rg.client.OpenDirectRoom(alice, &chatimv1.OpenDirectRoomRequest{OtherUser: "bob"})
 	if err != nil {
-		t.Fatalf("CreateRoom DM: %v", err)
+		t.Fatalf("OpenDirectRoom: %v", err)
 	}
 	add := func(ctx context.Context, room, requestID string, users ...string) func() error {
 		return func() error {

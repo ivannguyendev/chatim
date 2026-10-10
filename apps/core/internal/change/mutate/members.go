@@ -29,7 +29,7 @@ func (m *Mutator) AddMembers(ctx context.Context, c AddMembersCmd) ([]domain.Mem
 		return nil, err
 	}
 	key := dedupe.RequestKey(c.Room, c.User, c.RequestID)
-	status, err := m.d.Requests.Begin(ctx, key)
+	status, _, err := m.d.Requests.Begin(ctx, key)
 	switch {
 	case err != nil:
 		return nil, err

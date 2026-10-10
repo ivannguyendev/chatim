@@ -13,7 +13,8 @@ import (
 const usage = `usage: corecli <command> [flags]
 
 commands:
-  create-room        create a room through any live core
+  create-room        create a group through any live core (-request-id: reuse it to retry)
+  open-dm            open the direct room of the caller and -other, creating it on first use
   send               send one message to the core serving the room
   history            read one history page of a room
   edit               edit a message (-base: the version you saw)
@@ -45,6 +46,7 @@ func main() { os.Exit(realMain(os.Args[1:])) }
 func realMain(args []string) int {
 	commands := map[string]command{
 		"create-room":       createRoomCmd,
+		"open-dm":           openDirectCmd,
 		"send":              sendCmd,
 		"history":           historyCmd,
 		"edit":              editCmd,

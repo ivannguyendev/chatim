@@ -82,8 +82,6 @@ func TestNewRoomRules(t *testing.T) {
 		members []string
 		field   string
 	}{
-		{"dm ok without name", "acme", "alice", domain.RoomDM, "", []string{"alice", "bob"}, ""},
-		{"dm duplicates collapse to two", "acme", "alice", domain.RoomDM, "", []string{"alice", "bob", "bob", "alice"}, ""},
 		{"group of creator only", "acme", "alice", domain.RoomGroup, "Solo", []string{"alice"}, ""},
 		{"group of 6000", "acme", "alice", domain.RoomGroup, "Big", users(6000), ""},
 		{"name of 128 runes", "acme", "alice", domain.RoomGroup, strings.Repeat("ñ", 128), []string{"alice"}, ""},
@@ -93,13 +91,11 @@ func TestNewRoomRules(t *testing.T) {
 		{"unknown type", "acme", "alice", domain.RoomType("channel"), "T", []string{"alice"}, "type"},
 		{"creator missing", "acme", "alice", domain.RoomGroup, "T", []string{"bob"}, "members"},
 		{"no members", "acme", "alice", domain.RoomGroup, "T", nil, "members"},
-		{"dm of one", "acme", "alice", domain.RoomDM, "", []string{"alice", "alice"}, "members"},
-		{"dm of three", "acme", "alice", domain.RoomDM, "", []string{"alice", "bob", "carol"}, "members"},
+		{"dm is not a group", "acme", "alice", domain.RoomDM, "", []string{"alice", "bob"}, "type"},
 		{"group without name", "acme", "alice", domain.RoomGroup, "", []string{"alice"}, "name"},
 		{"group with blank name", "acme", "alice", domain.RoomGroup, " \t ", []string{"alice"}, "name"},
 		{"name of 129 runes", "acme", "alice", domain.RoomGroup, strings.Repeat("ñ", 129), []string{"alice"}, "name"},
 		{"name not utf-8", "acme", "alice", domain.RoomGroup, "T\xff", []string{"alice"}, "name"},
-		{"dm name not utf-8", "acme", "alice", domain.RoomDM, "\xc3", []string{"alice", "bob"}, "name"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

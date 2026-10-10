@@ -45,6 +45,7 @@ type roomDoc struct {
 	LastSeq        int64           `bson:"last_seq,omitempty"`
 	LastMsgAt      time.Time       `bson:"last_message_at,omitempty"`
 	LastChangeAt   time.Time       `bson:"last_change_at,omitempty"`
+	DMKey          string          `bson:"dm_key,omitempty"`
 }
 
 func encodeMessage(m domain.Message) (messageDoc, error) {
@@ -140,6 +141,7 @@ func encodeRoom(r domain.Room) (roomDoc, error) {
 		CreatedAt:      r.CreatedAt,
 		MemberCount:    r.MemberCount,
 		MemberCountVer: memberCountVer,
+		DMKey:          r.DMKey,
 	}, nil
 }
 
@@ -168,6 +170,7 @@ func decodeRoom(d roomDoc) (domain.Room, error) {
 		LastMsgAt:      d.LastMsgAt,
 		LastChangeAt:   d.LastChangeAt,
 		MemberCountVer: memberCountVer,
+		DMKey:          d.DMKey,
 	}, nil
 }
 

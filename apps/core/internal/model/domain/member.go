@@ -42,6 +42,14 @@ type Join struct {
 	By        string
 	At        time.Time
 	ReadSeq   uint64
+	Owner     string
+}
+
+func (j Join) RoleOf(user string) Role {
+	if user == j.Owner {
+		return RoleOwner
+	}
+	return RoleMember
 }
 
 type MemberCount struct {
@@ -65,7 +73,7 @@ func (j Join) Apply(cur Member, user string) Member {
 	if cur.Active() {
 		return cur
 	}
-	next := cur.Next(RoleMember, MemberActive, 0, j.RequestID, j.By, j.At)
+	next := cur.Next(j.RoleOf(user), MemberActive, 0, j.RequestID, j.By, j.At)
 	next.Room, next.Tenant, next.User = j.Room, j.Tenant, user
 	next.JoinedAt = j.At
 	next.ReadSeq = max(cur.ReadSeq, j.ReadSeq)

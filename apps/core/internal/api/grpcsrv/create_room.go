@@ -2,20 +2,17 @@ package grpcsrv
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
-	"github.com/ivannguyendev/chatim/apps/core/internal/store"
+	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-const createAttempts = 3
-
-var errRoomIDsTaken = fmt.Errorf("room id taken on all %d attempts: %w", createAttempts, apperr.ErrUnavailable)
+var errBadRequestID = fmt.Errorf("%w: request_id", apperr.ErrInvalidArgument)
 
 func (s *Service) CreateRoom(ctx context.Context, req *chatimv1.CreateRoomRequest) (*chatimv1.CreateRoomResponse, error) {
 	who, err := callerOf(ctx)
@@ -26,37 +23,45 @@ func (s *Service) CreateRoom(ctx context.Context, req *chatimv1.CreateRoomReques
 	if err != nil {
 		return nil, err
 	}
+	if domain.ValidCID(req.GetRequestId()) != nil {
+		return nil, errBadRequestID
+	}
 	if len(req.GetMembers()) > s.mutator.MemberBatch() {
 		return nil, domain.ErrTooManyMembers
 	}
 	now := s.now().UTC().Truncate(time.Millisecond)
-	for range createAttempts {
-		room, members, err := domain.NewRoom(who.tenant, who.user, typ, req.GetName(), req.GetMembers(), now, s.newID())
-		if err != nil {
-			return nil, err
-		}
-		err = s.rooms.Create(ctx, room, members)
-		switch {
-		case err == nil:
-			_ = s.events.Enqueue(room.ID, creationEvents(room, members))
-			return &chatimv1.CreateRoomResponse{Room: pbconv.Room(room)}, nil
-		case errors.Is(err, store.ErrRoomExists):
-			s.log.WarnContext(ctx, "room id taken, drawing a new one", "room", room.ID)
-		default:
-			return nil, err
-		}
+	room, members, err := domain.NewRoom(who.tenant, who.user, typ, req.GetName(), req.GetMembers(), now, s.newID())
+	if err != nil {
+		return nil, err
 	}
-	return nil, errRoomIDsTaken
+	key := dedupe.CreateKey(who.tenant, who.user, req.GetRequestId())
+	status, rec, err := s.requests.Begin(ctx, key)
+	switch {
+	case err != nil:
+		return nil, err
+	case status == dedupe.RequestBusy:
+		return nil, domain.ErrRetryLater
+	case status == dedupe.RequestDone:
+		return s.createdRoom(ctx, who, rec.Seq)
+	}
+	got, _, err := s.ensureRoom(ctx, founding{room: room, members: members, by: who.user, at: now})
+	settle, done := settling(ctx)
+	defer done()
+	if err != nil {
+		s.requests.Cancel(settle, key)
+		return nil, err
+	}
+	s.requests.Finish(settle, key, dedupe.Record{Seq: got.ID, CreatedAt: now})
+	return &chatimv1.CreateRoomResponse{Room: pbconv.Room(got)}, nil
 }
 
-func creationEvents(room domain.Room, members []domain.Member) []*chatimv1.Event {
-	events := make([]*chatimv1.Event, 0, len(members)+2)
-	events = append(events, pbconv.RoomCreated(room))
-	for _, m := range members {
-		if ev := pbconv.MemberEvent(room.Type, m); ev != nil {
-			events = append(events, ev)
-		}
+func (s *Service) createdRoom(ctx context.Context, who caller, id uint64) (*chatimv1.CreateRoomResponse, error) {
+	room, err := s.rooms.Get(ctx, id)
+	if err != nil {
+		return nil, err
 	}
-	count := domain.MemberCount{Count: room.MemberCount, Ver: 1}
-	return append(events, pbconv.MemberCountChanged(room, count, room.CreatedBy, room.CreatedAt))
+	if err := domain.CheckTenant(room, who.tenant); err != nil {
+		return nil, err
+	}
+	return &chatimv1.CreateRoomResponse{Room: pbconv.Room(room)}, nil
 }

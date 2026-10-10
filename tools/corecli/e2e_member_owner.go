@@ -79,11 +79,11 @@ func (r *memberRun) ownerReturns() error {
 		return err
 	}
 	last := r.n + 1
-	if err := r.markRead(r.st.Room, user, last, 1); err != nil {
+	if err := r.markRead(r.st.Room, user, last, 2); err != nil {
 		return err
 	}
 	return r.expect(
-		r.member(r.st.Room, e2e.KindMemberAdded, user, 3, e2e.AddedPayload("member", last, 1)),
+		r.member(r.st.Room, e2e.KindMemberAdded, user, 3, e2e.AddedPayload("member", last, 2)),
 		r.member(r.st.Room, e2e.KindRoleChanged, user, 4, e2e.RolePayload("owner", "member")),
 		r.count(5, r.st.Members+1),
 	)

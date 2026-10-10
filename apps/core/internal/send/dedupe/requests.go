@@ -35,11 +35,15 @@ func RequestKey(room uint64, user, requestID string) Key {
 	return Key{Room: room, User: user, CID: requestID, Space: SpaceRequest}
 }
 
+func CreateKey(tenant, user, requestID string) Key {
+	return Key{Tenant: tenant, User: user, CID: requestID, Space: SpaceCreate}
+}
+
 type Requests struct {
 	reg  Registry
 	ttl  time.Duration
 	mu   sync.Mutex
-	done *lru.Cache[Key, time.Time]
+	done *lru.Cache[Key, Record]
 }
 
 func NewRequests(reg Registry, ttl time.Duration) (*Requests, error) {
@@ -49,33 +53,33 @@ func NewRequests(reg Registry, ttl time.Duration) (*Requests, error) {
 	case ttl <= 0:
 		return nil, fmt.Errorf("%w: request dedupe ttl %v must be positive", apperr.ErrInvalidArgument, ttl)
 	}
-	return &Requests{reg: reg, ttl: ttl, done: lru.New[Key, time.Time](RequestCacheSize)}, nil
+	return &Requests{reg: reg, ttl: ttl, done: lru.New[Key, Record](RequestCacheSize)}, nil
 }
 
-func (r *Requests) Begin(ctx context.Context, k Key) (RequestStatus, error) {
+func (r *Requests) Begin(ctx context.Context, k Key) (RequestStatus, Record, error) {
 	if err := ctx.Err(); err != nil {
-		return RequestNew, err
+		return RequestNew, Record{}, err
 	}
-	if r.remembered(k) {
-		return RequestDone, nil
+	if rec, ok := r.remembered(k); ok {
+		return RequestDone, rec, nil
 	}
 	verdicts, err := r.reg.Reserve(ctx, []Key{k})
 	if cerr := ctx.Err(); cerr != nil {
-		return RequestNew, cerr
+		return RequestNew, Record{}, cerr
 	}
 	switch v := onlyVerdict(verdicts, err); v.Status {
 	case Committed:
-		r.remember(k, v.Record.CreatedAt)
-		return RequestDone, nil
+		r.remember(k, v.Record)
+		return RequestDone, v.Record, nil
 	case PendingHere, PendingElsewhere:
-		return RequestBusy, nil
+		return RequestBusy, Record{}, nil
 	default:
-		return RequestNew, nil
+		return RequestNew, Record{}, nil
 	}
 }
 
 func (r *Requests) Finish(ctx context.Context, k Key, rec Record) {
-	r.remember(k, rec.CreatedAt)
+	r.remember(k, rec)
 	_ = r.reg.Commit(ctx, []Entry{{Key: k, Record: rec}})
 }
 
@@ -90,22 +94,22 @@ func onlyVerdict(verdicts []Verdict, err error) Verdict {
 	return verdicts[0]
 }
 
-func (r *Requests) remembered(k Key) bool {
+func (r *Requests) remembered(k Key) (Record, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	at, ok := r.done.Get(k)
+	rec, ok := r.done.Get(k)
 	if !ok {
-		return false
+		return Record{}, false
 	}
-	if time.Since(at) >= r.ttl {
+	if time.Since(rec.CreatedAt) >= r.ttl {
 		r.done.Remove(k)
-		return false
+		return Record{}, false
 	}
-	return true
+	return rec, true
 }
 
-func (r *Requests) remember(k Key, at time.Time) {
+func (r *Requests) remember(k Key, rec Record) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.done.Put(k, at)
+	r.done.Put(k, rec)
 }

@@ -151,9 +151,9 @@ func TestTheClampReadsTheLastSeqOnlyPastTheRoomHead(t *testing.T) {
 
 func TestDirectRoomsTrackReadPositionsToo(t *testing.T) {
 	rg := newRig(t, nil)
-	r, members, err := domain.NewRoom(tenant, "owen", domain.RoomDM, "", []string{"owen", "mia"}, created, direct)
+	r, members, err := domain.NewDirectRoom(tenant, "owen", "mia", created, direct)
 	if err != nil {
-		t.Fatalf("NewRoom: %v", err)
+		t.Fatalf("NewDirectRoom: %v", err)
 	}
 	if err := rg.rooms.Create(t.Context(), r, members); err != nil {
 		t.Fatalf("create direct: %v", err)

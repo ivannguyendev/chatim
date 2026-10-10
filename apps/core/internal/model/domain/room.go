@@ -2,6 +2,8 @@ package domain
 
 import "time"
 
+const directKeySeparator = "│"
+
 type RoomType string
 
 const (
@@ -29,6 +31,11 @@ type Room struct {
 	LastMsgAt      time.Time
 	LastChangeAt   time.Time
 	MemberCountVer uint64
+	DMKey          string
+}
+
+func DirectKey(tenant, a, b string) string {
+	return tenant + directKeySeparator + min(a, b) + directKeySeparator + max(a, b)
 }
 
 func ParseRoomType(s string) (RoomType, error) {

@@ -2,6 +2,7 @@ package grpcsrv_test
 
 import (
 	"context"
+	"crypto/rand"
 	"log/slog"
 	"net"
 	"runtime"
@@ -22,6 +23,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
+	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
@@ -56,6 +58,7 @@ type rig struct {
 	hidden    *memstore.Hidden
 	reactions *memstore.Interactions
 	pins      *memstore.Pins
+	directs   *memstore.DirectRooms
 }
 
 type options struct {
@@ -67,6 +70,8 @@ type options struct {
 	sendPol access.Policy
 	events  grpcsrv.EventPublisher
 	limits  mutate.Limits
+	members func(*memstore.Rooms) grpcsrv.RoomMembers
+	pending dedupe.Registry
 }
 
 func newRig(t *testing.T, o options) *rig {
@@ -78,6 +83,7 @@ func newRig(t *testing.T, o options) *rig {
 	svc, err := grpcsrv.New(grpcsrv.Deps{
 		Sender: o.sender, Rooms: rg.rooms, Pages: rg.msgs, NewID: o.newID, Now: o.now, Policy: o.policy, Events: o.events,
 		Mutator: newMutator(t, rg, o), Edits: rg.edits, Hidden: rg.hidden, Bookmarks: rg.reactions,
+		Members: membersOf(rg, o), Timers: nopTimers{}, Requests: newRequests(t, o.pending), Directs: rg.directs,
 	}, quiet)
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -152,7 +158,7 @@ func expectCode(t *testing.T, err error, code codes.Code) {
 func (rg *rig) createGroup(t *testing.T, tenant, creator string, members ...string) string {
 	t.Helper()
 	resp, err := rg.client.CreateRoom(as(t, tenant, creator), &chatimv1.CreateRoomRequest{
-		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "Team", Members: append([]string{creator}, members...),
+		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "Team", Members: append([]string{creator}, members...), RequestId: rand.Text(),
 	})
 	if err != nil {
 		t.Fatalf("CreateRoom: %v", err)

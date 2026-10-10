@@ -18,6 +18,7 @@ var portMethods = map[string]string{
 	"Messages.Page":       "read",
 	"Messages.Find":       "read",
 	"Rooms.Create":        "insert-unique",
+	"Rooms.InsertRoom":    "insert-unique",
 	"Rooms.Get":           "read",
 	"Rooms.Member":        "read",
 	"Rooms.TouchActivity": "monotonic-max",
@@ -71,6 +72,9 @@ var portMethods = map[string]string{
 	"MemberCounts.SetMemberCount": "cas",
 	"ReadPositions.MarkRead":      "version-bump",
 	"ReadPositions.MarkUnread":    "version-bump",
+
+	"DirectRooms.Claim":   "upsert",
+	"DirectRooms.Repoint": "cas",
 }
 
 func TestEveryPortMethodHasAWriteContract(t *testing.T) {
@@ -92,6 +96,7 @@ func TestEveryPortMethodHasAWriteContract(t *testing.T) {
 		reflect.TypeFor[store.OwnerChanges](),
 		reflect.TypeFor[store.MemberCounts](),
 		reflect.TypeFor[store.ReadPositions](),
+		reflect.TypeFor[store.DirectRooms](),
 	}
 	seen := map[string]bool{}
 	for _, p := range ports {

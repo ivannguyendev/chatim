@@ -63,6 +63,26 @@ func (s *Rooms) Create(ctx context.Context, r domain.Room, members []domain.Memb
 	return nil
 }
 
+func (s *Rooms) InsertRoom(ctx context.Context, r domain.Room) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := store.ValidateRoomInsert(r); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.rooms[r.ID]; ok {
+		return fmt.Errorf("insert room %d: %w", r.ID, store.ErrRoomExists)
+	}
+	r.MemberCount, r.MemberCountVer = 0, 0
+	s.rooms[r.ID] = r
+	if s.log != nil {
+		s.log.appendFact(logged{kind: store.RoomInserted, room: r})
+	}
+	return nil
+}
+
 func (s *Rooms) Get(ctx context.Context, id uint64) (domain.Room, error) {
 	if err := ctx.Err(); err != nil {
 		return domain.Room{}, err

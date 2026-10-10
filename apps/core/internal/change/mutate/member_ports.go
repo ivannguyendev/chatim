@@ -21,7 +21,7 @@ type MemberStore interface {
 }
 
 type RequestDedupe interface {
-	Begin(ctx context.Context, k dedupe.Key) (dedupe.RequestStatus, error)
+	Begin(ctx context.Context, k dedupe.Key) (dedupe.RequestStatus, dedupe.Record, error)
 	Finish(ctx context.Context, k dedupe.Key, rec dedupe.Record)
 	Cancel(ctx context.Context, k dedupe.Key)
 }

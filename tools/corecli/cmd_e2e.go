@@ -69,9 +69,10 @@ func createRoomOnSlot(ctx context.Context, s *session, user string) (string, int
 		return "", 0, slotmap.Route{}, fmt.Errorf("load slot table: %w", err)
 	}
 	req := &chatimv1.CreateRoomRequest{
-		Type:    chatimv1.RoomType_ROOM_TYPE_GROUP,
-		Name:    "e2e " + time.Now().UTC().Format(time.RFC3339),
-		Members: []string{user},
+		Type:      chatimv1.RoomType_ROOM_TYPE_GROUP,
+		Name:      "e2e " + time.Now().UTC().Format(time.RFC3339),
+		Members:   []string{user},
+		RequestId: randomCID(),
 	}
 	resp, _, err := s.client.CreateRoom(ctx, req)
 	if err != nil {

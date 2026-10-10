@@ -53,7 +53,7 @@ func TestCreateRoomEnqueuesRoomCreatedAndTheFirstMembers(t *testing.T) {
 	events := &recordingEvents{}
 	rg := newRig(t, options{sender: &fakeSender{}, newID: newID, now: func() time.Time { return clock }, events: events})
 	if _, err := rg.client.CreateRoom(as(t, "acme", "alice"), &chatimv1.CreateRoomRequest{
-		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "Team", Members: []string{"bob", "alice", "bob", "carol"},
+		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "Team", Members: []string{"bob", "alice", "bob", "carol"}, RequestId: "r1",
 	}); err != nil {
 		t.Fatalf("CreateRoom: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestCreateRoomSucceedsWhenTheEventIsRefused(t *testing.T) {
 	events := &recordingEvents{err: errors.New("publish queue full")}
 	rg := newRig(t, options{sender: &fakeSender{}, newID: newID, events: events})
 	resp, err := rg.client.CreateRoom(as(t, "acme", "alice"), &chatimv1.CreateRoomRequest{
-		Type: chatimv1.RoomType_ROOM_TYPE_DM, Members: []string{"alice", "bob"},
+		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "Team", Members: []string{"alice", "bob"}, RequestId: "r1",
 	})
 	if err != nil || resp.GetRoom().GetId() != "7" {
 		t.Fatalf("CreateRoom with a refused event = %v, %v; want room 7", resp, err)
@@ -110,19 +110,21 @@ func TestCreateRoomSucceedsWhenTheEventIsRefused(t *testing.T) {
 }
 
 func TestCreateRoomEnqueuesOnlyForTheStoredRoom(t *testing.T) {
-	newID, _ := idSequence(1, 2, 3)
+	newID, _ := idSequence(1, 3)
 	events := &recordingEvents{}
 	rg := newRig(t, options{sender: &fakeSender{}, newID: newID, events: events})
-	occupy(t, rg.rooms, 1, 2)
-	if _, err := rg.client.CreateRoom(as(t, "acme", "alice"), &chatimv1.CreateRoomRequest{
-		Type: chatimv1.RoomType_ROOM_TYPE_DM, Members: []string{"alice", "bob"},
-	}); err != nil {
+	occupy(t, rg.rooms, 1)
+	group := func(requestID, name string) error {
+		_, err := rg.client.CreateRoom(as(t, "acme", "alice"), &chatimv1.CreateRoomRequest{
+			Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: name, Members: []string{"alice", "bob"}, RequestId: requestID,
+		})
+		return err
+	}
+	expectCode(t, group("r1", "Team"), codes.Unavailable)
+	if err := group("r2", "Team"); err != nil {
 		t.Fatalf("CreateRoom: %v", err)
 	}
-	_, err := rg.client.CreateRoom(as(t, "acme", "alice"), &chatimv1.CreateRoomRequest{
-		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Members: []string{"alice"},
-	})
-	expectCode(t, err, codes.InvalidArgument)
+	expectCode(t, group("r3", ""), codes.InvalidArgument)
 	if rooms, _ := events.enqueued(); !slices.Equal(rooms, []uint64{3, 3, 3, 3}) {
 		t.Fatalf("enqueued for rooms %v, want only 3", rooms)
 	}

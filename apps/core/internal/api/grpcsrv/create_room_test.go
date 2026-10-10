@@ -20,7 +20,7 @@ func TestCreateRoomStoresAndReturnsTheRoom(t *testing.T) {
 	newID, _ := idSequence(42)
 	rg := newRig(t, options{sender: &fakeSender{}, newID: newID, now: func() time.Time { return clock }})
 	resp, err := rg.client.CreateRoom(as(t, "acme", "alice"), &chatimv1.CreateRoomRequest{
-		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "Team", Members: []string{"bob", "alice", "bob"},
+		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "Team", Members: []string{"bob", "alice", "bob"}, RequestId: "r1",
 	})
 	if err != nil {
 		t.Fatalf("CreateRoom: %v", err)
@@ -48,16 +48,16 @@ func TestCreateRoomRejectsBadInput(t *testing.T) {
 	rg := newRig(t, options{sender: &fakeSender{}})
 	dm, group := chatimv1.RoomType_ROOM_TYPE_DM, chatimv1.RoomType_ROOM_TYPE_GROUP
 	cases := map[string]*chatimv1.CreateRoomRequest{
-		"unspecified type":       {Name: "Team", Members: []string{"alice"}},
-		"unknown type":           {Type: chatimv1.RoomType(7), Name: "Team", Members: []string{"alice"}},
-		"group without name":     {Type: group, Members: []string{"alice"}},
-		"name too long":          {Type: group, Name: strings.Repeat("n", 129), Members: []string{"alice"}},
-		"creator not a member":   {Type: group, Name: "Team", Members: []string{"bob"}},
-		"no members":             {Type: group, Name: "Team"},
-		"invalid member id":      {Type: group, Name: "Team", Members: []string{"alice", "b.b"}},
-		"dm of one":              {Type: dm, Members: []string{"alice"}},
-		"dm of three":            {Type: dm, Members: []string{"alice", "bob", "carol"}},
-		"dm without the creator": {Type: dm, Members: []string{"bob", "carol"}},
+		"unspecified type":     {Name: "Team", Members: []string{"alice"}, RequestId: "r1"},
+		"unknown type":         {Type: chatimv1.RoomType(7), Name: "Team", Members: []string{"alice"}, RequestId: "r1"},
+		"group without name":   {Type: group, Members: []string{"alice"}, RequestId: "r1"},
+		"name too long":        {Type: group, Name: strings.Repeat("n", 129), Members: []string{"alice"}, RequestId: "r1"},
+		"creator not a member": {Type: group, Name: "Team", Members: []string{"bob"}, RequestId: "r1"},
+		"no members":           {Type: group, Name: "Team", RequestId: "r1"},
+		"invalid member id":    {Type: group, Name: "Team", Members: []string{"alice", "b.b"}, RequestId: "r1"},
+		"no request id":        {Type: group, Name: "Team", Members: []string{"alice"}},
+		"bad request id":       {Type: group, Name: "Team", Members: []string{"alice"}, RequestId: "r 1"},
+		"direct room":          {Type: dm, Members: []string{"alice", "bob"}, RequestId: "r1"},
 	}
 	for name, req := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -72,52 +72,64 @@ func TestCreateRoomCapsTheMembersOfOneRequest(t *testing.T) {
 	rg := newRig(t, options{sender: &fakeSender{}, newID: newID})
 	full := manyUsers("alice", 500)
 	_, err := rg.client.CreateRoom(as(t, "acme", "alice"), &chatimv1.CreateRoomRequest{
-		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "Big", Members: append(full, "alice"),
+		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "Big", Members: append(full, "alice"), RequestId: "big-1",
 	})
 	expectCode(t, err, codes.InvalidArgument)
 	if calls() != 0 {
 		t.Fatalf("drew %d ids for a request over the cap, want 0", calls())
 	}
 	resp, err := rg.client.CreateRoom(as(t, "acme", "alice"), &chatimv1.CreateRoomRequest{
-		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "Big", Members: full,
+		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "Big", Members: full, RequestId: "big-2",
 	})
 	if err != nil || resp.GetRoom().GetMemberCount() != 500 {
 		t.Fatalf("CreateRoom of 500 = %v, %v; want 500 members", resp.GetRoom(), err)
 	}
 }
 
-func TestCreateRoomRetriesWithFreshIDsWhileTaken(t *testing.T) {
-	newID, calls := idSequence(1, 2, 3)
+func TestCreateRoomRetryWithTheSameRequestGivesTheSameRoom(t *testing.T) {
+	newID, _ := idSequence(42, 43)
 	rg := newRig(t, options{sender: &fakeSender{}, newID: newID})
-	occupy(t, rg.rooms, 1, 2)
-	resp, err := rg.client.CreateRoom(as(t, "acme", "alice"), &chatimv1.CreateRoomRequest{
-		Type: chatimv1.RoomType_ROOM_TYPE_DM, Members: []string{"alice", "bob"},
-	})
-	if err != nil {
-		t.Fatalf("CreateRoom: %v", err)
+	req := &chatimv1.CreateRoomRequest{Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "Team", Members: []string{"alice", "bob"}, RequestId: "r1"}
+	for i := range 2 {
+		resp, err := rg.client.CreateRoom(as(t, "acme", "alice"), req)
+		if err != nil || resp.GetRoom().GetId() != "42" || resp.GetRoom().GetMemberCount() != 2 {
+			t.Fatalf("CreateRoom call %d = %v, %v; want room 42 of 2", i+1, resp.GetRoom(), err)
+		}
 	}
-	if resp.GetRoom().GetId() != "3" || calls() != 3 {
-		t.Fatalf("room id %q after %d ids, want \"3\" after 3", resp.GetRoom().GetId(), calls())
+	if _, err := rg.rooms.Get(t.Context(), 43); !errors.Is(err, domain.ErrRoomNotFound) {
+		t.Fatalf("room 43 = %v, want ErrRoomNotFound", err)
 	}
-	if m, err := rg.rooms.Member(t.Context(), 3, "bob"); err != nil || m.Tenant != "acme" {
-		t.Fatalf("member bob of room 3 = %+v, %v", m, err)
+	other, err := rg.client.CreateRoom(as(t, "acme", "bob"), req)
+	if err != nil || other.GetRoom().GetId() != "43" {
+		t.Fatalf("CreateRoom by bob with alice's request id = %v, %v; want room 43", other.GetRoom(), err)
 	}
 }
 
-func TestCreateRoomGivesUpAfterThreeTakenIDs(t *testing.T) {
-	newID, calls := idSequence(1, 2, 3, 4)
+func TestCreateRoomRefusesATakenIDWithoutDrawingAgain(t *testing.T) {
+	newID, calls := idSequence(1, 2)
 	rg := newRig(t, options{sender: &fakeSender{}, newID: newID})
-	occupy(t, rg.rooms, 1, 2, 3)
+	occupy(t, rg.rooms, 1)
+	req := &chatimv1.CreateRoomRequest{Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "Team", Members: []string{"alice"}, RequestId: "r1"}
+	_, err := rg.client.CreateRoom(as(t, "acme", "alice"), req)
+	expectCode(t, err, codes.Unavailable)
+	if calls() != 1 {
+		t.Fatalf("drew %d ids, want 1", calls())
+	}
+	if taken, err := rg.rooms.Get(t.Context(), 1); err != nil || taken.Tenant != "other" {
+		t.Fatalf("room 1 = %+v, %v; want the other tenant's room kept", taken, err)
+	}
+	resp, err := rg.client.CreateRoom(as(t, "acme", "alice"), req)
+	if err != nil || resp.GetRoom().GetId() != "2" {
+		t.Fatalf("retry after a taken id = %v, %v; want room 2", resp.GetRoom(), err)
+	}
+}
+
+func TestCreateRoomRefusesARequestInFlight(t *testing.T) {
+	rg := newRig(t, options{sender: &fakeSender{}, pending: pendingCIDs{}})
 	_, err := rg.client.CreateRoom(as(t, "acme", "alice"), &chatimv1.CreateRoomRequest{
-		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "Team", Members: []string{"alice"},
+		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "Team", Members: []string{"alice"}, RequestId: "r1",
 	})
 	expectCode(t, err, codes.Unavailable)
-	if calls() != 3 {
-		t.Fatalf("drew %d ids, want 3", calls())
-	}
-	if _, err := rg.rooms.Get(t.Context(), 4); !errors.Is(err, domain.ErrRoomNotFound) {
-		t.Fatalf("room 4 = %v, want ErrRoomNotFound", err)
-	}
 }
 
 func occupy(t *testing.T, rooms *memstore.Rooms, ids ...uint64) {

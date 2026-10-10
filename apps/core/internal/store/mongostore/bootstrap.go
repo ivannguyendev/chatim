@@ -13,7 +13,7 @@ import (
 )
 
 func Bootstrap(ctx context.Context, db *mongo.Database) error {
-	for _, name := range []string{messagesCollection, editsCollection, interactionsCollection, pinActionsCollection, membersCollection, mentionsCollection} {
+	for _, name := range []string{messagesCollection, editsCollection, interactionsCollection, pinActionsCollection, membersCollection, mentionsCollection, roomDMsCollection} {
 		if err := ensureClustered(ctx, db, name); err != nil {
 			return err
 		}

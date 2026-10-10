@@ -2,6 +2,7 @@ package itest
 
 import (
 	"context"
+	"crypto/rand"
 	"log/slog"
 	"os"
 	"testing"
@@ -112,7 +113,7 @@ func dialCore(t *testing.T, cfg config.Config) chatimv1.CoreServiceClient {
 func createRoom(t *testing.T, client chatimv1.CoreServiceClient) string {
 	t.Helper()
 	resp, err := client.CreateRoom(caller(t.Context()), &chatimv1.CreateRoomRequest{
-		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "load", Members: []string{itUser, "bob"},
+		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "load", Members: []string{itUser, "bob"}, RequestId: rand.Text(),
 	})
 	if err != nil {
 		t.Fatalf("CreateRoom: %v", err)

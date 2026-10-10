@@ -15,7 +15,10 @@ import (
 
 func TestNewRequiresEveryDependency(t *testing.T) {
 	rg := memStores()
-	full := grpcsrv.Deps{Sender: &fakeSender{}, Rooms: rg.rooms, Pages: rg.msgs, Mutator: newMutator(t, rg, options{}), Edits: rg.edits, Hidden: rg.hidden, Bookmarks: rg.reactions}
+	full := grpcsrv.Deps{
+		Sender: &fakeSender{}, Rooms: rg.rooms, Pages: rg.msgs, Mutator: newMutator(t, rg, options{}), Edits: rg.edits, Hidden: rg.hidden, Bookmarks: rg.reactions,
+		Members: rg.rooms, Timers: nopTimers{}, Requests: newRequests(t, nil), Directs: rg.directs,
+	}
 	for name, drop := range map[string]func(d *grpcsrv.Deps){
 		"no sender":    func(d *grpcsrv.Deps) { d.Sender = nil },
 		"no rooms":     func(d *grpcsrv.Deps) { d.Rooms = nil },
@@ -24,6 +27,10 @@ func TestNewRequiresEveryDependency(t *testing.T) {
 		"no edits":     func(d *grpcsrv.Deps) { d.Edits = nil },
 		"no hidden":    func(d *grpcsrv.Deps) { d.Hidden = nil },
 		"no bookmarks": func(d *grpcsrv.Deps) { d.Bookmarks = nil },
+		"no members":   func(d *grpcsrv.Deps) { d.Members = nil },
+		"no timers":    func(d *grpcsrv.Deps) { d.Timers = nil },
+		"no requests":  func(d *grpcsrv.Deps) { d.Requests = nil },
+		"no directs":   func(d *grpcsrv.Deps) { d.Directs = nil },
 	} {
 		deps := full
 		drop(&deps)
@@ -42,6 +49,10 @@ func TestEveryRPCChecksCallerIdentityFirst(t *testing.T) {
 	rpcs := map[string]func(context.Context) error{
 		"CreateRoom": func(ctx context.Context) error {
 			_, err := rg.client.CreateRoom(ctx, &chatimv1.CreateRoomRequest{})
+			return err
+		},
+		"OpenDirectRoom": func(ctx context.Context) error {
+			_, err := rg.client.OpenDirectRoom(ctx, &chatimv1.OpenDirectRoomRequest{OtherUser: "bob"})
 			return err
 		},
 		"SendMessage": func(ctx context.Context) error {

@@ -69,7 +69,7 @@ func newRequests(t *testing.T, reg Registry) *Requests {
 
 func expectBegin(t *testing.T, r *Requests, k Key, want RequestStatus) {
 	t.Helper()
-	got, err := r.Begin(t.Context(), k)
+	got, _, err := r.Begin(t.Context(), k)
 	if err != nil || got != want {
 		t.Fatalf("Begin(%s) = %v, %v, want %v", k, got, err, want)
 	}

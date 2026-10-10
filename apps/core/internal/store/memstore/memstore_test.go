@@ -74,3 +74,7 @@ func TestMemberFeedContract(t *testing.T) {
 		return rooms, hidden, memstore.NewFeed(memstore.NewMessages(), rooms, nil, memstore.WithHidden(hidden))
 	})
 }
+
+func TestDirectRoomsContract(t *testing.T) {
+	storetest.RunDirectRooms(t, func(*testing.T) store.DirectRooms { return memstore.NewDirectRooms() })
+}

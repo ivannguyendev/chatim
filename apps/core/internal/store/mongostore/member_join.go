@@ -26,7 +26,7 @@ func joinPipeline(j domain.Join, room, readSeq int64, user string) mongo.Pipelin
 		{Key: "room_id", Value: room},
 		{Key: "tenant", Value: literal(j.Tenant)},
 		{Key: "user_id", Value: literal(user)},
-		keep("role", literal(string(domain.RoleMember))),
+		keep("role", literal(string(j.RoleOf(user)))),
 		{Key: "state", Value: int64(domain.MemberActive)},
 		keep("priority", int64(0)),
 		keep("joined_at", j.At),

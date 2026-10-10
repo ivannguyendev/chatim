@@ -20,7 +20,7 @@ import (
 )
 
 var (
-	errMissingDeps = fmt.Errorf("%w: core service needs a sender, a room store, a page reader, a mutator, an edit store, a hidden store and a bookmark store", apperr.ErrInvalidArgument)
+	errMissingDeps = fmt.Errorf("%w: core service needs a sender, a room store, a page reader, a mutator, an edit store, a hidden store, a bookmark store, a member store, count timers, request dedupe and a direct room store", apperr.ErrInvalidArgument)
 	errBadRoomID   = fmt.Errorf("%w: room id", apperr.ErrInvalidArgument)
 )
 
@@ -51,6 +51,10 @@ type Deps struct {
 	Edits     store.Edits
 	Hidden    store.Hidden
 	Bookmarks BookmarkLister
+	Members   RoomMembers
+	Timers    mutate.CountTimers
+	Requests  mutate.RequestDedupe
+	Directs   store.DirectRooms
 	NewID     func() uint64
 	Now       func() time.Time
 }
@@ -65,6 +69,10 @@ type Service struct {
 	edits        store.Edits
 	hidden       store.Hidden
 	bookmarks    BookmarkLister
+	members      RoomMembers
+	timers       mutate.CountTimers
+	requests     mutate.RequestDedupe
+	directs      store.DirectRooms
 	access       *access.Checker
 	view         view.Pipeline
 	bookmarkView view.Pipeline
@@ -76,7 +84,8 @@ type Service struct {
 var _ chatimv1.CoreServiceServer = (*Service)(nil)
 
 func New(d Deps, log *slog.Logger) (*Service, error) {
-	if d.Sender == nil || d.Rooms == nil || d.Pages == nil || d.Mutator == nil || d.Edits == nil || d.Hidden == nil || d.Bookmarks == nil {
+	if d.Sender == nil || d.Rooms == nil || d.Pages == nil || d.Mutator == nil || d.Edits == nil || d.Hidden == nil || d.Bookmarks == nil ||
+		d.Members == nil || d.Timers == nil || d.Requests == nil || d.Directs == nil {
 		return nil, errMissingDeps
 	}
 	if d.NewID == nil {
@@ -97,7 +106,7 @@ func New(d Deps, log *slog.Logger) (*Service, error) {
 	}
 	return &Service{
 		sender: d.Sender, rooms: d.Rooms, pages: d.Pages, events: d.Events, mutator: d.Mutator, edits: d.Edits, hidden: d.Hidden,
-		bookmarks: d.Bookmarks, access: checker, view: view.Default(), bookmarkView: view.New(view.MaskDeleted, view.HideForViewer), newID: d.NewID, now: d.Now, log: log,
+		bookmarks: d.Bookmarks, members: d.Members, timers: d.Timers, requests: d.Requests, directs: d.Directs, access: checker, view: view.Default(), bookmarkView: view.New(view.MaskDeleted, view.HideForViewer), newID: d.NewID, now: d.Now, log: log,
 	}, nil
 }
 

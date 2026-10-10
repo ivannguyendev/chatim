@@ -74,7 +74,7 @@ func (rg *rig) flaky(t *testing.T) *flakyMembers {
 
 func (rg *rig) requestStatus(t *testing.T, user, requestID string) dedupe.RequestStatus {
 	t.Helper()
-	status, err := newRequests(t, rg.registry).Begin(t.Context(), dedupe.RequestKey(group, user, requestID))
+	status, _, err := newRequests(t, rg.registry).Begin(t.Context(), dedupe.RequestKey(group, user, requestID))
 	if err != nil {
 		t.Fatalf("Begin: %v", err)
 	}

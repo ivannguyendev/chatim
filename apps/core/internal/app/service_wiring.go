@@ -28,19 +28,26 @@ type serviceDeps struct {
 }
 
 func wireService(d serviceDeps) (*grpcsrv.Service, error) {
-	mut, err := wireMutator(d)
+	requests, err := dedupe.NewRequests(d.cidBatch, d.cfg.Dedupe.CommittedTTL)
+	if err != nil {
+		return nil, fmt.Errorf("wire request dedupe: %w", err)
+	}
+	mut, err := wireMutator(d, requests)
 	if err != nil {
 		return nil, err
 	}
 	st := d.store
-	svc, err := grpcsrv.New(grpcsrv.Deps{Sender: d.router, Rooms: st, Pages: st, Events: d.pub, Mutator: mut, Edits: st, Hidden: st.Hidden(), Bookmarks: st.Interactions()}, d.log)
+	svc, err := grpcsrv.New(grpcsrv.Deps{
+		Sender: d.router, Rooms: st, Pages: st, Events: d.pub, Mutator: mut, Edits: st, Hidden: st.Hidden(), Bookmarks: st.Interactions(),
+		Members: st, Timers: d.timers, Requests: requests, Directs: st.DirectRooms(),
+	}, d.log)
 	if err != nil {
 		return nil, fmt.Errorf("wire core service: %w", err)
 	}
 	return svc, nil
 }
 
-func wireMutator(d serviceDeps) (*mutate.Mutator, error) {
+func wireMutator(d serviceDeps, requests *dedupe.Requests) (*mutate.Mutator, error) {
 	st := d.store
 	checker, err := access.NewChecker(st, access.DefaultPolicy{LockedKinds: d.cfg.LockedMessageKinds})
 	if err != nil {
@@ -50,10 +57,6 @@ func wireMutator(d serviceDeps) (*mutate.Mutator, error) {
 	projector, err := pinproj.New(pins, st)
 	if err != nil {
 		return nil, fmt.Errorf("wire pin projector: %w", err)
-	}
-	requests, err := dedupe.NewRequests(d.cidBatch, d.cfg.Dedupe.CommittedTTL)
-	if err != nil {
-		return nil, fmt.Errorf("wire request dedupe: %w", err)
 	}
 	mut, err := mutate.New(mutate.Deps{
 		Access: checker, Messages: st, Edits: st, Hidden: st.Hidden(), Rooms: st, Events: d.pub,

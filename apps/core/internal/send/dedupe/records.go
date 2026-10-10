@@ -9,6 +9,7 @@ import (
 const (
 	keyPrefix       = "chatim:cid:"
 	requestPrefix   = "chatim:req:"
+	createPrefix    = "chatim:req:create:"
 	pendingPrefix   = "p:"
 	committedPrefix = "c:"
 )
@@ -18,20 +19,25 @@ type Space uint8
 const (
 	SpaceCID Space = iota
 	SpaceRequest
+	SpaceCreate
 )
 
 type Key struct {
 	Room      uint64
+	Tenant    string
 	User, CID string
 	Space     Space
 }
 
 func (k Key) String() string {
-	prefix := keyPrefix
-	if k.Space == SpaceRequest {
-		prefix = requestPrefix
+	switch k.Space {
+	case SpaceCreate:
+		return createPrefix + k.Tenant + ":" + k.User + ":" + k.CID
+	case SpaceRequest:
+		return requestPrefix + strconv.FormatUint(k.Room, 10) + ":" + k.User + ":" + k.CID
+	default:
+		return keyPrefix + strconv.FormatUint(k.Room, 10) + ":" + k.User + ":" + k.CID
 	}
-	return prefix + strconv.FormatUint(k.Room, 10) + ":" + k.User + ":" + k.CID
 }
 
 type Record struct {

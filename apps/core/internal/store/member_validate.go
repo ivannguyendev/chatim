@@ -2,6 +2,7 @@ package store
 
 import (
 	"math"
+	"slices"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 )
@@ -24,6 +25,8 @@ func ValidateJoin(j domain.Join, users []string) error {
 		return invalid("read seq")
 	case len(users) < 1 || len(users) > domain.MaxMemberBatch:
 		return invalid("users")
+	case j.Owner != "" && !slices.Contains(users, j.Owner):
+		return invalid("owner")
 	}
 	seen := make(map[string]struct{}, len(users))
 	for _, u := range users {

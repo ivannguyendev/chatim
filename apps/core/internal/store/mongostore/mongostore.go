@@ -22,6 +22,7 @@ const (
 	interactionsCollection    = "message_interactions"
 	pinActionsCollection      = "pin_actions"
 	mentionsCollection        = "mentions"
+	roomDMsCollection         = "room_dms"
 )
 
 var (
@@ -41,6 +42,7 @@ var (
 	_ store.MemberCounts      = (*Store)(nil)
 	_ store.ReadPositions     = (*Store)(nil)
 	_ store.Mentions          = (*Mentions)(nil)
+	_ store.DirectRooms       = (*DirectRooms)(nil)
 )
 
 type Options struct {
@@ -59,6 +61,7 @@ type Store struct {
 	interactions     *Interactions
 	pins             *Pins
 	mentions         *Mentions
+	directRooms      *DirectRooms
 }
 
 func New(db *mongo.Database, opts Options) *Store {
@@ -79,6 +82,7 @@ func New(db *mongo.Database, opts Options) *Store {
 		interactions:     &Interactions{coll: db.Collection(interactionsCollection, interacted), client: db.Client()},
 		pins:             &Pins{coll: db.Collection(pinActionsCollection, primary)},
 		mentions:         &Mentions{coll: db.Collection(mentionsCollection, primary)},
+		directRooms:      &DirectRooms{coll: db.Collection(roomDMsCollection, primary)},
 	}
 }
 
@@ -89,3 +93,5 @@ func (s *Store) Pins() *Pins { return s.pins }
 func (s *Store) Hidden() *Hidden { return s.hidden }
 
 func (s *Store) Mentions() *Mentions { return s.mentions }
+
+func (s *Store) DirectRooms() *DirectRooms { return s.directRooms }

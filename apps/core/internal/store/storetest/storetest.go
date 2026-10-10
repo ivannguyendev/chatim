@@ -1,6 +1,7 @@
 package storetest
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -39,7 +40,7 @@ func Run(t *testing.T, open func(t *testing.T) (store.Messages, store.Rooms)) {
 		})
 	}
 	t.Run("Rooms", func(t *testing.T) {
-		for _, c := range append(roomsCases(), activityCases()...) {
+		for _, c := range slices.Concat(roomsCases(), roomInsertCases(), activityCases()) {
 			t.Run(c.name, func(t *testing.T) {
 				_, rooms := open(t)
 				c.run(t, rooms)

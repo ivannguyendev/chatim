@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/api/grpcsrv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/pinproj"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
@@ -30,6 +31,16 @@ func (acceptAllCIDs) Reserve(_ context.Context, keys []dedupe.Key) ([]dedupe.Ver
 func (acceptAllCIDs) Commit(context.Context, []dedupe.Entry) error { return nil }
 
 func (acceptAllCIDs) Abort(context.Context, []dedupe.Key) error { return nil }
+
+type pendingCIDs struct{ acceptAllCIDs }
+
+func (pendingCIDs) Reserve(_ context.Context, keys []dedupe.Key) ([]dedupe.Verdict, error) {
+	out := make([]dedupe.Verdict, len(keys))
+	for i := range out {
+		out[i] = dedupe.Verdict{Status: dedupe.PendingElsewhere}
+	}
+	return out, nil
+}
 
 type nopTimers struct{}
 
@@ -74,7 +85,7 @@ func (f *fakeSender) sent() []actor.SendCmd {
 func memStores() *rig {
 	return &rig{
 		rooms: memstore.NewRooms(), msgs: memstore.NewMessages(), edits: memstore.NewEdits(), hidden: memstore.NewHidden(),
-		reactions: memstore.NewInteractions(), pins: memstore.NewPins(),
+		reactions: memstore.NewInteractions(), pins: memstore.NewPins(), directs: memstore.NewDirectRooms(),
 	}
 }
 
@@ -96,10 +107,7 @@ func newMutator(t *testing.T, rg *rig, o options) *mutate.Mutator {
 	if f, ok := o.sender.(mutate.MemberForgetter); ok {
 		forget = f
 	}
-	requests, err := dedupe.NewRequests(acceptAllCIDs{}, 15*time.Minute)
-	if err != nil {
-		t.Fatalf("NewRequests: %v", err)
-	}
+	requests := newRequests(t, nil)
 	m, err := mutate.New(mutate.Deps{
 		Access: checker, Messages: rg.msgs, Edits: rg.edits, Hidden: rg.hidden, Rooms: rg.rooms, Events: events, Now: o.now,
 		Interactions: rg.reactions, Counts: rg.msgs, CountTimers: nopTimers{}, Pins: rg.pins, Projector: projector, Limits: o.limits,
@@ -109,4 +117,23 @@ func newMutator(t *testing.T, rg *rig, o options) *mutate.Mutator {
 		t.Fatalf("mutate.New: %v", err)
 	}
 	return m
+}
+
+func newRequests(t *testing.T, reg dedupe.Registry) *dedupe.Requests {
+	t.Helper()
+	if reg == nil {
+		reg = acceptAllCIDs{}
+	}
+	r, err := dedupe.NewRequests(reg, 15*time.Minute)
+	if err != nil {
+		t.Fatalf("NewRequests: %v", err)
+	}
+	return r
+}
+
+func membersOf(rg *rig, o options) grpcsrv.RoomMembers {
+	if o.members == nil {
+		return rg.rooms
+	}
+	return o.members(rg.rooms)
 }

@@ -42,6 +42,24 @@ func (s *Store) Create(ctx context.Context, r domain.Room, members []domain.Memb
 	return nil
 }
 
+func (s *Store) InsertRoom(ctx context.Context, r domain.Room) error {
+	if err := store.ValidateRoomInsert(r); err != nil {
+		return err
+	}
+	r.MemberCount, r.MemberCountVer = 0, 0
+	room, err := encodeRoom(r)
+	if err != nil {
+		return err
+	}
+	if _, err := s.rooms.InsertOne(ctx, room); err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return fmt.Errorf("insert room %d: %w", r.ID, store.ErrRoomExists)
+		}
+		return fmt.Errorf("insert room %d: %w", r.ID, err)
+	}
+	return nil
+}
+
 func (s *Store) Get(ctx context.Context, id uint64) (domain.Room, error) {
 	key, err := toInt64("room id", id)
 	if err != nil {

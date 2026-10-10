@@ -36,8 +36,8 @@ func (droppedEvents) Enqueue(uint64, []*chatimv1.Event) error { return nil }
 
 type freshRequests struct{}
 
-func (freshRequests) Begin(context.Context, dedupe.Key) (dedupe.RequestStatus, error) {
-	return dedupe.RequestNew, nil
+func (freshRequests) Begin(context.Context, dedupe.Key) (dedupe.RequestStatus, dedupe.Record, error) {
+	return dedupe.RequestNew, dedupe.Record{}, nil
 }
 
 func (freshRequests) Finish(context.Context, dedupe.Key, dedupe.Record) {}

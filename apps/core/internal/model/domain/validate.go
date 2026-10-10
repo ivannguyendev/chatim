@@ -9,7 +9,6 @@ import (
 const (
 	maxTextBytes = 16384
 	maxNameRunes = 128
-	dmMembers    = 2
 	defaultPage  = 50
 	maxPage      = 100
 )
@@ -21,43 +20,61 @@ func NewRoom(tenant, creator string, typ RoomType, name string, members []string
 	if err := ValidUser(creator); err != nil {
 		return Room{}, nil, err
 	}
-	if _, err := ParseRoomType(string(typ)); err != nil {
+	if typ != RoomGroup {
+		return Room{}, nil, invalid("type")
+	}
+	if err := validateName(name); err != nil {
 		return Room{}, nil, err
 	}
-	if err := validateName(typ, name); err != nil {
-		return Room{}, nil, err
-	}
-	users, err := distinctMembers(typ, creator, members)
+	users, err := distinctMembers(creator, members)
 	if err != nil {
 		return Room{}, nil, err
 	}
-	requestID := CreationRequestID(id)
-	out := make([]Member, len(users))
-	for i, u := range users {
-		role := RoleMember
-		if u == creator {
-			role = RoleOwner
-		}
-		out[i] = Member{
-			Room: id, Tenant: tenant, User: u, Role: role, JoinedAt: now, State: MemberActive, Ver: 1,
-			RequestID: requestID, UpdatedAt: now, UpdatedBy: creator, LastChangeAt: now,
-		}
-	}
-	room := Room{ID: id, Tenant: tenant, Type: typ, Name: name, CreatedBy: creator, CreatedAt: now, MemberCount: len(out)}
-	return room, out, nil
+	j := Join{Room: id, Tenant: tenant, RequestID: CreationRequestID(id), By: creator, At: now, Owner: creator}
+	room := Room{ID: id, Tenant: tenant, Type: typ, Name: name, CreatedBy: creator, CreatedAt: now, MemberCount: len(users)}
+	return room, founders(j, users), nil
 }
 
-func validateName(typ RoomType, name string) error {
+func NewDirectRoom(tenant, caller, other string, now time.Time, id uint64) (Room, []Member, error) {
+	if err := ValidTenant(tenant); err != nil {
+		return Room{}, nil, err
+	}
+	if err := ValidUser(caller); err != nil {
+		return Room{}, nil, err
+	}
+	if err := ValidUser(other); err != nil {
+		return Room{}, nil, err
+	}
+	if caller == other {
+		return Room{}, nil, ErrSelfDirect
+	}
+	j := Join{Room: id, Tenant: tenant, RequestID: CreationRequestID(id), By: caller, At: now}
+	room := Room{ID: id, Tenant: tenant, Type: RoomDM, CreatedBy: caller, CreatedAt: now, MemberCount: 2, DMKey: DirectKey(tenant, caller, other)}
+	return room, founders(j, []string{caller, other}), nil
+}
+
+func founders(j Join, users []string) []Member {
+	out := make([]Member, len(users))
+	for i, u := range users {
+		out[i] = Member{
+			Room: j.Room, Tenant: j.Tenant, User: u, Role: j.RoleOf(u), JoinedAt: j.At, State: MemberActive, Ver: 1,
+			RequestID: j.RequestID, UpdatedAt: j.At, UpdatedBy: j.By, LastChangeAt: j.At,
+		}
+	}
+	return out
+}
+
+func validateName(name string) error {
 	if !utf8.ValidString(name) || utf8.RuneCountInString(name) > maxNameRunes {
 		return invalid("name")
 	}
-	if typ == RoomGroup && strings.TrimSpace(name) == "" {
+	if strings.TrimSpace(name) == "" {
 		return invalid("name")
 	}
 	return nil
 }
 
-func distinctMembers(typ RoomType, creator string, members []string) ([]string, error) {
+func distinctMembers(creator string, members []string) ([]string, error) {
 	seen := make(map[string]struct{}, len(members))
 	users := make([]string, 0, len(members))
 	for _, u := range members {
@@ -70,7 +87,7 @@ func distinctMembers(typ RoomType, creator string, members []string) ([]string, 
 		seen[u] = struct{}{}
 		users = append(users, u)
 	}
-	if _, ok := seen[creator]; !ok || (typ == RoomDM && len(users) != dmMembers) {
+	if _, ok := seen[creator]; !ok {
 		return nil, invalid("members")
 	}
 	return users, nil

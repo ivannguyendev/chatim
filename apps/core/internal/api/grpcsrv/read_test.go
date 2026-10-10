@@ -43,11 +43,11 @@ func TestReadPositionThroughTheService(t *testing.T) {
 		got  readRow
 		want readRow
 	}{
-		{"read up to 2", read(2), readRow{2, 1}},
-		{"read 0 means everything", read(0), readRow{3, 2}},
-		{"read past the end is clamped", read(9), readRow{3, 2}},
-		{"unread from 2", unread(2), readRow{1, 3}},
-		{"read at the current position moves nothing", read(1), readRow{1, 3}},
+		{"read up to 2", read(2), readRow{2, 2}},
+		{"read 0 means everything", read(0), readRow{3, 3}},
+		{"read past the end is clamped", read(9), readRow{3, 3}},
+		{"unread from 2", unread(2), readRow{1, 4}},
+		{"read at the current position moves nothing", read(1), readRow{1, 4}},
 	}
 	for _, s := range steps {
 		if s.got != s.want {
@@ -71,7 +71,7 @@ func TestReadPositionThroughTheService(t *testing.T) {
 			got = append(got, ev.GetId())
 		}
 	}
-	want := []string{pbconv.ReadEventID(id, "bob", 1), pbconv.ReadEventID(id, "bob", 2), pbconv.ReadEventID(id, "bob", 3)}
+	want := []string{pbconv.ReadEventID(id, "bob", 2), pbconv.ReadEventID(id, "bob", 3), pbconv.ReadEventID(id, "bob", 4)}
 	if !slices.Equal(got, want) {
 		t.Fatalf("read_updated ids %v, want %v", got, want)
 	}
