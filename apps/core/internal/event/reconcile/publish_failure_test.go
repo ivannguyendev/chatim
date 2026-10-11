@@ -107,8 +107,11 @@ func TestPersistentRefusalPublishesOncePerTermAndConfirmsNothing(t *testing.T) {
 		if got := len(rg.js.Attempts()); got != terms {
 			t.Fatalf("attempts = %d over %d terms, want exactly one per term", got, terms)
 		}
-		if got := rg.sink.Count(failedMsg); got != terms {
-			t.Fatalf("%q logged %d times over %d terms, want once per term", failedMsg, got, terms)
+		if got := rg.Stats().PublishFailures; got != uint64(terms) {
+			t.Fatalf("publish failures = %d over %d terms, want one per term", got, terms)
+		}
+		if got := rg.sink.Count(failedMsg); got < 1 || got > terms {
+			t.Fatalf("%q logged %d times over %d terms, want at least once and at most once per second", failedMsg, got, terms)
 		}
 		if got := rg.confirmed(t); got != 0 || len(rg.js.Stored()) != 0 {
 			t.Fatalf("confirmed = %d, stored = %v; want nothing past a refused publish", got, storedIDs(rg.js))

@@ -3,28 +3,31 @@ package reconcile
 import "sync/atomic"
 
 type Stats struct {
-	Running     bool
-	Terms       uint64
-	Forwarded   uint64
-	Dropped     uint64
-	HistoryLost uint64
+	Running         bool
+	Terms           uint64
+	Forwarded       uint64
+	Dropped         uint64
+	HistoryLost     uint64
+	PublishFailures uint64
 }
 
 type counters struct {
-	running     atomic.Bool
-	terms       atomic.Uint64
-	forwarded   atomic.Uint64
-	dropped     atomic.Uint64
-	historyLost atomic.Uint64
+	running         atomic.Bool
+	terms           atomic.Uint64
+	forwarded       atomic.Uint64
+	dropped         atomic.Uint64
+	historyLost     atomic.Uint64
+	publishFailures atomic.Uint64
 }
 
 func (r *Reconciler) Stats() Stats {
 	return Stats{
-		Running:     r.stats.running.Load(),
-		Terms:       r.stats.terms.Load(),
-		Forwarded:   r.stats.forwarded.Load(),
-		Dropped:     r.stats.dropped.Load(),
-		HistoryLost: r.stats.historyLost.Load(),
+		Running:         r.stats.running.Load(),
+		Terms:           r.stats.terms.Load(),
+		Forwarded:       r.stats.forwarded.Load(),
+		Dropped:         r.stats.dropped.Load(),
+		HistoryLost:     r.stats.historyLost.Load(),
+		PublishFailures: r.stats.publishFailures.Load(),
 	}
 }
 

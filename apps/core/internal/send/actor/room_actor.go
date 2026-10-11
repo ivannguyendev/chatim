@@ -28,29 +28,31 @@ type actor struct {
 	retire  chan struct{}
 	gone    chan struct{}
 
-	room    domain.Room
-	last    uint64
-	dirty   bool
-	members *memberCache
-	cache   cidCache
-	flight  *group
-	landed  []landing
-	failed  []failure
+	room      domain.Room
+	last      uint64
+	dirty     bool
+	members   *memberCache
+	cache     cidCache
+	uncertain map[dedupeKey]uncertainWrite
+	flight    *group
+	landed    []landing
+	failed    []failure
 
 	contended bool
 }
 
 func newActor(r *Router, id uint64) *actor {
 	return &actor{
-		r:       r,
-		id:      id,
-		mailbox: make(chan *request, r.cfg.Mailbox),
-		results: make(chan []store.Result, 1),
-		retire:  make(chan struct{}),
-		gone:    make(chan struct{}),
-		dirty:   true,
-		members: newMemberCache(),
-		cache:   newCIDCache(cidCacheSize, cidCacheTTL),
+		r:         r,
+		id:        id,
+		mailbox:   make(chan *request, r.cfg.Mailbox),
+		results:   make(chan []store.Result, 1),
+		retire:    make(chan struct{}),
+		gone:      make(chan struct{}),
+		dirty:     true,
+		members:   newMemberCache(),
+		cache:     newCIDCache(cidCacheSize, cidCacheTTL),
+		uncertain: make(map[dedupeKey]uncertainWrite),
 	}
 }
 

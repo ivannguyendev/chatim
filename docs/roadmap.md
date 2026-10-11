@@ -74,8 +74,6 @@ Câu ở cuối [tóm tắt M2c](plans/2026-10-10-m2c-threads-mentions-summary.m
 Từ M2b.0, chi tiết ở [tóm tắt kỹ thuật, mục Kết quả thực thi](plans/2026-10-05-m2b0-mechanism-foundations-summary.md#12-kết-quả-thực-thi-2026-10-05):
 
 - `room_yields_total` có thể đếm thừa khi hai entry cùng hết lượt trong một group hoặc slot đã yêu cầu retire.
-- Pause contention không thức dậy khi retire; mỗi actor bị tranh có thể dùng tới 200ms của `HookTimeout` slot.
-- `contentionWait` không reset sau chu kỳ tranh mà không có gì để retry.
 - Event còn trong hàng đợi khi publisher bị abort cưỡng bức không được đếm.
 - `reconcile_republished_total` đếm số lần gửi, nên thay đổi phát lại sau khi term restart bị đếm lại.
 - `ack_marks_dropped_total{reason=marker_failed}` là cận trên (đếm cả batch).

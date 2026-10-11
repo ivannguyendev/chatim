@@ -40,6 +40,7 @@ type Reconciler struct {
 	cfg     Config
 	log     *slog.Logger
 	drops   limitedLog
+	fails   limitedLog
 	stats   counters
 	started atomic.Bool
 	stop    chan struct{}
@@ -60,8 +61,8 @@ func New(deps Deps, cfg Config, log *slog.Logger) (*Reconciler, error) {
 	}
 	return &Reconciler{
 		deps: deps, cfg: cfg, log: log,
-		drops: limitedLog{log: log},
-		stop:  make(chan struct{}), done: make(chan struct{}),
+		drops: limitedLog{log: log}, fails: limitedLog{log: log},
+		stop: make(chan struct{}), done: make(chan struct{}),
 	}, nil
 }
 
@@ -133,7 +134,8 @@ func (r *Reconciler) ended(ctx context.Context, err error) {
 			r.log.WarnContext(ctx, "forget change feed position", "err", ferr)
 		}
 	case errors.Is(err, errPublishFailed):
-		r.log.WarnContext(ctx, failedMsg, "err", err)
+		r.stats.publishFailures.Add(1)
+		r.fails.warn(ctx, failedMsg, "err", err)
 	case errors.Is(err, store.ErrFeedBusy):
 		r.log.InfoContext(ctx, "change feed held by another consumer; retrying")
 	default:

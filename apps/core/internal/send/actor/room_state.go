@@ -65,7 +65,7 @@ func (a *actor) admit(ctx context.Context, q *request) *entry {
 		return nil
 	}
 	k := dedupeKey{user: c.User, cid: c.CID}
-	if a.cache.join(k, q) {
+	if a.cache.join(k, q) || a.recheck(ctx, k) {
 		return nil
 	}
 	return &entry{key: k, msg: domain.Message{

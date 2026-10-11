@@ -40,7 +40,7 @@ func (a *actor) reconcile(ctx context.Context, open []*entry) {
 	if len(open) == 0 {
 		return
 	}
-	found, err := a.r.msgs.Find(ctx, a.id, keysOf(open))
+	found, err := a.findOnce(ctx, keysOf(open))
 	if err != nil {
 		a.r.log.WarnContext(ctx, "find of unconfirmed message writes failed", "room", a.id, "messages", len(open), "err", err)
 	} else {
@@ -50,6 +50,7 @@ func (a *actor) reconcile(ctx context.Context, open []*entry) {
 		a.r.log.WarnContext(ctx, "message writes unconfirmed", "room", a.id, "messages", len(open))
 	}
 	for _, e := range open {
+		a.remember(e)
 		a.fail(e, errUnconfirmed, true)
 	}
 	a.conclude(ctx)
