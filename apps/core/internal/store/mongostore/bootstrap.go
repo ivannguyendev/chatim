@@ -93,7 +93,10 @@ func memberIndexes() []mongo.IndexModel {
 			{Key: "room_id", Value: 1}, {Key: "state", Value: 1}, {Key: "role", Value: 1},
 			{Key: "priority", Value: -1}, {Key: "joined_at", Value: 1}, {Key: "user_id", Value: 1},
 		}},
-		{Keys: bson.D{{Key: "tenant", Value: 1}, {Key: "user_id", Value: 1}, {Key: "state", Value: 1}, {Key: "room_id", Value: 1}}},
+		{Keys: bson.D{
+			{Key: "tenant", Value: 1}, {Key: "user_id", Value: 1}, {Key: "state", Value: 1}, {Key: "room_id", Value: 1},
+			{Key: "joined_at", Value: 1}, {Key: "cleared_at", Value: 1}, {Key: "read_seq", Value: 1},
+		}},
 	}
 }
 
@@ -117,6 +120,8 @@ func mentionIndexes() []mongo.IndexModel {
 	return []mongo.IndexModel{
 		{Keys: bson.D{{Key: "tenant", Value: 1}, {Key: "target", Value: 1}, {Key: "state", Value: 1}, {Key: "created_at", Value: -1}, {Key: "message_key", Value: -1}}},
 		{Keys: bson.D{{Key: "message_key", Value: 1}}},
+		{Keys: bson.D{{Key: "room_id", Value: 1}, {Key: "kind", Value: 1}, {Key: "created_at", Value: -1}, {Key: "message_key", Value: -1}}},
+		{Keys: bson.D{{Key: "room_id", Value: 1}, {Key: "target", Value: 1}, {Key: "thread_root", Value: 1}, {Key: "seq", Value: 1}}},
 	}
 }
 

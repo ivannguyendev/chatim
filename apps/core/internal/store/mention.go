@@ -26,6 +26,7 @@ type Mentions interface {
 	ApplyMentions(ctx context.Context, s MentionSet) error
 	MentionsOf(ctx context.Context, key MsgKey) ([]domain.Mention, error)
 	List(ctx context.Context, q MentionQuery) ([]domain.Mention, error)
+	MarkRead(ctx context.Context, room uint64, user string, readSeq uint64) error
 }
 
 func ValidateMentionSet(s MentionSet) error {

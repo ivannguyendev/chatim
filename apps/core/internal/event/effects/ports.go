@@ -93,6 +93,14 @@ type MentionWriter interface {
 	ApplyMentions(ctx context.Context, s store.MentionSet) error
 }
 
+type SharedMentionRaiser interface {
+	RaiseSharedMention(ctx context.Context, room uint64, at time.Time) error
+}
+
+type MentionReads interface {
+	MarkRead(ctx context.Context, room uint64, user string, readSeq uint64) error
+}
+
 type LinkTimers interface {
 	MessageCountTimers
 	Disarm(ctx context.Context, tm work.Timer)

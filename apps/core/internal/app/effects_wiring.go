@@ -29,6 +29,7 @@ type effectSet struct {
 	memberEvent       *effects.MemberEvent
 	memberCountEvent  *effects.MemberCountEvent
 	readEvent         *effects.ReadEvent
+	mentionRead       *effects.MentionRead
 	hiddenEvent       *effects.HiddenEvent
 	historyCleared    *effects.HistoryClearedEvent
 	memberCountRepair *effects.MemberCountRepair
@@ -84,7 +85,7 @@ func wireEffects(cfg config.Config, cl *clients, st *mongostore.Store, marks *ev
 	}
 	fx.replyMentionIndex, err = effects.NewReplyMentionIndex(
 		effects.ReplyMentionIndexDeps{
-			Messages: st, Replies: st.Interactions(), Counts: st, Mentions: st.Mentions(), Timers: timers.messages, Rooms: st, JS: cl.effectsJS,
+			Messages: st, Replies: st.Interactions(), Counts: st, Mentions: st.Mentions(), Shared: st, Timers: timers.messages, Rooms: st, JS: cl.effectsJS,
 		},
 		effects.ReplyMentionIndexConfig{SubjectRoot: cfg.Stream.SubjectRoot, RoomCache: cfg.EffectRoomCache},
 	)
@@ -110,7 +111,7 @@ func (fx effectSet) registry(activity effects.Effect) effects.Registry {
 		store.ReactionChanged:   {activity, fx.reactionEvent.Effect(), fx.countEvent.Effect()},
 		store.PinInserted:       {activity, fx.pinProjection.Effect(), fx.pinEvent.Effect()},
 		store.MemberChanged:     {activity, fx.memberEvent.Effect(), fx.memberCountEvent.Effect()},
-		store.ReadChanged:       {fx.readEvent.Effect()},
+		store.ReadChanged:       {fx.mentionRead.Effect(), fx.readEvent.Effect()},
 		store.MessageHidden:     {fx.hiddenEvent.Effect()},
 		store.HistoryCleared:    {fx.historyCleared.Effect()},
 		store.MemberCountCheck:  {fx.memberCountRepair.Effect()},

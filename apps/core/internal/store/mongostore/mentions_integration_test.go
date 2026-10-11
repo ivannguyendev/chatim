@@ -2,6 +2,7 @@ package mongostore
 
 import (
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,7 +26,10 @@ func TestBootstrapCreatesMentions(t *testing.T) {
 	_, db := itStore(t, itClient(t))
 	assertClusteredLayout(t, db, mentionsCollection)
 	got := indexKeys(t, db.Collection(mentionsCollection))
-	for _, pattern := range []string{"tenant:1,target:1,state:1,created_at:-1,message_key:-1", "message_key:1"} {
+	for _, pattern := range []string{
+		"tenant:1,target:1,state:1,created_at:-1,message_key:-1", "message_key:1",
+		"room_id:1,kind:1,created_at:-1,message_key:-1", "room_id:1,target:1,thread_root:1,seq:1",
+	} {
 		if !hasIndex(got, pattern, false) {
 			t.Fatalf("mentions indexes = %v, want non-unique %s", got, pattern)
 		}
@@ -40,7 +44,7 @@ func TestMentionDocumentLayout(t *testing.T) {
 	if err := s.Mentions().ApplyMentions(t.Context(), set); err != nil {
 		t.Fatalf("ApplyMentions: %v", err)
 	}
-	want := []string{"_id", "created_at", "message_key", "message_ver", "room_id", "sender_id", "state", "target", "tenant", "updated_at"}
+	want := []string{"_id", "created_at", "kind", "message_key", "message_ver", "room_id", "sender_id", "seq", "state", "target", "tenant", "thread_root", "updated_at"}
 	for target, id := range map[string][]byte{
 		"group:ops":      keys.Mention(keys.Msg(itRoom, 0, 4), keys.MentionGroupKind, "ops"),
 		all.Name(itRoom): keys.Mention(keys.Msg(itRoom, 0, 4), keys.MentionAllKind, ""),
@@ -55,6 +59,9 @@ func TestMentionDocumentLayout(t *testing.T) {
 		if got := raw.Lookup("target").StringValue(); got != target {
 			t.Fatalf("stored target = %q, want %q", got, target)
 		}
+		if kind, seq := raw.Lookup("kind").StringValue(), raw.Lookup("seq").Int64(); kind != strings.SplitN(target, ":", 2)[0] || seq != 4 {
+			t.Fatalf("%s stored kind %q seq %d, want the target kind and seq 4", target, kind, seq)
+		}
 	}
 }
 
@@ -68,7 +75,7 @@ func TestAnOlderMentionWriteLosingARaceSettles(t *testing.T) {
 	}
 	older := newer
 	older.Ver, older.At = 1, codecTime.Add(time.Minute)
-	if err := s.Mentions().write(t.Context(), older, int64(itRoom), store.MentionPlan{Live: []domain.MentionTarget{minh}}); err != nil {
+	if err := s.Mentions().write(t.Context(), older, store.MentionPlan{Live: []domain.MentionTarget{minh}}); err != nil {
 		t.Fatalf("older write that lost the race = %v, want nil", err)
 	}
 	got, err := s.Mentions().MentionsOf(t.Context(), key)

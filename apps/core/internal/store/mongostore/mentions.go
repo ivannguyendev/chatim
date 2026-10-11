@@ -20,22 +20,22 @@ func (m *Mentions) ApplyMentions(ctx context.Context, set store.MentionSet) erro
 	if err := store.ValidateMentionSet(set); err != nil {
 		return err
 	}
-	room, err := toInt64("room id", set.Key.Room)
-	if err != nil {
-		return err
-	}
 	stored, err := m.MentionsOf(ctx, set.Key)
 	if err != nil {
 		return err
 	}
-	return m.write(ctx, set, room, store.PlanMentions(stored, set))
+	return m.write(ctx, set, store.PlanMentions(stored, set))
 }
 
-func (m *Mentions) write(ctx context.Context, set store.MentionSet, room int64, plan store.MentionPlan) error {
+func (m *Mentions) write(ctx context.Context, set store.MentionSet, plan store.MentionPlan) error {
+	at, err := placeOf(set.Key)
+	if err != nil {
+		return err
+	}
 	models := make([]mongo.WriteModel, 0, len(plan.Live)+len(plan.Retire))
 	for _, t := range plan.Live {
 		models = append(models, mongo.NewUpdateOneModel().SetFilter(notNewerThan(set, t)).
-			SetUpdate(bson.D{{Key: "$set", Value: liveMentionFields(set, t, room)}}).SetUpsert(true))
+			SetUpdate(liveMentionUpdate(set, t, at)).SetUpsert(true))
 	}
 	for _, t := range plan.Retire {
 		models = append(models, mongo.NewUpdateOneModel().SetFilter(notNewerThan(set, t)).
@@ -44,7 +44,7 @@ func (m *Mentions) write(ctx context.Context, set store.MentionSet, room int64, 
 	if len(models) == 0 {
 		return nil
 	}
-	_, err := m.coll.BulkWrite(ctx, models, options.BulkWrite().SetOrdered(false))
+	_, err = m.coll.BulkWrite(ctx, models, options.BulkWrite().SetOrdered(false))
 	if err != nil && !onlyDuplicateKeys(err) {
 		return fmt.Errorf("apply mentions v%d of %d/%d/%d: %w", set.Ver, set.Key.Room, set.Key.Thread, set.Key.Seq, err)
 	}

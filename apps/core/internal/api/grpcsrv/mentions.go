@@ -19,7 +19,7 @@ type MentionLister interface {
 }
 
 type MemberRoomLister interface {
-	RoomsOf(ctx context.Context, tenant, user string) ([]uint64, error)
+	RoomsOf(ctx context.Context, tenant, user string) ([]store.MemberRoom, error)
 }
 
 func (s *Service) ListMentions(ctx context.Context, req *chatimv1.ListMentionsRequest) (*chatimv1.ListMentionsResponse, error) {
@@ -88,7 +88,7 @@ func (s *Service) mentionWants(ctx context.Context, who caller, groups []*chatim
 		out = append(out, store.MentionWant{Target: name, Since: since[name]})
 	}
 	for _, room := range rooms {
-		out = append(out, store.MentionWant{Target: domain.MentionTarget{Kind: domain.MentionAll}.Name(room)})
+		out = append(out, store.MentionWant{Target: domain.MentionTarget{Kind: domain.MentionAll}.Name(room.Room)})
 	}
 	return out, nil
 }

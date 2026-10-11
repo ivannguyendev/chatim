@@ -40,10 +40,10 @@ func (s *Mentions) ApplyMentions(ctx context.Context, set store.MentionSet) erro
 		s.docs[set.Key] = cur
 	}
 	for _, t := range plan.Live {
-		cur[t] = mentionOf(set, t, true)
+		cur[t] = mentionOf(set, t, true, cur[t].Live && cur[t].Read)
 	}
 	for _, t := range plan.Retire {
-		cur[t] = mentionOf(set, t, false)
+		cur[t] = mentionOf(set, t, false, false)
 	}
 	return nil
 }
@@ -60,9 +60,9 @@ func (s *Mentions) MentionsOf(ctx context.Context, key store.MsgKey) ([]domain.M
 	return slices.Collect(maps.Values(s.docs[key])), nil
 }
 
-func mentionOf(set store.MentionSet, t domain.MentionTarget, live bool) domain.Mention {
+func mentionOf(set store.MentionSet, t domain.MentionTarget, live, read bool) domain.Mention {
 	return domain.Mention{
 		Key: domain.MsgKey(set.Key), Tenant: set.Tenant, Target: t, Sender: set.Sender,
-		Live: live, Ver: set.Ver, CreatedAt: set.CreatedAt, UpdatedAt: set.At,
+		Live: live, Read: read, Ver: set.Ver, CreatedAt: set.CreatedAt, UpdatedAt: set.At,
 	}
 }

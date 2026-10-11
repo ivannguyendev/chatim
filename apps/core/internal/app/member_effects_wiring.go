@@ -21,6 +21,9 @@ func (fx *effectSet) wireMemberEffects(cfg config.Config, cl *clients, st *mongo
 	if fx.readEvent, err = effects.NewReadEvent(members, events); err != nil {
 		return fmt.Errorf("wire read_event effect: %w", err)
 	}
+	if fx.mentionRead, err = effects.NewMentionRead(effects.MentionReadDeps{Members: st, Mentions: st.Mentions()}); err != nil {
+		return fmt.Errorf("wire mention_read effect: %w", err)
+	}
 	if fx.hiddenEvent, err = effects.NewHiddenEvent(effects.HiddenEventDeps{Hidden: st.Hidden(), Rooms: st, JS: cl.effectsJS}, events); err != nil {
 		return fmt.Errorf("wire hidden_event effect: %w", err)
 	}
@@ -41,6 +44,7 @@ func (fx effectSet) memberCounters() map[string]effectCounters {
 		fx.memberEvent.Effect().Name:       {republished: fx.memberEvent.Republished, dropped: fx.memberEvent.Dropped},
 		fx.memberCountEvent.Effect().Name:  {republished: fx.memberCountEvent.Republished, dropped: fx.memberCountEvent.Dropped},
 		fx.readEvent.Effect().Name:         {republished: fx.readEvent.Republished, dropped: fx.readEvent.Dropped},
+		fx.mentionRead.Effect().Name:       {dropped: fx.mentionRead.Dropped},
 		fx.hiddenEvent.Effect().Name:       {republished: fx.hiddenEvent.Republished, dropped: fx.hiddenEvent.Dropped},
 		fx.historyCleared.Effect().Name:    {republished: fx.historyCleared.Republished, dropped: fx.historyCleared.Dropped},
 		fx.memberCountRepair.Effect().Name: {republished: fx.memberCountRepair.Republished, dropped: fx.memberCountRepair.Dropped},

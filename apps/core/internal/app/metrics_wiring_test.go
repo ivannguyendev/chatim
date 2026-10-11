@@ -38,6 +38,7 @@ func fakeProbes(withReader bool) probes {
 			"reply_mention_index": {republished: func() uint64 { return 15 }, dropped: func() uint64 { return 16 }},
 			"count_repair":        {republished: func() uint64 { return 17 }, dropped: func() uint64 { return 18 }},
 			"bookmark_event":      {republished: func() uint64 { return 19 }, dropped: func() uint64 { return 20 }},
+			"mention_read":        {dropped: func() uint64 { return 22 }},
 		},
 		counterRepairs: map[string]func() uint64{
 			"reactions": func() uint64 { return 6 }, "replies": func() uint64 { return 21 }, "members": func() uint64 { return 12 },
@@ -114,14 +115,14 @@ func TestEffectMetricsReadTheirEffectByLabel(t *testing.T) {
 		"reconcile_republished_total{reply_mention_index}": 15, "effect_dropped_total{reply_mention_index}": 16,
 		"reconcile_republished_total{count_repair}": 17, "effect_dropped_total{count_repair}": 18,
 		"reconcile_republished_total{bookmark_event}": 19, "effect_dropped_total{bookmark_event}": 20,
-		"counter_repaired_total{replies}": 21,
+		"counter_repaired_total{replies}": 21, "effect_dropped_total{mention_read}": 22,
 	}
 	for key, v := range want {
 		if g, ok := got[key]; !ok || g != v {
 			t.Errorf("%s = %v (present %v), want %v", key, g, ok, v)
 		}
 	}
-	for _, silent := range []string{"edit_projection", "pin_projection"} {
+	for _, silent := range []string{"edit_projection", "pin_projection", "mention_read"} {
 		if _, ok := got["reconcile_republished_total{"+silent+"}"]; ok {
 			t.Errorf("%s never publishes, but reconcile_republished_total is exported for it", silent)
 		}

@@ -9,7 +9,7 @@ import (
 
 var allowedKinds = map[string]bool{
 	"read": true, "lifecycle": true, "reset": true, "purge": true,
-	"insert-unique": true, "cas": true, "monotonic-cas": true, "monotonic-max": true, "upsert": true, "version-bump": true, "transaction": true,
+	"insert-unique": true, "cas": true, "projection": true, "monotonic-cas": true, "monotonic-max": true, "upsert": true, "version-bump": true, "transaction": true,
 }
 
 var portMethods = map[string]string{
@@ -77,6 +77,10 @@ var portMethods = map[string]string{
 	"Mentions.ApplyMentions": "monotonic-cas",
 	"Mentions.MentionsOf":    "read",
 	"Mentions.List":          "read",
+	"Mentions.MarkRead":      "projection",
+
+	"SharedMentions.RaiseSharedMention": "monotonic-max",
+	"SharedMentions.SharedMentionTimes": "read",
 
 	"DirectRooms.Claim":   "upsert",
 	"DirectRooms.Repoint": "cas",
@@ -103,6 +107,7 @@ func TestEveryPortMethodHasAWriteContract(t *testing.T) {
 		reflect.TypeFor[store.ReadPositions](),
 		reflect.TypeFor[store.DirectRooms](),
 		reflect.TypeFor[store.Mentions](),
+		reflect.TypeFor[store.SharedMentions](),
 	}
 	seen := map[string]bool{}
 	for _, p := range ports {
@@ -114,7 +119,7 @@ func TestEveryPortMethodHasAWriteContract(t *testing.T) {
 			case !ok:
 				t.Errorf("%s has no write contract: classify it here and add its storetest case", name)
 			case !allowedKinds[kind]:
-				t.Errorf("%s has kind %q; writes must be insert-unique, cas, monotonic-cas, monotonic-max, upsert, version-bump, purge or transaction", name, kind)
+				t.Errorf("%s has kind %q; writes must be insert-unique, cas, monotonic-cas, monotonic-max, upsert, version-bump, projection, purge or transaction", name, kind)
 			}
 		}
 	}

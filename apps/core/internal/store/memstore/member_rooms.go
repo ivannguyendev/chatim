@@ -1,13 +1,15 @@
 package memstore
 
 import (
+	"cmp"
 	"context"
 	"slices"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
-func (s *Rooms) RoomsOf(ctx context.Context, tenant, user string) ([]uint64, error) {
+func (s *Rooms) RoomsOf(ctx context.Context, tenant, user string) ([]store.MemberRoom, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -16,12 +18,12 @@ func (s *Rooms) RoomsOf(ctx context.Context, tenant, user string) ([]uint64, err
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := []uint64{}
+	out := []store.MemberRoom{}
 	for k, m := range s.members {
 		if k.user == user && m.Tenant == tenant && m.Active() {
-			out = append(out, k.room)
+			out = append(out, store.MemberRoom{Room: k.room, JoinedAt: m.JoinedAt, ClearedAt: m.ClearedAt, ReadSeq: m.ReadSeq})
 		}
 	}
-	slices.Sort(out)
+	slices.SortFunc(out, func(a, b store.MemberRoom) int { return cmp.Compare(a.Room, b.Room) })
 	return out, nil
 }

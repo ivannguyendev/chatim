@@ -13,6 +13,7 @@ type Mention struct {
 	Target    MentionTarget
 	Sender    string
 	Live      bool
+	Read      bool
 	Ver       uint32
 	CreatedAt time.Time
 	UpdatedAt time.Time

@@ -81,7 +81,7 @@ func newIndexRig(t *testing.T) *indexRig {
 func (rg *indexRig) deps() effects.ReplyMentionIndexDeps {
 	return effects.ReplyMentionIndexDeps{
 		Messages: rg.finder, Replies: rg.inter, Counts: rg.msgs, Mentions: rg.mentions, Timers: rg.timers,
-		Rooms: rg.rooms, JS: rg.js, Now: func() time.Time { return indexedAt },
+		Shared: rg.rooms, Rooms: rg.rooms, JS: rg.js, Now: func() time.Time { return indexedAt },
 	}
 }
 

@@ -32,6 +32,8 @@ type Room struct {
 	LastChangeAt   time.Time
 	MemberCountVer uint64
 	DMKey          string
+
+	LastSharedMentionAt time.Time
 }
 
 func DirectKey(tenant, a, b string) string {

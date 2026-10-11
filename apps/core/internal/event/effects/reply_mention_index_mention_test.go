@@ -113,6 +113,7 @@ func TestNewReplyMentionIndexRejectsBadInput(t *testing.T) {
 		"no replies":  func(d *effects.ReplyMentionIndexDeps, _ *effects.ReplyMentionIndexConfig) { d.Replies = nil },
 		"no counts":   func(d *effects.ReplyMentionIndexDeps, _ *effects.ReplyMentionIndexConfig) { d.Counts = nil },
 		"no mentions": func(d *effects.ReplyMentionIndexDeps, _ *effects.ReplyMentionIndexConfig) { d.Mentions = nil },
+		"no shared":   func(d *effects.ReplyMentionIndexDeps, _ *effects.ReplyMentionIndexConfig) { d.Shared = nil },
 		"no timers":   func(d *effects.ReplyMentionIndexDeps, _ *effects.ReplyMentionIndexConfig) { d.Timers = nil },
 		"no rooms":    func(d *effects.ReplyMentionIndexDeps, _ *effects.ReplyMentionIndexConfig) { d.Rooms = nil },
 		"no js":       func(d *effects.ReplyMentionIndexDeps, _ *effects.ReplyMentionIndexConfig) { d.JS = nil },

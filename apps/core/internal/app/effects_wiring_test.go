@@ -53,12 +53,12 @@ func TestEffectSetExportsEveryEffect(t *testing.T) {
 		effects.CountRepairDeps{Messages: msgs, Interactions: reactions, Counts: msgs, Timers: noTimers{}, Rooms: rooms, JS: js},
 		effects.CountRepairConfig{SubjectRoot: "evt"}))(t)
 	fx.replyMentionIndex = built(effects.NewReplyMentionIndex(
-		effects.ReplyMentionIndexDeps{Messages: msgs, Replies: reactions, Counts: msgs, Mentions: memstore.NewMentions(), Timers: noTimers{}, Rooms: rooms, JS: js},
+		effects.ReplyMentionIndexDeps{Messages: msgs, Replies: reactions, Counts: msgs, Mentions: memstore.NewMentions(), Shared: rooms, Timers: noTimers{}, Rooms: rooms, JS: js},
 		effects.ReplyMentionIndexConfig{SubjectRoot: "evt"}))(t)
 	counters := fx.counters()
 	want := []string{
 		effects.BookmarkEventName, effects.CountEventName, effects.CountRepairName, effects.EditProjectionName, effects.HiddenEventName, effects.HistoryClearedEventName, effects.MemberCountEventName,
-		effects.MemberCountRepairName, effects.MemberEventName, effects.MessageChangedName, effects.MessageCreatedName,
+		effects.MemberCountRepairName, effects.MemberEventName, effects.MentionReadName, effects.MessageChangedName, effects.MessageCreatedName,
 		effects.PinEventName, effects.PinProjectionName, effects.ReactionEventName,
 		effects.ReadEventName, effects.ReplyMentionIndexName, effects.RoomCreatedName,
 	}
@@ -66,7 +66,7 @@ func TestEffectSetExportsEveryEffect(t *testing.T) {
 		t.Fatalf("effects with metrics = %v, want %v", got, want)
 	}
 	for name, c := range counters {
-		silent := name == effects.EditProjectionName || name == effects.PinProjectionName
+		silent := name == effects.EditProjectionName || name == effects.PinProjectionName || name == effects.MentionReadName
 		if c.dropped == nil || (c.republished == nil) != silent {
 			t.Errorf("%s: dropped set %v, republished set %v; want dropped always and republished only when it publishes", name, c.dropped != nil, c.republished != nil)
 		}
@@ -100,6 +100,7 @@ func withMemberEffects(t *testing.T, fx *effectSet, rooms *memstore.Rooms, js *p
 	fx.memberEvent = built(effects.NewMemberEvent(members, events))(t)
 	fx.memberCountEvent = built(effects.NewMemberCountEvent(members, events))(t)
 	fx.readEvent = built(effects.NewReadEvent(members, events))(t)
+	fx.mentionRead = built(effects.NewMentionRead(effects.MentionReadDeps{Members: rooms, Mentions: memstore.NewMentions()}))(t)
 	fx.hiddenEvent = built(effects.NewHiddenEvent(effects.HiddenEventDeps{Hidden: memstore.NewHidden(), Rooms: rooms, JS: js}, events))(t)
 	fx.historyCleared = built(effects.NewHistoryClearedEvent(members, events))(t)
 	fx.memberCountRepair = built(effects.NewMemberCountRepair(
@@ -110,7 +111,7 @@ func assertMemberRegistry(t *testing.T, reg effects.Registry) {
 	t.Helper()
 	want := map[store.ChangeKind][]string{
 		store.MemberChanged:     {effects.RoomActivityName, effects.MemberEventName, effects.MemberCountEventName},
-		store.ReadChanged:       {effects.ReadEventName},
+		store.ReadChanged:       {effects.MentionReadName, effects.ReadEventName},
 		store.MessageHidden:     {effects.HiddenEventName},
 		store.HistoryCleared:    {effects.HistoryClearedEventName},
 		store.MemberCountCheck:  {effects.MemberCountRepairName},

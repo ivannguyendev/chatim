@@ -65,7 +65,7 @@ func mentionBranches(q store.MentionQuery) []bson.D {
 }
 
 func mentionBranch(q store.MentionQuery, target any, since time.Time) bson.D {
-	branch := bson.D{{Key: "tenant", Value: q.Tenant}, {Key: "target", Value: target}, {Key: "state", Value: mentionLive}}
+	branch := bson.D{{Key: "tenant", Value: q.Tenant}, {Key: "target", Value: target}, {Key: "state", Value: bson.D{{Key: "$in", Value: bson.A{mentionLive, mentionRead}}}}}
 	var span bson.D
 	if !since.IsZero() {
 		span = append(span, bson.E{Key: "$gte", Value: since})
