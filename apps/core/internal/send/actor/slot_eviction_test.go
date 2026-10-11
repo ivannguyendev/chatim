@@ -83,7 +83,7 @@ func TestRetireSettlesTheInFlightGroupAndTurnsAwayTheRest(t *testing.T) {
 	})
 }
 
-func TestRetireFailsPendingRetriesWithTheirCertainty(t *testing.T) {
+func TestRetireAfterAFailedWriteKeepsOrReleasesItsCIDByCertainty(t *testing.T) {
 	tests := map[string]struct {
 		write   func(*rig) outcome
 		release bool
@@ -107,7 +107,7 @@ func TestRetireFailsPendingRetriesWithTheirCertainty(t *testing.T) {
 				expectErr(t, (<-w).err, domain.ErrRetryLater)
 				<-evicted
 				if n := len(rg.sub.sent()); n != 1 {
-					t.Fatalf("submitted %d groups, want the retry dropped by retire", n)
+					t.Fatalf("submitted %d groups, want one attempt and no resend", n)
 				}
 				var want [][]dedupe.Key
 				if tt.release {

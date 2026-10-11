@@ -31,7 +31,7 @@ func (a *actor) dispatch(ctx context.Context, first *request) {
 		}
 		cancel()
 		for _, e := range entries {
-			a.fail(e, err, e.fixed)
+			a.fail(e, err, false)
 		}
 		a.conclude(gctx)
 		return
@@ -40,13 +40,8 @@ func (a *actor) dispatch(ctx context.Context, first *request) {
 }
 
 func (a *actor) gather(ctx context.Context, first *request) []*entry {
-	retries := a.retries
-	a.retries = nil
 	if err := a.refresh(ctx); err != nil {
 		a.r.log.WarnContext(ctx, "reload room timeline failed", "room", a.id, "err", err)
-		for _, e := range retries {
-			a.fail(e, errUnavailable, e.fixed)
-		}
 		a.reject(first, errUnavailable)
 		return nil
 	}
@@ -54,8 +49,8 @@ func (a *actor) gather(ctx context.Context, first *request) []*entry {
 	if first != nil {
 		fresh = a.take(ctx, fresh, first)
 	}
-	fresh = a.drain(ctx, fresh, a.r.cfg.MaxGroup-len(retries))
-	return append(retries, a.reserve(ctx, fresh)...)
+	fresh = a.drain(ctx, fresh, a.r.cfg.MaxGroup)
+	return a.reserve(ctx, fresh)
 }
 
 func (a *actor) drain(ctx context.Context, fresh []*entry, limit int) []*entry {
@@ -94,14 +89,6 @@ func (a *actor) reject(first *request, err error) {
 func (a *actor) number(entries []*entry, now time.Time) {
 	next := a.last
 	for _, e := range entries {
-		if e.fixed {
-			next = max(next, e.msg.Seq)
-		}
-	}
-	for _, e := range entries {
-		if e.fixed {
-			continue
-		}
 		next++
 		e.msg.Seq, e.msg.CreatedAt = next, now
 	}

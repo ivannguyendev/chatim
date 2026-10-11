@@ -9,14 +9,9 @@ import (
 )
 
 type entry struct {
-	key        dedupeKey
-	msg        domain.Message
-	admittedAt time.Time
-	unsent     int
-	resends    int
-	fixed      bool
-	dup        bool
-	reserved   bool
+	key      dedupeKey
+	msg      domain.Message
+	reserved bool
 }
 
 type group struct {
@@ -38,7 +33,6 @@ type actor struct {
 	dirty   bool
 	members *memberCache
 	cache   cidCache
-	retries []*entry
 	flight  *group
 	landed  []landing
 	failed  []failure
@@ -89,7 +83,7 @@ func (a *actor) run(ctx context.Context) {
 			return
 		}
 		var first *request
-		if a.flight == nil && len(a.retries) == 0 {
+		if a.flight == nil {
 			if closing == nil && len(a.mailbox) == 0 {
 				a.exit(errStopped)
 				return
@@ -112,7 +106,7 @@ func (a *actor) run(ctx context.Context) {
 			}
 		}
 		if a.retireRequested() {
-			a.retireNow(ctx, first)
+			a.retireNow(first)
 			return
 		}
 		if a.flight == nil {
@@ -140,10 +134,6 @@ func (a *actor) exit(err error) {
 			a.cache.fail(e.key, err)
 		}
 	}
-	for _, e := range a.retries {
-		a.cache.fail(e.key, err)
-	}
-	a.retries = nil
 	for {
 		select {
 		case q := <-a.mailbox:

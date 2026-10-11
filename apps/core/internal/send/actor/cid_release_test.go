@@ -18,8 +18,8 @@ func TestOnlyDefiniteFailuresReleaseTheReservation(t *testing.T) {
 		"rejected write":        {func(rg *rig) { rg.sub.then(rejected) }, true},
 		"submit refused":        {func(rg *rig) { rg.sub.err = domain.ErrBusy }, true},
 		"seq taken elsewhere":   {func(rg *rig) { rg.sub.alwaysDo(rg.sub.foreignFirst) }, true},
-		"resend limit":          {func(rg *rig) { rg.sub.alwaysDo(lostUnknown) }, false},
-		"rejected resend":       {func(rg *rig) { rg.sub.then(lostUnknown, rejected) }, false},
+		"write not sent":        {func(rg *rig) { rg.sub.then(notSent) }, true},
+		"ambiguous write":       {func(rg *rig) { rg.sub.then(lostUnknown) }, false},
 		"unconfirmed deadline":  {func(rg *rig) { rg.sub.then(rg.sub.landedUnknown); rg.msgs.findHook = findTimesOut }, false},
 		"unconfirmed duplicate": {func(rg *rig) { rg.sub.then(rg.sub.landedDuplicate); rg.msgs.findHook = findTimesOut }, false},
 	}

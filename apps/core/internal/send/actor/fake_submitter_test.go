@@ -5,7 +5,6 @@ import (
 	"errors"
 	"slices"
 	"sync"
-	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/flush"
@@ -20,12 +19,11 @@ type fakeSubmitter struct {
 	gate  chan struct{}
 	once  sync.Once
 
-	mu        sync.Mutex
-	groups    [][]domain.Message
-	deadlines []time.Time
-	script    []outcome
-	always    outcome
-	err       error
+	mu     sync.Mutex
+	groups [][]domain.Message
+	script []outcome
+	always outcome
+	err    error
 }
 
 func (s *fakeSubmitter) Submit(ctx context.Context, g flush.Group) error {
@@ -39,7 +37,6 @@ func (s *fakeSubmitter) Submit(ctx context.Context, g flush.Group) error {
 	}
 	msgs := slices.Clone(g.Msgs)
 	s.groups = append(s.groups, msgs)
-	s.deadlines = append(s.deadlines, g.Deadline)
 	fn := s.insert
 	switch {
 	case len(s.script) > 0:
@@ -110,12 +107,6 @@ func (s *fakeSubmitter) foreignFirst(msgs []domain.Message) []store.Result {
 	}
 	s.insert(foreign)
 	return s.insert(msgs)
-}
-
-func (s *fakeSubmitter) groupDeadlines() []time.Time {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return slices.Clone(s.deadlines)
 }
 
 func notSent(msgs []domain.Message) []store.Result {

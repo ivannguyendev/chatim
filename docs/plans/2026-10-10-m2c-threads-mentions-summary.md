@@ -258,7 +258,8 @@ sequenceDiagram
 - **R2 (đóng):** `Config` khi log liệt kê mọi field không bí mật (duyệt tự động, danh sách field bí mật riêng; test đỏ khi thêm field mới mà chưa log hoặc chưa che); key log lồng theo nhóm (`stream.name` …). `GetEditHistory` đọc fact mới nhất: là fact xoá → trả rỗng, đóng khe giữa fact xoá và projection.
 - **R3 (đóng):** `room_created` chỉ đếm PubAck không trùng vào `reconcile_republished_total`.
 - **R4 (đóng):** bằng `room_dms` + `OpenDirectRoom` và `CreateRoom` rút id một lần; room id giữ 63-bit ngẫu nhiên.
-- **R5 (đóng):** va doc của core khác khi cấp seq → lệnh `UNAVAILABLE` ngay, các lệnh chưa ghi xong trong cùng nhóm cũng `UNAVAILABLE`, actor nhường room một lần; client gửi lại cùng cid tới chủ thật. Không còn gán lại seq, không backoff. Lệnh "chưa kịp gửi" (`ErrNotSent`) có ngân sách riêng, không bị nhóm va chạm kéo theo. Điểm còn hỏi owner (gửi lại khi `Unknown`) ở cuối bản này.
+- **R5 (đóng):** va doc của core khác khi cấp seq → lệnh `UNAVAILABLE` ngay, các lệnh chưa ghi xong trong cùng nhóm cũng `UNAVAILABLE`, actor nhường room một lần; client gửi lại cùng cid tới chủ thật. Không còn gán lại seq, không backoff.
+- **Không thử lại ở actor và reader (owner 2026-10-10):** luật tuyệt đối: code của mình không thử lại, kể cả thao tác idempotent; thử lại bên trong thư viện (driver Mongo, go-redis, nats.go, JetStream giao lại khi Nak) vẫn dùng. Actor ghi mỗi tin **một lần**: nhóm chưa kịp gửi trước hạn (`ErrNotSent`) → `UNAVAILABLE` ngay và nhả cid; insert ra `Unknown` hay `Duplicate` chỉ đọc đối chiếu một lần, không thấy doc → `UNAVAILABLE` ngay và giữ cid (mục 5). Reader reconcile gửi phiếu việc lỗi → kết thúc term, term sau đọc lại từ vị trí đã xác nhận.
 
 ## 5. Đúng đắn và chạy đua
 
@@ -277,6 +278,9 @@ sequenceDiagram
 | Core chết giữa `OpenDirectRoom` | Lần mở sau làm nốt | Bước "đảm bảo" chạy lại được |
 | Gửi lại `CreateRoom` (trong 15 phút), kể cả sau khi core chết giữa chừng | Cùng room, đủ member | `request_id` chốt ngay sau insert room |
 | Hai core cùng ghi một room lúc chuyển slot | Một tin thắng; bên thua `UNAVAILABLE`, client gửi lại cùng cid | `_id` unique (P1) |
+| Mongo timeout khi ghi tin seq 41 (`Unknown`), đọc đối chiếu một lần không thấy | Client nhận `UNAVAILABLE` ngay. Gửi lại cùng cid: tin đã vào → trả đúng seq 41, không ghi thêm; chưa thấy → `UNAVAILABLE` tiếp tới khi thấy tin hoặc khoá pending hết hạn (10s) | Khoá pending `p:{core}` của cid được giữ, actor nạp lại 100 tin gần nhất trước lần gửi sau; không mất tin, không trùng |
+| Nhóm chưa kịp gửi trước hạn (`ErrNotSent`) | `UNAVAILABLE` ngay, cid được nhả; gửi lại ghi như tin mới | Chắc chắn chưa ghi gì |
+| Reader gửi phiếu việc bị NATS từ chối hoặc hết hạn ack | Term kết thúc; khoảng 1s sau term mới gửi lại mọi phiếu chưa xác nhận | Vị trí chỉ xác nhận phần đã ack; change stream đọc tiếp từ resume token, stream bỏ bản trùng theo `Nats-Msg-Id` |
 | Worker dựng mention trên hai core lúc chuyển slot | Có thể sót một đích cũ còn sống tới lần sửa sau | Mục 10 |
 
 Không thêm số đánh liên tục hay khoá chung nào. Chỗ xếp hàng duy nhất vẫn là actor của room; doc tin nóng chỉ nhận `$inc` (Mongo xếp hàng ở mức doc, không báo lỗi).
@@ -328,7 +332,7 @@ Feed đọc `message_interactions` (insert/update/replace) và lấy loại từ
 | `OpenDirectRoom` riêng, `CreateRoom` chỉ group (D117, D118) | Tạo DM ngầm khi gửi tin đầu | Gửi tin cần room id trước để định tuyến và chống trùng |
 | `CreateRoom` chốt `request_id` ngay sau insert room, gửi lại thì làm nốt (D118) | Chốt sau khi xong hết | Chốt muộn thì lỗi giữa chừng xoá khoá, gửi lại tạo room thứ hai, room đầu mồ côi không owner |
 | Kiểm trả lời/forward ở `grpcsrv` (D114, D116) | Kiểm trong actor | Không làm nghẽn hàng đợi của room |
-| Không thử lại nội bộ áp cho ghim và actor (D119) | Giữ gán lại seq ≤3 làm ngoại lệ | Một luật cho mọi lệnh |
+| Không thử lại nội bộ áp cho ghim, actor và reader (D119) | Giữ gán lại seq ≤3; gửi lại cùng seq ≤3 khi `Unknown`; xếp lại nhóm `ErrNotSent`; đọc lại có backoff; reader tự gửi lại phiếu tại chỗ | Một luật cho mọi lệnh; lỗi rõ ràng, client gửi lại cùng cid |
 | Không `@here`, không alias room, không giới hạn bookmark | | Owner chốt |
 
 ## 9. Chi phí
@@ -366,11 +370,12 @@ Feed đọc `message_interactions` (insert/update/replace) và lấy loại từ
 | Phiếu sửa bị "đói" ở tin rất nóng | Tương tác liên tục làm `v` đổi mãi, phiếu Nak nhiều lần | Không ghi đè số mới | Chỉ xảy ra khi đã có lỗi trước đó; theo dõi `counter_repaired_total` |
 | Nâng cấp | Collection `reactions` bỏ, kind phiếu 11, 12 mới; core cũ Nak phiếu kind mới | | Dev `make infra-reset`; nâng mọi core cùng lúc (như M2b.3/M2b.4) |
 | API đổi | `CreateRoom` bắt buộc `request_id`, không nhận DM; DM qua `OpenDirectRoom` | | Chưa có client ngoài; app mới gọi theo API mới |
+| Client gửi lại nhiều hơn khi Mongo chậm thoáng qua | Mongo timeout khi ghi seq 41: client nhận `UNAVAILABLE` ngay thay vì core tự ghi lại; lần gửi lại cùng cid có thể tiếp tục `UNAVAILABLE` tới 10s nếu tin chưa thấy. Hiếm hơn nữa: tin vào muộn hơn 10s và đã trôi khỏi 100 tin gần nhất → lần gửi lại tạo bản thứ hai, phía đọc gộp theo (người gửi, cid) như CD3 | Một luật cho mọi lệnh, không vòng thử lại ẩn trong core | Chấp nhận; SDK gửi lại có giãn cách, giữ cid |
+| Reader phát lại phiếu sau mỗi lỗi NATS | Mỗi lần NATS từ chối, term mới gửi lại tối đa `RECONCILE_WINDOW` (1024) phiếu chưa xác nhận; stream bỏ bản trùng | Không vòng thử lại tại chỗ | Chấp nhận; NATS lỗi kéo dài thì reader dừng ở vị trí đã xác nhận, `reconcile_terms_total` tăng mỗi giây |
 
 **Known issues (Minor, không chặn merge):**
 - `msg_created` còn đếm mọi PubAck (cả bản trùng) vào `reconcile_republished_total` như trước M2c; R3 chỉ sửa `room_created`.
 - `LockedMessageKinds` trong log config hiện dạng số.
-- Sau va seq, các lệnh Duplicate khác trong nhóm vẫn chờ xác nhận tới hạn nhóm; lệnh `Unknown` bị bỏ giữ khoá pending tới `CID_PENDING_TTL`.
 - Resync chỉ quét timeline chính; dedupe phiếu đếm lại theo room trong RAM.
 - Chưa có itest đầu-cuối "`$inc` lỗi rồi phiếu bật sửa" và "chết giữa `AddReply` và `$inc`" (unit test phủ).
 - Mỗi phiếu sửa tốn một lần đọc đích mention, kể cả khi mention không đổi.
@@ -390,6 +395,7 @@ Feed đọc `message_interactions` (insert/update/replace) và lấy loại từ
 8. `ListBookmarks`, `ListMentions` ở M2c; `ListThreads` để M3.
 9. Không đặt giới hạn dữ liệu nào ngoài yêu cầu có sẵn (≤50 đích mention mỗi tin, A6).
 10. Không thử lại nội bộ cho mọi lệnh, kể cả ghim và actor khi va seq (R1, R5).
+11. Luật tuyệt đối (2026-10-10): code của mình không bao giờ thử lại, kể cả thao tác idempotent; chỉ thư viện được thử lại. Actor không gửi lại insert `Unknown`, không xếp lại nhóm `ErrNotSent`, chỉ đọc đối chiếu một lần; reader publish lỗi thì kết thúc term.
 
 ### 11.2 Đội tự chọn trong lúc xây
 
@@ -428,7 +434,9 @@ Owner xem qua; mỗi dòng đã ghi vào D112–D119 của thiết kế.
 | `domain` counts | Emoji ≤ 0 ẩn, `rc` kẹp, số âm đánh dấu chưa ổn |
 | `reply_mention_index` (`TestAReplyIsCountedOnceAcrossRedeliveries`, `TestAReplyDeletedBeforeItsRecordIsNeverCounted`, `TestAnOldEditRecordAfterANewOneChangesNothing`, `TestOnlyFlaggedRecordsReadMessagesOncePerRoom` …) | Cộng một lần; xoá trừ một lần; phiếu lệch thứ tự; chỉ phiếu có cờ đọc tin |
 | `grpcsrv` reply, forward, bookmark, `GetReplies`, `ListMentions`, `CreateRoom`, `OpenDirectRoom` | Mã lỗi từng ca bảng 4.1; forward của forward giữ tác giả gốc; che tin xoá/ẩn/clear; gửi lại `CreateRoom` cùng room và làm nốt, không hồi sinh người bị xoá; id trùng `UNAVAILABLE` không rút lại; mở DM song song, chết giữa chừng |
-| actor R5 (`TestSeqContentionFailsAtOnceAndYieldsTheRoom`, `TestResendAbandonedByContentionKeepsItsReservation` …, `-count=5`); competing writers | Va seq `UNAVAILABLE` ngay, nhường room một lần, không mất/nhân đôi tin (~250 lần client gửi lại / 480 tin) |
+| actor R5 (`TestSeqContentionFailsAtOnceAndYieldsTheRoom`, `TestAmbiguousWriteBesideContentionKeepsItsReservation` …, `-count=5`); competing writers | Va seq `UNAVAILABLE` ngay, nhường room một lần, không mất/nhân đôi tin (~250 lần client gửi lại / 480 tin) |
+| actor một lần ghi (`TestNotSentWriteFailsAtOnceAndReleasesItsCID`, `TestUnknownWriteThatIsAbsentFailsAtOnceAndKeepsItsCID`, `TestUnknownWriteThatLandsLaterAnswersTheClientRetryWithTheOriginalSeq`, `TestDuplicateNotYetVisibleFailsAfterOneFind`, `-count=5`) | `ErrNotSent` lỗi ngay và nhả cid; `Unknown`/`Duplicate` một `Find`, lỗi ngay, giữ cid; tin vào muộn được trả seq gốc, không ghi lần hai |
+| reader (`TestRefusedPublishEndsTheTermAndTheNextTermReplaysFromTheConfirmedPosition`, `TestFailedAckEndsTheTermWithoutConfirmingAndTheNextTermRepublishes`, `TestPersistentRefusalPublishesOncePerTermAndConfirmsNothing`, `-count=5`) | Publish lỗi kết thúc term; term sau gửi lại từ vị trí đã xác nhận; mỗi term gửi một lần, không vòng tại chỗ |
 | R1, R2, R3 | Ghim một lượt; log đủ field, không lộ bí mật; lịch sử sửa của tin đang xoá rỗng; `room_created` không đếm trùng |
 | Slot R5 `-count=20` | Soft ownership vẫn đúng sau đổi actor (496s xanh) |
 | Itest hạ tầng thật: `TestRealInfraRepliesAreCountedListedAndKeepTheParent`, `TestRealInfraMentionsForwardsAndBookmarksReachTheirLists`, `TestRealInfraConcurrentOpensOfOnePairOnTwoCoresMakeOneDirectRoom`, `TestRealInfraConcurrentReactionsConvergeToExactCounts`, `TestRealInfraResyncDrillRepublishesWritesTheReaderMissed` (thêm reply, mention, bookmark, đếm lại) | Đầu-cuối qua Mongo/NATS/Redis thật, hai core |
@@ -445,7 +453,3 @@ Owner xem qua; mỗi dòng đã ghi vào D112–D119 của thiết kế.
 **(a) `ListMentions` khi user có hơn ~200 đích.** Ví dụ Minh ở 180 room và app truyền 40 nhóm của Minh → 221 đích. Hiện core gửi một truy vấn; quá ~200 nhánh thì Mongo bỏ cách trộn thứ tự và quét mọi mention khớp rồi sắp trong RAM, nên Minh càng được nhắc nhiều thì màn "Tôi được nhắc tới" càng chậm. Chọn:
 1. Giữ một truy vấn, chấp nhận chậm ở user rất nhiều room/nhóm (ít người, đo ở PoC).
 2. Chia đích thành lô 200, mỗi lô một truy vấn, app trộn lấy 50 mới nhất: luôn nhanh theo index, đổi lại 221 đích = 2 truy vấn, 1000 đích = 5 truy vấn mỗi trang.
-
-**(b) Gửi lại cùng seq khi insert ra `Unknown` (thiết kế §6.2 bước 5, D31).** Ví dụ: actor ghi tin seq 41, Mongo timeout nên không biết đã ghi hay chưa; actor đọc lại không thấy, nên gửi lại **đúng** doc seq 41 đó, tối đa 3 lần, rồi mới báo lỗi. Đây không phải va chạm CAS: cùng `_id`, ghi hai lần vẫn chỉ một tin, chỉ để giải kết quả chưa rõ trước khi trả lời client. Chọn:
-1. Giữ (khuyên): client ít phải gửi lại khi Mongo chậm thoáng qua; không có rủi ro trùng.
-2. Bỏ theo luật "không thử lại nội bộ": `Unknown` không thấy → `UNAVAILABLE` ngay, client gửi lại cùng cid.

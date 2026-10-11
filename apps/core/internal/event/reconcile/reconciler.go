@@ -16,7 +16,7 @@ import (
 const (
 	historyLostMsg = "change feed history lost; restarting from now, changes in the gap need a resync"
 	dropMsg        = "dropping change that cannot become a work record"
-	failedMsg      = "work record publish failed; retrying"
+	failedMsg      = "work record publish failed; term ended, the next term replays from the confirmed position"
 )
 
 var (
@@ -40,7 +40,6 @@ type Reconciler struct {
 	cfg     Config
 	log     *slog.Logger
 	drops   limitedLog
-	fails   limitedLog
 	stats   counters
 	started atomic.Bool
 	stop    chan struct{}
@@ -61,8 +60,8 @@ func New(deps Deps, cfg Config, log *slog.Logger) (*Reconciler, error) {
 	}
 	return &Reconciler{
 		deps: deps, cfg: cfg, log: log,
-		drops: limitedLog{log: log}, fails: limitedLog{log: log},
-		stop: make(chan struct{}), done: make(chan struct{}),
+		drops: limitedLog{log: log},
+		stop:  make(chan struct{}), done: make(chan struct{}),
 	}, nil
 }
 
@@ -133,6 +132,8 @@ func (r *Reconciler) ended(ctx context.Context, err error) {
 		if ferr := r.deps.Feed.Forget(ctx); ferr != nil {
 			r.log.WarnContext(ctx, "forget change feed position", "err", ferr)
 		}
+	case errors.Is(err, errPublishFailed):
+		r.log.WarnContext(ctx, failedMsg, "err", err)
 	case errors.Is(err, store.ErrFeedBusy):
 		r.log.InfoContext(ctx, "change feed held by another consumer; retrying")
 	default:
@@ -143,8 +144,4 @@ func (r *Reconciler) ended(ctx context.Context, err error) {
 func (r *Reconciler) drop(ctx context.Context, err error) {
 	r.stats.dropped.Add(1)
 	r.drops.warn(ctx, dropMsg, "err", err)
-}
-
-func (r *Reconciler) publishFailed(err error) {
-	r.fails.warn(context.Background(), failedMsg, "err", err)
 }

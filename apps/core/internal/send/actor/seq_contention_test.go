@@ -86,14 +86,14 @@ func TestSeqContentionFailsTheRestOfTheGroupAndKeepsCommittedAcks(t *testing.T) 
 		}
 		assertGroupSeqs(t, rg, []uint64{1}, []uint64{2, 3, 4, 5, 6})
 		assertYielded(t, rg)
-		want := []dedupe.Key{remoteKey(roomA, "alice", "c2"), remoteKey(roomA, "alice", "c3")}
+		want := []dedupe.Key{remoteKey(roomA, "alice", "c3"), remoteKey(roomA, "alice", "c2")}
 		if got := abortedKeys(rg); !slices.Equal(got, want) {
 			t.Fatalf("aborted %v, want %v: the ambiguous c5 keeps its reservation", got, want)
 		}
 	})
 }
 
-func TestResendAbandonedByContentionKeepsItsReservation(t *testing.T) {
+func TestAmbiguousWriteBesideContentionKeepsItsReservation(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rg := newRig(t, baseConfig)
 		rg.cids.trackPending()

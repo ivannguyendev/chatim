@@ -25,7 +25,7 @@ type term struct {
 func newTerm(r *Reconciler, cur store.Cursor) *term {
 	return &term{
 		r: r, cur: cur,
-		win:     newWindow(r.deps.JS, r.cfg.Window, r.cfg.Poll, r.publishFailed),
+		win:     newWindow(r.deps.JS, r.cfg.Window, r.cfg.Poll),
 		changes: make(chan store.Change, r.cfg.Batch),
 		failed:  make(chan error, 1),
 		checked: time.Now(),
@@ -99,13 +99,14 @@ func (t *term) forward(ctx context.Context, c store.Change) error {
 	if !work.KnownKind(c.Kind) {
 		t.r.drop(ctx, fmt.Errorf("%w: unknown change kind %d", store.ErrCorruptChange, c.Kind))
 		t.win.done(c.Position)
-		return nil
+		return t.win.collect()
 	}
 	if err := t.makeRoom(ctx); err != nil {
 		return err
 	}
-	t.win.send(c.Position, work.Message(t.r.cfg.SubjectRoot, t.r.cfg.Partitions, work.RecordOf(c)))
+	if err := t.win.send(c.Position, work.Message(t.r.cfg.SubjectRoot, t.r.cfg.Partitions, work.RecordOf(c))); err != nil {
+		return err
+	}
 	t.r.stats.forwarded.Add(1)
-	t.win.collect()
-	return nil
+	return t.win.collect()
 }

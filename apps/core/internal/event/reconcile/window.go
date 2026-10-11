@@ -2,6 +2,8 @@ package reconcile
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -11,85 +13,78 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
+var errPublishFailed = errors.New("work record publish failed")
+
 type entry struct {
-	pos     store.Position
-	msg     *nats.Msg
-	future  jetstream.PubAckFuture
-	acked   bool
-	retryAt time.Time
+	pos    store.Position
+	future jetstream.PubAckFuture
+	acked  bool
+	failed bool
 }
 
 type window struct {
 	js      publish.JetStream
 	limit   int
-	backoff time.Duration
-	failed  func(error)
+	wait    time.Duration
 	entries []*entry
 	settled store.Position
+	err     error
 }
 
-func newWindow(js publish.JetStream, limit int, backoff time.Duration, failed func(error)) *window {
-	return &window{js: js, limit: limit, backoff: backoff, failed: failed}
+func newWindow(js publish.JetStream, limit int, wait time.Duration) *window {
+	return &window{js: js, limit: limit, wait: wait}
 }
 
 func (w *window) done(pos store.Position) {
 	w.entries = append(w.entries, &entry{pos: pos, acked: true})
 }
 
-func (w *window) send(pos store.Position, msg *nats.Msg) {
-	e := &entry{pos: pos, msg: msg}
-	w.publish(e)
-	w.entries = append(w.entries, e)
-}
-
-func (w *window) publish(e *entry) {
-	f, err := w.js.PublishMsgAsync(e.msg)
+func (w *window) send(pos store.Position, msg *nats.Msg) error {
+	f, err := w.js.PublishMsgAsync(msg)
 	if err != nil {
-		w.retry(e, err)
-		return
+		return w.fail(err)
 	}
-	e.future = f
+	w.entries = append(w.entries, &entry{pos: pos, future: f})
+	return nil
 }
 
-func (w *window) retry(e *entry, err error) {
-	e.future, e.retryAt = nil, time.Now().Add(w.backoff)
-	w.failed(err)
+func (w *window) fail(err error) error {
+	if w.err == nil {
+		w.err = fmt.Errorf("%w: %w", errPublishFailed, err)
+	}
+	return w.err
 }
 
 func (w *window) poll(e *entry) bool {
-	switch {
-	case e.acked:
-		return true
-	case e.future == nil:
-		if !time.Now().Before(e.retryAt) {
-			w.publish(e)
-		}
-		return false
+	if e.acked || e.failed {
+		return e.acked
 	}
 	select {
 	case <-e.future.Ok():
 		e.acked = true
 	case err := <-e.future.Err():
-		w.retry(e, err)
+		e.failed = true
+		_ = w.fail(err)
 	default:
 	}
 	return e.acked
 }
 
-func (w *window) collect() {
+func (w *window) collect() error {
 	for len(w.entries) > 0 && w.poll(w.entries[0]) {
 		w.settled = w.entries[0].pos
 		w.entries[0] = nil
 		w.entries = w.entries[1:]
 	}
+	return w.err
 }
 
 func (w *window) full() bool { return len(w.entries) >= w.limit }
 
 func (w *window) drain(ctx context.Context) {
 	for {
-		w.collect()
-		if len(w.entries) == 0 || w.awaitHead(ctx, nil, w.backoff) != nil {
+		_ = w.collect()
+		if len(w.entries) == 0 || w.entries[0].failed || w.awaitHead(ctx, nil, w.wait) != nil {
 			return
 		}
 	}
@@ -97,8 +92,8 @@ func (w *window) drain(ctx context.Context) {
 
 func (w *window) awaitHead(ctx context.Context, stop <-chan struct{}, limit time.Duration) error {
 	head := w.entries[0]
-	if head.future == nil {
-		return sleep(ctx, stop, min(time.Until(head.retryAt), limit))
+	if head.failed {
+		return w.err
 	}
 	capped := time.NewTimer(limit)
 	defer capped.Stop()
@@ -106,7 +101,8 @@ func (w *window) awaitHead(ctx context.Context, stop <-chan struct{}, limit time
 	case <-head.future.Ok():
 		head.acked = true
 	case err := <-head.future.Err():
-		w.retry(head, err)
+		head.failed = true
+		return w.fail(err)
 	case <-capped.C:
 	case <-stop:
 		return errStopped

@@ -57,7 +57,7 @@
 
 Đóng hết ở M2c (2026-10-10), chi tiết ở [tóm tắt M2c](plans/2026-10-10-m2c-threads-mentions-summary.md) mục 4.7 và D113, D117–D119.
 
-- **R1 — Bỏ vòng thử lại nội bộ:** đóng. Ghim một lượt (append trùng `pin_ver` → `UNAVAILABLE`; `Project` một lượt, fast path trả fold cục bộ, worker Nak; D119); counter reaction không còn touch vì mọi số trên tin là `$inc` + phiếu hẹn (D113).
+- **R1 — Bỏ vòng thử lại nội bộ:** đóng. Ghim một lượt (append trùng `pin_ver` → `UNAVAILABLE`; `Project` một lượt, fast path trả fold cục bộ, worker Nak; D119); counter reaction không còn touch vì mọi số trên tin là `$inc` + phiếu hẹn (D113). Owner 2026-10-10 chốt luật tuyệt đối (code của mình không thử lại, kể cả thao tác idempotent): actor không gửi lại insert `Unknown`, không xếp lại nhóm `ErrNotSent`, chỉ một `Find`; reader reconcile publish lỗi thì kết thúc term, term sau đọc lại từ vị trí đã xác nhận (D119).
 - **R2 — Hai known issue của M2b.2:** đóng. `Config.LogValue` log mọi field không bí mật (duyệt tự động, có test bắt field mới); `GetEditHistory` trả rỗng khi fact mới nhất là xoá.
 - **R3 — `room_created` đếm republish sai:** đóng. Chỉ đếm PubAck không trùng.
 - **R4 — Cách sinh room id:** đóng. Giữ id 63-bit ngẫu nhiên; DM qua sổ `room_dms` + `OpenDirectRoom` (D117); `CreateRoom` chỉ group, `request_id`, rút id một lần, trùng → `UNAVAILABLE` (D118).
@@ -65,10 +65,9 @@
 
 ## Câu hỏi mở cho owner (từ M2c)
 
-Hai câu ở cuối [tóm tắt M2c](plans/2026-10-10-m2c-threads-mentions-summary.md#câu-hỏi-cho-owner); chưa chặn merge, trả lời trước M3.
+Câu ở cuối [tóm tắt M2c](plans/2026-10-10-m2c-threads-mentions-summary.md#câu-hỏi-cho-owner); chưa chặn merge, trả lời trước M3.
 
 - **`ListMentions` của user có > ~200 đích** (room + nhóm): giữ một truy vấn (Mongo sắp trong RAM khi quá ~200 nhánh `$or`) hay chia lô 200 đích, gộp trong app (nhiều truy vấn hơn) (D115).
-- **Gửi lại cùng seq khi insert `Unknown`** (thiết kế §6.2 bước 5, D31): actor gửi lại đúng doc đó ≤3 lần để giải kết quả chưa rõ (cùng `_id`, idempotent); giữ, hay bỏ theo luật "không thử lại nội bộ" (D119).
 
 ## Mục mang sang M5 (hardening)
 

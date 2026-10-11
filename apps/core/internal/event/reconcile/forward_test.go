@@ -1,13 +1,10 @@
 package reconcile_test
 
 import (
-	"errors"
 	"slices"
 	"testing"
 	"testing/synctest"
 	"time"
-
-	"github.com/nats-io/nats.go"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish/publishtest"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
@@ -102,33 +99,6 @@ func TestConfirmWaitsForTheAck(t *testing.T) {
 	})
 }
 
-func TestRefusedPublishIsResent(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		rg := newRig(t, nil).start(t)
-		synctest.Wait()
-		refused := 0
-		rg.js.RefuseWhen(func(*nats.Msg) error {
-			if refused == 0 {
-				refused++
-				return errors.New("too many stalled")
-			}
-			return nil
-		})
-		rg.insert(t, room, 1)
-		time.Sleep(2 * tick)
-		synctest.Wait()
-		if got := attemptIDs(rg.js); len(got) < 2 {
-			t.Fatalf("attempts = %v, want the refused publish resent", got)
-		}
-		if got := storedIDs(rg.js); !slices.Equal(got, recordIDs(1)) {
-			t.Fatalf("stored = %v, want %s once", got, recordID(1))
-		}
-		if got := rg.confirmed(t); got != 1 {
-			t.Fatalf("confirmed = %d, want 1", got)
-		}
-	})
-}
-
 func TestFullWindowWaitsForTheHead(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rg := newRig(t, nil).start(t)
@@ -145,27 +115,6 @@ func TestFullWindowWaitsForTheHead(t *testing.T) {
 		synctest.Wait()
 		if got := storedIDs(rg.js); !slices.Equal(got, recordIDs(1, 2, 3, 4, 5, 6)) {
 			t.Fatalf("stored after release = %v, want seq 1..6 in order", got)
-		}
-	})
-}
-
-func TestPersistentRefusalIsLoggedAndRetried(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		rg := newRig(t, nil).start(t)
-		synctest.Wait()
-		rg.js.RefuseWhen(func(*nats.Msg) error { return errors.New("no responders") })
-		rg.insert(t, room, 1)
-		time.Sleep(4 * tick)
-		synctest.Wait()
-		attempts := attemptIDs(rg.js)
-		if len(attempts) < 3 {
-			t.Fatalf("attempts = %v, want the refused publish retried", attempts)
-		}
-		if got := rg.sink.Count(failedMsg); got < 1 || got > len(attempts) {
-			t.Fatalf("%q logged %d times for %d attempts, want at least once and at most once per attempt", failedMsg, got, len(attempts))
-		}
-		if got := rg.confirmed(t); got != 0 || len(rg.js.Stored()) != 0 {
-			t.Fatalf("confirmed = %d, stored = %v; want nothing past a refused publish", got, storedIDs(rg.js))
 		}
 	})
 }

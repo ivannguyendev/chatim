@@ -59,14 +59,9 @@ func (a *actor) requestRetire() bool {
 	return true
 }
 
-func (a *actor) retireNow(ctx context.Context, first *request) {
+func (a *actor) retireNow(first *request) {
 	if first != nil {
 		first.answer(Ack{}, errRetired)
 	}
-	for _, e := range a.retries {
-		a.fail(e, errRetired, e.fixed)
-	}
-	a.retries = nil
-	a.conclude(ctx)
 	a.exit(errRetired)
 }

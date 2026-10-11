@@ -29,7 +29,7 @@ const (
 
 	historyLostMsg = "change feed history lost; restarting from now, changes in the gap need a resync"
 	dropMsg        = "dropping change that cannot become a work record"
-	failedMsg      = "work record publish failed; retrying"
+	failedMsg      = "work record publish failed; term ended, the next term replays from the confirmed position"
 )
 
 var setup = reconcile.Config{

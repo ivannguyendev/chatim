@@ -2,7 +2,6 @@ package actor
 
 import (
 	"context"
-	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
@@ -28,10 +27,8 @@ func (a *actor) reserve(ctx context.Context, fresh []*entry) []*entry {
 	if len(fresh) == 0 {
 		return fresh
 	}
-	now := time.Now()
 	keys := make([]dedupe.Key, len(fresh))
 	for i, e := range fresh {
-		e.admittedAt = now
 		keys[i] = a.remoteKey(e.key)
 	}
 	verdicts, err := a.r.cids.Reserve(ctx, keys)
@@ -47,6 +44,7 @@ func (a *actor) reserve(ctx context.Context, fresh []*entry) []*entry {
 			a.r.cidElsewhere.Add(1)
 			a.cache.fail(e.key, errCIDElsewhere)
 		case dedupe.PendingHere:
+			a.dirty = true
 			a.cache.fail(e.key, errCIDUnsettled)
 		default:
 			e.reserved = v.Status == dedupe.Reserved

@@ -19,9 +19,6 @@ const (
 	cidCacheTTL     = 10 * time.Minute
 	memberCacheSize = 1024
 	seedSize        = store.MaxPageLimit
-	maxRequeues     = 3
-	findBackoff     = 5 * time.Millisecond
-	maxFindBackoff  = 200 * time.Millisecond
 
 	reservationMargin = time.Second
 )
@@ -36,9 +33,7 @@ var (
 	errSeqContention = fmt.Errorf("sequence taken by another write: %w", domain.ErrRetryLater)
 	errCIDElsewhere  = fmt.Errorf("cid in flight on another core: %w", domain.ErrRetryLater)
 	errCIDUnsettled  = fmt.Errorf("cid reservation of an abandoned write still held: %w", domain.ErrRetryLater)
-	errWriteNotSent  = fmt.Errorf("message write not sent before its deadline too many times: %w", domain.ErrRetryLater)
-	errOutOfTime     = fmt.Errorf("message write would outlive its cid reservation: %w", domain.ErrRetryLater)
-	errGroupExpired  = fmt.Errorf("write group deadline passed before submit: %w", domain.ErrRetryLater)
+	errGroupExpired  = fmt.Errorf("write group deadline passed before the insert was sent: %w", domain.ErrRetryLater)
 	errMailboxFull   = fmt.Errorf("room mailbox full: %w", domain.ErrBusy)
 	errTooManyRooms  = fmt.Errorf("too many active rooms: %w", domain.ErrBusy)
 )

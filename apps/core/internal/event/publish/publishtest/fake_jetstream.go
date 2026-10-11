@@ -107,6 +107,20 @@ func (j *JetStream) Release() {
 	j.waiters = nil
 }
 
+func (j *JetStream) Fail(err error) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	j.holding = false
+	for _, f := range j.held {
+		f.err <- err
+	}
+	j.held = nil
+	for _, w := range j.waiters {
+		close(w)
+	}
+	j.waiters = nil
+}
+
 func (j *JetStream) Held() int {
 	j.mu.Lock()
 	defer j.mu.Unlock()

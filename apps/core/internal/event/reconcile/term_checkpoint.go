@@ -8,12 +8,16 @@ import (
 
 func (t *term) checkpoint(ctx context.Context) error {
 	t.checked = time.Now()
-	t.win.collect()
+	err := t.win.collect()
 	t.confirm(ctx)
-	if !t.r.leading() {
+	switch {
+	case err != nil:
+		return err
+	case !t.r.leading():
 		return errLostLead
+	default:
+		return nil
 	}
-	return nil
 }
 
 func (t *term) checkpointIfDue(ctx context.Context) error {
@@ -25,7 +29,9 @@ func (t *term) checkpointIfDue(ctx context.Context) error {
 
 func (t *term) makeRoom(ctx context.Context) error {
 	for {
-		t.win.collect()
+		if err := t.win.collect(); err != nil {
+			return err
+		}
 		if !t.win.full() {
 			return nil
 		}
