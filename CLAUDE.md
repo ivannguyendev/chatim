@@ -24,7 +24,7 @@ Done and merged to `main` (`dev-done`):
 - M2a.1 (PR #8–#10): no room-wide pts, natural event ids, best-effort events, a queue-only publisher on top of the nats.go async publisher (D47–D51).
 - M2a.2 + M2a.3 (PR #11): event reconciliation from the database change feed with acked marks on the dedupe Redis (D52); cross-room cid batching, ack before the cid Commit, a small warm dedupe Redis pool, acked marks in a 10ms window (D58–D60).
 
-The system mechanisms review closed on 2026-10-05 after two rounds with two external reviewers. The result is one design, `docs/designs/261005-chatim-architecture.md`, built on a data-class framework (§4) with decisions D61–D119, and a rewritten `docs/roadmap.md`. M2b.0–M2b.4 are merged to `main` (PR #12); M2c (D112–D119) is built on `feat/m2c` and awaits its PR; next is M3. Old design, plans and PoC notes are in `docs/archive/` and are not updated. Project docs are written in Vietnamese.
+The system mechanisms review closed on 2026-10-05 after two rounds with two external reviewers. The result is one design, `docs/designs/261005-chatim-architecture.md`, built on a data-class framework (§4) with decisions D61–D119, and a rewritten `docs/roadmap.md`. M2b.0–M2b.4 are merged to `main` (PR #12); M2c (D112–D119) is built on `feat/m2c` and awaits its PR; next is M3, narrowed on 2026-10-12 to the missing core query APIs (`GetMessages`, `GetReactions`, `ListPins`, `ListThreads`, a user's raw room list, batch room info and last messages, the reader's own reaction/bookmark in `GetHistory`, internal system messages with `kind` and an unread flag, the 2-shard test). Sync, unread, the conversation list, `@` badges and the room-tail cache belong to a separate app Inbox/sync built only on core APIs and events (decision log `.claude/plans/m3-scope-boundary_design.md`). Old design, plans and PoC notes are in `docs/archive/` and are not updated. Project docs are written in Vietnamese.
 
 ## Hard rules
 
@@ -39,6 +39,7 @@ The system mechanisms review closed on 2026-10-05 after two rounds with two exte
 ## Design checklist
 
 Check every brainstorm, summary and plan against this list before showing it to the owner.
+- Open every milestone plan with a scope and boundary table: what is in scope and which service owns it, what is out and where it belongs. Core offers data APIs and events; logic that combines data for one viewer (sync, unread, conversation list) belongs to an app (owner 2026-10-12).
 - Map each feature to a data class of design §4 (one write, event and repair path per class). Never design a per-feature patch; a feature that fits no class needs a new class first.
 - A derived value written inline (counter, projection, summary) is a direct write or `$inc` wrapped in the survival timer (design §7.1, D111); repair = recount + CAS on the version. Never recount on every change.
 - No internal retries: a CAS, duplicate-key or transaction conflict returns `ErrRetryLater` (`UNAVAILABLE`) at once; workers Nak; transactions run one attempt.
@@ -285,4 +286,4 @@ Rules:
 - `docs/archive/`: the Phase 1 design (full D1–D60 rationale), the draft mechanisms review, the component diagrams, the M0–M2a.3 plans, the 8 archived review documents (`docs/archive/research/261004-*`), and the old PoC notes. Frozen.
 - `docs/git-workflow.md`: branches, merge Definition of Done, readiness levels, SemVer tags and handling a broken `main`.
 - `.claude/plans/*_design.md`: local (gitignored) decision logs of M2a, M2a.1/M2b draft, M2a.2 and M2a.3.
-- Before writing the M3 plan, running the prod-like PoC or sizing the work stream or oplog, ask the owner for real numbers to replace the assumptions in design §2.3.
+- Real numbers (owner 2026-10-12, design §2.3): 99% of users are in under 200 rooms, but the other 1% are key users in very many rooms who need fast, complete reads, so size read APIs for them (~5,000 rooms, not a limit); ~100K connections, reconnects spread over at least a minute. Before running the prod-like PoC or sizing the work stream or oplog, ask the owner for the remaining numbers (`MarkRead`/s, edit rate, active rooms).

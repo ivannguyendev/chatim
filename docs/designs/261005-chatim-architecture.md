@@ -15,6 +15,7 @@ chatim là hạ tầng chat dùng chung (CPaaS nội bộ), multi-tenant về m�
 - Tin: gửi, sửa (có lịch sử), xoá cho mọi người / phía tôi, trả lời, chuyển tiếp.
 - Tương tác: reaction, vị trí đọc + unread, typing, presence, thread, mention, ghim, bookmark, đánh dấu chưa đọc.
 - Event stream nội bộ cho các app khác.
+- Ranh giới (owner chốt 2026-10-12): core cung cấp API dữ liệu (gửi, đọc, sửa, xoá, lịch sử, reaction, vị trí đọc…) và phát event. Logic gộp dữ liệu cho một người xem (sync, unread, danh sách hội thoại, badge `@`) thuộc app Inbox/sync, chỉ dùng API core và event. Plan mỗi milestone mở đầu bằng bảng scope và ranh giới.
 
 **Không làm ở Phase 1:** app auth / api / events / push / migrator, API import trong core, media, search, E2EE, webhook, voice/video, admin UI.
 
@@ -62,7 +63,8 @@ Chưa có số thật; mọi ước lượng dưới đây dùng các giả đ�
 
 | Giả định | Giá trị | Dùng ở |
 |---|---|---|
-| Số room mỗi user | 50 (10 room có tin mới lúc reconnect) | §9 tải reconnect storm |
+| Số room mỗi user | Owner 2026-10-12: 99% user dưới 200 room; 1% còn lại là user quan trọng ở rất nhiều room, phải nhanh và đủ thông tin, nên tính theo nhóm này (mốc ~5.000, không phải giới hạn). Còn giả định 10 room có tin mới lúc reconnect | §9 tải reconnect storm, API đọc lô của M3 |
+| Kết nối | Owner 2026-10-12: ~100K đồng thời, kết nối lại trải ≥ 1 phút | §9.3, gateway |
 | Tỉ lệ tin bị sửa/xoá | 1–3% | §6 ngân sách lệnh sửa, cỡ `message_edits` |
 | Số room active cùng lúc | 3–5K | §8 room activity |
 | Số member doc | ~500M (10M user × 50 room) | §9 index "room của user" trên `members` |
@@ -439,7 +441,9 @@ Lệnh ghi cũng gọi cùng permission hook.
 
 **Đã xây (M2b.2, D86, D87):** `access.Checker` tách `Admit` (room → tenant → membership, không hỏi policy) và `Allow` (hỏi policy); `Authorize` = hai bước. `Request.Author` là tác giả tin đích, `Request.Kind` là loại tin đích (rỗng/0 với action theo room). Action trên một tin (sửa, xoá, ẩn, `GetEditHistory`) chạy `Admit` → `Find` tin → `Allow`; `clear_history`, `read_history`, `send_message` dùng `Authorize`/actor như cũ. `access.DefaultPolicy` là mặc định của `NewChecker` và actor: `edit_message`/`delete_message` trên loại tin nằm trong `LockedKinds` → `PERMISSION_DENIED` cho mọi người, kể cả tác giả (D87); khi `Author ≠ User` → `PERMISSION_DENIED`; mọi action khác cho member. `LockedKinds` đọc từ `MESSAGE_LOCKED_KINDS` (tên loại cách nhau dấu phẩy, phân biệt hoa thường, mặc định rỗng; tên lạ → lỗi boot; hiện chỉ có `text`, loại mới thêm một dòng vào `domain.kindNames`) và chỉ checker của `mutate` nhận. Core không có luật riêng cho tác giả, owner hay loại tin ngoài policy.
 
-### 9.3 Room list, unread, sync [Chưa xây]
+### 9.3 Room list, unread, sync [Chưa xây — thuộc app Inbox/sync, không phải core]
+
+Owner chốt 2026-10-12: phần này là việc của app Inbox/sync, không nằm trong core. Core (M3) chỉ cung cấp API đọc: danh sách room thô của user có phân trang, đọc lô thông tin room và tin cuối của nhiều room. Các ý dưới đây (D72–D74) là đầu vào cho thiết kế của app và sẽ được xét lại ở đó; app phải nhanh và đủ cho user ở hàng nghìn room (1% user quan trọng).
 
 - **Phòng của tôi:** đọc index `{tenant, user_id, state, room_id}` của `members` (D98, thay `user_rooms` của D72).
 - **"Có tin mới"** lấy `last_seq` từ `messages` (reverse scan limit 1, nguồn thật), không từ `rooms.last_seq`. Lý do: event của tin m publish trước lúc client subscribe lại, còn projection coalesce chưa có m, nên client sẽ không bao giờ thấy m cho tới tin sau. Secondary lag: đọc primary, hoặc "pass 2" sau ~3s cho room có `last_msg_at` trong 10s gần nhất.
