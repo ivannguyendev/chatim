@@ -14,6 +14,7 @@ import (
 
 var readerMetrics = []string{
 	"reconcile_running", "reconcile_terms_total", "reconcile_forwarded_total", "reconcile_dropped_total", "reconcile_history_lost_total",
+	"reconcile_publish_failures_total",
 }
 
 func fakeProbes(withReader bool) probes {
@@ -127,4 +128,18 @@ func TestEffectMetricsReadTheirEffectByLabel(t *testing.T) {
 			t.Errorf("%s never publishes, but reconcile_republished_total is exported for it", silent)
 		}
 	}
+}
+
+func TestReaderPublishFailuresReadTheReaderStats(t *testing.T) {
+	p := fakeProbes(true)
+	p.reconcile = func() reconcile.Stats { return reconcile.Stats{PublishFailures: 4} }
+	for _, s := range metricSources(p) {
+		if s.Name == "reconcile_publish_failures_total" {
+			if got := s.Read(); got != 4 {
+				t.Fatalf("reconcile_publish_failures_total = %v, want 4", got)
+			}
+			return
+		}
+	}
+	t.Fatal("no reconcile_publish_failures_total source")
 }

@@ -103,6 +103,7 @@ func readerSources(stats func() reconcile.Stats) []metrics.Source {
 		{Name: "reconcile_forwarded_total", Help: "Committed changes the reader sent to the work stream.", Read: func() float64 { return float64(stats().Forwarded) }},
 		{Name: "reconcile_dropped_total", Help: "Corrupt changes the reader could not turn into work records.", Read: func() float64 { return float64(stats().Dropped) }},
 		{Name: "reconcile_history_lost_total", Help: "Times the change feed position fell out of the oplog.", Read: func() float64 { return float64(stats().HistoryLost) }},
+		{Name: "reconcile_publish_failures_total", Help: "Reader terms ended because the work stream refused a record or its ack failed.", Read: func() float64 { return float64(stats().PublishFailures) }},
 	}
 }
 
