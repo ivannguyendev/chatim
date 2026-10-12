@@ -18,7 +18,7 @@ flowchart TD
     end
 
     subgraph Entry["Tầng Cổng & Thời gian thực"]
-        M09["Module 09: Realtime Delivery & Ephemeral<br/>(WebSocket Gateway, Typing, Presence)"]
+        M09["Module 09: Realtime Delivery & Ephemeral<br/>(App websocket, Typing, Presence)"]
     end
 
     subgraph CoreFeatures["Tầng Nghiệp vụ Hội thoại (Core Features)"]

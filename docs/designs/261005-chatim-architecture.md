@@ -10,7 +10,7 @@ chatim là hạ tầng chat dùng chung (CPaaS nội bộ), multi-tenant về m�
 
 **Phase 1**
 - `core`: room, member, message, tương tác, cấp seq, lưu trữ, phát event.
-- `gateway`: giữ kết nối WebSocket, đẩy event realtime.
+- `websocket`: giữ kết nối WebSocket, đẩy event realtime.
 - Room: DM, group ≤5K member, channel ~200K subscriber (chỉ admin post).
 - Tin: gửi, sửa (có lịch sử), xoá cho mọi người / phía tôi, trả lời, chuyển tiếp.
 - Tương tác: reaction, vị trí đọc + unread, typing, presence, thread, mention, ghim, bookmark, đánh dấu chưa đọc.
@@ -22,7 +22,7 @@ chatim là hạ tầng chat dùng chung (CPaaS nội bộ), multi-tenant về m�
 **Quy mô:** ~100K kết nối đồng thời, 5–10K tin/s đỉnh, 5–20 tỷ tin sau 2 năm.
 
 ```
- Client SDK ──WebSocket──► gateway ──gRPC (theo slot)──► core ──insertMany w:majority──► MongoDB rs (3)
+ Client SDK ──WebSocket──► websocket ──gRPC (theo slot)──► core ──insertMany w:majority──► MongoDB rs (3)
                               ▲                            │                                  │
                               │                            ├─publish──► JetStream CHATIM_EVT ──RePublish──► live.*
                               └──── subscribe live.* ◄─────┘                                  │
@@ -38,7 +38,7 @@ chatim là hạ tầng chat dùng chung (CPaaS nội bộ), multi-tenant về m�
 |---|---|
 | A1 | p99: ack gửi tin ≤30ms; tới người nhận online ≤100ms; trang 50 tin ở bất kỳ vị trí ≤20ms |
 | A2 | Đã ack = đã ghi `w:majority`. Thứ tự trong timeline giống nhau cho mọi người. Event best-effort, id tự nhiên để người nhận bỏ trùng; reconcile bù phần mất |
-| A3 | 99.95%, không điểm chết đơn lẻ: core ≥2, gateway 2–3, Mongo rs 3 member (chưa shard), NATS 3, Redis Sentinel |
+| A3 | 99.95%, không điểm chết đơn lẻ: core ≥2, websocket 2–3, Mongo rs 3 member (chưa shard), NATS 3, Redis Sentinel |
 | A4 | Tin và lịch sử sửa giữ mãi; `CHATIM_EVT` giữ 7 ngày |
 | A5 | JWT do app auth cấp; mTLS nội bộ; không E2EE |
 | A6 | Text ≤16KB, meta ≤8KB, ≤50 mention, ≤10 tham chiếu đính kèm |
@@ -64,7 +64,7 @@ Chưa có số thật; mọi ước lượng dưới đây dùng các giả đ�
 | Giả định | Giá trị | Dùng ở |
 |---|---|---|
 | Số room mỗi user | Owner 2026-10-12: 99% user dưới 200 room; 1% còn lại là user quan trọng ở rất nhiều room, phải nhanh và đủ thông tin, nên tính theo nhóm này (mốc ~5.000, không phải giới hạn). Còn giả định 10 room có tin mới lúc reconnect | §9 tải reconnect storm, API đọc lô của M3 |
-| Kết nối | Owner 2026-10-12: ~100K đồng thời, kết nối lại trải ≥ 1 phút | §9.3, gateway |
+| Kết nối | Owner 2026-10-12: ~100K đồng thời, kết nối lại trải ≥ 1 phút | §9.3, websocket |
 | Tỉ lệ tin bị sửa/xoá | 1–3% | §6 ngân sách lệnh sửa, cỡ `message_edits` |
 | Số room active cùng lúc | 3–5K | §8 room activity |
 | Số member doc | ~500M (10M user × 50 room) | §9 index "room của user" trên `members` |
@@ -75,7 +75,7 @@ Chưa có số thật; mọi ước lượng dưới đây dùng các giả đ�
 |---|---|
 | P1 | Core nào cũng xử lý đúng mọi room. Quyền sở hữu slot chỉ để gom batch, giữ thứ tự, dùng cache. Đúng đắn đến từ khoá unique của DB làm CAS |
 | P2 | DB là nguồn sự thật. Mỗi command có **một fact chính** làm điểm tuần tự hoá, ghi bằng một lệnh atomic trên một doc; mọi thứ khác là effect idempotent. Không transaction nhiều doc, trừ **một ngoại lệ**: lệnh đụng owner (D100, §5.1). **Cấm join không giới hạn**; tra cứu điểm có giới hạn (≤ vài trăm khoá) được phép |
-| P3 | Mỗi thay đổi data phát event theo **chính sách của lớp dữ liệu** (§4) và được **bảo đảm phát** (worker phát lại trạng thái hiện tại); ephemeral không lưu. Subject theo loại dữ liệu `room`/`member`/`message` (D108). Core không chọn người nhận: chuyển tới user nào là việc của app phân phối (thiết kế sau), gateway, push |
+| P3 | Mỗi thay đổi data phát event theo **chính sách của lớp dữ liệu** (§4) và được **bảo đảm phát** (worker phát lại trạng thái hiện tại); ephemeral không lưu. Subject theo loại dữ liệu `room`/`member`/`message` (D108). Core không chọn người nhận: chuyển tới user nào là việc của app phân phối (thiết kế sau), websocket, push |
 | P4 | Mọi thứ suy ra từ fact là **effect**. Effect hội tụ (event, projection, counter, dọn dẹp) chạy lại an toàn; effect không hội tụ (push, tin hệ thống, webhook) phải idempotent ở consumer theo event id. Fast path chạy ngay (best-effort); reconciler là đường bảo đảm |
 | P5 | Số đếm theo target (`member_count`, số trên tin `rx`/`rc`) = `$inc` theo số doc thực sự đổi ngay trong lệnh, bọc phiếu hẹn sinh tồn; sửa = đếm lại tuyệt đối + CAS theo version khi phiếu bật (§7, §7.1; D102, D111, D113 thay recount mỗi lần của D67/D90). Không `$inc` trần không có phiếu. Giá trị theo người đọc (unread) tính lúc đọc, không lưu |
 | P6 | Id event là khoá tự nhiên + version; receiver áp "version cao thắng"; không có số liên tục toàn room |
@@ -95,7 +95,7 @@ Mỗi tính năng khai báo nó thuộc lớp nào. Lớp quyết định đúng
 | Giá trị theo người đọc | unread, cờ đã đọc của mention, view ẩn/đã xoá | Không lưu kết quả; tính lúc đọc từ fact thưa (`hidden`), mốc `members.cleared_at` (D97) và lúc gửi của tin tại `read_seq` (D115) | Unread: không. Ẩn tin, xoá lịch sử: `message_hidden`, `history_cleared` trên subject `member`, worker phát lại (D109) | Worker `hidden_event`, `history_cleared_event` |
 | Vị trí đọc | `members.read_seq` + `read_ver` | Toán tử thường trên doc của người đọc, không đụng `ver`: `MarkRead` nâng khi `read_seq < seq`, `MarkUnread` hạ khi `read_seq > to`; mỗi lần đổi `read_ver + 1` (D105) | Một `read_updated` `{room}-rd-{user}-v{read_ver}` mỗi lần đổi, subject `member`, không coalesce, không ack mark | Feed lấy update có `read_ver` (kind `ReadChanged`); worker `read_event` phát lại vị trí hiện tại |
 | Sổ nhận chỗ | `room_dms`: một room DM mỗi cặp user (D117) | Upsert `$setOnInsert` theo `_id` (khoá unique duy nhất, không unique index phụ); người tới sau nhận lại chỗ đã có; bước "đảm bảo" (room + member) sau đó chạy lại được | Không event riêng; event thuộc room/member được tạo (`room_created`, `member_added`, `member_count_changed`) | Lần mở sau làm nốt bước "đảm bảo"; số member qua phiếu hẹn (D111) |
-| Ephemeral | typing, presence | Không lưu; gateway ↔ NATS core, không qua core | Subject `live.*.eph.*` | Không |
+| Ephemeral | typing, presence | Không lưu; websocket ↔ NATS core, không qua core | Subject `live.*.eph.*` | Không |
 
 Mỗi tính năng còn khai báo **ngân sách khuếch đại**: số write, read, lookup, event cho một thao tác ở nhóm 5K và channel 200K. Ngân sách vượt thì phải đổi lớp hoặc thêm chính sách coalesce trước khi viết plan.
 
@@ -180,7 +180,7 @@ Update trên `rooms` không vào change feed (feed chỉ lấy insert của `roo
 | `cleared_at` | mốc xoá lịch sử phía tôi (ms), `$max`; tin có `ts ≤ cleared_at` bị ẩn với người này (D97) |
 | `read_seq`, `read_ver` | vị trí đọc và số lần nó đổi (D105) |
 
-`state`, `priority`, `ver`, `read_seq`, `read_ver` luôn ghi (filter `$lt`/`$gt` không khớp field thiếu). Không quét khoảng `_id` của `members` (Mongo so BinData theo độ dài trước, nên khoảng byte không phải khoảng tiền tố room): theo room đi index `room_id`, theo user `_id` bằng hoặc `$in`. Index đầu dùng chung cho đếm member active, tìm owner, chọn kế nhiệm; index thứ hai là "room của user" `{tenant, user_id, state, room_id, joined_at, cleared_at, read_seq}` (ba field cuối từ M2c để `RoomsOf` của `ListMentions` đọc thẳng từ index; chuẩn bị M3, gateway).
+`state`, `priority`, `ver`, `read_seq`, `read_ver` luôn ghi (filter `$lt`/`$gt` không khớp field thiếu). Không quét khoảng `_id` của `members` (Mongo so BinData theo độ dài trước, nên khoảng byte không phải khoảng tiền tố room): theo room đi index `room_id`, theo user `_id` bằng hoặc `$in`. Index đầu dùng chung cho đếm member active, tìm owner, chọn kế nhiệm; index thứ hai là "room của user" `{tenant, user_id, state, room_id, joined_at, cleared_at, read_seq}` (ba field cuối từ M2c để `RoomsOf` của `ListMentions` đọc thẳng từ index; chuẩn bị M3, websocket).
 
 **`message_interactions`** (D112, M2c): `message_key`, `room_id`, `tenant`, `kind` (chuỗi `reaction` / `bookmark` / `reply`; byte `kind` trong `_id` là 1 / 2 / 3), `actor_id` (người react / lưu / trả lời), `value`, `previous_value` (emoji hiện tại và trước đó, chỉ reaction), `reply_seq` (chỉ reply), `state` (1 còn, 2 đã gỡ: bỏ react, gỡ lưu, tin trả lời bị xoá), `ver` (số lần doc đổi), `created_at`, `updated_at`. `kind` nằm trong khoá nên change feed biết loại mà không đọc doc (byte lạ = doc hỏng). Doc reply của một tin dài bằng nhau (24 + 1 + 16 byte) nên quét khoảng `_id` ra đúng danh sách trả lời theo seq; cận quét cũng 41 byte (`keys.InteractionReplyRange`, vì Mongo so BinData theo độ dài trước). Doc reaction/bookmark dài theo user nên đếm/lọc qua index, không quét khoảng `_id`. Ví dụ tin 40: `40│1│hung` (👍, state 1), `40│2│minh`, `40│3│0│57` (actor `lan`), `40│3│0│60` (state 2, tin 60 đã xoá).
 
@@ -219,7 +219,7 @@ Không có đường nâng cấp tại chỗ cho đổi tên field và khoá `me
 3. Nhận/nhả slot về `ceil(1024 / số core sống)`.
 4. Publish `chatim:slots:changed`.
 
-`Owns()` chỉ đúng khi lease mới hơn `min(LeaseTTL, HeartbeatTTL) − Tick`, tính từ đầu tick (D24), nên hai core cùng tưởng giữ một slot không quá ~1 tick. Hook nhận cả batch slot, dùng chung `HookTimeout` mỗi `Step` (D26); `BeforeRelease`, `AfterLose`, `AfterClaim` gọi `Router.EvictSlots` (D27, D49). Slot manager dùng Redis client riêng (D28). Client dùng `slotmap.Resolver` để map slot → địa chỉ core; gateway và `tools/internal/route` định tuyến mọi lệnh của một room về core chủ slot.
+`Owns()` chỉ đúng khi lease mới hơn `min(LeaseTTL, HeartbeatTTL) − Tick`, tính từ đầu tick (D24), nên hai core cùng tưởng giữ một slot không quá ~1 tick. Hook nhận cả batch slot, dùng chung `HookTimeout` mỗi `Step` (D26); `BeforeRelease`, `AfterLose`, `AfterClaim` gọi `Router.EvictSlots` (D27, D49). Slot manager dùng Redis client riêng (D28). Client dùng `slotmap.Resolver` để map slot → địa chỉ core; websocket và `tools/internal/route` định tuyến mọi lệnh của một room về core chủ slot.
 
 **Khi va doc của core khác** (D77, D119) [Đã xây]: actor không gán lại seq. Lần đầu thấy doc của core khác ở seq của mình (lúc chuyển slot): entry đó và mọi entry chưa ghi xong của nhóm lỗi `ErrRetryLater` (`UNAVAILABLE`), entry đã ghi vẫn được ack; actor nhường room **một lần** qua `requestRetire` → `a.retire` (cùng cơ chế với slot hook), nên lệnh sau đi về chủ thật và nạp lại từ DB; client gửi lại cùng cid. Không backoff, không fencing token; `room_yields_total` chỉ đếm lần nhường thật (alert `ChatimSeqContention`). Entry chưa rõ kết quả trong cùng nhóm giữ khoá pending `p:{core}` như §6.2 bước 5.
 
@@ -452,15 +452,17 @@ Owner chốt 2026-10-12: phần này là việc của app Inbox/sync, không n�
 - **Sync token** (D74): map `room → last_seq client thực sự có` (50 room ≈ 1KB), có thể kèm change version. Server so với `last_seq` thật, trả room có thay đổi. Token mất, quá cũ hoặc quá lớn → full sync (`ListMyRooms` phân trang). Không dùng token thời gian: event best-effort làm "đã thấy tới T" sai.
 - **Reconnect storm:** 100K user/60s × 50 room ≈ 83K seek + 16,7K tail fill/s (giả định §2.3). SDK reconnect có jitter (trải 60s ra ~5 phút). Đo ở PoC prod-like.
 
-## 10. Gateway realtime [Chưa xây]
+## 10. App websocket realtime [Chưa xây]
+
+Đổi tên từ `gateway` (2026-10-12): app giữ kết nối WebSocket, đẩy event realtime và chuyển lệnh chat tới core; không phải cửa vào duy nhất (API hỏi–đáp của app Inbox/sync đi HTTPS → LB → Inbox). Gom `MarkRead`: SDK gửi vị trí mới nhất tối đa ~2s một lần và khi rời room; app websocket chặn thêm theo (kết nối, room), giữ seq lớn nhất, rồi gọi thẳng core.
 
 - gws, 1 goroutine/connection, tắt nén, frame ≤64KB, ping 25s, 60s không phản hồi thì đóng. JWT trong subprotocol hoặc frame đầu (≤5s), kiểm bằng JWKS có cache.
 - Protobuf `ClientFrame{id, oneof send|edit|delete|react|read|typing|history|sync|sub_presence…}`, `ServerFrame{reply|event|heartbeat}`; subprotocol JSON để debug.
 - Hàng đợi gửi mỗi connection có giới hạn (256 frame / 1MB): đầy → bỏ typing/presence trước → vẫn đầy thì đóng `4008 slow consumer`.
 - Fanout theo interest: `roomIndex` room→{conn}, một sub NATS mỗi room (đếm tham chiếu); client kết nối → lấy room từ index "room của user" trên `members` → sub `live.{t}.*.{rid}.>` (mọi loại dữ liệu của room: `room`, `member`, `message`, D108); Broadcaster encode một lần.
-- Core không có subject theo user và không chọn người nhận (D104): event `member`/`read_updated`/`message_hidden`/`history_cleared` mang `user` trong payload; chuyển tới user nào (thiết bị của người đó, người khác thấy "đã xem", push) do app phân phối thiết kế sau quyết định, trước khi gateway đẩy. `member_removed` → unsubscribe ngay; khoảng rò bằng độ trễ thu hồi.
+- Core không có subject theo user và không chọn người nhận (D104): event `member`/`read_updated`/`message_hidden`/`history_cleared` mang `user` trong payload; chuyển tới user nào (thiết bị của người đó, người khác thấy "đã xem", push) do app phân phối thiết kế sau quyết định, trước khi websocket đẩy. `member_removed` → unsubscribe ngay; khoảng rò bằng độ trễ thu hồi.
 - Typing/presence ephemeral: `live.{t}.room.{rid}.eph.typing`, không qua core, không vào stream; typing 1 lần/3s, không có trong channel; presence đếm connection trên Redis state.
-- Gateway không sắp lại thứ tự; client sắp theo seq, bỏ trùng theo event id.
+- App websocket không sắp lại thứ tự; client sắp theo seq, bỏ trùng theo event id.
 - Rate limit ~10 tin/s/user (burst 20) + quota theo tenant; giới hạn handshake/s; client backoff + jitter.
 
 ## 11. Event stream
@@ -575,7 +577,7 @@ Plan execute M2b.0–M2b.4 (nay ở `.claude/plans/`, local) giữ đường d�
 | Core chết giữa ghi member và `$inc member_count` | Phiếu hẹn bật sau `MEMBER_COUNT_CHECK_DELAY`, `member_count_repair` đếm lại (§7.1); transaction owner chết giữa chừng thì bị huỷ, không ghi gì |
 | NATS lỗi lúc hẹn phiếu | Lệnh thêm/xoá/rời trả `UNAVAILABLE`, chưa ghi gì; client gọi lại |
 | Reader chậm/ngừng quá cửa sổ oplog | Alert RC5; `/app resync` (§8.3, D81) |
-| Gateway chết / reconnect hàng loạt | Client backoff + jitter; sync token; room-tail cache |
+| App websocket chết / reconnect hàng loạt | Client backoff + jitter; sync token; room-tail cache |
 | Room nóng | Mailbox có giới hạn, coalesce counter, rate limit post |
 
 ## 15. Kiểm thử
@@ -600,6 +602,8 @@ Plan execute M2b.0–M2b.4 (nay ở `.claude/plans/`, local) giữ đường d�
 | Soft ownership không fencing | Thấp | CAS; actor tự rút; fencing là phương án dự phòng nếu chaos fail |
 
 ## 17. Decision Log
+
+`gateway` trong các quyết định cũ là app `websocket` (đổi tên 2026-10-12; app chưa xây). Từ 2026-10-12 app Inbox/sync có đường riêng HTTPS → LB → Inbox, `MarkRead` ở lại core (roadmap).
 
 Quyết định D1–D60 giữ id cũ; D96–D110 (M2b.4) sửa D49 (subject), D67 (`member_count`), D72 (`user_rooms`, `cleared_before_seq`), D75 (`p`), D85 (ẩn/clear có event, mốc thời gian); chi tiết và phương án bị loại ở [thiết kế Phase 1 (archive)](../archive/designs/260930-chat-core-gateway-design.md#14-decision-log). D53–D57 (nháp M2b) bị bỏ, thay bởi D61–D78. D112–D119 (M2c, 2026-10-10) thay phần lưu của D88, toàn bộ D90, phần gán lại seq của D31/D77 và phần thử lại của D92.
 

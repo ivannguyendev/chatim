@@ -29,7 +29,7 @@ sequenceDiagram
     participant Core as Core (change/ownership)
     participant Mongo as MongoDB (Transaction Session)
     participant Watch as NATS (memberwatch)
-    participant Gateway as WebSocket Gateway
+    participant App websocket as WebSocket App websocket
 
     Owner->>Core: LeaveRoom(room_id)
     Core->>Core: Nhận diện: Người rời đi đang là Owner!
@@ -47,9 +47,9 @@ sequenceDiagram
     Core->>Mongo: CommitTransaction()
     Mongo-->>Core: Giao dịch thành công!
 
-    Note over Core,Gateway: Đồng bộ cache quyền tức thì
+    Note over Core,App websocket: Đồng bộ cache quyền tức thì
     Core->>Watch: Broadcast member_role_changed (usr_2002 is Owner)
-    Watch-->>Gateway: Huỷ cache quyền cũ, áp dụng quyền mới
+    Watch-->>App websocket: Huỷ cache quyền cũ, áp dụng quyền mới
     Core-->>Owner: Xác nhận rời phòng thành công
 ```
 
@@ -85,7 +85,7 @@ Khi phòng chỉ còn đúng 1 người (chính là Owner) và người này b�
   3. Lập tức phát event `room_archived` và kích hoạt Core tự động huỷ bỏ (Evict) Actor của phòng đó trong RAM để giải phóng tài nguyên.
 
 ### 3.3. Cơ chế Quên Cache tức thời (`memberwatch` D106)
-- Để tối ưu hiệu năng, các node Core và Gateway lưu cache danh sách quyền của thành viên trong RAM.
+- Để tối ưu hiệu năng, các node Core và App websocket lưu cache danh sách quyền của thành viên trong RAM.
 - Khi một người bị kick hoặc bị hạ quyền:
   - Core phát một sự kiện đặc biệt lên NATS JetStream: `member_removed` hoặc `member_role_changed`.
   - Bộ phận `send/memberwatch` trên tất cả các node Core khác lập tức nhận tín hiệu và xoá cache thành viên đó trong RAM. Lệnh gửi tin tiếp theo của người bị kick sẽ bị từ chối ngay lập tức tại tầng xác thực quyền `access.Policy`.
@@ -136,7 +136,7 @@ Khi phòng chỉ còn đúng 1 người (chính là Owner) và người này b�
    - *Hạn chế:* Nếu tại thời điểm Owner rời nhóm, nhóm đang diễn ra việc thay đổi role ồ ạt, MongoDB Transaction có thể bị lỗi `WriteConflict`.
    - *Đánh đổi:* Chấp nhận trả mã lỗi `UNAVAILABLE` để client thử lại thay vì dùng cơ chế khoá phân tán phức tạp gây nguy cơ deadlock.
 2. **Chi phí lan toả khi xoá thành viên ở nhóm lớn:**
-   - *Hạn chế:* Khi kick một thành viên khỏi nhóm 5,000 người, Gateway phải ngắt kết nối WebSocket subscription của user đó đối với phòng. Quá trình này diễn ra bất đồng bộ qua NATS trong vòng vài mili-giây.
+   - *Hạn chế:* Khi kick một thành viên khỏi nhóm 5,000 người, App websocket phải ngắt kết nối WebSocket subscription của user đó đối với phòng. Quá trình này diễn ra bất đồng bộ qua NATS trong vòng vài mili-giây.
 3. **Giới hạn số lượng thành viên tối đa (5,000 member):**
    - Không phù hợp cho các cộng đồng hàng trăm nghìn người thảo luận hai chiều; các trường hợp đó phải chuyển sang sử dụng mô hình **Kênh (Channel)**.
 

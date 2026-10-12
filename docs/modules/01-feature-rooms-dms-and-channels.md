@@ -25,7 +25,7 @@ Trò chuyện 1-1 là trường hợp đặc biệt dễ xảy ra xung đột kh
 sequenceDiagram
     autonumber
     participant ClientA as Client A
-    participant GW as Gateway
+    participant GW as App websocket
     participant Core as Core Service
     participant DMS as MongoDB (room_dms)
     participant Rooms as MongoDB (rooms)
@@ -72,7 +72,7 @@ sequenceDiagram
 ### 3.3. Phân bổ và định tuyến theo Slot (Slot Hashing & Routing)
 - **Cơ chế:** Mọi phòng chat khi được tạo ra đều được gán cố định vào một trong 1024 Soft Slots:
   $$\text{SlotID} = \text{mix64}(\text{room\_id}) \pmod{1024}$$
-- Quyền ghi của phòng thuộc về node Core đang nắm giữ hợp đồng thuê (Lease) của Slot đó. Gateway khi gửi các lệnh tạo tin nhắn hay thay đổi cấu hình phòng sẽ định tuyến thẳng đến Core đang sở hữu slot tương ứng.
+- Quyền ghi của phòng thuộc về node Core đang nắm giữ hợp đồng thuê (Lease) của Slot đó. App websocket khi gửi các lệnh tạo tin nhắn hay thay đổi cấu hình phòng sẽ định tuyến thẳng đến Core đang sở hữu slot tương ứng.
 
 ---
 
@@ -146,7 +146,7 @@ sequenceDiagram
 |---|---|---|
 | **MongoDB Replica Set** | Lưu trữ chính (`rooms`, `room_dms`) | Nếu MongoDB failover hoặc mất kết nối: Lệnh tạo phòng trả `UNAVAILABLE` ngay lập tức. Client cần đợi 1–3s để cụm Mongo bầu Primary mới. |
 | **Redis State (Slot Lease)** | Định tuyến và xác định quyền sở hữu phòng | Nếu Redis State sập: Core mất lease sẽ không nhận lệnh ghi phòng mới; chuyển sang chế độ an toàn (Safe mode) để chống split-brain. |
-| **NATS JetStream** | Phát sự kiện `room_created` cho Gateway | Nếu NATS tạm thời quá tải: Lệnh tạo phòng trên MongoDB vẫn commit thành công (Fast-path); Reconciler sẽ phát bù sự kiện `room_created` sau 5s thông qua Oplog Change Stream. |
+| **NATS JetStream** | Phát sự kiện `room_created` cho App websocket | Nếu NATS tạm thời quá tải: Lệnh tạo phòng trên MongoDB vẫn commit thành công (Fast-path); Reconciler sẽ phát bù sự kiện `room_created` sau 5s thông qua Oplog Change Stream. |
 
 ### 6.1. Chỉ số Sức khoẻ Vận hành & Cảnh báo SRE (Key Metrics & Alerts)
 
