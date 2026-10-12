@@ -74,9 +74,10 @@ func TestListSharedMergesAFullRoomBatchWithoutASort(t *testing.T) {
 	}
 	before := store.MentionCursor{At: codecTime.Add(100 * time.Millisecond), Key: store.MsgKey{Room: itRoom + 100, Seq: 1}}
 	for name, q := range map[string]store.SharedMentionQuery{
-		"all and groups": {Rooms: rooms, Groups: []string{"ops", "hcm"}, Limit: 20},
-		"all only":       {Rooms: rooms, Limit: 20},
-		"after a key":    {Rooms: rooms, Groups: []string{"ops"}, Before: before, Limit: 20},
+		"all and groups": {Tenant: "acme", Rooms: rooms, Groups: []string{"ops", "hcm"}, Limit: 20},
+		"group since":    {Tenant: "acme", Rooms: rooms, Groups: []string{"ops"}, GroupSince: codecTime, Limit: 20},
+		"all only":       {Tenant: "acme", Rooms: rooms, Limit: 20},
+		"after a key":    {Tenant: "acme", Rooms: rooms, Groups: []string{"ops"}, Before: before, Limit: 20},
 	} {
 		filter, err := sharedMentionFilter(q)
 		if err != nil {
@@ -85,7 +86,7 @@ func TestListSharedMergesAFullRoomBatchWithoutASort(t *testing.T) {
 		stages, indexes := winningPlan(t, db, explainMentions(filter, q.Limit))
 		assertMergedScan(t, name, stages, indexes, mentionRoomIndex)
 	}
-	got, err := s.Mentions().ListShared(t.Context(), store.SharedMentionQuery{Rooms: rooms, Groups: []string{"ops"}, Before: before, Limit: 3})
+	got, err := s.Mentions().ListShared(t.Context(), store.SharedMentionQuery{Tenant: "acme", Rooms: rooms, Groups: []string{"ops"}, Before: before, Limit: 3})
 	if err != nil {
 		t.Fatalf("ListShared: %v", err)
 	}

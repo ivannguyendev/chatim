@@ -32,13 +32,16 @@ type MemberRoomLister interface {
 }
 
 type mentionRead struct {
-	who      caller
-	rooms    map[uint64]store.MemberRoom
-	groups   map[string]time.Time
-	groupIDs []string
-	hide     bool
-	before   store.MentionCursor
-	limit    int
+	who        caller
+	rooms      map[uint64]store.MemberRoom
+	groups     map[string]time.Time
+	groupIDs   []string
+	groupSince time.Time
+	hide       bool
+	before     store.MentionCursor
+	limit      int
+	readAt     map[uint64]time.Time
+	readKnown  map[uint64]bool
 }
 
 func (s *Service) ListMentions(ctx context.Context, req *chatimv1.ListMentionsRequest) (*chatimv1.ListMentionsResponse, error) {
@@ -58,7 +61,7 @@ func (s *Service) ListMentions(ctx context.Context, req *chatimv1.ListMentionsRe
 	for _, room := range rooms {
 		r.rooms[room.Room] = room
 	}
-	user, userEnd, err := s.userMentions(ctx, r)
+	user, err := s.userMentions(ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +69,14 @@ func (s *Service) ListMentions(ctx context.Context, req *chatimv1.ListMentionsRe
 	if err != nil {
 		return nil, err
 	}
-	return s.mentionResponse(ctx, who, store.PageMentions(r.limit, user, userEnd, shared))
+	page := store.PageMentions(r.limit, user, shared)
+	if err := s.readPoints(ctx, r, mentionRooms(page.Items)); err != nil {
+		return nil, err
+	}
+	for i := range page.Items {
+		page.Items[i].Read = r.isRead(page.Items[i])
+	}
+	return s.mentionResponse(ctx, who, page)
 }
 
 func (s *Service) mentionReadOf(who caller, req *chatimv1.ListMentionsRequest) (mentionRead, error) {
@@ -87,8 +97,8 @@ func (s *Service) mentionReadOf(who caller, req *chatimv1.ListMentionsRequest) (
 	}
 	_, hide := s.hideRead[who.tenant]
 	return mentionRead{
-		who: who, groups: groups, groupIDs: slices.Sorted(maps.Keys(groups)), hide: hide,
-		before: store.MentionCursor{At: at, Key: key}, limit: limit,
+		who: who, groups: groups, groupIDs: slices.Sorted(maps.Keys(groups)), groupSince: earliestGroupSince(groups), hide: hide,
+		before: store.MentionCursor{At: at, Key: key}, limit: limit, readAt: map[uint64]time.Time{}, readKnown: map[uint64]bool{},
 	}, nil
 }
 
@@ -145,6 +155,15 @@ func mentionGroup(g *chatimv1.MentionGroup) (string, time.Time, error) {
 	return target.ID, g.GetSince().AsTime().UTC(), nil
 }
 
-func readUpTo(d domain.Mention, room store.MemberRoom) bool {
-	return d.Key.Thread == 0 && d.Key.Seq <= room.ReadSeq
+func earliestGroupSince(groups map[string]time.Time) time.Time {
+	var out time.Time
+	for _, since := range groups {
+		if since.IsZero() {
+			return time.Time{}
+		}
+		if out.IsZero() || since.Before(out) {
+			out = since
+		}
+	}
+	return out
 }

@@ -15,11 +15,6 @@ type MentionRoom struct {
 	ReadSeq uint64
 }
 
-type MentionPage struct {
-	Items []domain.Mention
-	Next  MentionCursor
-}
-
 func MentionSince(r MemberRoom) time.Time {
 	if r.ClearedAt.After(r.JoinedAt) {
 		return r.ClearedAt
@@ -39,23 +34,11 @@ func SharedMentionRooms(rooms []MemberRoom, last map[uint64]time.Time) []Mention
 	return out
 }
 
-func ReadMessageKeys(rooms []MentionRoom) []MsgKey {
-	out := make([]MsgKey, 0, len(rooms))
-	for _, r := range rooms {
-		if r.ReadSeq > 0 {
-			out = append(out, MsgKey{Room: r.Room, Seq: r.ReadSeq})
-		}
-	}
-	return out
-}
-
-func RaiseSinceToRead(rooms []MentionRoom, readAt map[MsgKey]time.Time) []MentionRoom {
+func RaiseSinceToRead(rooms []MentionRoom, readAt map[uint64]time.Time) []MentionRoom {
 	out := make([]MentionRoom, 0, len(rooms))
 	for _, r := range rooms {
-		if at, ok := readAt[MsgKey{Room: r.Room, Seq: r.ReadSeq}]; ok && r.ReadSeq > 0 {
-			if before := at.Add(-time.Millisecond); before.After(r.Since) {
-				r.Since = before
-			}
+		if at, ok := readAt[r.Room]; ok && at.After(r.Since) {
+			r.Since = at
 		}
 		if r.Last.After(r.Since) {
 			out = append(out, r)
@@ -69,23 +52,4 @@ func MergeMentions(limit int, lists ...[]domain.Mention) []domain.Mention {
 	slices.SortStableFunc(all, func(a, b domain.Mention) int { return CompareMentions(b, a) })
 	all = slices.CompactFunc(all, func(a, b domain.Mention) bool { return a.Key == b.Key })
 	return all[:min(len(all), limit)]
-}
-
-func MentionsSettled(merged []domain.Mention, limit int, next time.Time) bool {
-	return len(merged) >= limit && merged[limit-1].CreatedAt.After(next)
-}
-
-func PageMentions(limit int, user []domain.Mention, userEnd MentionCursor, shared []domain.Mention) MentionPage {
-	items := MergeMentions(limit, user, shared)
-	if !userEnd.At.IsZero() {
-		items = slices.DeleteFunc(items, userEnd.Holds)
-	}
-	switch {
-	case len(items) == limit:
-		return MentionPage{Items: items, Next: CursorOf(items[len(items)-1])}
-	case !userEnd.At.IsZero():
-		return MentionPage{Items: items, Next: userEnd}
-	default:
-		return MentionPage{Items: items}
-	}
 }

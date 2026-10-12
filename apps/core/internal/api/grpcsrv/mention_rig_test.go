@@ -34,14 +34,14 @@ type mentionRig struct {
 	*rig
 	clock      *testClock
 	alice, bob context.Context
-	seqs       map[uint64]uint64
+	seqs       map[[2]uint64]uint64
 }
 
 func newMentionRig(t *testing.T, o options) *mentionRig {
 	t.Helper()
 	clock := &testClock{now: mentionT0}
 	o.now = clock.Now
-	return &mentionRig{rig: newRig(t, o), clock: clock, alice: as(t, "acme", "alice"), bob: as(t, "acme", "bob"), seqs: map[uint64]uint64{}}
+	return &mentionRig{rig: newRig(t, o), clock: clock, alice: as(t, "acme", "alice"), bob: as(t, "acme", "bob"), seqs: map[[2]uint64]uint64{}}
 }
 
 func sec(n int) time.Time { return mentionT0.Add(time.Duration(n) * time.Second) }
@@ -78,19 +78,38 @@ func (rg *mentionRig) read(t *testing.T, room, seq uint64, worker bool) {
 	if _, err := rg.client.MarkRead(rg.bob, &chatimv1.MarkReadRequest{RoomId: ids.FormatRoomID(room), Seq: seq}); err != nil {
 		t.Fatalf("MarkRead: %v", err)
 	}
-	if !worker {
+	rg.worker(t, room, seq, worker)
+}
+
+func (rg *mentionRig) unread(t *testing.T, room, seq uint64) {
+	t.Helper()
+	resp, err := rg.client.MarkUnread(rg.bob, &chatimv1.MarkUnreadRequest{RoomId: ids.FormatRoomID(room), Seq: seq})
+	if err != nil {
+		t.Fatalf("MarkUnread: %v", err)
+	}
+	rg.worker(t, room, resp.GetReadSeq(), true)
+}
+
+func (rg *mentionRig) worker(t *testing.T, room, readSeq uint64, run bool) {
+	t.Helper()
+	if !run {
 		return
 	}
-	if err := rg.mentions.MarkRead(t.Context(), room, "bob", seq); err != nil {
+	if err := rg.mentions.MarkRead(t.Context(), room, "bob", readSeq); err != nil {
 		t.Fatalf("mentions MarkRead: %v", err)
 	}
 }
 
 func (rg *mentionRig) post(t *testing.T, room uint64, text string, at int, targets ...domain.MentionTarget) uint64 {
 	t.Helper()
-	rg.seqs[room]++
-	seq := rg.seqs[room]
-	m := domain.Message{Room: room, Seq: seq, Tenant: "acme", From: "alice", Kind: domain.KindText, Text: text, CID: fmt.Sprintf("c-%d-%d", room, seq), CreatedAt: sec(at)}
+	return rg.postIn(t, room, 0, text, at, targets...)
+}
+
+func (rg *mentionRig) postIn(t *testing.T, room, thread uint64, text string, at int, targets ...domain.MentionTarget) uint64 {
+	t.Helper()
+	rg.seqs[[2]uint64{room, thread}]++
+	seq := rg.seqs[[2]uint64{room, thread}]
+	m := domain.Message{Room: room, Thread: thread, Seq: seq, Tenant: "acme", From: "alice", Kind: domain.KindText, Text: text, CID: fmt.Sprintf("c-%d-%d-%d", room, thread, seq), CreatedAt: sec(at)}
 	if r := rg.msgs.Insert(t.Context(), []domain.Message{m}); r[0].Outcome != store.Inserted {
 		t.Fatalf("Insert(%s) = %+v", text, r[0])
 	}

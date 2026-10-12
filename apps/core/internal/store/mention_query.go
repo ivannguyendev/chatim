@@ -32,10 +32,12 @@ type SharedRoom struct {
 }
 
 type SharedMentionQuery struct {
-	Rooms  []SharedRoom
-	Groups []string
-	Before MentionCursor
-	Limit  int
+	Tenant     string
+	Rooms      []SharedRoom
+	Groups     []string
+	GroupSince time.Time
+	Before     MentionCursor
+	Limit      int
 }
 
 func ValidateTargetMentionQuery(q TargetMentionQuery) error {
@@ -49,7 +51,10 @@ func ValidateTargetMentionQuery(q TargetMentionQuery) error {
 }
 
 func ValidateSharedMentionQuery(q SharedMentionQuery) error {
-	if len(q.Rooms) == 0 || len(q.Rooms) > SharedMentionBatch {
+	switch {
+	case q.Tenant == "":
+		return invalid("tenant")
+	case len(q.Rooms) == 0 || len(q.Rooms) > SharedMentionBatch:
 		return invalid("mention rooms")
 	}
 	seen := make(map[uint64]struct{}, len(q.Rooms))
@@ -75,13 +80,13 @@ func validateMentionPage(before MentionCursor, limit int) error {
 }
 
 func (q SharedMentionQuery) Wants(m domain.Mention) bool {
-	if !m.Live || !q.Before.Holds(m) {
+	if !m.Live || m.Tenant != q.Tenant || !q.Before.Holds(m) {
 		return false
 	}
 	switch m.Target.Kind {
 	case domain.MentionAll:
 	case domain.MentionGroup:
-		if !slices.Contains(q.Groups, m.Target.ID) {
+		if !slices.Contains(q.Groups, m.Target.ID) || m.CreatedAt.Before(q.GroupSince) {
 			return false
 		}
 	default:

@@ -30,7 +30,7 @@ func TestValidateTargetMentionQuery(t *testing.T) {
 }
 
 func TestValidateSharedMentionQuery(t *testing.T) {
-	good := store.SharedMentionQuery{Rooms: []store.SharedRoom{{Room: 1}, {Room: 2, Since: at(1)}}, Groups: []string{"ops"}, Limit: 20}
+	good := store.SharedMentionQuery{Tenant: "acme", Rooms: []store.SharedRoom{{Room: 1}, {Room: 2, Since: at(1)}}, Groups: []string{"ops"}, Limit: 20}
 	if err := store.ValidateSharedMentionQuery(good); err != nil {
 		t.Fatalf("ValidateSharedMentionQuery(good) = %v", err)
 	}
@@ -38,10 +38,11 @@ func TestValidateSharedMentionQuery(t *testing.T) {
 	for i := range full {
 		full[i].Room = uint64(i + 1)
 	}
-	if err := store.ValidateSharedMentionQuery(store.SharedMentionQuery{Rooms: full, Limit: 20}); err != nil {
+	if err := store.ValidateSharedMentionQuery(store.SharedMentionQuery{Tenant: "acme", Rooms: full, Limit: 20}); err != nil {
 		t.Fatalf("ValidateSharedMentionQuery(full batch) = %v", err)
 	}
 	for name, edit := range map[string]func(*store.SharedMentionQuery){
+		"no tenant":      func(q *store.SharedMentionQuery) { q.Tenant = "" },
 		"no rooms":       func(q *store.SharedMentionQuery) { q.Rooms = nil },
 		"over a batch":   func(q *store.SharedMentionQuery) { q.Rooms = slices.Concat(full, []store.SharedRoom{{Room: 9999}}) },
 		"room 0":         func(q *store.SharedMentionQuery) { q.Rooms = []store.SharedRoom{{}} },

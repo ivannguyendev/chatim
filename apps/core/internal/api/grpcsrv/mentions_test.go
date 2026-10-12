@@ -99,26 +99,6 @@ func mentionTexts(from, to int) []string {
 	return out
 }
 
-func TestListMentionsFillsThePageWhenGroupSinceDropsDocs(t *testing.T) {
-	rg := newMentionRig(t, options{})
-	a := rg.room(t, 0, "bob")
-	for i := 1; i <= 25; i++ {
-		rg.post(t, a, fmt.Sprintf("m%02d", i), i, toAll)
-	}
-	for i := 31; i <= 60; i++ {
-		rg.post(t, a, fmt.Sprintf("ops%02d", i), i, toOps)
-	}
-	groups := []*chatimv1.MentionGroup{{Id: "ops", Since: timestamppb.New(sec(100))}}
-	got, _, next := rg.list(t, &chatimv1.ListMentionsRequest{Groups: groups})
-	if want := mentionTexts(25, 6); !slices.Equal(got, want) || next == "" {
-		t.Fatalf("first page = %v next %q, want %v and a next page", got, next, want)
-	}
-	got, _, next = rg.list(t, &chatimv1.ListMentionsRequest{Groups: groups, Before: next})
-	if want := mentionTexts(5, 1); !slices.Equal(got, want) || next != "" {
-		t.Fatalf("second page = %v next %q, want %v and no next page", got, next, want)
-	}
-}
-
 func TestListMentionsStopsEarlyAndPagesAcrossRoomBatches(t *testing.T) {
 	counter := &countingLister{}
 	rg := newMentionRig(t, options{listing: func(m grpcsrv.MentionLister) grpcsrv.MentionLister {

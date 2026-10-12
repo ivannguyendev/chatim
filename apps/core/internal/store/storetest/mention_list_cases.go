@@ -107,10 +107,17 @@ func listSharedSince(t *testing.T, s store.Mentions) {
 	gone := placed(t, s, roomB, 2, baseTime.Add(6*time.Second), mentionAll)
 	mustApplyMentions(t, s, store.MentionSet{Key: gone, Tenant: tenant, Sender: "alice", Ver: 1, CreatedAt: baseTime.Add(6 * time.Second), At: baseTime.Add(time.Hour)})
 	rooms := []store.SharedRoom{{Room: roomA, Since: baseTime}, {Room: roomB}}
-	q := store.SharedMentionQuery{Rooms: rooms, Groups: []string{mentionOps.ID}, Limit: 10}
+	foreign := store.MentionSet{Key: store.MsgKey{Room: roomB, Seq: 3}, Tenant: "globex", Sender: "alice", Targets: []domain.MentionTarget{mentionAll}, CreatedAt: baseTime.Add(7 * time.Second), At: baseTime}
+	mustApplyMentions(t, s, foreign)
+	q := store.SharedMentionQuery{Tenant: tenant, Rooms: rooms, Groups: []string{mentionOps.ID}, Limit: 10}
 	if got, want := shared(t, s, q), []store.MsgKey{a3, a2, b1, b1}; !slices.Equal(got, want) {
 		t.Fatalf("ListShared = %v, want %v", got, want)
 	}
+	q.GroupSince = baseTime.Add(3 * time.Second)
+	if got, want := shared(t, s, q), []store.MsgKey{a3, a2, b1}; !slices.Equal(got, want) {
+		t.Fatalf("ListShared(group since 3s) = %v, want %v", got, want)
+	}
+	q.GroupSince = time.Time{}
 	q.Groups = nil
 	if got, want := shared(t, s, q), []store.MsgKey{a2, b1}; !slices.Equal(got, want) {
 		t.Fatalf("ListShared(no groups) = %v, want %v", got, want)
@@ -126,7 +133,7 @@ func listSharedCursor(t *testing.T, s store.Mentions) {
 	b1 := placed(t, s, roomB, 1, baseTime, mentionAll)
 	a2 := placed(t, s, roomA, 2, baseTime.Add(time.Second), mentionAll)
 	c1 := placed(t, s, roomC, 1, baseTime.Add(2*time.Second), mentionOps)
-	q := store.SharedMentionQuery{Rooms: []store.SharedRoom{{Room: roomA}, {Room: roomB}, {Room: roomC}}, Groups: []string{mentionOps.ID}, Limit: 2}
+	q := store.SharedMentionQuery{Tenant: tenant, Rooms: []store.SharedRoom{{Room: roomA}, {Room: roomB}, {Room: roomC}}, Groups: []string{mentionOps.ID}, Limit: 2}
 	if got, want := shared(t, s, q), []store.MsgKey{c1, a2}; !slices.Equal(got, want) {
 		t.Fatalf("first page = %v, want %v", got, want)
 	}
@@ -155,8 +162,9 @@ func listInvalid(t *testing.T, s store.Mentions) {
 			t.Errorf("%s: ListByTarget = %v, want ErrInvalidArgument", name, err)
 		}
 	}
-	goodShared := store.SharedMentionQuery{Rooms: []store.SharedRoom{{Room: roomA}}, Limit: 10}
+	goodShared := store.SharedMentionQuery{Tenant: tenant, Rooms: []store.SharedRoom{{Room: roomA}}, Limit: 10}
 	for name, edit := range map[string]func(*store.SharedMentionQuery){
+		"no tenant":      func(q *store.SharedMentionQuery) { q.Tenant = "" },
 		"no rooms":       func(q *store.SharedMentionQuery) { q.Rooms = nil },
 		"duplicate room": func(q *store.SharedMentionQuery) { q.Rooms = []store.SharedRoom{{Room: roomA}, {Room: roomA}} },
 		"bad group":      func(q *store.SharedMentionQuery) { q.Groups = []string{""} },

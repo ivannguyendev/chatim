@@ -3,6 +3,7 @@ package mongostore
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -61,7 +62,7 @@ func targetMentionFilter(q store.TargetMentionQuery) bson.D {
 		states = bson.A{mentionLive}
 	}
 	filter := bson.D{{Key: "tenant", Value: q.Tenant}, {Key: "target", Value: q.Target}, {Key: "state", Value: bson.D{{Key: "$in", Value: states}}}}
-	return withMentionSpan(filter, time.Time{}, q.Before)
+	return withMentionSpan(filter, nil, q.Before)
 }
 
 func sharedMentionFilter(q store.SharedMentionQuery) (bson.D, error) {
@@ -75,21 +76,34 @@ func sharedMentionFilter(q store.SharedMentionQuery) (bson.D, error) {
 		if err != nil {
 			return nil, err
 		}
-		all := bson.D{{Key: "room_id", Value: room}, {Key: "kind", Value: mentionKindNames[domain.MentionAll]}, {Key: "state", Value: mentionLive}}
-		branches = append(branches, withMentionSpan(all, r.Since, q.Before))
-		if len(groups) > 0 {
-			group := bson.D{{Key: "room_id", Value: room}, {Key: "kind", Value: mentionKindNames[domain.MentionGroup]}, {Key: "state", Value: mentionLive}, {Key: "target", Value: bson.D{{Key: "$in", Value: groups}}}}
-			branches = append(branches, withMentionSpan(group, r.Since, q.Before))
+		all := sharedBranch(room, q.Tenant, domain.MentionAll)
+		branches = append(branches, withMentionSpan(all, after(r.Since), q.Before))
+		if len(groups) == 0 {
+			continue
 		}
+		group := append(sharedBranch(room, q.Tenant, domain.MentionGroup), bson.E{Key: "target", Value: bson.D{{Key: "$in", Value: groups}}})
+		lower := after(r.Since)
+		if q.GroupSince.After(r.Since) {
+			lower = bson.D{{Key: "$gte", Value: q.GroupSince}}
+		}
+		branches = append(branches, withMentionSpan(group, lower, q.Before))
 	}
 	return bson.D{{Key: "$or", Value: branches}}, nil
 }
 
-func withMentionSpan(filter bson.D, since time.Time, before store.MentionCursor) bson.D {
-	var span bson.D
-	if !since.IsZero() {
-		span = append(span, bson.E{Key: "$gt", Value: since})
+func sharedBranch(room int64, tenant string, kind domain.MentionKind) bson.D {
+	return bson.D{{Key: "room_id", Value: room}, {Key: "kind", Value: mentionKindNames[kind]}, {Key: "tenant", Value: tenant}, {Key: "state", Value: mentionLive}}
+}
+
+func after(since time.Time) bson.D {
+	if since.IsZero() {
+		return nil
 	}
+	return bson.D{{Key: "$gt", Value: since}}
+}
+
+func withMentionSpan(filter, lower bson.D, before store.MentionCursor) bson.D {
+	span := slices.Clone(lower)
 	if !before.At.IsZero() {
 		span = append(span, bson.E{Key: "$lte", Value: before.At})
 	}
