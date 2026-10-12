@@ -1,7 +1,6 @@
 package mongostore
 
 import (
-	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -12,44 +11,89 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
-const mentionListIndex = "tenant_1_target_1_state_1_created_at_-1_message_key_-1"
+const (
+	mentionTargetIndex = "tenant_1_target_1_state_1_created_at_-1_message_key_-1"
+	mentionRoomIndex   = "room_id_1_kind_1_created_at_-1_message_key_-1"
+)
 
-func TestListMentionsMergesIndexRangesWithoutASort(t *testing.T) {
+func assertMergedScan(t *testing.T, name string, stages, indexes []string, index string) {
+	t.Helper()
+	scans := 0
+	for _, st := range stages {
+		if st == "IXSCAN" {
+			scans++
+		}
+	}
+	t.Logf("%s: winning plan %v over %d index scans", name, stages[:min(len(stages), 4)], scans)
+	if slices.Contains(stages, "SORT") || slices.Contains(stages, "COLLSCAN") || !slices.Contains(indexes, index) {
+		t.Fatalf("%s: winning plan stages %v on %v, want merged %s scans without a blocking SORT", name, stages, indexes, index)
+	}
+	for _, ix := range indexes {
+		if ix != index {
+			t.Fatalf("%s: winning plan uses %s, want only %s", name, ix, index)
+		}
+	}
+}
+
+func explainMentions(filter bson.D, limit int) bson.D {
+	return bson.D{{Key: "find", Value: mentionsCollection}, {Key: "filter", Value: filter}, {Key: "sort", Value: mentionListSort()}, {Key: "limit", Value: limit}}
+}
+
+func TestListByTargetMergesStateRangesWithoutASort(t *testing.T) {
 	s, db := itStore(t, itClient(t))
-	var wants []store.MentionWant
+	minh := domain.MentionTarget{Kind: domain.MentionUser, ID: "minh"}
 	for i := range 6 {
-		target := domain.MentionTarget{Kind: domain.MentionGroup, ID: fmt.Sprintf("g%d", i)}
-		set := store.MentionSet{Key: store.MsgKey{Room: itRoom, Seq: uint64(i + 1)}, Tenant: "acme", Sender: "alice", Targets: []domain.MentionTarget{target}, CreatedAt: codecTime.Add(time.Duration(i) * time.Second), At: codecTime}
+		set := store.MentionSet{Key: store.MsgKey{Room: itRoom, Seq: uint64(i + 1)}, Tenant: "acme", Sender: "alice", Targets: []domain.MentionTarget{minh}, CreatedAt: codecTime.Add(time.Duration(i) * time.Second), At: codecTime}
 		if err := s.Mentions().ApplyMentions(t.Context(), set); err != nil {
 			t.Fatalf("ApplyMentions: %v", err)
 		}
-		w := store.MentionWant{Target: target.Name(itRoom)}
-		if i%3 == 0 {
-			w.Since = codecTime.Add(2 * time.Second)
-		}
-		wants = append(wants, w)
 	}
-	for name, q := range map[string]store.MentionQuery{
-		"first page":  {Tenant: "acme", Targets: wants, Limit: 50},
-		"after a key": {Tenant: "acme", Targets: wants, Limit: 50, Before: store.MentionCursor{At: codecTime.Add(4 * time.Second), Key: store.MsgKey{Room: itRoom, Seq: 5}}},
-		"plain only":  {Tenant: "acme", Targets: wants[1:3], Limit: 50},
+	before := store.MentionCursor{At: codecTime.Add(4 * time.Second), Key: store.MsgKey{Room: itRoom, Seq: 5}}
+	for name, q := range map[string]store.TargetMentionQuery{
+		"mark":        {Tenant: "acme", Target: minh.Name(0), Limit: 20},
+		"hide":        {Tenant: "acme", Target: minh.Name(0), UnreadOnly: true, Limit: 20},
+		"after a key": {Tenant: "acme", Target: minh.Name(0), Before: before, Limit: 20},
 	} {
-		find := bson.D{{Key: "find", Value: mentionsCollection}, {Key: "filter", Value: mentionListFilter(q)}, {Key: "sort", Value: mentionListSort()}, {Key: "limit", Value: q.Limit}}
-		stages, indexes := winningPlan(t, db, find)
-		t.Logf("%s: winning plan stages %v on %v", name, stages, indexes)
-		if slices.Contains(stages, "SORT") || slices.Contains(stages, "COLLSCAN") || !slices.Contains(indexes, mentionListIndex) {
-			t.Fatalf("%s: winning plan stages %v on %v, want merged %s scans without a blocking SORT", name, stages, indexes, mentionListIndex)
+		stages, indexes := winningPlan(t, db, explainMentions(targetMentionFilter(q), q.Limit))
+		assertMergedScan(t, name, stages, indexes, mentionTargetIndex)
+	}
+}
+
+func TestListSharedMergesAFullRoomBatchWithoutASort(t *testing.T) {
+	s, db := itStore(t, itClient(t))
+	all := domain.MentionTarget{Kind: domain.MentionAll}
+	ops := domain.MentionTarget{Kind: domain.MentionGroup, ID: "ops"}
+	rooms := make([]store.SharedRoom, store.SharedMentionBatch)
+	for i := range rooms {
+		room := itRoom + uint64(i)
+		rooms[i] = store.SharedRoom{Room: room, Since: codecTime.Add(-time.Hour)}
+		set := store.MentionSet{Key: store.MsgKey{Room: room, Seq: 1}, Tenant: "acme", Sender: "alice", Targets: []domain.MentionTarget{all, ops}, CreatedAt: codecTime.Add(time.Duration(i) * time.Millisecond), At: codecTime}
+		if err := s.Mentions().ApplyMentions(t.Context(), set); err != nil {
+			t.Fatalf("ApplyMentions: %v", err)
 		}
 	}
-	got, err := s.Mentions().List(t.Context(), store.MentionQuery{Tenant: "acme", Targets: wants, Limit: 50})
+	before := store.MentionCursor{At: codecTime.Add(100 * time.Millisecond), Key: store.MsgKey{Room: itRoom + 100, Seq: 1}}
+	for name, q := range map[string]store.SharedMentionQuery{
+		"all and groups": {Rooms: rooms, Groups: []string{"ops", "hcm"}, Limit: 20},
+		"all only":       {Rooms: rooms, Limit: 20},
+		"after a key":    {Rooms: rooms, Groups: []string{"ops"}, Before: before, Limit: 20},
+	} {
+		filter, err := sharedMentionFilter(q)
+		if err != nil {
+			t.Fatalf("sharedMentionFilter: %v", err)
+		}
+		stages, indexes := winningPlan(t, db, explainMentions(filter, q.Limit))
+		assertMergedScan(t, name, stages, indexes, mentionRoomIndex)
+	}
+	got, err := s.Mentions().ListShared(t.Context(), store.SharedMentionQuery{Rooms: rooms, Groups: []string{"ops"}, Before: before, Limit: 3})
 	if err != nil {
-		t.Fatalf("List: %v", err)
+		t.Fatalf("ListShared: %v", err)
 	}
-	var seqs []uint64
+	var seen []uint64
 	for _, m := range got {
-		seqs = append(seqs, m.Key.Seq)
+		seen = append(seen, m.Key.Room-itRoom)
 	}
-	if want := []uint64{6, 5, 4, 3, 2}; !slices.Equal(seqs, want) {
-		t.Fatalf("List seqs = %v, want %v (g0 is older than its since)", seqs, want)
+	if want := []uint64{99, 99, 98}; !slices.Equal(seen, want) {
+		t.Fatalf("ListShared rooms = %v, want %v", seen, want)
 	}
 }

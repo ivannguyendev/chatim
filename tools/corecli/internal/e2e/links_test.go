@@ -66,6 +66,19 @@ func TestEventOfCarriesLinksRepliesAndBookmarks(t *testing.T) {
 	}
 }
 
+func TestCheckMentionsWantsTheExactPlacesInOrder(t *testing.T) {
+	got := []*chatimv1.MentionItem{{Message: &chatimv1.Message{RoomId: "77", Seq: 6}}, {Message: &chatimv1.Message{RoomId: "88", Seq: 2}, Read: true}}
+	want := append(e2e.PlacesIn("77", []uint64{6}), e2e.Place{Room: "88", Seq: 2})
+	if err := e2e.CheckMentions("mentions", got, want); err != nil {
+		t.Fatalf("CheckMentions: %v", err)
+	}
+	for _, bad := range [][]e2e.Place{e2e.PlacesIn("77", []uint64{6, 2}), want[:1], {want[1], want[0]}} {
+		if err := e2e.CheckMentions("mentions", got, bad); err == nil {
+			t.Fatalf("CheckMentions(%v) passed", bad)
+		}
+	}
+}
+
 func TestCheckSeqsWantsTheExactRoomAndOrder(t *testing.T) {
 	got := []*chatimv1.Message{{RoomId: "77", Seq: 6}, {RoomId: "77", Seq: 5}}
 	if err := e2e.CheckSeqs("mentions", "77", got, []uint64{6, 5}); err != nil {

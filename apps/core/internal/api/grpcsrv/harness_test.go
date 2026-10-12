@@ -74,6 +74,8 @@ type options struct {
 	members func(*memstore.Rooms) grpcsrv.RoomMembers
 	pending dedupe.Registry
 	pages   func(grpcsrv.PageReader) grpcsrv.PageReader
+	hide    []string
+	listing func(grpcsrv.MentionLister) grpcsrv.MentionLister
 }
 
 func newRig(t *testing.T, o options) *rig {
@@ -85,7 +87,8 @@ func newRig(t *testing.T, o options) *rig {
 	svc, err := grpcsrv.New(grpcsrv.Deps{
 		Sender: o.sender, Rooms: rg.rooms, Pages: o.pageReader(rg.msgs), NewID: o.newID, Now: o.now, Policy: o.policy, Events: o.events,
 		Mutator: newMutator(t, rg, o), Edits: rg.edits, Hidden: rg.hidden, Bookmarks: rg.reactions, Replies: rg.reactions,
-		Members: membersOf(rg, o), Timers: nopTimers{}, Requests: newRequests(t, o.pending), Directs: rg.directs, Mentions: rg.mentions, MemberRooms: rg.rooms,
+		Members: membersOf(rg, o), Timers: nopTimers{}, Requests: newRequests(t, o.pending), Directs: rg.directs, Mentions: o.mentionLister(rg.mentions), MemberRooms: rg.rooms,
+		SentTimes: rg.msgs, HideRead: o.hide,
 	}, quiet)
 	if err != nil {
 		t.Fatalf("New: %v", err)

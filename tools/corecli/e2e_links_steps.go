@@ -138,7 +138,7 @@ func (r *linkRun) mentionThree() error {
 		if err != nil {
 			return nil, err
 		}
-		return e2e.CheckSeqs("mentions of "+r.peer, r.group, resp.GetMessages(), r.mentioned), nil
+		return e2e.CheckMentions("mentions of "+r.peer, resp.GetItems(), e2e.PlacesIn(r.group, r.mentioned)), nil
 	})
 }
 

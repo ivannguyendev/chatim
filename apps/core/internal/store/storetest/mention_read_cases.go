@@ -15,7 +15,7 @@ func mentionReadCases() []mentionCase {
 		{"MarkReadFlipsUserMentionsBothWays", markReadBothWays},
 		{"ReapplyKeepsReadAndReaddStartsUnread", reapplyKeepsRead},
 		{"MarkReadLeavesRetiredThreadAndOtherRoomsAlone", markReadScope},
-		{"ListStillGivesReadMentionsWithTheFlag", listReadMentions},
+		{"ListByTargetGivesReadDocsWithTheFlagUnlessUnreadOnly", listReadMentions},
 		{"MarkReadRejectsBadInput", markReadInvalid},
 	}
 }
@@ -86,9 +86,10 @@ func listReadMentions(t *testing.T, s store.Mentions) {
 	read := placed(t, s, roomA, 90, baseTime, mentionMinh)
 	unread := placed(t, s, roomA, 100, baseTime.Add(time.Second), mentionMinh)
 	mustMarkMentionsRead(t, s, roomA, "minh", 95)
-	got, err := s.List(t.Context(), store.MentionQuery{Tenant: tenant, Targets: wants(roomA, mentionMinh), Limit: 10})
+	q := store.TargetMentionQuery{Tenant: tenant, Target: mentionMinh.Name(0), Limit: 10}
+	got, err := s.ListByTarget(t.Context(), q)
 	if err != nil {
-		t.Fatalf("List: %v", err)
+		t.Fatalf("ListByTarget: %v", err)
 	}
 	keys := make([]store.MsgKey, len(got))
 	flags := make([]bool, len(got))
@@ -96,7 +97,11 @@ func listReadMentions(t *testing.T, s store.Mentions) {
 		keys[i], flags[i] = store.MsgKey(m.Key), m.Read
 	}
 	if !slices.Equal(keys, []store.MsgKey{unread, read}) || !slices.Equal(flags, []bool{false, true}) {
-		t.Fatalf("List = %v read %v; want [%v %v] read [false true]", keys, flags, unread, read)
+		t.Fatalf("ListByTarget = %v read %v; want [%v %v] read [false true]", keys, flags, unread, read)
+	}
+	q.UnreadOnly = true
+	if got := byTarget(t, s, q); !slices.Equal(got, []store.MsgKey{unread}) {
+		t.Fatalf("ListByTarget(unread only) = %v, want [%v]", got, unread)
 	}
 }
 

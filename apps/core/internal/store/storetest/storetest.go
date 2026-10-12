@@ -28,6 +28,7 @@ func Run(t *testing.T, open func(t *testing.T) (store.Messages, store.Rooms)) {
 		{"Page", pageCases()},
 		{"Walk", walkCases()},
 		{"Find", findCases()},
+		{"SentTimes", sentTimeCases()},
 	}
 	for _, g := range groups {
 		t.Run(g.name, func(t *testing.T) {

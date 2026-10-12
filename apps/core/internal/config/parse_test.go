@@ -105,6 +105,34 @@ func TestLoadRejectsAnUnknownLockedMessageKind(t *testing.T) {
 	}
 }
 
+func TestLoadReadsMentionHideReadTenants(t *testing.T) {
+	tests := []struct {
+		value string
+		want  []string
+	}{
+		{"", nil},
+		{" acme , ", []string{"acme"}},
+		{"acme,globex-2", []string{"acme", "globex-2"}},
+	}
+	for _, tt := range tests {
+		setEnv(t, map[string]string{"MENTION_HIDE_READ_TENANTS": tt.value})
+		got, err := config.Load()
+		if err != nil || !slices.Equal(got.MentionHideReadTenants, tt.want) {
+			t.Fatalf("MENTION_HIDE_READ_TENANTS=%q gives %v, %v; want %v", tt.value, got.MentionHideReadTenants, err, tt.want)
+		}
+	}
+}
+
+func TestLoadRejectsABadMentionHideReadTenant(t *testing.T) {
+	for _, value := range []string{"acme,Bad Tenant", "acme," + strings.Repeat("a", 33)} {
+		setEnv(t, map[string]string{"MENTION_HIDE_READ_TENANTS": value})
+		_, err := config.Load()
+		if err == nil || !strings.Contains(err.Error(), "MENTION_HIDE_READ_TENANTS") {
+			t.Fatalf("MENTION_HIDE_READ_TENANTS=%q: Load() = %v, want an error naming the key", value, err)
+		}
+	}
+}
+
 func TestLoadReadsReactionEmojis(t *testing.T) {
 	tests := []struct {
 		value string

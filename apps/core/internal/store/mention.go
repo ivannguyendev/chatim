@@ -25,7 +25,8 @@ type MentionPlan struct {
 type Mentions interface {
 	ApplyMentions(ctx context.Context, s MentionSet) error
 	MentionsOf(ctx context.Context, key MsgKey) ([]domain.Mention, error)
-	List(ctx context.Context, q MentionQuery) ([]domain.Mention, error)
+	ListByTarget(ctx context.Context, q TargetMentionQuery) ([]domain.Mention, error)
+	ListShared(ctx context.Context, q SharedMentionQuery) ([]domain.Mention, error)
 	MarkRead(ctx context.Context, room uint64, user string, readSeq uint64) error
 }
 

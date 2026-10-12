@@ -22,6 +22,30 @@ func SeqsOf(msgs []*chatimv1.Message) []uint64 {
 	return out
 }
 
+type Place struct {
+	Room string
+	Seq  uint64
+}
+
+func PlacesIn(room string, seqs []uint64) []Place {
+	out := make([]Place, len(seqs))
+	for i, seq := range seqs {
+		out[i] = Place{Room: room, Seq: seq}
+	}
+	return out
+}
+
+func CheckMentions(what string, got []*chatimv1.MentionItem, want []Place) error {
+	places := make([]Place, len(got))
+	for i, it := range got {
+		places[i] = Place{Room: it.GetMessage().GetRoomId(), Seq: it.GetMessage().GetSeq()}
+	}
+	if !slices.Equal(places, want) {
+		return fmt.Errorf("%s returned %v, want %v", what, places, want)
+	}
+	return nil
+}
+
 func CheckSeqs(what, room string, got []*chatimv1.Message, want []uint64) error {
 	if seqs := SeqsOf(got); !slices.Equal(seqs, want) {
 		return fmt.Errorf("%s returned seq %v, want %v", what, seqs, want)

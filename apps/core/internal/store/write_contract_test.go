@@ -76,11 +76,13 @@ var portMethods = map[string]string{
 
 	"Mentions.ApplyMentions": "monotonic-cas",
 	"Mentions.MentionsOf":    "read",
-	"Mentions.List":          "read",
+	"Mentions.ListByTarget":  "read",
+	"Mentions.ListShared":    "read",
 	"Mentions.MarkRead":      "projection",
 
 	"SharedMentions.RaiseSharedMention": "monotonic-max",
 	"SharedMentions.SharedMentionTimes": "read",
+	"MessageTimes.SentTimes":            "read",
 
 	"DirectRooms.Claim":   "upsert",
 	"DirectRooms.Repoint": "cas",
@@ -108,6 +110,7 @@ func TestEveryPortMethodHasAWriteContract(t *testing.T) {
 		reflect.TypeFor[store.DirectRooms](),
 		reflect.TypeFor[store.Mentions](),
 		reflect.TypeFor[store.SharedMentions](),
+		reflect.TypeFor[store.MessageTimes](),
 	}
 	seen := map[string]bool{}
 	for _, p := range ports {

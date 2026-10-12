@@ -469,9 +469,61 @@ func (x *ListMentionsRequest) GetLimit() uint32 {
 	return 0
 }
 
+type MentionItem struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Message       *Message               `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	Read          bool                   `protobuf:"varint,2,opt,name=read,proto3" json:"read,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MentionItem) Reset() {
+	*x = MentionItem{}
+	mi := &file_chatim_v1_replies_bookmarks_mentions_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MentionItem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MentionItem) ProtoMessage() {}
+
+func (x *MentionItem) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_replies_bookmarks_mentions_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MentionItem.ProtoReflect.Descriptor instead.
+func (*MentionItem) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_replies_bookmarks_mentions_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *MentionItem) GetMessage() *Message {
+	if x != nil {
+		return x.Message
+	}
+	return nil
+}
+
+func (x *MentionItem) GetRead() bool {
+	if x != nil {
+		return x.Read
+	}
+	return false
+}
+
 type ListMentionsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Messages      []*Message             `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
+	Items         []*MentionItem         `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
 	Next          string                 `protobuf:"bytes,2,opt,name=next,proto3" json:"next,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -479,7 +531,7 @@ type ListMentionsResponse struct {
 
 func (x *ListMentionsResponse) Reset() {
 	*x = ListMentionsResponse{}
-	mi := &file_chatim_v1_replies_bookmarks_mentions_proto_msgTypes[8]
+	mi := &file_chatim_v1_replies_bookmarks_mentions_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -491,7 +543,7 @@ func (x *ListMentionsResponse) String() string {
 func (*ListMentionsResponse) ProtoMessage() {}
 
 func (x *ListMentionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_replies_bookmarks_mentions_proto_msgTypes[8]
+	mi := &file_chatim_v1_replies_bookmarks_mentions_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -504,12 +556,12 @@ func (x *ListMentionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMentionsResponse.ProtoReflect.Descriptor instead.
 func (*ListMentionsResponse) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_replies_bookmarks_mentions_proto_rawDescGZIP(), []int{8}
+	return file_chatim_v1_replies_bookmarks_mentions_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *ListMentionsResponse) GetMessages() []*Message {
+func (x *ListMentionsResponse) GetItems() []*MentionItem {
 	if x != nil {
-		return x.Messages
+		return x.Items
 	}
 	return nil
 }
@@ -554,9 +606,12 @@ const file_chatim_v1_replies_bookmarks_mentions_proto_rawDesc = "" +
 	"\x13ListMentionsRequest\x12/\n" +
 	"\x06groups\x18\x01 \x03(\v2\x17.chatim.v1.MentionGroupR\x06groups\x12\x16\n" +
 	"\x06before\x18\x02 \x01(\tR\x06before\x12\x14\n" +
-	"\x05limit\x18\x03 \x01(\rR\x05limit\"Z\n" +
-	"\x14ListMentionsResponse\x12.\n" +
-	"\bmessages\x18\x01 \x03(\v2\x12.chatim.v1.MessageR\bmessages\x12\x12\n" +
+	"\x05limit\x18\x03 \x01(\rR\x05limit\"O\n" +
+	"\vMentionItem\x12,\n" +
+	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\x12\x12\n" +
+	"\x04read\x18\x02 \x01(\bR\x04read\"X\n" +
+	"\x14ListMentionsResponse\x12,\n" +
+	"\x05items\x18\x01 \x03(\v2\x16.chatim.v1.MentionItemR\x05items\x12\x12\n" +
 	"\x04next\x18\x02 \x01(\tR\x04nextB\xae\x01\n" +
 	"\rcom.chatim.v1B\x1dRepliesBookmarksMentionsProtoP\x01Z9github.com/ivannguyendev/chatim/pkg/pb/chatim/v1;chatimv1\xa2\x02\x03CXX\xaa\x02\tChatim.V1\xca\x02\tChatim\\V1\xe2\x02\x15Chatim\\V1\\GPBMetadata\xea\x02\n" +
 	"Chatim::V1b\x06proto3"
@@ -573,7 +628,7 @@ func file_chatim_v1_replies_bookmarks_mentions_proto_rawDescGZIP() []byte {
 	return file_chatim_v1_replies_bookmarks_mentions_proto_rawDescData
 }
 
-var file_chatim_v1_replies_bookmarks_mentions_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_chatim_v1_replies_bookmarks_mentions_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_chatim_v1_replies_bookmarks_mentions_proto_goTypes = []any{
 	(*SetBookmarkRequest)(nil),    // 0: chatim.v1.SetBookmarkRequest
 	(*SetBookmarkResponse)(nil),   // 1: chatim.v1.SetBookmarkResponse
@@ -583,21 +638,23 @@ var file_chatim_v1_replies_bookmarks_mentions_proto_goTypes = []any{
 	(*ListBookmarksRequest)(nil),  // 5: chatim.v1.ListBookmarksRequest
 	(*ListBookmarksResponse)(nil), // 6: chatim.v1.ListBookmarksResponse
 	(*ListMentionsRequest)(nil),   // 7: chatim.v1.ListMentionsRequest
-	(*ListMentionsResponse)(nil),  // 8: chatim.v1.ListMentionsResponse
-	(*Message)(nil),               // 9: chatim.v1.Message
-	(*MentionGroup)(nil),          // 10: chatim.v1.MentionGroup
+	(*MentionItem)(nil),           // 8: chatim.v1.MentionItem
+	(*ListMentionsResponse)(nil),  // 9: chatim.v1.ListMentionsResponse
+	(*Message)(nil),               // 10: chatim.v1.Message
+	(*MentionGroup)(nil),          // 11: chatim.v1.MentionGroup
 }
 var file_chatim_v1_replies_bookmarks_mentions_proto_depIdxs = []int32{
-	9,  // 0: chatim.v1.GetRepliesResponse.messages:type_name -> chatim.v1.Message
-	9,  // 1: chatim.v1.BookmarkItem.message:type_name -> chatim.v1.Message
+	10, // 0: chatim.v1.GetRepliesResponse.messages:type_name -> chatim.v1.Message
+	10, // 1: chatim.v1.BookmarkItem.message:type_name -> chatim.v1.Message
 	4,  // 2: chatim.v1.ListBookmarksResponse.items:type_name -> chatim.v1.BookmarkItem
-	10, // 3: chatim.v1.ListMentionsRequest.groups:type_name -> chatim.v1.MentionGroup
-	9,  // 4: chatim.v1.ListMentionsResponse.messages:type_name -> chatim.v1.Message
-	5,  // [5:5] is the sub-list for method output_type
-	5,  // [5:5] is the sub-list for method input_type
-	5,  // [5:5] is the sub-list for extension type_name
-	5,  // [5:5] is the sub-list for extension extendee
-	0,  // [0:5] is the sub-list for field type_name
+	11, // 3: chatim.v1.ListMentionsRequest.groups:type_name -> chatim.v1.MentionGroup
+	10, // 4: chatim.v1.MentionItem.message:type_name -> chatim.v1.Message
+	8,  // 5: chatim.v1.ListMentionsResponse.items:type_name -> chatim.v1.MentionItem
+	6,  // [6:6] is the sub-list for method output_type
+	6,  // [6:6] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_chatim_v1_replies_bookmarks_mentions_proto_init() }
@@ -613,7 +670,7 @@ func file_chatim_v1_replies_bookmarks_mentions_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_chatim_v1_replies_bookmarks_mentions_proto_rawDesc), len(file_chatim_v1_replies_bookmarks_mentions_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

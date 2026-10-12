@@ -35,5 +35,5 @@ func (f *fakeCore) ListMentions(ctx context.Context, in *chatimv1.ListMentionsRe
 	if err := f.record(ctx, in); err != nil {
 		return nil, err
 	}
-	return &chatimv1.ListMentionsResponse{Messages: []*chatimv1.Message{{RoomId: "42", Seq: 4, MentionAll: true}}, Next: "m1"}, nil
+	return &chatimv1.ListMentionsResponse{Items: []*chatimv1.MentionItem{{Message: &chatimv1.Message{RoomId: "42", Seq: 4, MentionAll: true}, Read: true}}, Next: "m1"}, nil
 }

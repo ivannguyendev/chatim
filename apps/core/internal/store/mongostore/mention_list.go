@@ -12,12 +12,27 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
-func (m *Mentions) List(ctx context.Context, q store.MentionQuery) ([]domain.Mention, error) {
-	if err := store.ValidateMentionQuery(q); err != nil {
+func (m *Mentions) ListByTarget(ctx context.Context, q store.TargetMentionQuery) ([]domain.Mention, error) {
+	if err := store.ValidateTargetMentionQuery(q); err != nil {
 		return nil, err
 	}
-	opts := options.Find().SetSort(mentionListSort()).SetLimit(int64(q.Limit))
-	cur, err := m.coll.Find(ctx, mentionListFilter(q), opts)
+	return m.list(ctx, targetMentionFilter(q), q.Limit)
+}
+
+func (m *Mentions) ListShared(ctx context.Context, q store.SharedMentionQuery) ([]domain.Mention, error) {
+	if err := store.ValidateSharedMentionQuery(q); err != nil {
+		return nil, err
+	}
+	filter, err := sharedMentionFilter(q)
+	if err != nil {
+		return nil, err
+	}
+	return m.list(ctx, filter, q.Limit)
+}
+
+func (m *Mentions) list(ctx context.Context, filter bson.D, limit int) ([]domain.Mention, error) {
+	opts := options.Find().SetSort(mentionListSort()).SetLimit(int64(limit))
+	cur, err := m.coll.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, fmt.Errorf("list mentions: %w", err)
 	}
@@ -40,45 +55,50 @@ func mentionListSort() bson.D {
 	return bson.D{{Key: "created_at", Value: -1}, {Key: "message_key", Value: -1}}
 }
 
-func mentionListFilter(q store.MentionQuery) bson.D {
-	branches := mentionBranches(q)
-	if len(branches) == 1 {
-		return branches[0]
+func targetMentionFilter(q store.TargetMentionQuery) bson.D {
+	states := bson.A{mentionLive, mentionRead}
+	if q.UnreadOnly {
+		states = bson.A{mentionLive}
 	}
-	return bson.D{{Key: "$or", Value: branches}}
+	filter := bson.D{{Key: "tenant", Value: q.Tenant}, {Key: "target", Value: q.Target}, {Key: "state", Value: bson.D{{Key: "$in", Value: states}}}}
+	return withMentionSpan(filter, time.Time{}, q.Before)
 }
 
-func mentionBranches(q store.MentionQuery) []bson.D {
-	var plain bson.A
-	var branches []bson.D
-	for _, w := range q.Targets {
-		if w.Since.IsZero() {
-			plain = append(plain, w.Target)
-			continue
+func sharedMentionFilter(q store.SharedMentionQuery) (bson.D, error) {
+	groups := make(bson.A, len(q.Groups))
+	for i, g := range q.Groups {
+		groups[i] = domain.MentionTarget{Kind: domain.MentionGroup, ID: g}.Name(0)
+	}
+	branches := make(bson.A, 0, 2*len(q.Rooms))
+	for _, r := range q.Rooms {
+		room, err := toInt64("room id", r.Room)
+		if err != nil {
+			return nil, err
 		}
-		branches = append(branches, mentionBranch(q, w.Target, w.Since))
+		all := bson.D{{Key: "room_id", Value: room}, {Key: "kind", Value: mentionKindNames[domain.MentionAll]}, {Key: "state", Value: mentionLive}}
+		branches = append(branches, withMentionSpan(all, r.Since, q.Before))
+		if len(groups) > 0 {
+			group := bson.D{{Key: "room_id", Value: room}, {Key: "kind", Value: mentionKindNames[domain.MentionGroup]}, {Key: "state", Value: mentionLive}, {Key: "target", Value: bson.D{{Key: "$in", Value: groups}}}}
+			branches = append(branches, withMentionSpan(group, r.Since, q.Before))
+		}
 	}
-	if len(plain) > 0 {
-		branches = append([]bson.D{mentionBranch(q, bson.D{{Key: "$in", Value: plain}}, time.Time{})}, branches...)
-	}
-	return branches
+	return bson.D{{Key: "$or", Value: branches}}, nil
 }
 
-func mentionBranch(q store.MentionQuery, target any, since time.Time) bson.D {
-	branch := bson.D{{Key: "tenant", Value: q.Tenant}, {Key: "target", Value: target}, {Key: "state", Value: bson.D{{Key: "$in", Value: bson.A{mentionLive, mentionRead}}}}}
+func withMentionSpan(filter bson.D, since time.Time, before store.MentionCursor) bson.D {
 	var span bson.D
 	if !since.IsZero() {
-		span = append(span, bson.E{Key: "$gte", Value: since})
+		span = append(span, bson.E{Key: "$gt", Value: since})
 	}
-	if !q.Before.At.IsZero() {
-		span = append(span, bson.E{Key: "$lte", Value: q.Before.At})
+	if !before.At.IsZero() {
+		span = append(span, bson.E{Key: "$lte", Value: before.At})
 	}
 	if len(span) > 0 {
-		branch = append(branch, bson.E{Key: "created_at", Value: span})
+		filter = append(filter, bson.E{Key: "created_at", Value: span})
 	}
-	if at := q.Before.At; !at.IsZero() {
-		tied := bson.D{{Key: "created_at", Value: at}, {Key: "message_key", Value: bson.D{{Key: "$gte", Value: msgID(q.Before.Key)}}}}
-		branch = append(branch, bson.E{Key: "$nor", Value: bson.A{tied}})
+	if !before.At.IsZero() {
+		tied := bson.D{{Key: "created_at", Value: before.At}, {Key: "message_key", Value: bson.D{{Key: "$gte", Value: msgID(before.Key)}}}}
+		filter = append(filter, bson.E{Key: "$nor", Value: bson.A{tied}})
 	}
-	return branch
+	return filter
 }

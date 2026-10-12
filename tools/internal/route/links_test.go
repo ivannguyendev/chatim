@@ -39,7 +39,7 @@ func linkCalls() map[string]linkCase {
 		"bookmarks": linkCaseOf(&chatimv1.ListBookmarksRequest{Before: "b0", Limit: 5}, (*route.Client).ListBookmarks,
 			&chatimv1.ListBookmarksResponse{Items: []*chatimv1.BookmarkItem{{Message: &chatimv1.Message{RoomId: "42", Seq: 3}, Available: true}}, Next: "b1"}, false),
 		"mentions": linkCaseOf(&chatimv1.ListMentionsRequest{Groups: []*chatimv1.MentionGroup{{Id: "team", Since: since}}, Limit: 5}, (*route.Client).ListMentions,
-			&chatimv1.ListMentionsResponse{Messages: []*chatimv1.Message{{RoomId: "42", Seq: 4, MentionAll: true}}, Next: "m1"}, false),
+			&chatimv1.ListMentionsResponse{Items: []*chatimv1.MentionItem{{Message: &chatimv1.Message{RoomId: "42", Seq: 4, MentionAll: true}, Read: true}}, Next: "m1"}, false),
 		"create": linkCaseOf(&chatimv1.CreateRoomRequest{Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Members: []string{"bob"}, RequestId: "req-1"}, (*route.Client).CreateRoom,
 			&chatimv1.CreateRoomResponse{Room: &chatimv1.Room{Id: "42"}}, false),
 	}

@@ -1,54 +1,112 @@
 package store
 
 import (
+	"bytes"
+	"cmp"
+	"math"
+	"slices"
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
+	"github.com/ivannguyendev/chatim/pkg/keys"
 )
 
-type MentionWant struct {
-	Target string
-	Since  time.Time
-}
+const SharedMentionBatch = 200
 
 type MentionCursor struct {
 	At  time.Time
 	Key MsgKey
 }
 
-type MentionQuery struct {
-	Tenant  string
-	Targets []MentionWant
-	Before  MentionCursor
-	Limit   int
+type TargetMentionQuery struct {
+	Tenant     string
+	Target     string
+	UnreadOnly bool
+	Before     MentionCursor
+	Limit      int
 }
 
-func ValidateMentionQuery(q MentionQuery) error {
-	if q.Tenant == "" {
+type SharedRoom struct {
+	Room  uint64
+	Since time.Time
+}
+
+type SharedMentionQuery struct {
+	Rooms  []SharedRoom
+	Groups []string
+	Before MentionCursor
+	Limit  int
+}
+
+func ValidateTargetMentionQuery(q TargetMentionQuery) error {
+	switch {
+	case q.Tenant == "":
 		return invalid("tenant")
+	case q.Target == "":
+		return invalid("mention target")
 	}
-	if len(q.Targets) == 0 {
-		return invalid("mention targets")
+	return validateMentionPage(q.Before, q.Limit)
+}
+
+func ValidateSharedMentionQuery(q SharedMentionQuery) error {
+	if len(q.Rooms) == 0 || len(q.Rooms) > SharedMentionBatch {
+		return invalid("mention rooms")
 	}
-	seen := make(map[string]struct{}, len(q.Targets))
-	for _, w := range q.Targets {
-		if _, dup := seen[w.Target]; dup || w.Target == "" {
-			return invalid("mention target")
+	seen := make(map[uint64]struct{}, len(q.Rooms))
+	for _, r := range q.Rooms {
+		if _, dup := seen[r.Room]; dup || r.Room == 0 || r.Room > math.MaxInt64 {
+			return invalid("mention room")
 		}
-		seen[w.Target] = struct{}{}
+		seen[r.Room] = struct{}{}
 	}
-	if !q.Before.At.IsZero() && q.Before.Key.Validate() != nil {
+	for _, g := range q.Groups {
+		if !domain.ValidMentionLink(domain.MentionTarget{Kind: domain.MentionGroup, ID: g}) {
+			return invalid("mention group")
+		}
+	}
+	return validateMentionPage(q.Before, q.Limit)
+}
+
+func validateMentionPage(before MentionCursor, limit int) error {
+	if !before.At.IsZero() && before.Key.Validate() != nil {
 		return invalid("mention cursor")
 	}
-	return ValidateLimit(q.Limit, MaxPageLimit)
+	return ValidateLimit(limit, MaxPageLimit)
 }
 
-func (q MentionQuery) Wants(m domain.Mention) bool {
-	name := m.Target.Name(m.Key.Room)
-	for _, w := range q.Targets {
-		if w.Target == name {
-			return w.Since.IsZero() || !m.CreatedAt.Before(w.Since)
+func (q SharedMentionQuery) Wants(m domain.Mention) bool {
+	if !m.Live || !q.Before.Holds(m) {
+		return false
+	}
+	switch m.Target.Kind {
+	case domain.MentionAll:
+	case domain.MentionGroup:
+		if !slices.Contains(q.Groups, m.Target.ID) {
+			return false
+		}
+	default:
+		return false
+	}
+	for _, r := range q.Rooms {
+		if r.Room == m.Key.Room {
+			return m.CreatedAt.After(r.Since)
 		}
 	}
 	return false
+}
+
+func (c MentionCursor) Holds(m domain.Mention) bool {
+	return c.At.IsZero() || CompareMentions(m, domain.Mention{Key: domain.MsgKey(c.Key), CreatedAt: c.At}) < 0
+}
+
+func CursorOf(m domain.Mention) MentionCursor {
+	return MentionCursor{At: m.CreatedAt, Key: MsgKey(m.Key)}
+}
+
+func CompareMentions(a, b domain.Mention) int {
+	return cmp.Or(a.CreatedAt.Compare(b.CreatedAt), bytes.Compare(mentionKeyBytes(a), mentionKeyBytes(b)))
+}
+
+func mentionKeyBytes(m domain.Mention) []byte {
+	return keys.Msg(m.Key.Room, m.Key.Thread, m.Key.Seq)
 }

@@ -49,7 +49,12 @@ message ListMentionsRequest {
   uint32 limit = 3;
 }
 
+message MentionItem {
+  Message message = 1;
+  bool read = 2;
+}
+
 message ListMentionsResponse {
-  repeated Message messages = 1;
+  repeated MentionItem items = 1;
   string next = 2;
 }

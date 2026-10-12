@@ -114,6 +114,18 @@ func (p *parser) kinds(key string) []domain.Kind {
 	return kinds
 }
 
+func (p *parser) tenants(key string) []string {
+	var tenants []string
+	for _, id := range p.list(key) {
+		if err := domain.ValidTenant(id); err != nil {
+			p.fail(fmt.Errorf("%s: %q: %w", key, id, err))
+			continue
+		}
+		tenants = append(tenants, id)
+	}
+	return tenants
+}
+
 func (p *parser) secret(key string) string {
 	fileKey := key + "_FILE"
 	path := os.Getenv(fileKey)

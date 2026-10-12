@@ -25,6 +25,14 @@ func sendLinked(t *testing.T, client chatimv1.CoreServiceClient, user string, re
 	return resp.GetSeq()
 }
 
+func mentionSeqs(resp *chatimv1.ListMentionsResponse) []uint64 {
+	out := make([]uint64, len(resp.GetItems()))
+	for i, it := range resp.GetItems() {
+		out[i] = it.GetMessage().GetSeq()
+	}
+	return out
+}
+
 func seqsOf(msgs []*chatimv1.Message) []uint64 {
 	out := make([]uint64, len(msgs))
 	for i, m := range msgs {
@@ -122,7 +130,7 @@ func TestRealInfraMentionsForwardsAndBookmarksReachTheirLists(t *testing.T) {
 	req := &chatimv1.ListMentionsRequest{Groups: []*chatimv1.MentionGroup{{Id: "design", Since: timestamppb.New(since)}}, Limit: 10}
 	awaitStored(t, "mentions of bob", func() ([]uint64, error) {
 		resp, err := client.ListMentions(callerAs(t.Context(), "bob"), req)
-		return seqsOf(resp.GetMessages()), err
+		return mentionSeqs(resp), err
 	}, func(got []uint64) bool { return slices.Equal(got, want) })
 
 	fwd := sendLinked(t, client, "bob", &chatimv1.SendMessageRequest{RoomId: otherID, Cid: "forward-1", ForwardFrom: &chatimv1.ForwardRef{RoomId: roomID, Seq: seqs[0]}})

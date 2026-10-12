@@ -20,7 +20,7 @@ import (
 )
 
 var (
-	errMissingDeps = fmt.Errorf("%w: core service needs a sender, a room store, a page reader, a mutator, an edit store, a hidden store, a bookmark store, a reply store, a member store, count timers, request dedupe, a direct room store, a mention store and a member room store", apperr.ErrInvalidArgument)
+	errMissingDeps = fmt.Errorf("%w: core service needs a sender, a room store, a page reader, a mutator, an edit store, a hidden store, a bookmark store, a reply store, a member store, count timers, request dedupe, a direct room store, a mention store, a member room store and message times", apperr.ErrInvalidArgument)
 	errBadRoomID   = fmt.Errorf("%w: room id", apperr.ErrInvalidArgument)
 )
 
@@ -58,6 +58,8 @@ type Deps struct {
 	Directs     store.DirectRooms
 	Mentions    MentionLister
 	MemberRooms MemberRoomLister
+	SentTimes   store.MessageTimes
+	HideRead    []string
 	NewID       func() uint64
 	Now         func() time.Time
 }
@@ -79,6 +81,8 @@ type Service struct {
 	directs      store.DirectRooms
 	mentionList  MentionLister
 	memberRooms  MemberRoomLister
+	sentTimes    store.MessageTimes
+	hideRead     map[string]struct{}
 	access       *access.Checker
 	view         view.Pipeline
 	bookmarkView view.Pipeline
@@ -91,7 +95,7 @@ var _ chatimv1.CoreServiceServer = (*Service)(nil)
 
 func New(d Deps, log *slog.Logger) (*Service, error) {
 	if d.Sender == nil || d.Rooms == nil || d.Pages == nil || d.Mutator == nil || d.Edits == nil || d.Hidden == nil || d.Bookmarks == nil ||
-		d.Replies == nil || d.Members == nil || d.Timers == nil || d.Requests == nil || d.Directs == nil || d.Mentions == nil || d.MemberRooms == nil {
+		d.Replies == nil || d.Members == nil || d.Timers == nil || d.Requests == nil || d.Directs == nil || d.Mentions == nil || d.MemberRooms == nil || d.SentTimes == nil {
 		return nil, errMissingDeps
 	}
 	if d.NewID == nil {
@@ -110,9 +114,13 @@ func New(d Deps, log *slog.Logger) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
+	hideRead := make(map[string]struct{}, len(d.HideRead))
+	for _, tenant := range d.HideRead {
+		hideRead[tenant] = struct{}{}
+	}
 	return &Service{
 		sender: d.Sender, rooms: d.Rooms, pages: d.Pages, events: d.Events, mutator: d.Mutator, edits: d.Edits, hidden: d.Hidden,
-		bookmarks: d.Bookmarks, replies: d.Replies, members: d.Members, timers: d.Timers, requests: d.Requests, directs: d.Directs, mentionList: d.Mentions, memberRooms: d.MemberRooms, access: checker, view: view.Default(), bookmarkView: view.New(view.MaskDeleted, view.HideForViewer), newID: d.NewID, now: d.Now, log: log,
+		bookmarks: d.Bookmarks, replies: d.Replies, members: d.Members, timers: d.Timers, requests: d.Requests, directs: d.Directs, mentionList: d.Mentions, memberRooms: d.MemberRooms, sentTimes: d.SentTimes, hideRead: hideRead, access: checker, view: view.Default(), bookmarkView: view.New(view.MaskDeleted, view.HideForViewer), newID: d.NewID, now: d.Now, log: log,
 	}, nil
 }
 
