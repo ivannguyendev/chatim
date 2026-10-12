@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
@@ -25,6 +25,11 @@ func TestValidateJoin(t *testing.T) {
 	full := make([]string, domain.MaxMemberBatch)
 	for i := range full {
 		full[i] = "u" + strconv.Itoa(i)
+	}
+	owned := goodJoin()
+	owned.Owner = "carol"
+	if err := store.ValidateJoin(owned, []string{"bob", "carol"}); err != nil {
+		t.Fatalf("ValidateJoin(owner carol) = %v", err)
 	}
 	if err := store.ValidateJoin(goodJoin(), full); err != nil {
 		t.Fatalf("ValidateJoin(%d users) = %v", len(full), err)
@@ -49,6 +54,7 @@ func TestValidateJoin(t *testing.T) {
 		"too many users": {goodJoin(), append(full, "extra")},
 		"bad user":       {goodJoin(), []string{"bob", "b c"}},
 		"duplicate user": {goodJoin(), []string{"bob", "carol", "bob"}},
+		"owner outside":  {edit(func(j *domain.Join) { j.Owner = "dan" }), []string{"bob"}},
 	}
 	for name, c := range cases {
 		if err := store.ValidateJoin(c.j, c.users); !errors.Is(err, apperr.ErrInvalidArgument) {

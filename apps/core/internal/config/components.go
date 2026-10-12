@@ -3,14 +3,15 @@ package config
 import (
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
-	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
-	"github.com/ivannguyendev/chatim/apps/core/internal/eventmark"
-	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
-	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
-	"github.com/ivannguyendev/chatim/apps/core/internal/reconcile"
-	"github.com/ivannguyendev/chatim/apps/core/internal/slot"
-	"github.com/ivannguyendev/chatim/apps/core/internal/work"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventmark"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/reconcile"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/platform/slot"
+	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
+	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
+	"github.com/ivannguyendev/chatim/apps/core/internal/send/flush"
 	"github.com/ivannguyendev/chatim/pkg/envconfig"
 )
 
@@ -42,7 +43,9 @@ func (p *parser) components(c *Config) {
 		MaxActors:      p.count("ACTOR_MAX", 100000),
 		GroupDeadline:  c.RequestDeadline,
 		ReservationTTL: pendingTTL,
+		MentionTargets: p.count("MENTION_TARGETS_MAX", domain.DefaultMentionTargetsMax),
 	}
+	c.Limits.MentionTargets = c.Actor.MentionTargets
 	c.Dedupe = dedupe.Config{
 		CoreID:       c.CoreID,
 		PendingTTL:   pendingTTL,

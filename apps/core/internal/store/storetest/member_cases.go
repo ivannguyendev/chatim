@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
@@ -19,6 +19,7 @@ type MemberRooms interface {
 	store.OwnerChanges
 	store.MemberCounts
 	store.ReadPositions
+	store.SharedMentions
 }
 
 type memberCase struct {
@@ -28,7 +29,7 @@ type memberCase struct {
 
 func RunMembers(t *testing.T, open func(t *testing.T) MemberRooms) {
 	t.Helper()
-	for _, c := range slices.Concat(memberCases(), memberChangeCases(), ownerChangeCases(), memberCountCases(), readPositionCases()) {
+	for _, c := range slices.Concat(memberCases(), memberRoomCases(), memberChangeCases(), ownerChangeCases(), memberCountCases(), readPositionCases(), sharedMentionCases()) {
 		t.Run(c.name, func(t *testing.T) { c.run(t, open(t)) })
 	}
 }

@@ -10,7 +10,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
@@ -38,6 +38,24 @@ func (s *Store) Create(ctx context.Context, r domain.Room, members []domain.Memb
 	_, err = s.members.InsertMany(ctx, docs, options.InsertMany().SetOrdered(false))
 	if err != nil && !onlyDuplicateKeys(err) {
 		return fmt.Errorf("create room %d: insert members: %w", r.ID, err)
+	}
+	return nil
+}
+
+func (s *Store) InsertRoom(ctx context.Context, r domain.Room) error {
+	if err := store.ValidateRoomInsert(r); err != nil {
+		return err
+	}
+	r.MemberCount, r.MemberCountVer = 0, 0
+	room, err := encodeRoom(r)
+	if err != nil {
+		return err
+	}
+	if _, err := s.rooms.InsertOne(ctx, room); err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return fmt.Errorf("insert room %d: %w", r.ID, store.ErrRoomExists)
+		}
+		return fmt.Errorf("insert room %d: %w", r.ID, err)
 	}
 	return nil
 }

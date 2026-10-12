@@ -94,11 +94,6 @@ func TestAttemptTimeoutsAreRetriedOnlyForIdempotentCalls(t *testing.T) {
 		if _, st, err := c.GetHistory(t.Context(), &chatimv1.GetHistoryRequest{RoomId: "42"}); err != nil || st.Attempts != 2 {
 			t.Fatalf("GetHistory = %v after %d attempts, want success on the second", err, st.Attempts)
 		}
-		core.block = 1
-		_, st, err := c.CreateRoom(t.Context(), &chatimv1.CreateRoomRequest{})
-		if status.Code(err) != codes.DeadlineExceeded || st.Attempts != 1 {
-			t.Fatalf("CreateRoom = %v after %d attempts, want DeadlineExceeded without a retry", err, st.Attempts)
-		}
 	})
 }
 

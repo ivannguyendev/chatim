@@ -15,13 +15,13 @@ import (
 	"github.com/ivannguyendev/chatim/tools/corecli/internal/e2e"
 )
 
-const e2eUsage = "usage: corecli e2e setup|send|change|react-pin|members|check [flags]"
+const e2eUsage = "usage: corecli e2e setup|send|change|react-pin|members|links|check [flags]"
 
 func e2eCmd(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return errors.New(e2eUsage)
 	}
-	steps := map[string]command{"setup": e2eSetup, "send": e2eSend, "change": e2eChange, "react-pin": e2eReactPin, "members": e2eMembers, "check": e2eCheck}
+	steps := map[string]command{"setup": e2eSetup, "send": e2eSend, "change": e2eChange, "react-pin": e2eReactPin, "members": e2eMembers, "links": e2eLinks, "check": e2eCheck}
 	step, ok := steps[args[0]]
 	if !ok {
 		return errors.New(e2eUsage)
@@ -69,9 +69,10 @@ func createRoomOnSlot(ctx context.Context, s *session, user string) (string, int
 		return "", 0, slotmap.Route{}, fmt.Errorf("load slot table: %w", err)
 	}
 	req := &chatimv1.CreateRoomRequest{
-		Type:    chatimv1.RoomType_ROOM_TYPE_GROUP,
-		Name:    "e2e " + time.Now().UTC().Format(time.RFC3339),
-		Members: []string{user},
+		Type:      chatimv1.RoomType_ROOM_TYPE_GROUP,
+		Name:      "e2e " + time.Now().UTC().Format(time.RFC3339),
+		Members:   []string{user},
+		RequestId: randomCID(),
 	}
 	resp, _, err := s.client.CreateRoom(ctx, req)
 	if err != nil {

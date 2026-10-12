@@ -35,15 +35,7 @@ type changeUpdate struct {
 func decodeChange(ev changeDoc) (store.Change, error) {
 	switch ev.NS.Coll {
 	case messagesCollection:
-		var d messageDoc
-		if err := bson.Unmarshal(ev.FullDocument, &d); err != nil {
-			return store.Change{}, fmt.Errorf("%w: message document: %w", errCorrupt, err)
-		}
-		m, err := decodeMessage(d)
-		if err != nil {
-			return store.Change{}, err
-		}
-		return store.Change{Kind: store.MessageInserted, Msg: m, CommittedAt: ev.WallTime}, nil
+		return decodeMessageChange(ev)
 	case roomsCollection:
 		var d roomDoc
 		if err := bson.Unmarshal(ev.FullDocument, &d); err != nil {
@@ -64,8 +56,8 @@ func decodeChange(ev changeDoc) (store.Change, error) {
 			return store.Change{}, err
 		}
 		return store.Change{Kind: store.EditInserted, Edit: e, CommittedAt: ev.WallTime}, nil
-	case reactionsCollection:
-		return decodeReactionChange(ev)
+	case interactionsCollection:
+		return decodeInteractionChange(ev)
 	case pinActionsCollection:
 		return decodePinChange(ev)
 	case membersCollection:

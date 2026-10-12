@@ -6,7 +6,7 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
@@ -15,14 +15,19 @@ var _ store.Messages = (*Messages)(nil)
 type timeline struct{ room, thread uint64 }
 
 type Messages struct {
-	mu    sync.RWMutex
-	lines map[timeline][]domain.Message
-	log   []logged
-	grew  chan struct{}
+	mu        sync.RWMutex
+	lines     map[timeline][]domain.Message
+	log       []logged
+	grew      chan struct{}
+	rawCounts map[store.MsgKey][]domain.RawCount
+	rawReply  map[store.MsgKey]int64
 }
 
 func NewMessages() *Messages {
-	return &Messages{lines: make(map[timeline][]domain.Message), grew: make(chan struct{})}
+	return &Messages{
+		lines: make(map[timeline][]domain.Message), grew: make(chan struct{}),
+		rawCounts: make(map[store.MsgKey][]domain.RawCount), rawReply: make(map[store.MsgKey]int64),
+	}
 }
 
 func (s *Messages) Insert(ctx context.Context, msgs []domain.Message) []store.Result {
@@ -51,7 +56,8 @@ func (s *Messages) insertLocked(m domain.Message) store.Result {
 	if found {
 		return store.Result{Outcome: store.Duplicate}
 	}
-	m.Hidden, m.Reactions = false, domain.ReactionSummary{}
+	m = detached(m)
+	m.Hidden, m.Reactions, m.Replies = false, domain.ReactionSummary{}, domain.ReplyCount{}
 	s.lines[tl] = slices.Insert(line, i, m)
 	s.appendLog(logged{kind: store.MessageInserted, msg: m})
 	return store.Result{Outcome: store.Inserted}
@@ -81,7 +87,7 @@ func (s *Messages) Page(ctx context.Context, q store.PageQuery) ([]domain.Messag
 	defer s.mu.RUnlock()
 	line := s.lines[timeline{q.Room, q.Thread}]
 	lo, hi := window(line, q)
-	return slices.Clone(line[lo:hi]), nil
+	return detachedAll(line[lo:hi]), nil
 }
 
 func window(line []domain.Message, q store.PageQuery) (lo, hi int) {
@@ -120,7 +126,7 @@ func (s *Messages) Find(ctx context.Context, room uint64, keys []store.MsgKey) (
 	for _, k := range wanted {
 		line := s.lines[timeline{k.Room, k.Thread}]
 		if i, ok := slices.BinarySearchFunc(line, k.Seq, bySeq); ok {
-			out = append(out, line[i])
+			out = append(out, detached(line[i]))
 		}
 	}
 	return out, nil

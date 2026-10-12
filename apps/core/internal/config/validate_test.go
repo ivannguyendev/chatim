@@ -73,8 +73,6 @@ func TestLoadValidation(t *testing.T) {
 		{"cid batch shards above slot count", map[string]string{"CID_BATCH_SHARDS": "2000"}, "CID_BATCH_*"},
 		{"cid batch shards at slot count", map[string]string{"CID_BATCH_SHARDS": "1024"}, ""},
 		{"zero cid batch queue", map[string]string{"CID_BATCH_QUEUE": "0"}, "CID_BATCH_QUEUE"},
-		{"reaction count delay above the reconcile delay", map[string]string{"REACTION_COUNT_DELAY": "5001ms"}, "REACTION_COUNT_DELAY must be positive and at most RECONCILE_DELAY"},
-		{"reaction count delay at the reconcile delay", map[string]string{"REACTION_COUNT_DELAY": "5s"}, ""},
 		{"pin limit above the cap", map[string]string{"PIN_LIMIT": "1001"}, "REACTION_EMOJIS, PIN_LIMIT"},
 		{"pin limit at the cap", map[string]string{"PIN_LIMIT": "1000"}, ""},
 		{"stop phases overflow", map[string]string{
@@ -98,23 +96,25 @@ func TestLoadValidation(t *testing.T) {
 	}
 }
 
-func TestMemberCountCheckDelayMustOutliveARequest(t *testing.T) {
-	tests := []struct {
-		env     map[string]string
-		wantErr bool
-	}{
-		{map[string]string{"MEMBER_COUNT_CHECK_DELAY": "3s"}, true},
-		{map[string]string{"MEMBER_COUNT_CHECK_DELAY": "2s"}, true},
-		{map[string]string{"MEMBER_COUNT_CHECK_DELAY": "3001ms"}, false},
-		{map[string]string{"MEMBER_COUNT_CHECK_DELAY": "4s", "CORE_REQUEST_DEADLINE": "4s", "CORE_SHUTDOWN_BUDGET": "30s"}, true},
-		{map[string]string{"CORE_REQUEST_DEADLINE": "4999ms", "CORE_SHUTDOWN_BUDGET": "30s"}, false},
-	}
-	for _, tt := range tests {
-		setEnv(t, tt.env)
-		got, err := config.Load()
-		failed := err != nil && strings.Contains(err.Error(), "MEMBER_COUNT_CHECK_DELAY must be longer than CORE_REQUEST_DEADLINE")
-		if failed != tt.wantErr || (!tt.wantErr && err != nil) {
-			t.Fatalf("%v: Load() = %+v, %v; want rule broken %v", tt.env, got.MemberCountCheckDelay, err, tt.wantErr)
+func TestCountCheckDelaysMustOutliveARequest(t *testing.T) {
+	for _, key := range []string{"MEMBER_COUNT_CHECK_DELAY", "MESSAGE_COUNT_CHECK_DELAY"} {
+		tests := []struct {
+			env     map[string]string
+			wantErr bool
+		}{
+			{map[string]string{key: "3s"}, true},
+			{map[string]string{key: "2s"}, true},
+			{map[string]string{key: "3001ms"}, false},
+			{map[string]string{key: "4s", "CORE_REQUEST_DEADLINE": "4s", "CORE_SHUTDOWN_BUDGET": "30s"}, true},
+			{map[string]string{"CORE_REQUEST_DEADLINE": "4999ms", "CORE_SHUTDOWN_BUDGET": "30s"}, false},
+		}
+		for _, tt := range tests {
+			setEnv(t, tt.env)
+			_, err := config.Load()
+			failed := err != nil && strings.Contains(err.Error(), key+" must be longer than CORE_REQUEST_DEADLINE")
+			if failed != tt.wantErr || (!tt.wantErr && err != nil) {
+				t.Fatalf("%v: Load() = %v; want rule broken %v", tt.env, err, tt.wantErr)
+			}
 		}
 	}
 }

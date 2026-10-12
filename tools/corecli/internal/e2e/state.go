@@ -23,6 +23,7 @@ type State struct {
 	Pins      []Pin      `json:"pins,omitempty"`
 	Members   int32      `json:"member_count"`
 	MemberRun bool       `json:"member_run,omitempty"`
+	LinkRun   bool       `json:"link_run,omitempty"`
 }
 
 func TextFor(cid string) string { return "e2e message " + cid }

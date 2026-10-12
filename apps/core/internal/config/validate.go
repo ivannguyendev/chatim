@@ -6,7 +6,7 @@ import (
 	"net"
 	"regexp"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 )
 
 var (
@@ -45,8 +45,8 @@ func (c Config) validate() error {
 		{c.EffectDelay < c.Stream.Duplicates, "RECONCILE_DELAY must be shorter than EVT_STREAM_DUPLICATES"},
 		{c.EffectDelay > publish.MarkDeadline(c.Publish.AckTimeout), "RECONCILE_DELAY must be longer than PUB_ACK_TIMEOUT plus the ack mark window and timeout"},
 		{c.Work.Duplicates > c.Reconcile.ConfirmEvery+c.Reconcile.Drain, "WORK_DUPLICATES must be longer than RECONCILE_CONFIRM_EVERY + RECONCILE_DRAIN"},
-		{c.ReactionCountDelay > 0 && c.ReactionCountDelay <= c.EffectDelay, "REACTION_COUNT_DELAY must be positive and at most RECONCILE_DELAY"},
 		{c.MemberCountCheckDelay > c.RequestDeadline, "MEMBER_COUNT_CHECK_DELAY must be longer than CORE_REQUEST_DEADLINE"},
+		{c.MessageCountCheckDelay > c.RequestDeadline, "MESSAGE_COUNT_CHECK_DELAY must be longer than CORE_REQUEST_DEADLINE"},
 		{plan.fitsWithin(c.ShutdownBudget), fmt.Sprintf("%s = %v must be shorter than CORE_SHUTDOWN_BUDGET %v", stopPhases, plan.total(), c.ShutdownBudget)},
 	}
 	var errs []error
@@ -64,7 +64,7 @@ func (c Config) componentErrors() []error {
 		err  error
 	}{
 		{"FLUSH_*", c.Flush.Validate()},
-		{"ACTOR_*, CID_PENDING_TTL, CORE_REQUEST_DEADLINE", c.Actor.Validate()},
+		{"ACTOR_*, MENTION_TARGETS_MAX, CID_PENDING_TTL, CORE_REQUEST_DEADLINE", c.Actor.Validate()},
 		{"CORE_ID, CID_*, REDIS_OP_TIMEOUT, REDIS_COOLDOWN", c.Dedupe.Validate()},
 		{"CID_BATCH_*", c.CIDBatch.Validate()},
 		{"PUB_*, EVT_SUBJECT_ROOT", c.Publish.Validate()},

@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 )
 
 type Messages interface {
@@ -16,6 +16,7 @@ type Messages interface {
 
 type Rooms interface {
 	Create(ctx context.Context, r domain.Room, members []domain.Member) error
+	InsertRoom(ctx context.Context, r domain.Room) error
 	Get(ctx context.Context, id uint64) (domain.Room, error)
 	Member(ctx context.Context, room uint64, user string) (domain.Member, error)
 	TouchActivity(ctx context.Context, acts []Activity) error

@@ -4,6 +4,7 @@ package chatim.v1;
 
 import "chatim/v1/core.proto";
 import "chatim/v1/members.proto";
+import "chatim/v1/message_links.proto";
 import "chatim/v1/reactions_pins.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -35,6 +36,7 @@ message Event {
     MemberPriorityChanged member_priority_changed = 33;
     MessageHidden message_hidden = 34;
     HistoryCleared history_cleared = 35;
+    BookmarkChanged bookmark_changed = 36;
   }
 }
 
@@ -66,6 +68,7 @@ message ReactionChanged {
 message CountsChanged {
   string counter = 1;
   ReactionSummary reactions = 2;
+  ReplyCount reply_count = 3;
 }
 
 message MessagePinned {

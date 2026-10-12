@@ -5,17 +5,17 @@ import (
 	"math"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
-	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
-	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
-	"github.com/ivannguyendev/chatim/apps/core/internal/effects"
-	"github.com/ivannguyendev/chatim/apps/core/internal/eventmark"
-	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
-	"github.com/ivannguyendev/chatim/apps/core/internal/mutate"
-	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
-	"github.com/ivannguyendev/chatim/apps/core/internal/reconcile"
-	"github.com/ivannguyendev/chatim/apps/core/internal/slot"
-	"github.com/ivannguyendev/chatim/apps/core/internal/work"
+	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/effects"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventmark"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/reconcile"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/platform/slot"
+	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
+	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
+	"github.com/ivannguyendev/chatim/apps/core/internal/send/flush"
 	"github.com/ivannguyendev/chatim/pkg/envconfig"
 	"github.com/ivannguyendev/chatim/pkg/grpcserver"
 )
@@ -26,49 +26,50 @@ const (
 )
 
 type Config struct {
-	CoreID                string
-	GRPCAddr              string
-	AdvertiseAddr         string
-	AdminAddr             string
-	MongoURI              string
-	MongoDB               string
-	MongoUser             string
-	MongoPassword         string
-	MongoAuthSource       string
-	RedisAddr             string
-	RedisDB               int
-	RedisPassword         string
-	RedisDedupeAddr       string
-	RedisDedupeDB         int
-	RedisDedupePassword   string
-	NATSURL               string
-	ConnectTimeout        time.Duration
-	RequestDeadline       time.Duration
-	SlowRPC               time.Duration
-	QueueWait             time.Duration
-	MaxInflight           int
-	DrainDelay            time.Duration
-	GRPCShutdown          time.Duration
-	PublisherDrain        time.Duration
-	ShutdownBudget        time.Duration
-	Flush                 flush.Config
-	Actor                 actor.Config
-	Dedupe                dedupe.Config
-	CIDBatch              dedupe.BatchConfig
-	Publish               publish.Config
-	Stream                publish.StreamConfig
-	Work                  work.StreamConfig
-	Slot                  slot.Config
-	ReconcileEnabled      bool
-	Reconcile             reconcile.Config
-	EffectDelay           time.Duration
-	EffectRoomCache       int
-	Effects               effects.Config
-	AckMarks              eventmark.Config
-	LockedMessageKinds    []domain.Kind
-	Limits                mutate.Limits
-	ReactionCountDelay    time.Duration
-	MemberCountCheckDelay time.Duration
+	CoreID                 string
+	GRPCAddr               string
+	AdvertiseAddr          string
+	AdminAddr              string
+	MongoURI               string
+	MongoDB                string
+	MongoUser              string
+	MongoPassword          string
+	MongoAuthSource        string
+	RedisAddr              string
+	RedisDB                int
+	RedisPassword          string
+	RedisDedupeAddr        string
+	RedisDedupeDB          int
+	RedisDedupePassword    string
+	NATSURL                string
+	ConnectTimeout         time.Duration
+	RequestDeadline        time.Duration
+	SlowRPC                time.Duration
+	QueueWait              time.Duration
+	MaxInflight            int
+	DrainDelay             time.Duration
+	GRPCShutdown           time.Duration
+	PublisherDrain         time.Duration
+	ShutdownBudget         time.Duration
+	Flush                  flush.Config
+	Actor                  actor.Config
+	Dedupe                 dedupe.Config
+	CIDBatch               dedupe.BatchConfig
+	Publish                publish.Config
+	Stream                 publish.StreamConfig
+	Work                   work.StreamConfig
+	Slot                   slot.Config
+	ReconcileEnabled       bool
+	Reconcile              reconcile.Config
+	EffectDelay            time.Duration
+	EffectRoomCache        int
+	Effects                effects.Config
+	AckMarks               eventmark.Config
+	LockedMessageKinds     []domain.Kind
+	MentionHideReadTenants []string
+	Limits                 mutate.Limits
+	MemberCountCheckDelay  time.Duration
+	MessageCountCheckDelay time.Duration
 }
 
 type StopPlan struct {
@@ -89,31 +90,32 @@ func AdminAddr() string { return envconfig.String("CORE_ADMIN_ADDR", defaultAdmi
 func Load() (Config, error) {
 	var p parser
 	c := Config{
-		CoreID:              p.coreID(),
-		GRPCAddr:            envconfig.String("CORE_GRPC_ADDR", ":9000"),
-		AdminAddr:           AdminAddr(),
-		MongoURI:            envconfig.String("MONGO_URI", ""),
-		MongoDB:             envconfig.String("MONGO_DB", "chatim"),
-		MongoUser:           envconfig.String("MONGO_USER", ""),
-		MongoPassword:       p.secret("MONGO_PASSWORD"),
-		MongoAuthSource:     envconfig.String("MONGO_AUTH_SOURCE", "admin"),
-		RedisAddr:           envconfig.String("REDIS_ADDR", "chatim-redis:6379"),
-		RedisDB:             p.index("REDIS_DB", 0),
-		RedisPassword:       p.secret("REDIS_PASSWORD"),
-		RedisDedupeAddr:     envconfig.String("REDIS_DEDUPE_ADDR", "chatim-redis-dedupe:6379"),
-		RedisDedupeDB:       p.index("REDIS_DEDUPE_DB", 0),
-		RedisDedupePassword: p.secret("REDIS_DEDUPE_PASSWORD"),
-		NATSURL:             envconfig.String("NATS_URL", "nats://chatim-nats:4222"),
-		ConnectTimeout:      p.span("CORE_CONNECT_TIMEOUT", 10*time.Second),
-		RequestDeadline:     p.span("CORE_REQUEST_DEADLINE", 3*time.Second),
-		SlowRPC:             p.span("CORE_SLOW_RPC", grpcserver.DefaultSlowRPC),
-		QueueWait:           p.span("CORE_QUEUE_WAIT", 25*time.Millisecond),
-		MaxInflight:         p.count("CORE_MAX_INFLIGHT", 2048),
-		DrainDelay:          p.span("CORE_DRAIN_DELAY", 2*time.Second),
-		GRPCShutdown:        p.span("CORE_GRPC_SHUTDOWN", 5*time.Second),
-		PublisherDrain:      p.span("CORE_PUBLISHER_DRAIN", 5*time.Second),
-		ShutdownBudget:      p.span("CORE_SHUTDOWN_BUDGET", 28*time.Second),
-		LockedMessageKinds:  p.kinds("MESSAGE_LOCKED_KINDS"),
+		CoreID:                 p.coreID(),
+		GRPCAddr:               envconfig.String("CORE_GRPC_ADDR", ":9000"),
+		AdminAddr:              AdminAddr(),
+		MongoURI:               envconfig.String("MONGO_URI", ""),
+		MongoDB:                envconfig.String("MONGO_DB", "chatim"),
+		MongoUser:              envconfig.String("MONGO_USER", ""),
+		MongoPassword:          p.secret("MONGO_PASSWORD"),
+		MongoAuthSource:        envconfig.String("MONGO_AUTH_SOURCE", "admin"),
+		RedisAddr:              envconfig.String("REDIS_ADDR", "chatim-redis:6379"),
+		RedisDB:                p.index("REDIS_DB", 0),
+		RedisPassword:          p.secret("REDIS_PASSWORD"),
+		RedisDedupeAddr:        envconfig.String("REDIS_DEDUPE_ADDR", "chatim-redis-dedupe:6379"),
+		RedisDedupeDB:          p.index("REDIS_DEDUPE_DB", 0),
+		RedisDedupePassword:    p.secret("REDIS_DEDUPE_PASSWORD"),
+		NATSURL:                envconfig.String("NATS_URL", "nats://chatim-nats:4222"),
+		ConnectTimeout:         p.span("CORE_CONNECT_TIMEOUT", 10*time.Second),
+		RequestDeadline:        p.span("CORE_REQUEST_DEADLINE", 3*time.Second),
+		SlowRPC:                p.span("CORE_SLOW_RPC", grpcserver.DefaultSlowRPC),
+		QueueWait:              p.span("CORE_QUEUE_WAIT", 25*time.Millisecond),
+		MaxInflight:            p.count("CORE_MAX_INFLIGHT", 2048),
+		DrainDelay:             p.span("CORE_DRAIN_DELAY", 2*time.Second),
+		GRPCShutdown:           p.span("CORE_GRPC_SHUTDOWN", 5*time.Second),
+		PublisherDrain:         p.span("CORE_PUBLISHER_DRAIN", 5*time.Second),
+		ShutdownBudget:         p.span("CORE_SHUTDOWN_BUDGET", 28*time.Second),
+		LockedMessageKinds:     p.kinds("MESSAGE_LOCKED_KINDS"),
+		MentionHideReadTenants: p.tenants("MENTION_HIDE_READ_TENANTS"),
 		Limits: mutate.Limits{
 			Emojis:      p.listOr("REACTION_EMOJIS", mutate.DefaultEmojis),
 			PinLimit:    p.count("PIN_LIMIT", mutate.DefaultPinLimit),

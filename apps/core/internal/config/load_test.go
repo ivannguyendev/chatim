@@ -6,18 +6,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/actor"
+	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
-	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
-	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
-	"github.com/ivannguyendev/chatim/apps/core/internal/effects"
-	"github.com/ivannguyendev/chatim/apps/core/internal/eventmark"
-	"github.com/ivannguyendev/chatim/apps/core/internal/flush"
-	"github.com/ivannguyendev/chatim/apps/core/internal/mutate"
-	"github.com/ivannguyendev/chatim/apps/core/internal/publish"
-	"github.com/ivannguyendev/chatim/apps/core/internal/reconcile"
-	"github.com/ivannguyendev/chatim/apps/core/internal/slot"
-	"github.com/ivannguyendev/chatim/apps/core/internal/work"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/effects"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventmark"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/reconcile"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/platform/slot"
+	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
+	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
+	"github.com/ivannguyendev/chatim/apps/core/internal/send/flush"
 )
 
 const day = 24 * time.Hour
@@ -42,7 +42,7 @@ func TestLoadDefaults(t *testing.T) {
 		Flush: flush.Config{Shards: 4, Window: 2 * time.Millisecond, MaxBatch: 256, QueueSize: 1024, InsertTimeout: time.Second},
 		Actor: actor.Config{
 			Mailbox: 1024, Idle: 5 * time.Minute, MaxGroup: 64, MaxActors: 100000,
-			GroupDeadline: 3 * time.Second, ReservationTTL: 10 * time.Second,
+			GroupDeadline: 3 * time.Second, ReservationTTL: 10 * time.Second, MentionTargets: 50,
 		},
 		Dedupe:   dedupe.Config{CoreID: host, PendingTTL: 10 * time.Second, CommittedTTL: 15 * time.Minute, Timeout: 100 * time.Millisecond, Cooldown: time.Second},
 		CIDBatch: dedupe.BatchConfig{Shards: 4, MaxKeys: 256, Queue: 4096},
@@ -60,13 +60,13 @@ func TestLoadDefaults(t *testing.T) {
 			SubjectRoot: "work", Partitions: 32, Window: 1024, Batch: 256,
 			ConfirmEvery: time.Second, Drain: time.Second, Poll: time.Second,
 		},
-		EffectDelay:           5 * time.Second,
-		EffectRoomCache:       65536,
-		Effects:               effects.Config{Partitions: 32, FetchBatch: 256, FetchWait: time.Second, RetryDelay: 5 * time.Second, Drain: time.Second, Poll: time.Second},
-		AckMarks:              eventmark.Config{TTL: time.Hour, Timeout: 100 * time.Millisecond, Cooldown: time.Second},
-		Limits:                mutate.Limits{Emojis: mutate.DefaultEmojis, PinLimit: 50, MemberBatch: 500},
-		ReactionCountDelay:    time.Second,
-		MemberCountCheckDelay: 5 * time.Second,
+		EffectDelay:            5 * time.Second,
+		EffectRoomCache:        65536,
+		Effects:                effects.Config{Partitions: 32, FetchBatch: 256, FetchWait: time.Second, RetryDelay: 5 * time.Second, Drain: time.Second, Poll: time.Second},
+		AckMarks:               eventmark.Config{TTL: time.Hour, Timeout: 100 * time.Millisecond, Cooldown: time.Second},
+		Limits:                 mutate.Limits{Emojis: mutate.DefaultEmojis, PinLimit: 50, MemberBatch: 500, MentionTargets: 50},
+		MemberCountCheckDelay:  5 * time.Second,
+		MessageCountCheckDelay: 5 * time.Second,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Load() =\n%#v\nwant\n%#v", got, want)
@@ -90,7 +90,7 @@ func TestLoadOverrides(t *testing.T) {
 		Flush: flush.Config{Shards: 8, Window: 5 * time.Millisecond, MaxBatch: 512, QueueSize: 256, InsertTimeout: 500 * time.Millisecond},
 		Actor: actor.Config{
 			Mailbox: 64, Idle: time.Minute, MaxGroup: 32, MaxActors: 5000,
-			GroupDeadline: 2 * time.Second, ReservationTTL: 8 * time.Second,
+			GroupDeadline: 2 * time.Second, ReservationTTL: 8 * time.Second, MentionTargets: 20,
 		},
 		Dedupe:   dedupe.Config{CoreID: "core-a", PendingTTL: 8 * time.Second, CommittedTTL: 30 * time.Minute, Timeout: 50 * time.Millisecond, Cooldown: 2 * time.Second},
 		CIDBatch: dedupe.BatchConfig{Shards: 2, MaxKeys: 64, Queue: 512},
@@ -108,14 +108,15 @@ func TestLoadOverrides(t *testing.T) {
 			SubjectRoot: "work_it", Partitions: 16, Window: 64, Batch: 32,
 			ConfirmEvery: 2 * time.Second, Drain: 500 * time.Millisecond, Poll: 500 * time.Millisecond,
 		},
-		EffectDelay:           20 * time.Second,
-		EffectRoomCache:       128,
-		Effects:               effects.Config{Partitions: 16, FetchBatch: 64, FetchWait: 500 * time.Millisecond, RetryDelay: 2 * time.Second, Drain: 500 * time.Millisecond, Poll: 500 * time.Millisecond},
-		AckMarks:              eventmark.Config{TTL: 30 * time.Minute, Timeout: 50 * time.Millisecond, Cooldown: 2 * time.Second},
-		LockedMessageKinds:    []domain.Kind{domain.KindText},
-		Limits:                mutate.Limits{Emojis: []string{"🎉", "👍"}, PinLimit: 10, MemberBatch: 20},
-		ReactionCountDelay:    2 * time.Second,
-		MemberCountCheckDelay: 4 * time.Second,
+		EffectDelay:            20 * time.Second,
+		EffectRoomCache:        128,
+		Effects:                effects.Config{Partitions: 16, FetchBatch: 64, FetchWait: 500 * time.Millisecond, RetryDelay: 2 * time.Second, Drain: 500 * time.Millisecond, Poll: 500 * time.Millisecond},
+		AckMarks:               eventmark.Config{TTL: 30 * time.Minute, Timeout: 50 * time.Millisecond, Cooldown: 2 * time.Second},
+		LockedMessageKinds:     []domain.Kind{domain.KindText},
+		MentionHideReadTenants: []string{"acme", "globex"},
+		Limits:                 mutate.Limits{Emojis: []string{"🎉", "👍"}, PinLimit: 10, MemberBatch: 20, MentionTargets: 20},
+		MemberCountCheckDelay:  4 * time.Second,
+		MessageCountCheckDelay: 6 * time.Second,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Load() =\n%#v\nwant\n%#v", got, want)

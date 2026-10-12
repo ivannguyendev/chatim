@@ -1427,6 +1427,82 @@ func (x *MessageHidden) GetSeq() uint64 {
 	return 0
 }
 
+type BookmarkChanged struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ThreadRoot    uint64                 `protobuf:"varint,1,opt,name=thread_root,json=threadRoot,proto3" json:"thread_root,omitempty"`
+	Seq           uint64                 `protobuf:"varint,2,opt,name=seq,proto3" json:"seq,omitempty"`
+	User          string                 `protobuf:"bytes,3,opt,name=user,proto3" json:"user,omitempty"`
+	On            bool                   `protobuf:"varint,4,opt,name=on,proto3" json:"on,omitempty"`
+	Ver           uint32                 `protobuf:"varint,5,opt,name=ver,proto3" json:"ver,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BookmarkChanged) Reset() {
+	*x = BookmarkChanged{}
+	mi := &file_chatim_v1_members_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BookmarkChanged) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BookmarkChanged) ProtoMessage() {}
+
+func (x *BookmarkChanged) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_members_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BookmarkChanged.ProtoReflect.Descriptor instead.
+func (*BookmarkChanged) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_members_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *BookmarkChanged) GetThreadRoot() uint64 {
+	if x != nil {
+		return x.ThreadRoot
+	}
+	return 0
+}
+
+func (x *BookmarkChanged) GetSeq() uint64 {
+	if x != nil {
+		return x.Seq
+	}
+	return 0
+}
+
+func (x *BookmarkChanged) GetUser() string {
+	if x != nil {
+		return x.User
+	}
+	return ""
+}
+
+func (x *BookmarkChanged) GetOn() bool {
+	if x != nil {
+		return x.On
+	}
+	return false
+}
+
+func (x *BookmarkChanged) GetVer() uint32 {
+	if x != nil {
+		return x.Ver
+	}
+	return 0
+}
+
 type HistoryCleared struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	User          string                 `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
@@ -1437,7 +1513,7 @@ type HistoryCleared struct {
 
 func (x *HistoryCleared) Reset() {
 	*x = HistoryCleared{}
-	mi := &file_chatim_v1_members_proto_msgTypes[22]
+	mi := &file_chatim_v1_members_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1449,7 +1525,7 @@ func (x *HistoryCleared) String() string {
 func (*HistoryCleared) ProtoMessage() {}
 
 func (x *HistoryCleared) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_members_proto_msgTypes[22]
+	mi := &file_chatim_v1_members_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1462,7 +1538,7 @@ func (x *HistoryCleared) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryCleared.ProtoReflect.Descriptor instead.
 func (*HistoryCleared) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_members_proto_rawDescGZIP(), []int{22}
+	return file_chatim_v1_members_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *HistoryCleared) GetUser() string {
@@ -1575,7 +1651,14 @@ const file_chatim_v1_members_proto_rawDesc = "" +
 	"\x04user\x18\x01 \x01(\tR\x04user\x12\x1f\n" +
 	"\vthread_root\x18\x02 \x01(\x04R\n" +
 	"threadRoot\x12\x10\n" +
-	"\x03seq\x18\x03 \x01(\x04R\x03seq\"_\n" +
+	"\x03seq\x18\x03 \x01(\x04R\x03seq\"z\n" +
+	"\x0fBookmarkChanged\x12\x1f\n" +
+	"\vthread_root\x18\x01 \x01(\x04R\n" +
+	"threadRoot\x12\x10\n" +
+	"\x03seq\x18\x02 \x01(\x04R\x03seq\x12\x12\n" +
+	"\x04user\x18\x03 \x01(\tR\x04user\x12\x0e\n" +
+	"\x02on\x18\x04 \x01(\bR\x02on\x12\x10\n" +
+	"\x03ver\x18\x05 \x01(\rR\x03ver\"_\n" +
 	"\x0eHistoryCleared\x12\x12\n" +
 	"\x04user\x18\x01 \x01(\tR\x04user\x129\n" +
 	"\n" +
@@ -1606,7 +1689,7 @@ func file_chatim_v1_members_proto_rawDescGZIP() []byte {
 }
 
 var file_chatim_v1_members_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_chatim_v1_members_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+var file_chatim_v1_members_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
 var file_chatim_v1_members_proto_goTypes = []any{
 	(MemberRole)(0),                   // 0: chatim.v1.MemberRole
 	(MemberRemovedReason)(0),          // 1: chatim.v1.MemberRemovedReason
@@ -1632,20 +1715,21 @@ var file_chatim_v1_members_proto_goTypes = []any{
 	(*MemberCountChanged)(nil),        // 21: chatim.v1.MemberCountChanged
 	(*ReadUpdated)(nil),               // 22: chatim.v1.ReadUpdated
 	(*MessageHidden)(nil),             // 23: chatim.v1.MessageHidden
-	(*HistoryCleared)(nil),            // 24: chatim.v1.HistoryCleared
-	(*timestamppb.Timestamp)(nil),     // 25: google.protobuf.Timestamp
+	(*BookmarkChanged)(nil),           // 24: chatim.v1.BookmarkChanged
+	(*HistoryCleared)(nil),            // 25: chatim.v1.HistoryCleared
+	(*timestamppb.Timestamp)(nil),     // 26: google.protobuf.Timestamp
 }
 var file_chatim_v1_members_proto_depIdxs = []int32{
 	2,  // 0: chatim.v1.AddMembersResponse.added:type_name -> chatim.v1.AddedMember
 	0,  // 1: chatim.v1.ChangeMemberRoleRequest.role:type_name -> chatim.v1.MemberRole
 	0,  // 2: chatim.v1.ChangeMemberRoleResponse.previous_role:type_name -> chatim.v1.MemberRole
 	0,  // 3: chatim.v1.MemberAdded.role:type_name -> chatim.v1.MemberRole
-	25, // 4: chatim.v1.MemberAdded.joined_at:type_name -> google.protobuf.Timestamp
+	26, // 4: chatim.v1.MemberAdded.joined_at:type_name -> google.protobuf.Timestamp
 	1,  // 5: chatim.v1.MemberRemoved.reason:type_name -> chatim.v1.MemberRemovedReason
 	0,  // 6: chatim.v1.MemberRemoved.previous_role:type_name -> chatim.v1.MemberRole
 	0,  // 7: chatim.v1.MemberRoleChanged.role:type_name -> chatim.v1.MemberRole
 	0,  // 8: chatim.v1.MemberRoleChanged.previous_role:type_name -> chatim.v1.MemberRole
-	25, // 9: chatim.v1.HistoryCleared.cleared_at:type_name -> google.protobuf.Timestamp
+	26, // 9: chatim.v1.HistoryCleared.cleared_at:type_name -> google.protobuf.Timestamp
 	10, // [10:10] is the sub-list for method output_type
 	10, // [10:10] is the sub-list for method input_type
 	10, // [10:10] is the sub-list for extension type_name
@@ -1664,7 +1748,7 @@ func file_chatim_v1_members_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_chatim_v1_members_proto_rawDesc), len(file_chatim_v1_members_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   23,
+			NumMessages:   24,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

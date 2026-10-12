@@ -1,0 +1,149 @@
+package app
+
+import (
+	"fmt"
+	"log/slog"
+	"maps"
+
+	"github.com/ivannguyendev/chatim/apps/core/internal/config"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/effects"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventmark"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
+	"github.com/ivannguyendev/chatim/apps/core/internal/store"
+	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
+)
+
+type effectSet struct {
+	workers        *effects.Workers
+	msgCreated     *effects.MessageCreated
+	roomCreated    *effects.RoomCreated
+	editProjection *effects.EditProjection
+	msgChanged     *effects.MessageChanged
+	countEvent     *effects.CountEvent
+	reactionEvent  *effects.ReactionEvent
+	pinProjection  *effects.PinProjection
+	pinEvent       *effects.PinEvent
+	bookmarkEvent  *effects.BookmarkEvent
+
+	memberEvent       *effects.MemberEvent
+	memberCountEvent  *effects.MemberCountEvent
+	readEvent         *effects.ReadEvent
+	mentionRead       *effects.MentionRead
+	hiddenEvent       *effects.HiddenEvent
+	historyCleared    *effects.HistoryClearedEvent
+	memberCountRepair *effects.MemberCountRepair
+	countRepair       *effects.CountRepair
+	replyMentionIndex *effects.ReplyMentionIndex
+}
+
+type countTimers struct {
+	members  effects.CountTimers
+	messages effects.LinkTimers
+}
+
+func wireEffects(cfg config.Config, cl *clients, st *mongostore.Store, marks *eventmark.Store, owner effects.Owner, timers countTimers, log *slog.Logger) (effectSet, error) {
+	fx := effectSet{}
+	var err error
+	fx.msgCreated, err = effects.NewMessageCreated(
+		effects.MessageCreatedDeps{Marks: marks, Messages: st, Rooms: st, JS: cl.effectsJS},
+		effects.MessageCreatedConfig{SubjectRoot: cfg.Stream.SubjectRoot, Delay: cfg.EffectDelay, RoomCache: cfg.EffectRoomCache},
+	)
+	if err != nil {
+		return effectSet{}, fmt.Errorf("wire msg_created effect: %w", err)
+	}
+	fx.roomCreated, err = effects.NewRoomCreated(
+		effects.RoomCreatedDeps{Rooms: st, JS: cl.effectsJS},
+		effects.RoomCreatedConfig{SubjectRoot: cfg.Stream.SubjectRoot, Delay: cfg.EffectDelay},
+	)
+	if err != nil {
+		return effectSet{}, fmt.Errorf("wire room_created effect: %w", err)
+	}
+	fx.editProjection, err = effects.NewEditProjection(effects.EditProjectionDeps{Edits: st, Messages: st, Purger: st})
+	if err != nil {
+		return effectSet{}, fmt.Errorf("wire edit_projection effect: %w", err)
+	}
+	fx.msgChanged, err = effects.NewMessageChanged(
+		effects.MessageChangedDeps{Edits: st, Messages: st, Rooms: st, JS: cl.effectsJS},
+		effects.MessageChangedConfig{SubjectRoot: cfg.Stream.SubjectRoot, Delay: cfg.EffectDelay, RoomCache: cfg.EffectRoomCache},
+	)
+	if err != nil {
+		return effectSet{}, fmt.Errorf("wire msg_changed effect: %w", err)
+	}
+	if err = fx.wireReactionPinEffects(cfg, cl, st); err != nil {
+		return effectSet{}, err
+	}
+	if err = fx.wireMemberEffects(cfg, cl, st, timers.members); err != nil {
+		return effectSet{}, err
+	}
+	fx.countRepair, err = effects.NewCountRepair(
+		effects.CountRepairDeps{Messages: st, Interactions: st.Interactions(), Counts: st, Timers: timers.messages, Rooms: st, JS: cl.effectsJS},
+		effects.CountRepairConfig{SubjectRoot: cfg.Stream.SubjectRoot, RoomCache: cfg.EffectRoomCache},
+	)
+	if err != nil {
+		return effectSet{}, fmt.Errorf("wire count_repair effect: %w", err)
+	}
+	fx.replyMentionIndex, err = effects.NewReplyMentionIndex(
+		effects.ReplyMentionIndexDeps{
+			Messages: st, Replies: st.Interactions(), Counts: st, Mentions: st.Mentions(), Shared: st, Timers: timers.messages, Rooms: st, JS: cl.effectsJS,
+		},
+		effects.ReplyMentionIndexConfig{SubjectRoot: cfg.Stream.SubjectRoot, RoomCache: cfg.EffectRoomCache},
+	)
+	if err != nil {
+		return effectSet{}, fmt.Errorf("wire reply_mention_index effect: %w", err)
+	}
+	fx.workers, err = effects.New(effects.Deps{
+		Queue:    func(p int) work.Queue { return work.NewQueue(cl.effectsJS, cfg.Work.Name, p, cfg.Effects.RetryDelay) },
+		Owner:    owner,
+		Registry: fx.registry(effects.NewRoomActivity(st).Effect()),
+	}, cfg.Effects, log)
+	if err != nil {
+		return effectSet{}, fmt.Errorf("wire effect workers: %w", err)
+	}
+	return fx, nil
+}
+
+func (fx effectSet) registry(activity effects.Effect) effects.Registry {
+	return effects.Registry{
+		store.MessageInserted:   {activity, fx.replyMentionIndex.Effect(), fx.msgCreated.Effect()},
+		store.RoomInserted:      {fx.roomCreated.Effect()},
+		store.EditInserted:      {activity, fx.editProjection.Effect(), fx.replyMentionIndex.Effect(), fx.msgChanged.Effect()},
+		store.ReactionChanged:   {activity, fx.reactionEvent.Effect(), fx.countEvent.Effect()},
+		store.PinInserted:       {activity, fx.pinProjection.Effect(), fx.pinEvent.Effect()},
+		store.MemberChanged:     {activity, fx.memberEvent.Effect(), fx.memberCountEvent.Effect()},
+		store.ReadChanged:       {fx.mentionRead.Effect(), fx.readEvent.Effect()},
+		store.MessageHidden:     {fx.hiddenEvent.Effect()},
+		store.HistoryCleared:    {fx.historyCleared.Effect()},
+		store.MemberCountCheck:  {fx.memberCountRepair.Effect()},
+		store.MessageCountCheck: {fx.countRepair.Effect()},
+		store.BookmarkChanged:   {activity, fx.bookmarkEvent.Effect()},
+	}
+}
+
+func (fx effectSet) counters() map[string]effectCounters {
+	out := fx.memberCounters()
+	maps.Copy(out, map[string]effectCounters{
+		fx.msgCreated.Effect().Name:     {republished: fx.msgCreated.Republished, dropped: fx.msgCreated.Dropped},
+		fx.roomCreated.Effect().Name:    {republished: fx.roomCreated.Republished, dropped: fx.roomCreated.Dropped},
+		fx.msgChanged.Effect().Name:     {republished: fx.msgChanged.Republished, dropped: fx.msgChanged.Dropped},
+		fx.editProjection.Effect().Name: {dropped: fx.editProjection.Dropped},
+		fx.countEvent.Effect().Name:     {republished: fx.countEvent.Republished, dropped: fx.countEvent.Dropped},
+		fx.reactionEvent.Effect().Name:  {republished: fx.reactionEvent.Republished, dropped: fx.reactionEvent.Dropped},
+		fx.pinEvent.Effect().Name:       {republished: fx.pinEvent.Republished, dropped: fx.pinEvent.Dropped},
+		fx.pinProjection.Effect().Name:  {dropped: fx.pinProjection.Dropped},
+		fx.countRepair.Effect().Name:    {republished: fx.countRepair.Republished, dropped: fx.countRepair.Dropped},
+		fx.bookmarkEvent.Effect().Name:  {republished: fx.bookmarkEvent.Republished, dropped: fx.bookmarkEvent.Dropped},
+		fx.replyMentionIndex.Effect().Name: {
+			republished: fx.replyMentionIndex.Republished, dropped: fx.replyMentionIndex.Dropped,
+		},
+	})
+	return out
+}
+
+func (fx effectSet) counterRepairs() map[string]func() uint64 {
+	return map[string]func() uint64{
+		pbconv.ReactionsCounter: func() uint64 { return fx.countRepair.Repaired(pbconv.ReactionsCounter) },
+		pbconv.RepliesCounter:   func() uint64 { return fx.countRepair.Repaired(pbconv.RepliesCounter) },
+		effects.MembersCounter:  fx.memberCountRepair.Repaired,
+	}
+}

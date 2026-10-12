@@ -147,6 +147,14 @@ message MessageHidden {
   uint64 seq = 3;
 }
 
+message BookmarkChanged {
+  uint64 thread_root = 1;
+  uint64 seq = 2;
+  string user = 3;
+  bool on = 4;
+  uint32 ver = 5;
+}
+
 message HistoryCleared {
   string user = 1;
   google.protobuf.Timestamp cleared_at = 2;

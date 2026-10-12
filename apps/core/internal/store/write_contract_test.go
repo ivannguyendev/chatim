@@ -9,7 +9,7 @@ import (
 
 var allowedKinds = map[string]bool{
 	"read": true, "lifecycle": true, "reset": true, "purge": true,
-	"insert-unique": true, "cas": true, "monotonic-cas": true, "monotonic-max": true, "upsert": true, "version-bump": true, "transaction": true,
+	"insert-unique": true, "cas": true, "projection": true, "monotonic-cas": true, "monotonic-max": true, "upsert": true, "version-bump": true, "transaction": true,
 }
 
 var portMethods = map[string]string{
@@ -18,6 +18,7 @@ var portMethods = map[string]string{
 	"Messages.Page":       "read",
 	"Messages.Find":       "read",
 	"Rooms.Create":        "insert-unique",
+	"Rooms.InsertRoom":    "insert-unique",
 	"Rooms.Get":           "read",
 	"Rooms.Member":        "read",
 	"Rooms.TouchActivity": "monotonic-max",
@@ -41,11 +42,18 @@ var portMethods = map[string]string{
 	"Hidden.Get":                  "read",
 	"Hidden.Between":              "read",
 
-	"Reactions.Set":                  "version-bump",
-	"Reactions.Remove":               "version-bump",
-	"Reactions.Get":                  "read",
-	"Reactions.Count":                "read",
-	"Reactions.Between":              "read",
+	"Interactions.SetReaction":       "version-bump",
+	"Interactions.RemoveReaction":    "version-bump",
+	"Interactions.GetReaction":       "read",
+	"Interactions.CountReactions":    "read",
+	"Interactions.SetBookmark":       "version-bump",
+	"Interactions.GetBookmark":       "read",
+	"Interactions.Bookmarks":         "read",
+	"Interactions.AddReply":          "upsert",
+	"Interactions.RemoveReply":       "version-bump",
+	"Interactions.Replies":           "read",
+	"Interactions.CountLiveReplies":  "read",
+	"Interactions.Between":           "read",
 	"ReactionSummaries.SetReactions": "cas",
 	"Pins.Append":                    "insert-unique",
 	"Pins.At":                        "read",
@@ -58,12 +66,26 @@ var portMethods = map[string]string{
 	"MemberWriter.ApplyMember":    "cas",
 	"MemberReader.MembersOf":      "read",
 	"MemberReader.MembersBetween": "read",
+	"MemberReader.RoomsOf":        "read",
 	"OwnerChanges.ChangeOwners":   "transaction",
 	"MemberCounts.AddMemberCount": "version-bump",
 	"MemberCounts.CountMembers":   "read",
 	"MemberCounts.SetMemberCount": "cas",
 	"ReadPositions.MarkRead":      "version-bump",
 	"ReadPositions.MarkUnread":    "version-bump",
+
+	"Mentions.ApplyMentions": "monotonic-cas",
+	"Mentions.MentionsOf":    "read",
+	"Mentions.ListByTarget":  "read",
+	"Mentions.ListShared":    "read",
+	"Mentions.MarkRead":      "projection",
+
+	"SharedMentions.RaiseSharedMention": "monotonic-max",
+	"SharedMentions.SharedMentionTimes": "read",
+	"MessageTimes.SentTimes":            "read",
+
+	"DirectRooms.Claim":   "upsert",
+	"DirectRooms.Repoint": "cas",
 }
 
 func TestEveryPortMethodHasAWriteContract(t *testing.T) {
@@ -76,7 +98,7 @@ func TestEveryPortMethodHasAWriteContract(t *testing.T) {
 		reflect.TypeFor[store.HistoryClearer](),
 		reflect.TypeFor[store.Edits](),
 		reflect.TypeFor[store.Hidden](),
-		reflect.TypeFor[store.Reactions](),
+		reflect.TypeFor[store.Interactions](),
 		reflect.TypeFor[store.ReactionSummaries](),
 		reflect.TypeFor[store.Pins](),
 		reflect.TypeFor[store.PinProjector](),
@@ -85,6 +107,10 @@ func TestEveryPortMethodHasAWriteContract(t *testing.T) {
 		reflect.TypeFor[store.OwnerChanges](),
 		reflect.TypeFor[store.MemberCounts](),
 		reflect.TypeFor[store.ReadPositions](),
+		reflect.TypeFor[store.DirectRooms](),
+		reflect.TypeFor[store.Mentions](),
+		reflect.TypeFor[store.SharedMentions](),
+		reflect.TypeFor[store.MessageTimes](),
 	}
 	seen := map[string]bool{}
 	for _, p := range ports {
@@ -96,7 +122,7 @@ func TestEveryPortMethodHasAWriteContract(t *testing.T) {
 			case !ok:
 				t.Errorf("%s has no write contract: classify it here and add its storetest case", name)
 			case !allowedKinds[kind]:
-				t.Errorf("%s has kind %q; writes must be insert-unique, cas, monotonic-cas, monotonic-max, upsert, version-bump, purge or transaction", name, kind)
+				t.Errorf("%s has kind %q; writes must be insert-unique, cas, monotonic-cas, monotonic-max, upsert, version-bump, projection, purge or transaction", name, kind)
 			}
 		}
 	}

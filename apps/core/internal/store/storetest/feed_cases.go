@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
@@ -29,6 +29,7 @@ func RunFeed(t *testing.T, open func(t *testing.T) (store.Messages, store.Rooms,
 func feedCases() []feedCase {
 	return []feedCase{
 		{"new inserts come out in commit order with their content", feedOrder},
+		{"message inserts carry their reply and mention flags", feedReplyMentionFlags},
 		{"room inserts and their creation members come out in commit order", feedRooms},
 		{"inserts after bootstrap but before the first open are read", feedStartsAtBootstrap},
 		{"reopen resumes after the confirmed position", feedResume},

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 )
 
 func secs(n int) time.Time { return baseTime.Add(time.Duration(n) * time.Second) }

@@ -10,7 +10,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/keys"
 )
@@ -70,7 +70,7 @@ func (s *Store) PurgeText(ctx context.Context, key store.MsgKey, upTo uint32) er
 		{Key: "$gte", Value: keys.Edit(key.Room, key.Thread, key.Seq, 0)},
 		{Key: "$lte", Value: keys.Edit(key.Room, key.Thread, key.Seq, upTo)},
 	}}}
-	update := bson.D{{Key: "$unset", Value: bson.D{{Key: "text", Value: ""}}}}
+	update := bson.D{{Key: "$unset", Value: bson.D{{Key: "text", Value: ""}, {Key: "mention_targets", Value: ""}, {Key: "mention_all", Value: ""}}}}
 	if _, err := s.edits.UpdateMany(ctx, filter, update); err != nil {
 		return fmt.Errorf("purge text of %d/%d/%d up to v%d: %w", key.Room, key.Thread, key.Seq, upTo, err)
 	}

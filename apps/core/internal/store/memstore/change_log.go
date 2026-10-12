@@ -3,7 +3,7 @@ package memstore
 import (
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
@@ -13,6 +13,7 @@ type logged struct {
 	room     domain.Room
 	edit     domain.Edit
 	reaction domain.Reaction
+	bookmark domain.Bookmark
 	pin      domain.PinAction
 	member   domain.Member
 	hidden   domain.HiddenMessage
@@ -21,7 +22,7 @@ type logged struct {
 
 type FeedOption func(log *Messages)
 
-func WithReactions(r *Reactions) FeedOption { return func(log *Messages) { r.attach(log) } }
+func WithInteractions(r *Interactions) FeedOption { return func(log *Messages) { r.attach(log) } }
 
 func WithPins(p *Pins) FeedOption { return func(log *Messages) { p.attach(log) } }
 
@@ -67,7 +68,7 @@ func (s *Edits) attach(log *Messages) {
 	s.log = log
 }
 
-func (s *Reactions) attach(log *Messages) {
+func (s *Interactions) attach(log *Messages) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.log = log

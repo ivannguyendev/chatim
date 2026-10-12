@@ -24,6 +24,14 @@ groups:
           guarantee: RC1
         annotations:
           summary: The change reader found corrupt changes it could not turn into work records.
+      - alert: ChatimReconcilePublishFailing
+        expr: sum(rate(chatim_core_reconcile_publish_failures_total[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+          guarantee: RC1
+        annotations:
+          summary: The change reader keeps ending terms because the work stream refuses records; effects run late until it accepts them again.
       - alert: ChatimFeedHistoryLost
         expr: sum(increase(chatim_core_reconcile_history_lost_total[15m])) > 0
         labels:

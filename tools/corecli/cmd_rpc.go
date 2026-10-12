@@ -17,30 +17,31 @@ import (
 )
 
 var (
-	roomTypes = map[string]chatimv1.RoomType{"group": chatimv1.RoomType_ROOM_TYPE_GROUP, "dm": chatimv1.RoomType_ROOM_TYPE_DM}
-	anchors   = map[string]chatimv1.HistoryAnchor{
+	anchors = map[string]chatimv1.HistoryAnchor{
 		"latest": chatimv1.HistoryAnchor_HISTORY_ANCHOR_LATEST,
 		"oldest": chatimv1.HistoryAnchor_HISTORY_ANCHOR_OLDEST,
 		"before": chatimv1.HistoryAnchor_HISTORY_ANCHOR_BEFORE,
 		"after":  chatimv1.HistoryAnchor_HISTORY_ANCHOR_AFTER,
 	}
-	errRoomRequired = errors.New("-room is required")
+	errRoomRequired  = errors.New("-room is required")
+	errOtherRequired = errors.New("-other is required")
 )
 
 func createRoomCmd(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("create-room", flag.ContinueOnError)
 	o := addOptions(fs)
-	typ := fs.String("type", "group", "room type: group or dm")
-	name := fs.String("name", "", "room name, required for a group")
+	name := fs.String("name", "", "group name")
 	members := fs.String("members", "", "comma-separated members besides the caller")
+	requestID := fs.String("request-id", "", "request id, random when empty; reuse it to get the same group back")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	rt, ok := roomTypes[*typ]
-	if !ok {
-		return fmt.Errorf("-type %q: want group or dm", *typ)
+	if *requestID == "" {
+		*requestID = randomCID()
 	}
-	req := &chatimv1.CreateRoomRequest{Type: rt, Name: *name, Members: append([]string{o.user}, splitList(*members)...)}
+	req := &chatimv1.CreateRoomRequest{
+		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: *name, Members: append([]string{o.user}, splitList(*members)...), RequestId: *requestID,
+	}
 	return withSession(ctx, o, func(ctx context.Context, s *session) error {
 		resp, st, err := s.client.CreateRoom(ctx, req)
 		if err != nil {
@@ -48,6 +49,27 @@ func createRoomCmd(ctx context.Context, args []string) error {
 		}
 		report("create-room", st)
 		return printJSON(resp.GetRoom())
+	})
+}
+
+func openDirectCmd(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("open-dm", flag.ContinueOnError)
+	o := addOptions(fs)
+	other := fs.String("other", "", "the other user of the direct room")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *other == "" {
+		return errOtherRequired
+	}
+	req := &chatimv1.OpenDirectRoomRequest{OtherUser: *other}
+	return withSession(ctx, o, func(ctx context.Context, s *session) error {
+		resp, st, err := s.client.OpenDirectRoom(ctx, req)
+		if err != nil {
+			return err
+		}
+		report("open-dm", st)
+		return printJSON(resp)
 	})
 }
 

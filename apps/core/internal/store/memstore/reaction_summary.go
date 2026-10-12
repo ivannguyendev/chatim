@@ -4,7 +4,7 @@ import (
 	"context"
 	"slices"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
@@ -28,5 +28,6 @@ func (s *Messages) SetReactions(ctx context.Context, key store.MsgKey, base uint
 		return false, nil
 	}
 	line[i].Reactions = domain.ReactionSummary{Counts: slices.Clone(sum.Counts), Version: sum.Version}
+	delete(s.rawCounts, key)
 	return true, nil
 }

@@ -4,10 +4,17 @@ import (
 	"context"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 )
 
 const MaxMemberScan = 1000
+
+type MemberRoom struct {
+	Room      uint64
+	JoinedAt  time.Time
+	ClearedAt time.Time
+	ReadSeq   uint64
+}
 
 type JoinResult struct {
 	Members []domain.Member
@@ -22,6 +29,7 @@ type MemberWriter interface {
 type MemberReader interface {
 	MembersOf(ctx context.Context, room uint64, users []string) ([]domain.Member, error)
 	MembersBetween(ctx context.Context, room uint64, from, to time.Time, limit int) ([]domain.Member, error)
+	RoomsOf(ctx context.Context, tenant, user string) ([]MemberRoom, error)
 }
 
 type OwnerView struct {

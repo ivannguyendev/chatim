@@ -53,7 +53,7 @@ func createRoom(ctx context.Context, cl *route.Client, c config, run string, i i
 	for k := range members {
 		members[k] = fmt.Sprintf("%s-u%d-%d", run, i, k)
 	}
-	req := &chatimv1.CreateRoomRequest{Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: fmt.Sprintf("bench %s #%d", run, i), Members: members}
+	req := &chatimv1.CreateRoomRequest{Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: fmt.Sprintf("bench %s #%d", run, i), Members: members, RequestId: fmt.Sprintf("%s-r%d", run, i)}
 	resp, _, err := cl.CreateRoom(route.WithCaller(ctx, c.tenant, members[0]), req)
 	if err != nil {
 		return room{}, fmt.Errorf("room %d: %w", i, err)

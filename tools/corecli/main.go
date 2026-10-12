@@ -13,7 +13,8 @@ import (
 const usage = `usage: corecli <command> [flags]
 
 commands:
-  create-room        create a room through any live core
+  create-room        create a group through any live core (-request-id: reuse it to retry)
+  open-dm            open the direct room of the caller and -other, creating it on first use
   send               send one message to the core serving the room
   history            read one history page of a room
   edit               edit a message (-base: the version you saw)
@@ -34,7 +35,7 @@ commands:
   unread             mark the room unread from -seq
   watch              print live events of a room from NATS
   slots              show how live cores share the slots
-  e2e                end-to-end scenario steps: setup, send, change, react-pin, members, check
+  e2e                end-to-end scenario steps: setup, send, change, react-pin, members, links, check
 
 run "corecli <command> -h" for the flags of a command`
 
@@ -45,6 +46,7 @@ func main() { os.Exit(realMain(os.Args[1:])) }
 func realMain(args []string) int {
 	commands := map[string]command{
 		"create-room":       createRoomCmd,
+		"open-dm":           openDirectCmd,
 		"send":              sendCmd,
 		"history":           historyCmd,
 		"edit":              editCmd,

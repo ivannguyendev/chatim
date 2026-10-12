@@ -90,8 +90,9 @@ func (c *cursor) Next(ctx context.Context) (store.Change, error) {
 		if ok {
 			c.next++
 			return store.Change{
-				Kind: l.kind, Msg: l.msg, Room: l.room, Edit: l.edit, Reaction: l.reaction, Pin: l.pin,
-				Member: l.member, Hidden: l.hidden, CommittedAt: l.at, Position: store.Position(strconv.Itoa(c.next)),
+				Kind: l.kind, Msg: l.msg, ReplyMentionFlags: store.ReplyMentionFlagsOf(l.msg), Room: l.room, Edit: l.edit,
+				Reaction: l.reaction, Bookmark: l.bookmark, Pin: l.pin, Member: l.member, Hidden: l.hidden,
+				CommittedAt: l.at, Position: store.Position(strconv.Itoa(c.next)),
 			}, nil
 		}
 		select {

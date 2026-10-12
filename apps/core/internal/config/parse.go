@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/pkg/envconfig"
 )
 
@@ -112,6 +112,18 @@ func (p *parser) kinds(key string) []domain.Kind {
 		kinds = append(kinds, k)
 	}
 	return kinds
+}
+
+func (p *parser) tenants(key string) []string {
+	var tenants []string
+	for _, id := range p.list(key) {
+		if err := domain.ValidTenant(id); err != nil {
+			p.fail(fmt.Errorf("%s: %q: %w", key, id, err))
+			continue
+		}
+		tenants = append(tenants, id)
+	}
+	return tenants
 }
 
 func (p *parser) secret(key string) string {

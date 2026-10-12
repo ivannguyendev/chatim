@@ -34,7 +34,7 @@ finish() {
   fi
   rm -rf "$state"
   if [ "$result" = PASS ]; then
-    echo "e2e PASS: $first messages before and $after after killing $victim, no loss, no duplicate, every acked seq live; seq 1 edited and seq 2 deleted on history, edit history and live; seq 3 reacted with the first then the second emoji from GetReactionSettings and an unlisted emoji refused, seq 4 pinned, on replies, history and live; members added, promoted, removed and refused, read positions, hide and clear, the last owner leaving and coming back, on replies, history and live room, member and message subjects"
+    echo "e2e PASS: $first messages before and $after after killing $victim, no loss, no duplicate, every acked seq live; seq 1 edited and seq 2 deleted on history, edit history and live; seq 3 reacted with the first then the second emoji from GetReactionSettings and an unlisted emoji refused, seq 4 pinned, on replies, history and live; members added, promoted, removed and refused, read positions, hide and clear, the last owner leaving and coming back, on replies, history and live room, member and message subjects; a direct room opened twice into one room, replies counted and listed, the parent kept while replied, mentions of a user, a group and @all listed, a forward and a bookmark, on replies, lists and live"
     exit 0
   fi
   echo "e2e FAIL during: $step" >&2
@@ -106,5 +106,11 @@ step="phase 5 members and read positions"
 echo "phase 5: direct room refusals, add e2e-bob and e2e-carol, role and priority, removal, read positions, hide and clear, the owner leaves and comes back"
 cli e2e members -state /state
 step="phase 5 check"
+cli e2e check -state /state
+
+step="phase 6 direct rooms, replies, mentions, forward and bookmarks"
+echo "phase 6: open a direct room twice, react, reply twice, refuse deleting the parent, delete a reply, mention a user, a group and @all, forward, bookmark"
+cli e2e links -state /state
+step="phase 6 check"
 cli e2e check -state /state
 result=PASS
