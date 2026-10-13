@@ -21,6 +21,7 @@ func RunMemberFeed(t *testing.T, open func(t *testing.T) (MemberRooms, store.Hid
 		{"an owner change feeds its writes in order and counts feed nothing", memberFeedOwners},
 		{"read moves feed the new read ver and no-ops feed nothing", memberFeedReads},
 		{"a raised clear and a new hide feed one change each", memberFeedClearAndHide},
+		{"room info and preference changes feed one change each and counts feed nothing", memberFeedRoomInfoAndPreferences},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			s, hidden, feed := open(t)
@@ -34,6 +35,9 @@ func assertMemberChange(t *testing.T, c store.Change, kind store.ChangeKind, use
 	got := uint64(c.Member.Ver)
 	if kind == store.ReadChanged {
 		got = c.Member.ReadVer
+	}
+	if kind == store.PreferenceChanged {
+		got = c.Member.Preferences.Ver
 	}
 	if c.Kind != kind || c.Member.Room != roomA || c.Member.User != user || got != ver || c.Msg.Seq != 0 || c.Hidden.User != "" {
 		t.Fatalf("change = %+v, want kind %d for %q at ver %d", c, kind, user, ver)

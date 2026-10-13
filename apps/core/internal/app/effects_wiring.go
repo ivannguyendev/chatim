@@ -35,6 +35,8 @@ type effectSet struct {
 	memberCountRepair *effects.MemberCountRepair
 	countRepair       *effects.CountRepair
 	replyMentionIndex *effects.ReplyMentionIndex
+	roomEvent         *effects.RoomEvent
+	preferencesEvent  *effects.PreferencesEvent
 }
 
 type countTimers struct {
@@ -85,7 +87,7 @@ func wireEffects(cfg config.Config, cl *clients, st *mongostore.Store, marks *ev
 	}
 	fx.replyMentionIndex, err = effects.NewReplyMentionIndex(
 		effects.ReplyMentionIndexDeps{
-			Messages: st, Replies: st.Interactions(), Counts: st, Mentions: st.Mentions(), Shared: st, Timers: timers.messages, Rooms: st, JS: cl.effectsJS,
+			Messages: st, Replies: st.Interactions(), Threads: st.ReplyThreads(), Counts: st, Mentions: st.Mentions(), Shared: st, Timers: timers.messages, Rooms: st, JS: cl.effectsJS,
 		},
 		effects.ReplyMentionIndexConfig{SubjectRoot: cfg.Stream.SubjectRoot, RoomCache: cfg.EffectRoomCache},
 	)
@@ -117,6 +119,8 @@ func (fx effectSet) registry(activity effects.Effect) effects.Registry {
 		store.MemberCountCheck:  {fx.memberCountRepair.Effect()},
 		store.MessageCountCheck: {fx.countRepair.Effect()},
 		store.BookmarkChanged:   {activity, fx.bookmarkEvent.Effect()},
+		store.RoomChanged:       {activity, fx.roomEvent.Effect()},
+		store.PreferenceChanged: {activity, fx.preferencesEvent.Effect()},
 	}
 }
 

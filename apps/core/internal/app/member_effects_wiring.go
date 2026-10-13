@@ -30,6 +30,12 @@ func (fx *effectSet) wireMemberEffects(cfg config.Config, cl *clients, st *mongo
 	if fx.historyCleared, err = effects.NewHistoryClearedEvent(members, events); err != nil {
 		return fmt.Errorf("wire history_cleared_event effect: %w", err)
 	}
+	if fx.preferencesEvent, err = effects.NewPreferencesEvent(members, events); err != nil {
+		return fmt.Errorf("wire preferences_event effect: %w", err)
+	}
+	if fx.roomEvent, err = effects.NewRoomEvent(effects.RoomEventDeps{Rooms: st, JS: cl.effectsJS}, events); err != nil {
+		return fmt.Errorf("wire room_event effect: %w", err)
+	}
 	if fx.memberCountRepair, err = effects.NewMemberCountRepair(
 		effects.MemberCountRepairDeps{Rooms: st, Counts: st, Timers: timers, JS: cl.effectsJS},
 		effects.MemberCountRepairConfig{SubjectRoot: cfg.Stream.SubjectRoot},
@@ -48,5 +54,7 @@ func (fx effectSet) memberCounters() map[string]effectCounters {
 		fx.hiddenEvent.Effect().Name:       {republished: fx.hiddenEvent.Republished, dropped: fx.hiddenEvent.Dropped},
 		fx.historyCleared.Effect().Name:    {republished: fx.historyCleared.Republished, dropped: fx.historyCleared.Dropped},
 		fx.memberCountRepair.Effect().Name: {republished: fx.memberCountRepair.Republished, dropped: fx.memberCountRepair.Dropped},
+		fx.preferencesEvent.Effect().Name:  {republished: fx.preferencesEvent.Republished, dropped: fx.preferencesEvent.Dropped},
+		fx.roomEvent.Effect().Name:         {republished: fx.roomEvent.Republished, dropped: fx.roomEvent.Dropped},
 	}
 }

@@ -39,12 +39,12 @@ type Record struct {
 }
 
 func KnownKind(k store.ChangeKind) bool {
-	return k >= store.MessageInserted && k <= store.MessageCountCheck
+	return k >= store.MessageInserted && k <= store.PreferenceChanged
 }
 
 func carriesUser(k store.ChangeKind) bool {
 	switch k {
-	case store.ReactionChanged, store.MemberChanged, store.ReadChanged, store.MessageHidden, store.HistoryCleared, store.BookmarkChanged:
+	case store.ReactionChanged, store.MemberChanged, store.ReadChanged, store.MessageHidden, store.HistoryCleared, store.BookmarkChanged, store.PreferenceChanged:
 		return true
 	default:
 		return false
@@ -81,6 +81,10 @@ func RecordOf(c store.Change) Record {
 	case store.BookmarkChanged:
 		b := c.Bookmark
 		r.Room, r.Thread, r.Seq, r.Version, r.User = b.Room, b.Thread, b.Seq, b.Ver, b.User
+	case store.RoomChanged:
+		r.Room, r.Version = c.Room.ID, narrowVersion(c.Room.InfoVer)
+	case store.PreferenceChanged:
+		r.Room, r.Version, r.User = c.Member.Room, narrowVersion(c.Member.Preferences.Ver), c.Member.User
 	case store.MessageCountCheck:
 	}
 	return r
@@ -122,6 +126,10 @@ func (r Record) ID() string {
 			return ""
 		}
 		return "q:" + pbconv.MessageEventID(r.Room, r.Thread, r.Seq) + "-" + r.User + "-" + strconv.FormatUint(uint64(r.Version), 10)
+	case store.RoomChanged:
+		return "u:" + pbconv.RoomInfoEventID(r.Room, uint64(r.Version))
+	case store.PreferenceChanged:
+		return "f:" + pbconv.PreferencesEventID(r.Room, r.User, uint64(r.Version))
 	default:
 		return ""
 	}

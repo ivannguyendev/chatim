@@ -99,7 +99,7 @@ func TestRoomActivityTouchesOnlyTheChangeTimeForEdits(t *testing.T) {
 	if len(errs) != len(recs) || slices.ContainsFunc(errs, func(err error) bool { return err != nil }) {
 		t.Fatalf("Run errors = %v, want %d nils", errs, len(recs))
 	}
-	want := []store.Activity{{Room: 101, At: t2}, {Room: 101, Seq: 4, At: t1}}
+	want := []store.Activity{{Room: 101, At: t2, Edited: true}, {Room: 101, Seq: 4, At: t1}}
 	if len(spy.calls) != 1 || !slices.Equal(spy.calls[0], want) {
 		t.Fatalf("TouchActivity calls = %+v, want one call with %+v (edits as seq 0, kept apart from the new message)", spy.calls, want)
 	}

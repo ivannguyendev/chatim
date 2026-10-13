@@ -12,7 +12,7 @@ import (
 
 const updatedFieldsPath = "updateDescription.updatedFields."
 
-var memberFeedFields = []string{"ver", "read_ver", "cleared_at"}
+var memberFeedFields = []string{"ver", "read_ver", "cleared_at", "preference_ver"}
 
 func decodeMemberChange(ev changeDoc) (store.Change, error) {
 	if ev.OperationType == "update" {
@@ -57,8 +57,13 @@ func memberFromUpdate(ev changeDoc) (store.Change, error) {
 		c.Member.ReadVer = uint64(v)
 	case has(fields, "cleared_at"):
 		c.Kind = store.HistoryCleared
+	case has(fields, "preference_ver"):
+		var v uint32
+		c.Kind = store.PreferenceChanged
+		v, err = positiveVer(fields, "preference_ver")
+		c.Member.Preferences.Ver = uint64(v)
 	default:
-		err = fmt.Errorf("%w: member update without ver, read_ver or cleared_at", errCorrupt)
+		err = fmt.Errorf("%w: member update without ver, read_ver, cleared_at or preference_ver", errCorrupt)
 	}
 	return c, err
 }

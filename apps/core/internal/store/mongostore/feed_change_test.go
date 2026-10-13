@@ -71,14 +71,14 @@ func TestDecodeChangeReadsEdits(t *testing.T) {
 	}
 }
 
-func TestFeedPipelineLetsOnlyReactionAndMemberChangesThrough(t *testing.T) {
+func TestFeedPipelineLetsOnlyReactionRoomInfoAndMemberChangesThrough(t *testing.T) {
 	b, err := bson.Marshal(feedPipeline()[0])
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
 	branches, err := bson.Raw(b).Lookup("$match", "$or").Array().Values()
-	if err != nil || len(branches) != 4 {
-		t.Fatalf("$or = %v, %v; want 4 branches", branches, err)
+	if err != nil || len(branches) != 5 {
+		t.Fatalf("$or = %v, %v; want 5 branches", branches, err)
 	}
 	inserts, _ := branches[0].Document().Lookup("ns.coll", "$in").Array().Values()
 	var colls []string
@@ -92,18 +92,22 @@ func TestFeedPipelineLetsOnlyReactionAndMemberChangesThrough(t *testing.T) {
 	if coll := branches[1].Document().Lookup("ns.coll").StringValue(); coll != interactionsCollection {
 		t.Fatalf("interaction branch = %s, want updates and replaces of message_interactions", branches[1])
 	}
-	replaces := branches[2].Document()
+	rooms := branches[2].Document()
+	if rooms.Lookup("operationType").StringValue() != "update" || rooms.Lookup("ns.coll").StringValue() != roomsCollection || rooms.Lookup("updateDescription.updatedFields.info_ver").Type == 0 {
+		t.Fatalf("room branch = %s, want room updates that touch info_ver only", rooms)
+	}
+	replaces := branches[3].Document()
 	if replaces.Lookup("operationType").StringValue() != "replace" || replaces.Lookup("ns.coll").StringValue() != membersCollection {
 		t.Fatalf("member replace branch = %s", replaces)
 	}
-	updates := branches[3].Document()
+	updates := branches[4].Document()
 	fields, _ := updates.Lookup("$or").Array().Values()
 	var names []string
 	for _, f := range fields {
 		elems, _ := f.Document().Elements()
 		names = append(names, elems[0].Key())
 	}
-	wantFields := []string{"updateDescription.updatedFields.ver", "updateDescription.updatedFields.read_ver", "updateDescription.updatedFields.cleared_at"}
+	wantFields := []string{"updateDescription.updatedFields.ver", "updateDescription.updatedFields.read_ver", "updateDescription.updatedFields.cleared_at", "updateDescription.updatedFields.preference_ver"}
 	if updates.Lookup("operationType").StringValue() != "update" || updates.Lookup("ns.coll").StringValue() != membersCollection || !slices.Equal(names, wantFields) {
 		t.Fatalf("member update branch = %s, want updates of members that touch %v", updates, wantFields)
 	}

@@ -101,4 +101,10 @@ func skippedInteractions(t *testing.T, s *Store, key store.MsgKey) {
 	if removed, err := in.RemoveReply(ctx, reply, codecTime); err != nil || !removed {
 		t.Fatalf("RemoveReply = %v, %v", removed, err)
 	}
+	if err := s.ReplyThreads().Touch(ctx, key, "acme", key.Seq+1, codecTime); err != nil {
+		t.Fatalf("Touch thread: %v", err)
+	}
+	if err := s.TouchActivity(ctx, []store.Activity{{Room: itRoom, At: codecTime, Edited: true}}); err != nil {
+		t.Fatalf("TouchActivity(edited): %v", err)
+	}
 }

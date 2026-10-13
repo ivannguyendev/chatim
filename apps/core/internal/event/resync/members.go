@@ -58,6 +58,9 @@ func memberStateRecords(m domain.Member) []work.Record {
 	if !m.ClearedAt.IsZero() {
 		out = append(out, memberRecord(store.HistoryCleared, m))
 	}
+	if m.Preferences.Ver >= 1 {
+		out = append(out, memberRecord(store.PreferenceChanged, m))
+	}
 	return out
 }
 

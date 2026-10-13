@@ -53,14 +53,14 @@ func TestEffectSetExportsEveryEffect(t *testing.T) {
 		effects.CountRepairDeps{Messages: msgs, Interactions: reactions, Counts: msgs, Timers: noTimers{}, Rooms: rooms, JS: js},
 		effects.CountRepairConfig{SubjectRoot: "evt"}))(t)
 	fx.replyMentionIndex = built(effects.NewReplyMentionIndex(
-		effects.ReplyMentionIndexDeps{Messages: msgs, Replies: reactions, Counts: msgs, Mentions: memstore.NewMentions(), Shared: rooms, Timers: noTimers{}, Rooms: rooms, JS: js},
+		effects.ReplyMentionIndexDeps{Messages: msgs, Replies: reactions, Threads: memstore.NewReplyThreads(), Counts: msgs, Mentions: memstore.NewMentions(), Shared: rooms, Timers: noTimers{}, Rooms: rooms, JS: js},
 		effects.ReplyMentionIndexConfig{SubjectRoot: "evt"}))(t)
 	counters := fx.counters()
 	want := []string{
 		effects.BookmarkEventName, effects.CountEventName, effects.CountRepairName, effects.EditProjectionName, effects.HiddenEventName, effects.HistoryClearedEventName, effects.MemberCountEventName,
 		effects.MemberCountRepairName, effects.MemberEventName, effects.MentionReadName, effects.MessageChangedName, effects.MessageCreatedName,
-		effects.PinEventName, effects.PinProjectionName, effects.ReactionEventName,
-		effects.ReadEventName, effects.ReplyMentionIndexName, effects.RoomCreatedName,
+		effects.PinEventName, effects.PinProjectionName, effects.PreferencesEventName, effects.ReactionEventName,
+		effects.ReadEventName, effects.ReplyMentionIndexName, effects.RoomCreatedName, effects.RoomEventName,
 	}
 	if got := slices.Sorted(maps.Keys(counters)); !slices.Equal(got, want) {
 		t.Fatalf("effects with metrics = %v, want %v", got, want)
@@ -103,6 +103,8 @@ func withMemberEffects(t *testing.T, fx *effectSet, rooms *memstore.Rooms, js *p
 	fx.mentionRead = built(effects.NewMentionRead(effects.MentionReadDeps{Members: rooms, Mentions: memstore.NewMentions()}))(t)
 	fx.hiddenEvent = built(effects.NewHiddenEvent(effects.HiddenEventDeps{Hidden: memstore.NewHidden(), Rooms: rooms, JS: js}, events))(t)
 	fx.historyCleared = built(effects.NewHistoryClearedEvent(members, events))(t)
+	fx.preferencesEvent = built(effects.NewPreferencesEvent(members, events))(t)
+	fx.roomEvent = built(effects.NewRoomEvent(effects.RoomEventDeps{Rooms: rooms, JS: js}, events))(t)
 	fx.memberCountRepair = built(effects.NewMemberCountRepair(
 		effects.MemberCountRepairDeps{Rooms: rooms, Counts: rooms, Timers: noTimers{}, JS: js}, effects.MemberCountRepairConfig{SubjectRoot: "evt"}))(t)
 }
@@ -120,6 +122,8 @@ func assertMemberRegistry(t *testing.T, reg effects.Registry) {
 		store.BookmarkChanged:   {effects.RoomActivityName, effects.BookmarkEventName},
 		store.MessageInserted:   {effects.RoomActivityName, effects.ReplyMentionIndexName, effects.MessageCreatedName},
 		store.EditInserted:      {effects.RoomActivityName, effects.EditProjectionName, effects.ReplyMentionIndexName, effects.MessageChangedName},
+		store.RoomChanged:       {effects.RoomActivityName, effects.RoomEventName},
+		store.PreferenceChanged: {effects.RoomActivityName, effects.PreferencesEventName},
 	}
 	for kind, names := range want {
 		var got []string
@@ -138,7 +142,7 @@ func assertMemberRegistry(t *testing.T, reg effects.Registry) {
 			t.Errorf("kind %d repair delay = %v, want 0 (the timer already waited)", kind, d)
 		}
 	}
-	for kind := store.MessageInserted; kind <= store.MessageCountCheck; kind++ {
+	for kind := store.MessageInserted; kind <= store.PreferenceChanged; kind++ {
 		if _, ok := reg[kind]; !ok {
 			t.Errorf("kind %d has no effects; want every kind registered", kind)
 		}

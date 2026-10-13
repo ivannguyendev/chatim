@@ -104,6 +104,11 @@ func (s *scanner) room(ctx context.Context, r domain.Room) error {
 			return err
 		}
 	}
+	if r.InfoVer >= 2 && s.inRange(r.UpdatedAt) {
+		if err := s.emitCounted(ctx, roomInfoRecord(r), &s.rep.RoomInfoRecords); err != nil {
+			return err
+		}
+	}
 	for _, scan := range []func(context.Context, uint64) error{s.timeline, s.edits, s.interactions, s.pins, s.members, s.hidden, s.countChecks} {
 		if err := scan(ctx, r.ID); err != nil {
 			return err
@@ -135,6 +140,10 @@ func (s *scanner) timeline(ctx context.Context, room uint64) error {
 		}
 		q.Anchor, q.Seq = store.Before, page[0].Seq
 	}
+}
+
+func roomInfoRecord(r domain.Room) work.Record {
+	return work.RecordOf(store.Change{Kind: store.RoomChanged, Room: r, CommittedAt: r.UpdatedAt})
 }
 
 func messageRecord(m domain.Message) work.Record {

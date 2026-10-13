@@ -96,5 +96,14 @@ func (s *Rooms) logMemberLocked(kind store.ChangeKind, m domain.Member) {
 	if kind == store.HistoryCleared {
 		m = domain.Member{Room: m.Room, User: m.User}
 	}
+	if kind == store.PreferenceChanged {
+		m = domain.Member{Room: m.Room, User: m.User, Preferences: domain.RoomPreferences{Ver: m.Preferences.Ver}}
+	}
 	s.log.appendFact(logged{kind: kind, member: m})
+}
+
+func (s *Rooms) logRoomInfoLocked(room, infoVer uint64) {
+	if s.log != nil {
+		s.log.appendFact(logged{kind: store.RoomChanged, room: domain.Room{ID: room, InfoVer: infoVer}})
+	}
 }

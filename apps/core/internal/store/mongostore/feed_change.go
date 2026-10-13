@@ -37,15 +37,7 @@ func decodeChange(ev changeDoc) (store.Change, error) {
 	case messagesCollection:
 		return decodeMessageChange(ev)
 	case roomsCollection:
-		var d roomDoc
-		if err := bson.Unmarshal(ev.FullDocument, &d); err != nil {
-			return store.Change{}, fmt.Errorf("%w: room document: %w", errCorrupt, err)
-		}
-		r, err := decodeRoom(d)
-		if err != nil {
-			return store.Change{}, err
-		}
-		return store.Change{Kind: store.RoomInserted, Room: r, CommittedAt: ev.WallTime}, nil
+		return decodeRoomChange(ev)
 	case editsCollection:
 		var d editDoc
 		if err := bson.Unmarshal(ev.FullDocument, &d); err != nil {

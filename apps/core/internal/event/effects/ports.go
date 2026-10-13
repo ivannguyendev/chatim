@@ -85,6 +85,10 @@ type ReplyLinks interface {
 	RemoveReply(ctx context.Context, r domain.Reply, at time.Time) (bool, error)
 }
 
+type ReplyThreadWriter interface {
+	Touch(ctx context.Context, parent store.MsgKey, tenant string, replySeq uint64, at time.Time) error
+}
+
 type ReplyCounter interface {
 	AddReplyCount(ctx context.Context, key store.MsgKey, delta int) (domain.ReplyCount, error)
 }

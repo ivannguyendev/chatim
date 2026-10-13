@@ -9,9 +9,9 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
-func TestKnownKindsAreTheTwelveChangeKinds(t *testing.T) {
-	for k := range store.ChangeKind(14) {
-		want := k >= store.MessageInserted && k <= store.MessageCountCheck
+func TestKnownKindsAreTheFourteenChangeKinds(t *testing.T) {
+	for k := range store.ChangeKind(16) {
+		want := k >= store.MessageInserted && k <= store.PreferenceChanged
 		if got := work.KnownKind(k); got != want {
 			t.Errorf("KnownKind(%d) = %v, want %v", k, got, want)
 		}
@@ -19,7 +19,7 @@ func TestKnownKindsAreTheTwelveChangeKinds(t *testing.T) {
 }
 
 func TestMemberSetRecordsNeedAValidUserTail(t *testing.T) {
-	for _, kind := range []store.ChangeKind{store.MemberChanged, store.ReadChanged, store.MessageHidden, store.HistoryCleared} {
+	for _, kind := range []store.ChangeKind{store.MemberChanged, store.ReadChanged, store.MessageHidden, store.HistoryCleared, store.PreferenceChanged} {
 		r := work.Record{Kind: kind, Room: 777, Thread: 3, Seq: 5, Version: 2, User: "alice", CommittedAt: committed}
 		got, err := work.Decode(work.Encode(r))
 		if err != nil || got.Kind != kind || got.User != "alice" || got.Room != 777 || got.Version != 2 {

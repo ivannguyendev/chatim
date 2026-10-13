@@ -73,7 +73,7 @@ func TestRealInfraResyncDrillRepublishesWritesTheReaderMissed(t *testing.T) {
 	if err := app.RunResync(t.Context(), core.cfg, opts, quiet, &out); err != nil {
 		t.Fatalf("RunResync: %v (output %q)", err, out.String())
 	}
-	if got := strings.TrimSpace(out.String()); got != "resync rooms=1 room_records=1 message_records=6 edit_records=1 reaction_records=1 bookmark_records=1 pin_records=1 member_records=4 hidden_records=1 count_check_records=2 dry_run=false" {
+	if got := strings.TrimSpace(out.String()); got != "resync rooms=1 room_records=1 room_info_records=0 message_records=6 edit_records=1 reaction_records=1 bookmark_records=1 pin_records=1 member_records=4 hidden_records=1 count_check_records=2 dry_run=false" {
 		t.Fatalf("resync output = %q, want one room, its room record, six message, one edit, one reaction, one bookmark, one pin, two member docs with their read positions, one hidden record and count checks of the reacted and the replied message", got)
 	}
 	awaitLiveIDs(t, live, ran, want...)

@@ -60,6 +60,7 @@ type indexRig struct {
 	rooms    *memstore.Rooms
 	inter    *memstore.Interactions
 	mentions *memstore.Mentions
+	threads  *memstore.ReplyThreads
 	finder   *countingFinder
 	js       *publishtest.JetStream
 	timers   *linkTimers
@@ -70,7 +71,7 @@ func newIndexRig(t *testing.T) *indexRig {
 	t.Helper()
 	msgs := memstore.NewMessages()
 	rg := &indexRig{
-		msgs: msgs, rooms: memstore.NewRooms(), inter: memstore.NewInteractions(), mentions: memstore.NewMentions(),
+		msgs: msgs, rooms: memstore.NewRooms(), inter: memstore.NewInteractions(), mentions: memstore.NewMentions(), threads: memstore.NewReplyThreads(),
 		finder: &countingFinder{MessageFinder: msgs}, js: &publishtest.JetStream{}, timers: &linkTimers{},
 	}
 	createRoom(t, rg.rooms, room)
@@ -80,7 +81,7 @@ func newIndexRig(t *testing.T) *indexRig {
 
 func (rg *indexRig) deps() effects.ReplyMentionIndexDeps {
 	return effects.ReplyMentionIndexDeps{
-		Messages: rg.finder, Replies: rg.inter, Counts: rg.msgs, Mentions: rg.mentions, Timers: rg.timers,
+		Messages: rg.finder, Replies: rg.inter, Threads: rg.threads, Counts: rg.msgs, Mentions: rg.mentions, Timers: rg.timers,
 		Shared: rg.rooms, Rooms: rg.rooms, JS: rg.js, Now: func() time.Time { return indexedAt },
 	}
 }

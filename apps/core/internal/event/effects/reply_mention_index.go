@@ -19,6 +19,7 @@ const ReplyMentionIndexName = "reply_mention_index"
 type ReplyMentionIndexDeps struct {
 	Messages MessageFinder
 	Replies  ReplyLinks
+	Threads  ReplyThreadWriter
 	Counts   ReplyCounter
 	Mentions MentionWriter
 	Shared   SharedMentionRaiser
@@ -40,7 +41,7 @@ type ReplyMentionIndex struct {
 
 func NewReplyMentionIndex(deps ReplyMentionIndexDeps, cfg ReplyMentionIndexConfig) (*ReplyMentionIndex, error) {
 	if !deps.complete() || cfg.SubjectRoot == "" || cfg.RoomCache < 0 {
-		return nil, fmt.Errorf("%w: %s needs messages, replies, counts, mentions, shared mentions, timers, rooms, a jetstream client and a subject root", apperr.ErrInvalidArgument, ReplyMentionIndexName)
+		return nil, fmt.Errorf("%w: %s needs messages, replies, reply threads, counts, mentions, shared mentions, timers, rooms, a jetstream client and a subject root", apperr.ErrInvalidArgument, ReplyMentionIndexName)
 	}
 	if deps.Now == nil {
 		deps.Now = time.Now
@@ -51,7 +52,7 @@ func NewReplyMentionIndex(deps ReplyMentionIndexDeps, cfg ReplyMentionIndexConfi
 }
 
 func (d ReplyMentionIndexDeps) complete() bool {
-	return d.Messages != nil && d.Replies != nil && d.Counts != nil && d.Mentions != nil && d.Shared != nil && d.Timers != nil && d.Rooms != nil && d.JS != nil
+	return d.Messages != nil && d.Replies != nil && d.Threads != nil && d.Counts != nil && d.Mentions != nil && d.Shared != nil && d.Timers != nil && d.Rooms != nil && d.JS != nil
 }
 
 func (e *ReplyMentionIndex) Effect() Effect {

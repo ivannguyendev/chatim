@@ -72,7 +72,7 @@ func feedPipeline() mongo.Pipeline {
 		{Key: "operationType", Value: bson.D{{Key: "$in", Value: bson.A{"update", "replace"}}}},
 		{Key: "ns.coll", Value: interactionsCollection},
 	}
-	branches := append(bson.A{inserts, interactionChanges}, memberFeedBranches()...)
+	branches := append(bson.A{inserts, interactionChanges, roomFeedBranch()}, memberFeedBranches()...)
 	return mongo.Pipeline{{{Key: "$match", Value: bson.D{{Key: "$or", Value: branches}}}}}
 }
 

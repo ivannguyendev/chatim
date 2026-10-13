@@ -32,6 +32,8 @@ const (
 	MemberCountCheck
 	BookmarkChanged
 	MessageCountCheck
+	RoomChanged
+	PreferenceChanged
 )
 
 type ReplyMentionFlags uint32

@@ -15,6 +15,13 @@ func (e *ReplyMentionIndex) link(ctx context.Context, m domain.Message) error {
 	if err := store.ValidateReply(reply); err != nil {
 		return err
 	}
+	if err := e.count(ctx, m, parent, reply); err != nil || m.Deleted {
+		return err
+	}
+	return e.deps.Threads.Touch(ctx, parent, m.Tenant, m.Seq, m.CreatedAt)
+}
+
+func (e *ReplyMentionIndex) count(ctx context.Context, m domain.Message, parent store.MsgKey, reply domain.Reply) error {
 	tm, err := e.deps.Timers.ArmMessageCountCheck(ctx, parent, pbconv.RepliesCounter)
 	if err != nil {
 		return err
