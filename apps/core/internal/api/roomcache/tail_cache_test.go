@@ -7,7 +7,7 @@ import (
 )
 
 func TestLookupTellsFreshExtendOrReload(t *testing.T) {
-	c := newTails(t, 1<<20)
+	c := newTails(t, 1<<22)
 	c.Replace(777, tailOf(1, 44))
 	cases := []struct {
 		name string
@@ -41,7 +41,7 @@ func TestLookupTellsFreshExtendOrReload(t *testing.T) {
 }
 
 func TestMergeAppendsNewerMessagesAndKeepsTheWindowAndPreviews(t *testing.T) {
-	c := newTails(t, 1<<20)
+	c := newTails(t, 1<<22)
 	c.Replace(777, tailOf(1, 300))
 	newer := tailOf(299, 305)
 	merged, ok := c.Merge(777, newer)
@@ -59,7 +59,7 @@ func TestMergeAppendsNewerMessagesAndKeepsTheWindowAndPreviews(t *testing.T) {
 }
 
 func TestMergeRefusesAMissingEntryOrAnotherEdit(t *testing.T) {
-	c := newTails(t, 1<<20)
+	c := newTails(t, 1<<22)
 	if _, ok := c.Merge(777, tailOf(1, 3)); ok {
 		t.Error("Merge into a missing entry succeeded")
 	}
@@ -75,7 +75,7 @@ func TestMergeRefusesAMissingEntryOrAnotherEdit(t *testing.T) {
 }
 
 func TestReplaceNeverMovesAnEntryBack(t *testing.T) {
-	c := newTails(t, 1<<20)
+	c := newTails(t, 1<<22)
 	c.Replace(777, tailOf(1, 10))
 	if got := c.Replace(777, tailOf(1, 8)); got.LastSeq != 8 {
 		t.Errorf("Replace returned LastSeq %d, want the caller's 8", got.LastSeq)
@@ -92,7 +92,7 @@ func TestReplaceNeverMovesAnEntryBack(t *testing.T) {
 }
 
 func TestPreviewsAreCutAndCompacted(t *testing.T) {
-	c := newTails(t, 1<<20)
+	c := newTails(t, 1<<22)
 	in := tailOf(1, 1)
 	in.Previews = []domain.Message{preview(1, longText(domain.PreviewRunes+30))}
 	got := c.Replace(777, in)
@@ -112,7 +112,10 @@ func TestTailCacheEvictsByBytes(t *testing.T) {
 	if size != want {
 		t.Fatalf("tailBytes = %d, want %d", size, want)
 	}
-	c := newTails(t, 2*size)
+	if 2*size > fullTailBytes || 3*size <= fullTailBytes {
+		t.Fatalf("fixture tail of %d bytes does not fit twice in %d", size, fullTailBytes)
+	}
+	c := newTails(t, fullTailBytes)
 	c.Replace(1, one)
 	c.Replace(2, one)
 	c.Lookup(activity(1, 300, editedAt))

@@ -45,7 +45,7 @@ func (f *fakeFetch) made() []fetchCall {
 }
 
 func TestLoadOfAFreshTailCallsNoFetch(t *testing.T) {
-	c := newTails(t, 1<<20)
+	c := newTails(t, 1<<22)
 	c.Replace(777, tailOf(1, 44))
 	f := &fakeFetch{}
 	got, err := c.Load(t.Context(), activity(777, 44, editedAt), f.fetch)
@@ -55,7 +55,7 @@ func TestLoadOfAFreshTailCallsNoFetch(t *testing.T) {
 }
 
 func TestLoadExtendsFromTheCachedLastSeq(t *testing.T) {
-	c := newTails(t, 1<<20)
+	c := newTails(t, 1<<22)
 	c.Replace(777, tailOf(1, 44))
 	f := &fakeFetch{result: func(after uint64) Tail { return tailOf(after+1, 45) }}
 	got, err := c.Load(t.Context(), activity(777, 45, editedAt), f.fetch)
@@ -72,7 +72,7 @@ func TestLoadExtendsFromTheCachedLastSeq(t *testing.T) {
 }
 
 func TestLoadReloadsAfterAnEditAndStampsTheActivity(t *testing.T) {
-	c := newTails(t, 1<<20)
+	c := newTails(t, 1<<22)
 	c.Replace(777, tailOf(1, 44))
 	f := &fakeFetch{result: func(uint64) Tail { return Tail{Window: tailOf(1, 44).Window} }}
 	got, err := c.Load(t.Context(), activity(777, 44, editedNow), f.fetch)
@@ -89,7 +89,7 @@ func TestLoadReloadsAfterAnEditAndStampsTheActivity(t *testing.T) {
 
 func TestConcurrentLoadsOfOneRoomShareOneFetch(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		c := newTails(t, 1<<20)
+		c := newTails(t, 1<<22)
 		f := &fakeFetch{gate: make(chan struct{}), result: func(uint64) Tail { return tailOf(1, 45) }}
 		var wg sync.WaitGroup
 		var good atomic.Int32
@@ -114,7 +114,7 @@ func TestConcurrentLoadsOfOneRoomShareOneFetch(t *testing.T) {
 
 func TestALoadErrorIsSharedAndNotCached(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		c := newTails(t, 1<<20)
+		c := newTails(t, 1<<22)
 		boom := errors.New("scan failed")
 		f := &fakeFetch{gate: make(chan struct{}), err: boom}
 		var wg sync.WaitGroup

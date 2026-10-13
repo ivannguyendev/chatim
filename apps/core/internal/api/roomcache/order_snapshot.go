@@ -46,7 +46,9 @@ func (c *SnapshotCache) Store(k SnapshotKey, keys []domain.RoomSortKey) {
 	size := snapshotBaseBytes + len(k.Tenant) + len(k.User) + snapshotKeyBytes*len(sorted)
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.entries.put(k, orderSnapshot{keys: sorted, takenAt: time.Now()}, size)
+	if !c.entries.put(k, orderSnapshot{keys: sorted, takenAt: time.Now()}, size) {
+		c.entries.remove(k)
+	}
 }
 
 func (c *SnapshotCache) Page(k SnapshotKey, after *domain.RoomSortKey, limit int) ([]domain.RoomSortKey, bool, bool) {

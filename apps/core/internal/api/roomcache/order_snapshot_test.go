@@ -107,3 +107,15 @@ func equalRooms(got []uint64, want ...uint64) bool {
 	}
 	return true
 }
+
+func TestAnOversizedSnapshotDropsTheOldOne(t *testing.T) {
+	c, err := NewSnapshotCache(snapshotBaseBytes + 8 + 2*snapshotKeyBytes)
+	if err != nil {
+		t.Fatalf("NewSnapshotCache: %v", err)
+	}
+	c.Store(minh, sortKeys(2))
+	c.Store(minh, sortKeys(3))
+	if _, _, ok := c.Page(minh, nil, 10); ok || c.Bytes() != 0 {
+		t.Errorf("old snapshot served after an oversized store (%d bytes)", c.Bytes())
+	}
+}

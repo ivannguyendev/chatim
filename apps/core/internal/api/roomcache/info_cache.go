@@ -75,8 +75,11 @@ func (c *InfoCache) Put(mark uint64, rooms ...domain.Room) {
 	now := time.Now()
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.forgetAt-mark >= recentForgetRooms {
+		return
+	}
 	for _, r := range rooms {
-		if at, forgot := c.forgets.Get(r.ID); forgot && at > mark {
+		if at, forgot := c.forgets.Peek(r.ID); forgot && at > mark {
 			continue
 		}
 		c.entries.Put(r.ID, cachedInfo{room: r, storedAt: now})

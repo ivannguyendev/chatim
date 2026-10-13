@@ -31,12 +31,11 @@ func TestSizedLRUReplacesAnEntryAndRefusesOneLargerThanTheLimit(t *testing.T) {
 	if c.put(1, "huge", 101) {
 		t.Error("put of 101 bytes into 100 succeeded")
 	}
-	if _, ok := c.get(1); ok || c.bytes() != 0 {
-		t.Errorf("an oversized put left the old entry or %d bytes", c.bytes())
+	if v, ok := c.get(1); !ok || v != "aa" || c.bytes() != 70 {
+		t.Errorf("an oversized put changed the old entry: %q, %v, %d bytes", v, ok, c.bytes())
 	}
-	c.put(2, "b", 10)
-	c.remove(2)
-	c.remove(2)
+	c.remove(1)
+	c.remove(1)
 	if c.bytes() != 0 || c.entries() != 0 {
 		t.Errorf("bytes/entries = %d/%d after remove, want 0/0", c.bytes(), c.entries())
 	}

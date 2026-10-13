@@ -15,6 +15,9 @@ const (
 	tailEntryBytes   = 160
 	tailMessageBytes = 64
 	tailPreviewBytes = 320
+	maxIDBytes       = 64
+	fullTailBytes    = tailEntryBytes + TailWindow*(tailMessageBytes+maxIDBytes) +
+		TailPreviews*(tailPreviewBytes+2*maxIDBytes+4*domain.PreviewRunes)
 )
 
 type Tail struct {

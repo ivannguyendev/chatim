@@ -82,11 +82,32 @@ func TestInfoCacheForgetDropsTheRoomAndRefusesAnOlderRead(t *testing.T) {
 	}
 }
 
+func TestInfoCacheRefusesAReadOlderThanTheForgetsItRemembers(t *testing.T) {
+	c := newInfo(t, 10)
+	mark := c.Mark()
+	for id := uint64(1000); id < 1000+recentForgetRooms-1; id++ {
+		c.Forget(id)
+	}
+	c.Put(mark, room(1, "kept"))
+	if hits, _ := c.Get([]uint64{1}); len(hits) != 1 {
+		t.Fatal("a read with fewer forgets than remembered was refused")
+	}
+	c.Forget(1)
+	mark = c.Mark()
+	for id := uint64(1000); id < 1000+recentForgetRooms; id++ {
+		c.Forget(id)
+	}
+	c.Put(mark, room(2, "unknown"))
+	if _, misses := c.Get([]uint64{2}); len(misses) != 1 {
+		t.Error("a read older than every remembered forget was cached")
+	}
+}
+
 func TestCacheConstructorsRejectEmptyBounds(t *testing.T) {
 	if _, err := NewInfoCache(0); err == nil {
 		t.Error("NewInfoCache(0) succeeded")
 	}
-	if _, err := NewTailCache(tailEntryBytes - 1); err == nil {
+	if _, err := NewTailCache(fullTailBytes - 1); err == nil {
 		t.Error("NewTailCache below one entry succeeded")
 	}
 	if _, err := NewSnapshotCache(snapshotBaseBytes - 1); err == nil {

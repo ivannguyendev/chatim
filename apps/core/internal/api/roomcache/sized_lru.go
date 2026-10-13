@@ -30,10 +30,10 @@ func (c *sizedLRU[K, V]) get(k K) (V, bool) {
 }
 
 func (c *sizedLRU[K, V]) put(k K, v V, size int) bool {
-	c.remove(k)
 	if size > c.limit {
 		return false
 	}
+	c.remove(k)
 	c.items[k] = c.order.PushFront(&sizedEntry[K, V]{key: k, val: v, size: size})
 	c.used += size
 	for c.used > c.limit {
