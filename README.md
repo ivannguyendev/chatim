@@ -11,7 +11,7 @@ Monorepo Go, mỗi app một container.
 | App | Vai trò | Phase |
 |---|---|---|
 | `core` | Room, member, message, tương tác; cấp seq; lưu MongoDB; phát event best-effort lên NATS JetStream (id event tự nhiên, thứ tự từng room); sửa/xoá tin là fact `message_edits` + projection `messages`, ẩn/clear theo người đọc; tương tác với tin chung `message_interactions` (reaction một emoji mỗi user, bookmark, trả lời có trích ở timeline chính), mention theo đích trong `mentions`, forward; số trên tin (`rx` theo emoji, `rc` số trả lời) `$inc` + phiếu hẹn đếm lại; ghim là fact `pin_actions` + projection `rooms.pins`; DM qua `OpenDirectRoom` + sổ `room_dms`, group qua `CreateRoom` có `request_id`; member mỗi (room, user) một doc, lệnh đụng owner trong một transaction, `member_count` `$inc` + phiếu hẹn đếm lại, vị trí đọc; event trên subject theo loại dữ liệu `evt.{t}.{loại}.{rid}.{kind}` với loại `room`, `member` hoặc `message` (RePublish sang `live.{t}.{loại}.{rid}.evt.{kind}`; nghe mọi event của room: `live.{t}.*.{rid}.>`), core không chọn người nhận; reader đọc change stream (`messages`, `rooms`, `message_edits`, `message_interactions`, `pin_actions`, `members`, `hidden`) đẩy record vào work stream, worker ở mọi core chạy effect (event bù, room activity, projection sửa/xoá/ghim, dựng doc trả lời và mention, sửa số trên tin và số member) | 1 |
-| `gateway` | WebSocket (gws) cho client SDK; nhận event từ NATS và đẩy realtime | 1 |
+| `websocket` | WebSocket (gws) cho client SDK; nhận event từ NATS và đẩy realtime | 1 |
 | `api`, `events`, `push`, `auth`, `migrator` | Public API, event stream cho app ngoài, push notification, xác thực, migrate/dual-write từ hệ thống cũ | Sau |
 
 Hạ tầng: MongoDB (replica set), Redis, NATS JetStream.

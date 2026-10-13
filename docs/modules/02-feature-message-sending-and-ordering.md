@@ -25,7 +25,7 @@ Pipeline gửi tin được tối ưu hoá theo mô hình gom nhóm (Batching) v
 sequenceDiagram
     autonumber
     participant Client as Client SDK
-    participant GW as Gateway
+    participant GW as App websocket
     participant Core as Core (api/grpcsrv)
     participant Actor as Room Actor (send/actor)
     participant Dedupe as Redis Dedupe (EVALSHA)

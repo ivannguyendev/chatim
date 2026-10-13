@@ -6,7 +6,7 @@ Tài liệu này vẽ components ở tầng vĩ mô và bố cục package bên 
 
 ## 1. Tổng quát (macro)
 
-`core` giữ mọi lệnh ghi và tính nhất quán; NATS JetStream là event bus cho các app khác. Gateway và các app xanh lá chưa xây.
+`core` giữ mọi lệnh ghi và tính nhất quán; NATS JetStream là event bus cho các app khác. App websocket và các app xanh lá chưa xây.
 
 ```mermaid
 flowchart TD
@@ -17,7 +17,7 @@ flowchart TD
     AppPush["Push App (APNs/FCM)"]
 
     subgraph Platform["chatim"]
-        AppGateway["Gateway (WebSocket)"]
+        AppWebsocket["App websocket"]
         AppCore["Core (logic + lưu trữ)"]
         NATS[("NATS JetStream<br/>CHATIM_EVT, CHATIM_WORK")]
         RedisState[("Redis state<br/>slot lease")]
@@ -26,14 +26,14 @@ flowchart TD
     end
 
     Client -. "1. lấy JWT" .-> AppAuth
-    Client -- "2. WebSocket" --> AppGateway
-    AppGateway -- "3. gRPC unary" --> AppCore
+    Client -- "2. WebSocket" --> AppWebsocket
+    AppWebsocket -- "3. gRPC unary" --> AppCore
     AppCore -- "4. ghi fact/state" --> MongoDB
     AppCore -- "5. lease slot" --> RedisState
     AppCore -- "6. chống trùng, ack mark" --> RedisDedupe
     AppCore -- "7. publish event" --> NATS
     MongoDB -. "change feed" .-> AppCore
-    NATS -- "live.{t}.*.{rid}.>" --> AppGateway
+    NATS -- "live.{t}.*.{rid}.>" --> AppWebsocket
     NATS -. "subscribe" .-> AppPush
     NATS -. "subscribe" .-> AppEvents
 
@@ -42,7 +42,7 @@ flowchart TD
     classDef future fill:#047857,stroke:#fff,color:#fff,stroke-width:2px,stroke-dasharray: 5 5;
     class AppCore core;
     class NATS,MongoDB,RedisState,RedisDedupe infra;
-    class AppGateway,AppAuth,AppEvents,AppPush future;
+    class AppWebsocket,AppAuth,AppEvents,AppPush future;
 ```
 
 ## 2. Bố cục package `apps/core`
@@ -129,7 +129,7 @@ M2c (đã xây): trả lời, forward, mention đi qua `api/grpcsrv` + `send` (k
 
 ```mermaid
 sequenceDiagram
-    participant GW as Gateway / corecli
+    participant GW as App websocket / corecli
     participant Srv as api/grpcsrv
     participant A as send/actor (room)
     participant B as send/dedupe.Batcher
@@ -237,6 +237,6 @@ sequenceDiagram
 
 Ownership chỉ mua batching, thứ tự và cache. Đúng đắn đến từ `_id` unique làm CAS, nên hai chủ cùng lúc không làm mất hay nhân đôi tin. Effect worker chỉ fetch partition `n` khi `Owns(n)`; reader chạy khi `Owns(0)`.
 
-## 7. Gateway (chưa xây)
+## 7. App websocket (chưa xây)
 
-Module dự kiến: `ws` (gws), `authn` (JWT theo JWKS tenant), `session`, `interest` (subscribe `live.{t}.*.{rid}.>`), `fanout` (encode một lần, gửi nhiều). Gateway gọi core qua gRPC và nhận event từ NATS; không đọc Mongo.
+Module dự kiến: `ws` (gws), `authn` (JWT theo JWKS tenant), `session`, `interest` (subscribe `live.{t}.*.{rid}.>`), `fanout` (encode một lần, gửi nhiều). App websocket gọi core qua gRPC và nhận event từ NATS; không đọc Mongo.

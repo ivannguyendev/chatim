@@ -10,18 +10,19 @@ chatim là hạ tầng chat dùng chung (CPaaS nội bộ), multi-tenant về m�
 
 **Phase 1**
 - `core`: room, member, message, tương tác, cấp seq, lưu trữ, phát event.
-- `gateway`: giữ kết nối WebSocket, đẩy event realtime.
+- `websocket`: giữ kết nối WebSocket, đẩy event realtime.
 - Room: DM, group ≤5K member, channel ~200K subscriber (chỉ admin post).
 - Tin: gửi, sửa (có lịch sử), xoá cho mọi người / phía tôi, trả lời, chuyển tiếp.
 - Tương tác: reaction, vị trí đọc + unread, typing, presence, thread, mention, ghim, bookmark, đánh dấu chưa đọc.
 - Event stream nội bộ cho các app khác.
+- Ranh giới (owner chốt 2026-10-12): core cung cấp API dữ liệu (gửi, đọc, sửa, xoá, lịch sử, reaction, vị trí đọc…) và phát event. Sửa 2026-10-13: client lấy danh sách hội thoại thẳng từ core; core xếp danh sách theo tin mới nhất và đếm unread lúc đọc (M3, D120–D123). Badge `@`, sync token, đa thiết bị: owner xác định lại nơi làm (Mention App, đổi tên từ "Inbox/sync"). Plan mỗi milestone mở đầu bằng bảng scope và ranh giới.
 
 **Không làm ở Phase 1:** app auth / api / events / push / migrator, API import trong core, media, search, E2EE, webhook, voice/video, admin UI.
 
 **Quy mô:** ~100K kết nối đồng thời, 5–10K tin/s đỉnh, 5–20 tỷ tin sau 2 năm.
 
 ```
- Client SDK ──WebSocket──► gateway ──gRPC (theo slot)──► core ──insertMany w:majority──► MongoDB rs (3)
+ Client SDK ──WebSocket──► websocket ──gRPC (theo slot)──► core ──insertMany w:majority──► MongoDB rs (3)
                               ▲                            │                                  │
                               │                            ├─publish──► JetStream CHATIM_EVT ──RePublish──► live.*
                               └──── subscribe live.* ◄─────┘                                  │
@@ -37,7 +38,7 @@ chatim là hạ tầng chat dùng chung (CPaaS nội bộ), multi-tenant về m�
 |---|---|
 | A1 | p99: ack gửi tin ≤30ms; tới người nhận online ≤100ms; trang 50 tin ở bất kỳ vị trí ≤20ms |
 | A2 | Đã ack = đã ghi `w:majority`. Thứ tự trong timeline giống nhau cho mọi người. Event best-effort, id tự nhiên để người nhận bỏ trùng; reconcile bù phần mất |
-| A3 | 99.95%, không điểm chết đơn lẻ: core ≥2, gateway 2–3, Mongo rs 3 member (chưa shard), NATS 3, Redis Sentinel |
+| A3 | 99.95%, không điểm chết đơn lẻ: core ≥2, websocket 2–3, Mongo rs 3 member (chưa shard), NATS 3, Redis Sentinel |
 | A4 | Tin và lịch sử sửa giữ mãi; `CHATIM_EVT` giữ 7 ngày |
 | A5 | JWT do app auth cấp; mTLS nội bộ; không E2EE |
 | A6 | Text ≤16KB, meta ≤8KB, ≤50 mention, ≤10 tham chiếu đính kèm |
@@ -62,7 +63,8 @@ Chưa có số thật; mọi ước lượng dưới đây dùng các giả đ�
 
 | Giả định | Giá trị | Dùng ở |
 |---|---|---|
-| Số room mỗi user | 50 (10 room có tin mới lúc reconnect) | §9 tải reconnect storm |
+| Số room mỗi user | Owner 2026-10-12: 99% user dưới 200 room; 1% còn lại là user quan trọng ở rất nhiều room, phải nhanh và đủ thông tin, nên tính theo nhóm này (mốc ~5.000, không phải giới hạn). Còn giả định 10 room có tin mới lúc reconnect | §9 tải reconnect storm, API đọc lô của M3 |
+| Kết nối | Owner 2026-10-12: ~100K đồng thời, kết nối lại trải ≥ 1 phút | §9.3, websocket |
 | Tỉ lệ tin bị sửa/xoá | 1–3% | §6 ngân sách lệnh sửa, cỡ `message_edits` |
 | Số room active cùng lúc | 3–5K | §8 room activity |
 | Số member doc | ~500M (10M user × 50 room) | §9 index "room của user" trên `members` |
@@ -73,7 +75,7 @@ Chưa có số thật; mọi ước lượng dưới đây dùng các giả đ�
 |---|---|
 | P1 | Core nào cũng xử lý đúng mọi room. Quyền sở hữu slot chỉ để gom batch, giữ thứ tự, dùng cache. Đúng đắn đến từ khoá unique của DB làm CAS |
 | P2 | DB là nguồn sự thật. Mỗi command có **một fact chính** làm điểm tuần tự hoá, ghi bằng một lệnh atomic trên một doc; mọi thứ khác là effect idempotent. Không transaction nhiều doc, trừ **một ngoại lệ**: lệnh đụng owner (D100, §5.1). **Cấm join không giới hạn**; tra cứu điểm có giới hạn (≤ vài trăm khoá) được phép |
-| P3 | Mỗi thay đổi data phát event theo **chính sách của lớp dữ liệu** (§4) và được **bảo đảm phát** (worker phát lại trạng thái hiện tại); ephemeral không lưu. Subject theo loại dữ liệu `room`/`member`/`message` (D108). Core không chọn người nhận: chuyển tới user nào là việc của app phân phối (thiết kế sau), gateway, push |
+| P3 | Mỗi thay đổi data phát event theo **chính sách của lớp dữ liệu** (§4) và được **bảo đảm phát** (worker phát lại trạng thái hiện tại); ephemeral không lưu. Subject theo loại dữ liệu `room`/`member`/`message` (D108). Core không chọn người nhận: chuyển tới user nào là việc của app phân phối (thiết kế sau), websocket, push |
 | P4 | Mọi thứ suy ra từ fact là **effect**. Effect hội tụ (event, projection, counter, dọn dẹp) chạy lại an toàn; effect không hội tụ (push, tin hệ thống, webhook) phải idempotent ở consumer theo event id. Fast path chạy ngay (best-effort); reconciler là đường bảo đảm |
 | P5 | Số đếm theo target (`member_count`, số trên tin `rx`/`rc`) = `$inc` theo số doc thực sự đổi ngay trong lệnh, bọc phiếu hẹn sinh tồn; sửa = đếm lại tuyệt đối + CAS theo version khi phiếu bật (§7, §7.1; D102, D111, D113 thay recount mỗi lần của D67/D90). Không `$inc` trần không có phiếu. Giá trị theo người đọc (unread) tính lúc đọc, không lưu |
 | P6 | Id event là khoá tự nhiên + version; receiver áp "version cao thắng"; không có số liên tục toàn room |
@@ -93,7 +95,7 @@ Mỗi tính năng khai báo nó thuộc lớp nào. Lớp quyết định đúng
 | Giá trị theo người đọc | unread, cờ đã đọc của mention, view ẩn/đã xoá | Không lưu kết quả; tính lúc đọc từ fact thưa (`hidden`), mốc `members.cleared_at` (D97) và lúc gửi của tin tại `read_seq` (D115) | Unread: không. Ẩn tin, xoá lịch sử: `message_hidden`, `history_cleared` trên subject `member`, worker phát lại (D109) | Worker `hidden_event`, `history_cleared_event` |
 | Vị trí đọc | `members.read_seq` + `read_ver` | Toán tử thường trên doc của người đọc, không đụng `ver`: `MarkRead` nâng khi `read_seq < seq`, `MarkUnread` hạ khi `read_seq > to`; mỗi lần đổi `read_ver + 1` (D105) | Một `read_updated` `{room}-rd-{user}-v{read_ver}` mỗi lần đổi, subject `member`, không coalesce, không ack mark | Feed lấy update có `read_ver` (kind `ReadChanged`); worker `read_event` phát lại vị trí hiện tại |
 | Sổ nhận chỗ | `room_dms`: một room DM mỗi cặp user (D117) | Upsert `$setOnInsert` theo `_id` (khoá unique duy nhất, không unique index phụ); người tới sau nhận lại chỗ đã có; bước "đảm bảo" (room + member) sau đó chạy lại được | Không event riêng; event thuộc room/member được tạo (`room_created`, `member_added`, `member_count_changed`) | Lần mở sau làm nốt bước "đảm bảo"; số member qua phiếu hẹn (D111) |
-| Ephemeral | typing, presence | Không lưu; gateway ↔ NATS core, không qua core | Subject `live.*.eph.*` | Không |
+| Ephemeral | typing, presence | Không lưu; websocket ↔ NATS core, không qua core | Subject `live.*.eph.*` | Không |
 
 Mỗi tính năng còn khai báo **ngân sách khuếch đại**: số write, read, lookup, event cho một thao tác ở nhóm 5K và channel 200K. Ngân sách vượt thì phải đổi lớp hoặc thêm chính sách coalesce trước khi viết plan.
 
@@ -178,7 +180,7 @@ Update trên `rooms` không vào change feed (feed chỉ lấy insert của `roo
 | `cleared_at` | mốc xoá lịch sử phía tôi (ms), `$max`; tin có `ts ≤ cleared_at` bị ẩn với người này (D97) |
 | `read_seq`, `read_ver` | vị trí đọc và số lần nó đổi (D105) |
 
-`state`, `priority`, `ver`, `read_seq`, `read_ver` luôn ghi (filter `$lt`/`$gt` không khớp field thiếu). Không quét khoảng `_id` của `members` (Mongo so BinData theo độ dài trước, nên khoảng byte không phải khoảng tiền tố room): theo room đi index `room_id`, theo user `_id` bằng hoặc `$in`. Index đầu dùng chung cho đếm member active, tìm owner, chọn kế nhiệm; index thứ hai là "room của user" `{tenant, user_id, state, room_id, joined_at, cleared_at, read_seq}` (ba field cuối từ M2c để `RoomsOf` của `ListMentions` đọc thẳng từ index; chuẩn bị M3, gateway).
+`state`, `priority`, `ver`, `read_seq`, `read_ver` luôn ghi (filter `$lt`/`$gt` không khớp field thiếu). Không quét khoảng `_id` của `members` (Mongo so BinData theo độ dài trước, nên khoảng byte không phải khoảng tiền tố room): theo room đi index `room_id`, theo user `_id` bằng hoặc `$in`. Index đầu dùng chung cho đếm member active, tìm owner, chọn kế nhiệm; index thứ hai là "room của user" `{tenant, user_id, state, room_id, joined_at, cleared_at, read_seq}` (ba field cuối từ M2c để `RoomsOf` của `ListMentions` đọc thẳng từ index; chuẩn bị M3, websocket).
 
 **`message_interactions`** (D112, M2c): `message_key`, `room_id`, `tenant`, `kind` (chuỗi `reaction` / `bookmark` / `reply`; byte `kind` trong `_id` là 1 / 2 / 3), `actor_id` (người react / lưu / trả lời), `value`, `previous_value` (emoji hiện tại và trước đó, chỉ reaction), `reply_seq` (chỉ reply), `state` (1 còn, 2 đã gỡ: bỏ react, gỡ lưu, tin trả lời bị xoá), `ver` (số lần doc đổi), `created_at`, `updated_at`. `kind` nằm trong khoá nên change feed biết loại mà không đọc doc (byte lạ = doc hỏng). Doc reply của một tin dài bằng nhau (24 + 1 + 16 byte) nên quét khoảng `_id` ra đúng danh sách trả lời theo seq; cận quét cũng 41 byte (`keys.InteractionReplyRange`, vì Mongo so BinData theo độ dài trước). Doc reaction/bookmark dài theo user nên đếm/lọc qua index, không quét khoảng `_id`. Ví dụ tin 40: `40│1│hung` (👍, state 1), `40│2│minh`, `40│3│0│57` (actor `lan`), `40│3│0│60` (state 2, tin 60 đã xoá).
 
@@ -217,7 +219,7 @@ Không có đường nâng cấp tại chỗ cho đổi tên field và khoá `me
 3. Nhận/nhả slot về `ceil(1024 / số core sống)`.
 4. Publish `chatim:slots:changed`.
 
-`Owns()` chỉ đúng khi lease mới hơn `min(LeaseTTL, HeartbeatTTL) − Tick`, tính từ đầu tick (D24), nên hai core cùng tưởng giữ một slot không quá ~1 tick. Hook nhận cả batch slot, dùng chung `HookTimeout` mỗi `Step` (D26); `BeforeRelease`, `AfterLose`, `AfterClaim` gọi `Router.EvictSlots` (D27, D49). Slot manager dùng Redis client riêng (D28). Client dùng `slotmap.Resolver` để map slot → địa chỉ core; gateway và `tools/internal/route` định tuyến mọi lệnh của một room về core chủ slot.
+`Owns()` chỉ đúng khi lease mới hơn `min(LeaseTTL, HeartbeatTTL) − Tick`, tính từ đầu tick (D24), nên hai core cùng tưởng giữ một slot không quá ~1 tick. Hook nhận cả batch slot, dùng chung `HookTimeout` mỗi `Step` (D26); `BeforeRelease`, `AfterLose`, `AfterClaim` gọi `Router.EvictSlots` (D27, D49). Slot manager dùng Redis client riêng (D28). Client dùng `slotmap.Resolver` để map slot → địa chỉ core; websocket và `tools/internal/route` định tuyến mọi lệnh của một room về core chủ slot.
 
 **Khi va doc của core khác** (D77, D119) [Đã xây]: actor không gán lại seq. Lần đầu thấy doc của core khác ở seq của mình (lúc chuyển slot): entry đó và mọi entry chưa ghi xong của nhóm lỗi `ErrRetryLater` (`UNAVAILABLE`), entry đã ghi vẫn được ack; actor nhường room **một lần** qua `requestRetire` → `a.retire` (cùng cơ chế với slot hook), nên lệnh sau đi về chủ thật và nạp lại từ DB; client gửi lại cùng cid. Không backoff, không fencing token; `room_yields_total` chỉ đếm lần nhường thật (alert `ChatimSeqContention`). Entry chưa rõ kết quả trong cùng nhóm giữ khoá pending `p:{core}` như §6.2 bước 5.
 
@@ -439,7 +441,9 @@ Lệnh ghi cũng gọi cùng permission hook.
 
 **Đã xây (M2b.2, D86, D87):** `access.Checker` tách `Admit` (room → tenant → membership, không hỏi policy) và `Allow` (hỏi policy); `Authorize` = hai bước. `Request.Author` là tác giả tin đích, `Request.Kind` là loại tin đích (rỗng/0 với action theo room). Action trên một tin (sửa, xoá, ẩn, `GetEditHistory`) chạy `Admit` → `Find` tin → `Allow`; `clear_history`, `read_history`, `send_message` dùng `Authorize`/actor như cũ. `access.DefaultPolicy` là mặc định của `NewChecker` và actor: `edit_message`/`delete_message` trên loại tin nằm trong `LockedKinds` → `PERMISSION_DENIED` cho mọi người, kể cả tác giả (D87); khi `Author ≠ User` → `PERMISSION_DENIED`; mọi action khác cho member. `LockedKinds` đọc từ `MESSAGE_LOCKED_KINDS` (tên loại cách nhau dấu phẩy, phân biệt hoa thường, mặc định rỗng; tên lạ → lỗi boot; hiện chỉ có `text`, loại mới thêm một dòng vào `domain.kindNames`) và chỉ checker của `mutate` nhận. Core không có luật riêng cho tác giả, owner hay loại tin ngoài policy.
 
-### 9.3 Room list, unread, sync [Chưa xây]
+### 9.3 Room list, unread, sync [Chưa xây — room list và unread vào core ở M3]
+
+Owner 2026-10-13: client lấy danh sách hội thoại thẳng từ core. M3 xây `ListMyRooms` (xếp theo `max(last_message_at, joined_at)` lúc đọc, mỗi room kèm tin cuối thật và unread R17) và `GetRooms(ids)` (cùng dạng mục); thiết kế trong [tóm tắt M3](../plans/2026-10-12-m3-core-query-apis-summary.md), D120–D138 ở §17 (owner duyệt 2026-10-13). Các ý dưới đây (D72–D74) là thiết kế cũ: unread theo R17/D73 giữ, room-tail cache để dự phòng nếu đo tải kết nối lại vượt ngân sách, sync token chưa làm.
 
 - **Phòng của tôi:** đọc index `{tenant, user_id, state, room_id}` của `members` (D98, thay `user_rooms` của D72).
 - **"Có tin mới"** lấy `last_seq` từ `messages` (reverse scan limit 1, nguồn thật), không từ `rooms.last_seq`. Lý do: event của tin m publish trước lúc client subscribe lại, còn projection coalesce chưa có m, nên client sẽ không bao giờ thấy m cho tới tin sau. Secondary lag: đọc primary, hoặc "pass 2" sau ~3s cho room có `last_msg_at` trong 10s gần nhất.
@@ -448,15 +452,17 @@ Lệnh ghi cũng gọi cùng permission hook.
 - **Sync token** (D74): map `room → last_seq client thực sự có` (50 room ≈ 1KB), có thể kèm change version. Server so với `last_seq` thật, trả room có thay đổi. Token mất, quá cũ hoặc quá lớn → full sync (`ListMyRooms` phân trang). Không dùng token thời gian: event best-effort làm "đã thấy tới T" sai.
 - **Reconnect storm:** 100K user/60s × 50 room ≈ 83K seek + 16,7K tail fill/s (giả định §2.3). SDK reconnect có jitter (trải 60s ra ~5 phút). Đo ở PoC prod-like.
 
-## 10. Gateway realtime [Chưa xây]
+## 10. App websocket realtime [Chưa xây]
+
+Đổi tên từ `gateway` (2026-10-12): app giữ kết nối WebSocket, đẩy event realtime và chuyển lệnh chat tới core; không phải cửa vào duy nhất (API hỏi–đáp của Mention App đi HTTPS → LB → Mention App). Gom `MarkRead`: SDK gửi vị trí mới nhất tối đa ~2s một lần và khi rời room; app websocket chặn thêm theo (kết nối, room), giữ seq lớn nhất, rồi gọi thẳng core.
 
 - gws, 1 goroutine/connection, tắt nén, frame ≤64KB, ping 25s, 60s không phản hồi thì đóng. JWT trong subprotocol hoặc frame đầu (≤5s), kiểm bằng JWKS có cache.
 - Protobuf `ClientFrame{id, oneof send|edit|delete|react|read|typing|history|sync|sub_presence…}`, `ServerFrame{reply|event|heartbeat}`; subprotocol JSON để debug.
 - Hàng đợi gửi mỗi connection có giới hạn (256 frame / 1MB): đầy → bỏ typing/presence trước → vẫn đầy thì đóng `4008 slow consumer`.
 - Fanout theo interest: `roomIndex` room→{conn}, một sub NATS mỗi room (đếm tham chiếu); client kết nối → lấy room từ index "room của user" trên `members` → sub `live.{t}.*.{rid}.>` (mọi loại dữ liệu của room: `room`, `member`, `message`, D108); Broadcaster encode một lần.
-- Core không có subject theo user và không chọn người nhận (D104): event `member`/`read_updated`/`message_hidden`/`history_cleared` mang `user` trong payload; chuyển tới user nào (thiết bị của người đó, người khác thấy "đã xem", push) do app phân phối thiết kế sau quyết định, trước khi gateway đẩy. `member_removed` → unsubscribe ngay; khoảng rò bằng độ trễ thu hồi.
+- Core không có subject theo user và không chọn người nhận (D104): event `member`/`read_updated`/`message_hidden`/`history_cleared` mang `user` trong payload; chuyển tới user nào (thiết bị của người đó, người khác thấy "đã xem", push) do app phân phối thiết kế sau quyết định, trước khi websocket đẩy. `member_removed` → unsubscribe ngay; khoảng rò bằng độ trễ thu hồi.
 - Typing/presence ephemeral: `live.{t}.room.{rid}.eph.typing`, không qua core, không vào stream; typing 1 lần/3s, không có trong channel; presence đếm connection trên Redis state.
-- Gateway không sắp lại thứ tự; client sắp theo seq, bỏ trùng theo event id.
+- App websocket không sắp lại thứ tự; client sắp theo seq, bỏ trùng theo event id.
 - Rate limit ~10 tin/s/user (burst 20) + quota theo tenant; giới hạn handshake/s; client backoff + jitter.
 
 ## 11. Event stream
@@ -571,7 +577,7 @@ Plan execute M2b.0–M2b.4 (nay ở `.claude/plans/`, local) giữ đường d�
 | Core chết giữa ghi member và `$inc member_count` | Phiếu hẹn bật sau `MEMBER_COUNT_CHECK_DELAY`, `member_count_repair` đếm lại (§7.1); transaction owner chết giữa chừng thì bị huỷ, không ghi gì |
 | NATS lỗi lúc hẹn phiếu | Lệnh thêm/xoá/rời trả `UNAVAILABLE`, chưa ghi gì; client gọi lại |
 | Reader chậm/ngừng quá cửa sổ oplog | Alert RC5; `/app resync` (§8.3, D81) |
-| Gateway chết / reconnect hàng loạt | Client backoff + jitter; sync token; room-tail cache |
+| App websocket chết / reconnect hàng loạt | Client backoff + jitter; sync token; room-tail cache |
 | Room nóng | Mailbox có giới hạn, coalesce counter, rate limit post |
 
 ## 15. Kiểm thử
@@ -596,6 +602,8 @@ Plan execute M2b.0–M2b.4 (nay ở `.claude/plans/`, local) giữ đường d�
 | Soft ownership không fencing | Thấp | CAS; actor tự rút; fencing là phương án dự phòng nếu chaos fail |
 
 ## 17. Decision Log
+
+`gateway` trong các quyết định cũ là app `websocket` (đổi tên 2026-10-12; app chưa xây). Từ 2026-10-12 Mention App có đường riêng HTTPS → LB → Mention App, `MarkRead` ở lại core (roadmap).
 
 Quyết định D1–D60 giữ id cũ; D96–D110 (M2b.4) sửa D49 (subject), D67 (`member_count`), D72 (`user_rooms`, `cleared_before_seq`), D75 (`p`), D85 (ẩn/clear có event, mốc thời gian); chi tiết và phương án bị loại ở [thiết kế Phase 1 (archive)](../archive/designs/260930-chat-core-gateway-design.md#14-decision-log). D53–D57 (nháp M2b) bị bỏ, thay bởi D61–D78. D112–D119 (M2c, 2026-10-10) thay phần lưu của D88, toàn bộ D90, phần gán lại seq của D31/D77 và phần thử lại của D92.
 
@@ -624,7 +632,7 @@ Quyết định D1–D60 giữ id cũ; D96–D110 (M2b.4) sửa D49 (subject), D
 
 **Đã thay:** D19 (bởi D47), D36–D38 và phần publisher của D39 (bởi D49).
 
-### 17.2 Mới (2026-10-05 → 2026-10-11)
+### 17.2 Mới (2026-10-05 → 2026-10-13)
 
 | # | Quyết định | Phương án bị loại | Lý do |
 |---|---|---|---|
@@ -687,3 +695,22 @@ Quyết định D1–D60 giữ id cũ; D96–D110 (M2b.4) sửa D49 (subject), D
 | D117 | (M2c) `OpenDirectRoom(other_user)` (action `open_direct`; nhắn chính mình → `INVALID_ARGUMENT`): sổ `room_dms` `_id = tenant│user nhỏ│user lớn` (`│` U+2502), `{room_id, created_at}`; claim = upsert `$setOnInsert room_id` (id 63-bit ngẫu nhiên mới), Mongo bảo đảm `_id` duy nhất nên hai người mở cùng lúc ra một room; room đã có 2 member active → `{room, created false}`; thiếu → bước "đảm bảo" `ensureRoom` (dùng chung với `CreateRoom`, chạy lại được): hẹn phiếu số member → `InsertRoom` (`rooms.dm_key`, không unique; `member_count 0`; trùng đúng room của mình → đi tiếp; id thuộc room khác → `Repoint` sổ sang id mới bằng CAS, `UNAVAILABLE`) → 2 member role `member`, `request_id {room}-created`, `read_ver 1` → `$inc member_count` → gỡ phiếu → `room_created` (số đã chốt), `member_added` ×2, `member_count_changed`. Core chết giữa chừng thì lần mở sau làm nốt. DM không có owner. Room id giữ 63-bit ngẫu nhiên; link dễ nhớ do app làm bằng cặp username. Bỏ index unique partial `{tenant, dm_key}` (chưa từng xây). Đóng R4 phần DM | Id DM tính từ cặp user (băm hoặc ghép chuỗi); ObjectId/ULID; unique index `{tenant, dm_key}`; tạo DM ngầm khi gửi tin đầu | Owner chốt 2026-10-10: băm cặp user có thể trùng (lộ DM), ghép chuỗi không vừa khoá 8 byte; unique index phụ không giữ được khi shard (§5.1), `_id` của sổ thì giữ được; gửi tin cần room id trước để định tuyến và chống trùng. Người lập room có `read_ver 1` như `AddMembers` (D99) |
 | D118 | (M2c) `CreateRoom` chỉ cho group/channel (loại DM → `INVALID_ARGUMENT`); `request_id` bắt buộc, dedupe `chatim:req:create:{tenant}:{user}:{request_id}` (Redis dedupe, 15 phút, `dedupe.Requests`, shard FNV(tenant:user)): đang chạy → `UNAVAILABLE`; mới → bốc room id ngẫu nhiên **một lần**, trùng → `UNAVAILABLE` (bỏ `createAttempts` ≤3) → `ensureRoom` (D117), khoá được **chốt ngay sau `InsertRoom`** (room id trong `Record.Seq`; `Cancel` chỉ khi chưa insert gì); đã xong → đọc room và làm nốt `ensureRoom` cho người lập chưa có doc member (người đã bị xoá giữ tombstone) rồi trả room. Đóng R4 | Bốc lại id ≤3 (thử lại nội bộ); không chống gửi lại; đổi room id sang ObjectId/ULID; chốt khoá sau khi xong hết | Luật không thử lại nội bộ; trùng 63-bit ngẫu nhiên rất hiếm, client gọi lại; gửi lại `CreateRoom` không tạo group trùng. Chốt sớm (review Task 13): chốt muộn thì lỗi giữa chừng xoá khoá, gửi lại tạo room thứ hai, room đầu mồ côi không owner. Còn khe hẹp: core chết giữa `InsertRoom` và lệnh chốt thì gửi lại sau `CID_PENDING_TTL` tạo room mới (room đầu 0 member). Giới hạn như D99: chỉ 15 phút và khi Redis còn khoá |
 | D119 | (M2c) Không thử lại nội bộ áp nốt (luật owner 2026-10-07): ghim một lượt: append trùng `pin_ver` với fact khác → `ErrRetryLater` ngay (bỏ `pinTries` 3); `pinproj.Project` một lượt fold + CAS (bỏ `MaxTries` 5), trượt → `ErrContended`: fast path trả fold cục bộ, worker `pin_projection` Nak (R1; phần counter của R1 hết nhờ D113). Actor va doc của core khác khi cấp seq → entry đó và mọi entry chưa ghi xong của nhóm `UNAVAILABLE` (entry đã ghi vẫn ack), actor nhường room một lần qua `requestRetire`/`a.retire`, không gán lại seq, không backoff (R5; thay phần gán lại ≤3 của D31/D77; không fencing của D77 giữ); `room_yields_total` chỉ đếm lần nhường thật. Owner 2026-10-10 (luật tuyệt đối: code của mình không thử lại, kể cả thao tác idempotent): `ErrNotSent` → `UNAVAILABLE` ngay + Abort (bỏ xếp lại ≤3); `Unknown` không thấy doc → `UNAVAILABLE` ngay, không gửi lại cùng seq (bỏ ≤3 của D31); `Duplicate`/`Unknown` chỉ một `Find`, không đọc lại có backoff; mỗi `Find` đối chiếu có hạn 1s riêng tách khỏi context nhóm; entry chưa rõ giữ khoá pending tới khi doc hiện hoặc `CID_PENDING_TTL` hết, actor nhớ nó theo (người gửi, cid) và client gửi lại thì `Find` đúng seq một lần (của mình → seq gốc + Commit; của người khác → Abort; không thấy → `UNAVAILABLE`), actor mất bộ nhớ thì `dirty` nạp lại trang seed (§6.2 bước 5); reader reconcile publish lỗi → kết thúc term, term sau đọc lại từ vị trí đã xác nhận, đếm `reconcile_publish_failures_total`, alert `ChatimReconcilePublishFailing` (§8.2). Client gửi lại cùng cid. Thay phần thử lại của D92 | Giữ vòng gán lại seq của actor làm ngoại lệ duy nhất của luật | Owner chốt khi duyệt tóm tắt M2c (2026-10-10): một luật cho mọi lệnh, lỗi rõ ràng, client gọi lại; va seq chỉ xảy ra lúc chuyển slot (hiếm), `_id` unique giữ đúng đắn (P1). Đo: competing writers ~250 lần client gửi lại / 480 tin (trước là thử lại nội bộ); slot R5 `-count=20` xanh |
+| D120 | (M3) Client lấy danh sách hội thoại thẳng từ core; mỗi màn hình một lần gọi | Qua Mention App; ghép nhiều API | Owner 2026-10-13 |
+| D121 | (M3) `ListMyRooms` xếp lúc đọc (ghim trước, rồi mốc xếp `max(last_message_at, joined_at)`), phân trang bằng con trỏ theo khoá xếp; ảnh chụp danh sách của user giữ 30s trong RAM core để trang sau không xếp lại | Trả `order` mọi room cho client; offset; xếp lại mỗi trang không ảnh chụp; lưu thứ tự theo user | Owner 2026-10-13 không muốn gửi `order` (~80KB ở 5.000 room); mốc xếp chỉ tăng nên con trỏ không làm sót room client chưa biết; lưu theo user tốn một ghi mỗi member mỗi tin (200K ở channel) |
+| D122 | (M3) Client áp `msg_created` cho unread, xem trước, thứ tự; chỉ gọi `GetRooms` khi đọc ở thiết bị khác, xoá/ẩn trong phần chưa đọc; mất event thì gọi lại `ListMyRooms` | Gọi `GetRooms` mỗi event | Nhóm 500 người, 5 tin/s = 2.500 lần gọi/s; channel 200K = 200K lần gọi mỗi tin |
+| D123 | (M3) Tin cuối, xem trước và unread tính từ `messages` (qua cache đuôi room) | `rooms.last_seq` làm tin cuối; số lưu sẵn; tin đầy đủ trong mục | D72; P5; tin đầy đủ tới ~200KB mỗi trang |
+| D124 | (M3) Unread R17 dừng ở 100, quét ≤ 300 tin, quá thì `approx` (D73); không đẩy bản đúng sau | Exact tuyệt đối; core đẩy cho từng user | Chặn chi phí; core không chọn người nhận (P3) |
+| D125 | (M3) Xem trước = tin mới nhất còn xem được trong phần đã quét, rút gọn `LastPreview` | Tin cuối kèm placeholder ẩn | Dòng room không hiện "đã ẩn" hay nội dung đã xoá lịch sử |
+| D126 | (M3) Tin hệ thống như tin thường: đẩy room lên đầu, tính unread; `skip_unread` chỉ bỏ tin khỏi unread | Tin hệ thống không đẩy room lên | Owner 2026-10-13 |
+| D127 | (M3) Ghim/tắt tiếng/lưu trữ hội thoại là field trên `members` với `preference_ver`, một `SetRoomPreferences`, event `room_preferences_changed` subject `member` | Collection riêng; ba RPC | Cài đặt của một (room, user) như vị trí đọc (D105): một doc, toán tử thường, không đụng `ver`; một lệnh cho một màn hình cài đặt |
+| D128 | (M3) `GetHistory` neo `AROUND(seq)` | Hai lần gọi trước/sau | Mở room tại chỗ chưa đọc và nhảy tới tin là một lần gọi |
+| D129 | (M3) Emoji/bookmark của tôi chỉ trên `GetHistory`, `GetMessages`, `GetReplies` | Trên mọi API trả tin | Các màn hình khác không hiện |
+| D130 | (M3) `reply_threads` (projection) ghi mỗi lần xử lý phiếu trả lời, update pipeline `max` | Chỉ ghi khi doc reply vừa tạo; quét doc reply | Worker chết giữa hai bước không làm mất thread; tin nóng 10K trả lời không làm trang đọc 10K doc |
+| D131 | (M3) Index reaction thêm `updated_at, actor_id`; mới nhất trước | Sắp theo user id | Chi phí như nhau, người xem thường muốn người mới nhất |
+| D132 | (M3) Tin `system` không kiểm membership, sender do caller chọn, action `send_system_message` | Bắt sender là member | SysMsg gửi được "X đã rời nhóm" |
+| D133 | (M3) `UpdateRoom`: `info_ver` CAS một lượt, owner/admin, field `optional`; feed lấy update `rooms` có `info_ver` | Fact `room_changes` riêng | Một doc một version như member (D98) |
+| D134 | (M3) `ListMembers` owner → admin → member trong một lần gọi | Sắp theo chữ cái của role | Role lưu chuỗi; đọc ba khoảng của index sẵn có |
+| D135 | (M3) Index "room của user" thêm `pinned_at, archived_at` | Đọc đủ doc `members` mọi room ở đường app | Đường app đọc phủ index cả 5.000 room |
+| D136 | (M3) Hai đường theo `ROOM_LIST_JOIN_MAX` (2.000): join `members → rooms` trong một aggregate, hoặc đọc từng bước rồi xếp ở core; chọn bằng `countDocuments` phủ index có `limit`, cache 60s theo user | Một đường; bộ đếm số room mỗi user; chạy join có chặn `$limit` rồi bỏ khi vượt | Owner chọn hai đường 2026-10-13 (join đắt hơn khi `members` đã shard và user nhiều room); bộ đếm theo user cần `$inc` + phiếu hẹn ở mọi lệnh member; chạy join rồi bỏ làm user lớn tốn cả hai đường |
+| D137 | (M3) Dữ liệu riêng người đọc đọc tươi; dữ liệu chung của room (thông tin, đuôi ~300 tin) qua cache RAM core, kiểm bằng `last_seq`/`last_edit_at` đọc trong cùng lần, xoá thông tin room theo `room_updated`/`member_count_changed` + TTL 60s | Gộp hết vào một aggregate (cả `$lookup` vào `messages`); cache theo user; Redis chung | Owner 2026-10-13: tận dụng cache, không cần một lần gọi; `messages` là collection lớn nhất, luật shard cấm join vào; cache theo user không dùng chung được giữa 500 người của một nhóm; RAM đủ (≈ 140MB cho 10K room nóng) và không thêm hạ tầng |
+| D138 | (M3) `rooms.last_edit_at` (`$max` bởi `room_activity` trên phiếu `EditInserted`) | Dùng `last_change_at` | `last_change_at` đổi theo cả reaction, ghim, member: cache đuôi sẽ bị quét lại liên tục |
