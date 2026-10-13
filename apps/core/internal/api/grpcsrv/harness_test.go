@@ -88,7 +88,7 @@ func newRig(t *testing.T, o options) *rig {
 		Sender: o.sender, Rooms: rg.rooms, Pages: o.pageReader(rg.msgs), NewID: o.newID, Now: o.now, Policy: o.policy, Events: o.events,
 		Mutator: newMutator(t, rg, o), Edits: rg.edits, Hidden: rg.hidden, Bookmarks: rg.reactions, Replies: rg.reactions,
 		Members: membersOf(rg, o), Timers: nopTimers{}, Requests: newRequests(t, o.pending), Directs: rg.directs, Mentions: o.mentionLister(rg.mentions), MemberRooms: rg.rooms,
-		SentTimes: rg.msgs, Mine: rg.reactions, HideRead: o.hide,
+		SentTimes: rg.msgs, Mine: rg.reactions, RoomList: newRoomLister(t, rg), HideRead: o.hide,
 	}, quiet)
 	if err != nil {
 		t.Fatalf("New: %v", err)

@@ -37,10 +37,14 @@ func wireService(d serviceDeps) (*grpcsrv.Service, error) {
 		return nil, err
 	}
 	st := d.store
+	rooms, err := wireRoomList(st)
+	if err != nil {
+		return nil, err
+	}
 	svc, err := grpcsrv.New(grpcsrv.Deps{
 		Sender: d.router, Rooms: st, Pages: st, Events: d.pub, Mutator: mut, Edits: st, Hidden: st.Hidden(), Bookmarks: st.Interactions(),
 		Replies: st.Interactions(), Members: st, Timers: d.timers, Requests: requests, Directs: st.DirectRooms(),
-		Mentions: st.Mentions(), MemberRooms: st, SentTimes: st, Mine: st.Interactions(), HideRead: d.cfg.MentionHideReadTenants,
+		Mentions: st.Mentions(), MemberRooms: st, SentTimes: st, Mine: st.Interactions(), RoomList: rooms, HideRead: d.cfg.MentionHideReadTenants,
 	}, d.log)
 	if err != nil {
 		return nil, fmt.Errorf("wire core service: %w", err)

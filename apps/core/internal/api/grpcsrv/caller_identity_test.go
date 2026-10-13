@@ -18,7 +18,7 @@ func TestNewRequiresEveryDependency(t *testing.T) {
 	full := grpcsrv.Deps{
 		Sender: &fakeSender{}, Rooms: rg.rooms, Pages: rg.msgs, Mutator: newMutator(t, rg, options{}), Edits: rg.edits, Hidden: rg.hidden, Bookmarks: rg.reactions,
 		Replies: rg.reactions, Members: rg.rooms, Timers: nopTimers{}, Requests: newRequests(t, nil), Directs: rg.directs,
-		Mentions: rg.mentions, MemberRooms: rg.rooms, SentTimes: rg.msgs, Mine: rg.reactions,
+		Mentions: rg.mentions, MemberRooms: rg.rooms, SentTimes: rg.msgs, Mine: rg.reactions, RoomList: newRoomLister(t, rg),
 	}
 	for name, drop := range map[string]func(d *grpcsrv.Deps){
 		"no sender":       func(d *grpcsrv.Deps) { d.Sender = nil },
@@ -37,6 +37,7 @@ func TestNewRequiresEveryDependency(t *testing.T) {
 		"no member rooms": func(d *grpcsrv.Deps) { d.MemberRooms = nil },
 		"no sent times":   func(d *grpcsrv.Deps) { d.SentTimes = nil },
 		"no reader marks": func(d *grpcsrv.Deps) { d.Mine = nil },
+		"no room list":    func(d *grpcsrv.Deps) { d.RoomList = nil },
 	} {
 		deps := full
 		drop(&deps)
@@ -143,6 +144,14 @@ func TestEveryRPCChecksCallerIdentityFirst(t *testing.T) {
 		},
 		"MarkUnread": func(ctx context.Context) error {
 			_, err := rg.client.MarkUnread(ctx, &chatimv1.MarkUnreadRequest{RoomId: "42"})
+			return err
+		},
+		"ListMyRooms": func(ctx context.Context) error {
+			_, err := rg.client.ListMyRooms(ctx, &chatimv1.ListMyRoomsRequest{})
+			return err
+		},
+		"GetRooms": func(ctx context.Context) error {
+			_, err := rg.client.GetRooms(ctx, &chatimv1.GetRoomsRequest{RoomIds: []string{"42"}})
 			return err
 		},
 	}
