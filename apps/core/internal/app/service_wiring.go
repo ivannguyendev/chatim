@@ -23,6 +23,7 @@ type serviceDeps struct {
 	cidBatch  *dedupe.Batcher
 	timers    *work.Timers
 	msgTimers *work.Timers
+	rooms     roomCaches
 	cfg       config.Config
 	log       *slog.Logger
 }
@@ -41,7 +42,7 @@ func wireService(d serviceDeps) (*grpcsrv.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	rooms, err := wireRoomList(st)
+	rooms, err := wireRoomList(st, d.rooms, d.cfg.RoomList.JoinMax)
 	if err != nil {
 		return nil, err
 	}

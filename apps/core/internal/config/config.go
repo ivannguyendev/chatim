@@ -70,6 +70,13 @@ type Config struct {
 	Limits                 mutate.Limits
 	MemberCountCheckDelay  time.Duration
 	MessageCountCheckDelay time.Duration
+	RoomList               RoomListConfig
+}
+
+type RoomListConfig struct {
+	JoinMax          int
+	TailCacheBytes   int
+	InfoCacheEntries int
 }
 
 type StopPlan struct {
@@ -124,6 +131,7 @@ func Load() (Config, error) {
 	}
 	c.AdvertiseAddr = p.advertiseAddr(c.CoreID, c.GRPCAddr)
 	p.components(&c)
+	c.RoomList = p.roomList()
 	if err := errors.Join(p.errs...); err != nil {
 		return Config{}, err
 	}

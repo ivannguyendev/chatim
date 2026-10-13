@@ -75,6 +75,8 @@ func TestLoadValidation(t *testing.T) {
 		{"zero cid batch queue", map[string]string{"CID_BATCH_QUEUE": "0"}, "CID_BATCH_QUEUE"},
 		{"pin limit above the cap", map[string]string{"PIN_LIMIT": "1001"}, "REACTION_EMOJIS, PIN_LIMIT"},
 		{"pin limit at the cap", map[string]string{"PIN_LIMIT": "1000"}, ""},
+		{"room tail cache under 1MB", map[string]string{"ROOM_TAIL_CACHE_BYTES": "1048575"}, "ROOM_TAIL_CACHE_BYTES must be at least 1048576"},
+		{"room tail cache at 1MB", map[string]string{"ROOM_TAIL_CACHE_BYTES": "1048576"}, ""},
 		{"stop phases overflow", map[string]string{
 			"CORE_DRAIN_DELAY": "1000000h", "CORE_GRPC_SHUTDOWN": "1000000h", "CORE_PUBLISHER_DRAIN": "1000000h",
 		}, "CORE_SHUTDOWN_BUDGET"},

@@ -47,6 +47,7 @@ func (c Config) validate() error {
 		{c.Work.Duplicates > c.Reconcile.ConfirmEvery+c.Reconcile.Drain, "WORK_DUPLICATES must be longer than RECONCILE_CONFIRM_EVERY + RECONCILE_DRAIN"},
 		{c.MemberCountCheckDelay > c.RequestDeadline, "MEMBER_COUNT_CHECK_DELAY must be longer than CORE_REQUEST_DEADLINE"},
 		{c.MessageCountCheckDelay > c.RequestDeadline, "MESSAGE_COUNT_CHECK_DELAY must be longer than CORE_REQUEST_DEADLINE"},
+		{c.RoomList.TailCacheBytes >= minRoomTailCacheBytes, fmt.Sprintf("ROOM_TAIL_CACHE_BYTES must be at least %d (1MB)", minRoomTailCacheBytes)},
 		{plan.fitsWithin(c.ShutdownBudget), fmt.Sprintf("%s = %v must be shorter than CORE_SHUTDOWN_BUDGET %v", stopPhases, plan.total(), c.ShutdownBudget)},
 	}
 	var errs []error

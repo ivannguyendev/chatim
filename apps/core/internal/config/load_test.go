@@ -67,6 +67,7 @@ func TestLoadDefaults(t *testing.T) {
 		Limits:                 mutate.Limits{Emojis: mutate.DefaultEmojis, PinLimit: 50, MemberBatch: 500, MentionTargets: 50},
 		MemberCountCheckDelay:  5 * time.Second,
 		MessageCountCheckDelay: 5 * time.Second,
+		RoomList:               config.RoomListConfig{JoinMax: 2000, TailCacheBytes: 256 << 20, InfoCacheEntries: 100000},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Load() =\n%#v\nwant\n%#v", got, want)
@@ -117,6 +118,7 @@ func TestLoadOverrides(t *testing.T) {
 		Limits:                 mutate.Limits{Emojis: []string{"🎉", "👍"}, PinLimit: 10, MemberBatch: 20, MentionTargets: 20},
 		MemberCountCheckDelay:  4 * time.Second,
 		MessageCountCheckDelay: 6 * time.Second,
+		RoomList:               config.RoomListConfig{JoinMax: 300, TailCacheBytes: 2 << 20, InfoCacheEntries: 5000},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Load() =\n%#v\nwant\n%#v", got, want)

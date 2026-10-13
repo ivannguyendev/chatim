@@ -54,7 +54,7 @@ type gateRig struct {
 	done      chan error
 }
 
-func startGate(t *testing.T, ctx context.Context, router *gatedRouter, slots runner, watch *fakeWatch) *gateRig {
+func startGate(t *testing.T, ctx context.Context, router *gatedRouter, slots runner, watch liveWatcher) *gateRig {
 	t.Helper()
 	sink := &testlog.Sink{}
 	log := sink.Logger()
@@ -67,7 +67,7 @@ func startGate(t *testing.T, ctx context.Context, router *gatedRouter, slots run
 		admin:     admin.New(admin.Config{ShutdownTimeout: config.CloseTimeout}, log),
 		grpc:      grpcserver.New(grpcserver.Config{ShutdownTimeout: time.Second}, log),
 		publisher: idle{}, flusher: idle{}, cidBatch: idle{}, router: router, slots: slots, workers: idle{},
-		memberWatch: watch,
+		watches: watch,
 	}
 	lis, err := listenAll(t.Context(), "127.0.0.1:0", "127.0.0.1:0")
 	if err != nil {

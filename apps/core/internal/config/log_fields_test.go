@@ -59,10 +59,13 @@ func TestConfigLogValueLogsEveryField(t *testing.T) {
 		}
 	}
 	walk(reflect.TypeFor[config.Config](), "", logged)
-	for _, key := range []string{"core_id", "grpc_addr", "cid_batch", "nats_url", "mongo_auth", "locked_message_kinds", "member_count_check_delay"} {
+	for _, key := range []string{"core_id", "grpc_addr", "cid_batch", "nats_url", "mongo_auth", "locked_message_kinds", "member_count_check_delay", "room_list"} {
 		if _, ok := logged[key]; !ok {
 			t.Errorf("summary misses %s: %v", key, logged)
 		}
+	}
+	if rooms, _ := logged["room_list"].(map[string]any); rooms["tail_cache_bytes"] != float64(256<<20) || rooms["join_max"] != float64(2000) {
+		t.Errorf("room_list = %v, want join_max 2000 and tail_cache_bytes 256MB", rooms)
 	}
 	if limits, _ := logged["limits"].(map[string]any); limits["pin_limit"] != float64(50) || !strings.Contains(limits["emojis"].(string), "👍") {
 		t.Errorf("limits = %v, want pin_limit 50 and the default emojis", limits)

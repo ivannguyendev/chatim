@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 
@@ -12,11 +11,6 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/memberwatch"
 )
-
-type memberWatcher interface {
-	Start(ctx context.Context) error
-	Stop()
-}
 
 func wireMemberWatch(cfg config.Config, nc *nats.Conn, router *actor.Router, log *slog.Logger) (*memberwatch.Watch, error) {
 	w, err := memberwatch.New(nc, cfg.Stream.LiveRoot, router.ForgetMembers, log)

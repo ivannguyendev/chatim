@@ -46,6 +46,7 @@ func fakeProbes(withReader bool) probes {
 		},
 		memberForgets:   func() uint64 { return 13 },
 		memberMalformed: func() uint64 { return 14 },
+		roomCache:       fakeRoomCacheProbes(),
 	}
 	if withReader {
 		p.reconcile = func() reconcile.Stats { return reconcile.Stats{} }
@@ -67,6 +68,7 @@ func TestCoreMetricSourcesCoverEveryGuarantee(t *testing.T) {
 		"cid_pending_elsewhere_total", "room_yields_total", "grpc_load_shed_total", "mongo_oplog_window_seconds",
 		"reconcile_lag_seconds", "reconcile_republished_total", "effect_dropped_total", "work_processed_total", "work_failures_total",
 		"counter_repaired_total", "member_cache_forgets_total", "member_watch_malformed_total",
+		"room_cache_hits_total", "room_cache_misses_total", "room_tail_cache_bytes", "room_watch_forgets_total", "room_watch_malformed_total",
 	}
 	on := sourceNames(metricSources(fakeProbes(true)))
 	for _, name := range append(everyCore, readerMetrics...) {

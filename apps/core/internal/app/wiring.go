@@ -37,18 +37,18 @@ type gate interface {
 }
 
 type node struct {
-	cfg         config.Config
-	log         *slog.Logger
-	admin       *admin.Server
-	grpc        *grpcserver.Server
-	publisher   drainer
-	flusher     drainer
-	cidBatch    drainer
-	router      gate
-	slots       runner
-	workers     drainer
-	reconciler  drainer
-	memberWatch memberWatcher
+	cfg        config.Config
+	log        *slog.Logger
+	admin      *admin.Server
+	grpc       *grpcserver.Server
+	publisher  drainer
+	flusher    drainer
+	cidBatch   drainer
+	router     gate
+	slots      runner
+	workers    drainer
+	reconciler drainer
+	watches    liveWatcher
 }
 
 func prepare(ctx context.Context, cfg config.Config, cl *clients) error {
@@ -94,7 +94,15 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 	if err != nil {
 		return nil, err
 	}
-	a.memberWatch = watch
+	caches, err := wireRoomCaches(cfg.RoomList)
+	if err != nil {
+		return nil, err
+	}
+	roomWatch, err := wireRoomWatch(cfg, cl.nats, caches.info, log)
+	if err != nil {
+		return nil, err
+	}
+	a.watches = liveWatchers{watch, roomWatch}
 	slotCfg := cfg.Slot
 	slotCfg.BeforeRelease = router.EvictSlots
 	slotCfg.AfterLose = router.EvictSlots
@@ -128,7 +136,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 		a.reconciler = rec
 	}
 	a.publisher, a.flusher, a.cidBatch, a.router, a.slots = pub, fl, batch, router, slots
-	svc, err := wireService(serviceDeps{store: st, router: router, pub: pub, cidBatch: batch, timers: timers, msgTimers: msgTimers, cfg: cfg, log: log})
+	svc, err := wireService(serviceDeps{store: st, router: router, pub: pub, cidBatch: batch, timers: timers, msgTimers: msgTimers, rooms: caches, cfg: cfg, log: log})
 	if err != nil {
 		return nil, err
 	}
@@ -154,6 +162,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 		counterRepairs:  fx.counterRepairs(),
 		memberForgets:   watch.Forgets,
 		memberMalformed: watch.Malformed,
+		roomCache:       caches.probes(roomWatch),
 	}
 	if rec != nil {
 		p.reconcile = rec.Stats

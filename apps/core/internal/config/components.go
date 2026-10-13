@@ -19,6 +19,11 @@ const (
 	defaultEffectDelay     = 5 * time.Second
 	defaultEffectRoomCache = 65536
 	workAckSlack           = 30 * time.Second
+
+	defaultRoomListJoinMax      = 2000
+	defaultRoomTailCacheBytes   = 256 << 20
+	defaultRoomInfoCacheEntries = 100000
+	minRoomTailCacheBytes       = 1 << 20
 )
 
 func (p *parser) components(c *Config) {
@@ -108,4 +113,12 @@ func (p *parser) components(c *Config) {
 		Cooldown: redisCooldown,
 	}
 	p.workerConfig(c)
+}
+
+func (p *parser) roomList() RoomListConfig {
+	return RoomListConfig{
+		JoinMax:          p.count("ROOM_LIST_JOIN_MAX", defaultRoomListJoinMax),
+		TailCacheBytes:   p.count("ROOM_TAIL_CACHE_BYTES", defaultRoomTailCacheBytes),
+		InfoCacheEntries: p.count("ROOM_INFO_CACHE_ENTRIES", defaultRoomInfoCacheEntries),
+	}
 }

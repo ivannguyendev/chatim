@@ -38,6 +38,7 @@ type probes struct {
 	reconcile       func() reconcile.Stats
 	memberForgets   func() uint64
 	memberMalformed func() uint64
+	roomCache       roomCacheProbes
 }
 
 func metricSources(p probes) []metrics.Source {
@@ -62,6 +63,7 @@ func metricSources(p probes) []metrics.Source {
 	out = append(out, workerSources(p.workers, p.effectCounts)...)
 	out = append(out, counterSources(p.counterRepairs)...)
 	out = append(out, memberWatchSources(p.memberForgets, p.memberMalformed)...)
+	out = append(out, roomCacheSources(p.roomCache)...)
 	if p.reconcile != nil {
 		out = append(out, readerSources(p.reconcile)...)
 	}

@@ -51,7 +51,7 @@ func (a *node) serve(ctx context.Context, adminLis, grpcLis net.Listener) error 
 	}
 	cause := a.awaitRouter(ctx, sup)
 	if cause == nil && ctx.Err() == nil {
-		cause = a.memberWatch.Start(ctx)
+		cause = a.watches.Start(ctx)
 	}
 	if cause != nil || ctx.Err() != nil {
 		_ = grpcLis.Close()
