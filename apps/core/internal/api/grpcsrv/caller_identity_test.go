@@ -18,7 +18,7 @@ func TestNewRequiresEveryDependency(t *testing.T) {
 	full := grpcsrv.Deps{
 		Sender: &fakeSender{}, Rooms: rg.rooms, Pages: rg.msgs, Mutator: newMutator(t, rg, options{}), Edits: rg.edits, Hidden: rg.hidden, Bookmarks: rg.reactions,
 		Replies: rg.reactions, Members: rg.rooms, Timers: nopTimers{}, Requests: newRequests(t, nil), Directs: rg.directs,
-		Mentions: rg.mentions, MemberRooms: rg.rooms, SentTimes: rg.msgs,
+		Mentions: rg.mentions, MemberRooms: rg.rooms, SentTimes: rg.msgs, Mine: rg.reactions,
 	}
 	for name, drop := range map[string]func(d *grpcsrv.Deps){
 		"no sender":       func(d *grpcsrv.Deps) { d.Sender = nil },
@@ -36,6 +36,7 @@ func TestNewRequiresEveryDependency(t *testing.T) {
 		"no mentions":     func(d *grpcsrv.Deps) { d.Mentions = nil },
 		"no member rooms": func(d *grpcsrv.Deps) { d.MemberRooms = nil },
 		"no sent times":   func(d *grpcsrv.Deps) { d.SentTimes = nil },
+		"no reader marks": func(d *grpcsrv.Deps) { d.Mine = nil },
 	} {
 		deps := full
 		drop(&deps)

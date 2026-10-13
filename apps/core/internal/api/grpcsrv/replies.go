@@ -56,6 +56,9 @@ func (s *Service) GetReplies(ctx context.Context, req *chatimv1.GetRepliesReques
 	for i, m := range msgs {
 		resp.Messages[i] = pbconv.Message(m)
 	}
+	if err := s.addMyInteractions(ctx, who.user, msgs, resp.Messages); err != nil {
+		return nil, err
+	}
 	if len(replies) == limit {
 		resp.Next = replies[len(replies)-1].Seq
 	}

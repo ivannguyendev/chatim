@@ -55,6 +55,7 @@ var portMethods = map[string]string{
 	"Interactions.Replies":           "read",
 	"Interactions.CountLiveReplies":  "read",
 	"Interactions.Between":           "read",
+	"Interactions.MyInteractions":    "read",
 	"ReactionSummaries.SetReactions": "cas",
 	"Pins.Append":                    "insert-unique",
 	"Pins.At":                        "read",
