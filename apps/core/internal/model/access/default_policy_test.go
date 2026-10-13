@@ -30,6 +30,8 @@ func TestDefaultPolicyLetsOnlyTheAuthorEditOrDelete(t *testing.T) {
 		{access.SetBookmark, "alice", "bob", nil},
 		{access.ReadReplies, "alice", "bob", nil},
 		{access.SendSystemMessage, "sysmsg-bot", "", nil},
+		{access.ReadReactions, "alice", "bob", nil},
+		{access.ReadMembers, "alice", "", nil},
 	}
 	for _, tc := range cases {
 		err := access.DefaultPolicy{}.Check(t.Context(), access.Request{Action: tc.action, User: tc.user, Author: tc.author})
@@ -102,6 +104,9 @@ func TestDefaultPolicyLocksSystemMessagesWhenConfigured(t *testing.T) {
 		if err := locked.Check(t.Context(), own); err != nil {
 			t.Fatalf("%s of a text message with system locked = %v, want nil", action, err)
 		}
+	}
+	if string(access.ReadReactions) != "read_reactions" || string(access.ReadMembers) != "read_members" {
+		t.Fatalf("actions %q and %q, want read_reactions and read_members", access.ReadReactions, access.ReadMembers)
 	}
 	if string(access.SendSystemMessage) != "send_system_message" {
 		t.Fatalf("action %q, want send_system_message", access.SendSystemMessage)

@@ -26,7 +26,7 @@ type interactionCase struct {
 
 func RunInteractions(t *testing.T, open func(t *testing.T) (ReactableMessages, store.Interactions)) {
 	t.Helper()
-	cases := slices.Concat(reactionSetCases(), reactionReadCases(), replyCases(), bookmarkCases(), bookmarkListCases(), summaryCases(), myInteractionCases())
+	cases := slices.Concat(reactionSetCases(), reactionReadCases(), replyCases(), bookmarkCases(), bookmarkListCases(), summaryCases(), myInteractionCases(), reactorCases())
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			msgs, interactions := open(t)

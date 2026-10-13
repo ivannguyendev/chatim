@@ -112,7 +112,7 @@ func (s *Service) visibleIn(ctx context.Context, who caller, g roomThread, keys 
 	if err != nil {
 		return err
 	}
-	for _, m := range s.bookmarkView.Apply(viewer, found) {
+	for _, m := range s.maskView.Apply(viewer, found) {
 		if !m.Deleted && !m.Hidden {
 			visible[store.KeyOf(m)] = m
 		}

@@ -27,6 +27,8 @@ const (
 	OpenDirect      Action = "open_direct"
 	SetBookmark     Action = "set_bookmark"
 	ReadReplies     Action = "read_replies"
+	ReadReactions   Action = "read_reactions"
+	ReadMembers     Action = "read_members"
 
 	SendSystemMessage Action = "send_system_message"
 
