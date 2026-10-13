@@ -82,3 +82,11 @@ func TestDirectRoomsContract(t *testing.T) {
 func TestReplyThreadsContract(t *testing.T) {
 	storetest.RunReplyThreads(t, func(*testing.T) store.ReplyThreads { return memstore.NewReplyThreads() })
 }
+
+func TestRoomListContract(t *testing.T) {
+	storetest.RunRoomList(t, func(*testing.T) storetest.ListableRooms { return memstore.NewRooms() })
+}
+
+func TestRoomTailsContract(t *testing.T) {
+	storetest.RunRoomTails(t, func(*testing.T) storetest.TailMessages { return memstore.NewMessages() })
+}

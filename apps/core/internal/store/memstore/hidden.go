@@ -66,6 +66,31 @@ func (s *Hidden) HiddenIn(ctx context.Context, user string, room, thread, from, 
 	return out, nil
 }
 
+func (s *Hidden) HiddenInRooms(ctx context.Context, user string, ranges []store.HiddenRange) (map[uint64][]uint64, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := store.ValidateHiddenRanges(user, ranges); err != nil {
+		return nil, err
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := map[uint64][]uint64{}
+	for k := range s.seqs {
+		if k.user == user && k.key.Thread == 0 && inHiddenRanges(ranges, k.key) {
+			out[k.key.Room] = append(out[k.key.Room], k.key.Seq)
+		}
+	}
+	for _, seqs := range out {
+		slices.Sort(seqs)
+	}
+	return out, nil
+}
+
+func inHiddenRanges(ranges []store.HiddenRange, k store.MsgKey) bool {
+	return slices.ContainsFunc(ranges, func(r store.HiddenRange) bool { return r.Room == k.Room && k.Seq >= r.From && k.Seq <= r.To })
+}
+
 func (s *Hidden) Get(ctx context.Context, user string, key store.MsgKey) (domain.HiddenMessage, bool, error) {
 	if err := ctx.Err(); err != nil {
 		return domain.HiddenMessage{}, false, err

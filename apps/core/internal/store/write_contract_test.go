@@ -41,6 +41,7 @@ var portMethods = map[string]string{
 	"Hidden.HiddenIn":             "read",
 	"Hidden.Get":                  "read",
 	"Hidden.Between":              "read",
+	"Hidden.HiddenInRooms":        "read",
 
 	"Interactions.SetReaction":       "version-bump",
 	"Interactions.RemoveReaction":    "version-bump",
@@ -91,6 +92,15 @@ var portMethods = map[string]string{
 	"RoomPreferences.SetPreferences": "version-bump",
 	"ReplyThreads.Touch":             "monotonic-max",
 	"ReplyThreads.List":              "read",
+
+	"RoomList.CountRooms":        "read",
+	"RoomList.JoinedRoomOrder":   "read",
+	"RoomList.StepwiseRoomOrder": "read",
+	"RoomList.MembersByKeys":     "read",
+	"RoomList.RoomActivities":    "read",
+	"RoomList.RoomInfos":         "read",
+	"RoomTails.TailWindow":       "read",
+	"RoomTails.TailPreviews":     "read",
 }
 
 func TestEveryPortMethodHasAWriteContract(t *testing.T) {
@@ -119,6 +129,8 @@ func TestEveryPortMethodHasAWriteContract(t *testing.T) {
 		reflect.TypeFor[store.RoomUpdater](),
 		reflect.TypeFor[store.RoomPreferences](),
 		reflect.TypeFor[store.ReplyThreads](),
+		reflect.TypeFor[store.RoomList](),
+		reflect.TypeFor[store.RoomTails](),
 	}
 	seen := map[string]bool{}
 	for _, p := range ports {
