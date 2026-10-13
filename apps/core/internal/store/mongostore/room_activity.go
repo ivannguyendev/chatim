@@ -39,6 +39,9 @@ func activityFields(a store.Activity, seq int64) bson.D {
 	if a.Thread == 0 && a.Seq > 0 {
 		fields = append(fields, bson.E{Key: "last_seq", Value: seq}, bson.E{Key: "last_message_at", Value: at})
 	}
+	if a.Thread == 0 && a.Edited {
+		fields = append(fields, bson.E{Key: "last_edit_at", Value: at})
+	}
 	return fields
 }
 

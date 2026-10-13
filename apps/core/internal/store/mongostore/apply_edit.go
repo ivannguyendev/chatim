@@ -39,7 +39,7 @@ func (s *Store) ApplyEdit(ctx context.Context, e domain.Edit) error {
 func editUpdate(e domain.Edit, version int32) (bson.D, error) {
 	if e.Kind == domain.EditDelete {
 		set := bson.D{{Key: "v", Value: version}, {Key: "ea", Value: e.At}, {Key: "x", Value: ""}, {Key: "d", Value: true}}
-		unset := bson.D{{Key: "mt", Value: ""}, {Key: "ma", Value: ""}, {Key: "fw", Value: ""}}
+		unset := bson.D{{Key: "mt", Value: ""}, {Key: "ma", Value: ""}, {Key: "fw", Value: ""}, {Key: "m", Value: ""}}
 		return bson.D{{Key: "$set", Value: set}, {Key: "$unset", Value: unset}}, nil
 	}
 	mentions, err := encodeMessageMentions(e.Mentions)

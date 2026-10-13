@@ -59,7 +59,7 @@ func TestReactionCountIsCoveredByTheInteractionIndex(t *testing.T) {
 	key := store.MsgKey{Room: itRoom, Seq: 1}
 	aggregate := bson.D{{Key: "aggregate", Value: interactionsCollection}, {Key: "pipeline", Value: countPipeline(key)}, {Key: "cursor", Value: bson.D{}}}
 	stages, indexes := winningPlan(t, db, aggregate)
-	const index = "message_key_1_kind_1_state_1_value_1"
+	const index = "message_key_1_kind_1_state_1_value_1_updated_at_-1_actor_id_1"
 	if !slices.Contains(indexes, index) || slices.Contains(stages, "FETCH") || slices.Contains(stages, "COLLSCAN") {
 		t.Fatalf("winning plan stages %v on indexes %v, want a covered scan of %s without FETCH", stages, indexes, index)
 	}

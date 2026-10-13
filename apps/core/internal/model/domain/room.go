@@ -36,10 +36,13 @@ type Room struct {
 	LastSeq        uint64
 	LastMsgAt      time.Time
 	LastChangeAt   time.Time
+	LastEditAt     time.Time
 	MemberCountVer uint64
 	DMKey          string
 	Avatar         string
 	InfoVer        uint64
+	UpdatedAt      time.Time
+	UpdatedBy      string
 
 	LastSharedMentionAt time.Time
 }

@@ -58,7 +58,7 @@ func oplogEntriesOf(t *testing.T, db *mongo.Database, id []byte) int64 {
 func TestMemberDocumentLayoutAndNoOpAdd(t *testing.T) {
 	s, db := itStore(t, itClient(t))
 	itRoomWithOwner(t, s)
-	want := slices.DeleteFunc(slices.Clone(memberFields), func(f string) bool { return f == "cleared_at" })
+	want := requiredMemberFields(memberFields)
 	if got := fieldNames(t, rawMember(t, db, "alice")); !slices.Equal(got, want) {
 		t.Fatalf("created member fields = %v, want %v", got, want)
 	}
@@ -70,7 +70,7 @@ func TestMemberDocumentLayoutAndNoOpAdd(t *testing.T) {
 	if got := fieldNames(t, added); !slices.Equal(got, want) {
 		t.Fatalf("added member fields = %v, want %v", got, want)
 	}
-	for _, f := range []string{"room_id", "state", "priority", "ver", "previous_state", "previous_priority", "read_seq", "read_ver"} {
+	for _, f := range []string{"room_id", "state", "priority", "ver", "previous_state", "previous_priority", "read_seq", "read_ver", "preference_ver"} {
 		if typ := added.Lookup(f).Type; typ != bson.TypeInt64 {
 			t.Fatalf("added %s type = %v, want int64", f, typ)
 		}

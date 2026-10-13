@@ -40,6 +40,7 @@ func joinPipeline(j domain.Join, room, readSeq int64, user string) mongo.Pipelin
 		keep("last_change_at", bson.D{{Key: "$max", Value: bson.A{"$last_change_at", j.At}}}),
 		keep("read_seq", bson.D{{Key: "$max", Value: bson.A{orZero("read_seq", int64(0)), readSeq}}}),
 		keep("read_ver", plusOne("read_ver")),
+		keep("preference_ver", orZero("preference_ver", int64(0))),
 	}
 	return mongo.Pipeline{{{Key: "$set", Value: set}}}
 }

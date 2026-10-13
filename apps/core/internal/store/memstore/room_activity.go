@@ -50,6 +50,9 @@ func withActivity(r domain.Room, a store.Activity) domain.Room {
 		r.LastSeq = max(r.LastSeq, a.Seq)
 		r.LastMsgAt = laterOf(r.LastMsgAt, at)
 	}
+	if a.Thread == 0 && a.Edited {
+		r.LastEditAt = laterOf(r.LastEditAt, at)
+	}
 	return r
 }
 

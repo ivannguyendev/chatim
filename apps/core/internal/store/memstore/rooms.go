@@ -48,7 +48,7 @@ func (s *Rooms) Create(ctx context.Context, r domain.Room, members []domain.Memb
 	if _, ok := s.rooms[r.ID]; ok {
 		return fmt.Errorf("create room %d: %w", r.ID, store.ErrRoomExists)
 	}
-	r.MemberCountVer = 1
+	r.MemberCountVer, r.InfoVer = 1, 1
 	s.rooms[r.ID] = r
 	if s.log != nil {
 		s.log.appendFact(logged{kind: store.RoomInserted, room: r})
@@ -75,7 +75,7 @@ func (s *Rooms) InsertRoom(ctx context.Context, r domain.Room) error {
 	if _, ok := s.rooms[r.ID]; ok {
 		return fmt.Errorf("insert room %d: %w", r.ID, store.ErrRoomExists)
 	}
-	r.MemberCount, r.MemberCountVer = 0, 0
+	r.MemberCount, r.MemberCountVer, r.InfoVer = 0, 0, 1
 	s.rooms[r.ID] = r
 	if s.log != nil {
 		s.log.appendFact(logged{kind: store.RoomInserted, room: r})

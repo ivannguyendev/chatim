@@ -18,7 +18,7 @@ func TestBootstrapCreatesInteractionAndPinCollections(t *testing.T) {
 	assertClusteredLayout(t, db, pinActionsCollection)
 	got := indexKeys(t, db.Collection(interactionsCollection))
 	for _, pattern := range []string{
-		"message_key:1,kind:1,state:1,value:1",
+		"message_key:1,kind:1,state:1,value:1,updated_at:-1,actor_id:1",
 		"tenant:1,actor_id:1,kind:1,state:1,updated_at:-1,message_key:-1",
 		"room_id:1,kind:1,updated_at:1",
 	} {

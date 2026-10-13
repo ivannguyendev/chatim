@@ -17,6 +17,10 @@ func detached(m domain.Message) domain.Message {
 	}
 	m.Mentions = slices.Clone(m.Mentions)
 	m.Reactions.Counts = slices.Clone(m.Reactions.Counts)
+	if len(m.Meta) == 0 {
+		m.Meta = nil
+	}
+	m.Meta = slices.Clone(m.Meta)
 	return m
 }
 

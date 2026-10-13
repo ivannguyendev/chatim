@@ -9,6 +9,7 @@ type Activity struct {
 	Thread uint64
 	Seq    uint64
 	At     time.Time
+	Edited bool
 }
 
 type ActiveQuery struct {

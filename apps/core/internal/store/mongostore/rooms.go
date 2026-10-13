@@ -18,7 +18,7 @@ func (s *Store) Create(ctx context.Context, r domain.Room, members []domain.Memb
 	if err := store.ValidateRoom(r, members); err != nil {
 		return err
 	}
-	r.MemberCountVer = 1
+	r.MemberCountVer, r.InfoVer = 1, 1
 	room, err := encodeRoom(r)
 	if err != nil {
 		return err
@@ -46,7 +46,7 @@ func (s *Store) InsertRoom(ctx context.Context, r domain.Room) error {
 	if err := store.ValidateRoomInsert(r); err != nil {
 		return err
 	}
-	r.MemberCount, r.MemberCountVer = 0, 0
+	r.MemberCount, r.MemberCountVer, r.InfoVer = 0, 0, 1
 	room, err := encodeRoom(r)
 	if err != nil {
 		return err

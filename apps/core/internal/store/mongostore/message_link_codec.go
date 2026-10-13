@@ -60,6 +60,7 @@ func encodeLinks(m domain.Message, d *messageDoc) error {
 		return err
 	}
 	d.Mentions, d.MentionAll = mentions, m.MentionAll
+	d.SkipUnread, d.Meta = m.SkipUnread, m.Meta
 	return nil
 }
 
@@ -107,6 +108,7 @@ func decodeLinks(d messageDoc, m *domain.Message) error {
 		m.Replies = rc
 	}
 	m.MentionAll = d.MentionAll
+	m.SkipUnread, m.Meta = d.SkipUnread, d.Meta
 	return nil
 }
 

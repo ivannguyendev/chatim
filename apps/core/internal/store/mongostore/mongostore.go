@@ -23,6 +23,7 @@ const (
 	pinActionsCollection      = "pin_actions"
 	mentionsCollection        = "mentions"
 	roomDMsCollection         = "room_dms"
+	replyThreadsCollection    = "reply_threads"
 )
 
 var (
@@ -43,6 +44,9 @@ var (
 	_ store.ReadPositions     = (*Store)(nil)
 	_ store.Mentions          = (*Mentions)(nil)
 	_ store.DirectRooms       = (*DirectRooms)(nil)
+	_ store.RoomUpdater       = (*Store)(nil)
+	_ store.RoomPreferences   = (*Store)(nil)
+	_ store.ReplyThreads      = (*ReplyThreads)(nil)
 )
 
 type Options struct {
@@ -62,6 +66,7 @@ type Store struct {
 	pins             *Pins
 	mentions         *Mentions
 	directRooms      *DirectRooms
+	replyThreads     *ReplyThreads
 }
 
 func New(db *mongo.Database, opts Options) *Store {
@@ -83,6 +88,7 @@ func New(db *mongo.Database, opts Options) *Store {
 		pins:             &Pins{coll: db.Collection(pinActionsCollection, primary)},
 		mentions:         &Mentions{coll: db.Collection(mentionsCollection, primary)},
 		directRooms:      &DirectRooms{coll: db.Collection(roomDMsCollection, primary)},
+		replyThreads:     &ReplyThreads{coll: db.Collection(replyThreadsCollection, primary)},
 	}
 }
 
@@ -95,3 +101,5 @@ func (s *Store) Hidden() *Hidden { return s.hidden }
 func (s *Store) Mentions() *Mentions { return s.mentions }
 
 func (s *Store) DirectRooms() *DirectRooms { return s.directRooms }
+
+func (s *Store) ReplyThreads() *ReplyThreads { return s.replyThreads }

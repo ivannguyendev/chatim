@@ -78,3 +78,7 @@ func TestMemberFeedContract(t *testing.T) {
 func TestDirectRoomsContract(t *testing.T) {
 	storetest.RunDirectRooms(t, func(*testing.T) store.DirectRooms { return memstore.NewDirectRooms() })
 }
+
+func TestReplyThreadsContract(t *testing.T) {
+	storetest.RunReplyThreads(t, func(*testing.T) store.ReplyThreads { return memstore.NewReplyThreads() })
+}

@@ -99,7 +99,7 @@ func (s *Service) insertRoom(ctx context.Context, f founding) (domain.Room, bool
 	err := s.rooms.InsertRoom(ctx, r)
 	switch {
 	case err == nil:
-		r.MemberCount, r.MemberCountVer = 0, 0
+		r.MemberCount, r.MemberCountVer, r.InfoVer = 0, 0, 1
 		return r, true, nil
 	case !errors.Is(err, store.ErrRoomExists):
 		return domain.Room{}, false, err

@@ -13,7 +13,7 @@ import (
 )
 
 func Bootstrap(ctx context.Context, db *mongo.Database) error {
-	for _, name := range []string{messagesCollection, editsCollection, interactionsCollection, pinActionsCollection, membersCollection, mentionsCollection, roomDMsCollection} {
+	for _, name := range []string{messagesCollection, editsCollection, interactionsCollection, pinActionsCollection, membersCollection, mentionsCollection, roomDMsCollection, replyThreadsCollection} {
 		if err := ensureClustered(ctx, db, name); err != nil {
 			return err
 		}
@@ -34,11 +34,15 @@ func Bootstrap(ctx context.Context, db *mongo.Database) error {
 		{interactionsCollection, interactionIndexes()},
 		{pinActionsCollection, roomTimeIndexes()},
 		{mentionsCollection, mentionIndexes()},
+		{replyThreadsCollection, []mongo.IndexModel{{Keys: replyThreadsByRecent}}},
 	}
 	for _, ix := range indexes {
 		if err := ensureIndexes(ctx, db, ix.coll, ix.models); err != nil {
 			return err
 		}
+	}
+	if err := dropReplacedIndexes(ctx, db); err != nil {
+		return err
 	}
 	return ensureFeedAnchor(ctx, db)
 }
@@ -96,6 +100,7 @@ func memberIndexes() []mongo.IndexModel {
 		{Keys: bson.D{
 			{Key: "tenant", Value: 1}, {Key: "user_id", Value: 1}, {Key: "state", Value: 1}, {Key: "room_id", Value: 1},
 			{Key: "joined_at", Value: 1}, {Key: "cleared_at", Value: 1}, {Key: "read_seq", Value: 1},
+			{Key: "pinned_at", Value: 1}, {Key: "archived_at", Value: 1},
 		}},
 	}
 }
@@ -110,7 +115,10 @@ func roomTimeIndexes() []mongo.IndexModel {
 
 func interactionIndexes() []mongo.IndexModel {
 	return []mongo.IndexModel{
-		{Keys: bson.D{{Key: "message_key", Value: 1}, {Key: "kind", Value: 1}, {Key: "state", Value: 1}, {Key: "value", Value: 1}}},
+		{Keys: bson.D{
+			{Key: "message_key", Value: 1}, {Key: "kind", Value: 1}, {Key: "state", Value: 1}, {Key: "value", Value: 1},
+			{Key: "updated_at", Value: -1}, {Key: "actor_id", Value: 1},
+		}},
 		{Keys: bson.D{{Key: "tenant", Value: 1}, {Key: "actor_id", Value: 1}, {Key: "kind", Value: 1}, {Key: "state", Value: 1}, {Key: "updated_at", Value: -1}, {Key: "message_key", Value: -1}}},
 		{Keys: bson.D{{Key: "room_id", Value: 1}, {Key: "kind", Value: 1}, {Key: "updated_at", Value: 1}}},
 	}

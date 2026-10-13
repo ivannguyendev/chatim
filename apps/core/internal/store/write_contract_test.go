@@ -86,6 +86,11 @@ var portMethods = map[string]string{
 
 	"DirectRooms.Claim":   "upsert",
 	"DirectRooms.Repoint": "cas",
+
+	"RoomUpdater.UpdateRoomInfo":     "cas",
+	"RoomPreferences.SetPreferences": "version-bump",
+	"ReplyThreads.Touch":             "monotonic-max",
+	"ReplyThreads.List":              "read",
 }
 
 func TestEveryPortMethodHasAWriteContract(t *testing.T) {
@@ -111,6 +116,9 @@ func TestEveryPortMethodHasAWriteContract(t *testing.T) {
 		reflect.TypeFor[store.Mentions](),
 		reflect.TypeFor[store.SharedMentions](),
 		reflect.TypeFor[store.MessageTimes](),
+		reflect.TypeFor[store.RoomUpdater](),
+		reflect.TypeFor[store.RoomPreferences](),
+		reflect.TypeFor[store.ReplyThreads](),
 	}
 	seen := map[string]bool{}
 	for _, p := range ports {

@@ -31,23 +31,8 @@ type messageDoc struct {
 	Forward    *forwardDoc    `bson:"fw,omitempty"`
 	Mentions   []mentionDoc   `bson:"mt,omitempty"`
 	MentionAll bool           `bson:"ma,omitempty"`
-}
-
-type roomDoc struct {
-	ID             int64           `bson:"_id"`
-	Tenant         string          `bson:"tenant"`
-	Type           domain.RoomType `bson:"type"`
-	Name           string          `bson:"name"`
-	CreatedBy      string          `bson:"created_by"`
-	CreatedAt      time.Time       `bson:"created_at"`
-	MemberCount    int             `bson:"member_count"`
-	MemberCountVer int64           `bson:"member_count_ver,omitempty"`
-	LastSeq        int64           `bson:"last_seq,omitempty"`
-	LastMsgAt      time.Time       `bson:"last_message_at,omitempty"`
-	LastChangeAt   time.Time       `bson:"last_change_at,omitempty"`
-	DMKey          string          `bson:"dm_key,omitempty"`
-
-	LastSharedMentionAt time.Time `bson:"last_shared_mention_at,omitempty"`
+	SkipUnread bool           `bson:"nu,omitempty"`
+	Meta       []byte         `bson:"m,omitempty"`
 }
 
 func encodeMessage(m domain.Message) (messageDoc, error) {
@@ -123,59 +108,6 @@ func decodeMessages(docs []messageDoc) ([]domain.Message, error) {
 		out[i] = m
 	}
 	return out, nil
-}
-
-func encodeRoom(r domain.Room) (roomDoc, error) {
-	id, err := toInt64("room id", r.ID)
-	if err != nil {
-		return roomDoc{}, err
-	}
-	memberCountVer, err := toInt64("member count ver", r.MemberCountVer)
-	if err != nil {
-		return roomDoc{}, err
-	}
-	return roomDoc{
-		ID:             id,
-		Tenant:         r.Tenant,
-		Type:           r.Type,
-		Name:           r.Name,
-		CreatedBy:      r.CreatedBy,
-		CreatedAt:      r.CreatedAt,
-		MemberCount:    r.MemberCount,
-		MemberCountVer: memberCountVer,
-		DMKey:          r.DMKey,
-	}, nil
-}
-
-func decodeRoom(d roomDoc) (domain.Room, error) {
-	id, err := toUint64("room id", d.ID)
-	if err != nil {
-		return domain.Room{}, err
-	}
-	lastSeq, err := toUint64("room last seq", d.LastSeq)
-	if err != nil {
-		return domain.Room{}, err
-	}
-	memberCountVer, err := toUint64("room member count ver", d.MemberCountVer)
-	if err != nil {
-		return domain.Room{}, err
-	}
-	return domain.Room{
-		ID:             id,
-		Tenant:         d.Tenant,
-		Type:           d.Type,
-		Name:           d.Name,
-		CreatedBy:      d.CreatedBy,
-		CreatedAt:      d.CreatedAt,
-		MemberCount:    d.MemberCount,
-		LastSeq:        lastSeq,
-		LastMsgAt:      d.LastMsgAt,
-		LastChangeAt:   d.LastChangeAt,
-		MemberCountVer: memberCountVer,
-		DMKey:          d.DMKey,
-
-		LastSharedMentionAt: d.LastSharedMentionAt,
-	}, nil
 }
 
 func toInt64(field string, v uint64) (int64, error) {
