@@ -59,8 +59,8 @@ func (l *Lister) firstWave(ctx context.Context, w who, slots []slot) (firstRead,
 		members  []domain.Member
 		activity []store.RoomActivity
 		loaded   []domain.Room
-		g        errgroup.Group
 	)
+	g, ctx := errgroup.WithContext(ctx)
 	if len(keys) > 0 {
 		g.Go(func() (err error) {
 			members, err = l.list.MembersByKeys(ctx, keys)

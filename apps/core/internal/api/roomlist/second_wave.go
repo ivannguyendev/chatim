@@ -23,19 +23,19 @@ func (l *Lister) secondWave(ctx context.Context, w who, rooms []resolved) (secon
 	var (
 		out   secondRead
 		peers []domain.Member
-		g     errgroup.Group
 	)
+	g, stop := errgroup.WithContext(ctx)
 	g.Go(func() (err error) {
-		out.tails, err = l.loadTails(ctx, rooms)
+		out.tails, err = l.loadTails(ctx, stop, rooms)
 		return err
 	})
 	g.Go(func() (err error) {
-		out.hidden, err = l.hidden.HiddenInRooms(ctx, w.user, hiddenRanges(rooms))
+		out.hidden, err = l.hidden.HiddenInRooms(stop, w.user, hiddenRanges(rooms))
 		return storeErr("read hidden messages", err)
 	})
 	if keys := peersToRead(rooms); len(keys) > 0 {
 		g.Go(func() (err error) {
-			peers, err = l.list.MembersByKeys(ctx, keys)
+			peers, err = l.list.MembersByKeys(stop, keys)
 			return storeErr("read direct peers", err)
 		})
 	}

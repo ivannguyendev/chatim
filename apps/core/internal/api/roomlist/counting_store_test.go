@@ -24,6 +24,8 @@ type countingStore struct {
 	calls      map[string]int
 	windows    []windowCall
 	brokenRoom uint64
+	brokenErr  error
+	tailHook   func(ctx context.Context, room uint64) error
 }
 
 func (c *countingStore) count(op string) {
@@ -92,10 +94,17 @@ func (c *countingStore) TailWindow(ctx context.Context, room, afterSeq uint64, l
 	c.count("TailWindow")
 	c.mu.Lock()
 	c.windows = append(c.windows, windowCall{room: room, after: afterSeq})
-	broken := c.brokenRoom == room
+	broken, fail, hook := c.brokenRoom == room, c.brokenErr, c.tailHook
 	c.mu.Unlock()
-	if broken {
+	switch {
+	case broken && fail != nil:
+		return nil, fail
+	case broken:
 		return nil, errBroken
+	case hook != nil:
+		if err := hook(ctx, room); err != nil {
+			return nil, err
+		}
 	}
 	return c.msgs.TailWindow(ctx, room, afterSeq, limit)
 }

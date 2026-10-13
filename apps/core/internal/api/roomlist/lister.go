@@ -64,6 +64,6 @@ func storeErr(op string, err error) error {
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return fmt.Errorf("%s: %w", op, err)
 	default:
-		return fmt.Errorf("%s: %w: %w", op, apperr.ErrUnavailable, err)
+		return fmt.Errorf("%s: %w: %s", op, apperr.ErrUnavailable, err.Error())
 	}
 }

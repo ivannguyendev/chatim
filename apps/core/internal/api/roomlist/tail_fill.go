@@ -11,12 +11,15 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
-func (l *Lister) loadTails(ctx context.Context, rooms []resolved) ([]roomcache.Tail, error) {
+func (l *Lister) loadTails(ctx, stop context.Context, rooms []resolved) ([]roomcache.Tail, error) {
 	out := make([]roomcache.Tail, len(rooms))
-	var g errgroup.Group
+	g, stop := errgroup.WithContext(stop)
 	g.SetLimit(TailFills)
 	for i, r := range rooms {
 		g.Go(func() error {
+			if err := stop.Err(); err != nil {
+				return err
+			}
 			t, err := l.tail.Load(ctx, r.activity, l.fetchNewestTailAfterSeq)
 			if err != nil {
 				return storeErr("load room tail", err)
