@@ -20,12 +20,14 @@ func memberRequest(action access.Action, caller, target domain.Role) access.Requ
 
 func TestMemberActionNames(t *testing.T) {
 	names := map[access.Action]string{
-		access.AddMembers:        "add_members",
-		access.RemoveMember:      "remove_member",
-		access.LeaveRoom:         "leave_room",
-		access.ChangeMemberRole:  "change_member_role",
-		access.SetMemberPriority: "set_member_priority",
-		access.MarkRead:          "mark_read",
+		access.AddMembers:         "add_members",
+		access.RemoveMember:       "remove_member",
+		access.LeaveRoom:          "leave_room",
+		access.ChangeMemberRole:   "change_member_role",
+		access.SetMemberPriority:  "set_member_priority",
+		access.MarkRead:           "mark_read",
+		access.UpdateRoom:         "update_room",
+		access.SetRoomPreferences: "set_room_preferences",
 	}
 	for action, name := range names {
 		if string(action) != name {
@@ -67,6 +69,10 @@ func TestDefaultPolicyMemberRules(t *testing.T) {
 		{access.MarkRead, owner, owner, nil},
 		{access.MarkRead, admin, admin, nil},
 		{access.MarkRead, member, member, nil},
+		{access.UpdateRoom, owner, owner, nil},
+		{access.UpdateRoom, admin, admin, nil},
+		{access.UpdateRoom, member, member, access.ErrDenied},
+		{access.SetRoomPreferences, member, member, nil},
 	}
 	policies := map[string]access.DefaultPolicy{
 		"nothing locked": {},

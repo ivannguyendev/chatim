@@ -36,6 +36,9 @@ const (
 	ChangeMemberRole  Action = "change_member_role"
 	SetMemberPriority Action = "set_member_priority"
 	MarkRead          Action = "mark_read"
+
+	UpdateRoom         Action = "update_room"
+	SetRoomPreferences Action = "set_room_preferences"
 )
 
 var ErrDenied = fmt.Errorf("action denied: %w", apperr.ErrPermissionDenied)
@@ -71,7 +74,7 @@ func (p DefaultPolicy) Check(_ context.Context, req Request) error {
 	switch req.Action {
 	case EditMessage, DeleteMessage:
 		return denyUnless(!slices.Contains(p.LockedKinds, req.Kind) && req.Author == req.User)
-	case AddMembers:
+	case AddMembers, UpdateRoom:
 		return denyUnless(req.Member.Role == domain.RoleOwner || req.Member.Role == domain.RoleAdmin)
 	case RemoveMember:
 		return denyUnless(req.Member.Role == domain.RoleOwner ||
