@@ -28,6 +28,8 @@ const (
 	SetBookmark     Action = "set_bookmark"
 	ReadReplies     Action = "read_replies"
 
+	SendSystemMessage Action = "send_system_message"
+
 	AddMembers        Action = "add_members"
 	RemoveMember      Action = "remove_member"
 	LeaveRoom         Action = "leave_room"

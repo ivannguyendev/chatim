@@ -29,6 +29,7 @@ func TestDefaultPolicyLetsOnlyTheAuthorEditOrDelete(t *testing.T) {
 		{access.OpenDirect, "alice", "", nil},
 		{access.SetBookmark, "alice", "bob", nil},
 		{access.ReadReplies, "alice", "bob", nil},
+		{access.SendSystemMessage, "sysmsg-bot", "", nil},
 	}
 	for _, tc := range cases {
 		err := access.DefaultPolicy{}.Check(t.Context(), access.Request{Action: tc.action, User: tc.user, Author: tc.author})
@@ -83,5 +84,26 @@ func TestDefaultPolicyLetsMembersReactAndPinAnyMessage(t *testing.T) {
 				t.Fatalf("%s: %s by bob on alice's message = %v, want nil", label, action, err)
 			}
 		}
+	}
+}
+
+func TestDefaultPolicyLocksSystemMessagesWhenConfigured(t *testing.T) {
+	system, err := domain.ParseKind("system")
+	if err != nil || system != domain.KindSystem {
+		t.Fatalf("ParseKind(system) = %v, %v", system, err)
+	}
+	locked := access.DefaultPolicy{LockedKinds: []domain.Kind{system}}
+	for _, action := range []access.Action{access.EditMessage, access.DeleteMessage} {
+		own := access.Request{Action: action, User: "bot", Author: "bot", Kind: domain.KindSystem}
+		if err := locked.Check(t.Context(), own); !errors.Is(err, access.ErrDenied) {
+			t.Fatalf("%s of a locked system message = %v, want ErrDenied", action, err)
+		}
+		own.Kind = domain.KindText
+		if err := locked.Check(t.Context(), own); err != nil {
+			t.Fatalf("%s of a text message with system locked = %v, want nil", action, err)
+		}
+	}
+	if string(access.SendSystemMessage) != "send_system_message" {
+		t.Fatalf("action %q, want send_system_message", access.SendSystemMessage)
 	}
 }
