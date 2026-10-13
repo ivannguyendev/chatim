@@ -4,14 +4,21 @@ package chatim.v1;
 
 import "chatim/v1/core.proto";
 import "chatim/v1/members.proto";
+import "chatim/v1/message_reads.proto";
 import "chatim/v1/reactions_pins.proto";
 import "chatim/v1/replies_bookmarks_mentions.proto";
+import "chatim/v1/room_list.proto";
 
 service CoreService {
   rpc CreateRoom(CreateRoomRequest) returns (CreateRoomResponse);
   rpc OpenDirectRoom(OpenDirectRoomRequest) returns (OpenDirectRoomResponse);
+  rpc ListMyRooms(ListMyRoomsRequest) returns (ListMyRoomsResponse);
+  rpc GetRooms(GetRoomsRequest) returns (GetRoomsResponse);
+  rpc UpdateRoom(UpdateRoomRequest) returns (UpdateRoomResponse);
+  rpc SetRoomPreferences(SetRoomPreferencesRequest) returns (SetRoomPreferencesResponse);
   rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
   rpc GetHistory(GetHistoryRequest) returns (GetHistoryResponse);
+  rpc GetMessages(GetMessagesRequest) returns (GetMessagesResponse);
   rpc EditMessage(EditMessageRequest) returns (EditMessageResponse);
   rpc DeleteMessage(DeleteMessageRequest) returns (DeleteMessageResponse);
   rpc HideMessage(HideMessageRequest) returns (HideMessageResponse);
@@ -20,9 +27,12 @@ service CoreService {
   rpc ReactMessage(ReactMessageRequest) returns (ReactMessageResponse);
   rpc PinMessage(PinMessageRequest) returns (PinMessageResponse);
   rpc UnpinMessage(UnpinMessageRequest) returns (UnpinMessageResponse);
+  rpc ListPins(ListPinsRequest) returns (ListPinsResponse);
   rpc GetReactionSettings(GetReactionSettingsRequest) returns (GetReactionSettingsResponse);
+  rpc GetReactions(GetReactionsRequest) returns (GetReactionsResponse);
   rpc SetBookmark(SetBookmarkRequest) returns (SetBookmarkResponse);
   rpc GetReplies(GetRepliesRequest) returns (GetRepliesResponse);
+  rpc ListThreads(ListThreadsRequest) returns (ListThreadsResponse);
   rpc ListBookmarks(ListBookmarksRequest) returns (ListBookmarksResponse);
   rpc ListMentions(ListMentionsRequest) returns (ListMentionsResponse);
   rpc AddMembers(AddMembersRequest) returns (AddMembersResponse);
@@ -30,6 +40,7 @@ service CoreService {
   rpc LeaveRoom(LeaveRoomRequest) returns (LeaveRoomResponse);
   rpc ChangeMemberRole(ChangeMemberRoleRequest) returns (ChangeMemberRoleResponse);
   rpc SetMemberPriority(SetMemberPriorityRequest) returns (SetMemberPriorityResponse);
+  rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);
   rpc MarkRead(MarkReadRequest) returns (MarkReadResponse);
   rpc MarkUnread(MarkUnreadRequest) returns (MarkUnreadResponse);
 }
