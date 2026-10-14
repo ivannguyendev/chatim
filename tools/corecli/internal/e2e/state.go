@@ -24,6 +24,7 @@ type State struct {
 	Members   int32      `json:"member_count"`
 	MemberRun bool       `json:"member_run,omitempty"`
 	LinkRun   bool       `json:"link_run,omitempty"`
+	RoomRun   bool       `json:"room_run,omitempty"`
 }
 
 func TextFor(cid string) string { return "e2e message " + cid }

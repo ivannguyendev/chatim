@@ -34,7 +34,7 @@ finish() {
   fi
   rm -rf "$state"
   if [ "$result" = PASS ]; then
-    echo "e2e PASS: $first messages before and $after after killing $victim, no loss, no duplicate, every acked seq live; seq 1 edited and seq 2 deleted on history, edit history and live; seq 3 reacted with the first then the second emoji from GetReactionSettings and an unlisted emoji refused, seq 4 pinned, on replies, history and live; members added, promoted, removed and refused, read positions, hide and clear, the last owner leaving and coming back, on replies, history and live room, member and message subjects; a direct room opened twice into one room, replies counted and listed, the parent kept while replied, mentions of a user, a group and @all listed, a forward and a bookmark, on replies, lists and live"
+    echo "e2e PASS: $first messages before and $after after killing $victim, no loss, no duplicate, every acked seq live; seq 1 edited and seq 2 deleted on history, edit history and live; seq 3 reacted with the first then the second emoji from GetReactionSettings and an unlisted emoji refused, seq 4 pinned, on replies, history and live; members added, promoted, removed and refused, read positions, hide and clear, the last owner leaving and coming back, on replies, history and live room, member and message subjects; a direct room opened twice into one room, replies counted and listed, the parent kept while replied, mentions of a user, a group and @all listed, a forward and a bookmark, on replies, lists and live; a system message from a non-member raising unread and one with skip_unread not, the room list ordered and counted after sends, reads, a delete and a hide, pinned first, archived apart, paged by cursor, refreshed by GetRooms and renamed live, history around a seq, messages by seq, threads, reactors, pins newest first, members owner first and a forward keeping skip_unread and meta"
     exit 0
   fi
   echo "e2e FAIL during: $step" >&2
@@ -112,5 +112,11 @@ step="phase 6 direct rooms, replies, mentions, forward and bookmarks"
 echo "phase 6: open a direct room twice, react, reply twice, refuse deleting the parent, delete a reply, mention a user, a group and @all, forward, bookmark"
 cli e2e links -state /state
 step="phase 6 check"
+cli e2e check -state /state
+
+step="phase 7 room list, room settings and reads"
+echo "phase 7: system messages, unread after send/read/delete/hide, pin and archive, page 2, GetRooms, UpdateRoom, AROUND, GetMessages, threads, reactors, pins, members, a forward with skip_unread and meta"
+cli e2e rooms -state /state
+step="phase 7 check"
 cli e2e check -state /state
 result=PASS
