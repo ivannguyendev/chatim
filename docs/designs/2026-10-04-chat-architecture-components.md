@@ -56,7 +56,7 @@ apps/core/
   internal/
     app/           wiring, vòng đời, lệnh serve/probe/resync/recount
     config/        đọc + kiểm config lúc boot
-    api/           grpcsrv, view
+    api/           grpcsrv, view, roomlist, roomcache
     model/         domain, pbconv, access
     send/          actor, dedupe, flush, memberwatch
     change/        mutate, ownership, pinproj
@@ -70,7 +70,7 @@ Phụ thuộc đi xuống; hai ngoại lệ đi ngang từ `change/mutate`: → 
 ```mermaid
 flowchart TB
     app["app (+ config)"]
-    api["api<br/>grpcsrv · view"]
+    api["api<br/>grpcsrv · view · roomlist · roomcache"]
     send["send<br/>actor · dedupe · flush · memberwatch"]
     change["change<br/>mutate · ownership · pinproj"]
     event["event<br/>publish · eventmark · work · effects · reconcile · resync"]
@@ -83,6 +83,7 @@ flowchart TB
     app --> platform
     api --> send
     api --> change
+    api -->|đọc thẳng| store
     send --> model
     send --> store
     change --> model
@@ -98,22 +99,24 @@ flowchart TB
 
 | Nhóm | Package | Vai trò | Design |
 |---|---|---|---|
-| `api` | `grpcsrv` | đọc metadata tenant/user, gọi actor/mutate/store, trả lỗi domain; kiểm trả lời/forward trước actor; bước "đảm bảo" tạo room (`OpenDirectRoom`, `CreateRoom`); `GetReplies`, `ListBookmarks`, `ListMentions` | §6.6, §9 |
+| `api` | `grpcsrv` | đọc metadata tenant/user, gọi actor/mutate/store/`roomlist`, trả lỗi domain; kiểm trả lời/forward/tin `system` trước actor; bước "đảm bảo" tạo room (`OpenDirectRoom`, `CreateRoom`); `GetReplies`, `ListBookmarks`, `ListMentions`; M3: `GetMessages`, `AROUND`, `ListThreads`, `GetReactions`, `ListPins`, `ListMembers`, `ListMyRooms`/`GetRooms` | §6.6, §9 |
 | | `view` | pipeline cho người đọc: gộp retry, che tin xoá/ẩn | §9.2 |
+| | `roomlist` | dựng mục room cho `ListMyRooms`/`GetRooms`: chọn đường (join/từng bước), ảnh chụp, hai đợt đọc song song, một lô xem trước mỗi trang, unread và xem trước trong RAM; gọi `roomcache` và store | §9.3, D121–D137 |
+| | `roomcache` | bốn cache RAM của core (thông tin room, đuôi room, ảnh chụp danh sách, đường) chỉ để nhanh; `Watch` nghe `room_updated`/`member_count_changed` trên NATS core để quên thông tin room | §9.3, D137 |
 | `model` | `domain` | kiểu và lỗi nghiệp vụ, validate | §4–§5 |
 | | `pbconv` | domain → proto, event id tự nhiên | §11 |
 | | `access` | permission hook: tenant + membership rồi `Policy` | §9.2 |
 | `send` | `actor` | một goroutine mỗi room, seq, write group | §6.2 |
 | | `dedupe` | cid/`request_id` qua LRU + Redis, batcher | §6.2, D58 |
 | | `flush` | gom `insertMany` theo shard | §6.2 |
-| | `memberwatch` | nghe `member_removed`/`member_role_changed`, xoá cache member của actor | D106 |
+| | `memberwatch` | nghe `member_removed`/`member_role_changed`, xoá cache member của actor; khởi động/dừng cùng nhóm với `roomcache.Watch` | D106 |
 | `change` | `mutate` | sửa/xoá/ẩn/clear/react/bookmark/pin/member/read; `$inc` số trên tin bọc phiếu hẹn | §6.3–§7 |
 | | `ownership` | kế nhiệm owner trong transaction | D100 |
 | | `pinproj` | fold pin fact + CAS | D92 |
 | `event` | `publish` | queue theo shard, `PublishMsgAsync`, ack mark | §8.1 |
 | | `eventmark` | bitmap ack mark trên Redis dedupe | D52, D60 |
 | | `work` | record, `CHATIM_WORK`, phiếu hẹn sinh tồn | §8.3, D111 |
-| | `effects` | worker mỗi partition, registry effect theo kind (M2c: `reply_mention_index`, `count_repair`, `count_event`, `bookmark_event`) | §8.3 |
+| | `effects` | worker mỗi partition, registry effect theo kind (M2c: `reply_mention_index`, `count_repair`, `count_event`, `bookmark_event`; M3: `room_event`, `preferences_event`, `reply_threads` trong `reply_mention_index`) | §8.3 |
 | | `reconcile` | reader change feed trên chủ slot 0 | §8.2 |
 | | `resync` | phát lại một khoảng feed bị mất | §14 |
 | `store` | `store` | port + kiểu lưu trữ | §5 |
@@ -124,6 +127,8 @@ flowchart TB
 | | `testlog` | tắt log Redis trong test | — |
 
 M2c (đã xây): trả lời, forward, mention đi qua `api/grpcsrv` + `send` (kiểm trước actor); reaction, bookmark đi qua `change/mutate`; doc reply và `mentions` do effect `reply_mention_index` dựng; số trên tin sửa bằng `count_repair`.
+
+M3 (đã xây trên `feat/m3`): `grpcsrv` → `roomlist` → `roomcache` + store cho danh sách hội thoại (`api` gọi xuống `store`, không qua `send`/`change`); `UpdateRoom`, `SetRoomPreferences` đi qua `change/mutate`; tin `system` đi đường gửi thường; mọi tra theo tập `_id` trong `mongostore` qua `boundedIDs` (D139).
 
 ## 3. Luồng gửi tin (`send`)
 
