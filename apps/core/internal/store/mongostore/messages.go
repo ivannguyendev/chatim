@@ -5,14 +5,12 @@ import (
 	"errors"
 	"fmt"
 
-	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
-	"github.com/ivannguyendev/chatim/pkg/keys"
 )
 
 func (s *Store) Insert(ctx context.Context, msgs []domain.Message) []store.Result {
@@ -98,12 +96,7 @@ func (s *Store) Find(ctx context.Context, room uint64, ks []store.MsgKey) ([]dom
 	if len(ks) == 0 {
 		return nil, ctx.Err()
 	}
-	ids := make(bson.A, len(ks))
-	for i, k := range ks {
-		ids[i] = keys.Msg(k.Room, k.Thread, k.Seq)
-	}
-	q := messageQuery{filter: bson.D{{Key: "_id", Value: bson.D{{Key: "$in", Value: ids}}}}}
-	msgs, err := find(ctx, s.committed, q)
+	msgs, err := findByKeys(ctx, s.committed, ks)
 	if err != nil {
 		return nil, fmt.Errorf("find messages in room %d: %w", room, err)
 	}

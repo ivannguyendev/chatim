@@ -11,7 +11,7 @@
 | cài đặt hội thoại | Ghim hội thoại lên đầu (`pinned_at`), tắt thông báo tới một lúc (`muted_until`), lưu trữ (`archived_at`). Riêng từng người, không ảnh hưởng người khác |
 | hoạt động của room | `rooms.last_seq`, `last_message_at`, `last_edit_at` (mới), `last_change_at`: do worker `room_activity` ghi bằng `$max`, có thể trễ vài ms tới vài giây so với tin thật |
 | mốc xếp | Thời điểm dùng để xếp room: `max(last_message_at, joined_at)`. Mọi tin mới, kể cả tin hệ thống, đẩy room lên; room vừa được thêm vào cũng nhảy lên đầu |
-| đường join / đường app | Hai cách `ListMyRooms` đọc danh sách room của user: ≤ `ROOM_LIST_JOIN_MAX` (2.000) room thì một aggregate `members → rooms` ở DB; nhiều hơn thì đọc từng bước rồi xếp ở core. Cùng kết quả |
+| đường join / đường app | Hai cách `ListMyRooms` đọc danh sách room của user: ≤ `ROOM_LIST_JOIN_MAX` (1.500; owner hạ từ 2.000 ngày 2026-10-15 theo số đo dev: join 2.000 room ~200ms mỗi lời gọi (2.000 lượt `$lookup`), đường từng bước 5.000 room ~134ms) room thì một aggregate `members → rooms` ở DB; nhiều hơn thì đọc từng bước rồi xếp ở core. Cùng kết quả |
 | ảnh chụp danh sách | Danh sách (room, khoá xếp) đã xếp của một user, giữ trong RAM core 30s để trang sau không phải xếp lại |
 | cache thông tin room | Tên, loại, ảnh, `member_count`, `dm_key` của room trong RAM core, dùng chung cho mọi người đọc; xoá khi có `room_updated`/`member_count_changed`, TTL 60s |
 | cache đuôi room | ~300 tin gần nhất của room ở dạng gọn (seq, người gửi, đã xoá, `nu`, lúc gửi) + ~10 tin có text rút gọn, trong RAM core, dùng chung cho mọi người đọc; kiểm bằng `last_seq`, `last_edit_at` (ý D72) |
@@ -136,7 +136,7 @@ Dev: `make infra-reset`.
 - `ListMyRoomsRequest{folder, next, limit}` → `{items, next}`. Message mới: `RoomItem{room, me, preview, unread{count, approx}, peer_read_seq}`, `LastPreview`, `Reactor`, `PinnedMessage`, `ThreadItem`, `MemberItem`, event `RoomUpdated`, `RoomPreferencesChanged`.
 - Action mới của `access`: `read_reactions`, `read_members` (mọi member), `update_room` (owner, admin), `send_system_message` (mặc định cho phép). `SetRoomPreferences` chỉ cần là member (cài đặt của chính mình).
 - Phiếu mới: kind 13 `RoomChanged` (`u:{room}-info-v{info_ver}`, feed lấy update `rooms` có `updatedFields.info_ver`); kind 14 `PreferenceChanged` (`f:{room}-pf-{user}-v{preference_ver}`, feed lấy update `members` có `updatedFields.preference_ver`). Update khác của `rooms` vẫn không vào feed.
-- Config mới: `ROOM_LIST_JOIN_MAX` (2.000; điểm chuyển đường, không phải giới hạn), `ROOM_TAIL_CACHE_BYTES` (256MB, LRU theo byte), `ROOM_INFO_CACHE_ENTRIES` (100.000). Cỡ một đuôi: 300 × ~40B + 10 × ~200B ≈ 14KB → 10K room nóng ≈ 140MB mỗi core.
+- Config mới: `ROOM_LIST_JOIN_MAX` (1.500, owner 2026-10-15; điểm chuyển đường, không phải giới hạn), `ROOM_TAIL_CACHE_BYTES` (256MB, LRU theo byte), `ROOM_INFO_CACHE_ENTRIES` (100.000). Cỡ một đuôi: 300 × ~40B + 10 × ~200B ≈ 14KB → 10K room nóng ≈ 140MB mỗi core.
 
 ## 4. Luồng xử lý
 
@@ -165,11 +165,11 @@ Nguyên tắc: **dữ liệu riêng của người đọc đọc tươi qua join
 | ~300 tin gần nhất dạng gọn + ~10 tin có text rút gọn | chung, đổi mỗi tin | cache đuôi room |
 | Tin tôi đã ẩn | riêng tôi | 1 truy vấn `hidden` |
 
-**Bước 1 — chọn đường.** `countDocuments` trên index "room của user" `{tenant, user_id, state: 1}` với `limit ROOM_LIST_JOIN_MAX + 1`: `COUNT_SCAN` phủ index, đọc tối đa 2.001 khoá, không đọc doc. Kết quả cache theo user 60s (hai đường ra cùng kết quả nên quyết định cũ vài giây không sai). ≤ 2.000 → đường join; lớn hơn → đường app.
+**Bước 1 — chọn đường.** `countDocuments` trên index "room của user" `{tenant, user_id, state: 1}` với `limit ROOM_LIST_JOIN_MAX + 1`: `COUNT_SCAN` phủ index, đọc tối đa 1.501 khoá, không đọc doc. Kết quả cache theo user 60s (hai đường ra cùng kết quả nên quyết định cũ vài giây không sai). ≤ 1.500 → đường join; lớn hơn → đường app.
 
 **Bước 2 — danh sách đã xếp của trang** (cả hai đường cùng quy tắc xếp: room ghim trước theo `pinned_at` giảm, rồi mốc xếp giảm, hoà theo `room_id` giảm; thư mục `MAIN` = không `archived_at`, `ARCHIVED` = có):
-- **Đường join (≤ 2.000 room):** một aggregate trên `members`: `$match` user → `$lookup rooms` (`room_id → _id`, sub-pipeline chỉ lấy `last_message_at, last_seq, last_edit_at`, không kéo `pins`) → `$addFields` mốc xếp → `$match` thư mục → `$sort`. Dòng nào cũng đã có đủ field `members` của tôi; DM thêm `$lookup members` của người kia (`peer_read_seq`).
-- **Đường app (> 2.000 room):** đọc phủ index `members` (`room_id, joined_at, pinned_at, archived_at`) → `rooms _id $in` lô 1.000 lấy 3 field hoạt động → xếp trong RAM bằng một hàm thuần → `members _id $in` cho các room của trang (đủ field của tôi + người kia của DM).
+- **Đường join (≤ 1.500 room):** một aggregate trên `members`: `$match` user → `$lookup rooms` (`room_id → _id`, sub-pipeline chỉ lấy `last_message_at, last_seq, last_edit_at`, không kéo `pins`) → `$addFields` mốc xếp → `$match` thư mục → `$sort`. Dòng nào cũng đã có đủ field `members` của tôi; DM thêm `$lookup members` của người kia (`peer_read_seq`).
+- **Đường app (> 1.500 room):** đọc phủ index `members` (`room_id, joined_at, pinned_at, archived_at`) → `rooms _id $in` lô 1.000 lấy 3 field hoạt động → xếp trong RAM bằng một hàm thuần → `members _id $in` cho các room của trang (đủ field của tôi + người kia của DM).
 - Kết quả xếp (room + khoá xếp, ~16B/room, 5.000 room ≈ 80KB) giữ làm **ảnh chụp** của user trong RAM 30s. Trang sau tới cùng core → cắt từ ảnh chụp, không xếp lại, chỉ `members _id $in` của 20 room để có field tươi; tới core khác hoặc hết hạn → chạy lại bước 2 với điều kiện "khoá nhỏ hơn con trỏ".
 
 **Bước 3 — thông tin room của 20 dòng:** cache thông tin room theo room id; thiếu → một `rooms _id $in` cho các room thiếu. Entry bị xoá khi core nhận `room_updated` hoặc `member_count_changed` (watcher kiểu `memberwatch` trên core NATS `live.*.room.*.evt.…`), TTL 60s phòng event mất.
@@ -327,7 +327,7 @@ Không thêm thư viện. Compose profile `shard` (dev/itest) và script shard. 
 | D133 | `UpdateRoom`: `info_ver` CAS một lượt, owner/admin, field `optional`; feed lấy update `rooms` có `info_ver` | Fact `room_changes` riêng | Một doc một version như member (D98) |
 | D134 | `ListMembers` owner → admin → member trong một lần gọi | Sắp theo chữ cái của role | Role lưu chuỗi; đọc ba khoảng của index sẵn có |
 | D135 | Index "room của user" thêm `pinned_at, archived_at` | Đọc đủ doc `members` mọi room ở đường app | Đường app đọc phủ index cả 5.000 room |
-| D136 | Hai đường theo `ROOM_LIST_JOIN_MAX` (2.000): join `members → rooms` trong một aggregate, hoặc đọc từng bước rồi xếp ở core; chọn bằng `countDocuments` phủ index có `limit`, cache 60s theo user | Một đường; bộ đếm số room mỗi user; chạy join có chặn `$limit` rồi bỏ khi vượt | Owner chọn hai đường 2026-10-13 (join đắt hơn khi `members` đã shard và user nhiều room); bộ đếm theo user cần `$inc` + phiếu hẹn ở mọi lệnh member; chạy join rồi bỏ làm user lớn tốn cả hai đường |
+| D136 | Hai đường theo `ROOM_LIST_JOIN_MAX` (1.500; owner hạ từ 2.000 ngày 2026-10-15 theo số đo dev: join 2.000 room ~200ms mỗi lời gọi (2.000 lượt `$lookup`), đường từng bước 5.000 room ~134ms): join `members → rooms` trong một aggregate, hoặc đọc từng bước rồi xếp ở core; chọn bằng `countDocuments` phủ index có `limit`, cache 60s theo user | Một đường; bộ đếm số room mỗi user; chạy join có chặn `$limit` rồi bỏ khi vượt | Owner chọn hai đường 2026-10-13 (join đắt hơn khi `members` đã shard và user nhiều room); bộ đếm theo user cần `$inc` + phiếu hẹn ở mọi lệnh member; chạy join rồi bỏ làm user lớn tốn cả hai đường |
 | D137 | Dữ liệu riêng người đọc đọc tươi; dữ liệu chung của room (thông tin, đuôi ~300 tin) qua cache RAM core, kiểm bằng `last_seq`/`last_edit_at` đọc trong cùng lần, xoá thông tin room theo `room_updated`/`member_count_changed` + TTL 60s | Gộp hết vào một aggregate (cả `$lookup` vào `messages`); cache theo user; Redis chung | Owner 2026-10-13: tận dụng cache, không cần một lần gọi; `messages` là collection lớn nhất, luật shard cấm join vào; cache theo user không dùng chung được giữa 500 người của một nhóm; RAM đủ (≈ 140MB cho 10K room nóng) và không thêm hạ tầng |
 | D138 | `rooms.last_edit_at` (`$max` bởi `room_activity` trên phiếu `EditInserted`) | Dùng `last_change_at` | `last_change_at` đổi theo cả reaction, ghim, member: cache đuôi sẽ bị quét lại liên tục |
 
@@ -337,7 +337,7 @@ Không thêm thư viện. Compose profile `shard` (dev/itest) và script shard. 
 
 | Lần gọi | Truy vấn |
 |---|---|
-| `ListMyRooms` trang đầu, ≤ 2.000 room, cache nóng, không room nào có tin mới | 1 đếm (thường đã cache) + 1 aggregate + 1 `hidden` = **2–3** |
+| `ListMyRooms` trang đầu, ≤ 1.500 room, cache nóng, không room nào có tin mới | 1 đếm (thường đã cache) + 1 aggregate + 1 `hidden` = **2–3** |
 | như trên, k room có tin mới từ lần trước | 3 + k quét bù |
 | như trên, cache lạnh | 3 + 1 `rooms` + 20 quét = **24** |
 | `ListMyRooms` trang đầu, 5.000 room (đường app) | đếm + `members` phủ + 5 `rooms` + `members` trang + `hidden` = **9** (cache nóng); 9 + k; lạnh **30** |
@@ -362,7 +362,7 @@ Mỗi trang trả 20 dòng, không có danh sách toàn bộ. Kết nối lại 
 
 - **Core khởi động lạnh hoặc mới thêm core:** cache trống, các trang đầu tốn như không cache (24–30 truy vấn) tới khi cache đầy; kết nối lại hàng loạt ngay sau deploy là ca nặng nhất. Đo ở M3.
 - **RAM core:** cache đuôi tới `ROOM_TAIL_CACHE_BYTES` (256MB) + ảnh chụp danh sách (≈ 80KB mỗi user 5.000 room trong 30s) mỗi core; chỉnh theo số đo.
-- **Hai đường lệch nhau:** chặn bằng một quy tắc xếp và test so khớp; đường join qua `members` đã shard đắt hơn (`$lookup` từ từng shard) → đo ở 2.000 room trên profile `shard`, chỉnh `ROOM_LIST_JOIN_MAX`.
+- **Hai đường lệch nhau:** chặn bằng một quy tắc xếp và test so khớp; đường join qua `members` đã shard đắt hơn (`$lookup` từ từng shard) → đo ở ngưỡng 1.500 room trên profile `shard`, chỉnh `ROOM_LIST_JOIN_MAX`.
 - **User 5.000 room (đường app):** trang đầu đọc 5.000 dòng index `members` và 5.000 doc `rooms` (Mongo đọc cả doc, gồm `pins`). Nếu đo thấy chậm: index phủ `rooms {_id, last_message_at, last_seq, last_edit_at}`.
 - **Client phải áp event đúng quy tắc 4.3**; SDK làm sai thì unread lệch tới lần `GetRooms`/`ListMyRooms` kế tiếp.
 - Thứ tự theo mốc xếp lệch khi work stream tồn đọng (alert `ChatimReconcilerLagging`); tin cuối và unread vẫn đúng.
@@ -378,7 +378,7 @@ Mỗi trang trả 20 dòng, không có danh sách toàn bộ. Kết nối lại 
 - Core xếp danh sách hội thoại và đếm unread; danh sách không hiện dấu `@`, chỉ unread.
 - Tin hệ thống đẩy room lên đầu và tính unread như tin thường; `skip_unread` chỉ bỏ tin khỏi unread.
 - App riêng đổi tên Mention App; việc còn lại của app owner xác định sau.
-- `ListMyRooms` hai đường theo ngưỡng 2.000 room; đường join tận dụng cache, không cần gộp tất cả vào một lần gọi; không gửi `order` cho client.
+- `ListMyRooms` hai đường theo ngưỡng 1.500 room (2026-10-13 chốt 2.000; 2026-10-15 hạ còn 1.500 theo số đo dev); đường join tận dụng cache, không cần gộp tất cả vào một lần gọi; không gửi `order` cho client.
 
 ### 11.2 Đội tự chọn, owner xem lại
 

@@ -23,6 +23,8 @@ type countingStore struct {
 	mu         sync.Mutex
 	calls      map[string]int
 	windows    []windowCall
+	previewKey int
+	previewErr error
 	brokenRoom uint64
 	brokenErr  error
 	tailHook   func(ctx context.Context, room uint64) error
@@ -40,7 +42,13 @@ func (c *countingStore) count(op string) {
 func (c *countingStore) reset() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.calls, c.windows = nil, nil
+	c.calls, c.windows, c.previewKey = nil, nil, 0
+}
+
+func (c *countingStore) previewKeys() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.previewKey
 }
 
 func (c *countingStore) snapshot() (map[string]int, []windowCall) {
@@ -111,6 +119,13 @@ func (c *countingStore) TailWindow(ctx context.Context, room, afterSeq uint64, l
 
 func (c *countingStore) TailPreviews(ctx context.Context, keys []store.MsgKey) ([]domain.Message, error) {
 	c.count("TailPreviews")
+	c.mu.Lock()
+	c.previewKey += len(keys)
+	fail := c.previewErr
+	c.mu.Unlock()
+	if fail != nil {
+		return nil, fail
+	}
 	return c.msgs.TailPreviews(ctx, keys)
 }
 

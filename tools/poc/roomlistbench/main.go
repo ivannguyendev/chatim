@@ -49,7 +49,7 @@ func realMain() int {
 	flag.IntVar(&c.page, "page", 20, "ListMyRooms limit")
 	flag.IntVar(&c.repeats, "repeats", 5, "warm first and next page calls per user after its cold pair")
 	flag.IntVar(&c.workers, "workers", 4, "parallel seeding calls")
-	flag.IntVar(&c.joinMax, "join-max", 2000, "ROOM_LIST_JOIN_MAX of the cores, only to label the path")
+	flag.IntVar(&c.joinMax, "join-max", 1500, "ROOM_LIST_JOIN_MAX of the cores, only to label the path")
 	flag.Int64Var(&c.quietOps, "quiet-ops", 40, "measure only once Mongo runs below this many ops/s for 3s")
 	flag.DurationVar(&c.settle, "settle", 15*time.Minute, "wait at most this long for room activity and a quiet Mongo")
 	flag.DurationVar(&c.callDeadline, "call-deadline", 2*time.Minute, "total deadline of one seeding call across its retries (same request_id and cid)")

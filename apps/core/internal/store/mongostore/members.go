@@ -84,11 +84,11 @@ func (s *Store) MembersOf(ctx context.Context, room uint64, users []string) ([]d
 }
 
 func membersOf(ctx context.Context, coll *mongo.Collection, room uint64, users []string) ([]domain.Member, error) {
-	ids := make(bson.A, len(users))
+	ids := make([][]byte, len(users))
 	for i, u := range users {
 		ids[i] = keys.Member(room, u)
 	}
-	found, err := findMembers(ctx, coll, bson.D{{Key: "_id", Value: bson.D{{Key: "$in", Value: ids}}}})
+	found, err := findMembers(ctx, coll, boundedIDs(ids))
 	if err != nil {
 		return nil, fmt.Errorf("members of room %d: %w", room, err)
 	}

@@ -67,14 +67,9 @@ func (s *Store) TailPreviews(ctx context.Context, ks []store.MsgKey) ([]domain.M
 	if len(ks) == 0 {
 		return []domain.Message{}, ctx.Err()
 	}
-	ids := make(bson.A, len(ks))
-	for i, k := range ks {
-		ids[i] = msgID(k)
-	}
-	msgs, err := find(ctx, s.messages, messageQuery{filter: bson.D{{Key: "_id", Value: bson.D{{Key: "$in", Value: ids}}}}})
+	msgs, err := findByKeys(ctx, s.messages, ks)
 	if err != nil {
 		return nil, fmt.Errorf("tail previews of %d messages: %w", len(ks), err)
 	}
-	store.SortByKey(msgs)
 	return msgs, nil
 }

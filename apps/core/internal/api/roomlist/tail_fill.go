@@ -13,14 +13,14 @@ import (
 
 func (l *Lister) loadTails(ctx, stop context.Context, rooms []resolved) ([]roomcache.Tail, error) {
 	out := make([]roomcache.Tail, len(rooms))
-	g, stop := errgroup.WithContext(stop)
+	g, loading := errgroup.WithContext(stop)
 	g.SetLimit(TailFills)
 	for i, r := range rooms {
 		g.Go(func() error {
-			if err := stop.Err(); err != nil {
+			if err := loading.Err(); err != nil {
 				return err
 			}
-			t, err := l.tail.Load(ctx, r.activity, l.fetchNewestTailAfterSeq)
+			t, err := l.tail.Load(ctx, r.activity, l.fetchNewestWindowAfterSeq)
 			if err != nil {
 				return storeErr("load room tail", err)
 			}
@@ -28,23 +28,41 @@ func (l *Lister) loadTails(ctx, stop context.Context, rooms []resolved) ([]roomc
 			return nil
 		})
 	}
-	return out, g.Wait()
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	return l.attachPreviews(stop, rooms, out)
 }
 
-func (l *Lister) fetchNewestTailAfterSeq(ctx context.Context, room, afterSeq uint64) (roomcache.Tail, error) {
+func (l *Lister) fetchNewestWindowAfterSeq(ctx context.Context, room, afterSeq uint64) (roomcache.Tail, error) {
 	window, err := l.tails.TailWindow(ctx, room, afterSeq, roomcache.TailWindow)
-	if err != nil || len(window) == 0 {
-		return roomcache.Tail{Window: window}, err
+	return roomcache.Tail{Window: window}, err
+}
+
+func (l *Lister) attachPreviews(ctx context.Context, rooms []resolved, tails []roomcache.Tail) ([]roomcache.Tail, error) {
+	var keys []store.MsgKey
+	for i, t := range tails {
+		for _, seq := range t.MissingPreviews() {
+			keys = append(keys, store.MsgKey{Room: rooms[i].activity.Room, Seq: seq})
+		}
 	}
-	keys := make([]store.MsgKey, 0, roomcache.TailPreviews)
-	for _, m := range window[:min(len(window), roomcache.TailPreviews)] {
-		keys = append(keys, store.MsgKey{Room: room, Seq: m.Seq})
+	if len(keys) == 0 {
+		return tails, nil
 	}
 	previews, err := l.tails.TailPreviews(ctx, keys)
 	if err != nil {
-		return roomcache.Tail{}, err
+		return nil, storeErr("read room previews", err)
 	}
-	return roomcache.Tail{Window: window, Previews: previews}, nil
+	byRoom := make(map[uint64][]domain.Message, len(rooms))
+	for _, m := range previews {
+		byRoom[m.Room] = append(byRoom[m.Room], m)
+	}
+	for i, t := range tails {
+		if found := byRoom[rooms[i].activity.Room]; len(found) > 0 {
+			tails[i], _ = l.tail.AttachPreviews(rooms[i].activity.Room, t, found)
+		}
+	}
+	return tails, nil
 }
 
 func hiddenRanges(rooms []resolved) []store.HiddenRange {

@@ -48,6 +48,27 @@ Kết luận dev:
 - Cache lạnh đúng như lệch Task 9: mỗi lần nạp đuôi = `TailWindow` + `TailPreviews` riêng → 40 truy vấn `messages` cho 20 room, nên trang lạnh 44–50 thay vì 23–30. Gộp `TailPreviews` cả trang còn ~25–31.
 - Độ trễ do đọc thứ tự: join 2.000 room tốn ~200ms ở cả lạnh lẫn nóng (`top` thấy 2.000 lượt đọc `rooms` của `$lookup` mỗi lời gọi), chậm hơn đường từng bước ở 5.000 room (~134ms). Trên dev này điểm chuyển 2.000 quá cao; chưa đo đường từng bước ở 2.000 room để chọn `ROOM_LIST_JOIN_MAX` mới (việc của owner).
 
+**Sau gộp xem trước và tra `_id` có giới hạn (2026-10-15).** Owner hạ `ROOM_LIST_JOIN_MAX` còn 1.500 (user 2.000 room nay đi đường từng bước). Mỗi trang một `TailPreviews` cho mọi tin xem trước còn thiếu. Lần đo đầu chỉ có gộp: 25 truy vấn nhưng trang lạnh 200 room p50 221ms (từ 30.6ms). `explain` cho thấy `_id $in` trên collection clustered chạy thành một lần quét từ khoá nhỏ nhất tới lớn nhất: 20 room trên dữ liệu bench đọc 320.040 doc cho 100 tin. Mọi tra `_id` theo tập khoá (`Find`, `TailPreviews`, `SentTimes`, `MembersByKeys`, `MembersOf`, `MyInteractions`) chuyển sang `$or` các khoảng (design §5.1). Số đo dưới đây: cùng layout, core dựng lại, một lượt khởi động bỏ đi rồi chờ 70s cho cache hết hạn; `CPU_Speed_Limit` 100 ở mọi mẫu (15/15). Số thô: `bin/bench/m3-roomlist-rs0/measure-*-bounded.txt`.
+
+| Room | Đường | Trang | n | p50 | p99 | Truy vấn (trung vị) | Cache/lời gọi |
+|---|---|---|---|---|---|---|---|
+| 200 | join | đầu, lạnh | 20 | 32.3ms | 65.5ms | 25 | info 20 miss, đuôi 20 miss, đường miss |
+| 200 | join | sau, lạnh | 20 | 8.3ms | 17.8ms | 25 | ảnh chụp hit, info/đuôi 20 miss |
+| 200 | join | đầu, nóng | 100 | 29.0ms | 46.1ms | 2 | info/đuôi 20 hit, đường hit |
+| 200 | join | sau, nóng | 100 | 5.9ms | 10.0ms | 3 | ảnh chụp hit |
+| 2.000 | từng bước | đầu, lạnh | 20 | 46.3ms | 56.0ms | 28 (+3 getmore) | như 200 |
+| 2.000 | từng bước | sau, lạnh | 20 | 9.4ms | 13.1ms | 25 | |
+| 2.000 | từng bước | đầu, nóng | 100 | 39.5ms | 57.2ms | 5 (+3 getmore) | |
+| 2.000 | từng bước | sau, nóng | 100 | 6.0ms | 8.4ms | 3 | |
+| 5.000 | từng bước | đầu, lạnh | 20 | 91.5ms | 163ms | 31 (+6 getmore) | như 200 |
+| 5.000 | từng bước | sau, lạnh | 20 | 8.3ms | 18.7ms | 25 | |
+| 5.000 | từng bước | đầu, nóng | 100 | 84.3ms | 102ms | 8 (+6 getmore) | |
+| 5.000 | từng bước | sau, nóng | 100 | 6.0ms | 9.0ms | 3 | |
+
+- Trang lạnh còn 25 truy vấn (join) và 28–31 (từng bước), đúng dự kiến ~25–31: 20 `TailWindow` + 1 `TailPreviews` (200 khoá) + `hidden` + `members` + `rooms`.
+- User 2.000 room: 209ms → 46ms vì đổi đường; 5.000 room: 134ms → 91ms lạnh, 134ms → 84ms nóng. Trang sau 12.5–60ms → 6–9ms vì `members`/`messages` theo khoá không còn quét lan sang room khác.
+- Explain trên dữ liệu bench, doc đọc/doc trả (trước → sau): `TailPreviews` 20 room 320.040/100 → 120/100; `SentTimes` 20 room 320.036/20 → 40/20; `Find` một room seq 1 + seq cuối 382/2 → 4/2; `MembersByKeys` 20 room (tôi + người kia tên ngắn) 13.560/20 → 60/20; `MembersOf` khoá dài ngắn lẫn nhau 19.126/3 → 6/3.
+
 ## Đo prod-like (chưa chạy)
 
 **Trước khi chạy: hỏi owner số thật** thay cho giả định ở thiết kế §2.3 (room/user, tỉ lệ sửa, room active, số member doc).

@@ -21,11 +21,11 @@ func (r *Interactions) MyInteractions(ctx context.Context, user string, ks []sto
 	if len(ks) == 0 {
 		return out, nil
 	}
-	ids := make(bson.A, 0, 2*len(ks))
+	ids := make([][]byte, 0, 2*len(ks))
 	for _, k := range ks {
 		ids = append(ids, userID(k, keys.ReactionKind, user), userID(k, keys.BookmarkKind, user))
 	}
-	filter := bson.D{{Key: "_id", Value: bson.D{{Key: "$in", Value: ids}}}, {Key: "state", Value: interactionLive}}
+	filter := boundedIDs(ids, bson.E{Key: "state", Value: interactionLive})
 	docs, err := r.find(ctx, filter, options.Find().SetProjection(myInteractionFields))
 	if err != nil {
 		return nil, fmt.Errorf("interactions of %q on %d messages: %w", user, len(ks), err)

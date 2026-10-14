@@ -20,7 +20,7 @@ const (
 	defaultEffectRoomCache = 65536
 	workAckSlack           = 30 * time.Second
 
-	defaultRoomListJoinMax      = 2000
+	defaultRoomListJoinMax      = 1500
 	defaultRoomTailCacheBytes   = 256 << 20
 	defaultRoomInfoCacheEntries = 100000
 	minRoomTailCacheBytes       = 1 << 20

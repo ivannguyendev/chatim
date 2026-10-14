@@ -21,11 +21,11 @@ func (s *Store) MembersByKeys(ctx context.Context, ks []store.MemberKey) ([]doma
 	if len(ks) == 0 {
 		return []domain.Member{}, ctx.Err()
 	}
-	ids := make(bson.A, len(ks))
+	ids := make([][]byte, len(ks))
 	for i, k := range ks {
 		ids[i] = keys.Member(k.Room, k.User)
 	}
-	found, err := findMembers(ctx, s.members, bson.D{{Key: "_id", Value: bson.D{{Key: "$in", Value: ids}}}})
+	found, err := findMembers(ctx, s.members, boundedIDs(ids))
 	if err != nil {
 		return nil, fmt.Errorf("members by %d keys: %w", len(ks), err)
 	}
