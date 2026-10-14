@@ -12,6 +12,9 @@ type idRun struct{ lo, hi []byte }
 
 func boundedIDs(ids [][]byte, extra ...bson.E) bson.D {
 	runs := idRuns(ids)
+	if len(runs) == 0 {
+		return append(bson.D{{Key: "_id", Value: bson.D{{Key: "$in", Value: bson.A{}}}}}, extra...)
+	}
 	if len(runs) == 1 && bytes.Equal(runs[0].lo, runs[0].hi) {
 		return append(bson.D{{Key: "_id", Value: runs[0].lo}}, extra...)
 	}

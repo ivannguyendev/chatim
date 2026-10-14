@@ -77,3 +77,9 @@ func TestBoundedIDsDoesNotChangeItsInput(t *testing.T) {
 		t.Error("boundedIDs changed the caller's keys")
 	}
 }
+
+func TestBoundedIDsMatchesNothingForNoKeys(t *testing.T) {
+	state := bson.E{Key: "state", Value: int64(1)}
+	want := bson.D{{Key: "_id", Value: bson.D{{Key: "$in", Value: bson.A{}}}}, state}
+	expectFilter(t, "no keys", boundedIDs(nil, state), want)
+}

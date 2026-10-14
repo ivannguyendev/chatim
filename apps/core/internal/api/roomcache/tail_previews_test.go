@@ -122,3 +122,21 @@ func TestAttachPreviewsKeepsTheEntryTTLAndCopies(t *testing.T) {
 		}
 	})
 }
+
+func TestAttachPreviewsKeepsThePreviewTheEntryAlreadyHolds(t *testing.T) {
+	c := newTails(t, 1<<22)
+	c.Replace(777, tailOf(1, 44))
+	extended, _ := c.Merge(777, windowOnly(45, 45))
+	late := []domain.Message{preview(45, "new"), preview(44, "other page")}
+	got, ok := c.AttachPreviews(777, extended, late)
+	if !ok {
+		t.Fatal("AttachPreviews refused the matching entry")
+	}
+	cached, _ := c.Lookup(activity(777, 45, editedAt))
+	for name, tail := range map[string]Tail{"returned": got, "cached": cached} {
+		expectSeqs(t, name+" previews", previewSeqs(tail), 45, 36)
+		if tail.Previews[0].Text != "new" || tail.Previews[1].Text != "text" {
+			t.Errorf("%s previews 45/44 = %q/%q, want new/text", name, tail.Previews[0].Text, tail.Previews[1].Text)
+		}
+	}
+}

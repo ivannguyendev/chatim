@@ -34,6 +34,15 @@ func (c *TailCache) AttachPreviews(room uint64, t Tail, previews []domain.Messag
 }
 
 func withPreviews(t Tail, previews []domain.Message) Tail {
-	t.Previews = append(slices.Clone(t.Previews), previews...)
+	held := make(map[uint64]struct{}, len(t.Previews))
+	for _, m := range t.Previews {
+		held[m.Seq] = struct{}{}
+	}
+	t.Previews = slices.Clone(t.Previews)
+	for _, m := range previews {
+		if _, ok := held[m.Seq]; !ok {
+			t.Previews = append(t.Previews, m)
+		}
+	}
 	return settleTail(t)
 }
