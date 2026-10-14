@@ -72,6 +72,8 @@
 
 ## Mục mang sang M5 (hardening)
 
+Từ M3 (owner 2026-10-14): **effect engine chặn đầu hàng** — effect có delay (`msg_created`, `RECONCILE_DELAY` 5s) giữ cả lô, effect delay 0 (`room_activity`, `reply_mention_index`, `pin_projection`, `mention_read`, count repair) trễ 5–20s, thông lượng ~1,6K phiếu/s mỗi core; phiếu lỗi Nak 5s mãi (không MaxDeliver/BackOff) có thể làm nghẹn partition; `Fetch` chờ đủ lô tới 0,9s; `reconcile_lag_seconds` không tách giai đoạn nên alert không thấy trễ 5s. Thử nghiệm hai giai đoạn ở M3 sửa được trễ ở 1K nhưng làm 5K tệ hơn (lô nhỏ: gấp 5 lần ghi `rooms`, giai đoạn có delay chạy từng lô nhỏ); bản vá và số đo trong `bin/m3-engine-two-stage.patch`, `bin/bench/m3-engine-*`. Hướng tiếp: gộp lô đã tới hạn cùng kind/effect + cửa sổ gom ngắn (`WORK_FETCH_LINGER` ~50ms), phiếu lỗi giãn dần bằng `NakWithDelay` + alert (owner đã chọn), lưu ý work stream `MaxAge` 2h vẫn xoá phiếu kẹt (khôi phục bằng `/app resync`).
+
 Từ M2b.0, chi tiết ở [tóm tắt kỹ thuật, mục Kết quả thực thi](plans/2026-10-05-m2b0-mechanism-foundations-summary.md#12-kết-quả-thực-thi-2026-10-05):
 
 - `room_yields_total` có thể đếm thừa khi hai entry cùng hết lượt trong một group hoặc slot đã yêu cầu retire.

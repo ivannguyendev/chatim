@@ -281,7 +281,7 @@ Compose profile `shard`: config server rs + 2 shard rs + mongos (`mongo:8.2.12`)
 
 ## 5. Đúng đắn và chạy đua
 
-- **Tin cuối và unread** đọc từ `messages` (trực tiếp hoặc qua cache đuôi kiểm bằng `last_seq`): tin vừa ack mà `room_activity` chưa nâng `last_seq` (vài ms–giây) chưa có trong lần gọi đó; client đã áp `msg_created` nên màn hình vẫn đúng, lần gọi sau đúng.
+- **Tin cuối và unread** đọc từ `messages` (trực tiếp hoặc qua cache đuôi kiểm bằng `last_seq`, `last_edit_at`): hai field này do worker `room_activity` ghi, và worker hiện trễ tới `RECONCILE_DELAY` (5s; tới ~20s khi PubAck chậm) vì effect có delay giữ cả lô (chặn đầu hàng, có từ M2b.1). Trong khoảng đó `ListMyRooms`/`GetRooms` có thể trả tin cuối/unread cũ, và hai core có thể trả khác nhau. Owner 2026-10-14: chấp nhận, hoãn sửa engine (M5). Client đã áp `msg_created`/`msg_deleted` tại chỗ nên màn hình đúng; gọi lại sau khoảng trễ thì đúng.
 - **Cache chỉ để nhanh, không để đúng (P1):** cache thiếu, hết hạn hay bị xoá → đọc DB; core khởi động lạnh vẫn trả đúng. Mỗi core một bản cache riêng; hai core có thể trả thông tin room lệch nhau tới khi event `room_updated`/`member_count_changed` tới hoặc hết TTL 60s. Sửa/xoá tin đổi `last_edit_at` nên cache đuôi không giữ text đã xoá.
 - **Hai đường cùng kết quả:** một quy tắc xếp, test so khớp hai đường trên cùng dữ liệu (mục 12).
 - **Client áp event:** event best-effort có thể mất; worker phát lại, và quay lại từ nền hay kết nối lại thì gọi `ListMyRooms` (P8). Unread client tự cộng có thể lệch khi tin vừa tới đã bị xoá trước khi client nhận `msg_created`; `msg_deleted` sau đó kích `GetRooms` sửa lại.
@@ -357,6 +357,8 @@ Không thêm thư viện. Compose profile `shard` (dev/itest) và script shard. 
 Mỗi trang trả 20 dòng, không có danh sách toàn bộ. Kết nối lại hàng loạt (~100K kết nối trải ≥ 1 phút, ~1.700 `ListMyRooms`/s): đuôi của một nhóm đông chỉ đọc một lần mỗi core rồi dùng chung, nên tải DB đi theo số room có tin mới, không theo user × room (mục tiêu của D72). Ước ~1.700 × 3 + số quét bù ≈ 5–10K truy vấn/s khi cache nóng, thay ~44K khi không cache. Ngoài lúc đó danh sách hội thoại gần như không tốn truy vấn vì client áp event. Đo ở M3 (mục 12.2).
 
 ## 10. Rủi ro
+
+- **Worker effect trễ tới ~5s (tới ~20s khi PubAck chậm) và thông lượng ~1,6K phiếu/s mỗi core:** danh sách hội thoại, `reply_threads`, `rc`, chỉ mục mention trễ theo; ở tải > ~1,6K phiếu/s mỗi core mọi effect trễ ~5s cố định. Có từ M2b.1, lộ ra ở M3; owner 2026-10-14 hoãn sửa sang M5 (thử nghiệm hai giai đoạn làm 5K tệ hơn vì mất gom lô; bản vá lưu `bin/m3-engine-two-stage.patch`).
 
 - **Core khởi động lạnh hoặc mới thêm core:** cache trống, các trang đầu tốn như không cache (24–30 truy vấn) tới khi cache đầy; kết nối lại hàng loạt ngay sau deploy là ca nặng nhất. Đo ở M3.
 - **RAM core:** cache đuôi tới `ROOM_TAIL_CACHE_BYTES` (256MB) + ảnh chụp danh sách (≈ 80KB mỗi user 5.000 room trong 30s) mỗi core; chỉnh theo số đo.
