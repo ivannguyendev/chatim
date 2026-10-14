@@ -37,7 +37,7 @@ Client gọi core qua app websocket cho mọi màn hình chat, kể cả danh s�
 | `GetHistory` thêm neo `AROUND(seq)`; `GetMessages`, `ListThreads`, `GetReactions`, `ListPins`, `ListMembers`, `UpdateRoom` | Sync token, đồng bộ đa thiết bị → owner xác định sau |
 | Emoji/bookmark của tôi trên `GetHistory`, `GetMessages`, `GetReplies` | Gom `MarkRead`, reconnect jitter, bỏ `kind`/`skip_unread` gửi từ client → M4 websocket |
 | `SendMessage` nhận `kind = system`, `skip_unread`, `meta` | Sinh tin hệ thống từ event (module SysMsg) → app riêng |
-| Collection `reply_threads`; test sẵn sàng sharding trên 2 shard | Chuyển mentions, bookmarks ra khỏi core; tên, ảnh của user → hệ thống user; attachments → sau |
+| Collection `reply_threads` | Test 2 shard và chọn shard key → hoãn, owner thảo luận riêng (2026-10-14); chuyển mentions, bookmarks ra khỏi core; tên, ảnh của user → hệ thống user; attachments → sau |
 
 ### 2.2 Màn hình → lần gọi core, hiện ngay và hiện sau
 
@@ -275,9 +275,9 @@ Ví dụ: SysMsg nhận `member_removed` của Lan, gửi vào 777 tin `kind = s
 
 Muốn khoá sửa/xoá tin `system`: `MESSAGE_LOCKED_KINDS=system` (D87).
 
-### 4.13 Test 2 shard
+### 4.13 Test 2 shard (hoãn)
 
-Compose profile `shard`: config server rs + 2 shard rs + mongos (`mongo:8.2.12`). Script shard collection clustered theo `{_id: 1}`, tách chunk để hai room mẫu ở hai shard. `make itest` qua mongos: toàn bộ `storetest`, explain kiểm `SINGLE_SHARD` cho truy vấn theo một room (`GetHistory`, `AROUND`, quét unread, `GetMessages`, `GetReactions`, `ListThreads`, `ListMembers`), transaction owner (D100), change feed; `make e2e` một lượt qua mongos.
+Owner 2026-10-14: sharding để sau, cần thảo luận kỹ. Lần chạy thử trên cluster 2 shard (bản vá `bin/m3-shard-profile.patch`) cho thấy: truy vấn theo room trên `messages`, `reply_threads` và `_id $in` nhắm một shard; transaction owner và change feed chạy qua mongos. Hai điểm cần thảo luận trước khi shard: (1) `members`, `message_interactions`, `mentions` có `_id` dài khác nhau (user id 1–64 byte) mà Mongo so BinData theo độ dài trước, nên shard theo `{_id: 1}` không giữ một room / một tin trên một shard — `ListMembers`, `GetReactions` (và mọi truy vấn theo room trên ba collection này) hỏi mọi shard; (2) change feed qua mongos trễ tới ~10s khi một shard rảnh (`periodicNoopIntervalSecs` mặc định 10s).
 
 ## 5. Đúng đắn và chạy đua
 
@@ -406,7 +406,6 @@ Mỗi trang trả 20 dòng, không có danh sách toàn bộ. Kết nối lại 
 | Unit `grpcsrv` từng RPC | quyền, mã lỗi, `missing`, xem trước, `peer_read_seq` |
 | Unit actor tin `system` | không kiểm membership, từ chối link/mention, meta > 8KB bị từ chối |
 | Unit feed `RoomChanged`, `PreferenceChanged`; worker `room_event`, `preferences_event`, `reply_mention_index` | update thiếu field version không vào feed; phát lại đúng doc; chạy lại `reply_threads` vẫn ghi |
-| Itest 2 shard | truy vấn theo room là `SINGLE_SHARD`; transaction owner, change feed qua mongos |
 | e2e phase 7 | tin hệ thống đẩy room lên và tính unread, tin `skip_unread` không tính; ghim/lưu trữ đổi thứ tự và thư mục; unread đúng sau gửi/đọc/xoá/ẩn; `AROUND`; `UpdateRoom` + `room_updated`; `ListThreads`, `GetReactions`, `ListPins`, `ListMembers`, `GetMessages` |
 
 ### 12.2 Kiểm chứng cuối milestone
