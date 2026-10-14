@@ -469,5 +469,5 @@ Test actor chập chờn (`TestLateUncertainWriteAnswersTheRetryWithItsOriginalS
 ### 12.2 Kiểm chứng cuối milestone
 
 - Trong lúc xây: `make itest` xanh ở các task đổi store/wiring (3, 4, 11, 12, 13); `make core-up && make e2e` PASS phase 1–7 ở `16ff6c8` và ở `cebc4ee`; `deploy/prometheus/alerts.yml` vẫn 17 luật.
-- Lần chạy cuối (`fmt-check`, `vet`, `lint`, `test`, `itest`, `e2e`, corebench một lần vì đường gửi chỉ đổi cho tin `system`): controller chạy trước PR, ghi kết quả vào nháp PR.
+- Lần chạy cuối ở `c556eaa` (2026-10-15): `fmt-check`, `vet`, `lint` (0 issue), `alerts-check` (17 luật) xanh; `make test` xanh (30s); `make itest` xanh (155s, mongostore 146s, itest 105s); `make core-up && make e2e` PASS phase 1–7 (33s, phase 7 có 34 event live). Corebench (`-rate 1000 -duration 30s -watch 10`, hai core, `CPU_Speed_Limit` 100 suốt lần chạy, chạy hai lần): cả hai lần 30000/30000 ack, 0 lỗi, 0 gửi lại, event live đủ, không trùng. Lần đầu p99 594ms, max 889ms vì một lần MongoDB khựng ~785ms lúc 23:56:15Z làm chậm mọi lệnh ghi `w:majority` (`messages`, `rooms`, `reconciler_state`) ở cả hai core cùng giây; lần chạy lại: ack p50 12.9ms, p95 27.7ms, p99 45.9ms, max 82.7ms, pacer lag p99 2.4ms, event live 303/303 (M2c cùng lệnh: p99 79.6ms).
 - Không chạy: test 2 shard (D140), đo đợt kết nối lại hàng loạt (để PoC prod-like P7).
