@@ -59,7 +59,7 @@ func (q *Queue) flush(base context.Context, batch []store.StateTarget) []store.S
 	cancel()
 	if err != nil {
 		q.failures.Add(n)
-		q.fails.warn(base, "pending state clear failed; the sweeper republishes these events", "targets", n, "err", err)
+		q.fails.Warn(base, "pending state clear failed; the sweeper republishes these events", "targets", n, "err", err)
 		return batch[:0]
 	}
 	q.cleared.Add(n)

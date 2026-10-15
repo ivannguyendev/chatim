@@ -106,7 +106,7 @@ func (w *Workers) settle(ctx context.Context, ds []work.Delivery, failed []bool)
 			err = d.Nak(w.cfg.RetryDelay)
 		}
 		if err != nil {
-			w.fails.warn(ctx, settleFailedMsg, "err", err)
+			w.fails.Warn(ctx, settleFailedMsg, "err", err)
 		}
 	}
 }

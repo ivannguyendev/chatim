@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
@@ -57,7 +58,7 @@ func (e *RoomCreated) run(ctx context.Context, recs []work.Record) []error {
 	for i, r := range recs {
 		room, err := e.deps.Rooms.Get(ctx, r.Room)
 		switch {
-		case undeliverable(err):
+		case eventkit.Undeliverable(err):
 			e.dropped.Add(1)
 			continue
 		case err != nil:

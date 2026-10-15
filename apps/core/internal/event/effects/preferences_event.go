@@ -39,7 +39,7 @@ func (e *PreferencesEvent) event(ctx context.Context, r work.Record) (*chatimv1.
 	case doc.Preferences.Ver < uint64(r.Version):
 		return nil, store.ErrStaleRead
 	}
-	room, err := e.types.identity(ctx, r.Room)
+	room, err := e.types.Identity(ctx, r.Room)
 	if err != nil {
 		return nil, err
 	}

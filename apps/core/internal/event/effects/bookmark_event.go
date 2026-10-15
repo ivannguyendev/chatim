@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
@@ -51,7 +52,7 @@ func (e *BookmarkEvent) run(ctx context.Context, recs []work.Record) []error {
 	return e.each(ctx, recs, e.event, bookmarkGone)
 }
 
-func bookmarkGone(err error) bool { return gone(err) || errors.Is(err, errNoBookmark) }
+func bookmarkGone(err error) bool { return eventkit.Gone(err) || errors.Is(err, errNoBookmark) }
 
 func (e *BookmarkEvent) event(ctx context.Context, r work.Record) (*chatimv1.Event, error) {
 	doc, found, err := e.bookmarks.GetBookmark(ctx, recordKey(r), r.User)
@@ -65,7 +66,7 @@ func (e *BookmarkEvent) event(ctx context.Context, r work.Record) (*chatimv1.Eve
 	case doc.Ver < r.Version:
 		return nil, store.ErrStaleRead
 	}
-	room, err := e.types.identity(ctx, r.Room)
+	room, err := e.types.Identity(ctx, r.Room)
 	if err != nil {
 		return nil, err
 	}

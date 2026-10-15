@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
@@ -51,7 +52,7 @@ func (e *ReactionEvent) run(ctx context.Context, recs []work.Record) []error {
 	return e.each(ctx, recs, e.event, reactionGone)
 }
 
-func reactionGone(err error) bool { return gone(err) || errors.Is(err, errNoReaction) }
+func reactionGone(err error) bool { return eventkit.Gone(err) || errors.Is(err, errNoReaction) }
 
 func (e *ReactionEvent) event(ctx context.Context, r work.Record) (*chatimv1.Event, error) {
 	doc, found, err := e.reactions.GetReaction(ctx, recordKey(r), r.User)
@@ -65,7 +66,7 @@ func (e *ReactionEvent) event(ctx context.Context, r work.Record) (*chatimv1.Eve
 	case doc.N < r.Version:
 		return nil, store.ErrStaleRead
 	}
-	typ, err := e.types.get(ctx, r.Room)
+	typ, err := e.types.Type(ctx, r.Room)
 	if err != nil {
 		return nil, err
 	}

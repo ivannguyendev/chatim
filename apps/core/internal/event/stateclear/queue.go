@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
@@ -22,8 +23,8 @@ type Queue struct {
 	store    Clearer
 	cfg      Config
 	log      *slog.Logger
-	fails    limitedLog
-	full     limitedLog
+	fails    *eventkit.LimitedLog
+	full     *eventkit.LimitedLog
 	in       chan store.StateTarget
 	mu       sync.RWMutex
 	closed   bool
@@ -49,7 +50,7 @@ func New(st Clearer, cfg Config, log *slog.Logger) (*Queue, error) {
 	}
 	abort, halt := context.WithCancel(context.Background())
 	return &Queue{
-		store: st, cfg: cfg, log: log, fails: limitedLog{log: log}, full: limitedLog{log: log},
+		store: st, cfg: cfg, log: log, fails: eventkit.NewLimitedLog(log), full: eventkit.NewLimitedLog(log),
 		in: make(chan store.StateTarget, cfg.Queue), abort: abort, halt: halt, done: make(chan struct{}),
 	}, nil
 }
@@ -65,7 +66,7 @@ func (q *Queue) Add(t store.StateTarget) {
 	case q.in <- t:
 	default:
 		q.dropped.Add(1)
-		q.full.warn(context.Background(), "pending state clear queue full; dropping clears", "capacity", q.cfg.Queue)
+		q.full.Warn(context.Background(), "pending state clear queue full; dropping clears", "capacity", q.cfg.Queue)
 	}
 }
 

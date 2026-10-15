@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
@@ -57,7 +58,7 @@ func (e *CountEvent) run(ctx context.Context, recs []work.Record) []error {
 	for _, g := range groups {
 		ev, err := e.event(ctx, g.key)
 		switch {
-		case gone(err):
+		case eventkit.Gone(err):
 			g.drop(&e.dropped)
 		case err != nil:
 			g.fail(errs, err)
@@ -82,7 +83,7 @@ func (e *CountEvent) event(ctx context.Context, key store.MsgKey) (*chatimv1.Eve
 	case found[0].Reactions.Version == 0:
 		return nil, nil
 	}
-	typ, err := e.types.get(ctx, key.Room)
+	typ, err := e.types.Type(ctx, key.Room)
 	if err != nil {
 		return nil, err
 	}

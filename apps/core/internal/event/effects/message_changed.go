@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
@@ -36,7 +37,7 @@ type MessageChangedConfig struct {
 type MessageChanged struct {
 	deps        MessageChangedDeps
 	cfg         MessageChangedConfig
-	types       *roomTypes
+	types       *eventkit.RoomTypes
 	republished atomic.Uint64
 	dropped     atomic.Uint64
 }
@@ -50,7 +51,7 @@ func NewMessageChanged(deps MessageChangedDeps, cfg MessageChangedConfig) (*Mess
 	if cfg.SubjectRoot == "" || cfg.Delay < 0 || cfg.RoomCache < 0 {
 		return nil, fmt.Errorf("%w: msg_changed config %+v needs a subject root, a delay and a room cache", apperr.ErrInvalidArgument, cfg)
 	}
-	return &MessageChanged{deps: deps, cfg: cfg, types: newRoomTypes(deps.Rooms, cfg.RoomCache)}, nil
+	return &MessageChanged{deps: deps, cfg: cfg, types: eventkit.NewRoomTypes(deps.Rooms, cfg.RoomCache)}, nil
 }
 
 func (e *MessageChanged) Effect() Effect {
@@ -70,7 +71,7 @@ func (e *MessageChanged) run(ctx context.Context, recs []work.Record) []error {
 		}
 		ev, err := e.event(ctx, r)
 		switch {
-		case gone(err):
+		case eventkit.Gone(err):
 			e.dropped.Add(1)
 			continue
 		case err != nil:
@@ -94,7 +95,7 @@ func (e *MessageChanged) event(ctx context.Context, r work.Record) (*chatimv1.Ev
 	if err != nil {
 		return nil, err
 	}
-	typ, err := e.types.get(ctx, r.Room)
+	typ, err := e.types.Type(ctx, r.Room)
 	if err != nil {
 		return nil, err
 	}

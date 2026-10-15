@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -53,7 +54,7 @@ func (e *MentionRead) runRoom(ctx context.Context, room uint64, recs []work.Reco
 	}
 	found, err := e.deps.Members.MembersOf(ctx, room, users)
 	switch {
-	case undeliverable(err):
+	case eventkit.Undeliverable(err):
 		e.dropped.Add(uint64(len(indexes)))
 		return
 	case err != nil:

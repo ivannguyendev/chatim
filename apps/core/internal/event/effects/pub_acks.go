@@ -2,15 +2,12 @@ package effects
 
 import (
 	"context"
-	"errors"
 	"sync/atomic"
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
-	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
-	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
 type pendingAck struct {
@@ -50,8 +47,4 @@ func countStored(n *atomic.Uint64) func(*jetstream.PubAck) {
 			n.Add(1)
 		}
 	}
-}
-
-func undeliverable(err error) bool {
-	return errors.Is(err, domain.ErrRoomNotFound) || errors.Is(err, apperr.ErrInvalidArgument)
 }

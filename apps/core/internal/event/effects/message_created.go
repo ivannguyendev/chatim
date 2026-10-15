@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
@@ -37,7 +38,7 @@ type MessageCreatedConfig struct {
 type MessageCreated struct {
 	deps        MessageCreatedDeps
 	cfg         MessageCreatedConfig
-	types       *roomTypes
+	types       *eventkit.RoomTypes
 	republished atomic.Uint64
 	dropped     atomic.Uint64
 }
@@ -51,7 +52,7 @@ func NewMessageCreated(deps MessageCreatedDeps, cfg MessageCreatedConfig) (*Mess
 	if cfg.SubjectRoot == "" || cfg.Delay < 0 || cfg.RoomCache < 0 {
 		return nil, fmt.Errorf("%w: msg_created config %+v needs a subject root, a delay and a room cache", apperr.ErrInvalidArgument, cfg)
 	}
-	return &MessageCreated{deps: deps, cfg: cfg, types: newRoomTypes(deps.Rooms, cfg.RoomCache)}, nil
+	return &MessageCreated{deps: deps, cfg: cfg, types: eventkit.NewRoomTypes(deps.Rooms, cfg.RoomCache)}, nil
 }
 
 func (e *MessageCreated) Effect() Effect {
@@ -100,13 +101,13 @@ func (e *MessageCreated) unmarkedByRoom(ctx context.Context, keys []store.MsgKey
 
 func (e *MessageCreated) publishRoom(ctx context.Context, keys []store.MsgKey, idx []int, errs []error, pending []pendingAck) []pendingAck {
 	room := keys[idx[0]].Room
-	typ, err := e.types.get(ctx, room)
+	typ, err := e.types.Type(ctx, room)
 	var found map[store.MsgKey]domain.Message
 	if err == nil {
 		found, err = e.find(ctx, room, keys, idx)
 	}
 	switch {
-	case undeliverable(err):
+	case eventkit.Undeliverable(err):
 		for range idx {
 			e.dropped.Add(1)
 		}

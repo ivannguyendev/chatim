@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
@@ -51,7 +52,7 @@ func (e *PinEvent) run(ctx context.Context, recs []work.Record) []error {
 	return e.each(ctx, recs, e.event, pinGone)
 }
 
-func pinGone(err error) bool { return gone(err) || errors.Is(err, store.ErrPinNotFound) }
+func pinGone(err error) bool { return eventkit.Gone(err) || errors.Is(err, store.ErrPinNotFound) }
 
 func (e *PinEvent) event(ctx context.Context, r work.Record) (*chatimv1.Event, error) {
 	fact, err := e.deps.Pins.At(ctx, r.Room, r.Seq)
@@ -66,7 +67,7 @@ func (e *PinEvent) event(ctx context.Context, r work.Record) (*chatimv1.Event, e
 	case len(found) == 0:
 		return nil, domain.ErrMessageNotFound
 	}
-	typ, err := e.types.get(ctx, r.Room)
+	typ, err := e.types.Type(ctx, r.Room)
 	if err != nil {
 		return nil, err
 	}

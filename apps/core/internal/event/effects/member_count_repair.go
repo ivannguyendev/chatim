@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
@@ -61,7 +62,7 @@ func (e *MemberCountRepair) run(ctx context.Context, recs []work.Record) []error
 	for _, g := range groupRecords(recs, recordRoom) {
 		err := e.repair(ctx, g.key)
 		switch {
-		case undeliverable(err):
+		case eventkit.Undeliverable(err):
 			g.drop(&e.dropped)
 		case err != nil:
 			g.fail(errs, err)

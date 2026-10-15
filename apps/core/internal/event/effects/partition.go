@@ -47,7 +47,7 @@ func (w *Workers) fetchFailed(ctx context.Context, p int, err error) {
 	if bad, ok := errors.AsType[work.BadRecordsError](err); ok {
 		w.failed.Add(bad.Terminated + bad.Deferred)
 	}
-	w.fails.warn(ctx, fetchFailedMsg, "partition", p, "err", err)
+	w.fails.Warn(ctx, fetchFailedMsg, "partition", p, "err", err)
 }
 
 func (w *Workers) pause(ctx context.Context) {
@@ -63,7 +63,7 @@ func (w *Workers) pause(ctx context.Context) {
 func (w *Workers) release(ctx context.Context, ds []work.Delivery) {
 	for _, d := range ds {
 		if err := d.Nak(0); err != nil {
-			w.fails.warn(ctx, settleFailedMsg, "err", err)
+			w.fails.Warn(ctx, settleFailedMsg, "err", err)
 		}
 	}
 }

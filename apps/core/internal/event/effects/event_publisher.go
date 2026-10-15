@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
@@ -15,7 +16,7 @@ import (
 type eventPublisher struct {
 	js          publish.JetStream
 	root        string
-	types       *roomTypes
+	types       *eventkit.RoomTypes
 	republished atomic.Uint64
 	dropped     atomic.Uint64
 }
@@ -30,7 +31,7 @@ func eventConfig(name string, cfg MessageChangedConfig) (MessageChangedConfig, e
 }
 
 func (p *eventPublisher) init(js publish.JetStream, root string, rooms RoomReader, cache int) {
-	p.js, p.root, p.types = js, root, newRoomTypes(rooms, cache)
+	p.js, p.root, p.types = js, root, eventkit.NewRoomTypes(rooms, cache)
 }
 
 func (p *eventPublisher) Republished() uint64 { return p.republished.Load() }

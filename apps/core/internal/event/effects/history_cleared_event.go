@@ -36,7 +36,7 @@ func (e *HistoryClearedEvent) event(ctx context.Context, r work.Record) (*chatim
 	case doc.ClearedAt.IsZero():
 		return nil, errNotCleared
 	}
-	room, err := e.types.identity(ctx, r.Room)
+	room, err := e.types.Identity(ctx, r.Room)
 	if err != nil {
 		return nil, err
 	}

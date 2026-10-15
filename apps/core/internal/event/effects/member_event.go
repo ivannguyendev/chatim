@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
@@ -67,7 +68,7 @@ func (e *memberEffect) current(ctx context.Context, room uint64, user string) (d
 func (e *memberEffect) stamp() time.Time { return e.now().UTC().Truncate(time.Millisecond) }
 
 func memberGone(err error) bool {
-	return gone(err) || errors.Is(err, errNoMember) || errors.Is(err, errNotCleared)
+	return eventkit.Gone(err) || errors.Is(err, errNoMember) || errors.Is(err, errNotCleared)
 }
 
 type MemberEvent struct{ memberEffect }
@@ -98,7 +99,7 @@ func (e *MemberEvent) event(ctx context.Context, r work.Record) (*chatimv1.Event
 	case doc.Ver < r.Version:
 		return nil, store.ErrStaleRead
 	}
-	typ, err := e.types.get(ctx, r.Room)
+	typ, err := e.types.Type(ctx, r.Room)
 	if err != nil {
 		return nil, err
 	}

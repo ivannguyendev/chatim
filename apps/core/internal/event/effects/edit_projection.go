@@ -2,10 +2,10 @@ package effects
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync/atomic"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -43,7 +43,7 @@ func (e *EditProjection) run(ctx context.Context, recs []work.Record) []error {
 	for i, r := range recs {
 		err := e.apply(ctx, r)
 		switch {
-		case gone(err):
+		case eventkit.Gone(err):
 			e.dropped.Add(1)
 		case err != nil:
 			errs[i] = err
@@ -71,9 +71,5 @@ func (e *EditProjection) apply(ctx context.Context, r work.Record) error {
 }
 
 func recordKey(r work.Record) store.MsgKey {
-	return store.MsgKey{Room: r.Room, Thread: r.Thread, Seq: r.Seq}
-}
-
-func gone(err error) bool {
-	return undeliverable(err) || errors.Is(err, store.ErrEditNotFound) || errors.Is(err, domain.ErrMessageNotFound)
+	return eventkit.MessageKey(r.Room, r.Thread, r.Seq)
 }

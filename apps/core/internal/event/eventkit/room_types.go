@@ -1,4 +1,4 @@
-package effects
+package eventkit
 
 import (
 	"context"
@@ -7,23 +7,27 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 )
 
-type roomTypes struct {
+type RoomReader interface {
+	Get(ctx context.Context, id uint64) (domain.Room, error)
+}
+
+type RoomTypes struct {
 	rooms RoomReader
 	limit int
 	mu    sync.Mutex
 	cache map[uint64]domain.Room
 }
 
-func newRoomTypes(rooms RoomReader, limit int) *roomTypes {
-	return &roomTypes{rooms: rooms, limit: limit, cache: make(map[uint64]domain.Room)}
+func NewRoomTypes(rooms RoomReader, limit int) *RoomTypes {
+	return &RoomTypes{rooms: rooms, limit: limit, cache: make(map[uint64]domain.Room)}
 }
 
-func (c *roomTypes) get(ctx context.Context, id uint64) (domain.RoomType, error) {
-	r, err := c.identity(ctx, id)
+func (c *RoomTypes) Type(ctx context.Context, id uint64) (domain.RoomType, error) {
+	r, err := c.Identity(ctx, id)
 	return r.Type, err
 }
 
-func (c *roomTypes) identity(ctx context.Context, id uint64) (domain.Room, error) {
+func (c *RoomTypes) Identity(ctx context.Context, id uint64) (domain.Room, error) {
 	c.mu.Lock()
 	r, ok := c.cache[id]
 	c.mu.Unlock()

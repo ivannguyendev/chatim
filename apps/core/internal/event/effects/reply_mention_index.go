@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
@@ -123,7 +124,7 @@ func (e *ReplyMentionIndex) index(ctx context.Context, r work.Record, m domain.M
 }
 
 func (e *ReplyMentionIndex) settled(err error) error {
-	if gone(err) {
+	if eventkit.Gone(err) {
 		e.dropped.Add(1)
 		return nil
 	}

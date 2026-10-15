@@ -3,6 +3,7 @@ package effects
 import (
 	"context"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
@@ -31,7 +32,7 @@ func (e *MemberCountEvent) run(ctx context.Context, recs []work.Record) []error 
 	for _, g := range groups {
 		r, err := e.rooms.Get(ctx, g.key)
 		switch {
-		case undeliverable(err):
+		case eventkit.Undeliverable(err):
 			g.drop(&e.dropped)
 		case err != nil:
 			g.fail(errs, err)

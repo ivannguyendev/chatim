@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
@@ -39,8 +40,8 @@ type Reconciler struct {
 	deps    Deps
 	cfg     Config
 	log     *slog.Logger
-	drops   limitedLog
-	fails   limitedLog
+	drops   *eventkit.LimitedLog
+	fails   *eventkit.LimitedLog
 	stats   counters
 	started atomic.Bool
 	stop    chan struct{}
@@ -61,7 +62,7 @@ func New(deps Deps, cfg Config, log *slog.Logger) (*Reconciler, error) {
 	}
 	return &Reconciler{
 		deps: deps, cfg: cfg, log: log,
-		drops: limitedLog{log: log}, fails: limitedLog{log: log},
+		drops: eventkit.NewLimitedLog(log), fails: eventkit.NewLimitedLog(log),
 		stop: make(chan struct{}), done: make(chan struct{}),
 	}, nil
 }
@@ -135,7 +136,7 @@ func (r *Reconciler) ended(ctx context.Context, err error) {
 		}
 	case errors.Is(err, errPublishFailed):
 		r.stats.publishFailures.Add(1)
-		r.fails.warn(ctx, failedMsg, "err", err)
+		r.fails.Warn(ctx, failedMsg, "err", err)
 	case errors.Is(err, store.ErrFeedBusy):
 		r.log.InfoContext(ctx, "change feed held by another consumer; retrying")
 	default:
@@ -145,5 +146,5 @@ func (r *Reconciler) ended(ctx context.Context, err error) {
 
 func (r *Reconciler) drop(ctx context.Context, err error) {
 	r.stats.dropped.Add(1)
-	r.drops.warn(ctx, dropMsg, "err", err)
+	r.drops.Warn(ctx, dropMsg, "err", err)
 }

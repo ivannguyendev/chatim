@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
@@ -50,7 +51,7 @@ func (e *HiddenEvent) run(ctx context.Context, recs []work.Record) []error {
 	return e.each(ctx, recs, e.event, hideGone)
 }
 
-func hideGone(err error) bool { return gone(err) || errors.Is(err, errNoHide) }
+func hideGone(err error) bool { return eventkit.Gone(err) || errors.Is(err, errNoHide) }
 
 func (e *HiddenEvent) event(ctx context.Context, r work.Record) (*chatimv1.Event, error) {
 	h, found, err := e.hidden.Get(ctx, r.User, recordKey(r))
@@ -60,7 +61,7 @@ func (e *HiddenEvent) event(ctx context.Context, r work.Record) (*chatimv1.Event
 	case !found:
 		return nil, errNoHide
 	}
-	room, err := e.types.identity(ctx, r.Room)
+	room, err := e.types.Identity(ctx, r.Room)
 	if err != nil {
 		return nil, err
 	}

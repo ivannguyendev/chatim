@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
@@ -44,7 +45,7 @@ func (e *RoomEvent) Effect() Effect {
 }
 
 func (e *RoomEvent) run(ctx context.Context, recs []work.Record) []error {
-	return e.each(ctx, recs, e.event, undeliverable)
+	return e.each(ctx, recs, e.event, eventkit.Undeliverable)
 }
 
 func (e *RoomEvent) event(ctx context.Context, r work.Record) (*chatimv1.Event, error) {

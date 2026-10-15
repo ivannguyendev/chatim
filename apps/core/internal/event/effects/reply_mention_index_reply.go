@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -38,7 +39,7 @@ func (e *ReplyMentionIndex) count(ctx context.Context, m domain.Message, parent 
 	if err == nil {
 		err = e.announceReplies(ctx, parent, m.Tenant, rc)
 	}
-	if err != nil && !gone(err) {
+	if err != nil && !eventkit.Gone(err) {
 		return err
 	}
 	e.deps.Timers.Disarm(ctx, tm)
@@ -59,7 +60,7 @@ func (e *ReplyMentionIndex) writeReply(ctx context.Context, m domain.Message, re
 }
 
 func (e *ReplyMentionIndex) announceReplies(ctx context.Context, parent store.MsgKey, tenant string, rc domain.ReplyCount) error {
-	typ, err := e.types.get(ctx, parent.Room)
+	typ, err := e.types.Type(ctx, parent.Room)
 	if err != nil {
 		return err
 	}

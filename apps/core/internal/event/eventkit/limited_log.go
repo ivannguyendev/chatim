@@ -1,4 +1,4 @@
-package stateclear
+package eventkit
 
 import (
 	"context"
@@ -7,13 +7,17 @@ import (
 	"time"
 )
 
-type limitedLog struct {
+type LimitedLog struct {
 	log  *slog.Logger
 	mu   sync.Mutex
 	last time.Time
 }
 
-func (l *limitedLog) warn(ctx context.Context, msg string, args ...any) {
+func NewLimitedLog(log *slog.Logger) *LimitedLog {
+	return &LimitedLog{log: log}
+}
+
+func (l *LimitedLog) Warn(ctx context.Context, msg string, args ...any) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if now := time.Now(); l.last.IsZero() || now.Sub(l.last) >= time.Second {

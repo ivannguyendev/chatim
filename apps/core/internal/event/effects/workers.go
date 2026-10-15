@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
@@ -18,7 +19,7 @@ type Workers struct {
 	deps      Deps
 	cfg       Config
 	log       *slog.Logger
-	fails     limitedLog
+	fails     *eventkit.LimitedLog
 	processed atomic.Uint64
 	failed    atomic.Uint64
 	lags      []atomic.Int64
@@ -43,7 +44,7 @@ func New(deps Deps, cfg Config, log *slog.Logger) (*Workers, error) {
 		log = slog.Default()
 	}
 	return &Workers{
-		deps: deps, cfg: cfg, log: log, fails: limitedLog{log: log},
+		deps: deps, cfg: cfg, log: log, fails: eventkit.NewLimitedLog(log),
 		lags: make([]atomic.Int64, cfg.Partitions),
 		stop: make(chan struct{}), done: make(chan struct{}),
 	}, nil

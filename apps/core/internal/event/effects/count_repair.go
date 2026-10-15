@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
@@ -91,7 +92,7 @@ func (e *CountRepair) run(ctx context.Context, recs []work.Record) []error {
 	for _, g := range groupRecords(recs, countTargetOf) {
 		err := e.repair(ctx, g.key)
 		switch {
-		case gone(err):
+		case eventkit.Gone(err):
 			g.drop(&e.dropped)
 		case err != nil:
 			g.fail(errs, err)
@@ -112,7 +113,7 @@ func (e *CountRepair) repair(ctx context.Context, t countTarget) error {
 	case len(found) == 0:
 		return domain.ErrMessageNotFound
 	}
-	typ, err := e.types.get(ctx, t.key.Room)
+	typ, err := e.types.Type(ctx, t.key.Room)
 	if err != nil {
 		return err
 	}
