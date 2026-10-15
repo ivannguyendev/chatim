@@ -19,12 +19,15 @@ type hiddenKey struct {
 }
 
 type Hidden struct {
-	mu   sync.RWMutex
-	seqs map[hiddenKey]time.Time
-	log  *Messages
+	mu    sync.RWMutex
+	seqs  map[hiddenKey]time.Time
+	log   *Messages
+	flags flagMap[hiddenKey]
 }
 
-func NewHidden() *Hidden { return &Hidden{seqs: make(map[hiddenKey]time.Time)} }
+func NewHidden() *Hidden {
+	return &Hidden{seqs: make(map[hiddenKey]time.Time), flags: make(flagMap[hiddenKey])}
+}
 
 func (s *Hidden) Hide(ctx context.Context, user string, key store.MsgKey, at time.Time) (bool, error) {
 	if err := ctx.Err(); err != nil {

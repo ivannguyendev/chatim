@@ -18,9 +18,12 @@ type Pins struct {
 	mu    sync.RWMutex
 	facts map[uint64][]domain.PinAction
 	log   *Messages
+	flags flagMap[pinFlagKey]
 }
 
-func NewPins() *Pins { return &Pins{facts: make(map[uint64][]domain.PinAction)} }
+func NewPins() *Pins {
+	return &Pins{facts: make(map[uint64][]domain.PinAction), flags: make(flagMap[pinFlagKey])}
+}
 
 func (s *Pins) Append(ctx context.Context, a domain.PinAction) error {
 	if err := ctx.Err(); err != nil {

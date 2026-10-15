@@ -18,9 +18,12 @@ type Edits struct {
 	mu    sync.RWMutex
 	facts map[store.MsgKey][]domain.Edit
 	log   *Messages
+	flags flagMap[editFlagKey]
 }
 
-func NewEdits() *Edits { return &Edits{facts: make(map[store.MsgKey][]domain.Edit)} }
+func NewEdits() *Edits {
+	return &Edits{facts: make(map[store.MsgKey][]domain.Edit), flags: make(flagMap[editFlagKey])}
+}
 
 func (s *Edits) Append(ctx context.Context, e domain.Edit) error {
 	if err := ctx.Err(); err != nil {

@@ -26,6 +26,7 @@ type Interactions struct {
 	bookmarks map[userKey]domain.Bookmark
 	replies   map[replyKey]domain.Reply
 	log       *Messages
+	flags     flagMap[interactionFlagKey]
 }
 
 func NewInteractions() *Interactions {
@@ -33,6 +34,7 @@ func NewInteractions() *Interactions {
 		reactions: make(map[userKey]domain.Reaction),
 		bookmarks: make(map[userKey]domain.Bookmark),
 		replies:   make(map[replyKey]domain.Reply),
+		flags:     make(flagMap[interactionFlagKey]),
 	}
 }
 

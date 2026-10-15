@@ -90,3 +90,13 @@ func TestRoomListContract(t *testing.T) {
 func TestRoomTailsContract(t *testing.T) {
 	storetest.RunRoomTails(t, func(*testing.T) storetest.TailMessages { return memstore.NewMessages() })
 }
+
+func TestEventStatesContract(t *testing.T) {
+	storetest.RunEventStates(t, func(*testing.T) storetest.EventStateStores {
+		states := memstore.NewEventStates(memstore.EventStateStores{
+			Messages: memstore.NewMessages(), Rooms: memstore.NewRooms(), Edits: memstore.NewEdits(),
+			Hidden: memstore.NewHidden(), Interactions: memstore.NewInteractions(), Pins: memstore.NewPins(),
+		})
+		return storetest.EventStateStores{States: states, Checkpoints: memstore.NewSweepCheckpoints(), Seeder: states}
+	})
+}

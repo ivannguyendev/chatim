@@ -104,6 +104,12 @@ var portMethods = map[string]string{
 	"RoomList.RoomInfos":         "read",
 	"RoomTails.TailWindow":       "read",
 	"RoomTails.TailPreviews":     "read",
+
+	"EventStates.Pending":      "read",
+	"EventStates.Clear":        "cas",
+	"EventStates.Mark":         "cas",
+	"SweepCheckpoints.Get":     "read",
+	"SweepCheckpoints.Advance": "monotonic-max",
 }
 
 func TestEveryPortMethodHasAWriteContract(t *testing.T) {
@@ -134,6 +140,8 @@ func TestEveryPortMethodHasAWriteContract(t *testing.T) {
 		reflect.TypeFor[store.ReplyThreads](),
 		reflect.TypeFor[store.RoomList](),
 		reflect.TypeFor[store.RoomTails](),
+		reflect.TypeFor[store.EventStates](),
+		reflect.TypeFor[store.SweepCheckpoints](),
 	}
 	seen := map[string]bool{}
 	for _, p := range ports {

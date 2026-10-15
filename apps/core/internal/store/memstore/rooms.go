@@ -21,18 +21,21 @@ type memberKey struct {
 }
 
 type Rooms struct {
-	mu        sync.RWMutex
-	rooms     map[uint64]domain.Room
-	members   map[memberKey]domain.Member
-	pins      map[uint64]domain.PinState
-	ownersVer map[uint64]uint64
-	log       *Messages
+	mu          sync.RWMutex
+	rooms       map[uint64]domain.Room
+	members     map[memberKey]domain.Member
+	pins        map[uint64]domain.PinState
+	ownersVer   map[uint64]uint64
+	log         *Messages
+	roomFlags   flagMap[uint64]
+	memberFlags flagMap[memberKey]
 }
 
 func NewRooms() *Rooms {
 	return &Rooms{
 		rooms: make(map[uint64]domain.Room), members: make(map[memberKey]domain.Member),
 		pins: make(map[uint64]domain.PinState), ownersVer: make(map[uint64]uint64),
+		roomFlags: make(flagMap[uint64]), memberFlags: make(flagMap[memberKey]),
 	}
 }
 

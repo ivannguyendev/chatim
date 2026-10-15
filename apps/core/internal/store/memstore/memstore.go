@@ -21,12 +21,14 @@ type Messages struct {
 	grew      chan struct{}
 	rawCounts map[store.MsgKey][]domain.RawCount
 	rawReply  map[store.MsgKey]int64
+	flags     flagMap[store.MsgKey]
 }
 
 func NewMessages() *Messages {
 	return &Messages{
 		lines: make(map[timeline][]domain.Message), grew: make(chan struct{}),
 		rawCounts: make(map[store.MsgKey][]domain.RawCount), rawReply: make(map[store.MsgKey]int64),
+		flags: make(flagMap[store.MsgKey]),
 	}
 }
 
