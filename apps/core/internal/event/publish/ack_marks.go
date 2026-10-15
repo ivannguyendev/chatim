@@ -6,8 +6,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/nats-io/nats.go/jetstream"
-
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
@@ -27,31 +25,23 @@ type Option func(*Publisher)
 func WithAckMarks(m Marker) Option {
 	return func(p *Publisher) {
 		if m != nil {
-			p.marks = &ackMarks{marker: m, queue: make(chan tracked, markQueue), fails: failureLog{log: p.log}, log: p.log, counters: &Counters{}}
+			p.marks = &ackMarks{marker: m, queue: make(chan store.MsgKey, markQueue), fails: failureLog{log: p.log}, log: p.log, counters: &Counters{}}
 		}
 	}
 }
 
-type tracked struct {
-	key    store.MsgKey
-	future jetstream.PubAckFuture
-}
-
 type ackMarks struct {
 	marker   Marker
-	queue    chan tracked
+	queue    chan store.MsgKey
 	full     atomic.Bool
 	fails    failureLog
 	log      *slog.Logger
 	counters *Counters
 }
 
-func (a *ackMarks) track(key store.MsgKey, f jetstream.PubAckFuture) {
-	if a == nil {
-		return
-	}
+func (a *ackMarks) track(key store.MsgKey) {
 	select {
-	case a.queue <- tracked{key: key, future: f}:
+	case a.queue <- key:
 		a.full.Store(false)
 	default:
 		a.counters.markQueueFull.Add(1)
@@ -68,18 +58,15 @@ func (a *ackMarks) run(abort <-chan struct{}) {
 	batch := make([]store.MsgKey, 0, markBatch)
 	for {
 		select {
-		case t, open := <-a.queue:
+		case key, open := <-a.queue:
 			if !open {
 				a.flush(batch)
 				return
 			}
-			if !acked(t.future, abort) {
-				continue
-			}
 			if len(batch) == 0 {
 				window.Reset(markWindow)
 			}
-			batch = append(batch, t.key)
+			batch = append(batch, key)
 			if len(batch) >= markBatch {
 				window.Stop()
 				a.flush(batch)
@@ -92,17 +79,6 @@ func (a *ackMarks) run(abort <-chan struct{}) {
 			a.flush(batch)
 			return
 		}
-	}
-}
-
-func acked(f jetstream.PubAckFuture, abort <-chan struct{}) bool {
-	select {
-	case <-f.Ok():
-		return true
-	case <-f.Err():
-		return false
-	case <-abort:
-		return false
 	}
 }
 
