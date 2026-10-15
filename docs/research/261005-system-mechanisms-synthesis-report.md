@@ -4,7 +4,7 @@
 > **Ngày hoàn thành:** 2026-10-05  
 > **Trạng thái:** Báo cáo Nghiên cứu Chính thức (Canonical Research Whitepaper)  
 > **Tác giả:** Nhóm Kiến trúc chatim & Ban Đánh giá Độc lập  
-> **Tài liệu nguồn tổng hợp:** [Báo cáo gốc](../archive/research/261004-system-mechanisms-report.md) · [Phản biện CL](../archive/research/261004-system-mechanisms-review-cl.md) · [Phản biện GE](../archive/research/261004-system-mechanisms-review-ge.md) · [Vòng 2 CL](../archive/research/261004-system-mechanisms-round2-cl.md) / [GE](../archive/research/261004-system-mechanisms-round2-ge.md) · [Kết quả vòng 2 CL](../archive/research/261004-system-mechanisms-round2-review-cl.md) / [GE](../archive/research/261004-system-mechanisms-round2-review-ge.md) · [Bản tổng hợp quyết định](../archive/research/261004-system-mechanisms-synthesis.md) · [Kiến trúc chuẩn hoá](../designs/261005-chatim-architecture.md).
+> **Nguồn tổng hợp:** 2 vòng phản biện cơ chế hệ thống (chuyên gia CL & GE) · [Kiến trúc chuẩn hoá](../architecture.md) · [Nhật ký quyết định D1–D140](../decision-log.md).
 
 ---
 

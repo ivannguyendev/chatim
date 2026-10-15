@@ -1,6 +1,6 @@
 # M2b.4 — Member + vị trí đọc: tóm tắt kỹ thuật
 
-> Trạng thái: **đã xây, `dev-done`** (thực thi xong 2026-10-08 trên nhánh chung `feat/m2b`), đã merge `main` qua **PR #12 ngày 2026-10-08**. Bản này là tài liệu lưu trữ: mô tả cái owner đã duyệt và cái đã thực sự xây, kể cả chỗ lệch so với plan (mục 13). Plan execute gốc cho AI nằm ở `.claude/plans/2026-10-06-m2b4-members-read.md` (local, không trong `docs/`). Quyết định D96–D111 nằm trong Decision Log của [thiết kế](../designs/261005-chatim-architecture.md) §17.2; thiết kế là nguồn sự thật hiện hành.
+> Trạng thái: **đã xây, `dev-done`** (thực thi xong 2026-10-08 trên nhánh chung `feat/m2b`), đã merge `main` qua **PR #12 ngày 2026-10-08**. Bản này là tài liệu lưu trữ: mô tả cái owner đã duyệt và cái đã thực sự xây, kể cả chỗ lệch so với plan (mục 13). Plan execute gốc cho AI nằm ở `.claude/plans/2026-10-06-m2b4-members-read.md` (local, không trong `docs/`). Quyết định D96–D111 nằm trong Decision Log của [thiết kế](../architecture.md) §17.2; thiết kế là nguồn sự thật hiện hành.
 >
 > Lưu ý lịch sử: bản plan M2b.4 đầu tiên (nhật ký member đánh số liên tục `mv`, `pending_owner_change`, `owner_guard`, `readcast`) đã **huỷ hoàn toàn**, chưa từng thực thi. Số quyết định D96–D110 được dùng lại cho thiết kế này với nghĩa khác.
 >

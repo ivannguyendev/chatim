@@ -1,6 +1,6 @@
 # PoC — chatim
 
-> Thiết kế: [../designs/261005-chatim-architecture.md](../designs/261005-chatim-architecture.md) · Chi tiết lần đo dev, lệnh và cấu hình: [archive/poc/README.md](../archive/poc/README.md), [so sánh MongoDB/PostgreSQL](../archive/poc/260930-mongodb-vs-postgresql.md).
+> Thiết kế: [../architecture.md](../architecture.md).
 > **Số dev chỉ để kiểm công cụ.** Máy dev là MacBook Intel 2018 + OrbStack (10 vCPU, 11.75GiB), DB, broker và công cụ đo chung một VM, Mongo 1 node. Go/no-go cần prod-like.
 
 ## Kết quả dev (2026-09-30 → 2026-10-05)
