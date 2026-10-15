@@ -24,6 +24,7 @@ const (
 	mentionsCollection        = "mentions"
 	roomDMsCollection         = "room_dms"
 	replyThreadsCollection    = "reply_threads"
+	sweeperStateCollection    = "sweeper_state"
 )
 
 var (
@@ -47,6 +48,8 @@ var (
 	_ store.RoomUpdater       = (*Store)(nil)
 	_ store.RoomPreferences   = (*Store)(nil)
 	_ store.ReplyThreads      = (*ReplyThreads)(nil)
+	_ store.EventStates       = (*EventStates)(nil)
+	_ store.SweepCheckpoints  = (*SweepCheckpoints)(nil)
 )
 
 type Options struct {
@@ -67,6 +70,8 @@ type Store struct {
 	mentions         *Mentions
 	directRooms      *DirectRooms
 	replyThreads     *ReplyThreads
+	eventStates      *EventStates
+	checkpoints      *SweepCheckpoints
 }
 
 func New(db *mongo.Database, opts Options) *Store {
@@ -75,6 +80,7 @@ func New(db *mongo.Database, opts Options) *Store {
 	local := options.Collection().SetWriteConcern(wc).SetReadPreference(readpref.Primary()).SetReadConcern(readconcern.Local())
 	majority := options.Collection().SetReadPreference(readpref.Primary()).SetReadConcern(readconcern.Majority())
 	interacted := options.Collection().SetWriteConcern(wc).SetReadPreference(readpref.Primary()).SetReadConcern(readconcern.Majority())
+	durable := options.Collection().SetWriteConcern(writeconcern.Majority()).SetReadPreference(readpref.Primary()).SetReadConcern(readconcern.Majority())
 	return &Store{
 		client:           db.Client(),
 		committedMembers: db.Collection(membersCollection, majority),
@@ -89,6 +95,8 @@ func New(db *mongo.Database, opts Options) *Store {
 		mentions:         &Mentions{coll: db.Collection(mentionsCollection, primary)},
 		directRooms:      &DirectRooms{coll: db.Collection(roomDMsCollection, primary)},
 		replyThreads:     &ReplyThreads{coll: db.Collection(replyThreadsCollection, primary)},
+		eventStates:      newEventStates(db, interacted),
+		checkpoints:      &SweepCheckpoints{coll: db.Collection(sweeperStateCollection, durable)},
 	}
 }
 
@@ -103,3 +111,7 @@ func (s *Store) Mentions() *Mentions { return s.mentions }
 func (s *Store) DirectRooms() *DirectRooms { return s.directRooms }
 
 func (s *Store) ReplyThreads() *ReplyThreads { return s.replyThreads }
+
+func (s *Store) EventStates() *EventStates { return s.eventStates }
+
+func (s *Store) SweepCheckpoints() *SweepCheckpoints { return s.checkpoints }
