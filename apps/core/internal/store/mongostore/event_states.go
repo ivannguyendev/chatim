@@ -88,7 +88,7 @@ func (e *EventStates) Mark(ctx context.Context, c store.StateCollection, targets
 		return err
 	}
 	for _, b := range stateBatches(targets) {
-		if err := e.update(ctx, b, markStatePipeline(b.bit)); err != nil {
+		if err := e.update(ctx, b, flaggedSet(b.bit)); err != nil {
 			return fmt.Errorf("mark %s bit %d: %w", b.coll, b.bit, err)
 		}
 	}
@@ -115,13 +115,4 @@ func clearStatePipeline(bit store.StateBit) mongo.Pipeline {
 func removeWhenClear(field string) bson.D {
 	isClear := bson.D{{Key: "$eq", Value: bson.A{"$" + stateField, int32(0)}}}
 	return bson.D{{Key: "$cond", Value: bson.A{isClear, "$$REMOVE", "$" + field}}}
-}
-
-func markStatePipeline(bit store.StateBit) mongo.Pipeline {
-	state := bson.D{{Key: "$ifNull", Value: bson.A{"$" + stateField, int32(0)}}}
-	at := bson.D{{Key: "$ifNull", Value: bson.A{"$" + stateAtField, "$$NOW"}}}
-	return mongo.Pipeline{{{Key: "$set", Value: bson.D{
-		{Key: stateField, Value: bson.D{{Key: "$bitOr", Value: bson.A{state, bitValue(bit)}}}},
-		{Key: stateAtField, Value: bson.D{{Key: "$min", Value: bson.A{at, "$$NOW"}}}},
-	}}}}
 }

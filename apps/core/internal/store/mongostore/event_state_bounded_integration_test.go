@@ -6,6 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
@@ -14,6 +17,7 @@ var stateCollectionNames = []string{messagesCollection, editsCollection, interac
 func TestPendingScansOnlyTheFlaggedDocsInStateOrder(t *testing.T) {
 	s, db, finds, _ := monitoredStateStore(t)
 	seedBoundedLookups(t, s)
+	unflagAll(t, db)
 	expectPendingIndexKeys(t, db, 0, stateCollectionNames...)
 	msgs := flaggedMessages()
 	base := time.Date(2026, 10, 16, 8, 0, 0, 0, time.UTC)
@@ -39,6 +43,7 @@ func TestPendingScansOnlyTheFlaggedDocsInStateOrder(t *testing.T) {
 func TestClearAndMarkStayBoundedOnClusteredKeys(t *testing.T) {
 	s, db, _, updates := monitoredStateStore(t)
 	seedBoundedLookups(t, s)
+	unflagAll(t, db)
 	base := time.Date(2026, 10, 16, 8, 0, 0, 0, time.UTC)
 	msgs := flaggedMessages()
 	members, reactions := flaggedVersioned()
@@ -67,5 +72,15 @@ func expectBoundedUpdate(t *testing.T, name string, c lookupCost, keys int) {
 	t.Helper()
 	if c.examined > 2*keys+1 || c.examined < keys || strings.Contains(c.plan, "COLLSCAN") {
 		t.Errorf("%s: examined %d docs for %d keys, plan %s; want %d..%d and no COLLSCAN", name, c.examined, keys, c.plan, keys, 2*keys+1)
+	}
+}
+
+func unflagAll(t *testing.T, db *mongo.Database) {
+	t.Helper()
+	unset := bson.D{{Key: "$unset", Value: bson.D{{Key: stateField, Value: ""}, {Key: stateAtField, Value: ""}}}}
+	for _, coll := range stateCollectionNames {
+		if _, err := db.Collection(coll).UpdateMany(t.Context(), bson.D{stateExists}, unset); err != nil {
+			t.Fatalf("unflag %s: %v", coll, err)
+		}
 	}
 }

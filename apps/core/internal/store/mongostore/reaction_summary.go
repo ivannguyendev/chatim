@@ -27,7 +27,7 @@ func (s *Store) SetReactions(ctx context.Context, key store.MsgKey, base uint64,
 		return false, err
 	}
 	filter := bson.D{{Key: "_id", Value: keys.Msg(key.Room, key.Thread, key.Seq)}, versionIs("rx.v", from)}
-	res, err := s.messages.UpdateOne(ctx, filter, bson.D{{Key: "$set", Value: bson.D{{Key: "rx", Value: doc}}}})
+	res, err := s.messages.UpdateOne(ctx, filter, flaggedSet(store.BitReactionCounts, setLiteral("rx", doc)))
 	if err != nil {
 		return false, fmt.Errorf("set reactions v%d of %d/%d/%d: %w", sum.Version, key.Room, key.Thread, key.Seq, err)
 	}

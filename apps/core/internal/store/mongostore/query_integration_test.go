@@ -156,7 +156,7 @@ func TestInsertMapsMixedBatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FindOne raw: %v", err)
 	}
-	if names := fieldNames(t, raw); !slices.Equal(names, []string{"_id", "t", "f", "k", "x", "c", "ts"}) {
+	if names := fieldNames(t, raw); !slices.Equal(names, []string{"_id", "t", "f", "k", "x", "c", "ts", stateField, stateAtField}) {
 		t.Fatalf("stored fields = %v", names)
 	}
 }

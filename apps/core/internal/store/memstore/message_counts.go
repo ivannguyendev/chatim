@@ -3,6 +3,7 @@ package memstore
 import (
 	"context"
 	"slices"
+	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -33,6 +34,7 @@ func (s *Messages) AddReactionCounts(ctx context.Context, key store.MsgKey, delt
 	raw = store.AddRawEmojiDeltas(raw, deltas)
 	m.Reactions = domain.SettleReactions(raw, m.Reactions.Version+1)
 	s.holdRaw(key, m.Reactions.Unsettled, raw)
+	s.flags.raise(key, store.BitReactionCounts, time.Now())
 	out := m.Reactions
 	out.Counts = slices.Clone(out.Counts)
 	return out, nil
@@ -65,6 +67,7 @@ func (s *Messages) AddReplyCount(ctx context.Context, key store.MsgKey, delta in
 	} else {
 		delete(s.rawReply, key)
 	}
+	s.flags.raise(key, store.BitReplyCounts, time.Now())
 	return m.Replies, nil
 }
 
@@ -86,6 +89,7 @@ func (s *Messages) SetReplyCount(ctx context.Context, key store.MsgKey, base uin
 	}
 	m.Replies = domain.ReplyCount{N: n, Version: base + 1}
 	delete(s.rawReply, key)
+	s.flags.raise(key, store.BitReplyCounts, time.Now())
 	return true, nil
 }
 

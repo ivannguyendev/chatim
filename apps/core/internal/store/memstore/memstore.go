@@ -61,6 +61,7 @@ func (s *Messages) insertLocked(m domain.Message) store.Result {
 	m = detached(m)
 	m.Hidden, m.Reactions, m.Replies = false, domain.ReactionSummary{}, domain.ReplyCount{}
 	s.lines[tl] = slices.Insert(line, i, m)
+	s.flags.raise(store.KeyOf(m), store.BitMsgCreated, m.CreatedAt)
 	s.appendLog(logged{kind: store.MessageInserted, msg: m})
 	return store.Result{Outcome: store.Inserted}
 }

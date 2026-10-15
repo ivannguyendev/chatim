@@ -13,3 +13,11 @@ func TestMongoMessageCountsContract(t *testing.T) {
 		return s
 	})
 }
+
+func TestMongoMessageStatesContract(t *testing.T) {
+	client := itClient(t)
+	storetest.RunMessageStates(t, func(t *testing.T) storetest.MessageStateStores {
+		s, _ := itStore(t, client)
+		return storetest.MessageStateStores{Messages: s, States: s.EventStates()}
+	})
+}

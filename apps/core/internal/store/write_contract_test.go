@@ -105,6 +105,11 @@ var portMethods = map[string]string{
 	"RoomTails.TailWindow":       "read",
 	"RoomTails.TailPreviews":     "read",
 
+	"MessageCounts.SetReactions":      "cas",
+	"MessageCounts.AddReactionCounts": "version-bump",
+	"MessageCounts.AddReplyCount":     "version-bump",
+	"MessageCounts.SetReplyCount":     "cas",
+
 	"EventStates.Pending":      "read",
 	"EventStates.Clear":        "cas",
 	"EventStates.Mark":         "cas",
@@ -124,6 +129,7 @@ func TestEveryPortMethodHasAWriteContract(t *testing.T) {
 		reflect.TypeFor[store.Hidden](),
 		reflect.TypeFor[store.Interactions](),
 		reflect.TypeFor[store.ReactionSummaries](),
+		reflect.TypeFor[store.MessageCounts](),
 		reflect.TypeFor[store.Pins](),
 		reflect.TypeFor[store.PinProjector](),
 		reflect.TypeFor[store.MemberWriter](),
