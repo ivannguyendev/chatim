@@ -17,7 +17,30 @@
 
 ## 2. Luồng hoạt động chi tiết (How It Works)
 
-### 2.1. Luồng Cập nhật Vị trí đọc & Thuật toán Đếm Unread có giới hạn (Bounded Scan)
+### 2.1. Sơ đồ Thuật toán Đếm Chưa đọc Có chặn & Đồng bộ Đa thiết bị (Bounded Scan Flow)
+
+Sơ đồ khối dưới đây trực quan hoá thuật toán tính toán số tin chưa đọc có ngưỡng chặn an toàn ($S = 100$) và luồng đồng bộ tức thời đa thiết bị:
+
+```mermaid
+flowchart TD
+    subgraph UpdatePhase["1. Luồng Ghi nhận Đã đọc (MarkRead)"]
+        UserAction["Người dùng lướt đọc tin đến vị trí seq"] --> CheckSeq{"seq mới > read_seq hiện tại?"}
+        CheckSeq -- "Không (lướt ngược lên)" --> NoOp["Bỏ qua (Giữ nguyên read_seq)"]
+        CheckSeq -- "Có (tiến về tương lai)" --> AtomicUpdate["Update MongoDB (members)<br/>filter: {read_seq < seq}<br/>set: {read_seq: seq}, inc: {read_ver: 1}"]
+        AtomicUpdate --> FanoutNATS["Publish qua NATS: read_updated"]
+        FanoutNATS --> SyncOtherDev["Đồng bộ tức thì: Xoá huy hiệu (badge) trên máy tính/tablet"]
+    end
+
+    subgraph CalcPhase["2. Thuật toán Đếm Unread Có Chặn (Bounded Scan)"]
+        ReqBadge["Client yêu cầu lấy số tin chưa đọc (GetUnreadCount)"] --> QueryMongo["MongoDB CountDocuments:<br/>filter: {room_id, seq > read_seq, sender != me}<br/><b>limit = 100</b> (Chỉ quét tối đa 100 docs)"]
+        QueryMongo --> BranchCount{"Số bản ghi quét được?"}
+
+        BranchCount -- "Số lượng < 100" --> ReturnExact["Trả về số chính xác (ví dụ: 15)<br/>approx = false -> Hiển thị '15'"]
+        BranchCount -- "Chạm ngưỡng 100" --> ReturnApprox["Chặn quét (Tiết kiệm CPU/IOPS)<br/>approx = true -> Hiển thị '99+'"]
+    end
+```
+
+### 2.2. Luồng Cập nhật Vị trí đọc & Thuật toán Đếm Unread có giới hạn (Sequence Diagram)
 
 ```mermaid
 sequenceDiagram
@@ -30,7 +53,7 @@ sequenceDiagram
     participant WebClient as Client SDK (Máy tính)
 
     Client->>Core: MarkRead(room_id, seq=10042)
-    
+
     Note over Core,Members: 1. Cập nhật vị trí đọc trên doc của chính tôi
     Core->>Members: UpdateOne(filter: {room_id, user_id, read_seq < 10042},<br/>update: {$set: {read_seq: 10042}, $inc: {read_ver: 1}})
     Members-->>Core: Update thành công (read_ver tăng)

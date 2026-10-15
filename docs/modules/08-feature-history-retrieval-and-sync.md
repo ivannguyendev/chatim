@@ -17,7 +17,25 @@
 
 ## 2. Luồng hoạt động chi tiết (How It Works)
 
-### 2.1. Luồng Phân trang & Xử lý qua Reader View Pipeline
+### 2.1. Sơ đồ Đường ống Chế biến Dữ liệu Đọc (Reader View Pipeline)
+
+Trước khi dữ liệu thô từ cơ sở dữ liệu được trả về cho Client, nó bắt buộc phải đi qua **Reader View Pipeline** trong bộ nhớ của Core để thi hành các chính sách riêng tư cá nhân hoá:
+
+```mermaid
+flowchart LR
+    RawMongo[("MongoDB (messages)<br/>Clustered Index: room_id, seq")] --> View["Reader View Pipeline (api/view)"]
+
+    subgraph PipelineSteps["4 Bước Lọc & Chế biến Dữ liệu Cá nhân hoá"]
+        F1["1. Lọc Mốc Dọn Dẹp<br/>Loại bỏ tin có<br/>created_at <= cleared_at"] --> F2["2. Lọc Ẩn Cá Nhân<br/>Loại bỏ tin có<br/>seq IN user_hidden"]
+        F2 --> F3["3. Mặt nạ Thu Hồi<br/>Nếu deleted == true:<br/>text = 'Tin đã bị xoá'<br/>xoá media_refs"]
+        F3 --> F4["4. Trang trí Tương tác<br/>Đính kèm rx summary<br/>và reply count rc"]
+    end
+
+    View --> F1
+    F4 --> CleanDTO["Clean Client DTO<br/>(An toàn, chuẩn bảo mật)"]
+```
+
+### 2.2. Luồng Phân trang & Xử lý qua Reader View Pipeline (Sequence Diagram)
 
 Toàn bộ dữ liệu thô từ cơ sở dữ liệu đều phải đi qua **Đường ống chế biến giao diện (Reader View Pipeline)** trước khi trả về cho người đọc:
 
@@ -32,14 +50,14 @@ sequenceDiagram
     participant Hidden as MongoDB (hidden)
 
     Client->>Core: GetHistory(room_id, cursor_seq=10042, limit=50, direction=BEFORE)
-    
+
     Note over Core,Msgs: 1. Đọc dữ liệu thô từ Clustered Index (p99 ≤ 20ms)
     Core->>Msgs: Find({room_id, seq < 10042}).sort({seq: -1}).limit(50)
     Msgs-->>Core: 50 documents thô
 
     Note over Core,View: 2. Đưa vào Reader View Pipeline chế biến
     Core->>View: Process(raw_messages, reader_user_id)
-    
+
     View->>Members: Lấy mốc cleared_at của người đọc
     View->>Hidden: Lấy danh sách tin ẩn của người đọc trong khoảng seq này
 
@@ -78,6 +96,18 @@ sequenceDiagram
     $$\text{Token} = \{\text{room\_A}: \text{last\_seq\_A}, \text{room\_B}: \text{last\_seq\_B}, \dots\}$$
   - Core chỉ truy vấn và trả về phần chênh lệch (Delta): các tin nhắn có `seq > last_seq` của các phòng có hoạt động mới.
   - Mỗi doc tin nhắn trả về luôn mang **toàn bộ snapshot trạng thái hiện tại** (nội dung mới nhất, cờ đã xoá, tóm tắt reaction `rx`, số replies `rc`). Nhờ đó, Client chỉ cần đè snapshot này lên giao diện là đạt trạng thái đồng bộ tuyệt đối mà không cần tính toán chuỗi sự kiện phức tạp.
+
+```mermaid
+flowchart TD
+    ClientOnline["Client có mạng trở lại (Reconnect)"] --> CalcGap["Tính độ lệch tin: gap = server_last_seq - client_last_seq"]
+    CalcGap --> CheckGap{"Khoảng hở tin nhắn (gap)?"}
+
+    CheckGap -- "gap <= 500 tin (Ngắn hạn)" --> FastDelta["Delta Catchup (Kéo phần bù qua Sync Token):<br/>- Kéo các tin mới có seq > client_last_seq<br/>- Nhận trực tiếp Snapshot mới nhất (ver, rx, rc)"]
+    FastDelta --> ApplyLocal["Đè snapshot lên Local DB -> Sẵn sàng tức thì"]
+
+    CheckGap -- "gap > 500 tin (Rớt mạng quá lâu)" --> SnapshotReset["Snapshot Reset (Đặt lại góc nhìn):<br/>- Đánh dấu vùng nhớ cục bộ là out-of-date<br/>- Kéo 50 tin mới nhất quanh màn hình hiện tại<br/>- Kéo mới danh mục phòng chat"]
+    SnapshotReset --> FreshView["Render giao diện tươi mới, tránh nghẽn I/O"]
+```
 
 ### 3.3. Client Jitter (Rải đều tải khi Reconnect)
 - Để bảo vệ cụm Core lúc mạng vừa phục hồi:

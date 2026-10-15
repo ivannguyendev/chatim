@@ -18,7 +18,41 @@
 
 ## 2. Luồng hoạt động chi tiết (How It Works)
 
-### 2.1. Luồng Sửa tin nhắn (Fact & Projection Pattern)
+### 2.1. Vòng đời Trạng thái & Cơ chế Che chắn Riêng tư (Message State & Privacy Machine)
+
+Mô hình trạng thái dưới đây làm rõ cách hệ thống xử lý giữa việc **bảo tồn sự thật lịch sử (Fact)**, **chiếu bản hiển thị chung (Projection)** và **che chắn góc nhìn riêng tư (Privacy Masking)**:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Active: Gửi tin thành công (Ver 1, Fact gốc)
+
+    %% Luồng sửa nội dung
+    Active --> Edited: Sửa nội dung (Ghi Fact vào message_edits, CAS Ver + 1)
+    Edited --> Edited: Sửa tiếp lần n (Append Fact ver = n, CAS Ver = n)
+
+    %% Luồng thu hồi / xoá 2 chiều
+    Active --> Recalled: Thu hồi / Xoá hai chiều (Soft delete: deleted = true)
+    Edited --> Recalled: Thu hồi sau khi đã từng sửa
+
+    state Recalled {
+        [*] --> MaskContent: Che nội dung: text = "Tin nhắn đã bị xoá"
+        MaskContent --> StripMedia: Huỷ liên kết media_refs (Bảo vệ riêng tư)
+    }
+
+    %% Tầng hiển thị riêng tư (Per-user Private Filtering)
+    state "Góc nhìn Cá nhân (Reader View Filter - Không sửa DB tin)" as PrivateView {
+        state "Hiển thị bình thường" as NormalView
+        state "Bị che / Loại bỏ" as FilteredOut
+
+        NormalView --> FilteredOut: User bấm "Xoá lịch sử" (created_at <= cleared_at)
+        NormalView --> FilteredOut: User bấm "Ẩn tin này" (seq in user_hidden)
+    }
+
+    Active --> NormalView
+    Edited --> NormalView
+```
+
+### 2.2. Luồng Sửa tin nhắn (Fact & Projection Pattern)
 
 Hệ thống tách biệt việc **Ghi nhận sự thật (Fact)** và **Chiếu ra bản hiển thị (Projection)**:
 

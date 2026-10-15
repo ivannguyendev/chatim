@@ -17,7 +17,37 @@
 
 ## 2. Luồng hoạt động chi tiết (How It Works)
 
-### 2.1. Kiến trúc Đối soát Hai luồng (Dual-Path Reconciliation Architecture)
+### 2.1. Sơ đồ Luồng Quyết định Đối soát & Tự phục hồi (Dual-Path Reconciliation Flow)
+
+Sơ đồ khối dưới đây trực quan hoá cách hai đường **Fast-Path** (phát tức thì độ trễ thấp) và **Slow-Path** (quét ngầm Oplog qua Change Stream) phối hợp để vừa đạt tốc độ cao, vừa bảo đảm không bao giờ sót sự kiện:
+
+```mermaid
+flowchart TD
+    CoreWrite["Core Service ghi MongoDB thành công (w:majority)"] --> SplitPaths{"Phân nhánh 2 luồng song song"}
+
+    %% Đường nhanh
+    subgraph FastPath["[ĐƯỜNG NHANH - FAST-PATH (Độ trễ thấp)]"]
+        SplitPaths -->|1. Bắn sự kiện tức thì| PubFast["PublishAsync sự kiện qua NATS (Best-effort)"]
+        PubFast -->|2. Đánh dấu cờ thành công| SetRedis["Ghi nhận Ack Mark vào Redis Bitmap<br/>(Key: ack_marks:{tenant}:{slot}:{minute})"]
+    end
+
+    %% Đường an toàn
+    subgraph SlowPath["[ĐƯỜNG AN TOÀN - SLOW-PATH RECONCILER (Không bao giờ sót)]"]
+        SplitPaths -->|1. Oplog Change Stream| Slot0["Slot 0 Leader Reader<br/>(Lắng nghe toàn bộ thay đổi DB)"]
+        Slot0 -->|2. Đẩy vào Work Stream| WorkQ[("NATS CHATIM_WORK<br/>(32 partitions theo RoomID)")]
+        WorkQ --> Worker["Effect Worker tiếp nhận xử lý"]
+        Worker --> DelayWait["3. Chờ độ trễ an toàn RECONCILE_DELAY (5 giây)"]
+        DelayWait --> CheckRedis{"4. Kiểm tra Redis Bitmap:<br/>Đã có cờ Ack Mark chưa?"}
+
+        CheckRedis -- "ĐÃ CÓ (Ack Mark = 1)<br/>Đường nhanh đã phát trọn vẹn" --> NoOp["Dập tắt sự kiện (No-op)<br/>Không phát lại, tránh spam Client"]
+        CheckRedis -- "CHƯA CÓ (Ack Mark = 0)<br/>Đường nhanh bị lỗi / Core sập nguồn!" --> Heal["Phát hiện sự kiện bị rớt!<br/>1. Đọc doc hiện tại từ MongoDB<br/>2. Phát bù (Compensate) qua NATS"]
+
+        NoOp --> AckWork["Xác nhận hoàn tất (Ack Record)"]
+        Heal --> AckWork
+    end
+```
+
+### 2.2. Kiến trúc Đối soát Hai luồng (Sequence Diagram)
 
 Hệ thống kết hợp giữa **Đường nhanh (Fast-Path: độ trễ thấp)** và **Đường an toàn (Slow-Path: bảo đảm tính toàn vẹn)**:
 
@@ -42,10 +72,10 @@ sequenceDiagram
     Mongo-->>Slot0: Đẩy sự kiện qua Change Stream Oplog
     Slot0->>WorkQ: Đẩy Record vào Work Stream (chia 32 partition)
     WorkQ-->>Worker: Worker nhận nhiệm vụ xử lý
-    
+
     Note over Worker: Chờ RECONCILE_DELAY (5 giây)
     Worker->>Redis: Kiểm tra xem tin này đã có Ack Mark chưa?
-    
+
     alt ĐÃ CÓ Ack Mark (Đường nhanh đã phát thành công)
         Redis-->>Worker: Mark = 1
         Note over Worker: Dập tắt sự kiện (No-op) để không spam trùng lặp!

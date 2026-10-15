@@ -17,7 +17,70 @@
 
 ## 2. Luồng hoạt động chi tiết (How It Works)
 
-### 2.1. Luồng xử lý Pipeline Gửi tin (Send Pipeline)
+### 2.1. Sơ đồ Khối Kiến trúc Pipeline Gửi tin (Send Pipeline Architecture)
+
+Kiến trúc xử lý gửi tin nhắn được tách lớp nghiêm ngặt nhằm cân bằng giữa thông lượng cực cao (High Throughput) và an toàn dữ liệu tuyệt đối (Data Durability):
+
+```mermaid
+flowchart LR
+    Client["Client SDK"] -->|1. WS Frame| GW["App websocket<br/>(gws / Protobuf)"]
+    GW -->|2. gRPC SendMessage| Core["Core Service<br/>(api/grpcsrv)"]
+
+    subgraph ActorDomain["Tầng Quản lý Phòng (In-Memory Actor)"]
+        Mailbox["Mailbox Channel<br/>(Tuần tự hoá tin)"] --> RoomActor["Room Actor<br/>(Single-Writer seq)"]
+    end
+
+    subgraph DedupeTier["Tầng Chống Trùng 3 Cấp"]
+        MemLRU["L1: In-Memory LRU<br/>(1,000 CIDs gần nhất)"]
+        RedisDed["L2: Redis EVALSHA<br/>(Reserve -> Commit 2-Phase)"]
+    end
+
+    subgraph Persistence["Tầng Lưu trữ Bền vững"]
+        Flusher["Batch Flusher<br/>(send/flush: 50 msgs / 2ms)"]
+        MongoDb[("MongoDB (messages)<br/>insertMany w:majority")]
+    end
+
+    subgraph EventStream["Tầng Phát tán Bất đồng bộ"]
+        PubQueue["Publisher Buffer<br/>(event/publish)"]
+        NATSJet[("NATS JetStream<br/>Subject: live.tenant.*")]
+    end
+
+    Core --> Mailbox
+    RoomActor <--> MemLRU
+    RoomActor <--> RedisDed
+    RoomActor -->|Bàn giao Doc| Flusher
+    Flusher -->|Group Commit| MongoDb
+    RoomActor -.->|Fast Ack| Core
+    RoomActor -.->|Best-effort Async| PubQueue
+    PubQueue --> NATSJet
+```
+
+### 2.2. Vòng đời Trạng thái Tin nhắn (Message State Lifecycle)
+
+Mỗi tin nhắn khi đi từ máy người gửi đến cơ sở dữ liệu và các người nhận trải qua các trạng thái rõ ràng:
+
+```mermaid
+stateDiagram-v2
+    [*] --> LocalPending: Client sinh CID & bấm gửi
+    LocalPending --> Ingested: Gateway nhận frame & chuyển tiếp gRPC
+
+    state Ingested {
+        [*] --> DedupeChecking: Kiểm tra L1 LRU & L2 Redis
+        DedupeChecking --> DedupeReserved: CID mới -> Reserve thành công (TTL 60s)
+        DedupeChecking --> DedupeDuplicate: CID đã tồn tại -> Trả kết quả cũ (Idempotent)
+    }
+
+    DedupeReserved --> SeqAllocated: Room Actor cấp seq = last_seq + 1
+    SeqAllocated --> GroupFlushing: Đẩy vào Flusher (Chờ gom cụm 2ms/50 tin)
+    GroupFlushing --> Committed: MongoDB ghi đĩa thành công (w:majority)
+
+    Committed --> FastAckSent: Trả kết quả về cho người gửi (p99 <= 30ms)
+    Committed --> Dispatched: Publisher đẩy sự kiện vào NATS JetStream
+
+    Dispatched --> [*]: Người nhận nhận tin qua WebSocket
+```
+
+### 2.3. Luồng xử lý Pipeline Gửi tin (Sequence Diagram)
 
 Pipeline gửi tin được tối ưu hoá theo mô hình gom nhóm (Batching) và phản hồi nhanh (Fast Ack):
 

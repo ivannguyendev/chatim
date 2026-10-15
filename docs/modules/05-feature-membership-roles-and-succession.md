@@ -18,7 +18,57 @@
 
 ## 2. Luồng hoạt động chi tiết (How It Works)
 
-### 2.1. Luồng Kế nhiệm Owner (Giao dịch đa tài liệu duy nhất — Single Transaction D100)
+### 2.1. Máy trạng thái Vòng đời & Quyền hạn Thành viên (Membership Lifecycle & Roles)
+
+Vòng đời thành viên và việc chuyển đổi cấp bậc trong phòng chat được kiểm soát chặt chẽ bởi máy trạng thái:
+
+```mermaid
+stateDiagram-v2
+    [*] --> ActiveMember: Được thêm vào phòng (state = Joined, role = Member)
+
+    state ActiveMember {
+        [*] --> Member: Vai trò mặc định (Gửi/đọc tin)
+        Member --> Admin: Owner nâng cấp quyền (role = Admin)
+        Admin --> Member: Owner hạ quyền quản trị
+        Admin --> Owner: Được chỉ định / Kế nhiệm thành Owner
+        Member --> Owner: Kế nhiệm trực tiếp (khi phòng không có Admin)
+    }
+
+    ActiveMember --> Left: Tự rời phòng (LeaveRoom: state = Left)
+    ActiveMember --> Kicked: Bị Admin/Owner mời ra (Kick: state = Removed)
+    ActiveMember --> Banned: Bị cấm vào lại (state = Banned)
+
+    Left --> ActiveMember: Được mời / Xin vào lại
+    Kicked --> ActiveMember: Được mời lại (nếu không bị ban)
+```
+
+### 2.2. Cây quyết định Kế nhiệm Owner (Succession Selection Flow)
+
+Sơ đồ khối dưới đây trực quan hoá thuật toán tìm kiếm người kế vị và cam kết giao dịch đa tài liệu khi Owner rời phòng:
+
+```mermaid
+flowchart TD
+    Start["Owner bấm Rời nhóm (LeaveRoom)"] --> CheckRole{"Còn thành viên khác trong phòng?"}
+    CheckRole -- "Không còn ai" --> ArchiveRoom["Đóng phòng (Room state = Archived)"]
+    CheckRole -- "Còn thành viên" --> QueryCandidates["Truy vấn danh sách ứng viên (trừ Owner)"]
+
+    QueryCandidates --> RankCandidates["Xếp hạng ứng viên kế vị theo bộ 3 tiêu chí:"]
+    RankCandidates --> P1["1. Cấp bậc Role: Admin > Member"]
+    P1 --> P2["2. App Priority do ứng dụng cấu hình (số cao hơn)"]
+    P2 --> P3["3. Thâm niên: joined_at nhỏ nhất (vào sớm nhất)"]
+
+    P3 --> SelectSuccessor["Chọn ứng viên số 1 làm Successor"]
+    SelectSuccessor --> Tx["Mở MongoDB Multi-document Transaction duy nhất (D100)"]
+
+    Tx --> StepA["1. Cập nhật Successor: role = Owner, ver = v+1"]
+    StepA --> StepB["2. Cập nhật Owner cũ: state = Left, role = Member"]
+    StepB --> StepC["3. Cập nhật Room: owner_id = Successor, ver = v+1"]
+    StepC --> Commit["Commit Transaction (w: majority)"]
+
+    Commit --> InvalidateCache["Broadcast memberwatch qua NATS để huỷ cache quyền tại App websocket"]
+```
+
+### 2.3. Luồng Kế nhiệm Owner (Sequence Diagram)
 
 Việc chuyển giao quyền sở hữu nhóm là tác vụ nhạy cảm cao, yêu cầu tính toàn vẹn tuyệt đối trên nhiều document cùng lúc:
 
@@ -36,7 +86,7 @@ sequenceDiagram
 
     Note over Core,Mongo: Bắt đầu MongoDB Transaction duy nhất
     Core->>Mongo: StartTransaction(readConcern="snapshot", writeConcern="majority")
-    
+
     Note over Core: Thuật toán chọn người kế vị:<br/>1. Role cao nhất (Admin > Member)<br/>2. App Priority do app đặt (số lớn hơn ưu tiên)<br/>3. Thời gian gia nhập lâu nhất (joined_at nhỏ nhất)
     Core->>Mongo: Find candidates (trừ Owner hiện tại)
     Mongo-->>Core: Chọn được Successor (usr_2002)

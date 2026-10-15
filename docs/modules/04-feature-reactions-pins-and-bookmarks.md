@@ -18,7 +18,36 @@
 
 ## 2. Luồng hoạt động chi tiết (How It Works)
 
-### 2.1. Luồng Thả cảm xúc & Cơ chế Phiếu hẹn sinh tồn (Survivor Timers)
+### 2.1. Cây quyết định Đột biến Cảm xúc & Cơ chế Tự phục hồi (Survivor Timers Flow)
+
+Sơ đồ khối dưới đây trực quan hoá cách hệ thống bảo đảm tính toàn vẹn của bộ đếm cảm xúc `rx` mà không cần transaction đa tài liệu, bao gồm cả kịch bản tự phục hồi khi node xử lý bị sập nguồn:
+
+```mermaid
+flowchart TD
+    Req["Thao tác: Thả / Đổi / Huỷ Cảm xúc (SetReaction)"] --> ArmTimer["1. Lên dây cót: Arm Survivor Timer<br/>(Lập lịch hẹn tự sửa sai sau 10s trên NATS CHATIM_WORK)"]
+
+    ArmTimer --> UpsertInter["2. Ghi nhận Fact tương tác vào message_interactions<br/>UpsertDoc({room, seq, user_id, emoji})"]
+    UpsertInter --> CalcDelta{"Kết quả tương tác?"}
+
+    CalcDelta -- "Thả mới (Add)" --> Inc["delta = +1 (emoji mới)"]
+    CalcDelta -- "Gỡ bỏ (Remove)" --> Dec["delta = -1 (emoji cũ)"]
+    CalcDelta -- "Đổi biểu tượng (Swap)" --> Swap["-1 (emoji cũ) VÀ +1 (emoji mới)"]
+
+    Inc --> UpdateMsg["3. Cập nhật trực tiếp bộ đếm trên MongoDB (messages)<br/>UpdateOne({room, seq}, {$inc: {'rx.emoji': delta}})"]
+    Dec --> UpdateMsg
+    Swap --> UpdateMsg
+
+    UpdateMsg --> CheckCrash{"Node Core có bị sập nguồn<br/>trước khi tháo ngòi?"}
+
+    CheckCrash -- "Bình thường (Đường chính)" --> Disarm["4. Tháo ngòi nổ: Disarm Survivor Timer<br/>(Thao tác toàn vẹn, huỷ lịch hẹn)"]
+    Disarm --> ReturnSuccess["Trả kết quả thành công cho Client (p99 <= 15ms)"]
+
+    CheckCrash -- "Node Core bị sập nguồn!" --> TimerFires["5. Phiếu hẹn phát nổ sau 10s!<br/>Worker count_repair nhận nhiệm vụ đối soát"]
+    TimerFires --> Recount["Worker truy vấn đếm lại toàn bộ tương tác thực tế<br/>trong message_interactions"]
+    Recount --> CASFix["Worker cập nhật lại mảng rx chuẩn xác trên doc messages<br/>bảo đảm tính hội tụ cuối cùng (Eventual Consistency)"]
+```
+
+### 2.2. Luồng Thả cảm xúc & Cơ chế Phiếu hẹn sinh tồn (Survivor Timers)
 
 Để bộ đếm `rx` trên tin nhắn luôn chuẩn xác mà không cần transaction đa tài liệu, hệ thống sử dụng cơ chế **Ghi nguyên tử + Lên dây cót phiếu hẹn**:
 
@@ -34,7 +63,7 @@ sequenceDiagram
     participant Worker as Worker count_repair
 
     Client->>Core: SetReaction(room, seq, emoji="👍")
-    
+
     Note over Core,Timers: 1. Lên dây cót phiếu hẹn sinh tồn (Arm Timer)
     Core->>Timers: Arm(room, seq, kind="reactions")
     Timers->>WorkQ: Đặt lịch hẹn tự sửa sai sau 10s
@@ -49,7 +78,7 @@ sequenceDiagram
 
     Note over Core,Timers: 4. Tháo ngòi nổ phiếu hẹn (Disarm Timer)
     Core->>Timers: Disarm() (Thao tác đã trọn vẹn, không cần sửa)
-    
+
     Core-->>Client: Trả về kết quả thành công
 
     opt Nếu Core bị sập nguồn ở Bước 3 (chưa kịp Disarm)
@@ -60,7 +89,7 @@ sequenceDiagram
     end
 ```
 
-### 2.2. Luồng Đổi Biểu tượng Cảm xúc (Change Reaction: 👍 sang ❤️)
+### 2.3. Luồng Đổi Biểu tượng Cảm xúc (Change Reaction: 👍 sang ❤️)
 
 Khi người dùng đã thả `👍` và bấm chọn sang `❤️`, hệ thống phải bảo đảm cập nhật cả 2 loại emoji một cách nguyên tử:
 

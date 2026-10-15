@@ -60,6 +60,44 @@ flowchart TD
     NATSLive -. "Không chuyển vì không có Interest" .x GW2
 ```
 
+### 2.2. Vòng đời Kết nối WebSocket & Cơ chế Xử lý Mã lỗi (Connection Lifecycle & Close Codes)
+
+Để đảm bảo hàng trăm nghìn kết nối đồng thời hoạt động ổn định và tự phục hồi khi có sự cố, Client SDK vận hành theo máy trạng thái kết nối có tích hợp xử lý mã đóng (Close Codes):
+
+```mermaid
+stateDiagram-v2
+    [*] --> Disconnected: Khởi động Client SDK
+
+    Disconnected --> Connecting: Bắt đầu bắt tay WebSocket (WS Handshake)
+    Connecting --> Authenticating: Gửi JWT qua Header / Frame đầu tiên
+
+    state Authenticating {
+        [*] --> ValidateJWT: App websocket xác thực qua bộ nhớ đệm JWKS
+        ValidateJWT --> AuthFailed: Token hết hạn / Không hợp lệ
+        ValidateJWT --> AuthSuccess: Xác thực thành công
+    }
+
+    AuthFailed --> Disconnected: Đóng kết nối mã 4001 (AUTH_TOKEN_EXPIRED)<br/>Client gọi Auth Service xin token mới
+
+    AuthSuccess --> Connected: Kênh kết nối sẵn sàng (Protobuf Stream)
+
+    state Connected {
+        [*] --> ActiveStreaming: Lắng nghe Interest các phòng đang mở
+        ActiveStreaming --> EphemeralBypass: Gửi / nhận Typing & Presence
+        ActiveStreaming --> BufferCongested: Mạng Client chậm, Socket Outbound Buffer đầy
+    }
+
+    BufferCongested --> Dropped: Server ngắt cưỡng bức mã 4008 (SLOW_CLIENT)<br/>Bảo vệ tài nguyên RAM của Gateway
+    Connected --> ServerMaintenance: Server trả mã 1001 (SERVER_GOING_AWAY)<br/>Node Gateway tiến hành bảo trì
+    Connected --> NetworkDrop: Đứt kết nối vật lý (Timeout nhịp tim Ping/Pong)
+
+    Dropped --> Reconnecting: Exponential Backoff + Full Jitter
+    ServerMaintenance --> Reconnecting: Tự động chuyển node Gateway khác
+    NetworkDrop --> Reconnecting: Chờ phục hồi mạng
+
+    Reconnecting --> Connecting: Kết nối lại sau thời gian chờ T_wait
+```
+
 ---
 
 ## 3. Cơ chế bảo đảm tính đúng đắn (Guarantees & Mechanisms)

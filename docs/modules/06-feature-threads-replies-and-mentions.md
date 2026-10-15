@@ -18,7 +18,36 @@
 
 ## 2. Luồng hoạt động chi tiết (How It Works)
 
-### 2.1. Luồng Trả lời tin nhắn & Bóc tách Mention bất đồng bộ
+### 2.1. Sơ đồ Khối Kiến trúc Xử lý Hai luồng Độc lập (Dual-Path Architecture)
+
+Để đảm bảo việc trả lời tin nhắn và gắn thẻ `@mention` không làm suy giảm thời gian phản hồi cực nhanh (p99 $\le$ 30ms) của luồng gửi tin chính, hệ thống bóc tách hoàn toàn luồng ghi nhận tức thời và luồng bóc tách chỉ mục bất đồng bộ:
+
+```mermaid
+flowchart TD
+    Client["Client SDK (Gửi tin kèm reply/mention)"] --> Core["Core Service (send/actor)"]
+
+    %% Luồng nhanh
+    subgraph FastPath["1. Luồng Ghi Tức Thời (Fast-Path Timeline)"]
+        Core -->|Insert doc kèm root_seq & reply_to_seq| MongoMsg[("MongoDB (messages)<br/>Timeline chính")]
+        MongoMsg -->|Ack majority| Core
+        Core -->|Fast Ack <= 30ms| Client
+    end
+
+    %% Luồng bất đồng bộ
+    subgraph AsyncPath["2. Luồng Bóc Tách & Chỉ Mục Ngầm (Async Indexing)"]
+        Core -.->|Enqueue MessageInserted| WorkQ[("NATS JetStream<br/>Stream: CHATIM_WORK")]
+        WorkQ --> Worker["Worker Pool<br/>(reply_mention_index)"]
+
+        Worker -->|Task 1: Cập nhật bộ đếm reply| IncReply["UpdateOne {seq: root_seq}<br/>$inc: {rc: 1}"]
+        IncReply --> MongoMsg
+
+        Worker -->|Task 2: Lập chỉ mục Hộp thư Mention| MentBox[("MongoDB (mentions)<br/>Hộp thư nhắc tên người dùng")]
+
+        Worker -->|Task 3: Kích hoạt thông báo ngoài app| PushSrv["Push Notification Service<br/>(APNs / FCM)"]
+    end
+```
+
+### 2.2. Luồng Trả lời tin nhắn & Bóc tách Mention bất đồng bộ (Sequence Diagram)
 
 Hệ thống thiết kế theo kiến trúc **Tách rời đường gửi tin tức thời và đường lập chỉ mục tìm kiếm**:
 
@@ -34,7 +63,7 @@ sequenceDiagram
     participant Push as Push Notification Service
 
     Client->>Core: SendMessage(reply_to=10010, mentions=["usr_B"], text="@usr_B xem giúp")
-    
+
     Note over Core,Msgs: 1. Ghi tin trả lời lên Timeline chính
     Core->>Msgs: Insert doc {seq: 10045, root_seq: 10010, reply_to_seq: 10010, quote: "..."}
     Msgs-->>Core: Insert thành công
@@ -45,7 +74,7 @@ sequenceDiagram
 
     Note over WorkQ,Worker: 3. Worker xử lý bất đồng bộ
     WorkQ->>Worker: Nhận nhiệm vụ xử lý seq=10045
-    
+
     par Tăng số lượng reply trên tin gốc
         Worker->>Msgs: UpdateOne({seq: 10010}, {$inc: {rc: 1}})
     and Lập chỉ mục Hộp thư Mention

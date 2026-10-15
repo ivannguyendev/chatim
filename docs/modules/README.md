@@ -61,7 +61,95 @@ flowchart TD
 
 ---
 
-## 2. Mục lục 10 Module Độc lập
+## 2. Sơ đồ Luồng Sự kiện Toàn cảnh Hệ thống (Global Event & Data Topology)
+
+Sơ đồ khối dưới đây thể hiện luồng luân chuyển dữ liệu và liên kết phối hợp giữa toàn bộ 10 module nghiệp vụ từ lúc Client phát lệnh đến khi lưu trữ, phân phối realtime và tự phục hồi:
+
+```mermaid
+flowchart TD
+    %% Tầng Client & Gateway
+    subgraph Clients["Tầng Thiết bị Khách (Clients)"]
+        UserA["Client A (Người gửi)"]
+        UserB["Client B (Đang mở phòng)"]
+        UserC["Client C (Thiết bị khác của A)"]
+    end
+
+    subgraph GW["Module 09: App websocket (WebSocket gws)"]
+        ConnHub["Connection Hub (Zero-Alloc Fanout)"]
+        EphemRouter["Ephemeral Bypass (Typing / Presence)"]
+    end
+
+    %% Tầng Core
+    subgraph CoreLayer["Cụm Dịch vụ Lõi (Core Service Modules)"]
+        M01["M01: Rooms & DMs<br/>(Sổ nhận chỗ tất định)"]
+        M02["M02: Send Actor & Flusher<br/>(Single-Writer seq)"]
+        M03["M03: Edit & Delete<br/>(Fact & CAS Projection)"]
+        M04["M04: Reactions & Pins<br/>(Survivor Timers)"]
+        M05["M05: Roles & Succession<br/>(Single Transaction)"]
+        M06["M06: Threads & Mentions<br/>(Flat root_seq)"]
+        M07["M07: Read Receipts<br/>(Bounded Scan 99+)"]
+        M08["M08: Reader View Pipeline<br/>(Lọc & che dấu riêng tư)"]
+    end
+
+    %% Tầng Lưu trữ & Cache
+    subgraph Storage["Tầng Lưu trữ Bền vững & Bộ nhớ đệm"]
+        RedisStorage[("Redis<br/>- Dedupe EVALSHA (M02)<br/>- Bitmap Ack Marks (M10)")]
+        MongoStorage[("MongoDB Replica Set<br/>- Clustered messages (M02, M08)<br/>- room_dms (M01)<br/>- message_edits Fact (M03)<br/>- members & interactions (M04, M05, M07)")]
+    end
+
+    %% Tầng Message Bus
+    subgraph EventBus["Hạ tầng NATS JetStream"]
+        NATSEph["NATS Ephemeral (Typing)"]
+        NATSEvt["NATS Live Events (CHATIM_EVT)"]
+        NATSWork["NATS Work Stream (CHATIM_WORK - 32 Parts)"]
+    end
+
+    %% Tầng Worker & Reconciler
+    subgraph AsyncWorkers["Tầng Xử lý Ngầm & Tự phục hồi"]
+        WorkerIndex["Worker reply_mention_index (M06)"]
+        WorkerTimer["Worker count_repair (M04, M10)"]
+        M10Reconcile["M10: Reconciler Leader Slot 0<br/>(Mongo Oplog Change Stream)"]
+    end
+
+    %% Liên kết luồng
+    UserA -->|1. Frame gửi tin / lệnh| ConnHub
+    UserA -.->|Typing frame| EphemRouter
+    EphemRouter -.-> NATSEph -.-> ConnHub -.-> UserB
+
+    ConnHub -->|2. gRPC Unary| M02
+    ConnHub -->|gRPC lệnh khác| M01 & M03 & M04 & M05 & M07
+    ConnHub -->|Đọc lịch sử| M08
+    M08 -->|Clustered read| MongoStorage
+
+    %% Core ghi Storage
+    M02 <-->|Reserve CID| RedisStorage
+    M02 -->|Group Commit| MongoStorage
+    M03 & M04 & M05 & M07 --> MongoStorage
+
+    %% Core phát event
+    M02 -.->|Fast-path Ack| ConnHub
+    M02 -.->|Fast-path Event| NATSEvt
+    M03 & M04 & M05 & M07 -.-> NATSEvt
+    NATSEvt -->|Interest Routing| ConnHub
+    ConnHub -->|Đẩy tin tức thời| UserB
+    NATSEvt -.->|Đồng bộ vị trí đọc| UserC
+
+    %% Luồng bất đồng bộ & Worker
+    M06 -.->|Enque work| NATSWork
+    M04 -.->|Arm survivor timer| NATSWork
+    NATSWork --> WorkerIndex & WorkerTimer
+    WorkerIndex -->|Lập inbox mention| MongoStorage
+    WorkerTimer -->|Đối soát sửa rx/rc| MongoStorage
+
+    %% Luồng Reconciler
+    MongoStorage -.->|Oplog Change Stream| M10Reconcile
+    M10Reconcile -->|Check Ack Mark| RedisStorage
+    M10Reconcile -.->|Slow-path bù sự kiện rớt| NATSEvt
+```
+
+---
+
+## 3. Mục lục 10 Module Độc lập
 
 Mỗi module dưới đây là một tập tài liệu đặc tả hoàn chỉnh, đi sâu vào từng trường hợp sử dụng cụ thể:
 
@@ -80,7 +168,7 @@ Mỗi module dưới đây là một tập tài liệu đặc tả hoàn chỉnh
 
 ---
 
-## 3. Ma trận Đối chiếu: Feature ↔ Khung Lớp Dữ liệu ↔ Hạ tầng
+## 4. Ma trận Đối chiếu: Feature ↔ Khung Lớp Dữ liệu ↔ Hạ tầng
 
 Để đảm bảo tính nhất quán trên toàn bộ hệ thống, mọi tính năng đều phải tuân thủ nghiêm ngặt **Khung lớp dữ liệu (Data Class Framework - §4)**:
 
@@ -100,23 +188,23 @@ Mỗi module dưới đây là một tập tài liệu đặc tả hoàn chỉnh
 
 ---
 
-## 4. Hướng dẫn Đọc tài liệu theo Vai trò
+## 5. Hướng dẫn Đọc tài liệu theo Vai trò
 
-- **Dành cho Product Owner / Business Analyst:**  
+- **Dành cho Product Owner / Business Analyst:**
   Đọc phần **1. Các Use Case nghiệp vụ** và **4. Hạn chế kỹ thuật & Đánh đổi** của từng module để hiểu rõ hệ thống hỗ trợ được những gì, giới hạn dung lượng ra sao và tại sao các tính năng như "Unread đếm 99+" hay "Kênh 200K chỉ admin post" lại được thiết kế như vậy.
 
-- **Dành cho Frontend / Client SDK Developers:**  
+- **Dành cho Frontend / Client SDK Developers:**
   Đọc kỹ **Module 02 (Gửi tin & Chống trùng CID)**, **Module 07 (Vị trí đọc & Unread)**, **Module 08 (Đọc lịch sử & Reconnect Token)** và **Module 09 (WebSocket Realtime)** để nắm bắt chính xác hợp đồng giao tiếp, mã lỗi gRPC, cơ chế client retry và cách hiển thị snapshot.
 
-- **Dành cho Backend / Core Developers:**  
+- **Dành cho Backend / Core Developers:**
   Đọc toàn bộ 10 module, đặc biệt chú ý phần **3. Cơ chế bảo đảm tính đúng đắn** và **4. Kỹ thuật triển khai**. Mọi thay đổi logic hay thêm tính năng mới bắt buộc phải đối chiếu với nguyên tắc: *Một ghi đơn doc atomic, không retry nội bộ, dùng phiếu hẹn sinh tồn cho dữ liệu phái sinh*.
 
-- **Dành cho SRE / DevOps / Infrastructure Engineers:**  
+- **Dành cho SRE / DevOps / Infrastructure Engineers:**
   Tập trung vào phần **5. Phụ thuộc kỹ thuật & Bán kính sự cố** của các module và đọc toàn bộ **Module 10 (Data Reconciliation & Self-Healing)** để hiểu rõ cách thức hệ thống tự chữa lành, cách phân bổ 1024 slot, ngưỡng cảnh báo Redis/Mongo/NATS và quy trình vận hành công cụ `/app resync` khi có sự cố hạ tầng.
 
 ---
 
-## 5. Ma trận Mã lỗi Hệ thống chung (System-Wide Error Codes Matrix)
+## 6. Ma trận Mã lỗi Hệ thống chung (System-Wide Error Codes Matrix)
 
 Để đồng bộ hành vi xử lý ngoại lệ trên toàn bộ các nền tảng Client (iOS, Android, Web SDK), mọi RPC gọi đến Core đều tuân thủ nguyên tắc phân loại lỗi chuẩn:
 
@@ -131,7 +219,7 @@ Mỗi module dưới đây là một tập tài liệu đặc tả hoàn chỉnh
 
 ---
 
-## 6. Tiêu chuẩn Vận hành SLA / SLO & Ngưỡng Cảnh báo Nền tảng
+## 7. Tiêu chuẩn Vận hành SLA / SLO & Ngưỡng Cảnh báo Nền tảng
 
 | Mục tiêu vận hành | Chỉ số cam kết (SLO) | Metric Prometheus tương ứng | Ngưỡng Cảnh báo (Alert Rule) |
 |---|---|---|---|

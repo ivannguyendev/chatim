@@ -17,7 +17,32 @@
 
 ## 2. Luồng hoạt động chi tiết (How It Works)
 
-### 2.1. Luồng mở phòng chat 1-1 (OpenDirectRoom — Sổ nhận chỗ DM)
+### 2.1. Cây quyết định Phân giải & Khởi tạo Phòng (Room Resolution Flow)
+
+Trước khi đi vào tuần tự chi tiết, sơ đồ khối dưới đây thể hiện logic rẽ nhánh khi phân giải hoặc tạo mới các loại phòng (DM, Nhóm chat, Kênh phát sóng):
+
+```mermaid
+flowchart TD
+    Req["Yêu cầu khởi tạo / Mở phòng"] --> CheckType{"Loại phòng cần mở?"}
+
+    %% Nhánh 1: Trò chuyện 1-1
+    CheckType -- "1-1 (Direct Message)" --> SortPair["Chuẩn hoá cặp người dùng:<br/>user_min = min(A, B)<br/>user_max = max(A, B)"]
+    SortPair --> UpsertDMS["MongoDB: FindAndModify ($setOnInsert)<br/>Collection: room_dms<br/>Key: {tenant_id, user_min, user_max}"]
+    UpsertDMS --> CheckNew{"Kết quả trả về<br/>đã có phòng trước đó?"}
+    CheckNew -- "Có sẵn (is_new = false)" --> ReturnDM["Trả về room_id hiện tại<br/>(Không tạo trùng phòng)"]
+    CheckNew -- "Vừa tạo mới (is_new = true)" --> InitDM["1. Insert collection 'rooms' (type: DM)<br/>2. Insert collection 'members' (2 user)<br/>3. Publish event 'room_created'"]
+    InitDM --> OpenNewDM["Trả về room_id mới sinh"]
+
+    %% Nhánh 2: Nhóm chat
+    CheckType -- "Nhóm chat (Group <=5K)" --> InitGroup["Khởi tạo phòng nhóm (type: Group)<br/>Người tạo = Owner (Quyền sở hữu)<br/>Thêm danh sách thành viên ban đầu"]
+    InitGroup --> OpenGroup["Kích hoạt phòng & đồng bộ thành viên"]
+
+    %% Nhánh 3: Kênh phát sóng
+    CheckType -- "Kênh phát sóng (Channel ~200K)" --> InitChan["Khởi tạo kênh (type: Channel)<br/>Phân quyền: Chỉ Admin/Owner được gửi tin<br/>Thành viên đăng ký chỉ có quyền Đọc"]
+    InitChan --> OpenChan["Sẵn sàng tiếp nhận đăng ký quy mô lớn"]
+```
+
+### 2.2. Luồng mở phòng chat 1-1 (OpenDirectRoom — Sổ nhận chỗ DM)
 
 Trò chuyện 1-1 là trường hợp đặc biệt dễ xảy ra xung đột khi cả hai người dùng A và B cùng bấm "Nhắn tin" cho nhau tại cùng một thời điểm:
 
