@@ -62,10 +62,8 @@ func TestResyncPublishesBookmarksAndChecksCountsOfReactedAndRepliedMessages(t *t
 	if len(got) != 67 || !slices.Equal(got[61:], tail) {
 		t.Fatalf("published %d ids ending %v, want 61 messages then %v", len(got), got[max(0, len(got)-6):], tail)
 	}
-	for _, r := range pub.records()[64:] {
-		if r.Kind != store.MessageCountCheck || r.CommittedAt.IsZero() {
-			t.Fatalf("count check record = %+v, want a MessageCountCheck stamped with the resync time", r)
-		}
+	if recs := pub.records(); len(recs) != 64 {
+		t.Fatalf("published %d work records, want 64: the count checks are armed timers, not work records", len(recs))
 	}
 }
 

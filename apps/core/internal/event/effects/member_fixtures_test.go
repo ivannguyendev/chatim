@@ -2,7 +2,6 @@ package effects_test
 
 import (
 	"context"
-	"sync"
 	"testing"
 	"time"
 
@@ -16,49 +15,21 @@ import (
 
 var memberNow = time.Date(2026, 10, 8, 9, 0, 0, 0, time.UTC)
 
-type fakeTimers struct {
-	mu    sync.Mutex
-	armed []uint64
-	err   error
-	onArm func()
-}
-
-func (f *fakeTimers) ArmMemberCountCheck(_ context.Context, r uint64) (work.Timer, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.err != nil {
-		return work.Timer{}, f.err
-	}
-	f.armed = append(f.armed, r)
-	if f.onArm != nil {
-		f.onArm()
-	}
-	return work.Timer{Seq: uint64(len(f.armed))}, nil
-}
-
-func (f *fakeTimers) rooms() []uint64 {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return append([]uint64(nil), f.armed...)
-}
-
 type memberRig struct {
 	rooms   *memstore.Rooms
 	hidden  *memstore.Hidden
 	js      *publishtest.JetStream
-	timers  *fakeTimers
 	room    domain.Room
 	member  *effects.MemberEvent
 	count   *effects.MemberCountEvent
 	read    *effects.ReadEvent
 	hide    *effects.HiddenEvent
 	cleared *effects.HistoryClearedEvent
-	repair  *effects.MemberCountRepair
 }
 
 func newMemberRig(t *testing.T) *memberRig {
 	t.Helper()
-	rg := &memberRig{rooms: memstore.NewRooms(), hidden: memstore.NewHidden(), js: &publishtest.JetStream{}, timers: &fakeTimers{}}
+	rg := &memberRig{rooms: memstore.NewRooms(), hidden: memstore.NewHidden(), js: &publishtest.JetStream{}}
 	rg.room = createRoom(t, rg.rooms, room)
 	now := func() time.Time { return memberNow }
 	events := effects.MessageChangedConfig{SubjectRoot: "evt", Delay: delay, RoomCache: 16}
@@ -68,10 +39,6 @@ func newMemberRig(t *testing.T) *memberRig {
 	rg.read = built(effects.NewReadEvent(members, events))(t)
 	rg.cleared = built(effects.NewHistoryClearedEvent(members, events))(t)
 	rg.hide = built(effects.NewHiddenEvent(effects.HiddenEventDeps{Hidden: rg.hidden, Rooms: rg.rooms, JS: rg.js}, events))(t)
-	rg.repair = built(effects.NewMemberCountRepair(
-		effects.MemberCountRepairDeps{Rooms: rg.rooms, Counts: rg.rooms, Timers: rg.timers, JS: rg.js, Now: now},
-		effects.MemberCountRepairConfig{SubjectRoot: "evt"},
-	))(t)
 	return rg
 }
 
@@ -139,10 +106,6 @@ func clearedRec(r uint64, user string) work.Record {
 	return work.Record{Kind: store.HistoryCleared, Room: r, User: user, CommittedAt: time.Now()}
 }
 
-func countCheck(r uint64, op uint32) work.Record {
-	return work.Record{Kind: store.MemberCountCheck, Room: r, Version: op, CommittedAt: time.Now()}
-}
-
 type brokenMembers struct{}
 
 func (brokenMembers) MembersOf(context.Context, uint64, []string) ([]domain.Member, error) {
@@ -151,10 +114,4 @@ func (brokenMembers) MembersOf(context.Context, uint64, []string) ([]domain.Memb
 
 func (brokenMembers) Get(context.Context, string, store.MsgKey) (domain.HiddenMessage, bool, error) {
 	return domain.HiddenMessage{}, false, errBoom
-}
-
-func (brokenMembers) CountMembers(context.Context, uint64) (int, error) { return 0, errBoom }
-
-func (brokenMembers) SetMemberCount(context.Context, uint64, uint64, int) (domain.MemberCount, bool, error) {
-	return domain.MemberCount{}, false, errBoom
 }

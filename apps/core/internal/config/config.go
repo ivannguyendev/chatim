@@ -10,6 +10,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventmark"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/reconcile"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/slot"
@@ -58,6 +59,7 @@ type Config struct {
 	Publish                publish.Config
 	Stream                 publish.StreamConfig
 	Work                   work.StreamConfig
+	Timer                  timer.StreamConfig
 	Slot                   slot.Config
 	ReconcileEnabled       bool
 	Reconcile              reconcile.Config
@@ -84,6 +86,7 @@ type StopPlan struct {
 	GRPC       time.Duration
 	Reconciler time.Duration
 	Workers    time.Duration
+	Timer      time.Duration
 	Router     time.Duration
 	CIDBatch   time.Duration
 	Flusher    time.Duration
@@ -147,6 +150,7 @@ func (c Config) StopPlan() StopPlan {
 		GRPC:       c.GRPCShutdown,
 		Reconciler: c.Reconcile.Drain + CloseTimeout,
 		Workers:    c.Effects.Drain + CloseTimeout,
+		Timer:      CloseTimeout,
 		Router:     c.RequestDeadline,
 		CIDBatch:   2 * c.Dedupe.Timeout,
 		Flusher:    c.Flush.InsertTimeout,
@@ -158,7 +162,7 @@ func (c Config) StopPlan() StopPlan {
 
 func (s StopPlan) total() time.Duration {
 	var sum time.Duration
-	for _, d := range []time.Duration{s.DrainDelay, s.GRPC, s.Reconciler, s.Workers, s.Router, s.CIDBatch, s.Flusher, s.Publisher, s.Slots, s.Close} {
+	for _, d := range []time.Duration{s.DrainDelay, s.GRPC, s.Reconciler, s.Workers, s.Timer, s.Router, s.CIDBatch, s.Flusher, s.Publisher, s.Slots, s.Close} {
 		if d > math.MaxInt64-sum {
 			return math.MaxInt64
 		}

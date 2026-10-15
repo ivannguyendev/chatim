@@ -3,8 +3,8 @@ package resync
 import (
 	"context"
 	"fmt"
-	"time"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -13,6 +13,10 @@ import (
 
 type Interactions interface {
 	Between(ctx context.Context, q store.InteractionScan) ([]store.Interaction, error)
+}
+
+type CountTimers interface {
+	ArmMessageCountCheck(ctx context.Context, key store.MsgKey, counter string) (timer.Timer, error)
 }
 
 type countCheck struct {
@@ -78,13 +82,23 @@ func (s *scanner) countChecks(ctx context.Context, _ uint64) error {
 	checks := s.checks
 	s.checks, s.seen = nil, map[countCheck]struct{}{}
 	for _, c := range checks {
-		rec, err := work.MessageCountCheck(c.key, c.counter, work.RandomOp(), time.Now().UTC())
-		if err != nil {
-			return fmt.Errorf("count check of %d/%d/%d %s: %w", c.key.Room, c.key.Thread, c.key.Seq, c.counter, err)
-		}
-		if err := s.emitCounted(ctx, rec, &s.rep.CountCheckRecords); err != nil {
+		if err := s.armCount(ctx, c); err != nil {
 			return err
 		}
+		s.rep.CountCheckRecords++
+	}
+	return nil
+}
+
+func (s *scanner) armCount(ctx context.Context, c countCheck) error {
+	if s.opts.DryRun {
+		return nil
+	}
+	if err := s.pace(ctx); err != nil {
+		return err
+	}
+	if _, err := s.deps.Timers.ArmMessageCountCheck(ctx, c.key, c.counter); err != nil {
+		return fmt.Errorf("count check of %d/%d/%d %s: %w", c.key.Room, c.key.Thread, c.key.Seq, c.counter, err)
 	}
 	return nil
 }

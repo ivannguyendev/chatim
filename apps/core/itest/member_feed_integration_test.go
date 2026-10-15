@@ -11,7 +11,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/pinproj"
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
@@ -50,14 +50,14 @@ func (noForget) ForgetMembers(uint64) {}
 
 func mutatorWithoutEvents(t *testing.T, it *itInfra, core itCore, members mutate.MemberStore) *mutate.Mutator {
 	t.Helper()
-	st, w := itStore(it, core), core.cfg.Work
+	st, tc := itStore(it, core), core.cfg.Timer
 	return built(mutate.New(mutate.Deps{
 		Access: built(access.NewChecker(st, access.DefaultPolicy{}))(t), Messages: st, Edits: st, Hidden: st.Hidden(), Rooms: st,
 		Events: droppedEvents{}, Interactions: st.Interactions(), Counts: st, Pins: st.Pins(),
 		Projector: built(pinproj.New(st.Pins(), st))(t), Limits: core.cfg.Limits, Members: members, Requests: freshRequests{},
 		Forget: noForget{}, Reads: st, Log: slog.New(slog.DiscardHandler),
-		Timers:      built(work.NewTimers(it.js, w.Name, w.SubjectRoot, w.Partitions, core.cfg.MemberCountCheckDelay))(t),
-		CountTimers: built(work.NewTimers(it.js, w.Name, w.SubjectRoot, w.Partitions, core.cfg.MessageCountCheckDelay))(t),
+		Timers:      built(timer.NewTimers(it.js, tc.Name, tc.SubjectRoot, core.cfg.MemberCountCheckDelay))(t),
+		CountTimers: built(timer.NewTimers(it.js, tc.Name, tc.SubjectRoot, core.cfg.MessageCountCheckDelay))(t),
 	}))(t)
 }
 

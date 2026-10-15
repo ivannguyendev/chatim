@@ -9,6 +9,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventmark"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/reconcile"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/metrics"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/slot"
@@ -46,6 +47,7 @@ type node struct {
 	cidBatch   drainer
 	router     gate
 	slots      runner
+	timers     drainer
 	workers    drainer
 	reconciler drainer
 	watches    liveWatcher
@@ -60,7 +62,10 @@ func prepare(ctx context.Context, cfg config.Config, cl *clients) error {
 	if err := publish.EnsureStream(ctx, cl.js, cfg.Stream); err != nil {
 		return config.RedactError(err, cfg.NATSURL)
 	}
-	return config.RedactError(work.EnsureStream(ctx, cl.js, cfg.Work), cfg.NATSURL)
+	if err := work.EnsureStream(ctx, cl.js, cfg.Work); err != nil {
+		return config.RedactError(err, cfg.NATSURL)
+	}
+	return config.RedactError(timer.EnsureStream(ctx, cl.js, cfg.Timer), cfg.NATSURL)
 }
 
 func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
@@ -111,16 +116,12 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wire slot manager: %w", err)
 	}
-	w := cfg.Work
-	timers, err := work.NewTimers(cl.js, w.Name, w.SubjectRoot, w.Partitions, cfg.MemberCountCheckDelay, work.WithTimerLogger(log))
+	ts, err := wireTimers(cfg, cl, st, pub, log)
 	if err != nil {
-		return nil, fmt.Errorf("wire member count timers: %w", err)
+		return nil, err
 	}
-	msgTimers, err := work.NewTimers(cl.js, w.Name, w.SubjectRoot, w.Partitions, cfg.MessageCountCheckDelay, work.WithTimerLogger(log))
-	if err != nil {
-		return nil, fmt.Errorf("wire message count timers: %w", err)
-	}
-	fx, err := wireEffects(cfg, cl, st, marks, slots, countTimers{members: timers, messages: msgTimers}, log)
+	a.timers = ts.consumer
+	fx, err := wireEffects(cfg, cl, st, marks, slots, ts.messages, log)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +137,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 		a.reconciler = rec
 	}
 	a.publisher, a.flusher, a.cidBatch, a.router, a.slots = pub, fl, batch, router, slots
-	svc, err := wireService(serviceDeps{store: st, router: router, pub: pub, cidBatch: batch, timers: timers, msgTimers: msgTimers, rooms: caches, cfg: cfg, log: log})
+	svc, err := wireService(serviceDeps{store: st, router: router, pub: pub, cidBatch: batch, timers: ts.members, msgTimers: ts.messages, rooms: caches, cfg: cfg, log: log})
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +160,9 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 		oplogWindow:     oplogWindowSeconds(cl.mongo),
 		workers:         fx.workers.Stats,
 		effectCounts:    fx.counters(),
-		counterRepairs:  fx.counterRepairs(),
+		counterRepairs:  ts.counterRepairs(),
+		timerFailures:   ts.consumer.Failures,
+		timerDropped:    ts.consumer.Dropped,
 		memberForgets:   watch.Forgets,
 		memberMalformed: watch.Malformed,
 		roomCache:       caches.probes(roomWatch),

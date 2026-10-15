@@ -61,7 +61,7 @@ func (w recordedWatch) Stop() {
 	w.order.got = append(w.order.got, w.name)
 }
 
-func TestShutdownDrainsWorkersAfterTheReconcilerAndBeforeTheRouter(t *testing.T) {
+func TestShutdownDrainsWorkersAndTheTimerConsumerAfterTheReconcilerAndBeforeTheRouter(t *testing.T) {
 	order := &stopOrder{}
 	running := make(chan struct{})
 	close(running)
@@ -75,7 +75,7 @@ func TestShutdownDrainsWorkersAfterTheReconcilerAndBeforeTheRouter(t *testing.T)
 		grpc:      grpcserver.New(grpcserver.Config{ShutdownTimeout: time.Second}, quiet),
 		publisher: order.drainer("publisher"), flusher: order.drainer("flusher"), cidBatch: order.drainer("cid batcher"),
 		router: &recordedRouter{recordedDrainer: order.drainer("router"), running: running},
-		slots:  idle{}, workers: order.drainer("workers"), reconciler: order.drainer("reconciler"),
+		slots:  idle{}, workers: order.drainer("workers"), timers: order.drainer("timer consumer"), reconciler: order.drainer("reconciler"),
 		watches: liveWatchers{recordedWatch{name: "member watch", order: order}, recordedWatch{name: "room watch", order: order}},
 	}
 	lis, err := listenAll(t.Context(), "127.0.0.1:0", "127.0.0.1:0")
@@ -94,7 +94,7 @@ func TestShutdownDrainsWorkersAfterTheReconcilerAndBeforeTheRouter(t *testing.T)
 	case <-time.After(gateLimit):
 		t.Fatalf("serve did not return within %v", gateLimit)
 	}
-	want := []string{"reconciler", "workers", "member watch", "room watch", "router", "cid batcher", "flusher", "publisher"}
+	want := []string{"reconciler", "workers", "timer consumer", "member watch", "room watch", "router", "cid batcher", "flusher", "publisher"}
 	if got := order.names(); !slices.Equal(got, want) {
 		t.Fatalf("drain order = %v, want %v", got, want)
 	}

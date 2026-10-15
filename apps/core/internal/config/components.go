@@ -6,6 +6,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventmark"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/reconcile"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/slot"
@@ -86,6 +87,14 @@ func (p *parser) components(c *Config) {
 		MaxAge:      p.span("WORK_MAX_AGE", work.DefaultMaxAge),
 		Duplicates:  p.span("WORK_DUPLICATES", work.DefaultDuplicates),
 		AckWait:     delay + workAckSlack,
+	}
+	c.Timer = timer.StreamConfig{
+		Name:        envconfig.String("TIMER_STREAM", "CHATIM_TIMER"),
+		SubjectRoot: envconfig.String("TIMER_SUBJECT_ROOT", "timer"),
+		Replicas:    c.Stream.Replicas,
+		MaxAge:      timer.DefaultMaxAge,
+		Duplicates:  timer.DefaultDuplicates,
+		AckWait:     timer.DefaultAckWait,
 	}
 	c.Slot = slot.Config{
 		CoreID:       c.CoreID,

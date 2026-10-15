@@ -34,7 +34,7 @@ func memberBuilders() map[string]memberBuilder {
 }
 
 func TestNewMemberEffectsRejectBadInput(t *testing.T) {
-	js, mem, hidden, timers := &publishtest.JetStream{}, memstore.NewRooms(), memstore.NewHidden(), &fakeTimers{}
+	js, mem, hidden := &publishtest.JetStream{}, memstore.NewRooms(), memstore.NewHidden()
 	events, noRoot := effects.MessageChangedConfig{SubjectRoot: "evt"}, effects.MessageChangedConfig{}
 	deps := effects.MemberEventDeps{Members: mem, Rooms: mem, JS: js}
 	bad := map[string]func() error{}
@@ -55,18 +55,6 @@ func TestNewMemberEffectsRejectBadInput(t *testing.T) {
 	bad["hidden_event without rooms"] = func() error { return hide(effects.HiddenEventDeps{Hidden: hidden, JS: js}, events) }
 	bad["hidden_event without js"] = func() error { return hide(effects.HiddenEventDeps{Hidden: hidden, Rooms: mem}, events) }
 	bad["hidden_event without a root"] = func() error { return hide(effects.HiddenEventDeps{Hidden: hidden, Rooms: mem, JS: js}, noRoot) }
-	repair := effects.MemberCountRepairDeps{Rooms: mem, Counts: mem, Timers: timers, JS: js}
-	fix := func(d effects.MemberCountRepairDeps, root string) error {
-		_, err := effects.NewMemberCountRepair(d, effects.MemberCountRepairConfig{SubjectRoot: root})
-		return err
-	}
-	bad["member_count_repair without rooms"] = func() error { return fix(effects.MemberCountRepairDeps{Counts: mem, Timers: timers, JS: js}, "evt") }
-	bad["member_count_repair without counts"] = func() error { return fix(effects.MemberCountRepairDeps{Rooms: mem, Timers: timers, JS: js}, "evt") }
-	bad["member_count_repair without timers"] = func() error { return fix(effects.MemberCountRepairDeps{Rooms: mem, Counts: mem, JS: js}, "evt") }
-	bad["member_count_repair without js"] = func() error {
-		return fix(effects.MemberCountRepairDeps{Rooms: mem, Counts: mem, Timers: timers}, "evt")
-	}
-	bad["member_count_repair without a root"] = func() error { return fix(repair, "") }
 	for name, build := range bad {
 		if err := build(); !errors.Is(err, apperr.ErrInvalidArgument) {
 			t.Errorf("%s: err = %v, want ErrInvalidArgument", name, err)
@@ -74,8 +62,5 @@ func TestNewMemberEffectsRejectBadInput(t *testing.T) {
 	}
 	if err := hide(effects.HiddenEventDeps{Hidden: hidden, Rooms: mem, JS: js}, events); err != nil {
 		t.Errorf("hidden_event with defaults: %v", err)
-	}
-	if err := fix(repair, "evt"); err != nil {
-		t.Errorf("member_count_repair with defaults: %v", err)
 	}
 }

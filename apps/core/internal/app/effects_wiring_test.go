@@ -10,8 +10,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/pinproj"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/effects"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish/publishtest"
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
-	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
 )
@@ -49,16 +48,13 @@ func TestEffectSetExportsEveryEffect(t *testing.T) {
 		bookmarkEvent:  built(effects.NewBookmarkEvent(effects.BookmarkEventDeps{Bookmarks: reactions, Rooms: rooms, JS: js}, events))(t),
 	}
 	withMemberEffects(t, &fx, rooms, js)
-	fx.countRepair = built(effects.NewCountRepair(
-		effects.CountRepairDeps{Messages: msgs, Interactions: reactions, Counts: msgs, Timers: noTimers{}, Rooms: rooms, JS: js},
-		effects.CountRepairConfig{SubjectRoot: "evt"}))(t)
 	fx.replyMentionIndex = built(effects.NewReplyMentionIndex(
 		effects.ReplyMentionIndexDeps{Messages: msgs, Replies: reactions, Threads: memstore.NewReplyThreads(), Counts: msgs, Mentions: memstore.NewMentions(), Shared: rooms, Timers: noTimers{}, Rooms: rooms, JS: js},
 		effects.ReplyMentionIndexConfig{SubjectRoot: "evt"}))(t)
 	counters := fx.counters()
 	want := []string{
-		effects.BookmarkEventName, effects.CountEventName, effects.CountRepairName, effects.EditProjectionName, effects.HiddenEventName, effects.HistoryClearedEventName, effects.MemberCountEventName,
-		effects.MemberCountRepairName, effects.MemberEventName, effects.MentionReadName, effects.MessageChangedName, effects.MessageCreatedName,
+		effects.BookmarkEventName, effects.CountEventName, effects.EditProjectionName, effects.HiddenEventName, effects.HistoryClearedEventName, effects.MemberCountEventName,
+		effects.MemberEventName, effects.MentionReadName, effects.MessageChangedName, effects.MessageCreatedName,
 		effects.PinEventName, effects.PinProjectionName, effects.PreferencesEventName, effects.ReactionEventName,
 		effects.ReadEventName, effects.ReplyMentionIndexName, effects.RoomCreatedName, effects.RoomEventName,
 	}
@@ -71,27 +67,16 @@ func TestEffectSetExportsEveryEffect(t *testing.T) {
 			t.Errorf("%s: dropped set %v, republished set %v; want dropped always and republished only when it publishes", name, c.dropped != nil, c.republished != nil)
 		}
 	}
-	repairs := fx.counterRepairs()
-	if len(repairs) != 3 || repairs[pbconv.ReactionsCounter] == nil || repairs[pbconv.RepliesCounter] == nil || repairs[effects.MembersCounter] == nil {
-		t.Fatalf("counter repairs = %v, want %q, %q and %q", repairs, pbconv.ReactionsCounter, pbconv.RepliesCounter, effects.MembersCounter)
-	}
-	if repairs[pbconv.ReactionsCounter]() != 0 || repairs[pbconv.RepliesCounter]() != 0 {
-		t.Errorf("fresh repair counters are not zero")
-	}
 	assertMemberRegistry(t, fx.registry(effects.NewRoomActivity(rooms).Effect()))
 }
 
 type noTimers struct{}
 
-func (noTimers) ArmMemberCountCheck(context.Context, uint64) (work.Timer, error) {
-	return work.Timer{}, nil
+func (noTimers) ArmMessageCountCheck(context.Context, store.MsgKey, string) (timer.Timer, error) {
+	return timer.Timer{}, nil
 }
 
-func (noTimers) ArmMessageCountCheck(context.Context, store.MsgKey, string) (work.Timer, error) {
-	return work.Timer{}, nil
-}
-
-func (noTimers) Disarm(context.Context, work.Timer) {}
+func (noTimers) Disarm(context.Context, timer.Timer) {}
 
 func withMemberEffects(t *testing.T, fx *effectSet, rooms *memstore.Rooms, js *publishtest.JetStream) {
 	t.Helper()
@@ -105,8 +90,6 @@ func withMemberEffects(t *testing.T, fx *effectSet, rooms *memstore.Rooms, js *p
 	fx.historyCleared = built(effects.NewHistoryClearedEvent(members, events))(t)
 	fx.preferencesEvent = built(effects.NewPreferencesEvent(members, events))(t)
 	fx.roomEvent = built(effects.NewRoomEvent(effects.RoomEventDeps{Rooms: rooms, JS: js}, events))(t)
-	fx.memberCountRepair = built(effects.NewMemberCountRepair(
-		effects.MemberCountRepairDeps{Rooms: rooms, Counts: rooms, Timers: noTimers{}, JS: js}, effects.MemberCountRepairConfig{SubjectRoot: "evt"}))(t)
 }
 
 func assertMemberRegistry(t *testing.T, reg effects.Registry) {
@@ -116,8 +99,6 @@ func assertMemberRegistry(t *testing.T, reg effects.Registry) {
 		store.ReadChanged:       {effects.MentionReadName, effects.ReadEventName},
 		store.MessageHidden:     {effects.HiddenEventName},
 		store.HistoryCleared:    {effects.HistoryClearedEventName},
-		store.MemberCountCheck:  {effects.MemberCountRepairName},
-		store.MessageCountCheck: {effects.CountRepairName},
 		store.ReactionChanged:   {effects.RoomActivityName, effects.ReactionEventName, effects.CountEventName},
 		store.BookmarkChanged:   {effects.RoomActivityName, effects.BookmarkEventName},
 		store.MessageInserted:   {effects.RoomActivityName, effects.ReplyMentionIndexName, effects.MessageCreatedName},
@@ -138,12 +119,12 @@ func assertMemberRegistry(t *testing.T, reg effects.Registry) {
 		}
 	}
 	for _, kind := range []store.ChangeKind{store.MemberCountCheck, store.MessageCountCheck} {
-		if d := reg[kind][0].Delay; d != 0 {
-			t.Errorf("kind %d repair delay = %v, want 0 (the timer already waited)", kind, d)
+		if effs, ok := reg[kind]; ok {
+			t.Errorf("kind %d has effects %v; count checks fire on the timer stream now", kind, effs)
 		}
 	}
 	for kind := store.MessageInserted; kind <= store.PreferenceChanged; kind++ {
-		if _, ok := reg[kind]; !ok {
+		if _, ok := reg[kind]; !ok && kind != store.MemberCountCheck && kind != store.MessageCountCheck {
 			t.Errorf("kind %d has no effects; want every kind registered", kind)
 		}
 	}

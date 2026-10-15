@@ -37,13 +37,14 @@ func fakeProbes(withReader bool) probes {
 			"member_event":        {republished: func() uint64 { return 9 }, dropped: func() uint64 { return 10 }},
 			"read_event":          {republished: func() uint64 { return 11 }, dropped: zero},
 			"reply_mention_index": {republished: func() uint64 { return 15 }, dropped: func() uint64 { return 16 }},
-			"count_repair":        {republished: func() uint64 { return 17 }, dropped: func() uint64 { return 18 }},
 			"bookmark_event":      {republished: func() uint64 { return 19 }, dropped: func() uint64 { return 20 }},
 			"mention_read":        {dropped: func() uint64 { return 22 }},
 		},
 		counterRepairs: map[string]func() uint64{
 			"reactions": func() uint64 { return 6 }, "replies": func() uint64 { return 21 }, "members": func() uint64 { return 12 },
 		},
+		timerFailures:   func() uint64 { return 17 },
+		timerDropped:    func() uint64 { return 18 },
 		memberForgets:   func() uint64 { return 13 },
 		memberMalformed: func() uint64 { return 14 },
 		roomCache:       fakeRoomCacheProbes(),
@@ -67,7 +68,7 @@ func TestCoreMetricSourcesCoverEveryGuarantee(t *testing.T) {
 		"publish_dropped_total", "ack_marks_dropped_total", "redis_degraded", "cid_settle_dropped_total",
 		"cid_pending_elsewhere_total", "room_yields_total", "grpc_load_shed_total", "mongo_oplog_window_seconds",
 		"reconcile_lag_seconds", "reconcile_republished_total", "effect_dropped_total", "work_processed_total", "work_failures_total",
-		"counter_repaired_total", "member_cache_forgets_total", "member_watch_malformed_total",
+		"counter_repaired_total", "timer_failures_total", "timer_dropped_total", "member_cache_forgets_total", "member_watch_malformed_total",
 		"room_cache_hits_total", "room_cache_misses_total", "room_tail_cache_bytes", "room_watch_forgets_total", "room_watch_malformed_total",
 	}
 	on := sourceNames(metricSources(fakeProbes(true)))
@@ -116,7 +117,7 @@ func TestEffectMetricsReadTheirEffectByLabel(t *testing.T) {
 		"reconcile_republished_total{read_event}": 11, "counter_repaired_total{members}": 12,
 		"member_cache_forgets_total": 13, "member_watch_malformed_total": 14,
 		"reconcile_republished_total{reply_mention_index}": 15, "effect_dropped_total{reply_mention_index}": 16,
-		"reconcile_republished_total{count_repair}": 17, "effect_dropped_total{count_repair}": 18,
+		"timer_failures_total": 17, "timer_dropped_total": 18,
 		"reconcile_republished_total{bookmark_event}": 19, "effect_dropped_total{bookmark_event}": 20,
 		"counter_repaired_total{replies}": 21, "effect_dropped_total{mention_read}": 22,
 	}

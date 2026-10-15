@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
@@ -53,27 +53,8 @@ type HiddenLookup interface {
 	Get(ctx context.Context, user string, key store.MsgKey) (domain.HiddenMessage, bool, error)
 }
 
-type MemberCounter interface {
-	CountMembers(ctx context.Context, room uint64) (int, error)
-	SetMemberCount(ctx context.Context, room, base uint64, count int) (domain.MemberCount, bool, error)
-}
-
-type CountTimers interface {
-	ArmMemberCountCheck(ctx context.Context, room uint64) (work.Timer, error)
-}
-
-type MessageCountReader interface {
-	CountReactions(ctx context.Context, key store.MsgKey) ([]domain.ReactionCount, error)
-	CountLiveReplies(ctx context.Context, parent store.MsgKey) (uint32, error)
-}
-
-type MessageCountWriter interface {
-	SetReactions(ctx context.Context, key store.MsgKey, base uint64, s domain.ReactionSummary) (bool, error)
-	SetReplyCount(ctx context.Context, key store.MsgKey, base uint64, n uint32) (bool, error)
-}
-
 type MessageCountTimers interface {
-	ArmMessageCountCheck(ctx context.Context, key store.MsgKey, counter string) (work.Timer, error)
+	ArmMessageCountCheck(ctx context.Context, key store.MsgKey, counter string) (timer.Timer, error)
 }
 
 type BookmarkReader interface {
@@ -107,5 +88,5 @@ type MentionReads interface {
 
 type LinkTimers interface {
 	MessageCountTimers
-	Disarm(ctx context.Context, tm work.Timer)
+	Disarm(ctx context.Context, tm timer.Timer)
 }

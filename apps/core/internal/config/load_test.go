@@ -12,6 +12,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventmark"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/reconcile"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/slot"
@@ -51,6 +52,7 @@ func TestLoadDefaults(t *testing.T) {
 		},
 		Stream: publish.StreamConfig{Name: "CHATIM_EVT", SubjectRoot: "evt", LiveRoot: "live", Replicas: 1, MaxAge: 7 * day, Duplicates: 5 * time.Minute},
 		Work:   work.StreamConfig{Name: "CHATIM_WORK", SubjectRoot: "work", Partitions: 32, Replicas: 1, MaxAge: 2 * time.Hour, Duplicates: 2 * time.Minute, AckWait: 35 * time.Second},
+		Timer:  timer.StreamConfig{Name: "CHATIM_TIMER", SubjectRoot: "timer", Replicas: 1, MaxAge: 2 * time.Hour, Duplicates: 2 * time.Minute, AckWait: 30 * time.Second},
 		Slot: slot.Config{
 			CoreID: host, Addr: host + ":9000", Tick: time.Second, HeartbeatTTL: 5 * time.Second,
 			LeaseTTL: 10 * time.Second, HookTimeout: 500 * time.Millisecond,
@@ -87,7 +89,7 @@ func TestLoadOverrides(t *testing.T) {
 		RedisPassword: "state-pw", RedisDedupeAddr: "dedupe:6381", RedisDedupeDB: 2, RedisDedupePassword: "dedupe-pw",
 		NATSURL: "nats://n1:4222", ConnectTimeout: 4 * time.Second, RequestDeadline: 2 * time.Second,
 		SlowRPC: 750 * time.Millisecond, QueueWait: 10 * time.Millisecond, MaxInflight: 100, DrainDelay: time.Second, GRPCShutdown: 4 * time.Second,
-		PublisherDrain: 3 * time.Second, ShutdownBudget: 20 * time.Second,
+		PublisherDrain: 3 * time.Second, ShutdownBudget: 21 * time.Second,
 		Flush: flush.Config{Shards: 8, Window: 5 * time.Millisecond, MaxBatch: 512, QueueSize: 256, InsertTimeout: 500 * time.Millisecond},
 		Actor: actor.Config{
 			Mailbox: 64, Idle: time.Minute, MaxGroup: 32, MaxActors: 5000,
@@ -100,6 +102,7 @@ func TestLoadOverrides(t *testing.T) {
 		},
 		Stream: publish.StreamConfig{Name: "CHATIM_EVT_IT", SubjectRoot: "evt_it", LiveRoot: "live_it", Replicas: 3, MaxAge: 2 * day, Duplicates: 5 * time.Minute},
 		Work:   work.StreamConfig{Name: "CHATIM_WORK_IT", SubjectRoot: "work_it", Partitions: 16, Replicas: 3, MaxAge: time.Hour, Duplicates: 3 * time.Minute, AckWait: 50 * time.Second},
+		Timer:  timer.StreamConfig{Name: "CHATIM_TIMER_IT", SubjectRoot: "timer_it", Replicas: 3, MaxAge: 2 * time.Hour, Duplicates: 2 * time.Minute, AckWait: 30 * time.Second},
 		Slot: slot.Config{
 			CoreID: "core-a", Addr: "10.0.0.5:7000", Tick: 500 * time.Millisecond, HeartbeatTTL: 3 * time.Second,
 			LeaseTTL: 6 * time.Second, HookTimeout: 200 * time.Millisecond,

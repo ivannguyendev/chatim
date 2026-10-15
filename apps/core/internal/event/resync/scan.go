@@ -41,6 +41,7 @@ type Deps struct {
 	Members      Members
 	Hidden       Hidden
 	Pub          Publisher
+	Timers       CountTimers
 }
 
 type Target struct {
@@ -165,13 +166,20 @@ func (s *scanner) emit(ctx context.Context, rec work.Record) error {
 	if s.opts.DryRun {
 		return nil
 	}
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-s.tick.C:
+	if err := s.pace(ctx); err != nil {
+		return err
 	}
 	if _, err := s.deps.Pub.PublishMsg(ctx, work.Message(s.target.SubjectRoot, s.target.Partitions, rec)); err != nil {
 		return fmt.Errorf("publish work record %s: %w", rec.ID(), err)
 	}
 	return nil
+}
+
+func (s *scanner) pace(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-s.tick.C:
+		return nil
+	}
 }

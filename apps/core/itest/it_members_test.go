@@ -142,13 +142,13 @@ func awaitSlotsSplit(t *testing.T, it *itInfra, coreIDs ...string) {
 
 func pendingTimers(t *testing.T, it *itInfra, cfg config.Config, room uint64) uint64 {
 	t.Helper()
-	s, err := it.js.Stream(t.Context(), cfg.Work.Name)
+	s, err := it.js.Stream(t.Context(), cfg.Timer.Name)
 	if err != nil {
-		t.Fatalf("work stream: %v", err)
+		t.Fatalf("timer stream: %v", err)
 	}
-	info, err := s.Info(t.Context(), jetstream.WithSubjectFilter(cfg.Work.SubjectRoot+".timer."+pbconv.RoomID(room)+".>"))
+	info, err := s.Info(t.Context(), jetstream.WithSubjectFilter(cfg.Timer.SubjectRoot+".arm."+pbconv.RoomID(room)+".>"))
 	if err != nil {
-		t.Fatalf("work stream info: %v", err)
+		t.Fatalf("timer stream info: %v", err)
 	}
 	var n uint64
 	for _, c := range info.State.Subjects {
@@ -167,7 +167,7 @@ func assertRoomRecords(t *testing.T, records <-chan *nats.Msg, roomID string, wa
 		case m := <-records:
 			id := m.Header.Get(jetstream.MsgIDHeader)
 			switch {
-			case strings.Contains(m.Subject, ".timer.") || !strings.HasPrefix(id[min(2, len(id)):], roomID):
+			case !strings.HasPrefix(id[min(2, len(id)):], roomID):
 				continue
 			case strings.HasPrefix(id, clearedPrefix) && (cleared == "" || cleared == id):
 				cleared = id

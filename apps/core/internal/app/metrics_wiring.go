@@ -35,6 +35,8 @@ type probes struct {
 	workers         func() effects.Stats
 	effectCounts    map[string]effectCounters
 	counterRepairs  map[string]func() uint64
+	timerFailures   func() uint64
+	timerDropped    func() uint64
 	reconcile       func() reconcile.Stats
 	memberForgets   func() uint64
 	memberMalformed func() uint64
@@ -62,6 +64,7 @@ func metricSources(p probes) []metrics.Source {
 	}
 	out = append(out, workerSources(p.workers, p.effectCounts)...)
 	out = append(out, counterSources(p.counterRepairs)...)
+	out = append(out, timerSources(p.timerFailures, p.timerDropped)...)
 	out = append(out, memberWatchSources(p.memberForgets, p.memberMalformed)...)
 	out = append(out, roomCacheSources(p.roomCache)...)
 	if p.reconcile != nil {
@@ -89,13 +92,20 @@ func workerSources(stats func() effects.Stats, counts map[string]effectCounters)
 }
 
 func counterSources(repairs map[string]func() uint64) []metrics.Source {
-	const help = "Counter summaries the effect workers rewrote because the fast path left them stale."
+	const help = "Counter summaries the survival timer repairs rewrote because the fast path left them stale."
 	out := make([]metrics.Source, 0, len(repairs))
 	for _, name := range slices.Sorted(maps.Keys(repairs)) {
 		read := repairs[name]
 		out = append(out, metrics.Source{Name: "counter_repaired_total", Help: help, Labels: map[string]string{"counter": name}, Read: func() float64 { return float64(read()) }})
 	}
 	return out
+}
+
+func timerSources(failures, dropped func() uint64) []metrics.Source {
+	return []metrics.Source{
+		{Name: "timer_failures_total", Help: "Fired count check timers sent back for a later retry after their repair failed.", Read: func() float64 { return float64(failures()) }},
+		{Name: "timer_dropped_total", Help: "Fired count check timers given up on: the room or message is gone or the payload is malformed.", Read: func() float64 { return float64(dropped()) }},
+	}
 }
 
 func readerSources(stats func() reconcile.Stats) []metrics.Source {

@@ -14,6 +14,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/resync"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -54,6 +55,16 @@ func (p *publishSpy) PublishMsg(_ context.Context, m *nats.Msg, _ ...jetstream.P
 	p.ids = append(p.ids, m.Header.Get(jetstream.MsgIDHeader))
 	p.recs = append(p.recs, rec)
 	return &jetstream.PubAck{}, nil
+}
+
+func (p *publishSpy) ArmMessageCountCheck(_ context.Context, key store.MsgKey, counter string) (timer.Timer, error) {
+	if p.err != nil {
+		return timer.Timer{}, p.err
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.ids = append(p.ids, timer.Check{Room: key.Room, Thread: key.Thread, Seq: key.Seq, Counter: counter, Op: 1}.ID())
+	return timer.Timer{Seq: uint64(len(p.ids))}, nil
 }
 
 func (p *publishSpy) published() []string {
@@ -137,6 +148,6 @@ func (w world) messages(t *testing.T, room uint64, n int, first time.Time) {
 	}
 }
 
-func (w world) deps(pub resync.Publisher) resync.Deps {
-	return resync.Deps{Rooms: w.rooms, Pages: w.msgs, Edits: w.edits, Interactions: w.reactions, Pins: w.pins, Members: w.rooms, Hidden: w.hidden, Pub: pub}
+func (w world) deps(pub *publishSpy) resync.Deps {
+	return resync.Deps{Rooms: w.rooms, Pages: w.msgs, Edits: w.edits, Interactions: w.reactions, Pins: w.pins, Members: w.rooms, Hidden: w.hidden, Pub: pub, Timers: pub}
 }

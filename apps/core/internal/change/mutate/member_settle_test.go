@@ -8,7 +8,7 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -55,7 +55,7 @@ func (f *flakyMembers) ChangeOwners(ctx context.Context, room uint64, users []st
 
 type deadlineTimers struct{ *fakeTimers }
 
-func (d deadlineTimers) Disarm(ctx context.Context, t work.Timer) {
+func (d deadlineTimers) Disarm(ctx context.Context, t timer.Timer) {
 	if ctx.Err() != nil {
 		d.log.add("disarm on a dead context")
 		return

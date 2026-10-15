@@ -36,6 +36,7 @@ func (a *node) shutdown(ctx context.Context, sup *supervisor, t tasks, cause err
 	}
 	s.step("reconciler", plan.Reconciler, closeReconciler, t.reconciler)
 	s.step("workers", plan.Workers, a.workers.Close, t.workers)
+	s.step("timer consumer", plan.Timer, a.timers.Close, t.timers)
 	a.watches.Stop()
 	s.step("router", plan.Router, a.router.Close, t.router)
 	s.step("cid batcher", plan.CIDBatch, a.cidBatch.Close, t.cidBatch)

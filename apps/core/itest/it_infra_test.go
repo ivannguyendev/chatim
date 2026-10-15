@@ -97,6 +97,8 @@ func (it *itInfra) coreConfig(t *testing.T, env map[string]string) config.Config
 		"EVT_LIVE_ROOT":         "itclive" + it.suffix,
 		"WORK_STREAM":           "IT_WORK_" + strings.ToUpper(it.suffix),
 		"WORK_SUBJECT_ROOT":     "itcwork" + it.suffix,
+		"TIMER_STREAM":          "IT_TIMER_" + strings.ToUpper(it.suffix),
+		"TIMER_SUBJECT_ROOT":    "itctimer" + it.suffix,
 	}
 	maps.Copy(base, env)
 	for k, v := range base {
@@ -116,7 +118,7 @@ func (it *itInfra) forget(t *testing.T, cfg config.Config) {
 	if err := it.mongo.Database(cfg.MongoDB).Drop(ctx); err != nil {
 		t.Errorf("drop %s: %v", cfg.MongoDB, err)
 	}
-	for _, name := range []string{cfg.Stream.Name, cfg.Work.Name} {
+	for _, name := range []string{cfg.Stream.Name, cfg.Work.Name, cfg.Timer.Name} {
 		if err := it.js.DeleteStream(ctx, name); err != nil && !errors.Is(err, jetstream.ErrStreamNotFound) {
 			t.Errorf("delete stream %s: %v", name, err)
 		}

@@ -9,7 +9,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/pinproj"
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
@@ -21,8 +21,8 @@ type serviceDeps struct {
 	router    *actor.Router
 	pub       *publish.Publisher
 	cidBatch  *dedupe.Batcher
-	timers    *work.Timers
-	msgTimers *work.Timers
+	timers    *timer.Timers
+	msgTimers *timer.Timers
 	rooms     roomCaches
 	cfg       config.Config
 	log       *slog.Logger

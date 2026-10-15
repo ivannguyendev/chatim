@@ -11,7 +11,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -45,19 +45,19 @@ type fakeTimers struct {
 	err   error
 }
 
-func (f *fakeTimers) ArmMemberCountCheck(_ context.Context, room uint64) (work.Timer, error) {
+func (f *fakeTimers) ArmMemberCountCheck(_ context.Context, room uint64) (timer.Timer, error) {
 	f.log.add("arm")
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.err != nil {
-		return work.Timer{}, f.err
+		return timer.Timer{}, f.err
 	}
 	f.seq++
 	f.armed[f.seq] = room
-	return work.Timer{Seq: f.seq}, nil
+	return timer.Timer{Seq: f.seq}, nil
 }
 
-func (f *fakeTimers) Disarm(_ context.Context, t work.Timer) {
+func (f *fakeTimers) Disarm(_ context.Context, t timer.Timer) {
 	f.log.add("disarm")
 	f.mu.Lock()
 	defer f.mu.Unlock()

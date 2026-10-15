@@ -9,6 +9,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/effects"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish/publishtest"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -27,7 +28,7 @@ type linkTimers struct {
 	disarmed []uint64
 }
 
-func (l *linkTimers) Disarm(_ context.Context, tm work.Timer) {
+func (l *linkTimers) Disarm(_ context.Context, tm timer.Timer) {
 	l.disarmMu.Lock()
 	defer l.disarmMu.Unlock()
 	l.disarmed = append(l.disarmed, tm.Seq)

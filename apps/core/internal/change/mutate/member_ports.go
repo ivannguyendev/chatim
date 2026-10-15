@@ -5,7 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -27,8 +27,8 @@ type RequestDedupe interface {
 }
 
 type CountTimers interface {
-	ArmMemberCountCheck(ctx context.Context, room uint64) (work.Timer, error)
-	Disarm(ctx context.Context, t work.Timer)
+	ArmMemberCountCheck(ctx context.Context, room uint64) (timer.Timer, error)
+	Disarm(ctx context.Context, t timer.Timer)
 }
 
 type MemberForgetter interface {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
@@ -16,16 +16,16 @@ func settling(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.WithoutCancel(ctx), settleTimeout)
 }
 
-func (m *Mutator) armCount(ctx context.Context, room uint64) (work.Timer, error) {
+func (m *Mutator) armCount(ctx context.Context, room uint64) (timer.Timer, error) {
 	t, err := m.d.Timers.ArmMemberCountCheck(ctx, room)
 	if err != nil {
 		m.d.Log.WarnContext(ctx, "member count check timer not armed; member command refused", "room", room, "err", err)
-		return work.Timer{}, domain.ErrRetryLater
+		return timer.Timer{}, domain.ErrRetryLater
 	}
 	return t, nil
 }
 
-func (m *Mutator) settleCount(ctx context.Context, r domain.Room, t work.Timer, delta int, actor string, at time.Time) *chatimv1.Event {
+func (m *Mutator) settleCount(ctx context.Context, r domain.Room, t timer.Timer, delta int, actor string, at time.Time) *chatimv1.Event {
 	if delta == 0 {
 		m.d.Timers.Disarm(ctx, t)
 		return nil
@@ -54,9 +54,9 @@ func (m *Mutator) announce(r domain.Room, written []domain.Member, count *chatim
 	}
 }
 
-func (m *Mutator) maybeArm(ctx context.Context, room uint64, delta int) (work.Timer, error) {
+func (m *Mutator) maybeArm(ctx context.Context, room uint64, delta int) (timer.Timer, error) {
 	if delta == 0 {
-		return work.Timer{}, nil
+		return timer.Timer{}, nil
 	}
 	return m.armCount(ctx, room)
 }
