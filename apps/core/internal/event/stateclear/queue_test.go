@@ -1,4 +1,4 @@
-package clear_test
+package stateclear_test
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/clear"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/stateclear"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
@@ -39,7 +39,7 @@ func TestAddAfterCloseIsACountedDrop(t *testing.T) {
 
 func TestCloseDrainsTheRemainder(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		rg := started(t, clear.Config{Batch: 2, Queue: 8})
+		rg := started(t, stateclear.Config{Batch: 2, Queue: 8})
 		rg.add(1, 2, 3, 4, 5)
 		start := time.Now()
 		rg.closeAndWait(t)
@@ -53,14 +53,14 @@ func TestCloseDrainsTheRemainder(t *testing.T) {
 
 func TestCloseGivesUpAfterTheDrainBudget(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		rg := started(t, clear.Config{Batch: 2, Queue: 8})
+		rg := started(t, stateclear.Config{Batch: 2, Queue: 8})
 		rg.st.set(nil, true)
 		rg.add(1, 2, 3, 4, 5)
 		time.Sleep(500 * time.Millisecond)
 		start := time.Now()
 		rg.closeAndWait(t)
-		if elapsed := time.Since(start); elapsed != clear.DrainTimeout {
-			t.Fatalf("Close took %v, want %v", elapsed, clear.DrainTimeout)
+		if elapsed := time.Since(start); elapsed != stateclear.DrainTimeout {
+			t.Fatalf("Close took %v, want %v", elapsed, stateclear.DrainTimeout)
 		}
 		expectSizes(t, rg.st, 2, 2)
 		rg.expectCounts(t, 0, 1, 4)
@@ -112,10 +112,10 @@ func TestRunStartsOnce(t *testing.T) {
 }
 
 func TestNewRejectsBadInput(t *testing.T) {
-	if _, err := clear.New(nil, defaultCfg, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
+	if _, err := stateclear.New(nil, defaultCfg, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
 		t.Fatalf("New without a store = %v, want ErrInvalidArgument", err)
 	}
-	if _, err := clear.New(&fakeStore{}, clear.Config{Batch: -1}, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
+	if _, err := stateclear.New(&fakeStore{}, stateclear.Config{Batch: -1}, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
 		t.Fatalf("New with a bad config = %v, want ErrInvalidArgument", err)
 	}
 }
@@ -123,15 +123,15 @@ func TestNewRejectsBadInput(t *testing.T) {
 func TestConfigValidate(t *testing.T) {
 	tests := []struct {
 		name string
-		cfg  clear.Config
+		cfg  stateclear.Config
 		ok   bool
 	}{
-		{"defaults", clear.Config{}, true},
-		{"explicit", clear.Config{Flush: 50 * time.Millisecond, Batch: 100, Queue: 1000}, true},
-		{"negative flush", clear.Config{Flush: -time.Millisecond}, false},
-		{"negative batch", clear.Config{Batch: -1}, false},
-		{"negative queue", clear.Config{Queue: -1}, false},
-		{"batch above queue", clear.Config{Batch: 10, Queue: 5}, false},
+		{"defaults", stateclear.Config{}, true},
+		{"explicit", stateclear.Config{Flush: 50 * time.Millisecond, Batch: 100, Queue: 1000}, true},
+		{"negative flush", stateclear.Config{Flush: -time.Millisecond}, false},
+		{"negative batch", stateclear.Config{Batch: -1}, false},
+		{"negative queue", stateclear.Config{Queue: -1}, false},
+		{"batch above queue", stateclear.Config{Batch: 10, Queue: 5}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

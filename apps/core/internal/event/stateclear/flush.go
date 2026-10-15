@@ -1,4 +1,4 @@
-package clear
+package stateclear
 
 import (
 	"context"

@@ -1,4 +1,4 @@
-package clear_test
+package stateclear_test
 
 import (
 	"slices"

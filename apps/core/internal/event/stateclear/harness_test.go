@@ -1,4 +1,4 @@
-package clear_test
+package stateclear_test
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 
 	"go.uber.org/goleak"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/clear"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/stateclear"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/testlog"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
@@ -27,8 +27,8 @@ const (
 
 var (
 	errStore    = errors.New("store down")
-	defaultCfg  = clear.Config{}
-	smallBuffer = clear.Config{Batch: 2, Queue: 2}
+	defaultCfg  = stateclear.Config{}
+	smallBuffer = stateclear.Config{Batch: 2, Queue: 2}
 )
 
 type fakeStore struct {
@@ -77,24 +77,24 @@ func (f *fakeStore) seqs(call int) []uint64 {
 }
 
 type rig struct {
-	*clear.Queue
+	*stateclear.Queue
 	st   *fakeStore
 	sink *testlog.Sink
 	done chan error
 }
 
-func newRig(t *testing.T, cfg clear.Config) *rig {
+func newRig(t *testing.T, cfg stateclear.Config) *rig {
 	t.Helper()
 	rg := &rig{st: &fakeStore{}, sink: &testlog.Sink{}, done: make(chan error, 1)}
-	q, err := clear.New(rg.st, cfg, rg.sink.Logger())
+	q, err := stateclear.New(rg.st, cfg, rg.sink.Logger())
 	if err != nil {
-		t.Fatalf("clear.New: %v", err)
+		t.Fatalf("stateclear.New: %v", err)
 	}
 	rg.Queue = q
 	return rg
 }
 
-func started(t *testing.T, cfg clear.Config) *rig {
+func started(t *testing.T, cfg stateclear.Config) *rig {
 	t.Helper()
 	rg := newRig(t, cfg)
 	go func() { rg.done <- rg.Run(context.Background()) }()
