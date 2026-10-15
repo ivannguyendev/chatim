@@ -17,5 +17,6 @@ func Undeliverable(err error) bool {
 }
 
 func Gone(err error) bool {
-	return Undeliverable(err) || errors.Is(err, store.ErrEditNotFound) || errors.Is(err, domain.ErrMessageNotFound)
+	return Undeliverable(err) || errors.Is(err, store.ErrEditNotFound) || errors.Is(err, domain.ErrMessageNotFound) ||
+		errors.Is(err, domain.ErrMemberNotFound)
 }

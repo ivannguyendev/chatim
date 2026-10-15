@@ -26,6 +26,7 @@ func TestGoneAndUndeliverableClassifyMissingTargets(t *testing.T) {
 		{apperr.ErrInvalidArgument, true, true},
 		{store.ErrEditNotFound, true, false},
 		{domain.ErrMessageNotFound, true, false},
+		{fmt.Errorf("wrap: %w", domain.ErrMemberNotFound), true, false},
 		{errors.New("store down"), false, false},
 		{nil, false, false},
 	}
