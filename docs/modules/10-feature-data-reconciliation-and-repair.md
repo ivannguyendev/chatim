@@ -1,5 +1,7 @@
 # Module 10: Tự phục hồi — Đối soát Dữ liệu, Sửa sai & Tự chữa lành (Self-Healing)
 
+> **[M3.1, đang xây — D141–D157]** Cơ chế trong tài liệu này (reader change stream, work stream, effect có delay, ack mark Redis) sẽ bị thay bằng cờ `_state` trên doc + sweeper slot 0 + projection nghe `CHATIM_EVT`. Xem [bản tóm tắt M3.1](../plans/2026-10-16-m3-1-state-driven-events-summary.md).
+
 > **Mục tiêu module:** Hoạt động như một "tấm lưới bảo hiểm an toàn" cho toàn bộ hệ thống, bảo đảm không bao giờ mất mát sự kiện (At-least-once Event Delivery) ngay cả khi máy chủ sập nguồn, tự động phát hiện và cân bằng lại các bộ đếm bị lệch, và cung cấp công cụ vận hành để vá lành dữ liệu khi hạ tầng gặp sự cố thảm hoạ.
 
 ---

@@ -67,6 +67,8 @@ Mọi thiết kế và dòng code trong `chatim` bắt buộc phải tuân thủ
 
 ## 4. Khung lớp dữ liệu (Data Class Framework)
 
+> **[M3.1, đang xây — D141–D157]** Cột "Sửa lỗi / Reconcile" bên dưới mô tả effect engine sẽ bị thay: mỗi doc mang `_state`/`_state_at` ghi cùng lệnh, publisher xoá bit sau PubAck, sweeper trên slot 0 phát bù, projection nghe `CHATIM_EVT` không delay. Xem [bản tóm tắt M3.1](plans/2026-10-16-m3-1-state-driven-events-summary.md).
+
 > **Quy định bất di bất dịch:** Mọi tính năng mới bắt buộc phải map vào đúng một lớp dữ liệu dưới đây trước khi viết plan. Tính năng không khớp lớp nào thì phải dừng lại để thiết kế lớp mới (D61).
 
 | Lớp | Ví dụ | Ghi | Event | Sửa lỗi / Reconcile |
@@ -105,7 +107,7 @@ Mọi collection dùng tên tiếng Anh đầy đủ (D96), ngoại trừ `messa
 ### 5.2 Quy tắc Sharding & Clustered Keys (Shard-Ready)
 
 1. **Khoá cụm (Clustered Index):** Toàn bộ collection lớn đều dùng Clustered Index trên `_id` với tiền tố `room_id`. Truy vấn khoảng trong một room là `SINGLE_SHARD`.
-2. **Cấm Secondary Index trên `messages`:** Giữ kích thước working set của `messages` vừa vặn hoàn toàn trong RAM.
+2. **Cấm Secondary Index trên `messages`:** Giữ kích thước working set của `messages` vừa vặn hoàn toàn trong RAM. Ngoại lệ duy nhất (M3.1, D148): partial index `{_state_at: 1, _id: 1}` chỉ chứa doc còn `_state` (event chờ phát), thường vài chục entry.
 3. **Quy tắc Bounded Lookups (D139):**
    - **Tuyệt đối không gửi `_id: {$in: [...]}`** hoặc `$or` các phép bằng trên collection clustered. MongoDB 8.2 so sánh BinData theo độ dài trước giá trị, khiến `$in` biến thành Full Range Scan xuyên qua nhiều room.
    - Bắt buộc gom qua hàm `mongostore.boundedIDs`: Sắp xếp key theo thứ tự BinData, gộp các dải key liền kề thành `$or` các khoảng `{_id: {$gte, $lte}}`. Mỗi key kiểm tra đúng ≤ 2 docs.

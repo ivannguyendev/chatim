@@ -32,6 +32,18 @@ while (true) {
 }' >"$dir/mongo.log" 2>&1 &
   pids+=($!)
 
+  docker exec chatim-mongodb mongosh --quiet --eval '
+db.getSiblingDB("admin").auth(process.env.MONGO_INITDB_ROOT_USERNAME, require("fs").readFileSync("/run/secrets/mongo_password", "utf8").trim());
+const roomLagSampler = db.getSiblingDB("chatim").rooms;
+while (true) {
+  const now = Date.now();
+  const r = roomLagSampler.find({last_message_at: {$exists: true}}, {last_message_at: 1}).sort({last_message_at: -1}).limit(1).toArray();
+  const lag = r.length ? (now - r[0].last_message_at.getTime()) / 1000 : -1;
+  print(Math.floor(now / 1000), "room_activity_lag_s=" + lag.toFixed(3));
+  sleep(1000);
+}' >"$dir/room-lag.log" 2>&1 &
+  pids+=($!)
+
   echo "${pids[*]}" >"$dir/pids"
 }
 
@@ -46,7 +58,7 @@ stop() {
   docker logs "$vm" >"$dir/vm.log" 2>&1
   docker rm -f "$vm" >/dev/null 2>&1
   docker exec chatim-redis-dedupe sh -c 'pkill -f "[w]hile :"; true' >/dev/null 2>&1
-  docker exec chatim-mongodb sh -c 'pkill -f "[s]erverStatus"; true' >/dev/null 2>&1
+  docker exec chatim-mongodb sh -c 'pkill -f "[s]erverStatus"; pkill -f "[r]oomLagSampler"; true' >/dev/null 2>&1
 }
 
 case "$action" in
