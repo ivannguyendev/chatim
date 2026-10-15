@@ -98,6 +98,14 @@ func TestMessageStatesContract(t *testing.T) {
 	})
 }
 
+func TestFactStatesContract(t *testing.T) {
+	storetest.RunFactStates(t, func(*testing.T) storetest.FactStateStores {
+		edits, interactions, pins, hidden := memstore.NewEdits(), memstore.NewInteractions(), memstore.NewPins(), memstore.NewHidden()
+		states := memstore.NewEventStates(memstore.EventStateStores{Edits: edits, Interactions: interactions, Pins: pins, Hidden: hidden})
+		return storetest.FactStateStores{Edits: edits, Interactions: interactions, Pins: pins, Hidden: hidden, States: states}
+	})
+}
+
 func TestEventStatesContract(t *testing.T) {
 	storetest.RunEventStates(t, func(*testing.T) storetest.EventStateStores {
 		states := memstore.NewEventStates(memstore.EventStateStores{

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -14,14 +13,8 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
-type flaggedMessageDoc struct {
-	Message messageDoc `bson:",inline"`
-	State   int32      `bson:"_state"`
-	StateAt time.Time  `bson:"_state_at"`
-}
-
-func flaggedInsert(d messageDoc) flaggedMessageDoc {
-	return flaggedMessageDoc{Message: d, State: bitValue(store.BitMsgCreated), StateAt: d.CreatedAt}
+func flaggedInsert(d messageDoc) flaggedDoc[messageDoc] {
+	return flagDoc(d, store.BitMsgCreated, d.CreatedAt)
 }
 
 func (s *Store) Insert(ctx context.Context, msgs []domain.Message) []store.Result {

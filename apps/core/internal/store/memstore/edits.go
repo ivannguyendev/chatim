@@ -42,6 +42,9 @@ func (s *Edits) Append(ctx context.Context, e domain.Edit) error {
 	}
 	e.Mentions = slices.Clone(e.Mentions)
 	s.facts[key] = slices.Insert(line, i, e)
+	if e.Version > 0 {
+		s.flags.raise(editFlagKey{key: key, ver: e.Version}, store.BitEditFact, e.At)
+	}
 	if s.log != nil {
 		s.log.appendFact(logged{kind: store.EditInserted, edit: e})
 	}

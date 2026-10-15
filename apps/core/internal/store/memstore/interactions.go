@@ -7,6 +7,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/keys"
 )
 
 var _ store.Interactions = (*Interactions)(nil)
@@ -58,6 +59,7 @@ func (s *Interactions) SetReaction(ctx context.Context, r domain.Reaction) (doma
 	next := r
 	next.Prev, next.N = cur.Emoji, cur.N+1
 	s.reactions[k] = next
+	s.flags.raise(interactionFlagKey{userKey: k, kind: keys.ReactionKind}, store.BitInteraction, time.Now())
 	s.logReaction(next)
 	return next, true, nil
 }
@@ -79,6 +81,7 @@ func (s *Interactions) RemoveReaction(ctx context.Context, key store.MsgKey, use
 	next := cur
 	next.Prev, next.Emoji, next.N, next.At = cur.Emoji, "", cur.N+1, at
 	s.reactions[k] = next
+	s.flags.raise(interactionFlagKey{userKey: k, kind: keys.ReactionKind}, store.BitInteraction, time.Now())
 	s.logReaction(next)
 	return next, true, nil
 }

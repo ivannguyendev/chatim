@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"context"
 	"slices"
+	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -28,6 +29,7 @@ func (s *Interactions) SetBookmark(ctx context.Context, b domain.Bookmark) (doma
 	next := b
 	next.Ver = cur.Ver + 1
 	s.bookmarks[k] = next
+	s.flags.raise(interactionFlagKey{userKey: k, kind: keys.BookmarkKind}, store.BitInteraction, time.Now())
 	if s.log != nil {
 		s.log.appendFact(logged{kind: store.BookmarkChanged, bookmark: next})
 	}

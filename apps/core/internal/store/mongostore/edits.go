@@ -15,8 +15,16 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/keys"
 )
 
-func (s *Store) Append(ctx context.Context, e domain.Edit) error {
+func editInsert(e domain.Edit) (any, error) {
 	doc, err := encodeEdit(e)
+	if err != nil || e.Version == 0 {
+		return doc, err
+	}
+	return flagDoc(doc, store.BitEditFact, doc.At), nil
+}
+
+func (s *Store) Append(ctx context.Context, e domain.Edit) error {
+	doc, err := editInsert(e)
 	if err != nil {
 		return err
 	}

@@ -40,6 +40,7 @@ func (s *Pins) Append(ctx context.Context, a domain.PinAction) error {
 		return fmt.Errorf("append pin v%d of room %d: %w", a.PV, a.Room, store.ErrPinExists)
 	}
 	s.facts[a.Room] = slices.Insert(line, i, a)
+	s.flags.raise(pinFlagKey{a.Room, a.PV}, store.BitPinFact, a.At)
 	if s.log != nil {
 		s.log.appendFact(logged{kind: store.PinInserted, pin: a})
 	}
