@@ -92,11 +92,8 @@ func preferencePipeline(fields []preferenceField, at time.Time) mongo.Pipeline {
 			set = append(set, bson.E{Key: f.name, Value: bson.D{{Key: "$ifNull", Value: bson.A{"$" + f.name, f.value}}}})
 		}
 	}
-	set = append(set,
-		bson.E{Key: "preference_ver", Value: bson.D{{Key: "$add", Value: bson.A{bson.D{{Key: "$ifNull", Value: bson.A{"$preference_ver", int64(0)}}}, int64(1)}}}},
-		bson.E{Key: "last_change_at", Value: bson.D{{Key: "$max", Value: bson.A{"$last_change_at", at}}}},
-	)
-	return mongo.Pipeline{{{Key: "$set", Value: set}}}
+	set = append(set, bson.E{Key: "preference_ver", Value: bumped("$preference_ver")}, latest("last_change_at", at))
+	return flaggedSet(store.BitPreferences, set...)
 }
 
 func (s *Store) preferences(ctx context.Context, room uint64, user string) (domain.RoomPreferences, error) {

@@ -65,6 +65,13 @@ func comparePending(a pendingEntry, at time.Time, key []byte) int {
 	return cmp.Or(a.doc.StateAt.Compare(at), cmp.Compare(len(a.key), len(key)), bytes.Compare(a.key, key))
 }
 
+func insertFlagTime(at time.Time) time.Time {
+	if at.IsZero() {
+		return time.Now()
+	}
+	return at
+}
+
 func millis(t time.Time) time.Time {
 	if t.IsZero() {
 		return t

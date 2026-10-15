@@ -11,6 +11,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/storetest"
 	"github.com/ivannguyendev/chatim/pkg/keys"
 )
@@ -58,7 +59,7 @@ func oplogEntriesOf(t *testing.T, db *mongo.Database, id []byte) int64 {
 func TestMemberDocumentLayoutAndNoOpAdd(t *testing.T) {
 	s, db := itStore(t, itClient(t))
 	itRoomWithOwner(t, s)
-	want := requiredMemberFields(memberFields)
+	want := append(requiredMemberFields(memberFields), stateField, stateAtField)
 	if got := fieldNames(t, rawMember(t, db, "alice")); !slices.Equal(got, want) {
 		t.Fatalf("created member fields = %v, want %v", got, want)
 	}
@@ -87,6 +88,25 @@ func TestMemberDocumentLayoutAndNoOpAdd(t *testing.T) {
 	}
 	if n := oplogEntriesOf(t, db, keys.Member(itRoom, "carol")); n != entries {
 		t.Fatalf("oplog entries of carol = %d after a no-op add, want %d", n, entries)
+	}
+	expectNoOpAddUnflagged(t, s, db, again)
+}
+
+func expectNoOpAddUnflagged(t *testing.T, s *Store, db *mongo.Database, j domain.Join) {
+	t.Helper()
+	target := store.StateTarget{Collection: store.StateMembers, Bit: store.BitMember, Room: itRoom, User: "carol", Ver: 1}
+	if err := s.EventStates().Clear(t.Context(), []store.StateTarget{target}); err != nil {
+		t.Fatalf("Clear: %v", err)
+	}
+	clean := rawMember(t, db, "carol")
+	if _, err := clean.LookupErr(stateField); err == nil {
+		t.Fatalf("cleared member %s still has %s", clean, stateField)
+	}
+	if _, err := s.AddMembers(t.Context(), j, []string{"carol"}); err != nil {
+		t.Fatalf("AddMembers after clear: %v", err)
+	}
+	if after := rawMember(t, db, "carol"); !bytes.Equal(after, clean) {
+		t.Fatalf("add of an active unflagged member changed the doc: %s -> %s", clean, after)
 	}
 }
 

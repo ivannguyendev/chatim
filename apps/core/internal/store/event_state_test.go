@@ -92,10 +92,41 @@ func TestStateTargetValidateRejectsBadTargets(t *testing.T) {
 		"member long user":     withTarget(ok["member"], func(x *store.StateTarget) { x.User = string(make([]byte, keys.MaxMemberUser+1)) }),
 		"hidden no user":       withTarget(ok["hidden"], func(x *store.StateTarget) { x.User = "" }),
 		"hidden seq 0":         withTarget(ok["hidden"], func(x *store.StateTarget) { x.Seq = 0 }),
+		"count ver too big":    withTarget(ok["message"], func(x *store.StateTarget) { x.Ver = math.MaxUint32 + 1 }),
+		"reaction ver too big": withTarget(ok["reaction"], func(x *store.StateTarget) { x.Ver = math.MaxUint32 + 1 }),
+		"member ver too big":   withTarget(ok["member"], func(x *store.StateTarget) { x.Bit, x.Ver = store.BitMember, math.MaxUint32+1 }),
+		"read ver too big":     withTarget(ok["member"], func(x *store.StateTarget) { x.Bit, x.Ver = store.BitReadPosition, math.MaxUint32+1 }),
+		"pref ver too big":     withTarget(ok["member"], func(x *store.StateTarget) { x.Ver = math.MaxInt64 + 1 }),
+		"room info too big":    withTarget(ok["room"], func(x *store.StateTarget) { x.Ver = math.MaxUint32 + 1 }),
+		"room count too big":   withTarget(ok["room"], func(x *store.StateTarget) { x.Bit, x.Ver = store.BitMemberCount, math.MaxUint32+1 }),
 	}
 	for name, target := range bad {
 		if err := target.Validate(); !errors.Is(err, apperr.ErrInvalidArgument) {
 			t.Fatalf("%s: Validate(%+v) = %v, want invalid argument", name, target, err)
+		}
+	}
+}
+
+func TestStateTargetValidateAcceptsTheLargestVersion(t *testing.T) {
+	for name, target := range validStateTargets() {
+		target.Ver = math.MaxUint32
+		if err := target.Validate(); err != nil {
+			t.Fatalf("%s: Validate(ver MaxUint32) = %v", name, err)
+		}
+	}
+}
+
+func TestStateTargetValidateIgnoresTheVersionOfInsertOnceBits(t *testing.T) {
+	for name, target := range map[string]store.StateTarget{
+		"message":       {Collection: store.StateMessages, Bit: store.BitMsgCreated, Room: 9, Seq: 4},
+		"pin":           {Collection: store.StatePins, Bit: store.BitPinFact, Room: 9, Seq: 3},
+		"hidden":        {Collection: store.StateHidden, Bit: store.BitHidden, Room: 9, Seq: 4, User: "bob"},
+		"room create":   {Collection: store.StateRooms, Bit: store.BitRoomCreated, Room: 9},
+		"history clear": {Collection: store.StateMembers, Bit: store.BitHistoryCleared, Room: 9, User: "bob"},
+	} {
+		target.Ver = math.MaxUint64
+		if err := target.Validate(); err != nil {
+			t.Fatalf("%s: Validate(unused ver) = %v", name, err)
 		}
 	}
 }

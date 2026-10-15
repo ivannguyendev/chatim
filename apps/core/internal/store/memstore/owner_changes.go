@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"slices"
+	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -81,9 +82,11 @@ func (s *Rooms) commitOwners(room, ownersVer uint64, writes []store.MemberWrite)
 		}
 	}
 	res := store.OwnerResult{Written: make([]domain.Member, 0, len(writes))}
+	now := time.Now()
 	for _, w := range writes {
 		k := memberKey{room, w.Cur.User}
 		s.members[k] = withMembership(s.members[k], w.Next)
+		s.memberFlags.raise(k, store.BitMember, now)
 		s.logMemberLocked(store.MemberChanged, s.members[k])
 		res.Written = append(res.Written, w.Next)
 	}
@@ -92,6 +95,7 @@ func (s *Rooms) commitOwners(room, ownersVer uint64, writes []store.MemberWrite)
 		r.MemberCount += delta
 		r.MemberCountVer++
 		s.rooms[room] = r
+		s.roomFlags.raise(room, store.BitMemberCount, now)
 		res.Count, res.CountChanged = domain.MemberCount{Count: r.MemberCount, Ver: r.MemberCountVer}, true
 	}
 	return res, nil

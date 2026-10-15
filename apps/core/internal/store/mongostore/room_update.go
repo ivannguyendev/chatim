@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
@@ -39,17 +40,20 @@ func infoVerIs(base int64) bson.E {
 	return bson.E{Key: "info_ver", Value: base}
 }
 
-func roomInfoUpdate(c store.RoomInfoChange) bson.D {
-	set := bson.D{{Key: "updated_at", Value: time.UnixMilli(c.At.UnixMilli()).UTC()}, {Key: "updated_by", Value: c.By}}
-	if c.Update.Name != nil {
-		set = append(set, bson.E{Key: "name", Value: *c.Update.Name})
+func roomInfoUpdate(c store.RoomInfoChange) mongo.Pipeline {
+	set := []bson.E{
+		{Key: "info_ver", Value: bumped("$info_ver")},
+		{Key: "updated_at", Value: time.UnixMilli(c.At.UnixMilli()).UTC()},
+		setLiteral("updated_by", c.By),
 	}
-	update := bson.D{{Key: "$inc", Value: bson.D{{Key: "info_ver", Value: int64(1)}}}}
+	if c.Update.Name != nil {
+		set = append(set, setLiteral("name", *c.Update.Name))
+	}
 	switch a := c.Update.Avatar; {
 	case a != nil && *a == "":
-		update = append(update, bson.E{Key: "$unset", Value: bson.D{{Key: "avatar", Value: ""}}})
+		set = append(set, bson.E{Key: "avatar", Value: "$$REMOVE"})
 	case a != nil:
-		set = append(set, bson.E{Key: "avatar", Value: *a})
+		set = append(set, setLiteral("avatar", *a))
 	}
-	return append(update, bson.E{Key: "$set", Value: set})
+	return flaggedSet(store.BitRoomInfo, set...)
 }

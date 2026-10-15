@@ -22,6 +22,7 @@ func RunEventStates(t *testing.T, open func(t *testing.T) EventStateStores) {
 		{"pending lists one collection by flag time then key in [from, before), paged by cursor", pendingOrderAndPages},
 		{"pending reports the key and the bits of every collection", pendingKeyFields},
 		{"a new bit keeps the oldest flag time", pendingKeepsOldestFlagTime},
+		{"members flagged at the same time page by key length then bytes, none skipped or repeated", pendingMembersTieByKeyLength},
 		{"clear turns off its bit and keeps the others", clearKeepsOtherBits},
 		{"clear with another version does nothing", clearStaleVersion},
 		{"clear of the last bit drops the doc from pending; missing docs and bits are skipped", clearLastBit},

@@ -61,11 +61,7 @@ func (s *Store) SetMemberCount(ctx context.Context, room, base uint64, count int
 		return domain.MemberCount{}, false, err
 	}
 	filter := bson.D{{Key: "_id", Value: key}, versionIs("member_count_ver", from)}
-	update := bson.D{
-		{Key: "$set", Value: bson.D{{Key: "member_count", Value: int64(count)}}},
-		{Key: "$inc", Value: bson.D{{Key: "member_count_ver", Value: int64(1)}}},
-	}
-	got, err := updateMemberCount(ctx, s.rooms, filter, update)
+	got, err := updateMemberCount(ctx, s.rooms, filter, countReset(count))
 	switch {
 	case errors.Is(err, mongo.ErrNoDocuments):
 		return domain.MemberCount{}, false, nil
@@ -75,15 +71,33 @@ func (s *Store) SetMemberCount(ctx context.Context, room, base uint64, count int
 	return got, true, nil
 }
 
-func countIncrement(delta int) bson.D {
-	return bson.D{{Key: "$inc", Value: memberCountFields(delta)}}
+func countIncrement(delta int) mongo.Pipeline {
+	return flaggedSet(store.BitMemberCount, memberCountFields(delta)...)
 }
 
-func memberCountFields(delta int) bson.D {
-	return bson.D{{Key: "member_count", Value: int64(delta)}, {Key: "member_count_ver", Value: int64(1)}}
+func countReset(count int) mongo.Pipeline {
+	return flaggedSet(store.BitMemberCount,
+		bson.E{Key: "member_count", Value: int64(count)},
+		bson.E{Key: "member_count_ver", Value: bumped("$member_count_ver")},
+	)
 }
 
-func updateMemberCount(ctx context.Context, rooms *mongo.Collection, filter, update bson.D) (domain.MemberCount, error) {
+func ownersUpdate(delta int) mongo.Pipeline {
+	owners := bson.E{Key: "owners_ver", Value: bumped("$owners_ver")}
+	if delta == 0 {
+		return mongo.Pipeline{{{Key: "$set", Value: bson.D{owners}}}}
+	}
+	return flaggedSet(store.BitMemberCount, append([]bson.E{owners}, memberCountFields(delta)...)...)
+}
+
+func memberCountFields(delta int) []bson.E {
+	return []bson.E{
+		{Key: "member_count", Value: bson.D{{Key: "$add", Value: bson.A{orZero("$member_count"), int64(delta)}}}},
+		{Key: "member_count_ver", Value: bumped("$member_count_ver")},
+	}
+}
+
+func updateMemberCount(ctx context.Context, rooms *mongo.Collection, filter bson.D, update mongo.Pipeline) (domain.MemberCount, error) {
 	opts := options.FindOneAndUpdate().SetReturnDocument(options.After).
 		SetProjection(bson.D{{Key: "member_count", Value: 1}, {Key: "member_count_ver", Value: 1}})
 	var d memberCountDoc

@@ -16,6 +16,8 @@ func (t StateTarget) Validate() error {
 		return invalid("state bit")
 	case t.Room == 0:
 		return invalid("state room")
+	case t.versioned() && t.Ver > math.MaxUint32:
+		return invalid("state version")
 	}
 	return t.validateKey()
 }
@@ -25,7 +27,7 @@ func (t StateTarget) validateKey() error {
 	case StateMessages, StatePins:
 		return requireSeq(t.Seq)
 	case StateEdits:
-		if t.Ver == 0 || t.Ver > math.MaxUint32 {
+		if t.Ver == 0 {
 			return invalid("state edit version")
 		}
 		return requireSeq(t.Seq)
@@ -40,6 +42,21 @@ func (t StateTarget) validateKey() error {
 		return firstError(requireSeq(t.Seq), requireUser(t.User, keys.MaxMemberUser))
 	default:
 		return nil
+	}
+}
+
+func (t StateTarget) versioned() bool {
+	switch t.Collection {
+	case StateMessages:
+		return t.Bit != BitMsgCreated
+	case StateEdits, StateInteractions:
+		return true
+	case StateMembers:
+		return t.Bit != BitHistoryCleared
+	case StateRooms:
+		return t.Bit != BitRoomCreated
+	default:
+		return false
 	}
 }
 

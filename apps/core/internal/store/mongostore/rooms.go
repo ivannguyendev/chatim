@@ -18,14 +18,13 @@ func (s *Store) Create(ctx context.Context, r domain.Room, members []domain.Memb
 	if err := store.ValidateRoom(r, members); err != nil {
 		return err
 	}
-	r.MemberCountVer, r.InfoVer = 1, 1
-	room, err := encodeRoom(r)
+	room, err := roomInsert(r, true)
 	if err != nil {
 		return err
 	}
 	docs := make([]any, len(members))
 	for i, m := range members {
-		if docs[i], err = encodeMember(store.CreationMember(r, m)); err != nil {
+		if docs[i], err = founderInsert(r, m, insertFlagTime(r.CreatedAt)); err != nil {
 			return err
 		}
 	}
@@ -46,8 +45,7 @@ func (s *Store) InsertRoom(ctx context.Context, r domain.Room) error {
 	if err := store.ValidateRoomInsert(r); err != nil {
 		return err
 	}
-	r.MemberCount, r.MemberCountVer, r.InfoVer = 0, 0, 1
-	room, err := encodeRoom(r)
+	room, err := roomInsert(r, false)
 	if err != nil {
 		return err
 	}
@@ -95,11 +93,7 @@ func (s *Store) ClearHistory(ctx context.Context, room uint64, user string, at t
 	}
 	at = time.UnixMilli(at.UnixMilli()).UTC()
 	filter := append(activeMemberFilter(room, user), bson.E{Key: "cleared_at", Value: bson.D{{Key: "$not", Value: bson.D{{Key: "$gte", Value: at}}}}})
-	update := bson.D{
-		{Key: "$set", Value: bson.D{{Key: "cleared_at", Value: at}}},
-		{Key: "$max", Value: bson.D{{Key: "last_change_at", Value: at}}},
-	}
-	res, err := s.members.UpdateOne(ctx, filter, update)
+	res, err := s.members.UpdateOne(ctx, filter, clearHistoryUpdate(at))
 	switch {
 	case err != nil:
 		return time.Time{}, false, fmt.Errorf("clear history of %q in room %d: %w", user, room, err)
@@ -111,4 +105,8 @@ func (s *Store) ClearHistory(ctx context.Context, room uint64, user string, at t
 		return time.Time{}, false, fmt.Errorf("clear history of %q in room %d: %w", user, room, err)
 	}
 	return d.ClearedAt, false, nil
+}
+
+func clearHistoryUpdate(at time.Time) mongo.Pipeline {
+	return flaggedSet(store.BitHistoryCleared, bson.E{Key: "cleared_at", Value: at}, latest("last_change_at", at))
 }

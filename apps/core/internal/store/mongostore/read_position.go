@@ -33,14 +33,9 @@ func (s *Store) moveRead(ctx context.Context, room uint64, user string, seq uint
 		return domain.ReadPosition{}, false, err
 	}
 	filter := append(activeMemberFilter(room, user), bson.E{Key: "read_seq", Value: bson.D{{Key: moves, Value: to}}})
-	update := bson.D{
-		{Key: "$set", Value: bson.D{{Key: "read_seq", Value: to}}},
-		{Key: "$inc", Value: bson.D{{Key: "read_ver", Value: int64(1)}}},
-		{Key: "$max", Value: bson.D{{Key: "last_change_at", Value: time.UnixMilli(time.Now().UnixMilli()).UTC()}}},
-	}
 	opts := options.FindOneAndUpdate().SetReturnDocument(options.After).SetProjection(readPositionFields)
 	var d readPositionDoc
-	err = s.members.FindOneAndUpdate(ctx, filter, update, opts).Decode(&d)
+	err = s.members.FindOneAndUpdate(ctx, filter, readMoveUpdate(to, time.Now()), opts).Decode(&d)
 	switch {
 	case errors.Is(err, mongo.ErrNoDocuments):
 		pos, err := s.readPosition(ctx, room, user)
@@ -50,6 +45,14 @@ func (s *Store) moveRead(ctx context.Context, room uint64, user string, seq uint
 	}
 	pos, err := decodeReadPosition(d)
 	return pos, err == nil, err
+}
+
+func readMoveUpdate(to int64, now time.Time) mongo.Pipeline {
+	return flaggedSet(store.BitReadPosition,
+		bson.E{Key: "read_seq", Value: to},
+		bson.E{Key: "read_ver", Value: bumped("$read_ver")},
+		latest("last_change_at", time.UnixMilli(now.UnixMilli()).UTC()),
+	)
 }
 
 func (s *Store) readPosition(ctx context.Context, room uint64, user string) (domain.ReadPosition, error) {

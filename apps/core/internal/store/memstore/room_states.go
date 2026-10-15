@@ -2,7 +2,6 @@ package memstore
 
 import (
 	"encoding/binary"
-	"fmt"
 	"math"
 	"time"
 
@@ -45,7 +44,8 @@ func (s *Rooms) seedState(t store.StateTarget, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if t.Collection == store.StateMembers {
-		return s.seedMemberLocked(t, at)
+		s.seedMemberLocked(t, at)
+		return nil
 	}
 	r, ok := s.rooms[t.Room]
 	if !ok {
@@ -63,10 +63,7 @@ func (s *Rooms) seedState(t store.StateTarget, at time.Time) error {
 	return nil
 }
 
-func (s *Rooms) seedMemberLocked(t store.StateTarget, at time.Time) error {
-	if t.Bit == store.BitMember && t.Ver > math.MaxUint32 {
-		return fmt.Errorf("seed member %d/%s: ver %d over uint32", t.Room, t.User, t.Ver)
-	}
+func (s *Rooms) seedMemberLocked(t store.StateTarget, at time.Time) {
 	k := memberKey{t.Room, t.User}
 	m, ok := s.members[k]
 	if !ok {
@@ -84,7 +81,6 @@ func (s *Rooms) seedMemberLocked(t store.StateTarget, at time.Time) error {
 	}
 	s.members[k] = m
 	s.memberFlags.raise(k, t.Bit, at)
-	return nil
 }
 
 func memberVersionIs(m domain.Member, t store.StateTarget) bool {

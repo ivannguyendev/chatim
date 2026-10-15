@@ -106,6 +106,13 @@ func TestFactStatesContract(t *testing.T) {
 	})
 }
 
+func TestMemberStatesContract(t *testing.T) {
+	storetest.RunMemberStates(t, func(*testing.T) storetest.MemberStateStores {
+		rooms := memstore.NewRooms()
+		return storetest.MemberStateStores{Rooms: rooms, States: memstore.NewEventStates(memstore.EventStateStores{Rooms: rooms})}
+	})
+}
+
 func TestEventStatesContract(t *testing.T) {
 	storetest.RunEventStates(t, func(*testing.T) storetest.EventStateStores {
 		states := memstore.NewEventStates(memstore.EventStateStores{

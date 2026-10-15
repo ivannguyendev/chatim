@@ -2,6 +2,7 @@ package memstore
 
 import (
 	"context"
+	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -25,6 +26,7 @@ func (s *Rooms) AddMemberCount(ctx context.Context, room uint64, delta int) (dom
 	r.MemberCount += delta
 	r.MemberCountVer++
 	s.rooms[room] = r
+	s.roomFlags.raise(room, store.BitMemberCount, time.Now())
 	return countOf(r), nil
 }
 
@@ -59,6 +61,7 @@ func (s *Rooms) SetMemberCount(ctx context.Context, room, base uint64, count int
 	r.MemberCount = count
 	r.MemberCountVer++
 	s.rooms[room] = r
+	s.roomFlags.raise(room, store.BitMemberCount, time.Now())
 	return countOf(r), true, nil
 }
 

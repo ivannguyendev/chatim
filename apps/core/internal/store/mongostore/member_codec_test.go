@@ -140,7 +140,7 @@ func TestJoinPipelineKeepsActiveDocsAndTakesStringsLiterally(t *testing.T) {
 	for i, e := range set {
 		names[i] = e.Key
 	}
-	want := requiredMemberFields(memberFields[1:])
+	want := append(requiredMemberFields(memberFields[1:]), stateField, stateAtField)
 	if !slices.Equal(names, want) {
 		t.Fatalf("$set fields = %v, want %v", names, want)
 	}
