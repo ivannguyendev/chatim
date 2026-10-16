@@ -2,6 +2,7 @@ package mongostore
 
 import (
 	"bytes"
+	"slices"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -62,4 +63,8 @@ func runWrites(targets []store.StateTarget, extra []bson.E) []stateWrite {
 		out[i] = stateWrite{filter: r.filter(extra), many: true}
 	}
 	return out
+}
+
+func stateChunks(writes []stateWrite) [][]stateWrite {
+	return slices.Collect(slices.Chunk(writes, stateBulkMax))
 }

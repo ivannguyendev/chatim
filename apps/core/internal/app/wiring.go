@@ -117,7 +117,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 		return nil, err
 	}
 	a.timers = ts.consumer
-	a.projectionDefs, err = wireProjections(cfg, cl, st, pub, ts.messages, log)
+	a.projectionDefs, err = wireProjections(cfg, cl, st, slots, pub, ts.messages, log)
 	if err != nil {
 		return nil, err
 	}

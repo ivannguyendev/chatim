@@ -104,7 +104,7 @@ func TestStateWritesOfRoomsAndHiddenUseTheirKeys(t *testing.T) {
 func TestStateWritesOfAFullBatchNeverHoldAnOr(t *testing.T) {
 	var targets []store.StateTarget
 	for room := uint64(1); room <= 50; room++ {
-		for seq := uint64(1); seq <= stateClearBatch/50; seq += 2 {
+		for seq := uint64(1); seq <= stateBulkMax/50; seq += 2 {
 			targets = append(targets, store.StateTarget{Collection: store.StateMessages, Bit: store.BitMsgCreated, Room: room, Seq: seq})
 		}
 	}

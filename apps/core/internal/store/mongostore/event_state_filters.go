@@ -15,7 +15,7 @@ const (
 	stateAtField      = "_state_at"
 	clearedAtField    = "cleared_at"
 	statePendingIndex = "state_pending"
-	stateClearBatch   = 500
+	stateBulkMax      = 500
 )
 
 var stateExists = bson.E{Key: stateField, Value: bson.D{{Key: "$exists", Value: true}}}
@@ -37,7 +37,7 @@ func stateBatches(targets []store.StateTarget) []stateBatch {
 	var out []stateBatch
 	for _, t := range sorted {
 		n := len(out)
-		if n == 0 || out[n-1].coll != t.Collection || out[n-1].bit != t.Bit || len(out[n-1].targets) == stateClearBatch {
+		if n == 0 || out[n-1].coll != t.Collection || out[n-1].bit != t.Bit {
 			out = append(out, stateBatch{coll: t.Collection, bit: t.Bit})
 			n++
 		}

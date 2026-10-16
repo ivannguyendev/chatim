@@ -69,7 +69,7 @@ func TestCloseGivesUpAfterTheDrainBudget(t *testing.T) {
 
 func TestCloseCutsALongClearAtTheDrainBudget(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		rg := started(t, defaultCfg)
+		rg := started(t, fastFlush)
 		rg.st.set(nil, true)
 		rg.add(1)
 		time.Sleep(200 * time.Millisecond)

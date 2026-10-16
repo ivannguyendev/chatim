@@ -28,6 +28,7 @@ const (
 var (
 	errStore    = errors.New("store down")
 	defaultCfg  = stateclear.Config{}
+	fastFlush   = stateclear.Config{Flush: 100 * time.Millisecond}
 	smallBuffer = stateclear.Config{Batch: 2, Queue: 2}
 )
 

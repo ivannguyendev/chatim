@@ -24,7 +24,7 @@ func TestNewConsumerRefusesMissingPartsAndBadConfig(t *testing.T) {
 		"no projection": func() (*projection.Consumer, error) { return projection.NewConsumer(nil, src, evtConfig, nil) },
 		"no source":     func() (*projection.Consumer, error) { return projection.NewConsumer(p, nil, evtConfig, nil) },
 		"bad config": func() (*projection.Consumer, error) {
-			return projection.NewConsumer(p, src, projection.Config{Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, FetchBatch: projection.MaxAckPending + 1}, nil)
+			return projection.NewConsumer(p, src, projection.Config{Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, FetchBatch: projection.MaxFetchBatch + 1}, nil)
 		},
 	} {
 		if _, err := build(); err == nil {

@@ -11,9 +11,9 @@ func filterMsg(seq uint64, bit store.StateBit, ver uint64) store.StateTarget {
 	return store.StateTarget{Collection: store.StateMessages, Bit: bit, Room: 9, Seq: seq, Ver: ver}
 }
 
-func TestStateBatchesGroupByCollectionAndBitInChunks(t *testing.T) {
+func TestStateBatchesGroupByCollectionAndBitWithoutATargetCap(t *testing.T) {
 	var targets []store.StateTarget
-	for seq := uint64(1); seq <= stateClearBatch+1; seq++ {
+	for seq := uint64(1); seq <= 3*stateBulkMax+1; seq++ {
 		targets = append(targets, filterMsg(seq, store.BitMsgCreated, 0))
 	}
 	room := store.StateTarget{Collection: store.StateRooms, Bit: store.BitRoomCreated, Room: 9}
@@ -24,8 +24,7 @@ func TestStateBatchesGroupByCollectionAndBitInChunks(t *testing.T) {
 		got[i] = [3]int{int(b.coll), int(b.bit), len(b.targets)}
 	}
 	want := [][3]int{
-		{int(store.StateMessages), int(store.BitMsgCreated), stateClearBatch},
-		{int(store.StateMessages), int(store.BitMsgCreated), 1},
+		{int(store.StateMessages), int(store.BitMsgCreated), 3*stateBulkMax + 1},
 		{int(store.StateMessages), int(store.BitReactionCounts), 1},
 		{int(store.StateRooms), int(store.BitRoomCreated), 1},
 	}

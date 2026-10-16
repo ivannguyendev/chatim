@@ -38,7 +38,6 @@ type RoomActivity struct {
 
 type activityKey struct {
 	room, thread uint64
-	msg, edited  bool
 }
 
 func NewRoomActivity(rooms ActivityWriter) *RoomActivity { return &RoomActivity{rooms: rooms} }
@@ -59,13 +58,13 @@ func (a *RoomActivity) Handle(ctx context.Context, evs []Event) []error {
 	acts := make([]store.Activity, 0, len(evs))
 	touched := make([]int, 0, len(evs))
 	for i, ev := range evs {
-		act, msg, ok := activityOf(ev)
+		act, ok := activityOf(ev)
 		if !ok {
 			errs[i] = fmt.Errorf("%w: room activity does not keep %T", apperr.ErrInvalidArgument, ev.Proto.GetPayload())
 			continue
 		}
 		touched = append(touched, i)
-		acts = merged(acts, at, activityKey{act.Room, act.Thread, msg, act.Edited}, act)
+		acts = merged(acts, at, activityKey{act.Room, act.Thread}, act)
 	}
 	if len(acts) == 0 {
 		return errs
@@ -85,28 +84,33 @@ func merged(acts []store.Activity, at map[activityKey]int, k activityKey, act st
 		at[k] = len(acts)
 		return append(acts, act)
 	}
-	acts[i].Seq = max(acts[i].Seq, act.Seq)
-	if act.At.After(acts[i].At) {
-		acts[i].At = act.At
+	cur := &acts[i]
+	cur.Edited = cur.Edited || act.Edited
+	switch {
+	case act.Seq > 0 && (cur.Seq == 0 || act.At.After(cur.At)):
+		cur.At = act.At
+	case act.Seq == 0 && cur.Seq == 0 && act.At.After(cur.At):
+		cur.At = act.At
 	}
+	cur.Seq = max(cur.Seq, act.Seq)
 	return acts
 }
 
-func activityOf(ev Event) (act store.Activity, msg, ok bool) {
-	act = store.Activity{Room: ev.Room, Thread: ev.Proto.GetThreadRoot(), At: ev.At}
+func activityOf(ev Event) (store.Activity, bool) {
+	act := store.Activity{Room: ev.Room, Thread: ev.Proto.GetThreadRoot(), At: ev.At}
 	switch ev.Proto.GetPayload().(type) {
 	case *chatimv1.Event_MessageCreated:
 		act.Seq = ev.Proto.GetSeq()
-		return act, true, true
+		return act, true
 	case *chatimv1.Event_MessageEdited, *chatimv1.Event_MessageDeleted:
 		act.Edited = act.Thread == 0
-		return act, false, true
+		return act, true
 	case *chatimv1.Event_ReactionChanged, *chatimv1.Event_MessagePinned, *chatimv1.Event_MessageUnpinned,
 		*chatimv1.Event_MemberAdded, *chatimv1.Event_MemberRemoved, *chatimv1.Event_MemberRoleChanged,
 		*chatimv1.Event_MemberPriorityChanged, *chatimv1.Event_BookmarkChanged, *chatimv1.Event_RoomUpdated,
 		*chatimv1.Event_RoomPreferencesChanged:
-		return act, false, true
+		return act, true
 	default:
-		return store.Activity{}, false, false
+		return store.Activity{}, false
 	}
 }

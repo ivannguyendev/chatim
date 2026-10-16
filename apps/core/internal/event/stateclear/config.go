@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	DefaultFlush   = 100 * time.Millisecond
-	DefaultBatch   = 500
+	DefaultFlush   = 2 * time.Second
+	DefaultBatch   = 16384
 	DefaultQueue   = 65536
 	DefaultTimeout = 5 * time.Second
 	DrainTimeout   = time.Second

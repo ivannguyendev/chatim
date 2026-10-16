@@ -12,10 +12,12 @@ import (
 const (
 	DefaultFetchBatch         = 256
 	DefaultFetchWait          = 500 * time.Millisecond
-	DefaultActivityFetchBatch = 1024
-	DefaultActivityFetchWait  = time.Second
+	DefaultActivityFetchBatch = 8192
+	DefaultActivityFetchWait  = 2500 * time.Millisecond
 	AckWait                   = 30 * time.Second
-	MaxAckPending             = 4096
+	MaxAckPending             = 16384
+	MaxFetchBatch             = MaxAckPending / 2
+	MaxFetchWait              = AckWait / 2
 )
 
 type Config struct {
@@ -48,13 +50,17 @@ func (c Config) validate() error {
 	switch {
 	case !subjectToken(c.Stream) || !subjectToken(c.SubjectRoot):
 		return fmt.Errorf("%w: projection stream %q and subject root %q must be single subject tokens", apperr.ErrInvalidArgument, c.Stream, c.SubjectRoot)
-	case c.FetchBatch <= 0 || c.FetchBatch > MaxAckPending || c.FetchWait <= 0:
-		return fmt.Errorf("%w: projection fetch batch %d must be 1..%d and fetch wait %v positive", apperr.ErrInvalidArgument, c.FetchBatch, MaxAckPending, c.FetchWait)
-	case c.ActivityFetchBatch <= 0 || c.ActivityFetchBatch > MaxAckPending || c.ActivityFetchWait <= 0:
-		return fmt.Errorf("%w: room activity fetch batch %d must be 1..%d and fetch wait %v positive", apperr.ErrInvalidArgument, c.ActivityFetchBatch, MaxAckPending, c.ActivityFetchWait)
+	case !fetchFits(c.FetchBatch, c.FetchWait):
+		return fmt.Errorf("%w: projection fetch batch %d must be 1..%d and fetch wait %v in (0, %v)", apperr.ErrInvalidArgument, c.FetchBatch, MaxFetchBatch, c.FetchWait, MaxFetchWait)
+	case !fetchFits(c.ActivityFetchBatch, c.ActivityFetchWait):
+		return fmt.Errorf("%w: room activity fetch batch %d must be 1..%d and fetch wait %v in (0, %v)", apperr.ErrInvalidArgument, c.ActivityFetchBatch, MaxFetchBatch, c.ActivityFetchWait, MaxFetchWait)
 	default:
 		return nil
 	}
+}
+
+func fetchFits(batch int, wait time.Duration) bool {
+	return batch > 0 && batch <= MaxFetchBatch && wait > 0 && wait < MaxFetchWait
 }
 
 func subjectToken(s string) bool { return s != "" && !strings.ContainsAny(s, ".*> \t\r\n") }

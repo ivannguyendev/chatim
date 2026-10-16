@@ -2,6 +2,7 @@ package projection_test
 
 import (
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -40,6 +41,30 @@ func TestRoomActivityMergesABatchIntoOneWritePerRoom(t *testing.T) {
 		if got[0][i] != want[i] {
 			t.Errorf("activity %d = %v, want %v", i, got[0][i], want[i])
 		}
+	}
+}
+
+func TestRoomActivityMergesEveryKindOfARoomThreadIntoOneRow(t *testing.T) {
+	w := &fakeWriter{}
+	evs := []projection.Event{
+		decoded(t, reactionChanged(roomA, 2, at(9))),
+		decoded(t, msgCreated(roomA, 0, 3, at(1))),
+		decoded(t, msgEdited(roomA, 0, 1, at(5))),
+		decoded(t, msgCreated(roomA, 7, 1, at(8))),
+		decoded(t, msgCreated(roomA, 0, 4, at(2))),
+		decoded(t, readUpdated(roomA, at(10))),
+		decoded(t, reactionChanged(roomB, 1, at(3))),
+		decoded(t, reactionChanged(roomB, 2, at(6))),
+		decoded(t, reactionChanged(roomB, 3, at(4))),
+	}
+	projection.NewRoomActivity(w).Handle(t.Context(), evs)
+	want := []store.Activity{
+		{Room: roomA, Seq: 4, At: at(2), Edited: true},
+		{Room: roomA, Thread: 7, Seq: 1, At: at(8)},
+		{Room: roomB, At: at(6)},
+	}
+	if got := w.touched(); len(got) != 1 || !slices.Equal(got[0], want) {
+		t.Fatalf("touched %v, want one write of %v", got, want)
 	}
 }
 

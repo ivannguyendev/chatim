@@ -17,13 +17,26 @@ func TestConfigFillsDefaultsAndRefusesBadValues(t *testing.T) {
 	if err := evtConfig.Validate(); err != nil {
 		t.Fatalf("default config: %v", err)
 	}
+	if projection.DefaultActivityFetchBatch != 8192 || projection.DefaultActivityFetchWait != 2500*time.Millisecond {
+		t.Fatalf("room activity fetch %d / %v, want 8192 / 2.5s", projection.DefaultActivityFetchBatch, projection.DefaultActivityFetchWait)
+	}
+	if projection.MaxAckPending < 2*projection.DefaultActivityFetchBatch || projection.MaxFetchBatch != projection.MaxAckPending/2 {
+		t.Fatalf("max ack pending %d must hold two full room activity batches", projection.MaxAckPending)
+	}
+	full := projection.Config{Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, FetchBatch: projection.MaxFetchBatch, ActivityFetchBatch: projection.MaxFetchBatch,
+		FetchWait: projection.MaxFetchWait - time.Millisecond, ActivityFetchWait: projection.MaxFetchWait - time.Millisecond}
+	if err := full.Validate(); err != nil {
+		t.Fatalf("config at the limits: %v", err)
+	}
 	for name, c := range map[string]projection.Config{
 		"no stream":                 {SubjectRoot: subjectRoot},
 		"dotted root":               {Stream: "CHATIM_EVT", SubjectRoot: "evt.x"},
 		"negative batch":            {Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, FetchBatch: -1},
-		"batch over limit":          {Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, FetchBatch: projection.MaxAckPending + 1},
+		"batch over limit":          {Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, FetchBatch: projection.MaxFetchBatch + 1},
+		"wait at half the ack wait": {Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, FetchWait: projection.MaxFetchWait},
 		"negative wait":             {Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, FetchWait: -time.Second},
-		"activity batch over limit": {Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, ActivityFetchBatch: projection.MaxAckPending + 1},
+		"activity batch over limit": {Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, ActivityFetchBatch: projection.MaxFetchBatch + 1},
+		"activity wait too long":    {Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, ActivityFetchWait: projection.MaxFetchWait},
 		"negative activity wait":    {Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, ActivityFetchWait: -time.Second},
 	} {
 		if err := c.Validate(); !errors.Is(err, apperr.ErrInvalidArgument) {
@@ -56,8 +69,8 @@ func TestEnsureConsumerMakesASharedDurableFilteredToTheProjection(t *testing.T) 
 	if !slices.Equal(c.FilterSubjects, p.Subjects(subjectRoot)) || c.FilterSubject != "" {
 		t.Errorf("filters %v / %q, want the projection subjects %v", c.FilterSubjects, c.FilterSubject, p.Subjects(subjectRoot))
 	}
-	if c.AckPolicy != jetstream.AckExplicitPolicy || c.AckWait != 30*time.Second || c.DeliverPolicy != jetstream.DeliverAllPolicy || c.MaxAckPending != 4096 {
-		t.Errorf("consumer config %+v; want explicit ack, 30s ack wait, deliver all, 4096 pending", c)
+	if c.AckPolicy != jetstream.AckExplicitPolicy || c.AckWait != 30*time.Second || c.DeliverPolicy != jetstream.DeliverAllPolicy || c.MaxAckPending != 16384 {
+		t.Errorf("consumer config %+v; want explicit ack, 30s ack wait, deliver all, 16384 pending", c)
 	}
 }
 

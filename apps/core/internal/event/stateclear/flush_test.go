@@ -9,12 +9,17 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/stateclear"
 )
 
-func TestFlushesTargetsBelowTheBatchSizeAfterTheFlushInterval(t *testing.T) {
+func TestFlushesTargetsBelowTheBatchSizeTwoSecondsAfterTheFirst(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
+		if stateclear.DefaultFlush != 2*time.Second {
+			t.Fatalf("default flush %v, want 2s", stateclear.DefaultFlush)
+		}
 		rg := started(t, defaultCfg)
-		rg.add(1, 2, 3)
+		rg.add(1, 2)
+		time.Sleep(time.Second)
+		rg.add(3)
 		synctest.Wait()
-		time.Sleep(99 * time.Millisecond)
+		time.Sleep(time.Second - time.Millisecond)
 		synctest.Wait()
 		expectSizes(t, rg.st)
 		time.Sleep(time.Millisecond)
@@ -29,16 +34,22 @@ func TestFlushesTargetsBelowTheBatchSizeAfterTheFlushInterval(t *testing.T) {
 	})
 }
 
-func TestFlushesAFullBatchWithoutWaitingForTheTimer(t *testing.T) {
+func TestFlushesAFullBatchOf16384WithoutWaitingForTheTimer(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
+		if stateclear.DefaultBatch != 16384 {
+			t.Fatalf("default batch %d, want 16384", stateclear.DefaultBatch)
+		}
 		rg := started(t, defaultCfg)
-		rg.add(seqRange(1, 501)...)
+		rg.add(seqRange(1, stateclear.DefaultBatch+1)...)
 		synctest.Wait()
-		expectSizes(t, rg.st, 500)
-		time.Sleep(100 * time.Millisecond)
+		expectSizes(t, rg.st, stateclear.DefaultBatch)
+		time.Sleep(stateclear.DefaultFlush - time.Millisecond)
 		synctest.Wait()
-		expectSizes(t, rg.st, 500, 1)
-		rg.expectCounts(t, 501, 0, 0)
+		expectSizes(t, rg.st, stateclear.DefaultBatch)
+		time.Sleep(time.Millisecond)
+		synctest.Wait()
+		expectSizes(t, rg.st, stateclear.DefaultBatch, 1)
+		rg.expectCounts(t, stateclear.DefaultBatch+1, 0, 0)
 		rg.closeAndWait(t)
 	})
 }
@@ -57,7 +68,7 @@ func TestStaysIdleWithoutTargets(t *testing.T) {
 
 func TestFailingClearIsCountedLoggedOncePerSecondAndNeverRetried(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		rg := started(t, defaultCfg)
+		rg := started(t, fastFlush)
 		rg.st.set(errStore, false)
 		rg.add(1, 2)
 		time.Sleep(100 * time.Millisecond)
@@ -95,8 +106,8 @@ func TestEachClearGetsItsOwnTimeout(t *testing.T) {
 		cfg     stateclear.Config
 		timeout time.Duration
 	}{
-		"default five seconds": {defaultCfg, 5 * time.Second},
-		"configured":           {stateclear.Config{Timeout: 2 * time.Second}, 2 * time.Second},
+		"default five seconds": {fastFlush, 5 * time.Second},
+		"configured":           {stateclear.Config{Flush: 100 * time.Millisecond, Timeout: 2 * time.Second}, 2 * time.Second},
 	} {
 		t.Run(name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {

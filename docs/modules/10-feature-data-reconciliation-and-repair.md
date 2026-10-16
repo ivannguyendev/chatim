@@ -162,13 +162,14 @@ Publish lỗi thì để cờ; CAS thua trong sweeper thì để cờ; projectio
 
 | Env | Mặc định | Ý nghĩa |
 |---|---|---|
-| `STATE_CLEAR_FLUSH` / `STATE_CLEAR_BATCH` / `STATE_CLEAR_QUEUE` | `100ms` / `500` / `65536` | Nhịp, cỡ lô và sức chứa hàng xoá cờ |
-| `SWEEP_INTERVAL` / `SWEEP_MIN_AGE` / `SWEEP_LOOKBACK` | `2s` / `5s` / `30s` | Nhịp quét, tuổi tối thiểu của cờ, phần lùi |
+| `STATE_CLEAR_FLUSH` / `STATE_CLEAR_BATCH` / `STATE_CLEAR_QUEUE` / `STATE_CLEAR_TIMEOUT` | `2s` / `16384` / `65536` / `5s` | Nhịp, cỡ lô, sức chứa và hạn mỗi lần xoá cờ; seq liền nhau của một room trong một lô thành một lệnh xoá theo khoảng, mỗi `BulkWrite` ≤ 500 lệnh |
+| `SWEEP_INTERVAL` / `SWEEP_MIN_AGE` / `SWEEP_LOOKBACK` | `2s` / `15s` / `60s` | Nhịp quét, tuổi tối thiểu của cờ, phần lùi |
 | `SWEEP_BATCH` / `SWEEP_RATE` | `500` / `5000` | Cỡ trang (≤ 1000) và số event phát bù tối đa mỗi giây |
-| `PROJECTION_FETCH_BATCH` / `PROJECTION_FETCH_WAIT` | `256` / `500ms` | Lô của consumer projection (≤ 4096) |
+| `PROJECTION_FETCH_BATCH` / `PROJECTION_FETCH_WAIT` | `256` / `500ms` | Lô của `mention_reply_index` và `mention_read`, chạy trên mọi core (lô ≤ 8192, chờ < 15s) |
+| `PROJECTION_ACTIVITY_FETCH_BATCH` / `PROJECTION_ACTIVITY_FETCH_WAIT` | `8192` / `2500ms` | Lô của `room_activity`, chỉ chạy trên core giữ slot 0; gộp mỗi (room, thread) thành một lệnh `$max` |
 | `TIMER_STREAM` / `TIMER_SUBJECT_ROOT` | `CHATIM_TIMER` / `timer` | Stream phiếu hẹn |
 
-Kiểm lúc boot: `SWEEP_MIN_AGE > PUB_ACK_TIMEOUT + STATE_CLEAR_FLUSH + 1s` (không phát lại event còn đang bay); `SWEEP_MIN_AGE + SWEEP_INTERVAL < EVT_STREAM_DUPLICATES` (bản phát lại bình thường bị stream bỏ); `SWEEP_LOOKBACK > CORE_REQUEST_DEADLINE + 10s`.
+Kiểm lúc boot: `SWEEP_MIN_AGE > PUB_ACK_TIMEOUT + STATE_CLEAR_FLUSH + STATE_CLEAR_TIMEOUT` (không phát lại event còn đang bay hoặc đang chờ xoá cờ); `SWEEP_MIN_AGE + SWEEP_INTERVAL < EVT_STREAM_DUPLICATES` (bản phát lại bình thường bị stream bỏ); `SWEEP_LOOKBACK > CORE_REQUEST_DEADLINE + 10s` và `> SWEEP_MIN_AGE + 10s`.
 
 ### 4.3. Công cụ vận hành
 

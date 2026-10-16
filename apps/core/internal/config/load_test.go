@@ -55,14 +55,14 @@ func TestLoadDefaults(t *testing.T) {
 			CoreID: host, Addr: host + ":9000", Tick: time.Second, HeartbeatTTL: 5 * time.Second,
 			LeaseTTL: 10 * time.Second, HookTimeout: 500 * time.Millisecond,
 		},
-		StateClear: stateclear.Config{Flush: 100 * time.Millisecond, Batch: 500, Queue: 65536, Timeout: 5 * time.Second},
+		StateClear: stateclear.Config{Flush: 2 * time.Second, Batch: 16384, Queue: 65536, Timeout: 5 * time.Second},
 		Sweep: sweep.Config{
 			SubjectRoot: "evt", Interval: 2 * time.Second, MinAge: 15 * time.Second, Lookback: time.Minute,
 			Batch: 500, Rate: 5000, Tick: time.Second, AckTimeout: 2 * time.Second,
 		},
 		Projection: projection.Config{
 			Stream: "CHATIM_EVT", SubjectRoot: "evt", FetchBatch: 256, FetchWait: 500 * time.Millisecond,
-			ActivityFetchBatch: 1024, ActivityFetchWait: time.Second,
+			ActivityFetchBatch: 8192, ActivityFetchWait: 2500 * time.Millisecond,
 		},
 		Limits:                 mutate.Limits{Emojis: mutate.DefaultEmojis, PinLimit: 50, MemberBatch: 500, MentionTargets: 50},
 		MemberCountCheckDelay:  5 * time.Second,
@@ -104,7 +104,7 @@ func TestLoadOverrides(t *testing.T) {
 			CoreID: "core-a", Addr: "10.0.0.5:7000", Tick: 500 * time.Millisecond, HeartbeatTTL: 3 * time.Second,
 			LeaseTTL: 6 * time.Second, HookTimeout: 200 * time.Millisecond,
 		},
-		StateClear: stateclear.Config{Flush: 50 * time.Millisecond, Batch: 200, Queue: 4096, Timeout: 3 * time.Second},
+		StateClear: stateclear.Config{Flush: 50 * time.Millisecond, Batch: 200, Queue: 4096, Timeout: 2 * time.Second},
 		Sweep: sweep.Config{
 			SubjectRoot: "evt_it", Interval: 3 * time.Second, MinAge: 4 * time.Second, Lookback: 20 * time.Second,
 			Batch: 250, Rate: 2000, Tick: 500 * time.Millisecond, AckTimeout: time.Second,

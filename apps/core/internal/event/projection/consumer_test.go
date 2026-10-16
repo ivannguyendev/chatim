@@ -63,7 +63,7 @@ func TestConsumerTouchesABatchOfThreeRoomsInOneWriteAndAcksIt(t *testing.T) {
 		if rg.c.Lag() != 3*time.Second || rg.c.Stuck() != 2 {
 			t.Errorf("lag %v stuck %d; want 3s from the oldest event and the two deliveries at the stuck count", rg.c.Lag(), rg.c.Stuck())
 		}
-		time.Sleep(time.Second)
+		time.Sleep(projection.DefaultActivityFetchWait)
 		synctest.Wait()
 		if rg.c.Lag() != 0 || rg.c.Stuck() != 2 {
 			t.Errorf("after an idle fetch lag %v stuck %d; want lag 0 and the stuck count kept", rg.c.Lag(), rg.c.Stuck())

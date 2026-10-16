@@ -40,13 +40,15 @@ type Consumer struct {
 	dropped  atomic.Uint64
 	lag      atomic.Int64
 	stuck    atomic.Uint64
+	log      *slog.Logger
+	lead     leader
 	started  atomic.Bool
 	stopped  context.Context
 	halt     context.CancelFunc
 	done     chan struct{}
 }
 
-func NewConsumer(p Projection, src eventkit.Source, cfg Config, log *slog.Logger) (*Consumer, error) {
+func NewConsumer(p Projection, src eventkit.Source, cfg Config, log *slog.Logger, opts ...Option) (*Consumer, error) {
 	if p == nil || src == nil {
 		return nil, fmt.Errorf("%w: projection consumer needs a projection and a source", apperr.ErrInvalidArgument)
 	}
@@ -59,12 +61,18 @@ func NewConsumer(p Projection, src eventkit.Source, cfg Config, log *slog.Logger
 		log = slog.Default()
 	}
 	log = log.With("projection", p.Name())
-	stopped, halt := context.WithCancel(context.Background())
-	return &Consumer{
+	c := &Consumer{
 		p: p, src: src, cfg: cfg, fails: eventkit.NewLimitedLog(log), handles: eventkit.NewLimitedLog(log),
-		garbage: eventkit.NewLimitedLog(log),
-		stopped: stopped, halt: halt, done: make(chan struct{}),
-	}, nil
+		garbage: eventkit.NewLimitedLog(log), log: log, done: make(chan struct{}),
+	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	if err := c.lead.validate(); err != nil {
+		return nil, err
+	}
+	c.stopped, c.halt = context.WithCancel(context.Background())
+	return c, nil
 }
 
 func (c *Consumer) Run(ctx context.Context) error {
@@ -77,14 +85,23 @@ func (c *Consumer) Run(ctx context.Context) error {
 	unwatch := context.AfterFunc(c.stopped, cancel)
 	defer unwatch()
 	for c.live(ctx) {
+		if !c.leading(ctx) {
+			c.lag.Store(0)
+			c.pause(ctx, c.lead.tick)
+			continue
+		}
 		ds, err := c.src.Fetch(fetchCtx, c.cfg.FetchBatch, c.cfg.FetchWait)
 		if len(ds) == 0 && err == nil {
 			c.lag.Store(0)
 		}
+		if len(ds) > 0 && !c.leading(ctx) {
+			c.release(ds)
+			continue
+		}
 		c.release(c.handle(ctx, ds))
 		if err != nil && c.live(ctx) {
 			c.fails.Warn(ctx, fetchFailedMsg, "err", err)
-			c.pause(ctx)
+			c.pause(ctx, c.cfg.FetchWait)
 		}
 	}
 	if c.stopped.Err() != nil {
@@ -118,8 +135,8 @@ func (c *Consumer) Stuck() uint64 { return c.stuck.Load() }
 
 func (c *Consumer) live(ctx context.Context) bool { return c.stopped.Err() == nil && ctx.Err() == nil }
 
-func (c *Consumer) pause(ctx context.Context) {
-	t := time.NewTimer(c.cfg.FetchWait)
+func (c *Consumer) pause(ctx context.Context, d time.Duration) {
+	t := time.NewTimer(d)
 	defer t.Stop()
 	select {
 	case <-t.C:

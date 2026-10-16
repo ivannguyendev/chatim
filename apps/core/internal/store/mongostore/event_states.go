@@ -100,12 +100,16 @@ func (e *EventStates) update(ctx context.Context, b stateBatch, pipeline mongo.P
 	if len(writes) == 0 {
 		return nil
 	}
-	models := make([]mongo.WriteModel, len(writes))
-	for i, w := range writes {
-		models[i] = w.model(pipeline)
+	for _, chunk := range stateChunks(writes) {
+		models := make([]mongo.WriteModel, len(chunk))
+		for i, w := range chunk {
+			models[i] = w.model(pipeline)
+		}
+		if _, err := e.colls[b.coll].BulkWrite(ctx, models, options.BulkWrite().SetOrdered(false)); err != nil {
+			return err
+		}
 	}
-	_, err := e.colls[b.coll].BulkWrite(ctx, models, options.BulkWrite().SetOrdered(false))
-	return err
+	return nil
 }
 
 func clearStatePipeline(bit store.StateBit) mongo.Pipeline {
