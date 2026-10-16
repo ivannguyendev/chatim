@@ -16,9 +16,10 @@ func (s *Rooms) TouchActivity(ctx context.Context, acts []store.Activity) error 
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	now := toMillis(time.Now())
 	for _, a := range acts {
 		if r, ok := s.rooms[a.Room]; ok {
-			s.rooms[a.Room] = withActivity(r, a)
+			s.rooms[a.Room] = withActivity(r, a, now)
 		}
 	}
 	return nil
@@ -43,15 +44,14 @@ func (s *Rooms) ActiveRooms(ctx context.Context, q store.ActiveQuery) ([]domain.
 	return out[:min(len(out), q.Limit)], nil
 }
 
-func withActivity(r domain.Room, a store.Activity) domain.Room {
-	at := a.At.UTC()
-	r.LastChangeAt = laterOf(r.LastChangeAt, at)
+func withActivity(r domain.Room, a store.Activity, now time.Time) domain.Room {
+	r.LastChangeAt = laterOf(r.LastChangeAt, now)
 	if a.Thread == 0 && a.Seq > 0 {
 		r.LastSeq = max(r.LastSeq, a.Seq)
-		r.LastMsgAt = laterOf(r.LastMsgAt, at)
+		r.LastMsgAt = laterOf(r.LastMsgAt, a.At.UTC())
 	}
 	if a.Thread == 0 && a.Edited {
-		r.LastEditAt = laterOf(r.LastEditAt, at)
+		r.LastEditAt = laterOf(r.LastEditAt, now)
 	}
 	return r
 }

@@ -28,7 +28,7 @@ func Decode(data []byte) (Event, error) {
 	switch {
 	case err != nil || room == 0:
 		return Event{}, fmt.Errorf("%w: room id %q", ErrBadEvent, ev.GetRoomId())
-	case ev.GetTs() == nil || ev.GetTs().CheckValid() != nil:
+	case ev.GetTs().CheckValid() != nil || ev.GetTs().GetSeconds() <= 0:
 		return Event{}, fmt.Errorf("%w: event %s has no valid time", ErrBadEvent, ev.GetId())
 	case ev.GetPayload() == nil:
 		return Event{}, fmt.Errorf("%w: event %s has no payload", ErrBadEvent, ev.GetId())

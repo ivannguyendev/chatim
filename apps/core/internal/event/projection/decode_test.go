@@ -32,6 +32,16 @@ func TestDecodeRefusesMalformedEvents(t *testing.T) {
 			return ev
 		},
 		"no payload": func() *chatimv1.Event { ev := msgCreated(roomA, 0, 1, at(1)); ev.Payload = nil; return ev },
+		"epoch time": func() *chatimv1.Event {
+			ev := msgCreated(roomA, 0, 1, at(1))
+			ev.Ts = &timestamppb.Timestamp{Nanos: 5}
+			return ev
+		},
+		"before epoch": func() *chatimv1.Event {
+			ev := msgCreated(roomA, 0, 1, at(1))
+			ev.Ts = &timestamppb.Timestamp{Seconds: -60}
+			return ev
+		},
 	}
 	for name, build := range cases {
 		if _, err := projection.Decode(encoded(t, build())); !errors.Is(err, projection.ErrBadEvent) {

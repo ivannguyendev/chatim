@@ -40,6 +40,7 @@ func TestRoomActivityRaisesTheEditTimeOnlyForEdits(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 	fx := effects.NewRoomActivity(rooms).Effect()
+	since := time.Now().Truncate(time.Millisecond)
 	edit := work.Record{Kind: store.EditInserted, Room: 101, Seq: 1, Version: 1, CommittedAt: activityAt.Add(time.Minute)}
 	react := work.Record{Kind: store.ReactionChanged, Room: 101, Seq: 1, Version: 1, User: "bob", CommittedAt: activityAt.Add(2 * time.Minute)}
 	for _, rec := range []work.Record{edit, react} {
@@ -48,7 +49,7 @@ func TestRoomActivityRaisesTheEditTimeOnlyForEdits(t *testing.T) {
 		}
 	}
 	got, err := rooms.Get(t.Context(), 101)
-	if err != nil || !got.LastEditAt.Equal(edit.CommittedAt) || !got.LastChangeAt.Equal(react.CommittedAt) {
-		t.Fatalf("room = %+v, %v; want last edit at %v and last change at %v", got, err, edit.CommittedAt, react.CommittedAt)
+	if err != nil || got.LastEditAt.Before(since) || got.LastChangeAt.Before(got.LastEditAt) {
+		t.Fatalf("room = %+v, %v; want last edit stamped by the store since %v and last change not before it", got, err, since)
 	}
 }

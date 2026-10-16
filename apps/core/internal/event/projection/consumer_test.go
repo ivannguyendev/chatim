@@ -16,6 +16,7 @@ import (
 var evtConfig = projection.Config{Stream: "CHATIM_EVT", SubjectRoot: subjectRoot}
 
 type consumerRig struct {
+	sink   *testlog.Sink
 	src    *fakeSource
 	writer *fakeWriter
 	c      *projection.Consumer
@@ -24,8 +25,8 @@ type consumerRig struct {
 
 func newConsumerRig(t *testing.T, ctx context.Context) *consumerRig {
 	t.Helper()
-	rg := &consumerRig{src: newFakeSource(), writer: &fakeWriter{}, result: make(chan error, 1)}
-	rg.c = built(projection.NewConsumer(projection.NewRoomActivity(rg.writer), rg.src, evtConfig, (&testlog.Sink{}).Logger()))(t)
+	rg := &consumerRig{sink: &testlog.Sink{}, src: newFakeSource(), writer: &fakeWriter{}, result: make(chan error, 1)}
+	rg.c = built(projection.NewConsumer(projection.NewRoomActivity(rg.writer), rg.src, evtConfig, rg.sink.Logger()))(t)
 	go func() { rg.result <- rg.c.Run(ctx) }()
 	return rg
 }
@@ -87,6 +88,9 @@ func TestConsumerTermsGarbageAndAcksAKindTheProjectionDoesNotKeep(t *testing.T) 
 		}
 		if rg.c.Dropped() != 2 || rg.c.Failures() != 0 {
 			t.Errorf("dropped %d failures %d; want the garbage and the stray kind dropped", rg.c.Dropped(), rg.c.Failures())
+		}
+		if n := rg.sink.Count("projection dropped an undecodable event"); n != 1 {
+			t.Errorf("undecodable warnings %d, want 1", n)
 		}
 		rg.stop(t)
 	})

@@ -133,19 +133,17 @@ func awaitTouched(t *testing.T, touched <-chan []store.Activity, want int) {
 
 func assertRoomActivity(t *testing.T, rooms *memstore.Rooms) {
 	t.Helper()
-	for id, check := range map[uint64]func(domain.Room) bool{
-		roomA: func(r domain.Room) bool {
-			return r.LastSeq == 1 && r.LastMsgAt.Equal(at(1)) && r.LastChangeAt.Equal(at(1))
-		},
-		roomB: func(r domain.Room) bool { return r.LastSeq == 0 && r.LastChangeAt.Equal(at(2)) },
-		roomC: func(r domain.Room) bool { return r.LastEditAt.Equal(at(3)) && r.LastChangeAt.Equal(at(3)) },
+	for id, want := range map[uint64]roomTrace{
+		roomA: {seq: 1, msgAt: at(1), changed: true},
+		roomB: {changed: true},
+		roomC: {changed: true, edited: true},
 	} {
 		r, err := rooms.Get(t.Context(), id)
 		if err != nil {
 			t.Fatalf("Get %d: %v", id, err)
 		}
-		if !check(r) {
-			t.Errorf("room %d activity %+v does not match its event (read_updated must not touch room A)", id, r)
+		if got := traceOf(r); got != want {
+			t.Errorf("room %d activity %+v, want %+v", id, got, want)
 		}
 	}
 }

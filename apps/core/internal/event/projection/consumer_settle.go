@@ -33,6 +33,7 @@ func (c *Consumer) decode(ctx context.Context, ds []eventkit.Delivery) ([]Event,
 		ev, err := Decode(d.Data())
 		if err != nil {
 			c.dropped.Add(1)
+			c.garbage.Warn(ctx, garbageMsg, "bytes", len(d.Data()), "err", err)
 			c.report(ctx, d.Term())
 			continue
 		}

@@ -3,6 +3,7 @@ package projection_test
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/projection"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
@@ -62,8 +63,8 @@ func TestRoomActivityGivesTheSameRoomsForDuplicatedAndReorderedEvents(t *testing
 	}
 	shuffled := []*chatimv1.Event{inOrder[5], inOrder[2], inOrder[1], inOrder[4], inOrder[0], inOrder[3], inOrder[1], inOrder[2]}
 	want := roomsAfter(t, [][]*chatimv1.Event{inOrder})
-	if a, b := want[roomA], want[roomB]; a.LastSeq != 2 || !a.LastMsgAt.Equal(at(2)) || !a.LastEditAt.Equal(at(3)) || b.LastSeq != 0 || !b.LastChangeAt.Equal(at(5)) {
-		t.Fatalf("in-order rooms A %+v B %+v; want A at seq 2 edited at 3s, B changed at 5s with no main seq", a, b)
+	if a, b := want[roomA], want[roomB]; a != (roomTrace{seq: 2, msgAt: at(2), changed: true, edited: true}) || b != (roomTrace{changed: true}) {
+		t.Fatalf("in-order rooms A %+v B %+v; want A at seq 2 sent at 2s and edited, B changed with no main seq", a, b)
 	}
 	for name, batches := range map[string][][]*chatimv1.Event{
 		"one shuffled batch with duplicates": {shuffled},
@@ -79,10 +80,20 @@ func TestRoomActivityGivesTheSameRoomsForDuplicatedAndReorderedEvents(t *testing
 	}
 }
 
-func roomsAfter(t *testing.T, batches [][]*chatimv1.Event) map[uint64]domain.Room {
+type roomTrace struct {
+	seq             uint64
+	msgAt           time.Time
+	changed, edited bool
+}
+
+func traceOf(r domain.Room) roomTrace {
+	return roomTrace{seq: r.LastSeq, msgAt: r.LastMsgAt, changed: !r.LastChangeAt.IsZero(), edited: !r.LastEditAt.IsZero()}
+}
+
+func roomsAfter(t *testing.T, batches [][]*chatimv1.Event) map[uint64]roomTrace {
 	t.Helper()
 	rooms := memstore.NewRooms()
-	out := make(map[uint64]domain.Room)
+	out := make(map[uint64]roomTrace)
 	for _, id := range []uint64{roomA, roomB, roomC} {
 		if err := rooms.InsertRoom(t.Context(), domain.Room{ID: id, Tenant: tenant, Type: domain.RoomGroup, CreatedAt: baseTime}); err != nil {
 			t.Fatalf("InsertRoom: %v", err)
@@ -105,7 +116,7 @@ func roomsAfter(t *testing.T, batches [][]*chatimv1.Event) map[uint64]domain.Roo
 		if err != nil {
 			t.Fatalf("Get: %v", err)
 		}
-		out[id] = r
+		out[id] = traceOf(r)
 	}
 	return out
 }

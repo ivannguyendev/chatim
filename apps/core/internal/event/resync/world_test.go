@@ -112,10 +112,7 @@ func newWorld(t *testing.T) world {
 	w.room(t, foreignRoom, "other", lostFrom.Add(20*time.Minute))
 	w.messages(t, busyRoom, 150, lostFrom.Add(-30*time.Minute))
 	w.messages(t, staleRoom, 5, lostFrom.Add(-3*time.Hour))
-	acts := []store.Activity{
-		{Room: busyRoom, Seq: 150, At: lostFrom.Add(2 * time.Hour)},
-		{Room: staleRoom, Seq: 5, At: lostFrom.Add(-3 * time.Hour)},
-	}
+	acts := []store.Activity{{Room: busyRoom, Seq: 150, At: lostFrom.Add(2 * time.Hour)}}
 	if err := w.rooms.TouchActivity(t.Context(), acts); err != nil {
 		t.Fatalf("TouchActivity: %v", err)
 	}

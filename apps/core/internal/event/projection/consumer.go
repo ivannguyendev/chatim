@@ -16,6 +16,7 @@ const (
 	fetchFailedMsg  = "projection fetch failed; retrying"
 	handleFailedMsg = "projection failed an event; it comes back later"
 	settleFailedMsg = "projection ack or nak failed; the event comes back after the ack wait"
+	garbageMsg      = "projection dropped an undecodable event"
 )
 
 var errStarted = errors.New("projection consumer already started")
@@ -32,6 +33,7 @@ type Consumer struct {
 	cfg         Config
 	fails       *eventkit.LimitedLog
 	handles     *eventkit.LimitedLog
+	garbage     *eventkit.LimitedLog
 	failures    atomic.Uint64
 	dropped     atomic.Uint64
 	lag         atomic.Int64
@@ -57,6 +59,7 @@ func NewConsumer(p Projection, src eventkit.Source, cfg Config, log *slog.Logger
 	stopped, halt := context.WithCancel(context.Background())
 	return &Consumer{
 		p: p, src: src, cfg: cfg, fails: eventkit.NewLimitedLog(log), handles: eventkit.NewLimitedLog(log),
+		garbage: eventkit.NewLimitedLog(log),
 		stopped: stopped, halt: halt, done: make(chan struct{}),
 	}, nil
 }

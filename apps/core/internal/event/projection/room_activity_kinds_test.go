@@ -1,6 +1,7 @@
 package projection_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -129,6 +130,9 @@ func TestRoomActivitySubscribesExactlyTheKindsThatTouchedActivity(t *testing.T) 
 		if c.listed {
 			listed++
 		}
+	}
+	if !slices.Contains(filters, "evt.*.member.*.room_preferences_changed") {
+		t.Errorf("filters %v miss the literal room_preferences_changed subject", filters)
 	}
 	if len(filters) != listed {
 		t.Errorf("filters %v: %d subjects, want one per listed kind (%d)", filters, len(filters), listed)

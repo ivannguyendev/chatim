@@ -47,6 +47,7 @@ func membersByKeys(t *testing.T, s ListableRooms) {
 func roomActivities(t *testing.T, s ListableRooms) {
 	listPair(t, s)
 	acts := []store.Activity{{Room: roomA, Seq: 9, At: secs(20)}, {Room: roomA, At: secs(30), Edited: true}}
+	since := stampStart()
 	if err := s.TouchActivity(t.Context(), acts); err != nil {
 		t.Fatalf("TouchActivity: %v", err)
 	}
@@ -54,7 +55,11 @@ func roomActivities(t *testing.T, s ListableRooms) {
 	if err != nil {
 		t.Fatalf("RoomActivities: %v", err)
 	}
-	want := []store.RoomActivity{{Room: roomB}, {Room: roomA, LastSeq: 9, LastMessageAt: secs(20), LastEditAt: secs(30)}}
+	if len(got) != 2 {
+		t.Fatalf("RoomActivities = %+v, want rooms B and A", got)
+	}
+	assertStamped(t, "room A last edit", got[1].LastEditAt, since)
+	want := []store.RoomActivity{{Room: roomB}, {Room: roomA, LastSeq: 9, LastMessageAt: secs(20), LastEditAt: got[1].LastEditAt}}
 	if !slices.EqualFunc(got, want, sameActivity) {
 		t.Fatalf("RoomActivities = %+v, want %+v", got, want)
 	}
