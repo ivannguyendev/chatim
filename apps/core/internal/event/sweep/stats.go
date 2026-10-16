@@ -53,6 +53,13 @@ func (c *counters) setOldest(coll store.StateCollection, now time.Time, docs []s
 	c.oldest[coll].Store(int64(age))
 }
 
+func (c *counters) raiseOldest(coll store.StateCollection, now time.Time, docs []store.PendingDoc) {
+	if len(docs) > 0 {
+		age := int64(max(0, now.Sub(docs[0].StateAt)))
+		c.oldest[coll].Store(max(age, c.oldest[coll].Load()))
+	}
+}
+
 func (c *counters) resetOldest() {
 	for i := range c.oldest {
 		c.oldest[i].Store(0)

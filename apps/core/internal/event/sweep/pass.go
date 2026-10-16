@@ -58,7 +58,7 @@ func (s *Sweeper) sweep(ctx context.Context, l *lead, c store.StateCollection) e
 		case !s.leading():
 			return errLostLead
 		case next.IsZero():
-			return s.advance(ctx, l, c, checkpoint, before, failedAt)
+			return s.advance(ctx, l, c, now, checkpoint, before, failedAt)
 		case s.stopping():
 			return errStopped
 		}
@@ -77,7 +77,7 @@ func (s *Sweeper) window(checkpoint time.Time, fresh bool) (from, stale time.Tim
 	return start, time.Time{}
 }
 
-func (s *Sweeper) advance(ctx context.Context, l *lead, c store.StateCollection, checkpoint, before, failedAt time.Time) error {
+func (s *Sweeper) advance(ctx context.Context, l *lead, c store.StateCollection, now, checkpoint, before, failedAt time.Time) error {
 	mark := before
 	if !failedAt.IsZero() {
 		mark = failedAt
@@ -85,7 +85,17 @@ func (s *Sweeper) advance(ctx context.Context, l *lead, c store.StateCollection,
 	if err := s.deps.Checkpoints.Advance(ctx, c, mark); err != nil {
 		return err
 	}
-	l.fresh[c] = !failedAt.IsZero() && failedAt.Before(later(checkpoint, mark).Add(-s.cfg.Lookback))
+	return s.probe(ctx, l, c, now, later(checkpoint, mark).Add(-s.cfg.Lookback))
+}
+
+func (s *Sweeper) probe(ctx context.Context, l *lead, c store.StateCollection, now, windowStart time.Time) error {
+	docs, _, err := s.deps.States.Pending(ctx, c, time.Time{}, windowStart, store.PendingCursor{}, 1)
+	if err != nil {
+		return err
+	}
+	l.fresh[c] = len(docs) > 0
+	s.stats.raiseOldest(c, now, docs)
+	s.warnStale(ctx, c, docs, windowStart)
 	return nil
 }
 
