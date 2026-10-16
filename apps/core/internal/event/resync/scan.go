@@ -6,10 +6,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/nats-io/nats.go"
-	"github.com/nats-io/nats.go/jetstream"
-
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
@@ -28,8 +24,8 @@ type Pages interface {
 	Page(ctx context.Context, q store.PageQuery) ([]domain.Message, error)
 }
 
-type Publisher interface {
-	PublishMsg(ctx context.Context, m *nats.Msg, opts ...jetstream.PublishOpt) (*jetstream.PubAck, error)
+type States interface {
+	Mark(ctx context.Context, c store.StateCollection, targets []store.StateTarget) error
 }
 
 type Deps struct {
@@ -40,30 +36,25 @@ type Deps struct {
 	Pins         Pins
 	Members      Members
 	Hidden       Hidden
-	Pub          Publisher
+	States       States
 	Timers       CountTimers
-}
-
-type Target struct {
-	SubjectRoot string
-	Partitions  int
 }
 
 type scanner struct {
 	deps   Deps
-	target Target
 	opts   Options
 	tick   *time.Ticker
 	rep    Report
+	batch  []mark
 	checks []countCheck
 	seen   map[countCheck]struct{}
 }
 
-func Run(ctx context.Context, deps Deps, target Target, opts Options) (Report, error) {
+func Run(ctx context.Context, deps Deps, opts Options) (Report, error) {
 	if err := opts.Validate(); err != nil {
 		return Report{DryRun: opts.DryRun}, err
 	}
-	s := &scanner{deps: deps, target: target, opts: opts, tick: time.NewTicker(time.Second / time.Duration(opts.Rate)), rep: Report{DryRun: opts.DryRun}, seen: map[countCheck]struct{}{}}
+	s := &scanner{deps: deps, opts: opts, tick: time.NewTicker(time.Second / time.Duration(opts.Rate)), rep: Report{DryRun: opts.DryRun}, seen: map[countCheck]struct{}{}}
 	defer s.tick.Stop()
 	err := s.rooms(ctx)
 	return s.rep, err
@@ -100,22 +91,34 @@ func (s *scanner) rooms(ctx context.Context) error {
 
 func (s *scanner) room(ctx context.Context, r domain.Room) error {
 	s.rep.Rooms++
-	if s.inRange(r.CreatedAt) {
-		if err := s.emitCounted(ctx, work.Record{Kind: store.RoomInserted, Room: r.ID, CommittedAt: r.CreatedAt}, &s.rep.RoomRecords); err != nil {
+	for _, m := range s.roomMarks(r) {
+		if err := s.mark(ctx, m); err != nil {
 			return err
 		}
 	}
-	if r.InfoVer >= 2 && s.inRange(r.UpdatedAt) {
-		if err := s.emitCounted(ctx, roomInfoRecord(r), &s.rep.RoomInfoRecords); err != nil {
-			return err
-		}
-	}
-	for _, scan := range []func(context.Context, uint64) error{s.timeline, s.edits, s.interactions, s.pins, s.members, s.hidden, s.countChecks} {
+	for _, scan := range []func(context.Context, uint64) error{s.timeline, s.edits, s.interactions, s.pins, s.members, s.hidden} {
 		if err := scan(ctx, r.ID); err != nil {
 			return err
 		}
 	}
-	return nil
+	if err := s.flush(ctx); err != nil {
+		return err
+	}
+	return s.countChecks(ctx)
+}
+
+func (s *scanner) roomMarks(r domain.Room) []mark {
+	var out []mark
+	if s.inRange(r.CreatedAt) {
+		out = append(out, mark{store.StateTarget{Collection: store.StateRooms, Bit: store.BitRoomCreated, Room: r.ID}, &s.rep.RoomsCreated})
+	}
+	if r.MemberCountVer >= 1 {
+		out = append(out, mark{store.StateTarget{Collection: store.StateRooms, Bit: store.BitMemberCount, Room: r.ID, Ver: r.MemberCountVer}, &s.rep.MemberCounts})
+	}
+	if r.InfoVer >= 2 && s.inRange(r.UpdatedAt) {
+		out = append(out, mark{store.StateTarget{Collection: store.StateRooms, Bit: store.BitRoomInfo, Room: r.ID, Ver: r.InfoVer}, &s.rep.RoomInfos})
+	}
+	return out
 }
 
 func (s *scanner) timeline(ctx context.Context, room uint64) error {
@@ -132,7 +135,8 @@ func (s *scanner) timeline(ctx context.Context, room uint64) error {
 			if m.CreatedAt.After(s.opts.To) {
 				continue
 			}
-			if err := s.emitCounted(ctx, messageRecord(m), &s.rep.MessageRecords); err != nil {
+			t := store.StateTarget{Collection: store.StateMessages, Bit: store.BitMsgCreated, Room: m.Room, Thread: m.Thread, Seq: m.Seq}
+			if err := s.mark(ctx, mark{t, &s.rep.Messages}); err != nil {
 				return err
 			}
 		}
@@ -143,37 +147,7 @@ func (s *scanner) timeline(ctx context.Context, room uint64) error {
 	}
 }
 
-func roomInfoRecord(r domain.Room) work.Record {
-	return work.RecordOf(store.Change{Kind: store.RoomChanged, Room: r, CommittedAt: r.UpdatedAt})
-}
-
-func messageRecord(m domain.Message) work.Record {
-	flags := uint32(store.ReplyMentionFlagsOf(m))
-	return work.Record{Kind: store.MessageInserted, Room: m.Room, Thread: m.Thread, Seq: m.Seq, Version: flags, CommittedAt: m.CreatedAt}
-}
-
 func (s *scanner) inRange(t time.Time) bool { return !t.Before(s.opts.From) && !t.After(s.opts.To) }
-
-func (s *scanner) emitCounted(ctx context.Context, rec work.Record, counted *int) error {
-	if err := s.emit(ctx, rec); err != nil {
-		return err
-	}
-	*counted++
-	return nil
-}
-
-func (s *scanner) emit(ctx context.Context, rec work.Record) error {
-	if s.opts.DryRun {
-		return nil
-	}
-	if err := s.pace(ctx); err != nil {
-		return err
-	}
-	if _, err := s.deps.Pub.PublishMsg(ctx, work.Message(s.target.SubjectRoot, s.target.Partitions, rec)); err != nil {
-		return fmt.Errorf("publish work record %s: %w", rec.ID(), err)
-	}
-	return nil
-}
 
 func (s *scanner) pace(ctx context.Context) error {
 	select {

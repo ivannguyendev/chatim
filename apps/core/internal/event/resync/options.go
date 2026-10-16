@@ -34,8 +34,8 @@ func ParseArgs(args []string, stderr io.Writer) (Options, error) {
 	fs.StringVar(&to, "to", "", "end of the lost range, RFC3339")
 	fs.StringVar(&o.Tenant, "tenant", "", "only rooms of this tenant")
 	fs.StringVar(&room, "room", "", "only this room id")
-	fs.IntVar(&o.Rate, "rate", DefaultRate, "work records published per second")
-	fs.BoolVar(&o.DryRun, "dry-run", false, "count the records without publishing them")
+	fs.IntVar(&o.Rate, "rate", DefaultRate, "pending flags set per second")
+	fs.BoolVar(&o.DryRun, "dry-run", false, "count the docs without flagging them")
 	if err := fs.Parse(args); err != nil {
 		return Options{}, fmt.Errorf("%w: %w", ErrUsage, err)
 	}

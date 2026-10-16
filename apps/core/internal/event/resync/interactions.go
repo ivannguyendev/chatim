@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/keys"
@@ -56,17 +55,20 @@ func (s *scanner) interaction(ctx context.Context, x store.Interaction) error {
 	switch x.Kind {
 	case keys.ReactionKind:
 		s.checkCount(x.Key, pbconv.ReactionsCounter)
-		return s.emitCounted(ctx, interactionRecord(store.ReactionChanged, x), &s.rep.ReactionRecords)
+		return s.mark(ctx, mark{interactionTarget(x), &s.rep.Reactions})
 	case keys.BookmarkKind:
-		return s.emitCounted(ctx, interactionRecord(store.BookmarkChanged, x), &s.rep.BookmarkRecords)
+		return s.mark(ctx, mark{interactionTarget(x), &s.rep.Bookmarks})
 	default:
 		s.checkCount(x.Key, pbconv.RepliesCounter)
 		return nil
 	}
 }
 
-func interactionRecord(kind store.ChangeKind, x store.Interaction) work.Record {
-	return work.Record{Kind: kind, Room: x.Key.Room, Thread: x.Key.Thread, Seq: x.Key.Seq, Version: x.Ver, User: x.User, CommittedAt: x.At}
+func interactionTarget(x store.Interaction) store.StateTarget {
+	return store.StateTarget{
+		Collection: store.StateInteractions, Bit: store.BitInteraction, Room: x.Key.Room, Thread: x.Key.Thread, Seq: x.Key.Seq,
+		User: x.User, Kind: x.Kind, Ver: uint64(x.Ver),
+	}
 }
 
 func (s *scanner) checkCount(key store.MsgKey, counter string) {
@@ -78,14 +80,14 @@ func (s *scanner) checkCount(key store.MsgKey, counter string) {
 	s.checks = append(s.checks, c)
 }
 
-func (s *scanner) countChecks(ctx context.Context, _ uint64) error {
+func (s *scanner) countChecks(ctx context.Context) error {
 	checks := s.checks
 	s.checks, s.seen = nil, map[countCheck]struct{}{}
 	for _, c := range checks {
 		if err := s.armCount(ctx, c); err != nil {
 			return err
 		}
-		s.rep.CountCheckRecords++
+		s.rep.CountChecks++
 	}
 	return nil
 }

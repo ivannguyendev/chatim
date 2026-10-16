@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"regexp"
-	"slices"
 	"time"
 )
 
@@ -32,14 +31,10 @@ func (c Config) validate() error {
 		{streamNamePattern.MatchString(c.Stream.Name), "EVT_STREAM must match " + streamNamePattern.String()},
 		{subjectRootPattern.MatchString(c.Stream.SubjectRoot), "EVT_SUBJECT_ROOT must match " + subjectRootPattern.String()},
 		{subjectRootPattern.MatchString(c.Stream.LiveRoot), "EVT_LIVE_ROOT must match " + subjectRootPattern.String()},
-		{streamNamePattern.MatchString(c.Work.Name), "WORK_STREAM must match " + streamNamePattern.String()},
-		{subjectRootPattern.MatchString(c.Work.SubjectRoot), "WORK_SUBJECT_ROOT must match " + subjectRootPattern.String()},
-		{c.Work.Name != c.Stream.Name, "WORK_STREAM must differ from EVT_STREAM"},
-		{c.Work.SubjectRoot != c.Stream.SubjectRoot && c.Work.SubjectRoot != c.Stream.LiveRoot, "WORK_SUBJECT_ROOT must differ from EVT_SUBJECT_ROOT and EVT_LIVE_ROOT"},
 		{streamNamePattern.MatchString(c.Timer.Name), "TIMER_STREAM must match " + streamNamePattern.String()},
 		{subjectRootPattern.MatchString(c.Timer.SubjectRoot), "TIMER_SUBJECT_ROOT must match " + subjectRootPattern.String()},
-		{c.Timer.Name != c.Stream.Name && c.Timer.Name != c.Work.Name, "TIMER_STREAM must differ from EVT_STREAM and WORK_STREAM"},
-		{!slices.Contains([]string{c.Stream.SubjectRoot, c.Stream.LiveRoot, c.Work.SubjectRoot}, c.Timer.SubjectRoot), "TIMER_SUBJECT_ROOT must differ from EVT_SUBJECT_ROOT, EVT_LIVE_ROOT and WORK_SUBJECT_ROOT"},
+		{c.Timer.Name != c.Stream.Name, "TIMER_STREAM must differ from EVT_STREAM"},
+		{c.Timer.SubjectRoot != c.Stream.SubjectRoot && c.Timer.SubjectRoot != c.Stream.LiveRoot, "TIMER_SUBJECT_ROOT must differ from EVT_SUBJECT_ROOT and EVT_LIVE_ROOT"},
 		{c.RequestDeadline < c.GRPCShutdown, "CORE_REQUEST_DEADLINE must be shorter than CORE_GRPC_SHUTDOWN"},
 		{c.QueueWait <= c.RequestDeadline/10, "CORE_QUEUE_WAIT must be at most a tenth of CORE_REQUEST_DEADLINE"},
 		{c.Flush.InsertTimeout < c.RequestDeadline, "FLUSH_INSERT_TIMEOUT must be shorter than CORE_REQUEST_DEADLINE"},
@@ -74,7 +69,6 @@ func (c Config) componentErrors() []error {
 		{"CID_BATCH_*", c.CIDBatch.Validate()},
 		{"PUB_*, EVT_SUBJECT_ROOT", c.Publish.Validate()},
 		{"EVT_*", c.Stream.Validate()},
-		{"WORK_*, EVT_STREAM_REPLICAS", c.Work.Validate()},
 		{"TIMER_*, EVT_STREAM_REPLICAS", c.Timer.Validate()},
 		{"SLOT_*, CORE_ID", c.Slot.Validate()},
 		{"STATE_CLEAR_*", c.StateClear.Validate()},

@@ -5,7 +5,6 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/slot"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
@@ -71,15 +70,6 @@ func (p *parser) components(c *Config) {
 		Replicas:    p.count("EVT_STREAM_REPLICAS", 1),
 		MaxAge:      p.span("EVT_STREAM_MAX_AGE", publish.DefaultStreamMaxAge),
 		Duplicates:  p.span("EVT_STREAM_DUPLICATES", publish.DefaultStreamDuplicates),
-	}
-	c.Work = work.StreamConfig{
-		Name:        envconfig.String("WORK_STREAM", "CHATIM_WORK"),
-		SubjectRoot: envconfig.String("WORK_SUBJECT_ROOT", "work"),
-		Partitions:  p.count("WORK_PARTITIONS", work.DefaultPartitions),
-		Replicas:    c.Stream.Replicas,
-		MaxAge:      p.span("WORK_MAX_AGE", work.DefaultMaxAge),
-		Duplicates:  p.span("WORK_DUPLICATES", work.DefaultDuplicates),
-		AckWait:     work.DefaultAckWait,
 	}
 	c.Timer = timer.StreamConfig{
 		Name:        envconfig.String("TIMER_STREAM", "CHATIM_TIMER"),

@@ -13,7 +13,6 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/stateclear"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/sweep"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/slot"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
@@ -51,7 +50,6 @@ func TestLoadDefaults(t *testing.T) {
 			SubjectRoot: "evt", Shards: 4, QueueSize: 1024, MaxPending: 256, AckTimeout: 2 * time.Second,
 		},
 		Stream: publish.StreamConfig{Name: "CHATIM_EVT", SubjectRoot: "evt", LiveRoot: "live", Replicas: 1, MaxAge: 7 * day, Duplicates: 5 * time.Minute},
-		Work:   work.StreamConfig{Name: "CHATIM_WORK", SubjectRoot: "work", Partitions: 32, Replicas: 1, MaxAge: 2 * time.Hour, Duplicates: 2 * time.Minute, AckWait: 35 * time.Second},
 		Timer:  timer.StreamConfig{Name: "CHATIM_TIMER", SubjectRoot: "timer", Replicas: 1, MaxAge: 2 * time.Hour, Duplicates: 2 * time.Minute, AckWait: 30 * time.Second},
 		Slot: slot.Config{
 			CoreID: host, Addr: host + ":9000", Tick: time.Second, HeartbeatTTL: 5 * time.Second,
@@ -98,7 +96,6 @@ func TestLoadOverrides(t *testing.T) {
 			SubjectRoot: "evt_it", Shards: 2, QueueSize: 512, MaxPending: 128, AckTimeout: time.Second,
 		},
 		Stream: publish.StreamConfig{Name: "CHATIM_EVT_IT", SubjectRoot: "evt_it", LiveRoot: "live_it", Replicas: 3, MaxAge: 2 * day, Duplicates: 5 * time.Minute},
-		Work:   work.StreamConfig{Name: "CHATIM_WORK_IT", SubjectRoot: "work_it", Partitions: 16, Replicas: 3, MaxAge: time.Hour, Duplicates: 3 * time.Minute, AckWait: 35 * time.Second},
 		Timer:  timer.StreamConfig{Name: "CHATIM_TIMER_IT", SubjectRoot: "timer_it", Replicas: 3, MaxAge: 2 * time.Hour, Duplicates: 2 * time.Minute, AckWait: 30 * time.Second},
 		Slot: slot.Config{
 			CoreID: "core-a", Addr: "10.0.0.5:7000", Tick: 500 * time.Millisecond, HeartbeatTTL: 3 * time.Second,

@@ -11,7 +11,6 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/stateclear"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/sweep"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/slot"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
@@ -58,7 +57,6 @@ type Config struct {
 	CIDBatch               dedupe.BatchConfig
 	Publish                publish.Config
 	Stream                 publish.StreamConfig
-	Work                   work.StreamConfig
 	Timer                  timer.StreamConfig
 	Slot                   slot.Config
 	StateClear             stateclear.Config
