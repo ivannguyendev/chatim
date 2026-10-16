@@ -2,7 +2,6 @@ package projection_test
 
 import (
 	"errors"
-	"slices"
 	"testing"
 	"time"
 
@@ -107,11 +106,10 @@ func TestMentionReplyIndexRefusesOtherEvents(t *testing.T) {
 	}
 }
 
-func TestMentionReplyIndexSubscribesToMessageChanges(t *testing.T) {
+func TestMentionReplyIndexIsNamed(t *testing.T) {
 	rg := newIndexRig(t)
-	want := []string{"evt.*.message.*.msg_created", "evt.*.message.*.msg_edited", "evt.*.message.*.msg_deleted"}
-	if got := rg.index.Subjects("evt"); !slices.Equal(got, want) || rg.index.Name() != projection.MentionReplyIndexName {
-		t.Fatalf("name %q subjects %v, want %q %v", rg.index.Name(), got, projection.MentionReplyIndexName, want)
+	if rg.index.Name() != projection.MentionReplyIndexName {
+		t.Fatalf("name %q, want %q", rg.index.Name(), projection.MentionReplyIndexName)
 	}
 	if projection.MentionReplyIndexName != "mention_reply_index" || pbconv.RepliesCounter != "replies" {
 		t.Fatalf("name %q counter %q", projection.MentionReplyIndexName, pbconv.RepliesCounter)

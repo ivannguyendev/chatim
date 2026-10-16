@@ -31,7 +31,7 @@ func newLeadRig(t *testing.T, owner *fakeOwner) *consumerRig {
 	t.Helper()
 	rg := &consumerRig{sink: &testlog.Sink{}, src: newFakeSource(), writer: &fakeWriter{}, result: make(chan error, 1)}
 	lead := projection.WithLeader(owner, 0, leadTick)
-	rg.c = built(projection.NewConsumer(projection.NewRoomActivity(rg.writer), rg.src, evtConfig, rg.sink.Logger(), lead))(t)
+	rg.c = built(projection.NewConsumer([]projection.Projection{projection.NewRoomActivity(rg.writer)}, rg.src, evtConfig, rg.sink.Logger(), lead))(t)
 	go func() { rg.result <- rg.c.Run(t.Context()) }()
 	synctest.Wait()
 	return rg
@@ -43,8 +43,8 @@ func TestLeaderGatedConsumerNeverFetchesWithoutTheLeaderSlot(t *testing.T) {
 		rg := newLeadRig(t, owner)
 		time.Sleep(10 * leadTick)
 		synctest.Wait()
-		if n := rg.src.asks(); n != 0 {
-			t.Fatalf("a core without slot 0 fetched %d times, want never", n)
+		if n, floors := rg.src.asks(), rg.src.floorReads(); n != 0 || floors != 0 {
+			t.Fatalf("a core without slot 0 fetched %d times and read the ack floor %d times, want never", n, floors)
 		}
 		owner.owns.Store(true)
 		time.Sleep(leadTick)
@@ -96,8 +96,8 @@ func TestLeaderGatedConsumerNaksWhatItHoldsWhenTheLeadIsLostAndStopsFetching(t *
 		owner.owns.Store(true)
 		time.Sleep(leadTick)
 		synctest.Wait()
-		if n := rg.src.asks(); n != 2 {
-			t.Fatalf("fetched %d times after the lead came back, want 2", n)
+		if n, floors := rg.src.asks(), rg.src.floorReads(); n != 2 || floors != 2 {
+			t.Fatalf("fetched %d times and read the ack floor %d times after the lead came back, want 2 and 2", n, floors)
 		}
 		rg.stop(t)
 	})
@@ -128,7 +128,7 @@ func TestLeaderGatedConsumerFinishesTheBatchItIsWritingWhenTheLeadIsLost(t *test
 }
 
 func TestLeaderOptionNeedsATickAndANilOwnerAlwaysFetches(t *testing.T) {
-	p, src := projection.NewRoomActivity(&fakeWriter{}), newFakeSource()
+	p, src := []projection.Projection{projection.NewRoomActivity(&fakeWriter{})}, newFakeSource()
 	if _, err := projection.NewConsumer(p, src, evtConfig, nil, projection.WithLeader(&fakeOwner{}, 0, 0)); err == nil {
 		t.Fatal("NewConsumer with a zero leader tick = nil error")
 	}

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/projection"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -37,15 +38,28 @@ func awaitSettled(t *testing.T, it *itInfra, cfg config.Config, st *mongostore.S
 	t.Helper()
 	deadline := time.Now().Add(itLiveLimit)
 	for {
-		docs, timers := pendingCount(t, st), pendingTimers(t, it, cfg, room)
-		if docs == 0 && timers == 0 {
+		docs, timers, events := pendingCount(t, st), pendingTimers(t, it, cfg, room), pendingProjections(t, it, cfg)
+		if docs == 0 && timers == 0 && events == 0 {
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("%d docs pending and %d timers armed after %v, want none", docs, timers, itLiveLimit)
+			t.Fatalf("%d docs pending, %d timers armed and %d events not projected after %v, want none", docs, timers, events, itLiveLimit)
 		}
 		time.Sleep(itActivityPoll)
 	}
+}
+
+func pendingProjections(t *testing.T, it *itInfra, cfg config.Config) uint64 {
+	t.Helper()
+	c, err := it.js.Consumer(t.Context(), cfg.Stream.Name, projection.DurableName)
+	if err != nil {
+		t.Fatalf("projections consumer: %v", err)
+	}
+	info, err := c.Info(t.Context())
+	if err != nil {
+		t.Fatalf("projections consumer info: %v", err)
+	}
+	return info.NumPending + uint64(info.NumAckPending)
 }
 
 func readLinkProjections(t *testing.T, st *mongostore.Store, room, parent, mention uint64) linkProjections {

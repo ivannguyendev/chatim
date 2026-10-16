@@ -43,8 +43,9 @@ func NewMentionRead(members MemberLookup, mentions MentionReads) (*MentionRead, 
 
 func (r *MentionRead) Name() string { return MentionReadName }
 
-func (r *MentionRead) Subjects(root string) []string {
-	return []string{filter(root, "member", "read_updated")}
+func (r *MentionRead) Keeps(ev Event) bool {
+	_, ok := ev.Proto.GetPayload().(*chatimv1.Event_ReadUpdated)
+	return ok
 }
 
 func (r *MentionRead) Handle(ctx context.Context, evs []Event) []error {

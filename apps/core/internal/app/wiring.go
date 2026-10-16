@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/projection"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/metrics"
@@ -35,21 +36,20 @@ type gate interface {
 }
 
 type node struct {
-	cfg            config.Config
-	log            *slog.Logger
-	admin          *admin.Server
-	grpc           *grpcserver.Server
-	publisher      drainer
-	stateClears    drainer
-	flusher        drainer
-	cidBatch       drainer
-	router         gate
-	slots          runner
-	timers         drainer
-	projections    drainer
-	sweeper        drainer
-	watches        liveWatcher
-	projectionDefs projectionSet
+	cfg         config.Config
+	log         *slog.Logger
+	admin       *admin.Server
+	grpc        *grpcserver.Server
+	publisher   drainer
+	stateClears drainer
+	flusher     drainer
+	cidBatch    drainer
+	router      gate
+	slots       runner
+	timers      drainer
+	projections drainer
+	sweeper     drainer
+	watches     liveWatcher
 }
 
 func prepare(ctx context.Context, cfg config.Config, cl *clients) error {
@@ -59,6 +59,9 @@ func prepare(ctx context.Context, cfg config.Config, cl *clients) error {
 		return fmt.Errorf("bootstrap mongo database %s: %w", cfg.MongoDB, config.RedactError(err, cfg.MongoURI))
 	}
 	if err := publish.EnsureStream(ctx, cl.js, cfg.Stream); err != nil {
+		return config.RedactError(err, cfg.NATSURL)
+	}
+	if err := projection.EnsureConsumer(ctx, cl.js, cfg.Projection); err != nil {
 		return config.RedactError(err, cfg.NATSURL)
 	}
 	return config.RedactError(timer.EnsureStream(ctx, cl.js, cfg.Timer), cfg.NATSURL)
@@ -117,7 +120,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 		return nil, err
 	}
 	a.timers = ts.consumer
-	a.projectionDefs, err = wireProjections(cfg, cl, st, slots, pub, ts.messages, log)
+	projections, err := wireProjections(cfg, cl, st, slots, pub, ts.messages, log)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +129,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 		return nil, err
 	}
 	a.publisher, a.stateClears, a.flusher, a.cidBatch, a.router, a.slots = pub, clears, fl, batch, router, slots
-	a.projections, a.sweeper = a.projectionDefs.group(), sweeper
+	a.projections, a.sweeper = projections, sweeper
 	svc, err := wireService(serviceDeps{store: st, router: router, pub: pub, cidBatch: batch, timers: ts.members, msgTimers: ts.messages, rooms: caches, cfg: cfg, log: log})
 	if err != nil {
 		return nil, err
@@ -153,7 +156,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 		memberForgets:   watch.Forgets,
 		memberMalformed: watch.Malformed,
 		roomCache:       caches.probes(roomWatch),
-		events:          eventProbes{clears: clears, projections: a.projectionDefs.probes(), sweeper: sweeper},
+		events:          eventProbes{clears: clears, projection: projections, sweeper: sweeper},
 	}
 	handler, err := metrics.Handler(metricSources(p))
 	if err != nil {

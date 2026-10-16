@@ -61,8 +61,7 @@ func TestLoadDefaults(t *testing.T) {
 			Batch: 500, Rate: 5000, Tick: time.Second, AckTimeout: 2 * time.Second,
 		},
 		Projection: projection.Config{
-			Stream: "CHATIM_EVT", SubjectRoot: "evt", FetchBatch: 256, FetchWait: 500 * time.Millisecond,
-			ActivityFetchBatch: 8192, ActivityFetchWait: 2500 * time.Millisecond,
+			Stream: "CHATIM_EVT", SubjectRoot: "evt", FetchBatch: 1024, FetchWait: time.Second,
 		},
 		Limits:                 mutate.Limits{Emojis: mutate.DefaultEmojis, PinLimit: 50, MemberBatch: 500, MentionTargets: 50},
 		MemberCountCheckDelay:  5 * time.Second,
@@ -111,7 +110,6 @@ func TestLoadOverrides(t *testing.T) {
 		},
 		Projection: projection.Config{
 			Stream: "CHATIM_EVT_IT", SubjectRoot: "evt_it", FetchBatch: 128, FetchWait: 250 * time.Millisecond,
-			ActivityFetchBatch: 2048, ActivityFetchWait: 2 * time.Second,
 		},
 		LockedMessageKinds:     []domain.Kind{domain.KindText},
 		MentionHideReadTenants: []string{"acme", "globex"},

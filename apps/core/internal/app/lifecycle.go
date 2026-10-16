@@ -28,9 +28,6 @@ func Run(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	if err := a.projectionDefs.ensure(ctx, cfg, cl.js); err != nil {
-		return err
-	}
 	lis, err := listenAll(ctx, cfg.AdminAddr, cfg.GRPCAddr)
 	if err != nil {
 		return err

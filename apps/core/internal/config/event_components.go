@@ -32,12 +32,10 @@ func (p *parser) eventConfig(c *Config) {
 		AckTimeout:  c.Publish.AckTimeout,
 	}
 	c.Projection = projection.Config{
-		Stream:             c.Stream.Name,
-		SubjectRoot:        c.Stream.SubjectRoot,
-		FetchBatch:         p.count("PROJECTION_FETCH_BATCH", projection.DefaultFetchBatch),
-		FetchWait:          p.span("PROJECTION_FETCH_WAIT", projection.DefaultFetchWait),
-		ActivityFetchBatch: p.count("PROJECTION_ACTIVITY_FETCH_BATCH", projection.DefaultActivityFetchBatch),
-		ActivityFetchWait:  p.span("PROJECTION_ACTIVITY_FETCH_WAIT", projection.DefaultActivityFetchWait),
+		Stream:      c.Stream.Name,
+		SubjectRoot: c.Stream.SubjectRoot,
+		FetchBatch:  p.count("PROJECTION_FETCH_BATCH", projection.DefaultFetchBatch),
+		FetchWait:   p.span("PROJECTION_FETCH_WAIT", projection.DefaultFetchWait),
 	}
 	c.MemberCountCheckDelay = p.span("MEMBER_COUNT_CHECK_DELAY", defaultMemberCountCheckDelay)
 	c.MessageCountCheckDelay = p.span("MESSAGE_COUNT_CHECK_DELAY", defaultMessageCountCheckDelay)

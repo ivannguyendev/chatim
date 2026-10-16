@@ -32,17 +32,9 @@ type sweepProbe interface {
 }
 
 type eventProbes struct {
-	clears      stateClearProbe
-	projections []projectionProbe
-	sweeper     sweepProbe
-}
-
-func (s projectionSet) probes() []projectionProbe {
-	out := make([]projectionProbe, len(s.consumers))
-	for i, c := range s.consumers {
-		out[i] = c
-	}
-	return out
+	clears     stateClearProbe
+	projection projectionProbe
+	sweeper    sweepProbe
 }
 
 func eventSources(p eventProbes, drops func() publish.Drops) []metrics.Source {
@@ -63,7 +55,7 @@ func eventSources(p eventProbes, drops func() publish.Drops) []metrics.Source {
 			metrics.Source{Name: "sweep_dropped_total", Help: "Pending flags the sweeper cleared without an event because the document is gone or cannot become an event.", Labels: labels, Read: func() float64 { return float64(p.sweeper.Dropped(c)) }},
 		)
 	}
-	for _, pr := range p.projections {
+	if pr := p.projection; pr != nil {
 		labels := map[string]string{"projection": pr.Name()}
 		out = append(out,
 			metrics.Source{Name: "projection_lag_seconds", Help: "Age of the oldest event in the projection's last batch; 0 when idle.", Gauge: true, Labels: labels, Read: func() float64 { return pr.Lag().Seconds() }},

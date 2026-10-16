@@ -2,7 +2,6 @@ package eventkit
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -12,6 +11,7 @@ import (
 type Delivery interface {
 	Data() []byte
 	Delivered() uint64
+	StreamSeq() uint64
 	Ack() error
 	Nak(delay time.Duration) error
 	Term() error
@@ -25,18 +25,57 @@ type ConsumerLookup interface {
 	Consumer(ctx context.Context, stream, name string) (jetstream.Consumer, error)
 }
 
-type pullSource struct {
+type PullSource struct {
 	js       ConsumerLookup
 	stream   string
 	name     string
 	consumer jetstream.Consumer
 }
 
-func NewPullSource(js ConsumerLookup, stream, consumer string) Source {
-	return &pullSource{js: js, stream: stream, name: consumer}
+func NewPullSource(js ConsumerLookup, stream, consumer string) *PullSource {
+	return &PullSource{js: js, stream: stream, name: consumer}
 }
 
-func (s *pullSource) Fetch(ctx context.Context, limit int, wait time.Duration) ([]Delivery, error) {
+func (s *PullSource) Fetch(ctx context.Context, limit int, wait time.Duration) ([]Delivery, error) {
+	c, err := s.lookup(ctx)
+	if err != nil {
+		return nil, err
+	}
+	batch, err := c.Fetch(limit, jetstream.FetchMaxWait(wait))
+	if err != nil {
+		return nil, fmt.Errorf("fetch from %s: %w", s.name, err)
+	}
+	var out []Delivery
+	msgs := batch.Messages()
+	for {
+		select {
+		case m, ok := <-msgs:
+			if !ok {
+				return out, batch.Error()
+			}
+			out = append(out, newPullDelivery(m))
+		case <-ctx.Done():
+			for m := range msgs {
+				out = append(out, newPullDelivery(m))
+			}
+			return out, ctx.Err()
+		}
+	}
+}
+
+func (s *PullSource) AckFloor(ctx context.Context) (uint64, error) {
+	c, err := s.lookup(ctx)
+	if err != nil {
+		return 0, err
+	}
+	info, err := c.Info(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("ack floor of %s: %w", s.name, err)
+	}
+	return info.AckFloor.Stream, nil
+}
+
+func (s *PullSource) lookup(ctx context.Context) (jetstream.Consumer, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -47,36 +86,25 @@ func (s *pullSource) Fetch(ctx context.Context, limit int, wait time.Duration) (
 		}
 		s.consumer = c
 	}
-	fctx, cancel := context.WithTimeout(ctx, wait)
-	defer cancel()
-	batch, err := s.consumer.Fetch(limit, jetstream.FetchContext(fctx))
-	if err != nil {
-		return nil, fmt.Errorf("fetch from %s: %w", s.name, err)
-	}
-	var out []Delivery
-	for m := range batch.Messages() {
-		out = append(out, pullDelivery{m})
-	}
-	return out, idleFetch(ctx, batch.Error())
-}
-
-func idleFetch(ctx context.Context, err error) error {
-	if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
-		return nil
-	}
-	return err
+	return s.consumer, nil
 }
 
 type pullDelivery struct {
 	jetstream.Msg
+	delivered uint64
+	stream    uint64
 }
 
-func (d pullDelivery) Delivered() uint64 {
-	meta, err := d.Metadata()
-	if err != nil {
-		return 0
+func newPullDelivery(m jetstream.Msg) pullDelivery {
+	d := pullDelivery{Msg: m}
+	if meta, err := m.Metadata(); err == nil {
+		d.delivered, d.stream = meta.NumDelivered, meta.Sequence.Stream
 	}
-	return meta.NumDelivered
+	return d
 }
+
+func (d pullDelivery) Delivered() uint64 { return d.delivered }
+
+func (d pullDelivery) StreamSeq() uint64 { return d.stream }
 
 func (d pullDelivery) Nak(delay time.Duration) error { return d.NakWithDelay(delay) }

@@ -23,10 +23,11 @@ type consumerRig struct {
 	result chan error
 }
 
-func newConsumerRig(t *testing.T, ctx context.Context) *consumerRig {
+func newConsumerRig(t *testing.T, ctx context.Context, extra ...projection.Projection) *consumerRig {
 	t.Helper()
 	rg := &consumerRig{sink: &testlog.Sink{}, src: newFakeSource(), writer: &fakeWriter{}, result: make(chan error, 1)}
-	rg.c = built(projection.NewConsumer(projection.NewRoomActivity(rg.writer), rg.src, evtConfig, rg.sink.Logger()))(t)
+	handlers := append([]projection.Projection{projection.NewRoomActivity(rg.writer)}, extra...)
+	rg.c = built(projection.NewConsumer(handlers, rg.src, evtConfig, rg.sink.Logger()))(t)
 	go func() { rg.result <- rg.c.Run(ctx) }()
 	return rg
 }
@@ -41,7 +42,7 @@ func (rg *consumerRig) stop(t *testing.T) {
 	}
 }
 
-func TestConsumerTouchesABatchOfThreeRoomsInOneWriteAndAcksIt(t *testing.T) {
+func TestConsumerTouchesABatchOfThreeRoomsInOneWriteAndAcksTheLastDelivery(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rg := newConsumerRig(t, t.Context())
 		time.Sleep(time.Minute)
@@ -55,62 +56,59 @@ func TestConsumerTouchesABatchOfThreeRoomsInOneWriteAndAcksIt(t *testing.T) {
 		if got := rg.writer.touched(); len(got) != 1 || !slices.EqualFunc(got[0], []uint64{roomA, roomB, roomC}, func(a store.Activity, r uint64) bool { return a.Room == r }) {
 			t.Fatalf("touched %v, want one write covering rooms A, B and C", got)
 		}
-		for i, d := range ds {
-			if acks, terms, naks := d.settled(); acks != 1 || terms != 0 || len(naks) != 0 {
-				t.Errorf("delivery %d: acks %d terms %d naks %v; want one ack", i, acks, terms, naks)
-			}
+		if got := settlements(ds); !sameSettlements(got, acked(2, 3)) {
+			t.Errorf("settled %+v; want one ack on the last delivery only", got)
 		}
 		if rg.c.Lag() != 3*time.Second || rg.c.Stuck() != 2 {
 			t.Errorf("lag %v stuck %d; want 3s from the oldest event and the two deliveries at the stuck count", rg.c.Lag(), rg.c.Stuck())
 		}
-		time.Sleep(projection.DefaultActivityFetchWait)
+		time.Sleep(projection.DefaultFetchWait)
 		synctest.Wait()
-		if rg.c.Lag() != 0 || rg.c.Stuck() != 2 {
-			t.Errorf("after an idle fetch lag %v stuck %d; want lag 0 and the stuck count kept", rg.c.Lag(), rg.c.Stuck())
+		if rg.c.Lag() != 0 || rg.c.Stuck() != 2 || rg.c.Name() != "projections" {
+			t.Errorf("after an idle fetch lag %v stuck %d name %q; want lag 0, the stuck count kept, named projections", rg.c.Lag(), rg.c.Stuck(), rg.c.Name())
 		}
 		rg.stop(t)
 	})
 }
 
-func TestConsumerTermsGarbageAndAcksAKindTheProjectionDoesNotKeep(t *testing.T) {
+func TestConsumerAcksPastGarbageAndKindsNoHandlerKeeps(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rg := newConsumerRig(t, t.Context())
-		garbage, stray, kept := &fakeDelivery{data: []byte("junk")}, delivery(t, readUpdated(roomA, at(1)), 1), delivery(t, msgCreated(roomB, 0, 1, at(1)), 1)
-		rg.src.push(garbage, stray, kept)
+		ds := []*fakeDelivery{delivery(t, msgCreated(roomB, 0, 1, at(1)), 1), {data: []byte("junk")}, delivery(t, readUpdated(roomA, at(1)), 1), {data: []byte("junk")}}
+		rg.src.push(ds...)
 		synctest.Wait()
-		if acks, terms, naks := garbage.settled(); acks != 0 || terms != 1 || len(naks) != 0 {
-			t.Errorf("garbage: acks %d terms %d naks %v; want one term", acks, terms, naks)
-		}
-		for name, d := range map[string]*fakeDelivery{"stray kind": stray, "kept": kept} {
-			if acks, terms, naks := d.settled(); acks != 1 || terms != 0 || len(naks) != 0 {
-				t.Errorf("%s: acks %d terms %d naks %v; want one ack", name, acks, terms, naks)
-			}
+		if got := settlements(ds); !sameSettlements(got, acked(3, 4)) {
+			t.Errorf("settled %+v; want only the last delivery acked, garbage never termed", got)
 		}
 		if rg.c.Dropped() != 2 || rg.c.Failures() != 0 {
-			t.Errorf("dropped %d failures %d; want the garbage and the stray kind dropped", rg.c.Dropped(), rg.c.Failures())
+			t.Errorf("dropped %d failures %d; want the two undecodable events dropped and the stray kind just acked", rg.c.Dropped(), rg.c.Failures())
 		}
 		if n := rg.sink.Count("projection dropped an undecodable event"); n != 1 {
-			t.Errorf("undecodable warnings %d, want 1", n)
+			t.Errorf("undecodable warnings %d, want 1 within the second", n)
 		}
 		rg.stop(t)
 	})
 }
 
-func TestConsumerNaksAFailedWriteOnTheRetryLadder(t *testing.T) {
+func TestConsumerNaksEachFailedEventOnItsOwnRetryRung(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rg := newConsumerRig(t, t.Context())
 		rg.writer.err = errors.New("rooms down")
-		first, third := delivery(t, msgCreated(roomA, 0, 1, at(1)), 0), delivery(t, msgCreated(roomB, 0, 1, at(1)), 3)
-		rg.src.push(first, third)
+		ds := []*fakeDelivery{delivery(t, msgCreated(roomA, 0, 1, at(1)), 0), delivery(t, msgCreated(roomB, 0, 1, at(1)), 3)}
+		rg.src.push(ds...)
 		synctest.Wait()
-		if _, _, naks := first.settled(); !slices.Equal(naks, []time.Duration{5 * time.Second}) {
-			t.Errorf("first delivery naks %v, want 5s", naks)
-		}
-		if _, _, naks := third.settled(); !slices.Equal(naks, []time.Duration{2 * time.Minute}) {
-			t.Errorf("third delivery naks %v, want 2m", naks)
+		want := []settlement{{naks: []time.Duration{5 * time.Second}}, {naks: []time.Duration{2 * time.Minute}}}
+		if got := settlements(ds); !sameSettlements(got, want) {
+			t.Errorf("settled %+v; want each sent back on the rung of its own delivery count", got)
 		}
 		if rg.c.Failures() != 2 || rg.c.Dropped() != 0 {
 			t.Errorf("failures %d dropped %d; want 2 failures", rg.c.Failures(), rg.c.Dropped())
+		}
+		asks := rg.src.asks()
+		time.Sleep(projection.DefaultFetchWait)
+		synctest.Wait()
+		if n := rg.src.asks(); n <= asks {
+			t.Errorf("fetched %d more times after the failure, want the consumer to keep fetching", n-asks)
 		}
 		rg.stop(t)
 	})
@@ -150,10 +148,9 @@ func TestConsumerStopHandsBackWhatTheLastFetchBrought(t *testing.T) {
 		rg.src.handOverOnCancel(fetched...)
 		synctest.Wait()
 		rg.stop(t)
-		for i, d := range fetched {
-			if acks, terms, naks := d.settled(); acks != 0 || terms != 0 || !slices.Equal(naks, []time.Duration{0}) {
-				t.Errorf("fetched %d: acks %d terms %d naks %v; want it handed back with Nak(0)", i, acks, terms, naks)
-			}
+		want := []settlement{{naks: []time.Duration{0}}, {naks: []time.Duration{0}}}
+		if got := settlements(fetched); !sameSettlements(got, want) {
+			t.Errorf("settled %+v; want each handed back with Nak(0)", got)
 		}
 		if len(rg.writer.touched()) != 0 || rg.c.Dropped() != 0 {
 			t.Errorf("writes %v dropped %d; want nothing handled after the stop", rg.writer.touched(), rg.c.Dropped())

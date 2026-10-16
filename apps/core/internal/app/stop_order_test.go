@@ -92,7 +92,7 @@ func stopNode(order *stopOrder) *node {
 		flusher: order.drainer("flusher"), cidBatch: order.drainer("cid batcher"),
 		router: &recordedRouter{recordedDrainer: order.drainer("router"), running: running},
 		slots:  idle{}, timers: order.drainer("timer consumer"),
-		projections: drainerGroup{order.drainer("projection")}, sweeper: order.drainer("sweeper"),
+		projections: order.drainer("projection"), sweeper: order.drainer("sweeper"),
 		watches: liveWatchers{recordedWatch{name: "member watch", order: order}, recordedWatch{name: "room watch", order: order}},
 	}
 }

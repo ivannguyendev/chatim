@@ -57,9 +57,9 @@ func fakeProbes() probes {
 		memberMalformed: func() uint64 { return 14 },
 		roomCache:       fakeRoomCacheProbes(),
 		events: eventProbes{
-			clears:      fakeClears{},
-			projections: []projectionProbe{fakeProjection{"room_activity", 50}, fakeProjection{"mention_read", 60}},
-			sweeper:     fakeSweeper{},
+			clears:     fakeClears{},
+			projection: fakeProjection{"projections", 50},
+			sweeper:    fakeSweeper{},
 		},
 	}
 }
@@ -111,9 +111,8 @@ func TestEventMetricsReadTheirComponentByLabel(t *testing.T) {
 	want := map[string]float64{
 		"state_clear_cleared_total": 31, "state_clear_dropped_total": 32, "state_clear_failures_total": 33, "publish_state_track_full_total": 34,
 		"sweep_publish_failures_total": 41, "sweep_failures_total": 42, "sweep_passes_total": 43,
-		"projection_lag_seconds{room_activity}": 50, "projection_failures_total{room_activity}": 51,
-		"projection_dropped_total{room_activity}": 52, "projection_stuck_total{room_activity}": 53,
-		"projection_lag_seconds{mention_read}": 60, "projection_stuck_total{mention_read}": 63,
+		"projection_lag_seconds{projections}": 50, "projection_failures_total{projections}": 51,
+		"projection_dropped_total{projections}": 52, "projection_stuck_total{projections}": 53,
 		"counter_repaired_total{reactions}": 6, "counter_repaired_total{replies}": 21, "counter_repaired_total{members}": 12,
 		"timer_failures_total": 17, "timer_dropped_total": 18,
 	}

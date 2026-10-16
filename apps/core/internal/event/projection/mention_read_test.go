@@ -151,10 +151,10 @@ func TestMentionReadRefusesOtherEvents(t *testing.T) {
 	}
 }
 
-func TestMentionReadSubscribesToReadUpdates(t *testing.T) {
+func TestMentionReadIsNamedAndNeedsItsPorts(t *testing.T) {
 	rg := newReadRig(t)
-	if got := rg.read.Subjects("evt"); !slices.Equal(got, []string{"evt.*.member.*.read_updated"}) || rg.read.Name() != "mention_read" {
-		t.Fatalf("name %q subjects %v", rg.read.Name(), got)
+	if rg.read.Name() != "mention_read" {
+		t.Fatalf("name %q", rg.read.Name())
 	}
 	for name, build := range map[string]func() (*projection.MentionRead, error){
 		"no members":  func() (*projection.MentionRead, error) { return projection.NewMentionRead(nil, rg.mentions) },

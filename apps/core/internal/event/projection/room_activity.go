@@ -11,23 +11,6 @@ import (
 
 const RoomActivityName = "room_activity"
 
-var roomActivityKinds = [...]struct{ data, kind string }{
-	{"message", "msg_created"},
-	{"message", "msg_edited"},
-	{"message", "msg_deleted"},
-	{"message", "reaction_changed"},
-	{"room", "msg_pinned"},
-	{"room", "msg_unpinned"},
-	{"member", "member_added"},
-	{"member", "member_removed"},
-	{"member", "member_role_changed"},
-	{"member", "member_priority_changed"},
-	{"member", "bookmark_changed"},
-
-	{"room", "room_updated"},
-	{"member", "room_preferences_changed"},
-}
-
 type ActivityWriter interface {
 	TouchActivity(ctx context.Context, acts []store.Activity) error
 }
@@ -44,12 +27,9 @@ func NewRoomActivity(rooms ActivityWriter) *RoomActivity { return &RoomActivity{
 
 func (a *RoomActivity) Name() string { return RoomActivityName }
 
-func (a *RoomActivity) Subjects(root string) []string {
-	out := make([]string, len(roomActivityKinds))
-	for i, k := range roomActivityKinds {
-		out[i] = filter(root, k.data, k.kind)
-	}
-	return out
+func (a *RoomActivity) Keeps(ev Event) bool {
+	_, ok := activityOf(ev)
+	return ok
 }
 
 func (a *RoomActivity) Handle(ctx context.Context, evs []Event) []error {

@@ -16,54 +16,67 @@ const StuckDeliveries uint64 = 6
 
 const (
 	fetchFailedMsg  = "projection fetch failed; retrying"
+	floorFailedMsg  = "projection could not read its ack floor; retrying"
 	handleFailedMsg = "projection failed an event; it comes back later"
 	settleFailedMsg = "projection ack or nak failed; the event comes back after the ack wait"
 	garbageMsg      = "projection dropped an undecodable event"
+	gapMsg          = "projection holds acks above a missing delivery until the server redelivers it"
 )
 
 var errStarted = errors.New("projection consumer already started")
 
 type Projection interface {
 	Name() string
-	Subjects(root string) []string
+	Keeps(ev Event) bool
 	Handle(ctx context.Context, evs []Event) []error
 }
 
+type Source interface {
+	eventkit.Source
+	AckFloor(ctx context.Context) (uint64, error)
+}
+
 type Consumer struct {
-	p        Projection
-	src      eventkit.Source
+	handlers []Projection
+	src      Source
 	cfg      Config
 	fails    *eventkit.LimitedLog
 	handles  *eventkit.LimitedLog
 	garbage  *eventkit.LimitedLog
+	gaps     *eventkit.LimitedLog
 	failures atomic.Uint64
 	dropped  atomic.Uint64
 	lag      atomic.Int64
 	stuck    atomic.Uint64
 	log      *slog.Logger
 	lead     leader
+	floor    ackFloor
 	started  atomic.Bool
 	stopped  context.Context
 	halt     context.CancelFunc
 	done     chan struct{}
 }
 
-func NewConsumer(p Projection, src eventkit.Source, cfg Config, log *slog.Logger, opts ...Option) (*Consumer, error) {
-	if p == nil || src == nil {
-		return nil, fmt.Errorf("%w: projection consumer needs a projection and a source", apperr.ErrInvalidArgument)
+func NewConsumer(handlers []Projection, src Source, cfg Config, log *slog.Logger, opts ...Option) (*Consumer, error) {
+	if len(handlers) == 0 || src == nil {
+		return nil, fmt.Errorf("%w: projection consumer needs handlers and a source", apperr.ErrInvalidArgument)
+	}
+	for _, h := range handlers {
+		if h == nil {
+			return nil, fmt.Errorf("%w: projection consumer got a nil handler", apperr.ErrInvalidArgument)
+		}
 	}
 	cfg = cfg.withDefaults()
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
-	cfg = cfg.fetchFor(p.Name())
 	if log == nil {
 		log = slog.Default()
 	}
-	log = log.With("projection", p.Name())
+	log = log.With("projection", DurableName)
 	c := &Consumer{
-		p: p, src: src, cfg: cfg, fails: eventkit.NewLimitedLog(log), handles: eventkit.NewLimitedLog(log),
-		garbage: eventkit.NewLimitedLog(log), log: log, done: make(chan struct{}),
+		handlers: handlers, src: src, cfg: cfg, fails: eventkit.NewLimitedLog(log), handles: eventkit.NewLimitedLog(log),
+		garbage: eventkit.NewLimitedLog(log), gaps: eventkit.NewLimitedLog(log), log: log, done: make(chan struct{}),
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -85,29 +98,42 @@ func (c *Consumer) Run(ctx context.Context) error {
 	unwatch := context.AfterFunc(c.stopped, cancel)
 	defer unwatch()
 	for c.live(ctx) {
-		if !c.leading(ctx) {
-			c.lag.Store(0)
-			c.pause(ctx, c.lead.tick)
-			continue
-		}
-		ds, err := c.src.Fetch(fetchCtx, c.cfg.FetchBatch, c.cfg.FetchWait)
-		if len(ds) == 0 && err == nil {
-			c.lag.Store(0)
-		}
-		if len(ds) > 0 && !c.leading(ctx) {
-			c.release(ds)
-			continue
-		}
-		c.release(c.handle(ctx, ds))
-		if err != nil && c.live(ctx) {
-			c.fails.Warn(ctx, fetchFailedMsg, "err", err)
-			c.pause(ctx, c.cfg.FetchWait)
-		}
+		c.step(ctx, fetchCtx)
 	}
+	c.forgetFloor()
 	if c.stopped.Err() != nil {
 		return nil
 	}
 	return ctx.Err()
+}
+
+func (c *Consumer) step(ctx, fetchCtx context.Context) {
+	if !c.leading(ctx) {
+		c.forgetFloor()
+		c.lag.Store(0)
+		c.pause(ctx, c.lead.tick)
+		return
+	}
+	if err := c.loadFloor(fetchCtx); err != nil {
+		if c.live(ctx) {
+			c.fails.Warn(ctx, floorFailedMsg, "err", err)
+		}
+		c.pause(ctx, c.cfg.FetchWait)
+		return
+	}
+	ds, err := c.src.Fetch(fetchCtx, c.cfg.FetchBatch, c.cfg.FetchWait)
+	if len(ds) == 0 && err == nil {
+		c.lag.Store(0)
+	}
+	if len(ds) > 0 && !c.leading(ctx) {
+		c.release(ds)
+		return
+	}
+	c.release(c.handle(ctx, ds))
+	if err != nil && c.live(ctx) {
+		c.fails.Warn(ctx, fetchFailedMsg, "err", err)
+		c.pause(ctx, c.cfg.FetchWait)
+	}
 }
 
 func (c *Consumer) Close(ctx context.Context) error {
@@ -123,7 +149,7 @@ func (c *Consumer) Close(ctx context.Context) error {
 	}
 }
 
-func (c *Consumer) Name() string { return c.p.Name() }
+func (c *Consumer) Name() string { return DurableName }
 
 func (c *Consumer) Failures() uint64 { return c.failures.Load() }
 

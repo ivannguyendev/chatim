@@ -35,5 +35,3 @@ func Decode(data []byte) (Event, error) {
 	}
 	return Event{Room: room, At: ev.GetTs().AsTime(), Proto: ev}, nil
 }
-
-func filter(root, data, kind string) string { return root + ".*." + data + ".*." + kind }

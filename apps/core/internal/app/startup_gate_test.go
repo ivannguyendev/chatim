@@ -67,7 +67,7 @@ func startGate(t *testing.T, ctx context.Context, router *gatedRouter, slots run
 		admin:     admin.New(admin.Config{ShutdownTimeout: config.CloseTimeout}, log),
 		grpc:      grpcserver.New(grpcserver.Config{ShutdownTimeout: time.Second}, log),
 		publisher: idle{}, stateClears: idle{}, flusher: idle{}, cidBatch: idle{}, router: router, slots: slots, timers: idle{},
-		projections: drainerGroup{idle{}, idle{}}, sweeper: idle{}, watches: watch,
+		projections: idle{}, sweeper: idle{}, watches: watch,
 	}
 	lis, err := listenAll(t.Context(), "127.0.0.1:0", "127.0.0.1:0")
 	if err != nil {

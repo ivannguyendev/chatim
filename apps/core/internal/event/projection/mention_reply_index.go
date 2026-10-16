@@ -16,8 +16,6 @@ import (
 
 const MentionReplyIndexName = "mention_reply_index"
 
-var messageChangeKinds = [...]string{"msg_created", "msg_edited", "msg_deleted"}
-
 type MentionReplyIndexDeps struct {
 	Replies  ReplyLinks
 	Threads  ReplyThreadWriter
@@ -56,12 +54,13 @@ func (d MentionReplyIndexDeps) complete() bool {
 
 func (x *MentionReplyIndex) Name() string { return MentionReplyIndexName }
 
-func (x *MentionReplyIndex) Subjects(root string) []string {
-	out := make([]string, len(messageChangeKinds))
-	for i, kind := range messageChangeKinds {
-		out[i] = filter(root, "message", kind)
+func (x *MentionReplyIndex) Keeps(ev Event) bool {
+	switch ev.Proto.GetPayload().(type) {
+	case *chatimv1.Event_MessageCreated, *chatimv1.Event_MessageEdited, *chatimv1.Event_MessageDeleted:
+		return true
+	default:
+		return false
 	}
-	return out
 }
 
 func (x *MentionReplyIndex) Handle(ctx context.Context, evs []Event) []error {
