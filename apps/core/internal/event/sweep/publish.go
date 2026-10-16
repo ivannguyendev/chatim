@@ -37,16 +37,32 @@ func (s *Sweeper) publish(ctx context.Context, p *pageRun) {
 		o := p.out[x.out]
 		select {
 		case ack := <-x.future.Ok():
-			if ack != nil && !ack.Duplicate {
-				s.stats.republished[p.coll].Add(1)
-			}
-			p.clears = append(p.clears, clearing{doc: o.doc, target: o.target})
+			s.acked(p, o, ack)
 		case err := <-x.future.Err():
 			s.publishFailed(ctx, p, o.doc, err)
 		case <-acks.Done():
-			s.publishFailed(ctx, p, o.doc, acks.Err())
+			s.settleLate(ctx, p, x, acks.Err())
 		}
 	}
+}
+
+func (s *Sweeper) settleLate(ctx context.Context, p *pageRun, x sent, late error) {
+	o := p.out[x.out]
+	select {
+	case ack := <-x.future.Ok():
+		s.acked(p, o, ack)
+	case err := <-x.future.Err():
+		s.publishFailed(ctx, p, o.doc, err)
+	default:
+		s.publishFailed(ctx, p, o.doc, late)
+	}
+}
+
+func (s *Sweeper) acked(p *pageRun, o outgoing, ack *jetstream.PubAck) {
+	if ack != nil && !ack.Duplicate {
+		s.stats.republished[p.coll].Add(1)
+	}
+	p.clears = append(p.clears, clearing{doc: o.doc, target: o.target})
 }
 
 func (s *Sweeper) publishFailed(ctx context.Context, p *pageRun, i int, err error) {

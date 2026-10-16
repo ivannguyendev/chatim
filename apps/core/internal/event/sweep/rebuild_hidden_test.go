@@ -50,7 +50,7 @@ func (vanishedHidden) Get(context.Context, string, store.MsgKey) (domain.HiddenM
 	return domain.HiddenMessage{}, false, nil
 }
 
-func TestVanishedInteractionAndHideAreDroppedAndCleared(t *testing.T) {
+func TestVanishedInteractionKeepsItsFlagAndVanishedHideIsDropped(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		f := newFullRig(t, func(f *fullRig) sweep.RebuilderStores {
 			s := f.stores(t)
@@ -74,11 +74,12 @@ func TestVanishedInteractionAndHideAreDroppedAndCleared(t *testing.T) {
 		}
 		f.settle()
 		expectPending(t, f.rig, store.StateHidden, 0)
-		if n := len(clearedIn(rec, store.StateInteractions)); n != 2 {
-			t.Fatalf("interaction clears = %d, want 2", n)
+		expectPending(t, f.rig, store.StateInteractions, 2)
+		if n := len(clearedIn(rec, store.StateInteractions)); n != 0 {
+			t.Fatalf("interaction clears = %d, want 0: their versions are unknown", n)
 		}
-		if f.Dropped(store.StateInteractions) != 2 || f.Dropped(store.StateHidden) != 1 {
-			t.Fatalf("dropped interactions %d, hidden %d; want 2 and 1", f.Dropped(store.StateInteractions), f.Dropped(store.StateHidden))
+		if f.Dropped(store.StateInteractions) != 0 || f.Dropped(store.StateHidden) != 1 || f.Failures() < 2 {
+			t.Fatalf("dropped interactions %d, hidden %d, failures %d; want 0, 1 and at least 2", f.Dropped(store.StateInteractions), f.Dropped(store.StateHidden), f.Failures())
 		}
 		f.stop(t)
 	})

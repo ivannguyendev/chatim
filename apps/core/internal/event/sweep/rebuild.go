@@ -26,13 +26,28 @@ func dropWith(target store.StateTarget, err error) error {
 	return &dropError{target: target, err: err}
 }
 
-func dropTarget(doc store.PendingDoc, bit store.StateBit, err error) store.StateTarget {
+var errUnknownVersion = errors.New("the gone document's version is unknown; the flag stays")
+
+func dropTarget(doc store.PendingDoc, bit store.StateBit, err error) (store.StateTarget, bool) {
 	if d, ok := errors.AsType[*dropError](err); ok {
-		return d.target
+		return d.target, true
 	}
 	return store.StateTarget{
 		Collection: doc.Collection, Bit: bit, Room: doc.Room, Thread: doc.Thread, Seq: doc.Seq,
 		User: doc.User, Kind: doc.Kind, Ver: doc.Ver,
+	}, versionInKey(doc.Collection, bit)
+}
+
+func versionInKey(c store.StateCollection, bit store.StateBit) bool {
+	switch c {
+	case store.StateMessages:
+		return bit == store.BitMsgCreated
+	case store.StateRooms:
+		return bit == store.BitRoomCreated
+	case store.StateEdits, store.StatePins, store.StateHidden:
+		return true
+	default:
+		return false
 	}
 }
 

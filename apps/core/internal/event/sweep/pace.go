@@ -12,9 +12,9 @@ type pace struct {
 	last   time.Time
 }
 
-func newPace(perSecond int) *pace {
-	r := float64(perSecond)
-	return &pace{rate: r, burst: r, tokens: r}
+func newPace(perSecond, burst int) *pace {
+	b := float64(min(burst, perSecond))
+	return &pace{rate: float64(perSecond), burst: b, tokens: b}
 }
 
 func (p *pace) take(ctx context.Context, stop <-chan struct{}, n int) error {

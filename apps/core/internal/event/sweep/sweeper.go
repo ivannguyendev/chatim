@@ -44,6 +44,8 @@ type Sweeper struct {
 	fails   *eventkit.LimitedLog
 	drops   *eventkit.LimitedLog
 	stale   *eventkit.LimitedLog
+	odd     *eventkit.LimitedLog
+	foreign map[string]struct{}
 	pace    *pace
 	stats   counters
 	started atomic.Bool
@@ -75,7 +77,8 @@ func New(deps Deps, cfg Config, log *slog.Logger) (*Sweeper, error) {
 	return &Sweeper{
 		deps: deps, cfg: cfg, log: log,
 		fails: eventkit.NewLimitedLog(log), drops: eventkit.NewLimitedLog(log), stale: eventkit.NewLimitedLog(log),
-		pace: newPace(cfg.Rate), stop: make(chan struct{}), done: make(chan struct{}),
+		odd: eventkit.NewLimitedLog(log), foreign: make(map[string]struct{}),
+		pace: newPace(cfg.Rate, cfg.Batch), stop: make(chan struct{}), done: make(chan struct{}),
 	}, nil
 }
 

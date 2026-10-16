@@ -38,7 +38,7 @@ const (
 	staleMsg   = "pending state older than the sweep checkpoint"
 )
 
-var setup = sweep.Config{SubjectRoot: "evt", Interval: interval, MinAge: minAge, Lookback: lookback, Batch: 4, Rate: 1000, Tick: tick, AckTimeout: time.Second}
+var setup = sweep.Config{SubjectRoot: "evt", Interval: interval, MinAge: minAge, Lookback: lookback, Batch: 16, Rate: 1000, Tick: tick, AckTimeout: time.Second}
 
 type owner struct{ leading atomic.Bool }
 

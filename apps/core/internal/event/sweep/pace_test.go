@@ -51,17 +51,24 @@ func TestSweepNeverPublishesFasterThanTheRate(t *testing.T) {
 		if len(ats) != docs+1 {
 			t.Fatalf("published %d events, want %d", len(ats), docs+1)
 		}
-		for i, at := range ats {
-			if allowed := rate + int(at.Sub(start).Seconds()*rate+1e-6); i+1 > allowed {
-				t.Fatalf("event %d published at +%v; at most %d allowed by then", i+1, at.Sub(start), allowed)
-			}
-		}
-		if last := ats[len(ats)-1].Sub(start); last < time.Duration(docs+1-rate)*time.Second/rate-time.Millisecond {
+		expectWithinBucket(t, ats, cfg.Batch, rate)
+		if last := ats[len(ats)-1].Sub(start); last < time.Duration(docs+1-cfg.Batch)*time.Second/rate-time.Millisecond {
 			t.Fatalf("last event at +%v; want the rate to spread the pass", last)
 		}
 		expectPending(t, rg, store.StateMessages, 0)
 		rg.stop(t)
 	})
+}
+
+func expectWithinBucket(t *testing.T, ats []time.Time, burst, rate int) {
+	t.Helper()
+	for i := range ats {
+		for j := i; j < len(ats); j++ {
+			if allowed := burst + int(ats[j].Sub(ats[i]).Seconds()*float64(rate)+1e-6); j-i+1 > allowed {
+				t.Fatalf("events %d..%d published within %v; at most %d allowed", i+1, j+1, ats[j].Sub(ats[i]), allowed)
+			}
+		}
+	}
 }
 
 func TestCloseInterruptsTheRateWait(t *testing.T) {

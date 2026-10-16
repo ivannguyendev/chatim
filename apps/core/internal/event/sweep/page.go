@@ -48,6 +48,7 @@ func (s *Sweeper) page(ctx context.Context, c store.StateCollection, docs []stor
 	p := &pageRun{coll: c, failed: make([]bool, len(docs))}
 	rb := s.deps.Rebuilders[c]
 	for i, d := range docs {
+		s.warnForeign(ctx, d)
 		for _, bit := range setBits(d.State & c.Bits()) {
 			evs, err := rb.Rebuild(ctx, d, bit)
 			s.collect(ctx, p, i, d, bit, evs, err)
@@ -70,7 +71,11 @@ func (s *Sweeper) page(ctx context.Context, c store.StateCollection, docs []stor
 func (s *Sweeper) collect(ctx context.Context, p *pageRun, i int, d store.PendingDoc, bit store.StateBit, evs []*chatimv1.Event, err error) {
 	switch {
 	case eventkit.Gone(err):
-		s.drop(ctx, p, i, dropTarget(d, bit, err), err)
+		if target, known := dropTarget(d, bit, err); known {
+			s.drop(ctx, p, i, target, err)
+		} else {
+			s.fail(ctx, p, i, rebuildFailedMsg, errors.Join(err, errUnknownVersion))
+		}
 	case err != nil:
 		s.fail(ctx, p, i, rebuildFailedMsg, err)
 	case len(evs) == 0:

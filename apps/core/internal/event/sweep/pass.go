@@ -15,6 +15,9 @@ const (
 
 func (s *Sweeper) pass(ctx context.Context, l *lead) error {
 	for _, c := range store.AllStateCollections() {
+		if s.stopping() {
+			return errStopped
+		}
 		if _, ok := s.deps.Rebuilders[c]; !ok {
 			continue
 		}
@@ -92,6 +95,11 @@ func (s *Sweeper) probe(ctx context.Context, l *lead, c store.StateCollection, n
 	docs, _, err := s.deps.States.Pending(ctx, c, time.Time{}, windowStart, store.PendingCursor{}, 1)
 	if err != nil {
 		return err
+	}
+	if len(docs) > 0 && docs[0].State&c.Bits() == 0 {
+		s.warnForeign(ctx, docs[0])
+		l.fresh[c] = false
+		return nil
 	}
 	l.fresh[c] = len(docs) > 0
 	s.stats.raiseOldest(c, now, docs)
