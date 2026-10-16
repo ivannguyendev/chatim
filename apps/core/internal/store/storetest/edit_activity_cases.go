@@ -13,7 +13,9 @@ func editActivityCases() []roomsCase {
 	}
 }
 
-func stampStart() time.Time { return time.Now().Truncate(time.Millisecond) }
+const serverClockSkew = time.Second
+
+func stampStart() time.Time { return time.Now().Add(-serverClockSkew).Truncate(time.Millisecond) }
 
 func assertStamped(t *testing.T, what string, got, since time.Time) {
 	t.Helper()
