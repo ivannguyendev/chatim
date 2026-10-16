@@ -14,6 +14,45 @@ import (
 
 const itActivityPoll = 100 * time.Millisecond
 
+const itSweepMargin = 1500 * time.Millisecond
+
+func (c itCore) sweepBound() time.Duration {
+	return c.cfg.Sweep.MinAge + c.cfg.Sweep.Interval + itSweepMargin
+}
+
+func expectSweptWithin(t *testing.T, c itCore, since time.Time, what string) {
+	t.Helper()
+	took := time.Since(since)
+	if took > c.sweepBound() {
+		t.Fatalf("%s swept after %v, want within SWEEP_MIN_AGE + SWEEP_INTERVAL + %v = %v", what, took, itSweepMargin, c.sweepBound())
+	}
+}
+
+func flagged(t *testing.T, st *mongostore.Store, c store.StateCollection, room, seq uint64) bool {
+	t.Helper()
+	docs, _, err := st.EventStates().Pending(t.Context(), c, time.Unix(0, 0), time.Now().Add(time.Hour), store.PendingCursor{}, store.MaxPendingPage)
+	if err != nil {
+		t.Fatalf("Pending(%s): %v", c, err)
+	}
+	for _, d := range docs {
+		if d.Room == room && d.Seq == seq {
+			return true
+		}
+	}
+	return false
+}
+
+func awaitUnflagged(t *testing.T, st *mongostore.Store, c store.StateCollection, room, seq uint64) {
+	t.Helper()
+	deadline := time.Now().Add(itLiveLimit)
+	for flagged(t, st, c, room, seq) {
+		if time.Now().After(deadline) {
+			t.Fatalf("%s doc %d/%d still flagged after %v, want the flag cleared after the publish", c, room, seq, itLiveLimit)
+		}
+		time.Sleep(itActivityPoll)
+	}
+}
+
 func itStore(it *itInfra, c itCore) *mongostore.Store {
 	return mongostore.New(it.mongo.Database(c.cfg.MongoDB), mongostore.Options{})
 }
@@ -53,7 +92,12 @@ func TestRealInfraSweeperPublishesWritesThatSkippedTheCore(t *testing.T) {
 	if res := st.Insert(t.Context(), []domain.Message{outside}); res[0].Outcome != store.Inserted {
 		t.Fatalf("insert outside the core: %+v", res)
 	}
+	if !flagged(t, st, store.StateMessages, room, 1) {
+		t.Fatalf("message written outside the core is not flagged, want it pending until a publish")
+	}
 	awaitLiveIDs(t, live, inserted, pbconv.MessageEventID(room, 0, 1))
+	expectSweptWithin(t, core, inserted, "msg_created of a message no core published")
+	awaitUnflagged(t, st, store.StateMessages, room, 1)
 	if got := awaitActivity(t, st, room, 1); got.LastMsgAt.IsZero() || got.LastChangeAt.Before(got.LastMsgAt) {
 		t.Fatalf("room activity = %+v, want last message and change times", got)
 	}

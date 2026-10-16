@@ -124,17 +124,23 @@ func TestRealInfraSweeperProjectsAnEditWrittenOutsideTheCore(t *testing.T) {
 		Room: room, Seq: seq, Version: 1, Kind: domain.EditText, Tenant: itTenant, By: itUser,
 		Text: "edited outside the core", At: time.Now().UTC().Truncate(time.Millisecond),
 	}
+	appended := time.Now()
 	if err := st.Append(t.Context(), fact); err != nil {
 		t.Fatalf("append an edit outside the core: %v", err)
 	}
+	if !flagged(t, st, store.StateEdits, room, seq) {
+		t.Fatalf("edit fact appended outside the core is not flagged, want it pending until the sweeper projects it")
+	}
 	ev := awaitLiveEvent(t, live, pbconv.MessageChangeEventID(room, 0, seq, 1))
-	if m := ev.GetMessageEdited().GetMessage(); m.GetText() != fact.Text || m.GetVer() != 1 {
+	expectSweptWithin(t, core, appended, "msg_edited of a fact never projected")
+	if e := ev.GetMessageEdited(); e.GetVer() != 1 || e.GetMessage().GetText() != fact.Text || e.GetMessage().GetVer() != 1 {
 		t.Fatalf("msg_edited from the sweeper = %v, want the projected snapshot at version 1", ev)
 	}
 	got, err := st.Find(t.Context(), room, []store.MsgKey{{Room: room, Seq: seq}})
 	if err != nil || len(got) != 1 || got[0].Text != fact.Text || got[0].Version != 1 || !got[0].EditedAt.Equal(fact.At) {
 		t.Fatalf("projection = %+v, %v; want the outside edit at version 1", got, err)
 	}
+	awaitUnflagged(t, st, store.StateEdits, room, seq)
 }
 
 func TestRealInfraDeletePurgesOlderTextsAndBlocksLaterEdits(t *testing.T) {

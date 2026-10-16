@@ -116,12 +116,14 @@ func (r *roomRun) myRooms(folder chatimv1.RoomFolder, next string, limit uint32)
 func (r *roomRun) settle(what string, check func() (pending, err error)) error {
 	ctx, cancel := context.WithTimeout(r.base, r.wait)
 	defer cancel()
+	began := time.Now()
 	for {
 		pending, err := check()
 		switch {
 		case err != nil:
 			return fmt.Errorf("%s: %w", what, err)
 		case pending == nil:
+			fmt.Fprintf(os.Stderr, "room list settled after %dms: %s\n", time.Since(began).Milliseconds(), what)
 			return nil
 		case !backoff.Pause(ctx, settlePoll):
 			return fmt.Errorf("%s after %v: %w", what, r.wait, pending)
