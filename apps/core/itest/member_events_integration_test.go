@@ -56,7 +56,7 @@ func awaitExactlyOnce(t *testing.T, live <-chan *nats.Msg, cfg config.Config, ro
 
 func TestRealInfraEachChangeGoesToTheSubjectOfItsData(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastEffects)
+	core := startCore(t, it, itFastSweep)
 	client := dialCore(t, core.cfg)
 	live := subscribeLive(t, it, core.cfg, "*")
 	roomID := createRoom(t, client)
@@ -84,7 +84,7 @@ func TestRealInfraEachChangeGoesToTheSubjectOfItsData(t *testing.T) {
 
 func TestRealInfraMemberCountFollowsEachCommand(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastEffects)
+	core := startCore(t, it, itFastSweep)
 	client := dialCore(t, core.cfg)
 	roomID := createRoom(t, client)
 	room := parseRoom(t, roomID)
@@ -113,7 +113,7 @@ func TestRealInfraMemberCountFollowsEachCommand(t *testing.T) {
 
 func TestRealInfraHidingAMessageAgainPublishesNoEvent(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastEffects)
+	core := startCore(t, it, itFastSweep)
 	client := dialCore(t, core.cfg)
 	roomID := createRoom(t, client)
 	room := parseRoom(t, roomID)
@@ -141,16 +141,16 @@ func TestRealInfraHidingAMessageAgainPublishesNoEvent(t *testing.T) {
 			if m.Header.Get(jetstream.MsgIDHeader) != id {
 				t.Fatalf("raw publish %s, want only %s", m.Header.Get(jetstream.MsgIDHeader), id)
 			}
-			if publishes++; publishes == 2 {
-				quiet = time.After(core.cfg.EffectDelay + time.Second)
+			if publishes++; publishes == 1 {
+				quiet = time.After(core.cfg.Sweep.MinAge + core.cfg.Sweep.Interval + time.Second)
 			}
 		case <-quiet:
-			if publishes != 2 {
-				t.Fatalf("message_hidden published %d times, want the fast path and the worker only", publishes)
+			if publishes != 1 {
+				t.Fatalf("message_hidden published %d times, want the fast path only", publishes)
 			}
 			return
 		case <-deadline:
-			t.Fatalf("message_hidden published %d times within %v, want 2", publishes, itLiveLimit)
+			t.Fatalf("message_hidden published %d times within %v, want 1", publishes, itLiveLimit)
 		}
 	}
 }

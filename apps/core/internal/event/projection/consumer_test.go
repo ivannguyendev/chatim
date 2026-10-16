@@ -47,8 +47,8 @@ func TestConsumerTouchesABatchOfThreeRoomsInOneWriteAndAcksIt(t *testing.T) {
 		time.Sleep(time.Minute)
 		ds := []*fakeDelivery{
 			delivery(t, msgCreated(roomA, 0, 1, time.Now().Add(-3*time.Second)), 1),
-			delivery(t, reactionChanged(roomB, 1, time.Now().Add(-time.Second)), 4),
-			delivery(t, msgEdited(roomC, 0, 1, time.Now()), 2),
+			delivery(t, reactionChanged(roomB, 1, time.Now().Add(-time.Second)), projection.StuckDeliveries),
+			delivery(t, msgEdited(roomC, 0, 1, time.Now()), projection.StuckDeliveries+1),
 		}
 		rg.src.push(ds...)
 		synctest.Wait()
@@ -60,13 +60,13 @@ func TestConsumerTouchesABatchOfThreeRoomsInOneWriteAndAcksIt(t *testing.T) {
 				t.Errorf("delivery %d: acks %d terms %d naks %v; want one ack", i, acks, terms, naks)
 			}
 		}
-		if rg.c.Lag() != 3*time.Second || rg.c.RedeliveredMax() != 4 {
-			t.Errorf("lag %v redelivered max %d; want 3s from the oldest event and 4", rg.c.Lag(), rg.c.RedeliveredMax())
+		if rg.c.Lag() != 3*time.Second || rg.c.Stuck() != 2 {
+			t.Errorf("lag %v stuck %d; want 3s from the oldest event and the two deliveries at the stuck count", rg.c.Lag(), rg.c.Stuck())
 		}
 		time.Sleep(time.Second)
 		synctest.Wait()
-		if rg.c.Lag() != 0 || rg.c.RedeliveredMax() != 4 {
-			t.Errorf("after an idle fetch lag %v redelivered max %d; want lag 0 and the last batch's max kept", rg.c.Lag(), rg.c.RedeliveredMax())
+		if rg.c.Lag() != 0 || rg.c.Stuck() != 2 {
+			t.Errorf("after an idle fetch lag %v stuck %d; want lag 0 and the stuck count kept", rg.c.Lag(), rg.c.Stuck())
 		}
 		rg.stop(t)
 	})

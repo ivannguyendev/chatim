@@ -57,7 +57,6 @@ x-core-env: &core-env
   NATS_URL: nats://chatim-nats:4222
   GOMEMLIMIT: 920MiB
   GOGC: ${CORE_GOGC:-100}
-  RECONCILE_ENABLED: ${RECONCILE_ENABLED:-true}
 
 services:
   mongodb:

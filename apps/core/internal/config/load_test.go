@@ -8,10 +8,10 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/effects"
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventmark"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/projection"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/reconcile"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/stateclear"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/sweep"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
@@ -57,15 +57,12 @@ func TestLoadDefaults(t *testing.T) {
 			CoreID: host, Addr: host + ":9000", Tick: time.Second, HeartbeatTTL: 5 * time.Second,
 			LeaseTTL: 10 * time.Second, HookTimeout: 500 * time.Millisecond,
 		},
-		ReconcileEnabled: true,
-		Reconcile: reconcile.Config{
-			SubjectRoot: "work", Partitions: 32, Window: 1024, Batch: 256,
-			ConfirmEvery: time.Second, Drain: time.Second, Poll: time.Second,
+		StateClear: stateclear.Config{Flush: 100 * time.Millisecond, Batch: 500, Queue: 65536},
+		Sweep: sweep.Config{
+			SubjectRoot: "evt", Interval: 2 * time.Second, MinAge: 5 * time.Second, Lookback: 30 * time.Second,
+			Batch: 500, Rate: 5000, Tick: time.Second, AckTimeout: 2 * time.Second,
 		},
-		EffectDelay:            5 * time.Second,
-		EffectRoomCache:        65536,
-		Effects:                effects.Config{Partitions: 32, FetchBatch: 256, FetchWait: time.Second, RetryDelay: 5 * time.Second, Drain: time.Second, Poll: time.Second},
-		AckMarks:               eventmark.Config{TTL: time.Hour, Timeout: 100 * time.Millisecond, Cooldown: time.Second},
+		Projection:             projection.Config{Stream: "CHATIM_EVT", SubjectRoot: "evt", FetchBatch: 256, FetchWait: 500 * time.Millisecond},
 		Limits:                 mutate.Limits{Emojis: mutate.DefaultEmojis, PinLimit: 50, MemberBatch: 500, MentionTargets: 50},
 		MemberCountCheckDelay:  5 * time.Second,
 		MessageCountCheckDelay: 5 * time.Second,
@@ -101,21 +98,18 @@ func TestLoadOverrides(t *testing.T) {
 			SubjectRoot: "evt_it", Shards: 2, QueueSize: 512, MaxPending: 128, AckTimeout: time.Second,
 		},
 		Stream: publish.StreamConfig{Name: "CHATIM_EVT_IT", SubjectRoot: "evt_it", LiveRoot: "live_it", Replicas: 3, MaxAge: 2 * day, Duplicates: 5 * time.Minute},
-		Work:   work.StreamConfig{Name: "CHATIM_WORK_IT", SubjectRoot: "work_it", Partitions: 16, Replicas: 3, MaxAge: time.Hour, Duplicates: 3 * time.Minute, AckWait: 50 * time.Second},
+		Work:   work.StreamConfig{Name: "CHATIM_WORK_IT", SubjectRoot: "work_it", Partitions: 16, Replicas: 3, MaxAge: time.Hour, Duplicates: 3 * time.Minute, AckWait: 35 * time.Second},
 		Timer:  timer.StreamConfig{Name: "CHATIM_TIMER_IT", SubjectRoot: "timer_it", Replicas: 3, MaxAge: 2 * time.Hour, Duplicates: 2 * time.Minute, AckWait: 30 * time.Second},
 		Slot: slot.Config{
 			CoreID: "core-a", Addr: "10.0.0.5:7000", Tick: 500 * time.Millisecond, HeartbeatTTL: 3 * time.Second,
 			LeaseTTL: 6 * time.Second, HookTimeout: 200 * time.Millisecond,
 		},
-		ReconcileEnabled: false,
-		Reconcile: reconcile.Config{
-			SubjectRoot: "work_it", Partitions: 16, Window: 64, Batch: 32,
-			ConfirmEvery: 2 * time.Second, Drain: 500 * time.Millisecond, Poll: 500 * time.Millisecond,
+		StateClear: stateclear.Config{Flush: 50 * time.Millisecond, Batch: 200, Queue: 4096},
+		Sweep: sweep.Config{
+			SubjectRoot: "evt_it", Interval: 3 * time.Second, MinAge: 4 * time.Second, Lookback: 20 * time.Second,
+			Batch: 250, Rate: 2000, Tick: 500 * time.Millisecond, AckTimeout: time.Second,
 		},
-		EffectDelay:            20 * time.Second,
-		EffectRoomCache:        128,
-		Effects:                effects.Config{Partitions: 16, FetchBatch: 64, FetchWait: 500 * time.Millisecond, RetryDelay: 2 * time.Second, Drain: 500 * time.Millisecond, Poll: 500 * time.Millisecond},
-		AckMarks:               eventmark.Config{TTL: 30 * time.Minute, Timeout: 50 * time.Millisecond, Cooldown: 2 * time.Second},
+		Projection:             projection.Config{Stream: "CHATIM_EVT_IT", SubjectRoot: "evt_it", FetchBatch: 128, FetchWait: 250 * time.Millisecond},
 		LockedMessageKinds:     []domain.Kind{domain.KindText},
 		MentionHideReadTenants: []string{"acme", "globex"},
 		Limits:                 mutate.Limits{Emojis: []string{"🎉", "👍"}, PinLimit: 10, MemberBatch: 20, MentionTargets: 20},

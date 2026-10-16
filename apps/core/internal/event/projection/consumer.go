@@ -12,6 +12,8 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
+const StuckDeliveries uint64 = 6
+
 const (
 	fetchFailedMsg  = "projection fetch failed; retrying"
 	handleFailedMsg = "projection failed an event; it comes back later"
@@ -28,20 +30,20 @@ type Projection interface {
 }
 
 type Consumer struct {
-	p           Projection
-	src         eventkit.Source
-	cfg         Config
-	fails       *eventkit.LimitedLog
-	handles     *eventkit.LimitedLog
-	garbage     *eventkit.LimitedLog
-	failures    atomic.Uint64
-	dropped     atomic.Uint64
-	lag         atomic.Int64
-	redelivered atomic.Uint64
-	started     atomic.Bool
-	stopped     context.Context
-	halt        context.CancelFunc
-	done        chan struct{}
+	p        Projection
+	src      eventkit.Source
+	cfg      Config
+	fails    *eventkit.LimitedLog
+	handles  *eventkit.LimitedLog
+	garbage  *eventkit.LimitedLog
+	failures atomic.Uint64
+	dropped  atomic.Uint64
+	lag      atomic.Int64
+	stuck    atomic.Uint64
+	started  atomic.Bool
+	stopped  context.Context
+	halt     context.CancelFunc
+	done     chan struct{}
 }
 
 func NewConsumer(p Projection, src eventkit.Source, cfg Config, log *slog.Logger) (*Consumer, error) {
@@ -111,7 +113,7 @@ func (c *Consumer) Dropped() uint64 { return c.dropped.Load() }
 
 func (c *Consumer) Lag() time.Duration { return time.Duration(c.lag.Load()) }
 
-func (c *Consumer) RedeliveredMax() uint64 { return c.redelivered.Load() }
+func (c *Consumer) Stuck() uint64 { return c.stuck.Load() }
 
 func (c *Consumer) live(ctx context.Context) bool { return c.stopped.Err() == nil && ctx.Err() == nil }
 

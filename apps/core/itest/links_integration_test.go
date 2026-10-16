@@ -67,7 +67,7 @@ func awaitReplyCount(t *testing.T, live <-chan *nats.Msg, room, parent, ver uint
 
 func TestRealInfraRepliesAreCountedListedAndKeepTheParent(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastEffects)
+	core := startCore(t, it, itFastSweep)
 	client := dialCore(t, core.cfg)
 	roomID := createRoomWith(t, client, []string{itUser, "bob"})
 	room := parseRoom(t, roomID)
@@ -109,7 +109,7 @@ func TestRealInfraRepliesAreCountedListedAndKeepTheParent(t *testing.T) {
 
 func TestRealInfraMentionsForwardsAndBookmarksReachTheirLists(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastEffects)
+	core := startCore(t, it, itFastSweep)
 	client := dialCore(t, core.cfg)
 	roomID, otherID := createRoomWith(t, client, []string{itUser, "bob"}), createRoomWith(t, client, []string{itUser, "bob"})
 	room := parseRoom(t, roomID)

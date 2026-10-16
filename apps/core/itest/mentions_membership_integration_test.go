@@ -9,7 +9,7 @@ import (
 
 func TestRealInfraSharedMentionsNeedMembershipAtSendTime(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastEffects)
+	core := startCore(t, it, itFastSweep)
 	client := dialCore(t, core.cfg)
 	roomID := createRoomWith(t, client, []string{itUser})
 	shared := &chatimv1.MentionSet{Targets: []*chatimv1.MentionTarget{{Kind: chatimv1.MentionKind_MENTION_KIND_GROUP, Id: "design"}}, All: true}

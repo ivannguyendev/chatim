@@ -1,44 +1,6 @@
 groups:
   - name: chatim-core-guarantees
     rules:
-      - alert: ChatimReconcilerAbsent
-        expr: sum(chatim_core_reconcile_running) == 0
-        for: 2m
-        labels:
-          severity: critical
-          guarantee: RC1
-        annotations:
-          summary: No core runs the change reader; committed changes do not reach the work stream.
-      - alert: ChatimReconcilerLagging
-        expr: max(chatim_core_reconcile_lag_seconds) > 120
-        for: 5m
-        labels:
-          severity: warning
-          guarantee: RC1
-        annotations:
-          summary: Effect workers run more than two minutes behind their effect delay.
-      - alert: ChatimReconcilerDropping
-        expr: sum(increase(chatim_core_reconcile_dropped_total[15m])) > 0
-        labels:
-          severity: warning
-          guarantee: RC1
-        annotations:
-          summary: The change reader found corrupt changes it could not turn into work records.
-      - alert: ChatimReconcilePublishFailing
-        expr: sum(rate(chatim_core_reconcile_publish_failures_total[5m])) > 0
-        for: 5m
-        labels:
-          severity: warning
-          guarantee: RC1
-        annotations:
-          summary: The change reader keeps ending terms because the work stream refuses records; effects run late until it accepts them again.
-      - alert: ChatimFeedHistoryLost
-        expr: sum(increase(chatim_core_reconcile_history_lost_total[15m])) > 0
-        labels:
-          severity: critical
-          guarantee: RC5
-        annotations:
-          summary: The change feed position fell out of the oplog; events in the gap are lost until a manual resync.
       - alert: ChatimOplogWindowShort
         expr: min(chatim_core_mongo_oplog_window_seconds) < 172800
         for: 15m
@@ -63,14 +25,6 @@ groups:
           guarantee: RC5
         annotations:
           summary: A core cannot read the oplog window; the RC5 detector is blind.
-      - alert: ChatimRepublishSurge
-        expr: sum(rate(chatim_core_reconcile_republished_total[5m])) > 100
-        for: 10m
-        labels:
-          severity: warning
-          guarantee: RC4
-        annotations:
-          summary: Effect workers send more than 100 events per second that had no ack mark.
       - alert: ChatimEventsDropped
         expr: sum(rate(chatim_core_publish_dropped_total[5m])) > 0
         for: 10m
@@ -78,7 +32,7 @@ groups:
           severity: warning
           guarantee: RC1
         annotations:
-          summary: The fast path keeps dropping events; delivery waits for the effect workers.
+          summary: The fast path keeps dropping events; delivery waits for the sweeper.
       - alert: ChatimRedisDegraded
         expr: max by (client) (chatim_core_redis_degraded) == 1
         for: 1m
@@ -108,21 +62,6 @@ groups:
           guarantee: P1
         annotations:
           summary: Actors keep yielding rooms after seq contention; check slot ownership.
-      - alert: ChatimWorkFailing
-        expr: sum(rate(chatim_core_work_failures_total[5m])) > 0
-        for: 10m
-        labels:
-          severity: warning
-          guarantee: RC1
-        annotations:
-          summary: Effect workers keep failing work records; events and room activity wait for retries.
-      - alert: ChatimEffectDropping
-        expr: sum by (effect) (increase(chatim_core_effect_dropped_total[15m])) > 0
-        labels:
-          severity: warning
-          guarantee: RC1
-        annotations:
-          summary: An effect gave up on work records whose document could not be read.
       - alert: ChatimCounterRepairSurge
         expr: sum by (counter) (rate(chatim_core_counter_repaired_total[5m])) > 1
         for: 10m
@@ -130,4 +69,43 @@ groups:
           severity: warning
           guarantee: CT1
         annotations:
-          summary: Effect workers keep rewriting counter summaries the fast path left stale; check fast path touch failures and hot targets.
+          summary: Survival timer repairs keep rewriting counter summaries the fast path left stale; check fast path count failures and hot targets.
+      - alert: ChatimEventPendingStuck
+        expr: max(chatim_core_event_pending_oldest_seconds) > 60
+        for: 5m
+        labels:
+          severity: warning
+          guarantee: RC1
+        annotations:
+          summary: A pending event flag has waited more than 60s; the sweeper cannot republish it (check NATS and the sweeper logs).
+      - alert: ChatimProjectionLagging
+        expr: max by (projection) (chatim_core_projection_lag_seconds) > 10
+        for: 5m
+        labels:
+          severity: warning
+          guarantee: RC1
+        annotations:
+          summary: A projection runs more than 10s behind its events; room activity, reply and mention indexes are stale.
+      - alert: ChatimProjectionFailing
+        expr: sum by (projection) (increase(chatim_core_projection_stuck_total[15m])) > 0
+        labels:
+          severity: warning
+          guarantee: RC1
+        annotations:
+          summary: A projection keeps failing an event that has been delivered six times or more.
+      - alert: ChatimSweeperIdle
+        expr: sum(increase(chatim_core_sweep_passes_total[1m])) == 0
+        for: 1m
+        labels:
+          severity: critical
+          guarantee: RC1
+        annotations:
+          summary: No core finished a sweeper pass for a minute; events lost before their ack are not republished.
+      - alert: ChatimTimerFailing
+        expr: sum(increase(chatim_core_timer_failures_total[15m])) > 0
+        for: 15m
+        labels:
+          severity: warning
+          guarantee: CT1
+        annotations:
+          summary: Fired count check timers keep failing their repair; member and message counts may stay stale.

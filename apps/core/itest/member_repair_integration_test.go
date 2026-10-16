@@ -7,8 +7,6 @@ import (
 	"maps"
 	"testing"
 
-	"github.com/nats-io/nats.go"
-
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/pinproj"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
@@ -63,7 +61,7 @@ func mutatorWithoutEvents(t *testing.T, it *itInfra, core itCore, members mutate
 
 func TestRealInfraACountMissedByACrashIsRepairedByItsTimer(t *testing.T) {
 	it := realInfra(t)
-	env := maps.Clone(itFastEffects)
+	env := maps.Clone(itFastSweep)
 	env["CORE_REQUEST_DEADLINE"], env["MEMBER_COUNT_CHECK_DELAY"] = "2s", "2500ms"
 	core := startCore(t, it, env)
 	client := dialCore(t, core.cfg)
@@ -99,7 +97,7 @@ func TestRealInfraACountMissedByACrashIsRepairedByItsTimer(t *testing.T) {
 
 func TestRealInfraLostMemberAndReadEventsAreRepublished(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastEffects)
+	core := startCore(t, it, itFastSweep)
 	client := dialCore(t, core.cfg)
 	roomID := createRoom(t, client)
 	room := parseRoom(t, roomID)
@@ -125,45 +123,5 @@ func TestRealInfraLostMemberAndReadEventsAreRepublished(t *testing.T) {
 	}
 	if r := evs[ids[2]].GetReadUpdated(); r.GetUser() != "erin" || r.GetReadSeq() != seq || r.GetReadVer() != pos.Ver {
 		t.Fatalf("republished read_updated = %v, want erin at seq %d ver %d", r, seq, pos.Ver)
-	}
-}
-
-func TestRealInfraReaderStateChangesEnterTheWorkStream(t *testing.T) {
-	it := realInfra(t)
-	core := startCore(t, it, itFastEffects)
-	records := make(chan *nats.Msg, 256)
-	sub, err := it.nc.ChanSubscribe(core.cfg.Work.SubjectRoot+".>", records)
-	if err != nil {
-		t.Fatalf("subscribe work subjects: %v", err)
-	}
-	t.Cleanup(func() { _ = sub.Unsubscribe() })
-	client := dialCore(t, core.cfg)
-	roomID := createRoom(t, client)
-	room := parseRoom(t, roomID)
-	first := sendAs(t, client, itUser, roomID, "work-1", "one")
-	addMembersAs(t, client, itUser, roomID, "work-dave", "dave")
-	second := sendAs(t, client, itUser, roomID, "work-2", "two")
-	dave := callerAs(t.Context(), "dave")
-	read, err := client.MarkRead(dave, &chatimv1.MarkReadRequest{RoomId: roomID, Seq: second})
-	if err != nil {
-		t.Fatalf("MarkRead: %v", err)
-	}
-	if _, err := client.ClearHistory(dave, &chatimv1.ClearHistoryRequest{RoomId: roomID}); err != nil {
-		t.Fatalf("ClearHistory: %v", err)
-	}
-	if _, err := client.HideMessage(dave, &chatimv1.HideMessageRequest{RoomId: roomID, Seq: first}); err != nil {
-		t.Fatalf("HideMessage: %v", err)
-	}
-
-	want := map[string]bool{"r:" + roomID: true, "m:" + pbconv.MessageEventID(room, 0, first): true, "m:" + pbconv.MessageEventID(room, 0, second): true}
-	for _, user := range []string{itUser, "bob", "dave"} {
-		want["g:"+pbconv.MemberEventID(room, user, 1)] = true
-	}
-	want["d:"+pbconv.ReadEventID(room, "dave", read.GetReadVer())] = true
-	want["h:"+pbconv.HiddenEventID(room, "dave", 0, first)] = true
-	cleared := "c:" + roomID + "-cl-dave-"
-	assertRoomRecords(t, records, roomID, want, cleared)
-	if doc := storedMembers(t, itStore(it, core), room, "dave")["dave"]; doc.Ver != 1 {
-		t.Fatalf("dave = %+v, want ver 1 after read, clear and hide", doc)
 	}
 }

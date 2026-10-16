@@ -43,8 +43,8 @@ func assertPreview(t *testing.T, item *chatimv1.RoomItem, seq uint64, text strin
 
 func TestRealInfraRoomListCachesOnOneCoreFollowWritesMadeOnTheOther(t *testing.T) {
 	it := realInfra(t)
-	core1 := startCore(t, it, itFastEffects)
-	env := maps.Clone(itFastEffects)
+	core1 := startCore(t, it, itFastSweep)
+	env := maps.Clone(itFastSweep)
 	env["CORE_ID"] = "it-core-2-" + it.suffix
 	core2 := startCore(t, it, env)
 	awaitSlotsSplit(t, it, core1.cfg.CoreID, core2.cfg.CoreID)

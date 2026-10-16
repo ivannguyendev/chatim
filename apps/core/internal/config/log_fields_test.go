@@ -103,7 +103,7 @@ func TestSecretLookingFieldsAreRedacted(t *testing.T) {
 func TestSnakeCaseKeepsAcronymsTogether(t *testing.T) {
 	for name, want := range map[string]string{
 		"CoreID": "core_id", "GRPCAddr": "grpc_addr", "CIDBatch": "cid_batch", "MongoDB": "mongo_db",
-		"HeartbeatTTL": "heartbeat_ttl", "TTL": "ttl", "MaxKeys": "max_keys", "ReconcileEnabled": "reconcile_enabled",
+		"HeartbeatTTL": "heartbeat_ttl", "TTL": "ttl", "MaxKeys": "max_keys", "StateClear": "state_clear",
 	} {
 		if got := config.SnakeCase(name); got != want {
 			t.Errorf("SnakeCase(%q) = %q, want %q", name, got, want)

@@ -76,14 +76,6 @@ func (p *parser) span(key string, def time.Duration) time.Duration {
 	return v
 }
 
-func (p *parser) flag(key string, def bool) bool {
-	v, err := envconfig.Bool(key, def)
-	if err != nil {
-		p.fail(err)
-	}
-	return v
-}
-
 func (p *parser) list(key string) []string {
 	var items []string
 	for item := range strings.SplitSeq(os.Getenv(key), ",") {

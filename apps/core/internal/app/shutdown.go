@@ -30,18 +30,15 @@ func (a *node) shutdown(ctx context.Context, sup *supervisor, t tasks, cause err
 	}
 	s := &stopper{ctx: stopCtx, log: a.log}
 	s.step("grpc", 0, nil, t.grpc)
-	var closeReconciler func(context.Context) error
-	if a.reconciler != nil {
-		closeReconciler = a.reconciler.Close
-	}
-	s.step("reconciler", plan.Reconciler, closeReconciler, t.reconciler)
-	s.step("workers", plan.Workers, a.workers.Close, t.workers)
+	s.step("sweeper", plan.Sweeper, a.sweeper.Close, t.sweeper)
+	s.step("projections", plan.Projections, a.projections.Close, t.projections)
 	s.step("timer consumer", plan.Timer, a.timers.Close, t.timers)
 	a.watches.Stop()
 	s.step("router", plan.Router, a.router.Close, t.router)
 	s.step("cid batcher", plan.CIDBatch, a.cidBatch.Close, t.cidBatch)
 	s.step("flusher", plan.Flusher, a.flusher.Close, t.flusher)
 	s.step("publisher", plan.Publisher, a.publisher.Close, t.publisher)
+	s.step("state clear queue", plan.StateClear, a.stateClears.Close, t.stateClears)
 	s.step("slot manager", 0, nil, t.slots)
 	s.step("admin", 0, nil, t.admin)
 	a.log.InfoContext(stopCtx, "core stopped", "failed_steps", s.failed)

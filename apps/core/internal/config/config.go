@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/effects"
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventmark"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/projection"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/reconcile"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/stateclear"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/sweep"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
@@ -61,12 +61,9 @@ type Config struct {
 	Work                   work.StreamConfig
 	Timer                  timer.StreamConfig
 	Slot                   slot.Config
-	ReconcileEnabled       bool
-	Reconcile              reconcile.Config
-	EffectDelay            time.Duration
-	EffectRoomCache        int
-	Effects                effects.Config
-	AckMarks               eventmark.Config
+	StateClear             stateclear.Config
+	Sweep                  sweep.Config
+	Projection             projection.Config
 	LockedMessageKinds     []domain.Kind
 	MentionHideReadTenants []string
 	Limits                 mutate.Limits
@@ -82,17 +79,18 @@ type RoomListConfig struct {
 }
 
 type StopPlan struct {
-	DrainDelay time.Duration
-	GRPC       time.Duration
-	Reconciler time.Duration
-	Workers    time.Duration
-	Timer      time.Duration
-	Router     time.Duration
-	CIDBatch   time.Duration
-	Flusher    time.Duration
-	Publisher  time.Duration
-	Slots      time.Duration
-	Close      time.Duration
+	DrainDelay  time.Duration
+	GRPC        time.Duration
+	Sweeper     time.Duration
+	Projections time.Duration
+	Timer       time.Duration
+	Router      time.Duration
+	CIDBatch    time.Duration
+	Flusher     time.Duration
+	Publisher   time.Duration
+	StateClear  time.Duration
+	Slots       time.Duration
+	Close       time.Duration
 }
 
 func AdminAddr() string { return envconfig.String("CORE_ADMIN_ADDR", defaultAdminAddr) }
@@ -146,23 +144,26 @@ func Load() (Config, error) {
 
 func (c Config) StopPlan() StopPlan {
 	return StopPlan{
-		DrainDelay: c.DrainDelay,
-		GRPC:       c.GRPCShutdown,
-		Reconciler: c.Reconcile.Drain + CloseTimeout,
-		Workers:    c.Effects.Drain + CloseTimeout,
-		Timer:      CloseTimeout,
-		Router:     c.RequestDeadline,
-		CIDBatch:   2 * c.Dedupe.Timeout,
-		Flusher:    c.Flush.InsertTimeout,
-		Publisher:  c.PublisherDrain,
-		Slots:      slot.ReleaseTimeout,
-		Close:      CloseTimeout,
+		DrainDelay:  c.DrainDelay,
+		GRPC:        c.GRPCShutdown,
+		Sweeper:     CloseTimeout,
+		Projections: CloseTimeout,
+		Timer:       CloseTimeout,
+		Router:      c.RequestDeadline,
+		CIDBatch:    2 * c.Dedupe.Timeout,
+		Flusher:     c.Flush.InsertTimeout,
+		Publisher:   c.PublisherDrain,
+		StateClear:  stateclear.DrainTimeout,
+		Slots:       slot.ReleaseTimeout,
+		Close:       CloseTimeout,
 	}
 }
 
 func (s StopPlan) total() time.Duration {
 	var sum time.Duration
-	for _, d := range []time.Duration{s.DrainDelay, s.GRPC, s.Reconciler, s.Workers, s.Timer, s.Router, s.CIDBatch, s.Flusher, s.Publisher, s.Slots, s.Close} {
+	for _, d := range []time.Duration{
+		s.DrainDelay, s.GRPC, s.Sweeper, s.Projections, s.Timer, s.Router, s.CIDBatch, s.Flusher, s.Publisher, s.StateClear, s.Slots, s.Close,
+	} {
 		if d > math.MaxInt64-sum {
 			return math.MaxInt64
 		}

@@ -18,8 +18,9 @@ import (
 )
 
 const (
-	slotRedisPool   = 4
-	dedupeSideConns = 4
+	slotRedisPool     = 4
+	dedupeSideConns   = 4
+	sweepPendingPages = 2
 )
 
 type redisPool struct {
@@ -33,8 +34,7 @@ type clients struct {
 	dedupe      *redis.Client
 	nats        *nats.Conn
 	js          jetstream.JetStream
-	reconcileJS jetstream.JetStream
-	effectsJS   jetstream.JetStream
+	sweepJS     jetstream.JetStream
 	pubCounters *publish.Counters
 }
 
@@ -128,19 +128,14 @@ func (c *clients) connectNATS(cfg config.Config, log *slog.Logger) error {
 		return fmt.Errorf("jetstream: %w", config.RedactError(err, cfg.NATSURL))
 	}
 	c.js = js
-	rjs, err := jetstream.New(nc, cfg.Reconcile.JetStreamOptions(cfg.Publish.AckTimeout)...)
-	if err != nil {
-		return fmt.Errorf("reconcile jetstream: %w", config.RedactError(err, cfg.NATSURL))
-	}
-	c.reconcileJS = rjs
-	ejs, err := jetstream.New(nc,
-		jetstream.WithPublishAsyncMaxPending(cfg.Effects.Partitions*cfg.Effects.FetchBatch),
+	sjs, err := jetstream.New(nc,
+		jetstream.WithPublishAsyncMaxPending(sweepPendingPages*cfg.Sweep.Batch),
 		jetstream.WithPublishAsyncTimeout(cfg.Publish.AckTimeout),
 	)
 	if err != nil {
-		return fmt.Errorf("effects jetstream: %w", config.RedactError(err, cfg.NATSURL))
+		return fmt.Errorf("sweeper jetstream: %w", config.RedactError(err, cfg.NATSURL))
 	}
-	c.effectsJS = ejs
+	c.sweepJS = sjs
 	return nil
 }
 

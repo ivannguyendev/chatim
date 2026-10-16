@@ -77,7 +77,7 @@ func awaitLiveEvent(t *testing.T, live <-chan *nats.Msg, id string) *chatimv1.Ev
 
 func TestRealInfraEditShowsInHistoryEditHistoryAndLive(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastEffects)
+	core := startCore(t, it, itFastSweep)
 	client := dialCore(t, core.cfg)
 	roomID := createRoom(t, client)
 	room := parseRoom(t, roomID)
@@ -109,15 +109,15 @@ func TestRealInfraEditShowsInHistoryEditHistoryAndLive(t *testing.T) {
 	}
 }
 
-func TestRealInfraWorkersProjectAnEditWrittenOutsideTheCore(t *testing.T) {
+func TestRealInfraSweeperProjectsAnEditWrittenOutsideTheCore(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastEffects)
+	core := startCore(t, it, itFastSweep)
 	client := dialCore(t, core.cfg)
 	roomID := createRoom(t, client)
 	room := parseRoom(t, roomID)
 	live := subscribeLive(t, it, core.cfg, roomID)
 	seq := sendAs(t, client, itUser, roomID, "edit-b", "original")
-	core.awaitTerm(t)
+	core.awaitSweeper(t)
 
 	st := itStore(it, core)
 	fact := domain.Edit{
@@ -129,7 +129,7 @@ func TestRealInfraWorkersProjectAnEditWrittenOutsideTheCore(t *testing.T) {
 	}
 	ev := awaitLiveEvent(t, live, pbconv.MessageChangeEventID(room, 0, seq, 1))
 	if m := ev.GetMessageEdited().GetMessage(); m.GetText() != fact.Text || m.GetVer() != 1 {
-		t.Fatalf("msg_edited from the workers = %v, want the projected snapshot at version 1", ev)
+		t.Fatalf("msg_edited from the sweeper = %v, want the projected snapshot at version 1", ev)
 	}
 	got, err := st.Find(t.Context(), room, []store.MsgKey{{Room: room, Seq: seq}})
 	if err != nil || len(got) != 1 || got[0].Text != fact.Text || got[0].Version != 1 || !got[0].EditedAt.Equal(fact.At) {
@@ -139,7 +139,7 @@ func TestRealInfraWorkersProjectAnEditWrittenOutsideTheCore(t *testing.T) {
 
 func TestRealInfraDeletePurgesOlderTextsAndBlocksLaterEdits(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastEffects)
+	core := startCore(t, it, itFastSweep)
 	client := dialCore(t, core.cfg)
 	roomID := createRoom(t, client)
 	room := parseRoom(t, roomID)

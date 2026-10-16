@@ -15,7 +15,7 @@ import (
 
 func TestRealInfraRecountRestoresADriftedCount(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastEffects)
+	core := startCore(t, it, itFastSweep)
 	roomID := createRoom(t, dialCore(t, core.cfg))
 	room := parseRoom(t, roomID)
 	db := it.mongo.Database(core.cfg.MongoDB)

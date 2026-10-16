@@ -36,7 +36,7 @@ func assertDeniedEverywhere(t *testing.T, client chatimv1.CoreServiceClient, use
 
 func TestRealInfraRemovedMemberIsDeniedAtOnceThroughTheActorCache(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastEffects)
+	core := startCore(t, it, itFastSweep)
 	client := dialCore(t, core.cfg)
 	roomID := createRoom(t, client)
 	cached := time.Now()
@@ -51,8 +51,8 @@ func TestRealInfraRemovedMemberIsDeniedAtOnceThroughTheActorCache(t *testing.T) 
 
 func TestRealInfraARemovalOnAnotherCoreReachesTheActorThroughTheMemberEvent(t *testing.T) {
 	it := realInfra(t)
-	core1 := startCore(t, it, itFastEffects)
-	env := maps.Clone(itFastEffects)
+	core1 := startCore(t, it, itFastSweep)
+	env := maps.Clone(itFastSweep)
 	env["CORE_ID"] = "it-core-2-" + it.suffix
 	core2 := startCore(t, it, env)
 	awaitSlotsSplit(t, it, core1.cfg.CoreID, core2.cfg.CoreID)
@@ -76,7 +76,7 @@ func TestRealInfraARemovalOnAnotherCoreReachesTheActorThroughTheMemberEvent(t *t
 
 func TestRealInfraAddMembersRetryWithTheSameRequestIDNeverReAddsARemovedUser(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastEffects)
+	core := startCore(t, it, itFastSweep)
 	client := dialCore(t, core.cfg)
 	roomID := createRoom(t, client)
 
@@ -99,7 +99,7 @@ func TestRealInfraAddMembersRetryWithTheSameRequestIDNeverReAddsARemovedUser(t *
 
 func TestRealInfraClearHistoryHidesByTimeAndSurvivesARejoin(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastEffects)
+	core := startCore(t, it, itFastSweep)
 	client := dialCore(t, core.cfg)
 	roomID := createRoom(t, client)
 	room := parseRoom(t, roomID)

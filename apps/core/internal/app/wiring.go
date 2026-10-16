@@ -6,11 +6,8 @@ import (
 	"log/slog"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventmark"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/reconcile"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/metrics"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/slot"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
@@ -38,19 +35,21 @@ type gate interface {
 }
 
 type node struct {
-	cfg        config.Config
-	log        *slog.Logger
-	admin      *admin.Server
-	grpc       *grpcserver.Server
-	publisher  drainer
-	flusher    drainer
-	cidBatch   drainer
-	router     gate
-	slots      runner
-	timers     drainer
-	workers    drainer
-	reconciler drainer
-	watches    liveWatcher
+	cfg            config.Config
+	log            *slog.Logger
+	admin          *admin.Server
+	grpc           *grpcserver.Server
+	publisher      drainer
+	stateClears    drainer
+	flusher        drainer
+	cidBatch       drainer
+	router         gate
+	slots          runner
+	timers         drainer
+	projections    drainer
+	sweeper        drainer
+	watches        liveWatcher
+	projectionDefs projectionSet
 }
 
 func prepare(ctx context.Context, cfg config.Config, cl *clients) error {
@@ -60,9 +59,6 @@ func prepare(ctx context.Context, cfg config.Config, cl *clients) error {
 		return fmt.Errorf("bootstrap mongo database %s: %w", cfg.MongoDB, config.RedactError(err, cfg.MongoURI))
 	}
 	if err := publish.EnsureStream(ctx, cl.js, cfg.Stream); err != nil {
-		return config.RedactError(err, cfg.NATSURL)
-	}
-	if err := work.EnsureStream(ctx, cl.js, cfg.Work); err != nil {
 		return config.RedactError(err, cfg.NATSURL)
 	}
 	return config.RedactError(timer.EnsureStream(ctx, cl.js, cfg.Timer), cfg.NATSURL)
@@ -79,11 +75,11 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wire cid batcher: %w", err)
 	}
-	marks, err := eventmark.New(cl.dedupe, cfg.AckMarks, log)
+	clears, err := wireStateClears(cfg, st, log)
 	if err != nil {
-		return nil, fmt.Errorf("wire event ack marks: %w", err)
+		return nil, err
 	}
-	pub, err := publish.New(cl.js, cfg.Publish, log, publish.WithAckMarks(marks), publish.WithCounters(cl.pubCounters))
+	pub, err := publish.New(cl.js, cfg.Publish, log, publish.WithStateClears(clears), publish.WithCounters(cl.pubCounters))
 	if err != nil {
 		return nil, fmt.Errorf("wire publisher: %w", err)
 	}
@@ -121,22 +117,16 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 		return nil, err
 	}
 	a.timers = ts.consumer
-	fx, err := wireEffects(cfg, cl, st, marks, slots, ts.messages, log)
+	a.projectionDefs, err = wireProjections(cfg, cl, st, pub, ts.messages, log)
 	if err != nil {
 		return nil, err
 	}
-	a.workers = fx.workers
-	var rec *reconcile.Reconciler
-	if cfg.ReconcileEnabled {
-		rec, err = reconcile.New(reconcile.Deps{
-			Feed: mongostore.NewFeed(cl.mongo.Database(cfg.MongoDB)), Owner: slots, JS: cl.reconcileJS,
-		}, cfg.Reconcile, log)
-		if err != nil {
-			return nil, fmt.Errorf("wire reconciler: %w", err)
-		}
-		a.reconciler = rec
+	sweeper, err := wireSweeper(cfg, cl, st, slots, log)
+	if err != nil {
+		return nil, err
 	}
-	a.publisher, a.flusher, a.cidBatch, a.router, a.slots = pub, fl, batch, router, slots
+	a.publisher, a.stateClears, a.flusher, a.cidBatch, a.router, a.slots = pub, clears, fl, batch, router, slots
+	a.projections, a.sweeper = a.projectionDefs.group(), sweeper
 	svc, err := wireService(serviceDeps{store: st, router: router, pub: pub, cidBatch: batch, timers: ts.members, msgTimers: ts.messages, rooms: caches, cfg: cfg, log: log})
 	if err != nil {
 		return nil, err
@@ -154,21 +144,16 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 		drops:           cl.pubCounters.Drops,
 		router:          router.Stats,
 		cidDegraded:     cids.Degraded,
-		markDegraded:    marks.Degraded,
 		cidDropped:      batch.Dropped,
 		loadShed:        limiter.Rejected,
 		oplogWindow:     oplogWindowSeconds(cl.mongo),
-		workers:         fx.workers.Stats,
-		effectCounts:    fx.counters(),
 		counterRepairs:  ts.counterRepairs(),
 		timerFailures:   ts.consumer.Failures,
 		timerDropped:    ts.consumer.Dropped,
 		memberForgets:   watch.Forgets,
 		memberMalformed: watch.Malformed,
 		roomCache:       caches.probes(roomWatch),
-	}
-	if rec != nil {
-		p.reconcile = rec.Stats
+		events:          eventProbes{clears: clears, projections: a.projectionDefs.probes(), sweeper: sweeper},
 	}
 	handler, err := metrics.Handler(metricSources(p))
 	if err != nil {

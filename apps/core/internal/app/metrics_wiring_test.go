@@ -5,41 +5,49 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/effects"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/reconcile"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/metrics"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
+	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
-var readerMetrics = []string{
-	"reconcile_running", "reconcile_terms_total", "reconcile_forwarded_total", "reconcile_dropped_total", "reconcile_history_lost_total",
-	"reconcile_publish_failures_total",
+type fakeClears struct{}
+
+func (fakeClears) Cleared() uint64  { return 31 }
+func (fakeClears) Dropped() uint64  { return 32 }
+func (fakeClears) Failures() uint64 { return 33 }
+
+type fakeProjection struct {
+	name string
+	base uint64
 }
 
-func fakeProbes(withReader bool) probes {
+func (p fakeProjection) Name() string       { return p.name }
+func (p fakeProjection) Lag() time.Duration { return time.Duration(p.base) * time.Second }
+func (p fakeProjection) Failures() uint64   { return p.base + 1 }
+func (p fakeProjection) Dropped() uint64    { return p.base + 2 }
+func (p fakeProjection) Stuck() uint64      { return p.base + 3 }
+
+type fakeSweeper struct{}
+
+func (fakeSweeper) PendingOldest(c store.StateCollection) time.Duration {
+	return time.Duration(c) * time.Second
+}
+func (fakeSweeper) Republished(c store.StateCollection) uint64 { return 10 + uint64(c) }
+func (fakeSweeper) Dropped(c store.StateCollection) uint64     { return 20 + uint64(c) }
+func (fakeSweeper) PublishFailures() uint64                    { return 41 }
+func (fakeSweeper) Failures() uint64                           { return 42 }
+func (fakeSweeper) Passes() uint64                             { return 43 }
+
+func fakeProbes() probes {
 	zero := func() uint64 { return 0 }
-	p := probes{
-		drops:        func() publish.Drops { return publish.Drops{} },
-		router:       func() actor.Stats { return actor.Stats{} },
-		cidDegraded:  func() bool { return false },
-		markDegraded: func() bool { return false },
-		cidDropped:   zero,
-		loadShed:     func() int64 { return 0 },
-		oplogWindow:  func() float64 { return 0 },
-		workers:      func() effects.Stats { return effects.Stats{Processed: 7, Failed: 2, Lag: 3 * time.Second} },
-		effectCounts: map[string]effectCounters{
-			"msg_created":         {republished: func() uint64 { return 5 }, dropped: zero},
-			"room_created":        {republished: zero, dropped: func() uint64 { return 1 }},
-			"edit_projection":     {dropped: func() uint64 { return 4 }},
-			"count_event":         {republished: func() uint64 { return 8 }, dropped: func() uint64 { return 2 }},
-			"pin_projection":      {dropped: func() uint64 { return 3 }},
-			"member_event":        {republished: func() uint64 { return 9 }, dropped: func() uint64 { return 10 }},
-			"read_event":          {republished: func() uint64 { return 11 }, dropped: zero},
-			"reply_mention_index": {republished: func() uint64 { return 15 }, dropped: func() uint64 { return 16 }},
-			"bookmark_event":      {republished: func() uint64 { return 19 }, dropped: func() uint64 { return 20 }},
-			"mention_read":        {dropped: func() uint64 { return 22 }},
-		},
+	return probes{
+		drops:       func() publish.Drops { return publish.Drops{StateTrackFull: 34} },
+		router:      func() actor.Stats { return actor.Stats{} },
+		cidDegraded: func() bool { return false },
+		cidDropped:  zero,
+		loadShed:    func() int64 { return 0 },
+		oplogWindow: func() float64 { return 0 },
 		counterRepairs: map[string]func() uint64{
 			"reactions": func() uint64 { return 6 }, "replies": func() uint64 { return 21 }, "members": func() uint64 { return 12 },
 		},
@@ -48,101 +56,75 @@ func fakeProbes(withReader bool) probes {
 		memberForgets:   func() uint64 { return 13 },
 		memberMalformed: func() uint64 { return 14 },
 		roomCache:       fakeRoomCacheProbes(),
-	}
-	if withReader {
-		p.reconcile = func() reconcile.Stats { return reconcile.Stats{} }
-	}
-	return p
-}
-
-func sourceNames(sources []metrics.Source) map[string]bool {
-	out := map[string]bool{}
-	for _, s := range sources {
-		out[s.Name] = true
-	}
-	return out
-}
-
-func TestCoreMetricSourcesCoverEveryGuarantee(t *testing.T) {
-	everyCore := []string{
-		"publish_dropped_total", "ack_marks_dropped_total", "redis_degraded", "cid_settle_dropped_total",
-		"cid_pending_elsewhere_total", "room_yields_total", "grpc_load_shed_total", "mongo_oplog_window_seconds",
-		"reconcile_lag_seconds", "reconcile_republished_total", "effect_dropped_total", "work_processed_total", "work_failures_total",
-		"counter_repaired_total", "timer_failures_total", "timer_dropped_total", "member_cache_forgets_total", "member_watch_malformed_total",
-		"room_cache_hits_total", "room_cache_misses_total", "room_tail_cache_bytes", "room_watch_forgets_total", "room_watch_malformed_total",
-	}
-	on := sourceNames(metricSources(fakeProbes(true)))
-	for _, name := range append(everyCore, readerMetrics...) {
-		if !on[name] {
-			t.Errorf("no metric source %s", name)
-		}
-	}
-	if _, err := metrics.Handler(metricSources(fakeProbes(true))); err != nil {
-		t.Fatalf("Handler: %v", err)
-	}
-	off := sourceNames(metricSources(fakeProbes(false)))
-	for _, name := range readerMetrics {
-		if off[name] {
-			t.Errorf("reader disabled but %s is exported", name)
-		}
-	}
-	for _, name := range everyCore {
-		if !off[name] {
-			t.Errorf("%s must be exported on every core, also without the reader", name)
-		}
+		events: eventProbes{
+			clears:      fakeClears{},
+			projections: []projectionProbe{fakeProjection{"room_activity", 50}, fakeProjection{"mention_read", 60}},
+			sweeper:     fakeSweeper{},
+		},
 	}
 }
 
-func TestEffectMetricsReadTheirEffectByLabel(t *testing.T) {
+func readings(sources []metrics.Source) map[string]float64 {
 	got := map[string]float64{}
-	for _, s := range metricSources(fakeProbes(false)) {
+	for _, s := range sources {
 		var key strings.Builder
 		key.WriteString(s.Name)
-		for _, label := range []string{s.Labels["effect"], s.Labels["counter"]} {
-			if label != "" {
-				key.WriteString("{" + label + "}")
+		for _, label := range []string{"counter", "projection", "collection", "client", "reason"} {
+			if v := s.Labels[label]; v != "" {
+				key.WriteString("{" + v + "}")
 			}
 		}
 		got[key.String()] = s.Read()
 	}
+	return got
+}
+
+func TestCoreMetricSourcesCoverEveryGuarantee(t *testing.T) {
+	sources := metricSources(fakeProbes())
+	if _, err := metrics.Handler(sources); err != nil {
+		t.Fatalf("Handler: %v", err)
+	}
+	got := readings(sources)
+	for _, name := range []string{
+		"publish_dropped_total{queue_full}", "redis_degraded{cid_dedupe}", "cid_settle_dropped_total",
+		"cid_pending_elsewhere_total", "room_yields_total", "grpc_load_shed_total", "mongo_oplog_window_seconds",
+		"counter_repaired_total{members}", "timer_failures_total", "timer_dropped_total", "member_cache_forgets_total", "member_watch_malformed_total",
+		"room_tail_cache_bytes", "room_watch_forgets_total", "room_watch_malformed_total",
+		"state_clear_cleared_total", "state_clear_dropped_total", "state_clear_failures_total", "publish_state_track_full_total",
+		"sweep_publish_failures_total", "sweep_failures_total", "sweep_passes_total",
+	} {
+		if _, ok := got[name]; !ok {
+			t.Errorf("no metric source %s", name)
+		}
+	}
+	for _, gone := range []string{
+		"ack_marks_dropped_total{queue_full}", "redis_degraded{ack_marks}", "reconcile_lag_seconds", "work_processed_total", "work_failures_total",
+	} {
+		if _, ok := got[gone]; ok {
+			t.Errorf("%s is still exported without the effect engine", gone)
+		}
+	}
+}
+
+func TestEventMetricsReadTheirComponentByLabel(t *testing.T) {
+	got := readings(metricSources(fakeProbes()))
 	want := map[string]float64{
-		"reconcile_lag_seconds": 3, "work_processed_total": 7, "work_failures_total": 2,
-		"reconcile_republished_total{msg_created}": 5, "reconcile_republished_total{room_created}": 0,
-		"effect_dropped_total{msg_created}": 0, "effect_dropped_total{room_created}": 1,
-		"effect_dropped_total{edit_projection}":    4,
-		"reconcile_republished_total{count_event}": 8, "effect_dropped_total{count_event}": 2,
-		"effect_dropped_total{pin_projection}":      3,
-		"counter_repaired_total{reactions}":         6,
-		"reconcile_republished_total{member_event}": 9, "effect_dropped_total{member_event}": 10,
-		"reconcile_republished_total{read_event}": 11, "counter_repaired_total{members}": 12,
-		"member_cache_forgets_total": 13, "member_watch_malformed_total": 14,
-		"reconcile_republished_total{reply_mention_index}": 15, "effect_dropped_total{reply_mention_index}": 16,
+		"state_clear_cleared_total": 31, "state_clear_dropped_total": 32, "state_clear_failures_total": 33, "publish_state_track_full_total": 34,
+		"sweep_publish_failures_total": 41, "sweep_failures_total": 42, "sweep_passes_total": 43,
+		"projection_lag_seconds{room_activity}": 50, "projection_failures_total{room_activity}": 51,
+		"projection_dropped_total{room_activity}": 52, "projection_stuck_total{room_activity}": 53,
+		"projection_lag_seconds{mention_read}": 60, "projection_stuck_total{mention_read}": 63,
+		"counter_repaired_total{reactions}": 6, "counter_repaired_total{replies}": 21, "counter_repaired_total{members}": 12,
 		"timer_failures_total": 17, "timer_dropped_total": 18,
-		"reconcile_republished_total{bookmark_event}": 19, "effect_dropped_total{bookmark_event}": 20,
-		"counter_repaired_total{replies}": 21, "effect_dropped_total{mention_read}": 22,
+	}
+	for _, c := range store.AllStateCollections() {
+		want["event_pending_oldest_seconds{"+c.String()+"}"] = float64(c)
+		want["sweep_republished_total{"+c.String()+"}"] = float64(10 + c)
+		want["sweep_dropped_total{"+c.String()+"}"] = float64(20 + c)
 	}
 	for key, v := range want {
 		if g, ok := got[key]; !ok || g != v {
 			t.Errorf("%s = %v (present %v), want %v", key, g, ok, v)
 		}
 	}
-	for _, silent := range []string{"edit_projection", "pin_projection", "mention_read"} {
-		if _, ok := got["reconcile_republished_total{"+silent+"}"]; ok {
-			t.Errorf("%s never publishes, but reconcile_republished_total is exported for it", silent)
-		}
-	}
-}
-
-func TestReaderPublishFailuresReadTheReaderStats(t *testing.T) {
-	p := fakeProbes(true)
-	p.reconcile = func() reconcile.Stats { return reconcile.Stats{PublishFailures: 4} }
-	for _, s := range metricSources(p) {
-		if s.Name == "reconcile_publish_failures_total" {
-			if got := s.Read(); got != 4 {
-				t.Fatalf("reconcile_publish_failures_total = %v, want 4", got)
-			}
-			return
-		}
-	}
-	t.Fatal("no reconcile_publish_failures_total source")
 }

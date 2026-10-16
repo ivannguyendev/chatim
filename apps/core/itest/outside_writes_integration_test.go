@@ -36,13 +36,13 @@ func awaitActivity(t *testing.T, st *mongostore.Store, room, seq uint64) domain.
 	}
 }
 
-func TestRealInfraWorkersPublishWritesThatSkippedTheCore(t *testing.T) {
+func TestRealInfraSweeperPublishesWritesThatSkippedTheCore(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastEffects)
+	core := startCore(t, it, itFastSweep)
 	roomID := createRoom(t, dialCore(t, core.cfg))
 	room := parseRoom(t, roomID)
 	live := subscribeLive(t, it, core.cfg, roomID)
-	core.awaitTerm(t)
+	core.awaitSweeper(t)
 
 	inserted := time.Now()
 	outside := domain.Message{
@@ -59,16 +59,16 @@ func TestRealInfraWorkersPublishWritesThatSkippedTheCore(t *testing.T) {
 	}
 }
 
-func TestRealInfraRoomCreatedComesFromTheFastPathAndTheWorkers(t *testing.T) {
+func TestRealInfraRoomCreatedComesFromTheFastPathAndTheSweeper(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastEffects)
+	core := startCore(t, it, itFastSweep)
 	live := subscribeLive(t, it, core.cfg, "*")
 
 	began := time.Now()
 	fast := createRoom(t, dialCore(t, core.cfg))
 	awaitLiveIDs(t, live, began, pbconv.RoomCreatedEventID(parseRoom(t, fast)))
 
-	core.awaitTerm(t)
+	core.awaitSweeper(t)
 	created := time.Now().UTC().Truncate(time.Millisecond)
 	outside := domain.Room{ID: ids.NewRoomID(), Tenant: itTenant, Type: domain.RoomGroup, Name: "outside", CreatedBy: "migrator", CreatedAt: created, MemberCount: 1}
 	owner := domain.Member{Room: outside.ID, Tenant: itTenant, User: "migrator", Role: domain.RoleOwner, JoinedAt: created}
@@ -80,7 +80,7 @@ func TestRealInfraRoomCreatedComesFromTheFastPathAndTheWorkers(t *testing.T) {
 
 func TestRealInfraSendMessageMovesRoomActivity(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastEffects)
+	core := startCore(t, it, itFastSweep)
 	client := dialCore(t, core.cfg)
 	roomID := createRoom(t, client)
 	room := parseRoom(t, roomID)

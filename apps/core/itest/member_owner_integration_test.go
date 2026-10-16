@@ -56,7 +56,7 @@ func atOnce(calls ...func()) {
 
 func TestRealInfraTwoOwnersLeavingAtOnceKeepAnOwner(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastEffects)
+	core := startCore(t, it, itFastSweep)
 	client := dialCore(t, core.cfg)
 	st := itStore(it, core)
 	for round := range itOwnerRaceRounds {
@@ -92,7 +92,7 @@ func TestRealInfraTwoOwnersLeavingAtOnceKeepAnOwner(t *testing.T) {
 
 func TestRealInfraTwoOwnersRemovingEachOtherLeaveOneOwner(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastEffects)
+	core := startCore(t, it, itFastSweep)
 	client := dialCore(t, core.cfg)
 	st := itStore(it, core)
 	for round := range itRemoveRaceRounds {
@@ -120,7 +120,7 @@ func TestRealInfraTwoOwnersRemovingEachOtherLeaveOneOwner(t *testing.T) {
 
 func TestRealInfraTheHighestPriorityAdminSucceedsTheLastOwner(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastEffects)
+	core := startCore(t, it, itFastSweep)
 	client := dialCore(t, core.cfg)
 	roomID := createRoomWith(t, client, []string{itUser, "carol"})
 	addMembersAs(t, client, itUser, roomID, "priority-dave", "dave")

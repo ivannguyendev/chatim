@@ -61,6 +61,6 @@ make -s redis-cli INSTANCE=dedupe ARGS="latency history command" >"$dir/redis-la
 make -s redis-cli INSTANCE=dedupe ARGS="slowlog get 256" >"$dir/redis-slowlog.txt" 2>&1
 mongo_eval "db.getSiblingDB('chatim').system.profile.find({}, {ts: 1, millis: 1, op: 1, ns: 1}).forEach(d => print(Math.floor(d.ts.getTime() / 1000), d.millis, d.op, d.ns));" >"$dir/mongo-profile.txt" 2>&1
 for c in chatim-core-1 chatim-core-2; do
-  docker logs --since "$start" "$c" 2>&1 | grep -E 'degraded|recovered|rpc finished|reconcile|dropping' >"$dir/$c.log"
+  docker logs --since "$start" "$c" 2>&1 | grep -E 'degraded|recovered|rpc finished|sweeper|projection|dropping' >"$dir/$c.log"
 done
 grep -E "^sends|^pacer|^ack latency|^live" "$dir/corebench.txt"

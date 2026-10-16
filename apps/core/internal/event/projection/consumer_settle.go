@@ -45,15 +45,15 @@ func (c *Consumer) decode(ctx context.Context, ds []eventkit.Delivery) ([]Event,
 
 func (c *Consumer) observe(evs []Event, held []eventkit.Delivery) {
 	oldest := evs[0].At
-	var most uint64
 	for i, ev := range evs {
 		if ev.At.Before(oldest) {
 			oldest = ev.At
 		}
-		most = max(most, held[i].Delivered())
+		if held[i].Delivered() >= StuckDeliveries {
+			c.stuck.Add(1)
+		}
 	}
 	c.lag.Store(int64(max(time.Since(oldest), 0)))
-	c.redelivered.Store(most)
 }
 
 func (c *Consumer) settle(ctx context.Context, d eventkit.Delivery, ev Event, err error) {

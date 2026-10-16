@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -61,23 +62,43 @@ func (w recordedWatch) Stop() {
 	w.order.got = append(w.order.got, w.name)
 }
 
-func TestShutdownDrainsWorkersAndTheTimerConsumerAfterTheReconcilerAndBeforeTheRouter(t *testing.T) {
-	order := &stopOrder{}
+type hungDrainer struct {
+	cancelled chan struct{}
+}
+
+func (h hungDrainer) Run(ctx context.Context) error {
+	<-ctx.Done()
+	close(h.cancelled)
+	return ctx.Err()
+}
+
+func (hungDrainer) Close(ctx context.Context) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func stopNode(order *stopOrder) *node {
 	running := make(chan struct{})
 	close(running)
 	cfg := config.Config{
 		DrainDelay: 10 * time.Millisecond, GRPCShutdown: time.Second, RequestDeadline: 500 * time.Millisecond,
 		PublisherDrain: time.Second, ShutdownBudget: gateLimit, Flush: flush.Config{InsertTimeout: 100 * time.Millisecond},
 	}
-	a := &node{
+	return &node{
 		cfg: cfg, log: quiet,
 		admin:     admin.New(admin.Config{ShutdownTimeout: config.CloseTimeout}, quiet),
 		grpc:      grpcserver.New(grpcserver.Config{ShutdownTimeout: time.Second}, quiet),
-		publisher: order.drainer("publisher"), flusher: order.drainer("flusher"), cidBatch: order.drainer("cid batcher"),
+		publisher: order.drainer("publisher"), stateClears: order.drainer("state clear queue"),
+		flusher: order.drainer("flusher"), cidBatch: order.drainer("cid batcher"),
 		router: &recordedRouter{recordedDrainer: order.drainer("router"), running: running},
-		slots:  idle{}, workers: order.drainer("workers"), timers: order.drainer("timer consumer"), reconciler: order.drainer("reconciler"),
+		slots:  idle{}, timers: order.drainer("timer consumer"),
+		projections: drainerGroup{order.drainer("projection")}, sweeper: order.drainer("sweeper"),
 		watches: liveWatchers{recordedWatch{name: "member watch", order: order}, recordedWatch{name: "room watch", order: order}},
 	}
+}
+
+func serveUntilStopped(t *testing.T, a *node) error {
+	t.Helper()
 	lis, err := listenAll(t.Context(), "127.0.0.1:0", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
@@ -88,14 +109,41 @@ func TestShutdownDrainsWorkersAndTheTimerConsumerAfterTheReconcilerAndBeforeTheR
 	cancel()
 	select {
 	case err := <-done:
-		if err != nil {
-			t.Fatalf("serve = %v, want a clean stop", err)
-		}
+		return err
 	case <-time.After(gateLimit):
 		t.Fatalf("serve did not return within %v", gateLimit)
+		return nil
 	}
-	want := []string{"reconciler", "workers", "timer consumer", "member watch", "room watch", "router", "cid batcher", "flusher", "publisher"}
+}
+
+func TestShutdownStopsTheSweeperFirstAndClearsStatesAfterThePublisher(t *testing.T) {
+	order := &stopOrder{}
+	if err := serveUntilStopped(t, stopNode(order)); err != nil {
+		t.Fatalf("serve = %v, want a clean stop", err)
+	}
+	want := []string{
+		"sweeper", "projection", "timer consumer", "member watch", "room watch", "router", "cid batcher", "flusher", "publisher", "state clear queue",
+	}
 	if got := order.names(); !slices.Equal(got, want) {
 		t.Fatalf("drain order = %v, want %v", got, want)
+	}
+}
+
+func TestShutdownCancelsAComponentWhoseDrainTimesOut(t *testing.T) {
+	order := &stopOrder{}
+	a := stopNode(order)
+	hung := hungDrainer{cancelled: make(chan struct{})}
+	a.sweeper = hung
+	err := serveUntilStopped(t, a)
+	if err == nil || !strings.Contains(err.Error(), "sweeper") {
+		t.Fatalf("serve = %v, want the sweeper step reported as failed", err)
+	}
+	select {
+	case <-hung.cancelled:
+	default:
+		t.Fatal("the sweeper kept running after its drain timed out")
+	}
+	if got := order.names(); !slices.Contains(got, "state clear queue") {
+		t.Fatalf("drain order = %v, want the rest of the stop to go on", got)
 	}
 }
