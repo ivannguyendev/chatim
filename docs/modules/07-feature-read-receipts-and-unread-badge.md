@@ -26,7 +26,7 @@ flowchart TD
     subgraph UpdatePhase["1. Luồng Ghi nhận Đã đọc (MarkRead)"]
         UserAction["Người dùng lướt đọc tin đến vị trí seq"] --> CheckSeq{"seq mới > read_seq hiện tại?"}
         CheckSeq -- "Không (lướt ngược lên)" --> NoOp["Bỏ qua (Giữ nguyên read_seq)"]
-        CheckSeq -- "Có (tiến về tương lai)" --> AtomicUpdate["Update MongoDB (members)<br/>filter: {read_seq < seq}<br/>set: {read_seq: seq}, inc: {read_ver: 1}"]
+        CheckSeq -- "Có (tiến về tương lai)" --> AtomicUpdate["Update MongoDB (members)<br/>filter: {read_seq < seq}<br/>set: {read_seq: seq}, inc: {read_ver: 1}<br/>kèm cờ _state bit 2 (read_updated chờ phát)"]
         AtomicUpdate --> FanoutNATS["Publish qua NATS: read_updated"]
         FanoutNATS --> SyncOtherDev["Đồng bộ tức thì: Xoá huy hiệu (badge) trên máy tính/tablet"]
     end
@@ -55,12 +55,13 @@ sequenceDiagram
     Client->>Core: MarkRead(room_id, seq=10042)
 
     Note over Core,Members: 1. Cập nhật vị trí đọc trên doc của chính tôi
-    Core->>Members: UpdateOne(filter: {room_id, user_id, read_seq < 10042},<br/>update: {$set: {read_seq: 10042}, $inc: {read_ver: 1}})
+    Core->>Members: UpdateOne(filter: {room_id, user_id, read_seq < 10042},<br/>update: {$set: {read_seq: 10042}, $inc: {read_ver: 1}}, _state bit 2)
     Members-->>Core: Update thành công (read_ver tăng)
 
     Note over Core,NATS: 2. Phát tán đồng bộ sang các thiết bị khác của tôi
     Core->>NATS: Publish read_updated(room_id, user_id, read_seq=10042)
     NATS-->>WebClient: Realtime push: Xoá huy hiệu chưa đọc trên Web
+    Note over Core,NATS: PubAck thì xoá bit 2 nếu read_ver còn bằng, rớt thì sweeper phát bù. Projection mention_read nghe read_updated và đánh dấu mention đã đọc theo read_seq hiện tại
 
     Core-->>Client: Xác nhận thành công
 
@@ -165,7 +166,7 @@ sequenceDiagram
 | Thành phần phụ thuộc | Mục đích phụ thuộc | Ứng xử khi thành phần gặp sự cố (Failure Behavior) |
 |---|---|---|
 | **Collection `members`** | Lưu trạng thái `read_seq` | Nếu ghi thất bại: Client sẽ thử lại trong lần cuộn màn hình tiếp theo. Người dùng chỉ bị hiện tượng tạm thời thấy phòng chưa được đánh dấu đã đọc. |
-| **NATS JetStream** | Phát sự kiện `read_updated` đồng bộ đa thiết bị | Nếu NATS quá tải: Thiết bị hiện tại vẫn hiển thị đã đọc bình thường; thiết bị thứ hai (ví dụ máy tính) sẽ được đồng bộ lại khi người dùng mở lại ứng dụng. |
+| **NATS JetStream** | Phát sự kiện `read_updated` đồng bộ đa thiết bị; nguồn của projection `mention_read` | Nếu NATS quá tải: Thiết bị hiện tại vẫn hiển thị đã đọc bình thường; doc `members` giữ cờ `_state` bit 2 và sweeper slot 0 phát bù `read_updated` của vị trí hiện tại khi NATS sống lại (Module 10), thiết bị thứ hai đồng bộ lúc đó hoặc khi mở lại ứng dụng. |
 | **Clustered Index `messages`** | Phục vụ thuật toán Bounded Count | Nếu index bị quá tải IOPS: API đếm unread sẽ fallback ngay lập tức về trả giá trị `unread_count = 0` hoặc trạng thái gần nhất để không làm nghẽn giao diện người dùng. |
 
 ### 6.1. Chỉ số Sức khoẻ Vận hành & Cảnh báo SRE (Key Metrics & Alerts)

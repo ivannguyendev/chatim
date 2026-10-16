@@ -198,7 +198,7 @@ Khi phòng chỉ còn đúng 1 người (chính là Owner) và người này b�
 |---|---|---|
 | **MongoDB Replica Set (Transactions)** | Đảm bảo nguyên tử khi đổi Owner | Nếu cụm MongoDB không hỗ trợ transaction (ví dụ standalone) hoặc đang bầu lại Primary: Thao tác đổi Owner sẽ bị huỷ bỏ để tránh tạo ra nhóm vô chủ. |
 | **NATS JetStream (`memberwatch`)** | Lan toả thông báo huỷ cache quyền | Nếu NATS bị nghẽn: Cache quyền trên một số Core có thể bị trễ tối đa bằng TTL của cache RAM (khoảng 30 giây), sau đó cache tự hết hạn và đọc lại từ DB. |
-| **Worker `member_count_repair`** | Tự động cân bằng lại số đếm member | Giúp bảo đảm số lượng thành viên hiển thị trên giao diện không bao giờ bị sai lệch vĩnh viễn ngay cả khi server bị sập nguồn đột ngột. |
+| **Consumer `timer-due` (`member_count_repair`, `CHATIM_TIMER`)** | Tự động cân bằng lại số đếm member (CAS `member_count_ver` kèm cờ `_state` bit 2 rồi phát `member_count_changed`) | Giúp bảo đảm số lượng thành viên hiển thị trên giao diện không bao giờ bị sai lệch vĩnh viễn ngay cả khi server bị sập nguồn đột ngột. |
 
 ### 6.1. Chỉ số Sức khoẻ Vận hành & Cảnh báo SRE (Key Metrics & Alerts)
 

@@ -35,15 +35,15 @@ flowchart TD
 
     %% Luồng bất đồng bộ
     subgraph AsyncPath["2. Luồng Bóc Tách & Chỉ Mục Ngầm (Async Indexing)"]
-        Core -.->|Enqueue MessageInserted| WorkQ[("NATS JetStream<br/>Stream: CHATIM_WORK")]
-        WorkQ --> Worker["Worker Pool<br/>(reply_mention_index)"]
+        Core -.->|Publish msg_created| EvtQ[("NATS JetStream<br/>Stream: CHATIM_EVT")]
+        EvtQ --> Worker["Projection consumer<br/>(mention_reply_index, dùng chung mọi core)"]
 
-        Worker -->|Task 1: Cập nhật bộ đếm reply| IncReply["UpdateOne {seq: root_seq}<br/>$inc: {rc: 1}"]
+        Worker -->|Việc 1: doc trả lời + bộ đếm reply| IncReply["AddReply rồi $inc rc +1<br/>dưới phiếu hẹn, kèm cờ _state bit 4"]
         IncReply --> MongoMsg
 
-        Worker -->|Task 2: Lập chỉ mục Hộp thư Mention| MentBox[("MongoDB (mentions)<br/>Hộp thư nhắc tên người dùng")]
+        Worker -->|Việc 2: Lập chỉ mục Hộp thư Mention| MentBox[("MongoDB (mentions)<br/>Hộp thư nhắc tên người dùng")]
 
-        Worker -->|Task 3: Kích hoạt thông báo ngoài app| PushSrv["Push Notification Service<br/>(APNs / FCM)"]
+        Worker -->|Việc 3: reply_threads| Threads[("MongoDB (reply_threads)")]
     end
 ```
 
@@ -57,10 +57,9 @@ sequenceDiagram
     participant Client as Client SDK
     participant Core as Core (send/actor)
     participant Msgs as MongoDB (messages)
-    participant WorkQ as NATS (CHATIM_WORK)
-    participant Worker as Worker reply_mention_index
+    participant WorkQ as NATS (CHATIM_EVT)
+    participant Worker as Projection mention_reply_index
     participant Ments as MongoDB (mentions)
-    participant Push as Push Notification Service
 
     Client->>Core: SendMessage(reply_to=10010, mentions=["usr_B"], text="@usr_B xem giúp")
 
@@ -69,19 +68,18 @@ sequenceDiagram
     Msgs-->>Core: Insert thành công
     Core-->>Client: Fast Ack trả seq=10045 cho người gửi
 
-    Note over Core,WorkQ: 2. Đẩy sự kiện phân tích vào Work Queue
-    Core->>WorkQ: Enqueue MessageInserted(seq=10045)
+    Note over Core,WorkQ: 2. Publish event (doc mang cờ _state bit 1 tới khi PubAck)
+    Core->>WorkQ: Publish msg_created 10045 (có reply_to và mention)
 
-    Note over WorkQ,Worker: 3. Worker xử lý bất đồng bộ
-    WorkQ->>Worker: Nhận nhiệm vụ xử lý seq=10045
+    Note over WorkQ,Worker: 3. Projection xử lý bất đồng bộ, không delay
+    WorkQ->>Worker: Lô event (≤ 256, chờ ≤ 500ms) gồm seq=10045
 
     par Tăng số lượng reply trên tin gốc
-        Worker->>Msgs: UpdateOne({seq: 10010}, {$inc: {rc: 1}})
+        Worker->>Msgs: AddReply rồi $inc rc +1 trên tin 10010 (kèm bit 4), phát counts_changed
     and Lập chỉ mục Hộp thư Mention
-        Worker->>Ments: InsertOne({target_user: "usr_B", room_id, seq: 10045, state: 1})
-    and Kích hoạt thông báo đẩy
-        Worker->>Push: Gửi Push Notification "Bạn được nhắc tới"
+        Worker->>Ments: ApplyMentions(user:usr_B, seq 10045, message_ver)
     end
+    Note over Worker: Lỗi thì Nak giãn dần 5s/30s/2m/10m, push do app khác nghe live.* đảm nhiệm
 ```
 
 ---
@@ -105,11 +103,12 @@ sequenceDiagram
 
 ### 3.3. Lập chỉ mục Mention bất đồng bộ & Idempotent (Async Mentions Indexing)
 - **Cơ chế:** Việc phát hiện ai được nhắc tên và cập nhật hộp thư cá nhân được tách hoàn toàn khỏi luồng gửi tin chính (Fast-path).
-- Worker `reply_mention_index` thuộc Effect Engine:
-  - Quét danh sách `mentions` được khai báo trong tin nhắn.
+- Projection `mention_reply_index` (consumer durable trên `CHATIM_EVT`, M3.1, Module 10):
+  - Đọc `reply_to` và danh sách mention **từ chính event** `msg_created`/`msg_edited`/`msg_deleted`, không đọc lại tin.
+  - Event bảo đảm tới nhờ cờ `_state` + sweeper, nên projection dựng từ event là đủ.
   - Ghi vào collection `mentions` với khoá duy nhất:
     $$\text{\_id} = \text{hash}(\text{tenant}, \text{target\_user\_id}, \text{room\_id}, \text{seq})$$
-  - Cơ chế này bảo đảm nếu worker bị chạy lại nhiều lần (do mạng chập chờn hoặc retry), document mention cũng không bao giờ bị nhân đôi.
+  - Cơ chế này bảo đảm nếu projection nhận lại event nhiều lần (do mạng chập chờn hoặc retry), document mention cũng không bao giờ bị nhân đôi.
 
 ---
 
@@ -170,7 +169,7 @@ sequenceDiagram
    - Giới hạn tối đa **50 mentions** trong một tin nhắn duy nhất.
    - Ngăn chặn các cuộc tấn công spam làm quá tải dịch vụ thông báo đẩy (Push Notification Amplification).
 3. **Độ trễ xuất hiện trong Hộp thư Mention:**
-   - Tin nhắn hiển thị trên timeline phòng chat tức thì, nhưng có thể mất từ 50–200ms trước khi xuất hiện trên tab "Tôi được nhắc tới" của người được tag (do xử lý bất đồng bộ qua worker).
+   - Tin nhắn hiển thị trên timeline phòng chat tức thì, nhưng có thể mất từ 50–200ms trước khi xuất hiện trên tab "Tôi được nhắc tới" của người được tag (do xử lý bất đồng bộ qua projection consumer, cửa sổ gom lô ≤ 500ms).
 
 ---
 
@@ -179,12 +178,12 @@ sequenceDiagram
 | Thành phần phụ thuộc | Mục đích phụ thuộc | Ứng xử khi thành phần gặp sự cố (Failure Behavior) |
 |---|---|---|
 | **MongoDB Clustered Collection** | Lưu tin nhắn kèm con trỏ Thread | Nếu MongoDB lỗi ghi: Tin nhắn trả lời bị từ chối như tin nhắn thường; tính toàn vẹn của thread được bảo toàn. |
-| **NATS JetStream (Work Queue)** | Đưa việc xử lý mention ra nền | Nếu NATS Work Queue bị ứ đọng: Tin nhắn trả lời vẫn gửi thành công, người trong phòng vẫn thấy tin; chỉ có tab "Tôi được nhắc tới" và thông báo đẩy bị trễ cho tới khi hàng đợi xả xong. |
-| **Worker `reply_mention_index`** | Lập chỉ mục mention và đếm reply | Worker được thiết kế hoàn toàn Idempotent: có thể retry nhiều lần mà không sợ sai lệch bộ đếm `rc` hoặc nhân đôi bản ghi mention. |
+| **NATS JetStream (`CHATIM_EVT`, consumer `projection-mention_reply_index`)** | Đưa việc xử lý mention ra nền | Nếu consumer bị ứ đọng hoặc NATS gián đoạn: Tin nhắn trả lời vẫn gửi thành công, người trong phòng vẫn thấy tin; chỉ có tab "Tôi được nhắc tới" và thông báo đẩy bị trễ cho tới khi hàng đợi xả xong. |
+| **Projection `mention_reply_index`** | Lập chỉ mục mention và đếm reply | Projection được thiết kế hoàn toàn Idempotent (doc trả lời chèn một lần theo `_id`, mention theo `message_ver`, `rc` dưới phiếu hẹn): có thể retry nhiều lần mà không sợ sai lệch bộ đếm `rc` hoặc nhân đôi bản ghi mention. |
 
 ### 6.1. Chỉ số Sức khoẻ Vận hành & Cảnh báo SRE (Key Metrics & Alerts)
 
 - **`chatim_thread_replies_total`:** Số lượng tin nhắn trả lời trong thread được gửi.
 - **`chatim_mentions_indexed_total`:** Số lượng bản ghi mention được bóc tách và lập chỉ mục vào database.
-- **`chatim_effects_queue_lag{worker="reply_mention_index"}`:** Số lượng nhiệm vụ xử lý mention đang bị dồn ứ trong NATS JetStream.
-  - *Luật cảnh báo (`ChatimMentionIndexingLag`):* Cảnh báo nếu queue lag `> 500 records` kéo dài trên 2 phút.
+- **`chatim_core_projection_lag_seconds{projection="mention_reply_index"}`:** Tuổi event cũ nhất trong lô gần nhất của projection.
+  - *Luật cảnh báo (`ChatimProjectionLagging`):* > 10s trong 5 phút. `ChatimProjectionFailing` khi `projection_stuck_total` tăng (giao lại từ lần thứ 6).

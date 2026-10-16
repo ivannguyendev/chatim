@@ -152,9 +152,10 @@ sequenceDiagram
     $$\text{insertMany}(\text{ordered} = \text{false}, w = \text{"majority"})$$
   - Cơ chế này giúp hệ thống đạt throughput 5,000 – 10,000 tin/giây mà vẫn bảo đảm độ an toàn dữ liệu trên cả 3 node MongoDB Replica Set.
 
-### 3.4. Fast Ack & Best-Effort Async Publish
+### 3.4. Fast Ack & Publish bất đồng bộ có bảo đảm (M3.1)
 - **Nguyên tắc:** Trả Ack cho người gửi ngay sau khi Mongo ghi nhận `w:majority`. Không bắt người gửi phải chờ đến khi tin được phát tán qua NATS JetStream.
-- Việc phát sự kiện `msg_created` qua NATS là hoàn toàn bất đồng bộ (Best-effort). Nếu tiến trình Core bị tắt đột ngột trước khi phát event, **Reconciler nền (Module 10)** sẽ đọc Change Stream của MongoDB và phát bù sự kiện.
+- Doc tin được insert kèm cờ `_state: 1` (`msg_created` chờ phát) trong cùng lệnh `insertMany`. Sau ack, publisher phát `msg_created` bất đồng bộ; PubAck về thì hàng xoá cờ tắt bit theo lô (mỗi 100ms, các khoảng `_id` liền nhau).
+- Nếu Core tắt đột ngột trước khi phát, hoặc NATS từ chối, doc còn cờ và **sweeper trên core giữ slot 0 (Module 10)** phát bù `msg_created` với đúng id sau khoảng 5–7s. Giao ít nhất một lần; stream bỏ bản trùng theo id.
 
 ### 3.5. Hợp đồng Snapshot & Xử lý Đến lệch thứ tự (Out-of-order Resilience — Quy tắc R6/R7)
 - **Vấn đề thực tế mạng di động:** Do NATS JetStream và kết nối mạng di động, Client SDK có thể nhận được sự kiện `msg_changed` (sửa tin) **trước khi** nhận được sự kiện `msg_created` (tạo tin ban đầu).
@@ -228,7 +229,7 @@ sequenceDiagram
 |---|---|---|
 | **MongoDB Clustered Collection** | Lưu trữ tin vĩnh viễn (`messages`) | Nếu Mongo Replica Set mất kết nối hoặc quá tải: Pipeline flush bị nghẽn, Actor từ chối nhận thêm tin và trả `UNAVAILABLE` cho Client. |
 | **Redis Dedupe Instance** | Lưu trữ tạm CID để chống trùng nhanh | Nếu Redis Dedupe bị chậm hoặc ngắt kết nối: `redisguard` kích hoạt mạch ngắt. Hệ thống bỏ qua Redis và để MongoDB unique key bắt trùng (độ trễ tăng nhẹ từ 5ms lên 15ms nhưng không chết dịch vụ). |
-| **NATS JetStream (CHATIM_EVT)** | Kênh phát tán sự kiện tin mới | Nếu NATS quá tải: Fast-path publish thất bại nhưng Core vẫn trả Ack thành công cho người gửi. Event sẽ được Reconciler phát bù qua Change Stream sau 5s. |
+| **NATS JetStream (CHATIM_EVT)** | Kênh phát tán sự kiện tin mới | Nếu NATS quá tải: Fast-path publish thất bại nhưng Core vẫn trả Ack thành công cho người gửi. Doc giữ cờ `_state`; sweeper slot 0 phát bù sau khoảng 5–7s (hoặc ngay khi NATS sống lại). |
 | **Platform Slot Manager** | Đảm bảo duy nhất 1 Core sở hữu phòng | Nếu Core bị mất hợp đồng thuê Slot: Actor của phòng tự động từ chối các lệnh gửi tin mới (`AfterLose`), hoàn tất các tin đang ghi dở rồi giải phóng tài nguyên. |
 
 ### 6.1. Chỉ số Sức khoẻ Vận hành & Cảnh báo SRE (Key Metrics & Alerts)

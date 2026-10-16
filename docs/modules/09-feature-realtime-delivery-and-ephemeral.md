@@ -128,6 +128,12 @@ stateDiagram-v2
     $$\text{cid} = \text{"sys-"}\{\text{event\_id}\}$$
   - Nhờ cơ chế chống trùng CID (Module 02), ngay cả khi có 2 node cùng xử lý sự kiện này, chỉ có đúng 1 tin nhắn hệ thống được ghi vào phòng chat.
 
+### 3.5. Hợp đồng chống trùng và lấp lỗ (D156, bắt buộc cho websocket M4)
+- Từ M3.1 event được giao **ít nhất một lần** (cờ `_state` + sweeper, Module 10) và bản phát bù có thể tới **sau** event mới hơn. Ví dụ: client nhận tin 46 trước, vài giây sau sweeper phát bù tin 45.
+- Bỏ trùng theo id event; với event đổi trạng thái, so version của doc (`ver`, `read_ver`, `pin_ver`, `info_ver`, `preference_ver`, `rx.v`/`rc.v`, `member_count_ver`): bản lớn hơn thắng.
+- `msg_created`: đã có đúng seq đó thì bỏ; thấy lỗ (seq > seq cuối + 1) thì gọi `GetHistory` để lấp. **Không bao giờ** bỏ theo luật "seq ≤ seq cuối đã thấy", vì như vậy tin 45 ở ví dụ trên sẽ mất.
+- Chi tiết: [kiến trúc §8.1](../architecture.md).
+
 ---
 
 ## 4. Kỹ thuật & Công nghệ triển khai (Technologies)
@@ -168,7 +174,7 @@ stateDiagram-v2
 
 | Thành phần phụ thuộc | Mục đích phụ thuộc | Ứng xử khi thành phần gặp sự cố (Failure Behavior) |
 |---|---|---|
-| **Cụm NATS Core Pub/Sub** | Truyền tải dữ liệu thời gian thực | Nếu NATS cluster bị nghẽn: Người dùng vẫn gửi được tin (do Core ghi Mongo thành công), nhưng tin nhắn mới đến các người nhận khác sẽ bị trễ vài giây. |
+| **Cụm NATS Core Pub/Sub** | Truyền tải dữ liệu thời gian thực | Nếu NATS cluster bị nghẽn: Người dùng vẫn gửi được tin (do Core ghi Mongo thành công), nhưng tin nhắn mới đến các người nhận khác sẽ bị trễ; event chưa vào JetStream được sweeper slot 0 phát bù khi NATS sống lại (Module 10). |
 | **Auth Service (JWKS Endpoint)** | Xác thực mã JWT khi mở kết nối | App websocket cache danh sách khoá công khai JWKS trong bộ nhớ. Nếu Auth Service sập, các kết nối đang mở vẫn hoạt động bình thường, kết nối mới vẫn vào được trong suốt thời gian cache còn hiệu lực. |
 | **Core Service (gRPC Unary)** | Xử lý các lệnh gửi/sửa từ App websocket | App websocket gọi Core qua gRPC theo bảng phân bổ Slot. Nếu một node Core bị lỗi, App websocket sẽ tự động định tuyến lệnh sang node Core kế nhiệm. |
 

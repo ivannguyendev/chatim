@@ -33,7 +33,7 @@ flowchart TD
     end
 
     subgraph Resilience["Tầng Tự phục hồi & Dữ liệu"]
-        M10["Module 10: Data Reconciliation & Self-Healing<br/>(Oplog Change Stream Reconciler, Survivor Timers)"]
+        M10["Module 10: Data Reconciliation & Self-Healing<br/>(Cờ _state, Sweeper slot 0, Projection, Survivor Timers)"]
     end
 
     Client <-->|WebSocket| M09
@@ -52,11 +52,11 @@ flowchart TD
     M05 -.->|Fast-path Events| M09
     M07 -.->|Fast-path Events| M09
 
-    M02 -->|Audit / Oplog| M10
-    M03 -->|Audit / Oplog| M10
-    M04 -->|Audit / Oplog| M10
-    M05 -->|Audit / Oplog| M10
-    M10 -.->|Slow-path Compensate| M09
+    M02 -->|Cờ _state chờ phát| M10
+    M03 -->|Cờ _state chờ phát| M10
+    M04 -->|Cờ _state chờ phát| M10
+    M05 -->|Cờ _state chờ phát| M10
+    M10 -.->|Sweeper phát bù| M09
 ```
 
 ---
@@ -93,7 +93,7 @@ flowchart TD
 
     %% Tầng Lưu trữ & Cache
     subgraph Storage["Tầng Lưu trữ Bền vững & Bộ nhớ đệm"]
-        RedisStorage[("Redis<br/>- Dedupe EVALSHA (M02)<br/>- Bitmap Ack Marks (M10)")]
+        RedisStorage[("Redis<br/>- Dedupe EVALSHA (M02)<br/>- request_id (M01, M05)")]
         MongoStorage[("MongoDB Replica Set<br/>- Clustered messages (M02, M08)<br/>- room_dms (M01)<br/>- message_edits Fact (M03)<br/>- members & interactions (M04, M05, M07)")]
     end
 
@@ -101,14 +101,14 @@ flowchart TD
     subgraph EventBus["Hạ tầng NATS JetStream"]
         NATSEph["NATS Ephemeral (Typing)"]
         NATSEvt["NATS Live Events (CHATIM_EVT)"]
-        NATSWork["NATS Work Stream (CHATIM_WORK - 32 Parts)"]
+        NATSWork["NATS Timer Stream (CHATIM_TIMER)"]
     end
 
-    %% Tầng Worker & Reconciler
-    subgraph AsyncWorkers["Tầng Xử lý Ngầm & Tự phục hồi"]
-        WorkerIndex["Worker reply_mention_index (M06)"]
-        WorkerTimer["Worker count_repair (M04, M10)"]
-        M10Reconcile["M10: Reconciler Leader Slot 0<br/>(Mongo Oplog Change Stream)"]
+    %% Tầng Projection & Tự phục hồi
+    subgraph AsyncWorkers["Tầng Xử lý Ngầm & Tự phục hồi (M3.1)"]
+        WorkerIndex["Projection room_activity · mention_reply_index · mention_read (M06, M07, M10)"]
+        WorkerTimer["Consumer timer-due: count_repair · member_count_repair (M04, M05, M10)"]
+        M10Reconcile["M10: Sweeper slot 0<br/>(quét cờ _state trên partial index)"]
     end
 
     %% Liên kết luồng
@@ -134,17 +134,16 @@ flowchart TD
     ConnHub -->|Đẩy tin tức thời| UserB
     NATSEvt -.->|Đồng bộ vị trí đọc| UserC
 
-    %% Luồng bất đồng bộ & Worker
-    M06 -.->|Enque work| NATSWork
-    M04 -.->|Arm survivor timer| NATSWork
-    NATSWork --> WorkerIndex & WorkerTimer
-    WorkerIndex -->|Lập inbox mention| MongoStorage
-    WorkerTimer -->|Đối soát sửa rx/rc| MongoStorage
+    %% Luồng projection & phiếu hẹn
+    NATSEvt --> WorkerIndex
+    M04 & M05 -.->|Arm survivor timer| NATSWork
+    NATSWork --> WorkerTimer
+    WorkerIndex -->|Danh sách hội thoại, inbox mention, rc| MongoStorage
+    WorkerTimer -->|Đối soát sửa rx/rc/member_count| MongoStorage
 
-    %% Luồng Reconciler
-    MongoStorage -.->|Oplog Change Stream| M10Reconcile
-    M10Reconcile -->|Check Ack Mark| RedisStorage
-    M10Reconcile -.->|Slow-path bù sự kiện rớt| NATSEvt
+    %% Luồng sweeper
+    M10Reconcile -.->|Doc còn cờ quá 5s| MongoStorage
+    M10Reconcile -.->|Phát bù từ doc hiện tại| NATSEvt
 ```
 
 ---
@@ -160,11 +159,11 @@ Mỗi module dưới đây là một tập tài liệu đặc tả hoàn chỉnh
 | **03** | [03. Message Edit, Delete & Privacy](./03-feature-message-edit-delete-and-privacy.md) | Sửa tin, xem lịch sử sửa, thu hồi, ẩn tin, xoá lịch sử | Fact/Projection pattern (`message_edits` -> `messages`); Optimistic CAS `base_ver`; Sparse fact filtering phía người đọc. |
 | **04** | [04. Reactions, Pins & Bookmarks](./04-feature-reactions-pins-and-bookmarks.md) | Thả reaction, ghim tin nhắn, lưu trữ bookmark | Tập `(target, user)` với Tombstone; Survivor timers (Phiếu hẹn sinh tồn D111) tự sửa sai biến đếm; Pin folding CAS hạn mức 50 pins. |
 | **05** | [05. Membership & Roles](./05-feature-membership-roles-and-succession.md) | Thêm/xoá thành viên, rời phòng, chuyển giao owner | BulkWrite upsert kèm `request_id`; Transaction Mongo duy nhất cho kế nhiệm Owner; NATS `memberwatch` xoá cache quyền Core. |
-| **06** | [06. Threads, Replies & Mentions](./06-feature-threads-replies-and-mentions.md) | Trả lời trích dẫn, đếm reply, tag @mention, inbox nhắc tên | Cấu trúc phân cấp phẳng (Flat thread qua `root_seq`); Biến đếm `rc` `$inc` + survivor timer; Worker quét và bóc tách mention bất đồng bộ. |
+| **06** | [06. Threads, Replies & Mentions](./06-feature-threads-replies-and-mentions.md) | Trả lời trích dẫn, đếm reply, tag @mention, inbox nhắc tên | Cấu trúc phân cấp phẳng (Flat thread qua `root_seq`); Biến đếm `rc` `$inc` + survivor timer; projection `mention_reply_index` lập chỉ mục mention từ event. |
 | **07** | [07. Read Receipts & Unread Badge](./07-feature-read-receipts-and-unread-badge.md) | Đánh dấu đã đọc/chưa đọc, badge số tin chưa đọc | Cập nhật vị trí đọc trên doc Member (`read_seq`, `read_ver`); Thuật toán đếm unread giới hạn cửa sổ $S$, tự động trả `approx` 99+ khi vượt ngưỡng. |
 | **08** | [08. History Retrieval & Reconnect Sync](./08-feature-history-retrieval-and-sync.md) | Cuộn xem lịch sử tin nhắn, khôi phục sau mất mạng | Cursor pagination `(room_id, seq)`; Dynamic View pipeline che giấu tin nhạy cảm; Sync token `(room_id, last_seq)` chống thundering herd. |
 | **09** | [09. Realtime Delivery & Ephemeral](./09-feature-realtime-delivery-and-ephemeral.md) | Đẩy tin realtime, báo đang gõ, trạng thái online | Dynamic interest routing trên NATS PubSub; Bỏ qua DB cho tín hiệu tạm thời (typing, presence); Zero-alloc fanout WebSocket `gws`. |
-| **10** | [10. Data Reconciliation & Self-Healing](./10-feature-data-reconciliation-and-repair.md) | Bù đắp event rớt mạng, tự sửa sai bộ đếm, resync | Kiến trúc Dual-Path: Fast-path tức thì + Reconciler Change Stream (Slot 0) sau 5s; Redis Bitmap Ack Marks chống trùng; CLI `/app resync`. |
+| **10** | [10. Data Reconciliation & Self-Healing](./10-feature-data-reconciliation-and-repair.md) | Bù đắp event rớt mạng, tự sửa sai bộ đếm, resync | Cờ `_state` ghi cùng lệnh, xoá sau PubAck; sweeper slot 0 phát bù cờ quá 5s; 3 projection consumer không delay; phiếu hẹn `CHATIM_TIMER`; CLI `/app resync` bật lại cờ. |
 
 ---
 
@@ -174,15 +173,15 @@ Mỗi module dưới đây là một tập tài liệu đặc tả hoàn chỉnh
 
 | Tính năng | Lớp dữ liệu quy định | Cách ghi dữ liệu | Cách phát Event | Cơ chế sửa sai khi crash |
 |---|---|---|---|---|
-| **Tạo tin nhắn** | Fact bất biến | Insert unique theo CID (CAS) | Tức thời `msg_created` (idempotent id) | Reconciler quét Change Stream Oplog |
-| **Sửa / Thu hồi tin** | Fact bất biến + Projection | Insert `message_edits`, update CAS `messages` | `msg_changed` mang snapshot | Reconciler áp lại Projection |
-| **Thả Reaction / Bookmark** | Tập `(target, user)` | Update `ver` trên `_id: {target, user}` | `reaction_changed`, `bookmark_event` | Reconciler phát lại doc hiện tại |
-| **Ghim tin nhắn** | Fact bất biến + Projection | Insert `pin_actions`, fold CAS `rooms.pins` | `msg_pinned`, `msg_unpinned` | Worker `pin_projection` gấp nếp lại |
-| **Bộ đếm tin nhắn (rx, rc)** | Aggregate theo target | `$inc` tức thời + Phiếu hẹn sinh tồn | `counts_changed` mang version | Worker `count_repair` đếm lại toàn bộ |
-| **Thành viên nhóm** | Tập `(room, user)` | BulkWrite upsert `$cond` kèm `request_id` | `member_added`, `member_removed` | Reconciler phát lại doc member |
-| **Số lượng thành viên** | Aggregate theo target | `$inc` theo doc đổi + Phiếu hẹn | `member_count_changed` | Worker `member_count_repair` |
-| **Vị trí đã đọc** | Vị trí đọc | Update `read_seq`, tăng `read_ver` | `read_updated` không coalesce | Reconciler phát lại vị trí mới nhất |
-| **Ẩn tin / Xoá lịch sử** | Giá trị theo người đọc | Ghi fact thưa `hidden`, update `cleared_at` | `message_hidden`, `history_cleared` | Worker phát lại trạng thái hiện tại |
+| **Tạo tin nhắn** | Fact bất biến | Insert unique theo CID (CAS) | Tức thời `msg_created` (idempotent id) | Cờ `_state` bit 1 + sweeper phát bù |
+| **Sửa / Thu hồi tin** | Fact bất biến + Projection | Insert `message_edits`, update CAS `messages` | `msg_edited`/`msg_deleted` mang snapshot | Sweeper áp lại Projection rồi phát |
+| **Thả Reaction / Bookmark** | Tập `(target, user)` | Update `ver` trên `_id: {target, user}` | `reaction_changed`, `bookmark_changed` | Sweeper phát lại doc hiện tại |
+| **Ghim tin nhắn** | Fact bất biến + Projection | Insert `pin_actions`, fold CAS `rooms.pins` | `msg_pinned`, `msg_unpinned` | Sweeper fold + CAS lại rồi phát |
+| **Bộ đếm tin nhắn (rx, rc)** | Aggregate theo target | `$inc` tức thời + Phiếu hẹn sinh tồn | `counts_changed` mang version | Phiếu hẹn `CHATIM_TIMER` → `count_repair` đếm lại; event qua cờ bit 2/4 |
+| **Thành viên nhóm** | Tập `(room, user)` | BulkWrite upsert `$cond` kèm `request_id` | `member_added`, `member_removed` | Sweeper phát lại doc member |
+| **Số lượng thành viên** | Aggregate theo target | `$inc` theo doc đổi + Phiếu hẹn | `member_count_changed` | Phiếu hẹn → `member_count_repair`; event qua cờ bit 2 |
+| **Vị trí đã đọc** | Vị trí đọc | Update `read_seq`, tăng `read_ver` | `read_updated` không coalesce | Sweeper phát lại vị trí mới nhất |
+| **Ẩn tin / Xoá lịch sử** | Giá trị theo người đọc | Ghi fact thưa `hidden`, update `cleared_at` | `message_hidden`, `history_cleared` | Sweeper phát lại trạng thái hiện tại |
 | **Sổ nhận chỗ DM** | Sổ nhận chỗ | Upsert `$setOnInsert` theo cặp User | Không event riêng (thuộc room/member) | Lần mở phòng sau hoàn tất bước dở |
 | **Typing & Presence** | Ephemeral (Tạm thời) | **Không ghi cơ sở dữ liệu** | Đi thẳng qua NATS WebSocket | Mất khi rớt mạng, không cần phục hồi |
 
@@ -226,6 +225,7 @@ Mỗi module dưới đây là một tập tài liệu đặc tả hoàn chỉnh
 | **Độ trễ Ack gửi tin** | p99 ≤ 30ms | `chatim_send_flush_duration_seconds` | `ChatimFlushLatencyHigh`: p99 > 30ms kéo dài 5 phút |
 | **Độ trễ phân phối Realtime** | p99 ≤ 100ms | `chatim_realtime_delivery_latency_seconds` | `ChatimDeliveryLatencyHigh`: p99 > 100ms kéo dài 3 phút |
 | **Độ trễ đọc 50 tin lịch sử** | p99 ≤ 20ms | `chatim_get_history_duration_seconds` | `ChatimHistoryReadLatencyHigh`: p99 > 20ms kéo dài 5 phút |
-| **Bảo đảm không mất tin** | 100% (At-least-once) | `chatim_reconcile_republished_total` | `ChatimRepublishSurge`: > 100 events/s bù đắp kéo dài 10 phút |
-| **Cân bằng bộ đếm tự động** | Tự sửa sai trong ≤ 10s | `chatim_counter_repaired_total` | `ChatimCounterRepairSurge`: > 10 repairs/phút kéo dài 5 phút |
+| **Bảo đảm không mất tin** | 100% (At-least-once) | `chatim_core_event_pending_oldest_seconds`, `chatim_core_sweep_passes_total` | `ChatimEventPendingStuck`: cờ cũ nhất > 60s kéo dài 5 phút; `ChatimSweeperIdle`: không lượt quét nào trong 10 phút |
+| **Projection theo kịp** | Danh sách hội thoại ổn định ≤ 1s (e2e 0–0,5s) | `chatim_core_projection_lag_seconds` | `ChatimProjectionLagging`: > 10s kéo dài 5 phút |
+| **Cân bằng bộ đếm tự động** | Tự sửa sai trong ≤ 10s | `chatim_core_counter_repaired_total` | `ChatimCounterRepairSurge`: > 1 lần/giây kéo dài 10 phút |
 

@@ -95,7 +95,7 @@ sequenceDiagram
 - **Cơ chế bảo đảm:**
   - **Fact (Sự thật bất biến):** Mọi lần sửa đổi đều được chèn thành một document mới trong collection `message_edits` với `ver = base_ver + 1`. Document này không bao giờ bị sửa hay xoá.
   - **Projection (Bản chiếu hiện tại):** Bảng `messages` chỉ đóng vai trò là bản chiếu (View Projection) trạng thái mới nhất để phục vụ việc đọc nhanh.
-  - **Tự phục hồi Projection:** Nếu sau khi ghi Fact vào `message_edits`, máy chủ Core bị crash trước khi cập nhật bảng `messages`: **Worker `edit_projection` (Module 10)** sẽ đọc Change Stream của `message_edits` và tự động cập nhật lại bảng `messages` để đưa hệ thống về trạng thái nhất quán cuối cùng (Eventual Consistency).
+  - **Tự phục hồi Projection:** Nếu sau khi ghi Fact vào `message_edits`, máy chủ Core bị crash trước khi cập nhật bảng `messages`: fact mang cờ `_state: 1` nên **sweeper slot 0 (Module 10)** thấy nó sau khoảng 5–7s, chạy lại `ApplyEdit` (idempotent, chỉ áp khi `v < ver`; xoá tin thì dọn text) rồi mới phát `msg_edited`/`msg_deleted` với snapshot đã áp (D151).
 
 ### 3.2. Chống ghi đè tranh chấp bằng Optimistic CAS (Check-And-Set)
 - Khi client gửi lệnh sửa, client **bắt buộc phải gửi kèm `base_ver`** (phiên bản mà client đang nhìn thấy).
@@ -170,7 +170,7 @@ sequenceDiagram
    - *Hạn chế:* Tồn tại một khoảng thời gian cực ngắn (vài phần triệu giây) giữa lúc ghi Fact vào `message_edits` và cập nhật Projection `messages`.
    - *Đánh đổi:* Chấp nhận độ trễ này để đổi lấy tính an toàn dữ liệu: không bao giờ mất lịch sử kiểm toán ngay cả khi máy chủ sập nguồn giữa chừng.
 2. **Quyền riêng tư vs Kiểm toán tuân thủ (Audit Compliance):**
-   - *Hạn chế:* Khi người dùng chọn "Xoá tin nhắn cho mọi người", nội dung tin nhắn vẫn còn lưu trong collection `message_edits` và trong Change Stream 7 ngày để phục vụ việc điều tra vi phạm chính sách / pháp lý nội bộ.
+   - *Hạn chế:* Khi người dùng chọn "Xoá tin nhắn cho mọi người", nội dung tin nhắn vẫn còn lưu trong collection `message_edits` và trong stream `CHATIM_EVT` 7 ngày để phục vụ việc điều tra vi phạm chính sách / pháp lý nội bộ.
    - *Đánh đổi:* Để bảo vệ quyền riêng tư nghiêm ngặt cho tenant đặc thù, hệ thống hỗ trợ cấu hình tenant: không mang nội dung text trong event phát tán qua NATS.
 
 ---
@@ -181,12 +181,12 @@ sequenceDiagram
 |---|---|---|
 | **MongoDB Clustered Collection** | Lưu Fact `message_edits` và Projection `messages` | Nếu MongoDB lỗi ghi CAS: Lệnh sửa/xoá trả lỗi `UNAVAILABLE`. Trạng thái tin nhắn giữ nguyên, không xảy ra tình trạng dữ liệu nửa vời. |
 | **Model Access Policy** | Thẩm định quyền sửa/xoá | Nếu cache quyền bị cũ (chưa nhận event kick thành viên): Sẽ kiểm tra trực tiếp doc `members` trên DB để đảm bảo không ai bị thu hồi quyền mà vẫn sửa được tin. |
-| **Worker `edit_projection`** | Đồng bộ Fact sang Projection khi fast-path lỗi | Nếu worker này bị chậm: Client đọc từ bảng `messages` có thể thấy tin cũ thêm vài giây cho tới khi worker xử lý xong backlog. |
+| **Sweeper slot 0 (Module 10)** | Áp lại Fact sang Projection và phát bù event khi lệnh dừng giữa chừng | Nếu core chết giữa fact và projection: Client đọc `messages` thấy bản cũ khoảng 5–7s cho tới khi sweeper áp lại; projection còn chậm thì sweeper giữ cờ và thử ở lượt sau. |
 
 ### 6.1. Chỉ số Sức khoẻ Vận hành & Cảnh báo SRE (Key Metrics & Alerts)
 
 - **`chatim_message_edits_total`:** Tổng số lần chỉnh sửa tin nhắn phát sinh.
 - **`chatim_message_deletes_total`:** Tổng số lần thu hồi/xoá tin nhắn cho mọi người.
 - **`chatim_edit_cas_failures_total`:** Số lần lệnh sửa tin bị từ chối do lệch `base_ver`.
-- **`chatim_edit_projection_worker_lag_seconds`:** Độ trễ của worker `edit_projection` khi đồng bộ fact sang projection.
-  - *Luật cảnh báo (`ChatimEditProjectionLagHigh`):* Cảnh báo nếu worker bị trễ `> 5 giây`.
+- **`chatim_core_event_pending_oldest_seconds{collection="message_edits"}`:** Tuổi fact sửa/xoá cũ nhất còn cờ chờ phát (sweeper đo).
+  - *Luật cảnh báo (`ChatimEventPendingStuck`):* cờ cũ nhất > 60s trong 5 phút.

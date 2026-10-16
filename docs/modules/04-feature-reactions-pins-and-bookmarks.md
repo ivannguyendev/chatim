@@ -24,7 +24,7 @@ Sơ đồ khối dưới đây trực quan hoá cách hệ thống bảo đảm 
 
 ```mermaid
 flowchart TD
-    Req["Thao tác: Thả / Đổi / Huỷ Cảm xúc (SetReaction)"] --> ArmTimer["1. Lên dây cót: Arm Survivor Timer<br/>(Lập lịch hẹn tự sửa sai sau 10s trên NATS CHATIM_WORK)"]
+    Req["Thao tác: Thả / Đổi / Huỷ Cảm xúc (SetReaction)"] --> ArmTimer["1. Lên dây cót: Arm Survivor Timer<br/>(Lập lịch hẹn tự sửa sai sau 5s trên NATS CHATIM_TIMER)"]
 
     ArmTimer --> UpsertInter["2. Ghi nhận Fact tương tác vào message_interactions<br/>UpsertDoc({room, seq, user_id, emoji})"]
     UpsertInter --> CalcDelta{"Kết quả tương tác?"}
@@ -33,7 +33,7 @@ flowchart TD
     CalcDelta -- "Gỡ bỏ (Remove)" --> Dec["delta = -1 (emoji cũ)"]
     CalcDelta -- "Đổi biểu tượng (Swap)" --> Swap["-1 (emoji cũ) VÀ +1 (emoji mới)"]
 
-    Inc --> UpdateMsg["3. Cập nhật trực tiếp bộ đếm trên MongoDB (messages)<br/>UpdateOne({room, seq}, {$inc: {'rx.emoji': delta}})"]
+    Inc --> UpdateMsg["3. Cập nhật trực tiếp bộ đếm trên MongoDB (messages)<br/>UpdateOne({room, seq}, {$inc: {'rx.emoji': delta}})<br/>kèm cờ _state bit 2 (counts_changed chờ phát)"]
     Dec --> UpdateMsg
     Swap --> UpdateMsg
 
@@ -42,9 +42,9 @@ flowchart TD
     CheckCrash -- "Bình thường (Đường chính)" --> Disarm["4. Tháo ngòi nổ: Disarm Survivor Timer<br/>(Thao tác toàn vẹn, huỷ lịch hẹn)"]
     Disarm --> ReturnSuccess["Trả kết quả thành công cho Client (p99 <= 15ms)"]
 
-    CheckCrash -- "Node Core bị sập nguồn!" --> TimerFires["5. Phiếu hẹn phát nổ sau 10s!<br/>Worker count_repair nhận nhiệm vụ đối soát"]
-    TimerFires --> Recount["Worker truy vấn đếm lại toàn bộ tương tác thực tế<br/>trong message_interactions"]
-    Recount --> CASFix["Worker cập nhật lại mảng rx chuẩn xác trên doc messages<br/>bảo đảm tính hội tụ cuối cùng (Eventual Consistency)"]
+    CheckCrash -- "Node Core bị sập nguồn!" --> TimerFires["5. Phiếu hẹn phát nổ sau 5s!<br/>Consumer timer-due chạy count_repair"]
+    TimerFires --> Recount["count_repair truy vấn đếm lại toàn bộ tương tác thực tế<br/>trong message_interactions"]
+    Recount --> CASFix["count_repair CAS lại mảng rx chuẩn xác (kèm bit 2) rồi phát counts_changed<br/>bảo đảm tính hội tụ cuối cùng (Eventual Consistency)"]
 ```
 
 ### 2.2. Luồng Thả cảm xúc & Cơ chế Phiếu hẹn sinh tồn (Survivor Timers)
@@ -56,36 +56,37 @@ sequenceDiagram
     autonumber
     participant Client as Client SDK
     participant Core as Core (change/mutate)
-    participant Timers as event/work.Timers
+    participant Timers as event/timer.Timers
     participant Inter as MongoDB (message_interactions)
     participant Msgs as MongoDB (messages)
-    participant WorkQ as NATS JetStream (CHATIM_WORK)
-    participant Worker as Worker count_repair
+    participant WorkQ as NATS JetStream (CHATIM_TIMER)
+    participant Worker as Consumer timer-due (count_repair)
 
     Client->>Core: SetReaction(room, seq, emoji="👍")
 
     Note over Core,Timers: 1. Lên dây cót phiếu hẹn sinh tồn (Arm Timer)
     Core->>Timers: Arm(room, seq, kind="reactions")
-    Timers->>WorkQ: Đặt lịch hẹn tự sửa sai sau 10s
+    Timers->>WorkQ: Đặt lịch hẹn tự sửa sai sau 5s
 
     Note over Core,Inter: 2. Ghi nhận tương tác của người dùng
-    Core->>Inter: Upsert doc {room, seq, user_id, emoji="👍", ver=v+1}
+    Core->>Inter: Upsert doc {room, seq, user_id, emoji="👍", ver=v+1, _state bit 1}
     Inter-->>Core: Đã ghi nhận (Doc thực sự thay đổi: delta = +1)
 
     Note over Core,Msgs: 3. Tăng/giảm bộ đếm trực tiếp trên tin
-    Core->>Msgs: UpdateOne({room, seq}, {$inc: {"rx.👍": 1}})
+    Core->>Msgs: UpdateOne({room, seq}, {$inc: {"rx.👍": 1}}, _state bit 2)
     Msgs-->>Core: Update thành công
 
     Note over Core,Timers: 4. Tháo ngòi nổ phiếu hẹn (Disarm Timer)
     Core->>Timers: Disarm() (Thao tác đã trọn vẹn, không cần sửa)
 
     Core-->>Client: Trả về kết quả thành công
+    Note over Core: Publish reaction_changed + counts_changed, PubAck thì xoá hai bit, rớt thì sweeper phát bù (Module 10)
 
     opt Nếu Core bị sập nguồn ở Bước 3 (chưa kịp Disarm)
-        Note over WorkQ,Worker: Phiếu hẹn nổ sau 10s!
+        Note over WorkQ,Worker: Phiếu hẹn nổ sau 5s!
         WorkQ->>Worker: Giao nhiệm vụ kiểm tra doc {room, seq}
         Worker->>Inter: Đếm lại toàn bộ reaction thực tế trong DB
-        Worker->>Msgs: Cập nhật lại rx chuẩn xác qua CAS version
+        Worker->>Msgs: Cập nhật lại rx chuẩn xác qua CAS version (kèm bit 2), rồi phát counts_changed
     end
 ```
 
@@ -132,12 +133,14 @@ sequenceDiagram
 - **Vấn đề cần giải quyết:** Nếu mỗi lần thả reaction đều phải quét toàn bộ collection để `COUNT(*)` rồi ghi lại số lượng (Recount), database sẽ bị nghẽn IOPS khi có hàng nghìn reaction mỗi giây. Ngược lại, nếu chỉ dùng `$inc`, nếu server crash giữa chừng thì số đếm sẽ vĩnh viễn bị lệch (Drift counter).
 - **Cơ chế bảo đảm:**
   - **Đường bình thường (Fast-path):** Khi ghi bản ghi tương tác thành công, nếu thực sự có emoji mới, Core áp dụng toán tử `$inc: {"rx.<emoji>": 1}` ngay trên document `messages`. Tốc độ cực nhanh (<2ms).
-  - **Bảo hiểm sinh tồn (Slow-path Insurance):** Trước khi ghi, Core bật một "phiếu hẹn" trên NATS JetStream. Nếu lệnh `$inc` thành công, phiếu hẹn được tháo ngòi (`Disarm`). Nếu Core crash trước khi kịp `$inc`, phiếu hẹn sẽ nổ sau 10s và kích hoạt worker `count_repair` quét đếm lại để đưa số lượng về chuẩn xác tuyệt đối.
+  - **Bảo hiểm sinh tồn (Slow-path Insurance):** Trước khi ghi, Core bật một "phiếu hẹn" trên NATS JetStream. Nếu lệnh `$inc` thành công, phiếu hẹn được tháo ngòi (`Disarm`). Nếu Core crash trước khi kịp `$inc`, phiếu hẹn trên `CHATIM_TIMER` nổ sau 5s và consumer `timer-due` chạy `count_repair` đếm lại để đưa số lượng về chuẩn xác tuyệt đối.
+  - **Event bảo đảm tới:** doc reaction mang bit 1 (`reaction_changed`), `$inc rx` bật bit 2 trên tin (`counts_changed`); mỗi bit chỉ được xoá sau PubAck và khi version còn bằng, nếu không sweeper slot 0 phát bù trạng thái hiện tại (Module 10).
 
 ### 3.3. Cơ chế gấp nếp Ghim tin nhắn (Pin Projection Folding D92)
 - **Ghim tin:** Mọi thao tác ghim hay bỏ ghim được ghi thành các Fact bất biến vào `pin_actions` với `pin_ver` tăng dần đơn điệu.
 - Bảng hiển thị ghim tại `rooms.pins` là bản chiếu (Projection) được sinh ra bằng cách gấp nếp (Fold) các hành động từ `pin_actions`.
 - **Bảo đảm hạn mức `PIN_LIMIT = 50`:** Nhờ việc tính toán trên toàn bộ chuỗi fact của `pin_actions`, số lượng tin ghim đang hoạt động không bao giờ vượt quá 50 tin, ngăn chặn tình trạng tràn bộ nhớ giao diện người dùng.
+- **Tự phục hồi (M3.1):** fact ghim mang cờ `_state: 1`. Nếu CAS fold thua hoặc core chết trước khi phát, sweeper slot 0 fold + CAS lại rồi mới phát `msg_pinned`/`msg_unpinned` (D151); thua CAS lần nữa thì giữ cờ cho lượt sau.
 
 ---
 
@@ -210,12 +213,12 @@ sequenceDiagram
 | Thành phần phụ thuộc | Mục đích phụ thuộc | Ứng xử khi thành phần gặp sự cố (Failure Behavior) |
 |---|---|---|
 | **MongoDB Clustered Collection** | Lưu `message_interactions` và `pin_actions` | Nếu MongoDB lỗi ghi CAS: Lệnh thả reaction/ghim trả `UNAVAILABLE`. Trạng thái cảm xúc giữ nguyên, client tự backoff và gọi lại. |
-| **NATS JetStream (CHATIM_WORK)** | Lưu trữ Phiếu hẹn sinh tồn (Survivor Timers) | Nếu NATS quá tải không nhận được timer: Lệnh ghi vẫn hoàn tất trên fast-path; nếu Core crash đúng lúc này, quản trị viên có thể kích hoạt công cụ `/app recount` để sửa sai thủ công. |
-| **Worker `count_repair`** | Tự động cân bằng lại bộ đếm khi có sự cố | Nếu worker bị chậm trễ: Bộ đếm reaction trên tin nhắn có thể lệch 1-2 đơn vị trong một khoảng thời gian ngắn, nhưng danh sách chi tiết từng người thả trong `message_interactions` luôn chính xác. |
+| **NATS JetStream (CHATIM_TIMER)** | Lưu trữ Phiếu hẹn sinh tồn (Survivor Timers) | Nếu không đặt được phiếu: lệnh trả `UNAVAILABLE` trước khi ghi gì, client gọi lại. Phiếu đã đặt sống qua restart NATS. |
+| **Consumer `timer-due` (`count_repair`)** | Tự động cân bằng lại bộ đếm khi có sự cố | Nếu consumer bị chậm trễ: Bộ đếm reaction trên tin nhắn có thể lệch 1-2 đơn vị trong một khoảng thời gian ngắn, nhưng danh sách chi tiết từng người thả trong `message_interactions` luôn chính xác. |
 
 ### 6.1. Chỉ số Sức khoẻ Vận hành & Cảnh báo SRE (Key Metrics & Alerts)
 
-- **`chatim_counter_repaired_total{counter="reactions"}`:** Bộ đếm tổng số lần worker `count_repair` phải can thiệp để sửa lệch số reaction.
+- **`chatim_counter_repaired_total{counter="reactions"}`:** Bộ đếm tổng số lần `count_repair` phải can thiệp để sửa lệch số reaction.
   - *Ngưỡng bình thường:* Gần như bằng 0 trong điều kiện vận hành ổn định.
-  - *Luật cảnh báo (`ChatimCounterRepairSurge`):* Khi tốc độ sửa sai tăng vọt `> 10 repairs/phút` trong 5 phút liên tục, cảnh báo Core đang bị crash đột ngột hoặc mạng giữa Core và MongoDB gặp tình trạng nghẽn nặng.
+  - *Luật cảnh báo (`ChatimCounterRepairSurge`):* Khi tốc độ sửa sai `> 1 lần/giây` kéo dài 10 phút, cảnh báo Core đang bị crash đột ngột hoặc mạng giữa Core và MongoDB gặp tình trạng nghẽn nặng.
 - **`chatim_pin_actions_total{action="pin|unpin"}`:** Đo lường tần suất ghim/bỏ ghim trong toàn hệ thống.
