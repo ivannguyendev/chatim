@@ -23,11 +23,6 @@ var portMethods = map[string]string{
 	"Rooms.Member":        "read",
 	"Rooms.TouchActivity": "monotonic-max",
 	"Rooms.ActiveRooms":   "read",
-	"ChangeFeed.Open":     "read",
-	"ChangeFeed.Forget":   "reset",
-	"Cursor.Next":         "read",
-	"Cursor.Confirm":      "monotonic-cas",
-	"Cursor.Close":        "lifecycle",
 
 	"MessageEditor.ApplyEdit":     "cas",
 	"HistoryClearer.ClearHistory": "monotonic-max",
@@ -121,8 +116,6 @@ func TestEveryPortMethodHasAWriteContract(t *testing.T) {
 	ports := []reflect.Type{
 		reflect.TypeFor[store.Messages](),
 		reflect.TypeFor[store.Rooms](),
-		reflect.TypeFor[store.ChangeFeed](),
-		reflect.TypeFor[store.Cursor](),
 		reflect.TypeFor[store.MessageEditor](),
 		reflect.TypeFor[store.HistoryClearer](),
 		reflect.TypeFor[store.Edits](),

@@ -7,8 +7,6 @@ type Counters struct {
 	malformed      atomic.Int64
 	refused        atomic.Int64
 	asyncFailed    atomic.Int64
-	markQueueFull  atomic.Int64
-	markFailed     atomic.Int64
 	stateTrackFull atomic.Int64
 }
 
@@ -17,8 +15,6 @@ type Drops struct {
 	Malformed      int64
 	Refused        int64
 	AsyncFailed    int64
-	MarkQueueFull  int64
-	MarkFailed     int64
 	StateTrackFull int64
 }
 
@@ -28,8 +24,6 @@ func (c *Counters) Drops() Drops {
 		Malformed:      c.malformed.Load(),
 		Refused:        c.refused.Load(),
 		AsyncFailed:    c.asyncFailed.Load(),
-		MarkQueueFull:  c.markQueueFull.Load(),
-		MarkFailed:     c.markFailed.Load(),
 		StateTrackFull: c.stateTrackFull.Load(),
 	}
 }

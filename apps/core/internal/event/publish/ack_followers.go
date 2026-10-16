@@ -15,15 +15,11 @@ const ackFollowQueue = 4096
 
 type pendingAck struct {
 	future jetstream.PubAckFuture
-	key    store.MsgKey
-	marked bool
 	target store.StateTarget
-	clear  bool
 }
 
 type ackFollower struct {
 	queue    chan pendingAck
-	marks    *ackMarks
 	clears   StateClears
 	full     atomic.Bool
 	log      *slog.Logger
@@ -31,43 +27,28 @@ type ackFollower struct {
 }
 
 func (p *Publisher) newAckFollower() *ackFollower {
-	if p.marks == nil && p.clears == nil {
+	if p.clears == nil {
 		return nil
 	}
-	return &ackFollower{queue: make(chan pendingAck, ackFollowQueue), marks: p.marks, clears: p.clears, log: p.log, counters: p.counters}
+	return &ackFollower{queue: make(chan pendingAck, ackFollowQueue), clears: p.clears, log: p.log, counters: p.counters}
 }
 
-func (a *ackFollower) follow(room uint64, ev *chatimv1.Event, f jetstream.PubAckFuture) {
+func (a *ackFollower) follow(ev *chatimv1.Event, f jetstream.PubAckFuture) {
 	if a == nil {
 		return
 	}
-	pending := pendingAck{future: f}
-	if a.marks != nil {
-		pending.key, pending.marked = markKey(room, ev)
-	}
-	if a.clears != nil {
-		pending.target, pending.clear = StateTargetOf(ev)
-	}
-	if !pending.marked && !pending.clear {
+	target, ok := StateTargetOf(ev)
+	if !ok {
 		return
 	}
 	select {
-	case a.queue <- pending:
+	case a.queue <- pendingAck{future: f, target: target}:
 		a.full.Store(false)
 	default:
-		a.drop(pending)
-	}
-}
-
-func (a *ackFollower) drop(pending pendingAck) {
-	if pending.marked {
-		a.counters.markQueueFull.Add(1)
-	}
-	if pending.clear {
 		a.counters.stateTrackFull.Add(1)
-	}
-	if a.full.CompareAndSwap(false, true) {
-		a.log.Warn("ack follower queue full; events left unmarked or flagged are republished later")
+		if a.full.CompareAndSwap(false, true) {
+			a.log.Warn("ack follower queue full; flagged events are republished by the sweeper")
+		}
 	}
 }
 
@@ -78,13 +59,7 @@ func (a *ackFollower) run(abort <-chan struct{}) {
 			if !open {
 				return
 			}
-			if !acked(pending.future, abort) {
-				continue
-			}
-			if pending.marked {
-				a.marks.track(pending.key)
-			}
-			if pending.clear {
+			if acked(pending.future, abort) {
 				a.clears.Add(pending.target)
 			}
 		case <-abort:
@@ -105,10 +80,7 @@ func acked(f jetstream.PubAckFuture, abort <-chan struct{}) bool {
 }
 
 func (p *Publisher) startFollowers() (stop func()) {
-	var marking, following sync.WaitGroup
-	if p.marks != nil {
-		marking.Go(func() { p.marks.run(p.abort) })
-	}
+	var following sync.WaitGroup
 	for _, s := range p.shards {
 		if s.acks != nil {
 			following.Go(func() { s.acks.run(p.abort) })
@@ -121,9 +93,5 @@ func (p *Publisher) startFollowers() (stop func()) {
 			}
 		}
 		following.Wait()
-		if p.marks != nil {
-			close(p.marks.queue)
-		}
-		marking.Wait()
 	}
 }

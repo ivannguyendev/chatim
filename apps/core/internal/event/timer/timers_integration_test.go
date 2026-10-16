@@ -12,6 +12,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
@@ -116,7 +117,7 @@ func TestRealJetStreamFiresAnArmedTimerAndTheConsumerRepairs(t *testing.T) {
 	tm := itTimers(t, js, cfg, &testlog.Sink{})
 	members := built(timer.NewMemberCountRepair(timer.MemberCountRepairDeps{Rooms: rooms, Counts: rooms, Timers: tm, Events: events}))(t)
 	messages := &fakeRepairer{}
-	c := built(timer.NewConsumer(timer.ConsumerDeps{Source: timer.NewSource(js, cfg.Name), Members: members, Messages: messages}, timer.ConsumerConfig{}, nil))(t)
+	c := built(timer.NewConsumer(timer.ConsumerDeps{Source: eventkit.NewPullSource(js, cfg.Name, timer.ConsumerName), Members: members, Messages: messages}, timer.ConsumerConfig{}, nil))(t)
 	armedAt := time.Now()
 	if _, err := tm.ArmMemberCountCheck(t.Context(), room); err != nil {
 		t.Fatalf("ArmMemberCountCheck: %v", err)

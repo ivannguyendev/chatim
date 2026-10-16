@@ -33,7 +33,6 @@ func (s *Rooms) AddMembers(ctx context.Context, j domain.Join, users []string) (
 			next.LastChangeAt = later(cur.LastChangeAt, next.LastChangeAt)
 			s.members[k] = next
 			s.memberFlags.raise(k, store.BitMember, time.Now())
-			s.logMemberLocked(store.MemberChanged, next)
 			out.Changed++
 		}
 		out.Members[i] = s.members[k]
@@ -57,7 +56,6 @@ func (s *Rooms) ApplyMember(ctx context.Context, cur, next domain.Member) (bool,
 	}
 	s.members[k] = withMembership(stored, next)
 	s.memberFlags.raise(k, store.BitMember, time.Now())
-	s.logMemberLocked(store.MemberChanged, s.members[k])
 	return true, nil
 }
 

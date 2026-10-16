@@ -39,6 +39,8 @@ type shard struct {
 	acks  *ackFollower
 }
 
+type Option func(*Publisher)
+
 type Publisher struct {
 	js       JetStream
 	cfg      Config
@@ -51,7 +53,6 @@ type Publisher struct {
 	abort    chan struct{}
 	stop     sync.Once
 	done     chan struct{}
-	marks    *ackMarks
 	clears   StateClears
 	counters *Counters
 }
@@ -70,9 +71,6 @@ func New(js JetStream, cfg Config, log *slog.Logger, opts ...Option) (*Publisher
 	p := &Publisher{js: js, cfg: cfg, log: log, fails: failureLog{log: log}, shards: make([]*shard, cfg.Shards), abort: make(chan struct{}), done: make(chan struct{}), counters: &Counters{}}
 	for _, opt := range opts {
 		opt(p)
-	}
-	if p.marks != nil {
-		p.marks.counters = p.counters
 	}
 	for i := range p.shards {
 		p.shards[i] = &shard{queue: make(chan item, cfg.QueueSize), acks: p.newAckFollower()}
@@ -121,11 +119,11 @@ func (p *Publisher) publish(s *shard, it item) {
 		}
 		f, err := p.js.PublishMsgAsync(msg, jetstream.WithRetryAttempts(p.cfg.Attempts), jetstream.WithRetryWait(p.cfg.RetryBackoff))
 		if err != nil {
-			p.fails.record("event publish refused; reconciliation must republish it", ev.GetId(), err)
+			p.fails.record("event publish refused; the sweeper republishes it", ev.GetId(), err)
 			p.counters.refused.Add(1)
 			continue
 		}
-		s.acks.follow(it.room, ev, f)
+		s.acks.follow(ev, f)
 	}
 }
 

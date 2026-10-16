@@ -87,7 +87,6 @@ func (s *Rooms) commitOwners(room, ownersVer uint64, writes []store.MemberWrite)
 		k := memberKey{room, w.Cur.User}
 		s.members[k] = withMembership(s.members[k], w.Next)
 		s.memberFlags.raise(k, store.BitMember, now)
-		s.logMemberLocked(store.MemberChanged, s.members[k])
 		res.Written = append(res.Written, w.Next)
 	}
 	s.ownersVer[room]++

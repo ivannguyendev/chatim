@@ -22,7 +22,7 @@ import (
 
 const (
 	ackFollowQueue   = 4096
-	ackFollowFullMsg = "ack follower queue full; events left unmarked or flagged are republished later"
+	ackFollowFullMsg = "ack follower queue full; flagged events are republished by the sweeper"
 )
 
 var _ publish.StateClears = (*stateclear.Queue)(nil)
@@ -130,9 +130,9 @@ func TestEventsWithoutAStateArePublishedAndNothingIsCleared(t *testing.T) {
 
 func TestFullAckFollowerDropsAndCountsWithoutBlockingPublishes(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		m, c := &recordingMarker{}, &recordingClears{}
+		c := &recordingClears{}
 		counters := &publish.Counters{}
-		rg := newRig(t, fastSetup, publish.WithAckMarks(m), publish.WithStateClears(c), publish.WithCounters(counters)).start(t)
+		rg := newRig(t, fastSetup, publish.WithStateClears(c), publish.WithCounters(counters)).start(t)
 		rg.js.Hold()
 		total := uint64(ackFollowQueue + 3)
 		rg.enqueue(t, roomA, 1)
@@ -142,31 +142,16 @@ func TestFullAckFollowerDropsAndCountsWithoutBlockingPublishes(t *testing.T) {
 		if got := len(rg.js.Attempts()); got != int(total) {
 			t.Fatalf("attempts while the follower is stuck = %d, want %d", got, total)
 		}
-		if d := counters.Drops(); d.StateTrackFull != 2 || d.MarkQueueFull != 2 {
-			t.Fatalf("StateTrackFull %d, MarkQueueFull %d; want 2 each (one waiting, %d queued)", d.StateTrackFull, d.MarkQueueFull, ackFollowQueue)
+		if got := counters.Drops().StateTrackFull; got != 2 {
+			t.Fatalf("StateTrackFull %d; want 2 (one waiting, %d queued)", got, ackFollowQueue)
 		}
 		if got := rg.sink.Count(ackFollowFullMsg); got != 1 {
 			t.Fatalf("%q logged %d times, want 1", ackFollowFullMsg, got)
 		}
 		rg.js.Release()
 		closeRig(t, rg)
-		if got, marked := len(c.added()), len(m.marked()); got != ackFollowQueue+1 || marked != ackFollowQueue+1 {
-			t.Fatalf("added %d, marked %d; want %d each", got, marked, ackFollowQueue+1)
-		}
-	})
-}
-
-func TestAckMarksAndStateClearsRunSideBySide(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		m, c := &recordingMarker{}, &recordingClears{}
-		rg := newRig(t, fastSetup, publish.WithAckMarks(m), publish.WithStateClears(c)).start(t)
-		rg.enqueue(t, roomA, 1)
-		closeRig(t, rg)
-		if got := m.marked(); !slices.Equal(got, []store.MsgKey{{Room: roomA, Seq: 1}}) {
-			t.Fatalf("marked = %v", got)
-		}
-		if got := c.added(); !slices.Equal(got, []store.StateTarget{createdTarget(roomA, 1)}) {
-			t.Fatalf("added = %+v", got)
+		if got := len(c.added()); got != ackFollowQueue+1 {
+			t.Fatalf("added %d; want %d", got, ackFollowQueue+1)
 		}
 	})
 }

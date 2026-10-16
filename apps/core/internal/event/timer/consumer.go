@@ -28,7 +28,7 @@ type Repairer interface {
 }
 
 type ConsumerDeps struct {
-	Source   Source
+	Source   eventkit.Source
 	Members  Repairer
 	Messages Repairer
 }

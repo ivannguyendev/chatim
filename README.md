@@ -26,7 +26,7 @@ apps/core/               # main.go (gọi app.Main); itest/: test tích hợp c�
   internal/model/        # domain, pbconv, access (kiểu, chuyển proto, permission hook)
   internal/send/         # actor, dedupe, flush, memberwatch (gửi tin)
   internal/change/       # mutate, ownership, pinproj (lệnh đổi, projection)
-  internal/event/        # publish, stateclear, projection, sweep, timer, eventkit, resync (event theo cờ `_state`); eventmark, work, effects, reconcile (engine cũ, không còn nối, chờ xoá)
+  internal/event/        # publish, stateclear, projection, sweep, timer, eventkit, resync (event theo cờ `_state`)
   internal/store/        # port + memstore, mongostore, storetest
   internal/platform/     # slot, metrics, redisguard, testlog (hạ tầng cụm)
 pkg/                     # dùng chung: keys, ids, lru, slotmap, apperr, envconfig, resilience, admin, grpcserver, grpcclient, backoff, pb

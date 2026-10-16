@@ -7,9 +7,6 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
-	"go.mongodb.org/mongo-driver/v2/mongo/readconcern"
-	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
-	"go.mongodb.org/mongo-driver/v2/mongo/writeconcern"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
@@ -20,7 +17,7 @@ func Bootstrap(ctx context.Context, db *mongo.Database) error {
 			return err
 		}
 	}
-	for _, name := range []string{roomsCollection, reconcilerStateCollection, hiddenCollection, sweeperStateCollection} {
+	for _, name := range []string{roomsCollection, hiddenCollection, sweeperStateCollection} {
 		if err := createCollection(ctx, db, name); err != nil {
 			return err
 		}
@@ -46,25 +43,7 @@ func Bootstrap(ctx context.Context, db *mongo.Database) error {
 	if err := ensureStatePendingIndexes(ctx, db); err != nil {
 		return err
 	}
-	if err := dropReplacedIndexes(ctx, db); err != nil {
-		return err
-	}
-	return ensureFeedAnchor(ctx, db)
-}
-
-func ensureFeedAnchor(ctx context.Context, db *mongo.Database) error {
-	majority := options.Collection().
-		SetReadPreference(readpref.Primary()).
-		SetReadConcern(readconcern.Majority()).
-		SetWriteConcern(writeconcern.Majority())
-	state := db.Collection(reconcilerStateCollection, majority)
-	keepOrNow := bson.D{{Key: "$ifNull", Value: bson.A{"$cluster_time", "$$CLUSTER_TIME"}}}
-	update := mongo.Pipeline{{{Key: "$set", Value: bson.D{{Key: "cluster_time", Value: keepOrNow}}}}}
-	filter := bson.D{{Key: "_id", Value: changesFeedID}}
-	if _, err := state.UpdateOne(ctx, filter, update, options.UpdateOne().SetUpsert(true)); err != nil && !mongo.IsDuplicateKeyError(err) {
-		return fmt.Errorf("bootstrap %s: anchor change feed: %w", reconcilerStateCollection, err)
-	}
-	return nil
+	return dropReplacedIndexes(ctx, db)
 }
 
 func ensureClustered(ctx context.Context, db *mongo.Database, name string) error {

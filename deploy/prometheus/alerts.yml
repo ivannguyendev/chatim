@@ -8,7 +8,7 @@ groups:
           severity: warning
           guarantee: RC5
         annotations:
-          summary: The oplog covers less than 48h.
+          summary: The oplog covers less than 48h; a lagging or resyncing secondary has little room to catch up.
       - alert: ChatimOplogWindowCritical
         expr: min(chatim_core_mongo_oplog_window_seconds) < 86400
         for: 15m
@@ -16,7 +16,7 @@ groups:
           severity: critical
           guarantee: RC5
         annotations:
-          summary: The oplog covers less than 24h, below the minimum retention.
+          summary: The oplog covers less than 24h, below the minimum retention for replica health.
       - alert: ChatimOplogWindowUnknown
         expr: count(chatim_core_mongo_oplog_window_seconds != chatim_core_mongo_oplog_window_seconds) > 0
         for: 10m
@@ -24,7 +24,7 @@ groups:
           severity: warning
           guarantee: RC5
         annotations:
-          summary: A core cannot read the oplog window; the RC5 detector is blind.
+          summary: A core cannot read the oplog window; the replica health check is blind.
       - alert: ChatimEventsDropped
         expr: sum(rate(chatim_core_publish_dropped_total[5m])) > 0
         for: 10m
@@ -94,13 +94,13 @@ groups:
         annotations:
           summary: A projection keeps failing an event that has been delivered six times or more.
       - alert: ChatimSweeperIdle
-        expr: sum(increase(chatim_core_sweep_passes_total[1m])) == 0
-        for: 1m
+        expr: sum(increase(chatim_core_sweep_passes_total[10m])) == 0
+        for: 10m
         labels:
           severity: critical
           guarantee: RC1
         annotations:
-          summary: No core finished a sweeper pass for a minute; events lost before their ack are not republished.
+          summary: No core finished a sweeper pass for 10 minutes; events lost before their ack are not republished.
       - alert: ChatimTimerFailing
         expr: sum(increase(chatim_core_timer_failures_total[15m])) > 0
         for: 15m

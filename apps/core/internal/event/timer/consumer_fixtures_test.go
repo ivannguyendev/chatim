@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 )
 
@@ -54,7 +55,7 @@ func (d *fakeDelivery) settled() (acks, terms int, naks []time.Duration) {
 
 type fakeSource struct {
 	mu      sync.Mutex
-	batches [][]timer.Delivery
+	batches [][]eventkit.Delivery
 	errs    []error
 	fetches int
 }
@@ -62,14 +63,14 @@ type fakeSource struct {
 func (s *fakeSource) push(ds ...*fakeDelivery) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	batch := make([]timer.Delivery, len(ds))
+	batch := make([]eventkit.Delivery, len(ds))
 	for i, d := range ds {
 		batch[i] = d
 	}
 	s.batches = append(s.batches, batch)
 }
 
-func (s *fakeSource) Fetch(ctx context.Context, _ int, wait time.Duration) ([]timer.Delivery, error) {
+func (s *fakeSource) Fetch(ctx context.Context, _ int, wait time.Duration) ([]eventkit.Delivery, error) {
 	s.mu.Lock()
 	s.fetches++
 	if len(s.errs) > 0 {

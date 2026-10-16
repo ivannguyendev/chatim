@@ -31,6 +31,5 @@ func (s *Rooms) SetPreferences(ctx context.Context, room uint64, user string, c 
 	m.Preferences, m.LastChangeAt = next, later(m.LastChangeAt, toMillis(at))
 	s.members[k] = m
 	s.memberFlags.raise(k, store.BitPreferences, time.Now())
-	s.logMemberLocked(store.PreferenceChanged, m)
 	return next, true, nil
 }

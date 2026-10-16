@@ -6,7 +6,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 )
 
-func (c *Consumer) handle(ctx context.Context, ds []Delivery) []Delivery {
+func (c *Consumer) handle(ctx context.Context, ds []eventkit.Delivery) []eventkit.Delivery {
 	for i, d := range ds {
 		if !c.live(ctx) {
 			return ds[i:]
@@ -16,7 +16,7 @@ func (c *Consumer) handle(ctx context.Context, ds []Delivery) []Delivery {
 	return nil
 }
 
-func (c *Consumer) settle(ctx context.Context, d Delivery) {
+func (c *Consumer) settle(ctx context.Context, d eventkit.Delivery) {
 	chk, err := Decode(d.Data())
 	if err != nil {
 		c.dropped.Add(1)
@@ -46,7 +46,7 @@ func (c *Consumer) repairerOf(chk Check) Repairer {
 	return c.deps.Messages
 }
 
-func (c *Consumer) release(ds []Delivery) {
+func (c *Consumer) release(ds []eventkit.Delivery) {
 	for _, d := range ds {
 		c.report(context.Background(), d.Nak(0))
 	}

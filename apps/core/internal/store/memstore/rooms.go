@@ -26,7 +26,6 @@ type Rooms struct {
 	members     map[memberKey]domain.Member
 	pins        map[uint64]domain.PinState
 	ownersVer   map[uint64]uint64
-	log         *Messages
 	roomFlags   flagMap[uint64]
 	memberFlags flagMap[memberKey]
 }
@@ -55,15 +54,11 @@ func (s *Rooms) Create(ctx context.Context, r domain.Room, members []domain.Memb
 	s.rooms[r.ID] = r
 	at := insertFlagTime(r.CreatedAt)
 	s.roomFlags.raise(r.ID, store.BitRoomCreated|store.BitMemberCount, at)
-	if s.log != nil {
-		s.log.appendFact(logged{kind: store.RoomInserted, room: r})
-	}
 	for _, m := range members {
 		k := memberKey{m.Room, m.User}
 		if _, ok := s.members[k]; !ok {
 			s.members[k] = stamped(store.CreationMember(r, m))
 			s.memberFlags.raise(k, store.BitMember, at)
-			s.logMemberLocked(store.MemberChanged, s.members[k])
 		}
 	}
 	return nil
@@ -84,9 +79,6 @@ func (s *Rooms) InsertRoom(ctx context.Context, r domain.Room) error {
 	r.MemberCount, r.MemberCountVer, r.InfoVer = 0, 0, 1
 	s.rooms[r.ID] = r
 	s.roomFlags.raise(r.ID, store.BitRoomCreated, insertFlagTime(r.CreatedAt))
-	if s.log != nil {
-		s.log.appendFact(logged{kind: store.RoomInserted, room: r})
-	}
 	return nil
 }
 
@@ -136,6 +128,5 @@ func (s *Rooms) ClearHistory(ctx context.Context, room uint64, user string, at t
 	m.ClearedAt, m.LastChangeAt = at, later(m.LastChangeAt, at)
 	s.members[k] = m
 	s.memberFlags.raise(k, store.BitHistoryCleared, time.Now())
-	s.logMemberLocked(store.HistoryCleared, m)
 	return at, true, nil
 }

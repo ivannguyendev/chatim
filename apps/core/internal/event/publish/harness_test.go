@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"go.uber.org/goleak"
@@ -29,8 +30,8 @@ const (
 
 	queueFullMsg = "publish queue full; dropping events"
 	malformedMsg = "dropping malformed event"
-	refusedMsg   = "event publish refused; reconciliation must republish it"
-	failedMsg    = "event publish failed; reconciliation must republish it"
+	refusedMsg   = "event publish refused; the sweeper republishes it"
+	failedMsg    = "event publish failed; the sweeper republishes it"
 )
 
 var (
@@ -130,4 +131,22 @@ func attemptsOf(js *publishtest.JetStream, id string) int {
 		}
 	}
 	return n
+}
+
+func seqs(from, to uint64) []uint64 {
+	var out []uint64
+	for s := from; s <= to; s++ {
+		out = append(out, s)
+	}
+	return out
+}
+
+func closeRig(t *testing.T, rg *rig) {
+	t.Helper()
+	synctest.Wait()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := rg.Close(ctx); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
 }

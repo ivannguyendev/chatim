@@ -30,9 +30,6 @@ func (s *Interactions) SetBookmark(ctx context.Context, b domain.Bookmark) (doma
 	next.Ver = cur.Ver + 1
 	s.bookmarks[k] = next
 	s.flags.raise(interactionFlagKey{userKey: k, kind: keys.BookmarkKind}, store.BitInteraction, time.Now())
-	if s.log != nil {
-		s.log.appendFact(logged{kind: store.BookmarkChanged, bookmark: next})
-	}
 	return next, true, nil
 }
 

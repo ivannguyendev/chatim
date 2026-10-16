@@ -34,6 +34,5 @@ func (s *Rooms) UpdateRoomInfo(ctx context.Context, room, base uint64, c store.R
 	r.InfoVer, r.UpdatedAt, r.UpdatedBy = base+1, toMillis(c.At), c.By
 	s.rooms[room] = r
 	s.roomFlags.raise(room, store.BitRoomInfo, time.Now())
-	s.logRoomInfoLocked(room, r.InfoVer)
 	return true, nil
 }

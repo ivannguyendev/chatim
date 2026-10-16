@@ -25,15 +25,6 @@ func TestReactionAndPinErrorsWrapAppKinds(t *testing.T) {
 	}
 }
 
-func TestChangeKindsOnlyGrowAtTheEnd(t *testing.T) {
-	kinds := []store.ChangeKind{store.MessageInserted, store.RoomInserted, store.EditInserted, store.ReactionChanged, store.PinInserted}
-	for i, k := range kinds {
-		if int(k) != i+1 {
-			t.Fatalf("change kind %d = %d, want %d: kinds are stored in work records", i, k, i+1)
-		}
-	}
-}
-
 func TestReactionKeyOf(t *testing.T) {
 	r := domain.Reaction{Room: 42, Thread: 7, Seq: 3, User: "bob", Emoji: "👍"}
 	if got, want := store.ReactionKeyOf(r), (store.MsgKey{Room: 42, Thread: 7, Seq: 3}); got != want {

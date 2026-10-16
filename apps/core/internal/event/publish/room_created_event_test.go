@@ -9,7 +9,6 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish/publishtest"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
-	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -27,10 +26,9 @@ func TestRoomCreatedGoesToItsOwnSubject(t *testing.T) {
 	}
 }
 
-func TestRoomCreatedIsPublishedButNeverMarked(t *testing.T) {
+func TestRoomCreatedIsPublishedInArrivalOrder(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		m := &recordingMarker{}
-		rg := newRig(t, fastSetup, publish.WithAckMarks(m)).start(t)
+		rg := newRig(t, fastSetup).start(t)
 		if err := rg.Enqueue(roomA, []*chatimv1.Event{roomCreated(roomA)}); err != nil {
 			t.Fatalf("Enqueue(room_created): %v", err)
 		}
@@ -38,12 +36,6 @@ func TestRoomCreatedIsPublishedButNeverMarked(t *testing.T) {
 		closeRig(t, rg)
 		if got := storedIDs(rg.js); !slices.Equal(got, []string{"101-created", "101-0-1"}) {
 			t.Fatalf("stored %v, want 101-created then 101-0-1", got)
-		}
-		if got := m.marked(); !slices.Equal(got, []store.MsgKey{{Room: roomA, Seq: 1}}) {
-			t.Fatalf("marked %v, want only the message", got)
-		}
-		if key, ok := publish.MarkKey(roomA, roomCreated(roomA)); ok {
-			t.Fatalf("MarkKey(room_created) = %v, true; want no mark", key)
 		}
 	})
 }

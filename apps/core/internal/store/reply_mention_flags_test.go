@@ -7,12 +7,6 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
-func TestInteractionAndMessageCountKindsComeLast(t *testing.T) {
-	if store.BookmarkChanged != 11 || store.MessageCountCheck != 12 {
-		t.Fatalf("BookmarkChanged = %d, MessageCountCheck = %d; want 11 and 12", store.BookmarkChanged, store.MessageCountCheck)
-	}
-}
-
 func TestReplyMentionFlagsOf(t *testing.T) {
 	reply := &domain.ReplyRef{Seq: 4}
 	user := []domain.MentionTarget{{Kind: domain.MentionUser, ID: "bob"}}

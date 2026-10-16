@@ -21,7 +21,6 @@ type hiddenKey struct {
 type Hidden struct {
 	mu    sync.RWMutex
 	seqs  map[hiddenKey]time.Time
-	log   *Messages
 	flags flagMap[hiddenKey]
 }
 
@@ -48,9 +47,6 @@ func (s *Hidden) Hide(ctx context.Context, user string, key store.MsgKey, at tim
 	at = time.UnixMilli(at.UnixMilli()).UTC()
 	s.seqs[k] = at
 	s.flags.raise(k, store.BitHidden, at)
-	if s.log != nil {
-		s.log.appendFact(logged{kind: store.MessageHidden, hidden: domain.HiddenMessage{User: user, Room: key.Room, Thread: key.Thread, Seq: key.Seq, At: at}})
-	}
 	return true, nil
 }
 

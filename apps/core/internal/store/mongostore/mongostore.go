@@ -13,18 +13,17 @@ import (
 )
 
 const (
-	messagesCollection        = "messages"
-	roomsCollection           = "rooms"
-	membersCollection         = "members"
-	reconcilerStateCollection = "reconciler_state"
-	editsCollection           = "message_edits"
-	hiddenCollection          = "hidden"
-	interactionsCollection    = "message_interactions"
-	pinActionsCollection      = "pin_actions"
-	mentionsCollection        = "mentions"
-	roomDMsCollection         = "room_dms"
-	replyThreadsCollection    = "reply_threads"
-	sweeperStateCollection    = "sweeper_state"
+	messagesCollection     = "messages"
+	roomsCollection        = "rooms"
+	membersCollection      = "members"
+	editsCollection        = "message_edits"
+	hiddenCollection       = "hidden"
+	interactionsCollection = "message_interactions"
+	pinActionsCollection   = "pin_actions"
+	mentionsCollection     = "mentions"
+	roomDMsCollection      = "room_dms"
+	replyThreadsCollection = "reply_threads"
+	sweeperStateCollection = "sweeper_state"
 )
 
 var (

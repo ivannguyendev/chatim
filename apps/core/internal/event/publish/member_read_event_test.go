@@ -7,7 +7,6 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
-	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
@@ -75,17 +74,5 @@ func TestEachKindGoesToTheSubjectOfItsData(t *testing.T) {
 	}
 	if subject, err := publish.SubjectFor("evt", tenant, roomA, "bogus"); !errors.Is(err, apperr.ErrInvalidArgument) || subject != "" {
 		t.Fatalf("SubjectFor(bogus) = %q, %v; want ErrInvalidArgument", subject, err)
-	}
-}
-
-func TestOnlyMessageCreatedIsMarked(t *testing.T) {
-	for name, c := range everyKind() {
-		key, ok := publish.MarkKey(roomA, c.ev)
-		switch {
-		case name == "msg_created" && (!ok || key != store.MsgKey{Room: roomA, Seq: 7}):
-			t.Errorf("MarkKey(msg_created) = %v, %v; want {%d 0 7}, true", key, ok, roomA)
-		case name != "msg_created" && ok:
-			t.Errorf("MarkKey(%s) = %v, true; want no mark", name, key)
-		}
 	}
 }
