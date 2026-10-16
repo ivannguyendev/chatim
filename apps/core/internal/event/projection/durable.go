@@ -47,7 +47,7 @@ func consumerConfig(cfg Config) jetstream.ConsumerConfig {
 	return jetstream.ConsumerConfig{
 		Durable:       DurableName,
 		FilterSubject: cfg.SubjectRoot + ".>",
-		AckPolicy:     jetstream.AckAllPolicy,
+		AckPolicy:     jetstream.AckExplicitPolicy,
 		AckWait:       AckWait,
 		MaxAckPending: cfg.MaxAckPending(),
 		DeliverPolicy: jetstream.DeliverAllPolicy,

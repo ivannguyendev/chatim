@@ -32,7 +32,7 @@ flowchart LR
   Q -- "4. updateMany mỗi 100ms / 500 đích" --> DB
   S[sweeper · chỉ core giữ slot 0] -- "5. doc còn cờ > 5s (partial index)" --> DB
   S -- "dựng lại event từ doc, phát cùng id" --> EVT
-  EVT -- "evt.> · AckAll" --> P[consumer projections · chỉ core giữ slot 0]
+  EVT -- "evt.>" --> P[consumer projections · chỉ core giữ slot 0]
   P --> P1[room_activity] & P2[mention_reply_index] & P3[mention_read]
   P1 & P2 & P3 --> DB
   EVT -- "live.*" --> W[websocket M4]
@@ -120,7 +120,7 @@ Ví dụ NATS chết từ 10:00:00 tới 10:02:00: gửi tin vẫn ack bình th�
 
 ### 3.3. Projection consumer (D150, D159)
 
-Một consumer durable `projections` trên `CHATIM_EVT`: lọc một subject `evt.>` (mọi event), `AckAll`, `AckWait` 30s, `MaxAckPending` = 2 × lô, `DeliverAll`. Chỉ core giữ slot 0 fetch (như sweeper, xét lại mỗi `SLOT_TICK`), nên mỗi lúc chỉ một nơi đọc durable. Lô ≤ `PROJECTION_FETCH_BATCH` 1024 event, chờ ≤ `PROJECTION_FETCH_WAIT` 1s (server hết hạn đúng lúc đó, client đợi thêm tới tín hiệu hết hạn nên không đánh rơi tin đã giao). Mỗi lô decode một lần rồi chia cho ba handler chạy song song, mỗi handler chỉ nhận các kind nó giữ; kind không handler nào giữ (ví dụ `room_created`) chỉ được ack. Ba durable cũ `projection-room_activity`, `projection-mention_reply_index`, `projection-mention_read` bị xoá lúc khởi động (không có thì bỏ qua). Lần đầu tạo `projections` đọc lại toàn bộ stream còn giữ (idempotent).
+Một consumer durable `projections` trên `CHATIM_EVT`: lọc một subject `evt.>` (mọi event), ack từng tin (`AckExplicit`), `AckWait` 30s, `MaxAckPending` = 4 × lô, `DeliverAll`. Chỉ core giữ slot 0 fetch (như sweeper, xét lại mỗi `SLOT_TICK`). Lô ≤ `PROJECTION_FETCH_BATCH` 1024 event, chờ ≤ `PROJECTION_FETCH_WAIT` 1s (server hết hạn đúng lúc đó, client đợi thêm tới tín hiệu hết hạn nên không đánh rơi tin đã giao). Mỗi lô decode một lần rồi chia cho ba handler chạy song song, mỗi handler chỉ nhận các kind nó giữ; kind không handler nào giữ (ví dụ `room_created`) chỉ được ack. Ba durable cũ `projection-room_activity`, `projection-mention_reply_index`, `projection-mention_read` bị xoá lúc khởi động (không có thì bỏ qua). Lần đầu tạo `projections` đọc lại toàn bộ stream còn giữ (idempotent).
 
 | Handler | Nhận | Ghi | Chống trùng và lệch thứ tự |
 |---|---|---|---|
@@ -128,14 +128,13 @@ Một consumer durable `projections` trên `CHATIM_EVT`: lọc một subject `ev
 | `mention_reply_index` | `msg_created`, `msg_edited`, `msg_deleted` | Đọc `reply_to` và mention **từ event**, không `Find`. Trả lời: đặt phiếu `replies` → `AddReply` → doc mới thì `$inc rc +1` (bit 4) → `counts_changed` → gỡ phiếu; xoá trả lời thì `RemoveReply` + `rc −1` cùng cách. Mention: `ApplyMentions` theo `message_ver`, `RaiseSharedMention` khi có `@all`/nhóm. `reply_threads.Touch` mỗi trả lời còn sống | doc trả lời theo `_id` (chèn một lần), tombstone trước khi thêm, mention theo version |
 | `mention_read` | `read_updated` | Một `MembersOf` mỗi room mỗi lô; `read_ver` của doc nhỏ hơn event thì Nak; còn lại `Mentions.MarkRead(room, user, read_seq hiện tại)` | đọc lại `read_ver`, dùng vị trí hiện tại |
 
-Ack theo lô (`AckAll`: ack một tin là ack mọi tin có seq stream nhỏ hơn, kể cả tin đang chờ giao lại). Vì vậy core không bao giờ ack cao hơn một tin chưa xử lý xong. Core nhớ mốc (seq stream đã ack, đọc từ server khi bắt đầu giữ slot 0) và tập tin đã xử lý ổn nằm trên mốc; mốc chỉ tiến qua đoạn liền mạch, rồi một `Ack` trên tin cao nhất của đoạn:
-- Cả lô ổn (event "không còn" — room hay doc mất — tính là ổn, đếm `projection_dropped_total`; không decode được cũng ack qua, đếm dropped) → một ack trên tin **cuối** lô.
-- Event lỗi → `Nak` riêng tin đó theo bậc thang 5s, 30s, 2m, 10m (`eventkit.NakDelay` theo số lần giao của nó); mốc dừng trước nó (ack tin ngay trước nếu đoạn liền mạch tiến), các tin ổn sau nó được giữ chưa ack. Tin lỗi quay lại và qua thì mốc tiến qua cả đoạn đã giữ và ack một lần. Ví dụ lô seq 101–200, seq 140 lỗi lần đầu: ack 139, Nak 140 trễ 5s, giữ 141–200; 5s sau 140 qua → ack 200. Trong lúc chờ, tin mới vẫn được xử lý nhưng không ack; khi số tin chưa ack chạm `MaxAckPending` (2 lô) server ngừng giao tin mới, chỉ giao lại. Tin giữ quá `AckWait` 30s được giao lại và xử lý lại (idempotent).
-- Thiếu tin dưới phần đã giữ (một lần giao bị mất: core cũ chết giữa lúc fetch) → hỏi lại mốc server một lần mỗi lô; mốc đã phủ thì tiến, chưa thì giữ tới khi server giao lại tin thiếu (sau `AckWait`). Ví dụ core giữ slot 0 bị kill khi đang nhận seq 1001–2000: core mới bắt đầu ở mốc 1000, nhận 2001–3000 và giữ; ≤ 30s sau 1001–2000 quay lại, mốc tiến tới 3000, một ack.
-- Tin giao lại có seq ≤ mốc (đã xử lý, ack cũ chưa tới server) → ack lại bằng lần giao mới.
-- Mất slot 0 giữa lô → làm xong và ack/Nak lô đó, rồi `Nak(0)` theo thứ tự seq các tin đang giữ; lô nhận sau khi mất slot thì `Nak(0)` từng tin để core mới nhận ngay. Dừng core: đợi lần fetch đang dở hết hạn (≤ 1s) rồi trả mọi tin nó mang về và các tin đang giữ bằng `Nak(0)`, nên không đánh rơi tin nào.
+Ack từng tin, như trước:
+- Ổn → `Ack`. Room hay doc không còn (`eventkit.Gone`) → `Ack`, đếm `projection_dropped_total`.
+- Không decode được → `Term`, đếm dropped.
+- Lỗi khác → `Nak` tin đó theo bậc thang 5s, 30s, 2m, 10m (`eventkit.NakDelay` theo số lần giao của nó). Chỉ tin đó chờ; các tin khác của lô vẫn được ack. `MaxAckPending` = 4 lô nên vài tin chậm không làm server ngừng giao.
+- Mất slot 0 giữa lô → làm xong và ack/Nak lô đó; lô nhận sau khi mất slot thì `Nak(0)` từng tin để core mới nhận ngay. Dừng core: đợi lần fetch đang dở hết hạn (≤ 1s) rồi trả mọi tin nó mang về bằng `Nak(0)`, nên không đánh rơi tin nào.
 
-Từ lần giao thứ 6 đếm `projection_stuck_total` (alert). Các số đo mang nhãn `projection="projections"`. Một event lỗi kéo dài giữ ack của mọi tin phía sau và, sau 2 lô, chặn tin mới tới khi nó qua (đổi lấy ack theo lô). Event phát lại (sweeper, lần đầu `DeliverAll`) cũng nâng `last_change_at`/bucket lên giờ hiện tại; chấp nhận được.
+Từ lần giao thứ 6 đếm `projection_stuck_total` (alert). Các số đo mang nhãn `projection="projections"`. Một event lỗi chỉ làm chậm chính nó. Event phát lại (sweeper, lần đầu `DeliverAll`) cũng nâng `last_change_at`/bucket lên giờ hiện tại; chấp nhận được.
 
 ### 3.4. Phiếu hẹn sinh tồn (D111, D152)
 
@@ -158,7 +157,7 @@ Publish lỗi thì để cờ; CAS thua trong sweeper thì để cờ; projectio
 | `event/publish` | Hàng theo shard, `PublishMsgAsync`; `WithStateClears` + ack follower mỗi shard (4096 mục); `StateTargetOf` (19 kind) |
 | `event/stateclear` | Hàng xoá cờ trong RAM: `Add` không chặn, xả mỗi `STATE_CLEAR_FLUSH`/`STATE_CLEAR_BATCH`, đầy thì bỏ và đếm, xả trong 1s khi dừng |
 | `event/sweep` | Sweeper slot 0: `pass`, `page`, `publish`, `pace`, `rebuild_*` cho 7 collection |
-| `event/projection` | Consumer `projections` (một durable, slot 0, `AckAll`) với 3 handler, `EnsureConsumer` (xoá 3 durable cũ), `Decode` |
+| `event/projection` | Consumer `projections` (một durable, slot 0, ack từng tin) với 3 handler, `EnsureConsumer` (xoá 3 durable cũ), `Decode` |
 | `event/timer` | `CHATIM_TIMER`, `Timers` (`Arm*`, `Disarm`), consumer `timer-due`, `count_repair`, `member_count_repair` |
 | `event/eventkit` | Phần dùng chung: `NewPullSource`, `NakDelay`, `Gone`, `LimitedLog`, `RoomTypes`, `MessageKey` |
 | `event/resync` | `/app resync`: chọn room, bật lại cờ (`EventStates.Mark`) |
@@ -171,7 +170,7 @@ Publish lỗi thì để cờ; CAS thua trong sweeper thì để cờ; projectio
 | `STATE_CLEAR_FLUSH` / `STATE_CLEAR_BATCH` / `STATE_CLEAR_QUEUE` / `STATE_CLEAR_TIMEOUT` | `2s` / `16384` / `65536` / `5s` | Nhịp, cỡ lô, sức chứa và hạn mỗi lần xoá cờ; seq liền nhau của một room trong một lô thành một lệnh xoá theo khoảng, mỗi `BulkWrite` ≤ 500 lệnh |
 | `SWEEP_INTERVAL` / `SWEEP_MIN_AGE` / `SWEEP_LOOKBACK` | `2s` / `15s` / `60s` | Nhịp quét, tuổi tối thiểu của cờ, phần lùi |
 | `SWEEP_BATCH` / `SWEEP_RATE` | `500` / `5000` | Cỡ trang (≤ 1000) và số event phát bù tối đa mỗi giây |
-| `PROJECTION_FETCH_BATCH` / `PROJECTION_FETCH_WAIT` | `1024` / `1s` | Lô của consumer `projections` (chỉ core giữ slot 0; lô ≤ 8192, chờ ≤ 1s để lần fetch dở lúc dừng kết thúc trong 1s dừng; `MaxAckPending` = 2 × lô) |
+| `PROJECTION_FETCH_BATCH` / `PROJECTION_FETCH_WAIT` | `1024` / `1s` | Lô của consumer `projections` (chỉ core giữ slot 0; lô ≤ 8192, chờ ≤ 1s để lần fetch dở lúc dừng kết thúc trong 1s dừng; `MaxAckPending` = 4 × lô) |
 | `TIMER_STREAM` / `TIMER_SUBJECT_ROOT` | `CHATIM_TIMER` / `timer` | Stream phiếu hẹn |
 
 Kiểm lúc boot: `SWEEP_MIN_AGE > PUB_ACK_TIMEOUT + STATE_CLEAR_FLUSH + STATE_CLEAR_TIMEOUT` (không phát lại event còn đang bay hoặc đang chờ xoá cờ); `SWEEP_MIN_AGE + SWEEP_INTERVAL < EVT_STREAM_DUPLICATES` (bản phát lại bình thường bị stream bỏ); `SWEEP_LOOKBACK > CORE_REQUEST_DEADLINE + 10s` và `> SWEEP_MIN_AGE + 10s`.

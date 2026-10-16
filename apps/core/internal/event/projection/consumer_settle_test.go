@@ -66,12 +66,11 @@ func settleEvents() []*chatimv1.Event {
 	}
 }
 
-func pushed(t *testing.T, src *fakeSource, evs []*chatimv1.Event, firstSeq, delivered uint64) []*fakeDelivery {
+func pushed(t *testing.T, src *fakeSource, evs []*chatimv1.Event, delivered uint64) []*fakeDelivery {
 	t.Helper()
 	ds := make([]*fakeDelivery, len(evs))
 	for i, ev := range evs {
 		ds[i] = delivery(t, ev, delivered)
-		ds[i].seq = firstSeq + uint64(i)
 	}
 	src.push(ds...)
 	synctest.Wait()
@@ -88,64 +87,37 @@ func (rg *settleRig) assertLikeOnce(t *testing.T, evs []*chatimv1.Event) {
 	}
 }
 
-func TestSettleAcksBeforeTheFailureNaksItAndHoldsTheRestUntilItPasses(t *testing.T) {
+func TestSettleNaksOnlyTheFailedEventOnItsRungAndAcksTheRest(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rg := newSettleRig(t)
 		rg.index.failOn(3, errBoom)
 		evs := settleEvents()
-		ds := pushed(t, rg.src, evs, 1, 3)
-		want := []settlement{{}, {acks: 1}, {naks: []time.Duration{2 * time.Minute}}, {}, {}}
+		ds := pushed(t, rg.src, evs, 3)
+		want := allAcked(len(ds))
+		want[2] = settlement{naks: []time.Duration{2 * time.Minute}}
 		if got := settlements(ds); !sameSettlements(got, want) {
 			t.Fatalf("settled %+v, want %+v", got, want)
 		}
-		if rg.c.Failures() != 1 {
-			t.Errorf("failures %d, want the one failed event", rg.c.Failures())
+		if rg.c.Failures() != 1 || rg.c.Dropped() != 0 {
+			t.Errorf("failures %d dropped %d, want the one failed event", rg.c.Failures(), rg.c.Dropped())
 		}
 		rg.index.failOn(3, nil)
-		again := pushed(t, rg.src, evs[2:3], 3, 4)
-		if got := append(settlements(again), settlements(ds[3:])...); !sameSettlements(got, []settlement{{}, {}, {acks: 1}}) {
-			t.Fatalf("settled %+v once the failed event passed, want one ack on the last held delivery", got)
+		again := pushed(t, rg.src, evs[2:3], 4)
+		if got := settlements(again); !sameSettlements(got, allAcked(1)) {
+			t.Fatalf("redelivery settled %+v, want it acked once it passes", got)
 		}
 		rg.assertLikeOnce(t, evs)
 		rg.stop(t)
 	})
 }
 
-func TestSettleOfARedeliveredTailGivesTheSameRooms(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		rg := newSettleRig(t)
-		rg.index.failOn(3, errBoom)
-		evs := settleEvents()
-		pushed(t, rg.src, evs, 1, 1)
-		rg.index.failOn(3, nil)
-		tail := pushed(t, rg.src, evs[2:], 3, 2)
-		if got := settlements(tail); !sameSettlements(got, acked(2, 3)) {
-			t.Fatalf("redelivered tail settled %+v, want one ack on its last delivery", got)
-		}
-		rg.assertLikeOnce(t, evs)
-		rg.stop(t)
-	})
-}
-
-func TestSettleOfAFailureOnTheFirstEventAcksNothing(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		rg := newSettleRig(t)
-		rg.index.failOn(1, errBoom)
-		ds := pushed(t, rg.src, settleEvents()[:2], 1, 1)
-		if got := settlements(ds); !sameSettlements(got, []settlement{{naks: []time.Duration{5 * time.Second}}, {}}) {
-			t.Fatalf("settled %+v, want the first sent back on the 5s rung and the second held", got)
-		}
-		rg.stop(t)
-	})
-}
-
-func TestSettleCountsAGoneEventAsDroppedAndAcksPastIt(t *testing.T) {
+func TestSettleCountsAGoneEventAsDroppedAndAcksIt(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rg := newSettleRig(t)
 		rg.index.failOn(2, domain.ErrRoomNotFound)
-		ds := pushed(t, rg.src, settleEvents()[:3], 1, 1)
-		if got := settlements(ds); !sameSettlements(got, acked(2, 3)) {
-			t.Fatalf("settled %+v, want the last delivery acked", got)
+		ds := pushed(t, rg.src, settleEvents()[:3], 1)
+		if got := settlements(ds); !sameSettlements(got, allAcked(3)) {
+			t.Fatalf("settled %+v, want every delivery acked", got)
 		}
 		if rg.c.Dropped() != 1 || rg.c.Failures() != 0 {
 			t.Errorf("dropped %d failures %d, want the gone event dropped", rg.c.Dropped(), rg.c.Failures())
@@ -153,45 +125,3 @@ func TestSettleCountsAGoneEventAsDroppedAndAcksPastIt(t *testing.T) {
 		rg.stop(t)
 	})
 }
-
-func TestSettleHoldsAcksAboveAGapUntilTheGapIsHandledOrTheServerFloorCoversIt(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		rg := newSettleRig(t)
-		evs := settleEvents()
-		held := pushed(t, rg.src, evs[3:], 4, 1)
-		if got := settlements(held); !sameSettlements(got, make([]settlement, 2)) {
-			t.Fatalf("settled %+v above a gap, want nothing acked or sent back", got)
-		}
-		if rg.src.floorReads() != 2 || rg.sink.Count(gapWarning) != 1 {
-			t.Fatalf("floor reads %d, want the lead start and one at the gap, with a warning", rg.src.floorReads())
-		}
-		gap := pushed(t, rg.src, evs[:3], 1, 2)
-		if got := append(settlements(gap), settlements(held)...); !sameSettlements(got, []settlement{{}, {}, {}, {}, {acks: 1}}) {
-			t.Fatalf("settled %+v once the gap came back, want one ack on the last held delivery", got)
-		}
-		rg.src.setFloor(7, nil)
-		above := pushed(t, rg.src, evs[:2], 8, 1)
-		if got := settlements(above); !sameSettlements(got, acked(1, 2)) {
-			t.Fatalf("settled %+v once the server floor covered the gap, want the last acked", got)
-		}
-		stale := pushed(t, rg.src, evs[:1], 2, 3)
-		if got := settlements(stale); !sameSettlements(got, acked(0, 1)) {
-			t.Fatalf("settled %+v, want a redelivery below the floor acked again with its newer handle", got)
-		}
-		rg.stop(t)
-	})
-}
-
-func TestStopHandsBackDeliveriesHeldAboveAGap(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		rg := newSettleRig(t)
-		held := pushed(t, rg.src, settleEvents()[3:], 4, 1)
-		rg.stop(t)
-		zero := []time.Duration{0}
-		if got := settlements(held); !sameSettlements(got, []settlement{{naks: zero}, {naks: zero}}) {
-			t.Fatalf("settled %+v at stop, want both handed back with Nak(0) in seq order", got)
-		}
-	})
-}
-
-const gapWarning = "projection holds acks above a missing delivery until the server redelivers it"

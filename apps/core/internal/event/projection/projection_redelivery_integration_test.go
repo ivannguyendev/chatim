@@ -49,6 +49,6 @@ func TestProjectionsConsumerRedeliversFromAFailedEventOnRealNATS(t *testing.T) {
 		seen = append(seen, call...)
 	}
 	if !slices.Equal(seen, []uint64{1, 2, 3, 2}) || c.Failures() != 1 {
-		t.Fatalf("handled %v with %d failures; want 1, 2, 3 then only the Nak'd 2 again after the 5s delay, 3 held and acked with it", seen, c.Failures())
+		t.Fatalf("handled %v with %d failures; want 1, 2, 3 then only the Nak'd 2 again after the 5s delay", seen, c.Failures())
 	}
 }

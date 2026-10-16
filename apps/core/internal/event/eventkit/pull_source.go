@@ -11,7 +11,6 @@ import (
 type Delivery interface {
 	Data() []byte
 	Delivered() uint64
-	StreamSeq() uint64
 	Ack() error
 	Nak(delay time.Duration) error
 	Term() error
@@ -63,18 +62,6 @@ func (s *PullSource) Fetch(ctx context.Context, limit int, wait time.Duration) (
 	}
 }
 
-func (s *PullSource) AckFloor(ctx context.Context) (uint64, error) {
-	c, err := s.lookup(ctx)
-	if err != nil {
-		return 0, err
-	}
-	info, err := c.Info(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("ack floor of %s: %w", s.name, err)
-	}
-	return info.AckFloor.Stream, nil
-}
-
 func (s *PullSource) lookup(ctx context.Context) (jetstream.Consumer, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -92,19 +79,16 @@ func (s *PullSource) lookup(ctx context.Context) (jetstream.Consumer, error) {
 type pullDelivery struct {
 	jetstream.Msg
 	delivered uint64
-	stream    uint64
 }
 
 func newPullDelivery(m jetstream.Msg) pullDelivery {
 	d := pullDelivery{Msg: m}
 	if meta, err := m.Metadata(); err == nil {
-		d.delivered, d.stream = meta.NumDelivered, meta.Sequence.Stream
+		d.delivered = meta.NumDelivered
 	}
 	return d
 }
 
 func (d pullDelivery) Delivered() uint64 { return d.delivered }
-
-func (d pullDelivery) StreamSeq() uint64 { return d.stream }
 
 func (d pullDelivery) Nak(delay time.Duration) error { return d.NakWithDelay(delay) }

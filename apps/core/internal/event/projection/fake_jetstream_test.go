@@ -15,7 +15,6 @@ type fakeDelivery struct {
 	mu        sync.Mutex
 	data      []byte
 	delivered uint64
-	seq       uint64
 	acks      int
 	terms     int
 	naks      []time.Duration
@@ -28,7 +27,6 @@ func delivery(t *testing.T, ev *chatimv1.Event, delivered uint64) *fakeDelivery 
 
 func (d *fakeDelivery) Data() []byte      { return d.data }
 func (d *fakeDelivery) Delivered() uint64 { return d.delivered }
-func (d *fakeDelivery) StreamSeq() uint64 { return d.seq }
 
 func (d *fakeDelivery) Ack() error {
 	d.mu.Lock()
@@ -71,10 +69,6 @@ type fakeSource struct {
 	onCancel []eventkit.Delivery
 	ready    chan struct{}
 	asked    []fetchAsk
-	nextSeq  uint64
-	floor    uint64
-	floorErr error
-	floors   int
 }
 
 type fetchAsk struct {
@@ -82,16 +76,10 @@ type fetchAsk struct {
 	wait  time.Duration
 }
 
-func newFakeSource() *fakeSource { return &fakeSource{ready: make(chan struct{}, 1), nextSeq: 1} }
+func newFakeSource() *fakeSource { return &fakeSource{ready: make(chan struct{}, 1)} }
 
 func (s *fakeSource) push(ds ...*fakeDelivery) {
 	s.mu.Lock()
-	for _, d := range ds {
-		if d.seq == 0 {
-			d.seq = s.nextSeq
-		}
-		s.nextSeq = max(s.nextSeq, d.seq+1)
-	}
 	s.batches = append(s.batches, deliveries(ds))
 	s.mu.Unlock()
 	select {
@@ -104,28 +92,6 @@ func (s *fakeSource) handOverOnCancel(ds ...*fakeDelivery) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.onCancel = deliveries(ds)
-}
-
-func (s *fakeSource) AckFloor(ctx context.Context) (uint64, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.floors++
-	if err := ctx.Err(); err != nil {
-		return 0, err
-	}
-	return s.floor, s.floorErr
-}
-
-func (s *fakeSource) setFloor(seq uint64, err error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.floor, s.floorErr = seq, err
-}
-
-func (s *fakeSource) floorReads() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.floors
 }
 
 func (s *fakeSource) Fetch(ctx context.Context, limit int, wait time.Duration) ([]eventkit.Delivery, error) {

@@ -12,10 +12,9 @@ import (
 var errUnanswered = errors.New("projection gave no result for the event")
 
 type batch struct {
-	evs    []Event
-	at     []int
-	failed []bool
-	gone   []bool
+	evs      []Event
+	at       []int
+	outcomes []outcome
 }
 
 func (c *Consumer) handle(ctx context.Context, ds []eventkit.Delivery) []eventkit.Delivery {
@@ -27,23 +26,22 @@ func (c *Consumer) handle(ctx context.Context, ds []eventkit.Delivery) []eventki
 	if len(b.evs) > 0 {
 		c.dispatch(ctx, b)
 	}
-	c.settle(ctx, ds, b.failed)
+	c.settle(ctx, ds, b.outcomes)
 	return nil
 }
 
 func (c *Consumer) decode(ctx context.Context, ds []eventkit.Delivery) batch {
-	b := batch{evs: make([]Event, 0, len(ds)), at: make([]int, 0, len(ds)), failed: make([]bool, len(ds))}
+	b := batch{evs: make([]Event, 0, len(ds)), at: make([]int, 0, len(ds)), outcomes: make([]outcome, len(ds))}
 	for i, d := range ds {
 		ev, err := Decode(d.Data())
 		if err != nil {
-			c.dropped.Add(1)
+			b.outcomes[i] = undecodable
 			c.garbage.Warn(ctx, garbageMsg, "bytes", len(d.Data()), "err", err)
 			continue
 		}
 		b.evs = append(b.evs, ev)
 		b.at = append(b.at, i)
 	}
-	b.gone = make([]bool, len(b.evs))
 	return b
 }
 
@@ -87,24 +85,19 @@ func (c *Consumer) dispatch(ctx context.Context, b batch) {
 			c.judge(ctx, b, i, c.handlers[h].Name(), resultOf(results[h], j, len(idx)))
 		}
 	}
-	for i, gone := range b.gone {
-		if gone && !b.failed[b.at[i]] {
-			c.dropped.Add(1)
-		}
-	}
 }
 
 func (c *Consumer) judge(ctx context.Context, b batch, i int, handler string, err error) {
+	o := &b.outcomes[b.at[i]]
 	switch {
 	case err == nil:
 	case eventkit.Gone(err):
-		b.gone[i] = true
-	case b.failed[b.at[i]]:
+		*o = max(*o, gone)
+	case *o >= cancelled:
 	case ctx.Err() != nil:
-		b.failed[b.at[i]] = true
+		*o = cancelled
 	default:
-		b.failed[b.at[i]] = true
-		c.failures.Add(1)
+		*o = failed
 		c.handles.Warn(ctx, handleFailedMsg, "handler", handler, "event", b.evs[i].Proto.GetId(), "err", err)
 	}
 }

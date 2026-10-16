@@ -58,8 +58,8 @@ func TestConsumerFetchesWithItsSettings(t *testing.T) {
 				done := make(chan error, 1)
 				go func() { done <- c.Run(t.Context()) }()
 				synctest.Wait()
-				if got, ok := src.firstAsk(); !ok || got != tc.want || src.floorReads() != 1 {
-					t.Errorf("first fetch %+v (asked %v) after %d floor reads, want %+v after one", got, ok, src.floorReads(), tc.want)
+				if got, ok := src.firstAsk(); !ok || got != tc.want {
+					t.Errorf("first fetch %+v (asked %v), want %+v", got, ok, tc.want)
 				}
 				if err := c.Close(t.Context()); err != nil {
 					t.Fatalf("Close: %v", err)
@@ -68,24 +68,4 @@ func TestConsumerFetchesWithItsSettings(t *testing.T) {
 			})
 		})
 	}
-}
-
-func TestConsumerRetriesTheAckFloorBeforeItFetches(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		rg := &consumerRig{sink: &testlog.Sink{}, src: newFakeSource(), writer: &fakeWriter{}, result: make(chan error, 1)}
-		rg.src.setFloor(0, errBoom)
-		rg.c = built(projection.NewConsumer([]projection.Projection{projection.NewRoomActivity(rg.writer)}, rg.src, evtConfig, rg.sink.Logger()))(t)
-		go func() { rg.result <- rg.c.Run(t.Context()) }()
-		synctest.Wait()
-		if rg.src.asks() != 0 || rg.sink.Count("projection could not read its ack floor; retrying") != 1 {
-			t.Fatalf("fetched %d times with no ack floor, want none and one warning", rg.src.asks())
-		}
-		rg.src.setFloor(0, nil)
-		time.Sleep(projection.DefaultFetchWait)
-		synctest.Wait()
-		if rg.src.asks() != 1 || rg.src.floorReads() != 2 {
-			t.Fatalf("after the floor came back: %d fetches, %d floor reads; want 1 and 2", rg.src.asks(), rg.src.floorReads())
-		}
-		rg.stop(t)
-	})
 }

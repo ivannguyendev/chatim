@@ -17,11 +17,11 @@ func TestConfigFillsDefaultsAndRefusesBadValues(t *testing.T) {
 	if err := evtConfig.Validate(); err != nil {
 		t.Fatalf("default config: %v", err)
 	}
-	if projection.DefaultFetchBatch != 1024 || projection.DefaultFetchWait != time.Second || evtConfig.MaxAckPending() != 2048 {
-		t.Fatalf("defaults %d / %v / %d pending, want 1024 / 1s / 2048", projection.DefaultFetchBatch, projection.DefaultFetchWait, evtConfig.MaxAckPending())
+	if projection.DefaultFetchBatch != 1024 || projection.DefaultFetchWait != time.Second || evtConfig.MaxAckPending() != 4096 {
+		t.Fatalf("defaults %d / %v / %d pending, want 1024 / 1s / 4096", projection.DefaultFetchBatch, projection.DefaultFetchWait, evtConfig.MaxAckPending())
 	}
 	full := projection.Config{Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, FetchBatch: projection.MaxFetchBatch, FetchWait: projection.MaxFetchWait}
-	if err := full.Validate(); err != nil || full.MaxAckPending() != 2*projection.MaxFetchBatch {
+	if err := full.Validate(); err != nil || full.MaxAckPending() != 4*projection.MaxFetchBatch {
 		t.Fatalf("config at the limits: %v, %d pending", err, full.MaxAckPending())
 	}
 	for name, c := range map[string]projection.Config{
@@ -59,7 +59,7 @@ func (a *fakeAdmin) DeleteConsumer(_ context.Context, _, name string) error {
 	return jetstream.ErrConsumerNotFound
 }
 
-func TestEnsureConsumerMakesOneLeaderDurableWithBatchAcks(t *testing.T) {
+func TestEnsureConsumerMakesOneSharedDurableWithExplicitAcks(t *testing.T) {
 	admin := &fakeAdmin{deleteErr: map[string]error{"projection-mention_read": nil}}
 	tuned := projection.Config{Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, FetchBatch: 300}
 	if err := projection.EnsureConsumer(t.Context(), admin, tuned); err != nil {
@@ -72,8 +72,8 @@ func TestEnsureConsumerMakesOneLeaderDurableWithBatchAcks(t *testing.T) {
 	if c.FilterSubject != "evt.>" || len(c.FilterSubjects) != 0 {
 		t.Errorf("filters %q / %v, want the single subject evt.>", c.FilterSubject, c.FilterSubjects)
 	}
-	if c.AckPolicy != jetstream.AckAllPolicy || c.AckWait != 30*time.Second || c.DeliverPolicy != jetstream.DeliverAllPolicy || c.MaxAckPending != 600 {
-		t.Errorf("consumer config %+v; want ack all, 30s ack wait, deliver all, twice the batch pending", c)
+	if c.AckPolicy != jetstream.AckExplicitPolicy || c.AckWait != 30*time.Second || c.DeliverPolicy != jetstream.DeliverAllPolicy || c.MaxAckPending != 1200 {
+		t.Errorf("consumer config %+v; want explicit ack, 30s ack wait, deliver all, four batches pending", c)
 	}
 	want := []string{"projection-room_activity", "projection-mention_reply_index", "projection-mention_read"}
 	if !slices.Equal(admin.deleted, want) {

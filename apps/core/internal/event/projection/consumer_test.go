@@ -42,7 +42,7 @@ func (rg *consumerRig) stop(t *testing.T) {
 	}
 }
 
-func TestConsumerTouchesABatchOfThreeRoomsInOneWriteAndAcksTheLastDelivery(t *testing.T) {
+func TestConsumerTouchesABatchOfThreeRoomsInOneWriteAndAcksEachDelivery(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rg := newConsumerRig(t, t.Context())
 		time.Sleep(time.Minute)
@@ -56,8 +56,8 @@ func TestConsumerTouchesABatchOfThreeRoomsInOneWriteAndAcksTheLastDelivery(t *te
 		if got := rg.writer.touched(); len(got) != 1 || !slices.EqualFunc(got[0], []uint64{roomA, roomB, roomC}, func(a store.Activity, r uint64) bool { return a.Room == r }) {
 			t.Fatalf("touched %v, want one write covering rooms A, B and C", got)
 		}
-		if got := settlements(ds); !sameSettlements(got, acked(2, 3)) {
-			t.Errorf("settled %+v; want one ack on the last delivery only", got)
+		if got := settlements(ds); !sameSettlements(got, allAcked(3)) {
+			t.Errorf("settled %+v; want each delivery acked once", got)
 		}
 		if rg.c.Lag() != 3*time.Second || rg.c.Stuck() != 2 {
 			t.Errorf("lag %v stuck %d; want 3s from the oldest event and the two deliveries at the stuck count", rg.c.Lag(), rg.c.Stuck())
@@ -71,14 +71,15 @@ func TestConsumerTouchesABatchOfThreeRoomsInOneWriteAndAcksTheLastDelivery(t *te
 	})
 }
 
-func TestConsumerAcksPastGarbageAndKindsNoHandlerKeeps(t *testing.T) {
+func TestConsumerTermsGarbageAndAcksKindsNoHandlerKeeps(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rg := newConsumerRig(t, t.Context())
 		ds := []*fakeDelivery{delivery(t, msgCreated(roomB, 0, 1, at(1)), 1), {data: []byte("junk")}, delivery(t, readUpdated(roomA, at(1)), 1), {data: []byte("junk")}}
 		rg.src.push(ds...)
 		synctest.Wait()
-		if got := settlements(ds); !sameSettlements(got, acked(3, 4)) {
-			t.Errorf("settled %+v; want only the last delivery acked, garbage never termed", got)
+		want := []settlement{{acks: 1}, {terms: 1}, {acks: 1}, {terms: 1}}
+		if got := settlements(ds); !sameSettlements(got, want) {
+			t.Errorf("settled %+v; want events acked and garbage termed", got)
 		}
 		if rg.c.Dropped() != 2 || rg.c.Failures() != 0 {
 			t.Errorf("dropped %d failures %d; want the two undecodable events dropped and the stray kind just acked", rg.c.Dropped(), rg.c.Failures())

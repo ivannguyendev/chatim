@@ -43,8 +43,8 @@ func TestLeaderGatedConsumerNeverFetchesWithoutTheLeaderSlot(t *testing.T) {
 		rg := newLeadRig(t, owner)
 		time.Sleep(10 * leadTick)
 		synctest.Wait()
-		if n, floors := rg.src.asks(), rg.src.floorReads(); n != 0 || floors != 0 {
-			t.Fatalf("a core without slot 0 fetched %d times and read the ack floor %d times, want never", n, floors)
+		if n := rg.src.asks(); n != 0 {
+			t.Fatalf("a core without slot 0 fetched %d times, want never", n)
 		}
 		owner.owns.Store(true)
 		time.Sleep(leadTick)
@@ -96,8 +96,8 @@ func TestLeaderGatedConsumerNaksWhatItHoldsWhenTheLeadIsLostAndStopsFetching(t *
 		owner.owns.Store(true)
 		time.Sleep(leadTick)
 		synctest.Wait()
-		if n, floors := rg.src.asks(), rg.src.floorReads(); n != 2 || floors != 2 {
-			t.Fatalf("fetched %d times and read the ack floor %d times after the lead came back, want 2 and 2", n, floors)
+		if n := rg.src.asks(); n != 2 {
+			t.Fatalf("fetched %d times after the lead came back, want 2", n)
 		}
 		rg.stop(t)
 	})

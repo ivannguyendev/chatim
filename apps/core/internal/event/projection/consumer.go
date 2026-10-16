@@ -16,11 +16,9 @@ const StuckDeliveries uint64 = 6
 
 const (
 	fetchFailedMsg  = "projection fetch failed; retrying"
-	floorFailedMsg  = "projection could not read its ack floor; retrying"
 	handleFailedMsg = "projection failed an event; it comes back later"
 	settleFailedMsg = "projection ack or nak failed; the event comes back after the ack wait"
 	garbageMsg      = "projection dropped an undecodable event"
-	gapMsg          = "projection holds acks above a missing delivery until the server redelivers it"
 )
 
 var errStarted = errors.New("projection consumer already started")
@@ -31,33 +29,26 @@ type Projection interface {
 	Handle(ctx context.Context, evs []Event) []error
 }
 
-type Source interface {
-	eventkit.Source
-	AckFloor(ctx context.Context) (uint64, error)
-}
-
 type Consumer struct {
 	handlers []Projection
-	src      Source
+	src      eventkit.Source
 	cfg      Config
 	fails    *eventkit.LimitedLog
 	handles  *eventkit.LimitedLog
 	garbage  *eventkit.LimitedLog
-	gaps     *eventkit.LimitedLog
 	failures atomic.Uint64
 	dropped  atomic.Uint64
 	lag      atomic.Int64
 	stuck    atomic.Uint64
 	log      *slog.Logger
 	lead     leader
-	floor    ackFloor
 	started  atomic.Bool
 	stopped  context.Context
 	halt     context.CancelFunc
 	done     chan struct{}
 }
 
-func NewConsumer(handlers []Projection, src Source, cfg Config, log *slog.Logger, opts ...Option) (*Consumer, error) {
+func NewConsumer(handlers []Projection, src eventkit.Source, cfg Config, log *slog.Logger, opts ...Option) (*Consumer, error) {
 	if len(handlers) == 0 || src == nil {
 		return nil, fmt.Errorf("%w: projection consumer needs handlers and a source", apperr.ErrInvalidArgument)
 	}
@@ -76,7 +67,7 @@ func NewConsumer(handlers []Projection, src Source, cfg Config, log *slog.Logger
 	log = log.With("projection", DurableName)
 	c := &Consumer{
 		handlers: handlers, src: src, cfg: cfg, fails: eventkit.NewLimitedLog(log), handles: eventkit.NewLimitedLog(log),
-		garbage: eventkit.NewLimitedLog(log), gaps: eventkit.NewLimitedLog(log), log: log, done: make(chan struct{}),
+		garbage: eventkit.NewLimitedLog(log), log: log, done: make(chan struct{}),
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -100,7 +91,6 @@ func (c *Consumer) Run(ctx context.Context) error {
 	for c.live(ctx) {
 		c.step(ctx, fetchCtx)
 	}
-	c.forgetFloor()
 	if c.stopped.Err() != nil {
 		return nil
 	}
@@ -109,16 +99,8 @@ func (c *Consumer) Run(ctx context.Context) error {
 
 func (c *Consumer) step(ctx, fetchCtx context.Context) {
 	if !c.leading(ctx) {
-		c.forgetFloor()
 		c.lag.Store(0)
 		c.pause(ctx, c.lead.tick)
-		return
-	}
-	if err := c.loadFloor(fetchCtx); err != nil {
-		if c.live(ctx) {
-			c.fails.Warn(ctx, floorFailedMsg, "err", err)
-		}
-		c.pause(ctx, c.cfg.FetchWait)
 		return
 	}
 	ds, err := c.src.Fetch(fetchCtx, c.cfg.FetchBatch, c.cfg.FetchWait)

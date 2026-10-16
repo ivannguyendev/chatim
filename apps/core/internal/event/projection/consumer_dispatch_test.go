@@ -72,8 +72,10 @@ func TestConsumerGivesEachHandlerTheKindsItKeepsInOneBatch(t *testing.T) {
 		if got := reads.handled(); len(got) != 1 || !slices.Equal(got[0], wantReads) || len(wantReads) != 1 {
 			t.Errorf("mention read got %v, want one call with %v", got, wantReads)
 		}
-		if got := settlements(ds); !sameSettlements(got, acked(len(ds)-1, len(ds))) {
-			t.Errorf("settled %+v, want one ack on the last delivery", got)
+		want := allAcked(len(ds))
+		want[6] = settlement{terms: 1}
+		if got := settlements(ds); !sameSettlements(got, want) {
+			t.Errorf("settled %+v, want every event acked and the garbage termed", got)
 		}
 		if rg.c.Dropped() != 1 || rg.c.Failures() != 0 {
 			t.Errorf("dropped %d failures %d, want only the garbage dropped", rg.c.Dropped(), rg.c.Failures())

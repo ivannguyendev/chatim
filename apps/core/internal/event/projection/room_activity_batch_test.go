@@ -31,8 +31,8 @@ func TestRoomActivityWritesAFullFetchOfManyRoomsOnce(t *testing.T) {
 				t.Errorf("room %d at seq %d, want %d", a.Room, a.Seq, want)
 			}
 		}
-		if got := settlements(ds); !sameSettlements(got, acked(events-1, events)) {
-			t.Fatalf("want one ack on the last of %d deliveries", events)
+		if got := settlements(ds); !sameSettlements(got, allAcked(events)) {
+			t.Fatalf("want each of %d deliveries acked once", events)
 		}
 		rg.stop(t)
 	})

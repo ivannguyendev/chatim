@@ -71,9 +71,11 @@ func settlements(ds []*fakeDelivery) []settlement {
 	return out
 }
 
-func acked(i, n int) []settlement {
+func allAcked(n int) []settlement {
 	out := make([]settlement, n)
-	out[i].acks = 1
+	for i := range out {
+		out[i].acks = 1
+	}
 	return out
 }
 

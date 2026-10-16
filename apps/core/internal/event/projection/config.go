@@ -26,7 +26,7 @@ type Config struct {
 
 func (c Config) Validate() error { return c.withDefaults().validate() }
 
-func (c Config) MaxAckPending() int { return 2 * c.withDefaults().FetchBatch }
+func (c Config) MaxAckPending() int { return 4 * c.withDefaults().FetchBatch }
 
 func (c Config) withDefaults() Config {
 	c.FetchBatch = cmp.Or(c.FetchBatch, DefaultFetchBatch)

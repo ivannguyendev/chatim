@@ -147,8 +147,8 @@ func awaitSettled(t *testing.T, js jetstream.JetStream, cfg projection.Config, l
 		if err != nil {
 			t.Fatalf("consumer info: %v", err)
 		}
-		if info.Config.AckPolicy != jetstream.AckAllPolicy || info.Config.FilterSubject != cfg.SubjectRoot+".>" {
-			t.Fatalf("durable config %+v, want ack all on %s.>", info.Config, cfg.SubjectRoot)
+		if info.Config.AckPolicy != jetstream.AckExplicitPolicy || info.Config.FilterSubject != cfg.SubjectRoot+".>" {
+			t.Fatalf("durable config %+v, want explicit ack on %s.>", info.Config, cfg.SubjectRoot)
 		}
 		if info.NumAckPending == 0 && info.NumPending == 0 && info.AckFloor.Stream == last {
 			return
