@@ -5,6 +5,8 @@ import (
 	"testing"
 	"testing/synctest"
 	"time"
+
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/stateclear"
 )
 
 func TestFlushesTargetsBelowTheBatchSizeAfterTheFlushInterval(t *testing.T) {
@@ -88,27 +90,40 @@ func TestFailingClearIsCountedLoggedOncePerSecondAndNeverRetried(t *testing.T) {
 	})
 }
 
-func TestEachClearGetsItsOwnOneSecondTimeout(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		rg := started(t, defaultCfg)
-		rg.st.set(nil, true)
-		rg.add(1)
-		start := time.Now()
-		time.Sleep(100 * time.Millisecond)
-		synctest.Wait()
-		expectSizes(t, rg.st, 1)
-		time.Sleep(time.Second)
-		synctest.Wait()
-		rg.expectCounts(t, 0, 0, 1)
-		rg.st.set(nil, false)
-		rg.add(2)
-		time.Sleep(100 * time.Millisecond)
-		synctest.Wait()
-		expectSizes(t, rg.st, 1, 1)
-		rg.expectCounts(t, 1, 0, 1)
-		if elapsed := time.Since(start); elapsed != 1200*time.Millisecond {
-			t.Fatalf("elapsed %v, want 1.2s", elapsed)
-		}
-		rg.closeAndWait(t)
-	})
+func TestEachClearGetsItsOwnTimeout(t *testing.T) {
+	for name, tc := range map[string]struct {
+		cfg     stateclear.Config
+		timeout time.Duration
+	}{
+		"default five seconds": {defaultCfg, 5 * time.Second},
+		"configured":           {stateclear.Config{Timeout: 2 * time.Second}, 2 * time.Second},
+	} {
+		t.Run(name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				rg := started(t, tc.cfg)
+				rg.st.set(nil, true)
+				rg.add(1)
+				start := time.Now()
+				time.Sleep(100 * time.Millisecond)
+				synctest.Wait()
+				expectSizes(t, rg.st, 1)
+				time.Sleep(tc.timeout - time.Millisecond)
+				synctest.Wait()
+				rg.expectCounts(t, 0, 0, 0)
+				time.Sleep(time.Millisecond)
+				synctest.Wait()
+				rg.expectCounts(t, 0, 0, 1)
+				rg.st.set(nil, false)
+				rg.add(2)
+				time.Sleep(100 * time.Millisecond)
+				synctest.Wait()
+				expectSizes(t, rg.st, 1, 1)
+				rg.expectCounts(t, 1, 0, 1)
+				if elapsed := time.Since(start); elapsed != tc.timeout+200*time.Millisecond {
+					t.Fatalf("elapsed %v, want %v", elapsed, tc.timeout+200*time.Millisecond)
+				}
+				rg.closeAndWait(t)
+			})
+		})
+	}
 }

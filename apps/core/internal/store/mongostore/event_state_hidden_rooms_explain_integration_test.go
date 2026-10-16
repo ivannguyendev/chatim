@@ -3,7 +3,6 @@ package mongostore
 import (
 	"fmt"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -65,44 +64,34 @@ func TestClearAndMarkOnHiddenAndRoomsUseTheirKeys(t *testing.T) {
 	expectPendingIndexKeys(t, db, len(hidden), hiddenCollection)
 	expectPendingIndexKeys(t, db, len(created)+len(counts), roomsCollection)
 
+	updates.reset()
 	if err := s.EventStates().Clear(t.Context(), hidden); err != nil {
 		t.Fatalf("Clear hidden: %v", err)
 	}
 	expectPendingIndexKeys(t, db, 0, hiddenCollection)
-	expectKeyedUpdate(t, "Clear hidden", explainLastUpdate(t, db, updates, hiddenCollection), len(hidden), hiddenUniqueIndex)
+	expectPointWrites(t, "Clear hidden", explainEachUpdate(t, db, updates, hiddenCollection), len(hidden), len(hidden), hiddenUniqueIndex)
 
 	if err := s.EventStates().Clear(t.Context(), created); err != nil {
 		t.Fatalf("Clear room created: %v", err)
 	}
 	expectPendingIndexKeys(t, db, len(counts), roomsCollection)
-	expectKeyedUpdate(t, "Clear room created", explainLastUpdate(t, db, updates, roomsCollection), len(created), "_id_", "IDHACK")
+	expectPointWrites(t, "Clear room created", explainEachUpdate(t, db, updates, roomsCollection), len(created), len(created), "_id_")
 
 	if err := s.EventStates().Clear(t.Context(), counts); err != nil {
 		t.Fatalf("Clear member counts: %v", err)
 	}
 	expectPendingIndexKeys(t, db, 0, roomsCollection)
-	expectKeyedUpdate(t, "Clear member counts", explainLastUpdate(t, db, updates, roomsCollection), len(counts), "_id_", "IDHACK")
+	expectPointWrites(t, "Clear member counts", explainEachUpdate(t, db, updates, roomsCollection), len(counts), len(counts), "_id_")
 
 	if err := s.EventStates().Mark(t.Context(), store.StateHidden, hidden); err != nil {
 		t.Fatalf("Mark hidden: %v", err)
 	}
 	expectPendingIndexKeys(t, db, len(hidden), hiddenCollection)
-	expectKeyedUpdate(t, "Mark hidden", explainLastUpdate(t, db, updates, hiddenCollection), len(hidden), hiddenUniqueIndex)
+	expectPointWrites(t, "Mark hidden", explainEachUpdate(t, db, updates, hiddenCollection), len(hidden), len(hidden), hiddenUniqueIndex)
 
 	if err := s.EventStates().Mark(t.Context(), store.StateRooms, counts); err != nil {
 		t.Fatalf("Mark member counts: %v", err)
 	}
 	expectPendingIndexKeys(t, db, len(counts), roomsCollection)
-	expectKeyedUpdate(t, "Mark member counts", explainLastUpdate(t, db, updates, roomsCollection), len(counts), "_id_", "IDHACK")
-}
-
-func expectKeyedUpdate(t *testing.T, name string, c lookupCost, keys int, anyOf ...string) {
-	t.Helper()
-	expectBoundedUpdate(t, name, c, keys)
-	for _, want := range anyOf {
-		if strings.Contains(c.plan, want) {
-			return
-		}
-	}
-	t.Errorf("%s: plan %s; want it to use one of %v", name, c.plan, anyOf)
+	expectPointWrites(t, "Mark member counts", explainEachUpdate(t, db, updates, roomsCollection), len(counts), len(counts), "_id_")
 }

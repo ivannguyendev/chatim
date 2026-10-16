@@ -54,6 +54,7 @@ func NewConsumer(p Projection, src eventkit.Source, cfg Config, log *slog.Logger
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
+	cfg = cfg.fetchFor(p.Name())
 	if log == nil {
 		log = slog.Default()
 	}

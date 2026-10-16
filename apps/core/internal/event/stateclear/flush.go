@@ -54,7 +54,7 @@ func (q *Queue) flush(base context.Context, batch []store.StateTarget) []store.S
 		q.dropped.Add(n)
 		return batch[:0]
 	}
-	ctx, cancel := context.WithTimeout(base, ClearTimeout)
+	ctx, cancel := context.WithTimeout(base, q.cfg.Timeout)
 	err := q.store.Clear(ctx, batch)
 	cancel()
 	if err != nil {

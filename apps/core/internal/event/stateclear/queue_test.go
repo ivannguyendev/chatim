@@ -53,7 +53,7 @@ func TestCloseDrainsTheRemainder(t *testing.T) {
 
 func TestCloseGivesUpAfterTheDrainBudget(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		rg := started(t, stateclear.Config{Batch: 2, Queue: 8})
+		rg := started(t, stateclear.Config{Batch: 2, Queue: 8, Timeout: time.Second})
 		rg.st.set(nil, true)
 		rg.add(1, 2, 3, 4, 5)
 		time.Sleep(500 * time.Millisecond)
@@ -64,6 +64,21 @@ func TestCloseGivesUpAfterTheDrainBudget(t *testing.T) {
 		}
 		expectSizes(t, rg.st, 2, 2)
 		rg.expectCounts(t, 0, 1, 4)
+	})
+}
+
+func TestCloseCutsALongClearAtTheDrainBudget(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		rg := started(t, defaultCfg)
+		rg.st.set(nil, true)
+		rg.add(1)
+		time.Sleep(200 * time.Millisecond)
+		start := time.Now()
+		rg.closeAndWait(t)
+		if elapsed := time.Since(start); elapsed != stateclear.DrainTimeout {
+			t.Fatalf("Close took %v with a %v clear timeout, want %v", elapsed, stateclear.DefaultTimeout, stateclear.DrainTimeout)
+		}
+		rg.expectCounts(t, 0, 0, 1)
 	})
 }
 
@@ -127,10 +142,11 @@ func TestConfigValidate(t *testing.T) {
 		ok   bool
 	}{
 		{"defaults", stateclear.Config{}, true},
-		{"explicit", stateclear.Config{Flush: 50 * time.Millisecond, Batch: 100, Queue: 1000}, true},
+		{"explicit", stateclear.Config{Flush: 50 * time.Millisecond, Batch: 100, Queue: 1000, Timeout: 3 * time.Second}, true},
 		{"negative flush", stateclear.Config{Flush: -time.Millisecond}, false},
 		{"negative batch", stateclear.Config{Batch: -1}, false},
 		{"negative queue", stateclear.Config{Queue: -1}, false},
+		{"negative timeout", stateclear.Config{Timeout: -time.Second}, false},
 		{"batch above queue", stateclear.Config{Batch: 10, Queue: 5}, false},
 	}
 	for _, tt := range tests {

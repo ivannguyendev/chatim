@@ -68,6 +68,12 @@ type fakeSource struct {
 	batches  [][]eventkit.Delivery
 	onCancel []eventkit.Delivery
 	ready    chan struct{}
+	asked    []fetchAsk
+}
+
+type fetchAsk struct {
+	limit int
+	wait  time.Duration
 }
 
 func newFakeSource() *fakeSource { return &fakeSource{ready: make(chan struct{}, 1)} }
@@ -88,7 +94,10 @@ func (s *fakeSource) handOverOnCancel(ds ...*fakeDelivery) {
 	s.onCancel = deliveries(ds)
 }
 
-func (s *fakeSource) Fetch(ctx context.Context, _ int, wait time.Duration) ([]eventkit.Delivery, error) {
+func (s *fakeSource) Fetch(ctx context.Context, limit int, wait time.Duration) ([]eventkit.Delivery, error) {
+	s.mu.Lock()
+	s.asked = append(s.asked, fetchAsk{limit, wait})
+	s.mu.Unlock()
 	t := time.NewTimer(wait)
 	defer t.Stop()
 	for {
@@ -118,4 +127,13 @@ func (s *fakeSource) next() ([]eventkit.Delivery, bool) {
 	b := s.batches[0]
 	s.batches = s.batches[1:]
 	return b, true
+}
+
+func (s *fakeSource) firstAsk() (fetchAsk, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.asked) == 0 {
+		return fetchAsk{}, false
+	}
+	return s.asked[0], true
 }

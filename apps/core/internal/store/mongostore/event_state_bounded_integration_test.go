@@ -2,7 +2,6 @@ package mongostore
 
 import (
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -53,26 +52,26 @@ func TestClearAndMarkStayBoundedOnClusteredKeys(t *testing.T) {
 	expectPendingIndexKeys(t, db, len(members), membersCollection)
 	expectPendingIndexKeys(t, db, len(reactions), interactionsCollection)
 
+	updates.reset()
 	if err := s.EventStates().Clear(t.Context(), all); err != nil {
 		t.Fatalf("Clear: %v", err)
 	}
 	expectPendingIndexKeys(t, db, 0, messagesCollection, membersCollection, interactionsCollection)
-	expectBoundedUpdate(t, "Clear messages", explainLastUpdate(t, db, updates, messagesCollection), len(msgs))
-	expectBoundedUpdate(t, "Clear members", explainLastUpdate(t, db, updates, membersCollection), len(members))
-	expectBoundedUpdate(t, "Clear reactions", explainLastUpdate(t, db, updates, interactionsCollection), len(reactions))
+	expectPointWrites(t, "Clear messages", explainEachUpdate(t, db, updates, messagesCollection), 4, len(msgs))
+	expectPointWrites(t, "Clear members", explainEachUpdate(t, db, updates, membersCollection), len(members), len(members))
+	expectPointWrites(t, "Clear reactions", explainEachUpdate(t, db, updates, interactionsCollection), len(reactions), len(reactions))
 
 	if err := s.EventStates().Mark(t.Context(), store.StateMembers, members); err != nil {
 		t.Fatalf("Mark: %v", err)
 	}
 	expectPendingIndexKeys(t, db, len(members), membersCollection)
-	expectBoundedUpdate(t, "Mark members", explainLastUpdate(t, db, updates, membersCollection), len(members))
-}
+	expectPointWrites(t, "Mark members", explainEachUpdate(t, db, updates, membersCollection), len(members), len(members))
 
-func expectBoundedUpdate(t *testing.T, name string, c lookupCost, keys int) {
-	t.Helper()
-	if c.examined > 2*keys+1 || c.examined < keys || strings.Contains(c.plan, "COLLSCAN") {
-		t.Errorf("%s: examined %d docs for %d keys, plan %s; want %d..%d and no COLLSCAN", name, c.examined, keys, c.plan, keys, 2*keys+1)
+	if err := s.EventStates().Mark(t.Context(), store.StateMessages, msgs); err != nil {
+		t.Fatalf("Mark messages: %v", err)
 	}
+	expectPendingIndexKeys(t, db, len(msgs), messagesCollection)
+	expectPointWrites(t, "Mark messages", explainEachUpdate(t, db, updates, messagesCollection), 4, len(msgs))
 }
 
 func unflagAll(t *testing.T, db *mongo.Database) {

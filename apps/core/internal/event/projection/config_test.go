@@ -18,11 +18,13 @@ func TestConfigFillsDefaultsAndRefusesBadValues(t *testing.T) {
 		t.Fatalf("default config: %v", err)
 	}
 	for name, c := range map[string]projection.Config{
-		"no stream":        {SubjectRoot: subjectRoot},
-		"dotted root":      {Stream: "CHATIM_EVT", SubjectRoot: "evt.x"},
-		"negative batch":   {Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, FetchBatch: -1},
-		"batch over limit": {Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, FetchBatch: projection.MaxAckPending + 1},
-		"negative wait":    {Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, FetchWait: -time.Second},
+		"no stream":                 {SubjectRoot: subjectRoot},
+		"dotted root":               {Stream: "CHATIM_EVT", SubjectRoot: "evt.x"},
+		"negative batch":            {Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, FetchBatch: -1},
+		"batch over limit":          {Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, FetchBatch: projection.MaxAckPending + 1},
+		"negative wait":             {Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, FetchWait: -time.Second},
+		"activity batch over limit": {Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, ActivityFetchBatch: projection.MaxAckPending + 1},
+		"negative activity wait":    {Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, ActivityFetchWait: -time.Second},
 	} {
 		if err := c.Validate(); !errors.Is(err, apperr.ErrInvalidArgument) {
 			t.Errorf("%s: Validate = %v, want ErrInvalidArgument", name, err)

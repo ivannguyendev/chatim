@@ -14,8 +14,8 @@ const (
 	LeaderSlot uint16 = 0
 
 	DefaultInterval   = 2 * time.Second
-	DefaultMinAge     = 5 * time.Second
-	DefaultLookback   = 30 * time.Second
+	DefaultMinAge     = 15 * time.Second
+	DefaultLookback   = 60 * time.Second
 	DefaultBatch      = 500
 	DefaultRate       = 5000
 	DefaultTick       = time.Second

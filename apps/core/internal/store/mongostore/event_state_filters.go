@@ -57,70 +57,20 @@ func bitValue(bit store.StateBit) int32 {
 	return int32(bit)
 }
 
-func stateFilter(c store.StateCollection, bit store.StateBit, targets []store.StateTarget, extra ...bson.E) (bson.D, bool) {
-	_, versioned := versionField(c, bit)
-	switch {
-	case c == store.StateHidden:
-		return orOf(matches(targets, hiddenMatch, extra))
-	case c == store.StateRooms && !versioned:
-		return roomIDsFilter(targets, extra)
-	case c == store.StateRooms:
-		return orOf(matches(targets, roomVersionMatch, extra))
-	case versioned:
-		return orOf(matches(targets, keyVersionMatch, extra))
-	default:
-		ids := make([][]byte, len(targets))
-		for i, t := range targets {
-			ids[i] = stateKey(t)
-		}
-		return boundedIDs(ids, extra...), len(ids) > 0
-	}
-}
-
-func matches(targets []store.StateTarget, match func(store.StateTarget) (bson.D, bool), extra []bson.E) []bson.D {
-	out := make([]bson.D, 0, len(targets))
-	for _, t := range targets {
-		if m, ok := match(t); ok {
-			out = append(out, append(m, extra...))
-		}
-	}
-	return out
-}
-
-func orOf(branches []bson.D) (bson.D, bool) {
-	switch len(branches) {
-	case 0:
-		return nil, false
-	case 1:
-		return branches[0], true
-	}
-	or := make(bson.A, len(branches))
-	for i, b := range branches {
-		or[i] = b
-	}
-	return bson.D{{Key: "$or", Value: or}}, true
-}
-
-func roomIDsFilter(targets []store.StateTarget, extra []bson.E) (bson.D, bool) {
-	ids := make(bson.A, 0, len(targets))
-	for _, t := range targets {
-		if id, ok := int64Of(t.Room); ok {
-			ids = append(ids, id)
-		}
-	}
-	return append(bson.D{{Key: "_id", Value: bson.D{{Key: "$in", Value: ids}}}}, extra...), len(ids) > 0
-}
-
 func roomVersionMatch(t store.StateTarget) (bson.D, bool) {
 	id, ok := int64Of(t.Room)
 	version, okVer := versionMatch(t)
 	return bson.D{{Key: "_id", Value: id}, version}, ok && okVer
 }
 
+func roomMatch(t store.StateTarget) (bson.D, bool) {
+	id, ok := int64Of(t.Room)
+	return bson.D{{Key: "_id", Value: id}}, ok
+}
+
 func keyVersionMatch(t store.StateTarget) (bson.D, bool) {
-	k := stateKey(t)
 	version, ok := versionMatch(t)
-	return bson.D{{Key: "_id", Value: bson.D{{Key: "$gte", Value: k}, {Key: "$lte", Value: k}}}, version}, ok
+	return bson.D{{Key: "_id", Value: stateKey(t)}, version}, ok
 }
 
 func hiddenMatch(t store.StateTarget) (bson.D, bool) {

@@ -20,7 +20,7 @@ import (
 
 type updateCapture struct {
 	mu   sync.Mutex
-	last map[string]bson.Raw
+	sent map[string][]bson.Raw
 }
 
 func (c *updateCapture) started(_ context.Context, e *event.CommandStartedEvent) {
@@ -30,14 +30,28 @@ func (c *updateCapture) started(_ context.Context, e *event.CommandStartedEvent)
 	coll, _ := e.Command.Lookup("update").StringValueOK()
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.last[coll] = slices.Clone(e.Command)
+	c.sent[coll] = append(c.sent[coll], slices.Clone(e.Command))
+}
+
+func (c *updateCapture) reset() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	clear(c.sent)
+}
+
+func (c *updateCapture) take(coll string) []bson.Raw {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := c.sent[coll]
+	delete(c.sent, coll)
+	return out
 }
 
 func monitoredStateStore(t *testing.T) (*Store, *mongo.Database, *findCapture, *updateCapture) {
 	t.Helper()
 	itClient(t)
 	finds := &findCapture{last: map[string]bson.Raw{}}
-	updates := &updateCapture{last: map[string]bson.Raw{}}
+	updates := &updateCapture{sent: map[string][]bson.Raw{}}
 	monitor := &event.CommandMonitor{Started: func(ctx context.Context, e *event.CommandStartedEvent) {
 		finds.started(ctx, e)
 		updates.started(ctx, e)
@@ -49,35 +63,6 @@ func monitoredStateStore(t *testing.T) (*Store, *mongo.Database, *findCapture, *
 	t.Cleanup(func() { _ = client.Disconnect(context.Background()) })
 	s, db := itStore(t, client)
 	return s, db, finds, updates
-}
-
-func explainLastUpdate(t *testing.T, db *mongo.Database, capture *updateCapture, coll string) lookupCost {
-	t.Helper()
-	capture.mu.Lock()
-	raw, ok := capture.last[coll]
-	capture.mu.Unlock()
-	if !ok {
-		t.Fatalf("no update on %s was sent", coll)
-	}
-	elems, err := raw.Elements()
-	if err != nil {
-		t.Fatalf("captured update: %v", err)
-	}
-	var cmd bson.D
-	for _, e := range elems {
-		if !slices.Contains(sessionFields, e.Key()) && e.Key() != "writeConcern" {
-			cmd = append(cmd, bson.E{Key: e.Key(), Value: e.Value()})
-		}
-	}
-	res, err := db.RunCommand(t.Context(), bson.D{{Key: "explain", Value: cmd}, {Key: "verbosity", Value: "executionStats"}}).Raw()
-	if err != nil {
-		t.Fatalf("explain %v: %v", cmd, err)
-	}
-	return lookupCost{
-		examined: int(res.Lookup("executionStats", "totalDocsExamined").AsInt64()),
-		returned: int(res.Lookup("executionStats", "nReturned").AsInt64()),
-		plan:     res.Lookup("queryPlanner", "winningPlan").String(),
-	}
 }
 
 func pendingIndexKeys(t *testing.T, db *mongo.Database, coll string) int {

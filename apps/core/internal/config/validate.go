@@ -44,6 +44,8 @@ func (c Config) validate() error {
 		{c.Sweep.MinAge > c.Publish.AckTimeout+c.StateClear.Flush+time.Second, "SWEEP_MIN_AGE must be longer than PUB_ACK_TIMEOUT + STATE_CLEAR_FLUSH + 1s"},
 		{c.Sweep.MinAge+c.Sweep.Interval < c.Stream.Duplicates, "SWEEP_MIN_AGE + SWEEP_INTERVAL must be shorter than EVT_STREAM_DUPLICATES"},
 		{c.Sweep.Lookback > c.RequestDeadline+sweepLookbackSlack, "SWEEP_LOOKBACK must be longer than CORE_REQUEST_DEADLINE + 10s"},
+		{c.Sweep.Lookback > c.Sweep.MinAge+sweepLookbackSlack, "SWEEP_LOOKBACK must be longer than SWEEP_MIN_AGE + 10s"},
+		{c.StateClear.Timeout < c.Sweep.MinAge, "STATE_CLEAR_TIMEOUT must be shorter than SWEEP_MIN_AGE"},
 		{c.MemberCountCheckDelay > c.RequestDeadline, "MEMBER_COUNT_CHECK_DELAY must be longer than CORE_REQUEST_DEADLINE"},
 		{c.MessageCountCheckDelay > c.RequestDeadline, "MESSAGE_COUNT_CHECK_DELAY must be longer than CORE_REQUEST_DEADLINE"},
 		{c.RoomList.TailCacheBytes >= minRoomTailCacheBytes, fmt.Sprintf("ROOM_TAIL_CACHE_BYTES must be at least %d (1MB)", minRoomTailCacheBytes)},

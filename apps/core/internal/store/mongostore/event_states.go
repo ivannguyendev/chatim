@@ -96,11 +96,15 @@ func (e *EventStates) Mark(ctx context.Context, c store.StateCollection, targets
 }
 
 func (e *EventStates) update(ctx context.Context, b stateBatch, pipeline mongo.Pipeline, extra ...bson.E) error {
-	filter, ok := stateFilter(b.coll, b.bit, b.targets, extra...)
-	if !ok {
+	writes := stateWrites(b.coll, b.bit, b.targets, extra...)
+	if len(writes) == 0 {
 		return nil
 	}
-	_, err := e.colls[b.coll].UpdateMany(ctx, filter, pipeline)
+	models := make([]mongo.WriteModel, len(writes))
+	for i, w := range writes {
+		models[i] = w.model(pipeline)
+	}
+	_, err := e.colls[b.coll].BulkWrite(ctx, models, options.BulkWrite().SetOrdered(false))
 	return err
 }
 
