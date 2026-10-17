@@ -1,5 +1,7 @@
 # Module 09: Thời gian thực — Phân phối Realtime & Tín hiệu tức thời (Typing/Presence)
 
+> **Trạng thái:** App `websocket` (M4) **chưa xây**. Phần core đã có: event trên `CHATIM_EVT` và RePublish sang NATS core `live.{t}.{loại dữ liệu}.{rid}.evt.{kind}` (D108), hợp đồng consumer D156 (§3.5). Phần còn lại của module này là thiết kế dự kiến.
+>
 > **Mục tiêu module:** Đẩy các thông điệp và biến động dữ liệu đến người dùng đang online với độ trễ siêu thấp (p99 ≤100ms) qua kết nối WebSocket hai chiều, hỗ trợ các tương tác sinh động tức thời như "Đang gõ..." (Typing Indicator) và trạng thái trực tuyến (Presence) mà không làm suy giảm hiệu năng cơ sở dữ liệu.
 
 ---
@@ -33,8 +35,8 @@ flowchart TD
     end
 
     subgraph EventBus["Hạ tầng NATS JetStream"]
-        NATSLive["NATS Core Pub/Sub<br/>Subject: live.tenant1.msg.101.>"]
-        NATSEph["NATS Ephemeral Bus<br/>Subject: live.tenant1.eph.101.>"]
+        NATSLive["NATS Core Pub/Sub (RePublish từ CHATIM_EVT)<br/>Subject: live.tenant1.*.101.>"]
+        NATSEph["NATS Ephemeral Bus (dự kiến)<br/>Subject: live.tenant1.eph.101.>"]
     end
 
     subgraph CoreLayer["Cụm Core Service"]
@@ -113,7 +115,7 @@ stateDiagram-v2
 ### 3.2. Đường truyền tắt cho Tín hiệu tạm thời (Ephemeral Bypass — Tiết kiệm 100% DB IOPS)
 - **Vấn đề:** Các tín hiệu như "Đang gõ tin" (Typing) hay "Nhịp tim trực tuyến" (Presence Ping) diễn ra liên tục hàng nghìn lần mỗi giây nhưng không có giá trị lưu trữ lâu dài. Nếu ghi các tín hiệu này vào MongoDB, cơ sở dữ liệu sẽ sập ngay lập tức vì quá tải ghi đĩa.
 - **Cơ chế bảo đảm:**
-  - Toàn bộ gói tin Ephemeral được gán chủ đề riêng: `live.*.eph.*`.
+  - Toàn bộ gói tin Ephemeral được gán chủ đề riêng (dự kiến): `live.*.eph.*`.
   - App websocket nhận gói tin từ Client sẽ **bỏ qua hoàn toàn dịch vụ Core và MongoDB**, đẩy thẳng trực tiếp vào kênh phân phối siêu tốc của NATS.
   - Các tín hiệu này chỉ sống trong vài giây trong bộ nhớ RAM và tự động tiêu biến. Nếu người dùng rớt mạng, tín hiệu mất đi một cách tự nhiên mà không để lại bất kỳ rác dữ liệu nào trong cơ sở dữ liệu.
 
@@ -122,11 +124,12 @@ stateDiagram-v2
   - Khi App websocket nhận được một sự kiện tin nhắn từ NATS, App websocket thực hiện **mã hoá nhị phân định dạng Protobuf đúng 1 lần duy nhất** vào một bộ đệm dùng chung (Shared Buffer Pool).
   - Sau đó, con trỏ của bộ đệm này được gửi trực tiếp vào các kết nối socket của 5,000 người dùng mà không tạo thêm 5,000 bản sao chuỗi trong bộ nhớ RAM. Kỹ thuật này giúp App websocket đạt hiệu năng cực đại với mức tiêu thụ RAM tối thiểu.
 
-### 3.4. Sinh tin nhắn hệ thống tất định (Deterministic SysMsg CID D93)
+### 3.4. Sinh tin nhắn hệ thống tất định (Deterministic SysMsg CID, D132)
 - Khi có các sự kiện hệ thống (như Ghim tin, Thêm thành viên):
-  - Module `SysMsg` lắng nghe sự kiện từ NATS và sinh ra một tin nhắn hệ thống với mã định danh tất định:
+  - Một app SysMsg ngoài core (chưa xây) lắng nghe sự kiện từ NATS và gọi `SendMessage(kind = system, skip_unread, meta)` với mã định danh tất định:
     $$\text{cid} = \text{"sys-"}\{\text{event\_id}\}$$
-  - Nhờ cơ chế chống trùng CID (Module 02), ngay cả khi có 2 node cùng xử lý sự kiện này, chỉ có đúng 1 tin nhắn hệ thống được ghi vào phòng chat.
+  - Core chỉ cung cấp đường gửi: tin `system` bỏ kiểm membership, không cho link hay mention (D132).
+  - Nhờ cơ chế chống trùng CID (Module 02), ngay cả khi có 2 node cùng xử lý sự kiện này trong cửa sổ `CID_COMMITTED_TTL` (15 phút), chỉ có đúng 1 tin nhắn hệ thống được ghi vào phòng chat.
 
 ### 3.5. Hợp đồng chống trùng và lấp lỗ (D156, bắt buộc cho websocket M4)
 - Từ M3.1 event được giao **ít nhất một lần** (cờ `_state` + sweeper, Module 10) và bản phát bù có thể tới **sau** event mới hơn. Ví dụ: client nhận tin 46 trước, vài giây sau sweeper phát bù tin 45.
@@ -166,7 +169,7 @@ stateDiagram-v2
 2. **Không bảo đảm sống sót của Ephemeral:**
    - Các tín hiệu Typing và Presence không có cơ chế gửi lại khi mất gói tin (Best-effort unacknowledged). Nếu rớt mạng, client chỉ đơn giản là không thấy báo đang gõ.
 3. **Chế độ Xoá chặt cho Tenant đặc thù (Privacy Strict Mode):**
-   - Với các tổ chức yêu cầu bảo mật cao, hệ thống hỗ trợ cấu hình: Event phát tán qua NATS chỉ chứa metadata và ID, **không mang nội dung văn bản**. Client nhận được thông báo sẽ phải gọi gRPC đọc nội dung có xác thực qua Gateway.
+   - Chưa có: event core phát luôn mang snapshot hiện tại kèm nội dung văn bản; chưa có cấu hình tenant để event chỉ chứa metadata và ID.
 
 ---
 
@@ -180,8 +183,10 @@ stateDiagram-v2
 
 ### 6.1. Chỉ số Sức khoẻ Vận hành & Cảnh báo SRE (Key Metrics & Alerts)
 
+> **Dự kiến, chưa xây:** các metric và alert dưới đây là thiết kế cho app `websocket` (M4); chưa có trong code và chưa có trong `deploy/prometheus/alerts.yml`.
+
 - **`chatim_websocket_connected_clients`:** Tổng số lượng kết nối WebSocket đang hoạt động đồng thời (CCU).
 - **`chatim_realtime_delivery_latency_seconds`:** Độ trễ từ lúc tin được ghi vào DB đến khi Client nhận được frame WebSocket.
   - *Ngưỡng SLA:* p99 ≤ 100ms.
-  - *Luật cảnh báo (`ChatimDeliveryLatencyHigh`):* Cảnh báo nếu p99 > 100ms trong 3 phút liên tục.
+  - *Luật cảnh báo dự kiến (`ChatimDeliveryLatencyHigh`, chưa có):* Cảnh báo nếu p99 > 100ms trong 3 phút liên tục.
 - **`chatim_websocket_slow_clients_dropped_total`:** Số lượng kết nối client bị App websocket ngắt cưỡng bức do nghẽn buffer.
