@@ -2,7 +2,7 @@
 
 > **Mục tiêu module:** Bảo đảm mọi thay đổi đã ghi DB đều có event tới `CHATIM_EVT` (ít nhất một lần) kể cả khi core chết hay NATS gián đoạn; giữ các bảng dẫn xuất (danh sách hội thoại, chỉ mục mention, doc trả lời, `rc`, `reply_threads`) theo kịp event; tự sửa số đếm lệch; và cho kỹ sư vận hành công cụ phát lại một khoảng.
 >
-> Cơ chế này có từ M3.1 (D141–D159, [bản tóm tắt](../plans/2026-10-16-m3-1-state-driven-events-summary.md)) và thay effect engine cũ (reader change stream → `CHATIM_WORK` → worker có delay 5s, ack mark trên Redis).
+> Cơ chế này có từ M3.1 (D141–D160, [bản tóm tắt](../plans/2026-10-16-m3-1-state-driven-events-summary.md)) và thay effect engine cũ (reader change stream → `CHATIM_WORK` → worker có delay 5s, ack mark trên Redis).
 
 ---
 
@@ -10,8 +10,8 @@
 
 | Mã Use Case | Tên Use Case | Tác nhân | Mô tả & Kết quả kỳ vọng |
 |---|---|---|---|
-| **UC-RECON-01** | **Phát bù event bị rớt** | Hệ thống tự động | Tin đã ghi DB nhưng core chết trước khi publish, hoặc NATS từ chối: doc còn cờ `_state`, khoảng 5–7s sau sweeper phát lại event với đúng id. |
-| **UC-RECON-02** | **Projection theo kịp event** | Hệ thống tự động | Danh sách hội thoại (`rooms.last_seq`), chỉ mục mention, doc trả lời, `rc`, `reply_threads`, mention đã đọc được ghi bởi consumer nghe `CHATIM_EVT`, không delay. e2e: danh sách hội thoại ổn định trong 0–0,5s sau `msg_created` (trước đây ~5s). |
+| **UC-RECON-01** | **Phát bù event bị rớt** | Hệ thống tự động | Tin đã ghi DB nhưng core chết trước khi publish, hoặc NATS từ chối: doc còn cờ `_state`, khoảng 15–17s sau (`SWEEP_MIN_AGE` + `SWEEP_INTERVAL`) sweeper phát lại event với đúng id. |
+| **UC-RECON-02** | **Projection theo kịp event** | Hệ thống tự động | Danh sách hội thoại (`rooms.last_seq`), chỉ mục mention, doc trả lời, `rc`, `reply_threads`, mention đã đọc được ghi bởi consumer nghe `CHATIM_EVT`, không delay cố định (cửa sổ gom 3s). Bench 2K: trễ `rooms.last_seq` trung vị 1,6s, chậm nhất 3,6s (engine cũ 2,7s / 5,7s). |
 | **UC-RECON-03** | **Tự sửa số đếm** | Hệ thống tự động | `$inc` của `rx`, `rc`, `member_count` bị ngắt giữa chừng: phiếu hẹn trên `CHATIM_TIMER` bật, đếm lại và CAS về số đúng. |
 | **UC-RECON-04** | **Tự hoàn tất projection trên lệnh** | Hệ thống tự động | Fact `message_edits` hoặc `pin_actions` đã ghi nhưng `messages`/`rooms.pins` chưa áp: sweeper áp lại rồi mới phát event. |
 | **UC-RECON-05** | **Phát lại một khoảng (`/app resync`)** | Kỹ sư vận hành (SRE) | Stream `CHATIM_EVT` mất dữ liệu hoặc cần dựng lại projection: resync bật lại cờ của các doc trong khoảng, sweeper phát lại, projection chạy lại (idempotent). |
@@ -29,8 +29,8 @@ flowchart LR
   G -- "2. ack" --> C
   G -- "3. publish (hàng theo shard)" --> EVT[(JetStream CHATIM_EVT)]
   EVT -- "PubAck → ack follower" --> Q[stateclear: hàng xoá cờ trong RAM]
-  Q -- "4. updateMany mỗi 100ms / 500 đích" --> DB
-  S[sweeper · chỉ core giữ slot 0] -- "5. doc còn cờ > 5s (partial index)" --> DB
+  Q -- "4. BulkWrite sau 2s: khoảng _id + UpdateOne" --> DB
+  S[sweeper · chỉ core giữ slot 0] -- "5. doc còn cờ > 15s (partial index)" --> DB
   S -- "dựng lại event từ doc, phát cùng id" --> EVT
   EVT -- "evt.>" --> P[consumer projections · chỉ core giữ slot 0]
   P --> P1[room_activity] & P2[mention_reply_index] & P3[mention_read]
@@ -47,7 +47,7 @@ flowchart LR
 2. Ghi doc chính **kèm bit** trong **cùng** lệnh ghi (insert, upsert pipeline, `$inc` hoặc transaction owner D100). Không thêm lần ghi nào trước ack.
 3. Ack client.
 4. Đưa event vào publisher (hàng theo shard, không chặn). Hàng đầy hoặc NATS lỗi thì event không đi, cờ còn.
-5. Ack follower của shard chờ PubAck rồi đưa "collection + khoá + bit + version" (`publish.StateTargetOf`) vào `event/stateclear`. Mỗi 100ms (hoặc đủ 500 đích) hàng chạy một `updateMany` cho mỗi collection và bit: tắt bit, hết bit thì `$unset` cả `_state` lẫn `_state_at`.
+5. Ack follower của shard chờ PubAck rồi đưa "collection + khoá + bit + version" (`publish.StateTargetOf`) vào `event/stateclear`. Hàng chạy một lần xoá 2s sau đích đầu tiên (hoặc khi đủ 16.384 đích): xếp cả lô theo `_id`, rồi mỗi collection và bit một `BulkWrite` không thứ tự (≤ 500 lệnh, không cắt đôi khoảng): dãy khoá liền nhau → một `UpdateMany` theo khoảng `_id`, khoá lẻ → `UpdateOne` theo `_id` (kèm version, bit). Mỗi lệnh tắt bit, hết bit thì `$unset` cả `_state` lẫn `_state_at`. Không dùng `$in` hay `$or` nhiều nhánh (bản đầu `updateMany` + `$or` 500 nhánh tốn 854ms mỗi lệnh dưới tải).
 
 Core chết ở bất kỳ bước nào sau bước 2 thì doc còn cờ, và sweeper làm nốt bước 4–5.
 
@@ -68,17 +68,17 @@ sequenceDiagram
         Core->>NATS: publish msg_created 777-0-45
         NATS-->>Core: PubAck (10:00:00,004)
         Core->>Clear: đích (messages, 777│0│45, bit 1)
-        Clear->>Mongo: 10:00:00,100 updateMany $or khoảng _id 777│0│40..45, tắt bit 1
+        Clear->>Mongo: 10:00:02,004 BulkWrite: UpdateMany _id 777│0│30..58, tắt bit 1
     else core-1 chết trước khi publish
         Note over Mongo: tin 45 còn _state: 1
-        Sweep->>Mongo: 10:00:05–07 Pending(mốc − 30s, now − 5s) trên state_pending
+        Sweep->>Mongo: 10:00:15–17 Pending(mốc − 60s, now − 15s) trên state_pending
         Sweep->>NATS: publish msg_created 777-0-45 (dựng từ doc hiện tại)
         NATS-->>Sweep: PubAck
         Sweep->>Mongo: Clear bit 1
     end
 ```
 
-Khoảng `_id` trong lệnh xoá chỉ gồm các seq **liền nhau đã PubAck**: tin 43 chưa PubAck thì thành hai khoảng 40–42 và 44–45. Không dùng `$in` (D139).
+Khoảng `_id` trong lệnh xoá chỉ gồm các seq **liền nhau đã PubAck**: tin 43 chưa PubAck thì thành hai khoảng 30–42 và 44–58. Không dùng `$in` (D139).
 
 ---
 
@@ -110,13 +110,13 @@ Khoảng `_id` trong lệnh xoá chỉ gồm các seq **liền nhau đã PubAck*
 ### 3.2. Sweeper (D146, D147, D154, D158)
 
 - **Ai chạy:** chỉ core giữ lease slot 0 (log `event sweeper started`), mỗi `SWEEP_INTERVAL` 2s. Hai core cùng giữ slot 0 lúc chuyển giao có thể phát trùng; stream bỏ bản trùng theo `Nats-Msg-Id`.
-- **Quét gì:** mỗi collection, đọc mốc trong `sweeper_state`, rồi đọc từng trang keyset `(_state_at, _id)` 500 doc trên partial index `state_pending`, trong khoảng `mốc − 30s ≤ _state_at < now − 5s`. Không giữ cursor giữa các trang. Lượt đầu sau khi lên làm leader quét từ đầu index.
+- **Quét gì:** mỗi collection, đọc mốc trong `sweeper_state`, rồi đọc từng trang keyset `(_state_at, _id)` 500 doc trên partial index `state_pending`, trong khoảng `mốc − 60s ≤ _state_at < now − 15s`. Không giữ cursor giữa các trang. Lượt đầu sau khi lên làm leader quét từ đầu index.
 - **Làm gì với mỗi doc, mỗi bit:** dựng event từ trạng thái **hiện tại** của doc với đúng id; với fact sửa thì chạy lại `ApplyEdit` (và xoá text khi xoá tin) trước, projection còn chậm thì giữ cờ; với fact ghim thì fold + CAS `rooms.pins`, thua CAS thì giữ cờ. Publish trên client JetStream riêng (tối đa `2 × SWEEP_BATCH` đang bay, ≤ `SWEEP_RATE` 5.000 event/s), chờ PubAck rồi `Clear` bit có điều kiện như §3.1.
 - **Doc không còn:** bỏ và xoá cờ theo version đọc được. Nếu bit có version mà không biết version thì **giữ cờ** và đếm lỗi, để không xoá nhầm cờ của thay đổi mới hơn.
-- **Mốc:** chỉ tiến. Bằng `_state_at` của doc kẹt cũ nhất trong lượt (publish lỗi), hoặc `now − 5s` nếu sạch.
+- **Mốc:** chỉ tiến. Bằng `_state_at` của doc kẹt cũ nhất trong lượt (publish lỗi), hoặc `now − 15s` nếu sạch.
 - **Dò trước cửa sổ (D158):** sau mỗi lượt của một collection, sweeper dò **một** doc còn cờ có `_state_at` trước đầu cửa sổ. Có thì lượt sau quét từ đầu index và log `pending state older than the sweep checkpoint`. Dò trên partial index nên gần như miễn phí.
 
-Ví dụ NATS chết từ 10:00:00 tới 10:02:00: gửi tin vẫn ack bình thường, mọi tin giữ cờ; mỗi lượt sweeper publish lỗi nên mốc đứng ở 10:00:00; khi NATS sống lại, sweeper phát bù với tốc độ ≤ 5.000/s và mốc tiến dần tới `now − 5s`. Thời gian bắt kịp thật: số đo: xem Task 14.
+Ví dụ NATS chết từ 10:00:00 tới 10:02:00: gửi tin vẫn ack bình thường, mọi tin giữ cờ; mỗi lượt sweeper publish lỗi nên mốc đứng ở 10:00:00; khi NATS sống lại, sweeper phát bù với tốc độ ≤ 5.000/s và mốc tiến dần tới `now − 15s`. Diễn tập trên bản cuối (NATS dừng ~2 phút 45 giây ở 2K tin/s): ack 100%, không mất tin, đỉnh ~320K doc có cờ, mọi cờ về 0 sau 3 phút 11 giây kể từ lúc NATS sống lại (~1.600 doc/s, chậm hơn `SWEEP_RATE` vì sweeper dựng lại tuần tự).
 
 ### 3.3. Projection consumer (D150, D159)
 
@@ -132,7 +132,7 @@ Ack từng tin, như trước:
 - Ổn → `Ack`. Room hay doc không còn (`eventkit.Gone`) → `Ack`, đếm `projection_dropped_total`.
 - Không decode được → `Term`, đếm dropped.
 - Lỗi khác → `Nak` tin đó theo bậc thang 5s, 30s, 2m, 10m (`eventkit.NakDelay` theo số lần giao của nó). Chỉ tin đó chờ; các tin khác của lô vẫn được ack. `MaxAckPending` = 4 lô nên vài tin chậm không làm server ngừng giao.
-- Mất slot 0 giữa lô → làm xong và ack/Nak lô đó; lô nhận sau khi mất slot thì `Nak(0)` từng tin để core mới nhận ngay. Dừng core: đợi lần fetch đang dở hết hạn (≤ 1s) rồi trả mọi tin nó mang về bằng `Nak(0)`, nên không đánh rơi tin nào.
+- Mất slot 0 giữa lô → làm xong và ack/Nak lô đó; lô nhận sau khi mất slot thì `Nak(0)` từng tin để core mới nhận ngay. Dừng core: đợi lần fetch đang dở hết hạn (≤ `PROJECTION_FETCH_WAIT` 3s, thêm tối đa 1s nếu mất tín hiệu hết hạn) rồi trả mọi tin nó mang về bằng `Nak(0)`, nên không đánh rơi tin nào.
 
 Từ lần giao thứ 6 đếm `projection_stuck_total` (alert). Các số đo mang nhãn `projection="projections"`. Một event lỗi chỉ làm chậm chính nó. Event phát lại (sweeper, lần đầu `DeliverAll`) cũng nâng `last_change_at`/bucket lên giờ hiện tại; chấp nhận được.
 
@@ -185,9 +185,9 @@ Kiểm lúc boot: `SWEEP_MIN_AGE > PUB_ACK_TIMEOUT + STATE_CLEAR_FLUSH + STATE_C
 
 | Sự cố | Biểu hiện | Tự phục hồi | Can thiệp tay |
 |---|---|---|---|
-| Core chết sau khi ghi, trước PubAck | Người nhận chưa thấy event | Sweeper phát bù sau ~5–7s | Không |
+| Core chết sau khi ghi, trước PubAck | Người nhận chưa thấy event | Sweeper phát bù sau ~15–17s | Không |
 | NATS chết vài phút | Không event, projection đứng; gửi tin vẫn ack | Doc tích cờ; NATS sống lại thì sweeper phát bù ≤ 5.000/s | Không; theo dõi `ChatimEventPendingStuck` |
-| Hàng xoá cờ đầy (Mongo chậm) | Cờ không được xoá | Sweeper phát lại sau 5s, stream bỏ trùng | Không |
+| Hàng xoá cờ đầy (Mongo chậm) | Cờ không được xoá | Sweeper phát lại sau ~15s, stream bỏ trùng | Không |
 | Core giữ slot 0 chết | Phát bù dừng ~10s | Core mới nhận slot 0, đọc mốc, quét tiếp | Không |
 | Core crash giữa `$inc` | `rx`/`rc`/`member_count` lệch | Phiếu hẹn bật sau 5s, đếm lại + CAS | `/app recount` nếu muốn |
 | Projection lỗi kéo dài | Danh sách hội thoại/mention trễ | Nak giãn dần, chạy lại khi lỗi hết | Theo dõi `ChatimProjectionFailing` |
@@ -197,9 +197,9 @@ Kiểm lúc boot: `SWEEP_MIN_AGE > PUB_ACK_TIMEOUT + STATE_CLEAR_FLUSH + STATE_C
 
 ## 5. Hạn chế kỹ thuật & Đánh đổi (Limitations & Trade-offs)
 
-1. **Ghi trên `messages` gấp đôi số doc bị sửa:** mỗi tin thêm một update xoá cờ (gom lô) và một entry oplog. Mức tăng thật: số đo: xem Task 14.
+1. **Ghi trên `messages` gấp đôi số doc bị sửa:** mỗi tin thêm một update xoá cờ (gom lô) và một entry oplog. Bench 2K, 60s: ~24,8K lệnh xoá cờ trên `messages` (22s thời gian lệnh), `members` update 4K → 8K; CPU Mongo vẫn 286% → 278% nhờ gom 2s và cửa sổ projection 3s.
 2. **NATS chết thì projection đứng:** danh sách hội thoại, mention và `rc` dừng cập nhật tới khi NATS sống và sweeper phát bù xong. Gửi tin và ack vẫn chạy.
-3. **Sweeper một máy:** core slot 0 chết thì phát bù dừng ~10s. Sweeper dựng lại event tuần tự (một lần đọc mỗi doc-bit), nên thời gian bắt kịp sau sự cố dài: số đo: xem Task 14.
+3. **Sweeper một máy:** core slot 0 chết thì phát bù dừng ~10s. Sweeper dựng lại event tuần tự (một lần đọc mỗi doc-bit), nên bắt kịp sau sự cố dài chậm hơn `SWEEP_RATE` (diễn tập ~1.600 doc/s).
 4. **Index phụ đầu tiên trên `messages`** (partial `state_pending`, D148): khi shard, sweeper hỏi mọi shard (index nhỏ, 2s một lần).
 5. **Ghi ngoài core không sinh event:** trước đây change stream bắt được; nay người chạy script phải tự bật cờ.
 6. **Ít nhất một lần, có thể lệch thứ tự:** consumer bắt buộc theo hợp đồng chống trùng ([kiến trúc §8.1](../architecture.md), D156): bỏ trùng theo id và version doc; `msg_created` thấy lỗ seq thì gọi `GetHistory`; không bao giờ "seq ≤ seq đã thấy thì bỏ". Chỉ trạng thái cuối của doc được bảo đảm; event trung gian có thể không được phát bù.

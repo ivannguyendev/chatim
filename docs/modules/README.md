@@ -142,7 +142,7 @@ flowchart TD
     WorkerTimer -->|Đối soát sửa rx/rc/member_count| MongoStorage
 
     %% Luồng sweeper
-    M10Reconcile -.->|Doc còn cờ quá 5s| MongoStorage
+    M10Reconcile -.->|Doc còn cờ quá 15s| MongoStorage
     M10Reconcile -.->|Phát bù từ doc hiện tại| NATSEvt
 ```
 
@@ -163,7 +163,7 @@ Mỗi module dưới đây là một tập tài liệu đặc tả hoàn chỉnh
 | **07** | [07. Read Receipts & Unread Badge](./07-feature-read-receipts-and-unread-badge.md) | Đánh dấu đã đọc/chưa đọc, badge số tin chưa đọc | Cập nhật vị trí đọc trên doc Member (`read_seq`, `read_ver`); Thuật toán đếm unread giới hạn cửa sổ $S$, tự động trả `approx` 99+ khi vượt ngưỡng. |
 | **08** | [08. History Retrieval & Reconnect Sync](./08-feature-history-retrieval-and-sync.md) | Cuộn xem lịch sử tin nhắn, khôi phục sau mất mạng | Cursor pagination `(room_id, seq)`; Dynamic View pipeline che giấu tin nhạy cảm; Sync token `(room_id, last_seq)` chống thundering herd. |
 | **09** | [09. Realtime Delivery & Ephemeral](./09-feature-realtime-delivery-and-ephemeral.md) | Đẩy tin realtime, báo đang gõ, trạng thái online | Dynamic interest routing trên NATS PubSub; Bỏ qua DB cho tín hiệu tạm thời (typing, presence); Zero-alloc fanout WebSocket `gws`. |
-| **10** | [10. Data Reconciliation & Self-Healing](./10-feature-data-reconciliation-and-repair.md) | Bù đắp event rớt mạng, tự sửa sai bộ đếm, resync | Cờ `_state` ghi cùng lệnh, xoá sau PubAck; sweeper slot 0 phát bù cờ quá 5s; một consumer `projections` (slot 0, 3 handler) không delay; phiếu hẹn `CHATIM_TIMER`; CLI `/app resync` bật lại cờ. |
+| **10** | [10. Data Reconciliation & Self-Healing](./10-feature-data-reconciliation-and-repair.md) | Bù đắp event rớt mạng, tự sửa sai bộ đếm, resync | Cờ `_state` ghi cùng lệnh, xoá sau PubAck; sweeper slot 0 phát bù cờ quá 15s; một consumer `projections` (slot 0, 3 handler) không delay; phiếu hẹn `CHATIM_TIMER`; CLI `/app resync` bật lại cờ. |
 
 ---
 
@@ -226,6 +226,6 @@ Mỗi module dưới đây là một tập tài liệu đặc tả hoàn chỉnh
 | **Độ trễ phân phối Realtime** | p99 ≤ 100ms | `chatim_realtime_delivery_latency_seconds` | `ChatimDeliveryLatencyHigh`: p99 > 100ms kéo dài 3 phút |
 | **Độ trễ đọc 50 tin lịch sử** | p99 ≤ 20ms | `chatim_get_history_duration_seconds` | `ChatimHistoryReadLatencyHigh`: p99 > 20ms kéo dài 5 phút |
 | **Bảo đảm không mất tin** | 100% (At-least-once) | `chatim_core_event_pending_oldest_seconds`, `chatim_core_sweep_passes_total` | `ChatimEventPendingStuck`: cờ cũ nhất > 60s kéo dài 5 phút; `ChatimSweeperIdle`: không lượt quét nào trong 10 phút |
-| **Projection theo kịp** | Danh sách hội thoại ổn định ≤ 1s (e2e 0–0,5s) | `chatim_core_projection_lag_seconds` | `ChatimProjectionLagging`: > 10s kéo dài 5 phút |
+| **Projection theo kịp** | Danh sách hội thoại ổn định ≤ ~3s (cửa sổ gom 3s; bench 2K trung vị 1,6s) | `chatim_core_projection_lag_seconds` | `ChatimProjectionLagging`: > 10s kéo dài 5 phút |
 | **Cân bằng bộ đếm tự động** | Tự sửa sai trong ≤ 10s | `chatim_core_counter_repaired_total` | `ChatimCounterRepairSurge`: > 1 lần/giây kéo dài 10 phút |
 

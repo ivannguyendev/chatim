@@ -69,6 +69,21 @@ Kết luận dev:
 - User 2.000 room: 209ms → 46ms vì đổi đường; 5.000 room: 134ms → 91ms lạnh, 134ms → 84ms nóng. Trang sau 12.5–60ms → 6–9ms vì `members`/`messages` theo khoá không còn quét lan sang room khác.
 - Explain trên dữ liệu bench, doc đọc/doc trả (trước → sau): `TailPreviews` 20 room 320.040/100 → 120/100; `SentTimes` 20 room 320.036/20 → 40/20; `Find` một room seq 1 + seq cuối 382/2 → 4/2; `MembersByKeys` 20 room (tôi + người kia tên ngắn) 13.560/20 → 60/20; `MembersOf` khoá dài ngắn lẫn nhau 19.126/3 → 6/3.
 
+### M3.1 — event theo trạng thái doc, 2K tin/s (2026-10-16 → 2026-10-17)
+
+`scripts/bench-cell.sh NAME 2000 reset`, 60s, core-1 + core-2, rs0 1 node, cả hai ô `CPU_Speed_Limit` 100. Engine cũ = image từ `f5b2e8e`; M3.1 = `ac9fb97`. Trễ danh sách = now − `ts` của tin đầu tiên sau `rooms.last_seq`, 20 room ngẫu nhiên mỗi giây (`room-lag.log`). Số thô: `bin/bench/base-2k-v8/`, `bin/bench/after-2k-v7/`.
+
+| | Engine cũ | M3.1 |
+|---|---|---|
+| ack p50 / p99 | 13.2 / 121ms | 13.0 / 131ms |
+| live p50 / p95 / max | 12 / 40 / 232ms | 12 / 32 / 233ms |
+| trễ danh sách trung vị / p95 / max | 2.7 / 3.7 / 5.7s | 1.6 / 3.3 / 3.6s |
+| CPU Mongo / NATS / hai core / Redis dedupe | 286% / 80% / 329% / 43% | 278% / 70% / 303% / 39% |
+| Mongo `top` 60s | `rooms` update 17.1K, `members` update 4K | `messages` update 24.8K (xoá cờ), `rooms` update 21.8K, `members` update 8K |
+
+- Bench đầu (`8121816`) không đạt: Mongo 287% → 507%, trễ danh sách 2.8s → 21s; lệnh xoá cờ `updateMany` + `$or` 500 nhánh 854ms mỗi lệnh (45% thời gian lệnh Mongo) gây vòng phát lại của sweeper. Các bước sửa và số từng bước: [tóm tắt M3.1 mục 9](../plans/2026-10-16-m3-1-state-driven-events-summary.md#9-chi-phí).
+- Diễn tập NATS chết (2K tin/s trong 4 phút, NATS dừng ~2 phút 45 giây; `bin/bench/drill-nats-2k-v2/`): 480K/480K ack, ack p50/p99 15.5/131ms; ngay trước khi dừng 4.080 tin còn cờ; đỉnh ~320K doc có cờ; sweeper phát lại 304K; mọi cờ về 0 sau 3 phút 11 giây kể từ lúc NATS sống lại (~1.6K doc/s); không mất tin. Lần đầu trước các sửa (`drill-nats-2k/`): 35K tin còn cờ trước khi dừng, đỉnh ~387K, bắt kịp ~7.5 phút.
+
 ## Đo prod-like (chưa chạy)
 
 **Trước khi chạy: hỏi owner số thật** thay cho giả định ở thiết kế §2.3 (room/user, tỉ lệ sửa, room active, số member doc).

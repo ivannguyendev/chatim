@@ -95,7 +95,7 @@ sequenceDiagram
 - **Cơ chế bảo đảm:**
   - **Fact (Sự thật bất biến):** Mọi lần sửa đổi đều được chèn thành một document mới trong collection `message_edits` với `ver = base_ver + 1`. Document này không bao giờ bị sửa hay xoá.
   - **Projection (Bản chiếu hiện tại):** Bảng `messages` chỉ đóng vai trò là bản chiếu (View Projection) trạng thái mới nhất để phục vụ việc đọc nhanh.
-  - **Tự phục hồi Projection:** Nếu sau khi ghi Fact vào `message_edits`, máy chủ Core bị crash trước khi cập nhật bảng `messages`: fact mang cờ `_state: 1` nên **sweeper slot 0 (Module 10)** thấy nó sau khoảng 5–7s, chạy lại `ApplyEdit` (idempotent, chỉ áp khi `v < ver`; xoá tin thì dọn text) rồi mới phát `msg_edited`/`msg_deleted` với snapshot đã áp (D151).
+  - **Tự phục hồi Projection:** Nếu sau khi ghi Fact vào `message_edits`, máy chủ Core bị crash trước khi cập nhật bảng `messages`: fact mang cờ `_state: 1` nên **sweeper slot 0 (Module 10)** thấy nó sau khoảng 15–17s, chạy lại `ApplyEdit` (idempotent, chỉ áp khi `v < ver`; xoá tin thì dọn text) rồi mới phát `msg_edited`/`msg_deleted` với snapshot đã áp (D151).
 
 ### 3.2. Chống ghi đè tranh chấp bằng Optimistic CAS (Check-And-Set)
 - Khi client gửi lệnh sửa, client **bắt buộc phải gửi kèm `base_ver`** (phiên bản mà client đang nhìn thấy).
@@ -181,7 +181,7 @@ sequenceDiagram
 |---|---|---|
 | **MongoDB Clustered Collection** | Lưu Fact `message_edits` và Projection `messages` | Nếu MongoDB lỗi ghi CAS: Lệnh sửa/xoá trả lỗi `UNAVAILABLE`. Trạng thái tin nhắn giữ nguyên, không xảy ra tình trạng dữ liệu nửa vời. |
 | **Model Access Policy** | Thẩm định quyền sửa/xoá | Nếu cache quyền bị cũ (chưa nhận event kick thành viên): Sẽ kiểm tra trực tiếp doc `members` trên DB để đảm bảo không ai bị thu hồi quyền mà vẫn sửa được tin. |
-| **Sweeper slot 0 (Module 10)** | Áp lại Fact sang Projection và phát bù event khi lệnh dừng giữa chừng | Nếu core chết giữa fact và projection: Client đọc `messages` thấy bản cũ khoảng 5–7s cho tới khi sweeper áp lại; projection còn chậm thì sweeper giữ cờ và thử ở lượt sau. |
+| **Sweeper slot 0 (Module 10)** | Áp lại Fact sang Projection và phát bù event khi lệnh dừng giữa chừng | Nếu core chết giữa fact và projection: Client đọc `messages` thấy bản cũ khoảng 15–17s cho tới khi sweeper áp lại; projection còn chậm thì sweeper giữ cờ và thử ở lượt sau. |
 
 ### 6.1. Chỉ số Sức khoẻ Vận hành & Cảnh báo SRE (Key Metrics & Alerts)
 

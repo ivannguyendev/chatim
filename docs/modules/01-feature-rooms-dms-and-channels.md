@@ -171,7 +171,7 @@ sequenceDiagram
 |---|---|---|
 | **MongoDB Replica Set** | Lưu trữ chính (`rooms`, `room_dms`) | Nếu MongoDB failover hoặc mất kết nối: Lệnh tạo phòng trả `UNAVAILABLE` ngay lập tức. Client cần đợi 1–3s để cụm Mongo bầu Primary mới. |
 | **Redis State (Slot Lease)** | Định tuyến và xác định quyền sở hữu phòng | Nếu Redis State sập: Core mất lease sẽ không nhận lệnh ghi phòng mới; chuyển sang chế độ an toàn (Safe mode) để chống split-brain. |
-| **NATS JetStream** | Phát sự kiện `room_created` cho App websocket | Nếu NATS tạm thời quá tải: Lệnh tạo phòng trên MongoDB vẫn commit thành công; doc `rooms` (bit 1, 2) và các doc `members` sáng lập (bit 1) giữ cờ `_state`, sweeper slot 0 phát bù `room_created`, `member_added`, `member_count_changed` sau khoảng 5–7s (Module 10). |
+| **NATS JetStream** | Phát sự kiện `room_created` cho App websocket | Nếu NATS tạm thời quá tải: Lệnh tạo phòng trên MongoDB vẫn commit thành công; doc `rooms` (bit 1, 2) và các doc `members` sáng lập (bit 1) giữ cờ `_state`, sweeper slot 0 phát bù `room_created`, `member_added`, `member_count_changed` sau khoảng 15–17s (Module 10). |
 
 ### 6.1. Chỉ số Sức khoẻ Vận hành & Cảnh báo SRE (Key Metrics & Alerts)
 

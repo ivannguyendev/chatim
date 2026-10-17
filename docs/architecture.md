@@ -1,7 +1,7 @@
 # chatim — Kiến trúc hệ thống (Single Source of Truth)
 
 > Ngày cập nhật: 2026-10-16 · Trạng thái: **Nguồn sự thật duy nhất (SSOT)** cho toàn bộ quy chuẩn kiến trúc của `chatim`.
-> Nhật ký 159 quyết định kỹ thuật: [docs/decision-log.md](./decision-log.md) (D1–D159).
+> Nhật ký 160 quyết định kỹ thuật: [docs/decision-log.md](./decision-log.md) (D1–D160).
 > Đặc tả chi tiết 10 Module tính năng (How-It-Works & Flowcharts): [docs/modules/README.md](./modules/README.md).
 > Lộ trình phát triển các Milestone: [docs/roadmap.md](./roadmap.md).
 
@@ -67,7 +67,7 @@ Mọi thiết kế và dòng code trong `chatim` bắt buộc phải tuân thủ
 
 ## 4. Khung lớp dữ liệu (Data Class Framework)
 
-> **Đường event chung cho mọi lớp (M3.1, D141–D159):** lệnh ghi doc kèm bit trong `_state` (+ `_state_at`) ở cùng lần ghi → ack → publish → sau PubAck xoá bit theo lô. Bit nào còn quá 5s thì sweeper trên core giữ slot 0 dựng lại event từ doc hiện tại và phát bù. Projection (`room_activity`, `mention_reply_index`, `mention_read`) là consumer trên `CHATIM_EVT`, không delay. Chi tiết: [Module 10](modules/10-feature-data-reconciliation-and-repair.md), [bản tóm tắt M3.1](plans/2026-10-16-m3-1-state-driven-events-summary.md).
+> **Đường event chung cho mọi lớp (M3.1, D141–D160):** lệnh ghi doc kèm bit trong `_state` (+ `_state_at`) ở cùng lần ghi → ack → publish → sau PubAck xoá bit theo lô. Bit nào còn quá 15s (`SWEEP_MIN_AGE`) thì sweeper trên core giữ slot 0 dựng lại event từ doc hiện tại và phát bù. Projection (`room_activity`, `mention_reply_index`, `mention_read`) đọc một consumer `projections` trên `CHATIM_EVT` (chỉ core giữ slot 0, cửa sổ gom 3s), không delay cố định. Chi tiết: [Module 10](modules/10-feature-data-reconciliation-and-repair.md), [bản tóm tắt M3.1](plans/2026-10-16-m3-1-state-driven-events-summary.md).
 
 > **Quy định bất di bất dịch:** Mọi tính năng mới bắt buộc phải map vào đúng một lớp dữ liệu dưới đây trước khi viết plan. Tính năng không khớp lớp nào thì phải dừng lại để thiết kế lớp mới (D61).
 
@@ -209,13 +209,13 @@ flowchart TB
 - **MongoDB:** Replica Set 3 node, `w:majority` cho mọi lệnh ghi bền vững.
 
 ### 7.2 Vòng đời Core (Lifecycle & Graceful Shutdown)
-- **Thứ tự Boot:** Publisher → Hàng xoá cờ (`stateclear`) → Flusher → CID Batcher → Slot Router → Slot Manager → Consumer phiếu hẹn (`timer-due`) → 3 Consumer projection → Sweeper (chỉ làm việc khi giữ slot 0) → Watchers (`memberwatch`, `roomcache.Watch`) → Mở cổng gRPC.
+- **Thứ tự Boot:** Publisher → Hàng xoá cờ (`stateclear`) → Flusher → CID Batcher → Slot Router → Slot Manager → Consumer phiếu hẹn (`timer-due`) → Consumer `projections` → Sweeper (chỉ làm việc khi giữ slot 0) → Watchers (`memberwatch`, `roomcache.Watch`) → Mở cổng gRPC.
 - **Thứ tự Dừng:** Bật `/readyz` false → Drain gRPC → Dừng Sweeper → Dừng Consumer projection → Dừng Consumer phiếu hẹn → Unsubscribe Watchers → Dừng Router → Flush CID Batcher → Flusher → Publisher → Xả hàng xoá cờ (1s; phần còn lại sweeper phát bù) → Nhả Slots → Đóng Clients (kế hoạch mặc định 29,7s trong `CORE_SHUTDOWN_BUDGET = 30s`; consumer projection có `PROJECTION_FETCH_WAIT` + 1s = 4s, consumer phiếu hẹn 500ms + 1s, vì lần fetch dở không huỷ được).
 - **CLI Subcommands:** `/app resync` (bật lại cờ `_state` của doc trong khoảng để sweeper phát lại; sau khi purge stream phải chờ qua `EVT_STREAM_DUPLICATES`, D155) và `/app recount -room ID` (đếm lại `member_count`, CAS kèm bit 2, publish rồi xoá cờ).
 
 ### 7.3 Quy ước ghi DB ngoài core
 - Mọi lần ghi bằng tay (mongosh) hay script migration lên 7 collection có event **phải tự bật** `_state` (đúng bit, xem Module 10 §3.1) và `_state_at` (giờ hiện tại, `$min`) trong cùng lệnh ghi. Không bật thì không có event nào được phát: từ M3.1 không còn change stream bắt các lần ghi này.
-- Ví dụ sửa tay tên room: `updateOne({_id: 777}, [{$set: {name: "Mới", info_ver: {$add: ["$info_ver", NumberLong(1)]}, _state: {$bitOr: [{$ifNull: ["$_state", NumberInt(0)]}, NumberInt(4)]}, _state_at: {$min: [{$ifNull: ["$_state_at", "$$NOW"]}, "$$NOW"]}}}])`; sweeper phát `room_updated` trong khoảng 5–7s.
+- Ví dụ sửa tay tên room: `updateOne({_id: 777}, [{$set: {name: "Mới", info_ver: {$add: ["$info_ver", NumberLong(1)]}, _state: {$bitOr: [{$ifNull: ["$_state", NumberInt(0)]}, NumberInt(4)]}, _state_at: {$min: [{$ifNull: ["$_state_at", "$$NOW"]}, "$$NOW"]}}}])`; sweeper phát `room_updated` trong khoảng 15–17s.
 - Muốn phát lại cả một khoảng thì dùng `/app resync` thay vì tự bật cờ.
 
 ---
@@ -226,7 +226,7 @@ Mỗi cam kết hệ thống bắt buộc phải đi kèm với Detector đo lư
 
 | Mã | Cam kết hệ thống | Cơ chế bảo đảm | Metric đo lường & Cảnh báo |
 |---|---|---|---|
-| **CT1** | Không mất tin đã ack (`w:majority`), mỗi tin có `msg_created` | Flusher ghi nhóm `w:majority`, doc mang bit 1 trong `_state`; publish sau ack, xoá bit sau PubAck; sweeper slot 0 phát bù bit còn quá 5s | `event_pending_oldest_seconds{collection}`, `sweep_republished_total`, `sweep_passes_total`, `publish_dropped_total`<br/>Alert: `ChatimEventPendingStuck`, `ChatimSweeperIdle`, `ChatimEventsDropped` |
+| **CT1** | Không mất tin đã ack (`w:majority`), mỗi tin có `msg_created` | Flusher ghi nhóm `w:majority`, doc mang bit 1 trong `_state`; publish sau ack, xoá bit sau PubAck; sweeper slot 0 phát bù bit còn quá 15s | `event_pending_oldest_seconds{collection}`, `sweep_republished_total`, `sweep_passes_total`, `publish_dropped_total`<br/>Alert: `ChatimEventPendingStuck`, `ChatimSweeperIdle`, `ChatimEventsDropped` |
 | **LK1** | Không lệch timeline giữa các user | Goroutine actor độc quyền mỗi room cấp monotonic seq | `seq_gap_total`, `room_yields_total`<br/>Alert: `ChatimSeqContention` |
 | **RM1** | Mọi thay đổi (room, member, tin, tương tác) đều phát event, trạng thái cuối luôn tới | Bit ghi cùng lệnh; xoá có điều kiện version; sweeper dựng lại event từ doc hiện tại | `event_pending_oldest_seconds{collection}`, `sweep_publish_failures_total`, `sweep_failures_total`, `state_clear_dropped_total`<br/>Alert: `ChatimEventPendingStuck`, `ChatimSweeperIdle` |
 | **PJ1** | Projection (danh sách hội thoại, chỉ mục mention, doc trả lời, `rc`, `reply_threads`, mention đã đọc) theo kịp event | Consumer `projections` (một durable, slot 0, ack từng tin) với 3 handler, không delay, ghi idempotent hoặc chặn version; lỗi Nak giãn dần 5s/30s/2m/10m | `projection_lag_seconds{projection}`, `projection_failures_total`, `projection_stuck_total`<br/>Alert: `ChatimProjectionLagging`, `ChatimProjectionFailing` |
@@ -262,11 +262,11 @@ Toàn bộ chi tiết kỹ thuật vận hành (How-It-Works), sơ đồ Mermaid
 | **07** | Read Receipts & Unread | [07-feature-read-receipts-and-unread-badge.md](./modules/07-feature-read-receipts-and-unread-badge.md) | Đánh dấu đã đọc/chưa đọc, thuật toán đếm unread giới hạn 99+. |
 | **08** | History & Reconnect Sync | [08-feature-history-retrieval-and-sync.md](./modules/08-feature-history-retrieval-and-sync.md) | Phân trang cursor `(room_id, seq)`, View pipeline lọc tin nhạy cảm. |
 | **09** | Realtime Delivery & Ephemeral | [09-feature-realtime-delivery-and-ephemeral.md](./modules/09-feature-realtime-delivery-and-ephemeral.md) | WebSocket gws, dynamic interest routing NATS, typing/presence. |
-| **10** | Reconciliation & Self-Healing | [10-feature-data-reconciliation-and-repair.md](./modules/10-feature-data-reconciliation-and-repair.md) | Cờ `_state` trên doc, xoá cờ sau PubAck, sweeper slot 0, 3 projection consumer, phiếu hẹn `CHATIM_TIMER`, resync/recount. |
+| **10** | Reconciliation & Self-Healing | [10-feature-data-reconciliation-and-repair.md](./modules/10-feature-data-reconciliation-and-repair.md) | Cờ `_state` trên doc, xoá cờ sau PubAck, sweeper slot 0, consumer `projections` (3 handler), phiếu hẹn `CHATIM_TIMER`, resync/recount. |
 
 ---
 
 ## 10. Tra cứu Quyết định Kỹ thuật (Decision Log)
 
 Mọi quyết định lựa chọn giải pháp kỹ thuật, đánh đổi (trade-offs), phương án bị loại bỏ (rejected alternatives) từ ngày đầu dự án đến Milestone M3.1 hiện tại được lưu trữ đầy đủ tại:
-👉 **[Architecture Decision Records (D1–D159)](./decision-log.md)**
+👉 **[Architecture Decision Records (D1–D160)](./decision-log.md)**

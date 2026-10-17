@@ -72,7 +72,7 @@ sequenceDiagram
     Core->>WorkQ: Publish msg_created 10045 (có reply_to và mention)
 
     Note over WorkQ,Worker: 3. Projection xử lý bất đồng bộ, không delay
-    WorkQ->>Worker: Lô event (≤ 256, chờ ≤ 500ms) gồm seq=10045
+    WorkQ->>Worker: Lô event của consumer projections (core giữ slot 0, ≤ 8192, chờ ≤ 3s) gồm seq=10045
 
     par Tăng số lượng reply trên tin gốc
         Worker->>Msgs: AddReply rồi $inc rc +1 trên tin 10010 (kèm bit 4), phát counts_changed
@@ -169,7 +169,7 @@ sequenceDiagram
    - Giới hạn tối đa **50 mentions** trong một tin nhắn duy nhất.
    - Ngăn chặn các cuộc tấn công spam làm quá tải dịch vụ thông báo đẩy (Push Notification Amplification).
 3. **Độ trễ xuất hiện trong Hộp thư Mention:**
-   - Tin nhắn hiển thị trên timeline phòng chat tức thì, nhưng có thể mất từ 50–200ms trước khi xuất hiện trên tab "Tôi được nhắc tới" của người được tag (do xử lý bất đồng bộ qua projection consumer, cửa sổ gom lô ≤ 500ms).
+   - Tin nhắn hiển thị trên timeline phòng chat tức thì, nhưng có thể mất tới ~3s trước khi xuất hiện trên tab "Tôi được nhắc tới" của người được tag (do xử lý bất đồng bộ qua consumer `projections`, cửa sổ gom lô ≤ 3s).
 
 ---
 
