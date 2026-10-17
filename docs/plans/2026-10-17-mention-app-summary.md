@@ -1,6 +1,6 @@
 # Mention App: tóm tắt kỹ thuật
 
-> **Trạng thái:** xây xong trên `feat/mention-app` (chồng lên `feat/m3.1`), chờ PR. Thiết kế owner duyệt ngày 2026-10-17; bản này viết lại theo cái đã thực sự xây.
+> **Trạng thái:** xây xong, đã merge `main` (PR #16, 2026-10-17, `dev-done`). Thiết kế owner duyệt ngày 2026-10-17; bản này viết lại theo cái đã thực sự xây.
 >
 > **Nguồn:**
 > - Hướng đi: owner duyệt ngày 2026-10-17 sau ba vòng brainstorm. Log ở `.claude/plans/mention-app_design.md` (MA1–MA18).
