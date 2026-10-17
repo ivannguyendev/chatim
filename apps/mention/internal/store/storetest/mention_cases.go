@@ -29,6 +29,7 @@ func RunMentions(t *testing.T, open func(t *testing.T) store.Mentions) {
 	for _, c := range slices.Concat(cases, mentionListCases()) {
 		t.Run(c.name, func(t *testing.T) { c.run(t, open(t)) })
 	}
+	t.Run("EveryOrderOfCreateRemoveReAddDeleteEndsTheSame", func(t *testing.T) { everyOrderEndsTheSame(t, open) })
 }
 
 func keyOf(room, seq uint64) domain.MessageKey { return domain.MessageKey{Room: room, Seq: seq} }

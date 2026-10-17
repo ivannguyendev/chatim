@@ -69,7 +69,7 @@ func mentionUpdate(p domain.Plan, at mentionPlace, t domain.Target, state domain
 		bson.D{{Key: "$lte", Value: bson.A{bson.D{{Key: "$ifNull", Value: bson.A{"$message_ver", ver}}}, ver}}},
 	}}}
 	var created any = literal(t.At)
-	if state == domain.StateRetired {
+	if t.At.IsZero() {
 		created = bson.D{{Key: "$ifNull", Value: bson.A{"$created_at", t.At}}}
 	}
 	differs := func(field string, v any) bson.D { return bson.D{{Key: "$ne", Value: bson.A{"$" + field, v}}} }

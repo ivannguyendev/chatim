@@ -20,7 +20,7 @@ func newMessageMentions(t *testing.T, s store.Mentions) {
 func editRetiresAndReAdds(t *testing.T, s store.Mentions) {
 	k := keyOf(roomA, 1)
 	mustApply(t, s, planOf(k, 0, []domain.Target{stamped(targetMinh, secs(1)), stamped(targetLan, secs(1))}, nil))
-	mustApply(t, s, planOf(k, 1, []domain.Target{stamped(targetLan, secs(1))}, []domain.Target{stamped(targetMinh, secs(9))}))
+	mustApply(t, s, planOf(k, 1, []domain.Target{stamped(targetLan, secs(1))}, []domain.Target{stamped(targetMinh, secs(1))}))
 	assertDocs(t, s, k, docOf(k, targetMinh, domain.StateRetired, 1, secs(1)), docOf(k, targetLan, domain.StateLive, 1, secs(1)))
 	mustApply(t, s, planOf(k, 2, []domain.Target{stamped(targetMinh, secs(20)), stamped(targetLan, secs(1))}, nil))
 	assertDocs(t, s, k, docOf(k, targetMinh, domain.StateLive, 2, secs(20)), docOf(k, targetLan, domain.StateLive, 2, secs(1)))

@@ -96,6 +96,8 @@ func groupsInvalid(t *testing.T, s store.Groups) {
 	assertInvalid(t, "Set(group twice)", err)
 	_, err = s.Set(t.Context(), []domain.Group{grp("hr", "HR", true, 1), grp("ops", " ", true, 1)})
 	assertInvalid(t, "Set(blank name)", err)
+	_, err = s.Set(t.Context(), []domain.Group{grp("hr", "HR", true, 1), grp("ops", "Ops", true, 0)})
+	assertInvalid(t, "Set(ver 0)", err)
 	_, err = s.All(t.Context(), "")
 	assertInvalid(t, "All(no tenant)", err)
 	assertGroups(t, s, tenant)

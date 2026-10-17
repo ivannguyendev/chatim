@@ -55,7 +55,7 @@ func (s *Mentions) put(plan domain.Plan, t domain.Target, state domain.State, no
 		if cur.Tenant != plan.Tenant || cur.MessageVer > plan.Ver {
 			return
 		}
-		if state == domain.StateRetired {
+		if t.At.IsZero() {
 			next.CreatedAt = cur.CreatedAt
 		}
 		if cur.State == next.State && cur.MessageVer == next.MessageVer && cur.CreatedAt.Equal(next.CreatedAt) && cur.Sender == next.Sender {
