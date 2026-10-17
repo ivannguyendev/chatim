@@ -10,6 +10,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/keys"
+	"github.com/ivannguyendev/chatim/pkg/mongobound"
 )
 
 var roomInfoFields = bson.D{{Key: "pins", Value: 0}, {Key: "pin_ver", Value: 0}}
@@ -25,7 +26,7 @@ func (s *Store) MembersByKeys(ctx context.Context, ks []store.MemberKey) ([]doma
 	for i, k := range ks {
 		ids[i] = keys.Member(k.Room, k.User)
 	}
-	found, err := findMembers(ctx, s.members, boundedIDs(ids))
+	found, err := findMembers(ctx, s.members, mongobound.IDs(ids))
 	if err != nil {
 		return nil, fmt.Errorf("members by %d keys: %w", len(ks), err)
 	}

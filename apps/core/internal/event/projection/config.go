@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/jsconsume"
 )
 
 const (
@@ -30,7 +30,7 @@ func (c Config) Validate() error { return c.withDefaults().validate() }
 func (c Config) MaxAckPending() int { return 4 * c.withDefaults().FetchBatch }
 
 func (c Config) StopTimeout() time.Duration {
-	return c.withDefaults().FetchWait + eventkit.FetchExpiryGrace
+	return c.withDefaults().FetchWait + jsconsume.FetchExpiryGrace
 }
 
 func (c Config) withDefaults() Config {

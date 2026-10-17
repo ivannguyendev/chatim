@@ -11,6 +11,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/callerid"
 	"github.com/ivannguyendev/chatim/pkg/ids"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
@@ -20,7 +21,7 @@ var (
 	errForwardWithReply = fmt.Errorf("%w: forward_from with reply_to", apperr.ErrInvalidArgument)
 )
 
-func (s *Service) forwardCmd(ctx context.Context, who caller, room uint64, req *chatimv1.SendMessageRequest) (actor.SendCmd, error) {
+func (s *Service) forwardCmd(ctx context.Context, who callerid.Caller, room uint64, req *chatimv1.SendMessageRequest) (actor.SendCmd, error) {
 	if req.GetReplyTo() != nil {
 		return actor.SendCmd{}, errForwardWithReply
 	}
@@ -33,7 +34,7 @@ func (s *Service) forwardCmd(ctx context.Context, who caller, room uint64, req *
 		return actor.SendCmd{}, err
 	}
 	return actor.SendCmd{
-		Tenant: who.tenant, User: who.user, Room: room, Thread: req.GetThreadRoot(), CID: req.GetCid(), Text: src.Text,
+		Tenant: who.Tenant, User: who.User, Room: room, Thread: req.GetThreadRoot(), CID: req.GetCid(), Text: src.Text,
 		Forward: forwardOrigin(key, src),
 	}, nil
 }
@@ -46,8 +47,8 @@ func forwardKey(ref *chatimv1.ForwardRef) (store.MsgKey, error) {
 	return store.MsgKey{Room: room, Seq: ref.GetSeq()}, nil
 }
 
-func (s *Service) forwardSource(ctx context.Context, who caller, key store.MsgKey) (domain.Message, error) {
-	grant, err := s.access.Admit(ctx, access.ForwardMessage, who.tenant, who.user, key.Room)
+func (s *Service) forwardSource(ctx context.Context, who callerid.Caller, key store.MsgKey) (domain.Message, error) {
+	grant, err := s.access.Admit(ctx, access.ForwardMessage, who.Tenant, who.User, key.Room)
 	if err != nil {
 		return domain.Message{}, err
 	}

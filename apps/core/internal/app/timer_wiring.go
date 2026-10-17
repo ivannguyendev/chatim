@@ -5,10 +5,10 @@ import (
 	"log/slog"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
+	"github.com/ivannguyendev/chatim/pkg/jsconsume"
 )
 
 type timerSet struct {
@@ -49,7 +49,7 @@ func wireTimers(cfg config.Config, cl *clients, st *mongostore.Store, events tim
 		return timerSet{}, fmt.Errorf("wire message count repair: %w", err)
 	}
 	ts.consumer, err = timer.NewConsumer(timer.ConsumerDeps{
-		Source: eventkit.NewPullSource(cl.js, cfg.Timer.Name, timer.ConsumerName), Members: ts.memberRepair, Messages: ts.countRepair,
+		Source: jsconsume.NewPullSource(cl.js, cfg.Timer.Name, timer.ConsumerName), Members: ts.memberRepair, Messages: ts.countRepair,
 	}, timer.ConsumerConfig{}, log)
 	if err != nil {
 		return timerSet{}, fmt.Errorf("wire timer consumer: %w", err)

@@ -29,7 +29,7 @@ func (s *Service) GetReplies(ctx context.Context, req *chatimv1.GetRepliesReques
 	if err != nil {
 		return nil, err
 	}
-	grant, err := s.access.Admit(ctx, access.ReadReplies, who.tenant, who.user, room)
+	grant, err := s.access.Admit(ctx, access.ReadReplies, who.Tenant, who.User, room)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +48,7 @@ func (s *Service) GetReplies(ctx context.Context, req *chatimv1.GetRepliesReques
 	if err != nil {
 		return nil, err
 	}
-	msgs, err := s.replyMessages(ctx, who.user, grant, replies)
+	msgs, err := s.replyMessages(ctx, who.User, grant, replies)
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +56,7 @@ func (s *Service) GetReplies(ctx context.Context, req *chatimv1.GetRepliesReques
 	for i, m := range msgs {
 		resp.Messages[i] = pbconv.Message(m)
 	}
-	if err := s.addMyInteractions(ctx, who.user, msgs, resp.Messages); err != nil {
+	if err := s.addMyInteractions(ctx, who.User, msgs, resp.Messages); err != nil {
 		return nil, err
 	}
 	if len(replies) == limit {

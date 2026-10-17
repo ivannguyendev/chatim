@@ -12,6 +12,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/keys"
+	"github.com/ivannguyendev/chatim/pkg/mongobound"
 )
 
 func (s *Store) AddMembers(ctx context.Context, j domain.Join, users []string) (store.JoinResult, error) {
@@ -85,7 +86,7 @@ func membersOf(ctx context.Context, coll *mongo.Collection, room uint64, users [
 	for i, u := range users {
 		ids[i] = keys.Member(room, u)
 	}
-	found, err := findMembers(ctx, coll, boundedIDs(ids))
+	found, err := findMembers(ctx, coll, mongobound.IDs(ids))
 	if err != nil {
 		return nil, fmt.Errorf("members of room %d: %w", room, err)
 	}

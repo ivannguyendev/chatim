@@ -1,4 +1,4 @@
-package grpcsrv
+package callerid
 
 import (
 	"context"
@@ -6,8 +6,8 @@ import (
 
 	"google.golang.org/grpc/metadata"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/ids"
 )
 
 const (
@@ -20,23 +20,23 @@ var (
 	errRepeatedCaller = fmt.Errorf("%w: caller tenant or user repeated", apperr.ErrInvalidArgument)
 )
 
-type caller struct{ tenant, user string }
+type Caller struct{ Tenant, User string }
 
-func callerOf(ctx context.Context) (caller, error) {
+func Of(ctx context.Context) (Caller, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 	tenants, users := md.Get(TenantHeader), md.Get(UserHeader)
 	switch {
 	case len(tenants) == 0 || len(users) == 0:
-		return caller{}, errNoCaller
+		return Caller{}, errNoCaller
 	case len(tenants) > 1 || len(users) > 1:
-		return caller{}, errRepeatedCaller
+		return Caller{}, errRepeatedCaller
 	}
-	c := caller{tenant: tenants[0], user: users[0]}
-	if err := domain.ValidTenant(c.tenant); err != nil {
-		return caller{}, err
+	c := Caller{Tenant: tenants[0], User: users[0]}
+	if err := ids.ValidTenant(c.Tenant); err != nil {
+		return Caller{}, err
 	}
-	if err := domain.ValidUser(c.user); err != nil {
-		return caller{}, err
+	if err := ids.ValidUser(c.User); err != nil {
+		return Caller{}, err
 	}
 	return c, nil
 }

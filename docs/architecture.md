@@ -114,7 +114,7 @@ Cờ event chờ phát (M3.1, D142–D149): 7 collection `messages`, `message_ed
 2. **Cấm Secondary Index trên `messages`:** Giữ kích thước working set của `messages` vừa vặn hoàn toàn trong RAM. Ngoại lệ duy nhất (M3.1, D148): partial index `{_state_at: 1, _id: 1}` chỉ chứa doc còn `_state` (event chờ phát), thường vài chục entry.
 3. **Quy tắc Bounded Lookups (D139):**
    - **Tuyệt đối không gửi `_id: {$in: [...]}`** hoặc `$or` các phép bằng trên collection clustered. MongoDB 8.2 so sánh BinData theo độ dài trước giá trị, khiến `$in` biến thành Full Range Scan xuyên qua nhiều room.
-   - Bắt buộc gom qua hàm `mongostore.boundedIDs`: Sắp xếp key theo thứ tự BinData, gộp các dải key liền kề thành `$or` các khoảng `{_id: {$gte, $lte}}`. Mỗi key kiểm tra đúng ≤ 2 docs.
+   - Bắt buộc gom qua hàm `mongobound.IDs`: Sắp xếp key theo thứ tự BinData, gộp các dải key liền kề thành `$or` các khoảng `{_id: {$gte, $lte}}`. Mỗi key kiểm tra đúng ≤ 2 docs.
 4. **Không giao dịch phân tán (No Multi-doc Transactions):**
    - **Ngoại lệ duy nhất (D100):** Kế nhiệm Owner (Owner rời, nhường quyền) dùng 1 transaction duy nhất cập nhật `members` + `rooms.owners_ver`. Xung đột trả `ErrRetryLater` ngay, không retry nội bộ.
 

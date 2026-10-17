@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
+	"github.com/ivannguyendev/chatim/pkg/jsconsume"
 )
 
 var errUnanswered = errors.New("projection gave no result for the event")
@@ -17,7 +18,7 @@ type batch struct {
 	outcomes []outcome
 }
 
-func (c *Consumer) handle(ctx context.Context, ds []eventkit.Delivery) []eventkit.Delivery {
+func (c *Consumer) handle(ctx context.Context, ds []jsconsume.Delivery) []jsconsume.Delivery {
 	if len(ds) == 0 || !c.live(ctx) {
 		return ds
 	}
@@ -30,7 +31,7 @@ func (c *Consumer) handle(ctx context.Context, ds []eventkit.Delivery) []eventki
 	return nil
 }
 
-func (c *Consumer) decode(ctx context.Context, ds []eventkit.Delivery) batch {
+func (c *Consumer) decode(ctx context.Context, ds []jsconsume.Delivery) batch {
 	b := batch{evs: make([]Event, 0, len(ds)), at: make([]int, 0, len(ds)), outcomes: make([]outcome, len(ds))}
 	for i, d := range ds {
 		ev, err := Decode(d.Data())
@@ -45,7 +46,7 @@ func (c *Consumer) decode(ctx context.Context, ds []eventkit.Delivery) batch {
 	return b
 }
 
-func (c *Consumer) observe(evs []Event, ds []eventkit.Delivery) {
+func (c *Consumer) observe(evs []Event, ds []jsconsume.Delivery) {
 	for _, d := range ds {
 		if d.Delivered() >= StuckDeliveries {
 			c.stuck.Add(1)

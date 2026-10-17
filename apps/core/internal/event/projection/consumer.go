@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/jsconsume"
 )
 
 const StuckDeliveries uint64 = 6
@@ -31,11 +31,11 @@ type Projection interface {
 
 type Consumer struct {
 	handlers []Projection
-	src      eventkit.Source
+	src      jsconsume.Source
 	cfg      Config
-	fails    *eventkit.LimitedLog
-	handles  *eventkit.LimitedLog
-	garbage  *eventkit.LimitedLog
+	fails    *jsconsume.LimitedLog
+	handles  *jsconsume.LimitedLog
+	garbage  *jsconsume.LimitedLog
 	failures atomic.Uint64
 	dropped  atomic.Uint64
 	lag      atomic.Int64
@@ -48,7 +48,7 @@ type Consumer struct {
 	done     chan struct{}
 }
 
-func NewConsumer(handlers []Projection, src eventkit.Source, cfg Config, log *slog.Logger, opts ...Option) (*Consumer, error) {
+func NewConsumer(handlers []Projection, src jsconsume.Source, cfg Config, log *slog.Logger, opts ...Option) (*Consumer, error) {
 	if len(handlers) == 0 || src == nil {
 		return nil, fmt.Errorf("%w: projection consumer needs handlers and a source", apperr.ErrInvalidArgument)
 	}
@@ -66,8 +66,8 @@ func NewConsumer(handlers []Projection, src eventkit.Source, cfg Config, log *sl
 	}
 	log = log.With("projection", DurableName)
 	c := &Consumer{
-		handlers: handlers, src: src, cfg: cfg, fails: eventkit.NewLimitedLog(log), handles: eventkit.NewLimitedLog(log),
-		garbage: eventkit.NewLimitedLog(log), log: log, done: make(chan struct{}),
+		handlers: handlers, src: src, cfg: cfg, fails: jsconsume.NewLimitedLog(log), handles: jsconsume.NewLimitedLog(log),
+		garbage: jsconsume.NewLimitedLog(log), log: log, done: make(chan struct{}),
 	}
 	for _, opt := range opts {
 		opt(c)

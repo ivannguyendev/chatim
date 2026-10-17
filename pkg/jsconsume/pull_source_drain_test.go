@@ -1,4 +1,4 @@
-package eventkit_test
+package jsconsume_test
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
+	"github.com/ivannguyendev/chatim/pkg/jsconsume"
 )
 
 type fakeMsg struct {
@@ -46,11 +46,11 @@ func message(delivered uint64) jetstream.Msg {
 func TestPullSourceReadsAStoppedFetchToItsEnd(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		c := &fakeConsumer{batch: fakeBatch{msgs: make(chan jetstream.Msg, 4)}}
-		src := eventkit.NewPullSource(fixedLookup{c}, "CHATIM_EVT", "projections")
+		src := jsconsume.NewPullSource(fixedLookup{c}, "CHATIM_EVT", "projections")
 		c.batch.msgs <- message(1)
 		ctx, cancel := context.WithCancel(t.Context())
 		type result struct {
-			ds  []eventkit.Delivery
+			ds  []jsconsume.Delivery
 			err error
 		}
 		done := make(chan result, 1)

@@ -12,15 +12,15 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/api/grpcsrv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/callerid"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 func callerAs(ctx context.Context, user string) context.Context {
-	return metadata.AppendToOutgoingContext(ctx, grpcsrv.TenantHeader, itTenant, grpcsrv.UserHeader, user)
+	return metadata.AppendToOutgoingContext(ctx, callerid.TenantHeader, itTenant, callerid.UserHeader, user)
 }
 
 func sendAs(t *testing.T, client chatimv1.CoreServiceClient, user, roomID, cid, text string) uint64 {

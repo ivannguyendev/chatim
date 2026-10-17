@@ -1,4 +1,4 @@
-package eventkit
+package jsconsume
 
 import "time"
 

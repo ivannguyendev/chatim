@@ -9,6 +9,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/callerid"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -68,8 +69,8 @@ func (s *Service) reactorQueryOf(room uint64, req *chatimv1.GetReactionsRequest)
 	return q, nil
 }
 
-func (s *Service) reactionsVisible(ctx context.Context, who caller, key store.MsgKey) (bool, error) {
-	grant, err := s.access.Admit(ctx, access.ReadReactions, who.tenant, who.user, key.Room)
+func (s *Service) reactionsVisible(ctx context.Context, who callerid.Caller, key store.MsgKey) (bool, error) {
+	grant, err := s.access.Admit(ctx, access.ReadReactions, who.Tenant, who.User, key.Room)
 	if err != nil {
 		return false, err
 	}
@@ -84,7 +85,7 @@ func (s *Service) reactionsVisible(ctx context.Context, who caller, key store.Ms
 	if err := s.access.Allow(ctx, grant); err != nil {
 		return false, err
 	}
-	viewer, err := s.viewerOf(ctx, who.user, grant, store.PageQuery{Room: key.Room, Thread: key.Thread}, found)
+	viewer, err := s.viewerOf(ctx, who.User, grant, store.PageQuery{Room: key.Room, Thread: key.Thread}, found)
 	if err != nil {
 		return false, err
 	}

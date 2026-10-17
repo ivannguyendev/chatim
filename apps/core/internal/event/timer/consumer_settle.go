@@ -4,9 +4,10 @@ import (
 	"context"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
+	"github.com/ivannguyendev/chatim/pkg/jsconsume"
 )
 
-func (c *Consumer) handle(ctx context.Context, ds []eventkit.Delivery) []eventkit.Delivery {
+func (c *Consumer) handle(ctx context.Context, ds []jsconsume.Delivery) []jsconsume.Delivery {
 	for i, d := range ds {
 		if !c.live(ctx) {
 			return ds[i:]
@@ -16,7 +17,7 @@ func (c *Consumer) handle(ctx context.Context, ds []eventkit.Delivery) []eventki
 	return nil
 }
 
-func (c *Consumer) settle(ctx context.Context, d eventkit.Delivery) {
+func (c *Consumer) settle(ctx context.Context, d jsconsume.Delivery) {
 	chk, err := Decode(d.Data())
 	if err != nil {
 		c.dropped.Add(1)
@@ -35,7 +36,7 @@ func (c *Consumer) settle(ctx context.Context, d eventkit.Delivery) {
 	default:
 		c.failures.Add(1)
 		c.repairs.Warn(ctx, repairFailedMsg, "check", chk.ID(), "err", err)
-		c.report(ctx, d.Nak(eventkit.NakDelay(d.Delivered())))
+		c.report(ctx, d.Nak(jsconsume.NakDelay(d.Delivered())))
 	}
 }
 
@@ -46,7 +47,7 @@ func (c *Consumer) repairerOf(chk Check) Repairer {
 	return c.deps.Messages
 }
 
-func (c *Consumer) release(ds []eventkit.Delivery) {
+func (c *Consumer) release(ds []jsconsume.Delivery) {
 	for _, d := range ds {
 		c.report(context.Background(), d.Nak(0))
 	}

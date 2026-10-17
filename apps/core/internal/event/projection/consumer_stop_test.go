@@ -8,18 +8,18 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/projection"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/testlog"
+	"github.com/ivannguyendev/chatim/pkg/jsconsume"
 )
 
 type expiringSource struct {
 	mu    sync.Mutex
-	held  []eventkit.Delivery
+	held  []jsconsume.Delivery
 	waits []time.Duration
 }
 
-func (s *expiringSource) Fetch(ctx context.Context, _ int, wait time.Duration) ([]eventkit.Delivery, error) {
+func (s *expiringSource) Fetch(ctx context.Context, _ int, wait time.Duration) ([]jsconsume.Delivery, error) {
 	s.mu.Lock()
 	s.waits = append(s.waits, wait)
 	s.mu.Unlock()

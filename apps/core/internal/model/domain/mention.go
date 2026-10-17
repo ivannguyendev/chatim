@@ -1,5 +1,7 @@
 package domain
 
+import "github.com/ivannguyendev/chatim/pkg/keys"
+
 type MentionKind uint8
 
 const (
@@ -40,15 +42,7 @@ func ValidateMentions(targets []MentionTarget, limit int) ([]MentionTarget, erro
 }
 
 func validMentionTarget(t MentionTarget) bool {
-	if (t.Kind != MentionUser && t.Kind != MentionGroup) || t.ID == "" || len(t.ID) > maxIDLen {
-		return false
-	}
-	for i := range len(t.ID) {
-		if !identByte(t.ID[i], true) && t.ID[i] != ':' {
-			return false
-		}
-	}
-	return true
+	return (t.Kind == MentionUser || t.Kind == MentionGroup) && keys.ValidMentionID(t.ID)
 }
 
 func SameMentions(a, b []MentionTarget) bool {

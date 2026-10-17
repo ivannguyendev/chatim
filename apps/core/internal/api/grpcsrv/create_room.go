@@ -9,13 +9,14 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/callerid"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 var errBadRequestID = fmt.Errorf("%w: request_id", apperr.ErrInvalidArgument)
 
 func (s *Service) CreateRoom(ctx context.Context, req *chatimv1.CreateRoomRequest) (*chatimv1.CreateRoomResponse, error) {
-	who, err := callerOf(ctx)
+	who, err := callerid.Of(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -30,12 +31,12 @@ func (s *Service) CreateRoom(ctx context.Context, req *chatimv1.CreateRoomReques
 		return nil, domain.ErrTooManyMembers
 	}
 	now := s.now().UTC().Truncate(time.Millisecond)
-	room, members, err := domain.NewRoom(who.tenant, who.user, typ, req.GetName(), req.GetMembers(), now, s.newID())
+	room, members, err := domain.NewRoom(who.Tenant, who.User, typ, req.GetName(), req.GetMembers(), now, s.newID())
 	if err != nil {
 		return nil, err
 	}
-	f := founding{room: room, members: members, by: who.user, at: now}
-	key := dedupe.CreateKey(who.tenant, who.user, req.GetRequestId())
+	f := founding{room: room, members: members, by: who.User, at: now}
+	key := dedupe.CreateKey(who.Tenant, who.User, req.GetRequestId())
 	status, rec, err := s.requests.Begin(ctx, key)
 	switch {
 	case err != nil:

@@ -10,7 +10,7 @@ import (
 
 func (s *Service) userMentions(ctx context.Context, r mentionRead) (store.MentionSource, error) {
 	q := store.TargetMentionQuery{
-		Tenant: r.who.tenant, Target: domain.MentionTarget{Kind: domain.MentionUser, ID: r.who.user}.Name(0), UnreadOnly: r.hide, Limit: r.limit,
+		Tenant: r.who.Tenant, Target: domain.MentionTarget{Kind: domain.MentionUser, ID: r.who.User}.Name(0), UnreadOnly: r.hide, Limit: r.limit,
 	}
 	fetch := func(before store.MentionCursor) ([]domain.Mention, error) {
 		q.Before = before
@@ -75,7 +75,7 @@ func (s *Service) sharedBatch(ctx context.Context, r mentionRead, batch []store.
 		}
 	}
 	q := store.SharedMentionQuery{
-		Tenant: r.who.tenant, Rooms: make([]store.SharedRoom, len(batch)), Groups: r.groupIDs, GroupSince: r.groupSince, Limit: r.limit,
+		Tenant: r.who.Tenant, Rooms: make([]store.SharedRoom, len(batch)), Groups: r.groupIDs, GroupSince: r.groupSince, Limit: r.limit,
 	}
 	for i, room := range batch {
 		q.Rooms[i] = store.SharedRoom{Room: room.Room, Since: room.Since}

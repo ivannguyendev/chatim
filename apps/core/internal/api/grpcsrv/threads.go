@@ -29,7 +29,7 @@ func (s *Service) ListThreads(ctx context.Context, req *chatimv1.ListThreadsRequ
 	if err != nil {
 		return nil, err
 	}
-	grant, err := s.access.Authorize(ctx, access.ReadReplies, who.tenant, who.user, room)
+	grant, err := s.access.Authorize(ctx, access.ReadReplies, who.Tenant, who.User, room)
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +37,7 @@ func (s *Service) ListThreads(ctx context.Context, req *chatimv1.ListThreadsRequ
 	if err != nil {
 		return nil, err
 	}
-	items, err := s.threadItems(ctx, who.user, grant, threads)
+	items, err := s.threadItems(ctx, who.User, grant, threads)
 	if err != nil {
 		return nil, err
 	}

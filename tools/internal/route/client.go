@@ -13,16 +13,12 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"github.com/ivannguyendev/chatim/pkg/callerid"
 	"github.com/ivannguyendev/chatim/pkg/ids"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-const (
-	TenantHeader = "x-chatim-tenant"
-	UserHeader   = "x-chatim-user"
-
-	maxConns = 256
-)
+const maxConns = 256
 
 var errNoRoute = status.Error(codes.Unavailable, "no live core to route to")
 
@@ -74,7 +70,7 @@ func New(loc Locator, dial Dialer, p Policy) (*Client, error) {
 }
 
 func WithCaller(ctx context.Context, tenant, user string) context.Context {
-	return metadata.AppendToOutgoingContext(ctx, TenantHeader, tenant, UserHeader, user)
+	return metadata.AppendToOutgoingContext(ctx, callerid.TenantHeader, tenant, callerid.UserHeader, user)
 }
 
 func (c *Client) CreateRoom(ctx context.Context, req *chatimv1.CreateRoomRequest) (*chatimv1.CreateRoomResponse, Stats, error) {

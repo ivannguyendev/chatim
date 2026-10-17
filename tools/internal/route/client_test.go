@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/ivannguyendev/chatim/pkg/callerid"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/tools/internal/route"
 )
@@ -44,10 +45,10 @@ func TestSendRetriesOnTheRefreshedRouteWithTheSameCID(t *testing.T) {
 			}
 		}
 		md := live.callers[0]
-		if got := md.Get(route.TenantHeader); len(got) != 1 || got[0] != "acme" {
+		if got := md.Get(callerid.TenantHeader); len(got) != 1 || got[0] != "acme" {
 			t.Fatalf("tenant metadata = %v", got)
 		}
-		if got := md.Get(route.UserHeader); len(got) != 1 || got[0] != "alice" {
+		if got := md.Get(callerid.UserHeader); len(got) != 1 || got[0] != "alice" {
 			t.Fatalf("user metadata = %v", got)
 		}
 	})

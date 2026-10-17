@@ -1,4 +1,4 @@
-package eventkit_test
+package jsconsume_test
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
+	"github.com/ivannguyendev/chatim/pkg/jsconsume"
 )
 
 var errLookup = errors.New("lookup refused")
@@ -26,7 +26,7 @@ func (l *refusingLookup) Consumer(_ context.Context, stream, name string) (jetst
 
 func TestPullSourceLooksUpItsDurableAndReportsAFailedLookup(t *testing.T) {
 	l := &refusingLookup{}
-	src := eventkit.NewPullSource(l, "CHATIM_EVT", "projection-room_activity")
+	src := jsconsume.NewPullSource(l, "CHATIM_EVT", "projection-room_activity")
 	ds, err := src.Fetch(t.Context(), 8, time.Second)
 	if !errors.Is(err, errLookup) || len(ds) != 0 {
 		t.Fatalf("Fetch = %d deliveries, %v; want the lookup error", len(ds), err)
@@ -40,7 +40,7 @@ func TestPullSourceDoesNothingOnceTheContextEnded(t *testing.T) {
 	l := &refusingLookup{}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if _, err := eventkit.NewPullSource(l, "S", "c").Fetch(ctx, 8, time.Second); !errors.Is(err, context.Canceled) || l.calls != 0 {
+	if _, err := jsconsume.NewPullSource(l, "S", "c").Fetch(ctx, 8, time.Second); !errors.Is(err, context.Canceled) || l.calls != 0 {
 		t.Errorf("Fetch on an ended context = %v after %d lookups; want context.Canceled and no lookup", err, l.calls)
 	}
 }

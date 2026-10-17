@@ -1,10 +1,10 @@
-package eventkit_test
+package jsconsume_test
 
 import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
+	"github.com/ivannguyendev/chatim/pkg/jsconsume"
 )
 
 func TestNakDelayClimbsTheLadderAndStaysAtTheTop(t *testing.T) {
@@ -21,7 +21,7 @@ func TestNakDelayClimbsTheLadderAndStaysAtTheTop(t *testing.T) {
 		{1 << 63, 10 * time.Minute},
 	}
 	for _, c := range cases {
-		if got := eventkit.NakDelay(c.delivered); got != c.want {
+		if got := jsconsume.NakDelay(c.delivered); got != c.want {
 			t.Errorf("NakDelay(%d) = %v, want %v", c.delivered, got, c.want)
 		}
 	}

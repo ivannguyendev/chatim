@@ -27,6 +27,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/callerid"
 	"github.com/ivannguyendev/chatim/pkg/grpcserver"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/pkg/resilience"
@@ -145,7 +146,7 @@ func serve(t *testing.T, svc chatimv1.CoreServiceServer, limiter *resilience.Lim
 }
 
 func as(t *testing.T, tenant, user string) context.Context {
-	return metadata.AppendToOutgoingContext(t.Context(), grpcsrv.TenantHeader, tenant, grpcsrv.UserHeader, user)
+	return metadata.AppendToOutgoingContext(t.Context(), callerid.TenantHeader, tenant, callerid.UserHeader, user)
 }
 
 func expectCode(t *testing.T, err error, code codes.Code) {

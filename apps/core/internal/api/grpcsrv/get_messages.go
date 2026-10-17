@@ -30,7 +30,7 @@ func (s *Service) GetMessages(ctx context.Context, req *chatimv1.GetMessagesRequ
 	if err != nil {
 		return nil, err
 	}
-	grant, err := s.access.Authorize(ctx, access.ReadHistory, who.tenant, who.user, room)
+	grant, err := s.access.Authorize(ctx, access.ReadHistory, who.Tenant, who.User, room)
 	if err != nil {
 		return nil, err
 	}
@@ -39,7 +39,7 @@ func (s *Service) GetMessages(ctx context.Context, req *chatimv1.GetMessagesRequ
 		return nil, err
 	}
 	slices.SortFunc(found, func(a, b domain.Message) int { return cmp.Compare(a.Seq, b.Seq) })
-	viewer, err := s.viewerOf(ctx, who.user, grant, store.PageQuery{Room: room}, found, quotedSeqs(room, found)...)
+	viewer, err := s.viewerOf(ctx, who.User, grant, store.PageQuery{Room: room}, found, quotedSeqs(room, found)...)
 	if err != nil {
 		return nil, err
 	}

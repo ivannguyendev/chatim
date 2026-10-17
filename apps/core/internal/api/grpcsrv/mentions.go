@@ -11,6 +11,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/callerid"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -32,7 +33,7 @@ type MemberRoomLister interface {
 }
 
 type mentionRead struct {
-	who        caller
+	who        callerid.Caller
 	rooms      map[uint64]store.MemberRoom
 	groups     map[string]time.Time
 	groupIDs   []string
@@ -45,7 +46,7 @@ type mentionRead struct {
 }
 
 func (s *Service) ListMentions(ctx context.Context, req *chatimv1.ListMentionsRequest) (*chatimv1.ListMentionsResponse, error) {
-	who, err := callerOf(ctx)
+	who, err := callerid.Of(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +54,7 @@ func (s *Service) ListMentions(ctx context.Context, req *chatimv1.ListMentionsRe
 	if err != nil {
 		return nil, err
 	}
-	rooms, err := s.memberRooms.RoomsOf(ctx, who.tenant, who.user)
+	rooms, err := s.memberRooms.RoomsOf(ctx, who.Tenant, who.User)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +80,7 @@ func (s *Service) ListMentions(ctx context.Context, req *chatimv1.ListMentionsRe
 	return s.mentionResponse(ctx, who, page)
 }
 
-func (s *Service) mentionReadOf(who caller, req *chatimv1.ListMentionsRequest) (mentionRead, error) {
+func (s *Service) mentionReadOf(who callerid.Caller, req *chatimv1.ListMentionsRequest) (mentionRead, error) {
 	at, key, err := decodePageCursor(req.GetBefore())
 	if err != nil {
 		return mentionRead{}, err
@@ -95,14 +96,14 @@ func (s *Service) mentionReadOf(who caller, req *chatimv1.ListMentionsRequest) (
 	if err != nil {
 		return mentionRead{}, err
 	}
-	_, hide := s.hideRead[who.tenant]
+	_, hide := s.hideRead[who.Tenant]
 	return mentionRead{
 		who: who, groups: groups, groupIDs: slices.Sorted(maps.Keys(groups)), groupSince: earliestGroupSince(groups), hide: hide,
 		before: store.MentionCursor{At: at, Key: key}, limit: limit, readAt: map[uint64]time.Time{}, readKnown: map[uint64]bool{},
 	}, nil
 }
 
-func (s *Service) mentionResponse(ctx context.Context, who caller, page store.MentionPage) (*chatimv1.ListMentionsResponse, error) {
+func (s *Service) mentionResponse(ctx context.Context, who callerid.Caller, page store.MentionPage) (*chatimv1.ListMentionsResponse, error) {
 	keys := make([]store.MsgKey, len(page.Items))
 	for i, d := range page.Items {
 		keys[i] = store.MsgKey(d.Key)

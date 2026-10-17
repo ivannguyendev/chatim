@@ -8,6 +8,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/mongobound"
 )
 
 type stateWrite struct {
@@ -53,14 +54,14 @@ func runWrites(targets []store.StateTarget, extra []bson.E) []stateWrite {
 	for i, t := range targets {
 		ids[i] = stateKey(t)
 	}
-	runs := idRuns(ids)
+	runs := mongobound.Runs(ids)
 	out := make([]stateWrite, len(runs))
 	for i, r := range runs {
-		if bytes.Equal(r.lo, r.hi) {
-			out[i] = stateWrite{filter: append(bson.D{{Key: "_id", Value: r.lo}}, extra...)}
+		if bytes.Equal(r.Lo, r.Hi) {
+			out[i] = stateWrite{filter: append(bson.D{{Key: "_id", Value: r.Lo}}, extra...)}
 			continue
 		}
-		out[i] = stateWrite{filter: r.filter(extra), many: true}
+		out[i] = stateWrite{filter: r.Filter(extra), many: true}
 	}
 	return out
 }

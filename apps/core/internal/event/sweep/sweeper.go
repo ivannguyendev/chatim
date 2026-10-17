@@ -8,10 +8,10 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/jsconsume"
 )
 
 const (
@@ -41,10 +41,10 @@ type Sweeper struct {
 	deps    Deps
 	cfg     Config
 	log     *slog.Logger
-	fails   *eventkit.LimitedLog
-	drops   *eventkit.LimitedLog
-	stale   *eventkit.LimitedLog
-	odd     *eventkit.LimitedLog
+	fails   *jsconsume.LimitedLog
+	drops   *jsconsume.LimitedLog
+	stale   *jsconsume.LimitedLog
+	odd     *jsconsume.LimitedLog
 	foreign map[string]struct{}
 	pace    *pace
 	stats   counters
@@ -76,8 +76,8 @@ func New(deps Deps, cfg Config, log *slog.Logger) (*Sweeper, error) {
 	}
 	return &Sweeper{
 		deps: deps, cfg: cfg, log: log,
-		fails: eventkit.NewLimitedLog(log), drops: eventkit.NewLimitedLog(log), stale: eventkit.NewLimitedLog(log),
-		odd: eventkit.NewLimitedLog(log), foreign: make(map[string]struct{}),
+		fails: jsconsume.NewLimitedLog(log), drops: jsconsume.NewLimitedLog(log), stale: jsconsume.NewLimitedLog(log),
+		odd: jsconsume.NewLimitedLog(log), foreign: make(map[string]struct{}),
 		pace: newPace(cfg.Rate, cfg.Batch), stop: make(chan struct{}), done: make(chan struct{}),
 	}, nil
 }

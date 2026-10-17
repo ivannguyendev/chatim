@@ -1,12 +1,12 @@
-package domain_test
+package ids_test
 
 import (
 	"errors"
 	"strings"
 	"testing"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/ids"
 )
 
 func TestIdentValidators(t *testing.T) {
@@ -15,9 +15,9 @@ func TestIdentValidators(t *testing.T) {
 		fn    func(string) error
 		field string
 	}
-	tenant := validator{"tenant", domain.ValidTenant, "tenant"}
-	user := validator{"user", domain.ValidUser, "user"}
-	cid := validator{"cid", domain.ValidCID, "cid"}
+	tenant := validator{"tenant", ids.ValidTenant, "tenant"}
+	user := validator{"user", ids.ValidUser, "user"}
+	cid := validator{"cid", ids.ValidCID, "cid"}
 
 	tests := []struct {
 		v     validator

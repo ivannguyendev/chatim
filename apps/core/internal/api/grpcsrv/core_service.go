@@ -15,6 +15,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/callerid"
 	"github.com/ivannguyendev/chatim/pkg/ids"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
@@ -138,7 +139,7 @@ func New(d Deps, log *slog.Logger) (*Service, error) {
 }
 
 func (s *Service) SendMessage(ctx context.Context, req *chatimv1.SendMessageRequest) (*chatimv1.SendMessageResponse, error) {
-	who, err := callerOf(ctx)
+	who, err := callerid.Of(ctx)
 	if err != nil {
 		return nil, err
 	}

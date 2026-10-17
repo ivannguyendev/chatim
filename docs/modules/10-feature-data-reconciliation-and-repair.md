@@ -131,7 +131,7 @@ Một consumer durable `projections` trên `CHATIM_EVT`: lọc một subject `ev
 Ack từng tin, như trước:
 - Ổn → `Ack`. Room hay doc không còn (`eventkit.Gone`) → `Ack`, đếm `projection_dropped_total`.
 - Không decode được → `Term`, đếm dropped.
-- Lỗi khác → `Nak` tin đó theo bậc thang 5s, 30s, 2m, 10m (`eventkit.NakDelay` theo số lần giao của nó). Chỉ tin đó chờ; các tin khác của lô vẫn được ack. `MaxAckPending` = 4 lô nên vài tin chậm không làm server ngừng giao.
+- Lỗi khác → `Nak` tin đó theo bậc thang 5s, 30s, 2m, 10m (`jsconsume.NakDelay` theo số lần giao của nó). Chỉ tin đó chờ; các tin khác của lô vẫn được ack. `MaxAckPending` = 4 lô nên vài tin chậm không làm server ngừng giao.
 - Mất slot 0 giữa lô → làm xong và ack/Nak lô đó; lô nhận sau khi mất slot thì `Nak(0)` từng tin để core mới nhận ngay. Dừng core: đợi lần fetch đang dở hết hạn (≤ `PROJECTION_FETCH_WAIT` 3s, thêm tối đa 1s nếu mất tín hiệu hết hạn) rồi trả mọi tin nó mang về bằng `Nak(0)`, nên không đánh rơi tin nào.
 
 Từ lần giao thứ 6 đếm `projection_stuck_total` (alert). Các số đo mang nhãn `projection="projections"`. Một event lỗi chỉ làm chậm chính nó. Event phát lại (sweeper, lần đầu `DeliverAll`) cũng nâng `last_change_at`/bucket lên giờ hiện tại; chấp nhận được.

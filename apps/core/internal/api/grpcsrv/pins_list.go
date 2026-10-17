@@ -21,7 +21,7 @@ func (s *Service) ListPins(ctx context.Context, req *chatimv1.ListPinsRequest) (
 	if err != nil {
 		return nil, err
 	}
-	grant, err := s.access.Authorize(ctx, access.ReadHistory, who.tenant, who.user, room)
+	grant, err := s.access.Authorize(ctx, access.ReadHistory, who.Tenant, who.User, room)
 	if err != nil {
 		return nil, err
 	}
@@ -30,7 +30,7 @@ func (s *Service) ListPins(ctx context.Context, req *chatimv1.ListPinsRequest) (
 		return nil, err
 	}
 	pins := slices.SortedFunc(slices.Values(state.Pins), func(a, b domain.Pin) int { return cmp.Compare(b.PV, a.PV) })
-	shown, err := s.pinnedMessages(ctx, who.user, grant, pins)
+	shown, err := s.pinnedMessages(ctx, who.User, grant, pins)
 	if err != nil {
 		return nil, err
 	}
