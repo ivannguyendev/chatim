@@ -2,6 +2,7 @@ package consumer_test
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"testing"
 	"testing/synctest"
@@ -85,6 +86,46 @@ func TestRunOnceAndCloseBeforeRun(t *testing.T) {
 		run.stop(t)
 		if err := r.consumer(t, &fakeQueue{}, cfg()).Close(t.Context()); err != nil {
 			t.Errorf("Close before Run = %v", err)
+		}
+	})
+}
+
+func TestCloseDeadlineCancelsEventsInFlightAndNaksThem(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := newRig()
+		r.resolver.block = make(chan struct{})
+		defer close(r.resolver.block)
+		now := time.Now()
+		var ds []*fakeDelivery
+		for seq := uint64(1); seq <= 3; seq++ {
+			ds = append(ds, delivery(t, created(seq, now, user("Minh", now)), 1))
+		}
+		q := &fakeQueue{}
+		q.push(ds...)
+		one := cfg()
+		one.Workers = 1
+		c := r.consumer(t, q, one)
+		run := start(t.Context(), c)
+		synctest.Wait()
+		begin := time.Now()
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+		defer cancel()
+		if err := c.Close(ctx); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("Close = %v, want context.DeadlineExceeded", err)
+		}
+		if took := time.Since(begin); took != time.Second {
+			t.Errorf("stop took %v, want the 1s deadline", took)
+		}
+		if err := <-run.done; err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		for i, d := range ds {
+			if got := settledOf(d); got.acks != 0 || got.terms != 0 || !slices.Equal(got.naks, []time.Duration{0}) {
+				t.Errorf("event %d settled %+v, want exactly one Nak(0)", i+1, got)
+			}
+		}
+		if c.Failures() != 0 || r.resolver.busy() != 0 {
+			t.Errorf("failures %d resolver busy %d, want none", c.Failures(), r.resolver.busy())
 		}
 	})
 }

@@ -8,7 +8,6 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/mention/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/mention/internal/plan"
-	"github.com/ivannguyendev/chatim/pkg/apperr"
 	"github.com/ivannguyendev/chatim/pkg/ids"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
@@ -42,7 +41,7 @@ func Notified(root string, r plan.Result, msg *chatimv1.Message, user string, ta
 func Retracted(root string, r plan.Result, user string) (Notice, error) {
 	reason, ok := retractReasons[r.Kind]
 	if !ok {
-		return Notice{}, fmt.Errorf("%w: retract a mention of a created message", apperr.ErrInvalidArgument)
+		return Notice{}, fmt.Errorf("%w: retract a mention of a created message", plan.ErrInvalidEvent)
 	}
 	n, err := envelope(r, user, 'r')
 	if err != nil {

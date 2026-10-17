@@ -82,7 +82,7 @@ func TestChannelRoomHasNoProtoType(t *testing.T) {
 
 func TestBuildRejects(t *testing.T) {
 	_, err := notify.Retracted("notify", result(plan.Created, 0), "Minh")
-	truth(t, errors.Is(err, apperr.ErrInvalidArgument))
+	truth(t, errors.Is(err, apperr.ErrInvalidArgument) && errors.Is(err, plan.ErrInvalidEvent))
 	_, err = notify.Retracted("notify", result(plan.Edited, 1), "Minh.x")
 	truth(t, errors.Is(err, apperr.ErrInvalidArgument))
 	r := result(plan.Edited, 1)

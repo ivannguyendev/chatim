@@ -16,6 +16,7 @@ type Delivery interface {
 	Ack() error
 	Nak(delay time.Duration) error
 	Term() error
+	InProgress() error
 }
 
 type Source interface {

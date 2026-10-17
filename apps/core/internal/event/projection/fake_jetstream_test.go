@@ -27,6 +27,7 @@ func delivery(t *testing.T, ev *chatimv1.Event, delivered uint64) *fakeDelivery 
 
 func (d *fakeDelivery) Data() []byte      { return d.data }
 func (d *fakeDelivery) Delivered() uint64 { return d.delivered }
+func (d *fakeDelivery) InProgress() error { return nil }
 
 func (d *fakeDelivery) Ack() error {
 	d.mu.Lock()

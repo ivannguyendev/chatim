@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
@@ -68,6 +69,7 @@ type fakeResolver struct {
 	groups   map[string][]string
 	err      error
 	block    chan struct{}
+	delay    time.Duration
 	inFlight int
 	calls    int
 }
@@ -76,13 +78,22 @@ func (r *fakeResolver) Resolve(ctx context.Context, _ string, _ uint64, _ domain
 	r.mu.Lock()
 	r.calls++
 	r.inFlight++
-	block, err := r.block, r.err
+	block, err, delay := r.block, r.err, r.delay
 	r.mu.Unlock()
 	defer func() {
 		r.mu.Lock()
 		r.inFlight--
 		r.mu.Unlock()
 	}()
+	if delay > 0 {
+		t := time.NewTimer(delay)
+		defer t.Stop()
+		select {
+		case <-t.C:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 	if block != nil {
 		select {
 		case <-block:

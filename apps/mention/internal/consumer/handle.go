@@ -50,24 +50,25 @@ func (c *Consumer) publish(ctx context.Context, j *job) error {
 	b := c.pub.Batch()
 	msg := messageOf(j.ev)
 	for user, target := range add {
-		n, err := notify.Notified(c.cfg.NotifySubjectRoot, r, msg, user, target)
-		if err == nil {
-			err = b.Add(n)
-		}
-		if err != nil {
+		n, built := notify.Notified(c.cfg.NotifySubjectRoot, r, msg, user, target)
+		if err := queue(b, n, built); err != nil {
 			return errors.Join(err, b.Wait(ctx))
 		}
 	}
 	for user := range drop {
-		n, err := notify.Retracted(c.cfg.NotifySubjectRoot, r, user)
-		if err == nil {
-			err = b.Add(n)
-		}
-		if err != nil {
+		n, built := notify.Retracted(c.cfg.NotifySubjectRoot, r, user)
+		if err := queue(b, n, built); err != nil {
 			return errors.Join(err, b.Wait(ctx))
 		}
 	}
 	return b.Wait(ctx)
+}
+
+func queue(b *notify.Batch, n notify.Notice, built error) error {
+	if built != nil {
+		return errInvalid(built)
+	}
+	return b.Add(n)
 }
 
 func (c *Consumer) resolve(ctx context.Context, r plan.Result, targets []domain.Target) (map[string]domain.Target, error) {

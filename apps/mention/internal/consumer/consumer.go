@@ -19,6 +19,7 @@ const (
 	handleFailedMsg = "mention consumer failed an event; it comes back later"
 	settleFailedMsg = "mention ack or nak failed; the event comes back after the ack wait"
 	garbageMsg      = "mention consumer dropped an invalid event"
+	progressMsg     = "mention in progress signal failed; the event may come back after the ack wait"
 )
 
 var errStarted = errors.New("mention consumer already started")
@@ -39,6 +40,8 @@ type Consumer struct {
 	started  atomic.Bool
 	stopped  context.Context
 	halt     context.CancelFunc
+	aborted  context.Context
+	abort    context.CancelFunc
 	done     chan struct{}
 }
 
@@ -61,6 +64,7 @@ func New(cfg config.Config, deps Deps) (*Consumer, error) {
 		done: make(chan struct{}),
 	}
 	c.stopped, c.halt = context.WithCancel(context.Background())
+	c.aborted, c.abort = context.WithCancel(context.Background())
 	return c, nil
 }
 
@@ -69,12 +73,16 @@ func (c *Consumer) Run(ctx context.Context) error {
 		return errStarted
 	}
 	defer close(c.done)
-	fetchCtx, cancel := context.WithCancel(ctx)
+	workCtx, cancelWork := context.WithCancel(ctx)
+	defer cancelWork()
+	unabort := context.AfterFunc(c.aborted, cancelWork)
+	defer unabort()
+	fetchCtx, cancel := context.WithCancel(workCtx)
 	defer cancel()
 	unwatch := context.AfterFunc(c.stopped, cancel)
 	defer unwatch()
-	for c.live(ctx) {
-		c.step(ctx, fetchCtx)
+	for c.live(workCtx) {
+		c.step(workCtx, fetchCtx)
 	}
 	if c.stopped.Err() != nil {
 		return nil
@@ -103,8 +111,10 @@ func (c *Consumer) Close(ctx context.Context) error {
 	case <-c.done:
 		return nil
 	case <-ctx.Done():
-		return ctx.Err()
 	}
+	c.abort()
+	<-c.done
+	return ctx.Err()
 }
 
 func (c *Consumer) Name() string { return DurableName }

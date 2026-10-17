@@ -28,12 +28,14 @@ func (c *Consumer) handle(ctx context.Context, ds []jsconsume.Delivery) {
 		c.release(ds)
 		return
 	}
-	jobs := c.prepare(ctx, ds)
+	batch := track(ds)
+	defer c.keepAlive(ctx, batch)()
+	jobs := c.prepare(ctx, batch)
 	c.loadVersions(ctx, jobs)
 	c.work(ctx, jobs)
 }
 
-func (c *Consumer) prepare(ctx context.Context, ds []jsconsume.Delivery) []job {
+func (c *Consumer) prepare(ctx context.Context, ds []*tracked) []job {
 	jobs := make([]job, 0, len(ds))
 	var oldest time.Time
 	for _, d := range ds {

@@ -14,10 +14,16 @@ import (
 
 type fakeMsg struct {
 	jetstream.Msg
-	meta *jetstream.MsgMetadata
+	meta     *jetstream.MsgMetadata
+	progress *int
 }
 
 func (m fakeMsg) Metadata() (*jetstream.MsgMetadata, error) { return m.meta, nil }
+
+func (m fakeMsg) InProgress() error {
+	*m.progress++
+	return nil
+}
 
 type fakeBatch struct{ msgs chan jetstream.Msg }
 
@@ -40,7 +46,7 @@ func (l fixedLookup) Consumer(context.Context, string, string) (jetstream.Consum
 }
 
 func message(delivered uint64) jetstream.Msg {
-	return fakeMsg{meta: &jetstream.MsgMetadata{NumDelivered: delivered}}
+	return fakeMsg{meta: &jetstream.MsgMetadata{NumDelivered: delivered}, progress: new(int)}
 }
 
 func TestPullSourceReadsAStoppedFetchToItsEnd(t *testing.T) {
@@ -74,6 +80,22 @@ func TestPullSourceReadsAStoppedFetchToItsEnd(t *testing.T) {
 		}
 		if d := got.ds[1]; d.Delivered() != 2 {
 			t.Errorf("delivered %d, want 2", d.Delivered())
+		}
+	})
+}
+
+func TestPullDeliveryReportsProgressToItsMessage(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		m := message(1)
+		c := &fakeConsumer{batch: fakeBatch{msgs: make(chan jetstream.Msg, 1)}}
+		c.batch.msgs <- m
+		close(c.batch.msgs)
+		ds, err := jsconsume.NewPullSource(fixedLookup{c}, "CHATIM_EVT", "mention").Fetch(t.Context(), 8, time.Second)
+		if err != nil || len(ds) != 1 {
+			t.Fatalf("Fetch = %d deliveries, %v; want one", len(ds), err)
+		}
+		if err := ds[0].InProgress(); err != nil || *m.(fakeMsg).progress != 1 {
+			t.Errorf("InProgress = %v after %d calls, want one call on the message", err, *m.(fakeMsg).progress)
 		}
 	})
 }

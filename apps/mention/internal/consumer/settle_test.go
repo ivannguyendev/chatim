@@ -36,13 +36,14 @@ func TestSettleBranches(t *testing.T) {
 		failures    uint64
 		resolverHit bool
 	}{
-		"done acks":           {ev: mentionMinh, delivered: 1, want: settledAs{acks: 1}, resolverHit: true},
-		"no targets acks":     {ev: func(now time.Time) *chatimv1.Event { return created(41, now) }, delivered: 1, want: settledAs{acks: 1}},
-		"gone room acks":      {setup: func(r *rig) { r.resolver.err = fmt.Errorf("room: %w", apperr.ErrNotFound) }, ev: mentionMinh, delivered: 1, want: settledAs{acks: 1}, dropped: 1, resolverHit: true},
-		"undecodable terms":   {raw: []byte{0xff, 0xff, 0xff}, delivered: 1, want: settledAs{terms: 1}, dropped: 1},
-		"invalid event terms": {ev: func(now time.Time) *chatimv1.Event { ev := mentionMinh(now); ev.RoomId = "x"; return ev }, delivered: 1, want: settledAs{terms: 1}, dropped: 1},
-		"failure naks first":  {setup: func(r *rig) { r.resolver.err = errDown }, ev: mentionMinh, delivered: 1, want: settledAs{naks: []time.Duration{5 * time.Second}}, failures: 1, resolverHit: true},
-		"failure climbs":      {setup: func(r *rig) { r.resolver.err = errDown }, ev: mentionMinh, delivered: 3, want: settledAs{naks: []time.Duration{2 * time.Minute}}, failures: 1, resolverHit: true},
+		"done acks":                {ev: mentionMinh, delivered: 1, want: settledAs{acks: 1}, resolverHit: true},
+		"no targets acks":          {ev: func(now time.Time) *chatimv1.Event { return created(41, now) }, delivered: 1, want: settledAs{acks: 1}},
+		"gone room acks":           {setup: func(r *rig) { r.resolver.err = fmt.Errorf("room: %w", apperr.ErrNotFound) }, ev: mentionMinh, delivered: 1, want: settledAs{acks: 1}, dropped: 1, resolverHit: true},
+		"undecodable terms":        {raw: []byte{0xff, 0xff, 0xff}, delivered: 1, want: settledAs{terms: 1}, dropped: 1},
+		"invalid event terms":      {ev: func(now time.Time) *chatimv1.Event { ev := mentionMinh(now); ev.RoomId = "x"; return ev }, delivered: 1, want: settledAs{terms: 1}, dropped: 1},
+		"unbuildable notice terms": {setup: func(r *rig) { r.resolver.groups["sale"] = []string{"Minh.x"} }, ev: func(now time.Time) *chatimv1.Event { return created(41, now, group("sale", now)) }, delivered: 1, want: settledAs{terms: 1}, dropped: 1, resolverHit: true},
+		"failure naks first":       {setup: func(r *rig) { r.resolver.err = errDown }, ev: mentionMinh, delivered: 1, want: settledAs{naks: []time.Duration{5 * time.Second}}, failures: 1, resolverHit: true},
+		"failure climbs":           {setup: func(r *rig) { r.resolver.err = errDown }, ev: mentionMinh, delivered: 3, want: settledAs{naks: []time.Duration{2 * time.Minute}}, failures: 1, resolverHit: true},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

@@ -20,6 +20,8 @@ type fakeDelivery struct {
 	acks      int
 	terms     int
 	naks      []time.Duration
+	progress  int
+	late      int
 }
 
 func delivery(t *testing.T, ev *chatimv1.Event, delivered uint64) *fakeDelivery {
@@ -53,6 +55,22 @@ func (d *fakeDelivery) Term() error {
 	defer d.mu.Unlock()
 	d.terms++
 	return nil
+}
+
+func (d *fakeDelivery) InProgress() error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.progress++
+	if d.acks+d.terms+len(d.naks) > 0 {
+		d.late++
+	}
+	return nil
+}
+
+func (d *fakeDelivery) progressed() (calls, late int) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.progress, d.late
 }
 
 func (d *fakeDelivery) settled() (acks, terms int, naks []time.Duration) {
