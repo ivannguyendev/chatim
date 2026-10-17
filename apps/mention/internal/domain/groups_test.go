@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"errors"
+	"math"
 	"slices"
 	"testing"
 
@@ -37,6 +38,7 @@ func TestUserGroupsValidate(t *testing.T) {
 		"tenant":  {Tenant: "T1", User: "Ha", Ver: 1},
 		"user":    {Tenant: "t1", User: "H a", Ver: 1},
 		"ver":     {Tenant: "t1", User: "Ha", Ver: 0},
+		"big ver": {Tenant: "t1", User: "Ha", Ver: math.MaxInt64 + 1},
 		"group":   {Tenant: "t1", User: "Ha", Groups: []string{"ok", "not ok"}, Ver: 1},
 		"empty":   {Tenant: "t1", User: "Ha", Groups: []string{""}, Ver: 1},
 		"no user": {Tenant: "t1", Ver: 1},
@@ -57,6 +59,7 @@ func TestGroupValidate(t *testing.T) {
 		"id":     {Tenant: "t1", ID: "g.h", Name: "G", Ver: 1},
 		"name":   {Tenant: "t1", ID: "g", Name: "  ", Ver: 1},
 		"ver":    {Tenant: "t1", ID: "g", Name: "G", Ver: 0},
+		"big":    {Tenant: "t1", ID: "g", Name: "G", Ver: math.MaxInt64 + 1},
 	}
 	for name, g := range bad {
 		if err := g.Validate(); !errors.Is(err, apperr.ErrInvalidArgument) {

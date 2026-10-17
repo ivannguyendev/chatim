@@ -16,6 +16,7 @@ func RunGroups(t *testing.T, open func(t *testing.T) store.Groups) {
 	}{
 		{"SetStoresGroupsAndReportsChanges", groupsSet},
 		{"OlderVerIsIgnored", groupsOlderIgnored},
+		{"NewerVerKeepsItsCaller", groupsUpdatedBy},
 		{"InactiveGroupStaysListedAsNotTaggable", groupsInactive},
 		{"AllIsPerTenant", groupsTenants},
 		{"InvalidCallsAreRejected", groupsInvalid},
@@ -26,7 +27,12 @@ func RunGroups(t *testing.T, open func(t *testing.T) store.Groups) {
 }
 
 func grp(id, name string, active bool, ver uint64) domain.Group {
-	return domain.Group{Tenant: tenant, ID: id, Name: name, Active: active, Ver: ver}
+	return domain.Group{Tenant: tenant, ID: id, Name: name, Active: active, Ver: ver, UpdatedBy: "hr-sync"}
+}
+
+func by(g domain.Group, caller string) domain.Group {
+	g.UpdatedBy = caller
+	return g
 }
 
 func mustSetGroups(t *testing.T, s store.Groups, want []string, items ...domain.Group) {
@@ -56,8 +62,16 @@ func groupsSet(t *testing.T, s store.Groups) {
 
 func groupsOlderIgnored(t *testing.T, s store.Groups) {
 	mustSetGroups(t, s, []string{"hr"}, grp("hr", "HR", true, 5))
-	mustSetGroups(t, s, nil, grp("hr", "Old HR", false, 4))
+	mustSetGroups(t, s, nil, by(grp("hr", "Old HR", false, 4), "old-sync"))
 	assertGroups(t, s, tenant, grp("hr", "HR", true, 5))
+}
+
+func groupsUpdatedBy(t *testing.T, s store.Groups) {
+	mustSetGroups(t, s, []string{"hr"}, grp("hr", "HR", true, 5))
+	mustSetGroups(t, s, nil, by(grp("hr", "HR", true, 6), "hr-admin"))
+	assertGroups(t, s, tenant, by(grp("hr", "HR", true, 6), "hr-admin"))
+	mustSetGroups(t, s, nil, by(grp("hr", "HR", true, 6), "replayer"))
+	assertGroups(t, s, tenant, by(grp("hr", "HR", true, 6), "hr-admin"))
 }
 
 func groupsInactive(t *testing.T, s store.Groups) {
