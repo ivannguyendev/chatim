@@ -6,15 +6,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
 const (
-	DefaultFetchBatch = 1024
-	DefaultFetchWait  = time.Second
+	DefaultFetchBatch = 8192
+	DefaultFetchWait  = 3 * time.Second
 	AckWait           = 30 * time.Second
 	MaxFetchBatch     = 8192
-	MaxFetchWait      = time.Second
+	MaxFetchWait      = 3 * time.Second
 )
 
 type Config struct {
@@ -27,6 +28,10 @@ type Config struct {
 func (c Config) Validate() error { return c.withDefaults().validate() }
 
 func (c Config) MaxAckPending() int { return 4 * c.withDefaults().FetchBatch }
+
+func (c Config) StopTimeout() time.Duration {
+	return c.withDefaults().FetchWait + eventkit.FetchExpiryGrace
+}
 
 func (c Config) withDefaults() Config {
 	c.FetchBatch = cmp.Or(c.FetchBatch, DefaultFetchBatch)

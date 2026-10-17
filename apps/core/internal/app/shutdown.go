@@ -21,7 +21,7 @@ func (a *node) shutdown(ctx context.Context, sup *supervisor, t tasks, cause err
 	plan := a.cfg.StopPlan()
 	stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), a.cfg.ShutdownBudget-config.CloseTimeout)
 	defer cancel()
-	a.log.InfoContext(stopCtx, "core shutting down", "component_failed", cause != nil)
+	a.log.InfoContext(stopCtx, "core shutting down", "component_failed", cause != nil, "stop_plan", plan.Total(), "budget", a.cfg.ShutdownBudget)
 
 	a.admin.SetReady(false)
 	a.grpc.Health().Shutdown()

@@ -72,3 +72,12 @@ func TestEnsureStreamRefusesBadConfig(t *testing.T) {
 		t.Errorf("EnsureStream with NATS down = %v", err)
 	}
 }
+
+func TestConsumerStopTimeoutCoversAFetchReadToItsLostExpiry(t *testing.T) {
+	if got := (timer.ConsumerConfig{}).StopTimeout(); got != 1500*time.Millisecond {
+		t.Errorf("default stop timeout %v, want 500ms wait + 1s lost expiry", got)
+	}
+	if got := (timer.ConsumerConfig{FetchWait: 2 * time.Second}).StopTimeout(); got != 3*time.Second {
+		t.Errorf("stop timeout %v, want 2s wait + 1s lost expiry", got)
+	}
+}

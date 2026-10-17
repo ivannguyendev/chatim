@@ -47,7 +47,7 @@ func TestConsumerFetchesWithItsSettings(t *testing.T) {
 		cfg  projection.Config
 		want fetchAsk
 	}{
-		"default":    {evtConfig, fetchAsk{1024, time.Second}},
+		"default":    {evtConfig, fetchAsk{8192, 3 * time.Second}},
 		"configured": {tuned, fetchAsk{128, 250 * time.Millisecond}},
 	} {
 		t.Run(name, func(t *testing.T) {

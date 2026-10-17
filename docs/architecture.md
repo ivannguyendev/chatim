@@ -204,13 +204,13 @@ flowchart TB
   - `chatim-redis-dedupe` (Dedupe): Dùng cho CID dedupe và `request_id` (`allkeys-lru`, không lưu đĩa). Từ M3.1 không còn bitmap ack mark `chatim:evtack:*`; event chờ phát nằm trong `_state` trên doc.
 - **NATS JetStream:**
   - `CHATIM_EVT`: Kênh phát live events 7 ngày, id tự nhiên, receiver bỏ trùng.
-  - Một consumer durable `projections` trên `CHATIM_EVT` (lọc `evt.>`, ack từng tin, `MaxAckPending` = 4 × lô), chỉ core giữ slot 0 fetch (lô 1024, chờ 1s), chia mỗi lô cho ba handler `room_activity`, `mention_reply_index`, `mention_read`; tin lỗi Nak riêng, giãn dần 5s/30s/2m/10m. Ba durable cũ bị xoá lúc khởi động.
+  - Một consumer durable `projections` trên `CHATIM_EVT` (lọc `evt.>`, ack từng tin, `MaxAckPending` = 4 × lô), chỉ core giữ slot 0 fetch (lô 8192, chờ 3s: cửa sổ 3s gom ghi `rooms` theo room để CPU Mongo ngang engine cũ), chia mỗi lô cho ba handler `room_activity`, `mention_reply_index`, `mention_read`; tin lỗi Nak riêng, giãn dần 5s/30s/2m/10m. Ba durable cũ bị xoá lúc khởi động.
   - `CHATIM_TIMER`: stream phiếu hẹn sinh tồn (WorkQueue, message schedule): phiếu đặt ở `timer.arm.*`, tới hạn sang `timer.due`, một consumer `timer-due` dùng chung (D152). Thay `CHATIM_WORK` (đã bỏ).
 - **MongoDB:** Replica Set 3 node, `w:majority` cho mọi lệnh ghi bền vững.
 
 ### 7.2 Vòng đời Core (Lifecycle & Graceful Shutdown)
 - **Thứ tự Boot:** Publisher → Hàng xoá cờ (`stateclear`) → Flusher → CID Batcher → Slot Router → Slot Manager → Consumer phiếu hẹn (`timer-due`) → 3 Consumer projection → Sweeper (chỉ làm việc khi giữ slot 0) → Watchers (`memberwatch`, `roomcache.Watch`) → Mở cổng gRPC.
-- **Thứ tự Dừng:** Bật `/readyz` false → Drain gRPC → Dừng Sweeper → Dừng Consumer projection → Dừng Consumer phiếu hẹn → Unsubscribe Watchers → Dừng Router → Flush CID Batcher → Flusher → Publisher → Xả hàng xoá cờ (1s; phần còn lại sweeper phát bù) → Nhả Slots → Đóng Clients (kế hoạch mặc định 26,2s trong `CORE_SHUTDOWN_BUDGET = 28s`).
+- **Thứ tự Dừng:** Bật `/readyz` false → Drain gRPC → Dừng Sweeper → Dừng Consumer projection → Dừng Consumer phiếu hẹn → Unsubscribe Watchers → Dừng Router → Flush CID Batcher → Flusher → Publisher → Xả hàng xoá cờ (1s; phần còn lại sweeper phát bù) → Nhả Slots → Đóng Clients (kế hoạch mặc định 29,7s trong `CORE_SHUTDOWN_BUDGET = 30s`; consumer projection có `PROJECTION_FETCH_WAIT` + 1s = 4s, consumer phiếu hẹn 500ms + 1s, vì lần fetch dở không huỷ được).
 - **CLI Subcommands:** `/app resync` (bật lại cờ `_state` của doc trong khoảng để sweeper phát lại; sau khi purge stream phải chờ qua `EVT_STREAM_DUPLICATES`, D155) và `/app recount -room ID` (đếm lại `member_count`, CAS kèm bit 2, publish rồi xoá cờ).
 
 ### 7.3 Quy ước ghi DB ngoài core

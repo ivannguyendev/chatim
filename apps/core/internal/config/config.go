@@ -119,7 +119,7 @@ func Load() (Config, error) {
 		DrainDelay:             p.span("CORE_DRAIN_DELAY", 2*time.Second),
 		GRPCShutdown:           p.span("CORE_GRPC_SHUTDOWN", 5*time.Second),
 		PublisherDrain:         p.span("CORE_PUBLISHER_DRAIN", 5*time.Second),
-		ShutdownBudget:         p.span("CORE_SHUTDOWN_BUDGET", 28*time.Second),
+		ShutdownBudget:         p.span("CORE_SHUTDOWN_BUDGET", 30*time.Second),
 		LockedMessageKinds:     p.kinds("MESSAGE_LOCKED_KINDS"),
 		MentionHideReadTenants: p.tenants("MENTION_HIDE_READ_TENANTS"),
 		Limits: mutate.Limits{
@@ -145,8 +145,8 @@ func (c Config) StopPlan() StopPlan {
 		DrainDelay:  c.DrainDelay,
 		GRPC:        c.GRPCShutdown,
 		Sweeper:     CloseTimeout,
-		Projections: CloseTimeout,
-		Timer:       CloseTimeout,
+		Projections: c.Projection.StopTimeout(),
+		Timer:       timer.ConsumerConfig{}.StopTimeout(),
 		Router:      c.RequestDeadline,
 		CIDBatch:    2 * c.Dedupe.Timeout,
 		Flusher:     c.Flush.InsertTimeout,
@@ -157,7 +157,7 @@ func (c Config) StopPlan() StopPlan {
 	}
 }
 
-func (s StopPlan) total() time.Duration {
+func (s StopPlan) Total() time.Duration {
 	var sum time.Duration
 	for _, d := range []time.Duration{
 		s.DrainDelay, s.GRPC, s.Sweeper, s.Projections, s.Timer, s.Router, s.CIDBatch, s.Flusher, s.Publisher, s.StateClear, s.Slots, s.Close,
@@ -170,4 +170,4 @@ func (s StopPlan) total() time.Duration {
 	return sum
 }
 
-func (s StopPlan) fitsWithin(budget time.Duration) bool { return s.total() < budget }
+func (s StopPlan) fitsWithin(budget time.Duration) bool { return s.Total() < budget }

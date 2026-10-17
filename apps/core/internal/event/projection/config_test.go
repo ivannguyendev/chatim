@@ -17,20 +17,30 @@ func TestConfigFillsDefaultsAndRefusesBadValues(t *testing.T) {
 	if err := evtConfig.Validate(); err != nil {
 		t.Fatalf("default config: %v", err)
 	}
-	if projection.DefaultFetchBatch != 1024 || projection.DefaultFetchWait != time.Second || evtConfig.MaxAckPending() != 4096 {
-		t.Fatalf("defaults %d / %v / %d pending, want 1024 / 1s / 4096", projection.DefaultFetchBatch, projection.DefaultFetchWait, evtConfig.MaxAckPending())
+	if projection.DefaultFetchBatch != 8192 || projection.DefaultFetchWait != 3*time.Second || evtConfig.MaxAckPending() != 32768 {
+		t.Fatalf("defaults %d / %v / %d pending, want 8192 / 3s / 32768", projection.DefaultFetchBatch, projection.DefaultFetchWait, evtConfig.MaxAckPending())
+	}
+	if projection.MaxFetchBatch != 8192 || projection.MaxFetchWait != 3*time.Second {
+		t.Fatalf("caps %d / %v, want 8192 / 3s", projection.MaxFetchBatch, projection.MaxFetchWait)
+	}
+	if evtConfig.StopTimeout() != 4*time.Second || projection.AckWait < 7*evtConfig.StopTimeout() {
+		t.Fatalf("stop timeout %v ack wait %v; want 3s wait + 1s lost expiry, far under the ack wait", evtConfig.StopTimeout(), projection.AckWait)
+	}
+	short := projection.Config{Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, FetchWait: 500 * time.Millisecond}
+	if short.StopTimeout() != 1500*time.Millisecond {
+		t.Fatalf("stop timeout %v, want the configured wait + 1s", short.StopTimeout())
 	}
 	full := projection.Config{Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, FetchBatch: projection.MaxFetchBatch, FetchWait: projection.MaxFetchWait}
 	if err := full.Validate(); err != nil || full.MaxAckPending() != 4*projection.MaxFetchBatch {
 		t.Fatalf("config at the limits: %v, %d pending", err, full.MaxAckPending())
 	}
 	for name, c := range map[string]projection.Config{
-		"no stream":                {SubjectRoot: subjectRoot},
-		"dotted root":              {Stream: "CHATIM_EVT", SubjectRoot: "evt.x"},
-		"negative batch":           {Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, FetchBatch: -1},
-		"batch over limit":         {Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, FetchBatch: projection.MaxFetchBatch + 1},
-		"wait past the stop phase": {Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, FetchWait: projection.MaxFetchWait + time.Millisecond},
-		"negative wait":            {Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, FetchWait: -time.Second},
+		"no stream":           {SubjectRoot: subjectRoot},
+		"dotted root":         {Stream: "CHATIM_EVT", SubjectRoot: "evt.x"},
+		"negative batch":      {Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, FetchBatch: -1},
+		"batch over limit":    {Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, FetchBatch: projection.MaxFetchBatch + 1},
+		"wait over the limit": {Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, FetchWait: projection.MaxFetchWait + time.Millisecond},
+		"negative wait":       {Stream: "CHATIM_EVT", SubjectRoot: subjectRoot, FetchWait: -time.Second},
 	} {
 		if err := c.Validate(); !errors.Is(err, apperr.ErrInvalidArgument) {
 			t.Errorf("%s: Validate = %v, want ErrInvalidArgument", name, err)

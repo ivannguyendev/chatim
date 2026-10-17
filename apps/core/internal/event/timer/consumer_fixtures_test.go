@@ -58,42 +58,66 @@ type fakeSource struct {
 	batches [][]eventkit.Delivery
 	errs    []error
 	fetches int
+	ready   chan struct{}
 }
 
 func (s *fakeSource) push(ds ...*fakeDelivery) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	batch := make([]eventkit.Delivery, len(ds))
 	for i, d := range ds {
 		batch[i] = d
 	}
+	s.mu.Lock()
 	s.batches = append(s.batches, batch)
+	ready := s.readyLocked()
+	s.mu.Unlock()
+	select {
+	case ready <- struct{}{}:
+	default:
+	}
 }
 
 func (s *fakeSource) Fetch(ctx context.Context, _ int, wait time.Duration) ([]eventkit.Delivery, error) {
+	t := time.NewTimer(wait)
+	defer t.Stop()
 	s.mu.Lock()
 	s.fetches++
+	s.mu.Unlock()
+	for {
+		b, ok, ready, err := s.next()
+		if ok {
+			return b, err
+		}
+		select {
+		case <-ready:
+		case <-t.C:
+			return nil, nil
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+}
+
+func (s *fakeSource) next() ([]eventkit.Delivery, bool, chan struct{}, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if len(s.errs) > 0 {
 		err := s.errs[0]
 		s.errs = s.errs[1:]
-		s.mu.Unlock()
-		return nil, err
+		return nil, true, nil, err
 	}
 	if len(s.batches) > 0 {
 		b := s.batches[0]
 		s.batches = s.batches[1:]
-		s.mu.Unlock()
-		return b, nil
+		return b, true, nil, nil
 	}
-	s.mu.Unlock()
-	t := time.NewTimer(wait)
-	defer t.Stop()
-	select {
-	case <-t.C:
-		return nil, nil
-	case <-ctx.Done():
-		return nil, ctx.Err()
+	return nil, false, s.readyLocked(), nil
+}
+
+func (s *fakeSource) readyLocked() chan struct{} {
+	if s.ready == nil {
+		s.ready = make(chan struct{}, 1)
 	}
+	return s.ready
 }
 
 func (s *fakeSource) fetchCount() int {

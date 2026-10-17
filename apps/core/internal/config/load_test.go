@@ -38,7 +38,7 @@ func TestLoadDefaults(t *testing.T) {
 		RedisDedupeAddr: "chatim-redis-dedupe:6379",
 		NATSURL:         "nats://chatim-nats:4222", ConnectTimeout: 10 * time.Second, RequestDeadline: 3 * time.Second,
 		SlowRPC: 500 * time.Millisecond, QueueWait: 25 * time.Millisecond, MaxInflight: 2048, DrainDelay: 2 * time.Second, GRPCShutdown: 5 * time.Second,
-		PublisherDrain: 5 * time.Second, ShutdownBudget: 28 * time.Second,
+		PublisherDrain: 5 * time.Second, ShutdownBudget: 30 * time.Second,
 		Flush: flush.Config{Shards: 4, Window: 2 * time.Millisecond, MaxBatch: 256, QueueSize: 1024, InsertTimeout: time.Second},
 		Actor: actor.Config{
 			Mailbox: 1024, Idle: 5 * time.Minute, MaxGroup: 64, MaxActors: 100000,
@@ -61,7 +61,7 @@ func TestLoadDefaults(t *testing.T) {
 			Batch: 500, Rate: 5000, Tick: time.Second, AckTimeout: 2 * time.Second,
 		},
 		Projection: projection.Config{
-			Stream: "CHATIM_EVT", SubjectRoot: "evt", FetchBatch: 1024, FetchWait: time.Second,
+			Stream: "CHATIM_EVT", SubjectRoot: "evt", FetchBatch: 8192, FetchWait: 3 * time.Second,
 		},
 		Limits:                 mutate.Limits{Emojis: mutate.DefaultEmojis, PinLimit: 50, MemberBatch: 500, MentionTargets: 50},
 		MemberCountCheckDelay:  5 * time.Second,
@@ -86,7 +86,7 @@ func TestLoadOverrides(t *testing.T) {
 		RedisPassword: "state-pw", RedisDedupeAddr: "dedupe:6381", RedisDedupeDB: 2, RedisDedupePassword: "dedupe-pw",
 		NATSURL: "nats://n1:4222", ConnectTimeout: 4 * time.Second, RequestDeadline: 2 * time.Second,
 		SlowRPC: 750 * time.Millisecond, QueueWait: 10 * time.Millisecond, MaxInflight: 100, DrainDelay: time.Second, GRPCShutdown: 4 * time.Second,
-		PublisherDrain: 3 * time.Second, ShutdownBudget: 21 * time.Second,
+		PublisherDrain: 3 * time.Second, ShutdownBudget: 22 * time.Second,
 		Flush: flush.Config{Shards: 8, Window: 5 * time.Millisecond, MaxBatch: 512, QueueSize: 256, InsertTimeout: 500 * time.Millisecond},
 		Actor: actor.Config{
 			Mailbox: 64, Idle: time.Minute, MaxGroup: 32, MaxActors: 5000,

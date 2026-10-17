@@ -38,6 +38,10 @@ type ConsumerConfig struct {
 	FetchWait  time.Duration
 }
 
+func (c ConsumerConfig) StopTimeout() time.Duration {
+	return cmp.Or(c.FetchWait, DefaultFetchWait) + eventkit.FetchExpiryGrace
+}
+
 type Consumer struct {
 	deps     ConsumerDeps
 	cfg      ConsumerConfig

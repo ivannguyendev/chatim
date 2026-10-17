@@ -178,7 +178,7 @@ sequenceDiagram
 | Thành phần phụ thuộc | Mục đích phụ thuộc | Ứng xử khi thành phần gặp sự cố (Failure Behavior) |
 |---|---|---|
 | **MongoDB Clustered Collection** | Lưu tin nhắn kèm con trỏ Thread | Nếu MongoDB lỗi ghi: Tin nhắn trả lời bị từ chối như tin nhắn thường; tính toàn vẹn của thread được bảo toàn. |
-| **NATS JetStream (`CHATIM_EVT`, consumer `projection-mention_reply_index`)** | Đưa việc xử lý mention ra nền | Nếu consumer bị ứ đọng hoặc NATS gián đoạn: Tin nhắn trả lời vẫn gửi thành công, người trong phòng vẫn thấy tin; chỉ có tab "Tôi được nhắc tới" và thông báo đẩy bị trễ cho tới khi hàng đợi xả xong. |
+| **NATS JetStream (`CHATIM_EVT`, consumer `projections`)** | Đưa việc xử lý mention ra nền | Nếu consumer bị ứ đọng hoặc NATS gián đoạn: Tin nhắn trả lời vẫn gửi thành công, người trong phòng vẫn thấy tin; chỉ có tab "Tôi được nhắc tới" và thông báo đẩy bị trễ cho tới khi hàng đợi xả xong. |
 | **Projection `mention_reply_index`** | Lập chỉ mục mention và đếm reply | Projection được thiết kế hoàn toàn Idempotent (doc trả lời chèn một lần theo `_id`, mention theo `message_ver`, `rc` dưới phiếu hẹn): có thể retry nhiều lần mà không sợ sai lệch bộ đếm `rc` hoặc nhân đôi bản ghi mention. |
 
 ### 6.1. Chỉ số Sức khoẻ Vận hành & Cảnh báo SRE (Key Metrics & Alerts)

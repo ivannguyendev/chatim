@@ -8,6 +8,8 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 )
 
+const FetchExpiryGrace = time.Second
+
 type Delivery interface {
 	Data() []byte
 	Delivered() uint64

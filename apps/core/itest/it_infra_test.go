@@ -97,6 +97,7 @@ func (it *itInfra) coreConfig(t *testing.T, env map[string]string) config.Config
 		"EVT_LIVE_ROOT":         "itclive" + it.suffix,
 		"TIMER_STREAM":          "IT_TIMER_" + strings.ToUpper(it.suffix),
 		"TIMER_SUBJECT_ROOT":    "itctimer" + it.suffix,
+		"PROJECTION_FETCH_WAIT": "500ms",
 	}
 	maps.Copy(base, env)
 	for k, v := range base {
