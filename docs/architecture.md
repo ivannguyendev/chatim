@@ -1,7 +1,7 @@
 # chatim — Kiến trúc hệ thống (Single Source of Truth)
 
 > Ngày cập nhật: 2026-10-16 · Trạng thái: **Nguồn sự thật duy nhất (SSOT)** cho toàn bộ quy chuẩn kiến trúc của `chatim`.
-> Nhật ký 161 quyết định kỹ thuật: [docs/decision-log.md](./decision-log.md) (D1–D161).
+> Nhật ký 162 quyết định kỹ thuật: [docs/decision-log.md](./decision-log.md) (D1–D162).
 > Đặc tả chi tiết 10 Module tính năng (How-It-Works & Flowcharts): [docs/modules/README.md](./modules/README.md).
 > Lộ trình phát triển các Milestone: [docs/roadmap.md](./roadmap.md).
 
@@ -271,4 +271,4 @@ Toàn bộ chi tiết kỹ thuật vận hành (How-It-Works), sơ đồ Mermaid
 ## 10. Tra cứu Quyết định Kỹ thuật (Decision Log)
 
 Mọi quyết định lựa chọn giải pháp kỹ thuật, đánh đổi (trade-offs), phương án bị loại bỏ (rejected alternatives) từ ngày đầu dự án đến Milestone M3.1 hiện tại được lưu trữ đầy đủ tại:
-👉 **[Architecture Decision Records (D1–D161)](./decision-log.md)**
+👉 **[Architecture Decision Records (D1–D162)](./decision-log.md)**
