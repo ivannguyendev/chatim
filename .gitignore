@@ -142,9 +142,9 @@ lerna-debug.log*
 !.vscode/extensions.json
 
 *cert*
-.agent
-.agents
-.claude
+.agent/*
+.claude/*
+.local/*
 
 /bin/
 rooms*.txt
