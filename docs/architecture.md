@@ -1,7 +1,7 @@
 # chatim — Kiến trúc hệ thống (Single Source of Truth)
 
-> Ngày cập nhật: 2026-10-16 · Trạng thái: **Nguồn sự thật duy nhất (SSOT)** cho toàn bộ quy chuẩn kiến trúc của `chatim`.
-> Nhật ký 162 quyết định kỹ thuật: [docs/decision-log.md](./decision-log.md) (D1–D162).
+> Ngày cập nhật: 2026-10-17 · Trạng thái: **Nguồn sự thật duy nhất (SSOT)** cho toàn bộ quy chuẩn kiến trúc của `chatim`.
+> Nhật ký 173 quyết định kỹ thuật: [docs/decision-log.md](./decision-log.md) (D1–D173). Danh mục event (core phát gì, ai nhận gì): [docs/events.md](./events.md).
 > Đặc tả chi tiết 10 Module tính năng (How-It-Works & Flowcharts): [docs/modules/README.md](./modules/README.md).
 > Lộ trình phát triển các Milestone: [docs/roadmap.md](./roadmap.md).
 
@@ -20,10 +20,10 @@
 - Ranh giới trách nhiệm:
   - Core cung cấp API dữ liệu (gửi, đọc, sửa, xoá, lịch sử, reaction, vị trí đọc…) và phát event.
   - Client lấy danh sách hội thoại thẳng từ Core; Core xếp danh sách theo tin mới nhất và đếm unread lúc đọc (M3, D120–D123).
-  - Badge `@`, sync token, đa thiết bị: Mention App đảm nhiệm (đổi tên từ "Inbox/sync").
+  - Mention App (app riêng `apps/mention`, thiết kế D162–D173, chưa xây, làm trước M4): ghi mention, `ListMentions`, thành viên nhóm và danh mục nhóm được tag, dữ liệu gợi ý `@nhóm` theo room, bung `@nhóm`/`@all` và gửi thông báo theo người lên `CHATIM_NOTIFY`; hiện chạy nhúng trong core. Lọc tắt thông báo và giao tới máy thuộc app notification (websocket M4, `push` Phase 2). Dấu `@` trên danh sách hội thoại, sync token, đa thiết bị: làm sau.
 
 ### 1.2 Ngoài phạm vi Phase 1 (Non-goals)
-App auth / api / events / push / migrator, API import trong core, media, search, E2EE, webhook, voice/video, admin UI.
+App auth / api / events / push / migrator, API import trong core, media, search, E2EE, webhook, voice/video, admin UI. (Search: owner dự định Search App riêng dùng search engine, 2026-10-17, chưa lên lịch; xem [roadmap](./roadmap.md).)
 
 ### 1.3 Mục tiêu quy mô (Scale)
 - ~100K kết nối đồng thời (CCU).
@@ -131,6 +131,7 @@ flowchart TD
     AppAuth["Auth App (JWT Issuer)"]
     AppEvents["Event Distribution / Webhooks"]
     AppPush["Push Notification Service"]
+    AppMention["Mention App (nhúng trong core, chưa xây)"]
 
     subgraph Platform["Hạ tầng Nền tảng chatim"]
         AppWebsocket["App websocket (gws Gateway)"]
@@ -152,6 +153,8 @@ flowchart TD
     AppCore -.->|9. Sweeper slot 0: quét cờ còn sót| MongoDB
     NATS -->|live.{t}.*.{rid}.>| AppWebsocket
     NATS -.->|Subscribe| AppPush
+    NATS -.->|"evt.*.mention.*.msg_created, msg_edited/deleted"| AppMention
+    AppMention -.->|"notify.{t}.{user}.mention"| NATS
     NATS -.->|Subscribe| AppEvents
 ```
 
@@ -207,6 +210,7 @@ flowchart TB
 - **NATS JetStream:**
   - `CHATIM_EVT`: Kênh phát live events 7 ngày, id tự nhiên, receiver bỏ trùng.
   - Một consumer durable `projections` trên `CHATIM_EVT` (lọc `evt.>`, ack từng tin, `MaxAckPending` = 4 × lô), chỉ core giữ slot 0 fetch (lô 8192, chờ 3s: cửa sổ 3s gom ghi `rooms` theo room để CPU Mongo ngang engine cũ), chia mỗi lô cho ba handler `room_activity`, `mention_reply_index`, `mention_read`; tin lỗi Nak riêng, giãn dần 5s/30s/2m/10m. Ba durable cũ bị xoá lúc khởi động.
+  - Sau Mention App (D170, D171, D173, chưa xây): `msg_created` của tin có mention phát ở `evt.{t}.mention.{rid}.msg_created`; consumer durable `mention` chỉ lọc 3 subject (tin có mention, `msg_edited`, `msg_deleted`), queue group: mọi pod/core cùng kéo, không leader; event tự đủ (`at` cho từng đích, `previous_mentions` trên sửa/xoá, D173) nên xử lý lệch thứ tự vẫn đúng; `mention_read` bị bỏ, `mention_reply_index` còn phần trả lời (`reply_index`); stream `CHATIM_NOTIFY` (`notify.{t}.{user}.mention`) cho thông báo. Chi tiết: [events.md](./events.md).
   - `CHATIM_TIMER`: stream phiếu hẹn sinh tồn (WorkQueue, message schedule): phiếu đặt ở `timer.arm.*`, tới hạn sang `timer.due`, một consumer `timer-due` dùng chung (D152). Thay `CHATIM_WORK` (đã bỏ).
 - **MongoDB:** Replica Set 3 node, `w:majority` cho mọi lệnh ghi bền vững.
 
@@ -245,6 +249,7 @@ Mỗi cam kết hệ thống bắt buộc phải đi kèm với Detector đo lư
 - **`msg_created`:** bỏ nếu đã có đúng seq đó; thấy lỗ (seq > seq cuối + 1) thì gọi `GetHistory` để lấp.
 - **Không bao giờ** dùng luật "seq ≤ seq cuối đã thấy thì bỏ": tin phát bù sẽ mất.
 - Chỉ trạng thái cuối của doc tập và số đếm được bảo đảm; event trung gian có thể không bao giờ được phát bù.
+- **Chỉ đăng ký đúng subject cần** ([events.md](./events.md)). Sau Mention App, `msg_created` của tin có mention nằm ở loại data `mention` (D170): ai lọc đúng `evt.*.message.*.msg_created` sẽ bỏ sót nó.
 - Stream chỉ bỏ trùng trong `EVT_STREAM_DUPLICATES` (5 phút); bản phát lại sau đó (projection lỗi lâu, resync) phải được consumer bỏ theo luật trên.
 
 ---

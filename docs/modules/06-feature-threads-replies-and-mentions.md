@@ -2,6 +2,14 @@
 
 > **Mục tiêu module:** Nâng cao trải nghiệm giao tiếp nhóm thông qua việc trả lời tin nhắn có trích dẫn (Quote Reply), theo dõi các cuộc thảo luận phụ theo luồng (Thread), nhắc tên thành viên (@mention), và tổng hợp hộp thư "Tôi được nhắc tới".
 
+> **Sắp đổi (thiết kế D163–D173, chưa xây):** phần mention của module này chuyển sang Mention App (`apps/mention`, nhúng trong core). Thay đổi:
+> - App ghi `mentions` theo cùng mô hình, trả `ListMentions` qua `MentionService` và giữ `mention_rooms` thay `rooms.last_shared_mention_at`.
+> - App quản lý thành viên nhóm, danh mục nhóm được tag, dữ liệu gợi ý `@nhóm`, và gửi thông báo theo người trên `CHATIM_NOTIFY`.
+> - Bỏ `mention_read` và `state 3`. Đích thêm bằng sửa tin mang giờ sửa.
+> - `msg_created` của tin có mention phát ở loại data `mention`.
+>
+> Phần trả lời ở lại core. Xem [tóm tắt Mention App](../plans/2026-10-17-mention-app-summary.md) và [danh mục event](../events.md). Nội dung bên dưới mô tả cái đang chạy.
+
 ---
 
 ## 1. Các Use Case nghiệp vụ (Business Use Cases)
