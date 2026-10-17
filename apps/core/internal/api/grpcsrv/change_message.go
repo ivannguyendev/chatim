@@ -7,6 +7,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
+	"github.com/ivannguyendev/chatim/pkg/callerid"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -16,7 +17,7 @@ func (s *Service) EditMessage(ctx context.Context, req *chatimv1.EditMessageRequ
 		return nil, err
 	}
 	m, err := s.mutator.Edit(ctx, mutate.EditCmd{
-		Tenant: who.tenant, User: who.user, Room: room, Thread: req.GetThreadRoot(), Seq: req.GetSeq(),
+		Tenant: who.Tenant, User: who.User, Room: room, Thread: req.GetThreadRoot(), Seq: req.GetSeq(),
 		BaseVersion: req.GetBaseVer(), Text: req.GetText(), Mentions: editMentions(req.GetMentions()),
 	})
 	if err != nil {
@@ -38,7 +39,7 @@ func (s *Service) DeleteMessage(ctx context.Context, req *chatimv1.DeleteMessage
 		return nil, err
 	}
 	m, err := s.mutator.Delete(ctx, mutate.DeleteCmd{
-		Tenant: who.tenant, User: who.user, Room: room, Thread: req.GetThreadRoot(), Seq: req.GetSeq(), BaseVersion: req.GetBaseVer(),
+		Tenant: who.Tenant, User: who.User, Room: room, Thread: req.GetThreadRoot(), Seq: req.GetSeq(), BaseVersion: req.GetBaseVer(),
 	})
 	if err != nil {
 		return nil, err
@@ -51,7 +52,7 @@ func (s *Service) HideMessage(ctx context.Context, req *chatimv1.HideMessageRequ
 	if err != nil {
 		return nil, err
 	}
-	err = s.mutator.Hide(ctx, mutate.HideCmd{Tenant: who.tenant, User: who.user, Room: room, Thread: req.GetThreadRoot(), Seq: req.GetSeq()})
+	err = s.mutator.Hide(ctx, mutate.HideCmd{Tenant: who.Tenant, User: who.User, Room: room, Thread: req.GetThreadRoot(), Seq: req.GetSeq()})
 	if err != nil {
 		return nil, err
 	}
@@ -63,21 +64,21 @@ func (s *Service) ClearHistory(ctx context.Context, req *chatimv1.ClearHistoryRe
 	if err != nil {
 		return nil, err
 	}
-	at, err := s.mutator.ClearHistory(ctx, mutate.ClearCmd{Tenant: who.tenant, User: who.user, Room: room})
+	at, err := s.mutator.ClearHistory(ctx, mutate.ClearCmd{Tenant: who.Tenant, User: who.User, Room: room})
 	if err != nil {
 		return nil, err
 	}
 	return &chatimv1.ClearHistoryResponse{ClearedAt: timestamppb.New(at)}, nil
 }
 
-func callerAndRoom(ctx context.Context, roomID string) (caller, uint64, error) {
-	who, err := callerOf(ctx)
+func callerAndRoom(ctx context.Context, roomID string) (callerid.Caller, uint64, error) {
+	who, err := callerid.Of(ctx)
 	if err != nil {
-		return caller{}, 0, err
+		return callerid.Caller{}, 0, err
 	}
 	room, err := parseRoomID(roomID)
 	if err != nil {
-		return caller{}, 0, err
+		return callerid.Caller{}, 0, err
 	}
 	return who, room, nil
 }

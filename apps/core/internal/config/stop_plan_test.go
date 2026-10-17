@@ -15,7 +15,7 @@ func TestDefaultStopPlanFitsTheBudget(t *testing.T) {
 	}
 	plan := c.StopPlan()
 	want := config.StopPlan{
-		DrainDelay: 2 * time.Second, GRPC: 5 * time.Second, Sweeper: time.Second, Projections: 4 * time.Second,
+		DrainDelay: 2 * time.Second, GRPC: 5 * time.Second, Sweeper: time.Second, Projections: 4 * time.Second, Mention: 1250 * time.Millisecond,
 		Timer: 1500 * time.Millisecond, Router: 3 * time.Second, CIDBatch: 200 * time.Millisecond, Flusher: time.Second,
 		Publisher: 5 * time.Second, StateClear: time.Second, Slots: 5 * time.Second, Close: time.Second,
 	}

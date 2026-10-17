@@ -43,7 +43,6 @@ const (
 	CoreService_GetReplies_FullMethodName          = "/chatim.v1.CoreService/GetReplies"
 	CoreService_ListThreads_FullMethodName         = "/chatim.v1.CoreService/ListThreads"
 	CoreService_ListBookmarks_FullMethodName       = "/chatim.v1.CoreService/ListBookmarks"
-	CoreService_ListMentions_FullMethodName        = "/chatim.v1.CoreService/ListMentions"
 	CoreService_AddMembers_FullMethodName          = "/chatim.v1.CoreService/AddMembers"
 	CoreService_RemoveMember_FullMethodName        = "/chatim.v1.CoreService/RemoveMember"
 	CoreService_LeaveRoom_FullMethodName           = "/chatim.v1.CoreService/LeaveRoom"
@@ -82,7 +81,6 @@ type CoreServiceClient interface {
 	GetReplies(ctx context.Context, in *GetRepliesRequest, opts ...grpc.CallOption) (*GetRepliesResponse, error)
 	ListThreads(ctx context.Context, in *ListThreadsRequest, opts ...grpc.CallOption) (*ListThreadsResponse, error)
 	ListBookmarks(ctx context.Context, in *ListBookmarksRequest, opts ...grpc.CallOption) (*ListBookmarksResponse, error)
-	ListMentions(ctx context.Context, in *ListMentionsRequest, opts ...grpc.CallOption) (*ListMentionsResponse, error)
 	AddMembers(ctx context.Context, in *AddMembersRequest, opts ...grpc.CallOption) (*AddMembersResponse, error)
 	RemoveMember(ctx context.Context, in *RemoveMemberRequest, opts ...grpc.CallOption) (*RemoveMemberResponse, error)
 	LeaveRoom(ctx context.Context, in *LeaveRoomRequest, opts ...grpc.CallOption) (*LeaveRoomResponse, error)
@@ -341,16 +339,6 @@ func (c *coreServiceClient) ListBookmarks(ctx context.Context, in *ListBookmarks
 	return out, nil
 }
 
-func (c *coreServiceClient) ListMentions(ctx context.Context, in *ListMentionsRequest, opts ...grpc.CallOption) (*ListMentionsResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListMentionsResponse)
-	err := c.cc.Invoke(ctx, CoreService_ListMentions_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *coreServiceClient) AddMembers(ctx context.Context, in *AddMembersRequest, opts ...grpc.CallOption) (*AddMembersResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AddMembersResponse)
@@ -459,7 +447,6 @@ type CoreServiceServer interface {
 	GetReplies(context.Context, *GetRepliesRequest) (*GetRepliesResponse, error)
 	ListThreads(context.Context, *ListThreadsRequest) (*ListThreadsResponse, error)
 	ListBookmarks(context.Context, *ListBookmarksRequest) (*ListBookmarksResponse, error)
-	ListMentions(context.Context, *ListMentionsRequest) (*ListMentionsResponse, error)
 	AddMembers(context.Context, *AddMembersRequest) (*AddMembersResponse, error)
 	RemoveMember(context.Context, *RemoveMemberRequest) (*RemoveMemberResponse, error)
 	LeaveRoom(context.Context, *LeaveRoomRequest) (*LeaveRoomResponse, error)
@@ -549,9 +536,6 @@ func (UnimplementedCoreServiceServer) ListThreads(context.Context, *ListThreadsR
 }
 func (UnimplementedCoreServiceServer) ListBookmarks(context.Context, *ListBookmarksRequest) (*ListBookmarksResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListBookmarks not implemented")
-}
-func (UnimplementedCoreServiceServer) ListMentions(context.Context, *ListMentionsRequest) (*ListMentionsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListMentions not implemented")
 }
 func (UnimplementedCoreServiceServer) AddMembers(context.Context, *AddMembersRequest) (*AddMembersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AddMembers not implemented")
@@ -1030,24 +1014,6 @@ func _CoreService_ListBookmarks_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
-func _CoreService_ListMentions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListMentionsRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(CoreServiceServer).ListMentions(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: CoreService_ListMentions_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(CoreServiceServer).ListMentions(ctx, req.(*ListMentionsRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _CoreService_AddMembers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AddMembersRequest)
 	if err := dec(in); err != nil {
@@ -1294,10 +1260,6 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListBookmarks",
 			Handler:    _CoreService_ListBookmarks_Handler,
-		},
-		{
-			MethodName: "ListMentions",
-			Handler:    _CoreService_ListMentions_Handler,
 		},
 		{
 			MethodName: "AddMembers",

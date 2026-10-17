@@ -21,6 +21,20 @@ func TestLinkEventIDsFollowTheCore(t *testing.T) {
 	}
 }
 
+func TestCreatedSubjectFollowsTheMentions(t *testing.T) {
+	user := &chatimv1.Message{MentionTargets: []*chatimv1.MentionTarget{{Id: "u"}}}
+	cases := map[string]string{
+		e2e.CreatedSubject("live", "t", "77", nil):                                 "live.t.message.77.evt.msg_created",
+		e2e.CreatedSubject("live", "t", "77", &chatimv1.Message{MentionAll: true}): "live.t.mention.77.evt.msg_created",
+		e2e.CreatedSubject("live", "t", "77", user):                                "live.t.mention.77.evt.msg_created",
+	}
+	for got, want := range cases {
+		if got != want {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	}
+}
+
 func TestLinksPayloadNamesEveryLinkOfAMessage(t *testing.T) {
 	m := &chatimv1.Message{
 		ReplyTo:        &chatimv1.ReplyRef{Seq: 1},

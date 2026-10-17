@@ -18,7 +18,7 @@ func insertCases() []messagesCase {
 		{"empty batch returns no results", insertEmpty},
 		{"concurrent inserts store each key once", insertConcurrent},
 		{"cancelled context stores nothing", insertCancelled},
-		{"reply, forward and mentions round trip; reply count is not written", insertKeepsLinks},
+		{"reply, forward and mentions with their times round trip; reply count is not written", insertKeepsLinks},
 	}
 }
 

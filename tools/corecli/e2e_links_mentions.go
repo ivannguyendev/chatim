@@ -9,6 +9,14 @@ import (
 
 const outsideCID = "e2e-link-outside-"
 
+func (r *linkRun) tagTeam() error {
+	item := &chatimv1.GroupItem{Id: r.team, Name: r.team, Active: true, Ver: 1}
+	if _, _, err := r.cl.SetGroups(r.as(r.st.User), &chatimv1.SetGroupsRequest{Items: []*chatimv1.GroupItem{item}}); err != nil {
+		return fmt.Errorf("make %s taggable: %w", r.team, err)
+	}
+	return nil
+}
+
 func (r *linkRun) mentionsNeedMembership() error {
 	created, _, err := r.cl.CreateRoom(r.as(r.st.User), &chatimv1.CreateRoomRequest{
 		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "e2e outside " + r.st.Room, Members: []string{r.st.User}, RequestId: "e2e-links-outside-" + r.st.Room,

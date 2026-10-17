@@ -76,13 +76,19 @@ func TestProjectionsConsumerRunsEveryHandlerFromRealEventsAndSettlesTheDurable(t
 			t.Fatalf("InsertRoom: %v", err)
 		}
 	}
-	index, reads := newIndexRig(t), newReadRig(t)
+	index := newIndexRig(t)
+	mentioning := func(m *domain.Message) { m.Mentions = []domain.MentionTarget{{Kind: domain.MentionUser, ID: "minh"}} }
 	events := []*chatimv1.Event{
-		reads.move(t, roomA, true, 95).Proto, index.send(t, 1, mentioning).Proto, reactionChanged(roomB, 1, at(2)),
+		index.send(t, 1, mentioning).Proto, index.send(t, 2, replyTo(1)).Proto, reactionChanged(roomB, 1, at(2)),
 		msgEdited(roomC, 0, 1, at(3)), roomCreated(roomB),
 	}
-	publishAll(t, js, cfg, events)
-	hs := []projection.Projection{projection.NewRoomActivity(rooms), index.index, reads.read}
+	subjects := publishAll(t, js, cfg, events)
+	for _, data := range []string{".mention.", ".message."} {
+		if !slices.ContainsFunc(subjects, func(s string) bool { return strings.Contains(s, data) }) {
+			t.Fatalf("subjects %v carry no %s data", subjects, data)
+		}
+	}
+	hs := []projection.Projection{projection.NewRoomActivity(rooms), index.index}
 	c := built(projection.NewConsumer(hs, projection.NewSource(js, cfg), cfg, (&testlog.Sink{}).Logger()))(t)
 	result := make(chan error, 1)
 	go func() { result <- c.Run(t.Context()) }()
@@ -93,17 +99,14 @@ func TestProjectionsConsumerRunsEveryHandlerFromRealEventsAndSettlesTheDurable(t
 	if err := <-result; err != nil {
 		t.Fatalf("Run = %v", err)
 	}
-	for id, want := range map[uint64]roomTrace{roomA: {seq: 1, msgAt: indexedAt, changed: true}, roomB: {changed: true}, roomC: {changed: true, edited: true}} {
+	for id, want := range map[uint64]roomTrace{roomA: {seq: 2, msgAt: indexedAt, changed: true}, roomB: {changed: true}, roomC: {changed: true, edited: true}} {
 		r, err := rooms.Get(t.Context(), id)
 		if err != nil || traceOf(r) != want {
 			t.Errorf("room %d activity %+v (%v), want %+v", id, traceOf(r), err, want)
 		}
 	}
-	if m := index.mentionsOf(t, 1); !m[mentionMinh].Live {
-		t.Errorf("mentions of seq 1 = %+v, want minh indexed", m)
-	}
-	if got := reads.readSeqs(t); !slices.Equal(got, []uint64{80, 90}) {
-		t.Errorf("read mentions = %v, want [80 90]", got)
+	if got := index.liveReplies(t, 1); got != 1 {
+		t.Errorf("live replies of seq 1 = %d, want the reply indexed", got)
 	}
 }
 
@@ -113,8 +116,9 @@ func roomCreated(room uint64) *chatimv1.Event {
 	return ev
 }
 
-func publishAll(t *testing.T, js jetstream.JetStream, cfg projection.Config, events []*chatimv1.Event) {
+func publishAll(t *testing.T, js jetstream.JetStream, cfg projection.Config, events []*chatimv1.Event) []string {
 	t.Helper()
+	subjects := make([]string, 0, len(events))
 	for _, ev := range events {
 		m, err := publish.Message(cfg.SubjectRoot, mustRoom(t, ev), ev)
 		if err != nil {
@@ -123,7 +127,9 @@ func publishAll(t *testing.T, js jetstream.JetStream, cfg projection.Config, eve
 		if _, err := js.PublishMsg(t.Context(), m); err != nil {
 			t.Fatalf("PublishMsg %s: %v", m.Subject, err)
 		}
+		subjects = append(subjects, m.Subject)
 	}
+	return subjects
 }
 
 func mustRoom(t *testing.T, ev *chatimv1.Event) uint64 {

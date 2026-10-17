@@ -7,6 +7,7 @@ import (
 	"math/rand/v2"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"google.golang.org/grpc/status"
@@ -35,18 +36,36 @@ type bench struct {
 	stats   openloop.Stats
 	live    *openloop.Live
 	watched int
+
+	mentionRate float64
+	mentioned   atomic.Uint64
 }
 
 func (b *bench) fire(ctx context.Context, s openloop.Shot) {
 	i := b.pick.Next()
 	r := b.rooms[i]
-	user := r.members[rand.IntN(len(r.members))]
-	req := &chatimv1.SendMessageRequest{RoomId: r.id, Cid: openloop.CID(b.run, s.Index), Text: b.texts[rand.IntN(len(b.texts))]}
+	sender := rand.IntN(len(r.members))
+	user := r.members[sender]
+	req := &chatimv1.SendMessageRequest{RoomId: r.id, Cid: openloop.CID(b.run, s.Index), Text: b.texts[rand.IntN(len(b.texts))], Mentions: b.mentions(r, sender)}
 	_, st, err := b.client.SendMessage(route.WithCaller(ctx, b.tenant, user), req)
 	b.stats.Record(openloop.Result{Shot: s, Done: time.Now(), Code: status.Code(err), Attempts: st.Attempts})
 	if err == nil && s.Measured && i < b.watched {
 		b.live.Expect()
 	}
+}
+
+func (b *bench) mentions(r room, sender int) *chatimv1.MentionSet {
+	if b.mentionRate <= 0 || rand.Float64() >= b.mentionRate {
+		return nil
+	}
+	if b.mentioned.Add(1)%20 == 0 {
+		return &chatimv1.MentionSet{All: true}
+	}
+	target := sender
+	if n := len(r.members); n > 1 {
+		target = (sender + 1 + rand.IntN(n-1)) % n
+	}
+	return &chatimv1.MentionSet{Targets: []*chatimv1.MentionTarget{{Kind: chatimv1.MentionKind_MENTION_KIND_USER, Id: r.members[target]}}}
 }
 
 func loadTexts(path string) ([]string, error) {

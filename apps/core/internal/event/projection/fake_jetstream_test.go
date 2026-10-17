@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
+	"github.com/ivannguyendev/chatim/pkg/jsconsume"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -27,6 +27,7 @@ func delivery(t *testing.T, ev *chatimv1.Event, delivered uint64) *fakeDelivery 
 
 func (d *fakeDelivery) Data() []byte      { return d.data }
 func (d *fakeDelivery) Delivered() uint64 { return d.delivered }
+func (d *fakeDelivery) InProgress() error { return nil }
 
 func (d *fakeDelivery) Ack() error {
 	d.mu.Lock()
@@ -55,8 +56,8 @@ func (d *fakeDelivery) settled() (acks, terms int, naks []time.Duration) {
 	return d.acks, d.terms, slices.Clone(d.naks)
 }
 
-func deliveries(ds []*fakeDelivery) []eventkit.Delivery {
-	out := make([]eventkit.Delivery, len(ds))
+func deliveries(ds []*fakeDelivery) []jsconsume.Delivery {
+	out := make([]jsconsume.Delivery, len(ds))
 	for i, d := range ds {
 		out[i] = d
 	}
@@ -65,8 +66,8 @@ func deliveries(ds []*fakeDelivery) []eventkit.Delivery {
 
 type fakeSource struct {
 	mu       sync.Mutex
-	batches  [][]eventkit.Delivery
-	onCancel []eventkit.Delivery
+	batches  [][]jsconsume.Delivery
+	onCancel []jsconsume.Delivery
 	ready    chan struct{}
 	asked    []fetchAsk
 }
@@ -94,7 +95,7 @@ func (s *fakeSource) handOverOnCancel(ds ...*fakeDelivery) {
 	s.onCancel = deliveries(ds)
 }
 
-func (s *fakeSource) Fetch(ctx context.Context, limit int, wait time.Duration) ([]eventkit.Delivery, error) {
+func (s *fakeSource) Fetch(ctx context.Context, limit int, wait time.Duration) ([]jsconsume.Delivery, error) {
 	s.mu.Lock()
 	s.asked = append(s.asked, fetchAsk{limit, wait})
 	s.mu.Unlock()
@@ -118,7 +119,7 @@ func (s *fakeSource) Fetch(ctx context.Context, limit int, wait time.Duration) (
 	}
 }
 
-func (s *fakeSource) next() ([]eventkit.Delivery, bool) {
+func (s *fakeSource) next() ([]jsconsume.Delivery, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.batches) == 0 {

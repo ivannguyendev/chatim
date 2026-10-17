@@ -51,7 +51,7 @@ if [ -n "$pprof" ]; then
   (sleep 20; docker run --rm --network chatim_default curlimages/curl -s "http://chatim-core-1:9090/debug/pprof/profile?seconds=20" >"$dir/cpu-core1.pb.gz" 2>/dev/null) &
 fi
 echo "[$(date +%H:%M:%S)] $name: corebench rate=$rate"
-make -s poc TOOL=corebench ARGS="-rate $rate -duration 60s -watch 20" >"$dir/corebench.txt" 2>&1
+make -s poc TOOL=corebench ARGS="-rate $rate -duration 60s -watch 20 ${BENCH_EXTRA_ARGS:-}" >"$dir/corebench.txt" 2>&1
 wait
 date +%s >"$dir/end"
 snapshot after

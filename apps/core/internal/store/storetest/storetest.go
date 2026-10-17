@@ -29,6 +29,7 @@ func Run(t *testing.T, open func(t *testing.T) (store.Messages, store.Rooms)) {
 		{"Walk", walkCases()},
 		{"Find", findCases()},
 		{"SentTimes", sentTimeCases()},
+		{"MessageVersions", messageVersionCases()},
 		{"SystemFields", systemFieldCases()},
 	}
 	for _, g := range groups {

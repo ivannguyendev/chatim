@@ -40,10 +40,12 @@ func mentionEdit(base uint32, text string, all bool, targets ...domain.MentionTa
 
 func assertMentioned(t *testing.T, what string, gotTargets []domain.MentionTarget, gotAll bool, all bool, want ...domain.MentionTarget) {
 	t.Helper()
-	if !slices.Equal(gotTargets, want) || gotAll != all {
+	if !slices.EqualFunc(gotTargets, want, sameTarget) || gotAll != all {
 		t.Fatalf("%s mentions = %v all=%v, want %v all=%v", what, gotTargets, gotAll, want, all)
 	}
 }
+
+func sameTarget(a, b domain.MentionTarget) bool { return a.Identity() == b.Identity() }
 
 func TestEditWithMentionsStoresThemInTheFactAndTheMessage(t *testing.T) {
 	rg := newRig(t, nil)

@@ -7,6 +7,7 @@ import (
 	"testing/synctest"
 
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
@@ -40,20 +41,25 @@ func TestSentMessageCarriesRepliesForwardsAndMentions(t *testing.T) {
 		}
 		m := sent[0][0]
 		if *m.ReplyTo != (domain.ReplyRef{Seq: 1}) || m.Forward.Author != "lan" || !m.MentionAll ||
-			len(m.Mentions) != 2 || m.Mentions[0] != minh || m.Mentions[1] != team {
+			len(m.Mentions) != 2 || m.Mentions[0].Identity() != minh || m.Mentions[1].Identity() != team {
 			t.Fatalf("stored %+v, want reply, forward, @all and two distinct mentions", m)
+		}
+		if m.CreatedAt.IsZero() || !m.Mentions[0].At.Equal(m.CreatedAt) || !m.Mentions[1].At.Equal(m.CreatedAt) || !m.MentionAllAt.Equal(m.CreatedAt) {
+			t.Fatalf("stored %+v, want every target and @all stamped with the send time", m)
 		}
 		evs := rg.events.events(roomA)
 		if len(evs) != 1 {
 			t.Fatalf("events = %v, want one msg_created", evs)
 		}
 		got := evs[0].GetMessageCreated().GetMessage()
+		sentAt := timestamppb.New(m.CreatedAt)
 		wantMentions := []*chatimv1.MentionTarget{
-			{Kind: chatimv1.MentionKind_MENTION_KIND_USER, Id: "minh"},
-			{Kind: chatimv1.MentionKind_MENTION_KIND_GROUP, Id: "team-design"},
+			{Kind: chatimv1.MentionKind_MENTION_KIND_USER, Id: "minh", At: sentAt},
+			{Kind: chatimv1.MentionKind_MENTION_KIND_GROUP, Id: "team-design", At: sentAt},
 		}
 		if !proto.Equal(got.GetReplyTo(), &chatimv1.ReplyRef{Seq: 1}) || got.GetForwardFrom().GetAuthor() != "lan" || !got.GetMentionAll() ||
-			len(got.GetMentionTargets()) != 2 || !proto.Equal(got.GetMentionTargets()[0], wantMentions[0]) || !proto.Equal(got.GetMentionTargets()[1], wantMentions[1]) {
+			len(got.GetMentionTargets()) != 2 || !proto.Equal(got.GetMentionTargets()[0], wantMentions[0]) || !proto.Equal(got.GetMentionTargets()[1], wantMentions[1]) ||
+			!proto.Equal(got.GetMentionAllAt(), sentAt) {
 			t.Fatalf("msg_created = %v, want reply_to, forward_from and mentions", got)
 		}
 	})

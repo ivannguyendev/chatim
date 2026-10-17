@@ -41,7 +41,7 @@ func sentTimesAcross(t *testing.T, s store.Messages) {
 }
 
 func sentTimesInvalid(t *testing.T, s store.Messages) {
-	many := make([]store.MsgKey, store.SharedMentionBatch+1)
+	many := make([]store.MsgKey, store.MaxMessageLookup+1)
 	for i := range many {
 		many[i] = store.MsgKey{Room: roomA, Seq: uint64(i + 1)}
 	}

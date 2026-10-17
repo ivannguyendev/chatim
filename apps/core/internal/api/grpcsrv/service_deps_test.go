@@ -18,8 +18,8 @@ func depsOf(t *testing.T, rg *rig, o options) grpcsrv.Deps {
 	return grpcsrv.Deps{
 		Sender: o.sender, Rooms: rg.rooms, Pages: o.pageReader(rg.msgs), NewID: o.newID, Now: o.now, Policy: o.policy, Events: o.events,
 		Mutator: newMutator(t, rg, o), Edits: rg.edits, Hidden: rg.hidden, Bookmarks: rg.reactions, Replies: rg.reactions,
-		Members: membersOf(rg, o), Timers: nopTimers{}, Requests: newRequests(t, o.pending), Directs: rg.directs, Mentions: o.mentionLister(rg.mentions), MemberRooms: rg.rooms,
-		SentTimes: rg.msgs, Mine: rg.reactions, RoomList: newRoomLister(t, rg), HideRead: o.hide,
+		Members: membersOf(rg, o), Timers: nopTimers{}, Requests: newRequests(t, o.pending), Directs: rg.directs,
+		Mine: rg.reactions, RoomList: newRoomLister(t, rg),
 		Threads: rg.threads, Reactors: rg.reactions, PinBoard: board, MemberList: rg.rooms,
 	}
 }
@@ -40,9 +40,6 @@ func TestNewRequiresEveryDependency(t *testing.T) {
 		"no timers":       func(d *grpcsrv.Deps) { d.Timers = nil },
 		"no requests":     func(d *grpcsrv.Deps) { d.Requests = nil },
 		"no directs":      func(d *grpcsrv.Deps) { d.Directs = nil },
-		"no mentions":     func(d *grpcsrv.Deps) { d.Mentions = nil },
-		"no member rooms": func(d *grpcsrv.Deps) { d.MemberRooms = nil },
-		"no sent times":   func(d *grpcsrv.Deps) { d.SentTimes = nil },
 		"no reader marks": func(d *grpcsrv.Deps) { d.Mine = nil },
 		"no room list":    func(d *grpcsrv.Deps) { d.RoomList = nil },
 		"no threads":      func(d *grpcsrv.Deps) { d.Threads = nil },

@@ -49,7 +49,7 @@ func wireService(d serviceDeps) (*grpcsrv.Service, error) {
 	svc, err := grpcsrv.New(grpcsrv.Deps{
 		Sender: d.router, Rooms: st, Pages: st, Events: d.pub, Mutator: mut, Edits: st, Hidden: st.Hidden(), Bookmarks: st.Interactions(),
 		Replies: st.Interactions(), Members: st, Timers: d.timers, Requests: requests, Directs: st.DirectRooms(),
-		Mentions: st.Mentions(), MemberRooms: st, SentTimes: st, Mine: st.Interactions(), RoomList: rooms, HideRead: d.cfg.MentionHideReadTenants,
+		Mine: st.Interactions(), RoomList: rooms,
 		Threads: st.ReplyThreads(), Reactors: st.Interactions(), PinBoard: projector, MemberList: st,
 	}, d.log)
 	if err != nil {

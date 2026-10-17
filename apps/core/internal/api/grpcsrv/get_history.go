@@ -9,6 +9,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/callerid"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -18,7 +19,7 @@ var (
 )
 
 func (s *Service) GetHistory(ctx context.Context, req *chatimv1.GetHistoryRequest) (*chatimv1.GetHistoryResponse, error) {
-	who, err := callerOf(ctx)
+	who, err := callerid.Of(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -26,7 +27,7 @@ func (s *Service) GetHistory(ctx context.Context, req *chatimv1.GetHistoryReques
 	if err != nil {
 		return nil, err
 	}
-	grant, err := s.access.Authorize(ctx, access.ReadHistory, who.tenant, who.user, q.Room)
+	grant, err := s.access.Authorize(ctx, access.ReadHistory, who.Tenant, who.User, q.Room)
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +35,7 @@ func (s *Service) GetHistory(ctx context.Context, req *chatimv1.GetHistoryReques
 	if err != nil {
 		return nil, err
 	}
-	viewer, err := s.viewerOf(ctx, who.user, grant, q.PageQuery, page, quotedSeqs(q.Room, page)...)
+	viewer, err := s.viewerOf(ctx, who.User, grant, q.PageQuery, page, quotedSeqs(q.Room, page)...)
 	if err != nil {
 		return nil, err
 	}

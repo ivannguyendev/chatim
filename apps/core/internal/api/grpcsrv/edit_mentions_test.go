@@ -3,6 +3,7 @@ package grpcsrv_test
 import (
 	"testing"
 
+	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/proto"
 
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
@@ -14,6 +15,17 @@ func mentionSet(all bool, users ...string) *chatimv1.MentionSet {
 		set.Targets = append(set.Targets, &chatimv1.MentionTarget{Kind: chatimv1.MentionKind_MENTION_KIND_USER, Id: u})
 	}
 	return set
+}
+
+func untimed(set *chatimv1.MentionSet) *chatimv1.MentionSet {
+	if set == nil {
+		return nil
+	}
+	out := &chatimv1.MentionSet{All: set.GetAll()}
+	for _, t := range set.GetTargets() {
+		out.Targets = append(out.Targets, &chatimv1.MentionTarget{Kind: t.GetKind(), Id: t.GetId()})
+	}
+	return out
 }
 
 func TestEditMentionsAreKeptReplacedOrClearedAndListedPerVersion(t *testing.T) {
@@ -37,7 +49,7 @@ func TestEditMentionsAreKeptReplacedOrClearedAndListedPerVersion(t *testing.T) {
 			t.Fatalf("EditMessage %d: %v", i+1, err)
 		}
 		m := resp.GetMessage()
-		got := &chatimv1.MentionSet{Targets: m.GetMentionTargets(), All: m.GetMentionAll()}
+		got := untimed(&chatimv1.MentionSet{Targets: m.GetMentionTargets(), All: m.GetMentionAll()})
 		if want := e.want; want == nil && (len(got.Targets) > 0 || got.All) || want != nil && !proto.Equal(got, want) {
 			t.Fatalf("edit %d mentions = %v, want %v", i+1, got, want)
 		}
@@ -52,8 +64,18 @@ func TestEditMentionsAreKeptReplacedOrClearedAndListedPerVersion(t *testing.T) {
 		t.Fatalf("versions = %v, want %d rows", vs, len(want))
 	}
 	for i, v := range vs {
-		if !proto.Equal(v.GetMentions(), want[i]) {
+		if !proto.Equal(untimed(v.GetMentions()), want[i]) {
 			t.Fatalf("version %d mentions = %v, want %v", v.GetVer(), v.GetMentions(), want[i])
 		}
 	}
+}
+
+func TestEditRejectsAllAsAMentionTarget(t *testing.T) {
+	rg := newRig(t, options{})
+	room := rg.createGroup(t, "acme", "alice", "bob")
+	alice := as(t, "acme", "alice")
+	rg.send(t, alice, room, "c-1", "v0")
+	all := &chatimv1.MentionSet{Targets: []*chatimv1.MentionTarget{{Kind: chatimv1.MentionKind_MENTION_KIND_ALL}}}
+	_, err := rg.client.EditMessage(alice, &chatimv1.EditMessageRequest{RoomId: room, Seq: 1, Text: "v1", Mentions: all})
+	expectCode(t, err, codes.InvalidArgument)
 }

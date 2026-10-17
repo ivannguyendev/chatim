@@ -40,8 +40,9 @@ func TestSendMessageStoresTheReplyAndMentions(t *testing.T) {
 	}
 	got := historyOf(t, rg, room)[1]
 	want := []*chatimv1.MentionTarget{req.Mentions.Targets[0], req.Mentions.Targets[2]}
-	if !proto.Equal(got.GetReplyTo(), &chatimv1.ReplyRef{Seq: 1}) || !got.GetMentionAll() || len(got.GetMentionTargets()) != 2 ||
-		!proto.Equal(got.GetMentionTargets()[0], want[0]) || !proto.Equal(got.GetMentionTargets()[1], want[1]) {
+	stored := untimed(&chatimv1.MentionSet{Targets: got.GetMentionTargets()}).GetTargets()
+	if !proto.Equal(got.GetReplyTo(), &chatimv1.ReplyRef{Seq: 1}) || !got.GetMentionAll() || len(stored) != 2 ||
+		!proto.Equal(stored[0], want[0]) || !proto.Equal(stored[1], want[1]) {
 		t.Fatalf("stored reply = %v, want reply_to seq 1, @all and mentions %v", got, want)
 	}
 }
@@ -104,6 +105,7 @@ func TestSendMessageRejectsBadLinks(t *testing.T) {
 		"reply to seq 0":    {RoomId: room, Cid: "c-2", Text: "re", ReplyTo: &chatimv1.ReplyRef{}},
 		"51 mentions":       {RoomId: room, Cid: "c-2", Text: "hi", Mentions: &chatimv1.MentionSet{Targets: many}},
 		"unknown mention":   {RoomId: room, Cid: "c-2", Text: "hi", Mentions: &chatimv1.MentionSet{Targets: []*chatimv1.MentionTarget{{Id: "x"}}}},
+		"all as a target":   {RoomId: room, Cid: "c-2", Text: "hi", Mentions: &chatimv1.MentionSet{Targets: []*chatimv1.MentionTarget{{Kind: chatimv1.MentionKind_MENTION_KIND_ALL}}}},
 		"forward and reply": {RoomId: room, Cid: "c-2", Text: "fw", ForwardFrom: &chatimv1.ForwardRef{RoomId: room, Seq: 1}, ReplyTo: &chatimv1.ReplyRef{Seq: 1}},
 	}
 	for name, req := range cases {

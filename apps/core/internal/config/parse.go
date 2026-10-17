@@ -65,6 +65,14 @@ func (p *parser) index(key string, def int) int {
 	return v
 }
 
+func (p *parser) flag(key string, def bool) bool {
+	v, err := envconfig.Bool(key, def)
+	if err != nil {
+		p.fail(err)
+	}
+	return v
+}
+
 func (p *parser) span(key string, def time.Duration) time.Duration {
 	v, err := envconfig.Duration(key, def)
 	switch {

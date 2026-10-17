@@ -16,6 +16,7 @@ func TestHandlerExposesCountersAndGaugesFromSources(t *testing.T) {
 		{Name: "publish_dropped_total", Help: "Events dropped before JetStream acked them.", Labels: map[string]string{"reason": "queue_full"}, Read: func() float64 { return queueFull }},
 		{Name: "publish_dropped_total", Help: "Events dropped before JetStream acked them.", Labels: map[string]string{"reason": "refused"}, Read: func() float64 { return refused }},
 		{Name: "sweep_running", Help: "1 while this core runs the sweeper.", Gauge: true, Read: func() float64 { return 1 }},
+		{Subsystem: "mention", Name: "lag_seconds", Help: "Mention lag.", Gauge: true, Read: func() float64 { return 2 }},
 	})
 	if err != nil {
 		t.Fatalf("Handler: %v", err)
@@ -28,6 +29,7 @@ func TestHandlerExposesCountersAndGaugesFromSources(t *testing.T) {
 		`chatim_core_publish_dropped_total{reason="refused"} 1`,
 		`# TYPE chatim_core_sweep_running gauge`,
 		`chatim_core_sweep_running 1`,
+		`chatim_mention_lag_seconds 2`,
 		`go_goroutines`,
 	} {
 		if !strings.Contains(string(body), want) {

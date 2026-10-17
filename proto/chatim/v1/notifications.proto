@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package chatim.v1;
+
+import "chatim/v1/core.proto";
+import "chatim/v1/message_links.proto";
+import "google/protobuf/timestamp.proto";
+
+enum RetractReason {
+  RETRACT_REASON_UNSPECIFIED = 0;
+  RETRACT_REASON_EDITED = 1;
+  RETRACT_REASON_DELETED = 2;
+}
+
+message Notification {
+  string id = 1;
+  string tenant = 2;
+  string user = 3;
+  string room_id = 4;
+  RoomType room_type = 5;
+  uint64 thread_root = 6;
+  uint64 seq = 7;
+  uint32 message_ver = 8;
+  google.protobuf.Timestamp ts = 9;
+  oneof payload {
+    MentionNotified mention_notified = 20;
+    MentionRetracted mention_retracted = 21;
+  }
+}
+
+message MentionNotified {
+  Message message = 1;
+  MentionTarget target = 2;
+}
+
+message MentionRetracted {
+  RetractReason reason = 1;
+}

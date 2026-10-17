@@ -1,6 +1,6 @@
 # Module 10: Tự phục hồi — Cờ event chờ phát, Sweeper, Projection & Sửa số đếm
 
-> **Mục tiêu module:** Bảo đảm mọi thay đổi đã ghi DB đều có event tới `CHATIM_EVT` (ít nhất một lần) kể cả khi core chết hay NATS gián đoạn; giữ các bảng dẫn xuất (danh sách hội thoại, chỉ mục mention, doc trả lời, `rc`, `reply_threads`) theo kịp event; tự sửa số đếm lệch; và cho kỹ sư vận hành công cụ phát lại một khoảng.
+> **Mục tiêu module:** Bảo đảm mọi thay đổi đã ghi DB đều có event tới `CHATIM_EVT` (ít nhất một lần) kể cả khi core chết hay NATS gián đoạn; giữ các bảng dẫn xuất của core (danh sách hội thoại, doc trả lời, `rc`, `reply_threads`) theo kịp event; tự sửa số đếm lệch; và cho kỹ sư vận hành công cụ phát lại một khoảng.
 >
 > Cơ chế này có từ M3.1 (D141–D160, [bản tóm tắt](../plans/2026-10-16-m3-1-state-driven-events-summary.md)) và thay effect engine cũ (reader change stream → `CHATIM_WORK` → worker có delay 5s, ack mark trên Redis).
 
@@ -11,7 +11,7 @@
 | Mã Use Case | Tên Use Case | Tác nhân | Mô tả & Kết quả kỳ vọng |
 |---|---|---|---|
 | **UC-RECON-01** | **Phát bù event bị rớt** | Hệ thống tự động | Tin đã ghi DB nhưng core chết trước khi publish, hoặc NATS từ chối: doc còn cờ `_state`, khoảng 15–17s sau (`SWEEP_MIN_AGE` + `SWEEP_INTERVAL`) sweeper phát lại event với đúng id. |
-| **UC-RECON-02** | **Projection theo kịp event** | Hệ thống tự động | Danh sách hội thoại (`rooms.last_seq`), chỉ mục mention, doc trả lời, `rc`, `reply_threads`, mention đã đọc được ghi bởi consumer nghe `CHATIM_EVT`, không delay cố định (cửa sổ gom 3s). Bench 2K: trễ `rooms.last_seq` trung vị 1,6s, chậm nhất 3,6s (engine cũ 2,7s / 5,7s). |
+| **UC-RECON-02** | **Projection theo kịp event** | Hệ thống tự động | Danh sách hội thoại (`rooms.last_seq`), doc trả lời, `rc`, `reply_threads` được ghi bởi consumer `projections` nghe `CHATIM_EVT`, không delay cố định (cửa sổ gom 3s). Chỉ mục mention do Mention App ghi bằng consumer riêng `mention` ([Module 06](06-feature-threads-replies-and-mentions.md)). Bench 2K: trễ `rooms.last_seq` trung vị 1,6s, chậm nhất 3,6s (engine cũ 2,7s / 5,7s). |
 | **UC-RECON-03** | **Tự sửa số đếm** | Hệ thống tự động | `$inc` của `rx`, `rc`, `member_count` bị ngắt giữa chừng: phiếu hẹn trên `CHATIM_TIMER` bật, đếm lại và CAS về số đúng. |
 | **UC-RECON-04** | **Tự hoàn tất projection trên lệnh** | Hệ thống tự động | Fact `message_edits` hoặc `pin_actions` đã ghi nhưng `messages`/`rooms.pins` chưa áp: sweeper áp lại rồi mới phát event. |
 | **UC-RECON-05** | **Phát lại một khoảng (`/app resync`)** | Kỹ sư vận hành (SRE) | Stream `CHATIM_EVT` mất dữ liệu hoặc cần dựng lại projection: resync bật lại cờ của các doc trong khoảng, sweeper phát lại, projection chạy lại (idempotent). |
@@ -33,8 +33,9 @@ flowchart LR
   S[sweeper · chỉ core giữ slot 0] -- "5. doc còn cờ > 15s (partial index)" --> DB
   S -- "dựng lại event từ doc, phát cùng id" --> EVT
   EVT -- "evt.>" --> P[consumer projections · chỉ core giữ slot 0]
-  P --> P1[room_activity] & P2[mention_reply_index] & P3[mention_read]
-  P1 & P2 & P3 --> DB
+  P --> P1[room_activity] & P2[reply_index]
+  P1 & P2 --> DB
+  EVT -- "3 subject mention" --> MA[consumer mention · Mention App, mọi core]
   EVT -- "live.*" --> W[websocket M4]
   T[(CHATIM_TIMER)] -- timer.due --> R[timer-due: count_repair · member_count_repair]
   R --> DB
@@ -90,7 +91,7 @@ Khoảng `_id` trong lệnh xoá chỉ gồm các seq **liền nhau đã PubAck*
 |---|---|---|---|---|
 | `messages` | 1 | `msg_created` | insert tin (thường, hệ thống, chuyển tiếp) | PubAck; khoảng `_id` liền nhau |
 | | 2 | `counts_changed` reaction | `$inc rx` khi react; `SetReactions` của `count_repair` | PubAck và `rx.v` vẫn bằng |
-| | 4 | `counts_changed` trả lời | `$inc rc` của `mention_reply_index`; `SetReplyCount` | PubAck và `rc.v` vẫn bằng |
+| | 4 | `counts_changed` trả lời | `$inc rc` của `reply_index`; `SetReplyCount` | PubAck và `rc.v` vẫn bằng |
 | `message_edits` | 1 | `msg_edited`/`msg_deleted` | insert fact `ver ≥ 1` (dòng `ver 0` không có event nên không có cờ) | PubAck |
 | `message_interactions` | 1 | `reaction_changed`/`bookmark_changed` | upsert khi thật sự đổi (chọn lại cùng emoji giữ nguyên byte nên không có cờ); doc trả lời không có cờ | PubAck và `ver` vẫn bằng |
 | `pin_actions` | 1 | `msg_pinned`/`msg_unpinned` | insert fact ghim | PubAck |
@@ -111,7 +112,7 @@ Khoảng `_id` trong lệnh xoá chỉ gồm các seq **liền nhau đã PubAck*
 
 - **Ai chạy:** chỉ core giữ lease slot 0 (log `event sweeper started`), mỗi `SWEEP_INTERVAL` 2s. Hai core cùng giữ slot 0 lúc chuyển giao có thể phát trùng; stream bỏ bản trùng theo `Nats-Msg-Id`.
 - **Quét gì:** mỗi collection, đọc mốc trong `sweeper_state`, rồi đọc từng trang keyset `(_state_at, _id)` 500 doc trên partial index `state_pending`, trong khoảng `mốc − 60s ≤ _state_at < now − 15s`. Không giữ cursor giữa các trang. Lượt đầu sau khi lên làm leader quét từ đầu index.
-- **Làm gì với mỗi doc, mỗi bit:** dựng event từ trạng thái **hiện tại** của doc với đúng id; với fact sửa thì chạy lại `ApplyEdit` (và xoá text khi xoá tin) trước, projection còn chậm thì giữ cờ; với fact ghim thì fold + CAS `rooms.pins`, thua CAS thì giữ cờ. Publish trên client JetStream riêng (tối đa `2 × SWEEP_BATCH` đang bay, ≤ `SWEEP_RATE` 5.000 event/s), chờ PubAck rồi `Clear` bit có điều kiện như §3.1.
+- **Làm gì với mỗi doc, mỗi bit:** dựng event từ trạng thái **hiện tại** của doc với đúng id; với fact sửa thì chạy lại `ApplyEdit` (và xoá text khi xoá tin) trước, projection còn chậm thì giữ cờ, rồi dựng `previous_mentions` (bản chụp đã xoá: đích của fact xoá; còn sống ở `ver = s`: đích của fact `s − 1`; D173); `msg_created` đi loại data `mention` hay `message` theo đích của bản chụp hiện tại (cùng hàm `subjectFor` với lệnh); với fact ghim thì fold + CAS `rooms.pins`, thua CAS thì giữ cờ. Publish trên client JetStream riêng (tối đa `2 × SWEEP_BATCH` đang bay, ≤ `SWEEP_RATE` 5.000 event/s), chờ PubAck rồi `Clear` bit có điều kiện như §3.1.
 - **Doc không còn:** bỏ và xoá cờ theo version đọc được. Nếu bit có version mà không biết version thì **giữ cờ** và đếm lỗi, để không xoá nhầm cờ của thay đổi mới hơn.
 - **Mốc:** chỉ tiến. Bằng `_state_at` của doc kẹt cũ nhất trong lượt (publish lỗi), hoặc `now − 15s` nếu sạch.
 - **Dò trước cửa sổ (D158):** sau mỗi lượt của một collection, sweeper dò **một** doc còn cờ có `_state_at` trước đầu cửa sổ. Có thì lượt sau quét từ đầu index và log `pending state older than the sweep checkpoint`. Dò trên partial index nên gần như miễn phí.
@@ -120,18 +121,17 @@ Ví dụ NATS chết từ 10:00:00 tới 10:02:00: gửi tin vẫn ack bình th�
 
 ### 3.3. Projection consumer (D150, D159)
 
-Một consumer durable `projections` trên `CHATIM_EVT`: lọc một subject `evt.>` (mọi event), ack từng tin (`AckExplicit`), `AckWait` 30s, `MaxAckPending` = 4 × lô, `DeliverAll`. Chỉ core giữ slot 0 fetch (như sweeper, xét lại mỗi `SLOT_TICK`). Lô ≤ `PROJECTION_FETCH_BATCH` 8192 event, chờ ≤ `PROJECTION_FETCH_WAIT` 3s (server hết hạn đúng lúc đó, client đợi thêm tới tín hiệu hết hạn nên không đánh rơi tin đã giao). Cửa sổ 3s là để gom: ở 2K tin/s một lô ~6K event, `room_activity` ghi một dòng mỗi room-thread nên số lệnh ghi `rooms` giảm, CPU Mongo về ngang engine cũ (với cửa sổ 1s là ~85K lệnh so với 17K, CPU Mongo +16%). Lúc dừng, lần fetch dở không huỷ được: core đọc tới khi server hết hạn (≤ 3s, chậm nhất thêm 1s nếu mất tín hiệu 408), nên mốc dừng projections là `PROJECTION_FETCH_WAIT` + 1s = 4s. Mỗi lô decode một lần rồi chia cho ba handler chạy song song, mỗi handler chỉ nhận các kind nó giữ; kind không handler nào giữ (ví dụ `room_created`) chỉ được ack. Ba durable cũ `projection-room_activity`, `projection-mention_reply_index`, `projection-mention_read` bị xoá lúc khởi động (không có thì bỏ qua). Lần đầu tạo `projections` đọc lại toàn bộ stream còn giữ (idempotent).
+Một consumer durable `projections` trên `CHATIM_EVT`: lọc một subject `evt.>` (mọi event), ack từng tin (`AckExplicit`), `AckWait` 30s, `MaxAckPending` = 4 × lô, `DeliverAll`. Chỉ core giữ slot 0 fetch (như sweeper, xét lại mỗi `SLOT_TICK`). Lô ≤ `PROJECTION_FETCH_BATCH` 8192 event, chờ ≤ `PROJECTION_FETCH_WAIT` 3s (server hết hạn đúng lúc đó, client đợi thêm tới tín hiệu hết hạn nên không đánh rơi tin đã giao). Cửa sổ 3s là để gom: ở 2K tin/s một lô ~6K event, `room_activity` ghi một dòng mỗi room-thread nên số lệnh ghi `rooms` giảm, CPU Mongo về ngang engine cũ (với cửa sổ 1s là ~85K lệnh so với 17K, CPU Mongo +16%). Lúc dừng, lần fetch dở không huỷ được: core đọc tới khi server hết hạn (≤ 3s, chậm nhất thêm 1s nếu mất tín hiệu 408), nên mốc dừng projections là `PROJECTION_FETCH_WAIT` + 1s = 4s. Mỗi lô decode một lần rồi chia cho hai handler chạy song song, mỗi handler chỉ nhận các kind nó giữ; kind không handler nào giữ (ví dụ `room_created`) chỉ được ack. Ba durable cũ `projection-room_activity`, `projection-mention_reply_index`, `projection-mention_read` bị xoá lúc khởi động (không có thì bỏ qua). Projection `mention_read` và nửa mention của `mention_reply_index` đã chuyển khỏi core (Mention App, D164, D165). Lần đầu tạo `projections` đọc lại toàn bộ stream còn giữ (idempotent).
 
 | Handler | Nhận | Ghi | Chống trùng và lệch thứ tự |
 |---|---|---|---|
 | `room_activity` | 13 kind có room: `msg_created`, `msg_edited`, `msg_deleted`, `reaction_changed`, `msg_pinned`, `msg_unpinned`, `member_added/removed/role_changed/priority_changed`, `bookmark_changed`, `room_updated`, `room_preferences_changed` | Một `TouchActivity` mỗi (room, thread) mỗi lô: `$max last_seq`, `last_message_at` (chỉ `msg_created`); `last_change_at`, `activity_bucket`, `last_edit_at` (sửa/xoá trên thread 0) bằng giờ server `$$NOW` | `$max` |
-| `mention_reply_index` | `msg_created`, `msg_edited`, `msg_deleted` | Đọc `reply_to` và mention **từ event**, không `Find`. Trả lời: đặt phiếu `replies` → `AddReply` → doc mới thì `$inc rc +1` (bit 4) → `counts_changed` → gỡ phiếu; xoá trả lời thì `RemoveReply` + `rc −1` cùng cách. Mention: `ApplyMentions` theo `message_ver`, `RaiseSharedMention` khi có `@all`/nhóm. `reply_threads.Touch` mỗi trả lời còn sống | doc trả lời theo `_id` (chèn một lần), tombstone trước khi thêm, mention theo version |
-| `mention_read` | `read_updated` | Một `MembersOf` mỗi room mỗi lô; `read_ver` của doc nhỏ hơn event thì Nak; còn lại `Mentions.MarkRead(room, user, read_seq hiện tại)` | đọc lại `read_ver`, dùng vị trí hiện tại |
+| `reply_index` | `msg_created`, `msg_deleted` | Đọc `reply_to` **từ event**, không `Find`. Trả lời: đặt phiếu `replies` → `AddReply` → doc mới thì `$inc rc +1` (bit 4) → `counts_changed` → gỡ phiếu; xoá trả lời thì `RemoveReply` + `rc −1` cùng cách. `reply_threads.Touch` mỗi trả lời còn sống | doc trả lời theo `_id` (chèn một lần), tombstone trước khi thêm |
 
 Ack từng tin, như trước:
 - Ổn → `Ack`. Room hay doc không còn (`eventkit.Gone`) → `Ack`, đếm `projection_dropped_total`.
 - Không decode được → `Term`, đếm dropped.
-- Lỗi khác → `Nak` tin đó theo bậc thang 5s, 30s, 2m, 10m (`eventkit.NakDelay` theo số lần giao của nó). Chỉ tin đó chờ; các tin khác của lô vẫn được ack. `MaxAckPending` = 4 lô nên vài tin chậm không làm server ngừng giao.
+- Lỗi khác → `Nak` tin đó theo bậc thang 5s, 30s, 2m, 10m (`jsconsume.NakDelay` theo số lần giao của nó). Chỉ tin đó chờ; các tin khác của lô vẫn được ack. `MaxAckPending` = 4 lô nên vài tin chậm không làm server ngừng giao.
 - Mất slot 0 giữa lô → làm xong và ack/Nak lô đó; lô nhận sau khi mất slot thì `Nak(0)` từng tin để core mới nhận ngay. Dừng core: đợi lần fetch đang dở hết hạn (≤ `PROJECTION_FETCH_WAIT` 3s, thêm tối đa 1s nếu mất tín hiệu hết hạn) rồi trả mọi tin nó mang về bằng `Nak(0)`, nên không đánh rơi tin nào.
 
 Từ lần giao thứ 6 đếm `projection_stuck_total` (alert). Các số đo mang nhãn `projection="projections"`. Một event lỗi chỉ làm chậm chính nó. Event phát lại (sweeper, lần đầu `DeliverAll`) cũng nâng `last_change_at`/bucket lên giờ hiện tại; chấp nhận được.
@@ -157,9 +157,9 @@ Publish lỗi thì để cờ; CAS thua trong sweeper thì để cờ; projectio
 | `event/publish` | Hàng theo shard, `PublishMsgAsync`; `WithStateClears` + ack follower mỗi shard (4096 mục); `StateTargetOf` (19 kind) |
 | `event/stateclear` | Hàng xoá cờ trong RAM: `Add` không chặn, xả mỗi `STATE_CLEAR_FLUSH`/`STATE_CLEAR_BATCH`, đầy thì bỏ và đếm, xả trong 1s khi dừng |
 | `event/sweep` | Sweeper slot 0: `pass`, `page`, `publish`, `pace`, `rebuild_*` cho 7 collection |
-| `event/projection` | Consumer `projections` (một durable, slot 0, ack từng tin) với 3 handler, `EnsureConsumer` (xoá 3 durable cũ), `Decode` |
+| `event/projection` | Consumer `projections` (một durable, slot 0, ack từng tin) với 2 handler (`room_activity`, `reply_index`), `EnsureConsumer` (xoá 3 durable cũ), `Decode` |
 | `event/timer` | `CHATIM_TIMER`, `Timers` (`Arm*`, `Disarm`), consumer `timer-due`, `count_repair`, `member_count_repair` |
-| `event/eventkit` | Phần dùng chung: `NewPullSource`, `NakDelay`, `Gone`, `LimitedLog`, `RoomTypes`, `MessageKey` |
+| `event/eventkit` | Phần riêng của core: `Gone`, `Undeliverable`, `RoomTypes`, `MessageKey`. Phần dùng chung với Mention App (`PullSource`, `Delivery`, `NakDelay`, `LimitedLog`, `FetchExpiryGrace`) ở `pkg/jsconsume` |
 | `event/resync` | `/app resync`: chọn room, bật lại cờ (`EventStates.Mark`) |
 | `store` | Ports `EventStates` (`Pending`, `Clear`, `Mark`), `SweepCheckpoints` (`Get`, `Advance`); contract `storetest.RunEventStates`, `RunMessageStates`, `RunFactStates`, `RunMemberStates` |
 
@@ -180,6 +180,7 @@ Kiểm lúc boot: `SWEEP_MIN_AGE > PUB_ACK_TIMEOUT + STATE_CLEAR_FLUSH + STATE_C
 - **`/app resync -from -to [-tenant] [-room] [-rate] [-dry-run]`** (D155): chọn room theo `activity_bucket` từ `-from` hoặc tạo trong khoảng (hoặc một room với `-room`), đọc doc hiện tại trong khoảng và bật lại bit bằng `EventStates.Mark` (trang ≤ 200 doc, nhịp `-rate`). Doc đang chờ giữ `_state_at` cũ; doc không còn hoặc đã đổi version thì bỏ qua. Mỗi tin có reaction và mỗi tin cha có doc trả lời trong khoảng nhận một phiếu đếm lại. Sweeper phát lại, projection chạy lại (idempotent). **Sau khi purge `CHATIM_EVT` phải chờ qua `EVT_STREAM_DUPLICATES` (5 phút)**, nếu không stream bỏ các id đó. Chạy `-dry-run` trước.
 - **`/app recount -room ID [-dry-run]`:** đếm lại `member_count`, CAS `member_count_ver` kèm bit 2, publish `member_count_changed`, rồi xoá cờ.
 - **Ghi tay vào DB** (mongosh, migration) phải tự bật `_state` + `_state_at` trong cùng lệnh ghi ([kiến trúc §7.3](../architecture.md)); không thì không có event.
+- **Ghi fact sửa từ ngoài core** phải ghi luôn dòng `ver 0`: sweeper dựng `previous_mentions` của `msg_edited` từ fact `ver − 1`; thiếu dòng đó thì trả `UNAVAILABLE` và cờ ở lại.
 
 ### 4.4. Ma trận sự cố
 
@@ -190,7 +191,7 @@ Kiểm lúc boot: `SWEEP_MIN_AGE > PUB_ACK_TIMEOUT + STATE_CLEAR_FLUSH + STATE_C
 | Hàng xoá cờ đầy (Mongo chậm) | Cờ không được xoá | Sweeper phát lại sau ~15s, stream bỏ trùng | Không |
 | Core giữ slot 0 chết | Phát bù dừng ~10s | Core mới nhận slot 0, đọc mốc, quét tiếp | Không |
 | Core crash giữa `$inc` | `rx`/`rc`/`member_count` lệch | Phiếu hẹn bật sau 5s, đếm lại + CAS | `/app recount` nếu muốn |
-| Projection lỗi kéo dài | Danh sách hội thoại/mention trễ | Nak giãn dần, chạy lại khi lỗi hết | Theo dõi `ChatimProjectionFailing` |
+| Projection lỗi kéo dài | Danh sách hội thoại, `rc`, `reply_threads` trễ | Nak giãn dần, chạy lại khi lỗi hết | Theo dõi `ChatimProjectionFailing` |
 | Stream `CHATIM_EVT` mất dữ liệu | Consumer thiếu event | — | `/app resync` cho khoảng mất (chờ qua cửa sổ chống trùng) |
 
 ---
@@ -198,7 +199,7 @@ Kiểm lúc boot: `SWEEP_MIN_AGE > PUB_ACK_TIMEOUT + STATE_CLEAR_FLUSH + STATE_C
 ## 5. Hạn chế kỹ thuật & Đánh đổi (Limitations & Trade-offs)
 
 1. **Ghi trên `messages` gấp đôi số doc bị sửa:** mỗi tin thêm một update xoá cờ (gom lô) và một entry oplog. Bench 2K, 60s: ~24,8K lệnh xoá cờ trên `messages` (22s thời gian lệnh), `members` update 4K → 8K; CPU Mongo vẫn 286% → 278% nhờ gom 2s và cửa sổ projection 3s.
-2. **NATS chết thì projection đứng:** danh sách hội thoại, mention và `rc` dừng cập nhật tới khi NATS sống và sweeper phát bù xong. Gửi tin và ack vẫn chạy.
+2. **NATS chết thì projection đứng:** danh sách hội thoại và `rc` (cùng chỉ mục mention của Mention App) dừng cập nhật tới khi NATS sống và sweeper phát bù xong. Gửi tin và ack vẫn chạy.
 3. **Sweeper một máy:** core slot 0 chết thì phát bù dừng ~10s. Sweeper dựng lại event tuần tự (một lần đọc mỗi doc-bit), nên bắt kịp sau sự cố dài chậm hơn `SWEEP_RATE` (diễn tập ~1.600 doc/s).
 4. **Index phụ đầu tiên trên `messages`** (partial `state_pending`, D148): khi shard, sweeper hỏi mọi shard (index nhỏ, 2s một lần).
 5. **Ghi ngoài core không sinh event:** trước đây change stream bắt được; nay người chạy script phải tự bật cờ.
@@ -212,7 +213,7 @@ Kiểm lúc boot: `SWEEP_MIN_AGE > PUB_ACK_TIMEOUT + STATE_CLEAR_FLUSH + STATE_C
 | Thành phần phụ thuộc | Mục đích | Ứng xử khi gặp sự cố |
 |---|---|---|
 | **MongoDB (partial index `state_pending`, `sweeper_state`)** | Giữ cờ và mốc quét | Mongo failover: lệnh trả `UNAVAILABLE`; cờ đã ghi vẫn còn, sweeper quét tiếp khi Mongo sẵn sàng. |
-| **NATS JetStream `CHATIM_EVT`** | Nhận event, nguồn của consumer `projections` (3 handler) | NATS chết: cờ tích lại, projection đứng; hồi phục thì sweeper phát bù. |
+| **NATS JetStream `CHATIM_EVT`** | Nhận event, nguồn của consumer `projections` (2 handler) và consumer `mention` của Mention App | NATS chết: cờ tích lại, projection đứng; hồi phục thì sweeper phát bù. |
 | **NATS JetStream `CHATIM_TIMER`** | Phiếu hẹn sửa số đếm | Đặt phiếu lỗi: lệnh trả `UNAVAILABLE` trước khi ghi; phiếu đã đặt sống qua restart NATS. |
 | **Redis State (lease slot 0)** | Chọn core chạy sweeper | Mất lease: sweeper dừng, core khác nhận slot 0. Redis dedupe không còn liên quan tới event. |
 

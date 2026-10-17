@@ -35,7 +35,7 @@ func TestDeletePurgesTheTextOfEarlierVersions(t *testing.T) {
 			t.Fatalf("fact v%d keeps text %q after delete", f.Version, f.Text)
 		}
 	}
-	if _, events := rg.events.list(); len(events) != 3 || !proto.Equal(events[2], pbconv.MessageDeleted(domain.RoomGroup, got, facts[2])) {
+	if _, events := rg.events.list(); len(events) != 3 || !proto.Equal(events[2], pbconv.MessageDeleted(domain.RoomGroup, got, facts[2], domain.Mentions{})) {
 		t.Fatalf("last event = %v, want msg_deleted v3", events)
 	}
 }

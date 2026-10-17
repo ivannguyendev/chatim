@@ -8,28 +8,29 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
+	"github.com/ivannguyendev/chatim/pkg/callerid"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 func (s *Service) OpenDirectRoom(ctx context.Context, req *chatimv1.OpenDirectRoomRequest) (*chatimv1.OpenDirectRoomResponse, error) {
-	who, err := callerOf(ctx)
+	who, err := callerid.Of(ctx)
 	if err != nil {
 		return nil, err
 	}
 	other, now, candidate := req.GetOtherUser(), s.now().UTC().Truncate(time.Millisecond), s.newID()
-	room, members, err := domain.NewDirectRoom(who.tenant, who.user, other, now, candidate)
+	room, members, err := domain.NewDirectRoom(who.Tenant, who.User, other, now, candidate)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.access.Allow(ctx, access.Request{Action: access.OpenDirect, User: who.user}); err != nil {
+	if err := s.access.Allow(ctx, access.Request{Action: access.OpenDirect, User: who.User}); err != nil {
 		return nil, err
 	}
-	if room.ID, err = s.directs.Claim(ctx, who.tenant, who.user, other, candidate, now); err != nil {
+	if room.ID, err = s.directs.Claim(ctx, who.Tenant, who.User, other, candidate, now); err != nil {
 		return nil, err
 	}
-	got, created, err := s.openDirect(ctx, founding{room: room, members: members, by: who.user, at: now})
+	got, created, err := s.openDirect(ctx, founding{room: room, members: members, by: who.User, at: now})
 	if errors.Is(err, errRoomIDTaken) {
-		s.repoint(ctx, who.tenant, who.user, other, room.ID)
+		s.repoint(ctx, who.Tenant, who.User, other, room.ID)
 	}
 	if err != nil {
 		return nil, err

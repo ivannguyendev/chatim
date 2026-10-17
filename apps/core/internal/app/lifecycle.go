@@ -10,7 +10,7 @@ import (
 )
 
 type tasks struct {
-	admin, publisher, stateClears, flusher, cidBatch, router, slots, timers, projections, sweeper, grpc *task
+	admin, publisher, stateClears, flusher, cidBatch, router, slots, timers, projections, mention, sweeper, grpc *task
 }
 
 func Run(ctx context.Context, cfg config.Config, log *slog.Logger) error {
@@ -21,22 +21,41 @@ func Run(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 		return err
 	}
 	defer cl.close(ctx, log)
-	if err := prepare(ctx, cfg, cl); err != nil {
-		return err
-	}
 	a, err := wire(cfg, cl, log)
 	if err != nil {
 		return err
 	}
-	lis, err := listenAll(ctx, cfg.AdminAddr, cfg.GRPCAddr)
+	return a.launch(ctx, func(ctx context.Context) ([]net.Listener, error) {
+		if err := prepare(ctx, cfg, cl, a.setups...); err != nil {
+			return nil, err
+		}
+		return listenAll(ctx, cfg.AdminAddr, cfg.GRPCAddr)
+	})
+}
+
+func (a *node) launch(ctx context.Context, ready func(context.Context) ([]net.Listener, error)) error {
+	lis, err := ready(ctx)
 	if err != nil {
+		a.abandon(ctx)
 		return err
 	}
 	return a.serve(ctx, lis[0], lis[1])
 }
 
+func (a *node) abandon(ctx context.Context) {
+	if a.watches != nil {
+		a.watches.Stop()
+	}
+	if a.mention == nil {
+		return
+	}
+	if err := a.mention.Close(context.WithoutCancel(ctx)); err != nil {
+		a.log.WarnContext(ctx, "mention app close after a failed start", "err", err)
+	}
+}
+
 func (a *node) serve(ctx context.Context, adminLis, grpcLis net.Listener) error {
-	sup := newSupervisor(ctx, 11)
+	sup := newSupervisor(ctx, 12)
 	t := tasks{
 		admin:       sup.start("admin", func(c context.Context) error { return a.admin.ServeListener(c, adminLis) }),
 		publisher:   sup.start("publisher", a.publisher.Run),
@@ -47,6 +66,7 @@ func (a *node) serve(ctx context.Context, adminLis, grpcLis net.Listener) error 
 		slots:       sup.start("slot manager", a.slots.Run),
 		timers:      sup.start("timer consumer", a.timers.Run),
 		projections: sup.start("projections", a.projections.Run),
+		mention:     startIf(sup, "mention", a.mention),
 		sweeper:     sup.start("sweeper", a.sweeper.Run),
 	}
 	cause := a.awaitRouter(ctx, sup)
@@ -61,6 +81,13 @@ func (a *node) serve(ctx context.Context, adminLis, grpcLis net.Listener) error 
 	a.admin.SetReady(true)
 	a.log.InfoContext(ctx, "core ready", "grpc", grpcLis.Addr().String(), "admin", adminLis.Addr().String())
 	return a.shutdown(ctx, sup, t, sup.wait(ctx))
+}
+
+func startIf(sup *supervisor, name string, d drainer) *task {
+	if d == nil {
+		return nil
+	}
+	return sup.start(name, d.Run)
 }
 
 func (a *node) awaitRouter(ctx context.Context, sup *supervisor) error {

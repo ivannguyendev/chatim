@@ -8,6 +8,7 @@ enum MentionKind {
   MENTION_KIND_UNSPECIFIED = 0;
   MENTION_KIND_USER = 1;
   MENTION_KIND_GROUP = 2;
+  MENTION_KIND_ALL = 3;
 }
 
 message ReplyRef {
@@ -26,11 +27,13 @@ message ForwardRef {
 message MentionTarget {
   MentionKind kind = 1;
   string id = 2;
+  google.protobuf.Timestamp at = 3;
 }
 
 message MentionSet {
   repeated MentionTarget targets = 1;
   bool all = 2;
+  google.protobuf.Timestamp all_at = 3;
 }
 
 message ReplyPreview {

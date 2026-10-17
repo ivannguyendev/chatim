@@ -43,8 +43,6 @@ type Room struct {
 	InfoVer        uint64
 	UpdatedAt      time.Time
 	UpdatedBy      string
-
-	LastSharedMentionAt time.Time
 }
 
 type RoomUpdate struct {

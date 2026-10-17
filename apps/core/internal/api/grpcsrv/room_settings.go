@@ -13,7 +13,7 @@ func (s *Service) UpdateRoom(ctx context.Context, req *chatimv1.UpdateRoomReques
 	if err != nil {
 		return nil, err
 	}
-	res, err := s.mutator.UpdateRoom(ctx, mutate.UpdateRoomCmd{Tenant: who.tenant, User: who.user, Room: room, Update: pbconv.DomainRoomUpdate(req)})
+	res, err := s.mutator.UpdateRoom(ctx, mutate.UpdateRoomCmd{Tenant: who.Tenant, User: who.User, Room: room, Update: pbconv.DomainRoomUpdate(req)})
 	if err != nil {
 		return nil, err
 	}
@@ -25,7 +25,7 @@ func (s *Service) SetRoomPreferences(ctx context.Context, req *chatimv1.SetRoomP
 	if err != nil {
 		return nil, err
 	}
-	res, err := s.mutator.SetRoomPreferences(ctx, mutate.PreferencesCmd{Tenant: who.tenant, User: who.user, Room: room, Change: pbconv.DomainPreferencesChange(req)})
+	res, err := s.mutator.SetRoomPreferences(ctx, mutate.PreferencesCmd{Tenant: who.Tenant, User: who.User, Room: room, Change: pbconv.DomainPreferencesChange(req)})
 	if err != nil {
 		return nil, err
 	}

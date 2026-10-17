@@ -106,7 +106,8 @@ flowchart TD
 
     %% Tầng Projection & Tự phục hồi
     subgraph AsyncWorkers["Tầng Xử lý Ngầm & Tự phục hồi (M3.1)"]
-        WorkerIndex["Projection room_activity · mention_reply_index · mention_read (M06, M07, M10)"]
+        WorkerIndex["Projection room_activity · reply_index (M06, M07, M10)"]
+        MentionApp["Mention App: consumer mention (mọi core) → mentions, CHATIM_NOTIFY (M06)"]
         WorkerTimer["Consumer timer-due: count_repair · member_count_repair (M04, M05, M10)"]
         M10Reconcile["M10: Sweeper slot 0<br/>(quét cờ _state trên partial index)"]
     end
@@ -136,9 +137,11 @@ flowchart TD
 
     %% Luồng projection & phiếu hẹn
     NATSEvt --> WorkerIndex
+    NATSEvt --> MentionApp
+    MentionApp -->|Chỉ mục mention| MongoStorage
     M04 & M05 -.->|Arm survivor timer| NATSWork
     NATSWork --> WorkerTimer
-    WorkerIndex -->|Danh sách hội thoại, inbox mention, rc| MongoStorage
+    WorkerIndex -->|Danh sách hội thoại, rc, reply_threads| MongoStorage
     WorkerTimer -->|Đối soát sửa rx/rc/member_count| MongoStorage
 
     %% Luồng sweeper
@@ -159,7 +162,7 @@ Mỗi module dưới đây là một tập tài liệu đặc tả hoàn chỉnh
 | **03** | [03. Message Edit, Delete & Privacy](./03-feature-message-edit-delete-and-privacy.md) | Sửa tin, xem lịch sử sửa, thu hồi, ẩn tin, xoá lịch sử | Fact/Projection pattern (`message_edits` -> `messages`); Optimistic CAS `base_ver`; Sparse fact filtering phía người đọc. |
 | **04** | [04. Reactions, Pins & Bookmarks](./04-feature-reactions-pins-and-bookmarks.md) | Thả reaction, ghim tin nhắn, lưu trữ bookmark | Tập `(target, user)` với Tombstone; Survivor timers (Phiếu hẹn sinh tồn D111) tự sửa sai biến đếm; Pin folding CAS hạn mức 50 pins. |
 | **05** | [05. Membership & Roles](./05-feature-membership-roles-and-succession.md) | Thêm/xoá thành viên, rời phòng, chuyển giao owner | BulkWrite upsert kèm `request_id`; Transaction Mongo duy nhất cho kế nhiệm Owner; NATS `memberwatch` xoá cache quyền Core. |
-| **06** | [06. Threads, Replies & Mentions](./06-feature-threads-replies-and-mentions.md) | Trả lời trích dẫn, đếm reply, tag @mention, inbox nhắc tên | Trả lời trên timeline chính qua `messages.rp {th, s}`, doc trả lời trong `message_interactions`, `reply_preview` tính lúc đọc; Biến đếm `rc` `$inc` + survivor timer; projection `mention_reply_index` lập chỉ mục mention từ event. |
+| **06** | [06. Threads, Replies & Mentions](./06-feature-threads-replies-and-mentions.md) | Trả lời trích dẫn, đếm reply, tag @mention, inbox nhắc tên | Trả lời trên timeline chính qua `messages.rp {th, s}`, doc trả lời trong `message_interactions`, `reply_preview` tính lúc đọc; Biến đếm `rc` `$inc` + survivor timer (projection `reply_index`); Mention App (nhúng trong core, D162–D176) lập chỉ mục mention từ event tự đủ, `ListMentions`, nhóm, gợi ý `@nhóm`, thông báo `CHATIM_NOTIFY`. |
 | **07** | [07. Read Receipts & Unread Badge](./07-feature-read-receipts-and-unread-badge.md) | Đánh dấu đã đọc/chưa đọc, badge số tin chưa đọc | Cập nhật vị trí đọc trên doc Member (`read_seq`, `read_ver`); Unread tính lúc đọc trong `ListMyRooms` từ đuôi phòng ≤ 300 tin, dừng ở 100, `approx` khi hết cửa sổ. |
 | **08** | [08. History Retrieval & Reconnect Sync](./08-feature-history-retrieval-and-sync.md) | Cuộn xem lịch sử tin nhắn, khôi phục sau mất mạng | Phân trang theo `seq` (`LATEST`/`OLDEST`/`BEFORE`/`AFTER`/`AROUND`); Dynamic View pipeline che giấu tin nhạy cảm; reconnect kéo snapshot (`ListMyRooms` + `GetHistory AFTER`), sync token thuộc Mention App (chưa có). |
 | **09** | [09. Realtime Delivery & Ephemeral](./09-feature-realtime-delivery-and-ephemeral.md) | Đẩy tin realtime, báo đang gõ, trạng thái online | (M4, chưa xây; core đã RePublish event sang `live.*`) Dynamic interest routing trên NATS PubSub; Bỏ qua DB cho tín hiệu tạm thời (typing, presence); Zero-alloc fanout WebSocket `gws`. |

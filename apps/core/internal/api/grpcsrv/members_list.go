@@ -35,7 +35,7 @@ func (s *Service) ListMembers(ctx context.Context, req *chatimv1.ListMembersRequ
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.access.Authorize(ctx, access.ReadMembers, who.tenant, who.user, room); err != nil {
+	if _, err := s.access.Authorize(ctx, access.ReadMembers, who.Tenant, who.User, room); err != nil {
 		return nil, err
 	}
 	members, err := s.memberList.ListMembers(ctx, room, after, limit)

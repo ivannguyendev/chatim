@@ -10,12 +10,13 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/callerid"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 var errReplyInThread = fmt.Errorf("%w: reply_to inside a thread", apperr.ErrInvalidArgument)
 
-func (s *Service) sendCmd(ctx context.Context, who caller, room uint64, req *chatimv1.SendMessageRequest) (actor.SendCmd, error) {
+func (s *Service) sendCmd(ctx context.Context, who callerid.Caller, room uint64, req *chatimv1.SendMessageRequest) (actor.SendCmd, error) {
 	kind, err := sendKind(req)
 	if err != nil {
 		return actor.SendCmd{}, err
@@ -48,7 +49,7 @@ func sendKind(req *chatimv1.SendMessageRequest) (domain.Kind, error) {
 	return kind, domain.ValidateMeta(req.GetMeta())
 }
 
-func (s *Service) linkedCmd(ctx context.Context, who caller, room uint64, req *chatimv1.SendMessageRequest) (actor.SendCmd, error) {
+func (s *Service) linkedCmd(ctx context.Context, who callerid.Caller, room uint64, req *chatimv1.SendMessageRequest) (actor.SendCmd, error) {
 	if req.GetForwardFrom() != nil {
 		return s.forwardCmd(ctx, who, room, req)
 	}
@@ -57,14 +58,14 @@ func (s *Service) linkedCmd(ctx context.Context, who caller, room uint64, req *c
 		return actor.SendCmd{}, err
 	}
 	return actor.SendCmd{
-		Tenant: who.tenant, User: who.user, Room: room, Thread: req.GetThreadRoot(), CID: req.GetCid(), Text: req.GetText(),
+		Tenant: who.Tenant, User: who.User, Room: room, Thread: req.GetThreadRoot(), CID: req.GetCid(), Text: req.GetText(),
 		ReplyTo:    reply,
 		Mentions:   pbconv.DomainMentionTargets(req.GetMentions().GetTargets()),
 		MentionAll: req.GetMentions().GetAll(),
 	}, nil
 }
 
-func (s *Service) checkReply(ctx context.Context, who caller, room, thread uint64, reply *domain.ReplyRef) error {
+func (s *Service) checkReply(ctx context.Context, who callerid.Caller, room, thread uint64, reply *domain.ReplyRef) error {
 	if reply == nil {
 		return nil
 	}
@@ -78,7 +79,7 @@ func (s *Service) checkReply(ctx context.Context, who caller, room, thread uint6
 	if err != nil || len(found) > 0 {
 		return err
 	}
-	if _, err := s.access.Admit(ctx, access.SendMessage, who.tenant, who.user, room); err != nil {
+	if _, err := s.access.Admit(ctx, access.SendMessage, who.Tenant, who.User, room); err != nil {
 		return err
 	}
 	return domain.ErrMessageNotFound

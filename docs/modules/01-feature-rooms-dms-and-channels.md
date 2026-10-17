@@ -135,7 +135,7 @@ sequenceDiagram
   "member_count_ver": NumberLong(42),   // Version bộ đếm thành viên
   "last_seq": NumberLong(10045),        // Hoạt động phòng (projection room_activity)
   "last_message_at": ISODate("2026-10-10T10:05:00Z")
-  // còn: dm_key (DM), last_change_at, last_edit_at, activity_bucket, last_shared_mention_at, _state/_state_at
+  // còn: dm_key (DM), last_change_at, last_edit_at, activity_bucket, _state/_state_at (mốc mention chung nằm ở mention_rooms của Mention App)
 }
 ```
 

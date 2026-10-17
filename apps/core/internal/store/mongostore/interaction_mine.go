@@ -9,6 +9,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/keys"
+	"github.com/ivannguyendev/chatim/pkg/mongobound"
 )
 
 var myInteractionFields = bson.D{{Key: "_id", Value: 1}, {Key: "value", Value: 1}, {Key: "state", Value: 1}, {Key: "ver", Value: 1}}
@@ -25,7 +26,7 @@ func (r *Interactions) MyInteractions(ctx context.Context, user string, ks []sto
 	for _, k := range ks {
 		ids = append(ids, userID(k, keys.ReactionKind, user), userID(k, keys.BookmarkKind, user))
 	}
-	filter := boundedIDs(ids, bson.E{Key: "state", Value: interactionLive})
+	filter := mongobound.IDs(ids, bson.E{Key: "state", Value: interactionLive})
 	docs, err := r.find(ctx, filter, options.Find().SetProjection(myInteractionFields))
 	if err != nil {
 		return nil, fmt.Errorf("interactions of %q on %d messages: %w", user, len(ks), err)

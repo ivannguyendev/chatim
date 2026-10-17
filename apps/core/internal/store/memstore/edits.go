@@ -123,7 +123,7 @@ func (s *Edits) PurgeText(ctx context.Context, key store.MsgKey, upTo uint32) er
 	line := s.facts[key]
 	for i := range line {
 		if line[i].Version <= upTo {
-			line[i].Text, line[i].Mentions, line[i].MentionAll = "", nil, false
+			line[i].Text, line[i].Mentions, line[i].MentionAll, line[i].MentionAllAt = "", nil, false, time.Time{}
 		}
 	}
 	return nil

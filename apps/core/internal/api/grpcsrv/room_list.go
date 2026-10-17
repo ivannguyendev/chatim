@@ -8,6 +8,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/callerid"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -24,7 +25,7 @@ type RoomLister interface {
 }
 
 func (s *Service) ListMyRooms(ctx context.Context, req *chatimv1.ListMyRoomsRequest) (*chatimv1.ListMyRoomsResponse, error) {
-	who, err := callerOf(ctx)
+	who, err := callerid.Of(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -39,7 +40,7 @@ func (s *Service) ListMyRooms(ctx context.Context, req *chatimv1.ListMyRoomsRequ
 	case limit > roomlist.MaxRooms:
 		return nil, errRoomListLimit
 	}
-	q := roomlist.Query{Tenant: who.tenant, User: who.user, Folder: folder, Limit: limit}
+	q := roomlist.Query{Tenant: who.Tenant, User: who.User, Folder: folder, Limit: limit}
 	if next := req.GetNext(); next != "" {
 		after, err := domain.DecodeRoomCursor(next, folder)
 		if err != nil {
@@ -59,7 +60,7 @@ func (s *Service) ListMyRooms(ctx context.Context, req *chatimv1.ListMyRoomsRequ
 }
 
 func (s *Service) GetRooms(ctx context.Context, req *chatimv1.GetRoomsRequest) (*chatimv1.GetRoomsResponse, error) {
-	who, err := callerOf(ctx)
+	who, err := callerid.Of(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +73,7 @@ func (s *Service) GetRooms(ctx context.Context, req *chatimv1.GetRoomsRequest) (
 			return nil, err
 		}
 	}
-	items, missing, err := s.roomList.Get(ctx, who.tenant, who.user, rooms)
+	items, missing, err := s.roomList.Get(ctx, who.Tenant, who.User, rooms)
 	if err != nil {
 		return nil, err
 	}

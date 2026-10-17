@@ -3,7 +3,7 @@ package projection
 import (
 	"context"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
+	"github.com/ivannguyendev/chatim/pkg/jsconsume"
 )
 
 type outcome uint8
@@ -16,7 +16,7 @@ const (
 	failed
 )
 
-func (c *Consumer) settle(ctx context.Context, ds []eventkit.Delivery, outcomes []outcome) {
+func (c *Consumer) settle(ctx context.Context, ds []jsconsume.Delivery, outcomes []outcome) {
 	for i, d := range ds {
 		switch outcomes[i] {
 		case handled:
@@ -31,12 +31,12 @@ func (c *Consumer) settle(ctx context.Context, ds []eventkit.Delivery, outcomes 
 			c.report(ctx, d.Nak(0))
 		case failed:
 			c.failures.Add(1)
-			c.report(ctx, d.Nak(eventkit.NakDelay(d.Delivered())))
+			c.report(ctx, d.Nak(jsconsume.NakDelay(d.Delivered())))
 		}
 	}
 }
 
-func (c *Consumer) release(ds []eventkit.Delivery) {
+func (c *Consumer) release(ds []jsconsume.Delivery) {
 	for _, d := range ds {
 		c.report(context.Background(), d.Nak(0))
 	}

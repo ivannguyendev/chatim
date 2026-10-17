@@ -91,5 +91,6 @@ func (a *actor) number(entries []*entry, now time.Time) {
 	for _, e := range entries {
 		next++
 		e.msg.Seq, e.msg.CreatedAt = next, now
+		e.msg = e.msg.WithMentions(e.msg.MentionSet().Stamp(domain.Mentions{}, now))
 	}
 }

@@ -82,7 +82,7 @@ func TestEventsOfADeletedMessageCarryNoContentLinks(t *testing.T) {
 	gone := domain.Edit{Room: m.Room, Seq: m.Seq, Version: 2, Kind: domain.EditDelete, By: "alice", At: sentAt}
 	pin := domain.PinAction{Room: m.Room, Seq: m.Seq, PV: 1, Op: domain.PinOpPin, By: "bob", At: sentAt}
 	for name, got := range map[string]*chatimv1.Message{
-		"msg_deleted": pbconv.MessageDeleted(domain.RoomGroup, m, gone).GetMessageDeleted().GetMessage(),
+		"msg_deleted": pbconv.MessageDeleted(domain.RoomGroup, m, gone, domain.Mentions{}).GetMessageDeleted().GetMessage(),
 		"msg_pinned":  pbconv.PinChanged(domain.RoomGroup, m, pin).GetMessagePinned().GetMessage(),
 		"msg_created": pbconv.MessageCreated(domain.RoomGroup, m).GetMessageCreated().GetMessage(),
 	} {
@@ -91,6 +91,19 @@ func TestEventsOfADeletedMessageCarryNoContentLinks(t *testing.T) {
 		}
 		if !proto.Equal(got.GetReplyTo(), &chatimv1.ReplyRef{Seq: 40}) || !got.GetDeleted() {
 			t.Fatalf("%s = %v, want the reply link and deleted kept", name, got)
+		}
+	}
+}
+
+func TestAllIsNeverAMentionTarget(t *testing.T) {
+	in := []*chatimv1.MentionTarget{{Kind: chatimv1.MentionKind_MENTION_KIND_ALL}, {Kind: chatimv1.MentionKind_MENTION_KIND_ALL, Id: "minh"}}
+	if _, err := domain.ValidateMentions(pbconv.DomainMentionTargets(in), domain.DefaultMentionTargetsMax); err == nil {
+		t.Fatalf("an ALL target from a client passed validation")
+	}
+	for _, k := range []domain.MentionKind{0, domain.MentionUser, domain.MentionGroup, 3, 255} {
+		out := pbconv.MentionTargets([]domain.MentionTarget{{Kind: k, ID: "minh"}})
+		if out[0].GetKind() == chatimv1.MentionKind_MENTION_KIND_ALL {
+			t.Fatalf("domain kind %d left core as MENTION_KIND_ALL", k)
 		}
 	}
 }

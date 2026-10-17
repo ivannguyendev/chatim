@@ -9,8 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/jsconsume"
 )
 
 const (
@@ -28,7 +28,7 @@ type Repairer interface {
 }
 
 type ConsumerDeps struct {
-	Source   eventkit.Source
+	Source   jsconsume.Source
 	Members  Repairer
 	Messages Repairer
 }
@@ -39,14 +39,14 @@ type ConsumerConfig struct {
 }
 
 func (c ConsumerConfig) StopTimeout() time.Duration {
-	return cmp.Or(c.FetchWait, DefaultFetchWait) + eventkit.FetchExpiryGrace
+	return cmp.Or(c.FetchWait, DefaultFetchWait) + jsconsume.FetchExpiryGrace
 }
 
 type Consumer struct {
 	deps     ConsumerDeps
 	cfg      ConsumerConfig
-	fails    *eventkit.LimitedLog
-	repairs  *eventkit.LimitedLog
+	fails    *jsconsume.LimitedLog
+	repairs  *jsconsume.LimitedLog
 	failures atomic.Uint64
 	dropped  atomic.Uint64
 	started  atomic.Bool
@@ -68,7 +68,7 @@ func NewConsumer(deps ConsumerDeps, cfg ConsumerConfig, log *slog.Logger) (*Cons
 		log = slog.Default()
 	}
 	stopped, halt := context.WithCancel(context.Background())
-	return &Consumer{deps: deps, cfg: cfg, fails: eventkit.NewLimitedLog(log), repairs: eventkit.NewLimitedLog(log), stopped: stopped, halt: halt, done: make(chan struct{})}, nil
+	return &Consumer{deps: deps, cfg: cfg, fails: jsconsume.NewLimitedLog(log), repairs: jsconsume.NewLimitedLog(log), stopped: stopped, halt: halt, done: make(chan struct{})}, nil
 }
 
 func (c *Consumer) Run(ctx context.Context) error {

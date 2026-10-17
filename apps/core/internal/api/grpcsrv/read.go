@@ -36,5 +36,5 @@ func readCmdOf(ctx context.Context, roomID string, seq uint64) (mutate.ReadCmd, 
 	if err != nil {
 		return mutate.ReadCmd{}, err
 	}
-	return mutate.ReadCmd{Tenant: who.tenant, User: who.user, Room: room, Seq: seq}, nil
+	return mutate.ReadCmd{Tenant: who.Tenant, User: who.User, Room: room, Seq: seq}, nil
 }

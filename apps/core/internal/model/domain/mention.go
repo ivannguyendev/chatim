@@ -1,5 +1,11 @@
 package domain
 
+import (
+	"time"
+
+	"github.com/ivannguyendev/chatim/pkg/keys"
+)
+
 type MentionKind uint8
 
 const (
@@ -12,6 +18,11 @@ const DefaultMentionTargetsMax = 50
 type MentionTarget struct {
 	Kind MentionKind
 	ID   string
+	At   time.Time
+}
+
+func (t MentionTarget) Identity() MentionTarget {
+	return MentionTarget{Kind: t.Kind, ID: t.ID}
 }
 
 func ValidateMentions(targets []MentionTarget, limit int) ([]MentionTarget, error) {
@@ -27,10 +38,10 @@ func ValidateMentions(targets []MentionTarget, limit int) ([]MentionTarget, erro
 		if !validMentionTarget(t) {
 			return nil, invalid("mentions")
 		}
-		if _, dup := seen[t]; dup {
+		if _, dup := seen[t.Identity()]; dup {
 			continue
 		}
-		seen[t] = struct{}{}
+		seen[t.Identity()] = struct{}{}
 		out = append(out, t)
 	}
 	if len(out) > limit {
@@ -40,15 +51,7 @@ func ValidateMentions(targets []MentionTarget, limit int) ([]MentionTarget, erro
 }
 
 func validMentionTarget(t MentionTarget) bool {
-	if (t.Kind != MentionUser && t.Kind != MentionGroup) || t.ID == "" || len(t.ID) > maxIDLen {
-		return false
-	}
-	for i := range len(t.ID) {
-		if !identByte(t.ID[i], true) && t.ID[i] != ':' {
-			return false
-		}
-	}
-	return true
+	return (t.Kind == MentionUser || t.Kind == MentionGroup) && keys.ValidMentionID(t.ID)
 }
 
 func SameMentions(a, b []MentionTarget) bool {
@@ -57,10 +60,10 @@ func SameMentions(a, b []MentionTarget) bool {
 	}
 	want := make(map[MentionTarget]struct{}, len(a))
 	for _, t := range a {
-		want[t] = struct{}{}
+		want[t.Identity()] = struct{}{}
 	}
 	for _, t := range b {
-		if _, ok := want[t]; !ok {
+		if _, ok := want[t.Identity()]; !ok {
 			return false
 		}
 	}

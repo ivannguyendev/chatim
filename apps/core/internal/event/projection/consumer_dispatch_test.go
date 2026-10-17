@@ -39,9 +39,8 @@ func seqsOf(ds []*fakeDelivery, keep func(*chatimv1.Event) bool) []uint64 {
 
 func TestConsumerGivesEachHandlerTheKindsItKeepsInOneBatch(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		index := newFakeHandler(projection.MentionReplyIndexName, newIndexRig(t).index.Keeps)
-		reads := newFakeHandler(projection.MentionReadName, newReadRig(t).read.Keeps)
-		rg := newConsumerRig(t, t.Context(), index, reads)
+		index := newFakeHandler(projection.ReplyIndexName, newIndexRig(t).index.Keeps)
+		rg := newConsumerRig(t, t.Context(), index)
 		ds := everyKind(t)
 		rg.src.push(ds...)
 		synctest.Wait()
@@ -60,17 +59,13 @@ func TestConsumerGivesEachHandlerTheKindsItKeepsInOneBatch(t *testing.T) {
 		}
 		wantIndex := seqsOf(ds, func(ev *chatimv1.Event) bool {
 			switch ev.GetPayload().(type) {
-			case *chatimv1.Event_MessageCreated, *chatimv1.Event_MessageEdited, *chatimv1.Event_MessageDeleted:
+			case *chatimv1.Event_MessageCreated, *chatimv1.Event_MessageDeleted:
 				return true
 			}
 			return false
 		})
-		wantReads := seqsOf(ds, func(ev *chatimv1.Event) bool { _, ok := ev.GetPayload().(*chatimv1.Event_ReadUpdated); return ok })
-		if got := index.handled(); len(got) != 1 || !slices.Equal(got[0], wantIndex) || len(wantIndex) != 3 {
-			t.Errorf("mention reply index got %v, want one call with %v", got, wantIndex)
-		}
-		if got := reads.handled(); len(got) != 1 || !slices.Equal(got[0], wantReads) || len(wantReads) != 1 {
-			t.Errorf("mention read got %v, want one call with %v", got, wantReads)
+		if got := index.handled(); len(got) != 1 || !slices.Equal(got[0], wantIndex) || len(wantIndex) != 2 {
+			t.Errorf("reply index got %v, want one call with %v", got, wantIndex)
 		}
 		want := allAcked(len(ds))
 		want[6] = settlement{terms: 1}

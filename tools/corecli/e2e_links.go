@@ -69,7 +69,7 @@ func e2eLinks(ctx context.Context, args []string) error {
 func (r *linkRun) run() error {
 	steps := []func() error{
 		r.openDirectTwice, r.reactInDirect, r.createGroup, r.replyTwice, r.parentIsKept,
-		r.deleteOneReply, r.mentionThree, r.mentionsNeedMembership, r.forwardToDirect, r.bookmarkMention,
+		r.deleteOneReply, r.tagTeam, r.mentionThree, r.mentionsNeedMembership, r.forwardToDirect, r.bookmarkMention,
 	}
 	for i, step := range steps {
 		if err := step(); err != nil {
@@ -135,7 +135,9 @@ func (r *linkRun) send(room, user, cid string, edit func(*chatimv1.SendMessageRe
 }
 
 func (r *linkRun) sent(room string, seq uint64, links *chatimv1.Message) e2e.Want {
-	return r.want(room, e2e.KindCreated, e2e.MessageEventID(room, seq), e2e.CreatedPayload(links))
+	w := r.want(room, e2e.KindCreated, e2e.MessageEventID(room, seq), e2e.CreatedPayload(links))
+	w.Subject = e2e.CreatedSubject(r.root, r.st.Tenant, room, links)
+	return w
 }
 
 func (r *linkRun) reactInDirect() error {

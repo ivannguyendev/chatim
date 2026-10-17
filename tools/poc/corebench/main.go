@@ -32,7 +32,7 @@ type config struct {
 	cpuProfile                          string
 	redisDB, rooms, members, workers    int
 	watch                               int
-	zipf                                float64
+	zipf, mentionRate                   float64
 	deadline, attempt, grace            time.Duration
 	plan                                openloop.Plan
 }
@@ -55,6 +55,7 @@ func realMain() int {
 	flag.DurationVar(&c.plan.Warmup, "warmup", 5*time.Second, "sends before the measured window, excluded from stats")
 	flag.IntVar(&c.plan.MaxInflight, "max-inflight", 4096, "sends in flight at most; a send due while full is shed by the client")
 	flag.Float64Var(&c.zipf, "zipf", 0, "zipf exponent (>1) for room popularity; 0 picks rooms uniformly")
+	flag.Float64Var(&c.mentionRate, "mention-rate", 0, "share of messages (0..1) that mention one other room member; every 20th mentioned message is @all instead")
 	flag.StringVar(&c.texts, "texts", "", "file with one message text per line; synthetic text when empty")
 	flag.DurationVar(&c.deadline, "deadline", 10*time.Second, "give up one send after this long, retries included")
 	flag.DurationVar(&c.attempt, "attempt", 5*time.Second, "timeout of one attempt")
@@ -80,6 +81,8 @@ func (c config) validate() error {
 		return errors.New("-rooms, -members and -setup-workers must be positive")
 	case c.watch < 0 || c.watch > c.rooms:
 		return errors.New("-watch must be in 0..rooms")
+	case c.mentionRate < 0 || c.mentionRate > 1:
+		return errors.New("-mention-rate must be in 0..1")
 	case c.deadline <= 0 || c.attempt <= 0 || c.grace < 0:
 		return errors.New("-deadline and -attempt must be positive, -watch-grace not negative")
 	}
@@ -112,7 +115,7 @@ func run(ctx context.Context, c config) error {
 	}
 	defer func() { _ = s.Close() }()
 	printConfig(c, len(texts), slotShare(s))
-	b := &bench{client: s.Client, tenant: c.tenant, run: runID(), texts: texts}
+	b := &bench{client: s.Client, tenant: c.tenant, run: runID(), texts: texts, mentionRate: c.mentionRate}
 	started := time.Now()
 	if b.rooms, err = createRooms(ctx, b.client, c, b.run); err != nil {
 		return err
@@ -139,8 +142,8 @@ func run(ctx context.Context, c config) error {
 }
 
 func printConfig(c config, texts int, share string) {
-	fmt.Printf("corebench rate=%d/s duration=%v warmup=%v max-inflight=%d rooms=%d members=%d zipf=%v deadline=%v attempt=%v watch=%d texts=%d\n",
-		c.plan.Rate, c.plan.Duration, c.plan.Warmup, c.plan.MaxInflight, c.rooms, c.members, c.zipf, c.deadline, c.attempt, c.watch, texts)
+	fmt.Printf("corebench rate=%d/s duration=%v warmup=%v max-inflight=%d rooms=%d members=%d zipf=%v mention-rate=%v deadline=%v attempt=%v watch=%d texts=%d\n",
+		c.plan.Rate, c.plan.Duration, c.plan.Warmup, c.plan.MaxInflight, c.rooms, c.members, c.zipf, c.mentionRate, c.deadline, c.attempt, c.watch, texts)
 	knobs := make([]string, len(coreKnobs))
 	for i, k := range coreKnobs {
 		knobs[i] = k + "=" + cmp.Or(os.Getenv(k), "default")

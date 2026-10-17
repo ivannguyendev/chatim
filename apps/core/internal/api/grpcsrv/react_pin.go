@@ -14,7 +14,7 @@ func (s *Service) ReactMessage(ctx context.Context, req *chatimv1.ReactMessageRe
 		return nil, err
 	}
 	res, err := s.mutator.React(ctx, mutate.ReactCmd{
-		Tenant: who.tenant, User: who.user, Room: room, Thread: req.GetThreadRoot(), Seq: req.GetSeq(), Emoji: req.GetEmoji(),
+		Tenant: who.Tenant, User: who.User, Room: room, Thread: req.GetThreadRoot(), Seq: req.GetSeq(), Emoji: req.GetEmoji(),
 	})
 	if err != nil {
 		return nil, err
@@ -51,5 +51,5 @@ func pinCmdOf(ctx context.Context, roomID string, thread, seq uint64) (mutate.Pi
 	if err != nil {
 		return mutate.PinCmd{}, err
 	}
-	return mutate.PinCmd{Tenant: who.tenant, User: who.user, Room: room, Thread: thread, Seq: seq}, nil
+	return mutate.PinCmd{Tenant: who.Tenant, User: who.User, Room: room, Thread: thread, Seq: seq}, nil
 }

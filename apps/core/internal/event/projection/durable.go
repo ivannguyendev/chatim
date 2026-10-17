@@ -7,8 +7,8 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/jsconsume"
 )
 
 const DurableName = "projections"
@@ -39,8 +39,8 @@ func EnsureConsumer(ctx context.Context, js Admin, cfg Config) error {
 	return nil
 }
 
-func NewSource(js eventkit.ConsumerLookup, cfg Config) *eventkit.PullSource {
-	return eventkit.NewPullSource(js, cfg.Stream, DurableName)
+func NewSource(js jsconsume.ConsumerLookup, cfg Config) *jsconsume.PullSource {
+	return jsconsume.NewPullSource(js, cfg.Stream, DurableName)
 }
 
 func consumerConfig(cfg Config) jetstream.ConsumerConfig {

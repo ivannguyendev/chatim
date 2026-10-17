@@ -79,9 +79,9 @@ func mustAppend(t *testing.T, s store.Edits, facts ...domain.Edit) {
 }
 
 func sameEdit(a, b domain.Edit) bool {
-	at, bt, am, bm := a.At, b.At, a.Mentions, b.Mentions
-	a.At, b.At, a.Mentions, b.Mentions = time.Time{}, time.Time{}, nil, nil
-	return reflect.DeepEqual(a, b) && at.Equal(bt) && slices.Equal(am, bm)
+	at, bt, am, bm := a.At, b.At, a.MentionSet(), b.MentionSet()
+	a.At, b.At, a.Mentions, b.Mentions, a.MentionAllAt, b.MentionAllAt = time.Time{}, time.Time{}, nil, nil, time.Time{}, time.Time{}
+	return reflect.DeepEqual(a, b) && at.Equal(bt) && sameMentionSet(am, bm)
 }
 
 func assertEdits(t *testing.T, op string, got, want []domain.Edit) {

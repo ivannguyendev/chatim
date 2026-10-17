@@ -8,9 +8,9 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/jsconsume"
 )
 
 var errStarted = errors.New("state clear queue already started")
@@ -23,8 +23,8 @@ type Queue struct {
 	store    Clearer
 	cfg      Config
 	log      *slog.Logger
-	fails    *eventkit.LimitedLog
-	full     *eventkit.LimitedLog
+	fails    *jsconsume.LimitedLog
+	full     *jsconsume.LimitedLog
 	in       chan store.StateTarget
 	mu       sync.RWMutex
 	closed   bool
@@ -50,7 +50,7 @@ func New(st Clearer, cfg Config, log *slog.Logger) (*Queue, error) {
 	}
 	abort, halt := context.WithCancel(context.Background())
 	return &Queue{
-		store: st, cfg: cfg, log: log, fails: eventkit.NewLimitedLog(log), full: eventkit.NewLimitedLog(log),
+		store: st, cfg: cfg, log: log, fails: jsconsume.NewLimitedLog(log), full: jsconsume.NewLimitedLog(log),
 		in: make(chan store.StateTarget, cfg.Queue), abort: abort, halt: halt, done: make(chan struct{}),
 	}, nil
 }

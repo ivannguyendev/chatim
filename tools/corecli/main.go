@@ -33,9 +33,12 @@ commands:
   set-priority       set the priority of -target
   read               mark the room read up to -seq (0: the last message)
   unread             mark the room unread from -seq
+  set-user-groups    set the full group list of -user (-ver: newer than the stored one)
+  set-groups         add or change a taggable group (-inactive keeps it out of notifications and lists)
+  room-groups        list the taggable groups with a member in -room
   watch              print live events of a room from NATS
   slots              show how live cores share the slots
-  e2e                end-to-end scenario steps: setup, send, change, react-pin, members, links, rooms, check
+  e2e                end-to-end scenario steps: setup, send, change, react-pin, members, links, rooms, mentions, check
 
 run "corecli <command> -h" for the flags of a command`
 
@@ -65,6 +68,9 @@ func realMain(args []string) int {
 		"set-priority":      setPriorityCmd,
 		"read":              readCmd,
 		"unread":            unreadCmd,
+		"set-user-groups":   setUserGroupsCmd,
+		"set-groups":        setGroupsCmd,
+		"room-groups":       roomGroupsCmd,
 		"watch":             watchCmd,
 		"slots":             slotsCmd,
 		"e2e":               e2eCmd,

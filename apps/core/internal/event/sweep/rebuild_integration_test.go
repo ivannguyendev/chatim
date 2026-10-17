@@ -78,6 +78,9 @@ func itSeedEveryCollection(t *testing.T, st *mongostore.Store, old time.Time) (d
 	if res := st.Insert(ctx, []domain.Message{msg}); res[0].Outcome != store.Inserted {
 		t.Fatalf("Insert = %+v", res[0])
 	}
+	if err := st.Append(ctx, domain.Edit{Room: itRoom, Seq: 1, Kind: domain.EditOriginal, Tenant: tenant, By: "ann", Text: "hi", At: old}); err != nil {
+		t.Fatalf("Append original row: %v", err)
+	}
 	if err := st.Append(ctx, domain.Edit{Room: itRoom, Seq: 1, Version: 1, Kind: domain.EditText, Tenant: tenant, By: "ann", Text: "hello", At: old.Add(time.Second)}); err != nil {
 		t.Fatalf("Append edit: %v", err)
 	}

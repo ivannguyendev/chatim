@@ -3,6 +3,7 @@ package memstore
 import (
 	"context"
 	"slices"
+	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -30,10 +31,10 @@ func (s *Messages) ApplyEdit(ctx context.Context, e domain.Edit) error {
 
 func projected(m domain.Message, e domain.Edit) domain.Message {
 	m.Version, m.EditedAt, m.Text, m.Deleted = e.Version, e.At, e.Text, false
-	m.Mentions, m.MentionAll = slices.Clone(e.Mentions), e.MentionAll
+	m.Mentions, m.MentionAll, m.MentionAllAt = slices.Clone(e.Mentions), e.MentionAll, e.MentionAllAt
 	if e.Kind == domain.EditDelete {
 		m.Text, m.Deleted = "", true
-		m.Mentions, m.MentionAll, m.Forward, m.Meta = nil, false, nil, nil
+		m.Mentions, m.MentionAll, m.MentionAllAt, m.Forward, m.Meta = nil, false, time.Time{}, nil, nil
 	}
 	return m
 }

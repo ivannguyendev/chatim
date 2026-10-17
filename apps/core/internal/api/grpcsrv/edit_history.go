@@ -27,7 +27,7 @@ func (s *Service) GetEditHistory(ctx context.Context, req *chatimv1.GetEditHisto
 	if err != nil {
 		return nil, err
 	}
-	grant, err := s.access.Admit(ctx, access.ReadEditHistory, who.tenant, who.user, room)
+	grant, err := s.access.Admit(ctx, access.ReadEditHistory, who.Tenant, who.User, room)
 	if err != nil {
 		return nil, err
 	}

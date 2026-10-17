@@ -10,6 +10,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/keys"
+	"github.com/ivannguyendev/chatim/pkg/mongobound"
 )
 
 var _ store.MessageTimes = (*Store)(nil)
@@ -20,7 +21,7 @@ type sentTimeDoc struct {
 }
 
 func (s *Store) SentTimes(ctx context.Context, ks []store.MsgKey) (map[store.MsgKey]time.Time, error) {
-	if err := store.ValidateSentTimeKeys(ks); err != nil {
+	if err := store.ValidateMessageLookup(ks); err != nil {
 		return nil, err
 	}
 	out := make(map[store.MsgKey]time.Time, len(ks))
@@ -28,7 +29,7 @@ func (s *Store) SentTimes(ctx context.Context, ks []store.MsgKey) (map[store.Msg
 		return out, ctx.Err()
 	}
 	opts := options.Find().SetProjection(bson.D{{Key: "ts", Value: 1}})
-	cur, err := s.messages.Find(ctx, boundedIDs(msgIDs(ks)), opts)
+	cur, err := s.messages.Find(ctx, mongobound.IDs(msgIDs(ks)), opts)
 	if err != nil {
 		return nil, fmt.Errorf("sent times of %d messages: %w", len(ks), err)
 	}

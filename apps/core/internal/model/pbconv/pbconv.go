@@ -116,6 +116,7 @@ func Message(m domain.Message) *chatimv1.Message {
 		ForwardFrom:    ForwardRef(m.Forward),
 		MentionTargets: MentionTargets(m.Mentions),
 		MentionAll:     m.MentionAll,
+		MentionAllAt:   optionalTime(m.MentionAllAt),
 		ReplyCount:     ReplyCount(m.Replies),
 		SkipUnread:     m.SkipUnread,
 		Meta:           m.Meta,

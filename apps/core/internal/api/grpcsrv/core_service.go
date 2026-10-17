@@ -15,12 +15,13 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/callerid"
 	"github.com/ivannguyendev/chatim/pkg/ids"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 var (
-	errMissingDeps = fmt.Errorf("%w: core service needs a sender, a room store, a page reader, a mutator, an edit store, a hidden store, a bookmark store, a reply store, a member store, count timers, request dedupe, a direct room store, a mention store, a member room store, message times, a reader interaction store, a room lister, a thread lister, a reactor lister, a pin reader and a member lister", apperr.ErrInvalidArgument)
+	errMissingDeps = fmt.Errorf("%w: core service needs a sender, a room store, a page reader, a mutator, an edit store, a hidden store, a bookmark store, a reply store, a member store, count timers, request dedupe, a direct room store, a reader interaction store, a room lister, a thread lister, a reactor lister, a pin reader and a member lister", apperr.ErrInvalidArgument)
 	errBadRoomID   = fmt.Errorf("%w: room id", apperr.ErrInvalidArgument)
 )
 
@@ -42,72 +43,64 @@ type noEvents struct{}
 func (noEvents) Enqueue(uint64, []*chatimv1.Event) error { return nil }
 
 type Deps struct {
-	Sender      Sender
-	Rooms       store.Rooms
-	Pages       PageReader
-	Policy      access.Policy
-	Events      EventPublisher
-	Mutator     *mutate.Mutator
-	Edits       store.Edits
-	Hidden      store.Hidden
-	Bookmarks   BookmarkLister
-	Replies     RepliesLister
-	Members     RoomMembers
-	Timers      mutate.CountTimers
-	Requests    mutate.RequestDedupe
-	Directs     store.DirectRooms
-	Mentions    MentionLister
-	MemberRooms MemberRoomLister
-	SentTimes   store.MessageTimes
-	Mine        MyInteractionReader
-	RoomList    RoomLister
-	Threads     ThreadLister
-	Reactors    ReactorLister
-	PinBoard    PinReader
-	MemberList  MemberLister
-	HideRead    []string
-	NewID       func() uint64
-	Now         func() time.Time
+	Sender     Sender
+	Rooms      store.Rooms
+	Pages      PageReader
+	Policy     access.Policy
+	Events     EventPublisher
+	Mutator    *mutate.Mutator
+	Edits      store.Edits
+	Hidden     store.Hidden
+	Bookmarks  BookmarkLister
+	Replies    RepliesLister
+	Members    RoomMembers
+	Timers     mutate.CountTimers
+	Requests   mutate.RequestDedupe
+	Directs    store.DirectRooms
+	Mine       MyInteractionReader
+	RoomList   RoomLister
+	Threads    ThreadLister
+	Reactors   ReactorLister
+	PinBoard   PinReader
+	MemberList MemberLister
+	NewID      func() uint64
+	Now        func() time.Time
 }
 
 type Service struct {
 	chatimv1.UnimplementedCoreServiceServer
-	sender      Sender
-	rooms       store.Rooms
-	pages       PageReader
-	events      EventPublisher
-	mutator     *mutate.Mutator
-	edits       store.Edits
-	hidden      store.Hidden
-	bookmarks   BookmarkLister
-	replies     RepliesLister
-	members     RoomMembers
-	timers      mutate.CountTimers
-	requests    mutate.RequestDedupe
-	directs     store.DirectRooms
-	mentionList MentionLister
-	memberRooms MemberRoomLister
-	sentTimes   store.MessageTimes
-	mine        MyInteractionReader
-	roomList    RoomLister
-	threads     ThreadLister
-	reactors    ReactorLister
-	pinBoard    PinReader
-	memberList  MemberLister
-	hideRead    map[string]struct{}
-	access      *access.Checker
-	view        view.Pipeline
-	maskView    view.Pipeline
-	newID       func() uint64
-	now         func() time.Time
-	log         *slog.Logger
+	sender     Sender
+	rooms      store.Rooms
+	pages      PageReader
+	events     EventPublisher
+	mutator    *mutate.Mutator
+	edits      store.Edits
+	hidden     store.Hidden
+	bookmarks  BookmarkLister
+	replies    RepliesLister
+	members    RoomMembers
+	timers     mutate.CountTimers
+	requests   mutate.RequestDedupe
+	directs    store.DirectRooms
+	mine       MyInteractionReader
+	roomList   RoomLister
+	threads    ThreadLister
+	reactors   ReactorLister
+	pinBoard   PinReader
+	memberList MemberLister
+	access     *access.Checker
+	view       view.Pipeline
+	maskView   view.Pipeline
+	newID      func() uint64
+	now        func() time.Time
+	log        *slog.Logger
 }
 
 var _ chatimv1.CoreServiceServer = (*Service)(nil)
 
 func New(d Deps, log *slog.Logger) (*Service, error) {
 	if d.Sender == nil || d.Rooms == nil || d.Pages == nil || d.Mutator == nil || d.Edits == nil || d.Hidden == nil || d.Bookmarks == nil ||
-		d.Replies == nil || d.Members == nil || d.Timers == nil || d.Requests == nil || d.Directs == nil || d.Mentions == nil || d.MemberRooms == nil || d.SentTimes == nil || d.Mine == nil || d.RoomList == nil ||
+		d.Replies == nil || d.Members == nil || d.Timers == nil || d.Requests == nil || d.Directs == nil || d.Mine == nil || d.RoomList == nil ||
 		d.Threads == nil || d.Reactors == nil || d.PinBoard == nil || d.MemberList == nil {
 		return nil, errMissingDeps
 	}
@@ -127,18 +120,14 @@ func New(d Deps, log *slog.Logger) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	hideRead := make(map[string]struct{}, len(d.HideRead))
-	for _, tenant := range d.HideRead {
-		hideRead[tenant] = struct{}{}
-	}
 	return &Service{
 		sender: d.Sender, rooms: d.Rooms, pages: d.Pages, events: d.Events, mutator: d.Mutator, edits: d.Edits, hidden: d.Hidden,
-		bookmarks: d.Bookmarks, replies: d.Replies, members: d.Members, timers: d.Timers, requests: d.Requests, directs: d.Directs, mentionList: d.Mentions, memberRooms: d.MemberRooms, sentTimes: d.SentTimes, mine: d.Mine, roomList: d.RoomList, threads: d.Threads, reactors: d.Reactors, pinBoard: d.PinBoard, memberList: d.MemberList, hideRead: hideRead, access: checker, view: view.Default(), maskView: view.New(view.MaskDeleted, view.HideForViewer), newID: d.NewID, now: d.Now, log: log,
+		bookmarks: d.Bookmarks, replies: d.Replies, members: d.Members, timers: d.Timers, requests: d.Requests, directs: d.Directs, mine: d.Mine, roomList: d.RoomList, threads: d.Threads, reactors: d.Reactors, pinBoard: d.PinBoard, memberList: d.MemberList, access: checker, view: view.Default(), maskView: view.New(view.MaskDeleted, view.HideForViewer), newID: d.NewID, now: d.Now, log: log,
 	}, nil
 }
 
 func (s *Service) SendMessage(ctx context.Context, req *chatimv1.SendMessageRequest) (*chatimv1.SendMessageResponse, error) {
-	who, err := callerOf(ctx)
+	who, err := callerid.Of(ctx)
 	if err != nil {
 		return nil, err
 	}

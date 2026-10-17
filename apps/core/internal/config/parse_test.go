@@ -117,8 +117,8 @@ func TestLoadReadsMentionHideReadTenants(t *testing.T) {
 	for _, tt := range tests {
 		setEnv(t, map[string]string{"MENTION_HIDE_READ_TENANTS": tt.value})
 		got, err := config.Load()
-		if err != nil || !slices.Equal(got.MentionHideReadTenants, tt.want) {
-			t.Fatalf("MENTION_HIDE_READ_TENANTS=%q gives %v, %v; want %v", tt.value, got.MentionHideReadTenants, err, tt.want)
+		if err != nil || !slices.Equal(got.Mention.HideReadTenants, tt.want) {
+			t.Fatalf("MENTION_HIDE_READ_TENANTS=%q gives %v, %v; want %v", tt.value, got.Mention.HideReadTenants, err, tt.want)
 		}
 	}
 }

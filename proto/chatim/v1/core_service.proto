@@ -34,7 +34,6 @@ service CoreService {
   rpc GetReplies(GetRepliesRequest) returns (GetRepliesResponse);
   rpc ListThreads(ListThreadsRequest) returns (ListThreadsResponse);
   rpc ListBookmarks(ListBookmarksRequest) returns (ListBookmarksResponse);
-  rpc ListMentions(ListMentionsRequest) returns (ListMentionsResponse);
   rpc AddMembers(AddMembersRequest) returns (AddMembersResponse);
   rpc RemoveMember(RemoveMemberRequest) returns (RemoveMemberResponse);
   rpc LeaveRoom(LeaveRoomRequest) returns (LeaveRoomResponse);

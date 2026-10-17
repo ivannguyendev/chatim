@@ -37,6 +37,7 @@ const (
 	roomData    = "room"
 	memberData  = "member"
 	messageData = "message"
+	mentionData = "mention"
 )
 
 var errMalformed = errors.New("event needs an id and a subject-safe tenant")
@@ -45,7 +46,7 @@ func Message(root string, room uint64, ev *chatimv1.Event) (*nats.Msg, error) {
 	if ev.GetId() == "" || !validToken(ev.GetTenant()) {
 		return nil, errMalformed
 	}
-	subject, err := subjectFor(root, ev.GetTenant(), room, eventKind(ev))
+	subject, err := subjectFor(root, ev.GetTenant(), room, eventKind(ev), hasMentions(ev))
 	if err != nil {
 		return nil, err
 	}
@@ -58,19 +59,29 @@ func Message(root string, room uint64, ev *chatimv1.Event) (*nats.Msg, error) {
 	return m, nil
 }
 
-func subjectFor(root, tenant string, room uint64, kind string) (string, error) {
+func subjectFor(root, tenant string, room uint64, kind string, mentions bool) (string, error) {
 	var data string
 	switch kind {
+	case msgCreated:
+		data = messageData
+		if mentions {
+			data = mentionData
+		}
 	case roomCreated, roomUpdated, msgPinned, msgUnpinned, memberCountChanged:
 		data = roomData
 	case memberAdded, memberRemoved, memberRoleChanged, memberPriorityChanged, readUpdated, messageHidden, historyCleared, bookmarkChanged, preferencesChanged:
 		data = memberData
-	case msgCreated, msgEdited, msgDeleted, reactionChanged, countsChanged:
+	case msgEdited, msgDeleted, reactionChanged, countsChanged:
 		data = messageData
 	default:
 		return "", fmt.Errorf("%w: unknown event kind %q", apperr.ErrInvalidArgument, kind)
 	}
 	return root + "." + tenant + "." + data + "." + strconv.FormatUint(room, 10) + "." + kind, nil
+}
+
+func hasMentions(ev *chatimv1.Event) bool {
+	m := ev.GetMessageCreated().GetMessage()
+	return len(m.GetMentionTargets()) > 0 || m.GetMentionAll()
 }
 
 func eventKind(ev *chatimv1.Event) string {

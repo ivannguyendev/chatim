@@ -20,17 +20,13 @@ func wireStateClears(cfg config.Config, st *mongostore.Store, log *slog.Logger) 
 }
 
 func wireProjections(cfg config.Config, cl *clients, st *mongostore.Store, owner projection.Owner, events projection.EventQueue, timers projection.LinkTimers, log *slog.Logger) (*projection.Consumer, error) {
-	replies, err := projection.NewMentionReplyIndex(projection.MentionReplyIndexDeps{
-		Replies: st.Interactions(), Threads: st.ReplyThreads(), Counts: st, Mentions: st.Mentions(), Shared: st, Timers: timers, Events: events,
+	replies, err := projection.NewReplyIndex(projection.ReplyIndexDeps{
+		Replies: st.Interactions(), Threads: st.ReplyThreads(), Counts: st, Timers: timers, Events: events,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("wire %s projection: %w", projection.MentionReplyIndexName, err)
+		return nil, fmt.Errorf("wire %s projection: %w", projection.ReplyIndexName, err)
 	}
-	reads, err := projection.NewMentionRead(st, st.Mentions())
-	if err != nil {
-		return nil, fmt.Errorf("wire %s projection: %w", projection.MentionReadName, err)
-	}
-	handlers := []projection.Projection{projection.NewRoomActivity(st), replies, reads}
+	handlers := []projection.Projection{projection.NewRoomActivity(st), replies}
 	c, err := projection.NewConsumer(handlers, projection.NewSource(cl.js, cfg.Projection), cfg.Projection, log, projection.WithLeader(owner, sweep.LeaderSlot, cfg.Slot.Tick))
 	if err != nil {
 		return nil, fmt.Errorf("wire projection consumer: %w", err)

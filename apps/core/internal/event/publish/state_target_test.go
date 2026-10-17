@@ -74,8 +74,8 @@ func messageTargetCases(room domain.Room, m domain.Message) map[string]targetCas
 	}
 	return map[string]targetCase{
 		"msg_created":      {pbconv.MessageCreated(domain.RoomGroup, m), created},
-		"msg_edited":       {pbconv.MessageEdited(domain.RoomGroup, m, e), edit},
-		"msg_deleted":      {pbconv.MessageDeleted(domain.RoomGroup, m, e), edit},
+		"msg_edited":       {pbconv.MessageEdited(domain.RoomGroup, m, e, domain.Mentions{}), edit},
+		"msg_deleted":      {pbconv.MessageDeleted(domain.RoomGroup, m, e, domain.Mentions{}), edit},
 		"counts_reactions": {pbconv.CountsChanged(domain.RoomGroup, m, sentAt), reactions},
 		"counts_replies":   {pbconv.ReplyCountsChanged(domain.RoomGroup, m, sentAt), replies},
 		"reaction_changed": {pbconv.ReactionChanged(domain.RoomGroup, r),
@@ -155,7 +155,7 @@ func TestEventsWithoutAClearableStateMapToNothing(t *testing.T) {
 		"unknown counter":    views,
 		"no cleared_at":      noClearTime,
 		"no reader":          noUser,
-		"edit without a ver": pbconv.MessageEdited(domain.RoomGroup, m, domain.Edit{Room: roomA, Thread: 5, Seq: 7}),
+		"edit without a ver": pbconv.MessageEdited(domain.RoomGroup, m, domain.Edit{Room: roomA, Thread: 5, Seq: 7}, domain.Mentions{}),
 	}
 	for name, ev := range cases {
 		if got, ok := publish.StateTargetOf(ev); ok {

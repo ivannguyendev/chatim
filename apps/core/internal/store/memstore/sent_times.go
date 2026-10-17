@@ -14,7 +14,7 @@ func (s *Messages) SentTimes(ctx context.Context, keys []store.MsgKey) (map[stor
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if err := store.ValidateSentTimeKeys(keys); err != nil {
+	if err := store.ValidateMessageLookup(keys); err != nil {
 		return nil, err
 	}
 	s.mu.RLock()

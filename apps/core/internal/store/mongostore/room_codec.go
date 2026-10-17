@@ -24,8 +24,6 @@ type roomDoc struct {
 	InfoVer        int64           `bson:"info_ver,omitempty"`
 	UpdatedAt      time.Time       `bson:"updated_at,omitempty"`
 	UpdatedBy      string          `bson:"updated_by,omitempty"`
-
-	LastSharedMentionAt time.Time `bson:"last_shared_mention_at,omitempty"`
 }
 
 func encodeRoom(r domain.Room) (roomDoc, error) {
@@ -93,7 +91,5 @@ func decodeRoom(d roomDoc) (domain.Room, error) {
 		InfoVer:        infoVer,
 		UpdatedAt:      d.UpdatedAt,
 		UpdatedBy:      d.UpdatedBy,
-
-		LastSharedMentionAt: d.LastSharedMentionAt,
 	}, nil
 }

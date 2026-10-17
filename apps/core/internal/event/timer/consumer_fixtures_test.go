@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
+	"github.com/ivannguyendev/chatim/pkg/jsconsume"
 )
 
 type fakeDelivery struct {
@@ -25,6 +25,7 @@ func delivery(c timer.Check, delivered uint64) *fakeDelivery {
 
 func (d *fakeDelivery) Data() []byte      { return d.data }
 func (d *fakeDelivery) Delivered() uint64 { return d.delivered }
+func (d *fakeDelivery) InProgress() error { return nil }
 
 func (d *fakeDelivery) Ack() error {
 	d.mu.Lock()
@@ -55,14 +56,14 @@ func (d *fakeDelivery) settled() (acks, terms int, naks []time.Duration) {
 
 type fakeSource struct {
 	mu      sync.Mutex
-	batches [][]eventkit.Delivery
+	batches [][]jsconsume.Delivery
 	errs    []error
 	fetches int
 	ready   chan struct{}
 }
 
 func (s *fakeSource) push(ds ...*fakeDelivery) {
-	batch := make([]eventkit.Delivery, len(ds))
+	batch := make([]jsconsume.Delivery, len(ds))
 	for i, d := range ds {
 		batch[i] = d
 	}
@@ -76,7 +77,7 @@ func (s *fakeSource) push(ds ...*fakeDelivery) {
 	}
 }
 
-func (s *fakeSource) Fetch(ctx context.Context, _ int, wait time.Duration) ([]eventkit.Delivery, error) {
+func (s *fakeSource) Fetch(ctx context.Context, _ int, wait time.Duration) ([]jsconsume.Delivery, error) {
 	t := time.NewTimer(wait)
 	defer t.Stop()
 	s.mu.Lock()
@@ -97,7 +98,7 @@ func (s *fakeSource) Fetch(ctx context.Context, _ int, wait time.Duration) ([]ev
 	}
 }
 
-func (s *fakeSource) next() ([]eventkit.Delivery, bool, chan struct{}, error) {
+func (s *fakeSource) next() ([]jsconsume.Delivery, bool, chan struct{}, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.errs) > 0 {

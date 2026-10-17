@@ -13,6 +13,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/keys"
+	"github.com/ivannguyendev/chatim/pkg/mongobound"
 )
 
 type messageQuery struct {
@@ -80,7 +81,7 @@ func find(ctx context.Context, coll *mongo.Collection, q messageQuery) ([]domain
 }
 
 func findByKeys(ctx context.Context, coll *mongo.Collection, ks []store.MsgKey) ([]domain.Message, error) {
-	cur, err := coll.Find(ctx, boundedIDs(msgIDs(ks)))
+	cur, err := coll.Find(ctx, mongobound.IDs(msgIDs(ks)))
 	if err != nil {
 		return nil, err
 	}

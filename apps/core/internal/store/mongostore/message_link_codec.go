@@ -32,8 +32,9 @@ type forwardDoc struct {
 }
 
 type mentionDoc struct {
-	Kind string `bson:"k"`
-	ID   string `bson:"i"`
+	Kind string    `bson:"k"`
+	ID   string    `bson:"i"`
+	At   time.Time `bson:"a,omitempty"`
 }
 
 func encodeLinks(m domain.Message, d *messageDoc) error {
@@ -59,7 +60,7 @@ func encodeLinks(m domain.Message, d *messageDoc) error {
 	if err != nil {
 		return err
 	}
-	d.Mentions, d.MentionAll = mentions, m.MentionAll
+	d.Mentions, d.MentionAll, d.MentionAllAt = mentions, m.MentionAll, m.MentionAllAt
 	d.SkipUnread, d.Meta = m.SkipUnread, m.Meta
 	return nil
 }
@@ -71,7 +72,7 @@ func encodeMessageMentions(targets []domain.MentionTarget) ([]mentionDoc, error)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, mentionDoc{Kind: name, ID: t.ID})
+		out = append(out, mentionDoc{Kind: name, ID: t.ID, At: t.At})
 	}
 	return out, nil
 }
@@ -97,7 +98,7 @@ func decodeLinks(d messageDoc, m *domain.Message) error {
 	}
 	for _, t := range d.Mentions {
 		if kind, ok := mentionKindOf(t.Kind); ok {
-			m.Mentions = append(m.Mentions, domain.MentionTarget{Kind: kind, ID: t.ID})
+			m.Mentions = append(m.Mentions, domain.MentionTarget{Kind: kind, ID: t.ID, At: t.At})
 		}
 	}
 	if c := d.Replies; c != nil {
@@ -107,7 +108,7 @@ func decodeLinks(d messageDoc, m *domain.Message) error {
 		}
 		m.Replies = rc
 	}
-	m.MentionAll = d.MentionAll
+	m.MentionAll, m.MentionAllAt = d.MentionAll, d.MentionAllAt
 	m.SkipUnread, m.Meta = d.SkipUnread, d.Meta
 	return nil
 }

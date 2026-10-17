@@ -84,5 +84,5 @@ func DialInsecure(addr string) (chatimv1.CoreServiceClient, io.Closer, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return chatimv1.NewCoreServiceClient(cc), cc, nil
+	return coreAPIs{CoreServiceClient: chatimv1.NewCoreServiceClient(cc), MentionServiceClient: chatimv1.NewMentionServiceClient(cc)}, cc, nil
 }
