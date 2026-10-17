@@ -89,18 +89,15 @@ func kindEvent(t *testing.T, c kindCase, thread uint64) *chatimv1.Event {
 }
 
 func TestEachHandlerKeepsExactlyItsKinds(t *testing.T) {
-	activity, index, read := projection.NewRoomActivity(&fakeWriter{}), newIndexRig(t).index, newReadRig(t).read
+	activity, index := projection.NewRoomActivity(&fakeWriter{}), newIndexRig(t).index
 	for _, c := range kindCases {
 		ev := decoded(t, kindEvent(t, c, 0))
-		message := c.name == "msg_created" || c.name == "msg_edited" || c.name == "msg_deleted"
+		reply := c.name == "msg_created" || c.name == "msg_deleted"
 		if got := activity.Keeps(ev); got != c.listed {
 			t.Errorf("room activity keeps %s = %v, want %v", c.name, got, c.listed)
 		}
-		if got := index.Keeps(ev); got != message {
-			t.Errorf("mention reply index keeps %s = %v, want %v", c.name, got, message)
-		}
-		if got := read.Keeps(ev); got != (c.name == "read_updated") {
-			t.Errorf("mention read keeps %s = %v", c.name, got)
+		if got := index.Keeps(ev); got != reply {
+			t.Errorf("reply index keeps %s = %v, want %v", c.name, got, reply)
 		}
 		m, err := publish.Message(subjectRoot, roomA, kindEvent(t, c, 0))
 		if err != nil || !strings.HasPrefix(m.Subject, subjectRoot+".") || !strings.HasSuffix(m.Subject, "."+c.name) {

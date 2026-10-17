@@ -23,14 +23,6 @@ type ReplyCounter interface {
 	AddReplyCount(ctx context.Context, key store.MsgKey, delta int) (domain.ReplyCount, error)
 }
 
-type MentionWriter interface {
-	ApplyMentions(ctx context.Context, s store.MentionSet) error
-}
-
-type SharedMentionRaiser interface {
-	RaiseSharedMention(ctx context.Context, room uint64, at time.Time) error
-}
-
 type LinkTimers interface {
 	ArmMessageCountCheck(ctx context.Context, key store.MsgKey, counter string) (timer.Timer, error)
 	Disarm(ctx context.Context, tm timer.Timer)
@@ -38,12 +30,4 @@ type LinkTimers interface {
 
 type EventQueue interface {
 	Enqueue(room uint64, events []*chatimv1.Event) error
-}
-
-type MemberLookup interface {
-	MembersOf(ctx context.Context, room uint64, users []string) ([]domain.Member, error)
-}
-
-type MentionReads interface {
-	MarkRead(ctx context.Context, room uint64, user string, readSeq uint64) error
 }

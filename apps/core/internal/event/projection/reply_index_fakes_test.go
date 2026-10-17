@@ -4,7 +4,6 @@ import (
 	"context"
 	"slices"
 	"sync"
-	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
@@ -77,11 +76,3 @@ type failingReplyCount struct{ err error }
 func (f failingReplyCount) AddReplyCount(context.Context, store.MsgKey, int) (domain.ReplyCount, error) {
 	return domain.ReplyCount{}, f.err
 }
-
-type failingShared struct{ err error }
-
-func (f failingShared) RaiseSharedMention(context.Context, uint64, time.Time) error { return f.err }
-
-type failingMentions struct{ err error }
-
-func (f failingMentions) ApplyMentions(context.Context, store.MentionSet) error { return f.err }

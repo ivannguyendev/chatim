@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
@@ -13,7 +14,15 @@ import (
 type stopper struct {
 	ctx    context.Context
 	log    *slog.Logger
+	mu     sync.Mutex
 	failed []string
+}
+
+type phase struct {
+	name  string
+	limit time.Duration
+	drain func(context.Context) error
+	task  *task
 }
 
 func (a *node) shutdown(ctx context.Context, sup *supervisor, t tasks, cause error) error {
@@ -31,7 +40,7 @@ func (a *node) shutdown(ctx context.Context, sup *supervisor, t tasks, cause err
 	s := &stopper{ctx: stopCtx, log: a.log}
 	s.step("grpc", 0, nil, t.grpc)
 	s.step("sweeper", plan.Sweeper, a.sweeper.Close, t.sweeper)
-	s.step("projections", plan.Projections, a.projections.Close, t.projections)
+	s.together(phase{"projections", plan.Projections, a.projections.Close, t.projections}, a.mentionPhase(plan.Mention, t.mention))
 	s.step("timer consumer", plan.Timer, a.timers.Close, t.timers)
 	a.watches.Stop()
 	s.step("router", plan.Router, a.router.Close, t.router)
@@ -58,9 +67,29 @@ func (s *stopper) step(name string, limit time.Duration, drain func(context.Cont
 		err = errors.Join(err, t.stop(s.ctx))
 	}
 	if err != nil {
+		s.mu.Lock()
 		s.failed = append(s.failed, name)
+		s.mu.Unlock()
 		s.log.ErrorContext(s.ctx, "shutdown step failed", "step", name, "err", err)
 	}
+}
+
+func (s *stopper) together(phases ...phase) {
+	var wg sync.WaitGroup
+	for _, p := range phases {
+		if p.drain == nil && p.task == nil {
+			continue
+		}
+		wg.Go(func() { s.step(p.name, p.limit, p.drain, p.task) })
+	}
+	wg.Wait()
+}
+
+func (a *node) mentionPhase(limit time.Duration, t *task) phase {
+	if a.mention == nil {
+		return phase{name: "mention"}
+	}
+	return phase{"mention", limit, a.mention.Close, t}
 }
 
 func (s *stopper) err() error {

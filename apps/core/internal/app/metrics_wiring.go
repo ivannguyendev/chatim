@@ -13,6 +13,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/metrics"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
+	"github.com/ivannguyendev/chatim/apps/mention/mentionapp"
 )
 
 const oplogProbeTimeout = 2 * time.Second
@@ -31,6 +32,7 @@ type probes struct {
 	memberMalformed func() uint64
 	roomCache       roomCacheProbes
 	events          eventProbes
+	mention         []mentionapp.Probe
 }
 
 func metricSources(p probes) []metrics.Source {
@@ -53,7 +55,7 @@ func metricSources(p probes) []metrics.Source {
 	out = append(out, timerSources(p.timerFailures, p.timerDropped)...)
 	out = append(out, memberWatchSources(p.memberForgets, p.memberMalformed)...)
 	out = append(out, roomCacheSources(p.roomCache)...)
-	return out
+	return append(out, mentionSources(p.mention)...)
 }
 
 func counterSources(repairs map[string]func() uint64) []metrics.Source {

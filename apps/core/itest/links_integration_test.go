@@ -111,6 +111,8 @@ func TestRealInfraMentionsForwardsAndBookmarksReachTheirLists(t *testing.T) {
 	it := realInfra(t)
 	core := startCore(t, it, itFastSweep)
 	client := dialCore(t, core.cfg)
+	mentions := dialMention(t, core.cfg)
+	tagGroups(t, mentions, nil, "design")
 	roomID, otherID := createRoomWith(t, client, []string{itUser, "bob"}), createRoomWith(t, client, []string{itUser, "bob"})
 	room := parseRoom(t, roomID)
 	live := subscribeLive(t, it, core.cfg, roomID)
@@ -129,7 +131,7 @@ func TestRealInfraMentionsForwardsAndBookmarksReachTheirLists(t *testing.T) {
 	want := []uint64{seqs[2], seqs[1], seqs[0]}
 	req := &chatimv1.ListMentionsRequest{Groups: []*chatimv1.MentionGroup{{Id: "design", Since: timestamppb.New(since)}}, Limit: 10}
 	awaitStored(t, "mentions of bob", func() ([]uint64, error) {
-		resp, err := client.ListMentions(callerAs(t.Context(), "bob"), req)
+		resp, err := mentions.ListMentions(callerAs(t.Context(), "bob"), req)
 		return mentionSeqs(resp), err
 	}, func(got []uint64) bool { return slices.Equal(got, want) })
 

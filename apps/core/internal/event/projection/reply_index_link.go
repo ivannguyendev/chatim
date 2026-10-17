@@ -10,7 +10,7 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-func (x *MentionReplyIndex) link(ctx context.Context, c messageChange) error {
+func (x *ReplyIndex) link(ctx context.Context, c messageChange) error {
 	m := c.msg
 	parent := eventkit.MessageKey(m.Room, m.ReplyTo.Thread, m.ReplyTo.Seq)
 	reply := domain.Reply{Parent: domain.MsgKey(parent), Room: m.Room, Thread: m.Thread, Seq: m.Seq, Tenant: m.Tenant, From: m.From, At: m.CreatedAt}
@@ -23,7 +23,7 @@ func (x *MentionReplyIndex) link(ctx context.Context, c messageChange) error {
 	return x.deps.Threads.Touch(ctx, parent, m.Tenant, m.Seq, m.CreatedAt)
 }
 
-func (x *MentionReplyIndex) count(ctx context.Context, c messageChange, parent store.MsgKey, reply domain.Reply) error {
+func (x *ReplyIndex) count(ctx context.Context, c messageChange, parent store.MsgKey, reply domain.Reply) error {
 	tm, err := x.deps.Timers.ArmMessageCountCheck(ctx, parent, pbconv.RepliesCounter)
 	if err != nil {
 		return err
@@ -47,7 +47,7 @@ func (x *MentionReplyIndex) count(ctx context.Context, c messageChange, parent s
 	return err
 }
 
-func (x *MentionReplyIndex) writeReply(ctx context.Context, c messageChange, reply domain.Reply) (bool, int, error) {
+func (x *ReplyIndex) writeReply(ctx context.Context, c messageChange, reply domain.Reply) (bool, int, error) {
 	if !c.msg.Deleted {
 		added, err := x.deps.Replies.AddReply(ctx, reply)
 		return added, 1, err
@@ -60,7 +60,7 @@ func (x *MentionReplyIndex) writeReply(ctx context.Context, c messageChange, rep
 	return removed, -1, err
 }
 
-func (x *MentionReplyIndex) announce(c messageChange, parent store.MsgKey, rc domain.ReplyCount) {
+func (x *ReplyIndex) announce(c messageChange, parent store.MsgKey, rc domain.ReplyCount) {
 	typ, err := pbconv.DomainRoomType(c.roomType)
 	if err != nil {
 		return

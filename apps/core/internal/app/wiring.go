@@ -49,10 +49,12 @@ type node struct {
 	timers      drainer
 	projections drainer
 	sweeper     drainer
+	mention     drainer
+	setups      []preparer
 	watches     liveWatcher
 }
 
-func prepare(ctx context.Context, cfg config.Config, cl *clients) error {
+func prepare(ctx context.Context, cfg config.Config, cl *clients, setups ...preparer) error {
 	ctx, cancel := context.WithTimeout(ctx, cfg.ConnectTimeout)
 	defer cancel()
 	if err := mongostore.Bootstrap(ctx, cl.mongo.Database(cfg.MongoDB)); err != nil {
@@ -64,7 +66,15 @@ func prepare(ctx context.Context, cfg config.Config, cl *clients) error {
 	if err := projection.EnsureConsumer(ctx, cl.js, cfg.Projection); err != nil {
 		return config.RedactError(err, cfg.NATSURL)
 	}
-	return config.RedactError(timer.EnsureStream(ctx, cl.js, cfg.Timer), cfg.NATSURL)
+	if err := timer.EnsureStream(ctx, cl.js, cfg.Timer); err != nil {
+		return config.RedactError(err, cfg.NATSURL)
+	}
+	for _, s := range setups {
+		if err := s.Prepare(ctx); err != nil {
+			return config.RedactError(config.RedactError(err, cfg.NATSURL), cfg.MongoURI)
+		}
+	}
+	return nil
 }
 
 func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
@@ -106,7 +116,6 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 	if err != nil {
 		return nil, err
 	}
-	a.watches = liveWatchers{watch, roomWatch}
 	slotCfg := cfg.Slot
 	slotCfg.BeforeRelease = router.EvictSlots
 	slotCfg.AfterLose = router.EvictSlots
@@ -143,6 +152,10 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 		Limiter:         limiter,
 	}, log)
 	chatimv1.RegisterCoreServiceServer(a.grpc, svc)
+	mention, err := wireMention(cfg, cl, st, caches, svc, log)
+	if err != nil {
+		return nil, err
+	}
 	p := probes{
 		drops:           cl.pubCounters.Drops,
 		router:          router.Stats,
@@ -157,6 +170,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 		memberMalformed: watch.Malformed,
 		roomCache:       caches.probes(roomWatch),
 		events:          eventProbes{clears: clears, projection: projections, sweeper: sweeper},
+		mention:         a.attachMention(mention, liveWatchers{watch, roomWatch}),
 	}
 	handler, err := metrics.Handler(metricSources(p))
 	if err != nil {

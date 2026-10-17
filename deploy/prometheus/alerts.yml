@@ -85,7 +85,7 @@ groups:
           severity: warning
           guarantee: RC1
         annotations:
-          summary: A projection runs more than 10s behind its events; room activity, reply and mention indexes are stale.
+          summary: A projection runs more than 10s behind its events; room activity and reply indexes are stale.
       - alert: ChatimProjectionFailing
         expr: sum by (projection) (increase(chatim_core_projection_stuck_total[15m])) > 0
         labels:
@@ -93,6 +93,21 @@ groups:
           guarantee: RC1
         annotations:
           summary: A projection keeps failing an event that has been delivered six times or more.
+      - alert: ChatimMentionLagging
+        expr: max(chatim_mention_lag_seconds) > 10
+        for: 5m
+        labels:
+          severity: warning
+          guarantee: RC1
+        annotations:
+          summary: The mention consumer runs more than 10s behind its events; mention lists and notifications are late.
+      - alert: ChatimMentionFailing
+        expr: sum(increase(chatim_mention_stuck_total[15m])) > 0
+        labels:
+          severity: warning
+          guarantee: RC1
+        annotations:
+          summary: The mention consumer keeps failing an event that has been delivered six times or more.
       - alert: ChatimSweeperIdle
         expr: sum(increase(chatim_core_sweep_passes_total[10m])) == 0
         for: 10m

@@ -21,6 +21,7 @@ const (
 	slotRedisPool     = 4
 	dedupeSideConns   = 4
 	sweepPendingPages = 2
+	notifyMaxPending  = 16384
 )
 
 type redisPool struct {
@@ -35,6 +36,7 @@ type clients struct {
 	nats        *nats.Conn
 	js          jetstream.JetStream
 	sweepJS     jetstream.JetStream
+	notifyJS    jetstream.JetStream
 	pubCounters *publish.Counters
 }
 
@@ -113,46 +115,6 @@ func redisOptions(addr string, db int, password, name string, pool redisPool) *r
 		DialerRetries:         pool.dialerRetries,
 		DisableIdentity:       true,
 		ContextTimeoutEnabled: true,
-	}
-}
-
-func (c *clients) connectNATS(cfg config.Config, log *slog.Logger) error {
-	nc, err := nats.Connect(cfg.NATSURL, natsOptions(cfg, log)...)
-	if err != nil {
-		return fmt.Errorf("nats connect %s: %w", config.RedactURL(cfg.NATSURL), config.RedactError(err, cfg.NATSURL))
-	}
-	c.nats = nc
-	c.pubCounters = &publish.Counters{}
-	js, err := jetstream.New(nc, cfg.Publish.JetStreamOptions(log, c.pubCounters)...)
-	if err != nil {
-		return fmt.Errorf("jetstream: %w", config.RedactError(err, cfg.NATSURL))
-	}
-	c.js = js
-	sjs, err := jetstream.New(nc,
-		jetstream.WithPublishAsyncMaxPending(sweepPendingPages*cfg.Sweep.Batch),
-		jetstream.WithPublishAsyncTimeout(cfg.Publish.AckTimeout),
-	)
-	if err != nil {
-		return fmt.Errorf("sweeper jetstream: %w", config.RedactError(err, cfg.NATSURL))
-	}
-	c.sweepJS = sjs
-	return nil
-}
-
-func natsOptions(cfg config.Config, log *slog.Logger) []nats.Option {
-	return []nats.Option{
-		nats.Name("chatim-core-" + cfg.CoreID),
-		nats.Timeout(cfg.ConnectTimeout),
-		nats.MaxReconnects(-1),
-		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
-			if err != nil {
-				log.Warn("nats disconnected", "err", config.RedactError(err, cfg.NATSURL))
-			}
-		}),
-		nats.ReconnectHandler(func(*nats.Conn) { log.Info("nats reconnected") }),
-		nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) {
-			log.Warn("nats async error", "err", config.RedactError(err, cfg.NATSURL))
-		}),
 	}
 }
 
