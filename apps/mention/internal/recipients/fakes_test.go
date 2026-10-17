@@ -16,7 +16,12 @@ import (
 
 const tenant = "t1"
 
-var errDown = errors.New("core down")
+const coreMemberPage = 1000
+
+var (
+	errDown      = errors.New("core down")
+	errPageLimit = errors.New("invalid argument")
+)
 
 type fakeCore struct {
 	rooms      map[uint64][]domain.Member
@@ -60,8 +65,11 @@ func (c *fakeCore) MembersOf(_ context.Context, room uint64, users []string) ([]
 func (c *fakeCore) ListMembers(_ context.Context, room uint64, after domain.MemberCursor, limit int) ([]domain.Member, error) {
 	c.listCalls++
 	c.listLimits = append(c.listLimits, limit)
-	if c.failOn == "ListMembers" {
+	switch {
+	case c.failOn == "ListMembers":
 		return nil, errDown
+	case limit < 1 || limit > coreMemberPage:
+		return nil, fmt.Errorf("%w: limit", errPageLimit)
 	}
 	var out []domain.Member
 	for _, m := range c.rooms[room] {

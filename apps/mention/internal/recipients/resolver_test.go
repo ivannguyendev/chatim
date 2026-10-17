@@ -95,7 +95,7 @@ func TestOneEntryPerUserByPriority(t *testing.T) {
 
 func TestSmallAndLargeRoomsGiveTheSameRecipients(t *testing.T) {
 	staff := users("s", 0, 2100)
-	for _, size := range []int{recipients.SmallRoom, recipients.SmallRoom + 500} {
+	for _, size := range []int{recipients.SmallRoom, recipients.PageSize, recipients.SmallRoom + 500} {
 		f := newFixture(t)
 		f.catalogue(t, "staff", true)
 		f.catalogue(t, "nobody", true)
@@ -119,8 +119,8 @@ func TestSmallAndLargeRoomsGiveTheSameRecipients(t *testing.T) {
 		if small != (f.groups.of == 1 && f.groups.byGroup == 0) || !small && f.groups.byGroup != 4 {
 			t.Fatalf("room of %d: Of %d, MembersOfGroup %d calls", size, f.groups.of, f.groups.byGroup)
 		}
-		if f.core.listLimits[0] != recipients.SmallRoom+1 {
-			t.Fatalf("first ListMembers limit = %d, want %d", f.core.listLimits[0], recipients.SmallRoom+1)
+		if f.core.listLimits[0] != recipients.PageSize || recipients.PageSize > coreMemberPage {
+			t.Fatalf("first ListMembers limit = %d, want one page of %d within the core page %d", f.core.listLimits[0], recipients.PageSize, coreMemberPage)
 		}
 	}
 }

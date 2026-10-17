@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	SmallRoom = 1000
 	PageSize  = store.MaxGroupMemberPage
+	SmallRoom = PageSize - 1
 )
 
 type Core interface {
@@ -46,7 +46,7 @@ func (r Resolver) Resolve(ctx context.Context, tenant string, room uint64, roomT
 	}
 	small := len(roster) <= SmallRoom
 	if !whole {
-		if roster, err = r.Core.ListMembers(ctx, room, domain.MemberCursor{}, SmallRoom+1); err != nil {
+		if roster, err = r.Core.ListMembers(ctx, room, domain.MemberCursor{}, PageSize); err != nil {
 			return nil, err
 		}
 		small = len(roster) <= SmallRoom
