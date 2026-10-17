@@ -39,7 +39,7 @@ Hướng mới: **nhìn vào một lệnh là thấy hết việc nó làm.** L�
 |---|---|
 | Cờ `_state`/`_state_at` trên 7 collection, ghi cùng lần ghi dữ liệu; xoá cờ theo lô sau PubAck | Đổi subject, id event, payload, proto client → không đổi gì |
 | Mọi event inline đã có mang cờ; thêm cờ cho hai event trước đây chỉ worker phát: `counts_changed` của trả lời và `member_count_changed` sau khi sửa số | Websocket chống trùng và lấp lỗ seq → M4, theo hợp đồng ở mục 5 |
-| Sweeper trên core giữ slot 0, quét từ mốc, có phần lùi và lần dò | Sharding (open topics §2) → còn mở |
+| Sweeper trên core giữ slot 0, quét từ mốc, có phần lùi và lần dò | Sharding → không làm trong core; người triển khai tự chọn shard key (D161) |
 | Một consumer `projections` trên `CHATIM_EVT` với ba phần xử lý | Số thật prod (MarkRead/s, tỉ lệ sửa) → trước PoC prod-like |
 | Phiếu hẹn chuyển sang stream `CHATIM_TIMER`, consumer `timer-due` | Ghi tay vào DB → người chạy script tự bật cờ (mục 10) |
 | Xoá reader, `CHATIM_WORK`, effect, bit ack Redis, change feed, config và alert liên quan; viết lại `/app resync` | Xoá collection `reconciler_state` và stream `CHATIM_WORK` cũ trên môi trường đang chạy → người vận hành xoá tay (mục 7) |

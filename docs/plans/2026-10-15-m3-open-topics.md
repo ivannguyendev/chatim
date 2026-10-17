@@ -2,7 +2,7 @@
 
 > Ngày: 2026-10-15. Owner yêu cầu thảo luận trước khi làm (2026-10-14). Không có quyết định nào trong tài liệu này; mỗi chủ đề nêu vấn đề, ví dụ, số đo, các phương án và câu hỏi cần chốt.
 >
-> **Trạng thái (2026-10-16):** chủ đề 1 (effect engine chặn đầu hàng) đã giải quyết ở M3.1: owner chọn bỏ hẳn engine ngày 2026-10-15 (D141, [tóm tắt M3.1](2026-10-16-m3-1-state-driven-events-summary.md)). Chủ đề 2 (sharding) vẫn mở.
+> **Trạng thái (2026-10-16):** chủ đề 1 (effect engine chặn đầu hàng) đã giải quyết ở M3.1: owner chọn bỏ hẳn engine ngày 2026-10-15 (D141, [tóm tắt M3.1](2026-10-16-m3-1-state-driven-events-summary.md)). Chủ đề 2 (sharding) đã đóng (owner 2026-10-17, D161): core không làm sharding; core giữ các quy tắc shard-ready, người triển khai tự chọn shard key và cấu hình theo nghiệp vụ của họ. Phần §2 dưới đây giữ lại làm dữ liệu tham khảo cho họ.
 
 ## 1. Effect engine bị chặn đầu hàng
 

@@ -73,9 +73,9 @@
 
 ## Mục mang sang M5 (hardening)
 
-Mục đầu (sharding) cần owner thảo luận trước khi làm (D140); vấn đề, ví dụ, số đo, phương án và câu hỏi cần chốt ở [2026-10-15-m3-open-topics.md](plans/2026-10-15-m3-open-topics.md); owner có thể chọn làm ở milestone riêng trước M4. Mục "effect engine chặn đầu hàng" đã giải quyết ở M3.1 (bỏ engine) nên không còn trong danh sách. Từ M3.1, các mục chỉ thuộc effect engine (reader, work stream, worker, ack mark, change feed) ở các milestone cũ đã được gỡ khỏi danh sách dưới.
+Sharding không phải việc của core (owner 2026-10-17, D161): core giữ quy tắc shard-ready, người triển khai tự chọn shard key theo nghiệp vụ; số đo 2 shard để tham khảo ở [2026-10-15-m3-open-topics.md](plans/2026-10-15-m3-open-topics.md) §2. Mục "effect engine chặn đầu hàng" đã giải quyết ở M3.1 (bỏ engine) nên không còn trong danh sách. Từ M3.1, các mục chỉ thuộc effect engine (reader, work stream, worker, ack mark, change feed) ở các milestone cũ đã được gỡ khỏi danh sách dưới.
 
-Từ M3 (owner 2026-10-14, cần thảo luận trước khi làm): **sharding**. Thử trên 2 shard (`bin/m3-shard-profile.patch`): `members`, `message_interactions`, `mentions` có `_id` dài khác nhau nên shard theo `{_id: 1}` (design §5.1) không giữ một room/tin trên một shard, `ListMembers`/`GetReactions` hỏi mọi shard; hướng có thể: shard theo `{room_id: 1}` hoặc khoá dài cố định. Transaction owner (D100) vẫn chạy qua mongos. Từ M3.1 không còn change feed (điểm trễ ~10s qua mongos hết); sweeper đọc partial index `state_pending` sẽ hỏi mọi shard (index nhỏ, 2s một lần).
+Từ M3, tham khảo cho người triển khai (không làm trong core, D161): **sharding**. Thử trên 2 shard (`bin/m3-shard-profile.patch`): `members`, `message_interactions`, `mentions` có `_id` dài khác nhau nên shard theo `{_id: 1}` (design §5.1) không giữ một room/tin trên một shard, `ListMembers`/`GetReactions` hỏi mọi shard; hướng có thể: shard theo `{room_id: 1}` hoặc khoá dài cố định. Transaction owner (D100) vẫn chạy qua mongos. Từ M3.1 không còn change feed (điểm trễ ~10s qua mongos hết); sweeper đọc partial index `state_pending` sẽ hỏi mọi shard (index nhỏ, 2s một lần).
 
 Từ M3.1, chi tiết ở [tóm tắt kỹ thuật](plans/2026-10-16-m3-1-state-driven-events-summary.md) (Minor đầy đủ theo task trong plan execute `.claude/plans/`, local):
 
