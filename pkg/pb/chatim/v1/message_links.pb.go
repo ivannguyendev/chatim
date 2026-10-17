@@ -203,6 +203,7 @@ type MentionTarget struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Kind          MentionKind            `protobuf:"varint,1,opt,name=kind,proto3,enum=chatim.v1.MentionKind" json:"kind,omitempty"`
 	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	At            *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=at,proto3" json:"at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -251,10 +252,18 @@ func (x *MentionTarget) GetId() string {
 	return ""
 }
 
+func (x *MentionTarget) GetAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.At
+	}
+	return nil
+}
+
 type MentionSet struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Targets       []*MentionTarget       `protobuf:"bytes,1,rep,name=targets,proto3" json:"targets,omitempty"`
 	All           bool                   `protobuf:"varint,2,opt,name=all,proto3" json:"all,omitempty"`
+	AllAt         *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=all_at,json=allAt,proto3" json:"all_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -301,6 +310,13 @@ func (x *MentionSet) GetAll() bool {
 		return x.All
 	}
 	return false
+}
+
+func (x *MentionSet) GetAllAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.AllAt
+	}
+	return nil
 }
 
 type ReplyPreview struct {
@@ -499,14 +515,16 @@ const file_chatim_v1_message_links_proto_rawDesc = "" +
 	"threadRoot\x12\x10\n" +
 	"\x03seq\x18\x03 \x01(\x04R\x03seq\x12\x16\n" +
 	"\x06author\x18\x04 \x01(\tR\x06author\x123\n" +
-	"\asent_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x06sentAt\"K\n" +
+	"\asent_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x06sentAt\"w\n" +
 	"\rMentionTarget\x12*\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x16.chatim.v1.MentionKindR\x04kind\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id\"R\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\x12*\n" +
+	"\x02at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x02at\"\x85\x01\n" +
 	"\n" +
 	"MentionSet\x122\n" +
 	"\atargets\x18\x01 \x03(\v2\x18.chatim.v1.MentionTargetR\atargets\x12\x10\n" +
-	"\x03all\x18\x02 \x01(\bR\x03all\"~\n" +
+	"\x03all\x18\x02 \x01(\bR\x03all\x121\n" +
+	"\x06all_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x05allAt\"~\n" +
 	"\fReplyPreview\x12\x10\n" +
 	"\x03seq\x18\x01 \x01(\x04R\x03seq\x12\x16\n" +
 	"\x06sender\x18\x02 \x01(\tR\x06sender\x12\x12\n" +
@@ -555,13 +573,15 @@ var file_chatim_v1_message_links_proto_goTypes = []any{
 var file_chatim_v1_message_links_proto_depIdxs = []int32{
 	8, // 0: chatim.v1.ForwardRef.sent_at:type_name -> google.protobuf.Timestamp
 	0, // 1: chatim.v1.MentionTarget.kind:type_name -> chatim.v1.MentionKind
-	3, // 2: chatim.v1.MentionSet.targets:type_name -> chatim.v1.MentionTarget
-	8, // 3: chatim.v1.MentionGroup.since:type_name -> google.protobuf.Timestamp
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	8, // 2: chatim.v1.MentionTarget.at:type_name -> google.protobuf.Timestamp
+	3, // 3: chatim.v1.MentionSet.targets:type_name -> chatim.v1.MentionTarget
+	8, // 4: chatim.v1.MentionSet.all_at:type_name -> google.protobuf.Timestamp
+	8, // 5: chatim.v1.MentionGroup.since:type_name -> google.protobuf.Timestamp
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_chatim_v1_message_links_proto_init() }

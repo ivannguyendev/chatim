@@ -59,11 +59,15 @@ func (r *editRebuilder) Rebuild(ctx context.Context, doc store.PendingDoc, bit s
 	case found[0].Version < fact.Version:
 		return nil, errProjectionBehind
 	}
+	previous, err := store.PreviousMentions(ctx, r.edits, found[0], fact)
+	if err != nil {
+		return nil, err
+	}
 	typ, err := r.types.Type(ctx, doc.Room)
 	if err != nil {
 		return nil, err
 	}
-	return one(pbconv.MessageChanged(typ, found[0], fact)), nil
+	return one(pbconv.MessageChanged(typ, found[0], fact, previous)), nil
 }
 
 func (r *editRebuilder) project(ctx context.Context, key store.MsgKey, fact domain.Edit) error {

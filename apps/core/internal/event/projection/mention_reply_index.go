@@ -124,6 +124,7 @@ func messageChangeOf(ev Event) (messageChange, error) {
 		Room: ev.Room, Thread: pm.GetThreadRoot(), Seq: pm.GetSeq(), Tenant: ev.Proto.GetTenant(), From: pm.GetSender(),
 		CreatedAt: pm.GetCreatedAt().AsTime(), Version: pm.GetVer(), Deleted: pm.GetDeleted(),
 		ReplyTo: pbconv.DomainReplyRef(pm.GetReplyTo()), Mentions: pbconv.DomainMentionTargets(pm.GetMentionTargets()), MentionAll: pm.GetMentionAll(),
+		MentionAllAt: pbconv.DomainTime(pm.GetMentionAllAt()),
 	}
 	if pm.GetEditedAt().CheckValid() == nil {
 		c.msg.EditedAt = pm.GetEditedAt().AsTime()

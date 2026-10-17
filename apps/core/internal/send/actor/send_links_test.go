@@ -7,6 +7,7 @@ import (
 	"testing/synctest"
 
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
@@ -51,12 +52,14 @@ func TestSentMessageCarriesRepliesForwardsAndMentions(t *testing.T) {
 			t.Fatalf("events = %v, want one msg_created", evs)
 		}
 		got := evs[0].GetMessageCreated().GetMessage()
+		sentAt := timestamppb.New(m.CreatedAt)
 		wantMentions := []*chatimv1.MentionTarget{
-			{Kind: chatimv1.MentionKind_MENTION_KIND_USER, Id: "minh"},
-			{Kind: chatimv1.MentionKind_MENTION_KIND_GROUP, Id: "team-design"},
+			{Kind: chatimv1.MentionKind_MENTION_KIND_USER, Id: "minh", At: sentAt},
+			{Kind: chatimv1.MentionKind_MENTION_KIND_GROUP, Id: "team-design", At: sentAt},
 		}
 		if !proto.Equal(got.GetReplyTo(), &chatimv1.ReplyRef{Seq: 1}) || got.GetForwardFrom().GetAuthor() != "lan" || !got.GetMentionAll() ||
-			len(got.GetMentionTargets()) != 2 || !proto.Equal(got.GetMentionTargets()[0], wantMentions[0]) || !proto.Equal(got.GetMentionTargets()[1], wantMentions[1]) {
+			len(got.GetMentionTargets()) != 2 || !proto.Equal(got.GetMentionTargets()[0], wantMentions[0]) || !proto.Equal(got.GetMentionTargets()[1], wantMentions[1]) ||
+			!proto.Equal(got.GetMentionAllAt(), sentAt) {
 			t.Fatalf("msg_created = %v, want reply_to, forward_from and mentions", got)
 		}
 	})

@@ -82,7 +82,7 @@ func TestEventsOfADeletedMessageCarryNoContentLinks(t *testing.T) {
 	gone := domain.Edit{Room: m.Room, Seq: m.Seq, Version: 2, Kind: domain.EditDelete, By: "alice", At: sentAt}
 	pin := domain.PinAction{Room: m.Room, Seq: m.Seq, PV: 1, Op: domain.PinOpPin, By: "bob", At: sentAt}
 	for name, got := range map[string]*chatimv1.Message{
-		"msg_deleted": pbconv.MessageDeleted(domain.RoomGroup, m, gone).GetMessageDeleted().GetMessage(),
+		"msg_deleted": pbconv.MessageDeleted(domain.RoomGroup, m, gone, domain.Mentions{}).GetMessageDeleted().GetMessage(),
 		"msg_pinned":  pbconv.PinChanged(domain.RoomGroup, m, pin).GetMessagePinned().GetMessage(),
 		"msg_created": pbconv.MessageCreated(domain.RoomGroup, m).GetMessageCreated().GetMessage(),
 	} {

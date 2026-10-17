@@ -120,6 +120,14 @@ func TestRealInfraSweeperProjectsAnEditWrittenOutsideTheCore(t *testing.T) {
 	core.awaitSweeper(t)
 
 	st := itStore(it, core)
+	sentAt := time.Now().UTC().Truncate(time.Millisecond)
+	original := domain.Edit{
+		Room: room, Seq: seq, Kind: domain.EditOriginal, Tenant: itTenant, By: itUser, Text: "original", At: sentAt,
+		Mentions: []domain.MentionTarget{{Kind: domain.MentionUser, ID: "minh", At: sentAt}},
+	}
+	if err := st.Append(t.Context(), original); err != nil {
+		t.Fatalf("append the original row outside the core: %v", err)
+	}
 	fact := domain.Edit{
 		Room: room, Seq: seq, Version: 1, Kind: domain.EditText, Tenant: itTenant, By: itUser,
 		Text: "edited outside the core", At: time.Now().UTC().Truncate(time.Millisecond),
@@ -135,6 +143,9 @@ func TestRealInfraSweeperProjectsAnEditWrittenOutsideTheCore(t *testing.T) {
 	expectSweptWithin(t, core, appended, "msg_edited of a fact never projected")
 	if e := ev.GetMessageEdited(); e.GetVer() != 1 || e.GetMessage().GetText() != fact.Text || e.GetMessage().GetVer() != 1 {
 		t.Fatalf("msg_edited from the sweeper = %v, want the projected snapshot at version 1", ev)
+	}
+	if p := ev.GetMessageEdited().GetPreviousMentions().GetTargets(); len(p) != 1 || p[0].GetId() != "minh" || !p[0].GetAt().AsTime().Equal(sentAt) {
+		t.Fatalf("previous_mentions = %v, want minh of the original row", p)
 	}
 	got, err := st.Find(t.Context(), room, []store.MsgKey{{Room: room, Seq: seq}})
 	if err != nil || len(got) != 1 || got[0].Text != fact.Text || got[0].Version != 1 || !got[0].EditedAt.Equal(fact.At) {

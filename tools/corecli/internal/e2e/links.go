@@ -20,6 +20,14 @@ func BookmarkEventID(room string, seq uint64, user string, ver uint32) string {
 	return room + "-bm-0-" + strconv.FormatUint(seq, 10) + "-" + user + "-v" + strconv.FormatUint(uint64(ver), 10)
 }
 
+func CreatedSubject(root, tenant, room string, m *chatimv1.Message) string {
+	class := classOf(KindCreated)
+	if len(m.GetMentionTargets()) > 0 || m.GetMentionAll() {
+		class = "mention"
+	}
+	return root + "." + tenant + "." + class + "." + room + ".evt." + KindCreated
+}
+
 func RepliesPayload(n uint32) string { return "replies=" + strconv.FormatUint(uint64(n), 10) }
 
 func BookmarkPayload(on bool) string { return "on=" + strconv.FormatBool(on) }

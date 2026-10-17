@@ -81,7 +81,12 @@ func TestProjectionsConsumerRunsEveryHandlerFromRealEventsAndSettlesTheDurable(t
 		reads.move(t, roomA, true, 95).Proto, index.send(t, 1, mentioning).Proto, reactionChanged(roomB, 1, at(2)),
 		msgEdited(roomC, 0, 1, at(3)), roomCreated(roomB),
 	}
-	publishAll(t, js, cfg, events)
+	subjects := publishAll(t, js, cfg, events)
+	for _, data := range []string{".mention.", ".message."} {
+		if !slices.ContainsFunc(subjects, func(s string) bool { return strings.Contains(s, data) }) {
+			t.Fatalf("subjects %v carry no %s data", subjects, data)
+		}
+	}
 	hs := []projection.Projection{projection.NewRoomActivity(rooms), index.index, reads.read}
 	c := built(projection.NewConsumer(hs, projection.NewSource(js, cfg), cfg, (&testlog.Sink{}).Logger()))(t)
 	result := make(chan error, 1)
@@ -113,8 +118,9 @@ func roomCreated(room uint64) *chatimv1.Event {
 	return ev
 }
 
-func publishAll(t *testing.T, js jetstream.JetStream, cfg projection.Config, events []*chatimv1.Event) {
+func publishAll(t *testing.T, js jetstream.JetStream, cfg projection.Config, events []*chatimv1.Event) []string {
 	t.Helper()
+	subjects := make([]string, 0, len(events))
 	for _, ev := range events {
 		m, err := publish.Message(cfg.SubjectRoot, mustRoom(t, ev), ev)
 		if err != nil {
@@ -123,7 +129,9 @@ func publishAll(t *testing.T, js jetstream.JetStream, cfg projection.Config, eve
 		if _, err := js.PublishMsg(t.Context(), m); err != nil {
 			t.Fatalf("PublishMsg %s: %v", m.Subject, err)
 		}
+		subjects = append(subjects, m.Subject)
 	}
+	return subjects
 }
 
 func mustRoom(t *testing.T, ev *chatimv1.Event) uint64 {

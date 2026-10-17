@@ -96,7 +96,7 @@ func (rg *indexRig) edit(t *testing.T, seq uint64, ver uint32, kind domain.EditK
 	if err := rg.msgs.ApplyEdit(t.Context(), e); err != nil {
 		t.Fatalf("ApplyEdit v%d: %v", ver, err)
 	}
-	return decoded(t, pbconv.MessageChanged(domain.RoomGroup, rg.message(t, seq), e))
+	return decoded(t, pbconv.MessageChanged(domain.RoomGroup, rg.message(t, seq), e, domain.Mentions{}))
 }
 
 func (rg *indexRig) message(t *testing.T, seq uint64) domain.Message {

@@ -573,11 +573,12 @@ func (x *RoomUpdated) GetRoom() *Room {
 }
 
 type MessageEdited struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Message       *Message               `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
-	Ver           uint32                 `protobuf:"varint,2,opt,name=ver,proto3" json:"ver,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Message          *Message               `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	Ver              uint32                 `protobuf:"varint,2,opt,name=ver,proto3" json:"ver,omitempty"`
+	PreviousMentions *MentionSet            `protobuf:"bytes,3,opt,name=previous_mentions,json=previousMentions,proto3" json:"previous_mentions,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *MessageEdited) Reset() {
@@ -624,12 +625,20 @@ func (x *MessageEdited) GetVer() uint32 {
 	return 0
 }
 
+func (x *MessageEdited) GetPreviousMentions() *MentionSet {
+	if x != nil {
+		return x.PreviousMentions
+	}
+	return nil
+}
+
 type MessageDeleted struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Message       *Message               `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
-	Ver           uint32                 `protobuf:"varint,2,opt,name=ver,proto3" json:"ver,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Message          *Message               `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	Ver              uint32                 `protobuf:"varint,2,opt,name=ver,proto3" json:"ver,omitempty"`
+	PreviousMentions *MentionSet            `protobuf:"bytes,3,opt,name=previous_mentions,json=previousMentions,proto3" json:"previous_mentions,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *MessageDeleted) Reset() {
@@ -674,6 +683,13 @@ func (x *MessageDeleted) GetVer() uint32 {
 		return x.Ver
 	}
 	return 0
+}
+
+func (x *MessageDeleted) GetPreviousMentions() *MentionSet {
+	if x != nil {
+		return x.PreviousMentions
+	}
+	return nil
 }
 
 type ReactionChanged struct {
@@ -948,13 +964,15 @@ const file_chatim_v1_events_proto_rawDesc = "" +
 	"\vRoomCreated\x12#\n" +
 	"\x04room\x18\x01 \x01(\v2\x0f.chatim.v1.RoomR\x04room\"2\n" +
 	"\vRoomUpdated\x12#\n" +
-	"\x04room\x18\x01 \x01(\v2\x0f.chatim.v1.RoomR\x04room\"O\n" +
+	"\x04room\x18\x01 \x01(\v2\x0f.chatim.v1.RoomR\x04room\"\x93\x01\n" +
 	"\rMessageEdited\x12,\n" +
 	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\x12\x10\n" +
-	"\x03ver\x18\x02 \x01(\rR\x03ver\"P\n" +
+	"\x03ver\x18\x02 \x01(\rR\x03ver\x12B\n" +
+	"\x11previous_mentions\x18\x03 \x01(\v2\x15.chatim.v1.MentionSetR\x10previousMentions\"\x94\x01\n" +
 	"\x0eMessageDeleted\x12,\n" +
 	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\x12\x10\n" +
-	"\x03ver\x18\x02 \x01(\rR\x03ver\"z\n" +
+	"\x03ver\x18\x02 \x01(\rR\x03ver\x12B\n" +
+	"\x11previous_mentions\x18\x03 \x01(\v2\x15.chatim.v1.MentionSetR\x10previousMentions\"z\n" +
 	"\x0fReactionChanged\x12\x12\n" +
 	"\x04user\x18\x01 \x01(\tR\x04user\x12\x14\n" +
 	"\x05emoji\x18\x02 \x01(\tR\x05emoji\x12%\n" +
@@ -1012,8 +1030,9 @@ var file_chatim_v1_events_proto_goTypes = []any{
 	(*RoomPreferencesChanged)(nil), // 21: chatim.v1.RoomPreferencesChanged
 	(*Message)(nil),                // 22: chatim.v1.Message
 	(*Room)(nil),                   // 23: chatim.v1.Room
-	(*ReactionSummary)(nil),        // 24: chatim.v1.ReactionSummary
-	(*ReplyCount)(nil),             // 25: chatim.v1.ReplyCount
+	(*MentionSet)(nil),             // 24: chatim.v1.MentionSet
+	(*ReactionSummary)(nil),        // 25: chatim.v1.ReactionSummary
+	(*ReplyCount)(nil),             // 26: chatim.v1.ReplyCount
 }
 var file_chatim_v1_events_proto_depIdxs = []int32{
 	10, // 0: chatim.v1.Event.room_type:type_name -> chatim.v1.RoomType
@@ -1041,16 +1060,18 @@ var file_chatim_v1_events_proto_depIdxs = []int32{
 	23, // 22: chatim.v1.RoomCreated.room:type_name -> chatim.v1.Room
 	23, // 23: chatim.v1.RoomUpdated.room:type_name -> chatim.v1.Room
 	22, // 24: chatim.v1.MessageEdited.message:type_name -> chatim.v1.Message
-	22, // 25: chatim.v1.MessageDeleted.message:type_name -> chatim.v1.Message
-	24, // 26: chatim.v1.CountsChanged.reactions:type_name -> chatim.v1.ReactionSummary
-	25, // 27: chatim.v1.CountsChanged.reply_count:type_name -> chatim.v1.ReplyCount
-	22, // 28: chatim.v1.MessagePinned.message:type_name -> chatim.v1.Message
-	22, // 29: chatim.v1.MessageUnpinned.message:type_name -> chatim.v1.Message
-	30, // [30:30] is the sub-list for method output_type
-	30, // [30:30] is the sub-list for method input_type
-	30, // [30:30] is the sub-list for extension type_name
-	30, // [30:30] is the sub-list for extension extendee
-	0,  // [0:30] is the sub-list for field type_name
+	24, // 25: chatim.v1.MessageEdited.previous_mentions:type_name -> chatim.v1.MentionSet
+	22, // 26: chatim.v1.MessageDeleted.message:type_name -> chatim.v1.Message
+	24, // 27: chatim.v1.MessageDeleted.previous_mentions:type_name -> chatim.v1.MentionSet
+	25, // 28: chatim.v1.CountsChanged.reactions:type_name -> chatim.v1.ReactionSummary
+	26, // 29: chatim.v1.CountsChanged.reply_count:type_name -> chatim.v1.ReplyCount
+	22, // 30: chatim.v1.MessagePinned.message:type_name -> chatim.v1.Message
+	22, // 31: chatim.v1.MessageUnpinned.message:type_name -> chatim.v1.Message
+	32, // [32:32] is the sub-list for method output_type
+	32, // [32:32] is the sub-list for method input_type
+	32, // [32:32] is the sub-list for extension type_name
+	32, // [32:32] is the sub-list for extension extendee
+	0,  // [0:32] is the sub-list for field type_name
 }
 
 func init() { file_chatim_v1_events_proto_init() }

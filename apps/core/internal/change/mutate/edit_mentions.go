@@ -6,6 +6,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
 type MentionSet struct {
@@ -32,6 +33,19 @@ func (m *Mutator) resolveMentions(ctx context.Context, c change, grant access.Re
 	}
 	grant.Action = access.MentionAll
 	return m.d.Access.Allow(ctx, grant)
+}
+
+type committed struct {
+	fact   domain.Edit
+	before domain.Mentions
+	known  bool
+}
+
+func (m *Mutator) previousOf(ctx context.Context, done committed, snap domain.Message) (domain.Mentions, error) {
+	if done.known && !snap.Deleted && snap.Version == done.fact.Version {
+		return done.before, nil
+	}
+	return store.PreviousMentions(ctx, m.d.Edits, snap, done.fact)
 }
 
 func previousMentions(msg domain.Message, latest domain.Edit, found bool) domain.Mentions {

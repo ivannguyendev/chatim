@@ -58,11 +58,13 @@ message RoomUpdated {
 message MessageEdited {
   Message message = 1;
   uint32 ver = 2;
+  MentionSet previous_mentions = 3;
 }
 
 message MessageDeleted {
   Message message = 1;
   uint32 ver = 2;
+  MentionSet previous_mentions = 3;
 }
 
 message ReactionChanged {

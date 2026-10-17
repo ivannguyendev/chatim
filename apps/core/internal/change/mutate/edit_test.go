@@ -42,7 +42,7 @@ func TestEditWritesVersionOneWithTheOriginalText(t *testing.T) {
 		t.Fatalf("facts = %+v, want %+v", facts, want)
 	}
 	rooms, events := rg.events.list()
-	if !slices.Equal(rooms, []uint64{room}) || len(events) != 1 || !proto.Equal(events[0], pbconv.MessageEdited(domain.RoomGroup, got, want)) {
+	if !slices.Equal(rooms, []uint64{room}) || len(events) != 1 || !proto.Equal(events[0], pbconv.MessageEdited(domain.RoomGroup, got, want, domain.Mentions{})) {
 		t.Fatalf("enqueued %v %v, want one msg_edited for room %d", rooms, events, room)
 	}
 	if id := events[0].GetId(); id != pbconv.MessageChangeEventID(room, 0, 1, 1) {

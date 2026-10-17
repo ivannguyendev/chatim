@@ -71,7 +71,7 @@ func TestMessageEditedEnvelope(t *testing.T) {
 	m, e := changeOf(domain.EditText)
 	want := changeEnvelope()
 	want.Payload = &chatimv1.Event_MessageEdited{MessageEdited: &chatimv1.MessageEdited{Message: pbconv.Message(m), Ver: 2}}
-	if got := pbconv.MessageEdited(domain.RoomGroup, m, e); !proto.Equal(got, want) {
+	if got := pbconv.MessageEdited(domain.RoomGroup, m, e, domain.Mentions{}); !proto.Equal(got, want) {
 		t.Fatalf("MessageEdited = %v, want %v", got, want)
 	}
 }
@@ -80,7 +80,7 @@ func TestMessageDeletedEnvelope(t *testing.T) {
 	m, e := changeOf(domain.EditDelete)
 	want := changeEnvelope()
 	want.Payload = &chatimv1.Event_MessageDeleted{MessageDeleted: &chatimv1.MessageDeleted{Message: pbconv.Message(m), Ver: 2}}
-	got := pbconv.MessageDeleted(domain.RoomGroup, m, e)
+	got := pbconv.MessageDeleted(domain.RoomGroup, m, e, domain.Mentions{})
 	if !proto.Equal(got, want) {
 		t.Fatalf("MessageDeleted = %v, want %v", got, want)
 	}

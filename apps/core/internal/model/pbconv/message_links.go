@@ -1,6 +1,10 @@
 package pbconv
 
 import (
+	"time"
+
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
@@ -34,16 +38,16 @@ func MentionTargets(targets []domain.MentionTarget) []*chatimv1.MentionTarget {
 	}
 	out := make([]*chatimv1.MentionTarget, len(targets))
 	for i, t := range targets {
-		out[i] = &chatimv1.MentionTarget{Kind: mentionKind(t.Kind), Id: t.ID}
+		out[i] = &chatimv1.MentionTarget{Kind: mentionKind(t.Kind), Id: t.ID, At: optionalTime(t.At)}
 	}
 	return out
 }
 
-func MentionSet(targets []domain.MentionTarget, all bool) *chatimv1.MentionSet {
-	if len(targets) == 0 && !all {
+func MentionSet(n domain.Mentions) *chatimv1.MentionSet {
+	if len(n.Targets) == 0 && !n.All {
 		return nil
 	}
-	return &chatimv1.MentionSet{Targets: MentionTargets(targets), All: all}
+	return &chatimv1.MentionSet{Targets: MentionTargets(n.Targets), All: n.All, AllAt: optionalTime(n.AllAt)}
 }
 
 func DomainMentionTargets(targets []*chatimv1.MentionTarget) []domain.MentionTarget {
@@ -52,9 +56,16 @@ func DomainMentionTargets(targets []*chatimv1.MentionTarget) []domain.MentionTar
 	}
 	out := make([]domain.MentionTarget, len(targets))
 	for i, t := range targets {
-		out[i] = domain.MentionTarget{Kind: domainMentionKind(t.GetKind()), ID: t.GetId()}
+		out[i] = domain.MentionTarget{Kind: domainMentionKind(t.GetKind()), ID: t.GetId(), At: DomainTime(t.GetAt())}
 	}
 	return out
+}
+
+func DomainTime(ts *timestamppb.Timestamp) time.Time {
+	if ts.CheckValid() != nil {
+		return time.Time{}
+	}
+	return ts.AsTime()
 }
 
 func ReplyCount(c domain.ReplyCount) *chatimv1.ReplyCount {

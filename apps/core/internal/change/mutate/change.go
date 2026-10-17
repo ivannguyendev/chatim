@@ -57,54 +57,60 @@ func (m *Mutator) apply(ctx context.Context, c change) (domain.Message, error) {
 	if err := m.resolveMentions(ctx, c, grant); err != nil {
 		return domain.Message{}, err
 	}
-	fact, err := m.commit(ctx, c, msg)
+	done, err := m.commit(ctx, c, msg)
 	if err != nil {
 		return domain.Message{}, err
 	}
-	if err := m.project(ctx, fact); err != nil {
+	if err := m.project(ctx, done.fact); err != nil {
 		return domain.Message{}, err
 	}
 	snap, err := m.find(ctx, c.key)
 	if err != nil {
 		return domain.Message{}, err
 	}
-	_ = m.d.Events.Enqueue(c.key.Room, []*chatimv1.Event{pbconv.MessageChanged(grant.Room.Type, snap, fact)})
+	previous, err := m.previousOf(ctx, done, snap)
+	if err != nil {
+		return domain.Message{}, err
+	}
+	_ = m.d.Events.Enqueue(c.key.Room, []*chatimv1.Event{pbconv.MessageChanged(grant.Room.Type, snap, done.fact, previous)})
 	return snap, nil
 }
 
-func (m *Mutator) commit(ctx context.Context, c change, msg domain.Message) (domain.Edit, error) {
+func (m *Mutator) commit(ctx context.Context, c change, msg domain.Message) (committed, error) {
 	if c.base >= math.MaxInt32 {
-		return domain.Edit{}, domain.ErrVersionConflict
+		return committed{}, domain.ErrVersionConflict
 	}
 	next := c.base + 1
 	latest, found, err := m.d.Edits.Latest(ctx, c.key)
 	if err != nil {
-		return domain.Edit{}, err
+		return committed{}, err
 	}
 	switch {
 	case found && latest.Version == next && c.matches(latest):
-		return latest, nil
+		return committed{fact: latest, before: msg.MentionSet(), known: msg.Version == c.base}, nil
 	case msg.Deleted || (found && latest.Kind == domain.EditDelete):
-		return domain.Edit{}, domain.ErrMessageDeleted
+		return committed{}, domain.ErrMessageDeleted
 	case c.base != max(msg.Version, latest.Version):
-		return domain.Edit{}, domain.ErrVersionConflict
+		return committed{}, domain.ErrVersionConflict
 	}
 	if err := m.refuseReplied(ctx, c); err != nil {
-		return domain.Edit{}, err
+		return committed{}, err
 	}
 	if err := m.keepOriginal(ctx, c, msg, next); err != nil {
-		return domain.Edit{}, err
+		return committed{}, err
 	}
 	at := m.now()
-	c = c.stamped(previousMentions(msg, latest, found), at)
+	before := previousMentions(msg, latest, found)
+	c = c.stamped(before, at)
 	fact := c.fact(next, at)
 	switch err := m.d.Edits.Append(ctx, fact); {
 	case errors.Is(err, store.ErrEditExists):
-		return m.recognize(ctx, c, next)
+		got, err := m.recognize(ctx, c, next)
+		return committed{fact: got, before: before, known: true}, err
 	case err != nil:
-		return domain.Edit{}, err
+		return committed{}, err
 	}
-	return fact, nil
+	return committed{fact: fact, before: before, known: true}, nil
 }
 
 func (m *Mutator) refuseReplied(ctx context.Context, c change) error {

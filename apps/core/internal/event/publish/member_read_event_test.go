@@ -33,8 +33,8 @@ func everyKind() map[string]kindCase {
 	pinned := bob2.Next(domain.RoleMember, domain.MemberActive, 5, "r", "bob", sentAt)
 	return map[string]kindCase{
 		"msg_created":              {pbconv.MessageCreated(domain.RoomGroup, m), "evt.acme.message.101.msg_created"},
-		"msg_edited":               {pbconv.MessageEdited(domain.RoomGroup, m, e), "evt.acme.message.101.msg_edited"},
-		"msg_deleted":              {pbconv.MessageDeleted(domain.RoomGroup, m, e), "evt.acme.message.101.msg_deleted"},
+		"msg_edited":               {pbconv.MessageEdited(domain.RoomGroup, m, e, domain.Mentions{}), "evt.acme.message.101.msg_edited"},
+		"msg_deleted":              {pbconv.MessageDeleted(domain.RoomGroup, m, e, domain.Mentions{}), "evt.acme.message.101.msg_deleted"},
 		"reaction_changed":         {pbconv.ReactionChanged(domain.RoomGroup, r), "evt.acme.message.101.reaction_changed"},
 		"counts_changed":           {pbconv.CountsChanged(domain.RoomGroup, m, sentAt), "evt.acme.message.101.counts_changed"},
 		"room_created":             {pbconv.RoomCreated(room), "evt.acme.room.101.room_created"},
@@ -72,7 +72,7 @@ func TestEachKindGoesToTheSubjectOfItsData(t *testing.T) {
 	if msg, err := publish.Message("evt", roomA, unknown); err == nil || msg != nil {
 		t.Fatalf("Message(no payload) = %v, %v; want an error and nothing to publish", msg, err)
 	}
-	if subject, err := publish.SubjectFor("evt", tenant, roomA, "bogus"); !errors.Is(err, apperr.ErrInvalidArgument) || subject != "" {
+	if subject, err := publish.SubjectFor("evt", tenant, roomA, "bogus", false); !errors.Is(err, apperr.ErrInvalidArgument) || subject != "" {
 		t.Fatalf("SubjectFor(bogus) = %q, %v; want ErrInvalidArgument", subject, err)
 	}
 }

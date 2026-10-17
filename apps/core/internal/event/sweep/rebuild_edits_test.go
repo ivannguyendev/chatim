@@ -21,6 +21,11 @@ func (f *fullRig) appendEdit(t *testing.T, seq uint64, ver uint32, kind domain.E
 	}
 }
 
+func (f *fullRig) original(t *testing.T, seq uint64, at time.Time) {
+	t.Helper()
+	f.appendEdit(t, seq, 0, domain.EditOriginal, "hi", at)
+}
+
 func (f *fullRig) message(t *testing.T, seq uint64) domain.Message {
 	t.Helper()
 	found, err := f.msgs.Find(t.Context(), room, []store.MsgKey{{Room: room, Seq: seq}})
@@ -36,6 +41,7 @@ func TestEditFactAheadOfItsProjectionIsAppliedThenPublished(t *testing.T) {
 		old := time.Now().Add(-time.Minute)
 		f.group(t, old, "ann")
 		f.send(t, room, 1, old)
+		f.original(t, 1, old)
 		f.appendEdit(t, 1, 1, domain.EditText, "hello", old.Add(time.Second))
 		f.settle()
 		id := pbconv.MessageChangeEventID(room, 0, 1, 1)
@@ -57,6 +63,7 @@ func TestDeleteFactProjectsTheDeleteAndPurgesOlderTexts(t *testing.T) {
 		old := time.Now().Add(-time.Minute)
 		f.group(t, old, "ann")
 		f.send(t, room, 1, old)
+		f.original(t, 1, old)
 		f.appendEdit(t, 1, 1, domain.EditText, "hello", old.Add(time.Second))
 		f.appendEdit(t, 1, 2, domain.EditDelete, "", old.Add(2*time.Second))
 		f.settle()

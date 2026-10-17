@@ -16,6 +16,17 @@ func mentionSet(all bool, users ...string) *chatimv1.MentionSet {
 	return set
 }
 
+func untimed(set *chatimv1.MentionSet) *chatimv1.MentionSet {
+	if set == nil {
+		return nil
+	}
+	out := &chatimv1.MentionSet{All: set.GetAll()}
+	for _, t := range set.GetTargets() {
+		out.Targets = append(out.Targets, &chatimv1.MentionTarget{Kind: t.GetKind(), Id: t.GetId()})
+	}
+	return out
+}
+
 func TestEditMentionsAreKeptReplacedOrClearedAndListedPerVersion(t *testing.T) {
 	rg := newRig(t, options{})
 	room := rg.createGroup(t, "acme", "alice", "bob")
@@ -37,7 +48,7 @@ func TestEditMentionsAreKeptReplacedOrClearedAndListedPerVersion(t *testing.T) {
 			t.Fatalf("EditMessage %d: %v", i+1, err)
 		}
 		m := resp.GetMessage()
-		got := &chatimv1.MentionSet{Targets: m.GetMentionTargets(), All: m.GetMentionAll()}
+		got := untimed(&chatimv1.MentionSet{Targets: m.GetMentionTargets(), All: m.GetMentionAll()})
 		if want := e.want; want == nil && (len(got.Targets) > 0 || got.All) || want != nil && !proto.Equal(got, want) {
 			t.Fatalf("edit %d mentions = %v, want %v", i+1, got, want)
 		}
@@ -52,7 +63,7 @@ func TestEditMentionsAreKeptReplacedOrClearedAndListedPerVersion(t *testing.T) {
 		t.Fatalf("versions = %v, want %d rows", vs, len(want))
 	}
 	for i, v := range vs {
-		if !proto.Equal(v.GetMentions(), want[i]) {
+		if !proto.Equal(untimed(v.GetMentions()), want[i]) {
 			t.Fatalf("version %d mentions = %v, want %v", v.GetVer(), v.GetMentions(), want[i])
 		}
 	}

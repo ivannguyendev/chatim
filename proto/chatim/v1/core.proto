@@ -73,6 +73,7 @@ message Message {
   bytes meta = 22;
   string my_reaction = 23;
   bool bookmarked = 24;
+  google.protobuf.Timestamp mention_all_at = 25;
 }
 
 message MessageVersion {
