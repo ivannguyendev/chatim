@@ -44,10 +44,10 @@ type liveFeed struct {
 	events []e2e.Event
 }
 
-func openLive(url, subject string) (*liveFeed, error) {
-	nc, err := nats.Connect(url, nats.Name("chatim-corecli-e2e-members"), nats.MaxReconnects(-1))
+func subscribe(url, name, subject string) (*nats.Conn, *nats.Subscription, error) {
+	nc, err := nats.Connect(url, nats.Name(name), nats.MaxReconnects(-1))
 	if err != nil {
-		return nil, fmt.Errorf("connect nats: %w", err)
+		return nil, nil, fmt.Errorf("connect nats: %w", err)
 	}
 	sub, err := nc.SubscribeSync(subject)
 	if err == nil {
@@ -55,9 +55,17 @@ func openLive(url, subject string) (*liveFeed, error) {
 	}
 	if err != nil {
 		nc.Close()
-		return nil, fmt.Errorf("subscribe %s: %w", subject, err)
+		return nil, nil, fmt.Errorf("subscribe %s: %w", subject, err)
 	}
 	fmt.Fprintln(os.Stderr, "watching", subject)
+	return nc, sub, nil
+}
+
+func openLive(url, subject string) (*liveFeed, error) {
+	nc, sub, err := subscribe(url, "chatim-corecli-e2e-members", subject)
+	if err != nil {
+		return nil, err
+	}
 	return &liveFeed{nc: nc, sub: sub}, nil
 }
 

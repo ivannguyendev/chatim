@@ -69,7 +69,7 @@ func e2eLinks(ctx context.Context, args []string) error {
 func (r *linkRun) run() error {
 	steps := []func() error{
 		r.openDirectTwice, r.reactInDirect, r.createGroup, r.replyTwice, r.parentIsKept,
-		r.deleteOneReply, r.mentionThree, r.mentionsNeedMembership, r.forwardToDirect, r.bookmarkMention,
+		r.deleteOneReply, r.tagTeam, r.mentionThree, r.mentionsNeedMembership, r.forwardToDirect, r.bookmarkMention,
 	}
 	for i, step := range steps {
 		if err := step(); err != nil {

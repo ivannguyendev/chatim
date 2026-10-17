@@ -2,6 +2,7 @@ package route_test
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"testing"
 	"testing/synctest"
@@ -31,7 +32,8 @@ func linkCaseOf[Req, Resp proto.Message](req Req, do func(*route.Client, context
 
 func linkCalls() map[string]linkCase {
 	since := timestamppb.New(time.UnixMilli(7))
-	return map[string]linkCase{
+	calls := mentionCalls()
+	maps.Copy(calls, map[string]linkCase{
 		"bookmark": linkCaseOf(&chatimv1.SetBookmarkRequest{RoomId: "42", Seq: 3, On: true}, (*route.Client).SetBookmark,
 			&chatimv1.SetBookmarkResponse{Changed: true}, true),
 		"replies": linkCaseOf(&chatimv1.GetRepliesRequest{RoomId: "42", Seq: 3, Limit: 10}, (*route.Client).GetReplies,
@@ -42,7 +44,8 @@ func linkCalls() map[string]linkCase {
 			&chatimv1.ListMentionsResponse{Items: []*chatimv1.MentionItem{{Message: &chatimv1.Message{RoomId: "42", Seq: 4, MentionAll: true}, Read: true}}, Next: "m1"}, false),
 		"create": linkCaseOf(&chatimv1.CreateRoomRequest{Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Members: []string{"bob"}, RequestId: "req-1"}, (*route.Client).CreateRoom,
 			&chatimv1.CreateRoomResponse{Room: &chatimv1.Room{Id: "42"}}, false),
-	}
+	})
+	return calls
 }
 
 type splitLocator struct {
