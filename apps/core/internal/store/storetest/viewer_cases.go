@@ -20,6 +20,7 @@ func viewerCases() []editCase {
 		{"hidden between returns the room hides in a time range by time then key", hiddenBetween},
 		{"hidden between rejects a bad limit and a bad time", hiddenInvalid},
 		{"hidden get reads one hide with its first time", hiddenGet},
+		{"hidden in rooms reads the main timeline hides of many room ranges in one query", hiddenInRooms},
 	}
 }
 

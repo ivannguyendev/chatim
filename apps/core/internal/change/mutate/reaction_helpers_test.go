@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
@@ -57,20 +57,20 @@ type fakeMessageTimers struct {
 	err      error
 }
 
-func (f *fakeMessageTimers) ArmMessageCountCheck(_ context.Context, key store.MsgKey, counter string) (work.Timer, error) {
+func (f *fakeMessageTimers) ArmMessageCountCheck(_ context.Context, key store.MsgKey, counter string) (timer.Timer, error) {
 	f.log.add("arm")
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.err != nil {
-		return work.Timer{}, f.err
+		return timer.Timer{}, f.err
 	}
 	f.seq++
 	f.armed[f.seq] = key
 	f.counters = append(f.counters, counter)
-	return work.Timer{Seq: f.seq}, nil
+	return timer.Timer{Seq: f.seq}, nil
 }
 
-func (f *fakeMessageTimers) Disarm(_ context.Context, t work.Timer) {
+func (f *fakeMessageTimers) Disarm(_ context.Context, t timer.Timer) {
 	f.log.add("disarm")
 	f.mu.Lock()
 	defer f.mu.Unlock()

@@ -32,6 +32,25 @@ while (true) {
 }' >"$dir/mongo.log" 2>&1 &
   pids+=($!)
 
+  docker exec chatim-mongodb mongosh --quiet --eval '
+db.getSiblingDB("admin").auth(process.env.MONGO_INITDB_ROOT_USERNAME, require("fs").readFileSync("/run/secrets/mongo_password", "utf8").trim());
+const roomLagSampler = db.getSiblingDB("chatim");
+const msgKey = (room, seq) => { const b = Buffer.alloc(24); b.writeBigUInt64BE(room, 0); b.writeBigUInt64BE(0n, 8); b.writeBigUInt64BE(seq, 16); return BinData(0, b.toString("base64")); };
+while (true) {
+  const now = Date.now();
+  const lags = [];
+  for (const r of roomLagSampler.rooms.aggregate([{$match: {last_seq: {$gt: 0}}}, {$sample: {size: 20}}, {$project: {last_seq: 1}}]).toArray()) {
+    const room = BigInt(r._id.toString());
+    const next = roomLagSampler.messages.find({_id: {$gt: msgKey(room, BigInt(r.last_seq.toString())), $lte: msgKey(room, 18446744073709551614n)}}, {ts: 1}).sort({_id: 1}).limit(1).toArray();
+    lags.push(next.length ? (now - next[0].ts.getTime()) / 1000 : 0);
+  }
+  lags.sort((x, y) => x - y);
+  const pick = q => lags.length ? lags[Math.min(lags.length - 1, Math.floor(q * lags.length))].toFixed(3) : "-1";
+  print(Math.floor(now / 1000), "room_lag_p50_s=" + pick(0.5), "room_lag_max_s=" + pick(1));
+  sleep(1000);
+}' >"$dir/room-lag.log" 2>&1 &
+  pids+=($!)
+
   echo "${pids[*]}" >"$dir/pids"
 }
 
@@ -46,7 +65,7 @@ stop() {
   docker logs "$vm" >"$dir/vm.log" 2>&1
   docker rm -f "$vm" >/dev/null 2>&1
   docker exec chatim-redis-dedupe sh -c 'pkill -f "[w]hile :"; true' >/dev/null 2>&1
-  docker exec chatim-mongodb sh -c 'pkill -f "[s]erverStatus"; true' >/dev/null 2>&1
+  docker exec chatim-mongodb sh -c 'pkill -f "[s]erverStatus"; pkill -f "[r]oomLagSampler"; true' >/dev/null 2>&1
 }
 
 case "$action" in

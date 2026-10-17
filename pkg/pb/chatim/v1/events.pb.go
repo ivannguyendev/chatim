@@ -51,6 +51,8 @@ type Event struct {
 	//	*Event_MessageHidden
 	//	*Event_HistoryCleared
 	//	*Event_BookmarkChanged
+	//	*Event_RoomUpdated
+	//	*Event_RoomPreferencesChanged
 	Payload       isEvent_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -302,6 +304,24 @@ func (x *Event) GetBookmarkChanged() *BookmarkChanged {
 	return nil
 }
 
+func (x *Event) GetRoomUpdated() *RoomUpdated {
+	if x != nil {
+		if x, ok := x.Payload.(*Event_RoomUpdated); ok {
+			return x.RoomUpdated
+		}
+	}
+	return nil
+}
+
+func (x *Event) GetRoomPreferencesChanged() *RoomPreferencesChanged {
+	if x != nil {
+		if x, ok := x.Payload.(*Event_RoomPreferencesChanged); ok {
+			return x.RoomPreferencesChanged
+		}
+	}
+	return nil
+}
+
 type isEvent_Payload interface {
 	isEvent_Payload()
 }
@@ -374,6 +394,14 @@ type Event_BookmarkChanged struct {
 	BookmarkChanged *BookmarkChanged `protobuf:"bytes,36,opt,name=bookmark_changed,json=bookmarkChanged,proto3,oneof"`
 }
 
+type Event_RoomUpdated struct {
+	RoomUpdated *RoomUpdated `protobuf:"bytes,37,opt,name=room_updated,json=roomUpdated,proto3,oneof"`
+}
+
+type Event_RoomPreferencesChanged struct {
+	RoomPreferencesChanged *RoomPreferencesChanged `protobuf:"bytes,38,opt,name=room_preferences_changed,json=roomPreferencesChanged,proto3,oneof"`
+}
+
 func (*Event_MessageCreated) isEvent_Payload() {}
 
 func (*Event_RoomCreated) isEvent_Payload() {}
@@ -407,6 +435,10 @@ func (*Event_MessageHidden) isEvent_Payload() {}
 func (*Event_HistoryCleared) isEvent_Payload() {}
 
 func (*Event_BookmarkChanged) isEvent_Payload() {}
+
+func (*Event_RoomUpdated) isEvent_Payload() {}
+
+func (*Event_RoomPreferencesChanged) isEvent_Payload() {}
 
 type MessageCreated struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -496,6 +528,50 @@ func (x *RoomCreated) GetRoom() *Room {
 	return nil
 }
 
+type RoomUpdated struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Room          *Room                  `protobuf:"bytes,1,opt,name=room,proto3" json:"room,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RoomUpdated) Reset() {
+	*x = RoomUpdated{}
+	mi := &file_chatim_v1_events_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RoomUpdated) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RoomUpdated) ProtoMessage() {}
+
+func (x *RoomUpdated) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_events_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RoomUpdated.ProtoReflect.Descriptor instead.
+func (*RoomUpdated) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_events_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *RoomUpdated) GetRoom() *Room {
+	if x != nil {
+		return x.Room
+	}
+	return nil
+}
+
 type MessageEdited struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Message       *Message               `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
@@ -506,7 +582,7 @@ type MessageEdited struct {
 
 func (x *MessageEdited) Reset() {
 	*x = MessageEdited{}
-	mi := &file_chatim_v1_events_proto_msgTypes[3]
+	mi := &file_chatim_v1_events_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -518,7 +594,7 @@ func (x *MessageEdited) String() string {
 func (*MessageEdited) ProtoMessage() {}
 
 func (x *MessageEdited) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_events_proto_msgTypes[3]
+	mi := &file_chatim_v1_events_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -531,7 +607,7 @@ func (x *MessageEdited) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MessageEdited.ProtoReflect.Descriptor instead.
 func (*MessageEdited) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_events_proto_rawDescGZIP(), []int{3}
+	return file_chatim_v1_events_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *MessageEdited) GetMessage() *Message {
@@ -558,7 +634,7 @@ type MessageDeleted struct {
 
 func (x *MessageDeleted) Reset() {
 	*x = MessageDeleted{}
-	mi := &file_chatim_v1_events_proto_msgTypes[4]
+	mi := &file_chatim_v1_events_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -570,7 +646,7 @@ func (x *MessageDeleted) String() string {
 func (*MessageDeleted) ProtoMessage() {}
 
 func (x *MessageDeleted) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_events_proto_msgTypes[4]
+	mi := &file_chatim_v1_events_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -583,7 +659,7 @@ func (x *MessageDeleted) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MessageDeleted.ProtoReflect.Descriptor instead.
 func (*MessageDeleted) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_events_proto_rawDescGZIP(), []int{4}
+	return file_chatim_v1_events_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *MessageDeleted) GetMessage() *Message {
@@ -612,7 +688,7 @@ type ReactionChanged struct {
 
 func (x *ReactionChanged) Reset() {
 	*x = ReactionChanged{}
-	mi := &file_chatim_v1_events_proto_msgTypes[5]
+	mi := &file_chatim_v1_events_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -624,7 +700,7 @@ func (x *ReactionChanged) String() string {
 func (*ReactionChanged) ProtoMessage() {}
 
 func (x *ReactionChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_events_proto_msgTypes[5]
+	mi := &file_chatim_v1_events_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -637,7 +713,7 @@ func (x *ReactionChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReactionChanged.ProtoReflect.Descriptor instead.
 func (*ReactionChanged) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_events_proto_rawDescGZIP(), []int{5}
+	return file_chatim_v1_events_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ReactionChanged) GetUser() string {
@@ -679,7 +755,7 @@ type CountsChanged struct {
 
 func (x *CountsChanged) Reset() {
 	*x = CountsChanged{}
-	mi := &file_chatim_v1_events_proto_msgTypes[6]
+	mi := &file_chatim_v1_events_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -691,7 +767,7 @@ func (x *CountsChanged) String() string {
 func (*CountsChanged) ProtoMessage() {}
 
 func (x *CountsChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_events_proto_msgTypes[6]
+	mi := &file_chatim_v1_events_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -704,7 +780,7 @@ func (x *CountsChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CountsChanged.ProtoReflect.Descriptor instead.
 func (*CountsChanged) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_events_proto_rawDescGZIP(), []int{6}
+	return file_chatim_v1_events_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *CountsChanged) GetCounter() string {
@@ -738,7 +814,7 @@ type MessagePinned struct {
 
 func (x *MessagePinned) Reset() {
 	*x = MessagePinned{}
-	mi := &file_chatim_v1_events_proto_msgTypes[7]
+	mi := &file_chatim_v1_events_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -750,7 +826,7 @@ func (x *MessagePinned) String() string {
 func (*MessagePinned) ProtoMessage() {}
 
 func (x *MessagePinned) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_events_proto_msgTypes[7]
+	mi := &file_chatim_v1_events_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -763,7 +839,7 @@ func (x *MessagePinned) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MessagePinned.ProtoReflect.Descriptor instead.
 func (*MessagePinned) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_events_proto_rawDescGZIP(), []int{7}
+	return file_chatim_v1_events_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *MessagePinned) GetMessage() *Message {
@@ -790,7 +866,7 @@ type MessageUnpinned struct {
 
 func (x *MessageUnpinned) Reset() {
 	*x = MessageUnpinned{}
-	mi := &file_chatim_v1_events_proto_msgTypes[8]
+	mi := &file_chatim_v1_events_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -802,7 +878,7 @@ func (x *MessageUnpinned) String() string {
 func (*MessageUnpinned) ProtoMessage() {}
 
 func (x *MessageUnpinned) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_events_proto_msgTypes[8]
+	mi := &file_chatim_v1_events_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -815,7 +891,7 @@ func (x *MessageUnpinned) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MessageUnpinned.ProtoReflect.Descriptor instead.
 func (*MessageUnpinned) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_events_proto_rawDescGZIP(), []int{8}
+	return file_chatim_v1_events_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *MessageUnpinned) GetMessage() *Message {
@@ -836,7 +912,7 @@ var File_chatim_v1_events_proto protoreflect.FileDescriptor
 
 const file_chatim_v1_events_proto_rawDesc = "" +
 	"\n" +
-	"\x16chatim/v1/events.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x17chatim/v1/members.proto\x1a\x1dchatim/v1/message_links.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb7\v\n" +
+	"\x16chatim/v1/events.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x17chatim/v1/members.proto\x1a\x1dchatim/v1/message_links.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a\x19chatim/v1/room_list.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd3\f\n" +
 	"\x05Event\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06tenant\x18\x02 \x01(\tR\x06tenant\x12\x17\n" +
@@ -863,11 +939,15 @@ const file_chatim_v1_events_proto_rawDesc = "" +
 	"\x17member_priority_changed\x18! \x01(\v2 .chatim.v1.MemberPriorityChangedH\x00R\x15memberPriorityChanged\x12A\n" +
 	"\x0emessage_hidden\x18\" \x01(\v2\x18.chatim.v1.MessageHiddenH\x00R\rmessageHidden\x12D\n" +
 	"\x0fhistory_cleared\x18# \x01(\v2\x19.chatim.v1.HistoryClearedH\x00R\x0ehistoryCleared\x12G\n" +
-	"\x10bookmark_changed\x18$ \x01(\v2\x1a.chatim.v1.BookmarkChangedH\x00R\x0fbookmarkChangedB\t\n" +
+	"\x10bookmark_changed\x18$ \x01(\v2\x1a.chatim.v1.BookmarkChangedH\x00R\x0fbookmarkChanged\x12;\n" +
+	"\froom_updated\x18% \x01(\v2\x16.chatim.v1.RoomUpdatedH\x00R\vroomUpdated\x12]\n" +
+	"\x18room_preferences_changed\x18& \x01(\v2!.chatim.v1.RoomPreferencesChangedH\x00R\x16roomPreferencesChangedB\t\n" +
 	"\apayloadJ\x04\b\a\x10\bR\x03pts\">\n" +
 	"\x0eMessageCreated\x12,\n" +
 	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\"2\n" +
 	"\vRoomCreated\x12#\n" +
+	"\x04room\x18\x01 \x01(\v2\x0f.chatim.v1.RoomR\x04room\"2\n" +
+	"\vRoomUpdated\x12#\n" +
 	"\x04room\x18\x01 \x01(\v2\x0f.chatim.v1.RoomR\x04room\"O\n" +
 	"\rMessageEdited\x12,\n" +
 	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\x12\x10\n" +
@@ -906,66 +986,71 @@ func file_chatim_v1_events_proto_rawDescGZIP() []byte {
 	return file_chatim_v1_events_proto_rawDescData
 }
 
-var file_chatim_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_chatim_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_chatim_v1_events_proto_goTypes = []any{
-	(*Event)(nil),                 // 0: chatim.v1.Event
-	(*MessageCreated)(nil),        // 1: chatim.v1.MessageCreated
-	(*RoomCreated)(nil),           // 2: chatim.v1.RoomCreated
-	(*MessageEdited)(nil),         // 3: chatim.v1.MessageEdited
-	(*MessageDeleted)(nil),        // 4: chatim.v1.MessageDeleted
-	(*ReactionChanged)(nil),       // 5: chatim.v1.ReactionChanged
-	(*CountsChanged)(nil),         // 6: chatim.v1.CountsChanged
-	(*MessagePinned)(nil),         // 7: chatim.v1.MessagePinned
-	(*MessageUnpinned)(nil),       // 8: chatim.v1.MessageUnpinned
-	(RoomType)(0),                 // 9: chatim.v1.RoomType
-	(*timestamppb.Timestamp)(nil), // 10: google.protobuf.Timestamp
-	(*MemberAdded)(nil),           // 11: chatim.v1.MemberAdded
-	(*MemberRemoved)(nil),         // 12: chatim.v1.MemberRemoved
-	(*MemberRoleChanged)(nil),     // 13: chatim.v1.MemberRoleChanged
-	(*MemberCountChanged)(nil),    // 14: chatim.v1.MemberCountChanged
-	(*ReadUpdated)(nil),           // 15: chatim.v1.ReadUpdated
-	(*MemberPriorityChanged)(nil), // 16: chatim.v1.MemberPriorityChanged
-	(*MessageHidden)(nil),         // 17: chatim.v1.MessageHidden
-	(*HistoryCleared)(nil),        // 18: chatim.v1.HistoryCleared
-	(*BookmarkChanged)(nil),       // 19: chatim.v1.BookmarkChanged
-	(*Message)(nil),               // 20: chatim.v1.Message
-	(*Room)(nil),                  // 21: chatim.v1.Room
-	(*ReactionSummary)(nil),       // 22: chatim.v1.ReactionSummary
-	(*ReplyCount)(nil),            // 23: chatim.v1.ReplyCount
+	(*Event)(nil),                  // 0: chatim.v1.Event
+	(*MessageCreated)(nil),         // 1: chatim.v1.MessageCreated
+	(*RoomCreated)(nil),            // 2: chatim.v1.RoomCreated
+	(*RoomUpdated)(nil),            // 3: chatim.v1.RoomUpdated
+	(*MessageEdited)(nil),          // 4: chatim.v1.MessageEdited
+	(*MessageDeleted)(nil),         // 5: chatim.v1.MessageDeleted
+	(*ReactionChanged)(nil),        // 6: chatim.v1.ReactionChanged
+	(*CountsChanged)(nil),          // 7: chatim.v1.CountsChanged
+	(*MessagePinned)(nil),          // 8: chatim.v1.MessagePinned
+	(*MessageUnpinned)(nil),        // 9: chatim.v1.MessageUnpinned
+	(RoomType)(0),                  // 10: chatim.v1.RoomType
+	(*timestamppb.Timestamp)(nil),  // 11: google.protobuf.Timestamp
+	(*MemberAdded)(nil),            // 12: chatim.v1.MemberAdded
+	(*MemberRemoved)(nil),          // 13: chatim.v1.MemberRemoved
+	(*MemberRoleChanged)(nil),      // 14: chatim.v1.MemberRoleChanged
+	(*MemberCountChanged)(nil),     // 15: chatim.v1.MemberCountChanged
+	(*ReadUpdated)(nil),            // 16: chatim.v1.ReadUpdated
+	(*MemberPriorityChanged)(nil),  // 17: chatim.v1.MemberPriorityChanged
+	(*MessageHidden)(nil),          // 18: chatim.v1.MessageHidden
+	(*HistoryCleared)(nil),         // 19: chatim.v1.HistoryCleared
+	(*BookmarkChanged)(nil),        // 20: chatim.v1.BookmarkChanged
+	(*RoomPreferencesChanged)(nil), // 21: chatim.v1.RoomPreferencesChanged
+	(*Message)(nil),                // 22: chatim.v1.Message
+	(*Room)(nil),                   // 23: chatim.v1.Room
+	(*ReactionSummary)(nil),        // 24: chatim.v1.ReactionSummary
+	(*ReplyCount)(nil),             // 25: chatim.v1.ReplyCount
 }
 var file_chatim_v1_events_proto_depIdxs = []int32{
-	9,  // 0: chatim.v1.Event.room_type:type_name -> chatim.v1.RoomType
-	10, // 1: chatim.v1.Event.ts:type_name -> google.protobuf.Timestamp
+	10, // 0: chatim.v1.Event.room_type:type_name -> chatim.v1.RoomType
+	11, // 1: chatim.v1.Event.ts:type_name -> google.protobuf.Timestamp
 	1,  // 2: chatim.v1.Event.message_created:type_name -> chatim.v1.MessageCreated
 	2,  // 3: chatim.v1.Event.room_created:type_name -> chatim.v1.RoomCreated
-	3,  // 4: chatim.v1.Event.message_edited:type_name -> chatim.v1.MessageEdited
-	4,  // 5: chatim.v1.Event.message_deleted:type_name -> chatim.v1.MessageDeleted
-	5,  // 6: chatim.v1.Event.reaction_changed:type_name -> chatim.v1.ReactionChanged
-	6,  // 7: chatim.v1.Event.counts_changed:type_name -> chatim.v1.CountsChanged
-	7,  // 8: chatim.v1.Event.message_pinned:type_name -> chatim.v1.MessagePinned
-	8,  // 9: chatim.v1.Event.message_unpinned:type_name -> chatim.v1.MessageUnpinned
-	11, // 10: chatim.v1.Event.member_added:type_name -> chatim.v1.MemberAdded
-	12, // 11: chatim.v1.Event.member_removed:type_name -> chatim.v1.MemberRemoved
-	13, // 12: chatim.v1.Event.member_role_changed:type_name -> chatim.v1.MemberRoleChanged
-	14, // 13: chatim.v1.Event.member_count_changed:type_name -> chatim.v1.MemberCountChanged
-	15, // 14: chatim.v1.Event.read_updated:type_name -> chatim.v1.ReadUpdated
-	16, // 15: chatim.v1.Event.member_priority_changed:type_name -> chatim.v1.MemberPriorityChanged
-	17, // 16: chatim.v1.Event.message_hidden:type_name -> chatim.v1.MessageHidden
-	18, // 17: chatim.v1.Event.history_cleared:type_name -> chatim.v1.HistoryCleared
-	19, // 18: chatim.v1.Event.bookmark_changed:type_name -> chatim.v1.BookmarkChanged
-	20, // 19: chatim.v1.MessageCreated.message:type_name -> chatim.v1.Message
-	21, // 20: chatim.v1.RoomCreated.room:type_name -> chatim.v1.Room
-	20, // 21: chatim.v1.MessageEdited.message:type_name -> chatim.v1.Message
-	20, // 22: chatim.v1.MessageDeleted.message:type_name -> chatim.v1.Message
-	22, // 23: chatim.v1.CountsChanged.reactions:type_name -> chatim.v1.ReactionSummary
-	23, // 24: chatim.v1.CountsChanged.reply_count:type_name -> chatim.v1.ReplyCount
-	20, // 25: chatim.v1.MessagePinned.message:type_name -> chatim.v1.Message
-	20, // 26: chatim.v1.MessageUnpinned.message:type_name -> chatim.v1.Message
-	27, // [27:27] is the sub-list for method output_type
-	27, // [27:27] is the sub-list for method input_type
-	27, // [27:27] is the sub-list for extension type_name
-	27, // [27:27] is the sub-list for extension extendee
-	0,  // [0:27] is the sub-list for field type_name
+	4,  // 4: chatim.v1.Event.message_edited:type_name -> chatim.v1.MessageEdited
+	5,  // 5: chatim.v1.Event.message_deleted:type_name -> chatim.v1.MessageDeleted
+	6,  // 6: chatim.v1.Event.reaction_changed:type_name -> chatim.v1.ReactionChanged
+	7,  // 7: chatim.v1.Event.counts_changed:type_name -> chatim.v1.CountsChanged
+	8,  // 8: chatim.v1.Event.message_pinned:type_name -> chatim.v1.MessagePinned
+	9,  // 9: chatim.v1.Event.message_unpinned:type_name -> chatim.v1.MessageUnpinned
+	12, // 10: chatim.v1.Event.member_added:type_name -> chatim.v1.MemberAdded
+	13, // 11: chatim.v1.Event.member_removed:type_name -> chatim.v1.MemberRemoved
+	14, // 12: chatim.v1.Event.member_role_changed:type_name -> chatim.v1.MemberRoleChanged
+	15, // 13: chatim.v1.Event.member_count_changed:type_name -> chatim.v1.MemberCountChanged
+	16, // 14: chatim.v1.Event.read_updated:type_name -> chatim.v1.ReadUpdated
+	17, // 15: chatim.v1.Event.member_priority_changed:type_name -> chatim.v1.MemberPriorityChanged
+	18, // 16: chatim.v1.Event.message_hidden:type_name -> chatim.v1.MessageHidden
+	19, // 17: chatim.v1.Event.history_cleared:type_name -> chatim.v1.HistoryCleared
+	20, // 18: chatim.v1.Event.bookmark_changed:type_name -> chatim.v1.BookmarkChanged
+	3,  // 19: chatim.v1.Event.room_updated:type_name -> chatim.v1.RoomUpdated
+	21, // 20: chatim.v1.Event.room_preferences_changed:type_name -> chatim.v1.RoomPreferencesChanged
+	22, // 21: chatim.v1.MessageCreated.message:type_name -> chatim.v1.Message
+	23, // 22: chatim.v1.RoomCreated.room:type_name -> chatim.v1.Room
+	23, // 23: chatim.v1.RoomUpdated.room:type_name -> chatim.v1.Room
+	22, // 24: chatim.v1.MessageEdited.message:type_name -> chatim.v1.Message
+	22, // 25: chatim.v1.MessageDeleted.message:type_name -> chatim.v1.Message
+	24, // 26: chatim.v1.CountsChanged.reactions:type_name -> chatim.v1.ReactionSummary
+	25, // 27: chatim.v1.CountsChanged.reply_count:type_name -> chatim.v1.ReplyCount
+	22, // 28: chatim.v1.MessagePinned.message:type_name -> chatim.v1.Message
+	22, // 29: chatim.v1.MessageUnpinned.message:type_name -> chatim.v1.Message
+	30, // [30:30] is the sub-list for method output_type
+	30, // [30:30] is the sub-list for method input_type
+	30, // [30:30] is the sub-list for extension type_name
+	30, // [30:30] is the sub-list for extension extendee
+	0,  // [0:30] is the sub-list for field type_name
 }
 
 func init() { file_chatim_v1_events_proto_init() }
@@ -977,6 +1062,7 @@ func file_chatim_v1_events_proto_init() {
 	file_chatim_v1_members_proto_init()
 	file_chatim_v1_message_links_proto_init()
 	file_chatim_v1_reactions_pins_proto_init()
+	file_chatim_v1_room_list_proto_init()
 	file_chatim_v1_events_proto_msgTypes[0].OneofWrappers = []any{
 		(*Event_MessageCreated)(nil),
 		(*Event_RoomCreated)(nil),
@@ -995,6 +1081,8 @@ func file_chatim_v1_events_proto_init() {
 		(*Event_MessageHidden)(nil),
 		(*Event_HistoryCleared)(nil),
 		(*Event_BookmarkChanged)(nil),
+		(*Event_RoomUpdated)(nil),
+		(*Event_RoomPreferencesChanged)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1002,7 +1090,7 @@ func file_chatim_v1_events_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_chatim_v1_events_proto_rawDesc), len(file_chatim_v1_events_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

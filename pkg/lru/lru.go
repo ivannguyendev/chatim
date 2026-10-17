@@ -27,6 +27,15 @@ func (c *Cache[K, V]) Get(k K) (V, bool) {
 	return el.Value.(*entry[K, V]).val, true
 }
 
+func (c *Cache[K, V]) Peek(k K) (V, bool) {
+	el, ok := c.items[k]
+	if !ok {
+		var zero V
+		return zero, false
+	}
+	return el.Value.(*entry[K, V]).val, true
+}
+
 func (c *Cache[K, V]) Put(k K, v V) {
 	if el, ok := c.items[k]; ok {
 		el.Value.(*entry[K, V]).val = v

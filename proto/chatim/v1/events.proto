@@ -6,6 +6,7 @@ import "chatim/v1/core.proto";
 import "chatim/v1/members.proto";
 import "chatim/v1/message_links.proto";
 import "chatim/v1/reactions_pins.proto";
+import "chatim/v1/room_list.proto";
 import "google/protobuf/timestamp.proto";
 
 message Event {
@@ -37,6 +38,8 @@ message Event {
     MessageHidden message_hidden = 34;
     HistoryCleared history_cleared = 35;
     BookmarkChanged bookmark_changed = 36;
+    RoomUpdated room_updated = 37;
+    RoomPreferencesChanged room_preferences_changed = 38;
   }
 }
 
@@ -45,6 +48,10 @@ message MessageCreated {
 }
 
 message RoomCreated {
+  Room room = 1;
+}
+
+message RoomUpdated {
   Room room = 1;
 }
 

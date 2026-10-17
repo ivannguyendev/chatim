@@ -41,6 +41,8 @@ type Interactions interface {
 	Replies(ctx context.Context, parent MsgKey, afterSeq uint64, limit int) ([]domain.Reply, error)
 	CountLiveReplies(ctx context.Context, parent MsgKey) (uint32, error)
 	Between(ctx context.Context, q InteractionScan) ([]Interaction, error)
+	MyInteractions(ctx context.Context, user string, keys []MsgKey) (map[MsgKey]MyInteraction, error)
+	Reactors(ctx context.Context, q ReactorQuery) ([]Reactor, error)
 }
 
 type ReactionSummaries interface {

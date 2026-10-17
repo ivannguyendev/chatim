@@ -17,10 +17,12 @@ var _ store.Edits = (*Edits)(nil)
 type Edits struct {
 	mu    sync.RWMutex
 	facts map[store.MsgKey][]domain.Edit
-	log   *Messages
+	flags flagMap[editFlagKey]
 }
 
-func NewEdits() *Edits { return &Edits{facts: make(map[store.MsgKey][]domain.Edit)} }
+func NewEdits() *Edits {
+	return &Edits{facts: make(map[store.MsgKey][]domain.Edit), flags: make(flagMap[editFlagKey])}
+}
 
 func (s *Edits) Append(ctx context.Context, e domain.Edit) error {
 	if err := ctx.Err(); err != nil {
@@ -39,8 +41,8 @@ func (s *Edits) Append(ctx context.Context, e domain.Edit) error {
 	}
 	e.Mentions = slices.Clone(e.Mentions)
 	s.facts[key] = slices.Insert(line, i, e)
-	if s.log != nil {
-		s.log.appendFact(logged{kind: store.EditInserted, edit: e})
+	if e.Version > 0 {
+		s.flags.raise(editFlagKey{key: key, ver: e.Version}, store.BitEditFact, e.At)
 	}
 	return nil
 }

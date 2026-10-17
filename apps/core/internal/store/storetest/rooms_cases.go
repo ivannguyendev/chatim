@@ -22,7 +22,7 @@ func roomsCases() []roomsCase {
 }
 
 func group(id uint64, name string, members int) domain.Room {
-	return domain.Room{ID: id, Tenant: tenant, Type: domain.RoomGroup, Name: name, CreatedBy: "alice", CreatedAt: baseTime, MemberCount: members, MemberCountVer: 1}
+	return domain.Room{ID: id, Tenant: tenant, Type: domain.RoomGroup, Name: name, CreatedBy: "alice", CreatedAt: baseTime, MemberCount: members, MemberCountVer: 1, InfoVer: 1}
 }
 
 func member(room uint64, user string, role domain.Role) domain.Member {

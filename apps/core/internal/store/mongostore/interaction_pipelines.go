@@ -47,6 +47,7 @@ func setReaction(head bson.D, x domain.Reaction) mongo.Pipeline {
 		bson.E{Key: "created_at", Value: createdOnce(x.At)},
 		bson.E{Key: "updated_at", Value: keep("updated_at", x.At)},
 	)
+	set = append(set, keptUnless(same, raisedState(store.BitInteraction))...)
 	return mongo.Pipeline{{{Key: "$set", Value: set}}}
 }
 
@@ -61,6 +62,7 @@ func setBookmark(head bson.D, at time.Time) mongo.Pipeline {
 		bson.E{Key: "created_at", Value: createdOnce(at)},
 		bson.E{Key: "updated_at", Value: keep("updated_at", at)},
 	)
+	set = append(set, keptUnless(same, raisedState(store.BitInteraction))...)
 	return mongo.Pipeline{{{Key: "$set", Value: set}}}
 }
 
@@ -87,6 +89,7 @@ func removeInteraction(at time.Time, keepValue bool) mongo.Pipeline {
 		bson.E{Key: "ver", Value: nextChange()},
 		bson.E{Key: "updated_at", Value: at},
 	)
+	set = append(set, raisedState(store.BitInteraction)...)
 	return mongo.Pipeline{{{Key: "$set", Value: set}}}
 }
 

@@ -9,10 +9,14 @@ import (
 
 type Kind uint8
 
-const KindText Kind = 1
+const (
+	KindText   Kind = 1
+	KindSystem Kind = 2
+)
 
 var kindNames = map[string]Kind{
-	"text": KindText,
+	"text":   KindText,
+	"system": KindSystem,
 }
 
 func ParseKind(name string) (Kind, error) {
@@ -42,6 +46,8 @@ type Message struct {
 	Mentions   []MentionTarget
 	MentionAll bool
 	Replies    ReplyCount
+	SkipUnread bool
+	Meta       []byte
 }
 
 func (m Message) WithoutDeletedContent() Message {
@@ -49,7 +55,22 @@ func (m Message) WithoutDeletedContent() Message {
 		return m
 	}
 	m.Text = ""
-	m.Mentions, m.MentionAll, m.Forward = nil, false, nil
+	m.Mentions, m.MentionAll, m.Forward, m.Meta = nil, false, nil, nil
 	m.Reactions, m.Replies = ReactionSummary{}, ReplyCount{}
 	return m
+}
+
+func ValidateSystemMessage(m Message) error {
+	switch {
+	case m.Kind != KindSystem:
+		return nil
+	case m.ReplyTo != nil:
+		return invalid("reply_to")
+	case m.Forward != nil:
+		return invalid("forward_from")
+	case len(m.Mentions) > 0 || m.MentionAll:
+		return invalid("mentions")
+	default:
+		return nil
+	}
 }

@@ -18,16 +18,16 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-func TestRealInfraWorkersProjectAPinFactWrittenOutsideTheCore(t *testing.T) {
+func TestRealInfraSweeperProjectsAPinFactWrittenOutsideTheCore(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastEffects)
+	core := startCore(t, it, itFastSweep)
 	client := dialCore(t, core.cfg)
 	roomID := createRoom(t, client)
 	room := parseRoom(t, roomID)
 	live := subscribeLive(t, it, core.cfg, roomID)
 	first := sendAs(t, client, itUser, roomID, "pin-b-1", "pinned outside the core")
 	second := sendAs(t, client, itUser, roomID, "pin-b-2", "pinned through the core")
-	core.awaitTerm(t)
+	core.awaitSweeper(t)
 
 	st := itStore(it, core)
 	at := time.Now().UTC().Truncate(time.Millisecond)
@@ -38,7 +38,7 @@ func TestRealInfraWorkersProjectAPinFactWrittenOutsideTheCore(t *testing.T) {
 	pinnedID := pbconv.PinEventID(room, 1)
 	ev := awaitLiveEvents(t, live, pinnedID)[pinnedID]
 	if p := ev.GetMessagePinned(); p.GetPinVer() != 1 || p.GetMessage().GetSeq() != first || p.GetMessage().GetText() != "pinned outside the core" || ev.GetActor() != itUser {
-		t.Fatalf("msg_pinned from the workers = %v, want seq %d at pin version 1 by %s", ev, first, itUser)
+		t.Fatalf("msg_pinned from the sweeper = %v, want seq %d at pin version 1 by %s", ev, first, itUser)
 	}
 	state, err := st.PinState(t.Context(), room)
 	if err != nil || state.Version != 1 || len(state.Pins) != 1 || state.Pins[0].Seq != first || state.Pins[0].PV != 1 || !state.Pins[0].At.Equal(at) {
@@ -64,7 +64,7 @@ func TestRealInfraWorkersProjectAPinFactWrittenOutsideTheCore(t *testing.T) {
 
 func TestRealInfraPinLimitHoldsUnderConcurrentPins(t *testing.T) {
 	it := realInfra(t)
-	env := maps.Clone(itFastEffects)
+	env := maps.Clone(itFastSweep)
 	env["PIN_LIMIT"] = "3"
 	core := startCore(t, it, env)
 	client := dialCore(t, core.cfg)

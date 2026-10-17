@@ -14,23 +14,9 @@ func TestContract(t *testing.T) {
 	})
 }
 
-func TestFeedContract(t *testing.T) {
-	storetest.RunFeed(t, func(*testing.T) (store.Messages, store.Rooms, store.ChangeFeed) {
-		msgs, rooms := memstore.NewMessages(), memstore.NewRooms()
-		return msgs, rooms, memstore.NewFeed(msgs, rooms, nil)
-	})
-}
-
 func TestEditsContract(t *testing.T) {
 	storetest.RunEdits(t, func(*testing.T) (storetest.EditableMessages, storetest.ClearableRooms, store.Edits, store.Hidden) {
 		return memstore.NewMessages(), memstore.NewRooms(), memstore.NewEdits(), memstore.NewHidden()
-	})
-}
-
-func TestEditFeedContract(t *testing.T) {
-	storetest.RunEditFeed(t, func(*testing.T) (store.Edits, store.ChangeFeed) {
-		msgs, edits := memstore.NewMessages(), memstore.NewEdits()
-		return edits, memstore.NewFeed(msgs, nil, edits)
 	})
 }
 
@@ -50,31 +36,54 @@ func TestPinsContract(t *testing.T) {
 	})
 }
 
-func TestReactionFeedContract(t *testing.T) {
-	storetest.RunInteractionFeed(t, func(*testing.T) (store.Interactions, store.ChangeFeed) {
-		interactions := memstore.NewInteractions()
-		return interactions, memstore.NewFeed(memstore.NewMessages(), nil, nil, memstore.WithInteractions(interactions))
-	})
-}
-
-func TestPinFeedContract(t *testing.T) {
-	storetest.RunPinFeed(t, func(*testing.T) (store.Pins, store.ChangeFeed) {
-		pins := memstore.NewPins()
-		return pins, memstore.NewFeed(memstore.NewMessages(), nil, nil, memstore.WithPins(pins))
-	})
-}
-
 func TestMembersContract(t *testing.T) {
 	storetest.RunMembers(t, func(*testing.T) storetest.MemberRooms { return memstore.NewRooms() })
 }
 
-func TestMemberFeedContract(t *testing.T) {
-	storetest.RunMemberFeed(t, func(*testing.T) (storetest.MemberRooms, store.Hidden, store.ChangeFeed) {
-		rooms, hidden := memstore.NewRooms(), memstore.NewHidden()
-		return rooms, hidden, memstore.NewFeed(memstore.NewMessages(), rooms, nil, memstore.WithHidden(hidden))
+func TestDirectRoomsContract(t *testing.T) {
+	storetest.RunDirectRooms(t, func(*testing.T) store.DirectRooms { return memstore.NewDirectRooms() })
+}
+
+func TestReplyThreadsContract(t *testing.T) {
+	storetest.RunReplyThreads(t, func(*testing.T) store.ReplyThreads { return memstore.NewReplyThreads() })
+}
+
+func TestRoomListContract(t *testing.T) {
+	storetest.RunRoomList(t, func(*testing.T) storetest.ListableRooms { return memstore.NewRooms() })
+}
+
+func TestRoomTailsContract(t *testing.T) {
+	storetest.RunRoomTails(t, func(*testing.T) storetest.TailMessages { return memstore.NewMessages() })
+}
+
+func TestMessageStatesContract(t *testing.T) {
+	storetest.RunMessageStates(t, func(*testing.T) storetest.MessageStateStores {
+		msgs := memstore.NewMessages()
+		return storetest.MessageStateStores{Messages: msgs, States: memstore.NewEventStates(memstore.EventStateStores{Messages: msgs})}
 	})
 }
 
-func TestDirectRoomsContract(t *testing.T) {
-	storetest.RunDirectRooms(t, func(*testing.T) store.DirectRooms { return memstore.NewDirectRooms() })
+func TestFactStatesContract(t *testing.T) {
+	storetest.RunFactStates(t, func(*testing.T) storetest.FactStateStores {
+		edits, interactions, pins, hidden := memstore.NewEdits(), memstore.NewInteractions(), memstore.NewPins(), memstore.NewHidden()
+		states := memstore.NewEventStates(memstore.EventStateStores{Edits: edits, Interactions: interactions, Pins: pins, Hidden: hidden})
+		return storetest.FactStateStores{Edits: edits, Interactions: interactions, Pins: pins, Hidden: hidden, States: states}
+	})
+}
+
+func TestMemberStatesContract(t *testing.T) {
+	storetest.RunMemberStates(t, func(*testing.T) storetest.MemberStateStores {
+		rooms := memstore.NewRooms()
+		return storetest.MemberStateStores{Rooms: rooms, States: memstore.NewEventStates(memstore.EventStateStores{Rooms: rooms})}
+	})
+}
+
+func TestEventStatesContract(t *testing.T) {
+	storetest.RunEventStates(t, func(*testing.T) storetest.EventStateStores {
+		states := memstore.NewEventStates(memstore.EventStateStores{
+			Messages: memstore.NewMessages(), Rooms: memstore.NewRooms(), Edits: memstore.NewEdits(),
+			Hidden: memstore.NewHidden(), Interactions: memstore.NewInteractions(), Pins: memstore.NewPins(),
+		})
+		return storetest.EventStateStores{States: states, Checkpoints: memstore.NewSweepCheckpoints(), Seeder: states}
+	})
 }

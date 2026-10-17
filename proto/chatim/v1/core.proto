@@ -15,6 +15,7 @@ enum RoomType {
 enum MessageKind {
   MESSAGE_KIND_UNSPECIFIED = 0;
   MESSAGE_KIND_TEXT = 1;
+  MESSAGE_KIND_SYSTEM = 2;
 }
 
 enum HistoryAnchor {
@@ -23,6 +24,7 @@ enum HistoryAnchor {
   HISTORY_ANCHOR_OLDEST = 2;
   HISTORY_ANCHOR_BEFORE = 3;
   HISTORY_ANCHOR_AFTER = 4;
+  HISTORY_ANCHOR_AROUND = 5;
 }
 
 enum EditKind {
@@ -40,6 +42,9 @@ message Room {
   string created_by = 5;
   google.protobuf.Timestamp created_at = 6;
   int32 member_count = 7;
+  string avatar = 8;
+  uint64 info_ver = 9;
+  repeated string direct_users = 10;
 }
 
 message Message {
@@ -64,6 +69,10 @@ message Message {
   bool mention_all = 18;
   ReplyCount reply_count = 19;
   ReplyPreview reply_preview = 20;
+  bool skip_unread = 21;
+  bytes meta = 22;
+  string my_reaction = 23;
+  bool bookmarked = 24;
 }
 
 message MessageVersion {
@@ -103,6 +112,9 @@ message SendMessageRequest {
   ReplyRef reply_to = 5;
   ForwardRef forward_from = 6;
   MentionSet mentions = 7;
+  MessageKind kind = 8;
+  bool skip_unread = 9;
+  bytes meta = 10;
 }
 
 message SendMessageResponse {

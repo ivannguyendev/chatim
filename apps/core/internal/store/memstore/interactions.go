@@ -7,6 +7,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/keys"
 )
 
 var _ store.Interactions = (*Interactions)(nil)
@@ -25,7 +26,7 @@ type Interactions struct {
 	reactions map[userKey]domain.Reaction
 	bookmarks map[userKey]domain.Bookmark
 	replies   map[replyKey]domain.Reply
-	log       *Messages
+	flags     flagMap[interactionFlagKey]
 }
 
 func NewInteractions() *Interactions {
@@ -33,6 +34,7 @@ func NewInteractions() *Interactions {
 		reactions: make(map[userKey]domain.Reaction),
 		bookmarks: make(map[userKey]domain.Bookmark),
 		replies:   make(map[replyKey]domain.Reply),
+		flags:     make(flagMap[interactionFlagKey]),
 	}
 }
 
@@ -56,7 +58,7 @@ func (s *Interactions) SetReaction(ctx context.Context, r domain.Reaction) (doma
 	next := r
 	next.Prev, next.N = cur.Emoji, cur.N+1
 	s.reactions[k] = next
-	s.logReaction(next)
+	s.flags.raise(interactionFlagKey{userKey: k, kind: keys.ReactionKind}, store.BitInteraction, time.Now())
 	return next, true, nil
 }
 
@@ -77,7 +79,7 @@ func (s *Interactions) RemoveReaction(ctx context.Context, key store.MsgKey, use
 	next := cur
 	next.Prev, next.Emoji, next.N, next.At = cur.Emoji, "", cur.N+1, at
 	s.reactions[k] = next
-	s.logReaction(next)
+	s.flags.raise(interactionFlagKey{userKey: k, kind: keys.ReactionKind}, store.BitInteraction, time.Now())
 	return next, true, nil
 }
 
@@ -89,10 +91,4 @@ func (s *Interactions) GetReaction(ctx context.Context, key store.MsgKey, user s
 	defer s.mu.RUnlock()
 	cur, ok := s.reactions[userKey{key: key, user: user}]
 	return cur, ok, nil
-}
-
-func (s *Interactions) logReaction(r domain.Reaction) {
-	if s.log != nil {
-		s.log.appendFact(logged{kind: store.ReactionChanged, reaction: r})
-	}
 }

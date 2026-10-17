@@ -5,7 +5,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
@@ -22,11 +21,9 @@ func (s *scanner) pins(ctx context.Context, room uint64) error {
 		limit:   store.MaxPinScan,
 		full:    ErrPinPageFull,
 		between: s.deps.Pins.Between,
-		record:  pinRecord,
-		counted: &s.rep.PinRecords,
+		at:      func(a domain.PinAction) time.Time { return a.At },
+		marks: func(a domain.PinAction) []mark {
+			return []mark{{store.StateTarget{Collection: store.StatePins, Bit: store.BitPinFact, Room: a.Room, Seq: a.PV}, &s.rep.Pins}}
+		},
 	})
-}
-
-func pinRecord(a domain.PinAction) work.Record {
-	return work.Record{Kind: store.PinInserted, Room: a.Room, Seq: a.PV, CommittedAt: a.At}
 }

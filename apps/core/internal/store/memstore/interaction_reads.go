@@ -70,3 +70,23 @@ func (s *Interactions) allOfKind(kind keys.InteractionKind) []store.Interaction 
 	}
 	return out
 }
+
+func (s *Interactions) MyInteractions(ctx context.Context, user string, ks []store.MsgKey) (map[store.MsgKey]store.MyInteraction, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := store.ValidateMyInteractions(user, ks); err != nil {
+		return nil, err
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make(map[store.MsgKey]store.MyInteraction)
+	for _, k := range ks {
+		at := userKey{key: k, user: user}
+		mine := store.MyInteraction{Reaction: s.reactions[at].Emoji, Bookmarked: s.bookmarks[at].On}
+		if mine != (store.MyInteraction{}) {
+			out[k] = mine
+		}
+	}
+	return out, nil
+}

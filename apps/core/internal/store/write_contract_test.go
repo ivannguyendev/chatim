@@ -23,11 +23,6 @@ var portMethods = map[string]string{
 	"Rooms.Member":        "read",
 	"Rooms.TouchActivity": "monotonic-max",
 	"Rooms.ActiveRooms":   "read",
-	"ChangeFeed.Open":     "read",
-	"ChangeFeed.Forget":   "reset",
-	"Cursor.Next":         "read",
-	"Cursor.Confirm":      "monotonic-cas",
-	"Cursor.Close":        "lifecycle",
 
 	"MessageEditor.ApplyEdit":     "cas",
 	"HistoryClearer.ClearHistory": "monotonic-max",
@@ -41,6 +36,7 @@ var portMethods = map[string]string{
 	"Hidden.HiddenIn":             "read",
 	"Hidden.Get":                  "read",
 	"Hidden.Between":              "read",
+	"Hidden.HiddenInRooms":        "read",
 
 	"Interactions.SetReaction":       "version-bump",
 	"Interactions.RemoveReaction":    "version-bump",
@@ -54,6 +50,8 @@ var portMethods = map[string]string{
 	"Interactions.Replies":           "read",
 	"Interactions.CountLiveReplies":  "read",
 	"Interactions.Between":           "read",
+	"Interactions.MyInteractions":    "read",
+	"Interactions.Reactors":          "read",
 	"ReactionSummaries.SetReactions": "cas",
 	"Pins.Append":                    "insert-unique",
 	"Pins.At":                        "read",
@@ -67,6 +65,7 @@ var portMethods = map[string]string{
 	"MemberReader.MembersOf":      "read",
 	"MemberReader.MembersBetween": "read",
 	"MemberReader.RoomsOf":        "read",
+	"MemberReader.ListMembers":    "read",
 	"OwnerChanges.ChangeOwners":   "transaction",
 	"MemberCounts.AddMemberCount": "version-bump",
 	"MemberCounts.CountMembers":   "read",
@@ -86,20 +85,44 @@ var portMethods = map[string]string{
 
 	"DirectRooms.Claim":   "upsert",
 	"DirectRooms.Repoint": "cas",
+
+	"RoomUpdater.UpdateRoomInfo":     "cas",
+	"RoomPreferences.SetPreferences": "version-bump",
+	"ReplyThreads.Touch":             "monotonic-max",
+	"ReplyThreads.List":              "read",
+
+	"RoomList.CountRooms":        "read",
+	"RoomList.JoinedRoomOrder":   "read",
+	"RoomList.StepwiseRoomOrder": "read",
+	"RoomList.MembersByKeys":     "read",
+	"RoomList.RoomActivities":    "read",
+	"RoomList.RoomInfos":         "read",
+	"RoomTails.TailWindow":       "read",
+	"RoomTails.TailPreviews":     "read",
+
+	"MessageCounts.SetReactions":      "cas",
+	"MessageCounts.AddReactionCounts": "version-bump",
+	"MessageCounts.AddReplyCount":     "version-bump",
+	"MessageCounts.SetReplyCount":     "cas",
+
+	"EventStates.Pending":      "read",
+	"EventStates.Clear":        "cas",
+	"EventStates.Mark":         "cas",
+	"SweepCheckpoints.Get":     "read",
+	"SweepCheckpoints.Advance": "monotonic-max",
 }
 
 func TestEveryPortMethodHasAWriteContract(t *testing.T) {
 	ports := []reflect.Type{
 		reflect.TypeFor[store.Messages](),
 		reflect.TypeFor[store.Rooms](),
-		reflect.TypeFor[store.ChangeFeed](),
-		reflect.TypeFor[store.Cursor](),
 		reflect.TypeFor[store.MessageEditor](),
 		reflect.TypeFor[store.HistoryClearer](),
 		reflect.TypeFor[store.Edits](),
 		reflect.TypeFor[store.Hidden](),
 		reflect.TypeFor[store.Interactions](),
 		reflect.TypeFor[store.ReactionSummaries](),
+		reflect.TypeFor[store.MessageCounts](),
 		reflect.TypeFor[store.Pins](),
 		reflect.TypeFor[store.PinProjector](),
 		reflect.TypeFor[store.MemberWriter](),
@@ -111,6 +134,13 @@ func TestEveryPortMethodHasAWriteContract(t *testing.T) {
 		reflect.TypeFor[store.Mentions](),
 		reflect.TypeFor[store.SharedMentions](),
 		reflect.TypeFor[store.MessageTimes](),
+		reflect.TypeFor[store.RoomUpdater](),
+		reflect.TypeFor[store.RoomPreferences](),
+		reflect.TypeFor[store.ReplyThreads](),
+		reflect.TypeFor[store.RoomList](),
+		reflect.TypeFor[store.RoomTails](),
+		reflect.TypeFor[store.EventStates](),
+		reflect.TypeFor[store.SweepCheckpoints](),
 	}
 	seen := map[string]bool{}
 	for _, p := range ports {

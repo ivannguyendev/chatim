@@ -33,16 +33,16 @@ func mustTouch(t *testing.T, s store.Rooms, acts ...store.Activity) {
 	}
 }
 
-func assertActivity(t *testing.T, s store.Rooms, id, seq uint64, msgAt, changeAt time.Time) {
+func assertActivity(t *testing.T, s store.Rooms, id, seq uint64, msgAt, changedSince time.Time) {
 	t.Helper()
 	got, err := s.Get(t.Context(), id)
 	if err != nil {
 		t.Fatalf("Get(%d): %v", id, err)
 	}
-	if got.LastSeq != seq || !got.LastMsgAt.Equal(msgAt) || !got.LastChangeAt.Equal(changeAt) {
-		t.Fatalf("room %d activity = seq %d, msg %v, change %v; want seq %d, msg %v, change %v",
-			id, got.LastSeq, got.LastMsgAt, got.LastChangeAt, seq, msgAt, changeAt)
+	if got.LastSeq != seq || !got.LastMsgAt.Equal(msgAt) {
+		t.Fatalf("room %d activity = seq %d, msg %v; want seq %d, msg %v", id, got.LastSeq, got.LastMsgAt, seq, msgAt)
 	}
+	assertStamped(t, "last change", got.LastChangeAt, changedSince)
 }
 
 func activeIDs(t *testing.T, s store.Rooms, q store.ActiveQuery) []uint64 {
@@ -62,32 +62,34 @@ func activityMonotonic(t *testing.T, s store.Rooms) {
 	room, members := teamOf(roomA)
 	mustCreate(t, s, room, members)
 	early, late := baseTime.Add(time.Hour), baseTime.Add(2*time.Hour)
+	since := stampStart()
 	mustTouch(t, s, store.Activity{Room: roomA, Seq: 5, At: late}, store.Activity{Room: roomA, Seq: 3, At: early})
-	assertActivity(t, s, roomA, 5, late, late)
+	assertActivity(t, s, roomA, 5, late, since)
 	mustTouch(t, s, store.Activity{Room: roomA, Seq: 4, At: early})
-	assertActivity(t, s, roomA, 5, late, late)
+	assertActivity(t, s, roomA, 5, late, since)
 	mustTouch(t, s)
-	assertActivity(t, s, roomA, 5, late, late)
+	assertActivity(t, s, roomA, 5, late, since)
 }
 
 func activityThread(t *testing.T, s store.Rooms) {
 	room, members := teamOf(roomA)
 	mustCreate(t, s, room, members)
-	threadAt := baseTime.Add(3 * time.Hour)
 	mustTouch(t, s, store.Activity{Room: roomA, Seq: 2, At: baseTime})
-	mustTouch(t, s, store.Activity{Room: roomA, Thread: sideThread, Seq: 50, At: threadAt})
-	assertActivity(t, s, roomA, 2, baseTime, threadAt)
-	if got := activeIDs(t, s, store.ActiveQuery{From: threadAt, To: threadAt, Limit: 10}); !slices.Equal(got, []uint64{roomA}) {
-		t.Fatalf("active rooms in the thread's hour = %v, want [%d]", got, roomA)
+	since := stampStart()
+	mustTouch(t, s, store.Activity{Room: roomA, Thread: sideThread, Seq: 50, At: baseTime.Add(3 * time.Hour)})
+	assertActivity(t, s, roomA, 2, baseTime, since)
+	if got := activeIDs(t, s, store.ActiveQuery{From: since, To: since, Limit: 10}); !slices.Equal(got, []uint64{roomA}) {
+		t.Fatalf("active rooms in the hour of the thread touch = %v, want [%d]", got, roomA)
 	}
 }
 
 func activityMissingRoom(t *testing.T, s store.Rooms) {
 	room, members := teamOf(roomA)
 	mustCreate(t, s, room, members)
+	since := stampStart()
 	mustTouch(t, s, store.Activity{Room: roomB, Seq: 3, At: baseTime}, store.Activity{Room: roomA, Seq: 1, At: baseTime})
 	assertNoRoom(t, s, roomB)
-	assertActivity(t, s, roomA, 1, baseTime, baseTime)
+	assertActivity(t, s, roomA, 1, baseTime, since)
 }
 
 func activeRoomsRange(t *testing.T, s store.Rooms) {
@@ -106,10 +108,7 @@ func activeRoomsRange(t *testing.T, s store.Rooms) {
 		room, members := roomAt(r.id, r.tenantID, r.created)
 		mustCreate(t, s, room, members)
 	}
-	mustTouch(t, s,
-		store.Activity{Room: roomB, Seq: 9, At: baseTime.Add(5 * time.Hour)},
-		store.Activity{Room: roomB + 2, Seq: 4, At: baseTime.Add(-3 * time.Hour)},
-	)
+	mustTouch(t, s, store.Activity{Room: roomB, Seq: 9, At: baseTime.Add(-3 * time.Hour)})
 	q := store.ActiveQuery{From: baseTime, To: baseTime.Add(time.Hour), Limit: 10}
 	steps := []struct {
 		name string
@@ -144,11 +143,11 @@ func activeRoomsInvalid(t *testing.T, s store.Rooms) {
 func activityWithoutSeq(t *testing.T, s store.Rooms) {
 	room, members := teamOf(roomA)
 	mustCreate(t, s, room, members)
-	editAt := baseTime.Add(5 * time.Hour)
 	mustTouch(t, s, store.Activity{Room: roomA, Seq: 2, At: baseTime})
-	mustTouch(t, s, store.Activity{Room: roomA, At: editAt})
-	assertActivity(t, s, roomA, 2, baseTime, editAt)
-	if got := activeIDs(t, s, store.ActiveQuery{From: editAt, To: editAt, Limit: 10}); !slices.Equal(got, []uint64{roomA}) {
-		t.Fatalf("active rooms in the edit's hour = %v, want [%d]", got, roomA)
+	since := stampStart()
+	mustTouch(t, s, store.Activity{Room: roomA, At: baseTime.Add(5 * time.Hour)})
+	assertActivity(t, s, roomA, 2, baseTime, since)
+	if got := activeIDs(t, s, store.ActiveQuery{From: since, To: since, Limit: 10}); !slices.Equal(got, []uint64{roomA}) {
+		t.Fatalf("active rooms in the hour of the touch = %v, want [%d]", got, roomA)
 	}
 }

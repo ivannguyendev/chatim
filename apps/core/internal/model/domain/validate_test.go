@@ -51,6 +51,18 @@ func TestValidateText(t *testing.T) {
 	}
 }
 
+func TestValidateMeta(t *testing.T) {
+	for _, n := range []int{0, 1, 8192} {
+		if err := domain.ValidateMeta(make([]byte, n)); err != nil {
+			t.Fatalf("meta of %d bytes = %v, want nil", n, err)
+		}
+	}
+	if err := domain.ValidateMeta(nil); err != nil {
+		t.Fatalf("nil meta = %v, want nil", err)
+	}
+	assertInvalid(t, domain.ValidateMeta(make([]byte, 8193)), "meta")
+}
+
 func TestValidateThread(t *testing.T) {
 	if err := domain.ValidateThread(0); err != nil {
 		t.Fatalf("ValidateThread(0) = %v, want nil", err)

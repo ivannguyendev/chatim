@@ -27,12 +27,8 @@ func (s *Store) SentTimes(ctx context.Context, ks []store.MsgKey) (map[store.Msg
 	if len(ks) == 0 {
 		return out, ctx.Err()
 	}
-	ids := make(bson.A, len(ks))
-	for i, k := range ks {
-		ids[i] = msgID(k)
-	}
 	opts := options.Find().SetProjection(bson.D{{Key: "ts", Value: 1}})
-	cur, err := s.messages.Find(ctx, bson.D{{Key: "_id", Value: bson.D{{Key: "$in", Value: ids}}}}, opts)
+	cur, err := s.messages.Find(ctx, boundedIDs(msgIDs(ks)), opts)
 	if err != nil {
 		return nil, fmt.Errorf("sent times of %d messages: %w", len(ks), err)
 	}

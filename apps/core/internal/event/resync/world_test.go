@@ -5,16 +5,11 @@ import (
 	"errors"
 	"slices"
 	"strconv"
-	"strings"
-	"sync"
 	"testing"
 	"time"
 
-	"github.com/nats-io/nats.go"
-	"github.com/nats-io/nats.go/jetstream"
-
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/resync"
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
@@ -28,55 +23,65 @@ const (
 )
 
 var (
-	lostFrom   = time.Date(2026, 10, 1, 10, 0, 0, 0, time.UTC)
-	lostTo     = lostFrom.Add(time.Hour)
-	errPublish = errors.New("publish failed")
-	target     = resync.Target{SubjectRoot: "work", Partitions: 32}
+	lostFrom = time.Date(2026, 10, 1, 10, 0, 0, 0, time.UTC)
+	lostTo   = lostFrom.Add(time.Hour)
+	errMark  = errors.New("mark failed")
 )
 
-type publishSpy struct {
-	mu   sync.Mutex
-	ids  []string
-	recs []work.Record
-	err  error
+type markSpy struct {
+	states *memstore.EventStates
+	pages  [][]store.StateTarget
+	checks []string
+	err    error
 }
 
-func (p *publishSpy) PublishMsg(_ context.Context, m *nats.Msg, _ ...jetstream.PublishOpt) (*jetstream.PubAck, error) {
-	if p.err != nil {
-		return nil, p.err
+func (s *markSpy) Mark(ctx context.Context, c store.StateCollection, targets []store.StateTarget) error {
+	if s.err != nil {
+		return s.err
 	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	rec, err := work.Decode(m.Data)
-	if err != nil {
-		return nil, err
+	s.pages = append(s.pages, slices.Clone(targets))
+	return s.states.Mark(ctx, c, targets)
+}
+
+func (s *markSpy) ArmMessageCountCheck(_ context.Context, key store.MsgKey, counter string) (timer.Timer, error) {
+	if s.err != nil {
+		return timer.Timer{}, s.err
 	}
-	p.ids = append(p.ids, m.Header.Get(jetstream.MsgIDHeader))
-	p.recs = append(p.recs, rec)
-	return &jetstream.PubAck{}, nil
+	s.checks = append(s.checks, countCheckID(key.Room, key.Seq, counter))
+	return timer.Timer{Seq: uint64(len(s.checks))}, nil
 }
 
-func (p *publishSpy) published() []string {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return slices.Clone(p.ids)
+func (s *markSpy) marked() []store.StateTarget { return slices.Concat(s.pages...) }
+
+func countCheckID(room, seq uint64, counter string) string {
+	return strconv.FormatUint(room, 10) + "/" + strconv.FormatUint(seq, 10) + "/" + counter
 }
 
-func (p *publishSpy) records() []work.Record {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return slices.Clone(p.recs)
+func roomMark(room uint64, bit store.StateBit, ver uint64) store.StateTarget {
+	return store.StateTarget{Collection: store.StateRooms, Bit: bit, Room: room, Ver: ver}
 }
 
-func withoutOps(ids []string) []string {
-	out := make([]string, len(ids))
-	for i, id := range ids {
-		if strings.HasPrefix(id, "q:") {
-			id = id[:strings.LastIndex(id, "-")+1]
-		}
-		out[i] = id
+func messageMark(room, seq uint64) store.StateTarget {
+	return store.StateTarget{Collection: store.StateMessages, Bit: store.BitMsgCreated, Room: room, Seq: seq}
+}
+
+func timelineMarks(room, newest, oldest uint64) []store.StateTarget {
+	var out []store.StateTarget
+	for seq := newest; seq >= oldest; seq-- {
+		out = append(out, messageMark(room, seq))
 	}
 	return out
+}
+
+func assertMarked(t *testing.T, got, want []store.StateTarget) {
+	t.Helper()
+	if !slices.EqualFunc(got, want, func(a, b store.StateTarget) bool {
+		at := a.At.Equal(b.At)
+		a.At, b.At = time.Time{}, time.Time{}
+		return at && a == b
+	}) {
+		t.Fatalf("marked %d targets %+v,\nwant %d targets %+v", len(got), got, len(want), want)
+	}
 }
 
 type world struct {
@@ -86,6 +91,7 @@ type world struct {
 	reactions *memstore.Interactions
 	pins      *memstore.Pins
 	hidden    *memstore.Hidden
+	states    *memstore.EventStates
 }
 
 func newWorld(t *testing.T) world {
@@ -94,6 +100,9 @@ func newWorld(t *testing.T) world {
 		rooms: memstore.NewRooms(), msgs: memstore.NewMessages(), edits: memstore.NewEdits(),
 		reactions: memstore.NewInteractions(), pins: memstore.NewPins(), hidden: memstore.NewHidden(),
 	}
+	w.states = memstore.NewEventStates(memstore.EventStateStores{
+		Messages: w.msgs, Rooms: w.rooms, Edits: w.edits, Hidden: w.hidden, Interactions: w.reactions, Pins: w.pins,
+	})
 	old := lostFrom.Add(-48 * time.Hour)
 	w.room(t, busyRoom, "acme", old)
 	w.room(t, newRoom, "acme", lostFrom.Add(10*time.Minute))
@@ -101,10 +110,7 @@ func newWorld(t *testing.T) world {
 	w.room(t, foreignRoom, "other", lostFrom.Add(20*time.Minute))
 	w.messages(t, busyRoom, 150, lostFrom.Add(-30*time.Minute))
 	w.messages(t, staleRoom, 5, lostFrom.Add(-3*time.Hour))
-	acts := []store.Activity{
-		{Room: busyRoom, Seq: 150, At: lostFrom.Add(2 * time.Hour)},
-		{Room: staleRoom, Seq: 5, At: lostFrom.Add(-3 * time.Hour)},
-	}
+	acts := []store.Activity{{Room: busyRoom, Seq: 150, At: lostFrom.Add(2 * time.Hour)}}
 	if err := w.rooms.TouchActivity(t.Context(), acts); err != nil {
 		t.Fatalf("TouchActivity: %v", err)
 	}
@@ -137,6 +143,8 @@ func (w world) messages(t *testing.T, room uint64, n int, first time.Time) {
 	}
 }
 
-func (w world) deps(pub resync.Publisher) resync.Deps {
-	return resync.Deps{Rooms: w.rooms, Pages: w.msgs, Edits: w.edits, Interactions: w.reactions, Pins: w.pins, Members: w.rooms, Hidden: w.hidden, Pub: pub}
+func (w world) spy() *markSpy { return &markSpy{states: w.states} }
+
+func (w world) deps(spy *markSpy) resync.Deps {
+	return resync.Deps{Rooms: w.rooms, Pages: w.msgs, Edits: w.edits, Interactions: w.reactions, Pins: w.pins, Members: w.rooms, Hidden: w.hidden, States: spy, Timers: spy}
 }

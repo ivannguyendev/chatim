@@ -36,7 +36,10 @@ type item struct {
 type shard struct {
 	queue chan item
 	full  atomic.Bool
+	acks  *ackFollower
 }
+
+type Option func(*Publisher)
 
 type Publisher struct {
 	js       JetStream
@@ -50,7 +53,7 @@ type Publisher struct {
 	abort    chan struct{}
 	stop     sync.Once
 	done     chan struct{}
-	marks    *ackMarks
+	clears   StateClears
 	counters *Counters
 }
 
@@ -69,11 +72,8 @@ func New(js JetStream, cfg Config, log *slog.Logger, opts ...Option) (*Publisher
 	for _, opt := range opts {
 		opt(p)
 	}
-	if p.marks != nil {
-		p.marks.counters = p.counters
-	}
 	for i := range p.shards {
-		p.shards[i] = &shard{queue: make(chan item, cfg.QueueSize)}
+		p.shards[i] = &shard{queue: make(chan item, cfg.QueueSize), acks: p.newAckFollower()}
 	}
 	return p, nil
 }
@@ -83,33 +83,24 @@ func (p *Publisher) Run(ctx context.Context) error {
 		return errStarted
 	}
 	defer close(p.done)
-	marking := make(chan struct{})
-	go func() {
-		defer close(marking)
-		if p.marks != nil {
-			p.marks.run(p.abort)
-		}
-	}()
-	var wg sync.WaitGroup
+	stopFollowers := p.startFollowers()
+	var drains sync.WaitGroup
 	for _, s := range p.shards {
-		wg.Go(func() { p.drain(ctx, s.queue) })
+		drains.Go(func() { p.drain(ctx, s) })
 	}
-	wg.Wait()
-	if p.marks != nil {
-		close(p.marks.queue)
-	}
-	<-marking
+	drains.Wait()
+	stopFollowers()
 	return ctx.Err()
 }
 
-func (p *Publisher) drain(ctx context.Context, queue <-chan item) {
+func (p *Publisher) drain(ctx context.Context, s *shard) {
 	for {
 		select {
-		case it, open := <-queue:
+		case it, open := <-s.queue:
 			if !open {
 				return
 			}
-			p.publish(it)
+			p.publish(s, it)
 		case <-p.abort:
 			return
 		case <-ctx.Done():
@@ -118,7 +109,7 @@ func (p *Publisher) drain(ctx context.Context, queue <-chan item) {
 	}
 }
 
-func (p *Publisher) publish(it item) {
+func (p *Publisher) publish(s *shard, it item) {
 	for _, ev := range it.events {
 		msg, err := Message(p.cfg.SubjectRoot, it.room, ev)
 		if err != nil {
@@ -128,13 +119,11 @@ func (p *Publisher) publish(it item) {
 		}
 		f, err := p.js.PublishMsgAsync(msg, jetstream.WithRetryAttempts(p.cfg.Attempts), jetstream.WithRetryWait(p.cfg.RetryBackoff))
 		if err != nil {
-			p.fails.record("event publish refused; reconciliation must republish it", ev.GetId(), err)
+			p.fails.record("event publish refused; the sweeper republishes it", ev.GetId(), err)
 			p.counters.refused.Add(1)
 			continue
 		}
-		if key, ok := markKey(it.room, ev); ok {
-			p.marks.track(key, f)
-		}
+		s.acks.follow(ev, f)
 	}
 }
 

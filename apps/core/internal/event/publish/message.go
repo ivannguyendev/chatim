@@ -31,6 +31,8 @@ const (
 	messageHidden         = "message_hidden"
 	historyCleared        = "history_cleared"
 	bookmarkChanged       = "bookmark_changed"
+	roomUpdated           = "room_updated"
+	preferencesChanged    = "room_preferences_changed"
 
 	roomData    = "room"
 	memberData  = "member"
@@ -59,9 +61,9 @@ func Message(root string, room uint64, ev *chatimv1.Event) (*nats.Msg, error) {
 func subjectFor(root, tenant string, room uint64, kind string) (string, error) {
 	var data string
 	switch kind {
-	case roomCreated, msgPinned, msgUnpinned, memberCountChanged:
+	case roomCreated, roomUpdated, msgPinned, msgUnpinned, memberCountChanged:
 		data = roomData
-	case memberAdded, memberRemoved, memberRoleChanged, memberPriorityChanged, readUpdated, messageHidden, historyCleared, bookmarkChanged:
+	case memberAdded, memberRemoved, memberRoleChanged, memberPriorityChanged, readUpdated, messageHidden, historyCleared, bookmarkChanged, preferencesChanged:
 		data = memberData
 	case msgCreated, msgEdited, msgDeleted, reactionChanged, countsChanged:
 		data = messageData
@@ -107,6 +109,10 @@ func eventKind(ev *chatimv1.Event) string {
 		return historyCleared
 	case *chatimv1.Event_BookmarkChanged:
 		return bookmarkChanged
+	case *chatimv1.Event_RoomUpdated:
+		return roomUpdated
+	case *chatimv1.Event_RoomPreferencesChanged:
+		return preferencesChanged
 	default:
 		return ""
 	}

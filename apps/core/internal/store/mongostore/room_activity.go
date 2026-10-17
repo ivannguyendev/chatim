@@ -3,6 +3,7 @@ package mongostore
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -22,7 +23,7 @@ func (s *Store) TouchActivity(ctx context.Context, acts []store.Activity) error 
 		}
 		models = append(models, mongo.NewUpdateOneModel().
 			SetFilter(bson.D{{Key: "_id", Value: room}}).
-			SetUpdate(bson.D{{Key: "$max", Value: activityFields(a, seq)}}))
+			SetUpdate(bson.A{bson.D{{Key: "$set", Value: activityFields(a, seq)}}}))
 	}
 	if len(models) == 0 {
 		return ctx.Err()
@@ -33,11 +34,21 @@ func (s *Store) TouchActivity(ctx context.Context, acts []store.Activity) error 
 	return nil
 }
 
+var nowHourBucket = bson.D{{Key: "$toLong", Value: bson.D{{Key: "$floor", Value: bson.D{{Key: "$divide", Value: bson.A{
+	bson.D{{Key: "$toLong", Value: "$$NOW"}}, int64(time.Hour / time.Millisecond),
+}}}}}}}
+
+func raised(field string, value any) bson.E {
+	return bson.E{Key: field, Value: bson.D{{Key: "$max", Value: bson.A{"$" + field, value}}}}
+}
+
 func activityFields(a store.Activity, seq int64) bson.D {
-	at := a.At.UTC()
-	fields := bson.D{{Key: "last_change_at", Value: at}, {Key: "activity_bucket", Value: store.HourBucket(at)}}
+	fields := bson.D{raised("last_change_at", "$$NOW"), raised("activity_bucket", nowHourBucket)}
 	if a.Thread == 0 && a.Seq > 0 {
-		fields = append(fields, bson.E{Key: "last_seq", Value: seq}, bson.E{Key: "last_message_at", Value: at})
+		fields = append(fields, raised("last_seq", seq), raised("last_message_at", a.At.UTC()))
+	}
+	if a.Thread == 0 && a.Edited {
+		fields = append(fields, raised("last_edit_at", "$$NOW"))
 	}
 	return fields
 }

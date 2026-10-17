@@ -76,6 +76,7 @@ type MessageKind int32
 const (
 	MessageKind_MESSAGE_KIND_UNSPECIFIED MessageKind = 0
 	MessageKind_MESSAGE_KIND_TEXT        MessageKind = 1
+	MessageKind_MESSAGE_KIND_SYSTEM      MessageKind = 2
 )
 
 // Enum value maps for MessageKind.
@@ -83,10 +84,12 @@ var (
 	MessageKind_name = map[int32]string{
 		0: "MESSAGE_KIND_UNSPECIFIED",
 		1: "MESSAGE_KIND_TEXT",
+		2: "MESSAGE_KIND_SYSTEM",
 	}
 	MessageKind_value = map[string]int32{
 		"MESSAGE_KIND_UNSPECIFIED": 0,
 		"MESSAGE_KIND_TEXT":        1,
+		"MESSAGE_KIND_SYSTEM":      2,
 	}
 )
 
@@ -125,6 +128,7 @@ const (
 	HistoryAnchor_HISTORY_ANCHOR_OLDEST      HistoryAnchor = 2
 	HistoryAnchor_HISTORY_ANCHOR_BEFORE      HistoryAnchor = 3
 	HistoryAnchor_HISTORY_ANCHOR_AFTER       HistoryAnchor = 4
+	HistoryAnchor_HISTORY_ANCHOR_AROUND      HistoryAnchor = 5
 )
 
 // Enum value maps for HistoryAnchor.
@@ -135,6 +139,7 @@ var (
 		2: "HISTORY_ANCHOR_OLDEST",
 		3: "HISTORY_ANCHOR_BEFORE",
 		4: "HISTORY_ANCHOR_AFTER",
+		5: "HISTORY_ANCHOR_AROUND",
 	}
 	HistoryAnchor_value = map[string]int32{
 		"HISTORY_ANCHOR_UNSPECIFIED": 0,
@@ -142,6 +147,7 @@ var (
 		"HISTORY_ANCHOR_OLDEST":      2,
 		"HISTORY_ANCHOR_BEFORE":      3,
 		"HISTORY_ANCHOR_AFTER":       4,
+		"HISTORY_ANCHOR_AROUND":      5,
 	}
 )
 
@@ -233,6 +239,9 @@ type Room struct {
 	CreatedBy     string                 `protobuf:"bytes,5,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	MemberCount   int32                  `protobuf:"varint,7,opt,name=member_count,json=memberCount,proto3" json:"member_count,omitempty"`
+	Avatar        string                 `protobuf:"bytes,8,opt,name=avatar,proto3" json:"avatar,omitempty"`
+	InfoVer       uint64                 `protobuf:"varint,9,opt,name=info_ver,json=infoVer,proto3" json:"info_ver,omitempty"`
+	DirectUsers   []string               `protobuf:"bytes,10,rep,name=direct_users,json=directUsers,proto3" json:"direct_users,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -316,6 +325,27 @@ func (x *Room) GetMemberCount() int32 {
 	return 0
 }
 
+func (x *Room) GetAvatar() string {
+	if x != nil {
+		return x.Avatar
+	}
+	return ""
+}
+
+func (x *Room) GetInfoVer() uint64 {
+	if x != nil {
+		return x.InfoVer
+	}
+	return 0
+}
+
+func (x *Room) GetDirectUsers() []string {
+	if x != nil {
+		return x.DirectUsers
+	}
+	return nil
+}
+
 type Message struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	RoomId         string                 `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
@@ -337,6 +367,10 @@ type Message struct {
 	MentionAll     bool                   `protobuf:"varint,18,opt,name=mention_all,json=mentionAll,proto3" json:"mention_all,omitempty"`
 	ReplyCount     *ReplyCount            `protobuf:"bytes,19,opt,name=reply_count,json=replyCount,proto3" json:"reply_count,omitempty"`
 	ReplyPreview   *ReplyPreview          `protobuf:"bytes,20,opt,name=reply_preview,json=replyPreview,proto3" json:"reply_preview,omitempty"`
+	SkipUnread     bool                   `protobuf:"varint,21,opt,name=skip_unread,json=skipUnread,proto3" json:"skip_unread,omitempty"`
+	Meta           []byte                 `protobuf:"bytes,22,opt,name=meta,proto3" json:"meta,omitempty"`
+	MyReaction     string                 `protobuf:"bytes,23,opt,name=my_reaction,json=myReaction,proto3" json:"my_reaction,omitempty"`
+	Bookmarked     bool                   `protobuf:"varint,24,opt,name=bookmarked,proto3" json:"bookmarked,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -502,6 +536,34 @@ func (x *Message) GetReplyPreview() *ReplyPreview {
 		return x.ReplyPreview
 	}
 	return nil
+}
+
+func (x *Message) GetSkipUnread() bool {
+	if x != nil {
+		return x.SkipUnread
+	}
+	return false
+}
+
+func (x *Message) GetMeta() []byte {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *Message) GetMyReaction() string {
+	if x != nil {
+		return x.MyReaction
+	}
+	return ""
+}
+
+func (x *Message) GetBookmarked() bool {
+	if x != nil {
+		return x.Bookmarked
+	}
+	return false
 }
 
 type MessageVersion struct {
@@ -805,6 +867,9 @@ type SendMessageRequest struct {
 	ReplyTo       *ReplyRef              `protobuf:"bytes,5,opt,name=reply_to,json=replyTo,proto3" json:"reply_to,omitempty"`
 	ForwardFrom   *ForwardRef            `protobuf:"bytes,6,opt,name=forward_from,json=forwardFrom,proto3" json:"forward_from,omitempty"`
 	Mentions      *MentionSet            `protobuf:"bytes,7,opt,name=mentions,proto3" json:"mentions,omitempty"`
+	Kind          MessageKind            `protobuf:"varint,8,opt,name=kind,proto3,enum=chatim.v1.MessageKind" json:"kind,omitempty"`
+	SkipUnread    bool                   `protobuf:"varint,9,opt,name=skip_unread,json=skipUnread,proto3" json:"skip_unread,omitempty"`
+	Meta          []byte                 `protobuf:"bytes,10,opt,name=meta,proto3" json:"meta,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -884,6 +949,27 @@ func (x *SendMessageRequest) GetForwardFrom() *ForwardRef {
 func (x *SendMessageRequest) GetMentions() *MentionSet {
 	if x != nil {
 		return x.Mentions
+	}
+	return nil
+}
+
+func (x *SendMessageRequest) GetKind() MessageKind {
+	if x != nil {
+		return x.Kind
+	}
+	return MessageKind_MESSAGE_KIND_UNSPECIFIED
+}
+
+func (x *SendMessageRequest) GetSkipUnread() bool {
+	if x != nil {
+		return x.SkipUnread
+	}
+	return false
+}
+
+func (x *SendMessageRequest) GetMeta() []byte {
+	if x != nil {
+		return x.Meta
 	}
 	return nil
 }
@@ -1608,7 +1694,7 @@ var File_chatim_v1_core_proto protoreflect.FileDescriptor
 
 const file_chatim_v1_core_proto_rawDesc = "" +
 	"\n" +
-	"\x14chatim/v1/core.proto\x12\tchatim.v1\x1a\x1dchatim/v1/message_links.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe8\x01\n" +
+	"\x14chatim/v1/core.proto\x12\tchatim.v1\x1a\x1dchatim/v1/message_links.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xbe\x02\n" +
 	"\x04Room\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06tenant\x18\x02 \x01(\tR\x06tenant\x12'\n" +
@@ -1618,7 +1704,11 @@ const file_chatim_v1_core_proto_rawDesc = "" +
 	"created_by\x18\x05 \x01(\tR\tcreatedBy\x129\n" +
 	"\n" +
 	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12!\n" +
-	"\fmember_count\x18\a \x01(\x05R\vmemberCount\"\x80\x06\n" +
+	"\fmember_count\x18\a \x01(\x05R\vmemberCount\x12\x16\n" +
+	"\x06avatar\x18\b \x01(\tR\x06avatar\x12\x19\n" +
+	"\binfo_ver\x18\t \x01(\x04R\ainfoVer\x12!\n" +
+	"\fdirect_users\x18\n" +
+	" \x03(\tR\vdirectUsers\"\xf6\x06\n" +
 	"\aMessage\x12\x17\n" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x1f\n" +
 	"\vthread_root\x18\x02 \x01(\x04R\n" +
@@ -1643,7 +1733,15 @@ const file_chatim_v1_core_proto_rawDesc = "" +
 	"mentionAll\x126\n" +
 	"\vreply_count\x18\x13 \x01(\v2\x15.chatim.v1.ReplyCountR\n" +
 	"replyCount\x12<\n" +
-	"\rreply_preview\x18\x14 \x01(\v2\x17.chatim.v1.ReplyPreviewR\freplyPreviewJ\x04\b\x04\x10\x05R\x03pts\"\xce\x01\n" +
+	"\rreply_preview\x18\x14 \x01(\v2\x17.chatim.v1.ReplyPreviewR\freplyPreview\x12\x1f\n" +
+	"\vskip_unread\x18\x15 \x01(\bR\n" +
+	"skipUnread\x12\x12\n" +
+	"\x04meta\x18\x16 \x01(\fR\x04meta\x12\x1f\n" +
+	"\vmy_reaction\x18\x17 \x01(\tR\n" +
+	"myReaction\x12\x1e\n" +
+	"\n" +
+	"bookmarked\x18\x18 \x01(\bR\n" +
+	"bookmarkedJ\x04\b\x04\x10\x05R\x03pts\"\xce\x01\n" +
 	"\x0eMessageVersion\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\rR\x03ver\x12'\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x13.chatim.v1.EditKindR\x04kind\x12\x12\n" +
@@ -1664,7 +1762,7 @@ const file_chatim_v1_core_proto_rawDesc = "" +
 	"other_user\x18\x01 \x01(\tR\totherUser\"W\n" +
 	"\x16OpenDirectRoomResponse\x12#\n" +
 	"\x04room\x18\x01 \x01(\v2\x0f.chatim.v1.RoomR\x04room\x12\x18\n" +
-	"\acreated\x18\x02 \x01(\bR\acreated\"\x91\x02\n" +
+	"\acreated\x18\x02 \x01(\bR\acreated\"\xf2\x02\n" +
 	"\x12SendMessageRequest\x12\x17\n" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x1f\n" +
 	"\vthread_root\x18\x02 \x01(\x04R\n" +
@@ -1673,7 +1771,12 @@ const file_chatim_v1_core_proto_rawDesc = "" +
 	"\x04text\x18\x04 \x01(\tR\x04text\x12.\n" +
 	"\breply_to\x18\x05 \x01(\v2\x13.chatim.v1.ReplyRefR\areplyTo\x128\n" +
 	"\fforward_from\x18\x06 \x01(\v2\x15.chatim.v1.ForwardRefR\vforwardFrom\x121\n" +
-	"\bmentions\x18\a \x01(\v2\x15.chatim.v1.MentionSetR\bmentions\"m\n" +
+	"\bmentions\x18\a \x01(\v2\x15.chatim.v1.MentionSetR\bmentions\x12*\n" +
+	"\x04kind\x18\b \x01(\x0e2\x16.chatim.v1.MessageKindR\x04kind\x12\x1f\n" +
+	"\vskip_unread\x18\t \x01(\bR\n" +
+	"skipUnread\x12\x12\n" +
+	"\x04meta\x18\n" +
+	" \x01(\fR\x04meta\"m\n" +
 	"\x13SendMessageResponse\x12\x10\n" +
 	"\x03seq\x18\x01 \x01(\x04R\x03seq\x129\n" +
 	"\n" +
@@ -1728,16 +1831,18 @@ const file_chatim_v1_core_proto_rawDesc = "" +
 	"\bRoomType\x12\x19\n" +
 	"\x15ROOM_TYPE_UNSPECIFIED\x10\x00\x12\x10\n" +
 	"\fROOM_TYPE_DM\x10\x01\x12\x13\n" +
-	"\x0fROOM_TYPE_GROUP\x10\x02*B\n" +
+	"\x0fROOM_TYPE_GROUP\x10\x02*[\n" +
 	"\vMessageKind\x12\x1c\n" +
 	"\x18MESSAGE_KIND_UNSPECIFIED\x10\x00\x12\x15\n" +
-	"\x11MESSAGE_KIND_TEXT\x10\x01*\x9a\x01\n" +
+	"\x11MESSAGE_KIND_TEXT\x10\x01\x12\x17\n" +
+	"\x13MESSAGE_KIND_SYSTEM\x10\x02*\xb5\x01\n" +
 	"\rHistoryAnchor\x12\x1e\n" +
 	"\x1aHISTORY_ANCHOR_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15HISTORY_ANCHOR_LATEST\x10\x01\x12\x19\n" +
 	"\x15HISTORY_ANCHOR_OLDEST\x10\x02\x12\x19\n" +
 	"\x15HISTORY_ANCHOR_BEFORE\x10\x03\x12\x18\n" +
-	"\x14HISTORY_ANCHOR_AFTER\x10\x04*g\n" +
+	"\x14HISTORY_ANCHOR_AFTER\x10\x04\x12\x19\n" +
+	"\x15HISTORY_ANCHOR_AROUND\x10\x05*g\n" +
 	"\bEditKind\x12\x19\n" +
 	"\x15EDIT_KIND_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12EDIT_KIND_ORIGINAL\x10\x01\x12\x12\n" +
@@ -1816,19 +1921,20 @@ var file_chatim_v1_core_proto_depIdxs = []int32{
 	27, // 17: chatim.v1.SendMessageRequest.reply_to:type_name -> chatim.v1.ReplyRef
 	28, // 18: chatim.v1.SendMessageRequest.forward_from:type_name -> chatim.v1.ForwardRef
 	32, // 19: chatim.v1.SendMessageRequest.mentions:type_name -> chatim.v1.MentionSet
-	25, // 20: chatim.v1.SendMessageResponse.created_at:type_name -> google.protobuf.Timestamp
-	2,  // 21: chatim.v1.GetHistoryRequest.anchor:type_name -> chatim.v1.HistoryAnchor
-	5,  // 22: chatim.v1.GetHistoryResponse.messages:type_name -> chatim.v1.Message
-	32, // 23: chatim.v1.EditMessageRequest.mentions:type_name -> chatim.v1.MentionSet
-	5,  // 24: chatim.v1.EditMessageResponse.message:type_name -> chatim.v1.Message
-	5,  // 25: chatim.v1.DeleteMessageResponse.message:type_name -> chatim.v1.Message
-	25, // 26: chatim.v1.ClearHistoryResponse.cleared_at:type_name -> google.protobuf.Timestamp
-	6,  // 27: chatim.v1.GetEditHistoryResponse.versions:type_name -> chatim.v1.MessageVersion
-	28, // [28:28] is the sub-list for method output_type
-	28, // [28:28] is the sub-list for method input_type
-	28, // [28:28] is the sub-list for extension type_name
-	28, // [28:28] is the sub-list for extension extendee
-	0,  // [0:28] is the sub-list for field type_name
+	1,  // 20: chatim.v1.SendMessageRequest.kind:type_name -> chatim.v1.MessageKind
+	25, // 21: chatim.v1.SendMessageResponse.created_at:type_name -> google.protobuf.Timestamp
+	2,  // 22: chatim.v1.GetHistoryRequest.anchor:type_name -> chatim.v1.HistoryAnchor
+	5,  // 23: chatim.v1.GetHistoryResponse.messages:type_name -> chatim.v1.Message
+	32, // 24: chatim.v1.EditMessageRequest.mentions:type_name -> chatim.v1.MentionSet
+	5,  // 25: chatim.v1.EditMessageResponse.message:type_name -> chatim.v1.Message
+	5,  // 26: chatim.v1.DeleteMessageResponse.message:type_name -> chatim.v1.Message
+	25, // 27: chatim.v1.ClearHistoryResponse.cleared_at:type_name -> google.protobuf.Timestamp
+	6,  // 28: chatim.v1.GetEditHistoryResponse.versions:type_name -> chatim.v1.MessageVersion
+	29, // [29:29] is the sub-list for method output_type
+	29, // [29:29] is the sub-list for method input_type
+	29, // [29:29] is the sub-list for extension type_name
+	29, // [29:29] is the sub-list for extension extendee
+	0,  // [0:29] is the sub-list for field type_name
 }
 
 func init() { file_chatim_v1_core_proto_init() }

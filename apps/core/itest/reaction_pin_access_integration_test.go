@@ -12,7 +12,7 @@ import (
 
 func TestRealInfraMembersReactAndPinEvenOnLockedKinds(t *testing.T) {
 	it := realInfra(t)
-	env := maps.Clone(itFastEffects)
+	env := maps.Clone(itFastSweep)
 	env["MESSAGE_LOCKED_KINDS"] = "text"
 	core := startCore(t, it, env)
 	client := dialCore(t, core.cfg)
@@ -62,7 +62,7 @@ func TestRealInfraMembersReactAndPinEvenOnLockedKinds(t *testing.T) {
 
 func TestRealInfraDeletedMessagesTakeNoNewReactionOrPin(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastEffects)
+	core := startCore(t, it, itFastSweep)
 	client := dialCore(t, core.cfg)
 	roomID := createRoom(t, client)
 	seq := sendAs(t, client, itUser, roomID, "deleted-f", "soon deleted")

@@ -25,6 +25,12 @@ type HistoryClearer interface {
 	ClearHistory(ctx context.Context, room uint64, user string, at time.Time) (time.Time, bool, error)
 }
 
+type RoomWriter interface {
+	HistoryClearer
+	store.RoomUpdater
+	store.RoomPreferences
+}
+
 type EventPublisher interface {
 	Enqueue(room uint64, events []*chatimv1.Event) error
 }
@@ -34,7 +40,7 @@ type Deps struct {
 	Messages     Messages
 	Edits        store.Edits
 	Hidden       store.Hidden
-	Rooms        HistoryClearer
+	Rooms        RoomWriter
 	Events       EventPublisher
 	Interactions store.Interactions
 	Counts       ReactionCounts

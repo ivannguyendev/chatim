@@ -28,10 +28,13 @@ func TestHiddenDocumentLayoutKeepsTheFirstHideTime(t *testing.T) {
 	}
 	got := fieldNames(t, docs[0])
 	slices.Sort(got)
-	if want := []string{"_id", "created_at", "room_id", "seq", "thread_root", "user_id"}; !slices.Equal(got, want) {
+	if want := []string{"_id", stateField, stateAtField, "created_at", "room_id", "seq", "thread_root", "user_id"}; !slices.Equal(got, want) {
 		t.Fatalf("stored fields = %v, want %v", got, want)
 	}
 	if at := docs[0].Lookup("created_at").Time(); !at.Equal(codecTime) {
 		t.Fatalf("created_at = %v, want the first hide %v", at, codecTime)
+	}
+	if at := docs[0].Lookup(stateAtField).Time(); !at.Equal(codecTime) {
+		t.Fatalf("%s = %v, want the first hide %v", stateAtField, at, codecTime)
 	}
 }

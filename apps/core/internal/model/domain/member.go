@@ -33,6 +33,7 @@ type Member struct {
 	LastChangeAt     time.Time
 	ReadSeq          uint64
 	ReadVer          uint64
+	Preferences      RoomPreferences
 }
 
 type Join struct {

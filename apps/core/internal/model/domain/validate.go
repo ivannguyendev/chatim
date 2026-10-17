@@ -8,6 +8,7 @@ import (
 
 const (
 	maxTextBytes = 16384
+	maxMetaBytes = 8192
 	maxNameRunes = 128
 	defaultPage  = 50
 	maxPage      = 100
@@ -96,6 +97,13 @@ func distinctMembers(creator string, members []string) ([]string, error) {
 func ValidateText(text string) error {
 	if len(text) > maxTextBytes || !utf8.ValidString(text) || strings.TrimSpace(text) == "" {
 		return invalid("text")
+	}
+	return nil
+}
+
+func ValidateMeta(meta []byte) error {
+	if len(meta) > maxMetaBytes {
+		return invalid("meta")
 	}
 	return nil
 }

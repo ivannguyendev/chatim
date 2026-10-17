@@ -31,7 +31,7 @@ func (e Event) IsCreated() bool { return e.Kind == "" || e.Kind == KindCreated }
 func EventOf(subject string, ev *chatimv1.Event) (Event, bool) {
 	if created := ev.GetMessageCreated(); created != nil {
 		m := created.GetMessage()
-		return Event{Kind: KindCreated, Room: ev.GetRoomId(), ID: ev.GetId(), Seq: ev.GetSeq(), CID: m.GetCid(), Text: LinksPayload(m), Subject: subject}, true
+		return Event{Kind: KindCreated, Room: ev.GetRoomId(), ID: ev.GetId(), Seq: ev.GetSeq(), CID: m.GetCid(), Text: CreatedPayload(m), Subject: subject}, true
 	}
 	if edited := ev.GetMessageEdited(); edited != nil {
 		return changeOf(subject, ev, KindEdited, edited.GetMessage(), edited.GetVer()), true
@@ -43,6 +43,9 @@ func EventOf(subject string, ev *chatimv1.Event) (Event, bool) {
 		return out, true
 	}
 	if out, ok := bookmarkOf(subject, ev); ok {
+		return out, true
+	}
+	if out, ok := roomOf(subject, ev); ok {
 		return out, true
 	}
 	return memberOf(subject, ev)

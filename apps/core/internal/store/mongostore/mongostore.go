@@ -13,16 +13,17 @@ import (
 )
 
 const (
-	messagesCollection        = "messages"
-	roomsCollection           = "rooms"
-	membersCollection         = "members"
-	reconcilerStateCollection = "reconciler_state"
-	editsCollection           = "message_edits"
-	hiddenCollection          = "hidden"
-	interactionsCollection    = "message_interactions"
-	pinActionsCollection      = "pin_actions"
-	mentionsCollection        = "mentions"
-	roomDMsCollection         = "room_dms"
+	messagesCollection     = "messages"
+	roomsCollection        = "rooms"
+	membersCollection      = "members"
+	editsCollection        = "message_edits"
+	hiddenCollection       = "hidden"
+	interactionsCollection = "message_interactions"
+	pinActionsCollection   = "pin_actions"
+	mentionsCollection     = "mentions"
+	roomDMsCollection      = "room_dms"
+	replyThreadsCollection = "reply_threads"
+	sweeperStateCollection = "sweeper_state"
 )
 
 var (
@@ -43,6 +44,11 @@ var (
 	_ store.ReadPositions     = (*Store)(nil)
 	_ store.Mentions          = (*Mentions)(nil)
 	_ store.DirectRooms       = (*DirectRooms)(nil)
+	_ store.RoomUpdater       = (*Store)(nil)
+	_ store.RoomPreferences   = (*Store)(nil)
+	_ store.ReplyThreads      = (*ReplyThreads)(nil)
+	_ store.EventStates       = (*EventStates)(nil)
+	_ store.SweepCheckpoints  = (*SweepCheckpoints)(nil)
 )
 
 type Options struct {
@@ -62,6 +68,9 @@ type Store struct {
 	pins             *Pins
 	mentions         *Mentions
 	directRooms      *DirectRooms
+	replyThreads     *ReplyThreads
+	eventStates      *EventStates
+	checkpoints      *SweepCheckpoints
 }
 
 func New(db *mongo.Database, opts Options) *Store {
@@ -70,6 +79,7 @@ func New(db *mongo.Database, opts Options) *Store {
 	local := options.Collection().SetWriteConcern(wc).SetReadPreference(readpref.Primary()).SetReadConcern(readconcern.Local())
 	majority := options.Collection().SetReadPreference(readpref.Primary()).SetReadConcern(readconcern.Majority())
 	interacted := options.Collection().SetWriteConcern(wc).SetReadPreference(readpref.Primary()).SetReadConcern(readconcern.Majority())
+	durable := options.Collection().SetWriteConcern(writeconcern.Majority()).SetReadPreference(readpref.Primary()).SetReadConcern(readconcern.Majority())
 	return &Store{
 		client:           db.Client(),
 		committedMembers: db.Collection(membersCollection, majority),
@@ -83,6 +93,9 @@ func New(db *mongo.Database, opts Options) *Store {
 		pins:             &Pins{coll: db.Collection(pinActionsCollection, primary)},
 		mentions:         &Mentions{coll: db.Collection(mentionsCollection, primary)},
 		directRooms:      &DirectRooms{coll: db.Collection(roomDMsCollection, primary)},
+		replyThreads:     &ReplyThreads{coll: db.Collection(replyThreadsCollection, primary)},
+		eventStates:      newEventStates(db, interacted),
+		checkpoints:      &SweepCheckpoints{coll: db.Collection(sweeperStateCollection, durable)},
 	}
 }
 
@@ -95,3 +108,9 @@ func (s *Store) Hidden() *Hidden { return s.hidden }
 func (s *Store) Mentions() *Mentions { return s.mentions }
 
 func (s *Store) DirectRooms() *DirectRooms { return s.directRooms }
+
+func (s *Store) ReplyThreads() *ReplyThreads { return s.replyThreads }
+
+func (s *Store) EventStates() *EventStates { return s.eventStates }
+
+func (s *Store) SweepCheckpoints() *SweepCheckpoints { return s.checkpoints }

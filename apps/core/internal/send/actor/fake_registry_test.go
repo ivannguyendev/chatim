@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"sync"
+	"testing/synctest"
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
@@ -122,6 +123,7 @@ func (f *fakeRegistry) fail(err error) {
 }
 
 func (f *fakeRegistry) calls() (reserves [][]dedupe.Key, commits [][]dedupe.Entry, aborts [][]dedupe.Key) {
+	synctest.Wait()
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return slices.Clone(f.reserves), slices.Clone(f.commits), slices.Clone(f.aborts)

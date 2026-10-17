@@ -1,0 +1,135 @@
+package roomlist_test
+
+import (
+	"context"
+	"errors"
+	"maps"
+	"sync"
+	"testing"
+
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/store"
+	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
+)
+
+var errBroken = errors.New("broken tail read")
+
+type windowCall struct{ room, after uint64 }
+
+type countingStore struct {
+	rooms      *memstore.Rooms
+	msgs       *memstore.Messages
+	hidden     *memstore.Hidden
+	mu         sync.Mutex
+	calls      map[string]int
+	windows    []windowCall
+	previewKey int
+	previewErr error
+	brokenRoom uint64
+	brokenErr  error
+	tailHook   func(ctx context.Context, room uint64) error
+}
+
+func (c *countingStore) count(op string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.calls == nil {
+		c.calls = map[string]int{}
+	}
+	c.calls[op]++
+}
+
+func (c *countingStore) reset() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls, c.windows, c.previewKey = nil, nil, 0
+}
+
+func (c *countingStore) previewKeys() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.previewKey
+}
+
+func (c *countingStore) snapshot() (map[string]int, []windowCall) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return maps.Clone(c.calls), append([]windowCall(nil), c.windows...)
+}
+
+func (c *countingStore) expectCalls(t *testing.T, want map[string]int) {
+	t.Helper()
+	got, _ := c.snapshot()
+	if got == nil {
+		got = map[string]int{}
+	}
+	if !maps.Equal(got, want) {
+		t.Errorf("store calls = %v, want %v", got, want)
+	}
+}
+
+func (c *countingStore) CountRooms(ctx context.Context, tenant, user string, limit int) (int, error) {
+	c.count("CountRooms")
+	return c.rooms.CountRooms(ctx, tenant, user, limit)
+}
+
+func (c *countingStore) JoinedRoomOrder(ctx context.Context, q store.RoomListQuery) ([]store.RoomOrderRow, error) {
+	c.count("JoinedRoomOrder")
+	return c.rooms.JoinedRoomOrder(ctx, q)
+}
+
+func (c *countingStore) StepwiseRoomOrder(ctx context.Context, q store.RoomListQuery) ([]store.RoomOrderRow, error) {
+	c.count("StepwiseRoomOrder")
+	return c.rooms.StepwiseRoomOrder(ctx, q)
+}
+
+func (c *countingStore) MembersByKeys(ctx context.Context, keys []store.MemberKey) ([]domain.Member, error) {
+	c.count("MembersByKeys")
+	return c.rooms.MembersByKeys(ctx, keys)
+}
+
+func (c *countingStore) RoomActivities(ctx context.Context, rooms []uint64) ([]store.RoomActivity, error) {
+	c.count("RoomActivities")
+	return c.rooms.RoomActivities(ctx, rooms)
+}
+
+func (c *countingStore) RoomInfos(ctx context.Context, rooms []uint64) ([]domain.Room, error) {
+	c.count("RoomInfos")
+	return c.rooms.RoomInfos(ctx, rooms)
+}
+
+func (c *countingStore) TailWindow(ctx context.Context, room, afterSeq uint64, limit int) ([]domain.TailMessage, error) {
+	c.count("TailWindow")
+	c.mu.Lock()
+	c.windows = append(c.windows, windowCall{room: room, after: afterSeq})
+	broken, fail, hook := c.brokenRoom == room, c.brokenErr, c.tailHook
+	c.mu.Unlock()
+	switch {
+	case broken && fail != nil:
+		return nil, fail
+	case broken:
+		return nil, errBroken
+	case hook != nil:
+		if err := hook(ctx, room); err != nil {
+			return nil, err
+		}
+	}
+	return c.msgs.TailWindow(ctx, room, afterSeq, limit)
+}
+
+func (c *countingStore) TailPreviews(ctx context.Context, keys []store.MsgKey) ([]domain.Message, error) {
+	c.count("TailPreviews")
+	c.mu.Lock()
+	c.previewKey += len(keys)
+	fail := c.previewErr
+	c.mu.Unlock()
+	if fail != nil {
+		return nil, fail
+	}
+	return c.msgs.TailPreviews(ctx, keys)
+}
+
+func (c *countingStore) HiddenInRooms(ctx context.Context, user string, ranges []store.HiddenRange) (map[uint64][]uint64, error) {
+	c.count("HiddenInRooms")
+	return c.hidden.HiddenInRooms(ctx, user, ranges)
+}

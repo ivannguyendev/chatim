@@ -49,7 +49,7 @@ func (s *Service) addReplyPreviews(ctx context.Context, viewer view.Viewer, room
 		if err != nil {
 			return err
 		}
-		for _, p := range s.bookmarkView.Apply(viewer, found) {
+		for _, p := range s.maskView.Apply(viewer, found) {
 			known[store.KeyOf(p)] = p
 		}
 	}

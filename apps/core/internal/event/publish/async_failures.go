@@ -36,6 +36,6 @@ func AsyncFailureHandler(log *slog.Logger, counters *Counters) jetstream.MsgErrH
 	f := &failureLog{log: log}
 	return func(_ jetstream.JetStream, m *nats.Msg, err error) {
 		counters.asyncFailed.Add(1)
-		f.record("event publish failed; reconciliation must republish it", m.Header.Get(jetstream.MsgIDHeader), err)
+		f.record("event publish failed; the sweeper republishes it", m.Header.Get(jetstream.MsgIDHeader), err)
 	}
 }

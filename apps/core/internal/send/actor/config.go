@@ -60,6 +60,9 @@ type SendCmd struct {
 	Forward      *domain.ForwardRef
 	Mentions     []domain.MentionTarget
 	MentionAll   bool
+	Kind         domain.Kind
+	SkipUnread   bool
+	Meta         []byte
 }
 
 type Ack struct {
@@ -99,6 +102,7 @@ func (c SendCmd) normalize(mentionLimit int) (SendCmd, error) {
 		domain.ValidateThread(c.Thread),
 		domain.ValidateText(c.Text),
 		domain.ValidateReply(c.ReplyTo),
+		domain.ValidateMeta(c.Meta),
 	} {
 		if err != nil {
 			return SendCmd{}, err
@@ -109,7 +113,41 @@ func (c SendCmd) normalize(mentionLimit int) (SendCmd, error) {
 		return SendCmd{}, err
 	}
 	c.Mentions = mentions
+	if c.Kind, err = sendKind(c.Kind); err != nil {
+		return SendCmd{}, err
+	}
+	if err := domain.ValidateSystemMessage(c.message()); err != nil {
+		return SendCmd{}, err
+	}
 	return c, nil
+}
+
+func sendKind(k domain.Kind) (domain.Kind, error) {
+	switch k {
+	case 0, domain.KindText:
+		return domain.KindText, nil
+	case domain.KindSystem:
+		return k, nil
+	default:
+		return 0, fmt.Errorf("%w: kind", apperr.ErrInvalidArgument)
+	}
+}
+
+func (c SendCmd) message() domain.Message {
+	return domain.Message{
+		Room:       c.Room,
+		Tenant:     c.Tenant,
+		From:       c.User,
+		Kind:       c.Kind,
+		Text:       c.Text,
+		CID:        c.CID,
+		ReplyTo:    c.ReplyTo,
+		Forward:    c.Forward,
+		Mentions:   c.Mentions,
+		MentionAll: c.MentionAll,
+		SkipUnread: c.SkipUnread,
+		Meta:       c.Meta,
+	}
 }
 
 func ackOf(m domain.Message) Ack {

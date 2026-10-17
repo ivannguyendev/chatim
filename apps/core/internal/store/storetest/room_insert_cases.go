@@ -18,7 +18,7 @@ func roomInsertCases() []roomsCase {
 }
 
 func directOf(room uint64) domain.Room {
-	return domain.Room{ID: room, Tenant: tenant, Type: domain.RoomDM, CreatedBy: "lan", CreatedAt: baseTime, DMKey: domain.DirectKey(tenant, "lan", "minh")}
+	return domain.Room{ID: room, Tenant: tenant, Type: domain.RoomDM, CreatedBy: "lan", CreatedAt: baseTime, DMKey: domain.DirectKey(tenant, "lan", "minh"), InfoVer: 1}
 }
 
 func mustInsertRoom(t *testing.T, s store.Rooms, r domain.Room) {

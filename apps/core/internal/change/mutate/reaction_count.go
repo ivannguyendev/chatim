@@ -3,7 +3,7 @@ package mutate
 import (
 	"context"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -14,20 +14,20 @@ type ReactionCounts interface {
 }
 
 type MessageCountTimers interface {
-	ArmMessageCountCheck(ctx context.Context, key store.MsgKey, counter string) (work.Timer, error)
-	Disarm(ctx context.Context, t work.Timer)
+	ArmMessageCountCheck(ctx context.Context, key store.MsgKey, counter string) (timer.Timer, error)
+	Disarm(ctx context.Context, t timer.Timer)
 }
 
-func (m *Mutator) armReactionCount(ctx context.Context, key store.MsgKey) (work.Timer, error) {
+func (m *Mutator) armReactionCount(ctx context.Context, key store.MsgKey) (timer.Timer, error) {
 	t, err := m.d.CountTimers.ArmMessageCountCheck(ctx, key, pbconv.ReactionsCounter)
 	if err != nil {
 		m.d.Log.WarnContext(ctx, "reaction count check timer not armed; reaction refused", "room", key.Room, "seq", key.Seq, "err", err)
-		return work.Timer{}, domain.ErrRetryLater
+		return timer.Timer{}, domain.ErrRetryLater
 	}
 	return t, nil
 }
 
-func (m *Mutator) countReaction(ctx context.Context, cur domain.ReactionSummary, key store.MsgKey, t work.Timer, deltas []store.EmojiDelta) (domain.ReactionSummary, bool) {
+func (m *Mutator) countReaction(ctx context.Context, cur domain.ReactionSummary, key store.MsgKey, t timer.Timer, deltas []store.EmojiDelta) (domain.ReactionSummary, bool) {
 	if len(deltas) == 0 {
 		m.d.CountTimers.Disarm(ctx, t)
 		return cur, false

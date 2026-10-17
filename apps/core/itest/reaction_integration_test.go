@@ -65,15 +65,15 @@ func emojiDeltas(prev, next string) []store.EmojiDelta {
 	return out
 }
 
-func TestRealInfraWorkersPublishReactionChangesWrittenOutsideTheCore(t *testing.T) {
+func TestRealInfraSweeperPublishesReactionChangesWrittenOutsideTheCore(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastEffects)
+	core := startCore(t, it, itFastSweep)
 	client := dialCore(t, core.cfg)
 	roomID := createRoom(t, client)
 	room := parseRoom(t, roomID)
 	live := subscribeLive(t, it, core.cfg, roomID)
 	seq := sendAs(t, client, itUser, roomID, "react-a", "reacted outside the core")
-	core.awaitTerm(t)
+	core.awaitSweeper(t)
 
 	st := itStore(it, core)
 	key := store.MsgKey{Room: room, Seq: seq}
@@ -115,7 +115,7 @@ func TestRealInfraWorkersPublishReactionChangesWrittenOutsideTheCore(t *testing.
 
 func TestRealInfraConcurrentReactionsConvergeToExactCounts(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastEffects)
+	core := startCore(t, it, itFastSweep)
 	client := dialCore(t, core.cfg)
 	users := itReactorNames()
 	roomID := createRoomWith(t, client, users)

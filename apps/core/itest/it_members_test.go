@@ -3,15 +3,11 @@ package itest
 import (
 	"bufio"
 	"context"
-	"maps"
 	"net/http"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
@@ -142,49 +138,17 @@ func awaitSlotsSplit(t *testing.T, it *itInfra, coreIDs ...string) {
 
 func pendingTimers(t *testing.T, it *itInfra, cfg config.Config, room uint64) uint64 {
 	t.Helper()
-	s, err := it.js.Stream(t.Context(), cfg.Work.Name)
+	s, err := it.js.Stream(t.Context(), cfg.Timer.Name)
 	if err != nil {
-		t.Fatalf("work stream: %v", err)
+		t.Fatalf("timer stream: %v", err)
 	}
-	info, err := s.Info(t.Context(), jetstream.WithSubjectFilter(cfg.Work.SubjectRoot+".timer."+pbconv.RoomID(room)+".>"))
+	info, err := s.Info(t.Context(), jetstream.WithSubjectFilter(cfg.Timer.SubjectRoot+".arm."+pbconv.RoomID(room)+".>"))
 	if err != nil {
-		t.Fatalf("work stream info: %v", err)
+		t.Fatalf("timer stream info: %v", err)
 	}
 	var n uint64
 	for _, c := range info.State.Subjects {
 		n += c
 	}
 	return n
-}
-
-func assertRoomRecords(t *testing.T, records <-chan *nats.Msg, roomID string, want map[string]bool, clearedPrefix string) {
-	t.Helper()
-	seen, cleared := map[string]bool{}, ""
-	deadline := time.After(itLiveLimit)
-	var quiet <-chan time.Time
-	for {
-		select {
-		case m := <-records:
-			id := m.Header.Get(jetstream.MsgIDHeader)
-			switch {
-			case strings.Contains(m.Subject, ".timer.") || !strings.HasPrefix(id[min(2, len(id)):], roomID):
-				continue
-			case strings.HasPrefix(id, clearedPrefix) && (cleared == "" || cleared == id):
-				cleared = id
-			case !want[id]:
-				t.Fatalf("work record %s on %s, want only %v and one %s*", id, m.Subject, slices.Sorted(maps.Keys(want)), clearedPrefix)
-			default:
-				seen[id] = true
-			}
-			if quiet == nil && cleared != "" && len(seen) == len(want) {
-				quiet = time.After(itQuietWindow)
-			}
-		case <-quiet:
-			return
-		case <-deadline:
-			if quiet == nil {
-				t.Fatalf("work records %v and %q arrived, want %v and one %s*", slices.Sorted(maps.Keys(seen)), cleared, slices.Sorted(maps.Keys(want)), clearedPrefix)
-			}
-		}
-	}
 }

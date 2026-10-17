@@ -12,13 +12,17 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
+
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/resync"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
+	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
 	"github.com/ivannguyendev/chatim/pkg/ids"
+	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 var (
@@ -37,12 +41,21 @@ type recountRooms interface {
 	SetMemberCount(ctx context.Context, room, base uint64, count int) (domain.MemberCount, bool, error)
 }
 
+type recountPublisher interface {
+	PublishMsg(ctx context.Context, m *nats.Msg, opts ...jetstream.PublishOpt) (*jetstream.PubAck, error)
+}
+
+type recountStates interface {
+	Clear(ctx context.Context, targets []store.StateTarget) error
+}
+
 type recounter struct {
-	rooms recountRooms
-	pub   resync.Publisher
-	root  string
-	now   func() time.Time
-	out   io.Writer
+	rooms  recountRooms
+	pub    recountPublisher
+	states recountStates
+	root   string
+	now    func() time.Time
+	out    io.Writer
 }
 
 func parseRecountArgs(args []string, stderr io.Writer) (RecountOptions, error) {
@@ -101,7 +114,7 @@ func RunRecount(ctx context.Context, cfg config.Config, opts RecountOptions, log
 		return err
 	}
 	st := mongostore.New(c.mongo.Database(cfg.MongoDB), mongostore.Options{})
-	r := recounter{rooms: st, pub: c.js, root: cfg.Stream.SubjectRoot, now: time.Now, out: out}
+	r := recounter{rooms: st, pub: c.js, states: st.EventStates(), root: cfg.Stream.SubjectRoot, now: time.Now, out: out}
 	return r.run(ctx, opts)
 }
 
@@ -126,13 +139,25 @@ func (r recounter) run(ctx context.Context, opts RecountOptions) error {
 		fmt.Fprintf(r.out, "member_count_ver moved past %d, nothing written\n", room.MemberCountVer)
 		return fmt.Errorf("room %d: %w", room.ID, errRecountRaced)
 	}
-	msg, err := publish.Message(r.root, room.ID, pbconv.MemberCountChanged(room, c, "", r.now().UTC().Truncate(time.Millisecond)))
+	ev := pbconv.MemberCountChanged(room, c, "", r.now().UTC().Truncate(time.Millisecond))
+	msg, err := publish.Message(r.root, room.ID, ev)
 	if err != nil {
 		return fmt.Errorf("build member_count_changed of room %d: %w", room.ID, err)
 	}
 	if _, err := r.pub.PublishMsg(ctx, msg); err != nil {
-		return fmt.Errorf("publish member_count_changed of room %d: %w", room.ID, err)
+		return fmt.Errorf("publish member_count_changed of room %d, the sweeper republishes it: %w", room.ID, err)
 	}
 	fmt.Fprintf(r.out, "member_count_ver=%d\n", c.Ver)
+	return r.clearPending(ctx, room.ID, ev)
+}
+
+func (r recounter) clearPending(ctx context.Context, room uint64, ev *chatimv1.Event) error {
+	t, ok := publish.StateTargetOf(ev)
+	if !ok {
+		return fmt.Errorf("member_count_changed of room %d has no pending flag target", room)
+	}
+	if err := r.states.Clear(ctx, []store.StateTarget{t}); err != nil {
+		return fmt.Errorf("clear the pending flag of room %d, the sweeper republishes it: %w", room, err)
+	}
 	return nil
 }

@@ -35,7 +35,7 @@ type editCase struct {
 
 func RunEdits(t *testing.T, open func(t *testing.T) (EditableMessages, ClearableRooms, store.Edits, store.Hidden)) {
 	t.Helper()
-	for _, c := range slices.Concat(factCases(), originalCases(), applyCases(), editMentionCases(), viewerCases()) {
+	for _, c := range slices.Concat(factCases(), originalCases(), applyCases(), editMentionCases(), viewerCases(), systemEditCases()) {
 		t.Run(c.name, func(t *testing.T) {
 			msgs, rooms, edits, hidden := open(t)
 			c.run(t, editStores{msgs: msgs, rooms: rooms, edits: edits, hidden: hidden})

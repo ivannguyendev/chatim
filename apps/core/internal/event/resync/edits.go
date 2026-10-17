@@ -5,7 +5,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
@@ -22,11 +21,15 @@ func (s *scanner) edits(ctx context.Context, room uint64) error {
 		limit:   store.MaxEditScan,
 		full:    ErrEditPageFull,
 		between: s.deps.Edits.Between,
-		record:  editRecord,
-		counted: &s.rep.EditRecords,
+		at:      func(e domain.Edit) time.Time { return e.At },
+		marks:   s.editMarks,
 	})
 }
 
-func editRecord(e domain.Edit) work.Record {
-	return work.Record{Kind: store.EditInserted, Room: e.Room, Thread: e.Thread, Seq: e.Seq, Version: e.Version, CommittedAt: e.At}
+func (s *scanner) editMarks(e domain.Edit) []mark {
+	if e.Version == 0 {
+		return nil
+	}
+	t := store.StateTarget{Collection: store.StateEdits, Bit: store.BitEditFact, Room: e.Room, Thread: e.Thread, Seq: e.Seq, Ver: uint64(e.Version)}
+	return []mark{{t, &s.rep.Edits}}
 }

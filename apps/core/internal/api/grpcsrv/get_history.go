@@ -7,7 +7,6 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/api/view"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
-	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
@@ -31,42 +30,39 @@ func (s *Service) GetHistory(ctx context.Context, req *chatimv1.GetHistoryReques
 	if err != nil {
 		return nil, err
 	}
-	page, err := s.pages.Page(ctx, q)
+	page, err := s.historyPage(ctx, q)
 	if err != nil {
 		return nil, err
 	}
-	viewer, err := s.viewerOf(ctx, who.user, grant, q, page, quotedSeqs(q.Room, page)...)
+	viewer, err := s.viewerOf(ctx, who.user, grant, q.PageQuery, page, quotedSeqs(q.Room, page)...)
 	if err != nil {
 		return nil, err
 	}
-	page = s.view.Apply(viewer, page)
-	out := make([]*chatimv1.Message, len(page))
-	for i, m := range page {
-		out[i] = pbconv.Message(m)
-	}
-	if err := s.addReplyPreviews(ctx, viewer, q.Room, page, out); err != nil {
+	out, err := s.readerMessages(ctx, viewer, q.Room, s.view.Apply(viewer, page))
+	if err != nil {
 		return nil, err
 	}
 	return &chatimv1.GetHistoryResponse{Messages: out}, nil
 }
 
-func pageQueryOf(req *chatimv1.GetHistoryRequest) (store.PageQuery, error) {
+func pageQueryOf(req *chatimv1.GetHistoryRequest) (historyQuery, error) {
 	room, err := parseRoomID(req.GetRoomId())
 	if err != nil {
-		return store.PageQuery{}, err
+		return historyQuery{}, err
 	}
 	if err := domain.ValidateThread(req.GetThreadRoot()); err != nil {
-		return store.PageQuery{}, err
+		return historyQuery{}, err
 	}
 	anchor, seq, err := anchorOf(req.GetAnchor(), req.GetSeq())
 	if err != nil {
-		return store.PageQuery{}, err
+		return historyQuery{}, err
 	}
 	limit, err := domain.PageLimit(int(req.GetLimit()))
 	if err != nil {
-		return store.PageQuery{}, err
+		return historyQuery{}, err
 	}
-	return store.PageQuery{Room: room, Thread: req.GetThreadRoot(), Anchor: anchor, Seq: seq, Limit: limit}, nil
+	q := store.PageQuery{Room: room, Thread: req.GetThreadRoot(), Anchor: anchor, Seq: seq, Limit: limit}
+	return historyQuery{PageQuery: q, around: req.GetAnchor() == chatimv1.HistoryAnchor_HISTORY_ANCHOR_AROUND}, nil
 }
 
 func anchorOf(a chatimv1.HistoryAnchor, seq uint64) (store.Anchor, uint64, error) {
@@ -79,6 +75,8 @@ func anchorOf(a chatimv1.HistoryAnchor, seq uint64) (store.Anchor, uint64, error
 		return seqAnchor(store.Before, seq)
 	case chatimv1.HistoryAnchor_HISTORY_ANCHOR_AFTER:
 		return seqAnchor(store.After, seq)
+	case chatimv1.HistoryAnchor_HISTORY_ANCHOR_AROUND:
+		return aroundAnchor(seq)
 	default:
 		return 0, 0, errUnknownAnchor
 	}

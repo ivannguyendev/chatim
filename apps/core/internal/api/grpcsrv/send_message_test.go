@@ -29,7 +29,7 @@ func TestSendMessageHandsTheCallerAndRequestToTheSender(t *testing.T) {
 		t.Fatalf("response = %v, want %v", resp, want)
 	}
 	cmds := sender.sent()
-	wantCmd := actor.SendCmd{Tenant: "acme", User: "alice", Room: 9_007_199_254_740_993, CID: "c-1", Text: "xin chào"}
+	wantCmd := actor.SendCmd{Tenant: "acme", User: "alice", Room: 9_007_199_254_740_993, CID: "c-1", Text: "xin chào", Kind: domain.KindText}
 	if len(cmds) != 1 || !reflect.DeepEqual(cmds[0], wantCmd) {
 		t.Fatalf("sender got %+v, want [%+v]", cmds, wantCmd)
 	}

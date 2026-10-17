@@ -52,7 +52,7 @@ func assertLayout(t *testing.T, op string, raw bson.Raw, want ...string) {
 	}
 }
 
-var reactionLayout = []string{"_id", "message_key", "room_id", "tenant", "kind", "actor_id", "value", "previous_value", "state", "ver", "created_at", "updated_at"}
+var reactionLayout = []string{"_id", "message_key", "room_id", "tenant", "kind", "actor_id", "value", "previous_value", "state", "ver", "created_at", "updated_at", stateField, stateAtField}
 
 func TestReactionDocumentLayout(t *testing.T) {
 	s, db := itStore(t, itClient(t))
@@ -98,7 +98,7 @@ func TestBookmarkAndReplyDocumentLayout(t *testing.T) {
 	}
 	id := keys.InteractionUser(msg, keys.BookmarkKind, "minh")
 	first := rawInteraction(t, db, id)
-	assertLayout(t, "SetBookmark", first, "_id", "message_key", "room_id", "tenant", "kind", "actor_id", "state", "ver", "created_at", "updated_at")
+	assertLayout(t, "SetBookmark", first, "_id", "message_key", "room_id", "tenant", "kind", "actor_id", "state", "ver", "created_at", "updated_at", stateField, stateAtField)
 	b.At = codecTime.Add(time.Hour)
 	if _, changed, err := in.SetBookmark(t.Context(), b); err != nil || changed {
 		t.Fatalf("SetBookmark(again) = %v, %v; want no change", changed, err)

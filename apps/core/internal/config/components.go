@@ -3,10 +3,8 @@ package config
 import (
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventmark"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/reconcile"
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/slot"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
@@ -16,9 +14,10 @@ import (
 )
 
 const (
-	defaultEffectDelay     = 5 * time.Second
-	defaultEffectRoomCache = 65536
-	workAckSlack           = 30 * time.Second
+	defaultRoomListJoinMax      = 1500
+	defaultRoomTailCacheBytes   = 256 << 20
+	defaultRoomInfoCacheEntries = 100000
+	minRoomTailCacheBytes       = 1 << 20
 )
 
 func (p *parser) components(c *Config) {
@@ -27,7 +26,6 @@ func (p *parser) components(c *Config) {
 	redisCooldown := p.span("REDIS_COOLDOWN", dedupe.DefaultCooldown)
 	subjectRoot := envconfig.String("EVT_SUBJECT_ROOT", "evt")
 	tick := p.span("SLOT_TICK", time.Second)
-	delay := p.span("RECONCILE_DELAY", defaultEffectDelay)
 
 	c.Flush = flush.Config{
 		Shards:        p.count("FLUSH_SHARDS", 4),
@@ -73,14 +71,13 @@ func (p *parser) components(c *Config) {
 		MaxAge:      p.span("EVT_STREAM_MAX_AGE", publish.DefaultStreamMaxAge),
 		Duplicates:  p.span("EVT_STREAM_DUPLICATES", publish.DefaultStreamDuplicates),
 	}
-	c.Work = work.StreamConfig{
-		Name:        envconfig.String("WORK_STREAM", "CHATIM_WORK"),
-		SubjectRoot: envconfig.String("WORK_SUBJECT_ROOT", "work"),
-		Partitions:  p.count("WORK_PARTITIONS", work.DefaultPartitions),
+	c.Timer = timer.StreamConfig{
+		Name:        envconfig.String("TIMER_STREAM", "CHATIM_TIMER"),
+		SubjectRoot: envconfig.String("TIMER_SUBJECT_ROOT", "timer"),
 		Replicas:    c.Stream.Replicas,
-		MaxAge:      p.span("WORK_MAX_AGE", work.DefaultMaxAge),
-		Duplicates:  p.span("WORK_DUPLICATES", work.DefaultDuplicates),
-		AckWait:     delay + workAckSlack,
+		MaxAge:      timer.DefaultMaxAge,
+		Duplicates:  timer.DefaultDuplicates,
+		AckWait:     timer.DefaultAckWait,
 	}
 	c.Slot = slot.Config{
 		CoreID:       c.CoreID,
@@ -90,22 +87,13 @@ func (p *parser) components(c *Config) {
 		LeaseTTL:     p.span("SLOT_LEASE_TTL", 10*time.Second),
 		HookTimeout:  p.span("SLOT_HOOK_TIMEOUT", tick/2),
 	}
-	c.ReconcileEnabled = p.flag("RECONCILE_ENABLED", true)
-	c.EffectDelay = delay
-	c.EffectRoomCache = p.count("RECONCILE_ROOM_CACHE", defaultEffectRoomCache)
-	c.Reconcile = reconcile.Config{
-		SubjectRoot:  c.Work.SubjectRoot,
-		Partitions:   c.Work.Partitions,
-		Window:       p.count("RECONCILE_WINDOW", reconcile.DefaultWindow),
-		Batch:        p.count("RECONCILE_BATCH", reconcile.DefaultBatch),
-		ConfirmEvery: p.span("RECONCILE_CONFIRM_EVERY", reconcile.DefaultConfirmEvery),
-		Drain:        p.span("RECONCILE_DRAIN", reconcile.DefaultDrain),
-		Poll:         tick,
+	p.eventConfig(c)
+}
+
+func (p *parser) roomList() RoomListConfig {
+	return RoomListConfig{
+		JoinMax:          p.count("ROOM_LIST_JOIN_MAX", defaultRoomListJoinMax),
+		TailCacheBytes:   p.count("ROOM_TAIL_CACHE_BYTES", defaultRoomTailCacheBytes),
+		InfoCacheEntries: p.count("ROOM_INFO_CACHE_ENTRIES", defaultRoomInfoCacheEntries),
 	}
-	c.AckMarks = eventmark.Config{
-		TTL:      p.span("EVT_ACK_MARK_TTL", eventmark.DefaultTTL),
-		Timeout:  redisTimeout,
-		Cooldown: redisCooldown,
-	}
-	p.workerConfig(c)
 }

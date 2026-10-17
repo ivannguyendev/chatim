@@ -10,7 +10,7 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-func TestReactionAndPinEventsGoToTheirOwnSubjectsWithoutAMark(t *testing.T) {
+func TestReactionAndPinEventsGoToTheirOwnSubjects(t *testing.T) {
 	m := domain.Message{
 		Room: roomA, Seq: 7, Tenant: tenant, From: "alice", Kind: domain.KindText, Text: "hi", CID: "c-7", CreatedAt: sentAt,
 		Reactions: domain.ReactionSummary{Counts: []domain.ReactionCount{{Emoji: "👍", Count: 1}}, Version: 2},
@@ -35,9 +35,6 @@ func TestReactionAndPinEventsGoToTheirOwnSubjectsWithoutAMark(t *testing.T) {
 		}
 		if msg.Subject != c.subject || publishtest.MsgID(msg) != c.id {
 			t.Fatalf("%s: subject %q msg id %q, want %s and %s", name, msg.Subject, publishtest.MsgID(msg), c.subject, c.id)
-		}
-		if key, ok := publish.MarkKey(roomA, c.ev); ok {
-			t.Fatalf("%s: MarkKey = %v, true; want no mark", name, key)
 		}
 	}
 }

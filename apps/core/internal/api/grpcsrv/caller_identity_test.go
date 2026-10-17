@@ -2,51 +2,14 @@ package grpcsrv_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/api/grpcsrv"
-	"github.com/ivannguyendev/chatim/pkg/apperr"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
-
-func TestNewRequiresEveryDependency(t *testing.T) {
-	rg := memStores()
-	full := grpcsrv.Deps{
-		Sender: &fakeSender{}, Rooms: rg.rooms, Pages: rg.msgs, Mutator: newMutator(t, rg, options{}), Edits: rg.edits, Hidden: rg.hidden, Bookmarks: rg.reactions,
-		Replies: rg.reactions, Members: rg.rooms, Timers: nopTimers{}, Requests: newRequests(t, nil), Directs: rg.directs,
-		Mentions: rg.mentions, MemberRooms: rg.rooms, SentTimes: rg.msgs,
-	}
-	for name, drop := range map[string]func(d *grpcsrv.Deps){
-		"no sender":       func(d *grpcsrv.Deps) { d.Sender = nil },
-		"no rooms":        func(d *grpcsrv.Deps) { d.Rooms = nil },
-		"no pages":        func(d *grpcsrv.Deps) { d.Pages = nil },
-		"no mutator":      func(d *grpcsrv.Deps) { d.Mutator = nil },
-		"no edits":        func(d *grpcsrv.Deps) { d.Edits = nil },
-		"no hidden":       func(d *grpcsrv.Deps) { d.Hidden = nil },
-		"no bookmarks":    func(d *grpcsrv.Deps) { d.Bookmarks = nil },
-		"no replies":      func(d *grpcsrv.Deps) { d.Replies = nil },
-		"no members":      func(d *grpcsrv.Deps) { d.Members = nil },
-		"no timers":       func(d *grpcsrv.Deps) { d.Timers = nil },
-		"no requests":     func(d *grpcsrv.Deps) { d.Requests = nil },
-		"no directs":      func(d *grpcsrv.Deps) { d.Directs = nil },
-		"no mentions":     func(d *grpcsrv.Deps) { d.Mentions = nil },
-		"no member rooms": func(d *grpcsrv.Deps) { d.MemberRooms = nil },
-		"no sent times":   func(d *grpcsrv.Deps) { d.SentTimes = nil },
-	} {
-		deps := full
-		drop(&deps)
-		if _, err := grpcsrv.New(deps, quiet); !errors.Is(err, apperr.ErrInvalidArgument) {
-			t.Errorf("%s: New = %v, want ErrInvalidArgument", name, err)
-		}
-	}
-	if _, err := grpcsrv.New(full, nil); err != nil {
-		t.Errorf("New with defaults = %v, want nil", err)
-	}
-}
 
 func TestEveryRPCChecksCallerIdentityFirst(t *testing.T) {
 	sender := &fakeSender{}
@@ -142,6 +105,30 @@ func TestEveryRPCChecksCallerIdentityFirst(t *testing.T) {
 		},
 		"MarkUnread": func(ctx context.Context) error {
 			_, err := rg.client.MarkUnread(ctx, &chatimv1.MarkUnreadRequest{RoomId: "42"})
+			return err
+		},
+		"ListMyRooms": func(ctx context.Context) error {
+			_, err := rg.client.ListMyRooms(ctx, &chatimv1.ListMyRoomsRequest{})
+			return err
+		},
+		"GetRooms": func(ctx context.Context) error {
+			_, err := rg.client.GetRooms(ctx, &chatimv1.GetRoomsRequest{RoomIds: []string{"42"}})
+			return err
+		},
+		"ListThreads": func(ctx context.Context) error {
+			_, err := rg.client.ListThreads(ctx, &chatimv1.ListThreadsRequest{RoomId: "42"})
+			return err
+		},
+		"GetReactions": func(ctx context.Context) error {
+			_, err := rg.client.GetReactions(ctx, &chatimv1.GetReactionsRequest{RoomId: "42", Seq: 1})
+			return err
+		},
+		"ListPins": func(ctx context.Context) error {
+			_, err := rg.client.ListPins(ctx, &chatimv1.ListPinsRequest{RoomId: "42"})
+			return err
+		},
+		"ListMembers": func(ctx context.Context) error {
+			_, err := rg.client.ListMembers(ctx, &chatimv1.ListMembersRequest{RoomId: "42"})
 			return err
 		},
 	}

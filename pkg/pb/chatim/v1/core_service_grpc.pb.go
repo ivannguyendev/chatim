@@ -21,8 +21,13 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	CoreService_CreateRoom_FullMethodName          = "/chatim.v1.CoreService/CreateRoom"
 	CoreService_OpenDirectRoom_FullMethodName      = "/chatim.v1.CoreService/OpenDirectRoom"
+	CoreService_ListMyRooms_FullMethodName         = "/chatim.v1.CoreService/ListMyRooms"
+	CoreService_GetRooms_FullMethodName            = "/chatim.v1.CoreService/GetRooms"
+	CoreService_UpdateRoom_FullMethodName          = "/chatim.v1.CoreService/UpdateRoom"
+	CoreService_SetRoomPreferences_FullMethodName  = "/chatim.v1.CoreService/SetRoomPreferences"
 	CoreService_SendMessage_FullMethodName         = "/chatim.v1.CoreService/SendMessage"
 	CoreService_GetHistory_FullMethodName          = "/chatim.v1.CoreService/GetHistory"
+	CoreService_GetMessages_FullMethodName         = "/chatim.v1.CoreService/GetMessages"
 	CoreService_EditMessage_FullMethodName         = "/chatim.v1.CoreService/EditMessage"
 	CoreService_DeleteMessage_FullMethodName       = "/chatim.v1.CoreService/DeleteMessage"
 	CoreService_HideMessage_FullMethodName         = "/chatim.v1.CoreService/HideMessage"
@@ -31,9 +36,12 @@ const (
 	CoreService_ReactMessage_FullMethodName        = "/chatim.v1.CoreService/ReactMessage"
 	CoreService_PinMessage_FullMethodName          = "/chatim.v1.CoreService/PinMessage"
 	CoreService_UnpinMessage_FullMethodName        = "/chatim.v1.CoreService/UnpinMessage"
+	CoreService_ListPins_FullMethodName            = "/chatim.v1.CoreService/ListPins"
 	CoreService_GetReactionSettings_FullMethodName = "/chatim.v1.CoreService/GetReactionSettings"
+	CoreService_GetReactions_FullMethodName        = "/chatim.v1.CoreService/GetReactions"
 	CoreService_SetBookmark_FullMethodName         = "/chatim.v1.CoreService/SetBookmark"
 	CoreService_GetReplies_FullMethodName          = "/chatim.v1.CoreService/GetReplies"
+	CoreService_ListThreads_FullMethodName         = "/chatim.v1.CoreService/ListThreads"
 	CoreService_ListBookmarks_FullMethodName       = "/chatim.v1.CoreService/ListBookmarks"
 	CoreService_ListMentions_FullMethodName        = "/chatim.v1.CoreService/ListMentions"
 	CoreService_AddMembers_FullMethodName          = "/chatim.v1.CoreService/AddMembers"
@@ -41,6 +49,7 @@ const (
 	CoreService_LeaveRoom_FullMethodName           = "/chatim.v1.CoreService/LeaveRoom"
 	CoreService_ChangeMemberRole_FullMethodName    = "/chatim.v1.CoreService/ChangeMemberRole"
 	CoreService_SetMemberPriority_FullMethodName   = "/chatim.v1.CoreService/SetMemberPriority"
+	CoreService_ListMembers_FullMethodName         = "/chatim.v1.CoreService/ListMembers"
 	CoreService_MarkRead_FullMethodName            = "/chatim.v1.CoreService/MarkRead"
 	CoreService_MarkUnread_FullMethodName          = "/chatim.v1.CoreService/MarkUnread"
 )
@@ -51,8 +60,13 @@ const (
 type CoreServiceClient interface {
 	CreateRoom(ctx context.Context, in *CreateRoomRequest, opts ...grpc.CallOption) (*CreateRoomResponse, error)
 	OpenDirectRoom(ctx context.Context, in *OpenDirectRoomRequest, opts ...grpc.CallOption) (*OpenDirectRoomResponse, error)
+	ListMyRooms(ctx context.Context, in *ListMyRoomsRequest, opts ...grpc.CallOption) (*ListMyRoomsResponse, error)
+	GetRooms(ctx context.Context, in *GetRoomsRequest, opts ...grpc.CallOption) (*GetRoomsResponse, error)
+	UpdateRoom(ctx context.Context, in *UpdateRoomRequest, opts ...grpc.CallOption) (*UpdateRoomResponse, error)
+	SetRoomPreferences(ctx context.Context, in *SetRoomPreferencesRequest, opts ...grpc.CallOption) (*SetRoomPreferencesResponse, error)
 	SendMessage(ctx context.Context, in *SendMessageRequest, opts ...grpc.CallOption) (*SendMessageResponse, error)
 	GetHistory(ctx context.Context, in *GetHistoryRequest, opts ...grpc.CallOption) (*GetHistoryResponse, error)
+	GetMessages(ctx context.Context, in *GetMessagesRequest, opts ...grpc.CallOption) (*GetMessagesResponse, error)
 	EditMessage(ctx context.Context, in *EditMessageRequest, opts ...grpc.CallOption) (*EditMessageResponse, error)
 	DeleteMessage(ctx context.Context, in *DeleteMessageRequest, opts ...grpc.CallOption) (*DeleteMessageResponse, error)
 	HideMessage(ctx context.Context, in *HideMessageRequest, opts ...grpc.CallOption) (*HideMessageResponse, error)
@@ -61,9 +75,12 @@ type CoreServiceClient interface {
 	ReactMessage(ctx context.Context, in *ReactMessageRequest, opts ...grpc.CallOption) (*ReactMessageResponse, error)
 	PinMessage(ctx context.Context, in *PinMessageRequest, opts ...grpc.CallOption) (*PinMessageResponse, error)
 	UnpinMessage(ctx context.Context, in *UnpinMessageRequest, opts ...grpc.CallOption) (*UnpinMessageResponse, error)
+	ListPins(ctx context.Context, in *ListPinsRequest, opts ...grpc.CallOption) (*ListPinsResponse, error)
 	GetReactionSettings(ctx context.Context, in *GetReactionSettingsRequest, opts ...grpc.CallOption) (*GetReactionSettingsResponse, error)
+	GetReactions(ctx context.Context, in *GetReactionsRequest, opts ...grpc.CallOption) (*GetReactionsResponse, error)
 	SetBookmark(ctx context.Context, in *SetBookmarkRequest, opts ...grpc.CallOption) (*SetBookmarkResponse, error)
 	GetReplies(ctx context.Context, in *GetRepliesRequest, opts ...grpc.CallOption) (*GetRepliesResponse, error)
+	ListThreads(ctx context.Context, in *ListThreadsRequest, opts ...grpc.CallOption) (*ListThreadsResponse, error)
 	ListBookmarks(ctx context.Context, in *ListBookmarksRequest, opts ...grpc.CallOption) (*ListBookmarksResponse, error)
 	ListMentions(ctx context.Context, in *ListMentionsRequest, opts ...grpc.CallOption) (*ListMentionsResponse, error)
 	AddMembers(ctx context.Context, in *AddMembersRequest, opts ...grpc.CallOption) (*AddMembersResponse, error)
@@ -71,6 +88,7 @@ type CoreServiceClient interface {
 	LeaveRoom(ctx context.Context, in *LeaveRoomRequest, opts ...grpc.CallOption) (*LeaveRoomResponse, error)
 	ChangeMemberRole(ctx context.Context, in *ChangeMemberRoleRequest, opts ...grpc.CallOption) (*ChangeMemberRoleResponse, error)
 	SetMemberPriority(ctx context.Context, in *SetMemberPriorityRequest, opts ...grpc.CallOption) (*SetMemberPriorityResponse, error)
+	ListMembers(ctx context.Context, in *ListMembersRequest, opts ...grpc.CallOption) (*ListMembersResponse, error)
 	MarkRead(ctx context.Context, in *MarkReadRequest, opts ...grpc.CallOption) (*MarkReadResponse, error)
 	MarkUnread(ctx context.Context, in *MarkUnreadRequest, opts ...grpc.CallOption) (*MarkUnreadResponse, error)
 }
@@ -103,6 +121,46 @@ func (c *coreServiceClient) OpenDirectRoom(ctx context.Context, in *OpenDirectRo
 	return out, nil
 }
 
+func (c *coreServiceClient) ListMyRooms(ctx context.Context, in *ListMyRoomsRequest, opts ...grpc.CallOption) (*ListMyRoomsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListMyRoomsResponse)
+	err := c.cc.Invoke(ctx, CoreService_ListMyRooms_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) GetRooms(ctx context.Context, in *GetRoomsRequest, opts ...grpc.CallOption) (*GetRoomsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetRoomsResponse)
+	err := c.cc.Invoke(ctx, CoreService_GetRooms_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) UpdateRoom(ctx context.Context, in *UpdateRoomRequest, opts ...grpc.CallOption) (*UpdateRoomResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateRoomResponse)
+	err := c.cc.Invoke(ctx, CoreService_UpdateRoom_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) SetRoomPreferences(ctx context.Context, in *SetRoomPreferencesRequest, opts ...grpc.CallOption) (*SetRoomPreferencesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetRoomPreferencesResponse)
+	err := c.cc.Invoke(ctx, CoreService_SetRoomPreferences_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *coreServiceClient) SendMessage(ctx context.Context, in *SendMessageRequest, opts ...grpc.CallOption) (*SendMessageResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SendMessageResponse)
@@ -117,6 +175,16 @@ func (c *coreServiceClient) GetHistory(ctx context.Context, in *GetHistoryReques
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetHistoryResponse)
 	err := c.cc.Invoke(ctx, CoreService_GetHistory_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) GetMessages(ctx context.Context, in *GetMessagesRequest, opts ...grpc.CallOption) (*GetMessagesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetMessagesResponse)
+	err := c.cc.Invoke(ctx, CoreService_GetMessages_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -203,10 +271,30 @@ func (c *coreServiceClient) UnpinMessage(ctx context.Context, in *UnpinMessageRe
 	return out, nil
 }
 
+func (c *coreServiceClient) ListPins(ctx context.Context, in *ListPinsRequest, opts ...grpc.CallOption) (*ListPinsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListPinsResponse)
+	err := c.cc.Invoke(ctx, CoreService_ListPins_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *coreServiceClient) GetReactionSettings(ctx context.Context, in *GetReactionSettingsRequest, opts ...grpc.CallOption) (*GetReactionSettingsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetReactionSettingsResponse)
 	err := c.cc.Invoke(ctx, CoreService_GetReactionSettings_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) GetReactions(ctx context.Context, in *GetReactionsRequest, opts ...grpc.CallOption) (*GetReactionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetReactionsResponse)
+	err := c.cc.Invoke(ctx, CoreService_GetReactions_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -227,6 +315,16 @@ func (c *coreServiceClient) GetReplies(ctx context.Context, in *GetRepliesReques
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetRepliesResponse)
 	err := c.cc.Invoke(ctx, CoreService_GetReplies_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) ListThreads(ctx context.Context, in *ListThreadsRequest, opts ...grpc.CallOption) (*ListThreadsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListThreadsResponse)
+	err := c.cc.Invoke(ctx, CoreService_ListThreads_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -303,6 +401,16 @@ func (c *coreServiceClient) SetMemberPriority(ctx context.Context, in *SetMember
 	return out, nil
 }
 
+func (c *coreServiceClient) ListMembers(ctx context.Context, in *ListMembersRequest, opts ...grpc.CallOption) (*ListMembersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListMembersResponse)
+	err := c.cc.Invoke(ctx, CoreService_ListMembers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *coreServiceClient) MarkRead(ctx context.Context, in *MarkReadRequest, opts ...grpc.CallOption) (*MarkReadResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(MarkReadResponse)
@@ -329,8 +437,13 @@ func (c *coreServiceClient) MarkUnread(ctx context.Context, in *MarkUnreadReques
 type CoreServiceServer interface {
 	CreateRoom(context.Context, *CreateRoomRequest) (*CreateRoomResponse, error)
 	OpenDirectRoom(context.Context, *OpenDirectRoomRequest) (*OpenDirectRoomResponse, error)
+	ListMyRooms(context.Context, *ListMyRoomsRequest) (*ListMyRoomsResponse, error)
+	GetRooms(context.Context, *GetRoomsRequest) (*GetRoomsResponse, error)
+	UpdateRoom(context.Context, *UpdateRoomRequest) (*UpdateRoomResponse, error)
+	SetRoomPreferences(context.Context, *SetRoomPreferencesRequest) (*SetRoomPreferencesResponse, error)
 	SendMessage(context.Context, *SendMessageRequest) (*SendMessageResponse, error)
 	GetHistory(context.Context, *GetHistoryRequest) (*GetHistoryResponse, error)
+	GetMessages(context.Context, *GetMessagesRequest) (*GetMessagesResponse, error)
 	EditMessage(context.Context, *EditMessageRequest) (*EditMessageResponse, error)
 	DeleteMessage(context.Context, *DeleteMessageRequest) (*DeleteMessageResponse, error)
 	HideMessage(context.Context, *HideMessageRequest) (*HideMessageResponse, error)
@@ -339,9 +452,12 @@ type CoreServiceServer interface {
 	ReactMessage(context.Context, *ReactMessageRequest) (*ReactMessageResponse, error)
 	PinMessage(context.Context, *PinMessageRequest) (*PinMessageResponse, error)
 	UnpinMessage(context.Context, *UnpinMessageRequest) (*UnpinMessageResponse, error)
+	ListPins(context.Context, *ListPinsRequest) (*ListPinsResponse, error)
 	GetReactionSettings(context.Context, *GetReactionSettingsRequest) (*GetReactionSettingsResponse, error)
+	GetReactions(context.Context, *GetReactionsRequest) (*GetReactionsResponse, error)
 	SetBookmark(context.Context, *SetBookmarkRequest) (*SetBookmarkResponse, error)
 	GetReplies(context.Context, *GetRepliesRequest) (*GetRepliesResponse, error)
+	ListThreads(context.Context, *ListThreadsRequest) (*ListThreadsResponse, error)
 	ListBookmarks(context.Context, *ListBookmarksRequest) (*ListBookmarksResponse, error)
 	ListMentions(context.Context, *ListMentionsRequest) (*ListMentionsResponse, error)
 	AddMembers(context.Context, *AddMembersRequest) (*AddMembersResponse, error)
@@ -349,6 +465,7 @@ type CoreServiceServer interface {
 	LeaveRoom(context.Context, *LeaveRoomRequest) (*LeaveRoomResponse, error)
 	ChangeMemberRole(context.Context, *ChangeMemberRoleRequest) (*ChangeMemberRoleResponse, error)
 	SetMemberPriority(context.Context, *SetMemberPriorityRequest) (*SetMemberPriorityResponse, error)
+	ListMembers(context.Context, *ListMembersRequest) (*ListMembersResponse, error)
 	MarkRead(context.Context, *MarkReadRequest) (*MarkReadResponse, error)
 	MarkUnread(context.Context, *MarkUnreadRequest) (*MarkUnreadResponse, error)
 	mustEmbedUnimplementedCoreServiceServer()
@@ -367,11 +484,26 @@ func (UnimplementedCoreServiceServer) CreateRoom(context.Context, *CreateRoomReq
 func (UnimplementedCoreServiceServer) OpenDirectRoom(context.Context, *OpenDirectRoomRequest) (*OpenDirectRoomResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method OpenDirectRoom not implemented")
 }
+func (UnimplementedCoreServiceServer) ListMyRooms(context.Context, *ListMyRoomsRequest) (*ListMyRoomsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListMyRooms not implemented")
+}
+func (UnimplementedCoreServiceServer) GetRooms(context.Context, *GetRoomsRequest) (*GetRoomsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetRooms not implemented")
+}
+func (UnimplementedCoreServiceServer) UpdateRoom(context.Context, *UpdateRoomRequest) (*UpdateRoomResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateRoom not implemented")
+}
+func (UnimplementedCoreServiceServer) SetRoomPreferences(context.Context, *SetRoomPreferencesRequest) (*SetRoomPreferencesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetRoomPreferences not implemented")
+}
 func (UnimplementedCoreServiceServer) SendMessage(context.Context, *SendMessageRequest) (*SendMessageResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SendMessage not implemented")
 }
 func (UnimplementedCoreServiceServer) GetHistory(context.Context, *GetHistoryRequest) (*GetHistoryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetHistory not implemented")
+}
+func (UnimplementedCoreServiceServer) GetMessages(context.Context, *GetMessagesRequest) (*GetMessagesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetMessages not implemented")
 }
 func (UnimplementedCoreServiceServer) EditMessage(context.Context, *EditMessageRequest) (*EditMessageResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method EditMessage not implemented")
@@ -397,14 +529,23 @@ func (UnimplementedCoreServiceServer) PinMessage(context.Context, *PinMessageReq
 func (UnimplementedCoreServiceServer) UnpinMessage(context.Context, *UnpinMessageRequest) (*UnpinMessageResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UnpinMessage not implemented")
 }
+func (UnimplementedCoreServiceServer) ListPins(context.Context, *ListPinsRequest) (*ListPinsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListPins not implemented")
+}
 func (UnimplementedCoreServiceServer) GetReactionSettings(context.Context, *GetReactionSettingsRequest) (*GetReactionSettingsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetReactionSettings not implemented")
+}
+func (UnimplementedCoreServiceServer) GetReactions(context.Context, *GetReactionsRequest) (*GetReactionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetReactions not implemented")
 }
 func (UnimplementedCoreServiceServer) SetBookmark(context.Context, *SetBookmarkRequest) (*SetBookmarkResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetBookmark not implemented")
 }
 func (UnimplementedCoreServiceServer) GetReplies(context.Context, *GetRepliesRequest) (*GetRepliesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetReplies not implemented")
+}
+func (UnimplementedCoreServiceServer) ListThreads(context.Context, *ListThreadsRequest) (*ListThreadsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListThreads not implemented")
 }
 func (UnimplementedCoreServiceServer) ListBookmarks(context.Context, *ListBookmarksRequest) (*ListBookmarksResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListBookmarks not implemented")
@@ -426,6 +567,9 @@ func (UnimplementedCoreServiceServer) ChangeMemberRole(context.Context, *ChangeM
 }
 func (UnimplementedCoreServiceServer) SetMemberPriority(context.Context, *SetMemberPriorityRequest) (*SetMemberPriorityResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetMemberPriority not implemented")
+}
+func (UnimplementedCoreServiceServer) ListMembers(context.Context, *ListMembersRequest) (*ListMembersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListMembers not implemented")
 }
 func (UnimplementedCoreServiceServer) MarkRead(context.Context, *MarkReadRequest) (*MarkReadResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method MarkRead not implemented")
@@ -490,6 +634,78 @@ func _CoreService_OpenDirectRoom_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CoreService_ListMyRooms_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListMyRoomsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).ListMyRooms(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_ListMyRooms_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).ListMyRooms(ctx, req.(*ListMyRoomsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_GetRooms_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetRoomsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).GetRooms(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_GetRooms_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).GetRooms(ctx, req.(*GetRoomsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_UpdateRoom_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateRoomRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).UpdateRoom(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_UpdateRoom_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).UpdateRoom(ctx, req.(*UpdateRoomRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_SetRoomPreferences_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetRoomPreferencesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).SetRoomPreferences(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_SetRoomPreferences_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).SetRoomPreferences(ctx, req.(*SetRoomPreferencesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _CoreService_SendMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SendMessageRequest)
 	if err := dec(in); err != nil {
@@ -522,6 +738,24 @@ func _CoreService_GetHistory_Handler(srv interface{}, ctx context.Context, dec f
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(CoreServiceServer).GetHistory(ctx, req.(*GetHistoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_GetMessages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetMessagesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).GetMessages(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_GetMessages_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).GetMessages(ctx, req.(*GetMessagesRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -670,6 +904,24 @@ func _CoreService_UnpinMessage_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CoreService_ListPins_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListPinsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).ListPins(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_ListPins_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).ListPins(ctx, req.(*ListPinsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _CoreService_GetReactionSettings_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetReactionSettingsRequest)
 	if err := dec(in); err != nil {
@@ -684,6 +936,24 @@ func _CoreService_GetReactionSettings_Handler(srv interface{}, ctx context.Conte
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(CoreServiceServer).GetReactionSettings(ctx, req.(*GetReactionSettingsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_GetReactions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetReactionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).GetReactions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_GetReactions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).GetReactions(ctx, req.(*GetReactionsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -720,6 +990,24 @@ func _CoreService_GetReplies_Handler(srv interface{}, ctx context.Context, dec f
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(CoreServiceServer).GetReplies(ctx, req.(*GetRepliesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_ListThreads_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListThreadsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).ListThreads(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_ListThreads_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).ListThreads(ctx, req.(*ListThreadsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -850,6 +1138,24 @@ func _CoreService_SetMemberPriority_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CoreService_ListMembers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListMembersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).ListMembers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_ListMembers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).ListMembers(ctx, req.(*ListMembersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _CoreService_MarkRead_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(MarkReadRequest)
 	if err := dec(in); err != nil {
@@ -902,12 +1208,32 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _CoreService_OpenDirectRoom_Handler,
 		},
 		{
+			MethodName: "ListMyRooms",
+			Handler:    _CoreService_ListMyRooms_Handler,
+		},
+		{
+			MethodName: "GetRooms",
+			Handler:    _CoreService_GetRooms_Handler,
+		},
+		{
+			MethodName: "UpdateRoom",
+			Handler:    _CoreService_UpdateRoom_Handler,
+		},
+		{
+			MethodName: "SetRoomPreferences",
+			Handler:    _CoreService_SetRoomPreferences_Handler,
+		},
+		{
 			MethodName: "SendMessage",
 			Handler:    _CoreService_SendMessage_Handler,
 		},
 		{
 			MethodName: "GetHistory",
 			Handler:    _CoreService_GetHistory_Handler,
+		},
+		{
+			MethodName: "GetMessages",
+			Handler:    _CoreService_GetMessages_Handler,
 		},
 		{
 			MethodName: "EditMessage",
@@ -942,8 +1268,16 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _CoreService_UnpinMessage_Handler,
 		},
 		{
+			MethodName: "ListPins",
+			Handler:    _CoreService_ListPins_Handler,
+		},
+		{
 			MethodName: "GetReactionSettings",
 			Handler:    _CoreService_GetReactionSettings_Handler,
+		},
+		{
+			MethodName: "GetReactions",
+			Handler:    _CoreService_GetReactions_Handler,
 		},
 		{
 			MethodName: "SetBookmark",
@@ -952,6 +1286,10 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetReplies",
 			Handler:    _CoreService_GetReplies_Handler,
+		},
+		{
+			MethodName: "ListThreads",
+			Handler:    _CoreService_ListThreads_Handler,
 		},
 		{
 			MethodName: "ListBookmarks",
@@ -980,6 +1318,10 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetMemberPriority",
 			Handler:    _CoreService_SetMemberPriority_Handler,
+		},
+		{
+			MethodName: "ListMembers",
+			Handler:    _CoreService_ListMembers_Handler,
 		},
 		{
 			MethodName: "MarkRead",

@@ -20,7 +20,7 @@ func reactionDeltaPipeline(deltas []store.EmojiDelta) mongo.Pipeline {
 		}}}},
 		{Key: "v", Value: bumped("$rx.v")},
 	}
-	return mongo.Pipeline{{{Key: "$set", Value: bson.D{{Key: "rx", Value: counts}}}}}
+	return flaggedSet(store.BitReactionCounts, bson.E{Key: "rx", Value: counts})
 }
 
 func movedCounts(given bson.D) bson.D {
@@ -54,7 +54,7 @@ func newCounts(given bson.D) bson.D {
 func replyDeltaPipeline(delta int) mongo.Pipeline {
 	n := bson.D{{Key: "$add", Value: bson.A{orZero("$rc.n"), int64(delta)}}}
 	count := bson.D{{Key: "n", Value: n}, {Key: "v", Value: bumped("$rc.v")}}
-	return mongo.Pipeline{{{Key: "$set", Value: bson.D{{Key: "rc", Value: count}}}}}
+	return flaggedSet(store.BitReplyCounts, bson.E{Key: "rc", Value: count})
 }
 
 func bumped(field string) bson.D {

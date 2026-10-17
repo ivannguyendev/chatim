@@ -11,6 +11,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/resync"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
 )
 
@@ -48,10 +49,13 @@ func RunResync(ctx context.Context, cfg config.Config, opts resync.Options, log 
 	if err != nil {
 		return err
 	}
+	timers, err := timer.NewTimers(c.js, cfg.Timer.Name, cfg.Timer.SubjectRoot, cfg.MessageCountCheckDelay, timer.WithLogger(log))
+	if err != nil {
+		return fmt.Errorf("wire message count timers: %w", err)
+	}
 	st := mongostore.New(c.mongo.Database(cfg.MongoDB), mongostore.Options{})
-	target := resync.Target{SubjectRoot: cfg.Work.SubjectRoot, Partitions: cfg.Work.Partitions}
-	deps := resync.Deps{Rooms: st, Pages: st, Edits: st, Interactions: st.Interactions(), Pins: st.Pins(), Members: st, Hidden: st.Hidden(), Pub: c.js}
-	rep, err := resync.Run(ctx, deps, target, opts)
+	deps := resync.Deps{Rooms: st, Pages: st, Edits: st, Interactions: st.Interactions(), Pins: st.Pins(), Members: st, Hidden: st.Hidden(), States: st.EventStates(), Timers: timers}
+	rep, err := resync.Run(ctx, deps, opts)
 	fmt.Fprintln(out, rep)
 	return err
 }

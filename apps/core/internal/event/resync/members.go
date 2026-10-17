@@ -5,7 +5,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
@@ -29,9 +28,8 @@ func (s *scanner) members(ctx context.Context, room uint64) error {
 		limit:   store.MaxMemberScan,
 		full:    ErrMemberPageFull,
 		between: s.deps.Members.MembersBetween,
-		record:  func(m domain.Member) work.Record { return memberRecord(store.MemberChanged, m) },
-		extra:   memberStateRecords,
-		counted: &s.rep.MemberRecords,
+		at:      func(m domain.Member) time.Time { return m.LastChangeAt },
+		marks:   s.memberMarks,
 	})
 }
 
@@ -41,26 +39,29 @@ func (s *scanner) hidden(ctx context.Context, room uint64) error {
 		limit:   store.MaxHiddenScan,
 		full:    ErrHiddenPageFull,
 		between: s.deps.Hidden.Between,
-		record:  hiddenRecord,
-		counted: &s.rep.HiddenRecords,
+		at:      func(h domain.HiddenMessage) time.Time { return h.At },
+		marks: func(h domain.HiddenMessage) []mark {
+			t := store.StateTarget{Collection: store.StateHidden, Bit: store.BitHidden, Room: h.Room, Thread: h.Thread, Seq: h.Seq, User: h.User}
+			return []mark{{t, &s.rep.Hidden}}
+		},
 	})
 }
 
-func memberRecord(kind store.ChangeKind, m domain.Member) work.Record {
-	return work.RecordOf(store.Change{Kind: kind, Member: m, CommittedAt: m.LastChangeAt})
-}
-
-func memberStateRecords(m domain.Member) []work.Record {
-	var out []work.Record
+func (s *scanner) memberMarks(m domain.Member) []mark {
+	target := func(bit store.StateBit, ver uint64) store.StateTarget {
+		return store.StateTarget{Collection: store.StateMembers, Bit: bit, Room: m.Room, User: m.User, Ver: ver}
+	}
+	out := []mark{{target(store.BitMember, uint64(m.Ver)), &s.rep.Members}}
 	if m.ReadVer >= 1 {
-		out = append(out, memberRecord(store.ReadChanged, m))
+		out = append(out, mark{target(store.BitReadPosition, m.ReadVer), &s.rep.ReadPositions})
 	}
 	if !m.ClearedAt.IsZero() {
-		out = append(out, memberRecord(store.HistoryCleared, m))
+		cleared := target(store.BitHistoryCleared, 0)
+		cleared.At = m.ClearedAt
+		out = append(out, mark{cleared, &s.rep.HistoryCleared})
+	}
+	if m.Preferences.Ver >= 1 {
+		out = append(out, mark{target(store.BitPreferences, m.Preferences.Ver), &s.rep.Preferences})
 	}
 	return out
-}
-
-func hiddenRecord(h domain.HiddenMessage) work.Record {
-	return work.RecordOf(store.Change{Kind: store.MessageHidden, Hidden: h, CommittedAt: h.At})
 }

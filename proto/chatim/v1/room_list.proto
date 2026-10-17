@@ -1,0 +1,96 @@
+syntax = "proto3";
+
+package chatim.v1;
+
+import "chatim/v1/core.proto";
+import "chatim/v1/members.proto";
+import "google/protobuf/timestamp.proto";
+
+enum RoomFolder {
+  ROOM_FOLDER_UNSPECIFIED = 0;
+  ROOM_FOLDER_MAIN = 1;
+  ROOM_FOLDER_ARCHIVED = 2;
+}
+
+message MyRoomState {
+  MemberRole role = 1;
+  google.protobuf.Timestamp joined_at = 2;
+  google.protobuf.Timestamp cleared_at = 3;
+  uint64 read_seq = 4;
+  uint64 read_ver = 5;
+  google.protobuf.Timestamp pinned_at = 6;
+  google.protobuf.Timestamp muted_until = 7;
+  google.protobuf.Timestamp archived_at = 8;
+  uint64 preference_ver = 9;
+}
+
+message LastPreview {
+  uint64 seq = 1;
+  string sender = 2;
+  MessageKind kind = 3;
+  string text = 4;
+  google.protobuf.Timestamp created_at = 5;
+  bool deleted = 6;
+  bool edited = 7;
+}
+
+message Unread {
+  uint32 count = 1;
+  bool approx = 2;
+}
+
+message RoomItem {
+  Room room = 1;
+  MyRoomState me = 2;
+  LastPreview preview = 3;
+  Unread unread = 4;
+  uint64 peer_read_seq = 5;
+}
+
+message ListMyRoomsRequest {
+  RoomFolder folder = 1;
+  string next = 2;
+  uint32 limit = 3;
+}
+
+message ListMyRoomsResponse {
+  repeated RoomItem items = 1;
+  string next = 2;
+}
+
+message GetRoomsRequest {
+  repeated string room_ids = 1;
+}
+
+message GetRoomsResponse {
+  repeated RoomItem items = 1;
+  repeated string missing = 2;
+}
+
+message SetRoomPreferencesRequest {
+  string room_id = 1;
+  optional bool pinned = 2;
+  optional google.protobuf.Timestamp muted_until = 3;
+  optional bool archived = 4;
+}
+
+message SetRoomPreferencesResponse {
+  bool changed = 1;
+  MyRoomState state = 2;
+}
+
+message UpdateRoomRequest {
+  string room_id = 1;
+  optional string name = 2;
+  optional string avatar = 3;
+}
+
+message UpdateRoomResponse {
+  Room room = 1;
+  bool changed = 2;
+}
+
+message RoomPreferencesChanged {
+  string user = 1;
+  MyRoomState state = 2;
+}

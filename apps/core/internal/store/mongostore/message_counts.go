@@ -64,7 +64,7 @@ func (s *Store) SetReplyCount(ctx context.Context, key store.MsgKey, base uint64
 	}
 	filter := bson.D{{Key: "_id", Value: msgID(key)}, versionIs("rc.v", from)}
 	count := bson.D{{Key: "n", Value: int64(n)}, {Key: "v", Value: from + 1}}
-	res, err := s.messages.UpdateOne(ctx, filter, bson.D{{Key: "$set", Value: bson.D{{Key: "rc", Value: count}}}})
+	res, err := s.messages.UpdateOne(ctx, filter, flaggedSet(store.BitReplyCounts, setLiteral("rc", count)))
 	if err != nil {
 		return false, fmt.Errorf("set reply count v%d of %d/%d/%d: %w", base+1, key.Room, key.Thread, key.Seq, err)
 	}

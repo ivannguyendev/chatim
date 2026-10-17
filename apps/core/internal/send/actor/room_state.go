@@ -51,16 +51,7 @@ func (a *actor) refresh(ctx context.Context) error {
 
 func (a *actor) admit(ctx context.Context, q *request) *entry {
 	c := q.cmd
-	if err := domain.CheckTenant(a.room, c.Tenant); err != nil {
-		q.answer(Ack{}, err)
-		return nil
-	}
-	m, err := a.member(ctx, c.User)
-	if err != nil {
-		q.answer(Ack{}, err)
-		return nil
-	}
-	if err := a.allow(ctx, c, m); err != nil {
+	if err := a.authorize(ctx, c); err != nil {
 		q.answer(Ack{}, err)
 		return nil
 	}
@@ -68,18 +59,21 @@ func (a *actor) admit(ctx context.Context, q *request) *entry {
 	if a.cache.join(k, q) || a.recheck(ctx, k) {
 		return nil
 	}
-	return &entry{key: k, msg: domain.Message{
-		Room:       a.id,
-		Tenant:     a.room.Tenant,
-		From:       c.User,
-		Kind:       domain.KindText,
-		Text:       c.Text,
-		CID:        c.CID,
-		ReplyTo:    c.ReplyTo,
-		Forward:    c.Forward,
-		Mentions:   c.Mentions,
-		MentionAll: c.MentionAll,
-	}}
+	return &entry{key: k, msg: c.message()}
+}
+
+func (a *actor) authorize(ctx context.Context, c SendCmd) error {
+	if err := domain.CheckTenant(a.room, c.Tenant); err != nil {
+		return err
+	}
+	if c.Kind == domain.KindSystem {
+		return a.r.policy.Check(ctx, access.Request{Action: access.SendSystemMessage, User: c.User, Room: a.room})
+	}
+	m, err := a.member(ctx, c.User)
+	if err != nil {
+		return err
+	}
+	return a.allow(ctx, c, m)
 }
 
 func (a *actor) allow(ctx context.Context, c SendCmd, m domain.Member) error {

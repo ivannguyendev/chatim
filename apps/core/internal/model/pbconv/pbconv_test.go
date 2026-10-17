@@ -57,6 +57,7 @@ func TestEnumsMapKnownValuesAndDefaultToUnspecified(t *testing.T) {
 		want chatimv1.MessageKind
 	}{
 		{domain.KindText, chatimv1.MessageKind_MESSAGE_KIND_TEXT},
+		{domain.KindSystem, chatimv1.MessageKind_MESSAGE_KIND_SYSTEM},
 		{0, chatimv1.MessageKind_MESSAGE_KIND_UNSPECIFIED},
 		{99, chatimv1.MessageKind_MESSAGE_KIND_UNSPECIFIED},
 	}
@@ -74,6 +75,16 @@ func TestMessageCopiesEveryField(t *testing.T) {
 	}
 	if got := pbconv.Message(sample()); !proto.Equal(got, want) {
 		t.Fatalf("Message = %v, want %v", got, want)
+	}
+	sys := sample()
+	sys.Kind, sys.SkipUnread, sys.Meta = domain.KindSystem, true, []byte(`{"call_seconds":180}`)
+	want.Kind, want.SkipUnread, want.Meta = chatimv1.MessageKind_MESSAGE_KIND_SYSTEM, true, sys.Meta
+	if got := pbconv.Message(sys); !proto.Equal(got, want) {
+		t.Fatalf("system Message = %v, want %v", got, want)
+	}
+	sys.Deleted = true
+	if got := pbconv.Message(sys); got.GetMeta() != nil || !got.GetSkipUnread() || got.GetKind() != chatimv1.MessageKind_MESSAGE_KIND_SYSTEM {
+		t.Fatalf("deleted system Message = %v, want no meta, kind and skip_unread kept", got)
 	}
 }
 

@@ -13,7 +13,10 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-var errUnknownRoomType = fmt.Errorf("%w: type", apperr.ErrInvalidArgument)
+var (
+	errUnknownRoomType    = fmt.Errorf("%w: type", apperr.ErrInvalidArgument)
+	errUnknownMessageKind = fmt.Errorf("%w: kind", apperr.ErrInvalidArgument)
+)
 
 func RoomID(room uint64) string { return strconv.FormatUint(room, 10) }
 
@@ -54,6 +57,9 @@ func Room(r domain.Room) *chatimv1.Room {
 		CreatedBy:   r.CreatedBy,
 		CreatedAt:   timestamppb.New(r.CreatedAt),
 		MemberCount: memberCount(r.MemberCount),
+		Avatar:      r.Avatar,
+		InfoVer:     r.InfoVer,
+		DirectUsers: r.DirectUsers(),
 	}
 }
 
@@ -72,8 +78,21 @@ func MessageKind(k domain.Kind) chatimv1.MessageKind {
 	switch k {
 	case domain.KindText:
 		return chatimv1.MessageKind_MESSAGE_KIND_TEXT
+	case domain.KindSystem:
+		return chatimv1.MessageKind_MESSAGE_KIND_SYSTEM
 	default:
 		return chatimv1.MessageKind_MESSAGE_KIND_UNSPECIFIED
+	}
+}
+
+func DomainMessageKind(k chatimv1.MessageKind) (domain.Kind, error) {
+	switch k {
+	case chatimv1.MessageKind_MESSAGE_KIND_UNSPECIFIED, chatimv1.MessageKind_MESSAGE_KIND_TEXT:
+		return domain.KindText, nil
+	case chatimv1.MessageKind_MESSAGE_KIND_SYSTEM:
+		return domain.KindSystem, nil
+	default:
+		return 0, errUnknownMessageKind
 	}
 }
 
@@ -98,6 +117,8 @@ func Message(m domain.Message) *chatimv1.Message {
 		MentionTargets: MentionTargets(m.Mentions),
 		MentionAll:     m.MentionAll,
 		ReplyCount:     ReplyCount(m.Replies),
+		SkipUnread:     m.SkipUnread,
+		Meta:           m.Meta,
 	}
 }
 

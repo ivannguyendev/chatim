@@ -13,6 +13,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
+	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
 )
 
@@ -20,11 +21,33 @@ const recountRoom uint64 = 7_350_000_001
 
 var recountAt = time.Date(2026, 10, 8, 9, 0, 0, 0, time.UTC)
 
-type sentEvents struct{ msgs []*nats.Msg }
+var errRecountPublish = errors.New("publish refused")
+
+type sentEvents struct {
+	msgs []*nats.Msg
+	err  error
+}
 
 func (s *sentEvents) PublishMsg(_ context.Context, m *nats.Msg, _ ...jetstream.PublishOpt) (*jetstream.PubAck, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
 	s.msgs = append(s.msgs, m)
 	return &jetstream.PubAck{}, nil
+}
+
+func memberCountPending(t *testing.T, rooms *memstore.Rooms) bool {
+	t.Helper()
+	docs, _, err := memstore.NewEventStates(memstore.EventStateStores{Rooms: rooms}).Pending(t.Context(), store.StateRooms, time.Time{}, recountAt.AddDate(100, 0, 0), store.PendingCursor{}, store.MaxPendingPage)
+	if err != nil {
+		t.Fatalf("Pending: %v", err)
+	}
+	for _, d := range docs {
+		if d.Room == recountRoom && d.State&store.BitMemberCount != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 type racingCounts struct{ *memstore.Rooms }
@@ -53,8 +76,13 @@ func driftedRooms(t *testing.T) *memstore.Rooms {
 	return rooms
 }
 
-func newRecounter(rooms recountRooms, pub *sentEvents, out *bytes.Buffer) recounter {
-	return recounter{rooms: rooms, pub: pub, root: "evt", now: func() time.Time { return recountAt }, out: out}
+func newRecounter(rooms *memstore.Rooms, pub *sentEvents, out *bytes.Buffer) recounter {
+	return newRecounterOver(rooms, rooms, pub, out)
+}
+
+func newRecounterOver(counts recountRooms, rooms *memstore.Rooms, pub *sentEvents, out *bytes.Buffer) recounter {
+	states := memstore.NewEventStates(memstore.EventStateStores{Rooms: rooms})
+	return recounter{rooms: counts, pub: pub, states: states, root: "evt", now: func() time.Time { return recountAt }, out: out}
 }
 
 func TestRecountDryRunPrintsBothCountsAndWritesNothing(t *testing.T) {
@@ -87,11 +115,28 @@ func TestRecountRestoresTheCountAndPublishesIt(t *testing.T) {
 		!strings.HasSuffix(pub.msgs[0].Subject, ".member_count_changed") {
 		t.Fatalf("events = %+v, want one member_count_changed at ver 3", pub.msgs)
 	}
+	if memberCountPending(t, rooms) {
+		t.Fatalf("member count flag still pending after the publish, want it cleared")
+	}
+}
+
+func TestRecountKeepsThePendingFlagWhenThePublishFails(t *testing.T) {
+	rooms, out := driftedRooms(t), &bytes.Buffer{}
+	err := newRecounter(rooms, &sentEvents{err: errRecountPublish}, out).run(t.Context(), RecountOptions{Room: recountRoom})
+	if !errors.Is(err, errRecountPublish) {
+		t.Fatalf("run = %v, want errRecountPublish", err)
+	}
+	if r, err := rooms.Get(t.Context(), recountRoom); err != nil || r.MemberCount != 2 || r.MemberCountVer != 3 {
+		t.Fatalf("room = %+v, %v; want the count written at ver 3", r, err)
+	}
+	if !memberCountPending(t, rooms) {
+		t.Fatalf("member count flag cleared after a failed publish, want it kept for the sweeper")
+	}
 }
 
 func TestRecountFailsWhenTheCountMovesMeanwhile(t *testing.T) {
 	rooms, pub, out := driftedRooms(t), &sentEvents{}, &bytes.Buffer{}
-	err := newRecounter(racingCounts{rooms}, pub, out).run(t.Context(), RecountOptions{Room: recountRoom})
+	err := newRecounterOver(racingCounts{rooms}, rooms, pub, out).run(t.Context(), RecountOptions{Room: recountRoom})
 	if !errors.Is(err, errRecountRaced) || len(pub.msgs) != 0 {
 		t.Fatalf("run = %v with %d events, want errRecountRaced and nothing sent", err, len(pub.msgs))
 	}

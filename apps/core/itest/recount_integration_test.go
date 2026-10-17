@@ -4,18 +4,20 @@ import (
 	"bytes"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/nats-io/nats.go"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/app"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
+	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
 )
 
 func TestRealInfraRecountRestoresADriftedCount(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastEffects)
+	core := startCore(t, it, itFastSweep)
 	roomID := createRoom(t, dialCore(t, core.cfg))
 	room := parseRoom(t, roomID)
 	db := it.mongo.Database(core.cfg.MongoDB)
@@ -54,9 +56,26 @@ func TestRealInfraRecountRestoresADriftedCount(t *testing.T) {
 	if r, err := st.Get(t.Context(), room); err != nil || r.MemberCount != 2 || r.MemberCountVer != ver {
 		t.Fatalf("after recount room = %+v, %v; want 2 members at ver %d", r, err, ver)
 	}
+	if memberCountFlagged(t, st, room) {
+		t.Fatalf("member count of room %d still flagged after the publish, want the flag cleared", room)
+	}
 	id := pbconv.MemberCountEventID(room, ver)
 	ev := awaitLiveEvents(t, live, id)[id].GetMemberCountChanged()
 	if ev.GetMemberCount() != 2 || ev.GetMemberCountVer() != ver {
 		t.Fatalf("member_count_changed = %+v, want 2 at ver %d", ev, ver)
 	}
+}
+
+func memberCountFlagged(t *testing.T, st *mongostore.Store, room uint64) bool {
+	t.Helper()
+	docs, _, err := st.EventStates().Pending(t.Context(), store.StateRooms, time.Unix(0, 0), time.Now().Add(time.Hour), store.PendingCursor{}, store.MaxPendingPage)
+	if err != nil {
+		t.Fatalf("Pending(rooms): %v", err)
+	}
+	for _, d := range docs {
+		if d.Room == room && d.State&store.BitMemberCount != 0 {
+			return true
+		}
+	}
+	return false
 }

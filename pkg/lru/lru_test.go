@@ -57,3 +57,22 @@ func TestLenCountsLiveEntries(t *testing.T) {
 		t.Fatalf("Len after update and remove = %d", n)
 	}
 }
+
+func TestPeekReadsWithoutRefreshingTheKey(t *testing.T) {
+	c := lru.New[string, int](2)
+	c.Put("a", 1)
+	c.Put("b", 2)
+	if v, ok := c.Peek("a"); !ok || v != 1 {
+		t.Fatalf("Peek(a) = %d, %v", v, ok)
+	}
+	if _, ok := c.Peek("missing"); ok {
+		t.Fatal("Peek(missing) found a value")
+	}
+	c.Put("c", 3)
+	if _, ok := c.Peek("a"); ok {
+		t.Fatal("a survived although Peek must not refresh it")
+	}
+	if _, ok := c.Peek("b"); !ok {
+		t.Fatal("b evicted instead of the least recently used a")
+	}
+}

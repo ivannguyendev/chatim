@@ -194,12 +194,3 @@ func TestCreationMemberIsActiveAtVerOne(t *testing.T) {
 		t.Fatalf("CreationMember(full) = %+v, want %+v", got, want)
 	}
 }
-
-func TestMemberChangeKindsKeepTheirWireNumbers(t *testing.T) {
-	got := []store.ChangeKind{store.MemberChanged, store.ReadChanged, store.MessageHidden, store.HistoryCleared, store.MemberCountCheck}
-	for i, k := range got {
-		if want := store.ChangeKind(6 + i); k != want {
-			t.Errorf("kind %d = %d, want %d", i, k, want)
-		}
-	}
-}

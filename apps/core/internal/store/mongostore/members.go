@@ -57,23 +57,20 @@ func applyMember(ctx context.Context, coll *mongo.Collection, cur, next domain.M
 	return res.MatchedCount == 1, nil
 }
 
-func membershipUpdate(next domain.Member) bson.D {
-	set := bson.D{
-		{Key: "role", Value: next.Role},
-		{Key: "state", Value: int64(next.State)},
-		{Key: "priority", Value: int64(next.Priority)},
-		{Key: "previous_role", Value: next.PreviousRole},
-		{Key: "previous_state", Value: int64(next.PreviousState)},
-		{Key: "previous_priority", Value: int64(next.PreviousPriority)},
-		{Key: "request_id", Value: next.RequestID},
-		{Key: "updated_by", Value: next.UpdatedBy},
-		{Key: "updated_at", Value: next.UpdatedAt},
-	}
-	return bson.D{
-		{Key: "$set", Value: set},
-		{Key: "$max", Value: bson.D{{Key: "last_change_at", Value: next.LastChangeAt}}},
-		{Key: "$inc", Value: bson.D{{Key: "ver", Value: int64(1)}}},
-	}
+func membershipUpdate(next domain.Member) mongo.Pipeline {
+	return flaggedSet(store.BitMember,
+		setLiteral("role", string(next.Role)),
+		bson.E{Key: "state", Value: int64(next.State)},
+		bson.E{Key: "priority", Value: int64(next.Priority)},
+		setLiteral("previous_role", string(next.PreviousRole)),
+		bson.E{Key: "previous_state", Value: int64(next.PreviousState)},
+		bson.E{Key: "previous_priority", Value: int64(next.PreviousPriority)},
+		setLiteral("request_id", next.RequestID),
+		setLiteral("updated_by", next.UpdatedBy),
+		bson.E{Key: "updated_at", Value: next.UpdatedAt},
+		latest("last_change_at", next.LastChangeAt),
+		bson.E{Key: "ver", Value: bumped("$ver")},
+	)
 }
 
 func (s *Store) MembersOf(ctx context.Context, room uint64, users []string) ([]domain.Member, error) {
@@ -84,11 +81,11 @@ func (s *Store) MembersOf(ctx context.Context, room uint64, users []string) ([]d
 }
 
 func membersOf(ctx context.Context, coll *mongo.Collection, room uint64, users []string) ([]domain.Member, error) {
-	ids := make(bson.A, len(users))
+	ids := make([][]byte, len(users))
 	for i, u := range users {
 		ids[i] = keys.Member(room, u)
 	}
-	found, err := findMembers(ctx, coll, bson.D{{Key: "_id", Value: bson.D{{Key: "$in", Value: ids}}}})
+	found, err := findMembers(ctx, coll, boundedIDs(ids))
 	if err != nil {
 		return nil, fmt.Errorf("members of room %d: %w", room, err)
 	}

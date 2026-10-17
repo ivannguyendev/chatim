@@ -22,7 +22,9 @@ const itLiveLimit = 30 * time.Second
 
 const itProbeTimeout = 2 * time.Second
 
-var itFastEffects = map[string]string{"CORE_DRAIN_DELAY": "200ms", "RECONCILE_DELAY": "2s", "PUB_ACK_TIMEOUT": "500ms"}
+const itSweeperStarted = "event sweeper started"
+
+var itFastSweep = map[string]string{"CORE_DRAIN_DELAY": "200ms", "PUB_ACK_TIMEOUT": "500ms", "SWEEP_MIN_AGE": "2s", "SWEEP_INTERVAL": "200ms", "STATE_CLEAR_FLUSH": "100ms", "STATE_CLEAR_TIMEOUT": "1s"}
 
 type itCore struct {
 	cfg     config.Config
@@ -33,7 +35,7 @@ func startCore(t *testing.T, it *itInfra, env map[string]string) itCore {
 	t.Helper()
 	cfg := it.coreConfig(t, env)
 	started := make(chan struct{})
-	logger := slog.New(&termStartSignal{
+	logger := slog.New(&sweeperStartSignal{
 		Handler: slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}),
 		once:    &sync.Once{},
 		started: started,
@@ -52,12 +54,12 @@ func startCore(t *testing.T, it *itInfra, env map[string]string) itCore {
 	return itCore{cfg: cfg, started: started}
 }
 
-func (c itCore) awaitTerm(t *testing.T) {
+func (c itCore) awaitSweeper(t *testing.T) {
 	t.Helper()
 	select {
 	case <-c.started:
 	case <-time.After(itLiveLimit):
-		t.Fatalf("no reconcile term started within %v", itLiveLimit)
+		t.Fatalf("no event sweeper started within %v", itLiveLimit)
 	}
 }
 
@@ -99,37 +101,18 @@ func awaitLiveIDs(t *testing.T, live <-chan *nats.Msg, since time.Time, want ...
 	t.Logf("live events %v arrived %v after the write", want, time.Since(since))
 }
 
-func assertNoLiveIDs(t *testing.T, live <-chan *nats.Msg, wait time.Duration, unwantedIDs ...string) {
-	t.Helper()
-	unwanted := make(map[string]bool, len(unwantedIDs))
-	for _, id := range unwantedIDs {
-		unwanted[id] = true
-	}
-	timeout := time.After(wait)
-	for {
-		select {
-		case m := <-live:
-			if id := m.Header.Get(jetstream.MsgIDHeader); unwanted[id] {
-				t.Fatalf("live event %s arrived, want none within %v", id, wait)
-			}
-		case <-timeout:
-			return
-		}
-	}
-}
-
-type termStartSignal struct {
+type sweeperStartSignal struct {
 	slog.Handler
 	once    *sync.Once
 	started chan struct{}
 }
 
-func (h *termStartSignal) Enabled(_ context.Context, level slog.Level) bool {
+func (h *sweeperStartSignal) Enabled(_ context.Context, level slog.Level) bool {
 	return level >= slog.LevelInfo
 }
 
-func (h *termStartSignal) Handle(ctx context.Context, r slog.Record) error {
-	if r.Message == "reconcile term started" {
+func (h *sweeperStartSignal) Handle(ctx context.Context, r slog.Record) error {
+	if r.Message == itSweeperStarted {
 		h.once.Do(func() { close(h.started) })
 	}
 	if !h.Handler.Enabled(ctx, r.Level) {
@@ -138,10 +121,10 @@ func (h *termStartSignal) Handle(ctx context.Context, r slog.Record) error {
 	return h.Handler.Handle(ctx, r)
 }
 
-func (h *termStartSignal) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return &termStartSignal{Handler: h.Handler.WithAttrs(attrs), once: h.once, started: h.started}
+func (h *sweeperStartSignal) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &sweeperStartSignal{Handler: h.Handler.WithAttrs(attrs), once: h.once, started: h.started}
 }
 
-func (h *termStartSignal) WithGroup(name string) slog.Handler {
-	return &termStartSignal{Handler: h.Handler.WithGroup(name), once: h.once, started: h.started}
+func (h *sweeperStartSignal) WithGroup(name string) slog.Handler {
+	return &sweeperStartSignal{Handler: h.Handler.WithGroup(name), once: h.once, started: h.started}
 }

@@ -135,7 +135,7 @@ func (r *linkRun) send(room, user, cid string, edit func(*chatimv1.SendMessageRe
 }
 
 func (r *linkRun) sent(room string, seq uint64, links *chatimv1.Message) e2e.Want {
-	return r.want(room, e2e.KindCreated, e2e.MessageEventID(room, seq), e2e.LinksPayload(links))
+	return r.want(room, e2e.KindCreated, e2e.MessageEventID(room, seq), e2e.CreatedPayload(links))
 }
 
 func (r *linkRun) reactInDirect() error {

@@ -36,8 +36,7 @@ func (h *Hidden) Hide(ctx context.Context, user string, key store.MsgKey, at tim
 		return false, err
 	}
 	filter := bson.D{{Key: "user_id", Value: doc.User}, {Key: "room_id", Value: doc.Room}, {Key: "thread_root", Value: doc.Thread}, {Key: "seq", Value: doc.Seq}}
-	update := bson.D{{Key: "$setOnInsert", Value: bson.D{{Key: "created_at", Value: at}}}}
-	res, err := h.coll.UpdateOne(ctx, filter, update, options.UpdateOne().SetUpsert(true))
+	res, err := h.coll.UpdateOne(ctx, filter, hideUpdate(at), options.UpdateOne().SetUpsert(true))
 	switch {
 	case mongo.IsDuplicateKeyError(err):
 		return false, nil
@@ -63,6 +62,14 @@ func (h *Hidden) Get(ctx context.Context, user string, key store.MsgKey) (domain
 	}
 	out, err := decodeHidden(got)
 	return out, err == nil, err
+}
+
+func hideUpdate(at time.Time) bson.D {
+	return bson.D{{Key: "$setOnInsert", Value: bson.D{
+		{Key: "created_at", Value: at},
+		{Key: stateField, Value: bitValue(store.BitHidden)},
+		{Key: stateAtField, Value: at},
+	}}}
 }
 
 func encodeHidden(user string, key store.MsgKey) (hiddenDoc, error) {

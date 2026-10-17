@@ -17,16 +17,16 @@ type timeline struct{ room, thread uint64 }
 type Messages struct {
 	mu        sync.RWMutex
 	lines     map[timeline][]domain.Message
-	log       []logged
-	grew      chan struct{}
 	rawCounts map[store.MsgKey][]domain.RawCount
 	rawReply  map[store.MsgKey]int64
+	flags     flagMap[store.MsgKey]
 }
 
 func NewMessages() *Messages {
 	return &Messages{
-		lines: make(map[timeline][]domain.Message), grew: make(chan struct{}),
+		lines:     make(map[timeline][]domain.Message),
 		rawCounts: make(map[store.MsgKey][]domain.RawCount), rawReply: make(map[store.MsgKey]int64),
+		flags: make(flagMap[store.MsgKey]),
 	}
 }
 
@@ -59,7 +59,7 @@ func (s *Messages) insertLocked(m domain.Message) store.Result {
 	m = detached(m)
 	m.Hidden, m.Reactions, m.Replies = false, domain.ReactionSummary{}, domain.ReplyCount{}
 	s.lines[tl] = slices.Insert(line, i, m)
-	s.appendLog(logged{kind: store.MessageInserted, msg: m})
+	s.flags.raise(store.KeyOf(m), store.BitMsgCreated, m.CreatedAt)
 	return store.Result{Outcome: store.Inserted}
 }
 

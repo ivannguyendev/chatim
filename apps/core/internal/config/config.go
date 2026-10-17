@@ -6,11 +6,11 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/effects"
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventmark"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/projection"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/reconcile"
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/stateclear"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/sweep"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/slot"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
@@ -57,32 +57,38 @@ type Config struct {
 	CIDBatch               dedupe.BatchConfig
 	Publish                publish.Config
 	Stream                 publish.StreamConfig
-	Work                   work.StreamConfig
+	Timer                  timer.StreamConfig
 	Slot                   slot.Config
-	ReconcileEnabled       bool
-	Reconcile              reconcile.Config
-	EffectDelay            time.Duration
-	EffectRoomCache        int
-	Effects                effects.Config
-	AckMarks               eventmark.Config
+	StateClear             stateclear.Config
+	Sweep                  sweep.Config
+	Projection             projection.Config
 	LockedMessageKinds     []domain.Kind
 	MentionHideReadTenants []string
 	Limits                 mutate.Limits
 	MemberCountCheckDelay  time.Duration
 	MessageCountCheckDelay time.Duration
+	RoomList               RoomListConfig
+}
+
+type RoomListConfig struct {
+	JoinMax          int
+	TailCacheBytes   int
+	InfoCacheEntries int
 }
 
 type StopPlan struct {
-	DrainDelay time.Duration
-	GRPC       time.Duration
-	Reconciler time.Duration
-	Workers    time.Duration
-	Router     time.Duration
-	CIDBatch   time.Duration
-	Flusher    time.Duration
-	Publisher  time.Duration
-	Slots      time.Duration
-	Close      time.Duration
+	DrainDelay  time.Duration
+	GRPC        time.Duration
+	Sweeper     time.Duration
+	Projections time.Duration
+	Timer       time.Duration
+	Router      time.Duration
+	CIDBatch    time.Duration
+	Flusher     time.Duration
+	Publisher   time.Duration
+	StateClear  time.Duration
+	Slots       time.Duration
+	Close       time.Duration
 }
 
 func AdminAddr() string { return envconfig.String("CORE_ADMIN_ADDR", defaultAdminAddr) }
@@ -113,7 +119,7 @@ func Load() (Config, error) {
 		DrainDelay:             p.span("CORE_DRAIN_DELAY", 2*time.Second),
 		GRPCShutdown:           p.span("CORE_GRPC_SHUTDOWN", 5*time.Second),
 		PublisherDrain:         p.span("CORE_PUBLISHER_DRAIN", 5*time.Second),
-		ShutdownBudget:         p.span("CORE_SHUTDOWN_BUDGET", 28*time.Second),
+		ShutdownBudget:         p.span("CORE_SHUTDOWN_BUDGET", 30*time.Second),
 		LockedMessageKinds:     p.kinds("MESSAGE_LOCKED_KINDS"),
 		MentionHideReadTenants: p.tenants("MENTION_HIDE_READ_TENANTS"),
 		Limits: mutate.Limits{
@@ -124,6 +130,7 @@ func Load() (Config, error) {
 	}
 	c.AdvertiseAddr = p.advertiseAddr(c.CoreID, c.GRPCAddr)
 	p.components(&c)
+	c.RoomList = p.roomList()
 	if err := errors.Join(p.errs...); err != nil {
 		return Config{}, err
 	}
@@ -135,22 +142,26 @@ func Load() (Config, error) {
 
 func (c Config) StopPlan() StopPlan {
 	return StopPlan{
-		DrainDelay: c.DrainDelay,
-		GRPC:       c.GRPCShutdown,
-		Reconciler: c.Reconcile.Drain + CloseTimeout,
-		Workers:    c.Effects.Drain + CloseTimeout,
-		Router:     c.RequestDeadline,
-		CIDBatch:   2 * c.Dedupe.Timeout,
-		Flusher:    c.Flush.InsertTimeout,
-		Publisher:  c.PublisherDrain,
-		Slots:      slot.ReleaseTimeout,
-		Close:      CloseTimeout,
+		DrainDelay:  c.DrainDelay,
+		GRPC:        c.GRPCShutdown,
+		Sweeper:     CloseTimeout,
+		Projections: c.Projection.StopTimeout(),
+		Timer:       timer.ConsumerConfig{}.StopTimeout(),
+		Router:      c.RequestDeadline,
+		CIDBatch:    2 * c.Dedupe.Timeout,
+		Flusher:     c.Flush.InsertTimeout,
+		Publisher:   c.PublisherDrain,
+		StateClear:  stateclear.DrainTimeout,
+		Slots:       slot.ReleaseTimeout,
+		Close:       CloseTimeout,
 	}
 }
 
-func (s StopPlan) total() time.Duration {
+func (s StopPlan) Total() time.Duration {
 	var sum time.Duration
-	for _, d := range []time.Duration{s.DrainDelay, s.GRPC, s.Reconciler, s.Workers, s.Router, s.CIDBatch, s.Flusher, s.Publisher, s.Slots, s.Close} {
+	for _, d := range []time.Duration{
+		s.DrainDelay, s.GRPC, s.Sweeper, s.Projections, s.Timer, s.Router, s.CIDBatch, s.Flusher, s.Publisher, s.StateClear, s.Slots, s.Close,
+	} {
 		if d > math.MaxInt64-sum {
 			return math.MaxInt64
 		}
@@ -159,4 +170,4 @@ func (s StopPlan) total() time.Duration {
 	return sum
 }
 
-func (s StopPlan) fitsWithin(budget time.Duration) bool { return s.total() < budget }
+func (s StopPlan) fitsWithin(budget time.Duration) bool { return s.Total() < budget }

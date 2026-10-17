@@ -29,6 +29,10 @@ type memberDoc struct {
 	ClearedAt        time.Time   `bson:"cleared_at,omitempty"`
 	ReadSeq          int64       `bson:"read_seq"`
 	ReadVer          int64       `bson:"read_ver"`
+	PreferenceVer    int64       `bson:"preference_ver"`
+	PinnedAt         time.Time   `bson:"pinned_at,omitempty"`
+	MutedUntil       time.Time   `bson:"muted_until,omitempty"`
+	ArchivedAt       time.Time   `bson:"archived_at,omitempty"`
 }
 
 type readPositionDoc struct {
@@ -49,12 +53,18 @@ func encodeMember(m domain.Member) (memberDoc, error) {
 	if err != nil {
 		return memberDoc{}, err
 	}
+	p := m.Preferences
+	preferenceVer, err := toInt64("member preference ver", p.Ver)
+	if err != nil {
+		return memberDoc{}, err
+	}
 	return memberDoc{
 		ID: keys.Member(m.Room, m.User), Room: room, Tenant: m.Tenant, User: m.User,
 		Role: m.Role, State: int64(m.State), Priority: int64(m.Priority), JoinedAt: m.JoinedAt, Ver: int64(m.Ver),
 		PreviousRole: m.PreviousRole, PreviousState: int64(m.PreviousState), PreviousPriority: int64(m.PreviousPriority),
 		RequestID: m.RequestID, UpdatedAt: m.UpdatedAt, UpdatedBy: m.UpdatedBy, LastChangeAt: m.LastChangeAt,
 		ClearedAt: m.ClearedAt, ReadSeq: readSeq, ReadVer: readVer,
+		PreferenceVer: preferenceVer, PinnedAt: p.PinnedAt, MutedUntil: p.MutedUntil, ArchivedAt: p.ArchivedAt,
 	}, nil
 }
 
@@ -86,12 +96,16 @@ func decodeMember(d memberDoc) (domain.Member, error) {
 	if d.Ver < 0 || d.Ver > math.MaxUint32 {
 		return domain.Member{}, fmt.Errorf("%w: member ver %d", errCorrupt, d.Ver)
 	}
+	preferences, err := decodePreferences(preferenceDoc{Ver: d.PreferenceVer, PinnedAt: d.PinnedAt, MutedUntil: d.MutedUntil, ArchivedAt: d.ArchivedAt})
+	if err != nil {
+		return domain.Member{}, err
+	}
 	return domain.Member{
 		Room: room, Tenant: d.Tenant, User: d.User, Role: d.Role, JoinedAt: d.JoinedAt, ClearedAt: d.ClearedAt,
 		State: state, Ver: uint32(d.Ver), Priority: priority,
 		PreviousRole: d.PreviousRole, PreviousState: previousState, PreviousPriority: previousPriority,
 		RequestID: d.RequestID, UpdatedAt: d.UpdatedAt, UpdatedBy: d.UpdatedBy, LastChangeAt: d.LastChangeAt,
-		ReadSeq: pos.Seq, ReadVer: pos.Ver,
+		ReadSeq: pos.Seq, ReadVer: pos.Ver, Preferences: preferences,
 	}, nil
 }
 

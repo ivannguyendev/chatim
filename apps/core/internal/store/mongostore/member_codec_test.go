@@ -18,7 +18,12 @@ import (
 var memberFields = []string{
 	"_id", "room_id", "tenant", "user_id", "role", "state", "priority", "joined_at", "ver",
 	"previous_role", "previous_state", "previous_priority", "request_id", "updated_at", "updated_by",
-	"last_change_at", "cleared_at", "read_seq", "read_ver",
+	"last_change_at", "cleared_at", "read_seq", "read_ver", "preference_ver", "pinned_at", "muted_until", "archived_at",
+}
+
+func requiredMemberFields(fields []string) []string {
+	optional := []string{"cleared_at", "pinned_at", "muted_until", "archived_at"}
+	return slices.DeleteFunc(slices.Clone(fields), func(f string) bool { return slices.Contains(optional, f) })
 }
 
 func sampleMember() domain.Member {
@@ -28,6 +33,9 @@ func sampleMember() domain.Member {
 		PreviousRole: domain.RoleMember, PreviousState: domain.MemberRemoved, PreviousPriority: 9,
 		RequestID: "req-1", UpdatedAt: codecTime.Add(2 * time.Minute), UpdatedBy: "alice",
 		LastChangeAt: codecTime.Add(3 * time.Minute), ReadSeq: 42, ReadVer: 5,
+		Preferences: domain.RoomPreferences{
+			PinnedAt: codecTime.Add(4 * time.Minute), MutedUntil: codecTime.Add(time.Hour), ArchivedAt: codecTime.Add(5 * time.Minute), Ver: 6,
+		},
 	}
 }
 
@@ -44,7 +52,7 @@ func TestMemberCodecRoundTrip(t *testing.T) {
 	if got := fieldNames(t, raw); !slices.Equal(got, memberFields) {
 		t.Fatalf("fields = %v, want %v", got, memberFields)
 	}
-	for _, f := range []string{"room_id", "state", "priority", "ver", "previous_state", "previous_priority", "read_seq", "read_ver"} {
+	for _, f := range []string{"room_id", "state", "priority", "ver", "previous_state", "previous_priority", "read_seq", "read_ver", "preference_ver"} {
 		if typ := raw.Lookup(f).Type; typ != bson.TypeInt64 {
 			t.Fatalf("%s type = %v, want int64", f, typ)
 		}
@@ -53,19 +61,21 @@ func TestMemberCodecRoundTrip(t *testing.T) {
 	if err != nil || !sameMemberTimes(got, m) {
 		t.Fatalf("decodeMember = %+v, %v; want %+v", got, err, m)
 	}
-	got.JoinedAt, got.ClearedAt, got.UpdatedAt, got.LastChangeAt = m.JoinedAt, m.ClearedAt, m.UpdatedAt, m.LastChangeAt
+	got.JoinedAt, got.ClearedAt, got.UpdatedAt, got.LastChangeAt, got.Preferences = m.JoinedAt, m.ClearedAt, m.UpdatedAt, m.LastChangeAt, m.Preferences
 	if got != m {
 		t.Fatalf("decoded %+v, want %+v", got, m)
 	}
-	m.ClearedAt = time.Time{}
+	m.ClearedAt, m.Preferences = time.Time{}, domain.RoomPreferences{}
 	doc, _ = encodeMember(m)
-	if _, raw := roundTrip(t, doc); slices.Contains(fieldNames(t, raw), "cleared_at") {
-		t.Fatal("cleared_at written for a member that never cleared")
+	if _, raw := roundTrip(t, doc); !slices.Equal(fieldNames(t, raw), requiredMemberFields(memberFields)) {
+		t.Fatalf("fields of a member without clear or preferences = %v, want %v", fieldNames(t, raw), requiredMemberFields(memberFields))
 	}
 }
 
 func sameMemberTimes(a, b domain.Member) bool {
-	return a.JoinedAt.Equal(b.JoinedAt) && a.ClearedAt.Equal(b.ClearedAt) && a.UpdatedAt.Equal(b.UpdatedAt) && a.LastChangeAt.Equal(b.LastChangeAt)
+	p, q := a.Preferences, b.Preferences
+	return a.JoinedAt.Equal(b.JoinedAt) && a.ClearedAt.Equal(b.ClearedAt) && a.UpdatedAt.Equal(b.UpdatedAt) && a.LastChangeAt.Equal(b.LastChangeAt) &&
+		p.PinnedAt.Equal(q.PinnedAt) && p.MutedUntil.Equal(q.MutedUntil) && p.ArchivedAt.Equal(q.ArchivedAt) && p.Ver == q.Ver
 }
 
 func TestMemberCodecRejectsOutOfRangeValues(t *testing.T) {
@@ -85,6 +95,7 @@ func TestMemberCodecRejectsOutOfRangeValues(t *testing.T) {
 		"previous below int32": func(d *memberDoc) { d.PreviousPriority = math.MinInt32 - 1 },
 		"negative read seq":    func(d *memberDoc) { d.ReadSeq = -1 },
 		"negative read ver":    func(d *memberDoc) { d.ReadVer = -1 },
+		"negative pref ver":    func(d *memberDoc) { d.PreferenceVer = -1 },
 	}
 	for name, mutate := range cases {
 		d := good
@@ -97,6 +108,7 @@ func TestMemberCodecRejectsOutOfRangeValues(t *testing.T) {
 		"room above max int64":     func() domain.Member { m := sampleMember(); m.Room = math.MaxInt64 + 1; return m }(),
 		"read seq above max int64": func() domain.Member { m := sampleMember(); m.ReadSeq = math.MaxInt64 + 1; return m }(),
 		"read ver above max int64": func() domain.Member { m := sampleMember(); m.ReadVer = math.MaxInt64 + 1; return m }(),
+		"pref ver above max int64": func() domain.Member { m := sampleMember(); m.Preferences.Ver = math.MaxInt64 + 1; return m }(),
 	} {
 		if _, err := encodeMember(m); !errors.Is(err, apperr.ErrInvalidArgument) {
 			t.Errorf("%s: encodeMember = %v, want ErrInvalidArgument", name, err)
@@ -128,7 +140,7 @@ func TestJoinPipelineKeepsActiveDocsAndTakesStringsLiterally(t *testing.T) {
 	for i, e := range set {
 		names[i] = e.Key
 	}
-	want := slices.DeleteFunc(slices.Clone(memberFields[1:]), func(f string) bool { return f == "cleared_at" })
+	want := append(requiredMemberFields(memberFields[1:]), stateField, stateAtField)
 	if !slices.Equal(names, want) {
 		t.Fatalf("$set fields = %v, want %v", names, want)
 	}

@@ -9,7 +9,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/api/grpcsrv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/pinproj"
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
@@ -44,15 +44,15 @@ func (pendingCIDs) Reserve(_ context.Context, keys []dedupe.Key) ([]dedupe.Verdi
 
 type nopTimers struct{}
 
-func (nopTimers) ArmMemberCountCheck(context.Context, uint64) (work.Timer, error) {
-	return work.Timer{Seq: 1}, nil
+func (nopTimers) ArmMemberCountCheck(context.Context, uint64) (timer.Timer, error) {
+	return timer.Timer{Seq: 1}, nil
 }
 
-func (nopTimers) ArmMessageCountCheck(context.Context, store.MsgKey, string) (work.Timer, error) {
-	return work.Timer{}, nil
+func (nopTimers) ArmMessageCountCheck(context.Context, store.MsgKey, string) (timer.Timer, error) {
+	return timer.Timer{}, nil
 }
 
-func (nopTimers) Disarm(context.Context, work.Timer) {}
+func (nopTimers) Disarm(context.Context, timer.Timer) {}
 
 type nopForgetter struct{}
 
@@ -86,6 +86,7 @@ func memStores() *rig {
 	return &rig{
 		rooms: memstore.NewRooms(), msgs: memstore.NewMessages(), edits: memstore.NewEdits(), hidden: memstore.NewHidden(),
 		reactions: memstore.NewInteractions(), pins: memstore.NewPins(), directs: memstore.NewDirectRooms(), mentions: memstore.NewMentions(),
+		threads: memstore.NewReplyThreads(),
 	}
 }
 

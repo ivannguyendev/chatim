@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	memberRoomsIndex  = "tenant_1_user_id_1_state_1_room_id_1_joined_at_1_cleared_at_1_read_seq_1"
+	memberRoomsIndex  = "tenant_1_user_id_1_state_1_room_id_1_joined_at_1_cleared_at_1_read_seq_1_pinned_at_1_archived_at_1"
 	mentionReadsIndex = "room_id_1_target_1_thread_root_1_seq_1"
 )
 

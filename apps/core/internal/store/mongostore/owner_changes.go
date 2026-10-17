@@ -79,12 +79,8 @@ func (s *Store) changeOwners(ctx context.Context, key int64, room uint64, users 
 		}
 		res.Written = append(res.Written, w.Next)
 	}
-	inc := bson.D{{Key: "owners_ver", Value: int64(1)}}
 	delta := store.MemberCountDelta(writes)
-	if delta != 0 {
-		inc = append(inc, memberCountFields(delta)...)
-	}
-	count, err := updateMemberCount(ctx, s.rooms, bson.D{{Key: "_id", Value: key}}, bson.D{{Key: "$inc", Value: inc}})
+	count, err := updateMemberCount(ctx, s.rooms, bson.D{{Key: "_id", Value: key}}, ownersUpdate(delta))
 	if err != nil {
 		return store.OwnerResult{}, fmt.Errorf("change owners of room %d: bump owners ver: %w", room, err)
 	}

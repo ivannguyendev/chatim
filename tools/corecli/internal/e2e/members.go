@@ -48,9 +48,9 @@ func LiveSubject(root, tenant, room, kind string) string {
 
 func classOf(kind string) string {
 	switch kind {
-	case KindRoomCreated, KindPinned, KindUnpinned, KindMemberCount:
+	case KindRoomCreated, KindPinned, KindUnpinned, KindMemberCount, KindRoomUpdated:
 		return "room"
-	case KindMemberAdded, KindMemberRemoved, KindRoleChanged, KindPriorityChanged, KindRead, KindHidden, KindCleared, KindBookmark:
+	case KindMemberAdded, KindMemberRemoved, KindRoleChanged, KindPriorityChanged, KindRead, KindHidden, KindCleared, KindBookmark, KindPreferences:
 		return "member"
 	default:
 		return "message"

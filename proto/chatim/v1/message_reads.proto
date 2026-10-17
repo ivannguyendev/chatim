@@ -1,0 +1,89 @@
+syntax = "proto3";
+
+package chatim.v1;
+
+import "chatim/v1/core.proto";
+import "chatim/v1/members.proto";
+import "chatim/v1/reactions_pins.proto";
+import "google/protobuf/timestamp.proto";
+
+message GetMessagesRequest {
+  string room_id = 1;
+  uint64 thread_root = 2;
+  repeated uint64 seqs = 3;
+}
+
+message GetMessagesResponse {
+  repeated Message messages = 1;
+}
+
+message ThreadItem {
+  Message message = 1;
+  google.protobuf.Timestamp last_reply_at = 2;
+  Message last_reply_preview = 3;
+}
+
+message ListThreadsRequest {
+  string room_id = 1;
+  string before = 2;
+  uint32 limit = 3;
+}
+
+message ListThreadsResponse {
+  repeated ThreadItem items = 1;
+  string next = 2;
+}
+
+message Reactor {
+  string user = 1;
+  string emoji = 2;
+  google.protobuf.Timestamp at = 3;
+}
+
+message GetReactionsRequest {
+  string room_id = 1;
+  uint64 thread_root = 2;
+  uint64 seq = 3;
+  string emoji = 4;
+  string after = 5;
+  uint32 limit = 6;
+}
+
+message GetReactionsResponse {
+  repeated Reactor reactors = 1;
+  string next = 2;
+}
+
+message PinnedMessage {
+  Pin pin = 1;
+  Message message = 2;
+}
+
+message ListPinsRequest {
+  string room_id = 1;
+}
+
+message ListPinsResponse {
+  uint64 pin_ver = 1;
+  repeated PinnedMessage items = 2;
+}
+
+message MemberItem {
+  string user = 1;
+  MemberRole role = 2;
+  int32 priority = 3;
+  google.protobuf.Timestamp joined_at = 4;
+  uint64 read_seq = 5;
+  uint64 read_ver = 6;
+}
+
+message ListMembersRequest {
+  string room_id = 1;
+  string after = 2;
+  uint32 limit = 3;
+}
+
+message ListMembersResponse {
+  repeated MemberItem members = 1;
+  string next = 2;
+}

@@ -78,3 +78,28 @@ func find(ctx context.Context, coll *mongo.Collection, q messageQuery) ([]domain
 	}
 	return decodeMessages(docs)
 }
+
+func findByKeys(ctx context.Context, coll *mongo.Collection, ks []store.MsgKey) ([]domain.Message, error) {
+	cur, err := coll.Find(ctx, boundedIDs(msgIDs(ks)))
+	if err != nil {
+		return nil, err
+	}
+	var docs []messageDoc
+	if err := cur.All(ctx, &docs); err != nil {
+		return nil, err
+	}
+	msgs, err := decodeMessages(docs)
+	if err != nil {
+		return nil, err
+	}
+	store.SortByKey(msgs)
+	return msgs, nil
+}
+
+func msgIDs(ks []store.MsgKey) [][]byte {
+	ids := make([][]byte, len(ks))
+	for i, k := range ks {
+		ids[i] = msgID(k)
+	}
+	return ids
+}

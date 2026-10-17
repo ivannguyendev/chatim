@@ -19,12 +19,14 @@ type hiddenKey struct {
 }
 
 type Hidden struct {
-	mu   sync.RWMutex
-	seqs map[hiddenKey]time.Time
-	log  *Messages
+	mu    sync.RWMutex
+	seqs  map[hiddenKey]time.Time
+	flags flagMap[hiddenKey]
 }
 
-func NewHidden() *Hidden { return &Hidden{seqs: make(map[hiddenKey]time.Time)} }
+func NewHidden() *Hidden {
+	return &Hidden{seqs: make(map[hiddenKey]time.Time), flags: make(flagMap[hiddenKey])}
+}
 
 func (s *Hidden) Hide(ctx context.Context, user string, key store.MsgKey, at time.Time) (bool, error) {
 	if err := ctx.Err(); err != nil {
@@ -44,9 +46,7 @@ func (s *Hidden) Hide(ctx context.Context, user string, key store.MsgKey, at tim
 	}
 	at = time.UnixMilli(at.UnixMilli()).UTC()
 	s.seqs[k] = at
-	if s.log != nil {
-		s.log.appendFact(logged{kind: store.MessageHidden, hidden: domain.HiddenMessage{User: user, Room: key.Room, Thread: key.Thread, Seq: key.Seq, At: at}})
-	}
+	s.flags.raise(k, store.BitHidden, at)
 	return true, nil
 }
 
@@ -64,6 +64,31 @@ func (s *Hidden) HiddenIn(ctx context.Context, user string, room, thread, from, 
 	}
 	slices.Sort(out)
 	return out, nil
+}
+
+func (s *Hidden) HiddenInRooms(ctx context.Context, user string, ranges []store.HiddenRange) (map[uint64][]uint64, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := store.ValidateHiddenRanges(user, ranges); err != nil {
+		return nil, err
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := map[uint64][]uint64{}
+	for k := range s.seqs {
+		if k.user == user && k.key.Thread == 0 && inHiddenRanges(ranges, k.key) {
+			out[k.key.Room] = append(out[k.key.Room], k.key.Seq)
+		}
+	}
+	for _, seqs := range out {
+		slices.Sort(seqs)
+	}
+	return out, nil
+}
+
+func inHiddenRanges(ranges []store.HiddenRange, k store.MsgKey) bool {
+	return slices.ContainsFunc(ranges, func(r store.HiddenRange) bool { return r.Room == k.Room && k.Seq >= r.From && k.Seq <= r.To })
 }
 
 func (s *Hidden) Get(ctx context.Context, user string, key store.MsgKey) (domain.HiddenMessage, bool, error) {

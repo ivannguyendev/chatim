@@ -12,6 +12,9 @@ func secs(n int) time.Time { return baseTime.Add(time.Duration(n) * time.Second)
 
 func sameMember(a, b domain.Member) bool {
 	times := [][2]time.Time{{a.JoinedAt, b.JoinedAt}, {a.ClearedAt, b.ClearedAt}, {a.UpdatedAt, b.UpdatedAt}, {a.LastChangeAt, b.LastChangeAt}}
+	if !samePreferences(a.Preferences, b.Preferences) {
+		return false
+	}
 	for _, p := range times {
 		if !p[0].Equal(p[1]) {
 			return false
@@ -19,8 +22,13 @@ func sameMember(a, b domain.Member) bool {
 	}
 	for _, m := range []*domain.Member{&a, &b} {
 		m.JoinedAt, m.ClearedAt, m.UpdatedAt, m.LastChangeAt = time.Time{}, time.Time{}, time.Time{}, time.Time{}
+		m.Preferences = domain.RoomPreferences{}
 	}
 	return a == b
+}
+
+func samePreferences(a, b domain.RoomPreferences) bool {
+	return a.PinnedAt.Equal(b.PinnedAt) && a.MutedUntil.Equal(b.MutedUntil) && a.ArchivedAt.Equal(b.ArchivedAt) && a.Ver == b.Ver
 }
 
 func assertMembers(t *testing.T, op string, got, want []domain.Member) {

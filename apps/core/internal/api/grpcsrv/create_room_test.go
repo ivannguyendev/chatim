@@ -28,7 +28,7 @@ func TestCreateRoomStoresAndReturnsTheRoom(t *testing.T) {
 	stamp := clock.UTC().Truncate(time.Millisecond)
 	want := &chatimv1.Room{
 		Id: "42", Tenant: "acme", Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "Team", CreatedBy: "alice",
-		CreatedAt: timestamppb.New(stamp), MemberCount: 2,
+		CreatedAt: timestamppb.New(stamp), MemberCount: 2, InfoVer: 1,
 	}
 	if !proto.Equal(resp.GetRoom(), want) {
 		t.Fatalf("room = %v, want %v", resp.GetRoom(), want)

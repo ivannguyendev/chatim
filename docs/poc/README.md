@@ -1,6 +1,6 @@
 # PoC — chatim
 
-> Thiết kế: [../designs/261005-chatim-architecture.md](../designs/261005-chatim-architecture.md) · Chi tiết lần đo dev, lệnh và cấu hình: [archive/poc/README.md](../archive/poc/README.md), [so sánh MongoDB/PostgreSQL](../archive/poc/260930-mongodb-vs-postgresql.md).
+> Thiết kế: [../architecture.md](../architecture.md).
 > **Số dev chỉ để kiểm công cụ.** Máy dev là MacBook Intel 2018 + OrbStack (10 vCPU, 11.75GiB), DB, broker và công cụ đo chung một VM, Mongo 1 node. Go/no-go cần prod-like.
 
 ## Kết quả dev (2026-09-30 → 2026-10-05)
@@ -18,6 +18,71 @@
 | C1-M2a.3 | Perf đường ghi ở 5K/s | Trước/sau | Lệnh Redis/tin 6.35 → 4.74; CPU redis-dedupe 89% → 69% | Chỉ so trước/sau |
 | W1 | Xả backlog work stream (reader slot 0 + worker 2 core), M2b.1 | ≥ 3× ingest đỉnh (D66; đo thật ở P3) | 36000 record (1000 `RoomInserted` + 35000 `MessageInserted`) trong ~4s ≈ ≥ 9000 record/s (cận dưới, mẫu cách nhau 1–2s) sau 35s ghi 1000 tin/s với reader tắt; lag worker tối đa 52.4s (backlog tích luỹ); `work_failures_total` 0; republish `room_created` 1000 (không mark, stream bỏ trùng), `msg_created` 0 (fast path đã mark); CPU_Speed_Limit 100 | Chỉ kiểm công cụ |
 | DB | MongoDB vs PostgreSQL | — | Mongo thắng đọc ngẫu nhiên khi dữ liệu > RAM (8.4 vs 35ms) và dung lượng (130 vs 393B/tin); Postgres thắng độ trễ ghi bền | Giữ MongoDB (D9), chờ prod-like |
+
+### M3 — `ListMyRooms` trên replica set (2026-10-15)
+
+Công cụ `tools/poc/roomlistbench`, rs0 1 node, core-1 + core-2, mặc định `ROOM_LIST_JOIN_MAX` 2000, trang 20 room. Số thô: `bin/bench/m3-roomlist-rs0/`.
+
+- **Seed qua API core** (`-mode seed`, 4 lời gọi song song, mỗi lời gọi tối đa 2 phút, thử lại giữ `request_id`/cid): 60 user (20 cho mỗi cỡ 200, 2.000, 5.000), 4.960 room nền dùng chung (1 tin mỗi room) và 40 room riêng mỗi user (5 tin của người kia, chưa đọc, mới nhất) → trang đầu và trang sau đều là room riêng. 7.360 room, 151.360 member doc trong 5m36s, 16.960 tin trong 36s; chờ `rooms.last_seq` đủ ở mọi room (6s) rồi Mongo dưới 40 op/s trong 3s.
+- **Lạnh** = user mới (room riêng của user chỉ nằm trong trang của nó nên cache info, đuôi, đường và ảnh chụp đều trượt; cache WiredTiger của Mongo vẫn nóng); không khởi động lại core. Mỗi user: trang đầu + trang sau lạnh, rồi 5 cặp nóng (trong TTL 30s).
+- **Truy vấn/trang** = delta `opcounters` query + command của `serverStatus` quanh từng lời gọi (trừ lần đọc `serverStatus` của chính nó; `getmore` riêng); khung rỗng 20ms trước mỗi cỡ đo được 0 truy vấn. Lệnh bắt tay của kết nối Mongo mới (hiếm, thấy ở max) bị tính vào; `top` theo collection dùng để tách nguồn. Cache = delta `room_cache_hits/misses_total` của core-1.
+- **CPU_Speed_Limit** = 100 trước và trong cả ba ô (29/29 mẫu, mỗi 3s); seed làm máy hạ xung xuống 76 nên mỗi ô chờ về 100 trước khi đo.
+
+| Room | Đường | Trang | n | p50 | p99 | Truy vấn (trung vị) | Dự kiến §9 | Cache/lời gọi |
+|---|---|---|---|---|---|---|---|---|
+| 200 | join | đầu, lạnh | 20 | 30.6ms | 50.2ms | 44 | 24 (Task 9: ~44) | info 20 miss, đuôi 20 miss, đường miss |
+| 200 | join | sau, lạnh | 20 | 12.5ms | 76.7ms | 44 | 23 | ảnh chụp hit, info/đuôi 20 miss |
+| 200 | join | đầu, nóng | 100 | 25.9ms | 34.3ms | 2 | 2–3 | info/đuôi 20 hit, đường hit |
+| 200 | join | sau, nóng | 100 | 11.2ms | 68.5ms | 3 | 2 | ảnh chụp hit, info/đuôi 20 hit |
+| 2.000 | join | đầu, lạnh | 20 | 209ms | 227ms | 44 | 24 (~44) | như 200 |
+| 2.000 | join | sau, lạnh | 20 | 56.2ms | 71.2ms | 44 | 23 | |
+| 2.000 | join | đầu, nóng | 100 | 202ms | 268ms | 2 | 2–3 | |
+| 2.000 | join | sau, nóng | 100 | 53.1ms | 66.2ms | 3 | 2 | |
+| 5.000 | từng bước | đầu, lạnh | 20 | 134ms | 158ms | 50 (+6 getmore) | 30 | như 200 |
+| 5.000 | từng bước | sau, lạnh | 20 | 60.2ms | 68.4ms | 44 | 23 | |
+| 5.000 | từng bước | đầu, nóng | 100 | 134ms | 153ms | 8 (+6 getmore) | 9 | |
+| 5.000 | từng bước | sau, nóng | 100 | 57.9ms | 72.6ms | 3 | 2 | |
+
+Kết luận dev:
+- Cache nóng đạt: trang đầu 2 truy vấn (join: aggregate + `hidden`) và 8 (từng bước: `members` phủ + 5 lô `rooms` + `members` của trang + `hidden`; §9 tính thêm lần đếm, nay đã cache); trang sau 3 (`members` + `rooms` hoạt động + `hidden`; §9 ghi 2 vì quên lần đọc hoạt động của các room trong ảnh chụp).
+- Cache lạnh đúng như lệch Task 9: mỗi lần nạp đuôi = `TailWindow` + `TailPreviews` riêng → 40 truy vấn `messages` cho 20 room, nên trang lạnh 44–50 thay vì 23–30. Gộp `TailPreviews` cả trang còn ~25–31.
+- Độ trễ do đọc thứ tự: join 2.000 room tốn ~200ms ở cả lạnh lẫn nóng (`top` thấy 2.000 lượt đọc `rooms` của `$lookup` mỗi lời gọi), chậm hơn đường từng bước ở 5.000 room (~134ms). Trên dev này điểm chuyển 2.000 quá cao; chưa đo đường từng bước ở 2.000 room để chọn `ROOM_LIST_JOIN_MAX` mới (việc của owner).
+
+**Sau gộp xem trước và tra `_id` có giới hạn (2026-10-15).** Owner hạ `ROOM_LIST_JOIN_MAX` còn 1.500 (user 2.000 room nay đi đường từng bước). Mỗi trang một `TailPreviews` cho mọi tin xem trước còn thiếu. Lần đo đầu chỉ có gộp: 25 truy vấn nhưng trang lạnh 200 room p50 221ms (từ 30.6ms). `explain` cho thấy `_id $in` trên collection clustered chạy thành một lần quét từ khoá nhỏ nhất tới lớn nhất: 20 room trên dữ liệu bench đọc 320.040 doc cho 100 tin. Mọi tra `_id` theo tập khoá (`Find`, `TailPreviews`, `SentTimes`, `MembersByKeys`, `MembersOf`, `MyInteractions`) chuyển sang `$or` các khoảng (design §5.1). Số đo dưới đây: cùng layout, core dựng lại, một lượt khởi động bỏ đi rồi chờ 70s cho cache hết hạn; `CPU_Speed_Limit` 100 ở mọi mẫu (15/15). Số thô: `bin/bench/m3-roomlist-rs0/measure-*-bounded.txt`.
+
+| Room | Đường | Trang | n | p50 | p99 | Truy vấn (trung vị) | Cache/lời gọi |
+|---|---|---|---|---|---|---|---|
+| 200 | join | đầu, lạnh | 20 | 32.3ms | 65.5ms | 25 | info 20 miss, đuôi 20 miss, đường miss |
+| 200 | join | sau, lạnh | 20 | 8.3ms | 17.8ms | 25 | ảnh chụp hit, info/đuôi 20 miss |
+| 200 | join | đầu, nóng | 100 | 29.0ms | 46.1ms | 2 | info/đuôi 20 hit, đường hit |
+| 200 | join | sau, nóng | 100 | 5.9ms | 10.0ms | 3 | ảnh chụp hit |
+| 2.000 | từng bước | đầu, lạnh | 20 | 46.3ms | 56.0ms | 28 (+3 getmore) | như 200 |
+| 2.000 | từng bước | sau, lạnh | 20 | 9.4ms | 13.1ms | 25 | |
+| 2.000 | từng bước | đầu, nóng | 100 | 39.5ms | 57.2ms | 5 (+3 getmore) | |
+| 2.000 | từng bước | sau, nóng | 100 | 6.0ms | 8.4ms | 3 | |
+| 5.000 | từng bước | đầu, lạnh | 20 | 91.5ms | 163ms | 31 (+6 getmore) | như 200 |
+| 5.000 | từng bước | sau, lạnh | 20 | 8.3ms | 18.7ms | 25 | |
+| 5.000 | từng bước | đầu, nóng | 100 | 84.3ms | 102ms | 8 (+6 getmore) | |
+| 5.000 | từng bước | sau, nóng | 100 | 6.0ms | 9.0ms | 3 | |
+
+- Trang lạnh còn 25 truy vấn (join) và 28–31 (từng bước), đúng dự kiến ~25–31: 20 `TailWindow` + 1 `TailPreviews` (200 khoá) + `hidden` + `members` + `rooms`.
+- User 2.000 room: 209ms → 46ms vì đổi đường; 5.000 room: 134ms → 91ms lạnh, 134ms → 84ms nóng. Trang sau 12.5–60ms → 6–9ms vì `members`/`messages` theo khoá không còn quét lan sang room khác.
+- Explain trên dữ liệu bench, doc đọc/doc trả (trước → sau): `TailPreviews` 20 room 320.040/100 → 120/100; `SentTimes` 20 room 320.036/20 → 40/20; `Find` một room seq 1 + seq cuối 382/2 → 4/2; `MembersByKeys` 20 room (tôi + người kia tên ngắn) 13.560/20 → 60/20; `MembersOf` khoá dài ngắn lẫn nhau 19.126/3 → 6/3.
+
+### M3.1 — event theo trạng thái doc, 2K tin/s (2026-10-16 → 2026-10-17)
+
+`scripts/bench-cell.sh NAME 2000 reset`, 60s, core-1 + core-2, rs0 1 node, cả hai ô `CPU_Speed_Limit` 100. Engine cũ = image từ `f5b2e8e`; M3.1 = `ac9fb97`. Trễ danh sách = now − `ts` của tin đầu tiên sau `rooms.last_seq`, 20 room ngẫu nhiên mỗi giây (`room-lag.log`). Số thô: `bin/bench/base-2k-v8/`, `bin/bench/after-2k-v7/`.
+
+| | Engine cũ | M3.1 |
+|---|---|---|
+| ack p50 / p99 | 13.2 / 121ms | 13.0 / 131ms |
+| live p50 / p95 / max | 12 / 40 / 232ms | 12 / 32 / 233ms |
+| trễ danh sách trung vị / p95 / max | 2.7 / 3.7 / 5.7s | 1.6 / 3.3 / 3.6s |
+| CPU Mongo / NATS / hai core / Redis dedupe | 286% / 80% / 329% / 43% | 278% / 70% / 303% / 39% |
+| Mongo `top` 60s | `rooms` update 17.1K, `members` update 4K | `messages` update 24.8K (xoá cờ), `rooms` update 21.8K, `members` update 8K |
+
+- Bench đầu (`8121816`) không đạt: Mongo 287% → 507%, trễ danh sách 2.8s → 21s; lệnh xoá cờ `updateMany` + `$or` 500 nhánh 854ms mỗi lệnh (45% thời gian lệnh Mongo) gây vòng phát lại của sweeper. Các bước sửa và số từng bước: [tóm tắt M3.1 mục 9](../plans/2026-10-16-m3-1-state-driven-events-summary.md#9-chi-phí).
+- Diễn tập NATS chết (2K tin/s trong 4 phút, NATS dừng ~2 phút 45 giây; `bin/bench/drill-nats-2k-v2/`): 480K/480K ack, ack p50/p99 15.5/131ms; ngay trước khi dừng 4.080 tin còn cờ; đỉnh ~320K doc có cờ; sweeper phát lại 304K; mọi cờ về 0 sau 3 phút 11 giây kể từ lúc NATS sống lại (~1.6K doc/s); không mất tin. Lần đầu trước các sửa (`drill-nats-2k/`): 35K tin còn cờ trước khi dừng, đỉnh ~387K, bắt kịp ~7.5 phút.
 
 ## Đo prod-like (chưa chạy)
 

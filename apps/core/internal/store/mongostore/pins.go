@@ -19,8 +19,16 @@ type Pins struct {
 	coll *mongo.Collection
 }
 
-func (p *Pins) Append(ctx context.Context, a domain.PinAction) error {
+func pinInsert(a domain.PinAction) (flaggedDoc[pinActionDoc], error) {
 	doc, err := encodePinAction(a)
+	if err != nil {
+		return flaggedDoc[pinActionDoc]{}, err
+	}
+	return flagDoc(doc, store.BitPinFact, doc.At), nil
+}
+
+func (p *Pins) Append(ctx context.Context, a domain.PinAction) error {
+	doc, err := pinInsert(a)
 	if err != nil {
 		return err
 	}

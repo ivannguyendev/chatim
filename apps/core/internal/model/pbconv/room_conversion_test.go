@@ -25,6 +25,18 @@ func TestRoomCopiesEveryField(t *testing.T) {
 	}
 }
 
+func TestRoomCopiesInfoAndDirectUsers(t *testing.T) {
+	dm := domain.Room{ID: 888, Tenant: "acme", Type: domain.RoomDM, DMKey: domain.DirectKey("acme", "minh", "lan"), InfoVer: 1, CreatedAt: sentAt}
+	if got := pbconv.Room(dm); got.GetInfoVer() != 1 || len(got.GetDirectUsers()) != 2 || got.GetDirectUsers()[0] != "lan" || got.GetDirectUsers()[1] != "minh" {
+		t.Fatalf("DM Room = %v, want info_ver 1 and direct users [lan minh]", got)
+	}
+	group := domain.Room{ID: 777, Tenant: "acme", Type: domain.RoomGroup, Name: "Cửa hàng 12", Avatar: "files/av/777.png", InfoVer: 3, CreatedAt: sentAt}
+	got := pbconv.Room(group)
+	if got.GetAvatar() != "files/av/777.png" || got.GetInfoVer() != 3 || got.GetDirectUsers() != nil {
+		t.Fatalf("group Room = %v, want avatar, info_ver 3 and no direct users", got)
+	}
+}
+
 func TestRoomClampsMemberCountToInt32(t *testing.T) {
 	cases := []struct {
 		in   int

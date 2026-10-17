@@ -45,11 +45,3 @@ func TestAsyncFailuresAreCounted(t *testing.T) {
 		t.Fatalf("async failures = %d, want 4", got)
 	}
 }
-
-func TestFailedMarksAreCounted(t *testing.T) {
-	c := &publish.Counters{}
-	marker := &recordingMarker{err: errRefused}
-	rg := newRig(t, fastSetup, publish.WithAckMarks(marker), publish.WithCounters(c)).start(t)
-	rg.enqueue(t, roomA, 1, 2)
-	eventually(t, "two failed marks counted", func() bool { return c.Drops().MarkFailed == 2 })
-}

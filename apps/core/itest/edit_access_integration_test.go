@@ -67,7 +67,7 @@ func hiddenOnly(m *chatimv1.Message) bool {
 
 func TestRealInfraConcurrentEditsOnOneBaseHaveOneWinner(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastEffects)
+	core := startCore(t, it, itFastSweep)
 	client := dialCore(t, core.cfg)
 	roomID := createRoom(t, client)
 	seq := sendAs(t, client, itUser, roomID, "edit-d", "base")
@@ -109,7 +109,7 @@ func TestRealInfraConcurrentEditsOnOneBaseHaveOneWinner(t *testing.T) {
 
 func TestRealInfraHideAndClearApplyOnlyToTheReaderAndAnnounceIt(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastEffects)
+	core := startCore(t, it, itFastSweep)
 	client := dialCore(t, core.cfg)
 	roomID := createRoom(t, client)
 	live := subscribeLive(t, it, core.cfg, roomID)

@@ -23,7 +23,7 @@ func TestParseArgsReadsEveryFlag(t *testing.T) {
 		t.Fatalf("ParseArgs = %+v, want %+v", got, want)
 	}
 	if def, err := resync.ParseArgs(rangeArgs, io.Discard); err != nil || def.Rate != resync.DefaultRate || def.Room != 0 || def.DryRun {
-		t.Fatalf("ParseArgs(range only) = %+v, %v; want rate %d, every room, publishing", def, err, resync.DefaultRate)
+		t.Fatalf("ParseArgs(range only) = %+v, %v; want rate %d, every room, flagging", def, err, resync.DefaultRate)
 	}
 }
 

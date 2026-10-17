@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/work"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -50,7 +50,7 @@ func settling(ctx context.Context) (context.Context, context.CancelFunc) {
 }
 
 func (s *Service) ensureRoom(ctx context.Context, f founding) (domain.Room, bool, error) {
-	timer, err := s.timers.ArmMemberCountCheck(ctx, f.room.ID)
+	armed, err := s.timers.ArmMemberCountCheck(ctx, f.room.ID)
 	if err != nil {
 		s.log.WarnContext(ctx, "member count check timer not armed; room not created", "room", f.room.ID, "err", err)
 		return domain.Room{}, false, domain.ErrRetryLater
@@ -58,7 +58,7 @@ func (s *Service) ensureRoom(ctx context.Context, f founding) (domain.Room, bool
 	room, inserted, err := s.insertRoom(ctx, f)
 	if err != nil {
 		if errors.Is(err, errRoomIDTaken) {
-			s.disarm(ctx, timer)
+			s.disarm(ctx, armed)
 		}
 		return domain.Room{}, false, err
 	}
@@ -72,7 +72,7 @@ func (s *Service) ensureRoom(ctx context.Context, f founding) (domain.Room, bool
 	}
 	settle, done := settling(ctx)
 	defer done()
-	count, counted := s.settleCount(settle, room.ID, timer, res.Changed)
+	count, counted := s.settleCount(settle, room.ID, armed, res.Changed)
 	room = s.settledRoom(settle, room, count, counted)
 	created := inserted || res.Changed > 0
 	if created {
@@ -99,7 +99,7 @@ func (s *Service) insertRoom(ctx context.Context, f founding) (domain.Room, bool
 	err := s.rooms.InsertRoom(ctx, r)
 	switch {
 	case err == nil:
-		r.MemberCount, r.MemberCountVer = 0, 0
+		r.MemberCount, r.MemberCountVer, r.InfoVer = 0, 0, 1
 		return r, true, nil
 	case !errors.Is(err, store.ErrRoomExists):
 		return domain.Room{}, false, err
@@ -126,7 +126,7 @@ func sameRoom(f founding, stored domain.Room) bool {
 	}
 }
 
-func (s *Service) settleCount(ctx context.Context, room uint64, t work.Timer, delta int) (domain.MemberCount, bool) {
+func (s *Service) settleCount(ctx context.Context, room uint64, t timer.Timer, delta int) (domain.MemberCount, bool) {
 	if delta == 0 {
 		s.timers.Disarm(ctx, t)
 		return domain.MemberCount{}, false
@@ -140,7 +140,7 @@ func (s *Service) settleCount(ctx context.Context, room uint64, t work.Timer, de
 	return c, true
 }
 
-func (s *Service) disarm(ctx context.Context, t work.Timer) {
+func (s *Service) disarm(ctx context.Context, t timer.Timer) {
 	settle, done := settling(ctx)
 	defer done()
 	s.timers.Disarm(settle, t)
