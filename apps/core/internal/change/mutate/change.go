@@ -69,7 +69,10 @@ func (m *Mutator) apply(ctx context.Context, c change) (domain.Message, error) {
 		return domain.Message{}, err
 	}
 	previous, err := m.previousOf(ctx, done, snap)
-	if err != nil {
+	switch {
+	case errors.Is(err, store.ErrPreviousPurged):
+		return snap, nil
+	case err != nil:
 		return domain.Message{}, err
 	}
 	_ = m.d.Events.Enqueue(c.key.Room, []*chatimv1.Event{pbconv.MessageChanged(grant.Room.Type, snap, done.fact, previous)})
