@@ -2,6 +2,7 @@ package mutate
 
 import (
 	"context"
+	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
@@ -21,30 +22,40 @@ func (m *Mutator) withMentions(c change, set *MentionSet) (change, error) {
 	if err != nil {
 		return change{}, err
 	}
-	c.mentions, c.all = targets, set.All
+	c.mentions = domain.Mentions{Targets: targets, All: set.All}
 	return c, nil
 }
 
-func (m *Mutator) resolveMentions(ctx context.Context, c change, grant access.Request, msg domain.Message) (change, error) {
-	switch {
-	case c.kind != domain.EditText:
-		return c, nil
-	case c.keepMentions:
-		c.mentions, c.all = msg.Mentions, msg.MentionAll
-		return c, nil
-	case !c.all:
-		return c, nil
+func (m *Mutator) resolveMentions(ctx context.Context, c change, grant access.Request) error {
+	if c.kind != domain.EditText || c.keepMentions || !c.mentions.All {
+		return nil
 	}
 	grant.Action = access.MentionAll
-	if err := m.d.Access.Allow(ctx, grant); err != nil {
-		return change{}, err
+	return m.d.Access.Allow(ctx, grant)
+}
+
+func previousMentions(msg domain.Message, latest domain.Edit, found bool) domain.Mentions {
+	if found && latest.Version > msg.Version {
+		return latest.MentionSet()
 	}
-	return c, nil
+	return msg.MentionSet()
+}
+
+func (c change) stamped(prev domain.Mentions, at time.Time) change {
+	if c.kind == domain.EditDelete || c.keepMentions {
+		c.mentions = prev
+		return c
+	}
+	c.mentions = c.mentions.Stamp(prev, at)
+	return c
 }
 
 func (c change) matches(e domain.Edit) bool {
 	if e.By != c.user || e.Kind != c.kind || e.Text != c.text {
 		return false
 	}
-	return c.keepMentions || (e.MentionAll == c.all && domain.SameMentions(e.Mentions, c.mentions))
+	if c.keepMentions || c.kind == domain.EditDelete {
+		return true
+	}
+	return e.MentionAll == c.mentions.All && domain.SameMentions(e.Mentions, c.mentions.Targets)
 }

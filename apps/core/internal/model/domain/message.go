@@ -27,27 +27,28 @@ func ParseKind(name string) (Kind, error) {
 }
 
 type Message struct {
-	Room       uint64
-	Thread     uint64
-	Seq        uint64
-	Tenant     string
-	From       string
-	Kind       Kind
-	Text       string
-	CID        string
-	CreatedAt  time.Time
-	Version    uint32
-	Deleted    bool
-	EditedAt   time.Time
-	Hidden     bool
-	Reactions  ReactionSummary
-	ReplyTo    *ReplyRef
-	Forward    *ForwardRef
-	Mentions   []MentionTarget
-	MentionAll bool
-	Replies    ReplyCount
-	SkipUnread bool
-	Meta       []byte
+	Room         uint64
+	Thread       uint64
+	Seq          uint64
+	Tenant       string
+	From         string
+	Kind         Kind
+	Text         string
+	CID          string
+	CreatedAt    time.Time
+	Version      uint32
+	Deleted      bool
+	EditedAt     time.Time
+	Hidden       bool
+	Reactions    ReactionSummary
+	ReplyTo      *ReplyRef
+	Forward      *ForwardRef
+	Mentions     []MentionTarget
+	MentionAll   bool
+	MentionAllAt time.Time
+	Replies      ReplyCount
+	SkipUnread   bool
+	Meta         []byte
 }
 
 func (m Message) WithoutDeletedContent() Message {
@@ -55,7 +56,7 @@ func (m Message) WithoutDeletedContent() Message {
 		return m
 	}
 	m.Text = ""
-	m.Mentions, m.MentionAll, m.Forward, m.Meta = nil, false, nil, nil
+	m.Mentions, m.MentionAll, m.MentionAllAt, m.Forward, m.Meta = nil, false, time.Time{}, nil, nil
 	m.Reactions, m.Replies = ReactionSummary{}, ReplyCount{}
 	return m
 }
@@ -73,4 +74,13 @@ func ValidateSystemMessage(m Message) error {
 	default:
 		return nil
 	}
+}
+
+func (m Message) MentionSet() Mentions {
+	return Mentions{Targets: m.Mentions, All: m.MentionAll, AllAt: m.MentionAllAt}
+}
+
+func (m Message) WithMentions(n Mentions) Message {
+	m.Mentions, m.MentionAll, m.MentionAllAt = n.Targets, n.All, n.AllAt
+	return m
 }

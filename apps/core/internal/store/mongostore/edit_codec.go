@@ -20,8 +20,9 @@ type editDoc struct {
 	Text   string          `bson:"text,omitempty"`
 	At     time.Time       `bson:"created_at"`
 
-	Mentions   []editMentionDoc `bson:"mention_targets,omitempty"`
-	MentionAll bool             `bson:"mention_all,omitempty"`
+	Mentions     []editMentionDoc `bson:"mention_targets,omitempty"`
+	MentionAll   bool             `bson:"mention_all,omitempty"`
+	MentionAllAt time.Time        `bson:"mention_all_at,omitempty"`
 }
 
 func encodeEdit(e domain.Edit) (editDoc, error) {
@@ -40,15 +41,16 @@ func encodeEdit(e domain.Edit) (editDoc, error) {
 		return editDoc{}, err
 	}
 	return editDoc{
-		ID:         keys.Edit(e.Room, e.Thread, e.Seq, e.Version),
-		Room:       room,
-		Tenant:     e.Tenant,
-		Kind:       e.Kind,
-		By:         e.By,
-		Text:       e.Text,
-		At:         e.At,
-		Mentions:   mentions,
-		MentionAll: e.MentionAll,
+		ID:           keys.Edit(e.Room, e.Thread, e.Seq, e.Version),
+		Room:         room,
+		Tenant:       e.Tenant,
+		Kind:         e.Kind,
+		By:           e.By,
+		Text:         e.Text,
+		At:           e.At,
+		Mentions:     mentions,
+		MentionAll:   e.MentionAll,
+		MentionAllAt: e.MentionAllAt,
 	}, nil
 }
 
@@ -58,17 +60,18 @@ func decodeEdit(d editDoc) (domain.Edit, error) {
 		return domain.Edit{}, fmt.Errorf("%w: edit _id: %w", errCorrupt, err)
 	}
 	return domain.Edit{
-		Room:       room,
-		Thread:     thread,
-		Seq:        seq,
-		Version:    version,
-		Kind:       d.Kind,
-		Tenant:     d.Tenant,
-		By:         d.By,
-		Text:       d.Text,
-		At:         d.At,
-		Mentions:   decodeEditMentions(d.Mentions),
-		MentionAll: d.MentionAll,
+		Room:         room,
+		Thread:       thread,
+		Seq:          seq,
+		Version:      version,
+		Kind:         d.Kind,
+		Tenant:       d.Tenant,
+		By:           d.By,
+		Text:         d.Text,
+		At:           d.At,
+		Mentions:     decodeEditMentions(d.Mentions),
+		MentionAll:   d.MentionAll,
+		MentionAllAt: d.MentionAllAt,
 	}, nil
 }
 

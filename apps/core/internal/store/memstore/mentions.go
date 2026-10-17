@@ -40,10 +40,12 @@ func (s *Mentions) ApplyMentions(ctx context.Context, set store.MentionSet) erro
 		s.docs[set.Key] = cur
 	}
 	for _, t := range plan.Live {
-		cur[t] = mentionOf(set, t, true, cur[t].Live && cur[t].Read)
+		id := t.Identity()
+		cur[id] = mentionOf(set, id, true, cur[id].Live && cur[id].Read)
 	}
 	for _, t := range plan.Retire {
-		cur[t] = mentionOf(set, t, false, false)
+		id := t.Identity()
+		cur[id] = mentionOf(set, id, false, false)
 	}
 	return nil
 }

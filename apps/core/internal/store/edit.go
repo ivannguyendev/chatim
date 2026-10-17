@@ -33,8 +33,6 @@ func ValidateEdit(e domain.Edit) error {
 		return invalid("edit kind")
 	case (e.Version == 0) != (e.Kind == domain.EditOriginal):
 		return invalid("version")
-	case e.Kind == domain.EditDelete && (len(e.Mentions) > 0 || e.MentionAll):
-		return invalid("mentions")
 	case !validEditMentions(e.Mentions):
 		return invalid("mentions")
 	default:
@@ -45,10 +43,10 @@ func ValidateEdit(e domain.Edit) error {
 func validEditMentions(targets []domain.MentionTarget) bool {
 	seen := make(map[domain.MentionTarget]struct{}, len(targets))
 	for _, t := range targets {
-		if _, dup := seen[t]; dup || t.Kind == domain.MentionAll || !domain.ValidMentionLink(t) {
+		if _, dup := seen[t.Identity()]; dup || t.Kind == domain.MentionAll || !domain.ValidMentionLink(t) {
 			return false
 		}
-		seen[t] = struct{}{}
+		seen[t.Identity()] = struct{}{}
 	}
 	return true
 }

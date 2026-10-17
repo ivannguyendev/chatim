@@ -43,10 +43,10 @@ func ValidateMentionSet(s MentionSet) error {
 	}
 	seen := make(map[domain.MentionTarget]struct{}, len(s.Targets))
 	for _, t := range s.Targets {
-		if _, dup := seen[t]; dup || !domain.ValidMentionLink(t) {
+		if _, dup := seen[t.Identity()]; dup || !domain.ValidMentionLink(t) {
 			return invalid("mention target")
 		}
-		seen[t] = struct{}{}
+		seen[t.Identity()] = struct{}{}
 	}
 	return nil
 }
@@ -57,18 +57,18 @@ func PlanMentions(stored []domain.Mention, s MentionSet) MentionPlan {
 		if d.Ver > s.Ver {
 			return MentionPlan{}
 		}
-		have[d.Target] = d
+		have[d.Target.Identity()] = d
 	}
 	var p MentionPlan
 	want := make(map[domain.MentionTarget]struct{}, len(s.Targets))
 	for _, t := range s.Targets {
-		want[t] = struct{}{}
-		if cur, ok := have[t]; !ok || !cur.Live || cur.Ver < s.Ver {
+		want[t.Identity()] = struct{}{}
+		if cur, ok := have[t.Identity()]; !ok || !cur.Live || cur.Ver < s.Ver {
 			p.Live = append(p.Live, t)
 		}
 	}
 	for _, d := range stored {
-		if _, keep := want[d.Target]; !keep && (d.Live || d.Ver < s.Ver) {
+		if _, keep := want[d.Target.Identity()]; !keep && (d.Live || d.Ver < s.Ver) {
 			p.Retire = append(p.Retire, d.Target)
 		}
 	}

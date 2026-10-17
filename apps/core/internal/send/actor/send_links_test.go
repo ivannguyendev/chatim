@@ -40,8 +40,11 @@ func TestSentMessageCarriesRepliesForwardsAndMentions(t *testing.T) {
 		}
 		m := sent[0][0]
 		if *m.ReplyTo != (domain.ReplyRef{Seq: 1}) || m.Forward.Author != "lan" || !m.MentionAll ||
-			len(m.Mentions) != 2 || m.Mentions[0] != minh || m.Mentions[1] != team {
+			len(m.Mentions) != 2 || m.Mentions[0].Identity() != minh || m.Mentions[1].Identity() != team {
 			t.Fatalf("stored %+v, want reply, forward, @all and two distinct mentions", m)
+		}
+		if m.CreatedAt.IsZero() || !m.Mentions[0].At.Equal(m.CreatedAt) || !m.Mentions[1].At.Equal(m.CreatedAt) || !m.MentionAllAt.Equal(m.CreatedAt) {
+			t.Fatalf("stored %+v, want every target and @all stamped with the send time", m)
 		}
 		evs := rg.events.events(roomA)
 		if len(evs) != 1 {

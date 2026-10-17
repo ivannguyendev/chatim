@@ -24,6 +24,11 @@ func mentionSet(ver uint32, targets ...domain.MentionTarget) store.MentionSet {
 	return store.MentionSet{Key: store.MsgKey{Room: 7, Seq: 3}, Tenant: "acme", Sender: "alice", Ver: ver, Targets: targets, CreatedAt: at, At: at}
 }
 
+func sinceSend(t domain.MentionTarget) domain.MentionTarget {
+	t.At = time.UnixMilli(1_700_000_000_000).UTC()
+	return t
+}
+
 func stored(t domain.MentionTarget, live bool, ver uint32) domain.Mention {
 	return domain.Mention{Key: domain.MsgKey{Room: 7, Seq: 3}, Target: t, Live: live, Ver: ver}
 }
@@ -62,14 +67,15 @@ func TestPlanMentions(t *testing.T) {
 		set        store.MentionSet
 		live, gone []domain.MentionTarget
 	}{
-		"new message":          {nil, mentionSet(0, minh, every), []domain.MentionTarget{minh, every}, nil},
-		"same version again":   {[]domain.Mention{stored(minh, true, 0)}, mentionSet(0, minh), nil, nil},
-		"edit swaps a target":  {[]domain.Mention{stored(minh, true, 0), stored(lan, true, 0)}, mentionSet(2, minh, ops), []domain.MentionTarget{minh, ops}, []domain.MentionTarget{lan}},
-		"delete retires all":   {[]domain.Mention{stored(minh, true, 1), stored(lan, false, 1)}, mentionSet(3), nil, []domain.MentionTarget{minh, lan}},
-		"retired stays put":    {[]domain.Mention{stored(lan, false, 3)}, mentionSet(3), nil, nil},
-		"a target comes back":  {[]domain.Mention{stored(lan, false, 1)}, mentionSet(2, lan), []domain.MentionTarget{lan}, nil},
-		"older version skips":  {[]domain.Mention{stored(minh, true, 2), stored(lan, false, 2)}, mentionSet(1, lan), nil, nil},
-		"one newer doc blocks": {[]domain.Mention{stored(minh, true, 0), stored(lan, false, 5)}, mentionSet(4, ops), nil, nil},
+		"new message":              {nil, mentionSet(0, minh, every), []domain.MentionTarget{minh, every}, nil},
+		"same version again":       {[]domain.Mention{stored(minh, true, 0)}, mentionSet(0, minh), nil, nil},
+		"edit swaps a target":      {[]domain.Mention{stored(minh, true, 0), stored(lan, true, 0)}, mentionSet(2, minh, ops), []domain.MentionTarget{minh, ops}, []domain.MentionTarget{lan}},
+		"delete retires all":       {[]domain.Mention{stored(minh, true, 1), stored(lan, false, 1)}, mentionSet(3), nil, []domain.MentionTarget{minh, lan}},
+		"retired stays put":        {[]domain.Mention{stored(lan, false, 3)}, mentionSet(3), nil, nil},
+		"a target comes back":      {[]domain.Mention{stored(lan, false, 1)}, mentionSet(2, lan), []domain.MentionTarget{lan}, nil},
+		"older version skips":      {[]domain.Mention{stored(minh, true, 2), stored(lan, false, 2)}, mentionSet(1, lan), nil, nil},
+		"one newer doc blocks":     {[]domain.Mention{stored(minh, true, 0), stored(lan, false, 5)}, mentionSet(4, ops), nil, nil},
+		"target times are ignored": {[]domain.Mention{stored(minh, true, 1), stored(lan, true, 1)}, mentionSet(1, sinceSend(minh), sinceSend(lan)), nil, nil},
 	}
 	for name, c := range cases {
 		p := store.PlanMentions(c.stored, c.set)

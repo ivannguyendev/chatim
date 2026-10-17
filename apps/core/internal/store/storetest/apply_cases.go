@@ -3,6 +3,7 @@ package storetest
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -22,9 +23,9 @@ func applyCases() []editCase {
 
 func edited(m domain.Message, e domain.Edit) domain.Message {
 	m.Version, m.EditedAt, m.Text, m.Deleted = e.Version, e.At, e.Text, e.Kind == domain.EditDelete
-	m.Mentions, m.MentionAll = e.Mentions, e.MentionAll
+	m.Mentions, m.MentionAll, m.MentionAllAt = e.Mentions, e.MentionAll, e.MentionAllAt
 	if m.Deleted {
-		m.Forward, m.Meta = nil, nil
+		m.Mentions, m.MentionAll, m.MentionAllAt, m.Forward, m.Meta = nil, false, time.Time{}, nil, nil
 	}
 	return m
 }

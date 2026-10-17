@@ -11,8 +11,8 @@ func linked(seq uint64) domain.Message {
 	m := msg(roomA, mainThread, seq)
 	m.ReplyTo = &domain.ReplyRef{Seq: 1}
 	m.Forward = &domain.ForwardRef{Room: roomB, Seq: 9, Author: "lan", SentAt: baseTime}
-	m.Mentions = []domain.MentionTarget{{Kind: domain.MentionUser, ID: "minh"}, {Kind: domain.MentionGroup, ID: "team-design"}}
-	m.MentionAll = true
+	m.Mentions = []domain.MentionTarget{{Kind: domain.MentionUser, ID: "minh", At: baseTime}, {Kind: domain.MentionGroup, ID: "team-design", At: baseTime}}
+	m.MentionAll, m.MentionAllAt = true, baseTime
 	return m
 }
 

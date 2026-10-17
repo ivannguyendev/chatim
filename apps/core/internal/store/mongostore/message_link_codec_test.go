@@ -18,8 +18,8 @@ func linkedMessage() domain.Message {
 	m := sampleMessage()
 	m.ReplyTo = &domain.ReplyRef{Seq: 40}
 	m.Forward = &domain.ForwardRef{Room: 555, Seq: 9, Author: "lan", SentAt: codecTime}
-	m.Mentions = []domain.MentionTarget{{Kind: domain.MentionUser, ID: "minh"}, {Kind: domain.MentionGroup, ID: "team-design"}}
-	m.MentionAll = true
+	m.Mentions = []domain.MentionTarget{{Kind: domain.MentionUser, ID: "minh", At: codecTime}, {Kind: domain.MentionGroup, ID: "team-design", At: codecTime}}
+	m.MentionAll, m.MentionAllAt = true, codecTime
 	return m
 }
 
@@ -30,11 +30,14 @@ func TestMessageCodecRoundTripsLinksWithShortNames(t *testing.T) {
 		t.Fatalf("encodeMessage: %v", err)
 	}
 	back, raw := roundTrip(t, doc)
-	if got, want := fieldNames(t, raw), []string{"_id", "t", "f", "k", "x", "c", "ts", "rp", "fw", "mt", "ma"}; !slices.Equal(got, want) {
+	if got, want := fieldNames(t, raw), []string{"_id", "t", "f", "k", "x", "c", "ts", "rp", "fw", "mt", "ma", "mat"}; !slices.Equal(got, want) {
 		t.Fatalf("fields = %v, want %v", got, want)
 	}
 	if got := raw.Lookup("mt", "1", "k").StringValue(); got != "group" {
 		t.Fatalf("mt.1.k = %q, want group", got)
+	}
+	if got := raw.Lookup("mt", "1", "a").Time(); !got.Equal(codecTime) {
+		t.Fatalf("mt.1.a = %v, want %v", got, codecTime)
 	}
 	if got := raw.Lookup("fw", "f").StringValue(); got != "lan" {
 		t.Fatalf("fw.f = %q, want lan", got)
@@ -43,10 +46,10 @@ func TestMessageCodecRoundTripsLinksWithShortNames(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decodeMessage: %v", err)
 	}
-	if !got.CreatedAt.Equal(m.CreatedAt) || !got.Forward.SentAt.Equal(m.Forward.SentAt) {
-		t.Fatalf("times = %v / %v, want %v", got.CreatedAt, got.Forward.SentAt, codecTime)
+	if !got.CreatedAt.Equal(m.CreatedAt) || !got.Forward.SentAt.Equal(m.Forward.SentAt) || !got.MentionAllAt.Equal(codecTime) || !sameCodecTargets(got.Mentions, m.Mentions) {
+		t.Fatalf("times = %v / %v / %v / %v, want %v", got.CreatedAt, got.Forward.SentAt, got.MentionAllAt, got.Mentions, codecTime)
 	}
-	got.CreatedAt, got.Forward.SentAt = m.CreatedAt, m.Forward.SentAt
+	got.CreatedAt, got.Forward.SentAt, got.MentionAllAt, got.Mentions = m.CreatedAt, m.Forward.SentAt, m.MentionAllAt, m.Mentions
 	if !reflect.DeepEqual(got, m) {
 		t.Fatalf("decoded %+v, want %+v", got, m)
 	}
@@ -140,4 +143,8 @@ func TestDecodeMessageSkipsUnknownMentionKinds(t *testing.T) {
 	if err != nil || len(m.Mentions) != 1 || m.Mentions[0] != (domain.MentionTarget{Kind: domain.MentionUser, ID: "minh"}) {
 		t.Fatalf("decoded mentions %+v, %v; want only user minh", m.Mentions, err)
 	}
+}
+
+func sameCodecTargets(a, b []domain.MentionTarget) bool {
+	return slices.EqualFunc(a, b, func(x, y domain.MentionTarget) bool { return x.Identity() == y.Identity() && x.At.Equal(y.At) })
 }

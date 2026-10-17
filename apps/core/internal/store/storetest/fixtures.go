@@ -136,7 +136,9 @@ func sameMessage(a, b domain.Message) bool {
 	af, bf := a.Forward, b.Forward
 	a.Forward, b.Forward = nil, nil
 	sameForward := (af == nil) == (bf == nil) && (af == nil || sameForwardRef(*af, *bf))
-	return reflect.DeepEqual(a, b) && at.Equal(bt) && ae.Equal(be) && sameReactions && sameForward
+	sameMentions := sameMentionSet(a.MentionSet(), b.MentionSet())
+	a, b = a.WithMentions(domain.Mentions{}), b.WithMentions(domain.Mentions{})
+	return reflect.DeepEqual(a, b) && at.Equal(bt) && ae.Equal(be) && sameReactions && sameForward && sameMentions
 }
 
 func sameForwardRef(a, b domain.ForwardRef) bool {

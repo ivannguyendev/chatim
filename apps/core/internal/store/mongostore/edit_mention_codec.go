@@ -1,10 +1,15 @@
 package mongostore
 
-import "github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
+import (
+	"time"
+
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
+)
 
 type editMentionDoc struct {
-	Kind string `bson:"kind"`
-	ID   string `bson:"id"`
+	Kind string    `bson:"kind"`
+	ID   string    `bson:"id"`
+	At   time.Time `bson:"at,omitempty"`
 }
 
 func encodeEditMentions(targets []domain.MentionTarget) ([]editMentionDoc, error) {
@@ -14,7 +19,7 @@ func encodeEditMentions(targets []domain.MentionTarget) ([]editMentionDoc, error
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, editMentionDoc{Kind: name, ID: t.ID})
+		out = append(out, editMentionDoc{Kind: name, ID: t.ID, At: t.At})
 	}
 	return out, nil
 }
@@ -23,7 +28,7 @@ func decodeEditMentions(docs []editMentionDoc) []domain.MentionTarget {
 	var out []domain.MentionTarget
 	for _, d := range docs {
 		if kind, ok := mentionKindOf(d.Kind); ok {
-			out = append(out, domain.MentionTarget{Kind: kind, ID: d.ID})
+			out = append(out, domain.MentionTarget{Kind: kind, ID: d.ID, At: d.At})
 		}
 	}
 	return out

@@ -21,6 +21,11 @@ type Edit struct {
 	Text    string
 	At      time.Time
 
-	Mentions   []MentionTarget
-	MentionAll bool
+	Mentions     []MentionTarget
+	MentionAll   bool
+	MentionAllAt time.Time
+}
+
+func (e Edit) MentionSet() Mentions {
+	return Mentions{Targets: e.Mentions, All: e.MentionAll, AllAt: e.MentionAllAt}
 }
