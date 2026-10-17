@@ -70,15 +70,6 @@ func TestADeleteDeliveredBeforeItsReplyIsNeverCounted(t *testing.T) {
 	}
 }
 
-func TestAnEditThatKeepsTheReplyLeavesTheCountAlone(t *testing.T) {
-	rg := newIndexRig(t)
-	rg.send(t, 1, nil)
-	noErrors(t, rg.handle(t, rg.send(t, 2, replyTo(1)), rg.edit(t, 2, 1, domain.EditText)), 2)
-	if armed, _ := rg.timers.checks(); rg.message(t, 1).Replies != (domain.ReplyCount{N: 1, Version: 1}) || len(armed) != 1 {
-		t.Fatalf("rc %+v armed %v; want only the new reply to count", rg.message(t, 1).Replies, armed)
-	}
-}
-
 func TestACountFailureKeepsTheTimerAndNaks(t *testing.T) {
 	rg := newIndexRig(t)
 	rg.send(t, 1, nil)

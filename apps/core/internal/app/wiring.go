@@ -174,6 +174,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 	}
 	handler, err := metrics.Handler(metricSources(p))
 	if err != nil {
+		a.abandon(context.Background())
 		return nil, fmt.Errorf("wire metrics: %w", err)
 	}
 	a.admin = admin.New(admin.Config{Addr: cfg.AdminAddr, ShutdownTimeout: config.CloseTimeout, Metrics: handler}, log)

@@ -25,14 +25,33 @@ func Run(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	if err := prepare(ctx, cfg, cl, a.setups...); err != nil {
-		return err
-	}
-	lis, err := listenAll(ctx, cfg.AdminAddr, cfg.GRPCAddr)
+	return a.launch(ctx, func(ctx context.Context) ([]net.Listener, error) {
+		if err := prepare(ctx, cfg, cl, a.setups...); err != nil {
+			return nil, err
+		}
+		return listenAll(ctx, cfg.AdminAddr, cfg.GRPCAddr)
+	})
+}
+
+func (a *node) launch(ctx context.Context, ready func(context.Context) ([]net.Listener, error)) error {
+	lis, err := ready(ctx)
 	if err != nil {
+		a.abandon(ctx)
 		return err
 	}
 	return a.serve(ctx, lis[0], lis[1])
+}
+
+func (a *node) abandon(ctx context.Context) {
+	if a.watches != nil {
+		a.watches.Stop()
+	}
+	if a.mention == nil {
+		return
+	}
+	if err := a.mention.Close(context.WithoutCancel(ctx)); err != nil {
+		a.log.WarnContext(ctx, "mention app close after a failed start", "err", err)
+	}
 }
 
 func (a *node) serve(ctx context.Context, adminLis, grpcLis net.Listener) error {

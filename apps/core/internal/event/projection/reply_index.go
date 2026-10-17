@@ -79,8 +79,6 @@ func messageChangeOf(ev Event) (messageChange, error) {
 	switch p := ev.Proto.GetPayload().(type) {
 	case *chatimv1.Event_MessageCreated:
 		pm, c.created = p.MessageCreated.GetMessage(), true
-	case *chatimv1.Event_MessageEdited:
-		pm = p.MessageEdited.GetMessage()
 	case *chatimv1.Event_MessageDeleted:
 		pm = p.MessageDeleted.GetMessage()
 	default:
