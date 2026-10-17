@@ -62,7 +62,7 @@ sequenceDiagram
     Note over Core,NATS: 2. Phát tán đồng bộ sang các thiết bị khác của tôi
     Core->>NATS: Publish read_updated(room_id, user_id, read_seq=10042)
     NATS-->>WebClient: Realtime push: Xoá huy hiệu chưa đọc trên Web
-    Note over Core,NATS: PubAck thì xoá bit 2 nếu read_ver còn bằng, rớt thì sweeper phát bù. Projection mention_read nghe read_updated và đánh dấu mention đã đọc theo read_seq hiện tại
+    Note over Core,NATS: PubAck thì xoá bit 2 nếu read_ver còn bằng, rớt thì sweeper phát bù. Cờ đã đọc của mention không lưu: Mention App tính lúc đọc ListMentions từ read_seq (D165)
 
     Core-->>Client: Xác nhận thành công
 
@@ -158,7 +158,7 @@ sequenceDiagram
 | Thành phần phụ thuộc | Mục đích phụ thuộc | Ứng xử khi thành phần gặp sự cố (Failure Behavior) |
 |---|---|---|
 | **Collection `members`** | Lưu trạng thái `read_seq` | Nếu ghi thất bại: Client sẽ thử lại trong lần cuộn màn hình tiếp theo. Người dùng chỉ bị hiện tượng tạm thời thấy phòng chưa được đánh dấu đã đọc. |
-| **NATS JetStream** | Phát sự kiện `read_updated` đồng bộ đa thiết bị; nguồn của projection `mention_read` | Nếu NATS quá tải: Thiết bị hiện tại vẫn hiển thị đã đọc bình thường; doc `members` giữ cờ `_state` bit 2 và sweeper slot 0 phát bù `read_updated` của vị trí hiện tại khi NATS sống lại (Module 10), thiết bị thứ hai đồng bộ lúc đó hoặc khi mở lại ứng dụng. |
+| **NATS JetStream** | Phát sự kiện `read_updated` đồng bộ đa thiết bị | Nếu NATS quá tải: Thiết bị hiện tại vẫn hiển thị đã đọc bình thường; doc `members` giữ cờ `_state` bit 2 và sweeper slot 0 phát bù `read_updated` của vị trí hiện tại khi NATS sống lại (Module 10), thiết bị thứ hai đồng bộ lúc đó hoặc khi mở lại ứng dụng. |
 | **`api/roomcache` + `messages`** | Đuôi phòng cho phép đếm unread | Đọc đuôi phòng từ Mongo lỗi: `ListMyRooms`/`GetRooms` trả `UNAVAILABLE` (lỗi store), không có giá trị unread dự phòng. |
 
 ### 6.1. Chỉ số Sức khoẻ Vận hành & Cảnh báo SRE (Key Metrics & Alerts)
