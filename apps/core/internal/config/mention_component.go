@@ -18,7 +18,7 @@ func (p *parser) mentionConfig(c *Config) {
 	m.NotifySubjectRoot = envconfig.String("NOTIFY_SUBJECT_ROOT", m.NotifySubjectRoot)
 	m.NotifyMaxStreamAge = p.span("NOTIFY_STREAM_MAX_AGE", m.NotifyMaxStreamAge)
 	m.NotifyDuplicates = p.span("NOTIFY_STREAM_DUPLICATES", m.NotifyDuplicates)
-	m.HideReadTenants = c.MentionHideReadTenants
+	m.HideReadTenants = p.tenants("MENTION_HIDE_READ_TENANTS")
 	m.RoomGroupsSyncMax = p.count("MENTION_ROOM_GROUPS_SYNC_MAX", m.RoomGroupsSyncMax)
 	m.RoomGroupsTTL = p.span("MENTION_ROOM_GROUPS_TTL", m.RoomGroupsTTL)
 	m.RoomGroupsRebuild = p.span("MENTION_ROOM_GROUPS_REBUILD", m.RoomGroupsRebuild)

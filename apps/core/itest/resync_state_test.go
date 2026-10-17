@@ -18,7 +18,7 @@ import (
 type linkProjections struct {
 	replies  domain.ReplyCount
 	threads  []store.ReplyThread
-	mentions []domain.Mention
+	mentions []mentionDocView
 }
 
 func pendingCount(t *testing.T, st *mongostore.Store) int {
@@ -62,7 +62,7 @@ func pendingProjections(t *testing.T, it *itInfra, cfg config.Config) uint64 {
 	return info.NumPending + uint64(info.NumAckPending)
 }
 
-func readLinkProjections(t *testing.T, st *mongostore.Store, room, parent, mention uint64) linkProjections {
+func readLinkProjections(t *testing.T, it *itInfra, cfg config.Config, st *mongostore.Store, room, parent, mention uint64) linkProjections {
 	t.Helper()
 	msgs, err := st.Find(t.Context(), room, []store.MsgKey{{Room: room, Seq: parent}})
 	if err != nil || len(msgs) != 1 {
@@ -72,9 +72,9 @@ func readLinkProjections(t *testing.T, st *mongostore.Store, room, parent, menti
 	if err != nil {
 		t.Fatalf("reply threads: %v", err)
 	}
-	mentions, err := st.Mentions().MentionsOf(t.Context(), store.MsgKey{Room: room, Seq: mention})
+	mentions, err := storedMentions(t, it, cfg, room, mention)()
 	if err != nil {
-		t.Fatalf("MentionsOf(%d): %v", mention, err)
+		t.Fatalf("stored mentions of seq %d: %v", mention, err)
 	}
 	return linkProjections{replies: msgs[0].Replies, threads: threads, mentions: mentions}
 }
@@ -89,15 +89,13 @@ func assertLinksUnchanged(t *testing.T, before, after linkProjections) {
 	}
 }
 
-func writeEveryKind(t *testing.T, client chatimv1.CoreServiceClient, st *mongostore.Store, roomID string) (parent, reply, mention uint64) {
+func writeEveryKind(t *testing.T, it *itInfra, cfg config.Config, client chatimv1.CoreServiceClient, roomID string) (parent, reply, mention uint64) {
 	t.Helper()
 	parent = sendAs(t, client, itUser, roomID, "resync-1", "parent")
 	reply = sendLinked(t, client, "bob", &chatimv1.SendMessageRequest{RoomId: roomID, Cid: "resync-2", Text: "reply", ReplyTo: &chatimv1.ReplyRef{Seq: parent}})
 	bob := &chatimv1.MentionSet{Targets: []*chatimv1.MentionTarget{{Kind: chatimv1.MentionKind_MENTION_KIND_USER, Id: "bob"}}}
 	mention = sendLinked(t, client, itUser, &chatimv1.SendMessageRequest{RoomId: roomID, Cid: "resync-3", Text: "@bob", Mentions: bob})
-	key := store.MsgKey{Room: parseRoom(t, roomID), Seq: mention}
-	awaitStored(t, "mention of bob", func() ([]domain.Mention, error) { return st.Mentions().MentionsOf(t.Context(), key) },
-		func(m []domain.Mention) bool { return len(m) == 1 })
+	awaitStored(t, "mention of bob", storedMentions(t, it, cfg, parseRoom(t, roomID), mention), func(m []mentionDocView) bool { return len(m) == 1 })
 	steps := []struct {
 		name, as string
 		do       func(ctx context.Context) error

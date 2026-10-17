@@ -20,7 +20,6 @@ const (
 	hiddenCollection       = "hidden"
 	interactionsCollection = "message_interactions"
 	pinActionsCollection   = "pin_actions"
-	mentionsCollection     = "mentions"
 	roomDMsCollection      = "room_dms"
 	replyThreadsCollection = "reply_threads"
 	sweeperStateCollection = "sweeper_state"
@@ -42,7 +41,6 @@ var (
 	_ store.OwnerChanges      = (*Store)(nil)
 	_ store.MemberCounts      = (*Store)(nil)
 	_ store.ReadPositions     = (*Store)(nil)
-	_ store.Mentions          = (*Mentions)(nil)
 	_ store.DirectRooms       = (*DirectRooms)(nil)
 	_ store.RoomUpdater       = (*Store)(nil)
 	_ store.RoomPreferences   = (*Store)(nil)
@@ -66,7 +64,6 @@ type Store struct {
 	hidden           *Hidden
 	interactions     *Interactions
 	pins             *Pins
-	mentions         *Mentions
 	directRooms      *DirectRooms
 	replyThreads     *ReplyThreads
 	eventStates      *EventStates
@@ -91,7 +88,6 @@ func New(db *mongo.Database, opts Options) *Store {
 		hidden:           &Hidden{coll: db.Collection(hiddenCollection, primary)},
 		interactions:     &Interactions{coll: db.Collection(interactionsCollection, interacted), client: db.Client()},
 		pins:             &Pins{coll: db.Collection(pinActionsCollection, primary)},
-		mentions:         &Mentions{coll: db.Collection(mentionsCollection, primary)},
 		directRooms:      &DirectRooms{coll: db.Collection(roomDMsCollection, primary)},
 		replyThreads:     &ReplyThreads{coll: db.Collection(replyThreadsCollection, primary)},
 		eventStates:      newEventStates(db, interacted),
@@ -104,8 +100,6 @@ func (s *Store) Interactions() *Interactions { return s.interactions }
 func (s *Store) Pins() *Pins { return s.pins }
 
 func (s *Store) Hidden() *Hidden { return s.hidden }
-
-func (s *Store) Mentions() *Mentions { return s.mentions }
 
 func (s *Store) DirectRooms() *DirectRooms { return s.directRooms }
 

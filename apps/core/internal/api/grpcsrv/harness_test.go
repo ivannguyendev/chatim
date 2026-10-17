@@ -60,7 +60,6 @@ type rig struct {
 	reactions *memstore.Interactions
 	pins      *memstore.Pins
 	directs   *memstore.DirectRooms
-	mentions  *memstore.Mentions
 	threads   *memstore.ReplyThreads
 }
 
@@ -76,8 +75,6 @@ type options struct {
 	members func(*memstore.Rooms) grpcsrv.RoomMembers
 	pending dedupe.Registry
 	pages   func(grpcsrv.PageReader) grpcsrv.PageReader
-	hide    []string
-	listing func(grpcsrv.MentionLister) grpcsrv.MentionLister
 }
 
 func newRig(t *testing.T, o options) *rig {

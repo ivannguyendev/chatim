@@ -24,7 +24,7 @@ var File_chatim_v1_core_service_proto protoreflect.FileDescriptor
 
 const file_chatim_v1_core_service_proto_rawDesc = "" +
 	"\n" +
-	"\x1cchatim/v1/core_service.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x17chatim/v1/members.proto\x1a\x1dchatim/v1/message_reads.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a*chatim/v1/replies_bookmarks_mentions.proto\x1a\x19chatim/v1/room_list.proto2\xe3\x14\n" +
+	"\x1cchatim/v1/core_service.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x17chatim/v1/members.proto\x1a\x1dchatim/v1/message_reads.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a*chatim/v1/replies_bookmarks_mentions.proto\x1a\x19chatim/v1/room_list.proto2\x92\x14\n" +
 	"\vCoreService\x12I\n" +
 	"\n" +
 	"CreateRoom\x12\x1c.chatim.v1.CreateRoomRequest\x1a\x1d.chatim.v1.CreateRoomResponse\x12U\n" +
@@ -54,8 +54,7 @@ const file_chatim_v1_core_service_proto_rawDesc = "" +
 	"\n" +
 	"GetReplies\x12\x1c.chatim.v1.GetRepliesRequest\x1a\x1d.chatim.v1.GetRepliesResponse\x12L\n" +
 	"\vListThreads\x12\x1d.chatim.v1.ListThreadsRequest\x1a\x1e.chatim.v1.ListThreadsResponse\x12R\n" +
-	"\rListBookmarks\x12\x1f.chatim.v1.ListBookmarksRequest\x1a .chatim.v1.ListBookmarksResponse\x12O\n" +
-	"\fListMentions\x12\x1e.chatim.v1.ListMentionsRequest\x1a\x1f.chatim.v1.ListMentionsResponse\x12I\n" +
+	"\rListBookmarks\x12\x1f.chatim.v1.ListBookmarksRequest\x1a .chatim.v1.ListBookmarksResponse\x12I\n" +
 	"\n" +
 	"AddMembers\x12\x1c.chatim.v1.AddMembersRequest\x1a\x1d.chatim.v1.AddMembersResponse\x12O\n" +
 	"\fRemoveMember\x12\x1e.chatim.v1.RemoveMemberRequest\x1a\x1f.chatim.v1.RemoveMemberResponse\x12F\n" +
@@ -94,48 +93,46 @@ var file_chatim_v1_core_service_proto_goTypes = []any{
 	(*GetRepliesRequest)(nil),           // 21: chatim.v1.GetRepliesRequest
 	(*ListThreadsRequest)(nil),          // 22: chatim.v1.ListThreadsRequest
 	(*ListBookmarksRequest)(nil),        // 23: chatim.v1.ListBookmarksRequest
-	(*ListMentionsRequest)(nil),         // 24: chatim.v1.ListMentionsRequest
-	(*AddMembersRequest)(nil),           // 25: chatim.v1.AddMembersRequest
-	(*RemoveMemberRequest)(nil),         // 26: chatim.v1.RemoveMemberRequest
-	(*LeaveRoomRequest)(nil),            // 27: chatim.v1.LeaveRoomRequest
-	(*ChangeMemberRoleRequest)(nil),     // 28: chatim.v1.ChangeMemberRoleRequest
-	(*SetMemberPriorityRequest)(nil),    // 29: chatim.v1.SetMemberPriorityRequest
-	(*ListMembersRequest)(nil),          // 30: chatim.v1.ListMembersRequest
-	(*MarkReadRequest)(nil),             // 31: chatim.v1.MarkReadRequest
-	(*MarkUnreadRequest)(nil),           // 32: chatim.v1.MarkUnreadRequest
-	(*CreateRoomResponse)(nil),          // 33: chatim.v1.CreateRoomResponse
-	(*OpenDirectRoomResponse)(nil),      // 34: chatim.v1.OpenDirectRoomResponse
-	(*ListMyRoomsResponse)(nil),         // 35: chatim.v1.ListMyRoomsResponse
-	(*GetRoomsResponse)(nil),            // 36: chatim.v1.GetRoomsResponse
-	(*UpdateRoomResponse)(nil),          // 37: chatim.v1.UpdateRoomResponse
-	(*SetRoomPreferencesResponse)(nil),  // 38: chatim.v1.SetRoomPreferencesResponse
-	(*SendMessageResponse)(nil),         // 39: chatim.v1.SendMessageResponse
-	(*GetHistoryResponse)(nil),          // 40: chatim.v1.GetHistoryResponse
-	(*GetMessagesResponse)(nil),         // 41: chatim.v1.GetMessagesResponse
-	(*EditMessageResponse)(nil),         // 42: chatim.v1.EditMessageResponse
-	(*DeleteMessageResponse)(nil),       // 43: chatim.v1.DeleteMessageResponse
-	(*HideMessageResponse)(nil),         // 44: chatim.v1.HideMessageResponse
-	(*ClearHistoryResponse)(nil),        // 45: chatim.v1.ClearHistoryResponse
-	(*GetEditHistoryResponse)(nil),      // 46: chatim.v1.GetEditHistoryResponse
-	(*ReactMessageResponse)(nil),        // 47: chatim.v1.ReactMessageResponse
-	(*PinMessageResponse)(nil),          // 48: chatim.v1.PinMessageResponse
-	(*UnpinMessageResponse)(nil),        // 49: chatim.v1.UnpinMessageResponse
-	(*ListPinsResponse)(nil),            // 50: chatim.v1.ListPinsResponse
-	(*GetReactionSettingsResponse)(nil), // 51: chatim.v1.GetReactionSettingsResponse
-	(*GetReactionsResponse)(nil),        // 52: chatim.v1.GetReactionsResponse
-	(*SetBookmarkResponse)(nil),         // 53: chatim.v1.SetBookmarkResponse
-	(*GetRepliesResponse)(nil),          // 54: chatim.v1.GetRepliesResponse
-	(*ListThreadsResponse)(nil),         // 55: chatim.v1.ListThreadsResponse
-	(*ListBookmarksResponse)(nil),       // 56: chatim.v1.ListBookmarksResponse
-	(*ListMentionsResponse)(nil),        // 57: chatim.v1.ListMentionsResponse
-	(*AddMembersResponse)(nil),          // 58: chatim.v1.AddMembersResponse
-	(*RemoveMemberResponse)(nil),        // 59: chatim.v1.RemoveMemberResponse
-	(*LeaveRoomResponse)(nil),           // 60: chatim.v1.LeaveRoomResponse
-	(*ChangeMemberRoleResponse)(nil),    // 61: chatim.v1.ChangeMemberRoleResponse
-	(*SetMemberPriorityResponse)(nil),   // 62: chatim.v1.SetMemberPriorityResponse
-	(*ListMembersResponse)(nil),         // 63: chatim.v1.ListMembersResponse
-	(*MarkReadResponse)(nil),            // 64: chatim.v1.MarkReadResponse
-	(*MarkUnreadResponse)(nil),          // 65: chatim.v1.MarkUnreadResponse
+	(*AddMembersRequest)(nil),           // 24: chatim.v1.AddMembersRequest
+	(*RemoveMemberRequest)(nil),         // 25: chatim.v1.RemoveMemberRequest
+	(*LeaveRoomRequest)(nil),            // 26: chatim.v1.LeaveRoomRequest
+	(*ChangeMemberRoleRequest)(nil),     // 27: chatim.v1.ChangeMemberRoleRequest
+	(*SetMemberPriorityRequest)(nil),    // 28: chatim.v1.SetMemberPriorityRequest
+	(*ListMembersRequest)(nil),          // 29: chatim.v1.ListMembersRequest
+	(*MarkReadRequest)(nil),             // 30: chatim.v1.MarkReadRequest
+	(*MarkUnreadRequest)(nil),           // 31: chatim.v1.MarkUnreadRequest
+	(*CreateRoomResponse)(nil),          // 32: chatim.v1.CreateRoomResponse
+	(*OpenDirectRoomResponse)(nil),      // 33: chatim.v1.OpenDirectRoomResponse
+	(*ListMyRoomsResponse)(nil),         // 34: chatim.v1.ListMyRoomsResponse
+	(*GetRoomsResponse)(nil),            // 35: chatim.v1.GetRoomsResponse
+	(*UpdateRoomResponse)(nil),          // 36: chatim.v1.UpdateRoomResponse
+	(*SetRoomPreferencesResponse)(nil),  // 37: chatim.v1.SetRoomPreferencesResponse
+	(*SendMessageResponse)(nil),         // 38: chatim.v1.SendMessageResponse
+	(*GetHistoryResponse)(nil),          // 39: chatim.v1.GetHistoryResponse
+	(*GetMessagesResponse)(nil),         // 40: chatim.v1.GetMessagesResponse
+	(*EditMessageResponse)(nil),         // 41: chatim.v1.EditMessageResponse
+	(*DeleteMessageResponse)(nil),       // 42: chatim.v1.DeleteMessageResponse
+	(*HideMessageResponse)(nil),         // 43: chatim.v1.HideMessageResponse
+	(*ClearHistoryResponse)(nil),        // 44: chatim.v1.ClearHistoryResponse
+	(*GetEditHistoryResponse)(nil),      // 45: chatim.v1.GetEditHistoryResponse
+	(*ReactMessageResponse)(nil),        // 46: chatim.v1.ReactMessageResponse
+	(*PinMessageResponse)(nil),          // 47: chatim.v1.PinMessageResponse
+	(*UnpinMessageResponse)(nil),        // 48: chatim.v1.UnpinMessageResponse
+	(*ListPinsResponse)(nil),            // 49: chatim.v1.ListPinsResponse
+	(*GetReactionSettingsResponse)(nil), // 50: chatim.v1.GetReactionSettingsResponse
+	(*GetReactionsResponse)(nil),        // 51: chatim.v1.GetReactionsResponse
+	(*SetBookmarkResponse)(nil),         // 52: chatim.v1.SetBookmarkResponse
+	(*GetRepliesResponse)(nil),          // 53: chatim.v1.GetRepliesResponse
+	(*ListThreadsResponse)(nil),         // 54: chatim.v1.ListThreadsResponse
+	(*ListBookmarksResponse)(nil),       // 55: chatim.v1.ListBookmarksResponse
+	(*AddMembersResponse)(nil),          // 56: chatim.v1.AddMembersResponse
+	(*RemoveMemberResponse)(nil),        // 57: chatim.v1.RemoveMemberResponse
+	(*LeaveRoomResponse)(nil),           // 58: chatim.v1.LeaveRoomResponse
+	(*ChangeMemberRoleResponse)(nil),    // 59: chatim.v1.ChangeMemberRoleResponse
+	(*SetMemberPriorityResponse)(nil),   // 60: chatim.v1.SetMemberPriorityResponse
+	(*ListMembersResponse)(nil),         // 61: chatim.v1.ListMembersResponse
+	(*MarkReadResponse)(nil),            // 62: chatim.v1.MarkReadResponse
+	(*MarkUnreadResponse)(nil),          // 63: chatim.v1.MarkUnreadResponse
 }
 var file_chatim_v1_core_service_proto_depIdxs = []int32{
 	0,  // 0: chatim.v1.CoreService.CreateRoom:input_type -> chatim.v1.CreateRoomRequest
@@ -162,50 +159,48 @@ var file_chatim_v1_core_service_proto_depIdxs = []int32{
 	21, // 21: chatim.v1.CoreService.GetReplies:input_type -> chatim.v1.GetRepliesRequest
 	22, // 22: chatim.v1.CoreService.ListThreads:input_type -> chatim.v1.ListThreadsRequest
 	23, // 23: chatim.v1.CoreService.ListBookmarks:input_type -> chatim.v1.ListBookmarksRequest
-	24, // 24: chatim.v1.CoreService.ListMentions:input_type -> chatim.v1.ListMentionsRequest
-	25, // 25: chatim.v1.CoreService.AddMembers:input_type -> chatim.v1.AddMembersRequest
-	26, // 26: chatim.v1.CoreService.RemoveMember:input_type -> chatim.v1.RemoveMemberRequest
-	27, // 27: chatim.v1.CoreService.LeaveRoom:input_type -> chatim.v1.LeaveRoomRequest
-	28, // 28: chatim.v1.CoreService.ChangeMemberRole:input_type -> chatim.v1.ChangeMemberRoleRequest
-	29, // 29: chatim.v1.CoreService.SetMemberPriority:input_type -> chatim.v1.SetMemberPriorityRequest
-	30, // 30: chatim.v1.CoreService.ListMembers:input_type -> chatim.v1.ListMembersRequest
-	31, // 31: chatim.v1.CoreService.MarkRead:input_type -> chatim.v1.MarkReadRequest
-	32, // 32: chatim.v1.CoreService.MarkUnread:input_type -> chatim.v1.MarkUnreadRequest
-	33, // 33: chatim.v1.CoreService.CreateRoom:output_type -> chatim.v1.CreateRoomResponse
-	34, // 34: chatim.v1.CoreService.OpenDirectRoom:output_type -> chatim.v1.OpenDirectRoomResponse
-	35, // 35: chatim.v1.CoreService.ListMyRooms:output_type -> chatim.v1.ListMyRoomsResponse
-	36, // 36: chatim.v1.CoreService.GetRooms:output_type -> chatim.v1.GetRoomsResponse
-	37, // 37: chatim.v1.CoreService.UpdateRoom:output_type -> chatim.v1.UpdateRoomResponse
-	38, // 38: chatim.v1.CoreService.SetRoomPreferences:output_type -> chatim.v1.SetRoomPreferencesResponse
-	39, // 39: chatim.v1.CoreService.SendMessage:output_type -> chatim.v1.SendMessageResponse
-	40, // 40: chatim.v1.CoreService.GetHistory:output_type -> chatim.v1.GetHistoryResponse
-	41, // 41: chatim.v1.CoreService.GetMessages:output_type -> chatim.v1.GetMessagesResponse
-	42, // 42: chatim.v1.CoreService.EditMessage:output_type -> chatim.v1.EditMessageResponse
-	43, // 43: chatim.v1.CoreService.DeleteMessage:output_type -> chatim.v1.DeleteMessageResponse
-	44, // 44: chatim.v1.CoreService.HideMessage:output_type -> chatim.v1.HideMessageResponse
-	45, // 45: chatim.v1.CoreService.ClearHistory:output_type -> chatim.v1.ClearHistoryResponse
-	46, // 46: chatim.v1.CoreService.GetEditHistory:output_type -> chatim.v1.GetEditHistoryResponse
-	47, // 47: chatim.v1.CoreService.ReactMessage:output_type -> chatim.v1.ReactMessageResponse
-	48, // 48: chatim.v1.CoreService.PinMessage:output_type -> chatim.v1.PinMessageResponse
-	49, // 49: chatim.v1.CoreService.UnpinMessage:output_type -> chatim.v1.UnpinMessageResponse
-	50, // 50: chatim.v1.CoreService.ListPins:output_type -> chatim.v1.ListPinsResponse
-	51, // 51: chatim.v1.CoreService.GetReactionSettings:output_type -> chatim.v1.GetReactionSettingsResponse
-	52, // 52: chatim.v1.CoreService.GetReactions:output_type -> chatim.v1.GetReactionsResponse
-	53, // 53: chatim.v1.CoreService.SetBookmark:output_type -> chatim.v1.SetBookmarkResponse
-	54, // 54: chatim.v1.CoreService.GetReplies:output_type -> chatim.v1.GetRepliesResponse
-	55, // 55: chatim.v1.CoreService.ListThreads:output_type -> chatim.v1.ListThreadsResponse
-	56, // 56: chatim.v1.CoreService.ListBookmarks:output_type -> chatim.v1.ListBookmarksResponse
-	57, // 57: chatim.v1.CoreService.ListMentions:output_type -> chatim.v1.ListMentionsResponse
-	58, // 58: chatim.v1.CoreService.AddMembers:output_type -> chatim.v1.AddMembersResponse
-	59, // 59: chatim.v1.CoreService.RemoveMember:output_type -> chatim.v1.RemoveMemberResponse
-	60, // 60: chatim.v1.CoreService.LeaveRoom:output_type -> chatim.v1.LeaveRoomResponse
-	61, // 61: chatim.v1.CoreService.ChangeMemberRole:output_type -> chatim.v1.ChangeMemberRoleResponse
-	62, // 62: chatim.v1.CoreService.SetMemberPriority:output_type -> chatim.v1.SetMemberPriorityResponse
-	63, // 63: chatim.v1.CoreService.ListMembers:output_type -> chatim.v1.ListMembersResponse
-	64, // 64: chatim.v1.CoreService.MarkRead:output_type -> chatim.v1.MarkReadResponse
-	65, // 65: chatim.v1.CoreService.MarkUnread:output_type -> chatim.v1.MarkUnreadResponse
-	33, // [33:66] is the sub-list for method output_type
-	0,  // [0:33] is the sub-list for method input_type
+	24, // 24: chatim.v1.CoreService.AddMembers:input_type -> chatim.v1.AddMembersRequest
+	25, // 25: chatim.v1.CoreService.RemoveMember:input_type -> chatim.v1.RemoveMemberRequest
+	26, // 26: chatim.v1.CoreService.LeaveRoom:input_type -> chatim.v1.LeaveRoomRequest
+	27, // 27: chatim.v1.CoreService.ChangeMemberRole:input_type -> chatim.v1.ChangeMemberRoleRequest
+	28, // 28: chatim.v1.CoreService.SetMemberPriority:input_type -> chatim.v1.SetMemberPriorityRequest
+	29, // 29: chatim.v1.CoreService.ListMembers:input_type -> chatim.v1.ListMembersRequest
+	30, // 30: chatim.v1.CoreService.MarkRead:input_type -> chatim.v1.MarkReadRequest
+	31, // 31: chatim.v1.CoreService.MarkUnread:input_type -> chatim.v1.MarkUnreadRequest
+	32, // 32: chatim.v1.CoreService.CreateRoom:output_type -> chatim.v1.CreateRoomResponse
+	33, // 33: chatim.v1.CoreService.OpenDirectRoom:output_type -> chatim.v1.OpenDirectRoomResponse
+	34, // 34: chatim.v1.CoreService.ListMyRooms:output_type -> chatim.v1.ListMyRoomsResponse
+	35, // 35: chatim.v1.CoreService.GetRooms:output_type -> chatim.v1.GetRoomsResponse
+	36, // 36: chatim.v1.CoreService.UpdateRoom:output_type -> chatim.v1.UpdateRoomResponse
+	37, // 37: chatim.v1.CoreService.SetRoomPreferences:output_type -> chatim.v1.SetRoomPreferencesResponse
+	38, // 38: chatim.v1.CoreService.SendMessage:output_type -> chatim.v1.SendMessageResponse
+	39, // 39: chatim.v1.CoreService.GetHistory:output_type -> chatim.v1.GetHistoryResponse
+	40, // 40: chatim.v1.CoreService.GetMessages:output_type -> chatim.v1.GetMessagesResponse
+	41, // 41: chatim.v1.CoreService.EditMessage:output_type -> chatim.v1.EditMessageResponse
+	42, // 42: chatim.v1.CoreService.DeleteMessage:output_type -> chatim.v1.DeleteMessageResponse
+	43, // 43: chatim.v1.CoreService.HideMessage:output_type -> chatim.v1.HideMessageResponse
+	44, // 44: chatim.v1.CoreService.ClearHistory:output_type -> chatim.v1.ClearHistoryResponse
+	45, // 45: chatim.v1.CoreService.GetEditHistory:output_type -> chatim.v1.GetEditHistoryResponse
+	46, // 46: chatim.v1.CoreService.ReactMessage:output_type -> chatim.v1.ReactMessageResponse
+	47, // 47: chatim.v1.CoreService.PinMessage:output_type -> chatim.v1.PinMessageResponse
+	48, // 48: chatim.v1.CoreService.UnpinMessage:output_type -> chatim.v1.UnpinMessageResponse
+	49, // 49: chatim.v1.CoreService.ListPins:output_type -> chatim.v1.ListPinsResponse
+	50, // 50: chatim.v1.CoreService.GetReactionSettings:output_type -> chatim.v1.GetReactionSettingsResponse
+	51, // 51: chatim.v1.CoreService.GetReactions:output_type -> chatim.v1.GetReactionsResponse
+	52, // 52: chatim.v1.CoreService.SetBookmark:output_type -> chatim.v1.SetBookmarkResponse
+	53, // 53: chatim.v1.CoreService.GetReplies:output_type -> chatim.v1.GetRepliesResponse
+	54, // 54: chatim.v1.CoreService.ListThreads:output_type -> chatim.v1.ListThreadsResponse
+	55, // 55: chatim.v1.CoreService.ListBookmarks:output_type -> chatim.v1.ListBookmarksResponse
+	56, // 56: chatim.v1.CoreService.AddMembers:output_type -> chatim.v1.AddMembersResponse
+	57, // 57: chatim.v1.CoreService.RemoveMember:output_type -> chatim.v1.RemoveMemberResponse
+	58, // 58: chatim.v1.CoreService.LeaveRoom:output_type -> chatim.v1.LeaveRoomResponse
+	59, // 59: chatim.v1.CoreService.ChangeMemberRole:output_type -> chatim.v1.ChangeMemberRoleResponse
+	60, // 60: chatim.v1.CoreService.SetMemberPriority:output_type -> chatim.v1.SetMemberPriorityResponse
+	61, // 61: chatim.v1.CoreService.ListMembers:output_type -> chatim.v1.ListMembersResponse
+	62, // 62: chatim.v1.CoreService.MarkRead:output_type -> chatim.v1.MarkReadResponse
+	63, // 63: chatim.v1.CoreService.MarkUnread:output_type -> chatim.v1.MarkUnreadResponse
+	32, // [32:64] is the sub-list for method output_type
+	0,  // [0:32] is the sub-list for method input_type
 	0,  // [0:0] is the sub-list for extension type_name
 	0,  // [0:0] is the sub-list for extension extendee
 	0,  // [0:0] is the sub-list for field type_name

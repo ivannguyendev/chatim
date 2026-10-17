@@ -120,7 +120,6 @@ func TestLoadOverrides(t *testing.T) {
 			Stream: "CHATIM_EVT_IT", SubjectRoot: "evt_it", FetchBatch: 128, FetchWait: 250 * time.Millisecond,
 		},
 		LockedMessageKinds:     []domain.Kind{domain.KindText},
-		MentionHideReadTenants: []string{"acme", "globex"},
 		Limits:                 mutate.Limits{Emojis: []string{"🎉", "👍"}, PinLimit: 10, MemberBatch: 20, MentionTargets: 20},
 		MemberCountCheckDelay:  4 * time.Second,
 		MessageCountCheckDelay: 6 * time.Second,

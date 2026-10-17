@@ -23,13 +23,13 @@ func TestRealInfraResyncRepublishesTheCurrentStateAfterTheEventStreamLostIt(t *t
 	roomID := createRoom(t, client)
 	room := parseRoom(t, roomID)
 	st := itStore(it, core)
-	parent, reply, mention := writeEveryKind(t, client, st, roomID)
+	parent, reply, mention := writeEveryKind(t, it, core.cfg, client, roomID)
 	if reply != parent+1 {
 		t.Fatalf("reply seq = %d, want %d", reply, parent+1)
 	}
 	core.awaitSweeper(t)
 	awaitSettled(t, it, core.cfg, st, room)
-	before := readLinkProjections(t, st, room, parent, mention)
+	before := readLinkProjections(t, it, core.cfg, st, room, parent, mention)
 	want := currentStateIDs(t, st, room, parent, mention)
 	time.Sleep(2 * itResyncDuplicates)
 
@@ -63,5 +63,5 @@ func TestRealInfraResyncRepublishesTheCurrentStateAfterTheEventStreamLostIt(t *t
 		}
 	}
 	awaitSettled(t, it, core.cfg, st, room)
-	assertLinksUnchanged(t, before, readLinkProjections(t, st, room, parent, mention))
+	assertLinksUnchanged(t, before, readLinkProjections(t, it, core.cfg, st, room, parent, mention))
 }

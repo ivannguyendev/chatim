@@ -6,42 +6,26 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 )
 
-func TestMentionTargetNamesFollowTheListQuery(t *testing.T) {
-	cases := map[string]struct {
-		target domain.MentionTarget
-		want   string
-	}{
-		"user":  {user("minh"), "user:minh"},
-		"group": {group("team-design"), "group:team-design"},
-		"all":   {domain.MentionTarget{Kind: domain.MentionAll}, "all:777"},
-	}
-	for name, c := range cases {
-		if got := c.target.Name(777); got != c.want {
-			t.Errorf("%s: Name = %q, want %q", name, got, c.want)
-		}
-	}
-}
-
 func TestAllIsNotASendableMentionTarget(t *testing.T) {
 	if _, err := domain.ValidateMentions([]domain.MentionTarget{{Kind: domain.MentionAll}}, 5); err == nil {
 		t.Fatal("ValidateMentions accepted an @all target; @all travels as its own flag")
 	}
 }
 
-func TestMentionTargetsOfAMessageAddAllLast(t *testing.T) {
-	m := domain.Message{Mentions: []domain.MentionTarget{user("minh"), group("ops")}, MentionAll: true}
-	got := domain.MentionTargetsOf(m)
-	want := []domain.MentionTarget{user("minh"), group("ops"), {Kind: domain.MentionAll}}
-	if len(got) != len(want) {
-		t.Fatalf("MentionTargetsOf = %v, want %v", got, want)
+func TestMentionLinksTakeAllOnlyWithoutAnID(t *testing.T) {
+	cases := map[string]struct {
+		target domain.MentionTarget
+		want   bool
+	}{
+		"user":        {domain.MentionTarget{Kind: domain.MentionUser, ID: "minh"}, true},
+		"group":       {domain.MentionTarget{Kind: domain.MentionGroup, ID: "team-design"}, true},
+		"all":         {domain.MentionTarget{Kind: domain.MentionAll}, true},
+		"all with id": {domain.MentionTarget{Kind: domain.MentionAll, ID: "x"}, false},
+		"user no id":  {domain.MentionTarget{Kind: domain.MentionUser}, false},
 	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("MentionTargetsOf = %v, want %v", got, want)
+	for name, c := range cases {
+		if got := domain.ValidMentionLink(c.target); got != c.want {
+			t.Errorf("%s: ValidMentionLink = %v, want %v", name, got, c.want)
 		}
-	}
-	m.Deleted = true
-	if got := domain.MentionTargetsOf(m); len(got) != 0 {
-		t.Fatalf("MentionTargetsOf(deleted) = %v, want none", got)
 	}
 }

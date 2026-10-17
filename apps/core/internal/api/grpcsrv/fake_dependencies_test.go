@@ -85,7 +85,7 @@ func (f *fakeSender) sent() []actor.SendCmd {
 func memStores() *rig {
 	return &rig{
 		rooms: memstore.NewRooms(), msgs: memstore.NewMessages(), edits: memstore.NewEdits(), hidden: memstore.NewHidden(),
-		reactions: memstore.NewInteractions(), pins: memstore.NewPins(), directs: memstore.NewDirectRooms(), mentions: memstore.NewMentions(),
+		reactions: memstore.NewInteractions(), pins: memstore.NewPins(), directs: memstore.NewDirectRooms(),
 		threads: memstore.NewReplyThreads(),
 	}
 }

@@ -26,6 +26,10 @@ func (c *Client) ListBookmarks(ctx context.Context, req *chatimv1.ListBookmarksR
 
 func (c *Client) ListMentions(ctx context.Context, req *chatimv1.ListMentionsRequest) (*chatimv1.ListMentionsResponse, Stats, error) {
 	return call(ctx, c, c.loc.AnyAddr, retryIdempotent, func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.ListMentionsResponse, error) {
-		return api.ListMentions(ctx, req)
+		mentions, ok := api.(chatimv1.MentionServiceClient)
+		if !ok {
+			return nil, errNoMentionService
+		}
+		return mentions.ListMentions(ctx, req)
 	})
 }

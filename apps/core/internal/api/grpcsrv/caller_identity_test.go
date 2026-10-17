@@ -67,10 +67,6 @@ func TestEveryRPCChecksCallerIdentityFirst(t *testing.T) {
 			_, err := rg.client.SetBookmark(ctx, &chatimv1.SetBookmarkRequest{RoomId: "42", Seq: 1, On: true})
 			return err
 		},
-		"ListMentions": func(ctx context.Context) error {
-			_, err := rg.client.ListMentions(ctx, &chatimv1.ListMentionsRequest{})
-			return err
-		},
 		"ListBookmarks": func(ctx context.Context) error {
 			_, err := rg.client.ListBookmarks(ctx, &chatimv1.ListBookmarksRequest{})
 			return err
