@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"cmp"
 	"fmt"
 	"net/http"
 
@@ -10,16 +11,17 @@ import (
 )
 
 const (
-	namespace = "chatim"
-	subsystem = "core"
+	namespace        = "chatim"
+	defaultSubsystem = "core"
 )
 
 type Source struct {
-	Name   string
-	Help   string
-	Labels map[string]string
-	Gauge  bool
-	Read   func() float64
+	Subsystem string
+	Name      string
+	Help      string
+	Labels    map[string]string
+	Gauge     bool
+	Read      func() float64
 }
 
 func Handler(sources []Source) (http.Handler, error) {
@@ -39,6 +41,7 @@ func Handler(sources []Source) (http.Handler, error) {
 }
 
 func collector(s Source) prometheus.Collector {
+	subsystem := cmp.Or(s.Subsystem, defaultSubsystem)
 	if s.Gauge {
 		return prometheus.NewGaugeFunc(prometheus.GaugeOpts{Namespace: namespace, Subsystem: subsystem, Name: s.Name, Help: s.Help, ConstLabels: s.Labels}, s.Read)
 	}

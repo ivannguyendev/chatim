@@ -78,6 +78,11 @@ func TestMessageLookupsAcrossRoomsAndThreadsStayBounded(t *testing.T) {
 		t.Fatalf("SentTimes = %v, %v; want 3 times", got, err)
 	}
 	expectBounded(t, "SentTimes", explainLast(t, db, capture, messagesCollection), len(times), 3)
+	capture.reset()
+	if got, err := s.MessageVersions(t.Context(), times); err != nil || len(got) != 3 {
+		t.Fatalf("MessageVersions = %v, %v; want 3 versions", got, err)
+	}
+	expectBounded(t, "MessageVersions", explainLast(t, db, capture, messagesCollection), len(times), 3)
 
 	find := []store.MsgKey{{Room: boundedRoomB, Seq: boundedMain}, {Room: boundedRoomB, Seq: 1}, {Room: boundedRoomB, Thread: 7, Seq: 10}}
 	capture.reset()

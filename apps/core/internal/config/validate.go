@@ -12,7 +12,7 @@ var (
 	subjectRootPattern = regexp.MustCompile(`^[a-z0-9_]+$`)
 )
 
-const stopPhases = "CORE_DRAIN_DELAY + CORE_GRPC_SHUTDOWN + 1s (sweeper) + PROJECTION_FETCH_WAIT + 1s (projections) + 500ms + 1s (timer consumer) + CORE_REQUEST_DEADLINE (router drain) + " +
+const stopPhases = "CORE_DRAIN_DELAY + CORE_GRPC_SHUTDOWN + 1s (sweeper) + max(PROJECTION_FETCH_WAIT, MENTION_FETCH_WAIT) + 1s (projections and mention) + 500ms + 1s (timer consumer) + CORE_REQUEST_DEADLINE (router drain) + " +
 	"2 x REDIS_OP_TIMEOUT (cid batcher drain) + FLUSH_INSERT_TIMEOUT (flusher drain) + CORE_PUBLISHER_DRAIN + 1s (state clear) + slot release + client close"
 
 const minAgeRule = "SWEEP_MIN_AGE must be longer than PUB_ACK_TIMEOUT + STATE_CLEAR_FLUSH + STATE_CLEAR_TIMEOUT"
@@ -51,6 +51,7 @@ func (c Config) validate() error {
 		{c.RoomList.TailCacheBytes >= minRoomTailCacheBytes, fmt.Sprintf("ROOM_TAIL_CACHE_BYTES must be at least %d (1MB)", minRoomTailCacheBytes)},
 		{plan.fitsWithin(c.ShutdownBudget), fmt.Sprintf("%s = %v must be shorter than CORE_SHUTDOWN_BUDGET %v", stopPhases, plan.Total(), c.ShutdownBudget)},
 	}
+	rules = append(rules, c.mentionRules()...)
 	var errs []error
 	for _, r := range rules {
 		if !r.ok {
@@ -77,6 +78,7 @@ func (c Config) componentErrors() []error {
 		{"SWEEP_*, EVT_SUBJECT_ROOT, SLOT_TICK, PUB_ACK_TIMEOUT", c.Sweep.Validate()},
 		{"PROJECTION_*, EVT_STREAM, EVT_SUBJECT_ROOT", c.Projection.Validate()},
 		{"REACTION_EMOJIS, PIN_LIMIT, MEMBER_BATCH_MAX", c.Limits.Validate()},
+		{"MENTION_*, NOTIFY_*", c.mentionErrors()},
 	}
 	var errs []error
 	for _, part := range parts {

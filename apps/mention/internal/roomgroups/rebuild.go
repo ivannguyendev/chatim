@@ -34,6 +34,7 @@ func (s *Sets) Failures() uint64 { return s.failures.Load() }
 
 func (s *Sets) large(tenant string, room uint64) Set {
 	e, ok := s.cache.Get(room)
+	s.count(ok)
 	if !ok || time.Since(e.BuiltAt) >= s.cfg.Rebuild {
 		s.kick(tenant, room)
 	}

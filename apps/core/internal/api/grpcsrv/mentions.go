@@ -108,7 +108,7 @@ func (s *Service) mentionResponse(ctx context.Context, who callerid.Caller, page
 	for i, d := range page.Items {
 		keys[i] = store.MsgKey(d.Key)
 	}
-	visible, err := s.visibleMessages(ctx, who, keys)
+	visible, err := s.VisibleMessages(ctx, who.Tenant, who.User, keys)
 	if err != nil {
 		return nil, err
 	}

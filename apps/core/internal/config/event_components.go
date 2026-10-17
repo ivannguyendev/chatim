@@ -39,4 +39,5 @@ func (p *parser) eventConfig(c *Config) {
 	}
 	c.MemberCountCheckDelay = p.span("MEMBER_COUNT_CHECK_DELAY", defaultMemberCountCheckDelay)
 	c.MessageCountCheckDelay = p.span("MESSAGE_COUNT_CHECK_DELAY", defaultMessageCountCheckDelay)
+	p.mentionConfig(c)
 }

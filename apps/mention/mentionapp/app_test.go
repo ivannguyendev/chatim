@@ -1,6 +1,7 @@
 package mentionapp_test
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/ivannguyendev/chatim/apps/mention/mentionapp"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
@@ -25,9 +27,20 @@ func config() mentionapp.Config {
 	return c
 }
 
-func deps() mentionapp.Deps {
+func offlineDB(t *testing.T) *mongo.Database {
+	t.Helper()
+	client, err := mongo.Connect(options.Client().ApplyURI("mongodb://127.0.0.1:1").SetServerSelectionTimeout(time.Millisecond))
+	if err != nil {
+		t.Fatalf("mongo client: %v", err)
+	}
+	t.Cleanup(func() { _ = client.Disconnect(context.Background()) })
+	return client.Database("mention_app_test")
+}
+
+func deps(t *testing.T) mentionapp.Deps {
+	t.Helper()
 	return mentionapp.Deps{
-		Mongo:    &mongo.Database{},
+		Mongo:    offlineDB(t),
 		JS:       fakeJS{},
 		NotifyJS: fakeJS{},
 		NATS:     &nats.Conn{},
@@ -37,7 +50,7 @@ func deps() mentionapp.Deps {
 }
 
 func TestNewHoldsValidConfig(t *testing.T) {
-	app, err := mentionapp.New(config(), deps())
+	app, err := mentionapp.New(config(), deps(t))
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
@@ -48,7 +61,7 @@ func TestNewHoldsValidConfig(t *testing.T) {
 
 func TestNewAppliesDefaults(t *testing.T) {
 	c := mentionapp.Config{EventStream: "CHATIM_EVT", EventSubjectRoot: "evt", LiveRoot: "live", Replicas: 1, FetchWait: time.Second}
-	app, err := mentionapp.New(c, deps())
+	app, err := mentionapp.New(c, deps(t))
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
@@ -60,7 +73,7 @@ func TestNewAppliesDefaults(t *testing.T) {
 func TestNewRejectsBadConfig(t *testing.T) {
 	c := config()
 	c.Workers = -1
-	if _, err := mentionapp.New(c, deps()); !errors.Is(err, apperr.ErrInvalidArgument) {
+	if _, err := mentionapp.New(c, deps(t)); !errors.Is(err, apperr.ErrInvalidArgument) {
 		t.Fatalf("new = %v, want invalid argument", err)
 	}
 }
@@ -76,7 +89,7 @@ func TestNewRejectsMissingDeps(t *testing.T) {
 	}
 	for name, drop := range cases {
 		t.Run(name, func(t *testing.T) {
-			d := deps()
+			d := deps(t)
 			drop(&d)
 			if _, err := mentionapp.New(config(), d); !errors.Is(err, apperr.ErrInvalidArgument) {
 				t.Fatalf("new = %v, want invalid argument", err)

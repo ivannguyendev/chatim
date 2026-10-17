@@ -1,6 +1,7 @@
 package mentionapp
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"time"
@@ -10,6 +11,10 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/ivannguyendev/chatim/apps/mention/internal/config"
+	"github.com/ivannguyendev/chatim/apps/mention/internal/consumer"
+	"github.com/ivannguyendev/chatim/apps/mention/internal/grpcsrv"
+	"github.com/ivannguyendev/chatim/apps/mention/internal/roomgroups"
+	"github.com/ivannguyendev/chatim/apps/mention/internal/store/mongostore"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
@@ -27,8 +32,13 @@ type Deps struct {
 }
 
 type App struct {
-	cfg  Config
-	deps Deps
+	cfg       Config
+	deps      Deps
+	bootstrap func(context.Context, *mongo.Database) error
+	consumer  *consumer.Consumer
+	sets      *roomgroups.Sets
+	watch     *roomgroups.Watch
+	service   *grpcsrv.Service
 }
 
 func New(cfg Config, deps Deps) (*App, error) {
@@ -38,7 +48,11 @@ func New(cfg Config, deps Deps) (*App, error) {
 	if err := deps.validate(); err != nil {
 		return nil, err
 	}
-	return &App{cfg: cfg.WithDefaults(), deps: deps}, nil
+	a := &App{cfg: cfg.WithDefaults(), deps: deps, bootstrap: mongostore.Bootstrap}
+	if err := a.assemble(); err != nil {
+		return nil, err
+	}
+	return a, nil
 }
 
 func (a *App) StopTimeout() time.Duration { return a.cfg.StopTimeout() }

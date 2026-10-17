@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/singleflight"
@@ -40,6 +41,8 @@ type Sets struct {
 	cfg    Config
 	log    *slog.Logger
 	flight singleflight.Group
+	hits   atomic.Uint64
+	misses atomic.Uint64
 }
 
 func NewSets(cfg Config, build BuildFunc, log *slog.Logger) (*Sets, error) {
@@ -68,10 +71,24 @@ func (s *Sets) Forget(room uint64) { s.cache.Forget(room) }
 
 func (s *Sets) Len() int { return s.cache.Len() }
 
+func (s *Sets) Hits() uint64 { return s.hits.Load() }
+
+func (s *Sets) Misses() uint64 { return s.misses.Load() }
+
+func (s *Sets) count(hit bool) {
+	if hit {
+		s.hits.Add(1)
+		return
+	}
+	s.misses.Add(1)
+}
+
 func (s *Sets) small(ctx context.Context, tenant string, room uint64) (Set, error) {
 	if e, ok := s.cache.Get(room); ok && e.Small && time.Since(e.BuiltAt) < s.cfg.TTL {
+		s.count(true)
 		return Set{Groups: e.Groups, Filtered: true}, nil
 	}
+	s.count(false)
 	ch := s.flight.DoChan(strconv.FormatUint(room, 10), func() (any, error) {
 		return s.buildSmall(context.WithoutCancel(ctx), tenant, room)
 	})

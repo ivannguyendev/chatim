@@ -79,7 +79,7 @@ func TestLoadValidation(t *testing.T) {
 		{"projection fetch batch at the limit", map[string]string{"PROJECTION_FETCH_BATCH": "8192"}, ""},
 		{"projection fetch wait above the limit", map[string]string{"PROJECTION_FETCH_WAIT": "3001ms"}, "PROJECTION_*"},
 		{"projection fetch wait at the limit", map[string]string{"PROJECTION_FETCH_WAIT": "3s"}, ""},
-		{"projection fetch wait counts in the stop plan", map[string]string{"PROJECTION_FETCH_WAIT": "500ms", "CORE_SHUTDOWN_BUDGET": "27200ms"}, "PROJECTION_FETCH_WAIT + 1s (projections)"},
+		{"projection fetch wait counts in the stop plan", map[string]string{"PROJECTION_FETCH_WAIT": "500ms", "CORE_SHUTDOWN_BUDGET": "27200ms"}, "max(PROJECTION_FETCH_WAIT, MENTION_FETCH_WAIT) + 1s (projections and mention)"},
 		{"shorter projection fetch wait shrinks the stop plan", map[string]string{"PROJECTION_FETCH_WAIT": "500ms", "CORE_SHUTDOWN_BUDGET": "27201ms"}, ""},
 		{"zero projection fetch wait", map[string]string{"PROJECTION_FETCH_WAIT": "0s"}, "PROJECTION_FETCH_WAIT"},
 		{"old room activity fetch variables are ignored", map[string]string{"PROJECTION_ACTIVITY_FETCH_BATCH": "junk", "PROJECTION_ACTIVITY_FETCH_WAIT": "-1s"}, ""},

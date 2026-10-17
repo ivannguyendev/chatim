@@ -60,7 +60,7 @@ func TestValidateSharedMentionQuery(t *testing.T) {
 }
 
 func TestValidateSentTimeKeys(t *testing.T) {
-	if err := store.ValidateSentTimeKeys([]store.MsgKey{{Room: 1, Seq: 1}, {Room: 2, Seq: 5}}); err != nil {
+	if err := store.ValidateMessageLookup([]store.MsgKey{{Room: 1, Seq: 1}, {Room: 2, Seq: 5}}); err != nil {
 		t.Fatalf("ValidateSentTimeKeys(good) = %v", err)
 	}
 	many := make([]store.MsgKey, store.SharedMentionBatch+1)
@@ -68,7 +68,7 @@ func TestValidateSentTimeKeys(t *testing.T) {
 		many[i] = store.MsgKey{Room: uint64(i + 1), Seq: 1}
 	}
 	for name, ks := range map[string][]store.MsgKey{"too many": many, "seq 0": {{Room: 1}}, "room 0": {{Seq: 1}}} {
-		if err := store.ValidateSentTimeKeys(ks); !errors.Is(err, apperr.ErrInvalidArgument) {
+		if err := store.ValidateMessageLookup(ks); !errors.Is(err, apperr.ErrInvalidArgument) {
 			t.Errorf("%s: ValidateSentTimeKeys = %v, want ErrInvalidArgument", name, err)
 		}
 	}

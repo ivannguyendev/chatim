@@ -16,6 +16,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/flush"
+	"github.com/ivannguyendev/chatim/apps/mention/mentionapp"
 	"github.com/ivannguyendev/chatim/pkg/envconfig"
 	"github.com/ivannguyendev/chatim/pkg/grpcserver"
 )
@@ -62,6 +63,7 @@ type Config struct {
 	StateClear             stateclear.Config
 	Sweep                  sweep.Config
 	Projection             projection.Config
+	Mention                mentionapp.Config
 	LockedMessageKinds     []domain.Kind
 	MentionHideReadTenants []string
 	Limits                 mutate.Limits
@@ -81,6 +83,7 @@ type StopPlan struct {
 	GRPC        time.Duration
 	Sweeper     time.Duration
 	Projections time.Duration
+	Mention     time.Duration
 	Timer       time.Duration
 	Router      time.Duration
 	CIDBatch    time.Duration
@@ -146,6 +149,7 @@ func (c Config) StopPlan() StopPlan {
 		GRPC:        c.GRPCShutdown,
 		Sweeper:     CloseTimeout,
 		Projections: c.Projection.StopTimeout(),
+		Mention:     c.mentionStop(),
 		Timer:       timer.ConsumerConfig{}.StopTimeout(),
 		Router:      c.RequestDeadline,
 		CIDBatch:    2 * c.Dedupe.Timeout,
@@ -160,7 +164,7 @@ func (c Config) StopPlan() StopPlan {
 func (s StopPlan) Total() time.Duration {
 	var sum time.Duration
 	for _, d := range []time.Duration{
-		s.DrainDelay, s.GRPC, s.Sweeper, s.Projections, s.Timer, s.Router, s.CIDBatch, s.Flusher, s.Publisher, s.StateClear, s.Slots, s.Close,
+		s.DrainDelay, s.GRPC, s.Sweeper, max(s.Projections, s.Mention), s.Timer, s.Router, s.CIDBatch, s.Flusher, s.Publisher, s.StateClear, s.Slots, s.Close,
 	} {
 		if d > math.MaxInt64-sum {
 			return math.MaxInt64
@@ -168,6 +172,13 @@ func (s StopPlan) Total() time.Duration {
 		sum += d
 	}
 	return sum
+}
+
+func (c Config) mentionStop() time.Duration {
+	if !c.Mention.Enabled {
+		return 0
+	}
+	return c.Mention.StopTimeout()
 }
 
 func (s StopPlan) fitsWithin(budget time.Duration) bool { return s.Total() < budget }

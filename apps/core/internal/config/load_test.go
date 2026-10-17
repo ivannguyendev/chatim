@@ -18,6 +18,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/flush"
+	"github.com/ivannguyendev/chatim/apps/mention/mentionapp"
 )
 
 const day = 24 * time.Hour
@@ -67,10 +68,17 @@ func TestLoadDefaults(t *testing.T) {
 		MemberCountCheckDelay:  5 * time.Second,
 		MessageCountCheckDelay: 5 * time.Second,
 		RoomList:               config.RoomListConfig{JoinMax: 1500, TailCacheBytes: 256 << 20, InfoCacheEntries: 100000},
+		Mention:                defaultMention(),
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Load() =\n%#v\nwant\n%#v", got, want)
 	}
+}
+
+func defaultMention() mentionapp.Config {
+	m := mentionapp.DefaultConfig()
+	m.EventStream, m.EventSubjectRoot, m.LiveRoot, m.Replicas = "CHATIM_EVT", "evt", "live", 1
+	return m
 }
 
 func TestLoadOverrides(t *testing.T) {
@@ -117,6 +125,12 @@ func TestLoadOverrides(t *testing.T) {
 		MemberCountCheckDelay:  4 * time.Second,
 		MessageCountCheckDelay: 6 * time.Second,
 		RoomList:               config.RoomListConfig{JoinMax: 300, TailCacheBytes: 2 << 20, InfoCacheEntries: 5000},
+		Mention: mentionapp.Config{
+			Enabled: true, EventStream: "CHATIM_EVT_IT", EventSubjectRoot: "evt_it", LiveRoot: "live_it", Replicas: 3,
+			FetchBatch: 64, FetchWait: 200 * time.Millisecond, Workers: 4, MaxAckPending: 1024, NotifyMaxAge: 2 * time.Minute,
+			NotifyStream: "CHATIM_NOTIFY_IT", NotifySubjectRoot: "notify_it", NotifyMaxStreamAge: 12 * time.Hour, NotifyDuplicates: 3 * time.Minute,
+			HideReadTenants: []string{"acme", "globex"}, RoomGroupsSyncMax: 200, RoomGroupsTTL: 30 * time.Second, RoomGroupsRebuild: 5 * time.Minute,
+		},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Load() =\n%#v\nwant\n%#v", got, want)
