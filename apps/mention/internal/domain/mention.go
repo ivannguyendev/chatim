@@ -50,6 +50,23 @@ func (p Plan) Validate() error {
 	return checkTargets(p.Retired, seen, false)
 }
 
+func (p Plan) InMillis() Plan {
+	p.Live, p.Retired = targetsInMillis(p.Live), targetsInMillis(p.Retired)
+	return p
+}
+
+func targetsInMillis(targets []Target) []Target {
+	if targets == nil {
+		return nil
+	}
+	out := make([]Target, len(targets))
+	for i, t := range targets {
+		t.At = t.At.Truncate(time.Millisecond)
+		out[i] = t
+	}
+	return out
+}
+
 func checkTargets(targets []Target, seen map[Target]struct{}, timed bool) error {
 	for _, t := range targets {
 		if err := t.Validate(); err != nil {

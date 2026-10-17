@@ -121,14 +121,18 @@ func TestFromEventRejects(t *testing.T) {
 		"another kind": func(ev *chatimv1.Event) {
 			ev.Payload = &chatimv1.Event_ReadUpdated{ReadUpdated: &chatimv1.ReadUpdated{}}
 		},
-		"no message":    func(ev *chatimv1.Event) { ev.GetMessageCreated().Message = nil },
-		"bad room":      func(ev *chatimv1.Event) { ev.RoomId = "x" },
-		"room zero":     func(ev *chatimv1.Event) { ev.RoomId = "0" },
-		"no time":       func(ev *chatimv1.Event) { ev.Ts = nil },
-		"bad tenant":    func(ev *chatimv1.Event) { ev.Tenant = "" },
-		"no sender":     func(ev *chatimv1.Event) { ev.GetMessageCreated().Message.Sender = "" },
-		"seq zero":      func(ev *chatimv1.Event) { ev.Seq = 0 },
-		"unknown kind":  func(ev *chatimv1.Event) { ev.GetMessageCreated().Message.MentionTargets[0].Kind = 0 },
+		"no message":   func(ev *chatimv1.Event) { ev.GetMessageCreated().Message = nil },
+		"bad room":     func(ev *chatimv1.Event) { ev.RoomId = "x" },
+		"room zero":    func(ev *chatimv1.Event) { ev.RoomId = "0" },
+		"no time":      func(ev *chatimv1.Event) { ev.Ts = nil },
+		"bad tenant":   func(ev *chatimv1.Event) { ev.Tenant = "" },
+		"no sender":    func(ev *chatimv1.Event) { ev.GetMessageCreated().Message.Sender = "" },
+		"seq zero":     func(ev *chatimv1.Event) { ev.Seq = 0 },
+		"unknown kind": func(ev *chatimv1.Event) { ev.GetMessageCreated().Message.MentionTargets[0].Kind = 0 },
+		"all as a target": func(ev *chatimv1.Event) {
+			ev.GetMessageCreated().Message.MentionTargets[0].Kind = chatimv1.MentionKind_MENTION_KIND_ALL
+		},
+		"kind past all": func(ev *chatimv1.Event) { ev.GetMessageCreated().Message.MentionTargets[0].Kind = 4 },
 		"bad target id": func(ev *chatimv1.Event) { ev.GetMessageCreated().Message.MentionTargets[0].Id = "a b" },
 		"same target twice": func(ev *chatimv1.Event) {
 			m := ev.GetMessageCreated().Message

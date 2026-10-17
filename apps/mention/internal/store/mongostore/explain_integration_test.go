@@ -6,6 +6,8 @@ import (
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
+
+	"github.com/ivannguyendev/chatim/apps/mention/internal/domain"
 )
 
 type plan struct {
@@ -101,5 +103,19 @@ func assertClusteredBounded(t *testing.T, name string, p plan, keys int) {
 	}
 	if !slices.ContainsFunc(p.stages, func(s string) bool { return s == "CLUSTERED_IXSCAN" || s == "EXPRESS_CLUSTERED_IXSCAN" }) {
 		t.Fatalf("%s: stages %v, want a clustered _id scan", name, p.stages)
+	}
+}
+
+func TestMentionsOfScansTheMessageKeyIndex(t *testing.T) {
+	db := itBootstrapped(t, itClient(t))
+	m := NewMentions(db)
+	for i := range 6 {
+		mustApplyAll(t, m, itPlace(itRoom, uint64(i+1), itTime, itMinh, itOps, itAll))
+	}
+	key := domain.MessageKey{Room: itRoom, Seq: 3}
+	p := explain(t, db, findCmd(mentionsCollection, mentionsOfFilter("acme", key), nil, 0))
+	assertOnlyIndex(t, "Of", p, "message_key_1")
+	if p.returned != 3 || p.examined != 3 {
+		t.Fatalf("Of examined %d and returned %d docs, want 3 and 3", p.examined, p.returned)
 	}
 }

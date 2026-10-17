@@ -32,7 +32,8 @@ func (s *Mentions) Apply(ctx context.Context, plan domain.Plan) error {
 	if err := plan.Validate(); err != nil {
 		return err
 	}
-	now := time.Now().UTC()
+	plan = plan.InMillis()
+	now := time.Now().UTC().Truncate(time.Millisecond)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, t := range plan.Live {

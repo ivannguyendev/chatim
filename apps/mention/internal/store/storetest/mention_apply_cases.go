@@ -3,6 +3,7 @@ package storetest
 import (
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/ivannguyendev/chatim/apps/mention/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/mention/internal/store"
@@ -94,4 +95,20 @@ func invalidMentionCalls(t *testing.T, s store.Mentions) {
 	_, err = s.Of(t.Context(), "", k)
 	assertInvalid(t, "Of(no tenant)", err)
 	assertDocs(t, s, k)
+}
+
+func subMillisecondTimesAreStoredInMillis(t *testing.T, s store.Mentions) {
+	k := keyOf(roomA, 1)
+	plan := planOf(k, 0, []domain.Target{stamped(targetMinh, secs(5).Add(1_234_567*time.Nanosecond))}, nil)
+	mustApply(t, s, plan)
+	first := mentionsOf(t, s, k)
+	mustApply(t, s, plan)
+	again := mentionsOf(t, s, k)
+	want := secs(5).Add(time.Millisecond)
+	if len(first) != 1 || len(again) != 1 || !first[0].CreatedAt.Equal(want) || !again[0].CreatedAt.Equal(want) {
+		t.Fatalf("Of = %+v then %+v, want one doc created at %v", first, again, want)
+	}
+	if !again[0].UpdatedAt.Equal(first[0].UpdatedAt) || first[0].UpdatedAt.Truncate(time.Millisecond) != first[0].UpdatedAt {
+		t.Fatalf("updated_at %v then %v, want one unchanged ms time", first[0].UpdatedAt, again[0].UpdatedAt)
+	}
 }

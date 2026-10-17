@@ -38,7 +38,7 @@ func TestNotifiedTargetKinds(t *testing.T) {
 		want   *chatimv1.MentionTarget
 	}{
 		"user":  {domain.Target{Kind: domain.TargetUser, ID: "Minh", At: sentAt}, &chatimv1.MentionTarget{Kind: chatimv1.MentionKind_MENTION_KIND_USER, Id: "Minh", At: timestamppb.New(sentAt)}},
-		"all":   {domain.Target{Kind: domain.TargetAll, At: sentAt}, &chatimv1.MentionTarget{At: timestamppb.New(sentAt)}},
+		"all":   {domain.Target{Kind: domain.TargetAll, At: sentAt}, &chatimv1.MentionTarget{Kind: chatimv1.MentionKind_MENTION_KIND_ALL, At: timestamppb.New(sentAt)}},
 		"no at": {domain.Target{Kind: domain.TargetUser, ID: "Minh"}, &chatimv1.MentionTarget{Kind: chatimv1.MentionKind_MENTION_KIND_USER, Id: "Minh"}},
 	}
 	for name, c := range cases {

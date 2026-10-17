@@ -70,6 +70,7 @@ var roomTypes = map[domain.RoomType]chatimv1.RoomType{
 var targetKinds = map[domain.TargetKind]chatimv1.MentionKind{
 	domain.TargetUser:  chatimv1.MentionKind_MENTION_KIND_USER,
 	domain.TargetGroup: chatimv1.MentionKind_MENTION_KIND_GROUP,
+	domain.TargetAll:   chatimv1.MentionKind_MENTION_KIND_ALL,
 }
 
 func envelope(r plan.Result, user string, mark byte) (*chatimv1.Notification, error) {

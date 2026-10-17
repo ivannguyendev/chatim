@@ -44,13 +44,15 @@ func (r Resolver) Resolve(ctx context.Context, tenant string, room uint64, roomT
 	if err != nil || len(groups) == 0 {
 		return picked.chosen, err
 	}
+	small := len(roster) <= SmallRoom
 	if !whole {
 		if roster, err = r.Core.ListMembers(ctx, room, domain.MemberCursor{}, SmallRoom+1); err != nil {
 			return nil, err
 		}
+		small = len(roster) <= SmallRoom
 		roster = active(roster)
 	}
-	if len(roster) <= SmallRoom {
+	if small {
 		err = r.groupsAmong(ctx, tenant, roster, groups, picked)
 	} else {
 		err = r.groupsInRoom(ctx, tenant, room, groups, picked)

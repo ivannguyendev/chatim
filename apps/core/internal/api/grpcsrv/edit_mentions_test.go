@@ -3,6 +3,7 @@ package grpcsrv_test
 import (
 	"testing"
 
+	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/proto"
 
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
@@ -67,4 +68,14 @@ func TestEditMentionsAreKeptReplacedOrClearedAndListedPerVersion(t *testing.T) {
 			t.Fatalf("version %d mentions = %v, want %v", v.GetVer(), v.GetMentions(), want[i])
 		}
 	}
+}
+
+func TestEditRejectsAllAsAMentionTarget(t *testing.T) {
+	rg := newRig(t, options{})
+	room := rg.createGroup(t, "acme", "alice", "bob")
+	alice := as(t, "acme", "alice")
+	rg.send(t, alice, room, "c-1", "v0")
+	all := &chatimv1.MentionSet{Targets: []*chatimv1.MentionTarget{{Kind: chatimv1.MentionKind_MENTION_KIND_ALL}}}
+	_, err := rg.client.EditMessage(alice, &chatimv1.EditMessageRequest{RoomId: room, Seq: 1, Text: "v1", Mentions: all})
+	expectCode(t, err, codes.InvalidArgument)
 }

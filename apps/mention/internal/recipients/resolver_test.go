@@ -3,6 +3,7 @@ package recipients_test
 import (
 	"errors"
 	"maps"
+	"slices"
 	"testing"
 	"time"
 
@@ -138,5 +139,33 @@ func TestPortErrorsPropagate(t *testing.T) {
 	_, err := f.r.Resolve(t.Context(), "", room, domain.RoomGroup, "Lan", []domain.Target{group("staff")})
 	if err == nil {
 		t.Fatalf("Resolve with a bad tenant read the catalog without an error")
+	}
+}
+
+func TestLeftMembersInTheFirstPageStillPickTheLargePath(t *testing.T) {
+	f := newFixture(t)
+	f.catalogue(t, "staff", true)
+	left := users("a", 0, 50)
+	f.core.join(room, left...)
+	for _, u := range left {
+		f.core.leave(room, u)
+	}
+	f.core.join(room, users("m", 0, recipients.SmallRoom-len(left)+1)...)
+	late := users("z", 0, 100)
+	f.core.join(room, late...)
+	items := make([]domain.UserGroups, 0, len(late))
+	for _, u := range append(slices.Clone(late), left...) {
+		items = append(items, domain.UserGroups{Tenant: tenant, User: u, Groups: []string{"staff"}, Ver: 1})
+	}
+	if _, err := f.groups.Set(t.Context(), items); err != nil {
+		t.Fatalf("set staff: %v", err)
+	}
+	want := map[string]domain.Target{}
+	for _, u := range late {
+		want[u] = group("staff")
+	}
+	expect(t, resolve(t, f, domain.RoomGroup, group("staff")), want)
+	if f.groups.byGroup == 0 {
+		t.Fatalf("a room of %d rows took the small path", len(f.core.rooms[room]))
 	}
 }

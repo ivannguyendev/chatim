@@ -8,6 +8,7 @@ enum MentionKind {
   MENTION_KIND_UNSPECIFIED = 0;
   MENTION_KIND_USER = 1;
   MENTION_KIND_GROUP = 2;
+  MENTION_KIND_ALL = 3;
 }
 
 message ReplyRef {

@@ -28,6 +28,7 @@ const (
 	MentionKind_MENTION_KIND_UNSPECIFIED MentionKind = 0
 	MentionKind_MENTION_KIND_USER        MentionKind = 1
 	MentionKind_MENTION_KIND_GROUP       MentionKind = 2
+	MentionKind_MENTION_KIND_ALL         MentionKind = 3
 )
 
 // Enum value maps for MentionKind.
@@ -36,11 +37,13 @@ var (
 		0: "MENTION_KIND_UNSPECIFIED",
 		1: "MENTION_KIND_USER",
 		2: "MENTION_KIND_GROUP",
+		3: "MENTION_KIND_ALL",
 	}
 	MentionKind_value = map[string]int32{
 		"MENTION_KIND_UNSPECIFIED": 0,
 		"MENTION_KIND_USER":        1,
 		"MENTION_KIND_GROUP":       2,
+		"MENTION_KIND_ALL":         3,
 	}
 )
 
@@ -537,11 +540,12 @@ const file_chatim_v1_message_links_proto_rawDesc = "" +
 	"\x03ver\x18\x02 \x01(\x04R\x03ver\"P\n" +
 	"\fMentionGroup\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x120\n" +
-	"\x05since\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x05since*Z\n" +
+	"\x05since\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x05since*p\n" +
 	"\vMentionKind\x12\x1c\n" +
 	"\x18MENTION_KIND_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11MENTION_KIND_USER\x10\x01\x12\x16\n" +
-	"\x12MENTION_KIND_GROUP\x10\x02B\xa2\x01\n" +
+	"\x12MENTION_KIND_GROUP\x10\x02\x12\x14\n" +
+	"\x10MENTION_KIND_ALL\x10\x03B\xa2\x01\n" +
 	"\rcom.chatim.v1B\x11MessageLinksProtoP\x01Z9github.com/ivannguyendev/chatim/pkg/pb/chatim/v1;chatimv1\xa2\x02\x03CXX\xaa\x02\tChatim.V1\xca\x02\tChatim\\V1\xe2\x02\x15Chatim\\V1\\GPBMetadata\xea\x02\n" +
 	"Chatim::V1b\x06proto3"
 

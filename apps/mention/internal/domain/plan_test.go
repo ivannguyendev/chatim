@@ -60,3 +60,16 @@ func TestMentionStates(t *testing.T) {
 		t.Fatalf("states = %d, %d", domain.StateLive, domain.StateRetired)
 	}
 }
+
+func TestPlanInMillisTruncatesEveryTargetTime(t *testing.T) {
+	p := plan()
+	p.Live[0].At = time.UnixMilli(1000).Add(999_999)
+	p.Retired[0].At = time.Time{}
+	got := p.InMillis()
+	if !got.Live[0].At.Equal(time.UnixMilli(1000)) || !got.Live[1].At.Equal(time.UnixMilli(1000)) || !got.Retired[0].At.IsZero() {
+		t.Fatalf("InMillis = %+v", got)
+	}
+	if p.Live[0].At.Equal(time.UnixMilli(1000)) {
+		t.Fatalf("InMillis changed the plan it was called on")
+	}
+}

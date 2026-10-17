@@ -22,6 +22,7 @@ func RunMentions(t *testing.T, open func(t *testing.T) store.Mentions) {
 		{"OlderVersionAfterANewerOneChangesNothing", olderAfterNewer},
 		{"TombstoneBeforeAnyLiveDocBlocksTheOlderLiveWrite", tombstoneFirst},
 		{"SamePlanTwiceChangesNothing", samePlanTwice},
+		{"SubMillisecondTimesAreStoredInMillis", subMillisecondTimesAreStoredInMillis},
 		{"MessagesStayApart", mentionMessagesApart},
 		{"AnotherTenantNeverTouchesTheDocs", mentionTenantsApart},
 		{"InvalidCallsAreRejected", invalidMentionCalls},

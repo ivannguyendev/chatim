@@ -27,7 +27,7 @@ func (m *Mentions) Apply(ctx context.Context, plan domain.Plan) error {
 	if err := plan.Validate(); err != nil {
 		return err
 	}
-	models, err := mentionModels(plan, time.Now().UTC())
+	models, err := mentionModels(plan.InMillis(), time.Now().UTC().Truncate(time.Millisecond))
 	if err != nil || len(models) == 0 {
 		return err
 	}
@@ -60,12 +60,15 @@ func (m *Mentions) Of(ctx context.Context, tenant string, key domain.MessageKey)
 	if err := store.ValidateMentionsOf(tenant, key); err != nil {
 		return nil, err
 	}
-	filter := bson.D{{Key: "message_key", Value: messageID(key)}, {Key: "tenant", Value: tenant}}
-	docs, err := findAll[mentionDoc](ctx, m.coll, filter)
+	docs, err := findAll[mentionDoc](ctx, m.coll, mentionsOfFilter(tenant, key))
 	if err != nil {
 		return nil, fmt.Errorf("mentions of %d/%d/%d: %w", key.Room, key.Thread, key.Seq, err)
 	}
 	return decodeMentions(docs)
+}
+
+func mentionsOfFilter(tenant string, key domain.MessageKey) bson.D {
+	return bson.D{{Key: "message_key", Value: messageID(key)}, {Key: "tenant", Value: tenant}}
 }
 
 func decodeMentions(docs []mentionDoc) ([]domain.Mention, error) {
