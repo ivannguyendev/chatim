@@ -50,6 +50,11 @@ func RaiseSinceToRead(rooms []MentionRoom, readAt map[uint64]time.Time) []Mentio
 func MergeMentions(limit int, lists ...[]domain.Mention) []domain.Mention {
 	all := slices.Concat(lists...)
 	slices.SortStableFunc(all, func(a, b domain.Mention) int { return CompareMentions(b, a) })
-	all = slices.CompactFunc(all, func(a, b domain.Mention) bool { return a.Key == b.Key })
+	seen := make(map[domain.MessageKey]struct{}, len(all))
+	all = slices.DeleteFunc(all, func(m domain.Mention) bool {
+		_, dup := seen[m.Key]
+		seen[m.Key] = struct{}{}
+		return dup
+	})
 	return all[:min(len(all), limit)]
 }

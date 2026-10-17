@@ -65,6 +65,15 @@ func TestMergeMentionsSortsNewestFirstAndShowsAMessageOnce(t *testing.T) {
 	}
 }
 
+func TestMergeMentionsShowsAMessageOnceWhenItsTargetsHaveDifferentTimes(t *testing.T) {
+	user := []domain.Mention{hit(1, 5, 10, minh), hit(1, 4, 30, minh)}
+	shared := []domain.Mention{hit(1, 5, 50, every), hit(1, 3, 20, every)}
+	got := store.MergeMentions(10, user, shared)
+	if want := []uint64{5, 4, 3}; !slices.Equal(seqsOf(got), want) || got[0].Target != every {
+		t.Fatalf("MergeMentions = %+v, want seqs %v with seq 5 at its newest target", got, want)
+	}
+}
+
 func TestSharedMentionQueryWants(t *testing.T) {
 	q := store.SharedMentionQuery{Tenant: "acme", Rooms: []store.SharedRoom{{Room: 1, Since: at(10)}, {Room: 2}}, Groups: []string{"ops"}, GroupSince: at(1), Before: store.CursorOf(hit(2, 9, 90, every)), Limit: 5}
 	other := domain.Target{Kind: domain.TargetGroup, ID: "hn"}
