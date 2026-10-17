@@ -16,6 +16,7 @@ import (
 const (
 	DefaultEntries = 4096
 	RebuildTimeout = 30 * time.Second
+	MaxRebuilds    = 4
 )
 
 type Config struct {
@@ -71,17 +72,29 @@ func (s *Sets) small(ctx context.Context, tenant string, room uint64) (Set, erro
 	if e, ok := s.cache.Get(room); ok && e.Small && time.Since(e.BuiltAt) < s.cfg.TTL {
 		return Set{Groups: e.Groups, Filtered: true}, nil
 	}
-	v, err, _ := s.flight.Do(strconv.FormatUint(room, 10), func() (any, error) {
-		mark := s.cache.Mark()
-		groups, err := s.build(ctx, tenant, room)
-		if err != nil {
-			return nil, err
-		}
-		s.cache.Put(mark, room, Entry{Groups: groups, BuiltAt: time.Now(), Small: true})
-		return groups, nil
+	ch := s.flight.DoChan(strconv.FormatUint(room, 10), func() (any, error) {
+		return s.buildSmall(context.WithoutCancel(ctx), tenant, room)
 	})
-	if err != nil {
-		return Set{}, err
+	select {
+	case <-ctx.Done():
+		return Set{}, ctx.Err()
+	case res := <-ch:
+		if res.Err != nil {
+			return Set{}, res.Err
+		}
+		return Set{Groups: res.Val.(map[string]struct{}), Filtered: true}, nil
 	}
-	return Set{Groups: v.(map[string]struct{}), Filtered: true}, nil
+}
+
+func (s *Sets) buildSmall(parent context.Context, tenant string, room uint64) (map[string]struct{}, error) {
+	ctx, cancel := context.WithTimeout(parent, RebuildTimeout)
+	defer cancel()
+	defer context.AfterFunc(s.ctx, cancel)()
+	mark := s.cache.Mark()
+	groups, err := s.build(ctx, tenant, room)
+	if err != nil {
+		return nil, err
+	}
+	s.cache.Put(mark, room, Entry{Groups: groups, BuiltAt: time.Now(), Small: true})
+	return groups, nil
 }

@@ -46,7 +46,7 @@ func (s *Sets) large(tenant string, room uint64) Set {
 func (s *Sets) kick(tenant string, room uint64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, busy := s.running[room]; busy || s.closed {
+	if _, busy := s.running[room]; busy || s.closed || len(s.running) >= MaxRebuilds {
 		return
 	}
 	s.running[room] = struct{}{}

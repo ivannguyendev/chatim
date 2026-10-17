@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ivannguyendev/chatim/apps/mention/internal/domain"
 	"github.com/ivannguyendev/chatim/apps/mention/internal/groups"
@@ -137,18 +138,20 @@ func (rg *mentionRig) postIn(t *testing.T, room, thread uint64, text string, at 
 	msg := &chatimv1.Message{Sender: "alice", Text: text, Cid: fmt.Sprintf("c-%d-%d-%d", room, thread, key.Seq)}
 	plan := domain.Plan{Key: key, Tenant: "acme", Sender: "alice"}
 	for _, tg := range targets {
-		tg.At = sec(at)
+		if tg.At.IsZero() {
+			tg.At = sec(at)
+		}
 		plan.Live = append(plan.Live, tg)
 		switch tg.Kind {
 		case domain.TargetAll:
-			msg.MentionAll = true
+			msg.MentionAll, msg.MentionAllAt = true, timestamppb.New(tg.At)
 		case domain.TargetUser:
-			msg.MentionTargets = append(msg.MentionTargets, &chatimv1.MentionTarget{Kind: chatimv1.MentionKind_MENTION_KIND_USER, Id: tg.ID})
+			msg.MentionTargets = append(msg.MentionTargets, &chatimv1.MentionTarget{Kind: chatimv1.MentionKind_MENTION_KIND_USER, Id: tg.ID, At: timestamppb.New(tg.At)})
 		case domain.TargetGroup:
-			msg.MentionTargets = append(msg.MentionTargets, &chatimv1.MentionTarget{Kind: chatimv1.MentionKind_MENTION_KIND_GROUP, Id: tg.ID})
+			msg.MentionTargets = append(msg.MentionTargets, &chatimv1.MentionTarget{Kind: chatimv1.MentionKind_MENTION_KIND_GROUP, Id: tg.ID, At: timestamppb.New(tg.At)})
 		}
 		if tg.Kind != domain.TargetUser {
-			if err := rg.rooms.Raise(t.Context(), "acme", room, sec(at)); err != nil {
+			if err := rg.rooms.Raise(t.Context(), "acme", room, tg.At); err != nil {
 				t.Fatalf("Raise: %v", err)
 			}
 		}

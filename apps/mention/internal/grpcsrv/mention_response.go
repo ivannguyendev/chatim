@@ -33,7 +33,7 @@ func (s *Service) mentionResponse(ctx context.Context, r mentionRead, page store
 		}
 	}
 	for _, d := range page.Items {
-		if m, ok := visible[d.Key]; ok && carriesAny(m, reasons[d.Key]) {
+		if m, ok := visible[d.Key]; ok && carriesAny(m, reasons[d.Key]) && !r.supersededBy(m, d) {
 			resp.Items = append(resp.Items, &chatimv1.MentionItem{Message: m, Read: r.isRead(d)})
 		}
 	}
