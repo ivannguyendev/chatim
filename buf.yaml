@@ -4,6 +4,10 @@ modules:
 lint:
   use:
     - STANDARD
+  ignore_only:
+    RPC_REQUEST_RESPONSE_UNIQUE:
+      - proto/chatim/v1/core_service.proto
+      - proto/chatim/v1/mention_service.proto
 breaking:
   use:
     - FILE

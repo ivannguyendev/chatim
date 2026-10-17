@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package chatim.v1;
+
+import "chatim/v1/replies_bookmarks_mentions.proto";
+
+service MentionService {
+  rpc ListMentions(ListMentionsRequest) returns (ListMentionsResponse);
+  rpc SetUserGroups(SetUserGroupsRequest) returns (SetUserGroupsResponse);
+  rpc SetGroups(SetGroupsRequest) returns (SetGroupsResponse);
+  rpc ListRoomGroups(ListRoomGroupsRequest) returns (ListRoomGroupsResponse);
+}
+
+message UserGroupsItem {
+  string user = 1;
+  repeated string groups = 2;
+  uint64 ver = 3;
+}
+
+message SetUserGroupsRequest {
+  repeated UserGroupsItem items = 1;
+}
+
+message SetUserGroupsResponse {
+  repeated string changed_users = 1;
+}
+
+message GroupItem {
+  string id = 1;
+  string name = 2;
+  bool active = 3;
+  uint64 ver = 4;
+}
+
+message SetGroupsRequest {
+  repeated GroupItem items = 1;
+}
+
+message SetGroupsResponse {
+  repeated string changed_groups = 1;
+}
+
+message ListRoomGroupsRequest {
+  string room_id = 1;
+}
+
+message RoomGroup {
+  string id = 1;
+  string name = 2;
+}
+
+message ListRoomGroupsResponse {
+  repeated RoomGroup groups = 1;
+  bool filtered = 2;
+}
