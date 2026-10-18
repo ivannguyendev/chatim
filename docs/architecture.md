@@ -20,7 +20,7 @@
 - Ranh giới trách nhiệm:
   - Core cung cấp API dữ liệu (gửi, đọc, sửa, xoá, lịch sử, reaction, vị trí đọc…) và phát event.
   - Client lấy danh sách hội thoại thẳng từ Core; Core xếp danh sách theo tin mới nhất và đếm unread lúc đọc (M3, D120–D123).
-  - Mention App (app riêng `apps/mention`, D162–D176, xây xong trên `feat/mention-app`, trước M4): ghi mention, `ListMentions`, thành viên nhóm và danh mục nhóm được tag, dữ liệu gợi ý `@nhóm` theo room, bung `@nhóm`/`@all` và gửi thông báo theo người lên `CHATIM_NOTIFY`; hiện chạy nhúng trong core (core chỉ import package công khai `apps/mention/mentionapp`; app đọc core qua cổng `CoreReader` trong tiến trình). Lọc tắt thông báo và giao tới máy thuộc app notification (websocket M4, `push` Phase 2). Dấu `@` trên danh sách hội thoại, sync token, đa thiết bị: làm sau.
+  - Mention App (app riêng `apps/mention`, D162–D176, đã merge `main` PR #16, trước M4): ghi mention, `ListMentions`, thành viên nhóm và danh mục nhóm được tag, dữ liệu gợi ý `@nhóm` theo room, bung `@nhóm`/`@all` và gửi thông báo theo người lên `CHATIM_NOTIFY`; hiện chạy nhúng trong core (core chỉ import package công khai `apps/mention/mentionapp`; app đọc core qua cổng `CoreReader` trong tiến trình). Lọc tắt thông báo và giao tới máy thuộc app notification (websocket M4, `push` Phase 2). Dấu `@` trên danh sách hội thoại, sync token, đa thiết bị: làm sau.
 
 ### 1.2 Ngoài phạm vi Phase 1 (Non-goals)
 App auth / api / events / push / migrator, API import trong core, media, search, E2EE, webhook, voice/video, admin UI. (Search: owner dự định Search App riêng dùng search engine, 2026-10-17, chưa lên lịch; xem [roadmap](./roadmap.md).)

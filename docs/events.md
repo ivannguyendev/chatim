@@ -1,6 +1,6 @@
 # chatim — Danh mục event
 
-> Cập nhật: 2026-10-17. Trạng thái: Mention App đã xây trên `feat/mention-app` (chồng lên M3.1 `feat/m3.1`), D162–D176 ([tóm tắt](plans/2026-10-17-mention-app-summary.md)).
+> Cập nhật: 2026-10-17. Trạng thái: Mention App đã merge `main` (PR #16), D162–D176 ([tóm tắt](plans/2026-10-17-mention-app-summary.md)).
 >
 > Tài liệu liên quan:
 > - Nguồn sự thật cơ chế: [thiết kế](architecture.md) §8.1 (hợp đồng consumer) và [Module 10](modules/10-feature-data-reconciliation-and-repair.md) (cờ `_state`, sweeper, projection).
