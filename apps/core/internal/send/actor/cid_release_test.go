@@ -6,8 +6,8 @@ import (
 	"testing"
 	"testing/synctest"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
 )
 
 func TestOnlyDefiniteFailuresReleaseTheReservation(t *testing.T) {

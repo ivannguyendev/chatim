@@ -4,8 +4,8 @@ import (
 	"testing"
 	"testing/synctest"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
 )
 
 func TestAckDoesNotWaitForTheCidCommit(t *testing.T) {

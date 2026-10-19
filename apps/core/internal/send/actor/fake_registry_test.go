@@ -7,7 +7,7 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
+	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 )
 
 type fakeRegistry struct {

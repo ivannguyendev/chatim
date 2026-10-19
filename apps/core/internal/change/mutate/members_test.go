@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
 )
 
 func users(docs []domain.Member) []string {

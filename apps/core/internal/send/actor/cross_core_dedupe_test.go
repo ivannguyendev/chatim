@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/testlog"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
 )
 
 func TestCommittedCIDIsAckedByAnotherCoreWithoutInsert(t *testing.T) {

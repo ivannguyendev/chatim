@@ -7,9 +7,9 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
 )
 
 func TestRemoteCommittedCIDIsAnsweredWithoutInsert(t *testing.T) {
