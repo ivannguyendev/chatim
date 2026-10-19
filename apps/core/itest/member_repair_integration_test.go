@@ -7,10 +7,9 @@ import (
 	"maps"
 	"testing"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/pinproj"
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
+	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
@@ -46,16 +45,14 @@ type noForget struct{}
 
 func (noForget) ForgetMembers(uint64) {}
 
-func mutatorWithoutEvents(t *testing.T, it *itInfra, core itCore, members mutate.MemberStore) *mutate.Mutator {
+func membersWithoutEvents(t *testing.T, it *itInfra, core itCore, members member.MemberStore) *member.Service {
 	t.Helper()
 	st, tc := itStore(it, core), core.cfg.Timer
-	return built(mutate.New(mutate.Deps{
-		Access: built(access.NewChecker(st, access.DefaultPolicy{}))(t), Messages: st, Edits: st, Hidden: st.Hidden(), Rooms: st,
-		Events: droppedEvents{}, Interactions: st.Interactions(), Counts: st, Pins: st.Pins(),
-		Projector: built(pinproj.New(st.Pins(), st))(t), Limits: core.cfg.Limits, Members: members, Requests: freshRequests{},
+	return built(member.New(member.Deps{
+		Access: built(access.NewChecker(st, access.DefaultPolicy{}))(t), Messages: st, Rooms: st,
+		Events: droppedEvents{}, Limits: core.cfg.Members, Members: members, Requests: freshRequests{},
 		Forget: noForget{}, Reads: st, Log: slog.New(slog.DiscardHandler),
-		Timers:      built(timer.NewTimers(it.js, tc.Name, tc.SubjectRoot, core.cfg.MemberCountCheckDelay))(t),
-		CountTimers: built(timer.NewTimers(it.js, tc.Name, tc.SubjectRoot, core.cfg.MessageCountCheckDelay))(t),
+		Timers: built(timer.NewTimers(it.js, tc.Name, tc.SubjectRoot, core.cfg.MemberCountCheckDelay))(t),
 	}))(t)
 }
 
@@ -76,8 +73,8 @@ func TestRealInfraACountMissedByACrashIsRepairedByItsTimer(t *testing.T) {
 	room := parseRoom(t, roomID)
 	live := subscribeLive(t, it, core.cfg, roomID)
 	repaired := itMetric(t, core.cfg, itMembersRepairedSeries)
-	cmd := mutate.AddMembersCmd{Tenant: itTenant, User: itUser, Room: room, Users: []string{"carol", "dave"}, RequestID: "timer-crash"}
-	added, err := mutatorWithoutEvents(t, it, core, countLost{st}).AddMembers(t.Context(), cmd)
+	cmd := member.AddMembersCmd{Tenant: itTenant, User: itUser, Room: room, Users: []string{"carol", "dave"}, RequestID: "timer-crash"}
+	added, err := membersWithoutEvents(t, it, core, countLost{st}).AddMembers(t.Context(), cmd)
 	if err != nil || len(added) != 2 {
 		t.Fatalf("AddMembers with a lost count = %v, %v; want both added", added, err)
 	}
@@ -102,13 +99,13 @@ func TestRealInfraLostMemberAndReadEventsAreRepublished(t *testing.T) {
 	roomID := createRoom(t, client)
 	room := parseRoom(t, roomID)
 	live := subscribeLive(t, it, core.cfg, roomID)
-	quiet := mutatorWithoutEvents(t, it, core, itStore(it, core))
-	cmd := mutate.AddMembersCmd{Tenant: itTenant, User: itUser, Room: room, Users: []string{"erin"}, RequestID: "lost-erin"}
+	quiet := membersWithoutEvents(t, it, core, itStore(it, core))
+	cmd := member.AddMembersCmd{Tenant: itTenant, User: itUser, Room: room, Users: []string{"erin"}, RequestID: "lost-erin"}
 	if added, err := quiet.AddMembers(t.Context(), cmd); err != nil || len(added) != 1 {
 		t.Fatalf("AddMembers without events = %v, %v; want erin added", added, err)
 	}
 	seq := sendAs(t, client, itUser, roomID, "lost-1", "erin reads this")
-	pos, err := quiet.MarkRead(t.Context(), mutate.ReadCmd{Tenant: itTenant, User: "erin", Room: room, Seq: seq})
+	pos, err := quiet.MarkRead(t.Context(), member.ReadCmd{Tenant: itTenant, User: "erin", Room: room, Seq: seq})
 	if err != nil || pos.Seq != seq {
 		t.Fatalf("MarkRead without events = %+v, %v; want read up to %d", pos, err, seq)
 	}

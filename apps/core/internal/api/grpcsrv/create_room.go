@@ -27,7 +27,7 @@ func (s *Service) CreateRoom(ctx context.Context, req *chatimv1.CreateRoomReques
 	if domain.ValidCID(req.GetRequestId()) != nil {
 		return nil, errBadRequestID
 	}
-	if len(req.GetMembers()) > s.mutator.MemberBatch() {
+	if len(req.GetMembers()) > s.memberService.MemberBatch() {
 		return nil, domain.ErrTooManyMembers
 	}
 	now := s.now().UTC().Truncate(time.Millisecond)

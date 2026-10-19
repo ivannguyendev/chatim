@@ -1,4 +1,4 @@
-package mutate_test
+package member_test
 
 import (
 	"context"
@@ -6,13 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
 type countingLast struct {
-	mutate.Messages
+	member.Messages
 	lasts atomic.Int32
 }
 
@@ -21,8 +21,8 @@ func (c *countingLast) Last(ctx context.Context, room, thread uint64) (uint64, e
 	return c.Messages.Last(ctx, room, thread)
 }
 
-func readCmd(user string, r, seq uint64) mutate.ReadCmd {
-	return mutate.ReadCmd{Tenant: tenant, User: user, Room: r, Seq: seq}
+func readCmd(user string, r, seq uint64) member.ReadCmd {
+	return member.ReadCmd{Tenant: tenant, User: user, Room: r, Seq: seq}
 }
 
 func (rg *rig) markRead(t *testing.T, user string, r, seq uint64) domain.ReadPosition {

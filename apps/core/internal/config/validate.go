@@ -77,7 +77,8 @@ func (c Config) componentErrors() []error {
 		{"STATE_CLEAR_*", c.StateClear.Validate()},
 		{"SWEEP_*, EVT_SUBJECT_ROOT, SLOT_TICK, PUB_ACK_TIMEOUT", c.Sweep.Validate()},
 		{"PROJECTION_*, EVT_STREAM, EVT_SUBJECT_ROOT", c.Projection.Validate()},
-		{"REACTION_EMOJIS, PIN_LIMIT, MEMBER_BATCH_MAX", c.Limits.Validate()},
+		{"REACTION_EMOJIS, PIN_LIMIT", c.Limits.Validate()},
+		{"MEMBER_BATCH_MAX", c.Members.Validate()},
 		{"MENTION_*, NOTIFY_*", c.mentionErrors()},
 	}
 	var errs []error

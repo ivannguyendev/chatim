@@ -1,4 +1,4 @@
-package mutate
+package member
 
 import (
 	"context"
@@ -31,90 +31,90 @@ type memberOp struct {
 	setsPriority bool
 }
 
-func (m *Mutator) RemoveMember(ctx context.Context, c RemoveMemberCmd) (MemberResult, error) {
+func (s *Service) RemoveMember(ctx context.Context, c RemoveMemberCmd) (MemberResult, error) {
 	if c.Target == c.User {
 		return MemberResult{}, errRemoveSelf
 	}
-	return m.change(ctx, memberOp{action: access.RemoveMember, owner: ownership.Remove, tenant: c.Tenant, caller: c.User, room: c.Room, target: c.Target, removes: true})
+	return s.change(ctx, memberOp{action: access.RemoveMember, owner: ownership.Remove, tenant: c.Tenant, caller: c.User, room: c.Room, target: c.Target, removes: true})
 }
 
-func (m *Mutator) LeaveRoom(ctx context.Context, c LeaveRoomCmd) (MemberResult, error) {
-	return m.change(ctx, memberOp{action: access.LeaveRoom, owner: ownership.Leave, tenant: c.Tenant, caller: c.User, room: c.Room, target: c.User, removes: true})
+func (s *Service) LeaveRoom(ctx context.Context, c LeaveRoomCmd) (MemberResult, error) {
+	return s.change(ctx, memberOp{action: access.LeaveRoom, owner: ownership.Leave, tenant: c.Tenant, caller: c.User, room: c.Room, target: c.User, removes: true})
 }
 
-func (m *Mutator) ChangeMemberRole(ctx context.Context, c ChangeRoleCmd) (MemberResult, error) {
+func (s *Service) ChangeMemberRole(ctx context.Context, c ChangeRoleCmd) (MemberResult, error) {
 	if _, err := domain.ParseRole(string(c.Role)); err != nil {
 		return MemberResult{}, err
 	}
-	return m.change(ctx, memberOp{action: access.ChangeMemberRole, owner: ownership.ChangeRole, tenant: c.Tenant, caller: c.User, room: c.Room, target: c.Target, role: c.Role})
+	return s.change(ctx, memberOp{action: access.ChangeMemberRole, owner: ownership.ChangeRole, tenant: c.Tenant, caller: c.User, room: c.Room, target: c.Target, role: c.Role})
 }
 
-func (m *Mutator) SetMemberPriority(ctx context.Context, c SetPriorityCmd) (MemberResult, error) {
-	return m.change(ctx, memberOp{action: access.SetMemberPriority, tenant: c.Tenant, caller: c.User, room: c.Room, target: c.Target, priority: c.Priority, setsPriority: true})
+func (s *Service) SetMemberPriority(ctx context.Context, c SetPriorityCmd) (MemberResult, error) {
+	return s.change(ctx, memberOp{action: access.SetMemberPriority, tenant: c.Tenant, caller: c.User, room: c.Room, target: c.Target, priority: c.Priority, setsPriority: true})
 }
 
-func (m *Mutator) change(ctx context.Context, op memberOp) (MemberResult, error) {
+func (s *Service) change(ctx context.Context, op memberOp) (MemberResult, error) {
 	if err := domain.ValidUser(op.target); err != nil {
 		return MemberResult{}, err
 	}
-	req, err := m.memberGrant(ctx, op.action, op.tenant, op.caller, op.room)
+	req, err := s.memberGrant(ctx, op.action, op.tenant, op.caller, op.room)
 	if op.owner == ownership.Leave && errors.Is(err, domain.ErrNotMember) {
-		return m.leftAlready(ctx, op)
+		return s.leftAlready(ctx, op)
 	}
 	if err != nil {
 		return MemberResult{}, err
 	}
-	op.requestID, op.at = m.d.NewRequestID(), m.now()
+	op.requestID, op.at = s.d.NewRequestID(), s.now()
 	doc, found := req.Member, true
 	if op.target != op.caller {
-		if doc, found, err = m.memberDoc(ctx, op.room, op.target); err != nil {
+		if doc, found, err = s.memberDoc(ctx, op.room, op.target); err != nil {
 			return MemberResult{}, err
 		}
 	}
 	req.Target, req.Role = policyTarget(op, doc, found), op.role
-	if err := m.d.Access.Allow(ctx, req); err != nil {
+	if err := s.d.Access.Allow(ctx, req); err != nil {
 		return MemberResult{}, err
 	}
 	if res, done, err := op.settled(doc, found); done {
 		return res, err
 	}
 	if !op.setsPriority && ownership.Affects(doc, op.owner, op.role) {
-		return m.ownerPath(ctx, op, req)
+		return s.ownerPath(ctx, op, req)
 	}
-	return m.plainPath(ctx, op, req.Room, doc)
+	return s.plainPath(ctx, op, req.Room, doc)
 }
 
-func (m *Mutator) plainPath(ctx context.Context, op memberOp, r domain.Room, doc domain.Member) (MemberResult, error) {
+func (s *Service) plainPath(ctx context.Context, op memberOp, r domain.Room, doc domain.Member) (MemberResult, error) {
 	next := op.next(doc)
 	delta := store.MemberCountDelta([]store.MemberWrite{{Cur: doc, Next: next}})
-	timer, err := m.maybeArm(ctx, r.ID, delta)
+	timer, err := s.maybeArm(ctx, r.ID, delta)
 	if err != nil {
 		return MemberResult{}, err
 	}
-	ok, err := m.d.Members.ApplyMember(ctx, doc, next)
+	ok, err := s.d.Members.ApplyMember(ctx, doc, next)
 	if err != nil {
-		m.d.Forget.ForgetMembers(r.ID)
+		s.d.Forget.ForgetMembers(r.ID)
 		return MemberResult{}, err
 	}
 	settle, done := settling(ctx)
 	defer done()
 	if !ok {
 		if delta != 0 {
-			m.d.Timers.Disarm(settle, timer)
+			s.d.Timers.Disarm(settle, timer)
 		}
 		return MemberResult{}, domain.ErrRetryLater
 	}
-	m.d.Forget.ForgetMembers(r.ID)
+	s.d.Forget.ForgetMembers(r.ID)
 	var count *chatimv1.Event
 	if delta != 0 {
-		count = m.settleCount(settle, r, timer, delta, op.caller, op.at)
+		count = s.settleCount(settle, r, timer, delta, op.caller, op.at)
 	}
-	m.announce(r, []domain.Member{next}, count)
+	s.announce(r, []domain.Member{next}, count)
 	return changed(next, doc, ""), nil
 }
 
-func (m *Mutator) leftAlready(ctx context.Context, op memberOp) (MemberResult, error) {
-	doc, found, err := m.memberDoc(ctx, op.room, op.caller)
+func (s *Service) leftAlready(ctx context.Context, op memberOp) (MemberResult, error) {
+	doc, found, err := s.memberDoc(ctx, op.room, op.caller)
 	switch {
 	case err != nil:
 		return MemberResult{}, err
@@ -124,8 +124,8 @@ func (m *Mutator) leftAlready(ctx context.Context, op memberOp) (MemberResult, e
 	return unchanged(doc), nil
 }
 
-func (m *Mutator) memberDoc(ctx context.Context, room uint64, user string) (domain.Member, bool, error) {
-	docs, err := m.d.Members.MembersOf(ctx, room, []string{user})
+func (s *Service) memberDoc(ctx context.Context, room uint64, user string) (domain.Member, bool, error) {
+	docs, err := s.d.Members.MembersOf(ctx, room, []string{user})
 	if err != nil || len(docs) == 0 {
 		return domain.Member{}, false, err
 	}

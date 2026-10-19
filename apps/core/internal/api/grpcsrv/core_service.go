@@ -10,6 +10,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/api/view"
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
@@ -21,7 +22,7 @@ import (
 )
 
 var (
-	errMissingDeps = fmt.Errorf("%w: core service needs a sender, a room store, a page reader, a mutator, an edit store, a hidden store, a bookmark store, a reply store, a member store, count timers, request dedupe, a direct room store, a reader interaction store, a room lister, a thread lister, a reactor lister, a pin reader and a member lister", apperr.ErrInvalidArgument)
+	errMissingDeps = fmt.Errorf("%w: core service needs a sender, a room store, a page reader, a mutator, a member service, an edit store, a hidden store, a bookmark store, a reply store, a member store, count timers, request dedupe, a direct room store, a reader interaction store, a room lister, a thread lister, a reactor lister, a pin reader and a member lister", apperr.ErrInvalidArgument)
 	errBadRoomID   = fmt.Errorf("%w: room id", apperr.ErrInvalidArgument)
 )
 
@@ -43,63 +44,65 @@ type noEvents struct{}
 func (noEvents) Enqueue(uint64, []*chatimv1.Event) error { return nil }
 
 type Deps struct {
-	Sender     Sender
-	Rooms      store.Rooms
-	Pages      PageReader
-	Policy     access.Policy
-	Events     EventPublisher
-	Mutator    *mutate.Mutator
-	Edits      store.Edits
-	Hidden     store.Hidden
-	Bookmarks  BookmarkLister
-	Replies    RepliesLister
-	Members    RoomMembers
-	Timers     mutate.CountTimers
-	Requests   mutate.RequestDedupe
-	Directs    store.DirectRooms
-	Mine       MyInteractionReader
-	RoomList   RoomLister
-	Threads    ThreadLister
-	Reactors   ReactorLister
-	PinBoard   PinReader
-	MemberList MemberLister
-	NewID      func() uint64
-	Now        func() time.Time
+	Sender        Sender
+	Rooms         store.Rooms
+	Pages         PageReader
+	Policy        access.Policy
+	Events        EventPublisher
+	Mutator       *mutate.Mutator
+	MemberService *member.Service
+	Edits         store.Edits
+	Hidden        store.Hidden
+	Bookmarks     BookmarkLister
+	Replies       RepliesLister
+	Members       RoomMembers
+	Timers        member.CountTimers
+	Requests      member.RequestDedupe
+	Directs       store.DirectRooms
+	Mine          MyInteractionReader
+	RoomList      RoomLister
+	Threads       ThreadLister
+	Reactors      ReactorLister
+	PinBoard      PinReader
+	MemberList    MemberLister
+	NewID         func() uint64
+	Now           func() time.Time
 }
 
 type Service struct {
 	chatimv1.UnimplementedCoreServiceServer
-	sender     Sender
-	rooms      store.Rooms
-	pages      PageReader
-	events     EventPublisher
-	mutator    *mutate.Mutator
-	edits      store.Edits
-	hidden     store.Hidden
-	bookmarks  BookmarkLister
-	replies    RepliesLister
-	members    RoomMembers
-	timers     mutate.CountTimers
-	requests   mutate.RequestDedupe
-	directs    store.DirectRooms
-	mine       MyInteractionReader
-	roomList   RoomLister
-	threads    ThreadLister
-	reactors   ReactorLister
-	pinBoard   PinReader
-	memberList MemberLister
-	access     *access.Checker
-	view       view.Pipeline
-	maskView   view.Pipeline
-	newID      func() uint64
-	now        func() time.Time
-	log        *slog.Logger
+	sender        Sender
+	rooms         store.Rooms
+	pages         PageReader
+	events        EventPublisher
+	mutator       *mutate.Mutator
+	memberService *member.Service
+	edits         store.Edits
+	hidden        store.Hidden
+	bookmarks     BookmarkLister
+	replies       RepliesLister
+	members       RoomMembers
+	timers        member.CountTimers
+	requests      member.RequestDedupe
+	directs       store.DirectRooms
+	mine          MyInteractionReader
+	roomList      RoomLister
+	threads       ThreadLister
+	reactors      ReactorLister
+	pinBoard      PinReader
+	memberList    MemberLister
+	access        *access.Checker
+	view          view.Pipeline
+	maskView      view.Pipeline
+	newID         func() uint64
+	now           func() time.Time
+	log           *slog.Logger
 }
 
 var _ chatimv1.CoreServiceServer = (*Service)(nil)
 
 func New(d Deps, log *slog.Logger) (*Service, error) {
-	if d.Sender == nil || d.Rooms == nil || d.Pages == nil || d.Mutator == nil || d.Edits == nil || d.Hidden == nil || d.Bookmarks == nil ||
+	if d.Sender == nil || d.Rooms == nil || d.Pages == nil || d.Mutator == nil || d.MemberService == nil || d.Edits == nil || d.Hidden == nil || d.Bookmarks == nil ||
 		d.Replies == nil || d.Members == nil || d.Timers == nil || d.Requests == nil || d.Directs == nil || d.Mine == nil || d.RoomList == nil ||
 		d.Threads == nil || d.Reactors == nil || d.PinBoard == nil || d.MemberList == nil {
 		return nil, errMissingDeps
@@ -121,7 +124,7 @@ func New(d Deps, log *slog.Logger) (*Service, error) {
 		return nil, err
 	}
 	return &Service{
-		sender: d.Sender, rooms: d.Rooms, pages: d.Pages, events: d.Events, mutator: d.Mutator, edits: d.Edits, hidden: d.Hidden,
+		sender: d.Sender, rooms: d.Rooms, pages: d.Pages, events: d.Events, mutator: d.Mutator, memberService: d.MemberService, edits: d.Edits, hidden: d.Hidden,
 		bookmarks: d.Bookmarks, replies: d.Replies, members: d.Members, timers: d.Timers, requests: d.Requests, directs: d.Directs, mine: d.Mine, roomList: d.RoomList, threads: d.Threads, reactors: d.Reactors, pinBoard: d.PinBoard, memberList: d.MemberList, access: checker, view: view.Default(), maskView: view.New(view.MaskDeleted, view.HideForViewer), newID: d.NewID, now: d.Now, log: log,
 	}, nil
 }

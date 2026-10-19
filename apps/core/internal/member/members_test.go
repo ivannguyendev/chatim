@@ -1,4 +1,4 @@
-package mutate_test
+package member_test
 
 import (
 	"errors"
@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
+	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 )
 
@@ -142,15 +142,15 @@ func TestAFailedAddCancelsTheRequestAndEventFailuresAreIgnored(t *testing.T) {
 
 func TestABatchOfTheMaximumSizeIsOneWrite(t *testing.T) {
 	rg := newMemberRig(t, nil)
-	many := make([]string, mutate.DefaultMemberBatch+1)
+	many := make([]string, member.DefaultMemberBatch+1)
 	for i := range many {
 		many[i] = "u" + strconv.Itoa(i)
 	}
 	if _, err := rg.m.AddMembers(t.Context(), add("owen", "r1", many...)); !errors.Is(err, domain.ErrTooManyMembers) {
 		t.Fatalf("AddMembers of %d = %v, want ErrTooManyMembers", len(many), err)
 	}
-	got, err := rg.m.AddMembers(t.Context(), add("owen", "r2", append(many[:mutate.DefaultMemberBatch], "u0")...))
-	if err != nil || len(got) != mutate.DefaultMemberBatch {
+	got, err := rg.m.AddMembers(t.Context(), add("owen", "r2", append(many[:member.DefaultMemberBatch], "u0")...))
+	if err != nil || len(got) != member.DefaultMemberBatch {
 		t.Fatalf("AddMembers of the cap = %d, %v", len(got), err)
 	}
 	if calls := rg.calls.list(); !slices.Equal(calls, []string{"arm", "add_members", "add_member_count", "disarm"}) {

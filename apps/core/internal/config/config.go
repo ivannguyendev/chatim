@@ -12,6 +12,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/stateclear"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/sweep"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
+	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/slot"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
@@ -66,6 +67,7 @@ type Config struct {
 	Mention                mentionapp.Config
 	LockedMessageKinds     []domain.Kind
 	Limits                 mutate.Limits
+	Members                member.Limits
 	MemberCountCheckDelay  time.Duration
 	MessageCountCheckDelay time.Duration
 	RoomList               RoomListConfig
@@ -124,10 +126,10 @@ func Load() (Config, error) {
 		ShutdownBudget:      p.span("CORE_SHUTDOWN_BUDGET", 30*time.Second),
 		LockedMessageKinds:  p.kinds("MESSAGE_LOCKED_KINDS"),
 		Limits: mutate.Limits{
-			Emojis:      p.listOr("REACTION_EMOJIS", mutate.DefaultEmojis),
-			PinLimit:    p.count("PIN_LIMIT", mutate.DefaultPinLimit),
-			MemberBatch: p.count("MEMBER_BATCH_MAX", mutate.DefaultMemberBatch),
+			Emojis:   p.listOr("REACTION_EMOJIS", mutate.DefaultEmojis),
+			PinLimit: p.count("PIN_LIMIT", mutate.DefaultPinLimit),
 		},
+		Members: member.Limits{MemberBatch: p.count("MEMBER_BATCH_MAX", member.DefaultMemberBatch)},
 	}
 	c.AdvertiseAddr = p.advertiseAddr(c.CoreID, c.GRPCAddr)
 	p.components(&c)

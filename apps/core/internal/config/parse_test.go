@@ -179,8 +179,8 @@ func TestLoadRejectsBadReactionEmojis(t *testing.T) {
 func TestMemberBatchMaxDefaultsAndBounds(t *testing.T) {
 	setEnv(t, nil)
 	got, err := config.Load()
-	if err != nil || got.Limits.MemberBatch != 500 {
-		t.Fatalf("default MEMBER_BATCH_MAX = %d, %v; want 500", got.Limits.MemberBatch, err)
+	if err != nil || got.Members.MemberBatch != 500 {
+		t.Fatalf("default MEMBER_BATCH_MAX = %d, %v; want 500", got.Members.MemberBatch, err)
 	}
 	for _, value := range []string{"0", "1", "1001", "-3"} {
 		setEnv(t, map[string]string{"MEMBER_BATCH_MAX": value})
@@ -191,8 +191,8 @@ func TestMemberBatchMaxDefaultsAndBounds(t *testing.T) {
 	for _, want := range []int{2, 1000} {
 		setEnv(t, map[string]string{"MEMBER_BATCH_MAX": strconv.Itoa(want)})
 		got, err := config.Load()
-		if err != nil || got.Limits.MemberBatch != want {
-			t.Fatalf("MEMBER_BATCH_MAX=%d gives %d, %v; want it accepted", want, got.Limits.MemberBatch, err)
+		if err != nil || got.Members.MemberBatch != want {
+			t.Fatalf("MEMBER_BATCH_MAX=%d gives %d, %v; want it accepted", want, got.Members.MemberBatch, err)
 		}
 	}
 }

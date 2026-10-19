@@ -1,10 +1,10 @@
-package mutate_test
+package member_test
 
 import (
 	"strconv"
 	"testing"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -98,22 +98,22 @@ func describe(ev *chatimv1.Event) string {
 	}
 }
 
-func add(user, requestID string, users ...string) mutate.AddMembersCmd {
-	return mutate.AddMembersCmd{Tenant: tenant, User: user, Room: group, Users: users, RequestID: requestID}
+func add(user, requestID string, users ...string) member.AddMembersCmd {
+	return member.AddMembersCmd{Tenant: tenant, User: user, Room: group, Users: users, RequestID: requestID}
 }
 
-func remove(user, target string) mutate.RemoveMemberCmd {
-	return mutate.RemoveMemberCmd{Tenant: tenant, User: user, Room: group, Target: target}
+func remove(user, target string) member.RemoveMemberCmd {
+	return member.RemoveMemberCmd{Tenant: tenant, User: user, Room: group, Target: target}
 }
 
-func leave(user string) mutate.LeaveRoomCmd {
-	return mutate.LeaveRoomCmd{Tenant: tenant, User: user, Room: group}
+func leave(user string) member.LeaveRoomCmd {
+	return member.LeaveRoomCmd{Tenant: tenant, User: user, Room: group}
 }
 
-func setRole(user, target string, role domain.Role) mutate.ChangeRoleCmd {
-	return mutate.ChangeRoleCmd{Tenant: tenant, User: user, Room: group, Target: target, Role: role}
+func setRole(user, target string, role domain.Role) member.ChangeRoleCmd {
+	return member.ChangeRoleCmd{Tenant: tenant, User: user, Room: group, Target: target, Role: role}
 }
 
-func setPriority(user, target string, priority int32) mutate.SetPriorityCmd {
-	return mutate.SetPriorityCmd{Tenant: tenant, User: user, Room: group, Target: target, Priority: priority}
+func setPriority(user, target string, priority int32) member.SetPriorityCmd {
+	return member.SetPriorityCmd{Tenant: tenant, User: user, Room: group, Target: target, Priority: priority}
 }

@@ -13,22 +13,15 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-var errMissingDeps = fmt.Errorf("%w: mutator needs access, messages, edits, hidden, rooms, events, reactions, reaction counts, message count timers, pins, a pin projector, members, request dedupe, a member forgetter, member count timers and read positions", apperr.ErrInvalidArgument)
+var errMissingDeps = fmt.Errorf("%w: mutator needs access, messages, edits, hidden, rooms, events, reactions, reaction counts, message count timers, pins and a pin projector", apperr.ErrInvalidArgument)
 
 type Messages interface {
 	Find(ctx context.Context, room uint64, keys []store.MsgKey) ([]domain.Message, error)
-	Last(ctx context.Context, room, thread uint64) (uint64, error)
 	ApplyEdit(ctx context.Context, e domain.Edit) error
 }
 
-type HistoryClearer interface {
-	ClearHistory(ctx context.Context, room uint64, user string, at time.Time) (time.Time, bool, error)
-}
-
 type RoomWriter interface {
-	HistoryClearer
 	store.RoomUpdater
-	store.RoomPreferences
 }
 
 type EventPublisher interface {
@@ -49,14 +42,7 @@ type Deps struct {
 	Projector    PinProjector
 	Limits       Limits
 	Now          func() time.Time
-
-	Members      MemberStore
-	Requests     RequestDedupe
-	Forget       MemberForgetter
-	Timers       CountTimers
-	Reads        store.ReadPositions
 	Log          *slog.Logger
-	NewRequestID func() string
 }
 
 type EditCmd struct {
@@ -79,8 +65,7 @@ type Mutator struct {
 
 func New(d Deps) (*Mutator, error) {
 	if d.Access == nil || d.Messages == nil || d.Edits == nil || d.Hidden == nil || d.Rooms == nil || d.Events == nil ||
-		d.Interactions == nil || d.Counts == nil || d.CountTimers == nil || d.Pins == nil || d.Projector == nil ||
-		d.Members == nil || d.Requests == nil || d.Forget == nil || d.Timers == nil || d.Reads == nil {
+		d.Interactions == nil || d.Counts == nil || d.CountTimers == nil || d.Pins == nil || d.Projector == nil {
 		return nil, errMissingDeps
 	}
 	d.Limits = d.Limits.withDefaults()
@@ -93,15 +78,20 @@ func New(d Deps) (*Mutator, error) {
 	if d.Log == nil {
 		d.Log = slog.Default()
 	}
-	if d.NewRequestID == nil {
-		d.NewRequestID = randomRequestID
-	}
 	return &Mutator{d: d}, nil
 }
 
-func (m *Mutator) MemberBatch() int { return m.d.Limits.MemberBatch }
+const settleTimeout = 2 * time.Second
+
+func settling(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), settleTimeout)
+}
 
 func (m *Mutator) now() time.Time { return m.d.Now().UTC().Truncate(time.Millisecond) }
+
+func (m *Mutator) tell(room uint64, ev *chatimv1.Event) {
+	_ = m.d.Events.Enqueue(room, []*chatimv1.Event{ev})
+}
 
 func (m *Mutator) find(ctx context.Context, key store.MsgKey) (domain.Message, error) {
 	found, err := m.d.Messages.Find(ctx, key.Room, []store.MsgKey{key})

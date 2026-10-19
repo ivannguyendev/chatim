@@ -11,6 +11,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/pinproj"
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
+	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -104,20 +105,38 @@ func newMutator(t *testing.T, rg *rig, o options) *mutate.Mutator {
 	if o.events != nil {
 		events = o.events
 	}
-	var forget mutate.MemberForgetter = nopForgetter{}
-	if f, ok := o.sender.(mutate.MemberForgetter); ok {
-		forget = f
-	}
-	requests := newRequests(t, nil)
 	m, err := mutate.New(mutate.Deps{
 		Access: checker, Messages: rg.msgs, Edits: rg.edits, Hidden: rg.hidden, Rooms: rg.rooms, Events: events, Now: o.now,
 		Interactions: rg.reactions, Counts: rg.msgs, CountTimers: nopTimers{}, Pins: rg.pins, Projector: projector, Limits: o.limits,
-		Members: rg.rooms, Requests: requests, Forget: forget, Timers: nopTimers{}, Reads: rg.rooms,
 	})
 	if err != nil {
 		t.Fatalf("mutate.New: %v", err)
 	}
 	return m
+}
+
+func newMemberService(t *testing.T, rg *rig, o options) *member.Service {
+	t.Helper()
+	checker, err := access.NewChecker(rg.rooms, o.policy)
+	if err != nil {
+		t.Fatalf("NewChecker: %v", err)
+	}
+	var events member.EventPublisher = nopPublisher{}
+	if o.events != nil {
+		events = o.events
+	}
+	var forget member.MemberForgetter = nopForgetter{}
+	if f, ok := o.sender.(member.MemberForgetter); ok {
+		forget = f
+	}
+	s, err := member.New(member.Deps{
+		Access: checker, Messages: rg.msgs, Rooms: rg.rooms, Events: events, Now: o.now, Limits: o.memberLimits,
+		Members: rg.rooms, Requests: newRequests(t, nil), Forget: forget, Timers: nopTimers{}, Reads: rg.rooms,
+	})
+	if err != nil {
+		t.Fatalf("member.New: %v", err)
+	}
+	return s
 }
 
 func newRequests(t *testing.T, reg dedupe.Registry) *dedupe.Requests {

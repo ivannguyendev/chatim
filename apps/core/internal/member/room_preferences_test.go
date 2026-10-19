@@ -1,4 +1,4 @@
-package mutate_test
+package member_test
 
 import (
 	"context"
@@ -6,18 +6,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
-func prefer(user string, c domain.PreferencesChange) mutate.PreferencesCmd {
-	return mutate.PreferencesCmd{Tenant: tenant, User: user, Room: room, Change: c}
+func prefer(user string, c domain.PreferencesChange) member.PreferencesCmd {
+	return member.PreferencesCmd{Tenant: tenant, User: user, Room: room, Change: c}
 }
 
-func (rg *rig) prefer(t *testing.T, user string, c domain.PreferencesChange) mutate.PreferencesResult {
+func (rg *rig) prefer(t *testing.T, user string, c domain.PreferencesChange) member.PreferencesResult {
 	t.Helper()
 	res, err := rg.m.SetRoomPreferences(t.Context(), prefer(user, c))
 	if err != nil {
@@ -80,7 +80,7 @@ func TestPreferencesNeedAMemberAndNoPolicy(t *testing.T) {
 	if res := rg.prefer(t, "bob", domain.PreferencesChange{Archived: new(true)}); !res.Changed {
 		t.Fatalf("SetRoomPreferences under a deny-all policy = %+v, want changed", res)
 	}
-	for name, c := range map[string]mutate.PreferencesCmd{
+	for name, c := range map[string]member.PreferencesCmd{
 		"outsider":     prefer("dave", domain.PreferencesChange{Pinned: new(true)}),
 		"other tenant": {Tenant: "other", User: "bob", Room: room, Change: domain.PreferencesChange{Pinned: new(true)}},
 		"nothing":      prefer("dave", domain.PreferencesChange{}),
@@ -106,7 +106,7 @@ func TestALeftMemberCannotSetPreferences(t *testing.T) {
 	if _, err := rg.m.LeaveRoom(t.Context(), leave("mia")); err != nil {
 		t.Fatalf("leave: %v", err)
 	}
-	c := mutate.PreferencesCmd{Tenant: tenant, User: "mia", Room: group, Change: domain.PreferencesChange{Pinned: new(true)}}
+	c := member.PreferencesCmd{Tenant: tenant, User: "mia", Room: group, Change: domain.PreferencesChange{Pinned: new(true)}}
 	if _, err := rg.m.SetRoomPreferences(t.Context(), c); !errors.Is(err, apperr.ErrPermissionDenied) {
 		t.Fatalf("left member SetRoomPreferences = %v, want PermissionDenied", err)
 	}

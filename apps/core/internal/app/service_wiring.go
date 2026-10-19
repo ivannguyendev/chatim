@@ -11,6 +11,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
+	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
@@ -38,7 +39,15 @@ func wireService(d serviceDeps) (*grpcsrv.Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wire pin projector: %w", err)
 	}
-	mut, err := wireMutator(d, requests, projector)
+	checker, err := access.NewChecker(st, access.DefaultPolicy{LockedKinds: d.cfg.LockedMessageKinds})
+	if err != nil {
+		return nil, fmt.Errorf("wire access checker: %w", err)
+	}
+	mut, err := wireMutator(d, checker, projector)
+	if err != nil {
+		return nil, err
+	}
+	members, err := wireMemberService(d, checker, requests)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +56,7 @@ func wireService(d serviceDeps) (*grpcsrv.Service, error) {
 		return nil, err
 	}
 	svc, err := grpcsrv.New(grpcsrv.Deps{
-		Sender: d.router, Rooms: st, Pages: st, Events: d.pub, Mutator: mut, Edits: st, Hidden: st.Hidden(), Bookmarks: st.Interactions(),
+		Sender: d.router, Rooms: st, Pages: st, Events: d.pub, Mutator: mut, MemberService: members, Edits: st, Hidden: st.Hidden(), Bookmarks: st.Interactions(),
 		Replies: st.Interactions(), Members: st, Timers: d.timers, Requests: requests, Directs: st.DirectRooms(),
 		Mine: st.Interactions(), RoomList: rooms,
 		Threads: st.ReplyThreads(), Reactors: st.Interactions(), PinBoard: projector, MemberList: st,
@@ -58,20 +67,27 @@ func wireService(d serviceDeps) (*grpcsrv.Service, error) {
 	return svc, nil
 }
 
-func wireMutator(d serviceDeps, requests *dedupe.Requests, projector *pinproj.Projector) (*mutate.Mutator, error) {
+func wireMutator(d serviceDeps, checker *access.Checker, projector *pinproj.Projector) (*mutate.Mutator, error) {
 	st := d.store
-	checker, err := access.NewChecker(st, access.DefaultPolicy{LockedKinds: d.cfg.LockedMessageKinds})
-	if err != nil {
-		return nil, fmt.Errorf("wire access checker: %w", err)
-	}
 	interactions, pins := st.Interactions(), st.Pins()
 	mut, err := mutate.New(mutate.Deps{
 		Access: checker, Messages: st, Edits: st, Hidden: st.Hidden(), Rooms: st, Events: d.pub,
-		Interactions: interactions, Counts: st, CountTimers: d.msgTimers, Pins: pins, Projector: projector, Limits: d.cfg.Limits,
-		Members: st, Requests: requests, Forget: d.router, Timers: d.timers, Reads: st, Log: d.log,
+		Interactions: interactions, Counts: st, CountTimers: d.msgTimers, Pins: pins, Projector: projector, Limits: d.cfg.Limits, Log: d.log,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("wire mutator: %w", err)
 	}
 	return mut, nil
+}
+
+func wireMemberService(d serviceDeps, checker *access.Checker, requests *dedupe.Requests) (*member.Service, error) {
+	st := d.store
+	svc, err := member.New(member.Deps{
+		Access: checker, Messages: st, Rooms: st, Events: d.pub, Members: st, Requests: requests,
+		Forget: d.router, Timers: d.timers, Reads: st, Limits: d.cfg.Members, Log: d.log,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("wire member service: %w", err)
+	}
+	return svc, nil
 }

@@ -6,6 +6,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/pkg/callerid"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
@@ -64,7 +65,7 @@ func (s *Service) ClearHistory(ctx context.Context, req *chatimv1.ClearHistoryRe
 	if err != nil {
 		return nil, err
 	}
-	at, err := s.mutator.ClearHistory(ctx, mutate.ClearCmd{Tenant: who.Tenant, User: who.User, Room: room})
+	at, err := s.memberService.ClearHistory(ctx, member.ClearCmd{Tenant: who.Tenant, User: who.User, Room: room})
 	if err != nil {
 		return nil, err
 	}

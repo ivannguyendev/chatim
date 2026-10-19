@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
@@ -25,7 +26,7 @@ func (s *Service) SetRoomPreferences(ctx context.Context, req *chatimv1.SetRoomP
 	if err != nil {
 		return nil, err
 	}
-	res, err := s.mutator.SetRoomPreferences(ctx, mutate.PreferencesCmd{Tenant: who.Tenant, User: who.User, Room: room, Change: pbconv.DomainPreferencesChange(req)})
+	res, err := s.memberService.SetRoomPreferences(ctx, member.PreferencesCmd{Tenant: who.Tenant, User: who.User, Room: room, Change: pbconv.DomainPreferencesChange(req)})
 	if err != nil {
 		return nil, err
 	}

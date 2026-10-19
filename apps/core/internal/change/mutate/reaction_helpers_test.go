@@ -13,6 +13,23 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 
+type callLog struct {
+	mu    sync.Mutex
+	calls []string
+}
+
+func (l *callLog) add(c string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.calls = append(l.calls, c)
+}
+
+func (l *callLog) list() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return slices.Clone(l.calls)
+}
+
 type countCall struct {
 	key    store.MsgKey
 	deltas []store.EmojiDelta

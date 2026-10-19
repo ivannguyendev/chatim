@@ -1,11 +1,11 @@
-package mutate_test
+package member_test
 
 import (
 	"context"
 	"errors"
 	"testing"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
@@ -112,7 +112,7 @@ func TestReadNeedsAnActiveMember(t *testing.T) {
 		{"never a member", func() error { _, err := rg.m.MarkRead(t.Context(), readCmd("zed", group, 1)); return err }, domain.ErrNotMember},
 		{"removed", func() error { _, err := rg.m.MarkUnread(t.Context(), readCmd("max", group, 1)); return err }, domain.ErrNotMember},
 		{"other tenant", func() error {
-			_, err := rg.m.MarkRead(t.Context(), mutate.ReadCmd{Tenant: "other", User: "mia", Room: group, Seq: 1})
+			_, err := rg.m.MarkRead(t.Context(), member.ReadCmd{Tenant: "other", User: "mia", Room: group, Seq: 1})
 			return err
 		}, domain.ErrRoomNotFound},
 		{"policy denies", func() error { _, err := rg.m.MarkRead(t.Context(), readCmd("carol", room, 1)); return err }, apperr.ErrPermissionDenied},

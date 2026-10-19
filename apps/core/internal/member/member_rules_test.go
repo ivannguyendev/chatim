@@ -1,11 +1,11 @@
-package mutate_test
+package member_test
 
 import (
 	"context"
 	"errors"
 	"testing"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
@@ -110,15 +110,15 @@ func TestDirectRoomsKeepTheirTwoMembers(t *testing.T) {
 		t.Fatalf("create dm: %v", err)
 	}
 	var errs []error
-	_, err = rg.m.AddMembers(t.Context(), mutate.AddMembersCmd{Tenant: tenant, User: "owen", Room: direct, Users: []string{"nia"}, RequestID: "r1"})
+	_, err = rg.m.AddMembers(t.Context(), member.AddMembersCmd{Tenant: tenant, User: "owen", Room: direct, Users: []string{"nia"}, RequestID: "r1"})
 	errs = append(errs, err)
-	_, err = rg.m.RemoveMember(t.Context(), mutate.RemoveMemberCmd{Tenant: tenant, User: "owen", Room: direct, Target: "mia"})
+	_, err = rg.m.RemoveMember(t.Context(), member.RemoveMemberCmd{Tenant: tenant, User: "owen", Room: direct, Target: "mia"})
 	errs = append(errs, err)
-	_, err = rg.m.LeaveRoom(t.Context(), mutate.LeaveRoomCmd{Tenant: tenant, User: "mia", Room: direct})
+	_, err = rg.m.LeaveRoom(t.Context(), member.LeaveRoomCmd{Tenant: tenant, User: "mia", Room: direct})
 	errs = append(errs, err)
-	_, err = rg.m.ChangeMemberRole(t.Context(), mutate.ChangeRoleCmd{Tenant: tenant, User: "owen", Room: direct, Target: "mia", Role: domain.RoleAdmin})
+	_, err = rg.m.ChangeMemberRole(t.Context(), member.ChangeRoleCmd{Tenant: tenant, User: "owen", Room: direct, Target: "mia", Role: domain.RoleAdmin})
 	errs = append(errs, err)
-	_, err = rg.m.SetMemberPriority(t.Context(), mutate.SetPriorityCmd{Tenant: tenant, User: "owen", Room: direct, Target: "mia", Priority: 1})
+	_, err = rg.m.SetMemberPriority(t.Context(), member.SetPriorityCmd{Tenant: tenant, User: "owen", Room: direct, Target: "mia", Priority: 1})
 	errs = append(errs, err)
 	for i, err := range errs {
 		if !errors.Is(err, domain.ErrDirectRoom) || !errors.Is(err, apperr.ErrFailedPrecondition) {
@@ -133,7 +133,7 @@ func TestDirectRoomsKeepTheirTwoMembers(t *testing.T) {
 func TestMemberCommandsRejectBadInputFirst(t *testing.T) {
 	rg := newMemberRig(t, nil)
 	ctx := t.Context()
-	nowhere := func(c mutate.AddMembersCmd) mutate.AddMembersCmd { c.Room = 99; return c }
+	nowhere := func(c member.AddMembersCmd) member.AddMembersCmd { c.Room = 99; return c }
 	checks := map[string]func() error{
 		"bad request id": func() error { _, err := rg.m.AddMembers(ctx, nowhere(add("owen", "bad id", "nia"))); return err },
 		"no request id":  func() error { _, err := rg.m.AddMembers(ctx, nowhere(add("owen", "", "nia"))); return err },

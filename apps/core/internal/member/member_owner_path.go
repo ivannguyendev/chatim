@@ -1,4 +1,4 @@
-package mutate
+package member
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-func (m *Mutator) ownerPath(ctx context.Context, op memberOp, req access.Request) (MemberResult, error) {
+func (s *Service) ownerPath(ctx context.Context, op memberOp, req access.Request) (MemberResult, error) {
 	users := []string{op.caller}
 	if op.target != op.caller {
 		users = append(users, op.target)
@@ -22,26 +22,26 @@ func (m *Mutator) ownerPath(ctx context.Context, op memberOp, req access.Request
 		Allow: func(caller, target domain.Member) error {
 			again := req
 			again.Member, again.Target = caller, target
-			return m.d.Access.Allow(ctx, again)
+			return s.d.Access.Allow(ctx, again)
 		},
 	}
-	res, err := m.d.Members.ChangeOwners(ctx, op.room, users, func(v store.OwnerView) ([]store.MemberWrite, error) {
+	res, err := s.d.Members.ChangeOwners(ctx, op.room, users, func(v store.OwnerView) ([]store.MemberWrite, error) {
 		seen = docOf(v.Docs, op.target)
 		return ownership.Plan(plan, v)
 	})
 	if err != nil {
-		m.d.Forget.ForgetMembers(op.room)
+		s.d.Forget.ForgetMembers(op.room)
 		return MemberResult{}, err
 	}
 	if len(res.Written) == 0 {
 		return unchanged(seen), nil
 	}
-	m.d.Forget.ForgetMembers(op.room)
+	s.d.Forget.ForgetMembers(op.room)
 	var count *chatimv1.Event
 	if res.CountChanged {
 		count = pbconv.MemberCountChanged(req.Room, res.Count, op.caller, op.at)
 	}
-	m.announce(req.Room, res.Written, count)
+	s.announce(req.Room, res.Written, count)
 	return ownerResult(res.Written, op.target), nil
 }
 
