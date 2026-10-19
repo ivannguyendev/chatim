@@ -35,7 +35,7 @@ func (m *Mutator) React(ctx context.Context, c ReactCmd) (ReactResult, error) {
 			return ReactResult{}, domain.ErrEmojiNotAllowed
 		}
 	}
-	grant, msg, err := m.target(ctx, access.ReactMessage, c.Tenant, c.User, key)
+	grant, msg, err := m.d.Access.Target(ctx, m.d.Messages, access.ReactMessage, c.Tenant, c.User, key)
 	if err != nil {
 		return ReactResult{}, err
 	}

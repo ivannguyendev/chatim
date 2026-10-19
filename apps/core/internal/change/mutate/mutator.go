@@ -114,23 +114,6 @@ func (m *Mutator) find(ctx context.Context, key store.MsgKey) (domain.Message, e
 	return found[0], nil
 }
 
-func (m *Mutator) target(ctx context.Context, action access.Action, tenant, user string, key store.MsgKey) (access.Request, domain.Message, error) {
-	req, err := m.d.Access.Admit(ctx, action, tenant, user, key.Room)
-	if err != nil {
-		return access.Request{}, domain.Message{}, err
-	}
-	msg, err := m.find(ctx, key)
-	if err != nil {
-		return access.Request{}, domain.Message{}, err
-	}
-	req.Author = msg.From
-	req.Kind = msg.Kind
-	if err := m.d.Access.Allow(ctx, req); err != nil {
-		return access.Request{}, domain.Message{}, err
-	}
-	return req, msg, nil
-}
-
 func validKey(key store.MsgKey) error {
 	if err := key.Validate(); err != nil {
 		return err

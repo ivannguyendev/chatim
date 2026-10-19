@@ -24,7 +24,7 @@ func (m *Mutator) Hide(ctx context.Context, c HideCmd) error {
 	if err := validKey(key); err != nil {
 		return err
 	}
-	req, _, err := m.target(ctx, access.HideMessage, c.Tenant, c.User, key)
+	req, _, err := m.d.Access.Target(ctx, m.d.Messages, access.HideMessage, c.Tenant, c.User, key)
 	if err != nil {
 		return err
 	}

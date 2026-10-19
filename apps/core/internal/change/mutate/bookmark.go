@@ -20,7 +20,7 @@ func (m *Mutator) SetBookmark(ctx context.Context, c BookmarkCmd) (bool, error) 
 	if err := validKey(key); err != nil {
 		return false, err
 	}
-	req, msg, err := m.target(ctx, access.SetBookmark, c.Tenant, c.User, key)
+	req, msg, err := m.d.Access.Target(ctx, m.d.Messages, access.SetBookmark, c.Tenant, c.User, key)
 	if err != nil {
 		return false, err
 	}

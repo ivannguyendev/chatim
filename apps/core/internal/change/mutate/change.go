@@ -50,7 +50,7 @@ func (m *Mutator) apply(ctx context.Context, c change) (domain.Message, error) {
 	if err := validKey(c.key); err != nil {
 		return domain.Message{}, err
 	}
-	grant, msg, err := m.target(ctx, c.action, c.tenant, c.user, c.key)
+	grant, msg, err := m.d.Access.Target(ctx, m.d.Messages, c.action, c.tenant, c.user, c.key)
 	if err != nil {
 		return domain.Message{}, err
 	}

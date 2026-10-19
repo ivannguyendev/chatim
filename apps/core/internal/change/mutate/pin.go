@@ -34,7 +34,7 @@ func (m *Mutator) pin(ctx context.Context, c PinCmd, op domain.PinOp, action acc
 	if err := validKey(key); err != nil {
 		return domain.PinState{}, err
 	}
-	grant, msg, err := m.target(ctx, action, c.Tenant, c.User, key)
+	grant, msg, err := m.d.Access.Target(ctx, m.d.Messages, action, c.Tenant, c.User, key)
 	if err != nil {
 		return domain.PinState{}, err
 	}
