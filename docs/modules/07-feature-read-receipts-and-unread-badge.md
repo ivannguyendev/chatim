@@ -92,7 +92,7 @@ sequenceDiagram
   - Thao tác này hoàn toàn độc lập với bảng `messages`, không sinh ra bất kỳ sự tranh chấp tài nguyên nào giữa các thành viên trong phòng.
 
 ### 3.2. Thuật toán Đếm Unread có chặn ngưỡng (Bounded Scan — Quy tắc R17 / D73)
-- **Cơ chế tính toán On-Demand:** Hệ thống **cố tình không lưu sẵn biến đếm unread** trong cơ sở dữ liệu. Số tin chưa đọc được tính lúc đọc trong `ListMyRooms`/`GetRooms` (`domain.CountUnread`), từ đuôi phòng mà `api/roomcache` giữ (≤ 300 tin gọn mỗi phòng, TTL 30s, singleflight, đối chiếu `last_seq`/`last_edit_at`), không có RPC đếm unread riêng.
+- **Cơ chế tính toán On-Demand:** Hệ thống **cố tình không lưu sẵn biến đếm unread** trong cơ sở dữ liệu. Số tin chưa đọc được tính lúc đọc trong `ListMyRooms`/`GetRooms` (`domain.CountUnread`), từ đuôi phòng mà `room/roomcache` giữ (≤ 300 tin gọn mỗi phòng, TTL 30s, singleflight, đối chiếu `last_seq`/`last_edit_at`), không có RPC đếm unread riêng.
 - **Quy tắc bảo đảm hiệu năng:**
   - Để tránh quét hàng nghìn tin đối với những người dùng lâu ngày không mở ứng dụng, phép đếm có hai chặn: `UnreadMax = 100` và cửa sổ `UnreadWindow = 300` tin:
     - Gặp `read_seq` trước: trả số chính xác, `approx = false`.
@@ -127,7 +127,7 @@ sequenceDiagram
 ```
 
 ### 4.2. Đuôi phòng trong RAM thay cho truy vấn đếm
-- Unread không chạy `countDocuments` trên `messages`. `RoomTails.TailWindow` đọc đuôi phòng bằng một range scan trên clustered `_id` (room│0│seq) rồi `api/roomcache` giữ bản gọn (seq, người gửi, đã xoá, `skip_unread`, thời điểm gửi) trong RAM, giới hạn tổng theo `ROOM_TAIL_CACHE_BYTES`.
+- Unread không chạy `countDocuments` trên `messages`. `RoomTails.TailWindow` đọc đuôi phòng bằng một range scan trên clustered `_id` (room│0│seq) rồi `room/roomcache` giữ bản gọn (seq, người gửi, đã xoá, `skip_unread`, thời điểm gửi) trong RAM, giới hạn tổng theo `ROOM_TAIL_CACHE_BYTES`.
 - Bản cache được dùng lại khi `last_seq` và `last_edit_at` của phòng chưa đổi; một trang danh sách hội thoại chỉ đọc lại đuôi của những phòng đã đổi (bench `roomlistbench`: trang đầu lạnh 25–31 truy vấn, ấm 2–8).
 
 ### 4.3. Hợp đồng Mã lỗi gRPC (Error Matrix)
@@ -159,7 +159,7 @@ sequenceDiagram
 |---|---|---|
 | **Collection `members`** | Lưu trạng thái `read_seq` | Nếu ghi thất bại: Client sẽ thử lại trong lần cuộn màn hình tiếp theo. Người dùng chỉ bị hiện tượng tạm thời thấy phòng chưa được đánh dấu đã đọc. |
 | **NATS JetStream** | Phát sự kiện `read_updated` đồng bộ đa thiết bị | Nếu NATS quá tải: Thiết bị hiện tại vẫn hiển thị đã đọc bình thường; doc `members` giữ cờ `_state` bit 2 và sweeper slot 0 phát bù `read_updated` của vị trí hiện tại khi NATS sống lại (Module 10), thiết bị thứ hai đồng bộ lúc đó hoặc khi mở lại ứng dụng. |
-| **`api/roomcache` + `messages`** | Đuôi phòng cho phép đếm unread | Đọc đuôi phòng từ Mongo lỗi: `ListMyRooms`/`GetRooms` trả `UNAVAILABLE` (lỗi store), không có giá trị unread dự phòng. |
+| **`room/roomcache` + `messages`** | Đuôi phòng cho phép đếm unread | Đọc đuôi phòng từ Mongo lỗi: `ListMyRooms`/`GetRooms` trả `UNAVAILABLE` (lỗi store), không có giá trị unread dự phòng. |
 
 ### 6.1. Chỉ số Sức khoẻ Vận hành & Cảnh báo SRE (Key Metrics & Alerts)
 

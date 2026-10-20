@@ -6,13 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/api/grpcsrv"
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/pinproj"
+	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
+	"github.com/ivannguyendev/chatim/apps/core/internal/member"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
+	"github.com/ivannguyendev/chatim/apps/core/internal/room"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
@@ -90,34 +90,60 @@ func memStores() *rig {
 	}
 }
 
-func newMutator(t *testing.T, rg *rig, o options) *mutate.Mutator {
+func newReader(t *testing.T, rg *rig, o options, pages message.Pages) *message.Reader {
 	t.Helper()
 	checker, err := access.NewChecker(rg.rooms, o.policy)
 	if err != nil {
 		t.Fatalf("NewChecker: %v", err)
 	}
-	projector, err := pinproj.New(rg.pins, rg.rooms)
+	r, err := message.NewReader(message.ReaderDeps{Access: checker, Pages: pages, Edits: rg.edits, Hidden: rg.hidden, Interactions: rg.reactions})
 	if err != nil {
-		t.Fatalf("pinproj.New: %v", err)
+		t.Fatalf("message.NewReader: %v", err)
 	}
-	var events mutate.EventPublisher = nopPublisher{}
+	return r
+}
+
+func newEditor(t *testing.T, rg *rig, o options) *message.Editor {
+	t.Helper()
+	checker, err := access.NewChecker(rg.rooms, o.policy)
+	if err != nil {
+		t.Fatalf("NewChecker: %v", err)
+	}
+	var events message.EventPublisher = nopPublisher{}
 	if o.events != nil {
 		events = o.events
 	}
-	var forget mutate.MemberForgetter = nopForgetter{}
-	if f, ok := o.sender.(mutate.MemberForgetter); ok {
-		forget = f
-	}
-	requests := newRequests(t, nil)
-	m, err := mutate.New(mutate.Deps{
-		Access: checker, Messages: rg.msgs, Edits: rg.edits, Hidden: rg.hidden, Rooms: rg.rooms, Events: events, Now: o.now,
-		Interactions: rg.reactions, Counts: rg.msgs, CountTimers: nopTimers{}, Pins: rg.pins, Projector: projector, Limits: o.limits,
-		Members: rg.rooms, Requests: requests, Forget: forget, Timers: nopTimers{}, Reads: rg.rooms,
+	m, err := message.New(message.Deps{
+		Access: checker, Messages: rg.msgs, Edits: rg.edits, Hidden: rg.hidden, Events: events, Now: o.now, Interactions: rg.reactions,
 	})
 	if err != nil {
-		t.Fatalf("mutate.New: %v", err)
+		t.Fatalf("message.New: %v", err)
 	}
 	return m
+}
+
+func newMemberService(t *testing.T, rg *rig, o options) *member.Service {
+	t.Helper()
+	checker, err := access.NewChecker(rg.rooms, o.policy)
+	if err != nil {
+		t.Fatalf("NewChecker: %v", err)
+	}
+	var events member.EventPublisher = nopPublisher{}
+	if o.events != nil {
+		events = o.events
+	}
+	var forget member.MemberForgetter = nopForgetter{}
+	if f, ok := o.sender.(member.MemberForgetter); ok {
+		forget = f
+	}
+	s, err := member.New(member.Deps{
+		Access: checker, Messages: rg.msgs, Rooms: rg.rooms, Events: events, Now: o.now, Limits: o.memberLimits,
+		Members: membersOf(rg, o), Requests: newRequests(t, nil), Forget: forget, Timers: nopTimers{}, Reads: rg.rooms,
+	})
+	if err != nil {
+		t.Fatalf("member.New: %v", err)
+	}
+	return s
 }
 
 func newRequests(t *testing.T, reg dedupe.Registry) *dedupe.Requests {
@@ -132,7 +158,26 @@ func newRequests(t *testing.T, reg dedupe.Registry) *dedupe.Requests {
 	return r
 }
 
-func membersOf(rg *rig, o options) grpcsrv.RoomMembers {
+func newRoomService(t *testing.T, rg *rig, o options, members *member.Service) *room.Service {
+	t.Helper()
+	checker, err := access.NewChecker(rg.rooms, o.policy)
+	if err != nil {
+		t.Fatalf("NewChecker: %v", err)
+	}
+	var events room.EventPublisher = nopPublisher{}
+	if o.events != nil {
+		events = o.events
+	}
+	s, err := room.New(room.Deps{
+		Access: checker, Rooms: rg.rooms, Directs: rg.directs, Members: members, Requests: newRequests(t, o.pending), Events: events, NewID: o.newID, Now: o.now,
+	})
+	if err != nil {
+		t.Fatalf("room.New: %v", err)
+	}
+	return s
+}
+
+func membersOf(rg *rig, o options) member.MemberStore {
 	if o.members == nil {
 		return rg.rooms
 	}

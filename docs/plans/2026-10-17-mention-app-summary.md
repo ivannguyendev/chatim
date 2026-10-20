@@ -2,6 +2,8 @@
 
 > **Trạng thái:** xây xong, đã merge `main` (PR #16, 2026-10-17, `dev-done`). Thiết kế owner duyệt ngày 2026-10-17; bản này viết lại theo cái đã thực sự xây.
 >
+> **Ghi chú 2026-10-20:** code chuyển từ `apps/mention` sang `modules/mention` (D182, chỉ đổi đường dẫn). Các đường dẫn `apps/mention` bên dưới là hồ sơ lúc xây.
+>
 > **Nguồn:**
 > - Hướng đi: owner duyệt ngày 2026-10-17 sau ba vòng brainstorm. Log ở `.claude/plans/mention-app_design.md` (MA1–MA18).
 > - Quyết định: D162–D176 trong [Decision Log](../decision-log.md) §17.4.

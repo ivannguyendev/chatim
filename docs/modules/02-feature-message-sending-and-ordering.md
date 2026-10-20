@@ -36,7 +36,7 @@ flowchart LR
     end
 
     subgraph Persistence["Tầng Lưu trữ Bền vững"]
-        Flusher["Batch Flusher<br/>(send/flush: 256 docs / 2ms)"]
+        Flusher["Batch Flusher<br/>(message/flush: 256 docs / 2ms)"]
         MongoDb[("MongoDB (messages)<br/>insertMany w:majority")]
     end
 
@@ -90,9 +90,9 @@ sequenceDiagram
     participant Client as Client SDK
     participant GW as App websocket
     participant Core as Core (api/grpcsrv)
-    participant Actor as Room Actor (send/actor)
+    participant Actor as Room Actor (message/actor)
     participant Dedupe as Redis Dedupe (EVALSHA)
-    participant Flush as Flusher (send/flush)
+    participant Flush as Flusher (message/flush)
     participant Mongo as MongoDB (messages)
     participant Pub as Publisher (event/publish)
     participant NATS as NATS JetStream

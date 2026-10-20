@@ -5,12 +5,11 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/api/grpcsrv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/metrics"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
-	"github.com/ivannguyendev/chatim/apps/mention/mentionapp"
+	"github.com/ivannguyendev/chatim/modules/mention/mentionapp"
 )
 
 const mentionSubsystem = "mention"
@@ -19,7 +18,7 @@ type preparer interface {
 	Prepare(ctx context.Context) error
 }
 
-func wireMention(cfg config.Config, cl *clients, st *mongostore.Store, caches roomCaches, svc *grpcsrv.Service, log *slog.Logger) (*mentionapp.App, error) {
+func wireMention(cfg config.Config, cl *clients, st *mongostore.Store, caches roomCaches, visible visibleReader, log *slog.Logger) (*mentionapp.App, error) {
 	if !cfg.Mention.Enabled {
 		return nil, nil
 	}
@@ -27,7 +26,7 @@ func wireMention(cfg config.Config, cl *clients, st *mongostore.Store, caches ro
 	if err != nil {
 		return nil, fmt.Errorf("wire mention access checker: %w", err)
 	}
-	core := mentionCore{members: st, messages: st, infos: st, info: caches.info, visible: svc, access: checker}
+	core := mentionCore{members: st, messages: st, infos: st, info: caches.info, visible: visible, access: checker}
 	app, err := mentionapp.New(cfg.Mention, mentionapp.Deps{
 		Mongo: cl.mongo.Database(cfg.MongoDB), JS: cl.js, NotifyJS: cl.notifyJS, NATS: cl.nats, Core: core, Log: log.With("app", mentionSubsystem),
 	})

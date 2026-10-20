@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/metrics"
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
 

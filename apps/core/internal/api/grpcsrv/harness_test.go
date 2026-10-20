@@ -19,12 +19,14 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/api/grpcsrv"
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
+	"github.com/ivannguyendev/chatim/apps/core/internal/interaction"
+	"github.com/ivannguyendev/chatim/apps/core/internal/member"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message/actor"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 	"github.com/ivannguyendev/chatim/pkg/callerid"
@@ -64,17 +66,18 @@ type rig struct {
 }
 
 type options struct {
-	sender  grpcsrv.Sender
-	newID   func() uint64
-	now     func() time.Time
-	limiter *resilience.Limiter
-	policy  access.Policy
-	sendPol access.Policy
-	events  grpcsrv.EventPublisher
-	limits  mutate.Limits
-	members func(*memstore.Rooms) grpcsrv.RoomMembers
-	pending dedupe.Registry
-	pages   func(grpcsrv.PageReader) grpcsrv.PageReader
+	sender       grpcsrv.Sender
+	newID        func() uint64
+	now          func() time.Time
+	limiter      *resilience.Limiter
+	policy       access.Policy
+	sendPol      access.Policy
+	events       member.EventPublisher
+	limits       interaction.Limits
+	memberLimits member.Limits
+	members      func(*memstore.Rooms) member.MemberStore
+	pending      dedupe.Registry
+	pages        func(message.Pages) message.Pages
 }
 
 func newRig(t *testing.T, o options) *rig {
@@ -83,7 +86,7 @@ func newRig(t *testing.T, o options) *rig {
 	if o.sender == nil {
 		o.sender = startRouter(t, rg, o.sendPol)
 	}
-	svc, err := grpcsrv.New(depsOf(t, rg, o), quiet)
+	svc, err := grpcsrv.New(depsOf(t, rg, o))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

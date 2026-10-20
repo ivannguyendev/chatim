@@ -5,10 +5,10 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/pinproj"
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/sweep"
+	"github.com/ivannguyendev/chatim/apps/core/internal/interaction/pinproj"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
 )
 

@@ -4,7 +4,7 @@
 
 > **Ai giữ phần nào:**
 > - **Core:** trả lời (doc trả lời, `rc`, `reply_threads`, projection `reply_index`), đích mention trên tin (`mt`/`ma` kèm giờ `at`), kiểm hợp lệ và phát event.
-> - **Mention App** (`apps/mention`, chạy nhúng trong core, D162–D176): chỉ mục `mentions`, `ListMentions`, nhóm của từng người, danh mục nhóm được tag, dữ liệu gợi ý `@nhóm`, thông báo theo người trên `CHATIM_NOTIFY`.
+> - **Mention App** (`modules/mention`, chạy nhúng trong core, D162–D176): chỉ mục `mentions`, `ListMentions`, nhóm của từng người, danh mục nhóm được tag, dữ liệu gợi ý `@nhóm`, thông báo theo người trên `CHATIM_NOTIFY`.
 >
 > Xem [tóm tắt Mention App](../plans/2026-10-17-mention-app-summary.md) và [danh mục event](../events.md).
 
@@ -31,7 +31,7 @@
 
 ```mermaid
 flowchart TD
-    Client["Client SDK (gửi tin kèm reply/mention)"] --> Core["Core (send/actor)"]
+    Client["Client SDK (gửi tin kèm reply/mention)"] --> Core["Core (message/actor)"]
 
     subgraph FastPath["1. Đường ghi tức thời"]
         Core -->|"Insert doc kèm rp {th, s}, mt[{k,i,a}], ma/mat"| MongoMsg[("MongoDB messages")]
@@ -60,7 +60,7 @@ flowchart TD
 sequenceDiagram
     autonumber
     participant Client as Client SDK
-    participant Core as Core (send/actor)
+    participant Core as Core (message/actor)
     participant Msgs as MongoDB (messages)
     participant Evt as NATS (CHATIM_EVT)
     participant RI as Projection reply_index

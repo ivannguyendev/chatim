@@ -24,7 +24,161 @@ linters:
     - perfsprint
     - intrange
     - modernize
+    - depguard
   settings:
+    depguard:
+      rules:
+        domain-boundaries:
+          files:
+            - "**/apps/core/internal/message/**"
+            - "**/apps/core/internal/interaction/**"
+            - "**/apps/core/internal/member/**"
+            - "**/apps/core/internal/room/**"
+            - "**/apps/core/internal/dedupe/**"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/api
+              desc: domains never import transport
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/app
+              desc: domains never import wiring
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/config
+              desc: domains never import config
+        domain-event-delivery:
+          files:
+            - "**/apps/core/internal/message/**"
+            - "**/apps/core/internal/interaction/**"
+            - "**/apps/core/internal/member/**"
+            - "**/apps/core/internal/room/**"
+            - "**/apps/core/internal/dedupe/**"
+            - "!**/apps/core/internal/message/actor/*_test.go"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/event/publish
+              desc: domains never import event delivery
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/event/sweep
+              desc: domains never import event delivery
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/event/projection
+              desc: domains never import event delivery
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/event/resync
+              desc: domains never import event delivery
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/event/stateclear
+              desc: domains never import event delivery
+        send-actor:
+          files:
+            - "**/apps/core/internal/message/**"
+            - "**/apps/core/internal/interaction/**"
+            - "**/apps/core/internal/member/**"
+            - "**/apps/core/internal/room/**"
+            - "**/apps/core/internal/dedupe/**"
+            - "!**/apps/core/internal/message/actor/**"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/message/actor
+              desc: domains never import the send actor
+        member-domain:
+          files:
+            - "**/apps/core/internal/member/**"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/room
+              desc: member never imports other domains
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/interaction
+              desc: member never imports other domains
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/message
+              desc: member never imports other domains
+        message-domain:
+          files:
+            - "**/apps/core/internal/message/**"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/interaction
+              desc: message never imports other domains
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/room
+              desc: message never imports other domains
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/member
+              desc: message never imports other domains
+        interaction-domain:
+          files:
+            - "**/apps/core/internal/interaction/**"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/room
+              desc: interaction never imports room or member
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/member
+              desc: interaction never imports room or member
+        room-domain:
+          files:
+            - "**/apps/core/internal/room/**"
+            - "!**/apps/core/internal/room/roomlist/**"
+            - "!**/apps/core/internal/room/roomcache/**"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/message
+              desc: room imports only the member domain
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/interaction
+              desc: room imports only the member domain
+        room-read-models:
+          files:
+            - "**/apps/core/internal/room/roomlist/**"
+            - "**/apps/core/internal/room/roomcache/**"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/message
+              desc: the room list and its caches read only model and store
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/interaction
+              desc: the room list and its caches read only model and store
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/member
+              desc: the room list and its caches read only model and store
+        event-layer:
+          files:
+            - "**/apps/core/internal/event/**"
+            - "!$test"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/message
+              desc: events never import domains
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/interaction
+              desc: events never import domains
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/member
+              desc: events never import domains
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/room
+              desc: events never import domains
+        event-layer-tests:
+          files:
+            - "**/apps/core/internal/event/**/*_test.go"
+          list-mode: lax
+          allow:
+            - github.com/ivannguyendev/chatim/apps/core/internal/interaction/pinproj
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/message
+              desc: event tests import only the pin projector of a domain
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/interaction
+              desc: event tests import only the pin projector of a domain
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/member
+              desc: event tests import only the pin projector of a domain
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/room
+              desc: event tests import only the pin projector of a domain
+        api-store-adapters:
+          files:
+            - "**/apps/core/internal/api/**"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore
+              desc: transport reads through domains, never a store adapter
+        api-memstore:
+          files:
+            - "**/apps/core/internal/api/**"
+            - "!$test"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/store/memstore
+              desc: only api tests use the in-memory store
+        config-owner:
+          files:
+            - "**/apps/core/**"
+            - "!**/apps/core/internal/app/**"
+            - "!**/apps/core/internal/config/**"
+            - "!**/apps/core/itest/**"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/config
+              desc: only app reads config
+        mention-module-entry:
+          files:
+            - "**/apps/core/**"
+            - "!**/apps/core/internal/app/**"
+            - "!**/apps/core/internal/config/**"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/modules/mention
+              desc: only app and config embed the mention module
     govet:
       enable-all: true
       disable:

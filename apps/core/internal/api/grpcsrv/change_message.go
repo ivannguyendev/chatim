@@ -5,7 +5,8 @@ import (
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/member"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/pkg/callerid"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
@@ -16,7 +17,7 @@ func (s *Service) EditMessage(ctx context.Context, req *chatimv1.EditMessageRequ
 	if err != nil {
 		return nil, err
 	}
-	m, err := s.mutator.Edit(ctx, mutate.EditCmd{
+	m, err := s.editor.Edit(ctx, message.EditCmd{
 		Tenant: who.Tenant, User: who.User, Room: room, Thread: req.GetThreadRoot(), Seq: req.GetSeq(),
 		BaseVersion: req.GetBaseVer(), Text: req.GetText(), Mentions: editMentions(req.GetMentions()),
 	})
@@ -26,11 +27,11 @@ func (s *Service) EditMessage(ctx context.Context, req *chatimv1.EditMessageRequ
 	return &chatimv1.EditMessageResponse{Message: pbconv.Message(m)}, nil
 }
 
-func editMentions(set *chatimv1.MentionSet) *mutate.MentionSet {
+func editMentions(set *chatimv1.MentionSet) *message.MentionSet {
 	if set == nil {
 		return nil
 	}
-	return &mutate.MentionSet{Targets: pbconv.DomainMentionTargets(set.GetTargets()), All: set.GetAll()}
+	return &message.MentionSet{Targets: pbconv.DomainMentionTargets(set.GetTargets()), All: set.GetAll()}
 }
 
 func (s *Service) DeleteMessage(ctx context.Context, req *chatimv1.DeleteMessageRequest) (*chatimv1.DeleteMessageResponse, error) {
@@ -38,7 +39,7 @@ func (s *Service) DeleteMessage(ctx context.Context, req *chatimv1.DeleteMessage
 	if err != nil {
 		return nil, err
 	}
-	m, err := s.mutator.Delete(ctx, mutate.DeleteCmd{
+	m, err := s.editor.Delete(ctx, message.DeleteCmd{
 		Tenant: who.Tenant, User: who.User, Room: room, Thread: req.GetThreadRoot(), Seq: req.GetSeq(), BaseVersion: req.GetBaseVer(),
 	})
 	if err != nil {
@@ -52,7 +53,7 @@ func (s *Service) HideMessage(ctx context.Context, req *chatimv1.HideMessageRequ
 	if err != nil {
 		return nil, err
 	}
-	err = s.mutator.Hide(ctx, mutate.HideCmd{Tenant: who.Tenant, User: who.User, Room: room, Thread: req.GetThreadRoot(), Seq: req.GetSeq()})
+	err = s.editor.Hide(ctx, message.HideCmd{Tenant: who.Tenant, User: who.User, Room: room, Thread: req.GetThreadRoot(), Seq: req.GetSeq()})
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +65,7 @@ func (s *Service) ClearHistory(ctx context.Context, req *chatimv1.ClearHistoryRe
 	if err != nil {
 		return nil, err
 	}
-	at, err := s.mutator.ClearHistory(ctx, mutate.ClearCmd{Tenant: who.Tenant, User: who.User, Room: room})
+	at, err := s.memberService.ClearHistory(ctx, member.ClearCmd{Tenant: who.Tenant, User: who.User, Room: room})
 	if err != nil {
 		return nil, err
 	}

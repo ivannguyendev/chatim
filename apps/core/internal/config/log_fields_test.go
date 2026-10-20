@@ -67,8 +67,8 @@ func TestConfigLogValueLogsEveryField(t *testing.T) {
 	if rooms, _ := logged["room_list"].(map[string]any); rooms["tail_cache_bytes"] != float64(256<<20) || rooms["join_max"] != float64(1500) {
 		t.Errorf("room_list = %v, want join_max 1500 and tail_cache_bytes 256MB", rooms)
 	}
-	if limits, _ := logged["limits"].(map[string]any); limits["pin_limit"] != float64(50) || !strings.Contains(limits["emojis"].(string), "👍") {
-		t.Errorf("limits = %v, want pin_limit 50 and the default emojis", limits)
+	if limits, _ := logged["interactions"].(map[string]any); limits["pin_limit"] != float64(50) || !strings.Contains(limits["emojis"].(string), "👍") {
+		t.Errorf("interactions = %v, want pin_limit 50 and the default emojis", limits)
 	}
 }
 

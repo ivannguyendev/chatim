@@ -10,7 +10,7 @@ import (
 
 	"google.golang.org/grpc/codes"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/api/grpcsrv"
+	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -99,7 +99,7 @@ func TestOpenDirectRoomAsksThePolicy(t *testing.T) {
 
 func TestOpenDirectRoomFinishesAnInterruptedOpen(t *testing.T) {
 	newID, _ := idSequence(8812, 8813)
-	wrap := func(rooms *memstore.Rooms) grpcsrv.RoomMembers {
+	wrap := func(rooms *memstore.Rooms) member.MemberStore {
 		spy := &failingJoins{Rooms: rooms}
 		spy.fails.Store(1)
 		return spy

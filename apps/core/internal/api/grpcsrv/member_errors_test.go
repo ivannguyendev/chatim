@@ -9,14 +9,14 @@ import (
 
 	"google.golang.org/grpc/codes"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 func TestMemberErrorsKeepTheirCodes(t *testing.T) {
-	rg := newRig(t, options{limits: mutate.Limits{MemberBatch: 3}})
+	rg := newRig(t, options{memberLimits: member.Limits{MemberBatch: 3}})
 	room := rg.createGroup(t, "acme", "alice", "bob", "carol")
 	alice, bob, carol, mallory := as(t, "acme", "alice"), as(t, "acme", "bob"), as(t, "acme", "carol"), as(t, "acme", "mallory")
 	if _, err := rg.client.ChangeMemberRole(alice, &chatimv1.ChangeMemberRoleRequest{RoomId: room, User: "carol", Role: chatimv1.MemberRole_MEMBER_ROLE_ADMIN}); err != nil {

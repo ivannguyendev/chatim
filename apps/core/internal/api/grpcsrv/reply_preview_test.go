@@ -9,14 +9,14 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/api/grpcsrv"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 type countingPages struct {
-	grpcsrv.PageReader
+	message.Pages
 	mu    sync.Mutex
 	finds [][]uint64
 }
@@ -29,7 +29,7 @@ func (c *countingPages) Find(ctx context.Context, room uint64, keys []store.MsgK
 	c.mu.Lock()
 	c.finds = append(c.finds, seqs)
 	c.mu.Unlock()
-	return c.PageReader.Find(ctx, room, keys)
+	return c.Pages.Find(ctx, room, keys)
 }
 
 func (c *countingPages) take() [][]uint64 {
@@ -40,7 +40,7 @@ func (c *countingPages) take() [][]uint64 {
 	return out
 }
 
-func (o options) pageReader(p grpcsrv.PageReader) grpcsrv.PageReader {
+func (o options) pageReader(p message.Pages) message.Pages {
 	if o.pages == nil {
 		return p
 	}
@@ -67,8 +67,8 @@ func previewsSeen(t *testing.T, rg *rig, ctx context.Context, room string, after
 func TestHistoryQuotesEachParentAsTheReaderSeesIt(t *testing.T) {
 	clock := &testClock{now: sentBase}
 	pages := &countingPages{}
-	rg := newRig(t, options{now: clock.Now, pages: func(p grpcsrv.PageReader) grpcsrv.PageReader {
-		pages.PageReader = p
+	rg := newRig(t, options{now: clock.Now, pages: func(p message.Pages) message.Pages {
+		pages.Pages = p
 		return pages
 	}})
 	room := rg.createGroup(t, "acme", "alice", "bob")

@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/api/roomcache"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/room/roomcache"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
-	"github.com/ivannguyendev/chatim/apps/mention/mentionapp"
+	"github.com/ivannguyendev/chatim/modules/mention/mentionapp"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 

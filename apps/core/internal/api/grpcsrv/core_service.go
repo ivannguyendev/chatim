@@ -3,17 +3,14 @@ package grpcsrv
 import (
 	"context"
 	"fmt"
-	"log/slog"
-	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/api/view"
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
-	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
-	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
-	"github.com/ivannguyendev/chatim/apps/core/internal/store"
+	"github.com/ivannguyendev/chatim/apps/core/internal/interaction"
+	"github.com/ivannguyendev/chatim/apps/core/internal/member"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message/actor"
+	"github.com/ivannguyendev/chatim/apps/core/internal/room"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 	"github.com/ivannguyendev/chatim/pkg/callerid"
 	"github.com/ivannguyendev/chatim/pkg/ids"
@@ -21,7 +18,7 @@ import (
 )
 
 var (
-	errMissingDeps = fmt.Errorf("%w: core service needs a sender, a room store, a page reader, a mutator, an edit store, a hidden store, a bookmark store, a reply store, a member store, count timers, request dedupe, a direct room store, a reader interaction store, a room lister, a thread lister, a reactor lister, a pin reader and a member lister", apperr.ErrInvalidArgument)
+	errMissingDeps = fmt.Errorf("%w: core service needs a sender, a message editor, a message reader, an interaction service, an interaction reader, a member service, a member reader, a room service and a room lister", apperr.ErrInvalidArgument)
 	errBadRoomID   = fmt.Errorf("%w: room id", apperr.ErrInvalidArgument)
 )
 
@@ -29,100 +26,41 @@ type Sender interface {
 	Send(ctx context.Context, c actor.SendCmd) (actor.Ack, error)
 }
 
-type PageReader interface {
-	Page(ctx context.Context, q store.PageQuery) ([]domain.Message, error)
-	Find(ctx context.Context, room uint64, keys []store.MsgKey) ([]domain.Message, error)
-}
-
-type EventPublisher interface {
-	Enqueue(room uint64, events []*chatimv1.Event) error
-}
-
-type noEvents struct{}
-
-func (noEvents) Enqueue(uint64, []*chatimv1.Event) error { return nil }
-
 type Deps struct {
-	Sender     Sender
-	Rooms      store.Rooms
-	Pages      PageReader
-	Policy     access.Policy
-	Events     EventPublisher
-	Mutator    *mutate.Mutator
-	Edits      store.Edits
-	Hidden     store.Hidden
-	Bookmarks  BookmarkLister
-	Replies    RepliesLister
-	Members    RoomMembers
-	Timers     mutate.CountTimers
-	Requests   mutate.RequestDedupe
-	Directs    store.DirectRooms
-	Mine       MyInteractionReader
-	RoomList   RoomLister
-	Threads    ThreadLister
-	Reactors   ReactorLister
-	PinBoard   PinReader
-	MemberList MemberLister
-	NewID      func() uint64
-	Now        func() time.Time
+	Sender             Sender
+	Editor             *message.Editor
+	Reader             *message.Reader
+	InteractionService *interaction.Service
+	InteractionReader  *interaction.Reader
+	MemberService      *member.Service
+	MemberReader       *member.Reader
+	RoomService        *room.Service
+	RoomList           RoomLister
 }
 
 type Service struct {
 	chatimv1.UnimplementedCoreServiceServer
-	sender     Sender
-	rooms      store.Rooms
-	pages      PageReader
-	events     EventPublisher
-	mutator    *mutate.Mutator
-	edits      store.Edits
-	hidden     store.Hidden
-	bookmarks  BookmarkLister
-	replies    RepliesLister
-	members    RoomMembers
-	timers     mutate.CountTimers
-	requests   mutate.RequestDedupe
-	directs    store.DirectRooms
-	mine       MyInteractionReader
-	roomList   RoomLister
-	threads    ThreadLister
-	reactors   ReactorLister
-	pinBoard   PinReader
-	memberList MemberLister
-	access     *access.Checker
-	view       view.Pipeline
-	maskView   view.Pipeline
-	newID      func() uint64
-	now        func() time.Time
-	log        *slog.Logger
+	sender             Sender
+	editor             *message.Editor
+	reader             *message.Reader
+	interactionService *interaction.Service
+	interactionReader  *interaction.Reader
+	memberService      *member.Service
+	memberReader       *member.Reader
+	roomService        *room.Service
+	roomList           RoomLister
 }
 
 var _ chatimv1.CoreServiceServer = (*Service)(nil)
 
-func New(d Deps, log *slog.Logger) (*Service, error) {
-	if d.Sender == nil || d.Rooms == nil || d.Pages == nil || d.Mutator == nil || d.Edits == nil || d.Hidden == nil || d.Bookmarks == nil ||
-		d.Replies == nil || d.Members == nil || d.Timers == nil || d.Requests == nil || d.Directs == nil || d.Mine == nil || d.RoomList == nil ||
-		d.Threads == nil || d.Reactors == nil || d.PinBoard == nil || d.MemberList == nil {
+func New(d Deps) (*Service, error) {
+	if d.Sender == nil || d.Editor == nil || d.Reader == nil || d.InteractionService == nil || d.InteractionReader == nil ||
+		d.MemberService == nil || d.MemberReader == nil || d.RoomService == nil || d.RoomList == nil {
 		return nil, errMissingDeps
 	}
-	if d.NewID == nil {
-		d.NewID = ids.NewRoomID
-	}
-	if d.Now == nil {
-		d.Now = time.Now
-	}
-	if d.Events == nil {
-		d.Events = noEvents{}
-	}
-	if log == nil {
-		log = slog.Default()
-	}
-	checker, err := access.NewChecker(d.Rooms, d.Policy)
-	if err != nil {
-		return nil, err
-	}
 	return &Service{
-		sender: d.Sender, rooms: d.Rooms, pages: d.Pages, events: d.Events, mutator: d.Mutator, edits: d.Edits, hidden: d.Hidden,
-		bookmarks: d.Bookmarks, replies: d.Replies, members: d.Members, timers: d.Timers, requests: d.Requests, directs: d.Directs, mine: d.Mine, roomList: d.RoomList, threads: d.Threads, reactors: d.Reactors, pinBoard: d.PinBoard, memberList: d.MemberList, access: checker, view: view.Default(), maskView: view.New(view.MaskDeleted, view.HideForViewer), newID: d.NewID, now: d.Now, log: log,
+		sender: d.Sender, editor: d.Editor, reader: d.Reader, interactionService: d.InteractionService, interactionReader: d.InteractionReader,
+		memberService: d.MemberService, memberReader: d.MemberReader, roomService: d.RoomService, roomList: d.RoomList,
 	}, nil
 }
 

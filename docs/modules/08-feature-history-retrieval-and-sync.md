@@ -23,7 +23,7 @@ Trước khi dữ liệu thô từ cơ sở dữ liệu được trả về cho 
 
 ```mermaid
 flowchart LR
-    RawMongo[("MongoDB (messages)<br/>Clustered _id: room│thread│seq")] --> View["Reader View Pipeline (api/view)"]
+    RawMongo[("MongoDB (messages)<br/>Clustered _id: room│thread│seq")] --> View["Reader View Pipeline (message/view)"]
 
     subgraph PipelineSteps["view.Default() rồi trang trí trong grpcsrv"]
         F1["1. CollapseRetried<br/>Bỏ bản trùng cùng (người gửi, cid),<br/>giữ seq nhỏ nhất"] --> F2["2. MaskDeleted<br/>Tin deleted: bỏ text, mention,<br/>@all, forward, rx, rc (giữ rp)"]
@@ -44,7 +44,7 @@ sequenceDiagram
     autonumber
     participant Client as Client SDK
     participant Core as Core (api/grpcsrv)
-    participant View as Reader View Pipeline (api/view)
+    participant View as Reader View Pipeline (message/view)
     participant Msgs as MongoDB (messages)
     participant Members as MongoDB (members)
     participant Hidden as MongoDB (hidden)
@@ -123,7 +123,7 @@ flowchart TD
 
 ### 4.2. Bộ nhớ đệm Room-Tail Cache trên Core (M3)
 - `GetHistory` **không** dùng cache: nó đọc thẳng store mỗi lần (không qua actor), rồi chạy view pipeline.
-- `api/roomcache` trên mỗi core giữ đuôi phòng (≤ 300 tin gọn + 10 tin xem trước, TTL 30s, singleflight, đối chiếu `last_seq`/`last_edit_at`) chỉ để phục vụ danh sách hội thoại (`ListMyRooms`/`GetRooms`: unread, tin xem trước), xem Module 07.
+- `room/roomcache` trên mỗi core giữ đuôi phòng (≤ 300 tin gọn + 10 tin xem trước, TTL 30s, singleflight, đối chiếu `last_seq`/`last_edit_at`) chỉ để phục vụ danh sách hội thoại (`ListMyRooms`/`GetRooms`: unread, tin xem trước), xem Module 07.
 
 ### 4.3. Hợp đồng Mã lỗi gRPC (Error Matrix)
 
@@ -153,7 +153,7 @@ flowchart TD
 |---|---|---|
 | **MongoDB Replica Set (Primary)** | Phục vụ đọc lịch sử | Store đọc từ Primary (read concern `majority` hoặc `local` tuỳ collection). Mongo failover: lệnh đọc trả `UNAVAILABLE`, client backoff rồi gọi lại. |
 | **Reader View Pipeline** | Che giấu dữ liệu theo người đọc | Chạy hoàn toàn in-memory trên tiến trình Core, không truy vấn thêm (quyền và `cleared_at` đã có từ bước `Authorize`). |
-| **Room-Tail Cache (`api/roomcache`)** | Tăng tốc danh sách hội thoại | Là cache tạm thời (In-memory). Nếu Core khởi động lại, cache sẽ tự động nạp lại từ MongoDB trong lần truy vấn đầu tiên mà không làm mất dữ liệu. |
+| **Room-Tail Cache (`room/roomcache`)** | Tăng tốc danh sách hội thoại | Là cache tạm thời (In-memory). Nếu Core khởi động lại, cache sẽ tự động nạp lại từ MongoDB trong lần truy vấn đầu tiên mà không làm mất dữ liệu. |
 
 ### 6.1. Chỉ số Sức khoẻ Vận hành & Cảnh báo SRE (Key Metrics & Alerts)
 

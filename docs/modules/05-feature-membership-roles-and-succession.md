@@ -75,7 +75,7 @@ Việc chuyển giao quyền sở hữu nhóm là tác vụ nhạy cảm cao, y�
 sequenceDiagram
     autonumber
     participant Owner as Owner hiện tại
-    participant Core as Core (change/ownership)
+    participant Core as Core (member/ownership)
     participant Mongo as MongoDB (Transaction Session)
     participant Watch as NATS (memberwatch)
     participant App websocket as WebSocket App websocket
@@ -135,7 +135,7 @@ Khi phòng chỉ còn đúng 1 người (chính là Owner) và người này b�
 - Để tối ưu hiệu năng, actor gửi tin trên mỗi core lưu cache member của room trong RAM (generation + TTL 10s, không cache phủ định; D106, D110).
 - Khi một người bị kick hoặc bị hạ quyền:
   - Core phát `member_removed` hoặc `member_role_changed` lên `CHATIM_EVT`; stream RePublish sang NATS core `live.{t}.member.{rid}.evt.{kind}`. Core thực hiện lệnh tự quên cache của mình ngay (`Router.ForgetMembers`).
-  - `send/memberwatch` trên mọi core subscribe NATS core `{live}.*.member.*.evt.member_removed` và `….member_role_changed`, lấy room id từ token thứ 4 của subject và quên cache member của room đó. NATS core không phát lại, nên event lạc thì cache tự hết hạn sau TTL 10s. Lệnh gửi tin tiếp theo của người bị kick sẽ bị từ chối ngay lập tức tại tầng xác thực quyền `access.Policy`.
+  - `member/memberwatch` trên mọi core subscribe NATS core `{live}.*.member.*.evt.member_removed` và `….member_role_changed`, lấy room id từ token thứ 4 của subject và quên cache member của room đó. NATS core không phát lại, nên event lạc thì cache tự hết hạn sau TTL 10s. Lệnh gửi tin tiếp theo của người bị kick sẽ bị từ chối ngay lập tức tại tầng xác thực quyền `access.Policy`.
 
 ---
 

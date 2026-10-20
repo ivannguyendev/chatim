@@ -6,9 +6,9 @@ import (
 
 	"github.com/nats-io/nats.go"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/api/roomcache"
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/metrics"
+	"github.com/ivannguyendev/chatim/apps/core/internal/room/roomcache"
 )
 
 const (

@@ -5,18 +5,20 @@ import (
 	"math"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/projection"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/stateclear"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/sweep"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
+	"github.com/ivannguyendev/chatim/apps/core/internal/interaction"
+	"github.com/ivannguyendev/chatim/apps/core/internal/member"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message/actor"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/slot"
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/flush"
-	"github.com/ivannguyendev/chatim/apps/mention/mentionapp"
+	"github.com/ivannguyendev/chatim/modules/mention/mentionapp"
 	"github.com/ivannguyendev/chatim/pkg/envconfig"
 	"github.com/ivannguyendev/chatim/pkg/grpcserver"
 )
@@ -65,7 +67,9 @@ type Config struct {
 	Projection             projection.Config
 	Mention                mentionapp.Config
 	LockedMessageKinds     []domain.Kind
-	Limits                 mutate.Limits
+	Messages               message.Limits
+	Interactions           interaction.Limits
+	Members                member.Limits
 	MemberCountCheckDelay  time.Duration
 	MessageCountCheckDelay time.Duration
 	RoomList               RoomListConfig
@@ -123,11 +127,11 @@ func Load() (Config, error) {
 		PublisherDrain:      p.span("CORE_PUBLISHER_DRAIN", 5*time.Second),
 		ShutdownBudget:      p.span("CORE_SHUTDOWN_BUDGET", 30*time.Second),
 		LockedMessageKinds:  p.kinds("MESSAGE_LOCKED_KINDS"),
-		Limits: mutate.Limits{
-			Emojis:      p.listOr("REACTION_EMOJIS", mutate.DefaultEmojis),
-			PinLimit:    p.count("PIN_LIMIT", mutate.DefaultPinLimit),
-			MemberBatch: p.count("MEMBER_BATCH_MAX", mutate.DefaultMemberBatch),
+		Interactions: interaction.Limits{
+			Emojis:   p.listOr("REACTION_EMOJIS", interaction.DefaultEmojis),
+			PinLimit: p.count("PIN_LIMIT", interaction.DefaultPinLimit),
 		},
+		Members: member.Limits{MemberBatch: p.count("MEMBER_BATCH_MAX", member.DefaultMemberBatch)},
 	}
 	c.AdvertiseAddr = p.advertiseAddr(c.CoreID, c.GRPCAddr)
 	p.components(&c)

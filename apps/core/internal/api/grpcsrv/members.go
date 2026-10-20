@@ -3,7 +3,7 @@ package grpcsrv
 import (
 	"context"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
@@ -13,7 +13,7 @@ func (s *Service) AddMembers(ctx context.Context, req *chatimv1.AddMembersReques
 	if err != nil {
 		return nil, err
 	}
-	added, err := s.mutator.AddMembers(ctx, mutate.AddMembersCmd{
+	added, err := s.memberService.AddMembers(ctx, member.AddMembersCmd{
 		Tenant: who.Tenant, User: who.User, Room: room, Users: req.GetUsers(), RequestID: req.GetRequestId(),
 	})
 	if err != nil {
@@ -31,7 +31,7 @@ func (s *Service) RemoveMember(ctx context.Context, req *chatimv1.RemoveMemberRe
 	if err != nil {
 		return nil, err
 	}
-	res, err := s.mutator.RemoveMember(ctx, mutate.RemoveMemberCmd{Tenant: who.Tenant, User: who.User, Room: room, Target: req.GetUser()})
+	res, err := s.memberService.RemoveMember(ctx, member.RemoveMemberCmd{Tenant: who.Tenant, User: who.User, Room: room, Target: req.GetUser()})
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +43,7 @@ func (s *Service) LeaveRoom(ctx context.Context, req *chatimv1.LeaveRoomRequest)
 	if err != nil {
 		return nil, err
 	}
-	res, err := s.mutator.LeaveRoom(ctx, mutate.LeaveRoomCmd{Tenant: who.Tenant, User: who.User, Room: room})
+	res, err := s.memberService.LeaveRoom(ctx, member.LeaveRoomCmd{Tenant: who.Tenant, User: who.User, Room: room})
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func (s *Service) ChangeMemberRole(ctx context.Context, req *chatimv1.ChangeMemb
 	if err != nil {
 		return nil, err
 	}
-	res, err := s.mutator.ChangeMemberRole(ctx, mutate.ChangeRoleCmd{Tenant: who.Tenant, User: who.User, Room: room, Target: req.GetUser(), Role: role})
+	res, err := s.memberService.ChangeMemberRole(ctx, member.ChangeRoleCmd{Tenant: who.Tenant, User: who.User, Room: room, Target: req.GetUser(), Role: role})
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +71,7 @@ func (s *Service) SetMemberPriority(ctx context.Context, req *chatimv1.SetMember
 	if err != nil {
 		return nil, err
 	}
-	res, err := s.mutator.SetMemberPriority(ctx, mutate.SetPriorityCmd{
+	res, err := s.memberService.SetMemberPriority(ctx, member.SetPriorityCmd{
 		Tenant: who.Tenant, User: who.User, Room: room, Target: req.GetUser(), Priority: req.GetPriority(),
 	})
 	if err != nil {

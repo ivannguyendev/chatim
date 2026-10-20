@@ -3,7 +3,7 @@ package grpcsrv
 import (
 	"context"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -12,7 +12,7 @@ func (s *Service) MarkRead(ctx context.Context, req *chatimv1.MarkReadRequest) (
 	if err != nil {
 		return nil, err
 	}
-	pos, err := s.mutator.MarkRead(ctx, cmd)
+	pos, err := s.memberService.MarkRead(ctx, cmd)
 	if err != nil {
 		return nil, err
 	}
@@ -24,17 +24,17 @@ func (s *Service) MarkUnread(ctx context.Context, req *chatimv1.MarkUnreadReques
 	if err != nil {
 		return nil, err
 	}
-	pos, err := s.mutator.MarkUnread(ctx, cmd)
+	pos, err := s.memberService.MarkUnread(ctx, cmd)
 	if err != nil {
 		return nil, err
 	}
 	return &chatimv1.MarkUnreadResponse{ReadSeq: pos.Seq, ReadVer: pos.Ver}, nil
 }
 
-func readCmdOf(ctx context.Context, roomID string, seq uint64) (mutate.ReadCmd, error) {
+func readCmdOf(ctx context.Context, roomID string, seq uint64) (member.ReadCmd, error) {
 	who, room, err := callerAndRoom(ctx, roomID)
 	if err != nil {
-		return mutate.ReadCmd{}, err
+		return member.ReadCmd{}, err
 	}
-	return mutate.ReadCmd{Tenant: who.Tenant, User: who.User, Room: room, Seq: seq}, nil
+	return member.ReadCmd{Tenant: who.Tenant, User: who.User, Room: room, Seq: seq}, nil
 }

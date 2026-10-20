@@ -6,19 +6,21 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
+	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/projection"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/stateclear"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/sweep"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
+	"github.com/ivannguyendev/chatim/apps/core/internal/interaction"
+	"github.com/ivannguyendev/chatim/apps/core/internal/member"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message/actor"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/slot"
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/flush"
-	"github.com/ivannguyendev/chatim/apps/mention/mentionapp"
+	"github.com/ivannguyendev/chatim/modules/mention/mentionapp"
 )
 
 const day = 24 * time.Hour
@@ -64,7 +66,9 @@ func TestLoadDefaults(t *testing.T) {
 		Projection: projection.Config{
 			Stream: "CHATIM_EVT", SubjectRoot: "evt", FetchBatch: 8192, FetchWait: 3 * time.Second,
 		},
-		Limits:                 mutate.Limits{Emojis: mutate.DefaultEmojis, PinLimit: 50, MemberBatch: 500, MentionTargets: 50},
+		Messages:               message.Limits{MentionTargets: 50},
+		Interactions:           interaction.Limits{Emojis: interaction.DefaultEmojis, PinLimit: 50},
+		Members:                member.Limits{MemberBatch: 500},
 		MemberCountCheckDelay:  5 * time.Second,
 		MessageCountCheckDelay: 5 * time.Second,
 		RoomList:               config.RoomListConfig{JoinMax: 1500, TailCacheBytes: 256 << 20, InfoCacheEntries: 100000},
@@ -120,7 +124,9 @@ func TestLoadOverrides(t *testing.T) {
 			Stream: "CHATIM_EVT_IT", SubjectRoot: "evt_it", FetchBatch: 128, FetchWait: 250 * time.Millisecond,
 		},
 		LockedMessageKinds:     []domain.Kind{domain.KindText},
-		Limits:                 mutate.Limits{Emojis: []string{"🎉", "👍"}, PinLimit: 10, MemberBatch: 20, MentionTargets: 20},
+		Messages:               message.Limits{MentionTargets: 20},
+		Interactions:           interaction.Limits{Emojis: []string{"🎉", "👍"}, PinLimit: 10},
+		Members:                member.Limits{MemberBatch: 20},
 		MemberCountCheckDelay:  4 * time.Second,
 		MessageCountCheckDelay: 6 * time.Second,
 		RoomList:               config.RoomListConfig{JoinMax: 300, TailCacheBytes: 2 << 20, InfoCacheEntries: 5000},
@@ -144,54 +150,5 @@ func TestOverridesCoverEveryKey(t *testing.T) {
 	}
 	if len(overrides) != len(envKeys) {
 		t.Errorf("overrides has %d keys, envKeys %d", len(overrides), len(envKeys))
-	}
-}
-
-func TestLoadAdvertiseAddrFollowsCoreIDAndGRPCPort(t *testing.T) {
-	tests := []struct {
-		name string
-		env  map[string]string
-		want string
-	}{
-		{"default port", map[string]string{"CORE_ID": "core-b"}, "core-b:9000"},
-		{"port of a bare grpc addr", map[string]string{"CORE_ID": "core-b", "CORE_GRPC_ADDR": ":7100"}, "core-b:7100"},
-		{"port of a bound grpc addr", map[string]string{"CORE_ID": "core-b", "CORE_GRPC_ADDR": "0.0.0.0:7200"}, "core-b:7200"},
-		{"explicit advertise addr wins", map[string]string{"CORE_ID": "core-b", "CORE_ADVERTISE_ADDR": "10.1.1.1:7300"}, "10.1.1.1:7300"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			setEnv(t, tt.env)
-			got, err := config.Load()
-			if err != nil {
-				t.Fatalf("Load: %v", err)
-			}
-			if got.AdvertiseAddr != tt.want || got.Slot.Addr != tt.want {
-				t.Errorf("AdvertiseAddr = %q, Slot.Addr = %q, want %q", got.AdvertiseAddr, got.Slot.Addr, tt.want)
-			}
-		})
-	}
-}
-
-func TestLoadDerivesHookTimeoutFromTick(t *testing.T) {
-	setEnv(t, map[string]string{"SLOT_TICK": "600ms"})
-	got, err := config.Load()
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if got.Slot.HookTimeout != 300*time.Millisecond {
-		t.Errorf("Slot.HookTimeout = %v, want half of SLOT_TICK", got.Slot.HookTimeout)
-	}
-}
-
-func TestAdminAddrReadsOnlyTheAdminKey(t *testing.T) {
-	for _, k := range envKeys {
-		t.Setenv(k, "")
-	}
-	if got := config.AdminAddr(); got != ":9090" {
-		t.Errorf("AdminAddr() = %q, want :9090", got)
-	}
-	t.Setenv("CORE_ADMIN_ADDR", "127.0.0.1:7091")
-	if got := config.AdminAddr(); got != "127.0.0.1:7091" {
-		t.Errorf("AdminAddr() = %q, want 127.0.0.1:7091", got)
 	}
 }

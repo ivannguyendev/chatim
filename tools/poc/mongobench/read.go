@@ -27,7 +27,7 @@ func runRead(ctx context.Context, args []string) error {
 	var t target
 	t.register(fs)
 	mode := fs.String("mode", "oldest", "page to read: oldest | random | latest")
-	roomsFile := fs.String("rooms-file", "rooms-mongo.txt", "room ids written by seed")
+	roomsFile := fs.String("rooms-file", ".local/rooms-mongo.txt", "room ids written by seed")
 	concurrency := fs.Int("concurrency", 16, "parallel readers")
 	duration := fs.Duration("duration", 30*time.Second, "how long to read")
 	limit := fs.Int64("limit", 50, "messages per page")

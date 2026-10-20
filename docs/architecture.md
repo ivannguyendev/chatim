@@ -14,21 +14,23 @@
 ### 1.1 Phạm vi Phase 1
 - `core`: room, member, message, tương tác, cấp seq, lưu trữ MongoDB, phát event NATS JetStream.
 - `websocket`: giữ kết nối WebSocket (gws), đẩy event realtime (chưa xây).
-- Room: DM (1-1), group ≤5K member, channel ~200K subscriber (chỉ admin post).
+- Room: DM (1-1), group ≤5K member. Channel ~200K subscriber (chỉ admin post) vào backlog (owner 2026-10-19, D178).
+- Exit Phase 1: `core` + `mention` + `websocket` đạt `prod-like validated`; go-live sau khi có `identity` (D178, [tóm tắt](plans/2026-10-19-phase1-exit-summary.md)).
 - Tin nhắn: gửi, sửa (có lịch sử), xoá cho mọi người / phía tôi, trả lời (quote), chuyển tiếp (forward).
 - Tương tác: reaction, vị trí đọc + unread, typing, presence, thread, mention, ghim (pin), bookmark, đánh dấu chưa đọc.
 - Ranh giới trách nhiệm:
   - Core cung cấp API dữ liệu (gửi, đọc, sửa, xoá, lịch sử, reaction, vị trí đọc…) và phát event.
   - Client lấy danh sách hội thoại thẳng từ Core; Core xếp danh sách theo tin mới nhất và đếm unread lúc đọc (M3, D120–D123).
-  - Mention App (app riêng `apps/mention`, D162–D176, đã merge `main` PR #16, trước M4): ghi mention, `ListMentions`, thành viên nhóm và danh mục nhóm được tag, dữ liệu gợi ý `@nhóm` theo room, bung `@nhóm`/`@all` và gửi thông báo theo người lên `CHATIM_NOTIFY`; hiện chạy nhúng trong core (core chỉ import package công khai `apps/mention/mentionapp`; app đọc core qua cổng `CoreReader` trong tiến trình). Lọc tắt thông báo và giao tới máy thuộc app notification (websocket M4, `push` Phase 2). Dấu `@` trên danh sách hội thoại, sync token, đa thiết bị: làm sau.
+  - Mention App (module nhúng `modules/mention`, D182; D162–D176, đã merge `main` PR #16, trước M4): ghi mention, `ListMentions`, thành viên nhóm và danh mục nhóm được tag, dữ liệu gợi ý `@nhóm` theo room, bung `@nhóm`/`@all` và gửi thông báo theo người lên `CHATIM_NOTIFY`; hiện chạy nhúng trong core (core chỉ import package công khai `modules/mention/mentionapp`; app đọc core qua cổng `CoreReader` trong tiến trình); giữ nhúng (owner 2026-10-19, D177): chỉ tách khi có team, SLA, nhịp release hoặc nhu cầu scale riêng có số đo, hoặc database riêng + CDC, và khi tách thì app tự sở hữu dữ liệu, chỉ gọi core qua API, không đọc chung bảng. Lọc tắt thông báo và giao tới máy thuộc app notification (websocket M4, `push` Phase 2). Dấu `@` trên danh sách hội thoại, sync token, đa thiết bị: làm sau.
 
 ### 1.2 Ngoài phạm vi Phase 1 (Non-goals)
-App auth / api / events / push / migrator, API import trong core, media, search, E2EE, webhook, voice/video, admin UI. (Search: owner dự định Search App riêng dùng search engine, 2026-10-17, chưa lên lịch; xem [roadmap](./roadmap.md).)
+Phase 2 (owner 2026-10-19, D179–D180): `identity`, `identity-verifier`, `gateway` (REST + webhook), `notification` (+ push), `search`, `migrator`, media qua presigned URL. Backlog: channel, sync token D74, đa thiết bị. Ngoài phạm vi: API import trong core, E2EE, voice/video, admin UI. Xem [roadmap](./roadmap.md).
 
 ### 1.3 Mục tiêu quy mô (Scale)
 - ~100K kết nối đồng thời (CCU).
 - 5–10K tin/s lúc đỉnh điểm.
 - Lưu trữ 5–20 tỷ tin nhắn sau 2 năm.
+- Số thật (owner 2026-10-19, D181): ~5.000 `MarkRead`/s, 5% tin bị sửa, 1.000 room hoạt động cùng lúc. Load test: dev 10K kết nối, prod-like 100K.
 
 ---
 
@@ -170,42 +172,54 @@ apps/core/
   internal/
     app/           Wiring, vòng đời khởi động/tắt, CLI subcommand
     config/        Load và validate cấu hình lúc boot
-    api/           grpcsrv, view pipeline, roomlist, roomcache
-    model/         domain entities, pbconv, access policy
-    send/          actor per room, dedupe batcher, flusher, memberwatch
-    change/        mutate, ownership transaction, pinproj
-    event/         publish async, stateclear, projection, sweep, timer, eventkit, resync
-    store/         store interfaces, mongostore, memstore, storetest
-    platform/      slot manager, metrics registry, redisguard
+    api/
+      grpcsrv/     Transport mỏng: đọc caller, đổi proto <-> domain, gọi đúng một use case của domain
+    message/       message.Editor (sửa, xoá, ẩn, kiểm tra reply và forward), message.Reader (GetHistory, GetMessages, lịch sử sửa)
+      actor/       actor theo room: cấp seq, cid dedupe, ghi một lần
+      flush/       gom insertMany nhiều room theo shard
+      view/        pipeline đọc: gộp tin gửi lại, che tin đã xoá, ẩn theo người đọc
+    interaction/   interaction.Service (react, bookmark, pin), interaction.Reader (reactions, pins, bookmarks, replies, threads)
+      pinproj/     fold + CAS phép chiếu pin, dùng chung với sweeper
+    member/        member.Service (thêm, xoá, rời, vai trò, priority, vị trí đọc, xoá lịch sử, room preferences), member.Reader (ListMembers)
+      ownership/   luật owner thuần, chạy trong transaction đổi owner (D100)
+      memberwatch/ quên cache member giữa các core qua NATS core
+    room/          room.Service (CreateRoom, OpenDirectRoom, UpdateRoom)
+      roomlist/    ListMyRooms, GetRooms: danh sách hội thoại sắp lúc đọc
+      roomcache/   cache RAM room info, tail, snapshot thứ tự, watch quên cache
+    dedupe/        cid và request_id trên Redis dedupe (batcher, LRU dự phòng)
+    model/         dùng chung: domain (entity, luật), access (Policy, Checker), pbconv
+    store/         dùng chung: store ports, mongostore, memstore, storetest
+    event/         dùng chung: publish, stateclear, projection, sweep, timer, eventkit, resync
+    platform/      dùng chung: slot manager, metrics registry, redisguard, testlog
 
-apps/mention/
+modules/mention/
   mentionapp/      bề mặt công khai core import: Config, Deps, New, Prepare, Run, Close, Register, Watch, Probes; cổng CoreReader
   internal/        config, domain, store (memstore, mongostore, storetest), plan, recipients, notify, consumer, groups, roomgroups, grpcsrv
 ```
 
-`apps/mention/internal` không import `apps/core/internal` và ngược lại; phần dùng chung nằm ở `pkg/` (`jsconsume`, `mongobound`, `callerid`, `ids`, `keys`). Core nối app trong `apps/core/internal/app` (`mention_wiring.go`, `mention_core_reader.go`).
+Luật layout (D182): `apps/<x>` là chương trình có `main.go`; `modules/<x>` là module nghiệp vụ nhúng, một package công khai + `internal/`. Một phần chỉ thành module khi có collection riêng không ai khác ghi, phụ thuộc một chiều vào core và nối qua event + port; domain của core không đủ nên ở lại `apps/core/internal`. `modules/mention/internal` không import `apps/core/internal` (luật `internal/` của Go) và chỉ mở 4 collection của nó (test `owned_collections_test.go`); trong core chỉ `app` và `config` import `mentionapp` (depguard `mention-module-entry`); phần dùng chung nằm ở `pkg/` (`jsconsume`, `mongobound`, `callerid`, `ids`, `keys`). Core nối app trong `apps/core/internal/app` (`mention_wiring.go`, `mention_core_reader.go`).
 
 ```mermaid
 flowchart TB
-    app["app (+ config)"]
-    api["api<br/>grpcsrv · view · roomlist · roomcache"]
-    send["send<br/>actor · dedupe · flush · memberwatch"]
-    change["change<br/>mutate · ownership · pinproj"]
+    app["app"]
+    config["config"]
+    api["api/grpcsrv<br/>transport mỏng"]
+    subgraph domains["domains (use case ở gốc mỗi domain)"]
+        room["room<br/>Service · roomlist · roomcache"]
+        member["member<br/>Service · Reader · ownership · memberwatch"]
+        interaction["interaction<br/>Service · Reader · pinproj"]
+        message["message<br/>Editor · Reader · actor · flush · view"]
+    end
     event["event<br/>publish · stateclear · projection · sweep · timer · eventkit · resync"]
-    model["model<br/>domain · pbconv · access"]
-    store["store<br/>store · mongostore · memstore"]
-    platform["platform<br/>slot · metrics · redisguard"]
+    shared["dùng chung<br/>model (domain · access · pbconv) · store · dedupe · platform"]
 
-    app --> api & event & platform
-    api --> send & change
-    api -->|Đọc thẳng| store
-    send --> model & store
-    change --> model & store
-    change -->|timer.Timers| event
-    change -->|dedupe.Requests| send
-    event --> model & store
-    send & event -->|redisguard| platform
-    store --> model
+    app --> api & config & event
+    api --> domains
+    room --> member
+    interaction --> message
+    domains --> shared
+    domains -->|event/timer| event
+    event --> shared
 ```
 
 ---

@@ -6,14 +6,14 @@ import (
 	"log/slog"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
+	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/projection"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message/actor"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/metrics"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/slot"
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/dedupe"
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
 	"github.com/ivannguyendev/chatim/pkg/admin"
 	"github.com/ivannguyendev/chatim/pkg/grpcserver"
@@ -139,7 +139,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 	}
 	a.publisher, a.stateClears, a.flusher, a.cidBatch, a.router, a.slots = pub, clears, fl, batch, router, slots
 	a.projections, a.sweeper = projections, sweeper
-	svc, err := wireService(serviceDeps{store: st, router: router, pub: pub, cidBatch: batch, timers: ts.members, msgTimers: ts.messages, rooms: caches, cfg: cfg, log: log})
+	svc, reader, err := wireService(serviceDeps{store: st, router: router, pub: pub, cidBatch: batch, timers: ts.members, msgTimers: ts.messages, rooms: caches, cfg: cfg, log: log})
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +152,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 		Limiter:         limiter,
 	}, log)
 	chatimv1.RegisterCoreServiceServer(a.grpc, svc)
-	mention, err := wireMention(cfg, cl, st, caches, svc, log)
+	mention, err := wireMention(cfg, cl, st, caches, reader, log)
 	if err != nil {
 		return nil, err
 	}

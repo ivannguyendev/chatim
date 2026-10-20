@@ -1,0 +1,155 @@
+package message_test
+
+import (
+	"errors"
+	"reflect"
+	"slices"
+	"strconv"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/ivannguyendev/chatim/apps/core/internal/message"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/store"
+	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
+	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
+)
+
+const (
+	tenant        = "acme"
+	room   uint64 = 4242
+)
+
+var (
+	created = time.Date(2026, 10, 5, 8, 0, 0, 0, time.UTC)
+	errBoom = errors.New("boom")
+)
+
+type recordingEvents struct {
+	mu     sync.Mutex
+	rooms  []uint64
+	events []*chatimv1.Event
+	err    error
+}
+
+func (r *recordingEvents) Enqueue(room uint64, events []*chatimv1.Event) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, ev := range events {
+		r.rooms = append(r.rooms, room)
+		r.events = append(r.events, ev)
+	}
+	return r.err
+}
+
+func (r *recordingEvents) list() ([]uint64, []*chatimv1.Event) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.rooms), slices.Clone(r.events)
+}
+
+type rig struct {
+	m         *message.Editor
+	msgs      *memstore.Messages
+	rooms     *memstore.Rooms
+	edits     *memstore.Edits
+	hidden    *memstore.Hidden
+	reactions *memstore.Interactions
+	events    *recordingEvents
+	now       time.Time
+}
+
+func newRig(t *testing.T, policy access.Policy) *rig {
+	t.Helper()
+	rg := &rig{
+		msgs: memstore.NewMessages(), rooms: memstore.NewRooms(), edits: memstore.NewEdits(), hidden: memstore.NewHidden(),
+		reactions: memstore.NewInteractions(), events: &recordingEvents{},
+		now: created.Add(time.Minute + 1500*time.Microsecond),
+	}
+	r := domain.Room{ID: room, Tenant: tenant, Type: domain.RoomGroup, Name: "team", CreatedBy: "alice", CreatedAt: created, MemberCount: 3}
+	members := []domain.Member{
+		{Room: room, Tenant: tenant, User: "alice", Role: domain.RoleOwner, JoinedAt: created},
+		{Room: room, Tenant: tenant, User: "bob", Role: domain.RoleMember, JoinedAt: created},
+		{Room: room, Tenant: tenant, User: "carol", Role: domain.RoleMember, JoinedAt: created},
+	}
+	if err := rg.rooms.Create(t.Context(), r, members); err != nil {
+		t.Fatalf("create room: %v", err)
+	}
+	rg.m = rg.build(t, rg.deps(t, policy))
+	return rg
+}
+
+func (rg *rig) deps(t *testing.T, policy access.Policy) message.Deps {
+	t.Helper()
+	checker, err := access.NewChecker(rg.rooms, policy)
+	if err != nil {
+		t.Fatalf("NewChecker: %v", err)
+	}
+	return message.Deps{
+		Access: checker, Messages: rg.msgs, Edits: rg.edits, Hidden: rg.hidden, Events: rg.events,
+		Interactions: rg.reactions, Now: func() time.Time { return rg.now },
+	}
+}
+
+func (rg *rig) build(t *testing.T, d message.Deps) *message.Editor {
+	t.Helper()
+	m, err := message.New(d)
+	if err != nil {
+		t.Fatalf("message.New: %v", err)
+	}
+	return m
+}
+
+func (rg *rig) editor(t *testing.T, policy access.Policy, edits store.Edits) *message.Editor {
+	t.Helper()
+	d := rg.deps(t, policy)
+	d.Edits = edits
+	return rg.build(t, d)
+}
+
+func (rg *rig) send(t *testing.T, seq uint64, from, text string) domain.Message {
+	t.Helper()
+	m := domain.Message{Room: room, Seq: seq, Tenant: tenant, From: from, Kind: domain.KindText, Text: text, CID: "c-" + strconv.FormatUint(seq, 10), CreatedAt: created}
+	if res := rg.msgs.Insert(t.Context(), []domain.Message{m}); res[0].Outcome != store.Inserted {
+		t.Fatalf("insert seq %d: %+v", seq, res)
+	}
+	return m
+}
+
+func (rg *rig) stored(t *testing.T, seq uint64) domain.Message {
+	t.Helper()
+	found, err := rg.msgs.Find(t.Context(), room, []store.MsgKey{key(seq)})
+	if err != nil || len(found) != 1 {
+		t.Fatalf("find seq %d = %v, %v", seq, found, err)
+	}
+	return found[0]
+}
+
+func (rg *rig) facts(t *testing.T, seq uint64) []domain.Edit {
+	t.Helper()
+	got, err := rg.edits.History(t.Context(), key(seq), 0, store.MaxEditPage)
+	if err != nil {
+		t.Fatalf("history of seq %d: %v", seq, err)
+	}
+	return got
+}
+
+func (rg *rig) at() time.Time { return rg.now.Truncate(time.Millisecond) }
+
+func key(seq uint64) store.MsgKey { return store.MsgKey{Room: room, Seq: seq} }
+
+func edit(user string, seq uint64, base uint32, text string) message.EditCmd {
+	return message.EditCmd{Tenant: tenant, User: user, Room: room, Seq: seq, BaseVersion: base, Text: text}
+}
+
+func del(user string, seq uint64, base uint32) message.DeleteCmd {
+	return message.DeleteCmd{Tenant: tenant, User: user, Room: room, Seq: seq, BaseVersion: base}
+}
+
+func sameEdit(a, b domain.Edit) bool {
+	at, mentions := a.At.Equal(b.At), slices.Equal(a.Mentions, b.Mentions)
+	a.At, b.At, a.Mentions, b.Mentions = time.Time{}, time.Time{}, nil, nil
+	return at && mentions && reflect.DeepEqual(a, b)
+}

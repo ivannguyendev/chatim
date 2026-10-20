@@ -7,9 +7,9 @@ import (
 	"github.com/nats-io/nats.go"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
+	"github.com/ivannguyendev/chatim/apps/core/internal/member/memberwatch"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/metrics"
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/memberwatch"
 )
 
 func wireMemberWatch(cfg config.Config, nc *nats.Conn, router *actor.Router, log *slog.Logger) (*memberwatch.Watch, error) {
