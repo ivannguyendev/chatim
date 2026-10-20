@@ -1,4 +1,4 @@
-package mutate
+package message
 
 import (
 	"context"
@@ -24,7 +24,7 @@ type change struct {
 	keepMentions bool
 }
 
-func (m *Mutator) Edit(ctx context.Context, c EditCmd) (domain.Message, error) {
+func (m *Editor) Edit(ctx context.Context, c EditCmd) (domain.Message, error) {
 	if err := domain.ValidateText(c.Text); err != nil {
 		return domain.Message{}, err
 	}
@@ -39,14 +39,14 @@ func (m *Mutator) Edit(ctx context.Context, c EditCmd) (domain.Message, error) {
 	return m.apply(ctx, ch)
 }
 
-func (m *Mutator) Delete(ctx context.Context, c DeleteCmd) (domain.Message, error) {
+func (m *Editor) Delete(ctx context.Context, c DeleteCmd) (domain.Message, error) {
 	return m.apply(ctx, change{
 		action: access.DeleteMessage, tenant: c.Tenant, user: c.User,
 		key: store.MsgKey{Room: c.Room, Thread: c.Thread, Seq: c.Seq}, base: c.BaseVersion, kind: domain.EditDelete,
 	})
 }
 
-func (m *Mutator) apply(ctx context.Context, c change) (domain.Message, error) {
+func (m *Editor) apply(ctx context.Context, c change) (domain.Message, error) {
 	if err := validKey(c.key); err != nil {
 		return domain.Message{}, err
 	}
@@ -79,7 +79,7 @@ func (m *Mutator) apply(ctx context.Context, c change) (domain.Message, error) {
 	return snap, nil
 }
 
-func (m *Mutator) commit(ctx context.Context, c change, msg domain.Message) (committed, error) {
+func (m *Editor) commit(ctx context.Context, c change, msg domain.Message) (committed, error) {
 	if c.base >= math.MaxInt32 {
 		return committed{}, domain.ErrVersionConflict
 	}
@@ -116,7 +116,7 @@ func (m *Mutator) commit(ctx context.Context, c change, msg domain.Message) (com
 	return committed{fact: fact, before: before, known: true}, nil
 }
 
-func (m *Mutator) refuseReplied(ctx context.Context, c change) error {
+func (m *Editor) refuseReplied(ctx context.Context, c change) error {
 	if c.kind != domain.EditDelete {
 		return nil
 	}
@@ -130,7 +130,7 @@ func (m *Mutator) refuseReplied(ctx context.Context, c change) error {
 	return nil
 }
 
-func (m *Mutator) keepOriginal(ctx context.Context, c change, msg domain.Message, next uint32) error {
+func (m *Editor) keepOriginal(ctx context.Context, c change, msg domain.Message, next uint32) error {
 	if next != 1 || c.kind != domain.EditText {
 		return nil
 	}
@@ -145,7 +145,7 @@ func (m *Mutator) keepOriginal(ctx context.Context, c change, msg domain.Message
 	return nil
 }
 
-func (m *Mutator) recognize(ctx context.Context, c change, version uint32) (domain.Edit, error) {
+func (m *Editor) recognize(ctx context.Context, c change, version uint32) (domain.Edit, error) {
 	got, err := m.d.Edits.At(ctx, c.key, version)
 	if err != nil {
 		return domain.Edit{}, err
@@ -156,7 +156,7 @@ func (m *Mutator) recognize(ctx context.Context, c change, version uint32) (doma
 	return got, nil
 }
 
-func (m *Mutator) project(ctx context.Context, f domain.Edit) error {
+func (m *Editor) project(ctx context.Context, f domain.Edit) error {
 	if err := m.d.Messages.ApplyEdit(ctx, f); err != nil {
 		return err
 	}

@@ -1,4 +1,4 @@
-package mutate
+package message
 
 import (
 	"context"
@@ -13,7 +13,7 @@ type HideCmd struct {
 	Room, Thread, Seq uint64
 }
 
-func (m *Mutator) Hide(ctx context.Context, c HideCmd) error {
+func (m *Editor) Hide(ctx context.Context, c HideCmd) error {
 	key := store.MsgKey{Room: c.Room, Thread: c.Thread, Seq: c.Seq}
 	if err := validKey(key); err != nil {
 		return err

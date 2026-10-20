@@ -1,4 +1,4 @@
-package mutate_test
+package message_test
 
 import (
 	"context"
@@ -66,7 +66,7 @@ func (rg *rig) racingEdit(t *testing.T, withFacts bool) *racingEdits {
 		rg.land(t, racer(2, domain.EditText, "other v2"), withFacts)
 		rg.land(t, racer(3, domain.EditText, "other v3"), withFacts)
 	}
-	rg.m = rg.mutator(t, nil, racing)
+	rg.m = rg.editor(t, nil, racing)
 	return racing
 }
 

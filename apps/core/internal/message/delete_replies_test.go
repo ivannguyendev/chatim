@@ -1,4 +1,4 @@
-package mutate_test
+package message_test
 
 import (
 	"errors"

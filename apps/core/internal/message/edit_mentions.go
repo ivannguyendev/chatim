@@ -1,4 +1,4 @@
-package mutate
+package message
 
 import (
 	"context"
@@ -14,7 +14,7 @@ type MentionSet struct {
 	All     bool
 }
 
-func (m *Mutator) withMentions(c change, set *MentionSet) (change, error) {
+func (m *Editor) withMentions(c change, set *MentionSet) (change, error) {
 	if set == nil {
 		c.keepMentions = true
 		return c, nil
@@ -27,7 +27,7 @@ func (m *Mutator) withMentions(c change, set *MentionSet) (change, error) {
 	return c, nil
 }
 
-func (m *Mutator) resolveMentions(ctx context.Context, c change, grant access.Request) error {
+func (m *Editor) resolveMentions(ctx context.Context, c change, grant access.Request) error {
 	if c.kind != domain.EditText || c.keepMentions || !c.mentions.All {
 		return nil
 	}
@@ -41,7 +41,7 @@ type committed struct {
 	known  bool
 }
 
-func (m *Mutator) previousOf(ctx context.Context, done committed, snap domain.Message) (domain.Mentions, error) {
+func (m *Editor) previousOf(ctx context.Context, done committed, snap domain.Message) (domain.Mentions, error) {
 	if done.known && !snap.Deleted && snap.Version == done.fact.Version {
 		return done.before, nil
 	}

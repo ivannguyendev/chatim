@@ -8,9 +8,9 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/api/view"
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/interaction"
 	"github.com/ivannguyendev/chatim/apps/core/internal/member"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/room"
@@ -23,7 +23,7 @@ import (
 )
 
 var (
-	errMissingDeps = fmt.Errorf("%w: core service needs a sender, a room store, a page reader, a mutator, an interaction service, a member service, a room service, an edit store, a hidden store, a bookmark store, a reply store, a reader interaction store, a room lister, a thread lister, a reactor lister, a pin reader and a member lister", apperr.ErrInvalidArgument)
+	errMissingDeps = fmt.Errorf("%w: core service needs a sender, a room store, a page reader, a message editor, an interaction service, a member service, a room service, an edit store, a hidden store, a bookmark store, a reply store, a reader interaction store, a room lister, a thread lister, a reactor lister, a pin reader and a member lister", apperr.ErrInvalidArgument)
 	errBadRoomID   = fmt.Errorf("%w: room id", apperr.ErrInvalidArgument)
 )
 
@@ -41,7 +41,7 @@ type Deps struct {
 	Rooms              store.Rooms
 	Pages              PageReader
 	Policy             access.Policy
-	Mutator            *mutate.Mutator
+	Editor             *message.Editor
 	InteractionService *interaction.Service
 	MemberService      *member.Service
 	RoomService        *room.Service
@@ -62,7 +62,7 @@ type Service struct {
 	sender             Sender
 	rooms              store.Rooms
 	pages              PageReader
-	mutator            *mutate.Mutator
+	editor             *message.Editor
 	interactionService *interaction.Service
 	memberService      *member.Service
 	roomService        *room.Service
@@ -85,7 +85,7 @@ type Service struct {
 var _ chatimv1.CoreServiceServer = (*Service)(nil)
 
 func New(d Deps, log *slog.Logger) (*Service, error) {
-	if d.Sender == nil || d.Rooms == nil || d.Pages == nil || d.Mutator == nil || d.InteractionService == nil || d.MemberService == nil || d.RoomService == nil || d.Edits == nil || d.Hidden == nil || d.Bookmarks == nil ||
+	if d.Sender == nil || d.Rooms == nil || d.Pages == nil || d.Editor == nil || d.InteractionService == nil || d.MemberService == nil || d.RoomService == nil || d.Edits == nil || d.Hidden == nil || d.Bookmarks == nil ||
 		d.Replies == nil || d.Mine == nil || d.RoomList == nil ||
 		d.Threads == nil || d.Reactors == nil || d.PinBoard == nil || d.MemberList == nil {
 		return nil, errMissingDeps
@@ -98,7 +98,7 @@ func New(d Deps, log *slog.Logger) (*Service, error) {
 		return nil, err
 	}
 	return &Service{
-		sender: d.Sender, rooms: d.Rooms, pages: d.Pages, mutator: d.Mutator, interactionService: d.InteractionService, memberService: d.MemberService, roomService: d.RoomService, edits: d.Edits, hidden: d.Hidden,
+		sender: d.Sender, rooms: d.Rooms, pages: d.Pages, editor: d.Editor, interactionService: d.InteractionService, memberService: d.MemberService, roomService: d.RoomService, edits: d.Edits, hidden: d.Hidden,
 		bookmarks: d.Bookmarks, replies: d.Replies, mine: d.Mine, roomList: d.RoomList, threads: d.Threads, reactors: d.Reactors, pinBoard: d.PinBoard, memberList: d.MemberList, access: checker, view: view.Default(), maskView: view.New(view.MaskDeleted, view.HideForViewer), log: log,
 	}, nil
 }

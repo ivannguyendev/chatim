@@ -1,4 +1,4 @@
-package mutate_test
+package message_test
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -124,7 +124,7 @@ func TestRetryAfterACrashFinishesTheProjection(t *testing.T) {
 func TestDuplicateVersionIsARetryOnlyForTheSameChange(t *testing.T) {
 	rg := newRig(t, nil)
 	rg.send(t, 1, "alice", "v0")
-	rg.m = rg.mutator(t, nil, laggingEdits{rg.edits})
+	rg.m = rg.editor(t, nil, laggingEdits{rg.edits})
 	other := domain.Edit{Room: room, Seq: 1, Version: 1, Kind: domain.EditText, Tenant: tenant, By: "alice", Text: "from another device", At: created}
 	if err := rg.edits.Append(t.Context(), other); err != nil {
 		t.Fatalf("Append: %v", err)
@@ -145,7 +145,7 @@ func TestEditRejectsBadInput(t *testing.T) {
 	thread.Thread = 1
 	noRoom := edit("alice", 1, 0, "x")
 	noRoom.Room = 0
-	for name, c := range map[string]mutate.EditCmd{
+	for name, c := range map[string]message.EditCmd{
 		"empty text": edit("alice", 1, 0, ""), "blank text": edit("alice", 1, 0, " \n "),
 		"seq zero": edit("alice", 0, 0, "x"), "thread": thread, "room zero": noRoom,
 	} {

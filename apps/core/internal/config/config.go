@@ -5,7 +5,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/projection"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
@@ -14,6 +13,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/interaction"
 	"github.com/ivannguyendev/chatim/apps/core/internal/member"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/slot"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
@@ -67,7 +67,7 @@ type Config struct {
 	Projection             projection.Config
 	Mention                mentionapp.Config
 	LockedMessageKinds     []domain.Kind
-	Limits                 mutate.Limits
+	Messages               message.Limits
 	Interactions           interaction.Limits
 	Members                member.Limits
 	MemberCountCheckDelay  time.Duration

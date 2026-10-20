@@ -1,23 +1,23 @@
-package mutate_test
+package message_test
 
 import (
 	"errors"
 	"strings"
 	"testing"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
 func TestLimitsFillDefaultsAndCheckBounds(t *testing.T) {
 	cases := []struct {
 		name   string
-		limits mutate.Limits
+		limits message.Limits
 		bad    string
 	}{
-		{"defaults", mutate.Limits{}, ""},
-		{"one target", mutate.Limits{MentionTargets: 1}, ""},
-		{"negative mention targets", mutate.Limits{MentionTargets: -2}, "-2"},
+		{"defaults", message.Limits{}, ""},
+		{"one target", message.Limits{MentionTargets: 1}, ""},
+		{"negative mention targets", message.Limits{MentionTargets: -2}, "-2"},
 	}
 	for _, c := range cases {
 		err := c.limits.Validate()

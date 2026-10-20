@@ -1,4 +1,4 @@
-package mutate_test
+package message_test
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
@@ -18,7 +18,7 @@ func TestHideNeedsAnExistingMessage(t *testing.T) {
 	rg := newRig(t, nil)
 	rg.send(t, 1, "alice", "hi")
 	hide := func(user string, seq uint64) error {
-		return rg.m.Hide(t.Context(), mutate.HideCmd{Tenant: tenant, User: user, Room: room, Seq: seq})
+		return rg.m.Hide(t.Context(), message.HideCmd{Tenant: tenant, User: user, Room: room, Seq: seq})
 	}
 	for range 2 {
 		if err := hide("bob", 1); err != nil {
@@ -56,7 +56,7 @@ func TestHideAsksThePolicy(t *testing.T) {
 	deny := access.PolicyFunc(func(_ context.Context, r access.Request) error { asked = append(asked, r); return access.ErrDenied })
 	rg := newRig(t, deny)
 	rg.send(t, 1, "alice", "hi")
-	if err := rg.m.Hide(t.Context(), mutate.HideCmd{Tenant: tenant, User: "bob", Room: room, Seq: 1}); !errors.Is(err, apperr.ErrPermissionDenied) {
+	if err := rg.m.Hide(t.Context(), message.HideCmd{Tenant: tenant, User: "bob", Room: room, Seq: 1}); !errors.Is(err, apperr.ErrPermissionDenied) {
 		t.Fatalf("Hide = %v, want PermissionDenied", err)
 	}
 	if len(asked) != 1 || asked[0].Action != access.HideMessage || asked[0].Author != "alice" {
@@ -70,7 +70,7 @@ func TestHidingSendsOneMessageHiddenAndHidingAgainSendsNothing(t *testing.T) {
 	rg.send(t, 2, "alice", "yo")
 	hide := func(seq uint64) {
 		t.Helper()
-		if err := rg.m.Hide(t.Context(), mutate.HideCmd{Tenant: tenant, User: "bob", Room: room, Seq: seq}); err != nil {
+		if err := rg.m.Hide(t.Context(), message.HideCmd{Tenant: tenant, User: "bob", Room: room, Seq: seq}); err != nil {
 			t.Fatalf("Hide(%d): %v", seq, err)
 		}
 	}

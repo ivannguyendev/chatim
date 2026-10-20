@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/member"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/room"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
@@ -90,21 +90,21 @@ func memStores() *rig {
 	}
 }
 
-func newMutator(t *testing.T, rg *rig, o options) *mutate.Mutator {
+func newEditor(t *testing.T, rg *rig, o options) *message.Editor {
 	t.Helper()
 	checker, err := access.NewChecker(rg.rooms, o.policy)
 	if err != nil {
 		t.Fatalf("NewChecker: %v", err)
 	}
-	var events mutate.EventPublisher = nopPublisher{}
+	var events message.EventPublisher = nopPublisher{}
 	if o.events != nil {
 		events = o.events
 	}
-	m, err := mutate.New(mutate.Deps{
+	m, err := message.New(message.Deps{
 		Access: checker, Messages: rg.msgs, Edits: rg.edits, Hidden: rg.hidden, Events: events, Now: o.now, Interactions: rg.reactions,
 	})
 	if err != nil {
-		t.Fatalf("mutate.New: %v", err)
+		t.Fatalf("message.New: %v", err)
 	}
 	return m
 }

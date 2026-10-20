@@ -1,11 +1,11 @@
-package mutate_test
+package message_test
 
 import (
 	"context"
 	"errors"
 	"testing"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
@@ -15,12 +15,12 @@ func TestTheDefaultPolicyLetsOnlyTheAuthorChangeAMessage(t *testing.T) {
 	rg := newRig(t, nil)
 	rg.send(t, 1, "alice", "a")
 	rg.send(t, 2, "bob", "b")
-	for _, c := range []mutate.EditCmd{edit("bob", 1, 0, "x"), edit("alice", 2, 0, "x")} {
+	for _, c := range []message.EditCmd{edit("bob", 1, 0, "x"), edit("alice", 2, 0, "x")} {
 		if _, err := rg.m.Edit(t.Context(), c); !errors.Is(err, access.ErrDenied) || !errors.Is(err, apperr.ErrPermissionDenied) {
 			t.Fatalf("%s edits seq %d = %v, want ErrDenied", c.User, c.Seq, err)
 		}
 	}
-	for _, c := range []mutate.DeleteCmd{del("bob", 1, 0), del("carol", 2, 0), del("alice", 2, 0)} {
+	for _, c := range []message.DeleteCmd{del("bob", 1, 0), del("carol", 2, 0), del("alice", 2, 0)} {
 		if _, err := rg.m.Delete(t.Context(), c); !errors.Is(err, access.ErrDenied) {
 			t.Fatalf("%s deletes seq %d = %v, want ErrDenied even for the room owner", c.User, c.Seq, err)
 		}

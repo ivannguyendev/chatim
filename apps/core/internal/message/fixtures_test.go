@@ -1,4 +1,4 @@
-package mutate_test
+package message_test
 
 import (
 	"errors"
@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -51,7 +51,7 @@ func (r *recordingEvents) list() ([]uint64, []*chatimv1.Event) {
 }
 
 type rig struct {
-	m         *mutate.Mutator
+	m         *message.Editor
 	msgs      *memstore.Messages
 	rooms     *memstore.Rooms
 	edits     *memstore.Edits
@@ -81,28 +81,28 @@ func newRig(t *testing.T, policy access.Policy) *rig {
 	return rg
 }
 
-func (rg *rig) deps(t *testing.T, policy access.Policy) mutate.Deps {
+func (rg *rig) deps(t *testing.T, policy access.Policy) message.Deps {
 	t.Helper()
 	checker, err := access.NewChecker(rg.rooms, policy)
 	if err != nil {
 		t.Fatalf("NewChecker: %v", err)
 	}
-	return mutate.Deps{
+	return message.Deps{
 		Access: checker, Messages: rg.msgs, Edits: rg.edits, Hidden: rg.hidden, Events: rg.events,
 		Interactions: rg.reactions, Now: func() time.Time { return rg.now },
 	}
 }
 
-func (rg *rig) build(t *testing.T, d mutate.Deps) *mutate.Mutator {
+func (rg *rig) build(t *testing.T, d message.Deps) *message.Editor {
 	t.Helper()
-	m, err := mutate.New(d)
+	m, err := message.New(d)
 	if err != nil {
-		t.Fatalf("mutate.New: %v", err)
+		t.Fatalf("message.New: %v", err)
 	}
 	return m
 }
 
-func (rg *rig) mutator(t *testing.T, policy access.Policy, edits store.Edits) *mutate.Mutator {
+func (rg *rig) editor(t *testing.T, policy access.Policy, edits store.Edits) *message.Editor {
 	t.Helper()
 	d := rg.deps(t, policy)
 	d.Edits = edits
@@ -140,12 +140,12 @@ func (rg *rig) at() time.Time { return rg.now.Truncate(time.Millisecond) }
 
 func key(seq uint64) store.MsgKey { return store.MsgKey{Room: room, Seq: seq} }
 
-func edit(user string, seq uint64, base uint32, text string) mutate.EditCmd {
-	return mutate.EditCmd{Tenant: tenant, User: user, Room: room, Seq: seq, BaseVersion: base, Text: text}
+func edit(user string, seq uint64, base uint32, text string) message.EditCmd {
+	return message.EditCmd{Tenant: tenant, User: user, Room: room, Seq: seq, BaseVersion: base, Text: text}
 }
 
-func del(user string, seq uint64, base uint32) mutate.DeleteCmd {
-	return mutate.DeleteCmd{Tenant: tenant, User: user, Room: room, Seq: seq, BaseVersion: base}
+func del(user string, seq uint64, base uint32) message.DeleteCmd {
+	return message.DeleteCmd{Tenant: tenant, User: user, Room: room, Seq: seq, BaseVersion: base}
 }
 
 func sameEdit(a, b domain.Edit) bool {

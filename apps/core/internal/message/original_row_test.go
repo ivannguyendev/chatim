@@ -1,4 +1,4 @@
-package mutate_test
+package message_test
 
 import (
 	"context"
@@ -79,7 +79,7 @@ func TestLaterEditsWriteNoOriginalRow(t *testing.T) {
 	rg := newRig(t, nil)
 	rg.send(t, 1, "alice", "v0")
 	appended := &appendLog{Edits: rg.edits}
-	rg.m = rg.mutator(t, nil, appended)
+	rg.m = rg.editor(t, nil, appended)
 	for base, text := range []string{"v1", "v2", "v3"} {
 		if _, err := rg.m.Edit(t.Context(), edit("alice", 1, uint32(base), text)); err != nil {
 			t.Fatalf("Edit base %d: %v", base, err)

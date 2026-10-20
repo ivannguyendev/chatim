@@ -1,4 +1,4 @@
-package mutate_test
+package message_test
 
 import (
 	"errors"
@@ -7,17 +7,16 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
-	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
 func TestDeletePurgesTheTextOfEarlierVersions(t *testing.T) {
 	rg := newRig(t, nil)
 	rg.send(t, 1, "alice", "v0")
-	for _, c := range []mutate.EditCmd{edit("alice", 1, 0, "v1"), edit("alice", 1, 1, "v2")} {
+	for _, c := range []message.EditCmd{edit("alice", 1, 0, "v1"), edit("alice", 1, 1, "v2")} {
 		if _, err := rg.m.Edit(t.Context(), c); err != nil {
 			t.Fatalf("Edit base %d: %v", c.BaseVersion, err)
 		}
@@ -64,7 +63,7 @@ func TestAFirstDeleteWritesNoOriginalRow(t *testing.T) {
 	rg := newRig(t, nil)
 	rg.send(t, 1, "alice", "v0")
 	appended := &appendLog{Edits: rg.edits}
-	rg.m = rg.mutator(t, nil, appended)
+	rg.m = rg.editor(t, nil, appended)
 	if _, err := rg.m.Delete(t.Context(), del("alice", 1, 0)); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
@@ -110,28 +109,5 @@ func TestARefusedEventDoesNotFailTheChange(t *testing.T) {
 	rg.events.err = errBoom
 	if got, err := rg.m.Edit(t.Context(), edit("alice", 1, 0, "v1")); err != nil || got.Version != 1 {
 		t.Fatalf("Edit with a refused event = %+v, %v; want success", got, err)
-	}
-}
-
-func TestNewRequiresEveryDependency(t *testing.T) {
-	rg := newRig(t, nil)
-	full := rg.deps(t, nil)
-	full.Now = nil
-	for name, drop := range map[string]func(d *mutate.Deps){
-		"no access":       func(d *mutate.Deps) { d.Access = nil },
-		"no messages":     func(d *mutate.Deps) { d.Messages = nil },
-		"no edits":        func(d *mutate.Deps) { d.Edits = nil },
-		"no hidden":       func(d *mutate.Deps) { d.Hidden = nil },
-		"no events":       func(d *mutate.Deps) { d.Events = nil },
-		"no interactions": func(d *mutate.Deps) { d.Interactions = nil },
-	} {
-		d := full
-		drop(&d)
-		if _, err := mutate.New(d); !errors.Is(err, apperr.ErrInvalidArgument) {
-			t.Fatalf("%s: New = %v, want ErrInvalidArgument", name, err)
-		}
-	}
-	if _, err := mutate.New(full); err != nil {
-		t.Fatalf("New with a default clock: %v", err)
 	}
 }

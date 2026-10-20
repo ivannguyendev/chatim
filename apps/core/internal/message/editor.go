@@ -1,4 +1,4 @@
-package mutate
+package message
 
 import (
 	"context"
@@ -12,11 +12,20 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-var errMissingDeps = fmt.Errorf("%w: mutator needs access, messages, edits, hidden, events and interactions", apperr.ErrInvalidArgument)
+var errMissingDeps = fmt.Errorf("%w: message editor needs access, messages, edits, hidden, events and interactions", apperr.ErrInvalidArgument)
 
 type Messages interface {
 	Find(ctx context.Context, room uint64, keys []store.MsgKey) ([]domain.Message, error)
 	ApplyEdit(ctx context.Context, e domain.Edit) error
+}
+
+type Hidden interface {
+	Hide(ctx context.Context, user string, key store.MsgKey, at time.Time) (bool, error)
+	Get(ctx context.Context, user string, key store.MsgKey) (domain.HiddenMessage, bool, error)
+}
+
+type LiveReplies interface {
+	CountLiveReplies(ctx context.Context, parent store.MsgKey) (uint32, error)
 }
 
 type EventPublisher interface {
@@ -27,9 +36,9 @@ type Deps struct {
 	Access       *access.Checker
 	Messages     Messages
 	Edits        store.Edits
-	Hidden       store.Hidden
+	Hidden       Hidden
 	Events       EventPublisher
-	Interactions store.Interactions
+	Interactions LiveReplies
 	Limits       Limits
 	Now          func() time.Time
 }
@@ -48,11 +57,11 @@ type DeleteCmd struct {
 	BaseVersion       uint32
 }
 
-type Mutator struct {
+type Editor struct {
 	d Deps
 }
 
-func New(d Deps) (*Mutator, error) {
+func New(d Deps) (*Editor, error) {
 	if d.Access == nil || d.Messages == nil || d.Edits == nil || d.Hidden == nil || d.Events == nil || d.Interactions == nil {
 		return nil, errMissingDeps
 	}
@@ -63,16 +72,16 @@ func New(d Deps) (*Mutator, error) {
 	if d.Now == nil {
 		d.Now = time.Now
 	}
-	return &Mutator{d: d}, nil
+	return &Editor{d: d}, nil
 }
 
-func (m *Mutator) now() time.Time { return m.d.Now().UTC().Truncate(time.Millisecond) }
+func (m *Editor) now() time.Time { return m.d.Now().UTC().Truncate(time.Millisecond) }
 
-func (m *Mutator) tell(room uint64, ev *chatimv1.Event) {
+func (m *Editor) tell(room uint64, ev *chatimv1.Event) {
 	_ = m.d.Events.Enqueue(room, []*chatimv1.Event{ev})
 }
 
-func (m *Mutator) find(ctx context.Context, key store.MsgKey) (domain.Message, error) {
+func (m *Editor) find(ctx context.Context, key store.MsgKey) (domain.Message, error) {
 	found, err := m.d.Messages.Find(ctx, key.Room, []store.MsgKey{key})
 	if err != nil {
 		return domain.Message{}, err

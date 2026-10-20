@@ -1,4 +1,4 @@
-package mutate
+package message
 
 import (
 	"cmp"

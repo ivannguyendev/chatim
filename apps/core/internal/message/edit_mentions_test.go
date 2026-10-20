@@ -1,4 +1,4 @@
-package mutate_test
+package message_test
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -32,9 +32,9 @@ func (rg *rig) sendMentioning(t *testing.T, seq uint64, all bool, targets ...dom
 	return m
 }
 
-func mentionEdit(base uint32, text string, all bool, targets ...domain.MentionTarget) mutate.EditCmd {
+func mentionEdit(base uint32, text string, all bool, targets ...domain.MentionTarget) message.EditCmd {
 	c := edit("alice", 1, base, text)
-	c.Mentions = &mutate.MentionSet{Targets: targets, All: all}
+	c.Mentions = &message.MentionSet{Targets: targets, All: all}
 	return c
 }
 
@@ -89,12 +89,12 @@ func TestRetriedEditWithTheSameMentionsInAnyOrderIsARetry(t *testing.T) {
 	if _, err := rg.m.Edit(t.Context(), mentionEdit(0, "v1", true, minh, ops)); err != nil {
 		t.Fatalf("Edit: %v", err)
 	}
-	for _, c := range []mutate.EditCmd{mentionEdit(0, "v1", true, ops, minh), edit("alice", 1, 0, "v1")} {
+	for _, c := range []message.EditCmd{mentionEdit(0, "v1", true, ops, minh), edit("alice", 1, 0, "v1")} {
 		if got, err := rg.m.Edit(t.Context(), c); err != nil || got.Version != 1 {
 			t.Fatalf("retry %+v = %+v, %v; want the first result", c.Mentions, got, err)
 		}
 	}
-	for _, c := range []mutate.EditCmd{mentionEdit(0, "v1", false, minh, ops), mentionEdit(0, "v1", true, minh)} {
+	for _, c := range []message.EditCmd{mentionEdit(0, "v1", false, minh, ops), mentionEdit(0, "v1", true, minh)} {
 		if _, err := rg.m.Edit(t.Context(), c); !errors.Is(err, domain.ErrVersionConflict) {
 			t.Fatalf("edit %+v at a taken version = %v, want ErrVersionConflict", c.Mentions, err)
 		}
@@ -107,7 +107,7 @@ func TestRetriedEditWithTheSameMentionsInAnyOrderIsARetry(t *testing.T) {
 func TestDuplicateVersionWithOtherMentionsIsNotARetry(t *testing.T) {
 	rg := newRig(t, nil)
 	rg.sendMentioning(t, 1, false)
-	rg.m = rg.mutator(t, nil, laggingEdits{rg.edits})
+	rg.m = rg.editor(t, nil, laggingEdits{rg.edits})
 	other := domain.Edit{Room: room, Seq: 1, Version: 1, Kind: domain.EditText, Tenant: tenant, By: "alice", Text: "v1", At: created, Mentions: []domain.MentionTarget{lan}}
 	if err := rg.edits.Append(t.Context(), other); err != nil {
 		t.Fatalf("Append: %v", err)
@@ -149,7 +149,7 @@ func TestEditRefusesBadOrTooManyMentions(t *testing.T) {
 	rg.m = rg.build(t, d)
 	rg.sendMentioning(t, 1, false)
 	bad := domain.MentionTarget{Kind: domain.MentionUser, ID: "Bad Id"}
-	for _, c := range []mutate.EditCmd{mentionEdit(0, "v1", false, minh, lan, ops), mentionEdit(0, "v1", false, bad)} {
+	for _, c := range []message.EditCmd{mentionEdit(0, "v1", false, minh, lan, ops), mentionEdit(0, "v1", false, bad)} {
 		if _, err := rg.m.Edit(t.Context(), c); !errors.Is(err, apperr.ErrInvalidArgument) {
 			t.Fatalf("edit %+v = %v, want ErrInvalidArgument", c.Mentions, err)
 		}

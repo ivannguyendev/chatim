@@ -20,7 +20,7 @@ func depsOf(t *testing.T, rg *rig, o options) grpcsrv.Deps {
 	members := newMemberService(t, rg, o)
 	return grpcsrv.Deps{
 		Sender: o.sender, Rooms: rg.rooms, Pages: o.pageReader(rg.msgs), Policy: o.policy,
-		Mutator: newMutator(t, rg, o), InteractionService: newInteractionService(t, rg, o, board), MemberService: members, RoomService: newRoomService(t, rg, o, members), Edits: rg.edits, Hidden: rg.hidden, Bookmarks: rg.reactions, Replies: rg.reactions,
+		Editor: newEditor(t, rg, o), InteractionService: newInteractionService(t, rg, o, board), MemberService: members, RoomService: newRoomService(t, rg, o, members), Edits: rg.edits, Hidden: rg.hidden, Bookmarks: rg.reactions, Replies: rg.reactions,
 		Mine: rg.reactions, RoomList: newRoomLister(t, rg),
 		Threads: rg.threads, Reactors: rg.reactions, PinBoard: board, MemberList: rg.rooms,
 	}
@@ -33,7 +33,7 @@ func TestNewRequiresEveryDependency(t *testing.T) {
 		"no sender":              func(d *grpcsrv.Deps) { d.Sender = nil },
 		"no rooms":               func(d *grpcsrv.Deps) { d.Rooms = nil },
 		"no pages":               func(d *grpcsrv.Deps) { d.Pages = nil },
-		"no mutator":             func(d *grpcsrv.Deps) { d.Mutator = nil },
+		"no message editor":      func(d *grpcsrv.Deps) { d.Editor = nil },
 		"no interaction service": func(d *grpcsrv.Deps) { d.InteractionService = nil },
 		"no member service":      func(d *grpcsrv.Deps) { d.MemberService = nil },
 		"no room service":        func(d *grpcsrv.Deps) { d.RoomService = nil },
