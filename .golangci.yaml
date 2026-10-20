@@ -215,7 +215,7 @@ linters:
       - path: ^pkg/backoff/backoff\.go$
         linters: [gosec]
         text: G404
-      - path: ^apps/core/internal/config/parse\.go$
+      - path: ^pkg/envconfig/secret\.go$
         linters: [gosec]
         text: G703
 
