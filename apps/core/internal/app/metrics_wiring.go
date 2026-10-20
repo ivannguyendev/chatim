@@ -10,8 +10,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/metrics"
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
 	"github.com/ivannguyendev/chatim/apps/mention/mentionapp"
 )

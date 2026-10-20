@@ -16,10 +16,10 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/interaction"
 	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	"github.com/ivannguyendev/chatim/apps/core/internal/message"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message/actor"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/slot"
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/flush"
 	"github.com/ivannguyendev/chatim/apps/mention/mentionapp"
 )
 

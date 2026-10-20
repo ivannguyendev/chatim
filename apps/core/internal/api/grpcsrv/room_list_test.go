@@ -7,9 +7,9 @@ import (
 
 	"google.golang.org/grpc/codes"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/api/roomcache"
-	"github.com/ivannguyendev/chatim/apps/core/internal/api/roomlist"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
+	"github.com/ivannguyendev/chatim/apps/core/internal/room/roomcache"
+	"github.com/ivannguyendev/chatim/apps/core/internal/room/roomlist"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 

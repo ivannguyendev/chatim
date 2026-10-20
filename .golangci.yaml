@@ -42,8 +42,15 @@ linters:
               desc: domains never import wiring
             - pkg: github.com/ivannguyendev/chatim/apps/core/internal/config
               desc: domains never import config
-            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/send/actor
-              desc: domains never import the send actor
+        domain-event-delivery:
+          files:
+            - "**/apps/core/internal/message/**"
+            - "**/apps/core/internal/interaction/**"
+            - "**/apps/core/internal/member/**"
+            - "**/apps/core/internal/room/**"
+            - "**/apps/core/internal/dedupe/**"
+            - "!**/apps/core/internal/message/actor/*_test.go"
+          deny:
             - pkg: github.com/ivannguyendev/chatim/apps/core/internal/event/publish
               desc: domains never import event delivery
             - pkg: github.com/ivannguyendev/chatim/apps/core/internal/event/sweep
@@ -54,6 +61,17 @@ linters:
               desc: domains never import event delivery
             - pkg: github.com/ivannguyendev/chatim/apps/core/internal/event/stateclear
               desc: domains never import event delivery
+        send-actor:
+          files:
+            - "**/apps/core/internal/message/**"
+            - "**/apps/core/internal/interaction/**"
+            - "**/apps/core/internal/member/**"
+            - "**/apps/core/internal/room/**"
+            - "**/apps/core/internal/dedupe/**"
+            - "!**/apps/core/internal/message/actor/**"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/message/actor
+              desc: domains never import the send actor
         member-domain:
           files:
             - "**/apps/core/internal/member/**"
@@ -85,6 +103,7 @@ linters:
         event-layer:
           files:
             - "**/apps/core/internal/event/**"
+            - "!$test"
           deny:
             - pkg: github.com/ivannguyendev/chatim/apps/core/internal/message
               desc: events never import domains
@@ -94,6 +113,21 @@ linters:
               desc: events never import domains
             - pkg: github.com/ivannguyendev/chatim/apps/core/internal/room
               desc: events never import domains
+        event-layer-tests:
+          files:
+            - "**/apps/core/internal/event/**/*_test.go"
+          list-mode: lax
+          allow:
+            - github.com/ivannguyendev/chatim/apps/core/internal/interaction/pinproj
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/message
+              desc: event tests import only the pin projector of a domain
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/interaction
+              desc: event tests import only the pin projector of a domain
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/member
+              desc: event tests import only the pin projector of a domain
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/room
+              desc: event tests import only the pin projector of a domain
         api-store-adapters:
           files:
             - "**/apps/core/internal/api/**"

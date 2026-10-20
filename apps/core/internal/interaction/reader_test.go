@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/pinproj"
 	"github.com/ivannguyendev/chatim/apps/core/internal/interaction"
+	"github.com/ivannguyendev/chatim/apps/core/internal/interaction/pinproj"
 	"github.com/ivannguyendev/chatim/apps/core/internal/message"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"

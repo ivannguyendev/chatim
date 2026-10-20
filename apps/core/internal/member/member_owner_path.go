@@ -3,7 +3,7 @@ package member
 import (
 	"context"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/ownership"
+	"github.com/ivannguyendev/chatim/apps/core/internal/member/ownership"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"

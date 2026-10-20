@@ -3,7 +3,7 @@ package app
 import (
 	"fmt"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/api/roomlist"
+	"github.com/ivannguyendev/chatim/apps/core/internal/room/roomlist"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
 )
 

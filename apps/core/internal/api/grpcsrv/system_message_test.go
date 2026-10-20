@@ -7,8 +7,8 @@ import (
 
 	"google.golang.org/grpc/codes"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/message/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 

@@ -5,17 +5,17 @@ import (
 	"log/slog"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/api/grpcsrv"
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/pinproj"
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/interaction"
+	"github.com/ivannguyendev/chatim/apps/core/internal/interaction/pinproj"
 	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	"github.com/ivannguyendev/chatim/apps/core/internal/message"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/room"
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
 )
 

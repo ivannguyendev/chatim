@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 	"github.com/ivannguyendev/chatim/pkg/callerid"
