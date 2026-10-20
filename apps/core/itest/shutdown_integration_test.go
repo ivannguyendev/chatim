@@ -17,6 +17,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
+	"github.com/ivannguyendev/chatim/pkg/admin"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -88,7 +89,7 @@ func awaitReady(t *testing.T, cfg config.Config, core *running) {
 		default:
 		}
 		ctx, cancel := context.WithTimeout(t.Context(), itProbeTimeout)
-		err := app.Probe(ctx, cfg.AdminAddr)
+		err := admin.Probe(ctx, cfg.AdminAddr)
 		cancel()
 		if err == nil {
 			return

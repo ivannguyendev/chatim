@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
+	"github.com/ivannguyendev/chatim/pkg/admin"
 )
 
 const usage = "usage: core [serve|probe|resync -from RFC3339 -to RFC3339 [-tenant T] [-room ID] [-rate N] [-dry-run]|recount -room ID [-dry-run]]"
@@ -57,9 +58,9 @@ func serveMain() int {
 }
 
 func probeMain() int {
-	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), admin.ProbeTimeout)
 	defer cancel()
-	if err := Probe(ctx, config.AdminAddr()); err != nil {
+	if err := admin.Probe(ctx, config.AdminAddr()); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}

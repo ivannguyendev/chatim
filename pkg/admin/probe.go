@@ -1,4 +1,4 @@
-package app
+package admin
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	probeTimeout   = 2 * time.Second
+	ProbeTimeout   = 2 * time.Second
 	probeBodyLimit = 4 << 10
 )
 
@@ -20,7 +20,7 @@ func Probe(ctx context.Context, adminAddr string) error {
 	if err != nil {
 		return fmt.Errorf("probe %s: %w", target, err)
 	}
-	client := &http.Client{Timeout: probeTimeout}
+	client := &http.Client{Timeout: ProbeTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("probe %s: %w", target, err)
