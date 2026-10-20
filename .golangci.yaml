@@ -171,6 +171,14 @@ linters:
           deny:
             - pkg: github.com/ivannguyendev/chatim/apps/core/internal/config
               desc: only app reads config
+        mention-module-entry:
+          files:
+            - "**/apps/core/**"
+            - "!**/apps/core/internal/app/**"
+            - "!**/apps/core/internal/config/**"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/modules/mention
+              desc: only app and config embed the mention module
     govet:
       enable-all: true
       disable:

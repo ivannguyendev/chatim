@@ -5,7 +5,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
-	"github.com/ivannguyendev/chatim/apps/mention/mentionapp"
+	"github.com/ivannguyendev/chatim/modules/mention/mentionapp"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 

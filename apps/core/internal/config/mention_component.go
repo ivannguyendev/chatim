@@ -1,7 +1,7 @@
 package config
 
 import (
-	"github.com/ivannguyendev/chatim/apps/mention/mentionapp"
+	"github.com/ivannguyendev/chatim/modules/mention/mentionapp"
 	"github.com/ivannguyendev/chatim/pkg/envconfig"
 )
 

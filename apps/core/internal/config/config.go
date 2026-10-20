@@ -18,7 +18,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/message/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/slot"
-	"github.com/ivannguyendev/chatim/apps/mention/mentionapp"
+	"github.com/ivannguyendev/chatim/modules/mention/mentionapp"
 	"github.com/ivannguyendev/chatim/pkg/envconfig"
 	"github.com/ivannguyendev/chatim/pkg/grpcserver"
 )

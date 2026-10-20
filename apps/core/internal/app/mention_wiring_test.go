@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/metrics"
-	"github.com/ivannguyendev/chatim/apps/mention/mentionapp"
+	"github.com/ivannguyendev/chatim/modules/mention/mentionapp"
 )
 
 type meetingDrainer struct {
