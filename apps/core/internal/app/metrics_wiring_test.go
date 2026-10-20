@@ -7,8 +7,8 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/message/actor"
-	"github.com/ivannguyendev/chatim/apps/core/internal/platform/metrics"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/metrics"
 )
 
 type fakeClears struct{}
@@ -81,7 +81,7 @@ func readings(sources []metrics.Source) map[string]float64 {
 
 func TestCoreMetricSourcesCoverEveryGuarantee(t *testing.T) {
 	sources := metricSources(fakeProbes())
-	if _, err := metrics.Handler(sources); err != nil {
+	if _, err := metrics.Handler(metricsSubsystem, sources); err != nil {
 		t.Fatalf("Handler: %v", err)
 	}
 	got := readings(sources)

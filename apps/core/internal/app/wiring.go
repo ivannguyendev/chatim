@@ -12,11 +12,11 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/message/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/message/flush"
-	"github.com/ivannguyendev/chatim/apps/core/internal/platform/metrics"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/slot"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
 	"github.com/ivannguyendev/chatim/pkg/admin"
 	"github.com/ivannguyendev/chatim/pkg/grpcserver"
+	"github.com/ivannguyendev/chatim/pkg/metrics"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/pkg/resilience"
 )
@@ -172,7 +172,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 		events:          eventProbes{clears: clears, projection: projections, sweeper: sweeper},
 		mention:         a.attachMention(mention, liveWatchers{watch, roomWatch}),
 	}
-	handler, err := metrics.Handler(metricSources(p))
+	handler, err := metrics.Handler(metricsSubsystem, metricSources(p))
 	if err != nil {
 		a.abandon(context.Background())
 		return nil, fmt.Errorf("wire metrics: %w", err)

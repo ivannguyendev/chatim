@@ -10,10 +10,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-const (
-	namespace        = "chatim"
-	defaultSubsystem = "core"
-)
+const namespace = "chatim"
 
 type Source struct {
 	Subsystem string
@@ -24,7 +21,7 @@ type Source struct {
 	Read      func() float64
 }
 
-func Handler(sources []Source) (http.Handler, error) {
+func Handler(subsystem string, sources []Source) (http.Handler, error) {
 	reg := prometheus.NewRegistry()
 	if err := reg.Register(collectors.NewGoCollector()); err != nil {
 		return nil, err
@@ -33,14 +30,14 @@ func Handler(sources []Source) (http.Handler, error) {
 		return nil, err
 	}
 	for _, s := range sources {
-		if err := reg.Register(collector(s)); err != nil {
+		if err := reg.Register(collector(subsystem, s)); err != nil {
 			return nil, fmt.Errorf("register metric %s: %w", s.Name, err)
 		}
 	}
 	return promhttp.HandlerFor(reg, promhttp.HandlerOpts{}), nil
 }
 
-func collector(s Source) prometheus.Collector {
+func collector(defaultSubsystem string, s Source) prometheus.Collector {
 	subsystem := cmp.Or(s.Subsystem, defaultSubsystem)
 	if s.Gauge {
 		return prometheus.NewGaugeFunc(prometheus.GaugeOpts{Namespace: namespace, Subsystem: subsystem, Name: s.Name, Help: s.Help, ConstLabels: s.Labels}, s.Read)

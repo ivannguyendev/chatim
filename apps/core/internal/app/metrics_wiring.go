@@ -11,12 +11,15 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/message/actor"
-	"github.com/ivannguyendev/chatim/apps/core/internal/platform/metrics"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
 	"github.com/ivannguyendev/chatim/modules/mention/mentionapp"
+	"github.com/ivannguyendev/chatim/pkg/metrics"
 )
 
-const oplogProbeTimeout = 2 * time.Second
+const (
+	oplogProbeTimeout = 2 * time.Second
+	metricsSubsystem  = "core"
+)
 
 type probes struct {
 	drops           func() publish.Drops

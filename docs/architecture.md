@@ -190,7 +190,7 @@ apps/core/
     model/         dùng chung: domain (entity, luật), access (Policy, Checker), pbconv
     store/         dùng chung: store ports, mongostore, memstore, storetest
     event/         dùng chung: publish, stateclear, projection, sweep, timer, eventkit, resync
-    platform/      dùng chung: slot manager, metrics registry, redisguard, testlog
+    platform/      dùng chung: slot manager, redisguard, testlog
 
 modules/mention/
   mentionapp/      bề mặt công khai core import: Config, Deps, New, Prepare, Run, Close, Register, Watch, Probes; cổng CoreReader
