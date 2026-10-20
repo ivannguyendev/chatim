@@ -1,21 +1,21 @@
 package config
 
 import (
+	"cmp"
 	"log/slog"
 	"reflect"
+	"slices"
 	"strings"
+
+	"github.com/ivannguyendev/chatim/pkg/redact"
 )
 
-const redacted = "xxxxx"
-
-var secretQueryKeys = []string{"pass", "secret", "token", "credential", "authmechanismproperties"}
-
 var secretFields = map[string]func(Config) slog.Attr{
-	"MongoURI":            func(c Config) slog.Attr { return slog.String("mongo_uri", RedactURL(c.MongoURI)) },
+	"MongoURI":            func(c Config) slog.Attr { return slog.String("mongo_uri", redact.URL(c.MongoURI)) },
 	"MongoPassword":       func(c Config) slog.Attr { return slog.Bool("mongo_auth", c.mongoAuth()) },
 	"RedisPassword":       func(c Config) slog.Attr { return slog.Bool("redis_auth", c.RedisPassword != "") },
 	"RedisDedupePassword": func(c Config) slog.Attr { return slog.Bool("redis_dedupe_auth", c.RedisDedupePassword != "") },
-	"NATSURL":             func(c Config) slog.Attr { return slog.String("nats_url", RedactURL(c.NATSURL)) },
+	"NATSURL":             func(c Config) slog.Attr { return slog.String("nats_url", redact.URL(c.NATSURL)) },
 }
 
 func (c Config) mongoAuth() bool { return c.MongoUser != "" || uriHasCredentials(c.MongoURI) }
@@ -26,46 +26,14 @@ func (c Config) LogValue() slog.Value {
 
 func (c Config) String() string { return c.LogValue().String() }
 
-func RedactURL(raw string) string {
-	if raw == "" {
-		return ""
-	}
-	scheme, rest, ok := strings.Cut(raw, "://")
-	if !ok {
-		return redacted
-	}
-	if at := strings.LastIndex(rest, "@"); at >= 0 {
-		rest = redacted + "@" + rest[at+1:]
-	}
-	if base, query, ok := strings.Cut(rest, "?"); ok {
-		rest = base + "?" + redactQuery(query)
-	}
-	return scheme + "://" + rest
-}
-
 func uriHasCredentials(raw string) bool {
 	_, rest, ok := strings.Cut(raw, "://")
 	base, _, _ := strings.Cut(rest, "?")
 	return ok && strings.Contains(base, "@")
 }
 
-func redactQuery(query string) string {
-	pairs := strings.Split(query, "&")
-	for i, pair := range pairs {
-		key, _, _ := strings.Cut(pair, "=")
-		if secretKey(key) {
-			pairs[i] = key + "=" + redacted
-		}
-	}
-	return strings.Join(pairs, "&")
-}
-
-func secretKey(key string) bool {
-	key = strings.ToLower(key)
-	for _, s := range secretQueryKeys {
-		if strings.Contains(key, s) {
-			return true
-		}
-	}
-	return false
+func (c Config) Secrets() []string {
+	out := slices.DeleteFunc([]string{c.MongoPassword, c.RedisPassword, c.RedisDedupePassword}, func(s string) bool { return s == "" })
+	slices.SortStableFunc(out, func(a, b string) int { return cmp.Compare(len(b), len(a)) })
+	return out
 }

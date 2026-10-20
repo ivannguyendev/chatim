@@ -1,4 +1,4 @@
-package config
+package redact
 
 import (
 	"cmp"
@@ -16,41 +16,35 @@ func (e *redactedError) Error() string { return e.msg }
 
 func (e *redactedError) Unwrap() error { return e.err }
 
-func RedactError(err error, rawURL string) error {
+func Error(err error, rawURL string) error {
 	if err == nil {
 		return nil
 	}
 	msg := err.Error()
-	clean := RedactText(msg, rawURL)
+	clean := Text(msg, rawURL)
 	if clean == msg {
 		return err
 	}
 	return &redactedError{msg: clean, err: err}
 }
 
-func RedactText(text string, rawURLs ...string) string {
+func Text(text string, rawURLs ...string) string {
 	for _, raw := range rawURLs {
 		if raw == "" {
 			continue
 		}
-		text = strings.ReplaceAll(text, raw, RedactURL(raw))
+		text = strings.ReplaceAll(text, raw, URL(raw))
 		for _, s := range urlSecrets(raw) {
-			text = strings.ReplaceAll(text, s, redacted)
+			text = strings.ReplaceAll(text, s, masked)
 		}
 	}
 	return text
 }
 
-func (c Config) Secrets() []string {
-	out := slices.DeleteFunc([]string{c.MongoPassword, c.RedisPassword, c.RedisDedupePassword}, func(s string) bool { return s == "" })
-	slices.SortStableFunc(out, func(a, b string) int { return cmp.Compare(len(b), len(a)) })
-	return out
-}
-
-func RedactSecrets(text string, secrets ...string) string {
+func Secrets(text string, secrets ...string) string {
 	for _, s := range secrets {
 		if s != "" {
-			text = strings.ReplaceAll(text, s, redacted)
+			text = strings.ReplaceAll(text, s, masked)
 		}
 	}
 	return text

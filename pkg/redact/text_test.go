@@ -1,4 +1,4 @@
-package config_test
+package redact_test
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/config"
+	"github.com/ivannguyendev/chatim/pkg/redact"
 )
 
 func TestRedactErrorScrubsCredentials(t *testing.T) {
@@ -31,14 +31,14 @@ func TestRedactErrorScrubsCredentials(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := config.RedactError(errors.New(tt.msg), tt.raw).Error()
+			got := redact.Error(errors.New(tt.msg), tt.raw).Error()
 			for _, secret := range tt.secrets {
 				if strings.Contains(got, secret) {
-					t.Fatalf("RedactError = %q, still holds %q", got, secret)
+					t.Fatalf("Error = %q, still holds %q", got, secret)
 				}
 			}
 			if !strings.Contains(got, "xxxxx") {
-				t.Fatalf("RedactError = %q, want the secret replaced by xxxxx", got)
+				t.Fatalf("Error = %q, want the secret replaced by xxxxx", got)
 			}
 		})
 	}
@@ -46,15 +46,15 @@ func TestRedactErrorScrubsCredentials(t *testing.T) {
 
 func TestRedactTextCoversEveryURL(t *testing.T) {
 	mongoURI, natsURL := "mongodb://chatim:pw1secret@m1/", "nats://core:pw2secret@n1:4222"
-	got := config.RedactText("mongo pw1secret and nats pw2secret", mongoURI, "", natsURL)
+	got := redact.Text("mongo pw1secret and nats pw2secret", mongoURI, "", natsURL)
 	if strings.Contains(got, "pw1secret") || strings.Contains(got, "pw2secret") {
-		t.Fatalf("RedactText = %q, want both secrets removed", got)
+		t.Fatalf("Text = %q, want both secrets removed", got)
 	}
 }
 
 func TestRedactErrorKeepsTheChain(t *testing.T) {
 	raw := "mongodb://chatim:s3cr3t@m1/"
-	err := config.RedactError(fmt.Errorf("ping %s: %w", raw, context.DeadlineExceeded), raw)
+	err := redact.Error(fmt.Errorf("ping %s: %w", raw, context.DeadlineExceeded), raw)
 	wrapped := fmt.Errorf("mongo ping: %w", err)
 	if !errors.Is(wrapped, context.DeadlineExceeded) {
 		t.Fatalf("errors.Is(%v, DeadlineExceeded) = false, want the chain kept", wrapped)
@@ -67,11 +67,18 @@ func TestRedactErrorKeepsTheChain(t *testing.T) {
 func TestRedactErrorLeavesCleanErrorsAlone(t *testing.T) {
 	clean := errors.New("connection refused")
 	for _, raw := range []string{"mongodb://chatim:s3cr3t@m1/", ""} {
-		if got := config.RedactError(clean, raw); !errors.Is(got, clean) || got.Error() != clean.Error() {
-			t.Fatalf("RedactError(%q) = %v, want the error unchanged", raw, got)
+		if got := redact.Error(clean, raw); !errors.Is(got, clean) || got.Error() != clean.Error() {
+			t.Fatalf("Error(%q) = %v, want the error unchanged", raw, got)
 		}
 	}
-	if got := config.RedactError(nil, "mongodb://chatim:s3cr3t@m1/"); got != nil {
-		t.Fatalf("RedactError(nil) = %v, want nil", got)
+	if got := redact.Error(nil, "mongodb://chatim:s3cr3t@m1/"); got != nil {
+		t.Fatalf("Error(nil) = %v, want nil", got)
+	}
+}
+
+func TestRedactSecretsReplacesEveryOccurrence(t *testing.T) {
+	got := redact.Secrets("auth pw-a then pw-a-long and pw-b", "pw-a-long", "pw-a", "", "pw-b")
+	if want := "auth xxxxx then xxxxx and xxxxx"; got != want {
+		t.Errorf("Secrets = %q, want %q", got, want)
 	}
 }

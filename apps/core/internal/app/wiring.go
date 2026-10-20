@@ -18,6 +18,7 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/grpcserver"
 	"github.com/ivannguyendev/chatim/pkg/metrics"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
+	"github.com/ivannguyendev/chatim/pkg/redact"
 	"github.com/ivannguyendev/chatim/pkg/resilience"
 )
 
@@ -58,20 +59,20 @@ func prepare(ctx context.Context, cfg config.Config, cl *clients, setups ...prep
 	ctx, cancel := context.WithTimeout(ctx, cfg.ConnectTimeout)
 	defer cancel()
 	if err := mongostore.Bootstrap(ctx, cl.mongo.Database(cfg.MongoDB)); err != nil {
-		return fmt.Errorf("bootstrap mongo database %s: %w", cfg.MongoDB, config.RedactError(err, cfg.MongoURI))
+		return fmt.Errorf("bootstrap mongo database %s: %w", cfg.MongoDB, redact.Error(err, cfg.MongoURI))
 	}
 	if err := publish.EnsureStream(ctx, cl.js, cfg.Stream); err != nil {
-		return config.RedactError(err, cfg.NATSURL)
+		return redact.Error(err, cfg.NATSURL)
 	}
 	if err := projection.EnsureConsumer(ctx, cl.js, cfg.Projection); err != nil {
-		return config.RedactError(err, cfg.NATSURL)
+		return redact.Error(err, cfg.NATSURL)
 	}
 	if err := timer.EnsureStream(ctx, cl.js, cfg.Timer); err != nil {
-		return config.RedactError(err, cfg.NATSURL)
+		return redact.Error(err, cfg.NATSURL)
 	}
 	for _, s := range setups {
 		if err := s.Prepare(ctx); err != nil {
-			return config.RedactError(config.RedactError(err, cfg.NATSURL), cfg.MongoURI)
+			return redact.Error(redact.Error(err, cfg.NATSURL), cfg.MongoURI)
 		}
 	}
 	return nil
