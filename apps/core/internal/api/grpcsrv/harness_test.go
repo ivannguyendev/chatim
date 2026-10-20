@@ -22,6 +22,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/interaction"
 	"github.com/ivannguyendev/chatim/apps/core/internal/member"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/send/actor"
@@ -76,7 +77,7 @@ type options struct {
 	memberLimits member.Limits
 	members      func(*memstore.Rooms) member.MemberStore
 	pending      dedupe.Registry
-	pages        func(grpcsrv.PageReader) grpcsrv.PageReader
+	pages        func(message.Pages) message.Pages
 }
 
 func newRig(t *testing.T, o options) *rig {

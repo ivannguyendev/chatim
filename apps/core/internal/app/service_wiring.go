@@ -65,14 +65,17 @@ func wireService(d serviceDeps) (*grpcsrv.Service, *message.Reader, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	readers, err := wireReaders(d, checker, reader, interactions, projector)
+	if err != nil {
+		return nil, nil, err
+	}
 	rooms, err := wireRoomList(st, d.rooms, d.cfg.RoomList.JoinMax)
 	if err != nil {
 		return nil, nil, err
 	}
 	svc, err := grpcsrv.New(grpcsrv.Deps{
-		Sender: d.router, Rooms: st, Pages: st, Editor: editor, Reader: reader, InteractionService: interactions, MemberService: members, RoomService: roomService, Bookmarks: st.Interactions(),
-		Replies: st.Interactions(), RoomList: rooms,
-		Threads: st.ReplyThreads(), Reactors: st.Interactions(), PinBoard: projector, MemberList: st,
+		Sender: d.router, Editor: editor, Reader: reader, InteractionService: interactions, InteractionReader: readers.interactions,
+		MemberService: members, MemberReader: readers.members, RoomService: roomService, RoomList: rooms,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("wire core service: %w", err)
@@ -124,4 +127,24 @@ func wireRoomService(d serviceDeps, checker *access.Checker, members *member.Ser
 		return nil, fmt.Errorf("wire room service: %w", err)
 	}
 	return svc, nil
+}
+
+type domainReaders struct {
+	interactions *interaction.Reader
+	members      *member.Reader
+}
+
+func wireReaders(d serviceDeps, checker *access.Checker, views *message.Reader, settings *interaction.Service, projector *pinproj.Projector) (domainReaders, error) {
+	st := d.store
+	interactions, err := interaction.NewReader(interaction.ReaderDeps{
+		Access: checker, Messages: st, Views: views, Interactions: st.Interactions(), Threads: st.ReplyThreads(), Pins: projector, Settings: settings,
+	})
+	if err != nil {
+		return domainReaders{}, fmt.Errorf("wire interaction reader: %w", err)
+	}
+	members, err := member.NewReader(member.ReaderDeps{Access: checker, Members: st})
+	if err != nil {
+		return domainReaders{}, fmt.Errorf("wire member reader: %w", err)
+	}
+	return domainReaders{interactions: interactions, members: members}, nil
 }
