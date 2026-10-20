@@ -90,6 +90,19 @@ func memStores() *rig {
 	}
 }
 
+func newReader(t *testing.T, rg *rig, o options, pages message.Pages) *message.Reader {
+	t.Helper()
+	checker, err := access.NewChecker(rg.rooms, o.policy)
+	if err != nil {
+		t.Fatalf("NewChecker: %v", err)
+	}
+	r, err := message.NewReader(message.ReaderDeps{Access: checker, Pages: pages, Edits: rg.edits, Hidden: rg.hidden, Interactions: rg.reactions})
+	if err != nil {
+		t.Fatalf("message.NewReader: %v", err)
+	}
+	return r
+}
+
 func newEditor(t *testing.T, rg *rig, o options) *message.Editor {
 	t.Helper()
 	checker, err := access.NewChecker(rg.rooms, o.policy)

@@ -1,13 +1,11 @@
 package grpcsrv
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"math"
 	"slices"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
@@ -30,24 +28,11 @@ func (s *Service) GetMessages(ctx context.Context, req *chatimv1.GetMessagesRequ
 	if err != nil {
 		return nil, err
 	}
-	grant, err := s.access.Authorize(ctx, access.ReadHistory, who.Tenant, who.User, room)
+	items, err := s.reader.Messages(ctx, who.Tenant, who.User, room, asked)
 	if err != nil {
 		return nil, err
 	}
-	found, err := s.pages.Find(ctx, room, asked)
-	if err != nil {
-		return nil, err
-	}
-	slices.SortFunc(found, func(a, b domain.Message) int { return cmp.Compare(a.Seq, b.Seq) })
-	viewer, err := s.viewerOf(ctx, who.User, grant, store.PageQuery{Room: room}, found, quotedSeqs(room, found)...)
-	if err != nil {
-		return nil, err
-	}
-	out, err := s.readerMessages(ctx, viewer, room, s.view.Apply(viewer, found))
-	if err != nil {
-		return nil, err
-	}
-	return &chatimv1.GetMessagesResponse{Messages: out}, nil
+	return &chatimv1.GetMessagesResponse{Messages: messagesOf(items)}, nil
 }
 
 func messageKeysOf(room uint64, seqs []uint64) ([]store.MsgKey, error) {

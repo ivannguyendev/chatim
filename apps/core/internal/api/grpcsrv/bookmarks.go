@@ -70,5 +70,5 @@ func (s *Service) bookmarkedMessages(ctx context.Context, who callerid.Caller, m
 	for i, b := range marks {
 		keys[i] = store.BookmarkKeyOf(b)
 	}
-	return s.VisibleMessages(ctx, who.Tenant, who.User, keys)
+	return s.reader.VisibleMessages(ctx, who.Tenant, who.User, keys)
 }

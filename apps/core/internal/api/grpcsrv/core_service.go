@@ -3,11 +3,9 @@ package grpcsrv
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/api/view"
 	"github.com/ivannguyendev/chatim/apps/core/internal/interaction"
 	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	"github.com/ivannguyendev/chatim/apps/core/internal/message"
@@ -23,7 +21,7 @@ import (
 )
 
 var (
-	errMissingDeps = fmt.Errorf("%w: core service needs a sender, a room store, a page reader, a message editor, an interaction service, a member service, a room service, an edit store, a hidden store, a bookmark store, a reply store, a reader interaction store, a room lister, a thread lister, a reactor lister, a pin reader and a member lister", apperr.ErrInvalidArgument)
+	errMissingDeps = fmt.Errorf("%w: core service needs a sender, a room store, a page reader, a message editor, a message reader, an interaction service, a member service, a room service, a bookmark store, a reply store, a room lister, a thread lister, a reactor lister, a pin reader and a member lister", apperr.ErrInvalidArgument)
 	errBadRoomID   = fmt.Errorf("%w: room id", apperr.ErrInvalidArgument)
 )
 
@@ -42,14 +40,12 @@ type Deps struct {
 	Pages              PageReader
 	Policy             access.Policy
 	Editor             *message.Editor
+	Reader             *message.Reader
 	InteractionService *interaction.Service
 	MemberService      *member.Service
 	RoomService        *room.Service
-	Edits              store.Edits
-	Hidden             store.Hidden
 	Bookmarks          BookmarkLister
 	Replies            RepliesLister
-	Mine               MyInteractionReader
 	RoomList           RoomLister
 	Threads            ThreadLister
 	Reactors           ReactorLister
@@ -63,43 +59,35 @@ type Service struct {
 	rooms              store.Rooms
 	pages              PageReader
 	editor             *message.Editor
+	reader             *message.Reader
 	interactionService *interaction.Service
 	memberService      *member.Service
 	roomService        *room.Service
-	edits              store.Edits
-	hidden             store.Hidden
 	bookmarks          BookmarkLister
 	replies            RepliesLister
-	mine               MyInteractionReader
 	roomList           RoomLister
 	threads            ThreadLister
 	reactors           ReactorLister
 	pinBoard           PinReader
 	memberList         MemberLister
 	access             *access.Checker
-	view               view.Pipeline
-	maskView           view.Pipeline
-	log                *slog.Logger
 }
 
 var _ chatimv1.CoreServiceServer = (*Service)(nil)
 
-func New(d Deps, log *slog.Logger) (*Service, error) {
-	if d.Sender == nil || d.Rooms == nil || d.Pages == nil || d.Editor == nil || d.InteractionService == nil || d.MemberService == nil || d.RoomService == nil || d.Edits == nil || d.Hidden == nil || d.Bookmarks == nil ||
-		d.Replies == nil || d.Mine == nil || d.RoomList == nil ||
+func New(d Deps) (*Service, error) {
+	if d.Sender == nil || d.Rooms == nil || d.Pages == nil || d.Editor == nil || d.Reader == nil || d.InteractionService == nil || d.MemberService == nil || d.RoomService == nil || d.Bookmarks == nil ||
+		d.Replies == nil || d.RoomList == nil ||
 		d.Threads == nil || d.Reactors == nil || d.PinBoard == nil || d.MemberList == nil {
 		return nil, errMissingDeps
-	}
-	if log == nil {
-		log = slog.Default()
 	}
 	checker, err := access.NewChecker(d.Rooms, d.Policy)
 	if err != nil {
 		return nil, err
 	}
 	return &Service{
-		sender: d.Sender, rooms: d.Rooms, pages: d.Pages, editor: d.Editor, interactionService: d.InteractionService, memberService: d.MemberService, roomService: d.RoomService, edits: d.Edits, hidden: d.Hidden,
-		bookmarks: d.Bookmarks, replies: d.Replies, mine: d.Mine, roomList: d.RoomList, threads: d.Threads, reactors: d.Reactors, pinBoard: d.PinBoard, memberList: d.MemberList, access: checker, view: view.Default(), maskView: view.New(view.MaskDeleted, view.HideForViewer), log: log,
+		sender: d.Sender, rooms: d.Rooms, pages: d.Pages, editor: d.Editor, reader: d.Reader, interactionService: d.InteractionService, memberService: d.MemberService, roomService: d.RoomService,
+		bookmarks: d.Bookmarks, replies: d.Replies, roomList: d.RoomList, threads: d.Threads, reactors: d.Reactors, pinBoard: d.PinBoard, memberList: d.MemberList, access: checker,
 	}, nil
 }
 

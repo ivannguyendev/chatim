@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/api/view"
+	"github.com/ivannguyendev/chatim/apps/core/internal/message/view"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 )
 

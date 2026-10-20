@@ -31,49 +31,53 @@ type serviceDeps struct {
 	log       *slog.Logger
 }
 
-func wireService(d serviceDeps) (*grpcsrv.Service, error) {
+func wireService(d serviceDeps) (*grpcsrv.Service, *message.Reader, error) {
 	requests, err := dedupe.NewRequests(d.cidBatch, d.cfg.Dedupe.CommittedTTL)
 	if err != nil {
-		return nil, fmt.Errorf("wire request dedupe: %w", err)
+		return nil, nil, fmt.Errorf("wire request dedupe: %w", err)
 	}
 	st := d.store
 	projector, err := pinproj.New(st.Pins(), st)
 	if err != nil {
-		return nil, fmt.Errorf("wire pin projector: %w", err)
+		return nil, nil, fmt.Errorf("wire pin projector: %w", err)
 	}
 	checker, err := access.NewChecker(st, access.DefaultPolicy{LockedKinds: d.cfg.LockedMessageKinds})
 	if err != nil {
-		return nil, fmt.Errorf("wire access checker: %w", err)
+		return nil, nil, fmt.Errorf("wire access checker: %w", err)
 	}
 	editor, err := wireMessageEditor(d, checker)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	reader, err := message.NewReader(message.ReaderDeps{Access: checker, Pages: st, Edits: st, Hidden: st.Hidden(), Interactions: st.Interactions()})
+	if err != nil {
+		return nil, nil, fmt.Errorf("wire message reader: %w", err)
 	}
 	interactions, err := wireInteractionService(d, checker, projector)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	members, err := wireMemberService(d, checker, requests)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	roomService, err := wireRoomService(d, checker, members, requests)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	rooms, err := wireRoomList(st, d.rooms, d.cfg.RoomList.JoinMax)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	svc, err := grpcsrv.New(grpcsrv.Deps{
-		Sender: d.router, Rooms: st, Pages: st, Editor: editor, InteractionService: interactions, MemberService: members, RoomService: roomService, Edits: st, Hidden: st.Hidden(), Bookmarks: st.Interactions(),
-		Replies: st.Interactions(), Mine: st.Interactions(), RoomList: rooms,
+		Sender: d.router, Rooms: st, Pages: st, Editor: editor, Reader: reader, InteractionService: interactions, MemberService: members, RoomService: roomService, Bookmarks: st.Interactions(),
+		Replies: st.Interactions(), RoomList: rooms,
 		Threads: st.ReplyThreads(), Reactors: st.Interactions(), PinBoard: projector, MemberList: st,
-	}, d.log)
+	})
 	if err != nil {
-		return nil, fmt.Errorf("wire core service: %w", err)
+		return nil, nil, fmt.Errorf("wire core service: %w", err)
 	}
-	return svc, nil
+	return svc, reader, nil
 }
 
 func wireMessageEditor(d serviceDeps, checker *access.Checker) (*message.Editor, error) {

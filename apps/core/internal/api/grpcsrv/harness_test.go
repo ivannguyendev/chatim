@@ -85,7 +85,7 @@ func newRig(t *testing.T, o options) *rig {
 	if o.sender == nil {
 		o.sender = startRouter(t, rg, o.sendPol)
 	}
-	svc, err := grpcsrv.New(depsOf(t, rg, o), quiet)
+	svc, err := grpcsrv.New(depsOf(t, rg, o))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

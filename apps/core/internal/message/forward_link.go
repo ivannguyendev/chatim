@@ -2,8 +2,8 @@ package message
 
 import (
 	"context"
-	"time"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/message/view"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -39,7 +39,7 @@ func (m *Editor) forwardSource(ctx context.Context, tenant, user string, key sto
 }
 
 func (m *Editor) forwardable(ctx context.Context, member domain.Member, key store.MsgKey, src domain.Message) error {
-	if clearedFor(member, src.CreatedAt) {
+	if (view.Viewer{ClearedAt: member.ClearedAt}).Cleared(src.CreatedAt) {
 		return domain.ErrMessageNotFound
 	}
 	_, hidden, err := m.d.Hidden.Get(ctx, member.User, key)
@@ -53,10 +53,6 @@ func (m *Editor) forwardable(ctx context.Context, member domain.Member, key stor
 	default:
 		return nil
 	}
-}
-
-func clearedFor(member domain.Member, createdAt time.Time) bool {
-	return !member.ClearedAt.IsZero() && !createdAt.After(member.ClearedAt)
 }
 
 func forwardOrigin(key store.MsgKey, src domain.Message) *domain.ForwardRef {

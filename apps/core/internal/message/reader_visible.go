@@ -1,4 +1,4 @@
-package grpcsrv
+package message
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 
 type roomThread struct{ room, thread uint64 }
 
-func (s *Service) VisibleMessages(ctx context.Context, tenant, user string, keys []store.MsgKey) (map[store.MsgKey]domain.Message, error) {
+func (r *Reader) VisibleMessages(ctx context.Context, tenant, user string, keys []store.MsgKey) (map[store.MsgKey]domain.Message, error) {
 	groups := make(map[roomThread][]store.MsgKey)
 	var order []roomThread
 	for _, k := range keys {
@@ -24,31 +24,31 @@ func (s *Service) VisibleMessages(ctx context.Context, tenant, user string, keys
 	}
 	visible := make(map[store.MsgKey]domain.Message, len(keys))
 	for _, g := range order {
-		if err := s.visibleIn(ctx, tenant, user, g, groups[g], visible); err != nil {
+		if err := r.visibleIn(ctx, tenant, user, g, groups[g], visible); err != nil {
 			return nil, err
 		}
 	}
 	return visible, nil
 }
 
-func (s *Service) visibleIn(ctx context.Context, tenant, user string, g roomThread, keys []store.MsgKey, visible map[store.MsgKey]domain.Message) error {
-	grant, err := s.access.Authorize(ctx, access.ReadHistory, tenant, user, g.room)
+func (r *Reader) visibleIn(ctx context.Context, tenant, user string, g roomThread, keys []store.MsgKey, visible map[store.MsgKey]domain.Message) error {
+	grant, err := r.d.Access.Authorize(ctx, access.ReadHistory, tenant, user, g.room)
 	if errors.Is(err, apperr.ErrPermissionDenied) || errors.Is(err, apperr.ErrNotFound) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	found, err := s.pages.Find(ctx, g.room, keys)
+	found, err := r.d.Pages.Find(ctx, g.room, keys)
 	if err != nil {
 		return err
 	}
-	viewer, err := s.viewerOf(ctx, user, grant, store.PageQuery{Room: g.room, Thread: g.thread}, found)
+	shown, err := r.Masked(ctx, user, grant, g.room, g.thread, found)
 	if err != nil {
 		return err
 	}
-	for _, m := range s.maskView.Apply(viewer, found) {
-		if !m.Deleted && !m.Hidden {
+	for _, m := range shown {
+		if VisibleToReader(m) {
 			visible[store.KeyOf(m)] = m
 		}
 	}

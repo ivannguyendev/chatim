@@ -139,7 +139,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 	}
 	a.publisher, a.stateClears, a.flusher, a.cidBatch, a.router, a.slots = pub, clears, fl, batch, router, slots
 	a.projections, a.sweeper = projections, sweeper
-	svc, err := wireService(serviceDeps{store: st, router: router, pub: pub, cidBatch: batch, timers: ts.members, msgTimers: ts.messages, rooms: caches, cfg: cfg, log: log})
+	svc, reader, err := wireService(serviceDeps{store: st, router: router, pub: pub, cidBatch: batch, timers: ts.members, msgTimers: ts.messages, rooms: caches, cfg: cfg, log: log})
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +152,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 		Limiter:         limiter,
 	}, log)
 	chatimv1.RegisterCoreServiceServer(a.grpc, svc)
-	mention, err := wireMention(cfg, cl, st, caches, svc, log)
+	mention, err := wireMention(cfg, cl, st, caches, reader, log)
 	if err != nil {
 		return nil, err
 	}

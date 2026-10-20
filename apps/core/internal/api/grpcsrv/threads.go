@@ -66,11 +66,11 @@ func (s *Service) threadItems(ctx context.Context, user string, grant access.Req
 	if err != nil {
 		return nil, err
 	}
-	viewer, err := s.viewerOf(ctx, user, grant, store.PageQuery{Room: grant.Room.ID}, found)
+	masked, err := s.reader.Masked(ctx, user, grant, grant.Room.ID, 0, found)
 	if err != nil {
 		return nil, err
 	}
-	raw, shown := byKey(found), byKey(s.maskView.Apply(viewer, found))
+	raw, shown := byKey(found), byKey(masked)
 	items := make([]*chatimv1.ThreadItem, 0, len(threads))
 	for _, t := range threads {
 		if parent, ok := raw[t.Parent]; !ok || parent.Replies.N == 0 {

@@ -6,6 +6,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/ivannguyendev/chatim/apps/core/internal/message"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -85,9 +86,9 @@ func (s *Service) reactionsVisible(ctx context.Context, who callerid.Caller, key
 	if err := s.access.Allow(ctx, grant); err != nil {
 		return false, err
 	}
-	viewer, err := s.viewerOf(ctx, who.User, grant, store.PageQuery{Room: key.Room, Thread: key.Thread}, found)
+	shown, err := s.reader.Masked(ctx, who.User, grant, key.Room, key.Thread, found)
 	if err != nil {
 		return false, err
 	}
-	return visibleToReader(s.maskView.Apply(viewer, found)[0]), nil
+	return message.VisibleToReader(shown[0]), nil
 }

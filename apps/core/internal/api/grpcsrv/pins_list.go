@@ -58,9 +58,9 @@ func (s *Service) pinnedMessages(ctx context.Context, user string, grant access.
 	if err != nil {
 		return nil, err
 	}
-	viewer, err := s.viewerOf(ctx, user, grant, store.PageQuery{Room: grant.Room.ID}, found)
+	shown, err := s.reader.Masked(ctx, user, grant, grant.Room.ID, 0, found)
 	if err != nil {
 		return nil, err
 	}
-	return byKey(s.maskView.Apply(viewer, found)), nil
+	return byKey(shown), nil
 }

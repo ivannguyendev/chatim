@@ -7,7 +7,6 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
-	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
@@ -52,13 +51,11 @@ func (s *Service) GetReplies(ctx context.Context, req *chatimv1.GetRepliesReques
 	if err != nil {
 		return nil, err
 	}
-	resp := &chatimv1.GetRepliesResponse{Messages: make([]*chatimv1.Message, len(msgs))}
-	for i, m := range msgs {
-		resp.Messages[i] = pbconv.Message(m)
-	}
-	if err := s.addMyInteractions(ctx, who.User, msgs, resp.Messages); err != nil {
+	items, err := s.reader.Mine(ctx, who.User, msgs)
+	if err != nil {
 		return nil, err
 	}
+	resp := &chatimv1.GetRepliesResponse{Messages: messagesOf(items)}
 	if len(replies) == limit {
 		resp.Next = replies[len(replies)-1].Seq
 	}
@@ -78,9 +75,5 @@ func (s *Service) replyMessages(ctx context.Context, user string, grant access.R
 		return nil, err
 	}
 	slices.SortFunc(found, func(a, b domain.Message) int { return cmp.Compare(a.Seq, b.Seq) })
-	viewer, err := s.viewerOf(ctx, user, grant, store.PageQuery{Room: grant.Room.ID}, found)
-	if err != nil {
-		return nil, err
-	}
-	return s.view.Apply(viewer, found), nil
+	return s.reader.Viewed(ctx, user, grant, grant.Room.ID, 0, found)
 }
