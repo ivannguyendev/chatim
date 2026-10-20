@@ -1,6 +1,6 @@
 # Xếp lại `apps/core` theo domain: tóm tắt kỹ thuật
 
-> Ngày: 2026-10-19, xây xong 2026-10-20 · Trạng thái: **đã xây** trên `refactor/core-domain-layout` (chờ PR) · Loại: refactor, **không đổi hành vi**
+> Ngày: 2026-10-19, xây xong 2026-10-20 (bước 4 `modules/mention` cùng ngày, D182) · Trạng thái: **đã xây** trên `refactor/core-domain-layout` (chờ PR) · Loại: refactor, **không đổi hành vi**
 > Hướng chốt qua hai vòng review độc lập, đối chiếu playbook enterprise `.claude/skills/go-lang/playbooks/architecture-and-layout.md` và `code-style-and-review.md`; bước 1 có một reviewer, kết quả APPROVE
 
 ## Phạm vi và ranh giới
@@ -10,7 +10,8 @@
 | Sắp lại package trong `apps/core/internal` theo 4 domain: `message`, `interaction`, `member`, `room` | Tách app, Go module riêng, service riêng (D177: core vẫn là một modular monolith) |
 | Chia `change/mutate` thành service theo domain; kéo logic ghi và đọc ra khỏi `api/grpcsrv` | Đổi API gRPC, proto, subject, event id, field DB, tên env |
 | Luật `depguard` cưỡng chế chiều phụ thuộc | Tách `store` hoặc `model/domain` theo domain |
-| `INDEXES.csv`, kiến trúc §6.2, `CLAUDE.md`, `docs/modules` | Đổi cấu trúc `apps/mention`; summary của các milestone cũ (hồ sơ lưu trữ) |
+| Chuyển `apps/mention` → `modules/mention` (bước 4, D182): `apps/` chỉ còn binary có `main.go`, `modules/` là module nghiệp vụ nhúng | Đổi code bên trong Mention App; tách Mention thành service (D177 giữ nguyên) |
+| `INDEXES.csv`, kiến trúc §6.2, `CLAUDE.md`, `docs/modules` | Summary của các milestone cũ (hồ sơ lưu trữ) |
 
 Ví dụ cái đổi được: trước đây muốn biết "member" làm gì phải mở 5 chỗ (`change/mutate/member_*.go`, `change/ownership`, `send/memberwatch`, `api/grpcsrv/members*.go`, `api/grpcsrv/read.go`). Giờ chỉ cần mở `internal/member/`.
 
@@ -45,7 +46,12 @@ apps/core/internal/
   platform/      metrics/  redisguard/  slot/  testlog/
   api/grpcsrv/   transport mỏng, không gọi thẳng store
   app/  config/
+modules/mention/
+  mentionapp/    cửa công khai duy nhất core được import (chỉ từ app/ và config/)
+  internal/      consumer, store, notify, grpcsrv… của Mention App
 ```
+
+Luật layout (D182): `apps/<x>` là chương trình chạy được, có `main.go`. `modules/<x>` là module nghiệp vụ nhúng vào một chương trình, có một package công khai và `internal/`. Một phần chỉ thành module khi đủ ba điều: có collection riêng không ai khác ghi, chỉ phụ thuộc một chiều vào core, và nối với core qua event + port, không chung transaction. Mention đủ cả ba. `message`, `member`, `interaction`, `room` không đủ điều nào (ví dụ doc `rooms` do 4 phần cùng ghi: `member_count`, `pins`, `last_seq`, tên/avatar), nên ở lại thành domain trong `apps/core/internal`.
 
 Chiều phụ thuộc (mũi tên = được import):
 
@@ -81,6 +87,7 @@ Không có field DB nào đổi.
 | `change/pinproj` | `interaction/pinproj` | 3 |
 | `change/ownership`, `send/memberwatch` | `member/ownership`, `member/memberwatch` | 3 |
 | `api/roomlist`, `api/roomcache` | `room/roomlist`, `room/roomcache` | 3 |
+| `apps/mention/**` | `modules/mention/**` (chỉ đổi đường dẫn import) | 4 |
 | Ở lại `api/grpcsrv` | `core_service.go`, handler mỏng của mọi RPC, `message_items.go` (đổi item sang proto), `page_cursor.go`, `query_cursors.go` | — |
 
 `grpcsrv.Deps` giờ chỉ còn: `Sender`, `Editor`, `Reader`, `InteractionService`, `InteractionReader`, `MemberService`, `MemberReader`, `RoomService`, `RoomList`.
@@ -135,8 +142,11 @@ Thêm `depguard` vào `.golangci.yaml` (golangci-lint v2.14.0). Luật cuối:
 | `event-layer-tests` | test `event/*` import domain, trừ `interaction/pinproj` (test sweeper dựng projector thật) |
 | `config-owner` | mọi package import `config`, trừ `app`, test của `config` và `apps/core/itest` (khởi động core qua `app.Run`) |
 | `api-store-adapters`, `api-memstore` | `api` import `store/mongostore`; code `api` (không phải test) import `store/memstore` |
+| `mention-module-entry` | package nào trong `apps/core` import `modules/mention`, trừ `app` và `config` |
 
-Mỗi luật đã được thử bằng một import sai cố ý, và `make lint` báo lỗi đúng luật.
+Mỗi luật đã được thử bằng một import sai cố ý, và `make lint` báo lỗi đúng luật. Chiều ngược (Mention import `apps/core/internal`) do luật `internal/` của Go chặn sẵn.
+
+Thêm test `modules/mention/internal/store/mongostore/owned_collections_test.go`: đọc mã nguồn của module, báo lỗi khi mở collection bằng chuỗi viết thẳng hoặc khi hằng tên collection khác 4 tên `mentions`, `mention_rooms`, `mention_user_groups`, `mention_groups`. Mention dùng chung database với core, test này giữ cho nó không đụng collection của core.
 
 ## 8. Quyết định và phương án bị loại
 
@@ -153,11 +163,14 @@ Mỗi luật đã được thử bằng một import sai cố ý, và `make lint
 | `projection`, rebuilder sweeper ở lại `event/` | Chia vào domain | Một consumer leader, một dispatch; rebuilder chỉ dựa `store` + `pbconv` |
 | Room dùng `member.ArmCount`/`Settling`/`SettleCount` | Room giữ bản chép riêng và dep `Timers` | Bỏ được bản chép logic đếm; câu log đổi là chấp nhận được |
 | Chuyển `api/view` sang `message/view` ngay ở bước 2 | Đợi tới bước 3 | `message.Reader` cần `view`; bỏ được bản chép riêng luật "cleared" sớm |
+| Mention ở `modules/mention` (D182) | Giữ `apps/mention`; đưa vào `apps/core/internal/mention`; tách service ngay | `apps/mention` không có `main.go` nên tên gây hiểu nhầm. Đưa vào core thì đảo D164 (core bung nhóm, chọn người nhận) và mất chặn của compiler. Tách ngay không đạt điều kiện nào của D177, còn phải thêm ~6 API lô vào core |
+| Domain của core ở lại `apps/core/internal` | Tách `message`, `member`, `interaction`, `room` thành `modules/` | Cùng ghi doc `rooms`, chung transaction owner (D100), chung sweeper và store; tách là distributed monolith |
 
 ## 9. Chi phí
 
 - 13 commit trên một nhánh, làm trong worktree riêng: bước 1 có 7 commit, bước 2 có 3, bước 3 có 2, cộng 1 commit tài liệu as-built.
 - Bước 3 có 106 file đổi tên bằng `git mv` (68 file giữ nguyên 100%); các file còn lại chỉ sửa dòng import.
+- Bước 4: `git mv apps/mention modules/mention` và đổi dòng import trong 108 file, một luật depguard, một test.
 - Không đổi tải lúc chạy, nên không cần bench.
 
 ## 10. Rủi ro còn lại
@@ -181,6 +194,7 @@ Mỗi luật đã được thử bằng một import sai cố ý, và `make lint
 | 1 | `fmt-check`, `vet`, `lint`, `test`, `itest`, `core-up` + `e2e`; reviewer chạy `-count=3` trên 5 package | test 66 package ok, itest ok; e2e lần 1 đỏ ở phase 5 bước 9 (race đã biết), lần 2 qua đủ 8 phase; review APPROVE |
 | 2 | `fmt-check`, `vet`, `lint`, `test`, `e2e` | xanh; e2e qua ngay lần đầu ở cả hai task |
 | 3 | `fmt-check`, `vet`, `lint`, `test`, `itest`, `e2e`, R5 | test 66 package, itest 66 package, e2e qua lần đầu; R5 (`slot`, `-race -count=20`) ok trong 703 giây |
+| 4 | `fmt-check`, `vet`, `lint`, test `./modules/... ./apps/core/...`, `make image TARGET=apps/core`; thử cố ý một import sai và một collection lạ | xanh; luật depguard và test collection đều bắt được lỗi cố ý. Không chạy `itest`/`e2e` vì chỉ đổi đường dẫn import |
 
 Các thay đổi nội dung test (đều ghi trong commit body):
 - `TestNewRequiresEveryDependency` được chia theo từng service.

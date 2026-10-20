@@ -4,7 +4,7 @@
 
 > **Ai giữ phần nào:**
 > - **Core:** trả lời (doc trả lời, `rc`, `reply_threads`, projection `reply_index`), đích mention trên tin (`mt`/`ma` kèm giờ `at`), kiểm hợp lệ và phát event.
-> - **Mention App** (`apps/mention`, chạy nhúng trong core, D162–D176): chỉ mục `mentions`, `ListMentions`, nhóm của từng người, danh mục nhóm được tag, dữ liệu gợi ý `@nhóm`, thông báo theo người trên `CHATIM_NOTIFY`.
+> - **Mention App** (`modules/mention`, chạy nhúng trong core, D162–D176): chỉ mục `mentions`, `ListMentions`, nhóm của từng người, danh mục nhóm được tag, dữ liệu gợi ý `@nhóm`, thông báo theo người trên `CHATIM_NOTIFY`.
 >
 > Xem [tóm tắt Mention App](../plans/2026-10-17-mention-app-summary.md) và [danh mục event](../events.md).
 
