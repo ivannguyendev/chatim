@@ -25,7 +25,7 @@ func runSeed(ctx context.Context, args []string) error {
 	order := fs.String("order", "interleaved", "insert order: interleaved (rooms mixed like real traffic) or room (one room at a time)")
 	partitions := fs.Int("partitions", 0, "hash partitions on room_id (0 = plain table)")
 	reset := fs.Bool("reset", false, "drop the table first")
-	roomsFile := fs.String("rooms-file", "rooms-pg.txt", "file that receives the seeded room ids")
+	roomsFile := fs.String("rooms-file", ".local/rooms-pg.txt", "file that receives the seeded room ids")
 	textFile := fs.String("text-file", "", "optional file of real message texts, one per line (needed for credible storage numbers)")
 	_ = fs.Parse(args)
 	texts, err := msgtext.Load(*textFile)
