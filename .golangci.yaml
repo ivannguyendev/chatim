@@ -94,6 +94,19 @@ linters:
               desc: events never import domains
             - pkg: github.com/ivannguyendev/chatim/apps/core/internal/room
               desc: events never import domains
+        api-store-adapters:
+          files:
+            - "**/apps/core/internal/api/**"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore
+              desc: transport reads through domains, never a store adapter
+        api-memstore:
+          files:
+            - "**/apps/core/internal/api/**"
+            - "!$test"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/store/memstore
+              desc: only api tests use the in-memory store
         config-owner:
           files:
             - "**/apps/core/**"
