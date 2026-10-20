@@ -55,7 +55,7 @@ func (s *Service) reactorQueryOf(room uint64, req *chatimv1.GetReactionsRequest)
 	if err := domain.ValidateThread(q.Key.Thread); err != nil {
 		return store.ReactorQuery{}, err
 	}
-	if q.Emoji != "" && !slices.Contains(s.mutator.ReactionEmojis(), q.Emoji) {
+	if q.Emoji != "" && !slices.Contains(s.interactionService.ReactionEmojis(), q.Emoji) {
 		return store.ReactorQuery{}, domain.ErrEmojiNotAllowed
 	}
 	after, err := decodeReactorCursor(req.GetAfter())

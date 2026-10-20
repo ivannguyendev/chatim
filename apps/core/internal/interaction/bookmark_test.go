@@ -1,4 +1,4 @@
-package mutate_test
+package interaction_test
 
 import (
 	"context"
@@ -9,18 +9,18 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/interaction"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
-func bookmark(user string, seq uint64, on bool) mutate.BookmarkCmd {
-	return mutate.BookmarkCmd{Tenant: tenant, User: user, Room: room, Seq: seq, On: on}
+func bookmark(user string, seq uint64, on bool) interaction.BookmarkCmd {
+	return interaction.BookmarkCmd{Tenant: tenant, User: user, Room: room, Seq: seq, On: on}
 }
 
-func (rg *rig) mustBookmark(t *testing.T, c mutate.BookmarkCmd, wantChanged bool) {
+func (rg *rig) mustBookmark(t *testing.T, c interaction.BookmarkCmd, wantChanged bool) {
 	t.Helper()
 	changed, err := rg.m.SetBookmark(t.Context(), c)
 	if err != nil || changed != wantChanged {
@@ -80,9 +80,7 @@ func TestBookmarkNeedsAnExistingLiveMessageToTurnOn(t *testing.T) {
 	rg.send(t, 2, "alice", "ho")
 	rg.mustBookmark(t, bookmark("bob", 1, true), true)
 	for _, seq := range []uint64{1, 2} {
-		if _, err := rg.m.Delete(t.Context(), del("alice", seq, 0)); err != nil {
-			t.Fatalf("Delete seq %d: %v", seq, err)
-		}
+		rg.deleteMessage(t, seq)
 	}
 	for _, seq := range []uint64{1, 2} {
 		if _, err := rg.m.SetBookmark(t.Context(), bookmark("bob", seq, true)); !errors.Is(err, domain.ErrMessageDeleted) {
@@ -98,7 +96,7 @@ func TestBookmarkNeedsAnExistingLiveMessageToTurnOn(t *testing.T) {
 	}
 	bad := bookmark("bob", 1, true)
 	bad.Thread = 3
-	for name, c := range map[string]mutate.BookmarkCmd{"zero seq": bookmark("bob", 0, true), "thread": bad} {
+	for name, c := range map[string]interaction.BookmarkCmd{"zero seq": bookmark("bob", 0, true), "thread": bad} {
 		if _, err := rg.m.SetBookmark(t.Context(), c); !errors.Is(err, apperr.ErrInvalidArgument) {
 			t.Errorf("%s: SetBookmark = %v, want ErrInvalidArgument", name, err)
 		}

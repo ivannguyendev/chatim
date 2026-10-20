@@ -3,7 +3,6 @@ package mutate
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
@@ -13,7 +12,7 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-var errMissingDeps = fmt.Errorf("%w: mutator needs access, messages, edits, hidden, events, reactions, reaction counts, message count timers, pins and a pin projector", apperr.ErrInvalidArgument)
+var errMissingDeps = fmt.Errorf("%w: mutator needs access, messages, edits, hidden, events and interactions", apperr.ErrInvalidArgument)
 
 type Messages interface {
 	Find(ctx context.Context, room uint64, keys []store.MsgKey) ([]domain.Message, error)
@@ -31,13 +30,8 @@ type Deps struct {
 	Hidden       store.Hidden
 	Events       EventPublisher
 	Interactions store.Interactions
-	Counts       ReactionCounts
-	CountTimers  MessageCountTimers
-	Pins         store.Pins
-	Projector    PinProjector
 	Limits       Limits
 	Now          func() time.Time
-	Log          *slog.Logger
 }
 
 type EditCmd struct {
@@ -59,8 +53,7 @@ type Mutator struct {
 }
 
 func New(d Deps) (*Mutator, error) {
-	if d.Access == nil || d.Messages == nil || d.Edits == nil || d.Hidden == nil || d.Events == nil ||
-		d.Interactions == nil || d.Counts == nil || d.CountTimers == nil || d.Pins == nil || d.Projector == nil {
+	if d.Access == nil || d.Messages == nil || d.Edits == nil || d.Hidden == nil || d.Events == nil || d.Interactions == nil {
 		return nil, errMissingDeps
 	}
 	d.Limits = d.Limits.withDefaults()
@@ -70,16 +63,7 @@ func New(d Deps) (*Mutator, error) {
 	if d.Now == nil {
 		d.Now = time.Now
 	}
-	if d.Log == nil {
-		d.Log = slog.Default()
-	}
 	return &Mutator{d: d}, nil
-}
-
-const settleTimeout = 2 * time.Second
-
-func settling(ctx context.Context) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.WithoutCancel(ctx), settleTimeout)
 }
 
 func (m *Mutator) now() time.Time { return m.d.Now().UTC().Truncate(time.Millisecond) }

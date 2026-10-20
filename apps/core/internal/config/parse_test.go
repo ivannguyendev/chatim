@@ -145,8 +145,8 @@ func TestLoadReadsReactionEmojis(t *testing.T) {
 	for _, tt := range tests {
 		setEnv(t, map[string]string{"REACTION_EMOJIS": tt.value})
 		got, err := config.Load()
-		if err != nil || !slices.Equal(got.Limits.Emojis, tt.want) {
-			t.Fatalf("REACTION_EMOJIS=%q gives %q, %v; want %q", tt.value, got.Limits.Emojis, err, tt.want)
+		if err != nil || !slices.Equal(got.Interactions.Emojis, tt.want) {
+			t.Fatalf("REACTION_EMOJIS=%q gives %q, %v; want %q", tt.value, got.Interactions.Emojis, err, tt.want)
 		}
 	}
 }

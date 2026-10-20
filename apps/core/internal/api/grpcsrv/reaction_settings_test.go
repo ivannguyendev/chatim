@@ -6,7 +6,7 @@ import (
 
 	"google.golang.org/grpc/codes"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/interaction"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -16,7 +16,7 @@ func TestReactionSettingsListTheConfiguredEmojis(t *testing.T) {
 	if err != nil || !slices.Equal(got.GetEmojis(), []string{"👍", "❤️", "😂", "😮", "😢", "🙏"}) {
 		t.Fatalf("GetReactionSettings = %v, %v; want the default list in order", got, err)
 	}
-	own := newRig(t, options{limits: mutate.Limits{Emojis: []string{"🎉", "👍"}}})
+	own := newRig(t, options{limits: interaction.Limits{Emojis: []string{"🎉", "👍"}}})
 	got, err = own.client.GetReactionSettings(as(t, "other", "bob"), &chatimv1.GetReactionSettingsRequest{})
 	if err != nil || !slices.Equal(got.GetEmojis(), []string{"🎉", "👍"}) {
 		t.Fatalf("GetReactionSettings = %v, %v; want the configured list", got, err)

@@ -12,6 +12,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/stateclear"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/sweep"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
+	"github.com/ivannguyendev/chatim/apps/core/internal/interaction"
 	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/slot"
@@ -67,6 +68,7 @@ type Config struct {
 	Mention                mentionapp.Config
 	LockedMessageKinds     []domain.Kind
 	Limits                 mutate.Limits
+	Interactions           interaction.Limits
 	Members                member.Limits
 	MemberCountCheckDelay  time.Duration
 	MessageCountCheckDelay time.Duration
@@ -125,9 +127,9 @@ func Load() (Config, error) {
 		PublisherDrain:      p.span("CORE_PUBLISHER_DRAIN", 5*time.Second),
 		ShutdownBudget:      p.span("CORE_SHUTDOWN_BUDGET", 30*time.Second),
 		LockedMessageKinds:  p.kinds("MESSAGE_LOCKED_KINDS"),
-		Limits: mutate.Limits{
-			Emojis:   p.listOr("REACTION_EMOJIS", mutate.DefaultEmojis),
-			PinLimit: p.count("PIN_LIMIT", mutate.DefaultPinLimit),
+		Interactions: interaction.Limits{
+			Emojis:   p.listOr("REACTION_EMOJIS", interaction.DefaultEmojis),
+			PinLimit: p.count("PIN_LIMIT", interaction.DefaultPinLimit),
 		},
 		Members: member.Limits{MemberBatch: p.count("MEMBER_BATCH_MAX", member.DefaultMemberBatch)},
 	}

@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/pinproj"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -58,17 +57,15 @@ type rig struct {
 	edits     *memstore.Edits
 	hidden    *memstore.Hidden
 	reactions *memstore.Interactions
-	pins      *memstore.Pins
 	events    *recordingEvents
 	now       time.Time
-	reactionParts
 }
 
 func newRig(t *testing.T, policy access.Policy) *rig {
 	t.Helper()
 	rg := &rig{
 		msgs: memstore.NewMessages(), rooms: memstore.NewRooms(), edits: memstore.NewEdits(), hidden: memstore.NewHidden(),
-		reactions: memstore.NewInteractions(), pins: memstore.NewPins(), events: &recordingEvents{},
+		reactions: memstore.NewInteractions(), events: &recordingEvents{},
 		now: created.Add(time.Minute + 1500*time.Microsecond),
 	}
 	r := domain.Room{ID: room, Tenant: tenant, Type: domain.RoomGroup, Name: "team", CreatedBy: "alice", CreatedAt: created, MemberCount: 3}
@@ -80,7 +77,6 @@ func newRig(t *testing.T, policy access.Policy) *rig {
 	if err := rg.rooms.Create(t.Context(), r, members); err != nil {
 		t.Fatalf("create room: %v", err)
 	}
-	rg.reactionParts = newReactionParts(rg.msgs, rg.reactions)
 	rg.m = rg.build(t, rg.deps(t, policy))
 	return rg
 }
@@ -91,13 +87,9 @@ func (rg *rig) deps(t *testing.T, policy access.Policy) mutate.Deps {
 	if err != nil {
 		t.Fatalf("NewChecker: %v", err)
 	}
-	projector, err := pinproj.New(rg.pins, rg.rooms)
-	if err != nil {
-		t.Fatalf("pinproj.New: %v", err)
-	}
 	return mutate.Deps{
 		Access: checker, Messages: rg.msgs, Edits: rg.edits, Hidden: rg.hidden, Events: rg.events,
-		Interactions: rg.writes, Counts: rg.counts, CountTimers: rg.msgTimers, Pins: rg.pins, Projector: projector, Now: func() time.Time { return rg.now },
+		Interactions: rg.reactions, Now: func() time.Time { return rg.now },
 	}
 }
 

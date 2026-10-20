@@ -11,5 +11,5 @@ func (s *Service) GetReactionSettings(ctx context.Context, _ *chatimv1.GetReacti
 	if _, err := callerid.Of(ctx); err != nil {
 		return nil, err
 	}
-	return &chatimv1.GetReactionSettingsResponse{Emojis: s.mutator.ReactionEmojis()}, nil
+	return &chatimv1.GetReactionSettingsResponse{Emojis: s.interactionService.ReactionEmojis()}, nil
 }

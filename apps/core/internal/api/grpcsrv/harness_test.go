@@ -19,8 +19,8 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/api/grpcsrv"
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
+	"github.com/ivannguyendev/chatim/apps/core/internal/interaction"
 	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
@@ -72,7 +72,7 @@ type options struct {
 	policy       access.Policy
 	sendPol      access.Policy
 	events       member.EventPublisher
-	limits       mutate.Limits
+	limits       interaction.Limits
 	memberLimits member.Limits
 	members      func(*memstore.Rooms) member.MemberStore
 	pending      dedupe.Registry

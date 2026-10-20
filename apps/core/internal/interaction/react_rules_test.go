@@ -1,4 +1,4 @@
-package mutate_test
+package interaction_test
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/interaction"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
@@ -16,7 +16,7 @@ import (
 func TestReactAcceptsOnlyTheConfiguredEmojis(t *testing.T) {
 	rg := newRig(t, nil)
 	d := rg.deps(t, nil)
-	d.Limits = mutate.Limits{Emojis: []string{"👍", "🎉"}}
+	d.Limits = interaction.Limits{Emojis: []string{"👍", "🎉"}}
 	rg.m = rg.build(t, d)
 	rg.send(t, 1, "alice", "hi")
 	if _, err := rg.m.React(t.Context(), react("bob", 1, "❤️")); !errors.Is(err, domain.ErrEmojiNotAllowed) || !errors.Is(err, apperr.ErrInvalidArgument) {
@@ -42,7 +42,7 @@ func TestReactRejectsBadInputBeforeWriting(t *testing.T) {
 	threaded.Thread = 1
 	cases := []struct {
 		name string
-		cmd  mutate.ReactCmd
+		cmd  interaction.ReactCmd
 		want error
 	}{
 		{"control character", react("bob", 1, "\u0007"), apperr.ErrInvalidArgument},

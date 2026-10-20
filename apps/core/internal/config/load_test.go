@@ -14,6 +14,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/stateclear"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/sweep"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
+	"github.com/ivannguyendev/chatim/apps/core/internal/interaction"
 	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/slot"
@@ -65,7 +66,8 @@ func TestLoadDefaults(t *testing.T) {
 		Projection: projection.Config{
 			Stream: "CHATIM_EVT", SubjectRoot: "evt", FetchBatch: 8192, FetchWait: 3 * time.Second,
 		},
-		Limits:                 mutate.Limits{Emojis: mutate.DefaultEmojis, PinLimit: 50, MentionTargets: 50},
+		Limits:                 mutate.Limits{MentionTargets: 50},
+		Interactions:           interaction.Limits{Emojis: interaction.DefaultEmojis, PinLimit: 50},
 		Members:                member.Limits{MemberBatch: 500},
 		MemberCountCheckDelay:  5 * time.Second,
 		MessageCountCheckDelay: 5 * time.Second,
@@ -122,7 +124,8 @@ func TestLoadOverrides(t *testing.T) {
 			Stream: "CHATIM_EVT_IT", SubjectRoot: "evt_it", FetchBatch: 128, FetchWait: 250 * time.Millisecond,
 		},
 		LockedMessageKinds:     []domain.Kind{domain.KindText},
-		Limits:                 mutate.Limits{Emojis: []string{"🎉", "👍"}, PinLimit: 10, MentionTargets: 20},
+		Limits:                 mutate.Limits{MentionTargets: 20},
+		Interactions:           interaction.Limits{Emojis: []string{"🎉", "👍"}, PinLimit: 10},
 		Members:                member.Limits{MemberBatch: 20},
 		MemberCountCheckDelay:  4 * time.Second,
 		MessageCountCheckDelay: 6 * time.Second,

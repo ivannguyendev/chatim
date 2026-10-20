@@ -124,12 +124,6 @@ func TestNewRequiresEveryDependency(t *testing.T) {
 		"no hidden":       func(d *mutate.Deps) { d.Hidden = nil },
 		"no events":       func(d *mutate.Deps) { d.Events = nil },
 		"no interactions": func(d *mutate.Deps) { d.Interactions = nil },
-		"no counts":       func(d *mutate.Deps) { d.Counts = nil },
-		"no count timers": func(d *mutate.Deps) { d.CountTimers = nil },
-		"no pins":         func(d *mutate.Deps) { d.Pins = nil },
-		"no projector":    func(d *mutate.Deps) { d.Projector = nil },
-		"bad pin limit":   func(d *mutate.Deps) { d.Limits = mutate.Limits{PinLimit: mutate.MaxPinLimit + 1} },
-		"no emojis":       func(d *mutate.Deps) { d.Limits = mutate.Limits{Emojis: []string{}} },
 	} {
 		d := full
 		drop(&d)

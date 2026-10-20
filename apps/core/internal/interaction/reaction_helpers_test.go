@@ -1,4 +1,4 @@
-package mutate_test
+package interaction_test
 
 import (
 	"context"
@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
+	"github.com/ivannguyendev/chatim/apps/core/internal/interaction"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 )
@@ -36,7 +36,7 @@ type countCall struct {
 }
 
 type spyCounts struct {
-	inner  mutate.ReactionCounts
+	inner  interaction.ReactionCounts
 	log    *callLog
 	mu     sync.Mutex
 	err    error
@@ -129,7 +129,7 @@ type reactionParts struct {
 	writes     loggedWrites
 }
 
-func newReactionParts(counts mutate.ReactionCounts, interactions store.Interactions) reactionParts {
+func newReactionParts(counts interaction.ReactionCounts, interactions store.Interactions) reactionParts {
 	calls := &callLog{}
 	return reactionParts{
 		reactCalls: calls,

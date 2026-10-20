@@ -11,6 +11,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
+	"github.com/ivannguyendev/chatim/apps/core/internal/interaction"
 	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/room"
@@ -44,7 +45,11 @@ func wireService(d serviceDeps) (*grpcsrv.Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wire access checker: %w", err)
 	}
-	mut, err := wireMutator(d, checker, projector)
+	mut, err := wireMutator(d, checker)
+	if err != nil {
+		return nil, err
+	}
+	interactions, err := wireInteractionService(d, checker, projector)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +66,7 @@ func wireService(d serviceDeps) (*grpcsrv.Service, error) {
 		return nil, err
 	}
 	svc, err := grpcsrv.New(grpcsrv.Deps{
-		Sender: d.router, Rooms: st, Pages: st, Mutator: mut, MemberService: members, RoomService: roomService, Edits: st, Hidden: st.Hidden(), Bookmarks: st.Interactions(),
+		Sender: d.router, Rooms: st, Pages: st, Mutator: mut, InteractionService: interactions, MemberService: members, RoomService: roomService, Edits: st, Hidden: st.Hidden(), Bookmarks: st.Interactions(),
 		Replies: st.Interactions(), Mine: st.Interactions(), RoomList: rooms,
 		Threads: st.ReplyThreads(), Reactors: st.Interactions(), PinBoard: projector, MemberList: st,
 	}, d.log)
@@ -71,17 +76,27 @@ func wireService(d serviceDeps) (*grpcsrv.Service, error) {
 	return svc, nil
 }
 
-func wireMutator(d serviceDeps, checker *access.Checker, projector *pinproj.Projector) (*mutate.Mutator, error) {
+func wireMutator(d serviceDeps, checker *access.Checker) (*mutate.Mutator, error) {
 	st := d.store
-	interactions, pins := st.Interactions(), st.Pins()
 	mut, err := mutate.New(mutate.Deps{
-		Access: checker, Messages: st, Edits: st, Hidden: st.Hidden(), Events: d.pub,
-		Interactions: interactions, Counts: st, CountTimers: d.msgTimers, Pins: pins, Projector: projector, Limits: d.cfg.Limits, Log: d.log,
+		Access: checker, Messages: st, Edits: st, Hidden: st.Hidden(), Events: d.pub, Interactions: st.Interactions(), Limits: d.cfg.Limits,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("wire mutator: %w", err)
 	}
 	return mut, nil
+}
+
+func wireInteractionService(d serviceDeps, checker *access.Checker, projector *pinproj.Projector) (*interaction.Service, error) {
+	st := d.store
+	svc, err := interaction.New(interaction.Deps{
+		Access: checker, Messages: st, Interactions: st.Interactions(), Counts: st, CountTimers: d.msgTimers,
+		Pins: st.Pins(), Projector: projector, Events: d.pub, Limits: d.cfg.Interactions, Log: d.log,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("wire interaction service: %w", err)
+	}
+	return svc, nil
 }
 
 func wireMemberService(d serviceDeps, checker *access.Checker, requests *dedupe.Requests) (*member.Service, error) {

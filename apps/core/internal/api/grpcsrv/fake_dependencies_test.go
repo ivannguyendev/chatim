@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/pinproj"
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/member"
@@ -97,17 +96,12 @@ func newMutator(t *testing.T, rg *rig, o options) *mutate.Mutator {
 	if err != nil {
 		t.Fatalf("NewChecker: %v", err)
 	}
-	projector, err := pinproj.New(rg.pins, rg.rooms)
-	if err != nil {
-		t.Fatalf("pinproj.New: %v", err)
-	}
 	var events mutate.EventPublisher = nopPublisher{}
 	if o.events != nil {
 		events = o.events
 	}
 	m, err := mutate.New(mutate.Deps{
-		Access: checker, Messages: rg.msgs, Edits: rg.edits, Hidden: rg.hidden, Events: events, Now: o.now,
-		Interactions: rg.reactions, Counts: rg.msgs, CountTimers: nopTimers{}, Pins: rg.pins, Projector: projector, Limits: o.limits,
+		Access: checker, Messages: rg.msgs, Edits: rg.edits, Hidden: rg.hidden, Events: events, Now: o.now, Interactions: rg.reactions,
 	})
 	if err != nil {
 		t.Fatalf("mutate.New: %v", err)

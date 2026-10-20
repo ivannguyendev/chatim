@@ -3,7 +3,7 @@ package grpcsrv
 import (
 	"context"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/interaction"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -20,7 +20,7 @@ func (s *Service) SetBookmark(ctx context.Context, req *chatimv1.SetBookmarkRequ
 	if err != nil {
 		return nil, err
 	}
-	changed, err := s.mutator.SetBookmark(ctx, mutate.BookmarkCmd{
+	changed, err := s.interactionService.SetBookmark(ctx, interaction.BookmarkCmd{
 		Tenant: who.Tenant, User: who.User, Room: room, Thread: req.GetThreadRoot(), Seq: req.GetSeq(), On: req.GetOn(),
 	})
 	if err != nil {

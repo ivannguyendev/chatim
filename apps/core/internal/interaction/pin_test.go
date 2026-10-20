@@ -1,4 +1,4 @@
-package mutate_test
+package interaction_test
 
 import (
 	"errors"
@@ -8,15 +8,15 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/interaction"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
-func pinCmd(user string, seq uint64) mutate.PinCmd {
-	return mutate.PinCmd{Tenant: tenant, User: user, Room: room, Seq: seq}
+func pinCmd(user string, seq uint64) interaction.PinCmd {
+	return interaction.PinCmd{Tenant: tenant, User: user, Room: room, Seq: seq}
 }
 
 func pinnedSeqs(s domain.PinState) []uint64 {
@@ -42,7 +42,7 @@ func (rg *rig) pinFacts(t *testing.T) []domain.PinAction {
 	return got
 }
 
-func (rg *rig) mustPin(t *testing.T, pin bool, c mutate.PinCmd) domain.PinState {
+func (rg *rig) mustPin(t *testing.T, pin bool, c interaction.PinCmd) domain.PinState {
 	t.Helper()
 	call := rg.m.Pin
 	if !pin {
@@ -87,7 +87,7 @@ func TestPinAndUnpinInTheWantedStateWriteNothing(t *testing.T) {
 	rg.now = rg.now.Add(time.Second)
 	noops := []struct {
 		pin bool
-		cmd mutate.PinCmd
+		cmd interaction.PinCmd
 	}{{true, pinCmd("carol", 1)}, {false, pinCmd("bob", 2)}}
 	for _, n := range noops {
 		if got := rg.mustPin(t, n.pin, n.cmd); got.Version != 1 || !slices.Equal(pinnedSeqs(got), []uint64{1}) {
@@ -115,7 +115,7 @@ func TestPinAndUnpinInTheWantedStateWriteNothing(t *testing.T) {
 func TestThePinLimitIsExact(t *testing.T) {
 	rg := newRig(t, nil)
 	d := rg.deps(t, nil)
-	d.Limits = mutate.Limits{PinLimit: 2}
+	d.Limits = interaction.Limits{PinLimit: 2}
 	rg.m = rg.build(t, d)
 	for _, seq := range []uint64{1, 2, 3} {
 		rg.send(t, seq, "alice", "m")
@@ -141,9 +141,7 @@ func TestPinningADeletedMessageFailsButUnpinningWorks(t *testing.T) {
 	rg.send(t, 2, "alice", "ho")
 	rg.mustPin(t, true, pinCmd("bob", 1))
 	for _, seq := range []uint64{1, 2} {
-		if _, err := rg.m.Delete(t.Context(), del("alice", seq, 0)); err != nil {
-			t.Fatalf("Delete seq %d: %v", seq, err)
-		}
+		rg.deleteMessage(t, seq)
 	}
 	if _, err := rg.m.Pin(t.Context(), pinCmd("bob", 2)); !errors.Is(err, domain.ErrMessageDeleted) {
 		t.Fatalf("pin a deleted message = %v, want ErrMessageDeleted", err)

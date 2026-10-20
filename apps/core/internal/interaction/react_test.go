@@ -1,4 +1,4 @@
-package mutate_test
+package interaction_test
 
 import (
 	"errors"
@@ -8,14 +8,14 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/interaction"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
-func react(user string, seq uint64, emoji string) mutate.ReactCmd {
-	return mutate.ReactCmd{Tenant: tenant, User: user, Room: room, Seq: seq, Emoji: emoji}
+func react(user string, seq uint64, emoji string) interaction.ReactCmd {
+	return interaction.ReactCmd{Tenant: tenant, User: user, Room: room, Seq: seq, Emoji: emoji}
 }
 
 func counts(v uint64, cs ...domain.ReactionCount) domain.ReactionSummary {
@@ -35,7 +35,7 @@ func (rg *rig) reaction(t *testing.T, seq uint64, user string) (domain.Reaction,
 	return doc, found
 }
 
-func (rg *rig) mustReact(t *testing.T, c mutate.ReactCmd) mutate.ReactResult {
+func (rg *rig) mustReact(t *testing.T, c interaction.ReactCmd) interaction.ReactResult {
 	t.Helper()
 	got, err := rg.m.React(t.Context(), c)
 	if err != nil {
@@ -163,10 +163,8 @@ func TestADeletedMessageTakesOnlyRemovals(t *testing.T) {
 	rg := newRig(t, nil)
 	rg.send(t, 1, "alice", "hi")
 	rg.mustReact(t, react("bob", 1, "👍"))
-	if _, err := rg.m.Delete(t.Context(), del("alice", 1, 0)); err != nil {
-		t.Fatalf("Delete: %v", err)
-	}
-	for _, c := range []mutate.ReactCmd{react("bob", 1, "❤️"), react("carol", 1, "👍")} {
+	rg.deleteMessage(t, 1)
+	for _, c := range []interaction.ReactCmd{react("bob", 1, "❤️"), react("carol", 1, "👍")} {
 		if _, err := rg.m.React(t.Context(), c); !errors.Is(err, domain.ErrMessageDeleted) || !errors.Is(err, apperr.ErrFailedPrecondition) {
 			t.Fatalf("%s reacts %q on a deleted message = %v, want ErrMessageDeleted", c.User, c.Emoji, err)
 		}

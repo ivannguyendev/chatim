@@ -1,4 +1,4 @@
-package mutate
+package interaction
 
 import (
 	"context"
@@ -18,26 +18,26 @@ type MessageCountTimers interface {
 	Disarm(ctx context.Context, t timer.Timer)
 }
 
-func (m *Mutator) armReactionCount(ctx context.Context, key store.MsgKey) (timer.Timer, error) {
-	t, err := m.d.CountTimers.ArmMessageCountCheck(ctx, key, pbconv.ReactionsCounter)
+func (s *Service) armReactionCount(ctx context.Context, key store.MsgKey) (timer.Timer, error) {
+	t, err := s.d.CountTimers.ArmMessageCountCheck(ctx, key, pbconv.ReactionsCounter)
 	if err != nil {
-		m.d.Log.WarnContext(ctx, "reaction count check timer not armed; reaction refused", "room", key.Room, "seq", key.Seq, "err", err)
+		s.d.Log.WarnContext(ctx, "reaction count check timer not armed; reaction refused", "room", key.Room, "seq", key.Seq, "err", err)
 		return timer.Timer{}, domain.ErrRetryLater
 	}
 	return t, nil
 }
 
-func (m *Mutator) countReaction(ctx context.Context, cur domain.ReactionSummary, key store.MsgKey, t timer.Timer, deltas []store.EmojiDelta) (domain.ReactionSummary, bool) {
+func (s *Service) countReaction(ctx context.Context, cur domain.ReactionSummary, key store.MsgKey, t timer.Timer, deltas []store.EmojiDelta) (domain.ReactionSummary, bool) {
 	if len(deltas) == 0 {
-		m.d.CountTimers.Disarm(ctx, t)
+		s.d.CountTimers.Disarm(ctx, t)
 		return cur, false
 	}
-	next, err := m.d.Counts.AddReactionCounts(ctx, key, deltas)
+	next, err := s.d.Counts.AddReactionCounts(ctx, key, deltas)
 	if err != nil {
-		m.d.Log.WarnContext(ctx, "reaction counts not updated; the check timer will recount", "room", key.Room, "seq", key.Seq, "err", err)
+		s.d.Log.WarnContext(ctx, "reaction counts not updated; the check timer will recount", "room", key.Room, "seq", key.Seq, "err", err)
 		return domain.ReactionSummary{Counts: store.AddEmojiDeltas(cur.Counts, deltas), Version: cur.Version}, false
 	}
-	m.d.CountTimers.Disarm(ctx, t)
+	s.d.CountTimers.Disarm(ctx, t)
 	return next, true
 }
 

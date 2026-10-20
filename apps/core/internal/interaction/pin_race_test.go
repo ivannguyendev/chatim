@@ -1,4 +1,4 @@
-package mutate_test
+package interaction_test
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/change/pinproj"
+	"github.com/ivannguyendev/chatim/apps/core/internal/interaction"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
@@ -18,7 +18,7 @@ import (
 )
 
 type scriptedProjector struct {
-	mutate.PinProjector
+	interaction.PinProjector
 	stale   int
 	current int
 	project error
@@ -176,7 +176,7 @@ func TestPinAsksThePolicyAndChecksTheTarget(t *testing.T) {
 	threaded.Thread, elsewhere.Room = 1, 999
 	cases := []struct {
 		name string
-		cmd  mutate.PinCmd
+		cmd  interaction.PinCmd
 		want error
 	}{
 		{"stranger", pinCmd("mallory", 1), domain.ErrNotMember},

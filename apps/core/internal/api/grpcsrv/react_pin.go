@@ -3,7 +3,7 @@ package grpcsrv
 import (
 	"context"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
+	"github.com/ivannguyendev/chatim/apps/core/internal/interaction"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
@@ -13,7 +13,7 @@ func (s *Service) ReactMessage(ctx context.Context, req *chatimv1.ReactMessageRe
 	if err != nil {
 		return nil, err
 	}
-	res, err := s.mutator.React(ctx, mutate.ReactCmd{
+	res, err := s.interactionService.React(ctx, interaction.ReactCmd{
 		Tenant: who.Tenant, User: who.User, Room: room, Thread: req.GetThreadRoot(), Seq: req.GetSeq(), Emoji: req.GetEmoji(),
 	})
 	if err != nil {
@@ -27,7 +27,7 @@ func (s *Service) PinMessage(ctx context.Context, req *chatimv1.PinMessageReques
 	if err != nil {
 		return nil, err
 	}
-	state, err := s.mutator.Pin(ctx, cmd)
+	state, err := s.interactionService.Pin(ctx, cmd)
 	if err != nil {
 		return nil, err
 	}
@@ -39,17 +39,17 @@ func (s *Service) UnpinMessage(ctx context.Context, req *chatimv1.UnpinMessageRe
 	if err != nil {
 		return nil, err
 	}
-	state, err := s.mutator.Unpin(ctx, cmd)
+	state, err := s.interactionService.Unpin(ctx, cmd)
 	if err != nil {
 		return nil, err
 	}
 	return &chatimv1.UnpinMessageResponse{PinVer: state.Version, Pins: pbconv.Pins(state.Pins)}, nil
 }
 
-func pinCmdOf(ctx context.Context, roomID string, thread, seq uint64) (mutate.PinCmd, error) {
+func pinCmdOf(ctx context.Context, roomID string, thread, seq uint64) (interaction.PinCmd, error) {
 	who, room, err := callerAndRoom(ctx, roomID)
 	if err != nil {
-		return mutate.PinCmd{}, err
+		return interaction.PinCmd{}, err
 	}
-	return mutate.PinCmd{Tenant: who.Tenant, User: who.User, Room: room, Thread: thread, Seq: seq}, nil
+	return interaction.PinCmd{Tenant: who.Tenant, User: who.User, Room: room, Thread: thread, Seq: seq}, nil
 }

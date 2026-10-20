@@ -1,4 +1,4 @@
-package mutate
+package interaction
 
 import (
 	"context"
@@ -15,24 +15,24 @@ type BookmarkCmd struct {
 	On                bool
 }
 
-func (m *Mutator) SetBookmark(ctx context.Context, c BookmarkCmd) (bool, error) {
+func (s *Service) SetBookmark(ctx context.Context, c BookmarkCmd) (bool, error) {
 	key := store.MsgKey{Room: c.Room, Thread: c.Thread, Seq: c.Seq}
 	if err := validKey(key); err != nil {
 		return false, err
 	}
-	req, msg, err := m.d.Access.Target(ctx, m.d.Messages, access.SetBookmark, c.Tenant, c.User, key)
+	req, msg, err := s.d.Access.Target(ctx, s.d.Messages, access.SetBookmark, c.Tenant, c.User, key)
 	if err != nil {
 		return false, err
 	}
 	if c.On && msg.Deleted {
 		return false, domain.ErrMessageDeleted
 	}
-	doc, changed, err := m.d.Interactions.SetBookmark(ctx, domain.Bookmark{
-		Room: c.Room, Thread: c.Thread, Seq: c.Seq, Tenant: c.Tenant, User: c.User, On: c.On, At: m.now(),
+	doc, changed, err := s.d.Interactions.SetBookmark(ctx, domain.Bookmark{
+		Room: c.Room, Thread: c.Thread, Seq: c.Seq, Tenant: c.Tenant, User: c.User, On: c.On, At: s.now(),
 	})
 	if err != nil || !changed {
 		return false, err
 	}
-	m.tell(c.Room, pbconv.BookmarkChanged(req.Room, doc))
+	s.tell(c.Room, pbconv.BookmarkChanged(req.Room, doc))
 	return true, nil
 }
