@@ -14,21 +14,23 @@
 ### 1.1 Phạm vi Phase 1
 - `core`: room, member, message, tương tác, cấp seq, lưu trữ MongoDB, phát event NATS JetStream.
 - `websocket`: giữ kết nối WebSocket (gws), đẩy event realtime (chưa xây).
-- Room: DM (1-1), group ≤5K member, channel ~200K subscriber (chỉ admin post).
+- Room: DM (1-1), group ≤5K member. Channel ~200K subscriber (chỉ admin post) vào backlog (owner 2026-10-19, D178).
+- Exit Phase 1: `core` + `mention` + `websocket` đạt `prod-like validated`; go-live sau khi có `identity` (D178, [tóm tắt](plans/2026-10-19-phase1-exit-summary.md)).
 - Tin nhắn: gửi, sửa (có lịch sử), xoá cho mọi người / phía tôi, trả lời (quote), chuyển tiếp (forward).
 - Tương tác: reaction, vị trí đọc + unread, typing, presence, thread, mention, ghim (pin), bookmark, đánh dấu chưa đọc.
 - Ranh giới trách nhiệm:
   - Core cung cấp API dữ liệu (gửi, đọc, sửa, xoá, lịch sử, reaction, vị trí đọc…) và phát event.
   - Client lấy danh sách hội thoại thẳng từ Core; Core xếp danh sách theo tin mới nhất và đếm unread lúc đọc (M3, D120–D123).
-  - Mention App (app riêng `apps/mention`, D162–D176, đã merge `main` PR #16, trước M4): ghi mention, `ListMentions`, thành viên nhóm và danh mục nhóm được tag, dữ liệu gợi ý `@nhóm` theo room, bung `@nhóm`/`@all` và gửi thông báo theo người lên `CHATIM_NOTIFY`; hiện chạy nhúng trong core (core chỉ import package công khai `apps/mention/mentionapp`; app đọc core qua cổng `CoreReader` trong tiến trình). Lọc tắt thông báo và giao tới máy thuộc app notification (websocket M4, `push` Phase 2). Dấu `@` trên danh sách hội thoại, sync token, đa thiết bị: làm sau.
+  - Mention App (app riêng `apps/mention`, D162–D176, đã merge `main` PR #16, trước M4): ghi mention, `ListMentions`, thành viên nhóm và danh mục nhóm được tag, dữ liệu gợi ý `@nhóm` theo room, bung `@nhóm`/`@all` và gửi thông báo theo người lên `CHATIM_NOTIFY`; hiện chạy nhúng trong core (core chỉ import package công khai `apps/mention/mentionapp`; app đọc core qua cổng `CoreReader` trong tiến trình); giữ nhúng (owner 2026-10-19, D177): chỉ tách khi có team, SLA, nhịp release hoặc nhu cầu scale riêng có số đo, hoặc database riêng + CDC, và khi tách thì app tự sở hữu dữ liệu, chỉ gọi core qua API, không đọc chung bảng. Lọc tắt thông báo và giao tới máy thuộc app notification (websocket M4, `push` Phase 2). Dấu `@` trên danh sách hội thoại, sync token, đa thiết bị: làm sau.
 
 ### 1.2 Ngoài phạm vi Phase 1 (Non-goals)
-App auth / api / events / push / migrator, API import trong core, media, search, E2EE, webhook, voice/video, admin UI. (Search: owner dự định Search App riêng dùng search engine, 2026-10-17, chưa lên lịch; xem [roadmap](./roadmap.md).)
+Phase 2 (owner 2026-10-19, D179–D180): `identity`, `identity-verifier`, `gateway` (REST + webhook), `notification` (+ push), `search`, `migrator`, media qua presigned URL. Backlog: channel, sync token D74, đa thiết bị. Ngoài phạm vi: API import trong core, E2EE, voice/video, admin UI. Xem [roadmap](./roadmap.md).
 
 ### 1.3 Mục tiêu quy mô (Scale)
 - ~100K kết nối đồng thời (CCU).
 - 5–10K tin/s lúc đỉnh điểm.
 - Lưu trữ 5–20 tỷ tin nhắn sau 2 năm.
+- Số thật (owner 2026-10-19, D181): ~5.000 `MarkRead`/s, 5% tin bị sửa, 1.000 room hoạt động cùng lúc. Load test: dev 10K kết nối, prod-like 100K.
 
 ---
 
