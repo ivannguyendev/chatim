@@ -170,13 +170,25 @@ apps/core/
   internal/
     app/           Wiring, vòng đời khởi động/tắt, CLI subcommand
     config/        Load và validate cấu hình lúc boot
-    api/           grpcsrv, view pipeline, roomlist, roomcache
-    model/         domain entities, pbconv, access policy
-    send/          actor per room, dedupe batcher, flusher, memberwatch
-    change/        mutate, ownership transaction, pinproj
-    event/         publish async, stateclear, projection, sweep, timer, eventkit, resync
-    store/         store interfaces, mongostore, memstore, storetest
-    platform/      slot manager, metrics registry, redisguard
+    api/
+      grpcsrv/     Transport mỏng: đọc caller, đổi proto <-> domain, gọi đúng một use case của domain
+    message/       message.Editor (sửa, xoá, ẩn, kiểm tra reply và forward), message.Reader (GetHistory, GetMessages, lịch sử sửa)
+      actor/       actor theo room: cấp seq, cid dedupe, ghi một lần
+      flush/       gom insertMany nhiều room theo shard
+      view/        pipeline đọc: gộp tin gửi lại, che tin đã xoá, ẩn theo người đọc
+    interaction/   interaction.Service (react, bookmark, pin), interaction.Reader (reactions, pins, bookmarks, replies, threads)
+      pinproj/     fold + CAS phép chiếu pin, dùng chung với sweeper
+    member/        member.Service (thêm, xoá, rời, vai trò, priority, vị trí đọc, xoá lịch sử, room preferences), member.Reader (ListMembers)
+      ownership/   luật owner thuần, chạy trong transaction đổi owner (D100)
+      memberwatch/ quên cache member giữa các core qua NATS core
+    room/          room.Service (CreateRoom, OpenDirectRoom, UpdateRoom)
+      roomlist/    ListMyRooms, GetRooms: danh sách hội thoại sắp lúc đọc
+      roomcache/   cache RAM room info, tail, snapshot thứ tự, watch quên cache
+    dedupe/        cid và request_id trên Redis dedupe (batcher, LRU dự phòng)
+    model/         dùng chung: domain (entity, luật), access (Policy, Checker), pbconv
+    store/         dùng chung: store ports, mongostore, memstore, storetest
+    event/         dùng chung: publish, stateclear, projection, sweep, timer, eventkit, resync
+    platform/      dùng chung: slot manager, metrics registry, redisguard, testlog
 
 apps/mention/
   mentionapp/      bề mặt công khai core import: Config, Deps, New, Prepare, Run, Close, Register, Watch, Probes; cổng CoreReader
@@ -187,25 +199,25 @@ apps/mention/
 
 ```mermaid
 flowchart TB
-    app["app (+ config)"]
-    api["api<br/>grpcsrv · view · roomlist · roomcache"]
-    send["send<br/>actor · dedupe · flush · memberwatch"]
-    change["change<br/>mutate · ownership · pinproj"]
+    app["app"]
+    config["config"]
+    api["api/grpcsrv<br/>transport mỏng"]
+    subgraph domains["domains (use case ở gốc mỗi domain)"]
+        room["room<br/>Service · roomlist · roomcache"]
+        member["member<br/>Service · Reader · ownership · memberwatch"]
+        interaction["interaction<br/>Service · Reader · pinproj"]
+        message["message<br/>Editor · Reader · actor · flush · view"]
+    end
     event["event<br/>publish · stateclear · projection · sweep · timer · eventkit · resync"]
-    model["model<br/>domain · pbconv · access"]
-    store["store<br/>store · mongostore · memstore"]
-    platform["platform<br/>slot · metrics · redisguard"]
+    shared["dùng chung<br/>model (domain · access · pbconv) · store · dedupe · platform"]
 
-    app --> api & event & platform
-    api --> send & change
-    api -->|Đọc thẳng| store
-    send --> model & store
-    change --> model & store
-    change -->|timer.Timers| event
-    change -->|dedupe.Requests| send
-    event --> model & store
-    send & event -->|redisguard| platform
-    store --> model
+    app --> api & config & event
+    api --> domains
+    room --> member
+    interaction --> message
+    domains --> shared
+    domains -->|event/timer| event
+    event --> shared
 ```
 
 ---

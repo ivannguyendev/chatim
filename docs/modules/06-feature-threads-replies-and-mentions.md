@@ -31,7 +31,7 @@
 
 ```mermaid
 flowchart TD
-    Client["Client SDK (gửi tin kèm reply/mention)"] --> Core["Core (send/actor)"]
+    Client["Client SDK (gửi tin kèm reply/mention)"] --> Core["Core (message/actor)"]
 
     subgraph FastPath["1. Đường ghi tức thời"]
         Core -->|"Insert doc kèm rp {th, s}, mt[{k,i,a}], ma/mat"| MongoMsg[("MongoDB messages")]
@@ -60,7 +60,7 @@ flowchart TD
 sequenceDiagram
     autonumber
     participant Client as Client SDK
-    participant Core as Core (send/actor)
+    participant Core as Core (message/actor)
     participant Msgs as MongoDB (messages)
     participant Evt as NATS (CHATIM_EVT)
     participant RI as Projection reply_index

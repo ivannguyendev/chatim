@@ -100,6 +100,27 @@ linters:
               desc: interaction never imports room or member
             - pkg: github.com/ivannguyendev/chatim/apps/core/internal/member
               desc: interaction never imports room or member
+        room-domain:
+          files:
+            - "**/apps/core/internal/room/**"
+            - "!**/apps/core/internal/room/roomlist/**"
+            - "!**/apps/core/internal/room/roomcache/**"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/message
+              desc: room imports only the member domain
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/interaction
+              desc: room imports only the member domain
+        room-read-models:
+          files:
+            - "**/apps/core/internal/room/roomlist/**"
+            - "**/apps/core/internal/room/roomcache/**"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/message
+              desc: the room list and its caches read only model and store
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/interaction
+              desc: the room list and its caches read only model and store
+            - pkg: github.com/ivannguyendev/chatim/apps/core/internal/member
+              desc: the room list and its caches read only model and store
         event-layer:
           files:
             - "**/apps/core/internal/event/**"

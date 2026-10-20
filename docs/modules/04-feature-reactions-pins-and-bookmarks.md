@@ -55,7 +55,7 @@ flowchart TD
 sequenceDiagram
     autonumber
     participant Client as Client SDK
-    participant Core as Core (change/mutate)
+    participant Core as Core (interaction.Service)
     participant Timers as event/timer.Timers
     participant Inter as MongoDB (message_interactions)
     participant Msgs as MongoDB (messages)
@@ -98,7 +98,7 @@ Khi người dùng đã thả `👍` và bấm chọn sang `❤️`, hệ thốn
 sequenceDiagram
     autonumber
     participant Client as Client SDK
-    participant Core as Core (change/mutate)
+    participant Core as Core (interaction.Service)
     participant Inter as MongoDB (message_interactions)
     participant Msgs as MongoDB (messages)
 
