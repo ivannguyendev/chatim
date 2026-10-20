@@ -71,10 +71,10 @@ type options struct {
 	limiter      *resilience.Limiter
 	policy       access.Policy
 	sendPol      access.Policy
-	events       grpcsrv.EventPublisher
+	events       member.EventPublisher
 	limits       mutate.Limits
 	memberLimits member.Limits
-	members      func(*memstore.Rooms) grpcsrv.RoomMembers
+	members      func(*memstore.Rooms) member.MemberStore
 	pending      dedupe.Registry
 	pages        func(grpcsrv.PageReader) grpcsrv.PageReader
 }

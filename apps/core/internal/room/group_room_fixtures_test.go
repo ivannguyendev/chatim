@@ -1,4 +1,4 @@
-package mutate_test
+package room_test
 
 import (
 	"testing"

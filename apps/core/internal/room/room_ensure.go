@@ -1,4 +1,4 @@
-package grpcsrv
+package room
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
+	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
@@ -14,15 +14,7 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-const settleTimeout = 2 * time.Second
-
 var errRoomIDTaken = fmt.Errorf("room id taken by another room: %w", apperr.ErrUnavailable)
-
-type RoomMembers interface {
-	AddMembers(ctx context.Context, j domain.Join, users []string) (store.JoinResult, error)
-	MembersOf(ctx context.Context, room uint64, users []string) ([]domain.Member, error)
-	AddMemberCount(ctx context.Context, room uint64, delta int) (domain.MemberCount, error)
-}
 
 type founding struct {
 	room    domain.Room
@@ -45,20 +37,17 @@ func (f founding) join(room uint64) (domain.Join, []string) {
 	return j, users
 }
 
-func settling(ctx context.Context) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.WithoutCancel(ctx), settleTimeout)
-}
-
 func (s *Service) ensureRoom(ctx context.Context, f founding) (domain.Room, bool, error) {
-	armed, err := s.timers.ArmMemberCountCheck(ctx, f.room.ID)
+	armed, err := s.d.Members.ArmCount(ctx, f.room.ID)
 	if err != nil {
-		s.log.WarnContext(ctx, "member count check timer not armed; room not created", "room", f.room.ID, "err", err)
-		return domain.Room{}, false, domain.ErrRetryLater
+		return domain.Room{}, false, err
 	}
 	room, inserted, err := s.insertRoom(ctx, f)
 	if err != nil {
 		if errors.Is(err, errRoomIDTaken) {
-			s.disarm(ctx, armed)
+			settle, done := member.Settling(ctx)
+			defer done()
+			s.d.Members.SettleCount(settle, f.room.ID, armed, 0)
 		}
 		return domain.Room{}, false, err
 	}
@@ -66,17 +55,17 @@ func (s *Service) ensureRoom(ctx context.Context, f founding) (domain.Room, bool
 		f.claimed(room)
 	}
 	j, users := f.join(room.ID)
-	res, err := s.members.AddMembers(ctx, j, users)
+	res, err := s.d.Members.AddFounders(ctx, j, users)
 	if err != nil {
 		return domain.Room{}, false, err
 	}
-	settle, done := settling(ctx)
+	settle, done := member.Settling(ctx)
 	defer done()
-	count, counted := s.settleCount(settle, room.ID, armed, res.Changed)
+	count, counted := s.d.Members.SettleCount(settle, room.ID, armed, res.Changed)
 	room = s.settledRoom(settle, room, count, counted)
 	created := inserted || res.Changed > 0
 	if created {
-		_ = s.events.Enqueue(room.ID, foundingEvents(room, res.Members, count, counted, f))
+		_ = s.d.Events.Enqueue(room.ID, foundingEvents(room, res.Members, count, counted, f))
 	}
 	return room, created, nil
 }
@@ -86,9 +75,9 @@ func (s *Service) settledRoom(ctx context.Context, room domain.Room, count domai
 		room.MemberCount, room.MemberCountVer = count.Count, count.Ver
 		return room
 	}
-	stored, err := s.rooms.Get(ctx, room.ID)
+	stored, err := s.d.Rooms.Get(ctx, room.ID)
 	if err != nil {
-		s.log.WarnContext(ctx, "new room not read back; replying with the count seen before", "room", room.ID, "err", err)
+		s.d.Log.WarnContext(ctx, "new room not read back; replying with the count seen before", "room", room.ID, "err", err)
 		return room
 	}
 	return stored
@@ -96,7 +85,7 @@ func (s *Service) settledRoom(ctx context.Context, room domain.Room, count domai
 
 func (s *Service) insertRoom(ctx context.Context, f founding) (domain.Room, bool, error) {
 	r := f.room
-	err := s.rooms.InsertRoom(ctx, r)
+	err := s.d.Rooms.InsertRoom(ctx, r)
 	switch {
 	case err == nil:
 		r.MemberCount, r.MemberCountVer, r.InfoVer = 0, 0, 1
@@ -104,7 +93,7 @@ func (s *Service) insertRoom(ctx context.Context, f founding) (domain.Room, bool
 	case !errors.Is(err, store.ErrRoomExists):
 		return domain.Room{}, false, err
 	}
-	stored, err := s.rooms.Get(ctx, r.ID)
+	stored, err := s.d.Rooms.Get(ctx, r.ID)
 	if err != nil {
 		return domain.Room{}, false, err
 	}
@@ -124,26 +113,6 @@ func sameRoom(f founding, stored domain.Room) bool {
 	default:
 		return f.resume && stored.CreatedBy == r.CreatedBy
 	}
-}
-
-func (s *Service) settleCount(ctx context.Context, room uint64, t timer.Timer, delta int) (domain.MemberCount, bool) {
-	if delta == 0 {
-		s.timers.Disarm(ctx, t)
-		return domain.MemberCount{}, false
-	}
-	c, err := s.members.AddMemberCount(ctx, room, delta)
-	if err != nil {
-		s.log.WarnContext(ctx, "member count of a new room not updated; the check timer will recount", "room", room, "delta", delta, "err", err)
-		return domain.MemberCount{}, false
-	}
-	s.timers.Disarm(ctx, t)
-	return c, true
-}
-
-func (s *Service) disarm(ctx context.Context, t timer.Timer) {
-	settle, done := settling(ctx)
-	defer done()
-	s.timers.Disarm(settle, t)
 }
 
 func foundingEvents(room domain.Room, members []domain.Member, count domain.MemberCount, counted bool, f founding) []*chatimv1.Event {

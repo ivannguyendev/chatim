@@ -12,11 +12,11 @@ import (
 
 const settleTimeout = 2 * time.Second
 
-func settling(ctx context.Context) (context.Context, context.CancelFunc) {
+func Settling(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.WithoutCancel(ctx), settleTimeout)
 }
 
-func (s *Service) armCount(ctx context.Context, room uint64) (timer.Timer, error) {
+func (s *Service) ArmCount(ctx context.Context, room uint64) (timer.Timer, error) {
 	t, err := s.d.Timers.ArmMemberCountCheck(ctx, room)
 	if err != nil {
 		s.d.Log.WarnContext(ctx, "member count check timer not armed; member command refused", "room", room, "err", err)
@@ -66,5 +66,5 @@ func (s *Service) maybeArm(ctx context.Context, room uint64, delta int) (timer.T
 	if delta == 0 {
 		return timer.Timer{}, nil
 	}
-	return s.armCount(ctx, room)
+	return s.ArmCount(ctx, room)
 }

@@ -1,4 +1,4 @@
-package mutate_test
+package room_test
 
 import (
 	"context"
@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
+	"github.com/ivannguyendev/chatim/apps/core/internal/room"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
@@ -23,8 +23,8 @@ func (l lostInfoCAS) UpdateRoomInfo(context.Context, uint64, uint64, store.RoomI
 	return false, l.err
 }
 
-func rename(user string, r uint64, name, avatar *string) mutate.UpdateRoomCmd {
-	return mutate.UpdateRoomCmd{Tenant: tenant, User: user, Room: r, Update: domain.RoomUpdate{Name: name, Avatar: avatar}}
+func rename(user string, r uint64, name, avatar *string) room.UpdateRoomCmd {
+	return room.UpdateRoomCmd{Tenant: tenant, User: user, Room: r, Update: domain.RoomUpdate{Name: name, Avatar: avatar}}
 }
 
 func (rg *rig) roomOf(t *testing.T, r uint64) domain.Room {
@@ -75,7 +75,7 @@ func TestMembersCannotUpdateTheRoomInfo(t *testing.T) {
 	if _, err := rg.m.UpdateRoom(t.Context(), rename("nia", group, new("Mine"), nil)); !errors.Is(err, apperr.ErrPermissionDenied) {
 		t.Fatalf("outsider UpdateRoom = %v, want PermissionDenied", err)
 	}
-	other := mutate.UpdateRoomCmd{Tenant: "other", User: "owen", Room: group, Update: domain.RoomUpdate{Name: new("Mine")}}
+	other := room.UpdateRoomCmd{Tenant: "other", User: "owen", Room: group, Update: domain.RoomUpdate{Name: new("Mine")}}
 	if _, err := rg.m.UpdateRoom(t.Context(), other); !errors.Is(err, apperr.ErrNotFound) {
 		t.Fatalf("other tenant UpdateRoom = %v, want NotFound", err)
 	}
@@ -129,7 +129,7 @@ func TestAnEmptyAvatarRemovesTheAvatar(t *testing.T) {
 
 func TestBadRoomUpdatesAreRefusedBeforeAnyRead(t *testing.T) {
 	rg := newMemberRig(t, nil)
-	for name, c := range map[string]mutate.UpdateRoomCmd{
+	for name, c := range map[string]room.UpdateRoomCmd{
 		"nothing":     rename("nia", group, nil, nil),
 		"empty name":  rename("nia", group, new(""), nil),
 		"long avatar": rename("nia", group, nil, new(strings.Repeat("a", 1025))),

@@ -46,7 +46,7 @@ func (s *Service) AddMembers(ctx context.Context, c AddMembersCmd) ([]domain.Mem
 }
 
 func (s *Service) join(ctx context.Context, r domain.Room, c AddMembersCmd, users []string, key dedupe.Key) ([]domain.Member, error) {
-	timer, err := s.armCount(ctx, r.ID)
+	timer, err := s.ArmCount(ctx, r.ID)
 	if err != nil {
 		s.cancelRequest(ctx, key)
 		return nil, err
@@ -54,7 +54,7 @@ func (s *Service) join(ctx context.Context, r domain.Room, c AddMembersCmd, user
 	now := s.now()
 	j := domain.Join{Room: r.ID, Tenant: c.Tenant, RequestID: c.RequestID, By: c.User, At: now}
 	res, err := s.write(ctx, j, users)
-	settle, done := settling(ctx)
+	settle, done := Settling(ctx)
 	defer done()
 	if err != nil {
 		s.d.Forget.ForgetMembers(r.ID)
@@ -72,7 +72,7 @@ func (s *Service) join(ctx context.Context, r domain.Room, c AddMembersCmd, user
 }
 
 func (s *Service) cancelRequest(ctx context.Context, key dedupe.Key) {
-	settle, done := settling(ctx)
+	settle, done := Settling(ctx)
 	defer done()
 	s.d.Requests.Cancel(settle, key)
 }

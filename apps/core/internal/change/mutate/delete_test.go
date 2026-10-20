@@ -122,7 +122,6 @@ func TestNewRequiresEveryDependency(t *testing.T) {
 		"no messages":     func(d *mutate.Deps) { d.Messages = nil },
 		"no edits":        func(d *mutate.Deps) { d.Edits = nil },
 		"no hidden":       func(d *mutate.Deps) { d.Hidden = nil },
-		"no rooms":        func(d *mutate.Deps) { d.Rooms = nil },
 		"no events":       func(d *mutate.Deps) { d.Events = nil },
 		"no interactions": func(d *mutate.Deps) { d.Interactions = nil },
 		"no counts":       func(d *mutate.Deps) { d.Counts = nil },

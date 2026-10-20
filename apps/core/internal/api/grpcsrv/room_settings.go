@@ -3,18 +3,18 @@ package grpcsrv
 import (
 	"context"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/change/mutate"
 	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
+	"github.com/ivannguyendev/chatim/apps/core/internal/room"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 func (s *Service) UpdateRoom(ctx context.Context, req *chatimv1.UpdateRoomRequest) (*chatimv1.UpdateRoomResponse, error) {
-	who, room, err := callerAndRoom(ctx, req.GetRoomId())
+	who, id, err := callerAndRoom(ctx, req.GetRoomId())
 	if err != nil {
 		return nil, err
 	}
-	res, err := s.mutator.UpdateRoom(ctx, mutate.UpdateRoomCmd{Tenant: who.Tenant, User: who.User, Room: room, Update: pbconv.DomainRoomUpdate(req)})
+	res, err := s.roomService.UpdateRoom(ctx, room.UpdateRoomCmd{Tenant: who.Tenant, User: who.User, Room: id, Update: pbconv.DomainRoomUpdate(req)})
 	if err != nil {
 		return nil, err
 	}

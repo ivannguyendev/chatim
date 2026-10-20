@@ -96,7 +96,7 @@ func (s *Service) plainPath(ctx context.Context, op memberOp, r domain.Room, doc
 		s.d.Forget.ForgetMembers(r.ID)
 		return MemberResult{}, err
 	}
-	settle, done := settling(ctx)
+	settle, done := Settling(ctx)
 	defer done()
 	if !ok {
 		if delta != 0 {
