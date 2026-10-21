@@ -3,9 +3,11 @@ syntax = "proto3";
 package chatim.v1;
 
 import "chatim/v1/core.proto";
+import "chatim/v1/events.proto";
 import "chatim/v1/members.proto";
 import "chatim/v1/mention_service.proto";
 import "chatim/v1/message_reads.proto";
+import "chatim/v1/notifications.proto";
 import "chatim/v1/reactions_pins.proto";
 import "chatim/v1/replies_bookmarks_mentions.proto";
 import "chatim/v1/room_list.proto";
@@ -15,6 +17,8 @@ message ClientFrame {
     AuthFrame auth = 10;
     HeartbeatFrame heartbeat = 11;
     ClientRequest request = 12;
+    OpenRoomFrame open_room = 20;
+    CloseRoomFrame close_room = 21;
   }
 }
 
@@ -23,6 +27,14 @@ message AuthFrame {
 }
 
 message HeartbeatFrame {}
+
+message OpenRoomFrame {
+  string room_id = 1;
+}
+
+message CloseRoomFrame {
+  string room_id = 1;
+}
 
 message ClientRequest {
   uint64 id = 1;
@@ -66,7 +78,36 @@ message ClientRequest {
 message ServerFrame {
   oneof frame {
     ServerResponse response = 10;
+    ReadyFrame ready = 20;
+    Event event = 21;
+    Notification notification = 22;
+    ResyncFrame resync = 23;
+    RoomClosedFrame room_closed = 24;
   }
+}
+
+message ReadyFrame {}
+
+enum ResyncReason {
+  RESYNC_REASON_UNSPECIFIED = 0;
+  RESYNC_REASON_LAG_TOO_OLD = 1;
+  RESYNC_REASON_CONSUMER_LOST = 2;
+  RESYNC_REASON_CLIENT_BACKLOG = 3;
+}
+
+message ResyncFrame {
+  ResyncReason reason = 1;
+}
+
+enum RoomClosedReason {
+  ROOM_CLOSED_REASON_UNSPECIFIED = 0;
+  ROOM_CLOSED_REASON_NOT_MEMBER = 1;
+  ROOM_CLOSED_REASON_REMOVED = 2;
+}
+
+message RoomClosedFrame {
+  string room_id = 1;
+  RoomClosedReason reason = 2;
 }
 
 message ServerResponse {

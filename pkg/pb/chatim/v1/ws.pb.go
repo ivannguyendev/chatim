@@ -21,6 +21,107 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type ResyncReason int32
+
+const (
+	ResyncReason_RESYNC_REASON_UNSPECIFIED    ResyncReason = 0
+	ResyncReason_RESYNC_REASON_LAG_TOO_OLD    ResyncReason = 1
+	ResyncReason_RESYNC_REASON_CONSUMER_LOST  ResyncReason = 2
+	ResyncReason_RESYNC_REASON_CLIENT_BACKLOG ResyncReason = 3
+)
+
+// Enum value maps for ResyncReason.
+var (
+	ResyncReason_name = map[int32]string{
+		0: "RESYNC_REASON_UNSPECIFIED",
+		1: "RESYNC_REASON_LAG_TOO_OLD",
+		2: "RESYNC_REASON_CONSUMER_LOST",
+		3: "RESYNC_REASON_CLIENT_BACKLOG",
+	}
+	ResyncReason_value = map[string]int32{
+		"RESYNC_REASON_UNSPECIFIED":    0,
+		"RESYNC_REASON_LAG_TOO_OLD":    1,
+		"RESYNC_REASON_CONSUMER_LOST":  2,
+		"RESYNC_REASON_CLIENT_BACKLOG": 3,
+	}
+)
+
+func (x ResyncReason) Enum() *ResyncReason {
+	p := new(ResyncReason)
+	*p = x
+	return p
+}
+
+func (x ResyncReason) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ResyncReason) Descriptor() protoreflect.EnumDescriptor {
+	return file_chatim_v1_ws_proto_enumTypes[0].Descriptor()
+}
+
+func (ResyncReason) Type() protoreflect.EnumType {
+	return &file_chatim_v1_ws_proto_enumTypes[0]
+}
+
+func (x ResyncReason) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ResyncReason.Descriptor instead.
+func (ResyncReason) EnumDescriptor() ([]byte, []int) {
+	return file_chatim_v1_ws_proto_rawDescGZIP(), []int{0}
+}
+
+type RoomClosedReason int32
+
+const (
+	RoomClosedReason_ROOM_CLOSED_REASON_UNSPECIFIED RoomClosedReason = 0
+	RoomClosedReason_ROOM_CLOSED_REASON_NOT_MEMBER  RoomClosedReason = 1
+	RoomClosedReason_ROOM_CLOSED_REASON_REMOVED     RoomClosedReason = 2
+)
+
+// Enum value maps for RoomClosedReason.
+var (
+	RoomClosedReason_name = map[int32]string{
+		0: "ROOM_CLOSED_REASON_UNSPECIFIED",
+		1: "ROOM_CLOSED_REASON_NOT_MEMBER",
+		2: "ROOM_CLOSED_REASON_REMOVED",
+	}
+	RoomClosedReason_value = map[string]int32{
+		"ROOM_CLOSED_REASON_UNSPECIFIED": 0,
+		"ROOM_CLOSED_REASON_NOT_MEMBER":  1,
+		"ROOM_CLOSED_REASON_REMOVED":     2,
+	}
+)
+
+func (x RoomClosedReason) Enum() *RoomClosedReason {
+	p := new(RoomClosedReason)
+	*p = x
+	return p
+}
+
+func (x RoomClosedReason) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RoomClosedReason) Descriptor() protoreflect.EnumDescriptor {
+	return file_chatim_v1_ws_proto_enumTypes[1].Descriptor()
+}
+
+func (RoomClosedReason) Type() protoreflect.EnumType {
+	return &file_chatim_v1_ws_proto_enumTypes[1]
+}
+
+func (x RoomClosedReason) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RoomClosedReason.Descriptor instead.
+func (RoomClosedReason) EnumDescriptor() ([]byte, []int) {
+	return file_chatim_v1_ws_proto_rawDescGZIP(), []int{1}
+}
+
 type ClientFrame struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Frame:
@@ -28,6 +129,8 @@ type ClientFrame struct {
 	//	*ClientFrame_Auth
 	//	*ClientFrame_Heartbeat
 	//	*ClientFrame_Request
+	//	*ClientFrame_OpenRoom
+	//	*ClientFrame_CloseRoom
 	Frame         isClientFrame_Frame `protobuf_oneof:"frame"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -97,6 +200,24 @@ func (x *ClientFrame) GetRequest() *ClientRequest {
 	return nil
 }
 
+func (x *ClientFrame) GetOpenRoom() *OpenRoomFrame {
+	if x != nil {
+		if x, ok := x.Frame.(*ClientFrame_OpenRoom); ok {
+			return x.OpenRoom
+		}
+	}
+	return nil
+}
+
+func (x *ClientFrame) GetCloseRoom() *CloseRoomFrame {
+	if x != nil {
+		if x, ok := x.Frame.(*ClientFrame_CloseRoom); ok {
+			return x.CloseRoom
+		}
+	}
+	return nil
+}
+
 type isClientFrame_Frame interface {
 	isClientFrame_Frame()
 }
@@ -113,11 +234,23 @@ type ClientFrame_Request struct {
 	Request *ClientRequest `protobuf:"bytes,12,opt,name=request,proto3,oneof"`
 }
 
+type ClientFrame_OpenRoom struct {
+	OpenRoom *OpenRoomFrame `protobuf:"bytes,20,opt,name=open_room,json=openRoom,proto3,oneof"`
+}
+
+type ClientFrame_CloseRoom struct {
+	CloseRoom *CloseRoomFrame `protobuf:"bytes,21,opt,name=close_room,json=closeRoom,proto3,oneof"`
+}
+
 func (*ClientFrame_Auth) isClientFrame_Frame() {}
 
 func (*ClientFrame_Heartbeat) isClientFrame_Frame() {}
 
 func (*ClientFrame_Request) isClientFrame_Frame() {}
+
+func (*ClientFrame_OpenRoom) isClientFrame_Frame() {}
+
+func (*ClientFrame_CloseRoom) isClientFrame_Frame() {}
 
 type AuthFrame struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -199,6 +332,94 @@ func (*HeartbeatFrame) Descriptor() ([]byte, []int) {
 	return file_chatim_v1_ws_proto_rawDescGZIP(), []int{2}
 }
 
+type OpenRoomFrame struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RoomId        string                 `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OpenRoomFrame) Reset() {
+	*x = OpenRoomFrame{}
+	mi := &file_chatim_v1_ws_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpenRoomFrame) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpenRoomFrame) ProtoMessage() {}
+
+func (x *OpenRoomFrame) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_ws_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpenRoomFrame.ProtoReflect.Descriptor instead.
+func (*OpenRoomFrame) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_ws_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *OpenRoomFrame) GetRoomId() string {
+	if x != nil {
+		return x.RoomId
+	}
+	return ""
+}
+
+type CloseRoomFrame struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RoomId        string                 `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CloseRoomFrame) Reset() {
+	*x = CloseRoomFrame{}
+	mi := &file_chatim_v1_ws_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CloseRoomFrame) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CloseRoomFrame) ProtoMessage() {}
+
+func (x *CloseRoomFrame) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_ws_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CloseRoomFrame.ProtoReflect.Descriptor instead.
+func (*CloseRoomFrame) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_ws_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *CloseRoomFrame) GetRoomId() string {
+	if x != nil {
+		return x.RoomId
+	}
+	return ""
+}
+
 type ClientRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    uint64                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -244,7 +465,7 @@ type ClientRequest struct {
 
 func (x *ClientRequest) Reset() {
 	*x = ClientRequest{}
-	mi := &file_chatim_v1_ws_proto_msgTypes[3]
+	mi := &file_chatim_v1_ws_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -256,7 +477,7 @@ func (x *ClientRequest) String() string {
 func (*ClientRequest) ProtoMessage() {}
 
 func (x *ClientRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_ws_proto_msgTypes[3]
+	mi := &file_chatim_v1_ws_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -269,7 +490,7 @@ func (x *ClientRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientRequest.ProtoReflect.Descriptor instead.
 func (*ClientRequest) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_ws_proto_rawDescGZIP(), []int{3}
+	return file_chatim_v1_ws_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ClientRequest) GetId() uint64 {
@@ -790,6 +1011,11 @@ type ServerFrame struct {
 	// Types that are valid to be assigned to Frame:
 	//
 	//	*ServerFrame_Response
+	//	*ServerFrame_Ready
+	//	*ServerFrame_Event
+	//	*ServerFrame_Notification
+	//	*ServerFrame_Resync
+	//	*ServerFrame_RoomClosed
 	Frame         isServerFrame_Frame `protobuf_oneof:"frame"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -797,7 +1023,7 @@ type ServerFrame struct {
 
 func (x *ServerFrame) Reset() {
 	*x = ServerFrame{}
-	mi := &file_chatim_v1_ws_proto_msgTypes[4]
+	mi := &file_chatim_v1_ws_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -809,7 +1035,7 @@ func (x *ServerFrame) String() string {
 func (*ServerFrame) ProtoMessage() {}
 
 func (x *ServerFrame) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_ws_proto_msgTypes[4]
+	mi := &file_chatim_v1_ws_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -822,7 +1048,7 @@ func (x *ServerFrame) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerFrame.ProtoReflect.Descriptor instead.
 func (*ServerFrame) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_ws_proto_rawDescGZIP(), []int{4}
+	return file_chatim_v1_ws_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ServerFrame) GetFrame() isServerFrame_Frame {
@@ -841,6 +1067,51 @@ func (x *ServerFrame) GetResponse() *ServerResponse {
 	return nil
 }
 
+func (x *ServerFrame) GetReady() *ReadyFrame {
+	if x != nil {
+		if x, ok := x.Frame.(*ServerFrame_Ready); ok {
+			return x.Ready
+		}
+	}
+	return nil
+}
+
+func (x *ServerFrame) GetEvent() *Event {
+	if x != nil {
+		if x, ok := x.Frame.(*ServerFrame_Event); ok {
+			return x.Event
+		}
+	}
+	return nil
+}
+
+func (x *ServerFrame) GetNotification() *Notification {
+	if x != nil {
+		if x, ok := x.Frame.(*ServerFrame_Notification); ok {
+			return x.Notification
+		}
+	}
+	return nil
+}
+
+func (x *ServerFrame) GetResync() *ResyncFrame {
+	if x != nil {
+		if x, ok := x.Frame.(*ServerFrame_Resync); ok {
+			return x.Resync
+		}
+	}
+	return nil
+}
+
+func (x *ServerFrame) GetRoomClosed() *RoomClosedFrame {
+	if x != nil {
+		if x, ok := x.Frame.(*ServerFrame_RoomClosed); ok {
+			return x.RoomClosed
+		}
+	}
+	return nil
+}
+
 type isServerFrame_Frame interface {
 	isServerFrame_Frame()
 }
@@ -849,7 +1120,169 @@ type ServerFrame_Response struct {
 	Response *ServerResponse `protobuf:"bytes,10,opt,name=response,proto3,oneof"`
 }
 
+type ServerFrame_Ready struct {
+	Ready *ReadyFrame `protobuf:"bytes,20,opt,name=ready,proto3,oneof"`
+}
+
+type ServerFrame_Event struct {
+	Event *Event `protobuf:"bytes,21,opt,name=event,proto3,oneof"`
+}
+
+type ServerFrame_Notification struct {
+	Notification *Notification `protobuf:"bytes,22,opt,name=notification,proto3,oneof"`
+}
+
+type ServerFrame_Resync struct {
+	Resync *ResyncFrame `protobuf:"bytes,23,opt,name=resync,proto3,oneof"`
+}
+
+type ServerFrame_RoomClosed struct {
+	RoomClosed *RoomClosedFrame `protobuf:"bytes,24,opt,name=room_closed,json=roomClosed,proto3,oneof"`
+}
+
 func (*ServerFrame_Response) isServerFrame_Frame() {}
+
+func (*ServerFrame_Ready) isServerFrame_Frame() {}
+
+func (*ServerFrame_Event) isServerFrame_Frame() {}
+
+func (*ServerFrame_Notification) isServerFrame_Frame() {}
+
+func (*ServerFrame_Resync) isServerFrame_Frame() {}
+
+func (*ServerFrame_RoomClosed) isServerFrame_Frame() {}
+
+type ReadyFrame struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReadyFrame) Reset() {
+	*x = ReadyFrame{}
+	mi := &file_chatim_v1_ws_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReadyFrame) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReadyFrame) ProtoMessage() {}
+
+func (x *ReadyFrame) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_ws_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReadyFrame.ProtoReflect.Descriptor instead.
+func (*ReadyFrame) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_ws_proto_rawDescGZIP(), []int{7}
+}
+
+type ResyncFrame struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Reason        ResyncReason           `protobuf:"varint,1,opt,name=reason,proto3,enum=chatim.v1.ResyncReason" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResyncFrame) Reset() {
+	*x = ResyncFrame{}
+	mi := &file_chatim_v1_ws_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResyncFrame) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResyncFrame) ProtoMessage() {}
+
+func (x *ResyncFrame) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_ws_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResyncFrame.ProtoReflect.Descriptor instead.
+func (*ResyncFrame) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_ws_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ResyncFrame) GetReason() ResyncReason {
+	if x != nil {
+		return x.Reason
+	}
+	return ResyncReason_RESYNC_REASON_UNSPECIFIED
+}
+
+type RoomClosedFrame struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RoomId        string                 `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
+	Reason        RoomClosedReason       `protobuf:"varint,2,opt,name=reason,proto3,enum=chatim.v1.RoomClosedReason" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RoomClosedFrame) Reset() {
+	*x = RoomClosedFrame{}
+	mi := &file_chatim_v1_ws_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RoomClosedFrame) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RoomClosedFrame) ProtoMessage() {}
+
+func (x *RoomClosedFrame) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_ws_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RoomClosedFrame.ProtoReflect.Descriptor instead.
+func (*RoomClosedFrame) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_ws_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *RoomClosedFrame) GetRoomId() string {
+	if x != nil {
+		return x.RoomId
+	}
+	return ""
+}
+
+func (x *RoomClosedFrame) GetReason() RoomClosedReason {
+	if x != nil {
+		return x.Reason
+	}
+	return RoomClosedReason_ROOM_CLOSED_REASON_UNSPECIFIED
+}
 
 type ServerResponse struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
@@ -898,7 +1331,7 @@ type ServerResponse struct {
 
 func (x *ServerResponse) Reset() {
 	*x = ServerResponse{}
-	mi := &file_chatim_v1_ws_proto_msgTypes[5]
+	mi := &file_chatim_v1_ws_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -910,7 +1343,7 @@ func (x *ServerResponse) String() string {
 func (*ServerResponse) ProtoMessage() {}
 
 func (x *ServerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_ws_proto_msgTypes[5]
+	mi := &file_chatim_v1_ws_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -923,7 +1356,7 @@ func (x *ServerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerResponse.ProtoReflect.Descriptor instead.
 func (*ServerResponse) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_ws_proto_rawDescGZIP(), []int{5}
+	return file_chatim_v1_ws_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ServerResponse) GetId() uint64 {
@@ -1457,16 +1890,23 @@ var File_chatim_v1_ws_proto protoreflect.FileDescriptor
 
 const file_chatim_v1_ws_proto_rawDesc = "" +
 	"\n" +
-	"\x12chatim/v1/ws.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x17chatim/v1/members.proto\x1a\x1fchatim/v1/mention_service.proto\x1a\x1dchatim/v1/message_reads.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a*chatim/v1/replies_bookmarks_mentions.proto\x1a\x19chatim/v1/room_list.proto\"\xb3\x01\n" +
+	"\x12chatim/v1/ws.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x16chatim/v1/events.proto\x1a\x17chatim/v1/members.proto\x1a\x1fchatim/v1/mention_service.proto\x1a\x1dchatim/v1/message_reads.proto\x1a\x1dchatim/v1/notifications.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a*chatim/v1/replies_bookmarks_mentions.proto\x1a\x19chatim/v1/room_list.proto\"\xa8\x02\n" +
 	"\vClientFrame\x12*\n" +
 	"\x04auth\x18\n" +
 	" \x01(\v2\x14.chatim.v1.AuthFrameH\x00R\x04auth\x129\n" +
 	"\theartbeat\x18\v \x01(\v2\x19.chatim.v1.HeartbeatFrameH\x00R\theartbeat\x124\n" +
-	"\arequest\x18\f \x01(\v2\x18.chatim.v1.ClientRequestH\x00R\arequestB\a\n" +
+	"\arequest\x18\f \x01(\v2\x18.chatim.v1.ClientRequestH\x00R\arequest\x127\n" +
+	"\topen_room\x18\x14 \x01(\v2\x18.chatim.v1.OpenRoomFrameH\x00R\bopenRoom\x12:\n" +
+	"\n" +
+	"close_room\x18\x15 \x01(\v2\x19.chatim.v1.CloseRoomFrameH\x00R\tcloseRoomB\a\n" +
 	"\x05frame\"!\n" +
 	"\tAuthFrame\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\"\x10\n" +
-	"\x0eHeartbeatFrame\"\xd0\x12\n" +
+	"\x0eHeartbeatFrame\"(\n" +
+	"\rOpenRoomFrame\x12\x17\n" +
+	"\aroom_id\x18\x01 \x01(\tR\x06roomId\")\n" +
+	"\x0eCloseRoomFrame\x12\x17\n" +
+	"\aroom_id\x18\x01 \x01(\tR\x06roomId\"\xd0\x12\n" +
 	"\rClientRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x04R\x02id\x12?\n" +
 	"\vcreate_room\x18\n" +
@@ -1511,11 +1951,24 @@ const file_chatim_v1_ws_proto_rawDesc = "" +
 	"markUnread\x12E\n" +
 	"\rlist_mentions\x18) \x01(\v2\x1e.chatim.v1.ListMentionsRequestH\x00R\flistMentions\x12L\n" +
 	"\x10list_room_groups\x18* \x01(\v2 .chatim.v1.ListRoomGroupsRequestH\x00R\x0elistRoomGroupsB\t\n" +
-	"\arequest\"O\n" +
+	"\arequest\"\xd8\x02\n" +
 	"\vServerFrame\x127\n" +
 	"\bresponse\x18\n" +
-	" \x01(\v2\x19.chatim.v1.ServerResponseH\x00R\bresponseB\a\n" +
-	"\x05frame\"\x9f\x13\n" +
+	" \x01(\v2\x19.chatim.v1.ServerResponseH\x00R\bresponse\x12-\n" +
+	"\x05ready\x18\x14 \x01(\v2\x15.chatim.v1.ReadyFrameH\x00R\x05ready\x12(\n" +
+	"\x05event\x18\x15 \x01(\v2\x10.chatim.v1.EventH\x00R\x05event\x12=\n" +
+	"\fnotification\x18\x16 \x01(\v2\x17.chatim.v1.NotificationH\x00R\fnotification\x120\n" +
+	"\x06resync\x18\x17 \x01(\v2\x16.chatim.v1.ResyncFrameH\x00R\x06resync\x12=\n" +
+	"\vroom_closed\x18\x18 \x01(\v2\x1a.chatim.v1.RoomClosedFrameH\x00R\n" +
+	"roomClosedB\a\n" +
+	"\x05frame\"\f\n" +
+	"\n" +
+	"ReadyFrame\">\n" +
+	"\vResyncFrame\x12/\n" +
+	"\x06reason\x18\x01 \x01(\x0e2\x17.chatim.v1.ResyncReasonR\x06reason\"_\n" +
+	"\x0fRoomClosedFrame\x12\x17\n" +
+	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x123\n" +
+	"\x06reason\x18\x02 \x01(\x0e2\x1b.chatim.v1.RoomClosedReasonR\x06reason\"\x9f\x13\n" +
 	"\x0eServerResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x04R\x02id\x12\x12\n" +
 	"\x04code\x18\x02 \x01(\x05R\x04code\x12\x18\n" +
@@ -1562,7 +2015,16 @@ const file_chatim_v1_ws_proto_rawDesc = "" +
 	"markUnread\x12F\n" +
 	"\rlist_mentions\x18) \x01(\v2\x1f.chatim.v1.ListMentionsResponseH\x00R\flistMentions\x12M\n" +
 	"\x10list_room_groups\x18* \x01(\v2!.chatim.v1.ListRoomGroupsResponseH\x00R\x0elistRoomGroupsB\b\n" +
-	"\x06resultB\x98\x01\n" +
+	"\x06result*\x8f\x01\n" +
+	"\fResyncReason\x12\x1d\n" +
+	"\x19RESYNC_REASON_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19RESYNC_REASON_LAG_TOO_OLD\x10\x01\x12\x1f\n" +
+	"\x1bRESYNC_REASON_CONSUMER_LOST\x10\x02\x12 \n" +
+	"\x1cRESYNC_REASON_CLIENT_BACKLOG\x10\x03*y\n" +
+	"\x10RoomClosedReason\x12\"\n" +
+	"\x1eROOM_CLOSED_REASON_UNSPECIFIED\x10\x00\x12!\n" +
+	"\x1dROOM_CLOSED_REASON_NOT_MEMBER\x10\x01\x12\x1e\n" +
+	"\x1aROOM_CLOSED_REASON_REMOVED\x10\x02B\x98\x01\n" +
 	"\rcom.chatim.v1B\aWsProtoP\x01Z9github.com/ivannguyendev/chatim/pkg/pb/chatim/v1;chatimv1\xa2\x02\x03CXX\xaa\x02\tChatim.V1\xca\x02\tChatim\\V1\xe2\x02\x15Chatim\\V1\\GPBMetadata\xea\x02\n" +
 	"Chatim::V1b\x06proto3"
 
@@ -1578,157 +2040,176 @@ func file_chatim_v1_ws_proto_rawDescGZIP() []byte {
 	return file_chatim_v1_ws_proto_rawDescData
 }
 
-var file_chatim_v1_ws_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_chatim_v1_ws_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_chatim_v1_ws_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_chatim_v1_ws_proto_goTypes = []any{
-	(*ClientFrame)(nil),                 // 0: chatim.v1.ClientFrame
-	(*AuthFrame)(nil),                   // 1: chatim.v1.AuthFrame
-	(*HeartbeatFrame)(nil),              // 2: chatim.v1.HeartbeatFrame
-	(*ClientRequest)(nil),               // 3: chatim.v1.ClientRequest
-	(*ServerFrame)(nil),                 // 4: chatim.v1.ServerFrame
-	(*ServerResponse)(nil),              // 5: chatim.v1.ServerResponse
-	(*CreateRoomRequest)(nil),           // 6: chatim.v1.CreateRoomRequest
-	(*OpenDirectRoomRequest)(nil),       // 7: chatim.v1.OpenDirectRoomRequest
-	(*ListMyRoomsRequest)(nil),          // 8: chatim.v1.ListMyRoomsRequest
-	(*GetRoomsRequest)(nil),             // 9: chatim.v1.GetRoomsRequest
-	(*UpdateRoomRequest)(nil),           // 10: chatim.v1.UpdateRoomRequest
-	(*SetRoomPreferencesRequest)(nil),   // 11: chatim.v1.SetRoomPreferencesRequest
-	(*SendMessageRequest)(nil),          // 12: chatim.v1.SendMessageRequest
-	(*GetHistoryRequest)(nil),           // 13: chatim.v1.GetHistoryRequest
-	(*GetMessagesRequest)(nil),          // 14: chatim.v1.GetMessagesRequest
-	(*EditMessageRequest)(nil),          // 15: chatim.v1.EditMessageRequest
-	(*DeleteMessageRequest)(nil),        // 16: chatim.v1.DeleteMessageRequest
-	(*HideMessageRequest)(nil),          // 17: chatim.v1.HideMessageRequest
-	(*ClearHistoryRequest)(nil),         // 18: chatim.v1.ClearHistoryRequest
-	(*GetEditHistoryRequest)(nil),       // 19: chatim.v1.GetEditHistoryRequest
-	(*ReactMessageRequest)(nil),         // 20: chatim.v1.ReactMessageRequest
-	(*PinMessageRequest)(nil),           // 21: chatim.v1.PinMessageRequest
-	(*UnpinMessageRequest)(nil),         // 22: chatim.v1.UnpinMessageRequest
-	(*ListPinsRequest)(nil),             // 23: chatim.v1.ListPinsRequest
-	(*GetReactionSettingsRequest)(nil),  // 24: chatim.v1.GetReactionSettingsRequest
-	(*GetReactionsRequest)(nil),         // 25: chatim.v1.GetReactionsRequest
-	(*SetBookmarkRequest)(nil),          // 26: chatim.v1.SetBookmarkRequest
-	(*GetRepliesRequest)(nil),           // 27: chatim.v1.GetRepliesRequest
-	(*ListThreadsRequest)(nil),          // 28: chatim.v1.ListThreadsRequest
-	(*ListBookmarksRequest)(nil),        // 29: chatim.v1.ListBookmarksRequest
-	(*AddMembersRequest)(nil),           // 30: chatim.v1.AddMembersRequest
-	(*RemoveMemberRequest)(nil),         // 31: chatim.v1.RemoveMemberRequest
-	(*LeaveRoomRequest)(nil),            // 32: chatim.v1.LeaveRoomRequest
-	(*ChangeMemberRoleRequest)(nil),     // 33: chatim.v1.ChangeMemberRoleRequest
-	(*SetMemberPriorityRequest)(nil),    // 34: chatim.v1.SetMemberPriorityRequest
-	(*ListMembersRequest)(nil),          // 35: chatim.v1.ListMembersRequest
-	(*MarkUnreadRequest)(nil),           // 36: chatim.v1.MarkUnreadRequest
-	(*ListMentionsRequest)(nil),         // 37: chatim.v1.ListMentionsRequest
-	(*ListRoomGroupsRequest)(nil),       // 38: chatim.v1.ListRoomGroupsRequest
-	(*CreateRoomResponse)(nil),          // 39: chatim.v1.CreateRoomResponse
-	(*OpenDirectRoomResponse)(nil),      // 40: chatim.v1.OpenDirectRoomResponse
-	(*ListMyRoomsResponse)(nil),         // 41: chatim.v1.ListMyRoomsResponse
-	(*GetRoomsResponse)(nil),            // 42: chatim.v1.GetRoomsResponse
-	(*UpdateRoomResponse)(nil),          // 43: chatim.v1.UpdateRoomResponse
-	(*SetRoomPreferencesResponse)(nil),  // 44: chatim.v1.SetRoomPreferencesResponse
-	(*SendMessageResponse)(nil),         // 45: chatim.v1.SendMessageResponse
-	(*GetHistoryResponse)(nil),          // 46: chatim.v1.GetHistoryResponse
-	(*GetMessagesResponse)(nil),         // 47: chatim.v1.GetMessagesResponse
-	(*EditMessageResponse)(nil),         // 48: chatim.v1.EditMessageResponse
-	(*DeleteMessageResponse)(nil),       // 49: chatim.v1.DeleteMessageResponse
-	(*HideMessageResponse)(nil),         // 50: chatim.v1.HideMessageResponse
-	(*ClearHistoryResponse)(nil),        // 51: chatim.v1.ClearHistoryResponse
-	(*GetEditHistoryResponse)(nil),      // 52: chatim.v1.GetEditHistoryResponse
-	(*ReactMessageResponse)(nil),        // 53: chatim.v1.ReactMessageResponse
-	(*PinMessageResponse)(nil),          // 54: chatim.v1.PinMessageResponse
-	(*UnpinMessageResponse)(nil),        // 55: chatim.v1.UnpinMessageResponse
-	(*ListPinsResponse)(nil),            // 56: chatim.v1.ListPinsResponse
-	(*GetReactionSettingsResponse)(nil), // 57: chatim.v1.GetReactionSettingsResponse
-	(*GetReactionsResponse)(nil),        // 58: chatim.v1.GetReactionsResponse
-	(*SetBookmarkResponse)(nil),         // 59: chatim.v1.SetBookmarkResponse
-	(*GetRepliesResponse)(nil),          // 60: chatim.v1.GetRepliesResponse
-	(*ListThreadsResponse)(nil),         // 61: chatim.v1.ListThreadsResponse
-	(*ListBookmarksResponse)(nil),       // 62: chatim.v1.ListBookmarksResponse
-	(*AddMembersResponse)(nil),          // 63: chatim.v1.AddMembersResponse
-	(*RemoveMemberResponse)(nil),        // 64: chatim.v1.RemoveMemberResponse
-	(*LeaveRoomResponse)(nil),           // 65: chatim.v1.LeaveRoomResponse
-	(*ChangeMemberRoleResponse)(nil),    // 66: chatim.v1.ChangeMemberRoleResponse
-	(*SetMemberPriorityResponse)(nil),   // 67: chatim.v1.SetMemberPriorityResponse
-	(*ListMembersResponse)(nil),         // 68: chatim.v1.ListMembersResponse
-	(*MarkUnreadResponse)(nil),          // 69: chatim.v1.MarkUnreadResponse
-	(*ListMentionsResponse)(nil),        // 70: chatim.v1.ListMentionsResponse
-	(*ListRoomGroupsResponse)(nil),      // 71: chatim.v1.ListRoomGroupsResponse
+	(ResyncReason)(0),                   // 0: chatim.v1.ResyncReason
+	(RoomClosedReason)(0),               // 1: chatim.v1.RoomClosedReason
+	(*ClientFrame)(nil),                 // 2: chatim.v1.ClientFrame
+	(*AuthFrame)(nil),                   // 3: chatim.v1.AuthFrame
+	(*HeartbeatFrame)(nil),              // 4: chatim.v1.HeartbeatFrame
+	(*OpenRoomFrame)(nil),               // 5: chatim.v1.OpenRoomFrame
+	(*CloseRoomFrame)(nil),              // 6: chatim.v1.CloseRoomFrame
+	(*ClientRequest)(nil),               // 7: chatim.v1.ClientRequest
+	(*ServerFrame)(nil),                 // 8: chatim.v1.ServerFrame
+	(*ReadyFrame)(nil),                  // 9: chatim.v1.ReadyFrame
+	(*ResyncFrame)(nil),                 // 10: chatim.v1.ResyncFrame
+	(*RoomClosedFrame)(nil),             // 11: chatim.v1.RoomClosedFrame
+	(*ServerResponse)(nil),              // 12: chatim.v1.ServerResponse
+	(*CreateRoomRequest)(nil),           // 13: chatim.v1.CreateRoomRequest
+	(*OpenDirectRoomRequest)(nil),       // 14: chatim.v1.OpenDirectRoomRequest
+	(*ListMyRoomsRequest)(nil),          // 15: chatim.v1.ListMyRoomsRequest
+	(*GetRoomsRequest)(nil),             // 16: chatim.v1.GetRoomsRequest
+	(*UpdateRoomRequest)(nil),           // 17: chatim.v1.UpdateRoomRequest
+	(*SetRoomPreferencesRequest)(nil),   // 18: chatim.v1.SetRoomPreferencesRequest
+	(*SendMessageRequest)(nil),          // 19: chatim.v1.SendMessageRequest
+	(*GetHistoryRequest)(nil),           // 20: chatim.v1.GetHistoryRequest
+	(*GetMessagesRequest)(nil),          // 21: chatim.v1.GetMessagesRequest
+	(*EditMessageRequest)(nil),          // 22: chatim.v1.EditMessageRequest
+	(*DeleteMessageRequest)(nil),        // 23: chatim.v1.DeleteMessageRequest
+	(*HideMessageRequest)(nil),          // 24: chatim.v1.HideMessageRequest
+	(*ClearHistoryRequest)(nil),         // 25: chatim.v1.ClearHistoryRequest
+	(*GetEditHistoryRequest)(nil),       // 26: chatim.v1.GetEditHistoryRequest
+	(*ReactMessageRequest)(nil),         // 27: chatim.v1.ReactMessageRequest
+	(*PinMessageRequest)(nil),           // 28: chatim.v1.PinMessageRequest
+	(*UnpinMessageRequest)(nil),         // 29: chatim.v1.UnpinMessageRequest
+	(*ListPinsRequest)(nil),             // 30: chatim.v1.ListPinsRequest
+	(*GetReactionSettingsRequest)(nil),  // 31: chatim.v1.GetReactionSettingsRequest
+	(*GetReactionsRequest)(nil),         // 32: chatim.v1.GetReactionsRequest
+	(*SetBookmarkRequest)(nil),          // 33: chatim.v1.SetBookmarkRequest
+	(*GetRepliesRequest)(nil),           // 34: chatim.v1.GetRepliesRequest
+	(*ListThreadsRequest)(nil),          // 35: chatim.v1.ListThreadsRequest
+	(*ListBookmarksRequest)(nil),        // 36: chatim.v1.ListBookmarksRequest
+	(*AddMembersRequest)(nil),           // 37: chatim.v1.AddMembersRequest
+	(*RemoveMemberRequest)(nil),         // 38: chatim.v1.RemoveMemberRequest
+	(*LeaveRoomRequest)(nil),            // 39: chatim.v1.LeaveRoomRequest
+	(*ChangeMemberRoleRequest)(nil),     // 40: chatim.v1.ChangeMemberRoleRequest
+	(*SetMemberPriorityRequest)(nil),    // 41: chatim.v1.SetMemberPriorityRequest
+	(*ListMembersRequest)(nil),          // 42: chatim.v1.ListMembersRequest
+	(*MarkUnreadRequest)(nil),           // 43: chatim.v1.MarkUnreadRequest
+	(*ListMentionsRequest)(nil),         // 44: chatim.v1.ListMentionsRequest
+	(*ListRoomGroupsRequest)(nil),       // 45: chatim.v1.ListRoomGroupsRequest
+	(*Event)(nil),                       // 46: chatim.v1.Event
+	(*Notification)(nil),                // 47: chatim.v1.Notification
+	(*CreateRoomResponse)(nil),          // 48: chatim.v1.CreateRoomResponse
+	(*OpenDirectRoomResponse)(nil),      // 49: chatim.v1.OpenDirectRoomResponse
+	(*ListMyRoomsResponse)(nil),         // 50: chatim.v1.ListMyRoomsResponse
+	(*GetRoomsResponse)(nil),            // 51: chatim.v1.GetRoomsResponse
+	(*UpdateRoomResponse)(nil),          // 52: chatim.v1.UpdateRoomResponse
+	(*SetRoomPreferencesResponse)(nil),  // 53: chatim.v1.SetRoomPreferencesResponse
+	(*SendMessageResponse)(nil),         // 54: chatim.v1.SendMessageResponse
+	(*GetHistoryResponse)(nil),          // 55: chatim.v1.GetHistoryResponse
+	(*GetMessagesResponse)(nil),         // 56: chatim.v1.GetMessagesResponse
+	(*EditMessageResponse)(nil),         // 57: chatim.v1.EditMessageResponse
+	(*DeleteMessageResponse)(nil),       // 58: chatim.v1.DeleteMessageResponse
+	(*HideMessageResponse)(nil),         // 59: chatim.v1.HideMessageResponse
+	(*ClearHistoryResponse)(nil),        // 60: chatim.v1.ClearHistoryResponse
+	(*GetEditHistoryResponse)(nil),      // 61: chatim.v1.GetEditHistoryResponse
+	(*ReactMessageResponse)(nil),        // 62: chatim.v1.ReactMessageResponse
+	(*PinMessageResponse)(nil),          // 63: chatim.v1.PinMessageResponse
+	(*UnpinMessageResponse)(nil),        // 64: chatim.v1.UnpinMessageResponse
+	(*ListPinsResponse)(nil),            // 65: chatim.v1.ListPinsResponse
+	(*GetReactionSettingsResponse)(nil), // 66: chatim.v1.GetReactionSettingsResponse
+	(*GetReactionsResponse)(nil),        // 67: chatim.v1.GetReactionsResponse
+	(*SetBookmarkResponse)(nil),         // 68: chatim.v1.SetBookmarkResponse
+	(*GetRepliesResponse)(nil),          // 69: chatim.v1.GetRepliesResponse
+	(*ListThreadsResponse)(nil),         // 70: chatim.v1.ListThreadsResponse
+	(*ListBookmarksResponse)(nil),       // 71: chatim.v1.ListBookmarksResponse
+	(*AddMembersResponse)(nil),          // 72: chatim.v1.AddMembersResponse
+	(*RemoveMemberResponse)(nil),        // 73: chatim.v1.RemoveMemberResponse
+	(*LeaveRoomResponse)(nil),           // 74: chatim.v1.LeaveRoomResponse
+	(*ChangeMemberRoleResponse)(nil),    // 75: chatim.v1.ChangeMemberRoleResponse
+	(*SetMemberPriorityResponse)(nil),   // 76: chatim.v1.SetMemberPriorityResponse
+	(*ListMembersResponse)(nil),         // 77: chatim.v1.ListMembersResponse
+	(*MarkUnreadResponse)(nil),          // 78: chatim.v1.MarkUnreadResponse
+	(*ListMentionsResponse)(nil),        // 79: chatim.v1.ListMentionsResponse
+	(*ListRoomGroupsResponse)(nil),      // 80: chatim.v1.ListRoomGroupsResponse
 }
 var file_chatim_v1_ws_proto_depIdxs = []int32{
-	1,  // 0: chatim.v1.ClientFrame.auth:type_name -> chatim.v1.AuthFrame
-	2,  // 1: chatim.v1.ClientFrame.heartbeat:type_name -> chatim.v1.HeartbeatFrame
-	3,  // 2: chatim.v1.ClientFrame.request:type_name -> chatim.v1.ClientRequest
-	6,  // 3: chatim.v1.ClientRequest.create_room:type_name -> chatim.v1.CreateRoomRequest
-	7,  // 4: chatim.v1.ClientRequest.open_direct_room:type_name -> chatim.v1.OpenDirectRoomRequest
-	8,  // 5: chatim.v1.ClientRequest.list_my_rooms:type_name -> chatim.v1.ListMyRoomsRequest
-	9,  // 6: chatim.v1.ClientRequest.get_rooms:type_name -> chatim.v1.GetRoomsRequest
-	10, // 7: chatim.v1.ClientRequest.update_room:type_name -> chatim.v1.UpdateRoomRequest
-	11, // 8: chatim.v1.ClientRequest.set_room_preferences:type_name -> chatim.v1.SetRoomPreferencesRequest
-	12, // 9: chatim.v1.ClientRequest.send_message:type_name -> chatim.v1.SendMessageRequest
-	13, // 10: chatim.v1.ClientRequest.get_history:type_name -> chatim.v1.GetHistoryRequest
-	14, // 11: chatim.v1.ClientRequest.get_messages:type_name -> chatim.v1.GetMessagesRequest
-	15, // 12: chatim.v1.ClientRequest.edit_message:type_name -> chatim.v1.EditMessageRequest
-	16, // 13: chatim.v1.ClientRequest.delete_message:type_name -> chatim.v1.DeleteMessageRequest
-	17, // 14: chatim.v1.ClientRequest.hide_message:type_name -> chatim.v1.HideMessageRequest
-	18, // 15: chatim.v1.ClientRequest.clear_history:type_name -> chatim.v1.ClearHistoryRequest
-	19, // 16: chatim.v1.ClientRequest.get_edit_history:type_name -> chatim.v1.GetEditHistoryRequest
-	20, // 17: chatim.v1.ClientRequest.react_message:type_name -> chatim.v1.ReactMessageRequest
-	21, // 18: chatim.v1.ClientRequest.pin_message:type_name -> chatim.v1.PinMessageRequest
-	22, // 19: chatim.v1.ClientRequest.unpin_message:type_name -> chatim.v1.UnpinMessageRequest
-	23, // 20: chatim.v1.ClientRequest.list_pins:type_name -> chatim.v1.ListPinsRequest
-	24, // 21: chatim.v1.ClientRequest.get_reaction_settings:type_name -> chatim.v1.GetReactionSettingsRequest
-	25, // 22: chatim.v1.ClientRequest.get_reactions:type_name -> chatim.v1.GetReactionsRequest
-	26, // 23: chatim.v1.ClientRequest.set_bookmark:type_name -> chatim.v1.SetBookmarkRequest
-	27, // 24: chatim.v1.ClientRequest.get_replies:type_name -> chatim.v1.GetRepliesRequest
-	28, // 25: chatim.v1.ClientRequest.list_threads:type_name -> chatim.v1.ListThreadsRequest
-	29, // 26: chatim.v1.ClientRequest.list_bookmarks:type_name -> chatim.v1.ListBookmarksRequest
-	30, // 27: chatim.v1.ClientRequest.add_members:type_name -> chatim.v1.AddMembersRequest
-	31, // 28: chatim.v1.ClientRequest.remove_member:type_name -> chatim.v1.RemoveMemberRequest
-	32, // 29: chatim.v1.ClientRequest.leave_room:type_name -> chatim.v1.LeaveRoomRequest
-	33, // 30: chatim.v1.ClientRequest.change_member_role:type_name -> chatim.v1.ChangeMemberRoleRequest
-	34, // 31: chatim.v1.ClientRequest.set_member_priority:type_name -> chatim.v1.SetMemberPriorityRequest
-	35, // 32: chatim.v1.ClientRequest.list_members:type_name -> chatim.v1.ListMembersRequest
-	36, // 33: chatim.v1.ClientRequest.mark_unread:type_name -> chatim.v1.MarkUnreadRequest
-	37, // 34: chatim.v1.ClientRequest.list_mentions:type_name -> chatim.v1.ListMentionsRequest
-	38, // 35: chatim.v1.ClientRequest.list_room_groups:type_name -> chatim.v1.ListRoomGroupsRequest
-	5,  // 36: chatim.v1.ServerFrame.response:type_name -> chatim.v1.ServerResponse
-	39, // 37: chatim.v1.ServerResponse.create_room:type_name -> chatim.v1.CreateRoomResponse
-	40, // 38: chatim.v1.ServerResponse.open_direct_room:type_name -> chatim.v1.OpenDirectRoomResponse
-	41, // 39: chatim.v1.ServerResponse.list_my_rooms:type_name -> chatim.v1.ListMyRoomsResponse
-	42, // 40: chatim.v1.ServerResponse.get_rooms:type_name -> chatim.v1.GetRoomsResponse
-	43, // 41: chatim.v1.ServerResponse.update_room:type_name -> chatim.v1.UpdateRoomResponse
-	44, // 42: chatim.v1.ServerResponse.set_room_preferences:type_name -> chatim.v1.SetRoomPreferencesResponse
-	45, // 43: chatim.v1.ServerResponse.send_message:type_name -> chatim.v1.SendMessageResponse
-	46, // 44: chatim.v1.ServerResponse.get_history:type_name -> chatim.v1.GetHistoryResponse
-	47, // 45: chatim.v1.ServerResponse.get_messages:type_name -> chatim.v1.GetMessagesResponse
-	48, // 46: chatim.v1.ServerResponse.edit_message:type_name -> chatim.v1.EditMessageResponse
-	49, // 47: chatim.v1.ServerResponse.delete_message:type_name -> chatim.v1.DeleteMessageResponse
-	50, // 48: chatim.v1.ServerResponse.hide_message:type_name -> chatim.v1.HideMessageResponse
-	51, // 49: chatim.v1.ServerResponse.clear_history:type_name -> chatim.v1.ClearHistoryResponse
-	52, // 50: chatim.v1.ServerResponse.get_edit_history:type_name -> chatim.v1.GetEditHistoryResponse
-	53, // 51: chatim.v1.ServerResponse.react_message:type_name -> chatim.v1.ReactMessageResponse
-	54, // 52: chatim.v1.ServerResponse.pin_message:type_name -> chatim.v1.PinMessageResponse
-	55, // 53: chatim.v1.ServerResponse.unpin_message:type_name -> chatim.v1.UnpinMessageResponse
-	56, // 54: chatim.v1.ServerResponse.list_pins:type_name -> chatim.v1.ListPinsResponse
-	57, // 55: chatim.v1.ServerResponse.get_reaction_settings:type_name -> chatim.v1.GetReactionSettingsResponse
-	58, // 56: chatim.v1.ServerResponse.get_reactions:type_name -> chatim.v1.GetReactionsResponse
-	59, // 57: chatim.v1.ServerResponse.set_bookmark:type_name -> chatim.v1.SetBookmarkResponse
-	60, // 58: chatim.v1.ServerResponse.get_replies:type_name -> chatim.v1.GetRepliesResponse
-	61, // 59: chatim.v1.ServerResponse.list_threads:type_name -> chatim.v1.ListThreadsResponse
-	62, // 60: chatim.v1.ServerResponse.list_bookmarks:type_name -> chatim.v1.ListBookmarksResponse
-	63, // 61: chatim.v1.ServerResponse.add_members:type_name -> chatim.v1.AddMembersResponse
-	64, // 62: chatim.v1.ServerResponse.remove_member:type_name -> chatim.v1.RemoveMemberResponse
-	65, // 63: chatim.v1.ServerResponse.leave_room:type_name -> chatim.v1.LeaveRoomResponse
-	66, // 64: chatim.v1.ServerResponse.change_member_role:type_name -> chatim.v1.ChangeMemberRoleResponse
-	67, // 65: chatim.v1.ServerResponse.set_member_priority:type_name -> chatim.v1.SetMemberPriorityResponse
-	68, // 66: chatim.v1.ServerResponse.list_members:type_name -> chatim.v1.ListMembersResponse
-	69, // 67: chatim.v1.ServerResponse.mark_unread:type_name -> chatim.v1.MarkUnreadResponse
-	70, // 68: chatim.v1.ServerResponse.list_mentions:type_name -> chatim.v1.ListMentionsResponse
-	71, // 69: chatim.v1.ServerResponse.list_room_groups:type_name -> chatim.v1.ListRoomGroupsResponse
-	70, // [70:70] is the sub-list for method output_type
-	70, // [70:70] is the sub-list for method input_type
-	70, // [70:70] is the sub-list for extension type_name
-	70, // [70:70] is the sub-list for extension extendee
-	0,  // [0:70] is the sub-list for field type_name
+	3,  // 0: chatim.v1.ClientFrame.auth:type_name -> chatim.v1.AuthFrame
+	4,  // 1: chatim.v1.ClientFrame.heartbeat:type_name -> chatim.v1.HeartbeatFrame
+	7,  // 2: chatim.v1.ClientFrame.request:type_name -> chatim.v1.ClientRequest
+	5,  // 3: chatim.v1.ClientFrame.open_room:type_name -> chatim.v1.OpenRoomFrame
+	6,  // 4: chatim.v1.ClientFrame.close_room:type_name -> chatim.v1.CloseRoomFrame
+	13, // 5: chatim.v1.ClientRequest.create_room:type_name -> chatim.v1.CreateRoomRequest
+	14, // 6: chatim.v1.ClientRequest.open_direct_room:type_name -> chatim.v1.OpenDirectRoomRequest
+	15, // 7: chatim.v1.ClientRequest.list_my_rooms:type_name -> chatim.v1.ListMyRoomsRequest
+	16, // 8: chatim.v1.ClientRequest.get_rooms:type_name -> chatim.v1.GetRoomsRequest
+	17, // 9: chatim.v1.ClientRequest.update_room:type_name -> chatim.v1.UpdateRoomRequest
+	18, // 10: chatim.v1.ClientRequest.set_room_preferences:type_name -> chatim.v1.SetRoomPreferencesRequest
+	19, // 11: chatim.v1.ClientRequest.send_message:type_name -> chatim.v1.SendMessageRequest
+	20, // 12: chatim.v1.ClientRequest.get_history:type_name -> chatim.v1.GetHistoryRequest
+	21, // 13: chatim.v1.ClientRequest.get_messages:type_name -> chatim.v1.GetMessagesRequest
+	22, // 14: chatim.v1.ClientRequest.edit_message:type_name -> chatim.v1.EditMessageRequest
+	23, // 15: chatim.v1.ClientRequest.delete_message:type_name -> chatim.v1.DeleteMessageRequest
+	24, // 16: chatim.v1.ClientRequest.hide_message:type_name -> chatim.v1.HideMessageRequest
+	25, // 17: chatim.v1.ClientRequest.clear_history:type_name -> chatim.v1.ClearHistoryRequest
+	26, // 18: chatim.v1.ClientRequest.get_edit_history:type_name -> chatim.v1.GetEditHistoryRequest
+	27, // 19: chatim.v1.ClientRequest.react_message:type_name -> chatim.v1.ReactMessageRequest
+	28, // 20: chatim.v1.ClientRequest.pin_message:type_name -> chatim.v1.PinMessageRequest
+	29, // 21: chatim.v1.ClientRequest.unpin_message:type_name -> chatim.v1.UnpinMessageRequest
+	30, // 22: chatim.v1.ClientRequest.list_pins:type_name -> chatim.v1.ListPinsRequest
+	31, // 23: chatim.v1.ClientRequest.get_reaction_settings:type_name -> chatim.v1.GetReactionSettingsRequest
+	32, // 24: chatim.v1.ClientRequest.get_reactions:type_name -> chatim.v1.GetReactionsRequest
+	33, // 25: chatim.v1.ClientRequest.set_bookmark:type_name -> chatim.v1.SetBookmarkRequest
+	34, // 26: chatim.v1.ClientRequest.get_replies:type_name -> chatim.v1.GetRepliesRequest
+	35, // 27: chatim.v1.ClientRequest.list_threads:type_name -> chatim.v1.ListThreadsRequest
+	36, // 28: chatim.v1.ClientRequest.list_bookmarks:type_name -> chatim.v1.ListBookmarksRequest
+	37, // 29: chatim.v1.ClientRequest.add_members:type_name -> chatim.v1.AddMembersRequest
+	38, // 30: chatim.v1.ClientRequest.remove_member:type_name -> chatim.v1.RemoveMemberRequest
+	39, // 31: chatim.v1.ClientRequest.leave_room:type_name -> chatim.v1.LeaveRoomRequest
+	40, // 32: chatim.v1.ClientRequest.change_member_role:type_name -> chatim.v1.ChangeMemberRoleRequest
+	41, // 33: chatim.v1.ClientRequest.set_member_priority:type_name -> chatim.v1.SetMemberPriorityRequest
+	42, // 34: chatim.v1.ClientRequest.list_members:type_name -> chatim.v1.ListMembersRequest
+	43, // 35: chatim.v1.ClientRequest.mark_unread:type_name -> chatim.v1.MarkUnreadRequest
+	44, // 36: chatim.v1.ClientRequest.list_mentions:type_name -> chatim.v1.ListMentionsRequest
+	45, // 37: chatim.v1.ClientRequest.list_room_groups:type_name -> chatim.v1.ListRoomGroupsRequest
+	12, // 38: chatim.v1.ServerFrame.response:type_name -> chatim.v1.ServerResponse
+	9,  // 39: chatim.v1.ServerFrame.ready:type_name -> chatim.v1.ReadyFrame
+	46, // 40: chatim.v1.ServerFrame.event:type_name -> chatim.v1.Event
+	47, // 41: chatim.v1.ServerFrame.notification:type_name -> chatim.v1.Notification
+	10, // 42: chatim.v1.ServerFrame.resync:type_name -> chatim.v1.ResyncFrame
+	11, // 43: chatim.v1.ServerFrame.room_closed:type_name -> chatim.v1.RoomClosedFrame
+	0,  // 44: chatim.v1.ResyncFrame.reason:type_name -> chatim.v1.ResyncReason
+	1,  // 45: chatim.v1.RoomClosedFrame.reason:type_name -> chatim.v1.RoomClosedReason
+	48, // 46: chatim.v1.ServerResponse.create_room:type_name -> chatim.v1.CreateRoomResponse
+	49, // 47: chatim.v1.ServerResponse.open_direct_room:type_name -> chatim.v1.OpenDirectRoomResponse
+	50, // 48: chatim.v1.ServerResponse.list_my_rooms:type_name -> chatim.v1.ListMyRoomsResponse
+	51, // 49: chatim.v1.ServerResponse.get_rooms:type_name -> chatim.v1.GetRoomsResponse
+	52, // 50: chatim.v1.ServerResponse.update_room:type_name -> chatim.v1.UpdateRoomResponse
+	53, // 51: chatim.v1.ServerResponse.set_room_preferences:type_name -> chatim.v1.SetRoomPreferencesResponse
+	54, // 52: chatim.v1.ServerResponse.send_message:type_name -> chatim.v1.SendMessageResponse
+	55, // 53: chatim.v1.ServerResponse.get_history:type_name -> chatim.v1.GetHistoryResponse
+	56, // 54: chatim.v1.ServerResponse.get_messages:type_name -> chatim.v1.GetMessagesResponse
+	57, // 55: chatim.v1.ServerResponse.edit_message:type_name -> chatim.v1.EditMessageResponse
+	58, // 56: chatim.v1.ServerResponse.delete_message:type_name -> chatim.v1.DeleteMessageResponse
+	59, // 57: chatim.v1.ServerResponse.hide_message:type_name -> chatim.v1.HideMessageResponse
+	60, // 58: chatim.v1.ServerResponse.clear_history:type_name -> chatim.v1.ClearHistoryResponse
+	61, // 59: chatim.v1.ServerResponse.get_edit_history:type_name -> chatim.v1.GetEditHistoryResponse
+	62, // 60: chatim.v1.ServerResponse.react_message:type_name -> chatim.v1.ReactMessageResponse
+	63, // 61: chatim.v1.ServerResponse.pin_message:type_name -> chatim.v1.PinMessageResponse
+	64, // 62: chatim.v1.ServerResponse.unpin_message:type_name -> chatim.v1.UnpinMessageResponse
+	65, // 63: chatim.v1.ServerResponse.list_pins:type_name -> chatim.v1.ListPinsResponse
+	66, // 64: chatim.v1.ServerResponse.get_reaction_settings:type_name -> chatim.v1.GetReactionSettingsResponse
+	67, // 65: chatim.v1.ServerResponse.get_reactions:type_name -> chatim.v1.GetReactionsResponse
+	68, // 66: chatim.v1.ServerResponse.set_bookmark:type_name -> chatim.v1.SetBookmarkResponse
+	69, // 67: chatim.v1.ServerResponse.get_replies:type_name -> chatim.v1.GetRepliesResponse
+	70, // 68: chatim.v1.ServerResponse.list_threads:type_name -> chatim.v1.ListThreadsResponse
+	71, // 69: chatim.v1.ServerResponse.list_bookmarks:type_name -> chatim.v1.ListBookmarksResponse
+	72, // 70: chatim.v1.ServerResponse.add_members:type_name -> chatim.v1.AddMembersResponse
+	73, // 71: chatim.v1.ServerResponse.remove_member:type_name -> chatim.v1.RemoveMemberResponse
+	74, // 72: chatim.v1.ServerResponse.leave_room:type_name -> chatim.v1.LeaveRoomResponse
+	75, // 73: chatim.v1.ServerResponse.change_member_role:type_name -> chatim.v1.ChangeMemberRoleResponse
+	76, // 74: chatim.v1.ServerResponse.set_member_priority:type_name -> chatim.v1.SetMemberPriorityResponse
+	77, // 75: chatim.v1.ServerResponse.list_members:type_name -> chatim.v1.ListMembersResponse
+	78, // 76: chatim.v1.ServerResponse.mark_unread:type_name -> chatim.v1.MarkUnreadResponse
+	79, // 77: chatim.v1.ServerResponse.list_mentions:type_name -> chatim.v1.ListMentionsResponse
+	80, // 78: chatim.v1.ServerResponse.list_room_groups:type_name -> chatim.v1.ListRoomGroupsResponse
+	79, // [79:79] is the sub-list for method output_type
+	79, // [79:79] is the sub-list for method input_type
+	79, // [79:79] is the sub-list for extension type_name
+	79, // [79:79] is the sub-list for extension extendee
+	0,  // [0:79] is the sub-list for field type_name
 }
 
 func init() { file_chatim_v1_ws_proto_init() }
@@ -1737,9 +2218,11 @@ func file_chatim_v1_ws_proto_init() {
 		return
 	}
 	file_chatim_v1_core_proto_init()
+	file_chatim_v1_events_proto_init()
 	file_chatim_v1_members_proto_init()
 	file_chatim_v1_mention_service_proto_init()
 	file_chatim_v1_message_reads_proto_init()
+	file_chatim_v1_notifications_proto_init()
 	file_chatim_v1_reactions_pins_proto_init()
 	file_chatim_v1_replies_bookmarks_mentions_proto_init()
 	file_chatim_v1_room_list_proto_init()
@@ -1747,8 +2230,10 @@ func file_chatim_v1_ws_proto_init() {
 		(*ClientFrame_Auth)(nil),
 		(*ClientFrame_Heartbeat)(nil),
 		(*ClientFrame_Request)(nil),
+		(*ClientFrame_OpenRoom)(nil),
+		(*ClientFrame_CloseRoom)(nil),
 	}
-	file_chatim_v1_ws_proto_msgTypes[3].OneofWrappers = []any{
+	file_chatim_v1_ws_proto_msgTypes[5].OneofWrappers = []any{
 		(*ClientRequest_CreateRoom)(nil),
 		(*ClientRequest_OpenDirectRoom)(nil),
 		(*ClientRequest_ListMyRooms)(nil),
@@ -1783,10 +2268,15 @@ func file_chatim_v1_ws_proto_init() {
 		(*ClientRequest_ListMentions)(nil),
 		(*ClientRequest_ListRoomGroups)(nil),
 	}
-	file_chatim_v1_ws_proto_msgTypes[4].OneofWrappers = []any{
+	file_chatim_v1_ws_proto_msgTypes[6].OneofWrappers = []any{
 		(*ServerFrame_Response)(nil),
+		(*ServerFrame_Ready)(nil),
+		(*ServerFrame_Event)(nil),
+		(*ServerFrame_Notification)(nil),
+		(*ServerFrame_Resync)(nil),
+		(*ServerFrame_RoomClosed)(nil),
 	}
-	file_chatim_v1_ws_proto_msgTypes[5].OneofWrappers = []any{
+	file_chatim_v1_ws_proto_msgTypes[10].OneofWrappers = []any{
 		(*ServerResponse_CreateRoom)(nil),
 		(*ServerResponse_OpenDirectRoom)(nil),
 		(*ServerResponse_ListMyRooms)(nil),
@@ -1826,13 +2316,14 @@ func file_chatim_v1_ws_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_chatim_v1_ws_proto_rawDesc), len(file_chatim_v1_ws_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   6,
+			NumEnums:      2,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_chatim_v1_ws_proto_goTypes,
 		DependencyIndexes: file_chatim_v1_ws_proto_depIdxs,
+		EnumInfos:         file_chatim_v1_ws_proto_enumTypes,
 		MessageInfos:      file_chatim_v1_ws_proto_msgTypes,
 	}.Build()
 	File_chatim_v1_ws_proto = out.File
