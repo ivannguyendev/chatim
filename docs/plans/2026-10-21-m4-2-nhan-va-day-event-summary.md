@@ -43,7 +43,7 @@ Thiết bị **không** nối vào NATS. Chỉ mỗi node websocket nối, mỗi
 | Subscription | Nhận gì |
 |---|---|
 | `live.*.*.*.evt.*` | Mọi event core phát (tin, react, thành viên, đọc, ghim…), mỗi event có số thứ tự trong stream |
-| `notify.*.mention` | Gói thông báo của Mention App (§6), mỗi gói kèm danh sách người nhận |
+| `notify.*.*` | Mọi gói thông báo theo hợp đồng chung (§6), mỗi gói kèm danh sách người nhận; hôm nay chỉ Mention App phát |
 
 Phần 4 thêm subscription riêng cho typing và online, để chúng không chiếm chỗ của event chat.
 
@@ -111,8 +111,8 @@ Vì sao cần `ver`: hiếm khi một event cũ tới sau event mới (sweeper p
 | `part`, `parts` | phần thứ mấy trên tổng số phần | `2`, `5` |
 
 3. **Chia phần:** mỗi gói tối đa 1.000 người, để dưới giới hạn 1MB mỗi tin của NATS (1.000 id × 64 byte + nội dung 16KB < 100KB). `@all` 5.000 người thành 5 gói, khoảng 400KB thay vì 80MB. Đây là cỡ trang, không phải giới hạn: channel 200K người sau này thành 200 gói.
-4. Subject theo tenant và loại: `notify.{tenant}.mention`. Thông báo bên trong gói có id chung cho mọi trang (máy dùng để bỏ trùng). Mỗi gói có `Nats-Msg-Id` = id đó + số phần + mã băm danh sách người của trang, để stream bỏ trùng khi phát lại, và nếu danh sách thành viên đổi giữa hai lần phát thì trang mới không bị bỏ nhầm (không ai bị sót; ai nhận hai lần thì máy bỏ trùng).
-5. **Websocket:** nhận gói qua `notify.*.mention`, kiểm tenant trong gói khớp tenant trong subject, duyệt `targets.users`, tra xem người nào đang nối vào node mình rồi đẩy frame `notification` (mã hoá một lần mỗi gói). Phase 1 không lọc room đang tắt: máy tự ẩn (owner 2026-10-21, chờ app notification).
+4. Subject theo tenant và loại: `notify.{tenant}.{kind}`, với Mention App là `notify.{tenant}.mention`. Khuôn gói và subject là **hợp đồng chung của bên giao** (websocket hôm nay, app notification Phase 2), nằm trong package dùng chung `pkg/delivery` và proto `delivery.proto`; Mention App và app khác sau này (ví dụ nhắc lịch họp phát `notify.{tenant}.reminder`) chỉ việc phát theo khuôn, websocket không phải sửa. Thông báo bên trong gói có id chung cho mọi trang (máy dùng để bỏ trùng). Mỗi gói có `Nats-Msg-Id` = id đó + số phần + mã băm danh sách người của trang, để stream bỏ trùng khi phát lại, và nếu danh sách thành viên đổi giữa hai lần phát thì trang mới không bị bỏ nhầm (không ai bị sót; ai nhận hai lần thì máy bỏ trùng).
+5. **Websocket:** nhận mọi loại gói qua `notify.*.*` (subject dạng cũ theo người có 4 phần nên tự động không khớp), kiểm tenant trong gói khớp tenant trong subject, duyệt `targets.users`, tra xem người nào đang nối vào node mình rồi đẩy frame `notification` (mã hoá một lần mỗi gói). Phase 1 không lọc room đang tắt: máy tự ẩn (owner 2026-10-21, chờ app notification).
 6. **App notification Phase 2:** đọc cùng stream bằng consumer bền, bung người ra thiết bị, áp tắt thông báo và không làm phiền, rồi push. Học theo OneSignal, `targets` để dành chỗ cho `topics`, `devices`, `tags`; Phase 1 chỉ dùng `users`.
 
 Giữ nguyên: chống trùng theo `message_ver` (bản lớn hơn thắng), thông báo rút lại khi tin bị sửa bỏ `@` hoặc bị xoá (D173). Mất đi: đọc lại thông báo của riêng một người trong 24 giờ theo subject; không ai dùng, vì trong app đã có `ListMentions` và app push dùng consumer bền. Mất thông báo lúc rớt mạng thì vẫn thấy trong `ListMentions`.
