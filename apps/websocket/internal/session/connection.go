@@ -112,17 +112,27 @@ func (c *connection) receive(message *gws.Message) {
 	case kind == frameUnknown:
 		c.server.stats.unknownFrames.Add(1)
 	}
-	if c.isAuthed() {
-		_ = c.socket.SetReadDeadline(time.Now().Add(c.server.opts.HeartbeatTimeout))
-	}
+	c.renewLiveness()
 }
 
-func (c *connection) ping(payload []byte) {
+func (c *connection) control(payload []byte, reply bool) {
+	if c.closing.Load() != 0 {
+		return
+	}
 	if !c.limiter.Allow() {
 		c.closeWith(CodePolicyViolation)
 		return
 	}
-	c.enqueue(outFrame{opcode: gws.OpcodePong, payload: payload})
+	if reply {
+		c.enqueue(outFrame{opcode: gws.OpcodePong, payload: payload})
+	}
+	c.renewLiveness()
+}
+
+func (c *connection) renewLiveness() {
+	if c.isAuthed() {
+		_ = c.socket.SetReadDeadline(time.Now().Add(c.server.opts.HeartbeatTimeout))
+	}
 }
 
 func kindOf(frame *chatimv1.ClientFrame) frameKind {
@@ -187,6 +197,14 @@ func (c *connection) recoverPanic() {
 	}
 }
 
+func (c *connection) recoverWriter() {
+	if r := recover(); r != nil {
+		c.server.logger.Error("websocket writer panic", "panic", fmt.Sprint(r), "stack", string(debug.Stack()))
+		c.closing.CompareAndSwap(0, uint32(CodeInternalError))
+		c.abort()
+	}
+}
+
 func (c *connection) panicked(r any) {
 	c.server.logger.Error("websocket connection panic", "panic", fmt.Sprint(r), "stack", string(debug.Stack()))
 	c.closeWith(CodeInternalError)
@@ -204,7 +222,13 @@ type events struct {
 
 func (events) OnPing(socket *gws.Conn, payload []byte) {
 	if c := connectionOf(socket); c != nil {
-		c.ping(payload)
+		c.control(payload, true)
+	}
+}
+
+func (events) OnPong(socket *gws.Conn, payload []byte) {
+	if c := connectionOf(socket); c != nil {
+		c.control(payload, false)
 	}
 }
 

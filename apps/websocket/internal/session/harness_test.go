@@ -11,7 +11,6 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -95,6 +94,7 @@ type fakeCore struct {
 	mu      sync.Mutex
 	holds   map[uint64]chan codes.Code
 	panics  map[uint64]bool
+	nils    map[uint64]bool
 	started chan uint64
 	claims  chan jwtverify.Claims
 	calls   atomic.Int64
@@ -104,6 +104,7 @@ func newFakeCore() *fakeCore {
 	return &fakeCore{
 		holds:   map[uint64]chan codes.Code{},
 		panics:  map[uint64]bool{},
+		nils:    map[uint64]bool{},
 		started: make(chan uint64, 256),
 		claims:  make(chan jwtverify.Claims, 256),
 	}
@@ -119,10 +120,13 @@ func (f *fakeCore) Execute(ctx context.Context, claims jwtverify.Claims, req *ch
 		return resp, command.Outcome{Code: codes.Unimplemented}
 	}
 	f.mu.Lock()
-	hold, panics := f.holds[req.GetId()], f.panics[req.GetId()]
+	hold, panics, nothing := f.holds[req.GetId()], f.panics[req.GetId()], f.nils[req.GetId()]
 	f.mu.Unlock()
 	if panics {
 		panic("command exploded")
+	}
+	if nothing {
+		return nil, command.Outcome{Command: "Test", Code: codes.OK}
 	}
 	code := codes.OK
 	if hold != nil {
@@ -200,7 +204,13 @@ type testClient struct {
 
 func (h *harness) dial(reading bool) *testClient {
 	h.t.Helper()
-	clientSide, serverSide := net.Pipe()
+	return h.dialWrapped(reading, func(c net.Conn) net.Conn { return c })
+}
+
+func (h *harness) dialWrapped(reading bool, wrap func(net.Conn) net.Conn) *testClient {
+	h.t.Helper()
+	clientSide, pipeSide := net.Pipe()
+	serverSide := wrap(pipeSide)
 	tc := &testClient{
 		t:          h.t,
 		raw:        clientSide,
@@ -330,15 +340,4 @@ func (tc *testClient) isOpen() bool {
 func (tc *testClient) close() {
 	_ = tc.conn.WriteClose(1000, nil)
 	tc.waitClosed()
-}
-
-func (tc *testClient) keepAlive(every, total time.Duration) {
-	for elapsed := time.Duration(0); elapsed+every <= total; elapsed += every {
-		time.Sleep(every)
-		tc.heartbeat()
-	}
-}
-
-func (h *harness) closes(code uint16) uint64 {
-	return h.server.stats.closes[strconv.FormatUint(uint64(code), 10)].Load()
 }

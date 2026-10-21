@@ -44,18 +44,33 @@ func (c *connection) deadlineOf(claims jwtverify.Claims) time.Time {
 }
 
 func (c *connection) authTimedOut() {
+	defer c.recoverPanic()
 	if !c.isAuthed() {
 		c.closeWith(CodeAuthTimeout)
 	}
 }
 
 func (c *connection) tokenExpired() {
-	c.mu.Lock()
-	valid := time.Now().Before(c.deadlineOf(c.claims))
-	c.mu.Unlock()
-	if !valid {
-		c.closeWith(CodeUnauthenticated)
+	defer c.recoverPanic()
+	if c.rearmExpiry() {
+		return
 	}
+	c.closeWith(CodeUnauthenticated)
+}
+
+func (c *connection) rearmExpiry() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.finished {
+		return true
+	}
+	remaining := time.Until(c.deadlineOf(c.claims))
+	if remaining <= 0 {
+		return false
+	}
+	stopTimer(c.expiry)
+	c.expiry = time.AfterFunc(remaining, c.tokenExpired)
+	return true
 }
 
 func (c *connection) currentClaims() jwtverify.Claims {

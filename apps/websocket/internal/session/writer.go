@@ -15,6 +15,7 @@ type outFrame struct {
 }
 
 func (c *connection) writeLoop() {
+	defer c.recoverWriter()
 	for {
 		select {
 		case code := <-c.closeReq:

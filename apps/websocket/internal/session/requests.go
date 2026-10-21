@@ -11,9 +11,11 @@ const (
 	messageRate     = "too many requests"
 	messageInflight = "too many requests in flight"
 	messageShutdown = "server shutting down, retry later"
+	messageInternal = "internal error"
 
 	wireResourceExhausted = int32(codes.ResourceExhausted)
 	wireUnavailable       = int32(codes.Unavailable)
+	wireInternal          = int32(codes.Internal)
 )
 
 var sweepingCodes = map[codes.Code]bool{codes.Unavailable: true, codes.DeadlineExceeded: true, codes.Canceled: true}
@@ -72,6 +74,11 @@ func (c *connection) guarded(req *chatimv1.ClientRequest) (resp *chatimv1.Server
 		}
 	}()
 	resp, outcome := c.server.executor.Execute(c.ctx, c.currentClaims(), req)
+	if resp == nil {
+		c.server.logger.Error("websocket command returned no response", "command", outcome.Command)
+		resp = &chatimv1.ServerResponse{Id: req.GetId(), Code: wireInternal, Message: messageInternal}
+		outcome.Code = codes.Internal
+	}
 	if outcome.Code == codes.Unimplemented && outcome.Command == "" {
 		c.server.stats.reject(rejectUnimplemented)
 	}
@@ -93,6 +100,12 @@ func (c *connection) enqueueSend(room uint64, req *chatimv1.ClientRequest) {
 }
 
 func (c *connection) runRoom(room uint64, q *roomQueue, req *chatimv1.ClientRequest) {
+	defer func() {
+		if r := recover(); r != nil {
+			c.panicked(r)
+			c.dropRoom(room, q)
+		}
+	}()
 	for req != nil {
 		if c.ctx.Err() != nil {
 			c.release()
@@ -113,26 +126,38 @@ func (c *connection) runRoom(room uint64, q *roomQueue, req *chatimv1.ClientRequ
 
 func (c *connection) sweep(q *roomQueue, failed *chatimv1.ServerResponse) {
 	c.mu.Lock()
-	swept := q.waiting
-	q.waiting = nil
+	queued := len(q.waiting)
 	c.mu.Unlock()
-	for _, req := range swept {
-		c.respond(&chatimv1.ServerResponse{Id: req.GetId(), Code: failed.GetCode(), Message: failed.GetMessage()})
-		c.release()
+	for range queued {
+		c.answerSwept(c.pop(q), failed)
 	}
 }
 
-func (c *connection) next(room uint64, q *roomQueue) *chatimv1.ClientRequest {
+func (c *connection) answerSwept(req *chatimv1.ClientRequest, failed *chatimv1.ServerResponse) {
+	defer c.release()
+	c.respond(&chatimv1.ServerResponse{Id: req.GetId(), Code: failed.GetCode(), Message: failed.GetMessage()})
+}
+
+func (c *connection) pop(q *roomQueue) *chatimv1.ClientRequest {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if len(q.waiting) == 0 {
-		delete(c.rooms, room)
-		return nil
-	}
 	req := q.waiting[0]
 	q.waiting[0] = nil
 	q.waiting = q.waiting[1:]
 	return req
+}
+
+func (c *connection) next(room uint64, q *roomQueue) *chatimv1.ClientRequest {
+	c.mu.Lock()
+	empty := len(q.waiting) == 0
+	if empty {
+		delete(c.rooms, room)
+	}
+	c.mu.Unlock()
+	if empty {
+		return nil
+	}
+	return c.pop(q)
 }
 
 func (c *connection) dropRoom(room uint64, q *roomQueue) {
