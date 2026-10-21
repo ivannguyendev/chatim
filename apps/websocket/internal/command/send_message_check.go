@@ -12,8 +12,12 @@ var errInternalSendField = status.Error(codes.InvalidArgument, "kind, skip_unrea
 
 func checkSendMessage(m proto.Message) error {
 	req, ok := m.(*chatimv1.SendMessageRequest)
-	if !ok || req.GetKind() != chatimv1.MessageKind_MESSAGE_KIND_UNSPECIFIED || req.GetSkipUnread() || len(req.GetMeta()) > 0 {
+	if !ok || !clientKind(req.GetKind()) || req.GetSkipUnread() || len(req.GetMeta()) > 0 {
 		return errInternalSendField
 	}
 	return nil
+}
+
+func clientKind(kind chatimv1.MessageKind) bool {
+	return kind == chatimv1.MessageKind_MESSAGE_KIND_UNSPECIFIED || kind == chatimv1.MessageKind_MESSAGE_KIND_TEXT
 }

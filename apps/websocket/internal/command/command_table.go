@@ -122,12 +122,10 @@ func buildCommands() ([]*command, error) {
 	cmds := make([]*command, fields.Len())
 	for i := range fields.Len() {
 		cmd, err := buildCommand(i, fields.Get(i), byRequest)
-		if err == nil {
-			cmd.check = checkFor[fields.Get(i).Message().FullName()]
-		}
 		if err != nil {
 			return nil, err
 		}
+		cmd.check = checkFor[fields.Get(i).Message().FullName()]
 		cmds[i] = cmd
 	}
 	if len(byRequest) > 0 {

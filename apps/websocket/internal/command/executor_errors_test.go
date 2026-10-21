@@ -67,6 +67,18 @@ func TestBadRoomIsInvalidArgument(t *testing.T) {
 	}
 }
 
+func TestHugeBadRoomGetsAShortFixedMessage(t *testing.T) {
+	h := newHarness(t, time.Second)
+	room := strings.Repeat("x", 100<<10)
+	resp, outcome := h.exec.Execute(t.Context(), testClaims, sendRequest(&chatimv1.SendMessageRequest{RoomId: room, Cid: "c1"}))
+	if codes.Code(resp.GetCode()) != codes.InvalidArgument || resp.GetMessage() != "invalid room_id" {
+		t.Fatalf("code = %d, message length = %d", resp.GetCode(), len(resp.GetMessage()))
+	}
+	if !strings.Contains(outcome.Detail, room) || len(h.router.routes) != 0 || len(h.core.recorded()) != 0 {
+		t.Fatalf("detail length = %d, routes = %d, calls = %d", len(outcome.Detail), len(h.router.routes), len(h.core.recorded()))
+	}
+}
+
 func TestNoLiveCoreIsUnavailableAndRefreshesRoutes(t *testing.T) {
 	routeErrors := []error{
 		coreroute.ErrNoRoute,

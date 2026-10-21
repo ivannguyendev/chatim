@@ -123,10 +123,10 @@ func TestCallerComesOnlyFromTheClaims(t *testing.T) {
 
 func TestSendMessageRefusesInternalFields(t *testing.T) {
 	cases := map[string]*chatimv1.SendMessageRequest{
-		"system kind": {RoomId: "42", Cid: "c1", Kind: chatimv1.MessageKind_MESSAGE_KIND_SYSTEM},
-		"text kind":   {RoomId: "42", Cid: "c1", Kind: chatimv1.MessageKind_MESSAGE_KIND_TEXT},
-		"skip unread": {RoomId: "42", Cid: "c1", SkipUnread: true},
-		"meta":        {RoomId: "42", Cid: "c1", Meta: []byte("{}")},
+		"system kind":  {RoomId: "42", Cid: "c1", Kind: chatimv1.MessageKind_MESSAGE_KIND_SYSTEM},
+		"unknown kind": {RoomId: "42", Cid: "c1", Kind: chatimv1.MessageKind(99)},
+		"skip unread":  {RoomId: "42", Cid: "c1", SkipUnread: true},
+		"meta":         {RoomId: "42", Cid: "c1", Meta: []byte("{}")},
 	}
 	for name, send := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -139,6 +139,14 @@ func TestSendMessageRefusesInternalFields(t *testing.T) {
 				t.Fatalf("forwarded: resp %v calls %d routes %v", resp, len(h.core.recorded()), h.router.routes)
 			}
 		})
+	}
+}
+
+func TestSendMessageAcceptsAnExplicitTextKind(t *testing.T) {
+	h := newHarness(t, time.Second)
+	resp, _ := h.exec.Execute(t.Context(), testClaims, sendRequest(&chatimv1.SendMessageRequest{RoomId: "42", Cid: "c1", Text: "hi", Kind: chatimv1.MessageKind_MESSAGE_KIND_TEXT}))
+	if resp.GetCode() != 0 || len(h.core.recorded()) != 1 {
+		t.Fatalf("resp = %v, core calls = %d", resp, len(h.core.recorded()))
 	}
 }
 

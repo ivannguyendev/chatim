@@ -22,6 +22,7 @@ var (
 	errUnknownRequest = status.Error(codes.Unimplemented, "request type not set or not known")
 	errMalformed      = status.Error(codes.InvalidArgument, "malformed request")
 	errEmptyResult    = status.Error(codes.Internal, "core returned no result")
+	errBadRoom        = status.Error(codes.InvalidArgument, "invalid room_id")
 )
 
 type Router interface {
@@ -113,7 +114,11 @@ func (e *Executor) route(cmd *command, req proto.Message) (coreroute.Conn, error
 	if cmd.room == nil {
 		return e.router.Any()
 	}
-	return e.router.Room(req.ProtoReflect().Get(cmd.room).String())
+	roomID := req.ProtoReflect().Get(cmd.room).String()
+	if _, err := coreroute.ParseRoom(roomID); err != nil {
+		return coreroute.Conn{}, fmt.Errorf("%w: %w", errBadRoom, err)
+	}
+	return e.router.Room(roomID)
 }
 
 func copyKnownFields(m proto.Message) (proto.Message, error) {
