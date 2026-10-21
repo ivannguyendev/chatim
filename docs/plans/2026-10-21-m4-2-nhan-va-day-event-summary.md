@@ -43,7 +43,7 @@ Thiết bị **không** nối vào NATS. Chỉ mỗi node websocket nối, mỗi
 | Subscription | Nhận gì |
 |---|---|
 | `live.*.*.*.evt.*` | Mọi event core phát (tin, react, thành viên, đọc, ghim…), mỗi event có số thứ tự trong stream |
-| `notify.*.*` | Mọi gói thông báo theo hợp đồng chung (§6), mỗi gói kèm danh sách người nhận; hôm nay chỉ Mention App phát |
+| `websocket.publish.*` | Hộp thư của websocket (§6): gói `Delivery` kèm danh sách người nhận, từ bất kỳ app nào; hôm nay chỉ Mention App phát |
 
 Phần 4 thêm subscription riêng cho typing và online, để chúng không chiếm chỗ của event chat.
 
@@ -111,11 +111,11 @@ Vì sao cần `ver`: hiếm khi một event cũ tới sau event mới (sweeper p
 | `part`, `parts` | phần thứ mấy trên tổng số phần | `2`, `5` |
 
 3. **Chia phần:** mỗi gói tối đa 1.000 người, để dưới giới hạn 1MB mỗi tin của NATS (1.000 id × 64 byte + nội dung 16KB < 100KB). `@all` 5.000 người thành 5 gói, khoảng 400KB thay vì 80MB. Đây là cỡ trang, không phải giới hạn: channel 200K người sau này thành 200 gói.
-4. Subject theo tenant và loại: `notify.{tenant}.{kind}`, với Mention App là `notify.{tenant}.mention`. Khuôn gói và subject là **hợp đồng chung của bên giao** (websocket hôm nay, app notification Phase 2), nằm trong package dùng chung `pkg/delivery` và proto `delivery.proto`; Mention App và app khác sau này (ví dụ nhắc lịch họp phát `notify.{tenant}.reminder`) chỉ việc phát theo khuôn, websocket không phải sửa. Thông báo bên trong gói có id chung cho mọi trang (máy dùng để bỏ trùng). Mỗi gói có `Nats-Msg-Id` = id đó + số phần + mã băm danh sách người của trang, để stream bỏ trùng khi phát lại, và nếu danh sách thành viên đổi giữa hai lần phát thì trang mới không bị bỏ nhầm (không ai bị sót; ai nhận hai lần thì máy bỏ trùng).
-5. **Websocket:** nhận mọi loại gói qua `notify.*.*` (subject dạng cũ theo người có 4 phần nên tự động không khớp), kiểm tenant trong gói khớp tenant trong subject, duyệt `targets.users`, tra xem người nào đang nối vào node mình rồi đẩy frame `notification` (mã hoá một lần mỗi gói). Phase 1 không lọc room đang tắt: máy tự ẩn (owner 2026-10-21, chờ app notification).
-6. **App notification Phase 2:** đọc cùng stream bằng consumer bền, bung người ra thiết bị, áp tắt thông báo và không làm phiền, rồi push. Học theo OneSignal, `targets` để dành chỗ cho `topics`, `devices`, `tags`; Phase 1 chỉ dùng `users`.
+4. **Tách vai (owner 2026-10-21):** websocket chỉ là đường truyền tới máy đang online, không làm thông báo. Nó có **hộp thư cố định `websocket.publish.{tenant}`** (giữ tenant để sau này chia node theo tenant và kiểm chéo tenant; loại nằm trong gói). App notification ở Phase 2 có hộp thư riêng `notify.{tenant}.{kind}`: nó lọc người tắt thông báo/không làm phiền, rồi phát gói vào hộp thư websocket cho người online và push cho người offline. Phase 1 chưa có app notification nên Mention App phát thẳng vào `websocket.publish.{tenant}`; Phase 2 đổi bằng một dòng config, websocket không sửa. Khuôn gói và hộp thư nằm trong package dùng chung `pkg/delivery` và proto `delivery.proto`; hộp thư lưu trên stream `CHATIM_WS` (24 giờ, bỏ trùng 6 phút) để Mention App vẫn chờ xác nhận rồi mới ack như hôm nay. Thông báo bên trong gói có id chung cho mọi trang (máy dùng để bỏ trùng). Mỗi gói có `Nats-Msg-Id` = id đó + số phần + mã băm danh sách người của trang, để stream bỏ trùng khi phát lại, và nếu danh sách thành viên đổi giữa hai lần phát thì trang mới không bị bỏ nhầm (không ai bị sót; ai nhận hai lần thì máy bỏ trùng).
+5. **Websocket:** nhận mọi loại gói qua `websocket.publish.*` (tin dạng cũ nằm ở `notify.*` nên không bao giờ tới đây), kiểm tenant trong gói khớp tenant trong subject, duyệt `targets.users`, tra xem người nào đang nối vào node mình rồi đẩy frame `notification` (mã hoá một lần mỗi gói). Phase 1 không lọc room đang tắt: máy tự ẩn (owner 2026-10-21, chờ app notification).
+6. **App notification Phase 2:** đọc hộp thư `notify.*` của riêng nó bằng consumer bền, bung người ra thiết bị, áp tắt thông báo và không làm phiền, rồi push người offline và phát `Delivery` vào hộp thư websocket cho người online. Học theo OneSignal, `targets` để dành chỗ cho `topics`, `devices`, `tags`; Phase 1 chỉ dùng `users`.
 
-Giữ nguyên: chống trùng theo `message_ver` (bản lớn hơn thắng), thông báo rút lại khi tin bị sửa bỏ `@` hoặc bị xoá (D173). Mất đi: đọc lại thông báo của riêng một người trong 24 giờ theo subject; không ai dùng, vì trong app đã có `ListMentions` và app push dùng consumer bền. Mất thông báo lúc rớt mạng thì vẫn thấy trong `ListMentions`.
+Giữ nguyên: chống trùng theo `message_ver` (bản lớn hơn thắng), thông báo rút lại khi tin bị sửa bỏ `@` hoặc bị xoá (D173). Mất đi: đọc lại thông báo của riêng một người trong 24 giờ theo subject; không ai dùng, vì trong app đã có `ListMentions`. Mất thông báo lúc rớt mạng thì vẫn thấy trong `ListMentions`.
 
 ## 7. Lỡ event và đọc bù
 
@@ -149,7 +149,7 @@ Phần 1 đã có hàng ghi riêng mỗi kết nối và hạn ghi 10 giây. Ph�
 
 Core không đổi event, subject phát ra, đường ghi hay proto event nào.
 
-**Thay đổi ở Mention App** (§6): phần phát thông báo (`modules/mention/internal/notify`) đổi từ mỗi người một tin sang gói `Delivery` chia phần; stream `CHATIM_NOTIFY` đổi subject sang `notify.{tenant}.{kind}`; proto thêm `Delivery`/`Targets`. Phần bung người nhận, ngưỡng 5 phút, chống trùng giữ nguyên. Đổi một phần D168 (dạng subject và gói tin).
+**Thay đổi ở Mention App** (§6): phần phát thông báo (`modules/mention/internal/notify`) đổi từ mỗi người một tin sang gói `Delivery` chia phần; phát vào hộp thư `websocket.publish.{tenant}` trên stream mới `CHATIM_WS` (gốc subject đổi được bằng config `MENTION_DELIVERY_ROOT` để Phase 2 chuyển sang `notify`); thôi tạo `CHATIM_NOTIFY` (để dành cho app notification); proto thêm `Delivery`/`Targets`. Phần bung người nhận, ngưỡng 5 phút, chống trùng giữ nguyên. Đổi một phần D168 (dạng subject và gói tin).
 
 ## 10. Frame mới
 
@@ -168,7 +168,9 @@ Core không đổi event, subject phát ra, đường ghi hay proto event nào.
 | Biến | Mặc định | Vì sao |
 |---|---|---|
 | `NATS_URL` | — | kết nối NATS |
-| `EVT_STREAM`, `EVT_LIVE_ROOT`, `NOTIFY_ROOT` | `CHATIM_EVT`, `live`, `notify` | giống core |
+| `EVT_STREAM`, `EVT_LIVE_ROOT` | `CHATIM_EVT`, `live` | giống core |
+| `DELIVERY_ROOT`, `DELIVERY_STREAM` | `websocket.publish`, `CHATIM_WS` | hộp thư của websocket |
+| `MENTION_DELIVERY_ROOT` (Mention App) | `websocket.publish` | Phase 2 đổi sang `notify` khi có app notification |
 | `WS_ROOM_IDS_INFLIGHT` | 64 | số lần gọi `ListMyRoomIDs` cùng lúc mỗi node, bảo vệ core |
 | `WS_FANOUT_WORKERS` | số CPU | số hàng xử lý theo room |
 | `WS_NATS_PENDING_BYTES` | 256MB | bộ đệm mỗi subscription |
@@ -189,13 +191,14 @@ Core không đổi event, subject phát ra, đường ghi hay proto event nào.
 | `ListMyRoomIDs` một lần, thêm 1 field index | Phân trang: thêm lượt gọi core mỗi kết nối. Dùng `ListMyRooms`: nặng (xếp, xem trước, unread) |
 | Phát hiện lỗ theo `Nats-Sequence` liên tiếp, đọc bù có trần | Gửi `resync` cho mọi máy khi lỡ event: một cú chập NATS gây bão `ListMyRooms`. Đọc bù không trần: làm chậm core vì chung JetStream |
 | Thông báo là gói tin chuẩn: nội dung một lần + danh sách người nhận, chia 1.000 người mỗi gói (owner) | Mỗi người một tin: `@all` 5.000 người = 5.000 bản sao nội dung (~80MB), tràn mạng và RAM. Đích là cả room để websocket tự bung: websocket không biết nhóm, không biết người vào sau tin |
+| Websocket chỉ là đường truyền, có hộp thư cố định `websocket.publish.{tenant}`; app notification Phase 2 có hộp thư riêng `notify.{tenant}.{kind}` (owner) | Websocket nghe `notify.*`: trộn vai, websocket thành bên làm thông báo, Phase 2 app notification và websocket tranh cùng một hộp thư. `websocket.publish` không có tenant: mất chia node theo tenant và kiểm chéo tenant |
 | Phase 1 không lọc room đang tắt ở server; chờ app notification (owner) | Websocket lọc: thêm 2 field index và trạng thái trong RAM, rồi Phase 2 lại chuyển sang app notification. Mention App lọc: ngược D168, mọi kênh bị lọc như nhau |
 | Đổi index bằng lệnh chạy tay (owner) | Tự build lại index lúc khởi động: một thao tác nặng không ai chủ động chạy |
 
 ## 13. Rủi ro
 
 - **Node nhận toàn bộ event:** ổn ở 2–3 node; quá ~10 node hoặc ~50K event/s phải chia node theo tenant.
-- **Đổi dạng thông báo là đổi hợp đồng của `CHATIM_NOTIFY`:** hôm nay chỉ e2e đọc stream này nên đổi thẳng, không cần chạy song song hai dạng. Stream cũ có thể còn tin dạng cũ trong 24 giờ; websocket bỏ qua tin không giải mã được và đếm.
+- **Đổi dạng thông báo:** hôm nay chỉ e2e đọc `CHATIM_NOTIFY` nên đổi thẳng, không chạy song song hai dạng. Tin dạng cũ còn trong `CHATIM_NOTIFY` tối đa 24 giờ và không bao giờ tới hộp thư websocket; trên máy dev có thể xoá stream cũ bằng tay.
 - **Thêm field vào index `members`:** index to hơn một chút; build bằng lệnh khi chưa go-live nên rẻ.
 
 ## 14. Kiểm thử phần 2
