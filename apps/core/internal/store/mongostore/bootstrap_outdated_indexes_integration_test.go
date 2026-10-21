@@ -13,12 +13,6 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/mongoindex"
 )
 
-var oldMembersUserKeys = bson.D{
-	{Key: "tenant", Value: 1}, {Key: "user_id", Value: 1}, {Key: "state", Value: 1}, {Key: "room_id", Value: 1},
-	{Key: "joined_at", Value: 1}, {Key: "cleared_at", Value: 1}, {Key: "read_seq", Value: 1},
-	{Key: "pinned_at", Value: 1}, {Key: "archived_at", Value: 1},
-}
-
 func allIndexes(t *testing.T, db *mongo.Database) map[string]map[string]bool {
 	t.Helper()
 	out := map[string]map[string]bool{}
@@ -57,7 +51,7 @@ func TestBootstrapLeavesACollectionWithDataUnchangedAndFlagsIt(t *testing.T) {
 	if err := members.DropOne(t.Context(), membersUserIndex); err != nil {
 		t.Fatalf("drop the new members index: %v", err)
 	}
-	if _, err := members.CreateOne(t.Context(), mongo.IndexModel{Keys: oldMembersUserKeys}); err != nil {
+	if _, err := members.CreateOne(t.Context(), mongo.IndexModel{Keys: membersUserKeysBeforeVer}); err != nil {
 		t.Fatalf("create the old members index: %v", err)
 	}
 	old := mongo.IndexModel{Keys: bson.D{{Key: "message_key", Value: 1}, {Key: "kind", Value: 1}, {Key: "state", Value: 1}, {Key: "value", Value: 1}}}

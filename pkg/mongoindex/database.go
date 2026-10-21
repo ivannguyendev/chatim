@@ -7,6 +7,7 @@ import (
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 const (
@@ -57,7 +58,7 @@ func existingOf(doc bson.Raw) (Existing, error) {
 	if err != nil {
 		return Existing{}, err
 	}
-	return Existing{Name: name, Keys: p, Building: building}, nil
+	return Existing{Name: name, Keys: p, Options: existingOptions(spec), Building: building}, nil
 }
 
 func Inspect(ctx context.Context, db *mongo.Database, cat Catalog) ([]Report, error) {
@@ -86,6 +87,9 @@ func inspect(ctx context.Context, db *mongo.Database, cat Catalog, c Collection)
 func Apply(ctx context.Context, db *mongo.Database, cat Catalog) ([]string, error) {
 	reports, err := Inspect(ctx, db, cat)
 	if err != nil {
+		return nil, err
+	}
+	if err := conflictsOf(reports); err != nil {
 		return nil, err
 	}
 	var created []string
@@ -143,18 +147,27 @@ func createOnEmpty(ctx context.Context, db *mongo.Database, r Report) (Report, e
 		return r, nil
 	}
 	coll := db.Collection(r.Collection)
-	n, err := coll.EstimatedDocumentCount(ctx)
-	if err != nil {
-		return r, fmt.Errorf("count documents of %s: %w", r.Collection, err)
-	}
-	if n > 0 {
-		return r, nil
+	empty, err := isEmpty(ctx, coll)
+	if err != nil || !empty {
+		return r, err
 	}
 	if _, err := coll.Indexes().CreateMany(ctx, r.Missing); err != nil {
 		return r, fmt.Errorf("create indexes on %s: %w", r.Collection, err)
 	}
 	r.Missing = nil
 	return r, nil
+}
+
+func isEmpty(ctx context.Context, coll *mongo.Collection) (bool, error) {
+	err := coll.FindOne(ctx, bson.D{}, options.FindOne().SetProjection(bson.D{{Key: "_id", Value: 1}})).Err()
+	switch {
+	case errors.Is(err, mongo.ErrNoDocuments):
+		return true, nil
+	case err != nil:
+		return false, fmt.Errorf("probe documents of %s: %w", coll.Name(), err)
+	default:
+		return false, nil
+	}
 }
 
 func hasCode(err error, code int) bool {

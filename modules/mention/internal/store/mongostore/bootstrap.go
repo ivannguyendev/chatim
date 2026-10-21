@@ -27,7 +27,7 @@ func Indexes() mongoindex.Catalog {
 			{Name: userGroupsCollection, Indexes: []mongo.IndexModel{{Keys: groupMembersIndexKeys()}}},
 			{Name: groupsCollection},
 		},
-		Replacements: []mongoindex.Replacement{{Collection: mentionsCollection, Old: mentionReadIndex}},
+		Replacements: []mongoindex.Replacement{{Collection: mentionsCollection, Old: mentionReadIndex, OldKeys: mentionReadKeys()}},
 	}
 }
 
@@ -41,6 +41,10 @@ func Bootstrap(ctx context.Context, db *mongo.Database, reporters ...mongoindex.
 		return err
 	}
 	return mongoindex.Ensure(ctx, db, Indexes(), reporters...)
+}
+
+func mentionReadKeys() bson.D {
+	return bson.D{{Key: "room_id", Value: 1}, {Key: "target", Value: 1}, {Key: "thread_root", Value: 1}, {Key: "seq", Value: 1}}
 }
 
 func mentionIndexes() []mongo.IndexModel {

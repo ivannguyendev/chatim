@@ -8,7 +8,6 @@ import (
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 type Collection struct {
@@ -19,6 +18,7 @@ type Collection struct {
 type Replacement struct {
 	Collection string
 	Old        string
+	OldKeys    bson.D
 	New        string
 }
 
@@ -55,16 +55,12 @@ func (c Catalog) replacementsOf(coll string) []Replacement {
 }
 
 func Name(m mongo.IndexModel) (string, error) {
-	if m.Options != nil {
-		var o options.IndexOptions
-		for _, set := range m.Options.List() {
-			if err := set(&o); err != nil {
-				return "", fmt.Errorf("index options: %w", err)
-			}
-		}
-		if o.Name != nil {
-			return *o.Name, nil
-		}
+	o, err := resolveOptions(m)
+	if err != nil {
+		return "", err
+	}
+	if o.Name != nil {
+		return *o.Name, nil
 	}
 	parts, err := keyParts(m.Keys)
 	if err != nil {
