@@ -15,6 +15,9 @@ COMPOSE  := docker compose -f deploy/compose/docker-compose.yml --env-file .env
 COMPOSE_ALL := $(COMPOSE) --profile postgres --profile app
 CORE_COMPOSE := $(COMPOSE) --profile app
 CORES    := core-1 core-2
+WEBSOCKETS := websocket-1
+WS_KEYS_DIR := .local/ws-keys
+CORECLI_IMAGE := chatim/corecli:dev
 INSTANCE ?= state
 REDIS_CONTAINER_state  := chatim-redis
 REDIS_CONTAINER_dedupe := chatim-redis-dedupe
@@ -22,7 +25,7 @@ GO_RUN   := docker run --rm -v "$(CURDIR)":/src -w /src -v chatim-gomod:/go/pkg/
 BUF_RUN  := docker run --rm -v "$(CURDIR)":/src -w /src $(BUF_IMAGE)
 POC_RUN  := $(GO_RUN) --network $(NETWORK) -e MONGO_URI -e PG_URI -e REDIS_PASSWORD
 
-.PHONY: go check-env test itest vet fmt-check lint vuln tidy proto buf-lint alerts-check poc image infra-up infra-down infra-reset pg-up pg-down core-up core-down e2e redis-cli
+.PHONY: go check-env test itest vet fmt-check lint vuln tidy proto buf-lint alerts-check poc image infra-up infra-down infra-reset pg-up pg-down core-up core-down dev-keys ws-token ws-logs e2e redis-cli
 
 go:
 	$(GO_RUN) $(GO_IMAGE) go $(ARGS)
@@ -89,13 +92,29 @@ pg-up: check-env
 pg-down: check-env
 	$(COMPOSE_ALL) stop postgres
 
-core-up: check-env
+core-up: check-env dev-keys
 	$(MAKE) -s image TARGET=apps/core
-	$(CORE_COMPOSE) up -d $(CORES)
-	./scripts/wait-core-healthy.sh $(addprefix chatim-,$(CORES))
+	$(MAKE) -s image TARGET=apps/websocket
+	$(CORE_COMPOSE) up -d $(CORES) $(WEBSOCKETS)
+	./scripts/wait-core-healthy.sh $(addprefix chatim-,$(CORES) $(WEBSOCKETS))
 
 core-down: check-env
-	$(CORE_COMPOSE) rm -s -f $(CORES)
+	$(CORE_COMPOSE) rm -s -f $(WEBSOCKETS) $(CORES)
+
+dev-keys:
+	@if [ -f $(WS_KEYS_DIR)/private.jwk ] && [ -f $(WS_KEYS_DIR)/jwks.json ]; then \
+		echo "dev keys present in $(WS_KEYS_DIR)" >&2; \
+	else \
+		$(MAKE) -s image TARGET=tools/corecli && \
+		mkdir -p $(WS_KEYS_DIR) && chmod 700 $(WS_KEYS_DIR) && \
+		docker run --rm --user "$$(id -u):$$(id -g)" -v "$(CURDIR)/$(WS_KEYS_DIR)":/keys $(CORECLI_IMAGE) dev-keys -out /keys >&2; \
+	fi
+
+ws-token: dev-keys
+	@docker run --rm --user "$$(id -u):$$(id -g)" -v "$(CURDIR)/$(WS_KEYS_DIR)/private.jwk":/keys/private.jwk:ro $(CORECLI_IMAGE) token -key /keys/private.jwk $(ARGS)
+
+ws-logs:
+	docker logs --tail 200 -f chatim-websocket-1
 
 e2e: check-env
 	$(MAKE) -s image TARGET=tools/corecli

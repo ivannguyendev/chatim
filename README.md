@@ -75,8 +75,11 @@ Compose đọc `CORE_GOGC` (mặc định 100, thành `GOGC` của core) lúc `m
     make lint                    # golangci-lint run ./...
     make vuln                    # go tool govulncheck ./...
     make itest                   # go test -race -shuffle=on -count=1 ./... với Mongo/Redis/NATS thật (cần infra-up)
-    make core-up                 # build image apps/core, chạy core-1 + core-2 (profile app), chờ /readyz healthy
-    make core-down               # dừng và xoá core-1, core-2
+    make core-up                 # sinh khoá dev nếu chưa có, build image apps/core + apps/websocket, chạy core-1 + core-2 + websocket-1 (profile app), chờ cả ba healthy
+    make core-down               # dừng và xoá websocket-1, core-1, core-2
+    make dev-keys                # sinh khoá ký dev vào .local/ws-keys/ (private.jwk 0600, jwks.json 0644) nếu chưa có; muốn thay khoá: xoá thư mục rồi chạy lại
+    make -s ws-token ARGS="-tenant e2e -user alice"   # in token dev (mặc định -ttl 15m, iss chatim-dev, aud chatim-websocket) để nối ws://127.0.0.1:8081/ws
+    make ws-logs                 # docker logs -f chatim-websocket-1
     make alerts-check            # promtool kiểm deploy/prometheus/alerts.yml (trong Docker)
     make e2e                     # build tools/corecli, chạy scripts/e2e.sh (route theo slot, kill core-1, kiểm tra; phase 3 sửa seq 1, xoá seq 2; phase 4 react seq 3 rồi đổi emoji, ghim seq 4; phase 5 member: DM từ chối, thêm, đổi role, priority, xoá, vị trí đọc, ẩn và clear, owner cuối rời rồi vào lại, kiểm reply và event trên subject `room`/`member`/`message`; phase 6 liên kết: mở DM hai lần ra một room, tạo group hai lần cùng `request_id`, react, hai trả lời + `GetReplies`, chặn xoá tin cha, xoá một trả lời, mention user/nhóm/`@all` + `ListMentions`, `@nhóm`/`@all` gửi trước khi vào group không hiện, forward, bookmark + `ListBookmarks`, 22 event live; phase 7 danh sách hội thoại và API đọc: tin hệ thống, unread sau gửi/đọc/xoá/ẩn, ghim và lưu trữ, trang 2, `GetRooms`, `UpdateRoom`, `AROUND`, `GetMessages`, thread, người react, ghim, member, forward có `skip_unread`/`meta`, 34 event live; phase 8 Mention App: nhóm được tag và nhóm tắt, `SetUserGroups` cho 3 người rồi chuyển 1 người, `@nhóm` báo đúng người còn trong room, `@nhóm` tắt không ai nhận, sửa thêm rồi bỏ `@user` (`mention_notified`, `mention_retracted`, `ListMentions`), xoá tin, `@all`, `ListRoomGroups`, `SetUserGroups` với `ver` cũ; kiểm 12 thông báo trên `notify.{tenant}.>`)
     docker run --rm --network chatim_default -e REDIS_PASSWORD chatim/corecli:dev edit -room ID -seq N -base V -text "..."   # sửa tin; cùng cờ: delete -room ID -seq N -base V, hide -room ID -seq N, clear -room ID, edits -room ID -seq N [-after V]; -tenant/-user chọn người gọi; image do make e2e build
@@ -155,9 +158,43 @@ Toàn bộ đọc qua `apps/core/internal/config`; thiếu thì dùng giá trị
 | `MENTION_ROOM_GROUPS_SYNC_MAX` | `5000` | Room tới cỡ này thì `ListRoomGroups` dựng tập nhóm ngay khi được hỏi, lớn hơn thì dựng ở nền (D172); không phải giới hạn dữ liệu |
 | `MENTION_ROOM_GROUPS_TTL`, `MENTION_ROOM_GROUPS_REBUILD` | `60s` / `10m` | Tập nhóm của room nhỏ hết hạn sau TTL (và quên khi có `member_added`/`member_removed`); room lớn dựng lại ở nền khi có người hỏi và tập cũ hơn `REBUILD` |
 
+## Biến môi trường `apps/websocket`
+
+Đọc qua `apps/websocket/internal/config`; sai định dạng hoặc vi phạm luật thì node không khởi động và báo gộp mọi lỗi.
+
+| Biến | Mặc định | Ghi chú |
+|---|---|---|
+| `WS_NODE_ID` | hostname | Định danh node, nằm trong tên client Redis `chatim-websocket-{node}` |
+| `WS_ADDR` | `:8080` | Lắng nghe WebSocket, đường dẫn `/ws`, subprotocol `chatim.v1` |
+| `WS_ADMIN_ADDR` | `:9090` | `/livez`, `/readyz`, `/metrics`; `/app probe` hỏi địa chỉ này; không publish ra host |
+| `REDIS_ADDR`, `REDIS_DB` | `chatim-redis:6379` / `0` | Redis state của core, chỉ đọc bảng slot để route lệnh tới core giữ room |
+| `REDIS_PASSWORD`, `REDIS_PASSWORD_FILE` | rỗng | Như của core; `_FILE` thắng. Compose trỏ `_FILE` vào secret `redis_password` |
+| `WS_JWT_KEYS_FILE` | — (bắt buộc) | JWKS công khai (Ed25519, có `kid`); file có khoá riêng (`d`) bị từ chối. Đọc một lần lúc khởi động |
+| `WS_JWT_ISSUER`, `WS_JWT_AUDIENCE` | — (bắt buộc) | `iss`, `aud` phải khớp; compose dev đặt `chatim-dev` / `chatim-websocket` |
+| `WS_JWT_LEEWAY` | `30s` | Dung sai giờ cho `exp`/`nbf` (≥ 0) |
+| `WS_AUTH_TIMEOUT` | `5s` | Không gửi frame auth trong thời gian này thì đóng 4002 |
+| `WS_UNAUTH_MAX` | `10000` | Số kết nối chưa xác thực tối đa mỗi node; quá thì 503 |
+| `WS_FRAME_MAX` | `131072` | Cỡ frame tối đa (≥ 4096); quá thì đóng 1009 |
+| `WS_HEARTBEAT_TIMEOUT` | `15s` | Không nhận frame nào trong thời gian này thì đóng (≥ 10s) |
+| `WS_COMMAND_RATE`, `WS_COMMAND_BURST` | `50` / `100` | Giới hạn frame mỗi giây và burst mỗi kết nối |
+| `WS_COMMAND_INFLIGHT` | `32` | Số lệnh đang chạy tối đa mỗi kết nối; quá thì `RESOURCE_EXHAUSTED` |
+| `WS_SEND_QUEUE` | `256` | Hàng frame chờ ghi mỗi kết nối; đầy thì cắt kết nối |
+| `WS_WRITE_TIMEOUT` | `10s` | Hạn ghi một frame |
+| `CORE_REQUEST_DEADLINE` | `5s` | Deadline mỗi lệnh gọi core |
+| `WS_DRAIN_DELAY`, `WS_SHUTDOWN_BUDGET` | `2s` / `15s` | Chuỗi dừng: `WS_DRAIN_DELAY + CORE_REQUEST_DEADLINE + 1s` phải ≤ budget; compose `stop_grace_period` = budget + 3s = 18s |
+
+Khoá dev: `make dev-keys` chạy `corecli dev-keys -out /keys` trong image `chatim/corecli:dev` với uid của máy, ghi `.local/ws-keys/private.jwk` (0600, chỉ nằm trong `.local/`, đã gitignore) và `.local/ws-keys/jwks.json` (0644). Compose chỉ đưa `jwks.json` vào websocket-1 làm secret `ws_jwks` (`WS_JWT_KEYS_FILE=/run/secrets/ws_jwks`); khoá riêng không bao giờ mount vào container websocket. Lấy token:
+
+    make -s ws-token ARGS="-tenant e2e -user alice -ttl 10m"
+    docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/.local/ws-keys/private.jwk":/keys/private.jwk:ro chatim/corecli:dev token -key /keys/private.jwk -tenant e2e -user alice
+
+Client nối `ws://127.0.0.1:8081/ws` (subprotocol `chatim.v1`), frame đầu là auth mang token; `pkg/wsclient` làm sẵn việc này.
+
+Đổi khoá (dev và prod, không cắt kết nối đang sống): thêm khoá mới (`kid` mới) vào JWKS bên cạnh khoá cũ → rolling restart các node websocket (JWKS chỉ đọc lúc khởi động) → chuyển bên ký sang khoá mới → chờ token cũ hết hạn (TTL + `WS_JWT_LEEWAY`) → bỏ khoá cũ khỏi JWKS và rolling restart lần nữa. Nên giữ TTL token ≤ 15 phút để bước chờ ngắn và token lộ hết hạn nhanh.
+
 ## Cổng
 
-Với app, compose publish ra host chỉ gRPC của core, và chỉ trên loopback — vì caller hiện được tin cậy qua metadata tới khi có mTLS (M5). Hạ tầng dev publish cổng riêng (`.env`):
+Với app, compose publish ra host chỉ gRPC của core và WebSocket của websocket-1, và chỉ trên loopback — vì caller hiện được tin cậy qua metadata tới khi có mTLS (M5). Hạ tầng dev publish cổng riêng (`.env`):
 
 | Cổng | Dịch vụ | Ghi chú |
 |---|---|---|
@@ -165,7 +202,8 @@ Với app, compose publish ra host chỉ gRPC của core, và chỉ trên loopba
 | `6381` | `redis-dedupe` (`REDIS_DEDUPE_PORT`) | Không lưu đĩa, `maxmemory` `REDIS_DEDUPE_MAXMEMORY` (512mb), `allkeys-lru`, bắt buộc AUTH (`REDIS_DEDUPE_PASSWORD`) |
 | `127.0.0.1:9001` | `core-1` gRPC (`CORE1_GRPC_PORT`) | |
 | `127.0.0.1:9002` | `core-2` gRPC (`CORE2_GRPC_PORT`) | |
-| — | admin (`/healthz`, `/readyz`, `/metrics`, pprof) mỗi core, cổng `9090` | Chỉ trong mạng compose, không publish ra host |
+| `127.0.0.1:8081` | `websocket-1` WebSocket `/ws` (`WS1_PORT`) | Cần token dev (`make -s ws-token`) |
+| — | admin (`/healthz`, `/readyz`, `/metrics`, pprof) mỗi core, cổng `9090`; admin websocket-1 (`/livez`, `/readyz`, `/metrics`) cổng `9090` | Chỉ trong mạng compose, không publish ra host |
 
 ## Tài liệu
 
