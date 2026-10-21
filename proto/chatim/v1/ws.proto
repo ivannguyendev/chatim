@@ -1,0 +1,111 @@
+syntax = "proto3";
+
+package chatim.v1;
+
+import "chatim/v1/core.proto";
+import "chatim/v1/members.proto";
+import "chatim/v1/mention_service.proto";
+import "chatim/v1/message_reads.proto";
+import "chatim/v1/reactions_pins.proto";
+import "chatim/v1/replies_bookmarks_mentions.proto";
+import "chatim/v1/room_list.proto";
+
+message ClientFrame {
+  oneof frame {
+    AuthFrame auth = 10;
+    HeartbeatFrame heartbeat = 11;
+    ClientRequest request = 12;
+  }
+}
+
+message AuthFrame {
+  string token = 1;
+}
+
+message HeartbeatFrame {}
+
+message ClientRequest {
+  uint64 id = 1;
+  oneof request {
+    CreateRoomRequest create_room = 10;
+    OpenDirectRoomRequest open_direct_room = 11;
+    ListMyRoomsRequest list_my_rooms = 12;
+    GetRoomsRequest get_rooms = 13;
+    UpdateRoomRequest update_room = 14;
+    SetRoomPreferencesRequest set_room_preferences = 15;
+    SendMessageRequest send_message = 16;
+    GetHistoryRequest get_history = 17;
+    GetMessagesRequest get_messages = 18;
+    EditMessageRequest edit_message = 19;
+    DeleteMessageRequest delete_message = 20;
+    HideMessageRequest hide_message = 21;
+    ClearHistoryRequest clear_history = 22;
+    GetEditHistoryRequest get_edit_history = 23;
+    ReactMessageRequest react_message = 24;
+    PinMessageRequest pin_message = 25;
+    UnpinMessageRequest unpin_message = 26;
+    ListPinsRequest list_pins = 27;
+    GetReactionSettingsRequest get_reaction_settings = 28;
+    GetReactionsRequest get_reactions = 29;
+    SetBookmarkRequest set_bookmark = 30;
+    GetRepliesRequest get_replies = 31;
+    ListThreadsRequest list_threads = 32;
+    ListBookmarksRequest list_bookmarks = 33;
+    AddMembersRequest add_members = 34;
+    RemoveMemberRequest remove_member = 35;
+    LeaveRoomRequest leave_room = 36;
+    ChangeMemberRoleRequest change_member_role = 37;
+    SetMemberPriorityRequest set_member_priority = 38;
+    ListMembersRequest list_members = 39;
+    MarkUnreadRequest mark_unread = 40;
+    ListMentionsRequest list_mentions = 41;
+    ListRoomGroupsRequest list_room_groups = 42;
+  }
+}
+
+message ServerFrame {
+  oneof frame {
+    ServerResponse response = 10;
+  }
+}
+
+message ServerResponse {
+  uint64 id = 1;
+  int32 code = 2;
+  string message = 3;
+  oneof result {
+    CreateRoomResponse create_room = 10;
+    OpenDirectRoomResponse open_direct_room = 11;
+    ListMyRoomsResponse list_my_rooms = 12;
+    GetRoomsResponse get_rooms = 13;
+    UpdateRoomResponse update_room = 14;
+    SetRoomPreferencesResponse set_room_preferences = 15;
+    SendMessageResponse send_message = 16;
+    GetHistoryResponse get_history = 17;
+    GetMessagesResponse get_messages = 18;
+    EditMessageResponse edit_message = 19;
+    DeleteMessageResponse delete_message = 20;
+    HideMessageResponse hide_message = 21;
+    ClearHistoryResponse clear_history = 22;
+    GetEditHistoryResponse get_edit_history = 23;
+    ReactMessageResponse react_message = 24;
+    PinMessageResponse pin_message = 25;
+    UnpinMessageResponse unpin_message = 26;
+    ListPinsResponse list_pins = 27;
+    GetReactionSettingsResponse get_reaction_settings = 28;
+    GetReactionsResponse get_reactions = 29;
+    SetBookmarkResponse set_bookmark = 30;
+    GetRepliesResponse get_replies = 31;
+    ListThreadsResponse list_threads = 32;
+    ListBookmarksResponse list_bookmarks = 33;
+    AddMembersResponse add_members = 34;
+    RemoveMemberResponse remove_member = 35;
+    LeaveRoomResponse leave_room = 36;
+    ChangeMemberRoleResponse change_member_role = 37;
+    SetMemberPriorityResponse set_member_priority = 38;
+    ListMembersResponse list_members = 39;
+    MarkUnreadResponse mark_unread = 40;
+    ListMentionsResponse list_mentions = 41;
+    ListRoomGroupsResponse list_room_groups = 42;
+  }
+}
