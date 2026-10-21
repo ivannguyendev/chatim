@@ -95,7 +95,7 @@ Frame mã hoá protobuf và dùng lại đúng message request/response sẵn c�
 
 | Biến | Mặc định | Vì sao |
 |---|---|---|
-| `WS_LISTEN`, `ADMIN_LISTEN` | `:8080`, `:9090` | cổng WebSocket; `/livez`, `/readyz`, `/metrics` |
+| `WS_ADDR`, `WS_ADMIN_ADDR` | `:8080`, `:9090` | cổng WebSocket; `/livez`, `/readyz`, `/metrics` |
 | `REDIS_ADDR`, `REDIS_PASSWORD_FILE` | — | đọc bảng slot (chỉ đọc) |
 | `WS_JWT_KEYS_FILE`, `WS_JWT_ISSUER`, `WS_JWT_AUDIENCE`, `WS_JWT_LEEWAY` | —, —, —, 30s | kiểm token |
 | `WS_AUTH_TIMEOUT` | 5s | kết nối không gửi token thì đóng |
