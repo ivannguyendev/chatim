@@ -27,12 +27,12 @@ Chưa gồm: "đã xem" của cả nhóm (phần 3), typing và online (phần 4
 
 ## 3. Websocket nghe gì
 
-Thiết bị **không** nối vào NATS. Chỉ mỗi node websocket nối, mỗi node một kết nối, nghe hai thứ:
+Thiết bị **không** nối vào NATS. Chỉ mỗi node websocket nối, mỗi node một kết nối, đọc hai stream theo thứ tự:
 
 | Nghe | Là gì |
 |---|---|
-| `live.*.*.*.evt.*` | Mọi event core phát (tin, react, thành viên, đọc…) |
-| `websocket.publish.*` | Hộp thư của websocket: gói tin các app gửi tới máy (§6) |
+| Stream event `CHATIM_EVT` | Mọi event core phát (tin, react, thành viên, đọc…) |
+| Hộp thư `websocket.publish.*` (stream `CHATIM_WS`) | Gói tin các app gửi tới máy (§6) |
 
 Mỗi node nhận **toàn bộ** event, nhưng chỉ đẩy cho máy đang nối vào chính nó. Ví dụ Lan ở ws-1, Bình ở ws-2: tin của Kho HCM tới cả hai node; ws-1 đẩy cho Lan, ws-2 đẩy cho Bình. Không cần ai biết "Lan đang ở node nào".
 
@@ -72,21 +72,22 @@ Mỗi tư cách thành viên có một số phiên bản (vào nhóm v1, rời v
 
 Khuôn gói nằm trong package dùng chung `pkg/delivery`, học theo OneSignal: danh sách người nhận hôm nay theo user, để sẵn chỗ cho theo thiết bị, theo chủ đề. Mất thông báo lúc rớt mạng thì vẫn thấy trong `ListMentions`.
 
-## 7. Lỡ event và đọc bù
+## 7. Lỡ event và đọc bù (owner 2026-10-21)
 
-JetStream đánh số liên tiếp cho mọi event (1001, 1002, 1003…) và lưu 7 ngày. Websocket nhận bản sao kèm số. Mỗi node chỉ **nhớ số cuối mình đã nhận** trong RAM; ba node không cần biết số của nhau.
+JetStream đánh số liên tiếp cho mọi event (1001, 1002, 1003…) và lưu 7 ngày. Mỗi node đọc stream **theo thứ tự** bằng tính năng có sẵn của thư viện NATS ("ordered consumer"). Node không tự đếm, không lưu gì.
 
-Ví dụ mạng của ws-2 chập 2 giây: ws-2 nhận 1002 rồi 1500 → biết mình lỡ 1003–1499 → xin lại JetStream đúng đoạn đó → đẩy xuống máy. Người dùng thấy tin trễ chưa tới một giây, không mất gì. ws-1, ws-3 không bị ảnh hưởng.
+Ví dụ mạng của ws-2 chập 2 giây: ws-2 đã nhận tới 1002 thì đứt. Khi mạng lại, thư viện thấy thiếu nên tự bỏ phần đang cầm và đọc lại **từ 1003 trở đi, liên tục**: 1003, 1004, …, 1500, 1501… cho tới khi đuổi kịp hiện tại. Tin tới máy đúng thứ tự, không mất tin nào; người dùng thấy trễ chưa tới một giây. ws-1, ws-3 không bị ảnh hưởng.
 
-Ba cái phanh để không hại core:
-1. Mỗi node chỉ xin lại một lượt một lúc, tối đa 20.000 event/giây.
-2. Lỡ quá nhiều (hơn 2 phút) → không xin lại; node hỏi lại danh sách room của từng người rồi bảo máy "tải lại", rải đều trong 60 giây.
-3. Máy nào nhận bù không kịp đọc → bảo riêng máy đó "tải lại", không cắt kết nối.
+Hai cái phanh để không hại core:
+1. Đang đuổi theo thì đọc tối đa 20.000 event/giây. Trễ quá 2 phút → bỏ đoạn cũ, nhảy tới hiện tại; node hỏi lại danh sách room của từng người rồi bảo máy "tải lại", rải đều trong 60 giây.
+2. Máy nào nhận không kịp lúc đang đuổi theo → bảo riêng máy đó "tải lại", không cắt kết nối.
 
 | Chuyện xảy ra | Websocket làm gì | Người dùng thấy |
 |---|---|---|
-| Mạng chập 2 giây | Xin lại vài nghìn event, xong trong ~0,2 giây | Tin tới trễ một chút |
-| Node bị cắt khỏi NATS 5 phút | Hỏi lại danh sách room, bảo máy tải lại (rải 60 giây) | Danh sách hội thoại tự làm mới |
+| Mạng chập 2 giây | Thư viện đọc lại từ số cuối, đuổi kịp trong ~0,2 giây | Tin tới trễ một chút |
+| Node bị cắt khỏi NATS 5 phút | Nhảy tới hiện tại, hỏi lại danh sách room, bảo máy tải lại (rải 60 giây) | Danh sách hội thoại tự làm mới |
+
+"Trễ 2 phút" đo bằng giờ JetStream lưu tin, không bằng giờ ghi trong event (sweeper có thể phát lại event cũ, mang giờ cũ nhưng vừa mới lưu).
 
 Vì sao không luôn bảo máy tải lại cho đơn giản: mỗi lần như vậy 33.000 máy trên node cùng gọi `ListMyRooms`; mạng chập 1 giây mà tốn thế là quá đắt.
 
@@ -100,10 +101,9 @@ Mỗi máy có hàng chờ gửi tối đa 1MB. Đầy → đóng mã 4008, máy
 
 - **`ListMyRoomIDs`:** trả mọi room của người gọi kèm phiên bản, một lần. Chỉ websocket gọi, máy không gọi được.
 - **Index `members`:** thêm 1 field `ver` để `ListMyRoomIDs` chỉ đọc index. Đổi bằng lệnh `/app indexes` chạy tay (xem trước / tạo bản mới / xoá bản cũ khi bản mới xong), không tự động lúc khởi động. Lệnh phủ cả index của Mention App.
-- **Stream event:** chỉ giữ đúng dạng subject được phát ra, để node không thấy "lỗ giả".
 - **Mention App:** phát gói tin có danh sách người nhận vào `websocket.publish.{tenant}` (stream mới `CHATIM_WS`) thay vì mỗi người một tin; phần bung người nhận, ngưỡng 5 phút, chống trùng giữ nguyên.
 
-Core không đổi event, đường ghi hay proto event nào.
+Core không đổi stream, event, đường ghi hay proto event nào.
 
 ## 10. Quyết định
 
@@ -111,7 +111,7 @@ Core không đổi event, đường ghi hay proto event nào.
 |---|---|
 | Mỗi node nghe toàn bộ, lọc trong RAM | Nghe theo từng room: hàng triệu lần đăng ký khi bão kết nối lại, và không thấy được nhóm mới |
 | Hai mức: thành viên / đang mở | Mọi event cho mọi room: tốn băng thông (react của 5.000 room) |
-| Lỡ ít thì xin lại, lỡ nhiều thì tải lại | Luôn tải lại: mạng chập ngắn cũng gây 33.000 lần gọi core |
+| Đọc stream theo thứ tự bằng ordered consumer của NATS; lỡ thì thư viện đọc lại từ số cuối (owner) | Tự đếm số và tự xin lại từng đoạn: nhiều code, phải thu hẹp subject stream ở core. Luôn tải lại: mạng chập ngắn cũng gây 33.000 lần gọi core |
 | Gói tin + danh sách người nhận (owner) | Mỗi người một tin: 5.000 bản sao nội dung |
 | Websocket có hộp thư riêng, app notification có hộp thư riêng (owner) | Websocket nghe `notify`: trộn vai |
 | Phase 1 không lọc tắt thông báo ở server (owner) | Websocket lọc rồi Phase 2 lại chuyển đi |
@@ -129,8 +129,8 @@ Core không đổi event, đường ghi hay proto event nào.
 |---|---|
 | Unit định tuyến | Đúng bảng §5; event riêng không lọt; cùng id người ở hai tenant không lẫn |
 | Unit thành viên | Nhóm mới hiện ngay; bị xoá thì ngừng nhận; event cũ tới muộn không làm "vào lại" |
-| Unit đọc bù | Phát hiện lỡ, xin lại đúng đoạn, ba cái phanh |
+| Unit đọc bù | Lỡ tin thì nhận đủ và đúng thứ tự; hai cái phanh (trễ quá 2 phút, máy không kịp) |
 | Unit gói thông báo | 2.500 người → 3 gói, mỗi người đúng một lần; phát lại không sót ai |
 | Test `ListMyRoomIDs` và `/app indexes` | Chỉ đọc index; lệnh không xoá bản cũ khi bản mới chưa xong |
 | e2e | Hai máy: gửi/nhận, mở/không mở nhóm, thêm/xoá thành viên, event riêng, `@` tới đúng người |
-| Diễn tập | Cắt riêng một node khỏi NATS 10 giây (phải đọc bù, không tải lại) và 3 phút (phải tải lại có rải) |
+| Diễn tập | Cắt riêng một node khỏi NATS 10 giây (đuổi kịp, không tải lại) và 3 phút (tải lại có rải) |
