@@ -85,25 +85,41 @@ func wire(cfg config.Config, log *slog.Logger) (*node, error) {
 func (n *node) serve(ctx context.Context, deps Deps) error {
 	adminLis, err := deps.Listen(ctx, n.cfg.AdminAddr)
 	if err != nil {
+		closeListener(adminLis)
 		return err
 	}
 	sup := newSupervisor(ctx)
 	t := tasks{admin: sup.start("admin", func(c context.Context) error { return n.admin.ServeListener(c, adminLis) })}
-	cause := n.openRouter(ctx, deps)
-	var wsLis net.Listener
-	if cause == nil && ctx.Err() == nil {
-		wsLis, cause = deps.Listen(ctx, n.cfg.ListenAddr)
-	}
-	if ctx.Err() != nil {
-		return n.abandon(ctx, sup, t)
-	}
-	if cause != nil {
+	wsLis, cause := n.openRoutes(ctx, deps)
+	if cause != nil || ctx.Err() != nil {
+		closeListener(wsLis)
+		if ctx.Err() != nil {
+			cause = nil
+		}
 		return errors.Join(cause, n.abandon(ctx, sup, t))
 	}
 	t.listener = sup.start("websocket listener", func(c context.Context) error { return n.serveListener(c, wsLis) })
+	select {
+	case failed := <-sup.failed:
+		return n.shutdown(ctx, sup, t, failed)
+	default:
+	}
 	n.admin.SetReady(true)
 	n.log.InfoContext(ctx, "websocket ready", "listen", wsLis.Addr().String(), "admin", adminLis.Addr().String())
 	return n.shutdown(ctx, sup, t, sup.wait(ctx))
+}
+
+func (n *node) openRoutes(ctx context.Context, deps Deps) (net.Listener, error) {
+	if err := n.openRouter(ctx, deps); err != nil || ctx.Err() != nil {
+		return nil, err
+	}
+	return deps.Listen(ctx, n.cfg.ListenAddr)
+}
+
+func closeListener(lis net.Listener) {
+	if lis != nil {
+		_ = lis.Close()
+	}
 }
 
 func (n *node) openRouter(ctx context.Context, deps Deps) error {

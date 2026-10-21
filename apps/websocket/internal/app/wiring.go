@@ -71,12 +71,11 @@ func newHTTPServer(ws http.Handler, log *slog.Logger) *http.Server {
 func metricSources(ws *session.Server, exec *command.Executor) []metrics.Source {
 	out := append(ws.Sources(), exec.CommandSources()...)
 	for _, latency := range exec.CoreCallLatency() {
-		read := latency.Read
 		out = append(out, metrics.Source{
 			Name:      "core_call_seconds",
 			Help:      "Core call latency of client commands, in seconds.",
 			Labels:    map[string]string{"command": latency.Command},
-			Histogram: func() metrics.Histogram { return metrics.Histogram(read()) },
+			Histogram: latency.Read,
 		})
 	}
 	return out

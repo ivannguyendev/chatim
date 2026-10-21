@@ -160,3 +160,45 @@ func TestRunFailsWhenTheAdminAddressCannotBeBound(t *testing.T) {
 		t.Fatalf("Run = %v, want the listen error", err)
 	}
 }
+
+func TestRunClosesTheWebsocketListenerWhenStartupEndsRightAfterBindingIt(t *testing.T) {
+	bindErr := errors.New("bound but broken")
+	for name, tc := range map[string]struct {
+		cancelOnBind bool
+		listenErr    error
+	}{
+		"stop signal right after bind": {cancelOnBind: true},
+		"listener returned with error": {listenErr: bindErr},
+	} {
+		t.Run(name, func(t *testing.T) {
+			mr := slotRedis(t)
+			keys := newSigner(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			bound := make(chan net.Listener, 1)
+			listen := func(ctx context.Context, addr string) (net.Listener, error) {
+				var lc net.ListenConfig
+				lis, err := lc.Listen(ctx, "tcp", "127.0.0.1:0")
+				if err != nil || addr != "ws" {
+					return lis, err
+				}
+				bound <- lis
+				if tc.cancelOnBind {
+					cancel()
+				}
+				return lis, tc.listenErr
+			}
+			logs := newLogWatch()
+			err := Run(ctx, testConfig(mr.Addr(), keys.path), logs.logger(), Deps{Listen: listen})
+			if !errors.Is(err, tc.listenErr) || (tc.listenErr == nil && err != nil) {
+				t.Fatalf("Run = %v, want %v", err, tc.listenErr)
+			}
+			if err := receive(t, bound, "websocket bind").Close(); !errors.Is(err, net.ErrClosed) {
+				t.Fatalf("websocket listener left open: second Close = %v", err)
+			}
+			if strings.Contains(logs.written(), "websocket ready") {
+				t.Fatal("node turned ready after an aborted start")
+			}
+		})
+	}
+}

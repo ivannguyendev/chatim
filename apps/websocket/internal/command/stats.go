@@ -14,16 +14,9 @@ const codeCount = int(codes.Unauthenticated) + 1
 
 var latencyBounds = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}
 
-type Histogram struct {
-	Bounds     []float64
-	Cumulative []uint64
-	Count      uint64
-	Sum        float64
-}
-
 type CommandLatency struct {
 	Command string
-	Read    func() Histogram
+	Read    func() metrics.Histogram
 }
 
 type stats struct {
@@ -57,8 +50,8 @@ func (s *stats) observe(cmd int, elapsed time.Duration) {
 	s.totals[cmd].Add(1)
 }
 
-func (s *stats) histogram(cmd int) Histogram {
-	h := Histogram{Bounds: latencyBounds, Cumulative: make([]uint64, len(latencyBounds))}
+func (s *stats) histogram(cmd int) metrics.Histogram {
+	h := metrics.Histogram{Bounds: latencyBounds, Cumulative: make([]uint64, len(latencyBounds))}
 	var running uint64
 	for i := range latencyBounds {
 		running += s.buckets[cmd*len(latencyBounds)+i].Load()
@@ -88,7 +81,7 @@ func (s *stats) commandSources() []metrics.Source {
 func (s *stats) latencies() []CommandLatency {
 	out := make([]CommandLatency, len(s.names))
 	for cmd, name := range s.names {
-		out[cmd] = CommandLatency{Command: name, Read: func() Histogram { return s.histogram(cmd) }}
+		out[cmd] = CommandLatency{Command: name, Read: func() metrics.Histogram { return s.histogram(cmd) }}
 	}
 	return out
 }

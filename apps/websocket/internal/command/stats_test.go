@@ -20,7 +20,7 @@ func readCount(t *testing.T, sources []metrics.Source, cmd, code string) float64
 	return 0
 }
 
-func latencyOf(t *testing.T, latencies []command.CommandLatency, cmd string) command.Histogram {
+func latencyOf(t *testing.T, latencies []command.CommandLatency, cmd string) metrics.Histogram {
 	t.Helper()
 	for _, l := range latencies {
 		if l.Command == cmd {
@@ -28,7 +28,7 @@ func latencyOf(t *testing.T, latencies []command.CommandLatency, cmd string) com
 		}
 	}
 	t.Fatalf("no latency for %s", cmd)
-	return command.Histogram{}
+	return metrics.Histogram{}
 }
 
 func refusedSend() *chatimv1.ClientRequest {
