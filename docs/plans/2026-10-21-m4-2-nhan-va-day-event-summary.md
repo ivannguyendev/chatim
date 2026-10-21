@@ -43,7 +43,7 @@ Thiết bị **không** nối vào NATS. Chỉ mỗi node websocket nối, mỗi
 | Subscription | Nhận gì |
 |---|---|
 | `live.*.*.*.evt.*` | Mọi event core phát (tin, react, thành viên, đọc, ghim…), mỗi event có số thứ tự trong stream |
-| `notify.>` | Gói thông báo của Mention App (§6), mỗi gói kèm danh sách người nhận |
+| `notify.*.mention` | Gói thông báo của Mention App (§6), mỗi gói kèm danh sách người nhận |
 
 Phần 4 thêm subscription riêng cho typing và online, để chúng không chiếm chỗ của event chat.
 
@@ -60,7 +60,11 @@ Tải NATS không phụ thuộc số thiết bị, chỉ phụ thuộc số even
 2. Event thành viên của Lan đến trong lúc đang tải được giữ lại, tải xong thì áp theo "`ver` lớn hơn thắng". Ví dụ: Lan vừa kết nối thì được thêm vào "Kế hoạch Q1" (ver 1). Danh sách trả về đã có nhóm đó ver 1 thì event bị bỏ; chưa có thì event thêm nhóm vào.
 3. Sau đó node gửi frame `ready`. Máy gọi `ListMyRooms` để vẽ danh sách.
 
-Vì sao cần `ver`: hiếm khi một event cũ tới sau event mới (sweeper phát bù). Không so `ver` thì event "Lan vào nhóm" cũ có thể làm Lan nhận lại tin của nhóm đã rời.
+Vì sao cần `ver`: hiếm khi một event cũ tới sau event mới (sweeper phát bù, hoặc đọc bù sau khi lỡ). Không so `ver` thì event "Lan vào nhóm" cũ có thể làm Lan nhận lại tin của nhóm đã rời. Vì vậy:
+- Lúc bắt đầu tải danh sách, node ghi số thứ tự event cuối đã thấy; event thành viên cũ hơn mốc đó bị bỏ, vì danh sách đã mới hơn.
+- Khi Lan rời một nhóm, node giữ dấu "đã rời" kèm `ver` chừng nào Lan còn kết nối; event "Lan vào nhóm" cũ tới muộn có `ver` không lớn hơn dấu đó bị bỏ.
+- Người được nhận diện bằng cặp (tenant, user): Lan của tenant A và Lan của tenant B là hai người khác nhau.
+- Nhiều thiết bị của Lan trên cùng một node dùng chung một danh sách, chỉ gọi core một lần.
 
 **Hai mức quan tâm:**
 
@@ -68,6 +72,8 @@ Vì sao cần `ver`: hiếm khi một event cũ tới sau event mới (sweeper p
 |---|---|---|
 | Thành viên | Mọi room trong danh sách của người | Chỉ event làm danh sách hội thoại đổi |
 | Đang mở | Máy gửi `open_room`, tới khi `close_room`; chỉ mở được room mình là thành viên | Mọi event của room |
+
+`open_room` gửi trước `ready` thì được giữ tới khi `ready`. Mở một nhóm vừa tạo (trả lời `CreateRoom` về trước event `member_added`) thì node chờ tối đa 10 giây cho event đó; quá hạn mà vẫn không phải thành viên thì gửi `room_closed{not_member}`. Bị xoá khỏi room đang mở thì nhận `room_closed{removed}`.
 
 ## 5. Ai nhận event nào (owner 2026-10-20)
 
@@ -105,8 +111,8 @@ Vì sao cần `ver`: hiếm khi một event cũ tới sau event mới (sweeper p
 | `part`, `parts` | phần thứ mấy trên tổng số phần | `2`, `5` |
 
 3. **Chia phần:** mỗi gói tối đa 1.000 người, để dưới giới hạn 1MB mỗi tin của NATS (1.000 id × 64 byte + nội dung 16KB < 100KB). `@all` 5.000 người thành 5 gói, khoảng 400KB thay vì 80MB. Đây là cỡ trang, không phải giới hạn: channel 200K người sau này thành 200 gói.
-4. Subject theo tenant và loại: `notify.{tenant}.mention`. Mỗi gói có `Nats-Msg-Id` = `id` + số phần, để stream bỏ trùng khi phát lại.
-5. **Websocket:** nhận gói qua `notify.>`, duyệt `targets.users`, tra xem người nào đang nối vào node mình rồi đẩy frame `notification` (mã hoá một lần mỗi gói). Phase 1 không lọc room đang tắt: máy tự ẩn (owner 2026-10-21, chờ app notification).
+4. Subject theo tenant và loại: `notify.{tenant}.mention`. Thông báo bên trong gói có id chung cho mọi trang (máy dùng để bỏ trùng). Mỗi gói có `Nats-Msg-Id` = id đó + số phần + mã băm danh sách người của trang, để stream bỏ trùng khi phát lại, và nếu danh sách thành viên đổi giữa hai lần phát thì trang mới không bị bỏ nhầm (không ai bị sót; ai nhận hai lần thì máy bỏ trùng).
+5. **Websocket:** nhận gói qua `notify.*.mention`, kiểm tenant trong gói khớp tenant trong subject, duyệt `targets.users`, tra xem người nào đang nối vào node mình rồi đẩy frame `notification` (mã hoá một lần mỗi gói). Phase 1 không lọc room đang tắt: máy tự ẩn (owner 2026-10-21, chờ app notification).
 6. **App notification Phase 2:** đọc cùng stream bằng consumer bền, bung người ra thiết bị, áp tắt thông báo và không làm phiền, rồi push. Học theo OneSignal, `targets` để dành chỗ cho `topics`, `devices`, `tags`; Phase 1 chỉ dùng `users`.
 
 Giữ nguyên: chống trùng theo `message_ver` (bản lớn hơn thắng), thông báo rút lại khi tin bị sửa bỏ `@` hoặc bị xoá (D173). Mất đi: đọc lại thông báo của riêng một người trong 24 giờ theo subject; không ai dùng, vì trong app đã có `ListMentions` và app push dùng consumer bền. Mất thông báo lúc rớt mạng thì vẫn thấy trong `ListMentions`.
@@ -116,19 +122,19 @@ Giữ nguyên: chống trùng theo `message_ver` (bản lớn hơn thắng), th�
 Core NATS không lưu `live.*`. Node lỡ event khi rớt mạng NATS hoặc nhận không kịp.
 
 1. Mỗi event `live.*` có header `Nats-Sequence` (số thứ tự trong stream `CHATIM_EVT`). Node nghe toàn bộ nên thấy đủ chuỗi số. Nhận 8812345 rồi 8812350 nghĩa là lỡ 8812346–8812349.
-2. Lỗ nhỏ (dưới ~100 event): đọc thẳng từng event theo số thứ tự, không tạo consumer.
-3. Lỗ lớn hơn: mỗi node chỉ **một** lượt đọc bù một lúc. Lỗ mới gộp vào lượt đang chạy. Đọc theo lô có giới hạn tốc độ, dừng đúng ở cuối lỗ rồi xoá consumer ngay. Trước khi bắt đầu chờ ngẫu nhiên 0–5 giây, để 3 node không đè JetStream cùng lúc.
-4. Lỗ quá trần (~2 phút hoặc ~2 triệu event): không đọc bù nữa. Node gửi `resync` cho máy, rải trong khoảng 60 giây; máy tự lấy lại danh sách hội thoại và lịch sử room đang mở.
-5. Số thứ tự lùi lại (stream bị tạo lại): coi là bắt đầu lại, không phải lỗ khổng lồ.
+2. Mọi lỗ đi một đường: mỗi node chỉ **một** lượt đọc bù một lúc, do máy chủ chính của stream phục vụ (không đọc từ bản sao có thể đang trễ). Lỗ mới gộp vào lượt đang chạy. Đọc theo lô với tốc độ tối đa 20.000 event/s (gấp đôi đỉnh nhận, để bù kịp mà không dồn JetStream), dừng đúng ở cuối lỗ rồi xoá consumer ngay. Trước khi bắt đầu chờ ngẫu nhiên 0–5 giây, để 3 node không đè JetStream cùng lúc.
+3. Lỗ quá trần (cũ hơn 2 phút tính từ event cuối nhận được, hoặc hơn 2,4 triệu event) hoặc đọc bù lỗi: không đọc bù nữa. Event thành viên trong lỗ có thể đã mất, nên node **nạp lại danh sách room** của từng người (rải trong 60 giây) rồi gửi `resync`; máy tự lấy lại danh sách hội thoại và lịch sử room đang mở. Nhờ vậy người bị xoá khỏi nhóm trong lúc lỗ không tiếp tục nhận tin của nhóm đó.
+4. Một máy nhận bù quá nhiều (sắp đầy hàng gửi 1MB): gửi `resync` riêng cho máy đó thay vì cắt kết nối, để nó không nối lại rồi gọi `ListMyRooms` đắt cùng lúc với người khác.
+5. Số thứ tự lùi lại (stream bị tạo lại, hoặc NATS mất phần đuôi chưa ghi): coi là bắt đầu lại, không phải lỗ khổng lồ. Sau khi nối lại NATS, node hỏi số thứ tự cuối của stream một lần để phát hiện lỗ ngay cả khi không có event mới.
 
 Event đọc bù có thể tới sau event mới hơn. Máy xử lý theo hợp đồng D156: bỏ trùng theo id và version; `msg_created` có lỗ seq thì gọi `GetHistory`; không bao giờ "bỏ nếu seq ≤ seq đã thấy".
 
-**Giữ kết nối NATS:** nối lại không giới hạn số lần (như core); ping NATS mỗi 10 giây để phát hiện kết nối chết nửa vời; mất NATS quá vài giây thì `/readyz` báo chưa sẵn sàng; không đệm tin gửi lúc mất kết nối.
+**Giữ kết nối NATS:** nối lại không giới hạn số lần (như core); ping NATS mỗi 10 giây để phát hiện kết nối chết nửa vời; lần đầu khởi động phải có NATS mới báo sẵn sàng, còn sau đó mất NATS vẫn báo sẵn sàng (nếu không, NATS chập là cả 3 node bị load balancer gỡ cùng lúc rồi mọi người ùa vào khi NATS lên lại) và có metric `nats_connected` để cảnh báo; không đệm tin gửi lúc mất kết nối.
 
 ## 8. Máy nhận chậm
 
 Phần 1 đã có hàng ghi riêng mỗi kết nối và hạn ghi 10 giây. Phần 2 thêm:
-- Hàng đợi gửi tính theo byte (mặc định 1MB mỗi kết nối) và ngân sách byte toàn node (mặc định 2GB), để vài máy chậm không ăn hết RAM.
+- Hàng đợi gửi tính theo byte, mặc định 1MB mỗi kết nối, để vài máy chậm không ăn hết RAM. Không có ngân sách toàn node: một frame mã hoá một lần dùng chung cho hàng nghìn kết nối, đếm theo từng kết nối sẽ phóng đại RAM; RAM node được giữ bằng `GOMEMLIMIT` (container ≥ 2GB, ước tính ~1,3GB cho 33K kết nối có người ở 5.000 room).
 - Đầy → đóng mã 4008. Máy nối lại sau và lấy snapshot.
 
 ## 9. Thay đổi ở core
@@ -139,7 +145,7 @@ Phần 1 đã có hàng ghi riêng mỗi kết nối và hạn ghi 10 giây. Ph�
    - `-apply`: tạo index mới bên cạnh index cũ. Core vẫn chạy; `ListMyRoomIDs` chỉ chậm hơn tới khi xong.
    - `-drop-old`: bước riêng, xoá index cũ khi bản mới đã có.
    - Lúc khởi động core chỉ tạo index trên database mới; gặp index cũ thì giữ nguyên và log cảnh báo "chạy /app indexes". Cơ chế tự xoá index cũ đang có (`bootstrap_replaced_indexes`) chuyển sang lệnh này.
-3. **Stream `CHATIM_EVT`:** thu hẹp subject từ `evt.>` còn đúng `evt.*.*.*.*`, để không event nào được lưu mà không phát ra `live.*` (nếu có, node sẽ thấy một lỗ giả và đọc bù vô ích). Bật đọc thẳng theo số thứ tự (`AllowDirect`) cho lỗ nhỏ. Core vẫn cập nhật cấu hình stream lúc khởi động như hôm nay (`CreateOrUpdateStream`); đổi này chỉ là cấu hình, không chép lại dữ liệu.
+3. **Stream `CHATIM_EVT`:** thu hẹp subject từ `evt.>` còn đúng `evt.*.*.*.*`, để không event nào được lưu mà không phát ra `live.*` (nếu có, node sẽ thấy một lỗ giả và đọc bù vô ích). Core vẫn cập nhật cấu hình stream lúc khởi động như hôm nay (`CreateOrUpdateStream`); đổi này chỉ là cấu hình, không chép lại dữ liệu.
 
 Core không đổi event, subject phát ra, đường ghi hay proto event nào.
 
@@ -154,6 +160,7 @@ Core không đổi event, subject phát ra, đường ghi hay proto event nào.
 | `event` | app → máy | đúng bytes `Event` core phát |
 | `notification` | app → máy | nội dung của gói `Delivery` (không kèm danh sách người nhận) |
 | `resync` | app → máy | lý do; máy lấy lại snapshot |
+| `room_closed` | app → máy | room id và lý do (`not_member`: mở room không phải thành viên; `removed`: bị xoá khỏi room) |
 | đóng 4008 | app → máy | máy nhận chậm, hàng đợi đầy: nối lại sau |
 
 ## 11. Config mới
@@ -165,9 +172,11 @@ Core không đổi event, subject phát ra, đường ghi hay proto event nào.
 | `WS_ROOM_IDS_INFLIGHT` | 64 | số lần gọi `ListMyRoomIDs` cùng lúc mỗi node, bảo vệ core |
 | `WS_FANOUT_WORKERS` | số CPU | số hàng xử lý theo room |
 | `WS_NATS_PENDING_BYTES` | 256MB | bộ đệm mỗi subscription |
-| `WS_SEND_QUEUE_BYTES`, `WS_NODE_SEND_BYTES` | 1MB, 2GB | máy chậm không ăn hết RAM |
-| `WS_GAP_DIRECT_MAX` | 100 | lỗ dưới mức này đọc thẳng từng event |
-| `WS_REPLAY_MAX`, `WS_REPLAY_MAX_AGE` | 2.000.000, 2m | quá trần thì `resync` thay vì đọc bù |
+| `WS_SEND_QUEUE_BYTES` | 1MB | máy chậm không ăn hết RAM |
+| `WS_FANOUT_QUEUE` | 4.096 event mỗi hàng | hứng một nhịp dồn ~1 giây; đầy thì bộ đệm NATS hứng |
+| `WS_REPLAY_RATE` | 20.000 event/s | gấp đôi đỉnh nhận: bù kịp mà không dồn JetStream |
+| `WS_OPEN_PENDING` | 10s | `open_room` của nhóm vừa tạo chờ event `member_added` tới |
+| `WS_REPLAY_MAX_AGE`, `WS_REPLAY_MAX` | 2m, 2.400.000 (= tốc độ × thời gian) | quá trần thì nạp lại + `resync` thay vì đọc bù |
 | `WS_RESYNC_WINDOW` | 60s | rải `resync` cho máy |
 | `MENTION_NOTIFY_TARGETS_PAGE` (Mention App) | 1.000 | số người mỗi gói thông báo, để mỗi tin NATS dưới 1MB |
 
@@ -196,7 +205,7 @@ Core không đổi event, subject phát ra, đường ghi hay proto event nào.
 | Unit định tuyến | Đúng bảng §5; event riêng không tới người khác; tin có `@` tới mức thành viên |
 | Unit tải room trong lúc có event | Mọi thứ tự giữa `ListMyRoomIDs` và event thành viên cho cùng kết quả |
 | Unit thêm/xoá thành viên | Room mới hiện ngay; bị xoá thì ngừng nhận, `open_room` bị từ chối |
-| Unit lỗ event | Phát hiện lỗ; lỗ nhỏ đọc thẳng; một lượt đọc bù mỗi node, gộp lỗ, dừng đúng chỗ, xoá consumer; quá trần → `resync` rải đều; seq lùi = bắt đầu lại |
+| Unit lỗ event | Phát hiện lỗ (cả lỗ ở cuối sau khi nối lại); một lượt đọc bù mỗi node, đúng tốc độ, gộp lỗ, dừng đúng chỗ, xoá consumer; quá trần → nạp lại danh sách room rồi `resync` rải đều; máy nhận bù quá nhiều → `resync` riêng; seq lùi = bắt đầu lại |
 | Unit node chậm | Callback NATS không chặn; hàng theo room giữ thứ tự; vượt byte → 4008 |
 | Storetest + explain itest `ListMyRoomIDs` | Hai adapter cùng kết quả; truy vấn chỉ đọc index |
 | Test lệnh `/app indexes` | `-dry-run` không ghi; `-apply` tạo index mới bên cạnh; `-drop-old` chỉ xoá khi bản mới đã có; khởi động không tự đổi index |
