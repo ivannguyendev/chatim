@@ -10,7 +10,10 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/envconfig"
 )
 
-const CloseTimeout = time.Second
+const (
+	CloseTimeout     = time.Second
+	defaultAdminAddr = ":9090"
+)
 
 type Config struct {
 	NodeID           string
@@ -37,12 +40,14 @@ type Config struct {
 	ShutdownBudget   time.Duration
 }
 
+func AdminAddr() string { return envconfig.String("WS_ADMIN_ADDR", defaultAdminAddr) }
+
 func Load() (Config, error) {
 	var p parser
 	c := Config{
 		NodeID:           p.nodeID(),
 		ListenAddr:       envconfig.String("WS_ADDR", ":8080"),
-		AdminAddr:        envconfig.String("WS_ADMIN_ADDR", ":9090"),
+		AdminAddr:        AdminAddr(),
 		RedisAddr:        envconfig.String("REDIS_ADDR", "chatim-redis:6379"),
 		RedisDB:          p.number("REDIS_DB", 0),
 		RedisPassword:    p.secret("REDIS_PASSWORD"),
