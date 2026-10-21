@@ -64,13 +64,17 @@ func (e events) OnMessage(conn *gws.Conn, message *gws.Message) {
 		_ = conn.WriteClose(closeUnsupportedData, nil)
 		return
 	}
-	var frame chatimv1.ServerFrame
-	if err := proto.Unmarshal(message.Bytes(), &frame); err != nil {
+	frame := &chatimv1.ServerFrame{}
+	if err := proto.Unmarshal(message.Bytes(), frame); err != nil {
 		_ = conn.WriteClose(closePolicyViolation, nil)
 		return
 	}
 	if resp := frame.GetResponse(); resp != nil {
 		e.client.deliver(resp)
+		return
+	}
+	if dispatched(frame) {
+		e.client.enqueue(frame)
 	}
 }
 

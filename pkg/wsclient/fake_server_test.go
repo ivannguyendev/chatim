@@ -53,7 +53,7 @@ func (s *fakeServer) drain() []receivedFrame {
 	}
 }
 
-func dialPipe(t *testing.T, server *fakeServer, token string) *Client {
+func dialPipe(t *testing.T, server *fakeServer, token string, opts ...Option) *Client {
 	t.Helper()
 	clientSide, serverSide := net.Pipe()
 	upgrader := gws.NewUpgrader(server, &gws.ServerOption{SubProtocols: []string{Subprotocol}})
@@ -73,7 +73,7 @@ func dialPipe(t *testing.T, server *fakeServer, token string) *Client {
 		conn.ReadLoop()
 	}()
 	t.Cleanup(func() { <-serverDone })
-	client, err := DialConn(t.Context(), clientSide, "ws://chatim.test/ws", token)
+	client, err := DialConn(t.Context(), clientSide, "ws://chatim.test/ws", token, opts...)
 	if err != nil {
 		t.Fatalf("DialConn: %v", err)
 	}

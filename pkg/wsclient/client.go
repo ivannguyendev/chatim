@@ -31,18 +31,21 @@ type Client struct {
 	mu      sync.Mutex
 	pending map[uint64]chan *chatimv1.ServerResponse
 	err     error
+	opts    options
+	inbox   chan *chatimv1.ServerFrame
+	backlog chan struct{}
 }
 
-func Dial(ctx context.Context, url, token string) (*Client, error) {
+func Dial(ctx context.Context, url, token string, opts ...Option) (*Client, error) {
 	option := clientOption(ctx, url)
 	option.NewDialer = func() (gws.Dialer, error) { return contextDialer{ctx: ctx}, nil }
-	return connect(token, func(events gws.Event) (*gws.Conn, *http.Response, error) {
+	return connect(token, opts, func(events gws.Event) (*gws.Conn, *http.Response, error) {
 		return gws.NewClient(events, option)
 	})
 }
 
-func DialConn(ctx context.Context, conn net.Conn, url, token string) (*Client, error) {
-	return connect(token, func(events gws.Event) (*gws.Conn, *http.Response, error) {
+func DialConn(ctx context.Context, conn net.Conn, url, token string, opts ...Option) (*Client, error) {
+	return connect(token, opts, func(events gws.Event) (*gws.Conn, *http.Response, error) {
 		return gws.NewClientFromConn(events, clientOption(ctx, url), conn)
 	})
 }
@@ -99,11 +102,15 @@ func (c *Client) Err() error {
 	return c.err
 }
 
-func connect(token string, open func(gws.Event) (*gws.Conn, *http.Response, error)) (*Client, error) {
+func connect(token string, opts []Option, open func(gws.Event) (*gws.Conn, *http.Response, error)) (*Client, error) {
+	o := buildOptions(opts)
 	c := &Client{
 		out:     make(chan []byte, outboxSize),
 		done:    make(chan struct{}),
 		pending: make(map[uint64]chan *chatimv1.ServerResponse),
+		opts:    o,
+		inbox:   make(chan *chatimv1.ServerFrame, o.dispatchQueue),
+		backlog: make(chan struct{}, 1),
 	}
 	conn, resp, err := open(events{client: c})
 	if resp != nil {
@@ -114,7 +121,7 @@ func connect(token string, open func(gws.Event) (*gws.Conn, *http.Response, erro
 	}
 	c.conn = conn
 	c.out <- authFrame(token)
-	c.loops.Add(2)
+	c.loops.Add(3)
 	go func() {
 		defer c.loops.Done()
 		conn.ReadLoop()
@@ -122,6 +129,10 @@ func connect(token string, open func(gws.Event) (*gws.Conn, *http.Response, erro
 	go func() {
 		defer c.loops.Done()
 		c.writeLoop()
+	}()
+	go func() {
+		defer c.loops.Done()
+		c.dispatchLoop()
 	}()
 	return c, nil
 }
