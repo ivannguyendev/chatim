@@ -70,7 +70,7 @@ Mỗi tư cách thành viên có một số phiên bản (vào nhóm v1, rời v
 | App notification (Phase 2) | Lọc tắt thông báo, không làm phiền; push khi offline, chuyển sang websocket khi online | `notify.{tenant}.{kind}` |
 | Mention App, app khác | Phát nội dung kèm danh sách người nhận | Phase 1 phát thẳng vào hộp thư websocket; Phase 2 đổi một dòng config sang `notify` |
 
-Khuôn gói nằm trong package dùng chung `pkg/delivery`, học theo OneSignal: danh sách người nhận hôm nay theo user, để sẵn chỗ cho theo thiết bị, theo chủ đề. Mất thông báo lúc rớt mạng thì vẫn thấy trong `ListMentions`.
+Khuôn gói nằm trong package dùng chung `pkg/wspublish`, học theo OneSignal: danh sách người nhận hôm nay theo user, để sẵn chỗ cho theo thiết bị, theo chủ đề. Mất thông báo lúc rớt mạng thì vẫn thấy trong `ListMentions`.
 
 ## 7. Lỡ event và đọc bù (owner 2026-10-21)
 
