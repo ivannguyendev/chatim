@@ -1,0 +1,164 @@
+package config_test
+
+import (
+	"bytes"
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/ivannguyendev/chatim/apps/websocket/internal/config"
+)
+
+var envKeys = []string{
+	"WS_NODE_ID", "WS_LISTEN", "ADMIN_LISTEN", "REDIS_ADDR", "REDIS_DB", "REDIS_PASSWORD", "REDIS_PASSWORD_FILE",
+	"WS_JWT_KEYS_FILE", "WS_JWT_ISSUER", "WS_JWT_AUDIENCE", "WS_JWT_LEEWAY",
+	"WS_AUTH_TIMEOUT", "WS_UNAUTH_MAX", "WS_FRAME_MAX", "WS_HEARTBEAT_TIMEOUT",
+	"WS_COMMAND_RATE", "WS_COMMAND_BURST", "WS_COMMAND_INFLIGHT", "WS_SEND_QUEUE", "WS_WRITE_TIMEOUT",
+	"CORE_REQUEST_DEADLINE", "WS_DRAIN_DELAY", "WS_SHUTDOWN_BUDGET",
+}
+
+var requiredEnv = map[string]string{
+	"WS_NODE_ID":       "ws-a",
+	"WS_JWT_KEYS_FILE": "/run/secrets/jwks.json",
+	"WS_JWT_ISSUER":    "chatim-identity",
+	"WS_JWT_AUDIENCE":  "chatim-websocket",
+}
+
+func setEnv(t *testing.T, env map[string]string) {
+	t.Helper()
+	for _, k := range envKeys {
+		t.Setenv(k, "")
+	}
+	for k, v := range requiredEnv {
+		t.Setenv(k, v)
+	}
+	for k, v := range env {
+		t.Setenv(k, v)
+	}
+}
+
+func TestLoadDefaults(t *testing.T) {
+	setEnv(t, nil)
+	got, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	want := config.Config{
+		NodeID:           "ws-a",
+		ListenAddr:       ":8080",
+		AdminAddr:        ":9090",
+		RedisAddr:        "chatim-redis:6379",
+		RedisDB:          0,
+		RedisPassword:    "",
+		JWTKeysFile:      "/run/secrets/jwks.json",
+		JWTIssuer:        "chatim-identity",
+		JWTAudience:      "chatim-websocket",
+		JWTLeeway:        30 * time.Second,
+		AuthTimeout:      5 * time.Second,
+		UnauthMax:        10000,
+		FrameMax:         131072,
+		HeartbeatTimeout: 15 * time.Second,
+		CommandRate:      50,
+		CommandBurst:     100,
+		CommandInflight:  32,
+		SendQueue:        256,
+		WriteTimeout:     10 * time.Second,
+		RequestDeadline:  5 * time.Second,
+		DrainDelay:       2 * time.Second,
+		ShutdownBudget:   15 * time.Second,
+	}
+	if got != want {
+		t.Fatalf("Load() = %+v, want %+v", fields(got), fields(want))
+	}
+}
+
+func fields(c config.Config) string {
+	v := reflect.ValueOf(c)
+	var b strings.Builder
+	for i := range v.NumField() {
+		fmt.Fprintf(&b, "%s=%v ", v.Type().Field(i).Name, v.Field(i).Interface())
+	}
+	return b.String()
+}
+
+func TestLoadNodeIDDefaultsToHostname(t *testing.T) {
+	setEnv(t, map[string]string{"WS_NODE_ID": ""})
+	host, err := os.Hostname()
+	if err != nil {
+		t.Skipf("hostname: %v", err)
+	}
+	got, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got.NodeID != host {
+		t.Fatalf("NodeID = %q, want %q", got.NodeID, host)
+	}
+}
+
+func TestLoadReadsRedisPasswordFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "redis_password")
+	if err := os.WriteFile(path, []byte("f1l3s3cr3t\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	setEnv(t, map[string]string{"REDIS_PASSWORD": "envs3cr3t", "REDIS_PASSWORD_FILE": path})
+	got, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got.RedisPassword != "f1l3s3cr3t" {
+		t.Fatalf("RedisPassword from file not used")
+	}
+}
+
+func TestLoadFailsOnUnreadablePasswordFile(t *testing.T) {
+	setEnv(t, map[string]string{"REDIS_PASSWORD_FILE": filepath.Join(t.TempDir(), "missing")})
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "REDIS_PASSWORD_FILE") {
+		t.Fatalf("Load() = %v, want an error naming REDIS_PASSWORD_FILE", err)
+	}
+}
+
+func TestLogValueHidesRedisPassword(t *testing.T) {
+	setEnv(t, map[string]string{"REDIS_PASSWORD": "st4t3s3cr3t"})
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	var buf bytes.Buffer
+	slog.New(slog.NewJSONHandler(&buf, nil)).Info("config loaded", "config", cfg)
+	logged := buf.String()
+	for _, out := range []string{logged, fmt.Sprintf("%v %+v %s", cfg, cfg, cfg)} {
+		if strings.Contains(out, "st4t3s3cr3t") {
+			t.Fatalf("summary leaks the redis password: %s", out)
+		}
+	}
+	for _, want := range []string{`"redis_auth":true`, `"node_id":"ws-a"`, `"listen_addr":":8080"`, `"frame_max":131072`, `"jwt_issuer":"chatim-identity"`} {
+		if !strings.Contains(logged, want) {
+			t.Errorf("summary %s misses %s", logged, want)
+		}
+	}
+}
+
+func TestLogValueReportsRedisWithoutAuth(t *testing.T) {
+	setEnv(t, nil)
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if out := cfg.String(); !strings.Contains(out, "redis_auth=false") {
+		t.Fatalf("String() = %s, want redis_auth=false", out)
+	}
+}
+
+func TestLogValueCoversEveryField(t *testing.T) {
+	cfg := config.Config{}
+	attrs := cfg.LogValue().Group()
+	if got, want := len(attrs), reflect.TypeFor[config.Config]().NumField(); got != want {
+		t.Fatalf("LogValue has %d attrs, Config has %d fields", got, want)
+	}
+}

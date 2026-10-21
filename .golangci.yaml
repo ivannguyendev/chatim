@@ -179,6 +179,22 @@ linters:
           deny:
             - pkg: github.com/ivannguyendev/chatim/modules/mention
               desc: only app and config embed the mention module
+        websocket-boundaries:
+          files:
+            - "**/apps/websocket/**"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/apps/core
+              desc: websocket reaches core only through gRPC and shared pkg code
+            - pkg: github.com/ivannguyendev/chatim/modules
+              desc: websocket embeds no business module
+        websocket-config-owner:
+          files:
+            - "**/apps/websocket/**"
+            - "!**/apps/websocket/internal/app/**"
+            - "!**/apps/websocket/internal/config/**"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/apps/websocket/internal/config
+              desc: only app reads config
     govet:
       enable-all: true
       disable:
