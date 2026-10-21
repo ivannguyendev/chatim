@@ -8,10 +8,10 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/mongoindex"
 )
 
-func Bootstrap(ctx context.Context, db *mongo.Database) error {
+func Bootstrap(ctx context.Context, db *mongo.Database, reporters ...mongoindex.Reporter) error {
 	for _, name := range []string{messagesCollection, editsCollection, interactionsCollection, pinActionsCollection, membersCollection, roomDMsCollection, replyThreadsCollection} {
 		if err := ensureClustered(ctx, db, name); err != nil {
 			return err
@@ -22,27 +22,7 @@ func Bootstrap(ctx context.Context, db *mongo.Database) error {
 			return err
 		}
 	}
-	indexes := []struct {
-		coll   string
-		models []mongo.IndexModel
-	}{
-		{membersCollection, memberIndexes()},
-		{roomsCollection, roomIndexes()},
-		{editsCollection, roomTimeIndexes()},
-		{hiddenCollection, hiddenIndexes()},
-		{interactionsCollection, interactionIndexes()},
-		{pinActionsCollection, roomTimeIndexes()},
-		{replyThreadsCollection, []mongo.IndexModel{{Keys: replyThreadsByRecent}}},
-	}
-	for _, ix := range indexes {
-		if err := ensureIndexes(ctx, db, ix.coll, ix.models); err != nil {
-			return err
-		}
-	}
-	if err := ensureStatePendingIndexes(ctx, db); err != nil {
-		return err
-	}
-	return dropReplacedIndexes(ctx, db)
+	return mongoindex.Ensure(ctx, db, Indexes(), reporters...)
 }
 
 func ensureClustered(ctx context.Context, db *mongo.Database, name string) error {
@@ -70,67 +50,6 @@ func clusteredOnID(opts bson.Raw) bool {
 func createCollection(ctx context.Context, db *mongo.Database, name string, opts ...options.Lister[options.CreateCollectionOptions]) error {
 	if err := db.CreateCollection(ctx, name, opts...); err != nil && !namespaceExists(err) {
 		return fmt.Errorf("bootstrap %s: create collection: %w", name, err)
-	}
-	return nil
-}
-
-func memberIndexes() []mongo.IndexModel {
-	return []mongo.IndexModel{
-		{Keys: bson.D{
-			{Key: "room_id", Value: 1}, {Key: "state", Value: 1}, {Key: "role", Value: 1},
-			{Key: "priority", Value: -1}, {Key: "joined_at", Value: 1}, {Key: "user_id", Value: 1},
-		}},
-		{Keys: bson.D{
-			{Key: "tenant", Value: 1}, {Key: "user_id", Value: 1}, {Key: "state", Value: 1}, {Key: "room_id", Value: 1},
-			{Key: "joined_at", Value: 1}, {Key: "cleared_at", Value: 1}, {Key: "read_seq", Value: 1},
-			{Key: "pinned_at", Value: 1}, {Key: "archived_at", Value: 1},
-		}},
-	}
-}
-
-func roomIndexes() []mongo.IndexModel {
-	return []mongo.IndexModel{{Keys: bson.D{{Key: "activity_bucket", Value: 1}}}, {Keys: bson.D{{Key: "created_at", Value: 1}}}}
-}
-
-func roomTimeIndexes() []mongo.IndexModel {
-	return []mongo.IndexModel{{Keys: bson.D{{Key: "room_id", Value: 1}, {Key: "created_at", Value: 1}}}}
-}
-
-func interactionIndexes() []mongo.IndexModel {
-	return []mongo.IndexModel{
-		{Keys: bson.D{
-			{Key: "message_key", Value: 1}, {Key: "kind", Value: 1}, {Key: "state", Value: 1}, {Key: "value", Value: 1},
-			{Key: "updated_at", Value: -1}, {Key: "actor_id", Value: 1},
-		}},
-		{Keys: bson.D{{Key: "tenant", Value: 1}, {Key: "actor_id", Value: 1}, {Key: "kind", Value: 1}, {Key: "state", Value: 1}, {Key: "updated_at", Value: -1}, {Key: "message_key", Value: -1}}},
-		{Keys: bson.D{{Key: "room_id", Value: 1}, {Key: "kind", Value: 1}, {Key: "updated_at", Value: 1}}},
-	}
-}
-
-func hiddenIndexes() []mongo.IndexModel {
-	keys := bson.D{{Key: "user_id", Value: 1}, {Key: "room_id", Value: 1}, {Key: "thread_root", Value: 1}, {Key: "seq", Value: 1}}
-	return []mongo.IndexModel{
-		{Keys: keys, Options: options.Index().SetUnique(true)},
-		{Keys: bson.D{{Key: "room_id", Value: 1}, {Key: "created_at", Value: 1}}},
-	}
-}
-
-func ensureIndexes(ctx context.Context, db *mongo.Database, coll string, models []mongo.IndexModel) error {
-	if _, err := db.Collection(coll).Indexes().CreateMany(ctx, models); err != nil {
-		return fmt.Errorf("bootstrap %s: create indexes: %w", coll, err)
-	}
-	return nil
-}
-
-func ensureStatePendingIndexes(ctx context.Context, db *mongo.Database) error {
-	model := mongo.IndexModel{
-		Keys:    bson.D{{Key: stateAtField, Value: 1}, {Key: "_id", Value: 1}},
-		Options: options.Index().SetName(statePendingIndex).SetPartialFilterExpression(bson.D{stateExists}),
-	}
-	for _, c := range store.AllStateCollections() {
-		if err := ensureIndexes(ctx, db, c.String(), []mongo.IndexModel{model}); err != nil {
-			return err
-		}
 	}
 	return nil
 }

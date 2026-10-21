@@ -10,6 +10,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
 	"github.com/ivannguyendev/chatim/modules/mention/mentionapp"
 	"github.com/ivannguyendev/chatim/pkg/metrics"
+	"github.com/ivannguyendev/chatim/pkg/mongoindex"
 )
 
 const mentionSubsystem = "mention"
@@ -18,7 +19,7 @@ type preparer interface {
 	Prepare(ctx context.Context) error
 }
 
-func wireMention(cfg config.Config, cl *clients, st *mongostore.Store, caches roomCaches, visible visibleReader, log *slog.Logger) (*mentionapp.App, error) {
+func wireMention(cfg config.Config, cl *clients, st *mongostore.Store, caches roomCaches, visible visibleReader, indexes *mongoindex.Health, log *slog.Logger) (*mentionapp.App, error) {
 	if !cfg.Mention.Enabled {
 		return nil, nil
 	}
@@ -28,7 +29,7 @@ func wireMention(cfg config.Config, cl *clients, st *mongostore.Store, caches ro
 	}
 	core := mentionCore{members: st, messages: st, infos: st, info: caches.info, visible: visible, access: checker}
 	app, err := mentionapp.New(cfg.Mention, mentionapp.Deps{
-		Mongo: cl.mongo.Database(cfg.MongoDB), JS: cl.js, NotifyJS: cl.notifyJS, NATS: cl.nats, Core: core, Log: log.With("app", mentionSubsystem),
+		Mongo: cl.mongo.Database(cfg.MongoDB), JS: cl.js, NotifyJS: cl.notifyJS, NATS: cl.nats, Core: core, Log: log.With("app", mentionSubsystem), Indexes: indexes,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("wire mention app: %w", err)

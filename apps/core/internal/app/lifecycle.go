@@ -26,7 +26,7 @@ func Run(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 		return err
 	}
 	return a.launch(ctx, func(ctx context.Context) ([]net.Listener, error) {
-		if err := prepare(ctx, cfg, cl, a.setups...); err != nil {
+		if err := prepare(ctx, cfg, cl, a.indexes, a.setups...); err != nil {
 			return nil, err
 		}
 		return listenAll(ctx, cfg.AdminAddr, cfg.GRPCAddr)

@@ -36,6 +36,7 @@ type probes struct {
 	roomCache       roomCacheProbes
 	events          eventProbes
 	mention         []mentionapp.Probe
+	indexes         indexProbes
 }
 
 func metricSources(p probes) []metrics.Source {
@@ -58,6 +59,7 @@ func metricSources(p probes) []metrics.Source {
 	out = append(out, timerSources(p.timerFailures, p.timerDropped)...)
 	out = append(out, memberWatchSources(p.memberForgets, p.memberMalformed)...)
 	out = append(out, roomCacheSources(p.roomCache)...)
+	out = append(out, indexSources(p.indexes)...)
 	return append(out, mentionSources(p.mention)...)
 }
 

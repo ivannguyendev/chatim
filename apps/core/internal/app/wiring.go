@@ -17,6 +17,7 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/admin"
 	"github.com/ivannguyendev/chatim/pkg/grpcserver"
 	"github.com/ivannguyendev/chatim/pkg/metrics"
+	"github.com/ivannguyendev/chatim/pkg/mongoindex"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/pkg/redact"
 	"github.com/ivannguyendev/chatim/pkg/resilience"
@@ -53,12 +54,13 @@ type node struct {
 	mention     drainer
 	setups      []preparer
 	watches     liveWatcher
+	indexes     *mongoindex.Health
 }
 
-func prepare(ctx context.Context, cfg config.Config, cl *clients, setups ...preparer) error {
+func prepare(ctx context.Context, cfg config.Config, cl *clients, indexes *mongoindex.Health, setups ...preparer) error {
 	ctx, cancel := context.WithTimeout(ctx, cfg.ConnectTimeout)
 	defer cancel()
-	if err := mongostore.Bootstrap(ctx, cl.mongo.Database(cfg.MongoDB)); err != nil {
+	if err := mongostore.Bootstrap(ctx, cl.mongo.Database(cfg.MongoDB), indexes); err != nil {
 		return fmt.Errorf("bootstrap mongo database %s: %w", cfg.MongoDB, redact.Error(err, cfg.MongoURI))
 	}
 	if err := publish.EnsureStream(ctx, cl.js, cfg.Stream); err != nil {
@@ -80,7 +82,7 @@ func prepare(ctx context.Context, cfg config.Config, cl *clients, setups ...prep
 
 func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 	st := mongostore.New(cl.mongo.Database(cfg.MongoDB), mongostore.Options{})
-	a := &node{cfg: cfg, log: log}
+	a := &node{cfg: cfg, log: log, indexes: mongoindex.NewHealth(log)}
 	cids, err := dedupe.New(cl.dedupe, cfg.Dedupe, log)
 	if err != nil {
 		return nil, fmt.Errorf("wire cid dedupe: %w", err)
@@ -153,7 +155,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 		Limiter:         limiter,
 	}, log)
 	chatimv1.RegisterCoreServiceServer(a.grpc, svc)
-	mention, err := wireMention(cfg, cl, st, caches, reader, log)
+	mention, err := wireMention(cfg, cl, st, caches, reader, a.indexes, log)
 	if err != nil {
 		return nil, err
 	}
@@ -172,6 +174,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 		roomCache:       caches.probes(roomWatch),
 		events:          eventProbes{clears: clears, projection: projections, sweeper: sweeper},
 		mention:         a.attachMention(mention, liveWatchers{watch, roomWatch}),
+		indexes:         indexProbes{health: a.indexes, collections: indexCatalog(cfg).Names()},
 	}
 	handler, err := metrics.Handler(metricsSubsystem, metricSources(p))
 	if err != nil {

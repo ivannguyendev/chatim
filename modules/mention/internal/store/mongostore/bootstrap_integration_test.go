@@ -1,12 +1,17 @@
 package mongostore
 
 import (
+	"bytes"
 	"errors"
+	"log/slog"
 	"slices"
+	"strings"
 	"testing"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
+
+	"github.com/ivannguyendev/chatim/pkg/mongoindex"
 )
 
 func indexNames(t *testing.T, db *mongo.Database, coll string) []string {
@@ -23,23 +28,28 @@ func indexNames(t *testing.T, db *mongo.Database, coll string) []string {
 	return names
 }
 
-func TestBootstrapKeepsCoreMentionsAndDropsTheReadIndex(t *testing.T) {
+func TestBootstrapKeepsCoreMentionsAndLeavesTheReadIndexToTheCommand(t *testing.T) {
 	db := itDatabase(t, itClient(t))
 	if err := ensureClustered(t.Context(), db, mentionsCollection); err != nil {
 		t.Fatalf("seed clustered mentions: %v", err)
 	}
 	old := mongo.IndexModel{Keys: bson.D{{Key: "room_id", Value: 1}, {Key: "target", Value: 1}, {Key: "thread_root", Value: 1}, {Key: "seq", Value: 1}}}
-	if err := ensureIndexes(t.Context(), db, mentionsCollection, append(mentionIndexes(), old)); err != nil {
+	if _, err := db.Collection(mentionsCollection).Indexes().CreateMany(t.Context(), append(mentionIndexes(), old)); err != nil {
 		t.Fatalf("seed core indexes: %v", err)
 	}
+	var logs bytes.Buffer
+	health := mongoindex.NewHealth(slog.New(slog.NewTextHandler(&logs, nil)))
 	for range 2 {
-		if err := Bootstrap(t.Context(), db); err != nil {
+		if err := Bootstrap(t.Context(), db, health); err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
 	}
-	want := []string{"_id_", "message_key_1", "room_id_1_kind_1_created_at_-1_message_key_-1", "tenant_1_target_1_state_1_created_at_-1_message_key_-1"}
+	want := []string{"_id_", "message_key_1", "room_id_1_kind_1_created_at_-1_message_key_-1", mentionReadIndex, "tenant_1_target_1_state_1_created_at_-1_message_key_-1"}
 	if got := indexNames(t, db, mentionsCollection); !slices.Equal(got, want) {
 		t.Fatalf("mentions indexes = %v, want %v", got, want)
+	}
+	if !health.Outdated(mentionsCollection) || health.Outdated(userGroupsCollection) || !strings.Contains(logs.String(), mentionReadIndex) {
+		t.Fatalf("outdated mentions/user groups = %v/%v, logs %q; want mentions flagged with %s", health.Outdated(mentionsCollection), health.Outdated(userGroupsCollection), logs.String(), mentionReadIndex)
 	}
 	if got, want := indexNames(t, db, userGroupsCollection), []string{"_id_", "tenant_1_groups_1_user_id_1"}; !slices.Equal(got, want) {
 		t.Fatalf("user groups indexes = %v, want %v", got, want)
@@ -47,6 +57,22 @@ func TestBootstrapKeepsCoreMentionsAndDropsTheReadIndex(t *testing.T) {
 	for _, name := range []string{groupsCollection, userGroupsCollection} {
 		if err := ensureClustered(t.Context(), db, name); err != nil {
 			t.Fatalf("%s: %v", name, err)
+		}
+	}
+}
+
+func TestBootstrapOfAFreshDatabaseCreatesEveryMentionIndex(t *testing.T) {
+	db := itDatabase(t, itClient(t))
+	if err := Bootstrap(t.Context(), db); err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	reports, err := mongoindex.Inspect(t.Context(), db, Indexes())
+	if err != nil {
+		t.Fatalf("Inspect: %v", err)
+	}
+	for _, r := range reports {
+		if r.Stale() || r.Absent || len(r.Unknown) > 0 {
+			t.Errorf("%s report = %+v, want every declared index and nothing else", r.Collection, r)
 		}
 	}
 }
