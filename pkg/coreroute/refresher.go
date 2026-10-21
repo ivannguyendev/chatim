@@ -3,7 +3,12 @@ package coreroute
 import (
 	"context"
 	"log/slog"
+	"time"
+
+	"github.com/ivannguyendev/chatim/pkg/backoff"
 )
+
+const minReloadGap = 250 * time.Millisecond
 
 type refresher struct {
 	refresh func(context.Context) error
@@ -33,6 +38,9 @@ func (r *refresher) run(ctx context.Context) {
 		}
 		if err := r.refresh(ctx); err != nil && ctx.Err() == nil {
 			r.log.DebugContext(ctx, "triggered slot table reload failed", "err", err)
+		}
+		if !backoff.Pause(ctx, minReloadGap) {
+			return
 		}
 	}
 }

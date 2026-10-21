@@ -88,7 +88,12 @@ func (r *Router) Close() error {
 	return r.closeErr
 }
 
-func (r *Router) prune(addrs []string) { r.pool.Prune(addrs) }
+func (r *Router) prune(addrs []string) {
+	if len(addrs) == 0 {
+		return
+	}
+	r.pool.Prune(addrs)
+}
 
 func (r *Router) awaitReady(ctx context.Context, cfg Config) error {
 	wait := cmp.Or(cfg.ReadyTimeout, DefaultReadyTimeout)

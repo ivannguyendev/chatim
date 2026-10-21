@@ -100,6 +100,30 @@ func TestRouterDropsTheOldConnectionWhenACoreChangesAddress(t *testing.T) {
 	}
 }
 
+func TestRouterKeepsConnectionsOnAnEmptyTableAndPrunesOnTheNextLoad(t *testing.T) {
+	mr := leasedRedis(t)
+	net := newFakeNet("core-1:9000", "core-2:9000")
+	r := openRouter(t, mr, net)
+	if _, err := r.Room("42"); err != nil {
+		t.Fatal(err)
+	}
+	mr.Del(slotmap.CoreKey("core-1"))
+	mr.Del(slotmap.CoreKey("core-2"))
+	if err := r.Refresh(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if _, closes := net.counts("core-2:9000"); closes != 0 {
+		t.Fatalf("core-2 closed %d times on a table with no cores, want kept", closes)
+	}
+	_ = mr.Set(slotmap.CoreKey("core-1"), "core-1:9000")
+	if err := r.Refresh(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if _, closes := net.counts("core-2:9000"); closes != 1 {
+		t.Fatalf("core-2 closed %d times after a table without it, want once", closes)
+	}
+}
+
 func TestTriggerReloadsTheTableInTheBackground(t *testing.T) {
 	mr := leasedRedis(t)
 	net := newFakeNet("core-1:9000", "core-2:9000")
