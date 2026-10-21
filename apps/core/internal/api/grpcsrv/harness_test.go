@@ -76,6 +76,7 @@ type options struct {
 	limits       interaction.Limits
 	memberLimits member.Limits
 	members      func(*memstore.Rooms) member.MemberStore
+	memberReads  func(*memstore.Rooms) member.MemberLister
 	pending      dedupe.Registry
 	pages        func(message.Pages) message.Pages
 }

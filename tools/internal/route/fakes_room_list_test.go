@@ -24,6 +24,13 @@ func (f *fakeCore) GetRooms(ctx context.Context, in *chatimv1.GetRoomsRequest, _
 	return &chatimv1.GetRoomsResponse{Items: []*chatimv1.RoomItem{{Room: &chatimv1.Room{Id: ids[0]}}}, Missing: slices.Clone(ids[1:])}, nil
 }
 
+func (f *fakeCore) ListMyRoomIDs(ctx context.Context, in *chatimv1.ListMyRoomIDsRequest, _ ...grpc.CallOption) (*chatimv1.ListMyRoomIDsResponse, error) {
+	if err := f.record(ctx, in); err != nil {
+		return nil, err
+	}
+	return &chatimv1.ListMyRoomIDsResponse{Rooms: []*chatimv1.MyRoomID{{RoomId: "42", Ver: 3}}}, nil
+}
+
 func (f *fakeCore) UpdateRoom(ctx context.Context, in *chatimv1.UpdateRoomRequest, _ ...grpc.CallOption) (*chatimv1.UpdateRoomResponse, error) {
 	if err := f.record(ctx, in); err != nil {
 		return nil, err

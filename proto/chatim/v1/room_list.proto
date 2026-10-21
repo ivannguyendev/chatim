@@ -67,6 +67,17 @@ message GetRoomsResponse {
   repeated string missing = 2;
 }
 
+message ListMyRoomIDsRequest {}
+
+message MyRoomID {
+  string room_id = 1;
+  uint32 ver = 2;
+}
+
+message ListMyRoomIDsResponse {
+  repeated MyRoomID rooms = 1;
+}
+
 message SetRoomPreferencesRequest {
   string room_id = 1;
   optional bool pinned = 2;
