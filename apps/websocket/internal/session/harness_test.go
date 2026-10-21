@@ -1,0 +1,344 @@
+package session
+
+import (
+	"bufio"
+	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net"
+	"net/http"
+	"strconv"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/lxzan/gws"
+	"go.uber.org/goleak"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/proto"
+
+	"github.com/ivannguyendev/chatim/apps/websocket/internal/command"
+	"github.com/ivannguyendev/chatim/pkg/jwtverify"
+	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
+)
+
+func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
+
+func testOptions() Options {
+	return Options{
+		AuthTimeout:      5 * time.Second,
+		HeartbeatTimeout: 15 * time.Second,
+		JWTLeeway:        30 * time.Second,
+		WriteTimeout:     10 * time.Second,
+		UnauthMax:        100,
+		FrameMax:         1024,
+		CommandRate:      50,
+		CommandBurst:     100,
+		CommandInflight:  32,
+		SendQueue:        16,
+	}
+}
+
+type fakeVerifier struct {
+	mu     sync.Mutex
+	tokens map[string]jwtverify.Claims
+	bad    error
+	calls  atomic.Int64
+}
+
+func newFakeVerifier(t *testing.T) *fakeVerifier {
+	return &fakeVerifier{tokens: map[string]jwtverify.Claims{}, bad: malformedTokenError(t)}
+}
+
+func (v *fakeVerifier) Verify(token string) (jwtverify.Claims, error) {
+	v.calls.Add(1)
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	claims, ok := v.tokens[token]
+	if !ok {
+		return jwtverify.Claims{}, v.bad
+	}
+	return claims, nil
+}
+
+func (v *fakeVerifier) issue(token, tenant, user string, expiresAt time.Time) string {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.tokens[token] = jwtverify.Claims{Tenant: tenant, User: user, ExpiresAt: expiresAt}
+	return token
+}
+
+func malformedTokenError(t *testing.T) error {
+	t.Helper()
+	public, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	jwks := fmt.Sprintf(`{"keys":[{"kty":"OKP","crv":"Ed25519","kid":"k1","x":%q}]}`, base64.RawURLEncoding.EncodeToString(public))
+	verifier, err := jwtverify.New(jwtverify.Config{JWKS: []byte(jwks), Issuer: "issuer", Audience: "audience"})
+	if err != nil {
+		t.Fatalf("verifier: %v", err)
+	}
+	_, err = verifier.Verify("not-a-token")
+	if jwtverify.ReasonOf(err) != jwtverify.ReasonMalformed {
+		t.Fatalf("expected a malformed token error, got %v", err)
+	}
+	return err
+}
+
+type fakeCore struct {
+	mu      sync.Mutex
+	holds   map[uint64]chan codes.Code
+	panics  map[uint64]bool
+	started chan uint64
+	claims  chan jwtverify.Claims
+	calls   atomic.Int64
+}
+
+func newFakeCore() *fakeCore {
+	return &fakeCore{
+		holds:   map[uint64]chan codes.Code{},
+		panics:  map[uint64]bool{},
+		started: make(chan uint64, 256),
+		claims:  make(chan jwtverify.Claims, 256),
+	}
+}
+
+func (f *fakeCore) Execute(ctx context.Context, claims jwtverify.Claims, req *chatimv1.ClientRequest) (*chatimv1.ServerResponse, command.Outcome) {
+	f.calls.Add(1)
+	f.started <- req.GetId()
+	f.claims <- claims
+	resp := &chatimv1.ServerResponse{Id: req.GetId()}
+	if req.GetRequest() == nil {
+		resp.Code = int32(codes.Unimplemented)
+		return resp, command.Outcome{Code: codes.Unimplemented}
+	}
+	f.mu.Lock()
+	hold, panics := f.holds[req.GetId()], f.panics[req.GetId()]
+	f.mu.Unlock()
+	if panics {
+		panic("command exploded")
+	}
+	code := codes.OK
+	if hold != nil {
+		select {
+		case code = <-hold:
+		case <-ctx.Done():
+			code = codes.Canceled
+		}
+	}
+	if code != codes.OK {
+		resp.Code = int32(code)
+		resp.Message = code.String()
+	}
+	return resp, command.Outcome{Command: "Test", Code: code}
+}
+
+func (f *fakeCore) hold(id uint64) chan codes.Code {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	ch := make(chan codes.Code, 1)
+	f.holds[id] = ch
+	return ch
+}
+
+func (f *fakeCore) panicOn(id uint64) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.panics[id] = true
+}
+
+func (f *fakeCore) startedIDs() []uint64 {
+	var ids []uint64
+	for {
+		select {
+		case id := <-f.started:
+			ids = append(ids, id)
+		default:
+			return ids
+		}
+	}
+}
+
+type harness struct {
+	t        *testing.T
+	server   *Server
+	verifier *fakeVerifier
+	core     *fakeCore
+}
+
+func newHarness(t *testing.T, opts Options) *harness {
+	t.Helper()
+	verifier, core := newFakeVerifier(t), newFakeCore()
+	server, err := New(opts, verifier, core, slog.New(slog.DiscardHandler))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	return &harness{t: t, server: server, verifier: verifier, core: core}
+}
+
+func (h *harness) token(user string, ttl time.Duration) string {
+	return h.verifier.issue("token-"+user+"-"+time.Now().Add(ttl).String(), "t1", user, time.Now().Add(ttl))
+}
+
+type testClient struct {
+	gws.BuiltinEventHandler
+	t          *testing.T
+	conn       *gws.Conn
+	raw        net.Conn
+	responses  chan *chatimv1.ServerResponse
+	pongs      chan struct{}
+	done       chan struct{}
+	serverDone chan struct{}
+	closeCode  uint16
+}
+
+func (h *harness) dial(reading bool) *testClient {
+	h.t.Helper()
+	clientSide, serverSide := net.Pipe()
+	tc := &testClient{
+		t:          h.t,
+		raw:        clientSide,
+		responses:  make(chan *chatimv1.ServerResponse, 256),
+		pongs:      make(chan struct{}, 16),
+		done:       make(chan struct{}),
+		serverDone: make(chan struct{}),
+	}
+	go func() {
+		defer close(tc.serverDone)
+		h.serveTestConn(serverSide)
+	}()
+	conn, resp, err := gws.NewClientFromConn(tc, &gws.ClientOption{
+		Addr:          "ws://chatim.test/ws",
+		RequestHeader: http.Header{"Sec-Websocket-Protocol": []string{Subprotocol}},
+	}, clientSide)
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
+	if err != nil {
+		h.t.Fatalf("dial: %v", err)
+	}
+	tc.conn = conn
+	if reading {
+		go conn.ReadLoop()
+	}
+	return tc
+}
+
+func (h *harness) serveTestConn(conn net.Conn) {
+	reader := bufio.NewReader(conn)
+	req, err := http.ReadRequest(reader)
+	if err != nil {
+		_ = conn.Close()
+		return
+	}
+	if status := h.server.admit(req); status != http.StatusOK {
+		_, _ = fmt.Fprintf(conn, "HTTP/1.1 %d %s\r\nContent-Length: 0\r\n\r\n", status, http.StatusText(status))
+		_ = conn.Close()
+		return
+	}
+	socket, err := h.server.upgrader.UpgradeFromConn(conn, reader, req)
+	h.server.serveUpgraded(socket, err)
+}
+
+func (tc *testClient) OnMessage(_ *gws.Conn, message *gws.Message) {
+	defer func() { _ = message.Close() }()
+	var frame chatimv1.ServerFrame
+	if err := proto.Unmarshal(message.Bytes(), &frame); err != nil {
+		tc.t.Errorf("decode server frame: %v", err)
+		return
+	}
+	tc.responses <- frame.GetResponse()
+}
+
+func (tc *testClient) OnPong(*gws.Conn, []byte) { tc.pongs <- struct{}{} }
+
+func (tc *testClient) OnClose(_ *gws.Conn, err error) {
+	if closeErr, ok := errors.AsType[*gws.CloseError](err); ok {
+		tc.closeCode = closeErr.Code
+	}
+	close(tc.done)
+}
+
+func (tc *testClient) frame(frame *chatimv1.ClientFrame) {
+	payload, err := proto.Marshal(frame)
+	if err != nil {
+		tc.t.Fatalf("marshal: %v", err)
+	}
+	tc.write(payload)
+}
+
+func (tc *testClient) write(payload []byte) {
+	_ = tc.conn.WriteMessage(gws.OpcodeBinary, payload)
+}
+
+func (tc *testClient) auth(token string) {
+	tc.frame(&chatimv1.ClientFrame{Frame: &chatimv1.ClientFrame_Auth{Auth: &chatimv1.AuthFrame{Token: token}}})
+}
+
+func (tc *testClient) heartbeat() {
+	tc.frame(&chatimv1.ClientFrame{Frame: &chatimv1.ClientFrame_Heartbeat{Heartbeat: &chatimv1.HeartbeatFrame{}}})
+}
+
+func (tc *testClient) request(req *chatimv1.ClientRequest) {
+	tc.frame(&chatimv1.ClientFrame{Frame: &chatimv1.ClientFrame_Request{Request: req}})
+}
+
+func (tc *testClient) send(id uint64, room string) {
+	tc.request(&chatimv1.ClientRequest{Id: id, Request: &chatimv1.ClientRequest_SendMessage{
+		SendMessage: &chatimv1.SendMessageRequest{RoomId: room, Cid: fmt.Sprintf("c-%d", id), Text: "hi"},
+	}})
+}
+
+func (tc *testClient) history(id uint64) {
+	tc.request(&chatimv1.ClientRequest{Id: id, Request: &chatimv1.ClientRequest_GetHistory{
+		GetHistory: &chatimv1.GetHistoryRequest{RoomId: "77"},
+	}})
+}
+
+func (tc *testClient) next() *chatimv1.ServerResponse {
+	tc.t.Helper()
+	select {
+	case resp := <-tc.responses:
+		return resp
+	case <-tc.done:
+		tc.t.Fatalf("connection closed with %d while waiting for a response", tc.closeCode)
+		return nil
+	}
+}
+
+func (tc *testClient) waitClosed() uint16 {
+	<-tc.done
+	<-tc.serverDone
+	return tc.closeCode
+}
+
+func (tc *testClient) isOpen() bool {
+	select {
+	case <-tc.done:
+		return false
+	default:
+		return true
+	}
+}
+
+func (tc *testClient) close() {
+	_ = tc.conn.WriteClose(1000, nil)
+	tc.waitClosed()
+}
+
+func (tc *testClient) keepAlive(every, total time.Duration) {
+	for elapsed := time.Duration(0); elapsed+every <= total; elapsed += every {
+		time.Sleep(every)
+		tc.heartbeat()
+	}
+}
+
+func (h *harness) closes(code uint16) uint64 {
+	return h.server.stats.closes[strconv.FormatUint(uint64(code), 10)].Load()
+}

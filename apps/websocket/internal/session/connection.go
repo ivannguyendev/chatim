@@ -1,0 +1,231 @@
+package session
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"runtime/debug"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/lxzan/gws"
+	"golang.org/x/time/rate"
+	"google.golang.org/protobuf/proto"
+
+	"github.com/ivannguyendev/chatim/pkg/jwtverify"
+	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
+)
+
+const sessionKey = "chatim.connection"
+
+var decodeOptions = proto.UnmarshalOptions{DiscardUnknown: true}
+
+type frameKind int
+
+const (
+	frameUnknown frameKind = iota
+	frameAuth
+	frameHeartbeat
+	frameRequest
+)
+
+type connection struct {
+	server   *Server
+	socket   *gws.Conn
+	ctx      context.Context
+	cancel   context.CancelFunc
+	limiter  *rate.Limiter
+	out      chan outFrame
+	closeReq chan uint16
+	closed   chan struct{}
+	closing  atomic.Uint32
+	aborted  atomic.Bool
+	inflight atomic.Int64
+	work     sync.WaitGroup
+
+	mu        sync.Mutex
+	authed    bool
+	finished  bool
+	claims    jwtverify.Claims
+	authTimer *time.Timer
+	expiry    *time.Timer
+	rooms     map[uint64]*roomQueue
+	closeErr  error
+}
+
+func newConnection(s *Server, socket *gws.Conn) *connection {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &connection{
+		server:   s,
+		socket:   socket,
+		ctx:      ctx,
+		cancel:   cancel,
+		limiter:  rate.NewLimiter(rate.Limit(s.opts.CommandRate), s.opts.CommandBurst),
+		out:      make(chan outFrame, s.opts.SendQueue),
+		closeReq: make(chan uint16, 1),
+		closed:   make(chan struct{}),
+		rooms:    map[uint64]*roomQueue{},
+	}
+}
+
+func (c *connection) run() {
+	c.socket.Session().Store(sessionKey, c)
+	c.work.Go(c.writeLoop)
+	c.mu.Lock()
+	c.authTimer = time.AfterFunc(c.server.opts.AuthTimeout, c.authTimedOut)
+	c.mu.Unlock()
+	_ = c.socket.SetReadDeadline(time.Now().Add(c.server.opts.AuthTimeout + authReadGrace))
+	c.socket.ReadLoop()
+	c.work.Wait()
+	if code, ok := c.closeCodeOf(c.closeErr); ok {
+		c.server.stats.closed(code)
+	}
+}
+
+func (c *connection) receive(message *gws.Message) {
+	defer c.recoverPanic()
+	if c.closing.Load() != 0 {
+		return
+	}
+	if message.Opcode != gws.OpcodeBinary {
+		c.closeWith(CodeUnsupportedData)
+		return
+	}
+	var frame chatimv1.ClientFrame
+	if err := decodeOptions.Unmarshal(message.Bytes(), &frame); err != nil {
+		c.closeWith(CodePolicyViolation)
+		return
+	}
+	kind := kindOf(&frame)
+	allowed := c.limiter.Allow()
+	switch {
+	case kind != frameAuth && !c.isAuthed():
+		c.closeWith(CodePolicyViolation)
+	case kind == frameRequest:
+		c.request(frame.GetRequest(), allowed)
+	case !allowed:
+		c.closeWith(CodePolicyViolation)
+	case kind == frameAuth:
+		c.authenticate(frame.GetAuth().GetToken())
+	case kind == frameUnknown:
+		c.server.stats.unknownFrames.Add(1)
+	}
+	if c.isAuthed() {
+		_ = c.socket.SetReadDeadline(time.Now().Add(c.server.opts.HeartbeatTimeout))
+	}
+}
+
+func (c *connection) ping(payload []byte) {
+	if !c.limiter.Allow() {
+		c.closeWith(CodePolicyViolation)
+		return
+	}
+	c.enqueue(outFrame{opcode: gws.OpcodePong, payload: payload})
+}
+
+func kindOf(frame *chatimv1.ClientFrame) frameKind {
+	switch frame.GetFrame().(type) {
+	case *chatimv1.ClientFrame_Auth:
+		return frameAuth
+	case *chatimv1.ClientFrame_Heartbeat:
+		return frameHeartbeat
+	case *chatimv1.ClientFrame_Request:
+		return frameRequest
+	default:
+		return frameUnknown
+	}
+}
+
+func (c *connection) isAuthed() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.authed
+}
+
+func (c *connection) finish(err error) {
+	c.mu.Lock()
+	if c.finished {
+		c.mu.Unlock()
+		return
+	}
+	c.finished = true
+	c.closeErr = err
+	authed := c.authed
+	stopTimer(c.authTimer)
+	stopTimer(c.expiry)
+	c.mu.Unlock()
+	if !authed {
+		c.server.stats.unauth.Add(-1)
+	}
+	c.cancel()
+	close(c.closed)
+}
+
+type statusCode interface {
+	error
+	Uint16() uint16
+}
+
+func (c *connection) closeCodeOf(err error) (uint16, bool) {
+	if c.aborted.Load() {
+		return CodeAbnormal, true
+	}
+	if code, ok := errors.AsType[statusCode](err); ok {
+		return code.Uint16(), true
+	}
+	if errors.Is(err, os.ErrDeadlineExceeded) {
+		return CodeNormal, true
+	}
+	return 0, false
+}
+
+func (c *connection) recoverPanic() {
+	if r := recover(); r != nil {
+		c.panicked(r)
+	}
+}
+
+func (c *connection) panicked(r any) {
+	c.server.logger.Error("websocket connection panic", "panic", fmt.Sprint(r), "stack", string(debug.Stack()))
+	c.closeWith(CodeInternalError)
+}
+
+func stopTimer(t *time.Timer) {
+	if t != nil {
+		t.Stop()
+	}
+}
+
+type events struct {
+	gws.BuiltinEventHandler
+}
+
+func (events) OnPing(socket *gws.Conn, payload []byte) {
+	if c := connectionOf(socket); c != nil {
+		c.ping(payload)
+	}
+}
+
+func (events) OnMessage(socket *gws.Conn, message *gws.Message) {
+	defer func() { _ = message.Close() }()
+	if c := connectionOf(socket); c != nil {
+		c.receive(message)
+	}
+}
+
+func (events) OnClose(socket *gws.Conn, err error) {
+	if c := connectionOf(socket); c != nil {
+		c.finish(err)
+	}
+}
+
+func connectionOf(socket *gws.Conn) *connection {
+	v, ok := socket.Session().Load(sessionKey)
+	if !ok {
+		return nil
+	}
+	c, _ := v.(*connection)
+	return c
+}
