@@ -8,6 +8,9 @@ first="${E2E_FIRST:-40}"
 after="${E2E_AFTER:-40}"
 victim="${E2E_KILL:-core-1}"
 watcher="chatim-e2e-watch-$$"
+ws_key="${WS_KEY:-$scripts/../.local/ws-keys/private.jwk}"
+ws_url="${WS_URL:-ws://chatim-websocket-1:8080/ws}"
+ws_container="${WS_CONTAINER:-chatim-websocket-1}"
 state="$(mktemp -d "${TMPDIR:-/tmp}/chatim-e2e.XXXXXX")"
 killed=""
 result=FAIL
@@ -34,7 +37,7 @@ finish() {
   fi
   rm -rf "$state"
   if [ "$result" = PASS ]; then
-    echo "e2e PASS: $first messages before and $after after killing $victim, no loss, no duplicate, every acked seq live; seq 1 edited and seq 2 deleted on history, edit history and live; seq 3 reacted with the first then the second emoji from GetReactionSettings and an unlisted emoji refused, seq 4 pinned, on replies, history and live; members added, promoted, removed and refused, read positions, hide and clear, the last owner leaving and coming back, on replies, history and live room, member and message subjects; a direct room opened twice into one room, replies counted and listed, the parent kept while replied, mentions of a user, a group and @all listed, a forward and a bookmark, on replies, lists and live; a system message from a non-member raising unread and one with skip_unread not, the room list ordered and counted after sends, reads, a delete and a hide, pinned first, archived apart, paged by cursor, refreshed by GetRooms and renamed live, history around a seq, messages by seq, threads, reactors, pins newest first, members owner first and a forward keeping skip_unread and meta; Mention App groups set and moved, @group notifying only its current members in the room and never the sender, an inactive group notifying and listing nobody, an edit adding then dropping a user notified then retracted and listed then gone, a delete retracting, @all notifying every other member, room groups with names and an older user group list ignored"
+    echo "e2e PASS: $first messages before and $after after killing $victim, no loss, no duplicate, every acked seq live; seq 1 edited and seq 2 deleted on history, edit history and live; seq 3 reacted with the first then the second emoji from GetReactionSettings and an unlisted emoji refused, seq 4 pinned, on replies, history and live; members added, promoted, removed and refused, read positions, hide and clear, the last owner leaving and coming back, on replies, history and live room, member and message subjects; a direct room opened twice into one room, replies counted and listed, the parent kept while replied, mentions of a user, a group and @all listed, a forward and a bookmark, on replies, lists and live; a system message from a non-member raising unread and one with skip_unread not, the room list ordered and counted after sends, reads, a delete and a hide, pinned first, archived apart, paged by cursor, refreshed by GetRooms and renamed live, history around a seq, messages by seq, threads, reactors, pins newest first, members owner first and a forward keeping skip_unread and meta; Mention App groups set and moved, @group notifying only its current members in the room and never the sender, an inactive group notifying and listing nobody, an edit adding then dropping a user notified then retracted and listed then gone, a delete retracting, @all notifying every other member, room groups with names and an older user group list ignored; through the websocket a dev token connecting, a send, history, an edit, a reaction and a bookmark matching the gRPC reads, a system message refused, an unknown key and an expired token closed 4001, a silent connection closed 4002 after the auth timeout and no token in the websocket logs"
     exit 0
   fi
   echo "e2e FAIL during: $step" >&2
@@ -124,5 +127,27 @@ step="phase 8 Mention App groups, notifications and lists"
 echo "phase 8: taggable and inactive groups, user groups set and moved, @group, @inactive group, an edit adding then dropping a user, a delete, @all, room groups, an older user group list"
 cli e2e mentions -state /state
 step="phase 8 check"
+cli e2e check -state /state
+
+step="phase 9 websocket entry point"
+echo "phase 9: through $ws_container a dev token, send, history, edit, react, bookmark, the same reads as gRPC, kind system refused, an unknown key and an expired token closed 4001, no auth closed 4002 after the auth timeout"
+if [ ! -r "$ws_key" ]; then
+  echo "dev signing key missing: run make dev-keys" >&2
+  exit 1
+fi
+docker run --rm --network "$network" --user "$(id -u):$(id -g)" -e REDIS_PASSWORD -v "$state":/state -v "$ws_key":/keys/private.jwk:ro "$image" \
+  e2e ws -state /state -url "$ws_url"
+step="phase 9 websocket logs hold no token"
+if [ ! -s "$state/ws-tokens" ]; then
+  echo "phase 9 wrote no token list" >&2
+  exit 1
+fi
+docker logs "$ws_container" >"$state/ws.log" 2>&1
+if grep -F -q -f "$state/ws-tokens" "$state/ws.log"; then
+  echo "the logs of $ws_container hold a token used by phase 9" >&2
+  exit 1
+fi
+echo "phase 9: the logs of $ws_container hold none of the $(wc -l <"$state/ws-tokens" | tr -d ' ') tokens used"
+step="phase 9 check"
 cli e2e check -state /state
 result=PASS

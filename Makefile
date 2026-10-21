@@ -118,4 +118,4 @@ ws-logs:
 
 e2e: check-env
 	$(MAKE) -s image TARGET=tools/corecli
-	NETWORK=$(NETWORK) ./scripts/e2e.sh
+	NETWORK=$(NETWORK) WS_KEY=$(CURDIR)/$(WS_KEYS_DIR)/private.jwk ./scripts/e2e.sh

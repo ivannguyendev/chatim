@@ -15,13 +15,13 @@ import (
 	"github.com/ivannguyendev/chatim/tools/corecli/internal/e2e"
 )
 
-const e2eUsage = "usage: corecli e2e setup|send|change|react-pin|members|links|rooms|mentions|check [flags]"
+const e2eUsage = "usage: corecli e2e setup|send|change|react-pin|members|links|rooms|mentions|ws|check [flags]"
 
 func e2eCmd(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return errors.New(e2eUsage)
 	}
-	steps := map[string]command{"setup": e2eSetup, "send": e2eSend, "change": e2eChange, "react-pin": e2eReactPin, "members": e2eMembers, "links": e2eLinks, "rooms": e2eRooms, "mentions": e2eMentions, "check": e2eCheck}
+	steps := map[string]command{"setup": e2eSetup, "send": e2eSend, "change": e2eChange, "react-pin": e2eReactPin, "members": e2eMembers, "links": e2eLinks, "rooms": e2eRooms, "mentions": e2eMentions, "ws": e2eWS, "check": e2eCheck}
 	step, ok := steps[args[0]]
 	if !ok {
 		return errors.New(e2eUsage)

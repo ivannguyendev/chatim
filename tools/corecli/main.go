@@ -40,7 +40,7 @@ commands:
   dev-keys           write a dev Ed25519 signing key and its public JWKS for the websocket node
   token              sign a dev websocket token with the key from dev-keys
   slots              show how live cores share the slots
-  e2e                end-to-end scenario steps: setup, send, change, react-pin, members, links, rooms, mentions, check
+  e2e                end-to-end scenario steps: setup, send, change, react-pin, members, links, rooms, mentions, ws, check
 
 run "corecli <command> -h" for the flags of a command`
 
