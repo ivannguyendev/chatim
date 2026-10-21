@@ -15,7 +15,7 @@ import (
 )
 
 var envKeys = []string{
-	"WS_NODE_ID", "WS_LISTEN", "ADMIN_LISTEN", "REDIS_ADDR", "REDIS_DB", "REDIS_PASSWORD", "REDIS_PASSWORD_FILE",
+	"WS_NODE_ID", "WS_ADDR", "WS_ADMIN_ADDR", "REDIS_ADDR", "REDIS_DB", "REDIS_PASSWORD", "REDIS_PASSWORD_FILE",
 	"WS_JWT_KEYS_FILE", "WS_JWT_ISSUER", "WS_JWT_AUDIENCE", "WS_JWT_LEEWAY",
 	"WS_AUTH_TIMEOUT", "WS_UNAUTH_MAX", "WS_FRAME_MAX", "WS_HEARTBEAT_TIMEOUT",
 	"WS_COMMAND_RATE", "WS_COMMAND_BURST", "WS_COMMAND_INFLIGHT", "WS_SEND_QUEUE", "WS_WRITE_TIMEOUT",
@@ -84,6 +84,17 @@ func fields(c config.Config) string {
 		fmt.Fprintf(&b, "%s=%v ", v.Type().Field(i).Name, v.Field(i).Interface())
 	}
 	return b.String()
+}
+
+func TestLoadReadsListenAddresses(t *testing.T) {
+	setEnv(t, map[string]string{"WS_ADDR": "127.0.0.1:7080", "WS_ADMIN_ADDR": "127.0.0.1:7090"})
+	got, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got.ListenAddr != "127.0.0.1:7080" || got.AdminAddr != "127.0.0.1:7090" {
+		t.Fatalf("ListenAddr, AdminAddr = %q, %q, want WS_ADDR and WS_ADMIN_ADDR", got.ListenAddr, got.AdminAddr)
+	}
 }
 
 func TestLoadNodeIDDefaultsToHostname(t *testing.T) {

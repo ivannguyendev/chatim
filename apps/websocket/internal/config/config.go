@@ -41,8 +41,8 @@ func Load() (Config, error) {
 	var p parser
 	c := Config{
 		NodeID:           p.nodeID(),
-		ListenAddr:       envconfig.String("WS_LISTEN", ":8080"),
-		AdminAddr:        envconfig.String("ADMIN_LISTEN", ":9090"),
+		ListenAddr:       envconfig.String("WS_ADDR", ":8080"),
+		AdminAddr:        envconfig.String("WS_ADMIN_ADDR", ":9090"),
 		RedisAddr:        envconfig.String("REDIS_ADDR", "chatim-redis:6379"),
 		RedisDB:          p.number("REDIS_DB", 0),
 		RedisPassword:    p.secret("REDIS_PASSWORD"),

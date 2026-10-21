@@ -21,8 +21,8 @@ func (c Config) Validate() error {
 	stop := c.DrainDelay + c.RequestDeadline + CloseTimeout
 	rules := []rule{
 		{c.NodeID != "", "WS_NODE_ID is required"},
-		{c.ListenAddr != "", "WS_LISTEN is required"},
-		{c.AdminAddr != "", "ADMIN_LISTEN is required"},
+		{c.ListenAddr != "", "WS_ADDR is required"},
+		{c.AdminAddr != "", "WS_ADMIN_ADDR is required"},
 		{c.RedisAddr != "", "REDIS_ADDR is required"},
 		{c.RedisDB >= 0, "REDIS_DB must not be negative"},
 		{c.JWTKeysFile != "", "WS_JWT_KEYS_FILE is required"},
