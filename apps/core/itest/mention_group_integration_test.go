@@ -19,7 +19,7 @@ func TestRealInfraGroupMentionWithoutAllNotifiesTheGroupMembersInTheRoom(t *test
 	seq := sendLinked(t, client, itUser, &chatimv1.SendMessageRequest{RoomId: roomID, Cid: "group-only-1", Text: "@sales", Mentions: group})
 	got := awaitNotified(t, notices, "carol")
 	n, ok := got["carol"]
-	wantID := roomID + "-0-" + strconv.FormatUint(seq, 10) + "-carol-m0"
+	wantID := roomID + "-0-" + strconv.FormatUint(seq, 10) + "-m0-g:sales"
 	if !ok || len(got) != 1 || n.GetId() != wantID || n.GetMentionNotified().GetTarget().GetKind() != chatimv1.MentionKind_MENTION_KIND_GROUP {
 		t.Fatalf("notifications = %v, want only carol by group with id %s", got, wantID)
 	}

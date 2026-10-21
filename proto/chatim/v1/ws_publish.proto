@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package chatim.v1;
+
+import "chatim/v1/notifications.proto";
+
+message WsPublish {
+  string id = 1;
+  string tenant = 2;
+  string kind = 3;
+  Notification notification = 4;
+  Targets targets = 5;
+  uint32 part = 6;
+  uint32 parts = 7;
+}
+
+message Targets {
+  repeated string users = 1;
+}

@@ -53,14 +53,14 @@ func bootstrapInto(calls *[]string, err error) func(context.Context, *mongo.Data
 	}
 }
 
-func TestPrepareBootstrapsThenEnsuresTheNotifyStreamAndTheConsumer(t *testing.T) {
+func TestPrepareBootstrapsThenEnsuresTheWsPublishStreamAndTheConsumer(t *testing.T) {
 	var calls []string
 	app := newApp(t, recordingJS{calls: &calls})
 	mentionapp.SetBootstrap(app, bootstrapInto(&calls, nil))
 	if err := app.Prepare(t.Context()); err != nil {
 		t.Fatalf("prepare: %v", err)
 	}
-	want := []string{"bootstrap", "stream CHATIM_NOTIFY", "consumer CHATIM_EVT mention"}
+	want := []string{"bootstrap", "stream CHATIM_WS", "consumer CHATIM_EVT mention"}
 	if !slices.Equal(calls, want) {
 		t.Fatalf("calls = %v, want %v", calls, want)
 	}

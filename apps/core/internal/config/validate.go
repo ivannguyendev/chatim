@@ -79,7 +79,7 @@ func (c Config) componentErrors() []error {
 		{"PROJECTION_*, EVT_STREAM, EVT_SUBJECT_ROOT", c.Projection.Validate()},
 		{"REACTION_EMOJIS, PIN_LIMIT", errors.Join(c.Interactions.Validate(), c.Messages.Validate())},
 		{"MEMBER_BATCH_MAX", c.Members.Validate()},
-		{"MENTION_*, NOTIFY_*", c.mentionErrors()},
+		{"MENTION_*", c.mentionErrors()},
 	}
 	var errs []error
 	for _, part := range parts {

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/modules/mention/internal/domain"
-	"github.com/ivannguyendev/chatim/modules/mention/internal/notify"
 	"github.com/ivannguyendev/chatim/modules/mention/internal/plan"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
@@ -47,28 +46,21 @@ func (c *Consumer) publish(ctx context.Context, j *job) error {
 	if len(add) == 0 && len(drop) == 0 {
 		return nil
 	}
-	b := c.pub.Batch()
-	msg := messageOf(j.ev)
-	for user, target := range add {
-		n, built := notify.Notified(c.cfg.NotifySubjectRoot, r, msg, user, target)
-		if err := queue(b, n, built); err != nil {
-			return errors.Join(err, b.Wait(ctx))
-		}
+	notified, err := c.build.Notified(r, messageOf(j.ev), add)
+	if err != nil {
+		return errInvalid(err)
 	}
-	for user := range drop {
-		n, built := notify.Retracted(c.cfg.NotifySubjectRoot, r, user)
-		if err := queue(b, n, built); err != nil {
+	retracted, err := c.build.Retracted(r, drop)
+	if err != nil {
+		return errInvalid(err)
+	}
+	b := c.pub.Batch()
+	for _, n := range append(notified, retracted...) {
+		if err := b.Add(n); err != nil {
 			return errors.Join(err, b.Wait(ctx))
 		}
 	}
 	return b.Wait(ctx)
-}
-
-func queue(b *notify.Batch, n notify.Notice, built error) error {
-	if built != nil {
-		return errInvalid(built)
-	}
-	return b.Add(n)
 }
 
 func (c *Consumer) resolve(ctx context.Context, r plan.Result, targets []domain.Target) (map[string]domain.Target, error) {

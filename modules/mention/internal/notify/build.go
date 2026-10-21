@@ -1,7 +1,10 @@
 package notify
 
 import (
+	"cmp"
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -10,7 +13,10 @@ import (
 	"github.com/ivannguyendev/chatim/modules/mention/internal/plan"
 	"github.com/ivannguyendev/chatim/pkg/ids"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
+	"github.com/ivannguyendev/chatim/pkg/wspublish"
 )
+
+const PacketKind = "mention"
 
 type Kind uint8
 
@@ -20,45 +26,129 @@ const (
 )
 
 type Notice struct {
-	Kind         Kind
-	Subject      string
-	Notification *chatimv1.Notification
+	Kind    Kind
+	Subject string
+	Packet  *chatimv1.WsPublish
 }
 
-func Subject(root, tenant, user string) string {
-	return root + "." + tenant + "." + user + ".mention"
+type Builder struct {
+	Root string
+	Page int
 }
 
-func Notified(root string, r plan.Result, msg *chatimv1.Message, user string, target domain.Target) (Notice, error) {
-	n, err := envelope(r, user, 'm')
-	if err != nil {
-		return Notice{}, err
+func (b Builder) Notified(r plan.Result, msg *chatimv1.Message, add map[string]domain.Target) ([]Notice, error) {
+	groups := groupByTarget(add)
+	var out []Notice
+	for _, g := range groups {
+		n, err := envelope(r, 'm', targetKey(g.target))
+		if err != nil {
+			return nil, err
+		}
+		n.Payload = &chatimv1.Notification_MentionNotified{MentionNotified: &chatimv1.MentionNotified{Message: msg, Target: targetOf(g.target)}}
+		packets, err := b.paged(KindNotified, n, g.users)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, packets...)
 	}
-	n.Payload = &chatimv1.Notification_MentionNotified{MentionNotified: &chatimv1.MentionNotified{Message: msg, Target: targetOf(target)}}
-	return Notice{Kind: KindNotified, Subject: Subject(root, r.Plan.Tenant, user), Notification: n}, nil
+	return out, nil
 }
 
-func Retracted(root string, r plan.Result, user string) (Notice, error) {
+func (b Builder) Retracted(r plan.Result, drop map[string]domain.Target) ([]Notice, error) {
+	if len(drop) == 0 {
+		return nil, nil
+	}
 	reason, ok := retractReasons[r.Kind]
 	if !ok {
-		return Notice{}, fmt.Errorf("%w: retract a mention of a created message", plan.ErrInvalidEvent)
+		return nil, fmt.Errorf("%w: retract a mention of a created message", plan.ErrInvalidEvent)
 	}
-	n, err := envelope(r, user, 'r')
+	n, err := envelope(r, 'r', reason.key)
 	if err != nil {
-		return Notice{}, err
+		return nil, err
 	}
-	n.Payload = &chatimv1.Notification_MentionRetracted{MentionRetracted: &chatimv1.MentionRetracted{Reason: reason}}
-	return Notice{Kind: KindRetracted, Subject: Subject(root, r.Plan.Tenant, user), Notification: n}, nil
+	n.Payload = &chatimv1.Notification_MentionRetracted{MentionRetracted: &chatimv1.MentionRetracted{Reason: reason.proto}}
+	return b.paged(KindRetracted, n, slices.Collect(maps.Keys(drop)))
 }
 
-func ID(key domain.MessageKey, user string, mark byte, ver uint32) string {
+func (b Builder) paged(kind Kind, n *chatimv1.Notification, users []string) ([]Notice, error) {
+	subject, err := wspublish.Subject(b.Root, n.GetTenant())
+	if err != nil {
+		return nil, err
+	}
+	for _, u := range users {
+		if err := ids.ValidUser(u); err != nil {
+			return nil, err
+		}
+	}
+	out := make([]Notice, 0, len(users)/max(b.Page, 1)+1)
+	var part uint32
+	for _, page := range wspublish.Pages(users, b.Page) {
+		part++
+		out = append(out, Notice{Kind: kind, Subject: subject, Packet: &chatimv1.WsPublish{
+			Id: wspublish.PageID(n.GetId(), int(part), page), Tenant: n.GetTenant(), Kind: PacketKind, Notification: n,
+			Targets: &chatimv1.Targets{Users: page}, Part: part,
+		}})
+	}
+	for _, o := range out {
+		o.Packet.Parts = part
+	}
+	return out, nil
+}
+
+func ID(key domain.MessageKey, mark byte, ver uint32, target string) string {
 	return strconv.FormatUint(key.Room, 10) + "-" + strconv.FormatUint(key.Thread, 10) + "-" +
-		strconv.FormatUint(key.Seq, 10) + "-" + user + "-" + string(mark) + strconv.FormatUint(uint64(ver), 10)
+		strconv.FormatUint(key.Seq, 10) + "-" + string(mark) + strconv.FormatUint(uint64(ver), 10) + "-" + target
 }
 
-var retractReasons = map[plan.Kind]chatimv1.RetractReason{
-	plan.Edited:  chatimv1.RetractReason_RETRACT_REASON_EDITED,
-	plan.Deleted: chatimv1.RetractReason_RETRACT_REASON_DELETED,
+type group struct {
+	target domain.Target
+	users  []string
+}
+
+func groupByTarget(add map[string]domain.Target) []group {
+	type groupKey struct {
+		key string
+		at  int64
+	}
+	byKey := make(map[groupKey]*group)
+	for user, t := range add {
+		k := groupKey{key: targetKey(t), at: t.At.UnixMilli()}
+		g, ok := byKey[k]
+		if !ok {
+			g = &group{target: t}
+			byKey[k] = g
+		}
+		g.users = append(g.users, user)
+	}
+	out := make([]group, 0, len(byKey))
+	for _, g := range byKey {
+		out = append(out, *g)
+	}
+	slices.SortFunc(out, func(a, b group) int {
+		return cmp.Or(cmp.Compare(targetKey(a.target), targetKey(b.target)), a.target.At.Compare(b.target.At))
+	})
+	return out
+}
+
+func targetKey(t domain.Target) string {
+	switch t.Kind {
+	case domain.TargetUser:
+		return "u:" + t.ID
+	case domain.TargetGroup:
+		return "g:" + t.ID
+	default:
+		return "all"
+	}
+}
+
+type retractReason struct {
+	proto chatimv1.RetractReason
+	key   string
+}
+
+var retractReasons = map[plan.Kind]retractReason{
+	plan.Edited:  {chatimv1.RetractReason_RETRACT_REASON_EDITED, "edited"},
+	plan.Deleted: {chatimv1.RetractReason_RETRACT_REASON_DELETED, "deleted"},
 }
 
 var roomTypes = map[domain.RoomType]chatimv1.RoomType{
@@ -72,18 +162,14 @@ var targetKinds = map[domain.TargetKind]chatimv1.MentionKind{
 	domain.TargetAll:   chatimv1.MentionKind_MENTION_KIND_ALL,
 }
 
-func envelope(r plan.Result, user string, mark byte) (*chatimv1.Notification, error) {
+func envelope(r plan.Result, mark byte, target string) (*chatimv1.Notification, error) {
 	if err := ids.ValidTenant(r.Plan.Tenant); err != nil {
-		return nil, err
-	}
-	if err := ids.ValidUser(user); err != nil {
 		return nil, err
 	}
 	key := r.Plan.Key
 	return &chatimv1.Notification{
-		Id:         ID(key, user, mark, r.Plan.Ver),
+		Id:         ID(key, mark, r.Plan.Ver, target),
 		Tenant:     r.Plan.Tenant,
-		User:       user,
 		RoomId:     strconv.FormatUint(key.Room, 10),
 		RoomType:   roomTypes[r.RoomType],
 		ThreadRoot: key.Thread,

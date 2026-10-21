@@ -29,6 +29,7 @@ type Consumer struct {
 	deps     Deps
 	stats    *notify.Stats
 	gate     *notify.Gate
+	build    notify.Builder
 	pub      *notify.Publisher
 	fails    *jsconsume.LimitedLog
 	handles  *jsconsume.LimitedLog
@@ -56,10 +57,10 @@ func New(cfg config.Config, deps Deps) (*Consumer, error) {
 		deps.Log = slog.Default()
 	}
 	log := deps.Log.With("consumer", DurableName)
-	stats := &notify.Stats{}
+	stats, cfg := &notify.Stats{}, cfg.WithDefaults()
 	c := &Consumer{
-		cfg: cfg.WithDefaults(), deps: deps, stats: stats,
-		gate: notify.NewGate(cfg.WithDefaults().NotifyMaxAge, stats), pub: notify.NewPublisher(deps.Notify, stats),
+		cfg: cfg, deps: deps, stats: stats, gate: notify.NewGate(cfg.NotifyMaxAge, stats),
+		build: notify.Builder{Root: cfg.WsPublishRoot, Page: cfg.TargetsPage}, pub: notify.NewPublisher(deps.Notify, stats),
 		fails: jsconsume.NewLimitedLog(log), handles: jsconsume.NewLimitedLog(log), garbage: jsconsume.NewLimitedLog(log),
 		done: make(chan struct{}),
 	}

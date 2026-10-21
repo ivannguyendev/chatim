@@ -30,13 +30,11 @@ func openNotices(url, subject string) (*noticeFeed, error) {
 func (f *noticeFeed) Close() { f.nc.Close() }
 
 func (f *noticeFeed) add(msg *nats.Msg) error {
-	var n chatimv1.Notification
-	if err := proto.Unmarshal(msg.Data, &n); err != nil {
-		return fmt.Errorf("decode notification on %s: %w", msg.Subject, err)
+	var d chatimv1.WsPublish
+	if err := proto.Unmarshal(msg.Data, &d); err != nil {
+		return fmt.Errorf("decode ws publish packet on %s: %w", msg.Subject, err)
 	}
-	if got, ok := e2e.NoticeOf(msg.Subject, &n); ok {
-		f.got = append(f.got, got)
-	}
+	f.got = append(f.got, e2e.NoticesOf(msg.Subject, &d)...)
 	return nil
 }
 

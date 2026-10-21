@@ -45,7 +45,7 @@ func TestEditRetiresThePreviousTargetsItDrops(t *testing.T) {
 		if got := targetsIn(t, r, 41, domain.StateRetired); !slices.Equal(got, []string{"user:Minh"}) {
 			t.Errorf("retired %v, want the dropped previous target", got)
 		}
-		if got := r.js.published(); !slices.Equal(got, []string{"notify.t1.Minh.mention 777-0-41-Minh-r1"}) {
+		if got := r.js.published(); !slices.Equal(got, []string{"websocket.publish.t1 777-0-41-r1-edited Minh"}) {
 			t.Errorf("published %v, want only the retraction of the dropped target", got)
 		}
 	})
@@ -67,7 +67,7 @@ func TestDeleteWithPreviousTargetsRetiresAndRetractsThem(t *testing.T) {
 		if got := targetsIn(t, r, 41, domain.StateLive); len(got) != 0 {
 			t.Errorf("live %v after a delete", got)
 		}
-		want := []string{"notify.t1.Hoa.mention 777-0-41-Hoa-r2", "notify.t1.Minh.mention 777-0-41-Minh-r2"}
+		want := []string{"websocket.publish.t1 777-0-41-r2-deleted Hoa,Minh"}
 		if got := r.js.published(); !slices.Equal(got, want) {
 			t.Errorf("published %v, want %v", got, want)
 		}

@@ -4,14 +4,17 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/ivannguyendev/chatim/modules/mention/internal/domain"
 	"github.com/ivannguyendev/chatim/modules/mention/internal/store/memstore"
+	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 var errAck = errors.New("ack failed")
@@ -138,10 +141,12 @@ func (f *fakeFuture) Err() <-chan error { return f.err }
 func (f *fakeFuture) Msg() *nats.Msg { return f.msg }
 
 type fakeJetStream struct {
-	mu      sync.Mutex
-	seen    map[string]bool
-	sent    []string
-	failAck bool
+	mu       sync.Mutex
+	seen     map[string]bool
+	sent     []string
+	packets  []*chatimv1.WsPublish
+	failAck  bool
+	failPart uint32
 }
 
 func (j *fakeJetStream) PublishMsgAsync(m *nats.Msg, _ ...jetstream.PublishOpt) (jetstream.PubAckFuture, error) {
@@ -149,17 +154,35 @@ func (j *fakeJetStream) PublishMsgAsync(m *nats.Msg, _ ...jetstream.PublishOpt) 
 	defer j.mu.Unlock()
 	f := &fakeFuture{ok: make(chan *jetstream.PubAck, 1), err: make(chan error, 1), msg: m}
 	id := m.Header.Get(jetstream.MsgIDHeader)
-	j.sent = append(j.sent, m.Subject+" "+id)
-	if j.failAck {
+	d := &chatimv1.WsPublish{}
+	if err := proto.Unmarshal(m.Data, d); err != nil || d.GetId() != id {
+		j.sent = append(j.sent, m.Subject+" undecodable or id "+id+" differs from the packet")
+	} else {
+		j.sent = append(j.sent, m.Subject+" "+d.GetNotification().GetId()+" "+strings.Join(d.GetTargets().GetUsers(), ","))
+		j.packets = append(j.packets, d)
+	}
+	if j.failAck || (j.failPart != 0 && d.GetPart() == j.failPart) {
 		f.err <- errAck
 		return f, nil
 	}
 	if j.seen == nil {
 		j.seen = map[string]bool{}
 	}
-	f.ok <- &jetstream.PubAck{Stream: "CHATIM_NOTIFY", Duplicate: j.seen[id]}
+	f.ok <- &jetstream.PubAck{Stream: "CHATIM_WS", Duplicate: j.seen[id]}
 	j.seen[id] = true
 	return f, nil
+}
+
+func (j *fakeJetStream) wsPackets() []*chatimv1.WsPublish {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return slices.Clone(j.packets)
+}
+
+func (j *fakeJetStream) failingPart(part uint32) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	j.failPart = part
 }
 
 func (j *fakeJetStream) published() []string {

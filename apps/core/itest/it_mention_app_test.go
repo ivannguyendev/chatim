@@ -52,7 +52,7 @@ func tagGroups(t *testing.T, client chatimv1.MentionServiceClient, members map[s
 func subscribeNotify(t *testing.T, it *itInfra, cfg config.Config) <-chan *nats.Msg {
 	t.Helper()
 	notices := make(chan *nats.Msg, 256)
-	sub, err := it.nc.ChanSubscribe(cfg.Mention.NotifySubjectRoot+".>", notices)
+	sub, err := it.nc.ChanSubscribe(cfg.Mention.WsPublishRoot+".>", notices)
 	if err != nil {
 		t.Fatalf("subscribe notify: %v", err)
 	}
@@ -67,14 +67,17 @@ func awaitNotified(t *testing.T, notices <-chan *nats.Msg, users ...string) map[
 	for len(got) < len(users) {
 		select {
 		case m := <-notices:
-			n := &chatimv1.Notification{}
-			if err := proto.Unmarshal(m.Data, n); err != nil {
-				t.Fatalf("decode notification on %s: %v", m.Subject, err)
+			d := &chatimv1.WsPublish{}
+			if err := proto.Unmarshal(m.Data, d); err != nil {
+				t.Fatalf("decode ws publish packet on %s: %v", m.Subject, err)
 			}
-			if n.GetMentionNotified() == nil {
-				t.Fatalf("notification %s is not a mention_notified", n.GetId())
+			n := d.GetNotification()
+			if n.GetMentionNotified() == nil || n.GetUser() != "" || d.GetKind() != "mention" {
+				t.Fatalf("ws publish packet %s carries %v, want a mention_notified naming no user", d.GetId(), n)
 			}
-			got[n.GetUser()] = n
+			for _, user := range d.GetTargets().GetUsers() {
+				got[user] = n
+			}
 		case <-deadline:
 			t.Fatalf("notifications for %v did not all arrive within %v; got %v", users, itLiveLimit, got)
 		}

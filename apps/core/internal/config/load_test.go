@@ -133,7 +133,7 @@ func TestLoadOverrides(t *testing.T) {
 		Mention: mentionapp.Config{
 			Enabled: true, EventStream: "CHATIM_EVT_IT", EventSubjectRoot: "evt_it", LiveRoot: "live_it", Replicas: 3,
 			FetchBatch: 64, FetchWait: 200 * time.Millisecond, Workers: 4, MaxAckPending: 1024, NotifyMaxAge: 2 * time.Minute,
-			NotifyStream: "CHATIM_NOTIFY_IT", NotifySubjectRoot: "notify_it", NotifyMaxStreamAge: 12 * time.Hour, NotifyDuplicates: 3 * time.Minute,
+			WsPublishStream: "CHATIM_WS_IT", WsPublishRoot: "websocket_it.publish", TargetsPage: 500,
 			HideReadTenants: []string{"acme", "globex"}, RoomGroupsSyncMax: 200, RoomGroupsTTL: 30 * time.Second, RoomGroupsRebuild: 5 * time.Minute,
 		},
 	}

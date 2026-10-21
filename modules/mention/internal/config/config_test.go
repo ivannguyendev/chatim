@@ -18,19 +18,18 @@ func linked() config.Config {
 func TestDefaults(t *testing.T) {
 	c := config.Defaults()
 	want := config.Config{
-		Enabled:            true,
-		FetchBatch:         512,
-		FetchWait:          250 * time.Millisecond,
-		Workers:            8,
-		MaxAckPending:      16384,
-		NotifyMaxAge:       5 * time.Minute,
-		NotifyStream:       "CHATIM_NOTIFY",
-		NotifySubjectRoot:  "notify",
-		NotifyMaxStreamAge: 24 * time.Hour,
-		NotifyDuplicates:   6 * time.Minute,
-		RoomGroupsSyncMax:  5000,
-		RoomGroupsTTL:      time.Minute,
-		RoomGroupsRebuild:  10 * time.Minute,
+		Enabled:           true,
+		FetchBatch:        512,
+		FetchWait:         250 * time.Millisecond,
+		Workers:           8,
+		MaxAckPending:     16384,
+		NotifyMaxAge:      5 * time.Minute,
+		WsPublishStream:   "CHATIM_WS",
+		WsPublishRoot:     "websocket.publish",
+		TargetsPage:       1000,
+		RoomGroupsSyncMax: 5000,
+		RoomGroupsTTL:     time.Minute,
+		RoomGroupsRebuild: 10 * time.Minute,
 	}
 	if !reflect.DeepEqual(c, want) {
 		t.Fatalf("defaults = %+v, want %+v", c, want)
@@ -40,7 +39,7 @@ func TestDefaults(t *testing.T) {
 func TestZeroFieldsTakeDefaults(t *testing.T) {
 	c := linked().WithDefaults()
 	d := config.Defaults()
-	if c.FetchBatch != d.FetchBatch || c.NotifyStream != d.NotifyStream || c.RoomGroupsRebuild != d.RoomGroupsRebuild {
+	if c.FetchBatch != d.FetchBatch || c.WsPublishStream != d.WsPublishStream || c.TargetsPage != d.TargetsPage || c.RoomGroupsRebuild != d.RoomGroupsRebuild {
 		t.Fatalf("with defaults = %+v", c)
 	}
 	if err := linked().Validate(); err != nil {
@@ -72,13 +71,13 @@ func TestValidateRules(t *testing.T) {
 		"max ack pending below batch":   func(c *config.Config) { c.FetchBatch = 1024; c.MaxAckPending = 512 },
 		"notify max age negative":       func(c *config.Config) { c.NotifyMaxAge = -time.Second },
 		"notify max age over dupes":     func(c *config.Config) { c.NotifyMaxAge = 7 * time.Minute },
-		"notify stream lowercase":       func(c *config.Config) { c.NotifyStream = "chatim_notify" },
-		"notify stream with dot":        func(c *config.Config) { c.NotifyStream = "CHATIM.NOTIFY" },
-		"notify root uppercase":         func(c *config.Config) { c.NotifySubjectRoot = "Notify" },
-		"notify root with dot":          func(c *config.Config) { c.NotifySubjectRoot = "notify.x" },
-		"notify stream age negative":    func(c *config.Config) { c.NotifyMaxStreamAge = -time.Hour },
-		"notify duplicates negative":    func(c *config.Config) { c.NotifyDuplicates = -time.Minute },
-		"notify duplicates over age":    func(c *config.Config) { c.NotifyMaxStreamAge = 5 * time.Minute; c.NotifyMaxAge = time.Minute },
+		"ws publish stream lowercase":   func(c *config.Config) { c.WsPublishStream = "chatim_ws" },
+		"ws publish stream with dot":    func(c *config.Config) { c.WsPublishStream = "CHATIM.WS" },
+		"ws publish root uppercase":     func(c *config.Config) { c.WsPublishRoot = "Websocket.publish" },
+		"ws publish root wildcard":      func(c *config.Config) { c.WsPublishRoot = "websocket.*" },
+		"ws publish root trailing dot":  func(c *config.Config) { c.WsPublishRoot = "websocket." },
+		"targets page negative":         func(c *config.Config) { c.TargetsPage = -1 },
+		"targets page over the max":     func(c *config.Config) { c.TargetsPage = 10001 },
 		"hide read tenant invalid":      func(c *config.Config) { c.HideReadTenants = []string{"t1", "Bad Tenant"} },
 		"hide read tenant empty":        func(c *config.Config) { c.HideReadTenants = []string{""} },
 		"room groups sync max negative": func(c *config.Config) { c.RoomGroupsSyncMax = -1 },
@@ -102,10 +101,15 @@ func TestValidateAcceptsEdges(t *testing.T) {
 	c.MaxAckPending = 100
 	c.Workers = 1
 	c.NotifyMaxAge = 6 * time.Minute
-	c.NotifyMaxStreamAge = 6 * time.Minute
+	c.WsPublishRoot = "notify"
+	c.TargetsPage = 10000
 	c.RoomGroupsSyncMax = 1
 	c.HideReadTenants = []string{"t1", "tenant_2"}
 	if err := c.Validate(); err != nil {
 		t.Fatalf("validate edges: %v", err)
+	}
+	c.TargetsPage = 1
+	if err := c.Validate(); err != nil {
+		t.Fatalf("validate a page of one: %v", err)
 	}
 }
