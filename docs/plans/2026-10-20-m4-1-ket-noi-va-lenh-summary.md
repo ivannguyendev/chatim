@@ -1,6 +1,6 @@
 # M4 phần 1: kết nối, token và chuyển lệnh tới core
 
-> **Trạng thái:** chờ owner duyệt. Phần 1 trong 5 phần của M4; phần sau chỉ viết khi phần này đã duyệt.
+> **Trạng thái:** owner duyệt 2026-10-20; **đã xây xong** trên `feat/m4` ngày 2026-10-21 (kết quả ở §10, quyết định D183–D188 ở [decision log §17.7](../decision-log.md), giao thức ở [Module 09 §7](../modules/09-feature-realtime-delivery-and-ephemeral.md)). Phần 1 trong 5 phần của M4.
 > **Năm phần:** (1) kết nối, token, lệnh · (2) nhận và đẩy event · (3) đã đọc, đã xem · (4) typing, online · (5) reconnect, vận hành, kiểm thử.
 > **Nguồn:** hướng M4 owner duyệt 2026-10-20 (`.claude/plans/m4-websocket_design.md`), hàng M4 [roadmap](../roadmap.md), [exit Phase 1](2026-10-19-phase1-exit-summary.md).
 
@@ -45,9 +45,9 @@ Phần 1 chưa gồm đẩy tin mới xuống máy (phần 2), đã đọc/đã 
    Sai bất kỳ điều nào → đóng mã 4001.
 3. Hợp lệ → app nhớ (người, tenant, hạn token) cho kết nối này.
 4. **Gia hạn:** trước khi token hết hạn, máy gửi `auth` với token mới, cùng người và tenant. Không gia hạn thì quá hạn (cộng 30 giây lệch giờ) app đóng 4001; máy lấy token mới rồi mới kết nối lại.
-5. **Giữ kết nối sống:** máy gửi `heartbeat` mỗi 5–10 giây (client mẫu chọn 5–8 giây để còn dư). 15 giây không có frame nào → app đóng kết nối. Phần 4 dùng chính heartbeat này cho online/offline.
+5. **Giữ kết nối sống:** máy gửi `heartbeat` mỗi 5–10 giây (client mẫu chọn 5–8 giây để còn dư). Mọi frame đều tính là còn sống, kể cả WebSocket ping. 15 giây không có frame nào → app đóng kết nối (mã 1000). Phần 4 dùng chính heartbeat này cho online/offline.
 6. **Máy không chịu đọc:** app ghi trả lời qua một hàng đợi riêng của kết nối, mỗi lần ghi có hạn 10 giây. Máy không đọc (hoặc mạng treo) thì app cắt kết nối, để một máy hỏng không giữ tài nguyên của node mãi.
-7. **Một lỗi lạ do máy gây ra** chỉ làm đóng kết nối đó, không làm sập node đang giữ hàng nghìn kết nối khác.
+7. **Một lỗi lạ do máy gây ra** chỉ làm đóng kết nối đó (mã 1011), không làm sập node đang giữ hàng nghìn kết nối khác.
 
 Ví dụ token hết hạn lúc 11:00. Lúc 10:55 máy Lan lấy token mới và gửi `auth`, kết nối tiếp tục, không rớt.
 
@@ -71,7 +71,7 @@ Ví dụ token hết hạn lúc 11:00. Lúc 10:55 máy Lan lấy token mới và
 | Nhóm | Cho phép | Chặn |
 |---|---|---|
 | Room | `CreateRoom`, `OpenDirectRoom`, `ListMyRooms`, `GetRooms`, `UpdateRoom`, `SetRoomPreferences` | — |
-| Tin | `SendMessage`, `GetHistory`, `GetMessages`, `EditMessage`, `DeleteMessage`, `HideMessage`, `ClearHistory`, `GetEditHistory` | Trong `SendMessage`: `kind`, `skip_unread`, `meta` (chỉ app nội bộ gửi tin hệ thống) |
+| Tin | `SendMessage`, `GetHistory`, `GetMessages`, `EditMessage`, `DeleteMessage`, `HideMessage`, `ClearHistory`, `GetEditHistory` | Trong `SendMessage`: `kind` khác mặc định và `TEXT`, `skip_unread`, `meta` (chỉ app nội bộ gửi tin hệ thống) |
 | React, ghim, thread | `ReactMessage`, `PinMessage`, `UnpinMessage`, `ListPins`, `GetReactionSettings`, `GetReactions`, `SetBookmark`, `GetReplies`, `ListThreads`, `ListBookmarks` | — |
 | Thành viên | `AddMembers`, `RemoveMember`, `LeaveRoom`, `ChangeMemberRole`, `SetMemberPriority`, `ListMembers`, `MarkUnread` | `MarkRead`: đi qua frame riêng ở phần 3 |
 | Mention | `ListMentions`, `ListRoomGroups` | `SetUserGroups`, `SetGroups`: do hệ thống user/nhóm gọi |
@@ -88,6 +88,8 @@ Ví dụ token hết hạn lúc 11:00. Lúc 10:55 máy Lan lấy token mới và
 | đóng 4002 | app → máy | không gửi token kịp 5 giây: nối lại bình thường |
 | đóng 1008 / 1003 / 1009 | app → máy | sai giao thức / gửi frame chữ thay vì nhị phân / frame quá lớn |
 | đóng 1001 | app → máy | node đang tắt: nối lại |
+| đóng 1011 | app → máy | lỗi lạ khi xử lý kết nối này: nối lại |
+| đóng 1000 | app → máy | 15 giây không có frame nào: nối lại |
 
 Frame mã hoá protobuf và dùng lại đúng message request/response sẵn có của core. Không có kênh JSON (bỏ D17); khi cần debug thì dùng `corecli` để giải mã. Chưa bật nén (`permessage-deflate`): nén tốn CPU khi có 100K kết nối; bật hay không quyết ở phần 5 khi có số đo.
 
@@ -97,12 +99,13 @@ Frame mã hoá protobuf và dùng lại đúng message request/response sẵn c�
 |---|---|---|
 | `WS_ADDR`, `WS_ADMIN_ADDR` | `:8080`, `:9090` | cổng WebSocket; `/livez`, `/readyz`, `/metrics` |
 | `REDIS_ADDR`, `REDIS_PASSWORD_FILE` | — | đọc bảng slot (chỉ đọc) |
+| `WS_NODE_ID` | hostname | tên node trong log và tên client Redis `chatim-websocket-{node}` |
 | `WS_JWT_KEYS_FILE`, `WS_JWT_ISSUER`, `WS_JWT_AUDIENCE`, `WS_JWT_LEEWAY` | —, —, —, 30s | kiểm token |
 | `WS_AUTH_TIMEOUT` | 5s | kết nối không gửi token thì đóng |
 | `WS_UNAUTH_MAX` | 10.000 | số kết nối chưa đưa token mỗi node, chống mở kết nối rác |
 | `WS_FRAME_MAX` | 128KB | lệnh lớn nhất: `AddMembers`/`CreateRoom` 1.000 người × id 64 byte ≈ 66KB |
 | `WS_HEARTBEAT_TIMEOUT` | 15s | không có frame nào thì đóng (owner) |
-| `WS_COMMAND_RATE`, `WS_COMMAND_BURST` | 50/s, 100 | chống lạm dụng mỗi kết nối (D112); tính cả `auth` và `heartbeat` |
+| `WS_COMMAND_RATE`, `WS_COMMAND_BURST` | 50/s, 100 | chống lạm dụng mỗi kết nối; tính cả `auth`, `heartbeat` và ping (ba loại này vượt thì đóng 1008) |
 | `WS_COMMAND_INFLIGHT` | 32 | số lệnh đang chạy + đang chờ mỗi kết nối, chặn bộ nhớ và goroutine |
 | `WS_SEND_QUEUE`, `WS_WRITE_TIMEOUT` | 256 frame, 10s | máy không đọc không được giữ tài nguyên node mãi |
 | `CORE_REQUEST_DEADLINE` | 5s | hạn mỗi lệnh gọi core |
@@ -138,3 +141,56 @@ Frame mã hoá protobuf và dùng lại đúng message request/response sẵn c�
 | Unit lệnh | 33 lệnh đi đúng core; field cấm → `INVALID_ARGUMENT`; field lạ bị bỏ; ghim field đệ quy + enum; header lấy từ token; không retry; lời lỗi hạ tầng không lộ địa chỉ; thứ tự `SendMessage` và cách trượt khi lỗi; giới hạn tốc độ |
 | Unit `pkg/coreroute` | Chọn đúng core theo slot; lệnh không thuộc room đi core bất kỳ; tự bỏ địa chỉ core cũ; nghìn lần làm mới dồn lại chỉ thành ≤ 2 lần đọc Redis |
 | e2e (`pkg/wsclient`, 2 core + 1 node) | Kết nối, gửi tin, xem lịch sử, sửa, react qua websocket ra cùng kết quả như gọi gRPC trực tiếp; lệnh bị chặn trả đúng mã |
+
+## 10. Kết quả thực thi
+
+Xây xong trên `feat/m4` ngày 2026-10-21, 12 task, đã push. Task rủi ro (2, 3, 6, 7, 8) có một reviewer một lượt; mọi lỗi Critical/Important đã sửa trong commit tiếp theo.
+
+### 10.1. Commit theo task
+
+| Task | Việc | Commit |
+|---|---|---|
+| 0 | Nâng trần file code lên 350 dòng (owner); bản tóm tắt này + dòng backlog "tenant ẩn nội dung tin" | `4363410`, `bc1d3aa` |
+| 1 | Trích từ core ra `pkg/`: `pkg/metrics`, `pkg/redact`, `envconfig.Secret`, `admin.Probe` | `48d3ab3`, `f800887`, `cbd88df`, `7911a1a` |
+| 2 | `pkg/coreroute` (chọn core, không retry); sửa sau review: giữ kết nối khi bảng slot rỗng, làm mới cách nhau ≥ 250ms; sửa một dòng `INDEXES.csv` | `bb97785`, `5911ecf`, `f768a19` |
+| 3 | `pkg/jwtverify` (JWKS Ed25519) và `tools/internal/devtoken` | `8652d7d` |
+| 4 | `ws.proto`: frame `auth`, `heartbeat`, `request`/`response`, 33 lệnh ở số field 10–42 | `d4dc32b` |
+| 5 | Config của websocket + luật depguard | `f865350`, `ad75f14`, `4a4e4a3` |
+| 9 | `pkg/wsclient` (client Go mẫu) | `b3b49df` |
+| 6 | Chuyển lệnh tới core (danh sách cho phép, lời lỗi, metric); sửa sau review | `d2a5106`, `98d689e` |
+| 7 | Kết nối: auth, heartbeat, giới hạn, thứ tự `SendMessage`; sửa sau review | `3744aa3`, `46bfdbb` |
+| 8 | Histogram trong `pkg/metrics`; nối app (admin, metric, tắt êm); sửa sau review | `08a2d90`, `9c5bda2`, `08dd5e3` |
+| 10 | Node `websocket-1` trong compose, khoá ký dev (`make dev-keys`, `make ws-token`, `make ws-logs`) | `797395c` |
+| 11 | e2e phase 9 qua websocket | `ae11be4` |
+| 12 | Tài liệu (decision log D183–D188, Module 09 §7, roadmap, `INDEXES.csv`, `CLAUDE.md`) | commit docs của task này |
+
+### 10.2. Khác với bản duyệt (đã sửa vào thân bài ở trên)
+
+- **`SendMessage` nhận `kind = TEXT`:** core coi `TEXT` như mặc định nên chặn nó chỉ làm khó client; vẫn chặn `SYSTEM` và mọi giá trị khác.
+- **Tên biến:** `WS_ADDR`/`WS_ADMIN_ADDR` (thay `WS_LISTEN`/`ADMIN_LISTEN`) cho giống core; thêm `WS_NODE_ID` (mặc định hostname).
+- **WebSocket ping cũng tính là còn sống** (sửa sau review Task 7). 15 giây không frame nào → đóng mã 1000.
+- **Vượt tốc độ ở `auth`/`heartbeat`/ping → đóng 1008** (không có `id` để trả `RESOURCE_EXHAUSTED`).
+- **Panic chỉ đóng kết nối đó với mã 1011**, có recover ở goroutine ghi, hàng theo room và các hẹn giờ.
+- **`room_id` sai dạng trả câu cố định** "invalid room_id", không lặp lại chuỗi máy gửi.
+- **Máy không đọc:** hàng đợi đầy hoặc ghi quá 10 giây thì cắt thẳng socket, không gửi close frame (máy thấy 1006); mã 4008 để phần 2.
+- **Client mẫu** gửi heartbeat ngẫu nhiên 5–8 giây (dùng `crypto/rand`).
+- **Chép request bằng Marshal + Unmarshal bỏ field lạ** (thay vì chỉ bỏ field lạ ở frame ngoài), nên field lạ bị bỏ ở mọi tầng lồng.
+
+### 10.3. Kiểm thử
+
+- `make fmt-check`, `make vet`, `make lint`, `make test` xanh; `make itest` xanh khi chạy lại (một test `mongostore` chập chờn, xem 10.4).
+- `make core-up && make e2e`: **phase 1–9 xanh**. Phase 9 qua `websocket-1`: token dev kết nối, gửi tin, xem lịch sử, sửa, react, bookmark ra **cùng kết quả** với đọc gRPC trực tiếp; `SendMessage` `kind system` → `INVALID_ARGUMENT`; token ký bằng khoá lạ và token hết hạn → 4001; kết nối im lặng → 4002 sau 5 giây; log của websocket không chứa token nào đã dùng.
+- Không bench ở phần 1 (tải 10K kết nối và bão reconnect ở phần 5).
+
+### 10.4. Còn lại
+
+- **`make vuln` đỏ** vì hai lỗ hổng có từ trước phần 1: GO-2026-6809 (`crypto/x509` của Go 1.26.9, đã sửa ở 1.26.10) và GO-2026-5932 (`x/crypto`, code không gọi tới, chưa có bản vá). **Chờ owner quyết nâng Go 1.26.9 → 1.26.10.**
+- **Test chập chờn:** `mongostore` `TestReactionSetOfTheSameUserRacingOnANewReactionNeverFails` lỗi một lần trong `make itest` (Mongo `DurationOverflow`), chạy lại 3/3 qua; cần xem riêng.
+- **Việc nhỏ ghi lại (Minor, không chặn):**
+  - `pkg/coreroute`: dọn địa chỉ cũ đóng kết nối ngay, nên lệnh đang chạy tới core vừa rời bảng bị huỷ (máy gửi lại); `Room()` có thể dial lại địa chỉ vừa bị dọn (lần nạp sau dọn tiếp).
+  - `pkg/jwtverify` (làm khi `identity-verifier` dùng lại): giới hạn độ dài token trong thư viện (websocket đã chặn frame 128KB); từ chối header `crit`; `devtoken.KeyPair` nên có `String()` không in khoá riêng.
+  - Kết nối: mã đóng do gws tự chọn (1009/1002/1000) có thể tới máy thành 1006 khi hạn ghi đã hết; chưa kiểm `Origin` (token nằm trong frame nên không phải rủi ro auth; cân nhắc ở phần 5); nhãn 1000 của `closes_total` gồm cả hết hạn heartbeat.
+  - Lệnh rỗng (`UNIMPLEMENTED`) đếm ở `commands_rejected_total`, chưa ở `commands_total`.
+  - `router.Close()` không nhận ctx nên có thể vượt ngân sách tắt (core cũng vậy).
+  - Chưa có luật alert cho websocket (metric đã có trên `/metrics`).
+- **Để phần sau như đã duyệt:** trần kết nối mỗi người và trần lần gọi core của cả node (phần 5); user Redis chỉ đọc và mTLS app ↔ core (M5); `ListMentions` tin `groups` máy gửi (D188).

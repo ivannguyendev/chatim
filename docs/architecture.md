@@ -1,7 +1,7 @@
 # chatim — Kiến trúc hệ thống (Single Source of Truth)
 
 > Ngày cập nhật: 2026-10-17 · Trạng thái: **Nguồn sự thật duy nhất (SSOT)** cho toàn bộ quy chuẩn kiến trúc của `chatim`.
-> Nhật ký 176 quyết định kỹ thuật: [docs/decision-log.md](./decision-log.md) (D1–D176). Danh mục event (core phát gì, ai nhận gì): [docs/events.md](./events.md).
+> Nhật ký 188 quyết định kỹ thuật: [docs/decision-log.md](./decision-log.md) (D1–D188). Danh mục event (core phát gì, ai nhận gì): [docs/events.md](./events.md).
 > Đặc tả chi tiết 10 Module tính năng (How-It-Works & Flowcharts): [docs/modules/README.md](./modules/README.md).
 > Lộ trình phát triển các Milestone: [docs/roadmap.md](./roadmap.md).
 
@@ -13,7 +13,7 @@
 
 ### 1.1 Phạm vi Phase 1
 - `core`: room, member, message, tương tác, cấp seq, lưu trữ MongoDB, phát event NATS JetStream.
-- `websocket`: giữ kết nối WebSocket (gws), đẩy event realtime (chưa xây).
+- `websocket`: giữ kết nối WebSocket (gws), kiểm token, chuyển lệnh tới core (phần 1 đã xây trên `feat/m4`, D183–D188); đẩy event realtime (phần 2, chưa xây).
 - Room: DM (1-1), group ≤5K member. Channel ~200K subscriber (chỉ admin post) vào backlog (owner 2026-10-19, D178).
 - Exit Phase 1: `core` + `mention` + `websocket` đạt `prod-like validated`; go-live sau khi có `identity` (D178, [tóm tắt](plans/2026-10-19-phase1-exit-summary.md)).
 - Tin nhắn: gửi, sửa (có lịch sử), xoá cho mọi người / phía tôi, trả lời (quote), chuyển tiếp (forward).
@@ -302,4 +302,4 @@ Toàn bộ chi tiết kỹ thuật vận hành (How-It-Works), sơ đồ Mermaid
 ## 10. Tra cứu Quyết định Kỹ thuật (Decision Log)
 
 Mọi quyết định lựa chọn giải pháp kỹ thuật, đánh đổi (trade-offs), phương án bị loại bỏ (rejected alternatives) từ ngày đầu dự án đến Mention App hiện tại được lưu trữ đầy đủ tại:
-👉 **[Architecture Decision Records (D1–D176)](./decision-log.md)**
+👉 **[Architecture Decision Records (D1–D188)](./decision-log.md)**

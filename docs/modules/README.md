@@ -18,7 +18,7 @@ flowchart TD
     end
 
     subgraph Entry["Tầng Cổng & Thời gian thực"]
-        M09["Module 09: Realtime Delivery & Ephemeral<br/>(App websocket M4 chưa xây, Typing, Presence)"]
+        M09["Module 09: Realtime Delivery & Ephemeral<br/>(App websocket M4: phần 1 đã xây, Typing, Presence dự kiến)"]
     end
 
     subgraph CoreFeatures["Tầng Nghiệp vụ Hội thoại (Core Features)"]
@@ -165,7 +165,7 @@ Mỗi module dưới đây là một tập tài liệu đặc tả hoàn chỉnh
 | **06** | [06. Threads, Replies & Mentions](./06-feature-threads-replies-and-mentions.md) | Trả lời trích dẫn, đếm reply, tag @mention, inbox nhắc tên | Trả lời trên timeline chính qua `messages.rp {th, s}`, doc trả lời trong `message_interactions`, `reply_preview` tính lúc đọc; Biến đếm `rc` `$inc` + survivor timer (projection `reply_index`); Mention App (nhúng trong core, D162–D176) lập chỉ mục mention từ event tự đủ, `ListMentions`, nhóm, gợi ý `@nhóm`, thông báo `CHATIM_NOTIFY`. |
 | **07** | [07. Read Receipts & Unread Badge](./07-feature-read-receipts-and-unread-badge.md) | Đánh dấu đã đọc/chưa đọc, badge số tin chưa đọc | Cập nhật vị trí đọc trên doc Member (`read_seq`, `read_ver`); Unread tính lúc đọc trong `ListMyRooms` từ đuôi phòng ≤ 300 tin, dừng ở 100, `approx` khi hết cửa sổ. |
 | **08** | [08. History Retrieval & Reconnect Sync](./08-feature-history-retrieval-and-sync.md) | Cuộn xem lịch sử tin nhắn, khôi phục sau mất mạng | Phân trang theo `seq` (`LATEST`/`OLDEST`/`BEFORE`/`AFTER`/`AROUND`); Dynamic View pipeline che giấu tin nhạy cảm; reconnect kéo snapshot (`ListMyRooms` + `GetHistory AFTER`), sync token thuộc Mention App (chưa có). |
-| **09** | [09. Realtime Delivery & Ephemeral](./09-feature-realtime-delivery-and-ephemeral.md) | Đẩy tin realtime, báo đang gõ, trạng thái online | (M4, chưa xây; core đã RePublish event sang `live.*`) Dynamic interest routing trên NATS PubSub; Bỏ qua DB cho tín hiệu tạm thời (typing, presence); Zero-alloc fanout WebSocket `gws`. |
+| **09** | [09. Realtime Delivery & Ephemeral](./09-feature-realtime-delivery-and-ephemeral.md) | Đẩy tin realtime, báo đang gõ, trạng thái online | (M4 phần 1 đã xây: kết nối, token, lệnh, §7; đẩy event phần 2; core đã RePublish event sang `live.*`) Dynamic interest routing trên NATS PubSub; Bỏ qua DB cho tín hiệu tạm thời (typing, presence); Zero-alloc fanout WebSocket `gws`. |
 | **10** | [10. Data Reconciliation & Self-Healing](./10-feature-data-reconciliation-and-repair.md) | Bù đắp event rớt mạng, tự sửa sai bộ đếm, resync | Cờ `_state` ghi cùng lệnh, xoá sau PubAck; sweeper slot 0 phát bù cờ quá 15s; một consumer `projections` (slot 0, 3 handler) không delay; phiếu hẹn `CHATIM_TIMER`; CLI `/app resync` bật lại cờ. |
 
 ---
