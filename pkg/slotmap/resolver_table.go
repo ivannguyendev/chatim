@@ -25,9 +25,21 @@ func (r *Resolver) load(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("read slot owners: %w", err)
 	}
-	r.table.Store(buildTable(cores, owners))
+	t := buildTable(cores, owners)
+	r.table.Store(t)
 	r.once.Do(func() { close(r.ready) })
+	if r.cfg.OnLoad != nil {
+		r.cfg.OnLoad(t.addrs())
+	}
 	return nil
+}
+
+func (t *table) addrs() []string {
+	addrs := make([]string, len(t.cores))
+	for i, c := range t.cores {
+		addrs[i] = c.addr
+	}
+	return addrs
 }
 
 const liveCoresScript = `

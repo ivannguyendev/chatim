@@ -25,7 +25,7 @@ func (c *Client) UnpinMessage(ctx context.Context, req *chatimv1.UnpinMessageReq
 }
 
 func (c *Client) GetReactionSettings(ctx context.Context, req *chatimv1.GetReactionSettingsRequest) (*chatimv1.GetReactionSettingsResponse, Stats, error) {
-	return call(ctx, c, c.loc.AnyAddr, retryIdempotent, func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.GetReactionSettingsResponse, error) {
+	return anyCore(ctx, c, func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.GetReactionSettingsResponse, error) {
 		return api.GetReactionSettings(ctx, req)
 	})
 }

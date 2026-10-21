@@ -25,6 +25,7 @@ const (
 type ResolverConfig struct {
 	Refresh     time.Duration
 	LoadTimeout time.Duration
+	OnLoad      func(addrs []string)
 }
 
 type Route struct {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/ivannguyendev/chatim/pkg/coreroute"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/tools/internal/route"
 )
@@ -54,7 +55,7 @@ func createRoom(ctx context.Context, cl *route.Client, c config, run string, i i
 		members[k] = fmt.Sprintf("%s-u%d-%d", run, i, k)
 	}
 	req := &chatimv1.CreateRoomRequest{Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: fmt.Sprintf("bench %s #%d", run, i), Members: members, RequestId: fmt.Sprintf("%s-r%d", run, i)}
-	resp, _, err := cl.CreateRoom(route.WithCaller(ctx, c.tenant, members[0]), req)
+	resp, _, err := cl.CreateRoom(coreroute.WithCaller(ctx, c.tenant, members[0]), req)
 	if err != nil {
 		return room{}, fmt.Errorf("room %d: %w", i, err)
 	}

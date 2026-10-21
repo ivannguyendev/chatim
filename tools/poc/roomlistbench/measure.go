@@ -6,8 +6,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/ivannguyendev/chatim/pkg/coreroute"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
-	"github.com/ivannguyendev/chatim/tools/internal/route"
 	"github.com/ivannguyendev/chatim/tools/poc/internal/latency"
 )
 
@@ -58,7 +58,7 @@ func (m *meter) call(ctx context.Context, key, user, next string) (*chatimv1.Lis
 		return nil, err
 	}
 	started := time.Now()
-	resp, err := m.api.ListMyRooms(route.WithCaller(ctx, m.tenant, user), &chatimv1.ListMyRoomsRequest{Folder: chatimv1.RoomFolder_ROOM_FOLDER_MAIN, Next: next, Limit: m.page})
+	resp, err := m.api.ListMyRooms(coreroute.WithCaller(ctx, m.tenant, user), &chatimv1.ListMyRoomsRequest{Folder: chatimv1.RoomFolder_ROOM_FOLDER_MAIN, Next: next, Limit: m.page})
 	took := time.Since(started)
 	if err != nil {
 		return nil, fmt.Errorf("ListMyRooms %s for %s: %w", key, user, err)
