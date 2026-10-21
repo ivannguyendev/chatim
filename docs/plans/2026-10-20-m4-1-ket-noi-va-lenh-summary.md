@@ -184,7 +184,7 @@ Xây xong trên `feat/m4` ngày 2026-10-21, 12 task, đã push. Task rủi ro (2
 
 ### 10.4. Còn lại
 
-- **`make vuln` đỏ** vì hai lỗ hổng có từ trước phần 1: GO-2026-6809 (`crypto/x509` của Go 1.26.9, đã sửa ở 1.26.10) và GO-2026-5932 (`x/crypto`, code không gọi tới, chưa có bản vá). **Chờ owner quyết nâng Go 1.26.9 → 1.26.10.**
+- **`make vuln`:** owner đồng ý nâng Go 1.26.9 → 1.26.10 (2026-10-21) để sửa GO-2026-6809 (`crypto/x509`); sau khi nâng, `make vuln` không còn lỗ hổng nào code chạm tới. GO-2026-5932 (`x/crypto`) vẫn nằm trong module nhưng code không gọi tới, chưa có bản vá.
 - **Test chập chờn:** `mongostore` `TestReactionSetOfTheSameUserRacingOnANewReactionNeverFails` lỗi một lần trong `make itest` (Mongo `DurationOverflow`), chạy lại 3/3 qua; cần xem riêng.
 - **Việc nhỏ ghi lại (Minor, không chặn):**
   - `pkg/coreroute`: dọn địa chỉ cũ đóng kết nối ngay, nên lệnh đang chạy tới core vừa rời bảng bị huỷ (máy gửi lại); `Room()` có thể dial lại địa chỉ vừa bị dọn (lần nạp sau dọn tiếp).
