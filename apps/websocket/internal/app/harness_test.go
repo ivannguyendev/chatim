@@ -77,7 +77,7 @@ func testConfig(redisAddr, keysFile string) config.Config {
 		RedisAddr: redisAddr, RedisPassword: testRedisPassword,
 		JWTKeysFile: keysFile, JWTIssuer: testIssuer, JWTAudience: testAudience, JWTLeeway: 30 * time.Second,
 		AuthTimeout: 5 * time.Second, UnauthMax: 100, FrameMax: 128 << 10, HeartbeatTimeout: 15 * time.Second,
-		CommandRate: 50, CommandBurst: 100, CommandInflight: 32, SendQueue: 256, WriteTimeout: 10 * time.Second,
+		CommandRate: 50, CommandBurst: 100, CommandInflight: 32, SendQueue: 256, SendQueueBytes: 1 << 20, WriteTimeout: 10 * time.Second,
 		RequestDeadline: 5 * time.Second, DrainDelay: 100 * time.Millisecond, ShutdownBudget: 15 * time.Second,
 		NATSURL: "nats://ws:" + testNATSPassword + "@nats:4222", EventStream: "CHATIM_EVT", EventRoot: "evt",
 		PublishRoot: "websocket.publish", PublishStream: "CHATIM_WS", StreamReplicas: 1,

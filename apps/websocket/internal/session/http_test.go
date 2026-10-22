@@ -116,16 +116,18 @@ func TestServeHTTPUpgradesAndRunsRequestsOverTCP(t *testing.T) {
 
 func TestNewRejectsInvalidOptions(t *testing.T) {
 	mutations := map[string]func(o *Options){
-		"auth timeout":    func(o *Options) { o.AuthTimeout = 0 },
-		"heartbeat":       func(o *Options) { o.HeartbeatTimeout = 0 },
-		"write timeout":   func(o *Options) { o.WriteTimeout = 0 },
-		"unauth max":      func(o *Options) { o.UnauthMax = 0 },
-		"frame max":       func(o *Options) { o.FrameMax = 0 },
-		"rate":            func(o *Options) { o.CommandRate = 0 },
-		"burst":           func(o *Options) { o.CommandBurst = 0 },
-		"inflight":        func(o *Options) { o.CommandInflight = 0 },
-		"send queue":      func(o *Options) { o.SendQueue = 0 },
-		"negative leeway": func(o *Options) { o.JWTLeeway = -time.Second },
+		"auth timeout":               func(o *Options) { o.AuthTimeout = 0 },
+		"heartbeat":                  func(o *Options) { o.HeartbeatTimeout = 0 },
+		"write timeout":              func(o *Options) { o.WriteTimeout = 0 },
+		"unauth max":                 func(o *Options) { o.UnauthMax = 0 },
+		"frame max":                  func(o *Options) { o.FrameMax = 0 },
+		"rate":                       func(o *Options) { o.CommandRate = 0 },
+		"burst":                      func(o *Options) { o.CommandBurst = 0 },
+		"inflight":                   func(o *Options) { o.CommandInflight = 0 },
+		"send queue":                 func(o *Options) { o.SendQueue = 0 },
+		"send bytes":                 func(o *Options) { o.SendQueueBytes = 0 },
+		"send bytes under one frame": func(o *Options) { o.SendQueueBytes = o.FrameMax - 1 },
+		"negative leeway":            func(o *Options) { o.JWTLeeway = -time.Second },
 	}
 	for name, mutate := range mutations {
 		t.Run(name, func(t *testing.T) {
@@ -147,6 +149,7 @@ func TestNewRejectsInvalidOptions(t *testing.T) {
 func TestSourcesExposeEveryCounterWithFixedLabels(t *testing.T) {
 	h := newHarness(t, testOptions())
 	h.server.stats.closed(CodeAuthTimeout)
+	h.server.stats.closed(CodeSlowClient)
 	h.server.stats.closed(4999)
 	h.server.stats.authFailed("bad_signature")
 	h.server.stats.reject(rejectInflight)
@@ -159,7 +162,7 @@ func TestSourcesExposeEveryCounterWithFixedLabels(t *testing.T) {
 		t.Fatalf("metric %s{%s=%q} missing", name, key, value)
 		return 0
 	}
-	if read("closes_total", "code", "4002") != 1 || read("closes_total", "code", "other") != 1 {
+	if read("closes_total", "code", "4002") != 1 || read("closes_total", "code", "4008") != 1 || read("closes_total", "code", "other") != 1 {
 		t.Fatal("close counters wrong")
 	}
 	if read("auth_failures_total", "reason", "bad_signature") != 1 || read("auth_failures_total", "reason", "identity_changed") != 0 {

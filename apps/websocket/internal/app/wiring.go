@@ -80,6 +80,7 @@ func sessionOptions(cfg config.Config) session.Options {
 		CommandBurst:     cfg.CommandBurst,
 		CommandInflight:  cfg.CommandInflight,
 		SendQueue:        cfg.SendQueue,
+		SendQueueBytes:   cfg.SendQueueBytes,
 	}
 }
 

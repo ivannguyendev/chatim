@@ -38,6 +38,7 @@ type Config struct {
 	CommandBurst     int
 	CommandInflight  int
 	SendQueue        int
+	SendQueueBytes   int
 	WriteTimeout     time.Duration
 	RequestDeadline  time.Duration
 	DrainDelay       time.Duration
@@ -80,6 +81,7 @@ func Load() (Config, error) {
 		CommandBurst:     p.number("WS_COMMAND_BURST", 100),
 		CommandInflight:  p.number("WS_COMMAND_INFLIGHT", 32),
 		SendQueue:        p.number("WS_SEND_QUEUE", 256),
+		SendQueueBytes:   p.number("WS_SEND_QUEUE_BYTES", 1<<20),
 		WriteTimeout:     p.span("WS_WRITE_TIMEOUT", 10*time.Second),
 		RequestDeadline:  p.span("CORE_REQUEST_DEADLINE", 5*time.Second),
 		DrainDelay:       p.span("WS_DRAIN_DELAY", 2*time.Second),
@@ -127,6 +129,7 @@ func (c Config) LogValue() slog.Value {
 		slog.Int("command_burst", c.CommandBurst),
 		slog.Int("command_inflight", c.CommandInflight),
 		slog.Int("send_queue", c.SendQueue),
+		slog.Int("send_queue_bytes", c.SendQueueBytes),
 		slog.Duration("write_timeout", c.WriteTimeout),
 		slog.Duration("request_deadline", c.RequestDeadline),
 		slog.Duration("drain_delay", c.DrainDelay),

@@ -48,6 +48,10 @@ type connection struct {
 	inflight atomic.Int64
 	work     sync.WaitGroup
 
+	queueMu     sync.Mutex
+	queuedBytes int64
+	sealed      bool
+
 	mu        sync.Mutex
 	authed    bool
 	finished  bool
@@ -83,6 +87,7 @@ func (c *connection) run() {
 	_ = c.socket.SetReadDeadline(time.Now().Add(c.server.opts.AuthTimeout + authReadGrace))
 	c.socket.ReadLoop()
 	c.work.Wait()
+	c.sealQueue()
 	if code, ok := c.closeCodeOf(c.closeErr); ok {
 		c.server.stats.closed(code)
 	}

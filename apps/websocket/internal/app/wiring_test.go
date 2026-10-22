@@ -30,7 +30,8 @@ func TestSessionOptionsCopyEveryLimit(t *testing.T) {
 	got := sessionOptions(cfg)
 	if got.AuthTimeout != cfg.AuthTimeout || got.HeartbeatTimeout != cfg.HeartbeatTimeout || got.WriteTimeout != cfg.WriteTimeout ||
 		got.UnauthMax != cfg.UnauthMax || got.FrameMax != cfg.FrameMax || got.CommandRate != cfg.CommandRate ||
-		got.CommandBurst != cfg.CommandBurst || got.CommandInflight != cfg.CommandInflight || got.SendQueue != cfg.SendQueue {
+		got.CommandBurst != cfg.CommandBurst || got.CommandInflight != cfg.CommandInflight || got.SendQueue != cfg.SendQueue ||
+		got.SendQueueBytes != cfg.SendQueueBytes {
 		t.Fatalf("session options = %+v from %+v", got, cfg)
 	}
 }

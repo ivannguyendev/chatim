@@ -30,6 +30,7 @@ const (
 	CodeTryAgainLater   uint16 = 1013
 	CodeUnauthenticated uint16 = 4001
 	CodeAuthTimeout     uint16 = 4002
+	CodeSlowClient      uint16 = 4008
 )
 
 type Verifier interface {
@@ -55,6 +56,7 @@ type Options struct {
 	CommandBurst     int
 	CommandInflight  int
 	SendQueue        int
+	SendQueueBytes   int
 }
 
 func (o Options) validate() error {
@@ -73,6 +75,10 @@ func (o Options) validate() error {
 	positive("command burst", o.CommandBurst > 0)
 	positive("commands in flight", o.CommandInflight > 0)
 	positive("send queue", o.SendQueue > 0)
+	positive("send queue bytes", o.SendQueueBytes > 0)
+	if o.SendQueueBytes < o.FrameMax {
+		errs = append(errs, errors.New("session: send queue bytes must hold one frame of the frame limit"))
+	}
 	if o.JWTLeeway < 0 {
 		errs = append(errs, errors.New("session: jwt leeway must not be negative"))
 	}

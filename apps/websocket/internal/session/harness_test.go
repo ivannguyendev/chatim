@@ -41,6 +41,7 @@ func testOptions() Options {
 		CommandBurst:     100,
 		CommandInflight:  32,
 		SendQueue:        16,
+		SendQueueBytes:   64 << 10,
 	}
 }
 

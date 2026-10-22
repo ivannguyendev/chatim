@@ -30,6 +30,7 @@ var (
 	closeCodes   = []uint16{
 		CodeNormal, CodeGoingAway, CodeProtocolError, CodeUnsupportedData, CodeAbnormal, CodeInvalidPayload,
 		CodePolicyViolation, CodeTooLarge, CodeInternalError, CodeTryAgainLater, CodeUnauthenticated, CodeAuthTimeout,
+		CodeSlowClient,
 	}
 	tokenReasons = []jwtverify.Reason{
 		jwtverify.ReasonMalformed, jwtverify.ReasonAlgorithm, jwtverify.ReasonSignature, jwtverify.ReasonKeyID,
@@ -42,6 +43,7 @@ var (
 type stats struct {
 	open          atomic.Int64
 	unauth        atomic.Int64
+	queuedBytes   atomic.Int64
 	unknownFrames atomic.Uint64
 	rejected      [rejectReasonCount]atomic.Uint64
 	authFailures  map[string]*atomic.Uint64
@@ -91,6 +93,7 @@ func (s *stats) sources() []metrics.Source {
 	out := []metrics.Source{
 		{Name: "connections", Help: "Open websocket connections.", Gauge: true, Read: gaugeOf(&s.open)},
 		{Name: "unauthenticated_connections", Help: "Open websocket connections that have not authenticated yet.", Gauge: true, Read: gaugeOf(&s.unauth)},
+		{Name: "send_queue_bytes", Help: "Bytes queued for writing across open websocket connections.", Gauge: true, Read: gaugeOf(&s.queuedBytes)},
 		{Name: "unknown_frames_total", Help: "Client frames of an unknown type ignored after auth.", Read: counterOf(&s.unknownFrames)},
 	}
 	for label, counter := range s.authFailures {

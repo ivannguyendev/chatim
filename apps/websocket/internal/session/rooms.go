@@ -13,6 +13,10 @@ type roomSink struct {
 
 func (s roomSink) Send(frame []byte) { s.c.enqueue(outFrame{opcode: gws.OpcodeBinary, payload: frame}) }
 
+func (s roomSink) TrySend(frame []byte) bool {
+	return s.c.tryEnqueue(outFrame{opcode: gws.OpcodeBinary, payload: frame})
+}
+
 func (s roomSink) Fail() { s.c.closeWith(CodeTryAgainLater) }
 
 func (c *connection) join(claims jwtverify.Claims) {

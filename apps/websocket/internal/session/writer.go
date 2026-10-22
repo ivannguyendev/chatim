@@ -14,6 +14,15 @@ type outFrame struct {
 	payload []byte
 }
 
+type admission int
+
+const (
+	admitted admission = iota
+	admitDropped
+	admitOverBudget
+	admitQueueFull
+)
+
 func (c *connection) writeLoop() {
 	defer c.recoverWriter()
 	for {
@@ -30,7 +39,9 @@ func (c *connection) writeLoop() {
 			c.writeClose(code)
 			return
 		case frame := <-c.out:
-			if !c.write(frame) {
+			written := c.write(frame)
+			c.written(frame)
+			if !written {
 				c.abort()
 				return
 			}
@@ -55,7 +66,9 @@ func (c *connection) writeClose(code uint16) {
 	for {
 		select {
 		case frame := <-c.out:
-			if c.socket.WriteMessage(frame.opcode, frame.payload) != nil {
+			err := c.socket.WriteMessage(frame.opcode, frame.payload)
+			c.written(frame)
+			if err != nil {
 				c.abort()
 				return
 			}
@@ -77,16 +90,59 @@ func (c *connection) respond(resp *chatimv1.ServerResponse) {
 }
 
 func (c *connection) enqueue(frame outFrame) {
+	switch c.admit(frame) {
+	case admitOverBudget:
+		c.closeWith(CodeSlowClient)
+	case admitQueueFull:
+		c.abort()
+	case admitted, admitDropped:
+	}
+}
+
+func (c *connection) tryEnqueue(frame outFrame) bool { return c.admit(frame) == admitted }
+
+func (c *connection) admit(frame outFrame) admission {
 	select {
 	case <-c.closed:
-		return
+		return admitDropped
 	default:
+	}
+	size := int64(len(frame.payload))
+	c.queueMu.Lock()
+	defer c.queueMu.Unlock()
+	switch {
+	case c.sealed:
+		return admitDropped
+	case c.queuedBytes+size > int64(c.server.opts.SendQueueBytes):
+		return admitOverBudget
 	}
 	select {
 	case c.out <- frame:
+		c.queuedBytes += size
+		c.server.stats.queuedBytes.Add(size)
+		return admitted
 	default:
-		c.abort()
+		return admitQueueFull
 	}
+}
+
+func (c *connection) written(frame outFrame) {
+	size := int64(len(frame.payload))
+	c.queueMu.Lock()
+	defer c.queueMu.Unlock()
+	if c.sealed {
+		return
+	}
+	c.queuedBytes -= size
+	c.server.stats.queuedBytes.Add(-size)
+}
+
+func (c *connection) sealQueue() {
+	c.queueMu.Lock()
+	defer c.queueMu.Unlock()
+	c.sealed = true
+	c.server.stats.queuedBytes.Add(-c.queuedBytes)
+	c.queuedBytes = 0
 }
 
 func (c *connection) closeWith(code uint16) {

@@ -179,6 +179,7 @@ Toàn bộ đọc qua `apps/core/internal/config`; thiếu thì dùng giá trị
 | `WS_COMMAND_RATE`, `WS_COMMAND_BURST` | `50` / `100` | Giới hạn frame mỗi giây và burst mỗi kết nối |
 | `WS_COMMAND_INFLIGHT` | `32` | Số lệnh đang chạy tối đa mỗi kết nối; quá thì `RESOURCE_EXHAUSTED` |
 | `WS_SEND_QUEUE` | `256` | Hàng frame chờ ghi mỗi kết nối; đầy thì cắt kết nối |
+| `WS_SEND_QUEUE_BYTES` | `1048576` | Byte chờ ghi mỗi kết nối (≥ `WS_FRAME_MAX`); vượt thì đóng 4008 sau các frame đã xếp |
 | `WS_WRITE_TIMEOUT` | `10s` | Hạn ghi một frame |
 | `CORE_REQUEST_DEADLINE` | `5s` | Deadline mỗi lệnh gọi core |
 | `WS_DRAIN_DELAY`, `WS_SHUTDOWN_BUDGET` | `2s` / `15s` | Chuỗi dừng: `WS_DRAIN_DELAY + CORE_REQUEST_DEADLINE + 1s` phải ≤ budget; compose `stop_grace_period` = budget + 3s = 18s |
