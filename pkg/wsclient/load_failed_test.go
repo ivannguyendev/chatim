@@ -80,3 +80,30 @@ func TestALoadFailedHandlerDecidesAndNothingIsSentForIt(t *testing.T) {
 		_ = client.Close()
 	})
 }
+
+func TestReadyOrResyncAfterLoadFailedCancelsThePendingLoadRooms(t *testing.T) {
+	for name, after := range map[string]*chatimv1.ServerFrame{
+		"ready":  {Frame: &chatimv1.ServerFrame_Ready{Ready: &chatimv1.ReadyFrame{}}},
+		"resync": {Frame: &chatimv1.ServerFrame_Resync{Resync: &chatimv1.ResyncFrame{Reason: chatimv1.ResyncReason_RESYNC_REASON_LAG_TOO_OLD}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				server := newFakeServer(func(conn *gws.Conn, frame *chatimv1.ClientFrame) {
+					if frame.GetAuth() != nil {
+						writeServerFrame(t, conn, &chatimv1.ServerFrame{Frame: &chatimv1.ServerFrame_LoadFailed{
+							LoadFailed: &chatimv1.LoadFailedFrame{RetryAfterMs: 2000},
+						}})
+						writeServerFrame(t, conn, after)
+					}
+				})
+				client := dialPipe(t, server, "token")
+				time.Sleep(10 * time.Second)
+				synctest.Wait()
+				if got := loadRoomsFrames(server.drain()); len(got) != 0 {
+					t.Fatalf("load_rooms sent after %s: %v", name, got)
+				}
+				_ = client.Close()
+			})
+		})
+	}
+}

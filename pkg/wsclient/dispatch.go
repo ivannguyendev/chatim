@@ -87,10 +87,12 @@ func (c *Client) dispatch(frame *chatimv1.ServerFrame) {
 			c.opts.onNotify(f.Notification)
 		}
 	case *chatimv1.ServerFrame_Ready:
+		c.stopLoadTimer()
 		if c.opts.onReady != nil {
 			c.opts.onReady()
 		}
 	case *chatimv1.ServerFrame_Resync:
+		c.stopLoadTimer()
 		c.resync(f.Resync.GetReason())
 	case *chatimv1.ServerFrame_RoomClosed:
 		if c.opts.onRoomClosed != nil {
