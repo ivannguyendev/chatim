@@ -99,6 +99,7 @@ func specs() []spec {
 		via(coreClient, chatimv1.CoreServiceClient.SetMemberPriority),
 		via(coreClient, chatimv1.CoreServiceClient.ListMembers),
 		via(coreClient, chatimv1.CoreServiceClient.MarkUnread),
+		via(coreClient, chatimv1.CoreServiceClient.MarkRead),
 		via(mentionClient, chatimv1.MentionServiceClient.ListMentions),
 		via(mentionClient, chatimv1.MentionServiceClient.ListRoomGroups),
 	}

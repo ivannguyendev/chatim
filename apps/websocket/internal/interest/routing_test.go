@@ -55,7 +55,7 @@ func TestEachKindReachesOnlyItsAudience(t *testing.T) {
 		"member_role_changed": viewers, "member_priority_changed": viewers, "member_count_changed": viewers,
 		"reaction_changed": viewers, "counts_changed": viewers, "msg_pinned": viewers, "msg_unpinned": viewers,
 		"message_hidden": owner, "history_cleared": owner, "bookmark_changed": owner,
-		"room_preferences_changed": owner, "read_updated": owner,
+		"room_preferences_changed": owner,
 	}
 	for kind, want := range cases {
 		t.Run(kind, func(t *testing.T) {
@@ -92,15 +92,15 @@ func TestUnknownAndMalformedEventsAreDroppedAndCounted(t *testing.T) {
 		badRoom.Room = "x1"
 		wrongData := msg("t1", 1)
 		wrongData.DataKind = "member"
-		garbage := event("read_updated", "t1", 1, "ow", 0)
+		garbage := event("history_cleared", "t1", 1, "ow", 0)
 		garbage.Data = []byte{0xff, 0xff}
-		otherTenantPayload := event("read_updated", "t2", 1, "ow", 0)
+		otherTenantPayload := event("history_cleared", "t2", 1, "ow", 0)
 		otherTenantPayload.Tenant = "t1"
-		otherRoomPayload := event("read_updated", "t1", 2, "ow", 0)
+		otherRoomPayload := event("history_cleared", "t1", 2, "ow", 0)
 		otherRoomPayload.Room = "1"
-		wrongPayload := event("read_updated", "t1", 1, "ow", 0)
+		wrongPayload := event("history_cleared", "t1", 1, "ow", 0)
 		wrongPayload.Kind = "message_hidden"
-		noUser := event("read_updated", "t1", 1, "", 0)
+		noUser := event("history_cleared", "t1", 1, "", 0)
 		for _, env := range []feed.Envelope{badRoom, wrongData, garbage, otherTenantPayload, otherRoomPayload, wrongPayload, noUser} {
 			a.route(env)
 		}
@@ -117,7 +117,7 @@ func TestUnknownAndMalformedEventsAreDroppedAndCounted(t *testing.T) {
 func TestTheSameUserIDInTwoTenantsNeverSharesEvents(t *testing.T) {
 	run(t, func(t *testing.T) {
 		a := newAudience(t)
-		a.route(event("read_updated", "t2", 1, "ow", 0))
+		a.route(event("history_cleared", "t2", 1, "ow", 0))
 		if got := a.receivers(); !slices.Equal(got, []string{"t2ow"}) {
 			t.Fatalf("t2 private event reached %v", got)
 		}

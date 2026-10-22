@@ -38,8 +38,8 @@ func refusedSend() *chatimv1.ClientRequest {
 func TestCommandCountersArePrebuiltForEveryPair(t *testing.T) {
 	h := newHarness(t, time.Second)
 	sources := h.exec.CommandSources()
-	if len(sources) != 33*17 {
-		t.Fatalf("sources = %d, want %d", len(sources), 33*17)
+	if len(sources) != 34*17 {
+		t.Fatalf("sources = %d, want %d", len(sources), 34*17)
 	}
 	seen := map[string]bool{}
 	for _, s := range sources {
@@ -65,7 +65,7 @@ func TestCommandCountersArePrebuiltForEveryPair(t *testing.T) {
 func TestCoreCallLatencyCountsOnlyCoreCalls(t *testing.T) {
 	h := newHarness(t, time.Second)
 	latencies := h.exec.CoreCallLatency()
-	if len(latencies) != 33 {
+	if len(latencies) != 34 {
 		t.Fatalf("latencies = %d", len(latencies))
 	}
 	h.exec.Execute(t.Context(), testClaims, plainSend())

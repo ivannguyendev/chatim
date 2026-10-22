@@ -75,6 +75,7 @@ message ClientRequest {
     MarkUnreadRequest mark_unread = 40;
     ListMentionsRequest list_mentions = 41;
     ListRoomGroupsRequest list_room_groups = 42;
+    MarkReadRequest mark_read = 43;
   }
 }
 
@@ -156,5 +157,6 @@ message ServerResponse {
     MarkUnreadResponse mark_unread = 40;
     ListMentionsResponse list_mentions = 41;
     ListRoomGroupsResponse list_room_groups = 42;
+    MarkReadResponse mark_read = 43;
   }
 }

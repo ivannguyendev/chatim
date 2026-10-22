@@ -71,8 +71,8 @@ func sendRequest(send *chatimv1.SendMessageRequest) *chatimv1.ClientRequest {
 
 func TestEveryCommandGoesToItsCoreOnce(t *testing.T) {
 	fields := requestFields()
-	if len(fields) != 33 {
-		t.Fatalf("commands = %d, want 33", len(fields))
+	if len(fields) != 34 {
+		t.Fatalf("commands = %d, want 34", len(fields))
 	}
 	for _, field := range fields {
 		name := commandName(field)

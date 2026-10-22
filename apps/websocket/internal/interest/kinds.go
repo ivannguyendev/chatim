@@ -25,6 +25,7 @@ const (
 	toViewers
 	toOwner
 	toMembership
+	toReaders
 )
 
 const (
@@ -64,21 +65,41 @@ var kinds = map[string]rule{
 	"history_cleared":          {toOwner, []string{dataMember}, historyCleared},
 	"bookmark_changed":         {toOwner, []string{dataMember}, bookmarkChanged},
 	"room_preferences_changed": {toOwner, []string{dataMember}, preferencesChanged},
-	"read_updated":             {toOwner, []string{dataMember}, readUpdated},
+	"read_positions":           {toReaders, []string{dataMember}, nil},
 }
 
 func (r rule) accepts(data string) bool { return slices.Contains(r.data, data) }
 
-func (r rule) user(env feed.Envelope) (string, uint32, bool) {
+func decode(env feed.Envelope) (*chatimv1.Event, bool) {
 	var ev chatimv1.Event
-	if decodeOptions.Unmarshal(env.Data, &ev) != nil {
+	if decodeOptions.Unmarshal(env.Data, &ev) != nil || ev.GetTenant() != env.Tenant || ev.GetRoomId() != env.Room {
+		return nil, false
+	}
+	return &ev, true
+}
+
+func (r rule) user(env feed.Envelope) (string, uint32, bool) {
+	ev, ok := decode(env)
+	if !ok {
 		return "", 0, false
 	}
-	if ev.GetTenant() != env.Tenant || ev.GetRoomId() != env.Room {
-		return "", 0, false
-	}
-	id, ver := r.subject(&ev)
+	id, ver := r.subject(ev)
 	return id, ver, id != ""
+}
+
+func readers(env feed.Envelope) ([]string, bool) {
+	ev, ok := decode(env)
+	if !ok || ev.GetReadPositions() == nil {
+		return nil, false
+	}
+	entries := ev.GetReadPositions().GetEntries()
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.GetUser() != "" {
+			out = append(out, e.GetUser())
+		}
+	}
+	return out, true
 }
 
 func memberAdded(ev *chatimv1.Event) (string, uint32) {
@@ -102,5 +123,3 @@ func bookmarkChanged(ev *chatimv1.Event) (string, uint32) {
 func preferencesChanged(ev *chatimv1.Event) (string, uint32) {
 	return ev.GetRoomPreferencesChanged().GetUser(), 0
 }
-
-func readUpdated(ev *chatimv1.Event) (string, uint32) { return ev.GetReadUpdated().GetUser(), 0 }

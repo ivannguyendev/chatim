@@ -65,8 +65,8 @@ func TestAJumpSuspendsEveryUserUntilTheirReloadThenResyncsAndDelivers(t *testing
 		}
 		f.route(withSeq(msg("t1", 1), 41))
 		f.route(event("reaction_changed", "t1", 2, "", 0))
-		f.route(event("read_updated", "t1", 1, "u1", 0))
-		f.route(event("read_updated", "t1", 1, "u2", 0))
+		f.route(reads("t1", 1, "u1", "u2"))
+		f.route(reads("t1", 2, "u1"))
 		f.route(event("member_role_changed", "t1", 2, "u2", 3))
 		pub.Deliver(publishEnv("t1", packet("t1", "mention", "u1", "u2")))
 		if a, b := s1.take(), s2.take(); len(a) != 0 || len(b) != 0 {

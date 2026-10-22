@@ -49,19 +49,26 @@ func (c *connection) release() {
 }
 
 func (c *connection) dispatch(req *chatimv1.ClientRequest) {
-	if room, ok := sendRoom(req); ok {
+	if room, ok := orderedRoom(req); ok {
 		c.enqueueSend(room, req)
 		return
 	}
 	c.work.Go(func() { c.guarded(req) })
 }
 
-func sendRoom(req *chatimv1.ClientRequest) (uint64, bool) {
-	send := req.GetSendMessage()
-	if send == nil {
+func orderedRoom(req *chatimv1.ClientRequest) (uint64, bool) {
+	var roomID string
+	switch r := req.GetRequest().(type) {
+	case *chatimv1.ClientRequest_SendMessage:
+		roomID = r.SendMessage.GetRoomId()
+	case *chatimv1.ClientRequest_MarkRead:
+		roomID = r.MarkRead.GetRoomId()
+	case *chatimv1.ClientRequest_MarkUnread:
+		roomID = r.MarkUnread.GetRoomId()
+	default:
 		return 0, false
 	}
-	room, err := ids.ParseRoomID(send.GetRoomId())
+	room, err := ids.ParseRoomID(roomID)
 	return room, err == nil
 }
 

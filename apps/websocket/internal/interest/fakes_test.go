@@ -260,7 +260,7 @@ var dataKinds = map[string]string{
 	"msg_created": "message", "msg_edited": "message", "msg_deleted": "message", "reaction_changed": "message", "counts_changed": "message",
 	"room_created": "room", "room_updated": "room", "member_count_changed": "room", "msg_pinned": "room", "msg_unpinned": "room",
 	"member_added": "member", "member_removed": "member", "member_role_changed": "member", "member_priority_changed": "member",
-	"message_hidden": "member", "history_cleared": "member", "bookmark_changed": "member", "room_preferences_changed": "member", "read_updated": "member",
+	"message_hidden": "member", "history_cleared": "member", "bookmark_changed": "member", "room_preferences_changed": "member", "read_positions": "member",
 }
 
 func event(kind, tenant string, room uint64, user string, ver uint32) feed.Envelope {
@@ -281,14 +281,26 @@ func event(kind, tenant string, room uint64, user string, ver uint32) feed.Envel
 		ev.Payload = &chatimv1.Event_BookmarkChanged{BookmarkChanged: &chatimv1.BookmarkChanged{User: user}}
 	case "room_preferences_changed":
 		ev.Payload = &chatimv1.Event_RoomPreferencesChanged{RoomPreferencesChanged: &chatimv1.RoomPreferencesChanged{User: user}}
-	case "read_updated":
-		ev.Payload = &chatimv1.Event_ReadUpdated{ReadUpdated: &chatimv1.ReadUpdated{User: user}}
+	case "read_positions":
+		ev.Payload = &chatimv1.Event_ReadPositions{ReadPositions: &chatimv1.ReadPositions{Entries: readEntries(strings.Split(user, ","))}}
 	}
 	raw, err := proto.Marshal(ev)
 	if err != nil {
 		panic(err)
 	}
 	return feed.Envelope{Tenant: tenant, DataKind: dataKinds[kind], Room: roomID, Kind: kind, ID: ev.GetId(), Data: raw}
+}
+
+func readEntries(users []string) []*chatimv1.ReadEntry {
+	out := make([]*chatimv1.ReadEntry, len(users))
+	for i, u := range users {
+		out[i] = &chatimv1.ReadEntry{User: u, ReadSeq: 1, ReadVer: 1}
+	}
+	return out
+}
+
+func reads(tenant string, room uint64, users ...string) feed.Envelope {
+	return event("read_positions", tenant, room, strings.Join(users, ","), 0)
 }
 
 func msg(tenant string, room uint64) feed.Envelope { return event("msg_created", tenant, room, "", 0) }

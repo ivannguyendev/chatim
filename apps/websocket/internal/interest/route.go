@@ -43,6 +43,35 @@ func (t *Table) Route(env feed.Envelope) {
 		t.toViewers(t.viewers(k), f, nil)
 	case toOwner, toMembership:
 		t.toUser(env, r, k, f)
+	case toReaders:
+		t.toReaders(env, k, f)
+	}
+}
+
+func (t *Table) toReaders(env feed.Envelope, k roomKey, f *lazyFrame) {
+	ids, ok := readers(env)
+	if !ok {
+		t.stats.dropped[dropMalformed].Add(1)
+		return
+	}
+	viewers := t.viewers(k)
+	named := make(map[*user]bool, len(ids))
+	for _, id := range ids {
+		u := t.lookup(userKey{tenant: env.Tenant, user: id})
+		if u == nil || named[u] {
+			continue
+		}
+		named[u] = true
+		t.toNamedReader(u, k.room, f)
+	}
+	t.toViewers(viewers, f, named)
+}
+
+func (t *Table) toNamedReader(u *user, room uint64, f *lazyFrame) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if _, member := u.rooms[room]; member && u.live() {
+		t.stats.delivered[levelMember].Add(u.deliver(f.get(), f.catchingUp, true))
 	}
 }
 
@@ -79,9 +108,9 @@ func (t *Table) toMembers(k roomKey, f *lazyFrame) {
 	}
 }
 
-func (t *Table) toViewers(viewers []*Conn, f *lazyFrame, skip *user) {
+func (t *Table) toViewers(viewers []*Conn, f *lazyFrame, skip map[*user]bool) {
 	for _, c := range viewers {
-		if c.user != skip && t.toViewer(c, f) {
+		if !skip[c.user] && t.toViewer(c, f) {
 			t.stats.delivered[levelOpen].Add(1)
 		}
 	}
@@ -114,7 +143,7 @@ func (t *Table) membership(k roomKey, uk userKey, ch change, f *lazyFrame) {
 		t.applyMembership(u, ch, f)
 		u.mu.Unlock()
 	}
-	t.toViewers(viewers, f, u)
+	t.toViewers(viewers, f, map[*user]bool{u: true})
 }
 
 func (t *Table) applyMembership(u *user, ch change, f *lazyFrame) {

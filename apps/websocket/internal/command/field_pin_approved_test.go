@@ -78,6 +78,8 @@ chatim.v1.ListRoomGroupsRequest 1 room_id single string
 chatim.v1.ListThreadsRequest 1 room_id single string
 chatim.v1.ListThreadsRequest 2 before single string
 chatim.v1.ListThreadsRequest 3 limit single uint32
+chatim.v1.MarkReadRequest 1 room_id single string
+chatim.v1.MarkReadRequest 2 seq single uint64
 chatim.v1.MarkUnreadRequest 1 room_id single string
 chatim.v1.MarkUnreadRequest 2 seq single uint64
 chatim.v1.MemberRole = 0 MEMBER_ROLE_UNSPECIFIED
