@@ -16,6 +16,8 @@ var (
 	ErrUnauthenticated = errors.New("wsclient: unauthenticated")
 	ErrAuthTimeout     = errors.New("wsclient: auth timeout")
 	ErrClosed          = errors.New("wsclient: closed")
+
+	ErrHandlerStillRunning = errors.New("wsclient: a handler is still running after close; call CloseAsync from handlers")
 )
 
 type CloseError struct {

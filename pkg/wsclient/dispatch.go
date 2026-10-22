@@ -42,7 +42,7 @@ func (c *Client) enqueue(frame *chatimv1.ServerFrame) {
 }
 
 func (c *Client) dispatchLoop() {
-	c.dispatcherID.Store(goroutineID())
+	defer close(c.dispatched)
 	for {
 		select {
 		case frame := <-c.inbox:

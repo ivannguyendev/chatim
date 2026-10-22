@@ -1,6 +1,7 @@
 package wsclient
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"sync"
@@ -207,18 +208,44 @@ func readyServer(t *testing.T) *fakeServer {
 	})
 }
 
-func TestCloseFromInsideAHandlerReturnsAndReleasesTheClient(t *testing.T) {
+func TestCloseAsyncFromInsideAHandlerReleasesTheClient(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		clients := make(chan *Client, 1)
+		returned := make(chan struct{})
+		client := dialPipe(t, readyServer(t), "token", OnReady(func() {
+			(<-clients).CloseAsync()
+			close(returned)
+		}))
+		clients <- client
+		<-returned
+		<-client.Done()
+		if !errors.Is(client.Err(), ErrClosed) {
+			t.Fatalf("Err = %v, want a normal close", client.Err())
+		}
+		if err := client.Close(); err != nil {
+			t.Fatalf("Close after CloseAsync: %v", err)
+		}
+		if err := client.Close(); err != nil {
+			t.Fatalf("second Close: %v", err)
+		}
+	})
+}
+
+func TestCloseInsideAHandlerGivesUpInsteadOfHangingSoHandlersMustUseCloseAsync(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		clients := make(chan *Client, 1)
 		closed := make(chan error, 1)
 		client := dialPipe(t, readyServer(t), "token", OnReady(func() { closed <- (<-clients).Close() }))
 		clients <- client
-		if err := <-closed; err != nil {
-			t.Fatalf("Close from a handler: %v", err)
+		start := time.Now()
+		if err := <-closed; !errors.Is(err, ErrHandlerStillRunning) {
+			t.Fatalf("Close from a handler = %v, want %v", err, ErrHandlerStillRunning)
 		}
-		<-client.Done()
+		if waited := time.Since(start); waited != handlerWaitTimeout {
+			t.Fatalf("Close from a handler waited %v, want %v", waited, handlerWaitTimeout)
+		}
 		if err := client.Close(); err != nil {
-			t.Fatalf("second Close: %v", err)
+			t.Fatalf("Close after the handler returned: %v", err)
 		}
 	})
 }
@@ -231,11 +258,8 @@ func TestCloseFromAnotherGoroutineWaitsForTheRunningHandler(t *testing.T) {
 			<-release
 		}))
 		<-entered
-		returned := make(chan struct{})
-		go func() {
-			_ = client.Close()
-			close(returned)
-		}()
+		returned := make(chan error, 1)
+		go func() { returned <- client.Close() }()
 		synctest.Wait()
 		select {
 		case <-returned:
@@ -243,15 +267,11 @@ func TestCloseFromAnotherGoroutineWaitsForTheRunningHandler(t *testing.T) {
 		default:
 		}
 		close(release)
-		<-returned
+		if err := <-returned; err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+		if err := client.Close(); err != nil {
+			t.Fatalf("second Close: %v", err)
+		}
 	})
-}
-
-func TestGoroutineIDTellsGoroutinesApart(t *testing.T) {
-	mine := goroutineID()
-	other := make(chan uint64)
-	go func() { other <- goroutineID() }()
-	if theirs := <-other; mine == 0 || theirs == 0 || mine == theirs || mine != goroutineID() {
-		t.Fatalf("goroutine ids mine %d theirs %d", mine, theirs)
-	}
 }

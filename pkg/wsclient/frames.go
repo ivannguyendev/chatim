@@ -39,6 +39,9 @@ func (c *Client) writeLoop() {
 		select {
 		case <-c.done:
 			return
+		case <-c.closing:
+			c.writeClose()
+			return
 		case frame := <-c.out:
 			c.write(frame)
 		case <-heartbeat.C:
@@ -51,6 +54,18 @@ func (c *Client) writeLoop() {
 func (c *Client) write(frame []byte) {
 	_ = c.conn.NetConn().SetWriteDeadline(time.Now().Add(writeTimeout))
 	_ = c.conn.WriteMessage(gws.OpcodeBinary, frame)
+}
+
+func (c *Client) writeClose() {
+	_ = c.conn.NetConn().SetWriteDeadline(time.Now().Add(closeTimeout))
+	_ = c.conn.WriteClose(1000, nil)
+	timer := time.NewTimer(closeTimeout)
+	defer timer.Stop()
+	select {
+	case <-c.done:
+	case <-timer.C:
+		_ = c.conn.NetConn().Close()
+	}
 }
 
 type events struct {

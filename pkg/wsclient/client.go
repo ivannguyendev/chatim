@@ -17,25 +17,27 @@ import (
 )
 
 const (
-	Subprotocol  = "chatim.v1"
-	outboxSize   = 64
-	closeTimeout = time.Second
+	Subprotocol        = "chatim.v1"
+	outboxSize         = 64
+	closeTimeout       = time.Second
+	handlerWaitTimeout = 5 * time.Second
 )
 
 type Client struct {
-	conn         *gws.Conn
-	out          chan []byte
-	done         chan struct{}
-	nextID       atomic.Uint64
-	loops        sync.WaitGroup
-	dispatcher   sync.WaitGroup
-	dispatcherID atomic.Uint64
-	mu           sync.Mutex
-	pending      map[uint64]chan *chatimv1.ServerResponse
-	err          error
-	opts         options
-	inbox        chan *chatimv1.ServerFrame
-	backlog      chan struct{}
+	conn       *gws.Conn
+	out        chan []byte
+	done       chan struct{}
+	closing    chan struct{}
+	closeOnce  sync.Once
+	dispatched chan struct{}
+	nextID     atomic.Uint64
+	loops      sync.WaitGroup
+	mu         sync.Mutex
+	pending    map[uint64]chan *chatimv1.ServerResponse
+	err        error
+	opts       options
+	inbox      chan *chatimv1.ServerFrame
+	backlog    chan struct{}
 }
 
 func Dial(ctx context.Context, url, token string, opts ...Option) (*Client, error) {
@@ -88,15 +90,22 @@ func (c *Client) Renew(token string) error {
 	return c.send(context.Background(), authFrame(token))
 }
 
+func (c *Client) CloseAsync() {
+	c.closeOnce.Do(func() { close(c.closing) })
+}
+
 func (c *Client) Close() error {
-	_ = c.conn.NetConn().SetWriteDeadline(time.Now().Add(closeTimeout))
-	_ = c.conn.WriteClose(1000, nil)
+	c.CloseAsync()
 	<-c.done
 	c.loops.Wait()
-	if id := goroutineID(); id == 0 || id != c.dispatcherID.Load() {
-		c.dispatcher.Wait()
+	timer := time.NewTimer(handlerWaitTimeout)
+	defer timer.Stop()
+	select {
+	case <-c.dispatched:
+		return nil
+	case <-timer.C:
+		return ErrHandlerStillRunning
 	}
-	return nil
 }
 
 func (c *Client) Done() <-chan struct{} { return c.done }
@@ -110,12 +119,14 @@ func (c *Client) Err() error {
 func connect(token string, opts []Option, open func(gws.Event) (*gws.Conn, *http.Response, error)) (*Client, error) {
 	o := buildOptions(opts)
 	c := &Client{
-		out:     make(chan []byte, outboxSize),
-		done:    make(chan struct{}),
-		pending: make(map[uint64]chan *chatimv1.ServerResponse),
-		opts:    o,
-		inbox:   make(chan *chatimv1.ServerFrame, o.dispatchQueue),
-		backlog: make(chan struct{}, 1),
+		out:        make(chan []byte, outboxSize),
+		done:       make(chan struct{}),
+		closing:    make(chan struct{}),
+		dispatched: make(chan struct{}),
+		pending:    make(map[uint64]chan *chatimv1.ServerResponse),
+		opts:       o,
+		inbox:      make(chan *chatimv1.ServerFrame, o.dispatchQueue),
+		backlog:    make(chan struct{}, 1),
 	}
 	conn, resp, err := open(events{client: c})
 	if resp != nil {
@@ -135,7 +146,7 @@ func connect(token string, opts []Option, open func(gws.Event) (*gws.Conn, *http
 		defer c.loops.Done()
 		c.writeLoop()
 	}()
-	c.dispatcher.Go(c.dispatchLoop)
+	go c.dispatchLoop()
 	return c, nil
 }
 
