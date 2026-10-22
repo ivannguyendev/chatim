@@ -3,7 +3,7 @@ package publish
 import "github.com/ivannguyendev/chatim/apps/core/internal/store"
 
 type StateClears interface {
-	Add(t store.StateTarget)
+	AddAll(targets []store.StateTarget)
 }
 
 func WithStateClears(c StateClears) Option {

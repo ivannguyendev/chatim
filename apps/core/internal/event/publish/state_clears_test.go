@@ -30,12 +30,20 @@ var _ publish.StateClears = (*stateclear.Queue)(nil)
 type recordingClears struct {
 	mu      sync.Mutex
 	targets []store.StateTarget
+	calls   int
 }
 
-func (c *recordingClears) Add(t store.StateTarget) {
+func (c *recordingClears) AddAll(targets []store.StateTarget) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.targets = append(c.targets, t)
+	c.targets = append(c.targets, targets...)
+	c.calls++
+}
+
+func (c *recordingClears) callCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.calls
 }
 
 func (c *recordingClears) added() []store.StateTarget {

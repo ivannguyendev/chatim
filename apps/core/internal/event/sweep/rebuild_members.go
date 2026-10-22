@@ -57,7 +57,8 @@ func (r *memberRebuilder) Rebuild(ctx context.Context, doc store.PendingDoc, bit
 		}
 		return one(ev), nil
 	case store.BitReadPosition:
-		return one(pbconv.ReadUpdated(room, doc.User, domain.ReadPosition{Seq: m.ReadSeq, Ver: m.ReadVer}, r.stamp())), nil
+		entry := &chatimv1.ReadEntry{User: doc.User, ReadSeq: m.ReadSeq, ReadVer: m.ReadVer}
+		return one(pbconv.ReadPositions(room, []*chatimv1.ReadEntry{entry}, r.stamp())), nil
 	case store.BitHistoryCleared:
 		if m.ClearedAt.IsZero() {
 			return nil, dropWith(target, errNeverCleared)

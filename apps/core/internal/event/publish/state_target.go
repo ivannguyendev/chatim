@@ -9,10 +9,13 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-func StateTargetOf(ev *chatimv1.Event) (store.StateTarget, bool) {
+func StateTargetsOf(ev *chatimv1.Event) []store.StateTarget {
 	room, err := strconv.ParseUint(ev.GetRoomId(), 10, 64)
 	if err != nil {
-		return store.StateTarget{}, false
+		return nil
+	}
+	if rp, ok := ev.GetPayload().(*chatimv1.Event_ReadPositions); ok {
+		return readPositionTargets(room, rp.ReadPositions.GetEntries())
 	}
 	t, ok := messageStateTarget(ev)
 	if !ok {
@@ -22,13 +25,24 @@ func StateTargetOf(ev *chatimv1.Event) (store.StateTarget, bool) {
 		t, ok = roomStateTarget(ev)
 	}
 	if !ok {
-		return store.StateTarget{}, false
+		return nil
 	}
 	t.Room = room
 	if t.Validate() != nil {
-		return store.StateTarget{}, false
+		return nil
 	}
-	return t, true
+	return []store.StateTarget{t}
+}
+
+func readPositionTargets(room uint64, entries []*chatimv1.ReadEntry) []store.StateTarget {
+	out := make([]store.StateTarget, 0, len(entries))
+	for _, e := range entries {
+		t := store.StateTarget{Collection: store.StateMembers, Bit: store.BitReadPosition, Room: room, User: e.GetUser(), Ver: e.GetReadVer()}
+		if t.Validate() == nil {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 func messageStateTarget(ev *chatimv1.Event) (store.StateTarget, bool) {

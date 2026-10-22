@@ -152,11 +152,11 @@ func (r recounter) run(ctx context.Context, opts RecountOptions) error {
 }
 
 func (r recounter) clearPending(ctx context.Context, room uint64, ev *chatimv1.Event) error {
-	t, ok := publish.StateTargetOf(ev)
-	if !ok {
+	targets := publish.StateTargetsOf(ev)
+	if len(targets) == 0 {
 		return fmt.Errorf("member_count_changed of room %d has no pending flag target", room)
 	}
-	if err := r.states.Clear(ctx, []store.StateTarget{t}); err != nil {
+	if err := r.states.Clear(ctx, targets); err != nil {
 		return fmt.Errorf("clear the pending flag of room %d, the sweeper republishes it: %w", room, err)
 	}
 	return nil
