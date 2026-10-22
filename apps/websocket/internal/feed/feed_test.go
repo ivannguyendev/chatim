@@ -24,7 +24,7 @@ func testConfig() Config {
 	return Config{
 		EventStream: "CHATIM_EVT", EventRoot: "evt", PublishStream: "CHATIM_WS", PublishRoot: "websocket.publish",
 		Replicas: 1, Workers: 2, Queue: 8, ReplayRate: 100, ConsumeBatch: 500, ConsumeBytes: 8 << 20,
-		ReplayMaxAge: 2 * time.Minute,
+		ReplayMaxAge: 2 * time.Minute, JumpCooldown: time.Minute,
 	}
 }
 
@@ -50,6 +50,11 @@ func TestNewNeedsAHandlerAndAReplayMaxAge(t *testing.T) {
 	cfg.ReplayMaxAge = 0
 	if _, err := New(cfg, newRecorder(), quietLog()); !errors.Is(err, errNoMaxAge) {
 		t.Fatalf("New without a max age = %v", err)
+	}
+	cfg = testConfig()
+	cfg.JumpCooldown = 0
+	if _, err := New(cfg, newRecorder(), quietLog()); !errors.Is(err, errNoMaxAge) {
+		t.Fatalf("New without a jump cooldown = %v", err)
 	}
 }
 

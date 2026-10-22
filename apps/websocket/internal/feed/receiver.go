@@ -18,6 +18,12 @@ type source struct {
 	publish   bool
 	perSecond int
 	maxAge    time.Duration
+	cooldown  time.Duration
+}
+
+type jumpHooks struct {
+	request    func(*receiver, JumpReason)
+	suppressed func(*receiver, time.Duration)
 }
 
 type receiver struct {
@@ -29,21 +35,23 @@ type receiver struct {
 	stats    *streamStats
 	unknown  *atomic.Uint64
 	dropped  *atomic.Uint64
-	onJump   func(*receiver, JumpReason)
+	hooks    jumpHooks
 	lastSeq  uint64
 	epoch    uint64
 	jumping  bool
 	lost     bool
 	created  time.Time
 	progress time.Time
+	behind   time.Time
+	lagJump  time.Time
 	ccMu     sync.Mutex
 	cc       jetstream.ConsumeContext
 }
 
-func newReceiver(ctx context.Context, src source, fan *fanout, stats *streamStats, unknown, dropped *atomic.Uint64, onJump func(*receiver, JumpReason)) *receiver {
+func newReceiver(ctx context.Context, src source, fan *fanout, stats *streamStats, unknown, dropped *atomic.Uint64, hooks jumpHooks) *receiver {
 	return &receiver{
 		source: src, turn: make(chan struct{}, 1), ctx: ctx, fan: fan, limiter: replayLimiter(src.perSecond),
-		stats: stats, unknown: unknown, dropped: dropped, onJump: onJump, progress: time.Now(),
+		stats: stats, unknown: unknown, dropped: dropped, hooks: hooks, progress: time.Now(),
 	}
 }
 
@@ -73,12 +81,15 @@ func (r *receiver) handle(epoch uint64, msg jetstream.Msg) {
 	now := time.Now()
 	age := now.Sub(meta.Timestamp)
 	if age > r.maxAge {
-		r.jumping = true
-		r.onJump(r, JumpLagTooOld)
-		return
+		if r.lagJumpAllowed(now) {
+			r.jumping = true
+			r.hooks.request(r, JumpLagTooOld)
+			return
+		}
+		r.hooks.suppressed(r, age)
 	}
 	r.lastSeq = meta.Sequence.Stream
-	r.progress = now
+	r.progress, r.behind = now, time.Time{}
 	defer func() { r.stats.observe(meta, time.Now()) }()
 	env, key, ok := r.envelope(msg, meta)
 	if !ok {
@@ -136,7 +147,7 @@ func (r *receiver) restart(ctx context.Context, pos Position) (uint64, bool) {
 	}
 	defer r.give()
 	r.epoch++
-	r.lastSeq, r.created, r.progress = pos.Last, pos.Created, time.Now()
+	r.lastSeq, r.created, r.progress, r.behind = pos.Last, pos.Created, time.Now(), time.Time{}
 	r.jumping, r.lost = false, false
 	return r.epoch, true
 }
@@ -159,11 +170,37 @@ func (r *receiver) verdict(pos Position, err error, now time.Time) (JumpReason, 
 	case !pos.Created.Equal(r.created) || pos.Last < r.lastSeq:
 		r.jumping = true
 		return JumpConsumerLost, true
-	case pos.Last > r.lastSeq && now.Sub(r.progress) > r.maxAge:
-		r.jumping = true
-		return JumpLagTooOld, true
+	case pos.Last <= r.lastSeq:
+		r.behind = time.Time{}
+		return 0, false
 	}
-	return 0, false
+	if r.behind.IsZero() {
+		r.behind = now
+	}
+	if now.Sub(later(r.behind, r.progress)) <= r.maxAge {
+		return 0, false
+	}
+	if !r.lagJumpAllowed(now) {
+		r.hooks.suppressed(r, now.Sub(r.progress))
+		return 0, false
+	}
+	r.jumping = true
+	return JumpLagTooOld, true
+}
+
+func (r *receiver) lagJumpAllowed(now time.Time) bool {
+	if !r.lagJump.IsZero() && now.Sub(r.lagJump) < r.cooldown {
+		return false
+	}
+	r.lagJump = now
+	return true
+}
+
+func later(a, b time.Time) time.Time {
+	if a.After(b) {
+		return a
+	}
+	return b
 }
 
 func (r *receiver) attach(cc jetstream.ConsumeContext) {

@@ -24,7 +24,9 @@ func (c *Conn) deliver(frame []byte, catchingUp, resumes bool) bool {
 			}
 			return false
 		}
-		c.settleBacklog()
+		if !c.settleBacklog() {
+			return false
+		}
 	}
 	if !catchingUp {
 		c.sink.Send(frame)
@@ -46,13 +48,16 @@ func (c *Conn) offerBacklogResync() {
 	}
 }
 
-func (c *Conn) settleBacklog() {
+func (c *Conn) settleBacklog() bool {
 	if c.backlog == owed {
-		c.sink.Send(resyncFrames[clientBacklog])
+		if !c.sink.TrySend(resyncFrames[clientBacklog]) {
+			return false
+		}
 		c.table.stats.countResync(clientBacklog)
 	}
 	c.backlog = flowing
 	c.table.unmarkBacklog(c)
+	return true
 }
 
 func (c *Conn) resync(reason chatimv1.ResyncReason) {

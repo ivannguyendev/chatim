@@ -185,23 +185,56 @@ func TestAFailedReloadClosesTheConnectionsOfTheUser(t *testing.T) {
 	})
 }
 
-func TestASecondSkipRestartsTheSchedule(t *testing.T) {
+func TestASecondSkipJoinsTheRunningScheduleWithoutRestartingIt(t *testing.T) {
 	run(t, func(t *testing.T) {
 		f := newFixture(t)
-		_, s1 := f.connect("t1", "u1", 1)
-		_, s2 := f.connect("t1", "u2", 1)
-		s1.take()
-		s2.take()
+		f.connect("t1", "u1", 1)
+		f.connect("t1", "u2", 1)
+		f.connect("t1", "u3", 1)
 		f.table.Jumped(lagJump(5))
 		synctest.Wait()
 		time.Sleep(10 * time.Second)
+		synctest.Wait()
 		f.table.Jumped(feed.Jump{Reason: feed.JumpConsumerLost, Seq: 9})
 		synctest.Wait()
+		order := f.loader.callOrder()[3:]
+		if len(order) != 1 {
+			t.Fatalf("reloads right after the second skip = %v, want only the first one", order)
+		}
+		first := order[0]
+		time.Sleep(10*time.Second - time.Nanosecond)
+		synctest.Wait()
+		if got := f.loader.callOrder()[3:]; len(got) != 1 {
+			t.Fatalf("the second user was reloaded before its turn: %v", got)
+		}
 		time.Sleep(time.Minute)
 		synctest.Wait()
-		calls := f.loader.callsOf("t1", "u1") + f.loader.callsOf("t1", "u2")
-		if calls != 5 || f.table.stats.resyncs[1].Load() != 1 || f.table.stats.resyncs[2].Load() != 2 {
-			t.Fatalf("loads %d lag resyncs %d lost resyncs %d", calls, f.table.stats.resyncs[1].Load(), f.table.stats.resyncs[2].Load())
+		order = f.loader.callOrder()[3:]
+		if len(order) != 4 || order[3] != first || order[1] == first || order[2] == first || order[1] == order[2] {
+			t.Fatalf("reload order = %v, want the waiting users first and %s again last", order, first)
+		}
+		if f.table.stats.resyncs[1].Load() != 1 || f.table.stats.resyncs[2].Load() != 3 {
+			t.Fatalf("lag resyncs %d lost resyncs %d", f.table.stats.resyncs[1].Load(), f.table.stats.resyncs[2].Load())
+		}
+	})
+}
+
+func TestReloadsStartWithLoadingUsersThenUsersWithOpenRooms(t *testing.T) {
+	run(t, func(t *testing.T) {
+		f := newFixture(t)
+		f.connect("t1", "idle", 1)
+		viewer, _ := f.connect("t1", "viewer", 1)
+		viewer.Open("1")
+		f.loader.holding(true)
+		f.table.Register("t1", "loading", &fakeSink{})
+		synctest.Wait()
+		f.table.Jumped(lagJump(4))
+		for _, at := range []time.Duration{0, 20 * time.Second, 20 * time.Second} {
+			time.Sleep(at)
+			synctest.Wait()
+		}
+		if got := f.loader.callOrder()[3:]; !slices.Equal(got, []string{"loading", "viewer", "idle"}) {
+			t.Fatalf("reload order = %v", got)
 		}
 	})
 }

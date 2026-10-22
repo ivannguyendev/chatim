@@ -18,7 +18,7 @@ const inactiveThreshold = 30 * time.Second
 
 var (
 	errNoHandler    = errors.New("feed needs a handler")
-	errNoMaxAge     = errors.New("feed needs a positive replay max age")
+	errNoMaxAge     = errors.New("feed needs a positive replay max age and jump cooldown")
 	errConsumeStuck = errors.New("consumer did not stop in time")
 	errStartedTwice = errors.New("feed already started")
 )
@@ -35,6 +35,7 @@ type Config struct {
 	ConsumeBatch  int
 	ConsumeBytes  int
 	ReplayMaxAge  time.Duration
+	JumpCooldown  time.Duration
 }
 
 type Feed struct {
@@ -60,14 +61,14 @@ func New(cfg Config, h Handler, log *slog.Logger) (*Feed, error) {
 	if h == nil {
 		return nil, errNoHandler
 	}
-	if cfg.ReplayMaxAge <= 0 {
+	if cfg.ReplayMaxAge <= 0 || cfg.JumpCooldown <= 0 {
 		return nil, errNoMaxAge
 	}
 	return &Feed{
 		cfg:     cfg,
 		handler: h,
 		log:     log,
-		streams: [2]*streamStats{{stream: cfg.EventStream}, {stream: cfg.PublishStream}},
+		streams: [2]*streamStats{newStreamStats(cfg.EventStream, cfg.JumpCooldown), newStreamStats(cfg.PublishStream, cfg.JumpCooldown)},
 	}, nil
 }
 
@@ -113,8 +114,8 @@ func (f *Feed) open(ctx, life context.Context, b Broker, fan *fanout) error {
 		{f.streams[1], f.cfg.PublishRoot, true},
 	}
 	for _, s := range sources {
-		src := source{root: s.root, publish: s.publish, perSecond: f.cfg.ReplayRate, maxAge: f.cfg.ReplayMaxAge}
-		r := newReceiver(life, src, fan, s.stats, &f.unknown, &f.dropped, f.requestJump)
+		src := source{root: s.root, publish: s.publish, perSecond: f.cfg.ReplayRate, maxAge: f.cfg.ReplayMaxAge, cooldown: f.cfg.JumpCooldown}
+		r := newReceiver(life, src, fan, s.stats, &f.unknown, &f.dropped, jumpHooks{request: f.requestJump, suppressed: f.jumpSuppressed})
 		f.readers = append(f.readers, r)
 		pos, err := b.Position(ctx, s.stats.stream)
 		if err != nil {

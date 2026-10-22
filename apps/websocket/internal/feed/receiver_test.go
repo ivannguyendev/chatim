@@ -190,7 +190,7 @@ func TestStreamStatsTrackLagPendingAndConsumerResets(t *testing.T) {
 	})
 }
 
-func noJump(*receiver, JumpReason) {}
+var noJump = jumpHooks{request: func(*receiver, JumpReason) {}, suppressed: func(*receiver, time.Duration) {}}
 
 type handlerFuncs struct {
 	event, publish func(Envelope)

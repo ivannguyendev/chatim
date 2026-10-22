@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -33,6 +34,7 @@ type fakeLoader struct {
 	replies chan reply
 	active  int
 	peak    int
+	order   []string
 }
 
 func newFakeLoader() *fakeLoader {
@@ -43,6 +45,7 @@ func (l *fakeLoader) Load(ctx context.Context, tenant, user string) ([]Room, err
 	k := userKey{tenant: tenant, user: user}
 	l.mu.Lock()
 	l.calls[k]++
+	l.order = append(l.order, user)
 	l.active++
 	l.peak = max(l.peak, l.active)
 	hold, rooms := l.hold, l.rooms[k]
@@ -83,6 +86,12 @@ func (l *fakeLoader) load() (peak, active int) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.peak, l.active
+}
+
+func (l *fakeLoader) callOrder() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return slices.Clone(l.order)
 }
 
 func (l *fakeLoader) callsOf(tenant, user string) int {

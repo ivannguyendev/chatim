@@ -45,6 +45,7 @@ func feedConfig(cfg config.Config) feed.Config {
 		ConsumeBatch:  cfg.ConsumeBatch,
 		ConsumeBytes:  cfg.ConsumeBytes,
 		ReplayMaxAge:  cfg.ReplayMaxAge,
+		JumpCooldown:  cfg.ResyncWindow,
 	}
 }
 

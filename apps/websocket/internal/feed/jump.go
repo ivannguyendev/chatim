@@ -33,6 +33,13 @@ func (f *Feed) requestJump(r *receiver, reason JumpReason) {
 	f.spawn(func() { f.jump(r, reason) })
 }
 
+func (f *Feed) jumpSuppressed(r *receiver, age time.Duration) {
+	r.stats.suppressed.Add(1)
+	r.stats.suppressLog.Do(func() {
+		f.log.Warn("feed is behind past the replay max age again within the jump cooldown; catching up instead; check the node clock", "stream", r.stats.stream, "age", age)
+	})
+}
+
 func (f *Feed) jump(r *receiver, reason JumpReason) {
 	ctx, cancel := context.WithTimeout(f.life, jumpCallTimeout)
 	defer cancel()

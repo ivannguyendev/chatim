@@ -71,7 +71,7 @@ type Table struct {
 	closed     bool
 	loads      sync.WaitGroup
 	resyncMu   sync.Mutex
-	resyncStop context.CancelFunc
+	reloads    *reloadRun
 	backlogMu  sync.Mutex
 	backlog    map[*Conn]struct{}
 	backlogged atomic.Int64

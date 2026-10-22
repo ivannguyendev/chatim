@@ -67,8 +67,15 @@ func TestAResyncThatDidNotFitIsSentOnceTheFeedCatchesUp(t *testing.T) {
 			t.Fatalf("frames %v resyncs %d try sends %d", got, backlogResyncs(f), trySends)
 		}
 		f.route(msg("t1", 2))
+		f.route(msg("t1", 1))
 		sends, _ := ss.counts()
-		if got := ss.take(); !slices.Equal(got, []string{"resync client_backlog"}) || sends != 1 || backlogResyncs(f) != 1 {
+		if got := ss.take(); len(got) != 0 || sends != 0 || backlogResyncs(f) != 0 || f.table.backlogged.Load() != 1 {
+			t.Fatalf("a resync that still does not fit: frames %v sends %d", got, sends)
+		}
+		ss.refusing(acceptAll)
+		f.route(msg("t1", 2))
+		sends, _ = ss.counts()
+		if got := ss.take(); !slices.Equal(got, []string{"resync client_backlog"}) || sends != 0 || backlogResyncs(f) != 1 {
 			t.Fatalf("after catching up frames %v sends %d", got, sends)
 		}
 		f.route(msg("t1", 1))

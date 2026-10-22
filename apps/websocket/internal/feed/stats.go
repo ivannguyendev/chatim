@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
+	"golang.org/x/time/rate"
 )
 
 type streamStats struct {
@@ -19,6 +20,12 @@ type streamStats struct {
 	serial       atomic.Uint64
 	jumps        atomic.Uint64
 	jumpFailures atomic.Uint64
+	suppressed   atomic.Uint64
+	suppressLog  rate.Sometimes
+}
+
+func newStreamStats(stream string, logEvery time.Duration) *streamStats {
+	return &streamStats{stream: stream, suppressLog: rate.Sometimes{Interval: logEvery}}
 }
 
 func (s *streamStats) observe(meta *jetstream.MsgMetadata, now time.Time) {

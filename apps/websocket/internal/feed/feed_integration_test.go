@@ -61,7 +61,7 @@ func itStreams(t *testing.T, url string) (jetstream.JetStream, Config) {
 		EventStream: "IT_FEED_EVT_" + suffix, EventRoot: "evtit" + suffix,
 		PublishStream: "IT_FEED_WS_" + suffix, PublishRoot: "wsit" + suffix + ".publish",
 		Replicas: 1, Workers: 1, Queue: 1, ReplayRate: 20000, ConsumeBatch: 500, ConsumeBytes: 8 << 20,
-		ReplayMaxAge: 2 * time.Minute,
+		ReplayMaxAge: 2 * time.Minute, JumpCooldown: time.Minute,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), itTimeout)
 	defer cancel()

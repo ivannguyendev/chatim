@@ -194,22 +194,92 @@ func TestAFailedSkipIsTriedAgainByTheWatchdogAsConsumerLost(t *testing.T) {
 	})
 }
 
-func TestAConsumerThatStopsDeliveringWhileBehindIsSkippedAsLagTooOld(t *testing.T) {
+func TestAnIdleStreamWithANewEventSeenBeforeDeliveryDoesNotSkip(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		b := newFakeBroker()
 		rec := newRecorder()
 		f := startedFeed(t, rec, b)
+		time.Sleep(3 * time.Minute)
+		synctest.Wait()
+		b.set(func(b *fakeBroker) { b.lastSeq["CHATIM_EVT"] = 1 })
+		time.Sleep(watchInterval)
+		synctest.Wait()
+		b.consumer("CHATIM_EVT").handler(eventMsg(roomSubject, 1, time.Now()))
+		time.Sleep(3 * time.Minute)
+		synctest.Wait()
+		stopFeed(t, f)
+		if jumps, _ := rec.history(); len(jumps) != 0 || !slices.Equal(rec.seqs("5"), []uint64{1}) {
+			t.Fatalf("jumps %v delivered %v", jumps, rec.seqs("5"))
+		}
+	})
+}
+
+func TestAConsumerThatStaysBehindForTheMaxAgeIsSkippedAsLagTooOld(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		b := newFakeBroker()
+		rec := newRecorder()
+		f := startedFeed(t, rec, b)
+		time.Sleep(3 * time.Minute)
+		synctest.Wait()
 		b.set(func(b *fakeBroker) { b.lastSeq["CHATIM_EVT"] = 3 })
-		time.Sleep(2 * time.Minute)
+		time.Sleep(watchInterval + 2*time.Minute)
 		synctest.Wait()
 		if len(b.consumersOf("CHATIM_EVT")) != 1 {
-			t.Fatal("skipped before the consumer was stuck for the max age")
+			t.Fatal("skipped before the consumer was behind for the max age")
 		}
 		time.Sleep(watchInterval)
 		synctest.Wait()
 		stopFeed(t, f)
 		if jumps, _ := rec.history(); !slices.Equal(jumps, []Jump{{Reason: JumpLagTooOld, Seq: 3}}) || len(b.consumersOf("CHATIM_EVT")) != 2 {
 			t.Fatalf("jumps %v consumers %d", jumps, len(b.consumersOf("CHATIM_EVT")))
+		}
+	})
+}
+
+func TestOldDeliveriesWithinTheCooldownAreCaughtUpInsteadOfSkipped(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		b := newFakeBroker()
+		rec := newRecorder()
+		f := startedFeed(t, rec, b)
+		old := func() time.Time { return time.Now().Add(-3 * time.Minute) }
+		b.set(func(b *fakeBroker) { b.lastSeq["CHATIM_EVT"] = 50 })
+		b.consumer("CHATIM_EVT").handler(eventMsg(roomSubject, 1, old()))
+		synctest.Wait()
+		b.set(func(b *fakeBroker) { b.lastSeq["CHATIM_EVT"] = 52 })
+		second := b.consumer("CHATIM_EVT")
+		second.handler(eventMsg(roomSubject, 51, old()))
+		time.Sleep(time.Minute - time.Second)
+		second.handler(eventMsg(roomSubject, 52, old()))
+		synctest.Wait()
+		if len(b.consumersOf("CHATIM_EVT")) != 2 || readMetric(t, f, "catchup_jump_suppressed_total", "CHATIM_EVT") != 2 {
+			t.Fatalf("consumers %d suppressed %v", len(b.consumersOf("CHATIM_EVT")), readMetric(t, f, "catchup_jump_suppressed_total", "CHATIM_EVT"))
+		}
+		time.Sleep(time.Second)
+		second.handler(eventMsg(roomSubject, 53, old()))
+		synctest.Wait()
+		b.consumer("CHATIM_EVT").handler(eventMsg(roomSubject, 53, time.Now()))
+		stopFeed(t, f)
+		jumps, _ := rec.history()
+		want := []Jump{{Reason: JumpLagTooOld, Seq: 50}, {Reason: JumpLagTooOld, Seq: 52}}
+		if !slices.Equal(jumps, want) || !slices.Equal(rec.seqs("5"), []uint64{51, 52, 53}) || len(b.consumersOf("CHATIM_EVT")) != 3 {
+			t.Fatalf("jumps %v delivered %v consumers %d", jumps, rec.seqs("5"), len(b.consumersOf("CHATIM_EVT")))
+		}
+	})
+}
+
+func TestConsumerLostSkipsIgnoreTheCooldown(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		b := newFakeBroker()
+		rec := newRecorder()
+		f := startedFeed(t, rec, b)
+		b.consumer("CHATIM_EVT").handler(eventMsg(roomSubject, 1, time.Now().Add(-3*time.Minute)))
+		synctest.Wait()
+		b.set(func(b *fakeBroker) { b.created["CHATIM_EVT"] = time.Now() })
+		time.Sleep(watchInterval)
+		synctest.Wait()
+		stopFeed(t, f)
+		if jumps, _ := rec.history(); !slices.Equal(jumps, []Jump{{Reason: JumpLagTooOld}, {Reason: JumpConsumerLost}}) {
+			t.Fatalf("jumps %v", jumps)
 		}
 	})
 }

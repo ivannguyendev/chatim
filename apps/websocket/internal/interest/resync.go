@@ -1,7 +1,9 @@
 package interest
 
 import (
+	"cmp"
 	"context"
+	"slices"
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/feed"
@@ -11,6 +13,13 @@ import (
 var jumpResync = map[feed.JumpReason]chatimv1.ResyncReason{
 	feed.JumpLagTooOld:    chatimv1.ResyncReason_RESYNC_REASON_LAG_TOO_OLD,
 	feed.JumpConsumerLost: chatimv1.ResyncReason_RESYNC_REASON_CONSUMER_LOST,
+}
+
+type reloadRun struct {
+	queue    []*user
+	queued   map[*user]struct{}
+	reason   chatimv1.ResyncReason
+	interval time.Duration
 }
 
 func (t *Table) Jumped(j feed.Jump) {
@@ -42,30 +51,79 @@ func (t *Table) snapshot() []*user {
 	return out
 }
 
+func (u *user) reloadRank() int {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if !u.ready {
+		return 0
+	}
+	for c := range u.conns {
+		if len(c.open) > 0 {
+			return 1
+		}
+	}
+	return 2
+}
+
 func (t *Table) schedule(users []*user, reason chatimv1.ResyncReason) {
 	t.resyncMu.Lock()
 	defer t.resyncMu.Unlock()
-	if t.resyncStop != nil {
-		t.resyncStop()
+	run := t.reloads
+	fresh := run == nil
+	if fresh {
+		run = &reloadRun{queued: map[*user]struct{}{}}
 	}
-	ctx, cancel := context.WithCancel(t.life)
-	t.resyncStop = cancel
-	if !t.spawn(func() { t.reloadAll(ctx, users, reason) }) {
-		cancel()
+	for _, u := range users {
+		if _, ok := run.queued[u]; !ok {
+			run.queued[u] = struct{}{}
+			run.queue = append(run.queue, u)
+		}
+	}
+	ranks := make(map[*user]int, len(run.queue))
+	for _, u := range run.queue {
+		ranks[u] = u.reloadRank()
+	}
+	slices.SortStableFunc(run.queue, func(a, b *user) int { return cmp.Compare(ranks[a], ranks[b]) })
+	run.reason = reason
+	if len(run.queue) > 0 {
+		run.interval = t.cfg.ResyncWindow / time.Duration(len(run.queue))
+	}
+	if !fresh || len(run.queue) == 0 {
+		return
+	}
+	t.reloads = run
+	if !t.spawn(func() { t.reloadAll(run) }) {
+		t.reloads = nil
 	}
 }
 
-func (t *Table) reloadAll(ctx context.Context, users []*user, reason chatimv1.ResyncReason) {
-	start := time.Now()
-	for i, u := range users {
-		if !sleepUntil(ctx, start.Add(t.cfg.ResyncWindow*time.Duration(i)/time.Duration(len(users)))) {
+func (t *Table) nextReload(run *reloadRun) (*user, chatimv1.ResyncReason, time.Duration, bool) {
+	t.resyncMu.Lock()
+	defer t.resyncMu.Unlock()
+	if len(run.queue) == 0 {
+		t.reloads = nil
+		return nil, 0, 0, false
+	}
+	u := run.queue[0]
+	run.queue = run.queue[1:]
+	delete(run.queued, u)
+	return u, run.reason, run.interval, true
+}
+
+func (t *Table) reloadAll(run *reloadRun) {
+	due := time.Now()
+	for {
+		if !sleepUntil(t.life, due) || !t.acquire(t.life) {
 			return
 		}
-		if !t.acquire(ctx) {
-			return
-		}
-		gen, ok := u.nextLoad()
+		u, reason, interval, ok := t.nextReload(run)
 		if !ok {
+			t.release()
+			return
+		}
+		due = due.Add(interval)
+		gen, live := u.nextLoad()
+		if !live {
 			t.release()
 			continue
 		}

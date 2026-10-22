@@ -83,7 +83,7 @@ func TestFeedWiringCarriesTheNATSAndStreamSettings(t *testing.T) {
 	fc := feedConfig(cfg)
 	if fc.EventStream != "CHATIM_EVT" || fc.EventRoot != "evt" || fc.PublishStream != "CHATIM_WS" || fc.PublishRoot != "websocket.publish" ||
 		fc.Replicas != 1 || fc.Workers != 2 || fc.Queue != 64 || fc.ReplayRate != 1000 || fc.ConsumeBatch != 100 || fc.ConsumeBytes != 1<<20 ||
-		fc.ReplayMaxAge != 2*time.Minute {
+		fc.ReplayMaxAge != 2*time.Minute || fc.JumpCooldown != time.Minute {
 		t.Fatalf("feed config = %+v from %+v", fc, cfg)
 	}
 }
