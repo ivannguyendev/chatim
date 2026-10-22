@@ -17,9 +17,14 @@ func (s *Service) ListMyRoomIDs(ctx context.Context, _ *chatimv1.ListMyRoomIDsRe
 	if err != nil {
 		return nil, err
 	}
-	resp := &chatimv1.ListMyRoomIDsResponse{Rooms: make([]*chatimv1.MyRoomID, len(rooms))}
-	for i, r := range rooms {
-		resp.Rooms[i] = &chatimv1.MyRoomID{RoomId: pbconv.RoomID(r.Room), Ver: r.Ver}
+	resp := &chatimv1.ListMyRoomIDsResponse{Rooms: make([]*chatimv1.MyRoomID, 0, len(rooms))}
+	for _, r := range rooms {
+		id := &chatimv1.MyRoomID{RoomId: pbconv.RoomID(r.Room), Ver: r.Ver}
+		if r.Left {
+			resp.Left = append(resp.Left, id)
+			continue
+		}
+		resp.Rooms = append(resp.Rooms, id)
 	}
 	return resp, nil
 }

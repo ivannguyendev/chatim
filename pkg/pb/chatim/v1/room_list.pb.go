@@ -698,6 +698,7 @@ func (x *MyRoomID) GetVer() uint32 {
 type ListMyRoomIDsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Rooms         []*MyRoomID            `protobuf:"bytes,1,rep,name=rooms,proto3" json:"rooms,omitempty"`
+	Left          []*MyRoomID            `protobuf:"bytes,2,rep,name=left,proto3" json:"left,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -735,6 +736,13 @@ func (*ListMyRoomIDsResponse) Descriptor() ([]byte, []int) {
 func (x *ListMyRoomIDsResponse) GetRooms() []*MyRoomID {
 	if x != nil {
 		return x.Rooms
+	}
+	return nil
+}
+
+func (x *ListMyRoomIDsResponse) GetLeft() []*MyRoomID {
+	if x != nil {
+		return x.Left
 	}
 	return nil
 }
@@ -1074,9 +1082,10 @@ const file_chatim_v1_room_list_proto_rawDesc = "" +
 	"\x14ListMyRoomIDsRequest\"5\n" +
 	"\bMyRoomID\x12\x17\n" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x10\n" +
-	"\x03ver\x18\x02 \x01(\rR\x03ver\"B\n" +
+	"\x03ver\x18\x02 \x01(\rR\x03ver\"k\n" +
 	"\x15ListMyRoomIDsResponse\x12)\n" +
-	"\x05rooms\x18\x01 \x03(\v2\x13.chatim.v1.MyRoomIDR\x05rooms\"\xdc\x01\n" +
+	"\x05rooms\x18\x01 \x03(\v2\x13.chatim.v1.MyRoomIDR\x05rooms\x12'\n" +
+	"\x04left\x18\x02 \x03(\v2\x13.chatim.v1.MyRoomIDR\x04left\"\xdc\x01\n" +
 	"\x19SetRoomPreferencesRequest\x12\x17\n" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x1b\n" +
 	"\x06pinned\x18\x02 \x01(\bH\x00R\x06pinned\x88\x01\x01\x12@\n" +
@@ -1163,15 +1172,16 @@ var file_chatim_v1_room_list_proto_depIdxs = []int32{
 	4,  // 13: chatim.v1.ListMyRoomsResponse.items:type_name -> chatim.v1.RoomItem
 	4,  // 14: chatim.v1.GetRoomsResponse.items:type_name -> chatim.v1.RoomItem
 	10, // 15: chatim.v1.ListMyRoomIDsResponse.rooms:type_name -> chatim.v1.MyRoomID
-	18, // 16: chatim.v1.SetRoomPreferencesRequest.muted_until:type_name -> google.protobuf.Timestamp
-	1,  // 17: chatim.v1.SetRoomPreferencesResponse.state:type_name -> chatim.v1.MyRoomState
-	20, // 18: chatim.v1.UpdateRoomResponse.room:type_name -> chatim.v1.Room
-	1,  // 19: chatim.v1.RoomPreferencesChanged.state:type_name -> chatim.v1.MyRoomState
-	20, // [20:20] is the sub-list for method output_type
-	20, // [20:20] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	10, // 16: chatim.v1.ListMyRoomIDsResponse.left:type_name -> chatim.v1.MyRoomID
+	18, // 17: chatim.v1.SetRoomPreferencesRequest.muted_until:type_name -> google.protobuf.Timestamp
+	1,  // 18: chatim.v1.SetRoomPreferencesResponse.state:type_name -> chatim.v1.MyRoomState
+	20, // 19: chatim.v1.UpdateRoomResponse.room:type_name -> chatim.v1.Room
+	1,  // 20: chatim.v1.RoomPreferencesChanged.state:type_name -> chatim.v1.MyRoomState
+	21, // [21:21] is the sub-list for method output_type
+	21, // [21:21] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_chatim_v1_room_list_proto_init() }

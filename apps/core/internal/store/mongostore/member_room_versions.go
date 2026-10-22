@@ -13,20 +13,24 @@ import (
 )
 
 type memberRoomVersionDoc struct {
-	Room int64 `bson:"room_id"`
-	Ver  int64 `bson:"ver"`
+	Room  int64 `bson:"room_id"`
+	Ver   int64 `bson:"ver"`
+	State int64 `bson:"state"`
 }
 
-var memberRoomVersionFields = bson.D{{Key: "room_id", Value: 1}, {Key: "ver", Value: 1}, {Key: "_id", Value: 0}}
+var memberRoomVersionFields = bson.D{{Key: "room_id", Value: 1}, {Key: "ver", Value: 1}, {Key: "state", Value: 1}, {Key: "_id", Value: 0}}
 
-var memberRoomVersionSort = bson.D{{Key: "room_id", Value: 1}}
+func memberRoomVersionsFilter(tenant, user string) bson.D {
+	states := bson.A{int64(domain.MemberActive), int64(domain.MemberRemoved)}
+	return bson.D{{Key: "tenant", Value: tenant}, {Key: "user_id", Value: user}, {Key: "state", Value: bson.D{{Key: "$in", Value: states}}}}
+}
 
 func (s *Store) RoomVersionsOf(ctx context.Context, tenant, user string) ([]store.RoomVersion, error) {
 	if err := domain.ValidUser(user); err != nil {
 		return nil, err
 	}
-	opts := options.Find().SetProjection(memberRoomVersionFields).SetSort(memberRoomVersionSort)
-	cur, err := s.members.Find(ctx, memberRoomsFilter(tenant, user), opts)
+	opts := options.Find().SetProjection(memberRoomVersionFields)
+	cur, err := s.members.Find(ctx, memberRoomVersionsFilter(tenant, user), opts)
 	if err != nil {
 		return nil, fmt.Errorf("room versions of %q: %w", user, err)
 	}
@@ -36,14 +40,22 @@ func (s *Store) RoomVersionsOf(ctx context.Context, tenant, user string) ([]stor
 	}
 	out := make([]store.RoomVersion, len(docs))
 	for i, d := range docs {
-		room, err := toUint64("member room id", d.Room)
+		v, err := toRoomVersion(d)
 		if err != nil {
 			return nil, err
 		}
-		if d.Ver < 0 || d.Ver > math.MaxUint32 {
-			return nil, fmt.Errorf("%w: member ver %d", errCorrupt, d.Ver)
-		}
-		out[i] = store.RoomVersion{Room: room, Ver: uint32(d.Ver)}
+		out[i] = v
 	}
 	return out, nil
+}
+
+func toRoomVersion(d memberRoomVersionDoc) (store.RoomVersion, error) {
+	room, err := toUint64("member room id", d.Room)
+	if err != nil {
+		return store.RoomVersion{}, err
+	}
+	if d.Ver < 0 || d.Ver > math.MaxUint32 {
+		return store.RoomVersion{}, fmt.Errorf("%w: member ver %d", errCorrupt, d.Ver)
+	}
+	return store.RoomVersion{Room: room, Ver: uint32(d.Ver), Left: d.State == int64(domain.MemberRemoved)}, nil
 }

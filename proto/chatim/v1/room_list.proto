@@ -76,6 +76,7 @@ message MyRoomID {
 
 message ListMyRoomIDsResponse {
   repeated MyRoomID rooms = 1;
+  repeated MyRoomID left = 2;
 }
 
 message SetRoomPreferencesRequest {

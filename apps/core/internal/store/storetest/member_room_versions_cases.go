@@ -16,8 +16,8 @@ const manyRoomsBase uint64 = 7_350_000_000
 func memberRoomVersionCases() []memberCase {
 	return []memberCase{
 		{"room versions of a user with no membership are empty", roomVersionsEmpty},
-		{"room versions of a user list every active room once sorted by room", roomVersionsSorted},
-		{"room versions of a user skip tombstones and other tenants", roomVersionsActiveOnly},
+		{"room versions of a user list every active room once", roomVersionsEveryRoom},
+		{"room versions of a user split active and left rooms and skip other tenants", roomVersionsActiveAndLeft},
 		{"room versions of a user carry the membership version after leave and rejoin", roomVersionsRejoin},
 		{"room versions of a user reject a bad user", roomVersionsInvalid},
 	}
@@ -32,7 +32,7 @@ func roomVersionsEmpty(t *testing.T, s MemberRooms) {
 	}
 }
 
-func roomVersionsSorted(t *testing.T, s MemberRooms) {
+func roomVersionsEveryRoom(t *testing.T, s MemberRooms) {
 	var want []store.RoomVersion
 	for i := range 30 {
 		id := manyRoomsBase + uint64((i*7)%30) + 1
@@ -40,13 +40,12 @@ func roomVersionsSorted(t *testing.T, s MemberRooms) {
 		mustCreate(t, s, room, members)
 		want = append(want, store.RoomVersion{Room: id, Ver: 1})
 	}
-	slices.SortFunc(want, func(a, b store.RoomVersion) int { return cmp.Compare(a.Room, b.Room) })
-	if got := roomVersionsOf(t, s, tenant, "bob"); !slices.Equal(got, want) {
-		t.Fatalf("RoomVersionsOf(bob) = %v,\nwant %v", got, want)
+	if got := roomVersionsOf(t, s, tenant, "bob"); !slices.Equal(got, byLeftThenRoom(want)) {
+		t.Fatalf("RoomVersionsOf(bob) = %v,\nwant %v", got, byLeftThenRoom(want))
 	}
 }
 
-func roomVersionsActiveOnly(t *testing.T, s MemberRooms) {
+func roomVersionsActiveAndLeft(t *testing.T, s MemberRooms) {
 	for _, id := range []uint64{roomB, roomA} {
 		room, members := teamOf(id)
 		mustCreate(t, s, room, members)
@@ -56,9 +55,10 @@ func roomVersionsActiveOnly(t *testing.T, s MemberRooms) {
 	bob := member(roomC, "bob", domain.RoleOwner)
 	bob.Tenant = "globex"
 	mustCreate(t, s, elsewhere, []domain.Member{bob})
-	removeMember(t, s, docOf(t, s, roomA, "bob"), secs(5))
-	if got := roomVersionsOf(t, s, tenant, "bob"); !slices.Equal(got, []store.RoomVersion{{Room: roomB, Ver: 1}}) {
-		t.Fatalf("RoomVersionsOf(acme, bob) = %v; want only room B at ver 1", got)
+	gone := removeMember(t, s, docOf(t, s, roomA, "bob"), secs(5))
+	want := []store.RoomVersion{{Room: roomB, Ver: 1}, {Room: roomA, Ver: gone.Ver, Left: true}}
+	if got := roomVersionsOf(t, s, tenant, "bob"); !slices.Equal(got, want) || gone.Ver != 2 {
+		t.Fatalf("RoomVersionsOf(acme, bob) = %v; want %v with room A left at ver 2", got, want)
 	}
 	if got := roomVersionsOf(t, s, "globex", "bob"); !slices.Equal(got, []store.RoomVersion{{Room: roomC, Ver: 1}}) {
 		t.Fatalf("RoomVersionsOf(globex, bob) = %v; want only room C at ver 1", got)
@@ -71,8 +71,8 @@ func roomVersionsActiveOnly(t *testing.T, s MemberRooms) {
 func roomVersionsRejoin(t *testing.T, s MemberRooms) {
 	_, bob := crew(t, s)
 	gone := removeMember(t, s, bob, secs(5))
-	if got := roomVersionsOf(t, s, tenant, "bob"); len(got) != 0 {
-		t.Fatalf("RoomVersionsOf(bob) after leaving = %v; want none", got)
+	if got := roomVersionsOf(t, s, tenant, "bob"); !slices.Equal(got, []store.RoomVersion{{Room: roomA, Ver: gone.Ver, Left: true}}) {
+		t.Fatalf("RoomVersionsOf(bob) after leaving = %v; want room A left at ver %d", got, gone.Ver)
 	}
 	j := domain.Join{Room: roomA, Tenant: tenant, RequestID: "req-back", By: "alice", At: secs(10)}
 	if res, err := s.AddMembers(t.Context(), j, []string{"bob"}); err != nil || res.Changed != 1 {
@@ -97,5 +97,19 @@ func roomVersionsOf(t *testing.T, s MemberRooms, tenant, user string) []store.Ro
 	if err != nil {
 		t.Fatalf("RoomVersionsOf(%q, %q): %v", tenant, user, err)
 	}
-	return got
+	return byLeftThenRoom(got)
+}
+
+func byLeftThenRoom(rooms []store.RoomVersion) []store.RoomVersion {
+	out := slices.Clone(rooms)
+	slices.SortFunc(out, func(a, b store.RoomVersion) int {
+		if a.Left != b.Left {
+			if a.Left {
+				return 1
+			}
+			return -1
+		}
+		return cmp.Compare(a.Room, b.Room)
+	})
+	return out
 }

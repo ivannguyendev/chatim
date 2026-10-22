@@ -19,6 +19,7 @@ type MemberRoom struct {
 type RoomVersion struct {
 	Room uint64
 	Ver  uint32
+	Left bool
 }
 
 type JoinResult struct {
