@@ -14,12 +14,14 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/tools/corecli/internal/e2e"
 	"github.com/ivannguyendev/chatim/tools/internal/devtoken"
+	"github.com/ivannguyendev/chatim/tools/internal/route"
 )
 
 var errWSTwoEmojis = errors.New("the websocket lists fewer than two reaction emojis")
 
 type wsEventsRun struct {
 	base   context.Context
+	cl     *route.Client
 	key    devtoken.KeyPair
 	url    string
 	tenant string
@@ -38,6 +40,7 @@ type wsEventsStep struct {
 
 func e2eWSEvents(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("e2e ws-events", flag.ContinueOnError)
+	o := addOptions(fs)
 	dir := fs.String("state", "/state", "directory holding the scenario state")
 	url := fs.String("url", "ws://chatim-websocket-1:8080/ws", "websocket endpoint")
 	keyFile := fs.String("key", "/keys/"+devtoken.PrivateFile, "private JWK written by dev-keys")
@@ -58,7 +61,12 @@ func e2eWSEvents(ctx context.Context, args []string) error {
 	r := &wsEventsRun{base: ctx, key: key, url: *url, tenant: st.Tenant, quiet: *quiet}
 	r.a = &wsPeer{name: "A", user: "e2e-wsa-" + st.Room, base: ctx, timeout: *callTimeout, wait: *wait}
 	r.b = &wsPeer{name: "B", user: "e2e-wsb-" + st.Room, base: ctx, timeout: *callTimeout, wait: *wait}
-	if err := r.run(); err != nil {
+	o.tenant = r.tenant
+	err = withRoutes(ctx, o, func(_ context.Context, s *session) error {
+		r.cl = s.client
+		return r.run()
+	})
+	if err != nil {
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "websocket events ok on group %s: %s\n", r.room, strings.Join(r.notes, "; "))
@@ -75,6 +83,8 @@ func (r *wsEventsRun) run() error {
 		{"A hides and bookmarks and only A hears it", r.ownerOnly},
 		{"@B and @all reach B as one notification each", r.mentions},
 		{"A removes B, B gets member_removed then room_closed and nothing more", r.removeB},
+		{"core lists the group in B's left rooms with its version and not in B's rooms", r.leftListed},
+		{"B reconnects and hears nothing of the group it left", r.reconnectB},
 		{"no duplicate, gap or resync on either applier", r.clean},
 	}
 	defer r.a.close()

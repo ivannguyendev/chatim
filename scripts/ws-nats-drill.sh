@@ -17,6 +17,14 @@ out="$root/bin/drill/ws-nats-$mode-${cut}s-$(date +%y%m%d-%H%M%S)"
 metrics="chatim-drill-metrics-$$"
 net="chatim-drill-net-$$"
 total=$((lead + cut + tail_seconds))
+remove_after=0
+expect_resyncs=0
+if [ "$mode" = cut ]; then
+  remove_after=$((lead + cut / 2))
+  if [ "$cut" -ge 120 ]; then
+    expect_resyncs=1
+  fi
+fi
 mkdir -p "$out"
 
 nats_ip="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' chatim-nats)"
@@ -36,7 +44,7 @@ cleanup() {
 trap cleanup EXIT
 
 docker run -d --name "$metrics" --network "container:$ws_container" curlimages/curl:8.11.1 sh -c \
-  'while :; do echo "ts $(date +%s)"; curl -s http://127.0.0.1:9090/metrics | grep -E "^chatim_websocket_(consumer_lag_seconds|consumer_resets_total|consumer_pending|catchup_jumps_total|catchup_jump_suppressed_total|catchup_jump_failures_total|resyncs_total|closes_total\{code=\"4008\"\}|nats_connected|nats_reconnects_total|interest_reloads_total|consumer_stale_skipped_total|connections)"; sleep 1; done' >/dev/null
+  'while :; do echo "ts $(date +%s)"; curl -s http://127.0.0.1:9090/metrics | grep -E "^chatim_websocket_(consumer_lag_seconds|consumer_resets_total|consumer_pending|catchup_jumps_total|catchup_jump_suppressed_total|catchup_jump_failures_total|resyncs_total|closes_total\{code=\"4008\"\}|nats_connected|nats_reconnects_total|users_suspended|reloads_total|reload_seconds_(sum|count)|reload_failures_total|room_ids_load_seconds_(sum|count)|room_ids_load_failures_total|consumer_stale_skipped_total|connections)"; sleep 1; done' >/dev/null
 if [ "$mode" = cut ]; then
   docker run -d --name "$net" --cap-add NET_ADMIN --network "container:$ws_container" alpine:3.20 sh -c 'apk add -q iptables >/dev/null && touch /ready && sleep infinity' >/dev/null
   until docker exec "$net" test -f /ready 2>/dev/null; do sleep 1; done
@@ -47,7 +55,7 @@ echo "drill $mode ${cut}s: lead ${lead}s, tail ${tail_seconds}s, corebench ${ben
 bench=$!
 sleep 15
 docker run --rm --network "$network" --user "$(id -u):$(id -g)" -v "$ws_key":/keys/private.jwk:ro "$image" \
-  e2e ws-drill -duration "${total}s" -rate "$drill_rate" >"$out/client.txt" 2>&1 &
+  e2e ws-drill -duration "${total}s" -rate "$drill_rate" -remove-after "${remove_after}s" -expect-resyncs "$expect_resyncs" >"$out/client.txt" 2>&1 &
 client=$!
 sleep "$lead"
 
@@ -74,6 +82,8 @@ wait "$bench" || true
 docker logs "$metrics" >"$out/metrics.txt" 2>&1
 echo "$start $restored" >"$out/window.txt"
 "$scripts/ws-drill-summary.sh" "$out/metrics.txt" "$start" "$restored" | tee "$out/summary.txt"
+docker logs --since "$start" "$ws_container" 2>&1 | grep -E "feed skipped|reload room ids failed" >"$out/ws-log.txt" || true
+cat "$out/ws-log.txt"
 tail -n 20 "$out/client.txt"
 grep -E "sent|errors|p99|shed" "$out/corebench.txt" | tail -n 5 || true
 exit "$client_status"
