@@ -66,7 +66,7 @@ func TestFanoutKeepsRoomOrderAndRunsOtherRoomsInParallel(t *testing.T) {
 		rec := newRecorder()
 		slow, fast := roomsOnDistinctWorkers(t, 4)
 		release := rec.block(slow)
-		f := newFanout(4, 16, rec)
+		f := newFanout(4, 16, rec, quietLog())
 		for seq := uint64(1); seq <= 5; seq++ {
 			f.send(slow, job{env: Envelope{Room: slow, Seq: seq}})
 			f.send(fast, job{env: Envelope{Room: fast, Seq: seq}})
@@ -92,7 +92,7 @@ func TestFanoutSendWaitsWhileTheWorkerQueueIsFull(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rec := newRecorder()
 		release := rec.block("9")
-		f := newFanout(1, 1, rec)
+		f := newFanout(1, 1, rec, quietLog())
 		sent := make(chan int, 4)
 		go func() {
 			for seq := uint64(1); seq <= 3; seq++ {
@@ -118,7 +118,7 @@ func TestFanoutSendWaitsWhileTheWorkerQueueIsFull(t *testing.T) {
 func TestFanoutRoutesPublishPacketsToPublish(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rec := newRecorder()
-		f := newFanout(2, 4, rec)
+		f := newFanout(2, 4, rec, quietLog())
 		f.send("n1-p0-abc", job{publish: true, env: Envelope{Tenant: "acme", ID: "n1-p0-abc"}})
 		if err := f.close(t.Context()); err != nil {
 			t.Fatal(err)
@@ -133,7 +133,7 @@ func TestFanoutHaltReleasesABlockedSenderAndRefusesLaterSends(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rec := newRecorder()
 		release := rec.block("9")
-		f := newFanout(1, 1, rec)
+		f := newFanout(1, 1, rec, quietLog())
 		f.send("9", job{env: Envelope{Room: "9", Seq: 1}})
 		synctest.Wait()
 		f.send("9", job{env: Envelope{Room: "9", Seq: 2}})
@@ -161,7 +161,7 @@ func TestFanoutCloseGivesUpOnAStuckWorkerAndSkipsTheRest(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rec := newRecorder()
 		release := rec.block("9")
-		f := newFanout(1, 4, rec)
+		f := newFanout(1, 4, rec, quietLog())
 		for seq := uint64(1); seq <= 3; seq++ {
 			f.send("9", job{env: Envelope{Room: "9", Seq: seq}})
 		}
@@ -174,6 +174,28 @@ func TestFanoutCloseGivesUpOnAStuckWorkerAndSkipsTheRest(t *testing.T) {
 		synctest.Wait()
 		if got := rec.seqs("9"); !slices.Equal(got, []uint64{1}) {
 			t.Fatalf("delivered %v after giving up, want only the job in hand", got)
+		}
+	})
+}
+
+func TestFanoutRecoversFromAHandlerPanicAndGoesOn(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		rec := newRecorder()
+		h := handlerFuncs{event: func(e Envelope) {
+			if e.Seq == 2 {
+				panic("bad event")
+			}
+			rec.Event(e)
+		}}
+		f := newFanout(1, 4, h, quietLog())
+		for seq := uint64(1); seq <= 3; seq++ {
+			f.send("9", job{env: Envelope{Room: "9", Seq: seq}})
+		}
+		if err := f.close(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		if got := rec.seqs("9"); !slices.Equal(got, []uint64{1, 3}) || f.panics.Load() != 1 {
+			t.Fatalf("delivered %v with %d panics, want 1 and 3 with one panic", got, f.panics.Load())
 		}
 	})
 }

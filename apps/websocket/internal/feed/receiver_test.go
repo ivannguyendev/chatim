@@ -3,6 +3,7 @@ package feed
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -10,12 +11,12 @@ import (
 )
 
 func newTestReceiver(ctx context.Context, rec Handler, publish bool, perSecond int) (*receiver, *fanout) {
-	fan := newFanout(2, 1024, rec)
+	fan := newFanout(2, 1024, rec, quietLog())
 	root := "evt"
 	if publish {
 		root = "websocket.publish"
 	}
-	return &receiver{ctx: ctx, root: root, publish: publish, fan: fan, limiter: replayLimiter(perSecond), stats: &streamStats{stream: "S"}, unknown: &atomic.Uint64{}}, fan
+	return newReceiver(ctx, root, publish, fan, perSecond, &streamStats{stream: "S"}, &atomic.Uint64{}, &atomic.Uint64{}), fan
 }
 
 func TestReceiverHandsTheEnvelopeToTheRoomWorker(t *testing.T) {
@@ -104,8 +105,63 @@ func TestReceiverLimitsTheRateOnlyWhileCatchingUp(t *testing.T) {
 		if err := fan.close(t.Context()); err != nil {
 			t.Fatal(err)
 		}
-		if got := len(rec.seqs("2")); got >= 400 {
-			t.Fatalf("delivered %d after stop, want the rest dropped", got)
+		if got := len(rec.seqs("2")); got >= 400 || r.dropped.Load() == 0 {
+			t.Fatalf("delivered %d after stop with %d counted as dropped, want the rest dropped and counted", got, r.dropped.Load())
+		}
+	})
+}
+
+func blockedReceiver(t *testing.T) (*receiver, *fanout, *recorder, chan struct{}) {
+	t.Helper()
+	rec := newRecorder()
+	release := rec.block("1")
+	fan := newFanout(1, 1, rec, quietLog())
+	r := newReceiver(t.Context(), "evt", false, fan, 100, &streamStats{stream: "S"}, &atomic.Uint64{}, &atomic.Uint64{})
+	r.handle(eventMsg("evt.acme.message.1.msg_created", 1, time.Now()))
+	synctest.Wait()
+	r.handle(eventMsg("evt.acme.message.1.msg_created", 2, time.Now()))
+	return r, fan, rec, release
+}
+
+func TestReceiverKeepsOrderWhenANewCallbackStartsWhileTheOldOneIsBlocked(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r, fan, rec, release := blockedReceiver(t)
+		go r.handle(eventMsg("evt.acme.message.1.msg_created", 3, time.Now()))
+		synctest.Wait()
+		go r.handle(eventMsg("evt.acme.message.1.msg_created", 4, time.Now()))
+		synctest.Wait()
+		go r.handle(eventMsg("evt.acme.message.1.msg_created", 2, time.Now()))
+		synctest.Wait()
+		close(release)
+		synctest.Wait()
+		if err := fan.close(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		if got := rec.seqs("1"); !slices.Equal(got, []uint64{1, 2, 3, 4}) {
+			t.Fatalf("delivered %v, want 1..4 in order", got)
+		}
+		if r.stats.stale.Load() != 1 {
+			t.Fatalf("stale skips = %d, want the repeated seq 2 skipped once", r.stats.stale.Load())
+		}
+	})
+}
+
+func TestReceiverLagIncludesTheWaitForAFreeWorker(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r, fan, _, release := blockedReceiver(t)
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			r.handle(eventMsg("evt.acme.message.1.msg_created", 3, time.Now()))
+		}()
+		time.Sleep(2 * time.Second)
+		close(release)
+		<-done
+		if got := r.stats.lagSeconds(); got != 2 {
+			t.Fatalf("lag = %vs, want the 2s spent waiting for the worker", got)
+		}
+		if err := fan.close(t.Context()); err != nil {
+			t.Fatal(err)
 		}
 	})
 }

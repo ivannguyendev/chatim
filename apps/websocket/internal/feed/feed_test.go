@@ -179,6 +179,9 @@ func TestStopReleasesAReceiverWaitingOnAFullQueueAndGivesUpOnAStuckHandler(t *te
 		if got := rec.seqs("5"); !slices.Equal(got, []uint64{1}) {
 			t.Fatalf("delivered %v after giving up, want only the event in hand", got)
 		}
+		if f.dropped.Load() == 0 {
+			t.Fatal("events refused at stop were not counted")
+		}
 	})
 }
 
@@ -215,7 +218,9 @@ func TestFeedMetricsFollowTheConnection(t *testing.T) {
 		msg.meta.NumPending = 4
 		b.consumer("CHATIM_EVT").handler(msg)
 		if read("consumer_lag_seconds", "CHATIM_EVT") != 2 || read("consumer_pending", "CHATIM_EVT") != 4 ||
-			read("events_unknown_total", "") != 1 || read("consumer_resets_total", "CHATIM_WS") != 0 {
+			read("events_unknown_total", "") != 1 || read("consumer_resets_total", "CHATIM_WS") != 0 ||
+			read("consumer_stale_skipped_total", "CHATIM_EVT") != 0 || read("fanout_handler_panics_total", "") != 0 ||
+			read("events_dropped_at_stop_total", "") != 0 {
 			t.Fatal("stream metrics wrong")
 		}
 	})

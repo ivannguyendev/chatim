@@ -13,6 +13,8 @@ import (
 const catchUpAge = 5 * time.Second
 
 type receiver struct {
+	turn    chan struct{}
+	lastSeq uint64
 	ctx     context.Context
 	root    string
 	publish bool
@@ -20,6 +22,11 @@ type receiver struct {
 	limiter *rate.Limiter
 	stats   *streamStats
 	unknown *atomic.Uint64
+	dropped *atomic.Uint64
+}
+
+func newReceiver(ctx context.Context, root string, publish bool, fan *fanout, perSecond int, stats *streamStats, unknown, dropped *atomic.Uint64) *receiver {
+	return &receiver{turn: make(chan struct{}, 1), ctx: ctx, root: root, publish: publish, fan: fan, limiter: replayLimiter(perSecond), stats: stats, unknown: unknown, dropped: dropped}
 }
 
 func replayLimiter(perSecond int) *rate.Limiter {
@@ -27,22 +34,31 @@ func replayLimiter(perSecond int) *rate.Limiter {
 }
 
 func (r *receiver) handle(msg jetstream.Msg) {
+	r.turn <- struct{}{}
+	defer func() { <-r.turn }()
 	meta, err := msg.Metadata()
 	if err != nil {
 		r.unknown.Add(1)
 		return
 	}
-	now := time.Now()
-	r.stats.observe(meta, now)
+	if meta.Sequence.Stream <= r.lastSeq {
+		r.stats.stale.Add(1)
+		return
+	}
+	r.lastSeq = meta.Sequence.Stream
+	defer func() { r.stats.observe(meta, time.Now()) }()
 	env, key, ok := r.envelope(msg, meta)
 	if !ok {
 		r.unknown.Add(1)
 		return
 	}
-	if now.Sub(meta.Timestamp) > catchUpAge && r.limiter.Wait(r.ctx) != nil {
+	if time.Since(meta.Timestamp) > catchUpAge && r.limiter.Wait(r.ctx) != nil {
+		r.dropped.Add(1)
 		return
 	}
-	r.fan.send(key, job{publish: r.publish, env: env})
+	if !r.fan.send(key, job{publish: r.publish, env: env}) {
+		r.dropped.Add(1)
+	}
 }
 
 func (r *receiver) envelope(msg jetstream.Msg, meta *jetstream.MsgMetadata) (Envelope, string, bool) {

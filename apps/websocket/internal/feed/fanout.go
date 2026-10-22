@@ -3,6 +3,8 @@ package feed
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 )
@@ -17,6 +19,8 @@ type job struct {
 type fanout struct {
 	queues  []chan job
 	handler Handler
+	log     *slog.Logger
+	panics  atomic.Uint64
 	stop    chan struct{}
 	halted  sync.Once
 	mu      sync.RWMutex
@@ -25,8 +29,8 @@ type fanout struct {
 	done    sync.WaitGroup
 }
 
-func newFanout(workers, queue int, h Handler) *fanout {
-	f := &fanout{queues: make([]chan job, workers), handler: h, stop: make(chan struct{})}
+func newFanout(workers, queue int, h Handler, log *slog.Logger) *fanout {
+	f := &fanout{queues: make([]chan job, workers), handler: h, log: log, stop: make(chan struct{})}
 	for i := range f.queues {
 		f.queues[i] = make(chan job, queue)
 		f.done.Go(func() { f.work(f.queues[i]) })
@@ -36,14 +40,24 @@ func newFanout(workers, queue int, h Handler) *fanout {
 
 func (f *fanout) work(queue chan job) {
 	for j := range queue {
-		switch {
-		case f.skip.Load():
-		case j.publish:
-			f.handler.Publish(j.env)
-		default:
-			f.handler.Event(j.env)
+		if !f.skip.Load() {
+			f.deliver(j)
 		}
 	}
+}
+
+func (f *fanout) deliver(j job) {
+	defer func() {
+		if v := recover(); v != nil {
+			f.panics.Add(1)
+			f.log.Error("fanout handler panicked; skipped the event", "tenant", j.env.Tenant, "room", j.env.Room, "kind", j.env.Kind, "seq", j.env.Seq, "panic", fmt.Sprint(v))
+		}
+	}()
+	if j.publish {
+		f.handler.Publish(j.env)
+		return
+	}
+	f.handler.Event(j.env)
 }
 
 func (f *fanout) send(key string, j job) bool {

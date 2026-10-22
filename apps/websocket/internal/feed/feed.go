@@ -41,6 +41,7 @@ type Feed struct {
 	log      *slog.Logger
 	streams  [2]*streamStats
 	unknown  atomic.Uint64
+	dropped  atomic.Uint64
 	broker   atomic.Pointer[Broker]
 	fan      atomic.Pointer[fanout]
 	mu       sync.Mutex
@@ -80,7 +81,7 @@ func (f *Feed) Start(ctx context.Context, b Broker) error {
 	f.broker.Store(&b)
 	life, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	f.cancel = cancel
-	fan := newFanout(f.cfg.Workers, f.cfg.Queue, f.handler)
+	fan := newFanout(f.cfg.Workers, f.cfg.Queue, f.handler, f.log)
 	f.fan.Store(fan)
 	err := f.open(ctx, life, b, fan)
 	if err != nil {
@@ -103,7 +104,7 @@ func (f *Feed) open(ctx, life context.Context, b Broker, fan *fanout) error {
 		{f.streams[1], f.cfg.PublishRoot, true},
 	}
 	for _, s := range sources {
-		r := &receiver{ctx: life, root: s.root, publish: s.publish, fan: fan, limiter: replayLimiter(f.cfg.ReplayRate), stats: s.stats, unknown: &f.unknown}
+		r := newReceiver(life, s.root, s.publish, fan, f.cfg.ReplayRate, s.stats, &f.unknown, &f.dropped)
 		if err := f.consume(ctx, b, r); err != nil {
 			return err
 		}

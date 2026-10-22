@@ -15,6 +15,7 @@ type streamStats struct {
 	lag     atomic.Uint64
 	pending atomic.Uint64
 	resets  atomic.Uint64
+	stale   atomic.Uint64
 	serial  atomic.Uint64
 }
 
