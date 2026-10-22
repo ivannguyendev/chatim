@@ -23,17 +23,19 @@ const (
 )
 
 type Client struct {
-	conn    *gws.Conn
-	out     chan []byte
-	done    chan struct{}
-	nextID  atomic.Uint64
-	loops   sync.WaitGroup
-	mu      sync.Mutex
-	pending map[uint64]chan *chatimv1.ServerResponse
-	err     error
-	opts    options
-	inbox   chan *chatimv1.ServerFrame
-	backlog chan struct{}
+	conn         *gws.Conn
+	out          chan []byte
+	done         chan struct{}
+	nextID       atomic.Uint64
+	loops        sync.WaitGroup
+	dispatcher   sync.WaitGroup
+	dispatcherID atomic.Uint64
+	mu           sync.Mutex
+	pending      map[uint64]chan *chatimv1.ServerResponse
+	err          error
+	opts         options
+	inbox        chan *chatimv1.ServerFrame
+	backlog      chan struct{}
 }
 
 func Dial(ctx context.Context, url, token string, opts ...Option) (*Client, error) {
@@ -91,6 +93,9 @@ func (c *Client) Close() error {
 	_ = c.conn.WriteClose(1000, nil)
 	<-c.done
 	c.loops.Wait()
+	if id := goroutineID(); id == 0 || id != c.dispatcherID.Load() {
+		c.dispatcher.Wait()
+	}
 	return nil
 }
 
@@ -121,7 +126,7 @@ func connect(token string, opts []Option, open func(gws.Event) (*gws.Conn, *http
 	}
 	c.conn = conn
 	c.out <- authFrame(token)
-	c.loops.Add(3)
+	c.loops.Add(2)
 	go func() {
 		defer c.loops.Done()
 		conn.ReadLoop()
@@ -130,10 +135,7 @@ func connect(token string, opts []Option, open func(gws.Event) (*gws.Conn, *http
 		defer c.loops.Done()
 		c.writeLoop()
 	}()
-	go func() {
-		defer c.loops.Done()
-		c.dispatchLoop()
-	}()
+	c.dispatcher.Go(c.dispatchLoop)
 	return c, nil
 }
 

@@ -198,3 +198,60 @@ func TestSlowHandlerKeepsCallsAndHeartbeatsFlowingAndOverflowAsksForResync(t *te
 		_ = client.Close()
 	})
 }
+
+func readyServer(t *testing.T) *fakeServer {
+	return newFakeServer(func(conn *gws.Conn, frame *chatimv1.ClientFrame) {
+		if frame.GetAuth() != nil {
+			writeServerFrame(t, conn, &chatimv1.ServerFrame{Frame: &chatimv1.ServerFrame_Ready{Ready: &chatimv1.ReadyFrame{}}})
+		}
+	})
+}
+
+func TestCloseFromInsideAHandlerReturnsAndReleasesTheClient(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		clients := make(chan *Client, 1)
+		closed := make(chan error, 1)
+		client := dialPipe(t, readyServer(t), "token", OnReady(func() { closed <- (<-clients).Close() }))
+		clients <- client
+		if err := <-closed; err != nil {
+			t.Fatalf("Close from a handler: %v", err)
+		}
+		<-client.Done()
+		if err := client.Close(); err != nil {
+			t.Fatalf("second Close: %v", err)
+		}
+	})
+}
+
+func TestCloseFromAnotherGoroutineWaitsForTheRunningHandler(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		entered, release := make(chan struct{}), make(chan struct{})
+		client := dialPipe(t, readyServer(t), "token", OnReady(func() {
+			close(entered)
+			<-release
+		}))
+		<-entered
+		returned := make(chan struct{})
+		go func() {
+			_ = client.Close()
+			close(returned)
+		}()
+		synctest.Wait()
+		select {
+		case <-returned:
+			t.Fatal("Close returned while a handler was still running")
+		default:
+		}
+		close(release)
+		<-returned
+	})
+}
+
+func TestGoroutineIDTellsGoroutinesApart(t *testing.T) {
+	mine := goroutineID()
+	other := make(chan uint64)
+	go func() { other <- goroutineID() }()
+	if theirs := <-other; mine == 0 || theirs == 0 || mine == theirs || mine != goroutineID() {
+		t.Fatalf("goroutine ids mine %d theirs %d", mine, theirs)
+	}
+}
