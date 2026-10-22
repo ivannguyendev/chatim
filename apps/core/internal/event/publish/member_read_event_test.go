@@ -46,6 +46,7 @@ func everyKind() map[string]kindCase {
 		"member_role_changed":      {pbconv.MemberEvent(domain.RoomGroup, promoted), "evt.acme.member.101.member_role_changed"},
 		"member_priority_changed":  {pbconv.MemberEvent(domain.RoomGroup, pinned), "evt.acme.member.101.member_priority_changed"},
 		"read_updated":             {pbconv.ReadUpdated(room, "bob", domain.ReadPosition{Seq: 7, Ver: 2}, sentAt), "evt.acme.member.101.read_updated"},
+		"read_positions":           {pbconv.ReadPositions(room, []*chatimv1.ReadEntry{{User: "bob", ReadSeq: 7, ReadVer: 2}}, sentAt), "evt.acme.member.101.read_positions"},
 		"message_hidden":           {pbconv.MessageHidden(room, "bob", 0, 7, sentAt), "evt.acme.member.101.message_hidden"},
 		"history_cleared":          {pbconv.HistoryCleared(room, "bob", sentAt, sentAt), "evt.acme.member.101.history_cleared"},
 		"bookmark_changed":         {pbconv.BookmarkChanged(room, domain.Bookmark{Room: roomA, Seq: 7, Tenant: tenant, User: "bob", On: true, Ver: 1, At: sentAt}), "evt.acme.member.101.bookmark_changed"},
@@ -56,8 +57,8 @@ func everyKind() map[string]kindCase {
 
 func TestEachKindGoesToTheSubjectOfItsData(t *testing.T) {
 	kinds := everyKind()
-	if len(kinds) != 19 {
-		t.Fatalf("table has %d kinds, want 19", len(kinds))
+	if len(kinds) != 20 {
+		t.Fatalf("table has %d kinds, want 20", len(kinds))
 	}
 	for name, c := range kinds {
 		msg, err := publish.Message("evt", roomA, c.ev)
@@ -74,5 +75,8 @@ func TestEachKindGoesToTheSubjectOfItsData(t *testing.T) {
 	}
 	if subject, err := publish.SubjectFor("evt", tenant, roomA, "bogus", false); !errors.Is(err, apperr.ErrInvalidArgument) || subject != "" {
 		t.Fatalf("SubjectFor(bogus) = %q, %v; want ErrInvalidArgument", subject, err)
+	}
+	if subject, err := publish.SubjectFor("evt", tenant, roomA, "read_positions", false); err != nil || subject != "evt.acme.member.101.read_positions" {
+		t.Fatalf("SubjectFor(read_positions) = %q, %v; want the member subject", subject, err)
 	}
 }

@@ -141,6 +141,16 @@ message ReadUpdated {
   uint64 read_ver = 3;
 }
 
+message ReadEntry {
+  string user = 1;
+  uint64 read_seq = 2;
+  uint64 read_ver = 3;
+}
+
+message ReadPositions {
+  repeated ReadEntry entries = 1;
+}
+
 message MessageHidden {
   string user = 1;
   uint64 thread_root = 2;

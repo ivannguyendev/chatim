@@ -40,6 +40,7 @@ message Event {
     BookmarkChanged bookmark_changed = 36;
     RoomUpdated room_updated = 37;
     RoomPreferencesChanged room_preferences_changed = 38;
+    ReadPositions read_positions = 39;
   }
 }
 

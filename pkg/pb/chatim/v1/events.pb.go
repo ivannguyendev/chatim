@@ -53,6 +53,7 @@ type Event struct {
 	//	*Event_BookmarkChanged
 	//	*Event_RoomUpdated
 	//	*Event_RoomPreferencesChanged
+	//	*Event_ReadPositions
 	Payload       isEvent_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -322,6 +323,15 @@ func (x *Event) GetRoomPreferencesChanged() *RoomPreferencesChanged {
 	return nil
 }
 
+func (x *Event) GetReadPositions() *ReadPositions {
+	if x != nil {
+		if x, ok := x.Payload.(*Event_ReadPositions); ok {
+			return x.ReadPositions
+		}
+	}
+	return nil
+}
+
 type isEvent_Payload interface {
 	isEvent_Payload()
 }
@@ -402,6 +412,10 @@ type Event_RoomPreferencesChanged struct {
 	RoomPreferencesChanged *RoomPreferencesChanged `protobuf:"bytes,38,opt,name=room_preferences_changed,json=roomPreferencesChanged,proto3,oneof"`
 }
 
+type Event_ReadPositions struct {
+	ReadPositions *ReadPositions `protobuf:"bytes,39,opt,name=read_positions,json=readPositions,proto3,oneof"`
+}
+
 func (*Event_MessageCreated) isEvent_Payload() {}
 
 func (*Event_RoomCreated) isEvent_Payload() {}
@@ -439,6 +453,8 @@ func (*Event_BookmarkChanged) isEvent_Payload() {}
 func (*Event_RoomUpdated) isEvent_Payload() {}
 
 func (*Event_RoomPreferencesChanged) isEvent_Payload() {}
+
+func (*Event_ReadPositions) isEvent_Payload() {}
 
 type MessageCreated struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -928,7 +944,7 @@ var File_chatim_v1_events_proto protoreflect.FileDescriptor
 
 const file_chatim_v1_events_proto_rawDesc = "" +
 	"\n" +
-	"\x16chatim/v1/events.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x17chatim/v1/members.proto\x1a\x1dchatim/v1/message_links.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a\x19chatim/v1/room_list.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd3\f\n" +
+	"\x16chatim/v1/events.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x17chatim/v1/members.proto\x1a\x1dchatim/v1/message_links.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a\x19chatim/v1/room_list.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x96\r\n" +
 	"\x05Event\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06tenant\x18\x02 \x01(\tR\x06tenant\x12\x17\n" +
@@ -957,7 +973,8 @@ const file_chatim_v1_events_proto_rawDesc = "" +
 	"\x0fhistory_cleared\x18# \x01(\v2\x19.chatim.v1.HistoryClearedH\x00R\x0ehistoryCleared\x12G\n" +
 	"\x10bookmark_changed\x18$ \x01(\v2\x1a.chatim.v1.BookmarkChangedH\x00R\x0fbookmarkChanged\x12;\n" +
 	"\froom_updated\x18% \x01(\v2\x16.chatim.v1.RoomUpdatedH\x00R\vroomUpdated\x12]\n" +
-	"\x18room_preferences_changed\x18& \x01(\v2!.chatim.v1.RoomPreferencesChangedH\x00R\x16roomPreferencesChangedB\t\n" +
+	"\x18room_preferences_changed\x18& \x01(\v2!.chatim.v1.RoomPreferencesChangedH\x00R\x16roomPreferencesChanged\x12A\n" +
+	"\x0eread_positions\x18' \x01(\v2\x18.chatim.v1.ReadPositionsH\x00R\rreadPositionsB\t\n" +
 	"\apayloadJ\x04\b\a\x10\bR\x03pts\">\n" +
 	"\x0eMessageCreated\x12,\n" +
 	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\"2\n" +
@@ -1028,11 +1045,12 @@ var file_chatim_v1_events_proto_goTypes = []any{
 	(*HistoryCleared)(nil),         // 19: chatim.v1.HistoryCleared
 	(*BookmarkChanged)(nil),        // 20: chatim.v1.BookmarkChanged
 	(*RoomPreferencesChanged)(nil), // 21: chatim.v1.RoomPreferencesChanged
-	(*Message)(nil),                // 22: chatim.v1.Message
-	(*Room)(nil),                   // 23: chatim.v1.Room
-	(*MentionSet)(nil),             // 24: chatim.v1.MentionSet
-	(*ReactionSummary)(nil),        // 25: chatim.v1.ReactionSummary
-	(*ReplyCount)(nil),             // 26: chatim.v1.ReplyCount
+	(*ReadPositions)(nil),          // 22: chatim.v1.ReadPositions
+	(*Message)(nil),                // 23: chatim.v1.Message
+	(*Room)(nil),                   // 24: chatim.v1.Room
+	(*MentionSet)(nil),             // 25: chatim.v1.MentionSet
+	(*ReactionSummary)(nil),        // 26: chatim.v1.ReactionSummary
+	(*ReplyCount)(nil),             // 27: chatim.v1.ReplyCount
 }
 var file_chatim_v1_events_proto_depIdxs = []int32{
 	10, // 0: chatim.v1.Event.room_type:type_name -> chatim.v1.RoomType
@@ -1056,22 +1074,23 @@ var file_chatim_v1_events_proto_depIdxs = []int32{
 	20, // 18: chatim.v1.Event.bookmark_changed:type_name -> chatim.v1.BookmarkChanged
 	3,  // 19: chatim.v1.Event.room_updated:type_name -> chatim.v1.RoomUpdated
 	21, // 20: chatim.v1.Event.room_preferences_changed:type_name -> chatim.v1.RoomPreferencesChanged
-	22, // 21: chatim.v1.MessageCreated.message:type_name -> chatim.v1.Message
-	23, // 22: chatim.v1.RoomCreated.room:type_name -> chatim.v1.Room
-	23, // 23: chatim.v1.RoomUpdated.room:type_name -> chatim.v1.Room
-	22, // 24: chatim.v1.MessageEdited.message:type_name -> chatim.v1.Message
-	24, // 25: chatim.v1.MessageEdited.previous_mentions:type_name -> chatim.v1.MentionSet
-	22, // 26: chatim.v1.MessageDeleted.message:type_name -> chatim.v1.Message
-	24, // 27: chatim.v1.MessageDeleted.previous_mentions:type_name -> chatim.v1.MentionSet
-	25, // 28: chatim.v1.CountsChanged.reactions:type_name -> chatim.v1.ReactionSummary
-	26, // 29: chatim.v1.CountsChanged.reply_count:type_name -> chatim.v1.ReplyCount
-	22, // 30: chatim.v1.MessagePinned.message:type_name -> chatim.v1.Message
-	22, // 31: chatim.v1.MessageUnpinned.message:type_name -> chatim.v1.Message
-	32, // [32:32] is the sub-list for method output_type
-	32, // [32:32] is the sub-list for method input_type
-	32, // [32:32] is the sub-list for extension type_name
-	32, // [32:32] is the sub-list for extension extendee
-	0,  // [0:32] is the sub-list for field type_name
+	22, // 21: chatim.v1.Event.read_positions:type_name -> chatim.v1.ReadPositions
+	23, // 22: chatim.v1.MessageCreated.message:type_name -> chatim.v1.Message
+	24, // 23: chatim.v1.RoomCreated.room:type_name -> chatim.v1.Room
+	24, // 24: chatim.v1.RoomUpdated.room:type_name -> chatim.v1.Room
+	23, // 25: chatim.v1.MessageEdited.message:type_name -> chatim.v1.Message
+	25, // 26: chatim.v1.MessageEdited.previous_mentions:type_name -> chatim.v1.MentionSet
+	23, // 27: chatim.v1.MessageDeleted.message:type_name -> chatim.v1.Message
+	25, // 28: chatim.v1.MessageDeleted.previous_mentions:type_name -> chatim.v1.MentionSet
+	26, // 29: chatim.v1.CountsChanged.reactions:type_name -> chatim.v1.ReactionSummary
+	27, // 30: chatim.v1.CountsChanged.reply_count:type_name -> chatim.v1.ReplyCount
+	23, // 31: chatim.v1.MessagePinned.message:type_name -> chatim.v1.Message
+	23, // 32: chatim.v1.MessageUnpinned.message:type_name -> chatim.v1.Message
+	33, // [33:33] is the sub-list for method output_type
+	33, // [33:33] is the sub-list for method input_type
+	33, // [33:33] is the sub-list for extension type_name
+	33, // [33:33] is the sub-list for extension extendee
+	0,  // [0:33] is the sub-list for field type_name
 }
 
 func init() { file_chatim_v1_events_proto_init() }
@@ -1104,6 +1123,7 @@ func file_chatim_v1_events_proto_init() {
 		(*Event_BookmarkChanged)(nil),
 		(*Event_RoomUpdated)(nil),
 		(*Event_RoomPreferencesChanged)(nil),
+		(*Event_ReadPositions)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
