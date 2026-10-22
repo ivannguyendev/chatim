@@ -29,13 +29,14 @@ type WSEntry struct {
 	Seq   uint64
 	To    uint64
 	User  string
+	Ver   uint64
 }
 
 type WSMatch WSEntry
 
 func (m WSMatch) Matches(e WSEntry) bool {
 	return same(m.Frame, e.Frame) && same(m.Kind, e.Kind) && same(m.ID, e.ID) && same(m.Room, e.Room) &&
-		same(m.User, e.User) && (m.Seq == 0 || m.Seq == e.Seq)
+		same(m.User, e.User) && (m.Seq == 0 || m.Seq == e.Seq) && (m.Ver == 0 || m.Ver == e.Ver)
 }
 
 func (m WSMatch) String() string {
@@ -53,6 +54,12 @@ type WSFeed struct {
 func NewWSFeed() *WSFeed { return &WSFeed{changed: make(chan struct{})} }
 
 func (f *WSFeed) Event(ev *chatimv1.Event) {
+	if reads := ev.GetReadPositions(); reads != nil {
+		for _, e := range reads.GetEntries() {
+			f.add(WSEntry{Frame: FrameEvent, Kind: "read_positions", ID: ev.GetId(), Room: ev.GetRoomId(), Seq: e.GetReadSeq(), User: e.GetUser(), Ver: e.GetReadVer()})
+		}
+		return
+	}
 	kind, user := payloadOf(ev, ev.ProtoReflect().Descriptor().Oneofs().ByName("payload"))
 	f.add(WSEntry{Frame: FrameEvent, Kind: kind, ID: ev.GetId(), Room: ev.GetRoomId(), Seq: ev.GetSeq(), User: user})
 }

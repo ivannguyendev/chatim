@@ -20,17 +20,19 @@ import (
 var errWSTwoEmojis = errors.New("the websocket lists fewer than two reaction emojis")
 
 type wsEventsRun struct {
-	base   context.Context
-	cl     *route.Client
-	key    devtoken.KeyPair
-	url    string
-	tenant string
-	quiet  time.Duration
-	a, b   *wsPeer
-	room   string
-	seq    uint64
-	tokens []string
-	notes  []string
+	base             context.Context
+	cl               *route.Client
+	key              devtoken.KeyPair
+	url              string
+	tenant           string
+	quiet            time.Duration
+	a, b             *wsPeer
+	a2, c            *wsPeer
+	room             string
+	readSeq, readVer uint64
+	seq              uint64
+	tokens           []string
+	notes            []string
 }
 
 type wsEventsStep struct {
@@ -82,6 +84,9 @@ func (r *wsEventsRun) run() error {
 		{"B gets no reaction_changed with the room closed and the next one after open_room", r.reactions},
 		{"A hides and bookmarks and only A hears it", r.ownerOnly},
 		{"@B and @all reach B as one notification each", r.mentions},
+		{"A's second device and C connect and C joins the group", r.readPeers},
+		{"A's MarkRead reaches B viewing the group and A's second device, not C", r.readSeen},
+		{"A's MarkUnread reaches B with a higher read_ver and a lower read_seq", r.unreadSeen},
 		{"A removes B, B gets member_removed then room_closed and nothing more", r.removeB},
 		{"core lists the group in B's left rooms with its version and not in B's rooms", r.leftListed},
 		{"B reconnects and hears nothing of the group it left", r.reconnectB},
@@ -89,6 +94,13 @@ func (r *wsEventsRun) run() error {
 	}
 	defer r.a.close()
 	defer r.b.close()
+	defer func() {
+		for _, p := range []*wsPeer{r.a2, r.c} {
+			if p != nil {
+				p.close()
+			}
+		}
+	}()
 	for i, step := range steps {
 		if err := step.run(); err != nil {
 			return fmt.Errorf("websocket events step %d (%s): %w", i+1, step.name, err)
