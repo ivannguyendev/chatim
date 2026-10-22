@@ -39,6 +39,8 @@ type Client struct {
 	inbox      chan *chatimv1.ServerFrame
 	backlog    chan struct{}
 	loadTimer  *time.Timer
+	reads      readThrottle
+	readers    sync.WaitGroup
 }
 
 func Dial(ctx context.Context, url, token string, opts ...Option) (*Client, error) {
@@ -56,21 +58,38 @@ func DialConn(ctx context.Context, conn net.Conn, url, token string, opts ...Opt
 }
 
 func (c *Client) Call(ctx context.Context, req *chatimv1.ClientRequest) (*chatimv1.ServerResponse, error) {
+	if listsRooms(req) {
+		if err := c.flushReads(ctx); err != nil {
+			return nil, err
+		}
+	}
+	id, reply, err := c.start(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return c.wait(ctx, id, reply)
+}
+
+func (c *Client) start(ctx context.Context, req *chatimv1.ClientRequest) (uint64, chan *chatimv1.ServerResponse, error) {
 	id := c.nextID.Add(1)
 	frame, err := proto.Marshal(&chatimv1.ClientFrame{Frame: &chatimv1.ClientFrame_Request{
 		Request: &chatimv1.ClientRequest{Id: id, Request: req.GetRequest()},
 	}})
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
 	reply := make(chan *chatimv1.ServerResponse, 1)
 	if err := c.register(id, reply); err != nil {
-		return nil, err
+		return 0, nil, err
 	}
 	if err := c.send(ctx, frame); err != nil {
 		c.forget(id)
-		return nil, err
+		return 0, nil, err
 	}
+	return id, reply, nil
+}
+
+func (c *Client) wait(ctx context.Context, id uint64, reply chan *chatimv1.ServerResponse) (*chatimv1.ServerResponse, error) {
 	select {
 	case resp := <-reply:
 		return resp, responseError(resp)
@@ -96,17 +115,28 @@ func (c *Client) CloseAsync() {
 }
 
 func (c *Client) Close() error {
+	ctx, cancel := context.WithTimeout(context.Background(), closeTimeout)
+	defer cancel()
+	return c.CloseContext(ctx)
+}
+
+func (c *Client) CloseContext(ctx context.Context) error {
+	flushErr := c.flushReads(ctx)
 	c.CloseAsync()
 	<-c.done
 	c.loops.Wait()
+	c.stopReads()
 	timer := time.NewTimer(handlerWaitTimeout)
 	defer timer.Stop()
 	select {
 	case <-c.dispatched:
-		return nil
 	case <-timer.C:
 		return ErrHandlerStillRunning
 	}
+	if ctx.Err() != nil {
+		return flushErr
+	}
+	return nil
 }
 
 func (c *Client) Done() <-chan struct{} { return c.done }
@@ -128,6 +158,7 @@ func connect(token string, opts []Option, open func(gws.Event) (*gws.Conn, *http
 		opts:       o,
 		inbox:      make(chan *chatimv1.ServerFrame, o.dispatchQueue),
 		backlog:    make(chan struct{}, 1),
+		reads:      newReadThrottle(),
 	}
 	conn, resp, err := open(events{client: c})
 	if resp != nil {

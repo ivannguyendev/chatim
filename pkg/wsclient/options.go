@@ -17,6 +17,7 @@ type options struct {
 	onGap         func(*Client, Gap)
 	onLoadFailed  func(*Client, time.Duration)
 	onNotify      func(*chatimv1.Notification)
+	onReadError   func(string, error)
 	onReady       func()
 	onResync      func(chatimv1.ResyncReason)
 	onRoomClosed  func(string, chatimv1.RoomClosedReason)
@@ -44,6 +45,10 @@ func OnLoadFailed(handle func(c *Client, retryAfter time.Duration)) Option {
 
 func OnNotification(handle func(*chatimv1.Notification)) Option {
 	return func(o *options) { o.onNotify = handle }
+}
+
+func OnReadError(handle func(roomID string, err error)) Option {
+	return func(o *options) { o.onReadError = handle }
 }
 
 func OnReady(handle func()) Option {

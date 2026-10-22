@@ -99,3 +99,21 @@ func countsVersion(key docKey, counts *chatimv1.CountsChanged) (docVersion, bool
 		return docVersion{}, false
 	}
 }
+
+func (a *Applier) applyReads(room string, entries []*chatimv1.ReadEntry) Outcome {
+	fresh := make([]*chatimv1.ReadEntry, 0, len(entries))
+	for _, e := range entries {
+		key := docKey{kind: docRead, room: room, user: e.GetUser()}
+		if known, ok := a.versions[key]; ok && e.GetReadVer() <= known {
+			continue
+		}
+		a.versions[key] = e.GetReadVer()
+		fresh = append(fresh, e)
+	}
+	if len(fresh) == 0 {
+		a.stats.Stale++
+		return Outcome{Verdict: VerdictStale}
+	}
+	a.stats.Delivered++
+	return Outcome{Verdict: VerdictDeliver, Reads: fresh}
+}

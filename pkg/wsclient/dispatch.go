@@ -16,12 +16,6 @@ func (c *Client) OpenRoom(ctx context.Context, roomID string) error {
 	}})
 }
 
-func (c *Client) CloseRoom(ctx context.Context, roomID string) error {
-	return c.sendFrame(ctx, &chatimv1.ClientFrame{Frame: &chatimv1.ClientFrame_CloseRoom{
-		CloseRoom: &chatimv1.CloseRoomFrame{RoomId: roomID},
-	}})
-}
-
 func (c *Client) LoadRooms(ctx context.Context) error {
 	return c.sendFrame(ctx, &chatimv1.ClientFrame{Frame: &chatimv1.ClientFrame_LoadRooms{
 		LoadRooms: &chatimv1.LoadRoomsFrame{},
@@ -133,6 +127,9 @@ func (c *Client) applyEvent(ev *chatimv1.Event) {
 	outcome := c.opts.applier.Apply(ev)
 	if outcome.Verdict != VerdictDeliver {
 		return
+	}
+	if reads := ev.GetReadPositions(); reads != nil {
+		reads.Entries = outcome.Reads
 	}
 	if !outcome.Gap.Empty() && c.opts.onGap != nil {
 		c.opts.onGap(c, outcome.Gap)

@@ -28,6 +28,7 @@ func (g Gap) Empty() bool { return g.From == 0 }
 type Outcome struct {
 	Verdict Verdict
 	Gap     Gap
+	Reads   []*chatimv1.ReadEntry
 }
 
 type ApplierStats struct {
@@ -74,6 +75,9 @@ func (a *Applier) Apply(ev *chatimv1.Event) Outcome {
 	if id := ev.GetId(); id != "" && !a.ids.add(id) {
 		a.stats.Duplicates++
 		return Outcome{Verdict: VerdictDuplicate}
+	}
+	if reads := ev.GetReadPositions(); reads != nil {
+		return a.applyReads(ev.GetRoomId(), reads.GetEntries())
 	}
 	version, versioned := versionOf(ev)
 	if versioned && !version.recordOnly {
