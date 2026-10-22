@@ -21,6 +21,7 @@ type streamStats struct {
 	jumps        atomic.Uint64
 	jumpFailures atomic.Uint64
 	suppressed   atomic.Uint64
+	behindSince  atomic.Int64
 	suppressLog  rate.Sometimes
 }
 
@@ -39,6 +40,14 @@ func (s *streamStats) observe(meta *jetstream.MsgMetadata, now time.Time) {
 	if serial > prev && s.serial.CompareAndSwap(prev, serial) && prev > 0 {
 		s.resets.Add(serial - prev)
 	}
+}
+
+func (s *streamStats) behindSeconds() float64 {
+	since := s.behindSince.Load()
+	if since == 0 {
+		return 0
+	}
+	return max(time.Since(time.Unix(0, since)), 0).Seconds()
 }
 
 func (s *streamStats) lagSeconds() float64 { return math.Float64frombits(s.lag.Load()) }

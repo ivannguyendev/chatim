@@ -74,6 +74,7 @@ type fakeBroker struct {
 	lastSeq     map[string]uint64
 	created     map[string]time.Time
 	positionErr map[string]error
+	onPosition  func(stream string)
 	ensureErr   error
 	consumerErr map[string]error
 	consumeErr  map[string]error
@@ -100,11 +101,15 @@ func (b *fakeBroker) EnsureStream(_ context.Context, cfg jetstream.StreamConfig)
 
 func (b *fakeBroker) Position(_ context.Context, stream string) (Position, error) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
-	if err := b.positionErr[stream]; err != nil {
+	err, pos, hook := b.positionErr[stream], Position{Last: b.lastSeq[stream], Created: b.created[stream]}, b.onPosition
+	b.mu.Unlock()
+	if err != nil {
 		return Position{}, err
 	}
-	return Position{Last: b.lastSeq[stream], Created: b.created[stream]}, nil
+	if hook != nil {
+		hook(stream)
+	}
+	return pos, nil
 }
 
 func (b *fakeBroker) set(f func(*fakeBroker)) {

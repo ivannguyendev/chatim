@@ -51,6 +51,7 @@ func (f *Feed) Sources() []metrics.Source {
 		labels := map[string]string{"stream": s.stream}
 		out = append(out,
 			metrics.Source{Name: "consumer_lag_seconds", Help: "Age of the last delivered message by its stream store time, measured at delivery.", Labels: labels, Gauge: true, Read: s.lagSeconds},
+			metrics.Source{Name: "consumer_behind_seconds", Help: "Time since the watchdog first saw the consumer behind the stream end, 0 when caught up.", Labels: labels, Gauge: true, Read: s.behindSeconds},
 			metrics.Source{Name: "consumer_pending", Help: "Messages left in the stream after the last delivered one.", Labels: labels, Gauge: true, Read: func() float64 { return float64(s.pending.Load()) }},
 			metrics.Source{Name: "consumer_resets_total", Help: "Times the ordered consumer was recreated by the client library.", Labels: labels, Read: func() float64 { return float64(s.resets.Load()) }},
 			metrics.Source{Name: "consumer_stale_skipped_total", Help: "Messages skipped because their stream sequence was not above the last one handled.", Labels: labels, Read: func() float64 { return float64(s.stale.Load()) }},

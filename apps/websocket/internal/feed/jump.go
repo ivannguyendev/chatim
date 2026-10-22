@@ -94,13 +94,17 @@ func (f *Feed) watch(ctx context.Context) {
 }
 
 func (f *Feed) check(ctx context.Context, r *receiver) {
+	before, ok := r.position(ctx)
+	if !ok {
+		return
+	}
 	call, cancel := context.WithTimeout(ctx, jumpCallTimeout)
 	pos, err := (*f.broker.Load()).Position(call, r.stats.stream)
 	cancel()
 	if !r.take(ctx) {
 		return
 	}
-	reason, jump := r.verdict(pos, err, time.Now())
+	reason, jump := r.verdict(before, pos, err, time.Now())
 	r.give()
 	if jump {
 		f.requestJump(r, reason)

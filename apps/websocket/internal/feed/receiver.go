@@ -82,6 +82,7 @@ func (r *receiver) handle(epoch uint64, msg jetstream.Msg) {
 	age := now.Sub(meta.Timestamp)
 	if age > r.maxAge {
 		if r.lagJumpAllowed(now) {
+			r.stats.observe(meta, now)
 			r.jumping = true
 			r.hooks.request(r, JumpLagTooOld)
 			return
@@ -89,7 +90,8 @@ func (r *receiver) handle(epoch uint64, msg jetstream.Msg) {
 		r.hooks.suppressed(r, age)
 	}
 	r.lastSeq = meta.Sequence.Stream
-	r.progress, r.behind = now, time.Time{}
+	r.progress = now
+	r.setBehind(time.Time{})
 	defer func() { r.stats.observe(meta, time.Now()) }()
 	env, key, ok := r.envelope(msg, meta)
 	if !ok {
@@ -147,7 +149,8 @@ func (r *receiver) restart(ctx context.Context, pos Position) (uint64, bool) {
 	}
 	defer r.give()
 	r.epoch++
-	r.lastSeq, r.created, r.progress, r.behind = pos.Last, pos.Created, time.Now(), time.Time{}
+	r.lastSeq, r.created, r.progress = pos.Last, pos.Created, time.Now()
+	r.setBehind(time.Time{})
 	r.jumping, r.lost = false, false
 	return r.epoch, true
 }
@@ -160,22 +163,44 @@ func (r *receiver) lose(ctx context.Context) {
 	r.jumping, r.lost = true, true
 }
 
-func (r *receiver) verdict(pos Position, err error, now time.Time) (JumpReason, bool) {
+type position struct {
+	seq   uint64
+	epoch uint64
+}
+
+func (r *receiver) position(ctx context.Context) (position, bool) {
+	if !r.take(ctx) {
+		return position{}, false
+	}
+	defer r.give()
+	return position{seq: r.lastSeq, epoch: r.epoch}, true
+}
+
+func (r *receiver) setBehind(since time.Time) {
+	r.behind = since
+	if since.IsZero() {
+		r.stats.behindSince.Store(0)
+		return
+	}
+	r.stats.behindSince.Store(since.UnixNano())
+}
+
+func (r *receiver) verdict(before position, pos Position, err error, now time.Time) (JumpReason, bool) {
 	switch {
 	case r.lost:
 		r.lost = false
 		return JumpConsumerLost, true
-	case r.jumping || err != nil:
+	case r.jumping || err != nil || before.epoch != r.epoch:
 		return 0, false
-	case !pos.Created.Equal(r.created) || pos.Last < r.lastSeq:
+	case !pos.Created.Equal(r.created) || pos.Last < before.seq:
 		r.jumping = true
 		return JumpConsumerLost, true
 	case pos.Last <= r.lastSeq:
-		r.behind = time.Time{}
+		r.setBehind(time.Time{})
 		return 0, false
 	}
 	if r.behind.IsZero() {
-		r.behind = now
+		r.setBehind(now)
 	}
 	if now.Sub(later(r.behind, r.progress)) <= r.maxAge {
 		return 0, false
