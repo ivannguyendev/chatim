@@ -230,6 +230,7 @@ services:
     container_name: chatim-websocket-1
     profiles: ["app"]
     restart: unless-stopped
+    mem_limit: 2g
     stop_grace_period: 18s
     secrets: [redis_password, ws_jwks]
     environment:
@@ -240,6 +241,7 @@ services:
       WS_JWT_ISSUER: chatim-dev
       WS_JWT_AUDIENCE: chatim-websocket
       NATS_URL: nats://chatim-nats:4222
+      GOMEMLIMIT: 1600MiB
     ports:
       - "127.0.0.1:${WS1_PORT:-8081}:8080"
     depends_on:

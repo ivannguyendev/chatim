@@ -9,10 +9,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
-	"github.com/ivannguyendev/chatim/pkg/backoff"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/pkg/wsclient"
 	"github.com/ivannguyendev/chatim/tools/corecli/internal/e2e"
@@ -98,7 +94,7 @@ func (r *wsRun) close() {
 }
 
 func (r *wsRun) sign(key devtoken.KeyPair, issued time.Time, ttl time.Duration) (string, error) {
-	token, err := key.Sign(devtoken.Claims{Issuer: devIssuer, Audience: devAudience, Subject: r.user, Tenant: r.tenant, IssuedAt: issued, TTL: ttl})
+	token, err := devSign(key, r.tenant, r.user, issued, ttl)
 	if err != nil {
 		return "", err
 	}
@@ -126,17 +122,7 @@ func (r *wsRun) connect() error {
 }
 
 func (r *wsRun) call(req *chatimv1.ClientRequest) (*chatimv1.ServerResponse, error) {
-	for attempt := 1; ; attempt++ {
-		ctx, cancel := context.WithTimeout(r.base, r.callTimeout)
-		resp, err := r.ws.Call(ctx, req)
-		cancel()
-		if status.Code(err) != codes.Unavailable || attempt == wsCallAttempts {
-			return resp, err
-		}
-		if !backoff.Pause(r.base, wsRetryPause) {
-			return nil, r.base.Err()
-		}
-	}
+	return callWS(r.base, r.ws, r.callTimeout, req)
 }
 
 func (r *wsRun) createRoom() error {
