@@ -91,10 +91,8 @@ func (c *connection) respond(resp *chatimv1.ServerResponse) {
 
 func (c *connection) enqueue(frame outFrame) {
 	switch c.admit(frame) {
-	case admitOverBudget:
+	case admitOverBudget, admitQueueFull:
 		c.closeWith(CodeSlowClient)
-	case admitQueueFull:
-		c.abort()
 	case admitted, admitDropped:
 	}
 }
@@ -106,6 +104,9 @@ func (c *connection) admit(frame outFrame) admission {
 	case <-c.closed:
 		return admitDropped
 	default:
+	}
+	if c.closing.Load() != 0 {
+		return admitDropped
 	}
 	size := int64(len(frame.payload))
 	c.queueMu.Lock()

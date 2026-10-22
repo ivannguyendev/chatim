@@ -121,24 +121,30 @@ func TestClientThatNeverReadsIsCutAfterTheWriteTimeout(t *testing.T) {
 	})
 }
 
-func TestFullSendQueueCutsTheConnectionAtOnce(t *testing.T) {
+func TestResponsesOverAFullFrameQueueCloseWith4008(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		opts := testOptions()
 		opts.SendQueue = 2
 		h := newHarness(t, opts)
-		tc := h.dial(false)
+		tc, c := h.dialConnection(false)
 		start := time.Now()
 		tc.auth(h.token("u1", time.Hour))
 		for id := uint64(1); id <= 6; id++ {
 			tc.history(id)
 		}
-		<-tc.serverDone
+		synctest.Wait()
 		if elapsed := time.Since(start); elapsed != 0 {
-			t.Fatalf("cut after %v, want at once", elapsed)
+			t.Fatalf("decided after %v, want at once", elapsed)
 		}
-		if h.closes(CodeAbnormal) != 1 {
-			t.Fatalf("aborts = %d, want 1", h.closes(CodeAbnormal))
+		if got := c.closing.Load(); got != uint32(CodeSlowClient) {
+			t.Fatalf("closing = %d, want %d", got, CodeSlowClient)
 		}
-		_ = tc.raw.Close()
+		tc.startReading()
+		if got := tc.waitClosed(); got != CodeSlowClient {
+			t.Fatalf("close code = %d, want %d", got, CodeSlowClient)
+		}
+		if h.closes(CodeSlowClient) != 1 || h.closes(CodeAbnormal) != 0 {
+			t.Fatalf("closes 4008 = %d, aborts = %d", h.closes(CodeSlowClient), h.closes(CodeAbnormal))
+		}
 	})
 }

@@ -98,13 +98,13 @@ func TestEventsOverTheByteBudgetCloseOnlyThatConnectionWith4008(t *testing.T) {
 			}
 		}
 		slow.startReading()
-		for i := range 2 {
-			if got := slow.nextFrame().GetEvent().GetId(); !strings.HasPrefix(got, "e"+string(rune('1'+i))+"-") {
-				t.Fatalf("slow frame %d = %q", i, got)
-			}
-		}
 		if got := slow.waitClosed(); got != CodeSlowClient {
 			t.Fatalf("slow close code = %d, want %d", got, CodeSlowClient)
+		}
+		for i := range 2 {
+			if got := (<-slow.frames).GetEvent().GetId(); !strings.HasPrefix(got, "e"+string(rune('1'+i))+"-") {
+				t.Fatalf("slow frame %d = %q", i, got)
+			}
 		}
 		if h.closes(CodeSlowClient) != 1 || !fast.isOpen() {
 			t.Fatalf("closes 4008 = %d, fast open = %v", h.closes(CodeSlowClient), fast.isOpen())
@@ -194,14 +194,14 @@ func TestAResponseOverTheByteBudgetClosesWith4008(t *testing.T) {
 			t.Fatalf("closing = %d, want %d", got, CodeSlowClient)
 		}
 		tc.startReading()
-		if f := tc.nextFrame(); f.GetReady() == nil {
-			t.Fatalf("first frame = %v, want ready", f)
-		}
-		if got := tc.nextFrame().GetEvent().GetId(); !strings.HasPrefix(got, "fill-") {
-			t.Fatalf("second frame = %q, want fill-", got)
-		}
 		if got := tc.waitClosed(); got != CodeSlowClient {
 			t.Fatalf("close code = %d, want %d", got, CodeSlowClient)
+		}
+		if f := <-tc.frames; f.GetReady() == nil {
+			t.Fatalf("first frame = %v, want ready", f)
+		}
+		if got := (<-tc.frames).GetEvent().GetId(); !strings.HasPrefix(got, "fill-") {
+			t.Fatalf("second frame = %q, want fill-", got)
 		}
 		select {
 		case resp := <-tc.responses:
@@ -211,5 +211,81 @@ func TestAResponseOverTheByteBudgetClosesWith4008(t *testing.T) {
 		if got := h.queuedBytes(); got != 0 {
 			t.Fatalf("queued bytes after close = %v, want 0", got)
 		}
+	})
+}
+
+func frameQueueOptions() Options {
+	opts := testOptions()
+	opts.SendQueue = 2
+	return opts
+}
+
+func TestAFullFrameQueueClosesWith4008AndDropsLaterFrames(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		h := newHarness(t, frameQueueOptions())
+		tc, c := h.dialConnection(false)
+		sink := roomSink{c: c}
+		for _, id := range []string{"a-", "b-", "c-"} {
+			sink.Send(sizedFrame(t, id, 50))
+			synctest.Wait()
+		}
+		if c.closing.Load() != 0 {
+			t.Fatalf("closed with %d before the queue was full", c.closing.Load())
+		}
+		start := time.Now()
+		sink.Send(sizedFrame(t, "d-", 50))
+		if got := c.closing.Load(); got != uint32(CodeSlowClient) || time.Since(start) != 0 {
+			t.Fatalf("closing = %d after %v, want %d at once", got, time.Since(start), CodeSlowClient)
+		}
+		before := h.queuedBytes()
+		sink.Send(sizedFrame(t, "late-", 50))
+		if got := h.queuedBytes(); got != before {
+			t.Fatalf("queued bytes = %v after closing, want %v", got, before)
+		}
+		tc.startReading()
+		if got := tc.waitClosed(); got != CodeSlowClient {
+			t.Fatalf("close code = %d, want %d", got, CodeSlowClient)
+		}
+		for _, want := range []string{"a-", "b-", "c-"} {
+			if got := (<-tc.frames).GetEvent().GetId(); !strings.HasPrefix(got, want) {
+				t.Fatalf("frame = %q, want %s", got, want)
+			}
+		}
+		select {
+		case f := <-tc.frames:
+			t.Fatalf("frame %v delivered after the 4008 decision", f)
+		default:
+		}
+		if h.closes(CodeSlowClient) != 1 || h.closes(CodeAbnormal) != 0 || h.queuedBytes() != 0 {
+			t.Fatalf("closes 4008 = %d, aborts = %d, queued = %v", h.closes(CodeSlowClient), h.closes(CodeAbnormal), h.queuedBytes())
+		}
+	})
+}
+
+func TestTrySendRefusesAFrameOverAFullFrameQueueWithoutClosing(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		h := newHarness(t, frameQueueOptions())
+		tc, c := h.dialConnection(false)
+		sink := roomSink{c: c}
+		for _, id := range []string{"a-", "b-", "c-"} {
+			if !sink.TrySend(sizedFrame(t, id, 50)) {
+				t.Fatalf("frame %s refused before the queue was full", id)
+			}
+			synctest.Wait()
+		}
+		if sink.TrySend(sizedFrame(t, "d-", 50)) {
+			t.Fatal("a frame over the full queue was accepted")
+		}
+		if c.closing.Load() != 0 {
+			t.Fatalf("TrySend closed the connection with %d", c.closing.Load())
+		}
+		tc.startReading()
+		for range 3 {
+			tc.nextFrame()
+		}
+		if !tc.isOpen() {
+			t.Fatal("connection closed")
+		}
+		tc.close()
 	})
 }
