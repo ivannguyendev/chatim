@@ -43,6 +43,12 @@ func (c *connection) openRoom(room string) {
 	}
 }
 
+func (c *connection) loadRooms() {
+	if m := c.currentMember(); m != nil {
+		m.LoadRooms()
+	}
+}
+
 func (c *connection) closeRoom(room string) {
 	if m := c.currentMember(); m != nil {
 		m.Close(room)

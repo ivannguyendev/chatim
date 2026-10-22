@@ -1,8 +1,12 @@
 package interest
 
 import (
+	"math"
+	"time"
+
 	"google.golang.org/protobuf/proto"
 
+	"github.com/ivannguyendev/chatim/pkg/backoff"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -12,6 +16,18 @@ var resyncFrames = map[chatimv1.ResyncReason][]byte{
 	chatimv1.ResyncReason_RESYNC_REASON_LAG_TOO_OLD:    resyncFrame(chatimv1.ResyncReason_RESYNC_REASON_LAG_TOO_OLD),
 	chatimv1.ResyncReason_RESYNC_REASON_CONSUMER_LOST:  resyncFrame(chatimv1.ResyncReason_RESYNC_REASON_CONSUMER_LOST),
 	chatimv1.ResyncReason_RESYNC_REASON_CLIENT_BACKLOG: resyncFrame(chatimv1.ResyncReason_RESYNC_REASON_CLIENT_BACKLOG),
+}
+
+const loadRetryHint = 3 * time.Second
+
+func loadFailedFrame() []byte {
+	var hint uint32
+	if ms := backoff.Jitter(loadRetryHint).Milliseconds(); ms > 0 && ms <= math.MaxUint32 {
+		hint = uint32(ms)
+	}
+	return mustMarshal(&chatimv1.ServerFrame{Frame: &chatimv1.ServerFrame_LoadFailed{
+		LoadFailed: &chatimv1.LoadFailedFrame{RetryAfterMs: hint},
+	}})
 }
 
 func resyncFrame(reason chatimv1.ResyncReason) []byte {

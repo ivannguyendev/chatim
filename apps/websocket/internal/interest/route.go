@@ -121,7 +121,7 @@ func (t *Table) applyMembership(u *user, ch change, f *lazyFrame) {
 	switch {
 	case u.gone:
 		return
-	case u.suspended:
+	case u.suspended || u.failed:
 		if u.loading {
 			u.held = append(u.held, ch)
 		}

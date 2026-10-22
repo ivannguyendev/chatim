@@ -3,8 +3,6 @@ package interest
 import (
 	"context"
 	"time"
-
-	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 func (t *Table) acquire(ctx context.Context) bool {
@@ -23,10 +21,10 @@ func (t *Table) initialLoad(u *user) {
 		return
 	}
 	defer t.release()
-	t.fetch(u, 1, chatimv1.ResyncReason_RESYNC_REASON_UNSPECIFIED)
+	t.fetch(u, 1)
 }
 
-func (t *Table) fetch(u *user, gen uint64, reason chatimv1.ResyncReason) {
+func (t *Table) fetch(u *user, gen uint64) {
 	u.mu.Lock()
 	if u.gone || u.gen != gen {
 		u.mu.Unlock()
@@ -42,48 +40,43 @@ func (t *Table) fetch(u *user, gen uint64, reason chatimv1.ResyncReason) {
 	switch {
 	case u.ctx.Err() != nil:
 	case err != nil:
-		if t.loadFailed(u, gen, err) {
-			t.requeue(u, reason)
-		}
+		t.loadFailed(u, gen, err)
 	default:
-		t.loaded(u, gen, m, reason)
+		t.loaded(u, gen, m)
 	}
 }
 
-func (t *Table) loadFailed(u *user, gen uint64, err error) bool {
-	s := t.userShard(u.key)
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (t *Table) loadFailed(u *user, gen uint64, err error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	if u.gone || u.gen != gen {
-		return false
+		return
 	}
-	u.loading = false
-	u.held = nil
-	if u.suspended && u.readied() {
+	if u.suspended {
 		t.stats.reloadFailures.Add(1)
-		t.failLog.Do(func() {
-			t.log.Warn("reload room ids failed; the user stays suspended and is reloaded again after a pause", "err", err)
-		})
-		return true
+	} else {
+		t.stats.loadFailures.Add(1)
 	}
-	t.stats.loadFailures.Add(1)
-	t.failLog.Do(func() { t.log.Warn("load room ids failed; closing the connections of the user", "err", err) })
-	t.drop(s, u)
+	t.failLog.Do(func() {
+		t.log.Warn("load room ids failed; the connections of the user wait for load_rooms", "err", err)
+	})
+	u.loading = false
+	u.failed = true
+	u.held = nil
+	frame := loadFailedFrame()
 	for c := range u.conns {
-		c.sink.Fail()
+		c.sink.Send(frame)
 	}
-	return false
 }
 
-func (t *Table) loaded(u *user, gen uint64, m Membership, reason chatimv1.ResyncReason) {
+func (t *Table) loaded(u *user, gen uint64, m Membership) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	if u.gone || u.gen != gen {
 		return
 	}
 	u.loading = false
+	u.failed = false
 	t.adopt(u, m)
 	u.ready = true
 	if since := u.suspendedAt; t.resume(u) {
@@ -92,7 +85,7 @@ func (t *Table) loaded(u *user, gen uint64, m Membership, reason chatimv1.Resync
 	}
 	for c := range u.conns {
 		if c.readied {
-			c.resumed(reason)
+			c.resumed(u.reason)
 			continue
 		}
 		c.becameReady()

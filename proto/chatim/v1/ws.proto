@@ -19,6 +19,7 @@ message ClientFrame {
     ClientRequest request = 12;
     OpenRoomFrame open_room = 20;
     CloseRoomFrame close_room = 21;
+    LoadRoomsFrame load_rooms = 22;
   }
 }
 
@@ -35,6 +36,8 @@ message OpenRoomFrame {
 message CloseRoomFrame {
   string room_id = 1;
 }
+
+message LoadRoomsFrame {}
 
 message ClientRequest {
   uint64 id = 1;
@@ -83,10 +86,15 @@ message ServerFrame {
     Notification notification = 22;
     ResyncFrame resync = 23;
     RoomClosedFrame room_closed = 24;
+    LoadFailedFrame load_failed = 25;
   }
 }
 
 message ReadyFrame {}
+
+message LoadFailedFrame {
+  uint32 retry_after_ms = 1;
+}
 
 enum ResyncReason {
   RESYNC_REASON_UNSPECIFIED = 0;

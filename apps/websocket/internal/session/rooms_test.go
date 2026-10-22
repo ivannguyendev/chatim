@@ -45,18 +45,28 @@ func TestRoomFramesBeforeAuthAreAPolicyViolation(t *testing.T) {
 	})
 }
 
-func TestAFailedRoomLoadClosesWithTryAgainLater(t *testing.T) {
+func TestAFailedRoomLoadSendsLoadFailedAndLoadRoomsAsksAgain(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		h := newHarness(t, testOptions())
 		h.loader.fail(errors.New("core down"))
 		tc := h.dial(true)
 		tc.auth(h.token("u1", time.Hour))
-		if got := tc.waitClosed(); got != CodeTryAgainLater {
-			t.Fatalf("close code = %d, want %d", got, CodeTryAgainLater)
+		if f := tc.nextFrame(); f.GetLoadFailed() == nil || f.GetLoadFailed().GetRetryAfterMs() == 0 {
+			t.Fatalf("frame = %v, want load_failed with a retry hint", f)
 		}
-		if h.closes(CodeTryAgainLater) != 1 || h.interestUsers() != 0 {
-			t.Fatalf("closes 1013 = %d, interest users = %v", h.closes(CodeTryAgainLater), h.interestUsers())
+		if !tc.isOpen() || h.closes(CodeTryAgainLater) != 0 || h.interestUsers() != 1 {
+			t.Fatalf("open %v closes 1013 = %d, interest users = %v", tc.isOpen(), h.closes(CodeTryAgainLater), h.interestUsers())
 		}
+		h.loader.fail(nil)
+		h.loader.set("t1", "u1", interest.Room{ID: 7, Ver: 1})
+		tc.loadRooms()
+		if f := tc.nextFrame(); f.GetReady() == nil {
+			t.Fatalf("frame after load_rooms = %v, want ready", f)
+		}
+		if h.loader.calls.Load() != 2 {
+			t.Fatalf("loads = %d, want 2", h.loader.calls.Load())
+		}
+		tc.close()
 	})
 }
 

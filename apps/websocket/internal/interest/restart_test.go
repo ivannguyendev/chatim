@@ -245,7 +245,7 @@ func TestAStaleFailedLoadFromBeforeTheJumpClosesNothing(t *testing.T) {
 		synctest.Wait()
 		f.loader.answer(0, reply{err: errors.New("core down")})
 		synctest.Wait()
-		if s.failures() != 0 || f.table.stats.loadFailures.Load() != 0 || f.table.stats.reloadFailures.Load() != 0 {
+		if s.failures() != 0 || len(s.take()) != 0 || f.table.stats.loadFailures.Load() != 0 || f.table.stats.reloadFailures.Load() != 0 {
 			t.Fatalf("failures %d load failures %d", s.failures(), f.table.stats.loadFailures.Load())
 		}
 	})

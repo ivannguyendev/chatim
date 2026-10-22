@@ -6,37 +6,117 @@ import (
 	"testing"
 	"testing/synctest"
 	"time"
+
+	"google.golang.org/protobuf/proto"
+
+	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-func TestAUserWhoseReloadKeepsFailingIsRetriedAboutOncePerSecondWhileOthersLoad(t *testing.T) {
+func TestAFailedReloadSendsLoadFailedAndWaitsForTheClientToAskAgain(t *testing.T) {
 	run(t, func(t *testing.T) {
-		f := newFixture(t)
-		sinks := map[string]*fakeSink{}
-		for _, u := range []string{"bad", "a", "b", "c"} {
-			_, sinks[u] = f.connect("t1", u, 1)
+		f := paced(t, 1)
+		conns, sinks := map[string]*Conn{}, map[string]*fakeSink{}
+		for _, u := range []string{"u1", "u2", "u3"} {
+			conns[u], sinks[u] = f.connect("t1", u, 1)
 			sinks[u].take()
 		}
-		f.loader.failing("t1", "bad", errors.New("poison"))
+		f.loader.holding(true)
 		f.table.Jumped(lagJump(5))
-		time.Sleep(10 * time.Millisecond)
 		synctest.Wait()
-		for _, u := range []string{"a", "b", "c"} {
-			if got := sinks[u].take(); !slices.Equal(got, []string{"resync lag_too_old"}) {
-				t.Fatalf("%s frames = %v", u, got)
+		f.table.resyncMu.Lock()
+		failing := f.table.reloads.queue[len(f.table.reloads.queue)-1].key.user
+		f.table.resyncMu.Unlock()
+		waiting := &fakeSink{}
+		second := f.table.Register("t1", failing, waiting)
+		f.loader.answer(3, reply{rooms: []Room{{ID: 1, Ver: 1}}})
+		time.Sleep(time.Second)
+		synctest.Wait()
+		f.loader.answer(4, reply{err: errors.New("core down")})
+		synctest.Wait()
+		for i, s := range []*fakeSink{sinks[failing], waiting} {
+			if got := s.take(); !slices.Equal(got, []string{"load_failed"}) || s.failures() != 0 {
+				t.Fatalf("device %d frames %v failures %d", i, got, s.failures())
 			}
 		}
-		time.Sleep(10 * time.Second)
-		synctest.Wait()
-		if calls := f.loader.callsOf("t1", "bad") - 1; calls < 10 || calls > 11 {
-			t.Fatalf("reloads of the failing user in 10s = %d, want about one per second", calls)
+		if f.table.stats.users.Load() != 3 || f.table.stats.suspended.Load() != 2 || f.table.stats.reloadFailures.Load() != 1 || f.table.stats.loadFailures.Load() != 0 {
+			t.Fatalf("users %d suspended %d reload failures %d", f.table.stats.users.Load(), f.table.stats.suspended.Load(), f.table.stats.reloadFailures.Load())
 		}
-		if sinks["bad"].failures() != 0 || len(sinks["bad"].take()) != 0 || f.table.stats.suspended.Load() != 1 || f.table.stats.reloads.Load() != 3 {
-			t.Fatalf("bad failures %d suspended %d reloads %d", sinks["bad"].failures(), f.table.stats.suspended.Load(), f.table.stats.reloads.Load())
+		time.Sleep(time.Second)
+		synctest.Wait()
+		f.loader.answer(5, reply{rooms: []Room{{ID: 1, Ver: 1}}})
+		time.Sleep(time.Hour)
+		synctest.Wait()
+		f.route(msg("t1", 1))
+		if got := len(f.loader.callOrder()); got != 6 || len(sinks[failing].take()) != 0 || len(waiting.take()) != 0 || f.table.stats.suspended.Load() != 1 {
+			t.Fatalf("loads %d, suspended %d; the server reloaded or delivered without load_rooms", got, f.table.stats.suspended.Load())
+		}
+		conns["u1"].LoadRooms()
+		if failing == "u1" {
+			conns["u2"].LoadRooms()
+		}
+		second.LoadRooms()
+		conns[failing].LoadRooms()
+		synctest.Wait()
+		if got := f.loader.callOrder(); len(got) != 7 || got[6] != failing {
+			t.Fatalf("loads after load_rooms = %v, want one more for %s", got, failing)
+		}
+		f.loader.answer(6, reply{rooms: []Room{{ID: 1, Ver: 1}}})
+		synctest.Wait()
+		f.route(msg("t1", 1))
+		if got := sinks[failing].take(); !slices.Equal(got, []string{"resync lag_too_old", "event msg_created/t1/1//v0"}) {
+			t.Fatalf("readied device frames = %v", got)
+		}
+		if got := waiting.take(); !slices.Equal(got, []string{"ready", "event msg_created/t1/1//v0"}) || f.table.stats.suspended.Load() != 0 {
+			t.Fatalf("waiting device frames = %v", got)
 		}
 	})
 }
 
-func TestAFailedReloadOfAUserNeverReadyClosesItsConnectionsLikeALogin(t *testing.T) {
+func TestAFailedFirstLoadSendsLoadFailedAndLoadRoomsReadiesTheUser(t *testing.T) {
+	run(t, func(t *testing.T) {
+		f := newFixture(t)
+		f.loader.holding(true)
+		s1, s2 := &fakeSink{}, &fakeSink{}
+		c1 := f.table.Register("t1", "u", s1)
+		c2 := f.table.Register("t1", "u", s2)
+		synctest.Wait()
+		f.loader.answer(0, reply{err: errors.New("core down")})
+		synctest.Wait()
+		for i, s := range []*fakeSink{s1, s2} {
+			if got := s.take(); !slices.Equal(got, []string{"load_failed"}) || s.failures() != 0 {
+				t.Fatalf("device %d frames %v failures %d", i, got, s.failures())
+			}
+		}
+		f.route(added("t1", 1, "u", 1))
+		late := &fakeSink{}
+		f.table.Register("t1", "u", late)
+		time.Sleep(time.Hour)
+		synctest.Wait()
+		u := f.table.lookup(userKey{tenant: "t1", user: "u"})
+		if got := late.take(); !slices.Equal(got, []string{"load_failed"}) || len(u.held) != 0 || f.loader.callsOf("t1", "u") != 1 {
+			t.Fatalf("late device %v, held %d, loads %d", got, len(u.held), f.loader.callsOf("t1", "u"))
+		}
+		if f.table.stats.loadFailures.Load() != 1 || f.table.stats.reloadFailures.Load() != 0 || f.table.stats.suspended.Load() != 0 || f.table.stats.users.Load() != 1 {
+			t.Fatalf("load failures %d suspended %d users %d", f.table.stats.loadFailures.Load(), f.table.stats.suspended.Load(), f.table.stats.users.Load())
+		}
+		c1.LoadRooms()
+		c2.LoadRooms()
+		synctest.Wait()
+		f.loader.answer(1, reply{rooms: []Room{{ID: 1, Ver: 1}}})
+		synctest.Wait()
+		f.route(msg("t1", 1))
+		for i, s := range []*fakeSink{s1, s2, late} {
+			if got := s.take(); !slices.Equal(got, []string{"ready", "event msg_created/t1/1//v0"}) {
+				t.Fatalf("device %d frames = %v", i, got)
+			}
+		}
+		if f.loader.callsOf("t1", "u") != 2 {
+			t.Fatalf("loads = %d, want 2", f.loader.callsOf("t1", "u"))
+		}
+	})
+}
+
+func TestAFailedReloadOfAUserNeverReadyKeepsItSuspendedUntilItLeaves(t *testing.T) {
 	run(t, func(t *testing.T) {
 		f := newFixture(t)
 		f.loader.holding(true)
@@ -47,39 +127,26 @@ func TestAFailedReloadOfAUserNeverReadyClosesItsConnectionsLikeALogin(t *testing
 		synctest.Wait()
 		f.loader.answer(1, reply{err: errors.New("core down")})
 		synctest.Wait()
-		if s.failures() != 1 || len(s.take()) != 0 || f.table.stats.users.Load() != 0 || f.table.stats.suspended.Load() != 0 {
-			t.Fatalf("failures %d users %d suspended %d", s.failures(), f.table.stats.users.Load(), f.table.stats.suspended.Load())
-		}
-		if f.table.stats.loadFailures.Load() != 1 || f.table.stats.reloadFailures.Load() != 0 {
-			t.Fatalf("load failures %d reload failures %d", f.table.stats.loadFailures.Load(), f.table.stats.reloadFailures.Load())
+		if got := s.take(); !slices.Equal(got, []string{"load_failed"}) || s.failures() != 0 || f.table.stats.suspended.Load() != 1 || f.table.stats.reloadFailures.Load() != 1 {
+			t.Fatalf("frames %v failures %d suspended %d", got, s.failures(), f.table.stats.suspended.Load())
 		}
 		c.Unregister()
+		if f.table.stats.suspended.Load() != 0 || f.table.stats.users.Load() != 0 {
+			t.Fatalf("suspended %d users %d after the user left", f.table.stats.suspended.Load(), f.table.stats.users.Load())
+		}
 	})
 }
 
-func TestAFailedReloadOfAUserWithAWaitingDeviceGoesToTheFront(t *testing.T) {
-	run(t, func(t *testing.T) {
-		f := paced(t, 1)
-		for _, u := range []string{"x", "y", "z"} {
-			f.connect("t1", u, 1)
+func TestLoadFailedCarriesARetryHintOfOneAndAHalfToThreeSeconds(t *testing.T) {
+	for range 50 {
+		var f chatimv1.ServerFrame
+		if err := proto.Unmarshal(loadFailedFrame(), &f); err != nil {
+			t.Fatal(err)
 		}
-		f.loader.holding(true)
-		f.table.Jumped(lagJump(5))
-		synctest.Wait()
-		first := f.loader.callOrder()[3]
-		f.table.resyncMu.Lock()
-		mixed := f.table.reloads.queue[len(f.table.reloads.queue)-1].key.user
-		f.table.resyncMu.Unlock()
-		f.table.Register("t1", mixed, &fakeSink{})
-		time.Sleep(time.Second)
-		synctest.Wait()
-		f.loader.answer(4, reply{err: errors.New("core down")})
-		time.Sleep(time.Second)
-		synctest.Wait()
-		if got := f.loader.callOrder()[3:]; len(got) != 3 || got[0] != first || got[1] != mixed || got[2] != mixed {
-			t.Fatalf("reloads = %v, want %s, then %s twice", got, first, mixed)
+		if ms := f.GetLoadFailed().GetRetryAfterMs(); ms < 1500 || ms > 3000 {
+			t.Fatalf("retry_after_ms = %d", ms)
 		}
-	})
+	}
 }
 
 func TestAJumpAfterCloseSuspendsNobody(t *testing.T) {

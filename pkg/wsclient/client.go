@@ -38,6 +38,7 @@ type Client struct {
 	opts       options
 	inbox      chan *chatimv1.ServerFrame
 	backlog    chan struct{}
+	loadTimer  *time.Timer
 }
 
 func Dial(ctx context.Context, url, token string, opts ...Option) (*Client, error) {

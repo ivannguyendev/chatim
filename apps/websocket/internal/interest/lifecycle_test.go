@@ -1,7 +1,6 @@
 package interest
 
 import (
-	"errors"
 	"log/slog"
 	"slices"
 	"strings"
@@ -97,36 +96,6 @@ func TestTheLastConnectionLeavingClearsTheUserAndItsMarks(t *testing.T) {
 		}
 		if got := sink.take(); !slices.Equal(got, []string{"ready", "event member_added/t1/3/u/v1"}) {
 			t.Fatalf("frames after reconnecting = %v; the left mark should be gone with the last connection", got)
-		}
-	})
-}
-
-func TestAFailedLoadClosesEveryWaitingConnection(t *testing.T) {
-	run(t, func(t *testing.T) {
-		f := newFixture(t)
-		f.loader.holding(true)
-		first, second := &fakeSink{}, &fakeSink{}
-		a := f.table.Register("t1", "u", first)
-		b := f.table.Register("t1", "u", second)
-		synctest.Wait()
-		f.loader.replies <- reply{err: errors.New("core unavailable")}
-		synctest.Wait()
-		if first.failures() != 1 || second.failures() != 1 || len(first.take()) != 0 {
-			t.Fatalf("failures = %d, %d", first.failures(), second.failures())
-		}
-		if f.table.stats.loadFailures.Load() != 1 || f.table.stats.users.Load() != 0 {
-			t.Fatalf("load failures %d users %d", f.table.stats.loadFailures.Load(), f.table.stats.users.Load())
-		}
-		f.route(added("t1", 1, "u", 1))
-		a.Unregister()
-		b.Unregister()
-		f.loader.holding(false)
-		_, retry := f.connect("t1", "u", 1)
-		if got := retry.take(); !slices.Equal(got, []string{"ready"}) {
-			t.Fatalf("a new connection after a failed load got %v", got)
-		}
-		if f.table.stats.users.Load() != 1 || f.table.stats.load.count.Load() != 2 {
-			t.Fatalf("users %d loads %d", f.table.stats.users.Load(), f.table.stats.load.count.Load())
 		}
 	})
 }

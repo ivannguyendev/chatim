@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 type change struct {
@@ -22,7 +24,9 @@ type user struct {
 	gone        bool
 	loading     bool
 	suspended   bool
+	failed      bool
 	suspendedAt time.Time
+	reason      chatimv1.ResyncReason
 	gen         uint64
 	mark        uint64
 	loadMark    uint64
@@ -77,21 +81,14 @@ func (u *user) apply(ch change) {
 
 func (u *user) live() bool { return u.ready && !u.suspended && !u.gone }
 
-func (u *user) readied() bool {
-	for c := range u.conns {
-		if c.readied {
-			return true
-		}
-	}
-	return false
-}
-
-func (t *Table) suspend(u *user, now time.Time) {
+func (t *Table) suspend(u *user, now time.Time, reason chatimv1.ResyncReason) {
 	if u.gone {
 		return
 	}
 	u.gen++
 	u.loading = false
+	u.failed = false
+	u.reason = reason
 	u.held = nil
 	if !u.suspended {
 		u.suspended = true
@@ -157,6 +154,8 @@ func (t *Table) attach(k userKey, sink Sink) (*Conn, bool) {
 	switch {
 	case !found:
 		t.loads.Go(func() { t.initialLoad(u) })
+	case u.failed:
+		sink.Send(loadFailedFrame())
 	case u.suspended:
 		return c, true
 	case u.ready:

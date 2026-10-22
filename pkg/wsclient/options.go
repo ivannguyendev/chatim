@@ -1,6 +1,10 @@
 package wsclient
 
-import chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
+import (
+	"time"
+
+	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
+)
 
 const DefaultDispatchQueue = 1024
 
@@ -11,6 +15,7 @@ type options struct {
 	dispatchQueue int
 	onEvent       func(*chatimv1.Event)
 	onGap         func(*Client, Gap)
+	onLoadFailed  func(*Client, time.Duration)
 	onNotify      func(*chatimv1.Notification)
 	onReady       func()
 	onResync      func(chatimv1.ResyncReason)
@@ -31,6 +36,10 @@ func OnEvent(handle func(*chatimv1.Event)) Option {
 
 func OnGap(fill func(*Client, Gap)) Option {
 	return func(o *options) { o.onGap = fill }
+}
+
+func OnLoadFailed(handle func(c *Client, retryAfter time.Duration)) Option {
+	return func(o *options) { o.onLoadFailed = handle }
 }
 
 func OnNotification(handle func(*chatimv1.Notification)) Option {

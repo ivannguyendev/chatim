@@ -43,6 +43,19 @@ func (c *Conn) Open(raw string) {
 	}
 }
 
+func (c *Conn) LoadRooms() {
+	u := c.user
+	u.mu.Lock()
+	again := !c.gone && !u.gone && u.failed
+	if again {
+		u.failed = false
+	}
+	u.mu.Unlock()
+	if again {
+		c.table.loadAgain(u)
+	}
+}
+
 func (c *Conn) Close(raw string) {
 	room, err := ids.ParseRoomID(raw)
 	if err != nil {

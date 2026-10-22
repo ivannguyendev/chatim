@@ -2,9 +2,11 @@ package wsclient
 
 import (
 	"context"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/ivannguyendev/chatim/pkg/backoff"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -17,6 +19,12 @@ func (c *Client) OpenRoom(ctx context.Context, roomID string) error {
 func (c *Client) CloseRoom(ctx context.Context, roomID string) error {
 	return c.sendFrame(ctx, &chatimv1.ClientFrame{Frame: &chatimv1.ClientFrame_CloseRoom{
 		CloseRoom: &chatimv1.CloseRoomFrame{RoomId: roomID},
+	}})
+}
+
+func (c *Client) LoadRooms(ctx context.Context) error {
+	return c.sendFrame(ctx, &chatimv1.ClientFrame{Frame: &chatimv1.ClientFrame_LoadRooms{
+		LoadRooms: &chatimv1.LoadRoomsFrame{},
 	}})
 }
 
@@ -43,10 +51,13 @@ func (c *Client) enqueue(frame *chatimv1.ServerFrame) {
 
 func (c *Client) dispatchLoop() {
 	defer close(c.dispatched)
+	defer c.stopLoadTimer()
 	for {
 		select {
 		case frame := <-c.inbox:
 			c.dispatch(frame)
+		case <-c.loadDue():
+			_ = c.LoadRooms(context.Background())
 		case <-c.backlog:
 			c.resync(chatimv1.ResyncReason_RESYNC_REASON_CLIENT_BACKLOG)
 		case <-c.done:
@@ -85,6 +96,34 @@ func (c *Client) dispatch(frame *chatimv1.ServerFrame) {
 		if c.opts.onRoomClosed != nil {
 			c.opts.onRoomClosed(f.RoomClosed.GetRoomId(), f.RoomClosed.GetReason())
 		}
+	case *chatimv1.ServerFrame_LoadFailed:
+		c.loadFailed(time.Duration(f.LoadFailed.GetRetryAfterMs()) * time.Millisecond)
+	}
+}
+
+func (c *Client) loadFailed(retryAfter time.Duration) {
+	if c.opts.onLoadFailed != nil {
+		c.opts.onLoadFailed(c, retryAfter)
+		return
+	}
+	wait := retryAfter + backoff.Jitter(retryAfter/2)
+	if c.loadTimer == nil {
+		c.loadTimer = time.NewTimer(wait)
+		return
+	}
+	c.loadTimer.Reset(wait)
+}
+
+func (c *Client) loadDue() <-chan time.Time {
+	if c.loadTimer == nil {
+		return nil
+	}
+	return c.loadTimer.C
+}
+
+func (c *Client) stopLoadTimer() {
+	if c.loadTimer != nil {
+		c.loadTimer.Stop()
 	}
 }
 
@@ -110,7 +149,7 @@ func (c *Client) resync(reason chatimv1.ResyncReason) {
 func dispatched(frame *chatimv1.ServerFrame) bool {
 	switch frame.GetFrame().(type) {
 	case *chatimv1.ServerFrame_Event, *chatimv1.ServerFrame_Notification, *chatimv1.ServerFrame_Ready,
-		*chatimv1.ServerFrame_Resync, *chatimv1.ServerFrame_RoomClosed:
+		*chatimv1.ServerFrame_Resync, *chatimv1.ServerFrame_RoomClosed, *chatimv1.ServerFrame_LoadFailed:
 		return true
 	default:
 		return false

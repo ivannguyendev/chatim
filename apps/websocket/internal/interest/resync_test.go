@@ -1,7 +1,6 @@
 package interest
 
 import (
-	"errors"
 	"slices"
 	"testing"
 	"testing/synctest"
@@ -99,44 +98,6 @@ func TestANewDeviceOfASuspendedUserMovesItToTheFrontOfTheQueue(t *testing.T) {
 		synctest.Wait()
 		if got := f.loader.callOrder()[4:]; len(got) != 2 || got[1] != late {
 			t.Fatalf("reloads = %v, want %s right after %s", got, late, first)
-		}
-	})
-}
-
-func TestAFailedReloadKeepsTheConnectionsAndRequeuesTheUserAtTheBack(t *testing.T) {
-	run(t, func(t *testing.T) {
-		f := paced(t, 1)
-		sinks := map[string]*fakeSink{}
-		for _, u := range []string{"u", "v"} {
-			_, sinks[u] = f.connect("t1", u, 1)
-			sinks[u].take()
-		}
-		f.loader.holding(true)
-		f.table.Jumped(lagJump(5))
-		synctest.Wait()
-		first := f.loader.callOrder()[2]
-		f.loader.answer(2, reply{err: errors.New("core down")})
-		synctest.Wait()
-		if sinks[first].failures() != 0 || f.table.stats.reloadFailures.Load() != 1 || f.table.stats.loadFailures.Load() != 0 || f.table.stats.suspended.Load() != 2 {
-			t.Fatalf("failures %d reload failures %d suspended %d", sinks[first].failures(), f.table.stats.reloadFailures.Load(), f.table.stats.suspended.Load())
-		}
-		for call := 3; call <= 4; call++ {
-			time.Sleep(time.Second)
-			synctest.Wait()
-			f.loader.answer(call, reply{rooms: []Room{{ID: 1, Ver: 1}}})
-			synctest.Wait()
-		}
-		order := f.loader.callOrder()[2:]
-		if len(order) != 3 || order[1] == first || order[2] != first {
-			t.Fatalf("reload order = %v, want %s again last", order, first)
-		}
-		for u, s := range sinks {
-			if got := s.take(); !slices.Equal(got, []string{"resync lag_too_old"}) || s.failures() != 0 {
-				t.Fatalf("%s frames %v failures %d", u, got, s.failures())
-			}
-		}
-		if f.table.stats.suspended.Load() != 0 || f.table.stats.users.Load() != 2 {
-			t.Fatalf("suspended %d users %d", f.table.stats.suspended.Load(), f.table.stats.users.Load())
 		}
 	})
 }

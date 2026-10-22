@@ -73,6 +73,10 @@ func (tc *testClient) openRoom(room string) {
 	tc.frame(&chatimv1.ClientFrame{Frame: &chatimv1.ClientFrame_OpenRoom{OpenRoom: &chatimv1.OpenRoomFrame{RoomId: room}}})
 }
 
+func (tc *testClient) loadRooms() {
+	tc.frame(&chatimv1.ClientFrame{Frame: &chatimv1.ClientFrame_LoadRooms{LoadRooms: &chatimv1.LoadRoomsFrame{}}})
+}
+
 func (tc *testClient) closeRoom(room string) {
 	tc.frame(&chatimv1.ClientFrame{Frame: &chatimv1.ClientFrame_CloseRoom{CloseRoom: &chatimv1.CloseRoomFrame{RoomId: room}}})
 }

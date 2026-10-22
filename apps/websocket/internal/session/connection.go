@@ -32,6 +32,7 @@ const (
 	frameRequest
 	frameOpenRoom
 	frameCloseRoom
+	frameLoadRooms
 )
 
 type connection struct {
@@ -122,6 +123,8 @@ func (c *connection) receive(message *gws.Message) {
 		c.openRoom(frame.GetOpenRoom().GetRoomId())
 	case kind == frameCloseRoom:
 		c.closeRoom(frame.GetCloseRoom().GetRoomId())
+	case kind == frameLoadRooms:
+		c.loadRooms()
 	case kind == frameUnknown:
 		c.server.stats.unknownFrames.Add(1)
 	}
@@ -160,6 +163,8 @@ func kindOf(frame *chatimv1.ClientFrame) frameKind {
 		return frameOpenRoom
 	case *chatimv1.ClientFrame_CloseRoom:
 		return frameCloseRoom
+	case *chatimv1.ClientFrame_LoadRooms:
+		return frameLoadRooms
 	default:
 		return frameUnknown
 	}

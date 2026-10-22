@@ -97,12 +97,12 @@ func (t *Table) Sources() []metrics.Source {
 		{Name: "interest_users", Help: "Users with a connection on this node.", Gauge: true, Read: gaugeOfInt64(&s.users)},
 		{Name: "interest_room_pairs", Help: "Loaded (user, room) memberships on this node.", Gauge: true, Read: gaugeOfInt64(&s.pairs)},
 		{Name: "room_ids_load_seconds", Help: "ListMyRoomIDs latency of room loads, in seconds.", Histogram: s.load.read},
-		{Name: "room_ids_load_failures_total", Help: "First room loads at login that failed and closed the connections of the user.", Read: counterOf(&s.loadFailures)},
+		{Name: "room_ids_load_failures_total", Help: "First room loads at login that failed; the connections of the user got load_failed.", Read: counterOf(&s.loadFailures)},
 		{Name: "open_room_rejected_total", Help: "open_room frames answered with room_closed not_member.", Read: counterOf(&s.openRejected)},
 		{Name: "users_suspended", Help: "Users whose delivery is suspended until their rooms are loaded again after the feed skipped part of the stream.", Gauge: true, Read: gaugeOfInt64(&s.suspended)},
 		{Name: "reloads_total", Help: "Suspended users whose rooms were loaded again.", Read: counterOf(&s.reloads)},
 		{Name: "reload_seconds", Help: "Time from the first suspension of a user to the end of its reload, in seconds.", Histogram: s.reload.read},
-		{Name: "reload_failures_total", Help: "Reloads of suspended users that failed; the user is reloaded again after a pause.", Read: counterOf(&s.reloadFailures)},
+		{Name: "reload_failures_total", Help: "Reloads of suspended users that failed; the connections of the user got load_failed.", Read: counterOf(&s.reloadFailures)},
 	}
 	for reason, label := range resyncLabels {
 		if label == "" {

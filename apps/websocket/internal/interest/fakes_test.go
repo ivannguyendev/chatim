@@ -34,7 +34,6 @@ type fakeLoader struct {
 	hold    bool
 	replies chan reply
 	waiting []chan reply
-	fail    map[userKey]error
 	active  int
 	peak    int
 	order   []string
@@ -51,7 +50,7 @@ func (l *fakeLoader) Load(ctx context.Context, tenant, user string) (Membership,
 	l.order = append(l.order, user)
 	l.active++
 	l.peak = max(l.peak, l.active)
-	hold, rooms, failure := l.hold, l.rooms[k], l.fail[k]
+	hold, rooms := l.hold, l.rooms[k]
 	own := make(chan reply, 1)
 	l.waiting = append(l.waiting, own)
 	l.mu.Unlock()
@@ -61,7 +60,7 @@ func (l *fakeLoader) Load(ctx context.Context, tenant, user string) (Membership,
 		l.mu.Unlock()
 	}()
 	if !hold {
-		return rooms, failure
+		return rooms, nil
 	}
 	var r reply
 	select {
@@ -96,15 +95,6 @@ func (l *fakeLoader) setLeft(tenant, user string, left ...Room) {
 	defer l.mu.Unlock()
 	k := userKey{tenant: tenant, user: user}
 	l.rooms[k] = Membership{Joined: l.rooms[k].Joined, Left: left}
-}
-
-func (l *fakeLoader) failing(tenant, user string, err error) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.fail == nil {
-		l.fail = map[userKey]error{}
-	}
-	l.fail[userKey{tenant: tenant, user: user}] = err
 }
 
 func (l *fakeLoader) holding(on bool) {
@@ -188,6 +178,8 @@ func describe(raw []byte) string {
 	case f.GetRoomClosed() != nil:
 		reason := strings.TrimPrefix(f.GetRoomClosed().GetReason().String(), "ROOM_CLOSED_REASON_")
 		line = "closed " + f.GetRoomClosed().GetRoomId() + " " + strings.ToLower(reason)
+	case f.GetLoadFailed() != nil:
+		line = "load_failed"
 	case f.GetResync() != nil:
 		line = "resync " + strings.ToLower(strings.TrimPrefix(f.GetResync().GetReason().String(), "RESYNC_REASON_"))
 	default:
