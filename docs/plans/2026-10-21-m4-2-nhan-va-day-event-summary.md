@@ -79,7 +79,7 @@ JetStream đánh số liên tiếp cho mọi event (1001, 1002, 1003…) và lư
 Ví dụ mạng của ws-2 chập 2 giây: ws-2 đã nhận tới 1002 thì đứt. Khi mạng lại, thư viện thấy thiếu nên tự bỏ phần đang cầm và đọc lại **từ 1003 trở đi, liên tục**: 1003, 1004, …, 1500, 1501… cho tới khi đuổi kịp hiện tại. Tin tới máy đúng thứ tự, không mất tin nào; người dùng thấy trễ chưa tới một giây. ws-1, ws-3 không bị ảnh hưởng.
 
 Hai cái phanh để không hại core:
-1. Đang đuổi theo thì đọc tối đa 20.000 event/giây. **Trễ từ 2 phút trở lên = coi như node khởi động lại** (owner 2026-10-22): nhảy tới hiện tại, **tạm ngừng đẩy mọi thứ cho mọi người trên node**, rồi nạp lại từng người từ core, tối đa 1.000 người/giây mỗi node (`WS_RELOAD_RATE`). Ai nạp xong thì nhận "tải lại" và được đẩy tin tiếp. Thiết bị mới của người đang tạm ngừng chờ tới khi người đó nạp xong mới nhận `ready`. Stream bị tạo lại cũng đi đường này. Nạp lỗi (ví dụ core đang lỗi) → node báo máy `load_failed`, giữ kết nối, không tự nạp lại; máy tự quyết: xin nạp lại (`load_rooms`) hoặc nối lại (owner 2026-10-22, đúng luật không retry nội bộ).
+1. Đang đuổi theo thì đọc tối đa 20.000 event/giây. **Trễ từ 2 phút trở lên = coi như node khởi động lại** (owner 2026-10-22): nhảy tới hiện tại, **tạm ngừng đẩy mọi thứ cho mọi người trên node**, rồi nạp lại từng người từ core, tối đa 1.000 người/giây mỗi node (`WS_RELOAD_RATE`). Ai nạp xong thì nhận "tải lại" và được đẩy tin tiếp. Thiết bị mới của người đang tạm ngừng chờ tới khi người đó nạp xong mới nhận `ready`. Stream bị tạo lại cũng đi đường này. Nạp lỗi (ví dụ core đang lỗi) → node báo máy `load_failed`, giữ kết nối, không tự nạp lại; máy tự quyết: xin nạp lại (`load_rooms`) hoặc nối lại (owner 2026-10-22, đúng luật không retry nội bộ). Chưa nạp xong thì node bỏ qua `open_room`, không giữ gì; máy mở room sau `ready` hoặc "tải lại".
 2. Máy nào nhận không kịp lúc đang đuổi theo → bảo riêng máy đó "tải lại", không cắt kết nối.
 
 | Chuyện xảy ra | Websocket làm gì | Người dùng thấy |
@@ -115,6 +115,7 @@ Core không đổi stream, event, đường ghi hay proto event nào.
 |---|---|
 | Mỗi node nghe toàn bộ, lọc trong RAM | Nghe theo từng room: hàng triệu lần đăng ký khi bão kết nối lại, và không thấy được nhóm mới |
 | Hai mức: thành viên / đang mở | Mọi event cho mọi room: tốn băng thông (react của 5.000 room) |
+| Nạp lỗi → `load_failed`, giữ kết nối, máy tự quyết xin nạp lại hay nối lại (owner 2026-10-22) | Server tự thử lại mỗi giây: retry nội bộ, dồn tải lên core đang yếu. Đóng 1013: mất kết nối, bão kết nối lại |
 | Trễ ≥ 2 phút = khởi động lại: tạm ngừng, nạp lại từng người (owner 2026-10-22) | Đọc lại tin vào/bị xoá của đoạn bị bỏ: nhiều code, vẫn cần đường khởi động lại khi stream bị tạo lại. Nạp trước ở 90 giây: thay đổi sau lúc nạp vẫn lọt |
 | Đọc stream theo thứ tự bằng ordered consumer của NATS; lỡ thì thư viện đọc lại từ số cuối (owner) | Tự đếm số và tự xin lại từng đoạn: nhiều code, phải thu hẹp subject stream ở core. Luôn tải lại: mạng chập ngắn cũng gây 33.000 lần gọi core |
 | Gói tin + danh sách người nhận (owner) | Mỗi người một tin: 5.000 bản sao nội dung |
