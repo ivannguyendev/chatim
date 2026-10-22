@@ -1,10 +1,10 @@
 # chatim — Danh mục event
 
-> Cập nhật: 2026-10-22. Trạng thái: Mention App đã merge `main` (PR #16), D162–D176 ([tóm tắt](plans/2026-10-17-mention-app-summary.md)); websocket M4 phần 2 (nhận và đẩy event, gói `WsPublish`) xây trên `feat/m4`, D189–D194 ([tóm tắt](plans/2026-10-21-m4-2-nhan-va-day-event-summary.md)).
+> Cập nhật: 2026-10-22. Trạng thái: Mention App đã merge `main` (PR #16), D162–D176 ([tóm tắt](plans/2026-10-17-mention-app-summary.md)); websocket M4 phần 2 (nhận và đẩy event, gói `WsPublish`) xây trên `feat/m4`, D189–D195 ([tóm tắt](plans/2026-10-21-m4-2-nhan-va-day-event-summary.md)).
 >
 > Tài liệu liên quan:
 > - Nguồn sự thật cơ chế: [thiết kế](architecture.md) §8.1 (hợp đồng consumer) và [Module 10](modules/10-feature-data-reconciliation-and-repair.md) (cờ `_state`, sweeper, projection).
-> - Quyết định: [Decision Log](decision-log.md) D104, D108, D141–D160, D162–D176, D189–D194.
+> - Quyết định: [Decision Log](decision-log.md) D104, D108, D141–D160, D162–D176, D189–D195.
 
 Tài liệu này trả lời ba câu: core và Mention App phát event gì, ở subject nào; ai nhận event nào; và app sau này nên đăng ký subject nào để chỉ nhận đúng data mình cần.
 
@@ -71,16 +71,16 @@ Nếu publish lỗi, sweeper trên core giữ slot 0 phát lại từ doc hiện
 | Websocket M4 (mọi node, §3.1) | mỗi node hai ordered consumer: `CHATIM_EVT` filter `evt.>` và `CHATIM_WS` filter `websocket.publish.>`, bắt đầu ở seq cuối + 1 | 19 kind của bảng §3.1; gói `WsPublish` | đẩy realtime tới máy đang nối vào node đó; không biết thông báo là gì |
 | App notification + push Phase 2 (chưa xây) | hộp thư `notify.{t}.{kind}` | thông báo | lọc tắt thông báo; `WsPublish` vào `websocket.publish.{t}` cho người online, APNs/FCM cho người offline |
 
-### 3.1. Websocket nhận gì (M4 phần 2, D189–D194)
+### 3.1. Websocket nhận gì (M4 phần 2, D189–D195)
 
-Mỗi node websocket một kết nối NATS, hai **ordered consumer** (không durable, `InactiveThreshold` 30s): `CHATIM_EVT` filter `evt.>` và `CHATIM_WS` filter `websocket.publish.>`. Node bắt đầu ở seq cuối của stream + 1; lỡ tin thì thư viện tự tạo lại consumer từ số cuối đã giao, tin tới đúng thứ tự. Trễ quá 2 phút theo giờ lưu → node bỏ đoạn cũ, nạp lại danh sách room và gửi `resync` (D190). Subject `evt.{t}.{loại}.{room}.{kind}` được đọc thẳng (không qua `live.*`); tenant lấy từ subject; mọi khoá người là (tenant, user).
+Mỗi node websocket một kết nối NATS, hai **ordered consumer** (không durable, `InactiveThreshold` 30s): `CHATIM_EVT` filter `evt.>` và `CHATIM_WS` filter `websocket.publish.>`. Node bắt đầu ở seq cuối của stream + 1; lỡ tin thì thư viện tự tạo lại consumer từ số cuối đã giao, tin tới đúng thứ tự. Trễ từ 2 phút trở lên theo giờ lưu (hoặc consumer mất, stream tạo lại) = node coi như khởi động lại (D195): bỏ đoạn cũ, tạm ngừng đẩy cho mọi người trên node, nạp lại từ core (`ListMyRoomIDs`: room đang ở và `left` kèm `ver`) theo `WS_RELOAD_RATE` người/giây, nạp xong người nào thì gửi `resync` cho máy của người đó. Nạp lỗi → `load_failed`, máy tự xin nạp lại bằng `load_rooms` (server không tự nạp lại). Room/thành viên chỉ nạp lúc login hoặc lúc khởi động lại; giữa hai lần đó node cập nhật trong RAM theo `member_added`/`member_removed`, và dấu "đã rời" từ `left` chặn một `member_added` cũ do sweeper phát bù. Hộp thư `CHATIM_WS` nhảy riêng không tạm ngừng ai: thông báo của đoạn bỏ qua mất (vẫn có trong `ListMentions`). Subject `evt.{t}.{loại}.{room}.{kind}` được đọc thẳng (không qua `live.*`); tenant lấy từ subject; mọi khoá người là (tenant, user).
 
 | Kind | Loại data | Ai trên node nhận |
 |---|---|---|
 | `msg_created` | `message`, `mention` | mọi thành viên room đang online (mức thành viên) |
 | `msg_edited`, `msg_deleted` | `message` | mọi thành viên room đang online |
 | `room_created`, `room_updated` | `room` | mọi thành viên room đang online (`room_created` thường tới trước khi node biết thành viên nên không ai nhận; máy lấy room khi nhận `member_added` của mình) |
-| `member_added`, `member_removed` | `member` | chính người đó và kết nối đang mở room; node cập nhật danh sách room của người đó theo `ver` lớn hơn thắng; bị xoá thì gửi event trước, rồi `room_closed{removed}` |
+| `member_added`, `member_removed` | `member` | chính người đó và kết nối đang mở room; node cập nhật danh sách room của người đó theo `ver` lớn hơn thắng (`member_added` có `ver` ≤ dấu đã rời bị bỏ); bị xoá thì gửi event trước, rồi `room_closed{removed}` |
 | `member_role_changed`, `member_priority_changed` | `member` | kết nối đang mở room (`open_room`) |
 | `member_count_changed`, `msg_pinned`, `msg_unpinned` | `room` | kết nối đang mở room |
 | `reaction_changed`, `counts_changed` | `message` | kết nối đang mở room |

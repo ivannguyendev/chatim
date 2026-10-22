@@ -1,6 +1,6 @@
 # Module 09: Thời gian thực — Phân phối Realtime & Tín hiệu tức thời (Typing/Presence)
 
-> **Trạng thái:** App `websocket` (M4) **đã xây phần 1 và 2/5** trên `feat/m4`: kết nối, token, chuyển lệnh tới core (phần 1, [§7](#7-giao-thức-kết-nối-m4-phần-1-đã-xây), D183–D188); nhận và đẩy event, gói thông báo `WsPublish` (phần 2, [§8](#8-nhận-và-đẩy-event-m4-phần-2-đã-xây), D189–D194). Đã đọc/đã xem (phần 3), typing/online (phần 4), reconnect và vận hành (phần 5) vẫn là thiết kế dự kiến; chỗ nào khác §7 hoặc §8 thì §7, §8 đúng.
+> **Trạng thái:** App `websocket` (M4) **đã xây phần 1 và 2/5** trên `feat/m4`: kết nối, token, chuyển lệnh tới core (phần 1, [§7](#7-giao-thức-kết-nối-m4-phần-1-đã-xây), D183–D188); nhận và đẩy event, gói thông báo `WsPublish` (phần 2, [§8](#8-nhận-và-đẩy-event-m4-phần-2-đã-xây), D189–D195). Đã đọc/đã xem (phần 3), typing/online (phần 4), reconnect và vận hành (phần 5) vẫn là thiết kế dự kiến; chỗ nào khác §7 hoặc §8 thì §7, §8 đúng.
 >
 > **Mục tiêu module:** Đẩy các thông điệp và biến động dữ liệu đến người dùng đang online với độ trễ siêu thấp (p99 ≤100ms) qua kết nối WebSocket hai chiều, hỗ trợ các tương tác sinh động tức thời như "Đang gõ..." (Typing Indicator) và trạng thái trực tuyến (Presence) mà không làm suy giảm hiệu năng cơ sở dữ liệu.
 
@@ -163,7 +163,7 @@ Bảng mã đóng đầy đủ của phần 1 nằm ở [§7.4](#74-mã-đóng).
 | `4002` | Không gửi `auth` trong 5 giây | Nối lại bình thường, không cần đổi token |
 | `1001` | Node websocket đang tắt | Nối lại (qua LB sang node khác, phần 5) |
 | `4008` | Máy nhận quá chậm: hàng ghi quá 1MB hoặc 256 frame (D194) | Nối lại có backoff, rồi tải lại danh sách hội thoại |
-| `1013` | Node không lấy được danh sách room của người dùng (`ListMyRoomIDs` lỗi) hoặc đang tắt | Nối lại có backoff |
+| `1013` | Node đang tắt (nạp danh sách room lỗi không đóng nữa mà gửi `load_failed`, D195) | Nối lại có backoff |
 
 ---
 
@@ -186,14 +186,14 @@ Bảng mã đóng đầy đủ của phần 1 nằm ở [§7.4](#74-mã-đóng).
 | **NATS JetStream (`CHATIM_EVT`, `CHATIM_WS`)** | Nhận event và gói thông báo (hai ordered consumer mỗi node) | Lần khởi động đầu cần NATS (không có thì node không sẵn sàng và thoát). Mất NATS sau đó: lệnh vẫn chạy, `/readyz` vẫn true, gauge `nats_connected` = 0; nối lại thì thư viện đọc tiếp từ số cuối, không mất tin; trễ quá 2 phút thì nhảy tới hiện tại + nạp lại + `resync` rải 60s (D190). Event chưa vào JetStream được sweeper slot 0 phát bù (Module 10). |
 | **File JWKS (khoá công khai)** | Xác thực JWT khi mở kết nối và khi gia hạn | Phần 1: file JWKS nạp một lần lúc khởi động (`WS_JWT_KEYS_FILE`), không gọi dịch vụ nào lúc kiểm token; file sai thì node không khởi động. Xoay khoá bằng rolling restart (D183). `identity` Phase 2 sẽ phát JWKS. |
 | **Redis state** | Đọc bảng slot để chọn core (chỉ đọc) | Redis chết: node giữ bảng slot đang có và mọi kết nối gRPC tới core; lần nạp không thấy core nào cũng không đóng kết nối (D186). Lúc khởi động node chờ bảng slot rồi mới bật `/readyz`. |
-| **Core `ListMyRoomIDs`** | Danh sách room của người dùng khi nối và khi nạp lại | Tối đa `WS_ROOM_IDS_INFLIGHT` (64) lần gọi đang chạy mỗi node; lỗi thì đóng mọi kết nối của người đó bằng 1013, máy nối lại. |
+| **Core `ListMyRoomIDs`** | Danh sách room đang ở và đã rời của người dùng khi login và khi nạp lại sau một lần nhảy (D195) | Tối đa `WS_ROOM_IDS_INFLIGHT` (64) lần gọi đang chạy mỗi node, nạp lại theo `WS_RELOAD_RATE`; lỗi thì gửi `load_failed` cho mọi kết nối của người đó, máy tự xin nạp lại (`load_rooms`) hoặc nối lại. |
 | **Core Service (gRPC Unary)** | Xử lý mọi lệnh của máy | App websocket gọi Core qua gRPC theo bảng slot, hạn `CORE_REQUEST_DEADLINE` (5s), **không tự gửi lại** (luật không retry nội bộ). Core lỗi `UNAVAILABLE` thì app trả nguyên mã cho máy và kích làm mới bảng slot (gom, ≥ 250ms một lần); máy gửi lại cùng `cid`/`request_id` và lần sau đi đúng core mới. |
 
 ### 6.1. Chỉ số Sức khoẻ Vận hành & Cảnh báo SRE (Key Metrics & Alerts)
 
 > **Đã có từ phần 1** (trên `/metrics` cổng admin, tiền tố `chatim_websocket_`): `connections`, `unauthenticated_connections` (gauge), `auth_failures_total{reason}`, `closes_total{code}` (chỉ mã do server đóng; nhãn 1000 gồm cả hết hạn heartbeat), `commands_rejected_total{reason=rate|inflight|unimplemented|shutdown}`, `unknown_frames_total`, `commands_total{command,code}`, histogram `core_call_seconds{command}`.
 >
-> **Thêm ở phần 2:** feed `nats_connected`, `nats_reconnects_total`, `consumer_lag_seconds{stream}` (tuổi tin vừa giao theo giờ lưu), `consumer_behind_seconds{stream}` (từ lúc watchdog thấy consumer sau đuôi stream, 0 khi kịp), `consumer_pending{stream}`, `consumer_resets_total{stream}`, `consumer_stale_skipped_total{stream}`, `catchup_jumps_total{stream}`, `catchup_jump_suppressed_total{stream}`, `catchup_jump_failures_total{stream}`, `fanout_queue_depth`, `fanout_handler_panics_total`, `events_unknown_total`, `events_dropped_at_stop_total`; bảng quan tâm `interest_users`, `interest_room_pairs`, histogram `room_ids_load_seconds`, `room_ids_load_failures_total`, `open_room_rejected_total`, `interest_reloads_total`, `resyncs_total{reason}`, `events_delivered_total{level}`, `events_dropped_total{reason}`; gói `publish_packets_total`, `publish_delivered_total`, `publish_dropped_total{reason}`; hàng ghi `send_queue_bytes`. **Chưa có luật alert nào cho websocket** (phần 5: `nats_connected`, `catchup_jump_suppressed_total`, độ trễ).
+> **Thêm ở phần 2:** feed `nats_connected`, `nats_reconnects_total`, `consumer_lag_seconds{stream}` (tuổi tin vừa giao theo giờ lưu), `consumer_behind_seconds{stream}` (từ lúc watchdog thấy consumer sau đuôi stream, 0 khi kịp), `consumer_pending{stream}`, `consumer_resets_total{stream}`, `consumer_stale_skipped_total{stream}`, `catchup_jumps_total{stream}`, `catchup_jump_suppressed_total{stream}`, `catchup_jump_failures_total{stream}`, `fanout_queue_depth`, `fanout_handler_panics_total`, `events_unknown_total`, `events_dropped_at_stop_total`; bảng quan tâm `interest_users`, `interest_room_pairs`, histogram `room_ids_load_seconds`, `room_ids_load_failures_total`, `open_room_rejected_total`, `users_suspended`, `reloads_total`, histogram `reload_seconds`, `reload_failures_total`, `resyncs_total{reason}`, `events_delivered_total{level}`, `events_dropped_total{reason}`; gói `publish_packets_total`, `publish_delivered_total`, `publish_dropped_total{reason}`; hàng ghi `send_queue_bytes`. **Chưa có luật alert nào cho websocket** (phần 5: `nats_connected`, `catchup_jump_suppressed_total`, độ trễ).
 >
 > **Dự kiến, chưa xây:** các metric và alert dưới đây là thiết kế cho phần 3–5; chưa có trong code và chưa có trong `deploy/prometheus/alerts.yml`.
 
@@ -219,9 +219,10 @@ Bảng mã đóng đầy đủ của phần 1 nằm ở [§7.4](#74-mã-đóng).
 ### 7.2. Frame
 
 - Mọi frame là **nhị phân protobuf** (D185): máy gửi `ClientFrame`, app gửi `ServerFrame`. Frame chữ → đóng 1003. Không có kênh JSON, chưa bật nén.
-- `ClientFrame` (oneof): `auth{token}` (10), `heartbeat{}` (11), `request{id, oneof request}` (12); phần 2: `open_room{room_id}` (20), `close_room{room_id}` (21).
-- `ServerFrame` (oneof): `response{id, code, message, oneof result}` (10); phần 2: `ready{}` (20), `event` (21, message `Event`), `notification` (22, message `Notification`), `resync{reason}` (23), `room_closed{room_id, reason}` (24). Ý nghĩa ở §8.
+- `ClientFrame` (oneof): `auth{token}` (10), `heartbeat{}` (11), `request{id, oneof request}` (12); phần 2: `open_room{room_id}` (20), `close_room{room_id}` (21), `load_rooms{}` (22, xin nạp lại danh sách room sau `load_failed`, D195).
+- `ServerFrame` (oneof): `response{id, code, message, oneof result}` (10); phần 2: `ready{}` (20), `event` (21, message `Event`), `notification` (22, message `Notification`), `resync{reason}` (23), `room_closed{room_id, reason}` (24), `load_failed{retry_after_ms}` (25, nạp danh sách room lỗi; kết nối vẫn giữ, D195). Ý nghĩa ở §8.
 - Số field 10–19 dành cho phần 1, 20–39 cho phần 2–4 (event, vị trí đọc, typing, online, resync); chỉ thêm, không đổi số cũ.
+- `open_room` khi người dùng chưa nạp xong (trước `ready`, đang tạm ngừng, sau `load_failed`) bị bỏ qua, không trả lời; máy chỉ mở room sau `ready`/`resync` (§8.2).
 - Sau khi đã auth, frame loại app chưa biết (máy mới hơn app) bị bỏ qua và đếm ở `unknown_frames_total`, không đóng kết nối. Frame không giải mã được → đóng 1008.
 
 ### 7.3. Token, gia hạn, heartbeat
@@ -247,7 +248,7 @@ Ví dụ: token của Lan hết hạn 11:00. Lúc 10:55 SDK lấy token mới v�
 | `1000` | 15 giây không có frame nào | Nối lại; kiểm lại nhịp heartbeat |
 | `1006` (máy tự thấy) | App cắt socket không gửi close frame: một lần ghi lỗi hoặc quá 10 giây | Nối lại có backoff |
 | `4008` | Máy nhận quá chậm: hàng ghi quá `WS_SEND_QUEUE_BYTES` (1MB) hoặc `WS_SEND_QUEUE` (256 frame), D194 | Nối lại có backoff, tải lại danh sách hội thoại |
-| `1013` | `ListMyRoomIDs` lỗi (đóng mọi kết nối của người đó) hoặc node đang đóng bảng quan tâm; phần 5 dùng thêm khi node quá tải | Nối lại có backoff |
+| `1013` | Node đang đóng bảng quan tâm; phần 5 dùng thêm khi node quá tải. `ListMyRoomIDs` lỗi không đóng mà gửi `load_failed` (D195) | Nối lại có backoff |
 
 ### 7.5. Lệnh và câu trả lời
 
@@ -279,19 +280,20 @@ Khi node tắt: `/readyz` false → chờ `WS_DRAIN_DELAY` (2s) → thôi nhận
 
 ## 8. Nhận và đẩy event (M4 phần 2, đã xây)
 
-> Xây trên `feat/m4` (commit `2b3c6c9`…`ec75155`), theo [tóm tắt phần 2](../plans/2026-10-21-m4-2-nhan-va-day-event-summary.md); quyết định D189–D194 ở [decision log §17.8](../decision-log.md); subject và bảng người nhận ở [events.md §3.1](../events.md). Code: `apps/websocket/internal/feed` (hai ordered consumer, worker theo room, watchdog, nhảy tới hiện tại), `apps/websocket/internal/interest` (bảng quan tâm, định tuyến, nạp lại, gói `WsPublish`), `apps/websocket/internal/frame` (ghép bytes), `pkg/wspublish` (khuôn hộp thư), `pkg/wsclient` (client mẫu áp event theo D156).
+> Xây trên `feat/m4` (commit `2b3c6c9`…`ec75155`), theo [tóm tắt phần 2](../plans/2026-10-21-m4-2-nhan-va-day-event-summary.md); quyết định D189–D195 ở [decision log §17.8](../decision-log.md); subject và bảng người nhận ở [events.md §3.1](../events.md). Code: `apps/websocket/internal/feed` (hai ordered consumer, worker theo room, watchdog, nhảy tới hiện tại), `apps/websocket/internal/interest` (bảng quan tâm, định tuyến, nạp lại, gói `WsPublish`), `apps/websocket/internal/frame` (ghép bytes), `pkg/wspublish` (khuôn hộp thư), `pkg/wsclient` (client mẫu áp event theo D156).
 
 ### 8.1. Sau khi auth: `ready`
 
 1. Auth xong, node đăng ký kết nối vào bảng quan tâm theo (tenant, user). Người đã có kết nối khác trên node dùng chung danh sách room, không gọi core lại.
-2. Người mới: node gọi core `ListMyRoomIDs` (tối đa `WS_ROOM_IDS_INFLIGHT` lần cùng lúc mỗi node), ghi mốc seq stream lúc bắt đầu gọi; event thành viên tới trong lúc gọi được giữ lại và áp sau theo `ver` lớn hơn thắng. Lỗi → đóng 1013.
+2. Người mới: node gọi core `ListMyRoomIDs` (tối đa `WS_ROOM_IDS_INFLIGHT` lần cùng lúc mỗi node), ghi mốc seq stream lúc bắt đầu gọi; core trả room đang ở (`rooms`) và room đã rời (`left`, kèm `ver`). Node ghi dấu "đã rời" từ `left` trước, rồi áp event thành viên tới trong lúc gọi theo `ver` lớn hơn thắng; `member_added` có `ver` ≤ dấu đã rời bị bỏ (D195). Lỗi → `load_failed` (§8.4), kết nối vẫn giữ.
+   Danh sách room chỉ nạp từ core lúc login hoặc lúc node "khởi động lại" (§8.4); giữa hai lần đó node tự cập nhật trong RAM theo `member_added`/`member_removed`.
 3. Xong thì gửi **`ready{}`**. Trước `ready` máy chưa nhận event nào; sau `ready` máy nên gọi `ListMyRooms` để có trạng thái đầy đủ (event chỉ báo cái mới).
 
-Ví dụ: Lan nối lúc stream ở seq 5.000; trong lúc node hỏi core, Lan bị xoá khỏi Kho HCM (seq 5.003). Danh sách core trả có thể còn Kho HCM hoặc không; node áp event seq 5.003 sau (vì > 5.000), nên kết quả luôn là "không còn Kho HCM".
+Ví dụ: Lan nối lúc stream ở seq 5.000; trong lúc node hỏi core, Lan bị xoá khỏi Kho HCM (seq 5.003). Danh sách core trả có thể còn Kho HCM hoặc không; node áp event seq 5.003 sau (vì > 5.000), nên kết quả luôn là "không còn Kho HCM". Sau đó sweeper phát bù một `member_added` cũ (`ver 1`) của Lan: `left` đã ghi Kho HCM ở `ver 2`, nên node bỏ nó.
 
 ### 8.2. Mở và đóng room
 
-- **`open_room{room_id}`**: nhận thêm react, ghim, số thành viên, đổi vai trò của room đó. Gửi trước `ready` thì được giữ tới `ready`. Room chưa có trong danh sách (ví dụ vừa `CreateRoom`, `member_added` chưa tới) thì chờ tối đa `WS_OPEN_PENDING` (10s); tới hạn vẫn không phải thành viên → **`room_closed{room_id, NOT_MEMBER}`**. `room_id` sai dạng cũng nhận `room_closed{NOT_MEMBER}`.
+- **`open_room{room_id}`**: nhận thêm react, ghim, số thành viên, đổi vai trò của room đó. Gửi khi người đó chưa nạp xong (trước `ready`, đang tạm ngừng, sau `load_failed`) thì node bỏ qua: không trả lời, không giữ gì; máy mở lại các room đang xem sau `ready`/`resync`. Room đang chờ `member_added` cũng bị bỏ khi người đó bị tạm ngừng. Room chưa có trong danh sách (ví dụ vừa `CreateRoom`, `member_added` chưa tới) thì chờ tối đa `WS_OPEN_PENDING` (10s); tới hạn vẫn không phải thành viên → **`room_closed{room_id, NOT_MEMBER}`**. `room_id` sai dạng cũng nhận `room_closed{NOT_MEMBER}`.
 - **`close_room{room_id}`**: luôn được, không trả lời.
 - Bị xoá khỏi room: máy nhận `member_removed` của mình trước, rồi **`room_closed{room_id, REMOVED}`** nếu đang mở; sau đó không nhận gì của room đó nữa.
 
@@ -304,13 +306,16 @@ Ví dụ: Lan nối lúc stream ở seq 5.000; trong lúc node hỏi core, Lan b
 
 - Mỗi node hai ordered consumer (`CHATIM_EVT` `evt.>`, `CHATIM_WS` `websocket.publish.>`), bắt đầu ở seq cuối + 1. Lỡ tin (mạng chập, NATS restart) thì thư viện tự đọc lại từ số cuối đã giao, đúng thứ tự, không mất tin.
 - Tin có giờ lưu cũ hơn 5s = đang đuổi theo: đọc tối đa `WS_REPLAY_RATE` (20.000/s).
-- **Trễ quá `WS_REPLAY_MAX_AGE` (2m, đo bằng giờ JetStream lưu tin)**, hoặc stream bị tạo lại: node bỏ đoạn cũ, đọc tiếp từ hiện tại, nạp lại danh sách room của từng người rải đều trong `WS_RESYNC_WINDOW` (60s), rồi gửi **`resync{LAG_TOO_OLD}`** (hoặc `CONSUMER_LOST`) cho từng kết nối. Máy nhận `resync` thì tải lại danh sách hội thoại và room đang mở (`ListMyRooms`, `GetHistory`).
-- Watchdog mỗi 5s phát hiện consumer đứng yên khi stream có tin mới; hai lần nhảy vì trễ cách nhau ít nhất `WS_RESYNC_WINDOW` (giờ node lệch NATS thì không nhảy liên tục, chỉ đếm `catchup_jump_suppressed_total`).
+- **Trễ từ `WS_REPLAY_MAX_AGE` trở lên (2m, đo bằng giờ JetStream lưu tin)**, watchdog thấy consumer đứng yên, hoặc stream bị tạo lại = **node coi như khởi động lại** (D195): bỏ đoạn cũ, đọc tiếp từ hiện tại, và **ngay lúc đó tạm ngừng mọi người trên node**: không event, không thông báo, máy mới của họ chưa nhận `ready`. Node nạp lại từ core từng người với tốc độ `WS_RELOAD_RATE` (1.000 người/giây mỗi node), thứ tự: máy đang chờ `ready` → người đang mở room → còn lại (máy mới đưa người đó lên đầu). Nạp xong: máy chưa `ready` nhận `ready`, máy đã `ready` nhận **`resync{LAG_TOO_OLD}`** (hoặc `CONSUMER_LOST`), rồi nhận tin bình thường. Máy nhận `resync` thì tải lại danh sách hội thoại và room đang mở (`ListMyRooms`, `GetHistory`). Nhảy lần hai giữa chừng thì mọi người lại tạm ngừng.
+- **Nạp lỗi** (lúc login hay sau nhảy) → node gửi **`load_failed{retry_after_ms}`** tới mọi kết nối của người đó, giữ kết nối, người đó vẫn tạm ngừng (không event, không `ready`; lệnh vẫn chạy), và **server không làm gì thêm, không tự nạp lại** (owner 2026-10-22, đúng luật không retry nội bộ). **Máy quyết định**: gửi **`load_rooms`** để xin nạp lại, hoặc ngắt và kết nối lại (login nạp lại). `retry_after_ms` chỉ là gợi ý. `load_rooms` xếp một lần nạp lên đầu hàng (vẫn theo `WS_RELOAD_RATE`; gửi trùng khi đang chờ thì bỏ); thành công → `ready` cho máy chưa từng `ready`, `resync` cho máy đã `ready`; lỗi → `load_failed` lần nữa. `pkg/wsclient` có option xử lý `load_failed`; không đặt thì client mẫu gửi `load_rooms` sau gợi ý + jitter.
+- Hộp thư `CHATIM_WS` nhảy riêng: không tạm ngừng ai, không `resync`; thông báo `@` của đoạn bỏ qua mất (vẫn có trong `ListMentions`).
+- Watchdog mỗi 5s phát hiện consumer đứng yên khi stream có tin mới; hai lần nhảy vì trễ cách nhau ít nhất `WS_REPLAY_MAX_AGE` (giờ node lệch NATS thì không nhảy liên tục, chỉ đếm `catchup_jump_suppressed_total`).
+- **Vận hành:** `WS_REPLAY_MAX_AGE` nên lớn hơn thời gian nạp lại cả node (số người trên node / `WS_RELOAD_RATE`; ví dụ 33.000 người / 1.000 = 33s < 2m). Ngắn hơn thì node có thể nhảy lần nữa khi chưa nạp xong lần trước, người cuối hàng chờ lâu hơn. Theo dõi `users_suspended`, `reload_seconds`, `reload_failures_total`, `room_ids_load_seconds_count` (số lần gọi `ListMyRoomIDs`).
 
 | Chuyện xảy ra | Websocket làm gì | Máy thấy |
 |---|---|---|
-| Mạng chập 10 giây | Thư viện đọc lại từ số cuối (diễn tập: đuổi kịp 5s) | Tin tới trễ, không mất, không `resync` |
-| Node bị cắt khỏi NATS 3 phút | Nhảy tới hiện tại, nạp lại, `resync` rải 60s | Một `resync`, danh sách hội thoại tự làm mới |
+| Mạng chập 10 giây | Thư viện đọc lại từ số cuối (diễn tập: đuổi kịp 3–5s) | Tin tới trễ, không mất, không `resync`; người bị xoá trong lúc chập nhận `member_removed` rồi `room_closed`, không gì thêm |
+| Node bị cắt khỏi NATS 3 phút | Khởi động lại: tạm ngừng mọi người, nạp lại theo `WS_RELOAD_RATE` (diễn tập: 3 người, nạp trung bình 16ms) | Một `resync` sau khi người đó được nạp lại; người bị xoá trong lúc cắt không nhận thêm gì của nhóm |
 | NATS restart | Đọc tiếp (JetStream cũng dừng nên không có lỗ) | Không gì |
 
 ### 8.5. Máy nhận chậm
@@ -321,6 +326,6 @@ Ví dụ: Lan nối lúc stream ở seq 5.000; trong lúc node hỏi core, Lan b
 ### 8.6. Giới hạn đã biết
 
 - Một node nhận toàn bộ event: ổn tới ~10 node; quá thì chia node theo tenant.
-- Sweeper có thể phát lại một `member_added` cũ sau `member_removed`; nếu người đó kết nối đúng giữa hai lần phát, room bị thêm lại cho phiên đó tới khi nối lại (hẹp: cần một lần publish lỗi + sweeper + thời điểm kết nối trùng).
-- Sau một lần nhảy (trễ > 2 phút), trong ≤ 60s chờ tới lượt nạp lại, người bị xoá ở đoạn bị bỏ qua có thể còn nhận tin room đó.
+- `left` không giới hạn: ~26 byte mỗi dòng, giới hạn nhận gRPC 4MB ≈ 160K nhóm đã rời mỗi người; quá thì lần nạp lỗi và máy nhận `load_failed` (ngoài use case, chấp nhận). RAM websocket ~30 byte mỗi dấu đã rời.
+- Sau một lần nhảy, người dùng chờ tới lượt nạp lại (tối đa số người trên node / `WS_RELOAD_RATE`) mới nhận tin tiếp.
 - Quyền NATS riêng cho websocket ở M5 (chặn go-live): tới lúc đó ai vào được NATS là giả được gói đẩy tới người dùng.

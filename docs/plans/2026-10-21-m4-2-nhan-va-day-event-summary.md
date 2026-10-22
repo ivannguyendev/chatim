@@ -1,6 +1,6 @@
 # M4 phần 2: nhận và đẩy event xuống máy
 
-> **Trạng thái:** đã xây trên `feat/m4` (2026-10-22, commit `2b3c6c9`…`ec75155`); owner duyệt hướng 2026-10-21. Phần 2 trong 5 phần của M4; phần 1 (kết nối, token, lệnh) đã xong. Quyết định D189–D194, kết quả ở §13.
+> **Trạng thái:** đã xây trên `feat/m4` (2026-10-22, commit `2b3c6c9`…`ec75155`); owner duyệt hướng 2026-10-21. Phần 2 trong 5 phần của M4; phần 1 (kết nối, token, lệnh) đã xong. Quyết định D189–D195, kết quả ở §13.
 > **Chi tiết cho người code:** `.claude/plans/2026-10-21-m4-2-nhan-va-day-event.md`.
 
 ## 1. Phần này làm gì
@@ -79,7 +79,7 @@ JetStream đánh số liên tiếp cho mọi event (1001, 1002, 1003…) và lư
 Ví dụ mạng của ws-2 chập 2 giây: ws-2 đã nhận tới 1002 thì đứt. Khi mạng lại, thư viện thấy thiếu nên tự bỏ phần đang cầm và đọc lại **từ 1003 trở đi, liên tục**: 1003, 1004, …, 1500, 1501… cho tới khi đuổi kịp hiện tại. Tin tới máy đúng thứ tự, không mất tin nào; người dùng thấy trễ chưa tới một giây. ws-1, ws-3 không bị ảnh hưởng.
 
 Hai cái phanh để không hại core:
-1. Đang đuổi theo thì đọc tối đa 20.000 event/giây. **Trễ từ 2 phút trở lên = coi như node khởi động lại** (owner 2026-10-22): nhảy tới hiện tại, **tạm ngừng đẩy mọi thứ cho mọi người trên node**, rồi nạp lại từng người từ core, tối đa 1.000 người/giây mỗi node (`WS_RELOAD_RATE`). Ai nạp xong thì nhận "tải lại" và được đẩy tin tiếp. Thiết bị mới của người đang tạm ngừng chờ tới khi người đó nạp xong mới nhận `ready`. Stream bị tạo lại cũng đi đường này.
+1. Đang đuổi theo thì đọc tối đa 20.000 event/giây. **Trễ từ 2 phút trở lên = coi như node khởi động lại** (owner 2026-10-22): nhảy tới hiện tại, **tạm ngừng đẩy mọi thứ cho mọi người trên node**, rồi nạp lại từng người từ core, tối đa 1.000 người/giây mỗi node (`WS_RELOAD_RATE`). Ai nạp xong thì nhận "tải lại" và được đẩy tin tiếp. Thiết bị mới của người đang tạm ngừng chờ tới khi người đó nạp xong mới nhận `ready`. Stream bị tạo lại cũng đi đường này. Nạp lỗi (ví dụ core đang lỗi) → node báo máy `load_failed`, giữ kết nối, không tự nạp lại; máy tự quyết: xin nạp lại (`load_rooms`) hoặc nối lại (owner 2026-10-22, đúng luật không retry nội bộ).
 2. Máy nào nhận không kịp lúc đang đuổi theo → bảo riêng máy đó "tải lại", không cắt kết nối.
 
 | Chuyện xảy ra | Websocket làm gì | Người dùng thấy |
@@ -103,7 +103,7 @@ Mỗi máy có hàng chờ gửi tối đa 1MB. Đầy → đóng mã 4008, máy
 
 ## 9. Thay đổi ở core và Mention App
 
-- **`ListMyRoomIDs`:** trả mọi room của người gọi kèm phiên bản, một lần. Chỉ websocket gọi, máy không gọi được.
+- **`ListMyRoomIDs`:** trả mọi room của người gọi kèm phiên bản, và các nhóm đã rời kèm phiên bản (`left`), một lần, không giới hạn. Chỉ websocket gọi, máy không gọi được.
 - **Index `members`:** thêm 1 field `ver` để `ListMyRoomIDs` chỉ đọc index. Đổi bằng lệnh `/app indexes` chạy tay (xem trước / tạo bản mới / xoá bản cũ khi bản mới xong), không tự động lúc khởi động. Lệnh phủ cả index của Mention App.
 - **Mention App:** phát gói tin có danh sách người nhận vào `websocket.publish.{tenant}` (stream mới `CHATIM_WS`) thay vì mỗi người một tin; phần bung người nhận, ngưỡng 5 phút, chống trùng giữ nguyên.
 
@@ -146,7 +146,7 @@ Core không đổi stream, event, đường ghi hay proto event nào.
 
 **Đổi trong lúc xây:**
 - Bắt đầu đọc ở "seq cuối của stream + 1" thay vì "từ bây giờ": nếu thư viện tạo lại consumer trước tin đầu tiên, "bây giờ" đã trôi và sót tin.
-- Watchdog nhớ lúc bắt đầu thấy trễ (`behindSince`), nên stream im lặng lâu rồi có tin mới không bị coi là trễ 2 phút; hai lần nhảy cách nhau ít nhất 60s, để giờ node lệch NATS không gây nhảy liên tục.
+- Watchdog nhớ lúc bắt đầu thấy trễ (`behindSince`), nên stream im lặng lâu rồi có tin mới không bị coi là trễ 2 phút; hai lần nhảy cách nhau ít nhất 2 phút (`WS_REPLAY_MAX_AGE`), để giờ node lệch NATS không gây nhảy liên tục.
 - Hàng ghi đầy theo số frame (256) cũng đóng 4008, không cắt socket không mã (1006) như phần 1.
 - `pkg/wsclient` thêm `CloseAsync()` để đóng từ trong handler; `Close()` chờ tối đa 5s rồi báo `ErrHandlerStillRunning`.
 - Diễn tập tìm ra một lỗi nặng: watchdog đọc vị trí stream không giữ khoá nên nhảy nhầm `consumer_lost` (2 lần trong 60s ở 2K tin/s). Đã sửa (`ec75155`), review lại đạt.
@@ -160,9 +160,10 @@ Core không đổi stream, event, đường ghi hay proto event nào.
 | Restart NATS (sau khi sửa) | 0 nhảy, 0 `resync`; 2.997/2.997 tin, 0 trùng, 0 lỗ |
 | 2K tin/s đều 60s (sau khi sửa) | 0 nhảy, 0 `resync`, 0 nạp lại; trễ tối đa 2,3ms |
 
-**Rủi ro (a), (b) — owner chốt cách sửa 2026-10-22, đang sửa:**
-- (a) Tin cũ "vào nhóm" do sweeper phát bù muộn có thể làm nhóm đã rời "quay lại" cho một phiên → sửa bằng `ListMyRoomIDs` trả cả nhóm đã rời kèm phiên bản (§4).
-- (b) Sau khi nhảy, người bị xoá ở đoạn bị bỏ qua có thể còn nhận tin tới lượt nạp lại → sửa bằng coi trễ ≥ 2 phút là khởi động lại: tạm ngừng mọi người, nạp lại từng người, ai nạp xong mới đẩy tiếp (§7).
+**Rủi ro (a), (b) — đã sửa (owner chốt 2026-10-22):**
+- (a) Tin cũ "vào nhóm" do sweeper phát bù không còn mở lại nhóm đã rời: `ListMyRoomIDs` trả cả nhóm đã rời kèm phiên bản (§4).
+- (b) Trễ ≥ 2 phút = khởi động lại: tạm ngừng mọi người, nạp lại từng người, ai nạp xong mới đẩy tiếp (§7). Nạp lỗi → `load_failed`, giữ kết nối; máy tự xin nạp lại hoặc nối lại.
+- Diễn tập cắt 3 phút, xoá một người khỏi nhóm giữa lúc cắt: 1 nhảy, mỗi kết nối đúng 1 `resync` sau khi được nạp lại (3 người, nạp trung bình 16ms, 6 lần `ListMyRoomIDs` gồm 3 lúc login); người bị xoá không nhận thêm tin nào của nhóm; 0 mất âm thầm. Cắt 10s: người bị xoá nhận "bị xoá" rồi im lặng, 0 `resync`. Restart NATS: 0 nhảy, 0 mất.
 
 **Rủi ro còn lại:**
 - (c) Quyền NATS riêng cho websocket ở M5: tới lúc đó ai vào được NATS là giả được gói đẩy tới người dùng. Chặn go-live.
