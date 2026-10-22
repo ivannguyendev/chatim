@@ -19,7 +19,7 @@ const (
 	DefaultMaxAckPending     = 16384
 	DefaultNotifyMaxAge      = 5 * time.Minute
 	DefaultTargetsPage       = 1000
-	MaxTargetsPage           = 10000
+	MaxTargetsPage           = 5000
 	DefaultRoomGroupsSyncMax = 5000
 	DefaultRoomGroupsTTL     = time.Minute
 	DefaultRoomGroupsRebuild = 10 * time.Minute

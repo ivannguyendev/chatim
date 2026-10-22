@@ -93,8 +93,8 @@ func TestPageIDIsStableAndFollowsTheUsers(t *testing.T) {
 		t.Fatal("PageID depends on the order of the users")
 	}
 	prefix := "77-0-5-m1-all-p2-"
-	if len(id) != len(prefix)+8 || id[:len(prefix)] != prefix {
-		t.Fatalf("PageID = %q, want %s plus 8 hex chars", id, prefix)
+	if len(id) != len(prefix)+16 || id[:len(prefix)] != prefix {
+		t.Fatalf("PageID = %q, want %s plus 16 hex chars", id, prefix)
 	}
 	if id == wspublish.PageID("77-0-5-m1-all", 2, []string{"an"}) {
 		t.Fatal("PageID unchanged when a user left the page")

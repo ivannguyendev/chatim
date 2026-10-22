@@ -106,17 +106,16 @@ type group struct {
 }
 
 func groupByTarget(add map[string]domain.Target) []group {
-	type groupKey struct {
-		key string
-		at  int64
-	}
-	byKey := make(map[groupKey]*group)
+	byKey := make(map[string]*group)
 	for user, t := range add {
-		k := groupKey{key: targetKey(t), at: t.At.UnixMilli()}
+		k := targetKey(t)
 		g, ok := byKey[k]
 		if !ok {
 			g = &group{target: t}
 			byKey[k] = g
+		}
+		if t.At.Before(g.target.At) {
+			g.target = t
 		}
 		g.users = append(g.users, user)
 	}
@@ -124,9 +123,7 @@ func groupByTarget(add map[string]domain.Target) []group {
 	for _, g := range byKey {
 		out = append(out, *g)
 	}
-	slices.SortFunc(out, func(a, b group) int {
-		return cmp.Or(cmp.Compare(targetKey(a.target), targetKey(b.target)), a.target.At.Compare(b.target.At))
-	})
+	slices.SortFunc(out, func(a, b group) int { return cmp.Compare(targetKey(a.target), targetKey(b.target)) })
 	return out
 }
 

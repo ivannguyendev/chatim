@@ -153,7 +153,7 @@ Toàn bộ đọc qua `apps/core/internal/config`; thiếu thì dùng giá trị
 | `MENTION_MAX_ACK_PENDING` | `16384` | `MaxAckPending` của durable `mention`, tổng cho mọi core (≥ `MENTION_FETCH_BATCH`) |
 | `MENTION_NOTIFY_MAX_AGE` | `5m` | Event cũ hơn thì vẫn ghi mention nhưng không gửi thông báo (D169); ≤ cửa sổ bỏ trùng 6 phút của stream gói |
 | `MENTION_WS_PUBLISH_STREAM`, `MENTION_WS_PUBLISH_ROOT` | `CHATIM_WS` / `websocket.publish` | Stream và subject gói `WsPublish` `{root}.{tenant}` (giữ 24h, bỏ trùng 6 phút, cấu hình trong `pkg/wspublish`); stream phải khác `EVT_STREAM`/`TIMER_STREAM`, root không bắt đầu bằng subject root khác. Số bản sao theo `EVT_STREAM_REPLICAS` |
-| `MENTION_NOTIFY_TARGETS_PAGE` | `1000` | Số người nhận tối đa mỗi gói `WsPublish` (1..10.000) |
+| `MENTION_NOTIFY_TARGETS_PAGE` | `1000` | Số người nhận tối đa mỗi gói `WsPublish` (1..5.000); trần 5.000 giữ gói dưới 1MB kể cả khi `max_payload` của NATS bị hạ |
 | `MENTION_HIDE_READ_TENANTS` | (rỗng) | Danh sách tenant id, cách nhau bằng dấu phẩy, mà `ListMentions` của Mention App ẩn mention đã đọc (giờ mention không muộn hơn tin tại `read_seq` của room); tenant khác thấy mọi mention kèm cờ `read`; tenant id sai định dạng thì core không khởi động (D115, nay thuộc config Mention App) |
 | `MENTION_ROOM_GROUPS_SYNC_MAX` | `5000` | Room tới cỡ này thì `ListRoomGroups` dựng tập nhóm ngay khi được hỏi, lớn hơn thì dựng ở nền (D172); không phải giới hạn dữ liệu |
 | `MENTION_ROOM_GROUPS_TTL`, `MENTION_ROOM_GROUPS_REBUILD` | `60s` / `10m` | Tập nhóm của room nhỏ hết hạn sau TTL (và quên khi có `member_added`/`member_removed`); room lớn dựng lại ở nền khi có người hỏi và tập cũ hơn `REBUILD` |

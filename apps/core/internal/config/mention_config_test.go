@@ -48,7 +48,7 @@ func TestMentionRules(t *testing.T) {
 		{"notify age above the duplicate window", map[string]string{"MENTION_NOTIFY_MAX_AGE": "7m"}, "MENTION_*"},
 		{"bad ws publish stream name", map[string]string{"MENTION_WS_PUBLISH_STREAM": "chatim_ws"}, "MENTION_*"},
 		{"bad ws publish root", map[string]string{"MENTION_WS_PUBLISH_ROOT": "websocket.*"}, "MENTION_*"},
-		{"targets page over the max", map[string]string{"MENTION_NOTIFY_TARGETS_PAGE": "10001"}, "MENTION_*"},
+		{"targets page over the max", map[string]string{"MENTION_NOTIFY_TARGETS_PAGE": "5001"}, "MENTION_*"},
 		{"ack pending below the fetch batch", map[string]string{"MENTION_MAX_ACK_PENDING": "100", "MENTION_FETCH_BATCH": "200"}, "MENTION_*"},
 		{"bad enabled flag", map[string]string{"MENTION_ENABLED": "maybe"}, "MENTION_ENABLED"},
 	}

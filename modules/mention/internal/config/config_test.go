@@ -77,7 +77,7 @@ func TestValidateRules(t *testing.T) {
 		"ws publish root wildcard":      func(c *config.Config) { c.WsPublishRoot = "websocket.*" },
 		"ws publish root trailing dot":  func(c *config.Config) { c.WsPublishRoot = "websocket." },
 		"targets page negative":         func(c *config.Config) { c.TargetsPage = -1 },
-		"targets page over the max":     func(c *config.Config) { c.TargetsPage = 10001 },
+		"targets page over the max":     func(c *config.Config) { c.TargetsPage = 5001 },
 		"hide read tenant invalid":      func(c *config.Config) { c.HideReadTenants = []string{"t1", "Bad Tenant"} },
 		"hide read tenant empty":        func(c *config.Config) { c.HideReadTenants = []string{""} },
 		"room groups sync max negative": func(c *config.Config) { c.RoomGroupsSyncMax = -1 },
@@ -102,7 +102,7 @@ func TestValidateAcceptsEdges(t *testing.T) {
 	c.Workers = 1
 	c.NotifyMaxAge = 6 * time.Minute
 	c.WsPublishRoot = "notify"
-	c.TargetsPage = 10000
+	c.TargetsPage = 5000
 	c.RoomGroupsSyncMax = 1
 	c.HideReadTenants = []string{"t1", "tenant_2"}
 	if err := c.Validate(); err != nil {

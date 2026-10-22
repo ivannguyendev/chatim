@@ -15,7 +15,7 @@ import (
 const (
 	DefaultRoot   = "websocket.publish"
 	DefaultStream = "CHATIM_WS"
-	pageHashChars = 8
+	pageHashChars = 16
 )
 
 var (

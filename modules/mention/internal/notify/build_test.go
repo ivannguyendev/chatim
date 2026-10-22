@@ -92,6 +92,19 @@ func TestDifferentTargetsFormSeparateGroups(t *testing.T) {
 	equal(t, map[string][]string{"777-0-41-m0-all": {"Hoa", "Minh"}, "777-0-41-m0-u:Lan": {"Lan"}}, byID)
 }
 
+func TestSameTargetKeyIsOneGroupWhateverTheAt(t *testing.T) {
+	early := domain.Target{Kind: domain.TargetGroup, ID: "sale", At: sentAt}
+	late := domain.Target{Kind: domain.TargetGroup, ID: "sale", At: editedAt}
+	for range 20 {
+		ns, err := builder.Notified(result(plan.Edited, 1), snapshot(), map[string]domain.Target{"Hoa": early, "Minh": late, "Lan": early})
+		noErr(t, err)
+		equal(t, 1, len(ns))
+		equal(t, "777-0-41-m1-g:sale", ns[0].Packet.GetNotification().GetId())
+		equal(t, []string{"Hoa", "Lan", "Minh"}, ns[0].Packet.GetTargets().GetUsers())
+		truth(t, proto.Equal(timestamppb.New(sentAt), ns[0].Packet.GetNotification().GetMentionNotified().GetTarget().GetAt()), "the group keeps the earliest at")
+	}
+}
+
 func TestNotifiedTargetKinds(t *testing.T) {
 	cases := map[string]struct {
 		target domain.Target
