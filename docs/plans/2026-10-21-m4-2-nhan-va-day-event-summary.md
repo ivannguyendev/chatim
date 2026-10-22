@@ -79,13 +79,17 @@ JetStream đánh số liên tiếp cho mọi event (1001, 1002, 1003…) và lư
 Ví dụ mạng của ws-2 chập 2 giây: ws-2 đã nhận tới 1002 thì đứt. Khi mạng lại, thư viện thấy thiếu nên tự bỏ phần đang cầm và đọc lại **từ 1003 trở đi, liên tục**: 1003, 1004, …, 1500, 1501… cho tới khi đuổi kịp hiện tại. Tin tới máy đúng thứ tự, không mất tin nào; người dùng thấy trễ chưa tới một giây. ws-1, ws-3 không bị ảnh hưởng.
 
 Hai cái phanh để không hại core:
-1. Đang đuổi theo thì đọc tối đa 20.000 event/giây. Trễ quá 2 phút → bỏ đoạn cũ, nhảy tới hiện tại. **Trước khi đọc tiếp, node đọc lại riêng các tin "vào nhóm"/"bị xoá" của đoạn bị bỏ qua** (JetStream lọc được theo loại, số lượng ít) và áp vào RAM: ai bị xoá trong lúc đó bị kick ngay. Không gọi core. Rồi bảo máy "tải lại" để máy tự lấy những tin nhắn bị bỏ qua. Nếu không đọc lại được (stream bị tạo lại, đoạn đó quá hạn lưu 7 ngày, hoặc lỗi) thì coi như node khởi động lại: đóng các kết nối rải đều, máy login lại và nạp lại.
+1. Đang đuổi theo thì đọc tối đa 20.000 event/giây. **Trễ từ 2 phút trở lên = coi như node khởi động lại** (owner 2026-10-22): nhảy tới hiện tại, **tạm ngừng đẩy mọi thứ cho mọi người trên node**, rồi nạp lại từng người từ core, tối đa 1.000 người/giây mỗi node (`WS_RELOAD_RATE`). Ai nạp xong thì nhận "tải lại" và được đẩy tin tiếp. Thiết bị mới của người đang tạm ngừng chờ tới khi người đó nạp xong mới nhận `ready`. Stream bị tạo lại cũng đi đường này.
 2. Máy nào nhận không kịp lúc đang đuổi theo → bảo riêng máy đó "tải lại", không cắt kết nối.
 
 | Chuyện xảy ra | Websocket làm gì | Người dùng thấy |
 |---|---|---|
 | Mạng chập 2 giây | Thư viện đọc lại từ số cuối, đuổi kịp trong ~0,2 giây | Tin tới trễ một chút |
-| Node bị cắt khỏi NATS 5 phút, Lan bị xoá khỏi X trong lúc đó | Nhảy tới hiện tại, đọc lại tin vào/bị xoá của 5 phút đó, kick Lan khỏi X ngay, bảo máy tải lại | Lan không nhận thêm gì của X; danh sách hội thoại tự làm mới |
+| Node bị cắt khỏi NATS 5 phút, Lan bị xoá khỏi X trong lúc đó | Nhảy tới hiện tại, tạm ngừng mọi người; nạp lại Lan từ core (danh sách mới không còn X), bảo máy tải lại | Lan chờ vài giây không nhận gì, rồi danh sách hội thoại tự làm mới; không bao giờ nhận thêm tin của X |
+
+Ví dụ thời gian: node có 33.000 người, mạng về lúc 10:05:00. 10:05:00 nhảy và tạm ngừng cả 33.000 người. Người đang kết nối dở và người đang mở nhóm được nạp trước. Mỗi giây nạp 1.000 người, nên tới 10:05:33 mọi người đã nạp xong và nhận lại tin. Core chịu 1.000 lần `ListMyRoomIDs`/giây mỗi node (đọc index, nhẹ). Nếu cả 3 node cùng mất NATS thì là 3.000/giây, vẫn trong sức core.
+
+Vì sao tạm ngừng mà không đẩy tiếp bằng danh sách cũ: danh sách cũ có thể còn nhóm mà người đó đã bị xoá trong đoạn bị bỏ qua.
 
 "Trễ 2 phút" đo bằng giờ JetStream lưu tin, không bằng giờ ghi trong event (sweeper có thể phát lại event cũ, mang giờ cũ nhưng vừa mới lưu).
 
@@ -111,6 +115,7 @@ Core không đổi stream, event, đường ghi hay proto event nào.
 |---|---|
 | Mỗi node nghe toàn bộ, lọc trong RAM | Nghe theo từng room: hàng triệu lần đăng ký khi bão kết nối lại, và không thấy được nhóm mới |
 | Hai mức: thành viên / đang mở | Mọi event cho mọi room: tốn băng thông (react của 5.000 room) |
+| Trễ ≥ 2 phút = khởi động lại: tạm ngừng, nạp lại từng người (owner 2026-10-22) | Đọc lại tin vào/bị xoá của đoạn bị bỏ: nhiều code, vẫn cần đường khởi động lại khi stream bị tạo lại. Nạp trước ở 90 giây: thay đổi sau lúc nạp vẫn lọt |
 | Đọc stream theo thứ tự bằng ordered consumer của NATS; lỡ thì thư viện đọc lại từ số cuối (owner) | Tự đếm số và tự xin lại từng đoạn: nhiều code, phải thu hẹp subject stream ở core. Luôn tải lại: mạng chập ngắn cũng gây 33.000 lần gọi core |
 | Gói tin + danh sách người nhận (owner) | Mỗi người một tin: 5.000 bản sao nội dung |
 | Websocket có hộp thư riêng, app notification có hộp thư riêng (owner) | Websocket nghe `notify`: trộn vai |
@@ -133,7 +138,7 @@ Core không đổi stream, event, đường ghi hay proto event nào.
 | Unit gói thông báo | 2.500 người → 3 gói, mỗi người đúng một lần; phát lại không sót ai |
 | Test `ListMyRoomIDs` và `/app indexes` | Chỉ đọc index; lệnh không xoá bản cũ khi bản mới chưa xong |
 | e2e | Hai máy: gửi/nhận, mở/không mở nhóm, thêm/xoá thành viên, event riêng, `@` tới đúng người |
-| Diễn tập | Cắt riêng một node khỏi NATS 10 giây (đuổi kịp, không tải lại) và 3 phút, có người bị xoá trong lúc cắt (bị kick ngay sau khi nối lại, không gọi core) |
+| Diễn tập | Cắt riêng một node khỏi NATS 10 giây (đuổi kịp, không tải lại) và 3 phút, có người bị xoá trong lúc cắt (sau khi nối lại không nhận thêm tin của nhóm đó; mỗi kết nối nhận một "tải lại" sau khi được nạp lại) |
 
 ## 13. Kết quả thực thi
 
@@ -157,7 +162,7 @@ Core không đổi stream, event, đường ghi hay proto event nào.
 
 **Rủi ro (a), (b) — owner chốt cách sửa 2026-10-22, đang sửa:**
 - (a) Tin cũ "vào nhóm" do sweeper phát bù muộn có thể làm nhóm đã rời "quay lại" cho một phiên → sửa bằng `ListMyRoomIDs` trả cả nhóm đã rời kèm phiên bản (§4).
-- (b) Sau khi nhảy, người bị xoá ở đoạn bị bỏ qua có thể còn nhận tin tới lượt nạp lại → sửa bằng đọc lại tin vào/bị xoá của đoạn bị bỏ qua từ JetStream rồi kick ngay; bỏ nạp lại qua core (§7).
+- (b) Sau khi nhảy, người bị xoá ở đoạn bị bỏ qua có thể còn nhận tin tới lượt nạp lại → sửa bằng coi trễ ≥ 2 phút là khởi động lại: tạm ngừng mọi người, nạp lại từng người, ai nạp xong mới đẩy tiếp (§7).
 
 **Rủi ro còn lại:**
 - (c) Quyền NATS riêng cho websocket ở M5: tới lúc đó ai vào được NATS là giả được gói đẩy tới người dùng. Chặn go-live.
