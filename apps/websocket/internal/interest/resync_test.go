@@ -8,104 +8,166 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/feed"
+	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 func lagJump(seq uint64) feed.Jump { return feed.Jump{Reason: feed.JumpLagTooOld, Seq: seq} }
 
-func TestASkipReloadsEveryUserSpreadOverTheWindowAndSendsResync(t *testing.T) {
-	run(t, func(t *testing.T) {
-		f := newFixture(t)
-		c1, s1 := f.connect("t1", "u1", 1, 2)
-		_, s2 := f.connect("t1", "u2", 1)
-		c1.Open("2")
-		s1.take()
-		s2.take()
-		f.loader.set("t1", "u1", 1)
-		f.loader.set("t1", "u2", 1, 3)
-		start := time.Now()
-		f.table.Jumped(lagJump(40))
-		synctest.Wait()
-		first, second := s1, s2
-		if s2.pending() > 0 {
-			first, second = s2, s1
-		}
-		if got := first.take(); len(got) == 0 || got[len(got)-1] != "resync lag_too_old" {
-			t.Fatalf("first user frames at the start = %v", got)
-		}
-		if got := second.take(); len(got) != 0 {
-			t.Fatalf("second user reloaded at once: %v", got)
-		}
-		time.Sleep(30*time.Second - time.Nanosecond)
-		synctest.Wait()
-		if got := second.take(); len(got) != 0 {
-			t.Fatalf("second user reloaded before its turn: %v", got)
-		}
-		time.Sleep(time.Nanosecond)
-		synctest.Wait()
-		if got := second.take(); len(got) == 0 || got[len(got)-1] != "resync lag_too_old" || time.Since(start) != 30*time.Second {
-			t.Fatalf("second user frames at 30s = %v", got)
-		}
-		f.route(msg("t1", 2))
-		f.route(msg("t1", 3))
-		if got, want := s1.take(), []string(nil); !slices.Equal(got, want) {
-			t.Fatalf("u1 still receives room 2 or room 3: %v", got)
-		}
-		if got := s2.take(); !slices.Equal(got, []string{"event msg_created/t1/3//v0"}) {
-			t.Fatalf("u2 frames for room 3 = %v", got)
-		}
-		if f.table.stats.reloads.Load() != 2 || f.table.stats.resyncs[1].Load() != 2 || f.loader.callsOf("t1", "u1") != 2 {
-			t.Fatalf("reloads %d resyncs %d", f.table.stats.reloads.Load(), f.table.stats.resyncs[1].Load())
-		}
-	})
+func paced(t *testing.T, perSecond int) *fixture {
+	return newFixtureWith(t, Config{Inflight: 64, OpenPending: 10 * time.Second, ReloadRate: perSecond})
 }
 
-func TestAReloadClosesOpenRoomsTheUserLeftDuringTheSkip(t *testing.T) {
+func resyncsOf(f *fixture, reason chatimv1.ResyncReason) uint64 {
+	return f.table.stats.resyncs[reason].Load()
+}
+
+const (
+	lagTooOld    = chatimv1.ResyncReason_RESYNC_REASON_LAG_TOO_OLD
+	consumerLost = chatimv1.ResyncReason_RESYNC_REASON_CONSUMER_LOST
+)
+
+func TestReloadsArePacedByTheRateAndAGoneUserDoesNotTakeATurn(t *testing.T) {
 	run(t, func(t *testing.T) {
-		f := newFixture(t)
-		c, s := f.connect("t1", "u", 1, 2)
-		c.Open("2")
-		c.Open("7")
-		s.take()
-		f.loader.set("t1", "u", 1, 7)
+		f := paced(t, 2)
+		conns := map[string]*Conn{}
+		for _, u := range []string{"a", "b", "c", "d"} {
+			conns[u], _ = f.connect("t1", u, 1)
+		}
 		f.table.Jumped(lagJump(10))
 		synctest.Wait()
-		if got := s.take(); !slices.Equal(got, []string{"closed 2 removed", "resync lag_too_old"}) {
-			t.Fatalf("frames = %v", got)
+		reloaded := f.loader.callOrder()[4:]
+		if len(reloaded) != 1 || f.table.stats.suspended.Load() != 3 {
+			t.Fatalf("reloads at the jump = %v, suspended %d", reloaded, f.table.stats.suspended.Load())
 		}
-		f.route(event("reaction_changed", "t1", 7, "", 0))
-		f.route(event("reaction_changed", "t1", 2, "", 0))
-		if got := s.take(); !slices.Equal(got, []string{"event reaction_changed/t1/7//v0"}) {
-			t.Fatalf("after reload the open rooms got %v", got)
+		for u, c := range conns {
+			if u != reloaded[0] {
+				c.Unregister()
+				break
+			}
 		}
-		f.route(withSeq(added("t1", 2, "u", 1), 20))
-		if got := s.take(); len(got) != 0 {
-			t.Fatalf("a replayed member_added at the old ver brought room 2 back: %v", got)
+		if f.table.stats.suspended.Load() != 2 {
+			t.Fatalf("suspended after a user left = %d", f.table.stats.suspended.Load())
 		}
-		f.route(withSeq(added("t1", 2, "u", 2), 21))
-		if got := s.take(); !slices.Equal(got, []string{"event member_added/t1/2/u/v2"}) {
-			t.Fatalf("a newer member_added = %v", got)
+		for i, at := range []time.Duration{500*time.Millisecond - time.Nanosecond, time.Nanosecond, 500 * time.Millisecond, time.Hour} {
+			time.Sleep(at)
+			synctest.Wait()
+			if want := []int{1, 2, 3, 3}[i]; len(f.loader.callOrder()[4:]) != want {
+				t.Fatalf("step %d: reloads %v, want %d", i, f.loader.callOrder()[4:], want)
+			}
+		}
+		if f.table.stats.suspended.Load() != 0 || f.table.stats.reloads.Load() != 3 {
+			t.Fatalf("suspended %d reloads %d", f.table.stats.suspended.Load(), f.table.stats.reloads.Load())
 		}
 	})
 }
 
-func TestMemberChangesDuringAReloadWinOverTheOlderList(t *testing.T) {
+func TestReloadsStartWithWaitingDevicesThenUsersWithOpenRooms(t *testing.T) {
 	run(t, func(t *testing.T) {
-		f := newFixture(t)
-		_, s := f.connect("t1", "u", 1)
-		s.take()
+		f := paced(t, 1)
+		f.connect("t1", "idle", 1)
+		viewer, _ := f.connect("t1", "viewer", 1)
+		viewer.Open("1")
 		f.loader.holding(true)
-		f.route(withSeq(msg("t1", 1), 50))
-		f.table.Jumped(lagJump(50))
+		f.table.Register("t1", "loading", &fakeSink{})
 		synctest.Wait()
-		f.route(withSeq(removed("t1", 1, "u", 2), 51))
-		f.route(withSeq(added("t1", 4, "u", 1), 52))
-		f.loader.replies <- reply{rooms: []Room{{ID: 1, Ver: 1}}}
+		f.table.Jumped(lagJump(4))
+		for range 3 {
+			synctest.Wait()
+			time.Sleep(time.Second)
+		}
+		if got := f.loader.callOrder()[3:]; !slices.Equal(got, []string{"loading", "viewer", "idle"}) {
+			t.Fatalf("reload order = %v", got)
+		}
+	})
+}
+
+func TestANewDeviceOfASuspendedUserMovesItToTheFrontOfTheQueue(t *testing.T) {
+	run(t, func(t *testing.T) {
+		f := paced(t, 1)
+		for _, u := range []string{"a", "b", "c", "d"} {
+			f.connect("t1", u, 1)
+		}
+		f.table.Jumped(lagJump(4))
 		synctest.Wait()
-		f.route(withSeq(msg("t1", 1), 53))
-		f.route(withSeq(msg("t1", 4), 54))
-		want := []string{"event msg_created/t1/1//v0", "event member_removed/t1/1/u/v2", "event member_added/t1/4/u/v1", "resync lag_too_old", "event msg_created/t1/4//v0"}
-		if got := s.take(); !slices.Equal(got, want) {
-			t.Fatalf("frames = %v, want %v", got, want)
+		first := f.loader.callOrder()[4]
+		f.table.resyncMu.Lock()
+		queue := f.table.reloads.queue
+		late := queue[len(queue)-1].key.user
+		f.table.resyncMu.Unlock()
+		f.table.Register("t1", late, &fakeSink{})
+		time.Sleep(time.Second)
+		synctest.Wait()
+		if got := f.loader.callOrder()[4:]; len(got) != 2 || got[1] != late {
+			t.Fatalf("reloads = %v, want %s right after %s", got, late, first)
+		}
+	})
+}
+
+func TestAFailedReloadKeepsTheConnectionsAndRequeuesTheUserAtTheBack(t *testing.T) {
+	run(t, func(t *testing.T) {
+		f := paced(t, 1)
+		sinks := map[string]*fakeSink{}
+		for _, u := range []string{"u", "v"} {
+			_, sinks[u] = f.connect("t1", u, 1)
+			sinks[u].take()
+		}
+		f.loader.holding(true)
+		f.table.Jumped(lagJump(5))
+		synctest.Wait()
+		first := f.loader.callOrder()[2]
+		f.loader.answer(2, reply{err: errors.New("core down")})
+		synctest.Wait()
+		if sinks[first].failures() != 0 || f.table.stats.reloadFailures.Load() != 1 || f.table.stats.loadFailures.Load() != 0 || f.table.stats.suspended.Load() != 2 {
+			t.Fatalf("failures %d reload failures %d suspended %d", sinks[first].failures(), f.table.stats.reloadFailures.Load(), f.table.stats.suspended.Load())
+		}
+		for call := 3; call <= 4; call++ {
+			time.Sleep(time.Second)
+			synctest.Wait()
+			f.loader.answer(call, reply{rooms: []Room{{ID: 1, Ver: 1}}})
+			synctest.Wait()
+		}
+		order := f.loader.callOrder()[2:]
+		if len(order) != 3 || order[1] == first || order[2] != first {
+			t.Fatalf("reload order = %v, want %s again last", order, first)
+		}
+		for u, s := range sinks {
+			if got := s.take(); !slices.Equal(got, []string{"resync lag_too_old"}) || s.failures() != 0 {
+				t.Fatalf("%s frames %v failures %d", u, got, s.failures())
+			}
+		}
+		if f.table.stats.suspended.Load() != 0 || f.table.stats.users.Load() != 2 {
+			t.Fatalf("suspended %d users %d", f.table.stats.suspended.Load(), f.table.stats.users.Load())
+		}
+	})
+}
+
+func TestASecondJumpMidQueueSuspendsEveryoneAgainAndKeepsTheFirstStart(t *testing.T) {
+	run(t, func(t *testing.T) {
+		f := paced(t, 1)
+		for _, u := range []string{"u1", "u2", "u3"} {
+			f.connect("t1", u, 1)
+		}
+		f.table.Jumped(lagJump(5))
+		synctest.Wait()
+		time.Sleep(500 * time.Millisecond)
+		f.table.Jumped(feed.Jump{Reason: feed.JumpConsumerLost, Seq: 9})
+		synctest.Wait()
+		if f.table.stats.suspended.Load() != 3 {
+			t.Fatalf("suspended after the second jump = %d", f.table.stats.suspended.Load())
+		}
+		time.Sleep(time.Hour)
+		synctest.Wait()
+		order := f.loader.callOrder()[3:]
+		first := order[0]
+		if len(order) != 4 || order[3] != first || order[1] == first || order[2] == first || order[1] == order[2] {
+			t.Fatalf("reload order = %v, want the waiting users first and %s again last", order, first)
+		}
+		if resyncsOf(f, lagTooOld) != 1 || resyncsOf(f, consumerLost) != 3 {
+			t.Fatalf("lag resyncs %d lost resyncs %d", resyncsOf(f, lagTooOld), resyncsOf(f, consumerLost))
+		}
+		h := f.table.stats.reload.read()
+		if h.Count != 4 || h.Sum != 5.5 || f.table.stats.suspended.Load() != 0 {
+			t.Fatalf("reload seconds count %d sum %v, want 4 and 0+1+2+2.5", h.Count, h.Sum)
 		}
 	})
 }
@@ -114,127 +176,35 @@ func TestARecreatedStreamResetsTheMarksSoItsEventsApply(t *testing.T) {
 	run(t, func(t *testing.T) {
 		f := newFixture(t)
 		f.route(withSeq(msg("t1", 1), 500))
-		_, s1 := f.connect("t1", "u1", 1)
-		_, s2 := f.connect("t1", "u2", 1)
-		s1.take()
-		s2.take()
+		_, s := f.connect("t1", "u", 1)
+		s.take()
+		f.loader.set("t1", "u", 1)
 		f.table.Jumped(feed.Jump{Reason: feed.JumpConsumerLost, Seq: 3})
 		synctest.Wait()
-		late := s2
-		if s1.pending() == 0 {
-			late = s1
-		}
-		late.take()
-		lateUser := "u2"
-		if late == s1 {
-			lateUser = "u1"
-		}
-		f.route(withSeq(added("t1", 9, lateUser, 1), 4))
+		f.route(withSeq(added("t1", 9, "u", 1), 4))
 		f.route(withSeq(msg("t1", 9), 5))
-		if got := late.take(); !slices.Equal(got, []string{"event member_added/t1/9/" + lateUser + "/v1", "event msg_created/t1/9//v0"}) {
-			t.Fatalf("new stream events before the reload = %v", got)
-		}
-		f.loader.set("t1", lateUser, 1, 9)
-		time.Sleep(30 * time.Second)
-		synctest.Wait()
-		if got := late.take(); !slices.Equal(got, []string{"resync consumer_lost"}) {
-			t.Fatalf("late user frames = %v", got)
-		}
-		f.route(withSeq(removed("t1", 9, lateUser, 2), 6))
-		if got := late.take(); !slices.Equal(got, []string{"event member_removed/t1/9/" + lateUser + "/v2"}) {
-			t.Fatalf("after the reload new stream events = %v", got)
-		}
-		if f.table.stats.resyncs[2].Load() != 2 {
-			t.Fatalf("consumer_lost resyncs = %d", f.table.stats.resyncs[2].Load())
+		want := []string{"resync consumer_lost", "event member_added/t1/9/u/v1", "event msg_created/t1/9//v0"}
+		if got := s.take(); !slices.Equal(got, want) {
+			t.Fatalf("frames = %v, want %v", got, want)
 		}
 	})
 }
 
-func TestAUserStillLoadingAtTheSkipLoadsAgainAndOnlyGetsReady(t *testing.T) {
+func TestUsersSuspendedFallsToZeroWhenUsersLeaveOrTheTableCloses(t *testing.T) {
 	run(t, func(t *testing.T) {
 		f := newFixture(t)
+		a, _ := f.connect("t1", "a", 1)
+		f.connect("t1", "b", 1)
 		f.loader.holding(true)
-		s := &fakeSink{}
-		f.table.Register("t1", "u", s)
+		f.table.Jumped(lagJump(3))
 		synctest.Wait()
-		f.table.Jumped(lagJump(8))
-		synctest.Wait()
-		f.loader.replies <- reply{rooms: []Room{{ID: 2, Ver: 1}}}
-		f.loader.replies <- reply{rooms: []Room{{ID: 2, Ver: 1}}}
-		synctest.Wait()
-		f.route(msg("t1", 2))
-		if got := s.take(); !slices.Equal(got, []string{"ready", "event msg_created/t1/2//v0"}) || f.loader.callsOf("t1", "u") != 2 {
-			t.Fatalf("frames = %v, loads %d", got, f.loader.callsOf("t1", "u"))
+		a.Unregister()
+		if f.table.stats.suspended.Load() != 1 {
+			t.Fatalf("suspended after a left = %d", f.table.stats.suspended.Load())
 		}
-	})
-}
-
-func TestAFailedReloadClosesTheConnectionsOfTheUser(t *testing.T) {
-	run(t, func(t *testing.T) {
-		f := newFixture(t)
-		c, s := f.connect("t1", "u", 1, 2)
-		f.loader.holding(true)
-		f.table.Jumped(lagJump(5))
-		synctest.Wait()
-		f.loader.replies <- reply{err: errors.New("core down")}
-		synctest.Wait()
-		if s.failures() != 1 || f.table.stats.users.Load() != 0 || f.table.stats.pairs.Load() != 0 {
-			t.Fatalf("failures %d users %d pairs %d", s.failures(), f.table.stats.users.Load(), f.table.stats.pairs.Load())
-		}
-		c.Unregister()
-	})
-}
-
-func TestASecondSkipJoinsTheRunningScheduleWithoutRestartingIt(t *testing.T) {
-	run(t, func(t *testing.T) {
-		f := newFixture(t)
-		f.connect("t1", "u1", 1)
-		f.connect("t1", "u2", 1)
-		f.connect("t1", "u3", 1)
-		f.table.Jumped(lagJump(5))
-		synctest.Wait()
-		time.Sleep(10 * time.Second)
-		synctest.Wait()
-		f.table.Jumped(feed.Jump{Reason: feed.JumpConsumerLost, Seq: 9})
-		synctest.Wait()
-		order := f.loader.callOrder()[3:]
-		if len(order) != 1 {
-			t.Fatalf("reloads right after the second skip = %v, want only the first one", order)
-		}
-		first := order[0]
-		time.Sleep(10*time.Second - time.Nanosecond)
-		synctest.Wait()
-		if got := f.loader.callOrder()[3:]; len(got) != 1 {
-			t.Fatalf("the second user was reloaded before its turn: %v", got)
-		}
-		time.Sleep(time.Minute)
-		synctest.Wait()
-		order = f.loader.callOrder()[3:]
-		if len(order) != 4 || order[3] != first || order[1] == first || order[2] == first || order[1] == order[2] {
-			t.Fatalf("reload order = %v, want the waiting users first and %s again last", order, first)
-		}
-		if f.table.stats.resyncs[1].Load() != 1 || f.table.stats.resyncs[2].Load() != 3 {
-			t.Fatalf("lag resyncs %d lost resyncs %d", f.table.stats.resyncs[1].Load(), f.table.stats.resyncs[2].Load())
-		}
-	})
-}
-
-func TestReloadsStartWithLoadingUsersThenUsersWithOpenRooms(t *testing.T) {
-	run(t, func(t *testing.T) {
-		f := newFixture(t)
-		f.connect("t1", "idle", 1)
-		viewer, _ := f.connect("t1", "viewer", 1)
-		viewer.Open("1")
-		f.loader.holding(true)
-		f.table.Register("t1", "loading", &fakeSink{})
-		synctest.Wait()
-		f.table.Jumped(lagJump(4))
-		for _, at := range []time.Duration{0, 20 * time.Second, 20 * time.Second} {
-			time.Sleep(at)
-			synctest.Wait()
-		}
-		if got := f.loader.callOrder()[3:]; !slices.Equal(got, []string{"loading", "viewer", "idle"}) {
-			t.Fatalf("reload order = %v", got)
+		f.table.Close()
+		if f.table.stats.suspended.Load() != 0 {
+			t.Fatalf("suspended after close = %d", f.table.stats.suspended.Load())
 		}
 	})
 }

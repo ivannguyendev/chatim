@@ -65,7 +65,8 @@ func (c Config) Validate() error {
 		positive("WS_CONSUME_BATCH", c.ConsumeBatch),
 		positive("WS_ROOM_IDS_INFLIGHT", c.RoomIDsInflight),
 		positive("WS_OPEN_PENDING", c.OpenPending),
-		positive("WS_RESYNC_WINDOW", c.ResyncWindow),
+		positive("WS_RELOAD_RATE", c.ReloadRate),
+		{c.ReloadRate <= 0 || time.Second/time.Duration(c.ReloadRate) > 0, "WS_RELOAD_RATE must be at most one reload per nanosecond"},
 		{c.ReplayMaxAge > catchUpAge, fmt.Sprintf("WS_REPLAY_MAX_AGE must exceed the %v catch-up age", catchUpAge)},
 		{c.ConsumeBytes >= minConsumeBytes, fmt.Sprintf("WS_CONSUME_BYTES must be at least %d (the NATS default max payload)", minConsumeBytes)},
 	}

@@ -32,10 +32,10 @@ func NewCoreLoader(router Router, deadline time.Duration) (*CoreLoader, error) {
 	return &CoreLoader{router: router, deadline: deadline}, nil
 }
 
-func (l *CoreLoader) Load(ctx context.Context, tenant, user string) ([]Room, error) {
+func (l *CoreLoader) Load(ctx context.Context, tenant, user string) (Membership, error) {
 	conn, err := l.router.Any()
 	if err != nil {
-		return nil, err
+		return Membership{}, err
 	}
 	callCtx, cancel := context.WithTimeout(ctx, l.deadline)
 	defer cancel()
@@ -45,10 +45,22 @@ func (l *CoreLoader) Load(ctx context.Context, tenant, user string) ([]Room, err
 		if status.Code(err) == codes.Unavailable {
 			l.router.Trigger()
 		}
-		return nil, err
+		return Membership{}, err
 	}
-	rooms := make([]Room, 0, len(resp.GetRooms()))
-	for _, r := range resp.GetRooms() {
+	joined, err := roomsOf(resp.GetRooms())
+	if err != nil {
+		return Membership{}, err
+	}
+	left, err := roomsOf(resp.GetLeft())
+	if err != nil {
+		return Membership{}, err
+	}
+	return Membership{Joined: joined, Left: left}, nil
+}
+
+func roomsOf(list []*chatimv1.MyRoomID) ([]Room, error) {
+	rooms := make([]Room, 0, len(list))
+	for _, r := range list {
 		id, err := ids.ParseRoomID(r.GetRoomId())
 		if err != nil {
 			return nil, fmt.Errorf("list my room ids: %w", err)

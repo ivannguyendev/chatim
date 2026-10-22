@@ -194,9 +194,9 @@ Toàn bộ đọc qua `apps/core/internal/config`; thiếu thì dùng giá trị
 | `WS_FANOUT_WORKERS`, `WS_FANOUT_QUEUE` | số CPU / `4096` | Worker theo room (`hash(room)`, giữ thứ tự từng room) và hàng event mỗi worker; đầy thì vòng nhận chờ |
 | `WS_CONSUME_BATCH`, `WS_CONSUME_BYTES` | `500` / `8388608` | Lô kéo của ordered consumer theo số tin và byte (byte ≥ 1MB) |
 | `WS_REPLAY_RATE` | `20000` | Tin/giây tối đa khi đang đuổi theo (giờ lưu tin cũ hơn 5s) |
-| `WS_REPLAY_MAX_AGE` | `2m` | Trễ quá mức này, đo bằng giờ JetStream lưu tin (> 5s), thì bỏ đoạn cũ, đọc từ hiện tại, nạp lại danh sách room và gửi `resync` |
-| `WS_RESYNC_WINDOW` | `60s` | Rải việc nạp lại + `resync` sau một lần nhảy trong khoảng này; cũng là thời gian nghỉ tối thiểu giữa hai lần nhảy vì trễ |
-| `WS_ROOM_IDS_INFLIGHT` | `64` | Số lần gọi `ListMyRoomIDs` đang chạy tối đa mỗi node; lỗi thì đóng các kết nối của người đó bằng 1013 |
+| `WS_REPLAY_MAX_AGE` | `2m` | Trễ quá mức này, đo bằng giờ JetStream lưu tin (> 5s), thì coi như node khởi động lại: bỏ đoạn cũ, đọc từ hiện tại, tạm ngừng đẩy cho mọi người trên node tới khi người đó được nạp lại rồi gửi `resync`; cũng là thời gian nghỉ tối thiểu giữa hai lần nhảy vì trễ |
+| `WS_RELOAD_RATE` | `1000` | Số người nạp lại mỗi giây mỗi node sau một lần nhảy (thiết bị đang chờ `ready` trước, rồi người đang mở room, rồi còn lại); nạp lại lỗi thì người đó vẫn tạm ngừng và xếp lại cuối hàng, không đóng kết nối |
+| `WS_ROOM_IDS_INFLIGHT` | `64` | Số lần gọi `ListMyRoomIDs` đang chạy tối đa mỗi node; lỗi lúc login thì đóng các kết nối của người đó bằng 1013 |
 | `WS_OPEN_PENDING` | `10s` | `open_room` của room chưa có trong danh sách (vừa tạo) chờ `member_added` tối đa ngần này, rồi `room_closed{NOT_MEMBER}` |
 
 Khoá dev: `make dev-keys` chạy `corecli dev-keys -out /keys` trong image `chatim/corecli:dev` với uid của máy, ghi `.local/ws-keys/private.jwk` (0600, chỉ nằm trong `.local/`, đã gitignore) và `.local/ws-keys/jwks.json` (0644). Compose chỉ đưa `jwks.json` vào websocket-1 làm secret `ws_jwks` (`WS_JWT_KEYS_FILE=/run/secrets/ws_jwks`); khoá riêng không bao giờ mount vào container websocket. Lấy token:

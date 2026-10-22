@@ -23,25 +23,27 @@ func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
 
 type reply struct {
 	rooms []Room
+	left  []Room
 	err   error
 }
 
 type fakeLoader struct {
 	mu      sync.Mutex
 	calls   map[userKey]int
-	rooms   map[userKey][]Room
+	rooms   map[userKey]Membership
 	hold    bool
 	replies chan reply
+	waiting []chan reply
 	active  int
 	peak    int
 	order   []string
 }
 
 func newFakeLoader() *fakeLoader {
-	return &fakeLoader{calls: map[userKey]int{}, rooms: map[userKey][]Room{}, replies: make(chan reply, 16)}
+	return &fakeLoader{calls: map[userKey]int{}, rooms: map[userKey]Membership{}, replies: make(chan reply, 16)}
 }
 
-func (l *fakeLoader) Load(ctx context.Context, tenant, user string) ([]Room, error) {
+func (l *fakeLoader) Load(ctx context.Context, tenant, user string) (Membership, error) {
 	k := userKey{tenant: tenant, user: user}
 	l.mu.Lock()
 	l.calls[k]++
@@ -49,6 +51,8 @@ func (l *fakeLoader) Load(ctx context.Context, tenant, user string) ([]Room, err
 	l.active++
 	l.peak = max(l.peak, l.active)
 	hold, rooms := l.hold, l.rooms[k]
+	own := make(chan reply, 1)
+	l.waiting = append(l.waiting, own)
 	l.mu.Unlock()
 	defer func() {
 		l.mu.Lock()
@@ -58,12 +62,21 @@ func (l *fakeLoader) Load(ctx context.Context, tenant, user string) ([]Room, err
 	if !hold {
 		return rooms, nil
 	}
+	var r reply
 	select {
-	case r := <-l.replies:
-		return r.rooms, r.err
+	case r = <-own:
+	case r = <-l.replies:
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return Membership{}, ctx.Err()
 	}
+	return Membership{Joined: r.rooms, Left: r.left}, r.err
+}
+
+func (l *fakeLoader) answer(call int, r reply) {
+	l.mu.Lock()
+	own := l.waiting[call]
+	l.mu.Unlock()
+	own <- r
 }
 
 func (l *fakeLoader) set(tenant, user string, rooms ...uint64) {
@@ -73,7 +86,15 @@ func (l *fakeLoader) set(tenant, user string, rooms ...uint64) {
 	for i, r := range rooms {
 		list[i] = Room{ID: r, Ver: 1}
 	}
-	l.rooms[userKey{tenant: tenant, user: user}] = list
+	k := userKey{tenant: tenant, user: user}
+	l.rooms[k] = Membership{Joined: list, Left: l.rooms[k].Left}
+}
+
+func (l *fakeLoader) setLeft(tenant, user string, left ...Room) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	k := userKey{tenant: tenant, user: user}
+	l.rooms[k] = Membership{Joined: l.rooms[k].Joined, Left: left}
 }
 
 func (l *fakeLoader) holding(on bool) {
@@ -185,12 +206,6 @@ func (s *fakeSink) counts() (sends, trySends int) {
 	return s.sends, s.trySends
 }
 
-func (s *fakeSink) pending() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return len(s.frames)
-}
-
 func (s *fakeSink) failures() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -205,7 +220,7 @@ type fixture struct {
 }
 
 func newFixture(t *testing.T) *fixture {
-	return newFixtureWith(t, Config{Inflight: 64, OpenPending: 10 * time.Second, ResyncWindow: time.Minute})
+	return newFixtureWith(t, Config{Inflight: 64, OpenPending: 10 * time.Second, ReloadRate: 1000})
 }
 
 func newFixtureWith(t *testing.T, cfg Config) *fixture {

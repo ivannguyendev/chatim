@@ -60,7 +60,9 @@ func TestLoadValidation(t *testing.T) {
 		{"consume bytes at 1MB", map[string]string{"WS_CONSUME_BYTES": "1048576"}, ""},
 		{"zero room ids inflight", map[string]string{"WS_ROOM_IDS_INFLIGHT": "0"}, "WS_ROOM_IDS_INFLIGHT must be positive"},
 		{"zero open pending", map[string]string{"WS_OPEN_PENDING": "0s"}, "WS_OPEN_PENDING must be positive"},
-		{"zero resync window", map[string]string{"WS_RESYNC_WINDOW": "0s"}, "WS_RESYNC_WINDOW must be positive"},
+		{"zero reload rate", map[string]string{"WS_RELOAD_RATE": "0"}, "WS_RELOAD_RATE must be positive"},
+		{"reload rate of one per nanosecond", map[string]string{"WS_RELOAD_RATE": "1000000000"}, ""},
+		{"reload rate above one per nanosecond", map[string]string{"WS_RELOAD_RATE": "1000000001"}, "WS_RELOAD_RATE must be at most one reload per nanosecond"},
 		{"replay max age at the catch-up age", map[string]string{"WS_REPLAY_MAX_AGE": "5s"}, "WS_REPLAY_MAX_AGE must exceed the 5s catch-up age"},
 		{"replay max age above the catch-up age", map[string]string{"WS_REPLAY_MAX_AGE": "6s"}, ""},
 	}

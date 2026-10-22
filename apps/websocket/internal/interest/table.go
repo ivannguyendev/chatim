@@ -25,14 +25,19 @@ type Room struct {
 	Ver uint32
 }
 
+type Membership struct {
+	Joined []Room
+	Left   []Room
+}
+
 type Loader interface {
-	Load(ctx context.Context, tenant, user string) ([]Room, error)
+	Load(ctx context.Context, tenant, user string) (Membership, error)
 }
 
 type Config struct {
-	Inflight     int
-	OpenPending  time.Duration
-	ResyncWindow time.Duration
+	Inflight    int
+	OpenPending time.Duration
+	ReloadRate  int
 }
 
 type userKey struct {
@@ -80,8 +85,8 @@ type Table struct {
 }
 
 func New(cfg Config, loader Loader, log *slog.Logger) (*Table, error) {
-	if cfg.Inflight <= 0 || cfg.OpenPending <= 0 || cfg.ResyncWindow <= 0 {
-		return nil, errors.New("interest: inflight, open pending and resync window must be positive")
+	if cfg.Inflight <= 0 || cfg.OpenPending <= 0 || cfg.ReloadRate <= 0 || time.Second/time.Duration(cfg.ReloadRate) <= 0 {
+		return nil, errors.New("interest: inflight, open pending and reload rate must be positive and the reload rate at most one per nanosecond")
 	}
 	if loader == nil || log == nil {
 		return nil, errors.New("interest: loader and logger are required")
@@ -103,6 +108,11 @@ func (t *Table) Close() {
 	t.closeMu.Unlock()
 	t.stop()
 	t.loads.Wait()
+	for _, u := range t.snapshot() {
+		u.mu.Lock()
+		t.resume(u)
+		u.mu.Unlock()
+	}
 }
 
 func (t *Table) spawn(fn func()) bool {

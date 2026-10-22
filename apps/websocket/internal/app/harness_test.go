@@ -82,7 +82,7 @@ func testConfig(redisAddr, keysFile string) config.Config {
 		NATSURL: "nats://ws:" + testNATSPassword + "@nats:4222", EventStream: "CHATIM_EVT", EventRoot: "evt",
 		PublishRoot: "websocket.publish", PublishStream: "CHATIM_WS", StreamReplicas: 1,
 		FanoutWorkers: 2, FanoutQueue: 64, ReplayRate: 1000, ConsumeBatch: 100, ConsumeBytes: 1 << 20,
-		RoomIDsInflight: 4, OpenPending: 10 * time.Second, ReplayMaxAge: 2 * time.Minute, ResyncWindow: time.Minute,
+		RoomIDsInflight: 4, OpenPending: 10 * time.Second, ReplayMaxAge: 2 * time.Minute, ReloadRate: 1000,
 	}
 }
 

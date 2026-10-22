@@ -12,16 +12,19 @@ import (
 
 func TestNewRejectsMissingParts(t *testing.T) {
 	quiet := slog.New(slog.DiscardHandler)
-	good := Config{Inflight: 1, OpenPending: time.Second, ResyncWindow: time.Second}
+	good := Config{Inflight: 1, OpenPending: time.Second, ReloadRate: 1}
 	for name, build := range map[string]func() (*Table, error){
 		"zero inflight": func() (*Table, error) {
-			return New(Config{OpenPending: time.Second, ResyncWindow: time.Second}, newFakeLoader(), quiet)
+			return New(Config{OpenPending: time.Second, ReloadRate: 1}, newFakeLoader(), quiet)
 		},
 		"zero open pending": func() (*Table, error) {
-			return New(Config{Inflight: 1, ResyncWindow: time.Second}, newFakeLoader(), quiet)
+			return New(Config{Inflight: 1, ReloadRate: 1}, newFakeLoader(), quiet)
 		},
-		"zero resync window": func() (*Table, error) {
+		"zero reload rate": func() (*Table, error) {
 			return New(Config{Inflight: 1, OpenPending: time.Second}, newFakeLoader(), quiet)
+		},
+		"reload rate under a nanosecond": func() (*Table, error) {
+			return New(Config{Inflight: 1, OpenPending: time.Second, ReloadRate: 2_000_000_000}, newFakeLoader(), quiet)
 		},
 		"no loader": func() (*Table, error) { return New(good, nil, quiet) },
 		"no logger": func() (*Table, error) { return New(good, newFakeLoader(), nil) },
@@ -122,15 +125,15 @@ func TestAFailedLoadClosesEveryWaitingConnection(t *testing.T) {
 		if got := retry.take(); !slices.Equal(got, []string{"ready"}) {
 			t.Fatalf("a new connection after a failed load got %v", got)
 		}
-		if f.table.stats.users.Load() != 1 || f.table.stats.loadCount.Load() != 2 {
-			t.Fatalf("users %d loads %d", f.table.stats.users.Load(), f.table.stats.loadCount.Load())
+		if f.table.stats.users.Load() != 1 || f.table.stats.load.count.Load() != 2 {
+			t.Fatalf("users %d loads %d", f.table.stats.users.Load(), f.table.stats.load.count.Load())
 		}
 	})
 }
 
 func TestLoadsInFlightAreBoundedAndALeavingUserFreesItsSlot(t *testing.T) {
 	run(t, func(t *testing.T) {
-		f := newFixtureWith(t, Config{Inflight: 2, OpenPending: time.Second, ResyncWindow: time.Second})
+		f := newFixtureWith(t, Config{Inflight: 2, OpenPending: time.Second, ReloadRate: 1})
 		f.loader.holding(true)
 		names := []string{"a", "b", "c", "d", "e"}
 		conns := map[string]*Conn{}
@@ -169,7 +172,7 @@ func TestCloseCancelsLoadsInFlight(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		loader := newFakeLoader()
 		loader.holding(true)
-		table, err := New(Config{Inflight: 1, OpenPending: time.Second, ResyncWindow: time.Second}, loader, slog.New(slog.DiscardHandler))
+		table, err := New(Config{Inflight: 1, OpenPending: time.Second, ReloadRate: 1}, loader, slog.New(slog.DiscardHandler))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -188,7 +191,7 @@ func TestCloseCancelsLoadsInFlight(t *testing.T) {
 func TestRegisterAfterCloseFailsTheConnectionWithoutStartingALoad(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		loader := newFakeLoader()
-		table, err := New(Config{Inflight: 1, OpenPending: time.Second, ResyncWindow: time.Second}, loader, slog.New(slog.DiscardHandler))
+		table, err := New(Config{Inflight: 1, OpenPending: time.Second, ReloadRate: 1}, loader, slog.New(slog.DiscardHandler))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -219,14 +222,15 @@ func TestSourcesNameEveryMetricWithFixedLabels(t *testing.T) {
 	for _, want := range []string{
 		"interest_users", "interest_room_pairs", "room_ids_load_seconds", "room_ids_load_failures_total", "open_room_rejected_total",
 		"events_delivered_total{level=member}", "events_delivered_total{level=open}", "events_delivered_total{level=owner}",
-		"events_dropped_total{reason=unknown_kind}", "events_dropped_total{reason=malformed}", "interest_reloads_total",
+		"events_dropped_total{reason=unknown_kind}", "events_dropped_total{reason=malformed}",
+		"users_suspended", "reloads_total", "reload_seconds", "reload_failures_total",
 		"resyncs_total{reason=lag_too_old}", "resyncs_total{reason=consumer_lost}", "resyncs_total{reason=client_backlog}",
 	} {
 		if got[want] != 1 {
 			t.Errorf("metric %s registered %d times", want, got[want])
 		}
 	}
-	if len(got) != 14 {
+	if len(got) != 17 {
 		t.Fatalf("metrics = %v", got)
 	}
 }

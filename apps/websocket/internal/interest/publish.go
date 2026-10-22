@@ -66,7 +66,7 @@ func (p *Publisher) toReadyUser(k userKey, out []byte, catchingUp bool) uint64 {
 	}
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	if !u.ready || u.gone {
+	if !u.live() {
 		return 0
 	}
 	return u.deliver(out, catchingUp, false)

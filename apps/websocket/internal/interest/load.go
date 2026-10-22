@@ -37,79 +37,78 @@ func (t *Table) fetch(u *user, gen uint64, reason chatimv1.ResyncReason) {
 	u.loading = true
 	u.mu.Unlock()
 	start := time.Now()
-	rooms, err := t.loader.Load(u.ctx, u.key.tenant, u.key.user)
-	t.stats.observeLoad(time.Since(start))
+	m, err := t.loader.Load(u.ctx, u.key.tenant, u.key.user)
+	t.stats.load.observe(time.Since(start))
 	switch {
 	case u.ctx.Err() != nil:
 	case err != nil:
-		t.loadFailed(u, gen, err)
+		if t.loadFailed(u, gen, err) {
+			t.requeue(u, reason)
+		}
 	default:
-		t.loaded(u, gen, rooms, reason)
+		t.loaded(u, gen, m, reason)
 	}
 }
 
-func (t *Table) loadFailed(u *user, gen uint64, err error) {
-	t.stats.loadFailures.Add(1)
-	t.failLog.Do(func() { t.log.Warn("load room ids failed; closing the connections of the user", "err", err) })
+func (t *Table) loadFailed(u *user, gen uint64, err error) bool {
 	s := t.userShard(u.key)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	if u.gone || u.gen != gen {
-		return
+		return false
 	}
-	u.gone = true
-	if s.users[u.key] == u {
-		delete(s.users, u.key)
-		t.stats.users.Add(-1)
-	}
-	u.cancel()
-	if u.ready {
-		for room := range u.rooms {
-			t.unindex(u, room)
-		}
-	}
+	u.loading = false
 	u.held = nil
+	if u.suspended {
+		t.stats.reloadFailures.Add(1)
+		t.failLog.Do(func() {
+			t.log.Warn("reload room ids failed; the user stays suspended and goes to the back of the reload queue", "err", err)
+		})
+		return true
+	}
+	t.stats.loadFailures.Add(1)
+	t.failLog.Do(func() { t.log.Warn("load room ids failed; closing the connections of the user", "err", err) })
+	t.drop(s, u)
 	for c := range u.conns {
 		c.sink.Fail()
 	}
+	return false
 }
 
-func (t *Table) loaded(u *user, gen uint64, rooms []Room, reason chatimv1.ResyncReason) {
+func (t *Table) loaded(u *user, gen uint64, m Membership, reason chatimv1.ResyncReason) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	if u.gone || u.gen != gen {
 		return
 	}
 	u.loading = false
-	if u.ready {
-		t.replace(u, rooms, reason)
-		return
-	}
-	u.mark = u.loadMark
-	for _, r := range rooms {
-		u.rooms[r.ID] = r.Ver
-	}
-	for _, ch := range u.held {
-		if ch.seq > u.mark {
-			u.apply(ch)
-		}
-	}
-	u.held = nil
-	for room := range u.rooms {
-		t.index(u, room)
-	}
+	t.adopt(u, m)
 	u.ready = true
+	if since := u.suspendedAt; t.resume(u) {
+		t.stats.reloads.Add(1)
+		t.stats.reload.observe(time.Since(since))
+	}
 	for c := range u.conns {
+		if c.readied {
+			c.resumed(reason)
+			continue
+		}
 		c.becameReady()
 	}
 }
 
-func (t *Table) replace(u *user, rooms []Room, reason chatimv1.ResyncReason) {
+func (t *Table) adopt(u *user, m Membership) {
 	old := u.rooms
-	next := make(map[uint64]uint32, len(rooms))
-	for _, r := range rooms {
+	if !u.ready {
+		old = nil
+	}
+	for _, r := range m.Left {
+		u.left[r.ID] = max(u.left[r.ID], r.Ver)
+	}
+	next := make(map[uint64]uint32, len(m.Joined))
+	for _, r := range m.Joined {
 		if gone, ok := u.left[r.ID]; ok && r.Ver <= gone {
 			continue
 		}
@@ -144,9 +143,5 @@ func (t *Table) replace(u *user, rooms []Room, reason chatimv1.ResyncReason) {
 				c.removed(room)
 			}
 		}
-	}
-	t.stats.reloads.Add(1)
-	for c := range u.conns {
-		c.resync(reason)
 	}
 }

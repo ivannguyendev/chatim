@@ -72,7 +72,7 @@ func (t *Table) raiseSeq(seq uint64) {
 func (t *Table) toMembers(k roomKey, f *lazyFrame) {
 	for _, u := range t.members(k) {
 		u.mu.Lock()
-		if _, member := u.rooms[k.room]; member && u.ready && !u.gone {
+		if _, member := u.rooms[k.room]; member && u.live() {
 			t.stats.delivered[levelMember].Add(u.deliver(f.get(), f.catchingUp, true))
 		}
 		u.mu.Unlock()
@@ -81,13 +81,17 @@ func (t *Table) toMembers(k roomKey, f *lazyFrame) {
 
 func (t *Table) toViewers(viewers []*Conn, f *lazyFrame, skip *user) {
 	for _, c := range viewers {
-		if c.user == skip {
-			continue
-		}
-		if c.deliver(f.get(), f.catchingUp, true) {
+		if c.user != skip && t.toViewer(c, f) {
 			t.stats.delivered[levelOpen].Add(1)
 		}
 	}
+}
+
+func (t *Table) toViewer(c *Conn, f *lazyFrame) bool {
+	u := c.user
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return !c.gone && u.live() && c.deliver(f.get(), f.catchingUp, true)
 }
 
 func (t *Table) toOwner(k userKey, f *lazyFrame) {
@@ -97,7 +101,7 @@ func (t *Table) toOwner(k userKey, f *lazyFrame) {
 	}
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	if u.ready && !u.gone {
+	if u.live() {
 		t.stats.delivered[levelOwner].Add(u.deliver(f.get(), f.catchingUp, true))
 	}
 }
@@ -117,14 +121,16 @@ func (t *Table) applyMembership(u *user, ch change, f *lazyFrame) {
 	switch {
 	case u.gone:
 		return
+	case u.suspended:
+		if u.loading {
+			u.held = append(u.held, ch)
+		}
+		return
 	case !u.ready:
 		u.held = append(u.held, ch)
 		return
 	case ch.seq <= u.mark:
 		return
-	}
-	if u.loading {
-		u.held = append(u.held, ch)
 	}
 	if ch.added {
 		t.memberAdded(u, ch, f)

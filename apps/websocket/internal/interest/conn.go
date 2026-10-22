@@ -18,6 +18,7 @@ type Conn struct {
 	user    *user
 	sink    Sink
 	gone    bool
+	readied bool
 	early   []string
 	open    map[uint64]struct{}
 	pending map[uint64]*pendingOpen
@@ -35,7 +36,7 @@ func (c *Conn) Open(raw string) {
 	defer u.mu.Unlock()
 	switch {
 	case c.gone || u.gone:
-	case !u.ready:
+	case !u.ready || u.suspended:
 		c.early = append(c.early, raw)
 	default:
 		c.openRoom(raw)
@@ -121,11 +122,35 @@ func (c *Conn) reject(raw string) {
 }
 
 func (c *Conn) becameReady() {
+	c.readied = true
 	c.sink.Send(readyFrame)
+	c.openEarly()
+}
+
+func (c *Conn) resumed(reason chatimv1.ResyncReason) {
+	c.resync(reason)
+	c.openEarly()
+}
+
+func (c *Conn) openEarly() {
 	early := c.early
 	c.early = nil
 	for _, raw := range early {
 		c.openRoom(raw)
+	}
+}
+
+func (c *Conn) suspend() {
+	for room, p := range c.pending {
+		p.timer.Stop()
+		delete(c.pending, room)
+		c.early = append(c.early, strconv.FormatUint(room, 10))
+	}
+	c.sendMu.Lock()
+	defer c.sendMu.Unlock()
+	if c.backlog != flowing {
+		c.backlog = flowing
+		c.table.unmarkBacklog(c)
 	}
 }
 

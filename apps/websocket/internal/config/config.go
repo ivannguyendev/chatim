@@ -57,7 +57,7 @@ type Config struct {
 	RoomIDsInflight  int
 	OpenPending      time.Duration
 	ReplayMaxAge     time.Duration
-	ResyncWindow     time.Duration
+	ReloadRate       int
 }
 
 func AdminAddr() string { return envconfig.String("WS_ADMIN_ADDR", defaultAdminAddr) }
@@ -102,7 +102,7 @@ func Load() (Config, error) {
 		RoomIDsInflight:  p.number("WS_ROOM_IDS_INFLIGHT", 64),
 		OpenPending:      p.span("WS_OPEN_PENDING", 10*time.Second),
 		ReplayMaxAge:     p.span("WS_REPLAY_MAX_AGE", 2*time.Minute),
-		ResyncWindow:     p.span("WS_RESYNC_WINDOW", time.Minute),
+		ReloadRate:       p.number("WS_RELOAD_RATE", 1000),
 	}
 	if err := errors.Join(p.errs...); err != nil {
 		return Config{}, err
@@ -152,7 +152,7 @@ func (c Config) LogValue() slog.Value {
 		slog.Int("room_ids_inflight", c.RoomIDsInflight),
 		slog.Duration("open_pending", c.OpenPending),
 		slog.Duration("replay_max_age", c.ReplayMaxAge),
-		slog.Duration("resync_window", c.ResyncWindow),
+		slog.Int("reload_rate", c.ReloadRate),
 	)
 }
 

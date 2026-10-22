@@ -45,7 +45,7 @@ func feedConfig(cfg config.Config) feed.Config {
 		ConsumeBatch:  cfg.ConsumeBatch,
 		ConsumeBytes:  cfg.ConsumeBytes,
 		ReplayMaxAge:  cfg.ReplayMaxAge,
-		JumpCooldown:  cfg.ResyncWindow,
+		JumpCooldown:  cfg.ReplayMaxAge,
 	}
 }
 
@@ -65,7 +65,7 @@ func newInterest(cfg config.Config, routes *routerHolder, log *slog.Logger) (*in
 	if err != nil {
 		return nil, err
 	}
-	return interest.New(interest.Config{Inflight: cfg.RoomIDsInflight, OpenPending: cfg.OpenPending, ResyncWindow: cfg.ResyncWindow}, loader, log)
+	return interest.New(interest.Config{Inflight: cfg.RoomIDsInflight, OpenPending: cfg.OpenPending, ReloadRate: cfg.ReloadRate}, loader, log)
 }
 
 func jwtConfig(cfg config.Config) jwtverify.Config {

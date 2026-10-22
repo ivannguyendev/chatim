@@ -49,17 +49,20 @@ func (r *anyRouter) Any() (coreroute.Conn, error) {
 func (r *anyRouter) Trigger() { r.triggers++ }
 
 func TestCoreLoaderAsksAnyCoreAsTheCallerWithinTheDeadline(t *testing.T) {
-	core := &roomIDsCore{resp: &chatimv1.ListMyRoomIDsResponse{Rooms: []*chatimv1.MyRoomID{{RoomId: "7", Ver: 3}, {RoomId: "12", Ver: 1}}}}
+	core := &roomIDsCore{resp: &chatimv1.ListMyRoomIDsResponse{
+		Rooms: []*chatimv1.MyRoomID{{RoomId: "7", Ver: 3}, {RoomId: "12", Ver: 1}},
+		Left:  []*chatimv1.MyRoomID{{RoomId: "9", Ver: 4}},
+	}}
 	loader, err := NewCoreLoader(&anyRouter{core: core}, 2*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
-	rooms, err := loader.Load(context.Background(), "acme", "alice")
+	m, err := loader.Load(context.Background(), "acme", "alice")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if !slices.Equal(rooms, []Room{{ID: 7, Ver: 3}, {ID: 12, Ver: 1}}) {
-		t.Fatalf("rooms = %v", rooms)
+	if !slices.Equal(m.Joined, []Room{{ID: 7, Ver: 3}, {ID: 12, Ver: 1}}) || !slices.Equal(m.Left, []Room{{ID: 9, Ver: 4}}) {
+		t.Fatalf("membership = %+v", m)
 	}
 	if got := core.md.Get(callerid.TenantHeader); !slices.Equal(got, []string{"acme"}) {
 		t.Fatalf("tenant header = %v", got)
@@ -88,6 +91,10 @@ func TestCoreLoaderFailures(t *testing.T) {
 	bad := &anyRouter{core: &roomIDsCore{resp: &chatimv1.ListMyRoomIDsResponse{Rooms: []*chatimv1.MyRoomID{{RoomId: "x"}}}}}
 	if _, err := mustLoader(t, bad).Load(context.Background(), "t", "u"); err == nil {
 		t.Fatal("a malformed room id was accepted")
+	}
+	badLeft := &anyRouter{core: &roomIDsCore{resp: &chatimv1.ListMyRoomIDsResponse{Left: []*chatimv1.MyRoomID{{RoomId: "0"}}}}}
+	if _, err := mustLoader(t, badLeft).Load(context.Background(), "t", "u"); err == nil {
+		t.Fatal("a malformed left room id was accepted")
 	}
 	if _, err := NewCoreLoader(nil, time.Second); err == nil {
 		t.Fatal("nil router accepted")

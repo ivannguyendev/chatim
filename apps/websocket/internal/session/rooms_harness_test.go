@@ -23,11 +23,11 @@ type roomLoader struct {
 	calls atomic.Int64
 }
 
-func (l *roomLoader) Load(_ context.Context, tenant, user string) ([]interest.Room, error) {
+func (l *roomLoader) Load(_ context.Context, tenant, user string) (interest.Membership, error) {
 	l.calls.Add(1)
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return l.rooms[tenant+"/"+user], l.err
+	return interest.Membership{Joined: l.rooms[tenant+"/"+user]}, l.err
 }
 
 func (l *roomLoader) set(tenant, user string, rooms ...interest.Room) {
@@ -48,7 +48,7 @@ func newTestInterest(t *testing.T) *interest.Table {
 
 func newInterestWith(t *testing.T, loader interest.Loader) *interest.Table {
 	t.Helper()
-	rooms, err := interest.New(interest.Config{Inflight: 4, OpenPending: 10 * time.Second, ResyncWindow: time.Minute}, loader, slog.New(slog.DiscardHandler))
+	rooms, err := interest.New(interest.Config{Inflight: 4, OpenPending: 10 * time.Second, ReloadRate: 1000}, loader, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("interest.New: %v", err)
 	}
