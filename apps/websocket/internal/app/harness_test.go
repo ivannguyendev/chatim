@@ -82,6 +82,7 @@ func testConfig(redisAddr, keysFile string) config.Config {
 		NATSURL: "nats://ws:" + testNATSPassword + "@nats:4222", EventStream: "CHATIM_EVT", EventRoot: "evt",
 		PublishRoot: "websocket.publish", PublishStream: "CHATIM_WS", StreamReplicas: 1,
 		FanoutWorkers: 2, FanoutQueue: 64, ReplayRate: 1000, ConsumeBatch: 100, ConsumeBytes: 1 << 20,
+		RoomIDsInflight: 4, OpenPending: 10 * time.Second,
 	}
 }
 
@@ -109,6 +110,10 @@ func (f *fakeCore) GetHistory(ctx context.Context, _ *chatimv1.GetHistoryRequest
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+}
+
+func (f *fakeCore) ListMyRoomIDs(context.Context, *chatimv1.ListMyRoomIDsRequest) (*chatimv1.ListMyRoomIDsResponse, error) {
+	return &chatimv1.ListMyRoomIDsResponse{}, nil
 }
 
 func startFakeCore(t *testing.T) (*fakeCore, coreroute.Dialer) {

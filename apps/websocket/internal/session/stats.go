@@ -29,7 +29,7 @@ var (
 	rejectLabels = [rejectReasonCount]string{"rate", "inflight", "unimplemented", "shutdown"}
 	closeCodes   = []uint16{
 		CodeNormal, CodeGoingAway, CodeProtocolError, CodeUnsupportedData, CodeAbnormal, CodeInvalidPayload,
-		CodePolicyViolation, CodeTooLarge, CodeInternalError, CodeUnauthenticated, CodeAuthTimeout,
+		CodePolicyViolation, CodeTooLarge, CodeInternalError, CodeTryAgainLater, CodeUnauthenticated, CodeAuthTimeout,
 	}
 	tokenReasons = []jwtverify.Reason{
 		jwtverify.ReasonMalformed, jwtverify.ReasonAlgorithm, jwtverify.ReasonSignature, jwtverify.ReasonKeyID,

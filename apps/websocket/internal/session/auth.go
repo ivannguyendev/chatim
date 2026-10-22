@@ -13,22 +13,28 @@ func (c *connection) authenticate(token string) {
 		c.closeWith(CodeUnauthenticated)
 		return
 	}
-	if !c.accept(claims) {
+	first, ok := c.accept(claims)
+	if !ok {
 		c.server.authFailed(reasonIdentityChange)
 		c.closeWith(CodeUnauthenticated)
+		return
+	}
+	if first {
+		c.join(claims)
 	}
 }
 
-func (c *connection) accept(claims jwtverify.Claims) bool {
+func (c *connection) accept(claims jwtverify.Claims) (first, ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.finished {
-		return true
+		return false, true
 	}
 	if c.authed && (claims.User != c.claims.User || claims.Tenant != c.claims.Tenant) {
-		return false
+		return false, false
 	}
-	if !c.authed {
+	first = !c.authed
+	if first {
 		c.authed = true
 		stopTimer(c.authTimer)
 		c.server.stats.unauth.Add(-1)
@@ -36,7 +42,7 @@ func (c *connection) accept(claims jwtverify.Claims) bool {
 	c.claims = claims
 	stopTimer(c.expiry)
 	c.expiry = time.AfterFunc(time.Until(c.deadlineOf(claims)), c.tokenExpired)
-	return true
+	return first, true
 }
 
 func (c *connection) deadlineOf(claims jwtverify.Claims) time.Time {

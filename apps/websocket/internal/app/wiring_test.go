@@ -9,6 +9,8 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/ivannguyendev/chatim/apps/websocket/internal/feed"
 )
 
 func TestWiringPassesOneJWTLeewayToTheVerifierAndTheSessions(t *testing.T) {
@@ -80,6 +82,22 @@ func TestFeedWiringCarriesTheNATSAndStreamSettings(t *testing.T) {
 	if fc.EventStream != "CHATIM_EVT" || fc.EventRoot != "evt" || fc.PublishStream != "CHATIM_WS" || fc.PublishRoot != "websocket.publish" ||
 		fc.Replicas != 1 || fc.Workers != 2 || fc.Queue != 64 || fc.ReplayRate != 1000 || fc.ConsumeBatch != 100 || fc.ConsumeBytes != 1<<20 {
 		t.Fatalf("feed config = %+v from %+v", fc, cfg)
+	}
+}
+
+func TestEventRouterHandsCoreEventsToTheInterestTable(t *testing.T) {
+	rooms, err := newInterest(testConfig("redis:6379", "/keys.json"), &routerHolder{}, newLogWatch().logger())
+	if err != nil {
+		t.Fatalf("newInterest: %v", err)
+	}
+	defer rooms.Close()
+	router := eventRouter{rooms}
+	router.Event(feed.Envelope{Tenant: "t1", DataKind: "message", Room: "7", Kind: "typing_started", Seq: 1})
+	router.Publish(feed.Envelope{Tenant: "t1"})
+	for _, s := range rooms.Sources() {
+		if s.Name == "events_dropped_total" && s.Labels["reason"] == "unknown_kind" && s.Read() != 1 {
+			t.Fatalf("unknown kinds dropped = %v, want 1", s.Read())
+		}
 	}
 }
 

@@ -23,6 +23,7 @@ var envKeys = []string{
 	"CORE_REQUEST_DEADLINE", "WS_DRAIN_DELAY", "WS_SHUTDOWN_BUDGET",
 	"NATS_URL", "EVT_STREAM", "EVT_SUBJECT_ROOT", "WS_PUBLISH_ROOT", "WS_PUBLISH_STREAM", "EVT_STREAM_REPLICAS",
 	"WS_FANOUT_WORKERS", "WS_FANOUT_QUEUE", "WS_REPLAY_RATE", "WS_CONSUME_BATCH", "WS_CONSUME_BYTES",
+	"WS_ROOM_IDS_INFLIGHT", "WS_OPEN_PENDING",
 }
 
 var requiredEnv = map[string]string{
@@ -86,6 +87,8 @@ func TestLoadDefaults(t *testing.T) {
 		ReplayRate:       20000,
 		ConsumeBatch:     500,
 		ConsumeBytes:     8 << 20,
+		RoomIDsInflight:  64,
+		OpenPending:      10 * time.Second,
 	}
 	if got != want {
 		t.Fatalf("Load() = %+v, want %+v", fields(got), fields(want))
@@ -174,7 +177,7 @@ func TestLoadReadsTheFeedSettings(t *testing.T) {
 	setEnv(t, map[string]string{
 		"EVT_STREAM": "CHATIM_EVT_IT", "EVT_SUBJECT_ROOT": "evt_it", "WS_PUBLISH_ROOT": "ws_it.publish", "WS_PUBLISH_STREAM": "CHATIM_WS_IT",
 		"EVT_STREAM_REPLICAS": "3", "WS_FANOUT_WORKERS": "6", "WS_FANOUT_QUEUE": "64", "WS_REPLAY_RATE": "900",
-		"WS_CONSUME_BATCH": "50", "WS_CONSUME_BYTES": "2097152",
+		"WS_CONSUME_BATCH": "50", "WS_CONSUME_BYTES": "2097152", "WS_ROOM_IDS_INFLIGHT": "8", "WS_OPEN_PENDING": "3s",
 	})
 	got, err := config.Load()
 	if err != nil {
@@ -182,7 +185,7 @@ func TestLoadReadsTheFeedSettings(t *testing.T) {
 	}
 	if got.EventStream != "CHATIM_EVT_IT" || got.EventRoot != "evt_it" || got.PublishRoot != "ws_it.publish" || got.PublishStream != "CHATIM_WS_IT" ||
 		got.StreamReplicas != 3 || got.FanoutWorkers != 6 || got.FanoutQueue != 64 || got.ReplayRate != 900 ||
-		got.ConsumeBatch != 50 || got.ConsumeBytes != 2<<20 {
+		got.ConsumeBatch != 50 || got.ConsumeBytes != 2<<20 || got.RoomIDsInflight != 8 || got.OpenPending != 3*time.Second {
 		t.Fatalf("Load() = %+v", fields(got))
 	}
 }

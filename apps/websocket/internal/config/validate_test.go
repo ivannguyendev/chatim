@@ -55,6 +55,8 @@ func TestLoadValidation(t *testing.T) {
 		{"zero consume batch", map[string]string{"WS_CONSUME_BATCH": "0"}, "WS_CONSUME_BATCH must be positive"},
 		{"consume bytes under 1MB", map[string]string{"WS_CONSUME_BYTES": "1048575"}, "WS_CONSUME_BYTES must be at least 1048576"},
 		{"consume bytes at 1MB", map[string]string{"WS_CONSUME_BYTES": "1048576"}, ""},
+		{"zero room ids inflight", map[string]string{"WS_ROOM_IDS_INFLIGHT": "0"}, "WS_ROOM_IDS_INFLIGHT must be positive"},
+		{"zero open pending", map[string]string{"WS_OPEN_PENDING": "0s"}, "WS_OPEN_PENDING must be positive"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -7,11 +7,13 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/command"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/config"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/feed"
+	"github.com/ivannguyendev/chatim/apps/websocket/internal/interest"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/session"
 	"github.com/ivannguyendev/chatim/pkg/admin"
 	"github.com/ivannguyendev/chatim/pkg/coreroute"
@@ -34,6 +36,7 @@ type node struct {
 	routes *routerHolder
 	router *coreroute.Router
 	feed   *feed.Feed
+	rooms  *interest.Table
 	http   *http.Server
 }
 
@@ -67,26 +70,40 @@ func wire(cfg config.Config, log *slog.Logger) (*node, error) {
 	if err != nil {
 		return nil, err
 	}
-	ws, err := session.New(sessionOptions(cfg), verifier, exec, log)
+	rooms, err := newInterest(cfg, routes, log)
 	if err != nil {
 		return nil, err
 	}
-	fd, err := feed.New(feedConfig(cfg), idleHandler{}, log)
+	n, err := wireServers(cfg, log, verifier, exec, rooms)
+	if err != nil {
+		rooms.Close()
+		return nil, err
+	}
+	n.routes = routes
+	return n, nil
+}
+
+func wireServers(cfg config.Config, log *slog.Logger, verifier *jwtverify.Verifier, exec *command.Executor, rooms *interest.Table) (*node, error) {
+	ws, err := session.New(sessionOptions(cfg), verifier, exec, rooms, log)
 	if err != nil {
 		return nil, err
 	}
-	handler, err := metrics.Handler(metricsSubsystem, append(metricSources(ws, exec), fd.Sources()...))
+	fd, err := feed.New(feedConfig(cfg), eventRouter{rooms}, log)
+	if err != nil {
+		return nil, err
+	}
+	handler, err := metrics.Handler(metricsSubsystem, slices.Concat(metricSources(ws, exec), fd.Sources(), rooms.Sources()))
 	if err != nil {
 		return nil, err
 	}
 	return &node{
-		cfg:    cfg,
-		log:    log,
-		admin:  admin.New(admin.Config{Addr: cfg.AdminAddr, Metrics: handler}, log),
-		ws:     ws,
-		routes: routes,
-		feed:   fd,
-		http:   newHTTPServer(ws, log),
+		cfg:   cfg,
+		log:   log,
+		admin: admin.New(admin.Config{Addr: cfg.AdminAddr, Metrics: handler}, log),
+		ws:    ws,
+		feed:  fd,
+		rooms: rooms,
+		http:  newHTTPServer(ws, log),
 	}, nil
 }
 
@@ -167,6 +184,7 @@ func (n *node) abandon(ctx context.Context, sup *supervisor, t tasks) error {
 	stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), n.cfg.ShutdownBudget)
 	defer cancel()
 	err := n.feed.Stop(stopCtx)
+	n.rooms.Close()
 	if n.router != nil {
 		err = errors.Join(err, n.router.Close())
 	}

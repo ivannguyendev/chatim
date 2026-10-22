@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/command"
+	"github.com/ivannguyendev/chatim/apps/websocket/internal/interest"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
@@ -26,6 +27,7 @@ const (
 	CodePolicyViolation uint16 = 1008
 	CodeTooLarge        uint16 = 1009
 	CodeInternalError   uint16 = 1011
+	CodeTryAgainLater   uint16 = 1013
 	CodeUnauthenticated uint16 = 4001
 	CodeAuthTimeout     uint16 = 4002
 )
@@ -36,6 +38,10 @@ type Verifier interface {
 
 type Executor interface {
 	Execute(ctx context.Context, claims jwtverify.Claims, req *chatimv1.ClientRequest) (*chatimv1.ServerResponse, command.Outcome)
+}
+
+type Interest interface {
+	Register(tenant, user string, sink interest.Sink) *interest.Conn
 }
 
 type Options struct {

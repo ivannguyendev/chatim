@@ -22,6 +22,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/command"
+	"github.com/ivannguyendev/chatim/apps/websocket/internal/interest"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
@@ -174,20 +175,19 @@ type harness struct {
 	server   *Server
 	verifier *fakeVerifier
 	core     *fakeCore
+	rooms    *interest.Table
+	loader   *roomLoader
 }
 
 func newHarness(t *testing.T, opts Options) *harness {
 	t.Helper()
-	verifier, core := newFakeVerifier(t), newFakeCore()
-	server, err := New(opts, verifier, core, slog.New(slog.DiscardHandler))
+	verifier, core, loader := newFakeVerifier(t), newFakeCore(), &roomLoader{rooms: map[string][]interest.Room{}}
+	rooms := newInterestWith(t, loader)
+	server, err := New(opts, verifier, core, rooms, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	return &harness{t: t, server: server, verifier: verifier, core: core}
-}
-
-func (h *harness) token(user string, ttl time.Duration) string {
-	return h.verifier.issue("token-"+user+"-"+time.Now().Add(ttl).String(), "t1", user, time.Now().Add(ttl))
+	return &harness{t: t, server: server, verifier: verifier, core: core, rooms: rooms, loader: loader}
 }
 
 type testClient struct {
@@ -196,6 +196,7 @@ type testClient struct {
 	conn       *gws.Conn
 	raw        net.Conn
 	responses  chan *chatimv1.ServerResponse
+	frames     chan *chatimv1.ServerFrame
 	pongs      chan struct{}
 	done       chan struct{}
 	serverDone chan struct{}
@@ -215,6 +216,7 @@ func (h *harness) dialWrapped(reading bool, wrap func(net.Conn) net.Conn) *testC
 		t:          h.t,
 		raw:        clientSide,
 		responses:  make(chan *chatimv1.ServerResponse, 256),
+		frames:     make(chan *chatimv1.ServerFrame, 256),
 		pongs:      make(chan struct{}, 16),
 		done:       make(chan struct{}),
 		serverDone: make(chan struct{}),
@@ -263,7 +265,11 @@ func (tc *testClient) OnMessage(_ *gws.Conn, message *gws.Message) {
 		tc.t.Errorf("decode server frame: %v", err)
 		return
 	}
-	tc.responses <- frame.GetResponse()
+	if resp := frame.GetResponse(); resp != nil {
+		tc.responses <- resp
+		return
+	}
+	tc.frames <- &frame
 }
 
 func (tc *testClient) OnPong(*gws.Conn, []byte) { tc.pongs <- struct{}{} }

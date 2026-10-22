@@ -14,6 +14,7 @@ import (
 	"golang.org/x/time/rate"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/ivannguyendev/chatim/apps/websocket/internal/interest"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
@@ -29,6 +30,8 @@ const (
 	frameAuth
 	frameHeartbeat
 	frameRequest
+	frameOpenRoom
+	frameCloseRoom
 )
 
 type connection struct {
@@ -52,6 +55,7 @@ type connection struct {
 	authTimer *time.Timer
 	expiry    *time.Timer
 	rooms     map[uint64]*roomQueue
+	member    *interest.Conn
 	closeErr  error
 }
 
@@ -109,6 +113,10 @@ func (c *connection) receive(message *gws.Message) {
 		c.closeWith(CodePolicyViolation)
 	case kind == frameAuth:
 		c.authenticate(frame.GetAuth().GetToken())
+	case kind == frameOpenRoom:
+		c.openRoom(frame.GetOpenRoom().GetRoomId())
+	case kind == frameCloseRoom:
+		c.closeRoom(frame.GetCloseRoom().GetRoomId())
 	case kind == frameUnknown:
 		c.server.stats.unknownFrames.Add(1)
 	}
@@ -143,6 +151,10 @@ func kindOf(frame *chatimv1.ClientFrame) frameKind {
 		return frameHeartbeat
 	case *chatimv1.ClientFrame_Request:
 		return frameRequest
+	case *chatimv1.ClientFrame_OpenRoom:
+		return frameOpenRoom
+	case *chatimv1.ClientFrame_CloseRoom:
+		return frameCloseRoom
 	default:
 		return frameUnknown
 	}
@@ -163,11 +175,16 @@ func (c *connection) finish(err error) {
 	c.finished = true
 	c.closeErr = err
 	authed := c.authed
+	member := c.member
+	c.member = nil
 	stopTimer(c.authTimer)
 	stopTimer(c.expiry)
 	c.mu.Unlock()
 	if !authed {
 		c.server.stats.unauth.Add(-1)
+	}
+	if member != nil {
+		member.Unregister()
 	}
 	c.cancel()
 	close(c.closed)

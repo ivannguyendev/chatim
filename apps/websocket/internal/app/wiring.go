@@ -9,6 +9,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/command"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/config"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/feed"
+	"github.com/ivannguyendev/chatim/apps/websocket/internal/interest"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/session"
 	"github.com/ivannguyendev/chatim/pkg/coreroute"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
@@ -46,11 +47,21 @@ func feedConfig(cfg config.Config) feed.Config {
 	}
 }
 
-type idleHandler struct{}
+type eventRouter struct {
+	rooms *interest.Table
+}
 
-func (idleHandler) Event(feed.Envelope) {}
+func (r eventRouter) Event(env feed.Envelope) { r.rooms.Route(env) }
 
-func (idleHandler) Publish(feed.Envelope) {}
+func (eventRouter) Publish(feed.Envelope) {}
+
+func newInterest(cfg config.Config, routes *routerHolder, log *slog.Logger) (*interest.Table, error) {
+	loader, err := interest.NewCoreLoader(routes, cfg.RequestDeadline)
+	if err != nil {
+		return nil, err
+	}
+	return interest.New(interest.Config{Inflight: cfg.RoomIDsInflight, OpenPending: cfg.OpenPending}, loader, log)
+}
 
 func jwtConfig(cfg config.Config) jwtverify.Config {
 	return jwtverify.Config{Issuer: cfg.JWTIssuer, Audience: cfg.JWTAudience, Leeway: cfg.JWTLeeway}

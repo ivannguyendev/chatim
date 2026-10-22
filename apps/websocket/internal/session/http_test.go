@@ -131,13 +131,16 @@ func TestNewRejectsInvalidOptions(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			opts := testOptions()
 			mutate(&opts)
-			if _, err := New(opts, newFakeVerifier(t), newFakeCore(), slog.New(slog.DiscardHandler)); err == nil {
+			if _, err := New(opts, newFakeVerifier(t), newFakeCore(), newTestInterest(t), slog.New(slog.DiscardHandler)); err == nil {
 				t.Fatal("New accepted invalid options")
 			}
 		})
 	}
-	if _, err := New(testOptions(), nil, newFakeCore(), slog.New(slog.DiscardHandler)); err == nil {
+	if _, err := New(testOptions(), nil, newFakeCore(), newTestInterest(t), slog.New(slog.DiscardHandler)); err == nil {
 		t.Fatal("New accepted a nil verifier")
+	}
+	if _, err := New(testOptions(), newFakeVerifier(t), newFakeCore(), nil, slog.New(slog.DiscardHandler)); err == nil {
+		t.Fatal("New accepted a nil interest")
 	}
 }
 

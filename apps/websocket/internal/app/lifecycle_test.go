@@ -39,6 +39,10 @@ func TestRunIsReadyOnlyAfterTheSlotTableAndStopAnswersRunningCommandsBefore1001(
 		`chatim_websocket_core_call_seconds_count{command="GetHistory"} 0`,
 		`chatim_websocket_commands_rejected_total{reason="shutdown"} 0`,
 		"chatim_websocket_unknown_frames_total 0",
+		"chatim_websocket_interest_users 0",
+		"chatim_websocket_room_ids_load_seconds_count 0",
+		`chatim_websocket_events_dropped_total{reason="unknown_kind"} 0`,
+		`chatim_websocket_events_delivered_total{level="owner"} 0`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("/metrics lacks %q", want)

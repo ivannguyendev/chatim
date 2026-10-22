@@ -53,6 +53,8 @@ type Config struct {
 	ReplayRate       int
 	ConsumeBatch     int
 	ConsumeBytes     int
+	RoomIDsInflight  int
+	OpenPending      time.Duration
 }
 
 func AdminAddr() string { return envconfig.String("WS_ADMIN_ADDR", defaultAdminAddr) }
@@ -93,6 +95,8 @@ func Load() (Config, error) {
 		ReplayRate:       p.number("WS_REPLAY_RATE", 20000),
 		ConsumeBatch:     p.number("WS_CONSUME_BATCH", 500),
 		ConsumeBytes:     p.number("WS_CONSUME_BYTES", 8<<20),
+		RoomIDsInflight:  p.number("WS_ROOM_IDS_INFLIGHT", 64),
+		OpenPending:      p.span("WS_OPEN_PENDING", 10*time.Second),
 	}
 	if err := errors.Join(p.errs...); err != nil {
 		return Config{}, err
@@ -138,6 +142,8 @@ func (c Config) LogValue() slog.Value {
 		slog.Int("replay_rate", c.ReplayRate),
 		slog.Int("consume_batch", c.ConsumeBatch),
 		slog.Int("consume_bytes", c.ConsumeBytes),
+		slog.Int("room_ids_inflight", c.RoomIDsInflight),
+		slog.Duration("open_pending", c.OpenPending),
 	)
 }
 

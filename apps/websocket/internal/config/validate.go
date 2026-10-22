@@ -60,6 +60,8 @@ func (c Config) Validate() error {
 		positive("WS_FANOUT_QUEUE", c.FanoutQueue),
 		positive("WS_REPLAY_RATE", c.ReplayRate),
 		positive("WS_CONSUME_BATCH", c.ConsumeBatch),
+		positive("WS_ROOM_IDS_INFLIGHT", c.RoomIDsInflight),
+		positive("WS_OPEN_PENDING", c.OpenPending),
 		{c.ConsumeBytes >= minConsumeBytes, fmt.Sprintf("WS_CONSUME_BYTES must be at least %d (the NATS default max payload)", minConsumeBytes)},
 	}
 	var errs []error
