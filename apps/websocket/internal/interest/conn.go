@@ -2,6 +2,7 @@ package interest
 
 import (
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/ivannguyendev/chatim/pkg/ids"
@@ -20,6 +21,8 @@ type Conn struct {
 	early   []string
 	open    map[uint64]struct{}
 	pending map[uint64]*pendingOpen
+	sendMu  sync.Mutex
+	backlog backlogState
 }
 
 func newConn(t *Table, u *user, sink Sink) *Conn {
@@ -149,4 +152,5 @@ func (c *Conn) release() {
 		p.timer.Stop()
 	}
 	c.open, c.pending, c.early = nil, nil, nil
+	c.table.unmarkBacklog(c)
 }

@@ -91,13 +91,50 @@ func (l *fakeLoader) callsOf(tenant, user string) int {
 	return l.calls[userKey{tenant: tenant, user: user}]
 }
 
+type trySendMode int
+
+const (
+	acceptAll trySendMode = iota
+	refuseEvents
+	refuseAll
+)
+
 type fakeSink struct {
-	mu     sync.Mutex
-	frames []string
-	fails  int
+	mu       sync.Mutex
+	frames   []string
+	fails    int
+	mode     trySendMode
+	sends    int
+	trySends int
+}
+
+func (s *fakeSink) refusing(mode trySendMode) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mode = mode
+}
+
+func (s *fakeSink) TrySend(raw []byte) bool {
+	line := describe(raw)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.trySends++
+	if s.mode == refuseAll || (s.mode == refuseEvents && !strings.HasPrefix(line, "resync")) {
+		return false
+	}
+	s.frames = append(s.frames, line)
+	return true
 }
 
 func (s *fakeSink) Send(raw []byte) {
+	line := describe(raw)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sends++
+	s.frames = append(s.frames, line)
+}
+
+func describe(raw []byte) string {
 	var f chatimv1.ServerFrame
 	if err := proto.Unmarshal(raw, &f); err != nil {
 		panic(err)
@@ -111,12 +148,12 @@ func (s *fakeSink) Send(raw []byte) {
 	case f.GetRoomClosed() != nil:
 		reason := strings.TrimPrefix(f.GetRoomClosed().GetReason().String(), "ROOM_CLOSED_REASON_")
 		line = "closed " + f.GetRoomClosed().GetRoomId() + " " + strings.ToLower(reason)
+	case f.GetResync() != nil:
+		line = "resync " + strings.ToLower(strings.TrimPrefix(f.GetResync().GetReason().String(), "RESYNC_REASON_"))
 	default:
 		line = "other"
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.frames = append(s.frames, line)
+	return line
 }
 
 func (s *fakeSink) Fail() {
@@ -129,8 +166,20 @@ func (s *fakeSink) take() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := s.frames
-	s.frames = nil
+	s.frames, s.sends, s.trySends = nil, 0, 0
 	return out
+}
+
+func (s *fakeSink) counts() (sends, trySends int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.sends, s.trySends
+}
+
+func (s *fakeSink) pending() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.frames)
 }
 
 func (s *fakeSink) failures() int {
@@ -147,7 +196,7 @@ type fixture struct {
 }
 
 func newFixture(t *testing.T) *fixture {
-	return newFixtureWith(t, Config{Inflight: 64, OpenPending: 10 * time.Second})
+	return newFixtureWith(t, Config{Inflight: 64, OpenPending: 10 * time.Second, ResyncWindow: time.Minute})
 }
 
 func newFixtureWith(t *testing.T, cfg Config) *fixture {

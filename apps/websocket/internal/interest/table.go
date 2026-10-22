@@ -16,6 +16,7 @@ const shardCount = 64
 
 type Sink interface {
 	Send(frame []byte)
+	TrySend(frame []byte) bool
 	Fail()
 }
 
@@ -29,8 +30,9 @@ type Loader interface {
 }
 
 type Config struct {
-	Inflight    int
-	OpenPending time.Duration
+	Inflight     int
+	OpenPending  time.Duration
+	ResyncWindow time.Duration
 }
 
 type userKey struct {
@@ -55,31 +57,37 @@ type roomShard struct {
 }
 
 type Table struct {
-	cfg     Config
-	loader  Loader
-	log     *slog.Logger
-	seed    maphash.Seed
-	users   [shardCount]userShard
-	rooms   [shardCount]roomShard
-	slots   chan struct{}
-	lastSeq atomic.Uint64
-	life    context.Context
-	stop    context.CancelFunc
-	closed  atomic.Bool
-	loads   sync.WaitGroup
-	stats   stats
-	failLog rate.Sometimes
+	cfg        Config
+	loader     Loader
+	log        *slog.Logger
+	seed       maphash.Seed
+	users      [shardCount]userShard
+	rooms      [shardCount]roomShard
+	slots      chan struct{}
+	lastSeq    atomic.Uint64
+	life       context.Context
+	stop       context.CancelFunc
+	closeMu    sync.RWMutex
+	closed     bool
+	loads      sync.WaitGroup
+	resyncMu   sync.Mutex
+	resyncStop context.CancelFunc
+	backlogMu  sync.Mutex
+	backlog    map[*Conn]struct{}
+	backlogged atomic.Int64
+	stats      stats
+	failLog    rate.Sometimes
 }
 
 func New(cfg Config, loader Loader, log *slog.Logger) (*Table, error) {
-	if cfg.Inflight <= 0 || cfg.OpenPending <= 0 {
-		return nil, errors.New("interest: inflight and open pending must be positive")
+	if cfg.Inflight <= 0 || cfg.OpenPending <= 0 || cfg.ResyncWindow <= 0 {
+		return nil, errors.New("interest: inflight, open pending and resync window must be positive")
 	}
 	if loader == nil || log == nil {
 		return nil, errors.New("interest: loader and logger are required")
 	}
 	life, stop := context.WithCancel(context.Background())
-	t := &Table{cfg: cfg, loader: loader, log: log, seed: maphash.MakeSeed(), slots: make(chan struct{}, cfg.Inflight), life: life, stop: stop, failLog: rate.Sometimes{Interval: time.Second}}
+	t := &Table{cfg: cfg, loader: loader, log: log, seed: maphash.MakeSeed(), slots: make(chan struct{}, cfg.Inflight), life: life, stop: stop, backlog: map[*Conn]struct{}{}, failLog: rate.Sometimes{Interval: time.Second}}
 	for i := range t.users {
 		t.users[i].users = map[userKey]*user{}
 		t.rooms[i].members = map[roomKey]map[*user]struct{}{}
@@ -90,9 +98,21 @@ func New(cfg Config, loader Loader, log *slog.Logger) (*Table, error) {
 }
 
 func (t *Table) Close() {
-	t.closed.Store(true)
+	t.closeMu.Lock()
+	t.closed = true
+	t.closeMu.Unlock()
 	t.stop()
 	t.loads.Wait()
+}
+
+func (t *Table) spawn(fn func()) bool {
+	t.closeMu.RLock()
+	defer t.closeMu.RUnlock()
+	if t.closed {
+		return false
+	}
+	t.loads.Go(fn)
+	return true
 }
 
 func (t *Table) userShard(k userKey) *userShard {

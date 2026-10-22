@@ -24,6 +24,7 @@ func testConfig() Config {
 	return Config{
 		EventStream: "CHATIM_EVT", EventRoot: "evt", PublishStream: "CHATIM_WS", PublishRoot: "websocket.publish",
 		Replicas: 1, Workers: 2, Queue: 8, ReplayRate: 100, ConsumeBatch: 500, ConsumeBytes: 8 << 20,
+		ReplayMaxAge: 2 * time.Minute,
 	}
 }
 
@@ -41,9 +42,14 @@ func startedFeed(t *testing.T, h Handler, b *fakeBroker) *Feed {
 	return f
 }
 
-func TestNewNeedsAHandler(t *testing.T) {
+func TestNewNeedsAHandlerAndAReplayMaxAge(t *testing.T) {
 	if _, err := New(testConfig(), nil, quietLog()); !errors.Is(err, errNoHandler) {
 		t.Fatalf("New(nil) = %v", err)
+	}
+	cfg := testConfig()
+	cfg.ReplayMaxAge = 0
+	if _, err := New(cfg, newRecorder(), quietLog()); !errors.Is(err, errNoMaxAge) {
+		t.Fatalf("New without a max age = %v", err)
 	}
 }
 
@@ -74,12 +80,13 @@ func TestStartEnsuresThePublishStreamAndConsumesBothStreamsFromNow(t *testing.T)
 		if evt.opts != 2 || ws.opts != 2 {
 			t.Fatalf("consume options %d / %d, want batch limits and an error handler", evt.opts, ws.opts)
 		}
+		evt.handler(eventMsg("evt.acme.message.5.msg_created", 100, time.Now()))
 		evt.handler(eventMsg("evt.acme.message.5.msg_created", 101, time.Now()))
 		ws.handler(eventMsg("websocket.publish.acme", 8, time.Now()))
 		if err := f.Stop(t.Context()); err != nil {
 			t.Fatalf("Stop: %v", err)
 		}
-		if !slices.Equal(rec.seqs("5"), []uint64{101}) || len(rec.publish) != 1 || rec.publish[0].Seq != 8 {
+		if !slices.Equal(rec.seqs("5"), []uint64{101}) || len(rec.publish) != 1 || rec.publish[0].Seq != 8 || len(rec.jumps) != 0 {
 			t.Fatalf("events %v publish %+v", rec.events, rec.publish)
 		}
 		select {
@@ -220,7 +227,8 @@ func TestFeedMetricsFollowTheConnection(t *testing.T) {
 		if read("consumer_lag_seconds", "CHATIM_EVT") != 2 || read("consumer_pending", "CHATIM_EVT") != 4 ||
 			read("events_unknown_total", "") != 1 || read("consumer_resets_total", "CHATIM_WS") != 0 ||
 			read("consumer_stale_skipped_total", "CHATIM_EVT") != 0 || read("fanout_handler_panics_total", "") != 0 ||
-			read("events_dropped_at_stop_total", "") != 0 {
+			read("events_dropped_at_stop_total", "") != 0 || read("catchup_jumps_total", "CHATIM_EVT") != 0 ||
+			read("catchup_jump_failures_total", "CHATIM_WS") != 0 {
 			t.Fatal("stream metrics wrong")
 		}
 	})

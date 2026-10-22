@@ -70,7 +70,10 @@ type fakeBroker struct {
 	mu          sync.Mutex
 	ensured     []jetstream.StreamConfig
 	consumers   map[string]*fakeConsumer
+	history     map[string][]*fakeConsumer
 	lastSeq     map[string]uint64
+	created     map[string]time.Time
+	positionErr map[string]error
 	ensureErr   error
 	consumerErr map[string]error
 	consumeErr  map[string]error
@@ -80,7 +83,10 @@ type fakeBroker struct {
 }
 
 func newFakeBroker() *fakeBroker {
-	b := &fakeBroker{consumers: map[string]*fakeConsumer{}, lastSeq: map[string]uint64{}, consumerErr: map[string]error{}, consumeErr: map[string]error{}}
+	b := &fakeBroker{
+		consumers: map[string]*fakeConsumer{}, history: map[string][]*fakeConsumer{}, lastSeq: map[string]uint64{}, created: map[string]time.Time{},
+		positionErr: map[string]error{}, consumerErr: map[string]error{}, consumeErr: map[string]error{},
+	}
 	b.connected.Store(true)
 	return b
 }
@@ -92,10 +98,25 @@ func (b *fakeBroker) EnsureStream(_ context.Context, cfg jetstream.StreamConfig)
 	return b.ensureErr
 }
 
-func (b *fakeBroker) LastSeq(_ context.Context, stream string) (uint64, error) {
+func (b *fakeBroker) Position(_ context.Context, stream string) (Position, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.lastSeq[stream], nil
+	if err := b.positionErr[stream]; err != nil {
+		return Position{}, err
+	}
+	return Position{Last: b.lastSeq[stream], Created: b.created[stream]}, nil
+}
+
+func (b *fakeBroker) set(f func(*fakeBroker)) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	f(b)
+}
+
+func (b *fakeBroker) consumersOf(stream string) []*fakeConsumer {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]*fakeConsumer(nil), b.history[stream]...)
 }
 
 func (b *fakeBroker) OrderedConsumer(_ context.Context, stream string, cfg jetstream.OrderedConsumerConfig) (Consumer, error) {
@@ -106,6 +127,7 @@ func (b *fakeBroker) OrderedConsumer(_ context.Context, stream string, cfg jetst
 	}
 	c := &fakeConsumer{stream: stream, cfg: cfg, refuse: b.consumeErr[stream]}
 	b.consumers[stream] = c
+	b.history[stream] = append(b.history[stream], c)
 	return c, nil
 }
 

@@ -44,6 +44,7 @@ func feedConfig(cfg config.Config) feed.Config {
 		ReplayRate:    cfg.ReplayRate,
 		ConsumeBatch:  cfg.ConsumeBatch,
 		ConsumeBytes:  cfg.ConsumeBytes,
+		ReplayMaxAge:  cfg.ReplayMaxAge,
 	}
 }
 
@@ -56,12 +57,14 @@ func (r eventRouter) Event(env feed.Envelope) { r.rooms.Route(env) }
 
 func (r eventRouter) Publish(env feed.Envelope) { r.publisher.Deliver(env) }
 
+func (r eventRouter) Jumped(j feed.Jump) { r.rooms.Jumped(j) }
+
 func newInterest(cfg config.Config, routes *routerHolder, log *slog.Logger) (*interest.Table, error) {
 	loader, err := interest.NewCoreLoader(routes, cfg.RequestDeadline)
 	if err != nil {
 		return nil, err
 	}
-	return interest.New(interest.Config{Inflight: cfg.RoomIDsInflight, OpenPending: cfg.OpenPending}, loader, log)
+	return interest.New(interest.Config{Inflight: cfg.RoomIDsInflight, OpenPending: cfg.OpenPending, ResyncWindow: cfg.ResyncWindow}, loader, log)
 }
 
 func jwtConfig(cfg config.Config) jwtverify.Config {

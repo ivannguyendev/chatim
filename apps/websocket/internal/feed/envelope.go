@@ -7,19 +7,33 @@ import (
 )
 
 type Envelope struct {
-	Tenant   string
-	DataKind string
-	Room     string
-	Kind     string
-	ID       string
-	Seq      uint64
-	StoredAt time.Time
-	Data     []byte
+	Tenant     string
+	DataKind   string
+	Room       string
+	Kind       string
+	ID         string
+	Seq        uint64
+	StoredAt   time.Time
+	CatchingUp bool
+	Data       []byte
+}
+
+type JumpReason int
+
+const (
+	JumpLagTooOld JumpReason = iota
+	JumpConsumerLost
+)
+
+type Jump struct {
+	Reason JumpReason
+	Seq    uint64
 }
 
 type Handler interface {
 	Event(Envelope)
 	Publish(Envelope)
+	Jumped(Jump)
 }
 
 const eventTokens = 4

@@ -18,6 +18,7 @@ const inactiveThreshold = 30 * time.Second
 
 var (
 	errNoHandler    = errors.New("feed needs a handler")
+	errNoMaxAge     = errors.New("feed needs a positive replay max age")
 	errConsumeStuck = errors.New("consumer did not stop in time")
 	errStartedTwice = errors.New("feed already started")
 )
@@ -33,6 +34,7 @@ type Config struct {
 	ReplayRate    int
 	ConsumeBatch  int
 	ConsumeBytes  int
+	ReplayMaxAge  time.Duration
 }
 
 type Feed struct {
@@ -46,13 +48,20 @@ type Feed struct {
 	fan      atomic.Pointer[fanout]
 	mu       sync.Mutex
 	started  bool
+	life     context.Context
 	cancel   context.CancelFunc
-	consumes []jetstream.ConsumeContext
+	readers  []*receiver
+	jobsMu   sync.Mutex
+	stopping bool
+	jobs     sync.WaitGroup
 }
 
 func New(cfg Config, h Handler, log *slog.Logger) (*Feed, error) {
 	if h == nil {
 		return nil, errNoHandler
+	}
+	if cfg.ReplayMaxAge <= 0 {
+		return nil, errNoMaxAge
 	}
 	return &Feed{
 		cfg:     cfg,
@@ -80,13 +89,13 @@ func (f *Feed) Start(ctx context.Context, b Broker) error {
 	f.started = true
 	f.broker.Store(&b)
 	life, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	f.cancel = cancel
+	f.life, f.cancel = life, cancel
 	fan := newFanout(f.cfg.Workers, f.cfg.Queue, f.handler, f.log)
 	f.fan.Store(fan)
-	err := f.open(ctx, life, b, fan)
-	if err != nil {
+	if err := f.open(ctx, life, b, fan); err != nil {
 		return errors.Join(err, f.stopLocked(ctx))
 	}
+	f.spawn(func() { f.watch(life) })
 	return nil
 }
 
@@ -104,31 +113,37 @@ func (f *Feed) open(ctx, life context.Context, b Broker, fan *fanout) error {
 		{f.streams[1], f.cfg.PublishRoot, true},
 	}
 	for _, s := range sources {
-		r := newReceiver(life, s.root, s.publish, fan, f.cfg.ReplayRate, s.stats, &f.unknown, &f.dropped)
-		if err := f.consume(ctx, b, r); err != nil {
+		src := source{root: s.root, publish: s.publish, perSecond: f.cfg.ReplayRate, maxAge: f.cfg.ReplayMaxAge}
+		r := newReceiver(life, src, fan, s.stats, &f.unknown, &f.dropped, f.requestJump)
+		f.readers = append(f.readers, r)
+		pos, err := b.Position(ctx, s.stats.stream)
+		if err != nil {
+			return err
+		}
+		if err := f.consume(ctx, b, r, pos); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (f *Feed) consume(ctx context.Context, b Broker, r *receiver) error {
+func (f *Feed) consume(ctx context.Context, b Broker, r *receiver, pos Position) error {
 	stream := r.stats.stream
-	last, err := b.LastSeq(ctx, stream)
+	c, err := b.OrderedConsumer(ctx, stream, OrderedConfig(r.root+".>", pos.Last+1))
 	if err != nil {
 		return err
 	}
-	c, err := b.OrderedConsumer(ctx, stream, OrderedConfig(r.root+".>", last+1))
-	if err != nil {
-		return err
+	epoch, ok := r.restart(ctx, pos)
+	if !ok {
+		return ctx.Err()
 	}
-	cc, err := c.Consume(r.handle,
+	cc, err := c.Consume(r.handlerFor(epoch),
 		jetstream.PullMaxMessagesWithBytesLimit(f.cfg.ConsumeBatch, f.cfg.ConsumeBytes),
 		f.consumeErrors(stream))
 	if err != nil {
 		return fmt.Errorf("consume %s: %w", stream, err)
 	}
-	f.consumes = append(f.consumes, cc)
+	r.attach(cc)
 	return nil
 }
 
@@ -149,17 +164,21 @@ func (f *Feed) stopLocked(ctx context.Context) error {
 	f.cancel = nil
 	fan := f.fan.Load()
 	fan.halt()
+	f.stopJobs()
 	var errs []error
-	for _, cc := range f.consumes {
-		cc.Stop()
+	var stopped []jetstream.ConsumeContext
+	for _, r := range f.readers {
+		if cc := r.detach(); cc != nil {
+			stopped = append(stopped, cc)
+		}
 	}
-	for _, cc := range f.consumes {
+	for _, cc := range stopped {
 		if !closedWithin(ctx, cc) {
 			errs = append(errs, errConsumeStuck)
 			break
 		}
 	}
-	f.consumes = nil
+	f.readers = nil
 	errs = append(errs, fan.close(ctx))
 	(*f.broker.Load()).Close()
 	return errors.Join(errs...)

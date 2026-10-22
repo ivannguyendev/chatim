@@ -54,7 +54,9 @@ func (n *fakeNATS) EnsureStream(_ context.Context, cfg jetstream.StreamConfig) e
 	return nil
 }
 
-func (n *fakeNATS) LastSeq(context.Context, string) (uint64, error) { return 0, nil }
+func (n *fakeNATS) Position(context.Context, string) (feed.Position, error) {
+	return feed.Position{}, nil
+}
 
 func (n *fakeNATS) OrderedConsumer(context.Context, string, jetstream.OrderedConsumerConfig) (feed.Consumer, error) {
 	return n, nil

@@ -99,12 +99,13 @@ func (b *natsBroker) EnsureStream(ctx context.Context, cfg jetstream.StreamConfi
 	return wspublish.EnsureStream(ctx, b.js, cfg)
 }
 
-func (b *natsBroker) LastSeq(ctx context.Context, stream string) (uint64, error) {
+func (b *natsBroker) Position(ctx context.Context, stream string) (Position, error) {
 	s, err := b.js.Stream(ctx, stream)
 	if err != nil {
-		return 0, fmt.Errorf("stream %s: %w", stream, err)
+		return Position{}, fmt.Errorf("stream %s: %w", stream, err)
 	}
-	return s.CachedInfo().State.LastSeq, nil
+	info := s.CachedInfo()
+	return Position{Last: info.State.LastSeq, Created: info.Created}, nil
 }
 
 func (b *natsBroker) OrderedConsumer(ctx context.Context, stream string, cfg jetstream.OrderedConsumerConfig) (Consumer, error) {

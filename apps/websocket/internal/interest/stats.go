@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/pkg/metrics"
+	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 type dropReason int
@@ -17,9 +18,14 @@ const (
 )
 
 var (
-	levelLabels = [levelCount]string{"member", "open", "owner"}
-	dropLabels  = [dropReasonCount]string{"unknown_kind", "malformed"}
-	loadBounds  = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}
+	levelLabels  = [levelCount]string{"member", "open", "owner"}
+	resyncLabels = [...]string{
+		chatimv1.ResyncReason_RESYNC_REASON_LAG_TOO_OLD:    "lag_too_old",
+		chatimv1.ResyncReason_RESYNC_REASON_CONSUMER_LOST:  "consumer_lost",
+		chatimv1.ResyncReason_RESYNC_REASON_CLIENT_BACKLOG: "client_backlog",
+	}
+	dropLabels = [dropReasonCount]string{"unknown_kind", "malformed"}
+	loadBounds = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}
 )
 
 func gaugeOfInt64(v *atomic.Int64) func() float64 { return func() float64 { return float64(v.Load()) } }
@@ -31,6 +37,8 @@ type stats struct {
 	pairs        atomic.Int64
 	loadFailures atomic.Uint64
 	openRejected atomic.Uint64
+	reloads      atomic.Uint64
+	resyncs      [len(resyncLabels)]atomic.Uint64
 	delivered    [levelCount]atomic.Uint64
 	dropped      [dropReasonCount]atomic.Uint64
 	loadBuckets  []atomic.Uint64
@@ -39,6 +47,12 @@ type stats struct {
 }
 
 func (s *stats) init() { s.loadBuckets = make([]atomic.Uint64, len(loadBounds)) }
+
+func (s *stats) countResync(reason chatimv1.ResyncReason) {
+	if int(reason) > 0 && int(reason) < len(resyncLabels) {
+		s.resyncs[reason].Add(1)
+	}
+}
 
 func (s *stats) observeLoad(elapsed time.Duration) {
 	elapsed = max(elapsed, 0)
@@ -69,6 +83,16 @@ func (t *Table) Sources() []metrics.Source {
 		{Name: "room_ids_load_seconds", Help: "ListMyRoomIDs latency of room loads, in seconds.", Histogram: s.loadHistogram},
 		{Name: "room_ids_load_failures_total", Help: "Room loads that failed and closed the connections of the user.", Read: counterOf(&s.loadFailures)},
 		{Name: "open_room_rejected_total", Help: "open_room frames answered with room_closed not_member.", Read: counterOf(&s.openRejected)},
+		{Name: "interest_reloads_total", Help: "Room lists of connected users loaded again after the feed skipped part of the stream.", Read: counterOf(&s.reloads)},
+	}
+	for reason, label := range resyncLabels {
+		if label == "" {
+			continue
+		}
+		out = append(out, metrics.Source{
+			Name: "resyncs_total", Help: "resync frames queued to connections, by reason.",
+			Labels: map[string]string{"reason": label}, Read: counterOf(&s.resyncs[reason]),
+		})
 	}
 	for l := range levelCount {
 		out = append(out, metrics.Source{

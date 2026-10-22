@@ -14,6 +14,7 @@ const (
 	maxHeartbeatGap     = 5 * time.Second
 	minHeartbeatTimeout = 2 * maxHeartbeatGap
 	minConsumeBytes     = 1 << 20
+	catchUpAge          = 5 * time.Second
 )
 
 type rule struct {
@@ -64,6 +65,8 @@ func (c Config) Validate() error {
 		positive("WS_CONSUME_BATCH", c.ConsumeBatch),
 		positive("WS_ROOM_IDS_INFLIGHT", c.RoomIDsInflight),
 		positive("WS_OPEN_PENDING", c.OpenPending),
+		positive("WS_RESYNC_WINDOW", c.ResyncWindow),
+		{c.ReplayMaxAge > catchUpAge, fmt.Sprintf("WS_REPLAY_MAX_AGE must exceed the %v catch-up age", catchUpAge)},
 		{c.ConsumeBytes >= minConsumeBytes, fmt.Sprintf("WS_CONSUME_BYTES must be at least %d (the NATS default max payload)", minConsumeBytes)},
 	}
 	var errs []error

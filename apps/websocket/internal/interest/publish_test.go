@@ -32,6 +32,11 @@ func (s *noteSink) Send(raw []byte) {
 	s.other++
 }
 
+func (s *noteSink) TrySend(raw []byte) bool {
+	s.Send(raw)
+	return true
+}
+
 func (s *noteSink) Fail() {}
 
 func (s *noteSink) take() []*chatimv1.Notification {

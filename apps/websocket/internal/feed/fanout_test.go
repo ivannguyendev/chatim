@@ -15,6 +15,8 @@ type recorder struct {
 	mu      sync.Mutex
 	events  map[string][]uint64
 	publish []Envelope
+	jumps   []Jump
+	log     []string
 	gate    map[string]chan struct{}
 }
 
@@ -35,6 +37,20 @@ func (r *recorder) Event(e Envelope) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.events[e.Room] = append(r.events[e.Room], e.Seq)
+	r.log = append(r.log, "event "+strconv.FormatUint(e.Seq, 10))
+}
+
+func (r *recorder) Jumped(j Jump) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.jumps = append(r.jumps, j)
+	r.log = append(r.log, "jumped "+strconv.FormatUint(j.Seq, 10))
+}
+
+func (r *recorder) history() ([]Jump, []string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.jumps), slices.Clone(r.log)
 }
 
 func (r *recorder) Publish(e Envelope) {

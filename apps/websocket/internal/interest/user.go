@@ -13,20 +13,26 @@ type change struct {
 }
 
 type user struct {
-	key    userKey
-	mu     sync.Mutex
-	ready  bool
-	gone   bool
-	mark   uint64
-	cancel context.CancelFunc
-	conns  map[*Conn]struct{}
-	rooms  map[uint64]uint32
-	left   map[uint64]uint32
-	held   []change
+	key      userKey
+	ctx      context.Context
+	cancel   context.CancelFunc
+	mu       sync.Mutex
+	ready    bool
+	gone     bool
+	loading  bool
+	gen      uint64
+	mark     uint64
+	loadMark uint64
+	conns    map[*Conn]struct{}
+	rooms    map[uint64]uint32
+	left     map[uint64]uint32
+	held     []change
 }
 
-func newUser(k userKey) *user {
-	return &user{key: k, conns: map[*Conn]struct{}{}, rooms: map[uint64]uint32{}, left: map[uint64]uint32{}}
+func newUser(ctx context.Context, k userKey) *user {
+	u := &user{key: k, gen: 1, conns: map[*Conn]struct{}{}, rooms: map[uint64]uint32{}, left: map[uint64]uint32{}}
+	u.ctx, u.cancel = context.WithCancel(ctx)
+	return u
 }
 
 func (u *user) applyAdded(room uint64, ver uint32) (applied, wasMember bool) {
@@ -66,23 +72,34 @@ func (u *user) apply(ch change) {
 	u.applyRemoved(ch.room, ch.ver)
 }
 
-func (u *user) send(frame []byte) uint64 {
+func (u *user) deliver(frame []byte, catchingUp, resumes bool) uint64 {
 	var n uint64
 	for c := range u.conns {
-		c.sink.Send(frame)
-		n++
+		if c.deliver(frame, catchingUp, resumes) {
+			n++
+		}
 	}
 	return n
 }
 
 func (t *Table) Register(tenant, userID string, sink Sink) *Conn {
 	k := userKey{tenant: tenant, user: userID}
+	t.closeMu.RLock()
+	defer t.closeMu.RUnlock()
+	if t.closed {
+		u := newUser(t.life, k)
+		u.gone = true
+		c := newConn(t, u, sink)
+		c.gone = true
+		sink.Fail()
+		return c
+	}
 	s := t.userShard(k)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	u, found := s.users[k]
 	if !found {
-		u = newUser(k)
+		u = newUser(t.life, k)
 		s.users[k] = u
 		t.stats.users.Add(1)
 	}
@@ -92,20 +109,11 @@ func (t *Table) Register(tenant, userID string, sink Sink) *Conn {
 	u.conns[c] = struct{}{}
 	switch {
 	case !found:
-		t.startLoad(u)
+		t.loads.Go(func() { t.initialLoad(u) })
 	case u.ready:
 		sink.Send(readyFrame)
 	}
 	return c
-}
-
-func (t *Table) startLoad(u *user) {
-	ctx, cancel := context.WithCancel(t.life)
-	u.cancel = cancel
-	if t.closed.Load() {
-		cancel()
-	}
-	t.loads.Go(func() { t.load(ctx, u) })
 }
 
 func (c *Conn) Unregister() {

@@ -11,12 +11,14 @@ import (
 )
 
 type streamStats struct {
-	stream  string
-	lag     atomic.Uint64
-	pending atomic.Uint64
-	resets  atomic.Uint64
-	stale   atomic.Uint64
-	serial  atomic.Uint64
+	stream       string
+	lag          atomic.Uint64
+	pending      atomic.Uint64
+	resets       atomic.Uint64
+	stale        atomic.Uint64
+	serial       atomic.Uint64
+	jumps        atomic.Uint64
+	jumpFailures atomic.Uint64
 }
 
 func (s *streamStats) observe(meta *jetstream.MsgMetadata, now time.Time) {

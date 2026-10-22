@@ -12,12 +12,19 @@ import (
 
 func TestNewRejectsMissingParts(t *testing.T) {
 	quiet := slog.New(slog.DiscardHandler)
-	good := Config{Inflight: 1, OpenPending: time.Second}
+	good := Config{Inflight: 1, OpenPending: time.Second, ResyncWindow: time.Second}
 	for name, build := range map[string]func() (*Table, error){
-		"zero inflight":     func() (*Table, error) { return New(Config{OpenPending: time.Second}, newFakeLoader(), quiet) },
-		"zero open pending": func() (*Table, error) { return New(Config{Inflight: 1}, newFakeLoader(), quiet) },
-		"no loader":         func() (*Table, error) { return New(good, nil, quiet) },
-		"no logger":         func() (*Table, error) { return New(good, newFakeLoader(), nil) },
+		"zero inflight": func() (*Table, error) {
+			return New(Config{OpenPending: time.Second, ResyncWindow: time.Second}, newFakeLoader(), quiet)
+		},
+		"zero open pending": func() (*Table, error) {
+			return New(Config{Inflight: 1, ResyncWindow: time.Second}, newFakeLoader(), quiet)
+		},
+		"zero resync window": func() (*Table, error) {
+			return New(Config{Inflight: 1, OpenPending: time.Second}, newFakeLoader(), quiet)
+		},
+		"no loader": func() (*Table, error) { return New(good, nil, quiet) },
+		"no logger": func() (*Table, error) { return New(good, newFakeLoader(), nil) },
 	} {
 		if _, err := build(); err == nil {
 			t.Errorf("%s: New accepted it", name)
@@ -123,7 +130,7 @@ func TestAFailedLoadClosesEveryWaitingConnection(t *testing.T) {
 
 func TestLoadsInFlightAreBoundedAndALeavingUserFreesItsSlot(t *testing.T) {
 	run(t, func(t *testing.T) {
-		f := newFixtureWith(t, Config{Inflight: 2, OpenPending: time.Second})
+		f := newFixtureWith(t, Config{Inflight: 2, OpenPending: time.Second, ResyncWindow: time.Second})
 		f.loader.holding(true)
 		names := []string{"a", "b", "c", "d", "e"}
 		conns := map[string]*Conn{}
@@ -162,7 +169,7 @@ func TestCloseCancelsLoadsInFlight(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		loader := newFakeLoader()
 		loader.holding(true)
-		table, err := New(Config{Inflight: 1, OpenPending: time.Second}, loader, slog.New(slog.DiscardHandler))
+		table, err := New(Config{Inflight: 1, OpenPending: time.Second, ResyncWindow: time.Second}, loader, slog.New(slog.DiscardHandler))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -175,6 +182,26 @@ func TestCloseCancelsLoadsInFlight(t *testing.T) {
 			t.Fatal("a load canceled by Close counted as a failure")
 		}
 		c.Unregister()
+	})
+}
+
+func TestRegisterAfterCloseFailsTheConnectionWithoutStartingALoad(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		loader := newFakeLoader()
+		table, err := New(Config{Inflight: 1, OpenPending: time.Second, ResyncWindow: time.Second}, loader, slog.New(slog.DiscardHandler))
+		if err != nil {
+			t.Fatal(err)
+		}
+		table.Close()
+		sink := &fakeSink{}
+		c := table.Register("t1", "u", sink)
+		synctest.Wait()
+		c.Open("1")
+		c.Close("1")
+		c.Unregister()
+		if sink.failures() != 1 || loader.callsOf("t1", "u") != 0 || table.stats.users.Load() != 0 || len(sink.take()) != 0 {
+			t.Fatalf("failures %d loads %d users %d", sink.failures(), loader.callsOf("t1", "u"), table.stats.users.Load())
+		}
 	})
 }
 
@@ -192,13 +219,14 @@ func TestSourcesNameEveryMetricWithFixedLabels(t *testing.T) {
 	for _, want := range []string{
 		"interest_users", "interest_room_pairs", "room_ids_load_seconds", "room_ids_load_failures_total", "open_room_rejected_total",
 		"events_delivered_total{level=member}", "events_delivered_total{level=open}", "events_delivered_total{level=owner}",
-		"events_dropped_total{reason=unknown_kind}", "events_dropped_total{reason=malformed}",
+		"events_dropped_total{reason=unknown_kind}", "events_dropped_total{reason=malformed}", "interest_reloads_total",
+		"resyncs_total{reason=lag_too_old}", "resyncs_total{reason=consumer_lost}", "resyncs_total{reason=client_backlog}",
 	} {
 		if got[want] != 1 {
 			t.Errorf("metric %s registered %d times", want, got[want])
 		}
 	}
-	if len(got) != 10 {
+	if len(got) != 14 {
 		t.Fatalf("metrics = %v", got)
 	}
 }

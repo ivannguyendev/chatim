@@ -7,8 +7,9 @@ import (
 )
 
 type lazyFrame struct {
-	data []byte
-	out  []byte
+	data       []byte
+	out        []byte
+	catchingUp bool
 }
 
 func (f *lazyFrame) get() []byte {
@@ -20,6 +21,9 @@ func (f *lazyFrame) get() []byte {
 
 func (t *Table) Route(env feed.Envelope) {
 	t.raiseSeq(env.Seq)
+	if !env.CatchingUp {
+		t.caughtUp()
+	}
 	r, ok := kinds[env.Kind]
 	if !ok {
 		t.stats.dropped[dropUnknownKind].Add(1)
@@ -31,7 +35,7 @@ func (t *Table) Route(env feed.Envelope) {
 		return
 	}
 	k := roomKey{tenant: env.Tenant, room: room}
-	f := &lazyFrame{data: env.Data}
+	f := &lazyFrame{data: env.Data, catchingUp: env.CatchingUp}
 	switch r.audience {
 	case toMembers:
 		t.toMembers(k, f)
@@ -69,7 +73,7 @@ func (t *Table) toMembers(k roomKey, f *lazyFrame) {
 	for _, u := range t.members(k) {
 		u.mu.Lock()
 		if _, member := u.rooms[k.room]; member && u.ready && !u.gone {
-			t.stats.delivered[levelMember].Add(u.send(f.get()))
+			t.stats.delivered[levelMember].Add(u.deliver(f.get(), f.catchingUp, true))
 		}
 		u.mu.Unlock()
 	}
@@ -80,8 +84,9 @@ func (t *Table) toViewers(viewers []*Conn, f *lazyFrame, skip *user) {
 		if c.user == skip {
 			continue
 		}
-		c.sink.Send(f.get())
-		t.stats.delivered[levelOpen].Add(1)
+		if c.deliver(f.get(), f.catchingUp, true) {
+			t.stats.delivered[levelOpen].Add(1)
+		}
 	}
 }
 
@@ -93,57 +98,65 @@ func (t *Table) toOwner(k userKey, f *lazyFrame) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	if u.ready && !u.gone {
-		t.stats.delivered[levelOwner].Add(u.send(f.get()))
+		t.stats.delivered[levelOwner].Add(u.deliver(f.get(), f.catchingUp, true))
 	}
 }
 
 func (t *Table) membership(k roomKey, uk userKey, ch change, f *lazyFrame) {
 	viewers := t.viewers(k)
-	var skip *user
-	if u := t.lookup(uk); u != nil {
+	u := t.lookup(uk)
+	if u != nil {
 		u.mu.Lock()
-		if t.applyMembership(u, ch, f) {
-			skip = u
-		}
+		t.applyMembership(u, ch, f)
 		u.mu.Unlock()
 	}
-	t.toViewers(viewers, f, skip)
+	t.toViewers(viewers, f, u)
 }
 
-func (t *Table) applyMembership(u *user, ch change, f *lazyFrame) bool {
+func (t *Table) applyMembership(u *user, ch change, f *lazyFrame) {
 	switch {
 	case u.gone:
-		return false
+		return
 	case !u.ready:
 		u.held = append(u.held, ch)
-		return false
+		return
 	case ch.seq <= u.mark:
-		return false
-	case ch.added:
-		applied, wasMember := u.applyAdded(ch.room, ch.ver)
-		if !applied {
-			return false
-		}
-		t.stats.delivered[levelOwner].Add(u.send(f.get()))
-		if !wasMember {
-			t.index(u, ch.room)
-		}
-		for c := range u.conns {
-			c.admitted(ch.room)
-		}
-		return true
-	default:
-		applied, wasMember := u.applyRemoved(ch.room, ch.ver)
-		if !applied {
-			return false
-		}
-		t.stats.delivered[levelOwner].Add(u.send(f.get()))
-		if wasMember {
-			t.unindex(u, ch.room)
-		}
-		for c := range u.conns {
-			c.removed(ch.room)
-		}
-		return true
+		return
+	}
+	if u.loading {
+		u.held = append(u.held, ch)
+	}
+	if ch.added {
+		t.memberAdded(u, ch, f)
+		return
+	}
+	t.memberRemoved(u, ch, f)
+}
+
+func (t *Table) memberAdded(u *user, ch change, f *lazyFrame) {
+	applied, wasMember := u.applyAdded(ch.room, ch.ver)
+	if !applied {
+		return
+	}
+	t.stats.delivered[levelOwner].Add(u.deliver(f.get(), f.catchingUp, true))
+	if !wasMember {
+		t.index(u, ch.room)
+	}
+	for c := range u.conns {
+		c.admitted(ch.room)
+	}
+}
+
+func (t *Table) memberRemoved(u *user, ch change, f *lazyFrame) {
+	applied, wasMember := u.applyRemoved(ch.room, ch.ver)
+	if !applied {
+		return
+	}
+	t.stats.delivered[levelOwner].Add(u.deliver(f.get(), f.catchingUp, true))
+	if wasMember {
+		t.unindex(u, ch.room)
+	}
+	for c := range u.conns {
+		c.removed(ch.room)
 	}
 }

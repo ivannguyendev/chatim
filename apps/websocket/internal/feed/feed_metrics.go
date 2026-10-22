@@ -54,6 +54,8 @@ func (f *Feed) Sources() []metrics.Source {
 			metrics.Source{Name: "consumer_pending", Help: "Messages left in the stream after the last delivered one.", Labels: labels, Gauge: true, Read: func() float64 { return float64(s.pending.Load()) }},
 			metrics.Source{Name: "consumer_resets_total", Help: "Times the ordered consumer was recreated by the client library.", Labels: labels, Read: func() float64 { return float64(s.resets.Load()) }},
 			metrics.Source{Name: "consumer_stale_skipped_total", Help: "Messages skipped because their stream sequence was not above the last one handled.", Labels: labels, Read: func() float64 { return float64(s.stale.Load()) }},
+			metrics.Source{Name: "catchup_jumps_total", Help: "Times the feed dropped the backlog and restarted at the stream end.", Labels: labels, Read: func() float64 { return float64(s.jumps.Load()) }},
+			metrics.Source{Name: "catchup_jump_failures_total", Help: "Restarts at the stream end that failed and wait for the next watchdog pass.", Labels: labels, Read: func() float64 { return float64(s.jumpFailures.Load()) }},
 		)
 	}
 	return out

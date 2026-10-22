@@ -9,11 +9,26 @@ import (
 	"sync/atomic"
 )
 
-var errFanoutStuck = errors.New("fanout workers did not drain in time")
+var (
+	errFanoutStuck   = errors.New("fanout workers did not drain in time")
+	errFanoutStopped = errors.New("fanout stopped")
+)
 
 type job struct {
 	publish bool
 	env     Envelope
+	mark    *barrierMark
+}
+
+type barrierMark struct {
+	left   atomic.Int64
+	passed chan struct{}
+}
+
+func (m *barrierMark) pass() {
+	if m.left.Add(-1) == 0 {
+		close(m.passed)
+	}
 }
 
 type fanout struct {
@@ -40,6 +55,10 @@ func newFanout(workers, queue int, h Handler, log *slog.Logger) *fanout {
 
 func (f *fanout) work(queue chan job) {
 	for j := range queue {
+		if j.mark != nil {
+			j.mark.pass()
+			continue
+		}
 		if !f.skip.Load() {
 			f.deliver(j)
 		}
@@ -71,6 +90,34 @@ func (f *fanout) send(key string, j job) bool {
 		return true
 	case <-f.stop:
 		return false
+	}
+}
+
+func (f *fanout) barrier(ctx context.Context) error {
+	m := &barrierMark{passed: make(chan struct{})}
+	m.left.Store(int64(len(f.queues)))
+	f.mu.RLock()
+	if f.closed {
+		f.mu.RUnlock()
+		return errFanoutStopped
+	}
+	for _, q := range f.queues {
+		select {
+		case q <- job{mark: m}:
+		case <-f.stop:
+			f.mu.RUnlock()
+			return errFanoutStopped
+		case <-ctx.Done():
+			f.mu.RUnlock()
+			return ctx.Err()
+		}
+	}
+	f.mu.RUnlock()
+	select {
+	case <-m.passed:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 

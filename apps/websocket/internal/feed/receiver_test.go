@@ -16,7 +16,7 @@ func newTestReceiver(ctx context.Context, rec Handler, publish bool, perSecond i
 	if publish {
 		root = "websocket.publish"
 	}
-	return newReceiver(ctx, root, publish, fan, perSecond, &streamStats{stream: "S"}, &atomic.Uint64{}, &atomic.Uint64{}), fan
+	return newReceiver(ctx, source{root: root, publish: publish, perSecond: perSecond, maxAge: time.Hour}, fan, &streamStats{stream: "S"}, &atomic.Uint64{}, &atomic.Uint64{}, noJump), fan
 }
 
 func TestReceiverHandsTheEnvelopeToTheRoomWorker(t *testing.T) {
@@ -24,7 +24,7 @@ func TestReceiverHandsTheEnvelopeToTheRoomWorker(t *testing.T) {
 		got := make(chan Envelope, 1)
 		r, fan := newTestReceiver(t.Context(), handlerFuncs{event: func(e Envelope) { got <- e }}, false, 100)
 		stored := time.Now()
-		r.handle(eventMsg("evt.acme.mention.42.msg_created", 7, stored))
+		r.handle(0, eventMsg("evt.acme.mention.42.msg_created", 7, stored))
 		if err := fan.close(t.Context()); err != nil {
 			t.Fatal(err)
 		}
@@ -44,8 +44,8 @@ func TestReceiverHandsPublishPacketsToPublishWithTheirID(t *testing.T) {
 		withID.header.Set("Nats-Msg-Id", "n1-p0-abcd")
 		noID := eventMsg("websocket.publish.beta", 4, time.Now())
 		noID.header = nil
-		r.handle(withID)
-		r.handle(noID)
+		r.handle(0, withID)
+		r.handle(0, noID)
 		if err := fan.close(t.Context()); err != nil {
 			t.Fatal(err)
 		}
@@ -64,9 +64,9 @@ func TestReceiverDropsAndCountsMalformedMessages(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rec := newRecorder()
 		r, fan := newTestReceiver(t.Context(), rec, false, 100)
-		r.handle(eventMsg("evt.acme.message.42", 1, time.Now()))
-		r.handle(eventMsg("evt.acme..42.msg_created", 2, time.Now()))
-		r.handle(&fakeMsg{subject: "evt.acme.message.42.msg_created", metaErr: errors.New("no metadata")})
+		r.handle(0, eventMsg("evt.acme.message.42", 1, time.Now()))
+		r.handle(0, eventMsg("evt.acme..42.msg_created", 2, time.Now()))
+		r.handle(0, &fakeMsg{subject: "evt.acme.message.42.msg_created", metaErr: errors.New("no metadata")})
 		if err := fan.close(t.Context()); err != nil {
 			t.Fatal(err)
 		}
@@ -82,7 +82,7 @@ func TestReceiverLimitsTheRateOnlyWhileCatchingUp(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		r, fan := newTestReceiver(ctx, rec, false, 100)
 		for seq := uint64(1); seq <= 200; seq++ {
-			r.handle(eventMsg("evt.acme.message.1.msg_created", seq, time.Now().Add(-catchUpAge)))
+			r.handle(0, eventMsg("evt.acme.message.1.msg_created", seq, time.Now().Add(-catchUpAge)))
 		}
 		synctest.Wait()
 		if got := len(rec.seqs("1")); got != 200 {
@@ -92,7 +92,7 @@ func TestReceiverLimitsTheRateOnlyWhileCatchingUp(t *testing.T) {
 		go func() {
 			defer close(done)
 			for seq := uint64(201); seq <= 600; seq++ {
-				r.handle(eventMsg("evt.acme.message.2.msg_created", seq, time.Now().Add(-10*time.Second)))
+				r.handle(0, eventMsg("evt.acme.message.2.msg_created", seq, time.Now().Add(-10*time.Second)))
 			}
 		}()
 		time.Sleep(2 * time.Second)
@@ -116,21 +116,21 @@ func blockedReceiver(t *testing.T) (*receiver, *fanout, *recorder, chan struct{}
 	rec := newRecorder()
 	release := rec.block("1")
 	fan := newFanout(1, 1, rec, quietLog())
-	r := newReceiver(t.Context(), "evt", false, fan, 100, &streamStats{stream: "S"}, &atomic.Uint64{}, &atomic.Uint64{})
-	r.handle(eventMsg("evt.acme.message.1.msg_created", 1, time.Now()))
+	r := newReceiver(t.Context(), source{root: "evt", perSecond: 100, maxAge: time.Hour}, fan, &streamStats{stream: "S"}, &atomic.Uint64{}, &atomic.Uint64{}, noJump)
+	r.handle(0, eventMsg("evt.acme.message.1.msg_created", 1, time.Now()))
 	synctest.Wait()
-	r.handle(eventMsg("evt.acme.message.1.msg_created", 2, time.Now()))
+	r.handle(0, eventMsg("evt.acme.message.1.msg_created", 2, time.Now()))
 	return r, fan, rec, release
 }
 
 func TestReceiverKeepsOrderWhenANewCallbackStartsWhileTheOldOneIsBlocked(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		r, fan, rec, release := blockedReceiver(t)
-		go r.handle(eventMsg("evt.acme.message.1.msg_created", 3, time.Now()))
+		go r.handle(0, eventMsg("evt.acme.message.1.msg_created", 3, time.Now()))
 		synctest.Wait()
-		go r.handle(eventMsg("evt.acme.message.1.msg_created", 4, time.Now()))
+		go r.handle(0, eventMsg("evt.acme.message.1.msg_created", 4, time.Now()))
 		synctest.Wait()
-		go r.handle(eventMsg("evt.acme.message.1.msg_created", 2, time.Now()))
+		go r.handle(0, eventMsg("evt.acme.message.1.msg_created", 2, time.Now()))
 		synctest.Wait()
 		close(release)
 		synctest.Wait()
@@ -152,7 +152,7 @@ func TestReceiverLagIncludesTheWaitForAFreeWorker(t *testing.T) {
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
-			r.handle(eventMsg("evt.acme.message.1.msg_created", 3, time.Now()))
+			r.handle(0, eventMsg("evt.acme.message.1.msg_created", 3, time.Now()))
 		}()
 		time.Sleep(2 * time.Second)
 		close(release)
@@ -190,9 +190,13 @@ func TestStreamStatsTrackLagPendingAndConsumerResets(t *testing.T) {
 	})
 }
 
+func noJump(*receiver, JumpReason) {}
+
 type handlerFuncs struct {
 	event, publish func(Envelope)
 }
+
+func (handlerFuncs) Jumped(Jump) {}
 
 func (h handlerFuncs) Event(e Envelope) {
 	if h.event != nil {

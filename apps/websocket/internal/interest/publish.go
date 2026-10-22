@@ -55,11 +55,11 @@ func (p *Publisher) Deliver(env feed.Envelope) {
 			continue
 		}
 		seen[id] = struct{}{}
-		p.delivered.Add(p.toReadyUser(userKey{tenant: env.Tenant, user: id}, out))
+		p.delivered.Add(p.toReadyUser(userKey{tenant: env.Tenant, user: id}, out, env.CatchingUp))
 	}
 }
 
-func (p *Publisher) toReadyUser(k userKey, out []byte) uint64 {
+func (p *Publisher) toReadyUser(k userKey, out []byte, catchingUp bool) uint64 {
 	u := p.table.lookup(k)
 	if u == nil {
 		return 0
@@ -69,7 +69,7 @@ func (p *Publisher) toReadyUser(k userKey, out []byte) uint64 {
 	if !u.ready || u.gone {
 		return 0
 	}
-	return u.send(out)
+	return u.deliver(out, catchingUp, false)
 }
 
 func (p *Publisher) Sources() []metrics.Source {
