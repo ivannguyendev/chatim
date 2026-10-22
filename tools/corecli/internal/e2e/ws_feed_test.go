@@ -60,6 +60,13 @@ func TestWSFeedRecordsNotificationsClosesResyncsAndGaps(t *testing.T) {
 	if f.Len() != len(checks) {
 		t.Fatalf("Len = %d, want %d", f.Len(), len(checks))
 	}
+	tail := f.Entries(4)
+	if len(tail) != 1 || tail[0].To != 5 {
+		t.Fatalf("Entries(4) = %+v, want the gap ending at 5", tail)
+	}
+	if f.Entries(9) != nil {
+		t.Fatal("Entries past the end returned entries")
+	}
 }
 
 func TestWSFeedFindStartsAtTheMarkAndCountsEveryMatch(t *testing.T) {

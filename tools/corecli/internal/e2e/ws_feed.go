@@ -27,6 +27,7 @@ type WSEntry struct {
 	ID    string
 	Room  string
 	Seq   uint64
+	To    uint64
 	User  string
 }
 
@@ -72,13 +73,22 @@ func (f *WSFeed) Resync(reason chatimv1.ResyncReason) {
 func (f *WSFeed) Ready() { f.add(WSEntry{Frame: FrameReady}) }
 
 func (f *WSFeed) Gap(_ *wsclient.Client, g wsclient.Gap) {
-	f.add(WSEntry{Frame: FrameGap, Room: g.RoomID, Seq: g.From})
+	f.add(WSEntry{Frame: FrameGap, Room: g.RoomID, Seq: g.From, To: g.To})
 }
 
 func (f *WSFeed) Len() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return len(f.entries)
+}
+
+func (f *WSFeed) Entries(from int) []WSEntry {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if from >= len(f.entries) {
+		return nil
+	}
+	return append([]WSEntry(nil), f.entries[max(from, 0):]...)
 }
 
 func (f *WSFeed) Find(from int, m WSMatch) (int, WSEntry, bool) {

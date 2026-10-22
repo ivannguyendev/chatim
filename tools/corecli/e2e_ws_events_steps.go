@@ -193,17 +193,3 @@ func (r *wsEventsRun) removeB() error {
 	}
 	return r.b.absent(markB, e2e.WSMatch{Room: r.room})
 }
-
-func (r *wsEventsRun) clean() error {
-	for _, p := range []*wsPeer{r.a, r.b} {
-		stats := p.applier.Stats()
-		if err := e2e.CheckApplierStats(p.name, stats); err != nil {
-			return err
-		}
-		if err := p.absent(0, e2e.WSMatch{Frame: e2e.FrameResync}); err != nil {
-			return err
-		}
-		r.notes = append(r.notes, fmt.Sprintf("%s applier %d delivered, 0 duplicates, 0 gaps, %d stale", p.name, stats.Delivered, stats.Stale))
-	}
-	return nil
-}
