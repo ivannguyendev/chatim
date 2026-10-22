@@ -49,14 +49,14 @@ func (t *Table) Route(env feed.Envelope) {
 }
 
 func (t *Table) toReaders(env feed.Envelope, k roomKey, f *lazyFrame) {
-	ids, ok := readers(env)
+	users, ok := readers(env)
 	if !ok {
 		t.stats.dropped[dropMalformed].Add(1)
 		return
 	}
 	viewers := t.viewers(k)
-	named := make(map[*user]bool, len(ids))
-	for _, id := range ids {
+	named := make(map[*user]bool, len(users))
+	for _, id := range users {
 		u := t.lookup(userKey{tenant: env.Tenant, user: id})
 		if u == nil || named[u] {
 			continue

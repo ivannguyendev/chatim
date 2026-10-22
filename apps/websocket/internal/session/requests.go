@@ -124,7 +124,7 @@ func (c *connection) runRoom(room uint64, q *roomQueue, req *chatimv1.ClientRequ
 			c.dropRoom(room, q)
 			return
 		}
-		if sweepingCodes[code] {
+		if sweepingCodes[code] && req.GetSendMessage() != nil {
 			c.sweep(q, resp)
 		}
 		req = c.next(room, q)

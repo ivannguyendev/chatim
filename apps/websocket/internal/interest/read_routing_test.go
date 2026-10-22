@@ -69,3 +69,13 @@ func TestReadPositionsNeverCrossTenantsAndDropMalformedPayloads(t *testing.T) {
 		}
 	})
 }
+
+func TestReadPositionsIsAReadersRuleOnMemberDataAndReadUpdatedIsGone(t *testing.T) {
+	r, ok := kinds["read_positions"]
+	if !ok || r.audience != toReaders || !r.accepts(dataMember) || r.accepts(dataMessage) || r.accepts(dataRoom) {
+		t.Fatalf("read_positions rule = %+v (known %v), want the readers audience on member data only", r, ok)
+	}
+	if _, known := kinds["read_updated"]; known {
+		t.Fatal("read_updated still has a routing rule")
+	}
+}
