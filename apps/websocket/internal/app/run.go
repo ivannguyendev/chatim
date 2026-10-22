@@ -88,11 +88,12 @@ func wireServers(cfg config.Config, log *slog.Logger, verifier *jwtverify.Verifi
 	if err != nil {
 		return nil, err
 	}
-	fd, err := feed.New(feedConfig(cfg), eventRouter{rooms}, log)
+	publisher := interest.NewPublisher(rooms)
+	fd, err := feed.New(feedConfig(cfg), eventRouter{rooms, publisher}, log)
 	if err != nil {
 		return nil, err
 	}
-	handler, err := metrics.Handler(metricsSubsystem, slices.Concat(metricSources(ws, exec), fd.Sources(), rooms.Sources()))
+	handler, err := metrics.Handler(metricsSubsystem, slices.Concat(metricSources(ws, exec), fd.Sources(), rooms.Sources(), publisher.Sources()))
 	if err != nil {
 		return nil, err
 	}

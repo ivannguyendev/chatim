@@ -48,12 +48,13 @@ func feedConfig(cfg config.Config) feed.Config {
 }
 
 type eventRouter struct {
-	rooms *interest.Table
+	rooms     *interest.Table
+	publisher *interest.Publisher
 }
 
 func (r eventRouter) Event(env feed.Envelope) { r.rooms.Route(env) }
 
-func (eventRouter) Publish(feed.Envelope) {}
+func (r eventRouter) Publish(env feed.Envelope) { r.publisher.Deliver(env) }
 
 func newInterest(cfg config.Config, routes *routerHolder, log *slog.Logger) (*interest.Table, error) {
 	loader, err := interest.NewCoreLoader(routes, cfg.RequestDeadline)

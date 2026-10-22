@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/feed"
+	"github.com/ivannguyendev/chatim/apps/websocket/internal/interest"
 )
 
 func TestWiringPassesOneJWTLeewayToTheVerifierAndTheSessions(t *testing.T) {
@@ -91,12 +92,18 @@ func TestEventRouterHandsCoreEventsToTheInterestTable(t *testing.T) {
 		t.Fatalf("newInterest: %v", err)
 	}
 	defer rooms.Close()
-	router := eventRouter{rooms}
+	publisher := interest.NewPublisher(rooms)
+	router := eventRouter{rooms, publisher}
 	router.Event(feed.Envelope{Tenant: "t1", DataKind: "message", Room: "7", Kind: "typing_started", Seq: 1})
 	router.Publish(feed.Envelope{Tenant: "t1"})
 	for _, s := range rooms.Sources() {
 		if s.Name == "events_dropped_total" && s.Labels["reason"] == "unknown_kind" && s.Read() != 1 {
 			t.Fatalf("unknown kinds dropped = %v, want 1", s.Read())
+		}
+	}
+	for _, s := range publisher.Sources() {
+		if s.Name == "publish_packets_total" && s.Read() != 1 {
+			t.Fatalf("publish packets = %v, want 1", s.Read())
 		}
 	}
 }
