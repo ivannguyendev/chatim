@@ -1,6 +1,7 @@
 package mongostore
 
 import (
+	"cmp"
 	"slices"
 	"testing"
 
@@ -40,8 +41,19 @@ func TestRoomVersionsOfIsCoveredByTheUserRoomsIndex(t *testing.T) {
 		t.Fatalf("winning plan stages %v on %v, want PROJECTION_COVERED over an IXSCAN of %s without FETCH or SORT", stages, indexes, membersUserIndex)
 	}
 	got, err := s.RoomVersionsOf(t.Context(), "acme", "alice")
+	slices.SortFunc(got, compareRoomVersions)
 	want := []store.RoomVersion{{Room: itRoom, Ver: 1}, {Room: itRoom + 1, Ver: 2, Left: true}}
 	if err != nil || !slices.Equal(got, want) {
 		t.Fatalf("RoomVersionsOf = %+v, %v; want %+v", got, err, want)
 	}
+}
+
+func compareRoomVersions(a, b store.RoomVersion) int {
+	if a.Left != b.Left {
+		if a.Left {
+			return 1
+		}
+		return -1
+	}
+	return cmp.Compare(a.Room, b.Room)
 }
