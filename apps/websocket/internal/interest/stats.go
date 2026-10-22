@@ -102,7 +102,7 @@ func (t *Table) Sources() []metrics.Source {
 		{Name: "users_suspended", Help: "Users whose delivery is suspended until their rooms are loaded again after the feed skipped part of the stream.", Gauge: true, Read: gaugeOfInt64(&s.suspended)},
 		{Name: "reloads_total", Help: "Suspended users whose rooms were loaded again.", Read: counterOf(&s.reloads)},
 		{Name: "reload_seconds", Help: "Time from the first suspension of a user to the end of its reload, in seconds.", Histogram: s.reload.read},
-		{Name: "reload_failures_total", Help: "Reloads of suspended users that failed and went to the back of the reload queue.", Read: counterOf(&s.reloadFailures)},
+		{Name: "reload_failures_total", Help: "Reloads of suspended users that failed; the user is reloaded again after a pause.", Read: counterOf(&s.reloadFailures)},
 	}
 	for reason, label := range resyncLabels {
 		if label == "" {

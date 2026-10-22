@@ -75,6 +75,7 @@ type Table struct {
 	closeMu    sync.RWMutex
 	closed     bool
 	loads      sync.WaitGroup
+	jumpMu     sync.Mutex
 	resyncMu   sync.Mutex
 	reloads    *reloadRun
 	backlogMu  sync.Mutex
@@ -108,11 +109,19 @@ func (t *Table) Close() {
 	t.closeMu.Unlock()
 	t.stop()
 	t.loads.Wait()
+	t.jumpMu.Lock()
+	defer t.jumpMu.Unlock()
 	for _, u := range t.snapshot() {
 		u.mu.Lock()
 		t.resume(u)
 		u.mu.Unlock()
 	}
+}
+
+func (t *Table) isClosed() bool {
+	t.closeMu.RLock()
+	defer t.closeMu.RUnlock()
+	return t.closed
 }
 
 func (t *Table) spawn(fn func()) bool {

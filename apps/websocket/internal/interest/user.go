@@ -77,6 +77,15 @@ func (u *user) apply(ch change) {
 
 func (u *user) live() bool { return u.ready && !u.suspended && !u.gone }
 
+func (u *user) readied() bool {
+	for c := range u.conns {
+		if c.readied {
+			return true
+		}
+	}
+	return false
+}
+
 func (t *Table) suspend(u *user, now time.Time) {
 	if u.gone {
 		return

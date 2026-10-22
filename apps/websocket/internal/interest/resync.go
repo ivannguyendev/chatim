@@ -15,17 +15,31 @@ var jumpResync = map[feed.JumpReason]chatimv1.ResyncReason{
 	feed.JumpConsumerLost: chatimv1.ResyncReason_RESYNC_REASON_CONSUMER_LOST,
 }
 
+const retryDelay = time.Second
+
+type retry struct {
+	user *user
+	at   time.Time
+}
+
 type reloadRun struct {
-	front  []*user
-	queue  []*user
-	queued map[*user]struct{}
-	reason chatimv1.ResyncReason
+	front   []*user
+	queue   []*user
+	queued  map[*user]struct{}
+	later   []retry
+	delayed map[*user]struct{}
+	reason  chatimv1.ResyncReason
 }
 
 func (t *Table) Jumped(j feed.Jump) {
 	reason, ok := jumpResync[j.Reason]
 	if !ok {
 		reason = chatimv1.ResyncReason_RESYNC_REASON_CONSUMER_LOST
+	}
+	t.jumpMu.Lock()
+	defer t.jumpMu.Unlock()
+	if t.isClosed() {
+		return
 	}
 	t.lastSeq.Store(j.Seq)
 	now := time.Now()
@@ -83,7 +97,8 @@ func (t *Table) schedule(users []*user, reason chatimv1.ResyncReason) {
 		}
 	}
 	for _, u := range users {
-		if _, ok := seen[u]; !ok {
+		_, waiting := run.delayed[u]
+		if _, ok := seen[u]; !ok && !waiting {
 			seen[u] = struct{}{}
 			run.queued[u] = struct{}{}
 			queue = append(queue, u)
@@ -104,12 +119,30 @@ func (t *Table) requeue(u *user, reason chatimv1.ResyncReason) {
 	t.resyncMu.Lock()
 	defer t.resyncMu.Unlock()
 	run, fresh := t.currentRun(reason)
-	if _, ok := run.queued[u]; !ok {
-		run.queued[u] = struct{}{}
-		run.queue = append(run.queue, u)
+	_, queued := run.queued[u]
+	if _, waiting := run.delayed[u]; !queued && !waiting {
+		run.delayed[u] = struct{}{}
+		run.later = append(run.later, retry{user: u, at: time.Now().Add(retryDelay)})
 	}
 	if fresh {
 		t.startRun(run)
+	}
+}
+
+func (run *reloadRun) promote(now time.Time) {
+	for len(run.later) > 0 && !run.later[0].at.After(now) {
+		u := run.later[0].user
+		run.later = run.later[1:]
+		delete(run.delayed, u)
+		if _, ok := run.queued[u]; ok {
+			continue
+		}
+		run.queued[u] = struct{}{}
+		if u.reloadRank() == 0 {
+			run.front = append(run.front, u)
+			continue
+		}
+		run.queue = append(run.queue, u)
 	}
 }
 
@@ -127,11 +160,11 @@ func (t *Table) currentRun(reason chatimv1.ResyncReason) (*reloadRun, bool) {
 	if t.reloads != nil {
 		return t.reloads, false
 	}
-	return &reloadRun{queued: map[*user]struct{}{}, reason: reason}, true
+	return &reloadRun{queued: map[*user]struct{}{}, delayed: map[*user]struct{}{}, reason: reason}, true
 }
 
 func (t *Table) startRun(run *reloadRun) {
-	if len(run.queue) == 0 {
+	if len(run.queue) == 0 && len(run.later) == 0 {
 		return
 	}
 	t.reloads = run
@@ -140,9 +173,10 @@ func (t *Table) startRun(run *reloadRun) {
 	}
 }
 
-func (t *Table) nextReload(run *reloadRun) (*user, chatimv1.ResyncReason, bool) {
+func (t *Table) nextReload(run *reloadRun, now time.Time) (*user, chatimv1.ResyncReason, time.Time, bool) {
 	t.resyncMu.Lock()
 	defer t.resyncMu.Unlock()
+	run.promote(now)
 	for {
 		var u *user
 		switch {
@@ -150,13 +184,15 @@ func (t *Table) nextReload(run *reloadRun) (*user, chatimv1.ResyncReason, bool) 
 			u, run.front = run.front[0], run.front[1:]
 		case len(run.queue) > 0:
 			u, run.queue = run.queue[0], run.queue[1:]
+		case len(run.later) > 0:
+			return nil, run.reason, run.later[0].at, true
 		default:
 			t.reloads = nil
-			return nil, 0, false
+			return nil, 0, time.Time{}, false
 		}
 		if _, ok := run.queued[u]; ok {
 			delete(run.queued, u)
-			return u, run.reason, true
+			return u, run.reason, time.Time{}, true
 		}
 	}
 }
@@ -165,18 +201,23 @@ func (t *Table) reloadAll(run *reloadRun) {
 	interval := time.Second / time.Duration(t.cfg.ReloadRate)
 	due := time.Now()
 	for {
-		if !sleepUntil(t.life, due) || !t.acquire(t.life) {
+		if !sleepUntil(t.life, due) {
 			return
 		}
-		u, reason, ok := t.nextReload(run)
-		if !ok {
-			t.release()
+		u, reason, wake, ok := t.nextReload(run, time.Now())
+		switch {
+		case !ok:
 			return
+		case u == nil:
+			due = wake
+			continue
 		}
 		gen, live := u.reloadGen()
 		if !live {
-			t.release()
 			continue
+		}
+		if !t.acquire(t.life) {
+			return
 		}
 		if now := time.Now(); due.Before(now) {
 			due = now

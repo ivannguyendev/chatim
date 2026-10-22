@@ -61,10 +61,10 @@ func (t *Table) loadFailed(u *user, gen uint64, err error) bool {
 	}
 	u.loading = false
 	u.held = nil
-	if u.suspended {
+	if u.suspended && u.readied() {
 		t.stats.reloadFailures.Add(1)
 		t.failLog.Do(func() {
-			t.log.Warn("reload room ids failed; the user stays suspended and goes to the back of the reload queue", "err", err)
+			t.log.Warn("reload room ids failed; the user stays suspended and is reloaded again after a pause", "err", err)
 		})
 		return true
 	}
