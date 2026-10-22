@@ -183,7 +183,7 @@ Mỗi module dưới đây là một tập tài liệu đặc tả hoàn chỉnh
 | **Bộ đếm tin nhắn (rx, rc)** | Aggregate theo target | `$inc` tức thời + Phiếu hẹn sinh tồn | `counts_changed` mang version | Phiếu hẹn `CHATIM_TIMER` → `count_repair` đếm lại; event qua cờ bit 2/4 |
 | **Thành viên nhóm** | Tập `(room, user)` | BulkWrite upsert `$cond` kèm `request_id` | `member_added`, `member_removed` | Sweeper phát lại doc member |
 | **Số lượng thành viên** | Aggregate theo target | `$inc` theo doc đổi + Phiếu hẹn | `member_count_changed` | Phiếu hẹn → `member_count_repair`; event qua cờ bit 2 |
-| **Vị trí đã đọc** | Vị trí đọc | Update `read_seq`, tăng `read_ver` | `read_updated` không coalesce | Sweeper phát lại vị trí mới nhất |
+| **Vị trí đã đọc** | Vị trí đọc | Update `read_seq`, tăng `read_ver` | `read_positions` gom theo room mỗi 1s (D196) | Sweeper phát lại vị trí mới nhất (một dòng) |
 | **Ẩn tin / Xoá lịch sử** | Giá trị theo người đọc | Ghi fact thưa `hidden`, update `cleared_at` | `message_hidden`, `history_cleared` | Sweeper phát lại trạng thái hiện tại |
 | **Sổ nhận chỗ DM** | Sổ nhận chỗ | Upsert `$setOnInsert` theo cặp User | Không event riêng (thuộc room/member) | Lần mở phòng sau hoàn tất bước dở |
 | **Typing & Presence** | Ephemeral (Tạm thời) | **Không ghi cơ sở dữ liệu** | Đi thẳng qua NATS WebSocket | Mất khi rớt mạng, không cần phục hồi |

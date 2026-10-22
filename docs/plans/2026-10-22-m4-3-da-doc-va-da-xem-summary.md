@@ -1,7 +1,7 @@
 # M4 phần 3: đã đọc và đã xem — tóm tắt
 
-> Ngày: 2026-10-22 · Nhánh `feat/m4` · Trạng thái: chờ owner duyệt
-> **Các phần của M4:** (1) kết nối, token, lệnh ✅ · (2) nhận và đẩy event ✅ · **(3) đã đọc, đã xem** · (HTTPS) app `gateway` cho lệnh tải dữ liệu · (4) typing, online · (5) reconnect, vận hành, kiểm thử.
+> Ngày: 2026-10-22 · Nhánh `feat/m4` · Trạng thái: **đã xây** (owner duyệt 2026-10-22; D196–D197)
+> **Các phần của M4:** (1) kết nối, token, lệnh ✅ · (2) nhận và đẩy event ✅ · **(3) đã đọc, đã xem** ✅ · (HTTPS) app `gateway` cho lệnh tải dữ liệu · (4) typing, online · (5) reconnect, vận hành, kiểm thử.
 
 ## 1. Phần này làm gì
 
@@ -81,7 +81,7 @@ flowchart LR
 
 SDK chờ câu trả lời của `MarkRead` đang gửi rồi mới gọi `ListMyRooms`. Ví dụ: Lan đọc xong nhóm X rồi bấm quay ra danh sách; máy chờ `MarkRead` (~10ms) rồi mới tải danh sách, nên X hiện 0, không hiện lại số cũ. Phần 3 làm luật này trong `pkg/wsclient`; khi `ListMyRooms` chuyển sang HTTPS ở phần `gateway`, luật giữ nguyên.
 
-## 8. Luật cho websocket (đề nghị ghi thành quyết định)
+## 8. Luật cho websocket (đã ghi thành D196)
 
 Websocket chỉ giữ trạng thái nạp lại được từ core lúc login (kết nối, token, bảng định tuyến room của từng người, hàng gửi) và tín hiệu không lưu (typing, online). Websocket được chuyển, giữ thứ tự, giới hạn tốc độ, chia trang và định tuyến theo bảng đã khai báo. Websocket không được giữ lần ghi chưa tới core, không gộp hay diễn giải lại lệnh, không đổi lệnh này vì nghĩa của lệnh khác, không tính giá trị nghiệp vụ. Thứ gì mất hoặc sai sau khi websocket khởi động lại thì phải nằm ở core hoặc module.
 
@@ -123,6 +123,19 @@ Websocket chỉ giữ trạng thái nạp lại được từ core lúc login (k
 | Unit websocket | `read_positions` tới người đang mở room và máy của người có tên; không tới người khác; `MarkUnread` không bị `MarkRead` gửi trước vượt |
 | Unit `pkg/wsclient` | ≤ 1 `MarkRead`/giây mỗi room; chờ trả lời trước `ListMyRooms` |
 | e2e | A đọc → B đang mở nhóm nhận "A đã xem" trong ~1 giây; máy thứ hai của A về 0 unread; B không mở nhóm thì không nhận |
+
+## Kết quả thực thi
+
+Xây trên `feat/m4` (commit `f9b774a`…`1a56d4a`, 2026-10-22), mỗi phần đường publish và websocket qua một reviewer, không còn lỗi Critical/Important.
+
+- **Đúng như kế hoạch:** hộp gom `event/readbatch`, `read_positions` (id theo nội dung, không `actor`), xoá N cờ sau PubAck (`StateTargetsOf`, `AddAll`), sweeper dựng một dòng, `READ_EVENT_WINDOW` và luật khởi động, `MarkRead` là lệnh thứ 34, bỏ hẳn `read_updated` (field 32 `reserved`).
+- **Khác so với kế hoạch:**
+  - `pkg/wsclient` có thêm `CloseContext(ctx)`: gửi các `MarkRead` đang chờ và chờ trả lời trong hạn của `ctx` rồi mới đóng; `Close()` giữ nguyên chữ ký, dùng hạn 1 giây.
+  - Lỗi của `MarkRead` gửi theo nhịp (không ai chờ) báo qua option mới `OnReadError(room, err)`, vì trước đó chưa có handler lỗi.
+  - Websocket: một `MarkRead`/`MarkUnread` lỗi hạ tầng không làm hỏng các `SendMessage` xếp sau nó trong cùng room; chỉ `SendMessage` lỗi mới quét hàng (sửa sau review).
+  - Hàng gom đóng chung hạn với bước xả publisher, nên `stop_plan` không đổi (29,7s / 30s).
+- **Đo được:** e2e qua websocket-1: A đọc → B (đang mở nhóm) nhận `read_positions` có A sau **353ms**; máy thứ hai của A nhận; C (thành viên, không mở nhóm) không nhận; `MarkUnread` tới B với `read_ver` cao hơn, `read_seq` thấp hơn. Itest: hai người đọc trong một cửa sổ → một event hai dòng, cả hai cờ được xoá trước khi sweeper kịp chạy.
+- **Kiểm thử đã chạy:** unit (`-race`, `-count=5` ở `readbatch`, `stateclear`, `publish`, `member`, `app`, `interest`, `session`, `wsclient`), `make itest`, `make e2e` xanh.
 
 ## Câu hỏi còn mở
 

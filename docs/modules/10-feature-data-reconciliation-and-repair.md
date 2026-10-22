@@ -48,7 +48,7 @@ flowchart LR
 2. Ghi doc chính **kèm bit** trong **cùng** lệnh ghi (insert, upsert pipeline, `$inc` hoặc transaction owner D100). Không thêm lần ghi nào trước ack.
 3. Ack client.
 4. Đưa event vào publisher (hàng theo shard, không chặn). Hàng đầy hoặc NATS lỗi thì event không đi, cờ còn.
-5. Ack follower của shard chờ PubAck rồi đưa "collection + khoá + bit + version" (`publish.StateTargetOf`) vào `event/stateclear`. Hàng chạy một lần xoá 2s sau đích đầu tiên (hoặc khi đủ 16.384 đích): xếp cả lô theo `_id`, rồi mỗi collection và bit một `BulkWrite` không thứ tự (≤ 500 lệnh, không cắt đôi khoảng): dãy khoá liền nhau → một `UpdateMany` theo khoảng `_id`, khoá lẻ → `UpdateOne` theo `_id` (kèm version, bit). Mỗi lệnh tắt bit, hết bit thì `$unset` cả `_state` lẫn `_state_at`. Không dùng `$in` hay `$or` nhiều nhánh (bản đầu `updateMany` + `$or` 500 nhánh tốn 854ms mỗi lệnh dưới tải).
+5. Ack follower của shard chờ PubAck rồi đưa "collection + khoá + bit + version" (`publish.StateTargetsOf`: một đích cho mỗi event, N đích bit 2 `members` cho `read_positions`, đưa vào hàng một lần bằng `AddAll`; follower giữ event và chỉ tính đích sau PubAck) vào `event/stateclear`. Hàng chạy một lần xoá 2s sau đích đầu tiên (hoặc khi đủ 16.384 đích): xếp cả lô theo `_id`, rồi mỗi collection và bit một `BulkWrite` không thứ tự (≤ 500 lệnh, không cắt đôi khoảng): dãy khoá liền nhau → một `UpdateMany` theo khoảng `_id`, khoá lẻ → `UpdateOne` theo `_id` (kèm version, bit). Mỗi lệnh tắt bit, hết bit thì `$unset` cả `_state` lẫn `_state_at`. Không dùng `$in` hay `$or` nhiều nhánh (bản đầu `updateMany` + `$or` 500 nhánh tốn 854ms mỗi lệnh dưới tải).
 
 Core chết ở bất kỳ bước nào sau bước 2 thì doc còn cờ, và sweeper làm nốt bước 4–5.
 
@@ -96,7 +96,7 @@ Khoảng `_id` trong lệnh xoá chỉ gồm các seq **liền nhau đã PubAck*
 | `message_interactions` | 1 | `reaction_changed`/`bookmark_changed` | upsert khi thật sự đổi (chọn lại cùng emoji giữ nguyên byte nên không có cờ); doc trả lời không có cờ | PubAck và `ver` vẫn bằng |
 | `pin_actions` | 1 | `msg_pinned`/`msg_unpinned` | insert fact ghim | PubAck |
 | `members` | 1 | `member_added/removed/role_changed/priority_changed` | thêm, xoá, rời, đổi role/priority, transaction owner | PubAck và `ver` vẫn bằng |
-| | 2 | `read_updated` | `MarkRead`/`MarkUnread` khi vị trí thật sự đổi | PubAck và `read_ver` vẫn bằng |
+| | 2 | `read_positions` (gom theo room, D196) | `MarkRead`/`MarkUnread` khi vị trí thật sự đổi | PubAck của event có tên user đó và `read_ver` vẫn bằng |
 | | 4 | `history_cleared` | `ClearHistory` khi `cleared_at` thật sự tăng | PubAck và `cleared_at` vẫn bằng |
 | | 8 | `room_preferences_changed` | `SetRoomPreferences` | PubAck và `preference_ver` vẫn bằng |
 | `hidden` | 1 | `message_hidden` | lần ẩn đầu | PubAck |
@@ -106,7 +106,7 @@ Khoảng `_id` trong lệnh xoá chỉ gồm các seq **liền nhau đã PubAck*
 
 `mentions`, `reply_threads`, doc trả lời và `room_dms` không có event nên không có cờ. `_state_at` ghi bằng `$min` (bit mới không đẩy lùi bit cũ): insert lấy giờ của doc, update lấy giờ server `$$NOW` (D149).
 
-**Vì sao xoá bit kèm điều kiện version (D145).** Lan đọc tới `read_seq` 40 (`read_ver` 7), core phát `read_updated` v7. Ngay trước lúc xoá cờ, Lan đọc tiếp tới 45 (`read_ver` 8) và bit 2 bật lại. Xoá có điều kiện `read_ver = 7` thì doc v8 không khớp, bit giữ nguyên; nếu `read_updated` v8 publish lỗi, sweeper vẫn phát bù.
+**Vì sao xoá bit kèm điều kiện version (D145).** Lan đọc tới `read_seq` 40 (`read_ver` 7), core phát `read_positions` có dòng của Lan ở `read_ver` 7. Ngay trước lúc xoá cờ, Lan đọc tiếp tới 45 (`read_ver` 8) và bit 2 bật lại. Xoá có điều kiện `read_ver = 7` thì doc v8 không khớp, bit giữ nguyên; nếu `read_positions` mang v8 publish lỗi, sweeper vẫn phát bù (một dòng từ doc).
 
 ### 3.2. Sweeper (D146, D147, D154, D158)
 
@@ -154,7 +154,7 @@ Publish lỗi thì để cờ; CAS thua trong sweeper thì để cờ; projectio
 
 | Package | Vai trò |
 |---|---|
-| `event/publish` | Hàng theo shard, `PublishMsgAsync`; `WithStateClears` + ack follower mỗi shard (4096 mục); `StateTargetOf` (19 kind) |
+| `event/publish` | Hàng theo shard, `PublishMsgAsync`; `WithStateClears` + ack follower mỗi shard (4096 mục); `StateTargetsOf` (19 kind) |
 | `event/stateclear` | Hàng xoá cờ trong RAM: `Add` không chặn, xả mỗi `STATE_CLEAR_FLUSH`/`STATE_CLEAR_BATCH`, đầy thì bỏ và đếm, xả trong 1s khi dừng |
 | `event/sweep` | Sweeper slot 0: `pass`, `page`, `publish`, `pace`, `rebuild_*` cho 7 collection |
 | `event/projection` | Consumer `projections` (một durable, slot 0, ack từng tin) với 2 handler (`room_activity`, `reply_index`), `EnsureConsumer` (xoá 3 durable cũ), `Decode` |

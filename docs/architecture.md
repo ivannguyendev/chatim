@@ -1,7 +1,7 @@
 # chatim — Kiến trúc hệ thống (Single Source of Truth)
 
 > Ngày cập nhật: 2026-10-17 · Trạng thái: **Nguồn sự thật duy nhất (SSOT)** cho toàn bộ quy chuẩn kiến trúc của `chatim`.
-> Nhật ký 195 quyết định kỹ thuật: [docs/decision-log.md](./decision-log.md) (D1–D195). Danh mục event (core phát gì, ai nhận gì): [docs/events.md](./events.md).
+> Nhật ký 197 quyết định kỹ thuật: [docs/decision-log.md](./decision-log.md) (D1–D197). Danh mục event (core phát gì, ai nhận gì): [docs/events.md](./events.md).
 > Đặc tả chi tiết 10 Module tính năng (How-It-Works & Flowcharts): [docs/modules/README.md](./modules/README.md).
 > Lộ trình phát triển các Milestone: [docs/roadmap.md](./roadmap.md).
 
@@ -80,7 +80,7 @@ Mọi thiết kế và dòng code trong `chatim` bắt buộc phải tuân thủ
 | **Tập (target, user)** | `message_interactions` (reaction, bookmark, reply doc); `members` | Một ghi theo khoá unique `_id` + `ver`. Cùng giá trị giữ nguyên; gỡ/rời để lại tombstone `state = 2`. Lệnh owner = 1 transaction (D100). | Id `{target}-{user}-v{ver}`; bit trên doc, xoá có điều kiện `ver`; doc hiện tại thắng. | Sweeper phát lại doc hiện tại; chỉ trạng thái cuối được bảo đảm. |
 | **Aggregate theo target** | Số emoji trên tin (`rx`), số trả lời (`rc`), `member_count` | `$inc` delta thực tế + Phiếu hẹn sinh tồn (D111). Số đếm lưu không kẹp (unclamped), kẹp lúc đọc. | `counts_changed`, `member_count_changed` (bit 2/4 trên `messages`, bit 2 trên `rooms`, xoá theo version). | Phiếu bật trên `CHATIM_TIMER`: consumer `timer-due` chạy `count_repair` / `member_count_repair` đếm lại + CAS version kèm bit. Vận hành qua `/app recount`. |
 | **Giá trị theo người đọc** | Unread, cờ đã đọc mention, view ẩn/xoá, danh sách `ListMyRooms` | Không lưu kết quả; tính lúc đọc từ fact thưa (`hidden`), mốc `cleared_at` và cache đuôi room (D123, D137). | Unread/Danh sách: không event. Ẩn/Clear: `message_hidden`, `history_cleared`. | Sweeper phát lại trạng thái hiện tại; Client tải lại khi reconnect. |
-| **Vị trí đọc** | `members.read_seq` + `read_ver`; cài đặt `preference_ver` | Cập nhật doc người đọc, không đụng `ver`: `MarkRead` nâng khi `read_seq < seq`, tăng `read_ver + 1`. `SetRoomPreferences` tăng `preference_ver + 1`. | `read_updated` không coalesce; `room_preferences_changed`. | Bit 2/8 trên `members`, xoá theo `read_ver`/`preference_ver`; sweeper phát lại trạng thái hiện tại. |
+| **Vị trí đọc** | `members.read_seq` + `read_ver`; cài đặt `preference_ver` | Cập nhật doc người đọc, không đụng `ver`: `MarkRead` nâng khi `read_seq < seq`, tăng `read_ver + 1`. `SetRoomPreferences` tăng `preference_ver + 1`. | `read_positions`: core gom theo room mỗi `READ_EVENT_WINDOW` (1s), mỗi user một dòng, tối đa 1.000 dòng mỗi event, id theo nội dung (D196); `room_preferences_changed`. | Bit 2/8 trên `members`, xoá theo `read_ver`/`preference_ver`; sweeper phát lại trạng thái hiện tại. |
 | **Sổ nhận chỗ** | `room_dms`: một room DM mỗi cặp user (D117) | Upsert `$setOnInsert` theo `_id` unique duy nhất; người tới sau nhận lại phòng đã có. Bước đảm bảo chạy lại an toàn. | Không event riêng; thuộc room/member tạo tương ứng. | Lần mở sau hoàn tất bước dở; số member qua phiếu hẹn sinh tồn. |
 | **Ephemeral** | Typing, presence | Không lưu DB; truyền trực tiếp qua WebSocket ↔ NATS. | Subject `live.*.eph.*` | Mất khi rớt mạng, không cần phục hồi. |
 
@@ -302,4 +302,4 @@ Toàn bộ chi tiết kỹ thuật vận hành (How-It-Works), sơ đồ Mermaid
 ## 10. Tra cứu Quyết định Kỹ thuật (Decision Log)
 
 Mọi quyết định lựa chọn giải pháp kỹ thuật, đánh đổi (trade-offs), phương án bị loại bỏ (rejected alternatives) từ ngày đầu dự án đến Mention App hiện tại được lưu trữ đầy đủ tại:
-👉 **[Architecture Decision Records (D1–D195)](./decision-log.md)**
+👉 **[Architecture Decision Records (D1–D197)](./decision-log.md)**

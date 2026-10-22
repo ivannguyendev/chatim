@@ -1,10 +1,10 @@
 # chatim — Danh mục event
 
-> Cập nhật: 2026-10-22. Trạng thái: Mention App đã merge `main` (PR #16), D162–D176 ([tóm tắt](plans/2026-10-17-mention-app-summary.md)); websocket M4 phần 2 (nhận và đẩy event, gói `WsPublish`) xây trên `feat/m4`, D189–D195 ([tóm tắt](plans/2026-10-21-m4-2-nhan-va-day-event-summary.md)).
+> Cập nhật: 2026-10-22. Trạng thái: Mention App đã merge `main` (PR #16), D162–D176 ([tóm tắt](plans/2026-10-17-mention-app-summary.md)); websocket M4 phần 2 (nhận và đẩy event, gói `WsPublish`) xây trên `feat/m4`, D189–D195 ([tóm tắt](plans/2026-10-21-m4-2-nhan-va-day-event-summary.md)); M4 phần 3 (`read_positions` thay `read_updated`), D196–D197 ([tóm tắt](plans/2026-10-22-m4-3-da-doc-va-da-xem-summary.md)).
 >
 > Tài liệu liên quan:
 > - Nguồn sự thật cơ chế: [thiết kế](architecture.md) §8.1 (hợp đồng consumer) và [Module 10](modules/10-feature-data-reconciliation-and-repair.md) (cờ `_state`, sweeper, projection).
-> - Quyết định: [Decision Log](decision-log.md) D104, D108, D141–D160, D162–D176, D189–D195.
+> - Quyết định: [Decision Log](decision-log.md) D104, D108, D141–D160, D162–D176, D189–D197.
 
 Tài liệu này trả lời ba câu: core và Mention App phát event gì, ở subject nào; ai nhận event nào; và app sau này nên đăng ký subject nào để chỉ nhận đúng data mình cần.
 
@@ -48,7 +48,7 @@ Nếu publish lỗi, sweeper trên core giữ slot 0 phát lại từ doc hiện
 | `msg_pinned`, `msg_unpinned` | `room` | `{room}-p{pin_ver}` | `PinMessage`, `UnpinMessage` | lệnh, sweeper |
 | `member_count_changed` | `room` | `{room}-members-v{member_count_ver}` | thêm/bớt người, sửa số | lệnh, phiếu hẹn, `/app recount`, sweeper |
 | `member_added`, `member_removed`, `member_role_changed`, `member_priority_changed` | `member` | `{room}-mb-{user}-v{ver}` | lệnh thành viên | lệnh, sweeper |
-| `read_updated` | `member` | `{room}-rd-{user}-v{read_ver}` | `MarkRead`, `MarkUnread` | lệnh, sweeper |
+| `read_positions` | `member` | `{room}-rp-{16 hex đầu sha256 các dòng "user:read_seq:read_ver" nối bằng "\n", sắp theo user}` | `MarkRead`, `MarkUnread`: core gom theo room mỗi `READ_EVENT_WINDOW` (1s), mỗi user một dòng (`read_ver` lớn nhất), tối đa 1.000 dòng mỗi event, không `actor` (D196) | hàng gom `event/readbatch`; sweeper (một dòng từ doc) |
 | `message_hidden` | `member` | `{room}-hd-{user}-{thread}-{seq}` | `HideMessage` lần đầu | lệnh, sweeper |
 | `history_cleared` | `member` | `{room}-cl-{user}-{cleared_at ms}` | `ClearHistory` | lệnh, sweeper |
 | `bookmark_changed` | `member` | `{room}-bm-{thread}-{seq}-{user}-v{ver}` | `SetBookmark` | lệnh, sweeper |
@@ -68,7 +68,7 @@ Nếu publish lỗi, sweeper trên core giữ slot 0 phát lại từ doc hiện
 | Core `roomcache.Watch` (mọi core) | core NATS `live` | `room_updated`, `member_count_changed` | quên cache thông tin room |
 | Mention App, watch tập nhóm theo room (mọi core, D172) | core NATS `live.*.member.*.evt.{kind}` | `member_added`, `member_removed` | quên tập nhóm của room (cache gợi ý `@nhóm`) |
 | **Mention App** | durable `mention`, queue group: mọi pod/core cùng kéo, mỗi event tới một pod, lô 512/250ms mỗi pod, 8 worker, lọc đúng 3 subject: `evt.*.mention.*.msg_created`, `evt.*.message.*.msg_edited`, `evt.*.message.*.msg_deleted` | 3 kind đó | ghi `mentions`, `mention_rooms`; bung `@nhóm`/`@all`; phát gói `WsPublish` `mention_notified`/`mention_retracted` vào `websocket.publish.{t}` |
-| Websocket M4 (mọi node, §3.1) | mỗi node hai ordered consumer: `CHATIM_EVT` filter `evt.>` và `CHATIM_WS` filter `websocket.publish.>`, bắt đầu ở seq cuối + 1 | 19 kind của bảng §3.1; gói `WsPublish` | đẩy realtime tới máy đang nối vào node đó; không biết thông báo là gì |
+| Websocket M4 (mọi node, §3.1) | mỗi node hai ordered consumer: `CHATIM_EVT` filter `evt.>` và `CHATIM_WS` filter `websocket.publish.>`, bắt đầu ở seq cuối + 1 | 19 kind của bảng §3.1 (gồm `read_positions`); gói `WsPublish` | đẩy realtime tới máy đang nối vào node đó; không biết thông báo là gì |
 | App notification + push Phase 2 (chưa xây) | hộp thư `notify.{t}.{kind}` | thông báo | lọc tắt thông báo; `WsPublish` vào `websocket.publish.{t}` cho người online, APNs/FCM cho người offline |
 
 ### 3.1. Websocket nhận gì (M4 phần 2, D189–D195)
@@ -84,14 +84,15 @@ Mỗi node websocket một kết nối NATS, hai **ordered consumer** (không du
 | `member_role_changed`, `member_priority_changed` | `member` | kết nối đang mở room (`open_room`) |
 | `member_count_changed`, `msg_pinned`, `msg_unpinned` | `room` | kết nối đang mở room |
 | `reaction_changed`, `counts_changed` | `message` | kết nối đang mở room |
-| `message_hidden`, `history_cleared`, `bookmark_changed`, `room_preferences_changed`, `read_updated` | `member` | chỉ chủ nhân (mọi kết nối của (tenant, user) đó); "đã xem" cho cả nhóm ở phần 3 |
+| `message_hidden`, `history_cleared`, `bookmark_changed`, `room_preferences_changed` | `member` | chỉ chủ nhân (mọi kết nối của (tenant, user) đó) |
+| `read_positions` | `member` | kết nối đang mở room (mức mở) cộng mọi kết nối của từng user có tên trong `entries` mà danh sách room trong RAM còn room đó và không tạm ngừng; mỗi kết nối nhận một lần (D196) |
 | kind khác | — | không ai; bỏ và đếm `events_dropped_total{reason="unknown_kind"}` (mặc định chặn, để event riêng tư mới không lọt) |
 
 Event đi xuống máy nguyên bytes trong `ServerFrame.event` (field 21), mã hoá một lần mỗi node. Gói `WsPublish` từ `CHATIM_WS`: tenant gói phải bằng tenant subject, `kind` là một token; nội dung đi trong `ServerFrame.notification` (field 22) tới từng người trong `targets.users` đang sẵn sàng trên node (tên trùng chỉ gửi một lần); người khác bỏ qua. Máy áp event theo hợp đồng §5 (`pkg/wsclient.Applier` là bản mẫu).
 
 Projection `mention_read` đã bỏ (D165); core vẫn xoá durable cũ `projection-mention_read` lúc khởi động.
 
-Kind không handler nào giữ (`room_created`, `counts_changed`, `member_count_changed`, `message_hidden`, `history_cleared`, `read_updated`) vẫn tới `projections` vì nó lọc `evt.>`; consumer chỉ ack.
+Kind không handler nào giữ (`room_created`, `counts_changed`, `member_count_changed`, `message_hidden`, `history_cleared`, `read_positions`) vẫn tới `projections` vì nó lọc `evt.>`; consumer chỉ ack.
 
 Tin không có mention không tới Mention App. Bench 2.000 tin/s với 5% tin có mention: Mention App nhận khoảng 100 event/s cộng các lần sửa/xoá, thay vì 2.000.
 

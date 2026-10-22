@@ -226,7 +226,7 @@ Với app, compose publish ra host chỉ gRPC của core và WebSocket của web
 
 - [Kiến trúc hệ thống (nguồn sự thật)](docs/architecture.md)
 - [10 Module kỹ thuật tính năng (How-It-Works)](docs/modules/README.md)
-- [Nhật ký quyết định kiến trúc D1–D195](docs/decision-log.md)
+- [Nhật ký quyết định kiến trúc D1–D197](docs/decision-log.md)
 - [Danh mục event (core và Mention App phát gì, ai nhận gì)](docs/events.md)
 - [Roadmap](docs/roadmap.md)
 - [Kết quả PoC](docs/poc/README.md)
