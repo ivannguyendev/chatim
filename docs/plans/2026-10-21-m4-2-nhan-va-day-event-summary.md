@@ -1,6 +1,6 @@
 # M4 phần 2: nhận và đẩy event xuống máy
 
-> **Trạng thái:** owner duyệt hướng 2026-10-21. Phần 2 trong 5 phần của M4; phần 1 (kết nối, token, lệnh) đã xong.
+> **Trạng thái:** đã xây trên `feat/m4` (2026-10-22, commit `2b3c6c9`…`ec75155`); owner duyệt hướng 2026-10-21. Phần 2 trong 5 phần của M4; phần 1 (kết nối, token, lệnh) đã xong. Quyết định D189–D194, kết quả ở §13.
 > **Chi tiết cho người code:** `.claude/plans/2026-10-21-m4-2-nhan-va-day-event.md`.
 
 ## 1. Phần này làm gì
@@ -134,3 +134,29 @@ Core không đổi stream, event, đường ghi hay proto event nào.
 | Test `ListMyRoomIDs` và `/app indexes` | Chỉ đọc index; lệnh không xoá bản cũ khi bản mới chưa xong |
 | e2e | Hai máy: gửi/nhận, mở/không mở nhóm, thêm/xoá thành viên, event riêng, `@` tới đúng người |
 | Diễn tập | Cắt riêng một node khỏi NATS 10 giây (đuổi kịp, không tải lại) và 3 phút (tải lại có rải) |
+
+## 13. Kết quả thực thi
+
+**Đã xây:** websocket đọc `CHATIM_EVT` và hộp thư `CHATIM_WS` bằng ordered consumer, bảng quan tâm (tenant, user) → room trong RAM, frame `ready`/`open_room`/`close_room`/`event`/`notification`/`resync`/`room_closed`, hai phanh, giới hạn 1MB mỗi máy; core có `ListMyRoomIDs` và `/app indexes`; Mention App phát gói `WsPublish`; `pkg/wspublish`, `pkg/mongoindex`; `pkg/wsclient` áp event theo D156.
+
+**Đổi trong lúc xây:**
+- Bắt đầu đọc ở "seq cuối của stream + 1" thay vì "từ bây giờ": nếu thư viện tạo lại consumer trước tin đầu tiên, "bây giờ" đã trôi và sót tin.
+- Watchdog nhớ lúc bắt đầu thấy trễ (`behindSince`), nên stream im lặng lâu rồi có tin mới không bị coi là trễ 2 phút; hai lần nhảy cách nhau ít nhất 60s, để giờ node lệch NATS không gây nhảy liên tục.
+- Hàng ghi đầy theo số frame (256) cũng đóng 4008, không cắt socket không mã (1006) như phần 1.
+- `pkg/wsclient` thêm `CloseAsync()` để đóng từ trong handler; `Close()` chờ tối đa 5s rồi báo `ErrHandlerStillRunning`.
+- Diễn tập tìm ra một lỗi nặng: watchdog đọc vị trí stream không giữ khoá nên nhảy nhầm `consumer_lost` (2 lần trong 60s ở 2K tin/s). Đã sửa (`ec75155`), review lại đạt.
+
+**Kiểm thử:** unit, `make itest`, e2e phase 1–9 xanh; phase 9 có hai người A/B qua websocket, 9 bước, 0 trùng, 0 lỗ.
+
+| Diễn tập (~200 tin/s, client giữ kết nối) | Kết quả |
+|---|---|
+| Cắt websocket-1 khỏi NATS 10s | Đuổi kịp 5s sau khi nối lại; 0 nhảy, 0 `resync`; 2.000/2.000 tin, không mất |
+| Cắt 3 phút | 1 nhảy `lag_too_old`, mỗi kết nối 1 `resync`; 3.731 tin thiếu đều nằm trong lỗ đã báo, 0 mất âm thầm |
+| Restart NATS (sau khi sửa) | 0 nhảy, 0 `resync`; 2.997/2.997 tin, 0 trùng, 0 lỗ |
+| 2K tin/s đều 60s (sau khi sửa) | 0 nhảy, 0 `resync`, 0 nạp lại; trễ tối đa 2,3ms |
+
+**Rủi ro còn lại cho owner:**
+- (a) Sweeper có thể phát lại một `member_added` cũ sau `member_removed`. Nếu người đó kết nối đúng giữa hai lần phát, room bị thêm lại cho phiên đó tới khi nối lại. Rất hẹp (cần publish lỗi + sweeper + thời điểm kết nối trùng). Cách vá: `ListMyRoomIDs` trả cả room đã rời kèm `ver`.
+- (b) Sau một lần nhảy (node trễ > 2 phút), trong ≤ 60s chờ tới lượt nạp lại, người bị xoá ở đoạn bị bỏ qua có thể còn nhận tin room đó.
+- (c) Quyền NATS riêng cho websocket ở M5: tới lúc đó ai vào được NATS là giả được gói đẩy tới người dùng. Chặn go-live.
+- (d) Giờ node lệch NATS > 2 phút: cooldown chặn nhảy liên tục nhưng cần alert `catchup_jump_suppressed_total` (phần 5).

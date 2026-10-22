@@ -107,7 +107,7 @@ flowchart TD
     %% Tầng Projection & Tự phục hồi
     subgraph AsyncWorkers["Tầng Xử lý Ngầm & Tự phục hồi (M3.1)"]
         WorkerIndex["Projection room_activity · reply_index (M06, M07, M10)"]
-        MentionApp["Mention App: consumer mention (mọi core) → mentions, CHATIM_NOTIFY (M06)"]
+        MentionApp["Mention App: consumer mention (mọi core) → mentions, gói WsPublish trên CHATIM_WS (M06)"]
         WorkerTimer["Consumer timer-due: count_repair · member_count_repair (M04, M05, M10)"]
         M10Reconcile["M10: Sweeper slot 0<br/>(quét cờ _state trên partial index)"]
     end

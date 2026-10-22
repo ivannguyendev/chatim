@@ -50,7 +50,7 @@ flowchart TD
         Evt -->|"3 subject: mention msg_created, msg_edited, msg_deleted"| MA["consumer mention"]
         MA -->|"upsert có điều kiện message_ver"| Ments[("mentions, mention_rooms")]
         MA -->|"người nhận: MembersOf, ListMembers, mention_user_groups"| Core
-        MA -->|"notify.{t}.{user}.mention"| Notify[("CHATIM_NOTIFY")]
+        MA -->|"gói WsPublish websocket.publish.{t}"| Notify[("CHATIM_WS")]
     end
 ```
 
@@ -66,7 +66,7 @@ sequenceDiagram
     participant RI as Projection reply_index
     participant MA as Mention App (consumer mention)
     participant Ments as MongoDB (mentions)
-    participant Notify as NATS (CHATIM_NOTIFY)
+    participant Notify as NATS (CHATIM_WS)
 
     Client->>Core: SendMessage(reply_to=10010, mentions=[user usr_B], text="@usr_B xem giúp")
     Core->>Msgs: Insert {_id: room│0│10045, rp: {th: 0, s: 10010}, mt: [{k: "user", i: "usr_B", a: 10:20:00}]}
@@ -81,7 +81,7 @@ sequenceDiagram
         Evt->>MA: msg_created 10045
         MA->>Ments: upsert user:usr_B state 1, created_at = at, message_ver 0
         MA->>Core: MembersOf(room, [usr_B])
-        MA->>Notify: mention_notified {room}-0-10045-usr_B-m0
+        MA->>Notify: WsPublish mention_notified {room}-0-10045-m0-u:usr_B, targets [usr_B]
         MA-->>Evt: Ack sau PubAck
     end
     Note over RI,MA: Lỗi thì Nak giãn dần 5s/30s/2m/10m; event cũ hơn 5 phút chỉ ghi mention, không báo
@@ -136,7 +136,7 @@ Trang 20 mục (0 → 20, lớn hơn → `INVALID_ARGUMENT`); store hoặc core 
 - Event tự đủ thông tin (`at` từng đích, `previous_mentions`), mọi upsert có điều kiện `message_ver`, tombstone ghi cả khi chưa có doc và lấy `at` của đích làm `created_at`. Test chạy đủ 24 hoán vị {gửi, sửa bỏ, sửa thêm lại, xoá} trên memstore và Mongo cho cùng doc cuối.
 - Khoá doc mention duy nhất (D115):
   $$\text{\_id} = \text{khoá tin (24B)} \,│\, \text{loại đích (1 user, 2 group, 3 all)} \,│\, \text{id đích (không có với @all)}$$
-- Nhận lại event nhiều lần không nhân đôi mention; thông báo trùng id bị `CHATIM_NOTIFY` bỏ trong 6 phút; event cũ hơn 5 phút không gửi thông báo.
+- Nhận lại event nhiều lần không nhân đôi mention; gói trùng id bị `CHATIM_WS` bỏ trong 6 phút; event cũ hơn 5 phút không gửi thông báo.
 
 ### 3.4. Sweeper phát lại
 - `msg_created` được dựng lại từ doc tin hiện tại: tin đã xoá hoặc đã sửa bỏ hết đích thì đi loại data `message` và không tới Mention App; app đã học thay đổi từ `msg_edited`/`msg_deleted`.
@@ -207,11 +207,12 @@ Tên field trong `messages` là tên ngắn (ngoại lệ duy nhất của luậ
 - `mention_user_groups {_id: "t1│usr_B", tenant, user_id, groups: [...], ver, updated_at, updated_by}` (clustered `_id` chuỗi, index `{tenant, groups, user_id}`).
 - `mention_groups {_id: "t1│sales", tenant, group_id, name, state, ver, updated_at, updated_by}` (clustered `_id` chuỗi).
 
-### 4.4. Thông báo `CHATIM_NOTIFY`
+### 4.4. Thông báo: gói `WsPublish` trên `CHATIM_WS` (D192)
 
-Subject `notify.{t}.{user}.mention`, proto `Notification{id, tenant, user, room_id, room_type, thread_root, seq, message_ver, ts, oneof}`:
-- `mention_notified {message, target}`: id `{room}-{thread}-{seq}-{user}-m{message_ver}`; `target` theo ưu tiên user > nhóm > `@all` (`MENTION_KIND_ALL`).
-- `mention_retracted {reason}`: id `…-r{message_ver}`.
+Subject `websocket.publish.{t}` (`MENTION_WS_PUBLISH_ROOT`), gói `WsPublish{id, tenant, kind "mention", notification, targets.users, part, parts}`: nội dung một lần, danh sách người nhận chia trang 1.000 (`MENTION_NOTIFY_TARGETS_PAGE`). Proto `Notification{id, tenant, user (để trống trong gói), room_id, room_type, thread_root, seq, message_ver, ts, oneof}`:
+- `mention_notified {message, target}`: id `{room}-{thread}-{seq}-m{message_ver}-{đích}` (`u:{id}`, `g:{id}`, `all`); mỗi người chỉ trong một gói, đích theo ưu tiên user > nhóm > `@all` (`MENTION_KIND_ALL`).
+- `mention_retracted {reason}`: id `…-r{message_ver}-{edited|deleted}`.
+- `WsPublish.id` = `Nats-Msg-Id` = id thông báo + `-p{part}-` + 16 hex sha256 danh sách user của trang. Websocket đẩy cho người có tên đang online; `CHATIM_NOTIFY`/`notify.{t}.{kind}` để dành cho app notification Phase 2. Chi tiết: [events.md §4](../events.md).
 - Người nhận: `@user` còn trong room; thành viên nhóm còn trong room; `@all` trong DM/group mọi thành viên; `@all` trong channel (hoặc loại room lạ) không gửi riêng; luôn bỏ người gửi. Mute do app notification lọc.
 
 ### 4.5. Hợp đồng Mã lỗi gRPC (Error Matrix)
@@ -249,7 +250,7 @@ Subject `notify.{t}.{user}.mention`, proto `Notification{id, tenant, user, room_
 | **MongoDB Clustered Collection** | Lưu tin nhắn kèm con trỏ Thread và đích mention | Nếu MongoDB lỗi ghi: Tin nhắn trả lời bị từ chối như tin nhắn thường; tính toàn vẹn của thread được bảo toàn. |
 | **NATS JetStream (`CHATIM_EVT`)** | Đưa việc đếm trả lời và chỉ mục mention ra nền | Tin vẫn gửi thành công; `rc`, `reply_threads`, tab "Tôi được nhắc tới" và thông báo trễ tới khi hàng đợi xả xong. |
 | **Projection `reply_index`** | Doc trả lời, `rc`, `reply_threads` | Idempotent (doc trả lời chèn một lần theo `_id`, `rc` dưới phiếu hẹn): nhận lại event không sai bộ đếm. |
-| **Mention App (consumer `mention`, `CHATIM_NOTIFY`)** | Chỉ mục mention và thông báo | Core không phụ thuộc app: tin vẫn gửi bình thường. Mention đuổi kịp khi app chạy lại (`DeliverAll`); thông báo cũ hơn 5 phút bị bỏ. `MENTION_ENABLED=false` tắt hẳn app. |
+| **Mention App (consumer `mention`, `CHATIM_WS`)** | Chỉ mục mention và thông báo | Core không phụ thuộc app: tin vẫn gửi bình thường. Mention đuổi kịp khi app chạy lại (`DeliverAll`); thông báo cũ hơn 5 phút bị bỏ. `MENTION_ENABLED=false` tắt hẳn app. |
 
 ### 6.1. Chỉ số Sức khoẻ Vận hành & Cảnh báo SRE (Key Metrics & Alerts)
 

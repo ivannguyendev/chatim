@@ -1,10 +1,10 @@
 # chatim — Danh mục event
 
-> Cập nhật: 2026-10-17. Trạng thái: Mention App đã merge `main` (PR #16), D162–D176 ([tóm tắt](plans/2026-10-17-mention-app-summary.md)).
+> Cập nhật: 2026-10-22. Trạng thái: Mention App đã merge `main` (PR #16), D162–D176 ([tóm tắt](plans/2026-10-17-mention-app-summary.md)); websocket M4 phần 2 (nhận và đẩy event, gói `WsPublish`) xây trên `feat/m4`, D189–D194 ([tóm tắt](plans/2026-10-21-m4-2-nhan-va-day-event-summary.md)).
 >
 > Tài liệu liên quan:
 > - Nguồn sự thật cơ chế: [thiết kế](architecture.md) §8.1 (hợp đồng consumer) và [Module 10](modules/10-feature-data-reconciliation-and-repair.md) (cờ `_state`, sweeper, projection).
-> - Quyết định: [Decision Log](decision-log.md) D104, D108, D141–D160, D162–D176.
+> - Quyết định: [Decision Log](decision-log.md) D104, D108, D141–D160, D162–D176, D189–D194.
 
 Tài liệu này trả lời ba câu: core và Mention App phát event gì, ở subject nào; ai nhận event nào; và app sau này nên đăng ký subject nào để chỉ nhận đúng data mình cần.
 
@@ -13,10 +13,10 @@ Tài liệu này trả lời ba câu: core và Mention App phát event gì, ở 
 | Stream | Subject | Ai phát | Ghi chú |
 |---|---|---|---|
 | `CHATIM_EVT` | `evt.{tenant}.{loại data}.{room}.{kind}` | core | Mọi thay đổi dữ liệu. `Nats-Msg-Id` = id event; stream bỏ bản trùng trong `EVT_STREAM_DUPLICATES` (5m) |
-| (RePublish của `CHATIM_EVT`) | `live.{tenant}.{loại data}.{room}.evt.{kind}` | NATS, tự động | Bản phát lại trên core NATS cho realtime; không lưu |
+| (RePublish của `CHATIM_EVT`) | `live.{tenant}.{loại data}.{room}.evt.{kind}` | NATS, tự động | Bản phát lại trên core NATS cho các watcher của core và Mention App; không lưu. Websocket không dùng (đọc thẳng `CHATIM_EVT`, §3.1) |
 | `CHATIM_TIMER` | `timer.arm.…`, `timer.due` | core | Phiếu hẹn sinh tồn (D111, D152), chỉ core dùng |
-| `CHATIM_WS` | `websocket.publish.{tenant}` | Mention App (Phase 1); app notification (Phase 2) | Hộp thư của websocket: gói `WsPublish` (một nội dung + danh sách người nhận). `Nats-Msg-Id` = `WsPublish.id`; giữ 24h, bỏ trùng 6 phút; cấu hình chung trong `pkg/wspublish` (`MENTION_WS_PUBLISH_STREAM`, `MENTION_WS_PUBLISH_ROOT`) |
-| `CHATIM_NOTIFY` (Phase 2, chưa tạo) | `notify.{tenant}.{kind}` | các app | Hộp thư của app notification Phase 2; Mention App chuyển sang bằng config `MENTION_WS_PUBLISH_ROOT` |
+| `CHATIM_WS` | `websocket.publish.{tenant}` | Mention App (Phase 1); app notification (Phase 2); app khác muốn đẩy tới máy online | Hộp thư của websocket (D192): gói `WsPublish` (một nội dung + danh sách người nhận). `Nats-Msg-Id` = `WsPublish.id`; file, giữ 24h, bỏ trùng 6 phút, bản sao `EVT_STREAM_REPLICAS`; cấu hình chung trong `pkg/wspublish`, bên phát và websocket cùng `CreateOrUpdateStream` (`MENTION_WS_PUBLISH_STREAM`/`_ROOT`, `WS_PUBLISH_STREAM`/`_ROOT`) |
+| `CHATIM_NOTIFY` (Phase 2, chưa tạo) | `notify.{tenant}.{kind}` | các app | Để dành cho hộp thư của app notification Phase 2 (lọc tắt thông báo, push); Mention App chuyển sang bằng config `MENTION_WS_PUBLISH_ROOT`. Websocket không nghe `notify.*` |
 
 `{loại data}` cho biết event thuộc doc nào (D108):
 - `room`: thông tin chung của room.
@@ -68,8 +68,26 @@ Nếu publish lỗi, sweeper trên core giữ slot 0 phát lại từ doc hiện
 | Core `roomcache.Watch` (mọi core) | core NATS `live` | `room_updated`, `member_count_changed` | quên cache thông tin room |
 | Mention App, watch tập nhóm theo room (mọi core, D172) | core NATS `live.*.member.*.evt.{kind}` | `member_added`, `member_removed` | quên tập nhóm của room (cache gợi ý `@nhóm`) |
 | **Mention App** | durable `mention`, queue group: mọi pod/core cùng kéo, mỗi event tới một pod, lô 512/250ms mỗi pod, 8 worker, lọc đúng 3 subject: `evt.*.mention.*.msg_created`, `evt.*.message.*.msg_edited`, `evt.*.message.*.msg_deleted` | 3 kind đó | ghi `mentions`, `mention_rooms`; bung `@nhóm`/`@all`; phát gói `WsPublish` `mention_notified`/`mention_retracted` vào `websocket.publish.{t}` |
-| Websocket M4 | ordered consumer trên `CHATIM_EVT` và trên `CHATIM_WS` (`websocket.publish.>`) | mọi kind; gói `WsPublish` | đẩy realtime tới máy đang online; không biết thông báo là gì |
+| Websocket M4 (mọi node, §3.1) | mỗi node hai ordered consumer: `CHATIM_EVT` filter `evt.>` và `CHATIM_WS` filter `websocket.publish.>`, bắt đầu ở seq cuối + 1 | 19 kind của bảng §3.1; gói `WsPublish` | đẩy realtime tới máy đang nối vào node đó; không biết thông báo là gì |
 | App notification + push Phase 2 (chưa xây) | hộp thư `notify.{t}.{kind}` | thông báo | lọc tắt thông báo; `WsPublish` vào `websocket.publish.{t}` cho người online, APNs/FCM cho người offline |
+
+### 3.1. Websocket nhận gì (M4 phần 2, D189–D194)
+
+Mỗi node websocket một kết nối NATS, hai **ordered consumer** (không durable, `InactiveThreshold` 30s): `CHATIM_EVT` filter `evt.>` và `CHATIM_WS` filter `websocket.publish.>`. Node bắt đầu ở seq cuối của stream + 1; lỡ tin thì thư viện tự tạo lại consumer từ số cuối đã giao, tin tới đúng thứ tự. Trễ quá 2 phút theo giờ lưu → node bỏ đoạn cũ, nạp lại danh sách room và gửi `resync` (D190). Subject `evt.{t}.{loại}.{room}.{kind}` được đọc thẳng (không qua `live.*`); tenant lấy từ subject; mọi khoá người là (tenant, user).
+
+| Kind | Loại data | Ai trên node nhận |
+|---|---|---|
+| `msg_created` | `message`, `mention` | mọi thành viên room đang online (mức thành viên) |
+| `msg_edited`, `msg_deleted` | `message` | mọi thành viên room đang online |
+| `room_created`, `room_updated` | `room` | mọi thành viên room đang online (`room_created` thường tới trước khi node biết thành viên nên không ai nhận; máy lấy room khi nhận `member_added` của mình) |
+| `member_added`, `member_removed` | `member` | chính người đó và kết nối đang mở room; node cập nhật danh sách room của người đó theo `ver` lớn hơn thắng; bị xoá thì gửi event trước, rồi `room_closed{removed}` |
+| `member_role_changed`, `member_priority_changed` | `member` | kết nối đang mở room (`open_room`) |
+| `member_count_changed`, `msg_pinned`, `msg_unpinned` | `room` | kết nối đang mở room |
+| `reaction_changed`, `counts_changed` | `message` | kết nối đang mở room |
+| `message_hidden`, `history_cleared`, `bookmark_changed`, `room_preferences_changed`, `read_updated` | `member` | chỉ chủ nhân (mọi kết nối của (tenant, user) đó); "đã xem" cho cả nhóm ở phần 3 |
+| kind khác | — | không ai; bỏ và đếm `events_dropped_total{reason="unknown_kind"}` (mặc định chặn, để event riêng tư mới không lọt) |
+
+Event đi xuống máy nguyên bytes trong `ServerFrame.event` (field 21), mã hoá một lần mỗi node. Gói `WsPublish` từ `CHATIM_WS`: tenant gói phải bằng tenant subject, `kind` là một token; nội dung đi trong `ServerFrame.notification` (field 22) tới từng người trong `targets.users` đang sẵn sàng trên node (tên trùng chỉ gửi một lần); người khác bỏ qua. Máy áp event theo hợp đồng §5 (`pkg/wsclient.Applier` là bản mẫu).
 
 Projection `mention_read` đã bỏ (D165); core vẫn xoá durable cũ `projection-mention_read` lúc khởi động.
 
@@ -127,12 +145,14 @@ flowchart LR
   EVT -->|"evt.*.mention.*.msg_created<br/>evt.*.message.*.msg_edited/deleted"| MA["Mention App (mọi pod, queue group)<br/>ghi mentions, bung nhóm"]
   EVT -->|RePublish| Live[("live.{t}.{loại}.{rid}.evt.{kind}")]
   Live --> Watch["Core memberwatch, roomcache"]
-  Live --> WS["Websocket M4"]
+  EVT -->|"ordered consumer evt.> (mỗi node)"| WS["Websocket M4<br/>lọc theo room trong RAM"]
+  WS -->|"event, notification, resync"| Device["Máy đang online"]
   Groups["Hệ thống user/nhóm"] -->|"SetUserGroups, SetGroups"| MA
   Live -->|member_added/removed| MA
   MA -->|"đọc trong tiến trình:<br/>MembersOf, ListMembers, RoomsOf, SentTimes,<br/>MessageVersions, VisibleMessages"| Core
   MA -->|"gói WsPublish"| WSBOX[("CHATIM_WS<br/>websocket.publish.{t}")]
-  WSBOX --> WS
+  WSBOX -->|"ordered consumer (mỗi node)"| WS
+  Notif["App notification Phase 2<br/>notify.{t}.{kind}"] -.->|"WsPublish cho người online"| WSBOX
   Client["Client"] -->|"ListMentions, ListRoomGroups"| MA
   Client -->|ListMembers| Core
 ```

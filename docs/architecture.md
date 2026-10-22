@@ -1,7 +1,7 @@
 # chatim — Kiến trúc hệ thống (Single Source of Truth)
 
 > Ngày cập nhật: 2026-10-17 · Trạng thái: **Nguồn sự thật duy nhất (SSOT)** cho toàn bộ quy chuẩn kiến trúc của `chatim`.
-> Nhật ký 188 quyết định kỹ thuật: [docs/decision-log.md](./decision-log.md) (D1–D188). Danh mục event (core phát gì, ai nhận gì): [docs/events.md](./events.md).
+> Nhật ký 194 quyết định kỹ thuật: [docs/decision-log.md](./decision-log.md) (D1–D194). Danh mục event (core phát gì, ai nhận gì): [docs/events.md](./events.md).
 > Đặc tả chi tiết 10 Module tính năng (How-It-Works & Flowcharts): [docs/modules/README.md](./modules/README.md).
 > Lộ trình phát triển các Milestone: [docs/roadmap.md](./roadmap.md).
 
@@ -13,7 +13,7 @@
 
 ### 1.1 Phạm vi Phase 1
 - `core`: room, member, message, tương tác, cấp seq, lưu trữ MongoDB, phát event NATS JetStream.
-- `websocket`: giữ kết nối WebSocket (gws), kiểm token, chuyển lệnh tới core (phần 1 đã xây trên `feat/m4`, D183–D188); đẩy event realtime (phần 2, chưa xây).
+- `websocket`: giữ kết nối WebSocket (gws), kiểm token, chuyển lệnh tới core (phần 1 đã xây trên `feat/m4`, D183–D188); đẩy event realtime: mỗi node đọc `CHATIM_EVT` và hộp thư `websocket.publish.{t}` (`CHATIM_WS`) bằng ordered consumer, lọc theo room trong RAM (phần 2 đã xây trên `feat/m4`, D189–D194).
 - Room: DM (1-1), group ≤5K member. Channel ~200K subscriber (chỉ admin post) vào backlog (owner 2026-10-19, D178).
 - Exit Phase 1: `core` + `mention` + `websocket` đạt `prod-like validated`; go-live sau khi có `identity` (D178, [tóm tắt](plans/2026-10-19-phase1-exit-summary.md)).
 - Tin nhắn: gửi, sửa (có lịch sử), xoá cho mọi người / phía tôi, trả lời (quote), chuyển tiếp (forward).
@@ -21,7 +21,7 @@
 - Ranh giới trách nhiệm:
   - Core cung cấp API dữ liệu (gửi, đọc, sửa, xoá, lịch sử, reaction, vị trí đọc…) và phát event.
   - Client lấy danh sách hội thoại thẳng từ Core; Core xếp danh sách theo tin mới nhất và đếm unread lúc đọc (M3, D120–D123).
-  - Mention App (module nhúng `modules/mention`, D182; D162–D176, đã merge `main` PR #16, trước M4): ghi mention, `ListMentions`, thành viên nhóm và danh mục nhóm được tag, dữ liệu gợi ý `@nhóm` theo room, bung `@nhóm`/`@all` và gửi thông báo theo người lên `CHATIM_NOTIFY`; hiện chạy nhúng trong core (core chỉ import package công khai `modules/mention/mentionapp`; app đọc core qua cổng `CoreReader` trong tiến trình); giữ nhúng (owner 2026-10-19, D177): chỉ tách khi có team, SLA, nhịp release hoặc nhu cầu scale riêng có số đo, hoặc database riêng + CDC, và khi tách thì app tự sở hữu dữ liệu, chỉ gọi core qua API, không đọc chung bảng. Lọc tắt thông báo và giao tới máy thuộc app notification (websocket M4, `push` Phase 2). Dấu `@` trên danh sách hội thoại, sync token, đa thiết bị: làm sau.
+  - Mention App (module nhúng `modules/mention`, D182; D162–D176, đã merge `main` PR #16, trước M4): ghi mention, `ListMentions`, thành viên nhóm và danh mục nhóm được tag, dữ liệu gợi ý `@nhóm` theo room, bung `@nhóm`/`@all` và gửi thông báo dạng gói `WsPublish` (nội dung một lần + danh sách người nhận) vào `websocket.publish.{t}` trên `CHATIM_WS` (D192); hiện chạy nhúng trong core (core chỉ import package công khai `modules/mention/mentionapp`; app đọc core qua cổng `CoreReader` trong tiến trình); giữ nhúng (owner 2026-10-19, D177): chỉ tách khi có team, SLA, nhịp release hoặc nhu cầu scale riêng có số đo, hoặc database riêng + CDC, và khi tách thì app tự sở hữu dữ liệu, chỉ gọi core qua API, không đọc chung bảng. Lọc tắt thông báo và giao tới máy thuộc app notification (websocket M4, `push` Phase 2). Dấu `@` trên danh sách hội thoại, sync token, đa thiết bị: làm sau.
 
 ### 1.2 Ngoài phạm vi Phase 1 (Non-goals)
 Phase 2 (owner 2026-10-19, D179–D180): `identity`, `identity-verifier`, `gateway` (REST + webhook), `notification` (+ push), `search`, `migrator`, media qua presigned URL. Backlog: channel, sync token D74, đa thiết bị. Ngoài phạm vi: API import trong core, E2EE, voice/video, admin UI. Xem [roadmap](./roadmap.md).
@@ -141,7 +141,7 @@ flowchart TD
     subgraph Platform["Hạ tầng Nền tảng chatim"]
         AppWebsocket["App websocket (gws Gateway)"]
         AppCore["Core (Business Logic & Storage Engine)"]
-        NATS[("NATS JetStream<br/>CHATIM_EVT, CHATIM_TIMER, CHATIM_NOTIFY")]
+        NATS[("NATS JetStream<br/>CHATIM_EVT, CHATIM_TIMER, CHATIM_WS")]
         RedisState[("Redis State<br/>Slot soft-leases")]
         RedisDedupe[("Redis Dedupe<br/>CID, request_id")]
         MongoDB[("MongoDB Replica Set<br/>Clustered Collections")]
@@ -159,7 +159,7 @@ flowchart TD
     NATS -->|live.{t}.*.{rid}.>| AppWebsocket
     NATS -.->|Subscribe| AppPush
     NATS -.->|"evt.*.mention.*.msg_created, msg_edited/deleted"| AppMention
-    AppMention -.->|"notify.{t}.{user}.mention"| NATS
+    AppMention -.->|"WsPublish websocket.publish.{t}"| NATS
     NATS -.->|Subscribe| AppEvents
 ```
 
@@ -234,12 +234,12 @@ flowchart TB
   - `CHATIM_EVT`: Kênh phát live events 7 ngày, id tự nhiên, receiver bỏ trùng.
   - Một consumer durable `projections` trên `CHATIM_EVT` (lọc `evt.>`, ack từng tin, `MaxAckPending` = 4 × lô), chỉ core giữ slot 0 fetch (lô 8192, chờ 3s: cửa sổ 3s gom ghi `rooms` theo room để CPU Mongo ngang engine cũ), chia mỗi lô cho hai handler `room_activity`, `reply_index` (chỉ phần trả lời); tin lỗi Nak riêng, giãn dần 5s/30s/2m/10m. Các durable cũ (gồm `projection-mention_read`) bị xoá lúc khởi động.
   - Mention App (D170, D171, D173): `msg_created` của tin có mention phát ở `evt.{t}.mention.{rid}.msg_created`; consumer durable `mention` chỉ lọc 3 subject (tin có mention, `msg_edited`, `msg_deleted`), queue group: mọi core cùng kéo, không leader, lô 512/250ms, 8 worker mỗi core, `InProgress` mỗi 10s cho lô chậm; event tự đủ (`at` cho từng đích, `previous_mentions` trên sửa/xoá) nên xử lý lệch thứ tự vẫn đúng. Không có chỗ nào xử lý nối tiếp: thêm core là thêm thông lượng.
-  - `CHATIM_NOTIFY`: thông báo theo người `notify.{t}.{user}.mention` (`mention_notified`, `mention_retracted`), giữ 24h, bỏ trùng 6 phút; Mention App publish trên client JetStream riêng. Chi tiết: [events.md](./events.md).
+  - `CHATIM_WS`: hộp thư của websocket `websocket.publish.{t}`, gói `WsPublish` (nội dung một lần + danh sách người nhận, D192); Mention App phát `mention_notified`/`mention_retracted` trên client JetStream riêng; giữ 24h, bỏ trùng 6 phút. `CHATIM_NOTIFY` (`notify.{t}.{kind}`) để dành cho app notification Phase 2. Chi tiết: [events.md](./events.md).
   - `CHATIM_TIMER`: stream phiếu hẹn sinh tồn (WorkQueue, message schedule): phiếu đặt ở `timer.arm.*`, tới hạn sang `timer.due`, một consumer `timer-due` dùng chung (D152). Thay `CHATIM_WORK` (đã bỏ).
 - **MongoDB:** Replica Set 3 node, `w:majority` cho mọi lệnh ghi bền vững.
 
 ### 7.2 Vòng đời Core (Lifecycle & Graceful Shutdown)
-- **Thứ tự Boot:** Publisher → Hàng xoá cờ (`stateclear`) → Flusher → CID Batcher → Slot Router → Slot Manager → Consumer phiếu hẹn (`timer-due`) → Consumer `projections` → Consumer `mention` (Mention App, khi `MENTION_ENABLED`) → Sweeper (chỉ làm việc khi giữ slot 0) → Watchers (`memberwatch`, `roomcache.Watch`, watch tập nhóm theo room) → Mở cổng gRPC (`CoreService` và `MentionService`). Trước đó `prepare` chạy bootstrap của Mention App, tạo `CHATIM_NOTIFY` và consumer `mention`.
+- **Thứ tự Boot:** Publisher → Hàng xoá cờ (`stateclear`) → Flusher → CID Batcher → Slot Router → Slot Manager → Consumer phiếu hẹn (`timer-due`) → Consumer `projections` → Consumer `mention` (Mention App, khi `MENTION_ENABLED`) → Sweeper (chỉ làm việc khi giữ slot 0) → Watchers (`memberwatch`, `roomcache.Watch`, watch tập nhóm theo room) → Mở cổng gRPC (`CoreService` và `MentionService`). Trước đó `prepare` chạy bootstrap của Mention App, tạo `CHATIM_WS` và consumer `mention`.
 - **Thứ tự Dừng:** Bật `/readyz` false → Drain gRPC → Dừng Sweeper → Dừng Consumer projection và Consumer `mention` song song → Dừng Consumer phiếu hẹn → Unsubscribe Watchers → Dừng Router → Flush CID Batcher → Flusher → Publisher → Xả hàng xoá cờ (1s; phần còn lại sweeper phát bù) → Nhả Slots → Đóng Clients (kế hoạch mặc định 29,7s trong `CORE_SHUTDOWN_BUDGET = 30s`; pha projection và `mention` dài `max(PROJECTION_FETCH_WAIT, MENTION_FETCH_WAIT)` + 1s = 4s, consumer phiếu hẹn 500ms + 1s, vì lần fetch dở không huỷ được).
 - **CLI Subcommands:** `/app resync` (bật lại cờ `_state` của doc trong khoảng để sweeper phát lại; sau khi purge stream phải chờ qua `EVT_STREAM_DUPLICATES`, D155) và `/app recount -room ID` (đếm lại `member_count`, CAS kèm bit 2, publish rồi xoá cờ).
 
@@ -302,4 +302,4 @@ Toàn bộ chi tiết kỹ thuật vận hành (How-It-Works), sơ đồ Mermaid
 ## 10. Tra cứu Quyết định Kỹ thuật (Decision Log)
 
 Mọi quyết định lựa chọn giải pháp kỹ thuật, đánh đổi (trade-offs), phương án bị loại bỏ (rejected alternatives) từ ngày đầu dự án đến Mention App hiện tại được lưu trữ đầy đủ tại:
-👉 **[Architecture Decision Records (D1–D188)](./decision-log.md)**
+👉 **[Architecture Decision Records (D1–D194)](./decision-log.md)**
