@@ -170,13 +170,13 @@ func TestASecondDeviceOfASuspendedUserWaitsAndGetsReadyAfterTheReload(t *testing
 		second := &fakeSink{}
 		c2 := f.table.Register("t1", "u", second)
 		c2.Open("1")
-		c2.Open("8")
 		f.route(withSeq(event("reaction_changed", "t1", 1, "", 0), 6))
 		if got := second.take(); len(got) != 0 {
 			t.Fatalf("the second device got %v before the reload", got)
 		}
 		f.loader.answer(1, reply{rooms: []Room{{ID: 1, Ver: 1}}})
 		synctest.Wait()
+		c2.Open("1")
 		f.route(event("reaction_changed", "t1", 1, "", 0))
 		if got := first.take(); !slices.Equal(got, []string{"resync lag_too_old"}) {
 			t.Fatalf("first device frames = %v", got)
@@ -187,7 +187,7 @@ func TestASecondDeviceOfASuspendedUserWaitsAndGetsReadyAfterTheReload(t *testing
 	})
 }
 
-func TestAnOpenRoomWaitingForMemberAddedAtTheJumpWaitsForTheReload(t *testing.T) {
+func TestAnOpenRoomWaitingForMemberAddedAtTheJumpIsDropped(t *testing.T) {
 	run(t, func(t *testing.T) {
 		f := newFixture(t)
 		c, s := f.connect("t1", "u", 1)
@@ -198,11 +198,12 @@ func TestAnOpenRoomWaitingForMemberAddedAtTheJumpWaitsForTheReload(t *testing.T)
 		synctest.Wait()
 		time.Sleep(time.Minute)
 		synctest.Wait()
-		if got := s.take(); len(got) != 0 {
-			t.Fatalf("a suspended device got %v", got)
+		if got := s.take(); len(got) != 0 || len(c.pending) != 0 {
+			t.Fatalf("frames %v pending %d", got, len(c.pending))
 		}
 		f.loader.answer(1, reply{rooms: []Room{{ID: 1, Ver: 1}, {ID: 9, Ver: 1}}})
 		synctest.Wait()
+		c.Open("9")
 		f.route(event("reaction_changed", "t1", 9, "", 0))
 		if got := s.take(); !slices.Equal(got, []string{"resync lag_too_old", "event reaction_changed/t1/9//v0"}) {
 			t.Fatalf("frames = %v", got)

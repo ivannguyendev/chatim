@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func TestOpenRoomBeforeReadyWaitsForReady(t *testing.T) {
+func TestOpenRoomBeforeReadyIsIgnoredAndKeepsNothing(t *testing.T) {
 	run(t, func(t *testing.T) {
 		f := newFixture(t)
 		f.loader.holding(true)
@@ -16,28 +16,22 @@ func TestOpenRoomBeforeReadyWaitsForReady(t *testing.T) {
 		synctest.Wait()
 		c.Open("1")
 		c.Open("abc")
-		c.Open("5")
-		c.Open("6")
-		c.Close("6")
-		if got := sink.take(); len(got) != 0 {
-			t.Fatalf("frames before ready = %v", got)
+		if got := sink.take(); len(got) != 0 || len(c.open) != 0 || len(c.pending) != 0 {
+			t.Fatalf("frames before ready = %v, open %d pending %d", got, len(c.open), len(c.pending))
 		}
 		f.loader.replies <- reply{rooms: []Room{{ID: 1, Ver: 1}}}
 		synctest.Wait()
-		if got := sink.take(); !slices.Equal(got, []string{"ready", "closed abc not_member"}) {
-			t.Fatalf("frames at ready = %v", got)
-		}
 		f.route(event("reaction_changed", "t1", 1, "", 0))
-		if got := sink.take(); len(got) != 1 {
-			t.Fatalf("open room did not receive reactions: %v", got)
+		if got := sink.take(); !slices.Equal(got, []string{"ready"}) {
+			t.Fatalf("frames at ready = %v; an ignored open must not be kept", got)
 		}
-		time.Sleep(10 * time.Second)
-		synctest.Wait()
-		if got := sink.take(); !slices.Equal(got, []string{"closed 5 not_member"}) {
-			t.Fatalf("frames after the open wait = %v", got)
+		c.Open("1")
+		f.route(event("reaction_changed", "t1", 1, "", 0))
+		if got := sink.take(); !slices.Equal(got, []string{"event reaction_changed/t1/1//v0"}) {
+			t.Fatalf("open after ready = %v", got)
 		}
-		if got := f.table.stats.openRejected.Load(); got != 2 {
-			t.Fatalf("open rejections = %d, want 2", got)
+		if got := f.table.stats.openRejected.Load(); got != 0 {
+			t.Fatalf("open rejections = %d, want 0", got)
 		}
 	})
 }

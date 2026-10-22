@@ -1,7 +1,6 @@
 package interest
 
 import (
-	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -9,8 +8,6 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/ids"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
-
-const earlyMax = 1024
 
 type pendingOpen struct {
 	timer *time.Timer
@@ -22,8 +19,6 @@ type Conn struct {
 	sink    Sink
 	gone    bool
 	readied bool
-	early   map[uint64]struct{}
-	bad     []string
 	open    map[uint64]struct{}
 	pending map[uint64]*pendingOpen
 	sendMu  sync.Mutex
@@ -31,47 +26,17 @@ type Conn struct {
 }
 
 func newConn(t *Table, u *user, sink Sink) *Conn {
-	return &Conn{table: t, user: u, sink: sink, early: map[uint64]struct{}{}, open: map[uint64]struct{}{}, pending: map[uint64]*pendingOpen{}}
+	return &Conn{table: t, user: u, sink: sink, open: map[uint64]struct{}{}, pending: map[uint64]*pendingOpen{}}
 }
 
 func (c *Conn) Open(raw string) {
 	u := c.user
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	switch {
-	case c.gone || u.gone:
-	case !u.ready || u.suspended:
-		c.wait(raw)
-	default:
+	if !c.gone && u.live() {
 		c.openRoom(raw)
 	}
 }
-
-func (c *Conn) wait(raw string) {
-	room, err := ids.ParseRoomID(raw)
-	switch {
-	case err == nil:
-		c.waitRoom(room)
-	case slices.Contains(c.bad, raw):
-	case c.waiting() >= earlyMax:
-		c.reject(raw)
-	default:
-		c.bad = append(c.bad, raw)
-	}
-}
-
-func (c *Conn) waitRoom(room uint64) {
-	if _, ok := c.early[room]; ok {
-		return
-	}
-	if c.waiting() >= earlyMax {
-		c.reject(strconv.FormatUint(room, 10))
-		return
-	}
-	c.early[room] = struct{}{}
-}
-
-func (c *Conn) waiting() int { return len(c.early) + len(c.bad) }
 
 func (c *Conn) LoadRooms() {
 	u := c.user
@@ -97,7 +62,6 @@ func (c *Conn) Close(raw string) {
 	if c.gone {
 		return
 	}
-	delete(c.early, room)
 	c.closeRoom(room)
 }
 
@@ -165,30 +129,16 @@ func (c *Conn) reject(raw string) {
 func (c *Conn) becameReady() {
 	c.readied = true
 	c.sink.Send(readyFrame)
-	c.openEarly()
 }
 
 func (c *Conn) resumed(reason chatimv1.ResyncReason) {
 	c.resync(reason)
-	c.openEarly()
-}
-
-func (c *Conn) openEarly() {
-	early, bad := c.early, c.bad
-	c.early, c.bad = map[uint64]struct{}{}, nil
-	for _, raw := range bad {
-		c.reject(raw)
-	}
-	for room := range early {
-		c.openRoomID(room)
-	}
 }
 
 func (c *Conn) suspend() {
 	for room, p := range c.pending {
 		p.timer.Stop()
 		delete(c.pending, room)
-		c.waitRoom(room)
 	}
 	c.sendMu.Lock()
 	defer c.sendMu.Unlock()
@@ -220,6 +170,6 @@ func (c *Conn) release() {
 	for _, p := range c.pending {
 		p.timer.Stop()
 	}
-	c.open, c.pending, c.early, c.bad = nil, nil, nil, nil
+	c.open, c.pending = nil, nil
 	c.table.unmarkBacklog(c)
 }

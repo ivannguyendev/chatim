@@ -3,42 +3,36 @@ package interest
 import (
 	"errors"
 	"slices"
-	"strconv"
 	"testing"
 	"testing/synctest"
+	"time"
 )
 
-func TestOpenRoomsBeforeTheLoadAreASetCappedPerConnection(t *testing.T) {
+func TestOpenRoomWhileSuspendedOrAfterAFailedLoadIsIgnored(t *testing.T) {
 	run(t, func(t *testing.T) {
 		f := newFixture(t)
+		c, s := f.connect("t1", "u", 1)
+		s.take()
 		f.loader.holding(true)
-		s := &fakeSink{}
-		c := f.table.Register("t1", "u", s)
+		f.table.Jumped(lagJump(5))
 		synctest.Wait()
-		for range 3 {
-			c.Open("1")
-		}
-		for room := 2; room <= earlyMax; room++ {
-			c.Open(strconv.Itoa(room))
-		}
 		c.Open("1")
-		if len(c.early) != earlyMax || len(s.take()) != 0 {
-			t.Fatalf("early rooms = %d, want %d with duplicates counted once", len(c.early), earlyMax)
-		}
-		over := strconv.Itoa(earlyMax + 1)
-		c.Open(over)
-		if got := s.take(); !slices.Equal(got, []string{"closed " + over + " not_member"}) || len(c.early) != earlyMax {
-			t.Fatalf("frames over the cap = %v, early %d", got, len(c.early))
-		}
-		f.loader.replies <- reply{rooms: []Room{{ID: 1, Ver: 1}, {ID: 2, Ver: 1}}}
+		f.loader.answer(1, reply{err: errors.New("core down")})
 		synctest.Wait()
-		f.route(event("reaction_changed", "t1", 1, "", 0))
-		f.route(event("reaction_changed", "t1", 2, "", 0))
-		want := []string{"ready", "event reaction_changed/t1/1//v0", "event reaction_changed/t1/2//v0"}
-		if got := s.take(); !slices.Equal(got, want) || len(c.open) != 2 || len(c.pending) != earlyMax-2 || len(c.early) != 0 {
-			t.Fatalf("frames %v open %d pending %d early %d", got, len(c.open), len(c.pending), len(c.early))
+		c.Open("1")
+		if got := s.take(); !slices.Equal(got, []string{"load_failed"}) || len(c.open) != 0 || len(c.pending) != 0 {
+			t.Fatalf("frames %v open %d pending %d", got, len(c.open), len(c.pending))
 		}
-		c.Unregister()
+		c.LoadRooms()
+		time.Sleep(time.Millisecond)
+		synctest.Wait()
+		f.loader.answer(2, reply{rooms: []Room{{ID: 1, Ver: 1}}})
+		synctest.Wait()
+		c.Open("1")
+		f.route(event("reaction_changed", "t1", 1, "", 0))
+		if got := s.take(); !slices.Equal(got, []string{"resync lag_too_old", "event reaction_changed/t1/1//v0"}) {
+			t.Fatalf("frames after the reload = %v", got)
+		}
 	})
 }
 
