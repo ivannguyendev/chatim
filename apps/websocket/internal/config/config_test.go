@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +21,8 @@ var envKeys = []string{
 	"WS_AUTH_TIMEOUT", "WS_UNAUTH_MAX", "WS_FRAME_MAX", "WS_HEARTBEAT_TIMEOUT",
 	"WS_COMMAND_RATE", "WS_COMMAND_BURST", "WS_COMMAND_INFLIGHT", "WS_SEND_QUEUE", "WS_WRITE_TIMEOUT",
 	"CORE_REQUEST_DEADLINE", "WS_DRAIN_DELAY", "WS_SHUTDOWN_BUDGET",
+	"NATS_URL", "EVT_STREAM", "EVT_SUBJECT_ROOT", "WS_PUBLISH_ROOT", "WS_PUBLISH_STREAM", "EVT_STREAM_REPLICAS",
+	"WS_FANOUT_WORKERS", "WS_FANOUT_QUEUE", "WS_REPLAY_RATE", "WS_CONSUME_BATCH", "WS_CONSUME_BYTES",
 }
 
 var requiredEnv = map[string]string{
@@ -27,6 +30,7 @@ var requiredEnv = map[string]string{
 	"WS_JWT_KEYS_FILE": "/run/secrets/jwks.json",
 	"WS_JWT_ISSUER":    "chatim-identity",
 	"WS_JWT_AUDIENCE":  "chatim-websocket",
+	"NATS_URL":         "nats://chatim-nats:4222",
 }
 
 func setEnv(t *testing.T, env map[string]string) {
@@ -71,6 +75,17 @@ func TestLoadDefaults(t *testing.T) {
 		RequestDeadline:  5 * time.Second,
 		DrainDelay:       2 * time.Second,
 		ShutdownBudget:   15 * time.Second,
+		NATSURL:          "nats://chatim-nats:4222",
+		EventStream:      "CHATIM_EVT",
+		EventRoot:        "evt",
+		PublishRoot:      "websocket.publish",
+		PublishStream:    "CHATIM_WS",
+		StreamReplicas:   1,
+		FanoutWorkers:    runtime.NumCPU(),
+		FanoutQueue:      4096,
+		ReplayRate:       20000,
+		ConsumeBatch:     500,
+		ConsumeBytes:     8 << 20,
 	}
 	if got != want {
 		t.Fatalf("Load() = %+v, want %+v", fields(got), fields(want))
@@ -152,6 +167,35 @@ func TestLogValueHidesRedisPassword(t *testing.T) {
 		if !strings.Contains(logged, want) {
 			t.Errorf("summary %s misses %s", logged, want)
 		}
+	}
+}
+
+func TestLoadReadsTheFeedSettings(t *testing.T) {
+	setEnv(t, map[string]string{
+		"EVT_STREAM": "CHATIM_EVT_IT", "EVT_SUBJECT_ROOT": "evt_it", "WS_PUBLISH_ROOT": "ws_it.publish", "WS_PUBLISH_STREAM": "CHATIM_WS_IT",
+		"EVT_STREAM_REPLICAS": "3", "WS_FANOUT_WORKERS": "6", "WS_FANOUT_QUEUE": "64", "WS_REPLAY_RATE": "900",
+		"WS_CONSUME_BATCH": "50", "WS_CONSUME_BYTES": "2097152",
+	})
+	got, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got.EventStream != "CHATIM_EVT_IT" || got.EventRoot != "evt_it" || got.PublishRoot != "ws_it.publish" || got.PublishStream != "CHATIM_WS_IT" ||
+		got.StreamReplicas != 3 || got.FanoutWorkers != 6 || got.FanoutQueue != 64 || got.ReplayRate != 900 ||
+		got.ConsumeBatch != 50 || got.ConsumeBytes != 2<<20 {
+		t.Fatalf("Load() = %+v", fields(got))
+	}
+}
+
+func TestLogValueHidesNATSCredentials(t *testing.T) {
+	setEnv(t, map[string]string{"NATS_URL": "nats://ws:n4tss3cr3t@chatim-nats:4222"})
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	out := cfg.String()
+	if strings.Contains(out, "n4tss3cr3t") || !strings.Contains(out, "chatim-nats:4222") {
+		t.Fatalf("String() = %s, want the NATS host without the password", out)
 	}
 }
 

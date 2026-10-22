@@ -3,6 +3,7 @@ package app
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -66,5 +67,27 @@ func TestRouterHolderAnswersUnavailableBeforeTheRouterIsOpen(t *testing.T) {
 	}
 	if _, err := h.Any(); status.Code(err) != codes.Unavailable {
 		t.Fatalf("Any = %v, want UNAVAILABLE", err)
+	}
+}
+
+func TestFeedWiringCarriesTheNATSAndStreamSettings(t *testing.T) {
+	cfg := testConfig("redis:6379", "/keys.json")
+	got := natsConfig(cfg, Deps{ReadyTimeout: 3 * time.Second})
+	if got.URL != cfg.NATSURL || got.Name != "chatim-websocket-ws-test" || got.ReadyTimeout != 3*time.Second {
+		t.Fatalf("nats config = %+v", got)
+	}
+	fc := feedConfig(cfg)
+	if fc.EventStream != "CHATIM_EVT" || fc.EventRoot != "evt" || fc.PublishStream != "CHATIM_WS" || fc.PublishRoot != "websocket.publish" ||
+		fc.Replicas != 1 || fc.Workers != 2 || fc.Queue != 64 || fc.ReplayRate != 1000 || fc.ConsumeBatch != 100 || fc.ConsumeBytes != 1<<20 {
+		t.Fatalf("feed config = %+v from %+v", fc, cfg)
+	}
+}
+
+func TestRedactedLoggerMasksTheNATSCredentials(t *testing.T) {
+	cfg := testConfig("redis:6379", "/keys.json")
+	logs := newLogWatch()
+	redactedLogger(logs.logger(), cfg).Warn("nats disconnected", "url", cfg.NATSURL, "err", "dial "+cfg.NATSURL)
+	if written := logs.written(); strings.Contains(written, testNATSPassword) || !strings.Contains(written, "nats:4222") {
+		t.Fatalf("log = %s, want the NATS host without the password", written)
 	}
 }

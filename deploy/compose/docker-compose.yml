@@ -239,6 +239,7 @@ services:
       WS_JWT_KEYS_FILE: /run/secrets/ws_jwks
       WS_JWT_ISSUER: chatim-dev
       WS_JWT_AUDIENCE: chatim-websocket
+      NATS_URL: nats://chatim-nats:4222
     ports:
       - "127.0.0.1:${WS1_PORT:-8081}:8080"
     depends_on:

@@ -5,13 +5,17 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"runtime"
 	"time"
 
 	"github.com/ivannguyendev/chatim/pkg/envconfig"
+	"github.com/ivannguyendev/chatim/pkg/redact"
+	"github.com/ivannguyendev/chatim/pkg/wspublish"
 )
 
 const (
 	CloseTimeout     = time.Second
+	FeedStopTimeout  = 2 * time.Second
 	defaultAdminAddr = ":9090"
 )
 
@@ -38,6 +42,17 @@ type Config struct {
 	RequestDeadline  time.Duration
 	DrainDelay       time.Duration
 	ShutdownBudget   time.Duration
+	NATSURL          string
+	EventStream      string
+	EventRoot        string
+	PublishRoot      string
+	PublishStream    string
+	StreamReplicas   int
+	FanoutWorkers    int
+	FanoutQueue      int
+	ReplayRate       int
+	ConsumeBatch     int
+	ConsumeBytes     int
 }
 
 func AdminAddr() string { return envconfig.String("WS_ADMIN_ADDR", defaultAdminAddr) }
@@ -67,6 +82,17 @@ func Load() (Config, error) {
 		RequestDeadline:  p.span("CORE_REQUEST_DEADLINE", 5*time.Second),
 		DrainDelay:       p.span("WS_DRAIN_DELAY", 2*time.Second),
 		ShutdownBudget:   p.span("WS_SHUTDOWN_BUDGET", 15*time.Second),
+		NATSURL:          envconfig.String("NATS_URL", ""),
+		EventStream:      envconfig.String("EVT_STREAM", "CHATIM_EVT"),
+		EventRoot:        envconfig.String("EVT_SUBJECT_ROOT", "evt"),
+		PublishRoot:      envconfig.String("WS_PUBLISH_ROOT", wspublish.DefaultRoot),
+		PublishStream:    envconfig.String("WS_PUBLISH_STREAM", wspublish.DefaultStream),
+		StreamReplicas:   p.number("EVT_STREAM_REPLICAS", 1),
+		FanoutWorkers:    p.number("WS_FANOUT_WORKERS", runtime.NumCPU()),
+		FanoutQueue:      p.number("WS_FANOUT_QUEUE", 4096),
+		ReplayRate:       p.number("WS_REPLAY_RATE", 20000),
+		ConsumeBatch:     p.number("WS_CONSUME_BATCH", 500),
+		ConsumeBytes:     p.number("WS_CONSUME_BYTES", 8<<20),
 	}
 	if err := errors.Join(p.errs...); err != nil {
 		return Config{}, err
@@ -101,6 +127,17 @@ func (c Config) LogValue() slog.Value {
 		slog.Duration("request_deadline", c.RequestDeadline),
 		slog.Duration("drain_delay", c.DrainDelay),
 		slog.Duration("shutdown_budget", c.ShutdownBudget),
+		slog.String("nats_url", redact.URL(c.NATSURL)),
+		slog.String("event_stream", c.EventStream),
+		slog.String("event_root", c.EventRoot),
+		slog.String("publish_root", c.PublishRoot),
+		slog.String("publish_stream", c.PublishStream),
+		slog.Int("stream_replicas", c.StreamReplicas),
+		slog.Int("fanout_workers", c.FanoutWorkers),
+		slog.Int("fanout_queue", c.FanoutQueue),
+		slog.Int("replay_rate", c.ReplayRate),
+		slog.Int("consume_batch", c.ConsumeBatch),
+		slog.Int("consume_bytes", c.ConsumeBytes),
 	)
 }
 

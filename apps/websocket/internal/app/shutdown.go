@@ -13,14 +13,15 @@ import (
 type stopPlan struct {
 	DrainDelay time.Duration
 	Commands   time.Duration
+	Feed       time.Duration
 	Close      time.Duration
 }
 
 func stopPlanOf(cfg config.Config) stopPlan {
-	return stopPlan{DrainDelay: cfg.DrainDelay, Commands: cfg.RequestDeadline, Close: config.CloseTimeout}
+	return stopPlan{DrainDelay: cfg.DrainDelay, Commands: cfg.RequestDeadline, Feed: config.FeedStopTimeout, Close: config.CloseTimeout}
 }
 
-func (p stopPlan) Total() time.Duration { return p.DrainDelay + p.Commands + p.Close }
+func (p stopPlan) Total() time.Duration { return p.DrainDelay + p.Commands + p.Feed + p.Close }
 
 func (n *node) shutdown(ctx context.Context, sup *supervisor, t tasks, cause error) error {
 	sup.stopping.Store(true)
@@ -42,6 +43,7 @@ func (n *node) shutdown(ctx context.Context, sup *supervisor, t tasks, cause err
 		}
 	}
 	fail("commands", within(stopCtx, plan.Commands, n.ws.Drain))
+	fail("feed", within(stopCtx, plan.Feed, n.feed.Stop))
 	n.ws.CloseAll(session.CodeGoingAway)
 	fail("connections", within(stopCtx, plan.Close, func(c context.Context) error {
 		return errors.Join(n.ws.Wait(c), t.listener.stop(c))

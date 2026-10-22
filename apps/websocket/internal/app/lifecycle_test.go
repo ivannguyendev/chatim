@@ -22,7 +22,7 @@ func TestRunIsReadyOnlyAfterTheSlotTableAndStopAnswersRunningCommandsBefore1001(
 	lis, logs := newListeners(), newLogWatch()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	done := runAsync(ctx, testConfig(mr.Addr(), keys.path), logs.logger(), Deps{Dial: dial, Listen: lis.listen})
+	done := runAsync(ctx, testConfig(mr.Addr(), keys.path), logs.logger(), Deps{Dial: dial, Listen: lis.listen, NATS: newFakeNATS().dial})
 
 	adminAddr := awaitListener(t, lis.admin)
 	if code, _ := httpStatus(t, adminAddr, "/livez"); code != 200 {
@@ -89,8 +89,8 @@ func TestRunIsReadyOnlyAfterTheSlotTableAndStopAnswersRunningCommandsBefore1001(
 	if err := awaitRun(t, done); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if strings.Contains(logs.written(), testRedisPassword) {
-		t.Fatal("a log line holds the redis password")
+	if written := logs.written(); strings.Contains(written, testRedisPassword) || strings.Contains(written, testNATSPassword) {
+		t.Fatal("a log line holds the redis or NATS password")
 	}
 }
 
@@ -124,13 +124,17 @@ func TestRunFailsWhenTheSlotTableNeverLoads(t *testing.T) {
 	mr.SetError("LOADING redis is loading the dataset")
 	keys := newSigner(t)
 	lis := newListeners()
-	deps := Deps{Listen: lis.listen, ReadyTimeout: 300 * time.Millisecond}
+	nats := newFakeNATS()
+	deps := Deps{Listen: lis.listen, ReadyTimeout: 300 * time.Millisecond, NATS: nats.dial}
 	err := Run(t.Context(), testConfig(mr.Addr(), keys.path), newLogWatch().logger(), deps)
 	if err == nil || !strings.Contains(err.Error(), "slot table") {
 		t.Fatalf("Run = %v, want a slot table error", err)
 	}
 	if len(lis.admin) != 1 || len(lis.ws) != 0 {
 		t.Fatalf("listeners opened: admin %d, websocket %d; want only admin", len(lis.admin), len(lis.ws))
+	}
+	if nats.running() != 0 || nats.closed.Load() != 1 {
+		t.Fatalf("feed left open after a failed start: consumers %d, NATS closes %d", nats.running(), nats.closed.Load())
 	}
 }
 
@@ -141,7 +145,7 @@ func TestRunStopsCleanlyWhenSignalledWhileWaitingForTheSlotTable(t *testing.T) {
 	lis := newListeners()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	done := runAsync(ctx, testConfig(mr.Addr(), keys.path), newLogWatch().logger(), Deps{Listen: lis.listen})
+	done := runAsync(ctx, testConfig(mr.Addr(), keys.path), newLogWatch().logger(), Deps{Listen: lis.listen, NATS: newFakeNATS().dial})
 	awaitListener(t, lis.admin)
 	cancel()
 	if err := awaitRun(t, done); err != nil {
@@ -189,7 +193,7 @@ func TestRunClosesTheWebsocketListenerWhenStartupEndsRightAfterBindingIt(t *test
 				return lis, tc.listenErr
 			}
 			logs := newLogWatch()
-			err := Run(ctx, testConfig(mr.Addr(), keys.path), logs.logger(), Deps{Listen: listen})
+			err := Run(ctx, testConfig(mr.Addr(), keys.path), logs.logger(), Deps{Listen: listen, NATS: newFakeNATS().dial})
 			if !errors.Is(err, tc.listenErr) || (tc.listenErr == nil && err != nil) {
 				t.Fatalf("Run = %v, want %v", err, tc.listenErr)
 			}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/command"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/config"
+	"github.com/ivannguyendev/chatim/apps/websocket/internal/feed"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/session"
 	"github.com/ivannguyendev/chatim/pkg/coreroute"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
@@ -23,8 +24,33 @@ const (
 )
 
 func redactedLogger(log *slog.Logger, cfg config.Config) *slog.Logger {
-	return slog.New(redact.NewHandler(log.Handler(), nil, []string{cfg.RedisPassword}))
+	return slog.New(redact.NewHandler(log.Handler(), []string{cfg.NATSURL}, []string{cfg.RedisPassword}))
 }
+
+func natsConfig(cfg config.Config, deps Deps) feed.NATSConfig {
+	return feed.NATSConfig{URL: cfg.NATSURL, Name: "chatim-websocket-" + cfg.NodeID, ReadyTimeout: deps.ReadyTimeout}
+}
+
+func feedConfig(cfg config.Config) feed.Config {
+	return feed.Config{
+		EventStream:   cfg.EventStream,
+		EventRoot:     cfg.EventRoot,
+		PublishStream: cfg.PublishStream,
+		PublishRoot:   cfg.PublishRoot,
+		Replicas:      cfg.StreamReplicas,
+		Workers:       cfg.FanoutWorkers,
+		Queue:         cfg.FanoutQueue,
+		ReplayRate:    cfg.ReplayRate,
+		ConsumeBatch:  cfg.ConsumeBatch,
+		ConsumeBytes:  cfg.ConsumeBytes,
+	}
+}
+
+type idleHandler struct{}
+
+func (idleHandler) Event(feed.Envelope) {}
+
+func (idleHandler) Publish(feed.Envelope) {}
 
 func jwtConfig(cfg config.Config) jwtverify.Config {
 	return jwtverify.Config{Issuer: cfg.JWTIssuer, Audience: cfg.JWTAudience, Leeway: cfg.JWTLeeway}

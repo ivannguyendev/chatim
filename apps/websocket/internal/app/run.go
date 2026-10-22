@@ -11,6 +11,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/command"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/config"
+	"github.com/ivannguyendev/chatim/apps/websocket/internal/feed"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/session"
 	"github.com/ivannguyendev/chatim/pkg/admin"
 	"github.com/ivannguyendev/chatim/pkg/coreroute"
@@ -22,6 +23,7 @@ type Deps struct {
 	Dial         coreroute.Dialer
 	ReadyTimeout time.Duration
 	Listen       func(ctx context.Context, addr string) (net.Listener, error)
+	NATS         func(ctx context.Context) (feed.Broker, error)
 }
 
 type node struct {
@@ -31,6 +33,7 @@ type node struct {
 	ws     *session.Server
 	routes *routerHolder
 	router *coreroute.Router
+	feed   *feed.Feed
 	http   *http.Server
 }
 
@@ -68,7 +71,11 @@ func wire(cfg config.Config, log *slog.Logger) (*node, error) {
 	if err != nil {
 		return nil, err
 	}
-	handler, err := metrics.Handler(metricsSubsystem, metricSources(ws, exec))
+	fd, err := feed.New(feedConfig(cfg), idleHandler{}, log)
+	if err != nil {
+		return nil, err
+	}
+	handler, err := metrics.Handler(metricsSubsystem, append(metricSources(ws, exec), fd.Sources()...))
 	if err != nil {
 		return nil, err
 	}
@@ -78,6 +85,7 @@ func wire(cfg config.Config, log *slog.Logger) (*node, error) {
 		admin:  admin.New(admin.Config{Addr: cfg.AdminAddr, Metrics: handler}, log),
 		ws:     ws,
 		routes: routes,
+		feed:   fd,
 		http:   newHTTPServer(ws, log),
 	}, nil
 }
@@ -110,6 +118,9 @@ func (n *node) serve(ctx context.Context, deps Deps) error {
 }
 
 func (n *node) openRoutes(ctx context.Context, deps Deps) (net.Listener, error) {
+	if err := n.openFeed(ctx, deps); err != nil || ctx.Err() != nil {
+		return nil, err
+	}
 	if err := n.openRouter(ctx, deps); err != nil || ctx.Err() != nil {
 		return nil, err
 	}
@@ -120,6 +131,21 @@ func closeListener(lis net.Listener) {
 	if lis != nil {
 		_ = lis.Close()
 	}
+}
+
+func (n *node) openFeed(ctx context.Context, deps Deps) error {
+	dial := deps.NATS
+	if dial == nil {
+		dial = func(c context.Context) (feed.Broker, error) { return feed.Dial(c, natsConfig(n.cfg, deps), n.log) }
+	}
+	b, err := dial(ctx)
+	if err != nil {
+		return fmt.Errorf("open nats: %w", err)
+	}
+	if err := n.feed.Start(ctx, b); err != nil {
+		return fmt.Errorf("start feed: %w", err)
+	}
+	return nil
 }
 
 func (n *node) openRouter(ctx context.Context, deps Deps) error {
@@ -140,9 +166,9 @@ func (n *node) abandon(ctx context.Context, sup *supervisor, t tasks) error {
 	sup.stopping.Store(true)
 	stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), n.cfg.ShutdownBudget)
 	defer cancel()
-	var err error
+	err := n.feed.Stop(stopCtx)
 	if n.router != nil {
-		err = n.router.Close()
+		err = errors.Join(err, n.router.Close())
 	}
 	return errors.Join(err, t.admin.stop(stopCtx))
 }
