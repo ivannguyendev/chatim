@@ -47,7 +47,7 @@ func memberTargetCases(room domain.Room, bob domain.Member) map[string]targetCas
 		"member_removed":          {pbconv.MemberEvent(domain.RoomGroup, removed), member(removed.Ver)},
 		"member_role_changed":     {pbconv.MemberEvent(domain.RoomGroup, promoted), member(promoted.Ver)},
 		"member_priority_changed": {pbconv.MemberEvent(domain.RoomGroup, raised), member(raised.Ver)},
-		"read_updated": {pbconv.ReadUpdated(room, "bob", domain.ReadPosition{Seq: 7, Ver: 8}, sentAt),
+		"read_positions": {pbconv.ReadPositions(room, []*chatimv1.ReadEntry{{User: "bob", ReadSeq: 7, ReadVer: 8}}, sentAt),
 			store.StateTarget{Collection: store.StateMembers, Bit: store.BitReadPosition, Room: roomA, User: "bob", Ver: 8}},
 		"history_cleared": {pbconv.HistoryCleared(room, "bob", clearedAt, sentAt),
 			store.StateTarget{Collection: store.StateMembers, Bit: store.BitHistoryCleared, Room: roomA, User: "bob", At: clearedAt}},
@@ -148,7 +148,6 @@ func TestEventsWithoutAClearableStateMapToNothing(t *testing.T) {
 	views.GetCountsChanged().Counter = "views"
 	noClearTime := pbconv.HistoryCleared(room, "bob", sentAt, sentAt)
 	noClearTime.GetHistoryCleared().ClearedAt = nil
-	noUser := pbconv.ReadUpdated(room, "", domain.ReadPosition{Seq: 7, Ver: 2}, sentAt)
 	noReaders := pbconv.ReadPositions(room, nil, sentAt)
 	badReaders := pbconv.ReadPositions(room, []*chatimv1.ReadEntry{{User: "", ReadSeq: 7, ReadVer: 2}, {User: "bob", ReadSeq: 7, ReadVer: math.MaxUint32 + 1}}, sentAt)
 	readersNoRoom := pbconv.ReadPositions(room, []*chatimv1.ReadEntry{{User: "bob", ReadSeq: 7, ReadVer: 2}}, sentAt)
@@ -161,7 +160,6 @@ func TestEventsWithoutAClearableStateMapToNothing(t *testing.T) {
 		"no seq":             pbconv.MessageCreated(domain.RoomGroup, noSeq),
 		"unknown counter":    views,
 		"no cleared_at":      noClearTime,
-		"no reader":          noUser,
 		"no read entries":    noReaders,
 		"bad read entries":   badReaders,
 		"reads without room": readersNoRoom,

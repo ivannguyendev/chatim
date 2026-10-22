@@ -81,9 +81,6 @@ func memberStateTarget(ev *chatimv1.Event) (store.StateTarget, bool) {
 		return memberSetTarget(p.MemberRoleChanged.GetUser(), p.MemberRoleChanged.GetVer()), true
 	case *chatimv1.Event_MemberPriorityChanged:
 		return memberSetTarget(p.MemberPriorityChanged.GetUser(), p.MemberPriorityChanged.GetVer()), true
-	case *chatimv1.Event_ReadUpdated:
-		r := p.ReadUpdated
-		return store.StateTarget{Collection: store.StateMembers, Bit: store.BitReadPosition, User: r.GetUser(), Ver: r.GetReadVer()}, true
 	case *chatimv1.Event_HistoryCleared:
 		h := p.HistoryCleared
 		if h.GetClearedAt() == nil {

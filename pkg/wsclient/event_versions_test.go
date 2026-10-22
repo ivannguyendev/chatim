@@ -57,9 +57,6 @@ func versionedKinds() map[string]versionedEvent {
 		"member_priority_changed": userEvent(func(ev *chatimv1.Event, u string, v uint64) {
 			ev.Payload = &chatimv1.Event_MemberPriorityChanged{MemberPriorityChanged: &chatimv1.MemberPriorityChanged{User: u, Ver: uint32(v)}}
 		}),
-		"read_updated": userEvent(func(ev *chatimv1.Event, u string, v uint64) {
-			ev.Payload = &chatimv1.Event_ReadUpdated{ReadUpdated: &chatimv1.ReadUpdated{User: u, ReadVer: v}}
-		}),
 		"room_preferences_changed": userEvent(func(ev *chatimv1.Event, u string, v uint64) {
 			ev.Payload = &chatimv1.Event_RoomPreferencesChanged{RoomPreferencesChanged: &chatimv1.RoomPreferencesChanged{
 				User: u, State: &chatimv1.MyRoomState{PreferenceVer: v},

@@ -57,9 +57,9 @@ func reactionChanged(room, seq uint64, ts time.Time) *chatimv1.Event {
 	return ev
 }
 
-func readUpdated(room uint64, ts time.Time) *chatimv1.Event {
+func readPositions(room uint64, ts time.Time) *chatimv1.Event {
 	ev := envelope(room, 0, 0, ts)
-	ev.Payload = &chatimv1.Event_ReadUpdated{ReadUpdated: &chatimv1.ReadUpdated{User: "u1", ReadSeq: 3, ReadVer: 2}}
+	ev.Payload = &chatimv1.Event_ReadPositions{ReadPositions: &chatimv1.ReadPositions{Entries: []*chatimv1.ReadEntry{{User: "u1", ReadSeq: 3, ReadVer: 2}}}}
 	return ev
 }
 

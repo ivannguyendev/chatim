@@ -27,7 +27,6 @@ const (
 	memberRoleChanged     = "member_role_changed"
 	memberPriorityChanged = "member_priority_changed"
 	memberCountChanged    = "member_count_changed"
-	readUpdated           = "read_updated"
 	readPositions         = "read_positions"
 	messageHidden         = "message_hidden"
 	historyCleared        = "history_cleared"
@@ -70,7 +69,7 @@ func subjectFor(root, tenant string, room uint64, kind string, mentions bool) (s
 		}
 	case roomCreated, roomUpdated, msgPinned, msgUnpinned, memberCountChanged:
 		data = roomData
-	case memberAdded, memberRemoved, memberRoleChanged, memberPriorityChanged, readUpdated, readPositions, messageHidden, historyCleared, bookmarkChanged, preferencesChanged:
+	case memberAdded, memberRemoved, memberRoleChanged, memberPriorityChanged, readPositions, messageHidden, historyCleared, bookmarkChanged, preferencesChanged:
 		data = memberData
 	case msgEdited, msgDeleted, reactionChanged, countsChanged:
 		data = messageData
@@ -113,8 +112,6 @@ func eventKind(ev *chatimv1.Event) string {
 		return memberPriorityChanged
 	case *chatimv1.Event_MemberCountChanged:
 		return memberCountChanged
-	case *chatimv1.Event_ReadUpdated:
-		return readUpdated
 	case *chatimv1.Event_ReadPositions:
 		return readPositions
 	case *chatimv1.Event_MessageHidden:

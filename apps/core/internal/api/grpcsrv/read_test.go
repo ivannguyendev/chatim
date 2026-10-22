@@ -71,8 +71,8 @@ func TestReadPositionThroughTheService(t *testing.T) {
 	if !slices.Equal(got, want) {
 		t.Fatalf("read sink adds %+v, want %+v", got, want)
 	}
-	if _, all := events.enqueued(); slices.ContainsFunc(all, func(ev *chatimv1.Event) bool { return ev.GetReadUpdated() != nil }) {
-		t.Fatal("a read command published read_updated; read positions go through the sink")
+	if _, all := events.enqueued(); slices.ContainsFunc(all, func(ev *chatimv1.Event) bool { return ev.GetReadPositions() != nil }) {
+		t.Fatal("a read command published read_positions itself; read positions go through the sink")
 	}
 }
 

@@ -119,7 +119,7 @@ func TestFromEventRejects(t *testing.T) {
 	cases := map[string]func(*chatimv1.Event){
 		"no payload": func(ev *chatimv1.Event) { ev.Payload = nil },
 		"another kind": func(ev *chatimv1.Event) {
-			ev.Payload = &chatimv1.Event_ReadUpdated{ReadUpdated: &chatimv1.ReadUpdated{}}
+			ev.Payload = &chatimv1.Event_ReadPositions{ReadPositions: &chatimv1.ReadPositions{}}
 		},
 		"no message":   func(ev *chatimv1.Event) { ev.GetMessageCreated().Message = nil },
 		"bad room":     func(ev *chatimv1.Event) { ev.RoomId = "x" },

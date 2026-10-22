@@ -52,7 +52,7 @@ func TestRoomActivityMergesEveryKindOfARoomThreadIntoOneRow(t *testing.T) {
 		decoded(t, msgEdited(roomA, 0, 1, at(5))),
 		decoded(t, msgCreated(roomA, 7, 1, at(8))),
 		decoded(t, msgCreated(roomA, 0, 4, at(2))),
-		decoded(t, readUpdated(roomA, at(10))),
+		decoded(t, readPositions(roomA, at(10))),
 		decoded(t, reactionChanged(roomB, 1, at(3))),
 		decoded(t, reactionChanged(roomB, 2, at(6))),
 		decoded(t, reactionChanged(roomB, 3, at(4))),
@@ -73,7 +73,7 @@ func TestRoomActivityFailsEveryEventOfAFailedWrite(t *testing.T) {
 	w := &fakeWriter{err: errDown}
 	errs := projection.NewRoomActivity(w).Handle(t.Context(), []projection.Event{
 		decoded(t, msgCreated(roomA, 0, 1, at(1))),
-		decoded(t, readUpdated(roomB, at(1))),
+		decoded(t, readPositions(roomB, at(1))),
 		decoded(t, msgCreated(roomC, 0, 1, at(1))),
 	})
 	if !errors.Is(errs[0], errDown) || !errors.Is(errs[2], errDown) || errors.Is(errs[1], errDown) {

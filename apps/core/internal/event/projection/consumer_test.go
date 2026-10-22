@@ -74,7 +74,7 @@ func TestConsumerTouchesABatchOfThreeRoomsInOneWriteAndAcksEachDelivery(t *testi
 func TestConsumerTermsGarbageAndAcksKindsNoHandlerKeeps(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rg := newConsumerRig(t, t.Context())
-		ds := []*fakeDelivery{delivery(t, msgCreated(roomB, 0, 1, at(1)), 1), {data: []byte("junk")}, delivery(t, readUpdated(roomA, at(1)), 1), {data: []byte("junk")}}
+		ds := []*fakeDelivery{delivery(t, msgCreated(roomB, 0, 1, at(1)), 1), {data: []byte("junk")}, delivery(t, readPositions(roomA, at(1)), 1), {data: []byte("junk")}}
 		rg.src.push(ds...)
 		synctest.Wait()
 		want := []settlement{{acks: 1}, {terms: 1}, {acks: 1}, {terms: 1}}

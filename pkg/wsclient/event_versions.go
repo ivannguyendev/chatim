@@ -49,8 +49,6 @@ func versionOf(ev *chatimv1.Event) (docVersion, bool) {
 		return userDoc(docMember, room, p.MemberRoleChanged.GetUser(), uint64(p.MemberRoleChanged.GetVer())), true
 	case *chatimv1.Event_MemberPriorityChanged:
 		return userDoc(docMember, room, p.MemberPriorityChanged.GetUser(), uint64(p.MemberPriorityChanged.GetVer())), true
-	case *chatimv1.Event_ReadUpdated:
-		return userDoc(docRead, room, p.ReadUpdated.GetUser(), p.ReadUpdated.GetReadVer()), true
 	case *chatimv1.Event_RoomPreferencesChanged:
 		return userDoc(docPreferences, room, p.RoomPreferencesChanged.GetUser(), p.RoomPreferencesChanged.GetState().GetPreferenceVer()), true
 	case *chatimv1.Event_MessagePinned:

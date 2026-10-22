@@ -10,19 +10,9 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
-
-func TestReadUpdatedCarriesTheReaderAndItsReadVer(t *testing.T) {
-	want := memberEnvelope("9007199254740993-rd-bob-v6", "bob")
-	want.Payload = &chatimv1.Event_ReadUpdated{ReadUpdated: &chatimv1.ReadUpdated{User: "bob", ReadSeq: 41, ReadVer: 6}}
-	got := pbconv.ReadUpdated(groupRoom(), "bob", domain.ReadPosition{Seq: 41, Ver: 6}, changedAt)
-	if !proto.Equal(got, want) {
-		t.Fatalf("ReadUpdated = %v, want %v", got, want)
-	}
-}
 
 func TestHiddenAndClearedEventsCarryTheUserAndTheirIDs(t *testing.T) {
 	clearedAt := sentAt.Add(3_123_000_000)
