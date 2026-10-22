@@ -45,12 +45,41 @@ func TestCheckLiveFindsEachWantedEventByID(t *testing.T) {
 		"subject":                        wrongSubject,
 		"want member_added":              wrongKind,
 		`"member_count=2"`:               seenAs(count, room, e2e.CountPayload(2)),
-		"unexpected read_updated":        {Kind: e2e.KindRead, Room: dm, ID: e2e.ReadEventID(dm, bob, 2)},
 		"unexpected member_role_changed": {Kind: e2e.KindRoleChanged, Room: room, ID: e2e.MemberEventID(room, bob, 2)},
 	}
 	for part, ev := range bad {
 		_, err := e2e.CheckLive(rooms, wants, []e2e.Event{ev})
 		expectErr(t, err, part)
+	}
+}
+
+func TestCheckLiveMatchesReadPositionsByEachUsersFinalPosition(t *testing.T) {
+	final := wantOf(room, e2e.KindRead, e2e.ReadWantID(room, bob, 3), e2e.ReadPayload(80, 3))
+	subject := final.Subject
+	read := func(text string) e2e.Event {
+		return e2e.Event{Kind: e2e.KindRead, Room: room, ID: room + "-rp-x", Subject: subject, Text: text}
+	}
+	cases := map[string]struct {
+		events []e2e.Event
+		seen   bool
+	}{
+		"final position among others":      {[]e2e.Event{read("e2e-amy read_seq=2 read_ver=1;" + bob + " read_seq=80 read_ver=3")}, true},
+		"intermediate then final":          {[]e2e.Event{read(bob + " read_seq=79 read_ver=2"), read(bob + " read_seq=80 read_ver=3")}, true},
+		"only an intermediate version":     {[]e2e.Event{read(bob + " read_seq=79 read_ver=2")}, false},
+		"same ver at another seq":          {[]e2e.Event{read(bob + " read_seq=81 read_ver=3")}, false},
+		"another user at the same version": {[]e2e.Event{read("e2e-amy read_seq=80 read_ver=3")}, false},
+		"other room":                       {[]e2e.Event{{Kind: e2e.KindRead, Room: "9", Subject: subject, Text: bob + " read_seq=80 read_ver=3"}}, false},
+		"wrong subject":                    {[]e2e.Event{{Kind: e2e.KindRead, Room: room, Subject: "live.e2e.message.42.evt.read_positions", Text: bob + " read_seq=80 read_ver=3"}}, false},
+		"malformed entries":                {[]e2e.Event{read("garbage;" + bob + " read_seq=x")}, false},
+	}
+	for name, c := range cases {
+		missing, err := e2e.CheckLive([]string{room}, []e2e.Want{final}, c.events)
+		if err != nil {
+			t.Fatalf("%s: CheckLive = %v, want no error for read positions", name, err)
+		}
+		if got := len(missing) == 0; got != c.seen {
+			t.Fatalf("%s: seen %v (missing %v), want %v", name, got, missing, c.seen)
+		}
 	}
 }
 

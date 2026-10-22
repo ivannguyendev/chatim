@@ -10,6 +10,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/projection"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/readbatch"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/stateclear"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/sweep"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
@@ -59,6 +60,7 @@ func TestLoadDefaults(t *testing.T) {
 			LeaseTTL: 10 * time.Second, HookTimeout: 500 * time.Millisecond,
 		},
 		StateClear: stateclear.Config{Flush: 2 * time.Second, Batch: 16384, Queue: 65536, Timeout: 5 * time.Second},
+		ReadBatch:  readbatch.Config{Window: time.Second},
 		Sweep: sweep.Config{
 			SubjectRoot: "evt", Interval: 2 * time.Second, MinAge: 15 * time.Second, Lookback: time.Minute,
 			Batch: 500, Rate: 5000, Tick: time.Second, AckTimeout: 2 * time.Second,
@@ -116,6 +118,7 @@ func TestLoadOverrides(t *testing.T) {
 			LeaseTTL: 6 * time.Second, HookTimeout: 200 * time.Millisecond,
 		},
 		StateClear: stateclear.Config{Flush: 50 * time.Millisecond, Batch: 200, Queue: 4096, Timeout: 2 * time.Second},
+		ReadBatch:  readbatch.Config{Window: 500 * time.Millisecond},
 		Sweep: sweep.Config{
 			SubjectRoot: "evt_it", Interval: 3 * time.Second, MinAge: 4 * time.Second, Lookback: 20 * time.Second,
 			Batch: 250, Rate: 2000, Tick: 500 * time.Millisecond, AckTimeout: time.Second,

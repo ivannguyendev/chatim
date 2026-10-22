@@ -23,6 +23,7 @@ type serviceDeps struct {
 	store     *mongostore.Store
 	router    *actor.Router
 	pub       *publish.Publisher
+	reads     member.ReadSink
 	cidBatch  *dedupe.Batcher
 	timers    *timer.Timers
 	msgTimers *timer.Timers
@@ -110,7 +111,7 @@ func wireMemberService(d serviceDeps, checker *access.Checker, requests *dedupe.
 	st := d.store
 	svc, err := member.New(member.Deps{
 		Access: checker, Messages: st, Rooms: st, Events: d.pub, Members: st, Requests: requests,
-		Forget: d.router, Timers: d.timers, Reads: st, Limits: d.cfg.Members, Log: d.log,
+		Forget: d.router, Timers: d.timers, Reads: st, ReadSink: d.reads, Limits: d.cfg.Members, Log: d.log,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("wire member service: %w", err)

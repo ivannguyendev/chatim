@@ -78,7 +78,7 @@ func TestRealInfraEachChangeGoesToTheSubjectOfItsData(t *testing.T) {
 		pbconv.MessageEventID(room, 0, seq):                    {"message", "msg_created"},
 		pbconv.MemberEventID(room, "carol", added[0].GetVer()): {"member", "member_added"},
 		pbconv.MemberCountEventID(room, 2):                     {"room", "member_count_changed"},
-		pbconv.ReadEventID(room, "bob", read.GetReadVer()):     {"member", "read_updated"},
+		pbconv.ReadPositionsEventID(room, []*chatimv1.ReadEntry{{User: "bob", ReadSeq: seq, ReadVer: read.GetReadVer()}}): {"member", "read_positions"},
 	})
 }
 

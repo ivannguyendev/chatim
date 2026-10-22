@@ -73,7 +73,7 @@ func (r *roomRun) readDeleteHide() error {
 	if err != nil {
 		return fmt.Errorf("mark room %s read as %s: %w", room, r.me, err)
 	}
-	if err := r.expect(r.want(room, e2e.KindRead, e2e.ReadEventID(room, r.me, 2), e2e.ReadPayload(3, 2))); err != nil {
+	if err := r.expect(r.want(room, e2e.KindRead, e2e.ReadWantID(room, r.me, 2), e2e.ReadPayload(3, 2))); err != nil {
 		return err
 	}
 	if err := r.line("unread after reading", r.text(room, 0, 3, r.peer)); err != nil {

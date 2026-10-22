@@ -44,6 +44,7 @@ type node struct {
 	grpc        *grpcserver.Server
 	publisher   drainer
 	stateClears drainer
+	readBatch   drainer
 	flusher     drainer
 	cidBatch    drainer
 	router      gate
@@ -99,6 +100,10 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wire publisher: %w", err)
 	}
+	reads, err := wireReadBatch(cfg, pub, log)
+	if err != nil {
+		return nil, err
+	}
 	fl, err := flush.New(st, cfg.Flush)
 	if err != nil {
 		return nil, fmt.Errorf("wire flusher: %w", err)
@@ -140,9 +145,10 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 	if err != nil {
 		return nil, err
 	}
+	a.readBatch = reads
 	a.publisher, a.stateClears, a.flusher, a.cidBatch, a.router, a.slots = pub, clears, fl, batch, router, slots
 	a.projections, a.sweeper = projections, sweeper
-	svc, reader, err := wireService(serviceDeps{store: st, router: router, pub: pub, cidBatch: batch, timers: ts.members, msgTimers: ts.messages, rooms: caches, cfg: cfg, log: log})
+	svc, reader, err := wireService(serviceDeps{store: st, router: router, pub: pub, reads: reads, cidBatch: batch, timers: ts.members, msgTimers: ts.messages, rooms: caches, cfg: cfg, log: log})
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +178,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 		memberForgets:   watch.Forgets,
 		memberMalformed: watch.Malformed,
 		roomCache:       caches.probes(roomWatch),
-		events:          eventProbes{clears: clears, projection: projections, sweeper: sweeper},
+		events:          eventProbes{clears: clears, reads: reads, projection: projections, sweeper: sweeper},
 		mention:         a.attachMention(mention, liveWatchers{watch, roomWatch}),
 		indexes:         indexProbes{health: a.indexes, collections: indexCatalog(cfg).Names()},
 	}

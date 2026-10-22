@@ -22,6 +22,7 @@ func TestNewRequiresEveryDependency(t *testing.T) {
 		"no forget":   func(d *member.Deps) { d.Forget = nil },
 		"no timers":   func(d *member.Deps) { d.Timers = nil },
 		"no reads":    func(d *member.Deps) { d.Reads = nil },
+		"no sink":     func(d *member.Deps) { d.ReadSink = nil },
 	} {
 		d := full
 		drop(&d)

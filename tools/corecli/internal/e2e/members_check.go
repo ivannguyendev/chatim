@@ -32,6 +32,10 @@ func CheckLive(rooms []string, wants []Want, events []Event) ([]string, error) {
 		if !slices.Contains(rooms, ev.Room) {
 			continue
 		}
+		if ev.Kind == KindRead {
+			markReads(byID, seen, ev)
+			continue
+		}
 		w, ok := byID[ev.ID]
 		switch {
 		case !ok && ev.IsMember():
@@ -54,6 +58,23 @@ func CheckLive(rooms []string, wants []Want, events []Event) ([]string, error) {
 		}
 	}
 	return missing, nil
+}
+
+func markReads(byID map[string]Want, seen map[string]bool, ev Event) {
+	for entry := range strings.SplitSeq(ev.Text, ";") {
+		user, payload, ok := strings.Cut(entry, " ")
+		if !ok {
+			continue
+		}
+		var seq, ver uint64
+		if _, err := fmt.Sscanf(payload, "read_seq=%d read_ver=%d", &seq, &ver); err != nil {
+			continue
+		}
+		id := ReadWantID(ev.Room, user, ver)
+		if w, wanted := byID[id]; wanted && w.Kind == KindRead && w.Subject == ev.Subject && w.Payload == payload {
+			seen[id] = true
+		}
+	}
 }
 
 func CheckMemberReply(what string, want, got MemberReply) error {

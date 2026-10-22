@@ -6,6 +6,8 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/projection"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/readbatch"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/stateclear"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/sweep"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
@@ -15,6 +17,14 @@ func wireStateClears(cfg config.Config, st *mongostore.Store, log *slog.Logger) 
 	q, err := stateclear.New(st.EventStates(), cfg.StateClear, log)
 	if err != nil {
 		return nil, fmt.Errorf("wire state clear queue: %w", err)
+	}
+	return q, nil
+}
+
+func wireReadBatch(cfg config.Config, pub *publish.Publisher, log *slog.Logger) (*readbatch.Queue, error) {
+	q, err := readbatch.New(pub.Enqueue, cfg.ReadBatch, log)
+	if err != nil {
+		return nil, fmt.Errorf("wire read batch queue: %w", err)
 	}
 	return q, nil
 }

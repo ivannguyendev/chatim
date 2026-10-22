@@ -51,7 +51,7 @@ func membersWithoutEvents(t *testing.T, it *itInfra, core itCore, members member
 	return built(member.New(member.Deps{
 		Access: built(access.NewChecker(st, access.DefaultPolicy{}))(t), Messages: st, Rooms: st,
 		Events: droppedEvents{}, Limits: core.cfg.Members, Members: members, Requests: freshRequests{},
-		Forget: noForget{}, Reads: st, Log: slog.New(slog.DiscardHandler),
+		Forget: noForget{}, Reads: st, ReadSink: noReads{}, Log: slog.New(slog.DiscardHandler),
 		Timers: built(timer.NewTimers(it.js, tc.Name, tc.SubjectRoot, core.cfg.MemberCountCheckDelay))(t),
 	}))(t)
 }
@@ -110,7 +110,7 @@ func TestRealInfraLostMemberAndReadEventsAreRepublished(t *testing.T) {
 		t.Fatalf("MarkRead without events = %+v, %v; want read up to %d", pos, err, seq)
 	}
 
-	ids := []string{pbconv.MemberEventID(room, "erin", 1), pbconv.MemberCountEventID(room, 2), pbconv.ReadEventID(room, "erin", pos.Ver)}
+	ids := []string{pbconv.MemberEventID(room, "erin", 1), pbconv.MemberCountEventID(room, 2), pbconv.ReadPositionsEventID(room, []*chatimv1.ReadEntry{{User: "erin", ReadSeq: seq, ReadVer: pos.Ver}})}
 	evs := awaitLiveEvents(t, live, ids...)
 	if a := evs[ids[0]].GetMemberAdded(); a.GetUser() != "erin" || a.GetVer() != 1 || a.GetRole() != chatimv1.MemberRole_MEMBER_ROLE_MEMBER || a.GetReadVer() == 0 {
 		t.Fatalf("republished member_added = %v, want erin as a member at ver 1 with a read position", a)
@@ -118,7 +118,11 @@ func TestRealInfraLostMemberAndReadEventsAreRepublished(t *testing.T) {
 	if c := evs[ids[1]].GetMemberCountChanged(); c.GetMemberCount() != 3 || c.GetMemberCountVer() != 2 {
 		t.Fatalf("republished member_count_changed = %v, want 3 members at ver 2", c)
 	}
-	if r := evs[ids[2]].GetReadUpdated(); r.GetUser() != "erin" || r.GetReadSeq() != seq || r.GetReadVer() != pos.Ver {
-		t.Fatalf("republished read_updated = %v, want erin at seq %d ver %d", r, seq, pos.Ver)
+	if r := evs[ids[2]].GetReadPositions().GetEntries(); len(r) != 1 || r[0].GetUser() != "erin" || r[0].GetReadSeq() != seq || r[0].GetReadVer() != pos.Ver {
+		t.Fatalf("republished read_positions = %v, want only erin at seq %d ver %d", r, seq, pos.Ver)
 	}
 }
+
+type noReads struct{}
+
+func (noReads) Add(domain.Room, string, domain.ReadPosition) {}

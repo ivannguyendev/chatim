@@ -17,6 +17,13 @@ func (fakeClears) Cleared() uint64  { return 31 }
 func (fakeClears) Dropped() uint64  { return 32 }
 func (fakeClears) Failures() uint64 { return 33 }
 
+type fakeReads struct{}
+
+func (fakeReads) Entries() uint64         { return 61 }
+func (fakeReads) Events() uint64          { return 62 }
+func (fakeReads) Dropped() uint64         { return 63 }
+func (fakeReads) EnqueueFailures() uint64 { return 64 }
+
 type fakeProjection struct {
 	name string
 	base uint64
@@ -58,6 +65,7 @@ func fakeProbes() probes {
 		roomCache:       fakeRoomCacheProbes(),
 		events: eventProbes{
 			clears:     fakeClears{},
+			reads:      fakeReads{},
 			projection: fakeProjection{"projections", 50},
 			sweeper:    fakeSweeper{},
 		},
@@ -92,6 +100,7 @@ func TestCoreMetricSourcesCoverEveryGuarantee(t *testing.T) {
 		"room_tail_cache_bytes", "room_watch_forgets_total", "room_watch_malformed_total",
 		"state_clear_cleared_total", "state_clear_dropped_total", "state_clear_failures_total", "publish_state_track_full_total",
 		"sweep_publish_failures_total", "sweep_failures_total", "sweep_passes_total",
+		"read_batch_entries_total", "read_batch_events_total", "read_batch_dropped_total", "read_batch_enqueue_failures_total",
 	} {
 		if _, ok := got[name]; !ok {
 			t.Errorf("no metric source %s", name)
@@ -110,6 +119,7 @@ func TestEventMetricsReadTheirComponentByLabel(t *testing.T) {
 	got := readings(metricSources(fakeProbes()))
 	want := map[string]float64{
 		"state_clear_cleared_total": 31, "state_clear_dropped_total": 32, "state_clear_failures_total": 33, "publish_state_track_full_total": 34,
+		"read_batch_entries_total": 61, "read_batch_events_total": 62, "read_batch_dropped_total": 63, "read_batch_enqueue_failures_total": 64,
 		"sweep_publish_failures_total": 41, "sweep_failures_total": 42, "sweep_passes_total": 43,
 		"projection_lag_seconds{projections}": 50, "projection_failures_total{projections}": 51,
 		"projection_dropped_total{projections}": 52, "projection_stuck_total{projections}": 53,

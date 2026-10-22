@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/projection"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/readbatch"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/stateclear"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/sweep"
 )
@@ -21,6 +22,7 @@ func (p *parser) eventConfig(c *Config) {
 		Queue:   p.count("STATE_CLEAR_QUEUE", stateclear.DefaultQueue),
 		Timeout: p.span("STATE_CLEAR_TIMEOUT", stateclear.DefaultTimeout),
 	}
+	c.ReadBatch = readbatch.Config{Window: p.span("READ_EVENT_WINDOW", readbatch.DefaultWindow)}
 	c.Sweep = sweep.Config{
 		SubjectRoot: c.Stream.SubjectRoot,
 		Interval:    p.span("SWEEP_INTERVAL", sweep.DefaultInterval),

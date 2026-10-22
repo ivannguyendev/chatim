@@ -8,6 +8,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/dedupe"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/projection"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
+	"github.com/ivannguyendev/chatim/apps/core/internal/event/readbatch"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/stateclear"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/sweep"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
@@ -63,6 +64,7 @@ type Config struct {
 	Timer                  timer.StreamConfig
 	Slot                   slot.Config
 	StateClear             stateclear.Config
+	ReadBatch              readbatch.Config
 	Sweep                  sweep.Config
 	Projection             projection.Config
 	Mention                mentionapp.Config

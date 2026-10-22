@@ -50,7 +50,7 @@ func TestEachPreferenceChangesOnItsOwnAndSendsTheFullState(t *testing.T) {
 		_, events := rg.events.list()
 		ev := events[len(events)-1]
 		state := ev.GetRoomPreferencesChanged().GetState()
-		if len(events) != i+2 || ev.GetId() != pbconv.PreferencesEventID(room, "bob", s.want.Ver) || ev.GetActor() != "bob" ||
+		if len(events) != i+1 || ev.GetId() != pbconv.PreferencesEventID(room, "bob", s.want.Ver) || ev.GetActor() != "bob" ||
 			ev.GetRoomPreferencesChanged().GetUser() != "bob" || state.GetPreferenceVer() != s.want.Ver || state.GetReadSeq() != 2 ||
 			(state.GetMutedUntil() != nil) != !s.want.MutedUntil.IsZero() || (state.GetPinnedAt() != nil) != !s.want.PinnedAt.IsZero() {
 			t.Fatalf("%s: events = %v, want room_preferences_changed v%d with the full state last", s.name, events, s.want.Ver)

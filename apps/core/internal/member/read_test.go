@@ -8,7 +8,6 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
-	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
@@ -47,28 +46,27 @@ func TestMarkUnreadOnlyMovesBack(t *testing.T) {
 	}
 }
 
-func TestEachChangeSendsOneReadUpdated(t *testing.T) {
+func TestEachMoveHandsOneReadPositionToTheSink(t *testing.T) {
 	rg := newRig(t, nil)
 	rg.sendMany(t, 4)
 	rg.markRead(t, "bob", room, 2)
 	rg.markRead(t, "bob", room, 1)
 	rg.markUnread(t, "bob", room, 3)
 	rg.markUnread(t, "bob", room, 2)
-	rg.events.err = errBoom
-	if got := rg.markRead(t, "bob", room, 4); got != (domain.ReadPosition{Seq: 4, Ver: 3}) {
-		t.Fatalf("MarkRead with a failing enqueue = %+v, want seq 4 ver 3", got)
-	}
-	rooms, events := rg.events.list()
+	rg.markRead(t, "bob", room, 4)
+	adds := rg.reads.list()
 	want := []domain.ReadPosition{{Seq: 2, Ver: 1}, {Seq: 1, Ver: 2}, {Seq: 4, Ver: 3}}
-	if len(events) != len(want) {
-		t.Fatalf("events = %v, want %d read_updated", events, len(want))
+	if len(adds) != len(want) {
+		t.Fatalf("sink adds = %+v, want %d", adds, len(want))
 	}
 	for i, pos := range want {
-		ev, r := events[i], events[i].GetReadUpdated()
-		if rooms[i] != room || ev.GetId() != pbconv.ReadEventID(room, "bob", pos.Ver) || ev.GetActor() != "bob" ||
-			r.GetUser() != "bob" || r.GetReadSeq() != pos.Seq || r.GetReadVer() != pos.Ver || !ev.GetTs().AsTime().Equal(rg.at()) {
-			t.Fatalf("event %d = %v, want read_updated of bob at %+v", i, ev, pos)
+		a := adds[i]
+		if a.room.ID != room || a.room.Tenant != tenant || a.room.Type != domain.RoomGroup || a.user != "bob" || a.pos != pos {
+			t.Fatalf("add %d = %+v, want bob of room %d at %+v", i, a, room, pos)
 		}
+	}
+	if _, events := rg.events.list(); len(events) != 0 {
+		t.Fatalf("events = %v, want none: read positions go through the sink", events)
 	}
 }
 
@@ -86,6 +84,9 @@ func TestAnEmptyRoomKeepsTheReadPosition(t *testing.T) {
 	}
 	if _, events := rg.events.list(); len(events) != 0 {
 		t.Fatalf("events = %v, want none", events)
+	}
+	if adds := rg.reads.list(); len(adds) != 0 {
+		t.Fatalf("sink adds = %+v, want none", adds)
 	}
 }
 
@@ -128,6 +129,9 @@ func TestReadNeedsAnActiveMember(t *testing.T) {
 	if _, events := rg.events.list(); len(events) != 2 {
 		t.Fatalf("events = %v, want only the removal and its count", events)
 	}
+	if adds := rg.reads.list(); len(adds) != 0 {
+		t.Fatalf("sink adds = %+v, want none", adds)
+	}
 }
 
 func TestTheClampReadsTheLastSeqOnlyPastTheRoomHead(t *testing.T) {
@@ -165,7 +169,7 @@ func TestDirectRoomsTrackReadPositionsToo(t *testing.T) {
 	if got := rg.markRead(t, "mia", direct, 1); got != (domain.ReadPosition{Seq: 1, Ver: 1}) {
 		t.Fatalf("MarkRead in a direct room = %+v, want seq 1 ver 1", got)
 	}
-	if _, events := rg.events.list(); len(events) != 1 || events[0].GetReadUpdated().GetUser() != "mia" {
-		t.Fatalf("events = %v, want one read_updated for mia", events)
+	if adds := rg.reads.list(); len(adds) != 1 || adds[0].user != "mia" || adds[0].room.Type != domain.RoomDM {
+		t.Fatalf("sink adds = %+v, want one for mia in the direct room", adds)
 	}
 }

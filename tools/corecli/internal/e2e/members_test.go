@@ -18,7 +18,7 @@ func TestMemberIDsAndSubjects(t *testing.T) {
 		e2e.RoomCreatedEventID(room):            "42-created",
 		e2e.MemberEventID(room, bob, 3):         "42-mb-e2e-bob-v3",
 		e2e.MemberCountEventID(room, 5):         "42-members-v5",
-		e2e.ReadEventID(room, bob, 2):           "42-rd-e2e-bob-v2",
+		e2e.ReadWantID(room, bob, 2):            "42-rp-e2e-bob-v2",
 		e2e.HiddenEventID(room, bob, 0, 1):      "42-hd-e2e-bob-0-1",
 		e2e.ClearedEventID(room, bob, at):       "42-cl-e2e-bob-1700000000123",
 		e2e.LiveSubject("live", "t", room, "x"): "live.t.message.42.evt.x",
@@ -71,8 +71,10 @@ func TestEventOfReadsMemberAndReadEvents(t *testing.T) {
 			e.Payload = &chatimv1.Event_MemberCountChanged{MemberCountChanged: &chatimv1.MemberCountChanged{MemberCount: 3, MemberCountVer: 2}}
 		}, e2e.Event{Kind: e2e.KindMemberCount, Text: e2e.CountPayload(3)}},
 		{func(e *chatimv1.Event) {
-			e.Payload = &chatimv1.Event_ReadUpdated{ReadUpdated: &chatimv1.ReadUpdated{User: bob, ReadSeq: 79, ReadVer: 2}}
-		}, e2e.Event{Kind: e2e.KindRead, User: bob, Text: e2e.ReadPayload(79, 2)}},
+			e.Payload = &chatimv1.Event_ReadPositions{ReadPositions: &chatimv1.ReadPositions{Entries: []*chatimv1.ReadEntry{
+				{User: "e2e-amy", ReadSeq: 5, ReadVer: 1}, {User: bob, ReadSeq: 79, ReadVer: 2},
+			}}}
+		}, e2e.Event{Kind: e2e.KindRead, Text: "e2e-amy read_seq=5 read_ver=1;" + bob + " " + e2e.ReadPayload(79, 2)}},
 		{func(e *chatimv1.Event) {
 			e.Seq = 1
 			e.Payload = &chatimv1.Event_MessageHidden{MessageHidden: &chatimv1.MessageHidden{User: bob, Seq: 1}}

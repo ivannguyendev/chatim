@@ -2,11 +2,12 @@ package grpcsrv_test
 
 import (
 	"slices"
+	"sync"
 	"testing"
 
 	"google.golang.org/grpc/codes"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -15,8 +16,8 @@ type readRow struct {
 }
 
 func TestReadPositionThroughTheService(t *testing.T) {
-	events := &recordingEvents{}
-	rg := newRig(t, options{events: events})
+	events, reads := &recordingEvents{}, &recordingReads{}
+	rg := newRig(t, options{events: events, reads: reads})
 	room := rg.createGroup(t, "acme", "alice", "bob")
 	alice, bob := as(t, "acme", "alice"), as(t, "acme", "bob")
 	for _, cid := range []string{"c-1", "c-2", "c-3"} {
@@ -61,18 +62,39 @@ func TestReadPositionThroughTheService(t *testing.T) {
 	_, err = rg.client.MarkRead(bob, &chatimv1.MarkReadRequest{RoomId: "x", Seq: 1})
 	expectCode(t, err, codes.InvalidArgument)
 	id := roomNumber(t, room)
-	var got []string
-	_, all := events.enqueued()
-	for _, ev := range all {
-		if ev.GetReadUpdated() != nil {
-			if ev.GetActor() != "bob" || ev.GetReadUpdated().GetUser() != "bob" {
-				t.Fatalf("read_updated %v, want bob as actor and reader", ev)
-			}
-			got = append(got, ev.GetId())
-		}
+	got := reads.list()
+	want := []readAdd{
+		{room: id, user: "bob", pos: domain.ReadPosition{Seq: 2, Ver: 2}},
+		{room: id, user: "bob", pos: domain.ReadPosition{Seq: 3, Ver: 3}},
+		{room: id, user: "bob", pos: domain.ReadPosition{Seq: 1, Ver: 4}},
 	}
-	want := []string{pbconv.ReadEventID(id, "bob", 2), pbconv.ReadEventID(id, "bob", 3), pbconv.ReadEventID(id, "bob", 4)}
 	if !slices.Equal(got, want) {
-		t.Fatalf("read_updated ids %v, want %v", got, want)
+		t.Fatalf("read sink adds %+v, want %+v", got, want)
 	}
+	if _, all := events.enqueued(); slices.ContainsFunc(all, func(ev *chatimv1.Event) bool { return ev.GetReadUpdated() != nil }) {
+		t.Fatal("a read command published read_updated; read positions go through the sink")
+	}
+}
+
+type readAdd struct {
+	room uint64
+	user string
+	pos  domain.ReadPosition
+}
+
+type recordingReads struct {
+	mu   sync.Mutex
+	adds []readAdd
+}
+
+func (r *recordingReads) Add(room domain.Room, user string, pos domain.ReadPosition) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.adds = append(r.adds, readAdd{room: room.ID, user: user, pos: pos})
+}
+
+func (r *recordingReads) list() []readAdd {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.adds)
 }
