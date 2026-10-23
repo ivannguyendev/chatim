@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"github.com/ivannguyendev/chatim/pkg/callerid"
 	"github.com/ivannguyendev/chatim/pkg/coreroute"
 	"github.com/ivannguyendev/chatim/pkg/ids"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
@@ -39,7 +40,7 @@ func (l *CoreLoader) Load(ctx context.Context, tenant, user string) (Membership,
 	}
 	callCtx, cancel := context.WithTimeout(ctx, l.deadline)
 	defer cancel()
-	callCtx = coreroute.WithCaller(metadata.NewOutgoingContext(callCtx, metadata.MD{}), tenant, user)
+	callCtx = callerid.WithCaller(metadata.NewOutgoingContext(callCtx, metadata.MD{}), tenant, user)
 	resp, err := conn.Core.ListMyRoomIDs(callCtx, &chatimv1.ListMyRoomIDsRequest{})
 	if err != nil {
 		if status.Code(err) == codes.Unavailable {

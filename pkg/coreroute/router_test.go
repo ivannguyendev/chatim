@@ -9,10 +9,8 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	"github.com/ivannguyendev/chatim/pkg/callerid"
 	"github.com/ivannguyendev/chatim/pkg/coreroute"
 	"github.com/ivannguyendev/chatim/pkg/slotmap"
 )
@@ -167,15 +165,5 @@ func TestOpenGivesUpWhenTheSlotTableNeverLoads(t *testing.T) {
 	}
 	if _, err := coreroute.Open(t.Context(), coreroute.Config{RedisAddr: addr, ReadyTimeout: -time.Second}); err == nil {
 		t.Fatal("Open accepted a negative ready timeout")
-	}
-}
-
-func TestWithCallerAppendsTheCallerHeaders(t *testing.T) {
-	md, _ := metadata.FromOutgoingContext(coreroute.WithCaller(t.Context(), "acme", "alice"))
-	if got := md.Get(callerid.TenantHeader); len(got) != 1 || got[0] != "acme" {
-		t.Fatalf("tenant = %v", got)
-	}
-	if got := md.Get(callerid.UserHeader); len(got) != 1 || got[0] != "alice" {
-		t.Fatalf("user = %v", got)
 	}
 }

@@ -1,4 +1,4 @@
-package command
+package corecall
 
 import (
 	"context"
@@ -27,6 +27,7 @@ type Outcome struct {
 	Command string
 	Code    codes.Code
 	Detail  string
+	Message string
 }
 
 type grpcStatusError interface {
@@ -49,7 +50,7 @@ func codeOf(err error) (codes.Code, string) {
 	return codes.Unknown, ""
 }
 
-func clientMessage(code codes.Code, coreMessage string) string {
+func ClientMessage(code codes.Code, coreMessage string) string {
 	if coreMessageKept[code] && coreMessage != "" {
 		return coreMessage
 	}

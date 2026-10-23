@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ivannguyendev/chatim/pkg/coreroute"
+	"github.com/ivannguyendev/chatim/pkg/callerid"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/tools/corecli/internal/e2e"
 )
@@ -12,7 +12,7 @@ import (
 const removedMemberVer = 2
 
 func (r *wsEventsRun) leftListed() error {
-	ctx := coreroute.WithCaller(r.base, r.tenant, r.b.user)
+	ctx := callerid.WithCaller(r.base, r.tenant, r.b.user)
 	resp, _, err := r.cl.ListMyRoomIDs(ctx, &chatimv1.ListMyRoomIDsRequest{})
 	if err != nil {
 		return fmt.Errorf("list room ids of %s: %w", r.b.user, err)

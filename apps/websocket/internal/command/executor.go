@@ -7,11 +7,11 @@ import (
 	"time"
 
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
+	"github.com/ivannguyendev/chatim/pkg/corecall"
 	"github.com/ivannguyendev/chatim/pkg/coreroute"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 	"github.com/ivannguyendev/chatim/pkg/metrics"
@@ -20,9 +20,12 @@ import (
 
 var (
 	errUnknownRequest = status.Error(codes.Unimplemented, "request type not set or not known")
-	errMalformed      = status.Error(codes.InvalidArgument, "malformed request")
-	errEmptyResult    = status.Error(codes.Internal, "core returned no result")
 	errBadRoom        = status.Error(codes.InvalidArgument, "invalid room_id")
+)
+
+type (
+	Outcome        = corecall.Outcome
+	CommandLatency = corecall.CommandLatency
 )
 
 type Router interface {
@@ -33,29 +36,34 @@ type Router interface {
 
 type Executor struct {
 	router   Router
-	deadline time.Duration
-	commands map[protoreflect.FieldNumber]*command
-	stats    *stats
+	forward  *corecall.Forwarder
+	commands map[protoreflect.FieldNumber]command
 }
 
 func New(router Router, deadline time.Duration) (*Executor, error) {
 	if router == nil {
 		return nil, errors.New("command: router is required")
 	}
-	if deadline <= 0 {
-		return nil, errors.New("command: core request deadline must be positive")
-	}
-	cmds, err := buildCommands()
+	served, err := corecall.Commands(servedMethods())
 	if err != nil {
 		return nil, err
 	}
-	byNumber := make(map[protoreflect.FieldNumber]*command, len(cmds))
-	names := make([]string, len(cmds))
-	for _, cmd := range cmds {
-		byNumber[cmd.result.Number()] = cmd
-		names[cmd.index] = cmd.name
+	cmds, methods, err := buildCommands(served)
+	if err != nil {
+		return nil, err
 	}
-	return &Executor{router: router, deadline: deadline, commands: byNumber, stats: newStats(names)}, nil
+	e := &Executor{router: router, commands: cmds}
+	e.forward, err = corecall.New(corecall.Options{
+		Methods:       methods,
+		Deadline:      deadline,
+		Route:         e.route,
+		Checks:        checks(),
+		OnUnavailable: router.Trigger,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return e, nil
 }
 
 func (e *Executor) Execute(ctx context.Context, claims jwtverify.Claims, req *chatimv1.ClientRequest) (*chatimv1.ServerResponse, Outcome) {
@@ -63,79 +71,42 @@ func (e *Executor) Execute(ctx context.Context, claims jwtverify.Claims, req *ch
 	msg := req.ProtoReflect()
 	field := msg.WhichOneof(requestOneof)
 	if field == nil {
-		return failed(resp, Outcome{Code: codes.Unimplemented, Detail: errUnknownRequest.Error()}, "")
+		return failed(resp, Outcome{Code: codes.Unimplemented, Detail: errUnknownRequest.Error(), Message: corecall.ClientMessage(codes.Unimplemented, "")})
 	}
 	cmd := e.commands[field.Number()]
-	result, err := e.run(ctx, claims, cmd, msg.Get(field).Message().Interface())
-	if err != nil {
-		code, coreMessage := codeOf(err)
-		e.stats.count(cmd.index, code)
-		if code == codes.Unavailable {
-			e.router.Trigger()
-		}
-		return failed(resp, Outcome{Command: cmd.name, Code: code, Detail: err.Error()}, coreMessage)
+	result, outcome := e.forward.Forward(ctx, claims, cmd.method, msg.Get(field).Message().Interface())
+	if outcome.Code != codes.OK {
+		return failed(resp, outcome)
 	}
-	e.stats.count(cmd.index, codes.OK)
 	resp.ProtoReflect().Set(cmd.result, protoreflect.ValueOfMessage(result.ProtoReflect()))
-	return resp, Outcome{Command: cmd.name, Code: codes.OK}
+	return resp, outcome
 }
 
-func (e *Executor) CommandSources() []metrics.Source { return e.stats.commandSources() }
+func (e *Executor) CommandSources() []metrics.Source { return e.forward.CommandSources() }
 
-func (e *Executor) CoreCallLatency() []CommandLatency { return e.stats.latencies() }
+func (e *Executor) CoreCallLatency() []CommandLatency { return e.forward.CoreCallLatency() }
 
-func (e *Executor) run(ctx context.Context, claims jwtverify.Claims, cmd *command, inner proto.Message) (proto.Message, error) {
-	req, err := copyKnownFields(inner)
-	if err != nil {
-		return nil, err
+func (e *Executor) route(cmd corecall.Command, req proto.Message) (corecall.Conn, error) {
+	roomID, ok := cmd.RoomID(req)
+	if !ok {
+		return conn(e.router.Any())
 	}
-	if cmd.check != nil {
-		if err := cmd.check(req); err != nil {
-			return nil, err
-		}
-	}
-	conn, err := e.route(cmd, req)
-	if err != nil {
-		return nil, err
-	}
-	callCtx, cancel := context.WithTimeout(ctx, e.deadline)
-	defer cancel()
-	callCtx = coreroute.WithCaller(metadata.NewOutgoingContext(callCtx, metadata.MD{}), claims.Tenant, claims.User)
-	start := time.Now()
-	result, err := cmd.call(callCtx, conn, req)
-	e.stats.observe(cmd.index, time.Since(start))
-	if err == nil && !result.ProtoReflect().IsValid() {
-		return nil, errEmptyResult
-	}
-	return result, err
-}
-
-func (e *Executor) route(cmd *command, req proto.Message) (coreroute.Conn, error) {
-	if cmd.room == nil {
-		return e.router.Any()
-	}
-	roomID := req.ProtoReflect().Get(cmd.room).String()
 	if _, err := coreroute.ParseRoom(roomID); err != nil {
-		return coreroute.Conn{}, fmt.Errorf("%w: %w", errBadRoom, err)
+		return corecall.Conn{}, fmt.Errorf("%w: %w", errBadRoom, err)
 	}
-	return e.router.Room(roomID)
+	return conn(e.router.Room(roomID))
 }
 
-func copyKnownFields(m proto.Message) (proto.Message, error) {
-	raw, err := proto.Marshal(m)
+func conn(c coreroute.Conn, err error) (corecall.Conn, error) {
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errMalformed, err)
+		return corecall.Conn{}, err
 	}
-	out := m.ProtoReflect().New().Interface()
-	if err := (proto.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(raw, out); err != nil {
-		return nil, fmt.Errorf("%w: %w", errMalformed, err)
-	}
-	return out, nil
+	return corecall.Conn{Core: c.Core, Mention: c.Mention}, nil
 }
 
-func failed(resp *chatimv1.ServerResponse, outcome Outcome, coreMessage string) (*chatimv1.ServerResponse, Outcome) {
+func failed(resp *chatimv1.ServerResponse, outcome Outcome) (*chatimv1.ServerResponse, Outcome) {
 	resp.Code = wireCode(outcome.Code)
-	resp.Message = clientMessage(outcome.Code, coreMessage)
+	resp.Message = outcome.Message
 	return resp, outcome
 }
 

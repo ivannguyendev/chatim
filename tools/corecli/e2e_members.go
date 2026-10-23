@@ -11,7 +11,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/ivannguyendev/chatim/pkg/coreroute"
+	"github.com/ivannguyendev/chatim/pkg/callerid"
 	"github.com/ivannguyendev/chatim/tools/corecli/internal/e2e"
 	"github.com/ivannguyendev/chatim/tools/internal/route"
 )
@@ -91,7 +91,7 @@ func (r *memberRun) run() error {
 }
 
 func (r *memberRun) as(user string) context.Context {
-	return coreroute.WithCaller(r.base, r.st.Tenant, user)
+	return callerid.WithCaller(r.base, r.st.Tenant, user)
 }
 
 func (r *memberRun) want(room, kind, id, payload string) e2e.Want {

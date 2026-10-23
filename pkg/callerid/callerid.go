@@ -40,3 +40,7 @@ func Of(ctx context.Context) (Caller, error) {
 	}
 	return c, nil
 }
+
+func WithCaller(ctx context.Context, tenant, user string) context.Context {
+	return metadata.AppendToOutgoingContext(ctx, TenantHeader, tenant, UserHeader, user)
+}

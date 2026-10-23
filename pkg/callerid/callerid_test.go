@@ -49,3 +49,13 @@ func TestOfRefusesMissingRepeatedOrInvalidCallers(t *testing.T) {
 		})
 	}
 }
+
+func TestWithCallerAppendsTheCallerHeaders(t *testing.T) {
+	md, _ := metadata.FromOutgoingContext(callerid.WithCaller(t.Context(), "acme", "alice"))
+	if got := md.Get(callerid.TenantHeader); len(got) != 1 || got[0] != "acme" {
+		t.Fatalf("tenant = %v", got)
+	}
+	if got := md.Get(callerid.UserHeader); len(got) != 1 || got[0] != "alice" {
+		t.Fatalf("user = %v", got)
+	}
+}

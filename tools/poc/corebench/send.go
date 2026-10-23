@@ -12,7 +12,7 @@ import (
 
 	"google.golang.org/grpc/status"
 
-	"github.com/ivannguyendev/chatim/pkg/coreroute"
+	"github.com/ivannguyendev/chatim/pkg/callerid"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/pkg/slotmap"
 	"github.com/ivannguyendev/chatim/tools/internal/route"
@@ -48,7 +48,7 @@ func (b *bench) fire(ctx context.Context, s openloop.Shot) {
 	sender := rand.IntN(len(r.members))
 	user := r.members[sender]
 	req := &chatimv1.SendMessageRequest{RoomId: r.id, Cid: openloop.CID(b.run, s.Index), Text: b.texts[rand.IntN(len(b.texts))], Mentions: b.mentions(r, sender)}
-	_, st, err := b.client.SendMessage(coreroute.WithCaller(ctx, b.tenant, user), req)
+	_, st, err := b.client.SendMessage(callerid.WithCaller(ctx, b.tenant, user), req)
 	b.stats.Record(openloop.Result{Shot: s, Done: time.Now(), Code: status.Code(err), Attempts: st.Attempts})
 	if err == nil && s.Measured && i < b.watched {
 		b.live.Expect()
