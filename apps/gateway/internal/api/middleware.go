@@ -31,7 +31,6 @@ type chain struct {
 	users    *limit.Users
 	bodyMax  int64
 	stats    *stats
-	errors   errorWriter
 	log      *slog.Logger
 	authLog  *rate.Limiter
 }
@@ -40,7 +39,7 @@ func (c *chain) gated(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !c.gate.Enter() {
 			c.stats.nodeInflight.Add(1)
-			c.errors.write(w, r, connect.CodeUnavailable, msgBusy)
+			writeError(w, connect.CodeUnavailable, msgBusy)
 			return
 		}
 		defer c.gate.Leave()
@@ -56,7 +55,7 @@ func (c *chain) authenticated(next http.Handler) http.Handler {
 			if c.authLog.Allow() {
 				c.log.WarnContext(r.Context(), "gateway auth failed", "reason", label)
 			}
-			c.errors.write(w, r, connect.CodeUnauthenticated, msgUnauthorized)
+			writeError(w, connect.CodeUnauthenticated, msgUnauthorized)
 			return
 		}
 		next.ServeHTTP(w, r.WithContext(withClaims(r.Context(), claims)))
@@ -107,7 +106,7 @@ func (c *chain) limited(next http.Handler) http.Handler {
 			} else {
 				c.stats.rateLimited.Add(1)
 			}
-			c.errors.write(w, r, connect.CodeResourceExhausted, msgTooMany)
+			writeError(w, connect.CodeResourceExhausted, msgTooMany)
 			return
 		}
 		defer release()
@@ -117,7 +116,7 @@ func (c *chain) limited(next http.Handler) http.Handler {
 
 func (c *chain) measured(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body := &countingBody{ReadCloser: r.Body}
+		body := &countingBody{ReadCloser: http.MaxBytesReader(w, r.Body, c.bodyMax+1)}
 		r.Body = body
 		next.ServeHTTP(w, r)
 		if r.ContentLength > c.bodyMax || body.n > c.bodyMax {

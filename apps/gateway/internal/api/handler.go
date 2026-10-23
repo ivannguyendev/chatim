@@ -20,8 +20,6 @@ import (
 
 const msgNotSupported = "request not supported"
 
-var errNoClaims = errors.New("api: request reached a handler without claims")
-
 type Options struct {
 	Forwarder   *corecall.Forwarder
 	Verifier    Verifier
@@ -51,7 +49,6 @@ func New(opts Options) (*Handler, error) {
 		users:    opts.Users,
 		bodyMax:  int64(opts.BodyMax),
 		stats:    st,
-		errors:   newErrorWriter(),
 		log:      opts.Log,
 		authLog:  rate.NewLimiter(rate.Every(time.Second), 1),
 	}
@@ -80,9 +77,9 @@ func (c *chain) procedures(fwd *corecall.Forwarder, bodyMax int) (*http.ServeMux
 			connect.WithCompression("gzip", nil, nil),
 		))
 	}
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		c.stats.unknownMethod.Add(1)
-		c.errors.write(w, r, connect.CodeUnimplemented, msgNotSupported)
+		writeError(w, connect.CodeUnimplemented, msgNotSupported)
 	})
 	return mux, nil
 }
@@ -91,7 +88,7 @@ func forward(fwd *corecall.Forwarder, method string) func(context.Context, *conn
 	return func(ctx context.Context, req *connect.Request[envelope]) (*connect.Response[envelope], error) {
 		claims, ok := ClaimsFrom(ctx)
 		if !ok {
-			return nil, connect.NewError(connect.CodeUnauthenticated, errNoClaims)
+			return nil, connect.NewError(connect.CodeUnauthenticated, messageError(msgUnauthorized))
 		}
 		resp, outcome := fwd.Forward(ctx, claims, method, req.Msg.msg)
 		if outcome.Code != codes.OK {

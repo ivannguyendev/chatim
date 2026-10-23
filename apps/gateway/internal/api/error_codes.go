@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 
 	"connectrpc.com/connect"
@@ -28,31 +29,26 @@ func connectCode(c codes.Code) connect.Code {
 	return connect.Code(c)
 }
 
-var plainStatus = map[connect.Code]int{
+var statusOf = map[connect.Code]int{
 	connect.CodeUnauthenticated:   http.StatusUnauthorized,
 	connect.CodeResourceExhausted: http.StatusTooManyRequests,
 	connect.CodeUnavailable:       http.StatusServiceUnavailable,
 	connect.CodeUnimplemented:     http.StatusNotFound,
 }
 
-type errorWriter struct {
-	connect *connect.ErrorWriter
+type errorBody struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
 }
 
-func newErrorWriter() errorWriter {
-	return errorWriter{connect: connect.NewErrorWriter()}
-}
-
-func (w errorWriter) write(resp http.ResponseWriter, req *http.Request, code connect.Code, message string) {
-	if w.connect.IsSupported(req) {
-		_ = w.connect.Write(resp, req, connect.NewError(code, messageError(message)))
-		return
-	}
-	status, ok := plainStatus[code]
+func writeError(w http.ResponseWriter, code connect.Code, message string) {
+	status, ok := statusOf[code]
 	if !ok {
 		status = http.StatusInternalServerError
 	}
-	http.Error(resp, message, status)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(errorBody{Code: code.String(), Message: message})
 }
 
 type messageError string

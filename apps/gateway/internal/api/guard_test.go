@@ -22,7 +22,7 @@ var historyJSON = []byte(`{"roomId":"42"}`)
 func TestBadTokensGet401BeforeAnyCoreCall(t *testing.T) {
 	h := newHarness(t, roomy)
 	good := h.token(t, claims{})
-	other := *h
+	other := &harness{}
 	_, other.priv, _ = ed25519.GenerateKey(rand.Reader)
 	cases := []struct {
 		name, reason string

@@ -8,12 +8,14 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"log"
 	"log/slog"
 	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -110,6 +112,8 @@ type harness struct {
 	server  *httptest.Server
 	priv    ed25519.PrivateKey
 	logs    *syncBuffer
+	panics  atomic.Bool
+	served  chan struct{}
 }
 
 type syncBuffer struct {
@@ -131,12 +135,17 @@ func (b *syncBuffer) String() string {
 
 func newHarness(t *testing.T, l limits) *harness {
 	t.Helper()
-	h := &harness{core: &fakeCore{}, logs: &syncBuffer{}}
+	h := &harness{core: &fakeCore{}, logs: &syncBuffer{}, served: make(chan struct{}, 64)}
 	conn := startCore(t, h.core)
 	fwd, err := corecall.New(corecall.Options{
 		Methods:  corecall.Request(),
 		Deadline: 2 * time.Second,
-		Route:    func(corecall.Command, proto.Message) (corecall.Conn, error) { return conn, nil },
+		Route: func(corecall.Command, proto.Message) (corecall.Conn, error) {
+			if h.panics.Load() {
+				panic("route failed")
+			}
+			return conn, nil
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -166,7 +175,17 @@ func newHarness(t *testing.T, l limits) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h.server = httptest.NewServer(h.handler)
+	h.server = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			select {
+			case h.served <- struct{}{}:
+			default:
+			}
+		}()
+		h.handler.ServeHTTP(w, r)
+	}))
+	h.server.Config.ErrorLog = log.New(io.Discard, "", 0)
+	h.server.Start()
 	t.Cleanup(h.server.Close)
 	return h
 }
