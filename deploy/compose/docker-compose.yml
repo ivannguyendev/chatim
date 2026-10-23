@@ -259,6 +259,35 @@ services:
       start_period: 30s
       start_interval: 1s
 
+  gateway-1:
+    image: chatim/gateway:dev
+    container_name: chatim-gateway-1
+    profiles: ["app"]
+    restart: unless-stopped
+    mem_limit: 1g
+    stop_grace_period: 18s
+    secrets: [ws_jwks]
+    environment:
+      GW_CORE_ADDRS: chatim-core-1:9000,chatim-core-2:9000
+      GW_JWT_KEYS_FILE: /run/secrets/ws_jwks
+      GW_JWT_ISSUER: chatim-dev
+      GW_JWT_AUDIENCE: chatim-websocket
+      GOMEMLIMIT: 800MiB
+    ports:
+      - "127.0.0.1:${GW1_PORT:-8082}:8080"
+    depends_on:
+      core-1:
+        condition: service_healthy
+      core-2:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/app", "probe"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+      start_interval: 1s
+
 secrets:
   ws_jwks:
     file: ../../.local/ws-keys/jwks.json

@@ -16,6 +16,7 @@ COMPOSE_ALL := $(COMPOSE) --profile postgres --profile app
 CORE_COMPOSE := $(COMPOSE) --profile app
 CORES    := core-1 core-2
 WEBSOCKETS := websocket-1
+GATEWAYS := gateway-1
 WS_KEYS_DIR := .local/ws-keys
 CORECLI_IMAGE := chatim/corecli:dev
 INSTANCE ?= state
@@ -25,7 +26,7 @@ GO_RUN   := docker run --rm -v "$(CURDIR)":/src -w /src -v chatim-gomod:/go/pkg/
 BUF_RUN  := docker run --rm -v "$(CURDIR)":/src -w /src $(BUF_IMAGE)
 POC_RUN  := $(GO_RUN) --network $(NETWORK) -e MONGO_URI -e PG_URI -e REDIS_PASSWORD
 
-.PHONY: go check-env test itest vet fmt-check lint vuln tidy proto buf-lint alerts-check poc image infra-up infra-down infra-reset pg-up pg-down core-up core-down dev-keys ws-token ws-logs e2e redis-cli
+.PHONY: go check-env test itest vet fmt-check lint vuln tidy proto buf-lint alerts-check poc image infra-up infra-down infra-reset pg-up pg-down core-up core-down dev-keys ws-token ws-logs gw-logs e2e redis-cli
 
 go:
 	$(GO_RUN) $(GO_IMAGE) go $(ARGS)
@@ -95,11 +96,12 @@ pg-down: check-env
 core-up: check-env dev-keys
 	$(MAKE) -s image TARGET=apps/core
 	$(MAKE) -s image TARGET=apps/websocket
-	$(CORE_COMPOSE) up -d $(CORES) $(WEBSOCKETS)
-	./scripts/wait-core-healthy.sh $(addprefix chatim-,$(CORES) $(WEBSOCKETS))
+	$(MAKE) -s image TARGET=apps/gateway
+	$(CORE_COMPOSE) up -d $(CORES) $(WEBSOCKETS) $(GATEWAYS)
+	./scripts/wait-core-healthy.sh $(addprefix chatim-,$(CORES) $(WEBSOCKETS) $(GATEWAYS))
 
 core-down: check-env
-	$(CORE_COMPOSE) rm -s -f $(WEBSOCKETS) $(CORES)
+	$(CORE_COMPOSE) rm -s -f $(GATEWAYS) $(WEBSOCKETS) $(CORES)
 
 dev-keys:
 	@if [ -f $(WS_KEYS_DIR)/private.jwk ] && [ -f $(WS_KEYS_DIR)/jwks.json ]; then \
@@ -115,6 +117,9 @@ ws-token: dev-keys
 
 ws-logs:
 	docker logs --tail 200 -f chatim-websocket-1
+
+gw-logs:
+	docker logs --tail 200 -f chatim-gateway-1
 
 e2e: check-env
 	$(MAKE) -s image TARGET=tools/corecli

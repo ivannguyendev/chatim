@@ -13,6 +13,7 @@ Monorepo Go, mỗi app một container.
 | `core` | Room, member, message, tương tác; cấp seq; lưu MongoDB; phát event best-effort lên NATS JetStream (id event tự nhiên, thứ tự từng room); sửa/xoá tin là fact `message_edits` + projection `messages`, ẩn/clear theo người đọc; tương tác với tin chung `message_interactions` (reaction một emoji mỗi user, bookmark, trả lời có trích ở timeline chính), đích mention trên tin (kèm giờ của từng đích), forward; số trên tin (`rx` theo emoji, `rc` số trả lời) `$inc` + phiếu hẹn đếm lại; ghim là fact `pin_actions` + projection `rooms.pins`; DM qua `OpenDirectRoom` + sổ `room_dms`, group qua `CreateRoom` có `request_id`; member mỗi (room, user) một doc, lệnh đụng owner trong một transaction, `member_count` `$inc` + phiếu hẹn đếm lại, vị trí đọc; event trên subject theo loại dữ liệu `evt.{t}.{loại}.{rid}.{kind}` với loại `room`, `member` hoặc `message` (RePublish sang `live.{t}.{loại}.{rid}.evt.{kind}`; nghe mọi event của room: `live.{t}.*.{rid}.>`), core không chọn người nhận; mỗi lần ghi bật cờ `_state` trên doc, publisher xoá cờ sau PubAck, sweeper trên core giữ slot 0 phát lại event của doc còn cờ (và áp projection sửa/xoá/ghim còn thiếu), một consumer `projections` trên `CHATIM_EVT` chạy ở core giữ slot 0, chia mỗi lô cho hai handler (room activity, doc trả lời), consumer phiếu hẹn sửa số trên tin và số member (M3.1); tin có mention phát ở loại dữ liệu `mention` | 1 |
 | `mention` (Mention App) | Chạy nhúng trong core (`modules/mention/mentionapp`): consumer `mention` (queue group mọi core) ghi `mentions`/`mention_rooms` theo event tự đủ, bung `@nhóm`/`@all`, gửi thông báo dạng gói `WsPublish` (nội dung một lần + danh sách người nhận) lên `websocket.publish.{tenant}` (`CHATIM_WS`); `MentionService` (`ListMentions`, `SetUserGroups`, `SetGroups`, `ListRoomGroups`) trên gRPC server của core | 1 |
 | `websocket` | WebSocket (gws) cho client SDK; nhận event từ NATS và đẩy realtime | 1 |
+| `gateway` | HTTPS (Connect trên HTTP/1.1 và h2c) cho tải dữ liệu và quản lý room: 22 lệnh `corecall.Request`, JWT như websocket, gọi core bất kỳ (round robin), giới hạn theo user | 1 |
 | `api`, `events`, `push`, `auth`, `migrator` | Public API, event stream cho app ngoài, push notification, xác thực, migrate/dual-write từ hệ thống cũ | Sau |
 
 Hạ tầng: MongoDB (replica set), Redis, NATS JetStream.
@@ -75,11 +76,12 @@ Compose đọc `CORE_GOGC` (mặc định 100, thành `GOGC` của core) lúc `m
     make lint                    # golangci-lint run ./...
     make vuln                    # go tool govulncheck ./...
     make itest                   # go test -race -shuffle=on -count=1 ./... với Mongo/Redis/NATS thật (cần infra-up)
-    make core-up                 # sinh khoá dev nếu chưa có, build image apps/core + apps/websocket, chạy core-1 + core-2 + websocket-1 (profile app), chờ cả ba healthy
-    make core-down               # dừng và xoá websocket-1, core-1, core-2
+    make core-up                 # sinh khoá dev nếu chưa có, build image apps/core + apps/websocket + apps/gateway, chạy core-1 + core-2 + websocket-1 + gateway-1 (profile app), chờ cả bốn healthy
+    make core-down               # dừng và xoá gateway-1, websocket-1, core-1, core-2
     make dev-keys                # sinh khoá ký dev vào .local/ws-keys/ (private.jwk 0600, jwks.json 0644) nếu chưa có; muốn thay khoá: xoá thư mục rồi chạy lại
-    make -s ws-token ARGS="-tenant e2e -user alice"   # in token dev (mặc định -ttl 15m, iss chatim-dev, aud chatim-websocket) để nối ws://127.0.0.1:8081/ws
+    make -s ws-token ARGS="-tenant e2e -user alice"   # in token dev (mặc định -ttl 15m, iss chatim-dev, aud chatim-websocket) để nối ws://127.0.0.1:8081/ws hoặc gọi http://127.0.0.1:8082
     make ws-logs                 # docker logs -f chatim-websocket-1
+    make gw-logs                 # docker logs -f chatim-gateway-1
     make alerts-check            # promtool kiểm deploy/prometheus/alerts.yml (trong Docker)
     make e2e                     # build tools/corecli, chạy scripts/e2e.sh (route theo slot, kill core-1, kiểm tra; phase 3 sửa seq 1, xoá seq 2; phase 4 react seq 3 rồi đổi emoji, ghim seq 4; phase 5 member: DM từ chối, thêm, đổi role, priority, xoá, vị trí đọc, ẩn và clear, owner cuối rời rồi vào lại, kiểm reply và event trên subject `room`/`member`/`message`; phase 6 liên kết: mở DM hai lần ra một room, tạo group hai lần cùng `request_id`, react, hai trả lời + `GetReplies`, chặn xoá tin cha, xoá một trả lời, mention user/nhóm/`@all` + `ListMentions`, `@nhóm`/`@all` gửi trước khi vào group không hiện, forward, bookmark + `ListBookmarks`, 22 event live; phase 7 danh sách hội thoại và API đọc: tin hệ thống, unread sau gửi/đọc/xoá/ẩn, ghim và lưu trữ, trang 2, `GetRooms`, `UpdateRoom`, `AROUND`, `GetMessages`, thread, người react, ghim, member, forward có `skip_unread`/`meta`, 34 event live; phase 8 Mention App: nhóm được tag và nhóm tắt, `SetUserGroups` cho 3 người rồi chuyển 1 người, `@nhóm` báo đúng người còn trong room, `@nhóm` tắt không ai nhận, sửa thêm rồi bỏ `@user` (`mention_notified`, `mention_retracted`, `ListMentions`), xoá tin, `@all`, `ListRoomGroups`, `SetUserGroups` với `ver` cũ; kiểm 12 thông báo đọc từ gói `WsPublish` trên `websocket.publish.{tenant}`; phase 9 websocket: lệnh qua websocket-1 so với gRPC, 4001/4002, rồi `corecli e2e ws-events` hai người A/B: nhóm mới hiện ngay, react chỉ khi mở room, không lọt event riêng, `@B`/`@all` đúng một lần, `member_removed` rồi `room_closed` và im lặng, 0 trùng 0 lỗ; không token nào trong log websocket)
     docker run --rm --network chatim_default -e REDIS_PASSWORD chatim/corecli:dev edit -room ID -seq N -base V -text "..."   # sửa tin; cùng cờ: delete -room ID -seq N -base V, hide -room ID -seq N, clear -room ID, edits -room ID -seq N [-after V]; -tenant/-user chọn người gọi; image do make e2e build
@@ -209,9 +211,40 @@ Client nối `ws://127.0.0.1:8081/ws` (subprotocol `chatim.v1`), frame đầu l�
 
 Đổi khoá (dev và prod, không cắt kết nối đang sống): thêm khoá mới (`kid` mới) vào JWKS bên cạnh khoá cũ → rolling restart các node websocket (JWKS chỉ đọc lúc khởi động) → chuyển bên ký sang khoá mới → chờ token cũ hết hạn (TTL + `WS_JWT_LEEWAY`) → bỏ khoá cũ khỏi JWKS và rolling restart lần nữa. Nên giữ TTL token ≤ 15 phút để bước chờ ngắn và token lộ hết hạn nhanh.
 
+## Biến môi trường `apps/gateway`
+
+Đọc qua `apps/gateway/internal/config`; sai định dạng hoặc vi phạm luật thì node không khởi động và báo gộp mọi lỗi. Gateway không dùng Redis hay NATS.
+
+| Biến | Mặc định | Ý nghĩa |
+|---|---|---|
+| `GW_ADDR` | `:8080` | Lắng nghe HTTP/1.1 và h2c; đường dẫn `/chatim.v1.CoreService/{Lệnh}`, `/chatim.v1.MentionService/{Lệnh}` (Connect, JSON hoặc protobuf, `POST`) |
+| `GW_ADMIN_ADDR` | `:9090` | `/livez`, `/readyz` (có ít nhất một core READY và chưa tắt), `/metrics` (`chatim_gateway_*`); `/app probe` hỏi địa chỉ này; không publish ra host |
+| `GW_CORE_ADDRS` | — (bắt buộc) | Danh sách `host:port` của core, cách nhau dấu phẩy; một kết nối gRPC round robin, không Redis, không retry của mình; compose đặt `chatim-core-1:9000,chatim-core-2:9000` |
+| `GW_JWT_KEYS_FILE`, `GW_JWT_ISSUER`, `GW_JWT_AUDIENCE` | — (bắt buộc) | Như websocket: JWKS công khai đọc một lần lúc khởi động (đổi khoá = khởi động lại); compose dùng cùng secret `ws_jwks` và `chatim-dev` / `chatim-websocket` |
+| `GW_JWT_LEEWAY` | `30s` | Dung sai giờ cho `exp`/`nbf` (≥ 0) |
+| `GW_BODY_MAX` | `131072` | Cỡ body tối đa; quá thì `resource_exhausted` |
+| `GW_USER_RATE`, `GW_USER_BURST` | `50` / `100` | Lệnh mỗi giây và burst mỗi (tenant, user) trên node; quá thì `resource_exhausted` (429) |
+| `GW_USER_INFLIGHT` | `32` | Lệnh đang chạy tối đa mỗi (tenant, user) trên node |
+| `GW_USER_LIMITERS` | `100000` | Số người giữ bộ đếm trong RAM (LRU, chỉ đẩy người không có lệnh đang chạy; ≥ `GW_INFLIGHT_MAX`) |
+| `GW_INFLIGHT_MAX` | `10000` | Lệnh đang chạy tối đa cả node, kiểm trước token; quá thì `unavailable` (503) |
+| `GW_CORS_ORIGINS` | rỗng | Origin trình duyệt được phép, đúng từng origin (`https://chat.example.com`), không `*`; rỗng = không cho trình duyệt khác origin |
+| `GW_DRAIN_DELAY`, `GW_SHUTDOWN_BUDGET` | `2s` / `15s` | Dừng: `/readyz` false, chờ drain, chờ lệnh đang chạy; budget phải lớn hơn `GW_DRAIN_DELAY + CORE_REQUEST_DEADLINE`; compose `stop_grace_period` 18s |
+| `GW_READ_HEADER_TIMEOUT`, `GW_READ_TIMEOUT` | `5s` / `10s` | Hạn đọc header và cả request |
+| `GW_WRITE_TIMEOUT` | `CORE_REQUEST_DEADLINE + 5s` | Hạn ghi trả lời (không nhỏ hơn mặc định) |
+| `GW_IDLE_TIMEOUT` | `60s` | Giữ kết nối rảnh |
+| `GW_MAX_HEADER_BYTES` | `16384` | Cỡ header tối đa; header `Authorization` dài quá 8KB bị từ chối |
+| `GW_H2_MAX_STREAMS` | `250` | Số stream HTTP/2 đồng thời mỗi kết nối |
+| `CORE_REQUEST_DEADLINE` | `5s` | Hạn một lần gọi core |
+
+Gọi thử (token dev, không in giá trị `.env`):
+
+    curl -H "Authorization: Bearer $(make -s ws-token ARGS='-tenant e2e -user alice')" -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:8082/chatim.v1.CoreService/ListMyRooms
+
+Không token → 401 `unauthenticated`; lệnh realtime (vd `SendMessage`) hoặc nội bộ (`ListMyRoomIDs`, `SetUserGroups`, `SetGroups`) → `unimplemented`.
+
 ## Cổng
 
-Với app, compose publish ra host chỉ gRPC của core và WebSocket của websocket-1, và chỉ trên loopback — vì caller hiện được tin cậy qua metadata tới khi có mTLS (M5). Hạ tầng dev publish cổng riêng (`.env`):
+Với app, compose publish ra host chỉ gRPC của core, WebSocket của websocket-1 và HTTP của gateway-1, và chỉ trên loopback — vì caller hiện được tin cậy qua metadata tới khi có mTLS (M5). Hạ tầng dev publish cổng riêng (`.env`):
 
 | Cổng | Dịch vụ | Ghi chú |
 |---|---|---|
@@ -220,7 +253,8 @@ Với app, compose publish ra host chỉ gRPC của core và WebSocket của web
 | `127.0.0.1:9001` | `core-1` gRPC (`CORE1_GRPC_PORT`) | |
 | `127.0.0.1:9002` | `core-2` gRPC (`CORE2_GRPC_PORT`) | |
 | `127.0.0.1:8081` | `websocket-1` WebSocket `/ws` (`WS1_PORT`) | Cần token dev (`make -s ws-token`) |
-| — | admin (`/healthz`, `/readyz`, `/metrics`, pprof) mỗi core, cổng `9090`; admin websocket-1 (`/livez`, `/readyz`, `/metrics`) cổng `9090` | Chỉ trong mạng compose, không publish ra host |
+| `127.0.0.1:8082` | `gateway-1` HTTP Connect (`GW1_PORT`) | Cần token dev (`Authorization: Bearer`) |
+| — | admin (`/healthz`, `/readyz`, `/metrics`, pprof) mỗi core, cổng `9090`; admin websocket-1 và gateway-1 (`/livez`, `/readyz`, `/metrics`) cổng `9090` | Chỉ trong mạng compose, không publish ra host |
 
 ## Tài liệu
 
