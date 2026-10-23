@@ -69,11 +69,14 @@ func New(router Router, deadline time.Duration) (*Executor, error) {
 func (e *Executor) Execute(ctx context.Context, claims jwtverify.Claims, req *chatimv1.ClientRequest) (*chatimv1.ServerResponse, Outcome) {
 	resp := &chatimv1.ServerResponse{Id: req.GetId()}
 	msg := req.ProtoReflect()
+	var cmd command
 	field := msg.WhichOneof(requestOneof)
-	if field == nil {
+	if field != nil {
+		cmd = e.commands[field.Number()]
+	}
+	if cmd.method == "" {
 		return failed(resp, Outcome{Code: codes.Unimplemented, Detail: errUnknownRequest.Error(), Message: corecall.ClientMessage(codes.Unimplemented, "")})
 	}
-	cmd := e.commands[field.Number()]
 	result, outcome := e.forward.Forward(ctx, claims, cmd.method, msg.Get(field).Message().Interface())
 	if outcome.Code != codes.OK {
 		return failed(resp, outcome)

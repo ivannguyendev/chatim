@@ -35,8 +35,8 @@ func TestRunIsReadyOnlyAfterTheSlotTableAndStopAnswersRunningCommandsBefore1001(
 	for _, want := range []string{
 		"chatim_websocket_connections 0",
 		"chatim_websocket_unauthenticated_connections 0",
-		`chatim_websocket_commands_total{code="OK",command="GetHistory"} 0`,
-		`chatim_websocket_core_call_seconds_count{command="GetHistory"} 0`,
+		`chatim_websocket_commands_total{code="OK",command="EditMessage"} 0`,
+		`chatim_websocket_core_call_seconds_count{command="EditMessage"} 0`,
 		`chatim_websocket_commands_rejected_total{reason="shutdown"} 0`,
 		"chatim_websocket_unknown_frames_total 0",
 		"chatim_websocket_interest_users 0",
@@ -70,8 +70,8 @@ func TestRunIsReadyOnlyAfterTheSlotTableAndStopAnswersRunningCommandsBefore1001(
 	defer func() { _ = client.Close() }()
 	answered := make(chan *chatimv1.ServerResponse, 1)
 	go func() {
-		resp, _ := client.Call(callCtx, &chatimv1.ClientRequest{Request: &chatimv1.ClientRequest_GetHistory{
-			GetHistory: &chatimv1.GetHistoryRequest{RoomId: "42"},
+		resp, _ := client.Call(callCtx, &chatimv1.ClientRequest{Request: &chatimv1.ClientRequest_EditMessage{
+			EditMessage: &chatimv1.EditMessageRequest{RoomId: "42", Seq: 1},
 		}})
 		answered <- resp
 	}()

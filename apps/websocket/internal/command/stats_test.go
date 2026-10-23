@@ -38,8 +38,8 @@ func refusedSend() *chatimv1.ClientRequest {
 func TestCommandCountersArePrebuiltForEveryPair(t *testing.T) {
 	h := newHarness(t, time.Second)
 	sources := h.exec.CommandSources()
-	if len(sources) != 34*17 {
-		t.Fatalf("sources = %d, want %d", len(sources), 34*17)
+	if len(sources) != 12*17 {
+		t.Fatalf("sources = %d, want %d", len(sources), 12*17)
 	}
 	seen := map[string]bool{}
 	for _, s := range sources {
@@ -57,15 +57,20 @@ func TestCommandCountersArePrebuiltForEveryPair(t *testing.T) {
 	if got := readCount(t, sources, "SendMessage", "InvalidArgument"); got != 1 {
 		t.Fatalf("SendMessage InvalidArgument = %v", got)
 	}
-	if got := readCount(t, sources, "GetHistory", "OK"); got != 0 {
-		t.Fatalf("GetHistory OK = %v", got)
+	if got := readCount(t, sources, "EditMessage", "OK"); got != 0 {
+		t.Fatalf("EditMessage OK = %v", got)
+	}
+	for _, s := range sources {
+		if s.Labels["command"] == "GetHistory" {
+			t.Fatal("GetHistory is still counted on the websocket")
+		}
 	}
 }
 
 func TestCoreCallLatencyCountsOnlyCoreCalls(t *testing.T) {
 	h := newHarness(t, time.Second)
 	latencies := h.exec.CoreCallLatency()
-	if len(latencies) != 34 {
+	if len(latencies) != 12 {
 		t.Fatalf("latencies = %d", len(latencies))
 	}
 	h.exec.Execute(t.Context(), testClaims, plainSend())
@@ -82,7 +87,7 @@ func TestCoreCallLatencyCountsOnlyCoreCalls(t *testing.T) {
 	if last := hist.Cumulative[len(hist.Cumulative)-1]; last > hist.Count {
 		t.Fatalf("hist = %+v", hist)
 	}
-	if other := latencyOf(t, latencies, "GetHistory"); other.Count != 0 {
-		t.Fatalf("GetHistory hist = %+v", other)
+	if other := latencyOf(t, latencies, "EditMessage"); other.Count != 0 {
+		t.Fatalf("EditMessage hist = %+v", other)
 	}
 }

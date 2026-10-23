@@ -102,11 +102,11 @@ type fakeCore struct {
 	release chan struct{}
 }
 
-func (f *fakeCore) GetHistory(ctx context.Context, _ *chatimv1.GetHistoryRequest) (*chatimv1.GetHistoryResponse, error) {
+func (f *fakeCore) EditMessage(ctx context.Context, _ *chatimv1.EditMessageRequest) (*chatimv1.EditMessageResponse, error) {
 	f.started <- struct{}{}
 	select {
 	case <-f.release:
-		return &chatimv1.GetHistoryResponse{}, nil
+		return &chatimv1.EditMessageResponse{}, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}

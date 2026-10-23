@@ -17,12 +17,10 @@ import (
 
 var testClaims = jwtverify.Claims{Tenant: "t1", User: "u1"}
 
-var anyCoreCommands = map[string]bool{
-	"CreateRoom": true, "OpenDirectRoom": true, "ListMyRooms": true, "GetRooms": true,
-	"GetReactionSettings": true, "ListBookmarks": true, "ListMentions": true,
+var realtimeCommands = map[string]bool{
+	"SendMessage": true, "EditMessage": true, "DeleteMessage": true, "HideMessage": true, "ReactMessage": true, "PinMessage": true,
+	"UnpinMessage": true, "SetBookmark": true, "MarkRead": true, "MarkUnread": true, "ClearHistory": true, "SetRoomPreferences": true,
 }
-
-var mentionCommands = map[string]bool{"ListMentions": true, "ListRoomGroups": true}
 
 type harness struct {
 	exec   *command.Executor
@@ -69,13 +67,18 @@ func sendRequest(send *chatimv1.SendMessageRequest) *chatimv1.ClientRequest {
 	return &chatimv1.ClientRequest{Id: 5, Request: &chatimv1.ClientRequest_SendMessage{SendMessage: send}}
 }
 
-func TestEveryCommandGoesToItsCoreOnce(t *testing.T) {
+func TestEveryRealtimeCommandGoesToItsCoreOnce(t *testing.T) {
 	fields := requestFields()
 	if len(fields) != 34 {
-		t.Fatalf("commands = %d, want 34", len(fields))
+		t.Fatalf("client request fields = %d, want 34", len(fields))
 	}
+	served := 0
 	for _, field := range fields {
 		name := commandName(field)
+		if !realtimeCommands[name] {
+			continue
+		}
+		served++
 		t.Run(name, func(t *testing.T) {
 			h := newHarness(t, time.Second)
 			resp, outcome := h.exec.Execute(t.Context(), testClaims, requestFor(field))
@@ -86,22 +89,49 @@ func TestEveryCommandGoesToItsCoreOnce(t *testing.T) {
 			if result == nil || result.Number() != field.Number() || string(result.Message().Name()) != name+"Response" {
 				t.Fatalf("result field = %v", result)
 			}
-			want := "room:42"
-			if anyCoreCommands[name] {
-				want = "any"
-			}
-			if len(h.router.routes) != 1 || h.router.routes[0] != want {
-				t.Fatalf("routes = %v, want %s", h.router.routes, want)
-			}
-			service := "CoreService"
-			if mentionCommands[name] {
-				service = "MentionService"
+			if len(h.router.routes) != 1 || h.router.routes[0] != "room:42" {
+				t.Fatalf("routes = %v, want room:42", h.router.routes)
 			}
 			calls := h.core.recorded()
-			if len(calls) != 1 || calls[0].method != "/chatim.v1."+service+"/"+name {
+			if len(calls) != 1 || calls[0].method != "/chatim.v1.CoreService/"+name {
 				t.Fatalf("core calls = %+v", calls)
 			}
 		})
+	}
+	if served != 12 {
+		t.Fatalf("realtime commands = %d, want 12", served)
+	}
+}
+
+func TestRequestCommandsTakeTheUnknownRequestPath(t *testing.T) {
+	refused := 0
+	for _, field := range requestFields() {
+		name := commandName(field)
+		if realtimeCommands[name] {
+			continue
+		}
+		refused++
+		t.Run(name, func(t *testing.T) {
+			h := newHarness(t, time.Second)
+			resp, outcome := h.exec.Execute(t.Context(), testClaims, requestFor(field))
+			if codes.Code(resp.GetCode()) != codes.Unimplemented || resp.GetMessage() != "request not supported" || resp.GetId() != 9 || resp.GetResult() != nil {
+				t.Fatalf("resp = %v", resp)
+			}
+			if outcome.Code != codes.Unimplemented || outcome.Command != "" {
+				t.Fatalf("outcome = %+v, want the unknown-request outcome", outcome)
+			}
+			if len(h.router.routes) != 0 || len(h.core.recorded()) != 0 {
+				t.Fatalf("routes = %v, core calls = %d", h.router.routes, len(h.core.recorded()))
+			}
+			for _, src := range h.exec.CommandSources() {
+				if src.Labels["command"] == name {
+					t.Fatalf("%s still has a counter", name)
+				}
+			}
+		})
+	}
+	if refused != 22 {
+		t.Fatalf("refused commands = %d, want 22", refused)
 	}
 }
 
@@ -167,16 +197,6 @@ func TestEmptyRequestIsUnimplemented(t *testing.T) {
 	}
 	if len(h.router.routes) != 0 || len(h.core.recorded()) != 0 {
 		t.Fatal("an empty request reached the router or core")
-	}
-}
-
-func TestMissingMentionClientIsUnimplemented(t *testing.T) {
-	h := newHarness(t, time.Second)
-	h.router.conn.Mention = nil
-	req := &chatimv1.ClientRequest{Id: 1, Request: &chatimv1.ClientRequest_ListMentions{ListMentions: &chatimv1.ListMentionsRequest{}}}
-	resp, outcome := h.exec.Execute(t.Context(), testClaims, req)
-	if codes.Code(resp.GetCode()) != codes.Unimplemented || outcome.Detail == "" || len(h.core.recorded()) != 0 {
-		t.Fatalf("resp = %v, outcome = %+v", resp, outcome)
 	}
 }
 

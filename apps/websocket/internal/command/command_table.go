@@ -19,7 +19,7 @@ type command struct {
 	result protoreflect.FieldDescriptor
 }
 
-func servedMethods() []string { return corecall.All() }
+func servedMethods() []string { return corecall.Realtime() }
 
 func checks() map[string]corecall.Check {
 	return map[string]corecall.Check{chatimv1.CoreService_SendMessage_FullMethodName: checkSendMessage}
@@ -37,7 +37,7 @@ func buildCommands(served []corecall.Command) (map[protoreflect.FieldNumber]comm
 		field := fields.Get(i)
 		c, ok := byRequest[field.Message().FullName()]
 		if !ok {
-			return nil, nil, fmt.Errorf("command: %s has no core call", field.Message().FullName())
+			continue
 		}
 		delete(byRequest, field.Message().FullName())
 		result := resultOneof.Fields().ByNumber(field.Number())
