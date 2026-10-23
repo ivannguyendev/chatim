@@ -1,8 +1,8 @@
 # chatim — Kiến trúc hệ thống (Single Source of Truth)
 
 > Ngày cập nhật: 2026-10-17 · Trạng thái: **Nguồn sự thật duy nhất (SSOT)** cho toàn bộ quy chuẩn kiến trúc của `chatim`.
-> Nhật ký 197 quyết định kỹ thuật: [docs/decision-log.md](./decision-log.md) (D1–D197). Danh mục event (core phát gì, ai nhận gì): [docs/events.md](./events.md).
-> Đặc tả chi tiết 10 Module tính năng (How-It-Works & Flowcharts): [docs/modules/README.md](./modules/README.md).
+> Nhật ký 198 quyết định kỹ thuật: [docs/decision-log.md](./decision-log.md) (D1–D198). Danh mục event (core phát gì, ai nhận gì): [docs/events.md](./events.md).
+> Đặc tả chi tiết 11 Module tính năng (How-It-Works & Flowcharts): [docs/modules/README.md](./modules/README.md).
 > Lộ trình phát triển các Milestone: [docs/roadmap.md](./roadmap.md).
 
 ---
@@ -13,9 +13,10 @@
 
 ### 1.1 Phạm vi Phase 1
 - `core`: room, member, message, tương tác, cấp seq, lưu trữ MongoDB, phát event NATS JetStream.
-- `websocket`: giữ kết nối WebSocket (gws), kiểm token, chuyển lệnh tới core (phần 1 đã xây trên `feat/m4`, D183–D188); đẩy event realtime: mỗi node đọc `CHATIM_EVT` và hộp thư `websocket.publish.{t}` (`CHATIM_WS`) bằng ordered consumer, lọc theo room trong RAM (phần 2 đã xây trên `feat/m4`, D189–D195).
+- `websocket`: giữ kết nối WebSocket (gws), kiểm token, chuyển lệnh tới core (phần 1 đã xây trên `feat/m4`, D183–D188); đẩy event realtime: mỗi node đọc `CHATIM_EVT` và hộp thư `websocket.publish.{t}` (`CHATIM_WS`) bằng ordered consumer, lọc theo room trong RAM (phần 2 đã xây trên `feat/m4`, D189–D195). Từ phần gateway chỉ còn 12 lệnh ghi realtime (D198).
+- `gateway`: HTTPS (Connect trên HTTP/1.1 và h2c, TLS ở load balancer) cho 22 lệnh tải dữ liệu và quản lý room (14 đọc, 8 quản lý); kiểm Bearer JWT như websocket, gọi core bất kỳ (round robin, không Redis, không slot), giới hạn theo user trên mỗi node; đã xây trên `feat/m4` (D197, D198). Đường của máy: ghi realtime và nhận event qua WebSocket, tải dữ liệu và quản lý qua HTTPS; thay đổi do HTTPS gây ra vẫn tới người khác qua event trên WebSocket.
 - Room: DM (1-1), group ≤5K member. Channel ~200K subscriber (chỉ admin post) vào backlog (owner 2026-10-19, D178).
-- Exit Phase 1: `core` + `mention` + `websocket` đạt `prod-like validated`; go-live sau khi có `identity` (D178, [tóm tắt](plans/2026-10-19-phase1-exit-summary.md)).
+- Exit Phase 1: `core` + `mention` + `websocket` + `gateway` đạt `prod-like validated`; go-live sau khi có `identity` (D178, [tóm tắt](plans/2026-10-19-phase1-exit-summary.md)).
 - Tin nhắn: gửi, sửa (có lịch sử), xoá cho mọi người / phía tôi, trả lời (quote), chuyển tiếp (forward).
 - Tương tác: reaction, vị trí đọc + unread, typing, presence, thread, mention, ghim (pin), bookmark, đánh dấu chưa đọc.
 - Ranh giới trách nhiệm:
@@ -24,7 +25,7 @@
   - Mention App (module nhúng `modules/mention`, D182; D162–D176, đã merge `main` PR #16, trước M4): ghi mention, `ListMentions`, thành viên nhóm và danh mục nhóm được tag, dữ liệu gợi ý `@nhóm` theo room, bung `@nhóm`/`@all` và gửi thông báo dạng gói `WsPublish` (nội dung một lần + danh sách người nhận) vào `websocket.publish.{t}` trên `CHATIM_WS` (D192); hiện chạy nhúng trong core (core chỉ import package công khai `modules/mention/mentionapp`; app đọc core qua cổng `CoreReader` trong tiến trình); giữ nhúng (owner 2026-10-19, D177): chỉ tách khi có team, SLA, nhịp release hoặc nhu cầu scale riêng có số đo, hoặc database riêng + CDC, và khi tách thì app tự sở hữu dữ liệu, chỉ gọi core qua API, không đọc chung bảng. Lọc tắt thông báo và giao tới máy thuộc app notification (websocket M4, `push` Phase 2). Dấu `@` trên danh sách hội thoại, sync token, đa thiết bị: làm sau.
 
 ### 1.2 Ngoài phạm vi Phase 1 (Non-goals)
-Phase 2 (owner 2026-10-19, D179–D180): `identity`, `identity-verifier`, `gateway` (REST + webhook), `notification` (+ push), `search`, `migrator`, media qua presigned URL. Backlog: channel, sync token D74, đa thiết bị. Ngoài phạm vi: API import trong core, E2EE, voice/video, admin UI. Xem [roadmap](./roadmap.md).
+Phase 2 (owner 2026-10-19, D179–D180): `identity`, `identity-verifier`, mở rộng `gateway` (REST + webhook cho hệ thống khác, API key; phần HTTPS cho máy đã ở Phase 1, D198), `notification` (+ push), `search`, `migrator`, media qua presigned URL. Backlog: channel, sync token D74, đa thiết bị. Ngoài phạm vi: API import trong core, E2EE, voice/video, admin UI. Xem [roadmap](./roadmap.md).
 
 ### 1.3 Mục tiêu quy mô (Scale)
 - ~100K kết nối đồng thời (CCU).
@@ -139,7 +140,8 @@ flowchart TD
     AppMention["Mention App (nhúng trong core)"]
 
     subgraph Platform["Hạ tầng Nền tảng chatim"]
-        AppWebsocket["App websocket (gws Gateway)"]
+        AppWebsocket["App websocket (gws, 12 lệnh ghi realtime)"]
+        AppGateway["App gateway (HTTPS Connect, 22 lệnh đọc và quản lý)"]
         AppCore["Core (Business Logic & Storage Engine)"]
         NATS[("NATS JetStream<br/>CHATIM_EVT, CHATIM_TIMER, CHATIM_WS")]
         RedisState[("Redis State<br/>Slot soft-leases")]
@@ -150,6 +152,8 @@ flowchart TD
     Client -.->|1. Lấy JWT| AppAuth
     Client <-->|2. WebSocket| AppWebsocket
     AppWebsocket -->|3. gRPC Unary theo Slot| AppCore
+    Client -->|2b. HTTPS Bearer JWT| AppGateway
+    AppGateway -->|3b. gRPC Unary core bất kỳ, round robin| AppCore
     AppCore -->|4. Ghi Fact & State kèm cờ _state| MongoDB
     AppCore <-->|5. Thuê Slot 1024| RedisState
     AppCore <-->|6. Bỏ trùng CID & request_id| RedisDedupe
@@ -280,7 +284,7 @@ Mỗi cam kết hệ thống bắt buộc phải đi kèm với Detector đo lư
 
 ---
 
-## 9. Bản đồ 10 Module tính năng chi tiết
+## 9. Bản đồ 11 Module tính năng chi tiết
 
 Toàn bộ chi tiết kỹ thuật vận hành (How-It-Works), sơ đồ Mermaid trình tự gọi lệnh, cấu trúc payload và mã lỗi từng tính năng được phân rã độc lập trong thư mục [`docs/modules/`](./modules/README.md):
 
@@ -296,10 +300,11 @@ Toàn bộ chi tiết kỹ thuật vận hành (How-It-Works), sơ đồ Mermaid
 | **08** | History & Reconnect Sync | [08-feature-history-retrieval-and-sync.md](./modules/08-feature-history-retrieval-and-sync.md) | Phân trang theo `seq` (`LATEST`/`OLDEST`/`BEFORE`/`AFTER`/`AROUND`), View pipeline che tin nhạy cảm. |
 | **09** | Realtime Delivery & Ephemeral | [09-feature-realtime-delivery-and-ephemeral.md](./modules/09-feature-realtime-delivery-and-ephemeral.md) | WebSocket gws, dynamic interest routing NATS, typing/presence. |
 | **10** | Reconciliation & Self-Healing | [10-feature-data-reconciliation-and-repair.md](./modules/10-feature-data-reconciliation-and-repair.md) | Cờ `_state` trên doc, xoá cờ sau PubAck, sweeper slot 0, consumer `projections` (2 handler), phiếu hẹn `CHATIM_TIMER`, resync/recount. |
+| **11** | HTTPS Gateway | [11-feature-https-gateway.md](./modules/11-feature-https-gateway.md) | App `gateway` (D198): 22 lệnh đọc và quản lý qua HTTPS (Connect), Bearer JWT, core bất kỳ round robin, giới hạn theo user, CORS.
 
 ---
 
 ## 10. Tra cứu Quyết định Kỹ thuật (Decision Log)
 
 Mọi quyết định lựa chọn giải pháp kỹ thuật, đánh đổi (trade-offs), phương án bị loại bỏ (rejected alternatives) từ ngày đầu dự án đến Mention App hiện tại được lưu trữ đầy đủ tại:
-👉 **[Architecture Decision Records (D1–D197)](./decision-log.md)**
+👉 **[Architecture Decision Records (D1–D198)](./decision-log.md)**

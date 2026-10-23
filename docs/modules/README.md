@@ -18,7 +18,8 @@ flowchart TD
     end
 
     subgraph Entry["Tầng Cổng & Thời gian thực"]
-        M09["Module 09: Realtime Delivery & Ephemeral<br/>(App websocket M4: phần 1 đã xây, Typing, Presence dự kiến)"]
+        M09["Module 09: Realtime Delivery & Ephemeral<br/>(App websocket M4: phần 1–3 đã xây, 12 lệnh ghi realtime; Typing, Presence dự kiến)"]
+        M11["Module 11: HTTPS Gateway<br/>(App gateway: 22 lệnh đọc và quản lý, Connect, core bất kỳ)"]
     end
 
     subgraph CoreFeatures["Tầng Nghiệp vụ Hội thoại (Core Features)"]
@@ -37,6 +38,10 @@ flowchart TD
     end
 
     Client <-->|WebSocket| M09
+    Client -->|HTTPS Bearer JWT| M11
+    M11 -->|gRPC Unary core bất kỳ| M01
+    M11 -->|gRPC Unary core bất kỳ| M05
+    M11 -->|gRPC Unary core bất kỳ| M08
     M09 -->|gRPC Unary theo Slot| M01
     M09 -->|gRPC Unary theo Slot| M02
     M09 -->|gRPC Unary theo Slot| M03
@@ -63,7 +68,7 @@ flowchart TD
 
 ## 2. Sơ đồ Luồng Sự kiện Toàn cảnh Hệ thống (Global Event & Data Topology)
 
-Sơ đồ khối dưới đây thể hiện luồng luân chuyển dữ liệu và liên kết phối hợp giữa toàn bộ 10 module nghiệp vụ từ lúc Client phát lệnh đến khi lưu trữ, phân phối realtime và tự phục hồi:
+Sơ đồ khối dưới đây thể hiện luồng luân chuyển dữ liệu và liên kết phối hợp giữa các module nghiệp vụ từ lúc Client phát lệnh đến khi lưu trữ, phân phối realtime và tự phục hồi:
 
 ```mermaid
 flowchart TD
@@ -151,7 +156,7 @@ flowchart TD
 
 ---
 
-## 3. Mục lục 10 Module Độc lập
+## 3. Mục lục 11 Module Độc lập
 
 Mỗi module dưới đây là một tập tài liệu đặc tả hoàn chỉnh, đi sâu vào từng trường hợp sử dụng cụ thể:
 
@@ -165,8 +170,9 @@ Mỗi module dưới đây là một tập tài liệu đặc tả hoàn chỉnh
 | **06** | [06. Threads, Replies & Mentions](./06-feature-threads-replies-and-mentions.md) | Trả lời trích dẫn, đếm reply, tag @mention, inbox nhắc tên | Trả lời trên timeline chính qua `messages.rp {th, s}`, doc trả lời trong `message_interactions`, `reply_preview` tính lúc đọc; Biến đếm `rc` `$inc` + survivor timer (projection `reply_index`); Mention App (nhúng trong core, D162–D176) lập chỉ mục mention từ event tự đủ, `ListMentions`, nhóm, gợi ý `@nhóm`, thông báo `CHATIM_NOTIFY`. |
 | **07** | [07. Read Receipts & Unread Badge](./07-feature-read-receipts-and-unread-badge.md) | Đánh dấu đã đọc/chưa đọc, badge số tin chưa đọc | Cập nhật vị trí đọc trên doc Member (`read_seq`, `read_ver`); Unread tính lúc đọc trong `ListMyRooms` từ đuôi phòng ≤ 300 tin, dừng ở 100, `approx` khi hết cửa sổ. |
 | **08** | [08. History Retrieval & Reconnect Sync](./08-feature-history-retrieval-and-sync.md) | Cuộn xem lịch sử tin nhắn, khôi phục sau mất mạng | Phân trang theo `seq` (`LATEST`/`OLDEST`/`BEFORE`/`AFTER`/`AROUND`); Dynamic View pipeline che giấu tin nhạy cảm; reconnect kéo snapshot (`ListMyRooms` + `GetHistory AFTER`), sync token thuộc Mention App (chưa có). |
-| **09** | [09. Realtime Delivery & Ephemeral](./09-feature-realtime-delivery-and-ephemeral.md) | Đẩy tin realtime, báo đang gõ, trạng thái online | (M4 phần 1 đã xây: kết nối, token, lệnh, §7; đẩy event phần 2; core đã RePublish event sang `live.*`) Dynamic interest routing trên NATS PubSub; Bỏ qua DB cho tín hiệu tạm thời (typing, presence); Zero-alloc fanout WebSocket `gws`. |
+| **09** | [09. Realtime Delivery & Ephemeral](./09-feature-realtime-delivery-and-ephemeral.md) | Đẩy tin realtime, ghi realtime (12 lệnh), báo đang gõ, trạng thái online | (M4 phần 1 đã xây: kết nối, token, lệnh, §7; đẩy event phần 2; từ phần gateway chỉ còn 12 lệnh ghi realtime, D198; core đã RePublish event sang `live.*`) Dynamic interest routing trên NATS PubSub; Bỏ qua DB cho tín hiệu tạm thời (typing, presence); Zero-alloc fanout WebSocket `gws`. |
 | **10** | [10. Data Reconciliation & Self-Healing](./10-feature-data-reconciliation-and-repair.md) | Bù đắp event rớt mạng, tự sửa sai bộ đếm, resync | Cờ `_state` ghi cùng lệnh, xoá sau PubAck; sweeper slot 0 phát bù cờ quá 15s; một consumer `projections` (slot 0, 3 handler) không delay; phiếu hẹn `CHATIM_TIMER`; CLI `/app resync` bật lại cờ. |
+| **11** | [11. HTTPS Gateway](./11-feature-https-gateway.md) | Tải danh sách hội thoại, lịch sử, thành viên; tạo nhóm, thêm người, đổi tên qua HTTPS | App `gateway` (D198): Connect trên HTTP/1.1 + h2c, 22 lệnh `corecall.Request`, Bearer JWT như websocket, core bất kỳ qua round robin không Redis, giới hạn theo user và trần toàn node, CORS theo danh sách; thay đổi tới người khác qua event trên WebSocket. |
 
 ---
 
@@ -196,10 +202,10 @@ Mỗi module dưới đây là một tập tài liệu đặc tả hoàn chỉnh
   Đọc phần **1. Các Use Case nghiệp vụ** và **4. Hạn chế kỹ thuật & Đánh đổi** của từng module để hiểu rõ hệ thống hỗ trợ được những gì, giới hạn dung lượng ra sao và tại sao các tính năng như "Unread đếm 99+" hay "Kênh 200K chỉ admin post" lại được thiết kế như vậy.
 
 - **Dành cho Frontend / Client SDK Developers:**
-  Đọc kỹ **Module 02 (Gửi tin & Chống trùng CID)**, **Module 07 (Vị trí đọc & Unread)**, **Module 08 (Đọc lịch sử & Reconnect Token)** và **Module 09 (WebSocket Realtime)** để nắm bắt chính xác hợp đồng giao tiếp, mã lỗi gRPC, cơ chế client retry và cách hiển thị snapshot.
+  Đọc kỹ **Module 02 (Gửi tin & Chống trùng CID)**, **Module 07 (Vị trí đọc & Unread)**, **Module 08 (Đọc lịch sử & Reconnect Token)** và **Module 09 (WebSocket Realtime)**, **Module 11 (HTTPS Gateway)** để nắm bắt chính xác hợp đồng giao tiếp, mã lỗi gRPC, cơ chế client retry và cách hiển thị snapshot.
 
 - **Dành cho Backend / Core Developers:**
-  Đọc toàn bộ 10 module, đặc biệt chú ý phần **3. Cơ chế bảo đảm tính đúng đắn** và **4. Kỹ thuật triển khai**. Mọi thay đổi logic hay thêm tính năng mới bắt buộc phải đối chiếu với nguyên tắc: *Một ghi đơn doc atomic, không retry nội bộ, dùng phiếu hẹn sinh tồn cho dữ liệu phái sinh*.
+  Đọc toàn bộ 11 module, đặc biệt chú ý phần **3. Cơ chế bảo đảm tính đúng đắn** và **4. Kỹ thuật triển khai**. Mọi thay đổi logic hay thêm tính năng mới bắt buộc phải đối chiếu với nguyên tắc: *Một ghi đơn doc atomic, không retry nội bộ, dùng phiếu hẹn sinh tồn cho dữ liệu phái sinh*.
 
 - **Dành cho SRE / DevOps / Infrastructure Engineers:**
   Tập trung vào phần **5. Phụ thuộc kỹ thuật & Bán kính sự cố** của các module và đọc toàn bộ **Module 10 (Data Reconciliation & Self-Healing)** để hiểu rõ cách thức hệ thống tự chữa lành, cách phân bổ 1024 slot, ngưỡng cảnh báo Redis/Mongo/NATS và quy trình vận hành công cụ `/app resync` khi có sự cố hạ tầng.
