@@ -31,7 +31,7 @@ func (r *wsEventsRun) reconnectB() error {
 		return err
 	}
 	r.tokens = append(r.tokens, token)
-	if err := dialPeer(r.base, r.url, token, r.b); err != nil {
+	if err := dialPeer(r.base, r.url, r.gatewayURL, token, r.b); err != nil {
 		return err
 	}
 	seq, err := r.send("e2e websocket events after B reconnected", nil)

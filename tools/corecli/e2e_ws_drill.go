@@ -34,6 +34,7 @@ type wsDrill struct {
 func e2eWSDrill(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("e2e ws-drill", flag.ContinueOnError)
 	url := fs.String("url", "ws://chatim-websocket-1:8080/ws", "websocket endpoint")
+	gatewayURL := fs.String("gateway", defaultGatewayURL, "HTTPS gateway endpoint for reads and room management")
 	keyFile := fs.String("key", "/keys/"+devtoken.PrivateFile, "private JWK written by dev-keys")
 	tenant := fs.String("tenant", "drill", "tenant of the drill users")
 	duration := fs.Duration("duration", 5*time.Minute, "how long to send")
@@ -62,7 +63,7 @@ func e2eWSDrill(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
-		if err := dialPeer(ctx, *url, token, p); err != nil {
+		if err := dialPeer(ctx, *url, *gatewayURL, token, p); err != nil {
 			return err
 		}
 	}
@@ -75,13 +76,13 @@ func e2eWSDrill(ctx context.Context, args []string) error {
 }
 
 func (d *wsDrill) prepare() error {
-	resp, err := d.sender.call(&chatimv1.ClientRequest{Request: &chatimv1.ClientRequest_CreateRoom{CreateRoom: &chatimv1.CreateRoomRequest{
+	resp, err := viaGateway(d.sender.gw, d.sender.gw.core.CreateRoom, &chatimv1.CreateRoomRequest{
 		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "ws drill", Members: []string{d.sender.user, d.receiver.user, d.leaver.user}, RequestId: randomCID(),
-	}}})
+	})
 	if err != nil {
 		return fmt.Errorf("create room: %w", err)
 	}
-	d.room = resp.GetCreateRoom().GetRoom().GetId()
+	d.room = resp.GetRoom().GetId()
 	for _, p := range []*wsPeer{d.receiver, d.leaver} {
 		if _, err := p.await(0, e2e.WSMatch{Frame: e2e.FrameEvent, Kind: "member_added", Room: d.room, User: p.user}); err != nil {
 			return err
@@ -188,11 +189,11 @@ func (d *wsDrill) history() ([]uint64, error) {
 	var stored []uint64
 	req := &chatimv1.GetHistoryRequest{RoomId: d.room, Anchor: chatimv1.HistoryAnchor_HISTORY_ANCHOR_OLDEST, Limit: drillHistoryPage}
 	for {
-		resp, err := d.receiver.call(&chatimv1.ClientRequest{Request: &chatimv1.ClientRequest_GetHistory{GetHistory: req}})
+		resp, err := viaGateway(d.receiver.gw, d.receiver.gw.core.GetHistory, req)
 		if err != nil {
 			return nil, fmt.Errorf("history: %w", err)
 		}
-		msgs := resp.GetGetHistory().GetMessages()
+		msgs := resp.GetMessages()
 		next := req.GetSeq()
 		for _, m := range msgs {
 			stored = append(stored, m.GetSeq())

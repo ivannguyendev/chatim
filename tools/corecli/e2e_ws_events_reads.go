@@ -20,13 +20,13 @@ func (r *wsEventsRun) readPeers() error {
 			return err
 		}
 		r.tokens = append(r.tokens, token)
-		if err := dialPeer(r.base, r.url, token, p); err != nil {
+		if err := dialPeer(r.base, r.url, r.gatewayURL, token, p); err != nil {
 			return err
 		}
 	}
-	if _, err := r.a.call(&chatimv1.ClientRequest{Request: &chatimv1.ClientRequest_AddMembers{AddMembers: &chatimv1.AddMembersRequest{
+	if _, err := viaGateway(r.a.gw, r.a.gw.core.AddMembers, &chatimv1.AddMembersRequest{
 		RoomId: r.room, Users: []string{r.c.user}, RequestId: randomCID(),
-	}}}); err != nil {
+	}); err != nil {
 		return fmt.Errorf("add %s: %w", r.c.user, err)
 	}
 	added := r.inRoom("member_added")

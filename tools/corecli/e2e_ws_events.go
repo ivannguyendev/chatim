@@ -24,6 +24,7 @@ type wsEventsRun struct {
 	cl               *route.Client
 	key              devtoken.KeyPair
 	url              string
+	gatewayURL       string
 	tenant           string
 	quiet            time.Duration
 	a, b             *wsPeer
@@ -45,6 +46,7 @@ func e2eWSEvents(ctx context.Context, args []string) error {
 	o := addOptions(fs)
 	dir := fs.String("state", "/state", "directory holding the scenario state")
 	url := fs.String("url", "ws://chatim-websocket-1:8080/ws", "websocket endpoint")
+	gatewayURL := fs.String("gateway", defaultGatewayURL, "HTTPS gateway endpoint for reads and room management")
 	keyFile := fs.String("key", "/keys/"+devtoken.PrivateFile, "private JWK written by dev-keys")
 	callTimeout := fs.Duration("call-timeout", 30*time.Second, "timeout of one websocket request")
 	wait := fs.Duration("wait", 30*time.Second, "how long to wait for one expected frame")
@@ -60,7 +62,7 @@ func e2eWSEvents(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	r := &wsEventsRun{base: ctx, key: key, url: *url, tenant: st.Tenant, quiet: *quiet}
+	r := &wsEventsRun{base: ctx, key: key, url: *url, gatewayURL: *gatewayURL, tenant: st.Tenant, quiet: *quiet}
 	r.a = &wsPeer{name: "A", user: "e2e-wsa-" + st.Room, base: ctx, timeout: *callTimeout, wait: *wait}
 	r.b = &wsPeer{name: "B", user: "e2e-wsb-" + st.Room, base: ctx, timeout: *callTimeout, wait: *wait}
 	o.tenant = r.tenant
@@ -117,7 +119,7 @@ func (r *wsEventsRun) connect() error {
 			return err
 		}
 		r.tokens = append(r.tokens, token)
-		if err := dialPeer(r.base, r.url, token, p); err != nil {
+		if err := dialPeer(r.base, r.url, r.gatewayURL, token, p); err != nil {
 			return err
 		}
 	}

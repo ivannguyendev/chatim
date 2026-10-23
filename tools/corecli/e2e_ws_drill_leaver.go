@@ -38,9 +38,9 @@ func (d *wsDrill) reopen() {
 
 func (d *wsDrill) removeLeaver() {
 	d.removal.done, d.removal.lastBefore = true, d.lastSeq
-	_, d.removal.err = d.sender.call(&chatimv1.ClientRequest{Request: &chatimv1.ClientRequest_RemoveMember{RemoveMember: &chatimv1.RemoveMemberRequest{
+	_, d.removal.err = viaGateway(d.sender.gw, d.sender.gw.core.RemoveMember, &chatimv1.RemoveMemberRequest{
 		RoomId: d.room, User: d.leaver.user,
-	}}})
+	})
 	fmt.Fprintf(os.Stderr, "+%v removed %s from %s after seq %d: err %v\n",
 		time.Since(d.start).Round(time.Second), d.leaver.user, d.room, d.removal.lastBefore, d.removal.err)
 }

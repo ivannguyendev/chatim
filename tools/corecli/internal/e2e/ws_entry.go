@@ -77,7 +77,7 @@ func MessageAt(msgs []*chatimv1.Message, seq uint64) *chatimv1.Message {
 
 func SameReply(what string, viaWS, viaGRPC proto.Message) error {
 	if !proto.Equal(viaWS, viaGRPC) {
-		return fmt.Errorf("%s through websocket differs from gRPC:\nwebsocket %v\ngrpc      %v", what, viaWS, viaGRPC)
+		return fmt.Errorf("%s through the client entry point differs from gRPC:\nclient %v\ngrpc   %v", what, viaWS, viaGRPC)
 	}
 	return nil
 }

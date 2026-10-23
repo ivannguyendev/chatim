@@ -15,10 +15,13 @@ import (
 	"github.com/ivannguyendev/chatim/tools/internal/devtoken"
 )
 
+const wsNotSupported = "request not supported"
+
 type wsPeer struct {
 	name    string
 	user    string
 	ws      *wsclient.Client
+	gw      *gateway
 	feed    *e2e.WSFeed
 	applier *wsclient.Applier
 	base    context.Context
@@ -26,7 +29,8 @@ type wsPeer struct {
 	wait    time.Duration
 }
 
-func dialPeer(base context.Context, url, token string, p *wsPeer) error {
+func dialPeer(base context.Context, url, gatewayURL, token string, p *wsPeer) error {
+	p.gw = newGateway(base, gatewayURL, token, p.timeout)
 	p.feed, p.applier = e2e.NewWSFeed(), wsclient.NewApplier(wsclient.DefaultRecentIDs)
 	ctx, cancel := context.WithTimeout(base, p.timeout)
 	defer cancel()
@@ -49,6 +53,18 @@ func dialPeer(base context.Context, url, token string, p *wsPeer) error {
 
 func (p *wsPeer) call(req *chatimv1.ClientRequest) (*chatimv1.ServerResponse, error) {
 	return callWS(p.base, p.ws, p.timeout, req)
+}
+
+func (p *wsPeer) barrier() error {
+	resp, err := callWS(p.base, p.ws, p.timeout, historyOverWS())
+	if status.Code(err) != codes.Unimplemented || resp.GetMessage() != wsNotSupported {
+		return fmt.Errorf("%s: GetHistory over the websocket = %w, want Unimplemented %q", p.name, err, wsNotSupported)
+	}
+	return nil
+}
+
+func historyOverWS() *chatimv1.ClientRequest {
+	return &chatimv1.ClientRequest{Request: &chatimv1.ClientRequest_GetHistory{GetHistory: &chatimv1.GetHistoryRequest{RoomId: "1"}}}
 }
 
 func (p *wsPeer) await(from int, m e2e.WSMatch) (int, error) {

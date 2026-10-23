@@ -9,13 +9,13 @@ import (
 )
 
 func (r *wsEventsRun) createGroup() error {
-	resp, err := r.a.call(&chatimv1.ClientRequest{Request: &chatimv1.ClientRequest_CreateRoom{CreateRoom: &chatimv1.CreateRoomRequest{
+	resp, err := viaGateway(r.a.gw, r.a.gw.core.CreateRoom, &chatimv1.CreateRoomRequest{
 		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "e2e websocket events", Members: []string{r.a.user}, RequestId: randomCID(),
-	}}})
+	})
 	if err != nil {
 		return fmt.Errorf("create room: %w", err)
 	}
-	if r.room = resp.GetCreateRoom().GetRoom().GetId(); r.room == "" {
+	if r.room = resp.GetRoom().GetId(); r.room == "" {
 		return errors.New("create room returned no room id")
 	}
 	added := r.inRoom("member_added")
@@ -27,9 +27,9 @@ func (r *wsEventsRun) createGroup() error {
 }
 
 func (r *wsEventsRun) addB() error {
-	_, err := r.a.call(&chatimv1.ClientRequest{Request: &chatimv1.ClientRequest_AddMembers{AddMembers: &chatimv1.AddMembersRequest{
+	_, err := viaGateway(r.a.gw, r.a.gw.core.AddMembers, &chatimv1.AddMembersRequest{
 		RoomId: r.room, Users: []string{r.b.user}, RequestId: randomCID(),
-	}}})
+	})
 	if err != nil {
 		return fmt.Errorf("add %s: %w", r.b.user, err)
 	}
@@ -60,11 +60,11 @@ func (r *wsEventsRun) sendSeen() error {
 }
 
 func (r *wsEventsRun) reactions() error {
-	settings, err := r.a.call(&chatimv1.ClientRequest{Request: &chatimv1.ClientRequest_GetReactionSettings{GetReactionSettings: &chatimv1.GetReactionSettingsRequest{}}})
+	settings, err := viaGateway(r.a.gw, r.a.gw.core.GetReactionSettings, &chatimv1.GetReactionSettingsRequest{})
 	if err != nil {
 		return fmt.Errorf("reaction settings: %w", err)
 	}
-	emojis := settings.GetGetReactionSettings().GetEmojis()
+	emojis := settings.GetEmojis()
 	if len(emojis) < 2 {
 		return errWSTwoEmojis
 	}
@@ -81,7 +81,7 @@ func (r *wsEventsRun) reactions() error {
 	if err := r.b.ws.OpenRoom(r.base, r.room); err != nil {
 		return fmt.Errorf("peer B opens %s: %w", r.room, err)
 	}
-	if _, err := r.b.call(&chatimv1.ClientRequest{Request: &chatimv1.ClientRequest_GetReactionSettings{GetReactionSettings: &chatimv1.GetReactionSettingsRequest{}}}); err != nil {
+	if err := r.b.barrier(); err != nil {
 		return fmt.Errorf("peer B barrier after open_room: %w", err)
 	}
 	markB = r.b.feed.Len()
@@ -165,9 +165,9 @@ func (r *wsEventsRun) mentions() error {
 
 func (r *wsEventsRun) removeB() error {
 	markB := r.b.feed.Len()
-	if _, err := r.a.call(&chatimv1.ClientRequest{Request: &chatimv1.ClientRequest_RemoveMember{RemoveMember: &chatimv1.RemoveMemberRequest{
+	if _, err := viaGateway(r.a.gw, r.a.gw.core.RemoveMember, &chatimv1.RemoveMemberRequest{
 		RoomId: r.room, User: r.b.user,
-	}}}); err != nil {
+	}); err != nil {
 		return fmt.Errorf("remove %s: %w", r.b.user, err)
 	}
 	removed := r.inRoom("member_removed")

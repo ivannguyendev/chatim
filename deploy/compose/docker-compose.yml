@@ -272,6 +272,7 @@ services:
       GW_JWT_KEYS_FILE: /run/secrets/ws_jwks
       GW_JWT_ISSUER: chatim-dev
       GW_JWT_AUDIENCE: chatim-websocket
+      GW_CORS_ORIGINS: ${GW_CORS_ORIGINS:-http://localhost:3000}
       GOMEMLIMIT: 800MiB
     ports:
       - "127.0.0.1:${GW1_PORT:-8082}:8080"

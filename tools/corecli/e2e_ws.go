@@ -28,6 +28,8 @@ type wsRun struct {
 	base        context.Context
 	cl          *route.Client
 	ws          *wsclient.Client
+	gw          *gateway
+	gatewayURL  string
 	key         devtoken.KeyPair
 	url         string
 	tenant      string
@@ -45,6 +47,7 @@ func e2eWS(ctx context.Context, args []string) error {
 	o := addOptions(fs)
 	dir := fs.String("state", "/state", "directory holding the scenario state")
 	url := fs.String("url", "ws://chatim-websocket-1:8080/ws", "websocket endpoint")
+	gatewayURL := fs.String("gateway", defaultGatewayURL, "HTTPS gateway endpoint for reads and room management")
 	keyFile := fs.String("key", "/keys/"+devtoken.PrivateFile, "private JWK written by dev-keys")
 	authTimeout := fs.Duration("auth-timeout", 5*time.Second, "WS_AUTH_TIMEOUT of the websocket node")
 	callTimeout := fs.Duration("call-timeout", 30*time.Second, "timeout of one websocket request")
@@ -59,7 +62,7 @@ func e2eWS(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	r := &wsRun{key: key, url: *url, tenant: st.Tenant, user: "e2e-ws-" + st.Room, callTimeout: *callTimeout, authTimeout: *authTimeout}
+	r := &wsRun{key: key, url: *url, gatewayURL: *gatewayURL, tenant: st.Tenant, user: "e2e-ws-" + st.Room, callTimeout: *callTimeout, authTimeout: *authTimeout}
 	o.tenant, o.user = r.tenant, r.user
 	err = withSession(ctx, o, func(ctx context.Context, s *session) error {
 		r.base, r.cl = ctx, s.client
@@ -117,6 +120,7 @@ func (r *wsRun) connect() error {
 	if err != nil {
 		return err
 	}
+	r.gw = newGateway(r.base, r.gatewayURL, token, r.callTimeout)
 	r.ws, err = r.dial(token)
 	return err
 }
@@ -126,13 +130,13 @@ func (r *wsRun) call(req *chatimv1.ClientRequest) (*chatimv1.ServerResponse, err
 }
 
 func (r *wsRun) createRoom() error {
-	resp, err := r.call(&chatimv1.ClientRequest{Request: &chatimv1.ClientRequest_CreateRoom{CreateRoom: &chatimv1.CreateRoomRequest{
+	resp, err := viaGateway(r.gw, r.gw.core.CreateRoom, &chatimv1.CreateRoomRequest{
 		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "e2e websocket", Members: []string{r.user}, RequestId: randomCID(),
-	}}})
+	})
 	if err != nil {
 		return fmt.Errorf("create room: %w", err)
 	}
-	if r.room = resp.GetCreateRoom().GetRoom().GetId(); r.room == "" {
+	if r.room = resp.GetRoom().GetId(); r.room == "" {
 		return errors.New("create room returned no room id")
 	}
 	return nil
@@ -158,11 +162,11 @@ func (r *wsRun) historySees() error {
 }
 
 func (r *wsRun) history() (*chatimv1.GetHistoryResponse, error) {
-	resp, err := r.call(&chatimv1.ClientRequest{Request: &chatimv1.ClientRequest_GetHistory{GetHistory: r.historyRequest()}})
+	resp, err := viaGateway(r.gw, r.gw.core.GetHistory, r.historyRequest())
 	if err != nil {
-		return nil, fmt.Errorf("history: %w", err)
+		return nil, fmt.Errorf("history through the gateway: %w", err)
 	}
-	return resp.GetGetHistory(), nil
+	return resp, nil
 }
 
 func (r *wsRun) historyRequest() *chatimv1.GetHistoryRequest {

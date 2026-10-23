@@ -227,7 +227,7 @@ Client nối `ws://127.0.0.1:8081/ws` (subprotocol `chatim.v1`), frame đầu l�
 | `GW_USER_INFLIGHT` | `32` | Lệnh đang chạy tối đa mỗi (tenant, user) trên node |
 | `GW_USER_LIMITERS` | `100000` | Số người giữ bộ đếm trong RAM (LRU, chỉ đẩy người không có lệnh đang chạy; ≥ `GW_INFLIGHT_MAX`) |
 | `GW_INFLIGHT_MAX` | `10000` | Lệnh đang chạy tối đa cả node, kiểm trước token; quá thì `unavailable` (503) |
-| `GW_CORS_ORIGINS` | rỗng | Origin trình duyệt được phép, đúng từng origin (`https://chat.example.com`), không `*`; rỗng = không cho trình duyệt khác origin |
+| `GW_CORS_ORIGINS` | rỗng | Origin trình duyệt được phép, đúng từng origin (`https://chat.example.com`), không `*`; rỗng = không cho trình duyệt khác origin; compose dev đặt `http://localhost:3000` (e2e phase 10 kiểm preflight từ origin này) |
 | `GW_DRAIN_DELAY`, `GW_SHUTDOWN_BUDGET` | `2s` / `15s` | Dừng: `/readyz` false, chờ drain, chờ lệnh đang chạy; budget phải lớn hơn `GW_DRAIN_DELAY + CORE_REQUEST_DEADLINE`; compose `stop_grace_period` 18s |
 | `GW_READ_HEADER_TIMEOUT`, `GW_READ_TIMEOUT` | `5s` / `10s` | Hạn đọc header và cả request |
 | `GW_WRITE_TIMEOUT` | `CORE_REQUEST_DEADLINE + 5s` | Hạn ghi trả lời (không nhỏ hơn mặc định) |
