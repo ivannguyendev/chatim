@@ -2,7 +2,6 @@ package config
 
 import (
 	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -11,7 +10,10 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/envconfig"
 )
 
-const writeTimeoutMargin = 5 * time.Second
+const (
+	writeTimeoutMargin = 5 * time.Second
+	defaultAdminAddr   = ":9090"
+)
 
 type Config struct {
 	ListenAddr        string
@@ -37,15 +39,16 @@ type Config struct {
 	MaxHeaderBytes    int
 	H2MaxStreams      int
 	RequestDeadline   time.Duration
-	LogLevel          slog.Level
 }
+
+func AdminAddr() string { return envconfig.String("GW_ADMIN_ADDR", defaultAdminAddr) }
 
 func Load() (Config, error) {
 	var p parser
 	deadline := p.span("CORE_REQUEST_DEADLINE", 5*time.Second)
 	c := Config{
 		ListenAddr:        envconfig.String("GW_ADDR", ":8080"),
-		AdminAddr:         envconfig.String("GW_ADMIN_ADDR", ":9090"),
+		AdminAddr:         AdminAddr(),
 		CoreAddrs:         list("GW_CORE_ADDRS"),
 		JWTKeysFile:       envconfig.String("GW_JWT_KEYS_FILE", ""),
 		JWTIssuer:         envconfig.String("GW_JWT_ISSUER", ""),
@@ -67,7 +70,6 @@ func Load() (Config, error) {
 		MaxHeaderBytes:    p.number("GW_MAX_HEADER_BYTES", 16<<10),
 		H2MaxStreams:      p.number("GW_H2_MAX_STREAMS", 250),
 		RequestDeadline:   deadline,
-		LogLevel:          p.level("LOG_LEVEL"),
 	}
 	if err := errors.Join(p.errs...); err != nil {
 		return Config{}, err
@@ -103,7 +105,6 @@ func (c Config) LogValue() slog.Value {
 		slog.Int("max_header_bytes", c.MaxHeaderBytes),
 		slog.Int("h2_max_streams", c.H2MaxStreams),
 		slog.Duration("request_deadline", c.RequestDeadline),
-		slog.String("log_level", c.LogLevel.String()),
 	)
 }
 
@@ -139,14 +140,4 @@ func (p *parser) span(key string, def time.Duration) time.Duration {
 		p.fail(err)
 	}
 	return v
-}
-
-func (p *parser) level(key string) slog.Level {
-	var level slog.Level
-	if v := os.Getenv(key); v != "" {
-		if err := level.UnmarshalText([]byte(v)); err != nil {
-			p.fail(fmt.Errorf("%s=%q: %w", key, v, err))
-		}
-	}
-	return level
 }
