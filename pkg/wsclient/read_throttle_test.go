@@ -146,7 +146,7 @@ func TestATickAtTheSameMomentNeverSendsAReadAfterTheUnread(t *testing.T) {
 	})
 }
 
-func TestListingRoomsSendsPendingReadsAndWaitsForTheirAnswers(t *testing.T) {
+func TestFlushReadsSendsPendingReadsAndWaitsForTheirAnswers(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		s := newReadServer(t)
 		client := dialPipe(t, s.fakeServer, "token")
@@ -154,23 +154,74 @@ func TestListingRoomsSendsPendingReadsAndWaitsForTheirAnswers(t *testing.T) {
 		_ = client.MarkRead(t.Context(), "7", 5)
 		_ = client.MarkRead(t.Context(), "7", 9)
 		_ = client.MarkRead(t.Context(), "8", 2)
-		listed := make(chan error, 1)
-		go func() {
-			_, err := client.Call(t.Context(), listRooms())
-			listed <- err
-		}()
+		flushed := make(chan error, 1)
+		go func() { flushed <- client.FlushReads(t.Context()) }()
 		synctest.Wait()
 		got := s.lines()
 		slices.Sort(got)
 		if !slices.Equal(got, []string{"read 7 5", "read 7 9", "read 8 2"}) {
-			t.Fatalf("frames before the answers = %v, want every pending read sent and no list yet", got)
+			t.Fatalf("frames = %v, want every pending read sent", got)
+		}
+		select {
+		case err := <-flushed:
+			t.Fatalf("FlushReads returned %v before the read answers", err)
+		default:
 		}
 		s.release()
-		if err := <-listed; err != nil {
-			t.Fatalf("ListMyRooms: %v", err)
+		if err := <-flushed; err != nil {
+			t.Fatalf("FlushReads = %v", err)
+		}
+		_ = client.Close()
+	})
+}
+
+func TestFlushReadsGivesUpWhenItsContextEnds(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		s := newReadServer(t)
+		client := dialPipe(t, s.fakeServer, "token")
+		s.holding(true)
+		_ = client.MarkRead(t.Context(), "7", 4)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		start := time.Now()
+		if err := client.FlushReads(ctx); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("FlushReads = %v, want DeadlineExceeded", err)
+		}
+		if waited := time.Since(start); waited < 2*time.Second {
+			t.Fatalf("waited %v, want the context's 2s", waited)
+		}
+		s.release()
+		_ = client.Close()
+	})
+}
+
+func TestFlushReadsWithNothingPendingReturnsAtOnce(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		s := newReadServer(t)
+		client := dialPipe(t, s.fakeServer, "token")
+		if err := client.FlushReads(t.Context()); err != nil {
+			t.Fatalf("FlushReads = %v", err)
+		}
+		if got := s.lines(); len(got) != 0 {
+			t.Fatalf("frames = %v, want none", got)
+		}
+		_ = client.Close()
+	})
+}
+
+func TestCallNoLongerFlushesReads(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		s := newReadServer(t)
+		client := dialPipe(t, s.fakeServer, "token")
+		_ = client.MarkRead(t.Context(), "7", 5)
+		_ = client.MarkRead(t.Context(), "7", 9)
+		synctest.Wait()
+		_ = s.lines()
+		if _, err := client.Call(t.Context(), listRooms()); err != nil {
+			t.Fatalf("Call: %v", err)
 		}
 		if got := s.lines(); !slices.Equal(got, []string{"list"}) {
-			t.Fatalf("frames after the answers = %v, want the list", got)
+			t.Fatalf("frames = %v, want only the call; pending reads wait for their tick or FlushReads", got)
 		}
 		_ = client.Close()
 	})

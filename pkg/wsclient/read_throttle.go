@@ -120,7 +120,7 @@ func (c *Client) readTick(roomID string) {
 	}
 }
 
-func (c *Client) flushReads(ctx context.Context) error {
+func (c *Client) FlushReads(ctx context.Context) error {
 	c.reads.mu.Lock()
 	for roomID, r := range c.reads.rooms {
 		if seq, waiting := r.take(); waiting {
@@ -206,13 +206,4 @@ func (c *Client) closedErr() error {
 		return err
 	}
 	return ErrClosed
-}
-
-func listsRooms(req *chatimv1.ClientRequest) bool {
-	switch req.GetRequest().(type) {
-	case *chatimv1.ClientRequest_ListMyRooms, *chatimv1.ClientRequest_GetRooms:
-		return true
-	default:
-		return false
-	}
 }

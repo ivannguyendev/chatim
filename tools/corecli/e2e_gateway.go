@@ -87,6 +87,7 @@ func (r *gatewayRun) run() error {
 		{"A adds C through the gateway and B, with the group open, hears member_added", r.addC},
 		{"A renames the group through the gateway and B hears room_updated", r.rename},
 		{"ListMyRooms, GetHistory, ListMembers and ListBookmarks through the gateway equal gRPC", r.readsMatch},
+		{"B marks read on the websocket, flushes and lists its rooms through the gateway with that read_seq", r.flushedRead},
 		{"an expired token gets 401", r.expiredRefused},
 		{"SendMessage through the gateway is unimplemented", r.sendRefused},
 		{"GetHistory through the websocket is unimplemented", r.b.barrier},

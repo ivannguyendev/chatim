@@ -58,11 +58,6 @@ func DialConn(ctx context.Context, conn net.Conn, url, token string, opts ...Opt
 }
 
 func (c *Client) Call(ctx context.Context, req *chatimv1.ClientRequest) (*chatimv1.ServerResponse, error) {
-	if listsRooms(req) {
-		if err := c.flushReads(ctx); err != nil {
-			return nil, err
-		}
-	}
 	id, reply, err := c.start(ctx, req)
 	if err != nil {
 		return nil, err
@@ -121,7 +116,7 @@ func (c *Client) Close() error {
 }
 
 func (c *Client) CloseContext(ctx context.Context) error {
-	flushErr := c.flushReads(ctx)
+	flushErr := c.FlushReads(ctx)
 	c.CloseAsync()
 	<-c.done
 	c.loops.Wait()
