@@ -90,7 +90,11 @@ func TestRunStampsAConnectedUserAndClosesThePresenceRedisOnStop(t *testing.T) {
 		t.Fatalf("presence ttl = %v", ttl)
 	}
 	_, body := httpStatus(t, adminAddr, "/metrics")
-	for _, want := range []string{"chatim_websocket_presence_redis_up 1", "chatim_websocket_presence_stamps_total 1", "chatim_websocket_presence_stamp_failures_total 0", "chatim_websocket_presence_stamp_pending 0"} {
+	for _, want := range []string{"chatim_websocket_presence_redis_up 1", "chatim_websocket_presence_stamps_total 1", "chatim_websocket_presence_stamp_failures_total 0", "chatim_websocket_presence_stamp_pending 0",
+		"chatim_websocket_presence_reads_total 0", "chatim_websocket_presence_read_failures_total 0", "chatim_websocket_presence_cached_users 0",
+		"chatim_websocket_presence_read_seconds_count 0", "chatim_websocket_presence_answers_total 0", "chatim_websocket_presence_watch_truncated_total 0",
+		"chatim_websocket_presence_watching_connections 0", `chatim_websocket_presence_answer_dropped_total{reason="busy"} 0`,
+		`chatim_websocket_presence_answer_dropped_total{reason="send_full"} 0`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("/metrics lacks %q", want)
 		}
@@ -154,9 +158,13 @@ func TestAFailedStartStopsTheStamperAndClosesThePresenceRedis(t *testing.T) {
 
 func TestPresenceWiringCopiesTheConfigAndRedactsThePassword(t *testing.T) {
 	cfg := testConfig("redis:6379", "/keys.json")
-	got := presenceConfig(cfg)
-	if got.TTL != cfg.PresenceTTL || got.StampEvery != cfg.PresenceStampEvery || got.Flush != cfg.PresenceFlush || got.Batch != cfg.PresenceBatch {
+	pruned := 0
+	got := presenceConfig(cfg, func(time.Time) { pruned++ })
+	if got.TTL != cfg.PresenceTTL || got.StampEvery != cfg.PresenceStampEvery || got.Flush != cfg.PresenceFlush || got.Batch != cfg.PresenceBatch || got.Prune == nil {
 		t.Fatalf("presence config = %+v from %+v", got, cfg)
+	}
+	if got.Prune(time.Now()); pruned != 1 {
+		t.Fatalf("presence config prune ran %d times, want the given func", pruned)
 	}
 	redisCfg := presenceRedisConfig(cfg)
 	if redisCfg.Addr != cfg.PresenceRedisAddr || redisCfg.DB != cfg.PresenceRedisDB || redisCfg.Pool != cfg.PresenceRedisPool ||

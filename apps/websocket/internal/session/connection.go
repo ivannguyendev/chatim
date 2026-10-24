@@ -34,6 +34,7 @@ const (
 	frameCloseRoom
 	frameLoadRooms
 	frameTyping
+	frameWatchPresence
 )
 
 type connection struct {
@@ -63,6 +64,7 @@ type connection struct {
 	expiry    *time.Timer
 	rooms     map[uint64]*roomQueue
 	member    *interest.Conn
+	watch     *presenceWatch
 	closeErr  error
 }
 
@@ -130,6 +132,10 @@ func (c *connection) receive(message *gws.Message) {
 		c.loadRooms()
 	case kind == frameTyping:
 		c.typing(frame.GetTyping())
+	case kind == frameWatchPresence:
+		c.watchPresence(frame.GetWatchPresence().GetUserIds())
+	case kind == frameHeartbeat:
+		c.answerPresence()
 	case kind == frameUnknown:
 		c.server.stats.unknownFrames.Add(1)
 	}
@@ -146,6 +152,7 @@ func (c *connection) control(payload []byte, reply bool) {
 	}
 	if reply {
 		c.enqueue(outFrame{opcode: gws.OpcodePong, payload: payload})
+		c.answerPresence()
 	}
 	c.renewLiveness()
 }
@@ -176,6 +183,8 @@ func kindOf(frame *chatimv1.ClientFrame) frameKind {
 		return frameLoadRooms
 	case *chatimv1.ClientFrame_Typing:
 		return frameTyping
+	case *chatimv1.ClientFrame_WatchPresence:
+		return frameWatchPresence
 	default:
 		return frameUnknown
 	}
@@ -202,8 +211,8 @@ func (c *connection) finish(err error) {
 	c.finished = true
 	c.closeErr = err
 	authed := c.authed
-	member := c.member
-	c.member = nil
+	member, watch := c.member, c.watch
+	c.member, c.watch = nil, nil
 	stopTimer(c.authTimer)
 	stopTimer(c.expiry)
 	c.mu.Unlock()
@@ -212,6 +221,9 @@ func (c *connection) finish(err error) {
 	}
 	if member != nil {
 		member.Unregister()
+	}
+	if watch != nil {
+		watch.drop()
 	}
 	c.cancel()
 	close(c.closed)

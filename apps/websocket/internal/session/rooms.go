@@ -36,6 +36,7 @@ func (c *connection) join(claims jwtverify.Claims) {
 		return
 	}
 	c.member = member
+	c.watch = newPresenceWatch(&c.server.presenceStats)
 	c.mu.Unlock()
 }
 

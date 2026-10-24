@@ -52,6 +52,7 @@ type Typing interface {
 
 type Presence interface {
 	Touch(tenant, user string, now time.Time)
+	Answer(ctx context.Context, tenant string, users []string) ([]*chatimv1.PresenceEntry, error)
 }
 
 type Options struct {
@@ -68,6 +69,7 @@ type Options struct {
 	SendQueueBytes   int
 	TypingRate       int
 	TypingBurst      int
+	PresenceWatchMax int
 }
 
 func (o Options) validate() error {
@@ -89,6 +91,7 @@ func (o Options) validate() error {
 	positive("send queue bytes", o.SendQueueBytes > 0)
 	positive("typing rate", o.TypingRate > 0)
 	positive("typing burst", o.TypingBurst > 0)
+	positive("presence watch limit", o.PresenceWatchMax > 0)
 	if o.SendQueueBytes < o.FrameMax {
 		errs = append(errs, errors.New("session: send queue bytes must hold one frame of the frame limit"))
 	}

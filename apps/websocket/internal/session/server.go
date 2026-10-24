@@ -19,18 +19,19 @@ import (
 const subprotocolHeader = "Sec-WebSocket-Protocol"
 
 type Server struct {
-	opts      Options
-	verifier  Verifier
-	executor  Executor
-	interest  Interest
-	typing    Typing
-	presence  Presence
-	logger    *slog.Logger
-	upgrader  *gws.Upgrader
-	stats     *stats
-	accepting *gate
-	commands  *gate
-	authLog   *rate.Limiter
+	opts          Options
+	verifier      Verifier
+	executor      Executor
+	interest      Interest
+	typing        Typing
+	presence      Presence
+	logger        *slog.Logger
+	upgrader      *gws.Upgrader
+	stats         *stats
+	presenceStats presenceStats
+	accepting     *gate
+	commands      *gate
+	authLog       *rate.Limiter
 
 	mu        sync.Mutex
 	live      map[*connection]struct{}
@@ -77,7 +78,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.serveUpgraded(socket, err)
 }
 
-func (s *Server) Sources() []metrics.Source { return s.stats.sources() }
+func (s *Server) Sources() []metrics.Source {
+	return append(s.stats.sources(), s.presenceStats.sources()...)
+}
 
 func (s *Server) Drain(ctx context.Context) error {
 	s.accepting.close()

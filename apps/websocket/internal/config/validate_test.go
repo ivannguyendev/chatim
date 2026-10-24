@@ -89,6 +89,12 @@ func TestLoadValidation(t *testing.T) {
 		{"presence flush counts twice in the refresh", map[string]string{"WS_PRESENCE_FLUSH": "1250ms"}, "must be below WS_PRESENCE_TTL"},
 		{"presence ttl at heartbeat timeout plus stamp interval", map[string]string{"WS_PRESENCE_TTL": "17s"}, ""},
 		{"presence ttl over heartbeat timeout plus stamp interval", map[string]string{"WS_PRESENCE_TTL": "17001ms"}, "WS_PRESENCE_TTL 17.001s must not exceed WS_HEARTBEAT_TIMEOUT + WS_PRESENCE_STAMP_EVERY = 17s"},
+		{"zero presence cache", map[string]string{"WS_PRESENCE_CACHE": "0s"}, "WS_PRESENCE_CACHE must be positive"},
+		{"presence cache at the ttl", map[string]string{"WS_PRESENCE_CACHE": "15s"}, "WS_PRESENCE_CACHE 15s must be below WS_PRESENCE_TTL 15s"},
+		{"presence cache just below the ttl", map[string]string{"WS_PRESENCE_CACHE": "14999ms"}, ""},
+		{"unparsable presence cache", map[string]string{"WS_PRESENCE_CACHE": "soon"}, "WS_PRESENCE_CACHE"},
+		{"zero presence watch max", map[string]string{"WS_PRESENCE_WATCH_MAX": "0"}, "WS_PRESENCE_WATCH_MAX must be positive"},
+		{"one presence watch user", map[string]string{"WS_PRESENCE_WATCH_MAX": "1"}, ""},
 		{"presence ttl follows the heartbeat timeout", map[string]string{"WS_HEARTBEAT_TIMEOUT": "12s"}, "must not exceed WS_HEARTBEAT_TIMEOUT + WS_PRESENCE_STAMP_EVERY = 14s"},
 	}
 	for _, tt := range tests {

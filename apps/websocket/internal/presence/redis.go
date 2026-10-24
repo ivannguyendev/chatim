@@ -52,6 +52,7 @@ func RedisOptions(cfg RedisConfig) *redis.Options {
 
 type Conn interface {
 	Pipelined(ctx context.Context, fn func(redis.Pipeliner) error) ([]redis.Cmder, error)
+	MGet(ctx context.Context, keys ...string) *redis.SliceCmd
 	Close() error
 }
 
@@ -84,6 +85,23 @@ func (c *Client) Stamp(ctx context.Context, keys []string, ttl time.Duration) er
 	})
 	c.up.Store(err == nil)
 	return err
+}
+
+func (c *Client) Online(ctx context.Context, keys []string) ([]bool, error) {
+	readCtx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+	values, err := c.conn.MGet(readCtx, keys...).Result()
+	if ctx.Err() == nil {
+		c.up.Store(err == nil)
+	}
+	if err != nil {
+		return nil, err
+	}
+	online := make([]bool, len(values))
+	for i, v := range values {
+		online[i] = v != nil
+	}
+	return online, nil
 }
 
 func (c *Client) Close() error { return c.conn.Close() }

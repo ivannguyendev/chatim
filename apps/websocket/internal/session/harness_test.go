@@ -42,6 +42,7 @@ func testOptions() Options {
 		SendQueueBytes:   64 << 10,
 		TypingRate:       2,
 		TypingBurst:      4,
+		PresenceWatchMax: 200,
 	}
 }
 

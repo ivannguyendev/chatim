@@ -27,6 +27,7 @@ var envKeys = []string{
 	"WS_TYPING_RATE", "WS_TYPING_BURST", "WS_TYPING_QUEUE", "WS_TYPING_PENDING_MSGS",
 	"WS_PRESENCE_REDIS_ADDR", "WS_PRESENCE_REDIS_DB", "WS_PRESENCE_REDIS_PASSWORD", "WS_PRESENCE_REDIS_PASSWORD_FILE",
 	"WS_PRESENCE_REDIS_TIMEOUT", "WS_PRESENCE_REDIS_POOL", "WS_PRESENCE_TTL", "WS_PRESENCE_STAMP_EVERY", "WS_PRESENCE_FLUSH", "WS_PRESENCE_BATCH",
+	"WS_PRESENCE_CACHE", "WS_PRESENCE_WATCH_MAX",
 }
 
 var requiredEnv = map[string]string{
@@ -107,6 +108,8 @@ func TestLoadDefaults(t *testing.T) {
 		PresenceStampEvery:   2 * time.Second,
 		PresenceFlush:        time.Second,
 		PresenceBatch:        500,
+		PresenceCache:        5 * time.Second,
+		PresenceWatchMax:     200,
 	}
 	if got != want {
 		t.Fatalf("Load() = %+v, want %+v", fields(got), fields(want))

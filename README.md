@@ -213,6 +213,8 @@ Toàn bộ đọc qua `apps/core/internal/config`; thiếu thì dùng giá trị
 | `WS_PRESENCE_STAMP_EVERY` | `2s` | Một người được đóng dấu lại khi lần đóng dấu trước trên node đã cũ hơn mức này; mọi frame (heartbeat, ping) sau auth đều tính, nhiều kết nối cùng người chỉ ghi một lần |
 | `WS_PRESENCE_FLUSH` | `1s` | Chu kỳ ghi những người chờ đóng dấu; batch lỗi đầu tiên dừng lượt, người chưa ghi chờ lượt sau; người không có frame quá `WS_PRESENCE_TTL` bị bỏ khỏi RAM và không ghi lại; dừng node không ghi lượt cuối |
 | `WS_PRESENCE_BATCH` | `500` | Số key mỗi pipeline, `1..1000` |
+| `WS_PRESENCE_CACHE` | `5s` | Kết quả online đọc từ Redis được giữ trong RAM ngần này (offline không bao giờ giữ); trong thời gian đó hỏi lại người đó không đọc Redis. Phải nhỏ hơn `WS_PRESENCE_TTL`; lượt ghi mỗi `WS_PRESENCE_FLUSH` cũng xoá mục cũ hơn mức này |
+| `WS_PRESENCE_WATCH_MAX` | `200` | Số người tối đa trong danh sách hỏi `watch_presence` của một kết nối (bỏ id sai và trùng, giữ 200 người đầu, đếm `presence_watch_truncated_total`). Mỗi `watch_presence`, heartbeat hay ping có danh sách khác rỗng được trả cả danh sách trong một frame `presence` (một `MGET` cho người chưa có trong cache); mỗi kết nối chỉ một lần trả đang chạy, lần khác lúc đó bị bỏ (`reason="busy"`), hàng gửi quá nửa thì bỏ (`reason="send_full"`), Redis lỗi thì không gửi gì |
 | `WS_ROOM_IDS_INFLIGHT` | `64` | Số lần gọi `ListMyRoomIDs` đang chạy tối đa mỗi node; lỗi thì gửi `load_failed` cho các kết nối của người đó |
 | `WS_OPEN_PENDING` | `10s` | `open_room` của room chưa có trong danh sách (vừa tạo) chờ `member_added` tối đa ngần này, rồi `room_closed{NOT_MEMBER}` |
 

@@ -72,6 +72,8 @@ type Config struct {
 	PresenceStampEvery    time.Duration
 	PresenceFlush         time.Duration
 	PresenceBatch         int
+	PresenceCache         time.Duration
+	PresenceWatchMax      int
 }
 
 func AdminAddr() string { return envconfig.String("WS_ADMIN_ADDR", defaultAdminAddr) }
@@ -131,6 +133,8 @@ func Load() (Config, error) {
 		PresenceStampEvery:    p.span("WS_PRESENCE_STAMP_EVERY", 2*time.Second),
 		PresenceFlush:         p.span("WS_PRESENCE_FLUSH", time.Second),
 		PresenceBatch:         p.number("WS_PRESENCE_BATCH", 500),
+		PresenceCache:         p.span("WS_PRESENCE_CACHE", 5*time.Second),
+		PresenceWatchMax:      p.number("WS_PRESENCE_WATCH_MAX", 200),
 	}
 	if err := errors.Join(p.errs...); err != nil {
 		return Config{}, err
@@ -194,6 +198,8 @@ func (c Config) LogValue() slog.Value {
 		slog.Duration("presence_stamp_every", c.PresenceStampEvery),
 		slog.Duration("presence_flush", c.PresenceFlush),
 		slog.Int("presence_batch", c.PresenceBatch),
+		slog.Duration("presence_cache", c.PresenceCache),
+		slog.Int("presence_watch_max", c.PresenceWatchMax),
 	)
 }
 

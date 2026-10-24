@@ -102,7 +102,7 @@ func wireServers(cfg config.Config, log *slog.Logger, verifier *jwtverify.Verifi
 	if err != nil {
 		return nil, err
 	}
-	ws, err := session.New(sessionOptions(cfg), verifier, exec, rooms, typist, pres.stamper, log)
+	ws, err := session.New(sessionOptions(cfg), verifier, exec, rooms, typist, pres.service(), log)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +111,7 @@ func wireServers(cfg config.Config, log *slog.Logger, verifier *jwtverify.Verifi
 	if err != nil {
 		return nil, err
 	}
-	sources := slices.Concat(metricSources(ws, exec), fd.Sources(), rooms.Sources(), publisher.Sources(), typist.Sources(), pres.stamper.Sources(), pres.client.Sources())
+	sources := slices.Concat(metricSources(ws, exec), fd.Sources(), rooms.Sources(), publisher.Sources(), typist.Sources(), pres.sources())
 	handler, err := metrics.Handler(metricsSubsystem, sources)
 	if err != nil {
 		return nil, err

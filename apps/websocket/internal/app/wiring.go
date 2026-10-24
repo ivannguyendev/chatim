@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -93,6 +94,7 @@ func sessionOptions(cfg config.Config) session.Options {
 		SendQueueBytes:   cfg.SendQueueBytes,
 		TypingRate:       cfg.TypingRate,
 		TypingBurst:      cfg.TypingBurst,
+		PresenceWatchMax: cfg.PresenceWatchMax,
 	}
 }
 
@@ -105,8 +107,20 @@ func newTyping(cfg config.Config, rooms *interest.Table) (*typing.Service, error
 }
 
 type presenceParts struct {
-	client  *presence.Client
-	stamper *presence.Stamper
+	client   *presence.Client
+	stamper  *presence.Stamper
+	answerer *presence.Answerer
+}
+
+type presenceService struct {
+	*presence.Stamper
+	*presence.Answerer
+}
+
+func (p presenceParts) service() presenceService { return presenceService{p.stamper, p.answerer} }
+
+func (p presenceParts) sources() []metrics.Source {
+	return slices.Concat(p.stamper.Sources(), p.answerer.Sources(), p.client.Sources())
 }
 
 func presenceRedisConfig(cfg config.Config) presence.RedisConfig {
@@ -120,8 +134,8 @@ func presenceRedisConfig(cfg config.Config) presence.RedisConfig {
 	}
 }
 
-func presenceConfig(cfg config.Config) presence.Config {
-	return presence.Config{TTL: cfg.PresenceTTL, StampEvery: cfg.PresenceStampEvery, Flush: cfg.PresenceFlush, Batch: cfg.PresenceBatch}
+func presenceConfig(cfg config.Config, prune func(time.Time)) presence.Config {
+	return presence.Config{TTL: cfg.PresenceTTL, StampEvery: cfg.PresenceStampEvery, Flush: cfg.PresenceFlush, Batch: cfg.PresenceBatch, Prune: prune}
 }
 
 func newPresence(cfg config.Config, deps Deps) (presenceParts, error) {
@@ -134,11 +148,15 @@ func newPresence(cfg config.Config, deps Deps) (presenceParts, error) {
 	if err != nil {
 		return presenceParts{}, errors.Join(err, closeConn(conn))
 	}
-	stamper, err := presence.NewStamper(presenceConfig(cfg), client)
+	answerer, err := presence.NewAnswerer(cfg.PresenceCache, client)
 	if err != nil {
 		return presenceParts{}, errors.Join(err, client.Close())
 	}
-	return presenceParts{client: client, stamper: stamper}, nil
+	stamper, err := presence.NewStamper(presenceConfig(cfg, answerer.Prune), client)
+	if err != nil {
+		return presenceParts{}, errors.Join(err, client.Close())
+	}
+	return presenceParts{client: client, stamper: stamper, answerer: answerer}, nil
 }
 
 func closeConn(conn presence.Conn) error {

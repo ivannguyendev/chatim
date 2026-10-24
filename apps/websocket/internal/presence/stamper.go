@@ -32,6 +32,7 @@ type Config struct {
 	StampEvery time.Duration
 	Flush      time.Duration
 	Batch      int
+	Prune      func(now time.Time)
 }
 
 type user struct {
@@ -141,7 +142,11 @@ func (s *Stamper) flush(ctx context.Context) {
 		}
 		addCount(&s.stamps, end-start)
 	}
-	s.dropIdle(time.Now())
+	now := time.Now()
+	s.dropIdle(now)
+	if s.cfg.Prune != nil {
+		s.cfg.Prune(now)
+	}
 }
 
 func (s *Stamper) takePending() []user {
