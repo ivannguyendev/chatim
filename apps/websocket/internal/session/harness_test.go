@@ -53,6 +53,7 @@ func testOptions() Options {
 type fakeVerifier struct {
 	mu     sync.Mutex
 	tokens map[string]jwtverify.Claims
+	holds  map[string]chan struct{}
 	bad    error
 	calls  atomic.Int64
 }
@@ -63,6 +64,12 @@ func newFakeVerifier(t *testing.T) *fakeVerifier {
 
 func (v *fakeVerifier) Verify(token string) (jwtverify.Claims, error) {
 	v.calls.Add(1)
+	v.mu.Lock()
+	hold := v.holds[token]
+	v.mu.Unlock()
+	if hold != nil {
+		<-hold
+	}
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	claims, ok := v.tokens[token]
@@ -110,10 +117,15 @@ type harness struct {
 
 func newHarness(t *testing.T, opts Options) *harness {
 	t.Helper()
+	return newHarnessWith(t, opts, func(rooms Interest) Interest { return rooms })
+}
+
+func newHarnessWith(t *testing.T, opts Options, wrap func(Interest) Interest) *harness {
+	t.Helper()
 	verifier, core, loader := newFakeVerifier(t), newFakeCore(), &roomLoader{rooms: map[string][]interest.Room{}}
 	rooms := newInterestWith(t, loader)
 	typist, presence := newTestTyping(t, rooms), &fakePresence{}
-	server, err := New(opts, verifier, core, rooms, typist, presence, slog.New(slog.DiscardHandler))
+	server, err := New(opts, verifier, core, wrap(rooms), typist, presence, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

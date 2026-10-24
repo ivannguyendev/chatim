@@ -178,7 +178,7 @@ func TestSourcesExposeEveryCounterWithFixedLabels(t *testing.T) {
 	if read("closes_total", "code", "4009") != 1 || read("closes_total", "code", "4008") != 1 || read("closes_total", "code", "other") != 1 {
 		t.Fatal("close counters wrong")
 	}
-	for _, result := range []string{"ok", "invalid", "expired", "rate"} {
+	for _, result := range []string{"ok", "invalid", "expired", "rate", "throttled"} {
 		if read("auth_total", "result", result) != 0 {
 			t.Fatalf("auth_total{result=%q} counted", result)
 		}

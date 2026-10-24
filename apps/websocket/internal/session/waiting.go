@@ -6,7 +6,6 @@ import (
 	"github.com/lxzan/gws"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/ivannguyendev/chatim/apps/websocket/internal/interest"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -31,40 +30,38 @@ func (c *connection) graceExpired(gen uint64) {
 
 func (c *connection) tokenExpired(gen uint64) {
 	defer c.recoverPanic()
-	member, watch, ok := c.stopRunning(gen)
-	if !ok {
+	if !c.stopRunning(gen) {
 		return
-	}
-	if member != nil {
-		member.Unregister()
-	}
-	if watch != nil {
-		watch.drop()
 	}
 	c.server.stats.authRequiredExpired.Add(1)
 	c.sendAuthRequired(promptExpired)
 }
 
-func (c *connection) stopRunning(gen uint64) (*interest.Conn, *presenceWatch, bool) {
+func (c *connection) stopRunning(gen uint64) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.finished || !c.running || c.authGen != gen {
-		return nil, nil, false
+		return false
 	}
 	if remaining := time.Until(c.deadlineOf(c.claims)); remaining > 0 {
 		c.armExpiry(remaining)
-		return nil, nil, false
+		return false
 	}
 	c.running = false
 	c.authGen++
 	c.reason = promptExpired
-	member, watch := c.member, c.watch
+	if c.member != nil {
+		c.member.Unregister()
+	}
+	if c.watch != nil {
+		c.watch.drop()
+	}
 	c.member, c.watch = nil, nil
 	if c.server.stats.unauth.Add(1) > int64(c.server.opts.UnauthMax) {
 		c.server.stats.unauthOverCap.Add(1)
 	}
 	c.startGrace()
-	return member, watch, true
+	return true
 }
 
 func (c *connection) setReason(reason chatimv1.AuthRequiredReason) {

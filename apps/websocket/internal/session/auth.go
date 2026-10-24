@@ -11,6 +11,8 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
+const throttleRetry = time.Second
+
 const (
 	promptMissing = chatimv1.AuthRequiredReason_AUTH_REQUIRED_REASON_MISSING
 	promptInvalid = chatimv1.AuthRequiredReason_AUTH_REQUIRED_REASON_INVALID
@@ -36,7 +38,7 @@ func (c *connection) authenticate(token string, running bool) {
 
 func (c *connection) login(token string) {
 	if !c.authGate.Allow() {
-		c.retryLater()
+		c.retryLater(authThrottled, throttleRetry)
 		return
 	}
 	claims, err := c.server.verifier.Verify(token)
@@ -60,8 +62,14 @@ func (c *connection) refused(err error) chatimv1.AuthRequiredReason {
 }
 
 func (c *connection) enter(claims jwtverify.Claims) {
+	if !c.sameIdentity(claims) {
+		c.server.authRefused(authInvalid, reasonIdentityChange)
+		c.setReason(promptInvalid)
+		c.sendAuthRequired(promptInvalid)
+		return
+	}
 	if !c.server.logins.Allow() {
-		c.retryLater()
+		c.retryLater(authRate, backoff.Between(c.server.opts.AuthRetryMin, c.server.opts.AuthRetryMax))
 		return
 	}
 	gen := c.generation()
@@ -71,7 +79,6 @@ func (c *connection) enter(claims jwtverify.Claims) {
 		return
 	}
 	if !c.startRunning(claims, member, gen) {
-		member.Unregister()
 		return
 	}
 	c.server.stats.authed(authOK)
@@ -91,9 +98,11 @@ func (c *connection) startRunning(claims jwtverify.Claims, member *interest.Conn
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.finished || c.running || c.authGen != gen {
+		member.Unregister()
 		return false
 	}
 	c.running = true
+	c.identified = true
 	c.authGen++
 	c.claims = claims
 	c.member = member
@@ -149,6 +158,12 @@ func (c *connection) deadlineOf(claims jwtverify.Claims) time.Time {
 	return claims.ExpiresAt.Add(c.server.opts.JWTLeeway)
 }
 
+func (c *connection) sameIdentity(claims jwtverify.Claims) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return !c.identified || (claims.Tenant == c.claims.Tenant && claims.User == c.claims.User)
+}
+
 func (c *connection) generation() uint64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -161,10 +176,10 @@ func (c *connection) currentClaims() jwtverify.Claims {
 	return c.claims
 }
 
-func (c *connection) retryLater() {
-	c.server.stats.authed(authRate)
+func (c *connection) retryLater(result authResult, after time.Duration) {
+	c.server.stats.authed(result)
 	var hint uint32
-	if ms := backoff.Between(c.server.opts.AuthRetryMin, c.server.opts.AuthRetryMax).Milliseconds(); ms > 0 && ms <= math.MaxUint32 {
+	if ms := after.Milliseconds(); ms > 0 && ms <= math.MaxUint32 {
 		hint = uint32(ms)
 	}
 	c.sendFrame(&chatimv1.ServerFrame{Frame: &chatimv1.ServerFrame_RetryLater{RetryLater: &chatimv1.RetryLaterFrame{RetryAfterMs: hint}}})

@@ -26,6 +26,7 @@ const (
 	authInvalid
 	authExpired
 	authRate
+	authThrottled
 	authUserLimit
 	authResultCount
 )
@@ -38,7 +39,7 @@ const (
 
 var (
 	rejectLabels     = [rejectReasonCount]string{"rate", "inflight", "unimplemented", "shutdown"}
-	authResultLabels = [authResultCount]string{"ok", "invalid", "expired", "rate", "user_limit"}
+	authResultLabels = [authResultCount]string{"ok", "invalid", "expired", "rate", "throttled", "user_limit"}
 	closeCodes       = []uint16{
 		CodeNormal, CodeGoingAway, CodeProtocolError, CodeUnsupportedData, CodeAbnormal, CodeInvalidPayload,
 		CodePolicyViolation, CodeTooLarge, CodeInternalError, CodeTryAgainLater, CodeUnauthenticated,

@@ -22,21 +22,21 @@ func TestExpiredTokenWhileWaitingGetsAuthRequiredExpiredAndBecomesTheLastReason(
 	})
 }
 
-func TestSecondAuthWithinASecondGetsRetryLaterWithoutVerifying(t *testing.T) {
+func TestSecondAuthWithinASecondGetsAOneSecondRetryLaterWithoutVerifying(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		h := newHarness(t, testOptions())
 		tc := h.dial(true)
 		tc.auth("forged")
 		tc.auth(h.token("u1", time.Hour))
 		tc.expectAuthRequired(promptInvalid)
-		if after := tc.expectRetryLater(); after < 5*time.Second || after > 30*time.Second {
-			t.Fatalf("retry_later %v, want within [5s, 30s]", after)
+		if after := tc.expectRetryLater(); after != time.Second {
+			t.Fatalf("retry_later %v, want 1s", after)
 		}
 		if got := h.verifier.calls.Load(); got != 1 {
 			t.Fatalf("verify calls = %d, want 1", got)
 		}
-		if h.authCount("rate") != 1 || h.authCount("invalid") != 1 {
-			t.Fatalf("rate %v invalid %v", h.authCount("rate"), h.authCount("invalid"))
+		if h.authCount("throttled") != 1 || h.authCount("rate") != 0 || h.authCount("invalid") != 1 {
+			t.Fatalf("throttled %v rate %v invalid %v", h.authCount("throttled"), h.authCount("rate"), h.authCount("invalid"))
 		}
 		time.Sleep(time.Second)
 		tc.auth(h.token("u1", time.Hour))

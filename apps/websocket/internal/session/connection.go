@@ -58,18 +58,19 @@ type connection struct {
 	queuedBytes int64
 	sealed      bool
 
-	mu       sync.Mutex
-	running  bool
-	finished bool
-	authGen  uint64
-	reason   chatimv1.AuthRequiredReason
-	claims   jwtverify.Claims
-	grace    *time.Timer
-	expiry   *time.Timer
-	rooms    map[uint64]*roomQueue
-	member   *interest.Conn
-	watch    *presenceWatch
-	closeErr error
+	mu         sync.Mutex
+	running    bool
+	identified bool
+	finished   bool
+	authGen    uint64
+	reason     chatimv1.AuthRequiredReason
+	claims     jwtverify.Claims
+	grace      *time.Timer
+	expiry     *time.Timer
+	rooms      map[uint64]*roomQueue
+	member     *interest.Conn
+	watch      *presenceWatch
+	closeErr   error
 }
 
 func newConnection(s *Server, socket *gws.Conn) *connection {
