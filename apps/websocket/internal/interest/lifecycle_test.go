@@ -11,19 +11,22 @@ import (
 
 func TestNewRejectsMissingParts(t *testing.T) {
 	quiet := slog.New(slog.DiscardHandler)
-	good := Config{Inflight: 1, OpenPending: time.Second, ReloadRate: 1}
+	good := Config{Inflight: 1, OpenPending: time.Second, ReloadRate: 1, UserConnectionsMax: 10}
 	for name, build := range map[string]func() (*Table, error){
 		"zero inflight": func() (*Table, error) {
-			return New(Config{OpenPending: time.Second, ReloadRate: 1}, newFakeLoader(), quiet)
+			return New(Config{OpenPending: time.Second, ReloadRate: 1, UserConnectionsMax: 10}, newFakeLoader(), quiet)
 		},
 		"zero open pending": func() (*Table, error) {
-			return New(Config{Inflight: 1, ReloadRate: 1}, newFakeLoader(), quiet)
+			return New(Config{Inflight: 1, ReloadRate: 1, UserConnectionsMax: 10}, newFakeLoader(), quiet)
 		},
 		"zero reload rate": func() (*Table, error) {
-			return New(Config{Inflight: 1, OpenPending: time.Second}, newFakeLoader(), quiet)
+			return New(Config{Inflight: 1, OpenPending: time.Second, UserConnectionsMax: 10}, newFakeLoader(), quiet)
+		},
+		"zero user connections": func() (*Table, error) {
+			return New(Config{Inflight: 1, OpenPending: time.Second, ReloadRate: 1}, newFakeLoader(), quiet)
 		},
 		"reload rate under a nanosecond": func() (*Table, error) {
-			return New(Config{Inflight: 1, OpenPending: time.Second, ReloadRate: 2_000_000_000}, newFakeLoader(), quiet)
+			return New(Config{Inflight: 1, OpenPending: time.Second, ReloadRate: 2_000_000_000, UserConnectionsMax: 10}, newFakeLoader(), quiet)
 		},
 		"no loader": func() (*Table, error) { return New(good, nil, quiet) },
 		"no logger": func() (*Table, error) { return New(good, newFakeLoader(), nil) },
@@ -40,7 +43,7 @@ func TestConnectionsOfOneUserShareOneLoad(t *testing.T) {
 		f.loader.holding(true)
 		sinks := []*fakeSink{{}, {}, {}}
 		for _, s := range sinks {
-			f.table.Register("t1", "u", s)
+			mustRegister(t, f.table, "t1", "u", s)
 		}
 		synctest.Wait()
 		if got := f.loader.callsOf("t1", "u"); got != 1 {
@@ -49,7 +52,7 @@ func TestConnectionsOfOneUserShareOneLoad(t *testing.T) {
 		f.loader.replies <- reply{rooms: []Room{{ID: 1, Ver: 1}}}
 		synctest.Wait()
 		late := &fakeSink{}
-		f.table.Register("t1", "u", late)
+		mustRegister(t, f.table, "t1", "u", late)
 		for i, s := range append(sinks, late) {
 			if got := s.take(); !slices.Equal(got, []string{"ready"}) {
 				t.Fatalf("connection %d frames = %v", i, got)
@@ -102,12 +105,12 @@ func TestTheLastConnectionLeavingClearsTheUserAndItsMarks(t *testing.T) {
 
 func TestLoadsInFlightAreBoundedAndALeavingUserFreesItsSlot(t *testing.T) {
 	run(t, func(t *testing.T) {
-		f := newFixtureWith(t, Config{Inflight: 2, OpenPending: time.Second, ReloadRate: 1})
+		f := newFixtureWith(t, Config{Inflight: 2, OpenPending: time.Second, ReloadRate: 1, UserConnectionsMax: 10})
 		f.loader.holding(true)
 		names := []string{"a", "b", "c", "d", "e"}
 		conns := map[string]*Conn{}
 		for _, u := range names {
-			conns[u] = f.table.Register("t1", u, &fakeSink{})
+			conns[u] = mustRegister(t, f.table, "t1", u, &fakeSink{})
 		}
 		synctest.Wait()
 		if peak, active := f.loader.load(); peak != 2 || active != 2 {
@@ -141,13 +144,13 @@ func TestCloseCancelsLoadsInFlight(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		loader := newFakeLoader()
 		loader.holding(true)
-		table, err := New(Config{Inflight: 1, OpenPending: time.Second, ReloadRate: 1}, loader, slog.New(slog.DiscardHandler))
+		table, err := New(Config{Inflight: 1, OpenPending: time.Second, ReloadRate: 1, UserConnectionsMax: 10}, loader, slog.New(slog.DiscardHandler))
 		if err != nil {
 			t.Fatal(err)
 		}
 		sink := &fakeSink{}
-		c := table.Register("t1", "u", sink)
-		table.Register("t1", "v", &fakeSink{})
+		c := mustRegister(t, table, "t1", "u", sink)
+		mustRegister(t, table, "t1", "v", &fakeSink{})
 		synctest.Wait()
 		table.Close()
 		if sink.failures() != 0 || table.stats.loadFailures.Load() != 0 {
@@ -160,13 +163,13 @@ func TestCloseCancelsLoadsInFlight(t *testing.T) {
 func TestRegisterAfterCloseFailsTheConnectionWithoutStartingALoad(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		loader := newFakeLoader()
-		table, err := New(Config{Inflight: 1, OpenPending: time.Second, ReloadRate: 1}, loader, slog.New(slog.DiscardHandler))
+		table, err := New(Config{Inflight: 1, OpenPending: time.Second, ReloadRate: 1, UserConnectionsMax: 10}, loader, slog.New(slog.DiscardHandler))
 		if err != nil {
 			t.Fatal(err)
 		}
 		table.Close()
 		sink := &fakeSink{}
-		c := table.Register("t1", "u", sink)
+		c := mustRegister(t, table, "t1", "u", sink)
 		synctest.Wait()
 		c.Open("1")
 		c.Close("1")

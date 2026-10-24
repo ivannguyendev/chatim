@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -28,7 +29,8 @@ func TestWiringPassesOneJWTLeewayToTheVerifierAndTheSessions(t *testing.T) {
 func TestSessionOptionsCopyEveryLimit(t *testing.T) {
 	cfg := testConfig("redis:6379", "/keys.json")
 	got := sessionOptions(cfg)
-	if got.AuthTimeout != cfg.AuthTimeout || got.HeartbeatTimeout != cfg.HeartbeatTimeout || got.WriteTimeout != cfg.WriteTimeout ||
+	if got.AuthGrace != cfg.AuthGrace || got.AuthRate != cfg.AuthRate || got.AuthBurst != cfg.AuthBurst ||
+		got.AuthRetryMin != cfg.AuthRetryMin || got.AuthRetryMax != cfg.AuthRetryMax || got.HeartbeatTimeout != cfg.HeartbeatTimeout || got.WriteTimeout != cfg.WriteTimeout ||
 		got.UnauthMax != cfg.UnauthMax || got.FrameMax != cfg.FrameMax || got.CommandRate != cfg.CommandRate ||
 		got.CommandBurst != cfg.CommandBurst || got.CommandInflight != cfg.CommandInflight || got.SendQueue != cfg.SendQueue ||
 		got.SendQueueBytes != cfg.SendQueueBytes || got.TypingRate != cfg.TypingRate || got.TypingBurst != cfg.TypingBurst ||
@@ -108,6 +110,31 @@ func TestEventRouterHandsCoreEventsToTheInterestTable(t *testing.T) {
 		if s.Name == "publish_packets_total" && s.Read() != 1 {
 			t.Fatalf("publish packets = %v, want 1", s.Read())
 		}
+	}
+}
+
+type nullSink struct{}
+
+func (nullSink) Send([]byte)         {}
+func (nullSink) TrySend([]byte) bool { return true }
+func (nullSink) Offer([]byte) bool   { return true }
+func (nullSink) Fail()               {}
+
+func TestInterestTableTakesTheUserConnectionLimit(t *testing.T) {
+	cfg := testConfig("redis:6379", "/keys.json")
+	cfg.UserConnectionsMax = 1
+	rooms, err := newInterest(cfg, &routerHolder{}, newLogWatch().logger())
+	if err != nil {
+		t.Fatalf("newInterest: %v", err)
+	}
+	defer rooms.Close()
+	first, err := rooms.Register("t1", "u1", nullSink{})
+	if err != nil {
+		t.Fatalf("first Register: %v", err)
+	}
+	defer first.Unregister()
+	if _, err := rooms.Register("t1", "u1", nullSink{}); !errors.Is(err, interest.ErrTooManyConnections) {
+		t.Fatalf("second Register = %v, want ErrTooManyConnections", err)
 	}
 }
 

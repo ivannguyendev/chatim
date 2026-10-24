@@ -39,7 +39,7 @@ type wsRun struct {
 	seq         uint64
 	tokens      []string
 	callTimeout time.Duration
-	authTimeout time.Duration
+	silentClose time.Duration
 }
 
 func e2eWS(ctx context.Context, args []string) error {
@@ -49,7 +49,7 @@ func e2eWS(ctx context.Context, args []string) error {
 	url := fs.String("url", "ws://chatim-websocket-1:8080/ws", "websocket endpoint")
 	gatewayURL := fs.String("gateway", defaultGatewayURL, "HTTPS gateway endpoint for reads and room management")
 	keyFile := fs.String("key", "/keys/"+devtoken.PrivateFile, "private JWK written by dev-keys")
-	authTimeout := fs.Duration("auth-timeout", 5*time.Second, "WS_AUTH_TIMEOUT of the websocket node")
+	silentClose := fs.Duration("heartbeat-timeout", 15*time.Second, "WS_HEARTBEAT_TIMEOUT of the websocket node")
 	callTimeout := fs.Duration("call-timeout", 30*time.Second, "timeout of one websocket request")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -62,7 +62,7 @@ func e2eWS(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	r := &wsRun{key: key, url: *url, gatewayURL: *gatewayURL, tenant: st.Tenant, user: "e2e-ws-" + st.Room, callTimeout: *callTimeout, authTimeout: *authTimeout}
+	r := &wsRun{key: key, url: *url, gatewayURL: *gatewayURL, tenant: st.Tenant, user: "e2e-ws-" + st.Room, callTimeout: *callTimeout, silentClose: *silentClose}
 	o.tenant, o.user = r.tenant, r.user
 	err = withSession(ctx, o, func(ctx context.Context, s *session) error {
 		r.base, r.cl = ctx, s.client
@@ -78,7 +78,7 @@ func e2eWS(ctx context.Context, args []string) error {
 func (r *wsRun) run() error {
 	steps := []func() error{
 		r.connect, r.createRoom, r.send, r.historySees, r.edit, r.react, r.bookmark, r.matchGRPC,
-		r.systemRefused, r.rogueKeyRefused, r.expiredRefused, r.silentTimesOut,
+		r.systemRefused, r.rogueKeyRefused, r.expiredRefused, r.silentClosed,
 	}
 	defer r.close()
 	for i, step := range steps {

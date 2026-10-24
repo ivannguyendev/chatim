@@ -36,10 +36,13 @@ type Loader interface {
 }
 
 type Config struct {
-	Inflight    int
-	OpenPending time.Duration
-	ReloadRate  int
+	Inflight           int
+	OpenPending        time.Duration
+	ReloadRate         int
+	UserConnectionsMax int
 }
+
+var ErrTooManyConnections = errors.New("interest: too many connections of the user on this node")
 
 type userKey struct {
 	tenant string
@@ -89,6 +92,9 @@ type Table struct {
 func New(cfg Config, loader Loader, log *slog.Logger) (*Table, error) {
 	if cfg.Inflight <= 0 || cfg.OpenPending <= 0 || cfg.ReloadRate <= 0 || time.Second/time.Duration(cfg.ReloadRate) <= 0 {
 		return nil, errors.New("interest: inflight, open pending and reload rate must be positive and the reload rate at most one per nanosecond")
+	}
+	if cfg.UserConnectionsMax <= 0 {
+		return nil, errors.New("interest: user connections max must be positive")
 	}
 	if loader == nil || log == nil {
 		return nil, errors.New("interest: loader and logger are required")

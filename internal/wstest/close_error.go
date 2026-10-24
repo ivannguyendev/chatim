@@ -7,10 +7,7 @@ import (
 	"github.com/lxzan/gws"
 )
 
-const (
-	CodeUnauthenticated uint16 = 4001
-	CodeAuthTimeout     uint16 = 4002
-)
+const CodeUnauthenticated uint16 = 4001
 
 var ErrClosed = errors.New("wstest: connection closed")
 

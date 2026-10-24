@@ -44,6 +44,8 @@ type connection struct {
 	cancel   context.CancelFunc
 	limiter  *rate.Limiter
 	typist   *rate.Limiter
+	authGate *rate.Limiter
+	prompts  *rate.Limiter
 	out      chan outFrame
 	closeReq chan uint16
 	closed   chan struct{}
@@ -56,16 +58,18 @@ type connection struct {
 	queuedBytes int64
 	sealed      bool
 
-	mu        sync.Mutex
-	authed    bool
-	finished  bool
-	claims    jwtverify.Claims
-	authTimer *time.Timer
-	expiry    *time.Timer
-	rooms     map[uint64]*roomQueue
-	member    *interest.Conn
-	watch     *presenceWatch
-	closeErr  error
+	mu       sync.Mutex
+	running  bool
+	finished bool
+	authGen  uint64
+	reason   chatimv1.AuthRequiredReason
+	claims   jwtverify.Claims
+	grace    *time.Timer
+	expiry   *time.Timer
+	rooms    map[uint64]*roomQueue
+	member   *interest.Conn
+	watch    *presenceWatch
+	closeErr error
 }
 
 func newConnection(s *Server, socket *gws.Conn) *connection {
@@ -77,9 +81,12 @@ func newConnection(s *Server, socket *gws.Conn) *connection {
 		cancel:   cancel,
 		limiter:  rate.NewLimiter(rate.Limit(s.opts.CommandRate), s.opts.CommandBurst),
 		typist:   rate.NewLimiter(rate.Limit(s.opts.TypingRate), s.opts.TypingBurst),
+		authGate: rate.NewLimiter(rate.Every(time.Second), 1),
+		prompts:  rate.NewLimiter(rate.Every(time.Second), 1),
 		out:      make(chan outFrame, s.opts.SendQueue),
 		closeReq: make(chan uint16, 1),
 		closed:   make(chan struct{}),
+		reason:   promptMissing,
 		rooms:    map[uint64]*roomQueue{},
 	}
 }
@@ -88,9 +95,9 @@ func (c *connection) run() {
 	c.socket.Session().Store(sessionKey, c)
 	c.work.Go(c.writeLoop)
 	c.mu.Lock()
-	c.authTimer = time.AfterFunc(c.server.opts.AuthTimeout, c.authTimedOut)
+	c.startGrace()
 	c.mu.Unlock()
-	_ = c.socket.SetReadDeadline(time.Now().Add(c.server.opts.AuthTimeout + authReadGrace))
+	_ = c.socket.SetReadDeadline(time.Now().Add(c.server.opts.HeartbeatTimeout))
 	c.socket.ReadLoop()
 	c.work.Wait()
 	c.sealQueue()
@@ -115,15 +122,20 @@ func (c *connection) receive(message *gws.Message) {
 	}
 	kind := kindOf(&frame)
 	allowed := c.limiter.Allow()
+	claims, running := c.authedClaims()
 	switch {
-	case kind != frameAuth && !c.isAuthed():
-		c.closeWith(CodePolicyViolation)
 	case kind == frameRequest:
-		c.request(frame.GetRequest(), allowed)
+		c.request(frame.GetRequest(), allowed, claims, running)
 	case !allowed:
 		c.closeWith(CodePolicyViolation)
 	case kind == frameAuth:
-		c.authenticate(frame.GetAuth().GetToken())
+		c.authenticate(frame.GetAuth().GetToken(), running)
+	case kind == frameHeartbeat:
+		c.answerPresence()
+	case kind == frameUnknown:
+		c.server.stats.unknownFrames.Add(1)
+	case !running:
+		c.promptAuth()
 	case kind == frameOpenRoom:
 		c.openRoom(frame.GetOpenRoom().GetRoomId())
 	case kind == frameCloseRoom:
@@ -134,10 +146,6 @@ func (c *connection) receive(message *gws.Message) {
 		c.typing(frame.GetTyping())
 	case kind == frameWatchPresence:
 		c.watchPresence(frame.GetWatchPresence().GetUserIds())
-	case kind == frameHeartbeat:
-		c.answerPresence()
-	case kind == frameUnknown:
-		c.server.stats.unknownFrames.Add(1)
 	}
 	c.renewLiveness()
 }
@@ -158,13 +166,11 @@ func (c *connection) control(payload []byte, reply bool) {
 }
 
 func (c *connection) renewLiveness() {
-	claims, authed := c.authedClaims()
-	if !authed {
-		return
-	}
 	now := time.Now()
 	_ = c.socket.SetReadDeadline(now.Add(c.server.opts.HeartbeatTimeout))
-	c.server.presence.Touch(claims.Tenant, claims.User, now)
+	if claims, running := c.authedClaims(); running {
+		c.server.presence.Touch(claims.Tenant, claims.User, now)
+	}
 }
 
 func kindOf(frame *chatimv1.ClientFrame) frameKind {
@@ -193,13 +199,7 @@ func kindOf(frame *chatimv1.ClientFrame) frameKind {
 func (c *connection) authedClaims() (jwtverify.Claims, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.claims, c.authed
-}
-
-func (c *connection) isAuthed() bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.authed
+	return c.claims, c.running
 }
 
 func (c *connection) finish(err error) {
@@ -210,15 +210,14 @@ func (c *connection) finish(err error) {
 	}
 	c.finished = true
 	c.closeErr = err
-	authed := c.authed
-	member, watch := c.member, c.watch
-	c.member, c.watch = nil, nil
-	stopTimer(c.authTimer)
-	stopTimer(c.expiry)
-	c.mu.Unlock()
-	if !authed {
+	if !c.running {
 		c.server.stats.unauth.Add(-1)
 	}
+	member, watch := c.member, c.watch
+	c.member, c.watch = nil, nil
+	stopTimer(c.grace)
+	stopTimer(c.expiry)
+	c.mu.Unlock()
 	if member != nil {
 		member.Unregister()
 	}

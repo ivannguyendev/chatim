@@ -157,14 +157,14 @@ func TestCallReturnsTheCloseErrorWhenTheServerCloses(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		server := newFakeServer(func(conn *gws.Conn, frame *chatimv1.ClientFrame) {
 			if frame.GetRequest() != nil {
-				_ = conn.WriteClose(CodeAuthTimeout, nil)
+				_ = conn.WriteClose(CodeUnauthenticated, nil)
 			}
 		})
 		c := dialPipe(t, server)
 		defer func() { _ = c.Close() }()
 		_, err := c.Call(t.Context(), sendRequest("7"))
-		if closeErr, ok := errors.AsType[*CloseError](err); !ok || closeErr.Code != CodeAuthTimeout {
-			t.Fatalf("call = %v, want close code %d", err, CodeAuthTimeout)
+		if closeErr, ok := errors.AsType[*CloseError](err); !ok || closeErr.Code != CodeUnauthenticated {
+			t.Fatalf("call = %v, want close code %d", err, CodeUnauthenticated)
 		}
 		if _, err := c.Call(t.Context(), sendRequest("7")); !errors.Is(err, ErrClosed) {
 			t.Fatalf("call after close = %v, want the close error", err)

@@ -27,7 +27,7 @@ func TestAFailedReloadSendsLoadFailedAndWaitsForTheClientToAskAgain(t *testing.T
 		failing := f.table.reloads.queue[len(f.table.reloads.queue)-1].key.user
 		f.table.resyncMu.Unlock()
 		waiting := &fakeSink{}
-		second := f.table.Register("t1", failing, waiting)
+		second := mustRegister(t, f.table, "t1", failing, waiting)
 		f.loader.answer(3, reply{rooms: []Room{{ID: 1, Ver: 1}}})
 		time.Sleep(time.Second)
 		synctest.Wait()
@@ -77,8 +77,8 @@ func TestAFailedFirstLoadSendsLoadFailedAndLoadRoomsReadiesTheUser(t *testing.T)
 		f := newFixture(t)
 		f.loader.holding(true)
 		s1, s2 := &fakeSink{}, &fakeSink{}
-		c1 := f.table.Register("t1", "u", s1)
-		c2 := f.table.Register("t1", "u", s2)
+		c1 := mustRegister(t, f.table, "t1", "u", s1)
+		c2 := mustRegister(t, f.table, "t1", "u", s2)
 		synctest.Wait()
 		f.loader.answer(0, reply{err: errors.New("core down")})
 		synctest.Wait()
@@ -89,7 +89,7 @@ func TestAFailedFirstLoadSendsLoadFailedAndLoadRoomsReadiesTheUser(t *testing.T)
 		}
 		f.route(added("t1", 1, "u", 1))
 		late := &fakeSink{}
-		f.table.Register("t1", "u", late)
+		mustRegister(t, f.table, "t1", "u", late)
 		time.Sleep(time.Hour)
 		synctest.Wait()
 		u := f.table.lookup(userKey{tenant: "t1", user: "u"})
@@ -121,7 +121,7 @@ func TestAFailedReloadOfAUserNeverReadyKeepsItSuspendedUntilItLeaves(t *testing.
 		f := newFixture(t)
 		f.loader.holding(true)
 		s := &fakeSink{}
-		c := f.table.Register("t1", "u", s)
+		c := mustRegister(t, f.table, "t1", "u", s)
 		synctest.Wait()
 		f.table.Jumped(lagJump(8))
 		synctest.Wait()

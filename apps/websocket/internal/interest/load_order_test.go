@@ -103,7 +103,7 @@ func playOrder(t *testing.T, c orderCase) (member bool, pairs int64) {
 	}
 	routeAt(beforeRegister)
 	sink := &fakeSink{}
-	f.table.Register("t1", "u", sink)
+	mustRegister(t, f.table, "t1", "u", sink)
 	synctest.Wait()
 	routeAt(duringLoad)
 	f.loader.replies <- reply{rooms: c.list}

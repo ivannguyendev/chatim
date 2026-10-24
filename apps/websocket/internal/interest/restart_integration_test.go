@@ -171,14 +171,14 @@ func TestALongStallSuspendsUsersAndAMemberRemovedMeanwhileEndsTheRoomForThem(t *
 	loader := newFakeLoader()
 	loader.set("t1", "stays", itRoom)
 	loader.set("t1", "removed", itRoom)
-	table, err := New(Config{Inflight: 4, OpenPending: 10 * time.Second, ReloadRate: 1000}, loader, slog.New(slog.DiscardHandler))
+	table, err := New(Config{Inflight: 4, OpenPending: 10 * time.Second, ReloadRate: 1000, UserConnectionsMax: 10}, loader, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer table.Close()
 	stays, removed := newITSink(), newITSink()
-	defer table.Register("t1", "stays", stays).Unregister()
-	defer table.Register("t1", "removed", removed).Unregister()
+	defer mustRegister(t, table, "t1", "stays", stays).Unregister()
+	defer mustRegister(t, table, "t1", "removed", removed).Unregister()
 	stays.await(t, "ready")
 	removed.await(t, "ready")
 

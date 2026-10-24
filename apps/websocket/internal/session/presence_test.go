@@ -44,12 +44,13 @@ func TestPresenceIsNotTouchedForAFailedAuth(t *testing.T) {
 		h := newHarness(t, testOptions())
 		tc := h.dial(true)
 		tc.auth("not-issued")
-		if got := tc.waitClosed(); got != CodeUnauthenticated {
-			t.Fatalf("close code = %d, want %d", got, CodeUnauthenticated)
-		}
+		tc.expectAuthRequired(promptInvalid)
+		tc.heartbeat()
+		synctest.Wait()
 		if got := h.presence.count(); got != 0 {
 			t.Fatalf("touches after a failed auth = %d, want 0", got)
 		}
+		tc.close()
 	})
 }
 

@@ -246,17 +246,19 @@ func TestWatchFramesGoThroughTheSharedLimiter(t *testing.T) {
 	})
 }
 
-func TestWatchBeforeAuthCloses(t *testing.T) {
+func TestWatchWhileWaitingGetsAuthRequiredAndNoAnswer(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		h := newHarness(t, testOptions())
 		tc := h.dial(true)
 		tc.watch("lan")
-		if got := tc.waitClosed(); got != CodePolicyViolation {
-			t.Fatalf("close code = %d, want %d", got, CodePolicyViolation)
-		}
+		tc.expectAuthRequired(promptMissing)
+		tc.heartbeat()
+		synctest.Wait()
+		tc.noFrame()
 		if h.presence.askCount() != 0 {
 			t.Fatal("presence asked before auth")
 		}
+		tc.close()
 	})
 }
 

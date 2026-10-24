@@ -35,7 +35,7 @@ func TestSignalRoomIsOkOnlyForALiveMemberOfTheRoom(t *testing.T) {
 	run(t, func(t *testing.T) {
 		f := newFixture(t)
 		f.loader.holding(true)
-		c := f.table.Register("t1", "u", &fakeSink{})
+		c := mustRegister(t, f.table, "t1", "u", &fakeSink{})
 		synctest.Wait()
 		if _, ok := c.SignalRoom("1"); ok {
 			t.Fatal("signal allowed before ready")

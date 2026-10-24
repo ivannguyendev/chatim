@@ -31,17 +31,16 @@ func TestAuthLoadsTheRoomsOnceAndSendsReady(t *testing.T) {
 	})
 }
 
-func TestRoomFramesBeforeAuthAreAPolicyViolation(t *testing.T) {
+func TestRoomFramesWhileWaitingGetAuthRequired(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		h := newHarness(t, testOptions())
 		tc := h.dial(true)
 		tc.openRoom("7")
-		if got := tc.waitClosed(); got != CodePolicyViolation {
-			t.Fatalf("close code = %d, want %d", got, CodePolicyViolation)
+		tc.expectAuthRequired(promptMissing)
+		if h.loader.calls.Load() != 0 || h.interestUsers() != 0 {
+			t.Fatalf("loads %d interest users %v before auth", h.loader.calls.Load(), h.interestUsers())
 		}
-		if h.loader.calls.Load() != 0 {
-			t.Fatal("a room load ran before auth")
-		}
+		tc.close()
 	})
 }
 

@@ -46,21 +46,21 @@ func TestPongsAloneKeepAnAuthenticatedConnectionAlive(t *testing.T) {
 	})
 }
 
-func TestPingsBeforeAuthDoNotExtendTheAuthTimeout(t *testing.T) {
+func TestPingsWhileWaitingKeepTheConnectionUntilTheGrace(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		h := newHarness(t, testOptions())
 		tc := h.dial(true)
 		start := time.Now()
-		for range 4 {
-			time.Sleep(time.Second)
+		for range 35 {
+			time.Sleep(5 * time.Second)
 			_ = tc.conn.WritePing(nil)
 			<-tc.pongs
 		}
-		if got := tc.waitClosed(); got != CodeAuthTimeout {
-			t.Fatalf("close code = %d, want %d", got, CodeAuthTimeout)
+		if got := tc.waitClosed(); got != CodeUnauthenticated {
+			t.Fatalf("close code = %d, want %d", got, CodeUnauthenticated)
 		}
-		if elapsed := time.Since(start); elapsed != 5*time.Second {
-			t.Fatalf("closed after %v, want 5s", elapsed)
+		if elapsed := time.Since(start); elapsed != 3*time.Minute {
+			t.Fatalf("closed after %v, want 3m", elapsed)
 		}
 	})
 }
@@ -68,26 +68,22 @@ func TestPingsBeforeAuthDoNotExtendTheAuthTimeout(t *testing.T) {
 func TestEarlyTokenTimerRearmsForTheRemainingTime(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		h := newHarness(t, testOptions())
-		tc := h.dial(true)
 		start := time.Now()
-		tc.auth(h.token("u1", time.Minute))
-		synctest.Wait()
+		tc := h.readyClientWith(h.token("u1", time.Minute))
 		c := h.onlyConnection()
 		c.mu.Lock()
 		c.expiry.Stop()
+		gen := c.authGen
 		c.mu.Unlock()
-		c.tokenExpired()
+		c.tokenExpired(gen)
 		synctest.Wait()
-		if !tc.isOpen() {
-			t.Fatal("early timer closed a valid token")
-		}
+		tc.noFrame()
 		tc.keepAlive(10*time.Second, 80*time.Second)
-		if got := tc.waitClosed(); got != CodeUnauthenticated {
-			t.Fatalf("close code = %d, want %d", got, CodeUnauthenticated)
-		}
+		tc.expectAuthRequired(promptExpired)
 		if elapsed := time.Since(start); elapsed != 90*time.Second {
-			t.Fatalf("closed after %v, want 90s", elapsed)
+			t.Fatalf("auth_required after %v, want 90s", elapsed)
 		}
+		tc.close()
 	})
 }
 

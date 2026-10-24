@@ -1,15 +1,17 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/lxzan/gws"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/ivannguyendev/chatim/internal/wstest"
+	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/tools/corecli/internal/e2e"
 	"github.com/ivannguyendev/chatim/tools/internal/devtoken"
 )
@@ -24,29 +26,34 @@ func (r *wsRun) rogueKeyRefused() error {
 		if err != nil {
 			return err
 		}
-		if err := r.refused("a token signed by an unknown key with kid "+kid, token); err != nil {
+		if err := r.authRequired("a token signed by an unknown key with kid "+kid, token, chatimv1.AuthRequiredReason_AUTH_REQUIRED_REASON_INVALID); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (r *wsRun) refused(what, token string) error {
+func (r *wsRun) authRequired(what, token string, want chatimv1.AuthRequiredReason) error {
 	c, err := r.dial(token)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = c.Close() }()
 	select {
-	case <-c.Done():
+	case f, ok := <-c.Frames():
+		if !ok {
+			return fmt.Errorf("%s closed with %w, want auth_required %v and the connection kept", what, c.Err(), want)
+		}
+		if err := e2e.CheckAuthRequired(f, want); err != nil {
+			return fmt.Errorf("%s: %w", what, err)
+		}
 	case <-time.After(r.callTimeout):
-		return fmt.Errorf("%s stayed connected for %v, want close 4001", what, r.callTimeout)
+		return fmt.Errorf("%s got no frame for %v, want auth_required %v", what, r.callTimeout, want)
 	case <-r.base.Done():
 		return r.base.Err()
 	}
-	closeErr, ok := errors.AsType[*wstest.CloseError](c.Err())
-	if !ok || closeErr.Code != wstest.CodeUnauthenticated {
-		return fmt.Errorf("%s closed with %w, want code %d", what, c.Err(), wstest.CodeUnauthenticated)
+	if _, err := callWS(r.base, c, r.callTimeout, historyOverWS()); status.Code(err) != codes.Unauthenticated {
+		return fmt.Errorf("%s: a request after auth_required = %w, want Unauthenticated on the open connection", what, err)
 	}
 	return nil
 }
@@ -58,7 +65,7 @@ type silentWatch struct {
 
 func (w *silentWatch) OnClose(_ *gws.Conn, err error) { w.closed <- err }
 
-func (r *wsRun) silentTimesOut() error {
+func (r *wsRun) silentClosed() error {
 	w := &silentWatch{closed: make(chan error, 1)}
 	conn, resp, err := gws.NewClient(w, &gws.ClientOption{
 		Addr:             r.url,
@@ -79,16 +86,16 @@ func (r *wsRun) silentTimesOut() error {
 	case <-time.After(r.callTimeout):
 		_ = conn.NetConn().Close()
 		<-w.closed
-		return fmt.Errorf("a connection without auth stayed open for %v, want close 4002", r.callTimeout)
+		return fmt.Errorf("a silent connection stayed open for %v, want close 1000", r.callTimeout)
 	}
 	waited := time.Since(start)
 	code, ok := e2e.CloseCode(closeErr)
 	if !ok {
-		return fmt.Errorf("a connection without auth ended with %w after %v, want close 4002", closeErr, waited)
+		return fmt.Errorf("a silent connection ended with %w after %v, want close 1000", closeErr, waited)
 	}
-	if err := e2e.CheckAuthTimeout(code, waited, r.authTimeout); err != nil {
+	if err := e2e.CheckSilentClose(code, waited, r.silentClose); err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "a connection without auth closed with code %d after %v\n", code, waited.Round(10*time.Millisecond))
+	fmt.Fprintf(os.Stderr, "a silent connection closed with code %d after %v\n", code, waited.Round(10*time.Millisecond))
 	return nil
 }

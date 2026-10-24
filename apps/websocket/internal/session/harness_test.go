@@ -29,7 +29,11 @@ func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
 
 func testOptions() Options {
 	return Options{
-		AuthTimeout:      5 * time.Second,
+		AuthGrace:        3 * time.Minute,
+		AuthRate:         1000,
+		AuthBurst:        2000,
+		AuthRetryMin:     5 * time.Second,
+		AuthRetryMax:     30 * time.Second,
 		HeartbeatTimeout: 15 * time.Second,
 		JWTLeeway:        30 * time.Second,
 		WriteTimeout:     10 * time.Second,

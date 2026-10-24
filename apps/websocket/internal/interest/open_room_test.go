@@ -12,7 +12,7 @@ func TestOpenRoomBeforeReadyIsIgnoredAndKeepsNothing(t *testing.T) {
 		f := newFixture(t)
 		f.loader.holding(true)
 		sink := &fakeSink{}
-		c := f.table.Register("t1", "u", sink)
+		c := mustRegister(t, f.table, "t1", "u", sink)
 		synctest.Wait()
 		c.Open("1")
 		c.Open("abc")

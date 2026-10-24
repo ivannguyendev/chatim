@@ -119,7 +119,12 @@ func TestServeHTTPUpgradesAndRunsRequestsOverTCP(t *testing.T) {
 
 func TestNewRejectsInvalidOptions(t *testing.T) {
 	mutations := map[string]func(o *Options){
-		"auth timeout":               func(o *Options) { o.AuthTimeout = 0 },
+		"auth grace":                 func(o *Options) { o.AuthGrace = 0 },
+		"auth rate":                  func(o *Options) { o.AuthRate = 0 },
+		"auth burst":                 func(o *Options) { o.AuthBurst = 0 },
+		"auth retry min":             func(o *Options) { o.AuthRetryMin = 0 },
+		"auth retry max":             func(o *Options) { o.AuthRetryMax = 0 },
+		"auth retry min over max":    func(o *Options) { o.AuthRetryMin = o.AuthRetryMax + time.Millisecond },
 		"heartbeat":                  func(o *Options) { o.HeartbeatTimeout = 0 },
 		"write timeout":              func(o *Options) { o.WriteTimeout = 0 },
 		"unauth max":                 func(o *Options) { o.UnauthMax = 0 },
@@ -156,10 +161,10 @@ func TestNewRejectsInvalidOptions(t *testing.T) {
 
 func TestSourcesExposeEveryCounterWithFixedLabels(t *testing.T) {
 	h := newHarness(t, testOptions())
-	h.server.stats.closed(CodeAuthTimeout)
+	h.server.stats.closed(CodeTooManyConnections)
 	h.server.stats.closed(CodeSlowClient)
 	h.server.stats.closed(4999)
-	h.server.stats.authFailed("bad_signature")
+	h.server.stats.authed(authUserLimit)
 	h.server.stats.reject(rejectInflight)
 	read := func(name, key, value string) float64 {
 		for _, s := range h.server.Sources() {
@@ -170,11 +175,16 @@ func TestSourcesExposeEveryCounterWithFixedLabels(t *testing.T) {
 		t.Fatalf("metric %s{%s=%q} missing", name, key, value)
 		return 0
 	}
-	if read("closes_total", "code", "4002") != 1 || read("closes_total", "code", "4008") != 1 || read("closes_total", "code", "other") != 1 {
+	if read("closes_total", "code", "4009") != 1 || read("closes_total", "code", "4008") != 1 || read("closes_total", "code", "other") != 1 {
 		t.Fatal("close counters wrong")
 	}
-	if read("auth_failures_total", "reason", "bad_signature") != 1 || read("auth_failures_total", "reason", "identity_changed") != 0 {
-		t.Fatal("auth failure counters wrong")
+	for _, result := range []string{"ok", "invalid", "expired", "rate"} {
+		if read("auth_total", "result", result) != 0 {
+			t.Fatalf("auth_total{result=%q} counted", result)
+		}
+	}
+	if read("auth_total", "result", "user_limit") != 1 || read("auth_required_total", "reason", "expired") != 0 || read("unauth_over_cap_total", "", "") != 0 {
+		t.Fatal("auth counters wrong")
 	}
 	if read("commands_rejected_total", "reason", "inflight") != 1 {
 		t.Fatal("rejection counter wrong")

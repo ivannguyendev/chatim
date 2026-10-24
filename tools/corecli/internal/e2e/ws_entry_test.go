@@ -97,26 +97,42 @@ func TestBookmarkedFindsTheMessage(t *testing.T) {
 }
 
 func TestCloseCodeReadsGwsErrors(t *testing.T) {
-	if code, ok := e2e.CloseCode(&gws.CloseError{Code: 4002}); !ok || code != 4002 {
-		t.Fatalf("CloseCode = %d, %v; want 4002", code, ok)
+	if code, ok := e2e.CloseCode(&gws.CloseError{Code: 4009}); !ok || code != 4009 {
+		t.Fatalf("CloseCode = %d, %v; want 4009", code, ok)
 	}
 	if _, ok := e2e.CloseCode(errors.New("reset")); ok {
 		t.Fatal("CloseCode of a plain error = ok")
 	}
 }
 
-func TestCheckAuthTimeoutWantsTheCodeAfterTheTimeout(t *testing.T) {
-	if err := e2e.CheckAuthTimeout(4002, 5100*time.Millisecond, 5*time.Second); err != nil {
-		t.Fatalf("CheckAuthTimeout = %v", err)
+func TestCheckSilentCloseWants1000AfterTheHeartbeatTimeout(t *testing.T) {
+	if err := e2e.CheckSilentClose(1000, 15100*time.Millisecond, 15*time.Second); err != nil {
+		t.Fatalf("CheckSilentClose = %v", err)
 	}
-	if err := e2e.CheckAuthTimeout(4001, 5100*time.Millisecond, 5*time.Second); err == nil {
-		t.Fatal("CheckAuthTimeout with 4001 = nil")
+	if err := e2e.CheckSilentClose(4002, 15100*time.Millisecond, 15*time.Second); err == nil {
+		t.Fatal("CheckSilentClose with 4002 = nil")
 	}
-	if err := e2e.CheckAuthTimeout(4002, time.Second, 5*time.Second); err == nil {
-		t.Fatal("CheckAuthTimeout closed early = nil")
+	if err := e2e.CheckSilentClose(1000, 5*time.Second, 15*time.Second); err == nil {
+		t.Fatal("CheckSilentClose closed early = nil")
 	}
-	if err := e2e.CheckAuthTimeout(4002, 20*time.Second, 5*time.Second); err == nil {
-		t.Fatal("CheckAuthTimeout closed late = nil")
+	if err := e2e.CheckSilentClose(1000, 30*time.Second, 15*time.Second); err == nil {
+		t.Fatal("CheckSilentClose closed late = nil")
+	}
+}
+
+func TestCheckAuthRequiredWantsTheReason(t *testing.T) {
+	expired := &chatimv1.ServerFrame{Frame: &chatimv1.ServerFrame_AuthRequired{AuthRequired: &chatimv1.AuthRequiredFrame{
+		Reason: chatimv1.AuthRequiredReason_AUTH_REQUIRED_REASON_EXPIRED,
+	}}}
+	if err := e2e.CheckAuthRequired(expired, chatimv1.AuthRequiredReason_AUTH_REQUIRED_REASON_EXPIRED); err != nil {
+		t.Fatalf("CheckAuthRequired = %v", err)
+	}
+	if err := e2e.CheckAuthRequired(expired, chatimv1.AuthRequiredReason_AUTH_REQUIRED_REASON_INVALID); err == nil {
+		t.Fatal("CheckAuthRequired with another reason = nil")
+	}
+	ready := &chatimv1.ServerFrame{Frame: &chatimv1.ServerFrame_Ready{Ready: &chatimv1.ReadyFrame{}}}
+	if err := e2e.CheckAuthRequired(ready, chatimv1.AuthRequiredReason_AUTH_REQUIRED_REASON_INVALID); err == nil {
+		t.Fatal("CheckAuthRequired of a ready frame = nil")
 	}
 }
 

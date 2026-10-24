@@ -48,7 +48,7 @@ func newTestInterest(t *testing.T) *interest.Table {
 
 func newInterestWith(t *testing.T, loader interest.Loader) *interest.Table {
 	t.Helper()
-	rooms, err := interest.New(interest.Config{Inflight: 4, OpenPending: 10 * time.Second, ReloadRate: 1000}, loader, slog.New(slog.DiscardHandler))
+	rooms, err := interest.New(interest.Config{Inflight: 4, OpenPending: 10 * time.Second, ReloadRate: 1000, UserConnectionsMax: 10}, loader, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("interest.New: %v", err)
 	}

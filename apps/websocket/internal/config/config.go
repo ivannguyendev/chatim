@@ -20,48 +20,53 @@ const (
 )
 
 type Config struct {
-	NodeID            string
-	ListenAddr        string
-	AdminAddr         string
-	RedisAddr         string
-	RedisDB           int
-	RedisPassword     string
-	JWTKeysFile       string
-	JWTIssuer         string
-	JWTAudience       string
-	JWTLeeway         time.Duration
-	AuthTimeout       time.Duration
-	UnauthMax         int
-	FrameMax          int
-	HeartbeatTimeout  time.Duration
-	CommandRate       int
-	CommandBurst      int
-	CommandInflight   int
-	SendQueue         int
-	SendQueueBytes    int
-	WriteTimeout      time.Duration
-	RequestDeadline   time.Duration
-	DrainDelay        time.Duration
-	ShutdownBudget    time.Duration
-	NATSURL           string
-	EventStream       string
-	EventRoot         string
-	PublishRoot       string
-	PublishStream     string
-	StreamReplicas    int
-	FanoutWorkers     int
-	FanoutQueue       int
-	ReplayRate        int
-	ConsumeBatch      int
-	ConsumeBytes      int
-	RoomIDsInflight   int
-	OpenPending       time.Duration
-	ReplayMaxAge      time.Duration
-	ReloadRate        int
-	TypingRate        int
-	TypingBurst       int
-	TypingQueue       int
-	TypingPendingMsgs int
+	NodeID             string
+	ListenAddr         string
+	AdminAddr          string
+	RedisAddr          string
+	RedisDB            int
+	RedisPassword      string
+	JWTKeysFile        string
+	JWTIssuer          string
+	JWTAudience        string
+	JWTLeeway          time.Duration
+	AuthGrace          time.Duration
+	AuthRate           int
+	AuthBurst          int
+	AuthRetryMin       time.Duration
+	AuthRetryMax       time.Duration
+	UserConnectionsMax int
+	UnauthMax          int
+	FrameMax           int
+	HeartbeatTimeout   time.Duration
+	CommandRate        int
+	CommandBurst       int
+	CommandInflight    int
+	SendQueue          int
+	SendQueueBytes     int
+	WriteTimeout       time.Duration
+	RequestDeadline    time.Duration
+	DrainDelay         time.Duration
+	ShutdownBudget     time.Duration
+	NATSURL            string
+	EventStream        string
+	EventRoot          string
+	PublishRoot        string
+	PublishStream      string
+	StreamReplicas     int
+	FanoutWorkers      int
+	FanoutQueue        int
+	ReplayRate         int
+	ConsumeBatch       int
+	ConsumeBytes       int
+	RoomIDsInflight    int
+	OpenPending        time.Duration
+	ReplayMaxAge       time.Duration
+	ReloadRate         int
+	TypingRate         int
+	TypingBurst        int
+	TypingQueue        int
+	TypingPendingMsgs  int
 
 	PresenceRedisAddr     string
 	PresenceRedisDB       int
@@ -81,48 +86,53 @@ func AdminAddr() string { return envconfig.String("WS_ADMIN_ADDR", defaultAdminA
 func Load() (Config, error) {
 	var p parser
 	c := Config{
-		NodeID:            p.nodeID(),
-		ListenAddr:        envconfig.String("WS_ADDR", ":8080"),
-		AdminAddr:         AdminAddr(),
-		RedisAddr:         envconfig.String("REDIS_ADDR", "chatim-redis:6379"),
-		RedisDB:           p.number("REDIS_DB", 0),
-		RedisPassword:     p.secret("REDIS_PASSWORD"),
-		JWTKeysFile:       envconfig.String("WS_JWT_KEYS_FILE", ""),
-		JWTIssuer:         envconfig.String("WS_JWT_ISSUER", ""),
-		JWTAudience:       envconfig.String("WS_JWT_AUDIENCE", ""),
-		JWTLeeway:         p.span("WS_JWT_LEEWAY", 30*time.Second),
-		AuthTimeout:       p.span("WS_AUTH_TIMEOUT", 5*time.Second),
-		UnauthMax:         p.number("WS_UNAUTH_MAX", 10000),
-		FrameMax:          p.number("WS_FRAME_MAX", 128<<10),
-		HeartbeatTimeout:  p.span("WS_HEARTBEAT_TIMEOUT", 15*time.Second),
-		CommandRate:       p.number("WS_COMMAND_RATE", 50),
-		CommandBurst:      p.number("WS_COMMAND_BURST", 100),
-		CommandInflight:   p.number("WS_COMMAND_INFLIGHT", 32),
-		SendQueue:         p.number("WS_SEND_QUEUE", 256),
-		SendQueueBytes:    p.number("WS_SEND_QUEUE_BYTES", 1<<20),
-		WriteTimeout:      p.span("WS_WRITE_TIMEOUT", 10*time.Second),
-		RequestDeadline:   p.span("CORE_REQUEST_DEADLINE", 5*time.Second),
-		DrainDelay:        p.span("WS_DRAIN_DELAY", 2*time.Second),
-		ShutdownBudget:    p.span("WS_SHUTDOWN_BUDGET", 15*time.Second),
-		NATSURL:           envconfig.String("NATS_URL", ""),
-		EventStream:       envconfig.String("EVT_STREAM", "CHATIM_EVT"),
-		EventRoot:         envconfig.String("EVT_SUBJECT_ROOT", "evt"),
-		PublishRoot:       envconfig.String("WS_PUBLISH_ROOT", wspublish.DefaultRoot),
-		PublishStream:     envconfig.String("WS_PUBLISH_STREAM", wspublish.DefaultStream),
-		StreamReplicas:    p.number("EVT_STREAM_REPLICAS", 1),
-		FanoutWorkers:     p.number("WS_FANOUT_WORKERS", runtime.NumCPU()),
-		FanoutQueue:       p.number("WS_FANOUT_QUEUE", 4096),
-		ReplayRate:        p.number("WS_REPLAY_RATE", 20000),
-		ConsumeBatch:      p.number("WS_CONSUME_BATCH", 500),
-		ConsumeBytes:      p.number("WS_CONSUME_BYTES", 8<<20),
-		RoomIDsInflight:   p.number("WS_ROOM_IDS_INFLIGHT", 64),
-		OpenPending:       p.span("WS_OPEN_PENDING", 10*time.Second),
-		ReplayMaxAge:      p.span("WS_REPLAY_MAX_AGE", 2*time.Minute),
-		ReloadRate:        p.number("WS_RELOAD_RATE", 1000),
-		TypingRate:        p.number("WS_TYPING_RATE", 2),
-		TypingBurst:       p.number("WS_TYPING_BURST", 4),
-		TypingQueue:       p.number("WS_TYPING_QUEUE", 8192),
-		TypingPendingMsgs: p.number("WS_TYPING_PENDING_MSGS", 65536),
+		NodeID:             p.nodeID(),
+		ListenAddr:         envconfig.String("WS_ADDR", ":8080"),
+		AdminAddr:          AdminAddr(),
+		RedisAddr:          envconfig.String("REDIS_ADDR", "chatim-redis:6379"),
+		RedisDB:            p.number("REDIS_DB", 0),
+		RedisPassword:      p.secret("REDIS_PASSWORD"),
+		JWTKeysFile:        envconfig.String("WS_JWT_KEYS_FILE", ""),
+		JWTIssuer:          envconfig.String("WS_JWT_ISSUER", ""),
+		JWTAudience:        envconfig.String("WS_JWT_AUDIENCE", ""),
+		JWTLeeway:          p.span("WS_JWT_LEEWAY", 30*time.Second),
+		AuthGrace:          p.span("WS_AUTH_GRACE", 3*time.Minute),
+		AuthRate:           p.number("WS_AUTH_RATE", 1000),
+		AuthBurst:          p.number("WS_AUTH_BURST", 2000),
+		AuthRetryMin:       p.span("WS_AUTH_RETRY_MIN", 5*time.Second),
+		AuthRetryMax:       p.span("WS_AUTH_RETRY_MAX", 30*time.Second),
+		UserConnectionsMax: p.number("WS_USER_CONNECTIONS_MAX", 10),
+		UnauthMax:          p.number("WS_UNAUTH_MAX", 10000),
+		FrameMax:           p.number("WS_FRAME_MAX", 128<<10),
+		HeartbeatTimeout:   p.span("WS_HEARTBEAT_TIMEOUT", 15*time.Second),
+		CommandRate:        p.number("WS_COMMAND_RATE", 50),
+		CommandBurst:       p.number("WS_COMMAND_BURST", 100),
+		CommandInflight:    p.number("WS_COMMAND_INFLIGHT", 32),
+		SendQueue:          p.number("WS_SEND_QUEUE", 256),
+		SendQueueBytes:     p.number("WS_SEND_QUEUE_BYTES", 1<<20),
+		WriteTimeout:       p.span("WS_WRITE_TIMEOUT", 10*time.Second),
+		RequestDeadline:    p.span("CORE_REQUEST_DEADLINE", 5*time.Second),
+		DrainDelay:         p.span("WS_DRAIN_DELAY", 2*time.Second),
+		ShutdownBudget:     p.span("WS_SHUTDOWN_BUDGET", 15*time.Second),
+		NATSURL:            envconfig.String("NATS_URL", ""),
+		EventStream:        envconfig.String("EVT_STREAM", "CHATIM_EVT"),
+		EventRoot:          envconfig.String("EVT_SUBJECT_ROOT", "evt"),
+		PublishRoot:        envconfig.String("WS_PUBLISH_ROOT", wspublish.DefaultRoot),
+		PublishStream:      envconfig.String("WS_PUBLISH_STREAM", wspublish.DefaultStream),
+		StreamReplicas:     p.number("EVT_STREAM_REPLICAS", 1),
+		FanoutWorkers:      p.number("WS_FANOUT_WORKERS", runtime.NumCPU()),
+		FanoutQueue:        p.number("WS_FANOUT_QUEUE", 4096),
+		ReplayRate:         p.number("WS_REPLAY_RATE", 20000),
+		ConsumeBatch:       p.number("WS_CONSUME_BATCH", 500),
+		ConsumeBytes:       p.number("WS_CONSUME_BYTES", 8<<20),
+		RoomIDsInflight:    p.number("WS_ROOM_IDS_INFLIGHT", 64),
+		OpenPending:        p.span("WS_OPEN_PENDING", 10*time.Second),
+		ReplayMaxAge:       p.span("WS_REPLAY_MAX_AGE", 2*time.Minute),
+		ReloadRate:         p.number("WS_RELOAD_RATE", 1000),
+		TypingRate:         p.number("WS_TYPING_RATE", 2),
+		TypingBurst:        p.number("WS_TYPING_BURST", 4),
+		TypingQueue:        p.number("WS_TYPING_QUEUE", 8192),
+		TypingPendingMsgs:  p.number("WS_TYPING_PENDING_MSGS", 65536),
 
 		PresenceRedisAddr:     envconfig.String("WS_PRESENCE_REDIS_ADDR", "chatim-redis-presence:6379"),
 		PresenceRedisDB:       p.number("WS_PRESENCE_REDIS_DB", 0),
@@ -157,7 +167,12 @@ func (c Config) LogValue() slog.Value {
 		slog.String("jwt_issuer", c.JWTIssuer),
 		slog.String("jwt_audience", c.JWTAudience),
 		slog.Duration("jwt_leeway", c.JWTLeeway),
-		slog.Duration("auth_timeout", c.AuthTimeout),
+		slog.Duration("auth_grace", c.AuthGrace),
+		slog.Int("auth_rate", c.AuthRate),
+		slog.Int("auth_burst", c.AuthBurst),
+		slog.Duration("auth_retry_min", c.AuthRetryMin),
+		slog.Duration("auth_retry_max", c.AuthRetryMax),
+		slog.Int("user_connections_max", c.UserConnectionsMax),
 		slog.Int("unauth_max", c.UnauthMax),
 		slog.Int("frame_max", c.FrameMax),
 		slog.Duration("heartbeat_timeout", c.HeartbeatTimeout),

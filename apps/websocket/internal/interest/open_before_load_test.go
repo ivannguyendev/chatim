@@ -41,7 +41,7 @@ func TestMemberChangesWhileALoadFailedUserWaitsAreDroppedAndTheNextLoadDecides(t
 		f := newFixture(t)
 		f.loader.holding(true)
 		s := &fakeSink{}
-		c := f.table.Register("t1", "u", s)
+		c := mustRegister(t, f.table, "t1", "u", s)
 		synctest.Wait()
 		f.loader.answer(0, reply{err: errors.New("core down")})
 		synctest.Wait()

@@ -120,5 +120,5 @@ func (r *wsRun) expiredRefused() error {
 	if err != nil {
 		return err
 	}
-	return r.refused("an expired token", token)
+	return r.authRequired("an expired token", token, chatimv1.AuthRequiredReason_AUTH_REQUIRED_REASON_EXPIRED)
 }

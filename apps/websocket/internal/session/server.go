@@ -31,6 +31,7 @@ type Server struct {
 	presenceStats presenceStats
 	accepting     *gate
 	commands      *gate
+	logins        *rate.Limiter
 	authLog       *rate.Limiter
 
 	mu        sync.Mutex
@@ -56,6 +57,7 @@ func New(opts Options, verifier Verifier, executor Executor, rooms Interest, typ
 		stats:     newStats(),
 		accepting: newGate(),
 		commands:  newGate(),
+		logins:    rate.NewLimiter(rate.Limit(opts.AuthRate), opts.AuthBurst),
 		authLog:   rate.NewLimiter(rate.Every(time.Second), 1),
 		live:      map[*connection]struct{}{},
 	}
@@ -154,10 +156,10 @@ func (s *Server) untrack(c *connection) {
 	s.stats.open.Add(-1)
 }
 
-func (s *Server) authFailed(label string) {
-	s.stats.authFailed(label)
+func (s *Server) authRefused(result authResult, reason string) {
+	s.stats.authed(result)
 	if s.authLog.Allow() {
-		s.logger.Warn("websocket auth failed", "reason", label)
+		s.logger.Debug("websocket auth refused", "result", authResultLabels[result], "reason", reason)
 	}
 }
 

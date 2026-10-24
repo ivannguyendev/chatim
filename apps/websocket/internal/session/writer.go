@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/lxzan/gws"
-	"google.golang.org/protobuf/proto"
 
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
@@ -80,13 +79,7 @@ func (c *connection) writeClose(code uint16) {
 }
 
 func (c *connection) respond(resp *chatimv1.ServerResponse) {
-	payload, err := proto.Marshal(&chatimv1.ServerFrame{Frame: &chatimv1.ServerFrame_Response{Response: resp}})
-	if err != nil {
-		c.server.logger.Error("encode websocket response", "error", err)
-		c.closeWith(CodeInternalError)
-		return
-	}
-	c.enqueue(outFrame{opcode: gws.OpcodeBinary, payload: payload})
+	c.sendFrame(&chatimv1.ServerFrame{Frame: &chatimv1.ServerFrame_Response{Response: resp}})
 }
 
 func (c *connection) enqueue(frame outFrame) {

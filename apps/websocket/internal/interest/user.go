@@ -119,15 +119,18 @@ func (u *user) deliver(frame []byte, catchingUp, resumes bool) uint64 {
 	return n
 }
 
-func (t *Table) Register(tenant, userID string, sink Sink) *Conn {
-	c, waiting := t.attach(userKey{tenant: tenant, user: userID}, sink)
+func (t *Table) Register(tenant, userID string, sink Sink) (*Conn, error) {
+	c, waiting, err := t.attach(userKey{tenant: tenant, user: userID}, sink)
+	if err != nil {
+		return nil, err
+	}
 	if waiting {
 		t.prioritize(c.user)
 	}
-	return c
+	return c, nil
 }
 
-func (t *Table) attach(k userKey, sink Sink) (*Conn, bool) {
+func (t *Table) attach(k userKey, sink Sink) (*Conn, bool, error) {
 	t.closeMu.RLock()
 	defer t.closeMu.RUnlock()
 	if t.closed {
@@ -136,12 +139,15 @@ func (t *Table) attach(k userKey, sink Sink) (*Conn, bool) {
 		c := newConn(t, u, sink)
 		c.gone = true
 		sink.Fail()
-		return c, false
+		return c, false, nil
 	}
 	s := t.userShard(k)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	u, found := s.users[k]
+	if found && u.connCount() >= t.cfg.UserConnectionsMax {
+		return nil, false, ErrTooManyConnections
+	}
 	if !found {
 		u = newUser(t.life, k)
 		s.users[k] = u
@@ -157,12 +163,18 @@ func (t *Table) attach(k userKey, sink Sink) (*Conn, bool) {
 	case u.failed:
 		sink.Send(loadFailedFrame())
 	case u.suspended:
-		return c, true
+		return c, true, nil
 	case u.ready:
 		c.readied = true
 		sink.Send(readyFrame)
 	}
-	return c, false
+	return c, false, nil
+}
+
+func (u *user) connCount() int {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return len(u.conns)
 }
 
 func (c *Conn) Unregister() {

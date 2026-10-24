@@ -8,49 +8,9 @@ import (
 	"github.com/lxzan/gws"
 	"google.golang.org/grpc/codes"
 
+	"github.com/ivannguyendev/chatim/apps/websocket/internal/interest"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
-
-func TestConnectionWithoutAuthIsClosedWith4002AfterTheAuthTimeout(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		h := newHarness(t, testOptions())
-		tc := h.dial(true)
-		time.Sleep(5*time.Second - time.Millisecond)
-		synctest.Wait()
-		if !tc.isOpen() {
-			t.Fatal("closed before the auth timeout")
-		}
-		if got := tc.waitClosed(); got != CodeAuthTimeout {
-			t.Fatalf("close code = %d, want %d", got, CodeAuthTimeout)
-		}
-		if h.closes(CodeAuthTimeout) != 1 || h.server.stats.unauth.Load() != 0 || h.server.stats.open.Load() != 0 {
-			t.Fatalf("stats after close: closes=%d unauth=%d open=%d", h.closes(CodeAuthTimeout), h.server.stats.unauth.Load(), h.server.stats.open.Load())
-		}
-	})
-}
-
-func TestFrameOtherThanAuthBeforeAuthIsClosedWith1008(t *testing.T) {
-	cases := map[string]func(tc *testClient){
-		"heartbeat": func(tc *testClient) { tc.heartbeat() },
-		"request":   func(tc *testClient) { tc.history(1) },
-		"unknown":   func(tc *testClient) { tc.write(unknownFramePayload) },
-	}
-	for name, send := range cases {
-		t.Run(name, func(t *testing.T) {
-			synctest.Test(t, func(t *testing.T) {
-				h := newHarness(t, testOptions())
-				tc := h.dial(true)
-				send(tc)
-				if got := tc.waitClosed(); got != CodePolicyViolation {
-					t.Fatalf("close code = %d, want %d", got, CodePolicyViolation)
-				}
-				if h.core.calls.Load() != 0 {
-					t.Fatal("core was called before auth")
-				}
-			})
-		})
-	}
-}
 
 var unknownFramePayload = []byte{0x98, 0x06, 0x01}
 
@@ -91,20 +51,24 @@ func TestFrameOverTheLimitIsClosedWith1009(t *testing.T) {
 	})
 }
 
-func TestBadTokenIsClosedWith4001AndCountedByReason(t *testing.T) {
+func TestBadTokenGetsAuthRequiredInvalidAndALaterGoodTokenGetsReady(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		h := newHarness(t, testOptions())
 		tc := h.dial(true)
 		tc.auth("forged")
-		if got := tc.waitClosed(); got != CodeUnauthenticated {
-			t.Fatalf("close code = %d, want %d", got, CodeUnauthenticated)
+		tc.expectAuthRequired(promptInvalid)
+		if !tc.isOpen() || h.authCount("invalid") != 1 || h.server.stats.unauth.Load() != 1 {
+			t.Fatalf("open %v invalid %v unauth %d", tc.isOpen(), h.authCount("invalid"), h.server.stats.unauth.Load())
 		}
-		if got := h.server.stats.authFailures["malformed"].Load(); got != 1 {
-			t.Fatalf("malformed auth failures = %d, want 1", got)
+		time.Sleep(time.Second)
+		tc.auth(h.token("u1", time.Hour))
+		if f := tc.nextFrame(); f.GetReady() == nil {
+			t.Fatalf("frame after a good token = %v, want ready", f)
 		}
-		if h.server.stats.unauth.Load() != 0 {
-			t.Fatal("unauthenticated gauge not released")
+		if h.authCount("ok") != 1 || h.server.stats.unauth.Load() != 0 {
+			t.Fatalf("ok %v unauth %d", h.authCount("ok"), h.server.stats.unauth.Load())
 		}
+		tc.close()
 	})
 }
 
@@ -129,78 +93,91 @@ func TestSilenceAfterAuthClosesTheConnection(t *testing.T) {
 	})
 }
 
-func TestTokenAcceptedInsideTheLeewayIsNotClosedAtOnce(t *testing.T) {
+func TestTokenAcceptedInsideTheLeewayExpiresOnlyAtExpPlusLeeway(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		h := newHarness(t, testOptions())
-		tc := h.dial(true)
-		tc.auth(h.token("u1", -10*time.Second))
+		tc := h.readyClientWith(h.token("u1", -10*time.Second))
+		start := time.Now()
 		tc.keepAlive(5*time.Second, 15*time.Second)
-		time.Sleep(5*time.Second - time.Millisecond)
 		synctest.Wait()
-		if !tc.isOpen() {
-			t.Fatal("closed before exp + leeway")
+		tc.noFrame()
+		tc.expectAuthRequired(promptExpired)
+		if elapsed := time.Since(start); elapsed != 20*time.Second || !tc.isOpen() {
+			t.Fatalf("auth_required after %v, open %v; want 20s and open", elapsed, tc.isOpen())
 		}
-		if got := tc.waitClosed(); got != CodeUnauthenticated {
-			t.Fatalf("close code = %d, want %d", got, CodeUnauthenticated)
-		}
+		tc.close()
 	})
 }
 
-func TestTokenExpiryPlusLeewayClosesWith4001(t *testing.T) {
+func TestTokenExpirySendsAuthRequiredAndTheGraceCloses4001(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		h := newHarness(t, testOptions())
-		tc := h.dial(true)
 		start := time.Now()
-		tc.auth(h.token("u1", time.Minute))
+		tc := h.readyClientWith(h.token("u1", time.Minute))
 		tc.keepAlive(10*time.Second, 80*time.Second)
+		tc.expectAuthRequired(promptExpired)
+		if elapsed := time.Since(start); elapsed != 90*time.Second || !tc.isOpen() {
+			t.Fatalf("auth_required after %v, open %v; want 90s and open", elapsed, tc.isOpen())
+		}
+		tc.heartbeat()
+		tc.keepAlive(5*time.Second, 175*time.Second)
 		if got := tc.waitClosed(); got != CodeUnauthenticated {
 			t.Fatalf("close code = %d, want %d", got, CodeUnauthenticated)
 		}
-		if elapsed := time.Since(start); elapsed != 90*time.Second {
-			t.Fatalf("closed after %v, want 90s", elapsed)
+		if elapsed := time.Since(start); elapsed != 270*time.Second {
+			t.Fatalf("closed after %v, want 270s", elapsed)
+		}
+		if h.server.stats.unauth.Load() != 0 || h.closes(CodeUnauthenticated) != 1 {
+			t.Fatalf("unauth %d closes 4001 %d", h.server.stats.unauth.Load(), h.closes(CodeUnauthenticated))
 		}
 	})
 }
 
-func TestRenewalWithTheSameIdentityKeepsTheConnection(t *testing.T) {
+func TestRenewalWithTheSameIdentityMovesTheExpiry(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		h := newHarness(t, testOptions())
-		tc := h.dial(true)
 		start := time.Now()
-		tc.auth(h.token("u1", time.Minute))
+		tc := h.readyClientWith(h.token("u1", time.Minute))
 		tc.keepAlive(10*time.Second, 50*time.Second)
 		tc.auth(h.token("u1", 2*time.Minute))
 		tc.keepAlive(10*time.Second, 140*time.Second)
-		if !tc.isOpen() {
-			t.Fatal("renewed connection closed")
-		}
-		if got := tc.waitClosed(); got != CodeUnauthenticated {
-			t.Fatalf("close code = %d, want %d", got, CodeUnauthenticated)
-		}
+		synctest.Wait()
+		tc.noFrame()
+		tc.expectAuthRequired(promptExpired)
 		if elapsed := time.Since(start); elapsed != 200*time.Second {
-			t.Fatalf("closed after %v, want 200s", elapsed)
+			t.Fatalf("auth_required after %v, want 200s", elapsed)
 		}
+		tc.close()
 	})
 }
 
-func TestRenewalWithAnotherIdentityIsClosedWith4001(t *testing.T) {
-	cases := map[string]struct{ tenant, user string }{
-		"other user":   {tenant: "t1", user: "u2"},
-		"other tenant": {tenant: "t2", user: "u1"},
+func TestRenewalWithAnotherIdentityOrABadTokenKeepsTheConnectionRunning(t *testing.T) {
+	cases := map[string]func(h *harness) string{
+		"other user":   func(h *harness) string { return h.verifier.issue("other", "t1", "u2", time.Now().Add(time.Hour)) },
+		"other tenant": func(h *harness) string { return h.verifier.issue("other", "t2", "u1", time.Now().Add(time.Hour)) },
+		"bad token":    func(*harness) string { return "forged" },
 	}
-	for name, tt := range cases {
+	for name, token := range cases {
 		t.Run(name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				h := newHarness(t, testOptions())
-				tc := h.dial(true)
-				tc.auth(h.token("u1", time.Hour))
-				tc.auth(h.verifier.issue("other", tt.tenant, tt.user, time.Now().Add(time.Hour)))
-				if got := tc.waitClosed(); got != CodeUnauthenticated {
-					t.Fatalf("close code = %d, want %d", got, CodeUnauthenticated)
+				h.loader.set("t1", "u1", interest.Room{ID: 7, Ver: 1})
+				tc := h.readyClient("u1")
+				tc.auth(token(h))
+				tc.expectAuthRequired(promptInvalid)
+				h.rooms.Route(roomEvent("msg_created", "message", 7, "7-0-1"))
+				if f := tc.nextFrame(); f.GetEvent().GetId() != "7-0-1" {
+					t.Fatalf("frame = %v, want event 7-0-1", f)
 				}
-				if got := h.server.stats.authFailures[reasonIdentityChange].Load(); got != 1 {
-					t.Fatalf("identity change failures = %d, want 1", got)
+				tc.history(1)
+				tc.next()
+				if claims := <-h.core.claims; claims.Tenant != "t1" || claims.User != "u1" {
+					t.Fatalf("claims after a refused renewal = %+v", claims)
 				}
+				if h.authCount("invalid") != 1 || h.interestUsers() != 1 {
+					t.Fatalf("invalid %v interest users %v", h.authCount("invalid"), h.interestUsers())
+				}
+				tc.close()
 			})
 		})
 	}

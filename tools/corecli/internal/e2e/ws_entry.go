@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	authTimeoutEarly = 500 * time.Millisecond
-	authTimeoutLate  = 5 * time.Second
+	silentCloseEarly = 500 * time.Millisecond
+	silentCloseLate  = 5 * time.Second
+	silentCloseCode  = 1000
 	tokensMode       = 0o600
 )
 
@@ -98,14 +99,25 @@ func CloseCode(err error) (uint16, bool) {
 	return 0, false
 }
 
-func CheckAuthTimeout(code uint16, waited, timeout time.Duration) error {
+func CheckSilentClose(code uint16, waited, timeout time.Duration) error {
 	switch {
-	case code != 4002:
-		return fmt.Errorf("silent connection closed with code %d, want 4002", code)
-	case waited < timeout-authTimeoutEarly:
-		return fmt.Errorf("silent connection closed after %v, before the auth timeout %v", waited, timeout)
-	case waited > timeout+authTimeoutLate:
-		return fmt.Errorf("silent connection closed after %v, long after the auth timeout %v", waited, timeout)
+	case code != silentCloseCode:
+		return fmt.Errorf("silent connection closed with code %d, want %d", code, silentCloseCode)
+	case waited < timeout-silentCloseEarly:
+		return fmt.Errorf("silent connection closed after %v, before the heartbeat timeout %v", waited, timeout)
+	case waited > timeout+silentCloseLate:
+		return fmt.Errorf("silent connection closed after %v, long after the heartbeat timeout %v", waited, timeout)
+	}
+	return nil
+}
+
+func CheckAuthRequired(f *chatimv1.ServerFrame, want chatimv1.AuthRequiredReason) error {
+	required := f.GetAuthRequired()
+	switch {
+	case required == nil:
+		return fmt.Errorf("frame %v, want auth_required %v", f, want)
+	case required.GetReason() != want:
+		return fmt.Errorf("auth_required %v, want %v", required.GetReason(), want)
 	}
 	return nil
 }

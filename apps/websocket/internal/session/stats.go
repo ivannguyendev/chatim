@@ -19,6 +19,17 @@ const (
 	rejectReasonCount
 )
 
+type authResult int
+
+const (
+	authOK authResult = iota
+	authInvalid
+	authExpired
+	authRate
+	authUserLimit
+	authResultCount
+)
+
 const (
 	otherLabel           = "other"
 	reasonIdentityChange = "identity_changed"
@@ -26,37 +37,29 @@ const (
 )
 
 var (
-	rejectLabels = [rejectReasonCount]string{"rate", "inflight", "unimplemented", "shutdown"}
-	closeCodes   = []uint16{
+	rejectLabels     = [rejectReasonCount]string{"rate", "inflight", "unimplemented", "shutdown"}
+	authResultLabels = [authResultCount]string{"ok", "invalid", "expired", "rate", "user_limit"}
+	closeCodes       = []uint16{
 		CodeNormal, CodeGoingAway, CodeProtocolError, CodeUnsupportedData, CodeAbnormal, CodeInvalidPayload,
-		CodePolicyViolation, CodeTooLarge, CodeInternalError, CodeTryAgainLater, CodeUnauthenticated, CodeAuthTimeout,
-		CodeSlowClient,
-	}
-	tokenReasons = []jwtverify.Reason{
-		jwtverify.ReasonMalformed, jwtverify.ReasonAlgorithm, jwtverify.ReasonSignature, jwtverify.ReasonKeyID,
-		jwtverify.ReasonType, jwtverify.ReasonIssuer, jwtverify.ReasonAudience, jwtverify.ReasonExpired,
-		jwtverify.ReasonNotYetValid, jwtverify.ReasonMissingClaim, jwtverify.ReasonSubject, jwtverify.ReasonTenant,
-		jwtverify.ReasonClaims,
+		CodePolicyViolation, CodeTooLarge, CodeInternalError, CodeTryAgainLater, CodeUnauthenticated,
+		CodeSlowClient, CodeTooManyConnections,
 	}
 )
 
 type stats struct {
-	open          atomic.Int64
-	unauth        atomic.Int64
-	queuedBytes   atomic.Int64
-	unknownFrames atomic.Uint64
-	rejected      [rejectReasonCount]atomic.Uint64
-	authFailures  map[string]*atomic.Uint64
-	closes        map[string]*atomic.Uint64
+	open                atomic.Int64
+	unauth              atomic.Int64
+	queuedBytes         atomic.Int64
+	unknownFrames       atomic.Uint64
+	unauthOverCap       atomic.Uint64
+	authRequiredExpired atomic.Uint64
+	rejected            [rejectReasonCount]atomic.Uint64
+	auths               [authResultCount]atomic.Uint64
+	closes              map[string]*atomic.Uint64
 }
 
 func newStats() *stats {
-	s := &stats{authFailures: map[string]*atomic.Uint64{}, closes: map[string]*atomic.Uint64{}}
-	for _, reason := range tokenReasons {
-		s.authFailures[reasonLabel(reason)] = new(atomic.Uint64)
-	}
-	s.authFailures[reasonIdentityChange] = new(atomic.Uint64)
-	s.authFailures[reasonUnknown] = new(atomic.Uint64)
+	s := &stats{closes: map[string]*atomic.Uint64{}}
 	for _, code := range closeCodes {
 		s.closes[strconv.Itoa(int(code))] = new(atomic.Uint64)
 	}
@@ -71,13 +74,7 @@ func reasonLabel(reason jwtverify.Reason) string {
 	return strings.ReplaceAll(string(reason), " ", "_")
 }
 
-func (s *stats) authFailed(label string) {
-	counter, ok := s.authFailures[label]
-	if !ok {
-		counter = s.authFailures[reasonUnknown]
-	}
-	counter.Add(1)
-}
+func (s *stats) authed(result authResult) { s.auths[result].Add(1) }
 
 func (s *stats) closed(code uint16) {
 	counter, ok := s.closes[strconv.Itoa(int(code))]
@@ -92,14 +89,19 @@ func (s *stats) reject(reason rejectReason) { s.rejected[reason].Add(1) }
 func (s *stats) sources() []metrics.Source {
 	out := []metrics.Source{
 		{Name: "connections", Help: "Open websocket connections.", Gauge: true, Read: gaugeOf(&s.open)},
-		{Name: "unauthenticated_connections", Help: "Open websocket connections that have not authenticated yet.", Gauge: true, Read: gaugeOf(&s.unauth)},
+		{Name: "unauthenticated_connections", Help: "Open websocket connections waiting for a valid token.", Gauge: true, Read: gaugeOf(&s.unauth)},
 		{Name: "send_queue_bytes", Help: "Bytes queued for writing across open websocket connections.", Gauge: true, Read: gaugeOf(&s.queuedBytes)},
-		{Name: "unknown_frames_total", Help: "Client frames of an unknown type ignored after auth.", Read: counterOf(&s.unknownFrames)},
+		{Name: "unknown_frames_total", Help: "Client frames of an unknown type ignored.", Read: counterOf(&s.unknownFrames)},
+		{Name: "unauth_over_cap_total", Help: "Connections that went back to waiting for a token above WS_UNAUTH_MAX.", Read: counterOf(&s.unauthOverCap)},
+		{
+			Name: "auth_required_total", Help: "auth_required frames sent to running connections, by reason.",
+			Labels: map[string]string{"reason": "expired"}, Read: counterOf(&s.authRequiredExpired),
+		},
 	}
-	for label, counter := range s.authFailures {
+	for result := range authResultCount {
 		out = append(out, metrics.Source{
-			Name: "auth_failures_total", Help: "Rejected auth frames, by reason.",
-			Labels: map[string]string{"reason": label}, Read: counterOf(counter),
+			Name: "auth_total", Help: "Auth frames, by result.",
+			Labels: map[string]string{"result": authResultLabels[result]}, Read: counterOf(&s.auths[result]),
 		})
 	}
 	for label, counter := range s.closes {

@@ -49,6 +49,7 @@ type presenceWatch struct {
 	busy    atomic.Bool
 	mu      sync.Mutex
 	users   []string
+	ver     uint64
 	dropped bool
 }
 
@@ -67,12 +68,19 @@ func (w *presenceWatch) replace(users []string) {
 		w.stats.watching.Add(-1)
 	}
 	w.users = users
+	w.ver++
 }
 
-func (w *presenceWatch) list() []string {
+func (w *presenceWatch) list() ([]string, uint64) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return w.users
+	return w.users, w.ver
+}
+
+func (w *presenceWatch) current(ver uint64) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return !w.dropped && w.ver == ver
 }
 
 func (w *presenceWatch) drop() {
@@ -82,6 +90,7 @@ func (w *presenceWatch) drop() {
 		w.stats.watching.Add(-1)
 	}
 	w.dropped, w.users = true, nil
+	w.ver++
 }
 
 func askList(users []string, limit int) ([]string, bool) {
@@ -127,7 +136,7 @@ func (c *connection) answerPresence() {
 	if w == nil {
 		return
 	}
-	users := w.list()
+	users, ver := w.list()
 	if len(users) == 0 {
 		return
 	}
@@ -138,11 +147,11 @@ func (c *connection) answerPresence() {
 	tenant := c.currentClaims().Tenant
 	c.work.Go(func() {
 		defer w.busy.Store(false)
-		c.answer(tenant, users)
+		c.answer(w, ver, tenant, users)
 	})
 }
 
-func (c *connection) answer(tenant string, users []string) {
+func (c *connection) answer(w *presenceWatch, ver uint64, tenant string, users []string) {
 	defer c.recoverPanic()
 	entries, err := c.server.presence.Answer(c.ctx, tenant, users)
 	if err != nil || c.ctx.Err() != nil {
@@ -151,6 +160,9 @@ func (c *connection) answer(tenant string, users []string) {
 	payload, err := proto.Marshal(&chatimv1.ServerFrame{Frame: &chatimv1.ServerFrame_Presence{Presence: &chatimv1.PresenceFrame{Entries: entries}}})
 	if err != nil {
 		c.server.logger.Error("encode presence frame", "error", err)
+		return
+	}
+	if c.currentWatch() != w || !w.current(ver) {
 		return
 	}
 	if !c.offer(outFrame{opcode: gws.OpcodeBinary, payload: payload}) {

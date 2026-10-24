@@ -72,7 +72,12 @@ func newInterest(cfg config.Config, routes *routerHolder, log *slog.Logger) (*in
 	if err != nil {
 		return nil, err
 	}
-	return interest.New(interest.Config{Inflight: cfg.RoomIDsInflight, OpenPending: cfg.OpenPending, ReloadRate: cfg.ReloadRate}, loader, log)
+	return interest.New(interest.Config{
+		Inflight:           cfg.RoomIDsInflight,
+		OpenPending:        cfg.OpenPending,
+		ReloadRate:         cfg.ReloadRate,
+		UserConnectionsMax: cfg.UserConnectionsMax,
+	}, loader, log)
 }
 
 func jwtConfig(cfg config.Config) jwtverify.Config {
@@ -81,7 +86,11 @@ func jwtConfig(cfg config.Config) jwtverify.Config {
 
 func sessionOptions(cfg config.Config) session.Options {
 	return session.Options{
-		AuthTimeout:      cfg.AuthTimeout,
+		AuthGrace:        cfg.AuthGrace,
+		AuthRate:         cfg.AuthRate,
+		AuthBurst:        cfg.AuthBurst,
+		AuthRetryMin:     cfg.AuthRetryMin,
+		AuthRetryMax:     cfg.AuthRetryMax,
 		HeartbeatTimeout: cfg.HeartbeatTimeout,
 		JWTLeeway:        cfg.JWTLeeway,
 		WriteTimeout:     cfg.WriteTimeout,

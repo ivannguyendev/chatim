@@ -121,7 +121,7 @@ type fixture struct {
 func newFixture(t *testing.T, queue int) *fixture {
 	t.Helper()
 	loader := &memberLoader{rooms: map[string][]interest.Room{}}
-	table, err := interest.New(interest.Config{Inflight: 4, OpenPending: 10 * time.Second, ReloadRate: 1000}, loader, slog.New(slog.DiscardHandler))
+	table, err := interest.New(interest.Config{Inflight: 4, OpenPending: 10 * time.Second, ReloadRate: 1000, UserConnectionsMax: 10}, loader, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("interest.New: %v", err)
 	}
@@ -143,7 +143,10 @@ func (f *fixture) member(user string, rooms ...uint64) {
 
 func (f *fixture) connect(user string, open ...string) (*interest.Conn, *fakeSink) {
 	sink := &fakeSink{}
-	c := f.table.Register("t1", user, sink)
+	c, err := f.table.Register("t1", user, sink)
+	if err != nil {
+		f.t.Fatalf("Register %s: %v", user, err)
+	}
 	synctest.Wait()
 	for _, room := range open {
 		c.Open(room)

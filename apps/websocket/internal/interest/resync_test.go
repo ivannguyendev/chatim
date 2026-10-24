@@ -13,7 +13,7 @@ import (
 func lagJump(seq uint64) feed.Jump { return feed.Jump{Reason: feed.JumpLagTooOld, Seq: seq} }
 
 func paced(t *testing.T, perSecond int) *fixture {
-	return newFixtureWith(t, Config{Inflight: 64, OpenPending: 10 * time.Second, ReloadRate: perSecond})
+	return newFixtureWith(t, Config{Inflight: 64, OpenPending: 10 * time.Second, ReloadRate: perSecond, UserConnectionsMax: 10})
 }
 
 func resyncsOf(f *fixture, reason chatimv1.ResyncReason) uint64 {
@@ -67,7 +67,7 @@ func TestReloadsStartWithWaitingDevicesThenUsersWithOpenRooms(t *testing.T) {
 		viewer, _ := f.connect("t1", "viewer", 1)
 		viewer.Open("1")
 		f.loader.holding(true)
-		f.table.Register("t1", "loading", &fakeSink{})
+		mustRegister(t, f.table, "t1", "loading", &fakeSink{})
 		synctest.Wait()
 		f.table.Jumped(lagJump(4))
 		for range 3 {
@@ -93,7 +93,7 @@ func TestANewDeviceOfASuspendedUserMovesItToTheFrontOfTheQueue(t *testing.T) {
 		queue := f.table.reloads.queue
 		late := queue[len(queue)-1].key.user
 		f.table.resyncMu.Unlock()
-		f.table.Register("t1", late, &fakeSink{})
+		mustRegister(t, f.table, "t1", late, &fakeSink{})
 		time.Sleep(time.Second)
 		synctest.Wait()
 		if got := f.loader.callOrder()[4:]; len(got) != 2 || got[1] != late {

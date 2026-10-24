@@ -36,7 +36,7 @@ func TestLeftMarksFromTheLoadDropAStaleMemberAddedHeldDuringIt(t *testing.T) {
 		f.route(withSeq(msg("t1", 99), markSeq))
 		f.loader.holding(true)
 		s := &fakeSink{}
-		f.table.Register("t1", "u", s)
+		mustRegister(t, f.table, "t1", "u", s)
 		synctest.Wait()
 		f.route(withSeq(added("t1", orderRoom, "u", 2), markSeq+1))
 		f.loader.replies <- reply{left: []Room{{ID: orderRoom, Ver: 3}}}
@@ -168,7 +168,7 @@ func TestASecondDeviceOfASuspendedUserWaitsAndGetsReadyAfterTheReload(t *testing
 		f.table.Jumped(lagJump(5))
 		synctest.Wait()
 		second := &fakeSink{}
-		c2 := f.table.Register("t1", "u", second)
+		c2 := mustRegister(t, f.table, "t1", "u", second)
 		c2.Open("1")
 		f.route(withSeq(event("reaction_changed", "t1", 1, "", 0), 6))
 		if got := second.take(); len(got) != 0 {
@@ -216,7 +216,7 @@ func TestAStaleLoadFromBeforeTheJumpIsDiscarded(t *testing.T) {
 		f := newFixture(t)
 		f.loader.holding(true)
 		s := &fakeSink{}
-		f.table.Register("t1", "u", s)
+		mustRegister(t, f.table, "t1", "u", s)
 		synctest.Wait()
 		f.table.Jumped(lagJump(8))
 		synctest.Wait()
@@ -240,7 +240,7 @@ func TestAStaleFailedLoadFromBeforeTheJumpClosesNothing(t *testing.T) {
 		f := newFixture(t)
 		f.loader.holding(true)
 		s := &fakeSink{}
-		f.table.Register("t1", "u", s)
+		mustRegister(t, f.table, "t1", "u", s)
 		synctest.Wait()
 		f.table.Jumped(lagJump(8))
 		synctest.Wait()

@@ -70,7 +70,7 @@ func newPublishFixture(t *testing.T) *publishFixture {
 
 func (p *publishFixture) join(tenant, user, name string) {
 	s := &noteSink{}
-	p.table.Register(tenant, user, s)
+	mustRegister(p.t, p.table, tenant, user, s)
 	synctest.Wait()
 	p.sinks[name] = s
 }
@@ -175,7 +175,7 @@ func TestPublishSkipsUsersNotReady(t *testing.T) {
 		p := newPublishFixture(t)
 		p.loader.holding(true)
 		late := &noteSink{}
-		p.table.Register("t1", "late", late)
+		mustRegister(t, p.table, "t1", "late", late)
 		synctest.Wait()
 		p.pub.Deliver(publishEnv("t1", packet("t1", "mention", "late")))
 		if got := len(late.take()); got != 0 {
