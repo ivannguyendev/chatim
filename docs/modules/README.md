@@ -18,7 +18,7 @@ flowchart TD
     end
 
     subgraph Entry["Tầng Cổng & Thời gian thực"]
-        M09["Module 09: Realtime Delivery & Ephemeral<br/>(App websocket M4: phần 1–3 đã xây, 12 lệnh ghi realtime; Typing, Presence dự kiến)"]
+        M09["Module 09: Realtime Delivery & Ephemeral<br/>(App websocket M4: phần 1–4 đã xây, 12 lệnh ghi realtime, typing và presence)"]
         M11["Module 11: HTTPS Gateway<br/>(App gateway: 22 lệnh đọc và quản lý, Connect, core bất kỳ)"]
     end
 

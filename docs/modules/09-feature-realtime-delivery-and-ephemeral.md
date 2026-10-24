@@ -1,6 +1,6 @@
 # Module 09: Thời gian thực — Phân phối Realtime & Tín hiệu tức thời (Typing/Presence)
 
-> **Trạng thái:** App `websocket` (M4) **đã xây phần 1, 2 và 3/5** trên `feat/m4`; từ phần gateway (D198) websocket chỉ còn 12 lệnh ghi realtime, lệnh đọc và quản lý room đi HTTPS qua app `gateway` ([module 11](./11-feature-https-gateway.md)): kết nối, token, chuyển lệnh tới core (phần 1, [§7](#7-giao-thức-kết-nối-m4-phần-1-đã-xây), D183–D188); nhận và đẩy event, gói thông báo `WsPublish` (phần 2, [§8](#8-nhận-và-đẩy-event-m4-phần-2-đã-xây), D189–D195); đã đọc/đã xem (phần 3, [§9](#9-đã-đọc-và-đã-xem-m4-phần-3-đã-xây), D196–D197). Typing/online (phần 4), reconnect và vận hành (phần 5) vẫn là thiết kế dự kiến; chỗ nào khác §7–§9 thì §7–§9 đúng.
+> **Trạng thái:** App `websocket` (M4) **đã xây phần 1, 2, 3 và 4/5** trên `feat/m4`; từ phần gateway (D198) websocket chỉ còn 12 lệnh ghi realtime, lệnh đọc và quản lý room đi HTTPS qua app `gateway` ([module 11](./11-feature-https-gateway.md)): kết nối, token, chuyển lệnh tới core (phần 1, [§7](#7-giao-thức-kết-nối-m4-phần-1-đã-xây), D183–D188); nhận và đẩy event, gói thông báo `WsPublish` (phần 2, [§8](#8-nhận-và-đẩy-event-m4-phần-2-đã-xây), D189–D195); đã đọc/đã xem (phần 3, [§9](#9-đã-đọc-và-đã-xem-m4-phần-3-đã-xây), D196–D197); đang gõ và online (phần 4, [§10](#10-đang-gõ-và-online-m4-phần-4-đã-xây), D199–D201). Reconnect và vận hành (phần 5) vẫn là thiết kế dự kiến; chỗ nào khác §7–§10 thì §7–§10 đúng.
 >
 > **Mục tiêu module:** Đẩy các thông điệp và biến động dữ liệu đến người dùng đang online với độ trễ siêu thấp (p99 ≤100ms) qua kết nối WebSocket hai chiều, hỗ trợ các tương tác sinh động tức thời như "Đang gõ..." (Typing Indicator) và trạng thái trực tuyến (Presence) mà không làm suy giảm hiệu năng cơ sở dữ liệu.
 
@@ -36,7 +36,7 @@ flowchart TD
 
     subgraph EventBus["Hạ tầng NATS JetStream"]
         NATSLive["Stream CHATIM_EVT<br/>mỗi node một ordered consumer evt.>"]
-        NATSEph["NATS Ephemeral Bus (dự kiến)<br/>Subject: live.tenant1.eph.101.>"]
+        NATSEph["NATS thường (không JetStream)<br/>Subject: eph.tenant1.101.typing"]
     end
 
     subgraph CoreLayer["Cụm Core Service"]
@@ -115,10 +115,11 @@ stateDiagram-v2
 
 ### 3.2. Đường truyền tắt cho Tín hiệu tạm thời (Ephemeral Bypass — Tiết kiệm 100% DB IOPS)
 - **Vấn đề:** Các tín hiệu như "Đang gõ tin" (Typing) hay "Nhịp tim trực tuyến" (Presence Ping) diễn ra liên tục hàng nghìn lần mỗi giây nhưng không có giá trị lưu trữ lâu dài. Nếu ghi các tín hiệu này vào MongoDB, cơ sở dữ liệu sẽ sập ngay lập tức vì quá tải ghi đĩa.
-- **Cơ chế bảo đảm:**
-  - Toàn bộ gói tin Ephemeral được gán chủ đề riêng (dự kiến): `live.*.eph.*`.
-  - App websocket nhận gói tin từ Client sẽ **bỏ qua hoàn toàn dịch vụ Core và MongoDB**, đẩy thẳng trực tiếp vào kênh phân phối siêu tốc của NATS.
-  - Các tín hiệu này chỉ sống trong vài giây trong bộ nhớ RAM và tự động tiêu biến. Nếu người dùng rớt mạng, tín hiệu mất đi một cách tự nhiên mà không để lại bất kỳ rác dữ liệu nào trong cơ sở dữ liệu.
+- **Cơ chế bảo đảm (đã xây ở phần 4, chi tiết §10):**
+  - App websocket nhận tín hiệu từ máy và **bỏ qua hoàn toàn core và MongoDB**.
+  - **Đang gõ** đi qua core NATS thường (không JetStream) trên subject `eph.{tenant}.{room}.typing`, bắn rồi quên (D199). Node nào cũng nhận và đẩy cho người đang mở room.
+  - **Online** không đi qua NATS: mỗi người online là một khoá có hạn `chatim:presence:{tenant}:{user}` trong Redis riêng `chatim-redis-presence`, do node của người đó đóng dấu theo heartbeat (D200). Người hỏi nhận câu trả lời đọc từ Redis ở mỗi heartbeat của mình (D201).
+  - Không có gì để dọn: tín hiệu gõ mất thì máy tự tắt sau 6 giây, khoá online hết hạn thì Redis tự xoá.
 
 ### 3.3. Mã hoá một lần, dùng chung cho mọi kết nối
 - Trong một phòng chat lớn có 5.000 người đang online cùng lúc:
@@ -187,6 +188,8 @@ Bảng mã đóng đầy đủ của phần 1 nằm ở [§7.4](#74-mã-đóng).
 | **File JWKS (khoá công khai)** | Xác thực JWT khi mở kết nối và khi gia hạn | Phần 1: file JWKS nạp một lần lúc khởi động (`WS_JWT_KEYS_FILE`), không gọi dịch vụ nào lúc kiểm token; file sai thì node không khởi động. Xoay khoá bằng rolling restart (D183). `identity` Phase 2 sẽ phát JWKS. |
 | **Redis state** | Đọc bảng slot để chọn core (chỉ đọc) | Redis chết: node giữ bảng slot đang có và mọi kết nối gRPC tới core; lần nạp không thấy core nào cũng không đóng kết nối (D186). Lúc khởi động node chờ bảng slot rồi mới bật `/readyz`. |
 | **Core `ListMyRoomIDs`** | Danh sách room đang ở và đã rời của người dùng khi login và khi nạp lại sau một lần nhảy (D195) | Tối đa `WS_ROOM_IDS_INFLIGHT` (64) lần gọi đang chạy mỗi node, nạp lại theo `WS_RELOAD_RATE`; lỗi thì gửi `load_failed` cho mọi kết nối của người đó, máy tự xin nạp lại (`load_rooms`) hoặc nối lại. |
+| **Core NATS (`eph.*.*.typing`, phần 4)** | Chuyển tín hiệu đang gõ giữa các node (D199) | Bắn rồi quên: mất NATS thì người cùng node vẫn thấy, node khác không thấy (đếm `typing_relay_failures_total`); không gửi lại, máy tự tắt "đang gõ" sau 6 giây. |
+| **Redis presence `chatim-redis-presence` (phần 4)** | Khoá online `chatim:presence:{tenant}:{user}` có hạn `WS_PRESENCE_TTL` (D200, D201) | Một primary, không Cluster (`MGET` nhiều khoá), không lưu đĩa, `noeviction`. Node không chờ nó lúc khởi động và `/readyz` không phụ thuộc nó (gauge `presence_redis_up`). Lỗi ghi: người trên node đó hiện offline ở mọi nơi tới khi node ghi lại được. Lỗi đọc: không gửi `presence`, máy giữ trạng thái đang thấy. Redis khởi động lại hoặc bị xoá sạch: một số người hiện offline tối đa ~10s rồi node đóng dấu lại. |
 | **Core Service (gRPC Unary)** | Xử lý mọi lệnh của máy | App websocket gọi Core qua gRPC theo bảng slot, hạn `CORE_REQUEST_DEADLINE` (5s), **không tự gửi lại** (luật không retry nội bộ). Core lỗi `UNAVAILABLE` thì app trả nguyên mã cho máy và kích làm mới bảng slot (gom, ≥ 250ms một lần); máy gửi lại cùng `cid`/`request_id` và lần sau đi đúng core mới. |
 
 ### 6.1. Chỉ số Sức khoẻ Vận hành & Cảnh báo SRE (Key Metrics & Alerts)
@@ -194,6 +197,8 @@ Bảng mã đóng đầy đủ của phần 1 nằm ở [§7.4](#74-mã-đóng).
 > **Đã có từ phần 1** (trên `/metrics` cổng admin, tiền tố `chatim_websocket_`): `connections`, `unauthenticated_connections` (gauge), `auth_failures_total{reason}`, `closes_total{code}` (chỉ mã do server đóng; nhãn 1000 gồm cả hết hạn heartbeat), `commands_rejected_total{reason=rate|inflight|unimplemented|shutdown}`, `unknown_frames_total`, `commands_total{command,code}`, histogram `core_call_seconds{command}`.
 >
 > **Thêm ở phần 2:** feed `nats_connected`, `nats_reconnects_total`, `consumer_lag_seconds{stream}` (tuổi tin vừa giao theo giờ lưu), `consumer_behind_seconds{stream}` (từ lúc watchdog thấy consumer sau đuôi stream, 0 khi kịp), `consumer_pending{stream}`, `consumer_resets_total{stream}`, `consumer_stale_skipped_total{stream}`, `catchup_jumps_total{stream}`, `catchup_jump_suppressed_total{stream}`, `catchup_jump_failures_total{stream}`, `fanout_queue_depth`, `fanout_handler_panics_total`, `events_unknown_total`, `events_dropped_at_stop_total`; bảng quan tâm `interest_users`, `interest_room_pairs`, histogram `room_ids_load_seconds`, `room_ids_load_failures_total`, `open_room_rejected_total`, `users_suspended`, `reloads_total`, histogram `reload_seconds`, `reload_failures_total`, `resyncs_total{reason}`, `events_delivered_total{level}`, `events_dropped_total{reason}`; gói `publish_packets_total`, `publish_delivered_total`, `publish_dropped_total{reason}`; hàng ghi `send_queue_bytes`. **Chưa có luật alert nào cho websocket** (phần 5: `nats_connected`, `catchup_jump_suppressed_total`, độ trễ).
+>
+> **Thêm ở phần 4:** typing `typing_received_total`, `typing_delivered_total`, `typing_relay_failures_total`, `typing_dropped_total{reason=rate|not_member|malformed|queue_full|send_full}`; presence `presence_redis_up`, `presence_stamps_total`, `presence_stamp_failures_total`, `presence_stamp_pending`, `presence_reads_total`, `presence_read_failures_total`, `presence_cached_users`, histogram `presence_read_seconds`, `presence_answers_total`, `presence_watch_truncated_total`, `presence_watching_connections`, `presence_answer_dropped_total{reason=send_full|busy}`. Alert (node mất Redis presence) để phần 5.
 >
 > **Dự kiến, chưa xây:** các metric và alert dưới đây là thiết kế cho phần 3–5; chưa có trong code và chưa có trong `deploy/prometheus/alerts.yml`.
 
@@ -219,8 +224,8 @@ Bảng mã đóng đầy đủ của phần 1 nằm ở [§7.4](#74-mã-đóng).
 ### 7.2. Frame
 
 - Mọi frame là **nhị phân protobuf** (D185): máy gửi `ClientFrame`, app gửi `ServerFrame`. Frame chữ → đóng 1003. Không có kênh JSON, chưa bật nén.
-- `ClientFrame` (oneof): `auth{token}` (10), `heartbeat{}` (11), `request{id, oneof request}` (12); phần 2: `open_room{room_id}` (20), `close_room{room_id}` (21), `load_rooms{}` (22, xin nạp lại danh sách room sau `load_failed`, D195).
-- `ServerFrame` (oneof): `response{id, code, message, oneof result}` (10); phần 2: `ready{}` (20), `event` (21, message `Event`), `notification` (22, message `Notification`), `resync{reason}` (23), `room_closed{room_id, reason}` (24), `load_failed{retry_after_ms}` (25, nạp danh sách room lỗi; kết nối vẫn giữ, D195). Ý nghĩa ở §8.
+- `ClientFrame` (oneof): `auth{token}` (10), `heartbeat{}` (11), `request{id, oneof request}` (12); phần 2: `open_room{room_id}` (20), `close_room{room_id}` (21), `load_rooms{}` (22, xin nạp lại danh sách room sau `load_failed`, D195); phần 4: `typing{room_id, stopped}` (23), `watch_presence{user_ids}` (24, thay cả danh sách hỏi online).
+- `ServerFrame` (oneof): `response{id, code, message, oneof result}` (10); phần 2: `ready{}` (20), `event` (21, message `Event`), `notification` (22, message `Notification`), `resync{reason}` (23), `room_closed{room_id, reason}` (24), `load_failed{retry_after_ms}` (25, nạp danh sách room lỗi; kết nối vẫn giữ, D195); phần 4: `typing{room_id, user_id, stopped}` (26, message `TypingNotice`), `presence{entries[{user_id, online}]}` (27, cả danh sách hỏi). Ý nghĩa ở §8 và §10.
 - Số field 10–19 dành cho phần 1, 20–39 cho phần 2–4 (event, vị trí đọc, typing, online, resync); chỉ thêm, không đổi số cũ.
 - `open_room` khi người dùng chưa nạp xong (trước `ready`, đang tạm ngừng, sau `load_failed`) bị bỏ qua, không trả lời; máy chỉ mở room sau `ready`/`resync` (§8.2).
 - Sau khi đã auth, frame loại app chưa biết (máy mới hơn app) bị bỏ qua và đếm ở `unknown_frames_total`, không đóng kết nối. Frame không giải mã được → đóng 1008.
@@ -340,3 +345,64 @@ Ví dụ: Lan nối lúc stream ở seq 5.000; trong lúc node hỏi core, Lan b
 - **`pkg/wsclient`:** `MarkRead(ctx, room, seq)` gửi ngay lần đầu của room đang yên, sau đó tối đa 1 lần/giây mỗi room với seq lớn nhất đang chờ (`ReadInterval`); `MarkUnread` huỷ phần chờ của room rồi gửi (không bao giờ có `MarkRead` cũ đi sau nó); `CloseRoom` gửi phần chờ trước `close_room`; `FlushReads(ctx)` gửi mọi phần chờ và chờ mọi `MarkRead` đang bay trả lời: app gọi nó trước khi tải danh sách hội thoại qua HTTPS (D198) để unread đúng; `CloseContext(ctx)` cũng vậy trước khi đóng (`Close` dùng hạn 1s); lỗi của lần gửi theo nhịp báo qua `OnReadError(room, err)`; `Applier` áp `read_positions` theo (room, user) `read_ver` lớn hơn và chỉ đưa dòng mới hơn cho `OnEvent`.
 - **Độ trễ:** e2e qua websocket-1 đo A → B 353ms (cửa sổ 1s).
 
+## 10. Đang gõ và online (M4 phần 4, đã xây)
+
+> Xây trên `feat/m4`, theo [tóm tắt phần 4](../plans/2026-10-24-m4-4-typing-va-online-summary.md); quyết định D199–D201 ở [decision log §17.11](../decision-log.md). Code: `apps/websocket/internal/typing` (nhận, đẩy, chuyển giữa node), `apps/websocket/internal/presence` (đóng dấu, đọc, bộ đệm), `apps/websocket/internal/session` (frame, giới hạn, danh sách hỏi), `pkg/wsclient` (giãn nhịp, tự tắt), `proto/chatim/v1/ws.proto` và `ws_ephemeral.proto` (`TypingSignal`). Không đụng core, Mongo hay JetStream.
+
+### 10.1. Frame
+
+| Frame | Số | Nội dung |
+|---|---|---|
+| `ClientFrame.typing` | 23 | `room_id`, `stopped` |
+| `ClientFrame.watch_presence` | 24 | `user_ids[]`: thay cả danh sách hỏi của kết nối, tối đa `WS_PRESENCE_WATCH_MAX` (200) |
+| `ServerFrame.typing` | 26 | `TypingNotice{room_id, user_id, stopped}` |
+| `ServerFrame.presence` | 27 | `entries[{user_id, online}]`: cả danh sách hỏi, theo thứ tự đã gửi |
+
+Tin giữa các node `TypingSignal{origin, tenant, room_id, user_id, stopped}` nằm trong `ws_ephemeral.proto`, không phải frame của máy.
+
+### 10.2. Đang gõ (D199)
+
+Ví dụ: Lan ở `websocket-1`, Nam cùng node, Hòa ở `websocket-2`; Nam và Hòa đang mở nhóm Kho HCM, Châu là thành viên nhưng không mở.
+
+1. Máy Lan gửi `typing{Kho HCM}`; `pkg/wsclient.Typing` gửi tối đa một lần mỗi 3 giây mỗi room (`TypingInterval`).
+2. `websocket-1` qua giới hạn frame chung, rồi `WS_TYPING_RATE` 2/s, `WS_TYPING_BURST` 4 mỗi kết nối; kiểm Lan là thành viên đang sống của room trong bảng RAM (chưa `ready`, không là thành viên, id room sai thì bỏ và đếm, không trả lời, không đóng kết nối).
+3. Node đẩy ngay `typing` cho Nam (đang mở room trên node), không cho máy nào của Lan, rồi phát `TypingSignal` lên `eph.{tenant}.{room}.typing` (core NATS, không chờ). Phát lỗi thì người cùng node vẫn thấy, chỉ đếm.
+4. `websocket-2` nhận qua subscription `eph.*.*.typing` (hàng `WS_TYPING_QUEUE`, giới hạn chờ của thư viện `WS_TYPING_PENDING_MSGS` + 64MB), bỏ tin có `origin` của chính tiến trình mình, đẩy cho Hòa. Châu không nhận.
+5. Mọi frame `typing` vào hàng gửi bằng `Offer`: chỉ khi hàng còn dưới một nửa `WS_SEND_QUEUE` frame và `WS_SEND_QUEUE_BYTES`; không thì bỏ (`send_full`), không bao giờ đóng 4008.
+6. Máy Hòa (`pkg/wsclient.OnTyping`) báo `true` mỗi lần nhận, `false` khi nhận `stopped`, khi thấy `msg_created` của Lan trong room, hoặc sau `TypingTimeout` 6 giây không có tín hiệu mới. `StopTyping` chỉ gửi khi trước đó đã gửi `typing`; `SendMessage` qua `Call` kết thúc gõ của room đó mà không gửi `stopped`.
+
+### 10.3. Online (D200, D201)
+
+- **Một luật:** khoá `chatim:presence:{tenant}:{user}` = `1` còn thì online, mất thì offline. Hạn `WS_PRESENCE_TTL` 15s.
+- **Đóng dấu:** sau auth và trên mọi frame đã auth (heartbeat, ping, pong; `pkg/wsclient` heartbeat mỗi 5–8s), node đánh dấu người đó chờ ghi, mỗi người tối đa một lần mỗi `WS_PRESENCE_STAMP_EVERY` 2s (nhiều máy cùng người ghi một lần). Mỗi `WS_PRESENCE_FLUSH` 1s node ghi `SET … EX` theo lô `WS_PRESENCE_BATCH` 500 trong pipeline, hạn `WS_PRESENCE_REDIS_TIMEOUT` 500ms tính cả lần thử lại; lô lỗi đầu tiên dừng lượt, người chưa ghi chờ lượt sau. Người không có frame quá TTL bị bỏ khỏi RAM. Không ai xoá hay sửa khoá của người khác; nối lại sau 3 giây không làm khoá mất.
+- **Hỏi:** `watch_presence` thay danh sách hỏi (bỏ id sai và trùng, giữ 200 người đầu) và được trả ngay; sau đó mỗi heartbeat hay ping của người hỏi có danh sách khác rỗng được trả **cả danh sách** trong một frame `presence`, cả trước `ready`. Danh sách mất theo kết nối; máy gửi lại sau khi nối lại.
+- **Đọc:** người đọc thấy online trong `WS_PRESENCE_CACHE` 5s qua lấy từ bộ đệm RAM (chia shard) của node; còn lại một `MGET`. Kết quả offline không bao giờ giữ. Lượt ghi mỗi giây cũng xoá mục bộ đệm cũ hơn 5s.
+- **Một lần trả mỗi kết nối:** đang có lần trả chạy thì lần mới bị bỏ (`busy`); hàng gửi quá nửa thì bỏ (`send_full`); Redis lỗi thì không gửi gì. Lần sau gửi kết quả mới, nên không máy nào kẹt ở trạng thái cũ.
+- **Ai xem được:** mọi người cùng tenant (tenant từ token).
+- **Thời gian thấy:** online ở heartbeat kế của người xem (≤ ~9s); offline 10–30s sau lần đóng dấu cuối (TTL 15s, cộng tối đa 5s bộ đệm và một nhịp heartbeat). Chưa có "xem lần cuối".
+
+### 10.4. Cấu hình
+
+`WS_TYPING_RATE` (2), `WS_TYPING_BURST` (4), `WS_TYPING_QUEUE` (8192), `WS_TYPING_PENDING_MSGS` (65536); `WS_PRESENCE_REDIS_ADDR` (`chatim-redis-presence:6379`), `WS_PRESENCE_REDIS_DB` (0), `WS_PRESENCE_REDIS_PASSWORD[_FILE]`, `WS_PRESENCE_REDIS_TIMEOUT` (500ms), `WS_PRESENCE_REDIS_POOL` (64), `WS_PRESENCE_TTL` (15s), `WS_PRESENCE_STAMP_EVERY` (2s), `WS_PRESENCE_FLUSH` (1s), `WS_PRESENCE_BATCH` (500, ≤ 1000), `WS_PRESENCE_CACHE` (5s, < TTL), `WS_PRESENCE_WATCH_MAX` (200). Luật khởi động: `WS_PRESENCE_STAMP_EVERY + 10s + 2 × WS_PRESENCE_FLUSH + WS_PRESENCE_REDIS_TIMEOUT < WS_PRESENCE_TTL` và `WS_PRESENCE_TTL ≤ WS_HEARTBEAT_TIMEOUT + WS_PRESENCE_STAMP_EVERY` (với mặc định `WS_HEARTBEAT_TIMEOUT ≥ 13s`). Bảng đầy đủ ở README.
+
+### 10.5. Vòng đời
+
+- Khởi động: subscription typing bật sau khi feed chạy; bộ đóng dấu chạy sau feed và không chờ Redis presence.
+- Tắt: dừng typing ngay trước feed; dừng bộ đóng dấu (không ghi lượt cuối) và đóng client Redis presence sau bước đóng kết nối. Khoá của người trên node tự hết hạn.
+
+### 10.6. Khi có sự cố
+
+| Chuyện | Người dùng thấy |
+|---|---|
+| Node chết đột ngột (e2e: `docker kill -s KILL websocket-2`) | người trên node đó offline sau 10–30s, trừ ai đã nối sang node khác |
+| Node khởi động lại ngay | không có gì phải dọn |
+| Máy mất mạng mà không đóng kết nối | offline sau 10–30s |
+| Redis presence lỗi đọc | chấm xanh đứng yên tới khi Redis về |
+| Một node không ghi được Redis presence | người trên node đó hiện offline ở mọi nơi tới khi nối lại (alert ở phần 5) |
+| Redis presence khởi động lại hoặc bị xoá sạch | một số người offline tối đa ~10s rồi tự online lại |
+| Mất một tin NATS typing | dòng "đang gõ" không hiện hoặc tắt sau 6 giây |
+
+### 10.7. Kiểm thử
+
+- Unit: typing chỉ từ thành viên sống tới người đang mở room, không về máy của người gõ, bỏ khi quá nhanh hoặc hàng quá nửa; đóng dấu, gom lô, dừng lượt ở lô lỗi, bỏ người im; trả cả danh sách, bộ đệm chỉ giữ online, một lần trả mỗi kết nối; `pkg/wsclient` giãn 3s, tự tắt 6s. Itest Redis thật cho bộ đóng dấu.
+- e2e phase 11 (hai node, `corecli e2e ws-ephemeral` và `ws-ephemeral-kill`): A ở node 1 gõ, B ở node 2 đang mở nhóm thấy trong 1s, C không mở và máy thứ hai của A không thấy, `StopTyping` tới B; D ngoài nhóm gõ thì không ai thấy; B xem [A, D]: A online, D offline trong 35s sau khi đóng; A nối lại sau 3s không bao giờ offline trong 20s; `kill -9 websocket-2` thì người ở đó offline trên máy xem ở node 1; log `websocket-2` không chứa token nào của phase 11.

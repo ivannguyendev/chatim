@@ -34,7 +34,9 @@ apps/core/               # main.go (gọi app.Main); itest/: test tích hợp c�
   internal/event/        # publish, stateclear, projection, sweep, timer, eventkit, resync (event theo cờ `_state`)
   internal/store/        # port + memstore, mongostore, storetest
   internal/platform/     # slot, metrics, redisguard, testlog (hạ tầng cụm)
-apps/websocket/          # WebSocket (gws): kết nối, token, 12 lệnh ghi realtime, đẩy event; internal/{app,config,session,command,feed,interest,frame}
+apps/websocket/          # WebSocket (gws): kết nối, token, 12 lệnh ghi realtime, đẩy event, đang gõ, online; internal/{app,config,session,command,feed,interest,frame,typing,presence}
+  internal/typing/       # đang gõ: kiểm thành viên, đẩy cho người đang mở room, chuyển giữa node qua core NATS eph.{tenant}.{room}.typing
+  internal/presence/     # online: đóng dấu khoá chatim:presence:{tenant}:{user} (EX 15s) trên Redis presence, trả danh sách hỏi mỗi heartbeat, bộ đệm 5s chỉ cho online
 apps/gateway/            # HTTPS (Connect): 22 lệnh đọc và quản lý room; internal/{app,config,api,limit}
 modules/mention/         # Mention App: module nhúng trong core (D182), không có main.go
   mentionapp/            # bề mặt công khai core import: Config, New, Prepare, Run, Close, Register, Watch, Probes; cổng CoreReader
@@ -79,14 +81,14 @@ Compose đọc `CORE_GOGC` (mặc định 100, thành `GOGC` của core) lúc `m
     make lint                    # golangci-lint run ./...
     make vuln                    # go tool govulncheck ./...
     make itest                   # go test -race -shuffle=on -count=1 ./... với Mongo/Redis/NATS thật (cần infra-up)
-    make core-up                 # sinh khoá dev nếu chưa có, build image apps/core + apps/websocket + apps/gateway, chạy core-1 + core-2 + websocket-1 + gateway-1 (profile app), chờ cả bốn healthy
-    make core-down               # dừng và xoá gateway-1, websocket-1, core-1, core-2
+    make core-up                 # sinh khoá dev nếu chưa có, build image apps/core + apps/websocket + apps/gateway, chạy core-1 + core-2 + websocket-1 + websocket-2 + gateway-1 (profile app), chờ cả năm healthy
+    make core-down               # dừng và xoá gateway-1, websocket-1, websocket-2, core-1, core-2
     make dev-keys                # sinh khoá ký dev vào .local/ws-keys/ (private.jwk 0600, jwks.json 0644) nếu chưa có; muốn thay khoá: xoá thư mục rồi chạy lại
     make -s ws-token ARGS="-tenant e2e -user alice"   # in token dev (mặc định -ttl 15m, iss chatim-dev, aud chatim-websocket) để nối ws://127.0.0.1:8081/ws hoặc gọi http://127.0.0.1:8082
-    make ws-logs                 # docker logs -f chatim-websocket-1
+    make ws-logs                 # docker logs -f chatim-websocket-1; make ws-logs NODE=2 cho chatim-websocket-2
     make gw-logs                 # docker logs -f chatim-gateway-1
     make alerts-check            # promtool kiểm deploy/prometheus/alerts.yml (trong Docker)
-    make e2e                     # build tools/corecli, chạy scripts/e2e.sh (route theo slot, kill core-1, kiểm tra; phase 3 sửa seq 1, xoá seq 2; phase 4 react seq 3 rồi đổi emoji, ghim seq 4; phase 5 member: DM từ chối, thêm, đổi role, priority, xoá, vị trí đọc, ẩn và clear, owner cuối rời rồi vào lại, kiểm reply và event trên subject `room`/`member`/`message`; phase 6 liên kết: mở DM hai lần ra một room, tạo group hai lần cùng `request_id`, react, hai trả lời + `GetReplies`, chặn xoá tin cha, xoá một trả lời, mention user/nhóm/`@all` + `ListMentions`, `@nhóm`/`@all` gửi trước khi vào group không hiện, forward, bookmark + `ListBookmarks`, 22 event live; phase 7 danh sách hội thoại và API đọc: tin hệ thống, unread sau gửi/đọc/xoá/ẩn, ghim và lưu trữ, trang 2, `GetRooms`, `UpdateRoom`, `AROUND`, `GetMessages`, thread, người react, ghim, member, forward có `skip_unread`/`meta`, 34 event live; phase 8 Mention App: nhóm được tag và nhóm tắt, `SetUserGroups` cho 3 người rồi chuyển 1 người, `@nhóm` báo đúng người còn trong room, `@nhóm` tắt không ai nhận, sửa thêm rồi bỏ `@user` (`mention_notified`, `mention_retracted`, `ListMentions`), xoá tin, `@all`, `ListRoomGroups`, `SetUserGroups` với `ver` cũ; kiểm 12 thông báo đọc từ gói `WsPublish` trên `websocket.publish.{tenant}`; phase 9 websocket: lệnh qua websocket-1 so với gRPC, 4001/4002, rồi `corecli e2e ws-events` hai người A/B: nhóm mới hiện ngay, react chỉ khi mở room, không lọt event riêng, `@B`/`@all` đúng một lần, `member_removed` rồi `room_closed` và im lặng, 0 trùng 0 lỗ; không token nào trong log websocket)
+    make e2e                     # build tools/corecli, chạy scripts/e2e.sh (route theo slot, kill core-1, kiểm tra; phase 3 sửa seq 1, xoá seq 2; phase 4 react seq 3 rồi đổi emoji, ghim seq 4; phase 5 member: DM từ chối, thêm, đổi role, priority, xoá, vị trí đọc, ẩn và clear, owner cuối rời rồi vào lại, kiểm reply và event trên subject `room`/`member`/`message`; phase 6 liên kết: mở DM hai lần ra một room, tạo group hai lần cùng `request_id`, react, hai trả lời + `GetReplies`, chặn xoá tin cha, xoá một trả lời, mention user/nhóm/`@all` + `ListMentions`, `@nhóm`/`@all` gửi trước khi vào group không hiện, forward, bookmark + `ListBookmarks`, 22 event live; phase 7 danh sách hội thoại và API đọc: tin hệ thống, unread sau gửi/đọc/xoá/ẩn, ghim và lưu trữ, trang 2, `GetRooms`, `UpdateRoom`, `AROUND`, `GetMessages`, thread, người react, ghim, member, forward có `skip_unread`/`meta`, 34 event live; phase 8 Mention App: nhóm được tag và nhóm tắt, `SetUserGroups` cho 3 người rồi chuyển 1 người, `@nhóm` báo đúng người còn trong room, `@nhóm` tắt không ai nhận, sửa thêm rồi bỏ `@user` (`mention_notified`, `mention_retracted`, `ListMentions`), xoá tin, `@all`, `ListRoomGroups`, `SetUserGroups` với `ver` cũ; kiểm 12 thông báo đọc từ gói `WsPublish` trên `websocket.publish.{tenant}`; phase 9 websocket: lệnh qua websocket-1 so với gRPC, 4001/4002, rồi `corecli e2e ws-events` hai người A/B: nhóm mới hiện ngay, react chỉ khi mở room, không lọt event riêng, `@B`/`@all` đúng một lần, `member_removed` rồi `room_closed` và im lặng, 0 trùng 0 lỗ; không token nào trong log websocket; phase 10 gateway; phase 11 hai node websocket: `corecli e2e ws-ephemeral` (đang gõ từ node 1 tới người đang mở nhóm ở node 2 trong 1s, không tới ai khác, người ngoài nhóm gõ bị bỏ, online, offline trong 35s sau khi đóng, nối lại sau 3s không offline) và `ws-ephemeral-kill` (`docker kill -s KILL websocket-2`, người ở đó offline trên máy xem ở node 1); không token nào trong log websocket-2)
     docker run --rm --network chatim_default -e REDIS_PASSWORD chatim/corecli:dev edit -room ID -seq N -base V -text "..."   # sửa tin; cùng cờ: delete -room ID -seq N -base V, hide -room ID -seq N, clear -room ID, edits -room ID -seq N [-after V]; -tenant/-user chọn người gọi; image do make e2e build
     docker run --rm --network chatim_default -e REDIS_PASSWORD chatim/corecli:dev react -room ID -seq N -emoji "👍"   # đặt/đổi reaction của người gọi (-emoji "" gỡ); pin -room ID -seq N, unpin -room ID -seq N; -tenant/-user chọn người gọi
     docker run --rm --network chatim_default -e REDIS_PASSWORD chatim/corecli:dev add-members -room ID -users a,b [-request-id R]   # thêm người (cùng -request-id = gửi lại đúng một lần); cùng cờ: remove-member -room ID -target U, leave -room ID, set-role -room ID -target U -role owner|admin|member, set-priority -room ID -target U -priority N, read -room ID [-seq N] (0 = tin cuối), unread -room ID -seq N; -tenant/-user chọn người gọi
@@ -262,7 +264,7 @@ Không token → 401 `unauthenticated`; lệnh realtime (vd `SendMessage`) hoặ
 
 ## Cổng
 
-Với app, compose publish ra host chỉ gRPC của core, WebSocket của websocket-1 và HTTP của gateway-1, và chỉ trên loopback — vì caller hiện được tin cậy qua metadata tới khi có mTLS (M5). Hạ tầng dev publish cổng riêng (`.env`):
+Với app, compose publish ra host chỉ gRPC của core, WebSocket của websocket-1 và websocket-2 và HTTP của gateway-1, và chỉ trên loopback — vì caller hiện được tin cậy qua metadata tới khi có mTLS (M5). Hạ tầng dev publish cổng riêng (`.env`):
 
 | Cổng | Dịch vụ | Ghi chú |
 |---|---|---|
@@ -272,8 +274,9 @@ Với app, compose publish ra host chỉ gRPC của core, WebSocket của websoc
 | `127.0.0.1:9001` | `core-1` gRPC (`CORE1_GRPC_PORT`) | |
 | `127.0.0.1:9002` | `core-2` gRPC (`CORE2_GRPC_PORT`) | |
 | `127.0.0.1:8081` | `websocket-1` WebSocket `/ws` (`WS1_PORT`) | Cần token dev (`make -s ws-token`) |
+| `127.0.0.1:8083` | `websocket-2` WebSocket `/ws` (`WS2_PORT`) | Node thứ hai để thử đang gõ và online giữa hai node; cùng token dev |
 | `127.0.0.1:8082` | `gateway-1` HTTP Connect (`GW1_PORT`) | Cần token dev (`Authorization: Bearer`) |
-| — | admin (`/healthz`, `/readyz`, `/metrics`, pprof) mỗi core, cổng `9090`; admin websocket-1 và gateway-1 (`/livez`, `/readyz`, `/metrics`) cổng `9090` | Chỉ trong mạng compose, không publish ra host |
+| — | admin (`/healthz`, `/readyz`, `/metrics`, pprof) mỗi core, cổng `9090`; admin websocket-1, websocket-2 và gateway-1 (`/livez`, `/readyz`, `/metrics`) cổng `9090` | Chỉ trong mạng compose, không publish ra host |
 
 ## Tài liệu
 
