@@ -58,6 +58,41 @@ x-core-env: &core-env
   GOMEMLIMIT: 920MiB
   GOGC: ${CORE_GOGC:-100}
 
+x-websocket: &websocket
+  image: chatim/websocket:dev
+  profiles: ["app"]
+  restart: unless-stopped
+  mem_limit: 2g
+  stop_grace_period: 18s
+  secrets: [redis_password, redis_presence_password, ws_jwks]
+  depends_on:
+    redis:
+      condition: service_healthy
+    redis-presence:
+      condition: service_healthy
+    core-1:
+      condition: service_healthy
+    core-2:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD", "/app", "probe"]
+    interval: 5s
+    timeout: 3s
+    retries: 3
+    start_period: 30s
+    start_interval: 1s
+
+x-websocket-env: &websocket-env
+  REDIS_ADDR: chatim-redis:6379
+  REDIS_PASSWORD_FILE: /run/secrets/redis_password
+  WS_PRESENCE_REDIS_ADDR: chatim-redis-presence:6379
+  WS_PRESENCE_REDIS_PASSWORD_FILE: /run/secrets/redis_presence_password
+  WS_JWT_KEYS_FILE: /run/secrets/ws_jwks
+  WS_JWT_ISSUER: chatim-dev
+  WS_JWT_AUDIENCE: chatim-websocket
+  NATS_URL: nats://chatim-nats:4222
+  GOMEMLIMIT: 1600MiB
+
 services:
   mongodb:
     image: mongo:8.2
@@ -238,42 +273,22 @@ services:
       - "127.0.0.1:${CORE2_GRPC_PORT:-9002}:9000"
 
   websocket-1:
-    image: chatim/websocket:dev
+    <<: *websocket
     container_name: chatim-websocket-1
-    profiles: ["app"]
-    restart: unless-stopped
-    mem_limit: 2g
-    stop_grace_period: 18s
-    secrets: [redis_password, redis_presence_password, ws_jwks]
     environment:
+      <<: *websocket-env
       WS_NODE_ID: websocket-1
-      REDIS_ADDR: chatim-redis:6379
-      REDIS_PASSWORD_FILE: /run/secrets/redis_password
-      WS_PRESENCE_REDIS_ADDR: chatim-redis-presence:6379
-      WS_PRESENCE_REDIS_PASSWORD_FILE: /run/secrets/redis_presence_password
-      WS_JWT_KEYS_FILE: /run/secrets/ws_jwks
-      WS_JWT_ISSUER: chatim-dev
-      WS_JWT_AUDIENCE: chatim-websocket
-      NATS_URL: nats://chatim-nats:4222
-      GOMEMLIMIT: 1600MiB
     ports:
       - "127.0.0.1:${WS1_PORT:-8081}:8080"
-    depends_on:
-      redis:
-        condition: service_healthy
-      redis-presence:
-        condition: service_healthy
-      core-1:
-        condition: service_healthy
-      core-2:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "/app", "probe"]
-      interval: 5s
-      timeout: 3s
-      retries: 3
-      start_period: 30s
-      start_interval: 1s
+
+  websocket-2:
+    <<: *websocket
+    container_name: chatim-websocket-2
+    environment:
+      <<: *websocket-env
+      WS_NODE_ID: websocket-2
+    ports:
+      - "127.0.0.1:${WS2_PORT:-8083}:8080"
 
   gateway-1:
     image: chatim/gateway:dev

@@ -42,6 +42,8 @@ func dialPeer(base context.Context, url, gatewayURL, token string, p *wsPeer) er
 		wsclient.OnResync(p.feed.Resync),
 		wsclient.OnRoomClosed(p.feed.RoomClosed),
 		wsclient.OnGap(p.feed.Gap),
+		wsclient.OnTyping(p.feed.Typing),
+		wsclient.OnPresence(p.feed.Presence),
 	)
 	if err != nil {
 		return fmt.Errorf("dial %s as %s: %w", url, p.name, err)
@@ -68,7 +70,11 @@ func historyOverWS() *chatimv1.ClientRequest {
 }
 
 func (p *wsPeer) await(from int, m e2e.WSMatch) (int, error) {
-	ctx, cancel := context.WithTimeout(p.base, p.wait)
+	return p.awaitUntil(from, m, time.Now().Add(p.wait))
+}
+
+func (p *wsPeer) awaitUntil(from int, m e2e.WSMatch, deadline time.Time) (int, error) {
+	ctx, cancel := context.WithDeadline(p.base, deadline)
 	defer cancel()
 	i, err := p.feed.Wait(ctx, from, m)
 	if err != nil {

@@ -11,10 +11,14 @@ watcher="chatim-e2e-watch-$$"
 ws_key="${WS_KEY:-$scripts/../.local/ws-keys/private.jwk}"
 ws_url="${WS_URL:-ws://chatim-websocket-1:8080/ws}"
 ws_container="${WS_CONTAINER:-chatim-websocket-1}"
+ws2_url="${WS2_URL:-ws://chatim-websocket-2:8080/ws}"
+ws2_container="${WS2_CONTAINER:-chatim-websocket-2}"
+ws2_watcher="chatim-e2e-ws2-watch-$$"
 gw_url="${GW_URL:-http://chatim-gateway-1:8080}"
 gw_container="${GW_CONTAINER:-chatim-gateway-1}"
 state="$(mktemp -d "${TMPDIR:-/tmp}/chatim-e2e.XXXXXX")"
 killed=""
+ws2_killed=""
 result=FAIL
 step="start"
 
@@ -31,15 +35,27 @@ restore() {
   fi
 }
 
+restore_ws2() {
+  if [ -n "$ws2_killed" ]; then
+    echo "restore: docker start $ws2_container"
+    docker start "$ws2_container" >/dev/null
+    "$scripts/wait-core-healthy.sh" "$ws2_container"
+    ws2_killed=""
+  fi
+}
+
 finish() {
   set +e
-  docker rm -f "$watcher" >/dev/null 2>&1
+  docker rm -f "$watcher" "$ws2_watcher" >/dev/null 2>&1
   if [ -n "$killed" ]; then
     restore || result=FAIL
   fi
+  if [ -n "$ws2_killed" ]; then
+    restore_ws2 || result=FAIL
+  fi
   rm -rf "$state"
   if [ "$result" = PASS ]; then
-    echo "e2e PASS: $first messages before and $after after killing $victim, no loss, no duplicate, every acked seq live; seq 1 edited and seq 2 deleted on history, edit history and live; seq 3 reacted with the first then the second emoji from GetReactionSettings and an unlisted emoji refused, seq 4 pinned, on replies, history and live; members added, promoted, removed and refused, read positions, hide and clear, the last owner leaving and coming back, on replies, history and live room, member and message subjects; a direct room opened twice into one room, replies counted and listed, the parent kept while replied, mentions of a user, a group and @all listed, a forward and a bookmark, on replies, lists and live; a system message from a non-member raising unread and one with skip_unread not, the room list ordered and counted after sends, reads, a delete and a hide, pinned first, archived apart, paged by cursor, refreshed by GetRooms and renamed live, history around a seq, messages by seq, threads, reactors, pins newest first, members owner first and a forward keeping skip_unread and meta; Mention App groups set and moved, @group notifying only its current members in the room and never the sender, an inactive group notifying and listing nobody, an edit adding then dropping a user notified then retracted and listed then gone, a delete retracting, @all notifying every other member, room groups with names and an older user group list ignored; through the websocket a dev token connecting, a send, an edit, a reaction and a bookmark, with history and bookmarks read through the gateway matching gRPC, a system message refused, an unknown key and an expired token closed 4001, a silent connection closed 4002 after the auth timeout, two users on the websocket hearing a new group at once, messages without duplicate or gap, reactions only with the room open, nothing of the other user's hides and bookmarks, one notification each for @user and @all, a read position reaching the viewer and the reader's other device but not a member without the room open, member_removed then room_closed and silence after removal, the left group listed with its version by ListMyRoomIDs and still silent after a reconnect, and no token in the websocket logs; through the gateway a group created, a member added and the group renamed with the events reaching a member with the group open on the websocket, ListMyRooms, GetHistory, ListMembers and ListBookmarks equal to gRPC, an expired token refused with 401, SendMessage unimplemented on the gateway and GetHistory unimplemented on the websocket, a CORS preflight answered for a listed origin, and no token in the gateway logs"
+    echo "e2e PASS: $first messages before and $after after killing $victim, no loss, no duplicate, every acked seq live; seq 1 edited and seq 2 deleted on history, edit history and live; seq 3 reacted with the first then the second emoji from GetReactionSettings and an unlisted emoji refused, seq 4 pinned, on replies, history and live; members added, promoted, removed and refused, read positions, hide and clear, the last owner leaving and coming back, on replies, history and live room, member and message subjects; a direct room opened twice into one room, replies counted and listed, the parent kept while replied, mentions of a user, a group and @all listed, a forward and a bookmark, on replies, lists and live; a system message from a non-member raising unread and one with skip_unread not, the room list ordered and counted after sends, reads, a delete and a hide, pinned first, archived apart, paged by cursor, refreshed by GetRooms and renamed live, history around a seq, messages by seq, threads, reactors, pins newest first, members owner first and a forward keeping skip_unread and meta; Mention App groups set and moved, @group notifying only its current members in the room and never the sender, an inactive group notifying and listing nobody, an edit adding then dropping a user notified then retracted and listed then gone, a delete retracting, @all notifying every other member, room groups with names and an older user group list ignored; through the websocket a dev token connecting, a send, an edit, a reaction and a bookmark, with history and bookmarks read through the gateway matching gRPC, a system message refused, an unknown key and an expired token closed 4001, a silent connection closed 4002 after the auth timeout, two users on the websocket hearing a new group at once, messages without duplicate or gap, reactions only with the room open, nothing of the other user's hides and bookmarks, one notification each for @user and @all, a read position reaching the viewer and the reader's other device but not a member without the room open, member_removed then room_closed and silence after removal, the left group listed with its version by ListMyRoomIDs and still silent after a reconnect, and no token in the websocket logs; through the gateway a group created, a member added and the group renamed with the events reaching a member with the group open on the websocket, ListMyRooms, GetHistory, ListMembers and ListBookmarks equal to gRPC, an expired token refused with 401, SendMessage unimplemented on the gateway and GetHistory unimplemented on the websocket, a CORS preflight answered for a listed origin, and no token in the gateway logs; across two websocket nodes typing reaching a member with the group open on the other node and nobody else, an outsider's typing dropped, a watched user online, offline after closing, still online across a reconnect after 3s, offline after its node was killed, and no token in the logs of $ws2_container"
     exit 0
   fi
   echo "e2e FAIL during: $step" >&2
@@ -176,5 +192,52 @@ if grep -F -q -f "$state/gw-all-tokens" "$state/gw.log"; then
 fi
 echo "phase 10: the logs of $gw_container hold none of the $(wc -l <"$state/gw-all-tokens" | tr -d ' ') tokens used"
 step="phase 10 check"
+cli e2e check -state /state
+step="phase 11 typing and presence across two websocket nodes"
+echo "phase 11: A on $ws_container, B, C and A's second device on $ws2_container, typing to B with the group open and not to C or A's device, an outsider's typing dropped, B watching A online and a closed D offline, A reconnecting after 3s without going offline"
+docker run --rm --network "$network" --user "$(id -u):$(id -g)" -e REDIS_PASSWORD -v "$state":/state -v "$ws_key":/keys/private.jwk:ro "$image" \
+  e2e ws-ephemeral -state /state -url "$ws_url" -url2 "$ws2_url" -gateway "$gw_url"
+step="phase 11 start the watcher of a user on $ws2_container"
+docker run --rm --name "$ws2_watcher" --network "$network" --user "$(id -u):$(id -g)" -e REDIS_PASSWORD -v "$state":/state -v "$ws_key":/keys/private.jwk:ro "$image" \
+  e2e ws-ephemeral-kill -state /state -url "$ws_url" -url2 "$ws2_url" -gateway "$gw_url" >"$state/ws2-kill.log" 2>&1 &
+ws2_pid=$!
+for _ in $(seq 1 60); do
+  if grep -w watching "$state/ws2-kill.log" >/dev/null 2>&1 || ! kill -0 "$ws2_pid" 2>/dev/null; then
+    break
+  fi
+  sleep 1
+done
+if ! grep -w watching "$state/ws2-kill.log"; then
+  cat "$state/ws2-kill.log" >&2
+  echo "the watcher of $ws2_container never saw its user online" >&2
+  exit 1
+fi
+step="phase 11 kill $ws2_container"
+echo "crash: docker kill -s KILL $ws2_container"
+docker kill -s KILL "$ws2_container" >/dev/null
+ws2_killed=yes
+step="phase 11 the user of $ws2_container goes offline"
+if ! wait "$ws2_pid"; then
+  cat "$state/ws2-kill.log" >&2
+  exit 1
+fi
+cat "$state/ws2-kill.log"
+step="phase 11 restart $ws2_container"
+restore_ws2
+step="phase 11 websocket-2 logs hold no token"
+for list in ws-ephemeral-tokens ws-ephemeral-kill-tokens; do
+  if [ ! -s "$state/$list" ]; then
+    echo "phase 11 wrote no $list" >&2
+    exit 1
+  fi
+done
+cat "$state/ws-ephemeral-tokens" "$state/ws-ephemeral-kill-tokens" >"$state/ws2-all-tokens"
+docker logs "$ws2_container" >"$state/ws2.log" 2>&1
+if grep -F -q -f "$state/ws2-all-tokens" "$state/ws2.log"; then
+  echo "the logs of $ws2_container hold a token used by phase 11" >&2
+  exit 1
+fi
+echo "phase 11: the logs of $ws2_container hold none of the $(wc -l <"$state/ws2-all-tokens" | tr -d ' ') tokens used"
+step="phase 11 check"
 cli e2e check -state /state
 result=PASS

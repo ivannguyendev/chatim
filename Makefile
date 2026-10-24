@@ -16,11 +16,12 @@ COMPOSE  := docker compose -f deploy/compose/docker-compose.yml --env-file .env
 COMPOSE_ALL := $(COMPOSE) --profile postgres --profile app
 CORE_COMPOSE := $(COMPOSE) --profile app
 CORES    := core-1 core-2
-WEBSOCKETS := websocket-1
+WEBSOCKETS := websocket-1 websocket-2
 GATEWAYS := gateway-1
 WS_KEYS_DIR := .local/ws-keys
 CORECLI_IMAGE := chatim/corecli:dev
 INSTANCE ?= state
+NODE ?= 1
 REDIS_CONTAINER_state  := chatim-redis
 REDIS_CONTAINER_dedupe := chatim-redis-dedupe
 REDIS_CONTAINER_presence := chatim-redis-presence
@@ -118,7 +119,7 @@ ws-token: dev-keys
 	@docker run --rm --user "$$(id -u):$$(id -g)" -v "$(CURDIR)/$(WS_KEYS_DIR)/private.jwk":/keys/private.jwk:ro $(CORECLI_IMAGE) token -key /keys/private.jwk $(ARGS)
 
 ws-logs:
-	docker logs --tail 200 -f chatim-websocket-1
+	docker logs --tail 200 -f chatim-websocket-$(NODE)
 
 gw-logs:
 	docker logs --tail 200 -f chatim-gateway-1
