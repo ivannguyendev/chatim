@@ -1,11 +1,10 @@
-package wsclient
+package wstest
 
 import (
 	"bufio"
 	"net"
 	"net/http"
 	"testing"
-	"time"
 
 	"github.com/lxzan/gws"
 	"google.golang.org/protobuf/proto"
@@ -13,47 +12,48 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-type receivedFrame struct {
-	at    time.Time
-	frame *chatimv1.ClientFrame
+type received struct {
+	opcode gws.Opcode
+	frame  *chatimv1.ClientFrame
+	raw    []byte
 }
 
 type fakeServer struct {
 	gws.BuiltinEventHandler
-	frames  chan receivedFrame
+	got     chan received
 	onFrame func(conn *gws.Conn, frame *chatimv1.ClientFrame)
 }
 
 func newFakeServer(onFrame func(conn *gws.Conn, frame *chatimv1.ClientFrame)) *fakeServer {
-	return &fakeServer{frames: make(chan receivedFrame, 1024), onFrame: onFrame}
+	return &fakeServer{got: make(chan received, 4096), onFrame: onFrame}
 }
 
 func (s *fakeServer) OnMessage(conn *gws.Conn, message *gws.Message) {
 	defer func() { _ = message.Close() }()
+	r := received{opcode: message.Opcode, raw: append([]byte(nil), message.Bytes()...)}
 	frame := &chatimv1.ClientFrame{}
-	if err := proto.Unmarshal(message.Bytes(), frame); err != nil {
-		_ = conn.WriteClose(closePolicyViolation, nil)
-		return
+	if message.Opcode == gws.OpcodeBinary && proto.Unmarshal(r.raw, frame) == nil {
+		r.frame = frame
 	}
-	s.frames <- receivedFrame{at: time.Now(), frame: frame}
-	if s.onFrame != nil {
-		s.onFrame(conn, frame)
+	s.got <- r
+	if s.onFrame != nil && r.frame != nil {
+		s.onFrame(conn, r.frame)
 	}
 }
 
-func (s *fakeServer) drain() []receivedFrame {
-	var got []receivedFrame
+func (s *fakeServer) drain() []received {
+	var out []received
 	for {
 		select {
-		case f := <-s.frames:
-			got = append(got, f)
+		case r := <-s.got:
+			out = append(out, r)
 		default:
-			return got
+			return out
 		}
 	}
 }
 
-func dialPipe(t *testing.T, server *fakeServer, token string, opts ...Option) *Client {
+func dialPipe(t *testing.T, server *fakeServer) *Conn {
 	t.Helper()
 	clientSide, serverSide := net.Pipe()
 	upgrader := gws.NewUpgrader(server, &gws.ServerOption{SubProtocols: []string{Subprotocol}})
@@ -73,18 +73,18 @@ func dialPipe(t *testing.T, server *fakeServer, token string, opts ...Option) *C
 		conn.ReadLoop()
 	}()
 	t.Cleanup(func() { <-serverDone })
-	client, err := DialConn(t.Context(), clientSide, "ws://chatim.test/ws", token, opts...)
+	c, err := dialConn(t.Context(), clientSide, "ws://chatim.test/ws")
 	if err != nil {
-		t.Fatalf("DialConn: %v", err)
+		t.Fatalf("dialConn: %v", err)
 	}
-	return client
+	return c
 }
 
-func writeServerFrame(t *testing.T, conn *gws.Conn, frame *chatimv1.ServerFrame) {
+func push(t *testing.T, conn *gws.Conn, frame *chatimv1.ServerFrame) {
 	t.Helper()
 	payload, err := proto.Marshal(frame)
 	if err != nil {
-		t.Errorf("marshal server frame: %v", err)
+		t.Errorf("marshal: %v", err)
 		return
 	}
 	_ = conn.WriteMessage(gws.OpcodeBinary, payload)
@@ -92,11 +92,13 @@ func writeServerFrame(t *testing.T, conn *gws.Conn, frame *chatimv1.ServerFrame)
 
 func respond(t *testing.T, conn *gws.Conn, resp *chatimv1.ServerResponse) {
 	t.Helper()
-	writeServerFrame(t, conn, &chatimv1.ServerFrame{Frame: &chatimv1.ServerFrame_Response{Response: resp}})
+	push(t, conn, &chatimv1.ServerFrame{Frame: &chatimv1.ServerFrame_Response{Response: resp}})
 }
 
-func sendMessageRequest(room string) *chatimv1.ClientRequest {
-	return &chatimv1.ClientRequest{Request: &chatimv1.ClientRequest_SendMessage{
-		SendMessage: &chatimv1.SendMessageRequest{RoomId: room},
-	}}
+func ready() *chatimv1.ServerFrame {
+	return &chatimv1.ServerFrame{Frame: &chatimv1.ServerFrame_Ready{Ready: &chatimv1.ReadyFrame{}}}
+}
+
+func eventFrame(seq uint64) *chatimv1.ServerFrame {
+	return &chatimv1.ServerFrame{Frame: &chatimv1.ServerFrame_Event{Event: &chatimv1.Event{RoomId: "7", Seq: seq}}}
 }

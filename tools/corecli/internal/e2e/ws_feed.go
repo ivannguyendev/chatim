@@ -9,7 +9,6 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
-	"github.com/ivannguyendev/chatim/pkg/wsclient"
 )
 
 const (
@@ -49,9 +48,11 @@ type WSFeed struct {
 	mu      sync.Mutex
 	entries []WSEntry
 	changed chan struct{}
+	events  *EventCheck
+	typing  TypingView
 }
 
-func NewWSFeed() *WSFeed { return &WSFeed{changed: make(chan struct{})} }
+func NewWSFeed() *WSFeed { return &WSFeed{changed: make(chan struct{}), events: NewEventCheck()} }
 
 func (f *WSFeed) Event(ev *chatimv1.Event) {
 	if reads := ev.GetReadPositions(); reads != nil {
@@ -79,8 +80,8 @@ func (f *WSFeed) Resync(reason chatimv1.ResyncReason) {
 
 func (f *WSFeed) Ready() { f.add(WSEntry{Frame: FrameReady}) }
 
-func (f *WSFeed) Gap(_ *wsclient.Client, g wsclient.Gap) {
-	f.add(WSEntry{Frame: FrameGap, Room: g.RoomID, Seq: g.From, To: g.To})
+func (f *WSFeed) Gap(g Gap) {
+	f.add(WSEntry{Frame: FrameGap, Room: g.Room, Seq: g.From, To: g.To})
 }
 
 func (f *WSFeed) Len() int {
@@ -162,11 +163,4 @@ func payloadOf(m proto.Message, oneof protoreflect.OneofDescriptor) (string, str
 		user = payload.Get(uf).String()
 	}
 	return string(fd.Name()), user
-}
-
-func CheckApplierStats(who string, s wsclient.ApplierStats) error {
-	if s.Duplicates != 0 || s.Gaps != 0 {
-		return fmt.Errorf("%s applier saw %d duplicates and %d gaps, want none (%d delivered, %d stale)", who, s.Duplicates, s.Gaps, s.Delivered, s.Stale)
-	}
-	return nil
 }

@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/ivannguyendev/chatim/internal/wstest"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
-	"github.com/ivannguyendev/chatim/pkg/wsclient"
 	"github.com/ivannguyendev/chatim/tools/corecli/internal/e2e"
 	"github.com/ivannguyendev/chatim/tools/internal/devtoken"
 	"github.com/ivannguyendev/chatim/tools/internal/route"
@@ -27,7 +27,7 @@ var errWSFewEmojis = errors.New("the websocket lists no reaction emoji")
 type wsRun struct {
 	base        context.Context
 	cl          *route.Client
-	ws          *wsclient.Client
+	ws          *wstest.Conn
 	gw          *gateway
 	gatewayURL  string
 	key         devtoken.KeyPair
@@ -105,10 +105,8 @@ func (r *wsRun) sign(key devtoken.KeyPair, issued time.Time, ttl time.Duration) 
 	return token, nil
 }
 
-func (r *wsRun) dial(token string) (*wsclient.Client, error) {
-	ctx, cancel := context.WithTimeout(r.base, r.callTimeout)
-	defer cancel()
-	c, err := wsclient.Dial(ctx, r.url, token)
+func (r *wsRun) dial(token string) (*wstest.Conn, error) {
+	c, err := dialWS(r.base, r.url, token, r.callTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("dial %s: %w", r.url, err)
 	}

@@ -92,7 +92,7 @@ func (r *wsEventsRun) run() error {
 		{"A removes B, B gets member_removed then room_closed and nothing more", r.removeB},
 		{"core lists the group in B's left rooms with its version and not in B's rooms", r.leftListed},
 		{"B reconnects and hears nothing of the group it left", r.reconnectB},
-		{"no duplicate, gap or resync on either applier", r.clean},
+		{"no duplicate, gap or resync on either connection", r.clean},
 	}
 	defer r.a.close()
 	defer r.b.close()
@@ -158,14 +158,14 @@ func (r *wsEventsRun) once(p *wsPeer, m e2e.WSMatch) error {
 
 func (r *wsEventsRun) clean() error {
 	for _, p := range []*wsPeer{r.a, r.b} {
-		stats := p.applier.Stats()
-		if err := e2e.CheckApplierStats(p.name, stats); err != nil {
+		stats := p.feed.Stats()
+		if err := e2e.CheckEventStats(p.name, stats); err != nil {
 			return err
 		}
 		if err := p.absent(0, e2e.WSMatch{Frame: e2e.FrameResync}); err != nil {
 			return err
 		}
-		r.notes = append(r.notes, fmt.Sprintf("%s applier %d delivered, 0 duplicates, 0 gaps, %d stale", p.name, stats.Delivered, stats.Stale))
+		r.notes = append(r.notes, fmt.Sprintf("%s %d events delivered, 0 duplicates, 0 gaps", p.name, stats.Delivered))
 	}
 	return nil
 }

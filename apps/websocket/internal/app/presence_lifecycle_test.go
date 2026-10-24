@@ -13,7 +13,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/presence"
-	"github.com/ivannguyendev/chatim/pkg/wsclient"
+	"github.com/ivannguyendev/chatim/internal/wstest"
 )
 
 type presenceRedis struct {
@@ -77,9 +77,12 @@ func TestRunStampsAConnectedUserAndClosesThePresenceRedisOnStop(t *testing.T) {
 	}
 	callCtx, callCancel := context.WithTimeout(context.Background(), waitLimit)
 	defer callCancel()
-	client, err := wsclient.Dial(callCtx, "ws://"+wsAddr+"/ws", keys.token(t, time.Now().Add(time.Hour)))
+	client, err := wstest.Dial(callCtx, "ws://"+wsAddr+"/ws")
 	if err != nil {
 		t.Fatalf("dial: %v", err)
+	}
+	if err := client.Auth(keys.token(t, time.Now().Add(time.Hour))); err != nil {
+		t.Fatalf("auth: %v", err)
 	}
 	defer func() { _ = client.Close() }()
 	receive(t, pres.stamped, "presence stamp")

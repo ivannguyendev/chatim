@@ -31,7 +31,7 @@ func (d *wsDrill) peers() []*wsPeer {
 }
 
 func (d *wsDrill) reopen() {
-	if err := d.receiver.ws.OpenRoom(d.base, d.room); err != nil {
+	if err := d.receiver.ws.OpenRoom(d.room); err != nil {
 		fmt.Fprintf(os.Stderr, "receiver reopens %s after resync: %v\n", d.room, err)
 	}
 }

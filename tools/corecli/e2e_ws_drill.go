@@ -87,7 +87,7 @@ func (d *wsDrill) prepare() error {
 		if _, err := p.await(0, e2e.WSMatch{Frame: e2e.FrameEvent, Kind: "member_added", Room: d.room, User: p.user}); err != nil {
 			return err
 		}
-		if err := p.ws.OpenRoom(d.base, d.room); err != nil {
+		if err := p.ws.OpenRoom(d.room); err != nil {
 			return fmt.Errorf("%s opens %s: %w", p.name, d.room, err)
 		}
 	}
@@ -173,14 +173,14 @@ func (d *wsDrill) report() error {
 		}
 	}
 	loss := e2e.CheckDrillLoss(stored, live, entries)
-	stats := d.receiver.applier.Stats()
-	fmt.Fprintf(os.Stderr, "drill: acked %d, failed %d; %v; receiver applier %+v, connection open %v\n",
+	stats := d.receiver.feed.Stats()
+	fmt.Fprintf(os.Stderr, "drill: acked %d, failed %d; %v; receiver events %+v, connection open %v\n",
 		d.acked, d.failed, loss, stats, d.receiver.ws.Err() == nil)
 	if err := loss.Err(); err != nil {
 		return err
 	}
 	if stats.Duplicates != 0 {
-		return fmt.Errorf("receiver applier dropped %d duplicates", stats.Duplicates)
+		return fmt.Errorf("receiver dropped %d duplicate events", stats.Duplicates)
 	}
 	return errors.Join(d.checkResyncs(), d.checkLeaver())
 }

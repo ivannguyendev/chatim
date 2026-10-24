@@ -97,13 +97,8 @@ func (r *gatewayRun) readsMatch() error {
 }
 
 func (r *gatewayRun) flushedRead() error {
-	if err := r.b.ws.MarkRead(r.base, r.room, r.seq); err != nil {
-		return fmt.Errorf("peer B marks read: %w", err)
-	}
-	ctx, cancel := context.WithTimeout(r.base, r.timeout)
-	defer cancel()
-	if err := r.b.ws.FlushReads(ctx); err != nil {
-		return fmt.Errorf("peer B flushes reads: %w", err)
+	if _, err := r.b.call(markReadRequest(r.room, r.seq)); err != nil {
+		return fmt.Errorf("peer B marks read and waits for its answer: %w", err)
 	}
 	list, err := viaGateway(r.b.gw, r.b.gw.core.ListMyRooms, &chatimv1.ListMyRoomsRequest{Folder: chatimv1.RoomFolder_ROOM_FOLDER_MAIN, Limit: 50})
 	if err != nil {

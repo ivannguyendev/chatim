@@ -13,7 +13,7 @@ func (r *wsEphemeralRun) outsiderDropped() error {
 	}
 	markB := r.b.feed.Len()
 	start := time.Now()
-	if err := r.d.ws.Typing(r.room); err != nil {
+	if err := r.d.ws.Typing(r.room, false); err != nil {
 		return fmt.Errorf("peer D typing: %w", err)
 	}
 	if !r.pauseUntil(start.Add(typingQuiet)) {

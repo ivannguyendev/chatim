@@ -132,7 +132,7 @@ func (r *wsEphemeralRun) connect() error {
 		}
 	}
 	for _, p := range []*wsPeer{r.b, r.a2} {
-		if err := p.ws.OpenRoom(r.base, r.room); err != nil {
+		if err := p.ws.OpenRoom(r.room); err != nil {
 			return fmt.Errorf("%s opens %s: %w", p.name, r.room, err)
 		}
 		if err := p.barrier(); err != nil {
@@ -145,7 +145,7 @@ func (r *wsEphemeralRun) connect() error {
 func (r *wsEphemeralRun) typingSeen() error {
 	markB, markC, markA2 := r.b.feed.Len(), r.c.feed.Len(), r.a2.feed.Len()
 	start := time.Now()
-	if err := r.a.ws.Typing(r.room); err != nil {
+	if err := r.a.ws.Typing(r.room, false); err != nil {
 		return fmt.Errorf("peer A typing: %w", err)
 	}
 	if _, err := r.b.awaitUntil(markB, e2e.TypingMatch(r.room, r.a.user, true), start.Add(typingWithin)); err != nil {
@@ -164,7 +164,7 @@ func (r *wsEphemeralRun) typingSeen() error {
 		}
 	}
 	stop := time.Now()
-	if err := r.a.ws.StopTyping(r.room); err != nil {
+	if err := r.a.ws.Typing(r.room, true); err != nil {
 		return fmt.Errorf("peer A stops typing: %w", err)
 	}
 	if _, err := r.b.awaitUntil(markB, e2e.TypingMatch(r.room, r.a.user, false), stop.Add(typingWithin)); err != nil {

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -38,7 +37,7 @@ func (r *wsEventsRun) readPeers() error {
 func (r *wsEventsRun) readSeen() error {
 	marks := map[*wsPeer]int{r.b: r.b.feed.Len(), r.a2: r.a2.feed.Len(), r.c: r.c.feed.Len()}
 	start := time.Now()
-	if err := r.a.ws.MarkRead(r.base, r.room, 0); err != nil {
+	if _, err := r.a.call(markReadRequest(r.room, 0)); err != nil {
 		return fmt.Errorf("peer A marks read: %w", err)
 	}
 	read := r.readOf(0)
@@ -67,9 +66,7 @@ func (r *wsEventsRun) readSeen() error {
 
 func (r *wsEventsRun) unreadSeen() error {
 	markB := r.b.feed.Len()
-	ctx, cancel := context.WithTimeout(r.base, r.a.timeout)
-	defer cancel()
-	if _, err := r.a.ws.MarkUnread(ctx, r.room, r.readSeq); err != nil {
+	if _, err := r.a.call(&chatimv1.ClientRequest{Request: &chatimv1.ClientRequest_MarkUnread{MarkUnread: &chatimv1.MarkUnreadRequest{RoomId: r.room, Seq: r.readSeq}}}); err != nil {
 		return fmt.Errorf("peer A marks unread from %d: %w", r.readSeq, err)
 	}
 	i, err := r.b.await(markB, r.readOf(r.readVer+1))

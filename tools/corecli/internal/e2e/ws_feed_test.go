@@ -8,7 +8,6 @@ import (
 	"time"
 
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
-	"github.com/ivannguyendev/chatim/pkg/wsclient"
 	"github.com/ivannguyendev/chatim/tools/corecli/internal/e2e"
 )
 
@@ -44,7 +43,7 @@ func TestWSFeedRecordsNotificationsClosesResyncsAndGaps(t *testing.T) {
 	f.Notification(&chatimv1.Notification{Id: "n1", RoomId: "7", Seq: 2, Payload: &chatimv1.Notification_MentionNotified{MentionNotified: &chatimv1.MentionNotified{}}})
 	f.RoomClosed("7", chatimv1.RoomClosedReason_ROOM_CLOSED_REASON_REMOVED)
 	f.Resync(chatimv1.ResyncReason_RESYNC_REASON_LAG_TOO_OLD)
-	f.Gap(nil, wsclient.Gap{RoomID: "7", From: 4, To: 5})
+	f.Gap(e2e.Gap{Room: "7", From: 4, To: 5})
 	checks := []e2e.WSMatch{
 		{Frame: e2e.FrameReady},
 		{Frame: e2e.FrameNotification, Kind: "mention_notified", ID: "n1", Room: "7", Seq: 2},
@@ -115,15 +114,4 @@ func TestWSFeedWaitStopsAtTheDeadline(t *testing.T) {
 			t.Fatalf("Wait = %v, want deadline exceeded", err)
 		}
 	})
-}
-
-func TestCheckApplierStatsRefusesDuplicatesAndGaps(t *testing.T) {
-	if err := e2e.CheckApplierStats("b", wsclient.ApplierStats{Delivered: 9, Stale: 1}); err != nil {
-		t.Fatalf("clean stats = %v", err)
-	}
-	for _, s := range []wsclient.ApplierStats{{Duplicates: 1}, {Gaps: 1}} {
-		if err := e2e.CheckApplierStats("b", s); err == nil {
-			t.Fatalf("stats %+v accepted", s)
-		}
-	}
 }

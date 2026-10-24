@@ -9,7 +9,7 @@ import (
 
 	"github.com/lxzan/gws"
 
-	"github.com/ivannguyendev/chatim/pkg/wsclient"
+	"github.com/ivannguyendev/chatim/internal/wstest"
 	"github.com/ivannguyendev/chatim/tools/corecli/internal/e2e"
 	"github.com/ivannguyendev/chatim/tools/internal/devtoken"
 )
@@ -44,9 +44,9 @@ func (r *wsRun) refused(what, token string) error {
 	case <-r.base.Done():
 		return r.base.Err()
 	}
-	closeErr, ok := errors.AsType[*wsclient.CloseError](c.Err())
-	if !ok || closeErr.Code != wsclient.CodeUnauthenticated {
-		return fmt.Errorf("%s closed with %w, want code %d", what, c.Err(), wsclient.CodeUnauthenticated)
+	closeErr, ok := errors.AsType[*wstest.CloseError](c.Err())
+	if !ok || closeErr.Code != wstest.CodeUnauthenticated {
+		return fmt.Errorf("%s closed with %w, want code %d", what, c.Err(), wstest.CodeUnauthenticated)
 	}
 	return nil
 }
@@ -62,7 +62,7 @@ func (r *wsRun) silentTimesOut() error {
 	w := &silentWatch{closed: make(chan error, 1)}
 	conn, resp, err := gws.NewClient(w, &gws.ClientOption{
 		Addr:             r.url,
-		RequestHeader:    http.Header{"Sec-Websocket-Protocol": []string{wsclient.Subprotocol}},
+		RequestHeader:    http.Header{"Sec-Websocket-Protocol": []string{wstest.Subprotocol}},
 		HandshakeTimeout: r.callTimeout,
 	})
 	if resp != nil {

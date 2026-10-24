@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ivannguyendev/chatim/internal/wstest"
 	"github.com/ivannguyendev/chatim/pkg/metrics"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
-	"github.com/ivannguyendev/chatim/pkg/wsclient"
 )
 
 func upgradeRequest(protocols string) *http.Request {
@@ -95,9 +95,12 @@ func TestServeHTTPUpgradesAndRunsRequestsOverTCP(t *testing.T) {
 	defer httpServer.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	client, err := wsclient.Dial(ctx, "ws"+strings.TrimPrefix(httpServer.URL, "http")+"/ws", h.token("u1", time.Hour))
+	client, err := wstest.Dial(ctx, "ws"+strings.TrimPrefix(httpServer.URL, "http")+"/ws")
 	if err != nil {
 		t.Fatalf("dial: %v", err)
+	}
+	if err := client.Auth(h.token("u1", time.Hour)); err != nil {
+		t.Fatalf("auth: %v", err)
 	}
 	resp, err := client.Call(ctx, &chatimv1.ClientRequest{Request: &chatimv1.ClientRequest_GetHistory{
 		GetHistory: &chatimv1.GetHistoryRequest{RoomId: "77"},

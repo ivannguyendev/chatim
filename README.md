@@ -41,7 +41,8 @@ apps/gateway/            # HTTPS (Connect): 22 lệnh đọc và quản lý room
 modules/mention/         # Mention App: module nhúng trong core (D182), không có main.go
   mentionapp/            # bề mặt công khai core import: Config, New, Prepare, Run, Close, Register, Watch, Probes; cổng CoreReader
   internal/              # config, domain, store, plan, recipients, notify, consumer, groups, roomgroups, grpcsrv
-pkg/                     # dùng chung: keys, ids, lru, slotmap, apperr, envconfig, resilience, admin, grpcserver, grpcclient, backoff, jsconsume, mongobound, callerid, pb, corecall, coreroute, jwtverify, wsclient, wspublish
+internal/wstest/         # client websocket nhỏ chỉ cho test của apps/websocket và e2e của corecli (không phải SDK)
+pkg/                     # dùng chung: keys, ids, lru, slotmap, apperr, envconfig, resilience, admin, grpcserver, grpcclient, backoff, jsconsume, mongobound, callerid, pb, corecall, coreroute, jwtverify, wspublish
 proto/chatim/v1/         # định nghĩa protobuf (buf) → pkg/pb
 tools/                   # corecli, internal/route; poc/: corebench, mongobench, postgresbench, natsbench, wsbench
 scripts/                 # e2e.sh, các script chờ hạ tầng sẵn sàng, bench-cell.sh / bench-sample.sh (đo corebench)
@@ -225,9 +226,9 @@ Khoá dev: `make dev-keys` chạy `corecli dev-keys -out /keys` trong image `cha
     make -s ws-token ARGS="-tenant e2e -user alice -ttl 10m"
     docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/.local/ws-keys/private.jwk":/keys/private.jwk:ro chatim/corecli:dev token -key /keys/private.jwk -tenant e2e -user alice
 
-Client nối `ws://127.0.0.1:8081/ws` (subprotocol `chatim.v1`), frame đầu là auth mang token; `pkg/wsclient` làm sẵn việc này.
+Client nối `ws://127.0.0.1:8081/ws` (subprotocol `chatim.v1`), frame đầu là auth mang token. Repo này chỉ có server: SDK cho client (ReactJS) nằm ở repo khác và làm theo giao thức trong `docs/modules/09-feature-realtime-delivery-and-ephemeral.md`; `internal/wstest` chỉ là client nhỏ cho test và e2e.
 
-`pkg/wsclient` gửi đang gõ bằng `Typing(room)` (lần đầu gửi ngay, sau đó tối đa một lần mỗi 3s mỗi room), `StopTyping(room)` (chỉ gửi khi đã gửi `typing` mà chưa dừng; gửi `SendMessage` vào room cũng tính là dừng, không gửi `stopped`), nhận qua `OnTyping(room, user, typing)` (`false` khi có `stopped`, khi 6s không có tin mới của người đó, hoặc khi `msg_created` của người đó trong room tới). `WatchPresence(users)` thay cả danh sách hỏi online trên server và kết quả tới `OnPresence(entries)` ở mỗi heartbeat. Danh sách này chỉ sống theo kết nối và client chưa tự nối lại: sau mỗi lần nối lại, app phải gọi lại `WatchPresence` với danh sách đầy đủ.
+Đang gõ: client gửi frame `typing` (hoặc `typing` với `stopped`) và nhận `typing` của người khác trong room đang mở; nên coi là dừng khi có `stopped`, khi 6s không có tin mới của người đó, hoặc khi `msg_created` của người đó tới. Online: `watch_presence` thay cả danh sách hỏi online trên server và kết quả tới ở mỗi heartbeat. Danh sách này chỉ sống theo kết nối: sau mỗi lần nối lại, client phải gửi lại `watch_presence` với danh sách đầy đủ.
 
 Đổi khoá (dev và prod, không cắt kết nối đang sống): thêm khoá mới (`kid` mới) vào JWKS bên cạnh khoá cũ → rolling restart các node websocket (JWKS chỉ đọc lúc khởi động) → chuyển bên ký sang khoá mới → chờ token cũ hết hạn (TTL + `WS_JWT_LEEWAY`) → bỏ khoá cũ khỏi JWKS và rolling restart lần nữa. Nên giữ TTL token ≤ 15 phút để bước chờ ngắn và token lộ hết hạn nhanh.
 

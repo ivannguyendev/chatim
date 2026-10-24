@@ -142,7 +142,7 @@ func (r *gatewayRun) createGroup() error {
 	if _, err := r.b.await(0, r.inRoom("member_added", r.b.user)); err != nil {
 		return err
 	}
-	if err := r.b.ws.OpenRoom(r.base, r.room); err != nil {
+	if err := r.b.ws.OpenRoom(r.room); err != nil {
 		return fmt.Errorf("peer B opens %s: %w", r.room, err)
 	}
 	return r.b.barrier()

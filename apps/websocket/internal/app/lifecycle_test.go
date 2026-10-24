@@ -10,8 +10,8 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/config"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/session"
+	"github.com/ivannguyendev/chatim/internal/wstest"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
-	"github.com/ivannguyendev/chatim/pkg/wsclient"
 )
 
 func TestRunIsReadyOnlyAfterTheSlotTableAndStopAnswersRunningCommandsBefore1001(t *testing.T) {
@@ -63,9 +63,12 @@ func TestRunIsReadyOnlyAfterTheSlotTableAndStopAnswersRunningCommandsBefore1001(
 
 	callCtx, callCancel := context.WithTimeout(context.Background(), waitLimit)
 	defer callCancel()
-	client, err := wsclient.Dial(callCtx, "ws://"+wsAddr+"/ws", keys.token(t, time.Now().Add(-5*time.Second)))
+	client, err := wstest.Dial(callCtx, "ws://"+wsAddr+"/ws")
 	if err != nil {
-		t.Fatalf("dial with a token inside the leeway: %v", err)
+		t.Fatalf("dial: %v", err)
+	}
+	if err := client.Auth(keys.token(t, time.Now().Add(-5*time.Second))); err != nil {
+		t.Fatalf("auth with a token inside the leeway: %v", err)
 	}
 	defer func() { _ = client.Close() }()
 	answered := make(chan *chatimv1.ServerResponse, 1)
@@ -87,7 +90,7 @@ func TestRunIsReadyOnlyAfterTheSlotTableAndStopAnswersRunningCommandsBefore1001(
 		t.Fatalf("running command answer = %v, want OK", resp)
 	}
 	receive(t, client.Done(), "connection close")
-	if closeErr, ok := errors.AsType[*wsclient.CloseError](client.Err()); !ok || closeErr.Code != session.CodeGoingAway {
+	if closeErr, ok := errors.AsType[*wstest.CloseError](client.Err()); !ok || closeErr.Code != session.CodeGoingAway {
 		t.Fatalf("connection end = %v, want close code 1001", client.Err())
 	}
 	if err := awaitRun(t, done); err != nil {

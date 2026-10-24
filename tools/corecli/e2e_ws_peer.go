@@ -8,9 +8,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/ivannguyendev/chatim/internal/wstest"
 	"github.com/ivannguyendev/chatim/pkg/backoff"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
-	"github.com/ivannguyendev/chatim/pkg/wsclient"
 	"github.com/ivannguyendev/chatim/tools/corecli/internal/e2e"
 	"github.com/ivannguyendev/chatim/tools/internal/devtoken"
 )
@@ -20,10 +20,10 @@ const wsNotSupported = "request not supported"
 type wsPeer struct {
 	name    string
 	user    string
-	ws      *wsclient.Client
+	ws      *wstest.Conn
 	gw      *gateway
 	feed    *e2e.WSFeed
-	applier *wsclient.Applier
+	fed     chan struct{}
 	base    context.Context
 	timeout time.Duration
 	wait    time.Duration
@@ -31,26 +31,32 @@ type wsPeer struct {
 
 func dialPeer(base context.Context, url, gatewayURL, token string, p *wsPeer) error {
 	p.gw = newGateway(base, gatewayURL, token, p.timeout)
-	p.feed, p.applier = e2e.NewWSFeed(), wsclient.NewApplier(wsclient.DefaultRecentIDs)
-	ctx, cancel := context.WithTimeout(base, p.timeout)
-	defer cancel()
-	ws, err := wsclient.Dial(ctx, url, token,
-		wsclient.WithApplier(p.applier),
-		wsclient.OnEvent(p.feed.Event),
-		wsclient.OnNotification(p.feed.Notification),
-		wsclient.OnReady(p.feed.Ready),
-		wsclient.OnResync(p.feed.Resync),
-		wsclient.OnRoomClosed(p.feed.RoomClosed),
-		wsclient.OnGap(p.feed.Gap),
-		wsclient.OnTyping(p.feed.Typing),
-		wsclient.OnPresence(p.feed.Presence),
-	)
+	ws, err := dialWS(base, url, token, p.timeout)
 	if err != nil {
 		return fmt.Errorf("dial %s as %s: %w", url, p.name, err)
 	}
-	p.ws = ws
+	feed, fed := e2e.NewWSFeed(), make(chan struct{})
+	go func() {
+		defer close(fed)
+		feed.Run(ws.Frames(), ws.LoadRooms)
+	}()
+	p.ws, p.feed, p.fed = ws, feed, fed
 	_, err = p.await(0, e2e.WSMatch{Frame: e2e.FrameReady})
 	return err
+}
+
+func dialWS(base context.Context, url, token string, timeout time.Duration) (*wstest.Conn, error) {
+	ctx, cancel := context.WithTimeout(base, timeout)
+	defer cancel()
+	ws, err := wstest.Dial(ctx, url)
+	if err != nil {
+		return nil, err
+	}
+	if err := ws.Auth(token); err != nil {
+		_ = ws.Close()
+		return nil, err
+	}
+	return ws, nil
 }
 
 func (p *wsPeer) call(req *chatimv1.ClientRequest) (*chatimv1.ServerResponse, error) {
@@ -93,10 +99,15 @@ func (p *wsPeer) absent(from int, m e2e.WSMatch) error {
 func (p *wsPeer) close() {
 	if p.ws != nil {
 		_ = p.ws.Close()
+		<-p.fed
 	}
 }
 
-func callWS(base context.Context, ws *wsclient.Client, timeout time.Duration, req *chatimv1.ClientRequest) (*chatimv1.ServerResponse, error) {
+func markReadRequest(room string, seq uint64) *chatimv1.ClientRequest {
+	return &chatimv1.ClientRequest{Request: &chatimv1.ClientRequest_MarkRead{MarkRead: &chatimv1.MarkReadRequest{RoomId: room, Seq: seq}}}
+}
+
+func callWS(base context.Context, ws *wstest.Conn, timeout time.Duration, req *chatimv1.ClientRequest) (*chatimv1.ServerResponse, error) {
 	for attempt := 1; ; attempt++ {
 		ctx, cancel := context.WithTimeout(base, timeout)
 		resp, err := ws.Call(ctx, req)

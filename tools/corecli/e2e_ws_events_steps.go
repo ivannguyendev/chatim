@@ -23,7 +23,7 @@ func (r *wsEventsRun) createGroup() error {
 	if _, err := r.a.await(0, added); err != nil {
 		return err
 	}
-	return r.a.ws.OpenRoom(r.base, r.room)
+	return r.a.ws.OpenRoom(r.room)
 }
 
 func (r *wsEventsRun) addB() error {
@@ -78,7 +78,7 @@ func (r *wsEventsRun) reactions() error {
 	if err := r.b.absent(markB, r.inRoom("reaction_changed")); err != nil {
 		return err
 	}
-	if err := r.b.ws.OpenRoom(r.base, r.room); err != nil {
+	if err := r.b.ws.OpenRoom(r.room); err != nil {
 		return fmt.Errorf("peer B opens %s: %w", r.room, err)
 	}
 	if err := r.b.barrier(); err != nil {
