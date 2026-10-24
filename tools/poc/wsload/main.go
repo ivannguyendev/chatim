@@ -83,7 +83,7 @@ func realMain() int {
 	flag.IntVar(&c.connectRate, "connect-rate", 1000, "logins per second over all nodes in steady and kill; burst ignores it")
 	flag.DurationVar(&c.duration, "duration", 60*time.Second, "steady: send window; kill: the longest wait for the first drop and for recovery")
 	flag.StringVar(&c.scenario, "scenario", scenarioSteady, "steady, kill or burst")
-	flag.StringVar(&c.out, "out", "", "result directory (default bin/wsload/<scenario>-<timestamp>)")
+	flag.StringVar(&c.out, "out", "", "result directory (default bin/bench/wsload-<scenario>-<timestamp>)")
 	flag.Usage = func() {
 		fmt.Fprint(flag.CommandLine.Output(), usageText)
 		flag.PrintDefaults()
@@ -91,7 +91,7 @@ func realMain() int {
 	flag.Parse()
 	c.urls = splitURLs(urls)
 	if c.out == "" {
-		c.out = filepath.Join("bin", "wsload", c.scenario+"-"+time.Now().Format("060102-150405"))
+		c.out = filepath.Join("bin", "bench", "wsload-"+c.scenario+"-"+time.Now().Format("060102-150405"))
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
