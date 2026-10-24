@@ -130,12 +130,14 @@ const (
 )
 
 type fakeSink struct {
-	mu       sync.Mutex
-	frames   []string
-	fails    int
-	mode     trySendMode
-	sends    int
-	trySends int
+	mu           sync.Mutex
+	frames       []string
+	fails        int
+	mode         trySendMode
+	refuseOffers bool
+	sends        int
+	trySends     int
+	offers       int
 }
 
 func (s *fakeSink) refusing(mode trySendMode) {
@@ -150,6 +152,18 @@ func (s *fakeSink) TrySend(raw []byte) bool {
 	defer s.mu.Unlock()
 	s.trySends++
 	if s.mode == refuseAll || (s.mode == refuseEvents && !strings.HasPrefix(line, "resync")) {
+		return false
+	}
+	s.frames = append(s.frames, line)
+	return true
+}
+
+func (s *fakeSink) Offer(raw []byte) bool {
+	line := describe(raw)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.offers++
+	if s.refuseOffers {
 		return false
 	}
 	s.frames = append(s.frames, line)
@@ -180,6 +194,8 @@ func describe(raw []byte) string {
 		line = "closed " + f.GetRoomClosed().GetRoomId() + " " + strings.ToLower(reason)
 	case f.GetLoadFailed() != nil:
 		line = "load_failed"
+	case f.GetTyping() != nil:
+		line = "typing " + f.GetTyping().GetRoomId() + " " + f.GetTyping().GetUserId()
 	case f.GetResync() != nil:
 		line = "resync " + strings.ToLower(strings.TrimPrefix(f.GetResync().GetReason().String(), "RESYNC_REASON_"))
 	default:
@@ -198,7 +214,7 @@ func (s *fakeSink) take() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := s.frames
-	s.frames, s.sends, s.trySends = nil, 0, 0
+	s.frames, s.sends, s.trySends, s.offers = nil, 0, 0, 0
 	return out
 }
 
@@ -206,6 +222,12 @@ func (s *fakeSink) counts() (sends, trySends int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.sends, s.trySends
+}
+
+func (s *fakeSink) offerCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.offers
 }
 
 func (s *fakeSink) failures() int {

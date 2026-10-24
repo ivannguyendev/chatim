@@ -51,6 +51,10 @@ func (s *itSink) TrySend(raw []byte) bool {
 	return true
 }
 
+func (s *itSink) Offer(raw []byte) bool {
+	return s.TrySend(raw)
+}
+
 func (s *itSink) Fail() {}
 
 func (s *itSink) since(from int) []string {

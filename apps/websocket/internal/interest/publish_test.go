@@ -37,6 +37,10 @@ func (s *noteSink) TrySend(raw []byte) bool {
 	return true
 }
 
+func (s *noteSink) Offer(raw []byte) bool {
+	return s.TrySend(raw)
+}
+
 func (s *noteSink) Fail() {}
 
 func (s *noteSink) take() []*chatimv1.Notification {

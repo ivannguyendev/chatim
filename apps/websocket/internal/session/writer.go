@@ -100,12 +100,7 @@ func (c *connection) enqueue(frame outFrame) {
 func (c *connection) tryEnqueue(frame outFrame) bool { return c.admit(frame) == admitted }
 
 func (c *connection) admit(frame outFrame) admission {
-	select {
-	case <-c.closed:
-		return admitDropped
-	default:
-	}
-	if c.closing.Load() != 0 {
+	if !c.accepting() {
 		return admitDropped
 	}
 	size := int64(len(frame.payload))
@@ -116,14 +111,47 @@ func (c *connection) admit(frame outFrame) admission {
 		return admitDropped
 	case c.queuedBytes+size > int64(c.server.opts.SendQueueBytes):
 		return admitOverBudget
+	case !c.push(frame, size):
+		return admitQueueFull
 	}
+	return admitted
+}
+
+func (c *connection) offer(frame outFrame) bool {
+	if !c.accepting() {
+		return false
+	}
+	size := int64(len(frame.payload))
+	c.queueMu.Lock()
+	defer c.queueMu.Unlock()
+	switch {
+	case c.sealed:
+		return false
+	case len(c.out)+1 >= c.server.opts.SendQueue/2:
+		return false
+	case c.queuedBytes+size >= int64(c.server.opts.SendQueueBytes/2):
+		return false
+	}
+	return c.push(frame, size)
+}
+
+func (c *connection) accepting() bool {
+	select {
+	case <-c.closed:
+		return false
+	default:
+	}
+	return c.closing.Load() == 0
+}
+
+func (c *connection) push(frame outFrame, size int64) bool {
 	select {
 	case c.out <- frame:
 		c.queuedBytes += size
 		c.server.stats.queuedBytes.Add(size)
-		return admitted
+		return true
 	default:
-		return admitQueueFull
+		return false
 	}
 }
 
