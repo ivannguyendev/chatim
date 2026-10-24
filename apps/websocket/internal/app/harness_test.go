@@ -83,6 +83,7 @@ func testConfig(redisAddr, keysFile string) config.Config {
 		PublishRoot: "websocket.publish", PublishStream: "CHATIM_WS", StreamReplicas: 1,
 		FanoutWorkers: 2, FanoutQueue: 64, ReplayRate: 1000, ConsumeBatch: 100, ConsumeBytes: 1 << 20,
 		RoomIDsInflight: 4, OpenPending: 10 * time.Second, ReplayMaxAge: 2 * time.Minute, ReloadRate: 1000,
+		TypingRate: 2, TypingBurst: 4, TypingQueue: 64, TypingPendingMsgs: 128,
 	}
 }
 

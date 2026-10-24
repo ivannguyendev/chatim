@@ -18,6 +18,8 @@ import (
 
 const (
 	DefaultReadyTimeout = 10 * time.Second
+	DefaultPendingMsgs  = 65536
+	pendingBytes        = 64 << 20
 	pingInterval        = 10 * time.Second
 	maxPingsOut         = 3
 	noReconnectBuf      = -1
@@ -29,11 +31,13 @@ type NATSConfig struct {
 	URL          string
 	Name         string
 	ReadyTimeout time.Duration
+	PendingMsgs  int
 }
 
 type natsBroker struct {
-	nc *nats.Conn
-	js jetstream.JetStream
+	nc          *nats.Conn
+	js          jetstream.JetStream
+	pendingMsgs int
 }
 
 func Dial(ctx context.Context, cfg NATSConfig, log *slog.Logger) (Broker, error) {
@@ -52,7 +56,7 @@ func Dial(ctx context.Context, cfg NATSConfig, log *slog.Logger) (Broker, error)
 		nc.Close()
 		return nil, fmt.Errorf("jetstream: %w", redact.Error(err, cfg.URL))
 	}
-	return &natsBroker{nc: nc, js: js}, nil
+	return &natsBroker{nc: nc, js: js, pendingMsgs: cmp.Or(cfg.PendingMsgs, DefaultPendingMsgs)}, nil
 }
 
 func awaitConnected(ctx context.Context, nc *nats.Conn, connected <-chan struct{}, limit time.Duration) error {
@@ -114,6 +118,25 @@ func (b *natsBroker) OrderedConsumer(ctx context.Context, stream string, cfg jet
 		return nil, fmt.Errorf("ordered consumer on %s: %w", stream, err)
 	}
 	return c, nil
+}
+
+func (b *natsBroker) Publish(subject string, data []byte) error {
+	if err := b.nc.Publish(subject, data); err != nil {
+		return fmt.Errorf("publish %s: %w", subject, err)
+	}
+	return nil
+}
+
+func (b *natsBroker) Subscribe(subject string, handler func(subject string, data []byte)) (func() error, error) {
+	sub, err := b.nc.Subscribe(subject, func(m *nats.Msg) { handler(m.Subject, m.Data) })
+	if err != nil {
+		return nil, fmt.Errorf("subscribe %s: %w", subject, err)
+	}
+	if err := sub.SetPendingLimits(b.pendingMsgs, pendingBytes); err != nil {
+		_ = sub.Unsubscribe()
+		return nil, fmt.Errorf("pending limits of %s: %w", subject, err)
+	}
+	return sub.Unsubscribe, nil
 }
 
 func (b *natsBroker) Connected() bool { return b.nc.IsConnected() }

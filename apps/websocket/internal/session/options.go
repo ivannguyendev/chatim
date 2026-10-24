@@ -45,6 +45,11 @@ type Interest interface {
 	Register(tenant, user string, sink interest.Sink) *interest.Conn
 }
 
+type Typing interface {
+	FromClient(conn *interest.Conn, tenant, user string, f *chatimv1.TypingFrame)
+	RateLimited()
+}
+
 type Options struct {
 	AuthTimeout      time.Duration
 	HeartbeatTimeout time.Duration
@@ -57,6 +62,8 @@ type Options struct {
 	CommandInflight  int
 	SendQueue        int
 	SendQueueBytes   int
+	TypingRate       int
+	TypingBurst      int
 }
 
 func (o Options) validate() error {
@@ -76,6 +83,8 @@ func (o Options) validate() error {
 	positive("commands in flight", o.CommandInflight > 0)
 	positive("send queue", o.SendQueue > 0)
 	positive("send queue bytes", o.SendQueueBytes > 0)
+	positive("typing rate", o.TypingRate > 0)
+	positive("typing burst", o.TypingBurst > 0)
 	if o.SendQueueBytes < o.FrameMax {
 		errs = append(errs, errors.New("session: send queue bytes must hold one frame of the frame limit"))
 	}

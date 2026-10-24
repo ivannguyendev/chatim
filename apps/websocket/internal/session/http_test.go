@@ -128,21 +128,26 @@ func TestNewRejectsInvalidOptions(t *testing.T) {
 		"send bytes":                 func(o *Options) { o.SendQueueBytes = 0 },
 		"send bytes under one frame": func(o *Options) { o.SendQueueBytes = o.FrameMax - 1 },
 		"negative leeway":            func(o *Options) { o.JWTLeeway = -time.Second },
+		"typing rate":                func(o *Options) { o.TypingRate = 0 },
+		"typing burst":               func(o *Options) { o.TypingBurst = 0 },
 	}
 	for name, mutate := range mutations {
 		t.Run(name, func(t *testing.T) {
 			opts := testOptions()
 			mutate(&opts)
-			if _, err := New(opts, newFakeVerifier(t), newFakeCore(), newTestInterest(t), slog.New(slog.DiscardHandler)); err == nil {
+			if _, err := New(opts, newFakeVerifier(t), newFakeCore(), newTestInterest(t), newTestTyping(t, newTestInterest(t)), slog.New(slog.DiscardHandler)); err == nil {
 				t.Fatal("New accepted invalid options")
 			}
 		})
 	}
-	if _, err := New(testOptions(), nil, newFakeCore(), newTestInterest(t), slog.New(slog.DiscardHandler)); err == nil {
+	if _, err := New(testOptions(), nil, newFakeCore(), newTestInterest(t), newTestTyping(t, newTestInterest(t)), slog.New(slog.DiscardHandler)); err == nil {
 		t.Fatal("New accepted a nil verifier")
 	}
-	if _, err := New(testOptions(), newFakeVerifier(t), newFakeCore(), nil, slog.New(slog.DiscardHandler)); err == nil {
+	if _, err := New(testOptions(), newFakeVerifier(t), newFakeCore(), nil, newTestTyping(t, newTestInterest(t)), slog.New(slog.DiscardHandler)); err == nil {
 		t.Fatal("New accepted a nil interest")
+	}
+	if _, err := New(testOptions(), newFakeVerifier(t), newFakeCore(), newTestInterest(t), nil, slog.New(slog.DiscardHandler)); err == nil {
+		t.Fatal("New accepted a nil typing service")
 	}
 }
 

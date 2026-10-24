@@ -65,6 +65,12 @@ func TestLoadValidation(t *testing.T) {
 		{"reload rate above one per nanosecond", map[string]string{"WS_RELOAD_RATE": "1000000001"}, "WS_RELOAD_RATE must be at most one reload per nanosecond"},
 		{"replay max age at the catch-up age", map[string]string{"WS_REPLAY_MAX_AGE": "5s"}, "WS_REPLAY_MAX_AGE must exceed the 5s catch-up age"},
 		{"replay max age above the catch-up age", map[string]string{"WS_REPLAY_MAX_AGE": "6s"}, ""},
+		{"zero typing rate", map[string]string{"WS_TYPING_RATE": "0"}, "WS_TYPING_RATE must be positive"},
+		{"zero typing burst", map[string]string{"WS_TYPING_BURST": "0"}, "WS_TYPING_BURST must be positive"},
+		{"negative typing queue", map[string]string{"WS_TYPING_QUEUE": "-1"}, "WS_TYPING_QUEUE must be positive"},
+		{"zero typing pending messages", map[string]string{"WS_TYPING_PENDING_MSGS": "0"}, "WS_TYPING_PENDING_MSGS must be positive"},
+		{"unparsable typing rate", map[string]string{"WS_TYPING_RATE": "fast"}, "WS_TYPING_RATE"},
+		{"one typing frame per second", map[string]string{"WS_TYPING_RATE": "1", "WS_TYPING_BURST": "1"}, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

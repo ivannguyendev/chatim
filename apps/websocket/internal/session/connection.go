@@ -33,6 +33,7 @@ const (
 	frameOpenRoom
 	frameCloseRoom
 	frameLoadRooms
+	frameTyping
 )
 
 type connection struct {
@@ -41,6 +42,7 @@ type connection struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 	limiter  *rate.Limiter
+	typist   *rate.Limiter
 	out      chan outFrame
 	closeReq chan uint16
 	closed   chan struct{}
@@ -72,6 +74,7 @@ func newConnection(s *Server, socket *gws.Conn) *connection {
 		ctx:      ctx,
 		cancel:   cancel,
 		limiter:  rate.NewLimiter(rate.Limit(s.opts.CommandRate), s.opts.CommandBurst),
+		typist:   rate.NewLimiter(rate.Limit(s.opts.TypingRate), s.opts.TypingBurst),
 		out:      make(chan outFrame, s.opts.SendQueue),
 		closeReq: make(chan uint16, 1),
 		closed:   make(chan struct{}),
@@ -125,6 +128,8 @@ func (c *connection) receive(message *gws.Message) {
 		c.closeRoom(frame.GetCloseRoom().GetRoomId())
 	case kind == frameLoadRooms:
 		c.loadRooms()
+	case kind == frameTyping:
+		c.typing(frame.GetTyping())
 	case kind == frameUnknown:
 		c.server.stats.unknownFrames.Add(1)
 	}
@@ -165,6 +170,8 @@ func kindOf(frame *chatimv1.ClientFrame) frameKind {
 		return frameCloseRoom
 	case *chatimv1.ClientFrame_LoadRooms:
 		return frameLoadRooms
+	case *chatimv1.ClientFrame_Typing:
+		return frameTyping
 	default:
 		return frameUnknown
 	}

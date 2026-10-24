@@ -43,6 +43,7 @@ func (n *node) shutdown(ctx context.Context, sup *supervisor, t tasks, cause err
 		}
 	}
 	fail("commands", within(stopCtx, plan.Commands, n.ws.Drain))
+	fail("typing", n.typing.Stop())
 	fail("feed", within(stopCtx, plan.Feed, n.feed.Stop))
 	n.ws.CloseAll(session.CodeGoingAway)
 	fail("connections", within(stopCtx, plan.Close, func(c context.Context) error {

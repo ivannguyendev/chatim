@@ -19,6 +19,8 @@ type fakeNATS struct {
 	mu        sync.Mutex
 	consumes  []*fakeConsumeContext
 	streams   []string
+	subs      map[string]int
+	subErr    error
 }
 
 func newFakeNATS() *fakeNATS {
@@ -82,6 +84,32 @@ func (n *fakeNATS) running() int {
 		}
 	}
 	return live
+}
+
+func (n *fakeNATS) Publish(string, []byte) error { return nil }
+
+func (n *fakeNATS) Subscribe(subject string, _ func(string, []byte)) (func() error, error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.subErr != nil {
+		return nil, n.subErr
+	}
+	if n.subs == nil {
+		n.subs = map[string]int{}
+	}
+	n.subs[subject]++
+	return func() error {
+		n.mu.Lock()
+		defer n.mu.Unlock()
+		n.subs[subject]--
+		return nil
+	}, nil
+}
+
+func (n *fakeNATS) subscribed(subject string) int {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.subs[subject]
 }
 
 func (n *fakeNATS) Connected() bool    { return n.connected.Load() }

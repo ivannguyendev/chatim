@@ -31,7 +31,7 @@ func TestSessionOptionsCopyEveryLimit(t *testing.T) {
 	if got.AuthTimeout != cfg.AuthTimeout || got.HeartbeatTimeout != cfg.HeartbeatTimeout || got.WriteTimeout != cfg.WriteTimeout ||
 		got.UnauthMax != cfg.UnauthMax || got.FrameMax != cfg.FrameMax || got.CommandRate != cfg.CommandRate ||
 		got.CommandBurst != cfg.CommandBurst || got.CommandInflight != cfg.CommandInflight || got.SendQueue != cfg.SendQueue ||
-		got.SendQueueBytes != cfg.SendQueueBytes {
+		got.SendQueueBytes != cfg.SendQueueBytes || got.TypingRate != cfg.TypingRate || got.TypingBurst != cfg.TypingBurst {
 		t.Fatalf("session options = %+v from %+v", got, cfg)
 	}
 }
@@ -77,7 +77,7 @@ func TestRouterHolderAnswersUnavailableBeforeTheRouterIsOpen(t *testing.T) {
 func TestFeedWiringCarriesTheNATSAndStreamSettings(t *testing.T) {
 	cfg := testConfig("redis:6379", "/keys.json")
 	got := natsConfig(cfg, Deps{ReadyTimeout: 3 * time.Second})
-	if got.URL != cfg.NATSURL || got.Name != "chatim-websocket-ws-test" || got.ReadyTimeout != 3*time.Second {
+	if got.URL != cfg.NATSURL || got.Name != "chatim-websocket-ws-test" || got.ReadyTimeout != 3*time.Second || got.PendingMsgs != cfg.TypingPendingMsgs {
 		t.Fatalf("nats config = %+v", got)
 	}
 	fc := feedConfig(cfg)

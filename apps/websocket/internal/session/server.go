@@ -23,6 +23,7 @@ type Server struct {
 	verifier  Verifier
 	executor  Executor
 	interest  Interest
+	typing    Typing
 	logger    *slog.Logger
 	upgrader  *gws.Upgrader
 	stats     *stats
@@ -35,18 +36,19 @@ type Server struct {
 	closeCode uint16
 }
 
-func New(opts Options, verifier Verifier, executor Executor, rooms Interest, logger *slog.Logger) (*Server, error) {
+func New(opts Options, verifier Verifier, executor Executor, rooms Interest, typing Typing, logger *slog.Logger) (*Server, error) {
 	if err := opts.validate(); err != nil {
 		return nil, err
 	}
-	if verifier == nil || executor == nil || rooms == nil || logger == nil {
-		return nil, errors.New("session: verifier, executor, interest and logger are required")
+	if verifier == nil || executor == nil || rooms == nil || typing == nil || logger == nil {
+		return nil, errors.New("session: verifier, executor, interest, typing and logger are required")
 	}
 	s := &Server{
 		opts:      opts,
 		verifier:  verifier,
 		executor:  executor,
 		interest:  rooms,
+		typing:    typing,
 		logger:    logger,
 		stats:     newStats(),
 		accepting: newGate(),

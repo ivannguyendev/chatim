@@ -142,6 +142,12 @@ func (b *fakeBroker) consumer(stream string) *fakeConsumer {
 	return b.consumers[stream]
 }
 
+func (b *fakeBroker) Publish(string, []byte) error { return nil }
+
+func (b *fakeBroker) Subscribe(string, func(string, []byte)) (func() error, error) {
+	return func() error { return nil }, nil
+}
+
 func (b *fakeBroker) Connected() bool    { return b.connected.Load() }
 func (b *fakeBroker) Reconnects() uint64 { return b.reconnects.Load() }
 func (b *fakeBroker) Close()             { b.closed.Add(1) }

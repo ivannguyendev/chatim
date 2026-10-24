@@ -5,6 +5,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/interest"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
+	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 type roomSink struct {
@@ -57,4 +58,13 @@ func (c *connection) closeRoom(room string) {
 	if m := c.currentMember(); m != nil {
 		m.Close(room)
 	}
+}
+
+func (c *connection) typing(f *chatimv1.TypingFrame) {
+	if !c.typist.Allow() {
+		c.server.typing.RateLimited()
+		return
+	}
+	claims := c.currentClaims()
+	c.server.typing.FromClient(c.currentMember(), claims.Tenant, claims.User, f)
 }

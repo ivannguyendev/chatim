@@ -11,6 +11,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/feed"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/interest"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/session"
+	"github.com/ivannguyendev/chatim/apps/websocket/internal/typing"
 	"github.com/ivannguyendev/chatim/pkg/coreroute"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 	"github.com/ivannguyendev/chatim/pkg/metrics"
@@ -29,7 +30,7 @@ func redactedLogger(log *slog.Logger, cfg config.Config) *slog.Logger {
 }
 
 func natsConfig(cfg config.Config, deps Deps) feed.NATSConfig {
-	return feed.NATSConfig{URL: cfg.NATSURL, Name: "chatim-websocket-" + cfg.NodeID, ReadyTimeout: deps.ReadyTimeout}
+	return feed.NATSConfig{URL: cfg.NATSURL, Name: "chatim-websocket-" + cfg.NodeID, ReadyTimeout: deps.ReadyTimeout, PendingMsgs: cfg.TypingPendingMsgs}
 }
 
 func feedConfig(cfg config.Config) feed.Config {
@@ -85,7 +86,17 @@ func sessionOptions(cfg config.Config) session.Options {
 		CommandInflight:  cfg.CommandInflight,
 		SendQueue:        cfg.SendQueue,
 		SendQueueBytes:   cfg.SendQueueBytes,
+		TypingRate:       cfg.TypingRate,
+		TypingBurst:      cfg.TypingBurst,
 	}
+}
+
+func newTyping(cfg config.Config, rooms *interest.Table) (*typing.Service, error) {
+	origin, err := typing.NewOrigin(cfg.NodeID)
+	if err != nil {
+		return nil, err
+	}
+	return typing.New(typing.Config{Origin: origin, Queue: cfg.TypingQueue}, rooms)
 }
 
 func routerConfig(cfg config.Config, deps Deps, log *slog.Logger) coreroute.Config {

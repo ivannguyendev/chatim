@@ -40,6 +40,9 @@ func TestRunIsReadyOnlyAfterNATSAndStaysReadyWhenNATSDrops(t *testing.T) {
 	if nats.running() != 2 || len(nats.streams) != 1 || nats.streams[0] != "CHATIM_WS" {
 		t.Fatalf("running consumers %d, ensured streams %v; want two consumers and CHATIM_WS", nats.running(), nats.streams)
 	}
+	if got := nats.subscribed("eph.*.*.typing"); got != 1 {
+		t.Fatalf("typing subscriptions = %d, want 1", got)
+	}
 	_, body := httpStatus(t, adminAddr, "/metrics")
 	for _, want := range []string{
 		"chatim_websocket_nats_connected 1",
@@ -48,6 +51,8 @@ func TestRunIsReadyOnlyAfterNATSAndStaysReadyWhenNATSDrops(t *testing.T) {
 		"chatim_websocket_fanout_queue_depth 0",
 		"chatim_websocket_events_unknown_total 0",
 		"chatim_websocket_nats_reconnects_total 0",
+		`chatim_websocket_typing_dropped_total{reason="queue_full"} 0`,
+		"chatim_websocket_typing_relay_failures_total 0",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("/metrics lacks %q", want)
@@ -66,8 +71,24 @@ func TestRunIsReadyOnlyAfterNATSAndStaysReadyWhenNATSDrops(t *testing.T) {
 	if err := awaitRun(t, done); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if nats.running() != 0 || nats.closed.Load() != 1 {
-		t.Fatalf("after stop: running consumers %d, NATS closes %d; want 0 and 1", nats.running(), nats.closed.Load())
+	if nats.running() != 0 || nats.closed.Load() != 1 || nats.subscribed("eph.*.*.typing") != 0 {
+		t.Fatalf("after stop: running consumers %d, NATS closes %d, typing subscriptions %d; want 0, 1 and 0",
+			nats.running(), nats.closed.Load(), nats.subscribed("eph.*.*.typing"))
+	}
+}
+
+func TestRunFailsAndStopsTheFeedWhenTheTypingRelayCannotSubscribe(t *testing.T) {
+	mr := slotRedis(t)
+	keys := newSigner(t)
+	nats := newFakeNATS()
+	nats.subErr = errors.New("nats connection closed")
+	lis := newListeners()
+	err := Run(t.Context(), testConfig(mr.Addr(), keys.path), newLogWatch().logger(), Deps{Listen: lis.listen, NATS: nats.dial})
+	if err == nil || !strings.Contains(err.Error(), "start typing relay") {
+		t.Fatalf("Run = %v, want a typing relay error", err)
+	}
+	if len(lis.ws) != 0 || nats.running() != 0 || nats.closed.Load() != 1 {
+		t.Fatalf("websocket listeners %d, running consumers %d, NATS closes %d; want 0, 0 and 1", len(lis.ws), nats.running(), nats.closed.Load())
 	}
 }
 

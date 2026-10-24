@@ -15,6 +15,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/feed"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/interest"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/session"
+	"github.com/ivannguyendev/chatim/apps/websocket/internal/typing"
 	"github.com/ivannguyendev/chatim/pkg/admin"
 	"github.com/ivannguyendev/chatim/pkg/coreroute"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
@@ -37,6 +38,7 @@ type node struct {
 	router *coreroute.Router
 	feed   *feed.Feed
 	rooms  *interest.Table
+	typing *typing.Service
 	http   *http.Server
 }
 
@@ -84,7 +86,11 @@ func wire(cfg config.Config, log *slog.Logger) (*node, error) {
 }
 
 func wireServers(cfg config.Config, log *slog.Logger, verifier *jwtverify.Verifier, exec *command.Executor, rooms *interest.Table) (*node, error) {
-	ws, err := session.New(sessionOptions(cfg), verifier, exec, rooms, log)
+	typist, err := newTyping(cfg, rooms)
+	if err != nil {
+		return nil, err
+	}
+	ws, err := session.New(sessionOptions(cfg), verifier, exec, rooms, typist, log)
 	if err != nil {
 		return nil, err
 	}
@@ -93,18 +99,19 @@ func wireServers(cfg config.Config, log *slog.Logger, verifier *jwtverify.Verifi
 	if err != nil {
 		return nil, err
 	}
-	handler, err := metrics.Handler(metricsSubsystem, slices.Concat(metricSources(ws, exec), fd.Sources(), rooms.Sources(), publisher.Sources()))
+	handler, err := metrics.Handler(metricsSubsystem, slices.Concat(metricSources(ws, exec), fd.Sources(), rooms.Sources(), publisher.Sources(), typist.Sources()))
 	if err != nil {
 		return nil, err
 	}
 	return &node{
-		cfg:   cfg,
-		log:   log,
-		admin: admin.New(admin.Config{Addr: cfg.AdminAddr, Metrics: handler}, log),
-		ws:    ws,
-		feed:  fd,
-		rooms: rooms,
-		http:  newHTTPServer(ws, log),
+		cfg:    cfg,
+		log:    log,
+		admin:  admin.New(admin.Config{Addr: cfg.AdminAddr, Metrics: handler}, log),
+		ws:     ws,
+		feed:   fd,
+		rooms:  rooms,
+		typing: typist,
+		http:   newHTTPServer(ws, log),
 	}, nil
 }
 
@@ -163,6 +170,9 @@ func (n *node) openFeed(ctx context.Context, deps Deps) error {
 	if err := n.feed.Start(ctx, b); err != nil {
 		return fmt.Errorf("start feed: %w", err)
 	}
+	if err := n.typing.Start(b); err != nil {
+		return fmt.Errorf("start typing relay: %w", err)
+	}
 	return nil
 }
 
@@ -184,7 +194,7 @@ func (n *node) abandon(ctx context.Context, sup *supervisor, t tasks) error {
 	sup.stopping.Store(true)
 	stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), n.cfg.ShutdownBudget)
 	defer cancel()
-	err := n.feed.Stop(stopCtx)
+	err := errors.Join(n.typing.Stop(), n.feed.Stop(stopCtx))
 	n.rooms.Close()
 	if n.router != nil {
 		err = errors.Join(err, n.router.Close())

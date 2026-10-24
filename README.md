@@ -201,6 +201,9 @@ Toàn bộ đọc qua `apps/core/internal/config`; thiếu thì dùng giá trị
 | `WS_REPLAY_RATE` | `20000` | Tin/giây tối đa khi đang đuổi theo (giờ lưu tin cũ hơn 5s) |
 | `WS_REPLAY_MAX_AGE` | `2m` | Trễ quá mức này, đo bằng giờ JetStream lưu tin (> 5s), thì coi như node khởi động lại: bỏ đoạn cũ, đọc từ hiện tại, tạm ngừng đẩy cho mọi người trên node tới khi người đó được nạp lại rồi gửi `resync`; cũng là thời gian nghỉ tối thiểu giữa hai lần nhảy vì trễ |
 | `WS_RELOAD_RATE` | `1000` | Số người nạp lại mỗi giây mỗi node sau một lần nhảy (thiết bị đang chờ `ready` trước, rồi người đang mở room, rồi còn lại); nạp lỗi thì máy nhận `load_failed`, kết nối vẫn giữ, server không tự nạp lại; máy gửi `load_rooms` (lên đầu hàng) hoặc nối lại. `WS_REPLAY_MAX_AGE` nên lớn hơn số người trên node / tốc độ này |
+| `WS_TYPING_RATE`, `WS_TYPING_BURST` | `2` / `4` | Giới hạn frame `typing` mỗi giây và burst mỗi kết nối (sau giới hạn frame chung); quá thì bỏ frame, đếm `typing_dropped_total{reason="rate"}`, không đóng kết nối |
+| `WS_TYPING_QUEUE` | `8192` | Hàng chờ tín hiệu `typing` nhận từ node khác (core NATS `eph.{tenant}.{room}.typing`); đầy thì bỏ, đếm `reason="queue_full"` |
+| `WS_TYPING_PENDING_MSGS` | `65536` | Số tin tối đa chờ trong subscription `eph.*.*.typing` của thư viện NATS (kèm 64MB); vượt thì NATS bỏ tin |
 | `WS_ROOM_IDS_INFLIGHT` | `64` | Số lần gọi `ListMyRoomIDs` đang chạy tối đa mỗi node; lỗi thì gửi `load_failed` cho các kết nối của người đó |
 | `WS_OPEN_PENDING` | `10s` | `open_room` của room chưa có trong danh sách (vừa tạo) chờ `member_added` tối đa ngần này, rồi `room_closed{NOT_MEMBER}` |
 
