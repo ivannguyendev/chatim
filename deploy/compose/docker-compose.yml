@@ -138,6 +138,18 @@ services:
     tmpfs:
       - /data
 
+  redis-presence:
+    <<: *redis
+    container_name: chatim-redis-presence
+    secrets: [redis_presence_password]
+    environment:
+      REDIS_SECRET_FILE: /run/secrets/redis_presence_password
+    command: ["--save", "", "--appendonly", "no", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "${REDIS_PRESENCE_PORT:-6382}:6379"
+    tmpfs:
+      - /data
+
   nats:
     image: nats:2.15-alpine
     container_name: chatim-nats
@@ -232,11 +244,13 @@ services:
     restart: unless-stopped
     mem_limit: 2g
     stop_grace_period: 18s
-    secrets: [redis_password, ws_jwks]
+    secrets: [redis_password, redis_presence_password, ws_jwks]
     environment:
       WS_NODE_ID: websocket-1
       REDIS_ADDR: chatim-redis:6379
       REDIS_PASSWORD_FILE: /run/secrets/redis_password
+      WS_PRESENCE_REDIS_ADDR: chatim-redis-presence:6379
+      WS_PRESENCE_REDIS_PASSWORD_FILE: /run/secrets/redis_presence_password
       WS_JWT_KEYS_FILE: /run/secrets/ws_jwks
       WS_JWT_ISSUER: chatim-dev
       WS_JWT_AUDIENCE: chatim-websocket
@@ -246,6 +260,8 @@ services:
       - "127.0.0.1:${WS1_PORT:-8081}:8080"
     depends_on:
       redis:
+        condition: service_healthy
+      redis-presence:
         condition: service_healthy
       core-1:
         condition: service_healthy
@@ -298,6 +314,8 @@ secrets:
     environment: REDIS_PASSWORD
   redis_dedupe_password:
     environment: REDIS_DEDUPE_PASSWORD
+  redis_presence_password:
+    environment: REDIS_PRESENCE_PASSWORD
   pg_password:
     environment: PG_PASSWORD
 

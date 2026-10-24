@@ -52,10 +52,11 @@ docs/                    # nghiên cứu, thiết kế, plan, kết quả PoC
 
 Chỉ cần Docker; Go chạy trong container `golang:1.26.10` qua `make`.
 
-    cp .env.example .env        # đổi MONGO_ROOT_PASSWORD, REDIS_PASSWORD, REDIS_DEDUPE_PASSWORD (chữ, số, - hoặc _)
-    make infra-up               # mongo rs0 :27117, redis state :6380, redis dedupe :6381, nats :4223 (monitor :8223)
+    cp .env.example .env        # đổi MONGO_ROOT_PASSWORD, REDIS_PASSWORD, REDIS_DEDUPE_PASSWORD, REDIS_PRESENCE_PASSWORD (chữ, số, - hoặc _)
+    make infra-up               # mongo rs0 :27117, redis state :6380, redis dedupe :6381, redis presence :6382, nats :4223 (monitor :8223)
     make redis-cli ARGS="info memory"                      # redis-cli trong container, mật khẩu lấy từ secret
-    make redis-cli INSTANCE=dedupe ARGS="dbsize"           # INSTANCE=state (mặc định) hoặc dedupe
+    make redis-cli INSTANCE=dedupe ARGS="dbsize"           # INSTANCE=state (mặc định), dedupe hoặc presence
+    make redis-cli INSTANCE=presence ARGS="ttl chatim:presence:e2e:alice"
     make test                   # go test -race ./... trong container
     make go ARGS="vet ./..."    # lệnh go bất kỳ
     make infra-down             # dừng; make infra-reset để xoá cả dữ liệu
@@ -184,7 +185,7 @@ Toàn bộ đọc qua `apps/core/internal/config`; thiếu thì dùng giá trị
 | `WS_AUTH_TIMEOUT` | `5s` | Không gửi frame auth trong thời gian này thì đóng 4002 |
 | `WS_UNAUTH_MAX` | `10000` | Số kết nối chưa xác thực tối đa mỗi node; quá thì 503 |
 | `WS_FRAME_MAX` | `131072` | Cỡ frame tối đa (≥ 4096); quá thì đóng 1009 |
-| `WS_HEARTBEAT_TIMEOUT` | `15s` | Không nhận frame nào trong thời gian này thì đóng (≥ 10s) |
+| `WS_HEARTBEAT_TIMEOUT` | `15s` | Không nhận frame nào trong thời gian này thì đóng (≥ 10s; với mặc định presence phải ≥ 13s vì `WS_PRESENCE_TTL` ≤ `WS_HEARTBEAT_TIMEOUT + WS_PRESENCE_STAMP_EVERY`) |
 | `WS_COMMAND_RATE`, `WS_COMMAND_BURST` | `50` / `100` | Giới hạn frame mỗi giây và burst mỗi kết nối |
 | `WS_COMMAND_INFLIGHT` | `32` | Số lệnh đang chạy tối đa mỗi kết nối; quá thì `RESOURCE_EXHAUSTED` |
 | `WS_SEND_QUEUE` | `256` | Hàng frame chờ ghi mỗi kết nối; đầy thì đóng 4008 sau các frame đã xếp (D194) |
@@ -204,6 +205,14 @@ Toàn bộ đọc qua `apps/core/internal/config`; thiếu thì dùng giá trị
 | `WS_TYPING_RATE`, `WS_TYPING_BURST` | `2` / `4` | Giới hạn frame `typing` mỗi giây và burst mỗi kết nối (sau giới hạn frame chung); quá thì bỏ frame, đếm `typing_dropped_total{reason="rate"}`, không đóng kết nối |
 | `WS_TYPING_QUEUE` | `8192` | Hàng chờ tín hiệu `typing` nhận từ node khác (core NATS `eph.{tenant}.{room}.typing`); đầy thì bỏ, đếm `reason="queue_full"` |
 | `WS_TYPING_PENDING_MSGS` | `65536` | Số tin tối đa chờ trong subscription `eph.*.*.typing` của thư viện NATS (kèm 64MB); vượt thì NATS bỏ tin |
+| `WS_PRESENCE_REDIS_ADDR`, `WS_PRESENCE_REDIS_DB` | `chatim-redis-presence:6379` / `0` | Redis presence riêng: mỗi người online là một key `chatim:presence:{tenant}:{user}` = `1` có `EX` = `WS_PRESENCE_TTL`; còn key là online, mất key là offline. Chỉ `SET … EX` (và `MGET` sau), không `SCAN`/`KEYS`, không xoá. Node không chờ Redis này khi khởi động, `/readyz` không phụ thuộc nó; gauge `presence_redis_up` |
+| `WS_PRESENCE_REDIS_PASSWORD`, `WS_PRESENCE_REDIS_PASSWORD_FILE` | rỗng | Như `REDIS_PASSWORD`; `_FILE` thắng. Compose trỏ `_FILE` vào secret `redis_presence_password` |
+| `WS_PRESENCE_REDIS_TIMEOUT` | `500ms` | Dial/đọc/ghi và hạn của mỗi lệnh pipeline, tính cả lần thử lại (`MaxRetries 1`) |
+| `WS_PRESENCE_REDIS_POOL` | `64` | Số kết nối tối đa của client presence (`chatim-websocket-presence-{node}`) |
+| `WS_PRESENCE_TTL` | `15s` | TTL của key online; phải lớn hơn `WS_PRESENCE_STAMP_EVERY + 10s + 2 × WS_PRESENCE_FLUSH + WS_PRESENCE_REDIS_TIMEOUT` và không quá `WS_HEARTBEAT_TIMEOUT + WS_PRESENCE_STAMP_EVERY` |
+| `WS_PRESENCE_STAMP_EVERY` | `2s` | Một người được đóng dấu lại khi lần đóng dấu trước trên node đã cũ hơn mức này; mọi frame (heartbeat, ping) sau auth đều tính, nhiều kết nối cùng người chỉ ghi một lần |
+| `WS_PRESENCE_FLUSH` | `1s` | Chu kỳ ghi những người chờ đóng dấu; batch lỗi đầu tiên dừng lượt, người chưa ghi chờ lượt sau; người không có frame quá `WS_PRESENCE_TTL` bị bỏ khỏi RAM và không ghi lại; dừng node không ghi lượt cuối |
+| `WS_PRESENCE_BATCH` | `500` | Số key mỗi pipeline, `1..1000` |
 | `WS_ROOM_IDS_INFLIGHT` | `64` | Số lần gọi `ListMyRoomIDs` đang chạy tối đa mỗi node; lỗi thì gửi `load_failed` cho các kết nối của người đó |
 | `WS_OPEN_PENDING` | `10s` | `open_room` của room chưa có trong danh sách (vừa tạo) chờ `member_added` tối đa ngần này, rồi `room_closed{NOT_MEMBER}` |
 
@@ -255,6 +264,7 @@ Với app, compose publish ra host chỉ gRPC của core, WebSocket của websoc
 |---|---|---|
 | `6380` | `redis` state (`REDIS_PORT`) | AOF everysec, `noeviction`, bắt buộc AUTH (`REDIS_PASSWORD`) |
 | `6381` | `redis-dedupe` (`REDIS_DEDUPE_PORT`) | Không lưu đĩa, `maxmemory` `REDIS_DEDUPE_MAXMEMORY` (512mb), `allkeys-lru`, bắt buộc AUTH (`REDIS_DEDUPE_PASSWORD`) |
+| `6382` | `redis-presence` (`REDIS_PRESENCE_PORT`) | Key online của websocket, không lưu đĩa, `noeviction`, bắt buộc AUTH (`REDIS_PRESENCE_PASSWORD`) |
 | `127.0.0.1:9001` | `core-1` gRPC (`CORE1_GRPC_PORT`) | |
 | `127.0.0.1:9002` | `core-2` gRPC (`CORE2_GRPC_PORT`) | |
 | `127.0.0.1:8081` | `websocket-1` WebSocket `/ws` (`WS1_PORT`) | Cần token dev (`make -s ws-token`) |

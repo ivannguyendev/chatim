@@ -49,6 +49,8 @@ func (n *node) shutdown(ctx context.Context, sup *supervisor, t tasks, cause err
 	fail("connections", within(stopCtx, plan.Close, func(c context.Context) error {
 		return errors.Join(n.ws.Wait(c), t.listener.stop(c))
 	}))
+	n.online.Stop()
+	fail("presence", closePresence(n.redis))
 	n.rooms.Close()
 	fail("core router", n.router.Close())
 	fail("admin", t.admin.stop(stopCtx))

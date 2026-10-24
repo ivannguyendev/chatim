@@ -1,15 +1,20 @@
 package app
 
 import (
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"sync/atomic"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/command"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/config"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/feed"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/interest"
+	"github.com/ivannguyendev/chatim/apps/websocket/internal/presence"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/session"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/typing"
 	"github.com/ivannguyendev/chatim/pkg/coreroute"
@@ -26,7 +31,7 @@ const (
 )
 
 func redactedLogger(log *slog.Logger, cfg config.Config) *slog.Logger {
-	return slog.New(redact.NewHandler(log.Handler(), []string{cfg.NATSURL}, []string{cfg.RedisPassword}))
+	return slog.New(redact.NewHandler(log.Handler(), []string{cfg.NATSURL}, []string{cfg.RedisPassword, cfg.PresenceRedisPassword}))
 }
 
 func natsConfig(cfg config.Config, deps Deps) feed.NATSConfig {
@@ -97,6 +102,57 @@ func newTyping(cfg config.Config, rooms *interest.Table) (*typing.Service, error
 		return nil, err
 	}
 	return typing.New(typing.Config{Origin: origin, Queue: cfg.TypingQueue}, rooms)
+}
+
+type presenceParts struct {
+	client  *presence.Client
+	stamper *presence.Stamper
+}
+
+func presenceRedisConfig(cfg config.Config) presence.RedisConfig {
+	return presence.RedisConfig{
+		Addr:     cfg.PresenceRedisAddr,
+		DB:       cfg.PresenceRedisDB,
+		Password: cfg.PresenceRedisPassword,
+		Pool:     cfg.PresenceRedisPool,
+		Timeout:  cfg.PresenceRedisTimeout,
+		Node:     cfg.NodeID,
+	}
+}
+
+func presenceConfig(cfg config.Config) presence.Config {
+	return presence.Config{TTL: cfg.PresenceTTL, StampEvery: cfg.PresenceStampEvery, Flush: cfg.PresenceFlush, Batch: cfg.PresenceBatch}
+}
+
+func newPresence(cfg config.Config, deps Deps) (presenceParts, error) {
+	open := deps.PresenceRedis
+	if open == nil {
+		open = func(opts *redis.Options) presence.Conn { return redis.NewClient(opts) }
+	}
+	conn := open(presence.RedisOptions(presenceRedisConfig(cfg)))
+	client, err := presence.NewClient(conn, cfg.PresenceRedisTimeout)
+	if err != nil {
+		return presenceParts{}, errors.Join(err, closeConn(conn))
+	}
+	stamper, err := presence.NewStamper(presenceConfig(cfg), client)
+	if err != nil {
+		return presenceParts{}, errors.Join(err, client.Close())
+	}
+	return presenceParts{client: client, stamper: stamper}, nil
+}
+
+func closeConn(conn presence.Conn) error {
+	if conn == nil {
+		return nil
+	}
+	return conn.Close()
+}
+
+func closePresence(client *presence.Client) error {
+	if err := client.Close(); err != nil {
+		return fmt.Errorf("close presence redis: %w", err)
+	}
+	return nil
 }
 
 func routerConfig(cfg config.Config, deps Deps, log *slog.Logger) coreroute.Config {

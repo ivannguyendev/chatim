@@ -10,10 +10,13 @@ import (
 	"slices"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/command"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/config"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/feed"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/interest"
+	"github.com/ivannguyendev/chatim/apps/websocket/internal/presence"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/session"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/typing"
 	"github.com/ivannguyendev/chatim/pkg/admin"
@@ -23,10 +26,11 @@ import (
 )
 
 type Deps struct {
-	Dial         coreroute.Dialer
-	ReadyTimeout time.Duration
-	Listen       func(ctx context.Context, addr string) (net.Listener, error)
-	NATS         func(ctx context.Context) (feed.Broker, error)
+	Dial          coreroute.Dialer
+	ReadyTimeout  time.Duration
+	Listen        func(ctx context.Context, addr string) (net.Listener, error)
+	NATS          func(ctx context.Context) (feed.Broker, error)
+	PresenceRedis func(opts *redis.Options) presence.Conn
 }
 
 type node struct {
@@ -39,6 +43,8 @@ type node struct {
 	feed   *feed.Feed
 	rooms  *interest.Table
 	typing *typing.Service
+	online *presence.Stamper
+	redis  *presence.Client
 	http   *http.Server
 }
 
@@ -52,7 +58,7 @@ func Run(ctx context.Context, cfg config.Config, log *slog.Logger, deps Deps) er
 	}
 	log = redactedLogger(log, cfg)
 	log.InfoContext(ctx, "starting websocket", "config", cfg.LogValue())
-	n, err := wire(cfg, log)
+	n, err := wire(cfg, log, deps)
 	if err != nil {
 		return err
 	}
@@ -62,7 +68,7 @@ func Run(ctx context.Context, cfg config.Config, log *slog.Logger, deps Deps) er
 	return n.serve(ctx, deps)
 }
 
-func wire(cfg config.Config, log *slog.Logger) (*node, error) {
+func wire(cfg config.Config, log *slog.Logger, deps Deps) (*node, error) {
 	verifier, err := jwtverify.LoadFile(cfg.JWTKeysFile, jwtConfig(cfg))
 	if err != nil {
 		return nil, fmt.Errorf("load jwt key set: %w", err)
@@ -72,25 +78,31 @@ func wire(cfg config.Config, log *slog.Logger) (*node, error) {
 	if err != nil {
 		return nil, err
 	}
-	rooms, err := newInterest(cfg, routes, log)
+	pres, err := newPresence(cfg, deps)
 	if err != nil {
 		return nil, err
 	}
-	n, err := wireServers(cfg, log, verifier, exec, rooms)
+	rooms, err := newInterest(cfg, routes, log)
+	if err != nil {
+		_ = pres.client.Close()
+		return nil, err
+	}
+	n, err := wireServers(cfg, log, verifier, exec, rooms, pres)
 	if err != nil {
 		rooms.Close()
+		_ = pres.client.Close()
 		return nil, err
 	}
 	n.routes = routes
 	return n, nil
 }
 
-func wireServers(cfg config.Config, log *slog.Logger, verifier *jwtverify.Verifier, exec *command.Executor, rooms *interest.Table) (*node, error) {
+func wireServers(cfg config.Config, log *slog.Logger, verifier *jwtverify.Verifier, exec *command.Executor, rooms *interest.Table, pres presenceParts) (*node, error) {
 	typist, err := newTyping(cfg, rooms)
 	if err != nil {
 		return nil, err
 	}
-	ws, err := session.New(sessionOptions(cfg), verifier, exec, rooms, typist, log)
+	ws, err := session.New(sessionOptions(cfg), verifier, exec, rooms, typist, pres.stamper, log)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +111,8 @@ func wireServers(cfg config.Config, log *slog.Logger, verifier *jwtverify.Verifi
 	if err != nil {
 		return nil, err
 	}
-	handler, err := metrics.Handler(metricsSubsystem, slices.Concat(metricSources(ws, exec), fd.Sources(), rooms.Sources(), publisher.Sources(), typist.Sources()))
+	sources := slices.Concat(metricSources(ws, exec), fd.Sources(), rooms.Sources(), publisher.Sources(), typist.Sources(), pres.stamper.Sources(), pres.client.Sources())
+	handler, err := metrics.Handler(metricsSubsystem, sources)
 	if err != nil {
 		return nil, err
 	}
@@ -111,6 +124,8 @@ func wireServers(cfg config.Config, log *slog.Logger, verifier *jwtverify.Verifi
 		feed:   fd,
 		rooms:  rooms,
 		typing: typist,
+		online: pres.stamper,
+		redis:  pres.client,
 		http:   newHTTPServer(ws, log),
 	}, nil
 }
@@ -119,7 +134,7 @@ func (n *node) serve(ctx context.Context, deps Deps) error {
 	adminLis, err := deps.Listen(ctx, n.cfg.AdminAddr)
 	if err != nil {
 		closeListener(adminLis)
-		return err
+		return errors.Join(err, closePresence(n.redis))
 	}
 	sup := newSupervisor(ctx)
 	t := tasks{admin: sup.start("admin", func(c context.Context) error { return n.admin.ServeListener(c, adminLis) })}
@@ -145,6 +160,9 @@ func (n *node) serve(ctx context.Context, deps Deps) error {
 func (n *node) openRoutes(ctx context.Context, deps Deps) (net.Listener, error) {
 	if err := n.openFeed(ctx, deps); err != nil || ctx.Err() != nil {
 		return nil, err
+	}
+	if err := n.online.Start(); err != nil {
+		return nil, fmt.Errorf("start presence stamper: %w", err)
 	}
 	if err := n.openRouter(ctx, deps); err != nil || ctx.Err() != nil {
 		return nil, err
@@ -195,6 +213,8 @@ func (n *node) abandon(ctx context.Context, sup *supervisor, t tasks) error {
 	stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), n.cfg.ShutdownBudget)
 	defer cancel()
 	err := errors.Join(n.typing.Stop(), n.feed.Stop(stopCtx))
+	n.online.Stop()
+	err = errors.Join(err, closePresence(n.redis))
 	n.rooms.Close()
 	if n.router != nil {
 		err = errors.Join(err, n.router.Close())

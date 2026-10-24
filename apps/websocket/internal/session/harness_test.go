@@ -100,18 +100,19 @@ type harness struct {
 	rooms    *interest.Table
 	loader   *roomLoader
 	typing   *typing.Service
+	presence *fakePresence
 }
 
 func newHarness(t *testing.T, opts Options) *harness {
 	t.Helper()
 	verifier, core, loader := newFakeVerifier(t), newFakeCore(), &roomLoader{rooms: map[string][]interest.Room{}}
 	rooms := newInterestWith(t, loader)
-	typist := newTestTyping(t, rooms)
-	server, err := New(opts, verifier, core, rooms, typist, slog.New(slog.DiscardHandler))
+	typist, presence := newTestTyping(t, rooms), &fakePresence{}
+	server, err := New(opts, verifier, core, rooms, typist, presence, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	return &harness{t: t, server: server, verifier: verifier, core: core, rooms: rooms, loader: loader, typing: typist}
+	return &harness{t: t, server: server, verifier: verifier, core: core, rooms: rooms, loader: loader, typing: typist, presence: presence}
 }
 
 type testClient struct {

@@ -151,9 +151,13 @@ func (c *connection) control(payload []byte, reply bool) {
 }
 
 func (c *connection) renewLiveness() {
-	if c.isAuthed() {
-		_ = c.socket.SetReadDeadline(time.Now().Add(c.server.opts.HeartbeatTimeout))
+	claims, authed := c.authedClaims()
+	if !authed {
+		return
 	}
+	now := time.Now()
+	_ = c.socket.SetReadDeadline(now.Add(c.server.opts.HeartbeatTimeout))
+	c.server.presence.Touch(claims.Tenant, claims.User, now)
 }
 
 func kindOf(frame *chatimv1.ClientFrame) frameKind {
@@ -175,6 +179,12 @@ func kindOf(frame *chatimv1.ClientFrame) frameKind {
 	default:
 		return frameUnknown
 	}
+}
+
+func (c *connection) authedClaims() (jwtverify.Claims, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.claims, c.authed
 }
 
 func (c *connection) isAuthed() bool {

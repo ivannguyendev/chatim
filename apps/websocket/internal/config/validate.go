@@ -15,6 +15,8 @@ const (
 	minHeartbeatTimeout = 2 * maxHeartbeatGap
 	minConsumeBytes     = 1 << 20
 	catchUpAge          = 5 * time.Second
+	maxClientFrameGap   = 10 * time.Second
+	maxPresenceBatch    = 1000
 )
 
 type rule struct {
@@ -74,6 +76,7 @@ func (c Config) Validate() error {
 		{c.ReplayMaxAge > catchUpAge, fmt.Sprintf("WS_REPLAY_MAX_AGE must exceed the %v catch-up age", catchUpAge)},
 		{c.ConsumeBytes >= minConsumeBytes, fmt.Sprintf("WS_CONSUME_BYTES must be at least %d (the NATS default max payload)", minConsumeBytes)},
 	}
+	rules = append(rules, c.presenceRules()...)
 	var errs []error
 	for _, r := range rules {
 		if !r.ok {
@@ -81,6 +84,23 @@ func (c Config) Validate() error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func (c Config) presenceRules() []rule {
+	refresh := c.PresenceStampEvery + maxClientFrameGap + 2*c.PresenceFlush + c.PresenceRedisTimeout
+	return []rule{
+		{c.PresenceRedisAddr != "", "WS_PRESENCE_REDIS_ADDR is required"},
+		{c.PresenceRedisDB >= 0, "WS_PRESENCE_REDIS_DB must not be negative"},
+		positive("WS_PRESENCE_REDIS_TIMEOUT", c.PresenceRedisTimeout),
+		positive("WS_PRESENCE_REDIS_POOL", c.PresenceRedisPool),
+		positive("WS_PRESENCE_TTL", c.PresenceTTL),
+		positive("WS_PRESENCE_STAMP_EVERY", c.PresenceStampEvery),
+		positive("WS_PRESENCE_FLUSH", c.PresenceFlush),
+		positive("WS_PRESENCE_BATCH", c.PresenceBatch),
+		{c.PresenceBatch <= maxPresenceBatch, fmt.Sprintf("WS_PRESENCE_BATCH must be at most %d", maxPresenceBatch)},
+		{refresh < c.PresenceTTL, fmt.Sprintf("WS_PRESENCE_STAMP_EVERY + %v (frame gap) + 2 x WS_PRESENCE_FLUSH + WS_PRESENCE_REDIS_TIMEOUT = %v must be below WS_PRESENCE_TTL %v", maxClientFrameGap, refresh, c.PresenceTTL)},
+		{c.PresenceTTL <= c.HeartbeatTimeout+c.PresenceStampEvery, fmt.Sprintf("WS_PRESENCE_TTL %v must not exceed WS_HEARTBEAT_TIMEOUT + WS_PRESENCE_STAMP_EVERY = %v", c.PresenceTTL, c.HeartbeatTimeout+c.PresenceStampEvery)},
+	}
 }
 
 func firstToken(root string) string {

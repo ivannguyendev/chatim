@@ -30,13 +30,14 @@ import (
 )
 
 const (
-	testIssuer        = "chatim-dev"
-	testAudience      = "chatim-websocket"
-	testKID           = "k1"
-	testRoom          = 42
-	testRedisPassword = "s3cr3t-redis-pass"
-	testNATSPassword  = "n4ts-s3cr3t"
-	waitLimit         = 10 * time.Second
+	testIssuer           = "chatim-dev"
+	testAudience         = "chatim-websocket"
+	testKID              = "k1"
+	testRoom             = 42
+	testRedisPassword    = "s3cr3t-redis-pass"
+	testNATSPassword     = "n4ts-s3cr3t"
+	testPresencePassword = "pr3s3nc3-s3cr3t"
+	waitLimit            = 10 * time.Second
 )
 
 type signer struct {
@@ -84,6 +85,8 @@ func testConfig(redisAddr, keysFile string) config.Config {
 		FanoutWorkers: 2, FanoutQueue: 64, ReplayRate: 1000, ConsumeBatch: 100, ConsumeBytes: 1 << 20,
 		RoomIDsInflight: 4, OpenPending: 10 * time.Second, ReplayMaxAge: 2 * time.Minute, ReloadRate: 1000,
 		TypingRate: 2, TypingBurst: 4, TypingQueue: 64, TypingPendingMsgs: 128,
+		PresenceRedisAddr: "presence:6379", PresenceRedisPassword: testPresencePassword, PresenceRedisTimeout: 500 * time.Millisecond,
+		PresenceRedisPool: 4, PresenceTTL: 15 * time.Second, PresenceStampEvery: 2 * time.Second, PresenceFlush: 50 * time.Millisecond, PresenceBatch: 500,
 	}
 }
 

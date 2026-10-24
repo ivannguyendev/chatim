@@ -1,6 +1,8 @@
 package session
 
 import (
+	"time"
+
 	"github.com/lxzan/gws"
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/interest"
@@ -25,6 +27,7 @@ func (s roomSink) Offer(frame []byte) bool {
 func (s roomSink) Fail() { s.c.closeWith(CodeTryAgainLater) }
 
 func (c *connection) join(claims jwtverify.Claims) {
+	c.server.presence.Touch(claims.Tenant, claims.User, time.Now())
 	member := c.server.interest.Register(claims.Tenant, claims.User, roomSink{c: c})
 	c.mu.Lock()
 	if c.finished {

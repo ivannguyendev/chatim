@@ -62,6 +62,16 @@ type Config struct {
 	TypingBurst       int
 	TypingQueue       int
 	TypingPendingMsgs int
+
+	PresenceRedisAddr     string
+	PresenceRedisDB       int
+	PresenceRedisPassword string
+	PresenceRedisTimeout  time.Duration
+	PresenceRedisPool     int
+	PresenceTTL           time.Duration
+	PresenceStampEvery    time.Duration
+	PresenceFlush         time.Duration
+	PresenceBatch         int
 }
 
 func AdminAddr() string { return envconfig.String("WS_ADMIN_ADDR", defaultAdminAddr) }
@@ -111,6 +121,16 @@ func Load() (Config, error) {
 		TypingBurst:       p.number("WS_TYPING_BURST", 4),
 		TypingQueue:       p.number("WS_TYPING_QUEUE", 8192),
 		TypingPendingMsgs: p.number("WS_TYPING_PENDING_MSGS", 65536),
+
+		PresenceRedisAddr:     envconfig.String("WS_PRESENCE_REDIS_ADDR", "chatim-redis-presence:6379"),
+		PresenceRedisDB:       p.number("WS_PRESENCE_REDIS_DB", 0),
+		PresenceRedisPassword: p.secret("WS_PRESENCE_REDIS_PASSWORD"),
+		PresenceRedisTimeout:  p.span("WS_PRESENCE_REDIS_TIMEOUT", 500*time.Millisecond),
+		PresenceRedisPool:     p.number("WS_PRESENCE_REDIS_POOL", 64),
+		PresenceTTL:           p.span("WS_PRESENCE_TTL", 15*time.Second),
+		PresenceStampEvery:    p.span("WS_PRESENCE_STAMP_EVERY", 2*time.Second),
+		PresenceFlush:         p.span("WS_PRESENCE_FLUSH", time.Second),
+		PresenceBatch:         p.number("WS_PRESENCE_BATCH", 500),
 	}
 	if err := errors.Join(p.errs...); err != nil {
 		return Config{}, err
@@ -165,6 +185,15 @@ func (c Config) LogValue() slog.Value {
 		slog.Int("typing_burst", c.TypingBurst),
 		slog.Int("typing_queue", c.TypingQueue),
 		slog.Int("typing_pending_msgs", c.TypingPendingMsgs),
+		slog.String("presence_redis_addr", c.PresenceRedisAddr),
+		slog.Int("presence_redis_db", c.PresenceRedisDB),
+		slog.Bool("presence_redis_auth", c.PresenceRedisPassword != ""),
+		slog.Duration("presence_redis_timeout", c.PresenceRedisTimeout),
+		slog.Int("presence_redis_pool", c.PresenceRedisPool),
+		slog.Duration("presence_ttl", c.PresenceTTL),
+		slog.Duration("presence_stamp_every", c.PresenceStampEvery),
+		slog.Duration("presence_flush", c.PresenceFlush),
+		slog.Int("presence_batch", c.PresenceBatch),
 	)
 }
 

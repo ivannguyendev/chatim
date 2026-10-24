@@ -50,6 +50,10 @@ type Typing interface {
 	RateLimited()
 }
 
+type Presence interface {
+	Touch(tenant, user string, now time.Time)
+}
+
 type Options struct {
 	AuthTimeout      time.Duration
 	HeartbeatTimeout time.Duration

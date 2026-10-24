@@ -39,7 +39,8 @@ func TestLoadValidation(t *testing.T) {
 		{"frame max under 4KB", map[string]string{"WS_FRAME_MAX": "4095"}, "WS_FRAME_MAX must be at least 4096"},
 		{"frame max at 4KB", map[string]string{"WS_FRAME_MAX": "4096"}, ""},
 		{"heartbeat timeout under two heartbeats", map[string]string{"WS_HEARTBEAT_TIMEOUT": "9999ms"}, "WS_HEARTBEAT_TIMEOUT must be at least 10s"},
-		{"heartbeat timeout at two heartbeats", map[string]string{"WS_HEARTBEAT_TIMEOUT": "10s"}, ""},
+		{"heartbeat timeout at two heartbeats leaves no room for presence", map[string]string{"WS_HEARTBEAT_TIMEOUT": "10s"}, "WS_PRESENCE_TTL 15s must not exceed WS_HEARTBEAT_TIMEOUT + WS_PRESENCE_STAMP_EVERY = 12s"},
+		{"heartbeat timeout with room for presence", map[string]string{"WS_HEARTBEAT_TIMEOUT": "13s"}, ""},
 		{"stop phases over the budget", map[string]string{"WS_SHUTDOWN_BUDGET": "9999ms"}, "WS_DRAIN_DELAY + CORE_REQUEST_DEADLINE + 2s (feed) + 1s (close) = 10s must not exceed WS_SHUTDOWN_BUDGET 9.999s"},
 		{"stop phases at the budget", map[string]string{"WS_SHUTDOWN_BUDGET": "10s"}, ""},
 		{"request deadline counts in the budget", map[string]string{"CORE_REQUEST_DEADLINE": "12001ms"}, "WS_SHUTDOWN_BUDGET"},
@@ -71,6 +72,24 @@ func TestLoadValidation(t *testing.T) {
 		{"zero typing pending messages", map[string]string{"WS_TYPING_PENDING_MSGS": "0"}, "WS_TYPING_PENDING_MSGS must be positive"},
 		{"unparsable typing rate", map[string]string{"WS_TYPING_RATE": "fast"}, "WS_TYPING_RATE"},
 		{"one typing frame per second", map[string]string{"WS_TYPING_RATE": "1", "WS_TYPING_BURST": "1"}, ""},
+		{"blank presence redis addr uses the default", map[string]string{"WS_PRESENCE_REDIS_ADDR": ""}, ""},
+		{"negative presence redis db", map[string]string{"WS_PRESENCE_REDIS_DB": "-1"}, "WS_PRESENCE_REDIS_DB must not be negative"},
+		{"zero presence redis timeout", map[string]string{"WS_PRESENCE_REDIS_TIMEOUT": "0s"}, "WS_PRESENCE_REDIS_TIMEOUT must be positive"},
+		{"zero presence redis pool", map[string]string{"WS_PRESENCE_REDIS_POOL": "0"}, "WS_PRESENCE_REDIS_POOL must be positive"},
+		{"zero presence ttl", map[string]string{"WS_PRESENCE_TTL": "0s"}, "WS_PRESENCE_TTL must be positive"},
+		{"zero presence stamp interval", map[string]string{"WS_PRESENCE_STAMP_EVERY": "0s"}, "WS_PRESENCE_STAMP_EVERY must be positive"},
+		{"zero presence flush", map[string]string{"WS_PRESENCE_FLUSH": "0s"}, "WS_PRESENCE_FLUSH must be positive"},
+		{"zero presence batch", map[string]string{"WS_PRESENCE_BATCH": "0"}, "WS_PRESENCE_BATCH must be positive"},
+		{"presence batch at 1000", map[string]string{"WS_PRESENCE_BATCH": "1000"}, ""},
+		{"presence batch over 1000", map[string]string{"WS_PRESENCE_BATCH": "1001"}, "WS_PRESENCE_BATCH must be at most 1000"},
+		{"unparsable presence ttl", map[string]string{"WS_PRESENCE_TTL": "long"}, "WS_PRESENCE_TTL"},
+		{"presence refresh at the ttl", map[string]string{"WS_PRESENCE_TTL": "14500ms"}, "WS_PRESENCE_STAMP_EVERY + 10s (frame gap) + 2 x WS_PRESENCE_FLUSH + WS_PRESENCE_REDIS_TIMEOUT = 14.5s must be below WS_PRESENCE_TTL 14.5s"},
+		{"presence refresh just below the ttl", map[string]string{"WS_PRESENCE_TTL": "14501ms"}, ""},
+		{"presence redis timeout counts in the refresh", map[string]string{"WS_PRESENCE_REDIS_TIMEOUT": "1s"}, "must be below WS_PRESENCE_TTL"},
+		{"presence flush counts twice in the refresh", map[string]string{"WS_PRESENCE_FLUSH": "1250ms"}, "must be below WS_PRESENCE_TTL"},
+		{"presence ttl at heartbeat timeout plus stamp interval", map[string]string{"WS_PRESENCE_TTL": "17s"}, ""},
+		{"presence ttl over heartbeat timeout plus stamp interval", map[string]string{"WS_PRESENCE_TTL": "17001ms"}, "WS_PRESENCE_TTL 17.001s must not exceed WS_HEARTBEAT_TIMEOUT + WS_PRESENCE_STAMP_EVERY = 17s"},
+		{"presence ttl follows the heartbeat timeout", map[string]string{"WS_HEARTBEAT_TIMEOUT": "12s"}, "must not exceed WS_HEARTBEAT_TIMEOUT + WS_PRESENCE_STAMP_EVERY = 14s"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -85,6 +104,18 @@ func TestLoadValidation(t *testing.T) {
 				t.Fatalf("Load() = %v, want an error containing %q", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestValidateRequiresThePresenceRedisAddress(t *testing.T) {
+	setEnv(t, nil)
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	cfg.PresenceRedisAddr = ""
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "WS_PRESENCE_REDIS_ADDR is required") {
+		t.Fatalf("Validate() = %v, want WS_PRESENCE_REDIS_ADDR is required", err)
 	}
 }
 

@@ -25,6 +25,8 @@ var envKeys = []string{
 	"WS_FANOUT_WORKERS", "WS_FANOUT_QUEUE", "WS_REPLAY_RATE", "WS_CONSUME_BATCH", "WS_CONSUME_BYTES",
 	"WS_ROOM_IDS_INFLIGHT", "WS_OPEN_PENDING", "WS_REPLAY_MAX_AGE", "WS_RELOAD_RATE",
 	"WS_TYPING_RATE", "WS_TYPING_BURST", "WS_TYPING_QUEUE", "WS_TYPING_PENDING_MSGS",
+	"WS_PRESENCE_REDIS_ADDR", "WS_PRESENCE_REDIS_DB", "WS_PRESENCE_REDIS_PASSWORD", "WS_PRESENCE_REDIS_PASSWORD_FILE",
+	"WS_PRESENCE_REDIS_TIMEOUT", "WS_PRESENCE_REDIS_POOL", "WS_PRESENCE_TTL", "WS_PRESENCE_STAMP_EVERY", "WS_PRESENCE_FLUSH", "WS_PRESENCE_BATCH",
 }
 
 var requiredEnv = map[string]string{
@@ -97,6 +99,14 @@ func TestLoadDefaults(t *testing.T) {
 		TypingBurst:       4,
 		TypingQueue:       8192,
 		TypingPendingMsgs: 65536,
+
+		PresenceRedisAddr:    "chatim-redis-presence:6379",
+		PresenceRedisTimeout: 500 * time.Millisecond,
+		PresenceRedisPool:    64,
+		PresenceTTL:          15 * time.Second,
+		PresenceStampEvery:   2 * time.Second,
+		PresenceFlush:        time.Second,
+		PresenceBatch:        500,
 	}
 	if got != want {
 		t.Fatalf("Load() = %+v, want %+v", fields(got), fields(want))
@@ -150,6 +160,25 @@ func TestLoadReadsRedisPasswordFile(t *testing.T) {
 	}
 	if got.RedisPassword != "f1l3s3cr3t" {
 		t.Fatalf("RedisPassword from file not used")
+	}
+}
+
+func TestLoadReadsThePresenceRedisPasswordFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "redis_presence_password")
+	if err := os.WriteFile(path, []byte("pr3s3nc3f1l3\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	setEnv(t, map[string]string{"WS_PRESENCE_REDIS_PASSWORD": "envs3cr3t", "WS_PRESENCE_REDIS_PASSWORD_FILE": path, "WS_PRESENCE_REDIS_ADDR": "presence:6379", "WS_PRESENCE_REDIS_DB": "2"})
+	got, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got.PresenceRedisPassword != "pr3s3nc3f1l3" || got.PresenceRedisAddr != "presence:6379" || got.PresenceRedisDB != 2 {
+		t.Fatalf("presence redis from env not used: addr %q db %d", got.PresenceRedisAddr, got.PresenceRedisDB)
+	}
+	out := got.String()
+	if strings.Contains(out, "pr3s3nc3f1l3") || !strings.Contains(out, "presence_redis_auth=true") {
+		t.Fatalf("String() = %s, want presence_redis_auth=true without the password", out)
 	}
 }
 

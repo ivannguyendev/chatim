@@ -15,7 +15,7 @@ func TestRunIsReadyOnlyAfterNATSAndStaysReadyWhenNATSDrops(t *testing.T) {
 	lis, logs := newListeners(), newLogWatch()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	done := runAsync(ctx, testConfig(mr.Addr(), keys.path), logs.logger(), Deps{Dial: dial, Listen: lis.listen, NATS: nats.dial})
+	done := runAsync(ctx, testConfig(mr.Addr(), keys.path), logs.logger(), Deps{PresenceRedis: newPresenceRedis(t).open, Dial: dial, Listen: lis.listen, NATS: nats.dial})
 
 	adminAddr := awaitListener(t, lis.admin)
 	receive(t, nats.dialed, "nats dial")
@@ -83,7 +83,7 @@ func TestRunFailsAndStopsTheFeedWhenTheTypingRelayCannotSubscribe(t *testing.T) 
 	nats := newFakeNATS()
 	nats.subErr = errors.New("nats connection closed")
 	lis := newListeners()
-	err := Run(t.Context(), testConfig(mr.Addr(), keys.path), newLogWatch().logger(), Deps{Listen: lis.listen, NATS: nats.dial})
+	err := Run(t.Context(), testConfig(mr.Addr(), keys.path), newLogWatch().logger(), Deps{PresenceRedis: newPresenceRedis(t).open, Listen: lis.listen, NATS: nats.dial})
 	if err == nil || !strings.Contains(err.Error(), "start typing relay") {
 		t.Fatalf("Run = %v, want a typing relay error", err)
 	}
@@ -98,7 +98,7 @@ func TestRunFailsWhenNATSCannotBeOpened(t *testing.T) {
 	nats := newFakeNATS()
 	nats.dialErr = errors.New("nats not connected within 10s")
 	lis := newListeners()
-	err := Run(t.Context(), testConfig(mr.Addr(), keys.path), newLogWatch().logger(), Deps{Listen: lis.listen, NATS: nats.dial})
+	err := Run(t.Context(), testConfig(mr.Addr(), keys.path), newLogWatch().logger(), Deps{PresenceRedis: newPresenceRedis(t).open, Listen: lis.listen, NATS: nats.dial})
 	if err == nil || !strings.Contains(err.Error(), "open nats") {
 		t.Fatalf("Run = %v, want an open nats error", err)
 	}
@@ -114,7 +114,7 @@ func TestRunStopsCleanlyWhenSignalledWhileWaitingForNATS(t *testing.T) {
 	lis := newListeners()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	done := runAsync(ctx, testConfig(mr.Addr(), keys.path), newLogWatch().logger(), Deps{Listen: lis.listen, NATS: nats.dial})
+	done := runAsync(ctx, testConfig(mr.Addr(), keys.path), newLogWatch().logger(), Deps{PresenceRedis: newPresenceRedis(t).open, Listen: lis.listen, NATS: nats.dial})
 	receive(t, nats.dialed, "nats dial")
 	cancel()
 	if err := awaitRun(t, done); err != nil {
