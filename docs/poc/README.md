@@ -13,7 +13,7 @@
 | R3a | RePublish đổi subject | PASS | PASS | Đạt |
 | R3b | 1M interest sub + 5K event/s | publish→gateway p99 ≤ 10ms | p99 1.2ms, 0 drop | Đạt |
 | R4 | gws 50K connection | ≤ 40KB/conn; lần ghi cuối ≤ 100ms | ≤ 10.3KB/conn; 155–245ms | RAM đạt, độ trễ không đạt trên dev |
-| R4b | wsload: 10K user thật trên 2 node websocket (steady, kill một node, burst đăng nhập) | Trễ giao `msg_created` p50/p90/p99; thời gian hồi phục sau kill; số `retry_later` | chưa chạy | chưa chạy |
+| R4b | wsload: 10K user thật trên 2 node websocket (steady, kill một node, burst đăng nhập) | Trễ giao `msg_created` p50/p90/p99; thời gian hồi phục sau kill; số `retry_later` | steady 1K tin/s: giao p50/p90/p99 16.1/35.8/100.4ms, 100% giao, 0 trùng; kill: 5K máy nối lại trong 3.05s; burst 10K: 2.949 `retry_later`, tất cả `ready` sau 32.1s | Chạy được; p99 sát ngưỡng 100ms trên dev (chung CPU), đo lại ở prod-like |
 | R5 | Soft ownership khi Redis mất dữ liệu | `-race -count=20` pass | pass ở mức unit | Còn chaos test |
 | C1 | corebench 2 core qua gRPC | Ack p99 ≤ 30ms (A1) | 5K/s đủ tải, p99 292ms; 10K/s đạt 9452/s, bỏ 5.5%, p99 818ms | Không đạt trên dev (VM bão hoà CPU) |
 | C1-M2a.3 | Perf đường ghi ở 5K/s | Trước/sau | Lệnh Redis/tin 6.35 → 4.74; CPU redis-dedupe 89% → 69% | Chỉ so trước/sau |
@@ -85,7 +85,7 @@ Kết luận dev:
 - Bench đầu (`8121816`) không đạt: Mongo 287% → 507%, trễ danh sách 2.8s → 21s; lệnh xoá cờ `updateMany` + `$or` 500 nhánh 854ms mỗi lệnh (45% thời gian lệnh Mongo) gây vòng phát lại của sweeper. Các bước sửa và số từng bước: [tóm tắt M3.1 mục 9](../plans/2026-10-16-m3-1-state-driven-events-summary.md#9-chi-phí).
 - Diễn tập NATS chết (2K tin/s trong 4 phút, NATS dừng ~2 phút 45 giây; `bin/bench/drill-nats-2k-v2/`): 480K/480K ack, ack p50/p99 15.5/131ms; ngay trước khi dừng 4.080 tin còn cờ; đỉnh ~320K doc có cờ; sweeper phát lại 304K; mọi cờ về 0 sau 3 phút 11 giây kể từ lúc NATS sống lại (~1.6K doc/s); không mất tin. Lần đầu trước các sửa (`drill-nats-2k/`): 35K tin còn cờ trước khi dừng, đỉnh ~387K, bắt kịp ~7.5 phút.
 
-### R4b — `tools/poc/wsload` (chưa chạy)
+### R4b — `tools/poc/wsload` (đã chạy trên dev 2026-10-25)
 
 Công cụ tạo `-groups` nhóm qua gateway (mỗi user trong một nhóm, một người gửi mỗi nhóm), ký token dev cho từng user từ `.local/ws-keys/private.jwk`, nối `-conns` user chia đều trên các URL `-ws`; người gửi gửi `SendMessage` qua websocket với cid riêng, nội dung mang giờ gửi (unix nano), người nhận đo trễ từ `msg_created`. Kết quả `summary.txt` + `summary.json` trong `bin/bench/wsload-<scenario>-<giờ>/` (hoặc `-out`; `scripts/wsload-kill.sh` ghi `bin/bench/wsload-kill-<giờ>/` kèm `run.log`).
 
@@ -96,6 +96,14 @@ Công cụ tạo `-groups` nhóm qua gateway (mỗi user trong một nhóm, mộ
 Giới hạn:
 - Mỗi kết nối tốn một file descriptor: chạy với `POC_FLAGS="--ulimit nofile=65536:65536"` (công cụ cảnh báo khi giới hạn thấp hơn `-conns` + 256). Node websocket có `ulimits: nofile: 65536` trong anchor `x-websocket` của compose (cần tạo lại container để có hiệu lực).
 - Trên dev công cụ chung CPU với node websocket, core và database, nên số dev chỉ để kiểm công cụ.
+
+Kết quả trên dev (2026-10-25; 10.000 user, 500 nhóm × 20 người, 2 node websocket, 2 core; tool chung máy):
+
+| Kịch bản | Kết quả | Thư mục |
+|---|---|---|
+| `steady` (1.000 tin/s, 60s) | nối 10.000/10.000, nối p50/p99 4.7/27.6ms; gửi 60.000, ack 60.000, ack p50/p99 15.3/98.9ms; giao 1.200.000/1.200.000, 0 trùng, trễ p50/p90/p99/max 16.1/35.8/100.4/304ms | `bin/bench/wsload-steady-261024-185715/` |
+| `burst` (10.000 `auth` cùng lúc) | 10.000 `ready`, 0 lỗi, 2.949 `retry_later` (giới hạn 1.000/s, dồn 2.000 mỗi node), máy cuối `ready` sau 32.1s | `bin/bench/wsload-burst-261024-185837/` |
+| `kill` (`kill -9` websocket-2, 100 tin/s) | 5.000 máy rớt, 5.000 nối lại trong 3.05s, 0 `retry_later`; 3 lệnh gửi `Unavailable` lúc node chết; tin gửi trong lúc nối lại không tới (máy tải lại qua HTTPS sau `ready`); node còn lại giữ 10.000 kết nối ở ~516MB (~50KB/kết nối gồm bảng room và hàng gửi) | `bin/bench/wsload-kill-261025-015914/` |
 
 ```bash
 make poc TOOL=wsload POC_FLAGS="--ulimit nofile=65536:65536" ARGS="-scenario steady"

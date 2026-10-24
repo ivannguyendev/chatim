@@ -191,6 +191,9 @@ Xây trên `feat/m4` từ 2026-10-24 tới 2026-10-25, mỗi task một commit (
 **Kiểm thử đã chạy:**
 - Mỗi task: unit của gói đụng tới (`-race`), `make fmt-check`, `make vet`, `make lint` trước commit; luật alert qua `make alerts-check`.
 - `make itest` xanh; `make e2e` phase 1–12 xanh. Phase 12: `auth_required{EXPIRED}` tới 49,4 giây sau khi ký token 20 giây (20 giây + 30 giây lệch giờ); kết nối thứ 11 bị đóng 4009; `docker stop` websocket-1 → kết nối nhận 1001 sau 2,8 giây, nối lại sang websocket-2, mở lại nhóm sau `ready` và nhận tin kế tiếp; log hai node không có token nào của phase 12.
-- Số đo wsload: (điền sau)
+- Số đo wsload trên dev (2026-10-25, 10.000 user, 2 node; chi tiết `docs/poc/README.md` R4b):
+  - chạy ổn định 1.000 tin/giây: giao đủ 100%, không trùng, trễ p50 16,1ms, p99 100,4ms (sát ngưỡng 100ms, máy dev chạy chung CPU); ack p99 98,9ms;
+  - 10.000 đăng nhập cùng lúc: tất cả vào được, 2.949 lần `retry_later`, máy cuối `ready` sau 32,1 giây;
+  - `kill -9` một node có 5.000 máy: cả 5.000 nối lại trong 3,05 giây; node còn lại giữ 10.000 kết nối ở ~516MB.
 
 **Ghi chú môi trường dev:** các tiến trình `agy_acp_server` mồ côi (agent Antigravity của Zed) chiếm hết IO của Docker, làm itest của core lỗi; tắt chúng đi thì itest và e2e xanh lại.
