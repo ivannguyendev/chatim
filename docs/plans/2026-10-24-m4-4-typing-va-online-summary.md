@@ -172,11 +172,11 @@ Kiểm thử đến lúc này:
 
 - Unit `make -s go ARGS="test -race -shuffle=on ./apps/websocket/... ./pkg/wsclient/... ./tools/corecli/..."`: xanh (gồm `typing`, `presence`, `session`, `interest`, `config`, `app`, `pkg/wsclient`, `tools/corecli/internal/e2e`).
 - `make fmt-check`, `make vet`, `make lint`: sạch.
-- Itest presence (Redis thật), `make e2e` phase 11: đo ở e2e.
+- `make itest` toàn bộ xanh (89 package, gồm itest presence trên `chatim-redis-presence` thật); `make core-up && make e2e` xanh phase 1–11 (2026-10-24). Lần đầu itest core đỏ vì máy dev: 3 tiến trình `agy_acp_server` (agent Antigravity của Zed, mồ côi) ăn ~200% CPU và I/O, `fsync` trong Docker 44ms/lần; tắt xong còn ~2,8ms/lần và itest xanh.
 
 | Đo ở e2e phase 11 | Kết quả |
 |---|---|
-| Đang gõ A (node 1) → B (node 2) | đo ở e2e |
-| D đóng → B thấy D offline | đo ở e2e |
-| A nối lại sau 3 giây: số lần B nhận online trong 20 giây, không lần nào offline | đo ở e2e |
-| `kill -9 websocket-2` → người ở đó offline trên máy xem ở node 1 | đo ở e2e |
+| Đang gõ A (node 1) → B (node 2) | ~1ms (cùng máy dev); `stopped` tới cũng ~1ms |
+| D đóng → B thấy D offline | 16,5 giây |
+| A nối lại sau 3 giây: số lần B nhận online trong 20 giây, không lần nào offline | 3 lần trả lời trong 20 giây, cả 3 online |
+| `kill -9 websocket-2` → người ở đó offline trên máy xem ở node 1 | 14,6 giây tính từ lúc B thấy E online (gồm cả lúc chờ kill) |
