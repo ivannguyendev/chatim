@@ -192,14 +192,14 @@ func TestSourcesNameEveryMetricWithFixedLabels(t *testing.T) {
 		"interest_users", "interest_room_pairs", "room_ids_load_seconds", "room_ids_load_failures_total", "open_room_rejected_total",
 		"events_delivered_total{level=member}", "events_delivered_total{level=open}", "events_delivered_total{level=owner}",
 		"events_dropped_total{reason=unknown_kind}", "events_dropped_total{reason=malformed}",
-		"users_suspended", "reloads_total", "reload_seconds", "reload_failures_total",
+		"users_suspended", "reloads_total", "reload_seconds", "reload_failures_total", "event_delivery_seconds",
 		"resyncs_total{reason=lag_too_old}", "resyncs_total{reason=consumer_lost}", "resyncs_total{reason=client_backlog}",
 	} {
 		if got[want] != 1 {
 			t.Errorf("metric %s registered %d times", want, got[want])
 		}
 	}
-	if len(got) != 17 {
+	if len(got) != 18 {
 		t.Fatalf("metrics = %v", got)
 	}
 }

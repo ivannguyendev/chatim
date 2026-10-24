@@ -24,9 +24,10 @@ var (
 		chatimv1.ResyncReason_RESYNC_REASON_CONSUMER_LOST:  "consumer_lost",
 		chatimv1.ResyncReason_RESYNC_REASON_CLIENT_BACKLOG: "client_backlog",
 	}
-	dropLabels   = [dropReasonCount]string{"unknown_kind", "malformed"}
-	loadBounds   = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}
-	reloadBounds = []float64{0.1, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600}
+	dropLabels     = [dropReasonCount]string{"unknown_kind", "malformed"}
+	loadBounds     = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}
+	reloadBounds   = []float64{0.1, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600}
+	deliveryBounds = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30}
 )
 
 func gaugeOfInt64(v *atomic.Int64) func() float64 { return func() float64 { return float64(v.Load()) } }
@@ -78,11 +79,13 @@ type stats struct {
 	dropped        [dropReasonCount]atomic.Uint64
 	load           *histogram
 	reload         *histogram
+	delivery       *histogram
 }
 
 func (s *stats) init() {
 	s.load = newHistogram(loadBounds)
 	s.reload = newHistogram(reloadBounds)
+	s.delivery = newHistogram(deliveryBounds)
 }
 
 func (s *stats) countResync(reason chatimv1.ResyncReason) {
@@ -102,6 +105,7 @@ func (t *Table) Sources() []metrics.Source {
 		{Name: "users_suspended", Help: "Users whose delivery is suspended until their rooms are loaded again after the feed skipped part of the stream.", Gauge: true, Read: gaugeOfInt64(&s.suspended)},
 		{Name: "reloads_total", Help: "Suspended users whose rooms were loaded again.", Read: counterOf(&s.reloads)},
 		{Name: "reload_seconds", Help: "Time from the first suspension of a user to the end of its reload, in seconds.", Histogram: s.reload.read},
+		{Name: "event_delivery_seconds", Help: "Time from the JetStream store time of a core event to its frame queued to the first connections on this node, in seconds.", Histogram: s.delivery.read},
 		{Name: "reload_failures_total", Help: "Reloads of suspended users that failed; the connections of the user got load_failed.", Read: counterOf(&s.reloadFailures)},
 	}
 	for reason, label := range resyncLabels {

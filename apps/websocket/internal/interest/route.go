@@ -1,6 +1,8 @@
 package interest
 
 import (
+	"time"
+
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/feed"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/frame"
 	"github.com/ivannguyendev/chatim/pkg/ids"
@@ -10,6 +12,7 @@ type lazyFrame struct {
 	data       []byte
 	out        []byte
 	catchingUp bool
+	reached    uint64
 }
 
 func (f *lazyFrame) get() []byte {
@@ -46,6 +49,18 @@ func (t *Table) Route(env feed.Envelope) {
 	case toReaders:
 		t.toReaders(env, k, f)
 	}
+	t.observeDelivery(env, f)
+}
+
+func (t *Table) observeDelivery(env feed.Envelope, f *lazyFrame) {
+	if f.reached > 0 && !env.StoredAt.IsZero() {
+		t.stats.delivery.observe(time.Since(env.StoredAt))
+	}
+}
+
+func (t *Table) countDelivered(l level, f *lazyFrame, n uint64) {
+	t.stats.delivered[l].Add(n)
+	f.reached += n
 }
 
 func (t *Table) toReaders(env feed.Envelope, k roomKey, f *lazyFrame) {
@@ -71,7 +86,7 @@ func (t *Table) toNamedReader(u *user, room uint64, f *lazyFrame) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	if _, member := u.rooms[room]; member && u.live() {
-		t.stats.delivered[levelMember].Add(u.deliver(f.get(), f.catchingUp, true))
+		t.countDelivered(levelMember, f, u.deliver(f.get(), f.catchingUp, true))
 	}
 }
 
@@ -102,7 +117,7 @@ func (t *Table) toMembers(k roomKey, f *lazyFrame) {
 	for _, u := range t.members(k) {
 		u.mu.Lock()
 		if _, member := u.rooms[k.room]; member && u.live() {
-			t.stats.delivered[levelMember].Add(u.deliver(f.get(), f.catchingUp, true))
+			t.countDelivered(levelMember, f, u.deliver(f.get(), f.catchingUp, true))
 		}
 		u.mu.Unlock()
 	}
@@ -111,7 +126,7 @@ func (t *Table) toMembers(k roomKey, f *lazyFrame) {
 func (t *Table) toViewers(viewers []*Conn, f *lazyFrame, skip map[*user]bool) {
 	for _, c := range viewers {
 		if !skip[c.user] && t.toViewer(c, f) {
-			t.stats.delivered[levelOpen].Add(1)
+			t.countDelivered(levelOpen, f, 1)
 		}
 	}
 }
@@ -131,7 +146,7 @@ func (t *Table) toOwner(k userKey, f *lazyFrame) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	if u.live() {
-		t.stats.delivered[levelOwner].Add(u.deliver(f.get(), f.catchingUp, true))
+		t.countDelivered(levelOwner, f, u.deliver(f.get(), f.catchingUp, true))
 	}
 }
 
@@ -173,7 +188,7 @@ func (t *Table) memberAdded(u *user, ch change, f *lazyFrame) {
 	if !applied {
 		return
 	}
-	t.stats.delivered[levelOwner].Add(u.deliver(f.get(), f.catchingUp, true))
+	t.countDelivered(levelOwner, f, u.deliver(f.get(), f.catchingUp, true))
 	if !wasMember {
 		t.index(u, ch.room)
 	}
@@ -187,7 +202,7 @@ func (t *Table) memberRemoved(u *user, ch change, f *lazyFrame) {
 	if !applied {
 		return
 	}
-	t.stats.delivered[levelOwner].Add(u.deliver(f.get(), f.catchingUp, true))
+	t.countDelivered(levelOwner, f, u.deliver(f.get(), f.catchingUp, true))
 	if wasMember {
 		t.unindex(u, ch.room)
 	}
