@@ -104,3 +104,17 @@ func TestCheckClosedWithWantsTheCloseCode(t *testing.T) {
 		t.Fatal("a connection ended without a close frame accepted")
 	}
 }
+
+func TestCheckGoingAwayWants1001FromAStoppingNode(t *testing.T) {
+	if err := e2e.CheckGoingAway("A on node 1", 1001, true); err != nil {
+		t.Fatalf("1001: %v", err)
+	}
+	for _, c := range []struct {
+		code   uint16
+		closed bool
+	}{{1000, true}, {1006, true}, {4001, true}, {0, false}} {
+		if err := e2e.CheckGoingAway("A on node 1", c.code, c.closed); err == nil {
+			t.Fatalf("code %d closed %v accepted, want only 1001", c.code, c.closed)
+		}
+	}
+}

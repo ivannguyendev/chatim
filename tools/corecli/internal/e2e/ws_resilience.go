@@ -82,3 +82,9 @@ func CheckClosedWith(what string, code uint16, closed bool, want uint16) error {
 	}
 	return nil
 }
+
+const CodeGoingAway uint16 = 1001
+
+func CheckGoingAway(what string, code uint16, closed bool) error {
+	return CheckClosedWith(what, code, closed, CodeGoingAway)
+}

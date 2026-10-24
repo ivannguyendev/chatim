@@ -98,8 +98,13 @@ func connectionEnd(p *wsPeer, within time.Duration) (string, error) {
 		return "", p.base.Err()
 	}
 	waited := time.Since(start).Round(100 * time.Millisecond)
-	if closeErr, ok := errors.AsType[*wstest.CloseError](p.ws.Err()); ok {
-		return fmt.Sprintf("close %d after %v", closeErr.Code, waited), nil
+	var code uint16
+	closeErr, closed := errors.AsType[*wstest.CloseError](p.ws.Err())
+	if closed {
+		code = closeErr.Code
 	}
-	return fmt.Sprintf("%v after %v", p.ws.Err(), waited), nil
+	if err := e2e.CheckGoingAway(p.name+"'s connection to the stopping node 1", code, closed); err != nil {
+		return "", fmt.Errorf("%w (ended with %w after %v)", err, p.ws.Err(), waited)
+	}
+	return fmt.Sprintf("close %d after %v", code, waited), nil
 }
