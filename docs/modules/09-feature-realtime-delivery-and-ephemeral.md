@@ -196,16 +196,28 @@ Bảng mã đóng đầy đủ của phần 1 nằm ở [§7.4](#74-mã-đóng).
 
 > **Đã có từ phần 1** (trên `/metrics` cổng admin, tiền tố `chatim_websocket_`): `connections`, `unauthenticated_connections` (gauge), `auth_failures_total{reason}`, `closes_total{code}` (chỉ mã do server đóng; nhãn 1000 gồm cả hết hạn heartbeat), `commands_rejected_total{reason=rate|inflight|unimplemented|shutdown}`, `unknown_frames_total`, `commands_total{command,code}`, histogram `core_call_seconds{command}`.
 >
-> **Thêm ở phần 2:** feed `nats_connected`, `nats_reconnects_total`, `consumer_lag_seconds{stream}` (tuổi tin vừa giao theo giờ lưu), `consumer_behind_seconds{stream}` (từ lúc watchdog thấy consumer sau đuôi stream, 0 khi kịp), `consumer_pending{stream}`, `consumer_resets_total{stream}`, `consumer_stale_skipped_total{stream}`, `catchup_jumps_total{stream}`, `catchup_jump_suppressed_total{stream}`, `catchup_jump_failures_total{stream}`, `fanout_queue_depth`, `fanout_handler_panics_total`, `events_unknown_total`, `events_dropped_at_stop_total`; bảng quan tâm `interest_users`, `interest_room_pairs`, histogram `room_ids_load_seconds`, `room_ids_load_failures_total`, `open_room_rejected_total`, `users_suspended`, `reloads_total`, histogram `reload_seconds`, `reload_failures_total`, `resyncs_total{reason}`, `events_delivered_total{level}`, `events_dropped_total{reason}`; gói `publish_packets_total`, `publish_delivered_total`, `publish_dropped_total{reason}`; hàng ghi `send_queue_bytes`. **Chưa có luật alert nào cho websocket** (phần 5: `nats_connected`, `catchup_jump_suppressed_total`, độ trễ).
+> **Thêm ở phần 2:** feed `nats_connected`, `nats_reconnects_total`, `consumer_lag_seconds{stream}` (tuổi tin vừa giao theo giờ lưu), `consumer_behind_seconds{stream}` (từ lúc watchdog thấy consumer sau đuôi stream, 0 khi kịp), `consumer_pending{stream}`, `consumer_resets_total{stream}`, `consumer_stale_skipped_total{stream}`, `catchup_jumps_total{stream}`, `catchup_jump_suppressed_total{stream}`, `catchup_jump_failures_total{stream}`, `fanout_queue_depth`, `fanout_handler_panics_total`, `events_unknown_total`, `events_dropped_at_stop_total`; bảng quan tâm `interest_users`, `interest_room_pairs`, histogram `room_ids_load_seconds`, `room_ids_load_failures_total`, `open_room_rejected_total`, `users_suspended`, `reloads_total`, histogram `reload_seconds`, `reload_failures_total`, `resyncs_total{reason}`, `events_delivered_total{level}`, `events_dropped_total{reason}`; gói `publish_packets_total`, `publish_delivered_total`, `publish_dropped_total{reason}`; hàng ghi `send_queue_bytes`. Luật alert cho websocket thêm ở phần 5 (bên dưới).
 >
 > **Thêm ở phần 4:** typing `typing_received_total`, `typing_delivered_total`, `typing_relay_failures_total`, `typing_dropped_total{reason=rate|not_member|malformed|queue_full|send_full}`; presence `presence_redis_up`, `presence_stamps_total`, `presence_stamp_failures_total`, `presence_stamp_pending`, `presence_reads_total`, `presence_read_failures_total`, `presence_cached_users`, histogram `presence_read_seconds`, `presence_answers_total`, `presence_watch_truncated_total`, `presence_watching_connections`, `presence_answer_dropped_total{reason=send_full|busy}`. Alert (node mất Redis presence) để phần 5.
+>
+> **Thêm ở phần 5:** histogram `event_delivery_seconds` (bảng quan tâm): mỗi event đi qua `Route` và tới ít nhất một kết nối trên node cho một mẫu, giá trị = lúc frame đã vào hàng gửi − giờ lưu JetStream (`StoredAt`); tính cả lúc đang đuổi theo, bỏ qua event không có giờ lưu; bucket 5ms..30s, có mốc 0,1s. Ví dụ: event lưu lúc 10:00:00.000, frame vào hàng gửi lúc 10:00:00.040 thì mẫu là 0,04s.
+>
+> **Luật alert websocket và gateway** (`deploy/prometheus/alerts.yml`, nhóm `chatim-websocket-gateway-health`):
+>
+> | Luật | Điều kiện | Mức | Ý nghĩa |
+> |---|---|---|---|
+> | `ChatimWebsocketNATSDown` | `chatim_websocket_nats_connected == 0` trong 1 phút | critical | Node mất NATS, máy trên node không nhận event hay thông báo tới khi nối lại |
+> | `ChatimWebsocketBehind` | `chatim_websocket_consumer_behind_seconds > 30` trong 2 phút (theo `stream`) | warning | Consumer nằm sau đuôi stream quá 30s, event tới máy trễ |
+> | `ChatimWebsocketJumpSuppressed` | `increase(chatim_websocket_catchup_jump_suppressed_total[10m]) > 0` | warning | Node lại trễ quá xa ngay trong thời gian chờ giữa hai lần nhảy, đang đọc lại backlog cũ thay vì nhảy |
+> | `ChatimWebsocketReloadFailing` | tổng `increase` 5 phút của `reload_failures_total` và `room_ids_load_failures_total` theo `instance` > 10, trong 5 phút | warning | Nạp room liên tục lỗi, người dùng nhận `load_failed` và không có event (xem `ListMyRoomIDs` của core) |
+> | `ChatimWebsocketDeliverySlow` | p99 của `chatim_websocket_event_delivery_seconds` theo `instance` (rate 5 phút) > 0,1s trong 5 phút | warning | Vượt ngưỡng p99 ≤ 100ms từ giờ lưu tới lúc frame vào hàng gửi |
+> | `ChatimPresenceRedisDown` | `chatim_websocket_presence_redis_up == 0` trong 1 phút | warning | Node không tới được Redis presence: người trên node hiện offline ở mọi nơi, máy không nhận `presence` |
+> | `ChatimGatewayCoreUnavailable` | tỉ lệ `chatim_gateway_commands_total{code="Unavailable"}` trên mọi lệnh (rate 5 phút) > 5% trong 5 phút | warning | Core chết, quá tải hoặc gateway không tới được core |
 >
 > **Dự kiến, chưa xây:** các metric và alert dưới đây là thiết kế cho phần 3–5; chưa có trong code và chưa có trong `deploy/prometheus/alerts.yml`.
 
 - **`chatim_websocket_connected_clients`:** Tổng số lượng kết nối WebSocket đang hoạt động đồng thời (CCU).
-- **`chatim_realtime_delivery_latency_seconds`:** Độ trễ từ lúc tin được ghi vào DB đến khi Client nhận được frame WebSocket.
-  - *Ngưỡng SLA:* p99 ≤ 100ms.
-  - *Luật cảnh báo dự kiến (`ChatimDeliveryLatencyHigh`, chưa có):* Cảnh báo nếu p99 > 100ms trong 3 phút liên tục.
+- **`chatim_realtime_delivery_latency_seconds`:** thay bằng `chatim_websocket_event_delivery_seconds` và luật `ChatimWebsocketDeliverySlow` ở phần 5 (đo tới lúc frame vào hàng gửi trên node, không tới lúc máy nhận; ngưỡng vẫn p99 ≤ 100ms).
 - **`chatim_websocket_slow_clients_dropped_total`:** Số lượng kết nối client bị App websocket ngắt cưỡng bức do nghẽn buffer.
 
 ---
