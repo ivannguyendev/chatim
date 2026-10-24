@@ -161,12 +161,12 @@ func (t *Table) attach(k userKey, sink Sink) (*Conn, bool, error) {
 	case !found:
 		t.loads.Go(func() { t.initialLoad(u) })
 	case u.failed:
-		sink.Send(loadFailedFrame())
+		c.sendState(loadFailedFrame())
 	case u.suspended:
 		return c, true, nil
 	case u.ready:
 		c.readied = true
-		sink.Send(readyFrame)
+		c.sendState(readyFrame)
 	}
 	return c, false, nil
 }

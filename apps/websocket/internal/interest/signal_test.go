@@ -109,9 +109,9 @@ func TestSignalReachesEveryViewerButTheSenderAndCountsRefusedOffers(t *testing.T
 			t.Fatalf("offers an %d lan %d lan2 %d", anSink.offerCount(), lanSink.offerCount(), lan2Sink.offerCount())
 		}
 		for _, s := range []*fakeSink{hoaSink, hoa2Sink} {
-			sends, trySends := s.counts()
-			if got := s.take(); !slices.Equal(got, []string{"typing 1 lan"}) || sends != 0 || trySends != 0 {
-				t.Fatalf("viewer frames %v sends %d try sends %d", got, sends, trySends)
+			trySends := s.trySendCount()
+			if got := s.take(); !slices.Equal(got, []string{"typing 1 lan"}) || trySends != 0 {
+				t.Fatalf("viewer frames %v try sends %d", got, trySends)
 			}
 		}
 		for _, s := range sinks {

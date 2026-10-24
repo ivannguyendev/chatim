@@ -38,7 +38,7 @@ func TestRequestsOverTheRateGetResourceExhaustedWithoutCallingCore(t *testing.T)
 	})
 }
 
-func TestAuthFloodOverTheRateClosesWith1008BeforeCheckingTheSignature(t *testing.T) {
+func TestAnAuthFloodOverTheRateIsDroppedBeforeCheckingTheSignature(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		opts := testOptions()
 		opts.CommandRate, opts.CommandBurst = 1, 3
@@ -48,28 +48,14 @@ func TestAuthFloodOverTheRateClosesWith1008BeforeCheckingTheSignature(t *testing
 		for range 5 {
 			tc.auth(token)
 		}
-		if got := tc.waitClosed(); got != CodePolicyViolation {
-			t.Fatalf("close code = %d, want %d", got, CodePolicyViolation)
-		}
+		synctest.Wait()
 		if got := h.verifier.calls.Load(); got != 3 {
 			t.Fatalf("signature checks = %d, want 3", got)
 		}
-	})
-}
-
-func TestHeartbeatFloodOverTheRateClosesWith1008(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		opts := testOptions()
-		opts.CommandRate, opts.CommandBurst = 1, 3
-		h := newHarness(t, opts)
-		tc := h.dial(true)
-		tc.auth(h.token("u1", time.Hour))
-		for range 4 {
-			tc.heartbeat()
+		if got := frameErrorsIn(tc.drainFrames()); len(got) != 1 || got[0] != wireRate || !tc.isOpen() {
+			t.Fatalf("frame errors %v open %v", got, tc.isOpen())
 		}
-		if got := tc.waitClosed(); got != CodePolicyViolation {
-			t.Fatalf("close code = %d, want %d", got, CodePolicyViolation)
-		}
+		tc.close()
 	})
 }
 
@@ -121,7 +107,7 @@ func TestClientThatNeverReadsIsCutAfterTheWriteTimeout(t *testing.T) {
 	})
 }
 
-func TestResponsesOverAFullFrameQueueCloseWith4008(t *testing.T) {
+func TestResponsesOverAFullFrameQueueAreDroppedAndCounted(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		opts := testOptions()
 		opts.SendQueue = 2
@@ -133,18 +119,25 @@ func TestResponsesOverAFullFrameQueueCloseWith4008(t *testing.T) {
 			tc.history(id)
 		}
 		synctest.Wait()
-		if elapsed := time.Since(start); elapsed != 0 {
-			t.Fatalf("decided after %v, want at once", elapsed)
-		}
-		if got := c.closing.Load(); got != uint32(CodeSlowClient) {
-			t.Fatalf("closing = %d, want %d", got, CodeSlowClient)
+		dropped := h.sessionMetric("send_dropped_total", "kind", "response")
+		if elapsed := time.Since(start); elapsed != 0 || dropped == 0 || c.closing.Load() != 0 {
+			t.Fatalf("after %v dropped %v closing %d", elapsed, dropped, c.closing.Load())
 		}
 		tc.startReading()
-		if got := tc.waitClosed(); got != CodeSlowClient {
-			t.Fatalf("close code = %d, want %d", got, CodeSlowClient)
+		if f := tc.nextFrame(); f.GetReady() == nil {
+			t.Fatalf("first frame = %v, want ready", f)
 		}
-		if h.closes(CodeSlowClient) != 1 || h.closes(CodeAbnormal) != 0 {
-			t.Fatalf("closes 4008 = %d, aborts = %d", h.closes(CodeSlowClient), h.closes(CodeAbnormal))
+		synctest.Wait()
+		if got := len(tc.responses); float64(got)+dropped != 6 {
+			t.Fatalf("responses %d dropped %v, want 6 in all", got, dropped)
 		}
+		for range len(tc.responses) {
+			<-tc.responses
+		}
+		tc.history(7)
+		if resp := tc.next(); resp.GetId() != 7 || !tc.isOpen() {
+			t.Fatalf("response %v open %v", resp, tc.isOpen())
+		}
+		tc.close()
 	})
 }

@@ -81,15 +81,15 @@ func (c *connection) promptAuth() {
 }
 
 func (c *connection) sendAuthRequired(reason chatimv1.AuthRequiredReason) {
-	c.sendFrame(&chatimv1.ServerFrame{Frame: &chatimv1.ServerFrame_AuthRequired{AuthRequired: &chatimv1.AuthRequiredFrame{Reason: reason}}})
+	c.sendFrame(&chatimv1.ServerFrame{Frame: &chatimv1.ServerFrame_AuthRequired{AuthRequired: &chatimv1.AuthRequiredFrame{Reason: reason}}}, sendControl)
 }
 
-func (c *connection) sendFrame(frame *chatimv1.ServerFrame) {
+func (c *connection) sendFrame(frame *chatimv1.ServerFrame, kind sendKind) {
 	payload, err := proto.Marshal(frame)
 	if err != nil {
 		c.server.logger.Error("encode websocket frame", "error", err)
 		c.closeWith(CodeInternalError)
 		return
 	}
-	c.enqueue(outFrame{opcode: gws.OpcodeBinary, payload: payload})
+	c.enqueue(outFrame{opcode: gws.OpcodeBinary, payload: payload}, kind)
 }

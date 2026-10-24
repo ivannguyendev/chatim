@@ -34,12 +34,11 @@ func TestOfferAcceptsOnlyBelowHalfOfTheFrameQueueAndNeverCloses(t *testing.T) {
 		if c.closing.Load() != 0 {
 			t.Fatalf("Offer closed the connection with %d", c.closing.Load())
 		}
-		sink.Send(sizedFrame(t, "f-", 20))
-		if !sink.TrySend(sizedFrame(t, "g-", 20)) {
+		if !sink.TrySend(sizedFrame(t, "f-", 20)) || !sink.TrySend(sizedFrame(t, "g-", 20)) {
 			t.Fatal("TrySend refused while the queue has room")
 		}
 		if c.closing.Load() != 0 || len(c.out) != 5 {
-			t.Fatalf("closing %d queued %d after Send and TrySend", c.closing.Load(), len(c.out))
+			t.Fatalf("closing %d queued %d after TrySend", c.closing.Load(), len(c.out))
 		}
 		tc.startReading()
 		for _, want := range append(ids, "f-", "g-") {
@@ -81,9 +80,8 @@ func TestOfferAcceptsOnlyBelowHalfOfTheByteBudget(t *testing.T) {
 		if got := h.queuedBytes(); got != 500 {
 			t.Fatalf("queued bytes = %v, want 500", got)
 		}
-		sink.Send(sizedFrame(t, "f-", 300))
-		if c.closing.Load() != 0 || h.queuedBytes() != 800 {
-			t.Fatalf("closing %d queued bytes %v after Send", c.closing.Load(), h.queuedBytes())
+		if !sink.TrySend(sizedFrame(t, "f-", 300)) || c.closing.Load() != 0 || h.queuedBytes() != 800 {
+			t.Fatalf("closing %d queued bytes %v after TrySend", c.closing.Load(), h.queuedBytes())
 		}
 		tc.startReading()
 		for _, want := range []string{"a-", "b-", "d-", "f-"} {
@@ -104,17 +102,13 @@ func TestOfferRefusesAClosingOrClosedConnection(t *testing.T) {
 		h := newHarness(t, offerOptions())
 		tc, c := h.dialConnection(false)
 		sink := roomSink{c: c}
-		sink.Send(sizedFrame(t, "fill-", 1000))
-		sink.Send(sizedFrame(t, "over-", 100))
-		if got := c.closing.Load(); got != uint32(CodeSlowClient) {
-			t.Fatalf("closing = %d, want %d", got, CodeSlowClient)
-		}
+		c.closeWith(CodeGoingAway)
 		if sink.Offer(sizedFrame(t, "a-", 10)) {
 			t.Fatal("a closing connection accepted an offer")
 		}
 		tc.startReading()
-		if got := tc.waitClosed(); got != CodeSlowClient {
-			t.Fatalf("close code = %d, want %d", got, CodeSlowClient)
+		if got := tc.waitClosed(); got != CodeGoingAway {
+			t.Fatalf("close code = %d, want %d", got, CodeGoingAway)
 		}
 		if sink.Offer(sizedFrame(t, "b-", 10)) || h.queuedBytes() != 0 {
 			t.Fatalf("a closed connection accepted an offer, queued bytes %v", h.queuedBytes())

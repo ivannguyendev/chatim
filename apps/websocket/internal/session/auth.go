@@ -182,5 +182,5 @@ func (c *connection) retryLater(result authResult, after time.Duration) {
 	if ms := after.Milliseconds(); ms > 0 && ms <= math.MaxUint32 {
 		hint = uint32(ms)
 	}
-	c.sendFrame(&chatimv1.ServerFrame{Frame: &chatimv1.ServerFrame_RetryLater{RetryLater: &chatimv1.RetryLaterFrame{RetryAfterMs: hint}}})
+	c.sendFrame(&chatimv1.ServerFrame{Frame: &chatimv1.ServerFrame_RetryLater{RetryLater: &chatimv1.RetryLaterFrame{RetryAfterMs: hint}}}, sendControl)
 }

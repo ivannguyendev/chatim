@@ -190,7 +190,9 @@ func TestAFullSendQueueDropsTheAnswerAndTheNextHeartbeatAnswers(t *testing.T) {
 		tc.auth(h.token("u1", time.Hour))
 		synctest.Wait()
 		for _, id := range []string{"a-", "b-", "c-"} {
-			roomSink{c: c}.Send(sizedFrame(t, id, 20))
+			if !(roomSink{c: c}).TrySend(sizedFrame(t, id, 20)) {
+				t.Fatalf("frame %s refused", id)
+			}
 		}
 		tc.watch("lan")
 		synctest.Wait()
@@ -240,9 +242,12 @@ func TestWatchFramesGoThroughTheSharedLimiter(t *testing.T) {
 		tc.watch("lan")
 		tc.watch("nam")
 		tc.watch("an")
-		if got := tc.waitClosed(); got != CodePolicyViolation {
-			t.Fatalf("close code = %d, want %d", got, CodePolicyViolation)
+		tc.watch("ha")
+		synctest.Wait()
+		if got := h.frameErrors("rate"); got != 2 || !tc.isOpen() {
+			t.Fatalf("rate drops %v open %v", got, tc.isOpen())
 		}
+		tc.close()
 	})
 }
 

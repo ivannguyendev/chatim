@@ -115,7 +115,7 @@ func TestEventRouterHandsCoreEventsToTheInterestTable(t *testing.T) {
 
 type nullSink struct{}
 
-func (nullSink) Send([]byte)         {}
+func (nullSink) Drained() bool       { return true }
 func (nullSink) TrySend([]byte) bool { return true }
 func (nullSink) Offer([]byte) bool   { return true }
 func (nullSink) Fail()               {}

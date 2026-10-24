@@ -36,7 +36,7 @@ type fakeSink struct {
 	refuse bool
 }
 
-func (s *fakeSink) Send([]byte)         {}
+func (s *fakeSink) Drained() bool       { return true }
 func (s *fakeSink) TrySend([]byte) bool { return true }
 func (s *fakeSink) Fail()               {}
 

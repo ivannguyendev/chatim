@@ -162,7 +162,7 @@ func TestNewRejectsInvalidOptions(t *testing.T) {
 func TestSourcesExposeEveryCounterWithFixedLabels(t *testing.T) {
 	h := newHarness(t, testOptions())
 	h.server.stats.closed(CodeTooManyConnections)
-	h.server.stats.closed(CodeSlowClient)
+	h.server.stats.closed(CodeTryAgainLater)
 	h.server.stats.closed(4999)
 	h.server.stats.authed(authUserLimit)
 	h.server.stats.reject(rejectInflight)
@@ -175,7 +175,7 @@ func TestSourcesExposeEveryCounterWithFixedLabels(t *testing.T) {
 		t.Fatalf("metric %s{%s=%q} missing", name, key, value)
 		return 0
 	}
-	if read("closes_total", "code", "4009") != 1 || read("closes_total", "code", "4008") != 1 || read("closes_total", "code", "other") != 1 {
+	if read("closes_total", "code", "4009") != 1 || read("closes_total", "code", "1013") != 1 || read("closes_total", "code", "other") != 1 {
 		t.Fatal("close counters wrong")
 	}
 	for _, result := range []string{"ok", "invalid", "expired", "rate", "throttled"} {

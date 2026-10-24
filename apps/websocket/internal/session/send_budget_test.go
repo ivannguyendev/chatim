@@ -1,7 +1,8 @@
 package session
 
 import (
-	"bytes"
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -9,6 +10,8 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/ivannguyendev/chatim/apps/websocket/internal/feed"
+	"github.com/ivannguyendev/chatim/apps/websocket/internal/interest"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -70,54 +73,114 @@ func (h *harness) queuedBytes() float64 {
 
 func (tc *testClient) startReading() { go tc.conn.ReadLoop() }
 
-func TestEventsOverTheByteBudgetCloseOnlyThatConnectionWith4008(t *testing.T) {
+func paddedEvent(n int) (feed.Envelope, string) {
+	id := fmt.Sprintf("e%d-%s", n, strings.Repeat("x", 300))
+	return roomEvent("msg_created", "message", 7, id), id
+}
+
+func eventIDs(frames []*chatimv1.ServerFrame) []string {
+	out := make([]string, 0, len(frames))
+	for _, f := range frames {
+		switch {
+		case f.GetEvent() != nil:
+			out = append(out, strings.SplitN(f.GetEvent().GetId(), "-", 2)[0])
+		case f.GetResync() != nil:
+			out = append(out, f.GetResync().GetReason().String())
+		case f.GetReady() != nil:
+			out = append(out, "ready")
+		default:
+			out = append(out, "other")
+		}
+	}
+	return out
+}
+
+func TestASlowClientIsNeverClosedAndGetsOneResyncOnceItReadsAgain(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		h := newHarness(t, budgetOptions())
+		h.loader.set("t1", "slow", interest.Room{ID: 7, Ver: 1})
+		h.loader.set("t1", "fast", interest.Room{ID: 7, Ver: 1})
 		slow, slowConn := h.dialConnection(false)
-		fast, fastConn := h.dialConnection(true)
-		shared := [][]byte{sizedFrame(t, "e1-", 400), sizedFrame(t, "e2-", 400), sizedFrame(t, "e3-", 400)}
-		copies := make([][]byte, len(shared))
-		for i, frame := range shared {
-			copies[i] = bytes.Clone(frame)
-		}
-		start := time.Now()
-		for _, frame := range shared {
-			roomSink{c: slowConn}.Send(frame)
-			roomSink{c: fastConn}.Send(frame)
+		slow.auth(h.token("slow", time.Hour))
+		synctest.Wait()
+		fast := h.readyClient("fast")
+		for n := 1; n <= 6; n++ {
+			env, _ := paddedEvent(n)
+			h.rooms.Route(env)
 			synctest.Wait()
 		}
-		if elapsed := time.Since(start); elapsed != 0 {
-			t.Fatalf("senders blocked for %v by a slow client", elapsed)
+		if got := slowConn.closing.Load(); got != 0 {
+			t.Fatalf("slow connection closing with %d", got)
 		}
-		if got := slowConn.closing.Load(); got != uint32(CodeSlowClient) {
-			t.Fatalf("slow connection closing = %d, want %d", got, CodeSlowClient)
-		}
-		for i := range shared {
-			if got := fast.nextFrame().GetEvent().GetId(); !strings.HasPrefix(got, "e"+string(rune('1'+i))+"-") {
-				t.Fatalf("fast frame %d = %q", i, got)
-			}
+		if got := eventIDs(fast.drainFrames()); !slices.Equal(got, []string{"e1", "e2", "e3", "e4", "e5", "e6"}) {
+			t.Fatalf("fast frames = %v", got)
 		}
 		slow.startReading()
-		if got := slow.waitClosed(); got != CodeSlowClient {
-			t.Fatalf("slow close code = %d, want %d", got, CodeSlowClient)
+		synctest.Wait()
+		got := eventIDs(slow.drainFrames())
+		if len(got) < 2 || len(got) > 6 || got[0] != "ready" || !slices.Equal(got[1:], []string{"e1", "e2", "e3", "e4", "e5"}[:len(got)-1]) {
+			t.Fatalf("slow frames before the resync = %v", got)
 		}
-		for i := range 2 {
-			if got := (<-slow.frames).GetEvent().GetId(); !strings.HasPrefix(got, "e"+string(rune('1'+i))+"-") {
-				t.Fatalf("slow frame %d = %q", i, got)
+		backlog := chatimv1.ResyncReason_RESYNC_REASON_CLIENT_BACKLOG.String()
+		for n, want := range [][]string{{backlog, "e7"}, {"e8"}, {"e9"}} {
+			env, _ := paddedEvent(n + 7)
+			h.rooms.Route(env)
+			synctest.Wait()
+			if got := eventIDs(slow.drainFrames()); !slices.Equal(got, want) {
+				t.Fatalf("slow frames for e%d = %v, want %v", n+7, got, want)
 			}
 		}
-		if h.closes(CodeSlowClient) != 1 || !fast.isOpen() {
-			t.Fatalf("closes 4008 = %d, fast open = %v", h.closes(CodeSlowClient), fast.isOpen())
+		if got := eventIDs(fast.drainFrames()); !slices.Equal(got, []string{"e7", "e8", "e9"}) {
+			t.Fatalf("fast frames after = %v", got)
 		}
-		for i := range shared {
-			if !bytes.Equal(shared[i], copies[i]) {
-				t.Fatalf("shared frame %d was modified", i)
-			}
+		if !slow.isOpen() || !fast.isOpen() {
+			t.Fatalf("slow open %v fast open %v", slow.isOpen(), fast.isOpen())
 		}
+		slow.close()
 		fast.close()
 		if got := h.queuedBytes(); got != 0 {
 			t.Fatalf("queued bytes after close = %v, want 0", got)
 		}
+	})
+}
+
+func TestDrainedMeansBelowHalfOfTheFramesAndTheBytes(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		opts := budgetOptions()
+		opts.SendQueue = 8
+		h := newHarness(t, opts)
+		tc, c := h.dialConnection(false)
+		sink := roomSink{c: c}
+		for i, size := range []int{20, 20, 20, 20, 20} {
+			if !sink.TrySend(sizedFrame(t, fmt.Sprintf("f%d-", i), size)) {
+				t.Fatalf("frame %d refused", i)
+			}
+			synctest.Wait()
+			if want := i < 4; sink.Drained() != want {
+				t.Fatalf("after %d frames (%d queued) drained = %v, want %v", i+1, len(c.out), sink.Drained(), want)
+			}
+		}
+		tc.startReading()
+		for range 5 {
+			tc.nextFrame()
+		}
+		synctest.Wait()
+		if !sink.Drained() {
+			t.Fatal("an empty queue is not drained")
+		}
+		big, bigConn := h.dialConnection(false)
+		bigSink := roomSink{c: bigConn}
+		if !bigSink.TrySend(sizedFrame(t, "big-", 520)) || bigSink.Drained() {
+			t.Fatalf("drained = %v with 520 of 1024 bytes queued", bigSink.Drained())
+		}
+		big.startReading()
+		big.nextFrame()
+		synctest.Wait()
+		if !bigSink.Drained() {
+			t.Fatal("not drained after the big frame was written")
+		}
+		tc.close()
+		big.close()
 	})
 }
 
@@ -163,8 +226,9 @@ func TestQueuedBytesAreReturnedWhenTheConnectionDies(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		h := newHarness(t, budgetOptions())
 		tc, c := h.dialConnection(false)
-		roomSink{c: c}.Send(sizedFrame(t, "a-", 300))
-		roomSink{c: c}.Send(sizedFrame(t, "b-", 300))
+		if !(roomSink{c: c}).TrySend(sizedFrame(t, "a-", 300)) || !(roomSink{c: c}).TrySend(sizedFrame(t, "b-", 300)) {
+			t.Fatal("frames within the budget were refused")
+		}
 		if got := h.queuedBytes(); got != 600 {
 			t.Fatalf("queued bytes = %v, want 600", got)
 		}
@@ -179,7 +243,7 @@ func TestQueuedBytesAreReturnedWhenTheConnectionDies(t *testing.T) {
 	})
 }
 
-func TestAResponseOverTheByteBudgetClosesWith4008(t *testing.T) {
+func TestAResponseOverTheByteBudgetIsDroppedAndTheConnectionStaysOpen(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		opts := budgetOptions()
 		h := newHarness(t, opts)
@@ -187,27 +251,32 @@ func TestAResponseOverTheByteBudgetClosesWith4008(t *testing.T) {
 		tc.auth(h.token("u1", time.Hour))
 		synctest.Wait()
 		ready := int(h.queuedBytes())
-		roomSink{c: c}.Send(sizedFrame(t, "fill-", opts.SendQueueBytes-ready))
+		if !(roomSink{c: c}).TrySend(sizedFrame(t, "fill-", opts.SendQueueBytes-ready)) {
+			t.Fatal("the fill frame was refused")
+		}
 		tc.history(1)
 		synctest.Wait()
-		if got := c.closing.Load(); got != uint32(CodeSlowClient) {
-			t.Fatalf("closing = %d, want %d", got, CodeSlowClient)
+		if c.closing.Load() != 0 || h.sessionMetric("send_dropped_total", "kind", "response") != 1 {
+			t.Fatalf("closing %d response drops %v", c.closing.Load(), h.sessionMetric("send_dropped_total", "kind", "response"))
 		}
 		tc.startReading()
-		if got := tc.waitClosed(); got != CodeSlowClient {
-			t.Fatalf("close code = %d, want %d", got, CodeSlowClient)
-		}
-		if f := <-tc.frames; f.GetReady() == nil {
+		if f := tc.nextFrame(); f.GetReady() == nil {
 			t.Fatalf("first frame = %v, want ready", f)
 		}
-		if got := (<-tc.frames).GetEvent().GetId(); !strings.HasPrefix(got, "fill-") {
+		if got := tc.nextFrame().GetEvent().GetId(); !strings.HasPrefix(got, "fill-") {
 			t.Fatalf("second frame = %q, want fill-", got)
 		}
+		synctest.Wait()
 		select {
 		case resp := <-tc.responses:
 			t.Fatalf("response %v delivered past the budget", resp)
 		default:
 		}
+		tc.history(2)
+		if resp := tc.next(); resp.GetId() != 2 || !tc.isOpen() {
+			t.Fatalf("response %v open %v", resp, tc.isOpen())
+		}
+		tc.close()
 		if got := h.queuedBytes(); got != 0 {
 			t.Fatalf("queued bytes after close = %v, want 0", got)
 		}
@@ -218,48 +287,6 @@ func frameQueueOptions() Options {
 	opts := testOptions()
 	opts.SendQueue = 2
 	return opts
-}
-
-func TestAFullFrameQueueClosesWith4008AndDropsLaterFrames(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		h := newHarness(t, frameQueueOptions())
-		tc, c := h.dialConnection(false)
-		sink := roomSink{c: c}
-		for _, id := range []string{"a-", "b-", "c-"} {
-			sink.Send(sizedFrame(t, id, 50))
-			synctest.Wait()
-		}
-		if c.closing.Load() != 0 {
-			t.Fatalf("closed with %d before the queue was full", c.closing.Load())
-		}
-		start := time.Now()
-		sink.Send(sizedFrame(t, "d-", 50))
-		if got := c.closing.Load(); got != uint32(CodeSlowClient) || time.Since(start) != 0 {
-			t.Fatalf("closing = %d after %v, want %d at once", got, time.Since(start), CodeSlowClient)
-		}
-		before := h.queuedBytes()
-		sink.Send(sizedFrame(t, "late-", 50))
-		if got := h.queuedBytes(); got != before {
-			t.Fatalf("queued bytes = %v after closing, want %v", got, before)
-		}
-		tc.startReading()
-		if got := tc.waitClosed(); got != CodeSlowClient {
-			t.Fatalf("close code = %d, want %d", got, CodeSlowClient)
-		}
-		for _, want := range []string{"a-", "b-", "c-"} {
-			if got := (<-tc.frames).GetEvent().GetId(); !strings.HasPrefix(got, want) {
-				t.Fatalf("frame = %q, want %s", got, want)
-			}
-		}
-		select {
-		case f := <-tc.frames:
-			t.Fatalf("frame %v delivered after the 4008 decision", f)
-		default:
-		}
-		if h.closes(CodeSlowClient) != 1 || h.closes(CodeAbnormal) != 0 || h.queuedBytes() != 0 {
-			t.Fatalf("closes 4008 = %d, aborts = %d, queued = %v", h.closes(CodeSlowClient), h.closes(CodeAbnormal), h.queuedBytes())
-		}
-	})
 }
 
 func TestTrySendRefusesAFrameOverAFullFrameQueueWithoutClosing(t *testing.T) {

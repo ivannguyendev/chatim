@@ -15,9 +15,9 @@ import (
 const shardCount = 64
 
 type Sink interface {
-	Send(frame []byte)
 	TrySend(frame []byte) bool
 	Offer(frame []byte) bool
+	Drained() bool
 	Fail()
 }
 

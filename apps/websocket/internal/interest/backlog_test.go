@@ -30,9 +30,8 @@ func TestASlowDeviceWhileCatchingUpGetsOneResyncAndResumesOnceCaughtUp(t *testin
 			f.route(catchingUp(msg("t1", 1)))
 			f.route(catchingUp(event("reaction_changed", "t1", 1, "", 0)))
 		}
-		sends, _ := ss.counts()
-		if got := ss.take(); !slices.Equal(got, []string{"resync client_backlog"}) || ss.failures() != 0 || sends != 0 {
-			t.Fatalf("slow device frames %v, failures %d, sends %d", got, ss.failures(), sends)
+		if got := ss.take(); !slices.Equal(got, []string{"resync client_backlog"}) || ss.failures() != 0 {
+			t.Fatalf("slow device frames %v, failures %d", got, ss.failures())
 		}
 		if got := fs.take(); len(got) != 3 {
 			t.Fatalf("fast device got %v, want every message", got)
@@ -53,7 +52,7 @@ func TestASlowDeviceWhileCatchingUpGetsOneResyncAndResumesOnceCaughtUp(t *testin
 	})
 }
 
-func TestAResyncThatDidNotFitIsSentOnceTheFeedCatchesUp(t *testing.T) {
+func TestTheBacklogResyncWaitsUntilTheQueueIsBelowHalf(t *testing.T) {
 	run(t, func(t *testing.T) {
 		f := newFixture(t)
 		_, ss := f.connect("t1", "slow", 1)
@@ -62,21 +61,19 @@ func TestAResyncThatDidNotFitIsSentOnceTheFeedCatchesUp(t *testing.T) {
 		ss.refusing(refuseAll)
 		f.route(catchingUp(msg("t1", 1)))
 		f.route(catchingUp(msg("t1", 1)))
-		_, trySends := ss.counts()
-		if got := ss.take(); len(got) != 0 || backlogResyncs(f) != 0 || trySends != 3 {
-			t.Fatalf("frames %v resyncs %d try sends %d", got, backlogResyncs(f), trySends)
+		if got := ss.take(); len(got) != 0 || backlogResyncs(f) != 0 || f.table.backlogged.Load() != 1 {
+			t.Fatalf("frames %v resyncs %d backlogged %d", got, backlogResyncs(f), f.table.backlogged.Load())
 		}
+		ss.refusing(halfFull)
 		f.route(msg("t1", 2))
 		f.route(msg("t1", 1))
-		sends, _ := ss.counts()
-		if got := ss.take(); len(got) != 0 || sends != 0 || backlogResyncs(f) != 0 || f.table.backlogged.Load() != 1 {
-			t.Fatalf("a resync that still does not fit: frames %v sends %d", got, sends)
+		if got := ss.take(); len(got) != 0 || backlogResyncs(f) != 0 || f.table.backlogged.Load() != 1 {
+			t.Fatalf("a queue still at half got frames %v resyncs %d", got, backlogResyncs(f))
 		}
 		ss.refusing(acceptAll)
 		f.route(msg("t1", 2))
-		sends, _ = ss.counts()
-		if got := ss.take(); !slices.Equal(got, []string{"resync client_backlog"}) || sends != 0 || backlogResyncs(f) != 1 {
-			t.Fatalf("after catching up frames %v sends %d", got, sends)
+		if got := ss.take(); !slices.Equal(got, []string{"resync client_backlog"}) || backlogResyncs(f) != 1 {
+			t.Fatalf("after the queue drained frames %v resyncs %d", got, backlogResyncs(f))
 		}
 		f.route(msg("t1", 1))
 		if got := ss.take(); !slices.Equal(got, []string{"event msg_created/t1/1//v0"}) {
@@ -85,16 +82,34 @@ func TestAResyncThatDidNotFitIsSentOnceTheFeedCatchesUp(t *testing.T) {
 	})
 }
 
-func TestLiveEventsAlwaysUseTheBudgetedSend(t *testing.T) {
+func TestALiveEventThatDoesNotFitStopsDeliveryUntilOneResync(t *testing.T) {
 	run(t, func(t *testing.T) {
 		f := newFixture(t)
 		_, s := f.connect("t1", "u", 1)
 		s.take()
-		s.refusing(refuseAll)
-		f.route(msg("t1", 1))
-		sends, trySends := s.counts()
-		if got := s.take(); !slices.Equal(got, []string{"event msg_created/t1/1//v0"}) || sends != 1 || trySends != 0 {
-			t.Fatalf("frames %v sends %d try sends %d", got, sends, trySends)
+		for episode := uint64(1); episode <= 2; episode++ {
+			s.refusing(refuseAll)
+			for range 3 {
+				f.route(msg("t1", 1))
+			}
+			if got := s.take(); len(got) != 0 || s.failures() != 0 || f.table.backlogged.Load() != 1 {
+				t.Fatalf("episode %d: frames %v failures %d backlogged %d", episode, got, s.failures(), f.table.backlogged.Load())
+			}
+			s.refusing(halfFull)
+			f.route(msg("t1", 1))
+			if got := s.take(); len(got) != 0 {
+				t.Fatalf("episode %d: delivered before the queue drained: %v", episode, got)
+			}
+			s.refusing(acceptAll)
+			f.route(msg("t1", 1))
+			f.route(msg("t1", 1))
+			want := []string{"resync client_backlog", "event msg_created/t1/1//v0", "event msg_created/t1/1//v0"}
+			if got := s.take(); !slices.Equal(got, want) || backlogResyncs(f) != episode || f.table.backlogged.Load() != 0 {
+				t.Fatalf("episode %d: frames %v resyncs %d backlogged %d", episode, got, backlogResyncs(f), f.table.backlogged.Load())
+			}
+		}
+		if s.failures() != 0 {
+			t.Fatalf("failures %d", s.failures())
 		}
 	})
 }

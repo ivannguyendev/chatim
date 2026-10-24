@@ -40,10 +40,10 @@ const (
 var (
 	rejectLabels     = [rejectReasonCount]string{"rate", "inflight", "unimplemented", "shutdown"}
 	authResultLabels = [authResultCount]string{"ok", "invalid", "expired", "rate", "throttled", "user_limit"}
+	sendKindLabels   = [sendKindCount]string{"response", "control"}
 	closeCodes       = []uint16{
-		CodeNormal, CodeGoingAway, CodeProtocolError, CodeUnsupportedData, CodeAbnormal, CodeInvalidPayload,
-		CodePolicyViolation, CodeTooLarge, CodeInternalError, CodeTryAgainLater, CodeUnauthenticated,
-		CodeSlowClient, CodeTooManyConnections,
+		CodeNormal, CodeGoingAway, CodeProtocolError, CodeAbnormal, CodeInvalidPayload,
+		CodeTooLarge, CodeInternalError, CodeTryAgainLater, CodeUnauthenticated, CodeTooManyConnections,
 	}
 )
 
@@ -56,6 +56,8 @@ type stats struct {
 	authRequiredExpired atomic.Uint64
 	rejected            [rejectReasonCount]atomic.Uint64
 	auths               [authResultCount]atomic.Uint64
+	sendDropped         [sendKindCount]atomic.Uint64
+	frameErrors         [frameErrorReasonCount]atomic.Uint64
 	closes              map[string]*atomic.Uint64
 }
 
@@ -109,6 +111,18 @@ func (s *stats) sources() []metrics.Source {
 		out = append(out, metrics.Source{
 			Name: "closes_total", Help: "Connections closed by the server, by close code.",
 			Labels: map[string]string{"code": label}, Read: counterOf(counter),
+		})
+	}
+	for kind := range sendKindCount {
+		out = append(out, metrics.Source{
+			Name: "send_dropped_total", Help: "Responses and control frames dropped because the send queue was full, by kind.",
+			Labels: map[string]string{"kind": sendKindLabels[kind]}, Read: counterOf(&s.sendDropped[kind]),
+		})
+	}
+	for reason := range frameErrorReasonCount {
+		out = append(out, metrics.Source{
+			Name: "frame_errors_total", Help: "Client frames dropped as text, undecodable or over the frame rate, by reason.",
+			Labels: map[string]string{"reason": frameErrorLabels[reason]}, Read: counterOf(&s.frameErrors[reason]),
 		})
 	}
 	for reason := range rejectReasonCount {

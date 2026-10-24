@@ -116,8 +116,10 @@ func TestTypingCountsTowardTheSharedFrameRate(t *testing.T) {
 		for range 3 {
 			a.typing("7", false)
 		}
-		if got := a.waitClosed(); got != CodePolicyViolation {
-			t.Fatalf("close code = %d, want %d", got, CodePolicyViolation)
+		synctest.Wait()
+		if got := h.frameErrors("rate"); got != 1 || !a.isOpen() {
+			t.Fatalf("rate drops %v open %v", got, a.isOpen())
 		}
+		a.close()
 	})
 }

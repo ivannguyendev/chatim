@@ -13,6 +13,14 @@ type outFrame struct {
 	payload []byte
 }
 
+type sendKind int
+
+const (
+	sendResponse sendKind = iota
+	sendControl
+	sendKindCount
+)
+
 type admission int
 
 const (
@@ -79,13 +87,13 @@ func (c *connection) writeClose(code uint16) {
 }
 
 func (c *connection) respond(resp *chatimv1.ServerResponse) {
-	c.sendFrame(&chatimv1.ServerFrame{Frame: &chatimv1.ServerFrame_Response{Response: resp}})
+	c.sendFrame(&chatimv1.ServerFrame{Frame: &chatimv1.ServerFrame_Response{Response: resp}}, sendResponse)
 }
 
-func (c *connection) enqueue(frame outFrame) {
+func (c *connection) enqueue(frame outFrame, kind sendKind) {
 	switch c.admit(frame) {
 	case admitOverBudget, admitQueueFull:
-		c.closeWith(CodeSlowClient)
+		c.server.stats.sendDropped[kind].Add(1)
 	case admitted, admitDropped:
 	}
 }
@@ -118,14 +126,20 @@ func (c *connection) offer(frame outFrame) bool {
 	c.queueMu.Lock()
 	defer c.queueMu.Unlock()
 	switch {
-	case c.sealed:
-		return false
-	case len(c.out)+1 >= c.server.opts.SendQueue/2:
-		return false
-	case c.queuedBytes+size >= int64(c.server.opts.SendQueueBytes/2):
+	case c.sealed, !c.belowHalf(len(c.out)+1, c.queuedBytes+size):
 		return false
 	}
 	return c.push(frame, size)
+}
+
+func (c *connection) drained() bool {
+	c.queueMu.Lock()
+	defer c.queueMu.Unlock()
+	return c.belowHalf(len(c.out), c.queuedBytes)
+}
+
+func (c *connection) belowHalf(frames int, bytes int64) bool {
+	return frames < c.server.opts.SendQueue/2 && bytes < int64(c.server.opts.SendQueueBytes/2)
 }
 
 func (c *connection) accepting() bool {

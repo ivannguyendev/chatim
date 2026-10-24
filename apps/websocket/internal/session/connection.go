@@ -46,6 +46,7 @@ type connection struct {
 	typist   *rate.Limiter
 	authGate *rate.Limiter
 	prompts  *rate.Limiter
+	rejects  *rate.Limiter
 	out      chan outFrame
 	closeReq chan uint16
 	closed   chan struct{}
@@ -84,6 +85,7 @@ func newConnection(s *Server, socket *gws.Conn) *connection {
 		typist:   rate.NewLimiter(rate.Limit(s.opts.TypingRate), s.opts.TypingBurst),
 		authGate: rate.NewLimiter(rate.Every(time.Second), 1),
 		prompts:  rate.NewLimiter(rate.Every(time.Second), 1),
+		rejects:  rate.NewLimiter(rate.Every(time.Second), 1),
 		out:      make(chan outFrame, s.opts.SendQueue),
 		closeReq: make(chan uint16, 1),
 		closed:   make(chan struct{}),
@@ -113,12 +115,12 @@ func (c *connection) receive(message *gws.Message) {
 		return
 	}
 	if message.Opcode != gws.OpcodeBinary {
-		c.closeWith(CodeUnsupportedData)
+		c.frameError(frameErrorUnsupported)
 		return
 	}
 	var frame chatimv1.ClientFrame
 	if err := decodeOptions.Unmarshal(message.Bytes(), &frame); err != nil {
-		c.closeWith(CodePolicyViolation)
+		c.frameError(frameErrorInvalid)
 		return
 	}
 	kind := kindOf(&frame)
@@ -128,7 +130,8 @@ func (c *connection) receive(message *gws.Message) {
 	case kind == frameRequest:
 		c.request(frame.GetRequest(), allowed, claims, running)
 	case !allowed:
-		c.closeWith(CodePolicyViolation)
+		c.frameError(frameErrorRate)
+		return
 	case kind == frameAuth:
 		c.authenticate(frame.GetAuth().GetToken(), running)
 	case kind == frameHeartbeat:
@@ -156,11 +159,11 @@ func (c *connection) control(payload []byte, reply bool) {
 		return
 	}
 	if !c.limiter.Allow() {
-		c.closeWith(CodePolicyViolation)
+		c.frameError(frameErrorRate)
 		return
 	}
 	if reply {
-		c.enqueue(outFrame{opcode: gws.OpcodePong, payload: payload})
+		c.enqueue(outFrame{opcode: gws.OpcodePong, payload: payload}, sendControl)
 		c.answerPresence()
 	}
 	c.renewLiveness()

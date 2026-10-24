@@ -123,12 +123,12 @@ func (c *Conn) expire(room uint64, p *pendingOpen) {
 
 func (c *Conn) reject(raw string) {
 	c.table.stats.openRejected.Add(1)
-	c.sink.Send(roomClosedFrame(raw, chatimv1.RoomClosedReason_ROOM_CLOSED_REASON_NOT_MEMBER))
+	c.sendState(roomClosedFrame(raw, chatimv1.RoomClosedReason_ROOM_CLOSED_REASON_NOT_MEMBER))
 }
 
 func (c *Conn) becameReady() {
 	c.readied = true
-	c.sink.Send(readyFrame)
+	c.sendState(readyFrame)
 }
 
 func (c *Conn) resumed(reason chatimv1.ResyncReason) {
@@ -158,7 +158,7 @@ func (c *Conn) admitted(room uint64) {
 
 func (c *Conn) removed(room uint64) {
 	if c.closeRoom(room) {
-		c.sink.Send(roomClosedFrame(strconv.FormatUint(room, 10), chatimv1.RoomClosedReason_ROOM_CLOSED_REASON_REMOVED))
+		c.sendState(roomClosedFrame(strconv.FormatUint(room, 10), chatimv1.RoomClosedReason_ROOM_CLOSED_REASON_REMOVED))
 	}
 }
 

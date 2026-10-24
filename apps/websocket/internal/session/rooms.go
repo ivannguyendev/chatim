@@ -11,8 +11,6 @@ type roomSink struct {
 	c *connection
 }
 
-func (s roomSink) Send(frame []byte) { s.c.enqueue(outFrame{opcode: gws.OpcodeBinary, payload: frame}) }
-
 func (s roomSink) TrySend(frame []byte) bool {
 	return s.c.tryEnqueue(outFrame{opcode: gws.OpcodeBinary, payload: frame})
 }
@@ -20,6 +18,8 @@ func (s roomSink) TrySend(frame []byte) bool {
 func (s roomSink) Offer(frame []byte) bool {
 	return s.c.offer(outFrame{opcode: gws.OpcodeBinary, payload: frame})
 }
+
+func (s roomSink) Drained() bool { return s.c.drained() }
 
 func (s roomSink) Fail() { s.c.closeWith(CodeTryAgainLater) }
 

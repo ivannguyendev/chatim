@@ -125,6 +125,7 @@ const (
 	acceptAll trySendMode = iota
 	refuseEvents
 	refuseAll
+	halfFull
 )
 
 type fakeSink struct {
@@ -133,7 +134,6 @@ type fakeSink struct {
 	fails        int
 	mode         trySendMode
 	refuseOffers bool
-	sends        int
 	trySends     int
 	offers       int
 }
@@ -156,6 +156,12 @@ func (s *fakeSink) TrySend(raw []byte) bool {
 	return true
 }
 
+func (s *fakeSink) Drained() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mode == acceptAll || s.mode == refuseEvents
+}
+
 func (s *fakeSink) Offer(raw []byte) bool {
 	line := describe(raw)
 	s.mu.Lock()
@@ -166,14 +172,6 @@ func (s *fakeSink) Offer(raw []byte) bool {
 	}
 	s.frames = append(s.frames, line)
 	return true
-}
-
-func (s *fakeSink) Send(raw []byte) {
-	line := describe(raw)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.sends++
-	s.frames = append(s.frames, line)
 }
 
 func describe(raw []byte) string {
@@ -212,14 +210,14 @@ func (s *fakeSink) take() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := s.frames
-	s.frames, s.sends, s.trySends, s.offers = nil, 0, 0, 0
+	s.frames, s.trySends, s.offers = nil, 0, 0
 	return out
 }
 
-func (s *fakeSink) counts() (sends, trySends int) {
+func (s *fakeSink) trySendCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.sends, s.trySends
+	return s.trySends
 }
 
 func (s *fakeSink) offerCount() int {

@@ -5,7 +5,6 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/lxzan/gws"
 	"google.golang.org/grpc/codes"
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/interest"
@@ -13,31 +12,6 @@ import (
 )
 
 var unknownFramePayload = []byte{0x98, 0x06, 0x01}
-
-func TestUndecodableFrameIsClosedWith1008(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		h := newHarness(t, testOptions())
-		tc := h.dial(true)
-		tc.write([]byte{0x52, 0x05, 0x01})
-		if got := tc.waitClosed(); got != CodePolicyViolation {
-			t.Fatalf("close code = %d, want %d", got, CodePolicyViolation)
-		}
-	})
-}
-
-func TestTextFrameIsClosedWith1003(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		h := newHarness(t, testOptions())
-		tc := h.dial(true)
-		_ = tc.conn.WriteMessage(gws.OpcodeText, []byte("hello"))
-		if got := tc.waitClosed(); got != CodeUnsupportedData {
-			t.Fatalf("close code = %d, want %d", got, CodeUnsupportedData)
-		}
-		if h.closes(CodeUnsupportedData) != 1 {
-			t.Fatal("1003 close not counted")
-		}
-	})
-}
 
 func TestFrameOverTheLimitIsClosedWith1009(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {

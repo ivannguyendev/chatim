@@ -18,15 +18,12 @@ const (
 	CodeNormal             uint16 = 1000
 	CodeGoingAway          uint16 = 1001
 	CodeProtocolError      uint16 = 1002
-	CodeUnsupportedData    uint16 = 1003
 	CodeAbnormal           uint16 = 1006
 	CodeInvalidPayload     uint16 = 1007
-	CodePolicyViolation    uint16 = 1008
 	CodeTooLarge           uint16 = 1009
 	CodeInternalError      uint16 = 1011
 	CodeTryAgainLater      uint16 = 1013
 	CodeUnauthenticated    uint16 = 4001
-	CodeSlowClient         uint16 = 4008
 	CodeTooManyConnections uint16 = 4009
 )
 
