@@ -167,6 +167,19 @@ groups:
           severity: warning
         annotations:
           summary: A websocket node cannot reach the presence Redis; its users show offline everywhere and its devices get no presence answers.
+      - alert: ChatimWebsocketAuthRateLimited
+        expr: sum by (instance) (rate(chatim_websocket_auth_total{result="rate"}[10m])) / sum by (instance) (rate(chatim_websocket_auth_total[10m])) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: More than 10% of the logins on a websocket node get retry_later from the node login limiter; a reconnect storm is waiting, or WS_AUTH_RATE and WS_AUTH_BURST are too low for the node.
+      - alert: ChatimWebsocketTokenExpiredSurge
+        expr: sum by (instance) (increase(chatim_websocket_auth_required_total{reason="expired"}[10m])) > 1000
+        labels:
+          severity: warning
+        annotations:
+          summary: More than 1000 running connections of a websocket node went back to waiting on an expired token in 10m; clients are not renewing tokens in time. The threshold depends on the user count of the node.
       - alert: ChatimGatewayCoreUnavailable
         expr: sum(rate(chatim_gateway_commands_total{code="Unavailable"}[5m])) / sum(rate(chatim_gateway_commands_total[5m])) > 0.05
         for: 5m
