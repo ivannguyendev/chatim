@@ -101,6 +101,9 @@ message ServerFrame {
     LoadFailedFrame load_failed = 25;
     TypingNotice typing = 26;
     PresenceFrame presence = 27;
+    RetryLaterFrame retry_later = 28;
+    AuthRequiredFrame auth_required = 29;
+    FrameErrorFrame frame_error = 30;
   }
 }
 
@@ -123,6 +126,32 @@ message PresenceEntry {
 
 message LoadFailedFrame {
   uint32 retry_after_ms = 1;
+}
+
+message RetryLaterFrame {
+  uint32 retry_after_ms = 1;
+}
+
+enum AuthRequiredReason {
+  AUTH_REQUIRED_REASON_UNSPECIFIED = 0;
+  AUTH_REQUIRED_REASON_MISSING = 1;
+  AUTH_REQUIRED_REASON_INVALID = 2;
+  AUTH_REQUIRED_REASON_EXPIRED = 3;
+}
+
+message AuthRequiredFrame {
+  AuthRequiredReason reason = 1;
+}
+
+enum FrameErrorReason {
+  FRAME_ERROR_REASON_UNSPECIFIED = 0;
+  FRAME_ERROR_REASON_UNSUPPORTED = 1;
+  FRAME_ERROR_REASON_INVALID = 2;
+  FRAME_ERROR_REASON_RATE = 3;
+}
+
+message FrameErrorFrame {
+  FrameErrorReason reason = 1;
 }
 
 enum ResyncReason {
