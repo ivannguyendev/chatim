@@ -18,7 +18,7 @@ flowchart TD
     end
 
     subgraph Entry["Tầng Cổng & Thời gian thực"]
-        M09["Module 09: Realtime Delivery & Ephemeral<br/>(App websocket M4: phần 1–4 đã xây, 12 lệnh ghi realtime, typing và presence)"]
+        M09["Module 09: Realtime Delivery & Ephemeral<br/>(App websocket M4: phần 1–5 đã xây, 12 lệnh ghi realtime, typing và presence, giữ kết nối, đặc tả client)"]
         M11["Module 11: HTTPS Gateway<br/>(App gateway: 22 lệnh đọc và quản lý, Connect, core bất kỳ)"]
     end
 
@@ -170,7 +170,7 @@ Mỗi module dưới đây là một tập tài liệu đặc tả hoàn chỉnh
 | **06** | [06. Threads, Replies & Mentions](./06-feature-threads-replies-and-mentions.md) | Trả lời trích dẫn, đếm reply, tag @mention, inbox nhắc tên | Trả lời trên timeline chính qua `messages.rp {th, s}`, doc trả lời trong `message_interactions`, `reply_preview` tính lúc đọc; Biến đếm `rc` `$inc` + survivor timer (projection `reply_index`); Mention App (nhúng trong core, D162–D176) lập chỉ mục mention từ event tự đủ, `ListMentions`, nhóm, gợi ý `@nhóm`, thông báo `CHATIM_NOTIFY`. |
 | **07** | [07. Read Receipts & Unread Badge](./07-feature-read-receipts-and-unread-badge.md) | Đánh dấu đã đọc/chưa đọc, badge số tin chưa đọc | Cập nhật vị trí đọc trên doc Member (`read_seq`, `read_ver`); Unread tính lúc đọc trong `ListMyRooms` từ đuôi phòng ≤ 300 tin, dừng ở 100, `approx` khi hết cửa sổ. |
 | **08** | [08. History Retrieval & Reconnect Sync](./08-feature-history-retrieval-and-sync.md) | Cuộn xem lịch sử tin nhắn, khôi phục sau mất mạng | Phân trang theo `seq` (`LATEST`/`OLDEST`/`BEFORE`/`AFTER`/`AROUND`); Dynamic View pipeline che giấu tin nhạy cảm; reconnect kéo snapshot (`ListMyRooms` + `GetHistory AFTER`), sync token thuộc Mention App (chưa có). |
-| **09** | [09. Realtime Delivery & Ephemeral](./09-feature-realtime-delivery-and-ephemeral.md) | Đẩy tin realtime, ghi realtime (12 lệnh), báo đang gõ, trạng thái online | (M4 phần 1 đã xây: kết nối, token, lệnh, §7; đẩy event phần 2; từ phần gateway chỉ còn 12 lệnh ghi realtime, D198; core đã RePublish event sang `live.*`) Dynamic interest routing trên NATS PubSub; Bỏ qua DB cho tín hiệu tạm thời (typing, presence); Zero-alloc fanout WebSocket `gws`. |
+| **09** | [09. Realtime Delivery & Ephemeral](./09-feature-realtime-delivery-and-ephemeral.md) | Đẩy tin realtime, ghi realtime (12 lệnh), báo đang gõ, trạng thái online | (M4 phần 1–5 đã xây: kết nối, token, lệnh, §7; đẩy event phần 2, §8; đã đọc phần 3, §9; từ phần gateway chỉ còn 12 lệnh ghi realtime, D198; đang gõ và online phần 4, §10; giữ kết nối, giới hạn đăng nhập, `frame_error`, alert và đặc tả client phần 5, §6.1–§6.2, §11) Dynamic interest routing trên NATS PubSub; Bỏ qua DB cho tín hiệu tạm thời (typing, presence); Zero-alloc fanout WebSocket `gws`. |
 | **10** | [10. Data Reconciliation & Self-Healing](./10-feature-data-reconciliation-and-repair.md) | Bù đắp event rớt mạng, tự sửa sai bộ đếm, resync | Cờ `_state` ghi cùng lệnh, xoá sau PubAck; sweeper slot 0 phát bù cờ quá 15s; một consumer `projections` (slot 0, 3 handler) không delay; phiếu hẹn `CHATIM_TIMER`; CLI `/app resync` bật lại cờ. |
 | **11** | [11. HTTPS Gateway](./11-feature-https-gateway.md) | Tải danh sách hội thoại, lịch sử, thành viên; tạo nhóm, thêm người, đổi tên qua HTTPS | App `gateway` (D198): Connect trên HTTP/1.1 + h2c, 22 lệnh `corecall.Request`, Bearer JWT như websocket, core bất kỳ qua round robin không Redis, giới hạn theo user và trần toàn node, CORS theo danh sách; thay đổi tới người khác qua event trên WebSocket. |
 
@@ -232,7 +232,7 @@ Mỗi module dưới đây là một tập tài liệu đặc tả hoàn chỉnh
 | Mục tiêu vận hành | Chỉ số cam kết (SLO) | Metric Prometheus tương ứng | Ngưỡng Cảnh báo (Alert Rule) |
 |---|---|---|---|
 | **Độ trễ Ack gửi tin** | p99 ≤ 30ms | Chưa có metric trong core; đo bằng `corebench` (bench 2K: p99 ~121–131ms trên máy dev) | Chưa có alert |
-| **Độ trễ phân phối Realtime** | p99 ≤ 100ms | Dự kiến `chatim_realtime_delivery_latency_seconds` (app websocket M4, chưa xây) | Dự kiến `ChatimDeliveryLatencyHigh` (chưa có) |
+| **Độ trễ phân phối Realtime** | p99 ≤ 100ms | `chatim_websocket_event_delivery_seconds` (từ giờ JetStream lưu tới lúc frame vào hàng gửi trên node, M4 phần 5) | `ChatimWebsocketDeliverySlow` (p99 > 100ms trong 5 phút) |
 | **Độ trễ đọc 50 tin lịch sử** | p99 ≤ 20ms | Chưa có metric | Chưa có alert |
 | **Bảo đảm không mất tin** | 100% (At-least-once) | `chatim_core_event_pending_oldest_seconds`, `chatim_core_sweep_passes_total` | `ChatimEventPendingStuck`: cờ cũ nhất > 60s kéo dài 5 phút; `ChatimSweeperIdle`: không lượt quét nào trong 10 phút |
 | **Projection theo kịp** | Danh sách hội thoại ổn định ≤ ~3s (cửa sổ gom 3s; bench 2K trung vị 1,6s) | `chatim_core_projection_lag_seconds` | `ChatimProjectionLagging`: > 10s kéo dài 5 phút |

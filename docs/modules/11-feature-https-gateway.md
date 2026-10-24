@@ -10,7 +10,7 @@
 
 | Mã Use Case | Tên Use Case | Tác nhân | Mô tả & Kết quả kỳ vọng |
 |---|---|---|---|
-| **UC-GW-01** | **Mở app, thấy danh sách hội thoại** | Người dùng | Máy gọi `ListMyRooms` qua HTTPS (trước đó `FlushReads` trên WebSocket để unread đúng); nhận danh sách đã xếp và đếm unread. |
+| **UC-GW-01** | **Mở app, thấy danh sách hội thoại** | Người dùng | Máy gọi `ListMyRooms` qua HTTPS (trước đó chờ trả lời mọi `MarkRead` đang gửi trên WebSocket để unread đúng, [Module 09 §11](./09-feature-realtime-delivery-and-ephemeral.md)); nhận danh sách đã xếp và đếm unread. |
 | **UC-GW-02** | **Cuộn lịch sử, xem thành viên, bookmark, thread** | Người dùng | 14 lệnh đọc (`GetHistory`, `ListMembers`, `ListBookmarks`...) qua HTTPS, kết quả bằng đúng gọi gRPC thẳng core. |
 | **UC-GW-03** | **Tạo nhóm, thêm/xoá người, đổi tên, đổi quyền** | Chủ/admin nhóm | 8 lệnh quản lý qua HTTPS; người khác đang online nhận thay đổi realtime qua event trên WebSocket. |
 | **UC-GW-04** | **App web gọi từ trình duyệt** | Frontend | CORS chỉ cho origin trong `GW_CORS_ORIGINS`; preflight không cần token. |

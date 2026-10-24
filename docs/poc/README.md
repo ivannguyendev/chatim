@@ -87,7 +87,7 @@ Kết luận dev:
 
 ### R4b — `tools/poc/wsload` (chưa chạy)
 
-Công cụ tạo `-groups` nhóm qua gateway (mỗi user trong một nhóm, một người gửi mỗi nhóm), ký token dev cho từng user từ `.local/ws-keys/private.jwk`, nối `-conns` user chia đều trên các URL `-ws`; người gửi gửi `SendMessage` qua websocket với cid riêng, nội dung mang giờ gửi (unix nano), người nhận đo trễ từ `msg_created`. Kết quả `summary.txt` + `summary.json` trong `bin/wsload/<scenario>-<giờ>/`.
+Công cụ tạo `-groups` nhóm qua gateway (mỗi user trong một nhóm, một người gửi mỗi nhóm), ký token dev cho từng user từ `.local/ws-keys/private.jwk`, nối `-conns` user chia đều trên các URL `-ws`; người gửi gửi `SendMessage` qua websocket với cid riêng, nội dung mang giờ gửi (unix nano), người nhận đo trễ từ `msg_created`. Kết quả `summary.txt` + `summary.json` trong `bin/bench/wsload-<scenario>-<giờ>/` (hoặc `-out`; `scripts/wsload-kill.sh` ghi `bin/bench/wsload-kill-<giờ>/` kèm `run.log`).
 
 - `steady`: nối với `-connect-rate`, mở nhóm, gửi `-rate` tin/s trong `-duration`; in trễ giao, ack, sent/acked/delivered/expected/duplicate/lỗi và thời gian nối.
 - `kill`: `scripts/wsload-kill.sh` chạy công cụ, thấy `kill-ready` thì `docker kill -s KILL chatim-websocket-2`, xong thì bật lại node và chờ healthy (trap bật lại nếu script lỗi). Client mất kết nối nối lại sau 0–3s ngẫu nhiên sang URL khác, theo `retry_later`; đo từ lần rớt đầu tới khi mọi client đã `ready` lại và số `retry_later`.
