@@ -79,6 +79,12 @@ func (f *WSFeed) apply(frame *chatimv1.ServerFrame, load *wakeup) {
 		f.applyTyping(fr.Typing)
 	case *chatimv1.ServerFrame_Presence:
 		f.Presence(fr.Presence.GetEntries())
+	case *chatimv1.ServerFrame_AuthRequired:
+		f.AuthRequired(fr.AuthRequired.GetReason())
+	case *chatimv1.ServerFrame_FrameError:
+		f.FrameError(fr.FrameError.GetReason())
+	case *chatimv1.ServerFrame_RetryLater:
+		f.RetryLater(time.Duration(fr.RetryLater.GetRetryAfterMs()) * time.Millisecond)
 	}
 }
 

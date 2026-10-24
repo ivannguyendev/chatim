@@ -14,11 +14,13 @@ ws_container="${WS_CONTAINER:-chatim-websocket-1}"
 ws2_url="${WS2_URL:-ws://chatim-websocket-2:8080/ws}"
 ws2_container="${WS2_CONTAINER:-chatim-websocket-2}"
 ws2_watcher="chatim-e2e-ws2-watch-$$"
+ws1_stopper="chatim-e2e-ws1-stop-$$"
 gw_url="${GW_URL:-http://chatim-gateway-1:8080}"
 gw_container="${GW_CONTAINER:-chatim-gateway-1}"
 state="$(mktemp -d "${TMPDIR:-/tmp}/chatim-e2e.XXXXXX")"
 killed=""
 ws2_killed=""
+ws1_stopped=""
 result=FAIL
 step="start"
 
@@ -44,18 +46,30 @@ restore_ws2() {
   fi
 }
 
+restore_ws1() {
+  if [ -n "$ws1_stopped" ]; then
+    echo "restore: docker start $ws_container"
+    docker start "$ws_container" >/dev/null
+    "$scripts/wait-core-healthy.sh" "$ws_container"
+    ws1_stopped=""
+  fi
+}
+
 finish() {
   set +e
-  docker rm -f "$watcher" "$ws2_watcher" >/dev/null 2>&1
+  docker rm -f "$watcher" "$ws2_watcher" "$ws1_stopper" >/dev/null 2>&1
   if [ -n "$killed" ]; then
     restore || result=FAIL
   fi
   if [ -n "$ws2_killed" ]; then
     restore_ws2 || result=FAIL
   fi
+  if [ -n "$ws1_stopped" ]; then
+    restore_ws1 || result=FAIL
+  fi
   rm -rf "$state"
   if [ "$result" = PASS ]; then
-    echo "e2e PASS: $first messages before and $after after killing $victim, no loss, no duplicate, every acked seq live; seq 1 edited and seq 2 deleted on history, edit history and live; seq 3 reacted with the first then the second emoji from GetReactionSettings and an unlisted emoji refused, seq 4 pinned, on replies, history and live; members added, promoted, removed and refused, read positions, hide and clear, the last owner leaving and coming back, on replies, history and live room, member and message subjects; a direct room opened twice into one room, replies counted and listed, the parent kept while replied, mentions of a user, a group and @all listed, a forward and a bookmark, on replies, lists and live; a system message from a non-member raising unread and one with skip_unread not, the room list ordered and counted after sends, reads, a delete and a hide, pinned first, archived apart, paged by cursor, refreshed by GetRooms and renamed live, history around a seq, messages by seq, threads, reactors, pins newest first, members owner first and a forward keeping skip_unread and meta; Mention App groups set and moved, @group notifying only its current members in the room and never the sender, an inactive group notifying and listing nobody, an edit adding then dropping a user notified then retracted and listed then gone, a delete retracting, @all notifying every other member, room groups with names and an older user group list ignored; through the websocket a dev token connecting, a send, an edit, a reaction and a bookmark, with history and bookmarks read through the gateway matching gRPC, a system message refused, an unknown key answered auth_required INVALID and an expired token auth_required EXPIRED with the connection kept open, a silent connection closed 1000 after the heartbeat timeout, two users on the websocket hearing a new group at once, messages without duplicate or gap, reactions only with the room open, nothing of the other user's hides and bookmarks, one notification each for @user and @all, a read position reaching the viewer and the reader's other device but not a member without the room open, member_removed then room_closed and silence after removal, the left group listed with its version by ListMyRoomIDs and still silent after a reconnect, and no token in the websocket logs; through the gateway a group created, a member added and the group renamed with the events reaching a member with the group open on the websocket, ListMyRooms, GetHistory, ListMembers and ListBookmarks equal to gRPC, an expired token refused with 401, SendMessage unimplemented on the gateway and GetHistory unimplemented on the websocket, a CORS preflight answered for a listed origin, and no token in the gateway logs; across two websocket nodes typing reaching a member with the group open on the other node and nobody else, an outsider's typing dropped, a watched user online, offline after closing, still online across a reconnect after 3s, offline after its node was killed, and no token in the logs of $ws2_container"
+    echo "e2e PASS: $first messages before and $after after killing $victim, no loss, no duplicate, every acked seq live; seq 1 edited and seq 2 deleted on history, edit history and live; seq 3 reacted with the first then the second emoji from GetReactionSettings and an unlisted emoji refused, seq 4 pinned, on replies, history and live; members added, promoted, removed and refused, read positions, hide and clear, the last owner leaving and coming back, on replies, history and live room, member and message subjects; a direct room opened twice into one room, replies counted and listed, the parent kept while replied, mentions of a user, a group and @all listed, a forward and a bookmark, on replies, lists and live; a system message from a non-member raising unread and one with skip_unread not, the room list ordered and counted after sends, reads, a delete and a hide, pinned first, archived apart, paged by cursor, refreshed by GetRooms and renamed live, history around a seq, messages by seq, threads, reactors, pins newest first, members owner first and a forward keeping skip_unread and meta; Mention App groups set and moved, @group notifying only its current members in the room and never the sender, an inactive group notifying and listing nobody, an edit adding then dropping a user notified then retracted and listed then gone, a delete retracting, @all notifying every other member, room groups with names and an older user group list ignored; through the websocket a dev token connecting, a send, an edit, a reaction and a bookmark, with history and bookmarks read through the gateway matching gRPC, a system message refused, an unknown key answered auth_required INVALID and an expired token auth_required EXPIRED with the connection kept open, a silent connection closed 1000 after the heartbeat timeout, two users on the websocket hearing a new group at once, messages without duplicate or gap, reactions only with the room open, nothing of the other user's hides and bookmarks, one notification each for @user and @all, a read position reaching the viewer and the reader's other device but not a member without the room open, member_removed then room_closed and silence after removal, the left group listed with its version by ListMyRoomIDs and still silent after a reconnect, and no token in the websocket logs; through the gateway a group created, a member added and the group renamed with the events reaching a member with the group open on the websocket, ListMyRooms, GetHistory, ListMembers and ListBookmarks equal to gRPC, an expired token refused with 401, SendMessage unimplemented on the gateway and GetHistory unimplemented on the websocket, a CORS preflight answered for a listed origin, and no token in the gateway logs; across two websocket nodes typing reaching a member with the group open on the other node and nobody else, an outsider's typing dropped, a watched user online, offline after closing, still online across a reconnect after 3s, offline after its node was killed, and no token in the logs of $ws2_container; a connection whose token ran out answered auth_required EXPIRED, heard nothing while it waited, refused a write and came back with ready on a fresh token with the missed seq reported as a gap, a text frame and a garbage frame answered frame_error UNSUPPORTED and INVALID on a connection kept open, ten connections of one user ready on a node and the eleventh closed 4009, a user on a stopped $ws_container reconnecting to $ws2_container and hearing the next message, and no token of phase 12 in the logs of either websocket node"
     exit 0
   fi
   echo "e2e FAIL during: $step" >&2
@@ -239,5 +253,59 @@ if grep -F -q -f "$state/ws2-all-tokens" "$state/ws2.log"; then
 fi
 echo "phase 11: the logs of $ws2_container hold none of the $(wc -l <"$state/ws2-all-tokens" | tr -d ' ') tokens used"
 step="phase 11 check"
+cli e2e check -state /state
+step="phase 12 login waits, frame errors and the user cap"
+echo "phase 12: on $ws_container a 20s token running out into auth_required EXPIRED, nothing heard and a write refused while waiting, ready on a fresh token with the missed seq a gap, frame_error UNSUPPORTED for a text frame and INVALID for garbage on a kept connection, ten connections of one user ready and the eleventh closed 4009"
+docker run --rm --network "$network" --user "$(id -u):$(id -g)" -e REDIS_PASSWORD -v "$state":/state -v "$ws_key":/keys/private.jwk:ro "$image" \
+  e2e ws-resilience -state /state -url "$ws_url" -gateway "$gw_url"
+step="phase 12 start a user on $ws_container"
+docker run --rm --name "$ws1_stopper" --network "$network" --user "$(id -u):$(id -g)" -e REDIS_PASSWORD -v "$state":/state -v "$ws_key":/keys/private.jwk:ro "$image" \
+  e2e ws-node-stop -state /state -url "$ws_url" -url2 "$ws2_url" -gateway "$gw_url" >"$state/ws-node-stop.log" 2>&1 &
+ws1_pid=$!
+for _ in $(seq 1 60); do
+  if grep '^on websocket-1' "$state/ws-node-stop.log" >/dev/null 2>&1 || ! kill -0 "$ws1_pid" 2>/dev/null; then
+    break
+  fi
+  sleep 1
+done
+if ! grep '^on websocket-1' "$state/ws-node-stop.log"; then
+  cat "$state/ws-node-stop.log" >&2
+  echo "the user of $ws_container never opened its group" >&2
+  exit 1
+fi
+step="phase 12 stop $ws_container"
+echo "stop: docker stop $ws_container"
+ws1_stopped=yes
+docker stop "$ws_container" >/dev/null
+step="phase 12 the user of $ws_container reconnects to $ws2_container"
+if ! wait "$ws1_pid"; then
+  cat "$state/ws-node-stop.log" >&2
+  exit 1
+fi
+if ! grep '^reconnected on websocket-2' "$state/ws-node-stop.log" >/dev/null; then
+  cat "$state/ws-node-stop.log" >&2
+  echo "the user of $ws_container never reconnected to $ws2_container" >&2
+  exit 1
+fi
+cat "$state/ws-node-stop.log"
+step="phase 12 restart $ws_container"
+restore_ws1
+step="phase 12 websocket logs hold no token"
+for list in ws-resilience-tokens ws-node-stop-tokens; do
+  if [ ! -s "$state/$list" ]; then
+    echo "phase 12 wrote no $list" >&2
+    exit 1
+  fi
+done
+cat "$state/ws-resilience-tokens" "$state/ws-node-stop-tokens" >"$state/ws12-all-tokens"
+for node in "$ws_container" "$ws2_container"; do
+  docker logs "$node" >"$state/ws12.log" 2>&1
+  if grep -F -q -f "$state/ws12-all-tokens" "$state/ws12.log"; then
+    echo "the logs of $node hold a token used by phase 12" >&2
+    exit 1
+  fi
+done
+echo "phase 12: the logs of $ws_container and $ws2_container hold none of the $(wc -l <"$state/ws12-all-tokens" | tr -d ' ') tokens used"
+step="phase 12 check"
 cli e2e check -state /state
 result=PASS
