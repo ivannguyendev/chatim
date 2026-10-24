@@ -20,6 +20,8 @@ message ClientFrame {
     OpenRoomFrame open_room = 20;
     CloseRoomFrame close_room = 21;
     LoadRoomsFrame load_rooms = 22;
+    TypingFrame typing = 23;
+    WatchPresenceFrame watch_presence = 24;
   }
 }
 
@@ -38,6 +40,15 @@ message CloseRoomFrame {
 }
 
 message LoadRoomsFrame {}
+
+message TypingFrame {
+  string room_id = 1;
+  bool stopped = 2;
+}
+
+message WatchPresenceFrame {
+  repeated string user_ids = 1;
+}
 
 message ClientRequest {
   uint64 id = 1;
@@ -88,10 +99,27 @@ message ServerFrame {
     ResyncFrame resync = 23;
     RoomClosedFrame room_closed = 24;
     LoadFailedFrame load_failed = 25;
+    TypingNotice typing = 26;
+    PresenceFrame presence = 27;
   }
 }
 
 message ReadyFrame {}
+
+message TypingNotice {
+  string room_id = 1;
+  string user_id = 2;
+  bool stopped = 3;
+}
+
+message PresenceFrame {
+  repeated PresenceEntry entries = 1;
+}
+
+message PresenceEntry {
+  string user_id = 1;
+  bool online = 2;
+}
 
 message LoadFailedFrame {
   uint32 retry_after_ms = 1;
