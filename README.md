@@ -225,6 +225,8 @@ Khoá dev: `make dev-keys` chạy `corecli dev-keys -out /keys` trong image `cha
 
 Client nối `ws://127.0.0.1:8081/ws` (subprotocol `chatim.v1`), frame đầu là auth mang token; `pkg/wsclient` làm sẵn việc này.
 
+`pkg/wsclient` gửi đang gõ bằng `Typing(room)` (lần đầu gửi ngay, sau đó tối đa một lần mỗi 3s mỗi room), `StopTyping(room)` (chỉ gửi khi đã gửi `typing` mà chưa dừng; gửi `SendMessage` vào room cũng tính là dừng, không gửi `stopped`), nhận qua `OnTyping(room, user, typing)` (`false` khi có `stopped`, khi 6s không có tin mới của người đó, hoặc khi `msg_created` của người đó trong room tới). `WatchPresence(users)` thay cả danh sách hỏi online trên server và kết quả tới `OnPresence(entries)` ở mỗi heartbeat. Danh sách này chỉ sống theo kết nối và client chưa tự nối lại: sau mỗi lần nối lại, app phải gọi lại `WatchPresence` với danh sách đầy đủ.
+
 Đổi khoá (dev và prod, không cắt kết nối đang sống): thêm khoá mới (`kid` mới) vào JWKS bên cạnh khoá cũ → rolling restart các node websocket (JWKS chỉ đọc lúc khởi động) → chuyển bên ký sang khoá mới → chờ token cũ hết hạn (TTL + `WS_JWT_LEEWAY`) → bỏ khoá cũ khỏi JWKS và rolling restart lần nữa. Nên giữ TTL token ≤ 15 phút để bước chờ ngắn và token lộ hết hạn nhanh.
 
 ## Biến môi trường `apps/gateway`

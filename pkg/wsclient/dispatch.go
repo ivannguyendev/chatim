@@ -46,12 +46,15 @@ func (c *Client) enqueue(frame *chatimv1.ServerFrame) {
 func (c *Client) dispatchLoop() {
 	defer close(c.dispatched)
 	defer c.stopLoadTimer()
+	defer c.typists.stop()
 	for {
 		select {
 		case frame := <-c.inbox:
 			c.dispatch(frame)
 		case <-c.loadDue():
 			_ = c.LoadRooms(context.Background())
+		case <-c.typists.due():
+			c.typingExpired()
 		case <-c.backlog:
 			c.resync(chatimv1.ResyncReason_RESYNC_REASON_CLIENT_BACKLOG)
 		case <-c.done:
@@ -94,6 +97,12 @@ func (c *Client) dispatch(frame *chatimv1.ServerFrame) {
 		}
 	case *chatimv1.ServerFrame_LoadFailed:
 		c.loadFailed(time.Duration(f.LoadFailed.GetRetryAfterMs()) * time.Millisecond)
+	case *chatimv1.ServerFrame_Typing:
+		c.typingNotice(f.Typing)
+	case *chatimv1.ServerFrame_Presence:
+		if c.opts.onPresence != nil {
+			c.opts.onPresence(f.Presence.GetEntries())
+		}
 	}
 }
 
@@ -134,6 +143,7 @@ func (c *Client) applyEvent(ev *chatimv1.Event) {
 	if !outcome.Gap.Empty() && c.opts.onGap != nil {
 		c.opts.onGap(c, outcome.Gap)
 	}
+	c.typingEndedByMessage(ev)
 	if c.opts.onEvent != nil {
 		c.opts.onEvent(ev)
 	}
@@ -148,7 +158,8 @@ func (c *Client) resync(reason chatimv1.ResyncReason) {
 func dispatched(frame *chatimv1.ServerFrame) bool {
 	switch frame.GetFrame().(type) {
 	case *chatimv1.ServerFrame_Event, *chatimv1.ServerFrame_Notification, *chatimv1.ServerFrame_Ready,
-		*chatimv1.ServerFrame_Resync, *chatimv1.ServerFrame_RoomClosed, *chatimv1.ServerFrame_LoadFailed:
+		*chatimv1.ServerFrame_Resync, *chatimv1.ServerFrame_RoomClosed, *chatimv1.ServerFrame_LoadFailed,
+		*chatimv1.ServerFrame_Typing, *chatimv1.ServerFrame_Presence:
 		return true
 	default:
 		return false

@@ -17,10 +17,12 @@ type options struct {
 	onGap         func(*Client, Gap)
 	onLoadFailed  func(*Client, time.Duration)
 	onNotify      func(*chatimv1.Notification)
+	onPresence    func([]*chatimv1.PresenceEntry)
 	onReadError   func(string, error)
 	onReady       func()
 	onResync      func(chatimv1.ResyncReason)
 	onRoomClosed  func(string, chatimv1.RoomClosedReason)
+	onTyping      func(string, string, bool)
 }
 
 func WithApplier(applier *Applier) Option {
@@ -47,6 +49,10 @@ func OnNotification(handle func(*chatimv1.Notification)) Option {
 	return func(o *options) { o.onNotify = handle }
 }
 
+func OnPresence(handle func([]*chatimv1.PresenceEntry)) Option {
+	return func(o *options) { o.onPresence = handle }
+}
+
 func OnReadError(handle func(roomID string, err error)) Option {
 	return func(o *options) { o.onReadError = handle }
 }
@@ -61,6 +67,10 @@ func OnResync(handle func(chatimv1.ResyncReason)) Option {
 
 func OnRoomClosed(handle func(roomID string, reason chatimv1.RoomClosedReason)) Option {
 	return func(o *options) { o.onRoomClosed = handle }
+}
+
+func OnTyping(handle func(roomID, userID string, typing bool)) Option {
+	return func(o *options) { o.onTyping = handle }
 }
 
 func buildOptions(opts []Option) options {

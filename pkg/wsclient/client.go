@@ -41,6 +41,8 @@ type Client struct {
 	loadTimer  *time.Timer
 	reads      readThrottle
 	readers    sync.WaitGroup
+	typing     typingSender
+	typists    typingTracker
 }
 
 func Dial(ctx context.Context, url, token string, opts ...Option) (*Client, error) {
@@ -62,6 +64,7 @@ func (c *Client) Call(ctx context.Context, req *chatimv1.ClientRequest) (*chatim
 	if err != nil {
 		return nil, err
 	}
+	c.typingEndedBySend(req)
 	return c.wait(ctx, id, reply)
 }
 
@@ -154,6 +157,8 @@ func connect(token string, opts []Option, open func(gws.Event) (*gws.Conn, *http
 		inbox:      make(chan *chatimv1.ServerFrame, o.dispatchQueue),
 		backlog:    make(chan struct{}, 1),
 		reads:      newReadThrottle(),
+		typing:     newTypingSender(),
+		typists:    newTypingTracker(),
 	}
 	conn, resp, err := open(events{client: c})
 	if resp != nil {
