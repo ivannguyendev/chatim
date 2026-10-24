@@ -114,17 +114,17 @@ func (c *connection) receive(message *gws.Message) {
 	if c.closing.Load() != 0 {
 		return
 	}
+	allowed := c.limiter.Allow()
 	if message.Opcode != gws.OpcodeBinary {
-		c.frameError(frameErrorUnsupported)
+		c.refuseFrame(allowed, frameErrorUnsupported)
 		return
 	}
 	var frame chatimv1.ClientFrame
 	if err := decodeOptions.Unmarshal(message.Bytes(), &frame); err != nil {
-		c.frameError(frameErrorInvalid)
+		c.refuseFrame(allowed, frameErrorInvalid)
 		return
 	}
 	kind := kindOf(&frame)
-	allowed := c.limiter.Allow()
 	claims, running := c.authedClaims()
 	switch {
 	case kind == frameRequest:

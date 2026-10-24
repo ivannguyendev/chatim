@@ -98,7 +98,7 @@ func TestAFrameFloodGetsAtMostOneFrameErrorPerSecondAndStaysOpen(t *testing.T) {
 		if got := frameErrorsIn(tc.drainFrames()); len(got) != 1 || got[0] != wireRate {
 			t.Fatalf("frame errors = %v, want one rate", got)
 		}
-		if h.frameErrors("rate") != 18 || h.frameErrors("unsupported") != 1 {
+		if h.frameErrors("rate") != 19 || h.frameErrors("unsupported") != 0 {
 			t.Fatalf("rate %v unsupported %v", h.frameErrors("rate"), h.frameErrors("unsupported"))
 		}
 		time.Sleep(time.Second)
@@ -115,6 +115,34 @@ func TestAFrameFloodGetsAtMostOneFrameErrorPerSecondAndStaysOpen(t *testing.T) {
 		}
 		if !tc.isOpen() {
 			t.Fatal("connection closed by the flood")
+		}
+		tc.close()
+	})
+}
+
+func TestATextFloodIsBoundedByTheSharedLimiter(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		opts := testOptions()
+		opts.CommandRate, opts.CommandBurst = 1, 3
+		h := newHarness(t, opts)
+		tc := h.readyClient("u1")
+		for range 10 {
+			_ = tc.conn.WriteMessage(gws.OpcodeText, []byte("hello"))
+		}
+		tc.write([]byte{0x52, 0x05, 0x01})
+		synctest.Wait()
+		if got := frameErrorsIn(tc.drainFrames()); len(got) != 1 || got[0] != wireUnsupported {
+			t.Fatalf("frame errors = %v, want one unsupported", got)
+		}
+		if h.frameErrors("unsupported") != 2 || h.frameErrors("invalid") != 0 || h.frameErrors("rate") != 9 {
+			t.Fatalf("unsupported %v invalid %v rate %v", h.frameErrors("unsupported"), h.frameErrors("invalid"), h.frameErrors("rate"))
+		}
+		tc.history(1)
+		if resp := tc.next(); resp.GetCode() == 0 {
+			t.Fatalf("a request after the flood was answered with %v", resp)
+		}
+		if h.core.calls.Load() != 0 || !tc.isOpen() {
+			t.Fatalf("core calls %d open %v", h.core.calls.Load(), tc.isOpen())
 		}
 		tc.close()
 	})

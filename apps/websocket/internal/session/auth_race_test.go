@@ -54,6 +54,7 @@ func TestNoDeliveryReachesAConnectionOnceItStoppedRunning(t *testing.T) {
 		h := newHarness(t, testOptions())
 		h.loader.set("t1", "u1", interest.Room{ID: 7, Ver: 1})
 		tc := h.readyClientWith(h.token("u1", time.Minute))
+		synctest.Wait()
 		c := h.onlyConnection()
 		c.mu.Lock()
 		c.expiry.Stop()

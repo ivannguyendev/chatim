@@ -44,7 +44,7 @@ cleanup() {
 trap cleanup EXIT
 
 docker run -d --name "$metrics" --network "container:$ws_container" curlimages/curl:8.11.1 sh -c \
-  'while :; do echo "ts $(date +%s)"; curl -s http://127.0.0.1:9090/metrics | grep -E "^chatim_websocket_(consumer_lag_seconds|consumer_resets_total|consumer_pending|catchup_jumps_total|catchup_jump_suppressed_total|catchup_jump_failures_total|resyncs_total|closes_total\{code=\"4008\"\}|nats_connected|nats_reconnects_total|users_suspended|reloads_total|reload_seconds_(sum|count)|reload_failures_total|room_ids_load_seconds_(sum|count)|room_ids_load_failures_total|consumer_stale_skipped_total|connections)"; sleep 1; done' >/dev/null
+  'while :; do echo "ts $(date +%s)"; curl -s http://127.0.0.1:9090/metrics | grep -E "^chatim_websocket_(consumer_lag_seconds|consumer_resets_total|consumer_pending|catchup_jumps_total|catchup_jump_suppressed_total|catchup_jump_failures_total|resyncs_total|send_dropped_total|nats_connected|nats_reconnects_total|users_suspended|reloads_total|reload_seconds_(sum|count)|reload_failures_total|room_ids_load_seconds_(sum|count)|room_ids_load_failures_total|consumer_stale_skipped_total|connections)"; sleep 1; done' >/dev/null
 if [ "$mode" = cut ]; then
   docker run -d --name "$net" --cap-add NET_ADMIN --network "container:$ws_container" alpine:3.20 sh -c 'apk add -q iptables >/dev/null && touch /ready && sleep infinity' >/dev/null
   until docker exec "$net" test -f /ready 2>/dev/null; do sleep 1; done

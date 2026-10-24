@@ -22,6 +22,13 @@ var (
 	}
 )
 
+func (c *connection) refuseFrame(allowed bool, reason frameErrorReason) {
+	if !allowed {
+		reason = frameErrorRate
+	}
+	c.frameError(reason)
+}
+
 func (c *connection) frameError(reason frameErrorReason) {
 	c.server.stats.frameErrors[reason].Add(1)
 	if !c.rejects.Allow() {

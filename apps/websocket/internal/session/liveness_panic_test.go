@@ -70,6 +70,7 @@ func TestEarlyTokenTimerRearmsForTheRemainingTime(t *testing.T) {
 		h := newHarness(t, testOptions())
 		start := time.Now()
 		tc := h.readyClientWith(h.token("u1", time.Minute))
+		synctest.Wait()
 		c := h.onlyConnection()
 		c.mu.Lock()
 		c.expiry.Stop()

@@ -36,6 +36,17 @@ func (c *Conn) deliver(frame []byte, catchingUp, resumes bool) bool {
 	return false
 }
 
+func (c *Conn) sendLoadState(frame []byte) {
+	c.sendMu.Lock()
+	defer c.sendMu.Unlock()
+	if !c.pushState(frame) {
+		c.owedState = frame
+		return
+	}
+	c.owedState = nil
+	c.settled()
+}
+
 func (c *Conn) sendState(frame []byte) {
 	c.sendMu.Lock()
 	defer c.sendMu.Unlock()
@@ -56,31 +67,49 @@ func (c *Conn) fallBehind() {
 }
 
 func (c *Conn) offerBacklogResync() {
-	if c.sink.Drained() && c.sink.TrySend(resyncFrames[clientBacklog]) {
+	if c.repay() {
 		c.backlog = skipping
-		c.table.stats.countResync(clientBacklog)
 	}
 }
 
 func (c *Conn) settleBacklog() bool {
-	if c.backlog == owed {
-		if !c.sink.Drained() || !c.sink.TrySend(resyncFrames[clientBacklog]) {
+	if c.backlog == owed && !c.repay() {
+		return false
+	}
+	c.settled()
+	return true
+}
+
+func (c *Conn) repay() bool {
+	if !c.sink.Drained() {
+		return false
+	}
+	if c.owedState != nil {
+		if !c.sink.TrySend(c.owedState) {
 			return false
 		}
-		c.table.stats.countResync(clientBacklog)
+		c.owedState = nil
+		return true
 	}
-	c.backlog = flowing
-	c.table.unmarkBacklog(c)
+	if !c.sink.TrySend(resyncFrames[clientBacklog]) {
+		return false
+	}
+	c.table.stats.countResync(clientBacklog)
 	return true
 }
 
 func (c *Conn) resync(reason chatimv1.ResyncReason) {
 	c.sendMu.Lock()
 	defer c.sendMu.Unlock()
+	c.owedState = nil
 	if !c.pushState(resyncFrames[reason]) {
 		return
 	}
 	c.table.stats.countResync(reason)
+	c.settled()
+}
+
+func (c *Conn) settled() {
 	if c.backlog != flowing {
 		c.backlog = flowing
 		c.table.unmarkBacklog(c)

@@ -65,7 +65,7 @@ func (t *Table) loadFailed(u *user, gen uint64, err error) {
 	u.held = nil
 	frame := loadFailedFrame()
 	for c := range u.conns {
-		c.sendState(frame)
+		c.sendLoadState(frame)
 	}
 }
 

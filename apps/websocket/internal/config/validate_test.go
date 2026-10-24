@@ -37,6 +37,8 @@ func TestLoadValidation(t *testing.T) {
 		{"zero command burst", map[string]string{"WS_COMMAND_BURST": "0"}, "WS_COMMAND_BURST must be positive"},
 		{"zero command inflight", map[string]string{"WS_COMMAND_INFLIGHT": "0"}, "WS_COMMAND_INFLIGHT must be positive"},
 		{"zero send queue", map[string]string{"WS_SEND_QUEUE": "0"}, "WS_SEND_QUEUE must be positive"},
+		{"send queue of one frame", map[string]string{"WS_SEND_QUEUE": "1"}, "WS_SEND_QUEUE must be at least 2"},
+		{"send queue of two frames", map[string]string{"WS_SEND_QUEUE": "2"}, ""},
 		{"zero send queue bytes", map[string]string{"WS_SEND_QUEUE_BYTES": "0"}, "WS_SEND_QUEUE_BYTES must be positive"},
 		{"send queue bytes under one frame", map[string]string{"WS_SEND_QUEUE_BYTES": "131071"}, "WS_SEND_QUEUE_BYTES 131071 must be at least WS_FRAME_MAX 131072"},
 		{"send queue bytes at one frame", map[string]string{"WS_SEND_QUEUE_BYTES": "131072"}, ""},

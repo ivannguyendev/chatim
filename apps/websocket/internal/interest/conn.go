@@ -14,15 +14,16 @@ type pendingOpen struct {
 }
 
 type Conn struct {
-	table   *Table
-	user    *user
-	sink    Sink
-	gone    bool
-	readied bool
-	open    map[uint64]struct{}
-	pending map[uint64]*pendingOpen
-	sendMu  sync.Mutex
-	backlog backlogState
+	table     *Table
+	user      *user
+	sink      Sink
+	gone      bool
+	readied   bool
+	open      map[uint64]struct{}
+	pending   map[uint64]*pendingOpen
+	sendMu    sync.Mutex
+	backlog   backlogState
+	owedState []byte
 }
 
 func newConn(t *Table, u *user, sink Sink) *Conn {
@@ -128,7 +129,7 @@ func (c *Conn) reject(raw string) {
 
 func (c *Conn) becameReady() {
 	c.readied = true
-	c.sendState(readyFrame)
+	c.sendLoadState(readyFrame)
 }
 
 func (c *Conn) resumed(reason chatimv1.ResyncReason) {
@@ -142,10 +143,8 @@ func (c *Conn) suspend() {
 	}
 	c.sendMu.Lock()
 	defer c.sendMu.Unlock()
-	if c.backlog != flowing {
-		c.backlog = flowing
-		c.table.unmarkBacklog(c)
-	}
+	c.owedState = nil
+	c.settled()
 }
 
 func (c *Conn) admitted(room uint64) {

@@ -11,6 +11,7 @@ import (
 
 const (
 	minFrameMax         = 4 << 10
+	minSendQueue        = 2
 	maxHeartbeatGap     = 5 * time.Second
 	minHeartbeatTimeout = 2 * maxHeartbeatGap
 	minConsumeBytes     = 1 << 20
@@ -56,6 +57,7 @@ func (c Config) Validate() error {
 		positive("WS_DRAIN_DELAY", c.DrainDelay),
 		positive("WS_SHUTDOWN_BUDGET", c.ShutdownBudget),
 		{c.FrameMax <= 0 || c.FrameMax >= minFrameMax, fmt.Sprintf("WS_FRAME_MAX must be at least %d", minFrameMax)},
+		{c.SendQueue <= 0 || c.SendQueue >= minSendQueue, fmt.Sprintf("WS_SEND_QUEUE must be at least %d", minSendQueue)},
 		{c.SendQueueBytes <= 0 || c.SendQueueBytes >= c.FrameMax, fmt.Sprintf("WS_SEND_QUEUE_BYTES %d must be at least WS_FRAME_MAX %d", c.SendQueueBytes, c.FrameMax)},
 		{c.HeartbeatTimeout <= 0 || c.HeartbeatTimeout >= minHeartbeatTimeout, fmt.Sprintf("WS_HEARTBEAT_TIMEOUT must be at least %v (two heartbeat gaps of %v)", minHeartbeatTimeout, maxHeartbeatGap)},
 		{stop <= c.ShutdownBudget, fmt.Sprintf("WS_DRAIN_DELAY + CORE_REQUEST_DEADLINE + %v (feed) + %v (close) = %v must not exceed WS_SHUTDOWN_BUDGET %v", FeedStopTimeout, CloseTimeout, stop, c.ShutdownBudget)},
