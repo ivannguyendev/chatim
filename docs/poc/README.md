@@ -13,6 +13,7 @@
 | R3a | RePublish đổi subject | PASS | PASS | Đạt |
 | R3b | 1M interest sub + 5K event/s | publish→gateway p99 ≤ 10ms | p99 1.2ms, 0 drop | Đạt |
 | R4 | gws 50K connection | ≤ 40KB/conn; lần ghi cuối ≤ 100ms | ≤ 10.3KB/conn; 155–245ms | RAM đạt, độ trễ không đạt trên dev |
+| R4b | wsload: 10K user thật trên 2 node websocket (steady, kill một node, burst đăng nhập) | Trễ giao `msg_created` p50/p90/p99; thời gian hồi phục sau kill; số `retry_later` | chưa chạy | chưa chạy |
 | R5 | Soft ownership khi Redis mất dữ liệu | `-race -count=20` pass | pass ở mức unit | Còn chaos test |
 | C1 | corebench 2 core qua gRPC | Ack p99 ≤ 30ms (A1) | 5K/s đủ tải, p99 292ms; 10K/s đạt 9452/s, bỏ 5.5%, p99 818ms | Không đạt trên dev (VM bão hoà CPU) |
 | C1-M2a.3 | Perf đường ghi ở 5K/s | Trước/sau | Lệnh Redis/tin 6.35 → 4.74; CPU redis-dedupe 89% → 69% | Chỉ so trước/sau |
@@ -83,6 +84,24 @@ Kết luận dev:
 
 - Bench đầu (`8121816`) không đạt: Mongo 287% → 507%, trễ danh sách 2.8s → 21s; lệnh xoá cờ `updateMany` + `$or` 500 nhánh 854ms mỗi lệnh (45% thời gian lệnh Mongo) gây vòng phát lại của sweeper. Các bước sửa và số từng bước: [tóm tắt M3.1 mục 9](../plans/2026-10-16-m3-1-state-driven-events-summary.md#9-chi-phí).
 - Diễn tập NATS chết (2K tin/s trong 4 phút, NATS dừng ~2 phút 45 giây; `bin/bench/drill-nats-2k-v2/`): 480K/480K ack, ack p50/p99 15.5/131ms; ngay trước khi dừng 4.080 tin còn cờ; đỉnh ~320K doc có cờ; sweeper phát lại 304K; mọi cờ về 0 sau 3 phút 11 giây kể từ lúc NATS sống lại (~1.6K doc/s); không mất tin. Lần đầu trước các sửa (`drill-nats-2k/`): 35K tin còn cờ trước khi dừng, đỉnh ~387K, bắt kịp ~7.5 phút.
+
+### R4b — `tools/poc/wsload` (chưa chạy)
+
+Công cụ tạo `-groups` nhóm qua gateway (mỗi user trong một nhóm, một người gửi mỗi nhóm), ký token dev cho từng user từ `.local/ws-keys/private.jwk`, nối `-conns` user chia đều trên các URL `-ws`; người gửi gửi `SendMessage` qua websocket với cid riêng, nội dung mang giờ gửi (unix nano), người nhận đo trễ từ `msg_created`. Kết quả `summary.txt` + `summary.json` trong `bin/wsload/<scenario>-<giờ>/`.
+
+- `steady`: nối với `-connect-rate`, mở nhóm, gửi `-rate` tin/s trong `-duration`; in trễ giao, ack, sent/acked/delivered/expected/duplicate/lỗi và thời gian nối.
+- `kill`: `scripts/wsload-kill.sh` chạy công cụ, thấy `kill-ready` thì `docker kill -s KILL chatim-websocket-2`, xong thì bật lại node và chờ healthy (trap bật lại nếu script lỗi). Client mất kết nối nối lại sau 0–3s ngẫu nhiên sang URL khác, theo `retry_later`; đo từ lần rớt đầu tới khi mọi client đã `ready` lại và số `retry_later`.
+- `burst`: dial + `auth` cả `-conns` user cùng lúc; đếm `retry_later`, thời gian tới khi tất cả `ready`, lỗi.
+
+Giới hạn:
+- Mỗi kết nối tốn một file descriptor: chạy với `POC_FLAGS="--ulimit nofile=65536:65536"` (công cụ cảnh báo khi giới hạn thấp hơn `-conns` + 256). Node websocket có `ulimits: nofile: 65536` trong anchor `x-websocket` của compose (cần tạo lại container để có hiệu lực).
+- Trên dev công cụ chung CPU với node websocket, core và database, nên số dev chỉ để kiểm công cụ.
+
+```bash
+make poc TOOL=wsload POC_FLAGS="--ulimit nofile=65536:65536" ARGS="-scenario steady"
+./scripts/wsload-kill.sh                     # WSLOAD_RATE (100), WSLOAD_KILL_NODE, tham số thêm chuyển cho công cụ
+make poc TOOL=wsload POC_FLAGS="--ulimit nofile=65536:65536" ARGS="-scenario burst"
+```
 
 ## Đo prod-like (chưa chạy)
 

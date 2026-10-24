@@ -63,6 +63,8 @@ x-websocket: &websocket
   profiles: ["app"]
   restart: unless-stopped
   mem_limit: 2g
+  ulimits:
+    nofile: 65536
   stop_grace_period: 18s
   secrets: [redis_password, redis_presence_password, ws_jwks]
   depends_on:
