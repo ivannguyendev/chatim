@@ -1,0 +1,4 @@
+wsload burst run=wl36d98a6a conns=10000 groups=500 members=20 rate=1000/s connect-rate=1000/s duration=60s ws=ws://chatim-websocket-1:8080/ws,ws://chatim-websocket-2:8080/ws
+setup: 3.65s
+connect: ready=10000 failed=0 retry_later=2949 last_ready=32.10s elapsed=32.10s time n=10000 p50=2162.7ms p90=23855.1ms p99=31195.1ms max=32087.6ms
+frames: retry_later=2949 load_failed=0 resync=0

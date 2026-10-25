@@ -178,6 +178,7 @@ Thêm test `modules/mention/internal/store/mongostore/owned_collections_test.go`
 - **Helper nhỏ bị chép ở vài nơi**, vì các domain không được import nhau: `settling`/`settleTimeout` (interaction, member), `validKey` (interaction, message), `now`/`tell` (3 bản). Nếu một helper đổi luật thì phải sửa ở mọi bản.
 - **`e2e` phase 5 bước 9 đôi khi đỏ.** Đây là race đã biết giữa lúc clear và lúc gửi trong cùng một ms (mục mang sang M5 từ M2b.4); code liên quan không đổi so với `main`.
 - **Test của sweeper dựng `interaction/pinproj` thật.** Luật `event-layer-tests` cho phép riêng trường hợp này.
+- **Minor để lại:** lỗi `MENTION_TARGETS_MAX` báo dưới nhãn "REACTION_EMOJIS, PIN_LIMIT"; `member.Settling` export chỉ để `room` dùng; `room.Deps.Events` thành bắt buộc.
 - **`CLAUDE.md` trên `main` còn thay đổi chưa commit** (tài liệu exit Phase 1) trong thư mục chính, nên khi gộp có thể đụng ở phần Architecture.
 
 ## 11. Điểm đội tự chọn (owner có thể phản biện)

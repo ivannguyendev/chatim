@@ -28,6 +28,14 @@ linters:
   settings:
     depguard:
       rules:
+        pkg-shared-only:
+          files:
+            - "**/pkg/**"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/apps
+              desc: pkg holds shared code only
+            - pkg: github.com/ivannguyendev/chatim/modules
+              desc: pkg holds shared code only
         domain-boundaries:
           files:
             - "**/apps/core/internal/message/**"

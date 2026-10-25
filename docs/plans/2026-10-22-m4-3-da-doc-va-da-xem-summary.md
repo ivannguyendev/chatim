@@ -137,6 +137,8 @@ Xây trên `feat/m4` (commit `f9b774a`…`1a56d4a`, 2026-10-22), mỗi phần đ
 - **Đo được:** e2e qua websocket-1: A đọc → B (đang mở nhóm) nhận `read_positions` có A sau **353ms**; máy thứ hai của A nhận; C (thành viên, không mở nhóm) không nhận; `MarkUnread` tới B với `read_ver` cao hơn, `read_seq` thấp hơn. Itest: hai người đọc trong một cửa sổ → một event hai dòng, cả hai cờ được xoá trước khi sweeper kịp chạy.
 - **Kiểm thử đã chạy:** unit (`-race`, `-count=5` ở `readbatch`, `stateclear`, `publish`, `member`, `app`, `interest`, `session`, `wsclient`), `make itest`, `make e2e` xanh.
 
-## Câu hỏi còn mở
+- **Minor để lại (không chặn):** ack follower giữ cả event có kind nhưng không có đích xoá cờ; hàng của follower giữ proto event tới lúc có PubAck (lúc xấu nhất ~2 lần RAM, 4.096 mục mỗi shard); sweeper phát lại cả event đã thành công khi một event sau nó lỗi.
 
-- Các lệnh quản lý khác (`OpenDirectRoom`, `UpdateRoom`, `RemoveMember`, `LeaveRoom`, `ChangeMemberRole`, `SetMemberPriority`) đi WebSocket hay HTTPS? Chốt ở phần `gateway`; phần 3 không đổi đường đi của chúng.
+## Câu hỏi đã chốt
+
+- Các lệnh quản lý khác (`OpenDirectRoom`, `UpdateRoom`, `RemoveMember`, `LeaveRoom`, `ChangeMemberRole`, `SetMemberPriority`) đi HTTPS qua `gateway` (D198).

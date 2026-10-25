@@ -22,7 +22,7 @@
 
 ### M3 — `ListMyRooms` trên replica set (2026-10-15)
 
-Công cụ `tools/poc/roomlistbench`, rs0 1 node, core-1 + core-2, mặc định `ROOM_LIST_JOIN_MAX` 2000, trang 20 room. Số thô: `bin/bench/m3-roomlist-rs0/`.
+Công cụ `tools/poc/roomlistbench`, rs0 1 node, core-1 + core-2, mặc định `ROOM_LIST_JOIN_MAX` 2000, trang 20 room. Kết quả: [results/m3-roomlist-rs0/](results/m3-roomlist-rs0/).
 
 - **Seed qua API core** (`-mode seed`, 4 lời gọi song song, mỗi lời gọi tối đa 2 phút, thử lại giữ `request_id`/cid): 60 user (20 cho mỗi cỡ 200, 2.000, 5.000), 4.960 room nền dùng chung (1 tin mỗi room) và 40 room riêng mỗi user (5 tin của người kia, chưa đọc, mới nhất) → trang đầu và trang sau đều là room riêng. 7.360 room, 151.360 member doc trong 5m36s, 16.960 tin trong 36s; chờ `rooms.last_seq` đủ ở mọi room (6s) rồi Mongo dưới 40 op/s trong 3s.
 - **Lạnh** = user mới (room riêng của user chỉ nằm trong trang của nó nên cache info, đuôi, đường và ảnh chụp đều trượt; cache WiredTiger của Mongo vẫn nóng); không khởi động lại core. Mỗi user: trang đầu + trang sau lạnh, rồi 5 cặp nóng (trong TTL 30s).
@@ -49,7 +49,7 @@ Kết luận dev:
 - Cache lạnh đúng như lệch Task 9: mỗi lần nạp đuôi = `TailWindow` + `TailPreviews` riêng → 40 truy vấn `messages` cho 20 room, nên trang lạnh 44–50 thay vì 23–30. Gộp `TailPreviews` cả trang còn ~25–31.
 - Độ trễ do đọc thứ tự: join 2.000 room tốn ~200ms ở cả lạnh lẫn nóng (`top` thấy 2.000 lượt đọc `rooms` của `$lookup` mỗi lời gọi), chậm hơn đường từng bước ở 5.000 room (~134ms). Trên dev này điểm chuyển 2.000 quá cao; chưa đo đường từng bước ở 2.000 room để chọn `ROOM_LIST_JOIN_MAX` mới (việc của owner).
 
-**Sau gộp xem trước và tra `_id` có giới hạn (2026-10-15).** Owner hạ `ROOM_LIST_JOIN_MAX` còn 1.500 (user 2.000 room nay đi đường từng bước). Mỗi trang một `TailPreviews` cho mọi tin xem trước còn thiếu. Lần đo đầu chỉ có gộp: 25 truy vấn nhưng trang lạnh 200 room p50 221ms (từ 30.6ms). `explain` cho thấy `_id $in` trên collection clustered chạy thành một lần quét từ khoá nhỏ nhất tới lớn nhất: 20 room trên dữ liệu bench đọc 320.040 doc cho 100 tin. Mọi tra `_id` theo tập khoá (`Find`, `TailPreviews`, `SentTimes`, `MembersByKeys`, `MembersOf`, `MyInteractions`) chuyển sang `$or` các khoảng (design §5.1). Số đo dưới đây: cùng layout, core dựng lại, một lượt khởi động bỏ đi rồi chờ 70s cho cache hết hạn; `CPU_Speed_Limit` 100 ở mọi mẫu (15/15). Số thô: `bin/bench/m3-roomlist-rs0/measure-*-bounded.txt`.
+**Sau gộp xem trước và tra `_id` có giới hạn (2026-10-15).** Owner hạ `ROOM_LIST_JOIN_MAX` còn 1.500 (user 2.000 room nay đi đường từng bước). Mỗi trang một `TailPreviews` cho mọi tin xem trước còn thiếu. Lần đo đầu chỉ có gộp: 25 truy vấn nhưng trang lạnh 200 room p50 221ms (từ 30.6ms). `explain` cho thấy `_id $in` trên collection clustered chạy thành một lần quét từ khoá nhỏ nhất tới lớn nhất: 20 room trên dữ liệu bench đọc 320.040 doc cho 100 tin. Mọi tra `_id` theo tập khoá (`Find`, `TailPreviews`, `SentTimes`, `MembersByKeys`, `MembersOf`, `MyInteractions`) chuyển sang `$or` các khoảng (design §5.1). Số đo dưới đây: cùng layout, core dựng lại, một lượt khởi động bỏ đi rồi chờ 70s cho cache hết hạn; `CPU_Speed_Limit` 100 ở mọi mẫu (15/15). Kết quả: `results/m3-roomlist-rs0/measure-*-bounded.txt`.
 
 | Room | Đường | Trang | n | p50 | p99 | Truy vấn (trung vị) | Cache/lời gọi |
 |---|---|---|---|---|---|---|---|
@@ -72,7 +72,7 @@ Kết luận dev:
 
 ### M3.1 — event theo trạng thái doc, 2K tin/s (2026-10-16 → 2026-10-17)
 
-`scripts/bench-cell.sh NAME 2000 reset`, 60s, core-1 + core-2, rs0 1 node, cả hai ô `CPU_Speed_Limit` 100. Engine cũ = image từ `f5b2e8e`; M3.1 = `ac9fb97`. Trễ danh sách = now − `ts` của tin đầu tiên sau `rooms.last_seq`, 20 room ngẫu nhiên mỗi giây (`room-lag.log`). Số thô: `bin/bench/base-2k-v8/`, `bin/bench/after-2k-v7/`.
+`scripts/bench-cell.sh NAME 2000 reset`, 60s, core-1 + core-2, rs0 1 node, cả hai ô `CPU_Speed_Limit` 100. Engine cũ = image từ `f5b2e8e`; M3.1 = `ac9fb97`. Trễ danh sách = now − `ts` của tin đầu tiên sau `rooms.last_seq`, 20 room ngẫu nhiên mỗi giây (`room-lag.log`). Kết quả: [results/base-2k-v8/](results/base-2k-v8/corebench.txt), [results/after-2k-v7/](results/after-2k-v7/corebench.txt).
 
 | | Engine cũ | M3.1 |
 |---|---|---|
@@ -83,7 +83,7 @@ Kết luận dev:
 | Mongo `top` 60s | `rooms` update 17.1K, `members` update 4K | `messages` update 24.8K (xoá cờ), `rooms` update 21.8K, `members` update 8K |
 
 - Bench đầu (`8121816`) không đạt: Mongo 287% → 507%, trễ danh sách 2.8s → 21s; lệnh xoá cờ `updateMany` + `$or` 500 nhánh 854ms mỗi lệnh (45% thời gian lệnh Mongo) gây vòng phát lại của sweeper. Các bước sửa và số từng bước: [tóm tắt M3.1 mục 9](../plans/2026-10-16-m3-1-state-driven-events-summary.md#9-chi-phí).
-- Diễn tập NATS chết (2K tin/s trong 4 phút, NATS dừng ~2 phút 45 giây; `bin/bench/drill-nats-2k-v2/`): 480K/480K ack, ack p50/p99 15.5/131ms; ngay trước khi dừng 4.080 tin còn cờ; đỉnh ~320K doc có cờ; sweeper phát lại 304K; mọi cờ về 0 sau 3 phút 11 giây kể từ lúc NATS sống lại (~1.6K doc/s); không mất tin. Lần đầu trước các sửa (`drill-nats-2k/`): 35K tin còn cờ trước khi dừng, đỉnh ~387K, bắt kịp ~7.5 phút.
+- Diễn tập NATS chết (2K tin/s trong 4 phút, NATS dừng ~2 phút 45 giây; [results/drill-nats-2k-v2/](results/drill-nats-2k-v2/corebench.txt)): 480K/480K ack, ack p50/p99 15.5/131ms; ngay trước khi dừng 4.080 tin còn cờ; đỉnh ~320K doc có cờ; sweeper phát lại 304K; mọi cờ về 0 sau 3 phút 11 giây kể từ lúc NATS sống lại (~1.6K doc/s); không mất tin. Lần đầu trước các sửa (`drill-nats-2k/`): 35K tin còn cờ trước khi dừng, đỉnh ~387K, bắt kịp ~7.5 phút.
 
 ### R4b — `tools/poc/wsload` (đã chạy trên dev 2026-10-25)
 
@@ -101,9 +101,9 @@ Kết quả trên dev (2026-10-25; 10.000 user, 500 nhóm × 20 người, 2 node
 
 | Kịch bản | Kết quả | Thư mục |
 |---|---|---|
-| `steady` (1.000 tin/s, 60s) | nối 10.000/10.000, nối p50/p99 4.7/27.6ms; gửi 60.000, ack 60.000, ack p50/p99 15.3/98.9ms; giao 1.200.000/1.200.000, 0 trùng, trễ p50/p90/p99/max 16.1/35.8/100.4/304ms | `bin/bench/wsload-steady-261024-185715/` |
-| `burst` (10.000 `auth` cùng lúc) | 10.000 `ready`, 0 lỗi, 2.949 `retry_later` (giới hạn 1.000/s, dồn 2.000 mỗi node), máy cuối `ready` sau 32.1s | `bin/bench/wsload-burst-261024-185837/` |
-| `kill` (`kill -9` websocket-2, 100 tin/s) | 5.000 máy rớt, 5.000 nối lại trong 3.05s, 0 `retry_later`; 3 lệnh gửi `Unavailable` lúc node chết; tin gửi trong lúc nối lại không tới (máy tải lại qua HTTPS sau `ready`); node còn lại giữ 10.000 kết nối ở ~516MB (~50KB/kết nối gồm bảng room và hàng gửi) | `bin/bench/wsload-kill-261025-015914/` |
+| `steady` (1.000 tin/s, 60s) | nối 10.000/10.000, nối p50/p99 4.7/27.6ms; gửi 60.000, ack 60.000, ack p50/p99 15.3/98.9ms; giao 1.200.000/1.200.000, 0 trùng, trễ p50/p90/p99/max 16.1/35.8/100.4/304ms | [results/wsload-steady-261024-185715/](results/wsload-steady-261024-185715/summary.txt) |
+| `burst` (10.000 `auth` cùng lúc) | 10.000 `ready`, 0 lỗi, 2.949 `retry_later` (giới hạn 1.000/s, dồn 2.000 mỗi node), máy cuối `ready` sau 32.1s, thời gian tới `ready` p50/p90/p99 2.2/23.9/31.2s | [results/wsload-burst-261024-185837/](results/wsload-burst-261024-185837/summary.txt) |
+| `kill` (`kill -9` websocket-2, 100 tin/s) | 5.000 máy rớt, 5.000 nối lại trong 3.05s, 0 `retry_later`; 3 lệnh gửi `Unavailable` lúc node chết; tin gửi trong lúc nối lại không tới (giao 8.623/9.620; máy tải lại qua HTTPS sau `ready`); node còn lại giữ 10.000 kết nối ở ~516MB (~50KB/kết nối gồm bảng room và hàng gửi) | [results/wsload-kill-261025-015914/](results/wsload-kill-261025-015914/summary.txt) |
 
 ```bash
 make poc TOOL=wsload POC_FLAGS="--ulimit nofile=65536:65536" ARGS="-scenario steady"
@@ -129,3 +129,9 @@ Hạ tầng: Mongo rs 3 member NVMe, NATS 3 node, 2 host Linux, dữ liệu th�
 | P8 | `clusterTime` của change event dùng làm `afterClusterTime` | Đúng đắn của touch counter |
 | P9 | Tỉ lệ tin không đếm unread sau `rs` | Giới hạn S của R17 (D73) |
 | P10 | Bộ nhớ NATS cho map chống trùng 5m (~3M id ở 10K tin/s) | Cỡ NATS |
+| P11 | Tải đọc Redis presence khi có watch: ước tính ~800K khoá/s toàn hệ thống ở 100K máy × 50 người được xem, chưa có cache phía offline (M4 phần 4) | Cỡ `chatim-redis-presence`, có cần cache offline không (D201) |
+| P12 | Nạp lại hàng loạt sau một lần nhảy (`WS_RELOAD_RATE` 1.000 user/s mỗi node, D195): thời gian tới `ready`/`resync` cho mọi user và tải `ListMyRoomIDs` lên core; `wsload` chưa có kịch bản nhảy | Giá trị `WS_RELOAD_RATE`, cỡ core |
+
+## Kết quả lưu trong repo
+
+`results/` giữ bản tóm tắt nhỏ (`corebench.txt`, `summary.txt`, `measure-*-bounded.txt`) của các lần chạy được tài liệu trích dẫn. Số thô đầy đủ (log, profile Mongo, metrics) chỉ nằm ở `bin/bench/` và `bin/drill/` trên máy chạy, không commit, có thể đã xoá.

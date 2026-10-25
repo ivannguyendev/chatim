@@ -1,6 +1,6 @@
 # M2b.2 — Sửa + xoá tin, ẩn và xoá lịch sử phía tôi: tóm tắt kỹ thuật
 
-> Trạng thái: **đã xây**, `dev-done`. Thực thi xong 2026-10-06 trên nhánh `feat/m2b`, merge `main` cùng M2b.0–M2b.4 qua PR #12 ngày 2026-10-08. Plan execute gốc (cho AI) nằm ở `.claude/plans/2026-10-05-m2b2-edit-delete.md` (local). Bản này là tài liệu lưu trữ: mô tả cái owner đã duyệt và cái đã xây. Chỗ nào milestone sau đã đổi thì ghi "Sau M2b.x: …". Quyết định D62–D64, D70, D75, D82–D87 nằm trong Decision Log của [thiết kế](../architecture.md) §17.
+> Trạng thái: **đã xây**, `dev-done`. Thực thi xong 2026-10-06 trên nhánh `feat/m2b`, merge `main` cùng M2b.0–M2b.4 qua PR #12 ngày 2026-10-08. Plan execute gốc (cho AI) đã xoá sau merge. Bản này là tài liệu lưu trữ: mô tả cái owner đã duyệt và cái đã xây. Chỗ nào milestone sau đã đổi thì ghi "Sau M2b.x: …". Quyết định D62–D64, D70, D75, D82–D87 nằm trong Decision Log của [thiết kế](../architecture.md) §17.
 >
 > Đường dẫn package theo bố cục hiện tại `apps/core/internal/<nhóm>/<package>` (thiết kế §13). Plan gốc dùng đường dẫn cũ `apps/core/internal/<package>`.
 

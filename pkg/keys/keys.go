@@ -6,10 +6,9 @@ import (
 )
 
 const (
-	MsgLen   = 24
-	EventLen = 16
-	EditLen  = 28
-	PinLen   = 16
+	MsgLen  = 24
+	EditLen = 28
+	PinLen  = 16
 )
 
 var ErrLength = errors.New("keys: invalid key length")
@@ -31,20 +30,6 @@ func ParseMsg(b []byte) (room, threadRoot, seq uint64, err error) {
 
 func MsgRange(room, threadRoot, fromSeq, toSeq uint64) (lo, hi []byte) {
 	return Msg(room, threadRoot, fromSeq), Msg(room, threadRoot, toSeq)
-}
-
-func Event(room, pts uint64) []byte {
-	b := make([]byte, EventLen)
-	be.PutUint64(b[0:8], room)
-	be.PutUint64(b[8:16], pts)
-	return b
-}
-
-func ParseEvent(b []byte) (room, pts uint64, err error) {
-	if len(b) != EventLen {
-		return 0, 0, ErrLength
-	}
-	return be.Uint64(b[0:8]), be.Uint64(b[8:16]), nil
 }
 
 func Edit(room, threadRoot, seq uint64, version uint32) []byte {

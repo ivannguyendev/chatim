@@ -1,6 +1,6 @@
 # M3 — Core: API truy vấn còn thiếu: tóm tắt kỹ thuật
 
-> Trạng thái: **xây xong, đã merge `main` cùng M3.1 (PR #15, 2026-10-17, `dev-done`)**. Bản này viết lại từ cái đã thực sự xây: owner duyệt bản trước khi code ngày 2026-10-13; mọi chỗ đội làm khác bản đó nằm trong thân bài và ở mục 11.2, quyết định owner trong lúc xây ở mục 11.1. Plan execute cho AI ở `.claude/plans/2026-10-12-m3-core-query-apis.md` (local, có mục "Kết quả thực thi" theo từng task). Decision log: `.claude/plans/m3-scope-boundary_design.md`, `.claude/plans/m3-core-query-apis_design.md`. Quyết định D120–D140 nằm trong Decision Log của [thiết kế](../architecture.md) §17.2; thiết kế là nguồn sự thật hiện hành. Hai chủ đề owner muốn thảo luận cuối milestone (effect engine chặn đầu hàng, sharding): [2026-10-15-m3-open-topics.md](2026-10-15-m3-open-topics.md).
+> Trạng thái: **xây xong, đã merge `main` cùng M3.1 (PR #15, 2026-10-17, `dev-done`)**. Bản này viết lại từ cái đã thực sự xây: owner duyệt bản trước khi code ngày 2026-10-13; mọi chỗ đội làm khác bản đó nằm trong thân bài và ở mục 11.2, quyết định owner trong lúc xây ở mục 11.1. Plan execute cho AI đã xoá sau merge; Minor còn lại nằm ở mục 10. Log brainstorm đã gộp vào Decision Log và xoá. Quyết định D120–D140 nằm trong Decision Log của [thiết kế](../architecture.md) §17.2; thiết kế là nguồn sự thật hiện hành. Hai chủ đề owner muốn thảo luận cuối milestone (effect engine chặn đầu hàng, sharding): [2026-10-15-m3-open-topics.md](2026-10-15-m3-open-topics.md).
 
 ## 1. Thuật ngữ
 
@@ -341,7 +341,7 @@ API đọc và unread không có event. Hai effect mới có `effect_dropped_tot
 - Bootstrap tạo `reply_threads`, hai index mới và bỏ hai index cũ; anchor feed không đổi.
 - Watcher `roomcache.Watch` dùng kết nối NATS core như `memberwatch`; hai watcher khởi động cùng nhóm sau router, dừng (Unsubscribe, không thêm mốc trong ngân sách 28s) sau worker, trước router.
 - Công cụ đo `tools/poc/roomlistbench` (seed qua API core, đo trang đầu/trang sau lạnh và nóng, đếm truy vấn Mongo bằng `serverStatus`).
-- Profile compose 2 shard: đã thử và gỡ (bản vá `bin/m3-shard-profile.patch`), xem D140.
+- Profile compose 2 shard: đã thử và gỡ (bản vá thử không lưu lại), xem D140.
 
 ## 8. Quyết định
 
@@ -414,6 +414,7 @@ Mỗi trang trả 20 dòng, không có danh sách toàn bộ. Không chỗ nào 
 - **Resync:** room chỉ đổi tên hoặc chỉ đổi cài đặt hội thoại trong khoảng mất feed không được chọn theo `activity_bucket`, phải chạy `-room` (như member, D91). Lần đổi tên đầu của room tạo trước M3 (không có `info_ver`) không được phát lại; dev đã reset.
 - **Deploy cuốn chiếu:** phiếu kind 13/14 bị core cũ Nak tới khi mọi core nâng cấp; core cũ tạo lại hai index cũ tới lúc đó (chỉ tốn ghi).
 - **Hai index to hơn** (`members` thêm 2 field; `message_interactions` thêm 2 field); dev `make infra-reset`.
+- **Minor để lại lúc xây:** aggregate join `members → rooms` không bật `allowDiskUse`; id trùng ở input `GetRooms` trả trùng; `ReplyThreads.Touch` bỏ qua tenant khi doc đã có; `peer_read_seq` không kiểm người kia còn active; seq không có doc xem trước bị đọc lại mỗi trang; memstore lưu `JoinedAt` theo nano còn Mongo theo ms.
 
 ## 11. Điểm owner
 

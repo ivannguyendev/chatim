@@ -180,3 +180,5 @@ Kiểm thử đến lúc này:
 | D đóng → B thấy D offline | 16,5 giây |
 | A nối lại sau 3 giây: số lần B nhận online trong 20 giây, không lần nào offline | 3 lần trả lời trong 20 giây, cả 3 online |
 | `kill -9 websocket-2` → người ở đó offline trên máy xem ở node 1 | 14,6 giây tính từ lúc B thấy E online (gồm cả lúc chờ kill) |
+
+**Minor để lại (không chặn):** `presence_redis_up` về 0 một chớp khi node tắt êm; thiếu test cho `putBack` của hàng đóng dấu; hàm dựng histogram lặp ở `interest` và `presence` (lần thứ ba thì chuyển vào `pkg/metrics`, roadmap "Từ M4").

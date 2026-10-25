@@ -1,6 +1,6 @@
 # M3.1 — Core: bỏ effect engine, chuyển sang event theo trạng thái doc: tóm tắt kỹ thuật
 
-> Trạng thái: **xây xong, đã merge `main` (PR #15, 2026-10-17, `dev-done`)**. Bản này viết lại từ cái đã thực sự xây: owner duyệt hướng ngày 2026-10-15 và 2026-10-16; mọi chỗ đội làm khác bản trước khi code nằm trong thân bài và ở mục 11.2, quyết định owner trong lúc xây ở mục 11.1. Plan execute cho AI ở `.claude/plans/2026-10-16-m3-1-state-driven-events.md` (local, có mục "Kết quả thực thi" theo từng task). Decision log lúc thiết kế: `.claude/plans/m3-1-state-driven-events_design.md` (S1–S17). Quyết định D141–D160 nằm trong [Decision Log](../decision-log.md) §17.3; [thiết kế](../architecture.md) và [Module 10](../modules/10-feature-data-reconciliation-and-repair.md) là nguồn sự thật hiện hành. M3.1 giải chủ đề 1 của [open topics](2026-10-15-m3-open-topics.md) (effect engine chặn đầu hàng); chủ đề 2 (sharding) còn mở.
+> Trạng thái: **xây xong, đã merge `main` (PR #15, 2026-10-17, `dev-done`)**. Bản này viết lại từ cái đã thực sự xây: owner duyệt hướng ngày 2026-10-15 và 2026-10-16; mọi chỗ đội làm khác bản trước khi code nằm trong thân bài và ở mục 11.2, quyết định owner trong lúc xây ở mục 11.1. Plan execute cho AI đã xoá sau merge; Minor còn lại nằm ở [roadmap](../roadmap.md) "Mục mang sang M5". Log brainstorm (S1–S17) đã gộp vào Decision Log và xoá. Quyết định D141–D160 nằm trong [Decision Log](../decision-log.md) §17.3; [thiết kế](../architecture.md) và [Module 10](../modules/10-feature-data-reconciliation-and-repair.md) là nguồn sự thật hiện hành. M3.1 giải chủ đề 1 của [open topics](2026-10-15-m3-open-topics.md) (effect engine chặn đầu hàng); chủ đề 2 (sharding) còn mở.
 
 ## 1. Thuật ngữ
 
@@ -361,7 +361,7 @@ Ghi vào [Decision Log](../decision-log.md) §17.3; thay D52, D65, D66, D79–D8
 
 ## 9. Chi phí
 
-Số đo dev, một ô 2K tin/s trong 60s (120.000 tin), hai core, rs0 một node, cả hai ô `CPU_Speed_Limit` 100. "Engine cũ" = image dựng từ `f5b2e8e`; "M3.1" = bản cuối `ac9fb97`. Thư mục `bin/bench/base-2k-v8` và `bin/bench/after-2k-v7`.
+Số đo dev, một ô 2K tin/s trong 60s (120.000 tin), hai core, rs0 một node, cả hai ô `CPU_Speed_Limit` 100. "Engine cũ" = image dựng từ `f5b2e8e`; "M3.1" = bản cuối `ac9fb97`. Kết quả: `docs/poc/results/base-2k-v8` và `docs/poc/results/after-2k-v7`.
 
 | | Engine cũ | M3.1 |
 |---|---|---|
@@ -467,7 +467,7 @@ Lệnh khác (sửa, react, member, đọc…) thêm một update xoá cờ mỗ
 
 - `make fmt-check`, `vet`, `lint`, `test`, `itest`, `alerts-check` (14 luật), `core-up && e2e`.
 - Bench 2K: bảng mục 9. Đạt chuẩn owner "≥ engine": ack và live ngang, trễ danh sách tốt hơn, CPU Mongo/NATS/core/Redis thấp hơn. Mục tiêu "trễ `last_seq` ≤ 1s" của plan không đạt (trung vị 1,6s) do cửa sổ 3s owner chọn.
-- Diễn tập NATS chết: corebench gửi 2K tin/s trong 4 phút (480K tin), giữa chừng `docker stop chatim-nats`, ~2 phút 45 giây sau `docker start`. Thư mục `bin/bench/drill-nats-2k` (lần đầu) và `bin/bench/drill-nats-2k-v2` (bản cuối).
+- Diễn tập NATS chết: corebench gửi 2K tin/s trong 4 phút (480K tin), giữa chừng `docker stop chatim-nats`, ~2 phút 45 giây sau `docker start`. Kết quả: `docs/poc/results/drill-nats-2k` (lần đầu) và `docs/poc/results/drill-nats-2k-v2` (bản cuối).
 
 | | Lần đầu (`8121816`, trước các sửa hiệu năng) | Bản cuối (`ac9fb97`) |
 |---|---|---|

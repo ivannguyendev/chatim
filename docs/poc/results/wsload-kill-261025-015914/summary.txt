@@ -1,0 +1,42 @@
+wsload kill run=wl36424742 conns=10000 groups=500 members=20 rate=100/s connect-rate=1000/s duration=60s ws=ws://chatim-websocket-1:8080/ws,ws://chatim-websocket-2:8080/ws
+setup: 3.66s
+connect: ready=10000 failed=0 retry_later=0 last_ready=10.00s elapsed=10.00s time n=10000 p50=3.8ms p90=7.4ms p99=15.4ms max=39.9ms
+send: due=563 shed=0 skipped=79 sent=484 acked=481 errors=3 map[Unavailable:3] ack p50=11.5ms p99=57.6ms
+delivery: delivered=8623 expected=9620 duplicate=0 latency n=8623 p50=10.9ms p90=25.9ms p99=56.8ms max=106.7ms
+kill: dropped=5000 reconnected=5000 not_reconnected=0 recovery=3.05s retry_later=0
+frames: retry_later=0 load_failed=0 resync=0
+error 4969x dropped: wstest: connection closed: EOF
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:35700->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:41630->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:41644->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:41646->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:41654->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:41658->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:41672->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:41680->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:41694->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:41700->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:41706->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:41710->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:41722->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:41736->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:41752->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:41760->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:41762->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:41776->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:41788->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:41798->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:41800->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:41802->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:41816->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:41822->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:41828->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:41840->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:41846->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:41850->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:41868->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:55262->192.168.97.10:8080: read: connection reset 
+error 1x dropped: wstest: connection closed: read tcp 192.168.97.12:59922->192.168.97.10:8080: read: connection reset 
+error 1x send: context canceled
+error 1x send: wstest: connection closed: read tcp 192.168.97.12:55262->192.168.97.10:8080: read: connection reset 
+error 1x send: wstest: connection closed: read tcp 192.168.97.12:59922->192.168.97.10:8080: read: connection reset 
