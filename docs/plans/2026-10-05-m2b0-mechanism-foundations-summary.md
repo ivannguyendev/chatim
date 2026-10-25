@@ -1,6 +1,6 @@
 # M2b.0 — Nền cơ chế: tóm tắt kỹ thuật
 
-> Trạng thái: **đã xây**, thực thi xong 2026-10-05 trên nhánh chung `feat/m2b`, `dev-done`; merge vào `main` cùng M2b.1–M2b.4 qua PR #12 ngày 2026-10-08. Plan execute gốc (cho AI) nằm ở `.claude/plans/2026-10-05-m2b0-mechanism-foundations.md` (local, không commit). Quyết định D65, D76, D77, D78 ở Decision Log của [thiết kế](../architecture.md) §17.2.
+> Trạng thái: **đã xây**, thực thi xong 2026-10-05 trên nhánh chung `feat/m2b`, `dev-done`; merge vào `main` cùng M2b.1–M2b.4 qua PR #12 ngày 2026-10-08. Plan execute gốc (cho AI) đã xoá sau merge; bản này là bản lưu. Quyết định D65, D76, D77, D78 ở Decision Log của [thiết kế](../architecture.md) §17.2.
 >
 > Bản này mô tả cái đã duyệt và đã xây. Chỗ nào milestone sau đã đổi thì ghi "Sau M2bx: …". Đường dẫn package theo bố cục hiện tại `apps/core/internal/<nhóm>/<package>` (thiết kế §13); plan gốc dùng đường dẫn cũ `apps/core/internal/<package>`.
 

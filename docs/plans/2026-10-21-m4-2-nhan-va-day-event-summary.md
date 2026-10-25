@@ -1,7 +1,7 @@
 # M4 phần 2: nhận và đẩy event xuống máy
 
 > **Trạng thái:** đã xây trên `feat/m4` (2026-10-22, commit `2b3c6c9`…`ec75155`); owner duyệt hướng 2026-10-21. Phần 2 trong 5 phần của M4; phần 1 (kết nối, token, lệnh) đã xong. Quyết định D189–D195, kết quả ở §13.
-> **Chi tiết cho người code:** `.claude/plans/2026-10-21-m4-2-nhan-va-day-event.md`.
+> **Chi tiết cho người code:** plan execute đã xoá; Minor còn lại nằm ở §13.
 
 ## 1. Phần này làm gì
 
@@ -169,3 +169,10 @@ Core không đổi stream, event, đường ghi hay proto event nào.
 **Rủi ro còn lại:**
 - (c) Quyền NATS riêng cho websocket ở M5: tới lúc đó ai vào được NATS là giả được gói đẩy tới người dùng. Chặn go-live.
 - (d) Giờ node lệch NATS > 2 phút: cooldown chặn nhảy liên tục nhưng cần alert `catchup_jump_suppressed_total` (phần 5).
+
+**Kết quả diễn tập lưu ở** `docs/poc/results/ws-nats-*` (bản tóm tắt của vòng cuối: cắt 10s, cắt 3 phút, restart NATS).
+
+**Minor để lại (không chặn):**
+- Một user id sai trong gói `WsPublish` làm rơi cả gói của Mention App, không chỉ người đó.
+- Bộ đếm thiếu một lần reset khi reset xảy ra trước tin đầu tiên; frame lớn hơn ngân sách byte của hàng gửi thì `TrySend` luôn trả false; ngân sách byte không tính header frame (≤ 14B).
+- `ListMyRoomIDs` có thể từ chối `state` ngoài 1..2 thay vì bỏ qua.

@@ -5,10 +5,10 @@
 > **Ghi chú 2026-10-20:** code chuyển từ `apps/mention` sang `modules/mention` (D182, chỉ đổi đường dẫn). Các đường dẫn `apps/mention` bên dưới là hồ sơ lúc xây.
 >
 > **Nguồn:**
-> - Hướng đi: owner duyệt ngày 2026-10-17 sau ba vòng brainstorm. Log ở `.claude/plans/mention-app_design.md` (MA1–MA18).
+> - Hướng đi: owner duyệt ngày 2026-10-17 sau ba vòng brainstorm. Log brainstorm (MA1–MA18) đã gộp vào Decision Log và xoá.
 > - Quyết định: D162–D176 trong [Decision Log](../decision-log.md) §17.4.
 > - Danh mục event, subject, ai nhận gì: [events.md](../events.md).
-> - Plan thực thi: `.claude/plans/2026-10-17-mention-app.md` (commit `64dd67e` … `334f8e1`).
+> - Plan thực thi: đã xoá sau merge (commit `64dd67e` … `334f8e1`).
 >
 > **Thứ tự:** làm trước M4 websocket (owner). PR mở sau khi PR M3 và M3.1 merge.
 
@@ -515,6 +515,12 @@ Vì sao trễ giảm: trước đây nửa mention của `mention_reply_index` c
 - Lưới "một mục mỗi tin" thấy đích mới trên tin trước khi doc của nó được ghi, nên bỏ mục cũ; doc mới hiện sau khi consumer xử lý xong.
 
 **R8. CPU Mongo/NATS cao hơn ở cùng tải** (9.1). Owner chấp nhận; tối ưu sau khi có số prod-like.
+
+**R9. Minor để lại lúc xây.**
+- Hai event cùng `Ver` nhưng khác `At` làm `created_at` của tombstone đổi qua lại (vô hại).
+- `@all` trong room lớn giữ cả danh sách người nhận trong RAM lúc chia trang.
+- `dependencyErr` che mất `InvalidArgument` từ phía dưới.
+- Test `slot` `TestStepCommandsIgnoreUnrelatedKeys` chập chờn khi chạy song song dưới tải.
 
 ## 11. Điểm owner
 

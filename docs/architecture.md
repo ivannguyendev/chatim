@@ -124,6 +124,12 @@ Cờ event chờ phát (M3.1, D142–D149): 7 collection `messages`, `message_ed
 4. **Không giao dịch phân tán (No Multi-doc Transactions):**
    - **Ngoại lệ duy nhất (D100):** Kế nhiệm Owner (Owner rời, nhường quyền) dùng 1 transaction duy nhất cập nhật `members` + `rooms.owners_ver`. Xung đột trả `ErrRetryLater` ngay, không retry nội bộ.
 
+### 5.3 Ràng buộc schema và giới hạn đã biết
+
+- `messages` cố ý không có collation mặc định, để `$sortArray` trong `AddReactionCounts` sắp `rx.c` đúng như `domain.SortReactionCounts` (D113). Thêm collation sẽ lặng lẽ làm lệch thứ tự `rx`.
+- Kind byte trong `_id` của `message_interactions` (1 reaction, 2 bookmark, 3 reply): decoder (`keys.ParseInteraction`, dùng ở codec và sweeper) báo lỗi với kind lạ. Thêm kind mới thì mọi core phải có decoder đó trước khi có core nào ghi kind đó (deploy hai bước).
+- `view.HideForViewer` so tin bị ẩn chỉ theo seq, bỏ thread: đúng khi mọi timeline là thread 0. Phải sửa trước khi có timeline thread ≠ 0.
+
 ---
 
 ## 6. Kiến trúc Components & Bố cục Package `apps/core`

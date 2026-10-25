@@ -1,0 +1,13 @@
+corebench rate=5000/s duration=1m0s warmup=5s max-inflight=4096 rooms=1000 members=4 zipf=0 deadline=10s attempt=5s watch=20 texts=4096
+core config declared for this run (corebench env, not read from the cores; default = core built-in): FLUSH_SHARDS=default FLUSH_WINDOW=default FLUSH_MAX_BATCH=default FLUSH_QUEUE=default FLUSH_INSERT_TIMEOUT=default ACTOR_MAX_GROUP=default ACTOR_MAILBOX=default CORE_REQUEST_DEADLINE=default CORE_MAX_INFLIGHT=default CORE_QUEUE_WAIT=default
+slot owners: core-1=512 core-2=512
+setup: 1000 rooms with 4 members each in 2.295s
+rate target=5000/s sent=4983/s acked=4983/s over the 1m0s measured window (after 5s warmup)
+sends due=300000 sent=298993 acked=298993 failed=0 shed_by_client=1007 (max in-flight 4096)
+failed by code: none
+retried sends=248 attempts=299346 max attempts=3
+with warmup: due=325000 sent=323993 shed_by_client=1007
+pacer lag (issue minus scheduled time): n=300000 p50=852.531µs p95=10.207634ms p99=34.905861ms p99.9=223.800114ms max=283.800114ms
+ack latency from scheduled time: n=298993 p50=53.538664ms p95=362.072091ms p99=835.251302ms p99.9=1.236521924s max=1.466127898s
+live events on 20 watched rooms: received=5911 of acked=5911 missing=0 duplicates=0 undecoded=0 (waited 0s after the last send returned)
+live lag, receive time minus event ts (ts = seq assignment on the core, before the insert; one host clock): n=5911 p50=42.630952ms p95=245.182443ms p99=538.231965ms p99.9=947.132681ms max=1.044578482s

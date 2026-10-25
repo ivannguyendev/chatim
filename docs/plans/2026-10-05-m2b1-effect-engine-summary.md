@@ -1,6 +1,6 @@
 # M2b.1 — Effect engine: tóm tắt kỹ thuật
 
-> Trạng thái: **đã xây** (thực thi xong 2026-10-05, `dev-done` trên `feat/m2b`), merge `main` trong PR #12 ngày 2026-10-08. Plan execute gốc (cho AI, có code mẫu, đường dẫn package cũ `apps/core/internal/<package>`) nằm ở `.claude/plans/2026-10-05-m2b1-effect-engine.md` (local). Quyết định D79–D81 trong Decision Log của [thiết kế](../architecture.md) §17.2.
+> Trạng thái: **đã xây** (thực thi xong 2026-10-05, `dev-done` trên `feat/m2b`), merge `main` trong PR #12 ngày 2026-10-08. Plan execute gốc (cho AI) đã xoá sau merge; bản này là bản lưu. Quyết định D79–D81 trong Decision Log của [thiết kế](../architecture.md) §17.2.
 >
 > Bản này viết **sau khi thực thi**, làm tài liệu lưu trữ: mô tả cái đã duyệt và đã xây ở M2b.1. Chỗ milestone sau đã đổi được ghi "Sau M2b.x: …". Đường dẫn theo bố cục package hiện tại (thiết kế §13).
 

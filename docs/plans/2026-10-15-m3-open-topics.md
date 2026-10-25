@@ -42,7 +42,7 @@ Hai giai đoạn trong một goroutine mỗi partition: effect không chờ ch�
 
 Nguyên nhân 5K tệ hơn: lấy phiếu ngay nên lô rất nhỏ; mất phần gom mà lô 256 phiếu trước đây vô tình làm. `room_activity` ghi một bulk write mỗi lô nhỏ (Mongo tải ×5, làm chậm cả đường gửi tin); giai đoạn có delay chạy từng lô nhỏ một (mỗi lô một pipeline Redis, một `Find`, một lần chờ PubAck), chiếm vòng lặp, effect không chờ bị đói.
 
-Bản vá: `bin/m3-engine-two-stage.patch` (38 file, áp lại được). Số đo: `bin/bench/m3-engine-*`.
+Bản vá thử (38 file) không lưu lại. Kết quả: `docs/poc/results/m3-engine-*`.
 
 ### 1.4 Phương án
 
@@ -85,7 +85,7 @@ Mọi khoá 11B của mọi room đứng trước mọi khoá 14B. Nên doc củ
 
 Mọi truy vấn theo room trên ba collection này (đếm member, tìm owner, đếm lại reaction, mention đường B…) cũng hỏi mọi shard. Các index theo user/target vốn đã được chấp nhận là hỏi mọi shard.
 
-Bản vá hạ tầng (profile compose `shard`, script, itest kiểm từng truy vấn): `bin/m3-shard-profile.patch` (6 file).
+Bản vá hạ tầng (profile compose `shard`, script, itest kiểm từng truy vấn, 6 file) không lưu lại.
 
 ### 2.3 Phương án
 

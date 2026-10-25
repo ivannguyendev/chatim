@@ -1,0 +1,6 @@
+wsload steady run=wl9faa3dab conns=10000 groups=500 members=20 rate=1000/s connect-rate=1000/s duration=60s ws=ws://chatim-websocket-1:8080/ws,ws://chatim-websocket-2:8080/ws
+setup: 3.88s
+connect: ready=10000 failed=0 retry_later=0 last_ready=10.00s elapsed=10.00s time n=10000 p50=4.7ms p90=9.0ms p99=27.6ms max=80.8ms
+send: due=60000 shed=0 skipped=0 sent=60000 acked=60000 errors=0 map[] ack p50=15.3ms p99=98.9ms
+delivery: delivered=1200000 expected=1200000 duplicate=0 latency n=1200000 p50=16.1ms p90=35.8ms p99=100.4ms max=304.1ms
+frames: retry_later=0 load_failed=0 resync=0

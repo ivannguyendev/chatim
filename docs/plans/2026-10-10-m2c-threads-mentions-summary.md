@@ -1,6 +1,6 @@
 # M2c — Tương tác với tin, mention, forward, tạo room: tóm tắt kỹ thuật
 
-> Trạng thái: **đã xây** (thực thi xong 2026-10-10 trên nhánh chung `feat/m2c`; `ListMentions` và luật không thử lại tuyệt đối xây lại 2026-10-11 theo quyết định owner ở mục 11.1), thành **`dev-done` khi merge** `main` qua một PR. Bản này viết lại từ cái đã thực sự xây: owner duyệt bản trước khi code (commit `1db822c`); mọi chỗ đội làm khác bản đó nằm ở mục 11.2. Plan execute cho AI ở `.claude/plans/2026-10-10-m2c-threads-mentions.md` (local, có mục "Kết quả thực thi" theo từng task). Quyết định D112–D119 nằm trong Decision Log của [thiết kế](../architecture.md) §17.2; thiết kế là nguồn sự thật hiện hành.
+> Trạng thái: **đã xây** (thực thi xong 2026-10-10 trên nhánh chung `feat/m2c`; `ListMentions` và luật không thử lại tuyệt đối xây lại 2026-10-11 theo quyết định owner ở mục 11.1), thành **`dev-done` khi merge** `main` qua một PR. Bản này viết lại từ cái đã thực sự xây: owner duyệt bản trước khi code (commit `1db822c`); mọi chỗ đội làm khác bản đó nằm ở mục 11.2. Plan execute cho AI đã xoá sau merge; Minor còn lại nằm ở mục 10 và [roadmap](../roadmap.md) "Mục mang sang M5". Quyết định D112–D119 nằm trong Decision Log của [thiết kế](../architecture.md) §17.2; thiết kế là nguồn sự thật hiện hành.
 
 ## 1. Thuật ngữ
 

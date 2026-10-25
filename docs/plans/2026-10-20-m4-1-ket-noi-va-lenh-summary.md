@@ -2,7 +2,7 @@
 
 > **Trạng thái:** owner duyệt 2026-10-20; **đã xây xong** trên `feat/m4` ngày 2026-10-21 (kết quả ở §10, quyết định D183–D188 ở [decision log §17.7](../decision-log.md), giao thức ở [Module 09 §7](../modules/09-feature-realtime-delivery-and-ephemeral.md)). Phần 1 trong 5 phần của M4.
 > **Năm phần:** (1) kết nối, token, lệnh · (2) nhận và đẩy event · (3) đã đọc, đã xem · (4) typing, online · (5) reconnect, vận hành, kiểm thử.
-> **Nguồn:** hướng M4 owner duyệt 2026-10-20 (`.claude/plans/m4-websocket_design.md`), hàng M4 [roadmap](../roadmap.md), [exit Phase 1](2026-10-19-phase1-exit-summary.md).
+> **Nguồn:** hướng M4 owner duyệt 2026-10-20 (D183–D188), hàng M4 [roadmap](../roadmap.md), [exit Phase 1](2026-10-19-phase1-exit-summary.md).
 
 ## 1. Phần này làm gì
 
@@ -187,10 +187,10 @@ Xây xong trên `feat/m4` ngày 2026-10-21, 12 task, đã push. Task rủi ro (2
 - **`make vuln`:** owner đồng ý nâng Go 1.26.9 → 1.26.10 (2026-10-21) để sửa GO-2026-6809 (`crypto/x509`); sau khi nâng, `make vuln` không còn lỗ hổng nào code chạm tới. GO-2026-5932 (`x/crypto`) vẫn nằm trong module nhưng code không gọi tới, chưa có bản vá.
 - **Test chập chờn:** `mongostore` `TestReactionSetOfTheSameUserRacingOnANewReactionNeverFails` lỗi một lần trong `make itest` (Mongo `DurationOverflow`), chạy lại 3/3 qua; cần xem riêng.
 - **Việc nhỏ ghi lại (Minor, không chặn):**
-  - `pkg/coreroute`: dọn địa chỉ cũ đóng kết nối ngay, nên lệnh đang chạy tới core vừa rời bảng bị huỷ (máy gửi lại); `Room()` có thể dial lại địa chỉ vừa bị dọn (lần nạp sau dọn tiếp).
-  - `pkg/jwtverify` (làm khi `identity-verifier` dùng lại): giới hạn độ dài token trong thư viện (websocket đã chặn frame 128KB); từ chối header `crit`; `devtoken.KeyPair` nên có `String()` không in khoá riêng.
-  - Kết nối: mã đóng do gws tự chọn (1009/1002/1000) có thể tới máy thành 1006 khi hạn ghi đã hết; chưa kiểm `Origin` (token nằm trong frame nên không phải rủi ro auth; cân nhắc ở phần 5); nhãn 1000 của `closes_total` gồm cả hết hạn heartbeat.
+  - `pkg/coreroute`: dọn địa chỉ cũ đóng kết nối ngay, nên lệnh đang chạy tới core vừa rời bảng bị huỷ (máy gửi lại); `Room()` có thể dial lại địa chỉ vừa bị dọn (lần nạp sau dọn tiếp); dial chạy trong lúc giữ `Pool.mu` (ổn vì gRPC dial lười, không chờ mạng).
+  - `pkg/jwtverify` (làm khi `identity-verifier` dùng lại): giới hạn độ dài token trong thư viện (websocket đã chặn frame 128KB); từ chối header `crit`; `devtoken.KeyPair` nên có `String()` không in khoá riêng; chưa từ chối token thiếu `exp` (`ExpiresAt` nil) và `iat` ở tương lai; `ConstantTimeCompare` thay được bằng `bytes.Equal`.
+  - Kết nối: mã đóng do gws tự chọn (1009/1002/1000) có thể tới máy thành 1006 khi hạn ghi đã hết; chưa kiểm `Origin` (token nằm trong frame nên không phải rủi ro auth; owner 2026-10-25: allowlist `WS_ALLOWED_ORIGINS` ở M5); nhãn 1000 của `closes_total` gồm cả hết hạn heartbeat.
   - Lệnh rỗng (`UNIMPLEMENTED`) đếm ở `commands_rejected_total`, chưa ở `commands_total`.
   - `router.Close()` không nhận ctx nên có thể vượt ngân sách tắt (core cũng vậy).
-  - Chưa có luật alert cho websocket (metric đã có trên `/metrics`).
+  - Luật alert cho websocket: đã thêm ở phần 5 (`deploy/prometheus/alerts.yml`).
 - **Để phần sau như đã duyệt:** trần kết nối mỗi người và trần lần gọi core của cả node (phần 5); user Redis chỉ đọc và mTLS app ↔ core (M5); `ListMentions` tin `groups` máy gửi (D188).

@@ -28,4 +28,6 @@ Pipeline: brainstorm → decision log → **phase-split review** → summary for
 
 **Progress report** (owner 2026-10-25): update the milestone row in `docs/roadmap.md` first, then end the closing report with the phase just finished (with evidence), the next phase (goal, first step) and the remaining phases with their status. The chat and the roadmap say the same thing.
 
+**Local plans and decision logs** (owner 2026-10-25): `.claude/plans/` is gitignored, so anything left only there is lost on a clean-up. When a phase closes, fold the decision log into `docs/decision-log.md` (decisions and rejected alternatives) and the plan's Minor findings into the summary or the roadmap's "Mục mang sang M5", then delete both local files; tracked docs never cite a `.claude/plans/` path. Rejected: committing the logs to `docs/decisions/` (a second record beside the Decision Log). Also rejected earlier (2026-10-25): a separate PRD document, since design §2 + Decision Log + summaries already serve as the reference.
+
 Related: [[owner-communication]], [[rule-retrospective]].

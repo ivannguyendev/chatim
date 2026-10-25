@@ -1,0 +1,10 @@
+caught up chatim_websocket_consumer_lag_seconds{stream="CHATIM_EVT"} 5s after restore
+caught up chatim_websocket_consumer_lag_seconds{stream="CHATIM_WS"} 0s after restore
+delta chatim_websocket_consumer_resets_total{stream="CHATIM_EVT"} 1
+delta chatim_websocket_nats_reconnects_total 1
+delta chatim_websocket_room_ids_load_seconds_count 3
+delta chatim_websocket_room_ids_load_seconds_sum 0.00412867
+max chatim_websocket_consumer_lag_seconds{stream="CHATIM_EVT"} 12.8s at +14s after the cut
+max chatim_websocket_consumer_lag_seconds{stream="CHATIM_WS"} 0.0s at +0s after the cut
+nats_connected 0 from +14s, back to 1 at +16s
+samples 176

@@ -1,6 +1,6 @@
 # M2b.3 — Reaction + ghim: tóm tắt kỹ thuật
 
-> Trạng thái: **đã xây** (2026-10-06, `dev-done` trên nhánh chung `feat/m2b`), merge `main` qua PR #12 ngày 2026-10-08 cùng M2b.0–M2b.4. Plan execute gốc (cho AI) nằm ở `.claude/plans/2026-10-06-m2b3-reactions-pins.md` (local, không còn trong `docs/`). Quyết định D88–D95 nằm trong Decision Log của [thiết kế](../architecture.md) §17. Bản này mô tả cái owner đã duyệt và cái đã xây; chỗ milestone sau đổi lại thì ghi "Sau M2b.4: …".
+> Trạng thái: **đã xây** (2026-10-06, `dev-done` trên nhánh chung `feat/m2b`), merge `main` qua PR #12 ngày 2026-10-08 cùng M2b.0–M2b.4. Plan execute gốc (cho AI) đã xoá sau merge. Quyết định D88–D95 nằm trong Decision Log của [thiết kế](../architecture.md) §17. Bản này mô tả cái owner đã duyệt và cái đã xây; chỗ milestone sau đổi lại thì ghi "Sau M2b.4: …".
 >
 > Đường dẫn package theo bố cục hiện tại `apps/core/internal/<nhóm>/<package>` (thiết kế §13). Plan gốc dùng đường dẫn cũ `apps/core/internal/<package>`.
 

@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-Owner decisions of 2026-10-17. D162 plus the milestone brainstorm. The full log is `.claude/plans/mention-app_design.md` (MA1–MA16).
+Owner decisions of 2026-10-17. D162 plus the milestone brainstorm. The brainstorm log (MA1–MA18) was folded into D162–D176 and deleted on 2026-10-25.
 
 **Role.** Mention App is a business module (`modules/mention`, embedded in core). It consumes message events, records user/group/channel mentions, expands groups and publishes notifications as `WsPublish` packets (content once + target users) to `websocket.publish.{tenant}` on `CHATIM_WS` (D192); `notify.{tenant}.{kind}` is reserved for the Phase 2 notification app.
 

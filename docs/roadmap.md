@@ -7,7 +7,7 @@
 - Chia phase trước khi viết summary (owner chốt 2026-10-25): sau khi lưu decision log, một reviewer độc lập đề xuất cách chia milestone thành phase (mục tiêu, sản phẩm test được riêng, phụ thuộc, yêu cầu nào thuộc phase nào); owner duyệt cách chia và danh sách phase ghi vào dòng milestone dưới đây. Summary và plan chi tiết chỉ viết cho **một phase**, phase sau viết khi phase trước xong. Quy trình đủ ở `CLAUDE.md` §Workflows.
 - **Bảng phủ** bắt buộc trong mọi summary và plan chi tiết (owner chốt 2026-10-25): yêu cầu → phase/thành phần → task → test → bằng chứng (điền sau khi thực thi). Ô trống = chia thiếu, không duyệt. Mọi khẳng định ghi nguồn (yêu cầu §2, D-id, câu trả lời của owner kèm ngày, `file:dòng`, output lệnh); chưa có nguồn thì ghi "chưa có nguồn" và hỏi, không đoán.
 - Đóng mỗi phase: cập nhật dòng milestone, báo phase vừa xong (kèm bằng chứng), phase tiếp theo và các phase còn lại; rà xem có rule mới owner đã xác nhận không.
-- `docs/plans/` chỉ chứa tài liệu để owner review và duyệt (`<plan>-summary.md`); plan execute chi tiết cho AI nằm ở `.claude/plans/<plan>.md` (local, gitignore; owner chốt 2026-10-09). Mỗi milestone có plan riêng, viết **trước khi code**. Plan **không chứa code** (owner chốt 2026-10-07; thay cho hướng dẫn "code đầy đủ" của skill `writing-plans`): mỗi task ghi mục tiêu, file tạo/sửa, todo, kỹ thuật (API, toán tử Mongo, index, thứ tự, mã lỗi), tên và hợp đồng mới viết bằng lời, test cần viết và mỗi test chứng minh gì, lệnh chạy, tiêu chí xong, commit. Người thực thi tự viết code theo TDD; gặp chỗ plan không nói tới thì dừng và báo.
+- `docs/plans/` chỉ chứa tài liệu để owner review và duyệt (`<plan>-summary.md`); plan execute chi tiết cho AI nằm ở `.claude/plans/<plan>.md` (local, gitignore; owner chốt 2026-10-09); khi đóng phase, Minor của plan gộp vào summary hoặc "Mục mang sang M5", decision log gộp vào Decision Log, rồi xoá cả hai (owner 2026-10-25). Mỗi milestone có plan riêng, viết **trước khi code**. Plan **không chứa code** (owner chốt 2026-10-07; thay cho hướng dẫn "code đầy đủ" của skill `writing-plans`): mỗi task ghi mục tiêu, file tạo/sửa, todo, kỹ thuật (API, toán tử Mongo, index, thứ tự, mã lỗi), tên và hợp đồng mới viết bằng lời, test cần viết và mỗi test chứng minh gì, lệnh chạy, tiêu chí xong, commit. Người thực thi tự viết code theo TDD; gặp chỗ plan không nói tới thì dừng và báo.
 - Plan mỗi phase/milestone mở đầu bằng bảng **scope và ranh giới** (owner chốt 2026-10-12): việc nào trong scope và service nào giữ; việc nào ngoài scope và thuộc về đâu (core, websocket, app nào). Core cung cấp API dữ liệu (gửi, đọc, sửa, xoá, lịch sử, reaction, vị trí đọc…) và phát event, một lần gọi mỗi màn hình; giá trị theo người xem tính lúc đọc (unread, danh sách hội thoại đã xếp) thuộc core từ 2026-10-13; trạng thái lưu theo người xem và sync là việc của app.
 - Plan mở đầu bằng bảng **tính năng → lớp dữ liệu** ([thiết kế §4](architecture.md#4-khung-lớp-dữ-liệu-data-class-framework)). Mỗi tính năng khai báo: fact (lệnh atomic nào, doc nào), cách idempotent (cid hoặc `base_ver`), effect + chính sách, quyền (permission hook), view theo người đọc, dòng trong danh mục event, ngân sách khuếch đại ở nhóm 5K (channel 200K khi Channel ra khỏi backlog), guarantee + detector. Tính năng không khớp lớp nào thì dừng, thiết kế lớp đó trước.
 - Dữ liệu suy ra (counter, projection) ghi ngay trong lệnh mà không gộp được với lần ghi chính vào một transaction: dùng **phiếu hẹn sinh tồn** ([thiết kế §7.1](architecture.md), D111), không thiết kế lại từ đầu.
@@ -51,12 +51,12 @@
 | Backlog | Channel | Room type channel (~200K subscriber, chỉ admin post): quyền post, fanout, số trên tin nóng (gom `counts_changed` của tin nhận nhiều react/s; bắt buộc trước khi channel go-live). Owner 2026-10-19: vào backlog, làm khi có yêu cầu nghiệp vụ | Backlog |
 | Backlog | Sync token (D74), đa thiết bị, dấu `@` trên danh sách hội thoại | Chờ số đo bão reconnect 100K (PoC P7) | Backlog |
 | Backlog | Tenant ẩn nội dung tin (D75) | Owner 2026-10-20: tách khỏi M4, làm khi có khách cần. Tenant có chính sách ẩn nội dung thì websocket bỏ text khỏi event trước khi đẩy xuống máy, không đọc lại từ core. Khi làm: reviewer xem lại thiết kế (bản event trong `CHATIM_EVT` vẫn giữ text 7 ngày) | Backlog |
-| 2 | **M6 — `identity`, `identity-verifier`** (go-live) | (D179, D207) `identity`: tenant, user, credential (Argon2id), liên kết SSO (OIDC/SAML), session/refresh token, cấp JWT + JWKS xoay khoá; phát `user_disabled`/`session_revoked`; danh bạ user (profile, tra theo lô, vì core không lưu tên). `identity-verifier`: chỉ kiểm tra token (chữ ký, hạn, tenant, danh sách thu hồi từ event), không ghi DB, ≥ 2 pod; gọi lúc mở kết nối và mỗi request REST, không cho từng tin. Thu hồi phiên tới `websocket` và `gateway` (Phase 1 không thu hồi). JWT không mang role theo room. Product mới: không nhập user hệ cũ | Chưa — milestone đầu của Phase 2, brainstorm riêng |
-| 2 | **M7 — Media** (go-live) | (D207) Presigned URL S3/MinIO qua `apps/gateway`, field đính kèm trong `messages` (≤ 10 tham chiếu, A6), URL GET cấp sau `Admit` của core. Sửa core (field + proto) nên làm trước lần đo PoC cuối | Chưa |
+| 2 | **M6 — `identity`, `identity-verifier`** (go-live) | (D179, D207) `identity`: tenant, user, credential (Argon2id), liên kết SSO (OIDC/SAML), session/refresh token, cấp JWT + JWKS xoay khoá; phát `user_disabled`/`session_revoked`; danh bạ user (profile, tra theo lô, vì core không lưu tên). `identity-verifier`: chỉ kiểm tra token (chữ ký, hạn, tenant, danh sách thu hồi từ event), không ghi DB, ≥ 2 pod; gọi lúc mở kết nối và mỗi request REST, không cho từng tin. Thu hồi phiên tới `websocket` và `gateway` (Phase 1 không thu hồi). Hướng đã bàn ở M4 (owner 2026-10-23, chưa chốt): event thu hồi trên NATS theo người (`revoked_before`), theo phiên (`sid`) và theo tenant; mọi node websocket và gateway nghe, đóng kết nối và từ chối token cũ; danh sách thu hồi chỉ giữ trong hạn token tối đa. Verifier chết thì không ai kết nối hay đăng nhập mới được (kết nối đang mở vẫn chạy), nên cần alert riêng. JWT không mang role theo room. Product mới: không nhập user hệ cũ | Chưa — milestone đầu của Phase 2, brainstorm riêng |
+| 2 | **M7 — Media** (go-live) | (D207) Presigned URL S3/MinIO qua `apps/gateway`, field đính kèm trong `messages` (≤ 10 tham chiếu, A6), URL GET cấp sau `Admit` của core. Còn phải thiết kế (phản biện 2026-10-19): prefix object theo tenant, dọn file đã upload mà không gửi, giới hạn dung lượng, quét mã độc. Sửa core (field + proto) nên làm trước lần đo PoC cuối | Chưa |
 | 2 | **M8 — `notification` + push** (go-live) | (D207) Push APNs/FCM (badge xấp xỉ, D73), danh sách máy theo session của M6, giữ bảng mute từ event `room_preferences_changed`, chỉ push khi offline; hộp thư `notify.{t}.{kind}` (`CHATIM_NOTIFY`). Còn mở, hỏi owner khi brainstorm: ai chọn người nhận push cho tin thường (D104; Mention App chỉ chọn cho mention) | Chưa |
 | 2 | **Go-live `v1.0.0`** | (D207) Khi Phase 1 `prod-like validated` và M6–M9 xong; identity cần security review riêng trước go-live | Chưa |
 | 2 (sau go-live) | API cho hệ thống khác + webhook | (D207) API cho backend tenant/bot là nhóm route xác thực bằng API key trong `apps/gateway`; webhook là worker riêng (gọi endpoint ngoài chậm, retry ra ngoài, không kéo chậm đường của máy client) | Sau go-live |
-| 2 (sau go-live) | `migrator` | (D180, dời sau go-live theo D207) Chạy dual với data thật cả trên dev; mỗi room một nơi cấp seq; import lịch sử im lặng (không bật `_state`) rồi `/app resync -rate` + `/app recount` dựng lại dẫn xuất; room chưa chuyển chỉ đọc trên chatim; sửa trước lỗi resync dừng sớm (mục mang sang M2b.1) | Sau go-live |
+| 2 (sau go-live) | `migrator` | (D180, dời sau go-live theo D207) Chạy dual với data thật cả trên dev; mỗi room một nơi cấp seq; import lịch sử im lặng (không bật `_state`) rồi `/app resync -rate` + `/app recount` dựng lại dẫn xuất; room chưa chuyển chỉ đọc trên chatim; sửa trước lỗi resync dừng sớm (mục mang sang M2b.1). Hệ nguồn: Node.js + MongoDB (doc lớn, BullMQ, Socket.IO). Plan cũ 2026-10-13 (bị thay bởi D180) còn ý dùng được: công cụ đối soát (đếm, checksum, seq liền nhau), không đụng prod cũ, tắt hệ cũ sau 14 ngày chạy ổn, id tin cũ làm cid. Hỏi owner khi brainstorm: dữ liệu cũ có trường nào mã hoá (hệ cũ có tiện ích AES-256-GCM/RSA-OAEP) không | Sau go-live |
 | 2 (sau go-live) | Policy quyền | Module policy chat: ánh xạ user → role → quyền (owner/moderator xoá tin người khác, giới hạn thời gian sửa/xoá theo tenant…), cắm vào `access.Policy` (M2b.0) thay `access.DefaultPolicy` (sửa/xoá chỉ tác giả, D86; loại tin khoá qua `Request.Kind`, D87) | Sau go-live |
 
 ## Thứ tự phụ thuộc
@@ -87,9 +87,9 @@
 
 Sharding không phải việc của core (owner 2026-10-17, D161): core giữ quy tắc shard-ready, người triển khai tự chọn shard key theo nghiệp vụ; số đo 2 shard để tham khảo ở [2026-10-15-m3-open-topics.md](plans/2026-10-15-m3-open-topics.md) §2. Mục "effect engine chặn đầu hàng" đã giải quyết ở M3.1 (bỏ engine) nên không còn trong danh sách. Từ M3.1, các mục chỉ thuộc effect engine (reader, work stream, worker, ack mark, change feed) ở các milestone cũ đã được gỡ khỏi danh sách dưới.
 
-Từ M3, tham khảo cho người triển khai (không làm trong core, D161): **sharding**. Thử trên 2 shard (`bin/m3-shard-profile.patch`): `members`, `message_interactions`, `mentions` có `_id` dài khác nhau nên shard theo `{_id: 1}` (design §5.1) không giữ một room/tin trên một shard, `ListMembers`/`GetReactions` hỏi mọi shard; hướng có thể: shard theo `{room_id: 1}` hoặc khoá dài cố định. Transaction owner (D100) vẫn chạy qua mongos. Từ M3.1 không còn change feed (điểm trễ ~10s qua mongos hết); sweeper đọc partial index `state_pending` sẽ hỏi mọi shard (index nhỏ, 2s một lần).
+Từ M3, tham khảo cho người triển khai (không làm trong core, D161): **sharding**. Thử trên 2 shard (bản vá thử không lưu lại): `members`, `message_interactions`, `mentions` có `_id` dài khác nhau nên shard theo `{_id: 1}` (design §5.1) không giữ một room/tin trên một shard, `ListMembers`/`GetReactions` hỏi mọi shard; hướng có thể: shard theo `{room_id: 1}` hoặc khoá dài cố định. Transaction owner (D100) vẫn chạy qua mongos. Từ M3.1 không còn change feed (điểm trễ ~10s qua mongos hết); sweeper đọc partial index `state_pending` sẽ hỏi mọi shard (index nhỏ, 2s một lần).
 
-Từ M3.1, chi tiết ở [tóm tắt kỹ thuật](plans/2026-10-16-m3-1-state-driven-events-summary.md) (Minor đầy đủ theo task trong plan execute `.claude/plans/`, local):
+Từ M3.1, chi tiết ở [tóm tắt kỹ thuật](plans/2026-10-16-m3-1-state-driven-events-summary.md):
 
 - Sweeper dựng lại event tuần tự, một lần đọc mỗi doc-bit: bắt kịp sau sự cố NATS dài có thể mất vài phút; diễn tập trên bản cuối ~1.600 doc/s (NATS chết ~2 phút 45 giây, cờ về 0 sau 3 phút 11 giây); gom đọc theo room nếu cần nhanh hơn.
 - `projection_lag_seconds` đo theo `ts` nghiệp vụ, nên event do sweeper phát lại làm lag trông cao; event phát lại cũng nâng `last_change_at`/`activity_bucket` lên giờ hiện tại (thêm một lần nạp cache, resync quét thêm room).
@@ -99,6 +99,9 @@ Từ M3.1, chi tiết ở [tóm tắt kỹ thuật](plans/2026-10-16-m3-1-state-
 - Phiếu đặt trên `CHATIM_WORK` ngay trước deploy M3.1 không có người nhận (chưa go-live, chấp nhận); DB cũ còn collection `reconciler_state` (vô hại, xoá tay).
 - `stateclear.Queue.Close` trả nil khi hết ngân sách xả (phần mất đã đếm, sweeper bù).
 - Ghi tay vào DB phải tự bật `_state` + `_state_at` (kiến trúc §7.3).
+- `stateclear`: `<-done` chờ mãi nếu `Clear` bỏ qua ctx; `Add` đi qua RWMutex; một chunk `BulkWrite` lỗi thì bỏ các chunk sau và đếm thừa `failures`. Luật boot không tính lần flush phải chờ sau một flush chậm.
+- Một lô `TouchActivity` 8192 lệnh có thể vượt bước dừng của projections.
+- `errDocGone`/`unknownBit` bọc `ErrInvalidArgument`, nên `eventkit.Gone` nuốt cả lỗi lập trình; sweeper chạy lại `Project` cho mỗi doc ghim.
 
 Từ M3, chi tiết ở [tóm tắt kỹ thuật, mục 10](plans/2026-10-12-m3-core-query-apis-summary.md#10-rủi-ro):
 
@@ -116,7 +119,7 @@ Từ M2b.0, chi tiết ở [tóm tắt kỹ thuật, mục Kết quả thực th
 - Probe oplog đọc primary hai lần mỗi lần scrape, không cache.
 - `make vuln`: một cảnh báo cấp module GO-2026-5932 (`golang.org/x/crypto/openpgp`), có từ trước, code không gọi tới; xử lý khi nâng phụ thuộc.
 
-Từ M2b.1, chi tiết ở [tóm tắt kỹ thuật, mục Kết quả thực thi](plans/2026-10-05-m2b1-effect-engine-summary.md#13-kết-quả-thực-thi) (danh sách Minor đầy đủ theo task nằm trong plan execute `.claude/plans/`, local):
+Từ M2b.1, chi tiết ở [tóm tắt kỹ thuật, mục Kết quả thực thi](plans/2026-10-05-m2b1-effect-engine-summary.md#13-kết-quả-thực-thi):
 
 - Resync dừng ở tin cũ đầu tiên (giả định `CreatedAt` tăng đơn điệu theo seq; migrator hoặc lệch đồng hồ có thể làm dừng sớm).
 
@@ -143,6 +146,8 @@ Từ M2b.4, chi tiết ở [tóm tắt kỹ thuật, mục Kết quả thực th
 - `GetEditHistory` trang đầu có thể trả `limit+1` dòng (thêm dòng `ver 0`).
 - Itest đua hiếm `TestReactionSetOfTheSameUserRacingOnANewReactionNeverFails` (Mongo `DurationOverflow`), theo dõi.
 - Test còn thiếu: `Begin`/`Finish` song song của `dedupe.Requests`; nối `Config.Limits.MemberBatch` vào `Mutator`; `Load()` của `MEMBER_COUNT_CHECK_DELAY`; watch start trước gRPC.
+- `dedupe.Requests`: ctx huỷ sau `Reserved` giữ khoá pending 10s; `Finish`/`Cancel` bỏ qua lỗi; chuỗi log dùng chung với cid.
+- Itest transaction owner có thể treo (thiếu timeout); `AddMemberCount`/`SetMemberCount` báo lỗi khác nhau khi room id > MaxInt64; `Allow` nil gây panic; `ParseUint` nhận số 0 đứng đầu.
 
 Từ M2c, chi tiết ở [tóm tắt kỹ thuật, mục 10](plans/2026-10-10-m2c-threads-mentions-summary.md#10-rủi-ro):
 
@@ -152,6 +157,20 @@ Từ M2c, chi tiết ở [tóm tắt kỹ thuật, mục 10](plans/2026-10-10-m2
 - Chưa có itest đầu-cuối "`$inc` lỗi → phiếu bật sửa" và "chết giữa `AddReply` và `$inc`" (unit phủ).
 - React như cũ vẫn hẹn + gỡ phiếu; mỗi phiếu sửa tốn một lần đọc đích mention; mỗi trả lời một lượt hẹn/ghi/`$inc`/phát tuần tự trong projection `reply_index` (đo thông lượng ở PoC prod-like).
 - `domain.MsgKey` trùng hình dạng với `store.MsgKey`.
+- `view.HideForViewer` so tin bị ẩn chỉ theo seq, bỏ thread (`apps/core/internal/message/view/masks.go`): đúng khi mọi timeline là thread 0, phải sửa trước khi có timeline thread ≠ 0 (kiến trúc, giới hạn đã biết).
+
+Từ Mention App, chi tiết ở [tóm tắt kỹ thuật, mục 10](plans/2026-10-17-mention-app-summary.md):
+
+- Test `slot` `TestStepCommandsIgnoreUnrelatedKeys` chập chờn khi chạy song song dưới tải.
+
+Từ M4, chi tiết ở các tóm tắt phần 1–5 và phần gateway:
+
+- **Chặn go-live:** quyền NATS riêng cho websocket (tới lúc đó ai vào được NATS là giả được gói đẩy tới người dùng, module 09 §8); mTLS giữa app với core (tin `system` không kiểm membership tới khi có mTLS).
+- Kiểm `Origin` trên `GET /ws`: owner 2026-10-25 chọn allowlist chính xác `WS_ALLOWED_ORIGINS`, giống `GW_CORS_ORIGINS` của gateway. Chưa làm vì token đi trong frame, không phải cookie.
+- Chưa đo nạp lại hàng loạt `WS_RELOAD_RATE` (PoC P12); `wsload` chưa có kịch bản nhảy.
+- Alert websocket/gateway chưa có nhãn `guarantee` như alert của core.
+- Owner 2026-10-22: giới hạn tốc độ lệnh chỉ theo kết nối (`WS_COMMAND_RATE`/`BURST`/`INFLIGHT`), không thêm theo user.
+- Nợ code: alias `command.Outcome`/`CommandLatency` còn trong `apps/websocket/internal/command/executor.go`; `Forwarder.Commands()` chép lại mỗi request; thiếu test ghim `errWrongRequest`; hàm histogram lặp ở `interest` và `presence` (lần thứ ba thì chuyển vào `pkg/metrics`).
 
 ## Mức sẵn sàng
 
