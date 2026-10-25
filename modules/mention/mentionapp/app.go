@@ -16,6 +16,7 @@ import (
 	"github.com/ivannguyendev/chatim/modules/mention/internal/roomgroups"
 	"github.com/ivannguyendev/chatim/modules/mention/internal/store/mongostore"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/mongoindex"
 )
 
 type Config = config.Config
@@ -29,6 +30,7 @@ type Deps struct {
 	NATS     *nats.Conn
 	Core     CoreReader
 	Log      *slog.Logger
+	Indexes  mongoindex.Reporter
 }
 
 type App struct {
@@ -48,7 +50,7 @@ func New(cfg Config, deps Deps) (*App, error) {
 	if err := deps.validate(); err != nil {
 		return nil, err
 	}
-	a := &App{cfg: cfg.WithDefaults(), deps: deps, bootstrap: mongostore.Bootstrap}
+	a := &App{cfg: cfg.WithDefaults(), deps: deps, bootstrap: deps.bootstrap}
 	if err := a.assemble(); err != nil {
 		return nil, err
 	}
@@ -56,6 +58,15 @@ func New(cfg Config, deps Deps) (*App, error) {
 }
 
 func (a *App) StopTimeout() time.Duration { return a.cfg.StopTimeout() }
+
+func Indexes() mongoindex.Catalog { return mongostore.Indexes() }
+
+func (d Deps) bootstrap(ctx context.Context, db *mongo.Database) error {
+	if d.Indexes == nil {
+		return mongostore.Bootstrap(ctx, db)
+	}
+	return mongostore.Bootstrap(ctx, db, d.Indexes)
+}
 
 func (d Deps) validate() error {
 	if d.Mongo == nil || d.JS == nil || d.NotifyJS == nil || d.NATS == nil || d.Core == nil || d.Log == nil {

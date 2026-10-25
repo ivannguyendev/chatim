@@ -127,6 +127,10 @@ func TestEveryRPCChecksCallerIdentityFirst(t *testing.T) {
 			_, err := rg.client.ListMembers(ctx, &chatimv1.ListMembersRequest{RoomId: "42"})
 			return err
 		},
+		"ListMyRoomIDs": func(ctx context.Context) error {
+			_, err := rg.client.ListMyRoomIDs(ctx, &chatimv1.ListMyRoomIDsRequest{})
+			return err
+		},
 	}
 	callers := []struct {
 		name  string

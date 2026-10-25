@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/platform/metrics"
 	"github.com/ivannguyendev/chatim/modules/mention/mentionapp"
+	"github.com/ivannguyendev/chatim/pkg/metrics"
 )
 
 type meetingDrainer struct {
@@ -72,7 +72,7 @@ func TestMentionProbesAreExportedAsChatimMention(t *testing.T) {
 	}
 	p := fakeProbes()
 	p.mention = probes
-	h, err := metrics.Handler(metricSources(p))
+	h, err := metrics.Handler(metricsSubsystem, metricSources(p))
 	if err != nil {
 		t.Fatalf("Handler: %v", err)
 	}

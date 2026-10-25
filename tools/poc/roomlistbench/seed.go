@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/ivannguyendev/chatim/pkg/callerid"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/tools/internal/route"
 )
@@ -47,7 +48,7 @@ func seedRooms(ctx context.Context, cl *route.Client, c config, run string, spec
 	err := parallel(ctx, len(specs), c.workers, func(ctx context.Context, i int) error {
 		s := specs[i]
 		req := &chatimv1.CreateRoomRequest{Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: fmt.Sprintf("rlb %s #%d", run, i), Members: s.members, RequestId: fmt.Sprintf("%s-r%d", run, i)}
-		resp, _, err := cl.CreateRoom(route.WithCaller(ctx, c.tenant, s.creator), req)
+		resp, _, err := cl.CreateRoom(callerid.WithCaller(ctx, c.tenant, s.creator), req)
 		if err != nil {
 			return fmt.Errorf("create room %d: %w", i, err)
 		}
@@ -66,7 +67,7 @@ func sendMessages(ctx context.Context, cl *route.Client, c config, run, group st
 		s := specs[i]
 		for k := range s.messages {
 			req := &chatimv1.SendMessageRequest{RoomId: ids[i], Cid: fmt.Sprintf("%s-%s%d-m%d", run, group, i, k), Text: fmt.Sprintf("tin %d của phòng %s%d", k+1, group, i)}
-			if _, _, err := cl.SendMessage(route.WithCaller(ctx, c.tenant, s.creator), req); err != nil {
+			if _, _, err := cl.SendMessage(callerid.WithCaller(ctx, c.tenant, s.creator), req); err != nil {
 				return fmt.Errorf("send to room %d: %w", i, err)
 			}
 			sent.Add(1)

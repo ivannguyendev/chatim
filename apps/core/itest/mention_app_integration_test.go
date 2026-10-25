@@ -40,9 +40,10 @@ func TestRealInfraMentionAppIndexesNotifiesAndListsAcrossTwoCores(t *testing.T) 
 	}
 
 	got := awaitNotified(t, notices, "bob", "carol", "dave")
+	targetKeys := map[string]string{"bob": "u:bob", "carol": "g:design", "dave": "all"}
 	for user, kind := range map[string]chatimv1.MentionKind{"bob": chatimv1.MentionKind_MENTION_KIND_USER, "carol": chatimv1.MentionKind_MENTION_KIND_GROUP, "dave": chatimv1.MentionKind_MENTION_KIND_ALL} {
 		n := got[user]
-		wantID := roomID + "-0-" + strconv.FormatUint(seq, 10) + "-" + user + "-m0"
+		wantID := roomID + "-0-" + strconv.FormatUint(seq, 10) + "-m0-" + targetKeys[user]
 		if n.GetId() != wantID || n.GetRoomId() != roomID || n.GetSeq() != seq || n.GetMentionNotified().GetTarget().GetKind() != kind {
 			t.Errorf("notification of %s = %v, want id %s by %v", user, n, wantID, kind)
 		}

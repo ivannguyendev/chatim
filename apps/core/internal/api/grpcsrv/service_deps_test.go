@@ -96,7 +96,11 @@ func newMemberReader(t *testing.T, rg *rig, o options) *member.Reader {
 	if err != nil {
 		t.Fatalf("NewChecker: %v", err)
 	}
-	r, err := member.NewReader(member.ReaderDeps{Access: checker, Members: rg.rooms})
+	var reads member.MemberLister = rg.rooms
+	if o.memberReads != nil {
+		reads = o.memberReads(rg.rooms)
+	}
+	r, err := member.NewReader(member.ReaderDeps{Access: checker, Members: reads})
 	if err != nil {
 		t.Fatalf("member.NewReader: %v", err)
 	}

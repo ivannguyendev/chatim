@@ -1,0 +1,193 @@
+package session
+
+import (
+	"time"
+
+	"github.com/lxzan/gws"
+
+	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
+)
+
+type outFrame struct {
+	opcode  gws.Opcode
+	payload []byte
+}
+
+type sendKind int
+
+const (
+	sendResponse sendKind = iota
+	sendControl
+	sendKindCount
+)
+
+type admission int
+
+const (
+	admitted admission = iota
+	admitDropped
+	admitOverBudget
+	admitQueueFull
+)
+
+func (c *connection) writeLoop() {
+	defer c.recoverWriter()
+	for {
+		select {
+		case code := <-c.closeReq:
+			c.writeClose(code)
+			return
+		case <-c.closed:
+			return
+		default:
+		}
+		select {
+		case code := <-c.closeReq:
+			c.writeClose(code)
+			return
+		case frame := <-c.out:
+			written := c.write(frame)
+			c.written(frame)
+			if !written {
+				c.abort()
+				return
+			}
+		case <-c.closed:
+			return
+		}
+	}
+}
+
+func (c *connection) write(frame outFrame) bool {
+	if err := c.socket.SetWriteDeadline(time.Now().Add(c.server.opts.WriteTimeout)); err != nil {
+		return false
+	}
+	return c.socket.WriteMessage(frame.opcode, frame.payload) == nil
+}
+
+func (c *connection) writeClose(code uint16) {
+	if err := c.socket.SetWriteDeadline(time.Now().Add(c.server.opts.WriteTimeout)); err != nil {
+		c.abort()
+		return
+	}
+	for {
+		select {
+		case frame := <-c.out:
+			err := c.socket.WriteMessage(frame.opcode, frame.payload)
+			c.written(frame)
+			if err != nil {
+				c.abort()
+				return
+			}
+		default:
+			_ = c.socket.WriteClose(code, nil)
+			return
+		}
+	}
+}
+
+func (c *connection) respond(resp *chatimv1.ServerResponse) {
+	c.sendFrame(&chatimv1.ServerFrame{Frame: &chatimv1.ServerFrame_Response{Response: resp}}, sendResponse)
+}
+
+func (c *connection) enqueue(frame outFrame, kind sendKind) {
+	switch c.admit(frame) {
+	case admitOverBudget, admitQueueFull:
+		c.server.stats.sendDropped[kind].Add(1)
+	case admitted, admitDropped:
+	}
+}
+
+func (c *connection) tryEnqueue(frame outFrame) bool { return c.admit(frame) == admitted }
+
+func (c *connection) admit(frame outFrame) admission {
+	if !c.accepting() {
+		return admitDropped
+	}
+	size := int64(len(frame.payload))
+	c.queueMu.Lock()
+	defer c.queueMu.Unlock()
+	switch {
+	case c.sealed:
+		return admitDropped
+	case c.queuedBytes+size > int64(c.server.opts.SendQueueBytes):
+		return admitOverBudget
+	case !c.push(frame, size):
+		return admitQueueFull
+	}
+	return admitted
+}
+
+func (c *connection) offer(frame outFrame) bool {
+	if !c.accepting() {
+		return false
+	}
+	size := int64(len(frame.payload))
+	c.queueMu.Lock()
+	defer c.queueMu.Unlock()
+	switch {
+	case c.sealed, !c.belowHalf(len(c.out)+1, c.queuedBytes+size):
+		return false
+	}
+	return c.push(frame, size)
+}
+
+func (c *connection) drained() bool {
+	c.queueMu.Lock()
+	defer c.queueMu.Unlock()
+	return c.belowHalf(len(c.out), c.queuedBytes)
+}
+
+func (c *connection) belowHalf(frames int, bytes int64) bool {
+	return frames < c.server.opts.SendQueue/2 && bytes < int64(c.server.opts.SendQueueBytes/2)
+}
+
+func (c *connection) accepting() bool {
+	select {
+	case <-c.closed:
+		return false
+	default:
+	}
+	return c.closing.Load() == 0
+}
+
+func (c *connection) push(frame outFrame, size int64) bool {
+	select {
+	case c.out <- frame:
+		c.queuedBytes += size
+		c.server.stats.queuedBytes.Add(size)
+		return true
+	default:
+		return false
+	}
+}
+
+func (c *connection) written(frame outFrame) {
+	size := int64(len(frame.payload))
+	c.queueMu.Lock()
+	defer c.queueMu.Unlock()
+	if c.sealed {
+		return
+	}
+	c.queuedBytes -= size
+	c.server.stats.queuedBytes.Add(-size)
+}
+
+func (c *connection) sealQueue() {
+	c.queueMu.Lock()
+	defer c.queueMu.Unlock()
+	c.sealed = true
+	c.server.stats.queuedBytes.Add(-c.queuedBytes)
+	c.queuedBytes = 0
+}
+
+func (c *connection) closeWith(code uint16) {
+	if c.closing.CompareAndSwap(0, uint32(code)) {
+		c.closeReq <- code
+	}
+}
+
+func (c *connection) abort() {
+	c.aborted.Store(true)
+	_ = c.socket.NetConn().Close()
+}

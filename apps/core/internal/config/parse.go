@@ -127,15 +127,10 @@ func (p *parser) tenants(key string) []string {
 }
 
 func (p *parser) secret(key string) string {
-	fileKey := key + "_FILE"
-	path := os.Getenv(fileKey)
-	if path == "" {
-		return os.Getenv(key)
-	}
-	b, err := os.ReadFile(path)
+	v, err := envconfig.Secret(key)
 	if err != nil {
-		p.fail(fmt.Errorf("%s: %w", fileKey, err))
+		p.fail(err)
 		return ""
 	}
-	return strings.TrimRight(string(b), "\r\n")
+	return v
 }

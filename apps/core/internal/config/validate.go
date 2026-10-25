@@ -15,7 +15,7 @@ var (
 const stopPhases = "CORE_DRAIN_DELAY + CORE_GRPC_SHUTDOWN + 1s (sweeper) + max(PROJECTION_FETCH_WAIT, MENTION_FETCH_WAIT) + 1s (projections and mention) + 500ms + 1s (timer consumer) + CORE_REQUEST_DEADLINE (router drain) + " +
 	"2 x REDIS_OP_TIMEOUT (cid batcher drain) + FLUSH_INSERT_TIMEOUT (flusher drain) + CORE_PUBLISHER_DRAIN + 1s (state clear) + slot release + client close"
 
-const minAgeRule = "SWEEP_MIN_AGE must be longer than PUB_ACK_TIMEOUT + STATE_CLEAR_FLUSH + STATE_CLEAR_TIMEOUT"
+const minAgeRule = "SWEEP_MIN_AGE must be longer than PUB_ACK_TIMEOUT + STATE_CLEAR_FLUSH + STATE_CLEAR_TIMEOUT + READ_EVENT_WINDOW"
 
 type rule struct {
 	ok  bool
@@ -42,7 +42,7 @@ func (c Config) validate() error {
 		{c.Dedupe.Timeout <= c.RequestDeadline/10, "REDIS_OP_TIMEOUT must be at most a tenth of CORE_REQUEST_DEADLINE"},
 		{c.Actor.MaxGroup <= c.Flush.MaxBatch, "ACTOR_MAX_GROUP must not exceed FLUSH_MAX_BATCH"},
 		{c.Publish.AckTimeout < c.PublisherDrain, "PUB_ACK_TIMEOUT must be shorter than CORE_PUBLISHER_DRAIN"},
-		{c.Sweep.MinAge > c.Publish.AckTimeout+c.StateClear.Flush+c.StateClear.Timeout, minAgeRule},
+		{c.Sweep.MinAge > c.Publish.AckTimeout+c.StateClear.Flush+c.StateClear.Timeout+c.ReadBatch.Window, minAgeRule},
 		{c.Sweep.MinAge+c.Sweep.Interval < c.Stream.Duplicates, "SWEEP_MIN_AGE + SWEEP_INTERVAL must be shorter than EVT_STREAM_DUPLICATES"},
 		{c.Sweep.Lookback > c.RequestDeadline+sweepLookbackSlack, "SWEEP_LOOKBACK must be longer than CORE_REQUEST_DEADLINE + 10s"},
 		{c.Sweep.Lookback > c.Sweep.MinAge+sweepLookbackSlack, "SWEEP_LOOKBACK must be longer than SWEEP_MIN_AGE + 10s"},
@@ -75,11 +75,12 @@ func (c Config) componentErrors() []error {
 		{"TIMER_*, EVT_STREAM_REPLICAS", c.Timer.Validate()},
 		{"SLOT_*, CORE_ID", c.Slot.Validate()},
 		{"STATE_CLEAR_*", c.StateClear.Validate()},
+		{"READ_EVENT_WINDOW", c.ReadBatch.Validate()},
 		{"SWEEP_*, EVT_SUBJECT_ROOT, SLOT_TICK, PUB_ACK_TIMEOUT", c.Sweep.Validate()},
 		{"PROJECTION_*, EVT_STREAM, EVT_SUBJECT_ROOT", c.Projection.Validate()},
 		{"REACTION_EMOJIS, PIN_LIMIT", errors.Join(c.Interactions.Validate(), c.Messages.Validate())},
 		{"MEMBER_BATCH_MAX", c.Members.Validate()},
-		{"MENTION_*, NOTIFY_*", c.mentionErrors()},
+		{"MENTION_*", c.mentionErrors()},
 	}
 	var errs []error
 	for _, part := range parts {

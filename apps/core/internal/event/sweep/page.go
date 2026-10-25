@@ -88,11 +88,12 @@ func (s *Sweeper) collect(ctx context.Context, p *pageRun, i int, d store.Pendin
 }
 
 func (s *Sweeper) enqueue(ctx context.Context, p *pageRun, i int, room uint64, ev *chatimv1.Event) {
-	target, ok := publish.StateTargetOf(ev)
-	if !ok || target.Collection != p.coll {
+	targets := publish.StateTargetsOf(ev)
+	if len(targets) != 1 || targets[0].Collection != p.coll {
 		s.fail(ctx, p, i, rebuildFailedMsg, errNoTarget)
 		return
 	}
+	target := targets[0]
 	msg, err := publish.Message(s.cfg.SubjectRoot, room, ev)
 	if err != nil {
 		s.drop(ctx, p, i, target, err)

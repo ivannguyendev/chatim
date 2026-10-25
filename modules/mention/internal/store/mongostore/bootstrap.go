@@ -7,6 +7,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"github.com/ivannguyendev/chatim/pkg/mongoindex"
 )
 
 const (
@@ -17,7 +19,19 @@ const (
 	mentionReadIndex     = "room_id_1_target_1_thread_root_1_seq_1"
 )
 
-func Bootstrap(ctx context.Context, db *mongo.Database) error {
+func Indexes() mongoindex.Catalog {
+	return mongoindex.Catalog{
+		Collections: []mongoindex.Collection{
+			{Name: mentionsCollection, Indexes: mentionIndexes()},
+			{Name: roomsCollection},
+			{Name: userGroupsCollection, Indexes: []mongo.IndexModel{{Keys: groupMembersIndexKeys()}}},
+			{Name: groupsCollection},
+		},
+		Replacements: []mongoindex.Replacement{{Collection: mentionsCollection, Old: mentionReadIndex, OldKeys: mentionReadKeys()}},
+	}
+}
+
+func Bootstrap(ctx context.Context, db *mongo.Database, reporters ...mongoindex.Reporter) error {
 	for _, name := range []string{mentionsCollection, userGroupsCollection, groupsCollection} {
 		if err := ensureClustered(ctx, db, name); err != nil {
 			return err
@@ -26,13 +40,11 @@ func Bootstrap(ctx context.Context, db *mongo.Database) error {
 	if err := createCollection(ctx, db, roomsCollection); err != nil {
 		return err
 	}
-	if err := ensureIndexes(ctx, db, mentionsCollection, mentionIndexes()); err != nil {
-		return err
-	}
-	if err := ensureIndexes(ctx, db, userGroupsCollection, []mongo.IndexModel{{Keys: groupMembersIndexKeys()}}); err != nil {
-		return err
-	}
-	return dropIndex(ctx, db.Collection(mentionsCollection), mentionReadIndex)
+	return mongoindex.Ensure(ctx, db, Indexes(), reporters...)
+}
+
+func mentionReadKeys() bson.D {
+	return bson.D{{Key: "room_id", Value: 1}, {Key: "target", Value: 1}, {Key: "thread_root", Value: 1}, {Key: "seq", Value: 1}}
 }
 
 func mentionIndexes() []mongo.IndexModel {
@@ -72,20 +84,6 @@ func clusteredOnID(opts bson.Raw) bool {
 func createCollection(ctx context.Context, db *mongo.Database, name string, opts ...options.Lister[options.CreateCollectionOptions]) error {
 	if err := db.CreateCollection(ctx, name, opts...); err != nil && !hasCode(err, namespaceExistsCode) {
 		return fmt.Errorf("bootstrap %s: create collection: %w", name, err)
-	}
-	return nil
-}
-
-func ensureIndexes(ctx context.Context, db *mongo.Database, coll string, models []mongo.IndexModel) error {
-	if _, err := db.Collection(coll).Indexes().CreateMany(ctx, models); err != nil {
-		return fmt.Errorf("bootstrap %s: create indexes: %w", coll, err)
-	}
-	return nil
-}
-
-func dropIndex(ctx context.Context, coll *mongo.Collection, name string) error {
-	if err := coll.Indexes().DropOne(ctx, name); err != nil && !hasCode(err, indexNotFoundCode) {
-		return fmt.Errorf("bootstrap %s: drop index %s: %w", coll.Name(), name, err)
 	}
 	return nil
 }

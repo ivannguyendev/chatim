@@ -73,9 +73,11 @@ type options struct {
 	policy       access.Policy
 	sendPol      access.Policy
 	events       member.EventPublisher
+	reads        member.ReadSink
 	limits       interaction.Limits
 	memberLimits member.Limits
 	members      func(*memstore.Rooms) member.MemberStore
+	memberReads  func(*memstore.Rooms) member.MemberLister
 	pending      dedupe.Registry
 	pages        func(message.Pages) message.Pages
 }

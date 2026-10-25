@@ -19,7 +19,7 @@ func (c *Client) GetReplies(ctx context.Context, req *chatimv1.GetRepliesRequest
 }
 
 func (c *Client) ListBookmarks(ctx context.Context, req *chatimv1.ListBookmarksRequest) (*chatimv1.ListBookmarksResponse, Stats, error) {
-	return call(ctx, c, c.loc.AnyAddr, retryIdempotent, func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.ListBookmarksResponse, error) {
+	return anyCore(ctx, c, func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.ListBookmarksResponse, error) {
 		return api.ListBookmarks(ctx, req)
 	})
 }

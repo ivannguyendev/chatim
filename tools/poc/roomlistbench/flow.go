@@ -6,6 +6,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/ivannguyendev/chatim/pkg/coreroute"
 	"github.com/ivannguyendev/chatim/tools/internal/route"
 )
 
@@ -52,7 +53,7 @@ func seed(ctx context.Context, cl *route.Client, probe *mongoProbe, c config, ru
 }
 
 func measureAll(ctx context.Context, probe *mongoProbe, c config, users []*benchUser) error {
-	api, closer, err := route.DialInsecure(c.core)
+	api, closer, err := coreroute.DialInsecure(c.core)
 	if err != nil {
 		return err
 	}

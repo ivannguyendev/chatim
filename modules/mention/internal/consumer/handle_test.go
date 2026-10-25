@@ -37,7 +37,7 @@ func TestCreatedNotifiesEveryRecipientAndRaisesSharedTime(t *testing.T) {
 		if acks, _, _ := d.settled(); acks != 1 {
 			t.Fatalf("acks %d, want 1", acks)
 		}
-		want := []string{"notify.t1.Hoa.mention 777-0-41-Hoa-m0", "notify.t1.Minh.mention 777-0-41-Minh-m0"}
+		want := []string{"websocket.publish.t1 777-0-41-m0-g:sale Hoa", "websocket.publish.t1 777-0-41-m0-u:Minh Minh"}
 		if got := r.js.published(); !slices.Equal(got, want) {
 			t.Errorf("published %v, want %v", got, want)
 		}
@@ -57,7 +57,7 @@ func TestEditNotifiesAddedAndRetractsDropped(t *testing.T) {
 		now := time.Now()
 		d := delivery(t, edited(41, 1, now, []*chatimv1.MentionTarget{user("Hoa", now)}, user("Minh", now.Add(-time.Minute))), 1)
 		runOnce(t, r, cfg(), d)
-		want := []string{"notify.t1.Hoa.mention 777-0-41-Hoa-m1", "notify.t1.Minh.mention 777-0-41-Minh-r1"}
+		want := []string{"websocket.publish.t1 777-0-41-m1-u:Hoa Hoa", "websocket.publish.t1 777-0-41-r1-edited Minh"}
 		if got := r.js.published(); !slices.Equal(got, want) {
 			t.Errorf("published %v, want %v", got, want)
 		}

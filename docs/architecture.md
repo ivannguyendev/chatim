@@ -1,8 +1,8 @@
 # chatim — Kiến trúc hệ thống (Single Source of Truth)
 
 > Ngày cập nhật: 2026-10-17 · Trạng thái: **Nguồn sự thật duy nhất (SSOT)** cho toàn bộ quy chuẩn kiến trúc của `chatim`.
-> Nhật ký 176 quyết định kỹ thuật: [docs/decision-log.md](./decision-log.md) (D1–D176). Danh mục event (core phát gì, ai nhận gì): [docs/events.md](./events.md).
-> Đặc tả chi tiết 10 Module tính năng (How-It-Works & Flowcharts): [docs/modules/README.md](./modules/README.md).
+> Nhật ký 198 quyết định kỹ thuật: [docs/decision-log.md](./decision-log.md) (D1–D198). Danh mục event (core phát gì, ai nhận gì): [docs/events.md](./events.md).
+> Đặc tả chi tiết 11 Module tính năng (How-It-Works & Flowcharts): [docs/modules/README.md](./modules/README.md).
 > Lộ trình phát triển các Milestone: [docs/roadmap.md](./roadmap.md).
 
 ---
@@ -13,18 +13,19 @@
 
 ### 1.1 Phạm vi Phase 1
 - `core`: room, member, message, tương tác, cấp seq, lưu trữ MongoDB, phát event NATS JetStream.
-- `websocket`: giữ kết nối WebSocket (gws), đẩy event realtime (chưa xây).
+- `websocket`: giữ kết nối WebSocket (gws), kiểm token, chuyển lệnh tới core (phần 1 đã xây trên `feat/m4`, D183–D188); đẩy event realtime: mỗi node đọc `CHATIM_EVT` và hộp thư `websocket.publish.{t}` (`CHATIM_WS`) bằng ordered consumer, lọc theo room trong RAM (phần 2 đã xây trên `feat/m4`, D189–D195). Từ phần gateway chỉ còn 12 lệnh ghi realtime (D198).
+- `gateway`: HTTPS (Connect trên HTTP/1.1 và h2c, TLS ở load balancer) cho 22 lệnh tải dữ liệu và quản lý room (14 đọc, 8 quản lý); kiểm Bearer JWT như websocket, gọi core bất kỳ (round robin, không Redis, không slot), giới hạn theo user trên mỗi node; đã xây trên `feat/m4` (D197, D198). Đường của máy: ghi realtime và nhận event qua WebSocket, tải dữ liệu và quản lý qua HTTPS; thay đổi do HTTPS gây ra vẫn tới người khác qua event trên WebSocket.
 - Room: DM (1-1), group ≤5K member. Channel ~200K subscriber (chỉ admin post) vào backlog (owner 2026-10-19, D178).
-- Exit Phase 1: `core` + `mention` + `websocket` đạt `prod-like validated`; go-live sau khi có `identity` (D178, [tóm tắt](plans/2026-10-19-phase1-exit-summary.md)).
+- Exit Phase 1: `core` + `mention` + `websocket` + `gateway` đạt `prod-like validated`; go-live sau khi có `identity` (D178, [tóm tắt](plans/2026-10-19-phase1-exit-summary.md)).
 - Tin nhắn: gửi, sửa (có lịch sử), xoá cho mọi người / phía tôi, trả lời (quote), chuyển tiếp (forward).
 - Tương tác: reaction, vị trí đọc + unread, typing, presence, thread, mention, ghim (pin), bookmark, đánh dấu chưa đọc.
 - Ranh giới trách nhiệm:
   - Core cung cấp API dữ liệu (gửi, đọc, sửa, xoá, lịch sử, reaction, vị trí đọc…) và phát event.
   - Client lấy danh sách hội thoại thẳng từ Core; Core xếp danh sách theo tin mới nhất và đếm unread lúc đọc (M3, D120–D123).
-  - Mention App (module nhúng `modules/mention`, D182; D162–D176, đã merge `main` PR #16, trước M4): ghi mention, `ListMentions`, thành viên nhóm và danh mục nhóm được tag, dữ liệu gợi ý `@nhóm` theo room, bung `@nhóm`/`@all` và gửi thông báo theo người lên `CHATIM_NOTIFY`; hiện chạy nhúng trong core (core chỉ import package công khai `modules/mention/mentionapp`; app đọc core qua cổng `CoreReader` trong tiến trình); giữ nhúng (owner 2026-10-19, D177): chỉ tách khi có team, SLA, nhịp release hoặc nhu cầu scale riêng có số đo, hoặc database riêng + CDC, và khi tách thì app tự sở hữu dữ liệu, chỉ gọi core qua API, không đọc chung bảng. Lọc tắt thông báo và giao tới máy thuộc app notification (websocket M4, `push` Phase 2). Dấu `@` trên danh sách hội thoại, sync token, đa thiết bị: làm sau.
+  - Mention App (module nhúng `modules/mention`, D182; D162–D176, đã merge `main` PR #16, trước M4): ghi mention, `ListMentions`, thành viên nhóm và danh mục nhóm được tag, dữ liệu gợi ý `@nhóm` theo room, bung `@nhóm`/`@all` và gửi thông báo dạng gói `WsPublish` (nội dung một lần + danh sách người nhận) vào `websocket.publish.{t}` trên `CHATIM_WS` (D192); hiện chạy nhúng trong core (core chỉ import package công khai `modules/mention/mentionapp`; app đọc core qua cổng `CoreReader` trong tiến trình); giữ nhúng (owner 2026-10-19, D177): chỉ tách khi có team, SLA, nhịp release hoặc nhu cầu scale riêng có số đo, hoặc database riêng + CDC, và khi tách thì app tự sở hữu dữ liệu, chỉ gọi core qua API, không đọc chung bảng. Lọc tắt thông báo và giao tới máy thuộc app notification (websocket M4, `push` Phase 2). Dấu `@` trên danh sách hội thoại, sync token, đa thiết bị: làm sau.
 
 ### 1.2 Ngoài phạm vi Phase 1 (Non-goals)
-Phase 2 (owner 2026-10-19, D179–D180): `identity`, `identity-verifier`, `gateway` (REST + webhook), `notification` (+ push), `search`, `migrator`, media qua presigned URL. Backlog: channel, sync token D74, đa thiết bị. Ngoài phạm vi: API import trong core, E2EE, voice/video, admin UI. Xem [roadmap](./roadmap.md).
+Phase 2 (owner 2026-10-19, D179–D180): `identity`, `identity-verifier`, mở rộng `gateway` (REST + webhook cho hệ thống khác, API key; phần HTTPS cho máy đã ở Phase 1, D198), `notification` (+ push), `search`, `migrator`, media qua presigned URL. Backlog: channel, sync token D74, đa thiết bị. Ngoài phạm vi: API import trong core, E2EE, voice/video, admin UI. Xem [roadmap](./roadmap.md).
 
 ### 1.3 Mục tiêu quy mô (Scale)
 - ~100K kết nối đồng thời (CCU).
@@ -80,9 +81,9 @@ Mọi thiết kế và dòng code trong `chatim` bắt buộc phải tuân thủ
 | **Tập (target, user)** | `message_interactions` (reaction, bookmark, reply doc); `members` | Một ghi theo khoá unique `_id` + `ver`. Cùng giá trị giữ nguyên; gỡ/rời để lại tombstone `state = 2`. Lệnh owner = 1 transaction (D100). | Id `{target}-{user}-v{ver}`; bit trên doc, xoá có điều kiện `ver`; doc hiện tại thắng. | Sweeper phát lại doc hiện tại; chỉ trạng thái cuối được bảo đảm. |
 | **Aggregate theo target** | Số emoji trên tin (`rx`), số trả lời (`rc`), `member_count` | `$inc` delta thực tế + Phiếu hẹn sinh tồn (D111). Số đếm lưu không kẹp (unclamped), kẹp lúc đọc. | `counts_changed`, `member_count_changed` (bit 2/4 trên `messages`, bit 2 trên `rooms`, xoá theo version). | Phiếu bật trên `CHATIM_TIMER`: consumer `timer-due` chạy `count_repair` / `member_count_repair` đếm lại + CAS version kèm bit. Vận hành qua `/app recount`. |
 | **Giá trị theo người đọc** | Unread, cờ đã đọc mention, view ẩn/xoá, danh sách `ListMyRooms` | Không lưu kết quả; tính lúc đọc từ fact thưa (`hidden`), mốc `cleared_at` và cache đuôi room (D123, D137). | Unread/Danh sách: không event. Ẩn/Clear: `message_hidden`, `history_cleared`. | Sweeper phát lại trạng thái hiện tại; Client tải lại khi reconnect. |
-| **Vị trí đọc** | `members.read_seq` + `read_ver`; cài đặt `preference_ver` | Cập nhật doc người đọc, không đụng `ver`: `MarkRead` nâng khi `read_seq < seq`, tăng `read_ver + 1`. `SetRoomPreferences` tăng `preference_ver + 1`. | `read_updated` không coalesce; `room_preferences_changed`. | Bit 2/8 trên `members`, xoá theo `read_ver`/`preference_ver`; sweeper phát lại trạng thái hiện tại. |
+| **Vị trí đọc** | `members.read_seq` + `read_ver`; cài đặt `preference_ver` | Cập nhật doc người đọc, không đụng `ver`: `MarkRead` nâng khi `read_seq < seq`, tăng `read_ver + 1`. `SetRoomPreferences` tăng `preference_ver + 1`. | `read_positions`: core gom theo room mỗi `READ_EVENT_WINDOW` (1s), mỗi user một dòng, tối đa 1.000 dòng mỗi event, id theo nội dung (D196); `room_preferences_changed`. | Bit 2/8 trên `members`, xoá theo `read_ver`/`preference_ver`; sweeper phát lại trạng thái hiện tại. |
 | **Sổ nhận chỗ** | `room_dms`: một room DM mỗi cặp user (D117) | Upsert `$setOnInsert` theo `_id` unique duy nhất; người tới sau nhận lại phòng đã có. Bước đảm bảo chạy lại an toàn. | Không event riêng; thuộc room/member tạo tương ứng. | Lần mở sau hoàn tất bước dở; số member qua phiếu hẹn sinh tồn. |
-| **Ephemeral** | Typing, presence | Không lưu DB; truyền trực tiếp qua WebSocket ↔ NATS. | Subject `live.*.eph.*` | Mất khi rớt mạng, không cần phục hồi. |
+| **Ephemeral** | Typing, presence | Không lưu DB, không qua core (M4 phần 4). Typing: node websocket ↔ core NATS thường, bắn rồi quên (D199). Presence: khoá có hạn do node của người đó đóng dấu theo heartbeat trong Redis riêng `chatim-redis-presence`, người hỏi đọc mỗi heartbeat của mình (D200, D201). | Typing: subject `eph.{tenant}.{room}.typing`. Presence: khoá Redis `chatim:presence:{tenant}:{user}` `EX` 15s, không qua NATS | Mất khi rớt mạng, không cần phục hồi: máy tắt "đang gõ" sau 6s, khoá hết hạn thì offline. |
 
 ---
 
@@ -139,9 +140,10 @@ flowchart TD
     AppMention["Mention App (nhúng trong core)"]
 
     subgraph Platform["Hạ tầng Nền tảng chatim"]
-        AppWebsocket["App websocket (gws Gateway)"]
+        AppWebsocket["App websocket (gws, 12 lệnh ghi realtime)"]
+        AppGateway["App gateway (HTTPS Connect, 22 lệnh đọc và quản lý)"]
         AppCore["Core (Business Logic & Storage Engine)"]
-        NATS[("NATS JetStream<br/>CHATIM_EVT, CHATIM_TIMER, CHATIM_NOTIFY")]
+        NATS[("NATS JetStream<br/>CHATIM_EVT, CHATIM_TIMER, CHATIM_WS")]
         RedisState[("Redis State<br/>Slot soft-leases")]
         RedisDedupe[("Redis Dedupe<br/>CID, request_id")]
         MongoDB[("MongoDB Replica Set<br/>Clustered Collections")]
@@ -150,6 +152,8 @@ flowchart TD
     Client -.->|1. Lấy JWT| AppAuth
     Client <-->|2. WebSocket| AppWebsocket
     AppWebsocket -->|3. gRPC Unary theo Slot| AppCore
+    Client -->|2b. HTTPS Bearer JWT| AppGateway
+    AppGateway -->|3b. gRPC Unary core bất kỳ, round robin| AppCore
     AppCore -->|4. Ghi Fact & State kèm cờ _state| MongoDB
     AppCore <-->|5. Thuê Slot 1024| RedisState
     AppCore <-->|6. Bỏ trùng CID & request_id| RedisDedupe
@@ -159,7 +163,7 @@ flowchart TD
     NATS -->|live.{t}.*.{rid}.>| AppWebsocket
     NATS -.->|Subscribe| AppPush
     NATS -.->|"evt.*.mention.*.msg_created, msg_edited/deleted"| AppMention
-    AppMention -.->|"notify.{t}.{user}.mention"| NATS
+    AppMention -.->|"WsPublish websocket.publish.{t}"| NATS
     NATS -.->|Subscribe| AppEvents
 ```
 
@@ -190,7 +194,7 @@ apps/core/
     model/         dùng chung: domain (entity, luật), access (Policy, Checker), pbconv
     store/         dùng chung: store ports, mongostore, memstore, storetest
     event/         dùng chung: publish, stateclear, projection, sweep, timer, eventkit, resync
-    platform/      dùng chung: slot manager, metrics registry, redisguard, testlog
+    platform/      dùng chung: slot manager, redisguard, testlog
 
 modules/mention/
   mentionapp/      bề mặt công khai core import: Config, Deps, New, Prepare, Run, Close, Register, Watch, Probes; cổng CoreReader
@@ -230,16 +234,17 @@ flowchart TB
 - **Hai cụm Redis độc lập (D44):**
   - `chatim-redis` (State): Chỉ dùng cho Slot Manager thuê 1024 slot (`noeviction`, AOF everysec).
   - `chatim-redis-dedupe` (Dedupe): Dùng cho CID dedupe và `request_id` (`allkeys-lru`, không lưu đĩa). Từ M3.1 không còn bitmap ack mark `chatim:evtack:*`; event chờ phát nằm trong `_state` trên doc.
+- **Redis presence của websocket (M4 phần 4, D200):** `chatim-redis-presence` chỉ giữ khoá online `chatim:presence:{tenant}:{user}` có hạn 15s (`noeviction`, không lưu đĩa); một primary, không Redis Cluster vì `MGET` nhiều khoá. Core không dùng nó.
 - **NATS JetStream:**
   - `CHATIM_EVT`: Kênh phát live events 7 ngày, id tự nhiên, receiver bỏ trùng.
   - Một consumer durable `projections` trên `CHATIM_EVT` (lọc `evt.>`, ack từng tin, `MaxAckPending` = 4 × lô), chỉ core giữ slot 0 fetch (lô 8192, chờ 3s: cửa sổ 3s gom ghi `rooms` theo room để CPU Mongo ngang engine cũ), chia mỗi lô cho hai handler `room_activity`, `reply_index` (chỉ phần trả lời); tin lỗi Nak riêng, giãn dần 5s/30s/2m/10m. Các durable cũ (gồm `projection-mention_read`) bị xoá lúc khởi động.
   - Mention App (D170, D171, D173): `msg_created` của tin có mention phát ở `evt.{t}.mention.{rid}.msg_created`; consumer durable `mention` chỉ lọc 3 subject (tin có mention, `msg_edited`, `msg_deleted`), queue group: mọi core cùng kéo, không leader, lô 512/250ms, 8 worker mỗi core, `InProgress` mỗi 10s cho lô chậm; event tự đủ (`at` cho từng đích, `previous_mentions` trên sửa/xoá) nên xử lý lệch thứ tự vẫn đúng. Không có chỗ nào xử lý nối tiếp: thêm core là thêm thông lượng.
-  - `CHATIM_NOTIFY`: thông báo theo người `notify.{t}.{user}.mention` (`mention_notified`, `mention_retracted`), giữ 24h, bỏ trùng 6 phút; Mention App publish trên client JetStream riêng. Chi tiết: [events.md](./events.md).
+  - `CHATIM_WS`: hộp thư của websocket `websocket.publish.{t}`, gói `WsPublish` (nội dung một lần + danh sách người nhận, D192); Mention App phát `mention_notified`/`mention_retracted` trên client JetStream riêng; giữ 24h, bỏ trùng 6 phút. `CHATIM_NOTIFY` (`notify.{t}.{kind}`) để dành cho app notification Phase 2. Chi tiết: [events.md](./events.md).
   - `CHATIM_TIMER`: stream phiếu hẹn sinh tồn (WorkQueue, message schedule): phiếu đặt ở `timer.arm.*`, tới hạn sang `timer.due`, một consumer `timer-due` dùng chung (D152). Thay `CHATIM_WORK` (đã bỏ).
 - **MongoDB:** Replica Set 3 node, `w:majority` cho mọi lệnh ghi bền vững.
 
 ### 7.2 Vòng đời Core (Lifecycle & Graceful Shutdown)
-- **Thứ tự Boot:** Publisher → Hàng xoá cờ (`stateclear`) → Flusher → CID Batcher → Slot Router → Slot Manager → Consumer phiếu hẹn (`timer-due`) → Consumer `projections` → Consumer `mention` (Mention App, khi `MENTION_ENABLED`) → Sweeper (chỉ làm việc khi giữ slot 0) → Watchers (`memberwatch`, `roomcache.Watch`, watch tập nhóm theo room) → Mở cổng gRPC (`CoreService` và `MentionService`). Trước đó `prepare` chạy bootstrap của Mention App, tạo `CHATIM_NOTIFY` và consumer `mention`.
+- **Thứ tự Boot:** Publisher → Hàng xoá cờ (`stateclear`) → Flusher → CID Batcher → Slot Router → Slot Manager → Consumer phiếu hẹn (`timer-due`) → Consumer `projections` → Consumer `mention` (Mention App, khi `MENTION_ENABLED`) → Sweeper (chỉ làm việc khi giữ slot 0) → Watchers (`memberwatch`, `roomcache.Watch`, watch tập nhóm theo room) → Mở cổng gRPC (`CoreService` và `MentionService`). Trước đó `prepare` chạy bootstrap của Mention App, tạo `CHATIM_WS` và consumer `mention`.
 - **Thứ tự Dừng:** Bật `/readyz` false → Drain gRPC → Dừng Sweeper → Dừng Consumer projection và Consumer `mention` song song → Dừng Consumer phiếu hẹn → Unsubscribe Watchers → Dừng Router → Flush CID Batcher → Flusher → Publisher → Xả hàng xoá cờ (1s; phần còn lại sweeper phát bù) → Nhả Slots → Đóng Clients (kế hoạch mặc định 29,7s trong `CORE_SHUTDOWN_BUDGET = 30s`; pha projection và `mention` dài `max(PROJECTION_FETCH_WAIT, MENTION_FETCH_WAIT)` + 1s = 4s, consumer phiếu hẹn 500ms + 1s, vì lần fetch dở không huỷ được).
 - **CLI Subcommands:** `/app resync` (bật lại cờ `_state` của doc trong khoảng để sweeper phát lại; sau khi purge stream phải chờ qua `EVT_STREAM_DUPLICATES`, D155) và `/app recount -room ID` (đếm lại `member_count`, CAS kèm bit 2, publish rồi xoá cờ).
 
@@ -280,7 +285,7 @@ Mỗi cam kết hệ thống bắt buộc phải đi kèm với Detector đo lư
 
 ---
 
-## 9. Bản đồ 10 Module tính năng chi tiết
+## 9. Bản đồ 11 Module tính năng chi tiết
 
 Toàn bộ chi tiết kỹ thuật vận hành (How-It-Works), sơ đồ Mermaid trình tự gọi lệnh, cấu trúc payload và mã lỗi từng tính năng được phân rã độc lập trong thư mục [`docs/modules/`](./modules/README.md):
 
@@ -296,10 +301,11 @@ Toàn bộ chi tiết kỹ thuật vận hành (How-It-Works), sơ đồ Mermaid
 | **08** | History & Reconnect Sync | [08-feature-history-retrieval-and-sync.md](./modules/08-feature-history-retrieval-and-sync.md) | Phân trang theo `seq` (`LATEST`/`OLDEST`/`BEFORE`/`AFTER`/`AROUND`), View pipeline che tin nhạy cảm. |
 | **09** | Realtime Delivery & Ephemeral | [09-feature-realtime-delivery-and-ephemeral.md](./modules/09-feature-realtime-delivery-and-ephemeral.md) | WebSocket gws, dynamic interest routing NATS, typing/presence. |
 | **10** | Reconciliation & Self-Healing | [10-feature-data-reconciliation-and-repair.md](./modules/10-feature-data-reconciliation-and-repair.md) | Cờ `_state` trên doc, xoá cờ sau PubAck, sweeper slot 0, consumer `projections` (2 handler), phiếu hẹn `CHATIM_TIMER`, resync/recount. |
+| **11** | HTTPS Gateway | [11-feature-https-gateway.md](./modules/11-feature-https-gateway.md) | App `gateway` (D198): 22 lệnh đọc và quản lý qua HTTPS (Connect), Bearer JWT, core bất kỳ round robin, giới hạn theo user, CORS.
 
 ---
 
 ## 10. Tra cứu Quyết định Kỹ thuật (Decision Log)
 
 Mọi quyết định lựa chọn giải pháp kỹ thuật, đánh đổi (trade-offs), phương án bị loại bỏ (rejected alternatives) từ ngày đầu dự án đến Mention App hiện tại được lưu trữ đầy đủ tại:
-👉 **[Architecture Decision Records (D1–D176)](./decision-log.md)**
+👉 **[Architecture Decision Records (D1–D198)](./decision-log.md)**

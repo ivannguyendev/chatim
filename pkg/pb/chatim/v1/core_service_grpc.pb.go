@@ -23,6 +23,7 @@ const (
 	CoreService_OpenDirectRoom_FullMethodName      = "/chatim.v1.CoreService/OpenDirectRoom"
 	CoreService_ListMyRooms_FullMethodName         = "/chatim.v1.CoreService/ListMyRooms"
 	CoreService_GetRooms_FullMethodName            = "/chatim.v1.CoreService/GetRooms"
+	CoreService_ListMyRoomIDs_FullMethodName       = "/chatim.v1.CoreService/ListMyRoomIDs"
 	CoreService_UpdateRoom_FullMethodName          = "/chatim.v1.CoreService/UpdateRoom"
 	CoreService_SetRoomPreferences_FullMethodName  = "/chatim.v1.CoreService/SetRoomPreferences"
 	CoreService_SendMessage_FullMethodName         = "/chatim.v1.CoreService/SendMessage"
@@ -61,6 +62,7 @@ type CoreServiceClient interface {
 	OpenDirectRoom(ctx context.Context, in *OpenDirectRoomRequest, opts ...grpc.CallOption) (*OpenDirectRoomResponse, error)
 	ListMyRooms(ctx context.Context, in *ListMyRoomsRequest, opts ...grpc.CallOption) (*ListMyRoomsResponse, error)
 	GetRooms(ctx context.Context, in *GetRoomsRequest, opts ...grpc.CallOption) (*GetRoomsResponse, error)
+	ListMyRoomIDs(ctx context.Context, in *ListMyRoomIDsRequest, opts ...grpc.CallOption) (*ListMyRoomIDsResponse, error)
 	UpdateRoom(ctx context.Context, in *UpdateRoomRequest, opts ...grpc.CallOption) (*UpdateRoomResponse, error)
 	SetRoomPreferences(ctx context.Context, in *SetRoomPreferencesRequest, opts ...grpc.CallOption) (*SetRoomPreferencesResponse, error)
 	SendMessage(ctx context.Context, in *SendMessageRequest, opts ...grpc.CallOption) (*SendMessageResponse, error)
@@ -133,6 +135,16 @@ func (c *coreServiceClient) GetRooms(ctx context.Context, in *GetRoomsRequest, o
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetRoomsResponse)
 	err := c.cc.Invoke(ctx, CoreService_GetRooms_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) ListMyRoomIDs(ctx context.Context, in *ListMyRoomIDsRequest, opts ...grpc.CallOption) (*ListMyRoomIDsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListMyRoomIDsResponse)
+	err := c.cc.Invoke(ctx, CoreService_ListMyRoomIDs_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -427,6 +439,7 @@ type CoreServiceServer interface {
 	OpenDirectRoom(context.Context, *OpenDirectRoomRequest) (*OpenDirectRoomResponse, error)
 	ListMyRooms(context.Context, *ListMyRoomsRequest) (*ListMyRoomsResponse, error)
 	GetRooms(context.Context, *GetRoomsRequest) (*GetRoomsResponse, error)
+	ListMyRoomIDs(context.Context, *ListMyRoomIDsRequest) (*ListMyRoomIDsResponse, error)
 	UpdateRoom(context.Context, *UpdateRoomRequest) (*UpdateRoomResponse, error)
 	SetRoomPreferences(context.Context, *SetRoomPreferencesRequest) (*SetRoomPreferencesResponse, error)
 	SendMessage(context.Context, *SendMessageRequest) (*SendMessageResponse, error)
@@ -476,6 +489,9 @@ func (UnimplementedCoreServiceServer) ListMyRooms(context.Context, *ListMyRoomsR
 }
 func (UnimplementedCoreServiceServer) GetRooms(context.Context, *GetRoomsRequest) (*GetRoomsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetRooms not implemented")
+}
+func (UnimplementedCoreServiceServer) ListMyRoomIDs(context.Context, *ListMyRoomIDsRequest) (*ListMyRoomIDsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListMyRoomIDs not implemented")
 }
 func (UnimplementedCoreServiceServer) UpdateRoom(context.Context, *UpdateRoomRequest) (*UpdateRoomResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateRoom not implemented")
@@ -650,6 +666,24 @@ func _CoreService_GetRooms_Handler(srv interface{}, ctx context.Context, dec fun
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(CoreServiceServer).GetRooms(ctx, req.(*GetRoomsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_ListMyRoomIDs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListMyRoomIDsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).ListMyRoomIDs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_ListMyRoomIDs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).ListMyRoomIDs(ctx, req.(*ListMyRoomIDsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1180,6 +1214,10 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetRooms",
 			Handler:    _CoreService_GetRooms_Handler,
+		},
+		{
+			MethodName: "ListMyRoomIDs",
+			Handler:    _CoreService_ListMyRoomIDs_Handler,
 		},
 		{
 			MethodName: "UpdateRoom",

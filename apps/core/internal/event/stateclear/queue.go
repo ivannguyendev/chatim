@@ -70,6 +70,27 @@ func (q *Queue) Add(t store.StateTarget) {
 	}
 }
 
+func (q *Queue) AddAll(targets []store.StateTarget) {
+	if len(targets) == 0 {
+		return
+	}
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+	if q.closed {
+		q.dropped.Add(uint64(len(targets)))
+		return
+	}
+	for i, t := range targets {
+		select {
+		case q.in <- t:
+		default:
+			q.dropped.Add(uint64(len(targets[i:])))
+			q.full.Warn(context.Background(), "pending state clear queue full; dropping clears", "capacity", q.cfg.Queue)
+			return
+		}
+	}
+}
+
 func (q *Queue) Close(ctx context.Context) error {
 	q.mu.Lock()
 	if !q.closed {

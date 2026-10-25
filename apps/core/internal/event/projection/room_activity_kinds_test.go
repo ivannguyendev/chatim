@@ -70,8 +70,8 @@ var kindCases = []kindCase{
 	{name: "member_count_changed", set: func(ev *chatimv1.Event) {
 		ev.Payload = &chatimv1.Event_MemberCountChanged{MemberCountChanged: &chatimv1.MemberCountChanged{}}
 	}},
-	{name: "read_updated", set: func(ev *chatimv1.Event) {
-		ev.Payload = &chatimv1.Event_ReadUpdated{ReadUpdated: &chatimv1.ReadUpdated{}}
+	{name: "read_positions", set: func(ev *chatimv1.Event) {
+		ev.Payload = &chatimv1.Event_ReadPositions{ReadPositions: &chatimv1.ReadPositions{}}
 	}},
 	{name: "message_hidden", set: func(ev *chatimv1.Event) {
 		ev.Payload = &chatimv1.Event_MessageHidden{MessageHidden: &chatimv1.MessageHidden{}}
@@ -130,9 +130,9 @@ func TestRoomActivityMapsEachListedKindToItsActivity(t *testing.T) {
 
 func TestRoomActivityDropsAKindItDoesNotSubscribe(t *testing.T) {
 	w := &fakeWriter{}
-	errs := projection.NewRoomActivity(w).Handle(t.Context(), []projection.Event{decoded(t, readUpdated(roomA, at(1)))})
+	errs := projection.NewRoomActivity(w).Handle(t.Context(), []projection.Event{decoded(t, readPositions(roomA, at(1)))})
 	if len(errs) != 1 || !eventkit.Gone(errs[0]) {
-		t.Fatalf("Handle(read_updated) = %v, want one error that drops the event", errs)
+		t.Fatalf("Handle(read_positions) = %v, want one error that drops the event", errs)
 	}
 	if len(w.touched()) != 0 {
 		t.Errorf("touched %v for an unsubscribed kind, want no write", w.touched())

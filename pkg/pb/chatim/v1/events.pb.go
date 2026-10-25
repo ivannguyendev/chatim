@@ -46,13 +46,13 @@ type Event struct {
 	//	*Event_MemberRemoved
 	//	*Event_MemberRoleChanged
 	//	*Event_MemberCountChanged
-	//	*Event_ReadUpdated
 	//	*Event_MemberPriorityChanged
 	//	*Event_MessageHidden
 	//	*Event_HistoryCleared
 	//	*Event_BookmarkChanged
 	//	*Event_RoomUpdated
 	//	*Event_RoomPreferencesChanged
+	//	*Event_ReadPositions
 	Payload       isEvent_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -259,15 +259,6 @@ func (x *Event) GetMemberCountChanged() *MemberCountChanged {
 	return nil
 }
 
-func (x *Event) GetReadUpdated() *ReadUpdated {
-	if x != nil {
-		if x, ok := x.Payload.(*Event_ReadUpdated); ok {
-			return x.ReadUpdated
-		}
-	}
-	return nil
-}
-
 func (x *Event) GetMemberPriorityChanged() *MemberPriorityChanged {
 	if x != nil {
 		if x, ok := x.Payload.(*Event_MemberPriorityChanged); ok {
@@ -317,6 +308,15 @@ func (x *Event) GetRoomPreferencesChanged() *RoomPreferencesChanged {
 	if x != nil {
 		if x, ok := x.Payload.(*Event_RoomPreferencesChanged); ok {
 			return x.RoomPreferencesChanged
+		}
+	}
+	return nil
+}
+
+func (x *Event) GetReadPositions() *ReadPositions {
+	if x != nil {
+		if x, ok := x.Payload.(*Event_ReadPositions); ok {
+			return x.ReadPositions
 		}
 	}
 	return nil
@@ -374,10 +374,6 @@ type Event_MemberCountChanged struct {
 	MemberCountChanged *MemberCountChanged `protobuf:"bytes,31,opt,name=member_count_changed,json=memberCountChanged,proto3,oneof"`
 }
 
-type Event_ReadUpdated struct {
-	ReadUpdated *ReadUpdated `protobuf:"bytes,32,opt,name=read_updated,json=readUpdated,proto3,oneof"`
-}
-
 type Event_MemberPriorityChanged struct {
 	MemberPriorityChanged *MemberPriorityChanged `protobuf:"bytes,33,opt,name=member_priority_changed,json=memberPriorityChanged,proto3,oneof"`
 }
@@ -400,6 +396,10 @@ type Event_RoomUpdated struct {
 
 type Event_RoomPreferencesChanged struct {
 	RoomPreferencesChanged *RoomPreferencesChanged `protobuf:"bytes,38,opt,name=room_preferences_changed,json=roomPreferencesChanged,proto3,oneof"`
+}
+
+type Event_ReadPositions struct {
+	ReadPositions *ReadPositions `protobuf:"bytes,39,opt,name=read_positions,json=readPositions,proto3,oneof"`
 }
 
 func (*Event_MessageCreated) isEvent_Payload() {}
@@ -426,8 +426,6 @@ func (*Event_MemberRoleChanged) isEvent_Payload() {}
 
 func (*Event_MemberCountChanged) isEvent_Payload() {}
 
-func (*Event_ReadUpdated) isEvent_Payload() {}
-
 func (*Event_MemberPriorityChanged) isEvent_Payload() {}
 
 func (*Event_MessageHidden) isEvent_Payload() {}
@@ -439,6 +437,8 @@ func (*Event_BookmarkChanged) isEvent_Payload() {}
 func (*Event_RoomUpdated) isEvent_Payload() {}
 
 func (*Event_RoomPreferencesChanged) isEvent_Payload() {}
+
+func (*Event_ReadPositions) isEvent_Payload() {}
 
 type MessageCreated struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -928,7 +928,7 @@ var File_chatim_v1_events_proto protoreflect.FileDescriptor
 
 const file_chatim_v1_events_proto_rawDesc = "" +
 	"\n" +
-	"\x16chatim/v1/events.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x17chatim/v1/members.proto\x1a\x1dchatim/v1/message_links.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a\x19chatim/v1/room_list.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd3\f\n" +
+	"\x16chatim/v1/events.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x17chatim/v1/members.proto\x1a\x1dchatim/v1/message_links.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a\x19chatim/v1/room_list.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xed\f\n" +
 	"\x05Event\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06tenant\x18\x02 \x01(\tR\x06tenant\x12\x17\n" +
@@ -950,15 +950,15 @@ const file_chatim_v1_events_proto_rawDesc = "" +
 	"\fmember_added\x18\x1c \x01(\v2\x16.chatim.v1.MemberAddedH\x00R\vmemberAdded\x12A\n" +
 	"\x0emember_removed\x18\x1d \x01(\v2\x18.chatim.v1.MemberRemovedH\x00R\rmemberRemoved\x12N\n" +
 	"\x13member_role_changed\x18\x1e \x01(\v2\x1c.chatim.v1.MemberRoleChangedH\x00R\x11memberRoleChanged\x12Q\n" +
-	"\x14member_count_changed\x18\x1f \x01(\v2\x1d.chatim.v1.MemberCountChangedH\x00R\x12memberCountChanged\x12;\n" +
-	"\fread_updated\x18  \x01(\v2\x16.chatim.v1.ReadUpdatedH\x00R\vreadUpdated\x12Z\n" +
+	"\x14member_count_changed\x18\x1f \x01(\v2\x1d.chatim.v1.MemberCountChangedH\x00R\x12memberCountChanged\x12Z\n" +
 	"\x17member_priority_changed\x18! \x01(\v2 .chatim.v1.MemberPriorityChangedH\x00R\x15memberPriorityChanged\x12A\n" +
 	"\x0emessage_hidden\x18\" \x01(\v2\x18.chatim.v1.MessageHiddenH\x00R\rmessageHidden\x12D\n" +
 	"\x0fhistory_cleared\x18# \x01(\v2\x19.chatim.v1.HistoryClearedH\x00R\x0ehistoryCleared\x12G\n" +
 	"\x10bookmark_changed\x18$ \x01(\v2\x1a.chatim.v1.BookmarkChangedH\x00R\x0fbookmarkChanged\x12;\n" +
 	"\froom_updated\x18% \x01(\v2\x16.chatim.v1.RoomUpdatedH\x00R\vroomUpdated\x12]\n" +
-	"\x18room_preferences_changed\x18& \x01(\v2!.chatim.v1.RoomPreferencesChangedH\x00R\x16roomPreferencesChangedB\t\n" +
-	"\apayloadJ\x04\b\a\x10\bR\x03pts\">\n" +
+	"\x18room_preferences_changed\x18& \x01(\v2!.chatim.v1.RoomPreferencesChangedH\x00R\x16roomPreferencesChanged\x12A\n" +
+	"\x0eread_positions\x18' \x01(\v2\x18.chatim.v1.ReadPositionsH\x00R\rreadPositionsB\t\n" +
+	"\apayloadJ\x04\b\a\x10\bJ\x04\b \x10!R\x03ptsR\fread_updated\">\n" +
 	"\x0eMessageCreated\x12,\n" +
 	"\amessage\x18\x01 \x01(\v2\x12.chatim.v1.MessageR\amessage\"2\n" +
 	"\vRoomCreated\x12#\n" +
@@ -1022,12 +1022,12 @@ var file_chatim_v1_events_proto_goTypes = []any{
 	(*MemberRemoved)(nil),          // 13: chatim.v1.MemberRemoved
 	(*MemberRoleChanged)(nil),      // 14: chatim.v1.MemberRoleChanged
 	(*MemberCountChanged)(nil),     // 15: chatim.v1.MemberCountChanged
-	(*ReadUpdated)(nil),            // 16: chatim.v1.ReadUpdated
-	(*MemberPriorityChanged)(nil),  // 17: chatim.v1.MemberPriorityChanged
-	(*MessageHidden)(nil),          // 18: chatim.v1.MessageHidden
-	(*HistoryCleared)(nil),         // 19: chatim.v1.HistoryCleared
-	(*BookmarkChanged)(nil),        // 20: chatim.v1.BookmarkChanged
-	(*RoomPreferencesChanged)(nil), // 21: chatim.v1.RoomPreferencesChanged
+	(*MemberPriorityChanged)(nil),  // 16: chatim.v1.MemberPriorityChanged
+	(*MessageHidden)(nil),          // 17: chatim.v1.MessageHidden
+	(*HistoryCleared)(nil),         // 18: chatim.v1.HistoryCleared
+	(*BookmarkChanged)(nil),        // 19: chatim.v1.BookmarkChanged
+	(*RoomPreferencesChanged)(nil), // 20: chatim.v1.RoomPreferencesChanged
+	(*ReadPositions)(nil),          // 21: chatim.v1.ReadPositions
 	(*Message)(nil),                // 22: chatim.v1.Message
 	(*Room)(nil),                   // 23: chatim.v1.Room
 	(*MentionSet)(nil),             // 24: chatim.v1.MentionSet
@@ -1049,13 +1049,13 @@ var file_chatim_v1_events_proto_depIdxs = []int32{
 	13, // 11: chatim.v1.Event.member_removed:type_name -> chatim.v1.MemberRemoved
 	14, // 12: chatim.v1.Event.member_role_changed:type_name -> chatim.v1.MemberRoleChanged
 	15, // 13: chatim.v1.Event.member_count_changed:type_name -> chatim.v1.MemberCountChanged
-	16, // 14: chatim.v1.Event.read_updated:type_name -> chatim.v1.ReadUpdated
-	17, // 15: chatim.v1.Event.member_priority_changed:type_name -> chatim.v1.MemberPriorityChanged
-	18, // 16: chatim.v1.Event.message_hidden:type_name -> chatim.v1.MessageHidden
-	19, // 17: chatim.v1.Event.history_cleared:type_name -> chatim.v1.HistoryCleared
-	20, // 18: chatim.v1.Event.bookmark_changed:type_name -> chatim.v1.BookmarkChanged
-	3,  // 19: chatim.v1.Event.room_updated:type_name -> chatim.v1.RoomUpdated
-	21, // 20: chatim.v1.Event.room_preferences_changed:type_name -> chatim.v1.RoomPreferencesChanged
+	16, // 14: chatim.v1.Event.member_priority_changed:type_name -> chatim.v1.MemberPriorityChanged
+	17, // 15: chatim.v1.Event.message_hidden:type_name -> chatim.v1.MessageHidden
+	18, // 16: chatim.v1.Event.history_cleared:type_name -> chatim.v1.HistoryCleared
+	19, // 17: chatim.v1.Event.bookmark_changed:type_name -> chatim.v1.BookmarkChanged
+	3,  // 18: chatim.v1.Event.room_updated:type_name -> chatim.v1.RoomUpdated
+	20, // 19: chatim.v1.Event.room_preferences_changed:type_name -> chatim.v1.RoomPreferencesChanged
+	21, // 20: chatim.v1.Event.read_positions:type_name -> chatim.v1.ReadPositions
 	22, // 21: chatim.v1.MessageCreated.message:type_name -> chatim.v1.Message
 	23, // 22: chatim.v1.RoomCreated.room:type_name -> chatim.v1.Room
 	23, // 23: chatim.v1.RoomUpdated.room:type_name -> chatim.v1.Room
@@ -1097,13 +1097,13 @@ func file_chatim_v1_events_proto_init() {
 		(*Event_MemberRemoved)(nil),
 		(*Event_MemberRoleChanged)(nil),
 		(*Event_MemberCountChanged)(nil),
-		(*Event_ReadUpdated)(nil),
 		(*Event_MemberPriorityChanged)(nil),
 		(*Event_MessageHidden)(nil),
 		(*Event_HistoryCleared)(nil),
 		(*Event_BookmarkChanged)(nil),
 		(*Event_RoomUpdated)(nil),
 		(*Event_RoomPreferencesChanged)(nil),
+		(*Event_ReadPositions)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

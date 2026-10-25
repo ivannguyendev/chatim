@@ -4,14 +4,21 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
-	"github.com/ivannguyendev/chatim/apps/core/internal/platform/metrics"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/metrics"
 )
 
 type stateClearProbe interface {
 	Cleared() uint64
 	Dropped() uint64
 	Failures() uint64
+}
+
+type readBatchProbe interface {
+	Entries() uint64
+	Events() uint64
+	Dropped() uint64
+	EnqueueFailures() uint64
 }
 
 type projectionProbe interface {
@@ -33,6 +40,7 @@ type sweepProbe interface {
 
 type eventProbes struct {
 	clears     stateClearProbe
+	reads      readBatchProbe
 	projection projectionProbe
 	sweeper    sweepProbe
 }
@@ -43,6 +51,10 @@ func eventSources(p eventProbes, drops func() publish.Drops) []metrics.Source {
 		{Name: "state_clear_dropped_total", Help: "Pending flag clears dropped (queue full, closed or stopped); the sweeper republishes those events.", Read: count(p.clears.Dropped)},
 		{Name: "state_clear_failures_total", Help: "Pending flag clear batches the store refused; the sweeper republishes those events.", Read: count(p.clears.Failures)},
 		{Name: "publish_state_track_full_total", Help: "Published events whose flag clear was not followed because the ack follower queue was full.", Read: func() float64 { return float64(drops().StateTrackFull) }},
+		{Name: "read_batch_entries_total", Help: "Read position moves handed to the read batch queue.", Read: count(p.reads.Entries)},
+		{Name: "read_batch_events_total", Help: "read_positions events the read batch queue handed to the publisher.", Read: count(p.reads.Events)},
+		{Name: "read_batch_dropped_total", Help: "Read position moves dropped after the read batch queue closed; the sweeper republishes them.", Read: count(p.reads.Dropped)},
+		{Name: "read_batch_enqueue_failures_total", Help: "read_positions events the publisher refused; the sweeper republishes their read positions.", Read: count(p.reads.EnqueueFailures)},
 		{Name: "sweep_publish_failures_total", Help: "Pending events the sweeper could not republish; their flag stays for the next pass.", Read: count(p.sweeper.PublishFailures)},
 		{Name: "sweep_failures_total", Help: "Pending documents or flag clears the sweeper failed on; they stay flagged for the next pass.", Read: count(p.sweeper.Failures)},
 		{Name: "sweep_passes_total", Help: "Sweeper passes this core finished while it held the leader slot.", Read: count(p.sweeper.Passes)},

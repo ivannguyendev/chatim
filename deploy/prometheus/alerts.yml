@@ -124,3 +124,66 @@ groups:
           guarantee: CT1
         annotations:
           summary: Fired count check timers keep failing their repair; member and message counts may stay stale.
+  - name: chatim-websocket-gateway-health
+    rules:
+      - alert: ChatimWebsocketNATSDown
+        expr: chatim_websocket_nats_connected == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: A websocket node lost its NATS connection; its devices get no events or notifications until it reconnects.
+      - alert: ChatimWebsocketBehind
+        expr: chatim_websocket_consumer_behind_seconds > 30
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: A websocket stream consumer has stayed behind the stream end for more than 30s; devices on the node see events late.
+      - alert: ChatimWebsocketJumpSuppressed
+        expr: increase(chatim_websocket_catchup_jump_suppressed_total[10m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: A websocket node fell too far behind again within the jump cooldown; it keeps replaying an old backlog instead of skipping to the stream end.
+      - alert: ChatimWebsocketReloadFailing
+        expr: sum by (instance) (increase(chatim_websocket_reload_failures_total[5m])) + sum by (instance) (increase(chatim_websocket_room_ids_load_failures_total[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Room loads of a websocket node keep failing; its users get load_failed and no events until a load succeeds (check core ListMyRoomIDs).
+      - alert: ChatimWebsocketDeliverySlow
+        expr: histogram_quantile(0.99, sum by (le, instance) (rate(chatim_websocket_event_delivery_seconds_bucket[5m]))) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: The p99 time from the JetStream store time of an event to its frame queued on a websocket node is above 100ms.
+      - alert: ChatimPresenceRedisDown
+        expr: chatim_websocket_presence_redis_up == 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: A websocket node cannot reach the presence Redis; its users show offline everywhere and its devices get no presence answers.
+      - alert: ChatimWebsocketAuthRateLimited
+        expr: sum by (instance) (rate(chatim_websocket_auth_total{result="rate"}[10m])) / sum by (instance) (rate(chatim_websocket_auth_total[10m])) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: More than 10% of the logins on a websocket node get retry_later from the node login limiter; a reconnect storm is waiting, or WS_AUTH_RATE and WS_AUTH_BURST are too low for the node.
+      - alert: ChatimWebsocketTokenExpiredSurge
+        expr: sum by (instance) (increase(chatim_websocket_auth_required_total{reason="expired"}[10m])) > 1000
+        labels:
+          severity: warning
+        annotations:
+          summary: More than 1000 running connections of a websocket node went back to waiting on an expired token in 10m; clients are not renewing tokens in time. The threshold depends on the user count of the node.
+      - alert: ChatimGatewayCoreUnavailable
+        expr: sum(rate(chatim_gateway_commands_total{code="Unavailable"}[5m])) / sum(rate(chatim_gateway_commands_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: More than 5% of gateway commands end Unavailable; core is down, overloaded or unreachable from the gateway.

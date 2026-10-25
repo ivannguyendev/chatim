@@ -32,7 +32,7 @@ func TestSendRetriesOnTheRefreshedRouteWithTheSameCID(t *testing.T) {
 			return "core-2:9000", true
 		}}
 		c := newClient(t, loc, net, route.Policy{})
-		resp, st, err := c.SendMessage(route.WithCaller(t.Context(), "acme", "alice"), send("c-1"))
+		resp, st, err := c.SendMessage(callerid.WithCaller(t.Context(), "acme", "alice"), send("c-1"))
 		if err != nil || resp.GetSeq() != 7 {
 			t.Fatalf("SendMessage = %v, %v; want seq 7", resp, err)
 		}

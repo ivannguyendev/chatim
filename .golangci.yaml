@@ -179,6 +179,40 @@ linters:
           deny:
             - pkg: github.com/ivannguyendev/chatim/modules/mention
               desc: only app and config embed the mention module
+        websocket-boundaries:
+          files:
+            - "**/apps/websocket/**"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/apps/core
+              desc: websocket reaches core only through gRPC and shared pkg code
+            - pkg: github.com/ivannguyendev/chatim/modules
+              desc: websocket embeds no business module
+        websocket-config-owner:
+          files:
+            - "**/apps/websocket/**"
+            - "!**/apps/websocket/internal/app/**"
+            - "!**/apps/websocket/internal/config/**"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/apps/websocket/internal/config
+              desc: only app reads config
+        gateway-boundaries:
+          files:
+            - "**/apps/gateway/**"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/apps/core
+              desc: gateway reaches core only through gRPC and shared pkg code
+            - pkg: github.com/ivannguyendev/chatim/apps/websocket
+              desc: gateway shares code with websocket only through pkg
+            - pkg: github.com/ivannguyendev/chatim/modules
+              desc: gateway embeds no business module
+        gateway-config-owner:
+          files:
+            - "**/apps/gateway/**"
+            - "!**/apps/gateway/internal/app/**"
+            - "!**/apps/gateway/internal/config/**"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/apps/gateway/internal/config
+              desc: only app reads config
     govet:
       enable-all: true
       disable:
@@ -215,7 +249,7 @@ linters:
       - path: ^pkg/backoff/backoff\.go$
         linters: [gosec]
         text: G404
-      - path: ^apps/core/internal/config/parse\.go$
+      - path: ^pkg/envconfig/secret\.go$
         linters: [gosec]
         text: G703
 

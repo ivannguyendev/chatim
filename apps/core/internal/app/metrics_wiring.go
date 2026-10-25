@@ -11,12 +11,15 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/message/actor"
-	"github.com/ivannguyendev/chatim/apps/core/internal/platform/metrics"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
 	"github.com/ivannguyendev/chatim/modules/mention/mentionapp"
+	"github.com/ivannguyendev/chatim/pkg/metrics"
 )
 
-const oplogProbeTimeout = 2 * time.Second
+const (
+	oplogProbeTimeout = 2 * time.Second
+	metricsSubsystem  = "core"
+)
 
 type probes struct {
 	drops           func() publish.Drops
@@ -33,6 +36,7 @@ type probes struct {
 	roomCache       roomCacheProbes
 	events          eventProbes
 	mention         []mentionapp.Probe
+	indexes         indexProbes
 }
 
 func metricSources(p probes) []metrics.Source {
@@ -55,6 +59,7 @@ func metricSources(p probes) []metrics.Source {
 	out = append(out, timerSources(p.timerFailures, p.timerDropped)...)
 	out = append(out, memberWatchSources(p.memberForgets, p.memberMalformed)...)
 	out = append(out, roomCacheSources(p.roomCache)...)
+	out = append(out, indexSources(p.indexes)...)
 	return append(out, mentionSources(p.mention)...)
 }
 

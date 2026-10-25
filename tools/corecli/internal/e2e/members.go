@@ -15,7 +15,7 @@ const (
 	KindRoleChanged     = "member_role_changed"
 	KindPriorityChanged = "member_priority_changed"
 	KindMemberCount     = "member_count_changed"
-	KindRead            = "read_updated"
+	KindRead            = "read_positions"
 	KindHidden          = "message_hidden"
 	KindCleared         = "history_cleared"
 )
@@ -30,8 +30,8 @@ func MemberCountEventID(room string, ver uint64) string {
 	return room + "-members-v" + strconv.FormatUint(ver, 10)
 }
 
-func ReadEventID(room, user string, readVer uint64) string {
-	return room + "-rd-" + user + "-v" + strconv.FormatUint(readVer, 10)
+func ReadWantID(room, user string, readVer uint64) string {
+	return room + "-rp-" + user + "-v" + strconv.FormatUint(readVer, 10)
 }
 
 func HiddenEventID(room, user string, thread, seq uint64) string {
@@ -83,6 +83,14 @@ func ReadPayload(seq, ver uint64) string {
 	return "read_seq=" + strconv.FormatUint(seq, 10) + " read_ver=" + strconv.FormatUint(ver, 10)
 }
 
+func ReadEntriesPayload(entries []*chatimv1.ReadEntry) string {
+	parts := make([]string, len(entries))
+	for i, e := range entries {
+		parts[i] = e.GetUser() + " " + ReadPayload(e.GetReadSeq(), e.GetReadVer())
+	}
+	return strings.Join(parts, ";")
+}
+
 func HiddenPayload(thread, seq uint64) string {
 	return "thread=" + strconv.FormatUint(thread, 10) + " seq=" + strconv.FormatUint(seq, 10)
 }
@@ -114,9 +122,8 @@ func memberOf(subject string, ev *chatimv1.Event) (Event, bool) {
 		out.Text = PriorityPayload(p.GetPriority(), p.GetPreviousPriority())
 	case ev.GetMemberCountChanged() != nil:
 		out.Kind, out.Text = KindMemberCount, CountPayload(ev.GetMemberCountChanged().GetMemberCount())
-	case ev.GetReadUpdated() != nil:
-		p := ev.GetReadUpdated()
-		out.Kind, out.User, out.Text = KindRead, p.GetUser(), ReadPayload(p.GetReadSeq(), p.GetReadVer())
+	case ev.GetReadPositions() != nil:
+		out.Kind, out.Text = KindRead, ReadEntriesPayload(ev.GetReadPositions().GetEntries())
 	case ev.GetMessageHidden() != nil:
 		p := ev.GetMessageHidden()
 		out.Kind, out.User, out.Seq, out.Text = KindHidden, p.GetUser(), p.GetSeq(), HiddenPayload(p.GetThreadRoot(), p.GetSeq())

@@ -2,6 +2,8 @@ package publish_test
 
 import (
 	"maps"
+	"math"
+	"slices"
 	"testing"
 	"time"
 
@@ -45,7 +47,7 @@ func memberTargetCases(room domain.Room, bob domain.Member) map[string]targetCas
 		"member_removed":          {pbconv.MemberEvent(domain.RoomGroup, removed), member(removed.Ver)},
 		"member_role_changed":     {pbconv.MemberEvent(domain.RoomGroup, promoted), member(promoted.Ver)},
 		"member_priority_changed": {pbconv.MemberEvent(domain.RoomGroup, raised), member(raised.Ver)},
-		"read_updated": {pbconv.ReadUpdated(room, "bob", domain.ReadPosition{Seq: 7, Ver: 8}, sentAt),
+		"read_positions": {pbconv.ReadPositions(room, []*chatimv1.ReadEntry{{User: "bob", ReadSeq: 7, ReadVer: 8}}, sentAt),
 			store.StateTarget{Collection: store.StateMembers, Bit: store.BitReadPosition, Room: roomA, User: "bob", Ver: 8}},
 		"history_cleared": {pbconv.HistoryCleared(room, "bob", clearedAt, sentAt),
 			store.StateTarget{Collection: store.StateMembers, Bit: store.BitHistoryCleared, Room: roomA, User: "bob", At: clearedAt}},
@@ -115,17 +117,18 @@ func TestEveryEventKindMapsToThePendingStateItClears(t *testing.T) {
 		if c.ev == nil || c.ev.GetPayload() == nil {
 			t.Fatalf("%s: builder returned no event", name)
 		}
-		got, ok := publish.StateTargetOf(c.ev)
-		if !ok {
-			t.Errorf("%s: StateTargetOf = false, want %+v", name, c.want)
+		targets := publish.StateTargetsOf(c.ev)
+		if len(targets) != 1 {
+			t.Errorf("%s: StateTargetsOf = %+v, want only %+v", name, targets, c.want)
 			continue
 		}
+		got := targets[0]
 		if !got.At.Equal(c.want.At) {
 			t.Errorf("%s: At = %v, want %v", name, got.At, c.want.At)
 		}
 		got.At, c.want.At = time.Time{}, time.Time{}
 		if got != c.want {
-			t.Errorf("%s: StateTargetOf = %+v, want %+v", name, got, c.want)
+			t.Errorf("%s: StateTargetsOf = %+v, want %+v", name, got, c.want)
 		}
 		if err := got.Validate(); err != nil {
 			t.Errorf("%s: target fails Validate: %v", name, err)
@@ -145,7 +148,10 @@ func TestEventsWithoutAClearableStateMapToNothing(t *testing.T) {
 	views.GetCountsChanged().Counter = "views"
 	noClearTime := pbconv.HistoryCleared(room, "bob", sentAt, sentAt)
 	noClearTime.GetHistoryCleared().ClearedAt = nil
-	noUser := pbconv.ReadUpdated(room, "", domain.ReadPosition{Seq: 7, Ver: 2}, sentAt)
+	noReaders := pbconv.ReadPositions(room, nil, sentAt)
+	badReaders := pbconv.ReadPositions(room, []*chatimv1.ReadEntry{{User: "", ReadSeq: 7, ReadVer: 2}, {User: "bob", ReadSeq: 7, ReadVer: math.MaxUint32 + 1}}, sentAt)
+	readersNoRoom := pbconv.ReadPositions(room, []*chatimv1.ReadEntry{{User: "bob", ReadSeq: 7, ReadVer: 2}}, sentAt)
+	readersNoRoom.RoomId = ""
 	cases := map[string]*chatimv1.Event{
 		"no payload":         {Id: "101-x", Tenant: tenant, RoomId: "101"},
 		"no room id":         noRoom,
@@ -154,12 +160,32 @@ func TestEventsWithoutAClearableStateMapToNothing(t *testing.T) {
 		"no seq":             pbconv.MessageCreated(domain.RoomGroup, noSeq),
 		"unknown counter":    views,
 		"no cleared_at":      noClearTime,
-		"no reader":          noUser,
+		"no read entries":    noReaders,
+		"bad read entries":   badReaders,
+		"reads without room": readersNoRoom,
 		"edit without a ver": pbconv.MessageEdited(domain.RoomGroup, m, domain.Edit{Room: roomA, Thread: 5, Seq: 7}, domain.Mentions{}),
 	}
 	for name, ev := range cases {
-		if got, ok := publish.StateTargetOf(ev); ok {
-			t.Errorf("%s: StateTargetOf = %+v, true; want false", name, got)
+		if got := publish.StateTargetsOf(ev); len(got) != 0 {
+			t.Errorf("%s: StateTargetsOf = %+v, want none", name, got)
 		}
+	}
+}
+
+func TestReadPositionsMapToTheReadFlagOfEveryValidEntry(t *testing.T) {
+	room, _, _ := targetFixtures()
+	ev := pbconv.ReadPositions(room, []*chatimv1.ReadEntry{
+		{User: "ann", ReadSeq: 3, ReadVer: 2},
+		{User: "", ReadSeq: 4, ReadVer: 5},
+		{User: "bob", ReadSeq: 7, ReadVer: 8},
+		{User: "carol", ReadSeq: 1, ReadVer: math.MaxUint32 + 1},
+		{User: "dan", ReadSeq: 9, ReadVer: 1},
+	}, sentAt)
+	read := func(user string, ver uint64) store.StateTarget {
+		return store.StateTarget{Collection: store.StateMembers, Bit: store.BitReadPosition, Room: roomA, User: user, Ver: ver}
+	}
+	want := []store.StateTarget{read("ann", 2), read("bob", 8), read("dan", 1)}
+	if got := publish.StateTargetsOf(ev); !slices.Equal(got, want) {
+		t.Fatalf("StateTargetsOf = %+v, want %+v", got, want)
 	}
 }

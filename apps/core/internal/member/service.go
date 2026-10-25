@@ -7,12 +7,13 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-var errMissingDeps = fmt.Errorf("%w: member service needs access, messages, rooms, events, members, request dedupe, a member forgetter, member count timers and read positions", apperr.ErrInvalidArgument)
+var errMissingDeps = fmt.Errorf("%w: member service needs access, messages, rooms, events, members, request dedupe, a member forgetter, member count timers, read positions and a read sink", apperr.ErrInvalidArgument)
 
 type Messages interface {
 	Last(ctx context.Context, room, thread uint64) (uint64, error)
@@ -25,6 +26,10 @@ type HistoryClearer interface {
 type RoomWriter interface {
 	HistoryClearer
 	store.RoomPreferences
+}
+
+type ReadSink interface {
+	Add(room domain.Room, user string, pos domain.ReadPosition)
 }
 
 type EventPublisher interface {
@@ -41,6 +46,7 @@ type Deps struct {
 	Forget       MemberForgetter
 	Timers       CountTimers
 	Reads        store.ReadPositions
+	ReadSink     ReadSink
 	Limits       Limits
 	Now          func() time.Time
 	Log          *slog.Logger
@@ -53,7 +59,7 @@ type Service struct {
 
 func New(d Deps) (*Service, error) {
 	if d.Access == nil || d.Messages == nil || d.Rooms == nil || d.Events == nil || d.Members == nil ||
-		d.Requests == nil || d.Forget == nil || d.Timers == nil || d.Reads == nil {
+		d.Requests == nil || d.Forget == nil || d.Timers == nil || d.Reads == nil || d.ReadSink == nil {
 		return nil, errMissingDeps
 	}
 	d.Limits = d.Limits.withDefaults()

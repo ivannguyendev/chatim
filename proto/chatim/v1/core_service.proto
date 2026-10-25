@@ -14,6 +14,7 @@ service CoreService {
   rpc OpenDirectRoom(OpenDirectRoomRequest) returns (OpenDirectRoomResponse);
   rpc ListMyRooms(ListMyRoomsRequest) returns (ListMyRoomsResponse);
   rpc GetRooms(GetRoomsRequest) returns (GetRoomsResponse);
+  rpc ListMyRoomIDs(ListMyRoomIDsRequest) returns (ListMyRoomIDsResponse);
   rpc UpdateRoom(UpdateRoomRequest) returns (UpdateRoomResponse);
   rpc SetRoomPreferences(SetRoomPreferencesRequest) returns (SetRoomPreferencesResponse);
   rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);

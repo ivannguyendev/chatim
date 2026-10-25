@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package chatim.v1;
+
+message TypingSignal {
+  string origin = 1;
+  string tenant = 2;
+  uint64 room_id = 3;
+  string user_id = 4;
+  bool stopped = 5;
+}

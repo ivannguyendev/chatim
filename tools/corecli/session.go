@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/ivannguyendev/chatim/pkg/callerid"
 	"github.com/ivannguyendev/chatim/pkg/slotmap"
 	"github.com/ivannguyendev/chatim/tools/internal/route"
 )
@@ -43,7 +44,7 @@ type session struct {
 
 func withSession(ctx context.Context, o *options, run func(ctx context.Context, s *session) error) error {
 	return withRoutes(ctx, o, func(ctx context.Context, s *session) error {
-		return run(route.WithCaller(ctx, o.tenant, o.user), s)
+		return run(callerid.WithCaller(ctx, o.tenant, o.user), s)
 	})
 }
 

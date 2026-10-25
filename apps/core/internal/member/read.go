@@ -6,7 +6,6 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
-	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
@@ -51,7 +50,7 @@ func (s *Service) moveRead(ctx context.Context, c ReadCmd, back bool) (domain.Re
 		return domain.ReadPosition{}, err
 	}
 	if moved {
-		s.tell(req.Room.ID, pbconv.ReadUpdated(req.Room, c.User, pos, s.now()))
+		s.d.ReadSink.Add(req.Room, c.User, pos)
 	}
 	return pos, nil
 }

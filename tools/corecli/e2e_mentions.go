@@ -10,6 +10,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/pkg/backoff"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
+	"github.com/ivannguyendev/chatim/pkg/wspublish"
 	"github.com/ivannguyendev/chatim/tools/corecli/internal/e2e"
 )
 
@@ -26,7 +27,7 @@ var errMentionsTwice = errors.New("this scenario already ran its mention phase")
 type mentionRun struct {
 	*linkRun
 	notes      *noticeFeed
-	notifyRoot string
+	subject    string
 	catalogTTL time.Duration
 	sender     string
 	an         string
@@ -43,7 +44,7 @@ func e2eMentions(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("e2e mentions", flag.ContinueOnError)
 	o := addOptions(fs)
 	live := addLiveFlags(fs)
-	notifyRoot := fs.String("notify-root", "notify", "notification subject root, NOTIFY_SUBJECT_ROOT of the cores")
+	root := fs.String("ws-publish-root", wspublish.DefaultRoot, "ws publish subject root, MENTION_WS_PUBLISH_ROOT of the cores")
 	catalogTTL := fs.Duration("catalog-ttl", 60*time.Second, "how long a core keeps the group catalog before it reads it again")
 	dir := fs.String("state", "/state", "directory holding the scenario state")
 	wait := fs.Duration("wait", 45*time.Second, "wait this long for the notifications and lists of each step")
@@ -57,16 +58,17 @@ func e2eMentions(ctx context.Context, args []string) error {
 	if st.MentionRun {
 		return errMentionsTwice
 	}
-	if err := singleTokens(st.Tenant, *notifyRoot); err != nil {
+	subject, err := wspublish.Subject(*root, st.Tenant)
+	if err != nil {
 		return err
 	}
-	feed, err := openNotices(*live.url, *notifyRoot+"."+st.Tenant+".>")
+	feed, err := openNotices(*live.url, subject)
 	if err != nil {
 		return err
 	}
 	defer feed.Close()
 	r := &mentionRun{
-		linkRun: &linkRun{memberRun: &memberRun{st: &st, wait: *wait}}, notes: feed, notifyRoot: *notifyRoot, catalogTTL: *catalogTTL,
+		linkRun: &linkRun{memberRun: &memberRun{st: &st, wait: *wait}}, notes: feed, subject: subject, catalogTTL: *catalogTTL,
 		sender: "e2e-lan-" + st.Room, an: "e2e-an-" + st.Room, binh: "e2e-binh-" + st.Room, chi: "e2e-chi-" + st.Room, minh: "e2e-minh-" + st.Room,
 	}
 	err = withRoutes(ctx, o, func(ctx context.Context, s *session) error {
@@ -77,7 +79,7 @@ func e2eMentions(ctx context.Context, args []string) error {
 		return err
 	}
 	st.MentionRun = true
-	fmt.Fprintf(os.Stderr, "mention phase ok on group %s: %d notifications checked by id, kind, subject and target\n", r.room, len(r.notices))
+	fmt.Fprintf(os.Stderr, "mention phase ok on group %s: %d notifications checked by id, user, kind, subject and target\n", r.room, len(r.notices))
 	return e2e.Save(statePath(*dir), st)
 }
 
@@ -97,7 +99,7 @@ func (r *mentionRun) run() error {
 
 func (r *mentionRun) expectNotices(ns ...e2e.Notice) error {
 	for _, n := range ns {
-		n.Subject = e2e.NotifySubject(r.notifyRoot, r.st.Tenant, n.User)
+		n.Subject = r.subject
 		r.notices = append(r.notices, n)
 	}
 	return r.notes.await(r.base, r.room, r.notices, r.wait)

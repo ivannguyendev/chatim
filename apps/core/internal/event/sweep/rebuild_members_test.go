@@ -9,6 +9,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
+	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 func TestMemberWithTwoBitsGivesTwoEventsClearedOneBitEach(t *testing.T) {
@@ -23,9 +24,11 @@ func TestMemberWithTwoBitsGivesTwoEventsClearedOneBitEach(t *testing.T) {
 			t.Fatalf("MarkRead = %v, %v", moved, err)
 		}
 		f.settle()
-		expectEvents(t, f, pbconv.MemberEventID(room, "ann", 1), pbconv.ReadEventID(room, "ann", pos.Ver))
-		if ev := f.published(t, pbconv.ReadEventID(room, "ann", pos.Ver)); ev.GetReadUpdated().GetReadSeq() != 3 {
-			t.Fatalf("read_updated = %+v, want read seq 3", ev)
+		readID := pbconv.ReadPositionsEventID(room, []*chatimv1.ReadEntry{{User: "ann", ReadSeq: 3, ReadVer: pos.Ver}})
+		expectEvents(t, f, pbconv.MemberEventID(room, "ann", 1), readID)
+		ev := f.published(t, readID)
+		if got := ev.GetReadPositions().GetEntries(); len(got) != 1 || got[0].GetUser() != "ann" || got[0].GetReadSeq() != 3 || got[0].GetReadVer() != pos.Ver {
+			t.Fatalf("read_positions = %+v, want one entry for ann at read seq 3", ev)
 		}
 		want := []store.StateTarget{
 			{Collection: store.StateMembers, Bit: store.BitMember, Room: room, User: "ann", Ver: 1},

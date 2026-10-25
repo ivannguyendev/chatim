@@ -135,10 +135,14 @@ message MemberCountChanged {
   uint64 member_count_ver = 2;
 }
 
-message ReadUpdated {
+message ReadEntry {
   string user = 1;
   uint64 read_seq = 2;
   uint64 read_ver = 3;
+}
+
+message ReadPositions {
+  repeated ReadEntry entries = 1;
 }
 
 message MessageHidden {

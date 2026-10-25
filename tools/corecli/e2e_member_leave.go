@@ -70,8 +70,5 @@ func (r *memberRun) unreadThenRead() error {
 	if err := r.markRead(r.st.Room, bob, r.n, 3); err != nil {
 		return err
 	}
-	return r.expect(
-		r.want(r.st.Room, e2e.KindRead, e2e.ReadEventID(r.st.Room, bob, 2), e2e.ReadPayload(r.n-1, 2)),
-		r.want(r.st.Room, e2e.KindRead, e2e.ReadEventID(r.st.Room, bob, 3), e2e.ReadPayload(r.n, 3)),
-	)
+	return r.expect(r.want(r.st.Room, e2e.KindRead, e2e.ReadWantID(r.st.Room, bob, 3), e2e.ReadPayload(r.n, 3)))
 }

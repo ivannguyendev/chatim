@@ -148,7 +148,7 @@ func currentStateIDs(t *testing.T, st *mongostore.Store, room, parent, mention u
 	for user, m := range storedMembers(t, st, room, itUser, "bob", "carol") {
 		ids = append(ids, pbconv.MemberEventID(room, user, m.Ver))
 		if m.ReadVer >= 1 {
-			ids = append(ids, pbconv.ReadEventID(room, user, m.ReadVer))
+			ids = append(ids, pbconv.ReadPositionsEventID(room, []*chatimv1.ReadEntry{{User: user, ReadSeq: m.ReadSeq, ReadVer: m.ReadVer}}))
 		}
 		if !m.ClearedAt.IsZero() {
 			ids = append(ids, pbconv.ClearedEventID(room, user, m.ClearedAt))

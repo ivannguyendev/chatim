@@ -7,14 +7,20 @@ import (
 )
 
 func (c *Client) ListMyRooms(ctx context.Context, req *chatimv1.ListMyRoomsRequest) (*chatimv1.ListMyRoomsResponse, Stats, error) {
-	return call(ctx, c, c.loc.AnyAddr, retryIdempotent, func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.ListMyRoomsResponse, error) {
+	return anyCore(ctx, c, func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.ListMyRoomsResponse, error) {
 		return api.ListMyRooms(ctx, req)
 	})
 }
 
 func (c *Client) GetRooms(ctx context.Context, req *chatimv1.GetRoomsRequest) (*chatimv1.GetRoomsResponse, Stats, error) {
-	return call(ctx, c, c.loc.AnyAddr, retryIdempotent, func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.GetRoomsResponse, error) {
+	return anyCore(ctx, c, func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.GetRoomsResponse, error) {
 		return api.GetRooms(ctx, req)
+	})
+}
+
+func (c *Client) ListMyRoomIDs(ctx context.Context, req *chatimv1.ListMyRoomIDsRequest) (*chatimv1.ListMyRoomIDsResponse, Stats, error) {
+	return anyCore(ctx, c, func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.ListMyRoomIDsResponse, error) {
+		return api.ListMyRoomIDs(ctx, req)
 	})
 }
 

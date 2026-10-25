@@ -11,10 +11,7 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
-const (
-	namespaceExistsCode = 48
-	indexNotFoundCode   = 27
-)
+const namespaceExistsCode = 48
 
 var (
 	ErrNotClustered = errors.New("mongostore: collection is not clustered on _id")

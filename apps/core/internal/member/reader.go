@@ -19,6 +19,7 @@ var (
 
 type MemberLister interface {
 	ListMembers(ctx context.Context, room uint64, after store.MemberCursor, limit int) ([]domain.Member, error)
+	RoomVersionsOf(ctx context.Context, tenant, user string) ([]store.RoomVersion, error)
 }
 
 type ReaderDeps struct {

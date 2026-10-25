@@ -50,7 +50,7 @@ func (j *fakeJetStream) PublishMsgAsync(m *nats.Msg, _ ...jetstream.PublishOpt) 
 		if j.seen == nil {
 			j.seen = map[string]bool{}
 		}
-		f.ok <- &jetstream.PubAck{Stream: "CHATIM_NOTIFY", Duplicate: j.seen[id]}
+		f.ok <- &jetstream.PubAck{Stream: "CHATIM_WS", Duplicate: j.seen[id]}
 		j.seen[id] = true
 	}
 	return f, nil

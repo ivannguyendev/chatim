@@ -10,7 +10,7 @@ import (
 )
 
 type tasks struct {
-	admin, publisher, stateClears, flusher, cidBatch, router, slots, timers, projections, mention, sweeper, grpc *task
+	admin, publisher, readBatch, stateClears, flusher, cidBatch, router, slots, timers, projections, mention, sweeper, grpc *task
 }
 
 func Run(ctx context.Context, cfg config.Config, log *slog.Logger) error {
@@ -26,7 +26,7 @@ func Run(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 		return err
 	}
 	return a.launch(ctx, func(ctx context.Context) ([]net.Listener, error) {
-		if err := prepare(ctx, cfg, cl, a.setups...); err != nil {
+		if err := prepare(ctx, cfg, cl, a.indexes, a.setups...); err != nil {
 			return nil, err
 		}
 		return listenAll(ctx, cfg.AdminAddr, cfg.GRPCAddr)
@@ -55,10 +55,11 @@ func (a *node) abandon(ctx context.Context) {
 }
 
 func (a *node) serve(ctx context.Context, adminLis, grpcLis net.Listener) error {
-	sup := newSupervisor(ctx, 12)
+	sup := newSupervisor(ctx, 13)
 	t := tasks{
 		admin:       sup.start("admin", func(c context.Context) error { return a.admin.ServeListener(c, adminLis) }),
 		publisher:   sup.start("publisher", a.publisher.Run),
+		readBatch:   sup.start("read batch", a.readBatch.Run),
 		stateClears: sup.start("state clear queue", a.stateClears.Run),
 		flusher:     sup.start("flusher", a.flusher.Run),
 		cidBatch:    sup.start("cid batcher", a.cidBatch.Run),

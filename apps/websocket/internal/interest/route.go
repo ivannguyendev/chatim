@@ -1,0 +1,212 @@
+package interest
+
+import (
+	"time"
+
+	"github.com/ivannguyendev/chatim/apps/websocket/internal/feed"
+	"github.com/ivannguyendev/chatim/apps/websocket/internal/frame"
+	"github.com/ivannguyendev/chatim/pkg/ids"
+)
+
+type lazyFrame struct {
+	data       []byte
+	out        []byte
+	catchingUp bool
+	reached    uint64
+}
+
+func (f *lazyFrame) get() []byte {
+	if f.out == nil {
+		f.out = frame.Event(f.data)
+	}
+	return f.out
+}
+
+func (t *Table) Route(env feed.Envelope) {
+	t.raiseSeq(env.Seq)
+	if !env.CatchingUp {
+		t.caughtUp()
+	}
+	r, ok := kinds[env.Kind]
+	if !ok {
+		t.stats.dropped[dropUnknownKind].Add(1)
+		return
+	}
+	room, err := ids.ParseRoomID(env.Room)
+	if err != nil || env.Tenant == "" || !r.accepts(env.DataKind) {
+		t.stats.dropped[dropMalformed].Add(1)
+		return
+	}
+	k := roomKey{tenant: env.Tenant, room: room}
+	f := &lazyFrame{data: env.Data, catchingUp: env.CatchingUp}
+	switch r.audience {
+	case toMembers:
+		t.toMembers(k, f)
+	case toViewers:
+		t.toViewers(t.viewers(k), f, nil)
+	case toOwner, toMembership:
+		t.toUser(env, r, k, f)
+	case toReaders:
+		t.toReaders(env, k, f)
+	}
+	t.observeDelivery(env, f)
+}
+
+func (t *Table) observeDelivery(env feed.Envelope, f *lazyFrame) {
+	if f.reached > 0 && !env.StoredAt.IsZero() {
+		t.stats.delivery.observe(time.Since(env.StoredAt))
+	}
+}
+
+func (t *Table) countDelivered(l level, f *lazyFrame, n uint64) {
+	t.stats.delivered[l].Add(n)
+	f.reached += n
+}
+
+func (t *Table) toReaders(env feed.Envelope, k roomKey, f *lazyFrame) {
+	users, ok := readers(env)
+	if !ok {
+		t.stats.dropped[dropMalformed].Add(1)
+		return
+	}
+	viewers := t.viewers(k)
+	named := make(map[*user]bool, len(users))
+	for _, id := range users {
+		u := t.lookup(userKey{tenant: env.Tenant, user: id})
+		if u == nil || named[u] {
+			continue
+		}
+		named[u] = true
+		t.toNamedReader(u, k.room, f)
+	}
+	t.toViewers(viewers, f, named)
+}
+
+func (t *Table) toNamedReader(u *user, room uint64, f *lazyFrame) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if _, member := u.rooms[room]; member && u.live() {
+		t.countDelivered(levelMember, f, u.deliver(f.get(), f.catchingUp, true))
+	}
+}
+
+func (t *Table) toUser(env feed.Envelope, r rule, k roomKey, f *lazyFrame) {
+	id, ver, ok := r.user(env)
+	if !ok {
+		t.stats.dropped[dropMalformed].Add(1)
+		return
+	}
+	uk := userKey{tenant: env.Tenant, user: id}
+	if r.audience == toOwner {
+		t.toOwner(uk, f)
+		return
+	}
+	t.membership(k, uk, change{seq: env.Seq, room: k.room, ver: ver, added: env.Kind == kindAdded}, f)
+}
+
+func (t *Table) raiseSeq(seq uint64) {
+	for {
+		cur := t.lastSeq.Load()
+		if seq <= cur || t.lastSeq.CompareAndSwap(cur, seq) {
+			return
+		}
+	}
+}
+
+func (t *Table) toMembers(k roomKey, f *lazyFrame) {
+	for _, u := range t.members(k) {
+		u.mu.Lock()
+		if _, member := u.rooms[k.room]; member && u.live() {
+			t.countDelivered(levelMember, f, u.deliver(f.get(), f.catchingUp, true))
+		}
+		u.mu.Unlock()
+	}
+}
+
+func (t *Table) toViewers(viewers []*Conn, f *lazyFrame, skip map[*user]bool) {
+	for _, c := range viewers {
+		if !skip[c.user] && t.toViewer(c, f) {
+			t.countDelivered(levelOpen, f, 1)
+		}
+	}
+}
+
+func (t *Table) toViewer(c *Conn, f *lazyFrame) bool {
+	u := c.user
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return !c.gone && u.live() && c.deliver(f.get(), f.catchingUp, true)
+}
+
+func (t *Table) toOwner(k userKey, f *lazyFrame) {
+	u := t.lookup(k)
+	if u == nil {
+		return
+	}
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.live() {
+		t.countDelivered(levelOwner, f, u.deliver(f.get(), f.catchingUp, true))
+	}
+}
+
+func (t *Table) membership(k roomKey, uk userKey, ch change, f *lazyFrame) {
+	viewers := t.viewers(k)
+	u := t.lookup(uk)
+	if u != nil {
+		u.mu.Lock()
+		t.applyMembership(u, ch, f)
+		u.mu.Unlock()
+	}
+	t.toViewers(viewers, f, map[*user]bool{u: true})
+}
+
+func (t *Table) applyMembership(u *user, ch change, f *lazyFrame) {
+	switch {
+	case u.gone:
+		return
+	case u.suspended || u.failed:
+		if u.loading {
+			u.held = append(u.held, ch)
+		}
+		return
+	case !u.ready:
+		u.held = append(u.held, ch)
+		return
+	case ch.seq <= u.mark:
+		return
+	}
+	if ch.added {
+		t.memberAdded(u, ch, f)
+		return
+	}
+	t.memberRemoved(u, ch, f)
+}
+
+func (t *Table) memberAdded(u *user, ch change, f *lazyFrame) {
+	applied, wasMember := u.applyAdded(ch.room, ch.ver)
+	if !applied {
+		return
+	}
+	t.countDelivered(levelOwner, f, u.deliver(f.get(), f.catchingUp, true))
+	if !wasMember {
+		t.index(u, ch.room)
+	}
+	for c := range u.conns {
+		c.admitted(ch.room)
+	}
+}
+
+func (t *Table) memberRemoved(u *user, ch change, f *lazyFrame) {
+	applied, wasMember := u.applyRemoved(ch.room, ch.ver)
+	if !applied {
+		return
+	}
+	t.countDelivered(levelOwner, f, u.deliver(f.get(), f.catchingUp, true))
+	if wasMember {
+		t.unindex(u, ch.room)
+	}
+	for c := range u.conns {
+		c.removed(ch.room)
+	}
+}

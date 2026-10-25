@@ -19,6 +19,18 @@ func TestJitterStaysWithinTheUpperHalf(t *testing.T) {
 	}
 }
 
+func TestBetweenStaysWithinTheBounds(t *testing.T) {
+	lo, hi := 5*time.Second, 30*time.Second
+	for range 500 {
+		if got := backoff.Between(lo, hi); got < lo || got > hi {
+			t.Fatalf("Between(%v, %v) = %v", lo, hi, got)
+		}
+	}
+	if got := backoff.Between(lo, lo); got != lo {
+		t.Fatalf("Between of equal bounds = %v, want %v", got, lo)
+	}
+}
+
 func TestPauseWaitsOrStopsOnCancel(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		start := time.Now()

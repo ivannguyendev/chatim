@@ -12,6 +12,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
 	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/room"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
@@ -95,7 +96,7 @@ func (rg *rig) deps(t *testing.T, policy access.Policy) room.Deps {
 	clock := func() time.Time { return rg.now }
 	members, err := member.New(member.Deps{
 		Access: checker, Messages: rg.msgs, Rooms: rg.rooms, Events: rg.events, Now: clock,
-		Members: rg.rooms, Requests: newRequests{}, Forget: nopForgetter{}, Timers: nopTimers{}, Reads: rg.rooms,
+		Members: rg.rooms, Requests: newRequests{}, Forget: nopForgetter{}, Timers: nopTimers{}, Reads: rg.rooms, ReadSink: nopReadSink{},
 	})
 	if err != nil {
 		t.Fatalf("member.New: %v", err)
@@ -115,3 +116,7 @@ func (rg *rig) build(t *testing.T, d room.Deps) *room.Service {
 }
 
 func (rg *rig) at() time.Time { return rg.now.Truncate(time.Millisecond) }
+
+type nopReadSink struct{}
+
+func (nopReadSink) Add(domain.Room, string, domain.ReadPosition) {}

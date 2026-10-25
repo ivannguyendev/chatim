@@ -65,6 +65,7 @@ var portMethods = map[string]string{
 	"MemberReader.MembersOf":      "read",
 	"MemberReader.MembersBetween": "read",
 	"MemberReader.RoomsOf":        "read",
+	"MemberReader.RoomVersionsOf": "read",
 	"MemberReader.ListMembers":    "read",
 	"OwnerChanges.ChangeOwners":   "transaction",
 	"MemberCounts.AddMemberCount": "version-bump",

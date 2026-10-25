@@ -37,8 +37,10 @@ commands:
   set-groups         add or change a taggable group (-inactive keeps it out of notifications and lists)
   room-groups        list the taggable groups with a member in -room
   watch              print live events of a room from NATS
+  dev-keys           write a dev Ed25519 signing key and its public JWKS for the websocket node
+  token              sign a dev websocket token with the key from dev-keys
   slots              show how live cores share the slots
-  e2e                end-to-end scenario steps: setup, send, change, react-pin, members, links, rooms, mentions, check
+  e2e                end-to-end scenario steps: setup, send, change, react-pin, members, links, rooms, mentions, ws, ws-events, ws-drill, check
 
 run "corecli <command> -h" for the flags of a command`
 
@@ -72,6 +74,8 @@ func realMain(args []string) int {
 		"set-groups":        setGroupsCmd,
 		"room-groups":       roomGroupsCmd,
 		"watch":             watchCmd,
+		"dev-keys":          devKeysCmd,
+		"token":             tokenCmd,
 		"slots":             slotsCmd,
 		"e2e":               e2eCmd,
 	}

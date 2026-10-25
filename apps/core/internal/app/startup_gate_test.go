@@ -66,7 +66,7 @@ func startGate(t *testing.T, ctx context.Context, router *gatedRouter, slots run
 		cfg: cfg, log: log,
 		admin:     admin.New(admin.Config{ShutdownTimeout: config.CloseTimeout}, log),
 		grpc:      grpcserver.New(grpcserver.Config{ShutdownTimeout: time.Second}, log),
-		publisher: idle{}, stateClears: idle{}, flusher: idle{}, cidBatch: idle{}, router: router, slots: slots, timers: idle{},
+		publisher: idle{}, readBatch: idle{}, stateClears: idle{}, flusher: idle{}, cidBatch: idle{}, router: router, slots: slots, timers: idle{},
 		projections: idle{}, sweeper: idle{}, watches: watch,
 	}
 	lis, err := listenAll(t.Context(), "127.0.0.1:0", "127.0.0.1:0")
@@ -124,7 +124,7 @@ func TestServeNeverOpensGRPCWhenStopRacesStartup(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	rg := startGate(t, ctx, &gatedRouter{running: make(chan struct{})}, idle{}, &fakeWatch{})
 	rg.awaitAdmin(t)
-	if err := Probe(t.Context(), rg.adminAddr); err == nil {
+	if err := admin.Probe(t.Context(), rg.adminAddr); err == nil {
 		t.Fatal("readyz answered 200 before the router ran")
 	}
 	cancel()
@@ -150,7 +150,7 @@ func TestServeOpensGRPCAndReadinessAfterACleanStart(t *testing.T) {
 	rg := startGate(t, ctx, &gatedRouter{running: running}, idle{}, &fakeWatch{})
 	rg.awaitAdmin(t)
 	deadline := time.Now().Add(gateLimit)
-	for Probe(t.Context(), rg.adminAddr) != nil {
+	for admin.Probe(t.Context(), rg.adminAddr) != nil {
 		if time.Now().After(deadline) {
 			t.Fatal("readyz never answered 200 after a clean start")
 		}

@@ -3,54 +3,46 @@ package config
 import (
 	"cmp"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 	"github.com/ivannguyendev/chatim/pkg/ids"
 	"github.com/ivannguyendev/chatim/pkg/jsconsume"
+	"github.com/ivannguyendev/chatim/pkg/wspublish"
 )
 
 const (
-	DefaultFetchBatch         = 512
-	DefaultFetchWait          = 250 * time.Millisecond
-	DefaultWorkers            = 8
-	DefaultMaxAckPending      = 16384
-	DefaultNotifyMaxAge       = 5 * time.Minute
-	DefaultNotifyStream       = "CHATIM_NOTIFY"
-	DefaultNotifySubjectRoot  = "notify"
-	DefaultNotifyStreamMaxAge = 24 * time.Hour
-	DefaultNotifyDuplicates   = 6 * time.Minute
-	DefaultRoomGroupsSyncMax  = 5000
-	DefaultRoomGroupsTTL      = time.Minute
-	DefaultRoomGroupsRebuild  = 10 * time.Minute
-)
-
-var (
-	notifyStreamName = regexp.MustCompile(`^[A-Z0-9_]+$`)
-	notifyRootName   = regexp.MustCompile(`^[a-z0-9_]+$`)
+	DefaultFetchBatch        = 512
+	DefaultFetchWait         = 250 * time.Millisecond
+	DefaultWorkers           = 8
+	DefaultMaxAckPending     = 16384
+	DefaultNotifyMaxAge      = 5 * time.Minute
+	DefaultTargetsPage       = 1000
+	MaxTargetsPage           = 5000
+	DefaultRoomGroupsSyncMax = 5000
+	DefaultRoomGroupsTTL     = time.Minute
+	DefaultRoomGroupsRebuild = 10 * time.Minute
 )
 
 type Config struct {
-	Enabled            bool
-	EventStream        string
-	EventSubjectRoot   string
-	LiveRoot           string
-	Replicas           int
-	FetchBatch         int
-	FetchWait          time.Duration
-	Workers            int
-	MaxAckPending      int
-	NotifyMaxAge       time.Duration
-	NotifyStream       string
-	NotifySubjectRoot  string
-	NotifyMaxStreamAge time.Duration
-	NotifyDuplicates   time.Duration
-	HideReadTenants    []string
-	RoomGroupsSyncMax  int
-	RoomGroupsTTL      time.Duration
-	RoomGroupsRebuild  time.Duration
+	Enabled           bool
+	EventStream       string
+	EventSubjectRoot  string
+	LiveRoot          string
+	Replicas          int
+	FetchBatch        int
+	FetchWait         time.Duration
+	Workers           int
+	MaxAckPending     int
+	NotifyMaxAge      time.Duration
+	WsPublishStream   string
+	WsPublishRoot     string
+	TargetsPage       int
+	HideReadTenants   []string
+	RoomGroupsSyncMax int
+	RoomGroupsTTL     time.Duration
+	RoomGroupsRebuild time.Duration
 }
 
 func Defaults() Config { return Config{Enabled: true}.WithDefaults() }
@@ -61,10 +53,9 @@ func (c Config) WithDefaults() Config {
 	c.Workers = cmp.Or(c.Workers, DefaultWorkers)
 	c.MaxAckPending = cmp.Or(c.MaxAckPending, DefaultMaxAckPending)
 	c.NotifyMaxAge = cmp.Or(c.NotifyMaxAge, DefaultNotifyMaxAge)
-	c.NotifyStream = cmp.Or(c.NotifyStream, DefaultNotifyStream)
-	c.NotifySubjectRoot = cmp.Or(c.NotifySubjectRoot, DefaultNotifySubjectRoot)
-	c.NotifyMaxStreamAge = cmp.Or(c.NotifyMaxStreamAge, DefaultNotifyStreamMaxAge)
-	c.NotifyDuplicates = cmp.Or(c.NotifyDuplicates, DefaultNotifyDuplicates)
+	c.WsPublishStream = cmp.Or(c.WsPublishStream, wspublish.DefaultStream)
+	c.WsPublishRoot = cmp.Or(c.WsPublishRoot, wspublish.DefaultRoot)
+	c.TargetsPage = cmp.Or(c.TargetsPage, DefaultTargetsPage)
 	c.RoomGroupsSyncMax = cmp.Or(c.RoomGroupsSyncMax, DefaultRoomGroupsSyncMax)
 	c.RoomGroupsTTL = cmp.Or(c.RoomGroupsTTL, DefaultRoomGroupsTTL)
 	c.RoomGroupsRebuild = cmp.Or(c.RoomGroupsRebuild, DefaultRoomGroupsRebuild)
@@ -90,7 +81,7 @@ func validateEvents(c Config) error {
 	case !subjectToken(c.EventStream) || !subjectToken(c.EventSubjectRoot) || !subjectToken(c.LiveRoot):
 		return invalid("event stream %q, event subject root %q and live root %q must be single subject tokens", c.EventStream, c.EventSubjectRoot, c.LiveRoot)
 	case c.Replicas <= 0:
-		return invalid("notify stream replicas %d must be positive", c.Replicas)
+		return invalid("ws publish stream replicas %d must be positive", c.Replicas)
 	default:
 		return nil
 	}
@@ -110,15 +101,17 @@ func validateConsumer(c Config) error {
 }
 
 func validateNotify(c Config) error {
+	if err := wspublish.ValidStream(c.WsPublishStream); err != nil {
+		return err
+	}
+	if err := wspublish.ValidRoot(c.WsPublishRoot); err != nil {
+		return err
+	}
 	switch {
-	case !notifyStreamName.MatchString(c.NotifyStream) || !notifyRootName.MatchString(c.NotifySubjectRoot):
-		return invalid("notify stream %q must match %s and subject root %q must match %s", c.NotifyStream, notifyStreamName, c.NotifySubjectRoot, notifyRootName)
-	case c.NotifyMaxAge <= 0 || c.NotifyMaxStreamAge <= 0 || c.NotifyDuplicates <= 0:
-		return invalid("notify max age %v, stream max age %v and duplicate window %v must be positive", c.NotifyMaxAge, c.NotifyMaxStreamAge, c.NotifyDuplicates)
-	case c.NotifyMaxAge > c.NotifyDuplicates:
-		return invalid("notify max age %v exceeds the duplicate window %v", c.NotifyMaxAge, c.NotifyDuplicates)
-	case c.NotifyDuplicates > c.NotifyMaxStreamAge:
-		return invalid("notify duplicate window %v exceeds the stream max age %v", c.NotifyDuplicates, c.NotifyMaxStreamAge)
+	case c.NotifyMaxAge <= 0 || c.NotifyMaxAge > wspublish.DefaultDuplicates:
+		return invalid("notify max age %v must be positive and within the ws publish duplicate window %v", c.NotifyMaxAge, wspublish.DefaultDuplicates)
+	case c.TargetsPage < 1 || c.TargetsPage > MaxTargetsPage:
+		return invalid("notify targets page %d must be 1..%d", c.TargetsPage, MaxTargetsPage)
 	}
 	for _, tenant := range c.HideReadTenants {
 		if err := ids.ValidTenant(tenant); err != nil {

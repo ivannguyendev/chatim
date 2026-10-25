@@ -58,6 +58,43 @@ x-core-env: &core-env
   GOMEMLIMIT: 920MiB
   GOGC: ${CORE_GOGC:-100}
 
+x-websocket: &websocket
+  image: chatim/websocket:dev
+  profiles: ["app"]
+  restart: unless-stopped
+  mem_limit: 2g
+  ulimits:
+    nofile: 65536
+  stop_grace_period: 18s
+  secrets: [redis_password, redis_presence_password, ws_jwks]
+  depends_on:
+    redis:
+      condition: service_healthy
+    redis-presence:
+      condition: service_healthy
+    core-1:
+      condition: service_healthy
+    core-2:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD", "/app", "probe"]
+    interval: 5s
+    timeout: 3s
+    retries: 3
+    start_period: 30s
+    start_interval: 1s
+
+x-websocket-env: &websocket-env
+  REDIS_ADDR: chatim-redis:6379
+  REDIS_PASSWORD_FILE: /run/secrets/redis_password
+  WS_PRESENCE_REDIS_ADDR: chatim-redis-presence:6379
+  WS_PRESENCE_REDIS_PASSWORD_FILE: /run/secrets/redis_presence_password
+  WS_JWT_KEYS_FILE: /run/secrets/ws_jwks
+  WS_JWT_ISSUER: chatim-dev
+  WS_JWT_AUDIENCE: chatim-websocket
+  NATS_URL: nats://chatim-nats:4222
+  GOMEMLIMIT: 1600MiB
+
 services:
   mongodb:
     image: mongo:8.2
@@ -135,6 +172,18 @@ services:
     command: ["--save", "", "--appendonly", "no", "--maxmemory", "${REDIS_DEDUPE_MAXMEMORY:-512mb}", "--maxmemory-policy", "allkeys-lru"]
     ports:
       - "${REDIS_DEDUPE_PORT:-6381}:6379"
+    tmpfs:
+      - /data
+
+  redis-presence:
+    <<: *redis
+    container_name: chatim-redis-presence
+    secrets: [redis_presence_password]
+    environment:
+      REDIS_SECRET_FILE: /run/secrets/redis_presence_password
+    command: ["--save", "", "--appendonly", "no", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "${REDIS_PRESENCE_PORT:-6382}:6379"
     tmpfs:
       - /data
 
@@ -225,13 +274,65 @@ services:
     ports:
       - "127.0.0.1:${CORE2_GRPC_PORT:-9002}:9000"
 
+  websocket-1:
+    <<: *websocket
+    container_name: chatim-websocket-1
+    environment:
+      <<: *websocket-env
+      WS_NODE_ID: websocket-1
+    ports:
+      - "127.0.0.1:${WS1_PORT:-8081}:8080"
+
+  websocket-2:
+    <<: *websocket
+    container_name: chatim-websocket-2
+    environment:
+      <<: *websocket-env
+      WS_NODE_ID: websocket-2
+    ports:
+      - "127.0.0.1:${WS2_PORT:-8083}:8080"
+
+  gateway-1:
+    image: chatim/gateway:dev
+    container_name: chatim-gateway-1
+    profiles: ["app"]
+    restart: unless-stopped
+    mem_limit: 1g
+    stop_grace_period: 18s
+    secrets: [ws_jwks]
+    environment:
+      GW_CORE_ADDRS: chatim-core-1:9000,chatim-core-2:9000
+      GW_JWT_KEYS_FILE: /run/secrets/ws_jwks
+      GW_JWT_ISSUER: chatim-dev
+      GW_JWT_AUDIENCE: chatim-websocket
+      GW_CORS_ORIGINS: ${GW_CORS_ORIGINS:-http://localhost:3000}
+      GOMEMLIMIT: 800MiB
+    ports:
+      - "127.0.0.1:${GW1_PORT:-8082}:8080"
+    depends_on:
+      core-1:
+        condition: service_healthy
+      core-2:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/app", "probe"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+      start_interval: 1s
+
 secrets:
+  ws_jwks:
+    file: ../../.local/ws-keys/jwks.json
   mongo_password:
     environment: MONGO_ROOT_PASSWORD
   redis_password:
     environment: REDIS_PASSWORD
   redis_dedupe_password:
     environment: REDIS_DEDUPE_PASSWORD
+  redis_presence_password:
+    environment: REDIS_PRESENCE_PASSWORD
   pg_password:
     environment: PG_PASSWORD
 

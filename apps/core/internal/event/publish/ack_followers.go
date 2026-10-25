@@ -7,7 +7,6 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -15,7 +14,7 @@ const ackFollowQueue = 4096
 
 type pendingAck struct {
 	future jetstream.PubAckFuture
-	target store.StateTarget
+	event  *chatimv1.Event
 }
 
 type ackFollower struct {
@@ -37,12 +36,11 @@ func (a *ackFollower) follow(ev *chatimv1.Event, f jetstream.PubAckFuture) {
 	if a == nil {
 		return
 	}
-	target, ok := StateTargetOf(ev)
-	if !ok {
+	if eventKind(ev) == "" {
 		return
 	}
 	select {
-	case a.queue <- pendingAck{future: f, target: target}:
+	case a.queue <- pendingAck{future: f, event: ev}:
 		a.full.Store(false)
 	default:
 		a.counters.stateTrackFull.Add(1)
@@ -59,8 +57,11 @@ func (a *ackFollower) run(abort <-chan struct{}) {
 			if !open {
 				return
 			}
-			if acked(pending.future, abort) {
-				a.clears.Add(pending.target)
+			if !acked(pending.future, abort) {
+				continue
+			}
+			if targets := StateTargetsOf(pending.event); len(targets) > 0 {
+				a.clears.AddAll(targets)
 			}
 		case <-abort:
 			return

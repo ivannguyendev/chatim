@@ -55,7 +55,7 @@ func (r *memberRun) directRoom() error {
 		r.member(dm, e2e.KindMemberAdded, peer, 1, ""),
 		r.want(dm, e2e.KindMemberCount, e2e.MemberCountEventID(dm, 1), e2e.CountPayload(2)),
 		r.want(dm, e2e.KindCreated, e2e.MessageEventID(dm, 1), ""),
-		r.want(dm, e2e.KindRead, e2e.ReadEventID(dm, peer, 2), e2e.ReadPayload(1, 2)),
+		r.want(dm, e2e.KindRead, e2e.ReadWantID(dm, peer, 2), e2e.ReadPayload(1, 2)),
 	)
 }
 

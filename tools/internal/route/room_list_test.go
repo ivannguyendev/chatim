@@ -22,6 +22,8 @@ func roomListCalls() map[string]linkCase {
 			&chatimv1.ListMyRoomsResponse{Items: []*chatimv1.RoomItem{{Room: &chatimv1.Room{Id: "42"}, Unread: &chatimv1.Unread{Count: 3}}}, Next: "n1"}, false),
 		"get rooms": linkCaseOf(&chatimv1.GetRoomsRequest{RoomIds: []string{"42", "43"}}, (*route.Client).GetRooms,
 			&chatimv1.GetRoomsResponse{Items: []*chatimv1.RoomItem{{Room: &chatimv1.Room{Id: "42"}}}, Missing: []string{"43"}}, false),
+		"list my room ids": linkCaseOf(&chatimv1.ListMyRoomIDsRequest{}, (*route.Client).ListMyRoomIDs,
+			&chatimv1.ListMyRoomIDsResponse{Rooms: []*chatimv1.MyRoomID{{RoomId: "42", Ver: 3}}}, false),
 		"update room": linkCaseOf(&chatimv1.UpdateRoomRequest{RoomId: "42", Name: &name}, (*route.Client).UpdateRoom,
 			&chatimv1.UpdateRoomResponse{Room: &chatimv1.Room{Id: "42", Name: name, InfoVer: 2}, Changed: true}, true),
 		"set preferences": linkCaseOf(&chatimv1.SetRoomPreferencesRequest{RoomId: "42", Pinned: &pinned}, (*route.Client).SetRoomPreferences,

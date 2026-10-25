@@ -12,6 +12,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/message"
 	"github.com/ivannguyendev/chatim/apps/core/internal/message/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
+	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/room"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/memstore"
@@ -57,6 +58,10 @@ func (nopTimers) Disarm(context.Context, timer.Timer) {}
 type nopForgetter struct{}
 
 func (nopForgetter) ForgetMembers(uint64) {}
+
+type nopReadSink struct{}
+
+func (nopReadSink) Add(domain.Room, string, domain.ReadPosition) {}
 
 type nopPublisher struct{}
 
@@ -132,13 +137,17 @@ func newMemberService(t *testing.T, rg *rig, o options) *member.Service {
 	if o.events != nil {
 		events = o.events
 	}
+	var reads member.ReadSink = nopReadSink{}
+	if o.reads != nil {
+		reads = o.reads
+	}
 	var forget member.MemberForgetter = nopForgetter{}
 	if f, ok := o.sender.(member.MemberForgetter); ok {
 		forget = f
 	}
 	s, err := member.New(member.Deps{
 		Access: checker, Messages: rg.msgs, Rooms: rg.rooms, Events: events, Now: o.now, Limits: o.memberLimits,
-		Members: membersOf(rg, o), Requests: newRequests(t, nil), Forget: forget, Timers: nopTimers{}, Reads: rg.rooms,
+		Members: membersOf(rg, o), Requests: newRequests(t, nil), Forget: forget, Timers: nopTimers{}, Reads: rg.rooms, ReadSink: reads,
 	})
 	if err != nil {
 		t.Fatalf("member.New: %v", err)

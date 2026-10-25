@@ -30,12 +30,20 @@ var _ publish.StateClears = (*stateclear.Queue)(nil)
 type recordingClears struct {
 	mu      sync.Mutex
 	targets []store.StateTarget
+	calls   int
 }
 
-func (c *recordingClears) Add(t store.StateTarget) {
+func (c *recordingClears) AddAll(targets []store.StateTarget) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.targets = append(c.targets, t)
+	c.targets = append(c.targets, targets...)
+	c.calls++
+}
+
+func (c *recordingClears) callCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.calls
 }
 
 func (c *recordingClears) added() []store.StateTarget {
@@ -59,8 +67,8 @@ func TestAckedEventsHandTheirStateToTheClearQueue(t *testing.T) {
 		rg.enqueue(t, roomA, 1, 2)
 		rg.enqueue(t, roomB, 1)
 		room := domain.Room{ID: roomA, Tenant: tenant, Type: domain.RoomGroup}
-		if err := rg.Enqueue(roomA, []*chatimv1.Event{pbconv.ReadUpdated(room, "bob", domain.ReadPosition{Seq: 2, Ver: 3}, sentAt)}); err != nil {
-			t.Fatalf("Enqueue(read_updated): %v", err)
+		if err := rg.Enqueue(roomA, []*chatimv1.Event{pbconv.ReadPositions(room, []*chatimv1.ReadEntry{{User: "bob", ReadSeq: 2, ReadVer: 3}}, sentAt)}); err != nil {
+			t.Fatalf("Enqueue(read_positions): %v", err)
 		}
 		closeRig(t, rg)
 		want := []store.StateTarget{

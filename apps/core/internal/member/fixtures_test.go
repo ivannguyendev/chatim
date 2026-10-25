@@ -49,11 +49,35 @@ func (r *recordingEvents) list() ([]uint64, []*chatimv1.Event) {
 	return slices.Clone(r.rooms), slices.Clone(r.events)
 }
 
+type readAdd struct {
+	room domain.Room
+	user string
+	pos  domain.ReadPosition
+}
+
+type recordingReads struct {
+	mu   sync.Mutex
+	adds []readAdd
+}
+
+func (r *recordingReads) Add(room domain.Room, user string, pos domain.ReadPosition) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.adds = append(r.adds, readAdd{room: room, user: user, pos: pos})
+}
+
+func (r *recordingReads) list() []readAdd {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.adds)
+}
+
 type rig struct {
 	m      *member.Service
 	msgs   *memstore.Messages
 	rooms  *memstore.Rooms
 	events *recordingEvents
+	reads  *recordingReads
 	now    time.Time
 	memberParts
 }
@@ -61,7 +85,7 @@ type rig struct {
 func newRig(t *testing.T, policy access.Policy) *rig {
 	t.Helper()
 	rg := &rig{
-		msgs: memstore.NewMessages(), rooms: memstore.NewRooms(), events: &recordingEvents{},
+		msgs: memstore.NewMessages(), rooms: memstore.NewRooms(), events: &recordingEvents{}, reads: &recordingReads{},
 		now: created.Add(time.Minute + 1500*time.Microsecond),
 	}
 	r := domain.Room{ID: room, Tenant: tenant, Type: domain.RoomGroup, Name: "team", CreatedBy: "alice", CreatedAt: created, MemberCount: 3}
@@ -86,7 +110,7 @@ func (rg *rig) deps(t *testing.T, policy access.Policy) member.Deps {
 	}
 	return member.Deps{
 		Access: checker, Messages: rg.msgs, Rooms: rg.rooms, Events: rg.events, Now: func() time.Time { return rg.now },
-		Members: rg.members, Requests: rg.requests, Forget: rg.forgets, Timers: rg.timers, Reads: rg.rooms, NewRequestID: rg.requestIDs.next,
+		Members: rg.members, Requests: rg.requests, Forget: rg.forgets, Timers: rg.timers, Reads: rg.rooms, ReadSink: rg.reads, NewRequestID: rg.requestIDs.next,
 	}
 }
 

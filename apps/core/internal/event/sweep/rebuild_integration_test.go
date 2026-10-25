@@ -16,6 +16,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/testlog"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
+	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 func itRebuilders(t *testing.T, st *mongostore.Store) map[store.StateCollection]sweep.Rebuilder {
@@ -114,7 +115,7 @@ func TestSweepRebuildsEveryCollectionFlaggedByTheRealStore(t *testing.T) {
 	for _, id := range []string{
 		pbconv.MessageChangeEventID(itRoom, 0, 1, 1),
 		pbconv.MemberEventID(itRoom, "ann", 1), pbconv.MemberEventID(itRoom, "bob", 1),
-		pbconv.ReadEventID(itRoom, "ann", pos.Ver), pbconv.ClearedEventID(itRoom, "bob", clearedAt),
+		pbconv.ReadPositionsEventID(itRoom, []*chatimv1.ReadEntry{{User: "ann", ReadSeq: pos.Seq, ReadVer: pos.Ver}}), pbconv.ClearedEventID(itRoom, "bob", clearedAt),
 		pbconv.ReactionEventID(itRoom, 0, 1, "bob", 1), pbconv.PinEventID(itRoom, 1), pbconv.HiddenEventID(itRoom, "bob", 0, 1),
 	} {
 		if !slices.Contains(got, id) {

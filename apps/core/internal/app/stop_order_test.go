@@ -91,7 +91,7 @@ func stopNode(order *stopOrder) *node {
 		cfg: cfg, log: quiet,
 		admin:     admin.New(admin.Config{ShutdownTimeout: config.CloseTimeout}, quiet),
 		grpc:      grpcserver.New(grpcserver.Config{ShutdownTimeout: time.Second}, quiet),
-		publisher: order.drainer("publisher"), stateClears: order.drainer("state clear queue"),
+		publisher: order.drainer("publisher"), readBatch: order.drainer("read batch"), stateClears: order.drainer("state clear queue"),
 		flusher: order.drainer("flusher"), cidBatch: order.drainer("cid batcher"),
 		router: &recordedRouter{recordedDrainer: order.drainer("router"), running: running},
 		slots:  idle{}, timers: order.drainer("timer consumer"),
@@ -119,13 +119,13 @@ func serveUntilStopped(t *testing.T, a *node) error {
 	}
 }
 
-func TestShutdownStopsTheSweeperFirstAndClearsStatesAfterThePublisher(t *testing.T) {
+func TestShutdownStopsTheSweeperFirstFlushesReadsBeforeThePublisherAndClearsStatesAfterIt(t *testing.T) {
 	order := &stopOrder{}
 	if err := serveUntilStopped(t, stopNode(order)); err != nil {
 		t.Fatalf("serve = %v, want a clean stop", err)
 	}
 	want := []string{
-		"sweeper", "mention", "projection", "timer consumer", "member watch", "room watch", "router", "cid batcher", "flusher", "publisher", "state clear queue",
+		"sweeper", "mention", "projection", "timer consumer", "member watch", "room watch", "router", "cid batcher", "flusher", "read batch", "publisher", "state clear queue",
 	}
 	got := order.names()
 	if len(got) == len(want) {

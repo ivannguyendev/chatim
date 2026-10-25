@@ -15,6 +15,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
+	"github.com/ivannguyendev/chatim/pkg/redact"
 )
 
 const (
@@ -61,11 +62,11 @@ func connect(ctx context.Context, cfg config.Config, log *slog.Logger) (*clients
 func (c *clients) connectMongo(ctx context.Context, cfg config.Config) error {
 	client, err := mongo.Connect(mongoOptions(cfg))
 	if err != nil {
-		return fmt.Errorf("mongo connect %s: %w", config.RedactURL(cfg.MongoURI), config.RedactError(err, cfg.MongoURI))
+		return fmt.Errorf("mongo connect %s: %w", redact.URL(cfg.MongoURI), redact.Error(err, cfg.MongoURI))
 	}
 	c.mongo = client
 	if err := client.Ping(ctx, readpref.Primary()); err != nil {
-		return fmt.Errorf("mongo ping %s: %w", config.RedactURL(cfg.MongoURI), config.RedactError(err, cfg.MongoURI))
+		return fmt.Errorf("mongo ping %s: %w", redact.URL(cfg.MongoURI), redact.Error(err, cfg.MongoURI))
 	}
 	return nil
 }

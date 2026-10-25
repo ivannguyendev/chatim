@@ -16,6 +16,12 @@ type MemberRoom struct {
 	ReadSeq   uint64
 }
 
+type RoomVersion struct {
+	Room uint64
+	Ver  uint32
+	Left bool
+}
+
 type JoinResult struct {
 	Members []domain.Member
 	Changed int
@@ -30,6 +36,7 @@ type MemberReader interface {
 	MembersOf(ctx context.Context, room uint64, users []string) ([]domain.Member, error)
 	MembersBetween(ctx context.Context, room uint64, from, to time.Time, limit int) ([]domain.Member, error)
 	RoomsOf(ctx context.Context, tenant, user string) ([]MemberRoom, error)
+	RoomVersionsOf(ctx context.Context, tenant, user string) ([]RoomVersion, error)
 	ListMembers(ctx context.Context, room uint64, after MemberCursor, limit int) ([]domain.Member, error)
 }
 

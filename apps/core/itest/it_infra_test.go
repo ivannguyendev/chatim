@@ -80,26 +80,26 @@ func realInfra(t *testing.T) *itInfra {
 func (it *itInfra) coreConfig(t *testing.T, env map[string]string) config.Config {
 	t.Helper()
 	base := map[string]string{
-		"CORE_ID":               "it-core-" + it.suffix,
-		"CORE_GRPC_ADDR":        freeAddr(t),
-		"CORE_ADMIN_ADDR":       freeAddr(t),
-		"MONGO_URI":             it.mongoURI,
-		"MONGO_DB":              "chatim_it_core_" + it.suffix,
-		"REDIS_ADDR":            it.state.addr,
-		"REDIS_DB":              strconv.Itoa(itRedisDB),
-		"REDIS_PASSWORD":        it.state.password,
-		"REDIS_DEDUPE_ADDR":     it.dedupe.addr,
-		"REDIS_DEDUPE_DB":       strconv.Itoa(itRedisDB),
-		"REDIS_DEDUPE_PASSWORD": it.dedupe.password,
-		"NATS_URL":              it.natsURL,
-		"EVT_STREAM":            "IT_CORE_" + strings.ToUpper(it.suffix),
-		"EVT_SUBJECT_ROOT":      "itcevt" + it.suffix,
-		"EVT_LIVE_ROOT":         "itclive" + it.suffix,
-		"TIMER_STREAM":          "IT_TIMER_" + strings.ToUpper(it.suffix),
-		"TIMER_SUBJECT_ROOT":    "itctimer" + it.suffix,
-		"NOTIFY_STREAM":         "IT_NOTIFY_" + strings.ToUpper(it.suffix),
-		"NOTIFY_SUBJECT_ROOT":   "itcnotify" + it.suffix,
-		"PROJECTION_FETCH_WAIT": "500ms",
+		"CORE_ID":                   "it-core-" + it.suffix,
+		"CORE_GRPC_ADDR":            freeAddr(t),
+		"CORE_ADMIN_ADDR":           freeAddr(t),
+		"MONGO_URI":                 it.mongoURI,
+		"MONGO_DB":                  "chatim_it_core_" + it.suffix,
+		"REDIS_ADDR":                it.state.addr,
+		"REDIS_DB":                  strconv.Itoa(itRedisDB),
+		"REDIS_PASSWORD":            it.state.password,
+		"REDIS_DEDUPE_ADDR":         it.dedupe.addr,
+		"REDIS_DEDUPE_DB":           strconv.Itoa(itRedisDB),
+		"REDIS_DEDUPE_PASSWORD":     it.dedupe.password,
+		"NATS_URL":                  it.natsURL,
+		"EVT_STREAM":                "IT_CORE_" + strings.ToUpper(it.suffix),
+		"EVT_SUBJECT_ROOT":          "itcevt" + it.suffix,
+		"EVT_LIVE_ROOT":             "itclive" + it.suffix,
+		"TIMER_STREAM":              "IT_TIMER_" + strings.ToUpper(it.suffix),
+		"TIMER_SUBJECT_ROOT":        "itctimer" + it.suffix,
+		"MENTION_WS_PUBLISH_STREAM": "IT_WS_" + strings.ToUpper(it.suffix),
+		"MENTION_WS_PUBLISH_ROOT":   "itcws" + it.suffix + ".publish",
+		"PROJECTION_FETCH_WAIT":     "500ms",
 	}
 	maps.Copy(base, env)
 	for k, v := range base {
@@ -119,7 +119,7 @@ func (it *itInfra) forget(t *testing.T, cfg config.Config) {
 	if err := it.mongo.Database(cfg.MongoDB).Drop(ctx); err != nil {
 		t.Errorf("drop %s: %v", cfg.MongoDB, err)
 	}
-	for _, name := range []string{cfg.Stream.Name, cfg.Timer.Name, cfg.Mention.NotifyStream} {
+	for _, name := range []string{cfg.Stream.Name, cfg.Timer.Name, cfg.Mention.WsPublishStream} {
 		if err := it.js.DeleteStream(ctx, name); err != nil && !errors.Is(err, jetstream.ErrStreamNotFound) {
 			t.Errorf("delete stream %s: %v", name, err)
 		}

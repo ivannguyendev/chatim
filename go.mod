@@ -3,7 +3,9 @@ module github.com/ivannguyendev/chatim
 go 1.26.0
 
 require (
+	connectrpc.com/connect v1.21.0
 	github.com/alicebob/miniredis/v2 v2.39.0
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/lxzan/gws v1.10.2
 	github.com/nats-io/nats.go v1.54.0
@@ -12,6 +14,7 @@ require (
 	go.mongodb.org/mongo-driver/v2 v2.9.1
 	go.uber.org/goleak v1.3.0
 	golang.org/x/sync v0.23.0
+	golang.org/x/time v0.16.0
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.12
 )

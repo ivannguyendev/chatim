@@ -13,8 +13,6 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/storetest"
 )
 
-const userRoomsIndex = "tenant_1_user_id_1_state_1_room_id_1_joined_at_1_cleared_at_1_read_seq_1_pinned_at_1_archived_at_1"
-
 func TestMongoRoomListContract(t *testing.T) {
 	client := itClient(t)
 	storetest.RunRoomList(t, func(t *testing.T) storetest.ListableRooms {
@@ -61,8 +59,8 @@ func TestCountRoomsIsACountScanOfTheUserRoomsIndex(t *testing.T) {
 	itListRooms(t, s, 3)
 	count := bson.D{{Key: "count", Value: membersCollection}, {Key: "query", Value: memberRoomsFilter("acme", "minh")}, {Key: "limit", Value: 2}}
 	stages, indexes := winningPlan(t, db, count)
-	if !slices.Contains(stages, "COUNT_SCAN") || slices.Contains(stages, "FETCH") || !slices.Equal(indexes, []string{userRoomsIndex}) {
-		t.Fatalf("winning plan stages %v on %v, want a COUNT_SCAN of %s without FETCH", stages, indexes, userRoomsIndex)
+	if !slices.Contains(stages, "COUNT_SCAN") || slices.Contains(stages, "FETCH") || !slices.Equal(indexes, []string{membersUserIndex}) {
+		t.Fatalf("winning plan stages %v on %v, want a COUNT_SCAN of %s without FETCH", stages, indexes, membersUserIndex)
 	}
 }
 
@@ -71,8 +69,8 @@ func TestStepwiseMembersReadIsCoveredByTheUserRoomsIndex(t *testing.T) {
 	itListRooms(t, s, 3)
 	find := bson.D{{Key: "find", Value: membersCollection}, {Key: "filter", Value: memberRoomsFilter("acme", "minh")}, {Key: "projection", Value: memberOrderFields}}
 	stages, indexes := winningPlan(t, db, find)
-	if slices.Contains(stages, "FETCH") || slices.Contains(stages, "COLLSCAN") || !slices.Equal(indexes, []string{userRoomsIndex}) {
-		t.Fatalf("winning plan stages %v on %v, want a covered scan of %s", stages, indexes, userRoomsIndex)
+	if slices.Contains(stages, "FETCH") || slices.Contains(stages, "COLLSCAN") || !slices.Equal(indexes, []string{membersUserIndex}) {
+		t.Fatalf("winning plan stages %v on %v, want a covered scan of %s", stages, indexes, membersUserIndex)
 	}
 }
 

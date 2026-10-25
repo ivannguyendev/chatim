@@ -26,8 +26,8 @@ flowchart TD
     subgraph UpdatePhase["1. Luồng Ghi nhận Đã đọc (MarkRead)"]
         UserAction["Người dùng lướt đọc tin đến vị trí seq"] --> CheckSeq{"seq mới > read_seq hiện tại?"}
         CheckSeq -- "Không (lướt ngược lên)" --> NoOp["Bỏ qua (Giữ nguyên read_seq)"]
-        CheckSeq -- "Có (tiến về tương lai)" --> AtomicUpdate["FindOneAndUpdate MongoDB (members)<br/>filter: {_id, state: 1, read_seq < seq}<br/>set: {read_seq: seq, read_ver: read_ver + 1}<br/>kèm cờ _state bit 2 (read_updated chờ phát)"]
-        AtomicUpdate --> FanoutNATS["Publish qua NATS: read_updated"]
+        CheckSeq -- "Có (tiến về tương lai)" --> AtomicUpdate["FindOneAndUpdate MongoDB (members)<br/>filter: {_id, state: 1, read_seq < seq}<br/>set: {read_seq: seq, read_ver: read_ver + 1}<br/>kèm cờ _state bit 2 (vị trí chờ phát)"]
+        AtomicUpdate --> FanoutNATS["Hàng gom readbatch: mỗi 1s một read_positions mỗi room (D196)"]
         FanoutNATS --> SyncOtherDev["Đồng bộ tức thì: Xoá huy hiệu (badge) trên máy tính/tablet"]
     end
 
@@ -59,12 +59,11 @@ sequenceDiagram
     Core->>Members: FindOneAndUpdate(filter: {_id: room│user, state: 1, read_seq < 10042},<br/>update pipeline: read_seq = 10042, read_ver + 1, _state bit 2)
     Members-->>Core: Update thành công (read_ver tăng)
 
-    Note over Core,NATS: 2. Phát tán đồng bộ sang các thiết bị khác của tôi
-    Core->>NATS: Publish read_updated(room_id, user_id, read_seq=10042)
-    NATS-->>WebClient: Realtime push: Xoá huy hiệu chưa đọc trên Web
-    Note over Core,NATS: PubAck thì xoá bit 2 nếu read_ver còn bằng, rớt thì sweeper phát bù. Cờ đã đọc của mention không lưu: Mention App tính lúc đọc ListMentions từ read_seq (D165)
-
-    Core-->>Client: Xác nhận thành công
+    Core-->>Client: Xác nhận thành công (read_seq, read_ver)
+    Note over Core,NATS: 2. Gom theo room rồi phát (D196)
+    Core->>NATS: Mỗi READ_EVENT_WINDOW (1s): read_positions(room_id, entries [{user, read_seq=10042, read_ver}])
+    NATS-->>WebClient: Websocket đẩy cho máy khác của tôi và người đang mở phòng (đã xem)
+    Note over Core,NATS: PubAck thì xoá bit 2 của mọi user có tên nếu read_ver còn bằng, rớt thì sweeper phát read_positions một dòng. Cờ đã đọc của mention không lưu: Mention App tính lúc đọc ListMentions từ read_seq (D165)
 
     Note over Client,Msgs: 3. Khi mở lại danh sách phòng: Tính Unread lúc đọc (M3, R17)
     Client->>Core: ListMyRooms (hoặc GetRooms)
@@ -158,7 +157,7 @@ sequenceDiagram
 | Thành phần phụ thuộc | Mục đích phụ thuộc | Ứng xử khi thành phần gặp sự cố (Failure Behavior) |
 |---|---|---|
 | **Collection `members`** | Lưu trạng thái `read_seq` | Nếu ghi thất bại: Client sẽ thử lại trong lần cuộn màn hình tiếp theo. Người dùng chỉ bị hiện tượng tạm thời thấy phòng chưa được đánh dấu đã đọc. |
-| **NATS JetStream** | Phát sự kiện `read_updated` đồng bộ đa thiết bị | Nếu NATS quá tải: Thiết bị hiện tại vẫn hiển thị đã đọc bình thường; doc `members` giữ cờ `_state` bit 2 và sweeper slot 0 phát bù `read_updated` của vị trí hiện tại khi NATS sống lại (Module 10), thiết bị thứ hai đồng bộ lúc đó hoặc khi mở lại ứng dụng. |
+| **NATS JetStream** | Phát sự kiện `read_positions` (gom theo room mỗi 1s, D196) đồng bộ đa thiết bị và "đã xem" | Nếu NATS quá tải: Thiết bị hiện tại vẫn hiển thị đã đọc bình thường; doc `members` giữ cờ `_state` bit 2 và sweeper slot 0 phát bù `read_positions` một dòng của vị trí hiện tại khi NATS sống lại (Module 10), thiết bị thứ hai đồng bộ lúc đó hoặc khi mở lại ứng dụng. |
 | **`room/roomcache` + `messages`** | Đuôi phòng cho phép đếm unread | Đọc đuôi phòng từ Mongo lỗi: `ListMyRooms`/`GetRooms` trả `UNAVAILABLE` (lỗi store), không có giá trị unread dự phòng. |
 
 ### 6.1. Chỉ số Sức khoẻ Vận hành & Cảnh báo SRE (Key Metrics & Alerts)
@@ -167,5 +166,5 @@ Chưa có metric đếm số lệnh `MarkRead`, thời gian tính unread hay t�
 
 - **`chatim_core_room_cache_hits_total{cache="tail"}`**, **`chatim_core_room_cache_misses_total{cache="tail"}`:** Lượt đọc đuôi phòng từ RAM hay từ store (chỉ để xem tốc độ, không có alert).
 - **`chatim_core_room_tail_cache_bytes`:** Dung lượng ước tính của cache đuôi phòng.
-- **`chatim_core_event_pending_oldest_seconds{collection="members"}`:** Tuổi cờ chờ phát cũ nhất trên `members` (gồm `read_updated`).
+- **`chatim_core_event_pending_oldest_seconds{collection="members"}`:** Tuổi cờ chờ phát cũ nhất trên `members` (gồm vị trí đọc chờ phát `read_positions`). Hàng gom có `chatim_core_read_batch_entries_total`, `_events_total`, `_dropped_total`, `_enqueue_failures_total`.
   - *Luật cảnh báo (`ChatimEventPendingStuck`):* cờ cũ nhất > 60s trong 5 phút.

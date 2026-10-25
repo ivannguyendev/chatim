@@ -1,6 +1,9 @@
 package config
 
 import (
+	"slices"
+	"strings"
+
 	"github.com/ivannguyendev/chatim/modules/mention/mentionapp"
 	"github.com/ivannguyendev/chatim/pkg/envconfig"
 )
@@ -14,10 +17,9 @@ func (p *parser) mentionConfig(c *Config) {
 	m.Workers = p.count("MENTION_WORKERS", m.Workers)
 	m.MaxAckPending = p.count("MENTION_MAX_ACK_PENDING", m.MaxAckPending)
 	m.NotifyMaxAge = p.span("MENTION_NOTIFY_MAX_AGE", m.NotifyMaxAge)
-	m.NotifyStream = envconfig.String("NOTIFY_STREAM", m.NotifyStream)
-	m.NotifySubjectRoot = envconfig.String("NOTIFY_SUBJECT_ROOT", m.NotifySubjectRoot)
-	m.NotifyMaxStreamAge = p.span("NOTIFY_STREAM_MAX_AGE", m.NotifyMaxStreamAge)
-	m.NotifyDuplicates = p.span("NOTIFY_STREAM_DUPLICATES", m.NotifyDuplicates)
+	m.WsPublishStream = envconfig.String("MENTION_WS_PUBLISH_STREAM", m.WsPublishStream)
+	m.WsPublishRoot = envconfig.String("MENTION_WS_PUBLISH_ROOT", m.WsPublishRoot)
+	m.TargetsPage = p.count("MENTION_NOTIFY_TARGETS_PAGE", m.TargetsPage)
 	m.HideReadTenants = p.tenants("MENTION_HIDE_READ_TENANTS")
 	m.RoomGroupsSyncMax = p.count("MENTION_ROOM_GROUPS_SYNC_MAX", m.RoomGroupsSyncMax)
 	m.RoomGroupsTTL = p.span("MENTION_ROOM_GROUPS_TTL", m.RoomGroupsTTL)
@@ -30,14 +32,11 @@ func (c Config) mentionRules() []rule {
 	if !m.Enabled {
 		return nil
 	}
-	roots := []string{c.Stream.SubjectRoot, c.Stream.LiveRoot, c.Timer.SubjectRoot}
-	distinctRoot := true
-	for _, root := range roots {
-		distinctRoot = distinctRoot && m.NotifySubjectRoot != root
-	}
+	first, _, _ := strings.Cut(m.WsPublishRoot, ".")
+	distinctRoot := !slices.Contains([]string{c.Stream.SubjectRoot, c.Stream.LiveRoot, c.Timer.SubjectRoot}, first)
 	return []rule{
-		{m.NotifyStream != c.Stream.Name && m.NotifyStream != c.Timer.Name, "NOTIFY_STREAM must differ from EVT_STREAM and TIMER_STREAM"},
-		{distinctRoot, "NOTIFY_SUBJECT_ROOT must differ from EVT_SUBJECT_ROOT, EVT_LIVE_ROOT and TIMER_SUBJECT_ROOT"},
+		{m.WsPublishStream != c.Stream.Name && m.WsPublishStream != c.Timer.Name, "MENTION_WS_PUBLISH_STREAM must differ from EVT_STREAM and TIMER_STREAM"},
+		{distinctRoot, "MENTION_WS_PUBLISH_ROOT must not start with EVT_SUBJECT_ROOT, EVT_LIVE_ROOT or TIMER_SUBJECT_ROOT"},
 		{m.FetchWait <= c.Projection.FetchWait, "MENTION_FETCH_WAIT must not exceed PROJECTION_FETCH_WAIT"},
 	}
 }

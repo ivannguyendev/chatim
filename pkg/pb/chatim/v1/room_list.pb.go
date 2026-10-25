@@ -607,6 +607,146 @@ func (x *GetRoomsResponse) GetMissing() []string {
 	return nil
 }
 
+type ListMyRoomIDsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMyRoomIDsRequest) Reset() {
+	*x = ListMyRoomIDsRequest{}
+	mi := &file_chatim_v1_room_list_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMyRoomIDsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMyRoomIDsRequest) ProtoMessage() {}
+
+func (x *ListMyRoomIDsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_room_list_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMyRoomIDsRequest.ProtoReflect.Descriptor instead.
+func (*ListMyRoomIDsRequest) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_room_list_proto_rawDescGZIP(), []int{8}
+}
+
+type MyRoomID struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RoomId        string                 `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
+	Ver           uint32                 `protobuf:"varint,2,opt,name=ver,proto3" json:"ver,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MyRoomID) Reset() {
+	*x = MyRoomID{}
+	mi := &file_chatim_v1_room_list_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MyRoomID) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MyRoomID) ProtoMessage() {}
+
+func (x *MyRoomID) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_room_list_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MyRoomID.ProtoReflect.Descriptor instead.
+func (*MyRoomID) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_room_list_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *MyRoomID) GetRoomId() string {
+	if x != nil {
+		return x.RoomId
+	}
+	return ""
+}
+
+func (x *MyRoomID) GetVer() uint32 {
+	if x != nil {
+		return x.Ver
+	}
+	return 0
+}
+
+type ListMyRoomIDsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Rooms         []*MyRoomID            `protobuf:"bytes,1,rep,name=rooms,proto3" json:"rooms,omitempty"`
+	Left          []*MyRoomID            `protobuf:"bytes,2,rep,name=left,proto3" json:"left,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMyRoomIDsResponse) Reset() {
+	*x = ListMyRoomIDsResponse{}
+	mi := &file_chatim_v1_room_list_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMyRoomIDsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMyRoomIDsResponse) ProtoMessage() {}
+
+func (x *ListMyRoomIDsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_room_list_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMyRoomIDsResponse.ProtoReflect.Descriptor instead.
+func (*ListMyRoomIDsResponse) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_room_list_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ListMyRoomIDsResponse) GetRooms() []*MyRoomID {
+	if x != nil {
+		return x.Rooms
+	}
+	return nil
+}
+
+func (x *ListMyRoomIDsResponse) GetLeft() []*MyRoomID {
+	if x != nil {
+		return x.Left
+	}
+	return nil
+}
+
 type SetRoomPreferencesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	RoomId        string                 `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
@@ -619,7 +759,7 @@ type SetRoomPreferencesRequest struct {
 
 func (x *SetRoomPreferencesRequest) Reset() {
 	*x = SetRoomPreferencesRequest{}
-	mi := &file_chatim_v1_room_list_proto_msgTypes[8]
+	mi := &file_chatim_v1_room_list_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -631,7 +771,7 @@ func (x *SetRoomPreferencesRequest) String() string {
 func (*SetRoomPreferencesRequest) ProtoMessage() {}
 
 func (x *SetRoomPreferencesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_room_list_proto_msgTypes[8]
+	mi := &file_chatim_v1_room_list_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -644,7 +784,7 @@ func (x *SetRoomPreferencesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetRoomPreferencesRequest.ProtoReflect.Descriptor instead.
 func (*SetRoomPreferencesRequest) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_room_list_proto_rawDescGZIP(), []int{8}
+	return file_chatim_v1_room_list_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *SetRoomPreferencesRequest) GetRoomId() string {
@@ -685,7 +825,7 @@ type SetRoomPreferencesResponse struct {
 
 func (x *SetRoomPreferencesResponse) Reset() {
 	*x = SetRoomPreferencesResponse{}
-	mi := &file_chatim_v1_room_list_proto_msgTypes[9]
+	mi := &file_chatim_v1_room_list_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -697,7 +837,7 @@ func (x *SetRoomPreferencesResponse) String() string {
 func (*SetRoomPreferencesResponse) ProtoMessage() {}
 
 func (x *SetRoomPreferencesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_room_list_proto_msgTypes[9]
+	mi := &file_chatim_v1_room_list_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -710,7 +850,7 @@ func (x *SetRoomPreferencesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetRoomPreferencesResponse.ProtoReflect.Descriptor instead.
 func (*SetRoomPreferencesResponse) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_room_list_proto_rawDescGZIP(), []int{9}
+	return file_chatim_v1_room_list_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *SetRoomPreferencesResponse) GetChanged() bool {
@@ -738,7 +878,7 @@ type UpdateRoomRequest struct {
 
 func (x *UpdateRoomRequest) Reset() {
 	*x = UpdateRoomRequest{}
-	mi := &file_chatim_v1_room_list_proto_msgTypes[10]
+	mi := &file_chatim_v1_room_list_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -750,7 +890,7 @@ func (x *UpdateRoomRequest) String() string {
 func (*UpdateRoomRequest) ProtoMessage() {}
 
 func (x *UpdateRoomRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_room_list_proto_msgTypes[10]
+	mi := &file_chatim_v1_room_list_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -763,7 +903,7 @@ func (x *UpdateRoomRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateRoomRequest.ProtoReflect.Descriptor instead.
 func (*UpdateRoomRequest) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_room_list_proto_rawDescGZIP(), []int{10}
+	return file_chatim_v1_room_list_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *UpdateRoomRequest) GetRoomId() string {
@@ -797,7 +937,7 @@ type UpdateRoomResponse struct {
 
 func (x *UpdateRoomResponse) Reset() {
 	*x = UpdateRoomResponse{}
-	mi := &file_chatim_v1_room_list_proto_msgTypes[11]
+	mi := &file_chatim_v1_room_list_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -809,7 +949,7 @@ func (x *UpdateRoomResponse) String() string {
 func (*UpdateRoomResponse) ProtoMessage() {}
 
 func (x *UpdateRoomResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_room_list_proto_msgTypes[11]
+	mi := &file_chatim_v1_room_list_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -822,7 +962,7 @@ func (x *UpdateRoomResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateRoomResponse.ProtoReflect.Descriptor instead.
 func (*UpdateRoomResponse) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_room_list_proto_rawDescGZIP(), []int{11}
+	return file_chatim_v1_room_list_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *UpdateRoomResponse) GetRoom() *Room {
@@ -849,7 +989,7 @@ type RoomPreferencesChanged struct {
 
 func (x *RoomPreferencesChanged) Reset() {
 	*x = RoomPreferencesChanged{}
-	mi := &file_chatim_v1_room_list_proto_msgTypes[12]
+	mi := &file_chatim_v1_room_list_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -861,7 +1001,7 @@ func (x *RoomPreferencesChanged) String() string {
 func (*RoomPreferencesChanged) ProtoMessage() {}
 
 func (x *RoomPreferencesChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_room_list_proto_msgTypes[12]
+	mi := &file_chatim_v1_room_list_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -874,7 +1014,7 @@ func (x *RoomPreferencesChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RoomPreferencesChanged.ProtoReflect.Descriptor instead.
 func (*RoomPreferencesChanged) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_room_list_proto_rawDescGZIP(), []int{12}
+	return file_chatim_v1_room_list_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *RoomPreferencesChanged) GetUser() string {
@@ -938,7 +1078,14 @@ const file_chatim_v1_room_list_proto_rawDesc = "" +
 	"\broom_ids\x18\x01 \x03(\tR\aroomIds\"W\n" +
 	"\x10GetRoomsResponse\x12)\n" +
 	"\x05items\x18\x01 \x03(\v2\x13.chatim.v1.RoomItemR\x05items\x12\x18\n" +
-	"\amissing\x18\x02 \x03(\tR\amissing\"\xdc\x01\n" +
+	"\amissing\x18\x02 \x03(\tR\amissing\"\x16\n" +
+	"\x14ListMyRoomIDsRequest\"5\n" +
+	"\bMyRoomID\x12\x17\n" +
+	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x10\n" +
+	"\x03ver\x18\x02 \x01(\rR\x03ver\"k\n" +
+	"\x15ListMyRoomIDsResponse\x12)\n" +
+	"\x05rooms\x18\x01 \x03(\v2\x13.chatim.v1.MyRoomIDR\x05rooms\x12'\n" +
+	"\x04left\x18\x02 \x03(\v2\x13.chatim.v1.MyRoomIDR\x04left\"\xdc\x01\n" +
 	"\x19SetRoomPreferencesRequest\x12\x17\n" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x1b\n" +
 	"\x06pinned\x18\x02 \x01(\bH\x00R\x06pinned\x88\x01\x01\x12@\n" +
@@ -984,7 +1131,7 @@ func file_chatim_v1_room_list_proto_rawDescGZIP() []byte {
 }
 
 var file_chatim_v1_room_list_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_chatim_v1_room_list_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_chatim_v1_room_list_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_chatim_v1_room_list_proto_goTypes = []any{
 	(RoomFolder)(0),                    // 0: chatim.v1.RoomFolder
 	(*MyRoomState)(nil),                // 1: chatim.v1.MyRoomState
@@ -995,41 +1142,46 @@ var file_chatim_v1_room_list_proto_goTypes = []any{
 	(*ListMyRoomsResponse)(nil),        // 6: chatim.v1.ListMyRoomsResponse
 	(*GetRoomsRequest)(nil),            // 7: chatim.v1.GetRoomsRequest
 	(*GetRoomsResponse)(nil),           // 8: chatim.v1.GetRoomsResponse
-	(*SetRoomPreferencesRequest)(nil),  // 9: chatim.v1.SetRoomPreferencesRequest
-	(*SetRoomPreferencesResponse)(nil), // 10: chatim.v1.SetRoomPreferencesResponse
-	(*UpdateRoomRequest)(nil),          // 11: chatim.v1.UpdateRoomRequest
-	(*UpdateRoomResponse)(nil),         // 12: chatim.v1.UpdateRoomResponse
-	(*RoomPreferencesChanged)(nil),     // 13: chatim.v1.RoomPreferencesChanged
-	(MemberRole)(0),                    // 14: chatim.v1.MemberRole
-	(*timestamppb.Timestamp)(nil),      // 15: google.protobuf.Timestamp
-	(MessageKind)(0),                   // 16: chatim.v1.MessageKind
-	(*Room)(nil),                       // 17: chatim.v1.Room
+	(*ListMyRoomIDsRequest)(nil),       // 9: chatim.v1.ListMyRoomIDsRequest
+	(*MyRoomID)(nil),                   // 10: chatim.v1.MyRoomID
+	(*ListMyRoomIDsResponse)(nil),      // 11: chatim.v1.ListMyRoomIDsResponse
+	(*SetRoomPreferencesRequest)(nil),  // 12: chatim.v1.SetRoomPreferencesRequest
+	(*SetRoomPreferencesResponse)(nil), // 13: chatim.v1.SetRoomPreferencesResponse
+	(*UpdateRoomRequest)(nil),          // 14: chatim.v1.UpdateRoomRequest
+	(*UpdateRoomResponse)(nil),         // 15: chatim.v1.UpdateRoomResponse
+	(*RoomPreferencesChanged)(nil),     // 16: chatim.v1.RoomPreferencesChanged
+	(MemberRole)(0),                    // 17: chatim.v1.MemberRole
+	(*timestamppb.Timestamp)(nil),      // 18: google.protobuf.Timestamp
+	(MessageKind)(0),                   // 19: chatim.v1.MessageKind
+	(*Room)(nil),                       // 20: chatim.v1.Room
 }
 var file_chatim_v1_room_list_proto_depIdxs = []int32{
-	14, // 0: chatim.v1.MyRoomState.role:type_name -> chatim.v1.MemberRole
-	15, // 1: chatim.v1.MyRoomState.joined_at:type_name -> google.protobuf.Timestamp
-	15, // 2: chatim.v1.MyRoomState.cleared_at:type_name -> google.protobuf.Timestamp
-	15, // 3: chatim.v1.MyRoomState.pinned_at:type_name -> google.protobuf.Timestamp
-	15, // 4: chatim.v1.MyRoomState.muted_until:type_name -> google.protobuf.Timestamp
-	15, // 5: chatim.v1.MyRoomState.archived_at:type_name -> google.protobuf.Timestamp
-	16, // 6: chatim.v1.LastPreview.kind:type_name -> chatim.v1.MessageKind
-	15, // 7: chatim.v1.LastPreview.created_at:type_name -> google.protobuf.Timestamp
-	17, // 8: chatim.v1.RoomItem.room:type_name -> chatim.v1.Room
+	17, // 0: chatim.v1.MyRoomState.role:type_name -> chatim.v1.MemberRole
+	18, // 1: chatim.v1.MyRoomState.joined_at:type_name -> google.protobuf.Timestamp
+	18, // 2: chatim.v1.MyRoomState.cleared_at:type_name -> google.protobuf.Timestamp
+	18, // 3: chatim.v1.MyRoomState.pinned_at:type_name -> google.protobuf.Timestamp
+	18, // 4: chatim.v1.MyRoomState.muted_until:type_name -> google.protobuf.Timestamp
+	18, // 5: chatim.v1.MyRoomState.archived_at:type_name -> google.protobuf.Timestamp
+	19, // 6: chatim.v1.LastPreview.kind:type_name -> chatim.v1.MessageKind
+	18, // 7: chatim.v1.LastPreview.created_at:type_name -> google.protobuf.Timestamp
+	20, // 8: chatim.v1.RoomItem.room:type_name -> chatim.v1.Room
 	1,  // 9: chatim.v1.RoomItem.me:type_name -> chatim.v1.MyRoomState
 	2,  // 10: chatim.v1.RoomItem.preview:type_name -> chatim.v1.LastPreview
 	3,  // 11: chatim.v1.RoomItem.unread:type_name -> chatim.v1.Unread
 	0,  // 12: chatim.v1.ListMyRoomsRequest.folder:type_name -> chatim.v1.RoomFolder
 	4,  // 13: chatim.v1.ListMyRoomsResponse.items:type_name -> chatim.v1.RoomItem
 	4,  // 14: chatim.v1.GetRoomsResponse.items:type_name -> chatim.v1.RoomItem
-	15, // 15: chatim.v1.SetRoomPreferencesRequest.muted_until:type_name -> google.protobuf.Timestamp
-	1,  // 16: chatim.v1.SetRoomPreferencesResponse.state:type_name -> chatim.v1.MyRoomState
-	17, // 17: chatim.v1.UpdateRoomResponse.room:type_name -> chatim.v1.Room
-	1,  // 18: chatim.v1.RoomPreferencesChanged.state:type_name -> chatim.v1.MyRoomState
-	19, // [19:19] is the sub-list for method output_type
-	19, // [19:19] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	10, // 15: chatim.v1.ListMyRoomIDsResponse.rooms:type_name -> chatim.v1.MyRoomID
+	10, // 16: chatim.v1.ListMyRoomIDsResponse.left:type_name -> chatim.v1.MyRoomID
+	18, // 17: chatim.v1.SetRoomPreferencesRequest.muted_until:type_name -> google.protobuf.Timestamp
+	1,  // 18: chatim.v1.SetRoomPreferencesResponse.state:type_name -> chatim.v1.MyRoomState
+	20, // 19: chatim.v1.UpdateRoomResponse.room:type_name -> chatim.v1.Room
+	1,  // 20: chatim.v1.RoomPreferencesChanged.state:type_name -> chatim.v1.MyRoomState
+	21, // [21:21] is the sub-list for method output_type
+	21, // [21:21] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_chatim_v1_room_list_proto_init() }
@@ -1039,15 +1191,15 @@ func file_chatim_v1_room_list_proto_init() {
 	}
 	file_chatim_v1_core_proto_init()
 	file_chatim_v1_members_proto_init()
-	file_chatim_v1_room_list_proto_msgTypes[8].OneofWrappers = []any{}
-	file_chatim_v1_room_list_proto_msgTypes[10].OneofWrappers = []any{}
+	file_chatim_v1_room_list_proto_msgTypes[11].OneofWrappers = []any{}
+	file_chatim_v1_room_list_proto_msgTypes[13].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_chatim_v1_room_list_proto_rawDesc), len(file_chatim_v1_room_list_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   13,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
