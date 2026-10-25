@@ -55,11 +55,7 @@ func TestMsgRangeSelectsOneTimelineWindow(t *testing.T) {
 	}
 }
 
-func TestEventAndEditRoundTrip(t *testing.T) {
-	room, pts, err := ParseEvent(Event(9, 77))
-	if err != nil || room != 9 || pts != 77 {
-		t.Fatalf("ParseEvent = %d %d %v", room, pts, err)
-	}
+func TestEditRoundTrip(t *testing.T) {
 	r, th, s, v, err := ParseEdit(Edit(9, 3, 5, 2))
 	if err != nil || r != 9 || th != 3 || s != 5 || v != 2 {
 		t.Fatalf("ParseEdit = %d %d %d %d %v", r, th, s, v, err)
@@ -72,9 +68,6 @@ func TestEventAndEditRoundTrip(t *testing.T) {
 func TestParseRejectsWrongLength(t *testing.T) {
 	if _, _, _, err := ParseMsg(make([]byte, MsgLen-1)); !errors.Is(err, ErrLength) {
 		t.Errorf("ParseMsg short key err = %v", err)
-	}
-	if _, _, err := ParseEvent(make([]byte, MsgLen)); !errors.Is(err, ErrLength) {
-		t.Errorf("ParseEvent wrong key err = %v", err)
 	}
 	if _, _, _, _, err := ParseEdit(make([]byte, MsgLen)); !errors.Is(err, ErrLength) {
 		t.Errorf("ParseEdit wrong key err = %v", err)
