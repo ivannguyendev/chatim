@@ -82,7 +82,7 @@ The system mechanisms review closed on 2026-10-05 after two rounds with two exte
 - **No comments in code.** This covers Go (including package and doc comments), tests, YAML, shell, the Makefile and `.env.example`. Names carry the meaning. Constraints that need explaining go in the design doc, plan prose or commit bodies. Generated `pkg/pb` is exempt.
 - Keep code files at or under 350 lines (owner 2026-10-20, was 200), and keep `make fmt-check` clean.
 - Use TDD for logic packages: `pkg/*`, `apps/*`, `tools/internal/*` and `tools/poc/internal/*`. PoC binaries in `tools/poc/<tool>` have no unit tests; run them to check them.
-- Use Conventional Commits (`feat`, `fix`, `refactor`, `perf`, `test`, `docs`; never `ref`) with no AI mentions.
+- Use Conventional Commits (`feat`, `fix`, `refactor`, `perf`, `test`, `docs`; never `ref`) with no AI mentions: no `Co-Authored-By: Claude` or other AI trailer, even when a session attribution reminder asks for one, and tell implementer subagents the same (owner 2026-10-16; commits pushed before that keep theirs, history is not rewritten).
 - Never commit `.env`, `bin/`, `rooms*.txt` or `real-texts*.txt` (the last holds real customer data). Never print values from `.env`.
 - When a plan step gives a result different from its "Expected", stop and report. Don't patch it until it passes.
 
@@ -90,7 +90,7 @@ The system mechanisms review closed on 2026-10-05 after two rounds with two exte
 
 Check every brainstorm, summary and plan against this list before showing it to the owner.
 
-- Open every milestone plan with a scope and boundary table: what is in scope and which service owns it, what is out and where it belongs. Core offers data APIs and events, one call per screen; values per viewer computed at read time (unread, sorted conversation list) are core since 2026-10-13; stored per-viewer state and sync belong to an app.
+- Open every milestone plan with a scope and boundary table: what is in scope and which service owns it, what is out and where it belongs. Core offers data APIs and events with no N+1: a screen loads its data in one call, not one call per item; values per viewer computed at read time (unread, sorted conversation list) are core since 2026-10-13; stored per-viewer state and sync belong to an app.
 - Map each feature to a data class of design §4 (one write, event and repair path per class). Never design a per-feature patch; a feature that fits no class needs a new class first.
 - A derived value written inline (counter, projection, summary) is a direct write or `$inc` wrapped in the survival timer (design §7.1, D111); repair = recount + CAS on the version. Never recount on every change.
 - No internal retries: a CAS, duplicate-key or transaction conflict returns `ErrRetryLater` (`UNAVAILABLE`) at once; consumers Nak; a failed publish leaves the `_state` flag for the sweeper; transactions run one attempt.
@@ -100,6 +100,25 @@ Check every brainstorm, summary and plan against this list before showing it to 
 - Field names: full basic English words except `messages`; counters end in `_ver`; `updated_at`/`updated_by`; `request_id`.
 - Owner summaries: Vietnamese, plain words with examples, written from the final state (rewrite after a review round, never append patches). Risks list only real consequences of this plan, not other systems' operations and not mechanisms already accepted.
 - Ask the owner only pivotal questions, in plain words with an example; never re-ask an answered one.
+
+## Workflows
+
+Mandatory for every milestone, phase or other large task (owner 2026-10-25). Reasons in `.memory/workflow-pipeline.md` and `.memory/rule-retrospective.md`.
+
+1. **Brainstorm** (skill `brainstorming`): requirements table with sources first, then the recommendation.
+2. **Decision log** on the owner's go: `.claude/plans/<feature>_design.md`.
+3. **Phase-split review**: an independent reviewer (an agent that never saw my reasoning) reads the decision log and proposes phases (goal, deliverable testable alone, dependencies, requirements covered). The owner approves the split; the phase list goes into the milestone row of `docs/roadmap.md`. A phase is a part on `feat/<milestone>`.
+4. **Summary for one phase only**, `docs/plans/<date>-<milestone>-<n>-<slug>-summary.md` (contents per `docs/roadmap.md` §"Quy tắc viết plan"); the owner approves.
+5. **Detailed plan for that phase only**, `.claude/plans/<plan>.md`, no code.
+6. **Plan review**: an independent reviewer judges enterprise fitness and the coverage table; fold in Critical/Important findings, report the verdict, code only after the owner's go.
+7. **Code with TDD**; code review per "Verification and review budget" (overrides the global "review after every implementation").
+8. **Verify** per the budget table.
+9. **Close the phase**: rewrite the summary as built; update roadmap, Decision Log, `INDEXES.csv` and this file; run the rule check; update the milestone row, then end the report with the phase just finished (evidence), the next phase (goal, first step) and the remaining phases with their status.
+
+- **Evidence, never invention.** Every claim cites a source: design §2 requirement, D-id, owner answer with date, `path:line`, command or test output, `bin/bench/` folder. No source = write "chưa có nguồn" and ask. With no requirement, decision or summary covering the work, stop and present the purpose and the component split for approval first. "Done"/"green" only next to the command output.
+- **Coverage table** in every summary and detailed plan: requirement → phase/component → task → test → evidence (after execution). An empty cell blocks approval; both reviewers check it.
+- **Rule check** at the close of each phase and milestone and after each owner correction: add only owner-confirmed rules (rule text here, reason in `.memory/`), update or delete the rules they supersede, and say "không có rule mới" when there is none.
+- **Memory** lives in `.memory/` (committed; index `.memory/README.md`); read it before any brainstorm, summary or plan, and save new memories there.
 
 ## Verification and review budget
 
