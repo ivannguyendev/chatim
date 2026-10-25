@@ -90,7 +90,7 @@ The system mechanisms review closed on 2026-10-05 after two rounds with two exte
 
 Check every brainstorm, summary and plan against this list before showing it to the owner.
 
-- Open every milestone plan with a scope and boundary table: what is in scope and which service owns it, what is out and where it belongs. Core offers data APIs and events with no N+1: a screen loads its data in one call, not one call per item; values per viewer computed at read time (unread, sorted conversation list) are core since 2026-10-13; stored per-viewer state and sync belong to an app.
+- Open every milestone plan with a scope and boundary table: what is in scope and which service owns it, what is out and where it belongs. Core offers data APIs and events; avoid or limit N+1 (prefer loading a screen's data in few calls over one call per item); values per viewer computed at read time (unread, sorted conversation list) are core since 2026-10-13; stored per-viewer state and sync belong to an app.
 - Map each feature to a data class of design §4 (one write, event and repair path per class). Never design a per-feature patch; a feature that fits no class needs a new class first.
 - A derived value written inline (counter, projection, summary) is a direct write or `$inc` wrapped in the survival timer (design §7.1, D111); repair = recount + CAS on the version. Never recount on every change.
 - No internal retries: a CAS, duplicate-key or transaction conflict returns `ErrRetryLater` (`UNAVAILABLE`) at once; consumers Nak; a failed publish leaves the `_state` flag for the sweeper; transactions run one attempt.
@@ -196,7 +196,7 @@ make poc TOOL=wsload POC_FLAGS="--ulimit nofile=65536:65536" ARGS="-scenario ste
 
 ## Code index
 
-`INDEXES.csv` at the repo root lists every Go package, plus the key docs, scripts and deploy files. Its columns are `path,kind,purpose,key_symbols,used_by,tests,decisions`. Read it before searching the tree.
+`INDEXES.csv` at the repo root lists every Go package, plus the key docs, scripts and deploy files. Its columns are `path,kind,purpose,key_symbols,used_by,tests` (decisions live in `docs/decision-log.md`, not here). Read it before searching the tree.
 
 When you add, remove or rename a package, or change its purpose or key symbols, update its row in the same commit.
 
