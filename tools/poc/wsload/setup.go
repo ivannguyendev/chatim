@@ -14,10 +14,10 @@ import (
 	"connectrpc.com/connect"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/ivannguyendev/chatim/internal/wstest"
 	"github.com/ivannguyendev/chatim/pkg/backoff"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/pkg/pb/chatim/v1/chatimv1connect"
+	"github.com/ivannguyendev/chatim/pkg/wstest"
 	"github.com/ivannguyendev/chatim/tools/internal/devtoken"
 	"github.com/ivannguyendev/chatim/tools/poc/internal/openloop"
 	"github.com/ivannguyendev/chatim/tools/poc/internal/wsload"

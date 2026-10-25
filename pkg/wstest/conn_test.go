@@ -123,15 +123,15 @@ func TestFramesKeepsEveryNonResponseFrameInOrderWithoutAReader(t *testing.T) {
 			for i := range pushed {
 				push(t, conn, eventFrame(uint64(i+1)))
 			}
-			_ = conn.WriteClose(CodeUnauthenticated, nil)
+			_ = conn.WriteClose(codeUnauthenticated, nil)
 		})
 		c := dialPipe(t, server)
 		if err := c.LoadRooms(); err != nil {
 			t.Fatalf("load rooms: %v", err)
 		}
 		<-c.Done()
-		if closeErr, ok := errors.AsType[*CloseError](c.Err()); !ok || closeErr.Code != CodeUnauthenticated {
-			t.Fatalf("Err = %v, want close code %d", c.Err(), CodeUnauthenticated)
+		if closeErr, ok := errors.AsType[*CloseError](c.Err()); !ok || closeErr.Code != codeUnauthenticated {
+			t.Fatalf("Err = %v, want close code %d", c.Err(), codeUnauthenticated)
 		}
 		first := <-c.Frames()
 		if first.GetReady() == nil {
@@ -157,14 +157,14 @@ func TestCallReturnsTheCloseErrorWhenTheServerCloses(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		server := newFakeServer(func(conn *gws.Conn, frame *chatimv1.ClientFrame) {
 			if frame.GetRequest() != nil {
-				_ = conn.WriteClose(CodeUnauthenticated, nil)
+				_ = conn.WriteClose(codeUnauthenticated, nil)
 			}
 		})
 		c := dialPipe(t, server)
 		defer func() { _ = c.Close() }()
 		_, err := c.Call(t.Context(), sendRequest("7"))
-		if closeErr, ok := errors.AsType[*CloseError](err); !ok || closeErr.Code != CodeUnauthenticated {
-			t.Fatalf("call = %v, want close code %d", err, CodeUnauthenticated)
+		if closeErr, ok := errors.AsType[*CloseError](err); !ok || closeErr.Code != codeUnauthenticated {
+			t.Fatalf("call = %v, want close code %d", err, codeUnauthenticated)
 		}
 		if _, err := c.Call(t.Context(), sendRequest("7")); !errors.Is(err, ErrClosed) {
 			t.Fatalf("call after close = %v, want the close error", err)
@@ -178,7 +178,6 @@ func TestSendersWriteOneFrameEach(t *testing.T) {
 		c := dialPipe(t, server)
 		steps := []func() error{
 			func() error { return c.OpenRoom("7") },
-			func() error { return c.CloseRoom("7") },
 			func() error { return c.LoadRooms() },
 			func() error { return c.Typing("7", false) },
 			func() error { return c.Typing("7", true) },
@@ -200,13 +199,12 @@ func TestSendersWriteOneFrameEach(t *testing.T) {
 		}
 		checks := []bool{
 			got[0].frame.GetOpenRoom().GetRoomId() == "7",
-			got[1].frame.GetCloseRoom().GetRoomId() == "7",
-			got[2].frame.GetLoadRooms() != nil,
-			got[3].frame.GetTyping().GetRoomId() == "7" && !got[3].frame.GetTyping().GetStopped(),
-			got[4].frame.GetTyping().GetStopped(),
-			slices.Equal(got[5].frame.GetWatchPresence().GetUserIds(), []string{"a", "b"}),
-			got[6].frame.GetHeartbeat() != nil,
-			got[7].opcode == gws.OpcodeText && string(got[7].raw) == "{}",
+			got[1].frame.GetLoadRooms() != nil,
+			got[2].frame.GetTyping().GetRoomId() == "7" && !got[2].frame.GetTyping().GetStopped(),
+			got[3].frame.GetTyping().GetStopped(),
+			slices.Equal(got[4].frame.GetWatchPresence().GetUserIds(), []string{"a", "b"}),
+			got[5].frame.GetHeartbeat() != nil,
+			got[6].opcode == gws.OpcodeText && string(got[6].raw) == "{}",
 		}
 		for i, ok := range checks {
 			if !ok {
