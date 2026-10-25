@@ -88,12 +88,15 @@ sequenceDiagram
     - Người tới trước: Insert bản ghi đặt chỗ với room id vừa rút.
     - Người tới sau: Doc đã có, câu lệnh không sửa đổi gì và trả về `room_id` mà người tới trước đã ghi. Hai upsert đụng nhau ở `_id` → `UNAVAILABLE`, client gọi lại.
   - Cả hai thành viên đã active → `{room, created: false}`; ngược lại chạy `ensureRoom` → `{room, created: true}`.
+  - Mở DM với chính mình → `INVALID_ARGUMENT`; policy hỏi action `open_direct`. DM không có owner (hai người đều vai `member`) và từ chối mọi lệnh thành viên (`FAILED_PRECONDITION`).
+  - **`ensureRoom` (`room/room_ensure.go`, chạy lại được):** đặt phiếu đếm member (lỗi → `UNAVAILABLE`) → `Rooms.InsertRoom` (`member_count 0`; trùng chính phòng mình thì đi tiếp, trùng phòng khác thì gỡ phiếu và `UNAVAILABLE`) → `AddMembers` với `request_id` `{room}-created` (người sáng lập có `read_ver 1`, nên `MarkRead` đầu tiên mang id `-v2`) → `AddMemberCount` → gỡ phiếu → phát event.
   - **Khả năng tự hồi phục (Self-healing):** Nếu node Core bị sập nguồn ngay sau khi đặt chỗ trong `room_dms` mà chưa kịp tạo doc trong `rooms` hay `members`, lần gọi `OpenDirectRoom` tiếp theo của bất kỳ ai trong hai người sẽ chạy lại `ensureRoom` và làm nốt bước dở dang. Room id trong sổ đã bị phòng khác chiếm → `Repoint` CAS sang id mới và trả `UNAVAILABLE`.
 
 ### 3.2. Bỏ vòng thử lại nội bộ (No Internal Retries — Nguyên tắc R1)
 - Room id do core rút ngẫu nhiên một lần cho mỗi `CreateRoom` (client không chỉ định id, D118). Nếu id đã bị phòng khác chiếm hoặc xảy ra xung đột tương tranh (CAS trượt), hoặc cùng `request_id` đang chạy ở core khác:
   - **Cơ chế:** Core **không bao giờ** chạy vòng lặp `for { retry... }` nội bộ.
   - **Hành vi:** Lập tức huỷ lệnh và trả mã lỗi gRPC `codes.Unavailable` để client tự backoff và gọi lại với cùng `request_id`. Điều này giúp ngăn chặn tình trạng goroutine bị kẹt, nghẽn thread pool của server dưới tải cao.
+- **Chống lặp `CreateRoom`:** `request_id` bắt buộc (`ValidCID`), khoá `chatim:req:create:{tenant}:{user}:{request_id}` trên `dedupe.Requests` (shard theo FNV(tenant:user)). Đang chạy → `UNAVAILABLE`; mới → `ensureRoom` và `Finish` (room id lưu trong `Record.Seq`) ngay sau `InsertRoom`, chỉ `Cancel` khi chưa chèn gì; đã xong → đọc phòng rồi chạy nốt `ensureRoom` cho người sáng lập chưa có doc member (người sáng lập đã bị xoá giữ tombstone, không được thêm lại).
 
 ### 3.3. Phân bổ và định tuyến theo Slot (Slot Hashing & Routing)
 - **Cơ chế:** Mọi phòng chat khi được tạo ra đều được gán cố định vào một trong 1024 Soft Slots:

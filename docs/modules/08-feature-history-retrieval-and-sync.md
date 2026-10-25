@@ -35,6 +35,8 @@ flowchart LR
     F4 --> CleanDTO["Clean Client DTO<br/>(An toàn, chuẩn bảo mật)"]
 ```
 
+- `MaskDeleted` dùng `domain.Message.WithoutDeletedContent` (chung với `pbconv`): tin đã xoá mất text, mention, `@all`, forward, `meta`, reaction và số trả lời, giữ `rp`. `HideForViewer` (`created_at ≤ cleared_at` hoặc bị người đọc ẩn) bỏ thêm cả `rp`. Cả hai giữ seq và version.
+
 ### 2.2. Luồng Phân trang & Xử lý qua Reader View Pipeline (Sequence Diagram)
 
 Toàn bộ dữ liệu thô từ cơ sở dữ liệu đều phải đi qua **Đường ống chế biến giao diện (Reader View Pipeline)** trước khi trả về cho người đọc:
@@ -122,7 +124,11 @@ flowchart TD
 - Khi truy vấn 50 tin nhắn theo `seq`, MongoDB chỉ cần nạp 1–2 trang nhớ từ ổ cứng NVMe vào bộ nhớ đệm (WiredTiger Cache), giúp câu lệnh hoàn thành trong vòng **2–5ms**.
 
 ### 4.2. Bộ nhớ đệm Room-Tail Cache trên Core (M3)
-- `GetHistory` **không** dùng cache: nó đọc thẳng store mỗi lần (không qua actor), rồi chạy view pipeline.
+- `GetHistory` **không** dùng cache: nó đọc thẳng store mỗi lần (không qua actor), rồi chạy view pipeline và gắn `reply_preview` (0 hoặc 1 `Find` theo khoá mỗi trang). `GetReplies`, `ListBookmarks` và các lệnh đọc M3 cũng đọc thẳng store:
+  - `GetMessages`: 1..100 seq, qua `view.Default()`.
+  - `ListThreads`, `ListPins` và bước kiểm tin của `GetReactions` chỉ chạy `MaskDeleted` + `HideForViewer`.
+  - `my_reaction`/`bookmarked` chỉ có trên `GetHistory`, `GetMessages`, `GetReplies`.
+  - `GetReplies` và `ListBookmarks` phân trang bằng `domain.PageLimit` (0 → 50, tối đa 100); mọi cursor mới là base64url; lỗi store đổi thành `UNAVAILABLE`.
 - `room/roomcache` trên mỗi core giữ đuôi phòng (≤ 300 tin gọn + 10 tin xem trước, TTL 30s, singleflight, đối chiếu `last_seq`/`last_edit_at`) chỉ để phục vụ danh sách hội thoại (`ListMyRooms`/`GetRooms`: unread, tin xem trước), xem Module 07.
 
 ### 4.3. Hợp đồng Mã lỗi gRPC (Error Matrix)

@@ -129,17 +129,23 @@ sequenceDiagram
   - Hệ thống **không xoá bản ghi** (xoá vật lý làm mất lịch sử và lỗi các hệ thống đồng bộ).
   - Hệ thống ghi đè trạng thái sang **Tombstone** (`state = 2`, **giữ** `value` để biết emoji nào cần trừ) và tăng số đếm phiên bản `ver = ver + 1`.
   - Thả lại đúng emoji đang có: `$cond` giữ doc nguyên từng byte (không oplog, không event); lệnh vẫn đặt rồi gỡ phiếu hẹn.
+- `ReactMessage`, `SetBookmark`, `PinMessage`, `UnpinMessage` chạy trong `interaction.Service`: `Admit` → `Find` → `Allow` với action `react_message`, `set_bookmark`, `pin_message`, `unpin_message`; policy mặc định cho mọi thành viên và `MESSAGE_LOCKED_KINDS` không áp dụng (D94). Emoji được kiểm trước cả membership và policy.
+- Không có cid: lệnh chính là trạng thái mong muốn (D89). Lệnh đặt là một `FindOneAndUpdate` filter bằng `_id` (unique), nên upsert đụng trùng khoá do server tự thử lại; lệnh gỡ là update không upsert.
+- Bookmark dùng cùng kiểu upsert; đã ở đúng trạng thái → `changed = false`, không event. `ListBookmarks` vẫn giữ mục người gọi không còn xem được (tin đã xoá, bị ẩn/clear) với `available = false` và không có text.
 
 ### 3.2. Đếm trực tiếp `$inc` kết hợp Phiếu hẹn sinh tồn (Survivor Timers D111 / D113)
 - **Vấn đề cần giải quyết:** Nếu mỗi lần thả reaction đều phải quét toàn bộ collection để `COUNT(*)` rồi ghi lại số lượng (Recount), database sẽ bị nghẽn IOPS khi có hàng nghìn reaction mỗi giây. Ngược lại, nếu chỉ dùng `$inc`, nếu server crash giữa chừng thì số đếm sẽ vĩnh viễn bị lệch (Drift counter).
 - **Cơ chế bảo đảm:**
   - **Đường bình thường (Fast-path):** Khi ghi bản ghi tương tác thành công, nếu thực sự có thay đổi, Core cộng delta vào `rx.c` bằng một update pipeline (`AddReactionCounts`, `rx.v + 1`) ngay trên document `messages`.
   - **Bảo hiểm sinh tồn (Slow-path Insurance):** Trước khi ghi, Core bật một "phiếu hẹn" trên NATS JetStream. Nếu lệnh `$inc` thành công, phiếu hẹn được tháo ngòi (`Disarm`). Nếu Core crash trước khi kịp `$inc`, phiếu hẹn trên `CHATIM_TIMER` nổ sau 5s và consumer `timer-due` chạy `count_repair` đếm lại để đưa số lượng về chuẩn xác tuyệt đối.
+  - **Lỗi giữa chừng:** ghi doc reaction lỗi thì giữ phiếu (không biết kết quả). `AddReactionCounts` lỗi thì chỉ ghi log, giữ phiếu, lệnh vẫn ack và trả tóm tắt cũ cộng delta, không phát `counts_changed`.
+  - `rx` = `{c: [{e, n}], v}`, mảng `c` sắp giảm dần theo số đếm rồi tăng dần theo emoji; `rc` = `{n, v}`.
   - **Event bảo đảm tới:** doc reaction mang bit 1 (`reaction_changed`), `$inc rx` bật bit 2 trên tin (`counts_changed`); mỗi bit chỉ được xoá sau PubAck và khi version còn bằng, nếu không sweeper slot 0 phát bù trạng thái hiện tại (Module 10).
 
 ### 3.3. Cơ chế gấp nếp Ghim tin nhắn (Pin Projection Folding D92)
 - **Ghim tin:** Mọi thao tác ghim hay bỏ ghim được ghi thành các Fact bất biến vào `pin_actions` với `pin_ver` tăng dần đơn điệu.
 - Bảng hiển thị ghim tại `rooms.pins` là bản chiếu (Projection) được sinh ra bằng cách gấp nếp (Fold) các hành động từ `pin_actions`.
+- Lệnh ghim không nhận base version: `pinproj.Projector.Current` fold `rooms.pins/pin_ver` với các fact sau nó; tin đã ở đúng trạng thái → thành công, không ghi fact. Chèn fact trùng `_id` mà cùng thao tác, cùng tin, cùng người → coi là kết quả của chính lệnh; fact khác → `ErrRetryLater` (`UNAVAILABLE`) ngay. Sau đó `Project` một lần (fold + CAS `pin_ver`). `Rooms.Get` không bao giờ đọc `pins`.
 - **Bảo đảm hạn mức `PIN_LIMIT = 50`:** `pin_actions` dùng `_id = room│pin_ver` liền nhau (dense), lệnh fold `rooms.pins/pin_ver` với các fact sau nó rồi chỉ chèn đúng một fact `pin_ver + 1`, nên số tin ghim đang hoạt động không bao giờ vượt quá 50 tin (ghim thứ 51 → `FailedPrecondition`).
 - **Tự phục hồi (M3.1):** fact ghim mang cờ `_state: 1`. Nếu CAS fold thua hoặc core chết trước khi phát, sweeper slot 0 fold + CAS lại rồi mới phát `msg_pinned`/`msg_unpinned` (D151); thua CAS lần nữa thì giữ cờ cho lượt sau.
 
@@ -189,7 +195,9 @@ sequenceDiagram
 
 ### 4.3. Danh mục Emoji cố định & API
 - Hệ thống quy định danh sách emoji hợp lệ qua cấu hình `REACTION_EMOJIS` (ví dụ: `👍`, `❤️`, `😂`, `😮`, `😢`, `🙏`). Client SDK gọi `GetReactionSettings` lúc khởi động để lấy danh sách emoji này.
-- Mọi emoji nằm ngoài danh sách đều bị Core từ chối ngay tại tầng API với mã lỗi `codes.InvalidArgument`.
+- Mọi emoji nằm ngoài danh sách đều bị Core từ chối ngay tại tầng API với mã lỗi `codes.InvalidArgument` (`domain.ErrEmojiNotAllowed`).
+- Để trống = danh sách mặc định; boot kiểm danh sách không rỗng, tối đa 100, emoji hợp lệ, không trùng (D95). Độ dài danh sách cũng là số emoji tối đa trên một tin.
+- `GetReactionSettings` không định tuyến theo room, chỉ cần metadata người gọi, trả danh sách đúng thứ tự cấu hình.
 
 ### 4.4. Hợp đồng Mã lỗi gRPC (Error Matrix)
 

@@ -136,12 +136,22 @@ sequenceDiagram
   - Mỗi phòng chat đang hoạt động được quản lý bởi **duy nhất một Goroutine Actor** trong bộ nhớ của node Core nắm giữ Slot.
   - Mọi yêu cầu gửi tin vào phòng đó đều xếp hàng tuần tự qua một kênh Go channel (Mailbox).
   - Actor là người duy nhất nắm giữ biến `current_seq` trong RAM. Việc cấp `seq = current_seq + 1` diễn ra trong 0 microsecond mà không cần gọi câu lệnh khoá phân tán nặng nề nào.
+  - `actor.Router` chạy một goroutine mỗi room với mailbox có giới hạn (`ACTOR_MAILBOX` 1024) và tự dừng khi rảnh (`ACTOR_IDLE` 5 phút). Mỗi actor chỉ có **một nhóm ghi đang bay**; actor bị cho nghỉ (retire) khi slot của room chuyển đi.
+  - Actor bị đánh dấu `dirty` (sau ghi không chắc chắn, hoặc mới tạo lại sau khi bị đuổi) nạp lại `Last` và trang seed mới nhất trước lệnh kế tiếp.
+
+### 3.1a. Kiểm tra trước actor (`grpcsrv`) và tin hệ thống
+- `grpcsrv` đọc tenant và user từ metadata `x-chatim-tenant`, `x-chatim-user` (`pkg/callerid`); người gọi là app nội bộ được tin cậy cho tới khi có mTLS.
+- Liên kết trong tin được kiểm trước actor bởi `message.Editor`: `reply_to` (chỉ thread 0) là một `Find` tin cha (`CheckReply` trong `message/reply_link.go`, gọi từ `grpcsrv/send_links.go`); tin cha không có thì hỏi `Admit` trước, để người ngoài room không dò được seq nào tồn tại. `forward_from` đi qua `message.Editor.Forward` (`message/forward_link.go`, 4 lần đọc theo khoá, D116); `grpcsrv/forward.go` chỉ parse và từ chối khi có cả `forward_from` lẫn `reply_to`. Tin không có liên kết không tốn lần đọc nào.
+- `Router.Send` chuẩn hoá mention (`domain.ValidateMentions` theo `MENTION_TARGETS_MAX`); có `@all` thì actor hỏi thêm quyền `mention_all` sau `send_message`.
+- Handler trả lỗi domain hoặc `apperr`; `pkg/grpcserver` đổi sang mã gRPC ở một chỗ duy nhất, client chỉ thấy text của lỗi sentinel.
+- **Tin hệ thống (M3, D132):** `grpcsrv` kiểm `meta` ≤ 8KB, `kind` chỉ `text`/`system`, và từ chối liên kết hay mention trên tin `system` trước actor (`INVALID_ARGUMENT`). Actor luôn kiểm tenant, nhưng với `system` thì bỏ kiểm thành viên và cache thành viên, chỉ hỏi policy `send_system_message` với `Member` và `Kind` rỗng. Doc lưu `k = 2`, `nu` (chỉ khi true), `m`. Forward giữ `skip_unread`/`meta` của request.
 
 ### 3.2. Cơ chế chống trùng 2 tầng + lọc lúc đọc (Deduplication)
 - **Cơ chế:** Để đảm bảo tính Idempotency khi Client retry, hệ thống áp dụng bộ lọc 2 tầng khi ghi và một bước lọc khi đọc:
   1. **Tầng 1 — In-Memory LRU Cache:** Mỗi actor phòng giữ tới 4,096 `cid` đã ack (10 phút) trong RAM để trả lại ack cũ ngay cho các gói tin gửi lặp.
   2. **Tầng 2 — Redis Dedupe (Chu trình 2 pha Reserve-Commit, khoá `chatim:cid:{room}:{user}:{cid}`):**
      - **Pha 1 (Reserve):** Đặt chỗ CID bằng Redis Lua Script (`dedupe.Batcher` gom nhiều phòng vào một `EVALSHA`), trạng thái pending `p:{core}` với `CID_PENDING_TTL` 10 giây. CID đang pending ở core khác → từ chối `UNAVAILABLE` (đếm `cid_pending_elsewhere_total`); đã `Committed` → trả kết quả cũ ngay lập tức.
+     - **Batcher (D58):** chia shard theo `slot % CID_BATCH_SHARDS` (mặc định 4). Reserve chặn người gọi: không có vòng nào đang bay thì đi ngay, có thì nhập vòng kế (một `EVALSHA`, tối đa `CID_BATCH_MAX_KEYS` 256 khoá). Commit và Abort chỉ xếp hàng; vòng settle của mỗi shard gửi chúng theo pipeline.
      - **Pha 2 (Commit):** Sau ack, CID được chuyển sang trạng thái `Committed` (`c:{seq}:{ms}`) với `CID_COMMITTED_TTL` 15 phút.
   3. **Không có unique index theo `cid` trên MongoDB:** `messages` không có index phụ (chỉ partial `state_pending`); `_id` (room│thread│seq) chỉ chặn hai lần ghi cùng seq. Nếu Redis lỗi, `redisguard` cho dedupe chạy chỉ với LRU; một bản trùng lọt qua (gửi lại sang core khác) bị `view.CollapseRetried` ẩn khi đọc theo (người gửi, cid).
 
@@ -151,11 +161,25 @@ sequenceDiagram
   - Flusher gom các tin nhắn từ nhiều phòng chat khác nhau trong một cửa sổ cực ngắn (`FLUSH_WINDOW` 2ms hoặc `FLUSH_MAX_BATCH` 256 doc) và thực thi **một lệnh duy nhất**:
     $$\text{insertMany}(\text{ordered} = \text{false}, w = \text{"majority"})$$
   - Cơ chế này giúp hệ thống đạt throughput 5,000 – 10,000 tin/giây mà vẫn bảo đảm độ an toàn dữ liệu trên cả 3 node MongoDB Replica Set.
+  - Nhóm không kịp xong trước hạn thì không được gửi (`flush.ErrNotSent`): actor trả `ErrRetryLater` cho các entry ngay và Abort cid của chúng (chưa có gì được ghi).
+
+### 3.3a. Kết quả ghi và ghi không chắc chắn (D119, không retry nội bộ)
+- Mỗi entry kết thúc ở một trong bốn kết quả `store.Inserted`, `Duplicate`, `Unknown`, `Rejected`. Mỗi entry chỉ được ghi **một lần**: actor không bao giờ gửi lại hay xếp hàng lại (owner 2026-10-10; retry của driver, go-redis và nats.go vẫn giữ).
+- `Duplicate` và `Unknown` được đúng một `Find` (đọc majority) theo khoá, với hạn riêng 1s tách khỏi context của nhóm (`reservationMargin`):
+  - Doc của mình (cùng người gửi, cùng cid) → coi là đã ghi.
+  - Doc của core khác ở seq của mình (tranh chấp seq): entry đó trả `ErrRetryLater` ngay, entry đã commit vẫn được ack, và actor nhường room một lần qua `requestRetire` (giữ `r.mu`) → `a.retire`, để lệnh sau tới đúng chủ; đếm `room_yields_total`.
+  - Không thấy, hoặc `Find` lỗi → không chắc chắn: `ErrRetryLater` (`errUnconfirmed`) ngay, cid vẫn pending (`p:{core}`, không Abort), actor `dirty` và nhớ lần ghi theo (user, cid) trong `ReservationTTL` (`ambiguous_writes.go`).
+  - `Rejected` thất bại và nhả cid.
+- Client gửi lại cùng cid cho một lần ghi đang nhớ → một `Find` seq đã nhớ (hạn 1s): doc của mình → trả ack gốc và Commit cid; seq bị người khác chiếm → Abort và `errCIDUnsettled`, lần gửi lại sau ghi mới; không thấy hoặc lỗi → `errCIDUnsettled`, vẫn nhớ. Vì vậy lần nạp lại do traffic khác gây ra không che được một lần ghi tới muộn.
+- Actor đã mất bộ nhớ (bị đuổi) nạp lại `Last` và trang seed; cho tới khi doc hiện ra, lần gửi lại gặp `PendingHere` → `errCIDUnsettled` (actor `dirty` lại) cho tới khi doc hiện hoặc `CID_PENDING_TTL` hết. Boot kiểm một lần thử nằm gọn trong lần đặt chỗ: `CID_PENDING_TTL` > hạn nhóm + 1s.
+- Sau commit, thứ tự là: ack (ghi LRU trước) → đưa event cho `publish.Publisher` → xếp Commit cid (`c:{seq}:{ms}`) vào batcher (D59). Core chết giữa ack và Commit để lại khoá pending tới `CID_PENDING_TTL`; client retry nhanh sau một lần ghi lỗi có thể gặp `PendingHere` và nhận `ErrRetryLater`.
 
 ### 3.4. Fast Ack & Publish bất đồng bộ có bảo đảm (M3.1)
 - **Nguyên tắc:** Trả Ack cho người gửi ngay sau khi Mongo ghi nhận `w:majority`. Không bắt người gửi phải chờ đến khi tin được phát tán qua NATS JetStream.
 - Doc tin được insert kèm cờ `_state: 1` (`msg_created` chờ phát) trong cùng lệnh `insertMany`. Sau ack, publisher phát `msg_created` bất đồng bộ; PubAck về thì hàng xoá cờ tắt bit theo lô (2s sau đích đầu, các khoảng `_id` liền nhau thành một `UpdateMany`, khoá lẻ `UpdateOne`).
 - Nếu Core tắt đột ngột trước khi phát, hoặc NATS từ chối, doc còn cờ và **sweeper trên core giữ slot 0 (Module 10)** phát bù `msg_created` với đúng id sau khoảng 15–17s. Giao ít nhất một lần; stream bỏ bản trùng theo id.
+- **Publisher (D50):** chỉ giữ một hàng đợi mỗi shard (chia theo slot), nên `Enqueue` không bao giờ chặn (hàng đầy thì bỏ và đếm `publish_dropped_total`, sweeper phát bù) và event của một room giữ thứ tự tới. Mỗi shard gọi `PublishMsgAsync` không chờ ack; nats.go lo giới hạn đang bay (`PUB_MAX_PENDING`), hạn ack (`PUB_ACK_TIMEOUT` 2s) và retry khi chưa có leader; lỗi đi vào `WithPublishAsyncErrHandler` và chỉ được log, tối đa một lần mỗi giây.
+- Subject và id: `msg_created` đi `evt.{t}.message.{rid}.msg_created` trên `CHATIM_EVT` (loại data `mention` khi tin có mention), `Nats-Msg-Id` = id tự nhiên; subject theo loại data do `publish.subjectFor` chọn (D108), kind lạ không được phát. Core không có subject theo user và không chọn người nhận (P3). Bảng đầy đủ: [events.md](../events.md) §1–2.
 
 ### 3.5. Hợp đồng Snapshot & Xử lý Đến lệch thứ tự (Out-of-order Resilience — Quy tắc R6/R7)
 - **Vấn đề thực tế mạng di động:** Do NATS JetStream và kết nối mạng di động, Client SDK có thể nhận được sự kiện `msg_edited` (sửa tin) **trước khi** nhận được sự kiện `msg_created` (tạo tin ban đầu).
@@ -163,6 +187,18 @@ sequenceDiagram
   - Mọi sự kiện phát tán qua NATS đều mang **toàn bộ Snapshot hiện tại của tin nhắn** kèm phiên bản `ver`.
   - Client SDK áp dụng quy tắc: *"Phiên bản `ver` cao hơn luôn thắng"*.
   - Nếu nhận được `msg_edited` cho một tin nhắn chưa có trên màn hình, Client SDK lưu snapshot này vào bộ nhớ và hiển thị trực tiếp. Khi sự kiện `msg_created` (bản gốc, `ver: 0`) đến sau, Client so sánh thấy phiên bản hiện tại đã là `ver: 1` nên sẽ bỏ qua gói tin cũ một cách an toàn.
+
+### 3.6. Slot và quyền sở hữu mềm (`platform/slot`, `pkg/slotmap`)
+- `slot = mix64(room) % 1024` (`slotmap.Of`); `slotmap.Score` và `Preferred` là băm rendezvous chọn core ưu tiên cho một slot. Client đổi slot ra địa chỉ core bằng `slotmap.Resolver`.
+- `slot.Manager.Step` chạy mỗi tick (`SLOT_TICK` 1s):
+  1. Heartbeat bằng một Lua script: `SET chatim:core:{id}`, `ZADD chatim:cores` chấm điểm theo `TIME` của Redis, rồi xoá core đã hết hạn.
+  2. Gia hạn lease `chatim:slot:{n}` bằng Lua nhiều khoá, nên Redis state phải là một primary, không phải Redis Cluster.
+  3. Nhận hoặc nhả slot hướng tới `ceil(1024 / số core sống)`.
+  4. Phát `chatim:slots:changed` khi có slot mất hoặc chuyển.
+- Hook nhận slot theo lô và dùng chung một `HookTimeout` (`SLOT_HOOK_TIMEOUT`, mặc định nửa tick) mỗi Step. `BeforeRelease`, `AfterLose` và `AfterClaim` đều chỉ gọi `Router.EvictSlots`.
+- `Owns()` chỉ đúng khi dấu lease còn mới hơn `min(LeaseTTL, HeartbeatTTL) − Tick`, tính từ đầu tick (D24).
+- Slot manager dùng Redis client riêng (pool 4, retry mặc định). Không bao giờ dùng `SCAN` hay `KEYS`: khoá cid lấp đầy keyspace.
+- **Bất biến: core nào cũng xử lý đúng room nào.** Quyền sở hữu chỉ mua gom lô, thứ tự và cache hit. Tính đúng đến từ `_id` duy nhất đóng vai CAS, nên Redis failover hay hai chủ cùng lúc không làm mất hay nhân đôi tin (hai chủ chỉ dẫn tới tranh chấp seq ở §3.3a).
 
 ---
 
@@ -197,6 +233,13 @@ Tên field trong `messages` là tên ngắn (ngoại lệ duy nhất của luậ
 
 - **Khoá chính Clustered `_id`:** Ghép 8 byte `room_id`, 8 byte `thread_root` và 8 byte `seq`. Dữ liệu của cùng một phòng chat nằm liền kề nhau trên ổ đĩa SSD, giúp việc đọc phân trang lịch sử tin nhắn đạt hiệu năng tối đa (p99 ≤20ms cho 50 tin).
 - **Không có index chống trùng theo `cid`:** index phụ duy nhất là partial `state_pending {_state_at: 1, _id: 1}` (D148).
+
+**Bộ đếm và version:**
+- `seq` là vị trí trong một timeline: bắt đầu từ 1, `thread_root = 0` là timeline chính, `MaxUint64` để dành.
+- Không có bộ đếm event toàn room (các field `pts` trong proto đã `reserved`). Id event là khoá tự nhiên: `{room}-{thread}-{seq}` cho tin mới (`pbconv.MessageEventID`); các thay đổi khác dùng version của doc đích ([events.md](../events.md) §2).
+- Room id (`pkg/ids`) là số 63-bit ngẫu nhiên khác 0, gửi dưới dạng chuỗi thập phân, rút một lần cho mỗi `CreateRoom`/`OpenDirectRoom`; id đã bị chiếm → `UNAVAILABLE` (D117, D118).
+- `pin_ver` là version dày của ghim trong room; `rx.v`/`rc.v` tăng một mỗi lần `$inc` hoặc sửa; `ver` của doc reaction/bookmark đếm số lần đổi (token id `-n{ver}`, `-v{ver}`). `rx.c[].n` và `rc.n` lưu delta thô, có thể tạm ≤ 0; lúc đọc bỏ emoji ≤ 0 và kẹp `rc` (`domain.SettleReactions`, `SettleReplies`, cờ `Unsettled`), `count_repair` ghi lại khi phiếu hẹn bật (D113, Module 04).
+- Thành viên: `ver` (≤ MaxUint32) đếm thay đổi membership của một doc (room, user); `read_ver` đếm thay đổi vị trí đọc; `rooms.member_count_ver` đếm thay đổi `member_count` (1 khi tạo); `rooms.owners_ver` tăng ở mọi transaction owner. Mọi version chỉ tăng, có thể nhảy cóc; tombstone không bao giờ bị xoá nên id event không bao giờ lặp lại.
 
 ### 4.2. Kỹ thuật Redis Lua Script (CID Dedupe)
 - Sử dụng lệnh `EVALSHA` gọi trước mã SHA1 của script Lua trên Redis để kiểm tra và đặt chỗ CID nguyên tử, tránh round-trip mạng nhiều lần giữa Core và Redis.

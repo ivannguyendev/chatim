@@ -93,7 +93,10 @@ sequenceDiagram
 ### 3.1. Mô hình Fact & Projection (Nguyên tắc P2)
 - **Vấn đề cần giải quyết:** Nếu ghi đè trực tiếp lên bảng `messages`, khi nhiều thao tác sửa diễn ra đồng thời hoặc hệ thống gặp sự cố, dữ liệu lịch sử sẽ bị mất vĩnh viễn và không thể đối soát.
 - **Cơ chế bảo đảm:**
-  - **Fact (Sự thật bất biến):** Mọi lần sửa đổi đều được chèn thành một document mới trong collection `message_edits` với `ver = base_ver + 1`; lần sửa đầu chèn thêm hàng `ver 0` giữ bản gốc. Document không bao giờ bị xoá; chỉ khi tin bị xoá thì text và mention của các fact cũ bị dọn (`PurgeText`).
+  - **Nơi chạy:** `EditMessage`, `DeleteMessage`, `HideMessage` chạy trong `message.Editor`, `ClearHistory` trong `member.Service`; `grpcsrv` gọi thẳng, không qua actor (tool vẫn định tuyến theo slot của room).
+  - **Fact (Sự thật bất biến):** Mọi lần sửa đổi đều được chèn thành một document mới trong collection `message_edits` với `ver = base_ver + 1`; lần sửa đầu chèn thêm hàng `ver 0` giữ bản gốc (`kind original`, text đã gửi, người gửi, giờ gửi). Xoá một tin chưa từng sửa thì không ghi hàng `ver 0`. Document không bao giờ bị xoá; chỉ khi tin bị xoá thì text và mention của các fact cũ hơn fact xoá bị dọn (`PurgeText`).
+  - **Mention khi sửa:** `EditCmd.Mentions` nil thì giữ mention hiện có (chép vào fact), tập rỗng thì xoá hết; mọi fact và hàng `ver 0` mang đủ tập mention kèm `at` từng đích (`mention_targets`, `mention_all`, `mention_all_at`); thêm `@all` mới thì hỏi policy `mention_all`.
+  - **Lịch sử sửa (`GetEditHistory`, action `read_edit_history`, phân trang `after_ver`):** trang đầu trả hàng `ver 0` rồi từng fact; tin đã xoá hoặc có fact mới nhất là xoá thì trả rỗng (R2); tin không có → `NOT_FOUND`.
   - **Projection (Bản chiếu hiện tại):** Bảng `messages` chỉ đóng vai trò là bản chiếu (View Projection) trạng thái mới nhất để phục vụ việc đọc nhanh.
   - **Tự phục hồi Projection:** Nếu sau khi ghi Fact vào `message_edits`, máy chủ Core bị crash trước khi cập nhật bảng `messages`: fact mang cờ `_state: 1` nên **sweeper slot 0 (Module 10)** thấy nó sau khoảng 15–17s, chạy lại `ApplyEdit` (idempotent, chỉ áp khi `v < ver`; xoá tin thì dọn text) rồi mới phát `msg_edited`/`msg_deleted` với snapshot đã áp (D151).
 
@@ -104,6 +107,7 @@ sequenceDiagram
   - Người thứ nhất hoàn tất -> version nâng lên `base_ver + 1`.
   - Người thứ hai gửi lệnh với `base_ver` cũ -> chèn trùng `_id`. Fact trùng cùng tác giả, cùng kind, cùng text (và cùng tập mention) là lần gửi lại của chính lệnh đó → thành công; khác nội dung → `codes.FailedPrecondition` (`domain.ErrVersionConflict`), client tải lại phiên bản mới nhất rồi mới thử lại. Core không chạy vòng lặp retry nội bộ.
 - Projection `ApplyEdit` chỉ ghi khi `messages.v < ver`, nên áp lại (sweeper) không bao giờ lùi version.
+- Thứ tự kiểm: `Admit` → `Find` → `Allow` (policy nhận tác giả và kind của tin) trước khi nhận diện lần gửi lại; sau đó mới tới tin đã xoá / `base_ver` cũ, rồi (chỉ với xoá) `CountLiveReplies > 0` → `ErrHasReplies`, tất cả trước mọi lần ghi. Lần gửi lại được nhận diện thì enqueue lại event cùng id `{room}-{thread}-{seq}-v{ver}` (stream bỏ bản trùng).
 
 ### 3.3. Dữ liệu theo người đọc: Fact thưa & Mốc thời gian (Sparse Fact View)
 - **Ẩn tin nhắn phía tôi (UC-EDIT-04):**
@@ -113,6 +117,7 @@ sequenceDiagram
   - Không xoá bất kỳ tin nhắn nào trong database.
   - Chỉ cập nhật một trường thời gian duy nhất trên document thành viên của người đó:
     $$\text{members.cleared\_at} = \max(\text{cũ}, \text{giờ server})$$
+  - Mốc tính bằng ms, chỉ ghi trên member đang active, lệnh trả về mốc hiện có; chỉ khi mốc thật sự tăng mới phát `history_cleared` (subject `member`, D97, D109).
 - Khi người dùng đọc lịch sử tin nhắn, **Reader View Pipeline (Module 08)** đánh dấu `hidden = true` và bỏ nội dung các tin có `created_at <= cleared_at` hoặc nằm trong bảng `hidden`; tin vẫn giữ `seq` và version nên timeline không có lỗ.
 
 ---
@@ -131,8 +136,9 @@ sequenceDiagram
   "created_by": "usr_1001",
   "text": "Nội dung sau khi đã sửa đổi", // bị xoá khi tin bị xoá (PurgeText)
   "created_at": ISODate("2026-10-10T10:08:00Z"),
-  "mention_targets": [ { "k": "user", "i": "usr_B" } ], // đủ tập mention của phiên bản
-  "mention_all": false
+  "mention_targets": [ { "kind": "user", "id": "usr_B", "at": ISODate("2026-10-10T10:08:00Z") } ], // đủ tập mention của phiên bản, kèm at
+  "mention_all": true,                 // chỉ ghi khi có @all
+  "mention_all_at": ISODate("2026-10-10T10:00:00Z") // giờ của @all, chỉ ghi khi có
 }
 ```
 
@@ -152,7 +158,10 @@ sequenceDiagram
 - Mọi yêu cầu sửa/xoá đều phải đi qua `access.Admit` (kiểm tra còn là thành viên không) và `access.Allow`:
   - **Sửa tin:** Mặc định chỉ tác giả (`sender_id == caller_id`) mới được sửa.
   - **Thu hồi tin:** Mặc định cũng chỉ tác giả (`access.DefaultPolicy`, D86); quyền Owner/Admin xoá tin người khác chờ module policy theo vai trò (Phase 2).
-  - **Khoá loại tin (`MESSAGE_LOCKED_KINDS`):** Danh sách tên kind (`text`, `system`) bị cấm sửa/xoá kể cả với tác giả; mặc định rỗng (không khoá gì), tên lạ là lỗi khi boot (D87).
+  - **Khoá loại tin (`MESSAGE_LOCKED_KINDS`):** Danh sách tên kind (`text`, `system`, phân biệt hoa thường) bị cấm sửa/xoá kể cả với tác giả; mặc định rỗng (không khoá gì), tên lạ là lỗi khi boot (D87). Core không có luật cứng nào theo tác giả, owner hay kind trong `message.Editor`; mọi quyền chỉ đến từ `access.Policy`. Chỉ checker domain dùng chung (message, interaction, member, room) nhận cấu hình này; checker của `grpcsrv` và actor dùng `DefaultPolicy{}`. Thêm kind mới = thêm một mục vào `domain.kindNames`.
+- **`access.Checker`:** luôn kiểm tenant và membership trước rồi mới hỏi policy. `Admit` chỉ kiểm tenant + membership; `Allow` hỏi policy với `Request.Author`/`Request.Kind` (tác giả và kind của tin đích, rỗng với lệnh trên room); `Authorize` làm cả hai. Lệnh trên một tin (sửa, xoá, ẩn, xem lịch sử sửa) chạy `Admit` → `Find` → `Allow`. `Rooms.Member` coi doc `state ≠ 1` là không phải thành viên.
+- **`access.DefaultPolicy`:** sửa/xoá chỉ tác giả; thêm người và `update_room` cho owner/admin; xoá người cho owner, admin chỉ xoá người vai `member`; đổi vai và `priority` chỉ owner; mọi action khác (kể cả `read_reactions`, `read_members`, `send_system_message`) cho mọi thành viên; `set_room_preferences` chỉ qua `Admit`. `send_system_message` nhận `Member` rỗng, nên policy theo vai sau này không được dựa vào nó.
+- **Nơi hỏi quyền:** `SendMessage` trong actor (`mention_all` sau `send_message`); `forward_message`, admit của reply, sửa/xoá/ẩn trong `message.Editor`; react/bookmark/pin/unpin trong `interaction.Service`; clear, lệnh thành viên và vị trí đọc trong `member.Service`; `open_direct`, `update_room` trong `room.Service`; `GetHistory`, `GetMessages`, `GetEditHistory` trong `message.Reader`; `GetReplies` (`read_replies`), `ListBookmarks`, `ListPins`, `ListThreads`, `GetReactions` trong `interaction.Reader`; `ListMembers` trong `member.Reader`; Mention App hỏi `read_history` cho `ListMentions` và `read_members` cho `ListRoomGroups` qua checker của core.
 
 ### 4.3. Hợp đồng Mã lỗi gRPC (Error Matrix)
 
