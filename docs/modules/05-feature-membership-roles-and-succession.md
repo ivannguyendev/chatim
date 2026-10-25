@@ -115,6 +115,12 @@ sequenceDiagram
     - Nếu member chưa có: Chèn mới với `state = 1`.
     - Nếu member trước đây đã rời nhóm (`state == 2`): Kích hoạt lại (`state = 1`, `role = member`, `priority = 0`, `read_seq = max(cũ, seq cuối)`, giữ `cleared_at`).
   - Hệ thống đếm chính xác số lượng document **thực sự thay đổi trạng thái** để chỉ tăng bộ đếm `member_count` đúng bằng số lượng đó kết hợp với **Phiếu hẹn sinh tồn (Survivor Timers D111)**.
+  - Chống lặp qua `dedupe.Requests` (`chatim:req:{room}:{user}:{request_id}`, LRU RAM + Redis, giữ `CID_COMMITTED_TTL` 15 phút và chỉ khi Redis còn khoá): đã xong → đọc lại và trả những người còn active do chính request này thêm; đang chạy ở core khác → `UNAVAILABLE`; mới → đặt phiếu → một `BulkWrite(ordered:false)` các upsert pipeline → quên cache member của actor → `$inc member_count` bằng `UpsertedCount + ModifiedCount` → gỡ phiếu → mỗi người một `member_added`, rồi `member_count_changed`.
+
+#### Đường thường và quyền mặc định (D101)
+- **Policy mặc định:** owner làm mọi thứ; admin thêm người và xoá người vai `member`; chỉ owner đổi vai và đặt `priority`; ai cũng rời được. Policy được hỏi **trước** khi lộ ra người đích có tồn tại hay không (đích không có hoặc đã rời được đưa vào policy như một `member` giả).
+- **Đường thường** (đích không phải owner, không nâng lên owner): một `UpdateOne` CAS trên `ver` của đích (`ApplyMember`); trượt CAS → `UNAVAILABLE` ngay. Xoá/rời một doc active thì đặt phiếu trước và `$inc −1` sau.
+- **Ai được đổi `member_count`:** chỉ `Rooms.Create`, `$inc` trong lệnh (theo số doc thật sự đổi trạng thái), transaction owner, consumer `member_count_repair` và `/app recount`; mỗi nơi bật bit 2 trên `rooms`. `$inc` lỗi thì ghi log, phiếu còn đặt, lệnh vẫn thành công; đặt phiếu lỗi → `UNAVAILABLE` trước mọi lần ghi. `MEMBER_COUNT_CHECK_DELAY` (5s) phải lớn hơn `CORE_REQUEST_DEADLINE`.
 
 ### 3.2. Thuật toán Kế nhiệm Owner tất định (Owner Succession Algorithm)
 - Nhóm chat không bao giờ tồn tại trạng thái không có chủ (Orphan group) hoặc có 2 chủ (Split-owner).
@@ -124,6 +130,7 @@ sequenceDiagram
   3. **Thâm niên trong nhóm (`joined_at`):** Người gia nhập nhóm sớm nhất sẽ được chọn nếu các tiêu chí trên bằng nhau; cuối cùng là user id nhỏ nhất.
 - Toàn bộ bước đổi vai trò của người mới, ghi người cũ rời và `$inc rooms.owners_ver` (điểm xung đột chung) được khoá chặt trong **một MongoDB Transaction duy nhất** (D100; phòng không có trường `owner_id`; ngoại lệ duy nhất của toàn hệ thống `chatim`, vi phạm nguyên tắc "chỉ ghi đơn doc" để đổi lấy tính an toàn tuyệt đối).
 - Nếu có xung đột giao dịch (Transaction Conflict): Core trả mã lỗi `codes.Unavailable` ngay lập tức, không retry nội bộ.
+- Cách chạy: `ownership.Affects` chọn đường owner → `OwnerChanges.ChangeOwners` chạy một transaction bằng `StartTransaction`/`CommitTransaction` (không bao giờ `WithTransaction`, chỉ một lần thử): đọc `owners_ver`, các doc, tối đa 2 owner và ứng viên admin/member đứng đầu; hàm thuần `ownership.Plan` ghi người kế vị trước rồi tới đích, mỗi doc một CAS trên `ver`; `$inc owners_ver` và số member nằm cùng một lần update doc `rooms`. Đường này không dùng phiếu hẹn. `LeaveRoom` trả `new_owner`; `member_removed` không mang người kế vị. memstore cho cùng ngữ nghĩa.
 
 #### Ca biên đặc biệt: Owner là thành viên duy nhất còn lại (không có ứng viên)
 Khi phòng chỉ còn đúng 1 người (chính là Owner) và người này bấm "Rời phòng":
@@ -176,7 +183,10 @@ Khi phòng chỉ còn đúng 1 người (chính là Owner) và người này b�
 | `PermissionDenied` | `ERR_INSUFFICIENT_ROLE` | Người gọi không phải Owner/Admin nhưng cố tình kick thành viên hoặc thăng chức. | Không retry; hiển thị thông báo "Bạn không có quyền thực hiện". |
 | `NotFound` | `ERR_MEMBER_NOT_FOUND` | Thành viên cần thao tác không tồn tại trong phòng. | Không retry; cập nhật lại danh sách thành viên trên UI. |
 | `FailedPrecondition` | `domain.ErrDirectRoom` / `domain.ErrLastOwner` | Lệnh thành viên trên phòng DM; owner cuối tự hạ quyền. | Không retry; ẩn thao tác trên UI. |
-| `InvalidArgument` | `domain.ErrTooManyMembers` | Một lệnh `AddMembers`/`CreateRoom` có hơn `MEMBER_BATCH_MAX` (500) người sau khi bỏ trùng. | Không retry; chia nhỏ danh sách. |
+| `InvalidArgument` | `domain.ErrTooManyMembers` | Một lệnh `AddMembers`/`CreateRoom` có hơn `MEMBER_BATCH_MAX` (mặc định 500, cấu hình 2..1000) người sau khi bỏ trùng; input sai. | Không retry; chia nhỏ danh sách. |
+| `PermissionDenied` | `domain.ErrNotMember` / `access.ErrDenied` | Người gọi không active, policy từ chối, người chưa từng là thành viên gọi rời phòng. | Không retry. |
+| `NotFound` | `domain.ErrMemberNotFound` | Xoá người chưa từng là thành viên; đổi vai/priority của đích không active. | Không retry. |
+| `OK` (`changed = false`) | — | Xoá một tombstone, rời phòng lần hai, đặt đúng vai/priority hiện có. | Không cần làm gì. |
 
 ---
 

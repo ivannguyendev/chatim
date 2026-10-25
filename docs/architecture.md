@@ -102,7 +102,7 @@ Cờ event chờ phát (M3.1, D142–D149): 7 collection `messages`, `message_ed
 | `pin_actions` (clustered) | 16B `room│pin_ver` | Fact | `{room_id, created_at}` | Fact các lần ghim/bỏ ghim tin nhắn. |
 | `rooms` | 8B `int64` | Metadata + Projection + Aggregate | `{activity_bucket}`, `{created_at}` | Thông tin phòng, số thành viên, `last_edit_at`, `dm_key`. |
 | `members` (clustered) | `room (8B)│user_id (≤64B)` | Tập + Vị trí đọc + Cài đặt | `{room_id, state, role, priority, joined_at, user_id}`, `{tenant, user_id, state, room_id, joined_at, cleared_at, read_seq, pinned_at, archived_at}` | Quản lý thành viên, quyền hạn, `read_seq`, `pinned_at`, `muted_until`. |
-| `message_interactions` (clustered) | 24B `msg│kind(1B)│part` | Tập (D112) | `{message_key, kind, state, value, updated_at, actor_id}`, `{tenant, actor_id, kind, state...}` | Gộp reaction, bookmark và link doc trả lời. |
+| `message_interactions` (clustered) | `msg (24B)│kind(1B)│part` | Tập (D112) | `{message_key, kind, state, value, updated_at, actor_id}`, `{tenant, actor_id, kind, state...}` | Gộp reaction, bookmark và link doc trả lời. |
 | `mentions` (clustered) | `msg│kind(1B)│target_id` | Projection theo đích (D115, D164), Mention App ghi | `{tenant, target, state, created_at, message_key}`, `{room_id, kind, created_at, message_key}`, `{message_key}` | Chỉ mục @mention theo đích (user, nhóm, `@all`); `state` 1 còn, 2 đã gỡ. |
 | `mention_rooms` | `room_id` | Mention App (D164) | Không có | `last_shared_mention_at` (`$max`) cho đường B của `ListMentions`; thay `rooms.last_shared_mention_at`. |
 | `mention_user_groups` (clustered) | chuỗi `tenant│user` | Mention App (D167) | `{tenant, groups, user_id}` (multikey) | Đủ nhóm của một người, `ver` do hệ thống user/nhóm cấp. |
@@ -111,6 +111,12 @@ Cờ event chờ phát (M3.1, D142–D149): 7 collection `messages`, `message_ed
 | `reply_threads` (clustered) | 24B `room│thread│seq` tin cha | Projection (D130) | `{room_id, last_reply_at, _id}` | Bảng tóm tắt thread và tin trả lời mới nhất. |
 | `hidden` | `ObjectId` | Fact thưa | `{user_id, room_id, thread_root, seq}` unique | Danh sách tin ẩn theo từng người đọc. |
 | `sweeper_state` | tên collection (`"messages"`…) | Vận hành (M3.1) | Không có | Mốc quét của sweeper mỗi collection `{checkpoint, updated_at}`, ghi `w:majority`, chỉ tiến. Thay `reconciler_state` (đã bỏ; DB cũ còn collection này thì xoá tay). |
+
+**Mã hoá khoá (`pkg/keys`):** các field uint64 ghi big-endian rồi nối liền, nên thứ tự byte trùng thứ tự số; một trang lịch sử bất kỳ, kể cả trang cũ nhất, là một range scan.
+- `message_edits`: khoá tin cộng version uint32 (28B).
+- `message_interactions`: khoá tin, một byte kind (1 reaction, 2 bookmark, 3 reply), rồi phần đuôi: byte của user (1..64B) hoặc `thread│seq` của tin trả lời (16B). Mọi khoá reply của một tin dài 41B nên `keys.InteractionReplyRange` (hai biên 41B) quét các reply theo seq; khoá reaction và bookmark dài ngắn khác nhau nên đếm và liệt kê qua index.
+- `mentions`: khoá tin, một byte loại đích (1 user, 2 nhóm, 3 `@all`), rồi id đích (`@all` không có id, khoá 25B).
+- `members` = `keys.Member(room, user)`: room 8B cộng byte user (1..64B). Mongo so BinData theo độ dài trước, nên không bao giờ quét khoảng `members` theo `_id`: theo room thì dùng index `room_id`, theo khoá cụ thể thì `_id` bằng hoặc `mongobound.IDs`.
 
 ### 5.2 Quy tắc Sharding & Clustered Keys (Shard-Ready)
 
@@ -235,6 +241,8 @@ flowchart TB
 ---
 
 ## 7. Hạ tầng, Vòng đời & Vận hành
+
+Biến môi trường, cổng, metric và lệnh vận hành của từng app: [apps/core.md](./apps/core.md), [apps/websocket.md](./apps/websocket.md), [apps/gateway.md](./apps/gateway.md).
 
 ### 7.1 Hạ tầng Lưu trữ & Message Bus
 - **Hai cụm Redis độc lập (D44):**

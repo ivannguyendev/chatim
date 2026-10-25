@@ -125,6 +125,8 @@ Trang 20 mục (0 → 20, lớn hơn → `INVALID_ARGUMENT`); store hoặc core 
   - Tin nhắn trong Thread vẫn nằm **trực tiếp trên timeline chính của phòng chat** (`thread_root = 0`) như một tin nhắn bình thường (D114).
   - Tin trả lời mang một con trỏ `messages.rp {th, s}` tới tin cha cùng room (`th` luôn 0). `reply_to` kèm `thread_root ≠ 0` bị từ chối `INVALID_ARGUMENT`.
   - Projection `reply_index` ghi một doc trả lời vào `message_interactions` với `_id = khoá tin cha│3│thread│seq` (41 byte), rồi `$inc rc +1` trên tin cha dưới phiếu hẹn. `GetReplies` quét dải `keys.InteractionReplyRange` của tin cha theo thứ tự seq (bỏ tombstone) rồi `Find $in` các tin trả lời; `ListThreads` đọc projection `reply_threads` (D130).
+  - Tin cha đã xoá vẫn trả lời được. Doc trả lời chỉ do `reply_index` ghi; `RemoveReply` trên doc chưa có thì ghi tombstone trước, nên một `AddReply` tới muộn không làm sống lại (`AddReply` chỉ `$setOnInsert`).
+  - `GetReplies` = `Admit` → `Find` tin cha (không có → `NOT_FOUND`) → `Allow(read_replies)` → quét dải → view; `next` = seq tin trả lời cuối của trang, 0 = hết.
 
 ### 3.2. Trích dẫn tính lúc đọc (`reply_preview`)
 - Doc tin trả lời **không lưu** bản sao nội dung tin cha; chỉ lưu con trỏ `rp`.
@@ -140,7 +142,16 @@ Trang 20 mục (0 → 20, lớn hơn → `INVALID_ARGUMENT`); store hoặc core 
 
 ### 3.4. Sweeper phát lại
 - `msg_created` được dựng lại từ doc tin hiện tại: tin đã xoá hoặc đã sửa bỏ hết đích thì đi loại data `message` và không tới Mention App; app đã học thay đổi từ `msg_edited`/`msg_deleted`.
-- Lệnh sửa gặp fact trước đã bị lệnh xoá chen vào dọn chữ (`ErrPreviousPurged`): lệnh vẫn thành công, không enqueue, sweeper phát bù từ cờ.
+- Lệnh sửa gặp fact trước đã bị lệnh xoá chen vào dọn chữ (`ErrPreviousPurged`: hàng còn, text rỗng): lệnh vẫn thành công, không enqueue, sweeper phát bù từ cờ. Thiếu hẳn fact trước → `UNAVAILABLE`.
+
+### 3.5. Đích mention trên tin (D115, D173)
+- Id đích theo `keys.ValidMentionID` (`[A-Za-z0-9_:-]{1,64}`). Actor đóng dấu `a` = giờ gửi; `message.Editor` giữ `a` cho đích đã có và đóng giờ fact cho đích mới. `domain.SameMentions` so đích theo danh tính, không so `a`, nên gửi lại cùng lệnh sửa vẫn là lần thử lại.
+- `publish.subjectFor` đặt `msg_created` có đích lên data kind `mention`, cả ở lệnh lẫn sweeper. Core không bung nhóm, không có `@here` và không giữ chỉ mục mention (việc của Mention App).
+
+### 3.6. Chuyển tiếp (D116, `message/forward_link.go`, phần parse ở `grpcsrv/forward.go`)
+- `forward_from` kèm `reply_to`, hoặc nguồn sai dạng (thread ≠ 0, seq 0) → `INVALID_ARGUMENT`.
+- `Admit(forward_message)` trên room nguồn: room không có hoặc khác tenant → `NOT_FOUND`, không phải thành viên → `PERMISSION_DENIED`. Tin nguồn không có, trước `cleared_at` hoặc bị người gọi ẩn → `NOT_FOUND`; đã xoá → `FAILED_PRECONDITION`; sau đó `Allow` với tác giả và kind của nguồn (4 lần đọc theo khoá).
+- Tin mới mang text hiện tại của nguồn, không mang mention (text và mention client gửi bị bỏ), `fw` = `fw` của nguồn nếu nguồn đã là tin chuyển tiếp, không thì chính nguồn.
 
 ---
 
@@ -234,12 +245,13 @@ Subject `websocket.publish.{t}` (`MENTION_WS_PUBLISH_ROOT`), gói `WsPublish{id,
 1. **Không có cây phân nhánh (No Nested Tree):**
    - *Hạn chế:* Mỗi tin trả lời chỉ trỏ tới đúng một tin cha trên timeline chính. `GetReplies` chỉ liệt kê trả lời trực tiếp của một tin, không dựng cây cấp 2, cấp 3.
    - *Lý do đánh đổi:* Giữ mô hình truy vấn phẳng, đơn giản hoá giao diện và loại bỏ truy vấn đệ quy.
-2. **Hạn mức Đề cập (Mention Quota):**
+2. **Tin cha bị xoá ngay sau một tin trả lời mới:** nếu `reply_index` chưa kịp dựng doc trả lời thì `CountLiveReplies` chưa thấy nó, lệnh xoá tin cha được chấp nhận (cửa sổ chấp nhận được).
+3. **Hạn mức Đề cập (Mention Quota):**
    - Tối đa **50 đích mention** (`MENTION_TARGETS_MAX`, sau khi bỏ trùng) mỗi tin; `@all` là cờ riêng, không tính vào 50.
-3. **Độ trễ xuất hiện trong Hộp thư Mention:** consumer `mention` gom lô ≤ 250ms; bench 2K tin/s: trễ đỉnh 0,48–0,68s.
-4. **Thông báo dựa trên thành viên lúc xử lý:** người rời nhóm giữa lúc tạo tin và lúc sửa tin có thể không nhận lệnh gỡ; `ListMentions` không còn hiện mục đó (lưới an toàn).
-5. **NATS chết quá 5 phút:** mention trong khoảng đó vẫn được ghi nhưng không có thông báo (`MENTION_NOTIFY_MAX_AGE`).
-6. **Gợi ý `@nhóm` và danh mục có thể cũ:** gợi ý tới 60s (room thường) hoặc 10 phút (channel); `SetGroups` có hiệu lực trên pod khác sau tối đa 60s.
+4. **Độ trễ xuất hiện trong Hộp thư Mention:** consumer `mention` gom lô ≤ 250ms; bench 2K tin/s: trễ đỉnh 0,48–0,68s.
+5. **Thông báo dựa trên thành viên lúc xử lý:** người rời nhóm giữa lúc tạo tin và lúc sửa tin có thể không nhận lệnh gỡ; `ListMentions` không còn hiện mục đó (lưới an toàn).
+6. **NATS chết quá 5 phút:** mention trong khoảng đó vẫn được ghi nhưng không có thông báo (`MENTION_NOTIFY_MAX_AGE`).
+7. **Gợi ý `@nhóm` và danh mục có thể cũ:** gợi ý tới 60s (room thường) hoặc 10 phút (channel); `SetGroups` có hiệu lực trên pod khác sau tối đa 60s.
 
 ---
 
