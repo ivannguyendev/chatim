@@ -1,7 +1,7 @@
 # chatim — Kiến trúc hệ thống (Single Source of Truth)
 
 > Ngày cập nhật: 2026-10-17 · Trạng thái: **Nguồn sự thật duy nhất (SSOT)** cho toàn bộ quy chuẩn kiến trúc của `chatim`.
-> Nhật ký 198 quyết định kỹ thuật: [docs/decision-log.md](./decision-log.md) (D1–D198). Danh mục event (core phát gì, ai nhận gì): [docs/events.md](./events.md).
+> Nhật ký 207 quyết định kỹ thuật: [docs/decision-log.md](./decision-log.md) (D1–D207). Danh mục event (core phát gì, ai nhận gì): [docs/events.md](./events.md).
 > Đặc tả chi tiết 11 Module tính năng (How-It-Works & Flowcharts): [docs/modules/README.md](./modules/README.md).
 > Lộ trình phát triển các Milestone: [docs/roadmap.md](./roadmap.md).
 
@@ -25,7 +25,7 @@
   - Mention App (module nhúng `modules/mention`, D182; D162–D176, đã merge `main` PR #16, trước M4): ghi mention, `ListMentions`, thành viên nhóm và danh mục nhóm được tag, dữ liệu gợi ý `@nhóm` theo room, bung `@nhóm`/`@all` và gửi thông báo dạng gói `WsPublish` (nội dung một lần + danh sách người nhận) vào `websocket.publish.{t}` trên `CHATIM_WS` (D192); hiện chạy nhúng trong core (core chỉ import package công khai `modules/mention/mentionapp`; app đọc core qua cổng `CoreReader` trong tiến trình); giữ nhúng (owner 2026-10-19, D177): chỉ tách khi có team, SLA, nhịp release hoặc nhu cầu scale riêng có số đo, hoặc database riêng + CDC, và khi tách thì app tự sở hữu dữ liệu, chỉ gọi core qua API, không đọc chung bảng. Lọc tắt thông báo và giao tới máy thuộc app notification (websocket M4, `push` Phase 2). Dấu `@` trên danh sách hội thoại, sync token, đa thiết bị: làm sau.
 
 ### 1.2 Ngoài phạm vi Phase 1 (Non-goals)
-Phase 2 (owner 2026-10-19, D179–D180): `identity`, `identity-verifier`, mở rộng `gateway` (REST + webhook cho hệ thống khác, API key; phần HTTPS cho máy đã ở Phase 1, D198), `notification` (+ push), `search`, `migrator`, media qua presigned URL. Backlog: channel, sync token D74, đa thiết bị. Ngoài phạm vi: API import trong core, E2EE, voice/video, admin UI. Xem [roadmap](./roadmap.md).
+Phase 2 (owner 2026-10-19, D179–D180; thứ tự và tập go-live owner 2026-10-25, D207): go-live `v1.0.0` cho một product mới cần M6 `identity` + `identity-verifier` (kèm danh bạ user và thu hồi phiên tới `websocket`/`gateway`) → M7 media qua presigned URL (field đính kèm trong core) → M8 `notification` (+ push) → M9 `search` người/nhóm. Sau go-live: API cho hệ thống khác (nhóm route API key trong `gateway`; phần HTTPS cho máy đã ở Phase 1, D198) + webhook (worker riêng), policy quyền, tìm nội dung tin, `migrator`. Backlog: channel, sync token D74, đa thiết bị. Ngoài phạm vi: API import trong core, E2EE, voice/video, admin UI. Xem [roadmap](./roadmap.md).
 
 ### 1.3 Mục tiêu quy mô (Scale)
 - ~100K kết nối đồng thời (CCU).
@@ -308,4 +308,4 @@ Toàn bộ chi tiết kỹ thuật vận hành (How-It-Works), sơ đồ Mermaid
 ## 10. Tra cứu Quyết định Kỹ thuật (Decision Log)
 
 Mọi quyết định lựa chọn giải pháp kỹ thuật, đánh đổi (trade-offs), phương án bị loại bỏ (rejected alternatives) từ ngày đầu dự án đến Mention App hiện tại được lưu trữ đầy đủ tại:
-👉 **[Architecture Decision Records (D1–D198)](./decision-log.md)**
+👉 **[Architecture Decision Records (D1–D207)](./decision-log.md)**
