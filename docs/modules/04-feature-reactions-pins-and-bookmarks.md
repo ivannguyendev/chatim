@@ -141,7 +141,7 @@ sequenceDiagram
 - **Ghim tin:** Mọi thao tác ghim hay bỏ ghim được ghi thành các Fact bất biến vào `pin_actions` với `pin_ver` tăng dần đơn điệu.
 - Bảng hiển thị ghim tại `rooms.pins` là bản chiếu (Projection) được sinh ra bằng cách gấp nếp (Fold) các hành động từ `pin_actions`.
 - **Bảo đảm hạn mức `PIN_LIMIT = 50`:** `pin_actions` dùng `_id = room│pin_ver` liền nhau (dense), lệnh fold `rooms.pins/pin_ver` với các fact sau nó rồi chỉ chèn đúng một fact `pin_ver + 1`, nên số tin ghim đang hoạt động không bao giờ vượt quá 50 tin (ghim thứ 51 → `FailedPrecondition`).
-- **Tự phục hồi (M3.1):** fact ghim mang cờ `_state: 1`. Nếu CAS fold thua hoặc core chết trước khi phát, sweeper slot 0 fold + CAS lại rồi mới phát `msg_pinned`/`msg_unpinned` (D151); thua CAS lần nữa thì giữ cờ cho lượt sau.
+- **Tự phục hồi (M3.1):** fact ghim mang cờ `_state: 1`. Lệnh chỉ phát `msg_pinned`/`msg_unpinned` khi `Project` thành công; `Project` lỗi (thua CAS hay lỗi DB) thì lệnh trả lời bằng bản fold tại chỗ, không phát và giữ cờ. Thua CAS hoặc core chết trước khi phát thì sweeper slot 0 fold + CAS lại rồi mới phát (D151, event trễ ~15–17s); thua CAS lần nữa thì giữ cờ cho lượt sau. Cờ chỉ mất sau PubAck của event, nên `rooms.pins` luôn bắt kịp sổ `pin_actions`; ghim không cần phiếu hẹn vì `Project` là fold lại từ sổ, chạy lại bao nhiêu lần cũng ra một kết quả.
 
 ---
 

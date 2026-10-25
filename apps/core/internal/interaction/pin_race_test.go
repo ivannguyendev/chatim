@@ -95,18 +95,20 @@ func TestAnotherFactAtThePinVersionReturnsRetryLaterAtOnce(t *testing.T) {
 	}
 }
 
-func TestAFailedProjectionFallsBackToTheFold(t *testing.T) {
+func TestAFailedProjectionAnswersTheFoldAndLeavesTheEventToTheSweeper(t *testing.T) {
 	for _, cause := range []error{pinproj.ErrContended, errBoom} {
 		rg := newRig(t, nil)
 		rg.withProjector(t, &scriptedProjector{project: cause})
-		rg.events.err = errBoom
 		rg.send(t, 1, "alice", "hi")
 		got, err := rg.m.Pin(t.Context(), pinCmd("bob", 1))
 		if err != nil || got.Version != 1 || !slices.Equal(pinnedSeqs(got), []uint64{1}) {
 			t.Fatalf("Pin with projection error %v = %+v, %v; want the folded state", cause, got, err)
 		}
 		if stored, err := rg.rooms.PinState(t.Context(), room); err != nil || stored.Version != 0 {
-			t.Fatalf("projection = %+v, %v; want it left to the worker", stored, err)
+			t.Fatalf("projection = %+v, %v; want it left to the sweeper", stored, err)
+		}
+		if _, events := rg.events.list(); len(events) != 0 {
+			t.Fatalf("projection error %v enqueued %v; want the fact flag kept for the sweeper", cause, events)
 		}
 	}
 }
@@ -133,6 +135,9 @@ func TestALostProjectionCASStillAnswersTheFoldAndTheNextProjectHeals(t *testing.
 	}
 	if stored, err := rg.rooms.PinState(t.Context(), room); err != nil || stored.Version != 1 {
 		t.Fatalf("projection after a lost CAS = %+v, %v; want it still at v1", stored, err)
+	}
+	if _, events := rg.events.list(); len(events) != 1 {
+		t.Fatalf("events after a lost CAS = %v; want only the first pin's event", events)
 	}
 	healed, err := projector.Project(t.Context(), room, 2)
 	if err != nil || !slices.Equal(pinnedSeqs(healed), []uint64{1, 2}) {

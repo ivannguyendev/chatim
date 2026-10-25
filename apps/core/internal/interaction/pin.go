@@ -90,7 +90,7 @@ func (s *Service) appendPin(ctx context.Context, fact domain.PinAction) (domain.
 func (s *Service) finishPin(ctx context.Context, typ domain.RoomType, msg domain.Message, before domain.PinState, fact domain.PinAction) domain.PinState {
 	state, err := s.d.Projector.Project(ctx, fact.Room, fact.PV)
 	if err != nil {
-		state = domain.FoldPins(before, []domain.PinAction{fact})
+		return domain.FoldPins(before, []domain.PinAction{fact})
 	}
 	_ = s.d.Events.Enqueue(fact.Room, []*chatimv1.Event{pbconv.PinChanged(typ, msg, fact)})
 	return state
