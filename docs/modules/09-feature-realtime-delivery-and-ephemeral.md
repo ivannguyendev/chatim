@@ -132,7 +132,7 @@ stateDiagram-v2
 ### 4.2. Định dạng Gói tin Protobuf Nhị phân
 - Toàn bộ dữ liệu trao đổi giữa Client và App websocket qua WebSocket đều được đóng gói dưới dạng nhị phân **Protocol Buffers (Protobuf)** thay vì văn bản JSON.
 - Giúp giảm từ **40% – 60% kích thước gói tin** truyền trên mạng di động 4G/5G, tiết kiệm pin cho thiết bị và tăng tốc độ giải mã.
-- **Không có kênh JSON** (D185 bỏ phần "JSON debug" của D17): frame chữ nhận `frame_error{UNSUPPORTED}` và bị bỏ, kết nối giữ (D205); debug bằng `corecli` hoặc client test `internal/wstest`.
+- **Không có kênh JSON** (D185 bỏ phần "JSON debug" của D17): frame chữ nhận `frame_error{UNSUPPORTED}` và bị bỏ, kết nối giữ (D205); debug bằng `corecli` hoặc client test `pkg/wstest`.
 
 ### 4.3. Hợp đồng Mã lỗi Kết nối & WebSocket Close Codes
 
@@ -209,7 +209,7 @@ Token sai hay hết hạn, frame sai, máy nhận chậm và hết suất đăng
 
 ## 7. Giao thức kết nối (M4 phần 1, đã xây)
 
-> Xây trên `feat/m4` (commit `4363410`…`ae11be4`), theo [tóm tắt phần 1](../plans/2026-10-20-m4-1-ket-noi-va-lenh-summary.md); quyết định D183–D188 ở [decision log §17.7](../decision-log.md). Code: `apps/websocket` (app), `pkg/jwtverify` (kiểm token), `pkg/coreroute` (chọn core, không retry), `proto/chatim/v1/ws.proto` (frame), `internal/wstest` (client test cho test và e2e, thay `pkg/wsclient` từ phần 5, D206). Phần 5 đổi §7.2–§7.4 và §7.6 (D202–D205).
+> Xây trên `feat/m4` (commit `4363410`…`ae11be4`), theo [tóm tắt phần 1](../plans/2026-10-20-m4-1-ket-noi-va-lenh-summary.md); quyết định D183–D188 ở [decision log §17.7](../decision-log.md). Code: `apps/websocket` (app), `pkg/jwtverify` (kiểm token), `pkg/coreroute` (chọn core, không retry), `proto/chatim/v1/ws.proto` (frame), `pkg/wstest` (client test cho test và e2e, thay `pkg/wsclient` từ phần 5, D206). Phần 5 đổi §7.2–§7.4 và §7.6 (D202–D205).
 
 ### 7.1. Mở kết nối
 
@@ -237,7 +237,7 @@ Từ phần 5 (D202–D204) kết nối có hai trạng thái phía server, **ch
 4. **Khi chờ:** `request` → `response{UNAUTHENTICATED, "authentication required"}`, không gọi core; `open_room`, `close_room`, `load_rooms`, `typing`, `watch_presence` → `auth_required{lý do lần trước}` (`MISSING` nếu chưa từng gửi token), tối đa 1 lần/giây; không event, thông báo, typing, `presence`; không đóng dấu online.
 5. **Gia hạn trong kết nối:** trước khi hết hạn, máy gửi lại `auth` với token mới cùng `sub` và `tid`; không qua giới hạn đăng nhập, không có frame trả lời khi thành công. Token sai, đã hết hạn hay của người khác → `auth_required{INVALID}`, kết nối chạy tiếp bằng token đang có. Một kết nối không bao giờ đổi người; muốn đổi người thì mở kết nối mới.
 6. **Hết hạn khi đang chạy** (`exp + 30s`): node gỡ kết nối khỏi bảng quan tâm, bỏ danh sách hỏi online, về trạng thái chờ, gửi `auth_required{EXPIRED}` và bắt đầu hẹn giờ 3 phút. Lệnh đã nhận trước đó chạy bằng danh tính lúc nhận và vẫn được trả lời. Token mới → nạp room lại → `ready`.
-7. **Heartbeat:** máy gửi `heartbeat` mỗi 5–10 giây (client test `internal/wstest` gửi mỗi 5 giây). Mọi frame của máy đều tính là còn sống ở cả hai trạng thái: heartbeat, lệnh, `auth`, và cả WebSocket ping (app trả pong). 15 giây (`WS_HEARTBEAT_TIMEOUT`) không có frame nào → app đóng (mã 1000).
+7. **Heartbeat:** máy gửi `heartbeat` mỗi 5–10 giây (client test `pkg/wstest` gửi mỗi 5 giây). Mọi frame của máy đều tính là còn sống ở cả hai trạng thái: heartbeat, lệnh, `auth`, và cả WebSocket ping (app trả pong). 15 giây (`WS_HEARTBEAT_TIMEOUT`) không có frame nào → app đóng (mã 1000).
 
 Ví dụ: token 15 phút của Lan phát lúc 10:45, hết hạn 11:00. Máy chọn mốc ngẫu nhiên trong 70–85% thời hạn, ví dụ 10:56, lấy token mới và gửi `auth`; kết nối chạy tiếp, không có frame trả lời. Nếu máy quên, 11:00:30 node gửi `auth_required{EXPIRED}` và Lan tạm không nhận tin; máy gửi token mới trên cùng kết nối, nhận `ready`, gửi lại `open_room` và `watch_presence`, tải lại qua HTTPS. Tới 11:03:30 vẫn chưa có token mới thì node đóng 4001.
 
@@ -364,7 +364,7 @@ Ví dụ: máy của Hùng vào thang máy, không đọc socket trong lúc nhó
 - **Đường đi:** máy gửi `request{MarkRead{room_id, seq}}` (lệnh thứ 34) hoặc `MarkUnread`; websocket chuyển tới core theo hàng (kết nối, room) như `SendMessage`. Core ghi doc `members` một lần mỗi lệnh, trả `read_seq`/`read_ver` ngay, rồi đưa vị trí vào hàng gom `event/readbatch`.
 - **Gom ở core:** mỗi `READ_EVENT_WINDOW` (1s) core phát một event `read_positions` mỗi room có người đọc, mỗi user một dòng (`read_ver` lớn nhất), tối đa 1.000 dòng mỗi event; id theo nội dung. Sau PubAck mọi cờ bit 2 có tên trong event được xoá; core chết thì sweeper phát `read_positions` một dòng từ doc (~15s).
 - **Ai nhận:** kết nối đang mở room, cộng mọi kết nối của từng user có tên trong `entries` mà room còn trong danh sách RAM và không tạm ngừng; mỗi kết nối nhận một lần. Ví dụ: Lan đọc nhóm "Kho" trên điện thoại; máy tính của Lan (không mở nhóm) và Minh (đang mở nhóm) nhận; Hùng (thành viên, không mở nhóm) không nhận.
-- **Client (đặc tả §11.5, D206):** SDK ở repo client giãn `MarkRead` tối đa 1 lần/giây mỗi room (lần đầu của room đang yên gửi ngay, sau đó seq lớn nhất đang chờ); `MarkUnread` huỷ `MarkRead` đang chờ của room rồi mới gửi (không bao giờ có `MarkRead` cũ đi sau nó); gửi phần chờ trước `close_room`; chờ trả lời mọi `MarkRead` đang gửi rồi mới tải danh sách hội thoại qua HTTPS (D198) để unread đúng; áp `read_positions` theo (room, user) `read_ver` lớn hơn. Repo này không còn `pkg/wsclient`; e2e gọi `MarkRead` bằng `internal/wstest` `Call` và chờ `response` trước `ListMyRooms`.
+- **Client (đặc tả §11.5, D206):** SDK ở repo client giãn `MarkRead` tối đa 1 lần/giây mỗi room (lần đầu của room đang yên gửi ngay, sau đó seq lớn nhất đang chờ); `MarkUnread` huỷ `MarkRead` đang chờ của room rồi mới gửi (không bao giờ có `MarkRead` cũ đi sau nó); gửi phần chờ trước `close_room`; chờ trả lời mọi `MarkRead` đang gửi rồi mới tải danh sách hội thoại qua HTTPS (D198) để unread đúng; áp `read_positions` theo (room, user) `read_ver` lớn hơn. Repo này không còn `pkg/wsclient`; e2e gọi `MarkRead` bằng `pkg/wstest` `Call` và chờ `response` trước `ListMyRooms`.
 - **Độ trễ:** e2e qua websocket-1 đo A → B 353ms (cửa sổ 1s).
 
 ## 10. Đang gõ và online (M4 phần 4, đã xây)
@@ -431,7 +431,7 @@ Ví dụ: Lan ở `websocket-1`, Nam cùng node, Hòa ở `websocket-2`; Nam và
 
 ## 11. Đặc tả cho client (M4 phần 5)
 
-> Xây trên `feat/m4` (commit `2fec916`…`2810525`), theo [tóm tắt phần 5](../plans/2026-10-24-m4-5-noi-lai-van-hanh-summary.md); quyết định D202–D206 ở [decision log §17.12](../decision-log.md). **Repo chatim chỉ là server** (D206): SDK ReactJS ở repo khác làm đúng mục này. Mục này viết theo hai giọng: **server bảo đảm** điều gì, và **client phải** làm gì. Client làm sai thì server chặn bằng giới hạn và lỗi theo từng frame (§11.6), không cần client tự giác. Code phía server: `apps/websocket/internal/session` (`auth.go`, `waiting.go`, `frame_errors.go`, `writer.go`), `apps/websocket/internal/interest/backlog.go`. `internal/wstest` chỉ là client test cho test và e2e, không phải SDK mẫu.
+> Xây trên `feat/m4` (commit `2fec916`…`2810525`), theo [tóm tắt phần 5](../plans/2026-10-24-m4-5-noi-lai-van-hanh-summary.md); quyết định D202–D206 ở [decision log §17.12](../decision-log.md). **Repo chatim chỉ là server** (D206): SDK ReactJS ở repo khác làm đúng mục này. Mục này viết theo hai giọng: **server bảo đảm** điều gì, và **client phải** làm gì. Client làm sai thì server chặn bằng giới hạn và lỗi theo từng frame (§11.6), không cần client tự giác. Code phía server: `apps/websocket/internal/session` (`auth.go`, `waiting.go`, `frame_errors.go`, `writer.go`), `apps/websocket/internal/interest/backlog.go`. `pkg/wstest` chỉ là client test cho test và e2e, không phải SDK mẫu.
 
 ### 11.1. Mở kết nối
 

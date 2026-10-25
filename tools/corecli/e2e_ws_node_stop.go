@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ivannguyendev/chatim/internal/wstest"
+	"github.com/ivannguyendev/chatim/pkg/wstest"
 	"github.com/ivannguyendev/chatim/tools/corecli/internal/e2e"
 	"github.com/ivannguyendev/chatim/tools/internal/devtoken"
 )

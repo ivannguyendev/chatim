@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ivannguyendev/chatim/internal/wstest"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
+	"github.com/ivannguyendev/chatim/pkg/wstest"
 	"github.com/ivannguyendev/chatim/tools/poc/internal/wsload"
 )
 

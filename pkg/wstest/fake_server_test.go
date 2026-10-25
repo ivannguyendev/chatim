@@ -12,6 +12,8 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
+const codeUnauthenticated uint16 = 4001
+
 type received struct {
 	opcode gws.Opcode
 	frame  *chatimv1.ClientFrame

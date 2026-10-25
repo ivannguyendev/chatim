@@ -11,10 +11,6 @@ func (c *Conn) OpenRoom(roomID string) error {
 	return c.Send(&chatimv1.ClientFrame{Frame: &chatimv1.ClientFrame_OpenRoom{OpenRoom: &chatimv1.OpenRoomFrame{RoomId: roomID}}})
 }
 
-func (c *Conn) CloseRoom(roomID string) error {
-	return c.Send(&chatimv1.ClientFrame{Frame: &chatimv1.ClientFrame_CloseRoom{CloseRoom: &chatimv1.CloseRoomFrame{RoomId: roomID}}})
-}
-
 func (c *Conn) LoadRooms() error {
 	return c.Send(&chatimv1.ClientFrame{Frame: &chatimv1.ClientFrame_LoadRooms{LoadRooms: &chatimv1.LoadRoomsFrame{}}})
 }

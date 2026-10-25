@@ -151,10 +151,10 @@ func (c *Conn) Err() error {
 func (c *Conn) Close() error {
 	ctx, cancel := context.WithTimeout(context.Background(), closeTimeout)
 	defer cancel()
-	return c.CloseContext(ctx)
+	return c.closeWithin(ctx)
 }
 
-func (c *Conn) CloseContext(ctx context.Context) error {
+func (c *Conn) closeWithin(ctx context.Context) error {
 	c.closeOnce.Do(func() {
 		close(c.closing)
 		c.writeMu.Lock()

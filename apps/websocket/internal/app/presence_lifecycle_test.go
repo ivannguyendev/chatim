@@ -13,7 +13,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/presence"
-	"github.com/ivannguyendev/chatim/internal/wstest"
+	"github.com/ivannguyendev/chatim/pkg/wstest"
 )
 
 type presenceRedis struct {

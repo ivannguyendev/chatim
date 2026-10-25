@@ -23,9 +23,8 @@ Hạ tầng: MongoDB (replica set), Redis (state, dedupe, presence), NATS JetStr
 ```
 apps/{core,websocket,gateway}/   # chương trình chạy được: main.go + internal/
 modules/mention/                 # Mention App, module nhúng trong core (D182)
-pkg/                             # code dùng chung, không có nghiệp vụ
+pkg/                             # code dùng chung, không có nghiệp vụ; wstest: client websocket chỉ cho test, e2e, wsload
 proto/chatim/v1/                 # protobuf (buf) → pkg/pb
-internal/wstest/                 # client websocket chỉ cho test và e2e
 tools/                           # corecli, devtoken; poc/: corebench, wsload, …
 scripts/                         # e2e.sh, bench-cell.sh, ws-nats-drill.sh, wsload-kill.sh
 deploy/                          # Dockerfile (ARG TARGET), compose dev, luật alert Prometheus

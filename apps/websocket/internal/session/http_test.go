@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/internal/wstest"
 	"github.com/ivannguyendev/chatim/pkg/metrics"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
+	"github.com/ivannguyendev/chatim/pkg/wstest"
 )
 
 func upgradeRequest(protocols string) *http.Request {

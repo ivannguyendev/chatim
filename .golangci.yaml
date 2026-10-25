@@ -36,6 +36,15 @@ linters:
               desc: pkg holds shared code only
             - pkg: github.com/ivannguyendev/chatim/modules
               desc: pkg holds shared code only
+        wstest-tests-only:
+          files:
+            - "**/apps/**"
+            - "**/modules/**"
+            - "**/pkg/**"
+            - "!**/*_test.go"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/pkg/wstest
+              desc: pkg/wstest is a test client for tests and tools only (D208)
         domain-boundaries:
           files:
             - "**/apps/core/internal/message/**"

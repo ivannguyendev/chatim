@@ -10,8 +10,8 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/config"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/session"
-	"github.com/ivannguyendev/chatim/internal/wstest"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
+	"github.com/ivannguyendev/chatim/pkg/wstest"
 )
 
 func TestRunIsReadyOnlyAfterTheSlotTableAndStopAnswersRunningCommandsBefore1001(t *testing.T) {

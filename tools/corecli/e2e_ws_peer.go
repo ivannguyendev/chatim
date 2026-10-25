@@ -8,9 +8,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/ivannguyendev/chatim/internal/wstest"
 	"github.com/ivannguyendev/chatim/pkg/backoff"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
+	"github.com/ivannguyendev/chatim/pkg/wstest"
 	"github.com/ivannguyendev/chatim/tools/corecli/internal/e2e"
 	"github.com/ivannguyendev/chatim/tools/internal/devtoken"
 )
