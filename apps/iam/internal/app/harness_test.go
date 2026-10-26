@@ -1,0 +1,187 @@
+package app_test
+
+import (
+	"bytes"
+	"context"
+	"crypto/rand"
+	"errors"
+	"io"
+	"log/slog"
+	"net"
+	"net/http"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"go.uber.org/goleak"
+
+	"github.com/ivannguyendev/chatim/apps/iam/internal/app"
+	"github.com/ivannguyendev/chatim/apps/iam/internal/config"
+	"github.com/ivannguyendev/chatim/apps/iam/internal/password"
+	"github.com/ivannguyendev/chatim/apps/iam/internal/signing"
+	"github.com/ivannguyendev/chatim/apps/iam/internal/store"
+)
+
+func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
+
+const waitLimit = 10 * time.Second
+
+var fastHash = password.Params{Memory: 64, Time: 1, Threads: 1, SaltLength: 16, KeyLength: 32}
+
+type fakeStore struct {
+	store.Auth
+	keys    []store.SigningKey
+	version int
+	closed  atomic.Bool
+}
+
+func (f *fakeStore) SigningKeys(context.Context) ([]store.SigningKey, error) { return f.keys, nil }
+func (f *fakeStore) Ping(context.Context) error                              { return nil }
+func (f *fakeStore) SchemaVersion(context.Context) (int, error)              { return f.version, nil }
+func (f *fakeStore) Close()                                                  { f.closed.Store(true) }
+
+func testConfig(kek []byte) config.Config {
+	return config.Config{
+		ListenAddr: "api", AdminAddr: "admin", PublicURL: "http://127.0.0.1", PGURI: "postgres://iam@db/iam", PGMaxConns: 2,
+		Issuer: "iss", Audience: "aud", AccessTTL: 15 * time.Minute, SessionIdle: time.Hour, SessionMax: 2 * time.Hour,
+		RefreshGrace: 30 * time.Second, DPoPWindow: time.Minute, HashConcurrency: 2, LoginFreeFailures: 5, LoginMaxDelay: time.Minute,
+		LoginIPRate: 10, LoginIPBurst: 10, LoginIPTracked: 100, PasswordMin: 12, KeyEncryptionKey: kek, KeyReload: time.Hour,
+		BodyMax: 16 << 10, DrainDelay: 10 * time.Millisecond, ShutdownBudget: 20 * time.Second,
+		ReadHeaderTimeout: time.Second, ReadTimeout: time.Second, WriteTimeout: time.Second, IdleTimeout: time.Second, MaxHeaderBytes: 16 << 10,
+	}
+}
+
+func newKEK(t *testing.T) []byte {
+	t.Helper()
+	kek := make([]byte, signing.KEKLength)
+	_, _ = rand.Read(kek)
+	return kek
+}
+
+func activeKey(t *testing.T, kek []byte) store.SigningKey {
+	t.Helper()
+	sealer, _ := signing.NewSealer(kek, rand.Reader)
+	k, _ := signing.Generate(rand.Reader)
+	sealed, err := sealer.Seal(k)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return store.SigningKey{ID: k.ID, State: store.KeyActive, PublicKey: k.PublicKey().Key, PrivateSealed: sealed}
+}
+
+type listeners struct {
+	admin, api chan string
+}
+
+func (l *listeners) listen(ctx context.Context, name string) (net.Listener, error) {
+	var lc net.ListenConfig
+	lis, err := lc.Listen(ctx, "tcp", "127.0.0.1:0")
+	if err != nil {
+		return nil, err
+	}
+	map[string]chan string{"admin": l.admin, "api": l.api}[name] <- lis.Addr().String()
+	return lis, nil
+}
+
+type logWatch struct {
+	messages chan string
+	mu       sync.Mutex
+	text     bytes.Buffer
+}
+
+func (w *logWatch) Enabled(context.Context, slog.Level) bool { return true }
+
+func (w *logWatch) Handle(ctx context.Context, r slog.Record) error {
+	w.mu.Lock()
+	err := slog.NewJSONHandler(&w.text, nil).Handle(ctx, r)
+	w.mu.Unlock()
+	select {
+	case w.messages <- r.Message:
+	default:
+	}
+	return err
+}
+
+func (w *logWatch) WithAttrs([]slog.Attr) slog.Handler { return w }
+func (w *logWatch) WithGroup(string) slog.Handler      { return w }
+
+func (w *logWatch) await(t *testing.T, message string) {
+	t.Helper()
+	timeout := time.After(waitLimit)
+	for {
+		select {
+		case got := <-w.messages:
+			if got == message {
+				return
+			}
+		case <-timeout:
+			t.Fatalf("log %q not seen", message)
+		}
+	}
+}
+
+type running struct {
+	cancel     context.CancelFunc
+	done       chan error
+	admin, api string
+	logs       *logWatch
+}
+
+func runIAM(t *testing.T, cfg config.Config, st *fakeStore, schema int) *running {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	lis := &listeners{admin: make(chan string, 1), api: make(chan string, 1)}
+	logs := &logWatch{messages: make(chan string, 1024)}
+	done := make(chan error, 1)
+	stopped := make(chan struct{})
+	deps := app.Deps{
+		Listen:        lis.listen,
+		OpenStore:     func(context.Context, string, int32) (app.Store, error) { return st, nil },
+		HashParams:    fastHash,
+		SchemaVersion: schema,
+	}
+	go func() {
+		defer close(stopped)
+		done <- app.Run(ctx, cfg, slog.New(logs), deps)
+	}()
+	r := &running{cancel: cancel, done: done, logs: logs}
+	r.admin = receive(t, lis.admin, "admin listen")
+	r.api = receive(t, lis.api, "api listen")
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-stopped:
+		case <-time.After(waitLimit):
+			t.Error("iam did not stop")
+		}
+	})
+	return r
+}
+
+func receive[T any](t *testing.T, ch <-chan T, what string) T {
+	t.Helper()
+	select {
+	case v := <-ch:
+		return v
+	case <-time.After(waitLimit):
+		t.Fatalf("%s did not happen", what)
+		var zero T
+		return zero
+	}
+}
+
+func httpGet(t *testing.T, addr, path string) (int, string) {
+	t.Helper()
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+addr+path, http.NoBody)
+	client := &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("GET %s: %v", path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(body)
+}
+
+var errOpen = errors.New("cannot reach postgres")

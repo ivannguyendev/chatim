@@ -36,7 +36,7 @@ func NewRefreshToken(sid string, random io.Reader) (string, error) {
 
 func ParseRefreshToken(token string) (string, bool) {
 	sid, secret, ok := strings.Cut(token, ".")
-	if !ok || !validID(sid) || len(secret) != SecretLength {
+	if !ok || !ValidID(sid) || len(secret) != SecretLength {
 		return "", false
 	}
 	if _, err := base64.RawURLEncoding.Strict().DecodeString(secret); err != nil {
@@ -50,7 +50,7 @@ func HashToken(token string) []byte {
 	return sum[:]
 }
 
-func validID(s string) bool {
+func ValidID(s string) bool {
 	if len(s) != IDLength {
 		return false
 	}

@@ -202,6 +202,8 @@ linters:
           deny:
             - pkg: github.com/ivannguyendev/chatim/apps/core
               desc: websocket reaches core only through gRPC and shared pkg code
+            - pkg: github.com/ivannguyendev/chatim/apps/iam
+              desc: websocket reaches iam only over the network
             - pkg: github.com/ivannguyendev/chatim/modules
               desc: websocket embeds no business module
         websocket-config-owner:
@@ -220,6 +222,8 @@ linters:
               desc: gateway reaches core only through gRPC and shared pkg code
             - pkg: github.com/ivannguyendev/chatim/apps/websocket
               desc: gateway shares code with websocket only through pkg
+            - pkg: github.com/ivannguyendev/chatim/apps/iam
+              desc: gateway reaches iam only over the network
             - pkg: github.com/ivannguyendev/chatim/modules
               desc: gateway embeds no business module
         gateway-config-owner:
@@ -229,6 +233,26 @@ linters:
             - "!**/apps/gateway/internal/config/**"
           deny:
             - pkg: github.com/ivannguyendev/chatim/apps/gateway/internal/config
+              desc: only app reads config
+        iam-boundaries:
+          files:
+            - "**/apps/iam/**"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/apps/core
+              desc: iam owns its own data and never reaches core tables or code
+            - pkg: github.com/ivannguyendev/chatim/apps/websocket
+              desc: iam shares code with websocket only through pkg
+            - pkg: github.com/ivannguyendev/chatim/apps/gateway
+              desc: iam shares code with gateway only through pkg
+            - pkg: github.com/ivannguyendev/chatim/modules
+              desc: iam embeds no chat module
+        iam-config-owner:
+          files:
+            - "**/apps/iam/**"
+            - "!**/apps/iam/internal/app/**"
+            - "!**/apps/iam/internal/config/**"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/apps/iam/internal/config
               desc: only app reads config
     govet:
       enable-all: true

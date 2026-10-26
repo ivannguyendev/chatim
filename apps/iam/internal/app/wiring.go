@@ -1,0 +1,125 @@
+package app
+
+import (
+	"context"
+	"crypto/rand"
+	"log/slog"
+	"net/http"
+	"time"
+
+	"github.com/ivannguyendev/chatim/apps/iam/internal/api"
+	"github.com/ivannguyendev/chatim/apps/iam/internal/auth"
+	"github.com/ivannguyendev/chatim/apps/iam/internal/config"
+	"github.com/ivannguyendev/chatim/apps/iam/internal/dpop"
+	"github.com/ivannguyendev/chatim/apps/iam/internal/guard"
+	"github.com/ivannguyendev/chatim/apps/iam/internal/keyring"
+	"github.com/ivannguyendev/chatim/apps/iam/internal/password"
+	"github.com/ivannguyendev/chatim/apps/iam/internal/signing"
+	"github.com/ivannguyendev/chatim/apps/iam/internal/store"
+	"github.com/ivannguyendev/chatim/apps/iam/internal/store/pgstore"
+	"github.com/ivannguyendev/chatim/pkg/admin"
+	"github.com/ivannguyendev/chatim/pkg/metrics"
+)
+
+const (
+	metricsSubsystem = "iam"
+	tokenLeeway      = 30 * time.Second
+	maxPoolConns     = 1 << 16
+)
+
+type Store interface {
+	store.Auth
+	keyring.Source
+	Ping(ctx context.Context) error
+	SchemaVersion(ctx context.Context) (int, error)
+	Close()
+}
+
+func openPostgres(ctx context.Context, uri string, maxConns int32) (Store, error) {
+	return pgstore.Open(ctx, uri, maxConns)
+}
+
+func wire(ctx context.Context, cfg config.Config, log *slog.Logger, deps Deps) (*node, error) {
+	st, err := deps.OpenStore(ctx, cfg.DatabaseURI(), poolSize(cfg.PGMaxConns))
+	if err != nil {
+		return nil, err
+	}
+	n, err := wireServers(cfg, log, st, deps)
+	if err != nil {
+		st.Close()
+		return nil, err
+	}
+	return n, nil
+}
+
+func poolSize(n int) int32 {
+	if n > maxPoolConns {
+		return maxPoolConns
+	}
+	if n < 1 {
+		return 1
+	}
+	return int32(n)
+}
+
+func wireServers(cfg config.Config, log *slog.Logger, st Store, deps Deps) (*node, error) {
+	sealer, err := signing.NewSealer(cfg.KeyEncryptionKey, rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+	ring := keyring.New(st, sealer, keyring.Config{
+		Token:  signing.TokenConfig{Issuer: cfg.Issuer, Audience: cfg.Audience, TTL: cfg.AccessTTL},
+		Leeway: tokenLeeway,
+	})
+	hasher, err := password.NewHasher(deps.HashParams, rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+	slots := guard.NewHashSlots(cfg.HashConcurrency)
+	svc := auth.New(auth.Deps{
+		Store: st, Hasher: hasher, Policy: password.Policy{MinLength: cfg.PasswordMin},
+		Backoff: guard.Backoff{FreeFailures: cfg.LoginFreeFailures, MaxDelay: cfg.LoginMaxDelay},
+		IPs:     guard.NewIPLimiter(float64(cfg.LoginIPRate), cfg.LoginIPBurst, cfg.LoginIPTracked),
+		Slots:   slots, Signers: ring, Random: rand.Reader, Now: time.Now,
+	}, auth.Config{SessionIdle: cfg.SessionIdle, SessionMax: cfg.SessionMax, RefreshGrace: cfg.RefreshGrace})
+	proofs, err := dpop.NewVerifier(cfg.PublicURL, cfg.DPoPWindow, time.Now)
+	if err != nil {
+		return nil, err
+	}
+	handler, err := api.New(api.Options{
+		Auth: svc, Proofs: proofs, Callers: ring, BodyMax: int64(cfg.BodyMax),
+		CORSOrigins: cfg.CORSOrigins, ClientIPHeader: cfg.ClientIPHeader, Log: log,
+	})
+	if err != nil {
+		return nil, err
+	}
+	metricsHandler, err := metrics.Handler(metricsSubsystem, metricSources(svc.Stats(), slots, ring))
+	if err != nil {
+		return nil, err
+	}
+	adm := admin.New(admin.Config{Addr: cfg.AdminAddr, Metrics: metricsHandler}, log)
+	return &node{
+		cfg:    cfg,
+		log:    log,
+		store:  st,
+		admin:  adm,
+		http:   newHTTPServer(cfg, handler, log),
+		health: &health{admin: adm, log: log, store: st, ring: ring, schema: deps.SchemaVersion},
+	}, nil
+}
+
+func newHTTPServer(cfg config.Config, handler http.Handler, log *slog.Logger) *http.Server {
+	var protocols http.Protocols
+	protocols.SetHTTP1(true)
+	protocols.SetUnencryptedHTTP2(true)
+	return &http.Server{
+		Handler:           handler,
+		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
+		ReadTimeout:       cfg.ReadTimeout,
+		WriteTimeout:      cfg.WriteTimeout,
+		IdleTimeout:       cfg.IdleTimeout,
+		MaxHeaderBytes:    cfg.MaxHeaderBytes,
+		Protocols:         &protocols,
+		ErrorLog:          slog.NewLogLogger(log.Handler(), slog.LevelWarn),
+	}
+}
