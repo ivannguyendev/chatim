@@ -7,6 +7,8 @@ export MONGO_URI := mongodb://$(MONGO_ROOT_USER):$(MONGO_ROOT_PASSWORD)@chatim-m
 export CHATIM_IT_MONGO_URI := $(MONGO_URI)
 export PG_URI := postgres://$(PG_USER):$(PG_PASSWORD)@chatim-postgres:5432/chatim_poc
 export CHATIM_IT_PG_URI := postgres://$(PG_USER):$(PG_PASSWORD)@chatim-postgres:5432/postgres
+export CHATIM_UID := $(shell id -u)
+export CHATIM_GID := $(shell id -g)
 
 GO_IMAGE ?= golang:1.26.10
 LINT_IMAGE ?= golangci/golangci-lint:v2.14.0
@@ -19,6 +21,7 @@ CORE_COMPOSE := $(COMPOSE) --profile app
 CORES    := core-1 core-2
 WEBSOCKETS := websocket-1 websocket-2
 GATEWAYS := gateway-1
+IAMS     := iam-1
 WS_KEYS_DIR := .local/ws-keys
 CORECLI_IMAGE := chatim/corecli:dev
 INSTANCE ?= state
@@ -30,7 +33,7 @@ GO_RUN   := docker run --rm -v "$(CURDIR)":/src -w /src -v chatim-gomod:/go/pkg/
 BUF_RUN  := docker run --rm -v "$(CURDIR)":/src -w /src $(BUF_IMAGE)
 POC_RUN  := $(GO_RUN) --network $(NETWORK) -e MONGO_URI -e PG_URI -e REDIS_PASSWORD
 
-.PHONY: go check-env test itest vet fmt-check lint vuln tidy proto buf-lint alerts-check poc image infra-up infra-down infra-reset pg-up pg-down core-up core-down dev-keys ws-token ws-logs gw-logs e2e redis-cli
+.PHONY: go check-env test itest vet fmt-check lint vuln tidy proto buf-lint alerts-check poc image infra-up infra-down infra-reset pg-up pg-down core-up core-down iam-env iam-admin iam-logs dev-keys ws-token ws-logs gw-logs e2e redis-cli
 
 go:
 	$(GO_RUN) $(GO_IMAGE) go $(ARGS)
@@ -97,15 +100,26 @@ pg-up: check-env
 pg-down: check-env
 	$(COMPOSE_ALL) stop postgres
 
-core-up: check-env dev-keys
+core-up: check-env iam-env dev-keys
 	$(MAKE) -s image TARGET=apps/core
 	$(MAKE) -s image TARGET=apps/websocket
 	$(MAKE) -s image TARGET=apps/gateway
-	$(CORE_COMPOSE) up -d $(CORES) $(WEBSOCKETS) $(GATEWAYS)
-	./scripts/wait-core-healthy.sh $(addprefix chatim-,$(CORES) $(WEBSOCKETS) $(GATEWAYS))
+	$(MAKE) -s image TARGET=apps/iam
+	$(CORE_COMPOSE) up -d $(CORES) $(WEBSOCKETS) $(GATEWAYS) $(IAMS)
+	./scripts/wait-core-healthy.sh $(addprefix chatim-,$(IAMS) $(CORES) $(WEBSOCKETS) $(GATEWAYS))
 
 core-down: check-env
-	$(CORE_COMPOSE) rm -s -f $(GATEWAYS) $(WEBSOCKETS) $(CORES)
+	$(CORE_COMPOSE) rm -s -f $(GATEWAYS) $(WEBSOCKETS) $(IAMS) iam-bootstrap postgres-init $(CORES)
+
+iam-env:
+	@test -n "$(IAM_PG_PASSWORD)" || (echo "set IAM_PG_PASSWORD in .env" && exit 1)
+	@test -n "$(IAM_KEY_ENCRYPTION_KEY)" || (echo "set IAM_KEY_ENCRYPTION_KEY in .env (openssl rand -base64 32)" && exit 1)
+
+iam-admin:
+	docker exec chatim-iam-1 /app $(ARGS)
+
+iam-logs:
+	docker logs --tail 200 -f chatim-iam-1
 
 dev-keys:
 	@if [ -f $(WS_KEYS_DIR)/private.jwk ] && [ -f $(WS_KEYS_DIR)/jwks.json ]; then \

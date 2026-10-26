@@ -58,6 +58,16 @@ x-core-env: &core-env
   GOMEMLIMIT: 920MiB
   GOGC: ${CORE_GOGC:-100}
 
+x-iam-env: &iam-env
+  IAM_PG_URI: postgres://iam@chatim-postgres:5432/chatim_iam
+  IAM_PG_PASSWORD_FILE: /run/secrets/iam_pg_password
+  IAM_KEY_ENCRYPTION_KEY_FILE: /run/secrets/iam_key_encryption_key
+  IAM_PUBLIC_URL: http://chatim-iam-1:8080
+  IAM_ISSUER: chatim-dev
+  IAM_AUDIENCE: chatim-websocket
+  IAM_CORS_ORIGINS: ${IAM_CORS_ORIGINS:-http://localhost:3000}
+  GOMEMLIMIT: 800MiB
+
 x-websocket: &websocket
   image: chatim/websocket:dev
   profiles: ["app"]
@@ -68,6 +78,8 @@ x-websocket: &websocket
   stop_grace_period: 18s
   secrets: [redis_password, redis_presence_password, ws_jwks]
   depends_on:
+    iam-bootstrap:
+      condition: service_completed_successfully
     redis:
       condition: service_healthy
     redis-presence:
@@ -206,7 +218,7 @@ services:
   postgres:
     image: postgres:18
     container_name: chatim-postgres
-    profiles: ["postgres"]
+    profiles: ["postgres", "app"]
     restart: unless-stopped
     shm_size: 1g
     secrets: [pg_password]
@@ -217,9 +229,9 @@ services:
     command:
       - postgres
       - -c
-      - shared_buffers=${PG_SHARED_BUFFERS:-3GB}
+      - shared_buffers=${PG_SHARED_BUFFERS:-512MB}
       - -c
-      - effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE:-6GB}
+      - effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE:-1GB}
       - -c
       - maintenance_work_mem=512MB
       - -c
@@ -255,6 +267,72 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+
+  postgres-init:
+    image: postgres:18
+    container_name: chatim-postgres-init
+    profiles: ["postgres", "app"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    secrets: [pg_password, iam_pg_password]
+    environment:
+      PGHOST: chatim-postgres
+      PGUSER: ${PG_USER:?set PG_USER in .env}
+      PGDATABASE: postgres
+    entrypoint: ["bash", "-c"]
+    command:
+      - |
+        set -euo pipefail
+        PGPASSWORD="$$(cat /run/secrets/pg_password)"
+        export PGPASSWORD
+        psql -v ON_ERROR_STOP=1 -q <<'SQL'
+        \set iam_password `cat /run/secrets/iam_pg_password`
+        SELECT 'CREATE ROLE iam LOGIN' WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'iam') \gexec
+        SELECT format('ALTER ROLE iam LOGIN PASSWORD %L', :'iam_password') \gexec
+        SELECT 'CREATE DATABASE chatim_iam OWNER iam' WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'chatim_iam') \gexec
+        SQL
+        echo "iam role and database ready"
+    restart: "no"
+
+  iam-bootstrap:
+    image: chatim/iam:dev
+    container_name: chatim-iam-bootstrap
+    profiles: ["app"]
+    user: "${CHATIM_UID:-65532}:${CHATIM_GID:-65532}"
+    command: ["bootstrap", "-jwks", "/keys/jwks.json"]
+    secrets: [iam_pg_password, iam_key_encryption_key]
+    environment:
+      <<: *iam-env
+    volumes:
+      - ../../.local/ws-keys:/keys
+    depends_on:
+      postgres-init:
+        condition: service_completed_successfully
+    restart: "no"
+
+  iam-1:
+    image: chatim/iam:dev
+    container_name: chatim-iam-1
+    profiles: ["app"]
+    restart: unless-stopped
+    mem_limit: 1g
+    stop_grace_period: 30s
+    secrets: [iam_pg_password, iam_key_encryption_key]
+    environment:
+      <<: *iam-env
+    ports:
+      - "127.0.0.1:${IAM1_PORT:-8084}:8080"
+    depends_on:
+      iam-bootstrap:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "/app", "probe"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+      start_interval: 1s
 
   core-1:
     <<: *core
@@ -310,6 +388,8 @@ services:
     ports:
       - "127.0.0.1:${GW1_PORT:-8082}:8080"
     depends_on:
+      iam-bootstrap:
+        condition: service_completed_successfully
       core-1:
         condition: service_healthy
       core-2:
@@ -335,6 +415,10 @@ secrets:
     environment: REDIS_PRESENCE_PASSWORD
   pg_password:
     environment: PG_PASSWORD
+  iam_pg_password:
+    environment: IAM_PG_PASSWORD
+  iam_key_encryption_key:
+    environment: IAM_KEY_ENCRYPTION_KEY
 
 networks:
   default:
