@@ -15,6 +15,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/gateway/internal/limit"
 	"github.com/ivannguyendev/chatim/pkg/corecall"
+	"github.com/ivannguyendev/chatim/pkg/httpcors"
 	"github.com/ivannguyendev/chatim/pkg/metrics"
 )
 
@@ -57,7 +58,11 @@ func New(opts Options) (*Handler, error) {
 		return nil, err
 	}
 	inner := c.gated(c.authenticated(c.limited(c.measured(mux))))
-	return &Handler{Handler: cors{origins: opts.CORSOrigins, next: inner}, stats: st}, nil
+	return &Handler{Handler: httpcors.New(httpcors.Config{
+		Origins:       opts.CORSOrigins,
+		AllowHeaders:  []string{"Authorization", "Content-Type", "Connect-Protocol-Version", "Connect-Timeout-Ms"},
+		ExposeHeaders: []string{"Grpc-Status", "Grpc-Message", "Grpc-Status-Details-Bin"},
+	}, inner), stats: st}, nil
 }
 
 func (h *Handler) Sources() []metrics.Source { return h.stats.sources() }
