@@ -24,6 +24,8 @@ type fakeStore struct {
 	accounts map[string]store.Account
 	sessions map[string]store.Session
 	audits   []string
+	failRead error
+	failRev  error
 }
 
 func newFakeStore() *fakeStore {
@@ -56,6 +58,9 @@ func (f *fakeStore) AccountByUsername(_ context.Context, tenant, username string
 func (f *fakeStore) AccountByID(_ context.Context, tenant, id string) (store.Account, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.failRead != nil {
+		return store.Account{}, f.failRead
+	}
 	a, ok := f.accounts[accountKey(tenant, id)]
 	if !ok {
 		return store.Account{}, apperr.ErrNotFound
@@ -119,6 +124,9 @@ func (f *fakeStore) RotateRefresh(_ context.Context, r store.Rotation, audit sto
 func (f *fakeStore) RevokeSession(_ context.Context, id string, r store.Revocation, audit store.AuditEvent) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.failRev != nil {
+		return false, f.failRev
+	}
 	s, ok := f.sessions[id]
 	if !ok || s.State != store.StateActive {
 		return false, nil
@@ -204,10 +212,16 @@ type harness struct {
 	svc    *auth.Service
 	store  *fakeStore
 	hasher *countingHasher
+	slots  *guard.HashSlots
 	now    time.Time
 }
 
 func newHarness(t *testing.T) *harness {
+	t.Helper()
+	return newHarnessWithSlots(t, 4)
+}
+
+func newHarnessWithSlots(t *testing.T, slots int) *harness {
 	t.Helper()
 	inner, err := password.NewHasher(password.Params{Memory: 64, Time: 1, Threads: 1, SaltLength: 16, KeyLength: 32}, rand.Reader)
 	if err != nil {
@@ -215,11 +229,11 @@ func newHarness(t *testing.T) *harness {
 	}
 	key, _ := signing.Generate(rand.Reader)
 	signer, _ := signing.NewSigner(key, signing.TokenConfig{Issuer: "iss", Audience: "aud", TTL: 15 * time.Minute})
-	h := &harness{store: newFakeStore(), hasher: &countingHasher{inner: inner}, now: t0}
+	h := &harness{store: newFakeStore(), hasher: &countingHasher{inner: inner}, slots: guard.NewHashSlots(slots), now: t0}
 	h.svc = auth.New(auth.Deps{
 		Store: h.store, Hasher: h.hasher, Policy: password.Policy{MinLength: 12},
 		Backoff: guard.Backoff{FreeFailures: 5, MaxDelay: time.Minute},
-		IPs:     guard.NewIPLimiter(1000, 1000, 100), Slots: guard.NewHashSlots(4),
+		IPs:     guard.NewIPLimiter(1000, 1000, 100), Slots: h.slots,
 		Signers: staticSigners{signer: signer}, Random: rand.Reader, Now: func() time.Time { return h.now },
 	}, auth.Config{SessionIdle: 30 * 24 * time.Hour, SessionMax: 90 * 24 * time.Hour, RefreshGrace: 30 * time.Second})
 	h.store.tenants["shop"] = store.Tenant{ID: "shop", State: store.StateActive, Ver: 1}

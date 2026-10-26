@@ -49,7 +49,7 @@ func (s *Service) RevokeSession(ctx context.Context, c Caller, id string) error 
 		s.deps.Stats.StoreErrors.Add(1)
 		return err
 	}
-	return s.revoke(ctx, target, "user", "")
+	return s.revoke(ctx, target, "user", c.IP)
 }
 
 func (s *Service) checkCaller(ctx context.Context, c Caller) error {

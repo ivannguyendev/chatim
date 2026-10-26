@@ -79,6 +79,7 @@ type Caller struct {
 	Tenant  string
 	Account string
 	Session string
+	IP      string
 }
 
 func New(deps Deps, cfg Config) *Service {

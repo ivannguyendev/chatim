@@ -9,6 +9,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/iam/internal/auth"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
 func loggedIn(t *testing.T) (*harness, auth.Tokens) {
@@ -127,5 +128,41 @@ func TestRevokeOnlyActsOnARealToken(t *testing.T) {
 	}
 	if s := h.store.sessions[tok.SessionID]; s.State != store.StateDisabled || s.RevokedReason != "logout" {
 		t.Fatalf("session = %+v; want revoked by logout", s)
+	}
+}
+
+func TestExpiredAndRevokedSessionsReturnTheSameError(t *testing.T) {
+	h, tok := loggedIn(t)
+	h.now = t0.Add(100 * 24 * time.Hour)
+	if _, err := h.refresh(tok.RefreshToken, "jkt-lan", "j1"); err == nil || err.Error() != auth.ErrInvalidGrant.Error() {
+		t.Fatalf("expired = %v, want exactly ErrInvalidGrant", err)
+	}
+	h.now = t0
+	_ = h.svc.Revoke(context.Background(), auth.RevokeRequest{Tenant: "shop", Token: tok.RefreshToken})
+	if _, err := h.refresh(tok.RefreshToken, "jkt-lan", "j2"); err == nil || err.Error() != auth.ErrInvalidGrant.Error() {
+		t.Fatalf("revoked = %v, want exactly ErrInvalidGrant", err)
+	}
+}
+
+func TestStoreFailuresDuringRefreshAreNotReportedAsDeadSessions(t *testing.T) {
+	h, tok := loggedIn(t)
+	h.store.failRead = apperr.ErrUnavailable
+	if _, err := h.refresh(tok.RefreshToken, "jkt-lan", "j1"); !errors.Is(err, apperr.ErrUnavailable) || errors.Is(err, auth.ErrInvalidGrant) {
+		t.Fatalf("refresh during a store outage = %v, want ErrUnavailable", err)
+	}
+	if h.store.sessions[tok.SessionID].State != store.StateActive {
+		t.Fatal("a store outage ended the session")
+	}
+}
+
+func TestReuseRevokeFailureIsSurfaced(t *testing.T) {
+	h, first := loggedIn(t)
+	if _, err := h.refresh(first.RefreshToken, "jkt-lan", "j1"); err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+	h.now = t0.Add(time.Minute)
+	h.store.failRev = apperr.ErrUnavailable
+	if _, err := h.refresh(first.RefreshToken, "jkt-lan", "j2"); !errors.Is(err, apperr.ErrUnavailable) {
+		t.Fatalf("reuse with a failing revoke = %v, want ErrUnavailable", err)
 	}
 }

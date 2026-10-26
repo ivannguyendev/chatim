@@ -50,13 +50,20 @@ func (s *Service) Refresh(ctx context.Context, req RefreshRequest) (Tokens, erro
 	case session.Rotate, session.RotateAgain:
 	case session.Reuse:
 		s.deps.Stats.RefreshReuse.Add(1)
-		_ = s.revoke(ctx, sess, "refresh_reuse", req.IP)
+		if err := s.revoke(ctx, sess, "refresh_reuse", req.IP); err != nil {
+			return Tokens{}, err
+		}
 		return Tokens{}, ErrInvalidGrant
 	default:
 		s.countRefresh(outcome)
 		return Tokens{}, ErrInvalidGrant
 	}
-	if !s.accountActive(ctx, sess.TenantID, sess.AccountID) {
+	active, err := s.accountActive(ctx, sess.TenantID, sess.AccountID)
+	if err != nil {
+		s.deps.Stats.RefreshUnavailable.Add(1)
+		return Tokens{}, err
+	}
+	if !active {
 		s.deps.Stats.RefreshRevoked.Add(1)
 		return Tokens{}, ErrInvalidGrant
 	}
@@ -123,13 +130,24 @@ func (s *Service) revoke(ctx context.Context, sess store.Session, reason, ip str
 	return nil
 }
 
-func (s *Service) accountActive(ctx context.Context, tenant, account string) bool {
+func (s *Service) accountActive(ctx context.Context, tenant, account string) (bool, error) {
 	t, err := s.deps.Store.TenantByID(ctx, tenant)
-	if err != nil || t.State != store.StateActive {
-		return false
+	if isNotFound(err) {
+		return false, nil
+	}
+	if err != nil {
+		s.deps.Stats.StoreErrors.Add(1)
+		return false, err
 	}
 	a, err := s.deps.Store.AccountByID(ctx, tenant, account)
-	return err == nil && a.State == store.StateActive
+	if isNotFound(err) {
+		return false, nil
+	}
+	if err != nil {
+		s.deps.Stats.StoreErrors.Add(1)
+		return false, err
+	}
+	return t.State == store.StateActive && a.State == store.StateActive, nil
 }
 
 func (s *Service) countRefresh(o session.Outcome) {

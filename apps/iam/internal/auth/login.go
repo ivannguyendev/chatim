@@ -34,10 +34,11 @@ type checked struct {
 }
 
 func (s *Service) Login(ctx context.Context, req LoginRequest) (Tokens, error) {
-	c, err := s.checkPassword(ctx, req.Tenant, req.Username, req.Password, req.IP)
+	c, release, err := s.checkPassword(ctx, req.Tenant, req.Username, req.Password, req.IP)
 	if err != nil {
 		return Tokens{}, err
 	}
+	defer release()
 	a := c.account
 	if a.PasswordMustChange {
 		s.deps.Stats.LoginMustChange.Add(1)
@@ -85,10 +86,11 @@ func (s *Service) ChangePassword(ctx context.Context, req ChangePasswordRequest)
 	if req.New == req.Current {
 		return fmt.Errorf("%w: new password must differ", apperr.ErrInvalidArgument)
 	}
-	c, err := s.checkPassword(ctx, req.Tenant, req.Username, req.Current, req.IP)
+	c, release, err := s.checkPassword(ctx, req.Tenant, req.Username, req.Current, req.IP)
 	if err != nil {
 		return err
 	}
+	defer release()
 	hash, err := s.deps.Hasher.Hash(req.New)
 	if err != nil {
 		return fmt.Errorf("%w: %w", apperr.ErrUnavailable, err)
@@ -107,23 +109,31 @@ func (s *Service) ChangePassword(ctx context.Context, req ChangePasswordRequest)
 	return nil
 }
 
-func (s *Service) checkPassword(ctx context.Context, tenant, username, pw, ip string) (checked, error) {
+func (s *Service) checkPassword(ctx context.Context, tenant, username, pw, ip string) (checked, func(), error) {
 	now := s.deps.Now()
 	if !s.deps.IPs.Allow(ip, now) {
 		s.deps.Stats.LoginThrottledIP.Add(1)
-		return checked{}, errTooManyRequests
+		return checked{}, nil, errTooManyRequests
 	}
 	normalized, ok := validIdentity(tenant, username)
 	if !ok {
 		s.deps.Stats.LoginInvalid.Add(1)
-		return checked{}, ErrInvalidCredentials
+		return checked{}, nil, ErrInvalidCredentials
 	}
 	release, ok := s.deps.Slots.TryAcquire()
 	if !ok {
 		s.deps.Stats.LoginBusy.Add(1)
-		return checked{}, errBusy
+		return checked{}, nil, errBusy
 	}
-	defer release()
+	c, err := s.verify(ctx, tenant, normalized, pw, ip, now)
+	if err != nil {
+		release()
+		return checked{}, nil, err
+	}
+	return c, release, nil
+}
+
+func (s *Service) verify(ctx context.Context, tenant, normalized, pw, ip string, now time.Time) (checked, error) {
 	a, eligible, err := s.lookup(ctx, tenant, normalized)
 	if err != nil {
 		s.deps.Hasher.VerifyDummy(pw)

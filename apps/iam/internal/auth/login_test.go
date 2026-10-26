@@ -180,3 +180,18 @@ func TestChangePasswordValidatesTheNewPassword(t *testing.T) {
 		t.Fatalf("wrong current password = %v, want ErrInvalidCredentials", err)
 	}
 }
+
+func TestSecondHashRunsInsideTheSameSlot(t *testing.T) {
+	h := newHarnessWithSlots(t, 1)
+	h.addAccount(t, "a1aaaaaaaaaaaaaaaaaaaaaaaa", "lan", lanPassword, false)
+	err := h.svc.ChangePassword(context.Background(), auth.ChangePasswordRequest{Tenant: "shop", Username: "lan", Current: lanPassword, New: "a brand new passphrase", IP: "10.0.0.1"})
+	if err != nil {
+		t.Fatalf("ChangePassword with one slot: %v", err)
+	}
+	if h.hasher.Hashes() != 2 || h.slots.InUse() != 0 {
+		t.Fatalf("hashes = %d, slots in use = %d; want 2 hashes in one slot, released after", h.hasher.Hashes(), h.slots.InUse())
+	}
+	if _, err := h.login("lan", "a brand new passphrase", "jkt-lan"); err != nil || h.slots.InUse() != 0 {
+		t.Fatalf("login = %v, slots in use = %d", err, h.slots.InUse())
+	}
+}
