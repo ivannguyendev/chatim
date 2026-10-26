@@ -6,6 +6,7 @@ export CHATIM_IT_PRESENCE_REDIS_PASSWORD := $(REDIS_PRESENCE_PASSWORD)
 export MONGO_URI := mongodb://$(MONGO_ROOT_USER):$(MONGO_ROOT_PASSWORD)@chatim-mongodb:27017/?replicaSet=rs0&authSource=admin
 export CHATIM_IT_MONGO_URI := $(MONGO_URI)
 export PG_URI := postgres://$(PG_USER):$(PG_PASSWORD)@chatim-postgres:5432/chatim_poc
+export CHATIM_IT_PG_URI := postgres://$(PG_USER):$(PG_PASSWORD)@chatim-postgres:5432/postgres
 
 GO_IMAGE ?= golang:1.26.10
 LINT_IMAGE ?= golangci/golangci-lint:v2.14.0
@@ -41,7 +42,7 @@ test:
 	$(GO_RUN) $(GO_IMAGE) go test -race -shuffle=on ./...
 
 itest: check-env
-	$(GO_RUN) --network $(NETWORK) -e CHATIM_IT_MONGO_URI -e CHATIM_IT_REDIS_ADDR=chatim-redis:6379 -e CHATIM_IT_REDIS_PASSWORD -e CHATIM_IT_REDIS_DEDUPE_ADDR=chatim-redis-dedupe:6379 -e CHATIM_IT_REDIS_DEDUPE_PASSWORD -e CHATIM_IT_PRESENCE_REDIS_ADDR=chatim-redis-presence:6379 -e CHATIM_IT_PRESENCE_REDIS_PASSWORD -e CHATIM_IT_NATS_URL=nats://chatim-nats:4222 $(GO_IMAGE) go test -race -shuffle=on -count=1 ./...
+	$(GO_RUN) --network $(NETWORK) -e CHATIM_IT_MONGO_URI -e CHATIM_IT_REDIS_ADDR=chatim-redis:6379 -e CHATIM_IT_REDIS_PASSWORD -e CHATIM_IT_REDIS_DEDUPE_ADDR=chatim-redis-dedupe:6379 -e CHATIM_IT_REDIS_DEDUPE_PASSWORD -e CHATIM_IT_PRESENCE_REDIS_ADDR=chatim-redis-presence:6379 -e CHATIM_IT_PRESENCE_REDIS_PASSWORD -e CHATIM_IT_NATS_URL=nats://chatim-nats:4222 -e CHATIM_IT_PG_URI $(GO_IMAGE) go test -race -shuffle=on -count=1 ./...
 
 vet:
 	$(GO_RUN) $(GO_IMAGE) go vet ./...
