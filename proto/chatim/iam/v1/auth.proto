@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package chatim.iam.v1;
+
+import "google/protobuf/timestamp.proto";
+
+service AuthService {
+  rpc Login(LoginRequest) returns (LoginResponse);
+  rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse);
+  rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
+  rpc RevokeSession(RevokeSessionRequest) returns (RevokeSessionResponse);
+}
+
+message LoginRequest {
+  string tenant = 1;
+  string username = 2;
+  string password = 3;
+  string device_name = 4;
+}
+
+message LoginResponse {
+  string access_token = 1;
+  string token_type = 2;
+  int64 expires_in = 3;
+  string refresh_token = 4;
+  string session_id = 5;
+}
+
+message ChangePasswordRequest {
+  string tenant = 1;
+  string username = 2;
+  string current_password = 3;
+  string new_password = 4;
+}
+
+message ChangePasswordResponse {}
+
+message ListSessionsRequest {}
+
+message Session {
+  string session_id = 1;
+  string device_name = 2;
+  string user_agent = 3;
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Timestamp last_used_at = 5;
+  bool current = 6;
+}
+
+message ListSessionsResponse {
+  repeated Session sessions = 1;
+}
+
+message RevokeSessionRequest {
+  string session_id = 1;
+}
+
+message RevokeSessionResponse {}
