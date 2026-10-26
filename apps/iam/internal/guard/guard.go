@@ -81,8 +81,12 @@ func (s *HashSlots) TryAcquire() (func(), bool) {
 func (s *HashSlots) InUse() int { return len(s.slots) }
 
 func ClientIP(r *http.Request, header string) string {
+	return ClientIPFrom(r.Header, r.RemoteAddr, header)
+}
+
+func ClientIPFrom(h http.Header, remoteAddr, header string) string {
 	if header != "" {
-		if v := r.Header.Get(header); v != "" {
+		if v := h.Get(header); v != "" {
 			if i := strings.LastIndexByte(v, ','); i >= 0 {
 				v = v[i+1:]
 			}
@@ -91,9 +95,9 @@ func ClientIP(r *http.Request, header string) string {
 			}
 		}
 	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	host, _, err := net.SplitHostPort(remoteAddr)
 	if err != nil {
-		return r.RemoteAddr
+		return remoteAddr
 	}
 	return host
 }
