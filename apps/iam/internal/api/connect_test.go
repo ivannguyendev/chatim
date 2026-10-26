@@ -3,7 +3,9 @@ package api_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -74,6 +76,7 @@ func TestLoginErrorCodes(t *testing.T) {
 			if !errors.As(err, &ce) || ce.Message() != c.msg {
 				t.Fatalf("message = %v, want %q", err, c.msg)
 			}
+			h.assertNoSecretsLogged(t)
 		})
 	}
 }
@@ -117,10 +120,48 @@ func TestChangePasswordNeedsNoTokenOrProof(t *testing.T) {
 	if _, err := client(h).ChangePassword(context.Background(), req); err != nil {
 		t.Fatalf("ChangePassword: %v", err)
 	}
-	h.fake.err = errors.Join(apperr.ErrInvalidArgument, errors.New("password must be 12 to 128 characters"))
+	h.fake.err = fmt.Errorf("%w: password must be 12 to 128 characters", apperr.ErrInvalidArgument)
 	_, err := client(h).ChangePassword(context.Background(), req)
-	if connect.CodeOf(err) != connect.CodeInvalidArgument {
-		t.Fatalf("weak password = %v, want invalid argument", err)
+	var ce *connect.Error
+	if !errors.As(err, &ce) || ce.Code() != connect.CodeInvalidArgument || ce.Message() != "password must be 12 to 128 characters" {
+		t.Fatalf("weak password = %v, want the policy message", err)
 	}
 	h.assertNoSecretsLogged(t)
+}
+
+func TestLoginRejectsTwoProofsAndOversizedBodies(t *testing.T) {
+	h := newHarness(t)
+	req := loginRequest("good-proof")
+	req.Header().Add("DPoP", "good-proof")
+	if _, err := client(h).Login(context.Background(), req); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("two proofs = %v, want invalid argument", err)
+	}
+	big := loginRequest("good-proof")
+	big.Msg.Password = strings.Repeat("p", 20<<10)
+	_, err := client(h).Login(context.Background(), big)
+	if code := connect.CodeOf(err); code != connect.CodeResourceExhausted && code != connect.CodeInvalidArgument {
+		t.Fatalf("oversized login = %v, want resource exhausted or invalid argument", err)
+	}
+	if len(h.fake.logins) != 0 {
+		t.Fatal("login reached the service with two proofs or an oversized body")
+	}
+}
+
+func TestBearerParsing(t *testing.T) {
+	h := newHarness(t)
+	for name, values := range map[string][]string{
+		"lowercase scheme": {"bearer good-access"},
+		"two headers":      {"Bearer good-access", "Bearer good-access"},
+		"double space":     {"Bearer  good-access"},
+	} {
+		req := connect.NewRequest(&iamv1.ListSessionsRequest{})
+		for _, v := range values {
+			req.Header().Add("Authorization", v)
+		}
+		_, err := client(h).ListSessions(context.Background(), req)
+		wantOK := name == "lowercase scheme"
+		if (err == nil) != wantOK {
+			t.Fatalf("%s: err = %v, want ok %v", name, err, wantOK)
+		}
+	}
 }

@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -69,18 +70,19 @@ func TestTokenEndpointErrors(t *testing.T) {
 		status      int
 		code        string
 	}{
-		"wrong grant":         {url.Values{"grant_type": {"password"}}.Encode(), "", "good-proof", nil, 400, "unsupported_grant_type"},
-		"missing grant":       {"refresh_token=x", "", "good-proof", nil, 400, "invalid_request"},
-		"missing token":       {"grant_type=refresh_token", "", "good-proof", nil, 400, "invalid_request"},
-		"json body":           {`{"grant_type":"refresh_token"}`, "application/json", "good-proof", nil, 400, "invalid_request"},
-		"missing dpop":        {refreshBody("x"), "", "", nil, 400, "invalid_dpop_proof"},
-		"bad dpop":            {refreshBody("x"), "", "bad-proof", nil, 400, "invalid_dpop_proof"},
-		"replayed proof":      {refreshBody("x"), "", "good-proof", auth.ErrProofReplayed, 400, "invalid_dpop_proof"},
-		"invalid grant":       {refreshBody("x"), "", "good-proof", auth.ErrInvalidGrant, 400, "invalid_grant"},
-		"store unavailable":   {refreshBody("x"), "", "good-proof", apperr.ErrUnavailable, 503, "server_error"},
-		"oversized body":      {refreshBody(strings.Repeat("x", 20<<10)), "", "good-proof", nil, 413, "invalid_request"},
-		"duplicated grant":    {"grant_type=refresh_token&grant_type=refresh_token&refresh_token=x", "", "good-proof", nil, 400, "invalid_request"},
-		"unknown sid in path": {refreshBody("x"), "", "good-proof", auth.ErrInvalidGrant, 400, "invalid_grant"},
+		"wrong grant":        {url.Values{"grant_type": {"password"}}.Encode(), "", "good-proof", nil, 400, "unsupported_grant_type"},
+		"missing grant":      {"refresh_token=x", "", "good-proof", nil, 400, "invalid_request"},
+		"missing token":      {"grant_type=refresh_token", "", "good-proof", nil, 400, "invalid_request"},
+		"json body":          {`{"grant_type":"refresh_token"}`, "application/json", "good-proof", nil, 400, "invalid_request"},
+		"missing dpop":       {refreshBody("x"), "", "", nil, 400, "invalid_dpop_proof"},
+		"bad dpop":           {refreshBody("x"), "", "bad-proof", nil, 400, "invalid_dpop_proof"},
+		"replayed proof":     {refreshBody("x"), "", "good-proof", auth.ErrProofReplayed, 400, "invalid_dpop_proof"},
+		"invalid grant":      {refreshBody("x"), "", "good-proof", auth.ErrInvalidGrant, 400, "invalid_grant"},
+		"store unavailable":  {refreshBody("x"), "", "good-proof", apperr.ErrUnavailable, 503, "server_error"},
+		"oversized body":     {refreshBody(strings.Repeat("x", 20<<10)), "", "good-proof", nil, 413, "invalid_request"},
+		"duplicated grant":   {"grant_type=refresh_token&grant_type=refresh_token&refresh_token=x", "", "good-proof", nil, 400, "invalid_request"},
+		"duplicated client":  {refreshBody("x") + "&client_id=other", "", "good-proof", nil, 400, "invalid_request"},
+		"unexpected failure": {refreshBody("x"), "", "good-proof", errors.New("boom secret detail"), 503, "server_error"},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -103,6 +105,7 @@ func TestTokenEndpointErrors(t *testing.T) {
 			if c.status == 503 && resp.Header.Get("Retry-After") != "1" {
 				t.Fatal("503 without Retry-After")
 			}
+			h.assertNoSecretsLogged(t)
 		})
 	}
 }
@@ -141,11 +144,35 @@ func TestRevokeEndpoint(t *testing.T) {
 
 func TestUnknownPathsAndMethods(t *testing.T) {
 	h := newHarness(t)
-	resp := h.do(t, http.MethodGet, tokenPath, "", nil)
-	if resp.StatusCode != http.StatusNotFound && resp.StatusCode != http.StatusMethodNotAllowed {
-		t.Fatalf("GET token = %d, want 404 or 405", resp.StatusCode)
+	for name, r := range map[string]reply{
+		"get token":      h.do(t, http.MethodGet, tokenPath, "", nil),
+		"trailing slash": h.postForm(t, tokenPath+"/", refreshBody("x"), map[string]string{"DPoP": "good-proof"}),
+		"unknown path":   h.postForm(t, "/nope", "", nil),
+	} {
+		if r.StatusCode != http.StatusNotFound {
+			t.Fatalf("%s = %d, want 404", name, r.StatusCode)
+		}
 	}
-	if other := h.postForm(t, "/nope", "", nil); other.StatusCode != http.StatusNotFound {
-		t.Fatalf("unknown path = %d, want 404", other.StatusCode)
+	if len(h.fake.refreshes) != 0 {
+		t.Fatal("a refresh reached the service through an unknown route")
+	}
+}
+
+func TestTenantComesFromThePath(t *testing.T) {
+	h := newHarness(t)
+	h.postForm(t, "/realms/other/protocol/openid-connect/token", refreshBody("x"), map[string]string{"DPoP": "good-proof"})
+	if len(h.fake.refreshes) != 1 || h.fake.refreshes[0].Tenant != "other" {
+		t.Fatalf("refreshes = %+v, want tenant other", h.fake.refreshes)
+	}
+}
+
+func TestTokenRejectsTwoDPoPHeaders(t *testing.T) {
+	h := newHarness(t)
+	resp := h.doHeaders(t, http.MethodPost, tokenPath, refreshBody("x"), http.Header{"Dpop": {"good-proof", "good-proof"}})
+	if resp.StatusCode != http.StatusBadRequest || readError(t, resp).Error != "invalid_dpop_proof" {
+		t.Fatalf("two DPoP headers = %d %s", resp.StatusCode, resp.Body)
+	}
+	if len(h.fake.refreshes) != 0 {
+		t.Fatal("refresh ran with two proofs")
 	}
 }

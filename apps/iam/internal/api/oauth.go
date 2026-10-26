@@ -63,7 +63,11 @@ func (s *server) token(w http.ResponseWriter, r *http.Request) {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_dpop_proof")
 		return
 	}
-	clientID, _ := single(form, "client_id")
+	if len(form["client_id"]) > 1 {
+		writeOAuthError(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	clientID := form.Get("client_id")
 	tok, err := s.opts.Auth.Refresh(r.Context(), auth.RefreshRequest{
 		Tenant: r.PathValue("tenant"), RefreshToken: refresh, ClientID: clientID,
 		IP: guard.ClientIP(r, s.opts.ClientIPHeader), Proof: auth.Proof{Thumbprint: proof.Thumbprint, JTI: proof.JTI},

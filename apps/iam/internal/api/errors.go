@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"connectrpc.com/connect"
 
@@ -37,7 +38,9 @@ func (s *server) connectError(ctx context.Context, procedure string, err error) 
 		return ce
 	case errors.Is(err, apperr.ErrUnavailable):
 		s.opts.Log.WarnContext(ctx, "iam request unavailable", "procedure", procedure, "err", err.Error())
-		return connect.NewError(connect.CodeUnavailable, errors.New("temporarily unavailable"))
+		ce := connect.NewError(connect.CodeUnavailable, errors.New("temporarily unavailable"))
+		ce.Meta().Set("Retry-After", "1")
+		return ce
 	default:
 		s.opts.Log.ErrorContext(ctx, "iam request failed", "procedure", procedure, "err", err.Error())
 		return connect.NewError(connect.CodeInternal, errors.New(msgRequestFail))
@@ -45,10 +48,11 @@ func (s *server) connectError(ctx context.Context, procedure string, err error) 
 }
 
 func invalidArgumentMessage(err error) string {
-	switch {
-	case errors.Is(err, auth.ErrProofReplayed):
+	if errors.Is(err, auth.ErrProofReplayed) {
 		return msgInvalidProof
-	default:
-		return "invalid argument"
 	}
+	if detail, ok := strings.CutPrefix(err.Error(), apperr.ErrInvalidArgument.Error()+": "); ok && detail != "" {
+		return detail
+	}
+	return "invalid argument"
 }

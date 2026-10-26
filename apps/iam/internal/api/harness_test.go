@@ -140,10 +140,22 @@ type reply struct {
 
 func (h *harness) do(t *testing.T, method, path, body string, headers map[string]string) reply {
 	t.Helper()
+	extra := http.Header{}
+	for k, v := range headers {
+		extra.Set(k, v)
+	}
+	return h.doHeaders(t, method, path, body, extra)
+}
+
+func (h *harness) doHeaders(t *testing.T, method, path, body string, headers http.Header) reply {
+	t.Helper()
 	req, _ := http.NewRequest(method, h.server.URL+path, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	for k, v := range headers {
-		req.Header.Set(k, v)
+	for k, values := range headers {
+		req.Header.Del(k)
+		for _, v := range values {
+			req.Header.Add(k, v)
+		}
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
