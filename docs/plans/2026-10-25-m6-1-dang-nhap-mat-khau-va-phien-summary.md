@@ -59,7 +59,7 @@ flowchart LR
 |---|---|---|---|
 | `tenants` | `id`, `name`, `state` (1 chạy, 2 khoá), `ver`, `created_at`, `updated_at`, `updated_by` | `shop` | realm |
 | `accounts` | `id` (= `sub`), `username`, `email`, `state`, `password_hash` (chuỗi PHC), `password_must_change`, `failed_login_count`, `next_login_at`, `ver`, audit | `lan` | `UNIQUE (tenant_id, username)` |
-| `sessions` | `id` (= `sid`), `account_id`, `state`, `device_name`, `user_agent`, `created_at`, `last_used_at`, `idle_expires_at`, `expires_at`, `refresh_ver`, `refresh_hash`, `refresh_history` (5 băm gần nhất + giờ thay), `dpop_jkt` (vân tay khoá máy), `dpop_last_jti`, `revoked_at/by/reason` | "iPhone" | một máy đăng nhập; chỉ lưu băm SHA-256 |
+| `sessions` | `id` (= `sid`), `account_id`, `state`, `device_name`, `user_agent`, `created_at`, `last_used_at`, `idle_expires_at`, `expires_at`, `refresh_ver`, `refresh_hash`, `refresh_history` (20 băm gần nhất + giờ thay), `dpop_jkt` (vân tay khoá máy), `dpop_recent_jti` (2 chữ ký gần nhất), `revoked_at/by/reason` | "iPhone" | một máy đăng nhập; chỉ lưu băm SHA-256 |
 | `signing_keys` | `kid`, `state` (chờ / đang ký / nghỉ), `public_key`, `private_key_sealed` (AES-256-GCM) | `k-ab12…` | luôn đúng một khoá đang ký |
 | `audit_events` | `at`, `actor`, `action`, `account_id`, `session_id`, `ip`, `detail` | `login_failed` | chỉ thêm, không sửa |
 
@@ -99,7 +99,7 @@ Refresh và đăng xuất theo đúng dạng OAuth, đường giống Keycloak: 
 - **Refresh token** = `{sid}.{32 byte ngẫu nhiên}`, tra theo khoá chính `sid`. Thứ tự kiểm:
   1. Khoá máy (`jkt`) khác → từ chối, **không** huỷ phiên.
   2. Băm khớp token hiện tại → xoay.
-  3. Khớp một trong 5 token cũ, thay chưa quá 30 giây → xoay lại (mạng rớt, thử lại mấy lần cũng được).
+  3. Khớp một trong 20 token cũ, thay chưa quá 30 giây → xoay lại (mạng rớt, thử lại mấy lần cũng được).
   4. Khớp token cũ đã quá 30 giây → coi là lộ, huỷ phiên.
   5. Không khớp gì → từ chối, **không** huỷ phiên. Kẻ chỉ biết `sid` (có trong access token) không phá được phiên của Lan.
 - **Hai refresh cùng lúc** (hai tab): cả hai đọc `refresh_ver = 7`. Tab A ghi `WHERE refresh_ver = 7` thắng; tab B 0 dòng → `503`. B thử lại với token cũ (vừa thay vài ms) → xoay lại, nhận cặp mới.
@@ -109,7 +109,8 @@ Refresh và đăng xuất theo đúng dạng OAuth, đường giống Keycloak: 
   - Theo IP: mỗi IP 1 lần/giây, dồn được 10 (mỗi node). Chặn lũ đăng nhập rác làm đầy suất băm.
   - Mọi nhánh đều băm đúng một lần và trả cùng câu lỗi. Người ngoài không phân biệt được "không có account" với "sai mật khẩu" hay "đang bị chờ".
   - Mỗi node 16 suất băm (16 × 19 MiB ≈ 304 MiB RAM); quá suất → `503`.
-- **DPoP chống phát lại:** chữ ký có hạn ±60 giây, đúng method và URL; phiên nhớ `jti` cuối, gửi trùng → từ chối.
+- **DPoP chống phát lại:** chữ ký có hạn ±60 giây, đúng method và URL (URL dựng từ `IAM_PUBLIC_URL`, không tin header); phiên nhớ 2 `jti` gần nhất, gửi trùng → từ chối. Client phải ký proof mới cho mỗi lần gửi, kể cả gửi lại.
+- **Đăng xuất** chỉ thu hồi khi token đúng là token (hiện tại hoặc cũ) của phiên; biết `sid` mà sai bí mật thì không làm gì.
 - **Thứ tự xếp hàng:** chỉ trong một phiên (CAS `refresh_ver`); không có khoá chung giữa các phiên.
 
 ## 7. Khoá ký
@@ -147,6 +148,8 @@ Refresh và đăng xuất theo đúng dạng OAuth, đường giống Keycloak: 
 - Rải đoán mật khẩu từ nhiều IP (botnet) vượt giới hạn theo IP → cần WAF/rate limit ở edge.
 - Chưa có cách xoay KEK (phần 5). Đăng nhập một yếu tố tới khi có MFA.
 - Cổng admin `:9090` (`/metrics`, pprof) không được public; chỉ `:8080` sau LB.
+- Phát hiện dùng lại refresh token chỉ trong 20 lần xoay gần nhất (~4 giờ dùng liên tục).
+- Lần sai mật khẩu của account có thật tốn thêm một lần ghi DB: lệch thời gian nhỏ cạnh phép băm, chấp nhận ở phần 1.
 
 ## 11. Điểm đội tự chọn (anh phản biện)
 

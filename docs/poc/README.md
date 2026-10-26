@@ -20,6 +20,8 @@
 | W1 | Xả backlog work stream (reader slot 0 + worker 2 core), M2b.1 | ≥ 3× ingest đỉnh (D66; đo thật ở P3) | 36000 record (1000 `RoomInserted` + 35000 `MessageInserted`) trong ~4s ≈ ≥ 9000 record/s (cận dưới, mẫu cách nhau 1–2s) sau 35s ghi 1000 tin/s với reader tắt; lag worker tối đa 52.4s (backlog tích luỹ); `work_failures_total` 0; republish `room_created` 1000 (không mark, stream bỏ trùng), `msg_created` 0 (fast path đã mark); CPU_Speed_Limit 100 | Chỉ kiểm công cụ |
 | DB | MongoDB vs PostgreSQL | — | Mongo thắng đọc ngẫu nhiên khi dữ liệu > RAM (8.4 vs 35ms) và dung lượng (130 vs 393B/tin); Postgres thắng độ trễ ghi bền | Giữ MongoDB (D9), chờ prod-like |
 
+Bench `postgresbench` đo với `PG_SHARED_BUFFERS=3GB` và `PG_EFFECTIVE_CACHE_SIZE=6GB` trong `.env`; từ M6 mặc định dev là 512MB/1GB vì `make core-up` cũng bật Postgres cho `iam`.
+
 ### M3 — `ListMyRooms` trên replica set (2026-10-15)
 
 Công cụ `tools/poc/roomlistbench`, rs0 1 node, core-1 + core-2, mặc định `ROOM_LIST_JOIN_MAX` 2000, trang 20 room. Kết quả: [results/m3-roomlist-rs0/](results/m3-roomlist-rs0/).
