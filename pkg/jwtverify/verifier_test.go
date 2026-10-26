@@ -143,3 +143,15 @@ func TestVerifyIsSafeForConcurrentUse(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func BenchmarkVerify(b *testing.B) {
+	key := newTestKey(b, testKID)
+	v := newVerifier(b, key)
+	token := signEdDSA(b, key, validClaims())
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := v.Verify(token); err != nil {
+			b.Fatal(err)
+		}
+	}
+}

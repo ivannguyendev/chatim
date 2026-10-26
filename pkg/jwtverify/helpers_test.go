@@ -27,7 +27,7 @@ type testKey struct {
 	priv ed25519.PrivateKey
 }
 
-func newTestKey(t *testing.T, kid string) testKey {
+func newTestKey(t testing.TB, kid string) testKey {
 	t.Helper()
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -42,7 +42,7 @@ func publicJWK(k testKey) map[string]any {
 	return map[string]any{"kty": "OKP", "crv": "Ed25519", "kid": k.kid, "x": b64(k.pub)}
 }
 
-func keySet(t *testing.T, keys ...map[string]any) []byte {
+func keySet(t testing.TB, keys ...map[string]any) []byte {
 	t.Helper()
 	data, err := json.Marshal(map[string]any{"keys": keys})
 	if err != nil {
@@ -61,7 +61,7 @@ func testConfig(jwks []byte) jwtverify.Config {
 	}
 }
 
-func newVerifier(t *testing.T, keys ...testKey) *jwtverify.Verifier {
+func newVerifier(t testing.TB, keys ...testKey) *jwtverify.Verifier {
 	t.Helper()
 	jwks := make([]map[string]any, 0, len(keys))
 	for _, k := range keys {
@@ -85,7 +85,7 @@ func validClaims() jwt.MapClaims {
 	}
 }
 
-func signWith(t *testing.T, method jwt.SigningMethod, key any, header map[string]any, claims jwt.MapClaims) string {
+func signWith(t testing.TB, method jwt.SigningMethod, key any, header map[string]any, claims jwt.MapClaims) string {
 	t.Helper()
 	token := jwt.NewWithClaims(method, claims)
 	for name, value := range header {
@@ -102,7 +102,7 @@ func signWith(t *testing.T, method jwt.SigningMethod, key any, header map[string
 	return signed
 }
 
-func signEdDSA(t *testing.T, k testKey, claims jwt.MapClaims) string {
+func signEdDSA(t testing.TB, k testKey, claims jwt.MapClaims) string {
 	t.Helper()
 	return signWith(t, jwt.SigningMethodEdDSA, k.priv, map[string]any{"kid": k.kid}, claims)
 }
