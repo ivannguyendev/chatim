@@ -23,6 +23,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/typing"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
+	"github.com/ivannguyendev/chatim/pkg/revocation"
 )
 
 func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
@@ -53,13 +54,14 @@ func testOptions() Options {
 type fakeVerifier struct {
 	mu     sync.Mutex
 	tokens map[string]jwtverify.Claims
+	errs   map[string]error
 	holds  map[string]chan struct{}
 	bad    error
 	calls  atomic.Int64
 }
 
 func newFakeVerifier(t *testing.T) *fakeVerifier {
-	return &fakeVerifier{tokens: map[string]jwtverify.Claims{}, bad: malformedTokenError(t)}
+	return &fakeVerifier{tokens: map[string]jwtverify.Claims{}, errs: map[string]error{}, bad: malformedTokenError(t)}
 }
 
 func (v *fakeVerifier) Verify(token string) (jwtverify.Claims, error) {
@@ -72,6 +74,9 @@ func (v *fakeVerifier) Verify(token string) (jwtverify.Claims, error) {
 	}
 	v.mu.Lock()
 	defer v.mu.Unlock()
+	if err, ok := v.errs[token]; ok {
+		return jwtverify.Claims{}, err
+	}
 	claims, ok := v.tokens[token]
 	if !ok {
 		return jwtverify.Claims{}, v.bad
@@ -82,8 +87,21 @@ func (v *fakeVerifier) Verify(token string) (jwtverify.Claims, error) {
 func (v *fakeVerifier) issue(token, tenant, user string, expiresAt time.Time) string {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	v.tokens[token] = jwtverify.Claims{Tenant: tenant, User: user, ExpiresAt: expiresAt}
+	v.tokens[token] = jwtverify.Claims{Tenant: tenant, User: user, Session: "s-" + token, IssuedAt: time.Now(), ExpiresAt: expiresAt}
 	return token
+}
+
+func (v *fakeVerifier) issueClaims(token string, c jwtverify.Claims) string {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.tokens[token] = c
+	return token
+}
+
+func (v *fakeVerifier) fail(token string, err error) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.errs[token] = err
 }
 
 func malformedTokenError(t *testing.T) error {
@@ -104,9 +122,31 @@ func malformedTokenError(t *testing.T) error {
 	return err
 }
 
+type fakeRevocations struct {
+	list    *revocation.List
+	unknown atomic.Bool
+	asked   atomic.Int64
+}
+
+func newFakeRevocations(t *testing.T) *fakeRevocations {
+	list, err := revocation.New(revocation.Config{Leeway: 30 * time.Second, MaxKeep: 17 * time.Minute, MaxAhead: time.Minute})
+	if err != nil {
+		t.Fatalf("revocation list: %v", err)
+	}
+	return &fakeRevocations{list: list}
+}
+
+func (f *fakeRevocations) Check(c jwtverify.Claims) revocation.Verdict { return f.list.Check(c) }
+
+func (f *fakeRevocations) UnknownKey(string) bool {
+	f.asked.Add(1)
+	return f.unknown.Load()
+}
+
 type harness struct {
 	t        *testing.T
 	server   *Server
+	revoked  *fakeRevocations
 	verifier *fakeVerifier
 	core     *fakeCore
 	rooms    *interest.Table
@@ -125,11 +165,12 @@ func newHarnessWith(t *testing.T, opts Options, wrap func(Interest) Interest) *h
 	verifier, core, loader := newFakeVerifier(t), newFakeCore(), &roomLoader{rooms: map[string][]interest.Room{}}
 	rooms := newInterestWith(t, loader)
 	typist, presence := newTestTyping(t, rooms), &fakePresence{}
-	server, err := New(opts, verifier, core, wrap(rooms), typist, presence, slog.New(slog.DiscardHandler))
+	revoked := newFakeRevocations(t)
+	server, err := New(opts, verifier, revoked, core, wrap(rooms), typist, presence, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	return &harness{t: t, server: server, verifier: verifier, core: core, rooms: rooms, loader: loader, typing: typist, presence: presence}
+	return &harness{t: t, server: server, revoked: revoked, verifier: verifier, core: core, rooms: rooms, loader: loader, typing: typist, presence: presence}
 }
 
 type testClient struct {

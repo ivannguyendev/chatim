@@ -25,6 +25,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/config"
 	"github.com/ivannguyendev/chatim/pkg/coreroute"
+	"github.com/ivannguyendev/chatim/pkg/iamsync"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/pkg/slotmap"
 )
@@ -88,7 +89,7 @@ func testConfig(redisAddr, keysFile string) config.Config {
 		TypingRate: 2, TypingBurst: 4, TypingQueue: 64, TypingPendingMsgs: 128,
 		PresenceRedisAddr: "presence:6379", PresenceRedisPassword: testPresencePassword, PresenceRedisTimeout: 500 * time.Millisecond,
 		PresenceRedisPool: 4, PresenceTTL: 15 * time.Second, PresenceStampEvery: 2 * time.Second, PresenceFlush: 50 * time.Millisecond, PresenceBatch: 500,
-		PresenceCache: 5 * time.Second, PresenceWatchMax: 200,
+		PresenceCache: 5 * time.Second, PresenceWatchMax: 200, IAM: iamsync.Defaults(),
 	}
 }
 

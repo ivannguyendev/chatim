@@ -19,6 +19,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/session"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/typing"
 	"github.com/ivannguyendev/chatim/pkg/coreroute"
+	"github.com/ivannguyendev/chatim/pkg/iamsync"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 	"github.com/ivannguyendev/chatim/pkg/metrics"
 	"github.com/ivannguyendev/chatim/pkg/redact"
@@ -116,6 +117,7 @@ func newTyping(cfg config.Config, rooms *interest.Table) (*typing.Service, error
 }
 
 type presenceParts struct {
+	raw      presence.Conn
 	client   *presence.Client
 	stamper  *presence.Stamper
 	answerer *presence.Answerer
@@ -165,7 +167,7 @@ func newPresence(cfg config.Config, deps Deps) (presenceParts, error) {
 	if err != nil {
 		return presenceParts{}, errors.Join(err, client.Close())
 	}
-	return presenceParts{client: client, stamper: stamper, answerer: answerer}, nil
+	return presenceParts{raw: conn, client: client, stamper: stamper, answerer: answerer}, nil
 }
 
 func closeConn(conn presence.Conn) error {
@@ -180,6 +182,18 @@ func closePresence(client *presence.Client) error {
 		return fmt.Errorf("close presence redis: %w", err)
 	}
 	return nil
+}
+
+func newSync(cfg config.Config, verifier *jwtverify.Verifier, conn presence.Conn, doer iamsync.Doer, log *slog.Logger) (*iamsync.Syncer, error) {
+	list, err := iamsync.NewList(cfg.JWTLeeway)
+	if err != nil {
+		return nil, err
+	}
+	var shared iamsync.Shared
+	if rc, ok := conn.(iamsync.RedisClient); ok {
+		shared = iamsync.NewRedisShared(rc)
+	}
+	return iamsync.New(cfg.IAM, list, verifier, shared, doer, log)
 }
 
 func routerConfig(cfg config.Config, deps Deps, log *slog.Logger) coreroute.Config {

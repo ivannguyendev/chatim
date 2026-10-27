@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/config"
+	"github.com/ivannguyendev/chatim/pkg/iamsync"
 )
 
 var envKeys = []string{
@@ -116,6 +117,7 @@ func TestLoadDefaults(t *testing.T) {
 		PresenceBatch:        500,
 		PresenceCache:        5 * time.Second,
 		PresenceWatchMax:     200,
+		IAM:                  iamsync.Defaults(),
 	}
 	if got != want {
 		t.Fatalf("Load() = %+v, want %+v", fields(got), fields(want))

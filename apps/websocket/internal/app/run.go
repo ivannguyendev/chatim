@@ -21,6 +21,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/typing"
 	"github.com/ivannguyendev/chatim/pkg/admin"
 	"github.com/ivannguyendev/chatim/pkg/coreroute"
+	"github.com/ivannguyendev/chatim/pkg/iamsync"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 	"github.com/ivannguyendev/chatim/pkg/metrics"
 )
@@ -31,6 +32,7 @@ type Deps struct {
 	Listen        func(ctx context.Context, addr string) (net.Listener, error)
 	NATS          func(ctx context.Context) (feed.Broker, error)
 	PresenceRedis func(opts *redis.Options) presence.Conn
+	IAMDoer       iamsync.Doer
 }
 
 type node struct {
@@ -45,11 +47,12 @@ type node struct {
 	typing *typing.Service
 	online *presence.Stamper
 	redis  *presence.Client
+	sync   *iamsync.Syncer
 	http   *http.Server
 }
 
 type tasks struct {
-	admin, listener *task
+	admin, listener, sync *task
 }
 
 func Run(ctx context.Context, cfg config.Config, log *slog.Logger, deps Deps) error {
@@ -87,7 +90,7 @@ func wire(cfg config.Config, log *slog.Logger, deps Deps) (*node, error) {
 		_ = pres.client.Close()
 		return nil, err
 	}
-	n, err := wireServers(cfg, log, verifier, exec, rooms, pres)
+	n, err := wireServers(cfg, log, wired{verifier: verifier, exec: exec, rooms: rooms, pres: pres, doer: deps.IAMDoer})
 	if err != nil {
 		rooms.Close()
 		_ = pres.client.Close()
@@ -97,21 +100,35 @@ func wire(cfg config.Config, log *slog.Logger, deps Deps) (*node, error) {
 	return n, nil
 }
 
-func wireServers(cfg config.Config, log *slog.Logger, verifier *jwtverify.Verifier, exec *command.Executor, rooms *interest.Table, pres presenceParts) (*node, error) {
+type wired struct {
+	verifier *jwtverify.Verifier
+	exec     *command.Executor
+	rooms    *interest.Table
+	pres     presenceParts
+	doer     iamsync.Doer
+}
+
+func wireServers(cfg config.Config, log *slog.Logger, w wired) (*node, error) {
+	rooms, pres := w.rooms, w.pres
 	typist, err := newTyping(cfg, rooms)
 	if err != nil {
 		return nil, err
 	}
-	ws, err := session.New(sessionOptions(cfg), verifier, exec, rooms, typist, pres.service(), log)
+	sync, err := newSync(cfg, w.verifier, pres.raw, w.doer, log)
 	if err != nil {
 		return nil, err
 	}
+	ws, err := session.New(sessionOptions(cfg), w.verifier, sync, w.exec, rooms, typist, pres.service(), log)
+	if err != nil {
+		return nil, err
+	}
+	sync.OnAdded(ws.Revoke)
 	publisher := interest.NewPublisher(rooms)
 	fd, err := feed.New(feedConfig(cfg), eventRouter{rooms, publisher}, log)
 	if err != nil {
 		return nil, err
 	}
-	sources := slices.Concat(metricSources(ws, exec), fd.Sources(), rooms.Sources(), publisher.Sources(), typist.Sources(), pres.sources())
+	sources := slices.Concat(metricSources(ws, w.exec), fd.Sources(), rooms.Sources(), publisher.Sources(), typist.Sources(), pres.sources(), sync.Sources())
 	handler, err := metrics.Handler(metricsSubsystem, sources)
 	if err != nil {
 		return nil, err
@@ -126,6 +143,7 @@ func wireServers(cfg config.Config, log *slog.Logger, verifier *jwtverify.Verifi
 		typing: typist,
 		online: pres.stamper,
 		redis:  pres.client,
+		sync:   sync,
 		http:   newHTTPServer(ws, log),
 	}, nil
 }
@@ -138,6 +156,7 @@ func (n *node) serve(ctx context.Context, deps Deps) error {
 	}
 	sup := newSupervisor(ctx)
 	t := tasks{admin: sup.start("admin", func(c context.Context) error { return n.admin.ServeListener(c, adminLis) })}
+	t.sync = sup.start("iam sync", func(c context.Context) error { n.sync.Run(c); return c.Err() })
 	wsLis, cause := n.openRoutes(ctx, deps)
 	if cause != nil || ctx.Err() != nil {
 		closeListener(wsLis)
@@ -150,7 +169,9 @@ func (n *node) serve(ctx context.Context, deps Deps) error {
 	select {
 	case failed := <-sup.failed:
 		return n.shutdown(ctx, sup, t, failed)
-	default:
+	case <-ctx.Done():
+		return n.shutdown(ctx, sup, t, nil)
+	case <-n.sync.Booted():
 	}
 	n.admin.SetReady(true)
 	n.log.InfoContext(ctx, "websocket ready", "listen", wsLis.Addr().String(), "admin", adminLis.Addr().String())
@@ -212,7 +233,7 @@ func (n *node) abandon(ctx context.Context, sup *supervisor, t tasks) error {
 	sup.stopping.Store(true)
 	stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), n.cfg.ShutdownBudget)
 	defer cancel()
-	err := errors.Join(n.typing.Stop(), n.feed.Stop(stopCtx))
+	err := errors.Join(n.typing.Stop(), n.feed.Stop(stopCtx), t.sync.stop(stopCtx))
 	n.online.Stop()
 	err = errors.Join(err, closePresence(n.redis))
 	n.rooms.Close()

@@ -10,6 +10,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/interest"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
+	"github.com/ivannguyendev/chatim/pkg/revocation"
 )
 
 const Subprotocol = "chatim.v1"
@@ -24,11 +25,17 @@ const (
 	CodeInternalError      uint16 = 1011
 	CodeTryAgainLater      uint16 = 1013
 	CodeUnauthenticated    uint16 = 4001
+	CodeTenantRevoked      uint16 = 4003
 	CodeTooManyConnections uint16 = 4009
 )
 
 type Verifier interface {
 	Verify(token string) (jwtverify.Claims, error)
+}
+
+type Revocations interface {
+	Check(claims jwtverify.Claims) revocation.Verdict
+	UnknownKey(kid string) bool
 }
 
 type Executor interface {

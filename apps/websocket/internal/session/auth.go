@@ -9,14 +9,19 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/backoff"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
+	"github.com/ivannguyendev/chatim/pkg/revocation"
 )
 
-const throttleRetry = time.Second
+const (
+	throttleRetry = time.Second
+	keyRetry      = time.Second
+)
 
 const (
 	promptMissing = chatimv1.AuthRequiredReason_AUTH_REQUIRED_REASON_MISSING
 	promptInvalid = chatimv1.AuthRequiredReason_AUTH_REQUIRED_REASON_INVALID
 	promptExpired = chatimv1.AuthRequiredReason_AUTH_REQUIRED_REASON_EXPIRED
+	promptRevoked = chatimv1.AuthRequiredReason_AUTH_REQUIRED_REASON_REVOKED
 )
 
 type renewal int
@@ -26,6 +31,7 @@ const (
 	renewOtherIdentity
 	renewWaiting
 	renewFinished
+	renewBlocked
 )
 
 func (c *connection) authenticate(token string, running bool) {
@@ -41,14 +47,43 @@ func (c *connection) login(token string) {
 		c.retryLater(authThrottled, throttleRetry)
 		return
 	}
-	claims, err := c.server.verifier.Verify(token)
-	if err != nil {
-		prompt := c.refused(err)
-		c.setReason(prompt)
-		c.sendAuthRequired(prompt)
+	claims, ok := c.verify(token)
+	if !ok {
+		return
+	}
+	if verdict := c.server.revocations.Check(claims); verdict != revocation.Allowed {
+		c.blocked(verdict, true)
 		return
 	}
 	c.enter(claims)
+}
+
+func (c *connection) verify(token string) (jwtverify.Claims, bool) {
+	claims, err := c.server.verifier.Verify(token)
+	if err == nil {
+		return claims, true
+	}
+	if jwtverify.ReasonOf(err) == jwtverify.ReasonKeyID && c.server.revocations.UnknownKey(jwtverify.KeyIDOf(token)) {
+		c.retryLater(authKeyPending, keyRetry)
+		return jwtverify.Claims{}, false
+	}
+	prompt := c.refused(err)
+	c.setReason(prompt)
+	c.sendAuthRequired(prompt)
+	return jwtverify.Claims{}, false
+}
+
+func (c *connection) blocked(verdict revocation.Verdict, waiting bool) {
+	if verdict == revocation.TenantRevoked {
+		c.server.stats.authed(authRevoked)
+		c.closeWith(CodeTenantRevoked)
+		return
+	}
+	c.server.authRefused(authRevoked, "revoked")
+	if waiting {
+		c.setReason(promptRevoked)
+	}
+	c.sendAuthRequired(promptRevoked)
 }
 
 func (c *connection) refused(err error) chatimv1.AuthRequiredReason {
@@ -78,10 +113,14 @@ func (c *connection) enter(claims jwtverify.Claims) {
 		c.registerFailed(err)
 		return
 	}
-	if !c.startRunning(claims, member, gen) {
+	started, verdict := c.startRunning(claims, member, gen)
+	if verdict != revocation.Allowed {
+		c.blocked(verdict, true)
 		return
 	}
-	c.server.stats.authed(authOK)
+	if started {
+		c.server.stats.authed(authOK)
+	}
 }
 
 func (c *connection) registerFailed(err error) {
@@ -94,12 +133,16 @@ func (c *connection) registerFailed(err error) {
 	c.closeWith(CodeInternalError)
 }
 
-func (c *connection) startRunning(claims jwtverify.Claims, member *interest.Conn, gen uint64) bool {
+func (c *connection) startRunning(claims jwtverify.Claims, member *interest.Conn, gen uint64) (bool, revocation.Verdict) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.finished || c.running || c.authGen != gen {
 		member.Unregister()
-		return false
+		return false, revocation.Allowed
+	}
+	if verdict := c.server.revocations.Check(claims); verdict != revocation.Allowed {
+		member.Unregister()
+		return false, verdict
 	}
 	c.running = true
 	c.identified = true
@@ -110,29 +153,34 @@ func (c *connection) startRunning(claims jwtverify.Claims, member *interest.Conn
 	stopTimer(c.grace)
 	c.server.stats.unauth.Add(-1)
 	c.armExpiry(time.Until(c.deadlineOf(claims)))
-	return true
+	return true, revocation.Allowed
 }
 
 func (c *connection) renew(token string) {
-	claims, err := c.server.verifier.Verify(token)
-	if err != nil {
-		c.refused(err)
-		c.sendAuthRequired(promptInvalid)
+	claims, ok := c.verify(token)
+	if !ok {
 		return
 	}
-	switch c.renewWith(claims) {
+	verdict := c.server.revocations.Check(claims)
+	switch c.renewWith(claims, verdict) {
 	case renewed:
 		c.server.stats.authed(authOK)
 	case renewOtherIdentity:
 		c.server.authRefused(authInvalid, reasonIdentityChange)
 		c.sendAuthRequired(promptInvalid)
 	case renewWaiting:
+		if verdict != revocation.Allowed {
+			c.blocked(verdict, true)
+			return
+		}
 		c.enter(claims)
+	case renewBlocked:
+		c.blocked(verdict, false)
 	case renewFinished:
 	}
 }
 
-func (c *connection) renewWith(claims jwtverify.Claims) renewal {
+func (c *connection) renewWith(claims jwtverify.Claims, verdict revocation.Verdict) renewal {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	switch {
@@ -142,6 +190,8 @@ func (c *connection) renewWith(claims jwtverify.Claims) renewal {
 		return renewWaiting
 	case claims.User != c.claims.User || claims.Tenant != c.claims.Tenant:
 		return renewOtherIdentity
+	case verdict != revocation.Allowed:
+		return renewBlocked
 	}
 	c.claims = claims
 	c.armExpiry(time.Until(c.deadlineOf(claims)))

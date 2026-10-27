@@ -92,32 +92,28 @@ func (s *Syncer) Run(ctx context.Context) {
 	if s.cfg.InternalURL == "" {
 		s.log.WarnContext(ctx, "iam revocation sync is off; revoked tokens stay valid until they expire")
 	}
-	boot := time.NewTimer(s.cfg.ReadyTimeout)
+	boot := time.AfterFunc(s.cfg.ReadyTimeout, func() { s.bootTimedOut(ctx) })
 	defer boot.Stop()
+	first, cancelFirst := context.WithTimeout(ctx, s.cfg.ReadyTimeout)
 	var listTick, keysTick <-chan time.Time
 	if s.cfg.InternalURL != "" {
 		t := time.NewTicker(s.cfg.RevocationsEvery)
 		defer t.Stop()
 		listTick = t.C
-		s.syncList(ctx)
+		s.syncList(first)
 	}
 	if s.cfg.JWKSURL != "" {
 		t := time.NewTicker(s.cfg.KeysEvery)
 		defer t.Stop()
 		keysTick = t.C
-		s.syncKeys(ctx)
+		s.syncKeys(first)
 	}
+	cancelFirst()
 	s.bootIfReady()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-boot.C:
-			s.bootOnce.Do(func() {
-				s.stats.bootTimeouts.Add(1)
-				s.log.WarnContext(ctx, "iam sync not complete before the ready timeout; serving with what is loaded")
-				close(s.booted)
-			})
 		case <-listTick:
 			s.syncList(ctx)
 			s.bootIfReady()
@@ -129,6 +125,14 @@ func (s *Syncer) Run(ctx context.Context) {
 			s.bootIfReady()
 		}
 	}
+}
+
+func (s *Syncer) bootTimedOut(ctx context.Context) {
+	s.bootOnce.Do(func() {
+		s.stats.bootTimeouts.Add(1)
+		s.log.WarnContext(ctx, "iam sync not complete before the ready timeout; serving with what is loaded")
+		close(s.booted)
+	})
 }
 
 func (s *Syncer) bootIfReady() {

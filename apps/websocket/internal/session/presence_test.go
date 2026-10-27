@@ -55,7 +55,7 @@ func TestPresenceIsNotTouchedForAFailedAuth(t *testing.T) {
 }
 
 func TestNewRequiresPresence(t *testing.T) {
-	if _, err := New(testOptions(), newFakeVerifier(t), newFakeCore(), newTestInterest(t), newTestTyping(t, newTestInterest(t)), nil, slog.New(slog.DiscardHandler)); err == nil {
+	if _, err := New(testOptions(), newFakeVerifier(t), newFakeRevocations(t), newFakeCore(), newTestInterest(t), newTestTyping(t, newTestInterest(t)), nil, slog.New(slog.DiscardHandler)); err == nil {
 		t.Fatal("New accepted a nil presence")
 	}
 }

@@ -21,6 +21,7 @@ const subprotocolHeader = "Sec-WebSocket-Protocol"
 type Server struct {
 	opts          Options
 	verifier      Verifier
+	revocations   Revocations
 	executor      Executor
 	interest      Interest
 	typing        Typing
@@ -39,27 +40,28 @@ type Server struct {
 	closeCode uint16
 }
 
-func New(opts Options, verifier Verifier, executor Executor, rooms Interest, typing Typing, presence Presence, logger *slog.Logger) (*Server, error) {
+func New(opts Options, verifier Verifier, revocations Revocations, executor Executor, rooms Interest, typing Typing, presence Presence, logger *slog.Logger) (*Server, error) {
 	if err := opts.validate(); err != nil {
 		return nil, err
 	}
-	if verifier == nil || executor == nil || rooms == nil || typing == nil || presence == nil || logger == nil {
-		return nil, errors.New("session: verifier, executor, interest, typing, presence and logger are required")
+	if verifier == nil || revocations == nil || executor == nil || rooms == nil || typing == nil || presence == nil || logger == nil {
+		return nil, errors.New("session: verifier, revocations, executor, interest, typing, presence and logger are required")
 	}
 	s := &Server{
-		opts:      opts,
-		verifier:  verifier,
-		executor:  executor,
-		interest:  rooms,
-		typing:    typing,
-		presence:  presence,
-		logger:    logger,
-		stats:     newStats(),
-		accepting: newGate(),
-		commands:  newGate(),
-		logins:    rate.NewLimiter(rate.Limit(opts.AuthRate), opts.AuthBurst),
-		authLog:   rate.NewLimiter(rate.Every(time.Second), 1),
-		live:      map[*connection]struct{}{},
+		opts:        opts,
+		verifier:    verifier,
+		revocations: revocations,
+		executor:    executor,
+		interest:    rooms,
+		typing:      typing,
+		presence:    presence,
+		logger:      logger,
+		stats:       newStats(),
+		accepting:   newGate(),
+		commands:    newGate(),
+		logins:      rate.NewLimiter(rate.Limit(opts.AuthRate), opts.AuthBurst),
+		authLog:     rate.NewLimiter(rate.Every(time.Second), 1),
+		live:        map[*connection]struct{}{},
 	}
 	s.upgrader = gws.NewUpgrader(events{}, &gws.ServerOption{
 		ReadMaxPayloadSize: opts.FrameMax,

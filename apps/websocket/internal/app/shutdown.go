@@ -50,6 +50,7 @@ func (n *node) shutdown(ctx context.Context, sup *supervisor, t tasks, cause err
 		return errors.Join(n.ws.Wait(c), t.listener.stop(c))
 	}))
 	n.online.Stop()
+	fail("iam sync", t.sync.stop(stopCtx))
 	fail("presence", closePresence(n.redis))
 	n.rooms.Close()
 	fail("core router", n.router.Close())

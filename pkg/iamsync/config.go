@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/url"
 	"time"
+
+	"github.com/ivannguyendev/chatim/pkg/revocation"
 )
 
 const (
@@ -65,4 +67,14 @@ func absolute(raw string, allowHTTP bool) bool {
 		return false
 	}
 	return u.Scheme == "https" || (allowHTTP && u.Scheme == "http")
+}
+
+const (
+	MaxEntryKeep   = 2 * time.Hour
+	MaxRevokeAhead = time.Minute
+	MaxNodeLeeway  = time.Minute
+)
+
+func NewList(leeway time.Duration) (*revocation.List, error) {
+	return revocation.New(revocation.Config{Leeway: leeway, MaxKeep: MaxEntryKeep, MaxAhead: MaxRevokeAhead})
 }

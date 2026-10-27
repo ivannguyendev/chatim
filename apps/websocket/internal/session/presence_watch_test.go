@@ -271,7 +271,7 @@ func TestNewRequiresAPositivePresenceWatchLimit(t *testing.T) {
 	opts := testOptions()
 	opts.PresenceWatchMax = 0
 	rooms := newTestInterest(t)
-	if _, err := New(opts, newFakeVerifier(t), newFakeCore(), rooms, newTestTyping(t, rooms), &fakePresence{}, slog.New(slog.DiscardHandler)); err == nil {
+	if _, err := New(opts, newFakeVerifier(t), newFakeRevocations(t), newFakeCore(), rooms, newTestTyping(t, rooms), &fakePresence{}, slog.New(slog.DiscardHandler)); err == nil {
 		t.Fatal("New accepted a zero presence watch limit")
 	}
 }
