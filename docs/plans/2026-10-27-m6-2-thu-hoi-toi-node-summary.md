@@ -28,6 +28,7 @@ Một ngày của Lan:
 | R8 | Token cấp sát lúc thu hồi không được lọt | D214, review 2026-10-27 |
 | R9 | Đảm bảo mới có metric và luật alert | `CLAUDE.md` §Architecture |
 | R10 | API nội bộ trên cổng nội bộ, API public trên cổng public, bật/tắt được từng cổng | owner 2026-10-27 |
+| R11 | Các node dùng chung cache: node không hỏi được `iam` vẫn có danh sách do node khác hỏi được; node gọi `iam` qua đúng một URL, không thử nhiều địa chỉ | owner 2026-10-27 |
 
 ## 3. Trong và ngoài
 
@@ -39,6 +40,7 @@ Một ngày của Lan:
 | `Claims` có `sid`, `iat` bắt buộc; bộ khoá đổi được lúc chạy | `pkg/jwtverify`, `devtoken` |
 | Danh sách thu hồi trong RAM (thuần, không mạng) | `pkg/revocation` mới |
 | Client hỏi khoá + danh sách, trạng thái sẵn sàng, metric | `pkg/iamsync` mới |
+| Cache chung giữa các node trên Redis (`chatim-redis-presence` sẵn có): hỏi được `iam` thì ghi lên, không hỏi được thì đọc về và gộp; chỉ danh sách thu hồi, **không** khoá ký | `pkg/iamsync`; websocket dùng kết nối Redis presence đang có, gateway thêm kết nối Redis tuỳ chọn |
 | Đẩy kết nối bị thu hồi về chờ, `REVOKED`, đóng `4003` khi khoá tenant | `websocket` |
 | Kiểm danh sách mỗi request | `gateway` |
 | Proto `AUTH_REQUIRED_REASON_REVOKED`, đặc tả client §11 | `proto`, module 09 |
@@ -62,11 +64,12 @@ flowchart LR
   WS & GW -->|"GET /.well-known/jwks.json mỗi 1m + khi gặp kid lạ"| IAM
   File[file JWKS lúc khởi động] --> WS & GW
   App -->|access token| WS & GW
+  WS & GW <-->|"cache chung: hỏi được iam thì ghi, không hỏi được thì đọc"| RD[("Redis chatim-redis-presence")]
 ```
 
 `iam` có ba cổng: public `:8080` (duy nhất đứng sau LB), nội bộ `:8081` (chỉ trong mạng cụm, cho node), admin `:9090` (metric, pprof, như phần 1). Cổng public không trả `/internal/…`, cổng nội bộ không trả login/refresh. Ví dụ: một cụm chỉ để node đọc → tắt cổng public; dev không cần thu hồi → tắt cổng nội bộ. Ở node, `*_IAM_INTERNAL_URL` trống = không kiểm thu hồi (log cảnh báo lúc khởi động, metric `iam_sync_enabled` = 0), `*_IAM_JWKS_URL` trống = chỉ dùng file JWKS như phần 1.
 
-Không còn NATS trong đường thu hồi và khoá. Gateway vẫn không NATS, không DB. `iam` không gọi node; node chỉ đọc.
+Không còn NATS trong đường thu hồi và khoá. Gateway vẫn không NATS, không DB; thêm Redis tuỳ chọn cho cache chung. `iam` không gọi node; node chỉ đọc.
 
 ## 5. Dữ liệu và lớp dữ liệu (design §4)
 
@@ -76,6 +79,7 @@ Không còn NATS trong đường thu hồi và khoá. Gateway vẫn không NATS,
 | `tenants.sessions_revoked_at` (mới) | giờ Postgres lúc khoá tenant | `shop` 16:00:00.412 | state của tenant, CAS `ver` như phần 1 |
 | `signing_keys` | không đổi; `created_at` dùng cho luật chờ 2 phút | | state |
 | Danh sách + khoá trong node | bản sao dẫn xuất trong RAM | | sửa bằng lần hỏi kế (mỗi lần trả đủ), không cần sweeper |
+| Redis `chatim:iam:revocations` (mới) | bản danh sách mới nhất mà một node hỏi được: các mục, `fetched_at` (giờ node đó hỏi `iam` thành công), hạn khoá 60s | ghi bởi `websocket-2` lúc 10:03:02 | bản sao dẫn xuất dùng chung; node chỉ gộp thêm mục, không xoá theo Redis; hết 60s không ai ghi thì tự mất |
 
 Endpoint thu hồi trả JSON: `sessions: [{session_id, tenant_id, expires_at}]`, `tenants: [{tenant_id, revoked_before, expires_at}]`, kèm `ETag`.
 
@@ -106,11 +110,15 @@ flowchart TD
   C -->|200 danh sách mới| M["Gộp vào danh sách trong RAM<br/>(không xoá mục cũ còn hạn)"]
   M --> SC["Websocket: quét kết nối có sid hoặc tenant mới"]
   SC --> OK
-  C -->|lỗi mạng, 5xx, 401| KEEP["Giữ danh sách đang có, đếm lỗi"]
-  KEEP --> ST{"Quá 30s chưa đồng bộ được?"}
+  OK --> PUT["Ghi bản đang có + fetched_at lên Redis chung (hạn 60s)"]
+  PUT --> EX["Bỏ mục đã quá hạn + leeway của node"] --> S
+  C -->|lỗi mạng, 5xx, 401| SH["Đọc bản trên Redis chung<br/>(do node khác hỏi được iam ghi lên)"]
+  SH --> SN{"Bản đó mới hơn bản của node?"}
+  SN -->|có| SM["Gộp thêm mục, quét kết nối;<br/>giờ đồng bộ = fetched_at của bản đó"] --> EX
+  SN -->|"không, hoặc Redis cũng lỗi"| KEEP["Giữ danh sách đang có, đếm lỗi"]
+  KEEP --> ST{"Quá 30s chưa có bản mới<br/>từ iam hay Redis?"}
   ST -->|có| AL["Alert ChatimIamSyncStale"]
   ST -->|chưa| S
-  OK --> EX["Bỏ mục đã quá hạn + leeway của node"] --> S
   K["Mỗi 1 phút, hoặc ngay khi gặp kid lạ (tối đa 1 lần/5s)"] --> J["GET /.well-known/jwks.json"]
   J --> KS["Bộ khoá = file JWKS ∪ khoá từ iam<br/>(trùng kid khác khoá → giữ khoá file, đếm metric)"]
 ```
@@ -185,7 +193,7 @@ Tóm tắt kết quả:
 
 ## 8. Thư viện và hạ tầng
 
-Không thêm thư viện: `net/http` (client có timeout, TLS mặc định của Go), `pkg/jwtverify` (đọc JWKS), `pgx/v5`. Config mới: `IAM_INTERNAL_ADDR` (`:8081`, trống = tắt; `IAM_ADDR` trống cũng = tắt cổng public), `IAM_NODE_SECRET`/`_FILE` (bắt buộc khi bật cổng nội bộ: chưa có mTLS thì pod nào trong cụm cũng gọi được cổng này), `IAM_KEY_ACTIVATE_LEAD` (2m); mỗi node `*_IAM_INTERNAL_URL`, `*_IAM_JWKS_URL` (prod bắt buộc `https://`: cổng public qua LB, hoặc cổng nội bộ nếu có TLS), `*_IAM_SECRET`/`_FILE`, `*_IAM_KEYS_INTERVAL` (1m), `*_IAM_REVOCATIONS_INTERVAL` (2s), `*_IAM_READY_TIMEOUT` (10s), `*_IAM_ALLOW_HTTP` (dev). Compose thêm secret `iam_node_secret`.
+Không thêm thư viện: `net/http` (client có timeout, TLS mặc định của Go), `pkg/jwtverify` (đọc JWKS), `pgx/v5`. Config mới: `IAM_INTERNAL_ADDR` (`:8081`, trống = tắt; `IAM_ADDR` trống cũng = tắt cổng public), `IAM_NODE_SECRET`/`_FILE` (bắt buộc khi bật cổng nội bộ: chưa có mTLS thì pod nào trong cụm cũng gọi được cổng này), `IAM_KEY_ACTIVATE_LEAD` (2m); mỗi node `*_IAM_INTERNAL_URL`, `*_IAM_JWKS_URL` (prod bắt buộc `https://`: cổng public qua LB, hoặc cổng nội bộ nếu có TLS), `*_IAM_SECRET`/`_FILE`, `*_IAM_KEYS_INTERVAL` (1m), `*_IAM_REVOCATIONS_INTERVAL` (2s), `*_IAM_READY_TIMEOUT` (10s), `*_IAM_ALLOW_HTTP` (dev); cache chung: websocket dùng `WS_PRESENCE_REDIS_*` sẵn có, gateway thêm `GW_SHARED_REDIS_ADDR`/`_PASSWORD`/`_FILE` (trống = không dùng cache chung). `*_IAM_INTERNAL_URL` là **một** URL (Service của `iam` tự chia replica; owner 2026-10-27 không thử nhiều địa chỉ). Compose thêm secret `iam_node_secret`, gateway nối `chatim-redis-presence`.
 
 ## 9. Quyết định và phương án bị loại
 
@@ -196,19 +204,23 @@ Không thêm thư viện: `net/http` (client có timeout, TLS mặc định củ
 | Thu hồi theo `sid`, tenant theo giờ Postgres | so `iat` với giờ thu hồi theo account | Lỗi chạy đua (mục 7) |
 | Đóng `4003` khi khoá tenant | `auth_required` cho 100K máy | Tránh 100K máy cùng refresh/login vô ích (Argon2 16 phép/node) |
 | `user_disabled` sang phần 3 | phát ngay ở phần 2 | Chưa có app nghe; phần 2 không cần outbox |
+| Cache chung trên Redis presence cho node không hỏi được `iam` (owner 2026-10-27) | node thử nhiều địa chỉ `iam` (owner 2026-10-27 không chọn); không làm gì thêm | Che được node đứt riêng đường tới `iam` (luật mạng, Service sai, kết nối kẹt vào replica chết) mà vẫn còn Redis; chỉ gộp thêm nên Redis không gỡ được thu hồi; khoá ký không qua Redis vì ai ghi được Redis sẽ chèn được khoá giả |
 
 ## 10. Chi phí và tải
 
 - ~15 node × 1 lần/2s ≈ 7,5 request/s tới `iam`, đa số `304`; JWKS ~15 lần/phút.
 - Thu hồi vài trăm phiên/ngày → bảng `revoked_sessions` vài trăm dòng (xoá sau ~16 phút).
-- Đường nóng: thêm một tra map mỗi lần kiểm token (cạnh ~121 µs chữ ký).
+- Cache chung: mỗi lần hỏi được `iam` một lệnh `SET` vài KB → ~7,5 lệnh/s lên Redis presence; đọc chỉ khi hỏi `iam` lỗi.
+- Đường nóng: thêm một tra map mỗi lần kiểm token (cạnh ~121 µs chữ ký); không gọi Redis hay `iam` theo từng token.
 - Đổi mật khẩu, khoá account: N dòng cho N phiên (thường < 10).
 
 ## 11. Rủi ro và giới hạn
 
 - Thu hồi tới node trong ~2–3s, không còn tức thì.
-- **Node mất liên lạc với `iam` trong khi `iam` vẫn nhận lệnh thu hồi.** Ví dụ: 10:00 đường mạng giữa `websocket-2` và `iam` đứt 10 phút. 10:03 Lan thu hồi iPhone (laptop gọi `iam` qua LB vẫn được). `websocket-1` biết sau ~2s; `websocket-2` không hỏi được nên iPhone đang nối vào `websocket-2` vẫn chạy tới khi mạng về (10:10) hoặc token hết hạn (≤ 15 phút), cái nào tới trước. Refresh của iPhone thì bị `iam` từ chối ngay. Nếu chính `iam` chết thì không ai thu hồi được nên không có gì bị lỡ. Alert `ChatimIamSyncStale` khi một node quá 30s chưa hỏi được. Đã chấp nhận ở D218 (bản NATS).
-- Node khởi động đúng lúc không với tới `iam`: sau 10s vẫn `ready` nhưng chưa có danh sách, nên các phiên bị thu hồi trong 15 phút trước đó vẫn qua node này tới khi hỏi được.
+- **Node mất liên lạc với `iam` trong khi `iam` vẫn nhận lệnh thu hồi** — nay có cache chung che. Ví dụ: 10:00 đường mạng giữa `websocket-2` và `iam` đứt 10 phút. 10:03 Lan thu hồi iPhone. `websocket-1` hỏi được `iam` lúc 10:03:02, ghi bản mới lên Redis. `websocket-2` hỏi `iam` lỗi → đọc Redis → thấy iPhone → đẩy iPhone về chờ lúc ~10:03:04. Node đứt hẳn khỏi mạng thì cũng không gọi được core, nên token lọt qua cũng không đọc/ghi được gì.
+- **Còn lại không che được:** node đứt cả `iam` lẫn Redis nhưng vẫn gọi được core, hoặc **mọi** node cùng không hỏi được `iam` (không ai ghi Redis). Khi đó token đã thu hồi còn qua node tới khi đường về hoặc token hết hạn (≤ 15 phút); refresh vẫn bị `iam` từ chối. Alert `ChatimIamSyncStale` khi một node quá 30s không có bản mới từ `iam` hay Redis. Nếu chính `iam` chết thì không ai thu hồi được nên không có gì bị lỡ.
+- Node khởi động đúng lúc không với tới `iam`: đọc Redis chung trước; Redis cũng không có thì sau 10s vẫn `ready` mà chưa có danh sách.
+- Ai ghi được Redis presence có thể chèn mục thu hồi giả (đá người dùng ra, tối đa ~16 phút mỗi mục), không gỡ được thu hồi thật và không chèn được khoá.
 - Khoá nằm trong file JWKS chỉ gỡ được bằng khởi động lại node.
 - Cổng nội bộ không đứng sau LB; trong cụm vẫn bảo vệ bằng secret tới khi có mTLS. Lộ secret chỉ lộ `sid` đã thu hồi và tenant id.
 
@@ -226,12 +238,12 @@ Không thêm thư viện: `net/http` (client có timeout, TLS mặc định củ
 | 2 | Cổng nội bộ bật/tắt, endpoint JWKS, endpoint thu hồi (secret, ETag), luật chờ 2 phút của `key-activate` | unit: cổng public không trả `/internal/…`, cổng nội bộ không trả login; tắt từng cổng chạy đúng, tắt cả hai → config lỗi; thiếu/sai secret → 401; 304 khi không đổi; khoá riêng không bao giờ trong JWKS; activate sớm bị từ chối |
 | 3 | `pkg/jwtverify` (`sid`, `iat` bắt buộc; bộ khoá động, ưu tiên file), `devtoken` thêm `sid` | unit: thiếu `sid`/`iat` → từ chối; trùng `kid` khác khoá → giữ khoá file; đổi khoá lúc chạy an toàn khi verify song song (`-race`) |
 | 4 | `pkg/revocation` | unit: `sid`, tenant theo `iat`, gộp không thay, bỏ mục hết hạn + leeway |
-| 5 | `pkg/iamsync` | unit (`synctest`, `httptest`): hỏi định kỳ, 304, hỏi khoá khi `kid` lạ có giới hạn, sẵn sàng sau lần đầu hoặc sau 10s, `iam` chết giữ dữ liệu cũ, metric tuổi đồng bộ |
+| 5 | `pkg/iamsync` (cả cache chung trên Redis) | unit (`synctest`, `httptest`, miniredis): hỏi định kỳ, 304, hỏi khoá khi `kid` lạ có giới hạn, sẵn sàng sau lần đầu hoặc sau 10s, `iam` chết giữ dữ liệu cũ, metric tuổi đồng bộ; hỏi được thì ghi Redis; hỏi lỗi thì đọc Redis, chỉ gộp bản mới hơn, Redis thiếu mục không xoá mục của node, Redis lỗi giữ dữ liệu cũ; khoá ký không bao giờ đọc từ Redis |
 | 6 | Websocket: quét kết nối, `REVOKED`, `4003`, `retry_later` khi khoá chưa đồng bộ | unit: kết nối đang chạy về chờ; đăng nhập đua với danh sách mới không lọt (`synctest`); tenant khoá → `4003` |
-| 7 | Gateway: kiểm mỗi request | unit: `sid` thu hồi → 401, `kid` lạ chưa đồng bộ → 503 |
+| 7 | Gateway: kiểm mỗi request, kết nối Redis chung tuỳ chọn | unit: `sid` thu hồi → 401, `kid` lạ chưa đồng bộ → 503; không cấu hình Redis vẫn chạy |
 | 8 | Proto + đặc tả §11 | `make buf-lint` |
 | 9 | Config, compose, alert (`ChatimIamSyncStale`, `ChatimJwksConflict`), docs | `make alerts-check`, `make core-up` healthy |
-| 10 | e2e phase 14 | thu hồi phiên → websocket nhận `REVOKED` và gateway 401 trong ≤ 5s; khoá account tương tự; xoay khoá + activate, token mới qua websocket không restart; khoá tenant → `4003` |
+| 10 | e2e phase 14 | thu hồi phiên → websocket nhận `REVOKED` và gateway 401 trong ≤ 5s; khoá account tương tự; chặn đường `websocket-2` → `iam` (sidecar iptables như `scripts/ws-nats-drill.sh`), thu hồi → `websocket-2` vẫn đẩy `REVOKED` nhờ Redis chung; xoay khoá + activate, token mới qua websocket không restart; khoá tenant → `4003` |
 
 ## Bảng phủ
 
@@ -247,3 +259,4 @@ Không thêm thư viện: `net/http` (client có timeout, TLS mặc định củ
 | R8 không lọt token sát lúc thu hồi | `iam` store, websocket | 1, 6 | itest đua 1, unit đua 6 | (sau khi xây) |
 | R9 metric + alert | `iamsync`, alerts | 5, 9 | `make alerts-check` | (sau khi xây) |
 | R10 cổng nội bộ riêng, bật/tắt từng cổng | `iam` app + config, node config | 2, 9 | unit 2, config test | (sau khi xây) |
+| R11 cache chung giữa các node | `iamsync`, websocket, gateway, compose | 5, 6, 7, 9, 10 | unit 5, e2e 14 (chặn đường tới `iam`) | (sau khi xây) |
