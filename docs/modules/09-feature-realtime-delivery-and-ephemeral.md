@@ -256,6 +256,7 @@ Từ phần 5 (D205) server chỉ còn đóng ở các trường hợp dưới. 
 | `1013` | Node đang đóng bảng quan tâm (lúc tắt). `ListMyRoomIDs` lỗi không đóng mà gửi `load_failed` (D195) | Nối lại có backoff |
 | `4001` | Ở trạng thái chờ đăng nhập quá `WS_AUTH_GRACE` (3 phút) | Lấy token mới rồi mới nối lại |
 | `4009` | Kết nối thứ 11 của cùng người trên node, ngay sau `auth` hợp lệ (D204) | Chờ 30–60 giây rồi nối lại; kiểm xem máy nào mở quá nhiều kết nối |
+| `4003` | Tenant của token bị admin khoá (M6 phần 2) | **Không tự nối lại**; báo "tổ chức đã bị khoá" và chỉ nối lại khi người dùng thao tác (đăng nhập lại) |
 
 **Không còn dùng** (giữ ở đây để client cũ và người đọc docs cũ biết thay bằng gì):
 
@@ -478,14 +479,14 @@ Hết hạn (đang chạy): server gỡ kết nối khỏi bảng quan tâm, b�
 | `typing` (26) | Người khác đang gõ trong room đang mở | Hiện "đang gõ"; tắt khi `stopped`, khi thấy `msg_created` của người đó, hoặc sau 6 giây không có tín hiệu |
 | `presence` (27) | Cả danh sách hỏi online, ở mỗi heartbeat | Thay trạng thái hiển thị bằng frame mới nhất |
 | `retry_later` (28) | `1000` ms: `auth` dồn quá 1 lần/giây; 5.000–30.000 ms: node hết suất đăng nhập. Kết nối vẫn chờ | Chờ **đúng** `retry_after_ms` rồi gửi lại `auth` trên cùng kết nối (cùng token nếu còn hạn); không nối lại |
-| `auth_required` (29) | `MISSING`: gửi frame khác khi chưa đăng nhập. `INVALID`: token sai hoặc của người khác (đang chạy thì vẫn chạy bằng token cũ). `EXPIRED`: token hết hạn, kết nối đã về chờ | `MISSING`/`EXPIRED`: gửi `auth` với token còn hạn. `INVALID`: lấy token đúng của đúng người; đổi người thì mở kết nối mới |
+| `auth_required` (29) | `MISSING`: gửi frame khác khi chưa đăng nhập. `INVALID`: token sai hoặc của người khác (đang chạy thì vẫn chạy bằng token cũ). `EXPIRED`: token hết hạn, kết nối đã về chờ. `REVOKED` (M6 phần 2): phiên của token đã bị thu hồi (người dùng thu hồi máy, đổi mật khẩu, admin khoá account), kết nối đã về chờ. Giá trị lạ (bản server mới hơn client) xử như `INVALID` | `MISSING`/`EXPIRED`: gửi `auth` với token còn hạn. `INVALID`: lấy token đúng của đúng người; đổi người thì mở kết nối mới. `REVOKED`: thử refresh một lần; `iam` trả `invalid_grant` thì về màn hình đăng nhập |
 | `frame_error` (30) | `UNSUPPORTED`: frame chữ. `INVALID`: frame không giải mã được. `RATE`: quá giới hạn frame. Frame đó bị bỏ, kết nối giữ; không mang id của frame lỗi | Sửa client, giảm nhịp; không cần nối lại |
 
 ### 11.4. Hành vi client bắt buộc
 
 | Việc | Client phải làm |
 |---|---|
-| Nối lại | Chờ theo mã: 1001 → ngẫu nhiên 0–60 giây; mất mạng, 1000, 1006 → 0–3 giây; 4009 → 30–60 giây; 4001 → lấy token mới trước; bắt tay lỗi, 503 và mã khác (1002, 1011, 1013) → chờ tăng dần 1, 2, 4… tối đa 60 giây. Không bao giờ nối lại vì `auth_required`, `retry_later` hay `frame_error` |
+| Nối lại | Chờ theo mã: 1001 → ngẫu nhiên 0–60 giây; mất mạng, 1000, 1006 → 0–3 giây; 4009 → 30–60 giây; 4001 → lấy token mới trước; 4003 → không tự nối lại; bắt tay lỗi, 503 và mã khác (1002, 1011, 1013) → chờ tăng dần 1, 2, 4… tối đa 60 giây. Không bao giờ nối lại vì `auth_required`, `retry_later` hay `frame_error` |
 | Gia hạn token | Ở mốc ngẫu nhiên trong 70–85% của `exp − iat`, tính từ lúc nhận token (không theo đồng hồ máy); gửi `auth` trên kết nối đang mở. Dùng token mới cho cả HTTPS (gateway trả 401 với token hết hạn) |
 | Lệnh chưa có trả lời lúc rớt kết nối | **Không gửi lại** (owner 2026-10-24); kết quả coi như chưa rõ. Nếu app muốn gửi lại thì dùng cùng `cid`/`request_id` (core chống trùng trong 15 phút) |
 | Sau **mọi** `ready` | Gửi lại `open_room` các room đang xem và `watch_presence`, rồi tải lại dữ liệu qua HTTPS. `resync` tới trước `ready` thì coi như `ready` |
