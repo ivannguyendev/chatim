@@ -27,13 +27,15 @@ Một ngày của Lan:
 | R7 | Xoay khoá không khởi động lại node; file JWKS làm dự phòng lúc khởi động | D216 |
 | R8 | Token cấp sát lúc thu hồi không được lọt | D214, review 2026-10-27 |
 | R9 | Đảm bảo mới có metric và luật alert | `CLAUDE.md` §Architecture |
+| R10 | API nội bộ trên cổng nội bộ, API public trên cổng public, bật/tắt được từng cổng | owner 2026-10-27 |
 
 ## 3. Trong và ngoài
 
 | Trong phần 2 | Ai làm |
 |---|---|
 | Bảng `revoked_sessions`, `tenants.sessions_revoked_at`, `iat` theo giờ Postgres, job xoá dòng hết hạn | `iam` |
-| `GET /.well-known/jwks.json` (công khai), `GET /internal/v1/revocations` (secret node), `key-activate` chờ đủ 2 phút | `iam` |
+| Tách cổng (owner 2026-10-27): cổng public `IAM_ADDR` (login, refresh, thu hồi, phiên, JWKS) và cổng nội bộ mới `IAM_INTERNAL_ADDR` (danh sách thu hồi, bản JWKS); để trống địa chỉ là tắt cổng đó, phải bật ít nhất một | `iam` |
+| `GET /.well-known/jwks.json` (cả hai cổng), `GET /internal/v1/revocations` (chỉ cổng nội bộ, secret node), `key-activate` chờ đủ 2 phút | `iam` |
 | `Claims` có `sid`, `iat` bắt buộc; bộ khoá đổi được lúc chạy | `pkg/jwtverify`, `devtoken` |
 | Danh sách thu hồi trong RAM (thuần, không mạng) | `pkg/revocation` mới |
 | Client hỏi khoá + danh sách, trạng thái sẵn sàng, metric | `pkg/iamsync` mới |
@@ -53,14 +55,16 @@ Một ngày của Lan:
 
 ```mermaid
 flowchart LR
-  App[App] -->|login, refresh, thu hồi| IAM[apps/iam]
+  App[App] -->|"login, refresh, thu hồi (LB → cổng public :8080)"| IAM[apps/iam]
   IAM --> PG[(Postgres: sessions, revoked_sessions, tenants, signing_keys)]
-  WS[websocket] -->|"GET /internal/v1/revocations mỗi 2s (ETag)"| IAM
+  WS[websocket] -->|"cổng nội bộ :8081: GET /internal/v1/revocations mỗi 2s (ETag)"| IAM
   GW[gateway] -->|như trên| IAM
   WS & GW -->|"GET /.well-known/jwks.json mỗi 1m + khi gặp kid lạ"| IAM
   File[file JWKS lúc khởi động] --> WS & GW
   App -->|access token| WS & GW
 ```
+
+`iam` có ba cổng: public `:8080` (duy nhất đứng sau LB), nội bộ `:8081` (chỉ trong mạng cụm, cho node), admin `:9090` (metric, pprof, như phần 1). Cổng public không trả `/internal/…`, cổng nội bộ không trả login/refresh. Ví dụ: một cụm chỉ để node đọc → tắt cổng public; dev không cần thu hồi → tắt cổng nội bộ. Ở node, `*_IAM_INTERNAL_URL` trống = không kiểm thu hồi (log cảnh báo lúc khởi động, metric `iam_sync_enabled` = 0), `*_IAM_JWKS_URL` trống = chỉ dùng file JWKS như phần 1.
 
 Không còn NATS trong đường thu hồi và khoá. Gateway vẫn không NATS, không DB. `iam` không gọi node; node chỉ đọc.
 
@@ -114,7 +118,7 @@ sequenceDiagram
 
 ## 8. Thư viện và hạ tầng
 
-Không thêm thư viện: `net/http` (client có timeout, TLS mặc định của Go), `pkg/jwtverify` (đọc JWKS), `pgx/v5`. Config mới: `IAM_NODE_SECRET`/`_FILE`, `IAM_KEY_ACTIVATE_LEAD` (2m); mỗi node `*_IAM_URL`, `*_IAM_SECRET`/`_FILE`, `*_IAM_KEYS_INTERVAL` (1m), `*_IAM_REVOCATIONS_INTERVAL` (2s), `*_IAM_READY_TIMEOUT` (10s), `*_IAM_ALLOW_HTTP` (dev). Compose thêm secret `iam_node_secret`.
+Không thêm thư viện: `net/http` (client có timeout, TLS mặc định của Go), `pkg/jwtverify` (đọc JWKS), `pgx/v5`. Config mới: `IAM_INTERNAL_ADDR` (`:8081`, trống = tắt; `IAM_ADDR` trống cũng = tắt cổng public), `IAM_NODE_SECRET`/`_FILE` (bắt buộc khi bật cổng nội bộ: chưa có mTLS thì pod nào trong cụm cũng gọi được cổng này), `IAM_KEY_ACTIVATE_LEAD` (2m); mỗi node `*_IAM_INTERNAL_URL`, `*_IAM_JWKS_URL` (prod bắt buộc `https://`: cổng public qua LB, hoặc cổng nội bộ nếu có TLS), `*_IAM_SECRET`/`_FILE`, `*_IAM_KEYS_INTERVAL` (1m), `*_IAM_REVOCATIONS_INTERVAL` (2s), `*_IAM_READY_TIMEOUT` (10s), `*_IAM_ALLOW_HTTP` (dev). Compose thêm secret `iam_node_secret`.
 
 ## 9. Quyết định và phương án bị loại
 
@@ -136,9 +140,10 @@ Không thêm thư viện: `net/http` (client có timeout, TLS mặc định củ
 ## 11. Rủi ro và giới hạn
 
 - Thu hồi tới node trong ~2–3s, không còn tức thì.
-- `iam` không với tới lâu → thu hồi mới không tới node (đã chấp nhận ở D218), có alert.
+- **Node mất liên lạc với `iam` trong khi `iam` vẫn nhận lệnh thu hồi.** Ví dụ: 10:00 đường mạng giữa `websocket-2` và `iam` đứt 10 phút. 10:03 Lan thu hồi iPhone (laptop gọi `iam` qua LB vẫn được). `websocket-1` biết sau ~2s; `websocket-2` không hỏi được nên iPhone đang nối vào `websocket-2` vẫn chạy tới khi mạng về (10:10) hoặc token hết hạn (≤ 15 phút), cái nào tới trước. Refresh của iPhone thì bị `iam` từ chối ngay. Nếu chính `iam` chết thì không ai thu hồi được nên không có gì bị lỡ. Alert `ChatimIamSyncStale` khi một node quá 30s chưa hỏi được. Đã chấp nhận ở D218 (bản NATS).
+- Node khởi động đúng lúc không với tới `iam`: sau 10s vẫn `ready` nhưng chưa có danh sách, nên các phiên bị thu hồi trong 15 phút trước đó vẫn qua node này tới khi hỏi được.
 - Khoá nằm trong file JWKS chỉ gỡ được bằng khởi động lại node.
-- Endpoint nội bộ nằm trên cổng công khai của `iam`: bảo vệ bằng secret; LB nên chặn `/internal/` từ internet. Lộ secret chỉ lộ `sid` đã thu hồi và tenant id.
+- Cổng nội bộ không đứng sau LB; trong cụm vẫn bảo vệ bằng secret tới khi có mTLS. Lộ secret chỉ lộ `sid` đã thu hồi và tenant id.
 
 ## 12. Điểm đội tự chọn (anh phản biện)
 
@@ -151,7 +156,7 @@ Không thêm thư viện: `net/http` (client có timeout, TLS mặc định củ
 | # | Task | Test chứng minh gì |
 |---|---|---|
 | 1 | Migration 0002, mọi đường thu hồi ghi `revoked_sessions`, `iat` theo giờ Postgres, job xoá | itest: mỗi đường thu hồi (người dùng, admin, khoá account, đổi/đặt lại mật khẩu, dùng lại refresh) có đúng dòng; khoá tenant đua với refresh không lọt token; job xoá đúng mục hết hạn |
-| 2 | Endpoint JWKS, endpoint thu hồi (secret, ETag), luật chờ 2 phút của `key-activate` | unit: thiếu/sai secret → 401; 304 khi không đổi; khoá riêng không bao giờ trong JWKS; activate sớm bị từ chối |
+| 2 | Cổng nội bộ bật/tắt, endpoint JWKS, endpoint thu hồi (secret, ETag), luật chờ 2 phút của `key-activate` | unit: cổng public không trả `/internal/…`, cổng nội bộ không trả login; tắt từng cổng chạy đúng, tắt cả hai → config lỗi; thiếu/sai secret → 401; 304 khi không đổi; khoá riêng không bao giờ trong JWKS; activate sớm bị từ chối |
 | 3 | `pkg/jwtverify` (`sid`, `iat` bắt buộc; bộ khoá động, ưu tiên file), `devtoken` thêm `sid` | unit: thiếu `sid`/`iat` → từ chối; trùng `kid` khác khoá → giữ khoá file; đổi khoá lúc chạy an toàn khi verify song song (`-race`) |
 | 4 | `pkg/revocation` | unit: `sid`, tenant theo `iat`, gộp không thay, bỏ mục hết hạn + leeway |
 | 5 | `pkg/iamsync` | unit (`synctest`, `httptest`): hỏi định kỳ, 304, hỏi khoá khi `kid` lạ có giới hạn, sẵn sàng sau lần đầu hoặc sau 10s, `iam` chết giữ dữ liệu cũ, metric tuổi đồng bộ |
@@ -174,3 +179,4 @@ Không thêm thư viện: `net/http` (client có timeout, TLS mặc định củ
 | R7 xoay khoá không restart, file dự phòng | `iam` JWKS + lead, `jwtverify`, `iamsync` | 2, 3, 5 | unit 2, 3, 5, e2e 14 | (sau khi xây) |
 | R8 không lọt token sát lúc thu hồi | `iam` store, websocket | 1, 6 | itest đua 1, unit đua 6 | (sau khi xây) |
 | R9 metric + alert | `iamsync`, alerts | 5, 9 | `make alerts-check` | (sau khi xây) |
+| R10 cổng nội bộ riêng, bật/tắt từng cổng | `iam` app + config, node config | 2, 9 | unit 2, config test | (sau khi xây) |
