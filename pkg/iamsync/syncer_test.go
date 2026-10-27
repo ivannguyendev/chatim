@@ -258,3 +258,29 @@ func TestRunStopsWithTheContext(t *testing.T) {
 		<-done
 	})
 }
+
+func TestSharedCopyCountsUnchangedAndBrokenReads(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		now := time.Now()
+		shared := &fakeShared{value: sharedValue(t, now.Add(time.Hour), phoneRevoked(now.Add(16*time.Minute)))}
+		doer := &fakeDoer{keys: okKeys(), revoke: answer{err: errDown}}
+		r := newRig(t, testConfig(), doer, shared)
+		r.start()
+		defer r.stop()
+		<-r.added
+		time.Sleep(2 * time.Second)
+		synctest.Wait()
+		shared.mu.Lock()
+		shared.value = []byte("{broken")
+		shared.mu.Unlock()
+		time.Sleep(2 * time.Second)
+		synctest.Wait()
+		body := metricsText(t, r.syncer)
+		if !strings.Contains(body, `iam_shared_reads_total{result="unchanged"} 1`) || !strings.Contains(body, `iam_shared_reads_total{result="error"} 1`) {
+			t.Fatalf("metrics = %s", body)
+		}
+		if strings.Contains(body, "iam_revocations_age_seconds -") {
+			t.Fatal("a future fetched_at made the age negative")
+		}
+	})
+}

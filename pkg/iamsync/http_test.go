@@ -51,3 +51,43 @@ func TestRealHTTPFetchesListAndKeys(t *testing.T) {
 		t.Fatalf("list or keys not loaded over http (keys set %d)", keys.count())
 	}
 }
+
+func TestRedirectsAreNotFollowed(t *testing.T) {
+	plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"keys":[]}`))
+	}))
+	t.Cleanup(plain.Close)
+	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, plain.URL+r.URL.Path, http.StatusFound)
+	}))
+	t.Cleanup(redirect.Close)
+	cfg := testConfig()
+	cfg.InternalURL, cfg.JWKSURL, cfg.AllowHTTP, cfg.ReadyTimeout = "", redirect.URL+"/.well-known/jwks.json", true, 200*time.Millisecond
+	list, _ := revocation.New(revocation.Config{MaxKeep: time.Minute})
+	keys := &fakeKeys{}
+	syncer, err := iamsync.New(cfg, list, keys, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		syncer.Run(ctx)
+	}()
+	<-syncer.Booted()
+	cancel()
+	<-done
+	if keys.count() != 0 {
+		t.Fatal("keys were taken from a redirect target")
+	}
+}
+
+func TestURLsWithUserinfoAreRefused(t *testing.T) {
+	cfg := testConfig()
+	cfg.InternalURL = "http://user:pass@chatim-iam-1:8081"
+	list, _ := revocation.New(revocation.Config{MaxKeep: time.Minute})
+	if _, err := iamsync.New(cfg, list, &fakeKeys{}, nil, nil, nil); err == nil {
+		t.Fatal("accepted a url with userinfo")
+	}
+}

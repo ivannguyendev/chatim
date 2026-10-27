@@ -65,7 +65,7 @@ func New(cfg Config, list *revocation.List, keys KeySink, shared Shared, doer Do
 		return nil, errors.New("iamsync: list and key sink are required")
 	}
 	if doer == nil {
-		doer = &http.Client{Timeout: cfg.HTTPTimeout}
+		doer = &http.Client{Timeout: cfg.HTTPTimeout, CheckRedirect: refuseRedirect}
 	}
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
@@ -139,6 +139,8 @@ func (s *Syncer) bootIfReady() {
 		s.bootOnce.Do(func() { close(s.booted) })
 	}
 }
+
+func refuseRedirect(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
 func (s *Syncer) fetch(ctx context.Context, url string, header http.Header) (int, http.Header, []byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, s.cfg.HTTPTimeout)

@@ -61,7 +61,7 @@ func (c Config) Validate() error {
 
 func absolute(raw string, allowHTTP bool) bool {
 	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" {
+	if err != nil || u.Host == "" || u.User != nil {
 		return false
 	}
 	return u.Scheme == "https" || (allowHTTP && u.Scheme == "http")

@@ -78,7 +78,9 @@ func (s *Syncer) writeShared(ctx context.Context, now time.Time, body []byte) {
 	}
 	value, err := json.Marshal(sharedValue{FetchedAt: now, Snapshot: body})
 	if err == nil {
-		err = s.shared.Put(ctx, value, s.cfg.SharedTTL)
+		putCtx, cancel := context.WithTimeout(ctx, s.cfg.HTTPTimeout)
+		err = s.shared.Put(putCtx, value, s.cfg.SharedTTL)
+		cancel()
 	}
 	if err != nil {
 		s.stats.sharedWriteErrors.Add(1)
@@ -89,7 +91,9 @@ func (s *Syncer) readShared(ctx context.Context) {
 	if s.shared == nil {
 		return
 	}
-	raw, err := s.shared.Get(ctx)
+	getCtx, cancel := context.WithTimeout(ctx, s.cfg.HTTPTimeout)
+	raw, err := s.shared.Get(getCtx)
+	cancel()
 	if err != nil {
 		s.stats.sharedErrors.Add(1)
 		return
@@ -111,11 +115,16 @@ func (s *Syncer) readShared(ctx context.Context) {
 		s.stats.sharedErrors.Add(1)
 		return
 	}
-	s.apply(snap, time.Now())
+	now := time.Now()
+	s.apply(snap, now)
+	fetched := value.FetchedAt
+	if fetched.After(now) {
+		fetched = now
+	}
 	s.mu.Lock()
 	s.sharedHash, s.listReady = hash, true
-	if value.FetchedAt.After(s.lastList) {
-		s.lastList = value.FetchedAt
+	if fetched.After(s.lastList) {
+		s.lastList = fetched
 	}
 	s.mu.Unlock()
 	s.stats.sharedMerged.Add(1)
