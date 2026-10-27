@@ -1,7 +1,7 @@
 # M6 phần 1: đăng nhập mật khẩu và phiên — tóm tắt
 
-> Ngày: 2026-10-25 · Nhánh `feat/m6` · Trạng thái: **owner duyệt 2026-10-26**; viết lại 2026-10-26 sau khi thêm DPoP (owner) và gộp review plan. Plan chi tiết đang chờ owner "go" code.
-> **Các phần của M6 `iam`:** **(1) đăng nhập mật khẩu + phiên** · (2) thu hồi tới websocket/gateway · (3) quyền + danh bạ · (4) OIDC provider + IdP ngoài + exchange · (5) sẵn sàng go-live.
+> Ngày: 2026-10-25 · Nhánh `feat/m6` · Trạng thái: **đã xây** (2026-10-27, `dev-done` trên `feat/m6`; quyết định D209–D218; kết quả, số đo và chỗ lệch ở mục cuối)
+> **Các phần của M6 `iam`:** **(1) đăng nhập mật khẩu + phiên ✅** · (2) thu hồi tới websocket/gateway · (3) quyền + danh bạ · (4) OIDC provider + IdP ngoài + exchange · (5) sẵn sàng go-live.
 
 ## 1. Phần này làm gì
 
@@ -106,7 +106,7 @@ Refresh và đăng xuất theo đúng dạng OAuth, đường giống Keycloak: 
 - **Khoá account đúng lúc đang đăng nhập:** Lan đọc account (ver 4), đang băm thì admin khoá (ver 5). Transaction tạo phiên ghi `WHERE ver = 4 AND state = 1` → 0 dòng → không có phiên. Tương tự với đổi mật khẩu và khoá tenant.
 - **Chống đoán:**
   - Theo account: sai 5 lần thì mỗi lần sai sau đó phải chờ gấp đôi (1s, 2s… tối đa **1 phút**). Kẻ xấu chỉ làm Lan chậm tối đa 1 phút, không khoá được.
-  - Theo IP: mỗi IP 1 lần/giây, dồn được 10 (mỗi node). Chặn lũ đăng nhập rác làm đầy suất băm.
+  - Theo IP: mỗi IP 20 lần/giây, dồn được 200 (mỗi node; owner 2026-10-27, chỉnh bằng `IAM_LOGIN_IP_RATE`/`IAM_LOGIN_IP_BURST`). Văn phòng ~200 người chung một IP vẫn đăng nhập cùng lúc được; lũ hàng nghìn lần/giây từ một máy bị chặn trước khi băm.
   - Mọi nhánh đều băm đúng một lần và trả cùng câu lỗi. Người ngoài không phân biệt được "không có account" với "sai mật khẩu" hay "đang bị chờ".
   - Mỗi node 16 suất băm (16 × 19 MiB ≈ 304 MiB RAM); quá suất → `503`.
 - **DPoP chống phát lại:** chữ ký có hạn ±60 giây, đúng method và URL (URL dựng từ `IAM_PUBLIC_URL`, không tin header); phiên nhớ 2 `jti` gần nhất, gửi trùng → từ chối. Client phải ký proof mới cho mỗi lần gửi, kể cả gửi lại.
@@ -134,9 +134,9 @@ Refresh và đăng xuất theo đúng dạng OAuth, đường giống Keycloak: 
 
 ## 9. Chi phí và tải
 
-- 100K phiên, refresh mỗi ~12 phút → ~140 refresh/giây; mỗi refresh 1 đọc + 1 transaction. Số đo: `BenchmarkRotateRefresh` (chưa có nguồn, đo trong phần này).
-- Login: một phép băm Argon2id + một proof DPoP. Số đo: `BenchmarkHash` (chưa có nguồn).
-- Đường nóng thật là kiểm token ở websocket/gateway: `BenchmarkVerify` (chưa có nguồn).
+- 100K phiên, refresh mỗi ~12 phút → ~140 refresh/giây; mỗi refresh 1 đọc + 1 transaction. `BenchmarkRotateRefresh`: ~1,7 ms một lần xoay tuần tự (transaction có commit, Postgres trong Docker trên máy dev).
+- Login: một phép băm Argon2id + một proof DPoP. `BenchmarkHash`: ~40 ms và ~19 MB mỗi phép băm.
+- Đường nóng thật là kiểm token ở websocket/gateway: `BenchmarkVerify`: ~121 µs mỗi token; bão 100K kết nối lại tốn ~12 giây CPU chia cho các node.
 - Audit ~1 dòng mỗi login/refresh: ~12M dòng/ngày ở 140/s. Chưa xoá audit cũ; chính sách giữ hỏi owner ở phần 5.
 
 ## 10. Rủi ro thật
@@ -155,7 +155,7 @@ Refresh và đăng xuất theo đúng dạng OAuth, đường giống Keycloak: 
 
 - Access token 15 phút; phiên hết hạn sau 30 ngày không dùng, tối đa 90 ngày.
 - Mật khẩu 12–128 ký tự, không bắt buộc ký tự đặc biệt (NIST 800-63B); mật khẩu tạm 20 ký tự.
-- Sai 5 lần rồi mới bắt chờ, tối đa 1 phút; mỗi IP 1 lần/giây, dồn 10.
+- Sai 5 lần rồi mới bắt chờ, tối đa 1 phút; mỗi IP 20 lần/giây, dồn 200.
 - DPoP bắt buộc cho mọi client; chấp nhận ES256 và EdDSA.
 - `iss` một giá trị ở phần 1; theo realm ở phần 4.
 
@@ -175,13 +175,38 @@ Refresh và đăng xuất theo đúng dạng OAuth, đường giống Keycloak: 
 
 | Yêu cầu | Thành phần | Task (plan chi tiết) | Test | Bằng chứng |
 |---|---|---|---|---|
-| Login mật khẩu Argon2id (owner 2026-10-25, D179) | `password`, `auth` | 2, 8, 10 | unit, e2e 13 | điền sau khi chạy |
-| Admin cấp account, chưa đăng ký, đặt lại mật khẩu (owner 2026-10-25) | lệnh admin | 12 | itest, e2e 13 | điền sau khi chạy |
-| Token Ed25519 + JWKS (D183) | `signing`, bootstrap | 3, 13 | unit, e2e 13 | điền sau khi chạy |
-| Refresh xoay vòng, phát hiện dùng lại | `session`, `auth`, `pgstore` | 4, 7, 8 | unit bảng, itest, e2e 13 | điền sau khi chạy |
-| DPoP gắn refresh token (owner 2026-10-26) | `dpop`, `auth` | 5, 8 | unit DPoP, e2e 13 | điền sau khi chạy |
-| Quản lý và thu hồi phiên (owner 2026-10-25) | `auth`, `api`, lệnh admin | 7, 8, 10, 12 | itest, e2e 13 | điền sau khi chạy |
-| Refresh/revoke OAuth chuẩn (owner 2026-10-26) | `api` | 10 | unit OAuth | điền sau khi chạy |
-| Postgres riêng (owner 2026-10-25) | `pgstore`, compose | 7, 13 | itest, `core-up` | điền sau khi chạy |
-| Chống đoán, không lộ account, audit | `guard`, `auth`, `pgstore` | 6, 7, 8 | unit, itest, e2e 13 | điền sau khi chạy |
-| Không đọc bảng của nhau (D177) | depguard | 11 | `make lint` | điền sau khi chạy |
+| Login mật khẩu Argon2id (owner 2026-10-25, D179) | `password`, `auth` | 2, 8, 10 | unit, e2e 13 | `b08553b`, `32ed082`, `2e59ecd`; e2e 13 PASS |
+| Admin cấp account, chưa đăng ký, đặt lại mật khẩu (owner 2026-10-25) | lệnh admin | 12 | itest, e2e 13 | xem mục Kết quả |
+| Token Ed25519 + JWKS (D183) | `signing`, bootstrap | 3, 13 | unit, e2e 13 | xem mục Kết quả |
+| Refresh xoay vòng, phát hiện dùng lại | `session`, `auth`, `pgstore` | 4, 7, 8 | unit bảng, itest, e2e 13 | xem mục Kết quả |
+| DPoP gắn refresh token (owner 2026-10-26) | `dpop`, `auth` | 5, 8 | unit DPoP, e2e 13 | xem mục Kết quả |
+| Quản lý và thu hồi phiên (owner 2026-10-25) | `auth`, `api`, lệnh admin | 7, 8, 10, 12 | itest, e2e 13 | xem mục Kết quả |
+| Refresh/revoke OAuth chuẩn (owner 2026-10-26) | `api` | 10 | unit OAuth | xem mục Kết quả |
+| Postgres riêng (owner 2026-10-25) | `pgstore`, compose | 7, 13 | itest, `core-up` | xem mục Kết quả |
+| Chống đoán, không lộ account, audit | `guard`, `auth`, `pgstore` | 6, 7, 8 | unit, itest, e2e 13 | xem mục Kết quả |
+| Không đọc bảng của nhau (D177) | depguard | 11 | `make lint` | xem mục Kết quả |
+
+
+## Kết quả (đã xây, 2026-10-27)
+
+**Bằng chứng**
+- Commit trên `feat/m6`: proto `f0cb537`, băm `b08553b`, ký `e17e4a3`, refresh `9c8228a`, DPoP `93dea2e`, chống đoán `c4e9382`, store `7eea16a`, use case `32ed082` + sửa review `020b5d5`, CORS `37e2c23`, API `2e59ecd` + sửa review `c1a6f39`, app `a07aae8`, lệnh admin `dd5d75b`, compose `e591ddb`, e2e `870e581`/`9c27b10`, mức IP `55cd677`, docs `2308458`.
+- `make fmt-check`, `make vet`, `make lint` (0 issues), `make go ARGS="test -race -shuffle=on ./apps/iam/..."` xanh; itest Postgres (`CHATIM_IT_PG_URI`) xanh cho `pgstore` và lệnh admin; `make alerts-check` 29 luật.
+- `make core-up` healthy cả 7 container; `make e2e` PASS 13 phase. Phase 13: log `iam-1` không chứa bí mật nào trong 46 mật khẩu, token và proof đã dùng; log Postgres không chứa mật khẩu role `iam`.
+- Review: plan (2 Critical, 9 Important, đã gộp trước khi code), lượt soát lại DPoP (4 Important, đã gộp), code Task 7+8 (không Critical; 3 Important đã sửa), code Task 10 (không Critical; 3 Important đã sửa).
+
+**Lệch so với plan**
+- Thêm package `keyring` (nạp khoá, signer hiện tại, kiểm Bearer) và tách `admincmd` thành task riêng để file ≤ 350 dòng.
+- `iam-1` ở cổng `127.0.0.1:8084` (8083 đã là `websocket-2`).
+- Mức IP mặc định 20/s dồn 200 thay 1/s dồn 10 (owner 2026-10-27, lý do NAT văn phòng).
+- Chưa có histogram `hash_seconds`, `refresh_seconds`; có counter theo kết quả và gauge. Thêm ở phần 5 nếu cần.
+- e2e phase 13 chạy account bị chờ trước, account chính sau.
+
+**Minor để lại (gộp từ review)**
+- Lần sai mật khẩu của account có thật tốn thêm một lần ghi DB: lệch thời gian nhỏ cạnh phép băm ~40 ms; tenant không tồn tại trả sớm hơn một lần đọc.
+- Chưa audit lần bị chặn theo IP/chờ, refresh khoá khác, account lạ (có metric).
+- Thiếu itest giữ transaction khoá tenant song song với tạo phiên (lập luận khoá `FOR SHARE` đúng); bổ sung khi phần 2 đụng lại store.
+- `revokeWhere` đánh số tham số cứng; chỉ gọi nội bộ với hằng số.
+- Body quá lớn ở `/token` trả 413 (RFC 6749 chỉ có 400); `server_error` 503 là lệch có chủ đích.
+- Phát hiện dùng lại refresh token chỉ trong 20 lần xoay gần nhất; không xét khi phiên đã hết hạn hoặc khoá máy khác (có chủ đích).
+- e2e phase 2 (core, có từ trước M6) hỏng một lần trên dev: client `corecli` gửi lại ngay sau `docker kill` core-1 gặp `grpc: the client connection is closing`; lần chạy sau qua. Ghi vào "Mục mang sang M5".

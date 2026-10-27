@@ -2,7 +2,7 @@
 
 Hạ tầng chat dùng chung (CPaaS nội bộ) cho nhiều sản phẩm: quản lý room, tin nhắn, tương tác realtime hiệu năng cao; lấy lịch sử cực nhanh ở bất kỳ vị trí nào; phát event mạnh tới các app khác kết nối vào. Multi-tenant về mặt logic.
 
-> Trạng thái: Phase 1 (M0 → M4: `core`, Mention App, `websocket`, `gateway`) đã xong và merge `main` (`dev-done`, PR #19, 2026-10-25). Tiếp theo Phase 2: M6 `identity` → M7 media → M8 notification + push → M9 tìm người/nhóm → go-live `v1.0.0` (D207); PoC prod-like và M5 chạy song song khi có hạ tầng. Chi tiết: [roadmap](docs/roadmap.md), kết quả đo: [docs/poc/README.md](docs/poc/README.md), bản đồ code: [INDEXES.csv](INDEXES.csv).
+> Trạng thái: Phase 1 (M0 → M4: `core`, Mention App, `websocket`, `gateway`) đã xong và merge `main` (`dev-done`, PR #19, 2026-10-25). Phase 2 đang làm: M6 `iam` (phần 1 xong trên `feat/m6`) → M7 media → M8 notification + push → M9 tìm người/nhóm → go-live `v1.0.0` (D207); PoC prod-like và M5 chạy song song khi có hạ tầng. Chi tiết: [roadmap](docs/roadmap.md), kết quả đo: [docs/poc/README.md](docs/poc/README.md), bản đồ code: [INDEXES.csv](INDEXES.csv).
 
 ## Kiến trúc
 
@@ -63,7 +63,7 @@ App chỉ publish trên loopback (caller còn được tin qua metadata tới kh
 
 ## Tài liệu
 
-- [Kiến trúc (nguồn sự thật)](docs/architecture.md) · [11 module tính năng](docs/modules/README.md) · [Decision log D1–D207](docs/decision-log.md) · [Danh mục event](docs/events.md)
+- [Kiến trúc (nguồn sự thật)](docs/architecture.md) · [11 module tính năng](docs/modules/README.md) · [Decision log D1–D218](docs/decision-log.md) · [Danh mục event](docs/events.md)
 - Vận hành từng app (biến môi trường, cổng, metric, lệnh): [core](docs/apps/core.md) · [websocket](docs/apps/websocket.md) · [gateway](docs/apps/gateway.md) · [iam](docs/apps/iam.md)
 - [Roadmap](docs/roadmap.md) · [Quy trình git](docs/git-workflow.md) · [Kiểm thử e2e](docs/e2e.md) · [Kết quả PoC](docs/poc/README.md)
 - Nghiên cứu: [cơ chế hệ thống](docs/research/261005-system-mechanisms-synthesis-report.md) · [kiến trúc chat mã nguồn mở](docs/research/260930-opensource-chat-architecture-research.md)

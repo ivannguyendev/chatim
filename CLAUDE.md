@@ -189,7 +189,7 @@ These are `_id`s of MongoDB clustered collections (`members` too), so any histor
 ## Docs
 
 - `docs/architecture.md`: the single source of truth: requirements, principles P1–P8, the data-class framework every plan must use (§4), data model and shard rules, package layout, lifecycle, guarantees with detectors (§8).
-- `docs/decision-log.md`: decisions D1–D207 with rejected alternatives. Add new decisions there.
+- `docs/decision-log.md`: decisions D1–D218 with rejected alternatives. Add new decisions there.
 - `docs/modules/README.md`: the 11 feature guides (01–11; 09 is websocket with the client spec in §11, 11 is the HTTPS gateway): flows, diagrams, error codes, mechanisms.
 - `docs/apps/{core,websocket,gateway}.md`: per-app env vars, ports, admin, metrics and operating commands. `docs/e2e.md`: the 12 e2e phases.
 - `docs/events.md`: the event catalog (streams, subjects, ids, consumers, contract). Update it whenever an event, subject or consumer changes.

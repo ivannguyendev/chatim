@@ -85,7 +85,7 @@ Một `grpc.ClientConn` duy nhất tới mọi địa chỉ trong `GW_CORE_ADDRS
 
 | Hạn chế | Đánh đổi |
 |---|---|
-| Không thu hồi token ở Phase 1 (owner 2026-10-23) | Token ngắn (≤ 15 phút); hết hạn → 401 ở lần gọi kế; thu hồi thuộc `identity` Phase 2 |
+| Không thu hồi token ở Phase 1 (owner 2026-10-23) | Token ngắn (≤ 15 phút); hết hạn → 401 ở lần gọi kế; thu hồi thuộc `iam` Phase 2 |
 | JWKS đọc một lần lúc khởi động | Đổi khoá = thêm khoá mới vào JWKS rồi rolling restart, như websocket |
 | Giới hạn theo user là của từng node | N node thì một user tối đa N × 50 lệnh/giây; người bị đẩy khỏi LRU rồi quay lại được thêm tối đa một burst |
 | Trần toàn node kiểm trước token | Lũ request không token vẫn chiếm chỗ tới trần; chặn lũ là việc của edge/load balancer; không giới hạn theo IP vì sau load balancer IP không tin được |

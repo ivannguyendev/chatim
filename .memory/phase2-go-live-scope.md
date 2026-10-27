@@ -1,6 +1,6 @@
 ---
 name: phase2-go-live-scope
-description: Owner 2026-10-25 (D207) - go-live v1.0.0 is for a new product (no migration) and needs identity, media, push and people/group search; Phase 2 order M6 identity, M7 media, M8 notification, M9 search
+description: Owner 2026-10-25 (D207) - go-live v1.0.0 is for a new product (no migration) and needs iam (D209), media, push and people/group search; Phase 2 order M6 iam, M7 media, M8 notification, M9 search
 metadata:
   type: project
 ---
