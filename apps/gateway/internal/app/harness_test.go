@@ -24,6 +24,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/ivannguyendev/chatim/apps/gateway/internal/config"
+	"github.com/ivannguyendev/chatim/pkg/iamsync"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/pkg/pb/chatim/v1/chatimv1connect"
 )
@@ -125,7 +126,7 @@ func testConfig(keysFile string, cores ...string) config.Config {
 		BodyMax: 128 << 10, UserRate: 50, UserBurst: 100, UserInflight: 32, UserLimiters: 1000, InflightMax: 100,
 		DrainDelay: 100 * time.Millisecond, ShutdownBudget: 15 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: time.Minute,
-		MaxHeaderBytes: 16 << 10, H2MaxStreams: 250, RequestDeadline: 5 * time.Second,
+		MaxHeaderBytes: 16 << 10, H2MaxStreams: 250, RequestDeadline: 5 * time.Second, IAM: iamsync.Defaults(),
 	}
 }
 
@@ -208,8 +209,12 @@ func receive[T any](t *testing.T, ch <-chan T, what string) T {
 }
 
 func runAsync(ctx context.Context, cfg config.Config, log *slog.Logger, lis *listeners) chan error {
+	return runAsyncWith(ctx, cfg, log, Deps{Listen: lis.listen})
+}
+
+func runAsyncWith(ctx context.Context, cfg config.Config, log *slog.Logger, deps Deps) chan error {
 	done := make(chan error, 1)
-	go func() { done <- Run(ctx, cfg, log, Deps{Listen: lis.listen}) }()
+	go func() { done <- Run(ctx, cfg, log, deps) }()
 	return done
 }
 

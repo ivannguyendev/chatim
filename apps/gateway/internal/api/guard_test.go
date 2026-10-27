@@ -198,7 +198,7 @@ func TestMetricSourcesArePrebuilt(t *testing.T) {
 	for _, s := range h.handler.Sources() {
 		names[s.Name]++
 	}
-	if names["auth_failures_total"] != 18 || names["rate_limited_total"] != 2 || names["inflight_rejected_total"] != 1 || names["body_too_large_total"] != 1 || names["commands_total"] != 1 || names["inflight"] != 1 {
+	if names["auth_failures_total"] != 22 || names["rate_limited_total"] != 2 || names["inflight_rejected_total"] != 1 || names["body_too_large_total"] != 1 || names["commands_total"] != 1 || names["inflight"] != 1 {
 		t.Fatalf("sources = %v", names)
 	}
 	client := chatimv1connect.NewCoreServiceClient(h.server.Client(), h.server.URL, withToken(h.token(t, claims{})))

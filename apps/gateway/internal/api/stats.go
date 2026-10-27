@@ -8,13 +8,16 @@ import (
 )
 
 const (
-	reasonMissing  = "missing"
-	reasonRepeated = "repeated"
-	reasonTooLong  = "too long"
-	reasonBadValue = "bad header"
-	reasonOther    = "other"
-	limitRate      = "rate"
-	limitInflight  = "inflight"
+	reasonMissing       = "missing"
+	reasonRepeated      = "repeated"
+	reasonTooLong       = "too long"
+	reasonBadValue      = "bad header"
+	reasonOther         = "other"
+	reasonRevoked       = "revoked"
+	reasonTenantRevoked = "tenant_revoked"
+	reasonKeyPending    = "key_pending"
+	limitRate           = "rate"
+	limitInflight       = "inflight"
 )
 
 var authReasons = []string{
@@ -23,7 +26,7 @@ var authReasons = []string{
 	string(jwtverify.ReasonKeyID), string(jwtverify.ReasonType), string(jwtverify.ReasonIssuer),
 	string(jwtverify.ReasonAudience), string(jwtverify.ReasonExpired), string(jwtverify.ReasonNotYetValid),
 	string(jwtverify.ReasonMissingClaim), string(jwtverify.ReasonSubject), string(jwtverify.ReasonTenant),
-	string(jwtverify.ReasonClaims),
+	string(jwtverify.ReasonClaims), string(jwtverify.ReasonSession), reasonRevoked, reasonTenantRevoked, reasonKeyPending,
 }
 
 type stats struct {

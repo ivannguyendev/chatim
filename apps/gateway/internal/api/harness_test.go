@@ -114,6 +114,7 @@ type harness struct {
 	logs    *syncBuffer
 	panics  atomic.Bool
 	served  chan struct{}
+	revoked *fakeRevocations
 }
 
 type syncBuffer struct {
@@ -168,8 +169,9 @@ func newHarness(t *testing.T, l limits) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
+	h.revoked = newFakeRevocations(t)
 	h.handler, err = api.New(api.Options{
-		Forwarder: fwd, Verifier: verifier, Gate: gate, Users: users, BodyMax: 4 << 10,
+		Forwarder: fwd, Verifier: verifier, Revocations: h.revoked, Gate: gate, Users: users, BodyMax: 4 << 10,
 		CORSOrigins: []string{testOrigin}, Log: slog.New(slog.NewJSONHandler(h.logs, nil)),
 	})
 	if err != nil {
@@ -213,8 +215,8 @@ func startCore(t *testing.T, core *fakeCore) corecall.Conn {
 }
 
 type claims struct {
-	tenant, user, issuer, audience string
-	expires                        time.Time
+	tenant, user, issuer, audience, session, kid string
+	expires                                      time.Time
 }
 
 func (h *harness) token(t *testing.T, c claims) string {
@@ -234,8 +236,14 @@ func (h *harness) token(t *testing.T, c claims) string {
 	if c.expires.IsZero() {
 		c.expires = time.Now().Add(time.Hour)
 	}
-	tok := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{"iss": c.issuer, "aud": c.audience, "sub": c.user, "tid": c.tenant, "sid": "s1", "iat": c.expires.Add(-time.Hour).Unix(), "exp": c.expires.Unix()})
-	tok.Header["kid"] = testKID
+	if c.session == "" {
+		c.session = "s1"
+	}
+	if c.kid == "" {
+		c.kid = testKID
+	}
+	tok := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{"iss": c.issuer, "aud": c.audience, "sub": c.user, "tid": c.tenant, "sid": c.session, "iat": c.expires.Add(-time.Hour).Unix(), "exp": c.expires.Unix()})
+	tok.Header["kid"] = c.kid
 	signed, err := tok.SignedString(h.priv)
 	if err != nil {
 		t.Fatal(err)

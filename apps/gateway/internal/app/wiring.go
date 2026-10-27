@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"slices"
 
+	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/proto"
@@ -16,6 +17,7 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/admin"
 	"github.com/ivannguyendev/chatim/pkg/corecall"
 	"github.com/ivannguyendev/chatim/pkg/grpcclient"
+	"github.com/ivannguyendev/chatim/pkg/iamsync"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 	"github.com/ivannguyendev/chatim/pkg/metrics"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
@@ -35,15 +37,43 @@ func wire(cfg config.Config, log *slog.Logger, deps Deps) (*node, error) {
 	if err != nil {
 		return nil, err
 	}
-	n, err := wireServers(cfg, log, verifier, conn)
+	shared := sharedRedis(cfg)
+	n, err := wireServers(cfg, log, verifier, conn, shared, deps.IAMDoer)
 	if err != nil {
 		_ = conn.Close()
+		if shared != nil {
+			_ = shared.Close()
+		}
 		return nil, err
 	}
 	return n, nil
 }
 
-func wireServers(cfg config.Config, log *slog.Logger, verifier *jwtverify.Verifier, conn *grpc.ClientConn) (*node, error) {
+func sharedRedis(cfg config.Config) *redis.Client {
+	if cfg.SharedRedis.Addr == "" {
+		return nil
+	}
+	r := cfg.SharedRedis
+	return redis.NewClient(&redis.Options{
+		Addr: r.Addr, DB: r.DB, Password: r.Password, ClientName: "chatim-gateway-iam-sync",
+		DialTimeout: r.Timeout, ReadTimeout: r.Timeout, WriteTimeout: r.Timeout, PoolSize: 2,
+		MaxRetries: 1, DisableIdentity: true, ContextTimeoutEnabled: true,
+	})
+}
+
+func wireServers(cfg config.Config, log *slog.Logger, verifier *jwtverify.Verifier, conn *grpc.ClientConn, shared *redis.Client, doer iamsync.Doer) (*node, error) {
+	list, err := iamsync.NewList(cfg.JWTLeeway)
+	if err != nil {
+		return nil, err
+	}
+	var copyStore iamsync.Shared
+	if shared != nil {
+		copyStore = iamsync.NewRedisShared(shared)
+	}
+	sync, err := iamsync.New(cfg.IAM, list, verifier, copyStore, doer, log)
+	if err != nil {
+		return nil, err
+	}
 	core := corecall.Conn{Core: chatimv1.NewCoreServiceClient(conn), Mention: chatimv1.NewMentionServiceClient(conn)}
 	fwd, err := corecall.New(corecall.Options{
 		Methods:  corecall.Request(),
@@ -62,13 +92,13 @@ func wireServers(cfg config.Config, log *slog.Logger, verifier *jwtverify.Verifi
 		return nil, err
 	}
 	handler, err := api.New(api.Options{
-		Forwarder: fwd, Verifier: verifier, Gate: gate, Users: users,
+		Forwarder: fwd, Verifier: verifier, Revocations: sync, Gate: gate, Users: users,
 		BodyMax: cfg.BodyMax, CORSOrigins: cfg.CORSOrigins, Log: log,
 	})
 	if err != nil {
 		return nil, err
 	}
-	metricsHandler, err := metrics.Handler(metricsSubsystem, metricSources(handler, fwd))
+	metricsHandler, err := metrics.Handler(metricsSubsystem, slices.Concat(metricSources(handler, fwd), sync.Sources()))
 	if err != nil {
 		return nil, err
 	}
@@ -77,6 +107,8 @@ func wireServers(cfg config.Config, log *slog.Logger, verifier *jwtverify.Verifi
 		cfg:   cfg,
 		log:   log,
 		conn:  conn,
+		sync:  sync,
+		redis: shared,
 		admin: adm,
 		http:  newHTTPServer(cfg, handler, log),
 		ready: &readiness{admin: adm, log: log},

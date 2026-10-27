@@ -24,6 +24,7 @@ const msgNotSupported = "request not supported"
 type Options struct {
 	Forwarder   *corecall.Forwarder
 	Verifier    Verifier
+	Revocations Revocations
 	Gate        *limit.Gate
 	Users       *limit.Users
 	BodyMax     int
@@ -37,21 +38,22 @@ type Handler struct {
 }
 
 func New(opts Options) (*Handler, error) {
-	if opts.Forwarder == nil || opts.Verifier == nil || opts.Gate == nil || opts.Users == nil || opts.Log == nil {
-		return nil, errors.New("api: forwarder, verifier, gate, users and log are required")
+	if opts.Forwarder == nil || opts.Verifier == nil || opts.Revocations == nil || opts.Gate == nil || opts.Users == nil || opts.Log == nil {
+		return nil, errors.New("api: forwarder, verifier, revocations, gate, users and log are required")
 	}
 	if opts.BodyMax <= 0 {
 		return nil, errors.New("api: body max must be positive")
 	}
 	st := newStats(opts.Gate.InFlight)
 	c := &chain{
-		verifier: opts.Verifier,
-		gate:     opts.Gate,
-		users:    opts.Users,
-		bodyMax:  int64(opts.BodyMax),
-		stats:    st,
-		log:      opts.Log,
-		authLog:  rate.NewLimiter(rate.Every(time.Second), 1),
+		verifier:    opts.Verifier,
+		revocations: opts.Revocations,
+		gate:        opts.Gate,
+		users:       opts.Users,
+		bodyMax:     int64(opts.BodyMax),
+		stats:       st,
+		log:         opts.Log,
+		authLog:     rate.NewLimiter(rate.Every(time.Second), 1),
 	}
 	mux, err := c.procedures(opts.Forwarder, opts.BodyMax)
 	if err != nil {

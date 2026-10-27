@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/pkg/envconfig"
+	"github.com/ivannguyendev/chatim/pkg/iamsync"
 )
 
 const (
@@ -39,6 +40,15 @@ type Config struct {
 	MaxHeaderBytes    int
 	H2MaxStreams      int
 	RequestDeadline   time.Duration
+	IAM               iamsync.Config
+	SharedRedis       SharedRedis
+}
+
+type SharedRedis struct {
+	Addr     string
+	DB       int
+	Password string
+	Timeout  time.Duration
 }
 
 func AdminAddr() string { return envconfig.String("GW_ADMIN_ADDR", defaultAdminAddr) }
@@ -70,7 +80,18 @@ func Load() (Config, error) {
 		MaxHeaderBytes:    p.number("GW_MAX_HEADER_BYTES", 16<<10),
 		H2MaxStreams:      p.number("GW_H2_MAX_STREAMS", 250),
 		RequestDeadline:   deadline,
+		SharedRedis: SharedRedis{
+			Addr:     envconfig.String("GW_SHARED_REDIS_ADDR", ""),
+			DB:       p.number("GW_SHARED_REDIS_DB", 0),
+			Password: p.secret("GW_SHARED_REDIS_PASSWORD"),
+			Timeout:  p.span("GW_SHARED_REDIS_TIMEOUT", 500*time.Millisecond),
+		},
 	}
+	iam, err := iamsync.FromEnv("GW")
+	if err != nil {
+		p.fail(err)
+	}
+	c.IAM = iam
 	if err := errors.Join(p.errs...); err != nil {
 		return Config{}, err
 	}
@@ -105,6 +126,9 @@ func (c Config) LogValue() slog.Value {
 		slog.Int("max_header_bytes", c.MaxHeaderBytes),
 		slog.Int("h2_max_streams", c.H2MaxStreams),
 		slog.Duration("request_deadline", c.RequestDeadline),
+		slog.Any("iam", c.IAM),
+		slog.Group("shared_redis", slog.String("addr", c.SharedRedis.Addr), slog.Int("db", c.SharedRedis.DB),
+			slog.Bool("auth", c.SharedRedis.Password != ""), slog.Duration("timeout", c.SharedRedis.Timeout)),
 	)
 }
 
@@ -128,6 +152,14 @@ func (p *parser) fail(err error) { p.errs = append(p.errs, err) }
 
 func (p *parser) number(key string, def int) int {
 	v, err := envconfig.Int(key, def)
+	if err != nil {
+		p.fail(err)
+	}
+	return v
+}
+
+func (p *parser) secret(key string) string {
+	v, err := envconfig.Secret(key)
 	if err != nil {
 		p.fail(err)
 	}

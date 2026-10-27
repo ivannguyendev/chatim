@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/gateway/internal/config"
+	"github.com/ivannguyendev/chatim/pkg/iamsync"
 )
 
 var envKeys = []string{
@@ -74,6 +75,8 @@ func TestLoadDefaults(t *testing.T) {
 		MaxHeaderBytes:    16 << 10,
 		H2MaxStreams:      250,
 		RequestDeadline:   5 * time.Second,
+		IAM:               iamsync.Defaults(),
+		SharedRedis:       config.SharedRedis{Timeout: 500 * time.Millisecond},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Load() = %+v\nwant %+v", got, want)
@@ -102,7 +105,7 @@ func TestLoadReadsOverrides(t *testing.T) {
 }
 
 func TestLogValueCoversEveryField(t *testing.T) {
-	setEnv(t, map[string]string{"GW_CORS_ORIGINS": "https://chat.example.com"})
+	setEnv(t, map[string]string{"GW_CORS_ORIGINS": "https://chat.example.com", "GW_SHARED_REDIS_ADDR": "chatim-redis-presence:6379", "GW_SHARED_REDIS_PASSWORD": "redis-secret"})
 	cfg := mustLoad(t)
 	attrs := cfg.LogValue().Group()
 	if got, want := len(attrs), reflect.TypeFor[config.Config]().NumField(); got != want {
@@ -110,6 +113,9 @@ func TestLogValueCoversEveryField(t *testing.T) {
 	}
 	var buf bytes.Buffer
 	slog.New(slog.NewJSONHandler(&buf, nil)).Info("config loaded", "config", cfg)
+	if strings.Contains(buf.String(), "redis-secret") {
+		t.Fatalf("summary leaks the shared redis password: %s", buf.String())
+	}
 	for _, want := range []string{`"core_addrs":"chatim-core-1:9000,chatim-core-2:9000"`, `"cors_origins":"https://chat.example.com"`, `"body_max":131072`} {
 		if !strings.Contains(buf.String(), want) {
 			t.Errorf("summary %s misses %s", buf.String(), want)

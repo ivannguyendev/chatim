@@ -16,6 +16,8 @@ type readiness struct {
 	log      *slog.Logger
 	mu       sync.Mutex
 	core     bool
+	booted   bool
+	ready    bool
 	stopping bool
 }
 
@@ -33,10 +35,23 @@ func (r *readiness) watch(ctx context.Context, conn *grpc.ClientConn) {
 func (r *readiness) coreReady(ctx context.Context, ready bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.stopping || ready == r.core {
+	r.core = ready
+	r.update(ctx)
+}
+
+func (r *readiness) iamBooted(ctx context.Context) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.booted = true
+	r.update(ctx)
+}
+
+func (r *readiness) update(ctx context.Context) {
+	ready := r.core && r.booted
+	if r.stopping || ready == r.ready {
 		return
 	}
-	r.core = ready
+	r.ready = ready
 	r.admin.SetReady(ready)
 	if ready {
 		r.log.InfoContext(ctx, "gateway ready")

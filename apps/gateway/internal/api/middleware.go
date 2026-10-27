@@ -12,6 +12,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/gateway/internal/limit"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
+	"github.com/ivannguyendev/chatim/pkg/revocation"
 )
 
 const (
@@ -19,20 +20,27 @@ const (
 	msgUnauthorized  = "missing or invalid token"
 	msgTooMany       = "too many requests, retry later"
 	msgBusy          = "gateway busy, retry later"
+	msgKeyPending    = "signing key not loaded yet, retry later"
 )
 
 type Verifier interface {
 	Verify(token string) (jwtverify.Claims, error)
 }
 
+type Revocations interface {
+	Check(claims jwtverify.Claims) revocation.Verdict
+	UnknownKey(kid string) bool
+}
+
 type chain struct {
-	verifier Verifier
-	gate     *limit.Gate
-	users    *limit.Users
-	bodyMax  int64
-	stats    *stats
-	log      *slog.Logger
-	authLog  *rate.Limiter
+	verifier    Verifier
+	revocations Revocations
+	gate        *limit.Gate
+	users       *limit.Users
+	bodyMax     int64
+	stats       *stats
+	log         *slog.Logger
+	authLog     *rate.Limiter
 }
 
 func (c *chain) gated(next http.Handler) http.Handler {
@@ -55,6 +63,10 @@ func (c *chain) authenticated(next http.Handler) http.Handler {
 			if c.authLog.Allow() {
 				c.log.WarnContext(r.Context(), "gateway auth failed", "reason", label)
 			}
+			if reason == reasonKeyPending {
+				writeError(w, connect.CodeUnavailable, msgKeyPending)
+				return
+			}
 			writeError(w, connect.CodeUnauthenticated, msgUnauthorized)
 			return
 		}
@@ -69,7 +81,18 @@ func (c *chain) authenticate(h http.Header) (jwtverify.Claims, string) {
 	}
 	claims, err := c.verifier.Verify(token)
 	if err != nil {
-		return jwtverify.Claims{}, string(jwtverify.ReasonOf(err))
+		reason := jwtverify.ReasonOf(err)
+		if reason == jwtverify.ReasonKeyID && c.revocations.UnknownKey(jwtverify.KeyIDOf(token)) {
+			return jwtverify.Claims{}, reasonKeyPending
+		}
+		return jwtverify.Claims{}, string(reason)
+	}
+	switch c.revocations.Check(claims) {
+	case revocation.SessionRevoked:
+		return jwtverify.Claims{}, reasonRevoked
+	case revocation.TenantRevoked:
+		return jwtverify.Claims{}, reasonTenantRevoked
+	case revocation.Allowed:
 	}
 	return claims, ""
 }
