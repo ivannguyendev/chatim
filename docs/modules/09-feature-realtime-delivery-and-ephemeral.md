@@ -461,7 +461,7 @@ Ví dụ: Lan ở `websocket-1`, Nam cùng node, Hòa ở `websocket-2`; Nam và
 5. Người đó đã có 10 kết nối trên node → đóng **4009**, không gọi core, không đóng dấu online.
 6. Nạp room từ core → `ready`; nạp lỗi → `load_failed{retry_after_ms}` (kết nối giữ, §11.3).
 
-Gia hạn (đang chạy, gửi `auth`): cùng (tenant, user) → hạn mới, **không có frame trả lời**, không tốn suất đăng nhập; token sai, đã hết hạn hay của người khác → `auth_required{INVALID}`, kết nối **chạy tiếp bằng token đang có**. Muốn đổi người thì mở kết nối mới.
+Gia hạn (đang chạy, gửi `auth`): cùng (tenant, user) → hạn mới, **không có frame trả lời**, không tốn suất đăng nhập; token sai, đã hết hạn hay của người khác → `auth_required{INVALID}`, kết nối **chạy tiếp bằng token đang có**. Token của phiên đã bị thu hồi (M6 phần 2) → kết nối về chờ, `auth_required{REVOKED}`; token cấp trước lúc tenant bị khoá → đóng `4003`. Muốn đổi người thì mở kết nối mới.
 
 Hết hạn (đang chạy): server gỡ kết nối khỏi bảng quan tâm, bỏ danh sách hỏi online và room đang mở, về chờ, gửi `auth_required{EXPIRED}`. Lệnh server đã nhận trước lúc đó chạy bằng danh tính lúc nhận và vẫn được trả lời. Một `auth` gửi đúng lúc hết hạn có thể được xử lý như đăng nhập, nên client nhận `ready` mà không thấy `auth_required` trước đó.
 

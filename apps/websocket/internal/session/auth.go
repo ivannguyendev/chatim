@@ -47,7 +47,7 @@ func (c *connection) login(token string) {
 		c.retryLater(authThrottled, throttleRetry)
 		return
 	}
-	claims, ok := c.verify(token)
+	claims, ok := c.verify(token, false)
 	if !ok {
 		return
 	}
@@ -58,7 +58,7 @@ func (c *connection) login(token string) {
 	c.enter(claims)
 }
 
-func (c *connection) verify(token string) (jwtverify.Claims, bool) {
+func (c *connection) verify(token string, running bool) (jwtverify.Claims, bool) {
 	claims, err := c.server.verifier.Verify(token)
 	if err == nil {
 		return claims, true
@@ -68,6 +68,10 @@ func (c *connection) verify(token string) (jwtverify.Claims, bool) {
 		return jwtverify.Claims{}, false
 	}
 	prompt := c.refused(err)
+	if running {
+		c.sendAuthRequired(promptInvalid)
+		return jwtverify.Claims{}, false
+	}
 	c.setReason(prompt)
 	c.sendAuthRequired(prompt)
 	return jwtverify.Claims{}, false
@@ -157,19 +161,19 @@ func (c *connection) startRunning(claims jwtverify.Claims, member *interest.Conn
 }
 
 func (c *connection) renew(token string) {
-	claims, ok := c.verify(token)
+	claims, ok := c.verify(token, true)
 	if !ok {
 		return
 	}
-	verdict := c.server.revocations.Check(claims)
-	switch c.renewWith(claims, verdict) {
+	outcome, verdict := c.renewWith(claims)
+	switch outcome {
 	case renewed:
 		c.server.stats.authed(authOK)
 	case renewOtherIdentity:
 		c.server.authRefused(authInvalid, reasonIdentityChange)
 		c.sendAuthRequired(promptInvalid)
 	case renewWaiting:
-		if verdict != revocation.Allowed {
+		if verdict := c.server.revocations.Check(claims); verdict != revocation.Allowed {
 			c.blocked(verdict, true)
 			return
 		}
@@ -180,22 +184,26 @@ func (c *connection) renew(token string) {
 	}
 }
 
-func (c *connection) renewWith(claims jwtverify.Claims, verdict revocation.Verdict) renewal {
+func (c *connection) renewWith(claims jwtverify.Claims) (renewal, revocation.Verdict) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	switch {
 	case c.finished:
-		return renewFinished
+		return renewFinished, revocation.Allowed
 	case !c.running:
-		return renewWaiting
+		return renewWaiting, revocation.Allowed
 	case claims.User != c.claims.User || claims.Tenant != c.claims.Tenant:
-		return renewOtherIdentity
-	case verdict != revocation.Allowed:
-		return renewBlocked
+		return renewOtherIdentity, revocation.Allowed
+	}
+	if verdict := c.server.revocations.Check(claims); verdict != revocation.Allowed {
+		if verdict == revocation.SessionRevoked {
+			c.toWaiting(promptRevoked)
+		}
+		return renewBlocked, verdict
 	}
 	c.claims = claims
 	c.armExpiry(time.Until(c.deadlineOf(claims)))
-	return renewed
+	return renewed, revocation.Allowed
 }
 
 func (c *connection) armExpiry(after time.Duration) {

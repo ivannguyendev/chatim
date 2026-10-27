@@ -59,9 +59,12 @@ func TestRevokedSessionIsRefusedAtLoginAndRenewal(t *testing.T) {
 			t.Fatalf("open %v revoked auths %v", waiting.isOpen(), h.authCount("revoked"))
 		}
 		running := h.readyClientWith(h.sessionToken("laptop-token", "laptop", time.Now()))
-		time.Sleep(time.Second)
 		running.auth("phone-token")
 		running.expectAuthRequired(promptRevoked)
+		synctest.Wait()
+		if h.interestUsers() != 0 {
+			t.Fatal("renewing with a revoked session left the connection running")
+		}
 		waiting.close()
 		running.close()
 	})
@@ -142,4 +145,56 @@ func keyIDError(t *testing.T) error {
 		t.Fatalf("want an unknown kid error, got %v", err)
 	}
 	return err
+}
+
+func TestRenewRacingARevokeNeverInstallsTheRevokedSession(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		h := newHarness(t, testOptions())
+		tc := h.readyClientWith(h.sessionToken("laptop-token", "laptop", time.Now()))
+		renewal := h.sessionToken("phone-token", "phone", time.Now())
+		release := h.verifier.holdToken(renewal)
+		tc.auth(renewal)
+		synctest.Wait()
+		h.revokeSession("phone")
+		close(release)
+		tc.expectAuthRequired(promptRevoked)
+		synctest.Wait()
+		if h.interestUsers() != 0 {
+			t.Fatal("a renewal that raced the revoke kept the connection running")
+		}
+		tc.close()
+	})
+}
+
+func TestRevokeLeavesWaitingConnectionsAlone(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		h := newHarness(t, testOptions())
+		tc := h.dial(true)
+		synctest.Wait()
+		h.revokeSession("phone")
+		synctest.Wait()
+		tc.noFrame()
+		if !tc.isOpen() || h.unauth() != 1 {
+			t.Fatalf("open %v unauth %d", tc.isOpen(), h.unauth())
+		}
+		tc.close()
+	})
+}
+
+func TestRevokedConnectionClosesAfterTheAuthGrace(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		opts := testOptions()
+		h := newHarness(t, opts)
+		tc := h.readyClientWith(h.sessionToken("phone-token", "phone", time.Now()))
+		h.revokeSession("phone")
+		tc.expectAuthRequired(promptRevoked)
+		synctest.Wait()
+		if h.unauth() != 1 {
+			t.Fatalf("unauth = %d after the revoke, want 1", h.unauth())
+		}
+		tc.keepAlive(opts.HeartbeatTimeout/2, opts.AuthGrace+opts.HeartbeatTimeout)
+		if got := tc.waitClosed(); got != CodeUnauthenticated {
+			t.Fatalf("closed with %d, want %d after the grace", got, CodeUnauthenticated)
+		}
+	})
 }
