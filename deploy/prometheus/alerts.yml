@@ -216,3 +216,31 @@ groups:
           severity: warning
         annotations:
           summary: iam has been getting Postgres errors for 5m; logins and refreshes fail with Unavailable.
+  - name: chatim-iam-sync
+    rules:
+      - alert: ChatimIamSyncStale
+        expr: |
+          max by (instance) (chatim_websocket_iam_revocations_age_seconds * on (instance) (chatim_websocket_iam_sync_enabled{kind="revocations"} == 1)) > 30
+          or
+          max by (instance) (chatim_gateway_iam_revocations_age_seconds * on (instance) (chatim_gateway_iam_sync_enabled{kind="revocations"} == 1)) > 30
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: A websocket or gateway node has not refreshed the iam revocation list from iam or the shared redis copy for over 30s; tokens revoked since then still work on that node until they expire.
+      - alert: ChatimIamKeysStale
+        expr: |
+          max by (instance) (chatim_websocket_iam_keys_age_seconds * on (instance) (chatim_websocket_iam_sync_enabled{kind="keys"} == 1)) > 180
+          or
+          max by (instance) (chatim_gateway_iam_keys_age_seconds * on (instance) (chatim_gateway_iam_sync_enabled{kind="keys"} == 1)) > 180
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: A websocket or gateway node has not fetched the iam JWKS for over 3 minutes; tokens signed by a newly activated key are refused there.
+      - alert: ChatimJwksConflict
+        expr: sum by (instance) (increase(chatim_websocket_jwks_conflicts_total[10m])) > 0 or sum by (instance) (increase(chatim_gateway_jwks_conflicts_total[10m])) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: iam published a key whose kid the node key file holds with a different key; the iam key is ignored there. Check the JWKS file and the iam signing keys.

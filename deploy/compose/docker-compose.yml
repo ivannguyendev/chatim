@@ -62,6 +62,8 @@ x-iam-env: &iam-env
   IAM_PG_URI: postgres://iam@chatim-postgres:5432/chatim_iam
   IAM_PG_PASSWORD_FILE: /run/secrets/iam_pg_password
   IAM_KEY_ENCRYPTION_KEY_FILE: /run/secrets/iam_key_encryption_key
+  IAM_NODE_SECRET_FILE: /run/secrets/iam_node_secret
+  IAM_KEY_ACTIVATE_LEAD: 10s
   IAM_PUBLIC_URL: http://chatim-iam-1:8080
   IAM_ISSUER: chatim-dev
   IAM_AUDIENCE: chatim-websocket
@@ -76,10 +78,10 @@ x-websocket: &websocket
   ulimits:
     nofile: 65536
   stop_grace_period: 18s
-  secrets: [redis_password, redis_presence_password, ws_jwks]
+  secrets: [redis_password, redis_presence_password, ws_jwks, iam_node_secret]
   depends_on:
-    iam-bootstrap:
-      condition: service_completed_successfully
+    iam-1:
+      condition: service_healthy
     redis:
       condition: service_healthy
     redis-presence:
@@ -104,6 +106,11 @@ x-websocket-env: &websocket-env
   WS_JWT_KEYS_FILE: /run/secrets/ws_jwks
   WS_JWT_ISSUER: chatim-dev
   WS_JWT_AUDIENCE: chatim-websocket
+  WS_IAM_INTERNAL_URL: http://chatim-iam-1:8081
+  WS_IAM_SECRET_FILE: /run/secrets/iam_node_secret
+  WS_IAM_JWKS_URL: http://chatim-iam-1:8080/.well-known/jwks.json
+  WS_IAM_KEYS_INTERVAL: 10s
+  WS_IAM_ALLOW_HTTP: "true"
   NATS_URL: nats://chatim-nats:4222
   GOMEMLIMIT: 1600MiB
 
@@ -301,7 +308,7 @@ services:
     profiles: ["app"]
     user: "${CHATIM_UID:-65532}:${CHATIM_GID:-65532}"
     command: ["bootstrap", "-jwks", "/keys/jwks.json"]
-    secrets: [iam_pg_password, iam_key_encryption_key]
+    secrets: [iam_pg_password, iam_key_encryption_key, iam_node_secret]
     environment:
       <<: *iam-env
     volumes:
@@ -318,7 +325,7 @@ services:
     restart: unless-stopped
     mem_limit: 1g
     stop_grace_period: 30s
-    secrets: [iam_pg_password, iam_key_encryption_key]
+    secrets: [iam_pg_password, iam_key_encryption_key, iam_node_secret]
     environment:
       <<: *iam-env
     ports:
@@ -377,19 +384,28 @@ services:
     restart: unless-stopped
     mem_limit: 1g
     stop_grace_period: 18s
-    secrets: [ws_jwks]
+    secrets: [ws_jwks, iam_node_secret, redis_presence_password]
     environment:
       GW_CORE_ADDRS: chatim-core-1:9000,chatim-core-2:9000
       GW_JWT_KEYS_FILE: /run/secrets/ws_jwks
       GW_JWT_ISSUER: chatim-dev
       GW_JWT_AUDIENCE: chatim-websocket
+      GW_IAM_INTERNAL_URL: http://chatim-iam-1:8081
+      GW_IAM_SECRET_FILE: /run/secrets/iam_node_secret
+      GW_IAM_JWKS_URL: http://chatim-iam-1:8080/.well-known/jwks.json
+      GW_IAM_KEYS_INTERVAL: 10s
+      GW_IAM_ALLOW_HTTP: "true"
+      GW_SHARED_REDIS_ADDR: chatim-redis-presence:6379
+      GW_SHARED_REDIS_PASSWORD_FILE: /run/secrets/redis_presence_password
       GW_CORS_ORIGINS: ${GW_CORS_ORIGINS:-http://localhost:3000}
       GOMEMLIMIT: 800MiB
     ports:
       - "127.0.0.1:${GW1_PORT:-8082}:8080"
     depends_on:
-      iam-bootstrap:
-        condition: service_completed_successfully
+      iam-1:
+        condition: service_healthy
+      redis-presence:
+        condition: service_healthy
       core-1:
         condition: service_healthy
       core-2:
@@ -419,6 +435,8 @@ secrets:
     environment: IAM_PG_PASSWORD
   iam_key_encryption_key:
     environment: IAM_KEY_ENCRYPTION_KEY
+  iam_node_secret:
+    environment: IAM_NODE_SECRET
 
 networks:
   default:

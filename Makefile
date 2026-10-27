@@ -114,6 +114,7 @@ core-down: check-env
 iam-env:
 	@test -n "$(IAM_PG_PASSWORD)" || (echo "set IAM_PG_PASSWORD in .env" && exit 1)
 	@test -n "$(IAM_KEY_ENCRYPTION_KEY)" || (echo "set IAM_KEY_ENCRYPTION_KEY in .env (openssl rand -base64 32)" && exit 1)
+	@test -n "$(IAM_NODE_SECRET)" || (echo "set IAM_NODE_SECRET in .env (openssl rand -hex 32)" && exit 1)
 
 iam-admin:
 	docker exec chatim-iam-1 /app $(ARGS)
