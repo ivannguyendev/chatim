@@ -81,21 +81,88 @@ Endpoint thu hồi trả JSON: `sessions: [{session_id, tenant_id, expires_at}]`
 
 ## 6. Luồng chính
 
+### 6.1. Thu hồi trong `iam`
+
 ```mermaid
-sequenceDiagram
-  participant L as Laptop của Lan
-  participant I as iam
-  participant P as Postgres
-  participant N as node websocket/gateway
-  participant D as iPhone
-  L->>I: RevokeSession(iPhone)
-  I->>P: tx: UPDATE sessions … RETURNING id → INSERT revoked_sessions, audit
-  N->>I: GET /internal/v1/revocations (If-None-Match)
-  I-->>N: 200 danh sách mới + ETag
-  N->>N: ghi danh sách trước, rồi quét kết nối có sid đó
-  N-->>D: auth_required{REVOKED}
-  D->>I: refresh → 400 invalid_grant → màn hình đăng nhập
+flowchart TD
+  A1["Lan thu hồi phiên iPhone"] --> T
+  A2["Admin khoá account Bình"] --> T
+  A3["Bình đổi mật khẩu / admin đặt lại"] --> T
+  A4["Refresh token cũ bị dùng lại"] --> T
+  T["Một transaction Postgres:<br/>UPDATE sessions SET state = thu hồi … RETURNING id"] --> R["Mỗi id trả về → một dòng revoked_sessions<br/>(hạn = giờ thu hồi + 15m + 1m)"]
+  R --> AU["Ghi audit, commit"]
+  B1["Admin khoá tenant shop"] --> TT["Một transaction: khoá tenant, thu hồi mọi phiên của shop,<br/>tenants.sessions_revoked_at = giờ Postgres"]
+  TT --> AU
+  AU --> DB[("Postgres: revoked_sessions, tenants")]
 ```
+
+### 6.2. Node đồng bộ với `iam` (websocket và gateway như nhau)
+
+```mermaid
+flowchart TD
+  S["Mỗi 2 giây"] --> Q["GET cổng nội bộ /internal/v1/revocations<br/>kèm secret và ETag lần trước"]
+  Q --> C{"Kết quả?"}
+  C -->|304 không đổi| OK["Ghi giờ đồng bộ thành công"]
+  C -->|200 danh sách mới| M["Gộp vào danh sách trong RAM<br/>(không xoá mục cũ còn hạn)"]
+  M --> SC["Websocket: quét kết nối có sid hoặc tenant mới"]
+  SC --> OK
+  C -->|lỗi mạng, 5xx, 401| KEEP["Giữ danh sách đang có, đếm lỗi"]
+  KEEP --> ST{"Quá 30s chưa đồng bộ được?"}
+  ST -->|có| AL["Alert ChatimIamSyncStale"]
+  ST -->|chưa| S
+  OK --> EX["Bỏ mục đã quá hạn + leeway của node"] --> S
+  K["Mỗi 1 phút, hoặc ngay khi gặp kid lạ (tối đa 1 lần/5s)"] --> J["GET /.well-known/jwks.json"]
+  J --> KS["Bộ khoá = file JWKS ∪ khoá từ iam<br/>(trùng kid khác khoá → giữ khoá file, đếm metric)"]
+```
+
+### 6.3. Node kiểm một token (websocket `auth`, gia hạn; gateway mỗi request)
+
+```mermaid
+flowchart TD
+  T["Token tới"] --> K{"kid có trong bộ khoá?"}
+  K -->|không| SY{"Khoá đã đồng bộ gần đây?<br/>(trong 2 chu kỳ)"}
+  SY -->|chưa| RL["Hỏi lại JWKS ngay<br/>websocket: retry_later · gateway: 503"]
+  SY -->|rồi| INV["Sai token<br/>websocket: auth_required INVALID · gateway: 401"]
+  K -->|có| SIG{"Chữ ký, iss, aud, exp, có sid và iat?"}
+  SIG -->|sai| INV
+  SIG -->|hết hạn| EXP["websocket: auth_required EXPIRED · gateway: 401"]
+  SIG -->|đúng| TN{"Tenant có giờ khoá<br/>và iat ≤ giờ đó?"}
+  TN -->|có| TD["websocket: đóng 4003 · gateway: 401"]
+  TN -->|không| SD{"sid nằm trong danh sách thu hồi?"}
+  SD -->|có| RV["websocket: auth_required REVOKED · gateway: 401"]
+  SD -->|không| GO["Cho qua<br/>websocket: kiểm lại danh sách trong khoá kết nối rồi mới chạy"]
+```
+
+### 6.4. Kết nối đang chạy bị thu hồi (websocket)
+
+```mermaid
+flowchart TD
+  N["Lần đồng bộ thấy sid iPhone mới bị thu hồi"] --> W["Ghi vào danh sách TRƯỚC"]
+  W --> F["Tìm kết nối đang chạy có sid đó"]
+  F --> R["Chuyển về chờ, gửi auth_required REVOKED"]
+  R --> C["iPhone thử refresh"]
+  C --> I{"iam: phiên còn sống?"}
+  I -->|không| L["400 invalid_grant → màn hình đăng nhập"]
+  R --> G{"Gửi token mới trong thời gian chờ?"}
+  G -->|không| CL["Hết thời gian chờ → đóng 4001"]
+  N2["Lần đồng bộ thấy tenant shop bị khoá"] --> W2["Ghi vào danh sách"] --> F2["Đóng mọi kết nối của shop bằng 4003<br/>(client không tự đăng nhập lại ngay)"]
+```
+
+### 6.5. Xoay khoá không khởi động lại node
+
+```mermaid
+flowchart TD
+  A["Admin: key-rotate"] --> P["Khoá mới ở trạng thái chờ,<br/>có ngay trong JWKS của iam"]
+  P --> N["Node lấy về trong ≤ 1 phút"]
+  P --> W{"Admin: key-activate<br/>khoá đã tạo ≥ 2 phút?"}
+  W -->|chưa| E["Từ chối, thoát 1"]
+  W -->|rồi| S["iam ký token mới bằng khoá mới;<br/>khoá cũ sang nghỉ, còn trong JWKS thêm 15m30s"]
+  S --> V{"Node gặp token khoá mới mà chưa có khoá?"}
+  V -->|có| R["Hỏi lại JWKS ngay, client nhận retry_later/503 rồi thử lại"]
+  V -->|không| OK["Kiểm bình thường"]
+```
+
+Tóm tắt kết quả:
 
 | Chỗ | Kết quả |
 |---|---|
