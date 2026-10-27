@@ -31,7 +31,7 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if c.ListenAddr != ":8080" || c.AdminAddr != ":9090" || c.AccessTTL != 15*time.Minute || c.SessionIdle != 720*time.Hour ||
 		c.SessionMax != 2160*time.Hour || c.RefreshGrace != 30*time.Second || c.HashConcurrency != 16 || c.LoginMaxDelay != time.Minute ||
-		c.LoginIPRate != 1 || c.LoginIPBurst != 10 || c.PasswordMin != 12 || c.BodyMax != 16<<10 || c.DPoPWindow != time.Minute {
+		c.LoginIPRate != 20 || c.LoginIPBurst != 200 || c.PasswordMin != 12 || c.BodyMax != 16<<10 || c.DPoPWindow != time.Minute {
 		t.Fatalf("defaults = %+v", c)
 	}
 	if len(c.KeyEncryptionKey) != 32 {

@@ -19,8 +19,6 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/wstest"
 )
 
-const ipRefill = 1100 * time.Millisecond
-
 type iamFlags struct {
 	iam, ws, metrics, tenant, dir *string
 	timeout                       *time.Duration
@@ -70,7 +68,6 @@ func e2eIAMLogin(ctx context.Context, args []string) error {
 	}
 	c := newIAMClient(*f.iam, *f.tenant, *f.timeout)
 	defer saveUsed(*f.dir, c)
-	start := time.Now()
 	if err := throttled(ctx, c, *f.metrics, tempB); err != nil {
 		return err
 	}
@@ -114,7 +111,6 @@ func e2eIAMLogin(ctx context.Context, args []string) error {
 		return err
 	}
 	fmt.Println("iam: refresh rotated, retries inside the grace window passed, another device key was refused without ending the session")
-	waitIPRefill(ctx, start)
 	if err := secondSession(ctx, c, newPassword, latest); err != nil {
 		return err
 	}
@@ -131,15 +127,6 @@ func e2eIAMLogin(ctx context.Context, args []string) error {
 		return err
 	}
 	return writeIAMState(*f.dir, iamState{Refresh: latest.Refresh, Key: key})
-}
-
-func waitIPRefill(ctx context.Context, start time.Time) {
-	t := time.NewTimer(time.Until(start.Add(ipRefill)))
-	defer t.Stop()
-	select {
-	case <-ctx.Done():
-	case <-t.C:
-	}
 }
 
 func secondSession(ctx context.Context, c *iamClient, password string, current iamTokens) error {

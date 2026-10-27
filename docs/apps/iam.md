@@ -21,7 +21,7 @@ IAM tổng quát kiểu Keycloak (M6, owner 2026-10-25), tự xây bằng Go tr�
 | `IAM_DPOP_WINDOW` | `60s` | `iat` của DPoP proof được lệch tối đa |
 | `IAM_HASH_CONCURRENCY` | `16` | Phép băm Argon2id chạy cùng lúc mỗi node (~19 MiB mỗi phép); quá thì `unavailable` |
 | `IAM_LOGIN_FREE_FAILURES`, `IAM_LOGIN_MAX_DELAY` | `5` / `1m` | Sai 5 lần thì bắt chờ 1s, 2s, 4s… tối đa 1 phút |
-| `IAM_LOGIN_IP_RATE`, `IAM_LOGIN_IP_BURST`, `IAM_LOGIN_IP_TRACKED` | `1` / `10` / `100000` | Đăng nhập mỗi IP mỗi node (token bucket, LRU) |
+| `IAM_LOGIN_IP_RATE`, `IAM_LOGIN_IP_BURST`, `IAM_LOGIN_IP_TRACKED` | `20` / `200` / `100000` | Lần kiểm mật khẩu mỗi IP mỗi node (token bucket, LRU); đủ cho văn phòng ~200 người chung một IP (NAT) cùng đăng nhập (owner 2026-10-27) |
 | `IAM_PASSWORD_MIN` | `12` | Độ dài tối thiểu (tối đa 128) |
 | `IAM_KEY_ENCRYPTION_KEY` / `_FILE` | — (bắt buộc) | 32 byte base64, mã hoá khoá ký riêng (AES-256-GCM); sinh bằng `openssl rand -base64 32` |
 | `IAM_KEY_RELOAD` | `30s` | Nhịp nạp lại khoá ký và kiểm readiness |
