@@ -17,6 +17,7 @@ const (
 	testIssuer   = "chatim-dev"
 	testAudience = "chatim-websocket"
 	testKID      = "dev-1"
+	testSession  = "s0abcdefghijklmnopqrstuvwx"
 )
 
 var testNow = time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
@@ -80,6 +81,7 @@ func validClaims() jwt.MapClaims {
 		"aud": testAudience,
 		"sub": "Alice_1",
 		"tid": "acme",
+		"sid": testSession,
 		"iat": testNow.Unix(),
 		"exp": testNow.Add(time.Hour).Unix(),
 	}

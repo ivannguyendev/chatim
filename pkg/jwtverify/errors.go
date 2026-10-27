@@ -23,6 +23,7 @@ const (
 	ReasonMissingClaim Reason = "missing claim"
 	ReasonSubject      Reason = "bad subject"
 	ReasonTenant       Reason = "bad tenant"
+	ReasonSession      Reason = "bad session"
 	ReasonClaims       Reason = "bad claims"
 )
 

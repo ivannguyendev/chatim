@@ -62,7 +62,7 @@ func newSigner(t *testing.T) signer {
 func (s signer) token(t *testing.T, expiresAt time.Time) string {
 	t.Helper()
 	tok := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{
-		"iss": testIssuer, "aud": testAudience, "sub": "u1", "tid": "t1", "exp": expiresAt.Unix(),
+		"iss": testIssuer, "aud": testAudience, "sub": "u1", "tid": "t1", "sid": "s1", "iat": time.Now().Unix(), "exp": expiresAt.Unix(),
 	})
 	tok.Header["kid"] = testKID
 	signed, err := tok.SignedString(s.priv)

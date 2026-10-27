@@ -2,16 +2,21 @@ package jwtverify
 
 import (
 	"crypto/ed25519"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/ivannguyendev/chatim/pkg/ids"
 )
+
+const maxSessionLength = 128
 
 type Config struct {
 	JWKS     []byte
@@ -24,17 +29,23 @@ type Config struct {
 type Claims struct {
 	Tenant    string
 	User      string
+	Session   string
+	IssuedAt  time.Time
 	ExpiresAt time.Time
 }
 
+type keyMap = map[string]ed25519.PublicKey
+
 type Verifier struct {
-	keys   map[string]ed25519.PublicKey
-	parser *jwt.Parser
+	keys    keyMap
+	dynamic atomic.Pointer[keyMap]
+	parser  *jwt.Parser
 }
 
 type tokenClaims struct {
 	jwt.RegisteredClaims
-	Tenant string `json:"tid"`
+	Tenant  string `json:"tid"`
+	Session string `json:"sid"`
 }
 
 func LoadFile(path string, cfg Config) (*Verifier, error) {
@@ -55,7 +66,7 @@ func New(cfg Config) (*Verifier, error) {
 	case cfg.Leeway < 0:
 		return nil, fmt.Errorf("%w: leeway must not be negative", ErrInvalidConfig)
 	}
-	keys, err := parseKeySet(cfg.JWKS)
+	keys, err := parseKeySet(cfg.JWKS, false)
 	if err != nil {
 		return nil, err
 	}
@@ -75,19 +86,79 @@ func New(cfg Config) (*Verifier, error) {
 	return &Verifier{keys: keys, parser: parser}, nil
 }
 
+func (v *Verifier) SetDynamic(jwks []byte) (int, error) {
+	keys, err := parseKeySet(jwks, true)
+	if err != nil {
+		return 0, err
+	}
+	conflicts := 0
+	for kid, key := range keys {
+		fixed, ok := v.keys[kid]
+		if !ok {
+			continue
+		}
+		if !fixed.Equal(key) {
+			conflicts++
+		}
+		delete(keys, kid)
+	}
+	v.dynamic.Store(&keys)
+	return conflicts, nil
+}
+
 func (v *Verifier) Verify(token string) (Claims, error) {
 	var claims tokenClaims
 	parsed, err := v.parser.ParseWithClaims(token, &claims, v.key)
 	if err != nil {
 		return Claims{}, invalid(classify(parsed, err))
 	}
-	if ids.ValidUser(claims.Subject) != nil {
+	switch {
+	case ids.ValidUser(claims.Subject) != nil:
 		return Claims{}, invalid(ReasonSubject)
-	}
-	if ids.ValidTenant(claims.Tenant) != nil {
+	case ids.ValidTenant(claims.Tenant) != nil:
 		return Claims{}, invalid(ReasonTenant)
+	case claims.Session == "" || claims.IssuedAt == nil:
+		return Claims{}, invalid(ReasonMissingClaim)
+	case !validSession(claims.Session):
+		return Claims{}, invalid(ReasonSession)
 	}
-	return Claims{Tenant: claims.Tenant, User: claims.Subject, ExpiresAt: claims.ExpiresAt.Time}, nil
+	return Claims{
+		Tenant:    claims.Tenant,
+		User:      claims.Subject,
+		Session:   claims.Session,
+		IssuedAt:  claims.IssuedAt.Time,
+		ExpiresAt: claims.ExpiresAt.Time,
+	}, nil
+}
+
+func KeyIDOf(token string) string {
+	header, _, ok := strings.Cut(token, ".")
+	if !ok {
+		return ""
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(header)
+	if err != nil {
+		return ""
+	}
+	var h struct {
+		KeyID string `json:"kid"`
+	}
+	if json.Unmarshal(raw, &h) != nil {
+		return ""
+	}
+	return h.KeyID
+}
+
+func validSession(s string) bool {
+	if len(s) > maxSessionLength {
+		return false
+	}
+	for i := range len(s) {
+		if s[i] < 0x21 || s[i] > 0x7e {
+			return false
+		}
+	}
+	return true
 }
 
 func (v *Verifier) key(token *jwt.Token) (any, error) {
@@ -100,11 +171,15 @@ func (v *Verifier) key(token *jwt.Token) (any, error) {
 	if !ok {
 		return nil, invalid(ReasonKeyID)
 	}
-	key, ok := v.keys[kid]
-	if !ok {
-		return nil, invalid(ReasonKeyID)
+	if key, ok := v.keys[kid]; ok {
+		return key, nil
 	}
-	return key, nil
+	if dynamic := v.dynamic.Load(); dynamic != nil {
+		if key, ok := (*dynamic)[kid]; ok {
+			return key, nil
+		}
+	}
+	return nil, invalid(ReasonKeyID)
 }
 
 func classify(token *jwt.Token, err error) Reason {

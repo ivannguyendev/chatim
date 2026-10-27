@@ -21,8 +21,8 @@ func TestVerifyAcceptsAValidToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Verify: %v", err)
 	}
-	want := jwtverify.Claims{Tenant: "acme", User: "Alice_1", ExpiresAt: testNow.Add(time.Hour)}
-	if got.Tenant != want.Tenant || got.User != want.User || !got.ExpiresAt.Equal(want.ExpiresAt) {
+	want := jwtverify.Claims{Tenant: "acme", User: "Alice_1", Session: testSession, IssuedAt: testNow, ExpiresAt: testNow.Add(time.Hour)}
+	if got.Tenant != want.Tenant || got.User != want.User || got.Session != want.Session || !got.IssuedAt.Equal(want.IssuedAt) || !got.ExpiresAt.Equal(want.ExpiresAt) {
 		t.Fatalf("Verify = %+v; want %+v", got, want)
 	}
 }
@@ -90,6 +90,13 @@ func TestVerifyRefusesBadTokens(t *testing.T) {
 		{"tid with star", signEdDSA(t, key, withClaim("tid", "ac*me")), jwtverify.ReasonTenant},
 		{"tid with gt", signEdDSA(t, key, withClaim("tid", "ac>me")), jwtverify.ReasonTenant},
 		{"numeric tid", signEdDSA(t, key, withClaim("tid", 7)), jwtverify.ReasonMalformed},
+		{"missing sid", signEdDSA(t, key, withClaim("sid", nil)), jwtverify.ReasonMissingClaim},
+		{"empty sid", signEdDSA(t, key, withClaim("sid", "")), jwtverify.ReasonMissingClaim},
+		{"long sid", signEdDSA(t, key, withClaim("sid", strings.Repeat("s", 129))), jwtverify.ReasonSession},
+		{"sid with space", signEdDSA(t, key, withClaim("sid", "s 1")), jwtverify.ReasonSession},
+		{"sid with control", signEdDSA(t, key, withClaim("sid", "s\x001")), jwtverify.ReasonSession},
+		{"numeric sid", signEdDSA(t, key, withClaim("sid", 7)), jwtverify.ReasonMalformed},
+		{"missing iat", signEdDSA(t, key, withClaim("iat", nil)), jwtverify.ReasonMissingClaim},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

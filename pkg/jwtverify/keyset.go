@@ -22,7 +22,7 @@ type jsonWebKeySet struct {
 	Keys []jsonWebKey `json:"keys"`
 }
 
-func parseKeySet(data []byte) (map[string]ed25519.PublicKey, error) {
+func parseKeySet(data []byte, allowEmpty bool) (map[string]ed25519.PublicKey, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("%w: empty", ErrInvalidKeySet)
 	}
@@ -30,7 +30,7 @@ func parseKeySet(data []byte) (map[string]ed25519.PublicKey, error) {
 	if err := json.Unmarshal(data, &set); err != nil {
 		return nil, fmt.Errorf("%w: not a JWKS document", ErrInvalidKeySet)
 	}
-	if len(set.Keys) == 0 {
+	if len(set.Keys) == 0 && !allowEmpty {
 		return nil, fmt.Errorf("%w: no keys", ErrInvalidKeySet)
 	}
 	keys := make(map[string]ed25519.PublicKey, len(set.Keys))

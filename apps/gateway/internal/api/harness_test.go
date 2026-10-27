@@ -234,7 +234,7 @@ func (h *harness) token(t *testing.T, c claims) string {
 	if c.expires.IsZero() {
 		c.expires = time.Now().Add(time.Hour)
 	}
-	tok := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{"iss": c.issuer, "aud": c.audience, "sub": c.user, "tid": c.tenant, "exp": c.expires.Unix()})
+	tok := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{"iss": c.issuer, "aud": c.audience, "sub": c.user, "tid": c.tenant, "sid": "s1", "iat": c.expires.Add(-time.Hour).Unix(), "exp": c.expires.Unix()})
 	tok.Header["kid"] = testKID
 	signed, err := tok.SignedString(h.priv)
 	if err != nil {

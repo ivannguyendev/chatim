@@ -26,7 +26,7 @@ func expiredTokenError(t *testing.T) error {
 		t.Fatalf("verifier: %v", err)
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{
-		"iss": "issuer", "aud": "audience", "sub": "u1", "tid": "t1",
+		"iss": "issuer", "aud": "audience", "sub": "u1", "tid": "t1", "sid": "s1",
 		"iat": time.Now().Add(-2 * time.Hour).Unix(), "exp": time.Now().Add(-time.Hour).Unix(),
 	})
 	token.Header["kid"] = "k1"
