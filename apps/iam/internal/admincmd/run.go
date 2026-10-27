@@ -27,14 +27,15 @@ type Store interface {
 }
 
 type Env struct {
-	Open      func(ctx context.Context) (Store, error)
-	Sealer    *signing.Sealer
-	Hasher    *password.Hasher
-	Random    io.Reader
-	Now       func() time.Time
-	KeyWindow time.Duration
-	Out       io.Writer
-	Log       *slog.Logger
+	Open         func(ctx context.Context) (Store, error)
+	Sealer       *signing.Sealer
+	Hasher       *password.Hasher
+	Random       io.Reader
+	Now          func() time.Time
+	KeyWindow    time.Duration
+	ActivateLead time.Duration
+	Out          io.Writer
+	Log          *slog.Logger
 }
 
 type command func(ctx context.Context, env Env, st Store, args []string) error

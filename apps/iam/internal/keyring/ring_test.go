@@ -3,6 +3,7 @@ package keyring_test
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
@@ -169,5 +170,38 @@ func TestReloadFailureKeepsTheLastGoodKeys(t *testing.T) {
 	}
 	if _, err := f.ring.Caller(f.sign(t, sid)); err != nil {
 		t.Fatalf("Caller after a failed reload: %v", err)
+	}
+}
+
+func TestJWKSServesThePublishedKeysOnly(t *testing.T) {
+	f := newFixture(t)
+	if _, ok := f.ring.JWKS(); ok {
+		t.Fatal("JWKS before the first reload")
+	}
+	active := f.addKey(t, store.KeyActive, time.Time{})
+	pending := f.addKey(t, store.KeyPending, time.Time{})
+	old := f.addKey(t, store.KeyRetired, t0.Add(-time.Hour))
+	if err := f.ring.Reload(context.Background()); err != nil {
+		t.Fatalf("Reload: %v", err)
+	}
+	body, ok := f.ring.JWKS()
+	if !ok {
+		t.Fatal("JWKS missing after reload")
+	}
+	var set struct {
+		Keys []map[string]any `json:"keys"`
+	}
+	if err := json.Unmarshal(body, &set); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	kids := map[string]bool{}
+	for _, k := range set.Keys {
+		if _, private := k["d"]; private {
+			t.Fatal("JWKS holds private key material")
+		}
+		kids[k["kid"].(string)] = true
+	}
+	if !kids[active.ID] || !kids[pending.ID] || kids[old.ID] || len(kids) != 2 {
+		t.Fatalf("kids = %v", kids)
 	}
 }

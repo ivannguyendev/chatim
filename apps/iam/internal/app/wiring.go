@@ -30,6 +30,8 @@ const (
 type Store interface {
 	store.Auth
 	keyring.Source
+	api.RevocationSource
+	DeleteExpiredRevocations(ctx context.Context) (int64, error)
 	Ping(ctx context.Context) error
 	SchemaVersion(ctx context.Context) (int, error)
 	Close()
@@ -82,30 +84,35 @@ func wireServers(cfg config.Config, log *slog.Logger, st Store, deps Deps) (*nod
 		IPs:     guard.NewIPLimiter(float64(cfg.LoginIPRate), cfg.LoginIPBurst, cfg.LoginIPTracked),
 		Slots:   slots, Signers: ring, Random: rand.Reader, Now: time.Now,
 	}, auth.Config{SessionIdle: cfg.SessionIdle, SessionMax: cfg.SessionMax, RefreshGrace: cfg.RefreshGrace})
-	proofs, err := dpop.NewVerifier(cfg.PublicURL, cfg.DPoPWindow, time.Now)
+	n := &node{cfg: cfg, log: log, store: st, internalStats: &api.InternalStats{}}
+	if cfg.ListenAddr != "" {
+		proofs, err := dpop.NewVerifier(cfg.PublicURL, cfg.DPoPWindow, time.Now)
+		if err != nil {
+			return nil, err
+		}
+		handler, err := api.New(api.Options{
+			Auth: svc, Proofs: proofs, Callers: ring, Keys: ring, BodyMax: int64(cfg.BodyMax),
+			CORSOrigins: cfg.CORSOrigins, ClientIPHeader: cfg.ClientIPHeader, Log: log,
+		})
+		if err != nil {
+			return nil, err
+		}
+		n.ports = append(n.ports, &port{addr: cfg.ListenAddr, server: newHTTPServer(cfg, handler, log)})
+	}
+	if cfg.InternalAddr != "" {
+		handler, err := api.NewInternal(api.InternalOptions{Revocations: st, Secret: cfg.NodeSecret, Stats: n.internalStats, Log: log})
+		if err != nil {
+			return nil, err
+		}
+		n.ports = append(n.ports, &port{addr: cfg.InternalAddr, server: newHTTPServer(cfg, handler, log)})
+	}
+	metricsHandler, err := metrics.Handler(metricsSubsystem, metricSources(svc.Stats(), slots, ring, n.internalStats, &n.cleanup))
 	if err != nil {
 		return nil, err
 	}
-	handler, err := api.New(api.Options{
-		Auth: svc, Proofs: proofs, Callers: ring, BodyMax: int64(cfg.BodyMax),
-		CORSOrigins: cfg.CORSOrigins, ClientIPHeader: cfg.ClientIPHeader, Log: log,
-	})
-	if err != nil {
-		return nil, err
-	}
-	metricsHandler, err := metrics.Handler(metricsSubsystem, metricSources(svc.Stats(), slots, ring))
-	if err != nil {
-		return nil, err
-	}
-	adm := admin.New(admin.Config{Addr: cfg.AdminAddr, Metrics: metricsHandler}, log)
-	return &node{
-		cfg:    cfg,
-		log:    log,
-		store:  st,
-		admin:  adm,
-		http:   newHTTPServer(cfg, handler, log),
-		health: &health{admin: adm, log: log, store: st, ring: ring, schema: deps.SchemaVersion},
-	}, nil
+	n.admin = admin.New(admin.Config{Addr: cfg.AdminAddr, Metrics: metricsHandler}, log)
+	n.health = &health{admin: n.admin, log: log, store: st, ring: ring, schema: deps.SchemaVersion}
+	return n, nil
 }
 
 func newHTTPServer(cfg config.Config, handler http.Handler, log *slog.Logger) *http.Server {

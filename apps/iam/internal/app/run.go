@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/ivannguyendev/chatim/apps/iam/internal/api"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/config"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/password"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store/pgstore"
@@ -22,13 +23,22 @@ type Deps struct {
 	SchemaVersion int
 }
 
+type port struct {
+	addr   string
+	server *http.Server
+	lis    net.Listener
+	task   *task
+}
+
 type node struct {
-	cfg    config.Config
-	log    *slog.Logger
-	store  Store
-	admin  *admin.Server
-	http   *http.Server
-	health *health
+	cfg           config.Config
+	log           *slog.Logger
+	store         Store
+	admin         *admin.Server
+	ports         []*port
+	health        *health
+	internalStats *api.InternalStats
+	cleanup       cleanupStats
 }
 
 type task struct {
@@ -46,8 +56,9 @@ func start(run func() error) *task {
 }
 
 type running struct {
-	api, admin, health    *task
+	admin, health         *task
 	stopAdmin, stopHealth context.CancelFunc
+	exited                chan *port
 }
 
 func (d Deps) withDefaults() Deps {
@@ -79,16 +90,30 @@ func Run(ctx context.Context, cfg config.Config, log *slog.Logger, deps Deps) er
 	return n.serve(ctx, deps)
 }
 
-func (n *node) serve(ctx context.Context, deps Deps) error {
+func (n *node) listen(ctx context.Context, deps Deps) (net.Listener, error) {
 	adminLis, err := deps.Listen(ctx, n.cfg.AdminAddr)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range n.ports {
+		if p.lis, err = deps.Listen(ctx, p.addr); err != nil {
+			errs := []error{err, adminLis.Close()}
+			for _, open := range n.ports {
+				if open.lis != nil {
+					errs = append(errs, open.lis.Close())
+				}
+			}
+			return nil, errors.Join(errs...)
+		}
+	}
+	return adminLis, nil
+}
+
+func (n *node) serve(ctx context.Context, deps Deps) error {
+	adminLis, err := n.listen(ctx, deps)
 	if err != nil {
 		n.store.Close()
 		return err
-	}
-	apiLis, err := deps.Listen(ctx, n.cfg.ListenAddr)
-	if err != nil {
-		n.store.Close()
-		return errors.Join(err, adminLis.Close())
 	}
 	base := context.WithoutCancel(ctx)
 	adminCtx, stopAdmin := context.WithCancel(base)
@@ -96,17 +121,26 @@ func (n *node) serve(ctx context.Context, deps Deps) error {
 	n.health.check(healthCtx)
 	r := running{
 		admin:      start(func() error { return n.admin.ServeListener(adminCtx, adminLis) }),
-		api:        start(func() error { return n.http.Serve(apiLis) }),
 		health:     start(func() error { n.watchHealth(healthCtx); return nil }),
 		stopAdmin:  stopAdmin,
 		stopHealth: stopHealth,
+		exited:     make(chan *port, len(n.ports)),
 	}
-	n.log.InfoContext(ctx, "iam serving", "listen", apiLis.Addr().String(), "admin", adminLis.Addr().String())
+	addrs := []any{"admin", adminLis.Addr().String()}
+	for _, p := range n.ports {
+		p.task = start(func() error { return p.server.Serve(p.lis) })
+		go func() {
+			<-p.task.done
+			r.exited <- p
+		}()
+		addrs = append(addrs, p.addr, p.lis.Addr().String())
+	}
+	n.log.InfoContext(ctx, "iam serving", addrs...)
 	var cause error
 	select {
 	case <-ctx.Done():
-	case <-r.api.done:
-		cause = fmt.Errorf("iam serve stopped unexpectedly: %w", r.api.err)
+	case p := <-r.exited:
+		cause = fmt.Errorf("iam port %s stopped unexpectedly: %w", p.addr, p.task.err)
 	case <-r.admin.done:
 		cause = fmt.Errorf("admin stopped unexpectedly: %w", r.admin.err)
 	}
@@ -122,8 +156,20 @@ func (n *node) watchHealth(ctx context.Context) {
 			return
 		case <-t.C:
 			n.health.check(ctx)
+			n.cleanExpired(ctx)
 		}
 	}
+}
+
+func (n *node) cleanExpired(ctx context.Context) {
+	removed, err := n.store.DeleteExpiredRevocations(ctx)
+	if err != nil {
+		if n.cleanup.errors.Add(1) == 1 {
+			n.log.WarnContext(ctx, "revocation cleanup failed", "err", err)
+		}
+		return
+	}
+	n.cleanup.removed.Add(removed)
 }
 
 func (n *node) shutdown(ctx context.Context, r running, cause error) error {
@@ -135,13 +181,17 @@ func (n *node) shutdown(ctx context.Context, r running, cause error) error {
 		pause(stopCtx, n.cfg.DrainDelay)
 	}
 	errs := []error{cause}
-	if err := n.http.Shutdown(stopCtx); err != nil {
-		errs = append(errs, fmt.Errorf("http shutdown: %w", err))
-		_ = n.http.Close()
+	for _, p := range n.ports {
+		if err := p.server.Shutdown(stopCtx); err != nil {
+			errs = append(errs, fmt.Errorf("http shutdown %s: %w", p.addr, err))
+			_ = p.server.Close()
+		}
 	}
-	<-r.api.done
-	if r.api.err != nil && !errors.Is(r.api.err, http.ErrServerClosed) {
-		errs = append(errs, fmt.Errorf("http serve: %w", r.api.err))
+	for _, p := range n.ports {
+		<-p.task.done
+		if p.task.err != nil && !errors.Is(p.task.err, http.ErrServerClosed) {
+			errs = append(errs, fmt.Errorf("http serve %s: %w", p.addr, p.task.err))
+		}
 	}
 	r.stopHealth()
 	<-r.health.done

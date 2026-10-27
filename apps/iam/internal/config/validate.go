@@ -8,9 +8,10 @@ import (
 )
 
 const (
-	kekLength          = 32
-	minPasswordLength  = 8
-	shutdownMarginTime = time.Second
+	kekLength           = 32
+	minPasswordLength   = 8
+	minNodeSecretLength = 32
+	shutdownMarginTime  = time.Second
 )
 
 type rule struct {
@@ -20,10 +21,13 @@ type rule struct {
 
 func (c Config) Validate() error {
 	rules := []rule{
-		{c.ListenAddr != "", "IAM_ADDR is required"},
+		{c.ListenAddr != "" || c.InternalAddr != "", "IAM_ADDR and IAM_INTERNAL_ADDR are both off; turn on at least one"},
 		{c.AdminAddr != "", "IAM_ADMIN_ADDR is required"},
 		{c.ListenAddr != c.AdminAddr, "IAM_ADMIN_ADDR must differ from IAM_ADDR"},
-		{validBaseURL(c.PublicURL), "IAM_PUBLIC_URL must be an absolute http(s) url without query or fragment"},
+		{c.InternalAddr == "" || (c.InternalAddr != c.AdminAddr && c.InternalAddr != c.ListenAddr), "IAM_INTERNAL_ADDR must differ from IAM_ADDR and IAM_ADMIN_ADDR"},
+		{c.ListenAddr == "" || validBaseURL(c.PublicURL), "IAM_PUBLIC_URL must be an absolute http(s) url without query or fragment"},
+		{c.InternalAddr == "" || len(c.NodeSecret) >= minNodeSecretLength, fmt.Sprintf("IAM_NODE_SECRET must hold at least %d bytes when IAM_INTERNAL_ADDR is on", minNodeSecretLength)},
+		{c.KeyActivateLead >= 0, "IAM_KEY_ACTIVATE_LEAD must not be negative"},
 		{c.PGURI != "", "IAM_PG_URI is required"},
 		{!hasPassword(c.PGURI), "IAM_PG_URI must not carry a password; use IAM_PG_PASSWORD or IAM_PG_PASSWORD_FILE"},
 		{c.Issuer != "", "IAM_ISSUER is required"},

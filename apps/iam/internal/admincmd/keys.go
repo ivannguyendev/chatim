@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/ivannguyendev/chatim/apps/iam/internal/keyring"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/signing"
@@ -60,11 +61,31 @@ func keyActivate(ctx context.Context, env Env, st Store, args []string) error {
 	if err := f.parse(args, "kid"); err != nil {
 		return err
 	}
+	if err := checkLead(ctx, env, st, *kid); err != nil {
+		return err
+	}
 	if err := st.ActivateSigningKey(ctx, *kid, env.Now(), audit(env, "", "key_activate", "", "")); err != nil {
 		return err
 	}
 	_, err := fmt.Fprintf(env.Out, "signing key %s active\n", *kid)
 	return err
+}
+
+func checkLead(ctx context.Context, env Env, st Store, kid string) error {
+	keys, err := st.SigningKeys(ctx)
+	if err != nil {
+		return err
+	}
+	for _, k := range keys {
+		if k.ID != kid || k.State != store.KeyPending {
+			continue
+		}
+		if age := env.Now().Sub(k.CreatedAt); age < env.ActivateLead {
+			return fmt.Errorf("signing key %s was created %s ago; activate it after %s so every node has fetched it",
+				kid, age.Truncate(time.Second), k.CreatedAt.Add(env.ActivateLead).UTC().Format(time.RFC3339))
+		}
+	}
+	return nil
 }
 
 func jwksExport(ctx context.Context, env Env, st Store, args []string) error {

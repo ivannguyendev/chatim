@@ -21,6 +21,7 @@ const (
 
 type Config struct {
 	ListenAddr        string
+	InternalAddr      string
 	AdminAddr         string
 	PublicURL         string
 	PGURI             string
@@ -41,6 +42,8 @@ type Config struct {
 	LoginIPTracked    int
 	PasswordMin       int
 	KeyEncryptionKey  []byte
+	NodeSecret        string
+	KeyActivateLead   time.Duration
 	KeyReload         time.Duration
 	BodyMax           int
 	CORSOrigins       []string
@@ -59,7 +62,8 @@ func AdminAddr() string { return envconfig.String("IAM_ADMIN_ADDR", defaultAdmin
 func Load() (Config, error) {
 	var p parser
 	c := Config{
-		ListenAddr:        envconfig.String("IAM_ADDR", ":8080"),
+		ListenAddr:        optional("IAM_ADDR", ":8080"),
+		InternalAddr:      optional("IAM_INTERNAL_ADDR", ":8081"),
 		AdminAddr:         AdminAddr(),
 		PublicURL:         envconfig.String("IAM_PUBLIC_URL", ""),
 		PGURI:             envconfig.String("IAM_PG_URI", ""),
@@ -80,6 +84,8 @@ func Load() (Config, error) {
 		LoginIPTracked:    p.number("IAM_LOGIN_IP_TRACKED", 100000),
 		PasswordMin:       p.number("IAM_PASSWORD_MIN", 12),
 		KeyEncryptionKey:  p.key("IAM_KEY_ENCRYPTION_KEY"),
+		NodeSecret:        p.secret("IAM_NODE_SECRET"),
+		KeyActivateLead:   p.span("IAM_KEY_ACTIVATE_LEAD", 2*time.Minute),
 		KeyReload:         p.span("IAM_KEY_RELOAD", 30*time.Second),
 		BodyMax:           p.number("IAM_BODY_MAX", 16<<10),
 		CORSOrigins:       list("IAM_CORS_ORIGINS"),
@@ -115,6 +121,7 @@ func (c Config) DatabaseURI() string {
 func (c Config) LogValue() slog.Value {
 	return slog.GroupValue(
 		slog.String("listen_addr", c.ListenAddr),
+		slog.String("internal_addr", c.InternalAddr),
 		slog.String("admin_addr", c.AdminAddr),
 		slog.String("public_url", c.PublicURL),
 		slog.String("pg_uri", redact.URL(c.PGURI)),
@@ -134,6 +141,8 @@ func (c Config) LogValue() slog.Value {
 		slog.Int("login_ip_burst", c.LoginIPBurst),
 		slog.Int("password_min", c.PasswordMin),
 		slog.Bool("key_encryption_key_set", len(c.KeyEncryptionKey) > 0),
+		slog.Bool("node_secret_set", c.NodeSecret != ""),
+		slog.Duration("key_activate_lead", c.KeyActivateLead),
 		slog.Duration("key_reload", c.KeyReload),
 		slog.Int("body_max", c.BodyMax),
 		slog.String("cors_origins", strings.Join(c.CORSOrigins, ",")),
@@ -144,6 +153,14 @@ func (c Config) LogValue() slog.Value {
 }
 
 func (c Config) String() string { return c.LogValue().String() }
+
+func optional(key, def string) string {
+	v, set := os.LookupEnv(key)
+	if !set {
+		return def
+	}
+	return strings.TrimSpace(v)
+}
 
 func list(key string) []string {
 	var out []string

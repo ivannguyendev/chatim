@@ -108,6 +108,12 @@ func (fakeCallers) Caller(token string) (auth.Caller, error) {
 	return auth.Caller{Tenant: "shop", Account: "lan", Session: "s1"}, nil
 }
 
+type fakeKeys struct{ body []byte }
+
+func (f fakeKeys) JWKS() ([]byte, bool) { return f.body, f.body != nil }
+
+const testJWKS = `{"keys":[{"kty":"OKP","crv":"Ed25519","kid":"k-1","x":"abc"}]}`
+
 type harness struct {
 	fake   *fakeAuth
 	server *httptest.Server
@@ -119,7 +125,7 @@ func newHarness(t *testing.T) *harness {
 	logs := &bytes.Buffer{}
 	fake := &fakeAuth{}
 	h, err := api.New(api.Options{
-		Auth: fake, Proofs: fakeProofs{}, Callers: fakeCallers{},
+		Auth: fake, Proofs: fakeProofs{}, Callers: fakeCallers{}, Keys: fakeKeys{body: []byte(testJWKS)},
 		BodyMax: 16 << 10, CORSOrigins: []string{"https://app.example.com"},
 		ClientIPHeader: "X-Real-IP", Now: func() time.Time { return t0 },
 		Log: slog.New(slog.NewJSONHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),

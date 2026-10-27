@@ -8,8 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
-
 	"github.com/ivannguyendev/chatim/apps/iam/internal/auth"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/session"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/signing"
@@ -40,6 +38,7 @@ type Ring struct {
 	mu       sync.RWMutex
 	signer   *signing.Signer
 	verifier *jwtverify.Verifier
+	jwks     []byte
 }
 
 func New(src Source, sealer *signing.Sealer, cfg Config) *Ring {
@@ -91,7 +90,7 @@ func (r *Ring) Reload(ctx context.Context) error {
 		}
 	}
 	r.mu.Lock()
-	r.signer, r.verifier = signer, verifier
+	r.signer, r.verifier, r.jwks = signer, verifier, set
 	r.mu.Unlock()
 	if signer == nil {
 		return ErrNoActiveKey
@@ -103,6 +102,12 @@ func (r *Ring) Ready() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.signer != nil
+}
+
+func (r *Ring) JWKS() ([]byte, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.jwks, r.jwks != nil
 }
 
 func (r *Ring) Current() (*signing.Signer, error) {
@@ -122,17 +127,8 @@ func (r *Ring) Caller(token string) (auth.Caller, error) {
 		return auth.Caller{}, errBadToken
 	}
 	claims, err := verifier.Verify(token)
-	if err != nil {
+	if err != nil || !session.ValidID(claims.Session) {
 		return auth.Caller{}, errBadToken
 	}
-	parsed, _, err := jwt.NewParser().ParseUnverified(token, jwt.MapClaims{})
-	if err != nil {
-		return auth.Caller{}, errBadToken
-	}
-	mc, _ := parsed.Claims.(jwt.MapClaims)
-	sid, _ := mc["sid"].(string)
-	if !session.ValidID(sid) {
-		return auth.Caller{}, errBadToken
-	}
-	return auth.Caller{Tenant: claims.Tenant, Account: claims.User, Session: sid}, nil
+	return auth.Caller{Tenant: claims.Tenant, Account: claims.User, Session: claims.Session}, nil
 }

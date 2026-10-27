@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"sync"
@@ -22,6 +23,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/iam/internal/signing"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store/pgstore"
+	"github.com/ivannguyendev/chatim/pkg/revocation"
 )
 
 func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
@@ -32,9 +34,23 @@ var fastHash = password.Params{Memory: 64, Time: 1, Threads: 1, SaltLength: 16, 
 
 type fakeStore struct {
 	store.Auth
-	keys    []store.SigningKey
-	version int
-	closed  atomic.Bool
+	keys     []store.SigningKey
+	version  int
+	closed   atomic.Bool
+	snapshot revocation.Snapshot
+	cleaned  chan struct{}
+}
+
+func (f *fakeStore) Revocations(context.Context) (revocation.Snapshot, error) { return f.snapshot, nil }
+
+func (f *fakeStore) DeleteExpiredRevocations(context.Context) (int64, error) {
+	if f.cleaned != nil {
+		select {
+		case f.cleaned <- struct{}{}:
+		default:
+		}
+	}
+	return 2, nil
 }
 
 func (f *fakeStore) SigningKeys(context.Context) ([]store.SigningKey, error) { return f.keys, nil }
@@ -44,7 +60,7 @@ func (f *fakeStore) Close()                                                  { f
 
 func testConfig(kek []byte) config.Config {
 	return config.Config{
-		ListenAddr: "api", AdminAddr: "admin", PublicURL: "http://127.0.0.1", PGURI: "postgres://iam@db/iam", PGMaxConns: 2,
+		ListenAddr: "api", InternalAddr: "internal", NodeSecret: testNodeSecret, AdminAddr: "admin", PublicURL: "http://127.0.0.1", PGURI: "postgres://iam@db/iam", PGMaxConns: 2,
 		Issuer: "iss", Audience: "aud", AccessTTL: 15 * time.Minute, SessionIdle: time.Hour, SessionMax: 2 * time.Hour,
 		RefreshGrace: 30 * time.Second, DPoPWindow: time.Minute, HashConcurrency: 2, LoginFreeFailures: 5, LoginMaxDelay: time.Minute,
 		LoginIPRate: 10, LoginIPBurst: 10, LoginIPTracked: 100, PasswordMin: 12, KeyEncryptionKey: kek, KeyReload: time.Hour,
@@ -71,8 +87,10 @@ func activeKey(t *testing.T, kek []byte) store.SigningKey {
 	return store.SigningKey{ID: k.ID, State: store.KeyActive, PublicKey: k.PublicKey().Key, PrivateSealed: sealed}
 }
 
+const testNodeSecret = "node-secret-value-0123456789abcdef"
+
 type listeners struct {
-	admin, api chan string
+	addrs map[string]chan string
 }
 
 func (l *listeners) listen(ctx context.Context, name string) (net.Listener, error) {
@@ -81,7 +99,7 @@ func (l *listeners) listen(ctx context.Context, name string) (net.Listener, erro
 	if err != nil {
 		return nil, err
 	}
-	map[string]chan string{"admin": l.admin, "api": l.api}[name] <- lis.Addr().String()
+	l.addrs[name] <- lis.Addr().String()
 	return lis, nil
 }
 
@@ -123,16 +141,16 @@ func (w *logWatch) await(t *testing.T, message string) {
 }
 
 type running struct {
-	cancel     context.CancelFunc
-	done       chan error
-	admin, api string
-	logs       *logWatch
+	cancel               context.CancelFunc
+	done                 chan error
+	admin, api, internal string
+	logs                 *logWatch
 }
 
 func runIAM(t *testing.T, cfg config.Config, st *fakeStore, schema int) *running {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
-	lis := &listeners{admin: make(chan string, 1), api: make(chan string, 1)}
+	lis := &listeners{addrs: map[string]chan string{"admin": make(chan string, 1), "api": make(chan string, 1), "internal": make(chan string, 1)}}
 	logs := &logWatch{messages: make(chan string, 1024)}
 	done := make(chan error, 1)
 	stopped := make(chan struct{})
@@ -147,8 +165,13 @@ func runIAM(t *testing.T, cfg config.Config, st *fakeStore, schema int) *running
 		done <- app.Run(ctx, cfg, slog.New(logs), deps)
 	}()
 	r := &running{cancel: cancel, done: done, logs: logs}
-	r.admin = receive(t, lis.admin, "admin listen")
-	r.api = receive(t, lis.api, "api listen")
+	r.admin = receive(t, lis.addrs["admin"], "admin listen")
+	if cfg.ListenAddr != "" {
+		r.api = receive(t, lis.addrs["api"], "api listen")
+	}
+	if cfg.InternalAddr != "" {
+		r.internal = receive(t, lis.addrs["internal"], "internal listen")
+	}
 	t.Cleanup(func() {
 		cancel()
 		select {
@@ -174,7 +197,13 @@ func receive[T any](t *testing.T, ch <-chan T, what string) T {
 
 func httpGet(t *testing.T, addr, path string) (int, string) {
 	t.Helper()
+	return httpGetWith(t, addr, path, nil)
+}
+
+func httpGetWith(t *testing.T, addr, path string, header http.Header) (int, string) {
+	t.Helper()
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+addr+path, http.NoBody)
+	maps.Copy(req.Header, header)
 	client := &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
 	resp, err := client.Do(req)
 	if err != nil {

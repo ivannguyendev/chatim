@@ -21,7 +21,10 @@ func setRequired(t *testing.T) {
 	t.Setenv("IAM_ISSUER", "chatim-dev")
 	t.Setenv("IAM_AUDIENCE", "chatim-websocket")
 	t.Setenv("IAM_KEY_ENCRYPTION_KEY", kek)
+	t.Setenv("IAM_NODE_SECRET", nodeSecret)
 }
+
+const nodeSecret = "node-secret-value-0123456789abcdef"
 
 func TestLoadDefaults(t *testing.T) {
 	setRequired(t)
@@ -33,6 +36,9 @@ func TestLoadDefaults(t *testing.T) {
 		c.SessionMax != 2160*time.Hour || c.RefreshGrace != 30*time.Second || c.HashConcurrency != 16 || c.LoginMaxDelay != time.Minute ||
 		c.LoginIPRate != 20 || c.LoginIPBurst != 200 || c.PasswordMin != 12 || c.BodyMax != 16<<10 || c.DPoPWindow != time.Minute {
 		t.Fatalf("defaults = %+v", c)
+	}
+	if c.InternalAddr != ":8081" || c.KeyActivateLead != 2*time.Minute || c.NodeSecret != nodeSecret || c.RevocationKeep() != 16*time.Minute {
+		t.Fatalf("internal defaults = %q %v %v", c.InternalAddr, c.KeyActivateLead, c.RevocationKeep())
 	}
 	if len(c.KeyEncryptionKey) != 32 {
 		t.Fatalf("kek length = %d, want 32", len(c.KeyEncryptionKey))
@@ -49,7 +55,7 @@ func TestLogValueHidesSecrets(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 	out := c.String()
-	for _, secret := range []string{"pg-secret-value", kek} {
+	for _, secret := range []string{"pg-secret-value", kek, nodeSecret} {
 		if strings.Contains(out, secret) {
 			t.Fatalf("config log contains a secret: %s", out)
 		}
@@ -76,6 +82,27 @@ func TestSecretsReadFromFiles(t *testing.T) {
 	}
 }
 
+func TestEachPortCanBeTurnedOff(t *testing.T) {
+	t.Run("public off", func(t *testing.T) {
+		setRequired(t)
+		t.Setenv("IAM_ADDR", "")
+		t.Setenv("IAM_PUBLIC_URL", "")
+		c, err := config.Load()
+		if err != nil || c.ListenAddr != "" || c.InternalAddr != ":8081" {
+			t.Fatalf("Load = %+v, %v; want only the internal port", c, err)
+		}
+	})
+	t.Run("internal off", func(t *testing.T) {
+		setRequired(t)
+		t.Setenv("IAM_INTERNAL_ADDR", "")
+		t.Setenv("IAM_NODE_SECRET", "")
+		c, err := config.Load()
+		if err != nil || c.InternalAddr != "" || c.ListenAddr != ":8080" {
+			t.Fatalf("Load = %+v, %v; want only the public port", c, err)
+		}
+	})
+}
+
 func TestLoadRejectsBadConfig(t *testing.T) {
 	cases := map[string]map[string]string{
 		"missing public url":    {"IAM_PUBLIC_URL": ""},
@@ -93,6 +120,12 @@ func TestLoadRejectsBadConfig(t *testing.T) {
 		"short password min":    {"IAM_PASSWORD_MIN": "6"},
 		"budget too small":      {"IAM_SHUTDOWN_BUDGET": "1s"},
 		"bad cors origin":       {"IAM_CORS_ORIGINS": "app.example.com"},
+		"both ports off":        {"IAM_ADDR": "", "IAM_INTERNAL_ADDR": ""},
+		"internal on admin":     {"IAM_INTERNAL_ADDR": ":9090"},
+		"internal on public":    {"IAM_INTERNAL_ADDR": ":8080"},
+		"missing node secret":   {"IAM_NODE_SECRET": ""},
+		"short node secret":     {"IAM_NODE_SECRET": "short"},
+		"negative lead":         {"IAM_KEY_ACTIVATE_LEAD": "-1s"},
 	}
 	for name, env := range cases {
 		t.Run(name, func(t *testing.T) {

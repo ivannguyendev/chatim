@@ -158,7 +158,7 @@ func waitForLockWait(t *testing.T, s fixture) {
 	defer tick.Stop()
 	for {
 		var waiting int
-		if err := s.raw.QueryRow(ctx, "SELECT count(*) FROM pg_locks WHERE NOT granted").Scan(&waiting); err != nil {
+		if err := s.raw.QueryRow(ctx, "SELECT count(*) FROM pg_locks WHERE NOT granted AND locktype = 'transactionid'").Scan(&waiting); err != nil {
 			t.Fatalf("pg_locks: %v", err)
 		}
 		if waiting > 0 {

@@ -33,10 +33,15 @@ type Callers interface {
 	Caller(token string) (auth.Caller, error)
 }
 
+type Keys interface {
+	JWKS() ([]byte, bool)
+}
+
 type Options struct {
 	Auth           Auth
 	Proofs         Proofs
 	Callers        Callers
+	Keys           Keys
 	BodyMax        int64
 	CORSOrigins    []string
 	ClientIPHeader string
@@ -50,8 +55,8 @@ type server struct {
 
 func New(opts Options) (http.Handler, error) {
 	switch {
-	case opts.Auth == nil || opts.Proofs == nil || opts.Callers == nil:
-		return nil, errors.New("api: auth, proofs and callers are required")
+	case opts.Auth == nil || opts.Proofs == nil || opts.Callers == nil || opts.Keys == nil:
+		return nil, errors.New("api: auth, proofs, callers and keys are required")
 	case opts.BodyMax <= 0:
 		return nil, errors.New("api: body max must be positive")
 	}
@@ -67,6 +72,7 @@ func New(opts Options) (http.Handler, error) {
 	mux.Handle(path, handler)
 	mux.HandleFunc("POST /realms/{tenant}/protocol/openid-connect/token", s.token)
 	mux.HandleFunc("POST /realms/{tenant}/protocol/openid-connect/revoke", s.revoke)
+	mux.HandleFunc("GET /.well-known/jwks.json", s.jwks)
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"code": "not_found", "message": "not found"})
 	})
@@ -79,6 +85,18 @@ func New(opts Options) (http.Handler, error) {
 		AllowHeaders:  []string{"Authorization", "Content-Type", "Connect-Protocol-Version", "Connect-Timeout-Ms", "DPoP"},
 		ExposeHeaders: []string{"Grpc-Status", "Grpc-Message", "Grpc-Status-Details-Bin", "Retry-After"},
 	}, limited), nil
+}
+
+func (s *server) jwks(w http.ResponseWriter, _ *http.Request) {
+	body, ok := s.opts.Keys.JWKS()
+	if !ok {
+		w.Header().Set("Retry-After", "1")
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"code": "unavailable", "message": "no signing keys yet"})
+		return
+	}
+	w.Header().Set("Content-Type", "application/jwk-set+json")
+	w.Header().Set("Cache-Control", "public, max-age=60")
+	_, _ = w.Write(body)
 }
 
 func noStore(h http.Header) {
