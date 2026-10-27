@@ -10,6 +10,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/iam/internal/app"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store"
+	"github.com/ivannguyendev/chatim/apps/iam/internal/store/pgstore"
 )
 
 func TestReadyWithAnActiveKeyAndTheCurrentSchema(t *testing.T) {
@@ -61,7 +62,7 @@ func TestRunRefusesBadConfigAndStoreFailures(t *testing.T) {
 	if err := app.Run(context.Background(), bad, slog.New(slog.DiscardHandler), app.Deps{}); err == nil {
 		t.Fatal("Run accepted a config without an issuer")
 	}
-	deps := app.Deps{OpenStore: func(context.Context, string, int32) (app.Store, error) { return nil, errOpen }}
+	deps := app.Deps{OpenStore: func(context.Context, string, pgstore.Options) (app.Store, error) { return nil, errOpen }}
 	if err := app.Run(context.Background(), testConfig(kek), slog.New(slog.DiscardHandler), deps); !errors.Is(err, errOpen) {
 		t.Fatalf("Run = %v, want the store error", err)
 	}

@@ -2,6 +2,7 @@ package pgstore
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -42,7 +43,11 @@ func (s *Store) SetTenantState(ctx context.Context, id string, state store.State
 		if state != store.StateDisabled {
 			return nil
 		}
-		return revokeWhere(ctx, tx, r, "tenant_id = $4", id)
+		if err := revokeSessions(ctx, tx, r, "tenant_id = $4", id); err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, "UPDATE tenants SET sessions_revoked_at = clock_timestamp() WHERE id = $1", id)
+		return err
 	})
 }
 
@@ -89,7 +94,7 @@ func (s *Store) SetAccountState(ctx context.Context, tenantID, id string, state 
 		if state != store.StateDisabled {
 			return nil
 		}
-		return revokeWhere(ctx, tx, r, "tenant_id = $4 AND account_id = $5", tenantID, id)
+		return s.revokeWhere(ctx, tx, r, "tenant_id = $4 AND account_id = $5", tenantID, id)
 	})
 }
 
@@ -122,14 +127,32 @@ func (s *Store) SetPassword(ctx context.Context, c store.PasswordChange, audit s
 		if err := expectOne(tag); err != nil {
 			return err
 		}
-		return revokeWhere(ctx, tx, c.Revocation, "tenant_id = $4 AND account_id = $5", c.TenantID, c.AccountID)
+		return s.revokeWhere(ctx, tx, c.Revocation, "tenant_id = $4 AND account_id = $5", c.TenantID, c.AccountID)
 	})
 }
 
-func revokeWhere(ctx context.Context, tx pgx.Tx, r store.Revocation, where string, args ...any) error {
-	params := append([]any{r.At, r.By, r.Reason}, args...)
-	_, err := tx.Exec(ctx,
-		"UPDATE sessions SET state = 2, revoked_at = $1, revoked_by = $2, revoked_reason = $3 WHERE state = 1 AND "+where,
-		params...)
+const revokeSessionsSQL = "UPDATE sessions SET state = 2, revoked_at = $1, revoked_by = $2, revoked_reason = $3 WHERE state = 1 AND "
+
+func revokeSessions(ctx context.Context, tx pgx.Tx, r store.Revocation, where string, args ...any) error {
+	_, err := tx.Exec(ctx, revokeSessionsSQL+where, append([]any{r.At, r.By, r.Reason}, args...)...)
 	return err
+}
+
+func (s *Store) revokeWhere(ctx context.Context, tx pgx.Tx, r store.Revocation, where string, args ...any) error {
+	_, err := s.revokeAndRecord(ctx, tx, r, where, args...)
+	return err
+}
+
+func (s *Store) revokeAndRecord(ctx context.Context, tx pgx.Tx, r store.Revocation, where string, args ...any) (int, error) {
+	keepAt := len(args) + 4
+	sql := "WITH r AS (" + revokeSessionsSQL + where + " RETURNING id, tenant_id), " +
+		"t AS (SELECT clock_timestamp() AS at), " +
+		"i AS (INSERT INTO revoked_sessions (session_id, tenant_id, revoked_at, expires_at) " +
+		"SELECT r.id, r.tenant_id, t.at, t.at + $" + strconv.Itoa(keepAt) + " FROM r, t ON CONFLICT (session_id) DO NOTHING) " +
+		"SELECT count(*) FROM r"
+	params := append([]any{r.At, r.By, r.Reason}, args...)
+	params = append(params, s.keep)
+	var revoked int
+	err := tx.QueryRow(ctx, sql, params...).Scan(&revoked)
+	return revoked, err
 }

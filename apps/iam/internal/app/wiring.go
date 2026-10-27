@@ -35,12 +35,12 @@ type Store interface {
 	Close()
 }
 
-func openPostgres(ctx context.Context, uri string, maxConns int32) (Store, error) {
-	return pgstore.Open(ctx, uri, maxConns)
+func openPostgres(ctx context.Context, uri string, opts pgstore.Options) (Store, error) {
+	return pgstore.Open(ctx, uri, opts)
 }
 
 func wire(ctx context.Context, cfg config.Config, log *slog.Logger, deps Deps) (*node, error) {
-	st, err := deps.OpenStore(ctx, cfg.DatabaseURI(), poolSize(cfg.PGMaxConns))
+	st, err := deps.OpenStore(ctx, cfg.DatabaseURI(), pgstore.Options{MaxConns: poolSize(cfg.PGMaxConns), RevocationKeep: cfg.RevocationKeep()})
 	if err != nil {
 		return nil, err
 	}

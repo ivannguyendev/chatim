@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -17,17 +18,26 @@ import (
 
 var errConflict = errors.New("row changed concurrently")
 
+type Options struct {
+	MaxConns       int32
+	RevocationKeep time.Duration
+}
+
 type Store struct {
 	pool *pgxpool.Pool
 	uri  string
+	keep time.Duration
 }
 
-func Open(ctx context.Context, uri string, maxConns int32) (*Store, error) {
+func Open(ctx context.Context, uri string, opts Options) (*Store, error) {
+	if opts.RevocationKeep <= 0 {
+		return nil, errors.New("pgstore: revocation keep must be positive")
+	}
 	cfg, err := pgxpool.ParseConfig(uri)
 	if err != nil {
 		return nil, redact.Error(fmt.Errorf("parse postgres uri: %w", err), uri)
 	}
-	cfg.MaxConns = max(maxConns, 1)
+	cfg.MaxConns = max(opts.MaxConns, 1)
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, redact.Error(fmt.Errorf("open postgres pool: %w", err), uri)
@@ -36,7 +46,7 @@ func Open(ctx context.Context, uri string, maxConns int32) (*Store, error) {
 		pool.Close()
 		return nil, redact.Error(fmt.Errorf("ping postgres: %w", err), uri)
 	}
-	return &Store{pool: pool, uri: uri}, nil
+	return &Store{pool: pool, uri: uri, keep: opts.RevocationKeep}, nil
 }
 
 func (s *Store) Close() { s.pool.Close() }

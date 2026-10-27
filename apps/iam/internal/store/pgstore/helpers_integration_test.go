@@ -18,6 +18,8 @@ import (
 
 var t0 = time.Date(2026, 10, 26, 8, 0, 0, 0, time.UTC)
 
+const testKeep = 16 * time.Minute
+
 func testDatabaseURI(t testing.TB) string {
 	t.Helper()
 	base := os.Getenv("CHATIM_IT_PG_URI")
@@ -56,7 +58,7 @@ func openStore(t testing.TB) fixture {
 	t.Helper()
 	ctx := context.Background()
 	uri := testDatabaseURI(t)
-	s, err := pgstore.Open(ctx, uri, 8)
+	s, err := pgstore.Open(ctx, uri, pgstore.Options{MaxConns: 8, RevocationKeep: testKeep})
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -121,8 +123,12 @@ func revocation() store.Revocation {
 func seedSessions(t testing.TB, s fixture, a store.Account, ids ...string) {
 	t.Helper()
 	for _, id := range ids {
-		if err := s.CreateSession(context.Background(), newSession(id, a), audit("login_ok")); err != nil {
+		if _, err := s.CreateSession(context.Background(), newSession(id, a), audit("login_ok")); err != nil {
 			t.Fatalf("CreateSession %s: %v", id, err)
 		}
 	}
+}
+
+func openWithoutKeep(uri string) (*pgstore.Store, error) {
+	return pgstore.Open(context.Background(), uri, pgstore.Options{MaxConns: 1})
 }

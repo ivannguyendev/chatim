@@ -126,10 +126,10 @@ type Auth interface {
 	TenantByID(ctx context.Context, id string) (Tenant, error)
 	AccountByUsername(ctx context.Context, tenantID, username string) (Account, error)
 	AccountByID(ctx context.Context, tenantID, id string) (Account, error)
-	CreateSession(ctx context.Context, s NewSession, audit AuditEvent) error
+	CreateSession(ctx context.Context, s NewSession, audit AuditEvent) (time.Time, error)
 	RecordLoginFailure(ctx context.Context, tenantID, accountID string, nextLoginAt func(failed int) time.Time, audit AuditEvent) error
 	SessionByID(ctx context.Context, id string) (Session, error)
-	RotateRefresh(ctx context.Context, r Rotation, audit AuditEvent) error
+	RotateRefresh(ctx context.Context, r Rotation, audit AuditEvent) (time.Time, error)
 	RevokeSession(ctx context.Context, id string, r Revocation, audit AuditEvent) (bool, error)
 	ActiveSessions(ctx context.Context, tenantID, accountID string) ([]Session, error)
 	SetPassword(ctx context.Context, c PasswordChange, audit AuditEvent) error

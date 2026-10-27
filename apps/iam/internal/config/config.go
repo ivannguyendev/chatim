@@ -14,7 +14,10 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/redact"
 )
 
-const defaultAdminAddr = ":9090"
+const (
+	defaultAdminAddr = ":9090"
+	revocationMargin = time.Minute
+)
 
 type Config struct {
 	ListenAddr        string
@@ -97,6 +100,8 @@ func Load() (Config, error) {
 	}
 	return c, nil
 }
+
+func (c Config) RevocationKeep() time.Duration { return c.AccessTTL + revocationMargin }
 
 func (c Config) DatabaseURI() string {
 	u, err := url.Parse(c.PGURI)

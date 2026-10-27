@@ -57,7 +57,7 @@ func TestRevokedSessionCannotRotateEvenWithTheRightVersion(t *testing.T) {
 	if err != nil || again {
 		t.Fatalf("second RevokeSession = %v, %v; want false, nil", again, err)
 	}
-	err = s.RotateRefresh(ctx, store.Rotation{SessionID: "s1aaaaaaaaaaaaaaaaaaaaaaaa", ExpectVer: 1, RefreshHash: digest("x"), IdleExpiresAt: t0, LastUsedAt: t0}, audit("refresh"))
+	_, err = s.RotateRefresh(ctx, store.Rotation{SessionID: "s1aaaaaaaaaaaaaaaaaaaaaaaa", ExpectVer: 1, RefreshHash: digest("x"), IdleExpiresAt: t0, LastUsedAt: t0}, audit("refresh"))
 	if !errors.Is(err, apperr.ErrUnavailable) {
 		t.Fatalf("RotateRefresh on a revoked session = %v, want ErrUnavailable", err)
 	}
@@ -104,7 +104,7 @@ func TestConcurrentLoginFailuresAreAllCounted(t *testing.T) {
 	if got.FailedLoginCount != 4 || !got.NextLoginAt.Equal(t0.Add(4*time.Second)) {
 		t.Fatalf("failed = %d, next = %v; want 4 and t0+4s", got.FailedLoginCount, got.NextLoginAt)
 	}
-	if err := s.CreateSession(ctx, newSession("s1aaaaaaaaaaaaaaaaaaaaaaaa", got), audit("login_ok")); err != nil {
+	if _, err := s.CreateSession(ctx, newSession("s1aaaaaaaaaaaaaaaaaaaaaaaa", got), audit("login_ok")); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	after, _ := s.AccountByID(ctx, "shop", a.ID)

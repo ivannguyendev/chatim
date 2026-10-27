@@ -81,11 +81,12 @@ func (s *Service) Refresh(ctx context.Context, req RefreshRequest) (Tokens, erro
 		detail["client_id"] = req.ClientID
 	}
 	audit := store.AuditEvent{TenantID: sess.TenantID, At: now, Actor: sess.AccountID, Action: "refresh", AccountID: sess.AccountID, SessionID: sid, IP: req.IP, Detail: detail}
-	if err := s.deps.Store.RotateRefresh(ctx, rotation, audit); err != nil {
+	issued, err := s.deps.Store.RotateRefresh(ctx, rotation, audit)
+	if err != nil {
 		s.deps.Stats.RefreshUnavailable.Add(1)
 		return Tokens{}, err
 	}
-	access, expires, err := s.signAccess(sess.TenantID, sess.AccountID, sid, now)
+	access, expires, err := s.signAccess(sess.TenantID, sess.AccountID, sid, issued)
 	if err != nil {
 		return Tokens{}, err
 	}

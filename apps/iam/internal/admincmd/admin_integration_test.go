@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -59,7 +60,9 @@ type harness struct {
 func newHarness(t *testing.T) *harness {
 	t.Helper()
 	uri := databaseURI(t)
-	env, out, logs := testEnv(t, func(ctx context.Context) (admincmd.Store, error) { return pgstore.Open(ctx, uri, 2) })
+	env, out, logs := testEnv(t, func(ctx context.Context) (admincmd.Store, error) {
+		return pgstore.Open(ctx, uri, pgstore.Options{MaxConns: 2, RevocationKeep: 16 * time.Minute})
+	})
 	return &harness{t: t, env: env, uri: uri, out: out, logs: logs}
 }
 
@@ -74,7 +77,7 @@ func (h *harness) run(args ...string) string {
 
 func (h *harness) store() *pgstore.Store {
 	h.t.Helper()
-	s, err := pgstore.Open(context.Background(), h.uri, 2)
+	s, err := pgstore.Open(context.Background(), h.uri, pgstore.Options{MaxConns: 2, RevocationKeep: 16 * time.Minute})
 	if err != nil {
 		h.t.Fatal(err)
 	}

@@ -21,6 +21,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/iam/internal/password"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/signing"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store"
+	"github.com/ivannguyendev/chatim/apps/iam/internal/store/pgstore"
 )
 
 func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
@@ -137,7 +138,7 @@ func runIAM(t *testing.T, cfg config.Config, st *fakeStore, schema int) *running
 	stopped := make(chan struct{})
 	deps := app.Deps{
 		Listen:        lis.listen,
-		OpenStore:     func(context.Context, string, int32) (app.Store, error) { return st, nil },
+		OpenStore:     func(context.Context, string, pgstore.Options) (app.Store, error) { return st, nil },
 		HashParams:    fastHash,
 		SchemaVersion: schema,
 	}

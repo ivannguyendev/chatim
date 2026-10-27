@@ -67,11 +67,12 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (Tokens, error) {
 		RecentJTI: []string{req.Proof.JTI},
 	}
 	audit := store.AuditEvent{TenantID: a.TenantID, At: now, Actor: a.ID, Action: "login_ok", AccountID: a.ID, SessionID: sid, IP: req.IP}
-	if err := s.deps.Store.CreateSession(ctx, store.NewSession{Session: sess, AccountVer: a.Ver, Rehash: rehash}, audit); err != nil {
+	issued, err := s.deps.Store.CreateSession(ctx, store.NewSession{Session: sess, AccountVer: a.Ver, Rehash: rehash}, audit)
+	if err != nil {
 		s.deps.Stats.StoreErrors.Add(1)
 		return Tokens{}, err
 	}
-	access, expires, err := s.signAccess(a.TenantID, a.ID, sid, now)
+	access, expires, err := s.signAccess(a.TenantID, a.ID, sid, issued)
 	if err != nil {
 		return Tokens{}, err
 	}

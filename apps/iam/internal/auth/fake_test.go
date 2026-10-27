@@ -26,6 +26,7 @@ type fakeStore struct {
 	audits   []string
 	failRead error
 	failRev  error
+	issued   time.Time
 }
 
 func newFakeStore() *fakeStore {
@@ -68,13 +69,13 @@ func (f *fakeStore) AccountByID(_ context.Context, tenant, id string) (store.Acc
 	return a, nil
 }
 
-func (f *fakeStore) CreateSession(_ context.Context, n store.NewSession, audit store.AuditEvent) error {
+func (f *fakeStore) CreateSession(_ context.Context, n store.NewSession, audit store.AuditEvent) (time.Time, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	key := accountKey(n.Session.TenantID, n.Session.AccountID)
 	a := f.accounts[key]
 	if a.Ver != n.AccountVer || a.State != store.StateActive || f.tenants[a.TenantID].State != store.StateActive {
-		return apperr.ErrUnavailable
+		return time.Time{}, apperr.ErrUnavailable
 	}
 	a.FailedLoginCount, a.NextLoginAt = 0, time.Time{}
 	if n.Rehash != "" {
@@ -83,7 +84,7 @@ func (f *fakeStore) CreateSession(_ context.Context, n store.NewSession, audit s
 	f.accounts[key] = a
 	f.sessions[n.Session.ID] = n.Session
 	f.audits = append(f.audits, audit.Action)
-	return nil
+	return f.issued, nil
 }
 
 func (f *fakeStore) RecordLoginFailure(_ context.Context, tenant, id string, next func(int) time.Time, audit store.AuditEvent) error {
@@ -107,18 +108,18 @@ func (f *fakeStore) SessionByID(_ context.Context, id string) (store.Session, er
 	return s, nil
 }
 
-func (f *fakeStore) RotateRefresh(_ context.Context, r store.Rotation, audit store.AuditEvent) error {
+func (f *fakeStore) RotateRefresh(_ context.Context, r store.Rotation, audit store.AuditEvent) (time.Time, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	s := f.sessions[r.SessionID]
 	if s.State != store.StateActive || s.RefreshVer != r.ExpectVer {
-		return apperr.ErrUnavailable
+		return time.Time{}, apperr.ErrUnavailable
 	}
 	s.RefreshVer++
 	s.RefreshHash, s.History, s.RecentJTI, s.IdleExpiresAt, s.LastUsedAt = r.RefreshHash, r.History, r.RecentJTI, r.IdleExpiresAt, r.LastUsedAt
 	f.sessions[r.SessionID] = s
 	f.audits = append(f.audits, audit.Action)
-	return nil
+	return f.issued, nil
 }
 
 func (f *fakeStore) RevokeSession(_ context.Context, id string, r store.Revocation, audit store.AuditEvent) (bool, error) {
@@ -237,6 +238,7 @@ func newHarnessWithSlots(t *testing.T, slots int) *harness {
 		Signers: staticSigners{signer: signer}, Random: rand.Reader, Now: func() time.Time { return h.now },
 	}, auth.Config{SessionIdle: 30 * 24 * time.Hour, SessionMax: 90 * 24 * time.Hour, RefreshGrace: 30 * time.Second})
 	h.store.tenants["shop"] = store.Tenant{ID: "shop", State: store.StateActive, Ver: 1}
+	h.store.issued = t0
 	return h
 }
 

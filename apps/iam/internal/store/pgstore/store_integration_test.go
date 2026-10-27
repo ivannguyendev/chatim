@@ -33,7 +33,7 @@ func TestConcurrentMigrationsDoNotOverlap(t *testing.T) {
 	errs := make(chan error, 3)
 	for range 3 {
 		wg.Go(func() {
-			s, err := pgstore.Open(ctx, uri, 2)
+			s, err := pgstore.Open(ctx, uri, pgstore.Options{MaxConns: 2, RevocationKeep: testKeep})
 			if err != nil {
 				errs <- err
 				return
@@ -75,19 +75,20 @@ func TestConcurrentRotationsLetExactlyOneWin(t *testing.T) {
 	ctx := context.Background()
 	seedTenant(t, s, "shop")
 	a := seedAccount(t, s, "shop", "a1aaaaaaaaaaaaaaaaaaaaaaaa", "lan")
-	if err := s.CreateSession(ctx, newSession("s1aaaaaaaaaaaaaaaaaaaaaaaa", a), audit("login_ok")); err != nil {
+	if _, err := s.CreateSession(ctx, newSession("s1aaaaaaaaaaaaaaaaaaaaaaaa", a), audit("login_ok")); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	var wg sync.WaitGroup
 	results := make(chan error, 2)
 	for i := range 2 {
 		wg.Go(func() {
-			results <- s.RotateRefresh(ctx, store.Rotation{
+			_, err := s.RotateRefresh(ctx, store.Rotation{
 				SessionID: "s1aaaaaaaaaaaaaaaaaaaaaaaa", ExpectVer: 1,
 				RefreshHash: digest("token-2-" + string(rune('a'+i))),
 				History:     []session.HistoryEntry{{Hash: digest("s1-token-1"), ReplacedAt: t0}},
 				RecentJTI:   []string{"jti"}, IdleExpiresAt: t0.Add(time.Hour), LastUsedAt: t0,
 			}, audit("refresh"))
+			results <- err
 		})
 	}
 	wg.Wait()
@@ -131,7 +132,7 @@ func TestCreateSessionFailsWhenTheAccountChangedMidLogin(t *testing.T) {
 			seedTenant(t, s, "shop")
 			a := seedAccount(t, s, "shop", "a1aaaaaaaaaaaaaaaaaaaaaaaa", "lan")
 			change(s)
-			err := s.CreateSession(ctx, newSession("s1aaaaaaaaaaaaaaaaaaaaaaaa", a), audit("login_ok"))
+			_, err := s.CreateSession(ctx, newSession("s1aaaaaaaaaaaaaaaaaaaaaaaa", a), audit("login_ok"))
 			if !errors.Is(err, apperr.ErrUnavailable) {
 				t.Fatalf("CreateSession after %s = %v, want ErrUnavailable", name, err)
 			}

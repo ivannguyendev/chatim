@@ -99,7 +99,7 @@ func adminMain(args []string) int {
 	}
 	env := admincmd.Env{
 		Open: func(ctx context.Context) (admincmd.Store, error) {
-			return pgstore.Open(ctx, cfg.DatabaseURI(), adminPoolConns)
+			return pgstore.Open(ctx, cfg.DatabaseURI(), pgstore.Options{MaxConns: adminPoolConns, RevocationKeep: cfg.RevocationKeep()})
 		},
 		Sealer: sealer, Hasher: hasher, Random: rand.Reader, Now: time.Now,
 		KeyWindow: cfg.AccessTTL + tokenLeeway, Out: os.Stdout, Log: log,

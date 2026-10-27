@@ -17,7 +17,7 @@ import (
 
 type Deps struct {
 	Listen        func(ctx context.Context, addr string) (net.Listener, error)
-	OpenStore     func(ctx context.Context, uri string, maxConns int32) (Store, error)
+	OpenStore     func(ctx context.Context, uri string, opts pgstore.Options) (Store, error)
 	HashParams    password.Params
 	SchemaVersion int
 }

@@ -3,6 +3,7 @@ package pgstore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -19,9 +20,10 @@ type historyRow struct {
 	ReplacedAt time.Time `json:"replaced_at"`
 }
 
-func (s *Store) CreateSession(ctx context.Context, n store.NewSession, audit store.AuditEvent) error {
+func (s *Store) CreateSession(ctx context.Context, n store.NewSession, audit store.AuditEvent) (time.Time, error) {
 	sess := n.Session
-	return s.write(ctx, audit, func(tx pgx.Tx) error {
+	var issued time.Time
+	err := s.write(ctx, audit, func(tx pgx.Tx) error {
 		var tenantState store.State
 		if err := tx.QueryRow(ctx, "SELECT state FROM tenants WHERE id = $1 FOR SHARE", sess.TenantID).Scan(&tenantState); err != nil {
 			return err
@@ -42,12 +44,12 @@ func (s *Store) CreateSession(ctx context.Context, n store.NewSession, audit sto
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx,
-			"INSERT INTO sessions (id, tenant_id, account_id, state, device_name, user_agent, created_at, last_used_at, idle_expires_at, expires_at, refresh_ver, refresh_hash, refresh_history, dpop_jkt, dpop_recent_jti) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)",
+		return tx.QueryRow(ctx,
+			"INSERT INTO sessions (id, tenant_id, account_id, state, device_name, user_agent, created_at, last_used_at, idle_expires_at, expires_at, refresh_ver, refresh_hash, refresh_history, dpop_jkt, dpop_recent_jti) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING transaction_timestamp()",
 			sess.ID, sess.TenantID, sess.AccountID, sess.State, sess.DeviceName, sess.UserAgent, sess.CreatedAt, sess.LastUsedAt,
-			sess.IdleExpiresAt, sess.ExpiresAt, sess.RefreshVer, sess.RefreshHash, history, sess.KeyThumbprint, nonNil(sess.RecentJTI))
-		return err
+			sess.IdleExpiresAt, sess.ExpiresAt, sess.RefreshVer, sess.RefreshHash, history, sess.KeyThumbprint, nonNil(sess.RecentJTI)).Scan(&issued)
 	})
+	return issued, err
 }
 
 func (s *Store) SessionByID(ctx context.Context, id string) (store.Session, error) {
@@ -67,32 +69,32 @@ func (s *Store) ActiveSessions(ctx context.Context, tenantID, accountID string) 
 	return out, s.mapErr(err)
 }
 
-func (s *Store) RotateRefresh(ctx context.Context, r store.Rotation, audit store.AuditEvent) error {
+func (s *Store) RotateRefresh(ctx context.Context, r store.Rotation, audit store.AuditEvent) (time.Time, error) {
 	history, err := encodeHistory(r.History)
 	if err != nil {
-		return s.mapErr(err)
+		return time.Time{}, s.mapErr(err)
 	}
-	return s.write(ctx, audit, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx,
-			"UPDATE sessions SET refresh_ver = refresh_ver + 1, refresh_hash = $3, refresh_history = $4, dpop_recent_jti = $5, idle_expires_at = $6, last_used_at = $7 WHERE id = $1 AND state = 1 AND refresh_ver = $2",
-			r.SessionID, r.ExpectVer, r.RefreshHash, history, nonNil(r.RecentJTI), r.IdleExpiresAt, r.LastUsedAt)
-		if err != nil {
-			return err
+	var issued time.Time
+	err = s.write(ctx, audit, func(tx pgx.Tx) error {
+		err := tx.QueryRow(ctx,
+			"UPDATE sessions SET refresh_ver = refresh_ver + 1, refresh_hash = $3, refresh_history = $4, dpop_recent_jti = $5, idle_expires_at = $6, last_used_at = $7 WHERE id = $1 AND state = 1 AND refresh_ver = $2 RETURNING transaction_timestamp()",
+			r.SessionID, r.ExpectVer, r.RefreshHash, history, nonNil(r.RecentJTI), r.IdleExpiresAt, r.LastUsedAt).Scan(&issued)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errConflict
 		}
-		return expectOne(tag)
+		return err
 	})
+	return issued, err
 }
 
 func (s *Store) RevokeSession(ctx context.Context, id string, r store.Revocation, audit store.AuditEvent) (bool, error) {
 	revoked := false
 	err := s.mapErr(s.inTx(ctx, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx,
-			"UPDATE sessions SET state = 2, revoked_at = $2, revoked_by = $3, revoked_reason = $4 WHERE id = $1 AND state = 1",
-			id, r.At, r.By, r.Reason)
+		count, err := s.revokeAndRecord(ctx, tx, r, "id = $4", id)
 		if err != nil {
 			return err
 		}
-		if tag.RowsAffected() == 0 {
+		if count == 0 {
 			return nil
 		}
 		revoked = true

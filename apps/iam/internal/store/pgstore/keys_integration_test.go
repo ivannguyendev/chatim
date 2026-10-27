@@ -63,7 +63,7 @@ func TestSessionRoundTripKeepsHistoryAndJTIs(t *testing.T) {
 	seedSessions(t, s, a, "s1aaaaaaaaaaaaaaaaaaaaaaaa")
 	history := []session.HistoryEntry{{Hash: digest("h1"), ReplacedAt: t0.Add(time.Minute)}, {Hash: digest("h0"), ReplacedAt: t0}}
 	rot := store.Rotation{SessionID: "s1aaaaaaaaaaaaaaaaaaaaaaaa", ExpectVer: 1, RefreshHash: digest("h2"), History: history, RecentJTI: []string{"j2", "j1"}, IdleExpiresAt: t0.Add(2 * time.Hour), LastUsedAt: t0.Add(time.Minute)}
-	if err := s.RotateRefresh(ctx, rot, audit("refresh")); err != nil {
+	if _, err := s.RotateRefresh(ctx, rot, audit("refresh")); err != nil {
 		t.Fatalf("RotateRefresh: %v", err)
 	}
 	got, err := s.SessionByID(ctx, "s1aaaaaaaaaaaaaaaaaaaaaaaa")
@@ -91,7 +91,7 @@ func BenchmarkRotateRefresh(b *testing.B) {
 	ver := int64(1)
 	b.ResetTimer()
 	for b.Loop() {
-		err := s.RotateRefresh(ctx, store.Rotation{
+		_, err := s.RotateRefresh(ctx, store.Rotation{
 			SessionID: "s1aaaaaaaaaaaaaaaaaaaaaaaa", ExpectVer: ver, RefreshHash: digest("h"),
 			History: history, RecentJTI: []string{"j"}, IdleExpiresAt: t0.Add(time.Hour), LastUsedAt: t0,
 		}, audit("refresh"))
