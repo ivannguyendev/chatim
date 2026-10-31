@@ -33,11 +33,14 @@ var envKeys = []string{
 }
 
 var requiredEnv = map[string]string{
-	"WS_NODE_ID":       "ws-a",
-	"WS_JWT_KEYS_FILE": "/run/secrets/jwks.json",
-	"WS_JWT_ISSUER":    "chatim-identity",
-	"WS_JWT_AUDIENCE":  "chatim-websocket",
-	"NATS_URL":         "nats://chatim-nats:4222",
+	"WS_NODE_ID":          "ws-a",
+	"WS_JWT_KEYS_FILE":    "/run/secrets/jwks.json",
+	"WS_JWT_ISSUER":       "chatim-identity",
+	"WS_JWT_AUDIENCE":     "chatim-websocket",
+	"NATS_URL":            "nats://chatim-nats:4222",
+	"WS_IAM_INTERNAL_URL": "http://chatim-iam-1:8081",
+	"WS_IAM_JWKS_URL":     "https://iam.example.com/.well-known/jwks.json",
+	"WS_IAM_SECRET":       "node-secret-value-0123456789abcdef",
 }
 
 func setEnv(t *testing.T, env map[string]string) {
@@ -117,7 +120,7 @@ func TestLoadDefaults(t *testing.T) {
 		PresenceBatch:        500,
 		PresenceCache:        5 * time.Second,
 		PresenceWatchMax:     200,
-		IAM:                  iamsync.Defaults(),
+		IAM:                  iamWant(),
 	}
 	if got != want {
 		t.Fatalf("Load() = %+v, want %+v", fields(got), fields(want))
@@ -269,4 +272,10 @@ func TestLogValueCoversEveryField(t *testing.T) {
 	if got, want := len(attrs), reflect.TypeFor[config.Config]().NumField(); got != want {
 		t.Fatalf("LogValue has %d attrs, Config has %d fields", got, want)
 	}
+}
+
+func iamWant() iamsync.Config {
+	c := iamsync.Defaults()
+	c.InternalURL, c.JWKSURL, c.Secret = "http://chatim-iam-1:8081", "https://iam.example.com/.well-known/jwks.json", "node-secret-value-0123456789abcdef"
+	return c
 }

@@ -82,7 +82,7 @@ func (s *Store) mapErr(err error) error {
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return apperr.ErrNotFound
-	case errors.Is(err, apperr.ErrNotFound), errors.Is(err, apperr.ErrAlreadyExists):
+	case errors.Is(err, apperr.ErrNotFound), errors.Is(err, apperr.ErrAlreadyExists), errors.Is(err, apperr.ErrFailedPrecondition):
 		return err
 	case errors.Is(err, errConflict):
 		return fmt.Errorf("%w: %w", apperr.ErrUnavailable, err)

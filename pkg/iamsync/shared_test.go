@@ -15,7 +15,8 @@ func TestRedisSharedRoundTrip(t *testing.T) {
 	mr := miniredis.RunT(t)
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
-	shared := iamsync.NewRedisShared(client)
+	shared := iamsync.NewRedisShared(client, "chatim-dev")
+	other := iamsync.NewRedisShared(client, "chatim-staging")
 	ctx := context.Background()
 	if got, err := shared.Get(ctx); err != nil || got != nil {
 		t.Fatalf("Get on empty = %q, %v; want nil, nil", got, err)
@@ -26,8 +27,11 @@ func TestRedisSharedRoundTrip(t *testing.T) {
 	if got, err := shared.Get(ctx); err != nil || string(got) != `{"x":1}` {
 		t.Fatalf("Get = %q, %v", got, err)
 	}
-	if ttl := mr.TTL(iamsync.SharedKey); ttl != time.Minute {
+	if ttl := mr.TTL(iamsync.SharedKey + ":chatim-dev"); ttl != time.Minute {
 		t.Fatalf("ttl = %v", ttl)
+	}
+	if got, err := other.Get(ctx); err != nil || got != nil {
+		t.Fatalf("another issuer read %q, %v; want nil, nil", got, err)
 	}
 	mr.Close()
 	if _, err := shared.Get(ctx); err == nil {

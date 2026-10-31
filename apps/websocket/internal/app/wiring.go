@@ -191,7 +191,7 @@ func newSync(cfg config.Config, verifier *jwtverify.Verifier, conn presence.Conn
 	}
 	var shared iamsync.Shared
 	if rc, ok := conn.(iamsync.RedisClient); ok {
-		shared = iamsync.NewRedisShared(rc)
+		shared = iamsync.NewRedisShared(rc, cfg.JWTIssuer)
 	}
 	return iamsync.New(cfg.IAM, list, verifier, shared, doer, log)
 }

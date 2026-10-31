@@ -68,7 +68,7 @@ func wireServers(cfg config.Config, log *slog.Logger, verifier *jwtverify.Verifi
 	}
 	var copyStore iamsync.Shared
 	if shared != nil {
-		copyStore = iamsync.NewRedisShared(shared)
+		copyStore = iamsync.NewRedisShared(shared, cfg.JWTIssuer)
 	}
 	sync, err := iamsync.New(cfg.IAM, list, verifier, copyStore, doer, log)
 	if err != nil {

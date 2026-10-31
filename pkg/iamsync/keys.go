@@ -10,8 +10,13 @@ import (
 func (s *Syncer) syncKeys(ctx context.Context) {
 	started := time.Now()
 	status, _, body, err := s.fetch(ctx, s.cfg.JWKSURL, http.Header{})
-	if err == nil && status != http.StatusOK {
-		err = fmt.Errorf("iamsync: jwks answered %d", status)
+	if err == nil {
+		s.mu.Lock()
+		s.keysRefused = refusal(status)
+		s.mu.Unlock()
+		if status != http.StatusOK {
+			err = fmt.Errorf("iamsync: jwks answered %d", status)
+		}
 	}
 	if err == nil {
 		var conflicts int
@@ -29,9 +34,6 @@ func (s *Syncer) syncKeys(ctx context.Context) {
 }
 
 func (s *Syncer) UnknownKey(kid string) bool {
-	if s.cfg.JWKSURL == "" {
-		return false
-	}
 	now := time.Now()
 	s.mu.Lock()
 	first, ok := s.seen[kid]

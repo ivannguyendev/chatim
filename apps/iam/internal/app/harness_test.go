@@ -39,6 +39,20 @@ type fakeStore struct {
 	closed   atomic.Bool
 	snapshot revocation.Snapshot
 	cleaned  chan struct{}
+	due      string
+	dueAsked chan time.Time
+}
+
+func (f *fakeStore) ActivateDueSigningKey(_ context.Context, cutoff, _ time.Time, _ store.AuditEvent) (string, error) {
+	if f.dueAsked != nil {
+		select {
+		case f.dueAsked <- cutoff:
+		default:
+		}
+	}
+	kid := f.due
+	f.due = ""
+	return kid, nil
 }
 
 func (f *fakeStore) Revocations(context.Context) (revocation.Snapshot, error) { return f.snapshot, nil }
@@ -63,7 +77,7 @@ func testConfig(kek []byte) config.Config {
 		ListenAddr: "api", InternalAddr: "internal", NodeSecret: testNodeSecret, AdminAddr: "admin", PublicURL: "http://127.0.0.1", PGURI: "postgres://iam@db/iam", PGMaxConns: 2,
 		Issuer: "iss", Audience: "aud", AccessTTL: 15 * time.Minute, SessionIdle: time.Hour, SessionMax: 2 * time.Hour,
 		RefreshGrace: 30 * time.Second, DPoPWindow: time.Minute, HashConcurrency: 2, LoginFreeFailures: 5, LoginMaxDelay: time.Minute,
-		LoginIPRate: 10, LoginIPBurst: 10, LoginIPTracked: 100, PasswordMin: 12, KeyEncryptionKey: kek, KeyReload: time.Hour,
+		LoginIPRate: 10, LoginIPBurst: 10, LoginIPTracked: 100, PasswordMin: 12, KeyEncryptionKey: kek, KeyReload: time.Hour, KeyActivateLead: 2 * time.Hour,
 		BodyMax: 16 << 10, DrainDelay: 10 * time.Millisecond, ShutdownBudget: 20 * time.Second,
 		ReadHeaderTimeout: time.Second, ReadTimeout: time.Second, WriteTimeout: time.Second, IdleTimeout: time.Second, MaxHeaderBytes: 16 << 10,
 	}

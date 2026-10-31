@@ -36,6 +36,9 @@ func (s *Syncer) fetchList(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	s.mu.Lock()
+	s.listRefused = refusal(status)
+	s.mu.Unlock()
 	now := time.Now()
 	switch status {
 	case http.StatusNotModified:

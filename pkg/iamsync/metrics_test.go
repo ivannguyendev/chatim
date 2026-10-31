@@ -28,7 +28,7 @@ func TestAgeCountsFromStartBeforeTheFirstSync(t *testing.T) {
 	r := newRig(t, testConfig(), &fakeDoer{}, nil)
 	time.Sleep(10 * time.Millisecond)
 	body := metricsText(t, r.syncer)
-	if !strings.Contains(body, `test_iam_sync_enabled{kind="revocations"} 1`) || strings.Contains(body, "test_iam_revocations_age_seconds 0\n") {
+	if !strings.Contains(body, `test_iam_refused{kind="revocations"} 0`) || strings.Contains(body, "test_iam_revocations_age_seconds 0\n") {
 		t.Fatalf("metrics = %s", body)
 	}
 }

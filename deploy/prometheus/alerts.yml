@@ -208,7 +208,7 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: An iam node has no active signing key, so it cannot issue tokens; run key-rotate and key-activate, or check IAM_KEY_ENCRYPTION_KEY.
+          summary: An iam node has no active signing key, so it cannot issue tokens; run key-rotate -activate-if-none, or check IAM_KEY_ENCRYPTION_KEY.
       - alert: ChatimIamStoreErrors
         expr: sum(rate(chatim_iam_store_errors_total[5m])) > 0
         for: 5m
@@ -220,9 +220,9 @@ groups:
     rules:
       - alert: ChatimIamSyncStale
         expr: |
-          max by (instance) (chatim_websocket_iam_revocations_age_seconds * on (instance) (chatim_websocket_iam_sync_enabled{kind="revocations"} == 1)) > 30
+          max by (instance) (chatim_websocket_iam_revocations_age_seconds) > 30
           or
-          max by (instance) (chatim_gateway_iam_revocations_age_seconds * on (instance) (chatim_gateway_iam_sync_enabled{kind="revocations"} == 1)) > 30
+          max by (instance) (chatim_gateway_iam_revocations_age_seconds) > 30
         for: 1m
         labels:
           severity: critical
@@ -230,14 +230,21 @@ groups:
           summary: A websocket or gateway node has not refreshed the iam revocation list from iam or the shared redis copy for over 30s; tokens revoked since then still work on that node until they expire.
       - alert: ChatimIamKeysStale
         expr: |
-          max by (instance) (chatim_websocket_iam_keys_age_seconds * on (instance) (chatim_websocket_iam_sync_enabled{kind="keys"} == 1)) > 180
+          max by (instance) (chatim_websocket_iam_keys_age_seconds) > 180
           or
-          max by (instance) (chatim_gateway_iam_keys_age_seconds * on (instance) (chatim_gateway_iam_sync_enabled{kind="keys"} == 1)) > 180
+          max by (instance) (chatim_gateway_iam_keys_age_seconds) > 180
         for: 5m
         labels:
           severity: warning
         annotations:
           summary: A websocket or gateway node has not fetched the iam JWKS for over 3 minutes; tokens signed by a newly activated key are refused there.
+      - alert: ChatimIamRefused
+        expr: max by (instance) (chatim_websocket_iam_refused) > 0 or max by (instance) (chatim_gateway_iam_refused) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: iam answers a websocket or gateway node with 4xx (wrong node secret or iam url); the node stays not ready. Check *_IAM_SECRET, *_IAM_INTERNAL_URL and *_IAM_JWKS_URL against iam.
       - alert: ChatimJwksConflict
         expr: sum by (instance) (increase(chatim_websocket_jwks_conflicts_total[10m])) > 0 or sum by (instance) (increase(chatim_gateway_jwks_conflicts_total[10m])) > 0
         labels:

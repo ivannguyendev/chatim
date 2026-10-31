@@ -63,7 +63,8 @@ x-iam-env: &iam-env
   IAM_PG_PASSWORD_FILE: /run/secrets/iam_pg_password
   IAM_KEY_ENCRYPTION_KEY_FILE: /run/secrets/iam_key_encryption_key
   IAM_NODE_SECRET_FILE: /run/secrets/iam_node_secret
-  IAM_KEY_ACTIVATE_LEAD: 10s
+  IAM_KEY_ACTIVATE_LEAD: 65s
+  IAM_KEY_RELOAD: 5s
   IAM_PUBLIC_URL: http://chatim-iam-1:8080
   IAM_ISSUER: chatim-dev
   IAM_AUDIENCE: chatim-websocket

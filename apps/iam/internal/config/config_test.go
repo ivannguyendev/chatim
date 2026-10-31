@@ -126,6 +126,7 @@ func TestLoadRejectsBadConfig(t *testing.T) {
 		"missing node secret":   {"IAM_NODE_SECRET": ""},
 		"short node secret":     {"IAM_NODE_SECRET": "short"},
 		"negative lead":         {"IAM_KEY_ACTIVATE_LEAD": "-1s"},
+		"zero lead":             {"IAM_KEY_ACTIVATE_LEAD": "0s"},
 	}
 	for name, env := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -137,5 +138,32 @@ func TestLoadRejectsBadConfig(t *testing.T) {
 				t.Fatal("Load accepted a bad config")
 			}
 		})
+	}
+}
+
+func TestLoadRefusesTimersThatBreakNodes(t *testing.T) {
+	cases := map[string]struct {
+		env  map[string]string
+		want string
+	}{
+		"lead shorter than reload plus node keys interval": {map[string]string{"IAM_KEY_ACTIVATE_LEAD": "89s"}, "IAM_KEY_ACTIVATE_LEAD 1m29s must be at least IAM_KEY_RELOAD + 1m0s = 1m30s"},
+		"access ttl past the node revocation cap":          {map[string]string{"IAM_ACCESS_TTL": "2h"}, "IAM_ACCESS_TTL 2h0m0s + 1m0s must not exceed 2h0m0s"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			setRequired(t)
+			for k, v := range tc.env {
+				t.Setenv(k, v)
+			}
+			if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Load = %v, want an error containing %q", err, tc.want)
+			}
+		})
+	}
+	setRequired(t)
+	t.Setenv("IAM_KEY_ACTIVATE_LEAD", "90s")
+	t.Setenv("IAM_ACCESS_TTL", "119m")
+	if _, err := config.Load(); err != nil {
+		t.Fatalf("Load at both limits = %v", err)
 	}
 }

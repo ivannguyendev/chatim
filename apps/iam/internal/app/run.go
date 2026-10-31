@@ -12,6 +12,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/iam/internal/api"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/config"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/password"
+	"github.com/ivannguyendev/chatim/apps/iam/internal/store"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store/pgstore"
 	"github.com/ivannguyendev/chatim/pkg/admin"
 )
@@ -39,6 +40,7 @@ type node struct {
 	health        *health
 	internalStats *api.InternalStats
 	cleanup       cleanupStats
+	keys          keyStats
 }
 
 type task struct {
@@ -155,9 +157,24 @@ func (n *node) watchHealth(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
+			n.activateDueKey(ctx)
 			n.health.check(ctx)
 			n.cleanExpired(ctx)
 		}
+	}
+}
+
+func (n *node) activateDueKey(ctx context.Context) {
+	now := time.Now()
+	audit := store.AuditEvent{At: now, Actor: "iam", Action: "key_activate"}
+	kid, err := n.store.ActivateDueSigningKey(ctx, now.Add(-n.cfg.KeyActivateLead), now, audit)
+	if err != nil {
+		n.log.WarnContext(ctx, "signing key activation failed", "err", err)
+		return
+	}
+	if kid != "" {
+		n.keys.activated.Add(1)
+		n.log.InfoContext(ctx, "signing key activated", "kid", kid)
 	}
 }
 

@@ -112,11 +112,11 @@ func TestRunRefusesBadConfigAndKeys(t *testing.T) {
 	keys := newSigner(t)
 	bad := testConfig(keys.path, "core:9000")
 	bad.ShutdownBudget = time.Second
-	if err := Run(t.Context(), bad, newLogWatch().logger(), Deps{}); err == nil || !strings.Contains(err.Error(), "GW_SHUTDOWN_BUDGET") {
+	if err := run(t.Context(), bad, newLogWatch().logger(), Deps{}); err == nil || !strings.Contains(err.Error(), "GW_SHUTDOWN_BUDGET") {
 		t.Fatalf("Run = %v", err)
 	}
 	missing := testConfig(keys.path+".missing", "core:9000")
-	if err := Run(t.Context(), missing, newLogWatch().logger(), Deps{}); err == nil || !strings.Contains(err.Error(), "jwt key set") {
+	if err := run(t.Context(), missing, newLogWatch().logger(), Deps{}); err == nil || !strings.Contains(err.Error(), "jwt key set") {
 		t.Fatalf("Run = %v", err)
 	}
 }

@@ -10,7 +10,7 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/iamsync"
 )
 
-func TestFromEnvDefaultsTurnSyncOff(t *testing.T) {
+func TestFromEnvDefaultsNeedTheIamURLs(t *testing.T) {
 	c, err := iamsync.FromEnv("WS")
 	if err != nil {
 		t.Fatalf("FromEnv: %v", err)
@@ -20,8 +20,9 @@ func TestFromEnvDefaultsTurnSyncOff(t *testing.T) {
 		c.SharedTTL != iamsync.DefaultSharedTTL || c.KeysMinGap != iamsync.DefaultKeysMinGap || c.AllowHTTP {
 		t.Fatalf("defaults = %+v", c)
 	}
-	if err := c.Validate(); err != nil {
-		t.Fatalf("defaults invalid: %v", err)
+	err = c.Validate()
+	if err == nil || !strings.Contains(err.Error(), "internal url is required") || !strings.Contains(err.Error(), "jwks url is required") {
+		t.Fatalf("Validate without urls = %v", err)
 	}
 }
 

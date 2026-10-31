@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/url"
 	"time"
+
+	"github.com/ivannguyendev/chatim/pkg/iamsync"
 )
 
 const (
@@ -27,7 +29,8 @@ func (c Config) Validate() error {
 		{c.InternalAddr == "" || (c.InternalAddr != c.AdminAddr && c.InternalAddr != c.ListenAddr), "IAM_INTERNAL_ADDR must differ from IAM_ADDR and IAM_ADMIN_ADDR"},
 		{c.ListenAddr == "" || validBaseURL(c.PublicURL), "IAM_PUBLIC_URL must be an absolute http(s) url without query or fragment"},
 		{c.InternalAddr == "" || len(c.NodeSecret) >= minNodeSecretLength, fmt.Sprintf("IAM_NODE_SECRET must hold at least %d bytes when IAM_INTERNAL_ADDR is on", minNodeSecretLength)},
-		{c.KeyActivateLead >= 0, "IAM_KEY_ACTIVATE_LEAD must not be negative"},
+		{c.KeyActivateLead >= c.KeyReload+iamsync.MaxKeysInterval, fmt.Sprintf("IAM_KEY_ACTIVATE_LEAD %v must be at least IAM_KEY_RELOAD + %v = %v so every node fetches a new key before it signs", c.KeyActivateLead, iamsync.MaxKeysInterval, c.KeyReload+iamsync.MaxKeysInterval)},
+		{c.RevocationKeep() <= iamsync.MaxEntryKeep, fmt.Sprintf("IAM_ACCESS_TTL %v + %v must not exceed %v, the longest revocation a node keeps", c.AccessTTL, revocationMargin, iamsync.MaxEntryKeep)},
 		{c.PGURI != "", "IAM_PG_URI is required"},
 		{!hasPassword(c.PGURI), "IAM_PG_URI must not carry a password; use IAM_PG_PASSWORD or IAM_PG_PASSWORD_FILE"},
 		{c.Issuer != "", "IAM_ISSUER is required"},

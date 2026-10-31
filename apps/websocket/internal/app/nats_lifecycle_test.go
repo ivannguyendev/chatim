@@ -83,7 +83,7 @@ func TestRunFailsAndStopsTheFeedWhenTheTypingRelayCannotSubscribe(t *testing.T) 
 	nats := newFakeNATS()
 	nats.subErr = errors.New("nats connection closed")
 	lis := newListeners()
-	err := Run(t.Context(), testConfig(mr.Addr(), keys.path), newLogWatch().logger(), Deps{PresenceRedis: newPresenceRedis(t).open, Listen: lis.listen, NATS: nats.dial})
+	err := run(t.Context(), testConfig(mr.Addr(), keys.path), newLogWatch().logger(), Deps{PresenceRedis: newPresenceRedis(t).open, Listen: lis.listen, NATS: nats.dial})
 	if err == nil || !strings.Contains(err.Error(), "start typing relay") {
 		t.Fatalf("Run = %v, want a typing relay error", err)
 	}
@@ -98,7 +98,7 @@ func TestRunFailsWhenNATSCannotBeOpened(t *testing.T) {
 	nats := newFakeNATS()
 	nats.dialErr = errors.New("nats not connected within 10s")
 	lis := newListeners()
-	err := Run(t.Context(), testConfig(mr.Addr(), keys.path), newLogWatch().logger(), Deps{PresenceRedis: newPresenceRedis(t).open, Listen: lis.listen, NATS: nats.dial})
+	err := run(t.Context(), testConfig(mr.Addr(), keys.path), newLogWatch().logger(), Deps{PresenceRedis: newPresenceRedis(t).open, Listen: lis.listen, NATS: nats.dial})
 	if err == nil || !strings.Contains(err.Error(), "open nats") {
 		t.Fatalf("Run = %v, want an open nats error", err)
 	}

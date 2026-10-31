@@ -15,12 +15,16 @@ type labelled struct {
 	count *atomic.Int64
 }
 
+type keyStats struct {
+	activated atomic.Int64
+}
+
 type cleanupStats struct {
 	removed atomic.Int64
 	errors  atomic.Int64
 }
 
-func metricSources(st *auth.Stats, slots *guard.HashSlots, ring *keyring.Ring, internal *api.InternalStats, cleanup *cleanupStats) []metrics.Source {
+func metricSources(st *auth.Stats, slots *guard.HashSlots, ring *keyring.Ring, internal *api.InternalStats, cleanup *cleanupStats, keys *keyStats) []metrics.Source {
 	var out []metrics.Source
 	counter := func(name, help, label string, series []labelled) {
 		for _, s := range series {
@@ -46,6 +50,7 @@ func metricSources(st *auth.Stats, slots *guard.HashSlots, ring *keyring.Ring, i
 	counter("store_errors_total", "Postgres errors seen by the auth use cases.", "", []labelled{{"", &st.StoreErrors}})
 	counter("revocations_cleaned_total", "Expired revoked-session rows deleted.", "", []labelled{{"", &cleanup.removed}})
 	counter("revocation_cleanup_errors_total", "Failed deletes of expired revoked-session rows.", "", []labelled{{"", &cleanup.errors}})
+	counter("signing_keys_activated_total", "Pending signing keys activated by iam once IAM_KEY_ACTIVATE_LEAD passed.", "", []labelled{{"", &keys.activated}})
 	for _, s := range []struct {
 		label string
 		count *atomic.Uint64

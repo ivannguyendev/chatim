@@ -115,7 +115,7 @@ func TestRunRefusesToStartOnBadConfigOrMissingKeys(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			lis := newListeners()
-			err := Run(t.Context(), tc.cfg, newLogWatch().logger(), Deps{PresenceRedis: newPresenceRedis(t).open, Listen: lis.listen})
+			err := run(t.Context(), tc.cfg, newLogWatch().logger(), Deps{PresenceRedis: newPresenceRedis(t).open, Listen: lis.listen})
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("Run = %v, want an error naming %q", err, tc.want)
 			}
@@ -133,7 +133,7 @@ func TestRunFailsWhenTheSlotTableNeverLoads(t *testing.T) {
 	lis := newListeners()
 	nats := newFakeNATS()
 	deps := Deps{PresenceRedis: newPresenceRedis(t).open, Listen: lis.listen, ReadyTimeout: 300 * time.Millisecond, NATS: nats.dial}
-	err := Run(t.Context(), testConfig(mr.Addr(), keys.path), newLogWatch().logger(), deps)
+	err := run(t.Context(), testConfig(mr.Addr(), keys.path), newLogWatch().logger(), deps)
 	if err == nil || !strings.Contains(err.Error(), "slot table") {
 		t.Fatalf("Run = %v, want a slot table error", err)
 	}
@@ -166,7 +166,7 @@ func TestRunStopsCleanlyWhenSignalledWhileWaitingForTheSlotTable(t *testing.T) {
 func TestRunFailsWhenTheAdminAddressCannotBeBound(t *testing.T) {
 	keys := newSigner(t)
 	refuse := func(context.Context, string) (net.Listener, error) { return nil, errors.New("address in use") }
-	err := Run(t.Context(), testConfig("127.0.0.1:1", keys.path), newLogWatch().logger(), Deps{PresenceRedis: newPresenceRedis(t).open, Listen: refuse})
+	err := run(t.Context(), testConfig("127.0.0.1:1", keys.path), newLogWatch().logger(), Deps{PresenceRedis: newPresenceRedis(t).open, Listen: refuse})
 	if err == nil || !strings.Contains(err.Error(), "address in use") {
 		t.Fatalf("Run = %v, want the listen error", err)
 	}
@@ -200,7 +200,7 @@ func TestRunClosesTheWebsocketListenerWhenStartupEndsRightAfterBindingIt(t *test
 				return lis, tc.listenErr
 			}
 			logs := newLogWatch()
-			err := Run(ctx, testConfig(mr.Addr(), keys.path), logs.logger(), Deps{PresenceRedis: newPresenceRedis(t).open, Listen: listen, NATS: newFakeNATS().dial})
+			err := run(ctx, testConfig(mr.Addr(), keys.path), logs.logger(), Deps{PresenceRedis: newPresenceRedis(t).open, Listen: listen, NATS: newFakeNATS().dial})
 			if !errors.Is(err, tc.listenErr) || (tc.listenErr == nil && err != nil) {
 				t.Fatalf("Run = %v, want %v", err, tc.listenErr)
 			}

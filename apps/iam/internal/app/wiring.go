@@ -32,6 +32,7 @@ type Store interface {
 	keyring.Source
 	api.RevocationSource
 	DeleteExpiredRevocations(ctx context.Context) (int64, error)
+	ActivateDueSigningKey(ctx context.Context, cutoff, at time.Time, audit store.AuditEvent) (string, error)
 	Ping(ctx context.Context) error
 	SchemaVersion(ctx context.Context) (int, error)
 	Close()
@@ -106,7 +107,7 @@ func wireServers(cfg config.Config, log *slog.Logger, st Store, deps Deps) (*nod
 		}
 		n.ports = append(n.ports, &port{addr: cfg.InternalAddr, server: newHTTPServer(cfg, handler, log)})
 	}
-	metricsHandler, err := metrics.Handler(metricsSubsystem, metricSources(svc.Stats(), slots, ring, n.internalStats, &n.cleanup))
+	metricsHandler, err := metrics.Handler(metricsSubsystem, metricSources(svc.Stats(), slots, ring, n.internalStats, &n.cleanup, &n.keys))
 	if err != nil {
 		return nil, err
 	}

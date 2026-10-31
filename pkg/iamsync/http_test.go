@@ -62,7 +62,7 @@ func TestRedirectsAreNotFollowed(t *testing.T) {
 	}))
 	t.Cleanup(redirect.Close)
 	cfg := testConfig()
-	cfg.InternalURL, cfg.JWKSURL, cfg.AllowHTTP, cfg.ReadyTimeout = "", redirect.URL+"/.well-known/jwks.json", true, 200*time.Millisecond
+	cfg.InternalURL, cfg.JWKSURL, cfg.AllowHTTP, cfg.ReadyTimeout = redirect.URL, redirect.URL+"/.well-known/jwks.json", true, 200*time.Millisecond
 	list, _ := revocation.New(revocation.Config{MaxKeep: time.Minute})
 	keys := &fakeKeys{}
 	syncer, err := iamsync.New(cfg, list, keys, nil, nil, nil)

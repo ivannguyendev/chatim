@@ -24,6 +24,9 @@ func TestNewRejectsBadConfig(t *testing.T) {
 		"jwks over http":       func(c *iamsync.Config) { c.JWKSURL = "http://iam/.well-known/jwks.json" },
 		"relative internal":    func(c *iamsync.Config) { c.InternalURL = "/internal" },
 		"internal no secret":   func(c *iamsync.Config) { c.Secret = "" },
+		"no internal url":      func(c *iamsync.Config) { c.InternalURL = "" },
+		"no jwks url":          func(c *iamsync.Config) { c.JWKSURL = "" },
+		"keys over a minute":   func(c *iamsync.Config) { c.KeysEvery = iamsync.MaxKeysInterval + time.Second },
 		"zero revoke interval": func(c *iamsync.Config) { c.RevocationsEvery = 0 },
 		"zero body max":        func(c *iamsync.Config) { c.BodyMax = 0 },
 	}
@@ -112,7 +115,7 @@ func TestFailureFallsBackToTheSharedCopy(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		now := time.Now()
 		shared := &fakeShared{value: sharedValue(t, now.Add(-time.Hour), phoneRevoked(now.Add(16*time.Minute)))}
-		doer := &fakeDoer{keys: okKeys(), revoke: answer{status: http.StatusUnauthorized}}
+		doer := &fakeDoer{keys: okKeys(), revoke: answer{err: errDown}}
 		r := newRig(t, testConfig(), doer, shared)
 		r.start()
 		defer r.stop()
@@ -234,15 +237,6 @@ func TestKeyRequestsAreSpacedOut(t *testing.T) {
 			t.Fatalf("key fetches after the gap = %d; want 3", got)
 		}
 	})
-}
-
-func TestKeysOffNeverAsksForRetry(t *testing.T) {
-	cfg := testConfig()
-	cfg.JWKSURL = ""
-	r := newRig(t, cfg, &fakeDoer{}, nil)
-	if r.syncer.UnknownKey("x") {
-		t.Fatal("UnknownKey asked for a retry without a jwks url")
-	}
 }
 
 func TestRunStopsWithTheContext(t *testing.T) {

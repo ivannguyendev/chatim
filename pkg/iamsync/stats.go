@@ -25,18 +25,17 @@ func (s *Syncer) Sources() []metrics.Source {
 	gauge := func(name, help string, labels map[string]string, read func() float64) metrics.Source {
 		return metrics.Source{Name: name, Help: help, Labels: labels, Gauge: true, Read: read}
 	}
-	enabled := func(on bool) func() float64 {
+	refused := func(status *int) func() float64 {
 		return func() float64 {
-			if on {
-				return 1
-			}
-			return 0
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			return float64(*status)
 		}
 	}
 	st := &s.stats
 	return []metrics.Source{
-		gauge("iam_sync_enabled", "1 when this node asks iam for this kind.", map[string]string{"kind": "revocations"}, enabled(s.cfg.InternalURL != "")),
-		gauge("iam_sync_enabled", "1 when this node asks iam for this kind.", map[string]string{"kind": "keys"}, enabled(s.cfg.JWKSURL != "")),
+		gauge("iam_refused", "HTTP status of the last iam answer that refused this node (4xx except 429), 0 when accepted; the node stays not ready while it is set.", map[string]string{"kind": "revocations"}, refused(&s.listRefused)),
+		gauge("iam_refused", "HTTP status of the last iam answer that refused this node (4xx except 429), 0 when accepted; the node stays not ready while it is set.", map[string]string{"kind": "keys"}, refused(&s.keysRefused)),
 		gauge("iam_revocations_age_seconds", "Seconds since the revocation list was last refreshed from iam or the shared copy (since start before the first refresh).", nil, s.age(func() time.Time { return s.lastList })),
 		gauge("iam_keys_age_seconds", "Seconds since keys were last fetched from iam (since start before the first fetch).", nil, s.age(func() time.Time { return s.lastKeys })),
 		counter("iam_sync_errors_total", "Failed fetches from iam by kind.", map[string]string{"kind": "revocations"}, &st.listErrors),

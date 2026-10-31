@@ -25,7 +25,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/config"
 	"github.com/ivannguyendev/chatim/pkg/coreroute"
-	"github.com/ivannguyendev/chatim/pkg/iamsync"
+	"github.com/ivannguyendev/chatim/pkg/iamsync/iamsynctest"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/pkg/slotmap"
 )
@@ -89,7 +89,7 @@ func testConfig(redisAddr, keysFile string) config.Config {
 		TypingRate: 2, TypingBurst: 4, TypingQueue: 64, TypingPendingMsgs: 128,
 		PresenceRedisAddr: "presence:6379", PresenceRedisPassword: testPresencePassword, PresenceRedisTimeout: 500 * time.Millisecond,
 		PresenceRedisPool: 4, PresenceTTL: 15 * time.Second, PresenceStampEvery: 2 * time.Second, PresenceFlush: 50 * time.Millisecond, PresenceBatch: 500,
-		PresenceCache: 5 * time.Second, PresenceWatchMax: 200, IAM: iamsync.Defaults(),
+		PresenceCache: 5 * time.Second, PresenceWatchMax: 200, IAM: iamsynctest.Config(),
 	}
 }
 
@@ -256,7 +256,7 @@ func httpStatus(t *testing.T, addr, path string) (int, string) {
 
 func runAsync(ctx context.Context, cfg config.Config, log *slog.Logger, deps Deps) chan error {
 	done := make(chan error, 1)
-	go func() { done <- Run(ctx, cfg, log, deps) }()
+	go func() { done <- run(ctx, cfg, log, deps) }()
 	return done
 }
 
@@ -281,4 +281,11 @@ func receive[T any](t *testing.T, ch <-chan T, what string) T {
 		var zero T
 		return zero
 	}
+}
+
+func run(ctx context.Context, cfg config.Config, log *slog.Logger, deps Deps) error {
+	if deps.IAMDoer == nil {
+		deps.IAMDoer = iamsynctest.Accepting{}
+	}
+	return Run(ctx, cfg, log, deps)
 }

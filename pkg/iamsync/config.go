@@ -36,16 +36,23 @@ type Config struct {
 
 func (c Config) Validate() error {
 	var errs []error
-	if c.InternalURL != "" {
-		if !absolute(c.InternalURL, true) {
-			errs = append(errs, errors.New("iamsync: internal url must be an absolute http(s) url"))
-		}
-		if c.Secret == "" {
-			errs = append(errs, errors.New("iamsync: node secret is required with an internal url"))
-		}
+	switch {
+	case c.InternalURL == "":
+		errs = append(errs, errors.New("iamsync: internal url is required"))
+	case !absolute(c.InternalURL, true):
+		errs = append(errs, errors.New("iamsync: internal url must be an absolute http(s) url"))
 	}
-	if c.JWKSURL != "" && !absolute(c.JWKSURL, c.AllowHTTP) {
+	if c.Secret == "" {
+		errs = append(errs, errors.New("iamsync: node secret is required"))
+	}
+	switch {
+	case c.JWKSURL == "":
+		errs = append(errs, errors.New("iamsync: jwks url is required"))
+	case !absolute(c.JWKSURL, c.AllowHTTP):
 		errs = append(errs, errors.New("iamsync: jwks url must be an absolute https url (http only when allowed for dev)"))
+	}
+	if c.KeysEvery > MaxKeysInterval {
+		errs = append(errs, fmt.Errorf("iamsync: keys interval must not exceed %v", MaxKeysInterval))
 	}
 	for name, d := range map[string]time.Duration{
 		"revocations interval": c.RevocationsEvery, "keys interval": c.KeysEvery, "keys min gap": c.KeysMinGap,
@@ -70,9 +77,10 @@ func absolute(raw string, allowHTTP bool) bool {
 }
 
 const (
-	MaxEntryKeep   = 2 * time.Hour
-	MaxRevokeAhead = time.Minute
-	MaxNodeLeeway  = time.Minute
+	MaxEntryKeep    = 2 * time.Hour
+	MaxRevokeAhead  = time.Minute
+	MaxNodeLeeway   = time.Minute
+	MaxKeysInterval = time.Minute
 )
 
 func NewList(leeway time.Duration) (*revocation.List, error) {

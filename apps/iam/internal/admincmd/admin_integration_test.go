@@ -170,6 +170,12 @@ func TestKeyCommandsAndBootstrap(t *testing.T) {
 	if keys[0].State != store.KeyRetired || keys[1].State != store.KeyActive {
 		t.Fatalf("states = %d, %d; want retired then active", keys[0].State, keys[1].State)
 	}
+	if code := admincmd.Run(ctx, h.env, []string{"key-activate", "-kid", keys[0].ID}); code != 1 {
+		t.Fatalf("key-activate of a retired key = %d, want 1", code)
+	}
+	if keys, _ = st.SigningKeys(ctx); keys[0].State != store.KeyRetired || keys[1].State != store.KeyActive {
+		t.Fatalf("states after reactivating a retired key = %d, %d; want unchanged", keys[0].State, keys[1].State)
+	}
 	out := filepath.Join(dir, "export.json")
 	h.run("jwks-export", "-out", out)
 	if kids := readKIDs(t, out); len(kids) != 2 {

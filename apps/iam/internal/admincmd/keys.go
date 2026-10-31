@@ -38,7 +38,7 @@ func rotate(ctx context.Context, env Env, st Store, activateIfNone bool) (string
 	if err := st.CreateSigningKey(ctx, row, audit(env, "", "key_create", "", "")); err != nil {
 		return "", err
 	}
-	state := "pending"
+	state := "pending, iam activates it from " + row.CreatedAt.Add(env.ActivateLead).UTC().Format(time.RFC3339)
 	if activateIfNone {
 		active, err := hasActiveKey(ctx, st)
 		if err != nil {

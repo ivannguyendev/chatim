@@ -55,6 +55,81 @@ func TestExactlyOneSigningKeyIsActive(t *testing.T) {
 	}
 }
 
+func keyStates(t *testing.T, s fixture) map[string]store.KeyState {
+	t.Helper()
+	keys, err := s.SigningKeys(context.Background())
+	if err != nil {
+		t.Fatalf("SigningKeys: %v", err)
+	}
+	out := map[string]store.KeyState{}
+	for _, k := range keys {
+		out[k.ID] = k.State
+	}
+	return out
+}
+
+func createKey(t *testing.T, s fixture, id string, created time.Time) {
+	t.Helper()
+	k := pendingKey(id)
+	k.CreatedAt = created
+	if err := s.CreateSigningKey(context.Background(), k, audit("key_create")); err != nil {
+		t.Fatalf("CreateSigningKey %s: %v", id, err)
+	}
+}
+
+func TestDuePendingKeyIsActivatedOnce(t *testing.T) {
+	s := openStore(t)
+	ctx := context.Background()
+	createKey(t, s, "k-old", t0)
+	if err := s.ActivateSigningKey(ctx, "k-old", t0, audit("key_activate")); err != nil {
+		t.Fatalf("activate old: %v", err)
+	}
+	createKey(t, s, "k-next", t0.Add(time.Minute))
+	if kid, err := s.ActivateDueSigningKey(ctx, t0.Add(30*time.Second), t0.Add(30*time.Second), audit("key_activate")); err != nil || kid != "" {
+		t.Fatalf("before the lead = %q, %v; want nothing", kid, err)
+	}
+	results := make(chan string, 2)
+	for range 2 {
+		go func() {
+			kid, err := s.ActivateDueSigningKey(ctx, t0.Add(3*time.Minute), t0.Add(3*time.Minute), audit("key_activate"))
+			if err != nil {
+				t.Errorf("ActivateDueSigningKey: %v", err)
+			}
+			results <- kid
+		}()
+	}
+	got := []string{<-results, <-results}
+	if (got[0] == "k-next") == (got[1] == "k-next") || got[0]+got[1] != "k-next" {
+		t.Fatalf("two replicas activated %q; want k-next exactly once", got)
+	}
+	if st := keyStates(t, s); st["k-old"] != store.KeyRetired || st["k-next"] != store.KeyActive {
+		t.Fatalf("states = %v", st)
+	}
+}
+
+func TestActivationRetiresOlderPendingKeysAndNeverRevivesARetiredOne(t *testing.T) {
+	s := openStore(t)
+	ctx := context.Background()
+	createKey(t, s, "k-a", t0)
+	createKey(t, s, "k-b", t0.Add(time.Minute))
+	createKey(t, s, "k-c", t0.Add(2*time.Minute))
+	if err := s.ActivateSigningKey(ctx, "k-b", t0.Add(time.Hour), audit("key_activate")); err != nil {
+		t.Fatalf("activate b: %v", err)
+	}
+	if st := keyStates(t, s); st["k-a"] != store.KeyRetired || st["k-b"] != store.KeyActive || st["k-c"] != store.KeyPending {
+		t.Fatalf("states = %v; want a retired, b active, c pending", st)
+	}
+	if err := s.ActivateSigningKey(ctx, "k-a", t0.Add(2*time.Hour), audit("key_activate")); !errors.Is(err, apperr.ErrFailedPrecondition) {
+		t.Fatalf("activate retired = %v, want ErrFailedPrecondition", err)
+	}
+	if kid, err := s.ActivateDueSigningKey(ctx, t0.Add(3*time.Hour), t0.Add(3*time.Hour), audit("key_activate")); err != nil || kid != "k-c" {
+		t.Fatalf("due = %q, %v; want k-c", kid, err)
+	}
+	if st := keyStates(t, s); st["k-a"] != store.KeyRetired || st["k-b"] != store.KeyRetired || st["k-c"] != store.KeyActive {
+		t.Fatalf("states = %v", st)
+	}
+}
+
 func TestSessionRoundTripKeepsHistoryAndJTIs(t *testing.T) {
 	s := openStore(t)
 	ctx := context.Background()

@@ -45,6 +45,8 @@ linters:
           deny:
             - pkg: github.com/ivannguyendev/chatim/pkg/wstest
               desc: pkg/wstest is a test client for tests and tools only (D208)
+            - pkg: github.com/ivannguyendev/chatim/pkg/iamsync/iamsynctest
+              desc: pkg/iamsync/iamsynctest holds iam fakes for tests only
         domain-boundaries:
           files:
             - "**/apps/core/internal/message/**"
@@ -297,6 +299,9 @@ linters:
       - path: ^pkg/backoff/backoff\.go$
         linters: [gosec]
         text: G404
+      - path: ^pkg/iamsync/iamsynctest/
+        linters: [gosec]
+        text: G101
       - path: ^pkg/envconfig/secret\.go$
         linters: [gosec]
         text: G703

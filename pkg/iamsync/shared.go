@@ -17,12 +17,15 @@ type RedisClient interface {
 
 type redisShared struct {
 	client RedisClient
+	key    string
 }
 
-func NewRedisShared(client RedisClient) Shared { return redisShared{client: client} }
+func NewRedisShared(client RedisClient, issuer string) Shared {
+	return redisShared{client: client, key: SharedKey + ":" + issuer}
+}
 
 func (r redisShared) Get(ctx context.Context) ([]byte, error) {
-	value, err := r.client.Get(ctx, SharedKey).Bytes()
+	value, err := r.client.Get(ctx, r.key).Bytes()
 	if errors.Is(err, redis.Nil) {
 		return nil, nil
 	}
@@ -30,5 +33,5 @@ func (r redisShared) Get(ctx context.Context) ([]byte, error) {
 }
 
 func (r redisShared) Put(ctx context.Context, value []byte, ttl time.Duration) error {
-	return r.client.Set(ctx, SharedKey, value, ttl).Err()
+	return r.client.Set(ctx, r.key, value, ttl).Err()
 }

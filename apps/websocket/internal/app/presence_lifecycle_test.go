@@ -148,7 +148,7 @@ func TestAFailedStartStopsTheStamperAndClosesThePresenceRedis(t *testing.T) {
 			mr := slotRedis(t)
 			mr.SetError("LOADING redis is loading the dataset")
 			pres := newPresenceRedis(t)
-			err := Run(t.Context(), testConfig(mr.Addr(), keys.path), newLogWatch().logger(), deps(pres, newListeners()))
+			err := run(t.Context(), testConfig(mr.Addr(), keys.path), newLogWatch().logger(), deps(pres, newListeners()))
 			if err == nil {
 				t.Fatal("Run = nil, want a start failure")
 			}

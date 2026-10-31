@@ -21,10 +21,13 @@ var envKeys = []string{
 }
 
 var requiredEnv = map[string]string{
-	"GW_CORE_ADDRS":    "chatim-core-1:9000,chatim-core-2:9000",
-	"GW_JWT_KEYS_FILE": "/run/secrets/jwks.json",
-	"GW_JWT_ISSUER":    "chatim-identity",
-	"GW_JWT_AUDIENCE":  "chatim-gateway",
+	"GW_CORE_ADDRS":       "chatim-core-1:9000,chatim-core-2:9000",
+	"GW_JWT_KEYS_FILE":    "/run/secrets/jwks.json",
+	"GW_JWT_ISSUER":       "chatim-identity",
+	"GW_JWT_AUDIENCE":     "chatim-gateway",
+	"GW_IAM_INTERNAL_URL": "http://chatim-iam-1:8081",
+	"GW_IAM_JWKS_URL":     "https://iam.example.com/.well-known/jwks.json",
+	"GW_IAM_SECRET":       "node-secret-value-0123456789abcdef",
 }
 
 func setEnv(t *testing.T, env map[string]string) {
@@ -75,7 +78,7 @@ func TestLoadDefaults(t *testing.T) {
 		MaxHeaderBytes:    16 << 10,
 		H2MaxStreams:      250,
 		RequestDeadline:   5 * time.Second,
-		IAM:               iamsync.Defaults(),
+		IAM:               iamWant(),
 		SharedRedis:       config.SharedRedis{Timeout: 500 * time.Millisecond},
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -135,4 +138,10 @@ func TestAdminAddrReadsOnlyItsVariable(t *testing.T) {
 	if got := config.AdminAddr(); got != ":9090" {
 		t.Fatalf("default AdminAddr = %q", got)
 	}
+}
+
+func iamWant() iamsync.Config {
+	c := iamsync.Defaults()
+	c.InternalURL, c.JWKSURL, c.Secret = "http://chatim-iam-1:8081", "https://iam.example.com/.well-known/jwks.json", "node-secret-value-0123456789abcdef"
+	return c
 }
