@@ -12,7 +12,10 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
-const xidBytes = 8
+const (
+	xidBytes       = 8
+	maxCursorBytes = 1024
+)
 
 var (
 	cursorEncoding = base64.RawURLEncoding.Strict()
@@ -36,7 +39,7 @@ func DecodePosition(cursor string) (store.Position, error) {
 	if cursor == "" {
 		return store.Position{}, nil
 	}
-	if strings.ContainsAny(cursor, "\r\n") {
+	if len(cursor) > maxCursorBytes || strings.ContainsAny(cursor, "\r\n") {
 		return store.Position{}, errBadCursor
 	}
 	raw, err := cursorEncoding.DecodeString(cursor)

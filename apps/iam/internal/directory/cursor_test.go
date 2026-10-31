@@ -12,6 +12,17 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
+func TestACursorOfExactly1024CharactersDecodes(t *testing.T) {
+	p := store.Position{Xid: 1, Kind: 1, Tenant: "t", ID: strings.Repeat("x", 757)}
+	cursor := directory.EncodePosition(p)
+	if len(cursor) != 1024 {
+		t.Fatalf("cursor length = %d; want 1024", len(cursor))
+	}
+	if got, err := directory.DecodePosition(cursor); err != nil || got != p {
+		t.Fatalf("DecodePosition = %+v, %v; want %+v", got, err, p)
+	}
+}
+
 func TestPositionsRoundTrip(t *testing.T) {
 	positions := []store.Position{
 		{Xid: 1, Kind: store.ChangeUser, Tenant: "shop", ID: "a2aaaaaaaaaaaaaaaaaaaaaaaa"},
@@ -89,6 +100,7 @@ func TestMalformedCursorsAreInvalidArguments(t *testing.T) {
 		"invalid utf8":          directory.EncodePosition(store.Position{Xid: 1, Kind: 1, Tenant: "\xff", ID: "x"}),
 		"nul byte":              directory.EncodePosition(store.Position{Xid: 1, Kind: 1, Tenant: "t", ID: "a\x00b"}),
 		"negative kind":         directory.EncodePosition(store.Position{Xid: 1, Kind: -1, Tenant: "t", ID: "x"}),
+		"longer than 1024":      directory.EncodePosition(store.Position{Xid: 1, Kind: 1, Tenant: "t", ID: strings.Repeat("x", 800)}),
 	}
 	for name, cursor := range cases {
 		t.Run(name, func(t *testing.T) {
