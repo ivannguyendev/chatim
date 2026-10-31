@@ -67,7 +67,7 @@ IAM tổng quát kiểu Keycloak (M6, owner 2026-10-25), tự xây bằng Go tr�
 
 **Cổng nội bộ** (`IAM_INTERNAL_ADDR`): `GET /internal/v1/revocations` và `GET /internal/v1/directory/changes` (cả hai cần header `Authorization: Bearer <IAM_NODE_SECRET>`; sai/thiếu → 401). Trả mọi mục còn hạn: `sessions[{session_id, tenant_id, expires_at}]` (một dòng mỗi phiên bị thu hồi: người dùng, admin, khoá account, đổi/đặt lại mật khẩu, dùng lại refresh token) và `tenants[{tenant_id, revoked_before, expires_at}]` (khoá tenant, giờ Postgres). Mục giữ `IAM_ACCESS_TTL` + 1 phút. `ETag` theo băm body, `If-None-Match` khớp → 304. Đường khác → 404, kể cả JWKS. Access token lấy `iat` từ giờ của transaction cấp (Postgres) nên token cấp trước lúc khoá tenant luôn có `iat` ≤ giờ khoá.
 
-**Feed danh bạ** `GET /internal/v1/directory/changes?after=&limit=&wait=` (long poll, cho app khác: 3b Mention, sau này M8, M9; xem [events.md §8](../events.md)):
+**Feed danh bạ** `GET /internal/v1/directory/changes?after=&limit=&wait=` (long poll, cho app khác: Mention sau khi `iam` xong (D234), M8, M9; xem [events.md §8](../events.md)):
 
 | Tham số | Ý nghĩa |
 |---|---|

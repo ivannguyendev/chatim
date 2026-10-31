@@ -6,6 +6,7 @@ Owner-confirmed rules, reasons and decisions for chatim, one fact per file. Read
 
 - [workflow-pipeline](workflow-pipeline.md) — brainstorm → decision log → independent phase-split review → summary and detailed plan per phase (format, ~130-line summary, code-free plan) → plan review → TDD → verify → close the phase with a progress report; fold local plans and decision logs into tracked docs, then delete them
 - [rule-retrospective](rule-retrospective.md) — after each phase/milestone and each owner correction: add owner-confirmed rules to CLAUDE.md, reasons here, fix or delete stale ones
+- [milestone-keeps-its-own-scope](milestone-keeps-its-own-scope.md) — a milestone finishes its own system; integrating into another module (iam → Mention) waits until it is done, never reopens that module's problems (D234, 2026-10-31)
 - [owner-communication](owner-communication.md) — requirements and scope table first, plain Vietnamese with an example, only pivotal questions, rewrite from the final state, real risks only, short summaries, walk-through before asking, failures with numbers, plainest version first
 
 ## Design
