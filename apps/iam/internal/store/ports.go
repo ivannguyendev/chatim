@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/iam/internal/session"
@@ -248,4 +249,20 @@ type DirectoryReader interface {
 	LoadStart(ctx context.Context) (Position, error)
 	LoadPage(ctx context.Context, after AccountKey, limit int) ([]DirectoryEntry, error)
 	TryLoadSlot(ctx context.Context, slots int) (release func(), ok bool, err error)
+}
+
+type Notice int8
+
+const (
+	NoticeNone Notice = iota
+	NoticeDirectory
+	NoticeRevocations
+	NoticeOther
+)
+
+var ErrListenerBroken = errors.New("change listener broken")
+
+type Listener interface {
+	Wait(ctx context.Context) (Notice, error)
+	Close(ctx context.Context) error
 }

@@ -33,9 +33,9 @@ func Open(ctx context.Context, uri string, opts Options) (*Store, error) {
 	if opts.RevocationKeep <= 0 {
 		return nil, errors.New("pgstore: revocation keep must be positive")
 	}
-	cfg, err := pgxpool.ParseConfig(uri)
+	cfg, err := parseConfig(uri)
 	if err != nil {
-		return nil, redact.Error(fmt.Errorf("parse postgres uri: %w", err), uri)
+		return nil, err
 	}
 	cfg.MaxConns = max(opts.MaxConns, 1)
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
@@ -47,6 +47,14 @@ func Open(ctx context.Context, uri string, opts Options) (*Store, error) {
 		return nil, redact.Error(fmt.Errorf("ping postgres: %w", err), uri)
 	}
 	return &Store{pool: pool, uri: uri, keep: opts.RevocationKeep}, nil
+}
+
+func parseConfig(uri string) (*pgxpool.Config, error) {
+	cfg, err := pgxpool.ParseConfig(uri)
+	if err != nil {
+		return nil, redact.Error(fmt.Errorf("parse postgres uri: %w", err), uri)
+	}
+	return cfg, nil
 }
 
 func (s *Store) Close() { s.pool.Close() }
