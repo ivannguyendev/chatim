@@ -15,7 +15,8 @@ Giữ kết nối WebSocket (gws) của client: 12 lệnh ghi realtime chuyển 
 | `REDIS_PASSWORD`, `REDIS_PASSWORD_FILE` | rỗng | Như của core; `_FILE` thắng. Compose trỏ `_FILE` vào secret `redis_password` |
 | `WS_JWT_KEYS_FILE` | — (bắt buộc) | JWKS công khai (Ed25519, có `kid`); file có khoá riêng (`d`) bị từ chối. Đọc một lần lúc khởi động |
 | `WS_JWT_ISSUER`, `WS_JWT_AUDIENCE` | — (bắt buộc) | `iss`, `aud` phải khớp; compose dev đặt `chatim-dev` / `chatim-websocket` |
-| `WS_JWT_LEEWAY` | `30s` | Dung sai giờ cho `exp`/`nbf` (≥ 0) |
+| `WS_JWT_LEEWAY` | `30s` | Dung sai giờ cho `exp`/`nbf` (0–1 phút; `iam` giữ mục thu hồi thêm 1 phút) |
+| `WS_IAM_INTERNAL_URL`, `WS_IAM_SECRET`/`_FILE`, `WS_IAM_JWKS_URL`, `WS_IAM_REVOCATIONS_INTERVAL`, `WS_IAM_KEYS_INTERVAL`, `WS_IAM_READY_TIMEOUT`, `WS_IAM_ALLOW_HTTP` | bắt buộc / bắt buộc / bắt buộc / `2s` / `1m` (tối đa `1m`) / `10s` / `false` | Đồng bộ danh sách thu hồi và khoá với `iam` ([iam.md](iam.md), node đồng bộ); bản dùng chung nằm trên Redis presence. `iam` trả 4xx (sai secret/URL) → node không `ready` (`iam_refused{kind}`). Phiên bị thu hồi → `auth_required{REVOKED}`, tenant bị khoá → đóng `4003` |
 | `WS_AUTH_GRACE` | `3m` | Kết nối mới và kết nối có token hết hạn ở trạng thái chờ đăng nhập: không nhận event, thông báo, typing, online; lệnh nhận `UNAUTHENTICATED`, frame khác (trừ `auth`, heartbeat) nhận `auth_required` tối đa 1 lần/giây. Chờ quá mức này thì đóng 4001 |
 | `WS_AUTH_RATE`, `WS_AUTH_BURST` | `1000` / `2000` | Số lần đăng nhập mỗi giây và burst mỗi node; chỉ token hợp lệ mới tốn suất, gia hạn cùng người không tốn. Hết suất thì `retry_later` (đếm `rate`) và giữ kết nối chờ. Mỗi kết nối đang chờ gửi `auth` tối đa 1 lần/giây, dồn hơn thì `retry_later{1000}` mà không kiểm token (đếm `throttled`) |
 | `WS_AUTH_RETRY_MIN`, `WS_AUTH_RETRY_MAX` | `5s` / `30s` | `retry_after_ms` của `retry_later` lấy ngẫu nhiên đều trong khoảng này (MIN ≤ MAX) |
@@ -70,7 +71,7 @@ Giữ kết nối WebSocket (gws) của client: 12 lệnh ghi realtime chuyển 
 
 ## Đổi khoá ký
 
-Dev và prod, không cắt kết nối đang sống: thêm khoá mới (`kid` mới) vào JWKS bên cạnh khoá cũ → rolling restart các node websocket và gateway (JWKS chỉ đọc lúc khởi động) → chuyển bên ký sang khoá mới → chờ token cũ hết hạn (TTL + `WS_JWT_LEEWAY`) → bỏ khoá cũ khỏi JWKS và rolling restart lần nữa. Nên giữ TTL token ≤ 15 phút để bước chờ ngắn và token lộ hết hạn nhanh.
+Từ M6 phần 2: khoá của `iam` xoay không cần khởi động lại (xem [iam.md](iam.md)). Khoá dev trong file JWKS vẫn theo cách cũ, không cắt kết nối đang sống: thêm khoá mới (`kid` mới) vào JWKS bên cạnh khoá cũ → rolling restart các node websocket và gateway (JWKS chỉ đọc lúc khởi động) → chuyển bên ký sang khoá mới → chờ token cũ hết hạn (TTL + `WS_JWT_LEEWAY`) → bỏ khoá cũ khỏi JWKS và rolling restart lần nữa. Nên giữ TTL token ≤ 15 phút để bước chờ ngắn và token lộ hết hạn nhanh.
 
 ## Bài tải và diễn tập
 

@@ -1,6 +1,6 @@
 # App `gateway`
 
-HTTPS (Connect trên HTTP/1.1 và h2c) cho tải dữ liệu và quản lý room: 22 lệnh `corecall.Request()` (14 lệnh đọc và `CreateRoom`, `OpenDirectRoom`, `UpdateRoom`, `AddMembers`, `RemoveMember`, `LeaveRoom`, `ChangeMemberRole`, `SetMemberPriority`), JWT như websocket, gọi core bất kỳ (round robin), giới hạn theo user. Không có database, không dùng Redis hay NATS. Cơ chế: [module 11](../modules/11-feature-https-gateway.md).
+HTTPS (Connect trên HTTP/1.1 và h2c) cho tải dữ liệu và quản lý room: 22 lệnh `corecall.Request()` (14 lệnh đọc và `CreateRoom`, `OpenDirectRoom`, `UpdateRoom`, `AddMembers`, `RemoveMember`, `LeaveRoom`, `ChangeMemberRole`, `SetMemberPriority`), JWT như websocket, gọi core bất kỳ (round robin), giới hạn theo user. Không có database, không dùng NATS; Redis chỉ (tuỳ chọn) cho bản danh sách thu hồi dùng chung (M6 phần 2). Cơ chế: [module 11](../modules/11-feature-https-gateway.md).
 
 ## Biến môi trường
 
@@ -12,7 +12,9 @@ HTTPS (Connect trên HTTP/1.1 và h2c) cho tải dữ liệu và quản lý room
 | `GW_ADMIN_ADDR` | `:9090` | `/livez`, `/readyz` (có ít nhất một core READY và chưa tắt), `/metrics` (`chatim_gateway_*`); `/app probe` hỏi địa chỉ này; không publish ra host |
 | `GW_CORE_ADDRS` | — (bắt buộc) | Danh sách `host:port` của core, cách nhau dấu phẩy; một kết nối gRPC round robin, không Redis, không retry của mình; compose đặt `chatim-core-1:9000,chatim-core-2:9000` |
 | `GW_JWT_KEYS_FILE`, `GW_JWT_ISSUER`, `GW_JWT_AUDIENCE` | — (bắt buộc) | Như websocket: JWKS công khai đọc một lần lúc khởi động (đổi khoá = khởi động lại); compose dùng cùng secret `ws_jwks` và `chatim-dev` / `chatim-websocket` |
-| `GW_JWT_LEEWAY` | `30s` | Dung sai giờ cho `exp`/`nbf` (≥ 0) |
+| `GW_JWT_LEEWAY` | `30s` | Dung sai giờ cho `exp`/`nbf` (0–1 phút) |
+| `GW_IAM_*` | như websocket | Đồng bộ danh sách thu hồi và khoá với `iam` ([iam.md](iam.md)); phiên bị thu hồi hoặc tenant bị khoá → 401 (`auth_failures_total{reason="revoked"\|"tenant_revoked"}`), `kid` chưa lấy kịp → 503 (`key_pending`). `ready` khi có core **và** đã đồng bộ lần đầu (hoặc quá `GW_IAM_READY_TIMEOUT`); URL và secret bắt buộc, `iam` trả 4xx → không `ready` |
+| `GW_SHARED_REDIS_ADDR`, `GW_SHARED_REDIS_DB`, `GW_SHARED_REDIS_PASSWORD`/`_FILE`, `GW_SHARED_REDIS_TIMEOUT` | rỗng / `0` / — / `500ms` | Redis chung (compose: `chatim-redis-presence`) giữ bản danh sách thu hồi cho node không hỏi được `iam`; rỗng = không dùng |
 | `GW_BODY_MAX` | `131072` | Cỡ body tối đa; quá thì `resource_exhausted` |
 | `GW_USER_RATE`, `GW_USER_BURST` | `50` / `100` | Lệnh mỗi giây và burst mỗi (tenant, user) trên node; quá thì `resource_exhausted` (429) |
 | `GW_USER_INFLIGHT` | `32` | Lệnh đang chạy tối đa mỗi (tenant, user) trên node |

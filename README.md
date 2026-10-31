@@ -38,11 +38,11 @@ Bản đồ từng package: [INDEXES.csv](INDEXES.csv); hướng phụ thuộc: 
 
 Chỉ cần Docker; Go chạy trong container `golang:1.26.10` qua `make`.
 
-    cp .env.example .env        # đặt các mật khẩu (chữ, số, - hoặc _); IAM_KEY_ENCRYPTION_KEY: openssl rand -base64 32
+    cp .env.example .env        # đặt các mật khẩu (chữ, số, - hoặc _); IAM_KEY_ENCRYPTION_KEY: openssl rand -base64 32; IAM_NODE_SECRET: openssl rand -hex 32
     make infra-up               # mongo :27117, redis :6380/:6381/:6382, nats :4223; infra-down / infra-reset
     make test                   # unit test trong container
     make core-up                # build và chạy postgres, iam-1, core-1, core-2, websocket-1, websocket-2, gateway-1; core-down để dừng
-    make e2e                    # 13 phase, xem docs/e2e.md
+    make e2e                    # 14 phase, xem docs/e2e.md
 
 Lệnh khác: `make vet`, `fmt-check`, `lint`, `vuln`, `itest`, `proto`, `buf-lint`, `alerts-check`, `redis-cli [INSTANCE=dedupe|presence] ARGS=…`, `image TARGET=…`, `poc TOOL=…` ([docs/poc/README.md](docs/poc/README.md)). Token dev và gọi thử gateway:
 
