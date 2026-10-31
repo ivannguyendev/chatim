@@ -22,7 +22,7 @@ import (
 
 const seededAccounts = 20000
 
-func itestDatabase(t *testing.T) (*pgstore.Store, *pgx.Conn, string) {
+func itestDatabase(t testing.TB) (*pgstore.Store, *pgx.Conn, string) {
 	t.Helper()
 	base := os.Getenv("CHATIM_IT_PG_URI")
 	if base == "" {
@@ -65,9 +65,14 @@ func itestDatabase(t *testing.T) (*pgstore.Store, *pgx.Conn, string) {
 	return s, raw, uri
 }
 
-func seedDirectory(t *testing.T, raw *pgx.Conn) {
+func seedDirectory(t testing.TB, raw *pgx.Conn, accounts int) {
 	t.Helper()
 	ctx := context.Background()
+	for _, table := range []string{"accounts", "directory_changes"} {
+		if _, err := raw.Exec(ctx, "ALTER TABLE "+table+" SET (autovacuum_enabled = false)"); err != nil {
+			t.Fatalf("disable autovacuum on %s: %v", table, err)
+		}
+	}
 	_, err := raw.Exec(ctx, `INSERT INTO tenants (id, name, state, ver, created_at, updated_at, updated_by)
 		VALUES ('shop', 'shop', 1, 1, now(), now(), 'test')`)
 	if err != nil {
@@ -76,7 +81,7 @@ func seedDirectory(t *testing.T, raw *pgx.Conn) {
 	_, err = raw.Exec(ctx, `INSERT INTO accounts (tenant_id, id, username, display_name, state, password_hash,
 		password_must_change, password_changed_at, ver, created_at, updated_at, updated_by)
 		SELECT 'shop', 'u' || lpad(g::text, 6, '0'), 'user' || g, 'User ' || g, 1, 'x', false, now(), 1, now(), now(), 'test'
-		FROM generate_series(1, $1::int) g`, seededAccounts)
+		FROM generate_series(1, $1::int) g`, accounts)
 	if err != nil {
 		t.Fatalf("seed accounts: %v", err)
 	}
@@ -125,7 +130,7 @@ func renameUntilStopped(t *testing.T, stop <-chan struct{}, uri string, writes *
 
 func TestWritesDuringLoadAreInTheCacheAfterReady(t *testing.T) {
 	s, raw, uri := itestDatabase(t)
-	seedDirectory(t, raw)
+	seedDirectory(t, raw, seededAccounts)
 	list, err := iamsync.NewList(0)
 	if err != nil {
 		t.Fatalf("NewList: %v", err)
