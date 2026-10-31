@@ -119,16 +119,24 @@ func (r *Ring) Current() (*signing.Signer, error) {
 	return r.signer, nil
 }
 
-func (r *Ring) Caller(token string) (auth.Caller, error) {
+func (r *Ring) Claims(token string) (jwtverify.Claims, error) {
 	r.mu.RLock()
 	verifier := r.verifier
 	r.mu.RUnlock()
 	if verifier == nil {
-		return auth.Caller{}, errBadToken
+		return jwtverify.Claims{}, errBadToken
 	}
 	claims, err := verifier.Verify(token)
 	if err != nil || !session.ValidID(claims.Session) {
-		return auth.Caller{}, errBadToken
+		return jwtverify.Claims{}, errBadToken
+	}
+	return claims, nil
+}
+
+func (r *Ring) Caller(token string) (auth.Caller, error) {
+	claims, err := r.Claims(token)
+	if err != nil {
+		return auth.Caller{}, err
 	}
 	return auth.Caller{Tenant: claims.Tenant, Account: claims.User, Session: claims.Session}, nil
 }

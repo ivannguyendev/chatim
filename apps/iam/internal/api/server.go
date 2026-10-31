@@ -12,8 +12,10 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/iam/internal/auth"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/dpop"
+	"github.com/ivannguyendev/chatim/apps/iam/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/httpcors"
 	"github.com/ivannguyendev/chatim/pkg/pb/chatim/iam/v1/iamv1connect"
+	"github.com/ivannguyendev/chatim/pkg/userlimit"
 )
 
 type Auth interface {
@@ -23,6 +25,8 @@ type Auth interface {
 	Revoke(ctx context.Context, req auth.RevokeRequest) error
 	ListSessions(ctx context.Context, c auth.Caller) ([]auth.SessionView, error)
 	RevokeSession(ctx context.Context, c auth.Caller, id string) error
+	MyProfile(ctx context.Context, c auth.Caller) (store.Profile, error)
+	UpdateMyProfile(ctx context.Context, c auth.Caller, u store.ProfileUpdate) (store.Profile, error)
 }
 
 type Proofs interface {
@@ -42,6 +46,11 @@ type Options struct {
 	Proofs         Proofs
 	Callers        Callers
 	Keys           Keys
+	Directory      Directory
+	Revocations    Revocations
+	Claims         Claims
+	DirectoryGate  *userlimit.Gate
+	DirectoryUsers *userlimit.Users
 	BodyMax        int64
 	CORSOrigins    []string
 	ClientIPHeader string
@@ -59,6 +68,8 @@ func New(opts Options) (http.Handler, error) {
 		return nil, errors.New("api: auth, proofs, callers and keys are required")
 	case opts.BodyMax <= 0:
 		return nil, errors.New("api: body max must be positive")
+	case opts.Directory != nil && (opts.Revocations == nil || opts.Claims == nil || opts.DirectoryGate == nil || opts.DirectoryUsers == nil):
+		return nil, errors.New("api: the directory needs revocations, claims, a gate and user limits")
 	}
 	if opts.Now == nil {
 		opts.Now = time.Now
@@ -70,6 +81,9 @@ func New(opts Options) (http.Handler, error) {
 	mux := http.NewServeMux()
 	path, handler := iamv1connect.NewAuthServiceHandler(connectService{s: s}, connect.WithReadMaxBytes(int(opts.BodyMax)))
 	mux.Handle(path, handler)
+	if opts.Directory != nil {
+		mux.Handle(iamv1connect.NewDirectoryServiceHandler(directoryService{s: s}, connect.WithReadMaxBytes(directoryBodyMax)))
+	}
 	mux.HandleFunc("POST /realms/{tenant}/protocol/openid-connect/token", s.token)
 	mux.HandleFunc("POST /realms/{tenant}/protocol/openid-connect/revoke", s.revoke)
 	mux.HandleFunc("GET /.well-known/jwks.json", s.jwks)
@@ -77,7 +91,7 @@ func New(opts Options) (http.Handler, error) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"code": "not_found", "message": "not found"})
 	})
 	limited := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, opts.BodyMax)
+		r.Body = http.MaxBytesReader(w, r.Body, s.bodyLimit(r.URL.Path))
 		mux.ServeHTTP(w, r)
 	})
 	return httpcors.New(httpcors.Config{

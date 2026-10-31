@@ -39,6 +39,7 @@ type fakeAuth struct {
 	revokes   []auth.RevokeRequest
 	callers   []auth.Caller
 	revoked   string
+	profiles  profileFake
 }
 
 func (f *fakeAuth) Login(_ context.Context, r auth.LoginRequest) (auth.Tokens, error) {
@@ -120,16 +121,20 @@ type harness struct {
 	logs   *bytes.Buffer
 }
 
-func newHarness(t *testing.T) *harness {
+func newHarness(t *testing.T, mods ...func(*api.Options)) *harness {
 	t.Helper()
 	logs := &bytes.Buffer{}
 	fake := &fakeAuth{}
-	h, err := api.New(api.Options{
+	opts := api.Options{
 		Auth: fake, Proofs: fakeProofs{}, Callers: fakeCallers{}, Keys: fakeKeys{body: []byte(testJWKS)},
 		BodyMax: 16 << 10, CORSOrigins: []string{"https://app.example.com"},
 		ClientIPHeader: "X-Real-IP", Now: func() time.Time { return t0 },
 		Log: slog.New(slog.NewJSONHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
-	})
+	}
+	for _, mod := range mods {
+		mod(&opts)
+	}
+	h, err := api.New(opts)
 	if err != nil {
 		t.Fatalf("api.New: %v", err)
 	}

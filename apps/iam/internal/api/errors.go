@@ -38,9 +38,7 @@ func (s *server) connectError(ctx context.Context, procedure string, err error) 
 		return ce
 	case errors.Is(err, apperr.ErrUnavailable):
 		s.opts.Log.WarnContext(ctx, "iam request unavailable", "procedure", procedure, "err", err.Error())
-		ce := connect.NewError(connect.CodeUnavailable, errors.New("temporarily unavailable"))
-		ce.Meta().Set("Retry-After", "1")
-		return ce
+		return errUnavailable("temporarily unavailable")
 	default:
 		s.opts.Log.ErrorContext(ctx, "iam request failed", "procedure", procedure, "err", err.Error())
 		return connect.NewError(connect.CodeInternal, errors.New(msgRequestFail))

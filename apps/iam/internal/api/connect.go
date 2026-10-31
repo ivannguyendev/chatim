@@ -95,21 +95,36 @@ type headered interface {
 }
 
 func (c connectService) ip(req headered) string {
-	return guard.ClientIPFrom(req.Header(), req.Peer().Addr, c.s.opts.ClientIPHeader)
+	return c.s.clientIP(req)
+}
+
+func (s *server) clientIP(req headered) string {
+	return guard.ClientIPFrom(req.Header(), req.Peer().Addr, s.opts.ClientIPHeader)
 }
 
 func (c connectService) caller(req headered) (auth.Caller, error) {
-	values := req.Header().Values("Authorization")
-	unauthenticated := connect.NewError(connect.CodeUnauthenticated, errors.New("unauthenticated"))
-	if len(values) != 1 || len(values[0]) <= len(bearerPrefix) || !strings.EqualFold(values[0][:len(bearerPrefix)], bearerPrefix) {
-		return auth.Caller{}, unauthenticated
+	token, ok := bearerToken(req.Header())
+	if !ok {
+		return auth.Caller{}, errUnauthenticated()
 	}
-	caller, err := c.s.opts.Callers.Caller(values[0][len(bearerPrefix):])
+	caller, err := c.s.opts.Callers.Caller(token)
 	if err != nil {
-		return auth.Caller{}, unauthenticated
+		return auth.Caller{}, errUnauthenticated()
 	}
 	caller.IP = c.ip(req)
 	return caller, nil
+}
+
+func bearerToken(h http.Header) (string, bool) {
+	values := h.Values("Authorization")
+	if len(values) != 1 || len(values[0]) <= len(bearerPrefix) || !strings.EqualFold(values[0][:len(bearerPrefix)], bearerPrefix) {
+		return "", false
+	}
+	return values[0][len(bearerPrefix):], true
+}
+
+func errUnauthenticated() *connect.Error {
+	return connect.NewError(connect.CodeUnauthenticated, errors.New("unauthenticated"))
 }
 
 func (s *server) expiresIn(tok auth.Tokens) int64 {

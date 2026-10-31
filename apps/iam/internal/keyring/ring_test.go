@@ -205,3 +205,19 @@ func TestJWKSServesThePublishedKeysOnly(t *testing.T) {
 		t.Fatalf("kids = %v", kids)
 	}
 }
+
+func TestClaimsCarryTheIssueTime(t *testing.T) {
+	f := newFixture(t)
+	f.addKey(t, store.KeyActive, time.Time{})
+	_ = f.ring.Reload(context.Background())
+	claims, err := f.ring.Claims(f.sign(t, sid))
+	if err != nil {
+		t.Fatalf("Claims: %v", err)
+	}
+	if claims.Tenant != "shop" || claims.User != "lan" || claims.Session != sid || !claims.IssuedAt.Equal(t0) {
+		t.Fatalf("claims = %+v", claims)
+	}
+	if _, err := f.ring.Claims(f.sign(t, "not-a-session")); !errors.Is(err, apperr.ErrUnauthenticated) {
+		t.Fatalf("bad sid = %v, want unauthenticated", err)
+	}
+}

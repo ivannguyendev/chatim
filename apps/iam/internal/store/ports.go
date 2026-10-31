@@ -80,6 +80,21 @@ type ProfileUpdate struct {
 	AvatarURL   *string
 }
 
+type Profile struct {
+	ID          string
+	Username    string
+	Email       string
+	DisplayName string
+	AvatarURL   string
+}
+
+type SessionCheck struct {
+	TenantID  string
+	AccountID string
+	SessionID string
+	Now       time.Time
+}
+
 type Session struct {
 	ID            string
 	TenantID      string
@@ -164,6 +179,8 @@ type Auth interface {
 	RevokeSession(ctx context.Context, id string, r Revocation, audit AuditEvent) (bool, error)
 	ActiveSessions(ctx context.Context, tenantID, accountID string) ([]Session, error)
 	SetPassword(ctx context.Context, c PasswordChange, audit AuditEvent) error
+	MyProfile(ctx context.Context, c SessionCheck) (Profile, error)
+	UpdateMyProfile(ctx context.Context, c SessionCheck, update ProfileUpdate, audit AuditEvent) (Profile, error)
 }
 
 type Directory interface {

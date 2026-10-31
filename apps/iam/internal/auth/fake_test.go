@@ -27,10 +27,12 @@ type fakeStore struct {
 	failRead error
 	failRev  error
 	issued   time.Time
+	profiles map[string]store.Profile
+	profile  profileCalls
 }
 
 func newFakeStore() *fakeStore {
-	return &fakeStore{tenants: map[string]store.Tenant{}, accounts: map[string]store.Account{}, sessions: map[string]store.Session{}}
+	return &fakeStore{tenants: map[string]store.Tenant{}, accounts: map[string]store.Account{}, sessions: map[string]store.Session{}, profiles: map[string]store.Profile{}}
 }
 
 func accountKey(tenant, id string) string { return tenant + "|" + id }
