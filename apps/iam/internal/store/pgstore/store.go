@@ -42,10 +42,6 @@ func Open(ctx context.Context, uri string, opts Options) (*Store, error) {
 	if err != nil {
 		return nil, redact.Error(fmt.Errorf("open postgres pool: %w", err), uri)
 	}
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
-		return nil, redact.Error(fmt.Errorf("ping postgres: %w", err), uri)
-	}
 	return &Store{pool: pool, uri: uri, keep: opts.RevocationKeep}, nil
 }
 

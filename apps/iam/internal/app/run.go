@@ -20,6 +20,8 @@ import (
 type Deps struct {
 	Listen        func(ctx context.Context, addr string) (net.Listener, error)
 	OpenStore     func(ctx context.Context, uri string, opts pgstore.Options) (Store, error)
+	OpenListener  func(ctx context.Context, uri string) (store.Listener, error)
+	MemoryLimit   func() int64
 	HashParams    password.Params
 	SchemaVersion int
 }
@@ -39,6 +41,7 @@ type node struct {
 	ports         []*port
 	health        *health
 	internalStats *api.InternalStats
+	dir           *directoryParts
 	cleanup       cleanupStats
 	keys          keyStats
 }
@@ -58,9 +61,9 @@ func start(run func() error) *task {
 }
 
 type running struct {
-	admin, health         *task
-	stopAdmin, stopHealth context.CancelFunc
-	exited                chan *port
+	admin, health, directory             *task
+	stopAdmin, stopHealth, stopDirectory context.CancelFunc
+	exited                               chan *port
 }
 
 func (d Deps) withDefaults() Deps {
@@ -69,6 +72,12 @@ func (d Deps) withDefaults() Deps {
 	}
 	if d.OpenStore == nil {
 		d.OpenStore = openPostgres
+	}
+	if d.OpenListener == nil {
+		d.OpenListener = openListener
+	}
+	if d.MemoryLimit == nil {
+		d.MemoryLimit = currentMemoryLimit
 	}
 	if d.HashParams == (password.Params{}) {
 		d.HashParams = password.DefaultParams
@@ -120,13 +129,16 @@ func (n *node) serve(ctx context.Context, deps Deps) error {
 	base := context.WithoutCancel(ctx)
 	adminCtx, stopAdmin := context.WithCancel(base)
 	healthCtx, stopHealth := context.WithCancel(base)
+	directoryCtx, stopDirectory := context.WithCancel(base)
 	n.health.check(healthCtx)
 	r := running{
-		admin:      start(func() error { return n.admin.ServeListener(adminCtx, adminLis) }),
-		health:     start(func() error { n.watchHealth(healthCtx); return nil }),
-		stopAdmin:  stopAdmin,
-		stopHealth: stopHealth,
-		exited:     make(chan *port, len(n.ports)),
+		admin:         start(func() error { return n.admin.ServeListener(adminCtx, adminLis) }),
+		health:        start(func() error { n.watchHealth(healthCtx); return nil }),
+		directory:     start(func() error { return n.dir.run(directoryCtx, func() { n.health.check(directoryCtx) }) }),
+		stopAdmin:     stopAdmin,
+		stopHealth:    stopHealth,
+		stopDirectory: stopDirectory,
+		exited:        make(chan *port, len(n.ports)),
 	}
 	addrs := []any{"admin", adminLis.Addr().String()}
 	for _, p := range n.ports {
@@ -208,6 +220,11 @@ func (n *node) shutdown(ctx context.Context, r running, cause error) error {
 		if p.task.err != nil && !errors.Is(p.task.err, http.ErrServerClosed) {
 			errs = append(errs, fmt.Errorf("http serve %s: %w", p.addr, p.task.err))
 		}
+	}
+	r.stopDirectory()
+	<-r.directory.done
+	if r.directory.err != nil {
+		errs = append(errs, fmt.Errorf("directory: %w", r.directory.err))
 	}
 	r.stopHealth()
 	<-r.health.done

@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,9 +19,17 @@ import (
 
 type closedStore struct {
 	admincmd.Store
+	pingErr error
+	closed  *bool
 }
 
-func (closedStore) Close() {}
+func (s closedStore) Ping(context.Context) error { return s.pingErr }
+
+func (s closedStore) Close() {
+	if s.closed != nil {
+		*s.closed = true
+	}
+}
 
 func testEnv(t *testing.T, open func(context.Context) (admincmd.Store, error)) (admincmd.Env, *bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
@@ -72,6 +82,19 @@ func TestStoreOpenFailureExitsWithOne(t *testing.T) {
 	env, _, _ := testEnv(t, func(context.Context) (admincmd.Store, error) { return nil, os.ErrNotExist })
 	if code := admincmd.Run(context.Background(), env, []string{"migrate"}); code != 1 {
 		t.Fatalf("Run = %d, want 1", code)
+	}
+}
+
+func TestUnreachablePostgresFailsFastWithOne(t *testing.T) {
+	closed := false
+	env, out, logs := testEnv(t, func(context.Context) (admincmd.Store, error) {
+		return closedStore{pingErr: errors.New("dial tcp: connection refused"), closed: &closed}, nil
+	})
+	if code := admincmd.Run(context.Background(), env, []string{"tenant-create", "-id", "shop", "-name", "Shop"}); code != 1 {
+		t.Fatalf("Run = %d, want 1", code)
+	}
+	if !closed || out.Len() != 0 || !strings.Contains(logs.String(), "connection refused") {
+		t.Fatalf("closed=%v out=%q logs=%s; want the store closed, no output and the ping error logged", closed, out, logs)
 	}
 }
 

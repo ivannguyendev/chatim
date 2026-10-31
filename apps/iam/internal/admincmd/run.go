@@ -23,6 +23,7 @@ var errUsage = errors.New("usage error")
 type Store interface {
 	store.Admin
 	Migrate(ctx context.Context, apply bool) ([]string, error)
+	Ping(ctx context.Context) error
 	Close()
 }
 
@@ -79,6 +80,10 @@ func Run(ctx context.Context, env Env, args []string) int {
 		return 1
 	}
 	defer st.Close()
+	if err := st.Ping(ctx); err != nil {
+		env.Log.ErrorContext(ctx, "reach iam store", "err", err)
+		return 1
+	}
 	if err := commands[args[0]](ctx, env, st, args[1:]); err != nil {
 		if errors.Is(err, errUsage) {
 			env.Log.ErrorContext(ctx, "iam command usage", "command", args[0], "err", err)

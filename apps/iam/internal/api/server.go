@@ -51,6 +51,7 @@ type Options struct {
 	Claims         Claims
 	DirectoryGate  *userlimit.Gate
 	DirectoryUsers *userlimit.Users
+	DirectoryStats *DirectoryStats
 	BodyMax        int64
 	CORSOrigins    []string
 	ClientIPHeader string
@@ -73,6 +74,9 @@ func New(opts Options) (http.Handler, error) {
 	}
 	if opts.Now == nil {
 		opts.Now = time.Now
+	}
+	if opts.DirectoryStats == nil {
+		opts.DirectoryStats = &DirectoryStats{}
 	}
 	if opts.Log == nil {
 		opts.Log = slog.New(slog.DiscardHandler)

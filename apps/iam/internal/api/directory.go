@@ -49,7 +49,8 @@ func (s *server) bodyLimit(path string) int64 {
 	return s.opts.BodyMax
 }
 
-func (d directoryService) GetUsers(_ context.Context, req *connect.Request[iamv1.GetUsersRequest]) (*connect.Response[iamv1.GetUsersResponse], error) {
+func (d directoryService) GetUsers(_ context.Context, req *connect.Request[iamv1.GetUsersRequest]) (resp *connect.Response[iamv1.GetUsersResponse], err error) {
+	defer func() { d.s.opts.DirectoryStats.countGetUsers(err) }()
 	claims, done, err := d.enter(req)
 	if err != nil {
 		return nil, err
@@ -62,6 +63,7 @@ func (d directoryService) GetUsers(_ context.Context, req *connect.Request[iamv1
 	if !d.s.opts.Directory.Ready() {
 		return nil, errUnavailable("directory is loading")
 	}
+	d.s.opts.DirectoryStats.GetUsersIDs.Add(uint64(len(wanted)))
 	found := d.s.opts.Directory.Lookup(claims.Tenant, wanted)
 	out := make([]*iamv1.DirectoryUser, 0, len(found))
 	for _, u := range found {
@@ -100,6 +102,7 @@ func (d directoryService) UpdateMyProfile(ctx context.Context, req *connect.Requ
 func (d directoryService) enter(req headered) (jwtverify.Claims, func(), error) {
 	gate := d.s.opts.DirectoryGate
 	if !gate.Enter() {
+		d.s.opts.DirectoryStats.InflightRejected.Add(1)
 		return jwtverify.Claims{}, nil, errUnavailable("temporarily unavailable")
 	}
 	claims, err := d.authenticate(req)
@@ -110,6 +113,7 @@ func (d directoryService) enter(req headered) (jwtverify.Claims, func(), error) 
 	release, err := d.s.opts.DirectoryUsers.Acquire(userlimit.Key{Tenant: claims.Tenant, User: claims.User})
 	if err != nil {
 		gate.Leave()
+		d.s.opts.DirectoryStats.UserLimited.Add(1)
 		return jwtverify.Claims{}, nil, connect.NewError(connect.CodeResourceExhausted, errors.New("too many requests, retry later"))
 	}
 	return claims, func() {

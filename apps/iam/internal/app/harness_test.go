@@ -41,6 +41,7 @@ type fakeStore struct {
 	cleaned  chan struct{}
 	due      string
 	dueAsked chan time.Duration
+	outage
 }
 
 func (f *fakeStore) ActivateDueSigningKey(_ context.Context, lead time.Duration, _ store.AuditEvent) (string, error) {
@@ -55,7 +56,12 @@ func (f *fakeStore) ActivateDueSigningKey(_ context.Context, lead time.Duration,
 	return kid, nil
 }
 
-func (f *fakeStore) Revocations(context.Context) (revocation.Snapshot, error) { return f.snapshot, nil }
+func (f *fakeStore) Revocations(context.Context) (revocation.Snapshot, error) {
+	if f.down.Load() {
+		return revocation.Snapshot{}, errOpen
+	}
+	return f.snapshot, nil
+}
 
 func (f *fakeStore) DeleteExpiredRevocations(context.Context) (int64, error) {
 	if f.cleaned != nil {
@@ -67,10 +73,37 @@ func (f *fakeStore) DeleteExpiredRevocations(context.Context) (int64, error) {
 	return 2, nil
 }
 
-func (f *fakeStore) SigningKeys(context.Context) ([]store.SigningKey, error) { return f.keys, nil }
-func (f *fakeStore) Ping(context.Context) error                              { return nil }
-func (f *fakeStore) SchemaVersion(context.Context) (int, error)              { return f.version, nil }
-func (f *fakeStore) Close()                                                  { f.closed.Store(true) }
+func (f *fakeStore) SigningKeys(context.Context) ([]store.SigningKey, error) {
+	if f.down.Load() {
+		return nil, errOpen
+	}
+	return f.keys, nil
+}
+
+func (f *fakeStore) Ping(context.Context) error {
+	if f.pings != nil {
+		select {
+		case f.pings <- struct{}{}:
+		default:
+		}
+	}
+	if f.down.Load() {
+		return errOpen
+	}
+	return nil
+}
+
+func (f *fakeStore) SchemaVersion(context.Context) (int, error) {
+	if f.down.Load() {
+		return 0, errOpen
+	}
+	return f.version, nil
+}
+
+func (f *fakeStore) Close() {
+	f.closedAt.Store(f.seq.Add(1))
+	f.closed.Store(true)
+}
 
 func testConfig(kek []byte) config.Config {
 	return config.Config{
@@ -78,6 +111,7 @@ func testConfig(kek []byte) config.Config {
 		Issuer: "iss", Audience: "aud", AccessTTL: 15 * time.Minute, SessionIdle: time.Hour, SessionMax: 2 * time.Hour,
 		RefreshGrace: 30 * time.Second, DPoPWindow: time.Minute, HashConcurrency: 2, LoginFreeFailures: 5, LoginMaxDelay: time.Minute,
 		LoginIPRate: 10, LoginIPBurst: 10, LoginIPTracked: 100, PasswordMin: 12, KeyEncryptionKey: kek, KeyReload: time.Hour, KeyActivateLead: 2 * time.Hour,
+		FeedWaitMax: 10 * time.Second, DirectoryLoadSlots: 1, InflightMax: 100, UserRate: 50, UserBurst: 100, UserInflight: 32, UserLimiters: 1000,
 		BodyMax: 16 << 10, DrainDelay: 10 * time.Millisecond, ShutdownBudget: 20 * time.Second,
 		ReadHeaderTimeout: time.Second, ReadTimeout: time.Second, WriteTimeout: time.Second, IdleTimeout: time.Second, MaxHeaderBytes: 16 << 10,
 	}
@@ -161,7 +195,7 @@ type running struct {
 	logs                 *logWatch
 }
 
-func runIAM(t *testing.T, cfg config.Config, st *fakeStore, schema int) *running {
+func runIAM(t *testing.T, cfg config.Config, st *fakeStore, schema int, adjust ...func(*app.Deps)) *running {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	lis := &listeners{addrs: map[string]chan string{"admin": make(chan string, 1), "api": make(chan string, 1), "internal": make(chan string, 1)}}
@@ -171,8 +205,13 @@ func runIAM(t *testing.T, cfg config.Config, st *fakeStore, schema int) *running
 	deps := app.Deps{
 		Listen:        lis.listen,
 		OpenStore:     func(context.Context, string, pgstore.Options) (app.Store, error) { return st, nil },
+		OpenListener:  openIdleListener,
+		MemoryLimit:   func() int64 { return 256 << 20 },
 		HashParams:    fastHash,
 		SchemaVersion: schema,
+	}
+	for _, a := range adjust {
+		a(&deps)
 	}
 	go func() {
 		defer close(stopped)

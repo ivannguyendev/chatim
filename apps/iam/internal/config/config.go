@@ -20,41 +20,48 @@ const (
 )
 
 type Config struct {
-	ListenAddr        string
-	InternalAddr      string
-	AdminAddr         string
-	PublicURL         string
-	PGURI             string
-	PGPassword        string
-	PGMaxConns        int
-	Issuer            string
-	Audience          string
-	AccessTTL         time.Duration
-	SessionIdle       time.Duration
-	SessionMax        time.Duration
-	RefreshGrace      time.Duration
-	DPoPWindow        time.Duration
-	HashConcurrency   int
-	LoginFreeFailures int
-	LoginMaxDelay     time.Duration
-	LoginIPRate       int
-	LoginIPBurst      int
-	LoginIPTracked    int
-	PasswordMin       int
-	KeyEncryptionKey  []byte
-	NodeSecret        string
-	KeyActivateLead   time.Duration
-	KeyReload         time.Duration
-	BodyMax           int
-	CORSOrigins       []string
-	ClientIPHeader    string
-	DrainDelay        time.Duration
-	ShutdownBudget    time.Duration
-	ReadHeaderTimeout time.Duration
-	ReadTimeout       time.Duration
-	WriteTimeout      time.Duration
-	IdleTimeout       time.Duration
-	MaxHeaderBytes    int
+	ListenAddr         string
+	InternalAddr       string
+	AdminAddr          string
+	PublicURL          string
+	PGURI              string
+	PGPassword         string
+	PGMaxConns         int
+	Issuer             string
+	Audience           string
+	AccessTTL          time.Duration
+	SessionIdle        time.Duration
+	SessionMax         time.Duration
+	RefreshGrace       time.Duration
+	DPoPWindow         time.Duration
+	HashConcurrency    int
+	LoginFreeFailures  int
+	LoginMaxDelay      time.Duration
+	LoginIPRate        int
+	LoginIPBurst       int
+	LoginIPTracked     int
+	PasswordMin        int
+	KeyEncryptionKey   []byte
+	NodeSecret         string
+	KeyActivateLead    time.Duration
+	KeyReload          time.Duration
+	BodyMax            int
+	CORSOrigins        []string
+	ClientIPHeader     string
+	DrainDelay         time.Duration
+	ShutdownBudget     time.Duration
+	ReadHeaderTimeout  time.Duration
+	ReadTimeout        time.Duration
+	WriteTimeout       time.Duration
+	IdleTimeout        time.Duration
+	MaxHeaderBytes     int
+	FeedWaitMax        time.Duration
+	DirectoryLoadSlots int
+	InflightMax        int
+	UserRate           int
+	UserBurst          int
+	UserInflight       int
+	UserLimiters       int
 }
 
 func AdminAddr() string { return envconfig.String("IAM_ADMIN_ADDR", defaultAdminAddr) }
@@ -62,41 +69,48 @@ func AdminAddr() string { return envconfig.String("IAM_ADMIN_ADDR", defaultAdmin
 func Load() (Config, error) {
 	var p parser
 	c := Config{
-		ListenAddr:        optional("IAM_ADDR", ":8080"),
-		InternalAddr:      optional("IAM_INTERNAL_ADDR", ":8081"),
-		AdminAddr:         AdminAddr(),
-		PublicURL:         envconfig.String("IAM_PUBLIC_URL", ""),
-		PGURI:             envconfig.String("IAM_PG_URI", ""),
-		PGPassword:        p.secret("IAM_PG_PASSWORD"),
-		PGMaxConns:        p.number("IAM_PG_MAX_CONNS", 20),
-		Issuer:            envconfig.String("IAM_ISSUER", ""),
-		Audience:          envconfig.String("IAM_AUDIENCE", ""),
-		AccessTTL:         p.span("IAM_ACCESS_TTL", 15*time.Minute),
-		SessionIdle:       p.span("IAM_SESSION_IDLE", 720*time.Hour),
-		SessionMax:        p.span("IAM_SESSION_MAX", 2160*time.Hour),
-		RefreshGrace:      p.span("IAM_REFRESH_GRACE", 30*time.Second),
-		DPoPWindow:        p.span("IAM_DPOP_WINDOW", time.Minute),
-		HashConcurrency:   p.number("IAM_HASH_CONCURRENCY", 16),
-		LoginFreeFailures: p.number("IAM_LOGIN_FREE_FAILURES", 5),
-		LoginMaxDelay:     p.span("IAM_LOGIN_MAX_DELAY", time.Minute),
-		LoginIPRate:       p.number("IAM_LOGIN_IP_RATE", 20),
-		LoginIPBurst:      p.number("IAM_LOGIN_IP_BURST", 200),
-		LoginIPTracked:    p.number("IAM_LOGIN_IP_TRACKED", 100000),
-		PasswordMin:       p.number("IAM_PASSWORD_MIN", 12),
-		KeyEncryptionKey:  p.key("IAM_KEY_ENCRYPTION_KEY"),
-		NodeSecret:        p.secret("IAM_NODE_SECRET"),
-		KeyActivateLead:   p.span("IAM_KEY_ACTIVATE_LEAD", 2*time.Minute),
-		KeyReload:         p.span("IAM_KEY_RELOAD", 30*time.Second),
-		BodyMax:           p.number("IAM_BODY_MAX", 16<<10),
-		CORSOrigins:       list("IAM_CORS_ORIGINS"),
-		ClientIPHeader:    envconfig.String("IAM_CLIENT_IP_HEADER", ""),
-		DrainDelay:        p.span("IAM_DRAIN_DELAY", 5*time.Second),
-		ShutdownBudget:    p.span("IAM_SHUTDOWN_BUDGET", 25*time.Second),
-		ReadHeaderTimeout: p.span("IAM_READ_HEADER_TIMEOUT", 5*time.Second),
-		ReadTimeout:       p.span("IAM_READ_TIMEOUT", 10*time.Second),
-		WriteTimeout:      p.span("IAM_WRITE_TIMEOUT", 15*time.Second),
-		IdleTimeout:       p.span("IAM_IDLE_TIMEOUT", 60*time.Second),
-		MaxHeaderBytes:    p.number("IAM_MAX_HEADER_BYTES", 16<<10),
+		ListenAddr:         optional("IAM_ADDR", ":8080"),
+		InternalAddr:       optional("IAM_INTERNAL_ADDR", ":8081"),
+		AdminAddr:          AdminAddr(),
+		PublicURL:          envconfig.String("IAM_PUBLIC_URL", ""),
+		PGURI:              envconfig.String("IAM_PG_URI", ""),
+		PGPassword:         p.secret("IAM_PG_PASSWORD"),
+		PGMaxConns:         p.number("IAM_PG_MAX_CONNS", 20),
+		Issuer:             envconfig.String("IAM_ISSUER", ""),
+		Audience:           envconfig.String("IAM_AUDIENCE", ""),
+		AccessTTL:          p.span("IAM_ACCESS_TTL", 15*time.Minute),
+		SessionIdle:        p.span("IAM_SESSION_IDLE", 720*time.Hour),
+		SessionMax:         p.span("IAM_SESSION_MAX", 2160*time.Hour),
+		RefreshGrace:       p.span("IAM_REFRESH_GRACE", 30*time.Second),
+		DPoPWindow:         p.span("IAM_DPOP_WINDOW", time.Minute),
+		HashConcurrency:    p.number("IAM_HASH_CONCURRENCY", 16),
+		LoginFreeFailures:  p.number("IAM_LOGIN_FREE_FAILURES", 5),
+		LoginMaxDelay:      p.span("IAM_LOGIN_MAX_DELAY", time.Minute),
+		LoginIPRate:        p.number("IAM_LOGIN_IP_RATE", 20),
+		LoginIPBurst:       p.number("IAM_LOGIN_IP_BURST", 200),
+		LoginIPTracked:     p.number("IAM_LOGIN_IP_TRACKED", 100000),
+		PasswordMin:        p.number("IAM_PASSWORD_MIN", 12),
+		KeyEncryptionKey:   p.key("IAM_KEY_ENCRYPTION_KEY"),
+		NodeSecret:         p.secret("IAM_NODE_SECRET"),
+		KeyActivateLead:    p.span("IAM_KEY_ACTIVATE_LEAD", 2*time.Minute),
+		KeyReload:          p.span("IAM_KEY_RELOAD", 30*time.Second),
+		BodyMax:            p.number("IAM_BODY_MAX", 16<<10),
+		CORSOrigins:        list("IAM_CORS_ORIGINS"),
+		ClientIPHeader:     envconfig.String("IAM_CLIENT_IP_HEADER", ""),
+		DrainDelay:         p.span("IAM_DRAIN_DELAY", 5*time.Second),
+		ShutdownBudget:     p.span("IAM_SHUTDOWN_BUDGET", 25*time.Second),
+		ReadHeaderTimeout:  p.span("IAM_READ_HEADER_TIMEOUT", 5*time.Second),
+		ReadTimeout:        p.span("IAM_READ_TIMEOUT", 10*time.Second),
+		WriteTimeout:       p.span("IAM_WRITE_TIMEOUT", 15*time.Second),
+		IdleTimeout:        p.span("IAM_IDLE_TIMEOUT", 60*time.Second),
+		MaxHeaderBytes:     p.number("IAM_MAX_HEADER_BYTES", 16<<10),
+		FeedWaitMax:        p.span("IAM_FEED_WAIT_MAX", 10*time.Second),
+		DirectoryLoadSlots: p.number("IAM_DIRECTORY_LOAD_SLOTS", 4),
+		InflightMax:        p.number("IAM_INFLIGHT_MAX", 10000),
+		UserRate:           p.number("IAM_USER_RATE", 50),
+		UserBurst:          p.number("IAM_USER_BURST", 100),
+		UserInflight:       p.number("IAM_USER_INFLIGHT", 32),
+		UserLimiters:       p.number("IAM_USER_LIMITERS", 100000),
 	}
 	if err := errors.Join(p.errs...); err != nil {
 		return Config{}, err
@@ -149,6 +163,13 @@ func (c Config) LogValue() slog.Value {
 		slog.String("client_ip_header", c.ClientIPHeader),
 		slog.Duration("drain_delay", c.DrainDelay),
 		slog.Duration("shutdown_budget", c.ShutdownBudget),
+		slog.Duration("feed_wait_max", c.FeedWaitMax),
+		slog.Int("directory_load_slots", c.DirectoryLoadSlots),
+		slog.Int("inflight_max", c.InflightMax),
+		slog.Int("user_rate", c.UserRate),
+		slog.Int("user_burst", c.UserBurst),
+		slog.Int("user_inflight", c.UserInflight),
+		slog.Int("user_limiters", c.UserLimiters),
 	)
 }
 

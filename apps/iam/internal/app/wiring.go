@@ -29,6 +29,7 @@ const (
 
 type Store interface {
 	store.Auth
+	store.DirectoryReader
 	keyring.Source
 	api.RevocationSource
 	DeleteExpiredRevocations(ctx context.Context) (int64, error)
@@ -47,7 +48,7 @@ func wire(ctx context.Context, cfg config.Config, log *slog.Logger, deps Deps) (
 	if err != nil {
 		return nil, err
 	}
-	n, err := wireServers(cfg, log, st, deps)
+	n, err := wireServers(ctx, cfg, log, st, deps)
 	if err != nil {
 		st.Close()
 		return nil, err
@@ -65,7 +66,7 @@ func poolSize(n int) int32 {
 	return int32(n)
 }
 
-func wireServers(cfg config.Config, log *slog.Logger, st Store, deps Deps) (*node, error) {
+func wireServers(ctx context.Context, cfg config.Config, log *slog.Logger, st Store, deps Deps) (*node, error) {
 	sealer, err := signing.NewSealer(cfg.KeyEncryptionKey, rand.Reader)
 	if err != nil {
 		return nil, err
@@ -85,7 +86,11 @@ func wireServers(cfg config.Config, log *slog.Logger, st Store, deps Deps) (*nod
 		IPs:     guard.NewIPLimiter(float64(cfg.LoginIPRate), cfg.LoginIPBurst, cfg.LoginIPTracked),
 		Slots:   slots, Signers: ring, Random: rand.Reader, Now: time.Now,
 	}, auth.Config{SessionIdle: cfg.SessionIdle, SessionMax: cfg.SessionMax, RefreshGrace: cfg.RefreshGrace})
-	n := &node{cfg: cfg, log: log, store: st, internalStats: &api.InternalStats{}}
+	dir, err := newDirectory(cfg, st, deps)
+	if err != nil {
+		return nil, err
+	}
+	n := &node{cfg: cfg, log: log, store: st, internalStats: &api.InternalStats{}, dir: dir}
 	if cfg.ListenAddr != "" {
 		proofs, err := dpop.NewVerifier(cfg.PublicURL, cfg.DPoPWindow, time.Now)
 		if err != nil {
@@ -93,6 +98,7 @@ func wireServers(cfg config.Config, log *slog.Logger, st Store, deps Deps) (*nod
 		}
 		handler, err := api.New(api.Options{
 			Auth: svc, Proofs: proofs, Callers: ring, Keys: ring, BodyMax: int64(cfg.BodyMax),
+			Directory: dir.cache, Revocations: dir.list, Claims: ring, DirectoryGate: dir.gate, DirectoryUsers: dir.users, DirectoryStats: dir.apiStats,
 			CORSOrigins: cfg.CORSOrigins, ClientIPHeader: cfg.ClientIPHeader, Log: log,
 		})
 		if err != nil {
@@ -101,18 +107,28 @@ func wireServers(cfg config.Config, log *slog.Logger, st Store, deps Deps) (*nod
 		n.ports = append(n.ports, &port{addr: cfg.ListenAddr, server: newHTTPServer(cfg, handler, log)})
 	}
 	if cfg.InternalAddr != "" {
-		handler, err := api.NewInternal(api.InternalOptions{Revocations: st, Secret: cfg.NodeSecret, Stats: n.internalStats, Log: log})
+		handler, err := api.NewInternal(api.InternalOptions{
+			Revocations: st, Secret: cfg.NodeSecret, Stats: n.internalStats, Log: log,
+			DirectoryFeed: st, DirectorySignal: dir.follower, FeedWaitMax: cfg.FeedWaitMax, FeedStats: dir.feedStats,
+		})
 		if err != nil {
 			return nil, err
 		}
-		n.ports = append(n.ports, &port{addr: cfg.InternalAddr, server: newHTTPServer(cfg, handler, log)})
+		server := newHTTPServer(cfg, handler, log)
+		server.RegisterOnShutdown(handler.Stop)
+		n.ports = append(n.ports, &port{addr: cfg.InternalAddr, server: server})
 	}
-	metricsHandler, err := metrics.Handler(metricsSubsystem, metricSources(svc.Stats(), slots, ring, n.internalStats, &n.cleanup, &n.keys))
+	memoryLimited := memoryLimitSet(deps.MemoryLimit())
+	if !memoryLimited {
+		log.WarnContext(ctx, "GOMEMLIMIT is not set; set it to about 90% of the container memory limit")
+	}
+	sources := append(metricSources(svc.Stats(), slots, ring, n.internalStats, &n.cleanup, &n.keys), directoryMetricSources(dir, memoryLimited, time.Now)...)
+	metricsHandler, err := metrics.Handler(metricsSubsystem, sources)
 	if err != nil {
 		return nil, err
 	}
 	n.admin = admin.New(admin.Config{Addr: cfg.AdminAddr, Metrics: metricsHandler}, log)
-	n.health = &health{admin: n.admin, log: log, store: st, ring: ring, schema: deps.SchemaVersion}
+	n.health = &health{admin: n.admin, log: log, store: st, ring: ring, directory: dir.cache, schema: deps.SchemaVersion}
 	return n, nil
 }
 

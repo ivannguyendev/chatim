@@ -34,8 +34,14 @@ IAM tổng quát kiểu Keycloak (M6, owner 2026-10-25), tự xây bằng Go tr�
 | `IAM_DRAIN_DELAY`, `IAM_SHUTDOWN_BUDGET` | `5s` / `25s` | Dừng: `/readyz` false, drain, `http.Shutdown`, đóng pool; budget > drain + write timeout + 1s |
 | `IAM_READ_HEADER_TIMEOUT`, `IAM_READ_TIMEOUT`, `IAM_WRITE_TIMEOUT`, `IAM_IDLE_TIMEOUT` | `5s` / `10s` / `15s` / `60s` | Hạn của HTTP server |
 | `IAM_MAX_HEADER_BYTES` | `16384` | Cỡ header tối đa |
+| `IAM_FEED_WAIT_MAX` | `10s` | Thời gian chờ tối đa của một long poll trên feed danh bạ (cổng nội bộ); từ `1s` đến `60s` |
+| `IAM_DIRECTORY_LOAD_SLOTS` | `4` | Số replica được nạp toàn bộ danh bạ cùng lúc (khoá advisory trên Postgres); ≥ 1 và < `IAM_PG_MAX_CONNS` |
+| `IAM_INFLIGHT_MAX` | `10000` | Lời gọi `DirectoryService` chạy cùng lúc mỗi node; quá thì `unavailable` |
+| `IAM_USER_RATE`, `IAM_USER_BURST` | `50` / `100` | Lời gọi `DirectoryService` mỗi người dùng mỗi node (token bucket); quá thì `resource_exhausted` |
+| `IAM_USER_INFLIGHT` | `32` | Lời gọi `DirectoryService` chạy cùng lúc của một người dùng; quá thì `resource_exhausted` |
+| `IAM_USER_LIMITERS` | `100000` | Số người dùng giữ bộ đếm (LRU); phải ≥ `IAM_INFLIGHT_MAX` |
 
-`/readyz` true khi ping được Postgres, schema đúng phiên bản migration mới nhất trong binary, và có đúng một khoá đang ký.
+`/readyz` lần đầu true khi ping được Postgres, schema đúng phiên bản migration mới nhất trong binary, có đúng một khoá đang ký và danh bạ đã nạp xong vào RAM (kiểm ngay khi nạp xong, không chờ `IAM_KEY_RELOAD`). Sau lần ready đầu, chỉ còn cần khoá ký và danh bạ: Postgres mất thì replica vẫn ready vì `GetUsers` và JWKS trả từ RAM, còn đăng nhập và refresh tự trả `unavailable`. Khởi động khi Postgres chưa lên thì process không thoát: `/livez` OK, `/readyz` false, nạp danh bạ thử lại có backoff đến khi Postgres lên. `GOMEMLIMIT` chưa đặt thì log cảnh báo một lần lúc khởi động và metric `memory_limit_set` = 0.
 
 ## API công khai
 

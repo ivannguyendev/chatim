@@ -14,6 +14,8 @@ const (
 	minPasswordLength   = 8
 	minNodeSecretLength = 32
 	shutdownMarginTime  = time.Second
+	feedWaitFloor       = time.Second
+	feedWaitCeiling     = time.Minute
 )
 
 type rule struct {
@@ -59,6 +61,14 @@ func (c Config) Validate() error {
 		positive("IAM_IDLE_TIMEOUT", c.IdleTimeout),
 		positive("IAM_MAX_HEADER_BYTES", c.MaxHeaderBytes),
 		{c.ReadHeaderTimeout <= c.ReadTimeout, "IAM_READ_HEADER_TIMEOUT must not exceed IAM_READ_TIMEOUT"},
+		{c.FeedWaitMax >= feedWaitFloor && c.FeedWaitMax <= feedWaitCeiling, fmt.Sprintf("IAM_FEED_WAIT_MAX %v must be from %v to %v", c.FeedWaitMax, feedWaitFloor, feedWaitCeiling)},
+		{c.DirectoryLoadSlots >= 1 && c.DirectoryLoadSlots < c.PGMaxConns, fmt.Sprintf("IAM_DIRECTORY_LOAD_SLOTS %d must be at least 1 and below IAM_PG_MAX_CONNS %d", c.DirectoryLoadSlots, c.PGMaxConns)},
+		positive("IAM_USER_RATE", c.UserRate),
+		positive("IAM_USER_BURST", c.UserBurst),
+		positive("IAM_USER_INFLIGHT", c.UserInflight),
+		positive("IAM_USER_LIMITERS", c.UserLimiters),
+		positive("IAM_INFLIGHT_MAX", c.InflightMax),
+		{c.UserLimiters >= c.InflightMax, fmt.Sprintf("IAM_USER_LIMITERS %d must be at least IAM_INFLIGHT_MAX %d", c.UserLimiters, c.InflightMax)},
 		{c.ShutdownBudget > c.DrainDelay+c.WriteTimeout+shutdownMarginTime, fmt.Sprintf("IAM_SHUTDOWN_BUDGET %v must exceed IAM_DRAIN_DELAY + IAM_WRITE_TIMEOUT + 1s = %v", c.ShutdownBudget, c.DrainDelay+c.WriteTimeout+shutdownMarginTime)},
 	}
 	var errs []error

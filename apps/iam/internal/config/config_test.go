@@ -40,6 +40,10 @@ func TestLoadDefaults(t *testing.T) {
 	if c.InternalAddr != ":8081" || c.KeyActivateLead != 2*time.Minute || c.NodeSecret != nodeSecret || c.RevocationKeep() != 16*time.Minute {
 		t.Fatalf("internal defaults = %q %v %v", c.InternalAddr, c.KeyActivateLead, c.RevocationKeep())
 	}
+	if c.FeedWaitMax != 10*time.Second || c.DirectoryLoadSlots != 4 || c.InflightMax != 10000 || c.UserRate != 50 ||
+		c.UserBurst != 100 || c.UserInflight != 32 || c.UserLimiters != 100000 {
+		t.Fatalf("directory defaults = %v %d %d %d %d %d %d", c.FeedWaitMax, c.DirectoryLoadSlots, c.InflightMax, c.UserRate, c.UserBurst, c.UserInflight, c.UserLimiters)
+	}
 	if len(c.KeyEncryptionKey) != 32 {
 		t.Fatalf("kek length = %d, want 32", len(c.KeyEncryptionKey))
 	}
@@ -165,5 +169,60 @@ func TestLoadRefusesTimersThatBreakNodes(t *testing.T) {
 	t.Setenv("IAM_ACCESS_TTL", "119m")
 	if _, err := config.Load(); err != nil {
 		t.Fatalf("Load at both limits = %v", err)
+	}
+}
+
+func TestLoadRefusesBadDirectoryLimits(t *testing.T) {
+	cases := map[string]struct {
+		env  map[string]string
+		want string
+	}{
+		"feed wait under 1s":          {map[string]string{"IAM_FEED_WAIT_MAX": "999ms"}, "IAM_FEED_WAIT_MAX 999ms must be from 1s to 1m0s"},
+		"feed wait over 60s":          {map[string]string{"IAM_FEED_WAIT_MAX": "61s"}, "IAM_FEED_WAIT_MAX 1m1s must be from 1s to 1m0s"},
+		"zero load slots":             {map[string]string{"IAM_DIRECTORY_LOAD_SLOTS": "0"}, "IAM_DIRECTORY_LOAD_SLOTS 0 must be at least 1 and below IAM_PG_MAX_CONNS 20"},
+		"load slots at the pool size": {map[string]string{"IAM_DIRECTORY_LOAD_SLOTS": "20"}, "IAM_DIRECTORY_LOAD_SLOTS 20 must be at least 1 and below IAM_PG_MAX_CONNS 20"},
+		"zero user rate":              {map[string]string{"IAM_USER_RATE": "0"}, "IAM_USER_RATE must be positive"},
+		"zero user burst":             {map[string]string{"IAM_USER_BURST": "0"}, "IAM_USER_BURST must be positive"},
+		"zero user inflight":          {map[string]string{"IAM_USER_INFLIGHT": "0"}, "IAM_USER_INFLIGHT must be positive"},
+		"zero user limiters":          {map[string]string{"IAM_USER_LIMITERS": "0"}, "IAM_USER_LIMITERS must be positive"},
+		"zero inflight max":           {map[string]string{"IAM_INFLIGHT_MAX": "0"}, "IAM_INFLIGHT_MAX must be positive"},
+		"limiters under the node cap": {map[string]string{"IAM_USER_LIMITERS": "9999"}, "IAM_USER_LIMITERS 9999 must be at least IAM_INFLIGHT_MAX 10000"},
+		"unparsable directory number": {map[string]string{"IAM_USER_RATE": "many"}, "IAM_USER_RATE"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			setRequired(t)
+			for k, v := range tc.env {
+				t.Setenv(k, v)
+			}
+			if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Load = %v, want an error containing %q", err, tc.want)
+			}
+		})
+	}
+	setRequired(t)
+	t.Setenv("IAM_FEED_WAIT_MAX", "60s")
+	t.Setenv("IAM_DIRECTORY_LOAD_SLOTS", "19")
+	t.Setenv("IAM_USER_LIMITERS", "10000")
+	if _, err := config.Load(); err != nil {
+		t.Fatalf("Load at the directory limits = %v", err)
+	}
+	t.Setenv("IAM_FEED_WAIT_MAX", "1s")
+	if _, err := config.Load(); err != nil {
+		t.Fatalf("Load at the lowest feed wait = %v", err)
+	}
+}
+
+func TestLogValueListsDirectorySettings(t *testing.T) {
+	setRequired(t)
+	c, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	out := c.String()
+	for _, key := range []string{"feed_wait_max=10s", "directory_load_slots=4", "inflight_max=10000", "user_rate=50", "user_burst=100", "user_inflight=32", "user_limiters=100000"} {
+		if !strings.Contains(out, key) {
+			t.Fatalf("config log lacks %s: %s", key, out)
+		}
 	}
 }
