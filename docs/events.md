@@ -1,6 +1,6 @@
 # chatim — Danh mục event
 
-> Cập nhật: 2026-10-24. Trạng thái: Mention App đã merge `main` (PR #16), D162–D176 ([tóm tắt](plans/2026-10-17-mention-app-summary.md)); websocket M4 phần 2 (nhận và đẩy event, gói `WsPublish`) xây trên `feat/m4`, D189–D195 ([tóm tắt](plans/2026-10-21-m4-2-nhan-va-day-event-summary.md)); M4 phần 3 (`read_positions` thay `read_updated`), D196–D197 ([tóm tắt](plans/2026-10-22-m4-3-da-doc-va-da-xem-summary.md)); M4 phần 4 (đang gõ và online, tín hiệu riêng của websocket, §7), D199–D201 ([tóm tắt](plans/2026-10-24-m4-4-typing-va-online-summary.md)).
+> Cập nhật: 2026-10-31 (§8 feed danh bạ của `iam`, M6 phần 3a). Trạng thái: Mention App đã merge `main` (PR #16), D162–D176 ([tóm tắt](plans/2026-10-17-mention-app-summary.md)); websocket M4 phần 2 (nhận và đẩy event, gói `WsPublish`) xây trên `feat/m4`, D189–D195 ([tóm tắt](plans/2026-10-21-m4-2-nhan-va-day-event-summary.md)); M4 phần 3 (`read_positions` thay `read_updated`), D196–D197 ([tóm tắt](plans/2026-10-22-m4-3-da-doc-va-da-xem-summary.md)); M4 phần 4 (đang gõ và online, tín hiệu riêng của websocket, §7), D199–D201 ([tóm tắt](plans/2026-10-24-m4-4-typing-va-online-summary.md)).
 >
 > Tài liệu liên quan:
 > - Nguồn sự thật cơ chế: [thiết kế](architecture.md) §8.1 (hợp đồng consumer) và [Module 10](modules/10-feature-data-reconciliation-and-repair.md) (cờ `_state`, sweeper, projection).
@@ -18,7 +18,7 @@ Tài liệu này trả lời ba câu: core và Mention App phát event gì, ở 
 | `CHATIM_WS` | `websocket.publish.{tenant}` | Mention App (Phase 1); app notification (Phase 2); app khác muốn đẩy tới máy online | Hộp thư của websocket (D192): gói `WsPublish` (một nội dung + danh sách người nhận). `Nats-Msg-Id` = `WsPublish.id`; file, giữ 24h, bỏ trùng 6 phút, bản sao `EVT_STREAM_REPLICAS`; cấu hình chung trong `pkg/wspublish`, bên phát và websocket cùng `CreateOrUpdateStream` (`MENTION_WS_PUBLISH_STREAM`/`_ROOT`, `WS_PUBLISH_STREAM`/`_ROOT`) |
 | `CHATIM_NOTIFY` (Phase 2, chưa tạo) | `notify.{tenant}.{kind}` | các app | Để dành cho hộp thư của app notification Phase 2 (lọc tắt thông báo, push); Mention App chuyển sang bằng config `MENTION_WS_PUBLISH_ROOT`. Websocket không nghe `notify.*` |
 
-Tín hiệu đang gõ và online không phải event dữ liệu, không vào stream nào ở bảng trên: xem §7.
+Tín hiệu đang gõ và online không phải event dữ liệu, không vào stream nào ở bảng trên: xem §7. Feed danh bạ của `iam` cũng không phải stream: xem §8.
 
 `{loại data}` cho biết event thuộc doc nào (D108):
 - `room`: thông tin chung của room.
@@ -168,3 +168,18 @@ Không phải event của core: không ghi Mongo, không vào JetStream, không 
 |---|---|---|---|---|
 | Đang gõ | core NATS `eph.{tenant}.{room}.typing`, nội dung `TypingSignal{origin, tenant, room_id, user_id, stopped}` (`proto/chatim/v1/ws_ephemeral.proto`) | node websocket của người gõ, sau khi đã đẩy cho người đang mở room trên chính node | mọi node websocket qua subscription `eph.*.*.typing`; mỗi node bỏ tin của chính `origin` mình và đẩy `ServerFrame.typing` cho kết nối đang mở room, trừ máy của người gõ | Bắn rồi quên, không chờ (D199). Ví dụ: Lan gõ trong room 7001 của tenant `acme` → `eph.acme.7001.typing` |
 | Online | **không qua NATS**: khoá Redis `chatim:presence:{tenant}:{user}` = `1`, `EX` 15s, trong Redis riêng `chatim-redis-presence` | node websocket của người đó đóng dấu theo heartbeat | node của người hỏi đọc bằng `MGET` ở mỗi heartbeat của người hỏi, trả `ServerFrame.presence` cả danh sách | Còn khoá là online, mất khoá là offline; không ai xoá khoá của người khác (D200, D201) |
+
+## 8. Feed danh bạ của `iam` (HTTP, không NATS)
+
+`iam` báo thay đổi của người và nhóm qua long poll HTTP trên cổng nội bộ, `GET /internal/v1/directory/changes?after&limit&wait` với `IAM_NODE_SECRET`; **không** phải stream JetStream, `iam` không dùng NATS (D219). Hợp đồng đầy đủ (tham số, mã lỗi, keep-alive): [docs/apps/iam.md](apps/iam.md).
+
+| | |
+|---|---|
+| Ai gọi | 3b: core (Mention App) để cập nhật nhóm của người và danh mục nhóm; sau này M8 (gỡ máy push khi account bị khoá), M9 (tìm người) |
+| Bản ghi `user` | `tenant_id`, `id`, `ver`, `state` (`active`/`disabled`), `display_name`, `avatar_url`, `groups` (chỉ nhóm **trực tiếp**; nhóm cha bên nhận tự tính từ bản ghi `group`) |
+| Bản ghi `group` | `tenant_id`, `id`, `ver`, `state` (`live`/`deleted`), `name`, `parent_id`, `mentionable` |
+| Không có | email, username |
+
+- **Vị trí:** mỗi trang trả `next`; bên nhận lưu nó và gọi lại với `after = next`. Đọc tiếp từ vị trí thì không sót thay đổi nào đã commit (feed chỉ đọc dưới mốc `xmin`). `after` rỗng → đọc từ đầu, tức là **toàn bộ** danh bạ: dùng khi app mới chạy lần đầu hoặc mất vị trí.
+- **`ver`:** mỗi người, mỗi nhóm có một dòng thay đổi bị ghi đè mỗi lần đổi, nên feed chỉ trả bản mới nhất, không trả từng bước trung gian. Bên nhận chỉ áp bản có `ver` lớn hơn bản đang giữ của cùng (`kind`, `tenant_id`, `id`); bản `ver` nhỏ hơn hoặc bằng thì bỏ. Đọc lại từ vị trí cũ (sau crash) là an toàn.
+- Ví dụ: admin chuyển Bình từ `kinh-doanh` sang `marketing` → một bản ghi `user` của Bình, `ver` 8, `groups: ["marketing"]`. Admin chuyển nhóm `kinh-doanh-hcm` sang cha khác → một bản ghi `group`, không phải một bản ghi cho mỗi thành viên.
