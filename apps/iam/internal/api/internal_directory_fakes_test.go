@@ -17,17 +17,20 @@ import (
 const feedPath = "/internal/v1/directory/changes"
 
 type fakeFeed struct {
-	mu      sync.Mutex
-	changes []store.Change
-	next    store.Position
-	err     error
-	afters  []store.Position
-	limits  []int
+	mu        sync.Mutex
+	changes   []store.Change
+	next      store.Position
+	err       error
+	afters    []store.Position
+	limits    []int
+	deadlines []time.Time
 }
 
-func (f *fakeFeed) Changes(_ context.Context, after store.Position, limit int) (store.ChangePage, error) {
+func (f *fakeFeed) Changes(ctx context.Context, after store.Position, limit int) (store.ChangePage, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	deadline, _ := ctx.Deadline()
+	f.deadlines = append(f.deadlines, deadline)
 	f.afters = append(f.afters, after)
 	f.limits = append(f.limits, limit)
 	if f.err != nil {
@@ -45,6 +48,12 @@ func (f *fakeFeed) push(next store.Position, changes ...store.Change) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.changes, f.next = changes, next
+}
+
+func (f *fakeFeed) queryDeadlines() []time.Time {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.deadlines)
 }
 
 func (f *fakeFeed) calls() ([]store.Position, []int) {
@@ -83,13 +92,17 @@ type feedHarness struct {
 	handler *api.Internal
 }
 
-func newFeedHarness(t *testing.T, waitMax time.Duration) *feedHarness {
+func newFeedHarness(t *testing.T, waitMax time.Duration, adjust ...func(*api.InternalOptions)) *feedHarness {
 	t.Helper()
 	f := &feedHarness{feed: &fakeFeed{}, signal: &fakeSignal{}, stats: &api.FeedStats{}}
-	h, err := api.NewInternal(api.InternalOptions{
+	opts := api.InternalOptions{
 		Revocations: &fakeRevocations{}, Secret: nodeSecret,
 		DirectoryFeed: f.feed, DirectorySignal: f.signal, FeedWaitMax: waitMax, FeedStats: f.stats,
-	})
+	}
+	for _, a := range adjust {
+		a(&opts)
+	}
+	h, err := api.NewInternal(opts)
 	if err != nil {
 		t.Fatalf("NewInternal: %v", err)
 	}
@@ -98,7 +111,11 @@ func newFeedHarness(t *testing.T, waitMax time.Duration) *feedHarness {
 }
 
 func (f *feedHarness) serve(query string, secret string) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(http.MethodGet, feedPath+query, nil)
+	return f.serveMethod(http.MethodGet, query, secret)
+}
+
+func (f *feedHarness) serveMethod(method, query, secret string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(method, feedPath+query, nil)
 	req.Header.Set("Authorization", "Bearer "+secret)
 	rec := httptest.NewRecorder()
 	f.handler.ServeHTTP(rec, req)

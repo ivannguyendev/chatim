@@ -236,3 +236,73 @@ func TestFeedNeedsASignal(t *testing.T) {
 		t.Fatal("accepted a feed without a signal")
 	}
 }
+
+func TestFeedRecheckIsConfigurable(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		f := newFeedHarness(t, time.Minute, func(o *api.InternalOptions) { o.FeedRecheck = 5 * time.Second })
+		began := time.Now()
+		done := f.start("?wait=30")
+		synctest.Wait()
+		f.feed.push(feedNext, groupChange())
+		time.Sleep(2 * time.Second)
+		synctest.Wait()
+		requireNotDone(t, done)
+		body := decodeFeed(t, <-done)
+		if elapsed := time.Since(began); elapsed != 5*time.Second || len(body.Changes) != 1 {
+			t.Fatalf("elapsed %v body %+v; want the change found by the 5s recheck", elapsed, body)
+		}
+	})
+}
+
+func TestNegativeFeedRecheckIsRejected(t *testing.T) {
+	_, err := api.NewInternal(api.InternalOptions{Revocations: &fakeRevocations{}, Secret: nodeSecret,
+		DirectoryFeed: &fakeFeed{}, DirectorySignal: &fakeSignal{}, FeedRecheck: -time.Second})
+	if err == nil {
+		t.Fatal("accepted a negative recheck")
+	}
+}
+
+func TestPageWithoutRecordsCountsAsEmpty(t *testing.T) {
+	f := newFeedHarness(t, time.Minute)
+	f.feed.push(feedNext, store.Change{Kind: store.ChangeUser, TenantID: "shop", ID: "lan"})
+	body := decodeFeed(t, f.serve("", nodeSecret))
+	if len(body.Changes) != 0 || body.Next != directory.EncodePosition(feedNext) {
+		t.Fatalf("body = %+v; want no records and the cursor moved past the skipped change", body)
+	}
+	if f.stats.Empty.Load() != 1 || f.stats.OK.Load() != 0 {
+		t.Fatalf("empty %d ok %d; want a 200 without records counted as empty", f.stats.Empty.Load(), f.stats.OK.Load())
+	}
+}
+
+func TestStoreQueriesEndBeforeTheWriteDeadline(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		f := newFeedHarness(t, time.Minute)
+		began := time.Now()
+		done := f.start("?wait=10")
+		synctest.Wait()
+		time.Sleep(3 * time.Second)
+		f.feed.push(feedNext, groupChange())
+		decodeFeed(t, <-done)
+		want := began.Add(14 * time.Second)
+		deadlines := f.feed.queryDeadlines()
+		if len(deadlines) != 3 {
+			t.Fatalf("store calls %d; want 3 (0s, 2s, 4s)", len(deadlines))
+		}
+		for i, d := range deadlines {
+			if !d.Equal(want) {
+				t.Fatalf("call %d deadline %v; want %v, one second before the write deadline", i, d.Sub(began), want.Sub(began))
+			}
+		}
+	})
+}
+
+func TestHeadIs405(t *testing.T) {
+	f := newFeedHarness(t, time.Minute)
+	rec := f.serveMethod(http.MethodHead, "", nodeSecret)
+	if rec.Code != http.StatusMethodNotAllowed || rec.Header().Get("Allow") != http.MethodGet {
+		t.Fatalf("HEAD = %d allow %q; want 405 allowing GET", rec.Code, rec.Header().Get("Allow"))
+	}
+	if afters, _ := f.feed.calls(); len(afters) != 0 {
+		t.Fatalf("store calls %d; want none", len(afters))
+	}
+}

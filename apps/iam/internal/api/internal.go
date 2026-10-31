@@ -35,6 +35,7 @@ type InternalOptions struct {
 	DirectoryFeed   DirectoryFeed
 	DirectorySignal DirectorySignal
 	FeedWaitMax     time.Duration
+	FeedRecheck     time.Duration
 	FeedStats       *FeedStats
 	Log             *slog.Logger
 }
@@ -51,8 +52,11 @@ func NewInternal(opts InternalOptions) (*Internal, error) {
 	if opts.Revocations == nil || opts.Secret == "" {
 		return nil, errors.New("api: revocation source and node secret are required")
 	}
-	if opts.DirectoryFeed != nil && (opts.DirectorySignal == nil || opts.FeedWaitMax < 0) {
-		return nil, errors.New("api: the directory feed needs a signal and a wait max of zero or more")
+	if opts.DirectoryFeed != nil && (opts.DirectorySignal == nil || opts.FeedWaitMax < 0 || opts.FeedRecheck < 0) {
+		return nil, errors.New("api: the directory feed needs a signal, a wait max of zero or more and a recheck of zero or more")
+	}
+	if opts.FeedRecheck == 0 {
+		opts.FeedRecheck = feedRecheckDefault
 	}
 	if opts.Stats == nil {
 		opts.Stats = &InternalStats{}
@@ -67,6 +71,7 @@ func NewInternal(opts InternalOptions) (*Internal, error) {
 	in.mux.HandleFunc("GET /internal/v1/revocations", in.revocations)
 	if opts.DirectoryFeed != nil {
 		in.mux.HandleFunc("GET "+directoryChangesPath, in.directoryChanges)
+		in.mux.HandleFunc("HEAD "+directoryChangesPath, methodNotAllowed)
 	}
 	in.mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"code": "not_found", "message": "not found"})
@@ -80,6 +85,11 @@ func (in *Internal) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (in *Internal) Stop() {
 	in.stopOnce.Do(func() { close(in.stop) })
+}
+
+func methodNotAllowed(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Allow", http.MethodGet)
+	writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"code": "method_not_allowed", "message": "use GET"})
 }
 
 func writeUnauthorized(w http.ResponseWriter) {

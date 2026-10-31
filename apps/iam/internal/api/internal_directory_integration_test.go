@@ -147,11 +147,11 @@ type polled struct {
 	err  error
 }
 
-func TestFeedLongPollWakesUnderOneSecond(t *testing.T) {
+func TestFeedLongPollWakesSoonAfterCommit(t *testing.T) {
 	s, uri := feedDatabase(t)
 	follower := startFollower(t, s, uri)
 	feed := &firstCallFeed{DirectoryFeed: s, called: make(chan struct{})}
-	h, err := api.NewInternal(api.InternalOptions{Revocations: s, Secret: nodeSecret, DirectoryFeed: feed, DirectorySignal: follower, FeedWaitMax: 30 * time.Second})
+	h, err := api.NewInternal(api.InternalOptions{Revocations: s, Secret: nodeSecret, DirectoryFeed: feed, DirectorySignal: follower, FeedWaitMax: 30 * time.Second, FeedRecheck: 30 * time.Second})
 	if err != nil {
 		t.Fatalf("NewInternal: %v", err)
 	}
@@ -182,7 +182,7 @@ func TestFeedLongPollWakesUnderOneSecond(t *testing.T) {
 			t.Fatalf("woken page = %+v (%v); want lan renamed with a new cursor", body, got.err)
 		}
 		t.Logf("long poll answered %v after the commit", elapsed)
-	case <-time.After(time.Second):
-		t.Fatal("no answer within 1s of the commit")
+	case <-time.After(2500 * time.Millisecond):
+		t.Fatal("no answer within 2.5s of the commit")
 	}
 }

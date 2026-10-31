@@ -17,8 +17,9 @@ const (
 	directoryChangesPath = "/internal/v1/directory/changes"
 	feedLimitDefault     = 500
 	feedLimitMax         = 1000
-	feedRecheck          = 2 * time.Second
+	feedRecheckDefault   = 2 * time.Second
 	feedWriteSlack       = 5 * time.Second
+	feedQueryMargin      = time.Second
 )
 
 var (
@@ -168,12 +169,15 @@ func (in *Internal) holdConnection(ctx context.Context, w http.ResponseWriter, w
 }
 
 func (in *Internal) awaitChanges(ctx context.Context, q feedQuery) (store.ChangePage, error) {
-	deadlineAt := time.Now().Add(q.wait)
+	began := time.Now()
+	deadlineAt := began.Add(q.wait)
 	deadline := time.NewTimer(q.wait)
 	defer deadline.Stop()
+	queryCtx, cancel := context.WithDeadline(ctx, began.Add(q.wait+feedWriteSlack-feedQueryMargin))
+	defer cancel()
 	for {
 		signal := in.opts.DirectorySignal.Signal()
-		page, err := in.opts.DirectoryFeed.Changes(ctx, q.after, q.limit)
+		page, err := in.opts.DirectoryFeed.Changes(queryCtx, q.after, q.limit)
 		if err != nil || len(page.Changes) > 0 || q.wait == 0 || !time.Now().Before(deadlineAt) || in.stopping() {
 			return page, err
 		}
@@ -188,7 +192,7 @@ func (in *Internal) awaitChanges(ctx context.Context, q feedQuery) (store.Change
 }
 
 func (in *Internal) sleep(ctx context.Context, signal <-chan struct{}, deadline <-chan time.Time) feedWake {
-	recheck := time.NewTimer(feedRecheck)
+	recheck := time.NewTimer(in.opts.FeedRecheck)
 	defer recheck.Stop()
 	in.opts.FeedStats.Waiting.Add(1)
 	defer in.opts.FeedStats.Waiting.Add(-1)
@@ -216,18 +220,22 @@ func (in *Internal) stopping() bool {
 }
 
 func (in *Internal) feedAnswer(after store.Position, page store.ChangePage) feedPage {
-	if len(page.Changes) == 0 {
-		in.opts.FeedStats.Empty.Add(1)
-		return feedPage{Changes: []any{}, Next: directory.EncodePosition(after)}
+	next := after
+	if len(page.Changes) > 0 {
+		next = page.Next
 	}
-	in.opts.FeedStats.OK.Add(1)
 	records := make([]any, 0, len(page.Changes))
 	for _, c := range page.Changes {
 		if record, ok := feedRecord(c); ok {
 			records = append(records, record)
 		}
 	}
-	return feedPage{Changes: records, Next: directory.EncodePosition(page.Next)}
+	if len(records) == 0 {
+		in.opts.FeedStats.Empty.Add(1)
+	} else {
+		in.opts.FeedStats.OK.Add(1)
+	}
+	return feedPage{Changes: records, Next: directory.EncodePosition(next)}
 }
 
 func feedRecord(c store.Change) (any, bool) {
