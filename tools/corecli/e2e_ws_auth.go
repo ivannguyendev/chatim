@@ -17,20 +17,51 @@ import (
 )
 
 func (r *wsRun) rogueKeyRefused() error {
-	for _, kid := range []string{"rogue", r.key.KeyID} {
-		rogue, err := devtoken.Generate(kid)
-		if err != nil {
-			return err
-		}
-		token, err := r.sign(rogue, time.Now(), devTokenTTL)
-		if err != nil {
-			return err
-		}
-		if err := r.authRequired("a token signed by an unknown key with kid "+kid, token, chatimv1.AuthRequiredReason_AUTH_REQUIRED_REASON_INVALID); err != nil {
-			return err
-		}
+	rogue, err := devtoken.Generate("rogue")
+	if err != nil {
+		return err
 	}
-	return nil
+	token, err := r.sign(rogue, time.Now(), devTokenTTL)
+	if err != nil {
+		return err
+	}
+	if err := r.retriedThenInvalid("a token signed by an unknown key with kid rogue", token); err != nil {
+		return err
+	}
+	impostor, err := devtoken.Generate(r.key.KeyID)
+	if err != nil {
+		return err
+	}
+	token, err = r.sign(impostor, time.Now(), devTokenTTL)
+	if err != nil {
+		return err
+	}
+	return r.authRequired("a token signed by another key under the dev kid "+r.key.KeyID, token, chatimv1.AuthRequiredReason_AUTH_REQUIRED_REASON_INVALID)
+}
+
+func (r *wsRun) retriedThenInvalid(what, token string) error {
+	c, err := r.dial(token)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = c.Close() }()
+	f, err := r.nextFrame(c, what)
+	if err != nil {
+		return err
+	}
+	wait, err := e2e.CheckRetryLater(f)
+	if err != nil {
+		return fmt.Errorf("%s: %w", what, err)
+	}
+	select {
+	case <-time.After(wait):
+	case <-r.base.Done():
+		return r.base.Err()
+	}
+	if err := c.Auth(token); err != nil {
+		return err
+	}
+	return r.expectRefused(c, what, chatimv1.AuthRequiredReason_AUTH_REQUIRED_REASON_INVALID)
 }
 
 func (r *wsRun) authRequired(what, token string, want chatimv1.AuthRequiredReason) error {
@@ -39,18 +70,30 @@ func (r *wsRun) authRequired(what, token string, want chatimv1.AuthRequiredReaso
 		return err
 	}
 	defer func() { _ = c.Close() }()
+	return r.expectRefused(c, what, want)
+}
+
+func (r *wsRun) nextFrame(c *wstest.Conn, what string) (*chatimv1.ServerFrame, error) {
 	select {
 	case f, ok := <-c.Frames():
 		if !ok {
-			return fmt.Errorf("%s closed with %w, want auth_required %v and the connection kept", what, c.Err(), want)
+			return nil, fmt.Errorf("%s closed with %w, want the connection kept", what, c.Err())
 		}
-		if err := e2e.CheckAuthRequired(f, want); err != nil {
-			return fmt.Errorf("%s: %w", what, err)
-		}
+		return f, nil
 	case <-time.After(r.callTimeout):
-		return fmt.Errorf("%s got no frame for %v, want auth_required %v", what, r.callTimeout, want)
+		return nil, fmt.Errorf("%s got no frame for %v", what, r.callTimeout)
 	case <-r.base.Done():
-		return r.base.Err()
+		return nil, r.base.Err()
+	}
+}
+
+func (r *wsRun) expectRefused(c *wstest.Conn, what string, want chatimv1.AuthRequiredReason) error {
+	f, err := r.nextFrame(c, what)
+	if err != nil {
+		return err
+	}
+	if err := e2e.CheckAuthRequired(f, want); err != nil {
+		return fmt.Errorf("%s: %w", what, err)
 	}
 	if _, err := callWS(r.base, c, r.callTimeout, historyOverWS()); status.Code(err) != codes.Unauthenticated {
 		return fmt.Errorf("%s: a request after auth_required = %w, want Unauthenticated on the open connection", what, err)

@@ -111,6 +111,17 @@ func CheckSilentClose(code uint16, waited, timeout time.Duration) error {
 	return nil
 }
 
+func CheckRetryLater(f *chatimv1.ServerFrame) (time.Duration, error) {
+	later := f.GetRetryLater()
+	switch {
+	case later == nil:
+		return 0, fmt.Errorf("frame %v, want retry_later", f)
+	case later.GetRetryAfterMs() == 0:
+		return 0, errors.New("retry_later without a wait")
+	}
+	return time.Duration(later.GetRetryAfterMs()) * time.Millisecond, nil
+}
+
 func CheckAuthRequired(f *chatimv1.ServerFrame, want chatimv1.AuthRequiredReason) error {
 	required := f.GetAuthRequired()
 	switch {

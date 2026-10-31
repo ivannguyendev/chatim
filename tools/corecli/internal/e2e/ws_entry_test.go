@@ -136,6 +136,21 @@ func TestCheckAuthRequiredWantsTheReason(t *testing.T) {
 	}
 }
 
+func TestCheckRetryLaterReturnsTheWait(t *testing.T) {
+	later := &chatimv1.ServerFrame{Frame: &chatimv1.ServerFrame_RetryLater{RetryLater: &chatimv1.RetryLaterFrame{RetryAfterMs: 1000}}}
+	if wait, err := e2e.CheckRetryLater(later); err != nil || wait != time.Second {
+		t.Fatalf("CheckRetryLater = %v, %v; want 1s", wait, err)
+	}
+	zero := &chatimv1.ServerFrame{Frame: &chatimv1.ServerFrame_RetryLater{RetryLater: &chatimv1.RetryLaterFrame{}}}
+	if _, err := e2e.CheckRetryLater(zero); err == nil {
+		t.Fatal("CheckRetryLater without a wait = nil")
+	}
+	invalid := &chatimv1.ServerFrame{Frame: &chatimv1.ServerFrame_AuthRequired{AuthRequired: &chatimv1.AuthRequiredFrame{Reason: chatimv1.AuthRequiredReason_AUTH_REQUIRED_REASON_INVALID}}}
+	if _, err := e2e.CheckRetryLater(invalid); err == nil {
+		t.Fatal("CheckRetryLater of an auth_required frame = nil")
+	}
+}
+
 func TestWriteTokensKeepsThemPrivate(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "ws-tokens")
 	if err := e2e.WriteTokens(path, "a.b.c", "d.e.f"); err != nil {
