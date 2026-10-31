@@ -141,7 +141,7 @@ type Admin interface {
 	SetTenantState(ctx context.Context, id string, state State, r Revocation, audit AuditEvent) error
 	CreateAccount(ctx context.Context, a Account, audit AuditEvent) error
 	SetAccountState(ctx context.Context, tenantID, id string, state State, r Revocation, audit AuditEvent) error
-	CreateSigningKey(ctx context.Context, k SigningKey, audit AuditEvent) error
-	ActivateSigningKey(ctx context.Context, id string, at time.Time, audit AuditEvent) error
+	CreateSigningKey(ctx context.Context, k SigningKey, audit AuditEvent) (time.Time, error)
+	ActivateSigningKey(ctx context.Context, id string, lead time.Duration, audit AuditEvent) error
 	SigningKeys(ctx context.Context) ([]SigningKey, error)
 }

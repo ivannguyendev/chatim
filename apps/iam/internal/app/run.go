@@ -165,9 +165,8 @@ func (n *node) watchHealth(ctx context.Context) {
 }
 
 func (n *node) activateDueKey(ctx context.Context) {
-	now := time.Now()
-	audit := store.AuditEvent{At: now, Actor: "iam", Action: "key_activate"}
-	kid, err := n.store.ActivateDueSigningKey(ctx, now.Add(-n.cfg.KeyActivateLead), now, audit)
+	audit := store.AuditEvent{At: time.Now(), Actor: "iam", Action: "key_activate"}
+	kid, err := n.store.ActivateDueSigningKey(ctx, n.cfg.KeyActivateLead, audit)
 	if err != nil {
 		n.log.WarnContext(ctx, "signing key activation failed", "err", err)
 		return

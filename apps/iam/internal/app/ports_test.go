@@ -71,12 +71,10 @@ func TestDueKeyIsActivatedOnTheReloadTick(t *testing.T) {
 	kek := newKEK(t)
 	cfg := testConfig(kek)
 	cfg.KeyReload = 20 * time.Millisecond
-	st := &fakeStore{keys: []store.SigningKey{activeKey(t, kek)}, version: 3, due: "k-next", dueAsked: make(chan time.Time, 1)}
-	started := time.Now()
+	st := &fakeStore{keys: []store.SigningKey{activeKey(t, kek)}, version: 3, due: "k-next", dueAsked: make(chan time.Duration, 1)}
 	r := runIAM(t, cfg, st, 3)
-	cutoff := receive(t, st.dueAsked, "due key check")
-	if lead := started.Sub(cutoff); lead < cfg.KeyActivateLead-time.Second || lead > cfg.KeyActivateLead+waitLimit {
-		t.Fatalf("cutoff %v before start; want about the %v lead", lead, cfg.KeyActivateLead)
+	if lead := receive(t, st.dueAsked, "due key check"); lead != cfg.KeyActivateLead {
+		t.Fatalf("lead = %v, want %v", lead, cfg.KeyActivateLead)
 	}
 	r.logs.await(t, "signing key activated")
 	if _, body := httpGet(t, r.admin, "/metrics"); !strings.Contains(body, "chatim_iam_signing_keys_activated_total 1") {

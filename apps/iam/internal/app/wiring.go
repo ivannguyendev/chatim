@@ -32,7 +32,7 @@ type Store interface {
 	keyring.Source
 	api.RevocationSource
 	DeleteExpiredRevocations(ctx context.Context) (int64, error)
-	ActivateDueSigningKey(ctx context.Context, cutoff, at time.Time, audit store.AuditEvent) (string, error)
+	ActivateDueSigningKey(ctx context.Context, lead time.Duration, audit store.AuditEvent) (string, error)
 	Ping(ctx context.Context) error
 	SchemaVersion(ctx context.Context) (int, error)
 	Close()

@@ -34,18 +34,19 @@ func rotate(ctx context.Context, env Env, st Store, activateIfNone bool) (string
 	if err != nil {
 		return "", err
 	}
-	row := store.SigningKey{ID: k.ID, State: store.KeyPending, PublicKey: k.PublicKey().Key, PrivateSealed: sealed, CreatedAt: env.Now()}
-	if err := st.CreateSigningKey(ctx, row, audit(env, "", "key_create", "", "")); err != nil {
+	row := store.SigningKey{ID: k.ID, State: store.KeyPending, PublicKey: k.PublicKey().Key, PrivateSealed: sealed}
+	created, err := st.CreateSigningKey(ctx, row, audit(env, "", "key_create", "", ""))
+	if err != nil {
 		return "", err
 	}
-	state := "pending, iam activates it from " + row.CreatedAt.Add(env.ActivateLead).UTC().Format(time.RFC3339)
+	state := "pending, iam activates it from " + created.Add(env.ActivateLead).UTC().Format(time.RFC3339)
 	if activateIfNone {
 		active, err := hasActiveKey(ctx, st)
 		if err != nil {
 			return "", err
 		}
 		if !active {
-			if err := st.ActivateSigningKey(ctx, k.ID, env.Now(), audit(env, "", "key_activate", "", "")); err != nil {
+			if err := st.ActivateSigningKey(ctx, k.ID, 0, audit(env, "", "key_activate", "", "")); err != nil {
 				return "", err
 			}
 			state = "active"
@@ -61,31 +62,11 @@ func keyActivate(ctx context.Context, env Env, st Store, args []string) error {
 	if err := f.parse(args, "kid"); err != nil {
 		return err
 	}
-	if err := checkLead(ctx, env, st, *kid); err != nil {
-		return err
-	}
-	if err := st.ActivateSigningKey(ctx, *kid, env.Now(), audit(env, "", "key_activate", "", "")); err != nil {
+	if err := st.ActivateSigningKey(ctx, *kid, env.ActivateLead, audit(env, "", "key_activate", "", "")); err != nil {
 		return err
 	}
 	_, err := fmt.Fprintf(env.Out, "signing key %s active\n", *kid)
 	return err
-}
-
-func checkLead(ctx context.Context, env Env, st Store, kid string) error {
-	keys, err := st.SigningKeys(ctx)
-	if err != nil {
-		return err
-	}
-	for _, k := range keys {
-		if k.ID != kid || k.State != store.KeyPending {
-			continue
-		}
-		if age := env.Now().Sub(k.CreatedAt); age < env.ActivateLead {
-			return fmt.Errorf("signing key %s was created %s ago; activate it after %s so every node has fetched it",
-				kid, age.Truncate(time.Second), k.CreatedAt.Add(env.ActivateLead).UTC().Format(time.RFC3339))
-		}
-	}
-	return nil
 }
 
 func jwksExport(ctx context.Context, env Env, st Store, args []string) error {

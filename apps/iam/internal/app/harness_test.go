@@ -40,13 +40,13 @@ type fakeStore struct {
 	snapshot revocation.Snapshot
 	cleaned  chan struct{}
 	due      string
-	dueAsked chan time.Time
+	dueAsked chan time.Duration
 }
 
-func (f *fakeStore) ActivateDueSigningKey(_ context.Context, cutoff, _ time.Time, _ store.AuditEvent) (string, error) {
+func (f *fakeStore) ActivateDueSigningKey(_ context.Context, lead time.Duration, _ store.AuditEvent) (string, error) {
 	if f.dueAsked != nil {
 		select {
-		case f.dueAsked <- cutoff:
+		case f.dueAsked <- lead:
 		default:
 		}
 	}

@@ -12,23 +12,27 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
-func (s *Store) CreateSigningKey(ctx context.Context, k store.SigningKey, audit store.AuditEvent) error {
-	return s.write(ctx, audit, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx,
-			"INSERT INTO signing_keys (kid, state, public_key, private_key_sealed, created_at) VALUES ($1, $2, $3, $4, $5)",
-			k.ID, store.KeyPending, k.PublicKey, k.PrivateSealed, k.CreatedAt)
-		return err
+func (s *Store) CreateSigningKey(ctx context.Context, k store.SigningKey, audit store.AuditEvent) (time.Time, error) {
+	var created time.Time
+	err := s.write(ctx, audit, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx,
+			"INSERT INTO signing_keys (kid, state, public_key, private_key_sealed, created_at) VALUES ($1, $2, $3, $4, now()) RETURNING created_at",
+			k.ID, store.KeyPending, k.PublicKey, k.PrivateSealed).Scan(&created)
 	})
+	return created, err
 }
 
-func (s *Store) ActivateSigningKey(ctx context.Context, id string, at time.Time, audit store.AuditEvent) error {
-	return s.write(ctx, audit, func(tx pgx.Tx) error { return activateKey(ctx, tx, id, at) })
+func (s *Store) ActivateSigningKey(ctx context.Context, id string, lead time.Duration, audit store.AuditEvent) error {
+	return s.write(ctx, audit, func(tx pgx.Tx) error { return activateKey(ctx, tx, id, lead) })
 }
 
-func (s *Store) ActivateDueSigningKey(ctx context.Context, cutoff, at time.Time, audit store.AuditEvent) (string, error) {
+func (s *Store) ActivateDueSigningKey(ctx context.Context, lead time.Duration, audit store.AuditEvent) (string, error) {
 	var kid string
 	err := s.inTx(ctx, func(tx pgx.Tx) error {
-		err := tx.QueryRow(ctx, "SELECT kid FROM signing_keys WHERE state = 1 AND created_at <= $1 ORDER BY created_at DESC LIMIT 1 FOR UPDATE", cutoff).Scan(&kid)
+		err := tx.QueryRow(ctx, `SELECT kid FROM signing_keys
+			WHERE state = 1 AND created_at <= now() - $1 * interval '1 microsecond'
+			AND created_at > COALESCE((SELECT max(created_at) FROM signing_keys WHERE state = 2), '-infinity')
+			ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, lead.Microseconds()).Scan(&kid)
 		if errors.Is(err, pgx.ErrNoRows) {
 			kid = ""
 			return nil
@@ -36,7 +40,7 @@ func (s *Store) ActivateDueSigningKey(ctx context.Context, cutoff, at time.Time,
 		if err != nil {
 			return err
 		}
-		if err := activateKey(ctx, tx, kid, at); err != nil {
+		if err := activateKey(ctx, tx, kid, lead); err != nil {
 			return err
 		}
 		audit.Detail = map[string]string{"kid": kid}
@@ -45,10 +49,13 @@ func (s *Store) ActivateDueSigningKey(ctx context.Context, cutoff, at time.Time,
 	return kid, s.mapErr(err)
 }
 
-func activateKey(ctx context.Context, tx pgx.Tx, id string, at time.Time) error {
+func activateKey(ctx context.Context, tx pgx.Tx, id string, lead time.Duration) error {
 	var state store.KeyState
-	var created time.Time
-	if err := tx.QueryRow(ctx, "SELECT state, created_at FROM signing_keys WHERE kid = $1 FOR UPDATE", id).Scan(&state, &created); err != nil {
+	var created, ready time.Time
+	var early bool
+	err := tx.QueryRow(ctx, `SELECT state, created_at, created_at + $2 * interval '1 microsecond', created_at + $2 * interval '1 microsecond' > now()
+		FROM signing_keys WHERE kid = $1 FOR UPDATE`, id, lead.Microseconds()).Scan(&state, &created, &ready, &early)
+	if err != nil {
 		return err
 	}
 	switch state {
@@ -58,10 +65,14 @@ func activateKey(ctx context.Context, tx pgx.Tx, id string, at time.Time) error 
 		return fmt.Errorf("%w: signing key %s is retired", apperr.ErrFailedPrecondition, id)
 	case store.KeyPending:
 	}
-	if _, err := tx.Exec(ctx, "UPDATE signing_keys SET state = 3, retired_at = $1 WHERE state = 2 OR (state = 1 AND created_at < $2)", at, created); err != nil {
+	if early {
+		return fmt.Errorf("%w: signing key %s can be activated from %s, once every node has fetched it",
+			apperr.ErrFailedPrecondition, id, ready.UTC().Format(time.RFC3339))
+	}
+	if _, err := tx.Exec(ctx, "UPDATE signing_keys SET state = 3, retired_at = now() WHERE state = 2 OR (state = 1 AND created_at < $1)", created); err != nil {
 		return err
 	}
-	_, err := tx.Exec(ctx, "UPDATE signing_keys SET state = 2, activated_at = $2, retired_at = NULL WHERE kid = $1", id, at)
+	_, err = tx.Exec(ctx, "UPDATE signing_keys SET state = 2, activated_at = now(), retired_at = NULL WHERE kid = $1", id)
 	return err
 }
 

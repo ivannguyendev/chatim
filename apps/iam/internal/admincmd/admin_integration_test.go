@@ -164,7 +164,7 @@ func TestKeyCommandsAndBootstrap(t *testing.T) {
 	if keys, _ = st.SigningKeys(ctx); keys[len(keys)-1].State != store.KeyPending {
 		t.Fatal("a key activated inside the lead")
 	}
-	h.env.Now = func() time.Time { return time.Now().Add(2 * time.Hour) }
+	h.env.ActivateLead = 0
 	h.run("key-activate", "-kid", pending.ID)
 	keys, _ = st.SigningKeys(ctx)
 	if keys[0].State != store.KeyRetired || keys[1].State != store.KeyActive {
