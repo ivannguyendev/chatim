@@ -251,3 +251,52 @@ groups:
           severity: critical
         annotations:
           summary: iam published a key whose kid the node key file holds with a different key; the iam key is ignored there. Check the JWKS file and the iam signing keys.
+  - name: chatim-iam-directory
+    rules:
+      - alert: ChatimIamDirectoryNotReady
+        expr: min by (instance) (chatim_iam_directory_ready) == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: An iam replica has not loaded the directory into memory for over 1m, so it stays not ready and serves nothing; Postgres is down or unreachable, or every load slot is held. Check chatim_iam_directory_load_failures_total and the iam log.
+      - alert: ChatimIamDirectoryStale
+        expr: max by (instance) (chatim_iam_directory_lag_seconds) > 30
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: An iam replica has not caught up with the directory change feed for over 30s; GetUsers there returns old names and groups, and sessions revoked since then can still read the directory. Postgres is unreachable from that replica.
+      - alert: ChatimIamDirectoryFeedStuck
+        expr: max(chatim_iam_directory_horizon_stalled_seconds) > 60
+        labels:
+          severity: warning
+        annotations:
+          summary: The iam directory feed has waited over 60s on a transaction that is still open below the Postgres xmin horizon; no directory change reaches the replicas or the feed until it ends. Find the long transaction in pg_stat_activity on the iam Postgres server.
+      - alert: ChatimIamDirectoryListenDown
+        expr: min by (instance) (chatim_iam_directory_listen_up) == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: An iam replica has had no Postgres LISTEN connection for 5m; it still rechecks the directory every 2s, so changes arrive up to 2s late. Check that no transaction-mode PgBouncer sits in front of iam and that IAM_PG_MAX_CONNS leaves room.
+      - alert: ChatimIamMemoryHigh
+        expr: |
+          (
+            go_memstats_heap_inuse_bytes > 0.8 * go_gc_gomemlimit_bytes
+            and
+            go_gc_gomemlimit_bytes < 9e18
+          )
+          and on (instance, job) chatim_iam_memory_limit_set
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: An iam replica has used over 80% of GOMEMLIMIT for 5m; the directory has grown past what the pod was sized for. Raise the pod memory and GOMEMLIMIT together.
+      - alert: ChatimIamMemoryLimitUnset
+        expr: min by (instance) (chatim_iam_memory_limit_set) == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: An iam replica runs without GOMEMLIMIT, so the directory in memory can push it into an OOM kill without the GC trying to hold back first. Set GOMEMLIMIT to about 90% of the pod memory limit.
