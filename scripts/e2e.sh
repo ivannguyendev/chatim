@@ -15,6 +15,7 @@ ws2_url="${WS2_URL:-ws://chatim-websocket-2:8080/ws}"
 ws2_container="${WS2_CONTAINER:-chatim-websocket-2}"
 ws2_watcher="chatim-e2e-ws2-watch-$$"
 ws1_stopper="chatim-e2e-ws1-stop-$$"
+iam_cut="chatim-e2e-iam-cut-$$"
 gw_url="${GW_URL:-http://chatim-gateway-1:8080}"
 gw_container="${GW_CONTAINER:-chatim-gateway-1}"
 iam_container="${IAM_CONTAINER:-chatim-iam-1}"
@@ -58,7 +59,7 @@ restore_ws1() {
 
 finish() {
   set +e
-  docker rm -f "$watcher" "$ws2_watcher" "$ws1_stopper" >/dev/null 2>&1
+  docker rm -f "$watcher" "$ws2_watcher" "$ws1_stopper" "$iam_cut" >/dev/null 2>&1
   if [ -n "$killed" ]; then
     restore || result=FAIL
   fi
@@ -69,8 +70,12 @@ finish() {
     restore_ws1 || result=FAIL
   fi
   rm -rf "$state"
+  if [ "$result" = PASS ] && [ -n "${E2E_ONLY:-}" ]; then
+    echo "e2e PASS: phase $E2E_ONLY only"
+    exit 0
+  fi
   if [ "$result" = PASS ]; then
-    echo "e2e PASS: $first messages before and $after after killing $victim, no loss, no duplicate, every acked seq live; seq 1 edited and seq 2 deleted on history, edit history and live; seq 3 reacted with the first then the second emoji from GetReactionSettings and an unlisted emoji refused, seq 4 pinned, on replies, history and live; members added, promoted, removed and refused, read positions, hide and clear, the last owner leaving and coming back, on replies, history and live room, member and message subjects; a direct room opened twice into one room, replies counted and listed, the parent kept while replied, mentions of a user, a group and @all listed, a forward and a bookmark, on replies, lists and live; a system message from a non-member raising unread and one with skip_unread not, the room list ordered and counted after sends, reads, a delete and a hide, pinned first, archived apart, paged by cursor, refreshed by GetRooms and renamed live, history around a seq, messages by seq, threads, reactors, pins newest first, members owner first and a forward keeping skip_unread and meta; Mention App groups set and moved, @group notifying only its current members in the room and never the sender, an inactive group notifying and listing nobody, an edit adding then dropping a user notified then retracted and listed then gone, a delete retracting, @all notifying every other member, room groups with names and an older user group list ignored; through the websocket a dev token connecting, a send, an edit, a reaction and a bookmark, with history and bookmarks read through the gateway matching gRPC, a system message refused, an unknown key answered auth_required INVALID and an expired token auth_required EXPIRED with the connection kept open, a silent connection closed 1000 after the heartbeat timeout, two users on the websocket hearing a new group at once, messages without duplicate or gap, reactions only with the room open, nothing of the other user's hides and bookmarks, one notification each for @user and @all, a read position reaching the viewer and the reader's other device but not a member without the room open, member_removed then room_closed and silence after removal, the left group listed with its version by ListMyRoomIDs and still silent after a reconnect, and no token in the websocket logs; through the gateway a group created, a member added and the group renamed with the events reaching a member with the group open on the websocket, ListMyRooms, GetHistory, ListMembers and ListBookmarks equal to gRPC, an expired token refused with 401, SendMessage unimplemented on the gateway and GetHistory unimplemented on the websocket, a CORS preflight answered for a listed origin, and no token in the gateway logs; across two websocket nodes typing reaching a member with the group open on the other node and nobody else, an outsider's typing dropped, a watched user online, offline after closing, still online across a reconnect after 3s, offline after its node was killed, and no token in the logs of $ws2_container; a connection whose token ran out answered auth_required EXPIRED, heard nothing while it waited, refused a write and came back with ready on a fresh token with the missed seq reported as a gap, a text frame and a garbage frame answered frame_error UNSUPPORTED and INVALID on a connection kept open, ten connections of one user ready on a node and the eleventh closed 4009, a user on a stopped $ws_container reconnecting to $ws2_container and hearing the next message, and no token of phase 12 in the logs of either websocket node; through iam an admin-created account forced to change its temporary password, a login whose access token the websocket accepted, a refresh rotated and retried twice inside the grace window, a refresh signed by another device key refused without ending the session, two sessions listed with one current and the revoked one unable to refresh, a garbage secret on a real session id refused, account-disable ending the live session, the right password refused while the account waited after six failures, and no password, token or proof in the iam logs"
+    echo "e2e PASS: $first messages before and $after after killing $victim, no loss, no duplicate, every acked seq live; seq 1 edited and seq 2 deleted on history, edit history and live; seq 3 reacted with the first then the second emoji from GetReactionSettings and an unlisted emoji refused, seq 4 pinned, on replies, history and live; members added, promoted, removed and refused, read positions, hide and clear, the last owner leaving and coming back, on replies, history and live room, member and message subjects; a direct room opened twice into one room, replies counted and listed, the parent kept while replied, mentions of a user, a group and @all listed, a forward and a bookmark, on replies, lists and live; a system message from a non-member raising unread and one with skip_unread not, the room list ordered and counted after sends, reads, a delete and a hide, pinned first, archived apart, paged by cursor, refreshed by GetRooms and renamed live, history around a seq, messages by seq, threads, reactors, pins newest first, members owner first and a forward keeping skip_unread and meta; Mention App groups set and moved, @group notifying only its current members in the room and never the sender, an inactive group notifying and listing nobody, an edit adding then dropping a user notified then retracted and listed then gone, a delete retracting, @all notifying every other member, room groups with names and an older user group list ignored; through the websocket a dev token connecting, a send, an edit, a reaction and a bookmark, with history and bookmarks read through the gateway matching gRPC, a system message refused, an unknown key answered retry_later then auth_required INVALID once the keys were fetched and an expired token auth_required EXPIRED with the connection kept open, a silent connection closed 1000 after the heartbeat timeout, two users on the websocket hearing a new group at once, messages without duplicate or gap, reactions only with the room open, nothing of the other user's hides and bookmarks, one notification each for @user and @all, a read position reaching the viewer and the reader's other device but not a member without the room open, member_removed then room_closed and silence after removal, the left group listed with its version by ListMyRoomIDs and still silent after a reconnect, and no token in the websocket logs; through the gateway a group created, a member added and the group renamed with the events reaching a member with the group open on the websocket, ListMyRooms, GetHistory, ListMembers and ListBookmarks equal to gRPC, an expired token refused with 401, SendMessage unimplemented on the gateway and GetHistory unimplemented on the websocket, a CORS preflight answered for a listed origin, and no token in the gateway logs; across two websocket nodes typing reaching a member with the group open on the other node and nobody else, an outsider's typing dropped, a watched user online, offline after closing, still online across a reconnect after 3s, offline after its node was killed, and no token in the logs of $ws2_container; a connection whose token ran out answered auth_required EXPIRED, heard nothing while it waited, refused a write and came back with ready on a fresh token with the missed seq reported as a gap, a text frame and a garbage frame answered frame_error UNSUPPORTED and INVALID on a connection kept open, ten connections of one user ready on a node and the eleventh closed 4009, a user on a stopped $ws_container reconnecting to $ws2_container and hearing the next message, and no token of phase 12 in the logs of either websocket node; through iam an admin-created account forced to change its temporary password, a login whose access token the websocket accepted, a refresh rotated and retried twice inside the grace window, a refresh signed by another device key refused without ending the session, two sessions listed with one current and the revoked one unable to refresh, a garbage secret on a real session id refused, account-disable ending the live session, the right password refused while the account waited after six failures, and no password, token or proof in the iam logs; a revoked session pushed back to waiting with auth_required REVOKED on websocket-1 and refused by the gateway within seconds, a revoke reaching websocket-2 through the shared redis copy while it was cut from the iam internal port, key-rotate alone moving signing to a new key that both websocket nodes and the gateway accepted at once without a restart, tenant-disable closing a live connection with 4003, and no secret of phase 14 in the iam, websocket or gateway logs"
     exit 0
   fi
   echo "e2e FAIL during: $step" >&2
@@ -78,9 +83,79 @@ finish() {
 }
 trap finish EXIT
 
+phase14_iam_revocation() {
+  step="phase 14 iam tenant and account"
+  iam14_tenant="e2e$(openssl rand -hex 4)"
+  docker exec "$iam_container" /app tenant-create -id "$iam14_tenant" -name e2e >/dev/null
+  docker exec "$iam_container" /app account-create -tenant "$iam14_tenant" -username minh | sed -n 's/^temporary password: //p' >"$state/iam-c.pw"
+  chmod 600 "$state/iam-c.pw"
+  cp "$state/iam-c.pw" "$state/iam14-secrets"
+  step="phase 14 revoke reaches websocket-1 and the gateway"
+  cli e2e iam-revoke -tenant "$iam14_tenant" -state /state
+  cat "$state/iam-secrets" >>"$state/iam14-secrets"
+  step="phase 14 revoke reaches websocket-2 cut from iam"
+  iam_ip="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$iam_container")"
+  docker run -d --name "$iam_cut" --cap-add NET_ADMIN --network "container:$ws2_container" alpine:3.20 sh -c 'apk add -q --no-cache iptables >/dev/null && touch /ready && sleep infinity' >/dev/null
+  cut_wait=0
+  until docker exec "$iam_cut" test -f /ready 2>/dev/null; do
+    cut_wait=$((cut_wait + 1))
+    if [ "$cut_wait" -gt 60 ] || [ "$(docker inspect -f '{{.State.Running}}' "$iam_cut")" != true ]; then
+      docker logs "$iam_cut" 2>&1 | tail -5 >&2
+      exit 1
+    fi
+    sleep 1
+  done
+  docker exec "$iam_cut" iptables -I OUTPUT -p tcp -d "$iam_ip" --dport 8081 -j REJECT --reject-with tcp-reset
+  cli e2e iam-revoke-partitioned -tenant "$iam14_tenant" -state /state
+  cat "$state/iam-secrets" >>"$state/iam14-secrets"
+  docker rm -f "$iam_cut" >/dev/null
+  step="phase 14 key rotation without a restart"
+  iam_kid="$(docker exec "$iam_container" /app key-rotate | sed -n 's/^signing key \([^ ]*\) created.*/\1/p')"
+  if [ -z "$iam_kid" ]; then
+    echo "key-rotate printed no key id" >&2
+    exit 1
+  fi
+  cli e2e iam-key-rotated -tenant "$iam14_tenant" -kid "$iam_kid" -state /state
+  cat "$state/iam-secrets" >>"$state/iam14-secrets"
+  step="phase 14 tenant-disable closes live connections"
+  rm -f "$state/iam-tenant-ready"
+  cli e2e iam-tenant-wait -tenant "$iam14_tenant" -state /state &
+  tenant_wait=$!
+  until [ -f "$state/iam-tenant-ready" ]; do
+    if ! kill -0 "$tenant_wait" 2>/dev/null; then
+      wait "$tenant_wait"
+      exit 1
+    fi
+    sleep 0.2
+  done
+  docker exec "$iam_container" /app tenant-disable -id "$iam14_tenant" >/dev/null
+  wait "$tenant_wait"
+  step="phase 14 logs hold no secret"
+  sed -n 's/^IAM_NODE_SECRET=//p' "$scripts/../.env" >>"$state/iam14-secrets"
+  grep -v '^$' "$state/iam14-secrets" >"$state/iam14-all-secrets"
+  for node in "$iam_container" "$ws_container" "$ws2_container" "$gw_container"; do
+    docker logs "$node" >"$state/iam14.log" 2>&1
+    if grep -F -q -f "$state/iam14-all-secrets" "$state/iam14.log"; then
+      echo "the logs of $node hold a password, token or secret of phase 14" >&2
+      exit 1
+    fi
+  done
+  echo "phase 14: the logs of iam, both websocket nodes and the gateway hold none of the $(wc -l <"$state/iam14-all-secrets" | tr -d ' ') secrets used"
+}
+
 case "$victim" in
   core-1 | core-2) ;;
   *) echo "E2E_KILL must be core-1 or core-2" >&2; exit 1 ;;
+esac
+
+case "${E2E_ONLY:-}" in
+  "") ;;
+  14)
+    phase14_iam_revocation
+    result=PASS
+    exit 0
+    ;;
+  *) echo "E2E_ONLY supports only 14" >&2; exit 1 ;;
 esac
 
 step="both cores share the slots"
@@ -333,4 +408,5 @@ if grep -F -q -f "$state/iam-all-secrets" "$state/iam.log"; then
   exit 1
 fi
 echo "phase 13: the logs of $iam_container hold none of the $(wc -l <"$state/iam-all-secrets" | tr -d ' ') secrets used"
+phase14_iam_revocation
 result=PASS

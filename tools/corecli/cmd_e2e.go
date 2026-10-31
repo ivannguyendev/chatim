@@ -15,13 +15,13 @@ import (
 	"github.com/ivannguyendev/chatim/tools/corecli/internal/e2e"
 )
 
-const e2eUsage = "usage: corecli e2e setup|send|change|react-pin|members|links|rooms|mentions|ws|ws-events|ws-drill|gateway|ws-ephemeral|ws-ephemeral-kill|ws-resilience|ws-node-stop|iam-login|iam-disabled|check [flags]"
+const e2eUsage = "usage: corecli e2e setup|send|change|react-pin|members|links|rooms|mentions|ws|ws-events|ws-drill|gateway|ws-ephemeral|ws-ephemeral-kill|ws-resilience|ws-node-stop|iam-login|iam-disabled|iam-revoke|iam-revoke-partitioned|iam-key-rotated|iam-tenant-wait|check [flags]"
 
 func e2eCmd(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return errors.New(e2eUsage)
 	}
-	steps := map[string]command{"setup": e2eSetup, "send": e2eSend, "change": e2eChange, "react-pin": e2eReactPin, "members": e2eMembers, "links": e2eLinks, "rooms": e2eRooms, "mentions": e2eMentions, "ws": e2eWS, "ws-events": e2eWSEvents, "ws-drill": e2eWSDrill, "gateway": e2eGateway, "ws-ephemeral": e2eWSEphemeral, "ws-ephemeral-kill": e2eWSEphemeralKill, "ws-resilience": e2eWSResilience, "ws-node-stop": e2eWSNodeStop, "iam-login": e2eIAMLogin, "iam-disabled": e2eIAMDisabled, "check": e2eCheck}
+	steps := map[string]command{"setup": e2eSetup, "send": e2eSend, "change": e2eChange, "react-pin": e2eReactPin, "members": e2eMembers, "links": e2eLinks, "rooms": e2eRooms, "mentions": e2eMentions, "ws": e2eWS, "ws-events": e2eWSEvents, "ws-drill": e2eWSDrill, "gateway": e2eGateway, "ws-ephemeral": e2eWSEphemeral, "ws-ephemeral-kill": e2eWSEphemeralKill, "ws-resilience": e2eWSResilience, "ws-node-stop": e2eWSNodeStop, "iam-login": e2eIAMLogin, "iam-disabled": e2eIAMDisabled, "iam-revoke": e2eIAMRevoke, "iam-revoke-partitioned": e2eIAMRevokePartitioned, "iam-key-rotated": e2eIAMKeyRotated, "iam-tenant-wait": e2eIAMTenantWait, "check": e2eCheck}
 	step, ok := steps[args[0]]
 	if !ok {
 		return errors.New(e2eUsage)
