@@ -10,7 +10,9 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/ivannguyendev/chatim/pkg/revocation"
 )
@@ -27,40 +29,67 @@ type InternalStats struct {
 }
 
 type InternalOptions struct {
-	Revocations RevocationSource
-	Secret      string
-	Stats       *InternalStats
-	Log         *slog.Logger
+	Revocations     RevocationSource
+	Secret          string
+	Stats           *InternalStats
+	DirectoryFeed   DirectoryFeed
+	DirectorySignal DirectorySignal
+	FeedWaitMax     time.Duration
+	FeedStats       *FeedStats
+	Log             *slog.Logger
 }
 
-type internal struct {
-	opts   InternalOptions
-	secret [sha256.Size]byte
+type Internal struct {
+	opts     InternalOptions
+	secret   [sha256.Size]byte
+	mux      *http.ServeMux
+	stop     chan struct{}
+	stopOnce sync.Once
 }
 
-func NewInternal(opts InternalOptions) (http.Handler, error) {
+func NewInternal(opts InternalOptions) (*Internal, error) {
 	if opts.Revocations == nil || opts.Secret == "" {
 		return nil, errors.New("api: revocation source and node secret are required")
+	}
+	if opts.DirectoryFeed != nil && (opts.DirectorySignal == nil || opts.FeedWaitMax < 0) {
+		return nil, errors.New("api: the directory feed needs a signal and a wait max of zero or more")
 	}
 	if opts.Stats == nil {
 		opts.Stats = &InternalStats{}
 	}
+	if opts.FeedStats == nil {
+		opts.FeedStats = &FeedStats{}
+	}
 	if opts.Log == nil {
 		opts.Log = slog.New(slog.DiscardHandler)
 	}
-	in := &internal{opts: opts, secret: sha256.Sum256([]byte(opts.Secret))}
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /internal/v1/revocations", in.revocations)
-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+	in := &Internal{opts: opts, secret: sha256.Sum256([]byte(opts.Secret)), mux: http.NewServeMux(), stop: make(chan struct{})}
+	in.mux.HandleFunc("GET /internal/v1/revocations", in.revocations)
+	if opts.DirectoryFeed != nil {
+		in.mux.HandleFunc("GET "+directoryChangesPath, in.directoryChanges)
+	}
+	in.mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"code": "not_found", "message": "not found"})
 	})
-	return mux, nil
+	return in, nil
 }
 
-func (in *internal) revocations(w http.ResponseWriter, r *http.Request) {
+func (in *Internal) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	in.mux.ServeHTTP(w, r)
+}
+
+func (in *Internal) Stop() {
+	in.stopOnce.Do(func() { close(in.stop) })
+}
+
+func writeUnauthorized(w http.ResponseWriter) {
+	writeJSON(w, http.StatusUnauthorized, map[string]string{"code": "unauthenticated", "message": "node secret required"})
+}
+
+func (in *Internal) revocations(w http.ResponseWriter, r *http.Request) {
 	if !in.authorized(r.Header.Get("Authorization")) {
 		in.opts.Stats.Unauthorized.Add(1)
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"code": "unauthenticated", "message": "node secret required"})
+		writeUnauthorized(w)
 		return
 	}
 	snap, err := in.opts.Revocations.Revocations(r.Context())
@@ -91,7 +120,7 @@ func (in *internal) revocations(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(body)
 }
 
-func (in *internal) authorized(header string) bool {
+func (in *Internal) authorized(header string) bool {
 	token, ok := strings.CutPrefix(header, "Bearer ")
 	if !ok {
 		return false
