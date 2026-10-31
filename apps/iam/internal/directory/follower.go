@@ -12,6 +12,7 @@ import (
 
 const (
 	recheckInterval      = 2 * time.Second
+	quickRecheckBase     = 50 * time.Millisecond
 	listenerCloseTimeout = 2 * time.Second
 )
 
@@ -31,6 +32,35 @@ type listenState struct {
 	listener    store.Listener
 	failures    int
 	reconnectAt time.Time
+}
+
+type passSchedule struct {
+	tickAt  time.Time
+	quickAt time.Time
+	quick   int
+}
+
+func (s *passSchedule) next() time.Time {
+	if !s.quickAt.IsZero() && s.quickAt.Before(s.tickAt) {
+		return s.quickAt
+	}
+	return s.tickAt
+}
+
+func (s *passSchedule) afterDirectoryPass(now time.Time, pending bool) {
+	if !pending {
+		s.quick, s.quickAt = 0, time.Time{}
+		return
+	}
+	s.quickAt = now.Add(quickRecheckDelay(s.quick))
+	s.quick++
+}
+
+func quickRecheckDelay(n int) time.Duration {
+	if n >= 6 {
+		return recheckInterval
+	}
+	return min(quickRecheckBase<<n, recheckInterval)
 }
 
 func (f *Follower) Signal() <-chan struct{} {
@@ -53,32 +83,42 @@ func (f *Follower) broadcast() {
 
 func (f *Follower) Run(ctx context.Context) error {
 	var ls listenState
+	var sched passSchedule
 	defer f.dropListener(ctx, &ls)
-	recheckAt := time.Now().Add(recheckInterval)
+	f.connect(ctx, &ls)
+	f.fullPass(ctx, &sched)
 	for {
 		f.connect(ctx, &ls)
-		notice, err := f.await(ctx, ls.listener, recheckAt)
+		notice, err := f.await(ctx, ls.listener, sched.next())
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
 		switch {
 		case err == nil:
 			ls.failures = 0
-			f.handle(ctx, notice)
+			f.handle(ctx, notice, &sched)
 			continue
 		case errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, store.ErrListenerBroken):
 			if ls.listener != nil {
 				ls.failures = 0
+			}
+			if time.Now().Before(sched.tickAt) {
+				f.directoryPass(ctx, &sched)
+				continue
 			}
 		default:
 			f.dropListener(ctx, &ls)
 			ls.reconnectAt = time.Now().Add(retryDelay(ls.failures))
 			ls.failures++
 		}
-		f.directoryPass(ctx)
-		f.revocationPass(ctx)
-		recheckAt = time.Now().Add(recheckInterval)
+		f.fullPass(ctx, &sched)
 	}
+}
+
+func (f *Follower) fullPass(ctx context.Context, sched *passSchedule) {
+	f.directoryPass(ctx, sched)
+	f.revocationPass(ctx)
+	sched.tickAt = time.Now().Add(recheckInterval)
 }
 
 func (f *Follower) connect(ctx context.Context, ls *listenState) {
@@ -116,28 +156,30 @@ func (f *Follower) await(ctx context.Context, l store.Listener, deadline time.Ti
 	return l.Wait(waitCtx)
 }
 
-func (f *Follower) handle(ctx context.Context, n store.Notice) {
+func (f *Follower) handle(ctx context.Context, n store.Notice, sched *passSchedule) {
 	switch n {
 	case store.NoticeDirectory:
-		f.directoryPass(ctx)
+		f.directoryPass(ctx, sched)
 	case store.NoticeRevocations:
 		f.revocationPass(ctx)
 	case store.NoticeNone, store.NoticeOther:
 	}
 }
 
-func (f *Follower) directoryPass(ctx context.Context) {
+func (f *Follower) directoryPass(ctx context.Context, sched *passSchedule) {
 	pass, err := drainFeed(ctx, f.Reader, f.Cache, f.Cache.Position())
 	if pass.read > 0 {
 		f.broadcast()
 	}
 	if err != nil {
 		f.Stats.readErrors.Add(1)
+		sched.afterDirectoryPass(time.Now(), false)
 		return
 	}
 	now := time.Now()
 	f.Stats.caughtUpAt.Store(now.UnixNano())
 	f.Stats.markStalled(now, pass.pending)
+	sched.afterDirectoryPass(now, pass.pending)
 }
 
 func (f *Follower) revocationPass(ctx context.Context) {

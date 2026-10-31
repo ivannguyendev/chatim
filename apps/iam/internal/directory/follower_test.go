@@ -1,6 +1,7 @@
 package directory_test
 
 import (
+	"slices"
 	"sync"
 	"testing"
 	"testing/synctest"
@@ -114,11 +115,12 @@ func TestDirectoryNotifyDoesNotFetchRevocations(t *testing.T) {
 		f := r.startFollower(&listenFactory{listeners: []*fakeListener{l}})
 		defer f.stop(t)
 		synctest.Wait()
+		revsBefore, readsBefore := r.revs.count(), r.changesCalls()
 		for range 3 {
 			l.events <- listenEvent{notice: store.NoticeDirectory}
 			synctest.Wait()
 		}
-		if r.revs.count() != 0 || r.changesCalls() != 3 {
+		if r.revs.count() != revsBefore || r.changesCalls() != readsBefore+3 {
 			t.Fatalf("revocation fetches=%d feed reads=%d; want 0 and 3", r.revs.count(), r.changesCalls())
 		}
 	})
@@ -131,13 +133,14 @@ func TestRevocationsAreMergedAndPrunedOnRevOrTick(t *testing.T) {
 		f := r.startFollower(&listenFactory{listeners: []*fakeListener{l}})
 		defer f.stop(t)
 		synctest.Wait()
+		readsBefore := r.changesCalls()
 		claims := func(session string) jwtverify.Claims {
 			return jwtverify.Claims{Tenant: "shop", Session: session, IssuedAt: time.Now()}
 		}
 		r.revs.set(revocation.Snapshot{Sessions: []revocation.Session{{ID: "s1", Tenant: "shop", ExpiresAt: time.Now().Add(3 * time.Second)}}}, nil)
 		l.events <- listenEvent{notice: store.NoticeRevocations}
 		synctest.Wait()
-		if r.list.Check(claims("s1")) != revocation.SessionRevoked || r.changesCalls() != 0 {
+		if r.list.Check(claims("s1")) != revocation.SessionRevoked || r.changesCalls() != readsBefore {
 			t.Fatalf("after rev: s1 %v feed reads %d; want revoked and no feed read", r.list.Check(claims("s1")), r.changesCalls())
 		}
 		r.revs.set(revocation.Snapshot{Sessions: []revocation.Session{{ID: "s2", Tenant: "shop", ExpiresAt: time.Now().Add(time.Hour)}}}, nil)
@@ -209,6 +212,7 @@ func TestHorizonStallIsMeasuredAndCleared(t *testing.T) {
 		r := newRig(t)
 		f := r.startFollower(&listenFactory{listeners: []*fakeListener{newFakeListener()}})
 		defer f.stop(t)
+		synctest.Wait()
 		r.reader.set(func(f *fakeReader) { f.pending = true })
 		time.Sleep(2 * time.Second)
 		synctest.Wait()
@@ -228,6 +232,88 @@ func TestHorizonStallIsMeasuredAndCleared(t *testing.T) {
 		synctest.Wait()
 		if r.stats.ReadErrors() != 1 {
 			t.Fatalf("read errors = %d; want 1", r.stats.ReadErrors())
+		}
+	})
+}
+
+func (r *rig) changesOffsets(start time.Time) []time.Duration {
+	var out []time.Duration
+	r.reader.read(func(f *fakeReader) {
+		for _, at := range f.changesTimes {
+			if !at.Before(start) {
+				out = append(out, at.Sub(start))
+			}
+		}
+	})
+	return out
+}
+
+func TestFirstPassRunsAtStart(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := newRig(t)
+		r.reader.add(userChange("shop", "lan", "Lan", 1))
+		r.revs.set(revocation.Snapshot{Sessions: []revocation.Session{{ID: "s1", Tenant: "shop", ExpiresAt: time.Now().Add(time.Hour)}}}, nil)
+		factory := &listenFactory{listeners: []*fakeListener{newFakeListener()}}
+		began := time.Now()
+		f := r.startFollower(factory)
+		defer f.stop(t)
+		synctest.Wait()
+		if got := displayName(r.cache, "shop", "lan"); got != "Lan" || time.Since(began) != 0 {
+			t.Fatalf("name = %q at %v; want Lan at start", got, time.Since(began))
+		}
+		claims := jwtverify.Claims{Tenant: "shop", Session: "s1", IssuedAt: time.Now()}
+		if r.revs.count() != 1 || r.list.Check(claims) != revocation.SessionRevoked {
+			t.Fatalf("revocation fetches = %d s1 = %v; want one fetch at start", r.revs.count(), r.list.Check(claims))
+		}
+		if !r.stats.ListenUp() || len(factory.callTimes()) != 1 {
+			t.Fatal("the listener must open before the first pass")
+		}
+	})
+}
+
+func TestPendingRowsAreRecheckedSoon(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := newRig(t)
+		l := newFakeListener()
+		f := r.startFollower(&listenFactory{listeners: []*fakeListener{l}})
+		defer f.stop(t)
+		synctest.Wait()
+		start := time.Now()
+		r.reader.set(func(f *fakeReader) { f.pending = true })
+		l.events <- listenEvent{notice: store.NoticeDirectory}
+		synctest.Wait()
+		time.Sleep(2 * time.Second)
+		synctest.Wait()
+		ms := time.Millisecond
+		want := []time.Duration{0, 0, 50 * ms, 150 * ms, 350 * ms, 750 * ms, 1550 * ms, 2000 * ms}
+		if got := r.changesOffsets(start); !slices.Equal(got, want) {
+			t.Fatalf("directory passes at %v; want %v", got, want)
+		}
+		if revs := r.revs.count(); revs != 2 {
+			t.Fatalf("revocation fetches = %d; want the start and the 2s tick only", revs)
+		}
+		r.reader.set(func(f *fakeReader) { f.pending = false })
+		time.Sleep(3 * time.Second)
+		synctest.Wait()
+		resumed := time.Now()
+		r.reader.set(func(f *fakeReader) { f.pending = true })
+		l.events <- listenEvent{notice: store.NoticeDirectory}
+		synctest.Wait()
+		time.Sleep(10 * ms)
+		r.reader.add(userChange("shop", "lan", "Lan", 1))
+		r.reader.set(func(f *fakeReader) { f.pending = false })
+		time.Sleep(40 * ms)
+		synctest.Wait()
+		if got := displayName(r.cache, "shop", "lan"); got != "Lan" {
+			t.Fatalf("50ms after a pending pass name = %q; want Lan from the reset quick recheck", got)
+		}
+		if got := r.changesOffsets(resumed); !slices.Equal(got, []time.Duration{0, 50 * ms, 50 * ms}) {
+			t.Fatalf("reads after the reset at %v; want [0 50ms 50ms], the change page then the empty page", got)
+		}
+		time.Sleep(900 * ms)
+		synctest.Wait()
+		if got := r.changesOffsets(resumed); len(got) != 3 {
+			t.Fatalf("passes after the horizon moved at %v; want no more quick rechecks", got)
 		}
 	})
 }

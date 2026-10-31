@@ -47,6 +47,7 @@ type fakeReader struct {
 	releases      int
 	loadPageCalls int
 	changesCalls  int
+	changesTimes  []time.Time
 	onLoadPage    func(call int) error
 }
 
@@ -72,6 +73,7 @@ func (r *fakeReader) Changes(_ context.Context, after store.Position, limit int)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.changesCalls++
+	r.changesTimes = append(r.changesTimes, time.Now())
 	if r.changesErr != nil {
 		return store.ChangePage{}, r.changesErr
 	}
