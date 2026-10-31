@@ -29,11 +29,11 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/ivannguyendev/chatim/apps/gateway/internal/api"
-	"github.com/ivannguyendev/chatim/apps/gateway/internal/limit"
 	"github.com/ivannguyendev/chatim/pkg/corecall"
 	"github.com/ivannguyendev/chatim/pkg/grpcclient"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
+	"github.com/ivannguyendev/chatim/pkg/userlimit"
 )
 
 func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
@@ -161,11 +161,11 @@ func newHarness(t *testing.T, l limits) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gate, err := limit.NewGate(l.node)
+	gate, err := userlimit.NewGate(l.node)
 	if err != nil {
 		t.Fatal(err)
 	}
-	users, err := limit.NewUsers(limit.UserConfig{Rate: l.rate, Burst: l.burst, Inflight: l.inflight, Capacity: 1000})
+	users, err := userlimit.NewUsers(userlimit.UserConfig{Rate: l.rate, Burst: l.burst, Inflight: l.inflight, Capacity: 1000})
 	if err != nil {
 		t.Fatal(err)
 	}

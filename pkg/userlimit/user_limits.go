@@ -1,4 +1,4 @@
-package limit
+package userlimit
 
 import (
 	"container/list"
@@ -10,8 +10,8 @@ import (
 )
 
 var (
-	ErrRate     = errors.New("limit: user over its request rate")
-	ErrInflight = errors.New("limit: user over its requests in flight")
+	ErrRate     = errors.New("userlimit: user over its request rate")
+	ErrInflight = errors.New("userlimit: user over its requests in flight")
 )
 
 type Key struct {
@@ -42,7 +42,7 @@ type Users struct {
 
 func NewUsers(cfg UserConfig) (*Users, error) {
 	if cfg.Rate <= 0 || cfg.Burst <= 0 || cfg.Inflight <= 0 || cfg.Capacity <= 0 {
-		return nil, errors.New("limit: rate, burst, inflight and capacity must be positive")
+		return nil, errors.New("userlimit: rate, burst, inflight and capacity must be positive")
 	}
 	if cfg.Now == nil {
 		cfg.Now = time.Now

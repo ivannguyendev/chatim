@@ -13,7 +13,6 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/gateway/internal/api"
 	"github.com/ivannguyendev/chatim/apps/gateway/internal/config"
-	"github.com/ivannguyendev/chatim/apps/gateway/internal/limit"
 	"github.com/ivannguyendev/chatim/pkg/admin"
 	"github.com/ivannguyendev/chatim/pkg/corecall"
 	"github.com/ivannguyendev/chatim/pkg/grpcclient"
@@ -21,6 +20,7 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 	"github.com/ivannguyendev/chatim/pkg/metrics"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
+	"github.com/ivannguyendev/chatim/pkg/userlimit"
 )
 
 const metricsSubsystem = "gateway"
@@ -83,11 +83,11 @@ func wireServers(cfg config.Config, log *slog.Logger, verifier *jwtverify.Verifi
 	if err != nil {
 		return nil, err
 	}
-	gate, err := limit.NewGate(cfg.InflightMax)
+	gate, err := userlimit.NewGate(cfg.InflightMax)
 	if err != nil {
 		return nil, err
 	}
-	users, err := limit.NewUsers(limit.UserConfig{Rate: cfg.UserRate, Burst: cfg.UserBurst, Inflight: cfg.UserInflight, Capacity: cfg.UserLimiters})
+	users, err := userlimit.NewUsers(userlimit.UserConfig{Rate: cfg.UserRate, Burst: cfg.UserBurst, Inflight: cfg.UserInflight, Capacity: cfg.UserLimiters})
 	if err != nil {
 		return nil, err
 	}

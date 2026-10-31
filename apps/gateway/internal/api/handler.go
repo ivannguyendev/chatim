@@ -13,10 +13,10 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/reflect/protoregistry"
 
-	"github.com/ivannguyendev/chatim/apps/gateway/internal/limit"
 	"github.com/ivannguyendev/chatim/pkg/corecall"
 	"github.com/ivannguyendev/chatim/pkg/httpcors"
 	"github.com/ivannguyendev/chatim/pkg/metrics"
+	"github.com/ivannguyendev/chatim/pkg/userlimit"
 )
 
 const msgNotSupported = "request not supported"
@@ -25,8 +25,8 @@ type Options struct {
 	Forwarder   *corecall.Forwarder
 	Verifier    Verifier
 	Revocations Revocations
-	Gate        *limit.Gate
-	Users       *limit.Users
+	Gate        *userlimit.Gate
+	Users       *userlimit.Users
 	BodyMax     int
 	CORSOrigins []string
 	Log         *slog.Logger

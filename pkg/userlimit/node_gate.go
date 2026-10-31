@@ -1,4 +1,4 @@
-package limit
+package userlimit
 
 import (
 	"errors"
@@ -12,7 +12,7 @@ type Gate struct {
 
 func NewGate(size int) (*Gate, error) {
 	if size <= 0 {
-		return nil, errors.New("limit: gate size must be positive")
+		return nil, errors.New("userlimit: gate size must be positive")
 	}
 	return &Gate{max: int64(size)}, nil
 }

@@ -76,7 +76,7 @@ Một `grpc.ClientConn` duy nhất tới mọi địa chỉ trong `GW_CORE_ADDRS
 
 - **Connect** `connectrpc.com/connect` v1.21.0 (plugin `buf.build/connectrpc/go` v1.21.0 sinh `chatimv1connect`): `POST /chatim.v1.{CoreService,MentionService}/{Lệnh}`, JSON hoặc protobuf; client sinh sẵn cho web, iOS, Android từ cùng proto.
 - **HTTP/1.1 và h2c** (`http.Server.Protocols`), TLS ở load balancer. Server: `ReadHeaderTimeout` 5s, `ReadTimeout` 10s, `WriteTimeout` ≥ `CORE_REQUEST_DEADLINE` + 5s, `IdleTimeout` 60s, header ≤ 16KB, 250 stream HTTP/2 mỗi kết nối.
-- **Kho giới hạn theo user** (`apps/gateway/internal/limit`): token bucket `golang.org/x/time/rate` + bộ đếm đang chạy, LRU `GW_USER_LIMITERS` (100.000) có khoá, chỉ đẩy người không có lệnh đang chạy.
+- **Kho giới hạn theo user** (`pkg/userlimit`): token bucket `golang.org/x/time/rate` + bộ đếm đang chạy, LRU `GW_USER_LIMITERS` (100.000) có khoá, chỉ đẩy người không có lệnh đang chạy.
 - **Admin** (`pkg/admin`): `/livez`, `/readyz` (có core READY và chưa tắt), `/metrics`, pprof; `/app probe` cho healthcheck.
 
 ---

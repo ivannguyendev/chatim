@@ -248,6 +248,8 @@ linters:
               desc: iam shares code with gateway only through pkg
             - pkg: github.com/ivannguyendev/chatim/modules
               desc: iam embeds no chat module
+            - pkg: github.com/nats-io
+              desc: iam does not depend on NATS (owner 2026-10-27)
         iam-sync-no-nats:
           files:
             - "**/pkg/iamsync/**"

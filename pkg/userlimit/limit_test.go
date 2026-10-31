@@ -1,4 +1,4 @@
-package limit_test
+package userlimit_test
 
 import (
 	"errors"
@@ -10,7 +10,7 @@ import (
 
 	"go.uber.org/goleak"
 
-	"github.com/ivannguyendev/chatim/apps/gateway/internal/limit"
+	"github.com/ivannguyendev/chatim/pkg/userlimit"
 )
 
 func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
@@ -19,26 +19,26 @@ type clock struct{ now time.Time }
 
 func (c *clock) read() time.Time { return c.now }
 
-func newUsers(t *testing.T, cfg limit.UserConfig) (*limit.Users, *clock) {
+func newUsers(t *testing.T, cfg userlimit.UserConfig) (*userlimit.Users, *clock) {
 	t.Helper()
 	c := &clock{now: time.Unix(1_800_000_000, 0)}
 	if cfg.Now == nil {
 		cfg.Now = c.read
 	}
-	u, err := limit.NewUsers(cfg)
+	u, err := userlimit.NewUsers(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return u, c
 }
 
-func spend(t *testing.T, u *limit.Users, key limit.Key) int {
+func spend(t *testing.T, u *userlimit.Users, key userlimit.Key) int {
 	t.Helper()
 	n := 0
 	for {
 		release, err := u.Acquire(key)
 		if err != nil {
-			if !errors.Is(err, limit.ErrRate) {
+			if !errors.Is(err, userlimit.ErrRate) {
 				t.Fatalf("Acquire = %v, want ErrRate", err)
 			}
 			return n
@@ -48,10 +48,10 @@ func spend(t *testing.T, u *limit.Users, key limit.Key) int {
 	}
 }
 
-var alice = limit.Key{Tenant: "t1", User: "alice"}
+var alice = userlimit.Key{Tenant: "t1", User: "alice"}
 
 func TestRateAllowsOneBurstThenRefills(t *testing.T) {
-	u, c := newUsers(t, limit.UserConfig{Rate: 2, Burst: 3, Inflight: 10, Capacity: 10})
+	u, c := newUsers(t, userlimit.UserConfig{Rate: 2, Burst: 3, Inflight: 10, Capacity: 10})
 	if got := spend(t, u, alice); got != 3 {
 		t.Fatalf("burst = %d, want 3", got)
 	}
@@ -62,7 +62,7 @@ func TestRateAllowsOneBurstThenRefills(t *testing.T) {
 }
 
 func TestInflightIsCappedAndReleaseIsIdempotent(t *testing.T) {
-	u, _ := newUsers(t, limit.UserConfig{Rate: 100, Burst: 100, Inflight: 2, Capacity: 10})
+	u, _ := newUsers(t, userlimit.UserConfig{Rate: 100, Burst: 100, Inflight: 2, Capacity: 10})
 	first, err := u.Acquire(alice)
 	if err != nil {
 		t.Fatal(err)
@@ -70,7 +70,7 @@ func TestInflightIsCappedAndReleaseIsIdempotent(t *testing.T) {
 	if _, err := u.Acquire(alice); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := u.Acquire(alice); !errors.Is(err, limit.ErrInflight) {
+	if _, err := u.Acquire(alice); !errors.Is(err, userlimit.ErrInflight) {
 		t.Fatalf("third = %v, want ErrInflight", err)
 	}
 	first()
@@ -78,39 +78,39 @@ func TestInflightIsCappedAndReleaseIsIdempotent(t *testing.T) {
 	if _, err := u.Acquire(alice); err != nil {
 		t.Fatalf("after release = %v", err)
 	}
-	if _, err := u.Acquire(alice); !errors.Is(err, limit.ErrInflight) {
+	if _, err := u.Acquire(alice); !errors.Is(err, userlimit.ErrInflight) {
 		t.Fatalf("a double release freed two slots: %v", err)
 	}
 }
 
 func TestSameUserInAnotherTenantIsSomeoneElse(t *testing.T) {
-	u, _ := newUsers(t, limit.UserConfig{Rate: 1, Burst: 2, Inflight: 10, Capacity: 10})
+	u, _ := newUsers(t, userlimit.UserConfig{Rate: 1, Burst: 2, Inflight: 10, Capacity: 10})
 	spend(t, u, alice)
-	if got := spend(t, u, limit.Key{Tenant: "t2", User: "alice"}); got != 2 {
+	if got := spend(t, u, userlimit.Key{Tenant: "t2", User: "alice"}); got != 2 {
 		t.Fatalf("alice of t2 got %d, want her own burst of 2", got)
 	}
 }
 
 func TestEvictionDropsOnlyIdleEntries(t *testing.T) {
-	u, _ := newUsers(t, limit.UserConfig{Rate: 100, Burst: 100, Inflight: 1, Capacity: 2})
+	u, _ := newUsers(t, userlimit.UserConfig{Rate: 100, Burst: 100, Inflight: 1, Capacity: 2})
 	if _, err := u.Acquire(alice); err != nil {
 		t.Fatal(err)
 	}
-	bob, err := u.Acquire(limit.Key{Tenant: "t1", User: "bob"})
+	bob, err := u.Acquire(userlimit.Key{Tenant: "t1", User: "bob"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	bob()
-	if _, err := u.Acquire(limit.Key{Tenant: "t1", User: "carol"}); err != nil {
+	if _, err := u.Acquire(userlimit.Key{Tenant: "t1", User: "carol"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := u.Acquire(alice); !errors.Is(err, limit.ErrInflight) {
+	if _, err := u.Acquire(alice); !errors.Is(err, userlimit.ErrInflight) {
 		t.Fatalf("alice = %v, want ErrInflight: her busy entry was dropped", err)
 	}
 	if u.Len() != 2 {
 		t.Fatalf("len = %d, want 2", u.Len())
 	}
-	if _, err := u.Acquire(limit.Key{Tenant: "t1", User: "dave"}); err != nil {
+	if _, err := u.Acquire(userlimit.Key{Tenant: "t1", User: "dave"}); err != nil {
 		t.Fatal(err)
 	}
 	if u.Len() != 3 {
@@ -119,9 +119,9 @@ func TestEvictionDropsOnlyIdleEntries(t *testing.T) {
 }
 
 func TestComingBackAfterEvictionRefillsOneBurstAtMost(t *testing.T) {
-	u, _ := newUsers(t, limit.UserConfig{Rate: 1, Burst: 3, Inflight: 10, Capacity: 1})
+	u, _ := newUsers(t, userlimit.UserConfig{Rate: 1, Burst: 3, Inflight: 10, Capacity: 1})
 	spend(t, u, alice)
-	spend(t, u, limit.Key{Tenant: "t1", User: "bob"})
+	spend(t, u, userlimit.Key{Tenant: "t1", User: "bob"})
 	if got := spend(t, u, alice); got != 3 {
 		t.Fatalf("alice after eviction = %d, want one burst of 3", got)
 	}
@@ -129,7 +129,7 @@ func TestComingBackAfterEvictionRefillsOneBurstAtMost(t *testing.T) {
 
 func TestConcurrentUsersNeverPassTheirInflightCap(t *testing.T) {
 	const keys, inflight = 50, 3
-	u, err := limit.NewUsers(limit.UserConfig{Rate: 1_000_000, Burst: 1_000_000, Inflight: inflight, Capacity: 10})
+	u, err := userlimit.NewUsers(userlimit.UserConfig{Rate: 1_000_000, Burst: 1_000_000, Inflight: inflight, Capacity: 10})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +140,7 @@ func TestConcurrentUsersNeverPassTheirInflightCap(t *testing.T) {
 		wg.Go(func() {
 			for i := range 300 {
 				k := (g*7 + i) % keys
-				release, err := u.Acquire(limit.Key{Tenant: "t", User: strconv.Itoa(k)})
+				release, err := u.Acquire(userlimit.Key{Tenant: "t", User: strconv.Itoa(k)})
 				if err != nil {
 					continue
 				}
@@ -162,21 +162,21 @@ func TestConcurrentUsersNeverPassTheirInflightCap(t *testing.T) {
 }
 
 func TestNewUsersRefusesBadConfig(t *testing.T) {
-	for _, cfg := range []limit.UserConfig{
+	for _, cfg := range []userlimit.UserConfig{
 		{Burst: 1, Inflight: 1, Capacity: 1}, {Rate: 1, Inflight: 1, Capacity: 1},
 		{Rate: 1, Burst: 1, Capacity: 1}, {Rate: 1, Burst: 1, Inflight: 1},
 	} {
-		if _, err := limit.NewUsers(cfg); err == nil {
+		if _, err := userlimit.NewUsers(cfg); err == nil {
 			t.Fatalf("%+v accepted", cfg)
 		}
 	}
 }
 
 func TestGateCapsTheNode(t *testing.T) {
-	if _, err := limit.NewGate(0); err == nil {
+	if _, err := userlimit.NewGate(0); err == nil {
 		t.Fatal("zero gate accepted")
 	}
-	g, err := limit.NewGate(2)
+	g, err := userlimit.NewGate(2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +196,7 @@ func TestGateCapsTheNode(t *testing.T) {
 }
 
 func TestGateHoldsUnderConcurrency(t *testing.T) {
-	g, err := limit.NewGate(5)
+	g, err := userlimit.NewGate(5)
 	if err != nil {
 		t.Fatal(err)
 	}

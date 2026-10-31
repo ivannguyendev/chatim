@@ -10,9 +10,9 @@ import (
 	"connectrpc.com/connect"
 	"golang.org/x/time/rate"
 
-	"github.com/ivannguyendev/chatim/apps/gateway/internal/limit"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 	"github.com/ivannguyendev/chatim/pkg/revocation"
+	"github.com/ivannguyendev/chatim/pkg/userlimit"
 )
 
 const (
@@ -35,8 +35,8 @@ type Revocations interface {
 type chain struct {
 	verifier    Verifier
 	revocations Revocations
-	gate        *limit.Gate
-	users       *limit.Users
+	gate        *userlimit.Gate
+	users       *userlimit.Users
 	bodyMax     int64
 	stats       *stats
 	log         *slog.Logger
@@ -122,9 +122,9 @@ func bearer(h http.Header) (string, string) {
 func (c *chain) limited(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		claims, _ := ClaimsFrom(r.Context())
-		release, err := c.users.Acquire(limit.Key{Tenant: claims.Tenant, User: claims.User})
+		release, err := c.users.Acquire(userlimit.Key{Tenant: claims.Tenant, User: claims.User})
 		if err != nil {
-			if errors.Is(err, limit.ErrInflight) {
+			if errors.Is(err, userlimit.ErrInflight) {
 				c.stats.userInflight.Add(1)
 			} else {
 				c.stats.rateLimited.Add(1)
