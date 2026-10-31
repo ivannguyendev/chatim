@@ -22,6 +22,13 @@ const (
 	KeyRetired KeyState = 3
 )
 
+type GroupState int16
+
+const (
+	GroupLive    GroupState = 1
+	GroupDeleted GroupState = 2
+)
+
 type Tenant struct {
 	ID        string
 	Name      string
@@ -47,6 +54,29 @@ type Account struct {
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 	UpdatedBy          string
+}
+
+type Group struct {
+	TenantID    string
+	ID          string
+	Name        string
+	ParentID    string
+	Mentionable bool
+	State       GroupState
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	UpdatedBy   string
+}
+
+type GroupUpdate struct {
+	Name        *string
+	ParentID    *string
+	Mentionable *bool
+}
+
+type ProfileUpdate struct {
+	DisplayName *string
+	AvatarURL   *string
 }
 
 type Session struct {
@@ -135,8 +165,18 @@ type Auth interface {
 	SetPassword(ctx context.Context, c PasswordChange, audit AuditEvent) error
 }
 
+type Directory interface {
+	SetProfile(ctx context.Context, tenantID, accountID string, update ProfileUpdate, audit AuditEvent) error
+	CreateGroup(ctx context.Context, g Group, audit AuditEvent) error
+	UpdateGroup(ctx context.Context, tenantID, id string, update GroupUpdate, audit AuditEvent) error
+	DeleteGroup(ctx context.Context, tenantID, id string, audit AuditEvent) error
+	SetAccountGroups(ctx context.Context, tenantID, accountID string, groupIDs []string, audit AuditEvent) error
+	Group(ctx context.Context, tenantID, id string) (Group, error)
+}
+
 type Admin interface {
 	Auth
+	Directory
 	CreateTenant(ctx context.Context, t Tenant, audit AuditEvent) error
 	SetTenantState(ctx context.Context, id string, state State, r Revocation, audit AuditEvent) error
 	CreateAccount(ctx context.Context, a Account, audit AuditEvent) error
