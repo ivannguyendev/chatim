@@ -1,6 +1,6 @@
 # M6 phần 3a: danh bạ trong `iam` — tóm tắt
 
-> Ngày: 2026-10-31 · Nhánh `feat/m6` · Trạng thái: **owner duyệt hướng 2026-10-31, chờ plan chi tiết và review**
+> Ngày: 2026-10-31, viết lại theo cái đã xây cùng ngày · Nhánh `feat/m6` · Trạng thái: **đã xây, `dev-done` trên nhánh (chưa push)** · Quyết định: D226–D231 (`docs/decision-log.md` §17.17)
 > **Các phần của M6 `iam`:** (1) đăng nhập + phiên ✅ · (2) thu hồi tới node ✅ · **(3a) danh bạ trong `iam`** · (3b) đồng bộ nhóm sang Mention · (3c) role, permission, API admin · (4) OIDC + IdP ngoài + exchange · (5) sẵn sàng go-live.
 
 ## 1. Phần này làm gì
@@ -165,18 +165,24 @@ flowchart TD
 | Không trả email, username | Trả đủ | Riêng tư; username là nửa thông tin đăng nhập |
 | Client gọi thẳng `iam` | Qua gateway | Gateway chỉ chuyển lệnh tới core (D198) |
 
-## 11. Chi phí
+## 11. Chi phí (đo trên dev, `bin/bench/t14/`, máy không hạ xung `CPU_Speed_Limit = 100`, cả cụm dev đang chạy)
 
-- **`GetUsers`:** tra RAM. 100K máy nối lại ≈ 1.700 lần/giây × 50 id, ước lượng ~0,1 core mỗi replica, Postgres ~0.
-- **Khởi động:** mỗi replica một lần đọc 100K dòng theo trang (~1s, ước lượng). 10 replica cùng lúc ≈ 3s.
-- **RAM:** ~20–40 MB cho 100K người, tăng theo số account.
-- **Feed:** mỗi app một request đang chờ, lúc rảnh ~0,1 lần gọi/giây.
-- Mọi số là ước lượng; plan có bench nạp 100K dòng, `GetUsers` 50 và 500 id, và thử 10 replica khởi động cùng lúc.
+| Mục | Ước lượng lúc duyệt | Đo được |
+|---|---|---|
+| RAM cho 100K người | 20–40 MB | **18,6 MB** |
+| Tra RAM 50 / 500 id | — / < 1 ms | **12 µs / 121 µs** |
+| Nạp 100K, ca xấu nhất (vừa nạp hàng loạt, chưa có thống kê bảng) | ~1s | **0,73s** (trước khi sửa câu nạp: 5,9–6,9s) |
+| 10 replica nạp cùng lúc, 4 chỗ | ~3s | **3,2s**; tối đa đúng 4 replica giữ chỗ |
+| `GetUsers` 50 id qua đủ đường HTTP | 0,1 core cho 1.700 lần/giây | **~0,65 ms CPU server mỗi lần → ~1,1 core** cho 1.700 lần/giây trên toàn cụm `iam`; Postgres 0 |
+
+- Ước lượng `GetUsers` lúc duyệt chỉ tính phần tra RAM (thực tế ~3%). Phần lớn CPU là nén gzip câu trả lời (~1/3), kiểm chữ ký Ed25519 (~1/5), tạo JSON (~1/5). Owner chấp nhận số đo, chưa tối ưu (2026-10-31); hai cách giảm khi cần: không nén câu trả lời nhỏ, nhớ token đã kiểm trong lúc còn hạn.
+- 1.700 lần/giây là lúc 100K máy nối lại trong 1 phút (CLAUDE.md số thật); lượt mở màn hình lúc bình thường: chưa có nguồn, đo ở prod-like.
+- **Feed:** mỗi app một request đang chờ, lúc rảnh ~0,1 lần gọi/giây; e2e đo đánh thức ≤ 42ms sau khi lệnh đổi tên xong.
 
 ## 12. Rủi ro
 
 - Phiên vừa bị thu hồi còn đọc được danh bạ thêm vài ms, tối đa ~2 giây nếu kết nối `LISTEN` đứt.
-- Danh bạ lớn hơn nhiều (1 triệu account ≈ 200 MB, nạp ~10s) thì phải tăng RAM pod hoặc đổi sang LRU. Có metric cỡ danh bạ và alert khi gần trần GOMEMLIMIT.
+- Danh bạ lớn hơn nhiều (1 triệu account ≈ 190 MB RAM, nạp ~7s theo tỉ lệ số đo) thì phải tăng RAM pod hoặc đổi sang LRU. Có metric cỡ danh bạ và alert khi gần trần GOMEMLIMIT.
 
 ## 13. Điểm đội tự chọn, owner phản biện
 
@@ -209,19 +215,39 @@ flowchart TD
   - Long-poll cổng nội bộ được `profile-set` đánh thức dưới 1 giây; khoá Bình thì bản ghi có `state = disabled`; sai secret → 401.
   - Khởi động lại `iam-1`: `/readyz` chỉ true sau khi nạp xong.
 
+## 15. Kết quả (2026-10-31)
+
+**Commit** (`feat/m6`): `c3941dd` bảng, trigger · `4e739c3` ghi profile, cây nhóm · `38829fc` đọc feed dưới mốc · `2bcd5d3` `LISTEN` · `8e6e374` giới hạn cỡ vị trí · `03faf6c` cache, bộ nạp, bộ theo dõi · `24644d6` proto · `2120b4c` `pkg/userlimit` · `db57286` `DirectoryService` · `7858494` feed long-poll · `ffaf8f1` đọc lại sớm khi còn dòng trên mốc · `19c7999` hạn câu đọc của feed · `56d2591` nối vào app · `5f27417` health check không chặn khởi động · `b0c349c` CLI · `31aea47` alert · `e827a5c` docs · `d6b79e7` + `3dbd971` e2e phase 15 · `da06a33` câu nạp theo khoá `accounts` · `c60dd24` bench · `1167896` itest feed.
+
+**Kiểm tra:** `make test` 107 package `ok`; `make itest` 107 package `ok`; `make lint` 0 issue; `make alerts-check` 39 luật; `make e2e` PASS 15 phase (`bin/e2e-m6p3a.log`): long-poll trả tên mới ≤ 60ms sau khi `profile-set` xong, `GetUsers` thấy sau 1ms, khoá account tới feed sau 2ms, sai secret 401, khởi động lại `iam` vẫn đủ người, log không chứa secret.
+
+**Khác với bản duyệt:**
+- Câu nạp danh bạ đọc theo khoá `accounts` rồi tra từng dòng thay đổi (bench: câu cũ phụ thuộc thống kê bảng, đọc bình phương ngay sau nạp hàng loạt, 5,9–6,9s; câu mới 0,73s ở ca xấu nhất).
+- Bộ theo dõi đọc lại sớm (50ms→2s) khi còn dòng trên mốc và đọc một lượt ngay khi khởi động (itest đỏ 1/3 khi chạy song song).
+- Health check có hạn 3s, chạy trong goroutine riêng sau khi `/livez` đã phục vụ; nạp xong chỉ yêu cầu kiểm; sau lần `ready` đầu bỏ ping và kiểm schema (review T10: Postgres treo lúc khởi động làm K8s giết pod).
+- `/readyz` trước lần đầu cần Postgres, sau đó không (đội chọn, §13).
+- Lỗi khoá ngoại (tenant lạ) trả `NotFound` thay vì `unavailable`.
+- CPU `GetUsers` ~11 lần ước lượng (§11), owner chấp nhận.
+- `scripts/e2e.sh` tách phase 13, 14, 15 ra file riêng (412 → 332 dòng).
+- itest feed chứng minh đường tín hiệu (handler đặt nhịp xem lại 30s, trả lời trước 20s) thay vì đo độ trễ: Postgres test dùng chung bị package khác giữ mốc vài giây; độ trễ đo ở e2e.
+
+**Ghi nhận nhỏ (không sửa):** `checkCaller` có từ phần 1 không kiểm phiên hết hạn (lệnh profile mới thì có) → phần 5; e2e chưa chứng minh `/readyz` false trong lúc nạp (danh bạ dev nhỏ, nạp xong trước lần hỏi đầu; unit test che); id nhóm đã xoá mềm không dùng lại được; chuông dồn dập mỗi chuông một câu đọc, không gom; feed không giới hạn số request đang chờ (cổng nội bộ có secret, vài bên gọi); chưa test h2c cho feed; `HEAD` trên feed trả 405; trường hợp hạn đọc của Go 1.26 tự xử lý, chỉ hạn ghi là cần đặt riêng; tên nhóm và URL ảnh chấp nhận `HTTPS://` viết hoa; bản ghi thay đổi trỏ tới account/nhóm không còn bị bỏ qua (chưa xảy ra vì không xoá cứng).
+
+**Mang sang:** 3b đồng bộ nhóm sang Mention (D232), 3c role/permission/API admin (D233); phần 5: `checkCaller` kiểm hết hạn, secret riêng cho từng bên gọi feed, khôi phục backup Postgres làm `ver` lùi; prod-like: đo lượt mở màn hình thật để biết CPU `GetUsers` lúc bình thường.
+
 ## Bảng phủ
 
 | Yêu cầu | Việc | Test | Bằng chứng |
 |---|---|---|---|
-| R1 hiện tên | profile, `GetUsers` | unit handler, e2e 15 | — |
-| R2 tra theo lô | `GetUsers` ≤ 500 id | unit, bench 500 id | — |
-| R4 báo thay đổi | `directory_changes`, feed | itest đảo thứ tự, chuông, e2e 15 | — |
-| R6 không NATS | feed HTTP, chuông Postgres | depguard cấm NATS trong `apps/iam` | — |
-| R7 không đọc bảng chéo | feed qua API | e2e 15 (chỉ gọi HTTP) | — |
-| R8 ~5.000 người | 10 lần × 500 id từ RAM | bench 500 id | — |
-| R10 không mở kết nối mới | long-poll + keep-alive | itest đánh thức, e2e 15 | — |
-| R11 cây nhóm, `mentionable` | `groups`, `account_groups`, CLI | itest vòng, xoá nhóm, e2e 15 | — |
-| R12 cấu hình sai không chạy | config validate | unit giờ chờ | — |
-| R13 cache đổi ngay | chuông + xem lại 2s, `ver` | unit `ver`, itest chuông, e2e 15 đổi tên | — |
-| R14 chịu tải | cache RAM, giới hạn theo người, trần đồng thời | bench `GetUsers`, nạp | — |
-| R15 không bão khởi động | 4 chỗ nạp, trang, chờ tăng dần, `/livez` tách `/readyz` | itest 6 replica, unit nạp lỗi, e2e 15 khởi động lại | — |
+| R1 hiện tên | profile, `GetUsers` | unit handler, e2e 15 | `db57286`; e2e PASS (2 người, không email/username) |
+| R2 tra theo lô | `GetUsers` ≤ 500 id | unit, bench 500 id | `db57286`; tra 500 id 121 µs |
+| R4 báo thay đổi | `directory_changes`, feed | itest đảo thứ tự, chuông, e2e 15 | `c3941dd`, `38829fc`, `7858494`; e2e PASS (đổi tên, `disabled`) |
+| R6 không NATS | feed HTTP, chuông Postgres | depguard cấm NATS trong `apps/iam` | `2120b4c`; `make lint` 0 issue |
+| R7 không đọc bảng chéo | feed qua API | e2e 15 (chỉ gọi HTTP) | e2e PASS |
+| R8 ~5.000 người | 10 lần × 500 id từ RAM | bench 500 id | `c60dd24`; 10 × 121 µs |
+| R10 không mở kết nối mới | long-poll + keep-alive | `TestIdlePollsReuseOneHTTP1Connection`, itest đánh thức, e2e 15 | `7858494`, `1167896`; e2e ≤ 60ms |
+| R11 cây nhóm, `mentionable` | `groups`, `account_groups`, CLI | itest vòng, xoá nhóm, e2e 15 | `4e739c3`, `b0c349c`; `make itest` xanh |
+| R12 cấu hình sai không chạy | config validate | unit giờ chờ | `56d2591`; `make test` xanh |
+| R13 cache đổi ngay | chuông + xem lại 2s, `ver` | unit `ver`, itest ghi trong lúc nạp, e2e 15 đổi tên | `03faf6c`, `ffaf8f1`; e2e: `GetUsers` thấy tên mới 1ms sau feed |
+| R14 chịu tải | cache RAM, giới hạn theo người, trần đồng thời | bench `GetUsers`, nạp | `c60dd24`; ~1,1 core cho 1.700 lần/giây, Postgres 0 (§11) |
+| R15 không bão khởi động | 4 chỗ nạp, trang, chờ tăng dần, `/livez` tách `/readyz`, health có hạn | itest slot, `TestBootServesLivezWhilePostgresHangs`, `TestTenLoadersFinish`, e2e 15 khởi động lại | `38829fc`, `5f27417`, `da06a33`; 10 replica 3,2s, tối đa 4 giữ chỗ |
