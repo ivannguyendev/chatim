@@ -10,6 +10,10 @@ import (
 type outage struct {
 	down      atomic.Bool
 	pings     chan struct{}
+	reloads   chan struct{}
+	hangPing  atomic.Bool
+	pingCount atomic.Int64
+	pingsDone atomic.Int64
 	loadGate  chan struct{}
 	feedAsked chan int
 	slotAsked chan struct{}
@@ -64,6 +68,16 @@ func (f *fakeStore) Changes(_ context.Context, after store.Position, limit int) 
 		return store.ChangePage{}, errOpen
 	}
 	return store.ChangePage{Next: after}, nil
+}
+
+func signal(ch chan struct{}) {
+	if ch == nil {
+		return
+	}
+	select {
+	case ch <- struct{}{}:
+	default:
+	}
 }
 
 type idleListener struct{}

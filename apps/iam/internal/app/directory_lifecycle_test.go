@@ -98,12 +98,12 @@ func TestStaysReadyWhenPostgresDiesAfterTheFirstLoad(t *testing.T) {
 	kek := newKEK(t)
 	cfg := testConfig(kek)
 	cfg.KeyReload = 20 * time.Millisecond
-	st := &fakeStore{keys: []store.SigningKey{activeKey(t, kek)}, version: 3, outage: outage{pings: make(chan struct{}, 1)}}
+	st := &fakeStore{keys: []store.SigningKey{activeKey(t, kek)}, version: 3, outage: outage{reloads: make(chan struct{}, 1)}}
 	r := runIAM(t, cfg, st, 3)
 	r.logs.await(t, "iam ready")
 	st.down.Store(true)
 	for range 3 {
-		receive(t, st.pings, "health check while postgres is down")
+		receive(t, st.reloads, "health check while postgres is down")
 	}
 	requireStatus(t, r.admin, "/readyz", http.StatusOK)
 	if code, body := httpGet(t, r.api, "/.well-known/jwks.json"); code != http.StatusOK || !strings.Contains(body, st.keys[0].ID) {

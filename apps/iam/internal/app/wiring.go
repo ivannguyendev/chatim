@@ -128,7 +128,7 @@ func wireServers(ctx context.Context, cfg config.Config, log *slog.Logger, st St
 		return nil, err
 	}
 	n.admin = admin.New(admin.Config{Addr: cfg.AdminAddr, Metrics: metricsHandler}, log)
-	n.health = &health{admin: n.admin, log: log, store: st, ring: ring, directory: dir.cache, schema: deps.SchemaVersion}
+	n.health = newHealth(n.admin, log, st, ring, dir.cache, deps.SchemaVersion)
 	return n, nil
 }
 

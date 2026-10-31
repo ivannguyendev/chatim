@@ -74,18 +74,20 @@ func (f *fakeStore) DeleteExpiredRevocations(context.Context) (int64, error) {
 }
 
 func (f *fakeStore) SigningKeys(context.Context) ([]store.SigningKey, error) {
+	signal(f.reloads)
 	if f.down.Load() {
 		return nil, errOpen
 	}
 	return f.keys, nil
 }
 
-func (f *fakeStore) Ping(context.Context) error {
-	if f.pings != nil {
-		select {
-		case f.pings <- struct{}{}:
-		default:
-		}
+func (f *fakeStore) Ping(ctx context.Context) error {
+	f.pingCount.Add(1)
+	signal(f.pings)
+	if f.hangPing.Load() {
+		<-ctx.Done()
+		f.pingsDone.Add(1)
+		return ctx.Err()
 	}
 	if f.down.Load() {
 		return errOpen

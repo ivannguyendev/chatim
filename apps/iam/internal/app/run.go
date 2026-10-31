@@ -130,11 +130,10 @@ func (n *node) serve(ctx context.Context, deps Deps) error {
 	adminCtx, stopAdmin := context.WithCancel(base)
 	healthCtx, stopHealth := context.WithCancel(base)
 	directoryCtx, stopDirectory := context.WithCancel(base)
-	n.health.check(healthCtx)
 	r := running{
 		admin:         start(func() error { return n.admin.ServeListener(adminCtx, adminLis) }),
 		health:        start(func() error { n.watchHealth(healthCtx); return nil }),
-		directory:     start(func() error { return n.dir.run(directoryCtx, func() { n.health.check(directoryCtx) }) }),
+		directory:     start(func() error { return n.dir.run(directoryCtx, n.health.trigger) }),
 		stopAdmin:     stopAdmin,
 		stopHealth:    stopHealth,
 		stopDirectory: stopDirectory,
@@ -164,10 +163,13 @@ func (n *node) serve(ctx context.Context, deps Deps) error {
 func (n *node) watchHealth(ctx context.Context) {
 	t := time.NewTicker(n.cfg.KeyReload)
 	defer t.Stop()
+	n.health.check(ctx)
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-n.health.wake:
+			n.health.check(ctx)
 		case <-t.C:
 			n.activateDueKey(ctx)
 			n.health.check(ctx)
@@ -177,6 +179,8 @@ func (n *node) watchHealth(ctx context.Context) {
 }
 
 func (n *node) activateDueKey(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, storeCallTimeout)
+	defer cancel()
 	audit := store.AuditEvent{At: time.Now(), Actor: "iam", Action: "key_activate"}
 	kid, err := n.store.ActivateDueSigningKey(ctx, n.cfg.KeyActivateLead, audit)
 	if err != nil {
@@ -190,6 +194,8 @@ func (n *node) activateDueKey(ctx context.Context) {
 }
 
 func (n *node) cleanExpired(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, storeCallTimeout)
+	defer cancel()
 	removed, err := n.store.DeleteExpiredRevocations(ctx)
 	if err != nil {
 		if n.cleanup.errors.Add(1) == 1 {
