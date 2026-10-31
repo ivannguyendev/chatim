@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/iam/internal/auth"
+	"github.com/ivannguyendev/chatim/apps/iam/internal/directory"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/password"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/session"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store"
@@ -88,6 +89,7 @@ func findAccount(ctx context.Context, st Store, tenant, username string) (store.
 func accountCreate(ctx context.Context, env Env, st Store, args []string) error {
 	f, tenant, username := accountFlags("account-create")
 	email := f.set.String("email", "", "optional email")
+	name := f.set.String("name", "", "display name; the username when not set")
 	if err := f.parse(args, "tenant", "username"); err != nil {
 		return err
 	}
@@ -97,6 +99,12 @@ func accountCreate(ctx context.Context, env Env, st Store, args []string) error 
 	}
 	if *email != "" && !strings.Contains(*email, "@") {
 		return fmt.Errorf("%w: -email must contain @", errUsage)
+	}
+	display := u
+	if f.given()["name"] {
+		if display, err = directory.NormalizeDisplayName(*name); err != nil {
+			return err
+		}
 	}
 	id, err := session.NewID(env.Random)
 	if err != nil {
@@ -108,7 +116,7 @@ func accountCreate(ctx context.Context, env Env, st Store, args []string) error 
 	}
 	now := env.Now()
 	a := store.Account{
-		TenantID: *tenant, ID: id, Username: u, Email: strings.ToLower(*email), State: store.StateActive,
+		TenantID: *tenant, ID: id, Username: u, DisplayName: display, Email: strings.ToLower(*email), State: store.StateActive,
 		PasswordHash: hash, PasswordMustChange: true, PasswordChangedAt: now, Ver: 1, CreatedAt: now, UpdatedAt: now, UpdatedBy: actor,
 	}
 	if err := st.CreateAccount(ctx, a, audit(env, *tenant, "account_create", id, "")); err != nil {

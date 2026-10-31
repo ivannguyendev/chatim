@@ -56,6 +56,11 @@ var commands = map[string]command{
 	"key-activate":    keyActivate,
 	"jwks-export":     jwksExport,
 	"bootstrap":       bootstrap,
+	"group-create":    groupCreate,
+	"group-update":    groupUpdate,
+	"group-delete":    groupDelete,
+	"account-groups":  accountGroups,
+	"profile-set":     profileSet,
 }
 
 func Names() []string {
@@ -118,6 +123,12 @@ func (f flags) parse(args []string, required ...string) error {
 		}
 	}
 	return nil
+}
+
+func (f flags) given() map[string]bool {
+	set := map[string]bool{}
+	f.set.Visit(func(fl *flag.Flag) { set[fl.Name] = true })
+	return set
 }
 
 func audit(env Env, tenant, action, account, session string) store.AuditEvent {

@@ -10,7 +10,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store"
 )
 
-const accountColumns = "tenant_id, id, username, coalesce(email, ''), state, password_hash, password_must_change, password_changed_at, failed_login_count, next_login_at, ver, created_at, updated_at, updated_by"
+const accountColumns = "tenant_id, id, username, coalesce(display_name, username), coalesce(email, ''), state, password_hash, password_must_change, password_changed_at, failed_login_count, next_login_at, ver, created_at, updated_at, updated_by"
 
 func (s *Store) CreateTenant(ctx context.Context, t store.Tenant, audit store.AuditEvent) error {
 	return s.write(ctx, audit, func(tx pgx.Tx) error {
@@ -54,8 +54,8 @@ func (s *Store) SetTenantState(ctx context.Context, id string, state store.State
 func (s *Store) CreateAccount(ctx context.Context, a store.Account, audit store.AuditEvent) error {
 	return s.write(ctx, audit, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx,
-			"INSERT INTO accounts (tenant_id, id, username, display_name, email, state, password_hash, password_must_change, password_changed_at, ver, created_at, updated_at, updated_by) VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
-			a.TenantID, a.ID, a.Username, nullable(a.Email), a.State, a.PasswordHash, a.PasswordMustChange, a.PasswordChangedAt, a.Ver, a.CreatedAt, a.UpdatedAt, a.UpdatedBy)
+			"INSERT INTO accounts (tenant_id, id, username, display_name, email, state, password_hash, password_must_change, password_changed_at, ver, created_at, updated_at, updated_by) VALUES ($1, $2, $3, coalesce(nullif($13::text, ''), $3), $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+			a.TenantID, a.ID, a.Username, nullable(a.Email), a.State, a.PasswordHash, a.PasswordMustChange, a.PasswordChangedAt, a.Ver, a.CreatedAt, a.UpdatedAt, a.UpdatedBy, a.DisplayName)
 		return err
 	})
 }
@@ -72,7 +72,7 @@ func (s *Store) account(ctx context.Context, where string, args ...any) (store.A
 	var a store.Account
 	var next *time.Time
 	err := s.pool.QueryRow(ctx, "SELECT "+accountColumns+" FROM accounts WHERE "+where, args...).
-		Scan(&a.TenantID, &a.ID, &a.Username, &a.Email, &a.State, &a.PasswordHash, &a.PasswordMustChange,
+		Scan(&a.TenantID, &a.ID, &a.Username, &a.DisplayName, &a.Email, &a.State, &a.PasswordHash, &a.PasswordMustChange,
 			&a.PasswordChangedAt, &a.FailedLoginCount, &next, &a.Ver, &a.CreatedAt, &a.UpdatedAt, &a.UpdatedBy)
 	if next != nil {
 		a.NextLoginAt = *next

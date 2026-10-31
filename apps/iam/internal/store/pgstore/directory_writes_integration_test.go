@@ -101,6 +101,17 @@ func TestCreateGroupNeedsALiveParent(t *testing.T) {
 	wantAudits(t, s, "group_create", 3)
 }
 
+func TestWritesInAnUnknownTenantAreNotFound(t *testing.T) {
+	ctx := context.Background()
+	s := openStore(t)
+	g := group("sales", "")
+	g.TenantID = "ghost"
+	wantErr(t, s.CreateGroup(ctx, g, audit("group_create")), apperr.ErrNotFound, "group in an unknown tenant")
+	a := store.Account{TenantID: "ghost", ID: lanID, Username: "lan", State: store.StateActive, PasswordHash: "h", PasswordChangedAt: t0, Ver: 1, CreatedAt: t0, UpdatedAt: t0, UpdatedBy: "test"}
+	wantErr(t, s.CreateAccount(ctx, a, audit("account_create")), apperr.ErrNotFound, "account in an unknown tenant")
+	wantAudits(t, s, "group_create", 0)
+}
+
 func TestUpdateGroupChangesOnlyTheGivenFields(t *testing.T) {
 	ctx := context.Background()
 	s := openStore(t)

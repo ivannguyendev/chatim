@@ -92,6 +92,8 @@ func (s *Store) mapErr(err error) error {
 		return fmt.Errorf("%w: %w", apperr.ErrUnavailable, err)
 	case errors.As(err, &pgErr) && pgErr.Code == "23505":
 		return fmt.Errorf("%w: %s", apperr.ErrAlreadyExists, pgErr.ConstraintName)
+	case errors.As(err, &pgErr) && pgErr.Code == "23503":
+		return fmt.Errorf("%w: %s", apperr.ErrNotFound, pgErr.ConstraintName)
 	case errors.As(err, &pgErr) && (pgErr.Code == "40001" || pgErr.Code == "40P01"):
 		return fmt.Errorf("%w: %s", apperr.ErrUnavailable, pgErr.Code)
 	default:

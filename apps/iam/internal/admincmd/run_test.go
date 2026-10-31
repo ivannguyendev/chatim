@@ -59,6 +59,11 @@ func TestUsageErrorsExitWithTwo(t *testing.T) {
 		{"jwks-export"},
 		{"migrate", "extra"},
 		{"key-activate", "-unknown"},
+		{"group-create", "-tenant", "shop", "-id", "sales"},
+		{"group-update", "-tenant", "shop", "-id", "sales"},
+		{"group-delete", "-tenant", "shop"},
+		{"account-groups", "-tenant", "shop", "-username", "lan"},
+		{"profile-set", "-tenant", "shop", "-username", "lan"},
 	}
 	for _, args := range cases {
 		if code := admincmd.Run(context.Background(), env, args); code != 2 {

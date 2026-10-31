@@ -44,6 +44,7 @@ type Account struct {
 	TenantID           string
 	ID                 string
 	Username           string
+	DisplayName        string
 	Email              string
 	State              State
 	PasswordHash       string

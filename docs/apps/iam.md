@@ -62,19 +62,24 @@ IAM tổng quát kiểu Keycloak (M6, owner 2026-10-25), tự xây bằng Go tr�
 
 ## Lệnh admin
 
-Chạy trong container (`make iam-admin ARGS="…"` = `docker exec chatim-iam-1 /app …`); kết quả ra stdout, log ra stderr; sai cú pháp thoát 2, lỗi thoát 1; mọi thay đổi ghi audit `admin-cli`.
+Chạy trong container (`make iam-admin ARGS="…"` = `docker exec chatim-iam-1 /app …`); kết quả ra stdout, log ra stderr; sai cú pháp thoát 2, lỗi thoát 1 (kể cả tên, id nhóm, URL ảnh sai: kiểm bằng hàm của `directory` trước khi chạm store); mọi thay đổi ghi audit `admin-cli` (nhóm: `group_create`, `group_update`, `group_delete` kèm `detail.group`; `account_groups_set`, `profile_set`).
 
 | Lệnh | Việc |
 |---|---|
 | `migrate [-apply]` | Mặc định chỉ liệt kê migration chờ; `-apply` chạy dưới khoá advisory |
 | `tenant-create -id -name`, `tenant-disable -id`, `tenant-enable -id` | Khoá tenant thu hồi mọi phiên của tenant |
-| `account-create -tenant -username [-email]` | In mật khẩu tạm **một lần**; phải đổi ở lần đăng nhập đầu |
+| `account-create -tenant -username [-email] [-name]` | In mật khẩu tạm **một lần**; phải đổi ở lần đăng nhập đầu. `-name` là tên hiển thị (chuẩn hoá như `UpdateMyProfile`), không đặt thì lấy username; ghi cùng một lần với tài khoản |
 | `password-reset -tenant -username` | Mật khẩu tạm mới, thu hồi mọi phiên |
 | `account-disable`, `account-enable` (`-tenant -username`) | Khoá thu hồi mọi phiên |
 | `session-list -tenant -username`, `session-revoke -session` | Xem và thu hồi phiên |
 | `key-rotate [-activate-if-none]`, `key-activate -kid` | Tạo khoá chờ, in giờ `iam` sẽ tự kích hoạt; `key-activate` kích hoạt tay (khoá cũ và khoá chờ cũ hơn sang nghỉ, luôn đúng một khoá đang ký), từ chối khoá chưa đủ `IAM_KEY_ACTIVATE_LEAD` và khoá đã nghỉ |
 | `jwks-export -out file [-merge file]` | Ghi JWKS công khai (khoá chờ, đang ký, nghỉ chưa quá 15m30s), ghi file tạm rồi đổi tên |
 | `bootstrap -jwks file` | Dev: migrate, tạo khoá đầu nếu chưa có, gộp vào file JWKS |
+| `group-create -tenant -id -name [-parent] [-mentionable=true]` | Tạo nhóm; `-parent` phải là nhóm còn sống; `-mentionable=false` để không gắn `@nhóm` được. Tenant hay nhóm cha không có → lỗi, thoát 1 |
+| `group-update -tenant -id [-name] [-parent] [-mentionable=BOOL]` | Chỉ đổi cờ có ghi trên lệnh; `-parent ""` chuyển nhóm lên gốc; chuyển vào chính nó hoặc nhóm con → lỗi `group cycle`, thoát 1; không ghi cờ nào để đổi → thoát 2 |
+| `group-delete -tenant -id` | Xoá mềm nhóm và gỡ mọi thành viên khỏi nhóm; còn nhóm con sống → lỗi, thoát 1 |
+| `account-groups -tenant -username -groups a,b` | Thay **toàn bộ** nhóm của tài khoản; tách theo dấu phẩy, bỏ khoảng trắng hai đầu; phần rỗng, id sai, id lặp hay nhóm không có → lỗi, không đổi gì; `-groups ""` (phải ghi rõ) gỡ mọi nhóm |
+| `profile-set -tenant -username [-name] [-avatar URL]` | Đổi tên hiển thị và/hoặc ảnh (phải ít nhất một cờ, không thì thoát 2); ảnh chỉ nhận `https://`, `-avatar ""` xoá ảnh; giá trị sai → thoát 1, không đổi gì |
 
 **Xoay khoá:** chỉ một lệnh `key-rotate`. `iam` công bố khoá chờ qua JWKS ở lần nạp lại kế tiếp (≤ `IAM_KEY_RELOAD`), node lấy về trong ≤ 1m, và `iam` tự kích hoạt khoá khi đủ `IAM_KEY_ACTIVATE_LEAD` (nhiều replica cùng thử, Postgres khoá dòng nên chỉ một lần; metric `signing_keys_activated_total`, log `signing key activated`). Không ai phải canh giờ, không khởi động lại node. Lỡ có node chưa có khoá, client chỉ nhận `retry_later`/503 vài giây trong lúc node hỏi JWKS ngay. File JWKS của node chỉ là dự phòng lúc khởi động; khoá đã nằm trong file chỉ gỡ được bằng cách sửa file và khởi động lại node.
 
