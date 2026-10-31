@@ -52,6 +52,7 @@ func testDatabaseURI(t testing.TB) string {
 type fixture struct {
 	*pgstore.Store
 	raw *pgx.Conn
+	uri string
 }
 
 func openStore(t testing.TB) fixture {
@@ -71,7 +72,7 @@ func openStore(t testing.TB) fixture {
 		t.Fatalf("connect raw: %v", err)
 	}
 	t.Cleanup(func() { _ = raw.Close(context.Background()) })
-	return fixture{Store: s, raw: raw}
+	return fixture{Store: s, raw: raw, uri: uri}
 }
 
 func audit(action string) store.AuditEvent {

@@ -5,6 +5,7 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -33,6 +34,10 @@ func LatestVersion() int {
 }
 
 func (s *Store) Migrate(ctx context.Context, apply bool) ([]string, error) {
+	return s.migrate(ctx, apply, math.MaxInt)
+}
+
+func (s *Store) migrate(ctx context.Context, apply bool, upTo int) ([]string, error) {
 	all, err := migrations()
 	if err != nil {
 		return nil, err
@@ -50,6 +55,9 @@ func (s *Store) Migrate(ctx context.Context, apply bool) ([]string, error) {
 			return err
 		}
 		for _, m := range all {
+			if m.version > upTo {
+				break
+			}
 			if applied[m.version] {
 				continue
 			}
