@@ -185,3 +185,67 @@ type Admin interface {
 	ActivateSigningKey(ctx context.Context, id string, lead time.Duration, audit AuditEvent) error
 	SigningKeys(ctx context.Context) ([]SigningKey, error)
 }
+
+type ChangeKind int16
+
+const (
+	ChangeUser  ChangeKind = 1
+	ChangeGroup ChangeKind = 2
+)
+
+type Position struct {
+	Xid    uint64
+	Kind   ChangeKind
+	Tenant string
+	ID     string
+}
+
+type UserChange struct {
+	State       State
+	DisplayName string
+	AvatarURL   string
+	Groups      []string
+}
+
+type GroupChange struct {
+	Name        string
+	ParentID    string
+	Mentionable bool
+	State       GroupState
+}
+
+type Change struct {
+	Kind     ChangeKind
+	TenantID string
+	ID       string
+	Ver      int64
+	User     *UserChange
+	Group    *GroupChange
+}
+
+type ChangePage struct {
+	Changes             []Change
+	Next                Position
+	PendingAboveHorizon bool
+}
+
+type AccountKey struct {
+	TenantID string
+	ID       string
+}
+
+type DirectoryEntry struct {
+	TenantID    string
+	ID          string
+	DisplayName string
+	AvatarURL   string
+	State       State
+	Ver         int64
+}
+
+type DirectoryReader interface {
+	Changes(ctx context.Context, after Position, limit int) (ChangePage, error)
+	LoadStart(ctx context.Context) (Position, error)
+	LoadPage(ctx context.Context, after AccountKey, limit int) ([]DirectoryEntry, error)
+	TryLoadSlot(ctx context.Context, slots int) (release func(), ok bool, err error)
+}
