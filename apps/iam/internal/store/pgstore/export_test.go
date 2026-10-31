@@ -19,3 +19,5 @@ func (s *Store) ReleaseUnheldSlot(ctx context.Context, slot int32) (held, left i
 }
 
 func (l *Listener) BackendPID() uint32 { return l.conn.PgConn().PID() }
+
+const LoadPageSQL = loadPageSQL

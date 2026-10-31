@@ -50,11 +50,19 @@ LEFT JOIN groups g ON p.kind = 2 AND g.tenant_id = p.tenant_id AND g.id = p.id
 ORDER BY p.change_xid, p.kind, p.tenant_id, p.id`
 
 const loadPageSQL = `SELECT a.tenant_id, a.id, a.display_name, a.avatar_url, a.state, c.ver
-FROM accounts a
-JOIN directory_changes c ON c.kind = 1 AND c.tenant_id = a.tenant_id AND c.id = a.id
-WHERE (a.tenant_id, a.id) > ($1, $2)
-ORDER BY a.tenant_id, a.id
-LIMIT $3`
+FROM (
+	SELECT tenant_id, id, display_name, avatar_url, state
+	FROM accounts
+	WHERE (tenant_id, id) > ($1, $2)
+	ORDER BY tenant_id, id
+	LIMIT $3
+) a
+CROSS JOIN LATERAL (
+	SELECT ver FROM directory_changes
+	WHERE kind = 1 AND tenant_id = a.tenant_id AND id = a.id
+	LIMIT 1
+) c
+ORDER BY a.tenant_id, a.id`
 
 var errBadLimit = fmt.Errorf("%w: limit must be positive", apperr.ErrInvalidArgument)
 
