@@ -110,13 +110,13 @@ make test                   # go test -race -shuffle=on ./... (unit only, minire
 make go ARGS="test -race -run TestName ./apps/core/internal/message/actor/"   # single test
 make vet; make fmt-check; make lint; make vuln; make tidy
 make proto; make buf-lint   # Buf v2, proto/chatim/v1 → pkg/pb
-make itest                  # all tests with CHATIM_IT_MONGO_URI/REDIS_ADDR/NATS_URL set (real infra)
+make itest                  # all tests with CHATIM_IT_MONGO_URI/REDIS_ADDR/NATS_URL/PG_URI set (real infra; make pg-up first for Postgres); one area: make itest ITEST_ARGS="-race -count=1 ./apps/iam/..." ($ written $$)
 make image TARGET=apps/core # distroless chatim/<name>:dev for any main package
 make core-up; make core-down   # postgres, iam-1, core-1, core-2, websocket-1, websocket-2, gateway-1 (compose profile app); runs dev-keys and iam-env first; iam-bootstrap merges the iam key into the dev JWKS
 make iam-admin ARGS="account-create -tenant T -username U"   # iam one-shot commands (docs/apps/iam.md); make iam-logs
 make -s ws-token ARGS="-tenant T -user U"   # dev token (default -ttl 15m) for both websocket nodes and gateway-1; make ws-logs [NODE=2], make gw-logs
 make alerts-check           # promtool check rules on deploy/prometheus/alerts.yml (in Docker)
-make e2e                    # tools/corecli + scripts/e2e.sh, 15 phases (docs/e2e.md); E2E_ONLY=14 or 15 runs only that iam phase
+make e2e                    # tools/corecli + scripts/e2e.sh, 16 phases (docs/e2e.md); E2E_ONLY=14, 15 or 16 runs only that iam phase
 make poc TOOL=corebench ARGS="-rate 2000 -duration 60s -watch 20"   # needs core-up; other tools: mongobench, postgresbench, natsbench, wsbench, wsload
 ```
 
