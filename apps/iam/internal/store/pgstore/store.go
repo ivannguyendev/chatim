@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -17,6 +18,13 @@ import (
 )
 
 var errConflict = errors.New("row changed concurrently")
+
+var retryLaterCodes = []string{"40001", "40P01", "55P03", "57014"}
+
+var domainErrors = []error{
+	apperr.ErrNotFound, apperr.ErrAlreadyExists, apperr.ErrFailedPrecondition, apperr.ErrInvalidArgument,
+	apperr.ErrPermissionDenied, apperr.ErrUnauthenticated, apperr.ErrUnavailable,
+}
 
 type Options struct {
 	MaxConns       int32
@@ -86,7 +94,7 @@ func (s *Store) mapErr(err error) error {
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return apperr.ErrNotFound
-	case errors.Is(err, apperr.ErrNotFound), errors.Is(err, apperr.ErrAlreadyExists), errors.Is(err, apperr.ErrFailedPrecondition):
+	case isDomainError(err):
 		return err
 	case errors.Is(err, errConflict):
 		return fmt.Errorf("%w: %w", apperr.ErrUnavailable, err)
@@ -94,11 +102,17 @@ func (s *Store) mapErr(err error) error {
 		return fmt.Errorf("%w: %s", apperr.ErrAlreadyExists, pgErr.ConstraintName)
 	case errors.As(err, &pgErr) && pgErr.Code == "23503":
 		return fmt.Errorf("%w: %s", apperr.ErrNotFound, pgErr.ConstraintName)
-	case errors.As(err, &pgErr) && (pgErr.Code == "40001" || pgErr.Code == "40P01"):
+	case errors.As(err, &pgErr) && pgErr.Code == "23514" && pgErr.ConstraintName == "groups_no_cycle":
+		return errGroupCycle
+	case errors.As(err, &pgErr) && slices.Contains(retryLaterCodes, pgErr.Code):
 		return fmt.Errorf("%w: %s", apperr.ErrUnavailable, pgErr.Code)
 	default:
 		return fmt.Errorf("%w: %w", apperr.ErrUnavailable, redact.Error(err, s.uri))
 	}
+}
+
+func isDomainError(err error) bool {
+	return slices.ContainsFunc(domainErrors, func(target error) bool { return errors.Is(err, target) })
 }
 
 func insertAudit(ctx context.Context, tx pgx.Tx, a store.AuditEvent) error {

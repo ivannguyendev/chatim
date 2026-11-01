@@ -208,10 +208,15 @@ func TestSettingGroupsWhileTheGroupIsDeletedNeverKeepsTheMembership(t *testing.T
 		name        string
 		deleteFirst bool
 		setErr      error
-		lanVer      int64
+		deleteErr   error
+		groupsAfter []string
+		verAfter    int64
+		retrySet    bool
+		retryErr    error
+		verAtEnd    int64
 	}{
-		{"set runs first", false, nil, 3},
-		{"delete runs first", true, apperr.ErrNotFound, 1},
+		{"set runs first", false, nil, apperr.ErrUnavailable, []string{"sales"}, 2, false, nil, 3},
+		{"delete runs first", true, apperr.ErrUnavailable, nil, nil, 1, true, apperr.ErrNotFound, 1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -232,12 +237,23 @@ func TestSettingGroupsWhileTheGroupIsDeletedNeverKeepsTheMembership(t *testing.T
 			}
 			g.open()
 			setErr, deleteErr := <-setDone, <-deleted
-			if !errors.Is(setErr, tc.setErr) || deleteErr != nil {
-				t.Fatalf("set = %v, delete = %v; want %v, nil", setErr, deleteErr, tc.setErr)
+			if !errors.Is(setErr, tc.setErr) || !errors.Is(deleteErr, tc.deleteErr) {
+				t.Fatalf("set = %v, delete = %v; want %v, %v", setErr, deleteErr, tc.setErr, tc.deleteErr)
 			}
-			wantGroupsOf(t, s, lanID, nil, "after race")
+			wantGroupsOf(t, s, lanID, tc.groupsAfter, "after race")
 			wantNoMembershipInADeletedGroup(t, s)
-			wantVer(t, s, userKind, lanID, tc.lanVer, "after race")
+			wantVer(t, s, userKind, lanID, tc.verAfter, "after race")
+			retry := remove
+			if tc.retrySet {
+				retry = set
+			}
+			wantErr(t, retry(), tc.retryErr, "retry the loser")
+			if got := readGroup(t, s, "sales").State; got != store.GroupDeleted {
+				t.Fatalf("sales state after retry = %d; want deleted", got)
+			}
+			wantGroupsOf(t, s, lanID, nil, "after retry")
+			wantNoMembershipInADeletedGroup(t, s)
+			wantVer(t, s, userKind, lanID, tc.verAtEnd, "after retry")
 		})
 	}
 }

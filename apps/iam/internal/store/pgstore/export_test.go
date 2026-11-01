@@ -1,6 +1,10 @@
 package pgstore
 
-import "context"
+import (
+	"context"
+
+	"github.com/jackc/pgx/v5"
+)
 
 func (s *Store) MigrateUpTo(ctx context.Context, version int) ([]string, error) {
 	return s.migrate(ctx, true, version)
@@ -21,3 +25,7 @@ func (s *Store) ReleaseUnheldSlot(ctx context.Context, slot int32) (held, left i
 func (l *Listener) BackendPID() uint32 { return l.conn.PgConn().PID() }
 
 const LoadPageSQL = loadPageSQL
+
+func (s *Store) RunAdminTx(ctx context.Context, treeTenant string, readOnly bool, fn func(pgx.Tx) error) error {
+	return s.adminTx(ctx, adminTxOptions{treeTenant: treeTenant, readOnly: readOnly}, fn)
+}
