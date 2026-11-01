@@ -53,11 +53,15 @@ func (s *Store) SetTenantState(ctx context.Context, id string, state store.State
 
 func (s *Store) CreateAccount(ctx context.Context, a store.Account, audit store.AuditEvent) error {
 	return s.write(ctx, audit, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx,
-			"INSERT INTO accounts (tenant_id, id, username, display_name, email, state, password_hash, password_must_change, password_changed_at, ver, created_at, updated_at, updated_by) VALUES ($1, $2, $3, coalesce(nullif($13::text, ''), $3), $4, $5, $6, $7, $8, $9, $10, $11, $12)",
-			a.TenantID, a.ID, a.Username, nullable(a.Email), a.State, a.PasswordHash, a.PasswordMustChange, a.PasswordChangedAt, a.Ver, a.CreatedAt, a.UpdatedAt, a.UpdatedBy, a.DisplayName)
-		return err
+		return insertAccountTx(ctx, tx, a)
 	})
+}
+
+func insertAccountTx(ctx context.Context, tx pgx.Tx, a store.Account) error {
+	_, err := tx.Exec(ctx,
+		"INSERT INTO accounts (tenant_id, id, username, display_name, email, state, password_hash, password_must_change, password_changed_at, ver, created_at, updated_at, updated_by) VALUES ($1, $2, $3, coalesce(nullif($13::text, ''), $3), $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+		a.TenantID, a.ID, a.Username, nullable(a.Email), a.State, a.PasswordHash, a.PasswordMustChange, a.PasswordChangedAt, a.Ver, a.CreatedAt, a.UpdatedAt, a.UpdatedBy, a.DisplayName)
+	return err
 }
 
 func (s *Store) AccountByUsername(ctx context.Context, tenantID, username string) (store.Account, error) {

@@ -22,6 +22,7 @@ type GroupNode struct {
 }
 
 type AdminTx interface {
+	RoleTx
 	RunningSession(ctx context.Context, c SessionCheck) error
 	AccountGrant(ctx context.Context, tenantID, accountID string) (Grant, error)
 	GroupsGrant(ctx context.Context, tenantID string, groupIDs []string) (Grant, error)

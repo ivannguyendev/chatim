@@ -196,6 +196,7 @@ type Directory interface {
 type Admin interface {
 	Auth
 	Directory
+	Roles
 	CreateTenant(ctx context.Context, t Tenant, audit AuditEvent) error
 	SetTenantState(ctx context.Context, id string, state State, r Revocation, audit AuditEvent) error
 	CreateAccount(ctx context.Context, a Account, audit AuditEvent) error
