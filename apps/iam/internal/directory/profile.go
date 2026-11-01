@@ -20,6 +20,7 @@ const (
 var (
 	ErrDisplayName = fmt.Errorf("%w: display name must be 1 to %d characters of valid text", apperr.ErrInvalidArgument, MaxNameRunes)
 	ErrGroupName   = fmt.Errorf("%w: group name must be 1 to %d characters of valid text", apperr.ErrInvalidArgument, MaxNameRunes)
+	ErrRoleName    = fmt.Errorf("%w: role name must be 1 to %d characters of valid text", apperr.ErrInvalidArgument, MaxNameRunes)
 	ErrAvatarURL   = fmt.Errorf("%w: avatar url must be empty or an https url with a host, no user info, at most %d bytes", apperr.ErrInvalidArgument, MaxAvatarBytes)
 	ErrGroupID     = fmt.Errorf("%w: group id must be 1 to %d bytes, each a letter, digit, underscore, hyphen or colon", apperr.ErrInvalidArgument, keys.MaxMentionID)
 )
@@ -30,6 +31,10 @@ func NormalizeDisplayName(raw string) (string, error) {
 
 func NormalizeGroupName(raw string) (string, error) {
 	return normalizeName(raw, ErrGroupName)
+}
+
+func NormalizeRoleName(raw string) (string, error) {
+	return normalizeName(raw, ErrRoleName)
 }
 
 func ValidateAvatarURL(raw string) error {
