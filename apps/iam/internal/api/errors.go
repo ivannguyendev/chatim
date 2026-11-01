@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"unicode/utf8"
 
 	"connectrpc.com/connect"
 
@@ -12,8 +13,9 @@ import (
 )
 
 const (
-	msgInvalidProof = "invalid dpop proof"
-	msgRequestFail  = "request failed"
+	msgInvalidProof  = "invalid dpop proof"
+	msgRequestFail   = "request failed"
+	clientMessageMax = 200
 )
 
 func (s *server) connectError(ctx context.Context, procedure string, err error) *connect.Error {
@@ -22,6 +24,10 @@ func (s *server) connectError(ctx context.Context, procedure string, err error) 
 		return connect.NewError(connect.CodeUnauthenticated, errors.New("invalid credentials"))
 	case errors.Is(err, auth.ErrPasswordChangeRequired):
 		return connect.NewError(connect.CodeFailedPrecondition, errors.New("password change required"))
+	case errors.Is(err, apperr.ErrFailedPrecondition):
+		return connect.NewError(connect.CodeFailedPrecondition, errors.New(detailOf(err, apperr.ErrFailedPrecondition)))
+	case errors.Is(err, apperr.ErrPermissionDenied):
+		return connect.NewError(connect.CodePermissionDenied, errors.New(detailOf(err, apperr.ErrPermissionDenied)))
 	case errors.Is(err, auth.ErrSessionInvalid):
 		return connect.NewError(connect.CodeUnauthenticated, errors.New("session is not active"))
 	case errors.Is(err, apperr.ErrUnauthenticated):
@@ -49,8 +55,23 @@ func invalidArgumentMessage(err error) string {
 	if errors.Is(err, auth.ErrProofReplayed) {
 		return msgInvalidProof
 	}
-	if detail, ok := strings.CutPrefix(err.Error(), apperr.ErrInvalidArgument.Error()+": "); ok && detail != "" {
-		return detail
+	return detailOf(err, apperr.ErrInvalidArgument)
+}
+
+func detailOf(err, kind error) string {
+	if detail, ok := strings.CutPrefix(err.Error(), kind.Error()+": "); ok && detail != "" {
+		return clip(detail)
 	}
-	return "invalid argument"
+	return kind.Error()
+}
+
+func clip(msg string) string {
+	if len(msg) <= clientMessageMax {
+		return msg
+	}
+	n := clientMessageMax
+	for n > 0 && !utf8.RuneStart(msg[n]) {
+		n--
+	}
+	return msg[:n]
 }

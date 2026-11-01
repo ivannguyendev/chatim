@@ -112,11 +112,7 @@ type dirHarness struct {
 
 func newDirHarness(t *testing.T, mods ...func(*api.Options)) *dirHarness {
 	t.Helper()
-	list, err := revocation.New(revocation.Config{MaxKeep: time.Hour, MaxAhead: time.Minute})
-	if err != nil {
-		t.Fatal(err)
-	}
-	list.Merge(revocation.Snapshot{Sessions: []revocation.Session{{ID: "s-revoked", Tenant: "shop", ExpiresAt: t0.Add(15 * time.Minute)}}}, t0)
+	list := newTestRevocations(t)
 	gate, err := userlimit.NewGate(8)
 	if err != nil {
 		t.Fatal(err)
@@ -140,6 +136,16 @@ func newDirHarness(t *testing.T, mods ...func(*api.Options)) *dirHarness {
 	d.fake.profiles.profile = store.Profile{ID: "lan", Username: "lan", Email: "lan@example.com", DisplayName: "lan"}
 	d.client = iamv1connect.NewDirectoryServiceClient(http.DefaultClient, d.server.URL)
 	return d
+}
+
+func newTestRevocations(t *testing.T) *revocation.List {
+	t.Helper()
+	list, err := revocation.New(revocation.Config{MaxKeep: time.Hour, MaxAhead: time.Minute})
+	if err != nil {
+		t.Fatal(err)
+	}
+	list.Merge(revocation.Snapshot{Sessions: []revocation.Session{{ID: "s-revoked", Tenant: "shop", ExpiresAt: t0.Add(15 * time.Minute)}}}, t0)
+	return list
 }
 
 func withToken[T any](token string, msg *T) *connect.Request[T] {

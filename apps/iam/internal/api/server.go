@@ -52,6 +52,10 @@ type Options struct {
 	DirectoryGate  *userlimit.Gate
 	DirectoryUsers *userlimit.Users
 	DirectoryStats *DirectoryStats
+	Admin          Admin
+	AdminGate      *userlimit.Gate
+	AdminUsers     *userlimit.Users
+	AdminStats     *AdminStats
 	BodyMax        int64
 	CORSOrigins    []string
 	ClientIPHeader string
@@ -60,7 +64,9 @@ type Options struct {
 }
 
 type server struct {
-	opts Options
+	opts      Options
+	directory limiter
+	admin     limiter
 }
 
 func New(opts Options) (http.Handler, error) {
@@ -71,6 +77,8 @@ func New(opts Options) (http.Handler, error) {
 		return nil, errors.New("api: body max must be positive")
 	case opts.Directory != nil && (opts.Revocations == nil || opts.Claims == nil || opts.DirectoryGate == nil || opts.DirectoryUsers == nil):
 		return nil, errors.New("api: the directory needs revocations, claims, a gate and user limits")
+	case opts.Admin != nil && (opts.Claims == nil || opts.Revocations == nil || opts.AdminGate == nil || opts.AdminUsers == nil):
+		return nil, errors.New("api: the admin service needs claims, revocations, a gate and user limits")
 	}
 	if opts.Now == nil {
 		opts.Now = time.Now
@@ -78,15 +86,25 @@ func New(opts Options) (http.Handler, error) {
 	if opts.DirectoryStats == nil {
 		opts.DirectoryStats = &DirectoryStats{}
 	}
+	if opts.AdminStats == nil {
+		opts.AdminStats = &AdminStats{}
+	}
 	if opts.Log == nil {
 		opts.Log = slog.New(slog.DiscardHandler)
 	}
-	s := &server{opts: opts}
+	s := &server{
+		opts:      opts,
+		directory: limiter{gate: opts.DirectoryGate, users: opts.DirectoryUsers, userLimited: &opts.DirectoryStats.UserLimited, inflightRejected: &opts.DirectoryStats.InflightRejected},
+		admin:     limiter{gate: opts.AdminGate, users: opts.AdminUsers, userLimited: &opts.AdminStats.UserLimited, inflightRejected: &opts.AdminStats.InflightRejected},
+	}
 	mux := http.NewServeMux()
 	path, handler := iamv1connect.NewAuthServiceHandler(connectService{s: s}, connect.WithReadMaxBytes(int(opts.BodyMax)))
 	mux.Handle(path, handler)
 	if opts.Directory != nil {
 		mux.Handle(iamv1connect.NewDirectoryServiceHandler(directoryService{s: s}, connect.WithReadMaxBytes(directoryBodyMax)))
+	}
+	if opts.Admin != nil {
+		mux.Handle(iamv1connect.NewAdminServiceHandler(adminService{s: s}, connect.WithReadMaxBytes(int(opts.BodyMax))))
 	}
 	mux.HandleFunc("POST /realms/{tenant}/protocol/openid-connect/token", s.token)
 	mux.HandleFunc("POST /realms/{tenant}/protocol/openid-connect/revoke", s.revoke)

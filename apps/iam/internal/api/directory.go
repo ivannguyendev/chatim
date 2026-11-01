@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 
 	"connectrpc.com/connect"
 
@@ -51,7 +52,7 @@ func (s *server) bodyLimit(path string) int64 {
 
 func (d directoryService) GetUsers(_ context.Context, req *connect.Request[iamv1.GetUsersRequest]) (resp *connect.Response[iamv1.GetUsersResponse], err error) {
 	defer func() { d.s.opts.DirectoryStats.countGetUsers(err) }()
-	claims, done, err := d.enter(req)
+	claims, done, err := d.s.enter(req, d.s.directory)
 	if err != nil {
 		return nil, err
 	}
@@ -73,12 +74,12 @@ func (d directoryService) GetUsers(_ context.Context, req *connect.Request[iamv1
 }
 
 func (d directoryService) GetMyProfile(ctx context.Context, req *connect.Request[iamv1.GetMyProfileRequest]) (*connect.Response[iamv1.GetMyProfileResponse], error) {
-	claims, done, err := d.enter(req)
+	claims, done, err := d.s.enter(req, d.s.directory)
 	if err != nil {
 		return nil, err
 	}
 	defer done()
-	p, err := d.s.opts.Auth.MyProfile(ctx, d.caller(req, claims))
+	p, err := d.s.opts.Auth.MyProfile(ctx, d.s.callerOf(req, claims))
 	if err != nil {
 		return nil, d.s.connectError(ctx, req.Spec().Procedure, err)
 	}
@@ -86,59 +87,65 @@ func (d directoryService) GetMyProfile(ctx context.Context, req *connect.Request
 }
 
 func (d directoryService) UpdateMyProfile(ctx context.Context, req *connect.Request[iamv1.UpdateMyProfileRequest]) (*connect.Response[iamv1.UpdateMyProfileResponse], error) {
-	claims, done, err := d.enter(req)
+	claims, done, err := d.s.enter(req, d.s.directory)
 	if err != nil {
 		return nil, err
 	}
 	defer done()
 	update := store.ProfileUpdate{DisplayName: req.Msg.DisplayName, AvatarURL: req.Msg.AvatarUrl}
-	p, err := d.s.opts.Auth.UpdateMyProfile(ctx, d.caller(req, claims), update)
+	p, err := d.s.opts.Auth.UpdateMyProfile(ctx, d.s.callerOf(req, claims), update)
 	if err != nil {
 		return nil, d.s.connectError(ctx, req.Spec().Procedure, err)
 	}
 	return connect.NewResponse(&iamv1.UpdateMyProfileResponse{Profile: myProfile(p)}), nil
 }
 
-func (d directoryService) enter(req headered) (jwtverify.Claims, func(), error) {
-	gate := d.s.opts.DirectoryGate
-	if !gate.Enter() {
-		d.s.opts.DirectoryStats.InflightRejected.Add(1)
+type limiter struct {
+	gate             *userlimit.Gate
+	users            *userlimit.Users
+	userLimited      *atomic.Uint64
+	inflightRejected *atomic.Uint64
+}
+
+func (s *server) enter(req headered, l limiter) (jwtverify.Claims, func(), error) {
+	if !l.gate.Enter() {
+		l.inflightRejected.Add(1)
 		return jwtverify.Claims{}, nil, errUnavailable("temporarily unavailable")
 	}
-	claims, err := d.authenticate(req)
+	claims, err := s.authenticate(req)
 	if err != nil {
-		gate.Leave()
+		l.gate.Leave()
 		return jwtverify.Claims{}, nil, err
 	}
-	release, err := d.s.opts.DirectoryUsers.Acquire(userlimit.Key{Tenant: claims.Tenant, User: claims.User})
+	release, err := l.users.Acquire(userlimit.Key{Tenant: claims.Tenant, User: claims.User})
 	if err != nil {
-		gate.Leave()
-		d.s.opts.DirectoryStats.UserLimited.Add(1)
+		l.gate.Leave()
+		l.userLimited.Add(1)
 		return jwtverify.Claims{}, nil, connect.NewError(connect.CodeResourceExhausted, errors.New("too many requests, retry later"))
 	}
 	return claims, func() {
 		release()
-		gate.Leave()
+		l.gate.Leave()
 	}, nil
 }
 
-func (d directoryService) authenticate(req headered) (jwtverify.Claims, error) {
+func (s *server) authenticate(req headered) (jwtverify.Claims, error) {
 	token, ok := bearerToken(req.Header())
 	if !ok {
 		return jwtverify.Claims{}, errUnauthenticated()
 	}
-	claims, err := d.s.opts.Claims.Claims(token)
+	claims, err := s.opts.Claims.Claims(token)
 	if err != nil {
 		return jwtverify.Claims{}, errUnauthenticated()
 	}
-	if d.s.opts.Revocations.Check(claims) != revocation.Allowed {
+	if s.opts.Revocations.Check(claims) != revocation.Allowed {
 		return jwtverify.Claims{}, connect.NewError(connect.CodeUnauthenticated, errors.New("session revoked"))
 	}
 	return claims, nil
 }
 
-func (d directoryService) caller(req headered, claims jwtverify.Claims) auth.Caller {
-	return auth.Caller{Tenant: claims.Tenant, Account: claims.User, Session: claims.Session, IP: d.s.clientIP(req)}
+func (s *server) callerOf(req headered, claims jwtverify.Claims) auth.Caller {
+	return auth.Caller{Tenant: claims.Tenant, Account: claims.User, Session: claims.Session, IP: s.clientIP(req)}
 }
 
 func uniqueUserIDs(raw []string) ([]string, error) {
