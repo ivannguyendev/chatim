@@ -1,6 +1,6 @@
 # M6 phần 3c.1: role và kiểm quyền — tóm tắt
 
-> Ngày: 2026-10-31 · Nhánh `feat/m6` · Trạng thái: **chờ owner duyệt** · Quyết định: D233 (đã sửa theo owner 2026-10-31), D234 · Mô hình: [nghiên cứu](../research/261031-iam-authorization-models.md)
+> Ngày: 2026-10-31, viết lại theo bản đã xây 2026-11-01 · Nhánh `feat/m6` (`52dad0f`…`15641e3`) · Trạng thái: **đã xây (`dev-done`)** · Quyết định: D233, D235, D236 (3c.2: D237, 3c.3: D238), D234 · Mô hình: [nghiên cứu](../research/261031-iam-authorization-models.md)
 > **Các phần của 3c:** **(3c.1) role và kiểm quyền** · (3c.2) quản trị account, tạo theo lô · (3c.3) account máy.
 
 ## 1. Phần này làm gì
@@ -39,6 +39,7 @@
 | Tính quyền theo cây nhóm, chống leo quyền, luật `tenant-admin` | `iam` (gói kiểm quyền mới) |
 | `AdminService`: role, gán role, nhóm, gán nhóm, xem/liệt kê account | `iam` (cổng public) |
 | Kiểm phiên chưa hết hạn cho lệnh admin và lệnh phiên cũ (`checkCaller`) | `iam` |
+| Giới hạn số transaction admin giữ kết nối Postgres (`IAM_ADMIN_DB_SLOTS`) | `iam` |
 | CLI: `role-*`, `account-roles`, `group-roles`, `account-create -role`, `client-permissions-set` | `iam` admincmd |
 | e2e phase 16 | `tools/corecli`, `scripts/` |
 
@@ -116,7 +117,9 @@ flowchart TD
   S --> P["Tính quyền của người gọi: role của người + role của nhóm và nhóm tổ tiên"]
   P --> C{"Có permission của lệnh?"}
   C -->|"không"| D["permission_denied"]
-  C --> E{"Chống leo quyền + luật tenant-admin"}
+  C --> X{"Id có trong tenant?"}
+  X -->|"không"| N["not_found"]
+  X --> E{"Chống leo quyền + luật tenant-admin"}
   E -->|"vi phạm"| D
   E --> W["Ghi + audit (người làm, phiên) → commit"]
   W -->|"đụng lệnh admin khác (40001)"| R["unavailable, gửi lại"]
@@ -132,10 +135,13 @@ flowchart TD
 | Gỡ role khỏi người X | không trao gì | quyền của X ⊆ quyền người gọi |
 | Gỡ role khỏi nhóm | không trao gì | role là `tenant-admin` thì chỉ `tenant-admin` gỡ được |
 | Đặt nhóm cho người X | quyền từ các nhóm mới (kể cả nhóm tổ tiên) | quyền của X ⊆ quyền người gọi |
+| Tạo nhóm dưới cha P | quyền từ P và tổ tiên của P | — |
 | Đổi cha nhóm G | quyền từ chuỗi tổ tiên mới | G hoặc tổ tiên cũ của G mang `tenant-admin` thì chỉ `tenant-admin` được xoá hay đổi cha (chỉ đi **lên** cây, không đi xuống) |
 
 - Chỉ `tenant-admin` gán, gỡ, hay tác động lên người có `tenant-admin`.
 - Ví dụ: Minh có `it-admin`, đổi cha nhóm `it-hcm` sang nhóm `hr` (mang role `hr-admin` có `iam:roles.write`). Minh không có `iam:roles.write` → `permission_denied`.
+- Tạo role và đặt nhóm cho người thì ghi trước, kiểm leo quyền sau, bị từ chối thì rollback. Nhờ vậy gõ sai permission luôn ra `invalid_argument`, id nhóm lạ luôn ra `not_found`, kể cả khi người gọi không đủ quyền.
+- Bớt quyền thì không bị chặn: người có `iam:groups.write` xoá hay đổi cha một nhóm mang role mạnh (không phải `tenant-admin`) làm thành viên mất quyền; không ai được thêm quyền.
 
 **Mã lỗi.**
 
@@ -146,22 +152,25 @@ flowchart TD
 | `not_found` | id không có, hoặc thuộc tenant khác |
 | `invalid_argument` | permission không có trong danh mục, id sai dạng |
 | `failed_precondition` | sửa hoặc xoá role dựng sẵn; nhóm tạo thành vòng |
-| `unavailable` | đụng lệnh admin khác (SERIALIZABLE), Postgres lỗi |
+| `unavailable` (+ `Retry-After: 1`) | đụng lệnh admin khác (SERIALIZABLE), chờ khoá hay chạy quá 5s, hết suất, node đầy, Postgres lỗi |
 | `resource_exhausted` | quá giới hạn theo người |
 
-**CLI** là đường của vận hành: không kiểm permission, nhưng vẫn ghi audit. Dùng để tạo `tenant-admin` đầu tiên và để cứu tenant lỡ mất admin.
+Nội dung lỗi gửi client cắt ở 200 byte. `CreateGroup`/`UpdateGroup` trả nhóm có `role_ids` rỗng (xem bằng `ListGroups`). `GetAccount`/`ListAccounts` chỉ trả nhóm và role của account khi người gọi có `iam:groups.read`/`iam:roles.read`.
+
+**CLI** là đường của vận hành: không kiểm permission, nhưng vẫn ghi audit `admin-cli`. Dùng để tạo `tenant-admin` đầu tiên (`account-create -role tenant-admin`) và để cứu tenant lỡ mất admin (`account-roles -roles tenant-admin`). Lệnh nhóm của CLI cũng chạy SERIALIZABLE: đụng lệnh khác thì thoát 1 với `unavailable`, chạy lại là được.
 
 ## 8. Đúng đắn
 
-- **Đua giữa lúc kiểm và lúc ghi.** Ví dụ: Bình đổi nhóm cho Hà đúng lúc Lan gán `tenant-admin` cho nhóm hiện tại của Hà. Kiểm của Bình chưa thấy `tenant-admin`.
-  - Mọi transaction ghi của admin (cả API lẫn CLI) chạy SERIALIZABLE: Postgres phát hiện hai bên đọc-ghi chéo nhau và cho một bên lỗi `40001` → `unavailable`.
-  - Gửi lại thì phép kiểm chạy lại và thấy Hà đã là `tenant-admin`, nên bị chặn.
-  - Không có khoá theo tenant, không có chỗ xếp hàng mới. Khoá cây độc quyền của 3a vẫn chỉ dùng khi đổi cha nhóm (chống vòng).
-- **Gỡ quyền có hiệu lực ngay:** quyền được tính trong cùng transaction với lệnh, không nằm trong token.
-- **Phiên hết hạn bị chặn.** Lệnh admin và các lệnh phiên cũ (`ListSessions`, `RevokeSession`) cùng kiểm "còn chạy và chưa hết hạn" trong transaction. Hàm `checkCaller` cũ không kiểm hết hạn (3a ghi lại); sửa ở phase này.
-- **Cô lập tenant:** mọi câu đọc và ghi đều có `tenant_id` của token; khoá ngoại đều kèm `tenant_id`.
-- **Đường tổ tiên luôn khớp `parent_id`:** chỉ trigger ghi cột này, trong cùng transaction với lệnh đổi cha. Vòng bị chặn bằng phép kiểm "cha mới không nằm trong cây con của G" (`G` thuộc `ancestors` của cha mới). Đổi cha vẫn giữ khoá cây độc quyền của 3a (hiếm). Có itest so `ancestors` với kết quả đệ quy từ `parent_id` sau một chuỗi tạo, đổi cha, xoá ngẫu nhiên.
-- **Không retry nội bộ:** `40001` và `40P01` trả `unavailable` ngay (D210).
+- **Đua giữa lúc kiểm và lúc ghi.** Ví dụ: Minh gán role `R` cho Hà đúng lúc Bình đổi nhóm cho Hà; cả hai cùng đọc quyền của Hà.
+  - Mọi transaction ghi của admin (cả API lẫn CLI) chạy SERIALIZABLE: Postgres thấy hai bên đọc-ghi chéo nhau và cho Bình lỗi `40001` → `unavailable`.
+  - Bình gửi lại thì phép kiểm chạy lại, thấy Hà đã có `R` mà Bình không có, nên bị chặn (`TestStoryRaceThenRetryIsBlocked`).
+  - Không có khoá theo tenant. Khoá cây của 3a vẫn dùng ở ba chỗ như cũ: tạo nhóm có cha, đổi cha, xoá nhóm. Khoá này nay lấy **trước** `BEGIN`, để transaction thấy kết quả của người vừa nhả khoá.
+- **Lệnh admin không chiếm hết Postgres:** chờ khoá hay chạy quá 5s thì trả `unavailable`; mỗi node chỉ cho `IAM_ADMIN_DB_SLOTS` (4) transaction admin cùng lúc; khởi động kiểm `IAM_ADMIN_DB_SLOTS + IAM_DIRECTORY_LOAD_SLOTS + 2 ≤ IAM_PG_MAX_CONNS`, nên đăng nhập luôn còn kết nối. Lỗi hay panic giữa chừng đều nhả khoá và trả kết nối.
+- **Gỡ quyền có hiệu lực ngay:** quyền được tính trong cùng transaction với lệnh, không nằm trong token (e2e 16: token của Bình chỉ có `iss aud sub tid sid iat exp`).
+- **Phiên hết hạn bị chặn** ở lệnh admin và ở `ListSessions`/`RevokeSession` (`checkCaller` nay kiểm hạn).
+- **Cô lập tenant:** mọi câu đọc và ghi đều có `tenant_id` của token; id tenant khác → `not_found`.
+- **Đường tổ tiên luôn khớp `parent_id`:** trigger ghi cột này trong cùng transaction; itest so `ancestors` với kết quả đệ quy từ `parent_id` sau 300 thao tác ngẫu nhiên. Vòng bị chặn bằng phép kiểm của store và trigger (`groups_no_cycle`). SQL viết tay phải đổi cha từng dòng một và chèn nhóm cha trước nhóm con.
+- **Không retry nội bộ:** `40001`, `40P01`, `55P03`, `57014` trả `unavailable` ngay (D210).
 
 ## 9. Event và subject
 
@@ -169,7 +178,9 @@ Không có. Role và gán role không vào feed danh bạ. Nhóm và gán nhóm 
 
 ## 10. Thư viện và hạ tầng
 
-Không thêm thư viện. Dùng lại Connect, `pkg/userlimit` (giới hạn riêng cho admin), và đường kiểm token cùng danh sách thu hồi trong RAM của `DirectoryService`.
+Không thêm thư viện. Dùng lại Connect, `pkg/userlimit` (giới hạn riêng cho admin), và đường kiểm token cùng danh sách thu hồi trong RAM của `DirectoryService`. Makefile: `make itest ITEST_ARGS="…"` chạy itest và bench của một app.
+
+Config mới: `IAM_ADMIN_USER_RATE` 10/s, `IAM_ADMIN_USER_BURST` 20, `IAM_ADMIN_INFLIGHT_MAX` 1.000, `IAM_ADMIN_DB_SLOTS` 4. Metric mới: `chatim_iam_admin_calls_total{result}`, `admin_denied_total{rpc}`, `admin_user_limited_total`, `admin_inflight_rejected_total`, `admin_slot_timeouts_total`; không thêm alert (lệnh bị từ chối là lỗi của client).
 
 ## 11. Quyết định và phương án bị loại
 
@@ -186,18 +197,19 @@ Không thêm thư viện. Dùng lại Connect, `pkg/userlimit` (giới hạn ri�
 
 ## 12. Chi phí
 
-- **Mỗi lệnh admin:** một transaction gồm: kiểm phiên, một câu tính quyền (đệ quy lên chuỗi tổ tiên của các nhóm trực tiếp), phần kiểm của lệnh, phần ghi, một dòng audit.
-- **Tính quyền của một người không đệ quy và không đi xuống.** Ví dụ cây `cong-ty` → `it` → `it-hcm` và `cong-ty` → `du-an` → `du-an-x`; Bình ở `it-hcm` và `du-an-x`.
-  1. Đọc 2 dòng `account_groups` (nhóm trực tiếp), join 2 dòng `groups` bằng khoá chính, mỗi dòng mang sẵn `ancestors`: `{cong-ty, it}` và `{cong-ty, du-an}`.
-  2. Gộp lại thành 5 nhóm, đọc role của chúng (`group_roles`) và role gán thẳng cho Bình (`account_roles`), rồi permission của các role.
-  - Cả việc là một câu SQL, vài chục dòng, tra bằng khoá hay index. Số dòng tuỳ **số nhóm trực tiếp** của Bình, không tuỳ độ sâu cây hay tenant có 2.000 nhóm, 100K người.
-- **Đổi cha nhóm** (hiếm): trigger sửa `ancestors` của cả cây con trong một câu. Ví dụ chuyển `it` (có 50 nhóm con) sang cha khác: 51 dòng `groups`; không đụng `account_groups`, không ghi gì theo người.
-- **Bench dev:** tính quyền ở cây 5 tầng, 2.000 nhóm, người ở 10 nhóm; đổi cha một nhóm có 500 nhóm con.
+- **Mỗi lệnh admin:** một transaction gồm kiểm phiên, một câu tính quyền, phần kiểm của lệnh, phần ghi, một dòng audit.
+- **Tính quyền không đệ quy và không đi xuống.** Ví dụ cây `cong-ty` → `it` → `it-hcm` và `cong-ty` → `du-an` → `du-an-x`; Bình ở `it-hcm` và `du-an-x`.
+  1. Đọc 2 dòng `account_groups`, join 2 dòng `groups` bằng khoá chính, mỗi dòng mang sẵn `ancestors`: `{cong-ty, it}` và `{cong-ty, du-an}`.
+  2. Gộp lại thành 5 nhóm, đọc role của chúng và role gán thẳng cho Bình, rồi permission của các role.
+  - `EXPLAIN` trên 41K nhóm, 25K account: chỉ quét index khoá chính, không quét tuần tự.
+- **Bench dev 2026-11-01** (`CPU_Speed_Limit` 100):
+  - tính quyền, cây 5 tầng 2.000 nhóm, người ở 10 nhóm: 0,24 ms, đọc 261 dòng;
+  - đổi cha một nhóm có 500 nhóm con: 21,9 ms.
 - **Không tốn gì thêm** cho đăng nhập, `GetUsers`, feed hay app khác.
 
 ## 13. Rủi ro
 
-- Hai admin cùng sửa một chỗ: một người nhận `unavailable` và phải gửi lại.
+- **Tenant nhỏ, nhiều admin bấm cùng lúc thì một phần lệnh phải gửi lại.** Postgres phát hiện xung đột theo trang dữ liệu, mà dữ liệu của tenant nhỏ nằm chung một trang. Đo dev: tenant 17 account, 8 admin sửa 8 người khác nhau liên tục trong 3s → 38% lệnh nhận `unavailable`; tenant có thêm 10.000 account → 0%. Client gửi lại theo `Retry-After`; lệnh đổi cha nhóm lớn không bị huỷ.
 - Tenant-admin tự gỡ quyền admin cuối cùng: tenant không còn ai quản trị qua API; vận hành cứu bằng CLI.
 
 ## 14. Điểm đội tự chọn, owner phản biện
@@ -207,47 +219,34 @@ Không thêm thư viện. Dùng lại Connect, `pkg/userlimit` (giới hạn ri�
 - Xoá role đang được gán thì gỡ luôn mọi chỗ gán (ghi audit), không từ chối.
 - Liệt kê account trả mỗi trang 100, theo con trỏ id.
 - Giới hạn theo người riêng cho admin: `IAM_ADMIN_USER_RATE` 10/s, `IAM_ADMIN_USER_BURST` 20, `IAM_ADMIN_INFLIGHT_MAX` 1.000 mỗi node.
+- Gán role đã có, gỡ role không có: trả ok, không ghi audit. Sửa role hay nhóm mà không gửi trường nào: `invalid_argument`. `mentionable` mặc định true như CLI.
 
-## 15. Kiểm thử
+**Mang sang sau:**
+- `pool.Acquire` của CLI không có hạn riêng (API có hạn request).
+- GIN chỉ trên `ancestors`, chưa kèm `tenant_id` (cần `btree_gin`); đổi cha hiếm nên chấp nhận.
+- `client-permissions-set` chưa kiểm dạng id client khi file rỗng.
+- Vài test biên của khoá cây (hết giờ bên trong transaction có khoá, huỷ lúc đang chờ khoá) chưa có.
 
-- **Unit:**
-  - dạng chuỗi permission;
-  - tập con và luật `tenant-admin`;
-  - mỗi RPC bị từ chối khi thiếu đúng permission của nó;
-  - danh mục trong migration khớp trong code.
-- **itest Postgres:**
-  - nhóm cháu thừa hưởng role của gốc; đổi cha thì quyền đổi theo;
-  - Bình tự vào nhóm `admins` → `permission_denied`;
-  - đổi cha nhóm sang nhánh mạnh hơn → `permission_denied`;
-  - id tenant khác → `not_found`; cùng tên role ở hai tenant;
-  - gán và đổi nhóm đua nhau dưới SERIALIZABLE → một bên `unavailable`, gửi lại thì bị chặn;
-  - gỡ role thì lần gọi sau bị từ chối;
-  - tenant mới có `tenant-admin`; tenant cũ được thêm;
-  - phiên hết hạn bị chặn ở lệnh admin và ở `ListSessions`.
-- **Bench dev:** tính quyền ở cây 5 tầng, 2.000 nhóm.
-- **e2e phase 16** (`E2E_ONLY=16`, rồi chạy đủ 16 phase):
-  - CLI tạo tenant và Lan `tenant-admin`;
-  - Lan tạo `it-admin` và gán cho nhóm của Bình;
-  - Bình đổi nhóm của Hà → được; tự vào `admins` → `permission_denied`;
-  - id tenant khác → `not_found`;
-  - Lan gỡ role → lệnh kế tiếp của Bình bị từ chối.
-- **Ngân sách kiểm:**
-  - `make itest` vì đổi pgstore;
-  - một reviewer cho phần kiểm quyền và chống leo quyền;
-  - phase 13–15 vẫn qua.
+## 15. Kiểm thử (kết quả)
+
+- **Unit:** dạng permission, tập con và luật `tenant-admin` (`authz`, 41 ca leo quyền); mỗi RPC bị từ chối khi thiếu đúng permission của nó; thứ tự lỗi (`manage`, 38 ca leo quyền + 11 ca thứ tự); danh mục migration khớp code; `mapErr`; mã lỗi Connect và mỗi RPC trong proto có permission (`api`); config và metric.
+- **itest Postgres** (`make itest ITEST_ARGS="-race -shuffle=on -count=1 ./apps/iam/..."`, mọi package `ok`, không test nào bị bỏ qua): 10 câu chuyện ở `manage_integration_test.go`; trigger `ancestors` và chặn vòng; SERIALIZABLE, khoá cây được nhả cả khi panic (`-count=5`); tính quyền và cô lập tenant; role, gán role, trang 100; CLI và cứu tenant mất admin.
+- **itest 3a đổi kỳ vọng một chỗ:** đặt nhóm trong lúc xoá nhóm, bên thua nay nhận `unavailable` (gửi lại thì có kết quả đúng) thay vì chờ.
+- **e2e:** `E2E_ONLY=16 make e2e` → `e2e PASS: phase 16 only`; `make e2e` đủ 16 phase PASS, phase 13–15 vẫn qua; log `iam` không chứa bí mật nào của phase 16.
+- **Review:** một reviewer cho T1, T3, T4, T5, T8; không có Critical; một Important ở T8 (thứ tự lỗi) đã sửa ở `bc53f40`.
 
 ## Bảng phủ
 
 | Yêu cầu | Thành phần | Test | Bằng chứng |
 |---|---|---|---|
-| R1 API admin có kiểm quyền | `AdminService` + gói kiểm quyền | unit từng RPC; e2e 16 | (điền sau khi xây) |
-| R3 permission, role | migration 0004, kiểm dạng chuỗi | unit dạng chuỗi; itest cùng tên role hai tenant | |
-| R4 nhóm con thừa hưởng | câu tính quyền đệ quy | itest nhóm cháu, đổi cha | |
-| R5 đọc DB mỗi lần | tính quyền trong transaction | itest gỡ role → bị từ chối; token không có claim quyền | |
-| R6 `tenant-admin` có sẵn, không ép | trigger + backfill | itest tenant mới và cũ; itest tự gỡ admin cuối được | |
-| R7 chỉ lưu và cấp | không có API đánh giá cho app | xem lại proto; unit chỉ chặn `iam:*` | |
-| R8 không sửa app khác | chỉ đổi trong `iam`, proto `iam`, e2e | `git diff --stat`; `make lint` | |
-| R9 DB riêng | depguard `iam-boundaries` | `make lint` | |
-| R10 không retry nội bộ | SERIALIZABLE, `40001` → `unavailable` | itest đua | |
-| R13 danh mục | khoá ngoại tới `client_permissions` | itest `iam:acounts.read` → `invalid_argument` | |
-| R14 quyền chia nhỏ | danh mục §6 | unit: có `groups.write` mà không có `groups.read` thì không liệt kê được | |
+| R1 API admin có kiểm quyền | `AdminService` + `authz` + `manage` | `TestEachRPCNeedsItsPermission`, `TestEveryAdminProcedureHasARequiredPermission`, `TestAdminServiceIsMounted`, e2e 16 | `6cdffa7`, `cb564ae`, `8e89982`, `15641e3` |
+| R3 permission, role | migration 0004, `authz.Parse` | `TestParsePermission*`, `TestSameRoleIDInTwoTenants` | `710ca89`, `90f771c`, `64dae10` |
+| R4 nhóm con thừa hưởng | `groups.ancestors` + câu tính quyền | `TestGrandchildInheritsTheRootRole`, `TestStoryGrandchildInheritsAndMoveFollows`, `TestAncestorsFollowParentThroughRandomOps` | `90f771c`, `7806327`, `0b2a56b` |
+| R5 đọc DB mỗi lần | tính quyền trong transaction | `TestStoryUnassignTakesEffectOnTheNextCall`; e2e 16 khoá JWT | `0b2a56b`, `15641e3` |
+| R6 `tenant-admin` có sẵn, không ép | trigger + backfill, CLI | `TestNewTenantGetsTenantAdmin`, `TestMigrationBackfillsTenantAdminAndAncestors`, `TestStoryLastTenantAdminMayRemoveItself`, `TestRescueALostTenantAdmin` | `90f771c`, `f615acf`, `0b2a56b` |
+| R7 chỉ lưu và cấp | proto không có RPC đánh giá | `TestRequiredPermissionsAreIAMCatalogEntries` | `62a5e46` |
+| R8 không sửa app khác | chỉ `iam`, proto `iam`, e2e, Makefile | `git diff --stat 92eeb92..HEAD`; `make lint` 0 issues | `15641e3` |
+| R9 DB riêng | depguard `iam-boundaries`, `iam-authz-pure` | `make lint`; `TestGrantStaysInsideTheTenant` | `710ca89`, `7806327` |
+| R10 không retry nội bộ | SERIALIZABLE, `mapErr` | `TestCrossedAdminWritesConflict`, `TestStoryRaceThenRetryIsBlocked`, `TestMapErrKeepsDomainErrors` | `8edc158`, `7806327`, `0b2a56b` |
+| R13 danh mục | `client_permissions` + kiểm trước khi ghi | `TestMigrationCatalogMatchesTheCode`, `TestCreateRoleRejectsUnknownPermission`, `TestStoryUnknownPermissionIsInvalid` | `90f771c`, `64dae10`, `bc53f40` |
+| R14 quyền chia nhỏ | 12 permission `iam:*` | `TestWriteDoesNotImplyRead`, `TestStoryWriteWithoutRead` | `710ca89`, `0b2a56b` |
