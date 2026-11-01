@@ -116,9 +116,9 @@ func TestMigrationBackfillsOneUserChangePerAccount(t *testing.T) {
 	for id, username := range map[string]string{lanID: "lan", minhID: "minh", anID: "an"} {
 		exec(t, raw, "INSERT INTO accounts (tenant_id, id, username, state, password_hash, password_must_change, password_changed_at, ver, created_at, updated_at, updated_by) VALUES ('shop', $1, $2, 1, 'hash', false, now(), 1, now(), now(), 'test')", id, username)
 	}
-	pending, err := s.Migrate(ctx, true)
+	pending, err := s.MigrateUpTo(ctx, 3)
 	if err != nil {
-		t.Fatalf("Migrate: %v", err)
+		t.Fatalf("MigrateUpTo 3: %v", err)
 	}
 	if !slices.Equal(pending, []string{"0003_directory.sql"}) {
 		t.Fatalf("pending = %v; want [0003_directory.sql]", pending)
