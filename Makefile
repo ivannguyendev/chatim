@@ -15,6 +15,7 @@ LINT_IMAGE ?= golangci/golangci-lint:v2.14.0
 BUF_IMAGE ?= bufbuild/buf:1.73.0
 PROM_IMAGE ?= prom/prometheus:v3.5.0
 NETWORK  ?= chatim_default
+ITEST_ARGS ?= -race -shuffle=on -count=1 ./...
 COMPOSE  := docker compose -f deploy/compose/docker-compose.yml --env-file .env
 COMPOSE_ALL := $(COMPOSE) --profile postgres --profile app
 CORE_COMPOSE := $(COMPOSE) --profile app
@@ -45,7 +46,7 @@ test:
 	$(GO_RUN) $(GO_IMAGE) go test -race -shuffle=on ./...
 
 itest: check-env
-	$(GO_RUN) --network $(NETWORK) -e CHATIM_IT_MONGO_URI -e CHATIM_IT_REDIS_ADDR=chatim-redis:6379 -e CHATIM_IT_REDIS_PASSWORD -e CHATIM_IT_REDIS_DEDUPE_ADDR=chatim-redis-dedupe:6379 -e CHATIM_IT_REDIS_DEDUPE_PASSWORD -e CHATIM_IT_PRESENCE_REDIS_ADDR=chatim-redis-presence:6379 -e CHATIM_IT_PRESENCE_REDIS_PASSWORD -e CHATIM_IT_NATS_URL=nats://chatim-nats:4222 -e CHATIM_IT_PG_URI $(GO_IMAGE) go test -race -shuffle=on -count=1 ./...
+	$(GO_RUN) --network $(NETWORK) -e CHATIM_IT_MONGO_URI -e CHATIM_IT_REDIS_ADDR=chatim-redis:6379 -e CHATIM_IT_REDIS_PASSWORD -e CHATIM_IT_REDIS_DEDUPE_ADDR=chatim-redis-dedupe:6379 -e CHATIM_IT_REDIS_DEDUPE_PASSWORD -e CHATIM_IT_PRESENCE_REDIS_ADDR=chatim-redis-presence:6379 -e CHATIM_IT_PRESENCE_REDIS_PASSWORD -e CHATIM_IT_NATS_URL=nats://chatim-nats:4222 -e CHATIM_IT_PG_URI $(GO_IMAGE) go test $(ITEST_ARGS)
 
 vet:
 	$(GO_RUN) $(GO_IMAGE) go vet ./...
