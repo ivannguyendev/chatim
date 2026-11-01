@@ -23,6 +23,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/iam/internal/signing"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store/pgstore"
+	"github.com/ivannguyendev/chatim/pkg/apperr"
 	"github.com/ivannguyendev/chatim/pkg/revocation"
 )
 
@@ -42,7 +43,14 @@ type fakeStore struct {
 	due      string
 	dueAsked chan time.Duration
 	outage
+	slotTimeouts atomic.Uint64
 }
+
+func (f *fakeStore) RunAdmin(context.Context, store.AdminTxOptions, func(store.AdminTx) error) error {
+	return apperr.ErrUnavailable
+}
+
+func (f *fakeStore) AdminSlotTimeouts() uint64 { return f.slotTimeouts.Load() }
 
 func (f *fakeStore) ActivateDueSigningKey(_ context.Context, lead time.Duration, _ store.AuditEvent) (string, error) {
 	if f.dueAsked != nil {
@@ -109,11 +117,12 @@ func (f *fakeStore) Close() {
 
 func testConfig(kek []byte) config.Config {
 	return config.Config{
-		ListenAddr: "api", InternalAddr: "internal", NodeSecret: testNodeSecret, AdminAddr: "admin", PublicURL: "http://127.0.0.1", PGURI: "postgres://iam@db/iam", PGMaxConns: 2,
+		ListenAddr: "api", InternalAddr: "internal", NodeSecret: testNodeSecret, AdminAddr: "admin", PublicURL: "http://127.0.0.1", PGURI: "postgres://iam@db/iam", PGMaxConns: 4,
 		Issuer: "iss", Audience: "aud", AccessTTL: 15 * time.Minute, SessionIdle: time.Hour, SessionMax: 2 * time.Hour,
 		RefreshGrace: 30 * time.Second, DPoPWindow: time.Minute, HashConcurrency: 2, LoginFreeFailures: 5, LoginMaxDelay: time.Minute,
 		LoginIPRate: 10, LoginIPBurst: 10, LoginIPTracked: 100, PasswordMin: 12, KeyEncryptionKey: kek, KeyReload: time.Hour, KeyActivateLead: 2 * time.Hour,
 		FeedWaitMax: 10 * time.Second, DirectoryLoadSlots: 1, InflightMax: 100, UserRate: 50, UserBurst: 100, UserInflight: 32, UserLimiters: 1000,
+		AdminUserRate: 10, AdminUserBurst: 20, AdminInflightMax: 100, AdminDBSlots: 1,
 		BodyMax: 16 << 10, DrainDelay: 10 * time.Millisecond, ShutdownBudget: 20 * time.Second,
 		ReadHeaderTimeout: time.Second, ReadTimeout: time.Second, WriteTimeout: time.Second, IdleTimeout: time.Second, MaxHeaderBytes: 16 << 10,
 	}

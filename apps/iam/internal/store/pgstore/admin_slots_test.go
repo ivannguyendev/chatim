@@ -5,15 +5,16 @@ import (
 	"errors"
 	"testing"
 	"testing/synctest"
+	"time"
 )
 
 func TestAdminSlotsDefaultWhenUnset(t *testing.T) {
 	for _, n := range []int{0, -3} {
-		if got := cap(newAdminSlots(n)); got != defaultAdminDBSlots {
+		if got := cap(newAdminSlots(n).free); got != defaultAdminDBSlots {
 			t.Fatalf("newAdminSlots(%d) holds %d; want %d", n, got, defaultAdminDBSlots)
 		}
 	}
-	if got := cap(newAdminSlots(7)); got != 7 {
+	if got := cap(newAdminSlots(7).free); got != 7 {
 		t.Fatalf("newAdminSlots(7) holds %d; want 7", got)
 	}
 }
@@ -82,8 +83,43 @@ func TestAdminSlotsWaitEndsWithTheContext(t *testing.T) {
 		if _, err := free.enter(cancelled); !errors.Is(err, context.Canceled) {
 			t.Fatalf("enter with a done context = %v; want context.Canceled", err)
 		}
-		if len(free) != 0 {
+		if len(free.free) != 0 {
 			t.Fatal("a done context took a free slot")
+		}
+	})
+}
+
+func TestAdminSlotTimeoutsCountOnlyWaitsEndedByTheContext(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		st := &Store{adminSlots: newAdminSlots(1)}
+		release, err := st.adminSlots.enter(context.Background())
+		if err != nil {
+			t.Fatalf("enter 1: %v", err)
+		}
+		done, stop := context.WithCancel(context.Background())
+		stop()
+		if _, err := st.adminSlots.enter(done); !errors.Is(err, context.Canceled) {
+			t.Fatalf("enter with a done context = %v; want context.Canceled", err)
+		}
+		if got := st.AdminSlotTimeouts(); got != 0 {
+			t.Fatalf("timeouts after a done context = %d; want 0", got)
+		}
+		deadline, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if _, err := st.adminSlots.enter(deadline); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("enter past the deadline = %v; want context.DeadlineExceeded", err)
+		}
+		if got := st.AdminSlotTimeouts(); got != 1 {
+			t.Fatalf("timeouts after a deadline = %d; want 1", got)
+		}
+		release()
+		again, err := st.adminSlots.enter(context.Background())
+		if err != nil {
+			t.Fatalf("enter after release: %v", err)
+		}
+		again()
+		if got := st.AdminSlotTimeouts(); got != 1 {
+			t.Fatalf("timeouts after a free entry = %d; want 1", got)
 		}
 	})
 }

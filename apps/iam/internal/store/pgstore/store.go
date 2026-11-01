@@ -36,7 +36,7 @@ type Store struct {
 	pool       *pgxpool.Pool
 	uri        string
 	keep       time.Duration
-	adminSlots adminSlots
+	adminSlots *adminSlots
 }
 
 func Open(ctx context.Context, uri string, opts Options) (*Store, error) {

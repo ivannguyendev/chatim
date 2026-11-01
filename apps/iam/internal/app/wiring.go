@@ -30,12 +30,14 @@ const (
 type Store interface {
 	store.Auth
 	store.DirectoryReader
+	store.AdminRunner
 	keyring.Source
 	api.RevocationSource
 	DeleteExpiredRevocations(ctx context.Context) (int64, error)
 	ActivateDueSigningKey(ctx context.Context, lead time.Duration, audit store.AuditEvent) (string, error)
 	Ping(ctx context.Context) error
 	SchemaVersion(ctx context.Context) (int, error)
+	AdminSlotTimeouts() uint64
 	Close()
 }
 
@@ -44,7 +46,7 @@ func openPostgres(ctx context.Context, uri string, opts pgstore.Options) (Store,
 }
 
 func wire(ctx context.Context, cfg config.Config, log *slog.Logger, deps Deps) (*node, error) {
-	st, err := deps.OpenStore(ctx, cfg.DatabaseURI(), pgstore.Options{MaxConns: poolSize(cfg.PGMaxConns), RevocationKeep: cfg.RevocationKeep()})
+	st, err := deps.OpenStore(ctx, cfg.DatabaseURI(), pgstore.Options{MaxConns: poolSize(cfg.PGMaxConns), RevocationKeep: cfg.RevocationKeep(), AdminDBSlots: cfg.AdminDBSlots})
 	if err != nil {
 		return nil, err
 	}
@@ -90,6 +92,10 @@ func wireServers(ctx context.Context, cfg config.Config, log *slog.Logger, st St
 	if err != nil {
 		return nil, err
 	}
+	adm, err := newAdmin(cfg, st)
+	if err != nil {
+		return nil, err
+	}
 	n := &node{cfg: cfg, log: log, store: st, internalStats: &api.InternalStats{}, dir: dir}
 	if cfg.ListenAddr != "" {
 		proofs, err := dpop.NewVerifier(cfg.PublicURL, cfg.DPoPWindow, time.Now)
@@ -99,6 +105,7 @@ func wireServers(ctx context.Context, cfg config.Config, log *slog.Logger, st St
 		handler, err := api.New(api.Options{
 			Auth: svc, Proofs: proofs, Callers: ring, Keys: ring, BodyMax: int64(cfg.BodyMax),
 			Directory: dir.cache, Revocations: dir.list, Claims: ring, DirectoryGate: dir.gate, DirectoryUsers: dir.users, DirectoryStats: dir.apiStats,
+			Admin: adm.service, AdminGate: adm.gate, AdminUsers: adm.users, AdminStats: adm.stats,
 			CORSOrigins: cfg.CORSOrigins, ClientIPHeader: cfg.ClientIPHeader, Log: log,
 		})
 		if err != nil {
@@ -123,6 +130,7 @@ func wireServers(ctx context.Context, cfg config.Config, log *slog.Logger, st St
 		log.WarnContext(ctx, "GOMEMLIMIT is not set; set it to about 90% of the container memory limit")
 	}
 	sources := append(metricSources(svc.Stats(), slots, ring, n.internalStats, &n.cleanup, &n.keys), directoryMetricSources(dir, memoryLimited, time.Now)...)
+	sources = append(sources, adminMetricSources(adm, st)...)
 	metricsHandler, err := metrics.Handler(metricsSubsystem, sources)
 	if err != nil {
 		return nil, err

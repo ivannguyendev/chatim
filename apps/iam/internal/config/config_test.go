@@ -44,6 +44,9 @@ func TestLoadDefaults(t *testing.T) {
 		c.UserBurst != 100 || c.UserInflight != 32 || c.UserLimiters != 100000 {
 		t.Fatalf("directory defaults = %v %d %d %d %d %d %d", c.FeedWaitMax, c.DirectoryLoadSlots, c.InflightMax, c.UserRate, c.UserBurst, c.UserInflight, c.UserLimiters)
 	}
+	if c.AdminUserRate != 10 || c.AdminUserBurst != 20 || c.AdminInflightMax != 1000 || c.AdminDBSlots != 4 {
+		t.Fatalf("admin defaults = %d %d %d %d", c.AdminUserRate, c.AdminUserBurst, c.AdminInflightMax, c.AdminDBSlots)
+	}
 	if len(c.KeyEncryptionKey) != 32 {
 		t.Fatalf("kek length = %d, want 32", len(c.KeyEncryptionKey))
 	}
@@ -202,7 +205,8 @@ func TestLoadRefusesBadDirectoryLimits(t *testing.T) {
 	}
 	setRequired(t)
 	t.Setenv("IAM_FEED_WAIT_MAX", "60s")
-	t.Setenv("IAM_DIRECTORY_LOAD_SLOTS", "19")
+	t.Setenv("IAM_DIRECTORY_LOAD_SLOTS", "17")
+	t.Setenv("IAM_ADMIN_DB_SLOTS", "1")
 	t.Setenv("IAM_USER_LIMITERS", "10000")
 	if _, err := config.Load(); err != nil {
 		t.Fatalf("Load at the directory limits = %v", err)
@@ -221,6 +225,54 @@ func TestLogValueListsDirectorySettings(t *testing.T) {
 	}
 	out := c.String()
 	for _, key := range []string{"feed_wait_max=10s", "directory_load_slots=4", "inflight_max=10000", "user_rate=50", "user_burst=100", "user_inflight=32", "user_limiters=100000"} {
+		if !strings.Contains(out, key) {
+			t.Fatalf("config log lacks %s: %s", key, out)
+		}
+	}
+}
+
+func TestLoadRefusesBadAdminLimits(t *testing.T) {
+	cases := map[string]struct {
+		env  map[string]string
+		want string
+	}{
+		"zero admin user rate":         {map[string]string{"IAM_ADMIN_USER_RATE": "0"}, "IAM_ADMIN_USER_RATE must be positive"},
+		"negative admin user burst":    {map[string]string{"IAM_ADMIN_USER_BURST": "-1"}, "IAM_ADMIN_USER_BURST must be positive"},
+		"zero admin inflight max":      {map[string]string{"IAM_ADMIN_INFLIGHT_MAX": "0"}, "IAM_ADMIN_INFLIGHT_MAX must be positive"},
+		"zero admin db slots":          {map[string]string{"IAM_ADMIN_DB_SLOTS": "0"}, "IAM_ADMIN_DB_SLOTS must be positive"},
+		"limiters under the admin cap": {map[string]string{"IAM_USER_LIMITERS": "10000", "IAM_INFLIGHT_MAX": "10000", "IAM_ADMIN_INFLIGHT_MAX": "10001"}, "IAM_USER_LIMITERS 10000 must be at least IAM_ADMIN_INFLIGHT_MAX 10001"},
+		"admin slots crowd the pool":   {map[string]string{"IAM_ADMIN_DB_SLOTS": "15"}, "IAM_ADMIN_DB_SLOTS 15 + IAM_DIRECTORY_LOAD_SLOTS 4 + 2 must not exceed IAM_PG_MAX_CONNS 20"},
+		"load slots crowd the pool":    {map[string]string{"IAM_PG_MAX_CONNS": "9"}, "IAM_ADMIN_DB_SLOTS 4 + IAM_DIRECTORY_LOAD_SLOTS 4 + 2 must not exceed IAM_PG_MAX_CONNS 9"},
+		"unparsable admin number":      {map[string]string{"IAM_ADMIN_DB_SLOTS": "few"}, "IAM_ADMIN_DB_SLOTS"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			setRequired(t)
+			for k, v := range tc.env {
+				t.Setenv(k, v)
+			}
+			if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Load = %v, want an error containing %q", err, tc.want)
+			}
+		})
+	}
+	setRequired(t)
+	t.Setenv("IAM_ADMIN_DB_SLOTS", "14")
+	t.Setenv("IAM_USER_LIMITERS", "10000")
+	t.Setenv("IAM_ADMIN_INFLIGHT_MAX", "10000")
+	if _, err := config.Load(); err != nil {
+		t.Fatalf("Load at the admin limits = %v", err)
+	}
+}
+
+func TestLogValueListsAdminSettings(t *testing.T) {
+	setRequired(t)
+	c, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	out := c.String()
+	for _, key := range []string{"admin_user_rate=10", "admin_user_burst=20", "admin_inflight_max=1000", "admin_db_slots=4"} {
 		if !strings.Contains(out, key) {
 			t.Fatalf("config log lacks %s: %s", key, out)
 		}

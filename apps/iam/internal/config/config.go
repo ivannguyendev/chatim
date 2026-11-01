@@ -62,6 +62,10 @@ type Config struct {
 	UserBurst          int
 	UserInflight       int
 	UserLimiters       int
+	AdminUserRate      int
+	AdminUserBurst     int
+	AdminInflightMax   int
+	AdminDBSlots       int
 }
 
 func AdminAddr() string { return envconfig.String("IAM_ADMIN_ADDR", defaultAdminAddr) }
@@ -111,6 +115,10 @@ func Load() (Config, error) {
 		UserBurst:          p.number("IAM_USER_BURST", 100),
 		UserInflight:       p.number("IAM_USER_INFLIGHT", 32),
 		UserLimiters:       p.number("IAM_USER_LIMITERS", 100000),
+		AdminUserRate:      p.number("IAM_ADMIN_USER_RATE", 10),
+		AdminUserBurst:     p.number("IAM_ADMIN_USER_BURST", 20),
+		AdminInflightMax:   p.number("IAM_ADMIN_INFLIGHT_MAX", 1000),
+		AdminDBSlots:       p.number("IAM_ADMIN_DB_SLOTS", 4),
 	}
 	if err := errors.Join(p.errs...); err != nil {
 		return Config{}, err
@@ -170,6 +178,10 @@ func (c Config) LogValue() slog.Value {
 		slog.Int("user_burst", c.UserBurst),
 		slog.Int("user_inflight", c.UserInflight),
 		slog.Int("user_limiters", c.UserLimiters),
+		slog.Int("admin_user_rate", c.AdminUserRate),
+		slog.Int("admin_user_burst", c.AdminUserBurst),
+		slog.Int("admin_inflight_max", c.AdminInflightMax),
+		slog.Int("admin_db_slots", c.AdminDBSlots),
 	)
 }
 

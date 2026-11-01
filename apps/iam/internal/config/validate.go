@@ -16,6 +16,7 @@ const (
 	shutdownMarginTime  = time.Second
 	feedWaitFloor       = time.Second
 	feedWaitCeiling     = time.Minute
+	reservedAuthConns   = 2
 )
 
 type rule struct {
@@ -69,6 +70,12 @@ func (c Config) Validate() error {
 		positive("IAM_USER_LIMITERS", c.UserLimiters),
 		positive("IAM_INFLIGHT_MAX", c.InflightMax),
 		{c.UserLimiters >= c.InflightMax, fmt.Sprintf("IAM_USER_LIMITERS %d must be at least IAM_INFLIGHT_MAX %d", c.UserLimiters, c.InflightMax)},
+		positive("IAM_ADMIN_USER_RATE", c.AdminUserRate),
+		positive("IAM_ADMIN_USER_BURST", c.AdminUserBurst),
+		positive("IAM_ADMIN_INFLIGHT_MAX", c.AdminInflightMax),
+		positive("IAM_ADMIN_DB_SLOTS", c.AdminDBSlots),
+		{c.UserLimiters >= c.AdminInflightMax, fmt.Sprintf("IAM_USER_LIMITERS %d must be at least IAM_ADMIN_INFLIGHT_MAX %d", c.UserLimiters, c.AdminInflightMax)},
+		{c.AdminDBSlots+c.DirectoryLoadSlots+reservedAuthConns <= c.PGMaxConns, fmt.Sprintf("IAM_ADMIN_DB_SLOTS %d + IAM_DIRECTORY_LOAD_SLOTS %d + %d must not exceed IAM_PG_MAX_CONNS %d so login and refresh keep a connection", c.AdminDBSlots, c.DirectoryLoadSlots, reservedAuthConns, c.PGMaxConns)},
 		{c.ShutdownBudget > c.DrainDelay+c.WriteTimeout+shutdownMarginTime, fmt.Sprintf("IAM_SHUTDOWN_BUDGET %v must exceed IAM_DRAIN_DELAY + IAM_WRITE_TIMEOUT + 1s = %v", c.ShutdownBudget, c.DrainDelay+c.WriteTimeout+shutdownMarginTime)},
 	}
 	var errs []error
