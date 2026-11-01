@@ -29,12 +29,14 @@ var domainErrors = []error{
 type Options struct {
 	MaxConns       int32
 	RevocationKeep time.Duration
+	AdminDBSlots   int
 }
 
 type Store struct {
-	pool *pgxpool.Pool
-	uri  string
-	keep time.Duration
+	pool       *pgxpool.Pool
+	uri        string
+	keep       time.Duration
+	adminSlots adminSlots
 }
 
 func Open(ctx context.Context, uri string, opts Options) (*Store, error) {
@@ -50,7 +52,7 @@ func Open(ctx context.Context, uri string, opts Options) (*Store, error) {
 	if err != nil {
 		return nil, redact.Error(fmt.Errorf("open postgres pool: %w", err), uri)
 	}
-	return &Store{pool: pool, uri: uri, keep: opts.RevocationKeep}, nil
+	return &Store{pool: pool, uri: uri, keep: opts.RevocationKeep, adminSlots: newAdminSlots(opts.AdminDBSlots)}, nil
 }
 
 func parseConfig(uri string) (*pgxpool.Config, error) {
