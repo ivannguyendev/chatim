@@ -88,7 +88,7 @@ Metric: `chatim_iam_machine_tokens_total{result}` (`ok`, `invalid_grant`, `repla
 
 ## 8. Đúng đắn
 
-- **Assertion dùng lại:** `jti` ghi trong cùng transaction với phiên; trùng → từ chối. `iam` chưa có vòng dọn nền, nên mỗi lần lấy token xoá luôn các dòng đã hết hạn **của cùng khoá** trong transaction đó: mỗi khoá giữ tối đa số assertion trong 5 phút gần nhất, không cần job dọn.
+- **Assertion dùng lại:** `jti` ghi trong cùng transaction với phiên; trùng → từ chối. Dòng hết hạn được vòng dọn 30s đã có của `iam` xoá (`app/run.go:163-207`, cùng chỗ dọn danh sách thu hồi).
 - **Khoá lộ:** thu hồi có hiệu lực ngay ở `iam` (assertion mới) và trong vài giây ở mọi node (danh sách thu hồi).
 - **Danh bạ không thấy máy:** itest đặt một máy giữa trang nạp 5.000 dòng.
 - **Không leo quyền qua máy:** như §6.

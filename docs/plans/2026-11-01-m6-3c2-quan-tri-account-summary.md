@@ -131,7 +131,7 @@ Metric: `chatim_iam_notify_calls_total{result}`, `chatim_iam_admin_accounts_crea
 | Link dùng một lần | Gửi mật khẩu tạm qua kênh notify | Mật khẩu nằm lại trong hộp thư, còn dùng tới khi đổi |
 | Webhook tới hệ thống notify của tenant | `iam` tự gửi email (SMTP); chờ M8 | Tenant chọn kênh; `iam` không giữ cấu hình từng kênh |
 | Body ký bằng khoá của `iam`, kiểm bằng JWKS | Secret chung HMAC | Không phải cất và xoay secret theo tenant |
-| Gọi webhook sau commit, lỗi thì báo để gửi lại | Outbox + vòng gửi lại | `iam` chưa có vòng nền; làm bản đơn giản trước |
+| Gọi webhook sau commit, lỗi thì báo để gửi lại | Outbox + vòng gửi lại | Bản đơn giản nhất trước: outbox thêm trạng thái chờ và một bên gửi trên mỗi node; thêm khi có số đo cần. Mã hết hạn được dọn bởi vòng dọn 30s đã có (`app/run.go:163-207`) |
 | Account mới chưa có mật khẩu | Backend gửi mật khẩu trong lô | Lô không băm, nhanh; không ai biết mật khẩu người khác |
 
 ## 11. Rủi ro
