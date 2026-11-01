@@ -31,11 +31,12 @@ type directoryUser struct {
 }
 
 type feedChange struct {
-	Kind        string `json:"kind"`
-	TenantID    string `json:"tenant_id"`
-	ID          string `json:"id"`
-	State       string `json:"state"`
-	DisplayName string `json:"display_name"`
+	Kind        string   `json:"kind"`
+	TenantID    string   `json:"tenant_id"`
+	ID          string   `json:"id"`
+	State       string   `json:"state"`
+	DisplayName string   `json:"display_name"`
+	Groups      []string `json:"groups"`
 }
 
 type feedReply struct {
