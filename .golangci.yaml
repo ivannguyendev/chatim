@@ -250,6 +250,24 @@ linters:
               desc: iam embeds no chat module
             - pkg: github.com/nats-io
               desc: iam does not depend on NATS (owner 2026-10-27)
+        iam-authz-pure:
+          files:
+            - "**/apps/iam/internal/authz/**"
+          deny:
+            - pkg: github.com/jackc/pgx
+              desc: authz is pure rules and never touches the database
+            - pkg: connectrpc.com/connect
+              desc: authz is pure rules and never touches transport
+            - pkg: github.com/ivannguyendev/chatim/apps/iam/internal/store
+              desc: authz is pure rules and never touches the store
+            - pkg: github.com/ivannguyendev/chatim/apps/iam/internal/api
+              desc: authz never imports transport
+            - pkg: github.com/ivannguyendev/chatim/apps/iam/internal/app
+              desc: authz never imports wiring
+            - pkg: github.com/ivannguyendev/chatim/apps/iam/internal/admincmd
+              desc: authz never imports the cli
+            - pkg: github.com/ivannguyendev/chatim/apps/iam/internal/manage
+              desc: authz never imports use cases
         iam-sync-no-nats:
           files:
             - "**/pkg/iamsync/**"
