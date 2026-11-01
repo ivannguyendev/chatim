@@ -30,14 +30,14 @@ func (s *Service) CreateRole(ctx context.Context, c auth.Caller, in NewRole) (st
 	}
 	var role store.Role
 	err = s.write(ctx, c, "CreateRole", false, func(st *step) error {
-		if err := authz.CheckRoleWrite(st.grant, perms); err != nil {
-			return err
-		}
 		role = store.Role{
 			TenantID: c.Tenant, ID: in.ID, Name: name, Ver: 1, Permissions: permissionStrings(perms),
 			CreatedAt: st.now, UpdatedAt: st.now, UpdatedBy: c.Account,
 		}
 		if err := st.tx.CreateRole(ctx, role); err != nil {
+			return err
+		}
+		if err := authz.CheckRoleWrite(st.grant, perms); err != nil {
 			return err
 		}
 		return st.audit(ctx, "role_create", "", map[string]string{"role": in.ID})

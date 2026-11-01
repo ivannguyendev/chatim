@@ -201,14 +201,14 @@ func (s *Service) SetAccountGroups(ctx context.Context, c auth.Caller, accountID
 		if err != nil {
 			return err
 		}
+		if err := st.tx.SetAccountGroups(ctx, c.Tenant, accountID, groupIDs); err != nil {
+			return err
+		}
 		joined, err := st.groupsGrant(ctx, groupIDs...)
 		if err != nil {
 			return err
 		}
 		if err := authz.CheckAccountGroups(st.grant, target, joined); err != nil {
-			return err
-		}
-		if err := st.tx.SetAccountGroups(ctx, c.Tenant, accountID, groupIDs); err != nil {
 			return err
 		}
 		return st.audit(ctx, "account_groups_set", accountID, map[string]string{"groups": strings.Join(groupIDs, ",")})

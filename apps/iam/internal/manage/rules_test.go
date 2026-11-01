@@ -148,7 +148,7 @@ func TestEscalationPerRPC(t *testing.T) {
 	}
 }
 
-func TestEscalationRefusalsWriteNothingExceptUpdateRoleThatRollsBack(t *testing.T) {
+func TestEscalationRefusalsRollBackWithoutAudit(t *testing.T) {
 	for _, tc := range escalationCases() {
 		if tc.allowed {
 			continue
@@ -162,8 +162,12 @@ func TestEscalationRefusalsWriteNothingExceptUpdateRoleThatRollsBack(t *testing.
 			svc, r := newService(w)
 			_ = tc.op(svc, caller(tc.who))
 			wrote := r.wrote()
-			if len(wrote) != 0 && !slices.Equal(wrote, []string{"UpdateRole"}) {
+			checkedAfterWrite := []string{"CreateRole", "UpdateRole", "SetAccountGroups"}
+			if len(wrote) > 1 || (len(wrote) == 1 && !slices.Contains(checkedAfterWrite, wrote[0])) {
 				t.Fatalf("wrote %v", wrote)
+			}
+			if r.rollbacks != 1 || len(r.audits) != 0 {
+				t.Fatalf("rollbacks = %d, audits = %v", r.rollbacks, r.audits)
 			}
 		})
 	}
