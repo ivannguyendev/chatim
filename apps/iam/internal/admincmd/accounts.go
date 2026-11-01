@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/iam/internal/auth"
+	"github.com/ivannguyendev/chatim/apps/iam/internal/authz"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/directory"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/password"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/session"
@@ -90,8 +91,14 @@ func accountCreate(ctx context.Context, env Env, st Store, args []string) error 
 	f, tenant, username := accountFlags("account-create")
 	email := f.set.String("email", "", "optional email")
 	name := f.set.String("name", "", "display name; the username when not set")
+	role := f.set.String("role", "", "optional role id assigned in the same transaction")
 	if err := f.parse(args, "tenant", "username"); err != nil {
 		return err
+	}
+	if f.given()["role"] {
+		if err := authz.ValidateRoleID(*role); err != nil {
+			return err
+		}
 	}
 	u, err := auth.NormalizeUsername(*username)
 	if err != nil {
@@ -119,11 +126,21 @@ func accountCreate(ctx context.Context, env Env, st Store, args []string) error 
 		TenantID: *tenant, ID: id, Username: u, DisplayName: display, Email: strings.ToLower(*email), State: store.StateActive,
 		PasswordHash: hash, PasswordMustChange: true, PasswordChangedAt: now, Ver: 1, CreatedAt: now, UpdatedAt: now, UpdatedBy: actor,
 	}
-	if err := st.CreateAccount(ctx, a, audit(env, *tenant, "account_create", id, "")); err != nil {
+	if err := createAccount(ctx, st, a, *role, audit(env, *tenant, "account_create", id, "")); err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(env.Out, "account %s created for %s\ntemporary password: %s\n", id, u, temp)
+	if _, err := fmt.Fprintf(env.Out, "account %s created for %s\ntemporary password: %s\n", id, u, temp); err != nil || *role == "" {
+		return err
+	}
+	_, err = fmt.Fprintf(env.Out, "role: %s\n", *role)
 	return err
+}
+
+func createAccount(ctx context.Context, st Store, a store.Account, role string, at store.AuditEvent) error {
+	if role == "" {
+		return st.CreateAccount(ctx, a, at)
+	}
+	return st.CreateAccountWithRole(ctx, a, role, at)
 }
 
 func passwordReset(ctx context.Context, env Env, st Store, args []string) error {

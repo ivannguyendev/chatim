@@ -7,7 +7,6 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/iam/internal/directory"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store"
-	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
 func groupFlags(name string) (flags, *string, *string) {
@@ -145,26 +144,7 @@ func accountGroups(ctx context.Context, env Env, st Store, args []string) error 
 }
 
 func splitGroups(raw string) ([]string, error) {
-	ids := []string{}
-	if raw == "" {
-		return ids, nil
-	}
-	seen := map[string]bool{}
-	for part := range strings.SplitSeq(raw, ",") {
-		id := strings.TrimSpace(part)
-		if id == "" {
-			return nil, fmt.Errorf("%w: -groups has an empty group id", apperr.ErrInvalidArgument)
-		}
-		if err := validGroupIDs(id); err != nil {
-			return nil, err
-		}
-		if seen[id] {
-			return nil, fmt.Errorf("%w: group %s listed twice", apperr.ErrInvalidArgument, id)
-		}
-		seen[id] = true
-		ids = append(ids, id)
-	}
-	return ids, nil
+	return splitList(raw, "groups", "group", directory.ValidateGroupID)
 }
 
 func listOrNone(ids []string) string {
