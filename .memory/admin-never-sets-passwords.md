@@ -17,4 +17,6 @@ This reverses part of D212 ("quên mật khẩu do admin đặt lại, chưa g�
 - Batch-created accounts start without a password and get an activation link, so batches never hash.
 - Ops CLI (`account-create`, `password-reset`) still prints a temporary password: operators, not tenant admins, and it is audited.
 
+Superseded in part 2026-11-01 by [[keycloak-over-self-built-iam]]: Keycloak sends the link by SMTP, no webhook, no plugin.
+
 Related: [[owner-communication]], [[ops-setup-hard-to-get-wrong]].

@@ -40,7 +40,7 @@ Check every brainstorm, summary and plan against this list before showing it to 
 - Field names: full basic English words except `messages`; counters end in `_ver`; `updated_at`/`updated_by`; `request_id`.
 - Owner summaries: Vietnamese, plain words with examples, written from the final state (rewrite after a review round, never append patches). Risks list only real consequences of this plan, not other systems' operations and not mechanisms already accepted.
 - Ask the owner only pivotal questions, in plain words with an example; never re-ask an answered one.
-- `iam`: no admin API sets, chooses or returns another user's password; admins only disable the current password or have `iam` send a server-generated one-time link through the tenant's notify webhook. Only the ops CLI prints a temporary password, as break-glass (owner 2026-11-01).
+- Identity (owner 2026-11-01, replaces D209): Keycloak, one realm per tenant, is the IAM and broker; `apps/iam` becomes a Go bridge off the login path (revocation list, directory feed, tenant ↔ realm). Use only built-in Keycloak features and configuration, never Keycloak plugins (SPI). Tenant admins never set passwords; they only send Keycloak's one-time action email link.
 
 ## Workflows
 
