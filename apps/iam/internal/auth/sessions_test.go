@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/ivannguyendev/chatim/apps/iam/internal/auth"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store"
@@ -73,5 +74,50 @@ func TestCallerWithARevokedSessionIsRejected(t *testing.T) {
 	forged := auth.Caller{Tenant: "shop", Account: "b1aaaaaaaaaaaaaaaaaaaaaaaa", Session: phone.SessionID}
 	if _, err := h.svc.ListSessions(ctx, forged); !errors.Is(err, apperr.ErrUnauthenticated) {
 		t.Fatalf("ListSessions with a session of another account = %v, want ErrUnauthenticated", err)
+	}
+}
+
+func TestCallerWithAnExpiredSessionIsRejected(t *testing.T) {
+	commands := map[string]func(*harness, auth.Caller) error{
+		"ListSessions": func(h *harness, c auth.Caller) error {
+			_, err := h.svc.ListSessions(context.Background(), c)
+			return err
+		},
+		"RevokeSession": func(h *harness, c auth.Caller) error {
+			return h.svc.RevokeSession(context.Background(), c, c.Session)
+		},
+	}
+	cases := []struct {
+		name     string
+		idle     time.Duration
+		absolute time.Duration
+		at       time.Duration
+		rejected bool
+	}{
+		{"idle deadline reached", time.Hour, 2 * time.Hour, time.Hour, true},
+		{"idle deadline one nanosecond ahead", time.Hour, 2 * time.Hour, time.Hour - time.Nanosecond, false},
+		{"absolute deadline reached", 3 * time.Hour, 2 * time.Hour, 2 * time.Hour, true},
+		{"absolute deadline one nanosecond ahead", 3 * time.Hour, 2 * time.Hour, 2*time.Hour - time.Nanosecond, false},
+	}
+	for command, run := range commands {
+		for _, tc := range cases {
+			t.Run(command+"/"+tc.name, func(t *testing.T) {
+				h, phone := loggedIn(t)
+				start := h.now
+				sess := h.store.sessions[phone.SessionID]
+				sess.IdleExpiresAt = start.Add(tc.idle)
+				sess.ExpiresAt = start.Add(tc.absolute)
+				h.store.sessions[phone.SessionID] = sess
+				h.now = start.Add(tc.at)
+				caller := auth.Caller{Tenant: "shop", Account: "a1aaaaaaaaaaaaaaaaaaaaaaaa", Session: phone.SessionID}
+				err := run(h, caller)
+				if tc.rejected && !errors.Is(err, auth.ErrSessionInvalid) {
+					t.Fatalf("%s at the deadline = %v, want ErrSessionInvalid", command, err)
+				}
+				if !tc.rejected && err != nil {
+					t.Fatalf("%s before the deadline = %v, want nil", command, err)
+				}
+			})
+		}
 	}
 }

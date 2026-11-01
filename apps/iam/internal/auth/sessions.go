@@ -64,5 +64,9 @@ func (s *Service) checkCaller(ctx context.Context, c Caller) error {
 	if sess.State != store.StateActive || sess.TenantID != c.Tenant || sess.AccountID != c.Account {
 		return ErrSessionInvalid
 	}
+	now := s.deps.Now()
+	if !sess.IdleExpiresAt.After(now) || !sess.ExpiresAt.After(now) {
+		return ErrSessionInvalid
+	}
 	return nil
 }
