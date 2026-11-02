@@ -23,8 +23,9 @@ Owner-confirmed rules, reasons and decisions for chatim, one fact per file. Read
 Decisions of a built milestone live in `docs/decision-log.md`, `docs/events.md` and `docs/modules/`; keep a note here only while it is not yet in those docs or when it carries a reason they do not.
 
 - [phase1-phase2-realign](phase1-phase2-realign.md) — Phase 1 exit = prod-like validated; dev bench ≤ 2K/s, dev load 10K; real numbers 5,000 MarkRead/s, 5% edits, 1,000 active rooms (D177–D181)
-- [phase2-go-live-scope](phase2-go-live-scope.md) — go-live v1.0.0 for a new product: iam (was identity, D209), media, push, people/group search; order M6 → M9; migrator and webhooks after go-live (D207)
+- [phase2-go-live-scope](phase2-go-live-scope.md) — go-live v1.0.0 for a new product: identity (D209 iam, renamed back by D243), media, push, people/group search; order M6 → M9; migrator and webhooks after go-live (D207)
 - [chat-mirrors-users-tenant-owns-identity](chat-mirrors-users-tenant-owns-identity.md) — owner 2026-11-02: chat owns no identity; user mirror, groups, per-tenant trusted issuers, revocation, token exchange to a chat token; reverses D179, D209 and the Keycloak choice
+- [identity-store-on-mongodb](identity-store-on-mongodb.md) — owner 2026-11-02: identity moves from Postgres to MongoDB in phase PM between PA and PB; reverses D210 (scope is now a small mirror, no Postgres HA for go-live)
 - [mention-app-role](mention-app-role.md) — Mention App in `modules/mention`, embedded in core; owns groups; own filtered consumer; notifications as `WsPublish`; mute is the notification app's
 - [server-spec-client-owns-behavior](server-spec-client-owns-behavior.md) — repo is server-only; the server specifies and enforces, client behaviour belongs to the client repo
 
