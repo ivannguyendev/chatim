@@ -84,3 +84,38 @@ func tokenCmd(_ context.Context, args []string) error {
 	_, err = fmt.Fprintln(os.Stdout, token)
 	return err
 }
+
+func devIssuerKeyCmd(_ context.Context, args []string) error {
+	fs := flag.NewFlagSet("dev-issuer-key", flag.ContinueOnError)
+	alg := fs.String("alg", devtoken.AlgorithmES256, "EdDSA, ES256 or RS256")
+	kid := fs.String("kid", "", "key id written in the JWK and in every token header")
+	out := fs.String("out", "", "new file for the private JWK (0600); the public JWK goes to stdout")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *out == "" {
+		return errOutRequired
+	}
+	key, err := devtoken.GenerateTenantKey(*alg, *kid)
+	if err != nil {
+		return err
+	}
+	private, err := key.PrivateJWK()
+	if err != nil {
+		return err
+	}
+	public, err := key.PublicJWK()
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(filepath.Clean(*out), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	_, werr := f.Write(private)
+	if err := errors.Join(werr, f.Close()); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(os.Stdout, string(public))
+	return err
+}

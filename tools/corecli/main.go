@@ -39,8 +39,9 @@ commands:
   watch              print live events of a room from NATS
   dev-keys           write a dev Ed25519 signing key and its public JWKS for the websocket node
   token              sign a dev websocket token with the key from dev-keys
+  dev-issuer-key     write a tenant issuer private JWK (0600) and print its public JWK for identity issuer-key-add
   slots              show how live cores share the slots
-  e2e                end-to-end scenario steps: setup, send, change, react-pin, members, links, rooms, mentions, ws, ws-events, ws-drill, check
+  e2e                end-to-end scenario steps: setup, send, change, react-pin, members, links, rooms, mentions, ws, ws-events, ws-drill, gateway, ws-ephemeral, ws-ephemeral-kill, ws-resilience, ws-node-stop, identity-exchange, identity-directory, check
 
 run "corecli <command> -h" for the flags of a command`
 
@@ -76,6 +77,7 @@ func realMain(args []string) int {
 		"watch":             watchCmd,
 		"dev-keys":          devKeysCmd,
 		"token":             tokenCmd,
+		"dev-issuer-key":    devIssuerKeyCmd,
 		"slots":             slotsCmd,
 		"e2e":               e2eCmd,
 	}
