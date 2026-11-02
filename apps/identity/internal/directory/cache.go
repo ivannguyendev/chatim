@@ -76,6 +76,16 @@ func (c *Cache) Lookup(tenant string, ids []string) []User {
 	return found
 }
 
+func (c *Cache) LookupOne(tenant, id string) (User, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	e, ok := c.users[userKey{tenant, id}]
+	if !ok {
+		return User{}, false
+	}
+	return User{ID: id, Entry: e}, true
+}
+
 func (c *Cache) Position() store.Position {
 	c.mu.RLock()
 	defer c.mu.RUnlock()

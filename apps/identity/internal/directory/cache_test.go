@@ -77,6 +77,20 @@ func TestLookupKeepsInputOrderAndSkipsMissing(t *testing.T) {
 	}
 }
 
+func TestLookupOneFindsOnlyTheTenantUser(t *testing.T) {
+	c := directory.NewCache()
+	c.ApplyEntries([]store.DirectoryEntry{entry("shop", "lan", "Lan", 3), entry("other", "minh", "Minh", 1)})
+	want := directory.User{ID: "lan", Entry: directory.Entry{DisplayName: "Lan", State: store.StateActive, Ver: 3}}
+	if got, ok := c.LookupOne("shop", "lan"); !ok || got != want {
+		t.Fatalf("LookupOne(shop, lan) = %+v, %v; want %+v, true", got, ok, want)
+	}
+	for _, tc := range []struct{ tenant, id string }{{"shop", "minh"}, {"shop", "missing"}, {"other", "lan"}} {
+		if got, ok := c.LookupOne(tc.tenant, tc.id); ok || got != (directory.User{}) {
+			t.Fatalf("LookupOne(%s, %s) = %+v, %v; want zero, false", tc.tenant, tc.id, got, ok)
+		}
+	}
+}
+
 func TestPositionAndReadinessStartEmpty(t *testing.T) {
 	c := directory.NewCache()
 	if c.Ready() || c.Position() != (store.Position{}) {
