@@ -265,6 +265,22 @@ linters:
           deny:
             - pkg: github.com/ivannguyendev/chatim/apps/identity/internal/config
               desc: only app reads config
+        identity-trust-pure:
+          files:
+            - "**/apps/identity/internal/trust/**"
+          deny:
+            - pkg: github.com/jackc/pgx
+              desc: trust reads issuers and keys only through store.TrustSource
+            - pkg: connectrpc.com/connect
+              desc: trust knows no transport
+            - pkg: github.com/ivannguyendev/chatim/apps/identity/internal/api
+              desc: trust knows no transport
+            - pkg: github.com/ivannguyendev/chatim/apps/identity/internal/app
+              desc: app wires trust, never the other way
+            - pkg: github.com/ivannguyendev/chatim/apps/identity/internal/admincmd
+              desc: admincmd uses trust, never the other way
+            - pkg: github.com/ivannguyendev/chatim/apps/identity/internal/exchange
+              desc: exchange uses trust, never the other way
     govet:
       enable-all: true
       disable:
