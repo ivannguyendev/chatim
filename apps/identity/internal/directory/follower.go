@@ -17,12 +17,13 @@ const (
 )
 
 type Follower struct {
-	Listen      func(ctx context.Context) (store.Listener, error)
-	Reader      store.DirectoryReader
-	Revocations RevocationSource
-	Cache       *Cache
-	List        *revocation.List
-	Stats       *Stats
+	Listen        func(ctx context.Context) (store.Listener, error)
+	Reader        store.DirectoryReader
+	Revocations   RevocationSource
+	Cache         *Cache
+	List          *revocation.List
+	Stats         *Stats
+	OnRevocations func()
 
 	mu     sync.Mutex
 	signal chan struct{}
@@ -162,6 +163,9 @@ func (f *Follower) handle(ctx context.Context, n store.Notice, sched *passSchedu
 		f.directoryPass(ctx, sched)
 	case store.NoticeRevocations:
 		f.revocationPass(ctx)
+		if f.OnRevocations != nil {
+			f.OnRevocations()
+		}
 	case store.NoticeNone, store.NoticeOther:
 	}
 }

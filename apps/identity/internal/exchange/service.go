@@ -2,6 +2,7 @@ package exchange
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -70,53 +71,60 @@ func New(deps Deps) *Service {
 	if deps.Now == nil {
 		deps.Now = time.Now
 	}
+	if deps.Random == nil {
+		deps.Random = rand.Reader
+	}
 	return &Service{deps: deps}
 }
 
 func (s *Service) Stats() *Stats { return s.deps.Stats }
 
-func (s *Service) Exchange(ctx context.Context, subjectToken string) (Issued, error) {
-	issued, result, err := s.exchange(ctx, subjectToken)
-	s.deps.Stats.count(result)
+func (s *Service) Exchange(ctx context.Context, subjectToken, clientIP string) (Issued, error) {
+	issued, err := s.exchange(ctx, subjectToken, clientIP)
+	if err != nil && !errors.Is(err, ErrRefused) && !errors.Is(err, ErrDisabled) {
+		s.deps.Log.WarnContext(ctx, "token exchange unavailable", slog.String("error", err.Error()), slog.String("ip", clientIP))
+	}
 	return issued, err
 }
 
-func (s *Service) exchange(ctx context.Context, subjectToken string) (Issued, Result, error) {
+func (s *Service) exchange(ctx context.Context, subjectToken, clientIP string) (Issued, error) {
 	if !s.deps.Directory.Ready() {
-		return Issued{}, ResultError, fmt.Errorf("%w: directory not loaded", apperr.ErrUnavailable)
+		return Issued{}, fmt.Errorf("%w: directory not loaded", apperr.ErrUnavailable)
 	}
 	sub, err := s.deps.Verifier.Verify(subjectToken)
 	if err != nil {
-		return s.refused(ctx, subjectToken, err)
+		return Issued{}, s.refused(ctx, subjectToken, clientIP, err)
 	}
 	cached, known := s.deps.Directory.LookupOne(sub.Tenant, sub.User)
-	if known && cached.State == store.StateDisabled {
+	if known && cached.State != store.StateActive {
 		s.deps.Log.InfoContext(ctx, "token exchange refused", slog.String("reason", reasonUserDisabled),
-			slog.String("tenant", sub.Tenant), slog.String("user", sub.User), slog.String("iss", sub.Issuer), slog.String("kid", sub.KeyID))
-		return Issued{}, ResultDisabled, ErrDisabled
+			slog.String("tenant", sub.Tenant), slog.String("user", sub.User), slog.String("iss", sub.Issuer),
+			slog.String("kid", sub.KeyID), slog.String("ip", clientIP))
+		return Issued{}, ErrDisabled
+	}
+	signer, err := s.deps.Signers.Current()
+	if err != nil {
+		return Issued{}, fmt.Errorf("%w: no signing key: %w", apperr.ErrUnavailable, err)
 	}
 	now := s.deps.Now()
 	if err := s.writeProfile(ctx, sub, cached, known, now); err != nil {
-		return Issued{}, ResultError, err
+		return Issued{}, err
 	}
-	issued, err := s.sign(sub, now)
-	if err != nil {
-		return Issued{}, ResultError, err
-	}
-	return issued, ResultOK, nil
+	return s.sign(signer, sub, now)
 }
 
-func (s *Service) refused(ctx context.Context, subjectToken string, err error) (Issued, Result, error) {
+func (s *Service) refused(ctx context.Context, subjectToken, clientIP string, err error) error {
 	if !errors.Is(err, trust.ErrRefused) {
-		return Issued{}, ResultError, fmt.Errorf("%w: verify tenant token: %w", apperr.ErrUnavailable, err)
+		return fmt.Errorf("%w: verify tenant token: %w", apperr.ErrUnavailable, err)
 	}
 	reason := trust.ReasonOf(err)
 	iss, kid := loggedClaims(subjectToken)
-	s.deps.Log.InfoContext(ctx, "token exchange refused", slog.String("reason", string(reason)), slog.String("iss", iss), slog.String("kid", kid))
+	s.deps.Log.InfoContext(ctx, "token exchange refused", slog.String("reason", string(reason)),
+		slog.String("iss", iss), slog.String("kid", kid), slog.String("ip", clientIP))
 	if reason == trust.ReasonTenantDisabled {
-		return Issued{}, ResultDisabled, ErrDisabled
+		return ErrDisabled
 	}
-	return Issued{}, ResultInvalid, ErrRefused
+	return ErrRefused
 }
 
 func (s *Service) writeProfile(ctx context.Context, sub trust.Subject, cached directory.User, known bool, now time.Time) error {
@@ -140,11 +148,7 @@ func (s *Service) writeProfile(ctx context.Context, sub trust.Subject, cached di
 	return nil
 }
 
-func (s *Service) sign(sub trust.Subject, now time.Time) (Issued, error) {
-	signer, err := s.deps.Signers.Current()
-	if err != nil {
-		return Issued{}, fmt.Errorf("%w: no signing key: %w", apperr.ErrUnavailable, err)
-	}
+func (s *Service) sign(signer *signing.Signer, sub trust.Subject, now time.Time) (Issued, error) {
 	sid, err := signing.NewSessionID(s.deps.Random)
 	if err != nil {
 		return Issued{}, fmt.Errorf("%w: %w", apperr.ErrUnavailable, err)

@@ -19,7 +19,7 @@ func claimedName(sub trust.Subject) (string, bool) {
 }
 
 func claimedPicture(sub trust.Subject) (string, bool) {
-	if !sub.HasPicture || directory.ValidateAvatarURL(sub.Picture) != nil {
+	if !sub.HasPicture || sub.Picture == "" || directory.ValidateAvatarURL(sub.Picture) != nil {
 		return "", false
 	}
 	return sub.Picture, true

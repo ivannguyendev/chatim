@@ -75,7 +75,7 @@ func newHealthUnderTest(t *testing.T) (*health, *hangingStore) {
 	st := &hangingStore{keys: []store.SigningKey{{ID: k.ID, State: store.KeyActive, PublicKey: k.PublicKey().Key, PrivateSealed: sealed}}}
 	log := slog.New(slog.DiscardHandler)
 	ring := keyring.New(st, sealer, keyring.Config{Token: signing.TokenConfig{Issuer: "iss", Audience: "aud", TTL: time.Minute}})
-	return newHealth(admin.New(admin.Config{Addr: "admin"}, log), log, st, ring, loadedDirectory{}, 3), st
+	return newHealth(admin.New(admin.Config{Addr: "admin"}, log), log, st, ring, loadedDirectory{}, loadedDirectory{}, 3), st
 }
 
 func (h *health) state() (checked, ready bool) {

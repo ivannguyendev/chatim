@@ -3,10 +3,12 @@ package directory_test
 import (
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
 
+	"github.com/ivannguyendev/chatim/apps/identity/internal/directory"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 	"github.com/ivannguyendev/chatim/pkg/revocation"
@@ -314,6 +316,30 @@ func TestPendingRowsAreRecheckedSoon(t *testing.T) {
 		synctest.Wait()
 		if got := r.changesOffsets(resumed); len(got) != 3 {
 			t.Fatalf("passes after the horizon moved at %v; want no more quick rechecks", got)
+		}
+	})
+}
+
+func TestRevNoticeCallsOnRevocations(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := newRig(t)
+		l := newFakeListener()
+		var woken atomic.Int32
+		f := r.startFollower(&listenFactory{listeners: []*fakeListener{l}}, func(f *directory.Follower) { f.OnRevocations = func() { woken.Add(1) } })
+		defer f.stop(t)
+		synctest.Wait()
+		time.Sleep(2 * time.Second)
+		synctest.Wait()
+		l.events <- listenEvent{notice: store.NoticeDirectory}
+		synctest.Wait()
+		if n := woken.Load(); n != 0 {
+			t.Fatalf("OnRevocations called %d times without a rev notice; want 0", n)
+		}
+		began := time.Now()
+		l.events <- listenEvent{notice: store.NoticeRevocations}
+		synctest.Wait()
+		if n := woken.Load(); n != 1 || time.Since(began) != 0 {
+			t.Fatalf("OnRevocations called %d times after %v; want once at once", n, time.Since(began))
 		}
 	})
 }

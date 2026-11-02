@@ -3,6 +3,7 @@ package trust_test
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -146,4 +147,30 @@ func (blockingSource) TrustedIssuers(ctx context.Context) ([]store.TrustedIssuer
 func (blockingSource) TrustedKeys(ctx context.Context) ([]store.TrustedKey, error) {
 	<-ctx.Done()
 	return nil, ctx.Err()
+}
+
+func TestReloaderCallsOnReadyOnceAfterTheFirstGoodLoad(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		src := newSource()
+		src.update(func(f *fakeSource) { f.err = errSource })
+		r := trust.NewReloader(newVerifier(t, nil), src, 10*time.Second, nil)
+		var readied atomic.Int32
+		r.OnReady = func() { readied.Add(1) }
+		run := startReloader(r)
+		defer run.stop(t)
+		synctest.Wait()
+		if n := readied.Load(); n != 0 {
+			t.Fatalf("OnReady called %d times after a failed load; want 0", n)
+		}
+		src.update(func(f *fakeSource) { f.err = nil })
+		time.Sleep(10 * time.Second)
+		synctest.Wait()
+		r.Wake()
+		synctest.Wait()
+		time.Sleep(10 * time.Second)
+		synctest.Wait()
+		if n := readied.Load(); n != 1 || src.loadCalls() != 4 {
+			t.Fatalf("OnReady called %d times over %d loads; want once over 4", n, src.loadCalls())
+		}
+	})
 }

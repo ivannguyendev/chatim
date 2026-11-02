@@ -259,8 +259,11 @@ type runningFollower struct {
 	stopped sync.Once
 }
 
-func (r *rig) startFollower(listen *listenFactory) *runningFollower {
+func (r *rig) startFollower(listen *listenFactory, mods ...func(*directory.Follower)) *runningFollower {
 	f := &directory.Follower{Listen: listen.open, Reader: r.reader, Revocations: r.revs, Cache: r.cache, List: r.list, Stats: r.stats}
+	for _, mod := range mods {
+		mod(f)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	run := &runningFollower{Follower: f, cancel: cancel, done: make(chan error, 1)}
 	go func() { run.done <- f.Run(ctx) }()

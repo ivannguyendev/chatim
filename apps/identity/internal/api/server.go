@@ -9,6 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/ivannguyendev/chatim/apps/identity/internal/guard"
 	"github.com/ivannguyendev/chatim/pkg/httpcors"
 	"github.com/ivannguyendev/chatim/pkg/pb/chatim/identity/v1/identityv1connect"
 	"github.com/ivannguyendev/chatim/pkg/userlimit"
@@ -26,6 +27,9 @@ type Options struct {
 	DirectoryGate  *userlimit.Gate
 	DirectoryUsers *userlimit.Users
 	DirectoryStats *DirectoryStats
+	Exchange       Exchanger
+	ExchangeIPs    *guard.IPLimiter
+	ExchangeStats  *ExchangeStats
 	BodyMax        int64
 	CORSOrigins    []string
 	ClientIPHeader string
@@ -46,12 +50,17 @@ func New(opts Options) (http.Handler, error) {
 		return nil, errors.New("api: body max must be positive")
 	case opts.Directory != nil && (opts.Revocations == nil || opts.Claims == nil || opts.DirectoryGate == nil || opts.DirectoryUsers == nil):
 		return nil, errors.New("api: the directory needs revocations, claims, a gate and user limits")
+	case opts.Exchange != nil && opts.ExchangeIPs == nil:
+		return nil, errors.New("api: the token exchange needs an ip limiter")
 	}
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
 	if opts.DirectoryStats == nil {
 		opts.DirectoryStats = &DirectoryStats{}
+	}
+	if opts.ExchangeStats == nil {
+		opts.ExchangeStats = &ExchangeStats{}
 	}
 	if opts.Log == nil {
 		opts.Log = slog.New(slog.DiscardHandler)
@@ -63,6 +72,9 @@ func New(opts Options) (http.Handler, error) {
 	mux := http.NewServeMux()
 	if opts.Directory != nil {
 		mux.Handle(identityv1connect.NewDirectoryServiceHandler(directoryService{s: s}, connect.WithReadMaxBytes(directoryBodyMax)))
+	}
+	if opts.Exchange != nil {
+		mux.HandleFunc("POST /v1/token", s.token)
 	}
 	mux.HandleFunc("GET /.well-known/jwks.json", s.jwks)
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {

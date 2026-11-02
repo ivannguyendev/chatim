@@ -27,6 +27,8 @@ type Store interface {
 	store.DirectoryReader
 	keyring.Source
 	api.RevocationSource
+	store.TrustSource
+	store.ProfileWriter
 	DeleteExpiredRevocations(ctx context.Context) (int64, error)
 	ActivateDueSigningKey(ctx context.Context, lead time.Duration, audit store.AuditEvent) (string, error)
 	Ping(ctx context.Context) error
@@ -61,24 +63,36 @@ func poolSize(n int) int32 {
 	return int32(n)
 }
 
-func wireServers(ctx context.Context, cfg config.Config, log *slog.Logger, st Store, deps Deps) (*node, error) {
+func newRing(cfg config.Config, st Store) (*keyring.Ring, error) {
 	sealer, err := signing.NewSealer(cfg.KeyEncryptionKey, rand.Reader)
 	if err != nil {
 		return nil, err
 	}
-	ring := keyring.New(st, sealer, keyring.Config{
+	return keyring.New(st, sealer, keyring.Config{
 		Token:  signing.TokenConfig{Issuer: cfg.Issuer, Audience: cfg.Audience, TTL: cfg.TokenTTL},
 		Leeway: tokenLeeway,
-	})
+	}), nil
+}
+
+func wireServers(ctx context.Context, cfg config.Config, log *slog.Logger, st Store, deps Deps) (*node, error) {
+	ring, err := newRing(cfg, st)
+	if err != nil {
+		return nil, err
+	}
 	dir, err := newDirectory(cfg, st, deps)
 	if err != nil {
 		return nil, err
 	}
-	n := &node{cfg: cfg, log: log, store: st, internalStats: &api.InternalStats{}, dir: dir}
+	tr, err := newTrust(cfg, st, dir, ring, log)
+	if err != nil {
+		return nil, err
+	}
+	n := &node{cfg: cfg, log: log, store: st, internalStats: &api.InternalStats{}, dir: dir, trust: tr}
 	if cfg.ListenAddr != "" {
 		handler, err := api.New(api.Options{
 			Keys: ring, BodyMax: int64(cfg.BodyMax),
 			Directory: dir.cache, Revocations: dir.list, Claims: ring, DirectoryGate: dir.gate, DirectoryUsers: dir.users, DirectoryStats: dir.apiStats,
+			Exchange: tr.service, ExchangeIPs: tr.ips, ExchangeStats: tr.apiStats,
 			CORSOrigins: cfg.CORSOrigins, ClientIPHeader: cfg.ClientIPHeader, Log: log,
 		})
 		if err != nil {
@@ -103,12 +117,13 @@ func wireServers(ctx context.Context, cfg config.Config, log *slog.Logger, st St
 		log.WarnContext(ctx, "GOMEMLIMIT is not set; set it to about 90% of the container memory limit")
 	}
 	sources := append(metricSources(ring, n.internalStats, &n.cleanup, &n.keys), directoryMetricSources(dir, memoryLimited, time.Now)...)
+	sources = append(sources, trustMetricSources(tr)...)
 	metricsHandler, err := metrics.Handler(metricsSubsystem, sources)
 	if err != nil {
 		return nil, err
 	}
 	n.admin = admin.New(admin.Config{Addr: cfg.AdminAddr, Metrics: metricsHandler}, log)
-	n.health = newHealth(n.admin, log, st, ring, dir.cache, deps.SchemaVersion)
+	n.health = newHealth(n.admin, log, st, ring, dir.cache, tr.verifier, deps.SchemaVersion)
 	return n, nil
 }
 

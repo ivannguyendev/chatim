@@ -9,11 +9,14 @@ import (
 )
 
 type Reloader struct {
+	OnReady func()
+
 	verifier *Verifier
 	source   store.TrustSource
 	every    time.Duration
 	log      *slog.Logger
 	wake     chan struct{}
+	readied  bool
 }
 
 func NewReloader(v *Verifier, src store.TrustSource, every time.Duration, log *slog.Logger) *Reloader {
@@ -57,5 +60,11 @@ func (r *Reloader) load(ctx context.Context) {
 	}
 	for _, k := range res.Skipped {
 		r.log.WarnContext(ctx, "trusted key skipped", slog.String("issuer", k.Issuer), slog.String("kid", k.KeyID))
+	}
+	if !r.readied {
+		r.readied = true
+		if r.OnReady != nil {
+			r.OnReady()
+		}
 	}
 }

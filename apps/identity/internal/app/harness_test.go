@@ -38,6 +38,7 @@ type fakeStore struct {
 	due      string
 	dueAsked chan time.Duration
 	outage
+	trustFake
 }
 
 func (f *fakeStore) ActivateDueSigningKey(_ context.Context, lead time.Duration, _ store.AuditEvent) (string, error) {

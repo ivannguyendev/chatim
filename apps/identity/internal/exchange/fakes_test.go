@@ -31,6 +31,7 @@ const (
 	chatIssuer = "https://chat.example"
 	chatAud    = "chat"
 	tokenTTL   = 5 * time.Minute
+	clientIP   = "203.0.113.9"
 )
 
 var (
@@ -166,7 +167,7 @@ type harness struct {
 	svc      *exchange.Service
 }
 
-func newHarness(t *testing.T) *harness {
+func newHarness(t *testing.T, mods ...func(*exchange.Deps)) *harness {
 	t.Helper()
 	public, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -188,7 +189,7 @@ func newHarness(t *testing.T) *harness {
 		logs:     &bytes.Buffer{},
 		stats:    &exchange.Stats{},
 	}
-	h.svc = exchange.New(exchange.Deps{
+	deps := exchange.Deps{
 		Verifier:  h.verifier,
 		Directory: h.dir,
 		Profiles:  h.profiles,
@@ -197,12 +198,21 @@ func newHarness(t *testing.T) *harness {
 		Now:       func() time.Time { return testNow },
 		Stats:     h.stats,
 		Log:       slog.New(slog.NewTextHandler(h.logs, nil)),
-	})
+	}
+	for _, mod := range mods {
+		mod(&deps)
+	}
+	h.svc = exchange.New(deps)
 	return h
 }
 
 func subject(user string) trust.Subject {
 	return trust.Subject{Tenant: "acme", User: user, Issuer: acmeIssuer, KeyID: acmeKeyID}
+}
+
+func (h *harness) exchange(t *testing.T, token string) (exchange.Issued, error) {
+	t.Helper()
+	return h.svc.Exchange(t.Context(), token, clientIP)
 }
 
 func (h *harness) cache(id, name, avatar string, state store.State) {

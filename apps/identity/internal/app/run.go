@@ -40,6 +40,7 @@ type node struct {
 	health        *health
 	internalStats *api.InternalStats
 	dir           *directoryParts
+	trust         *trustParts
 	cleanup       cleanupStats
 	keys          keyStats
 }
@@ -59,9 +60,9 @@ func start(run func() error) *task {
 }
 
 type running struct {
-	admin, health, directory             *task
-	stopAdmin, stopHealth, stopDirectory context.CancelFunc
-	exited                               chan *port
+	admin, health, directory, trust                 *task
+	stopAdmin, stopHealth, stopDirectory, stopTrust context.CancelFunc
+	exited                                          chan *port
 }
 
 func (d Deps) withDefaults() Deps {
@@ -125,13 +126,16 @@ func (n *node) serve(ctx context.Context, deps Deps) error {
 	adminCtx, stopAdmin := context.WithCancel(base)
 	healthCtx, stopHealth := context.WithCancel(base)
 	directoryCtx, stopDirectory := context.WithCancel(base)
+	trustCtx, stopTrust := context.WithCancel(base)
 	r := running{
 		admin:         start(func() error { return n.admin.ServeListener(adminCtx, adminLis) }),
 		health:        start(func() error { n.watchHealth(healthCtx); return nil }),
 		directory:     start(func() error { return n.dir.run(directoryCtx, n.health.trigger) }),
+		trust:         start(func() error { return n.trust.run(trustCtx, n.health.trigger) }),
 		stopAdmin:     stopAdmin,
 		stopHealth:    stopHealth,
 		stopDirectory: stopDirectory,
+		stopTrust:     stopTrust,
 		exited:        make(chan *port, len(n.ports)),
 	}
 	addrs := []any{"admin", adminLis.Addr().String()}
@@ -226,6 +230,11 @@ func (n *node) shutdown(ctx context.Context, r running, cause error) error {
 	<-r.directory.done
 	if r.directory.err != nil {
 		errs = append(errs, fmt.Errorf("directory: %w", r.directory.err))
+	}
+	r.stopTrust()
+	<-r.trust.done
+	if r.trust.err != nil {
+		errs = append(errs, fmt.Errorf("trust reload: %w", r.trust.err))
 	}
 	r.stopHealth()
 	<-r.health.done

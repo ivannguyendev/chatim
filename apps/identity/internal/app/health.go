@@ -12,7 +12,7 @@ import (
 
 const storeCallTimeout = 3 * time.Second
 
-type directoryReadiness interface {
+type readiness interface {
 	Ready() bool
 }
 
@@ -21,7 +21,8 @@ type health struct {
 	log       *slog.Logger
 	store     Store
 	ring      *keyring.Ring
-	directory directoryReadiness
+	directory readiness
+	trust     readiness
 	schema    int
 	wake      chan struct{}
 	mu        sync.Mutex
@@ -31,8 +32,8 @@ type health struct {
 	stopping  bool
 }
 
-func newHealth(srv *admin.Server, log *slog.Logger, st Store, ring *keyring.Ring, dir directoryReadiness, schema int) *health {
-	return &health{admin: srv, log: log, store: st, ring: ring, directory: dir, schema: schema, wake: make(chan struct{}, 1)}
+func newHealth(srv *admin.Server, log *slog.Logger, st Store, ring *keyring.Ring, dir, trusted readiness, schema int) *health {
+	return &health{admin: srv, log: log, store: st, ring: ring, directory: dir, trust: trusted, schema: schema, wake: make(chan struct{}, 1)}
 }
 
 func (h *health) trigger() {
@@ -56,10 +57,10 @@ func (h *health) check(ctx context.Context) {
 		version, versionErr = h.store.SchemaVersion(checkCtx)
 	}
 	storeOK := pingErr == nil && versionErr == nil && version == h.schema
-	keyReady, directoryReady := h.ring.Ready(), h.directory.Ready()
+	keyReady, directoryReady, trustReady := h.ring.Ready(), h.directory.Ready(), h.trust.Ready()
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	ready := keyReady && directoryReady && storeOK
+	ready := keyReady && directoryReady && trustReady && storeOK
 	if h.stopping || (h.checked && ready == h.ready) {
 		return
 	}
@@ -72,7 +73,7 @@ func (h *health) check(ctx context.Context) {
 		return
 	}
 	h.log.WarnContext(ctx, "identity not ready",
-		"signing_key", keyReady, "directory", directoryReady, "reload_err", errText(reloadErr), "store_err", errText(pingErr),
+		"signing_key", keyReady, "directory", directoryReady, "trust", trustReady, "reload_err", errText(reloadErr), "store_err", errText(pingErr),
 		"schema_version", version, "schema_expected", h.schema, "schema_err", errText(versionErr))
 }
 
