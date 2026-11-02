@@ -17,6 +17,7 @@ Owner-confirmed rules, reasons and decisions for chatim, one fact per file. Read
 - [index-changes-by-command](index-changes-by-command.md) — index changes on an existing DB only through an explicit command with dry run
 - [ops-setup-hard-to-get-wrong](ops-setup-hard-to-get-wrong.md) — cross-app settings and dependent timers are enforced in code (refuse to boot / not ready), never only documented; procedures like key rotation are one command (M6 part 2, 2026-10-31)
 - [cache-follows-db](cache-follows-db.md) — server caches change with the database (same-transaction signal, never TTL); design for load, client caching is not ours; boot warm-ups must not storm on K8s restarts (M6 part 3a, 2026-10-31)
+- [http-between-services-plain-keepalive](http-between-services-plain-keepalive.md) — service-to-service HTTP answers at once and reuses one kept-alive connection; never hold a request (no long polling, no SSE) (owner 2026-11-02)
 
 ## Owner decisions by area
 
