@@ -118,7 +118,7 @@ make identity-admin ARGS="issuer-add -issuer T-backend -tenant T"   # identity o
 make -s ws-token ARGS="-tenant T -user U"   # dev token (default -ttl 15m) for both websocket nodes and gateway-1; make ws-logs [NODE=2], make gw-logs
 make alerts-check           # promtool check rules on deploy/prometheus/alerts.yml (in Docker)
 make e2e                    # tools/corecli + scripts/e2e.sh, phases 1–13 and 15 (docs/e2e.md); E2E_ONLY=13 or 15 runs only that identity phase
-make poc TOOL=corebench ARGS="-rate 2000 -duration 60s -watch 20"   # needs core-up; other tools: mongobench, postgresbench, natsbench, wsbench, wsload, exchangebench
+make poc TOOL=corebench ARGS="-rate 2000 -duration 60s -watch 20"   # needs core-up; other tools: mongobench, natsbench, wsbench, wsload, exchangebench
 ```
 
 - Core one-shot commands (`docker exec chatim-core-1 /app resync|recount|indexes …`) and `corecli` subcommands: `docs/apps/core.md`. Indexes change only through `/app indexes` (D191).
