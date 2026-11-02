@@ -113,6 +113,34 @@ make poc TOOL=wsload POC_FLAGS="--ulimit nofile=65536:65536" ARGS="-scenario ste
 make poc TOOL=wsload POC_FLAGS="--ulimit nofile=65536:65536" ARGS="-scenario burst"
 ```
 
+### M6 PA — đổi token `POST /v1/token` (`tools/poc/exchangebench`, dev 2026-11-02)
+
+Mục tiêu 1.700 lần đổi/s là lúc 100K máy nối lại hàng loạt với token chat 5 phút. Một node `identity-1` chạy trên Postgres compose, mặc định `shared_buffers` 512MB, với `IDENTITY_EXCHANGE_IP_RATE=100000` vì mọi request đến từ một IP. Công cụ ký sẵn mọi token tenant trước khi pacer chạy, nên thời gian ký phía client không làm lệch lịch gửi. Mỗi lượt đi qua toàn bộ tập user theo thứ tự ngẫu nhiên. Lượt **lạnh** dùng issuer mới, mỗi lần đổi là một lần JIT tạo user. Lượt **ấm** chạy lại trên các user lượt lạnh đã tạo (`-users-file`), không ghi gì. Độ trễ tính từ giờ đã lên lịch. CPU của `identity` là Δ`process_cpu_seconds_total`. `CPU_Speed_Limit` bằng 100 suốt khung đo của cả bốn lượt; RS256 bị hạ xuống 65–76 chỉ trong lúc ký trước 110.500 token RSA, trước khi pacer chạy.
+
+| Lượt | Đạt | 5xx | Độ trễ p50/p99 | CPU `identity` | JIT tạo |
+|---|---|---|---|---|---|
+| ES256 ấm | 1.700/s | 0 | 0,82/2,08 ms | 0,62 core | 0 |
+| RS256 ấm | 1.700/s | 0 | 0,84/2,20 ms | 0,60 core | 0 |
+| ES256 lạnh | 562/s (client bỏ 68.254 lần vì đầy 2.048 request đang chờ) | 0 | 3,9/5,0 s | 0,40 core | 34.285 |
+| RS256 lạnh | 564/s (bỏ 68.171) | 0 | 3,9/4,9 s | 0,37 core | 34.432 |
+
+Kết quả: [results/exchange-261102/](results/exchange-261102/es256-warm.txt).
+
+- Khi không phải ghi, một node đạt 1.700/s và chỉ dùng khoảng 0,6 core, nên kiểm chữ ký RS256 hay ES256 không phải nút thắt.
+- Lượt lạnh dừng ở khoảng 560/s, trong khi `identity` chỉ dùng 0,4 core. Lượt chẩn đoán 20s ([es256-cold-waits.txt](results/exchange-261102/es256-cold-waits.txt), lấy mẫu `pg_stat_activity` mỗi 2s) thấy 18–19 trên 20 kết nối chờ `Lock|object` trên `INSERT INTO users`, kết nối còn lại ở `IO|WalSync`. Mỗi lần ghi user là một transaction có `NOTIFY` (trigger `directory_changes`). Postgres xếp hàng các commit có `NOTIFY` qua một khoá chung, nên các commit không gộp được lần fsync WAL. Kết luận này suy ra từ trạng thái chờ, chưa đọc `pg_locks`.
+- Sau đợt lạnh, follower danh bạ chạy liên tục và giữ Postgres gần một core. Hai nguyên nhân: mỗi `NOTIFY` chạy một lượt đọc feed, và câu feed dùng prepared statement bị chốt kế hoạch chung, quét cả `directory_changes`. Lỗi có từ phần 3a.
+- Owner 2026-11-02 quyết định chuyển store `identity` sang MongoDB ở phase PM, trước PB, nên PA không sửa hai lỗi trên. Đo lại lượt lạnh trên MongoDB ở PM.
+
+```bash
+IDENTITY_EXCHANGE_IP_RATE=100000 make core-up
+make -s go ARGS="run ./tools/corecli dev-issuer-key -alg ES256 -kid bench-es256 -out bin/bench/exchange-keys/es256.jwk" > bin/bench/exchange-keys/es256.pub
+make identity-admin ARGS="issuer-add -issuer T-backend -tenant T"
+make identity-admin ARGS="issuer-key-add -issuer T-backend -kid bench-es256 -alg ES256 -jwk '$(cat bin/bench/exchange-keys/es256.pub)'"
+make poc TOOL=exchangebench ARGS="-alg ES256 -key bin/bench/exchange-keys/es256.jwk -issuer T-backend -tenant T"
+docker exec chatim-postgres sh -c 'psql -U "$POSTGRES_USER" -d chatim_identity -Atc "SELECT id FROM users WHERE tenant_id = '"'"'T'"'"'"' > bin/bench/exchange-keys/es256-users.txt
+make poc TOOL=exchangebench ARGS="-alg ES256 -key bin/bench/exchange-keys/es256.jwk -issuer T-backend -tenant T -users-file bin/bench/exchange-keys/es256-users.txt"
+```
+
 ## Đo prod-like (chưa chạy)
 
 **Trước khi chạy: hỏi owner số thật** thay cho giả định ở thiết kế §2.3 (room/user, tỉ lệ sửa, room active, số member doc).
@@ -133,6 +161,7 @@ Hạ tầng: Mongo rs 3 member NVMe, NATS 3 node, 2 host Linux, dữ liệu th�
 | P10 | Bộ nhớ NATS cho map chống trùng 5m (~3M id ở 10K tin/s) | Cỡ NATS |
 | P11 | Tải đọc Redis presence khi có watch: ước tính ~800K khoá/s toàn hệ thống ở 100K máy × 50 người được xem, chưa có cache phía offline (M4 phần 4) | Cỡ `chatim-redis-presence`, có cần cache offline không (D201) |
 | P12 | Nạp lại hàng loạt sau một lần nhảy (`WS_RELOAD_RATE` 1.000 user/s mỗi node, D195): thời gian tới `ready`/`resync` cho mọi user và tải `ListMyRoomIDs` lên core; `wsload` chưa có kịch bản nhảy | Giá trị `WS_RELOAD_RATE`, cỡ core |
+| P13 | Đổi token `POST /v1/token` khi 100K user nối lại hàng loạt (~1.700/s) trên store MongoDB của `identity` (phase PM), cả lượt lạnh (JIT tạo user) lẫn ấm; dev Postgres lạnh dừng ở ~560/s/node | Số replica `identity`, cỡ database |
 
 ## Kết quả lưu trong repo
 
