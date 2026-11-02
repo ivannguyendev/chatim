@@ -104,6 +104,47 @@ type Revocation struct {
 	At     time.Time
 }
 
+type TrustedIssuer struct {
+	Issuer      string
+	TenantID    string
+	IssuerState State
+	TenantState State
+}
+
+type TrustedKey struct {
+	Issuer    string
+	KeyID     string
+	Algorithm string
+	PublicKey []byte
+	State     State
+	CreatedAt time.Time
+	CreatedBy string
+}
+
+type SeenProfile struct {
+	DisplayName string
+	AvatarURL   string
+}
+
+type ProfileWrite struct {
+	TenantID    string
+	UserID      string
+	DisplayName string
+	AvatarURL   string
+	Seen        *SeenProfile
+	At          time.Time
+	By          string
+}
+
+type TrustSource interface {
+	TrustedIssuers(ctx context.Context) ([]TrustedIssuer, error)
+	TrustedKeys(ctx context.Context) ([]TrustedKey, error)
+}
+
+type ProfileWriter interface {
+	WriteProfile(ctx context.Context, w ProfileWrite) (written bool, err error)
+}
+
 type Directory interface {
 	SetProfile(ctx context.Context, tenantID, userID string, update ProfileUpdate, audit AuditEvent) error
 	CreateGroup(ctx context.Context, g Group, audit AuditEvent) error
@@ -121,6 +162,11 @@ type Admin interface {
 	CreateSigningKey(ctx context.Context, k SigningKey, audit AuditEvent) (time.Time, error)
 	ActivateSigningKey(ctx context.Context, id string, lead time.Duration, audit AuditEvent) error
 	SigningKeys(ctx context.Context) ([]SigningKey, error)
+	CreateTrustedIssuer(ctx context.Context, issuer, tenantID string, audit AuditEvent) error
+	SetTrustedIssuerState(ctx context.Context, issuer string, state State, audit AuditEvent) error
+	AddTrustedKey(ctx context.Context, k TrustedKey, audit AuditEvent) error
+	RemoveTrustedKey(ctx context.Context, issuer, keyID string, audit AuditEvent) error
+	TrustedKeysOf(ctx context.Context, issuer string) ([]TrustedKey, error)
 }
 
 type ChangeKind int16
