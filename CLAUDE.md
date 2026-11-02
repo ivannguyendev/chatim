@@ -40,7 +40,7 @@ Check every brainstorm, summary and plan against this list before showing it to 
 - Field names: full basic English words except `messages`; counters end in `_ver`; `updated_at`/`updated_by`; `request_id`.
 - Owner summaries: Vietnamese, plain words with examples, written from the final state (rewrite after a review round, never append patches). Risks list only real consequences of this plan, not other systems' operations and not mechanisms already accepted.
 - Ask the owner only pivotal questions, in plain words with an example; never re-ask an answered one.
-- Identity (owner 2026-11-01, replaces D209): Keycloak, one realm per tenant, is the IAM and broker; `apps/iam` becomes a Go bridge off the login path (revocation list, directory feed, tenant ↔ realm). Use only built-in Keycloak features and configuration, never Keycloak plugins (SPI). Tenant admins never set passwords; they only send Keycloak's one-time action email link.
+- Identity (owner 2026-11-02, replaces D179, D209 and the 2026-11-01 Keycloak choice): chat owns no identity (no passwords, login, sessions, SSO). It keeps per-tenant trusted issuers, a user mirror, groups and revocation, and exchanges a JWT signed by the tenant's backend or IdP for its own chat token. The tenant always comes from the issuer config, never from a token claim. Never write plugins for an external IAM.
 
 ## Workflows
 
