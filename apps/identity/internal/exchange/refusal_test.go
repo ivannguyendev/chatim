@@ -1,6 +1,7 @@
 package exchange_test
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -106,5 +107,23 @@ func TestUnavailableDependenciesAreLoggedOnce(t *testing.T) {
 			assertWrites(t, h, nil)
 			assertOneLogLine(t, h, "level=WARN", "token exchange unavailable")
 		})
+	}
+}
+
+func TestCanceledClientIsNotCountedAsAStoreError(t *testing.T) {
+	h := newHarness(t)
+	h.profiles.err = context.Canceled
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, err := h.svc.Exchange(ctx, "tenant-token", clientIP)
+	if !errors.Is(err, context.Canceled) || !errors.Is(err, apperr.ErrUnavailable) {
+		t.Fatalf("Exchange error = %v; want canceled and unavailable", err)
+	}
+	assertWrites(t, h, map[exchange.WriteResult]uint64{})
+	if h.stats.StoreErrors() != 0 {
+		t.Fatalf("store errors = %d; want 0 for a client that left", h.stats.StoreErrors())
+	}
+	if h.logs.Len() != 0 {
+		t.Fatalf("log %q; want nothing for a client that left", h.logs.String())
 	}
 }

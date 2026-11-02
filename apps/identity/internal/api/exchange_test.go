@@ -281,3 +281,12 @@ func TestExchangeExpiresInRoundsUpTheRemainingSeconds(t *testing.T) {
 		}
 	}
 }
+
+func TestExchangeDoesNotCountClientsThatLeft(t *testing.T) {
+	r := newExchangeRig(t)
+	r.fake.err = fmt.Errorf("%w: write just-in-time profile: %w", apperr.ErrUnavailable, context.Canceled)
+	r.post(t, exchangeForm("tenant-token"), nil)
+	if c := r.counts(); c != "ok=0 invalid=0 disabled=0 rate=0 error=0" {
+		t.Fatalf("counts %s; want nothing counted for a canceled request", c)
+	}
+}

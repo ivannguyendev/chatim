@@ -76,6 +76,8 @@ func (s *server) token(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, exchange.ErrDisabled):
 		stats.Disabled.Add(1)
 		writeOAuthError(w, http.StatusBadRequest, oauthInvalidGrant)
+	case errors.Is(err, context.Canceled):
+		writeOAuthError(w, http.StatusServiceUnavailable, oauthUnavailable)
 	default:
 		stats.Errors.Add(1)
 		writeOAuthError(w, http.StatusServiceUnavailable, oauthUnavailable)

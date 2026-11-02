@@ -81,7 +81,7 @@ func (s *Service) Stats() *Stats { return s.deps.Stats }
 
 func (s *Service) Exchange(ctx context.Context, subjectToken, clientIP string) (Issued, error) {
 	issued, err := s.exchange(ctx, subjectToken, clientIP)
-	if err != nil && !errors.Is(err, ErrRefused) && !errors.Is(err, ErrDisabled) {
+	if err != nil && !errors.Is(err, ErrRefused) && !errors.Is(err, ErrDisabled) && !errors.Is(err, context.Canceled) {
 		s.deps.Log.WarnContext(ctx, "token exchange unavailable", slog.String("error", err.Error()), slog.String("ip", clientIP))
 	}
 	return issued, err
@@ -134,6 +134,8 @@ func (s *Service) writeProfile(ctx context.Context, sub trust.Subject, cached di
 	}
 	written, err := s.deps.Profiles.WriteProfile(ctx, w)
 	switch {
+	case err != nil && ctx.Err() != nil:
+		return fmt.Errorf("%w: write just-in-time profile: %w", apperr.ErrUnavailable, ctx.Err())
 	case err != nil:
 		s.deps.Stats.storeErrors.Add(1)
 		s.deps.Stats.countWrite(WriteError)
