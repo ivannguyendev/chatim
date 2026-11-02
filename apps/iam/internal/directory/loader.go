@@ -80,7 +80,7 @@ func (l *Loader) attempt(ctx context.Context) (bool, error) {
 }
 
 func (l *Loader) loadEntries(ctx context.Context) error {
-	var after store.AccountKey
+	var after store.UserKey
 	for {
 		entries, err := l.Reader.LoadPage(ctx, after, loadPageSize)
 		if err != nil {
@@ -91,6 +91,6 @@ func (l *Loader) loadEntries(ctx context.Context) error {
 			return nil
 		}
 		last := entries[len(entries)-1]
-		after = store.AccountKey{TenantID: last.TenantID, ID: last.ID}
+		after = store.UserKey{TenantID: last.TenantID, ID: last.ID}
 	}
 }

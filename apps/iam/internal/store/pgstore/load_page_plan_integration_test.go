@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	planAccounts = 20000
+	planUsers    = 20000
 	planPageSize = 1000
 )
 
@@ -23,25 +23,24 @@ type planNode struct {
 	Plans         []planNode `json:"Plans"`
 }
 
-func seedAccountsWithoutStats(t *testing.T, s fixture, accounts int) {
+func seedUsersWithoutStats(t *testing.T, s fixture, count int) {
 	t.Helper()
 	ctx := context.Background()
-	for _, table := range []string{"accounts", "directory_changes"} {
+	for _, table := range []string{"users", "directory_changes"} {
 		if _, err := s.raw.Exec(ctx, "ALTER TABLE "+table+" SET (autovacuum_enabled = false)"); err != nil {
 			t.Fatalf("disable autovacuum on %s: %v", table, err)
 		}
 	}
 	seedTenant(t, s, "shop")
-	_, err := s.raw.Exec(ctx, `INSERT INTO accounts (tenant_id, id, username, display_name, state, password_hash,
-		password_must_change, password_changed_at, ver, created_at, updated_at, updated_by)
-		SELECT 'shop', 'u' || lpad(g::text, 6, '0'), 'user' || g, 'User ' || g, 1, 'x', false, now(), 1, now(), now(), 'test'
-		FROM generate_series(1, $1::int) g`, accounts)
+	_, err := s.raw.Exec(ctx, `INSERT INTO users (tenant_id, id, display_name, state, ver, created_at, updated_at, updated_by)
+		SELECT 'shop', 'u' || lpad(g::text, 6, '0'), 'User ' || g, 1, 1, now(), now(), 'test'
+		FROM generate_series(1, $1::int) g`, count)
 	if err != nil {
-		t.Fatalf("seed accounts: %v", err)
+		t.Fatalf("seed users: %v", err)
 	}
 	var analyzed int
 	err = s.raw.QueryRow(ctx, `SELECT count(*) FROM pg_stat_user_tables
-		WHERE relname IN ('accounts', 'directory_changes') AND (last_analyze IS NOT NULL OR last_autoanalyze IS NOT NULL)`).Scan(&analyzed)
+		WHERE relname IN ('users', 'directory_changes') AND (last_analyze IS NOT NULL OR last_autoanalyze IS NOT NULL)`).Scan(&analyzed)
 	if err != nil || analyzed != 0 {
 		t.Fatalf("analyzed tables = %d, %v; want none", analyzed, err)
 	}
@@ -76,9 +75,9 @@ func checkScansStayNearTheLimit(t *testing.T, n planNode, limit int) {
 	}
 }
 
-func TestLoadPageUsesTheAccountsKeyWithoutStats(t *testing.T) {
+func TestLoadPageUsesTheUsersKeyWithoutStats(t *testing.T) {
 	s := openStore(t)
-	seedAccountsWithoutStats(t, s, planAccounts)
+	seedUsersWithoutStats(t, s, planUsers)
 	plan := explainLoadPage(t, s, "u018000", planPageSize)
 	if plan.ActualRows != planPageSize {
 		t.Fatalf("page rows = %.0f; want %d", plan.ActualRows, planPageSize)

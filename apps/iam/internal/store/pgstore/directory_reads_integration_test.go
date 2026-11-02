@@ -56,14 +56,14 @@ func ids(changes []store.Change) []string {
 
 func rename(t *testing.T, conn execer, id, name string) {
 	t.Helper()
-	exec(t, conn, "UPDATE accounts SET display_name = $2 WHERE tenant_id = 'shop' AND id = $1", id, name)
+	exec(t, conn, "UPDATE users SET display_name = $2 WHERE tenant_id = 'shop' AND id = $1", id, name)
 }
 
-func seedShop(t *testing.T, s fixture, accounts ...string) {
+func seedShop(t *testing.T, s fixture, userIDs ...string) {
 	t.Helper()
 	seedTenant(t, s, "shop")
-	for i, id := range accounts {
-		seedAccount(t, s, "shop", id, "user"+string(rune('a'+i)))
+	for i, id := range userIDs {
+		seedUser(t, s, "shop", id, "user"+string(rune('a'+i)))
 	}
 }
 
@@ -105,11 +105,11 @@ func TestReadingFromTheStartReturnsTheWholeDirectory(t *testing.T) {
 	quiet.Mentionable = false
 	createGroups(t, s, sales, north, quiet)
 	ctx := context.Background()
-	if err := s.SetAccountGroups(ctx, "shop", lanID, []string{"sales", "north"}, audit("account_groups_set")); err != nil {
-		t.Fatalf("SetAccountGroups: %v", err)
+	if err := s.SetUserGroups(ctx, "shop", lanID, []string{"sales", "north"}, audit("user_groups_set")); err != nil {
+		t.Fatalf("SetUserGroups: %v", err)
 	}
 	avatar := "https://cdn.example/lan.png"
-	if err := s.SetProfile(ctx, "shop", lanID, store.ProfileUpdate{AvatarURL: &avatar}, audit("profile_set")); err != nil {
+	if err := s.SetProfile(ctx, "shop", lanID, store.ProfileUpdate{AvatarURL: &avatar}, audit("user_set")); err != nil {
 		t.Fatalf("SetProfile: %v", err)
 	}
 
@@ -160,7 +160,7 @@ func TestPagesResumeInsideOneTransactionsRows(t *testing.T) {
 	s := openStore(t)
 	seedShop(t, s, lanID, minhID, anID, binhID)
 	_, start := drain(t, s, store.Position{}, 100)
-	exec(t, s.raw, "UPDATE accounts SET display_name = display_name || '!' WHERE tenant_id = 'shop'")
+	exec(t, s.raw, "UPDATE users SET display_name = display_name || '!' WHERE tenant_id = 'shop'")
 	createGroups(t, s, group(lanID, ""))
 
 	changes, _ := drain(t, s, start, 1)
@@ -212,7 +212,7 @@ func TestLoadStartThenChangesCatchesWritesMadeDuringTheLoad(t *testing.T) {
 		t.Fatalf("LoadStart = %+v", start)
 	}
 	name := "Minh 2"
-	if err := s.SetProfile(ctx, "shop", minhID, store.ProfileUpdate{DisplayName: &name}, audit("profile_set")); err != nil {
+	if err := s.SetProfile(ctx, "shop", minhID, store.ProfileUpdate{DisplayName: &name}, audit("user_set")); err != nil {
 		t.Fatalf("SetProfile: %v", err)
 	}
 	got, _ := drain(t, s, start, 100)
@@ -222,14 +222,14 @@ func TestLoadStartThenChangesCatchesWritesMadeDuringTheLoad(t *testing.T) {
 	}
 }
 
-func TestLoadPageWalksAllAccountsInKeyOrder(t *testing.T) {
+func TestLoadPageWalksAllUsersInKeyOrder(t *testing.T) {
 	s := openStore(t)
 	seedShop(t, s, minhID, lanID, binhID)
 	seedTenant(t, s, "acme")
-	seedAccount(t, s, "acme", anID, "an")
+	seedUser(t, s, "acme", anID, "an")
 	ctx := context.Background()
 	var got []store.DirectoryEntry
-	var after store.AccountKey
+	var after store.UserKey
 	for {
 		page, err := s.LoadPage(ctx, after, 2)
 		if err != nil {
@@ -240,7 +240,7 @@ func TestLoadPageWalksAllAccountsInKeyOrder(t *testing.T) {
 		}
 		got = append(got, page...)
 		last := page[len(page)-1]
-		after = store.AccountKey{TenantID: last.TenantID, ID: last.ID}
+		after = store.UserKey{TenantID: last.TenantID, ID: last.ID}
 	}
 	var keys []string
 	for _, e := range got {

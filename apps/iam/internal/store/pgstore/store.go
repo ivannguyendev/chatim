@@ -121,8 +121,8 @@ func insertAudit(ctx context.Context, tx pgx.Tx, a store.AuditEvent) error {
 		return fmt.Errorf("encode audit detail: %w", err)
 	}
 	_, err = tx.Exec(ctx,
-		"INSERT INTO audit_events (tenant_id, at, actor, action, account_id, session_id, ip, detail) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-		a.TenantID, a.At, a.Actor, a.Action, nullable(a.AccountID), nullable(a.SessionID), nullable(a.IP), body)
+		"INSERT INTO audit_events (tenant_id, at, actor, action, user_id, detail) VALUES ($1, $2, $3, $4, $5, $6)",
+		a.TenantID, a.At, a.Actor, a.Action, nullable(a.UserID), body)
 	return err
 }
 

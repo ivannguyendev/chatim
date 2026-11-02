@@ -38,10 +38,11 @@ type Tenant struct {
 	UpdatedBy string
 }
 
-type Account struct {
+type User struct {
 	TenantID    string
 	ID          string
 	DisplayName string
+	AvatarURL   string
 	State       State
 	Ver         int64
 	CreatedAt   time.Time
@@ -89,14 +90,12 @@ type SigningKey struct {
 }
 
 type AuditEvent struct {
-	TenantID  string
-	At        time.Time
-	Actor     string
-	Action    string
-	AccountID string
-	SessionID string
-	IP        string
-	Detail    map[string]string
+	TenantID string
+	At       time.Time
+	Actor    string
+	Action   string
+	UserID   string
+	Detail   map[string]string
 }
 
 type Revocation struct {
@@ -106,11 +105,11 @@ type Revocation struct {
 }
 
 type Directory interface {
-	SetProfile(ctx context.Context, tenantID, accountID string, update ProfileUpdate, audit AuditEvent) error
+	SetProfile(ctx context.Context, tenantID, userID string, update ProfileUpdate, audit AuditEvent) error
 	CreateGroup(ctx context.Context, g Group, audit AuditEvent) error
 	UpdateGroup(ctx context.Context, tenantID, id string, update GroupUpdate, audit AuditEvent) error
 	DeleteGroup(ctx context.Context, tenantID, id string, audit AuditEvent) error
-	SetAccountGroups(ctx context.Context, tenantID, accountID string, groupIDs []string, audit AuditEvent) error
+	SetUserGroups(ctx context.Context, tenantID, userID string, groupIDs []string, audit AuditEvent) error
 	Group(ctx context.Context, tenantID, id string) (Group, error)
 }
 
@@ -118,7 +117,7 @@ type Admin interface {
 	Directory
 	CreateTenant(ctx context.Context, t Tenant, audit AuditEvent) error
 	SetTenantState(ctx context.Context, id string, state State, r Revocation, audit AuditEvent) error
-	SetAccountState(ctx context.Context, tenantID, id string, state State, audit AuditEvent) error
+	SetUserState(ctx context.Context, tenantID, id string, state State, audit AuditEvent) error
 	CreateSigningKey(ctx context.Context, k SigningKey, audit AuditEvent) (time.Time, error)
 	ActivateSigningKey(ctx context.Context, id string, lead time.Duration, audit AuditEvent) error
 	SigningKeys(ctx context.Context) ([]SigningKey, error)
@@ -167,7 +166,7 @@ type ChangePage struct {
 	PendingAboveHorizon bool
 }
 
-type AccountKey struct {
+type UserKey struct {
 	TenantID string
 	ID       string
 }
@@ -184,7 +183,7 @@ type DirectoryEntry struct {
 type DirectoryReader interface {
 	Changes(ctx context.Context, after Position, limit int) (ChangePage, error)
 	LoadStart(ctx context.Context) (Position, error)
-	LoadPage(ctx context.Context, after AccountKey, limit int) ([]DirectoryEntry, error)
+	LoadPage(ctx context.Context, after UserKey, limit int) ([]DirectoryEntry, error)
 	TryLoadSlot(ctx context.Context, slots int) (release func(), ok bool, err error)
 }
 

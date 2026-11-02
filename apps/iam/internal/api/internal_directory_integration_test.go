@@ -65,9 +65,8 @@ func feedDatabase(t *testing.T) (*pgstore.Store, string) {
 	defer func() { _ = raw.Close(context.Background()) }()
 	_, err = raw.Exec(ctx, `INSERT INTO tenants (id, name, state, ver, created_at, updated_at, updated_by)
 		VALUES ('shop', 'shop', 1, 1, now(), now(), 'test');
-		INSERT INTO accounts (tenant_id, id, username, display_name, state, password_hash,
-		password_must_change, password_changed_at, ver, created_at, updated_at, updated_by)
-		VALUES ('shop', 'lan', 'lan', 'Lan', 1, 'x', false, now(), 1, now(), now(), 'test')`)
+		INSERT INTO users (tenant_id, id, display_name, state, ver, created_at, updated_at, updated_by)
+		VALUES ('shop', 'lan', 'Lan', 1, 1, now(), now(), 'test')`)
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -160,7 +159,7 @@ func TestFeedLongPollIsWokenByTheFollowerSignal(t *testing.T) {
 
 	first, err := pollFeed(t.Context(), srv.URL, "?wait=10")
 	if err != nil || len(first.Changes) != 1 || first.Next == "" {
-		t.Fatalf("first page = %+v (%v); want the seeded account", first, err)
+		t.Fatalf("first page = %+v (%v); want the seeded user", first, err)
 	}
 	answered := make(chan polled, 1)
 	go func() {

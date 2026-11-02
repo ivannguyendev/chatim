@@ -86,14 +86,14 @@ func seedTenant(t testing.TB, s fixture, id string) {
 	}
 }
 
-const seedAccountSQL = "INSERT INTO accounts (tenant_id, id, username, display_name, state, password_hash, password_must_change, password_changed_at, ver, created_at, updated_at, updated_by) VALUES ($1, $2, $3, $3, $4, '', false, $5, 1, $5, $5, 'test')"
+const seedUserSQL = "INSERT INTO users (tenant_id, id, display_name, state, ver, created_at, updated_at, updated_by) VALUES ($1, $2, $3, $4, 1, $5, $5, 'test')"
 
-func seedAccount(t testing.TB, s fixture, tenant, id, username string) store.Account {
+func seedUser(t testing.TB, s fixture, tenant, id, name string) store.User {
 	t.Helper()
-	if _, err := s.raw.Exec(context.Background(), seedAccountSQL, tenant, id, username, store.StateActive, t0); err != nil {
-		t.Fatalf("seed account %s: %v", id, err)
+	if _, err := s.raw.Exec(context.Background(), seedUserSQL, tenant, id, name, store.StateActive, t0); err != nil {
+		t.Fatalf("seed user %s: %v", id, err)
 	}
-	return store.Account{TenantID: tenant, ID: id, DisplayName: username, State: store.StateActive, Ver: 1, CreatedAt: t0, UpdatedAt: t0, UpdatedBy: "test"}
+	return store.User{TenantID: tenant, ID: id, DisplayName: name, State: store.StateActive, Ver: 1, CreatedAt: t0, UpdatedAt: t0, UpdatedBy: "test"}
 }
 
 func revocation() store.Revocation {

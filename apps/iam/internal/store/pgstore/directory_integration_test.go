@@ -11,7 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store"
-	"github.com/ivannguyendev/chatim/apps/iam/internal/store/pgstore"
 )
 
 const (
@@ -71,13 +70,13 @@ func insertGroup(t *testing.T, s fixture, id, name string, parent any) {
 func listen(t *testing.T, uri string) *pgx.Conn {
 	t.Helper()
 	conn := connect(t, uri)
-	exec(t, conn, "LISTEN iam_changes")
+	exec(t, conn, "LISTEN identity_changes")
 	return conn
 }
 
 func notificationsUntil(t *testing.T, listener, marker *pgx.Conn, mark string) []string {
 	t.Helper()
-	exec(t, marker, "SELECT pg_notify('iam_changes', $1)", mark)
+	exec(t, marker, "SELECT pg_notify('identity_changes', $1)", mark)
 	var got []string
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -100,88 +99,39 @@ func wantNotifications(t *testing.T, listener, marker *pgx.Conn, mark string, wa
 	}
 }
 
-func TestMigrationBackfillsOneUserChangePerAccount(t *testing.T) {
-	ctx := context.Background()
-	uri := testDatabaseURI(t)
-	s, err := pgstore.Open(ctx, uri, pgstore.Options{MaxConns: 2, RevocationKeep: testKeep})
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(s.Close)
-	if _, err := s.MigrateUpTo(ctx, 2); err != nil {
-		t.Fatalf("MigrateUpTo 2: %v", err)
-	}
-	raw := connect(t, uri)
-	exec(t, raw, "INSERT INTO tenants (id, name, state, ver, created_at, updated_at, updated_by) VALUES ('shop', 'shop', 1, 1, now(), now(), 'test')")
-	for id, username := range map[string]string{lanID: "lan", minhID: "minh", anID: "an"} {
-		exec(t, raw, "INSERT INTO accounts (tenant_id, id, username, state, password_hash, password_must_change, password_changed_at, ver, created_at, updated_at, updated_by) VALUES ('shop', $1, $2, 1, 'hash', false, now(), 1, now(), now(), 'test')", id, username)
-	}
-	pending, err := s.MigrateUpTo(ctx, 3)
-	if err != nil {
-		t.Fatalf("MigrateUpTo 3: %v", err)
-	}
-	if !slices.Equal(pending, []string{"0003_directory.sql"}) {
-		t.Fatalf("pending = %v; want [0003_directory.sql]", pending)
-	}
-	rows, err := raw.Query(ctx, "SELECT a.username, a.display_name, a.avatar_url, d.kind, d.ver FROM accounts a JOIN directory_changes d ON d.tenant_id = a.tenant_id AND d.id = a.id ORDER BY a.username")
-	if err != nil {
-		t.Fatalf("query: %v", err)
-	}
-	type row struct {
-		Username, DisplayName, AvatarURL string
-		Kind                             int16
-		Ver                              int64
-	}
-	got, err := pgx.CollectRows(rows, pgx.RowToStructByPos[row])
-	if err != nil {
-		t.Fatalf("collect: %v", err)
-	}
-	want := []row{{"an", "an", "", userKind, 1}, {"lan", "lan", "", userKind, 1}, {"minh", "minh", "", userKind, 1}}
-	if !slices.Equal(got, want) {
-		t.Fatalf("backfill = %+v; want %+v", got, want)
-	}
-	var total, xids int
-	if err := raw.QueryRow(ctx, "SELECT count(*), count(DISTINCT change_xid) FROM directory_changes").Scan(&total, &xids); err != nil {
-		t.Fatalf("count: %v", err)
-	}
-	if total != 3 || xids != 1 {
-		t.Fatalf("directory_changes rows = %d, distinct change_xid = %d; want 3, 1", total, xids)
-	}
-}
-
 func TestProfileUpdateBumpsVerOnlyWhenAFieldChanges(t *testing.T) {
 	ctx := context.Background()
 	s := openStore(t)
 	seedTenant(t, s, "shop")
-	seedAccount(t, s, "shop", lanID, "lan")
+	seedUser(t, s, "shop", lanID, "lan")
 	wantVer(t, s, userKind, lanID, 1, "create")
 	var displayName string
-	if err := s.raw.QueryRow(ctx, "SELECT display_name FROM accounts WHERE id = $1", lanID).Scan(&displayName); err != nil || displayName != "lan" {
+	if err := s.raw.QueryRow(ctx, "SELECT display_name FROM users WHERE id = $1", lanID).Scan(&displayName); err != nil || displayName != "lan" {
 		t.Fatalf("display_name = %q, %v; want lan", displayName, err)
 	}
-	exec(t, s.raw, "UPDATE accounts SET display_name = 'Lan Nguyen' WHERE id = $1", lanID)
+	exec(t, s.raw, "UPDATE users SET display_name = 'Lan Nguyen' WHERE id = $1", lanID)
 	wantVer(t, s, userKind, lanID, 2, "display name changed")
-	exec(t, s.raw, "UPDATE accounts SET display_name = 'Lan Nguyen' WHERE id = $1", lanID)
+	exec(t, s.raw, "UPDATE users SET display_name = 'Lan Nguyen' WHERE id = $1", lanID)
 	wantVer(t, s, userKind, lanID, 2, "same display name")
-	exec(t, s.raw, "UPDATE accounts SET updated_by = 'someone' WHERE id = $1", lanID)
+	exec(t, s.raw, "UPDATE users SET updated_by = 'someone' WHERE id = $1", lanID)
 	wantVer(t, s, userKind, lanID, 2, "no directory field changed")
-	exec(t, s.raw, "UPDATE accounts SET avatar_url = 'https://cdn.example/lan.png' WHERE id = $1", lanID)
+	exec(t, s.raw, "UPDATE users SET avatar_url = 'https://cdn.example/lan.png' WHERE id = $1", lanID)
 	wantVer(t, s, userKind, lanID, 3, "avatar changed")
-	if err := s.SetAccountState(ctx, "shop", lanID, store.StateDisabled, audit("account_disable")); err != nil {
-		t.Fatalf("SetAccountState: %v", err)
+	if err := s.SetUserState(ctx, "shop", lanID, store.StateDisabled, audit("user_disable")); err != nil {
+		t.Fatalf("SetUserState: %v", err)
 	}
 	wantVer(t, s, userKind, lanID, 4, "state changed")
 }
 
-func TestAccountGroupsChangeBumpsTheUser(t *testing.T) {
+func TestUserGroupsChangeBumpsTheUser(t *testing.T) {
 	s := openStore(t)
 	seedTenant(t, s, "shop")
-	seedAccount(t, s, "shop", lanID, "lan")
+	seedUser(t, s, "shop", lanID, "lan")
 	insertGroup(t, s, "sales", "Sales", nil)
-	exec(t, s.raw, "INSERT INTO account_groups (tenant_id, account_id, group_id) VALUES ('shop', $1, 'sales')", lanID)
+	exec(t, s.raw, "INSERT INTO user_groups (tenant_id, user_id, group_id) VALUES ('shop', $1, 'sales')", lanID)
 	wantVer(t, s, userKind, lanID, 2, "joined")
 	wantVer(t, s, groupKind, "sales", 1, "group after join")
-	exec(t, s.raw, "DELETE FROM account_groups WHERE tenant_id = 'shop' AND account_id = $1", lanID)
+	exec(t, s.raw, "DELETE FROM user_groups WHERE tenant_id = 'shop' AND user_id = $1", lanID)
 	wantVer(t, s, userKind, lanID, 3, "left")
 }
 
@@ -209,16 +159,16 @@ func TestNotifyIsSentAfterCommitOnly(t *testing.T) {
 	ctx := context.Background()
 	s := openStore(t)
 	seedTenant(t, s, "shop")
-	seedAccount(t, s, "shop", lanID, "lan")
-	seedAccount(t, s, "shop", minhID, "minh")
+	seedUser(t, s, "shop", lanID, "lan")
+	seedUser(t, s, "shop", minhID, "minh")
 	listener := listen(t, s.uri)
 	marker := connect(t, s.uri)
 	tx, err := s.raw.Begin(ctx)
 	if err != nil {
 		t.Fatalf("Begin: %v", err)
 	}
-	exec(t, tx, "UPDATE accounts SET display_name = 'Lan Nguyen' WHERE id = $1", lanID)
-	exec(t, tx, "UPDATE accounts SET display_name = 'Minh Tran' WHERE id = $1", minhID)
+	exec(t, tx, "UPDATE users SET display_name = 'Lan Nguyen' WHERE id = $1", lanID)
+	exec(t, tx, "UPDATE users SET display_name = 'Minh Tran' WHERE id = $1", minhID)
 	wantNotifications(t, listener, marker, "before-commit")
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatalf("Commit: %v", err)
@@ -228,7 +178,7 @@ func TestNotifyIsSentAfterCommitOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Begin: %v", err)
 	}
-	exec(t, tx, "UPDATE accounts SET display_name = 'Lan' WHERE id = $1", lanID)
+	exec(t, tx, "UPDATE users SET display_name = 'Lan' WHERE id = $1", lanID)
 	if err := tx.Rollback(ctx); err != nil {
 		t.Fatalf("Rollback: %v", err)
 	}
@@ -239,17 +189,53 @@ func TestStateChangesNotifyTheirChannel(t *testing.T) {
 	ctx := context.Background()
 	s := openStore(t)
 	seedTenant(t, s, "shop")
-	seedAccount(t, s, "shop", lanID, "lan")
+	seedUser(t, s, "shop", lanID, "lan")
 	listener := listen(t, s.uri)
 	marker := connect(t, s.uri)
-	if err := s.SetAccountState(ctx, "shop", lanID, store.StateDisabled, audit("account_disable")); err != nil {
-		t.Fatalf("SetAccountState lan: %v", err)
+	if err := s.SetUserState(ctx, "shop", lanID, store.StateDisabled, audit("user_disable")); err != nil {
+		t.Fatalf("SetUserState lan: %v", err)
 	}
-	wantNotifications(t, listener, marker, "account", "dir")
+	wantNotifications(t, listener, marker, "user", "dir")
 	if err := s.SetTenantState(ctx, "shop", store.StateDisabled, revocation(), audit("tenant_disable")); err != nil {
 		t.Fatalf("SetTenantState: %v", err)
 	}
 	wantNotifications(t, listener, marker, "tenant", "rev")
 	exec(t, s.raw, "UPDATE tenants SET name = 'Shop' WHERE id = 'shop'")
 	wantNotifications(t, listener, marker, "tenant-rename")
+}
+
+func userVer(t *testing.T, s fixture, id string) int64 {
+	t.Helper()
+	var ver int64
+	if err := s.raw.QueryRow(context.Background(), "SELECT ver FROM users WHERE tenant_id = 'shop' AND id = $1", id).Scan(&ver); err != nil {
+		t.Fatalf("read users.ver: %v", err)
+	}
+	return ver
+}
+
+func TestUserSetBumpsUserVerEveryTimeAndTheFeedOnlyOnChange(t *testing.T) {
+	ctx := context.Background()
+	s := openStore(t)
+	seedTenant(t, s, "shop")
+	listener := listen(t, s.uri)
+	marker := connect(t, s.uri)
+	seedUser(t, s, "shop", lanID, "lan")
+	wantVer(t, s, userKind, lanID, 1, "insert")
+	wantNotifications(t, listener, marker, "insert", "dir")
+	if err := s.SetProfile(ctx, "shop", lanID, store.ProfileUpdate{DisplayName: new("lan")}, audit("user_set")); err != nil {
+		t.Fatalf("SetProfile same name: %v", err)
+	}
+	wantVer(t, s, userKind, lanID, 1, "same name")
+	if got := userVer(t, s, lanID); got != 2 {
+		t.Fatalf("users.ver after same name = %d; want 2", got)
+	}
+	wantNotifications(t, listener, marker, "same-name")
+	if err := s.SetProfile(ctx, "shop", lanID, store.ProfileUpdate{DisplayName: new("Lan Nguyen")}, audit("user_set")); err != nil {
+		t.Fatalf("SetProfile new name: %v", err)
+	}
+	wantVer(t, s, userKind, lanID, 2, "new name")
+	if got := userVer(t, s, lanID); got != 3 {
+		t.Fatalf("users.ver after new name = %d; want 3", got)
+	}
+	wantNotifications(t, listener, marker, "new-name", "dir")
 }

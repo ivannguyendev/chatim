@@ -67,22 +67,22 @@ func tenantState(state store.State) command {
 	}
 }
 
-func accountFlags(name string) (flags, *string, *string) {
+func userFlags(name string) (flags, *string, *string) {
 	f := newFlags(name)
 	return f, f.set.String("tenant", "", "tenant id"), f.set.String("user", "", "user id")
 }
 
-func accountState(state store.State) command {
+func userState(state store.State) command {
 	return func(ctx context.Context, env Env, st Store, args []string) error {
-		f, tenant, user := accountFlags("account-state")
+		f, tenant, user := userFlags("user-state")
 		if err := f.parse(args, "tenant", "user"); err != nil {
 			return err
 		}
-		action := map[store.State]string{store.StateActive: "account_enable", store.StateDisabled: "account_disable"}[state]
-		if err := st.SetAccountState(ctx, *tenant, *user, state, audit(env, *tenant, action, *user)); err != nil {
+		action := map[store.State]string{store.StateActive: "user_enable", store.StateDisabled: "user_disable"}[state]
+		if err := st.SetUserState(ctx, *tenant, *user, state, audit(env, *tenant, action, *user)); err != nil {
 			return err
 		}
-		_, err := fmt.Fprintf(env.Out, "account %s: %s\n", *user, action)
+		_, err := fmt.Fprintf(env.Out, "user %s: %s\n", *user, action)
 		return err
 	}
 }

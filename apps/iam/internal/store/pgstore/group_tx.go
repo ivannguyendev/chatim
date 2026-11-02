@@ -2,7 +2,6 @@ package pgstore
 
 import (
 	"context"
-	"maps"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -109,14 +108,4 @@ func (r *serialRun) unlockTree(ctx context.Context) bool {
 	var unlocked bool
 	err := r.conn.QueryRow(wait, "SELECT pg_advisory_unlock(2, hashtext($1))", r.tenant).Scan(&unlocked)
 	return err == nil && unlocked
-}
-
-func withAuditDetail(a store.AuditEvent, key, value string) store.AuditEvent {
-	detail := maps.Clone(a.Detail)
-	if detail == nil {
-		detail = map[string]string{}
-	}
-	detail[key] = value
-	a.Detail = detail
-	return a
 }

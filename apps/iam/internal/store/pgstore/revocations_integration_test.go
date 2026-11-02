@@ -33,7 +33,7 @@ func TestTenantDisableRecordsOneRevokeTime(t *testing.T) {
 	ctx := context.Background()
 	s := openStore(t)
 	seedTenant(t, s, "shop")
-	seedAccount(t, s, "shop", lanID, "lan")
+	seedUser(t, s, "shop", lanID, "lan")
 	if err := s.SetTenantState(ctx, "shop", store.StateDisabled, revocation(), audit("tenant_disable")); err != nil {
 		t.Fatalf("disable: %v", err)
 	}

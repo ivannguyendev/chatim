@@ -51,16 +51,16 @@ func TestUsageErrorsExitWithTwo(t *testing.T) {
 		{"nope"},
 		{"tenant-create", "-id", "shop"},
 		{"tenant-create", "-id", "Bad Tenant", "-name", "x"},
-		{"account-disable", "-tenant", "shop"},
-		{"account-enable", "-tenant", "shop", "-username", "lan"},
+		{"user-disable", "-tenant", "shop"},
+		{"user-enable", "-tenant", "shop", "-username", "lan"},
 		{"jwks-export"},
 		{"migrate", "extra"},
 		{"key-activate", "-unknown"},
 		{"group-create", "-tenant", "shop", "-id", "sales"},
 		{"group-update", "-tenant", "shop", "-id", "sales"},
 		{"group-delete", "-tenant", "shop"},
-		{"account-groups", "-tenant", "shop", "-user", "lan"},
-		{"profile-set", "-tenant", "shop", "-user", "lan"},
+		{"user-groups", "-tenant", "shop", "-user", "lan"},
+		{"user-set", "-tenant", "shop", "-user", "lan"},
 	}
 	for _, args := range cases {
 		if code := admincmd.Run(context.Background(), env, args); code != 2 {
@@ -70,12 +70,12 @@ func TestUsageErrorsExitWithTwo(t *testing.T) {
 }
 
 func TestIsKnowsEveryCommand(t *testing.T) {
-	for _, name := range []string{"migrate", "account-disable", "account-groups", "profile-set", "key-rotate", "jwks-export", "bootstrap"} {
+	for _, name := range []string{"migrate", "user-disable", "user-enable", "user-groups", "user-set", "key-rotate", "jwks-export", "bootstrap"} {
 		if !admincmd.Is(name) {
 			t.Fatalf("Is(%q) = false", name)
 		}
 	}
-	for _, name := range []string{"account-create", "password-reset", "session-list", "session-revoke", "role-create", "account-roles", "group-roles", "client-permissions-set"} {
+	for _, name := range []string{"account-create", "account-disable", "account-enable", "account-groups", "profile-set", "password-reset", "session-list", "session-revoke", "role-create", "account-roles", "group-roles", "client-permissions-set"} {
 		if admincmd.Is(name) {
 			t.Fatalf("Is(%q) = true for a removed command", name)
 		}
@@ -85,20 +85,20 @@ func TestIsKnowsEveryCommand(t *testing.T) {
 	}
 }
 
-type missingAccountStore struct {
+type missingUserStore struct {
 	closedStore
 	tenant, user string
 }
 
-func (s *missingAccountStore) SetAccountState(_ context.Context, tenantID, id string, _ store.State, _ store.AuditEvent) error {
+func (s *missingUserStore) SetUserState(_ context.Context, tenantID, id string, _ store.State, _ store.AuditEvent) error {
 	s.tenant, s.user = tenantID, id
 	return apperr.ErrNotFound
 }
 
-func TestAccountDisableOfAnUnknownUserExitsWithOne(t *testing.T) {
-	st := &missingAccountStore{}
+func TestUserDisableOfAnUnknownUserExitsWithOne(t *testing.T) {
+	st := &missingUserStore{}
 	env, out, logs := testEnv(t, func(context.Context) (admincmd.Store, error) { return st, nil })
-	if code := admincmd.Run(context.Background(), env, []string{"account-disable", "-tenant", "shop", "-user", "ghost"}); code != 1 {
+	if code := admincmd.Run(context.Background(), env, []string{"user-disable", "-tenant", "shop", "-user", "ghost"}); code != 1 {
 		t.Fatalf("Run = %d, want 1", code)
 	}
 	if st.tenant != "shop" || st.user != "ghost" || out.Len() != 0 || !strings.Contains(logs.String(), "not found") {

@@ -15,7 +15,7 @@ const benchUsers = 100000
 func benchEntries(users int) []store.DirectoryEntry {
 	entries := make([]store.DirectoryEntry, users)
 	for i := range entries {
-		id := accountID(i + 1)
+		id := userID(i + 1)
 		entries[i] = store.DirectoryEntry{
 			TenantID: "shop", ID: id, DisplayName: fmt.Sprintf("User %d", i+1),
 			AvatarURL: "https://cdn.example.com/avatars/" + id + ".png", State: store.StateActive, Ver: 1,
@@ -35,7 +35,7 @@ func randomIDBatches(batches, size, users int) [][]string {
 	for i := range out {
 		out[i] = make([]string, size)
 		for j := range out[i] {
-			out[i][j] = accountID(1 + mrand.IntN(users))
+			out[i][j] = userID(1 + mrand.IntN(users))
 		}
 	}
 	return out

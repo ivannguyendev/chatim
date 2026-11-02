@@ -17,17 +17,17 @@ const (
 	minhID = "a2aaaaaaaaaaaaaaaaaaaaaaaa"
 )
 
-const seedAccountSQL = "INSERT INTO accounts (tenant_id, id, username, display_name, state, password_hash, password_must_change, password_changed_at, ver, created_at, updated_at, updated_by) VALUES ($1, $2, $3, $3, 1, '', false, now(), 1, now(), now(), 'test')"
+const seedUserSQL = "INSERT INTO users (tenant_id, id, display_name, state, ver, created_at, updated_at, updated_by) VALUES ($1, $2, $3, 1, 1, now(), now(), 'test')"
 
-func seedAccount(t *testing.T, h *harness, tenant, id, username string) {
+func seedUser(t *testing.T, h *harness, tenant, id, name string) {
 	t.Helper()
 	conn, err := pgx.Connect(context.Background(), h.uri)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = conn.Close(context.Background()) }()
-	if _, err := conn.Exec(context.Background(), seedAccountSQL, tenant, id, username); err != nil {
-		t.Fatalf("seed account %s: %v", id, err)
+	if _, err := conn.Exec(context.Background(), seedUserSQL, tenant, id, name); err != nil {
+		t.Fatalf("seed user %s: %v", id, err)
 	}
 }
 
@@ -119,10 +119,10 @@ func TestGroupCommands(t *testing.T) {
 	wantCLIAudits(t, raw, "group_delete", 1)
 }
 
-func accountGroupsOf(t *testing.T, raw *pgx.Conn, id string) []string {
+func userGroupsOf(t *testing.T, raw *pgx.Conn, id string) []string {
 	t.Helper()
 	rows, err := raw.Query(context.Background(),
-		"SELECT group_id FROM account_groups WHERE tenant_id = 'shop' AND account_id = $1 ORDER BY group_id", id)
+		"SELECT group_id FROM user_groups WHERE tenant_id = 'shop' AND user_id = $1 ORDER BY group_id", id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,52 +135,56 @@ func accountGroupsOf(t *testing.T, raw *pgx.Conn, id string) []string {
 
 func profileOf(t *testing.T, raw *pgx.Conn, id string) (name, avatar string) {
 	t.Helper()
-	err := raw.QueryRow(context.Background(), "SELECT display_name, avatar_url FROM accounts WHERE tenant_id = 'shop' AND id = $1", id).Scan(&name, &avatar)
+	err := raw.QueryRow(context.Background(), "SELECT display_name, avatar_url FROM users WHERE tenant_id = 'shop' AND id = $1", id).Scan(&name, &avatar)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return name, avatar
 }
 
-func TestAccountGroupAndProfileCommands(t *testing.T) {
+func TestUserGroupsAndUserSetCommands(t *testing.T) {
 	h, raw := newShop(t)
-	seedAccount(t, h, "shop", lanID, "lan")
+	seedUser(t, h, "shop", lanID, "lan")
 	h.run("group-create", "-tenant", "shop", "-id", "sales", "-name", "Sales")
 	h.run("group-create", "-tenant", "shop", "-id", "north", "-name", "North")
-	if out := h.run("account-groups", "-tenant", "shop", "-user", lanID, "-groups", " sales , north "); out != "account "+lanID+" groups: sales, north\n" {
-		t.Fatalf("account-groups output = %q", out)
+	if out := h.run("user-groups", "-tenant", "shop", "-user", lanID, "-groups", " sales , north "); out != "user "+lanID+" groups: sales, north\n" {
+		t.Fatalf("user-groups output = %q", out)
 	}
-	if got := accountGroupsOf(t, raw, lanID); !slices.Equal(got, []string{"north", "sales"}) {
+	if got := userGroupsOf(t, raw, lanID); !slices.Equal(got, []string{"north", "sales"}) {
 		t.Fatalf("groups = %v", got)
 	}
-	h.fail(1, "account-groups", "-tenant", "shop", "-user", lanID, "-groups", "sales,missing")
-	h.fail(1, "account-groups", "-tenant", "shop", "-user", lanID, "-groups", "sales,sales")
-	h.fail(1, "account-groups", "-tenant", "shop", "-user", lanID, "-groups", "sales,")
-	h.fail(1, "account-groups", "-tenant", "shop", "-user", minhID, "-groups", "sales")
-	if got := accountGroupsOf(t, raw, lanID); !slices.Equal(got, []string{"north", "sales"}) {
+	h.fail(1, "user-groups", "-tenant", "shop", "-user", lanID, "-groups", "sales,missing")
+	h.fail(1, "user-groups", "-tenant", "shop", "-user", lanID, "-groups", "sales,sales")
+	h.fail(1, "user-groups", "-tenant", "shop", "-user", lanID, "-groups", "sales,")
+	h.fail(1, "user-groups", "-tenant", "shop", "-user", minhID, "-groups", "sales")
+	if got := userGroupsOf(t, raw, lanID); !slices.Equal(got, []string{"north", "sales"}) {
 		t.Fatalf("groups after refused changes = %v", got)
 	}
-	if out := h.run("account-groups", "-tenant", "shop", "-user", lanID, "-groups", ""); out != "account "+lanID+" groups: none\n" {
-		t.Fatalf("account-groups clear output = %q", out)
+	if out := h.run("user-groups", "-tenant", "shop", "-user", lanID, "-groups", ""); out != "user "+lanID+" groups: none\n" {
+		t.Fatalf("user-groups clear output = %q", out)
 	}
-	if got := accountGroupsOf(t, raw, lanID); len(got) != 0 {
+	if got := userGroupsOf(t, raw, lanID); len(got) != 0 {
 		t.Fatalf("groups after clear = %v", got)
 	}
-	if out := h.run("profile-set", "-tenant", "shop", "-user", lanID, "-name", "Lan N.", "-avatar", "https://cdn.example/lan.png"); out != "profile updated for "+lanID+"\n" {
-		t.Fatalf("profile-set output = %q", out)
+	if out := h.run("user-set", "-tenant", "shop", "-user", lanID, "-name", "Lan N.", "-avatar", "https://cdn.example/lan.png"); out != "user "+lanID+" updated\n" {
+		t.Fatalf("user-set output = %q", out)
 	}
-	h.fail(1, "profile-set", "-tenant", "shop", "-user", lanID, "-avatar", "http://cdn.example/lan.png")
-	h.fail(1, "profile-set", "-tenant", "shop", "-user", lanID, "-name", "Bad", "-avatar", "http://cdn.example/lan.png")
+	h.fail(1, "user-set", "-tenant", "shop", "-user", lanID, "-avatar", "http://cdn.example/lan.png")
+	h.fail(1, "user-set", "-tenant", "shop", "-user", lanID, "-name", "Bad", "-avatar", "http://cdn.example/lan.png")
 	if name, avatar := profileOf(t, raw, lanID); name != "Lan N." || avatar != "https://cdn.example/lan.png" {
 		t.Fatalf("profile after refused changes = %q %q", name, avatar)
 	}
-	h.run("profile-set", "-tenant", "shop", "-user", lanID, "-avatar", "")
+	h.run("user-set", "-tenant", "shop", "-user", lanID, "-avatar", "")
 	if name, avatar := profileOf(t, raw, lanID); name != "Lan N." || avatar != "" {
 		t.Fatalf("profile after clearing the avatar = %q %q", name, avatar)
 	}
-	h.fail(1, "profile-set", "-tenant", "shop", "-user", minhID, "-name", "Minh")
-	h.fail(2, "profile-set", "-tenant", "shop", "-user", lanID)
-	h.fail(2, "account-groups", "-tenant", "shop", "-user", lanID)
-	wantCLIAudits(t, raw, "account_groups_set", 2)
-	wantCLIAudits(t, raw, "profile_set", 2)
+	h.fail(1, "user-set", "-tenant", "shop", "-user", minhID, "-name", "Minh")
+	h.fail(2, "user-set", "-tenant", "shop", "-user", lanID)
+	h.fail(2, "user-groups", "-tenant", "shop", "-user", lanID)
+	wantCLIAudits(t, raw, "user_groups_set", 2)
+	wantCLIAudits(t, raw, "user_set", 2)
+	var named int
+	if err := raw.QueryRow(context.Background(), "SELECT count(*) FROM audit_events WHERE action IN ('user_groups_set', 'user_set') AND user_id = $1", lanID).Scan(&named); err != nil || named != 4 {
+		t.Fatalf("audits naming the user = %d, %v; want 4", named, err)
+	}
 }

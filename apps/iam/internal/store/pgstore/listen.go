@@ -10,7 +10,7 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/redact"
 )
 
-const changesChannel = "iam_changes"
+const changesChannel = "identity_changes"
 
 type Listener struct {
 	conn *pgx.Conn

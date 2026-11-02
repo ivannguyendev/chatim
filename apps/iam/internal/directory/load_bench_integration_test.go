@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	loadAccounts  = 100000
+	loadUsers     = 100000
 	loadReplicas  = 10
 	loadSlots     = 4
 	loadRunBudget = 2 * time.Minute
@@ -62,15 +62,15 @@ func runLoader(tb testing.TB, reader store.DirectoryReader, revocations director
 		tb.Errorf("Loader.Run: %v", err)
 		return cache
 	}
-	if !cache.Ready() || cache.Len() != loadAccounts {
-		tb.Errorf("ready=%v cache=%d; want ready with %d users", cache.Ready(), cache.Len(), loadAccounts)
+	if !cache.Ready() || cache.Len() != loadUsers {
+		tb.Errorf("ready=%v cache=%d; want ready with %d users", cache.Ready(), cache.Len(), loadUsers)
 	}
 	return cache
 }
 
 func BenchmarkLoad100K(b *testing.B) {
 	s, raw, _ := itestDatabase(b)
-	seedDirectory(b, raw, loadAccounts)
+	seedDirectory(b, raw, loadUsers)
 	for b.Loop() {
 		runLoader(b, s, s)
 	}
@@ -79,7 +79,7 @@ func BenchmarkLoad100K(b *testing.B) {
 
 func TestTenLoadersFinish(t *testing.T) {
 	_, raw, uri := itestDatabase(t)
-	seedDirectory(t, raw, loadAccounts)
+	seedDirectory(t, raw, loadUsers)
 	var holders, peak atomic.Int64
 	readyAfter := make([]time.Duration, loadReplicas)
 	stores := make([]*pgstore.Store, loadReplicas)

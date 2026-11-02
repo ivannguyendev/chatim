@@ -41,7 +41,7 @@ Từ owner 2026-11-02 chat không giữ danh tính: `iam` (sẽ đổi tên `ide
 |---|---|
 | `GET /.well-known/jwks.json` | Khoá công khai (chờ, đang ký, nghỉ chưa quá 15m30s), `Cache-Control: public, max-age=60`; chưa có khoá → 503. Node prod lấy khoá **chỉ** từ đường này qua HTTPS của LB |
 | `POST /chatim.iam.v1.DirectoryService/GetUsers` | Connect, Bearer access token của `iam`. 1–500 `user_ids` mỗi lần (id trùng gộp lại); trả `id`, `display_name`, `avatar_url`, `state` (`ACTIVE`/`DISABLED`) **từ RAM**, không chạm Postgres; **không bao giờ** có email hay username. Id lạ hoặc của tenant khác bị bỏ qua, không báo lỗi. Ví dụ: Lan gửi 300 id người trong danh sách hội thoại, nhận lại 300 tên |
-| `POST /chatim.iam.v1.DirectoryService/GetMyProfile` | Bearer; hồ sơ của chính mình (`id`, `display_name`, `avatar_url`) đọc **từ RAM** theo `tid`, `sub` của token, không chạm Postgres; không có trong danh bạ → `not_found`. `UpdateMyProfile` đã bỏ; đổi tên, ảnh bằng lệnh `profile-set` |
+| `POST /chatim.iam.v1.DirectoryService/GetMyProfile` | Bearer; hồ sơ của chính mình (`id`, `display_name`, `avatar_url`) đọc **từ RAM** theo `tid`, `sub` của token, không chạm Postgres; không có trong danh bạ → `not_found`. `UpdateMyProfile` đã bỏ; đổi tên, ảnh bằng lệnh `user-set` |
 
 **Giới hạn và mã lỗi của `DirectoryService`** (cả hai lệnh): body tối đa 64 KiB; mỗi người dùng `IAM_USER_RATE`/`IAM_USER_BURST` lời gọi và `IAM_USER_INFLIGHT` lời gọi chạy cùng lúc mỗi node; cả node tối đa `IAM_INFLIGHT_MAX` lời gọi chạy cùng lúc. Token kiểm bằng khoá ký và danh sách thu hồi **trong RAM** (cùng chuông `NOTIFY` với danh bạ), không đọc bảng `sessions`, nên phiên vừa bị thu hồi còn đọc được thêm vài ms (tối đa ~2s khi kết nối `LISTEN` đứt).
 
@@ -73,23 +73,23 @@ Không có email và username. Mã lỗi: sai hoặc thiếu secret → 401; `af
 
 ## Lệnh admin
 
-Chạy trong container (`make iam-admin ARGS="…"` = `docker exec chatim-iam-1 /app …`); kết quả ra stdout, log ra stderr; sai cú pháp thoát 2, lỗi thoát 1 (kể cả tên, id nhóm, URL ảnh sai: kiểm bằng hàm của `directory` trước khi chạm store); mọi thay đổi ghi audit `admin-cli` (`tenant_create`, `tenant_disable`, `tenant_enable`, `account_disable`, `account_enable`; nhóm: `group_create`, `group_update`, `group_delete` kèm `detail.group` và số role bị gỡ; `account_groups_set`, `profile_set`). User chỉ được tạo bằng đổi token (sau PA T1 chưa có đường tạo; itest chèn thẳng dòng `accounts`).
+Chạy trong container (`make iam-admin ARGS="…"` = `docker exec chatim-iam-1 /app …`); kết quả ra stdout, log ra stderr; sai cú pháp thoát 2, lỗi thoát 1 (kể cả tên, id nhóm, URL ảnh sai: kiểm bằng hàm của `directory` trước khi chạm store); mọi thay đổi ghi audit `admin-cli` (`tenant_create`, `tenant_disable`, `tenant_enable`, `user_disable`, `user_enable`; nhóm: `group_create`, `group_update`, `group_delete` kèm `detail.group`; `user_groups_set`, `user_set`), cột `audit_events.user_id` ghi user bị đổi. User chỉ được tạo bằng đổi token (PA chưa xong đường này; itest chèn thẳng dòng `users`).
 
 | Lệnh | Việc |
 |---|---|
-| `migrate [-apply]` | Mặc định chỉ liệt kê migration chờ; `-apply` chạy dưới khoá advisory |
+| `migrate [-apply]` | Mặc định chỉ liệt kê migration chờ; `-apply` chạy dưới khoá advisory. Chỉ có một migration `0001_identity.sql` (gộp 1–4 cũ ở M6 PA): `tenants` (kèm `sessions_revoked_at`), `users`, `trusted_issuers`, `trusted_keys` (`algorithm` chỉ `EdDSA`, `ES256`, `RS256`), `signing_keys`, `audit_events`, `revoked_sessions`, `groups` (kèm `ancestors`), `user_groups`, `directory_changes`; `NOTIFY` kênh `identity_changes`. Database đã áp migration cũ 1–4 (`chatim_iam`) không dùng được: health thấy version 4 ≠ 1, node không ready; dùng database mới |
 | `tenant-create -id -name`, `tenant-disable -id`, `tenant-enable -id` | Khoá tenant ghi `sessions_revoked_at`: mọi token cấp trước giờ đó bị node từ chối |
-| `account-disable`, `account-enable` (`-tenant -user <id>`) | Đổi `state`, tăng `ver`; user không có → `not found`, thoát 1 |
+| `user-disable`, `user-enable` (`-tenant -user <id>`) | Đổi `state`, tăng `ver`; user không có → `not found`, thoát 1 |
 | `key-rotate [-activate-if-none]`, `key-activate -kid` | Tạo khoá chờ, in giờ `iam` sẽ tự kích hoạt; `key-activate` kích hoạt tay (khoá cũ và khoá chờ cũ hơn sang nghỉ, luôn đúng một khoá đang ký), từ chối khoá chưa đủ `IAM_KEY_ACTIVATE_LEAD` và khoá đã nghỉ |
 | `jwks-export -out file [-merge file]` | Ghi JWKS công khai (khoá chờ, đang ký, nghỉ chưa quá 15m30s), ghi file tạm rồi đổi tên |
 | `bootstrap -jwks file` | Dev: migrate, tạo khoá đầu nếu chưa có, gộp vào file JWKS |
 | `group-create -tenant -id -name [-parent] [-mentionable=true]` | Tạo nhóm; `-parent` phải là nhóm còn sống; `-mentionable=false` để không gắn `@nhóm` được. Tenant hay nhóm cha không có → lỗi, thoát 1 |
 | `group-update -tenant -id [-name] [-parent] [-mentionable=BOOL]` | Chỉ đổi cờ có ghi trên lệnh; `-parent ""` chuyển nhóm lên gốc; chuyển vào chính nó hoặc nhóm con → lỗi `group cycle`, thoát 1; không ghi cờ nào để đổi → thoát 2 |
-| `group-delete -tenant -id` | Xoá mềm nhóm, gỡ mọi thành viên (và dòng `group_roles` cũ còn sót tới PA T2); còn nhóm con sống → lỗi, thoát 1 |
-| `account-groups -tenant -user <id> -groups a,b` | Thay **toàn bộ** nhóm của tài khoản; tách theo dấu phẩy, bỏ khoảng trắng hai đầu; phần rỗng, id sai, id lặp hay nhóm không có → lỗi, không đổi gì; `-groups ""` (phải ghi rõ) gỡ mọi nhóm |
-| `profile-set -tenant -user <id> [-name] [-avatar URL]` | Đổi tên hiển thị và/hoặc ảnh (phải ít nhất một cờ, không thì thoát 2); ảnh chỉ nhận `https://`, `-avatar ""` xoá ảnh; giá trị sai hay user không có → thoát 1, không đổi gì |
+| `group-delete -tenant -id` | Xoá mềm nhóm, gỡ mọi thành viên; còn nhóm con sống → lỗi, thoát 1 |
+| `user-groups -tenant -user <id> -groups a,b` | Thay **toàn bộ** nhóm của user; tách theo dấu phẩy, bỏ khoảng trắng hai đầu; phần rỗng, id sai, id lặp hay nhóm không có → lỗi, không đổi gì; `-groups ""` (phải ghi rõ) gỡ mọi nhóm |
+| `user-set -tenant -user <id> [-name] [-avatar URL]` | Đổi tên hiển thị và/hoặc ảnh, luôn tăng `users.ver` (feed `directory_changes` chỉ tăng khi giá trị thật sự đổi) (phải ít nhất một cờ, không thì thoát 2); ảnh chỉ nhận `https://`, `-avatar ""` xoá ảnh; giá trị sai hay user không có → thoát 1, không đổi gì |
 
-**Lệnh nhóm.** Lệnh CLI không kiểm quyền: ai vào được container là người vận hành. `group-create`, `group-update`, `group-delete` và `account-groups` chạy một transaction SERIALIZABLE (`pgstore/group_tx.go`), một lần, không retry. Đụng lệnh khác cùng lúc ghi cùng dòng thì lệnh có thể thoát 1 với lỗi `unavailable`; chạy lại là được.
+**Lệnh nhóm.** Lệnh CLI không kiểm quyền: ai vào được container là người vận hành. `group-create`, `group-update`, `group-delete` và `user-groups` chạy một transaction SERIALIZABLE (`pgstore/group_tx.go`), một lần, không retry. Đụng lệnh khác cùng lúc ghi cùng dòng thì lệnh có thể thoát 1 với lỗi `unavailable`; chạy lại là được.
 
 **Xoay khoá:** chỉ một lệnh `key-rotate`. `iam` công bố khoá chờ qua JWKS ở lần nạp lại kế tiếp (≤ `IAM_KEY_RELOAD`), node lấy về trong ≤ 1m, và `iam` tự kích hoạt khoá khi đủ `IAM_KEY_ACTIVATE_LEAD` (nhiều replica cùng thử, Postgres khoá dòng nên chỉ một lần; metric `signing_keys_activated_total`, log `signing key activated`). Không ai phải canh giờ, không khởi động lại node. Lỡ có node chưa có khoá, client chỉ nhận `retry_later`/503 vài giây trong lúc node hỏi JWKS ngay. File JWKS của node chỉ là dự phòng lúc khởi động; khoá đã nằm trong file chỉ gỡ được bằng cách sửa file và khởi động lại node.
 
@@ -114,7 +114,19 @@ Cột `groups.ancestors` (chuỗi tổ tiên từ gốc tới cha) do trigger gi
 - câu SQL tay đổi `parent_id` **một dòng mỗi câu**: một câu `UPDATE` đổi cha nhiều nhóm cùng lúc cho `ancestors` sai;
 - `INSERT` nhiều nhóm trong một câu ghi nhóm cha trước nhóm con: khoá ngoại chỉ kiểm ở cuối câu, nên con đứng trước cha vẫn qua nhưng `ancestors` của con sai.
 
-`ancestors` lỡ sai thì chạy lại câu backfill `WITH RECURSIVE` trong `apps/iam/internal/store/pgstore/migrations/0004_roles.sql`.
+`ancestors` lỡ sai thì chạy câu dựng lại sau (giữ khoá cây của tenant như trên):
+
+```sql
+WITH RECURSIVE paths (tenant_id, id, ancestors) AS (
+  SELECT tenant_id, id, '{}'::text[] FROM groups WHERE parent_id IS NULL
+  UNION ALL
+  SELECT g.tenant_id, g.id, p.ancestors || p.id
+  FROM groups g JOIN paths p ON g.tenant_id = p.tenant_id AND g.parent_id = p.id
+)
+UPDATE groups g SET ancestors = p.ancestors
+FROM paths p
+WHERE g.tenant_id = p.tenant_id AND g.id = p.id AND g.ancestors IS DISTINCT FROM p.ancestors;
+```
 
 ## Cổng, compose, metric
 

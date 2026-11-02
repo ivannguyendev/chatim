@@ -40,21 +40,21 @@ type Env struct {
 type command func(ctx context.Context, env Env, st Store, args []string) error
 
 var commands = map[string]command{
-	"migrate":         migrate,
-	"tenant-create":   tenantCreate,
-	"tenant-disable":  tenantState(store.StateDisabled),
-	"tenant-enable":   tenantState(store.StateActive),
-	"account-disable": accountState(store.StateDisabled),
-	"account-enable":  accountState(store.StateActive),
-	"key-rotate":      keyRotate,
-	"key-activate":    keyActivate,
-	"jwks-export":     jwksExport,
-	"bootstrap":       bootstrap,
-	"group-create":    groupCreate,
-	"group-update":    groupUpdate,
-	"group-delete":    groupDelete,
-	"account-groups":  accountGroups,
-	"profile-set":     profileSet,
+	"migrate":        migrate,
+	"tenant-create":  tenantCreate,
+	"tenant-disable": tenantState(store.StateDisabled),
+	"tenant-enable":  tenantState(store.StateActive),
+	"user-disable":   userState(store.StateDisabled),
+	"user-enable":    userState(store.StateActive),
+	"key-rotate":     keyRotate,
+	"key-activate":   keyActivate,
+	"jwks-export":    jwksExport,
+	"bootstrap":      bootstrap,
+	"group-create":   groupCreate,
+	"group-update":   groupUpdate,
+	"group-delete":   groupDelete,
+	"user-groups":    userGroups,
+	"user-set":       userSet,
 }
 
 func Names() []string {
@@ -125,8 +125,8 @@ func (f flags) given() map[string]bool {
 	return set
 }
 
-func audit(env Env, tenant, action, account string) store.AuditEvent {
-	return store.AuditEvent{TenantID: tenant, At: env.Now(), Actor: actor, Action: action, AccountID: account}
+func audit(env Env, tenant, action, user string) store.AuditEvent {
+	return store.AuditEvent{TenantID: tenant, At: env.Now(), Actor: actor, Action: action, UserID: user}
 }
 
 func revocation(env Env, reason string) store.Revocation {

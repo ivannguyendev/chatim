@@ -92,7 +92,7 @@ func (r *fakeReader) LoadStart(context.Context) (store.Position, error) {
 	return store.Position{Xid: uint64(len(r.log))}, nil
 }
 
-func (r *fakeReader) LoadPage(_ context.Context, after store.AccountKey, limit int) ([]store.DirectoryEntry, error) {
+func (r *fakeReader) LoadPage(_ context.Context, after store.UserKey, limit int) ([]store.DirectoryEntry, error) {
 	r.mu.Lock()
 	r.loadPageCalls++
 	call, hook := r.loadPageCalls, r.onLoadPage

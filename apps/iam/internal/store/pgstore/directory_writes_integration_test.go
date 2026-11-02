@@ -48,23 +48,23 @@ func readGroup(t *testing.T, s fixture, id string) store.Group {
 	return g
 }
 
-func groupsOf(t *testing.T, s fixture, account string) []string {
+func groupsOf(t *testing.T, s fixture, user string) []string {
 	t.Helper()
-	rows, err := s.raw.Query(context.Background(), "SELECT group_id FROM account_groups WHERE tenant_id = 'shop' AND account_id = $1 ORDER BY group_id", account)
+	rows, err := s.raw.Query(context.Background(), "SELECT group_id FROM user_groups WHERE tenant_id = 'shop' AND user_id = $1 ORDER BY group_id", user)
 	if err != nil {
-		t.Fatalf("query account_groups: %v", err)
+		t.Fatalf("query user_groups: %v", err)
 	}
 	ids, err := pgx.CollectRows(rows, pgx.RowTo[string])
 	if err != nil {
-		t.Fatalf("collect account_groups: %v", err)
+		t.Fatalf("collect user_groups: %v", err)
 	}
 	return ids
 }
 
-func wantGroupsOf(t *testing.T, s fixture, account string, want []string, step string) {
+func wantGroupsOf(t *testing.T, s fixture, user string, want []string, step string) {
 	t.Helper()
-	if got := groupsOf(t, s, account); !slices.Equal(got, want) {
-		t.Fatalf("%s: groups of %s = %v; want %v", step, account, got, want)
+	if got := groupsOf(t, s, user); !slices.Equal(got, want) {
+		t.Fatalf("%s: groups of %s = %v; want %v", step, user, got, want)
 	}
 }
 
@@ -203,12 +203,12 @@ func TestDeletingAGroupRemovesMembershipsAndBumpsEachUser(t *testing.T) {
 	s := openStore(t)
 	seedTenant(t, s, "shop")
 	for id, username := range map[string]string{lanID: "lan", minhID: "minh", anID: "an"} {
-		seedAccount(t, s, "shop", id, username)
+		seedUser(t, s, "shop", id, username)
 	}
 	createGroups(t, s, group("sales", ""), group("support", ""))
-	for account, groups := range map[string][]string{lanID: {"sales", "support"}, minhID: {"sales"}, anID: {"support"}} {
-		if err := s.SetAccountGroups(ctx, "shop", account, groups, audit("account_groups_set")); err != nil {
-			t.Fatalf("SetAccountGroups: %v", err)
+	for user, groups := range map[string][]string{lanID: {"sales", "support"}, minhID: {"sales"}, anID: {"support"}} {
+		if err := s.SetUserGroups(ctx, "shop", user, groups, audit("user_groups_set")); err != nil {
+			t.Fatalf("SetUserGroups: %v", err)
 		}
 	}
 	for _, id := range []string{lanID, minhID, anID} {
@@ -228,17 +228,17 @@ func TestDeletingAGroupRemovesMembershipsAndBumpsEachUser(t *testing.T) {
 	wantAudits(t, s, "group_delete", 1)
 }
 
-func TestSetAccountGroupsReplacesTheWholeList(t *testing.T) {
+func TestSetUserGroupsReplacesTheWholeList(t *testing.T) {
 	ctx := context.Background()
 	s := openStore(t)
 	seedTenant(t, s, "shop")
-	seedAccount(t, s, "shop", lanID, "lan")
+	seedUser(t, s, "shop", lanID, "lan")
 	createGroups(t, s, group("a", ""), group("b", ""), group("c", ""), group("old", ""))
 	if err := s.DeleteGroup(ctx, "shop", "old", audit("group_delete")); err != nil {
 		t.Fatalf("DeleteGroup: %v", err)
 	}
 	set := func(ids ...string) error {
-		return s.SetAccountGroups(ctx, "shop", lanID, ids, audit("account_groups_set"))
+		return s.SetUserGroups(ctx, "shop", lanID, ids, audit("user_groups_set"))
 	}
 	if err := set("a", "b"); err != nil {
 		t.Fatalf("set a b: %v", err)
@@ -257,27 +257,27 @@ func TestSetAccountGroupsReplacesTheWholeList(t *testing.T) {
 	wantErr(t, set("b", "missing"), apperr.ErrNotFound, "missing group")
 	wantErr(t, set("b", "old"), apperr.ErrNotFound, "deleted group")
 	wantErr(t, set("b", "b"), apperr.ErrInvalidArgument, "duplicate")
-	wantErr(t, s.SetAccountGroups(ctx, "shop", minhID, []string{"a"}, audit("account_groups_set")), apperr.ErrNotFound, "missing account")
+	wantErr(t, s.SetUserGroups(ctx, "shop", minhID, []string{"a"}, audit("user_groups_set")), apperr.ErrNotFound, "missing user")
 	wantGroupsOf(t, s, lanID, []string{"b", "c"}, "after refusals")
 	if err := set(); err != nil {
 		t.Fatalf("set none: %v", err)
 	}
 	wantGroupsOf(t, s, lanID, nil, "none")
 	wantVer(t, s, userKind, lanID, 7, "none")
-	wantAudits(t, s, "account_groups_set", 4)
+	wantAudits(t, s, "user_groups_set", 4)
 }
 
 func TestSetProfileChangesOnlyTheGivenFields(t *testing.T) {
 	ctx := context.Background()
 	s := openStore(t)
 	seedTenant(t, s, "shop")
-	seedAccount(t, s, "shop", lanID, "lan")
-	at := audit("profile_set")
+	seedUser(t, s, "shop", lanID, "lan")
+	at := audit("user_set")
 	at.At = t0.Add(5 * time.Minute)
 	at.Actor = "admin-cli"
 	profile := func() (name, avatar, by string) {
 		t.Helper()
-		if err := s.raw.QueryRow(ctx, "SELECT display_name, avatar_url, updated_by FROM accounts WHERE id = $1", lanID).Scan(&name, &avatar, &by); err != nil {
+		if err := s.raw.QueryRow(ctx, "SELECT display_name, avatar_url, updated_by FROM users WHERE id = $1", lanID).Scan(&name, &avatar, &by); err != nil {
 			t.Fatalf("read profile: %v", err)
 		}
 		return name, avatar, by
@@ -302,9 +302,9 @@ func TestSetProfileChangesOnlyTheGivenFields(t *testing.T) {
 		t.Fatalf("avatar after clear = %q", avatar)
 	}
 	var ver int64
-	if err := s.raw.QueryRow(ctx, "SELECT ver FROM accounts WHERE tenant_id = 'shop' AND id = $1", lanID).Scan(&ver); err != nil || ver != 1 {
-		t.Fatalf("account ver = %d, %v; want 1", ver, err)
+	if err := s.raw.QueryRow(ctx, "SELECT ver FROM users WHERE tenant_id = 'shop' AND id = $1", lanID).Scan(&ver); err != nil || ver != 4 {
+		t.Fatalf("user ver = %d, %v; want 4 after three writes", ver, err)
 	}
-	wantErr(t, s.SetProfile(ctx, "shop", minhID, store.ProfileUpdate{DisplayName: new("Minh")}, at), apperr.ErrNotFound, "missing account")
-	wantAudits(t, s, "profile_set", 3)
+	wantErr(t, s.SetProfile(ctx, "shop", minhID, store.ProfileUpdate{DisplayName: new("Minh")}, at), apperr.ErrNotFound, "missing user")
+	wantAudits(t, s, "user_set", 3)
 }

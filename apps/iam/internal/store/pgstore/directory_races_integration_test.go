@@ -193,7 +193,7 @@ func wantNoMembershipInADeletedGroup(t *testing.T, s fixture) {
 	t.Helper()
 	var stale int
 	err := s.raw.QueryRow(context.Background(),
-		"SELECT count(*) FROM account_groups m JOIN groups g ON g.tenant_id = m.tenant_id AND g.id = m.group_id WHERE g.state = 2").Scan(&stale)
+		"SELECT count(*) FROM user_groups m JOIN groups g ON g.tenant_id = m.tenant_id AND g.id = m.group_id WHERE g.state = 2").Scan(&stale)
 	if err != nil {
 		t.Fatalf("count stale memberships: %v", err)
 	}
@@ -222,10 +222,10 @@ func TestSettingGroupsWhileTheGroupIsDeletedNeverKeepsTheMembership(t *testing.T
 		t.Run(tc.name, func(t *testing.T) {
 			s := openStore(t)
 			seedTenant(t, s, "shop")
-			seedAccount(t, s, "shop", lanID, "lan")
+			seedUser(t, s, "shop", lanID, "lan")
 			createGroups(t, s, group("sales", ""))
 			set := func() error {
-				return s.SetAccountGroups(ctx, "shop", lanID, []string{"sales"}, audit("account_groups_set"))
+				return s.SetUserGroups(ctx, "shop", lanID, []string{"sales"}, audit("user_groups_set"))
 			}
 			remove := func() error { return s.DeleteGroup(ctx, "shop", "sales", audit("group_delete")) }
 			g := groupRowGate(t, s, "sales")

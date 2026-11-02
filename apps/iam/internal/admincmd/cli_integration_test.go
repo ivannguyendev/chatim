@@ -96,10 +96,10 @@ func stateOf(t *testing.T, h *harness, sql string, args ...any) store.State {
 	return state
 }
 
-func TestTenantAndAccountStateCommands(t *testing.T) {
+func TestTenantAndUserStateCommands(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
-	if out := h.run("migrate"); !strings.Contains(out, "pending: 0001_init.sql") {
+	if out := h.run("migrate"); !strings.Contains(out, "pending: 0001_identity.sql") {
 		t.Fatalf("dry run = %q", out)
 	}
 	h.run("migrate", "-apply")
@@ -107,23 +107,23 @@ func TestTenantAndAccountStateCommands(t *testing.T) {
 		t.Fatalf("after apply = %q", out)
 	}
 	h.run("tenant-create", "-id", "shop", "-name", "Shop")
-	seedAccount(t, h, "shop", lanID, "lan")
-	const accountState = "SELECT state FROM accounts WHERE tenant_id = 'shop' AND id = $1"
-	if out := h.run("account-disable", "-tenant", "shop", "-user", lanID); out != "account "+lanID+": account_disable\n" {
-		t.Fatalf("account-disable output = %q", out)
+	seedUser(t, h, "shop", lanID, "lan")
+	const userState = "SELECT state FROM users WHERE tenant_id = 'shop' AND id = $1"
+	if out := h.run("user-disable", "-tenant", "shop", "-user", lanID); out != "user "+lanID+": user_disable\n" {
+		t.Fatalf("user-disable output = %q", out)
 	}
-	if st := stateOf(t, h, accountState, lanID); st != store.StateDisabled {
+	if st := stateOf(t, h, userState, lanID); st != store.StateDisabled {
 		t.Fatalf("state = %d, want disabled", st)
 	}
-	h.run("account-enable", "-tenant", "shop", "-user", lanID)
-	if st := stateOf(t, h, accountState, lanID); st != store.StateActive {
+	h.run("user-enable", "-tenant", "shop", "-user", lanID)
+	if st := stateOf(t, h, userState, lanID); st != store.StateActive {
 		t.Fatalf("state = %d, want active", st)
 	}
-	if code := admincmd.Run(ctx, h.env, []string{"account-disable", "-tenant", "shop", "-user", "nobody"}); code != 1 {
-		t.Fatalf("account-disable of an unknown user = %d, want 1", code)
+	if code := admincmd.Run(ctx, h.env, []string{"user-disable", "-tenant", "shop", "-user", "nobody"}); code != 1 {
+		t.Fatalf("user-disable of an unknown user = %d, want 1", code)
 	}
-	if code := admincmd.Run(ctx, h.env, []string{"account-disable", "-tenant", "blog", "-user", lanID}); code != 1 {
-		t.Fatalf("account-disable through another tenant = %d, want 1", code)
+	if code := admincmd.Run(ctx, h.env, []string{"user-disable", "-tenant", "blog", "-user", lanID}); code != 1 {
+		t.Fatalf("user-disable through another tenant = %d, want 1", code)
 	}
 	h.run("tenant-disable", "-id", "shop")
 	if st := stateOf(t, h, "SELECT state FROM tenants WHERE id = 'shop'"); st != store.StateDisabled {

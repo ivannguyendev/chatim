@@ -42,7 +42,7 @@ func (f *fakeStore) LoadStart(context.Context) (store.Position, error) {
 	return store.Position{}, nil
 }
 
-func (f *fakeStore) LoadPage(ctx context.Context, _ store.AccountKey, _ int) ([]store.DirectoryEntry, error) {
+func (f *fakeStore) LoadPage(ctx context.Context, _ store.UserKey, _ int) ([]store.DirectoryEntry, error) {
 	if f.loadGate != nil {
 		select {
 		case <-f.loadGate:

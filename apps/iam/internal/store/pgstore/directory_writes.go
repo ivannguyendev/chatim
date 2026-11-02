@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -23,11 +22,11 @@ var (
 	errGroupListedTwice = fmt.Errorf("%w: group listed twice", apperr.ErrInvalidArgument)
 )
 
-func (s *Store) SetProfile(ctx context.Context, tenantID, accountID string, u store.ProfileUpdate, audit store.AuditEvent) error {
+func (s *Store) SetProfile(ctx context.Context, tenantID, userID string, u store.ProfileUpdate, audit store.AuditEvent) error {
 	return s.write(ctx, audit, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx,
-			"UPDATE accounts SET display_name = coalesce($3, display_name), avatar_url = coalesce($4, avatar_url), updated_at = $5, updated_by = $6 WHERE tenant_id = $1 AND id = $2",
-			tenantID, accountID, u.DisplayName, u.AvatarURL, audit.At, audit.Actor)
+			"UPDATE users SET display_name = coalesce($3, display_name), avatar_url = coalesce($4, avatar_url), ver = ver + 1, updated_at = $5, updated_by = $6 WHERE tenant_id = $1 AND id = $2",
+			tenantID, userID, u.DisplayName, u.AvatarURL, audit.At, audit.Actor)
 		if err != nil {
 			return err
 		}
@@ -51,18 +50,14 @@ func (s *Store) UpdateGroup(ctx context.Context, tenantID, id string, u store.Gr
 }
 
 func (s *Store) DeleteGroup(ctx context.Context, tenantID, id string, audit store.AuditEvent) error {
-	return s.groupTx(ctx, treeLockIf(true, tenantID), func(tx pgx.Tx) error {
-		roles, err := deleteGroupTx(ctx, tx, tenantID, id, audit.At, audit.Actor)
-		if err != nil {
-			return err
-		}
-		return insertAudit(ctx, tx, withAuditDetail(audit, "roles", strconv.FormatInt(roles, 10)))
+	return s.groupWrite(ctx, treeLockIf(true, tenantID), audit, func(tx pgx.Tx) error {
+		return deleteGroupTx(ctx, tx, tenantID, id, audit.At, audit.Actor)
 	})
 }
 
-func (s *Store) SetAccountGroups(ctx context.Context, tenantID, accountID string, groupIDs []string, audit store.AuditEvent) error {
+func (s *Store) SetUserGroups(ctx context.Context, tenantID, userID string, groupIDs []string, audit store.AuditEvent) error {
 	return s.groupWrite(ctx, serialTxOptions{}, audit, func(tx pgx.Tx) error {
-		return setAccountGroupsTx(ctx, tx, tenantID, accountID, groupIDs)
+		return setUserGroupsTx(ctx, tx, tenantID, userID, groupIDs)
 	})
 }
 
@@ -95,43 +90,37 @@ func updateGroupTx(ctx context.Context, tx pgx.Tx, tenantID, id string, u store.
 	return err
 }
 
-func deleteGroupTx(ctx context.Context, tx pgx.Tx, tenantID, id string, at time.Time, by string) (int64, error) {
+func deleteGroupTx(ctx context.Context, tx pgx.Tx, tenantID, id string, at time.Time, by string) error {
 	var children bool
 	err := tx.QueryRow(ctx,
 		"SELECT EXISTS (SELECT 1 FROM groups WHERE tenant_id = $1 AND parent_id = $2 AND state = $3)",
 		tenantID, id, store.GroupLive).Scan(&children)
 	if err != nil {
-		return 0, err
+		return err
 	}
 	if children {
-		return 0, errGroupHasChildren
+		return errGroupHasChildren
 	}
 	tag, err := tx.Exec(ctx,
 		"UPDATE groups SET state = $3, updated_at = $4, updated_by = $5 WHERE tenant_id = $1 AND id = $2 AND state = $6",
 		tenantID, id, store.GroupDeleted, at, by, store.GroupLive)
 	if err != nil {
-		return 0, err
+		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return 0, pgx.ErrNoRows
+		return pgx.ErrNoRows
 	}
-	if _, err := tx.Exec(ctx, "DELETE FROM account_groups WHERE tenant_id = $1 AND group_id = $2", tenantID, id); err != nil {
-		return 0, err
-	}
-	tag, err = tx.Exec(ctx, "DELETE FROM group_roles WHERE tenant_id = $1 AND group_id = $2", tenantID, id)
-	if err != nil {
-		return 0, err
-	}
-	return tag.RowsAffected(), nil
+	_, err = tx.Exec(ctx, "DELETE FROM user_groups WHERE tenant_id = $1 AND group_id = $2", tenantID, id)
+	return err
 }
 
-func setAccountGroupsTx(ctx context.Context, tx pgx.Tx, tenantID, accountID string, groupIDs []string) error {
+func setUserGroupsTx(ctx context.Context, tx pgx.Tx, tenantID, userID string, groupIDs []string) error {
 	ids, err := sortedUnique(groupIDs)
 	if err != nil {
 		return err
 	}
 	var one int
-	err = tx.QueryRow(ctx, "SELECT 1 FROM accounts WHERE tenant_id = $1 AND id = $2 FOR UPDATE", tenantID, accountID).Scan(&one)
+	err = tx.QueryRow(ctx, "SELECT 1 FROM users WHERE tenant_id = $1 AND id = $2 FOR UPDATE", tenantID, userID).Scan(&one)
 	if err != nil {
 		return err
 	}
@@ -139,14 +128,14 @@ func setAccountGroupsTx(ctx context.Context, tx pgx.Tx, tenantID, accountID stri
 		return err
 	}
 	_, err = tx.Exec(ctx,
-		"DELETE FROM account_groups WHERE tenant_id = $1 AND account_id = $2 AND group_id <> ALL($3)",
-		tenantID, accountID, ids)
+		"DELETE FROM user_groups WHERE tenant_id = $1 AND user_id = $2 AND group_id <> ALL($3)",
+		tenantID, userID, ids)
 	if err != nil {
 		return err
 	}
 	_, err = tx.Exec(ctx,
-		"INSERT INTO account_groups (tenant_id, account_id, group_id) SELECT $1, $2, unnest($3::text[]) ON CONFLICT DO NOTHING",
-		tenantID, accountID, ids)
+		"INSERT INTO user_groups (tenant_id, user_id, group_id) SELECT $1, $2, unnest($3::text[]) ON CONFLICT DO NOTHING",
+		tenantID, userID, ids)
 	return err
 }
 

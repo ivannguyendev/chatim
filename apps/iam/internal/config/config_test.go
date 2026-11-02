@@ -169,16 +169,16 @@ func TestLoadRefusesBadDirectoryLimits(t *testing.T) {
 	}{
 		"feed wait under 1s":          {map[string]string{"IAM_FEED_WAIT_MAX": "999ms"}, "IAM_FEED_WAIT_MAX 999ms must be from 1s to 1m0s"},
 		"feed wait over 60s":          {map[string]string{"IAM_FEED_WAIT_MAX": "61s"}, "IAM_FEED_WAIT_MAX 1m1s must be from 1s to 1m0s"},
-		"zero load slots":             {map[string]string{"IAM_DIRECTORY_LOAD_SLOTS": "0"}, "IAM_DIRECTORY_LOAD_SLOTS 0 must be at least 1 and below IAM_PG_MAX_CONNS 20"},
-		"load slots at the pool size": {map[string]string{"IAM_DIRECTORY_LOAD_SLOTS": "20"}, "IAM_DIRECTORY_LOAD_SLOTS 20 must be at least 1 and below IAM_PG_MAX_CONNS 20"},
+		"zero load slots":             {map[string]string{"IAM_DIRECTORY_LOAD_SLOTS": "0"}, "IAM_DIRECTORY_LOAD_SLOTS 0 must be from 1 to IAM_PG_MAX_CONNS 20 - 2"},
+		"load slots at the pool size": {map[string]string{"IAM_DIRECTORY_LOAD_SLOTS": "20"}, "IAM_DIRECTORY_LOAD_SLOTS 20 must be from 1 to IAM_PG_MAX_CONNS 20 - 2"},
 		"zero user rate":              {map[string]string{"IAM_USER_RATE": "0"}, "IAM_USER_RATE must be positive"},
 		"zero user burst":             {map[string]string{"IAM_USER_BURST": "0"}, "IAM_USER_BURST must be positive"},
 		"zero user inflight":          {map[string]string{"IAM_USER_INFLIGHT": "0"}, "IAM_USER_INFLIGHT must be positive"},
 		"zero user limiters":          {map[string]string{"IAM_USER_LIMITERS": "0"}, "IAM_USER_LIMITERS must be positive"},
 		"zero inflight max":           {map[string]string{"IAM_INFLIGHT_MAX": "0"}, "IAM_INFLIGHT_MAX must be positive"},
 		"limiters under the node cap": {map[string]string{"IAM_USER_LIMITERS": "9999"}, "IAM_USER_LIMITERS 9999 must be at least IAM_INFLIGHT_MAX 10000"},
-		"load slots crowd the pool":   {map[string]string{"IAM_DIRECTORY_LOAD_SLOTS": "19"}, "IAM_DIRECTORY_LOAD_SLOTS 19 + 2 must not exceed IAM_PG_MAX_CONNS 20"},
-		"small pool":                  {map[string]string{"IAM_PG_MAX_CONNS": "5"}, "IAM_DIRECTORY_LOAD_SLOTS 4 + 2 must not exceed IAM_PG_MAX_CONNS 5"},
+		"load slots crowd the pool":   {map[string]string{"IAM_DIRECTORY_LOAD_SLOTS": "19"}, "IAM_DIRECTORY_LOAD_SLOTS 19 must be from 1 to IAM_PG_MAX_CONNS 20 - 2"},
+		"small pool":                  {map[string]string{"IAM_PG_MAX_CONNS": "5"}, "IAM_DIRECTORY_LOAD_SLOTS 4 must be from 1 to IAM_PG_MAX_CONNS 5 - 2"},
 		"unparsable directory number": {map[string]string{"IAM_USER_RATE": "many"}, "IAM_USER_RATE"},
 	}
 	for name, tc := range cases {
@@ -187,8 +187,12 @@ func TestLoadRefusesBadDirectoryLimits(t *testing.T) {
 			for k, v := range tc.env {
 				t.Setenv(k, v)
 			}
-			if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), tc.want) {
+			_, err := config.Load()
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("Load = %v, want an error containing %q", err, tc.want)
+			}
+			if strings.Contains(tc.want, "LOAD_SLOTS") && strings.Count(err.Error(), "IAM_DIRECTORY_LOAD_SLOTS") != 1 {
+				t.Fatalf("Load = %v, want one IAM_DIRECTORY_LOAD_SLOTS error", err)
 			}
 		})
 	}

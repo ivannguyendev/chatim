@@ -118,8 +118,8 @@ func groupDelete(ctx context.Context, env Env, st Store, args []string) error {
 	return err
 }
 
-func accountGroups(ctx context.Context, env Env, st Store, args []string) error {
-	f, tenant, user := accountFlags("account-groups")
+func userGroups(ctx context.Context, env Env, st Store, args []string) error {
+	f, tenant, user := userFlags("user-groups")
 	groups := f.set.String("groups", "", `comma-separated group ids; "" removes every group`)
 	if err := f.parse(args, "tenant", "user"); err != nil {
 		return err
@@ -131,12 +131,12 @@ func accountGroups(ctx context.Context, env Env, st Store, args []string) error 
 	if err != nil {
 		return err
 	}
-	at := audit(env, *tenant, "account_groups_set", *user)
+	at := audit(env, *tenant, "user_groups_set", *user)
 	at.Detail = map[string]string{"groups": strings.Join(ids, ",")}
-	if err := st.SetAccountGroups(ctx, *tenant, *user, ids, at); err != nil {
+	if err := st.SetUserGroups(ctx, *tenant, *user, ids, at); err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(env.Out, "account %s groups: %s\n", *user, listOrNone(ids))
+	_, err = fmt.Fprintf(env.Out, "user %s groups: %s\n", *user, listOrNone(ids))
 	return err
 }
 
@@ -170,8 +170,8 @@ func listOrNone(ids []string) string {
 	return strings.Join(ids, ", ")
 }
 
-func profileSet(ctx context.Context, env Env, st Store, args []string) error {
-	f, tenant, user := accountFlags("profile-set")
+func userSet(ctx context.Context, env Env, st Store, args []string) error {
+	f, tenant, user := userFlags("user-set")
 	name := f.set.String("name", "", "display name")
 	avatar := f.set.String("avatar", "", `https avatar url; "" clears it`)
 	if err := f.parse(args, "tenant", "user"); err != nil {
@@ -195,9 +195,9 @@ func profileSet(ctx context.Context, env Env, st Store, args []string) error {
 		}
 		u.AvatarURL = avatar
 	}
-	if err := st.SetProfile(ctx, *tenant, *user, u, audit(env, *tenant, "profile_set", *user)); err != nil {
+	if err := st.SetProfile(ctx, *tenant, *user, u, audit(env, *tenant, "user_set", *user)); err != nil {
 		return err
 	}
-	_, err := fmt.Fprintf(env.Out, "profile updated for %s\n", *user)
+	_, err := fmt.Fprintf(env.Out, "user %s updated\n", *user)
 	return err
 }

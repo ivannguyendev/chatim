@@ -39,7 +39,7 @@ func wantNotice(t *testing.T, l *pgstore.Listener, want store.Notice) {
 
 func setDisplayName(t *testing.T, s fixture, name string) {
 	t.Helper()
-	if err := s.SetProfile(context.Background(), "shop", lanID, store.ProfileUpdate{DisplayName: &name}, audit("profile_set")); err != nil {
+	if err := s.SetProfile(context.Background(), "shop", lanID, store.ProfileUpdate{DisplayName: &name}, audit("user_set")); err != nil {
 		t.Fatalf("SetProfile: %v", err)
 	}
 }
@@ -47,7 +47,7 @@ func setDisplayName(t *testing.T, s fixture, name string) {
 func TestListenerWakesOnCommittedChange(t *testing.T) {
 	s := openStore(t)
 	seedTenant(t, s, "shop")
-	seedAccount(t, s, "shop", lanID, "lan")
+	seedUser(t, s, "shop", lanID, "lan")
 	l := openListener(t, s.uri)
 	setDisplayName(t, s, "Lan Nguyen")
 	wantNotice(t, l, store.NoticeDirectory)
@@ -56,7 +56,7 @@ func TestListenerWakesOnCommittedChange(t *testing.T) {
 func TestListenerSurvivesWaitTimeouts(t *testing.T) {
 	s := openStore(t)
 	seedTenant(t, s, "shop")
-	seedAccount(t, s, "shop", lanID, "lan")
+	seedUser(t, s, "shop", lanID, "lan")
 	l := openListener(t, s.uri)
 	for i := range 3 {
 		notice, err := waitNotice(l, 50*time.Millisecond)
@@ -76,7 +76,7 @@ func TestListenerReportsRevocationNotices(t *testing.T) {
 		t.Fatalf("SetTenantState: %v", err)
 	}
 	wantNotice(t, l, store.NoticeRevocations)
-	exec(t, s.raw, "SELECT pg_notify('iam_changes', 'other')")
+	exec(t, s.raw, "SELECT pg_notify('identity_changes', 'other')")
 	wantNotice(t, l, store.NoticeOther)
 }
 

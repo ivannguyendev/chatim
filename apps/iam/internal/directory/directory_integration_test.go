@@ -20,7 +20,7 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/iamsync"
 )
 
-const seededAccounts = 20000
+const seededUsers = 20000
 
 func itestDatabase(t testing.TB) (*pgstore.Store, *pgx.Conn, string) {
 	t.Helper()
@@ -65,10 +65,10 @@ func itestDatabase(t testing.TB) (*pgstore.Store, *pgx.Conn, string) {
 	return s, raw, uri
 }
 
-func seedDirectory(t testing.TB, raw *pgx.Conn, accounts int) {
+func seedDirectory(t testing.TB, raw *pgx.Conn, count int) {
 	t.Helper()
 	ctx := context.Background()
-	for _, table := range []string{"accounts", "directory_changes"} {
+	for _, table := range []string{"users", "directory_changes"} {
 		if _, err := raw.Exec(ctx, "ALTER TABLE "+table+" SET (autovacuum_enabled = false)"); err != nil {
 			t.Fatalf("disable autovacuum on %s: %v", table, err)
 		}
@@ -78,16 +78,15 @@ func seedDirectory(t testing.TB, raw *pgx.Conn, accounts int) {
 	if err != nil {
 		t.Fatalf("seed tenant: %v", err)
 	}
-	_, err = raw.Exec(ctx, `INSERT INTO accounts (tenant_id, id, username, display_name, state, password_hash,
-		password_must_change, password_changed_at, ver, created_at, updated_at, updated_by)
-		SELECT 'shop', 'u' || lpad(g::text, 6, '0'), 'user' || g, 'User ' || g, 1, 'x', false, now(), 1, now(), now(), 'test'
-		FROM generate_series(1, $1::int) g`, accounts)
+	_, err = raw.Exec(ctx, `INSERT INTO users (tenant_id, id, display_name, state, ver, created_at, updated_at, updated_by)
+		SELECT 'shop', 'u' || lpad(g::text, 6, '0'), 'User ' || g, 1, 1, now(), now(), 'test'
+		FROM generate_series(1, $1::int) g`, count)
 	if err != nil {
-		t.Fatalf("seed accounts: %v", err)
+		t.Fatalf("seed users: %v", err)
 	}
 }
 
-func accountID(n int) string { return fmt.Sprintf("u%06d", n) }
+func userID(n int) string { return fmt.Sprintf("u%06d", n) }
 
 func renameUntilStopped(t *testing.T, stop <-chan struct{}, uri string, writes *atomic.Int64, warmed chan<- struct{}) {
 	ctx := context.Background()
@@ -97,14 +96,14 @@ func renameUntilStopped(t *testing.T, stop <-chan struct{}, uri string, writes *
 		return
 	}
 	defer func() { _ = conn.Close(context.Background()) }()
-	const rename = "UPDATE accounts SET display_name = $3 WHERE tenant_id = $1 AND id = $2"
+	const rename = "UPDATE users SET display_name = $3 WHERE tenant_id = $1 AND id = $2"
 	for n := 0; ; n++ {
 		select {
 		case <-stop:
 			return
 		default:
 		}
-		id := accountID(1 + mrand.IntN(seededAccounts))
+		id := userID(1 + mrand.IntN(seededUsers))
 		var err error
 		if n%10 == 0 {
 			err = pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
@@ -112,7 +111,7 @@ func renameUntilStopped(t *testing.T, stop <-chan struct{}, uri string, writes *
 					return err
 				}
 				time.Sleep(5 * time.Millisecond)
-				_, err := tx.Exec(ctx, rename, "shop", accountID(1+mrand.IntN(seededAccounts)), fmt.Sprintf("Slow pair %d", n))
+				_, err := tx.Exec(ctx, rename, "shop", userID(1+mrand.IntN(seededUsers)), fmt.Sprintf("Slow pair %d", n))
 				return err
 			})
 		} else {
@@ -130,7 +129,7 @@ func renameUntilStopped(t *testing.T, stop <-chan struct{}, uri string, writes *
 
 func TestWritesDuringLoadAreInTheCacheAfterReady(t *testing.T) {
 	s, raw, uri := itestDatabase(t)
-	seedDirectory(t, raw, seededAccounts)
+	seedDirectory(t, raw, seededUsers)
 	list, err := iamsync.NewList(0)
 	if err != nil {
 		t.Fatalf("NewList: %v", err)
@@ -181,11 +180,11 @@ func TestWritesDuringLoadAreInTheCacheAfterReady(t *testing.T) {
 		t.Fatalf("read errors=%d stalled=%v after %d passes; want a clean pass below the horizon", stats.ReadErrors(), stats.Stalled(), passes)
 	}
 
-	rows, err := raw.Query(ctx, `SELECT a.id, a.display_name, c.ver FROM accounts a
+	rows, err := raw.Query(ctx, `SELECT a.id, a.display_name, c.ver FROM users a
 		JOIN directory_changes c ON c.kind = 1 AND c.tenant_id = a.tenant_id AND c.id = a.id
 		WHERE a.tenant_id = 'shop' ORDER BY a.id`)
 	if err != nil {
-		t.Fatalf("read accounts: %v", err)
+		t.Fatalf("read users: %v", err)
 	}
 	type dbRow struct {
 		id, name string
@@ -196,10 +195,10 @@ func TestWritesDuringLoadAreInTheCacheAfterReady(t *testing.T) {
 		return d, r.Scan(&d.id, &d.name, &d.ver)
 	})
 	if err != nil {
-		t.Fatalf("collect accounts: %v", err)
+		t.Fatalf("collect users: %v", err)
 	}
-	if len(want) != seededAccounts || cache.Len() != seededAccounts {
-		t.Fatalf("db rows=%d cache=%d; want %d each", len(want), cache.Len(), seededAccounts)
+	if len(want) != seededUsers || cache.Len() != seededUsers {
+		t.Fatalf("db rows=%d cache=%d; want %d each", len(want), cache.Len(), seededUsers)
 	}
 	renamed, mismatched := 0, 0
 	for _, d := range want {
@@ -217,5 +216,5 @@ func TestWritesDuringLoadAreInTheCacheAfterReady(t *testing.T) {
 	if mismatched > 0 || renamed == 0 {
 		t.Fatalf("mismatched=%d renamed=%d; want 0 mismatched and some renamed", mismatched, renamed)
 	}
-	t.Logf("writes during load=%d renamed accounts=%d load=%.3fs passes=%d", during, renamed, stats.LastLoadSeconds(), passes)
+	t.Logf("writes during load=%d renamed users=%d load=%.3fs passes=%d", during, renamed, stats.LastLoadSeconds(), passes)
 }

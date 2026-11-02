@@ -35,34 +35,34 @@ pending AS (
 	) AS above
 )
 SELECT p.change_xid::text, p.kind, p.tenant_id, p.id, p.ver,
-	a.id IS NOT NULL, a.state, a.display_name, a.avatar_url,
-	CASE WHEN a.id IS NOT NULL THEN array(
-		SELECT ag.group_id FROM account_groups ag
-		WHERE ag.tenant_id = p.tenant_id AND ag.account_id = p.id
-		ORDER BY ag.group_id
+	u.id IS NOT NULL, u.state, u.display_name, u.avatar_url,
+	CASE WHEN u.id IS NOT NULL THEN array(
+		SELECT ug.group_id FROM user_groups ug
+		WHERE ug.tenant_id = p.tenant_id AND ug.user_id = p.id
+		ORDER BY ug.group_id
 	) END,
 	g.id IS NOT NULL, g.name, g.parent_id, g.mentionable, g.state,
 	pending.above
 FROM pending
 LEFT JOIN page p ON true
-LEFT JOIN accounts a ON p.kind = 1 AND a.tenant_id = p.tenant_id AND a.id = p.id
+LEFT JOIN users u ON p.kind = 1 AND u.tenant_id = p.tenant_id AND u.id = p.id
 LEFT JOIN groups g ON p.kind = 2 AND g.tenant_id = p.tenant_id AND g.id = p.id
 ORDER BY p.change_xid, p.kind, p.tenant_id, p.id`
 
-const loadPageSQL = `SELECT a.tenant_id, a.id, a.display_name, a.avatar_url, a.state, c.ver
+const loadPageSQL = `SELECT u.tenant_id, u.id, u.display_name, u.avatar_url, u.state, c.ver
 FROM (
 	SELECT tenant_id, id, display_name, avatar_url, state
-	FROM accounts
+	FROM users
 	WHERE (tenant_id, id) > ($1, $2)
 	ORDER BY tenant_id, id
 	LIMIT $3
-) a
+) u
 CROSS JOIN LATERAL (
 	SELECT ver FROM directory_changes
-	WHERE kind = 1 AND tenant_id = a.tenant_id AND id = a.id
+	WHERE kind = 1 AND tenant_id = u.tenant_id AND id = u.id
 	LIMIT 1
 ) c
-ORDER BY a.tenant_id, a.id`
+ORDER BY u.tenant_id, u.id`
 
 var errBadLimit = fmt.Errorf("%w: limit must be positive", apperr.ErrInvalidArgument)
 
@@ -71,8 +71,8 @@ type changeRow struct {
 	kind                   *store.ChangeKind
 	tenant, id             *string
 	ver                    *int64
-	hasAccount             bool
-	accountState           *store.State
+	hasUser                bool
+	userState              *store.State
 	displayName, avatarURL *string
 	groups                 []string
 	hasGroup               bool
@@ -96,7 +96,7 @@ func (s *Store) Changes(ctx context.Context, after store.Position, limit int) (s
 	for rows.Next() {
 		var r changeRow
 		err := rows.Scan(&r.xid, &r.kind, &r.tenant, &r.id, &r.ver,
-			&r.hasAccount, &r.accountState, &r.displayName, &r.avatarURL, &r.groups,
+			&r.hasUser, &r.userState, &r.displayName, &r.avatarURL, &r.groups,
 			&r.hasGroup, &r.groupName, &r.groupParent, &r.groupMentionable, &r.groupState,
 			&r.pendingAboveHorizon)
 		if err != nil {
@@ -121,12 +121,12 @@ func (s *Store) Changes(ctx context.Context, after store.Position, limit int) (s
 
 func (r changeRow) change() store.Change {
 	c := store.Change{Kind: *r.kind, TenantID: *r.tenant, ID: *r.id, Ver: *r.ver}
-	if r.hasAccount {
+	if r.hasUser {
 		groups := r.groups
 		if groups == nil {
 			groups = []string{}
 		}
-		c.User = &store.UserChange{State: *r.accountState, DisplayName: *r.displayName, AvatarURL: *r.avatarURL, Groups: groups}
+		c.User = &store.UserChange{State: *r.userState, DisplayName: *r.displayName, AvatarURL: *r.avatarURL, Groups: groups}
 	}
 	if r.hasGroup {
 		c.Group = &store.GroupChange{Name: *r.groupName, ParentID: deref(r.groupParent), Mentionable: *r.groupMentionable, State: *r.groupState}
@@ -146,7 +146,7 @@ func (s *Store) LoadStart(ctx context.Context) (store.Position, error) {
 	return store.Position{Xid: xid}, nil
 }
 
-func (s *Store) LoadPage(ctx context.Context, after store.AccountKey, limit int) ([]store.DirectoryEntry, error) {
+func (s *Store) LoadPage(ctx context.Context, after store.UserKey, limit int) ([]store.DirectoryEntry, error) {
 	if limit <= 0 {
 		return nil, errBadLimit
 	}

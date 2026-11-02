@@ -36,10 +36,10 @@ func (s *Store) SetTenantState(ctx context.Context, id string, state store.State
 	})
 }
 
-func (s *Store) SetAccountState(ctx context.Context, tenantID, id string, state store.State, audit store.AuditEvent) error {
+func (s *Store) SetUserState(ctx context.Context, tenantID, id string, state store.State, audit store.AuditEvent) error {
 	return s.write(ctx, audit, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx,
-			"UPDATE accounts SET state = $3, ver = ver + 1, updated_at = $4, updated_by = $5 WHERE tenant_id = $1 AND id = $2",
+			"UPDATE users SET state = $3, ver = ver + 1, updated_at = $4, updated_by = $5 WHERE tenant_id = $1 AND id = $2",
 			tenantID, id, state, audit.At, audit.Actor)
 		if err != nil {
 			return err

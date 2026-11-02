@@ -50,24 +50,24 @@ func TestConcurrentMigrationsDoNotOverlap(t *testing.T) {
 	}
 }
 
-func TestSetAccountStateBumpsVerAndStaysInsideTheTenant(t *testing.T) {
+func TestSetUserStateBumpsVerAndStaysInsideTheTenant(t *testing.T) {
 	s := openStore(t)
 	ctx := context.Background()
 	seedTenant(t, s, "shop")
 	seedTenant(t, s, "blog")
-	seedAccount(t, s, "shop", "a1aaaaaaaaaaaaaaaaaaaaaaaa", "lan")
-	if err := s.SetAccountState(ctx, "shop", "a1aaaaaaaaaaaaaaaaaaaaaaaa", store.StateDisabled, audit("account_disable")); err != nil {
-		t.Fatalf("SetAccountState: %v", err)
+	seedUser(t, s, "shop", "a1aaaaaaaaaaaaaaaaaaaaaaaa", "lan")
+	if err := s.SetUserState(ctx, "shop", "a1aaaaaaaaaaaaaaaaaaaaaaaa", store.StateDisabled, audit("user_disable")); err != nil {
+		t.Fatalf("SetUserState: %v", err)
 	}
 	var state store.State
 	var ver int64
-	if err := s.raw.QueryRow(ctx, "SELECT state, ver FROM accounts WHERE tenant_id = 'shop' AND id = 'a1aaaaaaaaaaaaaaaaaaaaaaaa'").Scan(&state, &ver); err != nil {
+	if err := s.raw.QueryRow(ctx, "SELECT state, ver FROM users WHERE tenant_id = 'shop' AND id = 'a1aaaaaaaaaaaaaaaaaaaaaaaa'").Scan(&state, &ver); err != nil {
 		t.Fatal(err)
 	}
 	if state != store.StateDisabled || ver != 2 {
 		t.Fatalf("state, ver = %d, %d; want disabled, 2", state, ver)
 	}
-	if err := s.SetAccountState(ctx, "blog", "a1aaaaaaaaaaaaaaaaaaaaaaaa", store.StateDisabled, audit("account_disable")); !errors.Is(err, apperr.ErrNotFound) {
-		t.Fatalf("account changed through another tenant = %v, want ErrNotFound", err)
+	if err := s.SetUserState(ctx, "blog", "a1aaaaaaaaaaaaaaaaaaaaaaaa", store.StateDisabled, audit("user_disable")); !errors.Is(err, apperr.ErrNotFound) {
+		t.Fatalf("user changed through another tenant = %v, want ErrNotFound", err)
 	}
 }
