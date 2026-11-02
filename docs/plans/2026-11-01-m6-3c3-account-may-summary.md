@@ -1,5 +1,6 @@
 # M6 phần 3c.3: account máy — tóm tắt
 
+> **Bỏ 2026-11-02, chưa xây:** owner đổi hướng, chat không giữ danh tính (không account, mật khẩu, role), nên phần này không còn làm ([tóm tắt PA](2026-11-02-m6-pa-identity-doi-token-summary.md)).
 > Ngày: 2026-11-01 · Nhánh `feat/m6` · Trạng thái: **owner duyệt 2026-11-01** · Quyết định: D238 (owner chọn cách A 2026-10-31), dựa trên D235–D236 · Mô hình: [nghiên cứu](../research/261031-iam-authorization-models.md) §4
 > **Các phần của 3c:** (3c.1) role và kiểm quyền ✅ · (3c.2) quản trị account, tạo theo lô · **(3c.3) account máy**. Code sau 3c.2 (chung proto `AdminService`, `api`, bảng `accounts`).
 

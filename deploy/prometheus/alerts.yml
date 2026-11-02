@@ -215,7 +215,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: An identity replica has failed to reload trusted issuers and keys for 3 minutes; a tenant key just removed still works for the token exchange on that replica.
+          summary: For 3 minutes an identity replica has failed to reload trusted issuers and keys or holds a trusted key it cannot use; while reloads fail, a tenant key just removed still works for the token exchange on that replica.
   - name: chatim-identity-sync
     rules:
       - alert: ChatimIdentitySyncStale

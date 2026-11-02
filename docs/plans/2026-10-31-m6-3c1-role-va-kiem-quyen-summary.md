@@ -1,5 +1,6 @@
 # M6 phần 3c.1: role và kiểm quyền — tóm tắt
 
+> **Đổi hướng owner 2026-11-02:** chat không giữ danh tính; `iam` đổi tên `identity`. Đăng nhập mật khẩu, phiên, refresh token, DPoP, role và `AdminService` đã gỡ ở M6 PA; phần còn giữ (khoá ký, thu hồi theo tenant, danh bạ) chạy tiếp dưới tên `identity` ([tóm tắt PA](2026-11-02-m6-pa-identity-doi-token-summary.md)). Tài liệu này giữ nguyên như lúc xây.
 > Ngày: 2026-10-31, viết lại theo bản đã xây 2026-11-01 · Nhánh `feat/m6` (`52dad0f`…`15641e3`) · Trạng thái: **đã xây (`dev-done`)** · Quyết định: D233, D235, D236 (3c.2: D237, 3c.3: D238), D234 · Mô hình: [nghiên cứu](../research/261031-iam-authorization-models.md)
 > **Các phần của 3c:** **(3c.1) role và kiểm quyền** · (3c.2) quản trị account, tạo theo lô · (3c.3) account máy.
 

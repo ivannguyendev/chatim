@@ -1,5 +1,6 @@
 # M6 phần 3a: danh bạ trong `iam` — tóm tắt
 
+> **Đổi hướng owner 2026-11-02:** chat không giữ danh tính; `iam` đổi tên `identity`. Đăng nhập mật khẩu, phiên, refresh token, DPoP, role và `AdminService` đã gỡ ở M6 PA; phần còn giữ (khoá ký, thu hồi theo tenant, danh bạ) chạy tiếp dưới tên `identity` ([tóm tắt PA](2026-11-02-m6-pa-identity-doi-token-summary.md)). Tài liệu này giữ nguyên như lúc xây.
 > Ngày: 2026-10-31, viết lại theo cái đã xây cùng ngày · Nhánh `feat/m6` · Trạng thái: **đã xây, `dev-done` trên nhánh (chưa push)** · Quyết định: D226–D231 (`docs/decision-log.md` §17.17)
 > **Các phần của M6 `iam`:** (1) đăng nhập + phiên ✅ · (2) thu hồi tới node ✅ · **(3a) danh bạ trong `iam`** · (3b) đồng bộ nhóm sang Mention · (3c) role, permission, API admin · (4) OIDC + IdP ngoài + exchange · (5) sẵn sàng go-live.
 

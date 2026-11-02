@@ -1,5 +1,6 @@
 # M6 phần 2: thu hồi tới websocket/gateway — tóm tắt
 
+> **Đổi hướng owner 2026-11-02:** chat không giữ danh tính; `iam` đổi tên `identity`. Đăng nhập mật khẩu, phiên, refresh token, DPoP, role và `AdminService` đã gỡ ở M6 PA; phần còn giữ (khoá ký, thu hồi theo tenant, danh bạ) chạy tiếp dưới tên `identity` ([tóm tắt PA](2026-11-02-m6-pa-identity-doi-token-summary.md)). Tài liệu này giữ nguyên như lúc xây.
 > Ngày: 2026-10-27, viết lại theo cái đã xây 2026-10-31 · Nhánh `feat/m6` · Trạng thái: **đã xây, `dev-done` trên nhánh (chưa push)**
 > **Các phần của M6 `iam`:** (1) đăng nhập mật khẩu + phiên ✅ · **(2) thu hồi tới websocket/gateway ✅** · (3) quyền + danh bạ (+ event `user_disabled`, `user_updated`) · (4) OIDC + IdP ngoài + exchange · (5) sẵn sàng go-live.
 
