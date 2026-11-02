@@ -10,7 +10,7 @@
 | Store MongoDB `apps/identity/internal/store/mongostore` thay `pgstore` | Có | `identity` |
 | Follower (RAM mỗi replica) đọc bằng change stream | Có | `identity` |
 | Gỡ feed HTTP `/internal/v1/directory/changes` (không app nào dùng) | Có | làm lại khi app đầu tiên cần (3b, M8 hoặc M9) |
-| Gỡ hết Postgres: `pgstore`, compose `postgres`/`postgres-init`, `make pg-up`/`pg-down`, `PG_URI`, `CHATIM_IT_PG_URI`, `scripts/wait-postgres.sh`, khoá `PG_*` trong `.env.example` và `.env`, pgx trong `go.mod`, luật depguard và tài liệu | Có | repo |
+| Gỡ hết Postgres: `pgstore` (xoá lúc chuyển app sang MongoDB, vì port mới không còn khớp), compose `postgres`/`postgres-init`, `make pg-up`/`pg-down`, `PG_URI`, `CHATIM_IT_PG_URI`, `scripts/wait-postgres.sh`, khoá `PG_*` trong `.env.example` và `.env`, pgx trong `go.mod`, luật depguard và tài liệu | Có | repo |
 | Metric và alert mới; đo đổi token, tải stream | Có | `identity`, `deploy/prometheus` |
 | Hợp đồng node ↔ `identity` (JWKS, danh sách thu hồi, `pkg/identitysync`) | Không đổi | — |
 | Audit (`audit_events`): bỏ ở PM vì `actor` luôn là `admin-cli` (`admincmd/run.go:18`) và không chỗ nào đọc; làm lại ở PB, suy từ change stream, có người gọi thật và cách đọc (owner "ok" 2026-11-02) | Không | PB |
@@ -60,10 +60,9 @@ Ví dụ: admin đổi tên Bình bằng `user-set` → ghi doc `acme│binh` (`
 | `signing_keys` (clustered) | `_id` = kid, `state`, `public_key`, `private_key_sealed`, `created_at`, `activated_at`, `retired_at` (giờ DB) | | Ký token chat, JWKS |
 | `signing_key_claims` (clustered) | `_id: "active"`, `key_id`, `ver` | | Một khoá đang dùng duy nhất, unique qua `_id` |
 | `revoked_sessions` (clustered) | `_id` = session id, `tenant_id`, `revoked_at`, `expires_at` | | Hợp đồng với node; vòng dọn như cũ |
-| `load_slots` (clustered) | `_id` (0..N−1), `holder`, `until` (giờ DB) | `2` | Tối đa N replica nạp cùng lúc |
-| `identity_meta` | `_id: "schema"`, `version` | `1` | `/readyz` kiểm phiên bản lược đồ |
+| `slots` (clustered) | `_id` = mục đích│số suất, `purpose`, `holder`, `expires_at` (giờ DB) | `directory_load│2` | Chia suất chung: tối đa N replica làm cùng một việc; người dùng đầu tiên là nạp danh bạ (`directory_load`, N = `IDENTITY_DIRECTORY_LOAD_SLOTS`). Việc khác cần chia suất chỉ thêm tên mục đích (owner 2026-11-02) |
 
-Index ngoài `_id` (khai báo qua `pkg/mongoindex`; `migrate` chạy thử mặc định): `users {tenant_id, groups}`, `groups {tenant_id, ancestors}`, `groups {tenant_id, parent_id, state}`, `revoked_sessions {expires_at}`. Không index unique nào ngoài `_id`.
+**Kiểm lược đồ như core** (owner "ok" 2026-11-02, thay số phiên bản lược đồ): danh sách collection và index khai báo trong code qua `pkg/mongoindex`; `migrate` chạy thử mặc định, `-apply` tạo collection và index còn thiếu, không xoá. Lúc khởi động, thiếu collection hay index → `/readyz` false kèm log thiếu gì và lệnh cần chạy; index lệch tuỳ chọn → log `warn` và gauge `chatim_identity_index_outdated{collection}` = 1, như core (`docs/apps/core.md:116`). Index ngoài `_id`: `users {tenant_id, groups}`, `groups {tenant_id, ancestors}`, `groups {tenant_id, parent_id, state}`, `revoked_sessions {expires_at}`. Không index unique nào ngoài `_id`.
 
 **Env đổi:** `IDENTITY_PG_URI`, `IDENTITY_PG_PASSWORD`, `IDENTITY_PG_MAX_CONNS` → `IDENTITY_MONGO_URI` (bắt buộc, không kèm credential), `IDENTITY_MONGO_DB` (`chatim_identity`), `IDENTITY_MONGO_USER`, `IDENTITY_MONGO_PASSWORD`/`_FILE`, `IDENTITY_MONGO_AUTH_SOURCE` (mặc định bằng `IDENTITY_MONGO_DB`), như core (D46). Luật cũ "`LOAD_SLOTS` + 2 ≤ `PG_MAX_CONNS`" bỏ. Compose: container khởi tạo tạo user `identity` (mật khẩu từ secret của `IDENTITY_MONGO_PASSWORD`); `.env` đổi khoá `IDENTITY_PG_PASSWORD` thành `IDENTITY_MONGO_PASSWORD` và xoá `PG_*` bằng `sed`, không in giá trị.
 
@@ -78,13 +77,13 @@ Transaction chỉ ở **5 lệnh phải đổi nhiều doc cùng lúc**: `group-
 | JIT lúc đổi token | User mới: `insertOne` `ver: 1`. User có: `updateOne` lọc `_id` + tên/ảnh đã thấy, `$set` + `$inc ver`. Không transaction, `w: majority`, không audit | Trùng `_id` (hai replica cùng tạo, hoặc driver tự gửi lại) hay lọc không khớp → không ghi, vẫn cấp token |
 | `user-set`, `user-disable/enable` | Một doc: user (`$inc ver` khi field đổi) | Không có user → `not_found` |
 | `tenant-*` | Một doc: tenant; khoá tenant đặt `sessions_revoked_at = $$NOW` | Trùng → `already_exists` |
-| `issuer-*`, `issuer-key-*` | Kiểm tenant/issuer có rồi ghi một doc (thay khoá ngoại; tenant và issuer không bao giờ bị xoá nên kiểm trước rồi ghi là đủ) | issuer chứa `│` → `invalid_argument` |
-| `group-create` | Transaction: `$inc group_tree_ver`; đọc cha (sống); `ancestors` = cha.ancestors + cha; insert | Cha lạ/đã xoá → `failed_precondition` |
+| `issuer-*`, `issuer-key-*` | Kiểm tenant/issuer có rồi ghi một doc (thay khoá ngoại; tenant và issuer không bao giờ bị xoá nên kiểm trước rồi ghi là đủ) | CLI đã từ chối issuer ngoài ASCII; store kiểm lại `│` → `invalid_argument` |
+| `group-create` | Transaction: `$inc group_tree_ver`; đọc cha (sống); `ancestors` = cha.ancestors + cha; insert | Cha lạ/đã xoá → `not_found` (như hiện nay) |
 | `group-update` | Đổi tên/`mentionable`: một doc. Đổi cha: transaction: `$inc group_tree_ver`; chặn vòng; sửa nhóm và cây con bằng một `updateMany` pipeline; cây con chỉ đổi `ancestors`, không tăng `ver` | Vòng → `failed_precondition` |
 | `group-delete` | Transaction: nhóm con sống → từ chối; nhóm → đã xoá, `$inc ver`, `members_ver`, `group_tree_ver`. Sau commit gỡ id nhóm khỏi user theo lô 500 (`$pull`, `$inc ver`); gọi lại trên nhóm đã xoá = gỡ tiếp | Nhóm con sống → `failed_precondition` |
 | `user-groups` | Transaction: đọc nhóm (sống, cùng tenant) qua `mongobound.StringIDs`; `$inc members_ver` trên mỗi nhóm của tập mới; đặt `groups` | Nhóm lạ/đã xoá → như hiện nay |
 | Khoá ký: tạo (`key-rotate`) một doc; kích hoạt | Transaction: đọc `active`; khoá chờ đủ hạn (`created_at + lead ≤ $$NOW`); khoá cũ → nghỉ, khoá mới → đang dùng, `active.key_id` đổi | Sớm → `failed_precondition` kèm giờ; hai replica cùng bật → một thua, tick sau thấy đã bật |
-| Suất nạp | `findOneAndUpdate` suất có `until < $$NOW` → `holder`, `until = $$NOW + 30s`; gia hạn mỗi 10s; nhả khi xong hay lỗi | Không suất trống → chờ |
+| Suất (`slots`, mục đích `directory_load`) | `findOneAndUpdate` suất của mục đích có `expires_at < $$NOW` → `holder`, `expires_at = $$NOW + 30s`; gia hạn mỗi 10s; nhả khi xong hay lỗi | Không suất trống → chờ |
 
 ### 4.2 Follower trong mỗi replica
 
@@ -181,7 +180,7 @@ Viết theo TDD cùng code (chỉ chạy gói đang sửa); kiểm đủ một l
 
 | Kiểm | Chứng minh |
 |---|---|
-| itest `migrate`: chạy thử không ghi; chạy thật tạo đủ collection, index, phiên bản; chạy lại không đổi | §3 |
+| itest `migrate`: chạy thử không ghi; chạy thật tạo đủ collection và index; chạy lại không đổi; thiếu index → `/readyz` false, lệch → gauge | §3 |
 | itest JIT: tạo, sửa khi khác, không ghi khi giống, CAS thua, hai bên cùng tạo | §4.1, §5 |
 | itest tenant, user, issuer, khoá tin cậy: tạo, trùng, không có, issuer chứa `│` | Thay khoá ngoại |
 | itest cây: tạo có cha, đổi cha sửa cây con, vòng bị chặn, hai lệnh đổi cha song song → một `unavailable`, cây con không tăng `ver` | §5 |
