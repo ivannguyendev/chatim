@@ -195,14 +195,27 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: An identity node has no active signing key, so it cannot issue tokens; run key-rotate -activate-if-none, or check IDENTITY_KEY_ENCRYPTION_KEY.
+          summary: An identity node has no active signing key, so it cannot issue chat tokens and the token exchange answers 503; run key-rotate -activate-if-none, or check IDENTITY_KEY_ENCRYPTION_KEY.
       - alert: ChatimIdentityStoreErrors
         expr: sum(rate(chatim_identity_store_errors_total[5m])) > 0
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: identity has been getting Postgres errors for 5m; logins and refreshes fail with Unavailable.
+          summary: identity has been getting Postgres errors for 5m; just-in-time user writes fail, so token exchanges that need one answer 503.
+      - alert: ChatimIdentityExchangeErrors
+        expr: sum(increase(chatim_identity_exchanges_total{result="error"}[5m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: The identity token exchange answered 503 in the last 5m because a node had no signing key, its directory was not loaded yet, or Postgres failed a just-in-time user write.
+      - alert: ChatimIdentityTrustStale
+        expr: max by (instance) (increase(chatim_identity_trust_reload_errors_total[1m])) > 0
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: An identity replica has failed to reload trusted issuers and keys for 3 minutes; a tenant key just removed still works for the token exchange on that replica.
   - name: chatim-identity-sync
     rules:
       - alert: ChatimIdentitySyncStale
