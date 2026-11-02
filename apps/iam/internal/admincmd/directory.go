@@ -7,6 +7,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/iam/internal/directory"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
 func groupFlags(name string) (flags, *string, *string) {
@@ -15,7 +16,7 @@ func groupFlags(name string) (flags, *string, *string) {
 }
 
 func groupAudit(env Env, tenant, action, id string) store.AuditEvent {
-	a := audit(env, tenant, action, "", "")
+	a := audit(env, tenant, action, "")
 	a.Detail = map[string]string{"group": id}
 	return a
 }
@@ -118,9 +119,9 @@ func groupDelete(ctx context.Context, env Env, st Store, args []string) error {
 }
 
 func accountGroups(ctx context.Context, env Env, st Store, args []string) error {
-	f, tenant, username := accountFlags("account-groups")
+	f, tenant, user := accountFlags("account-groups")
 	groups := f.set.String("groups", "", `comma-separated group ids; "" removes every group`)
-	if err := f.parse(args, "tenant", "username"); err != nil {
+	if err := f.parse(args, "tenant", "user"); err != nil {
 		return err
 	}
 	if !f.given()["groups"] {
@@ -130,21 +131,36 @@ func accountGroups(ctx context.Context, env Env, st Store, args []string) error 
 	if err != nil {
 		return err
 	}
-	a, err := findAccount(ctx, st, *tenant, *username)
-	if err != nil {
-		return err
-	}
-	at := audit(env, a.TenantID, "account_groups_set", a.ID, "")
+	at := audit(env, *tenant, "account_groups_set", *user)
 	at.Detail = map[string]string{"groups": strings.Join(ids, ",")}
-	if err := st.SetAccountGroups(ctx, a.TenantID, a.ID, ids, at); err != nil {
+	if err := st.SetAccountGroups(ctx, *tenant, *user, ids, at); err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(env.Out, "account %s groups: %s\n", a.Username, listOrNone(ids))
+	_, err = fmt.Fprintf(env.Out, "account %s groups: %s\n", *user, listOrNone(ids))
 	return err
 }
 
 func splitGroups(raw string) ([]string, error) {
-	return splitList(raw, "groups", "group", directory.ValidateGroupID)
+	ids := []string{}
+	if raw == "" {
+		return ids, nil
+	}
+	seen := map[string]bool{}
+	for part := range strings.SplitSeq(raw, ",") {
+		id := strings.TrimSpace(part)
+		if id == "" {
+			return nil, fmt.Errorf("%w: -groups has an empty group id", apperr.ErrInvalidArgument)
+		}
+		if err := directory.ValidateGroupID(id); err != nil {
+			return nil, err
+		}
+		if seen[id] {
+			return nil, fmt.Errorf("%w: group %s listed twice", apperr.ErrInvalidArgument, id)
+		}
+		seen[id] = true
+		ids = append(ids, id)
+	}
+	return ids, nil
 }
 
 func listOrNone(ids []string) string {
@@ -155,10 +171,10 @@ func listOrNone(ids []string) string {
 }
 
 func profileSet(ctx context.Context, env Env, st Store, args []string) error {
-	f, tenant, username := accountFlags("profile-set")
+	f, tenant, user := accountFlags("profile-set")
 	name := f.set.String("name", "", "display name")
 	avatar := f.set.String("avatar", "", `https avatar url; "" clears it`)
-	if err := f.parse(args, "tenant", "username"); err != nil {
+	if err := f.parse(args, "tenant", "user"); err != nil {
 		return err
 	}
 	given := f.given()
@@ -179,13 +195,9 @@ func profileSet(ctx context.Context, env Env, st Store, args []string) error {
 		}
 		u.AvatarURL = avatar
 	}
-	a, err := findAccount(ctx, st, *tenant, *username)
-	if err != nil {
+	if err := st.SetProfile(ctx, *tenant, *user, u, audit(env, *tenant, "profile_set", *user)); err != nil {
 		return err
 	}
-	if err := st.SetProfile(ctx, a.TenantID, a.ID, u, audit(env, a.TenantID, "profile_set", a.ID, "")); err != nil {
-		return err
-	}
-	_, err = fmt.Fprintf(env.Out, "profile updated for %s\n", a.Username)
+	_, err := fmt.Fprintf(env.Out, "profile updated for %s\n", *user)
 	return err
 }

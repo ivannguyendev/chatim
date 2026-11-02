@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -20,8 +19,6 @@ import (
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store/pgstore"
 )
-
-var tempPassword = regexp.MustCompile(`temporary password: (\S+)`)
 
 func databaseURI(t *testing.T) string {
 	t.Helper()
@@ -85,7 +82,21 @@ func (h *harness) store() *pgstore.Store {
 	return s
 }
 
-func TestAccountLifecycleCommands(t *testing.T) {
+func stateOf(t *testing.T, h *harness, sql string, args ...any) store.State {
+	t.Helper()
+	conn, err := pgx.Connect(context.Background(), h.uri)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close(context.Background()) }()
+	var state store.State
+	if err := conn.QueryRow(context.Background(), sql, args...).Scan(&state); err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+	return state
+}
+
+func TestTenantAndAccountStateCommands(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
 	if out := h.run("migrate"); !strings.Contains(out, "pending: 0001_init.sql") {
@@ -96,39 +107,30 @@ func TestAccountLifecycleCommands(t *testing.T) {
 		t.Fatalf("after apply = %q", out)
 	}
 	h.run("tenant-create", "-id", "shop", "-name", "Shop")
-	out := h.run("account-create", "-tenant", "shop", "-username", "Lan", "-email", "Lan@Shop.VN")
-	first := tempPassword.FindStringSubmatch(out)
-	if first == nil {
-		t.Fatalf("account-create output = %q, want a temporary password", out)
+	seedAccount(t, h, "shop", lanID, "lan")
+	const accountState = "SELECT state FROM accounts WHERE tenant_id = 'shop' AND id = $1"
+	if out := h.run("account-disable", "-tenant", "shop", "-user", lanID); out != "account "+lanID+": account_disable\n" {
+		t.Fatalf("account-disable output = %q", out)
 	}
-	st := h.store()
-	a, err := st.AccountByUsername(ctx, "shop", "lan")
-	if err != nil {
-		t.Fatalf("account: %v", err)
+	if st := stateOf(t, h, accountState, lanID); st != store.StateDisabled {
+		t.Fatalf("state = %d, want disabled", st)
 	}
-	if ok, _ := h.env.Hasher.Verify(a.PasswordHash, first[1]); !ok || !a.PasswordMustChange || a.Email != "lan@shop.vn" {
-		t.Fatalf("account = %+v; want the temporary password, forced change and a lowercase email", a)
+	h.run("account-enable", "-tenant", "shop", "-user", lanID)
+	if st := stateOf(t, h, accountState, lanID); st != store.StateActive {
+		t.Fatalf("state = %d, want active", st)
 	}
-	second := tempPassword.FindStringSubmatch(h.run("password-reset", "-tenant", "shop", "-username", "lan"))
-	if second == nil || second[1] == first[1] {
-		t.Fatal("password-reset did not issue a new temporary password")
+	if code := admincmd.Run(ctx, h.env, []string{"account-disable", "-tenant", "shop", "-user", "nobody"}); code != 1 {
+		t.Fatalf("account-disable of an unknown user = %d, want 1", code)
 	}
-	h.run("account-disable", "-tenant", "shop", "-username", "lan")
-	if a, _ = st.AccountByUsername(ctx, "shop", "lan"); a.State != store.StateDisabled {
-		t.Fatalf("state = %d, want disabled", a.State)
+	if code := admincmd.Run(ctx, h.env, []string{"account-disable", "-tenant", "blog", "-user", lanID}); code != 1 {
+		t.Fatalf("account-disable through another tenant = %d, want 1", code)
 	}
-	h.run("account-enable", "-tenant", "shop", "-username", "lan")
 	h.run("tenant-disable", "-id", "shop")
-	if tn, _ := st.TenantByID(ctx, "shop"); tn.State != store.StateDisabled {
-		t.Fatalf("tenant state = %d, want disabled", tn.State)
+	if st := stateOf(t, h, "SELECT state FROM tenants WHERE id = 'shop'"); st != store.StateDisabled {
+		t.Fatalf("tenant state = %d, want disabled", st)
 	}
 	if code := admincmd.Run(ctx, h.env, []string{"tenant-create", "-id", "shop", "-name", "Shop"}); code != 1 {
 		t.Fatalf("duplicate tenant = %d, want 1", code)
-	}
-	for _, secret := range []string{first[1], second[1]} {
-		if strings.Contains(h.logs.String(), secret) {
-			t.Fatal("a temporary password reached the log")
-		}
 	}
 }
 

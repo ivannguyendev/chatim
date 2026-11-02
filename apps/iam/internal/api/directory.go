@@ -9,7 +9,6 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/ivannguyendev/chatim/apps/iam/internal/auth"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/directory"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/ids"
@@ -73,31 +72,21 @@ func (d directoryService) GetUsers(_ context.Context, req *connect.Request[iamv1
 	return connect.NewResponse(&iamv1.GetUsersResponse{Users: out}), nil
 }
 
-func (d directoryService) GetMyProfile(ctx context.Context, req *connect.Request[iamv1.GetMyProfileRequest]) (*connect.Response[iamv1.GetMyProfileResponse], error) {
+func (d directoryService) GetMyProfile(_ context.Context, req *connect.Request[iamv1.GetMyProfileRequest]) (*connect.Response[iamv1.GetMyProfileResponse], error) {
 	claims, done, err := d.s.enter(req, d.s.directory)
 	if err != nil {
 		return nil, err
 	}
 	defer done()
-	p, err := d.s.opts.Auth.MyProfile(ctx, d.s.callerOf(req, claims))
-	if err != nil {
-		return nil, d.s.connectError(ctx, req.Spec().Procedure, err)
+	if !d.s.opts.Directory.Ready() {
+		return nil, errUnavailable("directory is loading")
 	}
-	return connect.NewResponse(&iamv1.GetMyProfileResponse{Profile: myProfile(p)}), nil
-}
-
-func (d directoryService) UpdateMyProfile(ctx context.Context, req *connect.Request[iamv1.UpdateMyProfileRequest]) (*connect.Response[iamv1.UpdateMyProfileResponse], error) {
-	claims, done, err := d.s.enter(req, d.s.directory)
-	if err != nil {
-		return nil, err
+	found := d.s.opts.Directory.Lookup(claims.Tenant, []string{claims.User})
+	if len(found) == 0 {
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("not found"))
 	}
-	defer done()
-	update := store.ProfileUpdate{DisplayName: req.Msg.DisplayName, AvatarURL: req.Msg.AvatarUrl}
-	p, err := d.s.opts.Auth.UpdateMyProfile(ctx, d.s.callerOf(req, claims), update)
-	if err != nil {
-		return nil, d.s.connectError(ctx, req.Spec().Procedure, err)
-	}
-	return connect.NewResponse(&iamv1.UpdateMyProfileResponse{Profile: myProfile(p)}), nil
+	u := found[0]
+	return connect.NewResponse(&iamv1.GetMyProfileResponse{Profile: &iamv1.MyProfile{Id: u.ID, DisplayName: u.DisplayName, AvatarUrl: u.AvatarURL}}), nil
 }
 
 type limiter struct {
@@ -144,10 +133,6 @@ func (s *server) authenticate(req headered) (jwtverify.Claims, error) {
 	return claims, nil
 }
 
-func (s *server) callerOf(req headered, claims jwtverify.Claims) auth.Caller {
-	return auth.Caller{Tenant: claims.Tenant, Account: claims.User, Session: claims.Session, IP: s.clientIP(req)}
-}
-
 func uniqueUserIDs(raw []string) ([]string, error) {
 	if len(raw) == 0 || len(raw) > maxDirectoryIDs {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("user_ids must hold 1 to %d ids", maxDirectoryIDs))
@@ -176,10 +161,6 @@ func userState(s store.State) iamv1.UserState {
 	default:
 		return iamv1.UserState_USER_STATE_UNSPECIFIED
 	}
-}
-
-func myProfile(p store.Profile) *iamv1.MyProfile {
-	return &iamv1.MyProfile{Id: p.ID, Username: p.Username, Email: p.Email, DisplayName: p.DisplayName, AvatarUrl: p.AvatarURL}
 }
 
 func errUnavailable(msg string) *connect.Error {

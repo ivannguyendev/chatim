@@ -189,19 +189,6 @@ groups:
           summary: More than 5% of gateway commands end Unavailable; core is down, overloaded or unreachable from the gateway.
   - name: chatim-iam-health
     rules:
-      - alert: ChatimIamHashSaturated
-        expr: sum(increase(chatim_iam_login_total{result="busy"}[5m])) > 0
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: iam refused logins because every password hash slot was busy for 5m; a login flood is running or IAM_HASH_CONCURRENCY is too low for the load.
-      - alert: ChatimIamRefreshReuse
-        expr: sum(increase(chatim_iam_refresh_total{result="reuse"}[10m])) > 10
-        labels:
-          severity: warning
-        annotations:
-          summary: More than 10 sessions were revoked in 10m because an old refresh token came back after the grace window; refresh tokens may be leaking, or a client resends tokens late.
       - alert: ChatimIamNoSigningKey
         expr: min(chatim_iam_signing_key_ready) == 0
         for: 1m

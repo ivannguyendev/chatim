@@ -17,8 +17,6 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/redact"
 )
 
-var errConflict = errors.New("row changed concurrently")
-
 var retryLaterCodes = []string{"40001", "40P01", "55P03", "57014"}
 
 var domainErrors = []error{
@@ -29,14 +27,12 @@ var domainErrors = []error{
 type Options struct {
 	MaxConns       int32
 	RevocationKeep time.Duration
-	AdminDBSlots   int
 }
 
 type Store struct {
-	pool       *pgxpool.Pool
-	uri        string
-	keep       time.Duration
-	adminSlots *adminSlots
+	pool *pgxpool.Pool
+	uri  string
+	keep time.Duration
 }
 
 func Open(ctx context.Context, uri string, opts Options) (*Store, error) {
@@ -52,7 +48,7 @@ func Open(ctx context.Context, uri string, opts Options) (*Store, error) {
 	if err != nil {
 		return nil, redact.Error(fmt.Errorf("open postgres pool: %w", err), uri)
 	}
-	return &Store{pool: pool, uri: uri, keep: opts.RevocationKeep, adminSlots: newAdminSlots(opts.AdminDBSlots)}, nil
+	return &Store{pool: pool, uri: uri, keep: opts.RevocationKeep}, nil
 }
 
 func parseConfig(uri string) (*pgxpool.Config, error) {
@@ -98,8 +94,6 @@ func (s *Store) mapErr(err error) error {
 		return apperr.ErrNotFound
 	case isDomainError(err):
 		return err
-	case errors.Is(err, errConflict):
-		return fmt.Errorf("%w: %w", apperr.ErrUnavailable, err)
 	case errors.As(err, &pgErr) && pgErr.Code == "23505":
 		return fmt.Errorf("%w: %s", apperr.ErrAlreadyExists, pgErr.ConstraintName)
 	case errors.As(err, &pgErr) && pgErr.Code == "23503":
@@ -130,13 +124,6 @@ func insertAudit(ctx context.Context, tx pgx.Tx, a store.AuditEvent) error {
 		"INSERT INTO audit_events (tenant_id, at, actor, action, account_id, session_id, ip, detail) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
 		a.TenantID, a.At, a.Actor, a.Action, nullable(a.AccountID), nullable(a.SessionID), nullable(a.IP), body)
 	return err
-}
-
-func expectOne(tag pgconn.CommandTag) error {
-	if tag.RowsAffected() != 1 {
-		return errConflict
-	}
-	return nil
 }
 
 func nullable(s string) *string {

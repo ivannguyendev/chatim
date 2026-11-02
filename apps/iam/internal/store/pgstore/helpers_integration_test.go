@@ -3,7 +3,6 @@ package pgstore_test
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"net/url"
 	"os"
@@ -79,11 +78,6 @@ func audit(action string) store.AuditEvent {
 	return store.AuditEvent{TenantID: "shop", At: t0, Actor: "test", Action: action, Detail: map[string]string{"k": "v"}}
 }
 
-func digest(s string) []byte {
-	sum := sha256.Sum256([]byte(s))
-	return sum[:]
-}
-
 func seedTenant(t testing.TB, s fixture, id string) {
 	t.Helper()
 	tenant := store.Tenant{ID: id, Name: id, State: store.StateActive, Ver: 1, CreatedAt: t0, UpdatedAt: t0, UpdatedBy: "test"}
@@ -92,42 +86,18 @@ func seedTenant(t testing.TB, s fixture, id string) {
 	}
 }
 
+const seedAccountSQL = "INSERT INTO accounts (tenant_id, id, username, display_name, state, password_hash, password_must_change, password_changed_at, ver, created_at, updated_at, updated_by) VALUES ($1, $2, $3, $3, $4, '', false, $5, 1, $5, $5, 'test')"
+
 func seedAccount(t testing.TB, s fixture, tenant, id, username string) store.Account {
 	t.Helper()
-	a := store.Account{
-		TenantID: tenant, ID: id, Username: username, State: store.StateActive,
-		PasswordHash:      "$argon2id$v=19$m=64,t=1,p=1$c2FsdHNhbHRzYWx0$a2V5a2V5a2V5a2V5a2V5a2V5",
-		PasswordChangedAt: t0, Ver: 1, CreatedAt: t0, UpdatedAt: t0, UpdatedBy: "test",
+	if _, err := s.raw.Exec(context.Background(), seedAccountSQL, tenant, id, username, store.StateActive, t0); err != nil {
+		t.Fatalf("seed account %s: %v", id, err)
 	}
-	if err := s.CreateAccount(context.Background(), a, audit("account_create")); err != nil {
-		t.Fatalf("CreateAccount: %v", err)
-	}
-	return a
-}
-
-func newSession(id string, a store.Account) store.NewSession {
-	return store.NewSession{
-		AccountVer: a.Ver,
-		Session: store.Session{
-			ID: id, TenantID: a.TenantID, AccountID: a.ID, State: store.StateActive,
-			DeviceName: "iPhone", UserAgent: "test", CreatedAt: t0, LastUsedAt: t0,
-			IdleExpiresAt: t0.Add(30 * 24 * time.Hour), ExpiresAt: t0.Add(90 * 24 * time.Hour),
-			RefreshVer: 1, RefreshHash: digest(id + "-token-1"), KeyThumbprint: "jkt-" + id,
-		},
-	}
+	return store.Account{TenantID: tenant, ID: id, DisplayName: username, State: store.StateActive, Ver: 1, CreatedAt: t0, UpdatedAt: t0, UpdatedBy: "test"}
 }
 
 func revocation() store.Revocation {
 	return store.Revocation{By: "admin-cli", Reason: "test", At: t0.Add(time.Minute)}
-}
-
-func seedSessions(t testing.TB, s fixture, a store.Account, ids ...string) {
-	t.Helper()
-	for _, id := range ids {
-		if _, err := s.CreateSession(context.Background(), newSession(id, a), audit("login_ok")); err != nil {
-			t.Fatalf("CreateSession %s: %v", id, err)
-		}
-	}
 }
 
 func openWithoutKeep(uri string) (*pgstore.Store, error) {

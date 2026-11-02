@@ -107,8 +107,6 @@ func TestWritesInAnUnknownTenantAreNotFound(t *testing.T) {
 	g := group("sales", "")
 	g.TenantID = "ghost"
 	wantErr(t, s.CreateGroup(ctx, g, audit("group_create")), apperr.ErrNotFound, "group in an unknown tenant")
-	a := store.Account{TenantID: "ghost", ID: lanID, Username: "lan", State: store.StateActive, PasswordHash: "h", PasswordChangedAt: t0, Ver: 1, CreatedAt: t0, UpdatedAt: t0, UpdatedBy: "test"}
-	wantErr(t, s.CreateAccount(ctx, a, audit("account_create")), apperr.ErrNotFound, "account in an unknown tenant")
 	wantAudits(t, s, "group_create", 0)
 }
 
@@ -303,9 +301,9 @@ func TestSetProfileChangesOnlyTheGivenFields(t *testing.T) {
 	if _, avatar, _ := profile(); avatar != "" {
 		t.Fatalf("avatar after clear = %q", avatar)
 	}
-	a, err := s.AccountByID(ctx, "shop", lanID)
-	if err != nil || a.Ver != 1 {
-		t.Fatalf("account ver = %d, %v; want 1 (profile never moves the login CAS)", a.Ver, err)
+	var ver int64
+	if err := s.raw.QueryRow(ctx, "SELECT ver FROM accounts WHERE tenant_id = 'shop' AND id = $1", lanID).Scan(&ver); err != nil || ver != 1 {
+		t.Fatalf("account ver = %d, %v; want 1", ver, err)
 	}
 	wantErr(t, s.SetProfile(ctx, "shop", minhID, store.ProfileUpdate{DisplayName: new("Minh")}, at), apperr.ErrNotFound, "missing account")
 	wantAudits(t, s, "profile_set", 3)

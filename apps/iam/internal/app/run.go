@@ -11,7 +11,6 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/iam/internal/api"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/config"
-	"github.com/ivannguyendev/chatim/apps/iam/internal/password"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store/pgstore"
 	"github.com/ivannguyendev/chatim/pkg/admin"
@@ -22,7 +21,6 @@ type Deps struct {
 	OpenStore     func(ctx context.Context, uri string, opts pgstore.Options) (Store, error)
 	OpenListener  func(ctx context.Context, uri string) (store.Listener, error)
 	MemoryLimit   func() int64
-	HashParams    password.Params
 	SchemaVersion int
 }
 
@@ -78,9 +76,6 @@ func (d Deps) withDefaults() Deps {
 	}
 	if d.MemoryLimit == nil {
 		d.MemoryLimit = currentMemoryLimit
-	}
-	if d.HashParams == (password.Params{}) {
-		d.HashParams = password.DefaultParams
 	}
 	if d.SchemaVersion == 0 {
 		d.SchemaVersion = pgstore.LatestVersion()

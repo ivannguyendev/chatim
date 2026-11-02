@@ -71,12 +71,9 @@ func TestListenerSurvivesWaitTimeouts(t *testing.T) {
 func TestListenerReportsRevocationNotices(t *testing.T) {
 	s := openStore(t)
 	seedTenant(t, s, "shop")
-	lan := seedAccount(t, s, "shop", lanID, "lan")
-	seedSessions(t, s, lan, phoneID)
 	l := openListener(t, s.uri)
-	revoked, err := s.RevokeSession(context.Background(), phoneID, revocation(), audit("session_revoke"))
-	if err != nil || !revoked {
-		t.Fatalf("RevokeSession = %v, %v; want true", revoked, err)
+	if err := s.SetTenantState(context.Background(), "shop", store.StateDisabled, revocation(), audit("tenant_disable")); err != nil {
+		t.Fatalf("SetTenantState: %v", err)
 	}
 	wantNotice(t, l, store.NoticeRevocations)
 	exec(t, s.raw, "SELECT pg_notify('iam_changes', 'other')")

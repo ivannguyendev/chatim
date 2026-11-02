@@ -23,24 +23,12 @@ type Config struct {
 	ListenAddr         string
 	InternalAddr       string
 	AdminAddr          string
-	PublicURL          string
 	PGURI              string
 	PGPassword         string
 	PGMaxConns         int
 	Issuer             string
 	Audience           string
 	AccessTTL          time.Duration
-	SessionIdle        time.Duration
-	SessionMax         time.Duration
-	RefreshGrace       time.Duration
-	DPoPWindow         time.Duration
-	HashConcurrency    int
-	LoginFreeFailures  int
-	LoginMaxDelay      time.Duration
-	LoginIPRate        int
-	LoginIPBurst       int
-	LoginIPTracked     int
-	PasswordMin        int
 	KeyEncryptionKey   []byte
 	NodeSecret         string
 	KeyActivateLead    time.Duration
@@ -62,10 +50,6 @@ type Config struct {
 	UserBurst          int
 	UserInflight       int
 	UserLimiters       int
-	AdminUserRate      int
-	AdminUserBurst     int
-	AdminInflightMax   int
-	AdminDBSlots       int
 }
 
 func AdminAddr() string { return envconfig.String("IAM_ADMIN_ADDR", defaultAdminAddr) }
@@ -76,24 +60,12 @@ func Load() (Config, error) {
 		ListenAddr:         optional("IAM_ADDR", ":8080"),
 		InternalAddr:       optional("IAM_INTERNAL_ADDR", ":8081"),
 		AdminAddr:          AdminAddr(),
-		PublicURL:          envconfig.String("IAM_PUBLIC_URL", ""),
 		PGURI:              envconfig.String("IAM_PG_URI", ""),
 		PGPassword:         p.secret("IAM_PG_PASSWORD"),
 		PGMaxConns:         p.number("IAM_PG_MAX_CONNS", 20),
 		Issuer:             envconfig.String("IAM_ISSUER", ""),
 		Audience:           envconfig.String("IAM_AUDIENCE", ""),
 		AccessTTL:          p.span("IAM_ACCESS_TTL", 15*time.Minute),
-		SessionIdle:        p.span("IAM_SESSION_IDLE", 720*time.Hour),
-		SessionMax:         p.span("IAM_SESSION_MAX", 2160*time.Hour),
-		RefreshGrace:       p.span("IAM_REFRESH_GRACE", 30*time.Second),
-		DPoPWindow:         p.span("IAM_DPOP_WINDOW", time.Minute),
-		HashConcurrency:    p.number("IAM_HASH_CONCURRENCY", 16),
-		LoginFreeFailures:  p.number("IAM_LOGIN_FREE_FAILURES", 5),
-		LoginMaxDelay:      p.span("IAM_LOGIN_MAX_DELAY", time.Minute),
-		LoginIPRate:        p.number("IAM_LOGIN_IP_RATE", 20),
-		LoginIPBurst:       p.number("IAM_LOGIN_IP_BURST", 200),
-		LoginIPTracked:     p.number("IAM_LOGIN_IP_TRACKED", 100000),
-		PasswordMin:        p.number("IAM_PASSWORD_MIN", 12),
 		KeyEncryptionKey:   p.key("IAM_KEY_ENCRYPTION_KEY"),
 		NodeSecret:         p.secret("IAM_NODE_SECRET"),
 		KeyActivateLead:    p.span("IAM_KEY_ACTIVATE_LEAD", 2*time.Minute),
@@ -115,10 +87,6 @@ func Load() (Config, error) {
 		UserBurst:          p.number("IAM_USER_BURST", 100),
 		UserInflight:       p.number("IAM_USER_INFLIGHT", 32),
 		UserLimiters:       p.number("IAM_USER_LIMITERS", 100000),
-		AdminUserRate:      p.number("IAM_ADMIN_USER_RATE", 10),
-		AdminUserBurst:     p.number("IAM_ADMIN_USER_BURST", 20),
-		AdminInflightMax:   p.number("IAM_ADMIN_INFLIGHT_MAX", 1000),
-		AdminDBSlots:       p.number("IAM_ADMIN_DB_SLOTS", 4),
 	}
 	if err := errors.Join(p.errs...); err != nil {
 		return Config{}, err
@@ -145,23 +113,12 @@ func (c Config) LogValue() slog.Value {
 		slog.String("listen_addr", c.ListenAddr),
 		slog.String("internal_addr", c.InternalAddr),
 		slog.String("admin_addr", c.AdminAddr),
-		slog.String("public_url", c.PublicURL),
 		slog.String("pg_uri", redact.URL(c.PGURI)),
 		slog.Bool("pg_password_set", c.PGPassword != ""),
 		slog.Int("pg_max_conns", c.PGMaxConns),
 		slog.String("issuer", c.Issuer),
 		slog.String("audience", c.Audience),
 		slog.Duration("access_ttl", c.AccessTTL),
-		slog.Duration("session_idle", c.SessionIdle),
-		slog.Duration("session_max", c.SessionMax),
-		slog.Duration("refresh_grace", c.RefreshGrace),
-		slog.Duration("dpop_window", c.DPoPWindow),
-		slog.Int("hash_concurrency", c.HashConcurrency),
-		slog.Int("login_free_failures", c.LoginFreeFailures),
-		slog.Duration("login_max_delay", c.LoginMaxDelay),
-		slog.Int("login_ip_rate", c.LoginIPRate),
-		slog.Int("login_ip_burst", c.LoginIPBurst),
-		slog.Int("password_min", c.PasswordMin),
 		slog.Bool("key_encryption_key_set", len(c.KeyEncryptionKey) > 0),
 		slog.Bool("node_secret_set", c.NodeSecret != ""),
 		slog.Duration("key_activate_lead", c.KeyActivateLead),
@@ -178,10 +135,6 @@ func (c Config) LogValue() slog.Value {
 		slog.Int("user_burst", c.UserBurst),
 		slog.Int("user_inflight", c.UserInflight),
 		slog.Int("user_limiters", c.UserLimiters),
-		slog.Int("admin_user_rate", c.AdminUserRate),
-		slog.Int("admin_user_burst", c.AdminUserBurst),
-		slog.Int("admin_inflight_max", c.AdminInflightMax),
-		slog.Int("admin_db_slots", c.AdminDBSlots),
 	)
 }
 

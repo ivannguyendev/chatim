@@ -13,8 +13,9 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/iam/internal/admincmd"
-	"github.com/ivannguyendev/chatim/apps/iam/internal/password"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/signing"
+	"github.com/ivannguyendev/chatim/apps/iam/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/apperr"
 )
 
 type closedStore struct {
@@ -36,13 +37,9 @@ func testEnv(t *testing.T, open func(context.Context) (admincmd.Store, error)) (
 	kek := make([]byte, signing.KEKLength)
 	_, _ = rand.Read(kek)
 	sealer, _ := signing.NewSealer(kek, rand.Reader)
-	hasher, err := password.NewHasher(password.Params{Memory: 64, Time: 1, Threads: 1, SaltLength: 16, KeyLength: 32}, rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
 	out, logs := &bytes.Buffer{}, &bytes.Buffer{}
 	return admincmd.Env{
-		Open: open, Sealer: sealer, Hasher: hasher, Random: rand.Reader, Now: time.Now,
+		Open: open, Sealer: sealer, Random: rand.Reader, Now: time.Now,
 		KeyWindow: 15*time.Minute + 30*time.Second, Out: out, Log: slog.New(slog.NewJSONHandler(logs, nil)),
 	}, out, logs
 }
@@ -54,16 +51,16 @@ func TestUsageErrorsExitWithTwo(t *testing.T) {
 		{"nope"},
 		{"tenant-create", "-id", "shop"},
 		{"tenant-create", "-id", "Bad Tenant", "-name", "x"},
-		{"account-create", "-tenant", "shop", "-username", "has space"},
-		{"account-create", "-tenant", "shop", "-username", "lan", "-email", "no-at"},
+		{"account-disable", "-tenant", "shop"},
+		{"account-enable", "-tenant", "shop", "-username", "lan"},
 		{"jwks-export"},
 		{"migrate", "extra"},
 		{"key-activate", "-unknown"},
 		{"group-create", "-tenant", "shop", "-id", "sales"},
 		{"group-update", "-tenant", "shop", "-id", "sales"},
 		{"group-delete", "-tenant", "shop"},
-		{"account-groups", "-tenant", "shop", "-username", "lan"},
-		{"profile-set", "-tenant", "shop", "-username", "lan"},
+		{"account-groups", "-tenant", "shop", "-user", "lan"},
+		{"profile-set", "-tenant", "shop", "-user", "lan"},
 	}
 	for _, args := range cases {
 		if code := admincmd.Run(context.Background(), env, args); code != 2 {
@@ -73,13 +70,39 @@ func TestUsageErrorsExitWithTwo(t *testing.T) {
 }
 
 func TestIsKnowsEveryCommand(t *testing.T) {
-	for _, name := range []string{"migrate", "account-create", "password-reset", "key-rotate", "jwks-export", "bootstrap"} {
+	for _, name := range []string{"migrate", "account-disable", "account-groups", "profile-set", "key-rotate", "jwks-export", "bootstrap"} {
 		if !admincmd.Is(name) {
 			t.Fatalf("Is(%q) = false", name)
 		}
 	}
+	for _, name := range []string{"account-create", "password-reset", "session-list", "session-revoke", "role-create", "account-roles", "group-roles", "client-permissions-set"} {
+		if admincmd.Is(name) {
+			t.Fatalf("Is(%q) = true for a removed command", name)
+		}
+	}
 	if admincmd.Is("serve") || admincmd.Is("probe") {
 		t.Fatal("serve and probe are not admin commands")
+	}
+}
+
+type missingAccountStore struct {
+	closedStore
+	tenant, user string
+}
+
+func (s *missingAccountStore) SetAccountState(_ context.Context, tenantID, id string, _ store.State, _ store.AuditEvent) error {
+	s.tenant, s.user = tenantID, id
+	return apperr.ErrNotFound
+}
+
+func TestAccountDisableOfAnUnknownUserExitsWithOne(t *testing.T) {
+	st := &missingAccountStore{}
+	env, out, logs := testEnv(t, func(context.Context) (admincmd.Store, error) { return st, nil })
+	if code := admincmd.Run(context.Background(), env, []string{"account-disable", "-tenant", "shop", "-user", "ghost"}); code != 1 {
+		t.Fatalf("Run = %d, want 1", code)
+	}
+	if st.tenant != "shop" || st.user != "ghost" || out.Len() != 0 || !strings.Contains(logs.String(), "not found") {
+		t.Fatalf("store saw %q/%q, out=%q logs=%s; want the user id passed through and not found logged", st.tenant, st.user, out, logs)
 	}
 }
 

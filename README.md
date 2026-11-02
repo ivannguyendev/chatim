@@ -14,7 +14,7 @@ Monorepo Go, mỗi app một container. Thiết kế: [architecture.md](docs/arc
 | `mention` (Mention App) | Nhúng trong core (`modules/mention`): chỉ mục mention, `ListMentions`, nhóm được tag, gợi ý `@nhóm`, thông báo `WsPublish` | [docs/apps/core.md](docs/apps/core.md#mention-app) |
 | `websocket` | WebSocket (gws): 12 lệnh ghi realtime, đẩy event, đang gõ, online, giữ kết nối khi token hết hạn; SDK client ở repo khác, theo [module 09 §11](docs/modules/09-feature-realtime-delivery-and-ephemeral.md) | [docs/apps/websocket.md](docs/apps/websocket.md) |
 | `gateway` | HTTPS (Connect): 22 lệnh đọc và quản lý room, JWT, gọi core bất kỳ (round robin), giới hạn theo user | [docs/apps/gateway.md](docs/apps/gateway.md) |
-| `iam` | IAM tổng quát kiểu Keycloak (M6): account do admin cấp, đăng nhập mật khẩu, token Ed25519, refresh gắn DPoP, phiên; Postgres riêng | [docs/apps/iam.md](docs/apps/iam.md) |
+| `iam` | Cầu danh tính (M6, sẽ đổi tên `identity`): khoá ký và token Ed25519, thu hồi theo tenant, danh bạ; chat không giữ đăng nhập (owner 2026-11-02); Postgres riêng | [docs/apps/iam.md](docs/apps/iam.md) |
 | media, `notification` + push, search | Phase 2 (D207) | — |
 
 Hạ tầng: MongoDB (replica set), Redis (state, dedupe, presence), NATS JetStream; Postgres cho `iam`.
@@ -58,7 +58,7 @@ App chỉ publish trên loopback (caller còn được tin qua metadata tới kh
 | `127.0.0.1:9001`, `127.0.0.1:9002` | gRPC `core-1`, `core-2` |
 | `127.0.0.1:8081`, `127.0.0.1:8083` | WebSocket `/ws` `websocket-1`, `websocket-2` |
 | `127.0.0.1:8082` | HTTP Connect `gateway-1` |
-| `127.0.0.1:8084` | HTTP `iam-1` (Connect `AuthService`, `/realms/{tenant}/protocol/openid-connect/token`) |
+| `127.0.0.1:8084` | HTTP `iam-1` (JWKS, Connect `DirectoryService`) |
 | `5433` | Postgres (`chatim_poc`, `chatim_iam`) |
 
 ## Tài liệu

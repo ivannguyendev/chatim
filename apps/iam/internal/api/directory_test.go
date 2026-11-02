@@ -11,9 +11,6 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/ivannguyendev/chatim/apps/iam/internal/api"
-	"github.com/ivannguyendev/chatim/apps/iam/internal/directory"
-	"github.com/ivannguyendev/chatim/apps/iam/internal/store"
-	"github.com/ivannguyendev/chatim/pkg/apperr"
 	iamv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/iam/v1"
 	"github.com/ivannguyendev/chatim/pkg/revocation"
 	"github.com/ivannguyendev/chatim/pkg/userlimit"
@@ -28,10 +25,6 @@ var directoryCalls = map[string]directoryCall{
 	},
 	"GetMyProfile": func(d *dirHarness, token string) error {
 		_, err := d.client.GetMyProfile(context.Background(), withToken(token, &iamv1.GetMyProfileRequest{}))
-		return err
-	},
-	"UpdateMyProfile": func(d *dirHarness, token string) error {
-		_, err := d.client.UpdateMyProfile(context.Background(), withToken(token, &iamv1.UpdateMyProfileRequest{DisplayName: new("Lan")}))
 		return err
 	},
 }
@@ -85,8 +78,8 @@ func TestRevokedSessionIsRefusedWithoutReadingTheStore(t *testing.T) {
 		}
 		wantCode(t, call(d, "forged"), connect.CodeUnauthenticated, name+" forged")
 	}
-	if d.fake.profileCalls() != 0 || d.dir.lookups.Load() != 0 {
-		t.Fatalf("store calls = %d, lookups = %d; want 0", d.fake.profileCalls(), d.dir.lookups.Load())
+	if d.dir.lookups.Load() != 0 {
+		t.Fatalf("lookups = %d; want 0", d.dir.lookups.Load())
 	}
 	if d.gate.InFlight() != 0 {
 		t.Fatalf("gate in flight = %d after refusals", d.gate.InFlight())
@@ -112,12 +105,13 @@ func TestTokenIssuedBeforeTenantRevocationIsRefused(t *testing.T) {
 	if err := directoryCalls["GetUsers"](d, tokenOld); err != nil {
 		t.Fatalf("before the revocation: %v", err)
 	}
+	before := d.dir.lookups.Load()
 	revokeTenantAt(d, t0)
 	for name, call := range directoryCalls {
 		wantCode(t, call(d, tokenOld), connect.CodeUnauthenticated, name)
 	}
-	if d.fake.profileCalls() != 0 {
-		t.Fatalf("store calls = %d; want 0", d.fake.profileCalls())
+	if got := d.dir.lookups.Load(); got != before {
+		t.Fatalf("lookups = %d after refusals; want %d", got, before)
 	}
 }
 
@@ -166,19 +160,27 @@ func TestBodyOver64KiBIsResourceExhausted(t *testing.T) {
 	if _, err := getUsers(d, tokenLan, manyIDs(500, 60)...); err != nil {
 		t.Fatalf("a 30 KiB directory body above the 16 KiB auth limit: %v", err)
 	}
-	big := &iamv1.UpdateMyProfileRequest{DisplayName: new(strings.Repeat("n", 70<<10))}
-	_, err := d.client.UpdateMyProfile(context.Background(), withToken(tokenLan, big))
+	before := d.dir.lookups.Load()
+	_, err := getUsers(d, tokenLan, strings.Repeat("n", 70<<10))
 	wantCode(t, err, connect.CodeResourceExhausted, "70 KiB body")
-	if d.fake.profileCalls() != 0 {
-		t.Fatal("an oversized body reached the service")
+	if d.dir.lookups.Load() != before {
+		t.Fatal("an oversized body reached the directory")
 	}
 }
 
-func TestOAuthBodyLimitIsUnchanged(t *testing.T) {
+func TestRemovedLoginAndAdminRoutesAreNotFound(t *testing.T) {
 	d := newDirHarness(t)
-	resp := d.postForm(t, tokenPath, refreshBody(strings.Repeat("x", 20<<10)), map[string]string{"DPoP": "good-proof"})
-	if resp.StatusCode != http.StatusRequestEntityTooLarge {
-		t.Fatalf("oversized token body = %d; want 413", resp.StatusCode)
+	for _, path := range []string{
+		"/realms/shop/protocol/openid-connect/token",
+		"/realms/shop/protocol/openid-connect/revoke",
+		"/chatim.iam.v1.AuthService/Login",
+		"/chatim.iam.v1.AdminService/CreateRole",
+		"/chatim.iam.v1.DirectoryService/UpdateMyProfile",
+	} {
+		r := d.do(t, http.MethodPost, path, "{}", map[string]string{"Content-Type": "application/json", "Authorization": "Bearer " + tokenLan})
+		if r.StatusCode != http.StatusNotFound {
+			t.Fatalf("POST %s = %d; want 404", path, r.StatusCode)
+		}
 	}
 }
 
@@ -238,63 +240,55 @@ func TestGateFullIsUnavailable(t *testing.T) {
 	}
 }
 
-func TestUpdateMyProfileRejectsBadInput(t *testing.T) {
+func TestGetMyProfileReadsTheCallerFromTheDirectory(t *testing.T) {
 	d := newDirHarness(t)
-	for _, bad := range []error{directory.ErrDisplayName, directory.ErrAvatarURL, fmt.Errorf("%w: set a display name or an avatar url", apperr.ErrInvalidArgument)} {
-		d.fake.err = bad
-		_, err := d.client.UpdateMyProfile(context.Background(), withToken(tokenLan, &iamv1.UpdateMyProfileRequest{AvatarUrl: new("http://x")}))
-		ce := wantCode(t, err, connect.CodeInvalidArgument, bad.Error())
-		if want := strings.TrimPrefix(bad.Error(), apperr.ErrInvalidArgument.Error()+": "); ce.message != want {
-			t.Fatalf("message = %q; want %q", ce.message, want)
+	for _, tc := range []struct{ token, id, name string }{{tokenLan, "lan", "lan"}, {tokenMall, "zed", "Zed"}} {
+		resp, err := d.client.GetMyProfile(context.Background(), withToken(tc.token, &iamv1.GetMyProfileRequest{}))
+		if err != nil {
+			t.Fatalf("GetMyProfile %s: %v", tc.id, err)
+		}
+		if p := resp.Msg.GetProfile(); p.GetId() != tc.id || p.GetDisplayName() != tc.name || p.GetAvatarUrl() != "" {
+			t.Fatalf("profile = %+v; want %s/%s", p, tc.id, tc.name)
 		}
 	}
-	d.fake.err = nil
-	_, err := d.client.UpdateMyProfile(context.Background(), withToken(tokenLan, &iamv1.UpdateMyProfileRequest{}))
-	if err != nil {
-		t.Fatalf("empty update with the fake: %v", err)
+	r := d.do(t, http.MethodPost, "/chatim.iam.v1.DirectoryService/GetMyProfile", "{}", map[string]string{"Content-Type": "application/json", "Authorization": "Bearer " + tokenLan})
+	if r.StatusCode != http.StatusOK || !strings.Contains(string(r.Body), `"displayName":"lan"`) {
+		t.Fatalf("json reply = %d %s", r.StatusCode, r.Body)
 	}
-	if u := d.fake.profiles.updates[len(d.fake.profiles.updates)-1]; u.DisplayName != nil || u.AvatarURL != nil {
-		t.Fatalf("unset fields reached the service as set: %+v", u)
+	for _, field := range []string{"username", "email"} {
+		if strings.Contains(strings.ToLower(string(r.Body)), field) {
+			t.Fatalf("json reply %s carries %s", r.Body, field)
+		}
 	}
 }
 
-func TestGetMyProfileReturnsTheCallersProfile(t *testing.T) {
-	d := newDirHarness(t)
-	req := withToken(tokenLan, &iamv1.GetMyProfileRequest{})
-	req.Header().Set("X-Real-IP", "198.51.100.7")
-	resp, err := d.client.GetMyProfile(context.Background(), req)
+func TestGetMyProfileCarriesTheAvatar(t *testing.T) {
+	claims := testClaims[tokenLan]
+	claims.User = "hoa"
+	d := newDirHarness(t, func(o *api.Options) { o.Claims = fakeClaims{"tok-hoa": claims} })
+	resp, err := d.client.GetMyProfile(context.Background(), withToken("tok-hoa", &iamv1.GetMyProfileRequest{}))
 	if err != nil {
 		t.Fatalf("GetMyProfile: %v", err)
 	}
-	p := resp.Msg.GetProfile()
-	if p.GetId() != "lan" || p.GetUsername() != "lan" || p.GetEmail() != "lan@example.com" || p.GetDisplayName() != "lan" {
+	if p := resp.Msg.GetProfile(); p.GetId() != "hoa" || p.GetDisplayName() != "Hoa" || p.GetAvatarUrl() != "https://cdn.example/hoa.png" {
 		t.Fatalf("profile = %+v", p)
 	}
-	if c := d.fake.callers[0]; c.Tenant != "shop" || c.Account != "lan" || c.Session != "s-lan" || c.IP != "198.51.100.7" {
-		t.Fatalf("caller = %+v", c)
-	}
-	d.fake.err = apperr.ErrUnavailable
-	_, err = d.client.GetMyProfile(context.Background(), withToken(tokenLan, &iamv1.GetMyProfileRequest{}))
-	wantCode(t, err, connect.CodeUnavailable, "store down")
 }
 
-func TestUpdateThenGetUsersSeesTheNewName(t *testing.T) {
+func TestGetMyProfileOfAnUnknownUserIsNotFound(t *testing.T) {
 	d := newDirHarness(t)
-	resp, err := d.client.UpdateMyProfile(context.Background(), withToken(tokenLan, &iamv1.UpdateMyProfileRequest{DisplayName: new("Lan Nguyen")}))
-	if err != nil {
-		t.Fatalf("UpdateMyProfile: %v", err)
+	_, err := d.client.GetMyProfile(context.Background(), withToken(tokenGhost, &iamv1.GetMyProfileRequest{}))
+	wantCode(t, err, connect.CodeNotFound, "unknown user")
+}
+
+func TestGetMyProfileIsUnavailableWhileTheDirectoryLoads(t *testing.T) {
+	d := newDirHarness(t)
+	d.dir.ready.Store(false)
+	_, err := d.client.GetMyProfile(context.Background(), withToken(tokenLan, &iamv1.GetMyProfileRequest{}))
+	if ce := wantCode(t, err, connect.CodeUnavailable, "not ready"); ce.retryAfter != "1" {
+		t.Fatalf("Retry-After = %q", ce.retryAfter)
 	}
-	before, err := getUsers(d, tokenLan, "lan")
-	if err != nil || usersOf(before) != "lan=lan/USER_STATE_ACTIVE" {
-		t.Fatalf("before the change reaches the cache = %v, %v", before, err)
-	}
-	p := resp.Msg.GetProfile()
-	d.dir.Apply([]store.Change{{
-		Kind: store.ChangeUser, TenantID: "shop", ID: p.GetId(), Ver: 2,
-		User: &store.UserChange{State: store.StateActive, DisplayName: p.GetDisplayName(), AvatarURL: p.GetAvatarUrl()},
-	}})
-	after, err := getUsers(d, tokenLan, "lan")
-	if err != nil || usersOf(after) != "lan=Lan Nguyen/USER_STATE_ACTIVE" {
-		t.Fatalf("after the change = %v, %v", after, err)
+	if d.dir.lookups.Load() != 0 {
+		t.Fatal("lookup ran before the directory was ready")
 	}
 }

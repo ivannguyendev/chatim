@@ -162,7 +162,7 @@ func TestPublicPortServesJWKSButNotTheRevocationList(t *testing.T) {
 }
 
 func TestPublicJWKSWithoutKeysIsUnavailable(t *testing.T) {
-	h, err := api.New(api.Options{Auth: &fakeAuth{}, Proofs: fakeProofs{}, Callers: fakeCallers{}, Keys: fakeKeys{}, BodyMax: 1 << 10})
+	h, err := api.New(api.Options{Keys: fakeKeys{}, BodyMax: 1 << 10})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

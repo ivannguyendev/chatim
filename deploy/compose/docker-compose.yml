@@ -65,7 +65,6 @@ x-iam-env: &iam-env
   IAM_NODE_SECRET_FILE: /run/secrets/iam_node_secret
   IAM_KEY_ACTIVATE_LEAD: 65s
   IAM_KEY_RELOAD: 5s
-  IAM_PUBLIC_URL: http://chatim-iam-1:8080
   IAM_ISSUER: chatim-dev
   IAM_AUDIENCE: chatim-websocket
   IAM_CORS_ORIGINS: ${IAM_CORS_ORIGINS:-http://localhost:3000}

@@ -15,33 +15,6 @@ func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
 
 var now = time.Date(2026, 10, 26, 8, 0, 0, 0, time.UTC)
 
-func TestBackoffDelays(t *testing.T) {
-	b := guard.Backoff{FreeFailures: 5, MaxDelay: time.Minute}
-	cases := map[int]time.Duration{
-		0:       0,
-		5:       0,
-		6:       time.Second,
-		7:       2 * time.Second,
-		8:       4 * time.Second,
-		11:      32 * time.Second,
-		12:      time.Minute,
-		1000:    time.Minute,
-		1 << 40: time.Minute,
-	}
-	for failed, want := range cases {
-		got := b.NextLoginAt(failed, now)
-		if want == 0 {
-			if !got.IsZero() {
-				t.Errorf("NextLoginAt(%d) = %v, want no wait", failed, got)
-			}
-			continue
-		}
-		if !got.Equal(now.Add(want)) {
-			t.Errorf("NextLoginAt(%d) = %v, want now + %v", failed, got.Sub(now), want)
-		}
-	}
-}
-
 func TestIPLimiterAllowsBurstThenRefills(t *testing.T) {
 	l := guard.NewIPLimiter(1, 3, 10)
 	for i := range 3 {
@@ -70,32 +43,6 @@ func TestIPLimiterForgetsTheLeastRecentIP(t *testing.T) {
 	}
 	if l.Allow("c", now) {
 		t.Fatal("recent ip lost its bucket")
-	}
-}
-
-func TestHashSlotsCapConcurrentHashing(t *testing.T) {
-	s := guard.NewHashSlots(2)
-	release1, ok1 := s.TryAcquire()
-	release2, ok2 := s.TryAcquire()
-	if !ok1 || !ok2 || s.InUse() != 2 {
-		t.Fatalf("two acquisitions = %v, %v, in use %d; want both and 2", ok1, ok2, s.InUse())
-	}
-	if _, ok := s.TryAcquire(); ok {
-		t.Fatal("third acquisition succeeded with two slots")
-	}
-	release1()
-	release1()
-	if s.InUse() != 1 {
-		t.Fatalf("in use after one release = %d, want 1 (double release must not free twice)", s.InUse())
-	}
-	release3, ok := s.TryAcquire()
-	if !ok {
-		t.Fatal("slot not reusable after release")
-	}
-	release2()
-	release3()
-	if s.InUse() != 0 {
-		t.Fatalf("in use = %d, want 0", s.InUse())
 	}
 }
 

@@ -39,16 +39,12 @@ const (
 	// DirectoryServiceGetMyProfileProcedure is the fully-qualified name of the DirectoryService's
 	// GetMyProfile RPC.
 	DirectoryServiceGetMyProfileProcedure = "/chatim.iam.v1.DirectoryService/GetMyProfile"
-	// DirectoryServiceUpdateMyProfileProcedure is the fully-qualified name of the DirectoryService's
-	// UpdateMyProfile RPC.
-	DirectoryServiceUpdateMyProfileProcedure = "/chatim.iam.v1.DirectoryService/UpdateMyProfile"
 )
 
 // DirectoryServiceClient is a client for the chatim.iam.v1.DirectoryService service.
 type DirectoryServiceClient interface {
 	GetUsers(context.Context, *connect.Request[v1.GetUsersRequest]) (*connect.Response[v1.GetUsersResponse], error)
 	GetMyProfile(context.Context, *connect.Request[v1.GetMyProfileRequest]) (*connect.Response[v1.GetMyProfileResponse], error)
-	UpdateMyProfile(context.Context, *connect.Request[v1.UpdateMyProfileRequest]) (*connect.Response[v1.UpdateMyProfileResponse], error)
 }
 
 // NewDirectoryServiceClient constructs a client for the chatim.iam.v1.DirectoryService service. By
@@ -74,20 +70,13 @@ func NewDirectoryServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(directoryServiceMethods.ByName("GetMyProfile")),
 			connect.WithClientOptions(opts...),
 		),
-		updateMyProfile: connect.NewClient[v1.UpdateMyProfileRequest, v1.UpdateMyProfileResponse](
-			httpClient,
-			baseURL+DirectoryServiceUpdateMyProfileProcedure,
-			connect.WithSchema(directoryServiceMethods.ByName("UpdateMyProfile")),
-			connect.WithClientOptions(opts...),
-		),
 	}
 }
 
 // directoryServiceClient implements DirectoryServiceClient.
 type directoryServiceClient struct {
-	getUsers        *connect.Client[v1.GetUsersRequest, v1.GetUsersResponse]
-	getMyProfile    *connect.Client[v1.GetMyProfileRequest, v1.GetMyProfileResponse]
-	updateMyProfile *connect.Client[v1.UpdateMyProfileRequest, v1.UpdateMyProfileResponse]
+	getUsers     *connect.Client[v1.GetUsersRequest, v1.GetUsersResponse]
+	getMyProfile *connect.Client[v1.GetMyProfileRequest, v1.GetMyProfileResponse]
 }
 
 // GetUsers calls chatim.iam.v1.DirectoryService.GetUsers.
@@ -100,16 +89,10 @@ func (c *directoryServiceClient) GetMyProfile(ctx context.Context, req *connect.
 	return c.getMyProfile.CallUnary(ctx, req)
 }
 
-// UpdateMyProfile calls chatim.iam.v1.DirectoryService.UpdateMyProfile.
-func (c *directoryServiceClient) UpdateMyProfile(ctx context.Context, req *connect.Request[v1.UpdateMyProfileRequest]) (*connect.Response[v1.UpdateMyProfileResponse], error) {
-	return c.updateMyProfile.CallUnary(ctx, req)
-}
-
 // DirectoryServiceHandler is an implementation of the chatim.iam.v1.DirectoryService service.
 type DirectoryServiceHandler interface {
 	GetUsers(context.Context, *connect.Request[v1.GetUsersRequest]) (*connect.Response[v1.GetUsersResponse], error)
 	GetMyProfile(context.Context, *connect.Request[v1.GetMyProfileRequest]) (*connect.Response[v1.GetMyProfileResponse], error)
-	UpdateMyProfile(context.Context, *connect.Request[v1.UpdateMyProfileRequest]) (*connect.Response[v1.UpdateMyProfileResponse], error)
 }
 
 // NewDirectoryServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -131,20 +114,12 @@ func NewDirectoryServiceHandler(svc DirectoryServiceHandler, opts ...connect.Han
 		connect.WithSchema(directoryServiceMethods.ByName("GetMyProfile")),
 		connect.WithHandlerOptions(opts...),
 	)
-	directoryServiceUpdateMyProfileHandler := connect.NewUnaryHandler(
-		DirectoryServiceUpdateMyProfileProcedure,
-		svc.UpdateMyProfile,
-		connect.WithSchema(directoryServiceMethods.ByName("UpdateMyProfile")),
-		connect.WithHandlerOptions(opts...),
-	)
 	return "/chatim.iam.v1.DirectoryService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case DirectoryServiceGetUsersProcedure:
 			directoryServiceGetUsersHandler.ServeHTTP(w, r)
 		case DirectoryServiceGetMyProfileProcedure:
 			directoryServiceGetMyProfileHandler.ServeHTTP(w, r)
-		case DirectoryServiceUpdateMyProfileProcedure:
-			directoryServiceUpdateMyProfileHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -160,8 +135,4 @@ func (UnimplementedDirectoryServiceHandler) GetUsers(context.Context, *connect.R
 
 func (UnimplementedDirectoryServiceHandler) GetMyProfile(context.Context, *connect.Request[v1.GetMyProfileRequest]) (*connect.Response[v1.GetMyProfileResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("chatim.iam.v1.DirectoryService.GetMyProfile is not implemented"))
-}
-
-func (UnimplementedDirectoryServiceHandler) UpdateMyProfile(context.Context, *connect.Request[v1.UpdateMyProfileRequest]) (*connect.Response[v1.UpdateMyProfileResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("chatim.iam.v1.DirectoryService.UpdateMyProfile is not implemented"))
 }

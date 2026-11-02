@@ -19,9 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	DirectoryService_GetUsers_FullMethodName        = "/chatim.iam.v1.DirectoryService/GetUsers"
-	DirectoryService_GetMyProfile_FullMethodName    = "/chatim.iam.v1.DirectoryService/GetMyProfile"
-	DirectoryService_UpdateMyProfile_FullMethodName = "/chatim.iam.v1.DirectoryService/UpdateMyProfile"
+	DirectoryService_GetUsers_FullMethodName     = "/chatim.iam.v1.DirectoryService/GetUsers"
+	DirectoryService_GetMyProfile_FullMethodName = "/chatim.iam.v1.DirectoryService/GetMyProfile"
 )
 
 // DirectoryServiceClient is the client API for DirectoryService service.
@@ -30,7 +29,6 @@ const (
 type DirectoryServiceClient interface {
 	GetUsers(ctx context.Context, in *GetUsersRequest, opts ...grpc.CallOption) (*GetUsersResponse, error)
 	GetMyProfile(ctx context.Context, in *GetMyProfileRequest, opts ...grpc.CallOption) (*GetMyProfileResponse, error)
-	UpdateMyProfile(ctx context.Context, in *UpdateMyProfileRequest, opts ...grpc.CallOption) (*UpdateMyProfileResponse, error)
 }
 
 type directoryServiceClient struct {
@@ -61,23 +59,12 @@ func (c *directoryServiceClient) GetMyProfile(ctx context.Context, in *GetMyProf
 	return out, nil
 }
 
-func (c *directoryServiceClient) UpdateMyProfile(ctx context.Context, in *UpdateMyProfileRequest, opts ...grpc.CallOption) (*UpdateMyProfileResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(UpdateMyProfileResponse)
-	err := c.cc.Invoke(ctx, DirectoryService_UpdateMyProfile_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // DirectoryServiceServer is the server API for DirectoryService service.
 // All implementations must embed UnimplementedDirectoryServiceServer
 // for forward compatibility.
 type DirectoryServiceServer interface {
 	GetUsers(context.Context, *GetUsersRequest) (*GetUsersResponse, error)
 	GetMyProfile(context.Context, *GetMyProfileRequest) (*GetMyProfileResponse, error)
-	UpdateMyProfile(context.Context, *UpdateMyProfileRequest) (*UpdateMyProfileResponse, error)
 	mustEmbedUnimplementedDirectoryServiceServer()
 }
 
@@ -93,9 +80,6 @@ func (UnimplementedDirectoryServiceServer) GetUsers(context.Context, *GetUsersRe
 }
 func (UnimplementedDirectoryServiceServer) GetMyProfile(context.Context, *GetMyProfileRequest) (*GetMyProfileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetMyProfile not implemented")
-}
-func (UnimplementedDirectoryServiceServer) UpdateMyProfile(context.Context, *UpdateMyProfileRequest) (*UpdateMyProfileResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method UpdateMyProfile not implemented")
 }
 func (UnimplementedDirectoryServiceServer) mustEmbedUnimplementedDirectoryServiceServer() {}
 func (UnimplementedDirectoryServiceServer) testEmbeddedByValue()                          {}
@@ -154,24 +138,6 @@ func _DirectoryService_GetMyProfile_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
-func _DirectoryService_UpdateMyProfile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateMyProfileRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(DirectoryServiceServer).UpdateMyProfile(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: DirectoryService_UpdateMyProfile_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DirectoryServiceServer).UpdateMyProfile(ctx, req.(*UpdateMyProfileRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // DirectoryService_ServiceDesc is the grpc.ServiceDesc for DirectoryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -186,10 +152,6 @@ var DirectoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetMyProfile",
 			Handler:    _DirectoryService_GetMyProfile_Handler,
-		},
-		{
-			MethodName: "UpdateMyProfile",
-			Handler:    _DirectoryService_UpdateMyProfile_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

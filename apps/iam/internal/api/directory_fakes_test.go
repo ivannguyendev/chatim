@@ -1,7 +1,6 @@
 package api_test
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"sync/atomic"
@@ -11,7 +10,6 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/ivannguyendev/chatim/apps/iam/internal/api"
-	"github.com/ivannguyendev/chatim/apps/iam/internal/auth"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/directory"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
@@ -25,48 +23,8 @@ const (
 	tokenOld     = "tok-old"
 	tokenRevoked = "tok-revoked"
 	tokenMall    = "tok-mall"
+	tokenGhost   = "tok-ghost"
 )
-
-type profileFake struct {
-	calls   int
-	profile store.Profile
-	updates []store.ProfileUpdate
-}
-
-func (f *fakeAuth) MyProfile(_ context.Context, c auth.Caller) (store.Profile, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.profiles.calls++
-	f.callers = append(f.callers, c)
-	if f.err != nil {
-		return store.Profile{}, f.err
-	}
-	return f.profiles.profile, nil
-}
-
-func (f *fakeAuth) UpdateMyProfile(_ context.Context, c auth.Caller, u store.ProfileUpdate) (store.Profile, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.profiles.calls++
-	f.callers = append(f.callers, c)
-	f.profiles.updates = append(f.profiles.updates, u)
-	if f.err != nil {
-		return store.Profile{}, f.err
-	}
-	if u.DisplayName != nil {
-		f.profiles.profile.DisplayName = *u.DisplayName
-	}
-	if u.AvatarURL != nil {
-		f.profiles.profile.AvatarURL = *u.AvatarURL
-	}
-	return f.profiles.profile, nil
-}
-
-func (f *fakeAuth) profileCalls() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.profiles.calls
-}
 
 type fakeClaims map[string]jwtverify.Claims
 
@@ -83,6 +41,7 @@ var testClaims = fakeClaims{
 	tokenOld:     {Tenant: "shop", User: "lan", Session: "s-old", IssuedAt: t0.Add(-time.Minute)},
 	tokenRevoked: {Tenant: "shop", User: "lan", Session: "s-revoked", IssuedAt: t0.Add(time.Second)},
 	tokenMall:    {Tenant: "mall", User: "zed", Session: "s-mall", IssuedAt: t0.Add(time.Second)},
+	tokenGhost:   {Tenant: "shop", User: "ghost", Session: "s-ghost", IssuedAt: t0.Add(time.Second)},
 }
 
 type testDirectory struct {
@@ -129,11 +88,11 @@ func newDirHarness(t *testing.T, mods ...func(*api.Options)) *dirHarness {
 		directoryEntry("mall", "zed", "Zed", store.StateActive),
 		directoryEntry("mall", "lan", "Mall Lan", store.StateActive),
 	})
+	d.dir.ApplyEntries([]store.DirectoryEntry{{TenantID: "shop", ID: "hoa", DisplayName: "Hoa", AvatarURL: "https://cdn.example/hoa.png", State: store.StateActive, Ver: 1}})
 	wire := func(o *api.Options) {
 		o.Directory, o.Revocations, o.Claims, o.DirectoryGate, o.DirectoryUsers = d.dir, list, testClaims, gate, users
 	}
 	d.harness = newHarness(t, append([]func(*api.Options){wire}, mods...)...)
-	d.fake.profiles.profile = store.Profile{ID: "lan", Username: "lan", Email: "lan@example.com", DisplayName: "lan"}
 	d.client = iamv1connect.NewDirectoryServiceClient(http.DefaultClient, d.server.URL)
 	return d
 }

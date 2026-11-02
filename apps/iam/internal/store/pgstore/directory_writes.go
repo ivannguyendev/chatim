@@ -39,19 +39,19 @@ func (s *Store) SetProfile(ctx context.Context, tenantID, accountID string, u st
 }
 
 func (s *Store) CreateGroup(ctx context.Context, g store.Group, audit store.AuditEvent) error {
-	return s.adminWrite(ctx, treeLockIf(g.ParentID != "", g.TenantID), audit, func(tx pgx.Tx) error {
+	return s.groupWrite(ctx, treeLockIf(g.ParentID != "", g.TenantID), audit, func(tx pgx.Tx) error {
 		return createGroupTx(ctx, tx, g)
 	})
 }
 
 func (s *Store) UpdateGroup(ctx context.Context, tenantID, id string, u store.GroupUpdate, audit store.AuditEvent) error {
-	return s.adminWrite(ctx, treeLockIf(u.ParentID != nil, tenantID), audit, func(tx pgx.Tx) error {
+	return s.groupWrite(ctx, treeLockIf(u.ParentID != nil, tenantID), audit, func(tx pgx.Tx) error {
 		return updateGroupTx(ctx, tx, tenantID, id, u, audit.At, audit.Actor)
 	})
 }
 
 func (s *Store) DeleteGroup(ctx context.Context, tenantID, id string, audit store.AuditEvent) error {
-	return s.adminTx(ctx, treeLockIf(true, tenantID), func(tx pgx.Tx) error {
+	return s.groupTx(ctx, treeLockIf(true, tenantID), func(tx pgx.Tx) error {
 		roles, err := deleteGroupTx(ctx, tx, tenantID, id, audit.At, audit.Actor)
 		if err != nil {
 			return err
@@ -61,7 +61,7 @@ func (s *Store) DeleteGroup(ctx context.Context, tenantID, id string, audit stor
 }
 
 func (s *Store) SetAccountGroups(ctx context.Context, tenantID, accountID string, groupIDs []string, audit store.AuditEvent) error {
-	return s.adminWrite(ctx, adminTxOptions{}, audit, func(tx pgx.Tx) error {
+	return s.groupWrite(ctx, serialTxOptions{}, audit, func(tx pgx.Tx) error {
 		return setAccountGroupsTx(ctx, tx, tenantID, accountID, groupIDs)
 	})
 }

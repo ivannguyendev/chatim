@@ -5,34 +5,12 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"golang.org/x/time/rate"
 
 	"github.com/ivannguyendev/chatim/pkg/lru"
 )
-
-const maxBackoffShift = 30
-
-type Backoff struct {
-	FreeFailures int
-	MaxDelay     time.Duration
-}
-
-func (b Backoff) NextLoginAt(failed int, now time.Time) time.Time {
-	over := failed - b.FreeFailures
-	if over <= 0 {
-		return time.Time{}
-	}
-	delay := b.MaxDelay
-	if shift := over - 1; shift < maxBackoffShift {
-		if d := time.Second << shift; d < delay {
-			delay = d
-		}
-	}
-	return now.Add(delay)
-}
 
 type IPLimiter struct {
 	mu      sync.Mutex
@@ -55,30 +33,6 @@ func (l *IPLimiter) Allow(ip string, now time.Time) bool {
 	}
 	return bucket.AllowN(now, 1)
 }
-
-type HashSlots struct {
-	slots chan struct{}
-}
-
-func NewHashSlots(n int) *HashSlots {
-	return &HashSlots{slots: make(chan struct{}, n)}
-}
-
-func (s *HashSlots) TryAcquire() (func(), bool) {
-	select {
-	case s.slots <- struct{}{}:
-		var released atomic.Bool
-		return func() {
-			if released.CompareAndSwap(false, true) {
-				<-s.slots
-			}
-		}, true
-	default:
-		return nil, false
-	}
-}
-
-func (s *HashSlots) InUse() int { return len(s.slots) }
 
 func ClientIP(r *http.Request, header string) string {
 	return ClientIPFrom(r.Header, r.RemoteAddr, header)

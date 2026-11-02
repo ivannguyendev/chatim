@@ -8,8 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/iam/internal/auth"
-	"github.com/ivannguyendev/chatim/apps/iam/internal/session"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/signing"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/apperr"
@@ -127,16 +125,8 @@ func (r *Ring) Claims(token string) (jwtverify.Claims, error) {
 		return jwtverify.Claims{}, errBadToken
 	}
 	claims, err := verifier.Verify(token)
-	if err != nil || !session.ValidID(claims.Session) {
+	if err != nil || !signing.ValidSessionID(claims.Session) {
 		return jwtverify.Claims{}, errBadToken
 	}
 	return claims, nil
-}
-
-func (r *Ring) Caller(token string) (auth.Caller, error) {
-	claims, err := r.Claims(token)
-	if err != nil {
-		return auth.Caller{}, err
-	}
-	return auth.Caller{Tenant: claims.Tenant, Account: claims.User, Session: claims.Session}, nil
 }

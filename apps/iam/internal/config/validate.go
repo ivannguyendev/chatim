@@ -11,12 +11,11 @@ import (
 
 const (
 	kekLength           = 32
-	minPasswordLength   = 8
 	minNodeSecretLength = 32
 	shutdownMarginTime  = time.Second
 	feedWaitFloor       = time.Second
 	feedWaitCeiling     = time.Minute
-	reservedAuthConns   = 2
+	reservedConns       = 2
 )
 
 type rule struct {
@@ -30,7 +29,6 @@ func (c Config) Validate() error {
 		{c.AdminAddr != "", "IAM_ADMIN_ADDR is required"},
 		{c.ListenAddr != c.AdminAddr, "IAM_ADMIN_ADDR must differ from IAM_ADDR"},
 		{c.InternalAddr == "" || (c.InternalAddr != c.AdminAddr && c.InternalAddr != c.ListenAddr), "IAM_INTERNAL_ADDR must differ from IAM_ADDR and IAM_ADMIN_ADDR"},
-		{c.ListenAddr == "" || validBaseURL(c.PublicURL), "IAM_PUBLIC_URL must be an absolute http(s) url without query or fragment"},
 		{c.InternalAddr == "" || len(c.NodeSecret) >= minNodeSecretLength, fmt.Sprintf("IAM_NODE_SECRET must hold at least %d bytes when IAM_INTERNAL_ADDR is on", minNodeSecretLength)},
 		{c.KeyActivateLead >= c.KeyReload+iamsync.MaxKeysInterval, fmt.Sprintf("IAM_KEY_ACTIVATE_LEAD %v must be at least IAM_KEY_RELOAD + %v = %v so every node fetches a new key before it signs", c.KeyActivateLead, iamsync.MaxKeysInterval, c.KeyReload+iamsync.MaxKeysInterval)},
 		{c.RevocationKeep() <= iamsync.MaxEntryKeep, fmt.Sprintf("IAM_ACCESS_TTL %v + %v must not exceed %v, the longest revocation a node keeps", c.AccessTTL, revocationMargin, iamsync.MaxEntryKeep)},
@@ -41,18 +39,6 @@ func (c Config) Validate() error {
 		{len(c.KeyEncryptionKey) == kekLength, fmt.Sprintf("IAM_KEY_ENCRYPTION_KEY must decode to %d bytes", kekLength)},
 		positive("IAM_PG_MAX_CONNS", c.PGMaxConns),
 		positive("IAM_ACCESS_TTL", c.AccessTTL),
-		positive("IAM_REFRESH_GRACE", c.RefreshGrace),
-		positive("IAM_DPOP_WINDOW", c.DPoPWindow),
-		{c.RefreshGrace < c.AccessTTL, "IAM_REFRESH_GRACE must be shorter than IAM_ACCESS_TTL"},
-		{c.AccessTTL < c.SessionIdle, "IAM_ACCESS_TTL must be shorter than IAM_SESSION_IDLE"},
-		{c.SessionIdle <= c.SessionMax, "IAM_SESSION_IDLE must not exceed IAM_SESSION_MAX"},
-		positive("IAM_HASH_CONCURRENCY", c.HashConcurrency),
-		{c.LoginFreeFailures >= 0, "IAM_LOGIN_FREE_FAILURES must not be negative"},
-		positive("IAM_LOGIN_MAX_DELAY", c.LoginMaxDelay),
-		positive("IAM_LOGIN_IP_RATE", c.LoginIPRate),
-		positive("IAM_LOGIN_IP_BURST", c.LoginIPBurst),
-		positive("IAM_LOGIN_IP_TRACKED", c.LoginIPTracked),
-		{c.PasswordMin >= minPasswordLength, fmt.Sprintf("IAM_PASSWORD_MIN must be at least %d", minPasswordLength)},
 		positive("IAM_KEY_RELOAD", c.KeyReload),
 		positive("IAM_BODY_MAX", c.BodyMax),
 		positive("IAM_DRAIN_DELAY", c.DrainDelay),
@@ -70,12 +56,7 @@ func (c Config) Validate() error {
 		positive("IAM_USER_LIMITERS", c.UserLimiters),
 		positive("IAM_INFLIGHT_MAX", c.InflightMax),
 		{c.UserLimiters >= c.InflightMax, fmt.Sprintf("IAM_USER_LIMITERS %d must be at least IAM_INFLIGHT_MAX %d", c.UserLimiters, c.InflightMax)},
-		positive("IAM_ADMIN_USER_RATE", c.AdminUserRate),
-		positive("IAM_ADMIN_USER_BURST", c.AdminUserBurst),
-		positive("IAM_ADMIN_INFLIGHT_MAX", c.AdminInflightMax),
-		positive("IAM_ADMIN_DB_SLOTS", c.AdminDBSlots),
-		{c.UserLimiters >= c.AdminInflightMax, fmt.Sprintf("IAM_USER_LIMITERS %d must be at least IAM_ADMIN_INFLIGHT_MAX %d", c.UserLimiters, c.AdminInflightMax)},
-		{c.AdminDBSlots+c.DirectoryLoadSlots+reservedAuthConns <= c.PGMaxConns, fmt.Sprintf("IAM_ADMIN_DB_SLOTS %d + IAM_DIRECTORY_LOAD_SLOTS %d + %d must not exceed IAM_PG_MAX_CONNS %d so login and refresh keep a connection", c.AdminDBSlots, c.DirectoryLoadSlots, reservedAuthConns, c.PGMaxConns)},
+		{c.DirectoryLoadSlots+reservedConns <= c.PGMaxConns, fmt.Sprintf("IAM_DIRECTORY_LOAD_SLOTS %d + %d must not exceed IAM_PG_MAX_CONNS %d so writes and the revocation list keep a connection", c.DirectoryLoadSlots, reservedConns, c.PGMaxConns)},
 		{c.ShutdownBudget > c.DrainDelay+c.WriteTimeout+shutdownMarginTime, fmt.Sprintf("IAM_SHUTDOWN_BUDGET %v must exceed IAM_DRAIN_DELAY + IAM_WRITE_TIMEOUT + 1s = %v", c.ShutdownBudget, c.DrainDelay+c.WriteTimeout+shutdownMarginTime)},
 	}
 	var errs []error
@@ -94,11 +75,6 @@ func (c Config) Validate() error {
 
 func positive[T int | time.Duration](name string, v T) rule {
 	return rule{v > 0, name + " must be positive"}
-}
-
-func validBaseURL(raw string) bool {
-	u, err := url.Parse(raw)
-	return err == nil && (u.Scheme == "https" || u.Scheme == "http") && u.Host != "" && u.RawQuery == "" && u.Fragment == ""
 }
 
 func validOrigin(raw string) bool {

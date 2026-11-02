@@ -8,12 +8,8 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/iam/internal/api"
-	"github.com/ivannguyendev/chatim/apps/iam/internal/auth"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/config"
-	"github.com/ivannguyendev/chatim/apps/iam/internal/dpop"
-	"github.com/ivannguyendev/chatim/apps/iam/internal/guard"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/keyring"
-	"github.com/ivannguyendev/chatim/apps/iam/internal/password"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/signing"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store/pgstore"
@@ -28,16 +24,13 @@ const (
 )
 
 type Store interface {
-	store.Auth
 	store.DirectoryReader
-	store.AdminRunner
 	keyring.Source
 	api.RevocationSource
 	DeleteExpiredRevocations(ctx context.Context) (int64, error)
 	ActivateDueSigningKey(ctx context.Context, lead time.Duration, audit store.AuditEvent) (string, error)
 	Ping(ctx context.Context) error
 	SchemaVersion(ctx context.Context) (int, error)
-	AdminSlotTimeouts() uint64
 	Close()
 }
 
@@ -46,7 +39,7 @@ func openPostgres(ctx context.Context, uri string, opts pgstore.Options) (Store,
 }
 
 func wire(ctx context.Context, cfg config.Config, log *slog.Logger, deps Deps) (*node, error) {
-	st, err := deps.OpenStore(ctx, cfg.DatabaseURI(), pgstore.Options{MaxConns: poolSize(cfg.PGMaxConns), RevocationKeep: cfg.RevocationKeep(), AdminDBSlots: cfg.AdminDBSlots})
+	st, err := deps.OpenStore(ctx, cfg.DatabaseURI(), pgstore.Options{MaxConns: poolSize(cfg.PGMaxConns), RevocationKeep: cfg.RevocationKeep()})
 	if err != nil {
 		return nil, err
 	}
@@ -77,35 +70,15 @@ func wireServers(ctx context.Context, cfg config.Config, log *slog.Logger, st St
 		Token:  signing.TokenConfig{Issuer: cfg.Issuer, Audience: cfg.Audience, TTL: cfg.AccessTTL},
 		Leeway: tokenLeeway,
 	})
-	hasher, err := password.NewHasher(deps.HashParams, rand.Reader)
-	if err != nil {
-		return nil, err
-	}
-	slots := guard.NewHashSlots(cfg.HashConcurrency)
-	svc := auth.New(auth.Deps{
-		Store: st, Hasher: hasher, Policy: password.Policy{MinLength: cfg.PasswordMin},
-		Backoff: guard.Backoff{FreeFailures: cfg.LoginFreeFailures, MaxDelay: cfg.LoginMaxDelay},
-		IPs:     guard.NewIPLimiter(float64(cfg.LoginIPRate), cfg.LoginIPBurst, cfg.LoginIPTracked),
-		Slots:   slots, Signers: ring, Random: rand.Reader, Now: time.Now,
-	}, auth.Config{SessionIdle: cfg.SessionIdle, SessionMax: cfg.SessionMax, RefreshGrace: cfg.RefreshGrace})
 	dir, err := newDirectory(cfg, st, deps)
-	if err != nil {
-		return nil, err
-	}
-	adm, err := newAdmin(cfg, st)
 	if err != nil {
 		return nil, err
 	}
 	n := &node{cfg: cfg, log: log, store: st, internalStats: &api.InternalStats{}, dir: dir}
 	if cfg.ListenAddr != "" {
-		proofs, err := dpop.NewVerifier(cfg.PublicURL, cfg.DPoPWindow, time.Now)
-		if err != nil {
-			return nil, err
-		}
 		handler, err := api.New(api.Options{
-			Auth: svc, Proofs: proofs, Callers: ring, Keys: ring, BodyMax: int64(cfg.BodyMax),
+			Keys: ring, BodyMax: int64(cfg.BodyMax),
 			Directory: dir.cache, Revocations: dir.list, Claims: ring, DirectoryGate: dir.gate, DirectoryUsers: dir.users, DirectoryStats: dir.apiStats,
-			Admin: adm.service, AdminGate: adm.gate, AdminUsers: adm.users, AdminStats: adm.stats,
 			CORSOrigins: cfg.CORSOrigins, ClientIPHeader: cfg.ClientIPHeader, Log: log,
 		})
 		if err != nil {
@@ -129,8 +102,7 @@ func wireServers(ctx context.Context, cfg config.Config, log *slog.Logger, st St
 	if !memoryLimited {
 		log.WarnContext(ctx, "GOMEMLIMIT is not set; set it to about 90% of the container memory limit")
 	}
-	sources := append(metricSources(svc.Stats(), slots, ring, n.internalStats, &n.cleanup, &n.keys), directoryMetricSources(dir, memoryLimited, time.Now)...)
-	sources = append(sources, adminMetricSources(adm, st)...)
+	sources := append(metricSources(ring, n.internalStats, &n.cleanup, &n.keys), directoryMetricSources(dir, memoryLimited, time.Now)...)
 	metricsHandler, err := metrics.Handler(metricsSubsystem, sources)
 	if err != nil {
 		return nil, err

@@ -36,7 +36,6 @@ func TestMapErrKeepsDomainErrors(t *testing.T) {
 		{"statement timeout", pgErr("57014", ""), apperr.ErrUnavailable, "57014"},
 		{"foreign key", pgErr("23503", "groups_tenant_id_fkey"), apperr.ErrNotFound, "groups_tenant_id_fkey"},
 		{"unique", pgErr("23505", "groups_pkey"), apperr.ErrAlreadyExists, "groups_pkey"},
-		{"row changed", errConflict, apperr.ErrUnavailable, ""},
 		{"unknown", errors.New("dial postgres://iam:secret-pw@db/iam failed"), apperr.ErrUnavailable, ""},
 	}
 	for _, tc := range cases {

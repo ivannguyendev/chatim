@@ -11,7 +11,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/iam/internal/password"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/signing"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store"
 )
@@ -30,7 +29,6 @@ type Store interface {
 type Env struct {
 	Open         func(ctx context.Context) (Store, error)
 	Sealer       *signing.Sealer
-	Hasher       *password.Hasher
 	Random       io.Reader
 	Now          func() time.Time
 	KeyWindow    time.Duration
@@ -42,32 +40,21 @@ type Env struct {
 type command func(ctx context.Context, env Env, st Store, args []string) error
 
 var commands = map[string]command{
-	"migrate":                migrate,
-	"tenant-create":          tenantCreate,
-	"tenant-disable":         tenantState(store.StateDisabled),
-	"tenant-enable":          tenantState(store.StateActive),
-	"account-create":         accountCreate,
-	"password-reset":         passwordReset,
-	"account-disable":        accountState(store.StateDisabled),
-	"account-enable":         accountState(store.StateActive),
-	"session-list":           sessionList,
-	"session-revoke":         sessionRevoke,
-	"key-rotate":             keyRotate,
-	"key-activate":           keyActivate,
-	"jwks-export":            jwksExport,
-	"bootstrap":              bootstrap,
-	"group-create":           groupCreate,
-	"group-update":           groupUpdate,
-	"group-delete":           groupDelete,
-	"account-groups":         accountGroups,
-	"profile-set":            profileSet,
-	"role-create":            roleCreate,
-	"role-update":            roleUpdate,
-	"role-delete":            roleDelete,
-	"role-list":              roleList,
-	"account-roles":          accountRoles,
-	"group-roles":            groupRoles,
-	"client-permissions-set": clientPermissionsSet,
+	"migrate":         migrate,
+	"tenant-create":   tenantCreate,
+	"tenant-disable":  tenantState(store.StateDisabled),
+	"tenant-enable":   tenantState(store.StateActive),
+	"account-disable": accountState(store.StateDisabled),
+	"account-enable":  accountState(store.StateActive),
+	"key-rotate":      keyRotate,
+	"key-activate":    keyActivate,
+	"jwks-export":     jwksExport,
+	"bootstrap":       bootstrap,
+	"group-create":    groupCreate,
+	"group-update":    groupUpdate,
+	"group-delete":    groupDelete,
+	"account-groups":  accountGroups,
+	"profile-set":     profileSet,
 }
 
 func Names() []string {
@@ -138,8 +125,8 @@ func (f flags) given() map[string]bool {
 	return set
 }
 
-func audit(env Env, tenant, action, account, session string) store.AuditEvent {
-	return store.AuditEvent{TenantID: tenant, At: env.Now(), Actor: actor, Action: action, AccountID: account, SessionID: session}
+func audit(env Env, tenant, action, account string) store.AuditEvent {
+	return store.AuditEvent{TenantID: tenant, At: env.Now(), Actor: actor, Action: action, AccountID: account}
 }
 
 func revocation(env Env, reason string) store.Revocation {

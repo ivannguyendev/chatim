@@ -8,11 +8,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store"
 )
 
-const (
-	lanID   = "a1aaaaaaaaaaaaaaaaaaaaaaaa"
-	phoneID = "s1aaaaaaaaaaaaaaaaaaaaaaaa"
-	laptop  = "s2aaaaaaaaaaaaaaaaaaaaaaaa"
-)
+const lanID = "a1aaaaaaaaaaaaaaaaaaaaaaaa"
 
 func revokedRows(t *testing.T, s fixture) map[string]time.Duration {
 	t.Helper()
@@ -33,72 +29,17 @@ func revokedRows(t *testing.T, s fixture) map[string]time.Duration {
 	return out
 }
 
-func wantRevoked(t *testing.T, s fixture, ids ...string) {
-	t.Helper()
-	got := revokedRows(t, s)
-	if len(got) != len(ids) {
-		t.Fatalf("revoked_sessions = %v; want %v", got, ids)
-	}
-	for _, id := range ids {
-		keep, ok := got[id]
-		if !ok || keep != testKeep {
-			t.Fatalf("revoked_sessions = %v; want %s kept %v", got, id, testKeep)
-		}
-	}
-}
-
-func TestEveryRevokePathRecordsItsSessions(t *testing.T) {
-	ctx := context.Background()
-	paths := map[string]func(fixture, store.Account) error{
-		"account disable": func(s fixture, a store.Account) error {
-			return s.SetAccountState(ctx, "shop", a.ID, store.StateDisabled, revocation(), audit("account_disable"))
-		},
-		"password change": func(s fixture, a store.Account) error {
-			return s.SetPassword(ctx, store.PasswordChange{TenantID: "shop", AccountID: a.ID, ExpectVer: a.Ver, Hash: a.PasswordHash, Revocation: revocation()}, audit("password_change"))
-		},
-	}
-	for name, run := range paths {
-		t.Run(name, func(t *testing.T) {
-			s := openStore(t)
-			seedTenant(t, s, "shop")
-			a := seedAccount(t, s, "shop", lanID, "lan")
-			seedSessions(t, s, a, phoneID, laptop)
-			if err := run(s, a); err != nil {
-				t.Fatalf("%s: %v", name, err)
-			}
-			wantRevoked(t, s, phoneID, laptop)
-		})
-	}
-}
-
-func TestRevokeSessionRecordsOnceAndReportsTheRevoke(t *testing.T) {
-	ctx := context.Background()
-	s := openStore(t)
-	seedTenant(t, s, "shop")
-	a := seedAccount(t, s, "shop", lanID, "lan")
-	seedSessions(t, s, a, phoneID, laptop)
-	revoked, err := s.RevokeSession(ctx, phoneID, revocation(), audit("session_revoke"))
-	if err != nil || !revoked {
-		t.Fatalf("RevokeSession = %v, %v; want true", revoked, err)
-	}
-	wantRevoked(t, s, phoneID)
-	again, err := s.RevokeSession(ctx, phoneID, revocation(), audit("session_revoke"))
-	if err != nil || again {
-		t.Fatalf("second RevokeSession = %v, %v; want false", again, err)
-	}
-	wantRevoked(t, s, phoneID)
-}
-
 func TestTenantDisableRecordsOneRevokeTime(t *testing.T) {
 	ctx := context.Background()
 	s := openStore(t)
 	seedTenant(t, s, "shop")
-	a := seedAccount(t, s, "shop", lanID, "lan")
-	seedSessions(t, s, a, phoneID)
+	seedAccount(t, s, "shop", lanID, "lan")
 	if err := s.SetTenantState(ctx, "shop", store.StateDisabled, revocation(), audit("tenant_disable")); err != nil {
 		t.Fatalf("disable: %v", err)
 	}
-	wantRevoked(t, s)
+	if rows := revokedRows(t, s); len(rows) != 0 {
+		t.Fatalf("revoked_sessions = %v; want none", rows)
+	}
 	snap, err := s.Revocations(ctx)
 	if err != nil {
 		t.Fatalf("Revocations: %v", err)
@@ -113,84 +54,6 @@ func TestTenantDisableRecordsOneRevokeTime(t *testing.T) {
 	after, err := s.Revocations(ctx)
 	if err != nil || len(after.Tenants) != 1 || !after.Tenants[0].RevokedBefore.Equal(first) {
 		t.Fatalf("after enable = %+v, %v; want the revoke time kept", after.Tenants, err)
-	}
-}
-
-func TestTokenIssuedBeforeATenantRevokeIsOlderThanItsTime(t *testing.T) {
-	ctx := context.Background()
-	s := openStore(t)
-	seedTenant(t, s, "shop")
-	a := seedAccount(t, s, "shop", lanID, "lan")
-	seedSessions(t, s, a, phoneID)
-	tx, err := s.raw.Begin(ctx)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	var issued time.Time
-	if err := tx.QueryRow(ctx, "UPDATE sessions SET refresh_ver = refresh_ver + 1 WHERE id = $1 RETURNING transaction_timestamp()", phoneID).Scan(&issued); err != nil {
-		t.Fatalf("hold the session row: %v", err)
-	}
-	done := make(chan error, 1)
-	go func() {
-		done <- s.SetTenantState(ctx, "shop", store.StateDisabled, revocation(), audit("tenant_disable"))
-	}()
-	waitForLockWait(t, s)
-	if err := tx.Commit(ctx); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
-	if err := <-done; err != nil {
-		t.Fatalf("disable: %v", err)
-	}
-	snap, err := s.Revocations(ctx)
-	if err != nil || len(snap.Tenants) != 1 {
-		t.Fatalf("Revocations = %+v, %v", snap, err)
-	}
-	if !snap.Tenants[0].RevokedBefore.After(issued) {
-		t.Fatalf("revoke time %v is not after the refresh issued at %v", snap.Tenants[0].RevokedBefore, issued)
-	}
-}
-
-func waitForLockWait(t *testing.T, s fixture) {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	tick := time.NewTicker(20 * time.Millisecond)
-	defer tick.Stop()
-	for {
-		var waiting int
-		if err := s.raw.QueryRow(ctx, "SELECT count(*) FROM pg_locks WHERE NOT granted AND locktype = 'transactionid'").Scan(&waiting); err != nil {
-			t.Fatalf("pg_locks: %v", err)
-		}
-		if waiting > 0 {
-			return
-		}
-		select {
-		case <-ctx.Done():
-			t.Fatal("the tenant disable never waited on the session row")
-		case <-tick.C:
-		}
-	}
-}
-
-func TestIssueTimesComeFromTheTransaction(t *testing.T) {
-	ctx := context.Background()
-	s := openStore(t)
-	seedTenant(t, s, "shop")
-	a := seedAccount(t, s, "shop", lanID, "lan")
-	created, err := s.CreateSession(ctx, newSession(phoneID, a), audit("login_ok"))
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	rotated, err := s.RotateRefresh(ctx, store.Rotation{SessionID: phoneID, ExpectVer: 1, RefreshHash: digest("x"), IdleExpiresAt: t0.Add(time.Hour), LastUsedAt: t0}, audit("refresh"))
-	if err != nil {
-		t.Fatalf("RotateRefresh: %v", err)
-	}
-	var dbNow time.Time
-	if err := s.raw.QueryRow(ctx, "SELECT now()").Scan(&dbNow); err != nil {
-		t.Fatalf("now: %v", err)
-	}
-	if created.IsZero() || rotated.Before(created) || rotated.After(dbNow) {
-		t.Fatalf("created %v, rotated %v, db now %v", created, rotated, dbNow)
 	}
 }
 

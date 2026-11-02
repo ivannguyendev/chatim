@@ -12,7 +12,6 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/iam/internal/admincmd"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/config"
-	"github.com/ivannguyendev/chatim/apps/iam/internal/password"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/signing"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store/pgstore"
 	"github.com/ivannguyendev/chatim/pkg/admin"
@@ -92,16 +91,11 @@ func adminMain(args []string) int {
 		log.ErrorContext(ctx, "key encryption key", "err", err)
 		return 1
 	}
-	hasher, err := password.NewHasher(password.DefaultParams, rand.Reader)
-	if err != nil {
-		log.ErrorContext(ctx, "password hasher", "err", err)
-		return 1
-	}
 	env := admincmd.Env{
 		Open: func(ctx context.Context) (admincmd.Store, error) {
 			return pgstore.Open(ctx, cfg.DatabaseURI(), pgstore.Options{MaxConns: adminPoolConns, RevocationKeep: cfg.RevocationKeep()})
 		},
-		Sealer: sealer, Hasher: hasher, Random: rand.Reader, Now: time.Now,
+		Sealer: sealer, Random: rand.Reader, Now: time.Now,
 		KeyWindow: cfg.AccessTTL + tokenLeeway, ActivateLead: cfg.KeyActivateLead, Out: os.Stdout, Log: log,
 	}
 	return admincmd.Run(ctx, env, args)

@@ -22,8 +22,8 @@ func TestReadyWithAnActiveKeyAndTheCurrentSchema(t *testing.T) {
 		t.Fatalf("readyz = %d, want 200", code)
 	}
 	code, body := httpGet(t, r.admin, "/metrics")
-	if code != http.StatusOK || !strings.Contains(body, `chatim_iam_login_total{result="ok"}`) || !strings.Contains(body, "chatim_iam_signing_key_ready 1") {
-		t.Fatalf("metrics = %d, missing iam series", code)
+	if code != http.StatusOK || strings.Contains(body, "chatim_iam_login_total") || strings.Contains(body, "chatim_iam_hash_inflight") || !strings.Contains(body, "chatim_iam_signing_key_ready 1") {
+		t.Fatalf("metrics = %d, want the key series and no login series", code)
 	}
 	if code, _ := httpGet(t, r.api, "/nope"); code != http.StatusNotFound {
 		t.Fatalf("unknown api path = %d, want 404", code)

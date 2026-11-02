@@ -153,7 +153,7 @@ func TestProfileUpdateBumpsVerOnlyWhenAFieldChanges(t *testing.T) {
 	ctx := context.Background()
 	s := openStore(t)
 	seedTenant(t, s, "shop")
-	a := seedAccount(t, s, "shop", lanID, "lan")
+	seedAccount(t, s, "shop", lanID, "lan")
 	wantVer(t, s, userKind, lanID, 1, "create")
 	var displayName string
 	if err := s.raw.QueryRow(ctx, "SELECT display_name FROM accounts WHERE id = $1", lanID).Scan(&displayName); err != nil || displayName != "lan" {
@@ -163,19 +163,11 @@ func TestProfileUpdateBumpsVerOnlyWhenAFieldChanges(t *testing.T) {
 	wantVer(t, s, userKind, lanID, 2, "display name changed")
 	exec(t, s.raw, "UPDATE accounts SET display_name = 'Lan Nguyen' WHERE id = $1", lanID)
 	wantVer(t, s, userKind, lanID, 2, "same display name")
-	change := store.PasswordChange{TenantID: "shop", AccountID: lanID, ExpectVer: a.Ver, Hash: a.PasswordHash + "x", Revocation: revocation()}
-	if err := s.SetPassword(ctx, change, audit("password_change")); err != nil {
-		t.Fatalf("SetPassword: %v", err)
-	}
-	wantVer(t, s, userKind, lanID, 2, "password change")
-	never := func(int) time.Time { return time.Time{} }
-	if err := s.RecordLoginFailure(ctx, "shop", lanID, never, audit("login_failed")); err != nil {
-		t.Fatalf("RecordLoginFailure: %v", err)
-	}
-	wantVer(t, s, userKind, lanID, 2, "login failure")
+	exec(t, s.raw, "UPDATE accounts SET updated_by = 'someone' WHERE id = $1", lanID)
+	wantVer(t, s, userKind, lanID, 2, "no directory field changed")
 	exec(t, s.raw, "UPDATE accounts SET avatar_url = 'https://cdn.example/lan.png' WHERE id = $1", lanID)
 	wantVer(t, s, userKind, lanID, 3, "avatar changed")
-	if err := s.SetAccountState(ctx, "shop", lanID, store.StateDisabled, revocation(), audit("account_disable")); err != nil {
+	if err := s.SetAccountState(ctx, "shop", lanID, store.StateDisabled, audit("account_disable")); err != nil {
 		t.Fatalf("SetAccountState: %v", err)
 	}
 	wantVer(t, s, userKind, lanID, 4, "state changed")
@@ -243,23 +235,17 @@ func TestNotifyIsSentAfterCommitOnly(t *testing.T) {
 	wantNotifications(t, listener, marker, "after-rollback")
 }
 
-func TestRevocationInsertNotifies(t *testing.T) {
+func TestStateChangesNotifyTheirChannel(t *testing.T) {
 	ctx := context.Background()
 	s := openStore(t)
 	seedTenant(t, s, "shop")
-	lan := seedAccount(t, s, "shop", lanID, "lan")
-	seedAccount(t, s, "shop", minhID, "minh")
-	seedSessions(t, s, lan, phoneID)
+	seedAccount(t, s, "shop", lanID, "lan")
 	listener := listen(t, s.uri)
 	marker := connect(t, s.uri)
-	if err := s.SetAccountState(ctx, "shop", lanID, store.StateDisabled, revocation(), audit("account_disable")); err != nil {
+	if err := s.SetAccountState(ctx, "shop", lanID, store.StateDisabled, audit("account_disable")); err != nil {
 		t.Fatalf("SetAccountState lan: %v", err)
 	}
-	wantNotifications(t, listener, marker, "account-with-session", "dir", "rev")
-	if err := s.SetAccountState(ctx, "shop", minhID, store.StateDisabled, revocation(), audit("account_disable")); err != nil {
-		t.Fatalf("SetAccountState minh: %v", err)
-	}
-	wantNotifications(t, listener, marker, "account-without-session", "dir")
+	wantNotifications(t, listener, marker, "account", "dir")
 	if err := s.SetTenantState(ctx, "shop", store.StateDisabled, revocation(), audit("tenant_disable")); err != nil {
 		t.Fatalf("SetTenantState: %v", err)
 	}

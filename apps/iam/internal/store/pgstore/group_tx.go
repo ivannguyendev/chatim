@@ -12,31 +12,27 @@ import (
 )
 
 const (
-	adminTreeLockWait = 5 * time.Second
-	adminRollbackWait = 5 * time.Second
-	adminTimeoutsSQL  = "SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '5s', true)"
+	treeLockWait      = 5 * time.Second
+	rollbackWait      = 5 * time.Second
+	serialTimeoutsSQL = "SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '5s', true)"
 )
 
-type adminTxOptions struct {
+type serialTxOptions struct {
 	treeTenant string
-	readOnly   bool
 }
 
-func treeLockIf(needed bool, tenantID string) adminTxOptions {
+func treeLockIf(needed bool, tenantID string) serialTxOptions {
 	if !needed {
-		return adminTxOptions{}
+		return serialTxOptions{}
 	}
-	return adminTxOptions{treeTenant: tenantID}
+	return serialTxOptions{treeTenant: tenantID}
 }
 
-func (o adminTxOptions) txOptions() pgx.TxOptions {
-	if o.readOnly {
-		return pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}
-	}
+func (o serialTxOptions) txOptions() pgx.TxOptions {
 	return pgx.TxOptions{IsoLevel: pgx.Serializable}
 }
 
-type adminRun struct {
+type serialRun struct {
 	conn   *pgxpool.Conn
 	tenant string
 	tx     pgx.Tx
@@ -44,18 +40,18 @@ type adminRun struct {
 	broken bool
 }
 
-func (s *Store) adminTx(ctx context.Context, opts adminTxOptions, fn func(pgx.Tx) error) error {
+func (s *Store) groupTx(ctx context.Context, opts serialTxOptions, fn func(pgx.Tx) error) error {
 	conn, err := s.pool.Acquire(ctx)
 	if err != nil {
 		return s.mapErr(err)
 	}
-	run := &adminRun{conn: conn, tenant: opts.treeTenant}
+	run := &serialRun{conn: conn, tenant: opts.treeTenant}
 	defer run.finish(ctx)
 	return s.mapErr(run.exec(ctx, opts, fn))
 }
 
-func (s *Store) adminWrite(ctx context.Context, opts adminTxOptions, audit store.AuditEvent, fn func(pgx.Tx) error) error {
-	return s.adminTx(ctx, opts, func(tx pgx.Tx) error {
+func (s *Store) groupWrite(ctx context.Context, opts serialTxOptions, audit store.AuditEvent, fn func(pgx.Tx) error) error {
+	return s.groupTx(ctx, opts, func(tx pgx.Tx) error {
 		if err := fn(tx); err != nil {
 			return err
 		}
@@ -63,7 +59,7 @@ func (s *Store) adminWrite(ctx context.Context, opts adminTxOptions, audit store
 	})
 }
 
-func (r *adminRun) exec(ctx context.Context, opts adminTxOptions, fn func(pgx.Tx) error) error {
+func (r *serialRun) exec(ctx context.Context, opts serialTxOptions, fn func(pgx.Tx) error) error {
 	if r.tenant != "" {
 		if err := r.lockTree(ctx); err != nil {
 			return err
@@ -74,7 +70,7 @@ func (r *adminRun) exec(ctx context.Context, opts adminTxOptions, fn func(pgx.Tx
 		return err
 	}
 	r.tx = tx
-	if _, err := tx.Exec(ctx, adminTimeoutsSQL); err != nil {
+	if _, err := tx.Exec(ctx, serialTimeoutsSQL); err != nil {
 		return err
 	}
 	if err := fn(tx); err != nil {
@@ -83,8 +79,8 @@ func (r *adminRun) exec(ctx context.Context, opts adminTxOptions, fn func(pgx.Tx
 	return tx.Commit(ctx)
 }
 
-func (r *adminRun) lockTree(ctx context.Context) error {
-	wait, cancel := context.WithTimeout(ctx, adminTreeLockWait)
+func (r *serialRun) lockTree(ctx context.Context) error {
+	wait, cancel := context.WithTimeout(ctx, treeLockWait)
 	defer cancel()
 	if _, err := r.conn.Exec(wait, "SELECT pg_advisory_lock(2, hashtext($1))", r.tenant); err != nil {
 		r.broken = true
@@ -94,9 +90,9 @@ func (r *adminRun) lockTree(ctx context.Context) error {
 	return nil
 }
 
-func (r *adminRun) finish(ctx context.Context) {
+func (r *serialRun) finish(ctx context.Context) {
 	if r.tx != nil {
-		rollback, cancel := context.WithTimeout(context.WithoutCancel(ctx), adminRollbackWait)
+		rollback, cancel := context.WithTimeout(context.WithoutCancel(ctx), rollbackWait)
 		_ = r.tx.Rollback(rollback)
 		cancel()
 	}
@@ -107,7 +103,7 @@ func (r *adminRun) finish(ctx context.Context) {
 	r.conn.Release()
 }
 
-func (r *adminRun) unlockTree(ctx context.Context) bool {
+func (r *serialRun) unlockTree(ctx context.Context) bool {
 	wait, cancel := context.WithTimeout(context.WithoutCancel(ctx), slotUnlockTimeout)
 	defer cancel()
 	var unlocked bool

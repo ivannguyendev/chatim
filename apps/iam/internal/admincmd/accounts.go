@@ -4,14 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"text/tabwriter"
-	"time"
 
-	"github.com/ivannguyendev/chatim/apps/iam/internal/auth"
-	"github.com/ivannguyendev/chatim/apps/iam/internal/authz"
-	"github.com/ivannguyendev/chatim/apps/iam/internal/directory"
-	"github.com/ivannguyendev/chatim/apps/iam/internal/password"
-	"github.com/ivannguyendev/chatim/apps/iam/internal/session"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/ids"
 )
@@ -51,7 +44,7 @@ func tenantCreate(ctx context.Context, env Env, st Store, args []string) error {
 	}
 	now := env.Now()
 	t := store.Tenant{ID: *id, Name: *name, State: store.StateActive, Ver: 1, CreatedAt: now, UpdatedAt: now, UpdatedBy: actor}
-	if err := st.CreateTenant(ctx, t, audit(env, *id, "tenant_create", "", "")); err != nil {
+	if err := st.CreateTenant(ctx, t, audit(env, *id, "tenant_create", "")); err != nil {
 		return err
 	}
 	_, err := fmt.Fprintf(env.Out, "tenant %s created\n", *id)
@@ -66,7 +59,7 @@ func tenantState(state store.State) command {
 			return err
 		}
 		action := map[store.State]string{store.StateActive: "tenant_enable", store.StateDisabled: "tenant_disable"}[state]
-		if err := st.SetTenantState(ctx, *id, state, revocation(env, action), audit(env, *id, action, "", "")); err != nil {
+		if err := st.SetTenantState(ctx, *id, state, revocation(env, action), audit(env, *id, action, "")); err != nil {
 			return err
 		}
 		_, err := fmt.Fprintf(env.Out, "tenant %s: %s\n", *id, action)
@@ -76,160 +69,20 @@ func tenantState(state store.State) command {
 
 func accountFlags(name string) (flags, *string, *string) {
 	f := newFlags(name)
-	return f, f.set.String("tenant", "", "tenant id"), f.set.String("username", "", "username")
-}
-
-func findAccount(ctx context.Context, st Store, tenant, username string) (store.Account, error) {
-	u, err := auth.NormalizeUsername(username)
-	if err != nil {
-		return store.Account{}, fmt.Errorf("%w: %w", errUsage, err)
-	}
-	return st.AccountByUsername(ctx, tenant, u)
-}
-
-func accountCreate(ctx context.Context, env Env, st Store, args []string) error {
-	f, tenant, username := accountFlags("account-create")
-	email := f.set.String("email", "", "optional email")
-	name := f.set.String("name", "", "display name; the username when not set")
-	role := f.set.String("role", "", "optional role id assigned in the same transaction")
-	if err := f.parse(args, "tenant", "username"); err != nil {
-		return err
-	}
-	if f.given()["role"] {
-		if err := authz.ValidateRoleID(*role); err != nil {
-			return err
-		}
-	}
-	u, err := auth.NormalizeUsername(*username)
-	if err != nil {
-		return fmt.Errorf("%w: %w", errUsage, err)
-	}
-	if *email != "" && !strings.Contains(*email, "@") {
-		return fmt.Errorf("%w: -email must contain @", errUsage)
-	}
-	display := u
-	if f.given()["name"] {
-		if display, err = directory.NormalizeDisplayName(*name); err != nil {
-			return err
-		}
-	}
-	id, err := session.NewID(env.Random)
-	if err != nil {
-		return err
-	}
-	temp, hash, err := temporary(env)
-	if err != nil {
-		return err
-	}
-	now := env.Now()
-	a := store.Account{
-		TenantID: *tenant, ID: id, Username: u, DisplayName: display, Email: strings.ToLower(*email), State: store.StateActive,
-		PasswordHash: hash, PasswordMustChange: true, PasswordChangedAt: now, Ver: 1, CreatedAt: now, UpdatedAt: now, UpdatedBy: actor,
-	}
-	if err := createAccount(ctx, st, a, *role, audit(env, *tenant, "account_create", id, "")); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(env.Out, "account %s created for %s\ntemporary password: %s\n", id, u, temp); err != nil || *role == "" {
-		return err
-	}
-	_, err = fmt.Fprintf(env.Out, "role: %s\n", *role)
-	return err
-}
-
-func createAccount(ctx context.Context, st Store, a store.Account, role string, at store.AuditEvent) error {
-	if role == "" {
-		return st.CreateAccount(ctx, a, at)
-	}
-	return st.CreateAccountWithRole(ctx, a, role, at)
-}
-
-func passwordReset(ctx context.Context, env Env, st Store, args []string) error {
-	f, tenant, username := accountFlags("password-reset")
-	if err := f.parse(args, "tenant", "username"); err != nil {
-		return err
-	}
-	a, err := findAccount(ctx, st, *tenant, *username)
-	if err != nil {
-		return err
-	}
-	temp, hash, err := temporary(env)
-	if err != nil {
-		return err
-	}
-	change := store.PasswordChange{TenantID: a.TenantID, AccountID: a.ID, ExpectVer: a.Ver, Hash: hash, MustChange: true, Revocation: revocation(env, "password_reset")}
-	if err := st.SetPassword(ctx, change, audit(env, a.TenantID, "password_reset", a.ID, "")); err != nil {
-		return err
-	}
-	_, err = fmt.Fprintf(env.Out, "password reset for %s; every session revoked\ntemporary password: %s\n", a.Username, temp)
-	return err
+	return f, f.set.String("tenant", "", "tenant id"), f.set.String("user", "", "user id")
 }
 
 func accountState(state store.State) command {
 	return func(ctx context.Context, env Env, st Store, args []string) error {
-		f, tenant, username := accountFlags("account-state")
-		if err := f.parse(args, "tenant", "username"); err != nil {
-			return err
-		}
-		a, err := findAccount(ctx, st, *tenant, *username)
-		if err != nil {
+		f, tenant, user := accountFlags("account-state")
+		if err := f.parse(args, "tenant", "user"); err != nil {
 			return err
 		}
 		action := map[store.State]string{store.StateActive: "account_enable", store.StateDisabled: "account_disable"}[state]
-		if err := st.SetAccountState(ctx, a.TenantID, a.ID, state, revocation(env, action), audit(env, a.TenantID, action, a.ID, "")); err != nil {
+		if err := st.SetAccountState(ctx, *tenant, *user, state, audit(env, *tenant, action, *user)); err != nil {
 			return err
 		}
-		_, err = fmt.Fprintf(env.Out, "account %s: %s\n", a.Username, action)
+		_, err := fmt.Fprintf(env.Out, "account %s: %s\n", *user, action)
 		return err
 	}
-}
-
-func sessionList(ctx context.Context, env Env, st Store, args []string) error {
-	f, tenant, username := accountFlags("session-list")
-	if err := f.parse(args, "tenant", "username"); err != nil {
-		return err
-	}
-	a, err := findAccount(ctx, st, *tenant, *username)
-	if err != nil {
-		return err
-	}
-	sessions, err := st.ActiveSessions(ctx, a.TenantID, a.ID)
-	if err != nil {
-		return err
-	}
-	w := tabwriter.NewWriter(env.Out, 0, 4, 2, ' ', 0)
-	_, _ = fmt.Fprintln(w, "SESSION\tDEVICE\tCREATED\tLAST USED")
-	for _, s := range sessions {
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", s.ID, s.DeviceName, s.CreatedAt.Format(time.RFC3339), s.LastUsedAt.Format(time.RFC3339))
-	}
-	return w.Flush()
-}
-
-func sessionRevoke(ctx context.Context, env Env, st Store, args []string) error {
-	f := newFlags("session-revoke")
-	id := f.set.String("session", "", "session id")
-	if err := f.parse(args, "session"); err != nil {
-		return err
-	}
-	s, err := st.SessionByID(ctx, *id)
-	if err != nil {
-		return err
-	}
-	revoked, err := st.RevokeSession(ctx, s.ID, revocation(env, "admin"), audit(env, s.TenantID, "session_revoke", s.AccountID, s.ID))
-	if err != nil {
-		return err
-	}
-	_, err = fmt.Fprintf(env.Out, "session %s revoked: %v\n", s.ID, revoked)
-	return err
-}
-
-func temporary(env Env) (string, string, error) {
-	temp, err := password.Temporary(env.Random)
-	if err != nil {
-		return "", "", err
-	}
-	hash, err := env.Hasher.Hash(temp)
-	if err != nil {
-		return "", "", err
-	}
-	return temp, hash, nil
 }

@@ -39,7 +39,7 @@ func TestEachPortRunsAlone(t *testing.T) {
 	kek := newKEK(t)
 	t.Run("internal only", func(t *testing.T) {
 		cfg := testConfig(kek)
-		cfg.ListenAddr, cfg.PublicURL = "", ""
+		cfg.ListenAddr = ""
 		r := runIAM(t, cfg, &fakeStore{keys: []store.SigningKey{activeKey(t, kek)}, version: 3}, 3)
 		r.logs.await(t, "iam ready")
 		if code, _ := httpGetWith(t, r.internal, "/internal/v1/revocations", nodeHeader()); code != http.StatusOK {

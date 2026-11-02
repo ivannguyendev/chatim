@@ -17,7 +17,6 @@ import (
 	"github.com/ivannguyendev/chatim/apps/iam/internal/api"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/directory"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/keyring"
-	"github.com/ivannguyendev/chatim/apps/iam/internal/session"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/signing"
 	"github.com/ivannguyendev/chatim/apps/iam/internal/store"
 	"github.com/ivannguyendev/chatim/pkg/iamsync"
@@ -79,7 +78,7 @@ func benchTokens(b *testing.B, ring *keyring.Ring) []string {
 	}
 	tokens := make([]string, benchCallers)
 	for i := range tokens {
-		sid, err := session.NewID(rand.Reader)
+		sid, err := signing.NewSessionID(rand.Reader)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -100,7 +99,7 @@ func benchRevocations(b *testing.B) *revocation.List {
 	now := time.Now()
 	sessions := make([]revocation.Session, benchRevoked)
 	for i := range sessions {
-		sid, err := session.NewID(rand.Reader)
+		sid, err := signing.NewSessionID(rand.Reader)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -133,7 +132,7 @@ func benchServer(b *testing.B) (iamv1connect.DirectoryServiceClient, []string) {
 		b.Fatal(err)
 	}
 	handler, err := api.New(api.Options{
-		Auth: &fakeAuth{}, Proofs: fakeProofs{}, Callers: ring, Keys: ring, BodyMax: 16 << 10,
+		Keys: ring, BodyMax: 16 << 10,
 		Directory: benchDirectory(), Revocations: benchRevocations(b), Claims: ring, DirectoryGate: gate, DirectoryUsers: users,
 	})
 	if err != nil {

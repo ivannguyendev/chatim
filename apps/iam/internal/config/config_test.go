@@ -15,7 +15,6 @@ var kek = base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32)))
 
 func setRequired(t *testing.T) {
 	t.Helper()
-	t.Setenv("IAM_PUBLIC_URL", "https://iam.example.com")
 	t.Setenv("IAM_PG_URI", "postgres://iam@chatim-postgres:5432/chatim_iam")
 	t.Setenv("IAM_PG_PASSWORD", "pg-secret-value")
 	t.Setenv("IAM_ISSUER", "chatim-dev")
@@ -32,9 +31,7 @@ func TestLoadDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if c.ListenAddr != ":8080" || c.AdminAddr != ":9090" || c.AccessTTL != 15*time.Minute || c.SessionIdle != 720*time.Hour ||
-		c.SessionMax != 2160*time.Hour || c.RefreshGrace != 30*time.Second || c.HashConcurrency != 16 || c.LoginMaxDelay != time.Minute ||
-		c.LoginIPRate != 20 || c.LoginIPBurst != 200 || c.PasswordMin != 12 || c.BodyMax != 16<<10 || c.DPoPWindow != time.Minute {
+	if c.ListenAddr != ":8080" || c.AdminAddr != ":9090" || c.AccessTTL != 15*time.Minute || c.BodyMax != 16<<10 {
 		t.Fatalf("defaults = %+v", c)
 	}
 	if c.InternalAddr != ":8081" || c.KeyActivateLead != 2*time.Minute || c.NodeSecret != nodeSecret || c.RevocationKeep() != 16*time.Minute {
@@ -43,9 +40,6 @@ func TestLoadDefaults(t *testing.T) {
 	if c.FeedWaitMax != 10*time.Second || c.DirectoryLoadSlots != 4 || c.InflightMax != 10000 || c.UserRate != 50 ||
 		c.UserBurst != 100 || c.UserInflight != 32 || c.UserLimiters != 100000 {
 		t.Fatalf("directory defaults = %v %d %d %d %d %d %d", c.FeedWaitMax, c.DirectoryLoadSlots, c.InflightMax, c.UserRate, c.UserBurst, c.UserInflight, c.UserLimiters)
-	}
-	if c.AdminUserRate != 10 || c.AdminUserBurst != 20 || c.AdminInflightMax != 1000 || c.AdminDBSlots != 4 {
-		t.Fatalf("admin defaults = %d %d %d %d", c.AdminUserRate, c.AdminUserBurst, c.AdminInflightMax, c.AdminDBSlots)
 	}
 	if len(c.KeyEncryptionKey) != 32 {
 		t.Fatalf("kek length = %d, want 32", len(c.KeyEncryptionKey))
@@ -93,7 +87,6 @@ func TestEachPortCanBeTurnedOff(t *testing.T) {
 	t.Run("public off", func(t *testing.T) {
 		setRequired(t)
 		t.Setenv("IAM_ADDR", "")
-		t.Setenv("IAM_PUBLIC_URL", "")
 		c, err := config.Load()
 		if err != nil || c.ListenAddr != "" || c.InternalAddr != ":8081" {
 			t.Fatalf("Load = %+v, %v; want only the internal port", c, err)
@@ -112,28 +105,22 @@ func TestEachPortCanBeTurnedOff(t *testing.T) {
 
 func TestLoadRejectsBadConfig(t *testing.T) {
 	cases := map[string]map[string]string{
-		"missing public url":    {"IAM_PUBLIC_URL": ""},
-		"public url with query": {"IAM_PUBLIC_URL": "https://iam.example.com?x=1"},
-		"missing issuer":        {"IAM_ISSUER": ""},
-		"missing kek":           {"IAM_KEY_ENCRYPTION_KEY": ""},
-		"short kek":             {"IAM_KEY_ENCRYPTION_KEY": base64.StdEncoding.EncodeToString([]byte("short"))},
-		"kek not base64":        {"IAM_KEY_ENCRYPTION_KEY": "!!!"},
-		"pg uri with password":  {"IAM_PG_URI": "postgres://iam:inline@host/db"},
-		"grace over access ttl": {"IAM_REFRESH_GRACE": "20m"},
-		"idle over max":         {"IAM_SESSION_IDLE": "3000h"},
-		"same ports":            {"IAM_ADMIN_ADDR": ":8080"},
-		"bad duration":          {"IAM_ACCESS_TTL": "soon"},
-		"zero hash slots":       {"IAM_HASH_CONCURRENCY": "0"},
-		"short password min":    {"IAM_PASSWORD_MIN": "6"},
-		"budget too small":      {"IAM_SHUTDOWN_BUDGET": "1s"},
-		"bad cors origin":       {"IAM_CORS_ORIGINS": "app.example.com"},
-		"both ports off":        {"IAM_ADDR": "", "IAM_INTERNAL_ADDR": ""},
-		"internal on admin":     {"IAM_INTERNAL_ADDR": ":9090"},
-		"internal on public":    {"IAM_INTERNAL_ADDR": ":8080"},
-		"missing node secret":   {"IAM_NODE_SECRET": ""},
-		"short node secret":     {"IAM_NODE_SECRET": "short"},
-		"negative lead":         {"IAM_KEY_ACTIVATE_LEAD": "-1s"},
-		"zero lead":             {"IAM_KEY_ACTIVATE_LEAD": "0s"},
+		"missing issuer":       {"IAM_ISSUER": ""},
+		"missing kek":          {"IAM_KEY_ENCRYPTION_KEY": ""},
+		"short kek":            {"IAM_KEY_ENCRYPTION_KEY": base64.StdEncoding.EncodeToString([]byte("short"))},
+		"kek not base64":       {"IAM_KEY_ENCRYPTION_KEY": "!!!"},
+		"pg uri with password": {"IAM_PG_URI": "postgres://iam:inline@host/db"},
+		"same ports":           {"IAM_ADMIN_ADDR": ":8080"},
+		"bad duration":         {"IAM_ACCESS_TTL": "soon"},
+		"budget too small":     {"IAM_SHUTDOWN_BUDGET": "1s"},
+		"bad cors origin":      {"IAM_CORS_ORIGINS": "app.example.com"},
+		"both ports off":       {"IAM_ADDR": "", "IAM_INTERNAL_ADDR": ""},
+		"internal on admin":    {"IAM_INTERNAL_ADDR": ":9090"},
+		"internal on public":   {"IAM_INTERNAL_ADDR": ":8080"},
+		"missing node secret":  {"IAM_NODE_SECRET": ""},
+		"short node secret":    {"IAM_NODE_SECRET": "short"},
+		"negative lead":        {"IAM_KEY_ACTIVATE_LEAD": "-1s"},
+		"zero lead":            {"IAM_KEY_ACTIVATE_LEAD": "0s"},
 	}
 	for name, env := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -190,6 +177,8 @@ func TestLoadRefusesBadDirectoryLimits(t *testing.T) {
 		"zero user limiters":          {map[string]string{"IAM_USER_LIMITERS": "0"}, "IAM_USER_LIMITERS must be positive"},
 		"zero inflight max":           {map[string]string{"IAM_INFLIGHT_MAX": "0"}, "IAM_INFLIGHT_MAX must be positive"},
 		"limiters under the node cap": {map[string]string{"IAM_USER_LIMITERS": "9999"}, "IAM_USER_LIMITERS 9999 must be at least IAM_INFLIGHT_MAX 10000"},
+		"load slots crowd the pool":   {map[string]string{"IAM_DIRECTORY_LOAD_SLOTS": "19"}, "IAM_DIRECTORY_LOAD_SLOTS 19 + 2 must not exceed IAM_PG_MAX_CONNS 20"},
+		"small pool":                  {map[string]string{"IAM_PG_MAX_CONNS": "5"}, "IAM_DIRECTORY_LOAD_SLOTS 4 + 2 must not exceed IAM_PG_MAX_CONNS 5"},
 		"unparsable directory number": {map[string]string{"IAM_USER_RATE": "many"}, "IAM_USER_RATE"},
 	}
 	for name, tc := range cases {
@@ -205,8 +194,7 @@ func TestLoadRefusesBadDirectoryLimits(t *testing.T) {
 	}
 	setRequired(t)
 	t.Setenv("IAM_FEED_WAIT_MAX", "60s")
-	t.Setenv("IAM_DIRECTORY_LOAD_SLOTS", "17")
-	t.Setenv("IAM_ADMIN_DB_SLOTS", "1")
+	t.Setenv("IAM_DIRECTORY_LOAD_SLOTS", "18")
 	t.Setenv("IAM_USER_LIMITERS", "10000")
 	if _, err := config.Load(); err != nil {
 		t.Fatalf("Load at the directory limits = %v", err)
@@ -231,50 +219,23 @@ func TestLogValueListsDirectorySettings(t *testing.T) {
 	}
 }
 
-func TestLoadRefusesBadAdminLimits(t *testing.T) {
-	cases := map[string]struct {
-		env  map[string]string
-		want string
-	}{
-		"zero admin user rate":         {map[string]string{"IAM_ADMIN_USER_RATE": "0"}, "IAM_ADMIN_USER_RATE must be positive"},
-		"negative admin user burst":    {map[string]string{"IAM_ADMIN_USER_BURST": "-1"}, "IAM_ADMIN_USER_BURST must be positive"},
-		"zero admin inflight max":      {map[string]string{"IAM_ADMIN_INFLIGHT_MAX": "0"}, "IAM_ADMIN_INFLIGHT_MAX must be positive"},
-		"zero admin db slots":          {map[string]string{"IAM_ADMIN_DB_SLOTS": "0"}, "IAM_ADMIN_DB_SLOTS must be positive"},
-		"limiters under the admin cap": {map[string]string{"IAM_USER_LIMITERS": "10000", "IAM_INFLIGHT_MAX": "10000", "IAM_ADMIN_INFLIGHT_MAX": "10001"}, "IAM_USER_LIMITERS 10000 must be at least IAM_ADMIN_INFLIGHT_MAX 10001"},
-		"admin slots crowd the pool":   {map[string]string{"IAM_ADMIN_DB_SLOTS": "15"}, "IAM_ADMIN_DB_SLOTS 15 + IAM_DIRECTORY_LOAD_SLOTS 4 + 2 must not exceed IAM_PG_MAX_CONNS 20"},
-		"load slots crowd the pool":    {map[string]string{"IAM_PG_MAX_CONNS": "9"}, "IAM_ADMIN_DB_SLOTS 4 + IAM_DIRECTORY_LOAD_SLOTS 4 + 2 must not exceed IAM_PG_MAX_CONNS 9"},
-		"unparsable admin number":      {map[string]string{"IAM_ADMIN_DB_SLOTS": "few"}, "IAM_ADMIN_DB_SLOTS"},
-	}
-	for name, tc := range cases {
-		t.Run(name, func(t *testing.T) {
-			setRequired(t)
-			for k, v := range tc.env {
-				t.Setenv(k, v)
-			}
-			if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("Load = %v, want an error containing %q", err, tc.want)
-			}
-		})
-	}
+func TestRemovedLoginAndAdminSettingsAreNotRead(t *testing.T) {
 	setRequired(t)
-	t.Setenv("IAM_ADMIN_DB_SLOTS", "14")
-	t.Setenv("IAM_USER_LIMITERS", "10000")
-	t.Setenv("IAM_ADMIN_INFLIGHT_MAX", "10000")
-	if _, err := config.Load(); err != nil {
-		t.Fatalf("Load at the admin limits = %v", err)
+	for _, key := range []string{
+		"IAM_PUBLIC_URL", "IAM_SESSION_IDLE", "IAM_SESSION_MAX", "IAM_REFRESH_GRACE", "IAM_DPOP_WINDOW", "IAM_HASH_CONCURRENCY",
+		"IAM_LOGIN_FREE_FAILURES", "IAM_LOGIN_MAX_DELAY", "IAM_LOGIN_IP_RATE", "IAM_LOGIN_IP_BURST", "IAM_LOGIN_IP_TRACKED",
+		"IAM_PASSWORD_MIN", "IAM_ADMIN_USER_RATE", "IAM_ADMIN_USER_BURST", "IAM_ADMIN_INFLIGHT_MAX", "IAM_ADMIN_DB_SLOTS",
+	} {
+		t.Setenv(key, "abc")
 	}
-}
-
-func TestLogValueListsAdminSettings(t *testing.T) {
-	setRequired(t)
 	c, err := config.Load()
 	if err != nil {
-		t.Fatalf("Load: %v", err)
+		t.Fatalf("Load with removed settings set to garbage = %v", err)
 	}
 	out := c.String()
-	for _, key := range []string{"admin_user_rate=10", "admin_user_burst=20", "admin_inflight_max=1000", "admin_db_slots=4"} {
-		if !strings.Contains(out, key) {
-			t.Fatalf("config log lacks %s: %s", key, out)
+	for _, key := range []string{"public_url", "session_idle", "dpop_window", "hash_concurrency", "login_", "password_min", "admin_user", "admin_inflight", "admin_db_slots"} {
+		if strings.Contains(out, key) {
+			t.Fatalf("config log still lists %s: %s", key, out)
 		}
 	}
 }

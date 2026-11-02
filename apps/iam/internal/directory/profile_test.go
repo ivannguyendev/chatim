@@ -66,13 +66,6 @@ func TestNormalizeGroupName(t *testing.T) {
 	checkNames(t, directory.NormalizeGroupName)
 }
 
-func TestNormalizeRoleName(t *testing.T) {
-	checkNames(t, directory.NormalizeRoleName)
-	if _, err := directory.NormalizeRoleName(""); !errors.Is(err, directory.ErrRoleName) {
-		t.Fatalf("err = %v, want ErrRoleName", err)
-	}
-}
-
 func TestValidateAvatarURL(t *testing.T) {
 	cases := []struct {
 		name  string

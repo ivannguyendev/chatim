@@ -91,12 +91,12 @@ func TestActiveKeySignsAndVerifiesItsOwnTokens(t *testing.T) {
 	if !f.ring.Ready() {
 		t.Fatal("ring not ready with an active key")
 	}
-	c, err := f.ring.Caller(f.sign(t, sid))
+	c, err := f.ring.Claims(f.sign(t, sid))
 	if err != nil {
-		t.Fatalf("Caller: %v", err)
+		t.Fatalf("Claims: %v", err)
 	}
-	if c.Tenant != "shop" || c.Account != "lan" || c.Session != sid {
-		t.Fatalf("caller = %+v", c)
+	if c.Tenant != "shop" || c.User != "lan" || c.Session != sid {
+		t.Fatalf("claims = %+v", c)
 	}
 }
 
@@ -125,7 +125,7 @@ func TestRotationKeepsOldTokensValidUntilTheRetiredKeyAges(t *testing.T) {
 	if err := f.ring.Reload(context.Background()); err != nil {
 		t.Fatalf("Reload: %v", err)
 	}
-	if _, err := f.ring.Caller(old); err != nil {
+	if _, err := f.ring.Claims(old); err != nil {
 		t.Fatalf("token of a recently retired key = %v, want valid", err)
 	}
 	if fresh, _ := f.ring.Current(); fresh.KeyID() == f.src.keys[0].ID {
@@ -139,20 +139,20 @@ func TestRotationKeepsOldTokensValidUntilTheRetiredKeyAges(t *testing.T) {
 	}
 }
 
-func TestCallerRejectsTokensWithoutAValidSession(t *testing.T) {
+func TestClaimsRejectsTokensWithoutAValidSession(t *testing.T) {
 	f := newFixture(t)
 	k := f.addKey(t, store.KeyActive, time.Time{})
 	_ = f.ring.Reload(context.Background())
-	if _, err := f.ring.Caller(f.sign(t, "not-a-session")); !errors.Is(err, apperr.ErrUnauthenticated) {
+	if _, err := f.ring.Claims(f.sign(t, "not-a-session")); !errors.Is(err, apperr.ErrUnauthenticated) {
 		t.Fatalf("bad sid = %v, want unauthenticated", err)
 	}
 	noSid := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{"iss": "iss", "aud": "aud", "sub": "lan", "tid": "shop", "iat": f.now.Unix(), "exp": f.now.Add(time.Minute).Unix()})
 	noSid.Header["kid"] = k.ID
 	signed, _ := noSid.SignedString(k.Private)
-	if _, err := f.ring.Caller(signed); !errors.Is(err, apperr.ErrUnauthenticated) {
+	if _, err := f.ring.Claims(signed); !errors.Is(err, apperr.ErrUnauthenticated) {
 		t.Fatalf("missing sid = %v, want unauthenticated", err)
 	}
-	if _, err := f.ring.Caller("garbage"); !errors.Is(err, apperr.ErrUnauthenticated) {
+	if _, err := f.ring.Claims("garbage"); !errors.Is(err, apperr.ErrUnauthenticated) {
 		t.Fatalf("garbage = %v, want unauthenticated", err)
 	}
 }
@@ -168,8 +168,8 @@ func TestReloadFailureKeepsTheLastGoodKeys(t *testing.T) {
 	if !f.ring.Ready() {
 		t.Fatal("a failed reload dropped the last good keys")
 	}
-	if _, err := f.ring.Caller(f.sign(t, sid)); err != nil {
-		t.Fatalf("Caller after a failed reload: %v", err)
+	if _, err := f.ring.Claims(f.sign(t, sid)); err != nil {
+		t.Fatalf("Claims after a failed reload: %v", err)
 	}
 }
 
