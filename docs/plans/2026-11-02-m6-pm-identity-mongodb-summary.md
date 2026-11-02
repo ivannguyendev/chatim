@@ -1,6 +1,6 @@
 # M6 phase PM: `identity` chuyển sang MongoDB, follower bằng change stream — tóm tắt
 
-> Ngày: 2026-11-02 · Nhánh `feat/m6` · Trạng thái: **chờ owner duyệt** · Dựa trên: D244 (owner 2026-11-02 "chuyển sang mongodb"), brainstorm PM owner "ok" 2026-11-02 (change stream thay `NOTIFY`), owner 2026-11-02 "bỏ Feed HTTP", owner 2026-11-02 "cắt đứt postgres", "bỏ luôn tools/poc/postgresbench", một phase kiểm một lần ở cuối ("ok")
+> Ngày: 2026-11-02 · Nhánh `feat/m6` · Trạng thái: **owner duyệt 2026-11-02** · Dựa trên: D244 (owner 2026-11-02 "chuyển sang mongodb"), brainstorm PM owner "ok" 2026-11-02 (change stream thay `NOTIFY`), owner 2026-11-02 "bỏ Feed HTTP", owner 2026-11-02 "cắt đứt postgres", "bỏ luôn tools/poc/postgresbench", một phase kiểm một lần ở cuối ("ok")
 > **Các phase của M6:** (PA) gỡ đăng nhập, đổi tên, đổi token ✅ · **(PM) MongoDB + change stream + gỡ Postgres** · (PB) server API theo lô, khoá user, thu hồi theo giờ
 
 ## Scope và ranh giới
