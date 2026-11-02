@@ -20,36 +20,42 @@ const (
 )
 
 type Config struct {
-	ListenAddr         string
-	InternalAddr       string
-	AdminAddr          string
-	PGURI              string
-	PGPassword         string
-	PGMaxConns         int
-	Issuer             string
-	Audience           string
-	AccessTTL          time.Duration
-	KeyEncryptionKey   []byte
-	NodeSecret         string
-	KeyActivateLead    time.Duration
-	KeyReload          time.Duration
-	BodyMax            int
-	CORSOrigins        []string
-	ClientIPHeader     string
-	DrainDelay         time.Duration
-	ShutdownBudget     time.Duration
-	ReadHeaderTimeout  time.Duration
-	ReadTimeout        time.Duration
-	WriteTimeout       time.Duration
-	IdleTimeout        time.Duration
-	MaxHeaderBytes     int
-	FeedWaitMax        time.Duration
-	DirectoryLoadSlots int
-	InflightMax        int
-	UserRate           int
-	UserBurst          int
-	UserInflight       int
-	UserLimiters       int
+	ListenAddr          string
+	InternalAddr        string
+	AdminAddr           string
+	PGURI               string
+	PGPassword          string
+	PGMaxConns          int
+	Issuer              string
+	Audience            string
+	TokenTTL            time.Duration
+	ExchangeAudience    string
+	ExchangeMaxLifetime time.Duration
+	TrustReload         time.Duration
+	ExchangeIPRate      int
+	ExchangeIPBurst     int
+	ExchangeIPTracked   int
+	KeyEncryptionKey    []byte
+	NodeSecret          string
+	KeyActivateLead     time.Duration
+	KeyReload           time.Duration
+	BodyMax             int
+	CORSOrigins         []string
+	ClientIPHeader      string
+	DrainDelay          time.Duration
+	ShutdownBudget      time.Duration
+	ReadHeaderTimeout   time.Duration
+	ReadTimeout         time.Duration
+	WriteTimeout        time.Duration
+	IdleTimeout         time.Duration
+	MaxHeaderBytes      int
+	FeedWaitMax         time.Duration
+	DirectoryLoadSlots  int
+	InflightMax         int
+	UserRate            int
+	UserBurst           int
+	UserInflight        int
+	UserLimiters        int
 }
 
 func AdminAddr() string { return envconfig.String("IDENTITY_ADMIN_ADDR", defaultAdminAddr) }
@@ -57,36 +63,42 @@ func AdminAddr() string { return envconfig.String("IDENTITY_ADMIN_ADDR", default
 func Load() (Config, error) {
 	var p parser
 	c := Config{
-		ListenAddr:         optional("IDENTITY_ADDR", ":8080"),
-		InternalAddr:       optional("IDENTITY_INTERNAL_ADDR", ":8081"),
-		AdminAddr:          AdminAddr(),
-		PGURI:              envconfig.String("IDENTITY_PG_URI", ""),
-		PGPassword:         p.secret("IDENTITY_PG_PASSWORD"),
-		PGMaxConns:         p.number("IDENTITY_PG_MAX_CONNS", 20),
-		Issuer:             envconfig.String("IDENTITY_ISSUER", ""),
-		Audience:           envconfig.String("IDENTITY_AUDIENCE", ""),
-		AccessTTL:          p.span("IDENTITY_ACCESS_TTL", 15*time.Minute),
-		KeyEncryptionKey:   p.key("IDENTITY_KEY_ENCRYPTION_KEY"),
-		NodeSecret:         p.secret("IDENTITY_NODE_SECRET"),
-		KeyActivateLead:    p.span("IDENTITY_KEY_ACTIVATE_LEAD", 2*time.Minute),
-		KeyReload:          p.span("IDENTITY_KEY_RELOAD", 30*time.Second),
-		BodyMax:            p.number("IDENTITY_BODY_MAX", 16<<10),
-		CORSOrigins:        list("IDENTITY_CORS_ORIGINS"),
-		ClientIPHeader:     envconfig.String("IDENTITY_CLIENT_IP_HEADER", ""),
-		DrainDelay:         p.span("IDENTITY_DRAIN_DELAY", 5*time.Second),
-		ShutdownBudget:     p.span("IDENTITY_SHUTDOWN_BUDGET", 25*time.Second),
-		ReadHeaderTimeout:  p.span("IDENTITY_READ_HEADER_TIMEOUT", 5*time.Second),
-		ReadTimeout:        p.span("IDENTITY_READ_TIMEOUT", 10*time.Second),
-		WriteTimeout:       p.span("IDENTITY_WRITE_TIMEOUT", 15*time.Second),
-		IdleTimeout:        p.span("IDENTITY_IDLE_TIMEOUT", 60*time.Second),
-		MaxHeaderBytes:     p.number("IDENTITY_MAX_HEADER_BYTES", 16<<10),
-		FeedWaitMax:        p.span("IDENTITY_FEED_WAIT_MAX", 10*time.Second),
-		DirectoryLoadSlots: p.number("IDENTITY_DIRECTORY_LOAD_SLOTS", 4),
-		InflightMax:        p.number("IDENTITY_INFLIGHT_MAX", 10000),
-		UserRate:           p.number("IDENTITY_USER_RATE", 50),
-		UserBurst:          p.number("IDENTITY_USER_BURST", 100),
-		UserInflight:       p.number("IDENTITY_USER_INFLIGHT", 32),
-		UserLimiters:       p.number("IDENTITY_USER_LIMITERS", 100000),
+		ListenAddr:          optional("IDENTITY_ADDR", ":8080"),
+		InternalAddr:        optional("IDENTITY_INTERNAL_ADDR", ":8081"),
+		AdminAddr:           AdminAddr(),
+		PGURI:               envconfig.String("IDENTITY_PG_URI", ""),
+		PGPassword:          p.secret("IDENTITY_PG_PASSWORD"),
+		PGMaxConns:          p.number("IDENTITY_PG_MAX_CONNS", 20),
+		Issuer:              envconfig.String("IDENTITY_ISSUER", ""),
+		Audience:            envconfig.String("IDENTITY_AUDIENCE", ""),
+		TokenTTL:            p.span("IDENTITY_TOKEN_TTL", 5*time.Minute),
+		ExchangeAudience:    envconfig.String("IDENTITY_EXCHANGE_AUDIENCE", ""),
+		ExchangeMaxLifetime: p.span("IDENTITY_EXCHANGE_MAX_LIFETIME", 10*time.Minute),
+		TrustReload:         p.span("IDENTITY_TRUST_RELOAD", 10*time.Second),
+		ExchangeIPRate:      p.number("IDENTITY_EXCHANGE_IP_RATE", 50),
+		ExchangeIPBurst:     p.number("IDENTITY_EXCHANGE_IP_BURST", 500),
+		ExchangeIPTracked:   p.number("IDENTITY_EXCHANGE_IP_TRACKED", 100000),
+		KeyEncryptionKey:    p.key("IDENTITY_KEY_ENCRYPTION_KEY"),
+		NodeSecret:          p.secret("IDENTITY_NODE_SECRET"),
+		KeyActivateLead:     p.span("IDENTITY_KEY_ACTIVATE_LEAD", 2*time.Minute),
+		KeyReload:           p.span("IDENTITY_KEY_RELOAD", 30*time.Second),
+		BodyMax:             p.number("IDENTITY_BODY_MAX", 16<<10),
+		CORSOrigins:         list("IDENTITY_CORS_ORIGINS"),
+		ClientIPHeader:      envconfig.String("IDENTITY_CLIENT_IP_HEADER", ""),
+		DrainDelay:          p.span("IDENTITY_DRAIN_DELAY", 5*time.Second),
+		ShutdownBudget:      p.span("IDENTITY_SHUTDOWN_BUDGET", 25*time.Second),
+		ReadHeaderTimeout:   p.span("IDENTITY_READ_HEADER_TIMEOUT", 5*time.Second),
+		ReadTimeout:         p.span("IDENTITY_READ_TIMEOUT", 10*time.Second),
+		WriteTimeout:        p.span("IDENTITY_WRITE_TIMEOUT", 15*time.Second),
+		IdleTimeout:         p.span("IDENTITY_IDLE_TIMEOUT", 60*time.Second),
+		MaxHeaderBytes:      p.number("IDENTITY_MAX_HEADER_BYTES", 16<<10),
+		FeedWaitMax:         p.span("IDENTITY_FEED_WAIT_MAX", 10*time.Second),
+		DirectoryLoadSlots:  p.number("IDENTITY_DIRECTORY_LOAD_SLOTS", 4),
+		InflightMax:         p.number("IDENTITY_INFLIGHT_MAX", 10000),
+		UserRate:            p.number("IDENTITY_USER_RATE", 50),
+		UserBurst:           p.number("IDENTITY_USER_BURST", 100),
+		UserInflight:        p.number("IDENTITY_USER_INFLIGHT", 32),
+		UserLimiters:        p.number("IDENTITY_USER_LIMITERS", 100000),
 	}
 	if err := errors.Join(p.errs...); err != nil {
 		return Config{}, err
@@ -97,7 +109,7 @@ func Load() (Config, error) {
 	return c, nil
 }
 
-func (c Config) RevocationKeep() time.Duration { return c.AccessTTL + revocationMargin }
+func (c Config) RevocationKeep() time.Duration { return c.TokenTTL + revocationMargin }
 
 func (c Config) DatabaseURI() string {
 	u, err := url.Parse(c.PGURI)
@@ -118,7 +130,13 @@ func (c Config) LogValue() slog.Value {
 		slog.Int("pg_max_conns", c.PGMaxConns),
 		slog.String("issuer", c.Issuer),
 		slog.String("audience", c.Audience),
-		slog.Duration("access_ttl", c.AccessTTL),
+		slog.Duration("token_ttl", c.TokenTTL),
+		slog.String("exchange_audience", c.ExchangeAudience),
+		slog.Duration("exchange_max_lifetime", c.ExchangeMaxLifetime),
+		slog.Duration("trust_reload", c.TrustReload),
+		slog.Int("exchange_ip_rate", c.ExchangeIPRate),
+		slog.Int("exchange_ip_burst", c.ExchangeIPBurst),
+		slog.Int("exchange_ip_tracked", c.ExchangeIPTracked),
 		slog.Bool("key_encryption_key_set", len(c.KeyEncryptionKey) > 0),
 		slog.Bool("node_secret_set", c.NodeSecret != ""),
 		slog.Duration("key_activate_lead", c.KeyActivateLead),

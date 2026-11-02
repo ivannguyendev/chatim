@@ -67,7 +67,7 @@ func wireServers(ctx context.Context, cfg config.Config, log *slog.Logger, st St
 		return nil, err
 	}
 	ring := keyring.New(st, sealer, keyring.Config{
-		Token:  signing.TokenConfig{Issuer: cfg.Issuer, Audience: cfg.Audience, TTL: cfg.AccessTTL},
+		Token:  signing.TokenConfig{Issuer: cfg.Issuer, Audience: cfg.Audience, TTL: cfg.TokenTTL},
 		Leeway: tokenLeeway,
 	})
 	dir, err := newDirectory(cfg, st, deps)

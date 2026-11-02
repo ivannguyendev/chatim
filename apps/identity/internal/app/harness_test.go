@@ -106,7 +106,8 @@ func (f *fakeStore) Close() {
 func testConfig(kek []byte) config.Config {
 	return config.Config{
 		ListenAddr: "api", InternalAddr: "internal", NodeSecret: testNodeSecret, AdminAddr: "admin", PGURI: "postgres://identity@db/identity", PGMaxConns: 4,
-		Issuer: "iss", Audience: "aud", AccessTTL: 15 * time.Minute, KeyEncryptionKey: kek, KeyReload: time.Hour, KeyActivateLead: 2 * time.Hour,
+		Issuer: "iss", Audience: "aud", TokenTTL: 5 * time.Minute, ExchangeAudience: "tenant-aud", ExchangeMaxLifetime: 10 * time.Minute, TrustReload: 10 * time.Second,
+		ExchangeIPRate: 50, ExchangeIPBurst: 500, ExchangeIPTracked: 100000, KeyEncryptionKey: kek, KeyReload: time.Hour, KeyActivateLead: 2 * time.Hour,
 		FeedWaitMax: 10 * time.Second, DirectoryLoadSlots: 1, InflightMax: 100, UserRate: 50, UserBurst: 100, UserInflight: 32, UserLimiters: 1000,
 		BodyMax: 16 << 10, DrainDelay: 10 * time.Millisecond, ShutdownBudget: 20 * time.Second,
 		ReadHeaderTimeout: time.Second, ReadTimeout: time.Second, WriteTimeout: time.Second, IdleTimeout: time.Second, MaxHeaderBytes: 16 << 10,

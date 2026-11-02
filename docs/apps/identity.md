@@ -16,7 +16,12 @@ Từ owner 2026-11-02 chat không giữ danh tính: `identity` (tên cũ `iam`, 
 | `IDENTITY_PG_PASSWORD` / `_FILE` | — | Mật khẩu role `identity` |
 | `IDENTITY_PG_MAX_CONNS` | `20` | Kết nối tối đa của pool |
 | `IDENTITY_ISSUER`, `IDENTITY_AUDIENCE` | — (bắt buộc) | `iss`, `aud` của access token; phải khớp `WS_JWT_*`/`GW_JWT_*` |
-| `IDENTITY_ACCESS_TTL` | `15m` | Hạn access token |
+| `IDENTITY_TOKEN_TTL` | `5m` | Hạn token chat do `identity` cấp; cũng là cửa sổ giữ khoá ký nghỉ và mục thu hồi (`IDENTITY_TOKEN_TTL` + 1m, phải ≤ 2h). Thay `IDENTITY_ACCESS_TTL` (không còn đọc) |
+| `IDENTITY_EXCHANGE_AUDIENCE` | — (bắt buộc) | `aud` mà token của tenant phải mang khi đổi lấy token chat; phải khác `IDENTITY_AUDIENCE`, để token chat không bao giờ được nhận như token tenant; compose dev `chatim` |
+| `IDENTITY_EXCHANGE_MAX_LIFETIME` | `10m` | `exp` − `iat` tối đa của token tenant; dài hơn thì từ chối |
+| `IDENTITY_TRUST_RELOAD` | `10s` | Nhịp nạp lại issuer và khoá tin cậy từ Postgres; tối đa `1m` |
+| `IDENTITY_EXCHANGE_IP_RATE`, `IDENTITY_EXCHANGE_IP_BURST` | `50` / `500` | Lần đổi token mỗi IP mỗi node (token bucket); quá thì `429`. Ước tính, chưa có nguồn số: văn phòng NAT 2.000 người nối lại trong 1 phút ≈ 33/s (controller Q4 2026-11-02); compose dev đọc `IDENTITY_EXCHANGE_IP_RATE` từ `.env` để bench ghi đè |
+| `IDENTITY_EXCHANGE_IP_TRACKED` | `100000` | Số IP giữ bộ đếm (LRU) của giới hạn đổi token |
 | `IDENTITY_KEY_ENCRYPTION_KEY` / `_FILE` | — (bắt buộc) | 32 byte base64, mã hoá khoá ký riêng (AES-256-GCM); sinh bằng `openssl rand -base64 32` |
 | `IDENTITY_KEY_RELOAD` | `30s` | Nhịp nạp lại khoá ký, tự kích hoạt khoá chờ đã đủ giờ, kiểm readiness và xoá dòng thu hồi đã hết hạn; compose dev `5s` |
 | `IDENTITY_KEY_ACTIVATE_LEAD` | `2m` | Khoá chờ được `identity` tự kích hoạt khi đủ tuổi này; `key-activate` từ chối khoá chưa đủ tuổi. Phải ≥ `IDENTITY_KEY_RELOAD` + 1m (khoảng hỏi khoá tối đa của node), sai thì `identity` không khởi động; compose dev `65s` |
@@ -39,7 +44,7 @@ Từ owner 2026-11-02 chat không giữ danh tính: `identity` (tên cũ `iam`, 
 
 | Đường | Ghi chú |
 |---|---|
-| `GET /.well-known/jwks.json` | Khoá công khai (chờ, đang ký, nghỉ chưa quá 15m30s), `Cache-Control: public, max-age=60`; chưa có khoá → 503. Node prod lấy khoá **chỉ** từ đường này qua HTTPS của LB |
+| `GET /.well-known/jwks.json` | Khoá công khai (chờ, đang ký, nghỉ chưa quá `IDENTITY_TOKEN_TTL` + 30s, mặc định 5m30s), `Cache-Control: public, max-age=60`; chưa có khoá → 503. Node prod lấy khoá **chỉ** từ đường này qua HTTPS của LB |
 | `POST /chatim.identity.v1.DirectoryService/GetUsers` | Connect, Bearer access token của `identity`. 1–500 `user_ids` mỗi lần (id trùng gộp lại); trả `id`, `display_name`, `avatar_url`, `state` (`ACTIVE`/`DISABLED`) **từ RAM**, không chạm Postgres; **không bao giờ** có email hay username. Id lạ hoặc của tenant khác bị bỏ qua, không báo lỗi. Ví dụ: Lan gửi 300 id người trong danh sách hội thoại, nhận lại 300 tên |
 | `POST /chatim.identity.v1.DirectoryService/GetMyProfile` | Bearer; hồ sơ của chính mình (`id`, `display_name`, `avatar_url`) đọc **từ RAM** theo `tid`, `sub` của token, không chạm Postgres; không có trong danh bạ → `not_found`. `UpdateMyProfile` đã bỏ; đổi tên, ảnh bằng lệnh `user-set` |
 
@@ -53,7 +58,7 @@ Từ owner 2026-11-02 chat không giữ danh tính: `identity` (tên cũ `iam`, 
 | `resource_exhausted` | Quá giới hạn theo người dùng; chờ rồi gọi lại |
 | `unavailable` + `Retry-After: 1` | Replica chưa nạp xong danh bạ (`directory is loading`); node đầy `IDENTITY_INFLIGHT_MAX` |
 
-**Cổng nội bộ** (`IDENTITY_INTERNAL_ADDR`): `GET /internal/v1/revocations` và `GET /internal/v1/directory/changes` (cả hai cần header `Authorization: Bearer <IDENTITY_NODE_SECRET>`; sai/thiếu → 401). Trả mọi mục còn hạn: `sessions[{session_id, tenant_id, expires_at}]` (bảng `revoked_sessions`; từ PA T1 không còn đường nào ghi, vòng dọn vẫn chạy) và `tenants[{tenant_id, revoked_before, expires_at}]` (khoá tenant, giờ Postgres). Mục giữ `IDENTITY_ACCESS_TTL` + 1 phút. `ETag` theo băm body, `If-None-Match` khớp → 304. Đường khác → 404, kể cả JWKS.
+**Cổng nội bộ** (`IDENTITY_INTERNAL_ADDR`): `GET /internal/v1/revocations` và `GET /internal/v1/directory/changes` (cả hai cần header `Authorization: Bearer <IDENTITY_NODE_SECRET>`; sai/thiếu → 401). Trả mọi mục còn hạn: `sessions[{session_id, tenant_id, expires_at}]` (bảng `revoked_sessions`; từ PA T1 không còn đường nào ghi, vòng dọn vẫn chạy) và `tenants[{tenant_id, revoked_before, expires_at}]` (khoá tenant, giờ Postgres). Mục giữ `IDENTITY_TOKEN_TTL` + 1 phút. `ETag` theo băm body, `If-None-Match` khớp → 304. Đường khác → 404, kể cả JWKS.
 
 **Feed danh bạ** `GET /internal/v1/directory/changes?after=&limit=&wait=` (long poll, cho app khác: Mention sau khi `identity` xong (D234), M8, M9; xem [events.md §8](../events.md)):
 
@@ -69,7 +74,7 @@ Trả 200 `{"changes": [...], "next": "…"}`, `Cache-Control: no-store`. Hết 
 
 Không có email và username. Mã lỗi: sai hoặc thiếu secret → 401; `after`, `limit`, `wait` sai dạng hoặc lặp tham số → 400 `{"error": …}`; Postgres lỗi → 503 + `Retry-After: 1`; `HEAD` → 405. Bên gọi giữ **một** kết nối keep-alive và gọi lại ngay với `after = next`, không mở kết nối mới mỗi lần. Số bên gọi dự kiến nhỏ (mỗi app tiêu thụ một request đang chờ), nên không có trần số request đang chờ: cổng nội bộ nằm sau `IDENTITY_NODE_SECRET`.
 
-**Node đồng bộ** (`pkg/identitysync`, websocket và gateway như nhau, tiền tố `WS_`/`GW_`): `*_IDENTITY_INTERNAL_URL`, `*_IDENTITY_SECRET`/`_FILE` và `*_IDENTITY_JWKS_URL` **bắt buộc** (JWKS phải `https://` trừ khi `*_IDENTITY_ALLOW_HTTP=true`, chỉ cho dev), `*_IDENTITY_REVOCATIONS_INTERVAL` (`2s`), `*_IDENTITY_KEYS_INTERVAL` (`1m`, tối đa `1m`, dev `10s`), `*_IDENTITY_READY_TIMEOUT` (`10s`). Node hỏi danh sách mỗi 2s, gộp vào RAM (chỉ thêm), ghi bản đó lên Redis chung `chatim:identity:revocations:<issuer>` (hạn 60s; issuer = `*_JWT_ISSUER`, nên staging và prod chung Redis không trộn nhau); hỏi `identity` lỗi thì đọc bản Redis do node khác ghi. Khoá ký không bao giờ đi qua Redis. `kid` lạ → hỏi JWKS ngay (tối đa 1 lần/5s), trong lúc chờ websocket trả `retry_later`, gateway 503. Node chỉ `ready` sau lần đồng bộ đầu hoặc sau `*_IDENTITY_READY_TIMEOUT` (khi `identity` không với tới). `identity` trả 4xx (trừ 429), ví dụ sai secret (401) hay sai đường (404) → node **không ready**, log lỗi `identity refused this node`, metric `identity_refused{kind}` = mã lỗi, kể cả khi đọc được bản Redis; `identity` nhận lại thì node `ready`. `*_JWT_LEEWAY` tối đa 1 phút. `IDENTITY_ACCESS_TTL` + 1m phải ≤ 2h (node bỏ mục thu hồi hạn xa hơn), sai thì `identity` không khởi động.
+**Node đồng bộ** (`pkg/identitysync`, websocket và gateway như nhau, tiền tố `WS_`/`GW_`): `*_IDENTITY_INTERNAL_URL`, `*_IDENTITY_SECRET`/`_FILE` và `*_IDENTITY_JWKS_URL` **bắt buộc** (JWKS phải `https://` trừ khi `*_IDENTITY_ALLOW_HTTP=true`, chỉ cho dev), `*_IDENTITY_REVOCATIONS_INTERVAL` (`2s`), `*_IDENTITY_KEYS_INTERVAL` (`1m`, tối đa `1m`, dev `10s`), `*_IDENTITY_READY_TIMEOUT` (`10s`). Node hỏi danh sách mỗi 2s, gộp vào RAM (chỉ thêm), ghi bản đó lên Redis chung `chatim:identity:revocations:<issuer>` (hạn 60s; issuer = `*_JWT_ISSUER`, nên staging và prod chung Redis không trộn nhau); hỏi `identity` lỗi thì đọc bản Redis do node khác ghi. Khoá ký không bao giờ đi qua Redis. `kid` lạ → hỏi JWKS ngay (tối đa 1 lần/5s), trong lúc chờ websocket trả `retry_later`, gateway 503. Node chỉ `ready` sau lần đồng bộ đầu hoặc sau `*_IDENTITY_READY_TIMEOUT` (khi `identity` không với tới). `identity` trả 4xx (trừ 429), ví dụ sai secret (401) hay sai đường (404) → node **không ready**, log lỗi `identity refused this node`, metric `identity_refused{kind}` = mã lỗi, kể cả khi đọc được bản Redis; `identity` nhận lại thì node `ready`. `*_JWT_LEEWAY` tối đa 1 phút. `IDENTITY_TOKEN_TTL` + 1m phải ≤ 2h (node bỏ mục thu hồi hạn xa hơn), sai thì `identity` không khởi động.
 
 ## Lệnh admin
 
@@ -81,7 +86,7 @@ Chạy trong container (`make identity-admin ARGS="…"` = `docker exec chatim-i
 | `tenant-create -id -name`, `tenant-disable -id`, `tenant-enable -id` | Khoá tenant ghi `sessions_revoked_at`: mọi token cấp trước giờ đó bị node từ chối |
 | `user-disable`, `user-enable` (`-tenant -user <id>`) | Đổi `state`, tăng `ver`; user không có → `not found`, thoát 1 |
 | `key-rotate [-activate-if-none]`, `key-activate -kid` | Tạo khoá chờ, in giờ `identity` sẽ tự kích hoạt; `key-activate` kích hoạt tay (khoá cũ và khoá chờ cũ hơn sang nghỉ, luôn đúng một khoá đang ký), từ chối khoá chưa đủ `IDENTITY_KEY_ACTIVATE_LEAD` và khoá đã nghỉ |
-| `jwks-export -out file [-merge file]` | Ghi JWKS công khai (khoá chờ, đang ký, nghỉ chưa quá 15m30s), ghi file tạm rồi đổi tên |
+| `jwks-export -out file [-merge file]` | Ghi JWKS công khai (khoá chờ, đang ký, nghỉ chưa quá `IDENTITY_TOKEN_TTL` + 30s, mặc định 5m30s), ghi file tạm rồi đổi tên |
 | `bootstrap -jwks file` | Dev: migrate, tạo khoá đầu nếu chưa có, gộp vào file JWKS |
 | `group-create -tenant -id -name [-parent] [-mentionable=true]` | Tạo nhóm; `-parent` phải là nhóm còn sống; `-mentionable=false` để không gắn `@nhóm` được. Tenant hay nhóm cha không có → lỗi, thoát 1 |
 | `group-update -tenant -id [-name] [-parent] [-mentionable=BOOL]` | Chỉ đổi cờ có ghi trên lệnh; `-parent ""` chuyển nhóm lên gốc; chuyển vào chính nó hoặc nhóm con → lỗi `group cycle`, thoát 1; không ghi cờ nào để đổi → thoát 2 |

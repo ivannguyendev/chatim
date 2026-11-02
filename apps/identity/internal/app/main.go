@@ -96,7 +96,7 @@ func adminMain(args []string) int {
 			return pgstore.Open(ctx, cfg.DatabaseURI(), pgstore.Options{MaxConns: adminPoolConns, RevocationKeep: cfg.RevocationKeep()})
 		},
 		Sealer: sealer, Random: rand.Reader, Now: time.Now,
-		KeyWindow: cfg.AccessTTL + tokenLeeway, ActivateLead: cfg.KeyActivateLead, Out: os.Stdout, Log: log,
+		KeyWindow: cfg.TokenTTL + tokenLeeway, ActivateLead: cfg.KeyActivateLead, Out: os.Stdout, Log: log,
 	}
 	return admincmd.Run(ctx, env, args)
 }
