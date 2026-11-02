@@ -136,6 +136,11 @@ type ProfileWrite struct {
 	By          string
 }
 
+type SchemaState struct {
+	Missing  []string
+	Outdated []string
+}
+
 type TrustSource interface {
 	TrustedIssuers(ctx context.Context) ([]TrustedIssuer, error)
 	TrustedKeys(ctx context.Context) ([]TrustedKey, error)

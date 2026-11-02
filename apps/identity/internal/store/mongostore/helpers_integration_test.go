@@ -24,6 +24,15 @@ func itURI(t *testing.T) string {
 
 func testDatabase(t *testing.T) *Store {
 	t.Helper()
+	s := emptyDatabase(t)
+	if _, err := s.Migrate(t.Context(), true); err != nil {
+		t.Fatalf("Migrate apply: %v", err)
+	}
+	return s
+}
+
+func emptyDatabase(t *testing.T) *Store {
+	t.Helper()
 	uri := itURI(t)
 	suffix := make([]byte, 6)
 	_, _ = rand.Read(suffix)
