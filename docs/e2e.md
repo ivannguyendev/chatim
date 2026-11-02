@@ -2,7 +2,7 @@
 
 `make e2e` build image `chatim/corecli:dev` rồi chạy `scripts/e2e.sh` trên cụm compose (cần `make infra-up` và `make core-up`): route theo slot, mỗi phase kiểm cả câu trả lời, lịch sử và event live. Chạy ở cuối milestone (bảng ngân sách kiểm thử trong `CLAUDE.md`). Hỏng ở phase nào thì script in tên bước (`step`) và dừng.
 
-Phase 13–16 (đăng nhập, thu hồi tới node, danh bạ, role của `iam`) đã gỡ ở M6 PA T1 cùng đăng nhập mật khẩu và `AdminService`: 13 và 15 viết lại ở PA (đổi token, danh bạ), 14 ở PB. `E2E_ONLY` tạm không nhận phase nào.
+Phase 13–16 (đăng nhập, thu hồi tới node, danh bạ, role của `identity`) đã gỡ ở M6 PA T1 cùng đăng nhập mật khẩu và `AdminService`: 13 và 15 viết lại ở PA (đổi token, danh bạ), 14 ở PB. `E2E_ONLY` tạm không nhận phase nào.
 
 | Phase | Kiểm gì |
 |---|---|

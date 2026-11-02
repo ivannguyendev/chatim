@@ -45,8 +45,8 @@ linters:
           deny:
             - pkg: github.com/ivannguyendev/chatim/pkg/wstest
               desc: pkg/wstest is a test client for tests and tools only (D208)
-            - pkg: github.com/ivannguyendev/chatim/pkg/iamsync/iamsynctest
-              desc: pkg/iamsync/iamsynctest holds iam fakes for tests only
+            - pkg: github.com/ivannguyendev/chatim/pkg/identitysync/identitysynctest
+              desc: pkg/identitysync/identitysynctest holds identity fakes for tests only
         domain-boundaries:
           files:
             - "**/apps/core/internal/message/**"
@@ -204,8 +204,8 @@ linters:
           deny:
             - pkg: github.com/ivannguyendev/chatim/apps/core
               desc: websocket reaches core only through gRPC and shared pkg code
-            - pkg: github.com/ivannguyendev/chatim/apps/iam
-              desc: websocket reaches iam only over the network
+            - pkg: github.com/ivannguyendev/chatim/apps/identity
+              desc: websocket reaches identity only over the network
             - pkg: github.com/ivannguyendev/chatim/modules
               desc: websocket embeds no business module
         websocket-config-owner:
@@ -224,8 +224,8 @@ linters:
               desc: gateway reaches core only through gRPC and shared pkg code
             - pkg: github.com/ivannguyendev/chatim/apps/websocket
               desc: gateway shares code with websocket only through pkg
-            - pkg: github.com/ivannguyendev/chatim/apps/iam
-              desc: gateway reaches iam only over the network
+            - pkg: github.com/ivannguyendev/chatim/apps/identity
+              desc: gateway reaches identity only over the network
             - pkg: github.com/ivannguyendev/chatim/modules
               desc: gateway embeds no business module
         gateway-config-owner:
@@ -236,34 +236,34 @@ linters:
           deny:
             - pkg: github.com/ivannguyendev/chatim/apps/gateway/internal/config
               desc: only app reads config
-        iam-boundaries:
+        identity-boundaries:
           files:
-            - "**/apps/iam/**"
+            - "**/apps/identity/**"
           deny:
             - pkg: github.com/ivannguyendev/chatim/apps/core
-              desc: iam owns its own data and never reaches core tables or code
+              desc: identity owns its own data and never reaches core tables or code
             - pkg: github.com/ivannguyendev/chatim/apps/websocket
-              desc: iam shares code with websocket only through pkg
+              desc: identity shares code with websocket only through pkg
             - pkg: github.com/ivannguyendev/chatim/apps/gateway
-              desc: iam shares code with gateway only through pkg
+              desc: identity shares code with gateway only through pkg
             - pkg: github.com/ivannguyendev/chatim/modules
-              desc: iam embeds no chat module
+              desc: identity embeds no chat module
             - pkg: github.com/nats-io
-              desc: iam does not depend on NATS (owner 2026-10-27)
-        iam-sync-no-nats:
+              desc: identity does not depend on NATS (owner 2026-10-27)
+        identity-sync-no-nats:
           files:
-            - "**/pkg/iamsync/**"
+            - "**/pkg/identitysync/**"
             - "**/pkg/revocation/**"
           deny:
             - pkg: github.com/nats-io
-              desc: revocations and keys reach nodes over https from iam, never through NATS (owner 2026-10-27)
-        iam-config-owner:
+              desc: revocations and keys reach nodes over https from identity, never through NATS (owner 2026-10-27)
+        identity-config-owner:
           files:
-            - "**/apps/iam/**"
-            - "!**/apps/iam/internal/app/**"
-            - "!**/apps/iam/internal/config/**"
+            - "**/apps/identity/**"
+            - "!**/apps/identity/internal/app/**"
+            - "!**/apps/identity/internal/config/**"
           deny:
-            - pkg: github.com/ivannguyendev/chatim/apps/iam/internal/config
+            - pkg: github.com/ivannguyendev/chatim/apps/identity/internal/config
               desc: only app reads config
     govet:
       enable-all: true
@@ -301,7 +301,7 @@ linters:
       - path: ^pkg/backoff/backoff\.go$
         linters: [gosec]
         text: G404
-      - path: ^pkg/iamsync/iamsynctest/
+      - path: ^pkg/identitysync/identitysynctest/
         linters: [gosec]
         text: G101
       - path: ^pkg/envconfig/secret\.go$

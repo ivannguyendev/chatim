@@ -14,7 +14,7 @@ Monorepo Go, mỗi app một container. Thiết kế: [architecture.md](docs/arc
 | `mention` (Mention App) | Nhúng trong core (`modules/mention`): chỉ mục mention, `ListMentions`, nhóm được tag, gợi ý `@nhóm`, thông báo `WsPublish` | [docs/apps/core.md](docs/apps/core.md#mention-app) |
 | `websocket` | WebSocket (gws): 12 lệnh ghi realtime, đẩy event, đang gõ, online, giữ kết nối khi token hết hạn; SDK client ở repo khác, theo [module 09 §11](docs/modules/09-feature-realtime-delivery-and-ephemeral.md) | [docs/apps/websocket.md](docs/apps/websocket.md) |
 | `gateway` | HTTPS (Connect): 22 lệnh đọc và quản lý room, JWT, gọi core bất kỳ (round robin), giới hạn theo user | [docs/apps/gateway.md](docs/apps/gateway.md) |
-| `iam` | Cầu danh tính (M6, sẽ đổi tên `identity`): khoá ký và token Ed25519, thu hồi theo tenant, danh bạ; chat không giữ đăng nhập (owner 2026-11-02); Postgres riêng | [docs/apps/iam.md](docs/apps/iam.md) |
+| `iam` | Cầu danh tính (M6, sẽ đổi tên `identity`): khoá ký và token Ed25519, thu hồi theo tenant, danh bạ; chat không giữ đăng nhập (owner 2026-11-02); Postgres riêng | [docs/apps/identity.md](docs/apps/identity.md) |
 | media, `notification` + push, search | Phase 2 (D207) | — |
 
 Hạ tầng: MongoDB (replica set), Redis (state, dedupe, presence), NATS JetStream; Postgres cho `iam`.
@@ -22,10 +22,10 @@ Hạ tầng: MongoDB (replica set), Redis (state, dedupe, presence), NATS JetStr
 ## Cấu trúc
 
 ```
-apps/{core,websocket,gateway,iam}/   # chương trình chạy được: main.go + internal/
+apps/{core,websocket,gateway,identity}/ # chương trình chạy được: main.go + internal/
 modules/mention/                 # Mention App, module nhúng trong core (D182)
 pkg/                             # code dùng chung, không có nghiệp vụ; wstest: client websocket chỉ cho test, e2e, wsload
-proto/chatim/{v1,iam/v1}/        # protobuf (buf) → pkg/pb
+proto/chatim/{v1,identity/v1}/   # protobuf (buf) → pkg/pb
 tools/                           # corecli, devtoken; poc/: corebench, wsload, …
 scripts/                         # e2e.sh, bench-cell.sh, ws-nats-drill.sh, wsload-kill.sh
 deploy/                          # Dockerfile (ARG TARGET), compose dev, luật alert Prometheus
@@ -38,10 +38,10 @@ Bản đồ từng package: [INDEXES.csv](INDEXES.csv); hướng phụ thuộc: 
 
 Chỉ cần Docker; Go chạy trong container `golang:1.26.10` qua `make`.
 
-    cp .env.example .env        # đặt các mật khẩu (chữ, số, - hoặc _); IAM_KEY_ENCRYPTION_KEY: openssl rand -base64 32; IAM_NODE_SECRET: openssl rand -hex 32
+    cp .env.example .env        # đặt các mật khẩu (chữ, số, - hoặc _); IDENTITY_KEY_ENCRYPTION_KEY: openssl rand -base64 32; IDENTITY_NODE_SECRET: openssl rand -hex 32
     make infra-up               # mongo :27117, redis :6380/:6381/:6382, nats :4223; infra-down / infra-reset
     make test                   # unit test trong container
-    make core-up                # build và chạy postgres, iam-1, core-1, core-2, websocket-1, websocket-2, gateway-1; core-down để dừng
+    make core-up                # build và chạy postgres, identity-1, core-1, core-2, websocket-1, websocket-2, gateway-1; core-down để dừng
     make e2e                    # 14 phase, xem docs/e2e.md
 
 Lệnh khác: `make vet`, `fmt-check`, `lint`, `vuln`, `itest`, `proto`, `buf-lint`, `alerts-check`, `redis-cli [INSTANCE=dedupe|presence] ARGS=…`, `image TARGET=…`, `poc TOOL=…` ([docs/poc/README.md](docs/poc/README.md)). Token dev và gọi thử gateway:
@@ -58,12 +58,12 @@ App chỉ publish trên loopback (caller còn được tin qua metadata tới kh
 | `127.0.0.1:9001`, `127.0.0.1:9002` | gRPC `core-1`, `core-2` |
 | `127.0.0.1:8081`, `127.0.0.1:8083` | WebSocket `/ws` `websocket-1`, `websocket-2` |
 | `127.0.0.1:8082` | HTTP Connect `gateway-1` |
-| `127.0.0.1:8084` | HTTP `iam-1` (JWKS, Connect `DirectoryService`) |
-| `5433` | Postgres (`chatim_poc`, `chatim_iam`) |
+| `127.0.0.1:8084` | HTTP `identity-1` (JWKS, Connect `DirectoryService`) |
+| `5433` | Postgres (`chatim_poc`, `chatim_identity`) |
 
 ## Tài liệu
 
 - [Kiến trúc (nguồn sự thật)](docs/architecture.md) · [11 module tính năng](docs/modules/README.md) · [Decision log D1–D218](docs/decision-log.md) · [Danh mục event](docs/events.md)
-- Vận hành từng app (biến môi trường, cổng, metric, lệnh): [core](docs/apps/core.md) · [websocket](docs/apps/websocket.md) · [gateway](docs/apps/gateway.md) · [iam](docs/apps/iam.md)
+- Vận hành từng app (biến môi trường, cổng, metric, lệnh): [core](docs/apps/core.md) · [websocket](docs/apps/websocket.md) · [gateway](docs/apps/gateway.md) · [identity](docs/apps/identity.md)
 - [Roadmap](docs/roadmap.md) · [Quy trình git](docs/git-workflow.md) · [Kiểm thử e2e](docs/e2e.md) · [Kết quả PoC](docs/poc/README.md)
 - Nghiên cứu: [cơ chế hệ thống](docs/research/261005-system-mechanisms-synthesis-report.md) · [kiến trúc chat mã nguồn mở](docs/research/260930-opensource-chat-architecture-research.md)

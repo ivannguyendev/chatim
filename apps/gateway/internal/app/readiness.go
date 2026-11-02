@@ -39,7 +39,7 @@ func (r *readiness) coreReady(ctx context.Context, ready bool) {
 	r.update(ctx)
 }
 
-func (r *readiness) iamBooted(ctx context.Context) {
+func (r *readiness) identityBooted(ctx context.Context) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.booted = true

@@ -16,7 +16,7 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/admin"
 	"github.com/ivannguyendev/chatim/pkg/corecall"
 	"github.com/ivannguyendev/chatim/pkg/grpcclient"
-	"github.com/ivannguyendev/chatim/pkg/iamsync"
+	"github.com/ivannguyendev/chatim/pkg/identitysync"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 	"github.com/ivannguyendev/chatim/pkg/metrics"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
@@ -38,7 +38,7 @@ func wire(cfg config.Config, log *slog.Logger, deps Deps) (*node, error) {
 		return nil, err
 	}
 	shared := sharedRedis(cfg)
-	n, err := wireServers(cfg, log, verifier, conn, shared, deps.IAMDoer)
+	n, err := wireServers(cfg, log, verifier, conn, shared, deps.IdentityDoer)
 	if err != nil {
 		_ = conn.Close()
 		if shared != nil {
@@ -55,22 +55,22 @@ func sharedRedis(cfg config.Config) *redis.Client {
 	}
 	r := cfg.SharedRedis
 	return redis.NewClient(&redis.Options{
-		Addr: r.Addr, DB: r.DB, Password: r.Password, ClientName: "chatim-gateway-iam-sync",
+		Addr: r.Addr, DB: r.DB, Password: r.Password, ClientName: "chatim-gateway-identity-sync",
 		DialTimeout: r.Timeout, ReadTimeout: r.Timeout, WriteTimeout: r.Timeout, PoolSize: 2,
 		MaxRetries: 1, DisableIdentity: true, ContextTimeoutEnabled: true,
 	})
 }
 
-func wireServers(cfg config.Config, log *slog.Logger, verifier *jwtverify.Verifier, conn *grpc.ClientConn, shared *redis.Client, doer iamsync.Doer) (*node, error) {
-	list, err := iamsync.NewList(cfg.JWTLeeway)
+func wireServers(cfg config.Config, log *slog.Logger, verifier *jwtverify.Verifier, conn *grpc.ClientConn, shared *redis.Client, doer identitysync.Doer) (*node, error) {
+	list, err := identitysync.NewList(cfg.JWTLeeway)
 	if err != nil {
 		return nil, err
 	}
-	var copyStore iamsync.Shared
+	var copyStore identitysync.Shared
 	if shared != nil {
-		copyStore = iamsync.NewRedisShared(shared, cfg.JWTIssuer)
+		copyStore = identitysync.NewRedisShared(shared, cfg.JWTIssuer)
 	}
-	sync, err := iamsync.New(cfg.IAM, list, verifier, copyStore, doer, log)
+	sync, err := identitysync.New(cfg.Identity, list, verifier, copyStore, doer, log)
 	if err != nil {
 		return nil, err
 	}

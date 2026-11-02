@@ -22,7 +22,7 @@ CORE_COMPOSE := $(COMPOSE) --profile app
 CORES    := core-1 core-2
 WEBSOCKETS := websocket-1 websocket-2
 GATEWAYS := gateway-1
-IAMS     := iam-1
+IDENTITIES := identity-1
 WS_KEYS_DIR := .local/ws-keys
 CORECLI_IMAGE := chatim/corecli:dev
 INSTANCE ?= state
@@ -34,7 +34,7 @@ GO_RUN   := docker run --rm -v "$(CURDIR)":/src -w /src -v chatim-gomod:/go/pkg/
 BUF_RUN  := docker run --rm -v "$(CURDIR)":/src -w /src $(BUF_IMAGE)
 POC_RUN  := $(GO_RUN) --network $(NETWORK) -e MONGO_URI -e PG_URI -e REDIS_PASSWORD
 
-.PHONY: go check-env test itest vet fmt-check lint vuln tidy proto buf-lint alerts-check poc image infra-up infra-down infra-reset pg-up pg-down core-up core-down iam-env iam-admin iam-logs dev-keys ws-token ws-logs gw-logs e2e redis-cli
+.PHONY: go check-env test itest vet fmt-check lint vuln tidy proto buf-lint alerts-check poc image infra-up infra-down infra-reset pg-up pg-down core-up core-down identity-env identity-admin identity-logs dev-keys ws-token ws-logs gw-logs e2e redis-cli
 
 go:
 	$(GO_RUN) $(GO_IMAGE) go $(ARGS)
@@ -101,27 +101,27 @@ pg-up: check-env
 pg-down: check-env
 	$(COMPOSE_ALL) stop postgres
 
-core-up: check-env iam-env dev-keys
+core-up: check-env identity-env dev-keys
 	$(MAKE) -s image TARGET=apps/core
 	$(MAKE) -s image TARGET=apps/websocket
 	$(MAKE) -s image TARGET=apps/gateway
-	$(MAKE) -s image TARGET=apps/iam
-	$(CORE_COMPOSE) up -d $(CORES) $(WEBSOCKETS) $(GATEWAYS) $(IAMS)
-	./scripts/wait-core-healthy.sh $(addprefix chatim-,$(IAMS) $(CORES) $(WEBSOCKETS) $(GATEWAYS))
+	$(MAKE) -s image TARGET=apps/identity
+	$(CORE_COMPOSE) up -d $(CORES) $(WEBSOCKETS) $(GATEWAYS) $(IDENTITIES)
+	./scripts/wait-core-healthy.sh $(addprefix chatim-,$(IDENTITIES) $(CORES) $(WEBSOCKETS) $(GATEWAYS))
 
 core-down: check-env
-	$(CORE_COMPOSE) rm -s -f $(GATEWAYS) $(WEBSOCKETS) $(IAMS) iam-bootstrap postgres-init $(CORES)
+	$(CORE_COMPOSE) rm -s -f $(GATEWAYS) $(WEBSOCKETS) $(IDENTITIES) identity-bootstrap postgres-init $(CORES)
 
-iam-env:
-	@test -n "$(IAM_PG_PASSWORD)" || (echo "set IAM_PG_PASSWORD in .env" && exit 1)
-	@test -n "$(IAM_KEY_ENCRYPTION_KEY)" || (echo "set IAM_KEY_ENCRYPTION_KEY in .env (openssl rand -base64 32)" && exit 1)
-	@test -n "$(IAM_NODE_SECRET)" || (echo "set IAM_NODE_SECRET in .env (openssl rand -hex 32)" && exit 1)
+identity-env:
+	@test -n "$(IDENTITY_PG_PASSWORD)" || (echo "set IDENTITY_PG_PASSWORD in .env" && exit 1)
+	@test -n "$(IDENTITY_KEY_ENCRYPTION_KEY)" || (echo "set IDENTITY_KEY_ENCRYPTION_KEY in .env (openssl rand -base64 32)" && exit 1)
+	@test -n "$(IDENTITY_NODE_SECRET)" || (echo "set IDENTITY_NODE_SECRET in .env (openssl rand -hex 32)" && exit 1)
 
-iam-admin:
-	docker exec chatim-iam-1 /app $(ARGS)
+identity-admin:
+	docker exec chatim-identity-1 /app $(ARGS)
 
-iam-logs:
-	docker logs --tail 200 -f chatim-iam-1
+identity-logs:
+	docker logs --tail 200 -f chatim-identity-1
 
 dev-keys:
 	@if [ -f $(WS_KEYS_DIR)/private.jwk ] && [ -f $(WS_KEYS_DIR)/jwks.json ]; then \

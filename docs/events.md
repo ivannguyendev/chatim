@@ -171,7 +171,7 @@ Không phải event của core: không ghi Mongo, không vào JetStream, không 
 
 ## 8. Feed danh bạ của `iam` (HTTP, không NATS)
 
-`iam` báo thay đổi của người và nhóm qua long poll HTTP trên cổng nội bộ, `GET /internal/v1/directory/changes?after&limit&wait` với `IAM_NODE_SECRET`; **không** phải stream JetStream, `iam` không dùng NATS (D219). Hợp đồng đầy đủ (tham số, mã lỗi, keep-alive): [docs/apps/iam.md](apps/iam.md).
+`iam` báo thay đổi của người và nhóm qua long poll HTTP trên cổng nội bộ, `GET /internal/v1/directory/changes?after&limit&wait` với `IDENTITY_NODE_SECRET`; **không** phải stream JetStream, `iam` không dùng NATS (D219). Hợp đồng đầy đủ (tham số, mã lỗi, keep-alive): [docs/apps/identity.md](apps/identity.md).
 
 | | |
 |---|---|

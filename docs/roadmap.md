@@ -83,7 +83,7 @@ Từ M6 phần 2, chi tiết ở [tóm tắt](plans/2026-10-27-m6-2-thu-hoi-toi-
 - Thu hồi hàng loạt bằng script làm body danh sách lớn (vài MB × 15 node mỗi 2s, Redis ghi cả khi 304): đo ở prod-like.
 - Listener websocket mở trước khi đồng bộ `iam` xong (chưa `ready` nên LB chưa gửi, nhưng kết nối thẳng vẫn vào được).
 - Thử hai replica `iam` cùng tự kích hoạt khoá và lệch nhịp nạp lại ở prod-like.
-- Xoay `IAM_NODE_SECRET` (nhận hai secret cùng lúc) để phần 5.
+- Xoay `IDENTITY_NODE_SECRET` (nhận hai secret cùng lúc) để phần 5.
 
 - `iam`: chưa có histogram `hash_seconds`/`refresh_seconds`; chưa audit lần bị chặn theo IP/chờ và account lạ; thiếu itest giữ khoá tenant song song với tạo phiên; chưa có cách xoay KEK; Postgres chưa có HA, backup, alert (phần 5).
 

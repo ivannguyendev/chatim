@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/pkg/envconfig"
-	"github.com/ivannguyendev/chatim/pkg/iamsync"
+	"github.com/ivannguyendev/chatim/pkg/identitysync"
 	"github.com/ivannguyendev/chatim/pkg/redact"
 	"github.com/ivannguyendev/chatim/pkg/wspublish"
 )
@@ -80,7 +80,7 @@ type Config struct {
 	PresenceBatch         int
 	PresenceCache         time.Duration
 	PresenceWatchMax      int
-	IAM                   iamsync.Config
+	Identity              identitysync.Config
 }
 
 func AdminAddr() string { return envconfig.String("WS_ADMIN_ADDR", defaultAdminAddr) }
@@ -148,11 +148,11 @@ func Load() (Config, error) {
 		PresenceCache:         p.span("WS_PRESENCE_CACHE", 5*time.Second),
 		PresenceWatchMax:      p.number("WS_PRESENCE_WATCH_MAX", 200),
 	}
-	iam, err := iamsync.FromEnv("WS")
+	identity, err := identitysync.FromEnv("WS")
 	if err != nil {
 		p.fail(err)
 	}
-	c.IAM = iam
+	c.Identity = identity
 	if err := errors.Join(p.errs...); err != nil {
 		return Config{}, err
 	}
@@ -222,7 +222,7 @@ func (c Config) LogValue() slog.Value {
 		slog.Int("presence_batch", c.PresenceBatch),
 		slog.Duration("presence_cache", c.PresenceCache),
 		slog.Int("presence_watch_max", c.PresenceWatchMax),
-		slog.Any("iam", c.IAM),
+		slog.Any("identity", c.Identity),
 	)
 }
 

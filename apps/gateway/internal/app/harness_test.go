@@ -24,7 +24,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/ivannguyendev/chatim/apps/gateway/internal/config"
-	"github.com/ivannguyendev/chatim/pkg/iamsync/iamsynctest"
+	"github.com/ivannguyendev/chatim/pkg/identitysync/identitysynctest"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/pkg/pb/chatim/v1/chatimv1connect"
 )
@@ -126,7 +126,7 @@ func testConfig(keysFile string, cores ...string) config.Config {
 		BodyMax: 128 << 10, UserRate: 50, UserBurst: 100, UserInflight: 32, UserLimiters: 1000, InflightMax: 100,
 		DrainDelay: 100 * time.Millisecond, ShutdownBudget: 15 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: time.Minute,
-		MaxHeaderBytes: 16 << 10, H2MaxStreams: 250, RequestDeadline: 5 * time.Second, IAM: iamsynctest.Config(),
+		MaxHeaderBytes: 16 << 10, H2MaxStreams: 250, RequestDeadline: 5 * time.Second, Identity: identitysynctest.Config(),
 	}
 }
 
@@ -250,8 +250,8 @@ func h2cClient(t *testing.T, addr, token string) chatimv1connect.CoreServiceClie
 }
 
 func run(ctx context.Context, cfg config.Config, log *slog.Logger, deps Deps) error {
-	if deps.IAMDoer == nil {
-		deps.IAMDoer = iamsynctest.Accepting{}
+	if deps.IdentityDoer == nil {
+		deps.IdentityDoer = identitysynctest.Accepting{}
 	}
 	return Run(ctx, cfg, log, deps)
 }

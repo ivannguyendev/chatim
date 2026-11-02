@@ -14,20 +14,20 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/gateway/internal/config"
 	"github.com/ivannguyendev/chatim/pkg/admin"
-	"github.com/ivannguyendev/chatim/pkg/iamsync"
+	"github.com/ivannguyendev/chatim/pkg/identitysync"
 )
 
 type Deps struct {
-	Listen      func(ctx context.Context, addr string) (net.Listener, error)
-	DialOptions []grpc.DialOption
-	IAMDoer     iamsync.Doer
+	Listen       func(ctx context.Context, addr string) (net.Listener, error)
+	DialOptions  []grpc.DialOption
+	IdentityDoer identitysync.Doer
 }
 
 type node struct {
 	cfg   config.Config
 	log   *slog.Logger
 	conn  *grpc.ClientConn
-	sync  *iamsync.Syncer
+	sync  *identitysync.Syncer
 	redis *redis.Client
 	admin *admin.Server
 	http  *http.Server
@@ -150,7 +150,7 @@ func (n *node) runSync(ctx context.Context) {
 		defer close(watched)
 		select {
 		case <-n.sync.Booted():
-			n.ready.iamBooted(ctx)
+			n.ready.identityBooted(ctx)
 		case <-ctx.Done():
 		}
 	}()

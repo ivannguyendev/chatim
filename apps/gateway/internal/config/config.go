@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/pkg/envconfig"
-	"github.com/ivannguyendev/chatim/pkg/iamsync"
+	"github.com/ivannguyendev/chatim/pkg/identitysync"
 )
 
 const (
@@ -40,7 +40,7 @@ type Config struct {
 	MaxHeaderBytes    int
 	H2MaxStreams      int
 	RequestDeadline   time.Duration
-	IAM               iamsync.Config
+	Identity          identitysync.Config
 	SharedRedis       SharedRedis
 }
 
@@ -87,11 +87,11 @@ func Load() (Config, error) {
 			Timeout:  p.span("GW_SHARED_REDIS_TIMEOUT", 500*time.Millisecond),
 		},
 	}
-	iam, err := iamsync.FromEnv("GW")
+	identity, err := identitysync.FromEnv("GW")
 	if err != nil {
 		p.fail(err)
 	}
-	c.IAM = iam
+	c.Identity = identity
 	if err := errors.Join(p.errs...); err != nil {
 		return Config{}, err
 	}
@@ -126,7 +126,7 @@ func (c Config) LogValue() slog.Value {
 		slog.Int("max_header_bytes", c.MaxHeaderBytes),
 		slog.Int("h2_max_streams", c.H2MaxStreams),
 		slog.Duration("request_deadline", c.RequestDeadline),
-		slog.Any("iam", c.IAM),
+		slog.Any("identity", c.Identity),
 		slog.Group("shared_redis", slog.String("addr", c.SharedRedis.Addr), slog.Int("db", c.SharedRedis.DB),
 			slog.Bool("auth", c.SharedRedis.Password != ""), slog.Duration("timeout", c.SharedRedis.Timeout)),
 	)

@@ -21,7 +21,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/typing"
 	"github.com/ivannguyendev/chatim/pkg/admin"
 	"github.com/ivannguyendev/chatim/pkg/coreroute"
-	"github.com/ivannguyendev/chatim/pkg/iamsync"
+	"github.com/ivannguyendev/chatim/pkg/identitysync"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 	"github.com/ivannguyendev/chatim/pkg/metrics"
 )
@@ -32,7 +32,7 @@ type Deps struct {
 	Listen        func(ctx context.Context, addr string) (net.Listener, error)
 	NATS          func(ctx context.Context) (feed.Broker, error)
 	PresenceRedis func(opts *redis.Options) presence.Conn
-	IAMDoer       iamsync.Doer
+	IdentityDoer  identitysync.Doer
 }
 
 type node struct {
@@ -47,7 +47,7 @@ type node struct {
 	typing *typing.Service
 	online *presence.Stamper
 	redis  *presence.Client
-	sync   *iamsync.Syncer
+	sync   *identitysync.Syncer
 	http   *http.Server
 }
 
@@ -90,7 +90,7 @@ func wire(cfg config.Config, log *slog.Logger, deps Deps) (*node, error) {
 		_ = pres.client.Close()
 		return nil, err
 	}
-	n, err := wireServers(cfg, log, wired{verifier: verifier, exec: exec, rooms: rooms, pres: pres, doer: deps.IAMDoer})
+	n, err := wireServers(cfg, log, wired{verifier: verifier, exec: exec, rooms: rooms, pres: pres, doer: deps.IdentityDoer})
 	if err != nil {
 		rooms.Close()
 		_ = pres.client.Close()
@@ -105,7 +105,7 @@ type wired struct {
 	exec     *command.Executor
 	rooms    *interest.Table
 	pres     presenceParts
-	doer     iamsync.Doer
+	doer     identitysync.Doer
 }
 
 func wireServers(cfg config.Config, log *slog.Logger, w wired) (*node, error) {
@@ -156,7 +156,7 @@ func (n *node) serve(ctx context.Context, deps Deps) error {
 	}
 	sup := newSupervisor(ctx)
 	t := tasks{admin: sup.start("admin", func(c context.Context) error { return n.admin.ServeListener(c, adminLis) })}
-	t.sync = sup.start("iam sync", func(c context.Context) error { n.sync.Run(c); return c.Err() })
+	t.sync = sup.start("identity sync", func(c context.Context) error { n.sync.Run(c); return c.Err() })
 	wsLis, cause := n.openRoutes(ctx, deps)
 	if cause != nil || ctx.Err() != nil {
 		closeListener(wsLis)

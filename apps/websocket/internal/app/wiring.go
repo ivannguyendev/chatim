@@ -19,7 +19,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/session"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/typing"
 	"github.com/ivannguyendev/chatim/pkg/coreroute"
-	"github.com/ivannguyendev/chatim/pkg/iamsync"
+	"github.com/ivannguyendev/chatim/pkg/identitysync"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 	"github.com/ivannguyendev/chatim/pkg/metrics"
 	"github.com/ivannguyendev/chatim/pkg/redact"
@@ -184,16 +184,16 @@ func closePresence(client *presence.Client) error {
 	return nil
 }
 
-func newSync(cfg config.Config, verifier *jwtverify.Verifier, conn presence.Conn, doer iamsync.Doer, log *slog.Logger) (*iamsync.Syncer, error) {
-	list, err := iamsync.NewList(cfg.JWTLeeway)
+func newSync(cfg config.Config, verifier *jwtverify.Verifier, conn presence.Conn, doer identitysync.Doer, log *slog.Logger) (*identitysync.Syncer, error) {
+	list, err := identitysync.NewList(cfg.JWTLeeway)
 	if err != nil {
 		return nil, err
 	}
-	var shared iamsync.Shared
-	if rc, ok := conn.(iamsync.RedisClient); ok {
-		shared = iamsync.NewRedisShared(rc, cfg.JWTIssuer)
+	var shared identitysync.Shared
+	if rc, ok := conn.(identitysync.RedisClient); ok {
+		shared = identitysync.NewRedisShared(rc, cfg.JWTIssuer)
 	}
-	return iamsync.New(cfg.IAM, list, verifier, shared, doer, log)
+	return identitysync.New(cfg.Identity, list, verifier, shared, doer, log)
 }
 
 func routerConfig(cfg config.Config, deps Deps, log *slog.Logger) coreroute.Config {

@@ -11,7 +11,7 @@ import (
 
 func TestSetDynamicAddsKeysAtRuntime(t *testing.T) {
 	file := newTestKey(t, testKID)
-	fresh := newTestKey(t, "iam-2")
+	fresh := newTestKey(t, "identity-2")
 	v := newVerifier(t, file)
 	token := signEdDSA(t, fresh, validClaims())
 	if _, err := v.Verify(token); jwtverify.ReasonOf(err) != jwtverify.ReasonKeyID {
@@ -38,7 +38,7 @@ func TestSetDynamicAddsKeysAtRuntime(t *testing.T) {
 func TestSetDynamicKeepsFileKeyOnConflict(t *testing.T) {
 	file := newTestKey(t, testKID)
 	impostor := newTestKey(t, testKID)
-	other := newTestKey(t, "iam-2")
+	other := newTestKey(t, "identity-2")
 	v := newVerifier(t, file)
 	conflicts, err := v.SetDynamic(keySet(t, publicJWK(impostor), publicJWK(other)))
 	if err != nil {
@@ -64,7 +64,7 @@ func TestSetDynamicKeepsFileKeyOnConflict(t *testing.T) {
 
 func TestSetDynamicKeepsPreviousKeysOnBadInput(t *testing.T) {
 	file := newTestKey(t, testKID)
-	fresh := newTestKey(t, "iam-2")
+	fresh := newTestKey(t, "identity-2")
 	v := newVerifier(t, file)
 	if _, err := v.SetDynamic(keySet(t, publicJWK(fresh))); err != nil {
 		t.Fatalf("SetDynamic: %v", err)
@@ -84,7 +84,7 @@ func TestSetDynamicKeepsPreviousKeysOnBadInput(t *testing.T) {
 
 func TestSetDynamicIsSafeWithConcurrentVerify(t *testing.T) {
 	file := newTestKey(t, testKID)
-	fresh := newTestKey(t, "iam-2")
+	fresh := newTestKey(t, "identity-2")
 	v := newVerifier(t, file)
 	token := signEdDSA(t, file, validClaims())
 	set := keySet(t, publicJWK(fresh))
@@ -109,10 +109,10 @@ func TestSetDynamicIsSafeWithConcurrentVerify(t *testing.T) {
 }
 
 func TestKeyIDOfReadsTheHeaderWithoutVerifying(t *testing.T) {
-	key := newTestKey(t, "iam-9")
+	key := newTestKey(t, "identity-9")
 	token := signEdDSA(t, key, validClaims())
-	if got := jwtverify.KeyIDOf(token); got != "iam-9" {
-		t.Fatalf("KeyIDOf = %q; want iam-9", got)
+	if got := jwtverify.KeyIDOf(token); got != "identity-9" {
+		t.Fatalf("KeyIDOf = %q; want identity-9", got)
 	}
 	noKid := signWith(t, jwt.SigningMethodEdDSA, key.priv, nil, validClaims())
 	for _, bad := range []string{"", "a.b.c", noKid} {
