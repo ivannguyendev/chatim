@@ -78,7 +78,7 @@ Không có email và username. Mã lỗi: sai hoặc thiếu secret → 401; `af
 
 ## Lệnh admin
 
-Chạy trong container (`make identity-admin ARGS="…"` = `docker exec chatim-identity-1 /app …`); kết quả ra stdout, log ra stderr; sai cú pháp thoát 2, lỗi thoát 1 (kể cả tên, id nhóm, URL ảnh sai: kiểm bằng hàm của `directory` trước khi chạm store); mọi thay đổi ghi audit `admin-cli` (`tenant_create`, `tenant_disable`, `tenant_enable`, `user_disable`, `user_enable`; nhóm: `group_create`, `group_update`, `group_delete` kèm `detail.group`; `user_groups_set`, `user_set`), cột `audit_events.user_id` ghi user bị đổi. User chỉ được tạo bằng đổi token (PA chưa xong đường này; itest chèn thẳng dòng `users`).
+Chạy trong container (`make identity-admin ARGS="…"` = `docker exec chatim-identity-1 /app …`); kết quả ra stdout, log ra stderr; sai cú pháp thoát 2, lỗi thoát 1 (kể cả tên, id nhóm, URL ảnh sai: kiểm bằng hàm của `directory` trước khi chạm store); mọi thay đổi ghi audit `admin-cli` (`tenant_create`, `tenant_disable`, `tenant_enable`, `user_disable`, `user_enable`; nhóm: `group_create`, `group_update`, `group_delete` kèm `detail.group`; `user_groups_set`, `user_set`; issuer: `issuer_add`, `issuer_disable`, `issuer_enable`, `issuer_key_add`, `issuer_key_remove` kèm `detail.issuer`, `detail.kid`, ghi theo tenant của issuer), cột `audit_events.user_id` ghi user bị đổi. User chỉ được tạo bằng đổi token (PA chưa xong đường này; itest chèn thẳng dòng `users`).
 
 | Lệnh | Việc |
 |---|---|
@@ -93,6 +93,11 @@ Chạy trong container (`make identity-admin ARGS="…"` = `docker exec chatim-i
 | `group-delete -tenant -id` | Xoá mềm nhóm, gỡ mọi thành viên; còn nhóm con sống → lỗi, thoát 1 |
 | `user-groups -tenant -user <id> -groups a,b` | Thay **toàn bộ** nhóm của user; tách theo dấu phẩy, bỏ khoảng trắng hai đầu; phần rỗng, id sai, id lặp hay nhóm không có → lỗi, không đổi gì; `-groups ""` (phải ghi rõ) gỡ mọi nhóm |
 | `user-set -tenant -user <id> [-name] [-avatar URL]` | Đổi tên hiển thị và/hoặc ảnh, luôn tăng `users.ver` (feed `directory_changes` chỉ tăng khi giá trị thật sự đổi) (phải ít nhất một cờ, không thì thoát 2); ảnh chỉ nhận `https://`, `-avatar ""` xoá ảnh; giá trị sai hay user không có → thoát 1, không đổi gì |
+| `issuer-add -issuer I -tenant T` | Tin issuer `I` (giá trị claim `iss` của token tenant) cho tenant `T`; một issuer chỉ thuộc một tenant. `I` 1–255 byte ASCII in được, không khoảng trắng (sai → thoát 2); `I` bằng `IDENTITY_ISSUER` của chính node → từ chối, thoát 1 (token chat không dùng làm token tenant được); tenant không có hay issuer đã có → thoát 1 |
+| `issuer-disable -issuer I`, `issuer-enable -issuer I` | Tắt/bật issuer; tắt thì token ký bởi mọi khoá của nó bị từ chối ở lần nạp lại kế tiếp. Issuer không có → thoát 1 |
+| `issuer-key-add -issuer I -kid K -alg EdDSA\|ES256\|RS256 -jwk '<JSON công khai>'` | Thêm khoá công khai. `-alg` khác ba giá trị trên → thoát 2. JWK kiểm bằng `trust.ParsePublicJWK` trước khi chạm store: EdDSA = `OKP`/`Ed25519`, ES256 = `EC`/`P-256` (điểm trên đường cong), RS256 = `RSA` 2048–4096 bit, `e` 65537; có thành phần khoá riêng (`d`, `p`, …), `alg`/`use` lệch, hay `kid` trong JWK khác `-kid` → thoát 1, không ghi gì. Lưu JSON chuẩn hoá (`kty`, `crv`, `x`, `y`, `n`, `e`, `kid`, `alg`), không lưu JSON gốc. Nhận đúng output `devtoken` khoá công khai. `-kid` trùng khoá đã có (kể cả đã gỡ) → thoát 1 |
+| `issuer-key-remove -issuer I -kid K` | Gỡ khoá (`state` 2, giữ dòng); khoá không có hay đã gỡ → thoát 1 |
+| `issuer-keys -issuer I` | Bảng `KID`, `ALG`, `STATE` (`active`/`removed`), `CREATED_AT`; không in khoá |
 
 **Lệnh nhóm.** Lệnh CLI không kiểm quyền: ai vào được container là người vận hành. `group-create`, `group-update`, `group-delete` và `user-groups` chạy một transaction SERIALIZABLE (`pgstore/group_tx.go`), một lần, không retry. Đụng lệnh khác cùng lúc ghi cùng dòng thì lệnh có thể thoát 1 với lỗi `unavailable`; chạy lại là được.
 

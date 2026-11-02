@@ -21,6 +21,7 @@ var errUsage = errors.New("usage error")
 
 type Store interface {
 	store.Admin
+	store.TrustSource
 	Migrate(ctx context.Context, apply bool) ([]string, error)
 	Ping(ctx context.Context) error
 	Close()
@@ -33,6 +34,7 @@ type Env struct {
 	Now          func() time.Time
 	KeyWindow    time.Duration
 	ActivateLead time.Duration
+	Issuer       string
 	Out          io.Writer
 	Log          *slog.Logger
 }
@@ -40,21 +42,27 @@ type Env struct {
 type command func(ctx context.Context, env Env, st Store, args []string) error
 
 var commands = map[string]command{
-	"migrate":        migrate,
-	"tenant-create":  tenantCreate,
-	"tenant-disable": tenantState(store.StateDisabled),
-	"tenant-enable":  tenantState(store.StateActive),
-	"user-disable":   userState(store.StateDisabled),
-	"user-enable":    userState(store.StateActive),
-	"key-rotate":     keyRotate,
-	"key-activate":   keyActivate,
-	"jwks-export":    jwksExport,
-	"bootstrap":      bootstrap,
-	"group-create":   groupCreate,
-	"group-update":   groupUpdate,
-	"group-delete":   groupDelete,
-	"user-groups":    userGroups,
-	"user-set":       userSet,
+	"migrate":           migrate,
+	"tenant-create":     tenantCreate,
+	"tenant-disable":    tenantState(store.StateDisabled),
+	"tenant-enable":     tenantState(store.StateActive),
+	"user-disable":      userState(store.StateDisabled),
+	"user-enable":       userState(store.StateActive),
+	"key-rotate":        keyRotate,
+	"key-activate":      keyActivate,
+	"jwks-export":       jwksExport,
+	"bootstrap":         bootstrap,
+	"group-create":      groupCreate,
+	"group-update":      groupUpdate,
+	"group-delete":      groupDelete,
+	"user-groups":       userGroups,
+	"user-set":          userSet,
+	"issuer-add":        issuerAdd,
+	"issuer-disable":    issuerState(store.StateDisabled),
+	"issuer-enable":     issuerState(store.StateActive),
+	"issuer-key-add":    issuerKeyAdd,
+	"issuer-key-remove": issuerKeyRemove,
+	"issuer-keys":       issuerKeys,
 }
 
 func Names() []string {
