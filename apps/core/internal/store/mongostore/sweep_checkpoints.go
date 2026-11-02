@@ -18,7 +18,7 @@ type SweepCheckpoints struct {
 }
 
 type checkpointDoc struct {
-	Checkpoint time.Time `bson:"checkpoint"`
+	CheckpointAt time.Time `bson:"checkpoint_at"`
 }
 
 func (s *SweepCheckpoints) Get(ctx context.Context, c store.StateCollection) (time.Time, error) {
@@ -36,7 +36,7 @@ func (s *SweepCheckpoints) Get(ctx context.Context, c store.StateCollection) (ti
 	case err != nil:
 		return time.Time{}, fmt.Errorf("sweep checkpoint %s: %w", c, err)
 	}
-	return doc.Checkpoint.UTC(), nil
+	return doc.CheckpointAt.UTC(), nil
 }
 
 func (s *SweepCheckpoints) Advance(ctx context.Context, c store.StateCollection, at time.Time) error {
@@ -47,7 +47,7 @@ func (s *SweepCheckpoints) Advance(ctx context.Context, c store.StateCollection,
 		return err
 	}
 	update := bson.D{
-		{Key: "$max", Value: bson.D{{Key: "checkpoint", Value: toMillis(at)}}},
+		{Key: "$max", Value: bson.D{{Key: "checkpoint_at", Value: toMillis(at)}}},
 		{Key: "$currentDate", Value: bson.D{{Key: "updated_at", Value: true}}},
 	}
 	if _, err := s.coll.UpdateOne(ctx, bson.D{{Key: "_id", Value: c.String()}}, update, options.UpdateOne().SetUpsert(true)); err != nil {
