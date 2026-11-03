@@ -59,8 +59,9 @@ x-core-env: &core-env
   GOGC: ${CORE_GOGC:-100}
 
 x-identity-env: &identity-env
-  IDENTITY_PG_URI: postgres://identity@chatim-postgres:5432/chatim_identity
-  IDENTITY_PG_PASSWORD_FILE: /run/secrets/identity_pg_password
+  IDENTITY_MONGO_URI: mongodb://chatim-mongodb:27017/?replicaSet=rs0
+  IDENTITY_MONGO_USER: identity
+  IDENTITY_MONGO_PASSWORD_FILE: /run/secrets/identity_mongo_password
   IDENTITY_KEY_ENCRYPTION_KEY_FILE: /run/secrets/identity_key_encryption_key
   IDENTITY_NODE_SECRET_FILE: /run/secrets/identity_node_secret
   IDENTITY_KEY_ACTIVATE_LEAD: 65s
@@ -71,6 +72,26 @@ x-identity-env: &identity-env
   IDENTITY_EXCHANGE_IP_RATE: ${IDENTITY_EXCHANGE_IP_RATE:-50}
   IDENTITY_CORS_ORIGINS: ${IDENTITY_CORS_ORIGINS:-http://localhost:3000}
   GOMEMLIMIT: 800MiB
+
+x-identity: &identity
+  image: chatim/identity:dev
+  profiles: ["app"]
+  restart: unless-stopped
+  mem_limit: 1g
+  stop_grace_period: 30s
+  secrets: [identity_mongo_password, identity_key_encryption_key, identity_node_secret]
+  environment:
+    <<: *identity-env
+  depends_on:
+    identity-bootstrap:
+      condition: service_completed_successfully
+  healthcheck:
+    test: ["CMD", "/app", "probe"]
+    interval: 5s
+    timeout: 3s
+    retries: 3
+    start_period: 30s
+    start_interval: 1s
 
 x-websocket: &websocket
   image: chatim/websocket:dev
@@ -224,84 +245,31 @@ services:
       timeout: 3s
       retries: 10
 
-  postgres:
-    image: postgres:18
-    container_name: chatim-postgres
-    profiles: ["postgres", "app"]
-    restart: unless-stopped
-    shm_size: 1g
-    secrets: [pg_password]
-    environment:
-      POSTGRES_USER: ${PG_USER:?set PG_USER in .env}
-      POSTGRES_PASSWORD_FILE: /run/secrets/pg_password
-      POSTGRES_DB: chatim_poc
-    command:
-      - postgres
-      - -c
-      - shared_buffers=${PG_SHARED_BUFFERS:-512MB}
-      - -c
-      - effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE:-1GB}
-      - -c
-      - maintenance_work_mem=512MB
-      - -c
-      - work_mem=16MB
-      - -c
-      - max_connections=200
-      - -c
-      - wal_buffers=64MB
-      - -c
-      - wal_compression=lz4
-      - -c
-      - max_wal_size=8GB
-      - -c
-      - min_wal_size=1GB
-      - -c
-      - checkpoint_timeout=15min
-      - -c
-      - checkpoint_completion_target=0.9
-      - -c
-      - random_page_cost=1.1
-      - -c
-      - effective_io_concurrency=200
-      - -c
-      - default_toast_compression=lz4
-      - -c
-      - jit=off
-    ports:
-      - "${PG_PORT:-5433}:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d chatim_poc"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-
-  postgres-init:
-    image: postgres:18
-    container_name: chatim-postgres-init
-    profiles: ["postgres", "app"]
+  identity-mongo-init:
+    image: mongo:8.2
+    container_name: chatim-identity-mongo-init
+    profiles: ["app"]
     depends_on:
-      postgres:
-        condition: service_healthy
-    secrets: [pg_password, identity_pg_password]
+      mongodb-init:
+        condition: service_completed_successfully
+    secrets: [mongo_password, identity_mongo_password]
     environment:
-      PGHOST: chatim-postgres
-      PGUSER: ${PG_USER:?set PG_USER in .env}
-      PGDATABASE: postgres
+      MONGO_USER: ${MONGO_ROOT_USER:?set MONGO_ROOT_USER in .env}
     entrypoint: ["bash", "-c"]
     command:
-      - |
-        set -euo pipefail
-        PGPASSWORD="$$(cat /run/secrets/pg_password)"
-        export PGPASSWORD
-        psql -v ON_ERROR_STOP=1 -q <<'SQL'
-        \set identity_password `cat /run/secrets/identity_pg_password`
-        SELECT 'CREATE ROLE identity LOGIN' WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'identity') \gexec
-        SELECT format('ALTER ROLE identity LOGIN PASSWORD %L', :'identity_password') \gexec
-        SELECT 'CREATE DATABASE chatim_identity OWNER identity' WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'chatim_identity') \gexec
-        SQL
-        echo "identity role and database ready"
+      - >-
+        mongosh --host chatim-mongodb --quiet
+        --eval 'const fs = require("fs");
+        db.getSiblingDB("admin").auth(process.env.MONGO_USER, fs.readFileSync("/run/secrets/mongo_password", "utf8").trim());
+        const identityDB = db.getSiblingDB("chatim_identity");
+        const identityPassword = fs.readFileSync("/run/secrets/identity_mongo_password", "utf8").trim();
+        if (identityPassword === "") { throw new Error("empty secret identity_mongo_password") }
+        if (identityDB.getUser("identity") === null) {
+        identityDB.createUser({ user: "identity", pwd: identityPassword, roles: [{ role: "readWrite", db: "chatim_identity" }] })
+        } else {
+        identityDB.updateUser("identity", { pwd: identityPassword })
+        }
+        print("identity user ready")'
     restart: "no"
 
   identity-bootstrap:
@@ -310,38 +278,27 @@ services:
     profiles: ["app"]
     user: "${CHATIM_UID:-65532}:${CHATIM_GID:-65532}"
     command: ["bootstrap", "-jwks", "/keys/jwks.json"]
-    secrets: [identity_pg_password, identity_key_encryption_key, identity_node_secret]
+    secrets: [identity_mongo_password, identity_key_encryption_key, identity_node_secret]
     environment:
       <<: *identity-env
     volumes:
       - ../../.local/ws-keys:/keys
     depends_on:
-      postgres-init:
+      identity-mongo-init:
         condition: service_completed_successfully
     restart: "no"
 
   identity-1:
-    image: chatim/identity:dev
+    <<: *identity
     container_name: chatim-identity-1
-    profiles: ["app"]
-    restart: unless-stopped
-    mem_limit: 1g
-    stop_grace_period: 30s
-    secrets: [identity_pg_password, identity_key_encryption_key, identity_node_secret]
-    environment:
-      <<: *identity-env
     ports:
       - "127.0.0.1:${IDENTITY1_PORT:-8084}:8080"
-    depends_on:
-      identity-bootstrap:
-        condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD", "/app", "probe"]
-      interval: 5s
-      timeout: 3s
-      retries: 3
-      start_period: 30s
-      start_interval: 1s
+
+  identity-2:
+    <<: *identity
+    container_name: chatim-identity-2
+    ports:
+      - "127.0.0.1:${IDENTITY2_PORT:-8085}:8080"
 
   core-1:
     <<: *core
@@ -431,10 +388,8 @@ secrets:
     environment: REDIS_DEDUPE_PASSWORD
   redis_presence_password:
     environment: REDIS_PRESENCE_PASSWORD
-  pg_password:
-    environment: PG_PASSWORD
-  identity_pg_password:
-    environment: IDENTITY_PG_PASSWORD
+  identity_mongo_password:
+    environment: IDENTITY_MONGO_PASSWORD
   identity_key_encryption_key:
     environment: IDENTITY_KEY_ENCRYPTION_KEY
   identity_node_secret:
@@ -448,4 +403,3 @@ volumes:
   mongodb_data:
   redis_data:
   nats_data:
-  postgres_data:

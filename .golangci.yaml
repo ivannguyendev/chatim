@@ -269,7 +269,7 @@ linters:
           files:
             - "**/apps/identity/internal/trust/**"
           deny:
-            - pkg: github.com/jackc/pgx
+            - pkg: go.mongodb.org/mongo-driver
               desc: trust reads issuers and keys only through store.TrustSource
             - pkg: connectrpc.com/connect
               desc: trust knows no transport
