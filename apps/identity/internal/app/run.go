@@ -11,17 +11,14 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/identity/internal/api"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/config"
-	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
-	"github.com/ivannguyendev/chatim/apps/identity/internal/store/pgstore"
+	"github.com/ivannguyendev/chatim/apps/identity/internal/store/mongostore"
 	"github.com/ivannguyendev/chatim/pkg/admin"
 )
 
 type Deps struct {
-	Listen        func(ctx context.Context, addr string) (net.Listener, error)
-	OpenStore     func(ctx context.Context, uri string, opts pgstore.Options) (Store, error)
-	OpenListener  func(ctx context.Context, uri string) (store.Listener, error)
-	MemoryLimit   func() int64
-	SchemaVersion int
+	Listen      func(ctx context.Context, addr string) (net.Listener, error)
+	OpenStore   func(ctx context.Context, opts mongostore.Options) (Store, error)
+	MemoryLimit func() int64
 }
 
 type port struct {
@@ -70,16 +67,10 @@ func (d Deps) withDefaults() Deps {
 		d.Listen = listenTCP
 	}
 	if d.OpenStore == nil {
-		d.OpenStore = openPostgres
-	}
-	if d.OpenListener == nil {
-		d.OpenListener = openListener
+		d.OpenStore = openMongo
 	}
 	if d.MemoryLimit == nil {
 		d.MemoryLimit = currentMemoryLimit
-	}
-	if d.SchemaVersion == 0 {
-		d.SchemaVersion = pgstore.LatestVersion()
 	}
 	return d
 }
@@ -130,7 +121,7 @@ func (n *node) serve(ctx context.Context, deps Deps) error {
 	r := running{
 		admin:         start(func() error { return n.admin.ServeListener(adminCtx, adminLis) }),
 		health:        start(func() error { n.watchHealth(healthCtx); return nil }),
-		directory:     start(func() error { return n.dir.run(directoryCtx, n.health.trigger) }),
+		directory:     start(func() error { return n.runDirectory(directoryCtx) }),
 		trust:         start(func() error { return n.trust.run(trustCtx, n.health.trigger) }),
 		stopAdmin:     stopAdmin,
 		stopHealth:    stopHealth,
@@ -170,18 +161,31 @@ func (n *node) watchHealth(ctx context.Context) {
 		case <-n.health.wake:
 			n.health.check(ctx)
 		case <-t.C:
-			n.activateDueKey(ctx)
+			writable := n.health.schemaComplete()
+			if writable {
+				n.activateDueKey(ctx)
+			}
 			n.health.check(ctx)
-			n.cleanExpired(ctx)
+			if writable {
+				n.cleanExpired(ctx)
+			}
 		}
 	}
+}
+
+func (n *node) runDirectory(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-n.health.schemaDone:
+	}
+	return n.dir.run(ctx, n.health.trigger)
 }
 
 func (n *node) activateDueKey(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, storeCallTimeout)
 	defer cancel()
-	audit := store.AuditEvent{At: time.Now(), Actor: "identity", Action: "key_activate"}
-	kid, err := n.store.ActivateDueSigningKey(ctx, n.cfg.KeyActivateLead, audit)
+	kid, err := n.store.ActivateDueSigningKey(ctx, n.cfg.KeyActivateLead)
 	if err != nil {
 		n.log.WarnContext(ctx, "signing key activation failed", "err", err)
 		return

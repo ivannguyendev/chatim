@@ -20,6 +20,7 @@ type hangingStore struct {
 	keys     []store.SigningKey
 	hangPing atomic.Bool
 	hangKeys atomic.Bool
+	missing  atomic.Bool
 	pings    atomic.Int64
 }
 
@@ -40,9 +41,14 @@ func (s *hangingStore) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (s *hangingStore) SchemaVersion(context.Context) (int, error) { return 3, nil }
+func (s *hangingStore) Schema(context.Context) (store.SchemaState, error) {
+	if s.missing.Load() {
+		return store.SchemaState{Missing: []string{"collection users absent"}}, nil
+	}
+	return store.SchemaState{}, nil
+}
 
-func (s *hangingStore) ActivateDueSigningKey(ctx context.Context, _ time.Duration, _ store.AuditEvent) (string, error) {
+func (s *hangingStore) ActivateDueSigningKey(ctx context.Context, _ time.Duration) (string, error) {
 	<-ctx.Done()
 	return "", ctx.Err()
 }
@@ -75,7 +81,7 @@ func newHealthUnderTest(t *testing.T) (*health, *hangingStore) {
 	st := &hangingStore{keys: []store.SigningKey{{ID: k.ID, State: store.KeyActive, PublicKey: k.PublicKey().Key, PrivateSealed: sealed}}}
 	log := slog.New(slog.DiscardHandler)
 	ring := keyring.New(st, sealer, keyring.Config{Token: signing.TokenConfig{Issuer: "iss", Audience: "aud", TTL: time.Minute}})
-	return newHealth(admin.New(admin.Config{Addr: "admin"}, log), log, st, ring, loadedDirectory{}, loadedDirectory{}, 3), st
+	return newHealth(admin.New(admin.Config{Addr: "admin"}, log), log, st, ring, loadedDirectory{}, loadedDirectory{}, newSchemaStats()), st
 }
 
 func (h *health) state() (checked, ready bool) {
@@ -121,6 +127,28 @@ func TestNoPingAfterFirstReadyAndAHangingReloadKeepsReadiness(t *testing.T) {
 		}
 		if got := st.pings.Load(); got != pings {
 			t.Fatalf("pings = %d after the first ready; want %d", got, pings)
+		}
+	})
+}
+
+func TestSchemaGateOpensOnlyOnceTheSchemaIsComplete(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		h, st := newHealthUnderTest(t)
+		st.missing.Store(true)
+		h.check(t.Context())
+		if _, ready := h.state(); ready || h.schemaComplete() {
+			t.Fatalf("ready=%v gate=%v with a missing collection; want both false", ready, h.schemaComplete())
+		}
+		st.hangPing.Store(true)
+		h.check(t.Context())
+		if h.schemaComplete() {
+			t.Fatal("gate opened on a timed-out check")
+		}
+		st.hangPing.Store(false)
+		st.missing.Store(false)
+		h.check(t.Context())
+		if _, ready := h.state(); !ready || !h.schemaComplete() {
+			t.Fatalf("ready=%v gate=%v with a complete schema; want both true", ready, h.schemaComplete())
 		}
 	})
 }

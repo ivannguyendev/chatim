@@ -10,13 +10,13 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/identity/internal/app"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
-	"github.com/ivannguyendev/chatim/apps/identity/internal/store/pgstore"
+	"github.com/ivannguyendev/chatim/apps/identity/internal/store/mongostore"
 )
 
 func TestReadyWithAnActiveKeyAndTheCurrentSchema(t *testing.T) {
 	kek := newKEK(t)
-	st := &fakeStore{keys: []store.SigningKey{activeKey(t, kek)}, version: 3}
-	r := runIdentity(t, testConfig(kek), st, 3)
+	st := &fakeStore{keys: []store.SigningKey{activeKey(t, kek)}}
+	r := runIdentity(t, testConfig(kek), st)
 	r.logs.await(t, "identity ready")
 	if code, _ := httpGet(t, r.admin, "/readyz"); code != http.StatusOK {
 		t.Fatalf("readyz = %d, want 200", code)
@@ -37,18 +37,9 @@ func TestReadyWithAnActiveKeyAndTheCurrentSchema(t *testing.T) {
 	}
 }
 
-func TestNotReadyWhenTheSchemaIsBehind(t *testing.T) {
-	kek := newKEK(t)
-	r := runIdentity(t, testConfig(kek), &fakeStore{keys: []store.SigningKey{activeKey(t, kek)}, version: 2}, 3)
-	r.logs.await(t, "identity not ready")
-	if code, _ := httpGet(t, r.admin, "/readyz"); code == http.StatusOK {
-		t.Fatal("ready with an old schema")
-	}
-}
-
 func TestNotReadyWithoutAnActiveKey(t *testing.T) {
 	kek := newKEK(t)
-	r := runIdentity(t, testConfig(kek), &fakeStore{version: 3}, 3)
+	r := runIdentity(t, testConfig(kek), &fakeStore{})
 	r.logs.await(t, "identity not ready")
 	if code, body := httpGet(t, r.admin, "/metrics"); code != http.StatusOK || !strings.Contains(body, "chatim_identity_signing_key_ready 0") {
 		t.Fatalf("metrics = %d, want signing_key_ready 0", code)
@@ -62,7 +53,7 @@ func TestRunRefusesBadConfigAndStoreFailures(t *testing.T) {
 	if err := app.Run(context.Background(), bad, slog.New(slog.DiscardHandler), app.Deps{}); err == nil {
 		t.Fatal("Run accepted a config without an issuer")
 	}
-	deps := app.Deps{OpenStore: func(context.Context, string, pgstore.Options) (app.Store, error) { return nil, errOpen }}
+	deps := app.Deps{OpenStore: func(context.Context, mongostore.Options) (app.Store, error) { return nil, errOpen }}
 	if err := app.Run(context.Background(), testConfig(kek), slog.New(slog.DiscardHandler), deps); !errors.Is(err, errOpen) {
 		t.Fatalf("Run = %v, want the store error", err)
 	}

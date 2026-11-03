@@ -114,20 +114,3 @@ func postExchange(t *testing.T, addr, subjectToken string) (int, string) {
 	body, _ := io.ReadAll(resp.Body)
 	return resp.StatusCode, string(body)
 }
-
-type notifyingListener struct {
-	notices chan store.Notice
-}
-
-func (l notifyingListener) open(context.Context, string) (store.Listener, error) { return l, nil }
-
-func (l notifyingListener) Wait(ctx context.Context) (store.Notice, error) {
-	select {
-	case <-ctx.Done():
-		return store.NoticeNone, ctx.Err()
-	case n := <-l.notices:
-		return n, nil
-	}
-}
-
-func (notifyingListener) Close(context.Context) error { return nil }

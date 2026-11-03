@@ -17,29 +17,50 @@ type readiness interface {
 }
 
 type health struct {
-	admin     *admin.Server
-	log       *slog.Logger
-	store     Store
-	ring      *keyring.Ring
-	directory readiness
-	trust     readiness
-	schema    int
-	wake      chan struct{}
-	mu        sync.Mutex
-	checked   bool
-	ready     bool
-	wasReady  bool
-	stopping  bool
+	admin      *admin.Server
+	log        *slog.Logger
+	store      Store
+	ring       *keyring.Ring
+	directory  readiness
+	trust      readiness
+	schema     *schemaStats
+	wake       chan struct{}
+	schemaDone chan struct{}
+	schemaOnce sync.Once
+	mu         sync.Mutex
+	checked    bool
+	ready      bool
+	wasReady   bool
+	stopping   bool
 }
 
-func newHealth(srv *admin.Server, log *slog.Logger, st Store, ring *keyring.Ring, dir, trusted readiness, schema int) *health {
-	return &health{admin: srv, log: log, store: st, ring: ring, directory: dir, trust: trusted, schema: schema, wake: make(chan struct{}, 1)}
+type storeProbe struct {
+	pingErr   error
+	schemaErr error
+	missing   int
+	complete  bool
+}
+
+func newHealth(srv *admin.Server, log *slog.Logger, st Store, ring *keyring.Ring, dir, trusted readiness, schema *schemaStats) *health {
+	return &health{
+		admin: srv, log: log, store: st, ring: ring, directory: dir, trust: trusted, schema: schema,
+		wake: make(chan struct{}, 1), schemaDone: make(chan struct{}),
+	}
 }
 
 func (h *health) trigger() {
 	select {
 	case h.wake <- struct{}{}:
 	default:
+	}
+}
+
+func (h *health) schemaComplete() bool {
+	select {
+	case <-h.schemaDone:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -50,17 +71,14 @@ func (h *health) check(ctx context.Context) {
 	checkCtx, cancel := context.WithTimeout(ctx, storeCallTimeout)
 	defer cancel()
 	reloadErr := h.ring.Reload(checkCtx)
-	var pingErr, versionErr error
-	version := h.schema
+	probe := storeProbe{complete: true}
 	if probeStore {
-		pingErr = h.store.Ping(checkCtx)
-		version, versionErr = h.store.SchemaVersion(checkCtx)
+		probe = h.probeStore(checkCtx)
 	}
-	storeOK := pingErr == nil && versionErr == nil && version == h.schema
 	keyReady, directoryReady, trustReady := h.ring.Ready(), h.directory.Ready(), h.trust.Ready()
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	ready := keyReady && directoryReady && trustReady && storeOK
+	ready := keyReady && directoryReady && trustReady && probe.complete
 	if h.stopping || (h.checked && ready == h.ready) {
 		return
 	}
@@ -73,8 +91,27 @@ func (h *health) check(ctx context.Context) {
 		return
 	}
 	h.log.WarnContext(ctx, "identity not ready",
-		"signing_key", keyReady, "directory", directoryReady, "trust", trustReady, "reload_err", errText(reloadErr), "store_err", errText(pingErr),
-		"schema_version", version, "schema_expected", h.schema, "schema_err", errText(versionErr))
+		"signing_key", keyReady, "directory", directoryReady, "trust", trustReady, "reload_err", errText(reloadErr), "store_err", errText(probe.pingErr),
+		"schema_missing", probe.missing, "schema_err", errText(probe.schemaErr))
+}
+
+func (h *health) probeStore(ctx context.Context) storeProbe {
+	var p storeProbe
+	if p.pingErr = h.store.Ping(ctx); p.pingErr != nil {
+		return p
+	}
+	state, err := h.store.Schema(ctx)
+	if err != nil {
+		p.schemaErr = err
+		return p
+	}
+	h.schema.note(ctx, h.log, state)
+	p.missing = len(state.Missing)
+	p.complete = p.missing == 0
+	if p.complete {
+		h.schemaOnce.Do(func() { close(h.schemaDone) })
+	}
+	return p
 }
 
 func (h *health) stop() {

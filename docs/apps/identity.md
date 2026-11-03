@@ -12,14 +12,16 @@ Chat không giữ danh tính (owner 2026-11-02, D239): không mật khẩu, đă
 | `IDENTITY_INTERNAL_ADDR` | `:8081` | Cổng nội bộ cho node websocket/gateway (danh sách thu hồi), **không** đứng sau LB; đặt rỗng là tắt. Phải bật ít nhất một trong hai cổng |
 | `IDENTITY_NODE_SECRET` / `_FILE` | — (bắt buộc khi bật cổng nội bộ) | Secret node gửi trong `Authorization: Bearer`, tối thiểu 32 byte (`openssl rand -hex 32`); so bằng hằng thời gian |
 | `IDENTITY_ADMIN_ADDR` | `:9090` | `/livez`, `/readyz`, `/metrics`, pprof; **không bao giờ public**; `/app probe` hỏi địa chỉ này |
-| `IDENTITY_PG_URI` | — (bắt buộc) | URI Postgres **không** kèm mật khẩu |
-| `IDENTITY_PG_PASSWORD` / `_FILE` | — | Mật khẩu role `identity` |
-| `IDENTITY_PG_MAX_CONNS` | `20` | Kết nối tối đa của pool |
+| `IDENTITY_MONGO_URI` | — (bắt buộc) | URI MongoDB **không** kèm user hay mật khẩu (có thì không khởi động), ví dụ `mongodb://chatim-mongodb:27017/?replicaSet=rs0` |
+| `IDENTITY_MONGO_DB` | `chatim_identity` | Database riêng của `identity` (D244) |
+| `IDENTITY_MONGO_USER` | rỗng | User MongoDB; rỗng = không xác thực |
+| `IDENTITY_MONGO_PASSWORD` / `_FILE` | — | Mật khẩu của `IDENTITY_MONGO_USER`; đặt mà không có user thì không khởi động |
+| `IDENTITY_MONGO_AUTH_SOURCE` | = `IDENTITY_MONGO_DB` | Database xác thực của user |
 | `IDENTITY_ISSUER`, `IDENTITY_AUDIENCE` | — (bắt buộc) | `iss`, `aud` của access token; phải khớp `WS_JWT_*`/`GW_JWT_*` |
 | `IDENTITY_TOKEN_TTL` | `5m` | Hạn token chat do `identity` cấp; cũng là cửa sổ giữ khoá ký nghỉ và mục thu hồi (`IDENTITY_TOKEN_TTL` + 1m, phải ≤ 2h). Thay `IDENTITY_ACCESS_TTL` (không còn đọc) |
 | `IDENTITY_EXCHANGE_AUDIENCE` | — (bắt buộc) | `aud` mà token của tenant phải mang khi đổi lấy token chat; phải khác `IDENTITY_AUDIENCE`, để token chat không bao giờ được nhận như token tenant; compose dev `chatim` |
 | `IDENTITY_EXCHANGE_MAX_LIFETIME` | `10m` | `exp` − `iat` tối đa của token tenant; dài hơn thì từ chối |
-| `IDENTITY_TRUST_RELOAD` | `10s` | Nhịp nạp lại issuer và khoá tin cậy từ Postgres; tối đa `1m` |
+| `IDENTITY_TRUST_RELOAD` | `10s` | Nhịp nạp lại issuer và khoá tin cậy từ MongoDB (lưới an toàn; change stream đánh thức ngay khi đổi), cũng là nhịp nạp lại danh sách thu hồi của follower; tối đa `1m` |
 | `IDENTITY_EXCHANGE_IP_RATE`, `IDENTITY_EXCHANGE_IP_BURST` | `50` / `500` | Lần đổi token mỗi IP mỗi node (token bucket); quá thì `429`. Ước tính, chưa có nguồn số: văn phòng NAT 2.000 người nối lại trong 1 phút ≈ 33/s (controller Q4 2026-11-02); compose dev đọc `IDENTITY_EXCHANGE_IP_RATE` từ `.env` để bench ghi đè |
 | `IDENTITY_EXCHANGE_IP_TRACKED` | `100000` | Số IP giữ bộ đếm (LRU) của giới hạn đổi token |
 | `IDENTITY_KEY_ENCRYPTION_KEY` / `_FILE` | — (bắt buộc) | 32 byte base64, mã hoá khoá ký riêng (AES-256-GCM); sinh bằng `openssl rand -base64 32` |
@@ -28,17 +30,16 @@ Chat không giữ danh tính (owner 2026-11-02, D239): không mật khẩu, đă
 | `IDENTITY_BODY_MAX` | `16384` | Cỡ body tối đa |
 | `IDENTITY_CORS_ORIGINS` | rỗng | Origin trình duyệt được phép, đúng từng origin |
 | `IDENTITY_CLIENT_IP_HEADER` | rỗng | Header IP do edge ghi đè (`X-Real-IP`); `X-Forwarded-For` lấy phần tử cuối; rỗng = `RemoteAddr` |
-| `IDENTITY_DRAIN_DELAY`, `IDENTITY_SHUTDOWN_BUDGET` | `5s` / `25s` | Dừng: `/readyz` false, drain, `http.Shutdown`, đóng pool; budget > drain + write timeout + 1s |
+| `IDENTITY_DRAIN_DELAY`, `IDENTITY_SHUTDOWN_BUDGET` | `5s` / `25s` | Dừng: `/readyz` false, drain, `http.Shutdown`, đóng kết nối MongoDB; budget > drain + write timeout + 1s |
 | `IDENTITY_READ_HEADER_TIMEOUT`, `IDENTITY_READ_TIMEOUT`, `IDENTITY_WRITE_TIMEOUT`, `IDENTITY_IDLE_TIMEOUT` | `5s` / `10s` / `15s` / `60s` | Hạn của HTTP server |
 | `IDENTITY_MAX_HEADER_BYTES` | `16384` | Cỡ header tối đa |
-| `IDENTITY_FEED_WAIT_MAX` | `10s` | Thời gian chờ tối đa của một long poll trên feed danh bạ (cổng nội bộ); từ `1s` đến `60s` |
-| `IDENTITY_DIRECTORY_LOAD_SLOTS` | `4` | Số replica được nạp toàn bộ danh bạ cùng lúc (khoá advisory trên Postgres); ≥ 1 và `IDENTITY_DIRECTORY_LOAD_SLOTS` + 2 ≤ `IDENTITY_PG_MAX_CONNS`, sai thì không khởi động, để lệnh ghi và danh sách thu hồi luôn còn kết nối |
+| `IDENTITY_DIRECTORY_LOAD_SLOTS` | `4` | Số replica được nạp toàn bộ danh bạ cùng lúc (suất `directory_load` trong collection `slots`); ≥ 1, sai thì không khởi động |
 | `IDENTITY_INFLIGHT_MAX` | `10000` | Lời gọi `DirectoryService` chạy cùng lúc mỗi node; quá thì `unavailable` |
 | `IDENTITY_USER_RATE`, `IDENTITY_USER_BURST` | `50` / `100` | Lời gọi `DirectoryService` mỗi người dùng mỗi node (token bucket); quá thì `resource_exhausted` |
 | `IDENTITY_USER_INFLIGHT` | `32` | Lời gọi `DirectoryService` chạy cùng lúc của một người dùng; quá thì `resource_exhausted` |
 | `IDENTITY_USER_LIMITERS` | `100000` | Số người dùng giữ bộ đếm (LRU) của `DirectoryService`; phải ≥ `IDENTITY_INFLIGHT_MAX` |
 
-`/readyz` lần đầu true khi ping được Postgres, schema đúng phiên bản migration mới nhất trong binary, có đúng một khoá đang ký, danh bạ đã nạp xong vào RAM và issuer/khoá tin cậy đã nạp lần đầu (kiểm ngay khi mỗi thứ nạp xong, không chờ `IDENTITY_KEY_RELOAD`). Sau lần ready đầu, chỉ còn cần khoá ký và danh bạ; issuer/khoá tin cậy nạp lại lỗi thì giữ bản cũ và replica vẫn ready (`trust_reload_errors_total` tăng) (không ping Postgres và hỏi schema nữa, chỉ nạp lại khoá): Postgres mất thì replica vẫn ready vì `GetUsers`, `GetMyProfile` và JWKS trả từ RAM. Mỗi lần kiểm (nạp khoá, ping, schema), kích hoạt khoá đến hạn và dọn mục thu hồi hết hạn đều có hạn 3s: Postgres treo (mất gói) thì lần kiểm đó tính là lỗi, không treo đến timeout TCP. Việc kiểm chạy trong goroutine riêng sau khi admin đã phục vụ, nên lúc khởi động `/livez` trả ngay và SIGTERM dừng được; nạp danh bạ xong chỉ báo goroutine đó kiểm lại ngay, không chờ, nên follower chạy luôn. Khởi động khi Postgres chưa lên thì process không thoát: `/livez` OK, `/readyz` false, nạp danh bạ thử lại có backoff đến khi Postgres lên. `GOMEMLIMIT` chưa đặt thì log cảnh báo một lần lúc khởi động và metric `memory_limit_set` = 0.
+`/readyz` lần đầu true khi ping được MongoDB, lược đồ đủ (đủ 9 collection clustered trên `_id` và đủ index khai báo trong binary), có đúng một khoá đang ký, danh bạ đã nạp xong vào RAM và issuer/khoá tin cậy đã nạp lần đầu (kiểm ngay khi mỗi thứ nạp xong, không chờ `IDENTITY_KEY_RELOAD`). Sau lần ready đầu, chỉ còn cần khoá ký và danh bạ; issuer/khoá tin cậy nạp lại lỗi thì giữ bản cũ và replica vẫn ready (`trust_reload_errors_total` tăng) (không ping MongoDB và hỏi lược đồ nữa, chỉ nạp lại khoá): MongoDB mất thì replica vẫn ready vì `GetUsers`, `GetMyProfile` và JWKS trả từ RAM. Lược đồ thiếu (database chưa chạy `/app migrate -apply`) thì `/readyz` false, log Warn `identity schema incomplete, run /app migrate -apply` kèm `missing`, và replica **không ghi gì**: chưa nạp danh bạ, chưa tự kích hoạt khoá ký, chưa dọn thu hồi (ghi trên database chưa migrate sẽ tạo collection không clustered mà `migrate -apply` từ chối); lần kiểm kế tiếp thấy lược đồ đủ thì chạy cả ba. Index lệch tuỳ chọn thì vẫn ready, log Warn `index outdated, run /app migrate -apply` và gauge `index_outdated{collection}` = 1 (theo lần kiểm gần nhất trước lần ready đầu). Mỗi lần kiểm (nạp khoá, ping, lược đồ), kích hoạt khoá đến hạn và dọn mục thu hồi hết hạn đều có hạn 3s: MongoDB treo (mất gói) thì lần kiểm đó tính là lỗi, không treo đến timeout TCP. Việc kiểm chạy trong goroutine riêng sau khi admin đã phục vụ, nên lúc khởi động `/livez` trả ngay và SIGTERM dừng được; nạp danh bạ xong chỉ báo goroutine đó kiểm lại ngay, không chờ, nên follower chạy luôn. Khởi động khi MongoDB chưa lên thì process không thoát: `/livez` OK, `/readyz` false, kiểm lại mỗi `IDENTITY_KEY_RELOAD` đến khi MongoDB lên. `GOMEMLIMIT` chưa đặt thì log cảnh báo một lần lúc khởi động và metric `memory_limit_set` = 0.
 
 ## API công khai
 

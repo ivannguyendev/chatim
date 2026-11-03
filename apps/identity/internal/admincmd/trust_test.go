@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ivannguyendev/chatim/apps/identity/internal/admincmd"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
@@ -23,30 +24,32 @@ type trustStore struct {
 	closedStore
 	issuers []store.TrustedIssuer
 	created []string
+	tenants []string
 	states  []store.State
 	added   []store.TrustedKey
-	audits  []store.AuditEvent
+	writers []string
 }
 
 func (s *trustStore) TrustedIssuers(context.Context) ([]store.TrustedIssuer, error) {
 	return s.issuers, nil
 }
 
-func (s *trustStore) CreateTrustedIssuer(_ context.Context, issuer, _ string, audit store.AuditEvent) error {
+func (s *trustStore) CreateTrustedIssuer(_ context.Context, issuer, tenant string, _ time.Time, by string) error {
 	s.created = append(s.created, issuer)
-	s.audits = append(s.audits, audit)
+	s.tenants = append(s.tenants, tenant)
+	s.writers = append(s.writers, by)
 	return nil
 }
 
-func (s *trustStore) SetTrustedIssuerState(_ context.Context, _ string, state store.State, audit store.AuditEvent) error {
+func (s *trustStore) SetTrustedIssuerState(_ context.Context, _ string, state store.State, _ time.Time, by string) error {
 	s.states = append(s.states, state)
-	s.audits = append(s.audits, audit)
+	s.writers = append(s.writers, by)
 	return nil
 }
 
-func (s *trustStore) AddTrustedKey(_ context.Context, k store.TrustedKey, audit store.AuditEvent) error {
+func (s *trustStore) AddTrustedKey(_ context.Context, k store.TrustedKey, _ time.Time, by string) error {
 	s.added = append(s.added, k)
-	s.audits = append(s.audits, audit)
+	s.writers = append(s.writers, by)
 	return nil
 }
 
@@ -150,12 +153,12 @@ func TestIssuerKeyAddStoresCanonicalDevtokenKeys(t *testing.T) {
 		if len(st.added) != 1 {
 			t.Fatalf("%s: added %d keys, want 1", c.alg, len(st.added))
 		}
-		k, a := st.added[0], st.audits[0]
+		k := st.added[0]
 		if k.Issuer != "https://shop.example" || k.KeyID != c.kid || k.Algorithm != c.alg || string(k.PublicKey) != string(canonical) {
 			t.Fatalf("%s: stored %+v, want canonical %s", c.alg, k, canonical)
 		}
-		if a.TenantID != "shop" || a.Action != "issuer_key_add" || a.Actor != "admin-cli" || a.Detail["issuer"] != "https://shop.example" || a.Detail["kid"] != c.kid {
-			t.Fatalf("%s: audit = %+v", c.alg, a)
+		if st.writers[0] != "admin-cli" {
+			t.Fatalf("%s: written by %q, want admin-cli", c.alg, st.writers[0])
 		}
 		if want := "issuer https://shop.example key " + c.kid + " added (" + c.alg + ")\n"; out.String() != want {
 			t.Fatalf("%s: out = %q, want %q", c.alg, out, want)
@@ -175,22 +178,22 @@ func TestIssuerAddRefusesOwnIssuer(t *testing.T) {
 	if code := admincmd.Run(context.Background(), env, []string{"issuer-add", "-issuer", "https://blog.example", "-tenant", "shop"}); code != 0 {
 		t.Fatalf("Run other issuer = %d, want 0", code)
 	}
-	if a := st.audits[0]; len(st.created) != 1 || a.TenantID != "shop" || a.Action != "issuer_add" || a.Detail["issuer"] != "https://blog.example" {
-		t.Fatalf("created %v audit %+v", st.created, a)
+	if len(st.created) != 1 || st.created[0] != "https://blog.example" || st.tenants[0] != "shop" || st.writers[0] != "admin-cli" {
+		t.Fatalf("created %v for %v by %v", st.created, st.tenants, st.writers)
 	}
 	if out.String() != "issuer https://blog.example trusted for tenant shop\n" {
 		t.Fatalf("out = %q", out)
 	}
 }
 
-func TestIssuerStateUsesTheIssuerTenant(t *testing.T) {
+func TestIssuerStateRefusesAnUnknownIssuer(t *testing.T) {
 	st := newTrustStore()
 	env, out := trustEnv(t, st)
 	if code := admincmd.Run(context.Background(), env, []string{"issuer-disable", "-issuer", "https://shop.example"}); code != 0 {
 		t.Fatalf("Run = %d, want 0", code)
 	}
-	if a := st.audits[0]; len(st.states) != 1 || st.states[0] != store.StateDisabled || a.TenantID != "shop" || a.Action != "issuer_disable" {
-		t.Fatalf("states %v audit %+v", st.states, a)
+	if len(st.states) != 1 || st.states[0] != store.StateDisabled || st.writers[0] != "admin-cli" {
+		t.Fatalf("states %v by %v", st.states, st.writers)
 	}
 	if out.String() != "issuer https://shop.example: issuer_disable\n" {
 		t.Fatalf("out = %q", out)

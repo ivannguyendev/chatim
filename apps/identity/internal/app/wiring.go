@@ -9,10 +9,11 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/identity/internal/api"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/config"
+	"github.com/ivannguyendev/chatim/apps/identity/internal/directory"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/keyring"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/signing"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
-	"github.com/ivannguyendev/chatim/apps/identity/internal/store/pgstore"
+	"github.com/ivannguyendev/chatim/apps/identity/internal/store/mongostore"
 	"github.com/ivannguyendev/chatim/pkg/admin"
 	"github.com/ivannguyendev/chatim/pkg/metrics"
 )
@@ -20,28 +21,40 @@ import (
 const (
 	metricsSubsystem = "identity"
 	tokenLeeway      = 30 * time.Second
-	maxPoolConns     = 1 << 16
+	serveAppName     = "chatim-identity"
+	adminAppName     = "chatim-identity-admin"
 )
 
 type Store interface {
-	store.DirectoryReader
+	directory.Source
 	keyring.Source
 	api.RevocationSource
 	store.TrustSource
 	store.ProfileWriter
 	DeleteExpiredRevocations(ctx context.Context) (int64, error)
-	ActivateDueSigningKey(ctx context.Context, lead time.Duration, audit store.AuditEvent) (string, error)
+	ActivateDueSigningKey(ctx context.Context, lead time.Duration) (string, error)
 	Ping(ctx context.Context) error
-	SchemaVersion(ctx context.Context) (int, error)
+	Schema(ctx context.Context) (store.SchemaState, error)
 	Close()
 }
 
-func openPostgres(ctx context.Context, uri string, opts pgstore.Options) (Store, error) {
-	return pgstore.Open(ctx, uri, opts)
+func openMongo(_ context.Context, opts mongostore.Options) (Store, error) {
+	st, err := mongostore.Open(opts)
+	if err != nil {
+		return nil, err
+	}
+	return st, nil
+}
+
+func mongoOptions(cfg config.Config, appName string) mongostore.Options {
+	return mongostore.Options{
+		URI: cfg.MongoURI, Database: cfg.MongoDB, User: cfg.MongoUser, Password: cfg.MongoPassword, AuthSource: cfg.MongoAuthSource,
+		AppName: appName, RevocationKeep: cfg.RevocationKeep(),
+	}
 }
 
 func wire(ctx context.Context, cfg config.Config, log *slog.Logger, deps Deps) (*node, error) {
-	st, err := deps.OpenStore(ctx, cfg.DatabaseURI(), pgstore.Options{MaxConns: poolSize(cfg.PGMaxConns), RevocationKeep: cfg.RevocationKeep()})
+	st, err := deps.OpenStore(ctx, mongoOptions(cfg, serveAppName))
 	if err != nil {
 		return nil, err
 	}
@@ -51,16 +64,6 @@ func wire(ctx context.Context, cfg config.Config, log *slog.Logger, deps Deps) (
 		return nil, err
 	}
 	return n, nil
-}
-
-func poolSize(n int) int32 {
-	if n > maxPoolConns {
-		return maxPoolConns
-	}
-	if n < 1 {
-		return 1
-	}
-	return int32(n)
 }
 
 func newRing(cfg config.Config, st Store) (*keyring.Ring, error) {
@@ -79,7 +82,7 @@ func wireServers(ctx context.Context, cfg config.Config, log *slog.Logger, st St
 	if err != nil {
 		return nil, err
 	}
-	dir, err := newDirectory(cfg, st, deps)
+	dir, err := newDirectory(cfg, st)
 	if err != nil {
 		return nil, err
 	}
@@ -113,14 +116,16 @@ func wireServers(ctx context.Context, cfg config.Config, log *slog.Logger, st St
 	if !memoryLimited {
 		log.WarnContext(ctx, "GOMEMLIMIT is not set; set it to about 90% of the container memory limit")
 	}
+	schema := newSchemaStats()
 	sources := append(metricSources(ring, n.internalStats, &n.cleanup, &n.keys), directoryMetricSources(dir, memoryLimited, time.Now)...)
 	sources = append(sources, trustMetricSources(tr)...)
+	sources = append(sources, schema.metricSources()...)
 	metricsHandler, err := metrics.Handler(metricsSubsystem, sources)
 	if err != nil {
 		return nil, err
 	}
 	n.admin = admin.New(admin.Config{Addr: cfg.AdminAddr, Metrics: metricsHandler}, log)
-	n.health = newHealth(n.admin, log, st, ring, dir.cache, tr.verifier, deps.SchemaVersion)
+	n.health = newHealth(n.admin, log, st, ring, dir.cache, tr.verifier, schema)
 	return n, nil
 }
 

@@ -12,36 +12,40 @@ import (
 var _ directory.Source = (*mongostore.Store)(nil)
 
 type outage struct {
-	down      atomic.Bool
-	pings     chan struct{}
-	reloads   chan struct{}
-	hangPing  atomic.Bool
-	pingCount atomic.Int64
-	pingsDone atomic.Int64
-	loadGate  chan struct{}
-	slotAsked chan struct{}
-	seq       atomic.Int64
-	closedAt  atomic.Int64
+	down       atomic.Bool
+	loadDown   atomic.Bool
+	pings      chan struct{}
+	reloads    chan struct{}
+	hangPing   atomic.Bool
+	pingCount  atomic.Int64
+	pingsDone  atomic.Int64
+	loadGate   chan struct{}
+	slotAsked  chan struct{}
+	streamOpen chan struct{}
+	events     chan store.StreamEvent
+	seq        atomic.Int64
+	closedAt   atomic.Int64
 }
 
-func (f *fakeStore) TryLoadSlot(context.Context, int) (func(), bool, error) {
-	if f.slotAsked != nil {
-		select {
-		case f.slotAsked <- struct{}{}:
-		default:
-		}
-	}
-	if f.down.Load() {
+type heldSlot struct{}
+
+func (heldSlot) Renew(context.Context) (bool, error) { return true, nil }
+
+func (heldSlot) Release() {}
+
+func (f *fakeStore) TryLoadSlot(context.Context, string, int) (store.Slot, bool, error) {
+	signal(f.slotAsked)
+	if f.down.Load() || f.loadDown.Load() {
 		return nil, false, errOpen
 	}
-	return func() {}, true, nil
+	return heldSlot{}, true, nil
 }
 
-func (f *fakeStore) LoadStart(context.Context) (store.Position, error) {
+func (f *fakeStore) StreamStart(context.Context) (store.StreamToken, error) {
 	if f.down.Load() {
-		return store.Position{}, errOpen
+		return nil, errOpen
 	}
-	return store.Position{}, nil
+	return store.StreamToken("t0"), nil
 }
 
 func (f *fakeStore) LoadPage(ctx context.Context, _ store.UserKey, _ int) ([]store.DirectoryEntry, error) {
@@ -58,12 +62,28 @@ func (f *fakeStore) LoadPage(ctx context.Context, _ store.UserKey, _ int) ([]sto
 	return []store.DirectoryEntry{{TenantID: "shop", ID: "lan", DisplayName: "Lan", State: store.StateActive, Ver: 1}}, nil
 }
 
-func (f *fakeStore) Changes(_ context.Context, after store.Position, _ int) (store.ChangePage, error) {
+func (f *fakeStore) OpenStream(context.Context, store.StreamToken) (store.ChangeStream, error) {
+	signal(f.streamOpen)
 	if f.down.Load() {
-		return store.ChangePage{}, errOpen
+		return nil, errOpen
 	}
-	return store.ChangePage{Next: after}, nil
+	return eventStream{events: f.events}, nil
 }
+
+type eventStream struct {
+	events chan store.StreamEvent
+}
+
+func (s eventStream) Next(ctx context.Context) (store.StreamEvent, bool, error) {
+	select {
+	case <-ctx.Done():
+		return store.StreamEvent{}, false, ctx.Err()
+	case ev := <-s.events:
+		return ev, true, nil
+	}
+}
+
+func (eventStream) Close(context.Context) error { return nil }
 
 func signal(ch chan struct{}) {
 	if ch == nil {
@@ -74,14 +94,3 @@ func signal(ch chan struct{}) {
 	default:
 	}
 }
-
-type idleListener struct{}
-
-func openIdleListener(context.Context, string) (store.Listener, error) { return idleListener{}, nil }
-
-func (idleListener) Wait(ctx context.Context) (store.Notice, error) {
-	<-ctx.Done()
-	return store.NoticeNone, ctx.Err()
-}
-
-func (idleListener) Close(context.Context) error { return nil }

@@ -22,9 +22,14 @@ type closedStore struct {
 	admincmd.Store
 	pingErr error
 	closed  *bool
+	missing []string
 }
 
 func (s closedStore) Ping(context.Context) error { return s.pingErr }
+
+func (s closedStore) Schema(context.Context) (store.SchemaState, error) {
+	return store.SchemaState{Missing: s.missing}, nil
+}
 
 func (s closedStore) Close() {
 	if s.closed != nil {
@@ -90,7 +95,10 @@ type missingUserStore struct {
 	tenant, user string
 }
 
-func (s *missingUserStore) SetUserState(_ context.Context, tenantID, id string, _ store.State, _ store.AuditEvent) error {
+func (s *missingUserStore) SetUserState(_ context.Context, tenantID, id string, _ store.State, _ time.Time, by string) error {
+	if by != "admin-cli" {
+		return errors.New("write not made as admin-cli")
+	}
 	s.tenant, s.user = tenantID, id
 	return apperr.ErrNotFound
 }
@@ -113,7 +121,28 @@ func TestStoreOpenFailureExitsWithOne(t *testing.T) {
 	}
 }
 
-func TestUnreachablePostgresFailsFastWithOne(t *testing.T) {
+func TestWriteCommandsRefuseAnIncompleteSchema(t *testing.T) {
+	st := &missingUserStore{closedStore: closedStore{missing: []string{"collection users absent"}}}
+	env, out, logs := testEnv(t, func(context.Context) (admincmd.Store, error) { return st, nil })
+	for _, args := range [][]string{
+		{"user-disable", "-tenant", "shop", "-user", "ghost"},
+		{"tenant-create", "-id", "shop", "-name", "Shop"},
+		{"issuer-keys", "-issuer", "https://shop.example"},
+	} {
+		logs.Reset()
+		if code := admincmd.Run(context.Background(), env, args); code != 1 {
+			t.Fatalf("Run(%v) = %d, want 1", args, code)
+		}
+		if !strings.Contains(logs.String(), "schema incomplete, run migrate -apply") || !strings.Contains(logs.String(), "collection users absent") {
+			t.Fatalf("Run(%v) logs = %s; want the schema message", args, logs)
+		}
+	}
+	if st.user != "" || out.Len() != 0 {
+		t.Fatalf("store written (%q) or output %q with an incomplete schema", st.user, out)
+	}
+}
+
+func TestUnreachableStoreFailsFastWithOne(t *testing.T) {
 	closed := false
 	env, out, logs := testEnv(t, func(context.Context) (admincmd.Store, error) {
 		return closedStore{pingErr: errors.New("dial tcp: connection refused"), closed: &closed}, nil

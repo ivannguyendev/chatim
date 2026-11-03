@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -16,6 +15,7 @@ import (
 
 const (
 	defaultAdminAddr = ":9090"
+	defaultMongoDB   = "chatim_identity"
 	revocationMargin = time.Minute
 )
 
@@ -23,9 +23,11 @@ type Config struct {
 	ListenAddr          string
 	InternalAddr        string
 	AdminAddr           string
-	PGURI               string
-	PGPassword          string
-	PGMaxConns          int
+	MongoURI            string
+	MongoDB             string
+	MongoUser           string
+	MongoPassword       string
+	MongoAuthSource     string
 	Issuer              string
 	Audience            string
 	TokenTTL            time.Duration
@@ -49,7 +51,6 @@ type Config struct {
 	WriteTimeout        time.Duration
 	IdleTimeout         time.Duration
 	MaxHeaderBytes      int
-	FeedWaitMax         time.Duration
 	DirectoryLoadSlots  int
 	InflightMax         int
 	UserRate            int
@@ -62,13 +63,16 @@ func AdminAddr() string { return envconfig.String("IDENTITY_ADMIN_ADDR", default
 
 func Load() (Config, error) {
 	var p parser
+	mongoDB := envconfig.String("IDENTITY_MONGO_DB", defaultMongoDB)
 	c := Config{
 		ListenAddr:          optional("IDENTITY_ADDR", ":8080"),
 		InternalAddr:        optional("IDENTITY_INTERNAL_ADDR", ":8081"),
 		AdminAddr:           AdminAddr(),
-		PGURI:               envconfig.String("IDENTITY_PG_URI", ""),
-		PGPassword:          p.secret("IDENTITY_PG_PASSWORD"),
-		PGMaxConns:          p.number("IDENTITY_PG_MAX_CONNS", 20),
+		MongoURI:            envconfig.String("IDENTITY_MONGO_URI", ""),
+		MongoDB:             mongoDB,
+		MongoUser:           envconfig.String("IDENTITY_MONGO_USER", ""),
+		MongoPassword:       p.secret("IDENTITY_MONGO_PASSWORD"),
+		MongoAuthSource:     envconfig.String("IDENTITY_MONGO_AUTH_SOURCE", mongoDB),
 		Issuer:              envconfig.String("IDENTITY_ISSUER", ""),
 		Audience:            envconfig.String("IDENTITY_AUDIENCE", ""),
 		TokenTTL:            p.span("IDENTITY_TOKEN_TTL", 5*time.Minute),
@@ -92,7 +96,6 @@ func Load() (Config, error) {
 		WriteTimeout:        p.span("IDENTITY_WRITE_TIMEOUT", 15*time.Second),
 		IdleTimeout:         p.span("IDENTITY_IDLE_TIMEOUT", 60*time.Second),
 		MaxHeaderBytes:      p.number("IDENTITY_MAX_HEADER_BYTES", 16<<10),
-		FeedWaitMax:         p.span("IDENTITY_FEED_WAIT_MAX", 10*time.Second),
 		DirectoryLoadSlots:  p.number("IDENTITY_DIRECTORY_LOAD_SLOTS", 4),
 		InflightMax:         p.number("IDENTITY_INFLIGHT_MAX", 10000),
 		UserRate:            p.number("IDENTITY_USER_RATE", 50),
@@ -111,23 +114,16 @@ func Load() (Config, error) {
 
 func (c Config) RevocationKeep() time.Duration { return c.TokenTTL + revocationMargin }
 
-func (c Config) DatabaseURI() string {
-	u, err := url.Parse(c.PGURI)
-	if err != nil || u.User == nil {
-		return c.PGURI
-	}
-	u.User = url.UserPassword(u.User.Username(), c.PGPassword)
-	return u.String()
-}
-
 func (c Config) LogValue() slog.Value {
 	return slog.GroupValue(
 		slog.String("listen_addr", c.ListenAddr),
 		slog.String("internal_addr", c.InternalAddr),
 		slog.String("admin_addr", c.AdminAddr),
-		slog.String("pg_uri", redact.URL(c.PGURI)),
-		slog.Bool("pg_password_set", c.PGPassword != ""),
-		slog.Int("pg_max_conns", c.PGMaxConns),
+		slog.String("mongo_uri", redact.URL(c.MongoURI)),
+		slog.String("mongo_db", c.MongoDB),
+		slog.String("mongo_user", c.MongoUser),
+		slog.Bool("mongo_password_set", c.MongoPassword != ""),
+		slog.String("mongo_auth_source", c.MongoAuthSource),
 		slog.String("issuer", c.Issuer),
 		slog.String("audience", c.Audience),
 		slog.Duration("token_ttl", c.TokenTTL),
@@ -146,7 +142,6 @@ func (c Config) LogValue() slog.Value {
 		slog.String("client_ip_header", c.ClientIPHeader),
 		slog.Duration("drain_delay", c.DrainDelay),
 		slog.Duration("shutdown_budget", c.ShutdownBudget),
-		slog.Duration("feed_wait_max", c.FeedWaitMax),
 		slog.Int("directory_load_slots", c.DirectoryLoadSlots),
 		slog.Int("inflight_max", c.InflightMax),
 		slog.Int("user_rate", c.UserRate),

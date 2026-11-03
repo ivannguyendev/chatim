@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/apps/identity/internal/app"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
 )
 
@@ -25,8 +24,8 @@ var fiveMinutes = regexp.MustCompile(`"expires_in":(299|300)}`)
 
 func TestReadyOnlyAfterTheFirstTrustLoadAndExchangesServed(t *testing.T) {
 	kek := newKEK(t)
-	st := &fakeStore{keys: []store.SigningKey{activeKey(t, kek)}, version: 3, trustFake: trustFake{trustGate: make(chan struct{}), tenantKey: newTenantKey(t)}}
-	r := runIdentity(t, testConfig(kek), st, 3)
+	st := &fakeStore{keys: []store.SigningKey{activeKey(t, kek)}, trustFake: trustFake{trustGate: make(chan struct{}), tenantKey: newTenantKey(t)}}
+	r := runIdentity(t, testConfig(kek), st)
 	r.logs.await(t, "identity not ready")
 	requireStatus(t, r.admin, "/readyz", http.StatusServiceUnavailable)
 	if code, body := postExchange(t, r.api, tenantToken(t, st.tenantKey, "lan")); code != http.StatusServiceUnavailable {
@@ -61,12 +60,12 @@ func TestTrustReloadErrorsKeepTheNodeReady(t *testing.T) {
 	kek := newKEK(t)
 	cfg := testConfig(kek)
 	cfg.TrustReload = 20 * time.Millisecond
-	st := &fakeStore{keys: []store.SigningKey{activeKey(t, kek)}, version: 3, trustFake: trustFake{trustLoads: make(chan struct{}, 1), tenantKey: newTenantKey(t)}}
-	r := runIdentity(t, cfg, st, 3)
+	st := &fakeStore{keys: []store.SigningKey{activeKey(t, kek)}, trustFake: trustFake{trustLoads: make(chan struct{}, 1), tenantKey: newTenantKey(t)}}
+	r := runIdentity(t, cfg, st)
 	r.logs.await(t, "identity ready")
 	st.trustDown.Store(true)
 	for range 3 {
-		receive(t, st.trustLoads, "trust reload while postgres is down")
+		receive(t, st.trustLoads, "trust reload while mongodb is down")
 	}
 	requireStatus(t, r.admin, "/readyz", http.StatusOK)
 	if _, body := httpGet(t, r.admin, "/metrics"); !trustReloadErrors.MatchString(body) {
@@ -77,16 +76,16 @@ func TestTrustReloadErrorsKeepTheNodeReady(t *testing.T) {
 	}
 }
 
-func TestRevNoticeWakesTheTrustReloaderAndShutdownStopsItBeforeTheStoreCloses(t *testing.T) {
+func TestTrustEventWakesTheTrustReloaderAndShutdownStopsItBeforeTheStoreCloses(t *testing.T) {
 	kek := newKEK(t)
 	cfg := testConfig(kek)
 	cfg.TrustReload = time.Minute
-	listener := notifyingListener{notices: make(chan store.Notice)}
-	st := &fakeStore{keys: []store.SigningKey{activeKey(t, kek)}, version: 3, trustFake: trustFake{trustHung: make(chan struct{}, 1)}}
-	r := runIdentity(t, cfg, st, 3, func(d *app.Deps) { d.OpenListener = listener.open })
+	st := &fakeStore{keys: []store.SigningKey{activeKey(t, kek)}, trustFake: trustFake{trustHung: make(chan struct{}, 1)},
+		outage: outage{events: make(chan store.StreamEvent)}}
+	r := runIdentity(t, cfg, st)
 	r.logs.await(t, "identity ready")
 	st.trustHang.Store(true)
-	listener.notices <- store.NoticeRevocations
+	st.events <- store.StreamEvent{Kinds: []store.EventKind{store.EventTrust}, Token: store.StreamToken("t1")}
 	receive(t, st.trustHung, "trust reload woken by the rev notice")
 	r.cancel()
 	if err := receive(t, r.done, "run return"); err != nil {

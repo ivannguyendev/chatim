@@ -151,26 +151,26 @@ type ProfileWriter interface {
 }
 
 type Directory interface {
-	SetProfile(ctx context.Context, tenantID, userID string, update ProfileUpdate, audit AuditEvent) error
-	CreateGroup(ctx context.Context, g Group, audit AuditEvent) error
-	UpdateGroup(ctx context.Context, tenantID, id string, update GroupUpdate, audit AuditEvent) error
-	DeleteGroup(ctx context.Context, tenantID, id string, audit AuditEvent) error
-	SetUserGroups(ctx context.Context, tenantID, userID string, groupIDs []string, audit AuditEvent) error
+	SetProfile(ctx context.Context, tenantID, userID string, update ProfileUpdate, at time.Time, by string) error
+	CreateGroup(ctx context.Context, g Group) error
+	UpdateGroup(ctx context.Context, tenantID, id string, update GroupUpdate, at time.Time, by string) error
+	DeleteGroup(ctx context.Context, tenantID, id string, at time.Time, by string) (int, error)
+	SetUserGroups(ctx context.Context, tenantID, userID string, groupIDs []string, at time.Time, by string) error
 	Group(ctx context.Context, tenantID, id string) (Group, error)
 }
 
 type Admin interface {
 	Directory
-	CreateTenant(ctx context.Context, t Tenant, audit AuditEvent) error
-	SetTenantState(ctx context.Context, id string, state State, r Revocation, audit AuditEvent) error
-	SetUserState(ctx context.Context, tenantID, id string, state State, audit AuditEvent) error
-	CreateSigningKey(ctx context.Context, k SigningKey, audit AuditEvent) (time.Time, error)
-	ActivateSigningKey(ctx context.Context, id string, lead time.Duration, audit AuditEvent) error
+	CreateTenant(ctx context.Context, t Tenant) error
+	SetTenantState(ctx context.Context, id string, state State, r Revocation) error
+	SetUserState(ctx context.Context, tenantID, id string, state State, at time.Time, by string) error
+	CreateSigningKey(ctx context.Context, k SigningKey) (time.Time, error)
+	ActivateSigningKey(ctx context.Context, id string, lead time.Duration) error
 	SigningKeys(ctx context.Context) ([]SigningKey, error)
-	CreateTrustedIssuer(ctx context.Context, issuer, tenantID string, audit AuditEvent) error
-	SetTrustedIssuerState(ctx context.Context, issuer string, state State, audit AuditEvent) error
-	AddTrustedKey(ctx context.Context, k TrustedKey, audit AuditEvent) error
-	RemoveTrustedKey(ctx context.Context, issuer, keyID string, audit AuditEvent) error
+	CreateTrustedIssuer(ctx context.Context, issuer, tenantID string, at time.Time, by string) error
+	SetTrustedIssuerState(ctx context.Context, issuer string, state State, at time.Time, by string) error
+	AddTrustedKey(ctx context.Context, k TrustedKey, at time.Time, by string) error
+	RemoveTrustedKey(ctx context.Context, issuer, keyID string) error
 	TrustedKeysOf(ctx context.Context, issuer string) ([]TrustedKey, error)
 }
 

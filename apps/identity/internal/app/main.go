@@ -13,12 +13,10 @@ import (
 	"github.com/ivannguyendev/chatim/apps/identity/internal/admincmd"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/config"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/signing"
-	"github.com/ivannguyendev/chatim/apps/identity/internal/store/pgstore"
+	"github.com/ivannguyendev/chatim/apps/identity/internal/store/mongostore"
 	"github.com/ivannguyendev/chatim/pkg/admin"
 	"github.com/ivannguyendev/chatim/pkg/redact"
 )
-
-const adminPoolConns = 2
 
 const usage = "usage: identity [serve|probe|<admin command> [flags]]"
 
@@ -73,7 +71,7 @@ func probeMain() int {
 }
 
 func redactingLogger(h slog.Handler, cfg config.Config) *slog.Logger {
-	return slog.New(redact.NewHandler(h, []string{cfg.DatabaseURI()}, []string{cfg.PGPassword}))
+	return slog.New(redact.NewHandler(h, []string{cfg.MongoURI}, []string{cfg.MongoPassword}))
 }
 
 func adminMain(args []string) int {
@@ -92,8 +90,12 @@ func adminMain(args []string) int {
 		return 1
 	}
 	env := admincmd.Env{
-		Open: func(ctx context.Context) (admincmd.Store, error) {
-			return pgstore.Open(ctx, cfg.DatabaseURI(), pgstore.Options{MaxConns: adminPoolConns, RevocationKeep: cfg.RevocationKeep()})
+		Open: func(context.Context) (admincmd.Store, error) {
+			st, err := mongostore.Open(mongoOptions(cfg, adminAppName))
+			if err != nil {
+				return nil, err
+			}
+			return st, nil
 		},
 		Sealer: sealer, Random: rand.Reader, Now: time.Now,
 		KeyWindow: cfg.TokenTTL + tokenLeeway, ActivateLead: cfg.KeyActivateLead, Issuer: cfg.Issuer, Out: os.Stdout, Log: log,

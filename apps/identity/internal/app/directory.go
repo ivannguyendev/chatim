@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"errors"
 	"math"
 	"runtime/debug"
 	"time"
@@ -10,8 +9,6 @@ import (
 	"github.com/ivannguyendev/chatim/apps/identity/internal/api"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/config"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/directory"
-	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
-	"github.com/ivannguyendev/chatim/apps/identity/internal/store/pgstore"
 	"github.com/ivannguyendev/chatim/pkg/identitysync"
 	"github.com/ivannguyendev/chatim/pkg/metrics"
 	"github.com/ivannguyendev/chatim/pkg/revocation"
@@ -22,14 +19,13 @@ type directoryParts struct {
 	cache    *directory.Cache
 	list     *revocation.List
 	stats    *directory.Stats
-	loader   *directory.Loader
-	follower *directory.Follower
+	mirror   *directory.Mirror
 	gate     *userlimit.Gate
 	users    *userlimit.Users
 	apiStats *api.DirectoryStats
 }
 
-func newDirectory(cfg config.Config, st Store, deps Deps) (*directoryParts, error) {
+func newDirectory(cfg config.Config, st Store) (*directoryParts, error) {
 	list, err := identitysync.NewList(tokenLeeway)
 	if err != nil {
 		return nil, err
@@ -44,30 +40,16 @@ func newDirectory(cfg config.Config, st Store, deps Deps) (*directoryParts, erro
 	}
 	cache := directory.NewCache()
 	stats := directory.NewStats(cache)
-	uri := cfg.DatabaseURI()
-	listen := func(ctx context.Context) (store.Listener, error) { return deps.OpenListener(ctx, uri) }
 	return &directoryParts{
 		cache: cache, list: list, stats: stats, gate: gate, users: users,
 		apiStats: &api.DirectoryStats{},
-		loader:   &directory.Loader{Reader: st, Revocations: st, Cache: cache, List: list, Slots: cfg.DirectoryLoadSlots, Stats: stats},
-		follower: &directory.Follower{Listen: listen, Reader: st, Revocations: st, Cache: cache, List: list, Stats: stats},
+		mirror:   &directory.Mirror{Source: st, Cache: cache, List: list, Stats: stats, Slots: cfg.DirectoryLoadSlots, Recheck: cfg.TrustReload},
 	}, nil
 }
 
 func (d *directoryParts) run(ctx context.Context, onLoaded func()) error {
-	d.loader.OnLoaded = onLoaded
-	err := d.loader.Run(ctx)
-	if err == nil {
-		err = d.follower.Run(ctx)
-	}
-	if errors.Is(err, context.Canceled) {
-		return nil
-	}
-	return err
-}
-
-func openListener(ctx context.Context, uri string) (store.Listener, error) {
-	return pgstore.OpenListener(ctx, uri)
+	d.mirror.OnLoaded = onLoaded
+	return d.mirror.Run(ctx)
 }
 
 func currentMemoryLimit() int64 { return debug.SetMemoryLimit(-1) }
@@ -81,16 +63,16 @@ func directoryMetricSources(d *directoryParts, memoryLimited bool, now func() ti
 		gauge("directory_entries", "Users held in the in-memory directory.", func() float64 { return float64(s.Entries()) }),
 		gauge("directory_load_seconds", "Duration of the last full directory load.", s.LastLoadSeconds),
 		counter("directory_load_failures_total", "Failed full directory loads.", s.LoadFailures),
-		gauge("directory_lag_seconds", "Seconds since the follower last caught up with the change feed; 0 before the first load.", func() float64 {
+		gauge("directory_lag_seconds", "Seconds since the change stream last said the follower caught up; 0 before the first load.", func() float64 {
 			caught := s.LastCaughtUp()
 			if caught.IsZero() {
 				return 0
 			}
 			return max(now().Sub(caught).Seconds(), 0)
 		}),
-		gauge("directory_listen_up", "1 while the Postgres LISTEN connection is open.", func() float64 { return boolValue(s.ListenUp()) }),
-		gauge("directory_horizon_stalled_seconds", "Seconds the change feed has waited on an open transaction below the horizon.", func() float64 { return s.HorizonStalledSeconds(now()) }),
-		counter("directory_read_errors_total", "Failed change feed reads by the follower.", s.ReadErrors),
+		gauge("directory_stream_up", "1 while the directory change stream is open.", func() float64 { return boolValue(s.StreamUp()) }),
+		counter("directory_stream_reloads_total", "Full directory reloads because the change stream lost its position.", s.StreamReloads),
+		counter("directory_read_errors_total", "Failed change stream opens and reads by the follower.", s.ReadErrors),
 		counter("directory_revocation_errors_total", "Failed revocation list reads by the follower.", s.RevocationErrors),
 		counter("get_users_ids_total", "User ids looked up by GetUsers.", calls.GetUsersIDs.Load),
 		counter("user_limited_total", "Directory calls refused by the per-user rate or in-flight limit.", calls.UserLimited.Load),

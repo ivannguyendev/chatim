@@ -30,7 +30,7 @@ func newTrust(cfg config.Config, st Store, dir *directoryParts, ring *keyring.Ri
 		return nil, err
 	}
 	reloader := trust.NewReloader(verifier, st, cfg.TrustReload, log)
-	dir.follower.OnRevocations = reloader.Wake
+	dir.mirror.OnTrust = reloader.Wake
 	return &trustParts{
 		verifier: verifier,
 		reloader: reloader,
@@ -54,7 +54,7 @@ func trustMetricSources(t *trustParts) []metrics.Source {
 	calls, writes := t.apiStats, t.service.Stats()
 	out := []metrics.Source{
 		counter("trust_reload_errors_total", "Failed trusted issuer and key reloads, plus trusted keys skipped as unusable.", t.verifier.Stats().ReloadErrors),
-		counter("store_errors_total", "Postgres errors on the token exchange path (just-in-time profile writes).", writes.StoreErrors),
+		counter("store_errors_total", "MongoDB errors on the token exchange path (just-in-time profile writes).", writes.StoreErrors),
 	}
 	for _, s := range []struct {
 		label string

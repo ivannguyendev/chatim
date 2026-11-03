@@ -15,12 +15,6 @@ func groupFlags(name string) (flags, *string, *string) {
 	return f, f.set.String("tenant", "", "tenant id"), f.set.String("id", "", "group id")
 }
 
-func groupAudit(env Env, tenant, action, id string) store.AuditEvent {
-	a := audit(env, tenant, action, "")
-	a.Detail = map[string]string{"group": id}
-	return a
-}
-
 func validGroupIDs(ids ...string) error {
 	for _, id := range ids {
 		if err := directory.ValidateGroupID(id); err != nil {
@@ -55,7 +49,7 @@ func groupCreate(ctx context.Context, env Env, st Store, args []string) error {
 		TenantID: *tenant, ID: *id, Name: n, ParentID: *parent, Mentionable: *mentionable,
 		State: store.GroupLive, CreatedAt: now, UpdatedAt: now, UpdatedBy: actor,
 	}
-	if err := st.CreateGroup(ctx, g, groupAudit(env, *tenant, "group_create", *id)); err != nil {
+	if err := st.CreateGroup(ctx, g); err != nil {
 		return err
 	}
 	_, err = fmt.Fprintf(env.Out, "group %s created\n", *id)
@@ -96,7 +90,7 @@ func groupUpdate(ctx context.Context, env Env, st Store, args []string) error {
 	if given["mentionable"] {
 		u.Mentionable = mentionable
 	}
-	if err := st.UpdateGroup(ctx, *tenant, *id, u, groupAudit(env, *tenant, "group_update", *id)); err != nil {
+	if err := st.UpdateGroup(ctx, *tenant, *id, u, env.Now(), actor); err != nil {
 		return err
 	}
 	_, err := fmt.Fprintf(env.Out, "group %s updated\n", *id)
@@ -111,10 +105,11 @@ func groupDelete(ctx context.Context, env Env, st Store, args []string) error {
 	if err := validGroupIDs(*id); err != nil {
 		return err
 	}
-	if err := st.DeleteGroup(ctx, *tenant, *id, groupAudit(env, *tenant, "group_delete", *id)); err != nil {
+	updated, err := st.DeleteGroup(ctx, *tenant, *id, env.Now(), actor)
+	if err != nil {
 		return err
 	}
-	_, err := fmt.Fprintf(env.Out, "group %s deleted\n", *id)
+	_, err = fmt.Fprintf(env.Out, "group %s deleted, %d users updated\n", *id, updated)
 	return err
 }
 
@@ -131,9 +126,7 @@ func userGroups(ctx context.Context, env Env, st Store, args []string) error {
 	if err != nil {
 		return err
 	}
-	at := audit(env, *tenant, "user_groups_set", *user)
-	at.Detail = map[string]string{"groups": strings.Join(ids, ",")}
-	if err := st.SetUserGroups(ctx, *tenant, *user, ids, at); err != nil {
+	if err := st.SetUserGroups(ctx, *tenant, *user, ids, env.Now(), actor); err != nil {
 		return err
 	}
 	_, err = fmt.Fprintf(env.Out, "user %s groups: %s\n", *user, listOrNone(ids))
@@ -195,7 +188,7 @@ func userSet(ctx context.Context, env Env, st Store, args []string) error {
 		}
 		u.AvatarURL = avatar
 	}
-	if err := st.SetProfile(ctx, *tenant, *user, u, audit(env, *tenant, "user_set", *user)); err != nil {
+	if err := st.SetProfile(ctx, *tenant, *user, u, env.Now(), actor); err != nil {
 		return err
 	}
 	_, err := fmt.Fprintf(env.Out, "user %s updated\n", *user)

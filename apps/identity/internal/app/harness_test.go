@@ -21,7 +21,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/identity/internal/config"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/signing"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
-	"github.com/ivannguyendev/chatim/apps/identity/internal/store/pgstore"
+	"github.com/ivannguyendev/chatim/apps/identity/internal/store/mongostore"
 	"github.com/ivannguyendev/chatim/pkg/revocation"
 )
 
@@ -31,7 +31,8 @@ const waitLimit = 10 * time.Second
 
 type fakeStore struct {
 	keys     []store.SigningKey
-	version  int
+	missing  atomic.Bool
+	outdated []string
 	closed   atomic.Bool
 	snapshot revocation.Snapshot
 	cleaned  chan struct{}
@@ -41,7 +42,7 @@ type fakeStore struct {
 	trustFake
 }
 
-func (f *fakeStore) ActivateDueSigningKey(_ context.Context, lead time.Duration, _ store.AuditEvent) (string, error) {
+func (f *fakeStore) ActivateDueSigningKey(_ context.Context, lead time.Duration) (string, error) {
 	if f.dueAsked != nil {
 		select {
 		case f.dueAsked <- lead:
@@ -92,11 +93,15 @@ func (f *fakeStore) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (f *fakeStore) SchemaVersion(context.Context) (int, error) {
+func (f *fakeStore) Schema(context.Context) (store.SchemaState, error) {
 	if f.down.Load() {
-		return 0, errOpen
+		return store.SchemaState{}, errOpen
 	}
-	return f.version, nil
+	state := store.SchemaState{Outdated: f.outdated}
+	if f.missing.Load() {
+		state.Missing = []string{"collection users absent"}
+	}
+	return state, nil
 }
 
 func (f *fakeStore) Close() {
@@ -106,10 +111,10 @@ func (f *fakeStore) Close() {
 
 func testConfig(kek []byte) config.Config {
 	return config.Config{
-		ListenAddr: "api", InternalAddr: "internal", NodeSecret: testNodeSecret, AdminAddr: "admin", PGURI: "postgres://identity@db/identity", PGMaxConns: 4,
+		ListenAddr: "api", InternalAddr: "internal", NodeSecret: testNodeSecret, AdminAddr: "admin", MongoURI: "mongodb://db/?replicaSet=rs0", MongoDB: "chatim_identity",
 		Issuer: "iss", Audience: "aud", TokenTTL: 5 * time.Minute, ExchangeAudience: "tenant-aud", ExchangeMaxLifetime: 10 * time.Minute, TrustReload: 10 * time.Second,
 		ExchangeIPRate: 50, ExchangeIPBurst: 500, ExchangeIPTracked: 100000, KeyEncryptionKey: kek, KeyReload: time.Hour, KeyActivateLead: 2 * time.Hour,
-		FeedWaitMax: 10 * time.Second, DirectoryLoadSlots: 1, InflightMax: 100, UserRate: 50, UserBurst: 100, UserInflight: 32, UserLimiters: 1000,
+		DirectoryLoadSlots: 1, InflightMax: 100, UserRate: 50, UserBurst: 100, UserInflight: 32, UserLimiters: 1000,
 		BodyMax: 16 << 10, DrainDelay: 10 * time.Millisecond, ShutdownBudget: 20 * time.Second,
 		ReadHeaderTimeout: time.Second, ReadTimeout: time.Second, WriteTimeout: time.Second, IdleTimeout: time.Second, MaxHeaderBytes: 16 << 10,
 	}
@@ -193,7 +198,7 @@ type running struct {
 	logs                 *logWatch
 }
 
-func runIdentity(t *testing.T, cfg config.Config, st *fakeStore, schema int, adjust ...func(*app.Deps)) *running {
+func runIdentity(t *testing.T, cfg config.Config, st *fakeStore, adjust ...func(*app.Deps)) *running {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	lis := &listeners{addrs: map[string]chan string{"admin": make(chan string, 1), "api": make(chan string, 1), "internal": make(chan string, 1)}}
@@ -201,11 +206,9 @@ func runIdentity(t *testing.T, cfg config.Config, st *fakeStore, schema int, adj
 	done := make(chan error, 1)
 	stopped := make(chan struct{})
 	deps := app.Deps{
-		Listen:        lis.listen,
-		OpenStore:     func(context.Context, string, pgstore.Options) (app.Store, error) { return st, nil },
-		OpenListener:  openIdleListener,
-		MemoryLimit:   func() int64 { return 256 << 20 },
-		SchemaVersion: schema,
+		Listen:      lis.listen,
+		OpenStore:   func(context.Context, mongostore.Options) (app.Store, error) { return st, nil },
+		MemoryLimit: func() int64 { return 256 << 20 },
 	}
 	for _, a := range adjust {
 		a(&deps)
@@ -264,4 +267,4 @@ func httpGetWith(t *testing.T, addr, path string, header http.Header) (int, stri
 	return resp.StatusCode, string(body)
 }
 
-var errOpen = errors.New("cannot reach postgres")
+var errOpen = errors.New("cannot reach mongodb")

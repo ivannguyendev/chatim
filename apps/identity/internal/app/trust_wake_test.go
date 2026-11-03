@@ -28,27 +28,49 @@ type wakeStore struct {
 	signingKey     store.SigningKey
 	tenantKey      ed25519.PrivateKey
 	tenantDisabled atomic.Bool
+	events         chan store.StreamEvent
 }
+
+type wakeSlot struct{}
+
+func (wakeSlot) Renew(context.Context) (bool, error) { return true, nil }
+
+func (wakeSlot) Release() {}
 
 func (s *wakeStore) SigningKeys(context.Context) ([]store.SigningKey, error) {
 	return []store.SigningKey{s.signingKey}, nil
 }
 
-func (s *wakeStore) TryLoadSlot(context.Context, int) (func(), bool, error) {
-	return func() {}, true, nil
+func (s *wakeStore) TryLoadSlot(context.Context, string, int) (store.Slot, bool, error) {
+	return wakeSlot{}, true, nil
 }
 
-func (s *wakeStore) LoadStart(context.Context) (store.Position, error) { return store.Position{}, nil }
+func (s *wakeStore) StreamStart(context.Context) (store.StreamToken, error) {
+	return store.StreamToken("t0"), nil
+}
+
+func (s *wakeStore) OpenStream(context.Context, store.StreamToken) (store.ChangeStream, error) {
+	return wakeStream(s.events), nil
+}
+
+type wakeStream chan store.StreamEvent
+
+func (w wakeStream) Next(ctx context.Context) (store.StreamEvent, bool, error) {
+	select {
+	case <-ctx.Done():
+		return store.StreamEvent{}, false, ctx.Err()
+	case ev := <-w:
+		return ev, true, nil
+	}
+}
+
+func (wakeStream) Close(context.Context) error { return nil }
 
 func (s *wakeStore) LoadPage(_ context.Context, after store.UserKey, _ int) ([]store.DirectoryEntry, error) {
 	if after.ID != "" {
 		return nil, nil
 	}
 	return []store.DirectoryEntry{{TenantID: "shop", ID: "lan", DisplayName: "Lan", State: store.StateActive, Ver: 1}}, nil
-}
-
-func (s *wakeStore) Changes(_ context.Context, after store.Position, _ int) (store.ChangePage, error) {
-	return store.ChangePage{Next: after}, nil
 }
 
 func (s *wakeStore) Revocations(context.Context) (revocation.Snapshot, error) {
@@ -72,19 +94,6 @@ func (s *wakeStore) TrustedKeys(context.Context) ([]store.TrustedKey, error) {
 	return []store.TrustedKey{{Issuer: "https://shop.example", KeyID: "shop-1", Algorithm: "EdDSA", PublicKey: jwk, State: store.StateActive}}, nil
 }
 
-type wakeListener struct{ notices chan store.Notice }
-
-func (l wakeListener) Wait(ctx context.Context) (store.Notice, error) {
-	select {
-	case <-ctx.Done():
-		return store.NoticeNone, ctx.Err()
-	case n := <-l.notices:
-		return n, nil
-	}
-}
-
-func (wakeListener) Close(context.Context) error { return nil }
-
 func newWakeStore(t *testing.T, kek []byte) *wakeStore {
 	t.Helper()
 	sealer, err := signing.NewSealer(kek, rand.Reader)
@@ -103,7 +112,10 @@ func newWakeStore(t *testing.T, kek []byte) *wakeStore {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &wakeStore{signingKey: store.SigningKey{ID: k.ID, State: store.KeyActive, PublicKey: k.PublicKey().Key, PrivateSealed: sealed}, tenantKey: tenantKey}
+	return &wakeStore{
+		signingKey: store.SigningKey{ID: k.ID, State: store.KeyActive, PublicKey: k.PublicKey().Key, PrivateSealed: sealed},
+		tenantKey:  tenantKey, events: make(chan store.StreamEvent),
+	}
 }
 
 func wakeConfig(kek []byte) config.Config {
@@ -128,19 +140,17 @@ func (s *wakeStore) token(t *testing.T) string {
 	return signed
 }
 
-func TestTenantDisableNoticeRefusesTheNextExchangeWithoutWaitingForATick(t *testing.T) {
+func TestTenantDisableEventRefusesTheNextExchangeWithoutWaitingForATick(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		kek := make([]byte, signing.KEKLength)
 		_, _ = rand.Read(kek)
 		cfg := wakeConfig(kek)
 		st := newWakeStore(t, kek)
-		listener := wakeListener{notices: make(chan store.Notice)}
-		deps := Deps{OpenListener: func(context.Context, string) (store.Listener, error) { return listener, nil }}
 		ring, err := newRing(cfg, st)
 		if err != nil {
 			t.Fatal(err)
 		}
-		dir, err := newDirectory(cfg, st, deps)
+		dir, err := newDirectory(cfg, st)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -166,11 +176,11 @@ func TestTenantDisableNoticeRefusesTheNextExchangeWithoutWaitingForATick(t *test
 		time.Sleep(time.Second)
 		began := time.Now()
 		st.tenantDisabled.Store(true)
-		listener.notices <- store.NoticeRevocations
+		st.events <- store.StreamEvent{Kinds: []store.EventKind{store.EventTrust, store.EventRevocation}, Token: store.StreamToken("t1")}
 		synctest.Wait()
 		_, err = tr.service.Exchange(ctx, st.token(t), "198.51.100.7")
 		if !errors.Is(err, exchange.ErrDisabled) || time.Since(began) != 0 {
-			t.Fatalf("exchange after the notice = %v at %v; want ErrDisabled at once, not on the %v tick", err, time.Since(began), cfg.TrustReload)
+			t.Fatalf("exchange after the event = %v at %v; want ErrDisabled at once, not on the %v tick", err, time.Since(began), cfg.TrustReload)
 		}
 	})
 }

@@ -35,7 +35,7 @@ func rotate(ctx context.Context, env Env, st Store, activateIfNone bool) (string
 		return "", err
 	}
 	row := store.SigningKey{ID: k.ID, State: store.KeyPending, PublicKey: k.PublicKey().Key, PrivateSealed: sealed}
-	created, err := st.CreateSigningKey(ctx, row, audit(env, "", "key_create", ""))
+	created, err := st.CreateSigningKey(ctx, row)
 	if err != nil {
 		return "", err
 	}
@@ -46,7 +46,7 @@ func rotate(ctx context.Context, env Env, st Store, activateIfNone bool) (string
 			return "", err
 		}
 		if !active {
-			if err := st.ActivateSigningKey(ctx, k.ID, 0, audit(env, "", "key_activate", "")); err != nil {
+			if err := st.ActivateSigningKey(ctx, k.ID, 0); err != nil {
 				return "", err
 			}
 			state = "active"
@@ -62,7 +62,7 @@ func keyActivate(ctx context.Context, env Env, st Store, args []string) error {
 	if err := f.parse(args, "kid"); err != nil {
 		return err
 	}
-	if err := st.ActivateSigningKey(ctx, *kid, env.ActivateLead, audit(env, "", "key_activate", "")); err != nil {
+	if err := st.ActivateSigningKey(ctx, *kid, env.ActivateLead); err != nil {
 		return err
 	}
 	_, err := fmt.Fprintf(env.Out, "signing key %s active\n", *kid)
@@ -108,7 +108,7 @@ func bootstrap(ctx context.Context, env Env, st Store, args []string) error {
 	if err := f.parse(args, "jwks"); err != nil {
 		return err
 	}
-	if _, err := st.Migrate(ctx, true); err != nil {
+	if err := runMigrate(ctx, env, st, true); err != nil {
 		return err
 	}
 	active, err := hasActiveKey(ctx, st)

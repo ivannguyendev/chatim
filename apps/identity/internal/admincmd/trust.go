@@ -39,7 +39,7 @@ func issuerAdd(ctx context.Context, env Env, st Store, args []string) error {
 	if *issuer == env.Issuer {
 		return errOwnIssuer
 	}
-	if err := st.CreateTrustedIssuer(ctx, *issuer, *tenant, issuerAudit(env, *tenant, "issuer_add", *issuer, "")); err != nil {
+	if err := st.CreateTrustedIssuer(ctx, *issuer, *tenant, env.Now(), actor); err != nil {
 		return err
 	}
 	_, err := fmt.Fprintf(env.Out, "issuer %s trusted for tenant %s\n", *issuer, *tenant)
@@ -56,15 +56,14 @@ func issuerState(state store.State) command {
 		if err := checkTrustName("issuer", *issuer); err != nil {
 			return err
 		}
-		tenant, err := issuerTenant(ctx, st, *issuer)
-		if err != nil {
+		if err := knownIssuer(ctx, st, *issuer); err != nil {
 			return err
 		}
 		action := map[store.State]string{store.StateActive: "issuer_enable", store.StateDisabled: "issuer_disable"}[state]
-		if err := st.SetTrustedIssuerState(ctx, *issuer, state, issuerAudit(env, tenant, action, *issuer, "")); err != nil {
+		if err := st.SetTrustedIssuerState(ctx, *issuer, state, env.Now(), actor); err != nil {
 			return err
 		}
-		_, err = fmt.Fprintf(env.Out, "issuer %s: %s\n", *issuer, action)
+		_, err := fmt.Fprintf(env.Out, "issuer %s: %s\n", *issuer, action)
 		return err
 	}
 }
@@ -89,12 +88,11 @@ func issuerKeyAdd(ctx context.Context, env Env, st Store, args []string) error {
 	if err := sameKeyID(canonical, *kid); err != nil {
 		return err
 	}
-	tenant, err := issuerTenant(ctx, st, *issuer)
-	if err != nil {
+	if err := knownIssuer(ctx, st, *issuer); err != nil {
 		return err
 	}
 	k := store.TrustedKey{Issuer: *issuer, KeyID: *kid, Algorithm: *alg, PublicKey: canonical}
-	if err := st.AddTrustedKey(ctx, k, issuerAudit(env, tenant, "issuer_key_add", *issuer, *kid)); err != nil {
+	if err := st.AddTrustedKey(ctx, k, env.Now(), actor); err != nil {
 		return err
 	}
 	_, err = fmt.Fprintf(env.Out, "issuer %s key %s added (%s)\n", *issuer, *kid, *alg)
@@ -109,14 +107,13 @@ func issuerKeyRemove(ctx context.Context, env Env, st Store, args []string) erro
 	if err := checkIssuerKey(*issuer, *kid); err != nil {
 		return err
 	}
-	tenant, err := issuerTenant(ctx, st, *issuer)
-	if err != nil {
+	if err := knownIssuer(ctx, st, *issuer); err != nil {
 		return err
 	}
-	if err := st.RemoveTrustedKey(ctx, *issuer, *kid, issuerAudit(env, tenant, "issuer_key_remove", *issuer, *kid)); err != nil {
+	if err := st.RemoveTrustedKey(ctx, *issuer, *kid); err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(env.Out, "issuer %s key %s removed\n", *issuer, *kid)
+	_, err := fmt.Fprintf(env.Out, "issuer %s key %s removed\n", *issuer, *kid)
 	return err
 }
 
@@ -129,7 +126,7 @@ func issuerKeys(ctx context.Context, env Env, st Store, args []string) error {
 	if err := checkTrustName("issuer", *issuer); err != nil {
 		return err
 	}
-	if _, err := issuerTenant(ctx, st, *issuer); err != nil {
+	if err := knownIssuer(ctx, st, *issuer); err != nil {
 		return err
 	}
 	keys, err := st.TrustedKeysOf(ctx, *issuer)
@@ -182,24 +179,15 @@ func sameKeyID(canonical []byte, kid string) error {
 	return nil
 }
 
-func issuerTenant(ctx context.Context, st Store, issuer string) (string, error) {
+func knownIssuer(ctx context.Context, st Store, issuer string) error {
 	issuers, err := st.TrustedIssuers(ctx)
 	if err != nil {
-		return "", err
+		return err
 	}
 	for _, i := range issuers {
 		if i.Issuer == issuer {
-			return i.TenantID, nil
+			return nil
 		}
 	}
-	return "", fmt.Errorf("issuer %s: %w", issuer, apperr.ErrNotFound)
-}
-
-func issuerAudit(env Env, tenant, action, issuer, kid string) store.AuditEvent {
-	a := audit(env, tenant, action, "")
-	a.Detail = map[string]string{"issuer": issuer}
-	if kid != "" {
-		a.Detail["kid"] = kid
-	}
-	return a
+	return fmt.Errorf("issuer %s: %w", issuer, apperr.ErrNotFound)
 }

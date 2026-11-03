@@ -33,7 +33,7 @@ func issuerState(t *testing.T, h *harness) store.State {
 }
 
 func TestIssuerCommands(t *testing.T) {
-	h, raw := newShop(t)
+	h := newShop(t)
 	h.env.Issuer = ownIssuer
 	h.fail(1, "issuer-add", "-issuer", shopIssuer, "-tenant", "blog")
 	h.fail(1, "issuer-add", "-issuer", ownIssuer, "-tenant", "shop")
@@ -77,7 +77,8 @@ func TestIssuerCommands(t *testing.T) {
 		t.Fatalf("issuer-keys printed key material: %q", listing)
 	}
 	h.fail(1, "issuer-keys", "-issuer", "https://blog.example")
-	for action, want := range map[string]int{"issuer_add": 1, "issuer_disable": 1, "issuer_enable": 1, "issuer_key_add": 2, "issuer_key_remove": 1} {
-		wantCLIAudits(t, raw, action, want)
+	keys, err := h.store().TrustedKeysOf(context.Background(), shopIssuer)
+	if err != nil || len(keys) != 2 || keys[0].CreatedBy != "admin-cli" || keys[1].CreatedBy != "admin-cli" {
+		t.Fatalf("TrustedKeysOf = %+v, %v; want two keys created by admin-cli", keys, err)
 	}
 }

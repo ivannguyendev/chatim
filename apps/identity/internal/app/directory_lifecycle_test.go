@@ -30,8 +30,8 @@ func requireRunning(t *testing.T, r *running) {
 
 func TestNotReadyUntilTheDirectoryIsLoaded(t *testing.T) {
 	kek := newKEK(t)
-	st := &fakeStore{keys: []store.SigningKey{activeKey(t, kek)}, version: 3, outage: outage{loadGate: make(chan struct{})}}
-	r := runIdentity(t, testConfig(kek), st, 3)
+	st := &fakeStore{keys: []store.SigningKey{activeKey(t, kek)}, outage: outage{loadGate: make(chan struct{})}}
+	r := runIdentity(t, testConfig(kek), st)
 	r.logs.await(t, "identity not ready")
 	requireStatus(t, r.admin, "/readyz", http.StatusServiceUnavailable)
 	if _, body := httpGet(t, r.admin, "/metrics"); !strings.Contains(body, "chatim_identity_directory_ready 0") {
@@ -43,13 +43,18 @@ func TestNotReadyUntilTheDirectoryIsLoaded(t *testing.T) {
 	_, body := httpGet(t, r.admin, "/metrics")
 	for _, series := range []string{
 		"chatim_identity_directory_ready 1", "chatim_identity_directory_entries 1", "chatim_identity_directory_load_seconds ",
-		"chatim_identity_directory_load_failures_total 0", "chatim_identity_directory_lag_seconds ", "chatim_identity_directory_listen_up ",
-		"chatim_identity_directory_horizon_stalled_seconds 0", "chatim_identity_directory_read_errors_total 0", "chatim_identity_directory_revocation_errors_total 0",
+		"chatim_identity_directory_load_failures_total 0", "chatim_identity_directory_lag_seconds ", "chatim_identity_directory_stream_up ",
+		"chatim_identity_directory_stream_reloads_total 0", "chatim_identity_directory_read_errors_total 0", "chatim_identity_directory_revocation_errors_total 0",
 		`chatim_identity_get_users_total{result="ok"} 0`, `chatim_identity_get_users_total{result="limited"} 0`, "chatim_identity_get_users_ids_total 0",
 		"chatim_identity_user_limited_total 0", "chatim_identity_inflight_rejected_total 0", "chatim_identity_memory_limit_set 1",
 	} {
 		if !strings.Contains(body, series) {
 			t.Errorf("metrics lack %q", series)
+		}
+	}
+	for _, gone := range []string{"directory_listen_up", "directory_horizon_stalled_seconds"} {
+		if strings.Contains(body, gone) {
+			t.Errorf("metrics still list %s", gone)
 		}
 	}
 }
@@ -58,8 +63,8 @@ func TestReadyRightAfterTheLoadWithoutWaitingForTheReloadTick(t *testing.T) {
 	kek := newKEK(t)
 	cfg := testConfig(kek)
 	cfg.KeyReload = time.Hour
-	st := &fakeStore{keys: []store.SigningKey{activeKey(t, kek)}, version: 3, outage: outage{loadGate: make(chan struct{})}}
-	r := runIdentity(t, cfg, st, 3)
+	st := &fakeStore{keys: []store.SigningKey{activeKey(t, kek)}, outage: outage{loadGate: make(chan struct{})}}
+	r := runIdentity(t, cfg, st)
 	r.logs.await(t, "identity not ready")
 	loaded := time.Now()
 	close(st.loadGate)
@@ -70,15 +75,18 @@ func TestReadyRightAfterTheLoadWithoutWaitingForTheReloadTick(t *testing.T) {
 	requireStatus(t, r.admin, "/readyz", http.StatusOK)
 }
 
-func TestBootsAndStaysAliveWhilePostgresIsDown(t *testing.T) {
+func TestBootsAndStaysAliveWhileMongoIsDown(t *testing.T) {
 	kek := newKEK(t)
-	st := &fakeStore{keys: []store.SigningKey{activeKey(t, kek)}, version: 3, outage: outage{slotAsked: make(chan struct{}, 1)}}
+	cfg := testConfig(kek)
+	cfg.KeyReload = 20 * time.Millisecond
+	st := &fakeStore{keys: []store.SigningKey{activeKey(t, kek)}, outage: outage{pings: make(chan struct{}, 1), slotAsked: make(chan struct{}, 1)}}
 	st.down.Store(true)
-	r := runIdentity(t, testConfig(kek), st, 3)
+	r := runIdentity(t, cfg, st)
 	r.logs.await(t, "identity not ready")
-	receive(t, st.slotAsked, "first load attempt")
-	receive(t, st.slotAsked, "load retry")
+	receive(t, st.pings, "first health check")
+	receive(t, st.pings, "health check retry")
 	requireRunning(t, r)
+	requireSilent(t, "the directory load", st.slotAsked)
 	requireStatus(t, r.admin, "/livez", http.StatusOK)
 	requireStatus(t, r.admin, "/readyz", http.StatusServiceUnavailable)
 	st.down.Store(false)
@@ -89,16 +97,16 @@ func TestBootsAndStaysAliveWhilePostgresIsDown(t *testing.T) {
 	}
 }
 
-func TestStaysReadyWhenPostgresDiesAfterTheFirstLoad(t *testing.T) {
+func TestStaysReadyWhenMongoDiesAfterTheFirstLoad(t *testing.T) {
 	kek := newKEK(t)
 	cfg := testConfig(kek)
 	cfg.KeyReload = 20 * time.Millisecond
-	st := &fakeStore{keys: []store.SigningKey{activeKey(t, kek)}, version: 3, outage: outage{reloads: make(chan struct{}, 1)}}
-	r := runIdentity(t, cfg, st, 3)
+	st := &fakeStore{keys: []store.SigningKey{activeKey(t, kek)}, outage: outage{reloads: make(chan struct{}, 1)}}
+	r := runIdentity(t, cfg, st)
 	r.logs.await(t, "identity ready")
 	st.down.Store(true)
 	for range 3 {
-		receive(t, st.reloads, "health check while postgres is down")
+		receive(t, st.reloads, "health check while mongodb is down")
 	}
 	requireStatus(t, r.admin, "/readyz", http.StatusOK)
 	if code, body := httpGet(t, r.api, "/.well-known/jwks.json"); code != http.StatusOK || !strings.Contains(body, st.keys[0].ID) {
@@ -110,9 +118,9 @@ var loadFailures = regexp.MustCompile(`chatim_identity_directory_load_failures_t
 
 func TestLivezStaysOkWhileLoadFails(t *testing.T) {
 	kek := newKEK(t)
-	st := &fakeStore{keys: []store.SigningKey{activeKey(t, kek)}, version: 3, outage: outage{slotAsked: make(chan struct{}, 1)}}
-	st.down.Store(true)
-	r := runIdentity(t, testConfig(kek), st, 3)
+	st := &fakeStore{keys: []store.SigningKey{activeKey(t, kek)}, outage: outage{slotAsked: make(chan struct{}, 1)}}
+	st.loadDown.Store(true)
+	r := runIdentity(t, testConfig(kek), st)
 	receive(t, st.slotAsked, "first load attempt")
 	receive(t, st.slotAsked, "load retry")
 	requireRunning(t, r)
@@ -125,7 +133,7 @@ func TestLivezStaysOkWhileLoadFails(t *testing.T) {
 
 func TestMemoryLimitUnsetIsReported(t *testing.T) {
 	kek := newKEK(t)
-	r := runIdentity(t, testConfig(kek), &fakeStore{keys: []store.SigningKey{activeKey(t, kek)}, version: 3}, 3,
+	r := runIdentity(t, testConfig(kek), &fakeStore{keys: []store.SigningKey{activeKey(t, kek)}},
 		func(d *app.Deps) { d.MemoryLimit = func() int64 { return math.MaxInt64 } })
 	r.logs.await(t, "GOMEMLIMIT is not set; set it to about 90% of the container memory limit")
 	if _, body := httpGet(t, r.admin, "/metrics"); !strings.Contains(body, "chatim_identity_memory_limit_set 0") {
