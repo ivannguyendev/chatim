@@ -33,6 +33,7 @@ type Mirror struct {
 type mirrorRun struct {
 	loadFailures   int
 	streamFailures int
+	reloadStreak   int
 	recheckAt      time.Time
 }
 
@@ -84,6 +85,9 @@ func (m *Mirror) streamFailed(ctx context.Context, run *mirrorRun, err error) {
 	case errors.Is(err, store.ErrStreamLost):
 		m.Stats.streamReloads.Add(1)
 		m.Cache.SetToken(nil)
+		wait := retryDelay(run.reloadStreak)
+		run.reloadStreak++
+		m.pause(ctx, run, wait)
 	default:
 		m.Stats.readErrors.Add(1)
 		wait := retryDelay(run.streamFailures)
@@ -94,6 +98,7 @@ func (m *Mirror) streamFailed(ctx context.Context, run *mirrorRun, err error) {
 
 func (m *Mirror) apply(ctx context.Context, run *mirrorRun, ev store.StreamEvent, has bool) {
 	if has {
+		run.reloadStreak = 0
 		for _, kind := range ev.Kinds {
 			switch kind {
 			case store.EventUser:

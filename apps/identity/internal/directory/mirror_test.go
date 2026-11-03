@@ -149,7 +149,14 @@ func TestMirrorReloadsWhenTheStreamPositionIsLost(t *testing.T) {
 		s := r.src.stream(t, 0)
 		s.send(streamResult{err: fmt.Errorf("%w: history gone", store.ErrStreamLost)})
 		synctest.Wait()
-		var slotCalls, starts int
+		var slotCalls int
+		r.src.read(func(f *fakeSource) { slotCalls = len(f.slotCalls) })
+		if slotCalls != 1 || !r.cache.Ready() || len(r.cache.Token()) != 0 {
+			t.Fatalf("slots=%d ready=%v token=%q right after a lost position; want no reload before the pause", slotCalls, r.cache.Ready(), r.cache.Token())
+		}
+		time.Sleep(1200 * time.Millisecond)
+		synctest.Wait()
+		var starts int
 		r.src.read(func(f *fakeSource) { slotCalls, starts = len(f.slotCalls), f.starts })
 		if r.stats.StreamReloads() != 1 || r.stats.ReadErrors() != 0 || r.stats.StreamUp() || s.closed.Load() != 1 || slotCalls != 2 || starts != 2 {
 			t.Fatalf("reloads=%d read errors=%d up=%v closed=%d slots=%d starts=%d after a lost position",
@@ -201,6 +208,77 @@ func TestMirrorStopClosesTheStreamWithALiveContext(t *testing.T) {
 		r.stop(t)
 		if s.closed.Load() != 1 || s.closeErr.Load() != "<nil>" || r.stats.StreamUp() {
 			t.Fatalf("closed=%d close ctx err=%v up=%v; want one close with a live context", s.closed.Load(), s.closeErr.Load(), r.stats.StreamUp())
+		}
+	})
+}
+
+func lostOpens(n int) []error {
+	out := make([]error, n)
+	for i := range out {
+		out[i] = fmt.Errorf("%w: history gone", store.ErrStreamLost)
+	}
+	return out
+}
+
+func TestMirrorBacksOffWhenTheStreamKeepsLosingItsPosition(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := newMirrorRig(t, entry("shop", "lan", "Lan", 1))
+		r.src.set(func(f *fakeSource) { f.openErrs = lostOpens(10) })
+		r.start(t)
+		synctest.Wait()
+		if !r.cache.Ready() || r.stats.StreamReloads() != 1 {
+			t.Fatalf("ready=%v reloads=%d after the first load; want ready and 1", r.cache.Ready(), r.stats.StreamReloads())
+		}
+		time.Sleep(19 * time.Second)
+		synctest.Wait()
+		var slotCalls []time.Time
+		r.src.read(func(f *fakeSource) { slotCalls = slices.Clone(f.slotCalls) })
+		got := gaps(slotCalls)
+		if len(got) != 4 {
+			t.Fatalf("load gaps = %v; want 4 spaced loads", got)
+		}
+		for i, gap := range got {
+			want := time.Second << i
+			if gap < want*8/10 || gap > want*12/10 {
+				t.Fatalf("load gaps = %v; want 1s, 2s, 4s, 8s ±20%%", got)
+			}
+		}
+		if r.stats.StreamReloads() != 5 || r.loaded.Load() != 5 || !r.cache.Ready() || r.stats.ReadErrors() != 0 {
+			t.Fatalf("reloads=%d loaded=%d ready=%v read errors=%d; want 5, 5, ready, 0",
+				r.stats.StreamReloads(), r.loaded.Load(), r.cache.Ready(), r.stats.ReadErrors())
+		}
+		r.stop(t)
+	})
+}
+
+func TestMirrorResetsTheReloadBackoffAfterAnAppliedEvent(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := startedMirror(t, entry("shop", "lan", "Lan", 1))
+		lost := streamResult{err: fmt.Errorf("%w: history gone", store.ErrStreamLost)}
+		reloadWait := func(n int) time.Duration {
+			t.Helper()
+			lostAt := time.Now()
+			r.src.stream(t, n).send(lost)
+			time.Sleep(3 * time.Second)
+			synctest.Wait()
+			var slotCalls []time.Time
+			r.src.read(func(f *fakeSource) { slotCalls = slices.Clone(f.slotCalls) })
+			if len(slotCalls) != n+2 {
+				t.Fatalf("loads = %d after lost position %d; want %d", len(slotCalls), n+1, n+2)
+			}
+			return slotCalls[n+1].Sub(lostAt)
+		}
+		first, second := reloadWait(0), reloadWait(1)
+		if first < 800*time.Millisecond || first > 1200*time.Millisecond || second < 1600*time.Millisecond || second > 2400*time.Millisecond {
+			t.Fatalf("reload waits = %v, %v; want 1s then 2s ±20%%", first, second)
+		}
+		r.src.stream(t, 2).send(userEvent(entry("shop", "mai", "Mai", 1), "T9"))
+		synctest.Wait()
+		if third := reloadWait(2); third < 800*time.Millisecond || third > 1200*time.Millisecond {
+			t.Fatalf("reload wait after an applied event = %v; want 1s ±20%%", third)
+		}
+		if r.stats.StreamReloads() != 3 || !r.cache.Ready() {
+			t.Fatalf("reloads=%d ready=%v; want 3 and ready", r.stats.StreamReloads(), r.cache.Ready())
 		}
 	})
 }
