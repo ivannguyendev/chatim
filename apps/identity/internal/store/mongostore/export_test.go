@@ -1,6 +1,10 @@
 package mongostore
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
+)
 
 func holdBeforeCommit(t *testing.T, hook func()) {
 	t.Helper()
@@ -12,4 +16,8 @@ func onBatch(t *testing.T, hook func(n int)) {
 	t.Helper()
 	afterBatch = hook
 	t.Cleanup(func() { afterBatch = nil })
+}
+
+func streamCursorID(cs store.ChangeStream) int64 {
+	return cs.(*changeStream).cursor.ID()
 }

@@ -31,6 +31,7 @@ type Store struct {
 	db     *mongo.Database
 	uri    string
 	keep   time.Duration
+	holder string
 }
 
 func Open(opts Options) (*Store, error) {
@@ -44,7 +45,7 @@ func Open(opts Options) (*Store, error) {
 	db := client.Database(opts.Database, options.Database().
 		SetWriteConcern(writeconcern.Majority()).
 		SetReadPreference(readpref.Primary()))
-	return &Store{client: client, db: db, uri: opts.URI, keep: opts.RevocationKeep}, nil
+	return &Store{client: client, db: db, uri: opts.URI, keep: opts.RevocationKeep, holder: newHolder()}, nil
 }
 
 func clientOptions(opts Options) *options.ClientOptions {

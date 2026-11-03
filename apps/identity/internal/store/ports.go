@@ -253,3 +253,31 @@ type Listener interface {
 	Wait(ctx context.Context) (Notice, error)
 	Close(ctx context.Context) error
 }
+
+type StreamToken []byte
+
+type EventKind int8
+
+const (
+	EventUser EventKind = iota + 1
+	EventTrust
+	EventRevocation
+)
+
+type StreamEvent struct {
+	Kinds []EventKind
+	User  DirectoryEntry
+	Token StreamToken
+}
+
+var ErrStreamLost = errors.New("change stream lost")
+
+type ChangeStream interface {
+	Next(ctx context.Context) (StreamEvent, bool, error)
+	Close(ctx context.Context) error
+}
+
+type Slot interface {
+	Renew(ctx context.Context) (bool, error)
+	Release()
+}
