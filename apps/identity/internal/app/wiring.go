@@ -103,14 +103,11 @@ func wireServers(ctx context.Context, cfg config.Config, log *slog.Logger, st St
 	if cfg.InternalAddr != "" {
 		handler, err := api.NewInternal(api.InternalOptions{
 			Revocations: st, Secret: cfg.NodeSecret, Stats: n.internalStats, Log: log,
-			DirectoryFeed: st, DirectorySignal: dir.follower, FeedWaitMax: cfg.FeedWaitMax, FeedStats: dir.feedStats,
 		})
 		if err != nil {
 			return nil, err
 		}
-		server := newHTTPServer(cfg, handler, log)
-		server.RegisterOnShutdown(handler.Stop)
-		n.ports = append(n.ports, &port{addr: cfg.InternalAddr, server: server})
+		n.ports = append(n.ports, &port{addr: cfg.InternalAddr, server: newHTTPServer(cfg, handler, log)})
 	}
 	memoryLimited := memoryLimitSet(deps.MemoryLimit())
 	if !memoryLimited {

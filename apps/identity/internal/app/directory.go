@@ -19,15 +19,14 @@ import (
 )
 
 type directoryParts struct {
-	cache     *directory.Cache
-	list      *revocation.List
-	stats     *directory.Stats
-	loader    *directory.Loader
-	follower  *directory.Follower
-	gate      *userlimit.Gate
-	users     *userlimit.Users
-	apiStats  *api.DirectoryStats
-	feedStats *api.FeedStats
+	cache    *directory.Cache
+	list     *revocation.List
+	stats    *directory.Stats
+	loader   *directory.Loader
+	follower *directory.Follower
+	gate     *userlimit.Gate
+	users    *userlimit.Users
+	apiStats *api.DirectoryStats
 }
 
 func newDirectory(cfg config.Config, st Store, deps Deps) (*directoryParts, error) {
@@ -49,7 +48,7 @@ func newDirectory(cfg config.Config, st Store, deps Deps) (*directoryParts, erro
 	listen := func(ctx context.Context) (store.Listener, error) { return deps.OpenListener(ctx, uri) }
 	return &directoryParts{
 		cache: cache, list: list, stats: stats, gate: gate, users: users,
-		apiStats: &api.DirectoryStats{}, feedStats: &api.FeedStats{},
+		apiStats: &api.DirectoryStats{},
 		loader:   &directory.Loader{Reader: st, Revocations: st, Cache: cache, List: list, Slots: cfg.DirectoryLoadSlots, Stats: stats},
 		follower: &directory.Follower{Listen: listen, Reader: st, Revocations: st, Cache: cache, List: list, Stats: stats},
 	}, nil
@@ -76,7 +75,7 @@ func currentMemoryLimit() int64 { return debug.SetMemoryLimit(-1) }
 func memoryLimitSet(limit int64) bool { return limit != math.MaxInt64 }
 
 func directoryMetricSources(d *directoryParts, memoryLimited bool, now func() time.Time) []metrics.Source {
-	s, feed, calls := d.stats, d.feedStats, d.apiStats
+	s, calls := d.stats, d.apiStats
 	out := []metrics.Source{
 		gauge("directory_ready", "1 once the directory is loaded into memory.", func() float64 { return boolValue(s.Ready()) }),
 		gauge("directory_entries", "Users held in the in-memory directory.", func() float64 { return float64(s.Entries()) }),
@@ -93,16 +92,10 @@ func directoryMetricSources(d *directoryParts, memoryLimited bool, now func() ti
 		gauge("directory_horizon_stalled_seconds", "Seconds the change feed has waited on an open transaction below the horizon.", func() float64 { return s.HorizonStalledSeconds(now()) }),
 		counter("directory_read_errors_total", "Failed change feed reads by the follower.", s.ReadErrors),
 		counter("directory_revocation_errors_total", "Failed revocation list reads by the follower.", s.RevocationErrors),
-		gauge("directory_feed_waiting", "Directory feed long polls waiting now.", func() float64 { return float64(feed.Waiting.Load()) }),
 		counter("get_users_ids_total", "User ids looked up by GetUsers.", calls.GetUsersIDs.Load),
 		counter("user_limited_total", "Directory calls refused by the per-user rate or in-flight limit.", calls.UserLimited.Load),
 		counter("inflight_rejected_total", "Directory calls refused because the node in-flight cap was full.", calls.InflightRejected.Load),
 		gauge("memory_limit_set", "1 when GOMEMLIMIT is set.", func() float64 { return boolValue(memoryLimited) }),
-	}
-	for label, c := range map[string]func() uint64{
-		"ok": feed.OK.Load, "empty": feed.Empty.Load, "bad_request": feed.BadRequest.Load, "unauthorized": feed.Unauthorized.Load, "error": feed.Errors.Load,
-	} {
-		out = append(out, labelledCounter("directory_feed_requests_total", "Directory feed requests on the internal port by result.", "result", label, c))
 	}
 	for label, c := range map[string]func() uint64{
 		"ok": calls.GetUsersOK.Load, "bad_request": calls.GetUsersBadRequest.Load, "unauthenticated": calls.GetUsersUnauthenticated.Load,

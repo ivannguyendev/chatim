@@ -1,8 +1,6 @@
 package app_test
 
 import (
-	"context"
-	"io"
 	"math"
 	"net/http"
 	"regexp"
@@ -47,9 +45,6 @@ func TestNotReadyUntilTheDirectoryIsLoaded(t *testing.T) {
 		"chatim_identity_directory_ready 1", "chatim_identity_directory_entries 1", "chatim_identity_directory_load_seconds ",
 		"chatim_identity_directory_load_failures_total 0", "chatim_identity_directory_lag_seconds ", "chatim_identity_directory_listen_up ",
 		"chatim_identity_directory_horizon_stalled_seconds 0", "chatim_identity_directory_read_errors_total 0", "chatim_identity_directory_revocation_errors_total 0",
-		`chatim_identity_directory_feed_requests_total{result="ok"} 0`, `chatim_identity_directory_feed_requests_total{result="empty"} 0`,
-		`chatim_identity_directory_feed_requests_total{result="bad_request"} 0`, `chatim_identity_directory_feed_requests_total{result="unauthorized"} 0`,
-		`chatim_identity_directory_feed_requests_total{result="error"} 0`, "chatim_identity_directory_feed_waiting 0",
 		`chatim_identity_get_users_total{result="ok"} 0`, `chatim_identity_get_users_total{result="limited"} 0`, "chatim_identity_get_users_ids_total 0",
 		"chatim_identity_user_limited_total 0", "chatim_identity_inflight_rejected_total 0", "chatim_identity_memory_limit_set 1",
 	} {
@@ -125,56 +120,6 @@ func TestLivezStaysOkWhileLoadFails(t *testing.T) {
 	requireStatus(t, r.admin, "/readyz", http.StatusServiceUnavailable)
 	if _, body := httpGet(t, r.admin, "/metrics"); !loadFailures.MatchString(body) || !strings.Contains(body, "chatim_identity_directory_ready 0") {
 		t.Fatal("metrics lack the failed loads")
-	}
-}
-
-type pollResult struct {
-	code int
-	body string
-	err  error
-	at   time.Time
-}
-
-func longPoll(ctx context.Context, addr string) <-chan pollResult {
-	out := make(chan pollResult, 1)
-	go func() {
-		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+addr+"/internal/v1/directory/changes?wait=10", http.NoBody)
-		req.Header.Set("Authorization", "Bearer "+testNodeSecret)
-		resp, err := (&http.Client{Transport: &http.Transport{DisableKeepAlives: true}}).Do(req)
-		if err != nil {
-			out <- pollResult{err: err, at: time.Now()}
-			return
-		}
-		defer func() { _ = resp.Body.Close() }()
-		body, err := io.ReadAll(resp.Body)
-		out <- pollResult{code: resp.StatusCode, body: string(body), err: err, at: time.Now()}
-	}()
-	return out
-}
-
-func TestShutdownReleasesFeedWaitersBeforeClosingTheStore(t *testing.T) {
-	kek := newKEK(t)
-	st := &fakeStore{keys: []store.SigningKey{activeKey(t, kek)}, version: 3, outage: outage{feedAsked: make(chan int, 16)}}
-	r := runIdentity(t, testConfig(kek), st, 3)
-	r.logs.await(t, "identity ready")
-	poll := longPoll(t.Context(), r.internal)
-	for limit := 0; limit != 500; {
-		limit = receive(t, st.feedAsked, "the long poll reading the feed")
-	}
-	stopped := time.Now()
-	r.cancel()
-	got := receive(t, poll, "long poll answer")
-	if got.err != nil || got.code != http.StatusOK || !strings.Contains(got.body, `"changes":[]`) {
-		t.Fatalf("poll = %d %s (%v); want an empty 200", got.code, got.body, got.err)
-	}
-	if waited := got.at.Sub(stopped); waited > 5*time.Second {
-		t.Fatalf("poll answered %v after shutdown began; want it released before its 10s wait", waited)
-	}
-	if err := receive(t, r.done, "run return"); err != nil {
-		t.Fatalf("Run = %v; want nil", err)
-	}
-	if closed, last := st.closedAt.Load(), st.lastFeed.Load(); closed <= last {
-		t.Fatalf("store closed at step %d before the last feed read at step %d", closed, last)
 	}
 }
 

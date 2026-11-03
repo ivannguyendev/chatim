@@ -15,10 +15,8 @@ type outage struct {
 	pingCount atomic.Int64
 	pingsDone atomic.Int64
 	loadGate  chan struct{}
-	feedAsked chan int
 	slotAsked chan struct{}
 	seq       atomic.Int64
-	lastFeed  atomic.Int64
 	closedAt  atomic.Int64
 }
 
@@ -56,14 +54,7 @@ func (f *fakeStore) LoadPage(ctx context.Context, _ store.UserKey, _ int) ([]sto
 	return []store.DirectoryEntry{{TenantID: "shop", ID: "lan", DisplayName: "Lan", State: store.StateActive, Ver: 1}}, nil
 }
 
-func (f *fakeStore) Changes(_ context.Context, after store.Position, limit int) (store.ChangePage, error) {
-	f.lastFeed.Store(f.seq.Add(1))
-	if f.feedAsked != nil {
-		select {
-		case f.feedAsked <- limit:
-		default:
-		}
-	}
+func (f *fakeStore) Changes(_ context.Context, after store.Position, _ int) (store.ChangePage, error) {
 	if f.down.Load() {
 		return store.ChangePage{}, errOpen
 	}

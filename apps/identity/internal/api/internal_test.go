@@ -150,6 +150,32 @@ func TestInternalPortServesNothingElse(t *testing.T) {
 	}
 }
 
+func TestDirectoryFeedIsGone(t *testing.T) {
+	h := newInternal(t)
+	for _, method := range []string{http.MethodGet, http.MethodHead} {
+		req, _ := http.NewRequest(method, h.server.URL+"/internal/v1/directory/changes?wait=1", nil)
+		req.Header.Set("Authorization", "Bearer "+nodeSecret)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("%s feed: %v", method, err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("%s feed = %d %s; want 404", method, resp.StatusCode, body)
+		}
+		if method == http.MethodGet {
+			var answer map[string]string
+			if err := json.Unmarshal(body, &answer); err != nil || answer["code"] != "not_found" || resp.Header.Get("Content-Type") != "application/json" {
+				t.Fatalf("feed body = %s %v (%v); want the not_found JSON", body, resp.Header, err)
+			}
+		}
+	}
+	if h.stats.OK.Load() != 0 || h.stats.Unauthorized.Load() != 0 || h.stats.Errors.Load() != 0 {
+		t.Fatal("the feed path touched the revocation stats")
+	}
+}
+
 func TestPublicPortServesJWKSButNotTheRevocationList(t *testing.T) {
 	h := newHarness(t)
 	jwks := h.do(t, http.MethodGet, "/.well-known/jwks.json", "", nil)
