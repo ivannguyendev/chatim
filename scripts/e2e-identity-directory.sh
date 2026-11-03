@@ -29,7 +29,7 @@ phase15_identity_directory() {
   echo "phase 15: tenant $id15_tenant trusts $id15_issuer with k1 (EdDSA)"
   cli e2e identity-directory -stage seed "${id15_args[@]}"
   identity_admin user-groups -tenant "$id15_tenant" -user binh -groups kinh-doanh-hcm
-  step="phase 15 GetUsers and the long poll woken by user-set"
+  step="phase 15 GetUsers polled every 50ms shows the name set by user-set"
   rm -f "$state/identity15-poll-open" "$state/identity15-cli-ms"
   docker run --rm --name "$identity_watch" --network "$network" --user "$(id -u):$(id -g)" -v "$state":/state "$image" \
     e2e identity-directory -stage profile "${id15_args[@]}" &
@@ -47,7 +47,7 @@ phase15_identity_directory() {
   awk -v a="$id15_start" -v b="$id15_end" 'BEGIN { printf "%.3f\n", b - a }' >"$state/identity15-cli-ms.tmp"
   mv "$state/identity15-cli-ms.tmp" "$state/identity15-cli-ms"
   wait "$id15_watch"
-  step="phase 15 user-disable reaches the feed and GetUsers"
+  step="phase 15 user-disable reaches GetUsers, the removed feed is 404, a wrong secret is 401"
   identity_admin user-disable -tenant "$id15_tenant" -user binh
   cli e2e identity-directory -stage disabled "${id15_args[@]}"
   step="phase 15 restart $identity_container and read the directory again"

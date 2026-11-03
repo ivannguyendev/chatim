@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -16,7 +17,7 @@ import (
 
 const (
 	wakeLimit          = time.Second
-	disabledFeedLimit  = 15 * time.Second
+	watchPause         = 50 * time.Millisecond
 	restartReadyLimit  = 120 * time.Second
 	cliDoneWait        = 60 * time.Second
 	directoryStateFile = "identity15.json"
@@ -35,13 +36,12 @@ type directoryFlags struct {
 
 type directoryState struct {
 	Access string `json:"access"`
-	Next   string `json:"next"`
 }
 
 type directoryRun struct {
-	f    directoryFlags
-	c    *identityClient
-	feed *feedClient
+	f      directoryFlags
+	c      *identityClient
+	secret string
 }
 
 func parseDirectoryFlags(args []string) (directoryFlags, error) {
@@ -79,7 +79,7 @@ func e2eIdentityDirectory(ctx context.Context, args []string) (err error) {
 	}
 	used := &usedSecrets{path: filepath.Join(*f.dir, "identity15-tokens")}
 	defer func() { err = errors.Join(err, used.save()) }()
-	r := directoryRun{f: f, c: newIdentityClient(*f.identity, *f.issuer, *f.audience, *f.tenant, *f.timeout, used), feed: newFeedClient(*f.internal, secret)}
+	r := directoryRun{f: f, c: newIdentityClient(*f.identity, *f.issuer, *f.audience, *f.tenant, *f.timeout, used), secret: secret}
 	switch *f.stage {
 	case "seed":
 		return r.seed(ctx)
@@ -122,38 +122,52 @@ func (r directoryRun) profile(ctx context.Context) error {
 	if err := r.checkFirstUsers(ctx, st.Access); err != nil {
 		return err
 	}
-	head, err := r.feed.head(ctx)
+	opened, arrived, err := r.watchNewName(ctx, st.Access, filepath.Join(*r.f.dir, pollOpenFile))
 	if err != nil {
-		return fmt.Errorf("feed head: %w", err)
+		return err
 	}
-	openPath := filepath.Join(*r.f.dir, pollOpenFile)
-	var opened time.Time
-	signal := func() {
-		opened = time.Now()
-		_ = os.WriteFile(openPath, nil, 0o600)
-	}
-	next, err := r.feed.awaitChange(ctx, head, cliDoneWait, signal, func(ch feedChange) bool {
-		return isUser(ch, *r.f.tenant, directoryBinh) && ch.DisplayName == binhNewName
-	})
-	if err != nil {
-		return fmt.Errorf("long poll for the new name: %w", err)
-	}
-	arrived := time.Now()
 	took, err := awaitCLITook(ctx, *r.f.dir)
 	if err != nil {
 		return err
 	}
-	wake := arrived.Sub(opened) - took
-	if wake >= wakeLimit {
-		return fmt.Errorf("the long poll returned %v after user-set finished, want under %v", wake.Round(time.Millisecond), wakeLimit)
+	lag := arrived.Sub(opened) - took
+	if lag >= wakeLimit {
+		return fmt.Errorf("GetUsers showed the new name %v after user-set finished, want under %v", lag.Round(time.Millisecond), wakeLimit)
 	}
-	refreshed, err := r.c.awaitUser(ctx, st.Access, directoryBinh, directoryLimit, func(u directoryUser) bool { return u.DisplayName == binhNewName })
-	if err != nil {
-		return fmt.Errorf("GetUsers after user-set: %w", err)
+	fmt.Printf("identity: GetUsers polled every %v showed the new name at most %v after user-set finished (watch open %v, the command took %v)\n",
+		watchPause, max(lag, 0).Round(time.Millisecond), arrived.Sub(opened).Round(time.Millisecond), took.Round(time.Millisecond))
+	return nil
+}
+
+func (r directoryRun) watchNewName(ctx context.Context, access, openPath string) (time.Time, time.Time, error) {
+	var opened time.Time
+	for {
+		users, _, err := r.c.getUsers(ctx, access, []string{directoryBinh})
+		if err != nil {
+			return opened, time.Time{}, fmt.Errorf("GetUsers while waiting for the new name: %w", err)
+		}
+		now := time.Now()
+		if slices.ContainsFunc(users, func(u directoryUser) bool { return u.ID == directoryBinh && u.DisplayName == binhNewName }) {
+			if opened.IsZero() {
+				return opened, now, errors.New("GetUsers showed the new name before user-set ran")
+			}
+			return opened, now, nil
+		}
+		if opened.IsZero() {
+			opened = now
+			if err := os.WriteFile(openPath, nil, 0o600); err != nil {
+				return opened, time.Time{}, err
+			}
+		}
+		if now.Sub(opened) > cliDoneWait {
+			return opened, time.Time{}, fmt.Errorf("GetUsers(%s) = %+v, the new name never came within %v", directoryBinh, users, cliDoneWait)
+		}
+		select {
+		case <-ctx.Done():
+			return opened, time.Time{}, ctx.Err()
+		case <-time.After(watchPause):
+		}
 	}
-	fmt.Printf("identity: the long poll returned the new name at most %v after user-set finished (poll open %v, the command took %v); GetUsers showed it %v after the feed\n",
-		max(wake, 0).Round(time.Millisecond), arrived.Sub(opened).Round(time.Millisecond), took.Round(time.Millisecond), refreshed.Round(time.Millisecond))
-	return writeJSON(filepath.Join(*r.f.dir, directoryStateFile), directoryState{Access: st.Access, Next: next})
 }
 
 func (r directoryRun) checkFirstUsers(ctx context.Context, access string) error {
@@ -189,24 +203,24 @@ func (r directoryRun) disabled(ctx context.Context) error {
 	if err := readJSON(filepath.Join(*r.f.dir, directoryStateFile), &st); err != nil {
 		return err
 	}
-	started := time.Now()
-	next, err := r.feed.awaitChange(ctx, st.Next, disabledFeedLimit, nil, func(ch feedChange) bool {
-		return isUser(ch, *r.f.tenant, directoryBinh) && ch.State == "disabled"
-	})
+	took, err := r.c.awaitUser(ctx, st.Access, directoryBinh, directoryLimit, func(u directoryUser) bool { return u.State == "USER_STATE_DISABLED" })
 	if err != nil {
-		return fmt.Errorf("feed after user-disable: %w", err)
-	}
-	fed := time.Since(started)
-	if _, err := r.c.awaitUser(ctx, st.Access, directoryBinh, directoryLimit, func(u directoryUser) bool { return u.State == "USER_STATE_DISABLED" }); err != nil {
 		return fmt.Errorf("GetUsers after user-disable: %w", err)
+	}
+	if err := expectInternalStatus(ctx, r.c.http, *r.f.internal, revocationsPath, r.secret, http.StatusOK); err != nil {
+		return err
+	}
+	if err := expectInternalStatus(ctx, r.c.http, *r.f.internal, removedFeedPath, r.secret, http.StatusNotFound); err != nil {
+		return err
 	}
 	wrong := "wrong-" + randomHex(16)
 	r.c.used.remember(wrong)
-	if _, status, err := r.feed.changes(ctx, wrong, "", 0, nil); err != nil || status != http.StatusUnauthorized {
-		return fmt.Errorf("feed with a wrong secret = %d, %w; want 401", status, err)
+	if err := expectInternalStatus(ctx, r.c.http, *r.f.internal, revocationsPath, wrong, http.StatusUnauthorized); err != nil {
+		return err
 	}
-	fmt.Printf("identity: user-disable reached the feed as state disabled in %v and GetUsers as USER_STATE_DISABLED; a wrong node secret got 401\n", fed.Round(time.Millisecond))
-	return writeJSON(filepath.Join(*r.f.dir, directoryStateFile), directoryState{Access: st.Access, Next: next})
+	fmt.Printf("identity: user-disable reached GetUsers as USER_STATE_DISABLED within %v; with the node secret %s answered 200 and the removed feed %s 404; a wrong node secret got 401\n",
+		took.Round(time.Millisecond), revocationsPath, removedFeedPath)
+	return nil
 }
 
 func (r directoryRun) restarted(ctx context.Context) error {
@@ -237,10 +251,6 @@ func usersByID(users []directoryUser) map[string]directoryUser {
 		got[u.ID] = u
 	}
 	return got
-}
-
-func isUser(ch feedChange, tenant, id string) bool {
-	return ch.Kind == "user" && ch.TenantID == tenant && ch.ID == id
 }
 
 func awaitCLITook(ctx context.Context, dir string) (time.Duration, error) {

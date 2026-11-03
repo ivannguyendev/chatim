@@ -13,7 +13,7 @@ import (
 	"github.com/ivannguyendev/chatim/tools/internal/devtoken"
 )
 
-const trustLimit = 15 * time.Second
+const trustLimit = 2 * time.Second
 
 type forgedCase struct {
 	name string
