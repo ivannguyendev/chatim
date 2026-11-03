@@ -131,13 +131,17 @@ Kết quả: [results/exchange-261102/](results/exchange-261102/es256-warm.txt).
 - Sau đợt lạnh, follower danh bạ chạy liên tục và giữ Postgres gần một core. Hai nguyên nhân: mỗi `NOTIFY` chạy một lượt đọc feed, và câu feed dùng prepared statement bị chốt kế hoạch chung, quét cả `directory_changes`. Lỗi có từ phần 3a.
 - Owner 2026-11-02 quyết định chuyển store `identity` sang MongoDB ở phase PM, trước PB, nên PA không sửa hai lỗi trên. Đo lại lượt lạnh trên MongoDB ở PM.
 
+Lệnh dưới chạy lượt lạnh rồi lượt ấm trên store hiện tại (MongoDB từ PM). Lượt ấm lấy danh sách user của tenant `T` từ `chatim_identity.users` bằng mongosh trong container `chatim-mongodb`, xác thực root từ `/run/secrets/mongo_password` như `scripts/bench-cell.sh:22-26`, không in mật khẩu.
+
 ```bash
 IDENTITY_EXCHANGE_IP_RATE=100000 make core-up
 make -s go ARGS="run ./tools/corecli dev-issuer-key -alg ES256 -kid bench-es256 -out bin/bench/exchange-keys/es256.jwk" > bin/bench/exchange-keys/es256.pub
 make identity-admin ARGS="issuer-add -issuer T-backend -tenant T"
 make identity-admin ARGS="issuer-key-add -issuer T-backend -kid bench-es256 -alg ES256 -jwk '$(cat bin/bench/exchange-keys/es256.pub)'"
 make poc TOOL=exchangebench ARGS="-alg ES256 -key bin/bench/exchange-keys/es256.jwk -issuer T-backend -tenant T"
-docker exec chatim-postgres sh -c 'psql -U "$POSTGRES_USER" -d chatim_identity -Atc "SELECT id FROM users WHERE tenant_id = '"'"'T'"'"'"' > bin/bench/exchange-keys/es256-users.txt
+docker exec chatim-mongodb mongosh --quiet --eval '
+db.getSiblingDB("admin").auth(process.env.MONGO_INITDB_ROOT_USERNAME, require("fs").readFileSync("/run/secrets/mongo_password", "utf8").trim());
+db.getSiblingDB("chatim_identity").users.find({tenant_id: "T"}, {_id: 0, id: 1}).forEach(u => print(u.id))' > bin/bench/exchange-keys/es256-users.txt
 make poc TOOL=exchangebench ARGS="-alg ES256 -key bin/bench/exchange-keys/es256.jwk -issuer T-backend -tenant T -users-file bin/bench/exchange-keys/es256-users.txt"
 ```
 

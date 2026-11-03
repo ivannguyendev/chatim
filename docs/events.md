@@ -18,7 +18,7 @@ Tài liệu này trả lời ba câu: core và Mention App phát event gì, ở 
 | `CHATIM_WS` | `websocket.publish.{tenant}` | Mention App (Phase 1); app notification (Phase 2); app khác muốn đẩy tới máy online | Hộp thư của websocket (D192): gói `WsPublish` (một nội dung + danh sách người nhận). `Nats-Msg-Id` = `WsPublish.id`; file, giữ 24h, bỏ trùng 6 phút, bản sao `EVT_STREAM_REPLICAS`; cấu hình chung trong `pkg/wspublish`, bên phát và websocket cùng `CreateOrUpdateStream` (`MENTION_WS_PUBLISH_STREAM`/`_ROOT`, `WS_PUBLISH_STREAM`/`_ROOT`) |
 | `CHATIM_NOTIFY` (Phase 2, chưa tạo) | `notify.{tenant}.{kind}` | các app | Để dành cho hộp thư của app notification Phase 2 (lọc tắt thông báo, push); Mention App chuyển sang bằng config `MENTION_WS_PUBLISH_ROOT`. Websocket không nghe `notify.*` |
 
-Tín hiệu đang gõ và online không phải event dữ liệu, không vào stream nào ở bảng trên: xem §7. Feed danh bạ của `identity` cũng không phải stream: xem §8.
+Tín hiệu đang gõ và online không phải event dữ liệu, không vào stream nào ở bảng trên: xem §7. Thay đổi danh bạ của `identity` cũng không đi qua stream: xem §8.
 
 `{loại data}` cho biết event thuộc doc nào (D108):
 - `room`: thông tin chung của room.
@@ -169,17 +169,6 @@ Không phải event của core: không ghi Mongo, không vào JetStream, không 
 | Đang gõ | core NATS `eph.{tenant}.{room}.typing`, nội dung `TypingSignal{origin, tenant, room_id, user_id, stopped}` (`proto/chatim/v1/ws_ephemeral.proto`) | node websocket của người gõ, sau khi đã đẩy cho người đang mở room trên chính node | mọi node websocket qua subscription `eph.*.*.typing`; mỗi node bỏ tin của chính `origin` mình và đẩy `ServerFrame.typing` cho kết nối đang mở room, trừ máy của người gõ | Bắn rồi quên, không chờ (D199). Ví dụ: Lan gõ trong room 7001 của tenant `acme` → `eph.acme.7001.typing` |
 | Online | **không qua NATS**: khoá Redis `chatim:presence:{tenant}:{user}` = `1`, `EX` 15s, trong Redis riêng `chatim-redis-presence` | node websocket của người đó đóng dấu theo heartbeat | node của người hỏi đọc bằng `MGET` ở mỗi heartbeat của người hỏi, trả `ServerFrame.presence` cả danh sách | Còn khoá là online, mất khoá là offline; không ai xoá khoá của người khác (D200, D201) |
 
-## 8. Feed danh bạ của `identity` (HTTP, không NATS)
+## 8. Thay đổi danh bạ của `identity` (không NATS)
 
-`identity` báo thay đổi của người và nhóm qua long poll HTTP trên cổng nội bộ, `GET /internal/v1/directory/changes?after&limit&wait` với `IDENTITY_NODE_SECRET`; **không** phải stream JetStream, `identity` không dùng NATS (D219). Từ M6 PA bản sao user đến từ JIT lúc đổi token và lệnh CLI; khi store chuyển sang MongoDB (phase PM), hợp đồng dưới đây giữ nguyên, cách tính vị trí đổi. Hợp đồng đầy đủ (tham số, mã lỗi, keep-alive): [docs/apps/identity.md](apps/identity.md).
-
-| | |
-|---|---|
-| Ai gọi | 3b: core (Mention App) để cập nhật nhóm của người và danh mục nhóm; sau này M8 (gỡ máy push khi account bị khoá), M9 (tìm người) |
-| Bản ghi `user` | `tenant_id`, `id`, `ver`, `state` (`active`/`disabled`), `display_name`, `avatar_url`, `groups` (chỉ nhóm **trực tiếp**; nhóm cha bên nhận tự tính từ bản ghi `group`) |
-| Bản ghi `group` | `tenant_id`, `id`, `ver`, `state` (`live`/`deleted`), `name`, `parent_id`, `mentionable` |
-| Không có | email, username |
-
-- **Vị trí:** mỗi trang trả `next`; bên nhận lưu nó và gọi lại với `after = next`. Đọc tiếp từ vị trí thì không sót thay đổi nào đã commit (feed chỉ đọc dưới mốc `xmin`). `after` rỗng → đọc từ đầu, tức là **toàn bộ** danh bạ: dùng khi app mới chạy lần đầu hoặc mất vị trí.
-- **`ver`:** mỗi người, mỗi nhóm có một dòng thay đổi bị ghi đè mỗi lần đổi, nên feed chỉ trả bản mới nhất, không trả từng bước trung gian. Bên nhận chỉ áp bản có `ver` lớn hơn bản đang giữ của cùng (`kind`, `tenant_id`, `id`); bản `ver` nhỏ hơn hoặc bằng thì bỏ. Đọc lại từ vị trí cũ (sau crash) là an toàn.
-- Ví dụ: admin chuyển Bình từ `kinh-doanh` sang `marketing` → một bản ghi `user` của Bình, `ver` 8, `groups: ["marketing"]`. Admin chuyển nhóm `kinh-doanh-hcm` sang cha khác → một bản ghi `group`, không phải một bản ghi cho mỗi thành viên.
+Feed danh bạ HTTP `GET /internal/v1/directory/changes` (D227) đã gỡ ở phase PM (owner 2026-11-02, M15) vì chưa app nào dùng; đường đó giờ trả 404. Làm lại khi app đầu tiên cần (Mention 3b, M8 hoặc M9), theo nhu cầu của app đó, dạng request thường trả ngay trên một kết nối keep-alive, không giữ request chờ thay đổi (`.memory/http-between-services-plain-keepalive.md`). Bên trong, mỗi replica `identity` theo dõi danh bạ bằng change stream của MongoDB ([docs/apps/identity.md](apps/identity.md)); đó không phải event cho app khác. `identity` vẫn không dùng NATS (D219).
