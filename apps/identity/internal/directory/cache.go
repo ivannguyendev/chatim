@@ -20,11 +20,10 @@ type User struct {
 }
 
 type Cache struct {
-	mu       sync.RWMutex
-	users    map[store.UserKey]Entry
-	position store.Position
-	token    store.StreamToken
-	ready    atomic.Bool
+	mu    sync.RWMutex
+	users map[store.UserKey]Entry
+	token store.StreamToken
+	ready atomic.Bool
 }
 
 func NewCache() *Cache {
@@ -68,17 +67,6 @@ func (c *Cache) ApplyEntries(entries []store.DirectoryEntry) {
 	}
 }
 
-func (c *Cache) Apply(changes []store.Change) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	for _, ch := range changes {
-		if ch.Kind != store.ChangeUser || ch.User == nil {
-			continue
-		}
-		putUser(c.users, store.UserKey{TenantID: ch.TenantID, ID: ch.ID}, Entry{DisplayName: ch.User.DisplayName, AvatarURL: ch.User.AvatarURL, State: ch.User.State, Ver: ch.Ver})
-	}
-}
-
 func putUser(users map[store.UserKey]Entry, key store.UserKey, e Entry) {
 	if e.State != store.StateActive && e.State != store.StateDisabled {
 		return
@@ -111,21 +99,7 @@ func (c *Cache) LookupOne(tenant, id string) (User, bool) {
 	return User{ID: id, Entry: e}, true
 }
 
-func (c *Cache) Position() store.Position {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.position
-}
-
-func (c *Cache) SetPosition(p store.Position) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.position = p
-}
-
 func (c *Cache) Ready() bool { return c.ready.Load() }
-
-func (c *Cache) markReady() { c.ready.Store(true) }
 
 func (c *Cache) Len() int {
 	c.mu.RLock()

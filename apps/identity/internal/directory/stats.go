@@ -10,8 +10,6 @@ type Stats struct {
 	lastLoad         atomic.Int64
 	loadFailures     atomic.Uint64
 	caughtUpAt       atomic.Int64
-	listenUp         atomic.Bool
-	stalledSince     atomic.Int64
 	readErrors       atomic.Uint64
 	revocationErrors atomic.Uint64
 	streamUp         atomic.Bool
@@ -32,8 +30,6 @@ func (s *Stats) LoadFailures() uint64 { return s.loadFailures.Load() }
 
 func (s *Stats) LastCaughtUp() time.Time { return unixTime(s.caughtUpAt.Load()) }
 
-func (s *Stats) ListenUp() bool { return s.listenUp.Load() }
-
 func (s *Stats) ReadErrors() uint64 { return s.readErrors.Load() }
 
 func (s *Stats) RevocationErrors() uint64 { return s.revocationErrors.Load() }
@@ -41,23 +37,6 @@ func (s *Stats) RevocationErrors() uint64 { return s.revocationErrors.Load() }
 func (s *Stats) StreamUp() bool { return s.streamUp.Load() }
 
 func (s *Stats) StreamReloads() uint64 { return s.streamReloads.Load() }
-
-func (s *Stats) HorizonStalledSeconds(now time.Time) float64 {
-	since := s.stalledSince.Load()
-	if since == 0 {
-		return 0
-	}
-	return max(now.Sub(unixTime(since)).Seconds(), 0)
-}
-
-func (s *Stats) markStalled(now time.Time, stalled bool) {
-	switch {
-	case !stalled:
-		s.stalledSince.Store(0)
-	case s.stalledSince.Load() == 0:
-		s.stalledSince.Store(now.UnixNano())
-	}
-}
 
 func unixTime(nanos int64) time.Time {
 	if nanos == 0 {

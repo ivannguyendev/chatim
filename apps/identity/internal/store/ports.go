@@ -89,15 +89,6 @@ type SigningKey struct {
 	RetiredAt     time.Time
 }
 
-type AuditEvent struct {
-	TenantID string
-	At       time.Time
-	Actor    string
-	Action   string
-	UserID   string
-	Detail   map[string]string
-}
-
 type Revocation struct {
 	By     string
 	Reason string
@@ -174,49 +165,6 @@ type Admin interface {
 	TrustedKeysOf(ctx context.Context, issuer string) ([]TrustedKey, error)
 }
 
-type ChangeKind int16
-
-const (
-	ChangeUser  ChangeKind = 1
-	ChangeGroup ChangeKind = 2
-)
-
-type Position struct {
-	Xid    uint64
-	Kind   ChangeKind
-	Tenant string
-	ID     string
-}
-
-type UserChange struct {
-	State       State
-	DisplayName string
-	AvatarURL   string
-	Groups      []string
-}
-
-type GroupChange struct {
-	Name        string
-	ParentID    string
-	Mentionable bool
-	State       GroupState
-}
-
-type Change struct {
-	Kind     ChangeKind
-	TenantID string
-	ID       string
-	Ver      int64
-	User     *UserChange
-	Group    *GroupChange
-}
-
-type ChangePage struct {
-	Changes             []Change
-	Next                Position
-	PendingAboveHorizon bool
-}
-
 type UserKey struct {
 	TenantID string
 	ID       string
@@ -229,29 +177,6 @@ type DirectoryEntry struct {
 	AvatarURL   string
 	State       State
 	Ver         int64
-}
-
-type DirectoryReader interface {
-	Changes(ctx context.Context, after Position, limit int) (ChangePage, error)
-	LoadStart(ctx context.Context) (Position, error)
-	LoadPage(ctx context.Context, after UserKey, limit int) ([]DirectoryEntry, error)
-	TryLoadSlot(ctx context.Context, slots int) (release func(), ok bool, err error)
-}
-
-type Notice int8
-
-const (
-	NoticeNone Notice = iota
-	NoticeDirectory
-	NoticeRevocations
-	NoticeOther
-)
-
-var ErrListenerBroken = errors.New("change listener broken")
-
-type Listener interface {
-	Wait(ctx context.Context) (Notice, error)
-	Close(ctx context.Context) error
 }
 
 type StreamToken []byte

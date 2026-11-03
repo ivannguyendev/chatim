@@ -12,6 +12,9 @@ import (
 const (
 	loadSlotPurpose = "directory_load"
 	slotRenewEvery  = 10 * time.Second
+	loadPageSize    = 5000
+	slotWaitMin     = 500 * time.Millisecond
+	slotWaitMax     = 2 * time.Second
 )
 
 var errLoadSlotLost = errors.New("directory load slot lost")

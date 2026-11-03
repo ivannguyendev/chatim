@@ -2,121 +2,36 @@ package directory_test
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	mrand "math/rand/v2"
-	"net/url"
-	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"go.mongodb.org/mongo-driver/v2/bson"
 
-	"github.com/ivannguyendev/chatim/apps/identity/internal/directory"
-	"github.com/ivannguyendev/chatim/apps/identity/internal/store/pgstore"
-	"github.com/ivannguyendev/chatim/pkg/identitysync"
+	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
+	"github.com/ivannguyendev/chatim/apps/identity/internal/store/mongostore"
 )
 
-const seededUsers = 20000
+const (
+	seededUsers = 20000
+	loadLimit   = time.Minute
+	trustLimit  = 2 * time.Second
+	markerID    = "zz-marker"
+)
 
-func itestDatabase(t testing.TB) (*pgstore.Store, *pgx.Conn, string) {
-	t.Helper()
-	base := os.Getenv("CHATIM_IT_PG_URI")
-	if base == "" {
-		t.Skip("set CHATIM_IT_PG_URI to run")
-	}
+func renameUntilStopped(t *testing.T, s *mongostore.Store, stop <-chan struct{}, writes *atomic.Int64, warmed chan<- struct{}) {
 	ctx := context.Background()
-	admin, err := pgx.Connect(ctx, base)
-	if err != nil {
-		t.Fatalf("connect admin: %v", err)
-	}
-	suffix := make([]byte, 6)
-	_, _ = rand.Read(suffix)
-	name := "identity_it_" + hex.EncodeToString(suffix)
-	if _, err := admin.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{name}.Sanitize()); err != nil {
-		t.Fatalf("create database: %v", err)
-	}
-	t.Cleanup(func() {
-		_, _ = admin.Exec(context.Background(), "DROP DATABASE "+pgx.Identifier{name}.Sanitize()+" WITH (FORCE)")
-		_ = admin.Close(context.Background())
-	})
-	u, err := url.Parse(base)
-	if err != nil {
-		t.Fatalf("parse uri: %v", err)
-	}
-	u.Path = "/" + name
-	uri := u.String()
-	s, err := pgstore.Open(ctx, uri, pgstore.Options{MaxConns: 8, RevocationKeep: 16 * time.Minute})
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(s.Close)
-	if _, err := s.Migrate(ctx, true); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
-	raw, err := pgx.Connect(ctx, uri)
-	if err != nil {
-		t.Fatalf("connect raw: %v", err)
-	}
-	t.Cleanup(func() { _ = raw.Close(context.Background()) })
-	return s, raw, uri
-}
-
-func seedDirectory(t testing.TB, raw *pgx.Conn, count int) {
-	t.Helper()
-	ctx := context.Background()
-	for _, table := range []string{"users", "directory_changes"} {
-		if _, err := raw.Exec(ctx, "ALTER TABLE "+table+" SET (autovacuum_enabled = false)"); err != nil {
-			t.Fatalf("disable autovacuum on %s: %v", table, err)
-		}
-	}
-	_, err := raw.Exec(ctx, `INSERT INTO tenants (id, name, state, ver, created_at, updated_at, updated_by)
-		VALUES ('shop', 'shop', 1, 1, now(), now(), 'test')`)
-	if err != nil {
-		t.Fatalf("seed tenant: %v", err)
-	}
-	_, err = raw.Exec(ctx, `INSERT INTO users (tenant_id, id, display_name, state, ver, created_at, updated_at, updated_by)
-		SELECT 'shop', 'u' || lpad(g::text, 6, '0'), 'User ' || g, 1, 1, now(), now(), 'test'
-		FROM generate_series(1, $1::int) g`, count)
-	if err != nil {
-		t.Fatalf("seed users: %v", err)
-	}
-}
-
-func userID(n int) string { return fmt.Sprintf("u%06d", n) }
-
-func renameUntilStopped(t *testing.T, stop <-chan struct{}, uri string, writes *atomic.Int64, warmed chan<- struct{}) {
-	ctx := context.Background()
-	conn, err := pgx.Connect(ctx, uri)
-	if err != nil {
-		t.Errorf("connect writer: %v", err)
-		return
-	}
-	defer func() { _ = conn.Close(context.Background()) }()
-	const rename = "UPDATE users SET display_name = $3 WHERE tenant_id = $1 AND id = $2"
 	for n := 0; ; n++ {
 		select {
 		case <-stop:
 			return
 		default:
 		}
-		id := userID(1 + mrand.IntN(seededUsers))
-		var err error
-		if n%10 == 0 {
-			err = pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
-				if _, err := tx.Exec(ctx, rename, "shop", id, fmt.Sprintf("Slow %d", n)); err != nil {
-					return err
-				}
-				time.Sleep(5 * time.Millisecond)
-				_, err := tx.Exec(ctx, rename, "shop", userID(1+mrand.IntN(seededUsers)), fmt.Sprintf("Slow pair %d", n))
-				return err
-			})
-		} else {
-			_, err = conn.Exec(ctx, rename, "shop", id, fmt.Sprintf("Renamed %d", n))
-		}
+		name := fmt.Sprintf("Renamed %d", n)
+		err := s.SetProfile(ctx, "shop", userID(1+mrand.IntN(seededUsers)), store.ProfileUpdate{DisplayName: &name}, time.Now(), "test")
 		if err != nil {
 			t.Errorf("rename: %v", err)
 			return
@@ -127,17 +42,16 @@ func renameUntilStopped(t *testing.T, stop <-chan struct{}, uri string, writes *
 	}
 }
 
-func TestWritesDuringLoadAreInTheCacheAfterReady(t *testing.T) {
-	s, raw, uri := itestDatabase(t)
-	seedDirectory(t, raw, seededUsers)
-	list, err := identitysync.NewList(0)
-	if err != nil {
-		t.Fatalf("NewList: %v", err)
-	}
-	cache := directory.NewCache()
-	stats := directory.NewStats(cache)
-	ctx := context.Background()
+type dbUser struct {
+	ID          string `bson:"id"`
+	DisplayName string `bson:"display_name"`
+	Ver         int64  `bson:"ver"`
+}
 
+func TestWritesDuringLoadAreInTheCacheAfterReady(t *testing.T) {
+	it := itestDatabase(t)
+	seedUsers(t, it, seededUsers)
+	ctx := context.Background()
 	var writes atomic.Int64
 	stop, writerDone, warmed := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	var stopOnce sync.Once
@@ -147,7 +61,7 @@ func TestWritesDuringLoadAreInTheCacheAfterReady(t *testing.T) {
 	}
 	go func() {
 		defer close(writerDone)
-		renameUntilStopped(t, stop, uri, &writes, warmed)
+		renameUntilStopped(t, it.store, stop, &writes, warmed)
 	}()
 	defer stopWriter()
 	select {
@@ -155,66 +69,88 @@ func TestWritesDuringLoadAreInTheCacheAfterReady(t *testing.T) {
 	case <-writerDone:
 		t.Fatal("the writer stopped before it warmed up")
 	}
-
+	applied, markerSeen := onceFor(markerID)
 	before := writes.Load()
-	loader := &directory.Loader{Reader: s, Revocations: s, Cache: cache, List: list, Slots: 4, Stats: stats}
-	loadCtx, cancelLoad := context.WithTimeout(ctx, time.Minute)
-	defer cancelLoad()
-	if err := loader.Run(loadCtx); err != nil {
-		t.Fatalf("Loader.Run: %v", err)
-	}
+	m := startMirror(t, watchedSource{Store: it.store, applied: applied}, 4)
+	await(t, m.loaded, loadLimit, "directory load")
 	during := writes.Load() - before
 	stopWriter()
-	if !cache.Ready() || during == 0 {
-		t.Fatalf("ready=%v writes during load=%d; want ready with writes during the load", cache.Ready(), during)
+	if !m.cache.Ready() || during == 0 {
+		t.Fatalf("ready=%v writes during load=%d; want ready with writes during the load", m.cache.Ready(), during)
 	}
-
-	follower := &directory.Follower{Reader: s, Revocations: s, Cache: cache, List: list, Stats: stats}
-	passes := 1
-	follower.DirectoryPass(ctx)
-	for deadline := time.Now().Add(30 * time.Second); stats.Stalled() && time.Now().Before(deadline); passes++ {
-		time.Sleep(200 * time.Millisecond)
-		follower.DirectoryPass(ctx)
+	if _, err := it.store.WriteProfile(ctx, store.ProfileWrite{TenantID: "shop", UserID: markerID, DisplayName: "Marker", At: time.Now(), By: "test"}); err != nil {
+		t.Fatalf("write marker: %v", err)
 	}
-	if stats.ReadErrors() != 0 || stats.Stalled() {
-		t.Fatalf("read errors=%d stalled=%v after %d passes; want a clean pass below the horizon", stats.ReadErrors(), stats.Stalled(), passes)
-	}
-
-	rows, err := raw.Query(ctx, `SELECT a.id, a.display_name, c.ver FROM users a
-		JOIN directory_changes c ON c.kind = 1 AND c.tenant_id = a.tenant_id AND c.id = a.id
-		WHERE a.tenant_id = 'shop' ORDER BY a.id`)
+	await(t, markerSeen, loadLimit, "marker user applied")
+	cursor, err := it.db.Collection("users").Find(ctx, bson.D{{Key: "tenant_id", Value: "shop"}})
 	if err != nil {
 		t.Fatalf("read users: %v", err)
 	}
-	type dbRow struct {
-		id, name string
-		ver      int64
+	var want []dbUser
+	if err := cursor.All(ctx, &want); err != nil {
+		t.Fatalf("decode users: %v", err)
 	}
-	want, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (dbRow, error) {
-		var d dbRow
-		return d, r.Scan(&d.id, &d.name, &d.ver)
-	})
-	if err != nil {
-		t.Fatalf("collect users: %v", err)
-	}
-	if len(want) != seededUsers || cache.Len() != seededUsers {
-		t.Fatalf("db rows=%d cache=%d; want %d each", len(want), cache.Len(), seededUsers)
+	if len(want) != seededUsers+1 || m.cache.Len() != seededUsers+1 {
+		t.Fatalf("db users=%d cache=%d; want %d each", len(want), m.cache.Len(), seededUsers+1)
 	}
 	renamed, mismatched := 0, 0
 	for _, d := range want {
-		got := cache.Lookup("shop", []string{d.id})
-		if len(got) != 1 || got[0].DisplayName != d.name || got[0].Ver != d.ver {
+		got := m.cache.Lookup("shop", []string{d.ID})
+		if len(got) != 1 || got[0].DisplayName != d.DisplayName || got[0].Ver != d.Ver {
 			mismatched++
 			if mismatched <= 5 {
-				t.Errorf("%s: cache %+v; db name %q ver %d", d.id, got, d.name, d.ver)
+				t.Errorf("%s: cache %+v; db name %q ver %d", d.ID, got, d.DisplayName, d.Ver)
 			}
 		}
-		if d.ver > 1 {
+		if d.Ver > 1 {
 			renamed++
 		}
 	}
 	if mismatched > 0 || renamed == 0 {
 		t.Fatalf("mismatched=%d renamed=%d; want 0 mismatched and some renamed", mismatched, renamed)
 	}
-	t.Logf("writes during load=%d renamed users=%d load=%.3fs passes=%d", during, renamed, stats.LastLoadSeconds(), passes)
+	t.Logf("writes during load=%d renamed users=%d load=%.3fs", during, renamed, m.stats.LastLoadSeconds())
+}
+
+func TestTrustedKeyAddWakesTrustAtOnce(t *testing.T) {
+	it := itestDatabase(t)
+	ctx := context.Background()
+	now := time.Now()
+	if err := it.store.CreateTenant(ctx, store.Tenant{ID: "shop", Name: "Shop", State: store.StateActive, CreatedAt: now, UpdatedAt: now, UpdatedBy: "test"}); err != nil {
+		t.Fatalf("CreateTenant: %v", err)
+	}
+	if err := it.store.CreateTrustedIssuer(ctx, "https://shop.example", "shop", now, "test"); err != nil {
+		t.Fatalf("CreateTrustedIssuer: %v", err)
+	}
+	m := startMirror(t, it.store, 1)
+	await(t, m.loaded, loadLimit, "directory load")
+	select {
+	case <-m.trust:
+		t.Fatal("trust woken by writes made before the load")
+	default:
+	}
+	added := time.Now()
+	key := store.TrustedKey{Issuer: "https://shop.example", KeyID: "shop-1", Algorithm: "EdDSA", PublicKey: []byte(`{"kty":"OKP","crv":"Ed25519","x":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"}`)}
+	if err := it.store.AddTrustedKey(ctx, key, added, "test"); err != nil {
+		t.Fatalf("AddTrustedKey: %v", err)
+	}
+	await(t, m.trust, trustLimit, "OnTrust after the key add")
+	t.Logf("OnTrust %v after the key add (recheck %v)", time.Since(added), mirrorRecheck)
+}
+
+func TestDropDatabaseReloads(t *testing.T) {
+	it := itestDatabase(t)
+	seedUsers(t, it, 3)
+	m := startMirror(t, it.store, 1)
+	await(t, m.loaded, loadLimit, "first directory load")
+	if m.cache.Len() != 3 || m.stats.StreamReloads() != 0 {
+		t.Fatalf("cache=%d reloads=%d after the first load; want 3 and 0", m.cache.Len(), m.stats.StreamReloads())
+	}
+	if err := it.db.Drop(context.Background()); err != nil {
+		t.Fatalf("drop database: %v", err)
+	}
+	await(t, m.loaded, loadLimit, "reload after dropDatabase")
+	if got := m.stats.StreamReloads(); got != 1 || !m.cache.Ready() || m.cache.Len() != 0 {
+		t.Fatalf("reloads=%d ready=%v cache=%d; want 1 reload, ready, empty cache", got, m.cache.Ready(), m.cache.Len())
+	}
 }

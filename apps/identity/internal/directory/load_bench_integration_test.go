@@ -10,8 +10,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/identity/internal/directory"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
-	"github.com/ivannguyendev/chatim/apps/identity/internal/store/pgstore"
-	"github.com/ivannguyendev/chatim/pkg/identitysync"
+	"github.com/ivannguyendev/chatim/apps/identity/internal/store/mongostore"
 )
 
 const (
@@ -22,21 +21,29 @@ const (
 )
 
 type slotCounter struct {
-	store.DirectoryReader
+	*mongostore.Store
 	holders *atomic.Int64
 	peak    *atomic.Int64
 }
 
-func (s slotCounter) TryLoadSlot(ctx context.Context, slots int) (func(), bool, error) {
-	release, ok, err := s.DirectoryReader.TryLoadSlot(ctx, slots)
+func (s slotCounter) TryLoadSlot(ctx context.Context, purpose string, slots int) (store.Slot, bool, error) {
+	slot, ok, err := s.Store.TryLoadSlot(ctx, purpose, slots)
 	if err != nil || !ok {
-		return release, ok, err
+		return slot, ok, err
 	}
 	raisePeak(s.peak, s.holders.Add(1))
-	return func() {
-		s.holders.Add(-1)
-		release()
-	}, true, nil
+	return &countedSlot{Slot: slot, holders: s.holders}, true, nil
+}
+
+type countedSlot struct {
+	store.Slot
+	holders *atomic.Int64
+	once    sync.Once
+}
+
+func (c *countedSlot) Release() {
+	c.once.Do(func() { c.holders.Add(-1) })
+	c.Slot.Release()
 }
 
 func raisePeak(peak *atomic.Int64, held int64) {
@@ -48,61 +55,52 @@ func raisePeak(peak *atomic.Int64, held int64) {
 	}
 }
 
-func runLoader(tb testing.TB, reader store.DirectoryReader, revocations directory.RevocationSource) *directory.Cache {
+func loadOnce(tb testing.TB, src directory.Source) {
 	tb.Helper()
-	list, err := identitysync.NewList(0)
-	if err != nil {
-		tb.Fatalf("NewList: %v", err)
+	m := startMirror(tb, src, loadSlots)
+	select {
+	case <-m.loaded:
+	case <-time.After(loadRunBudget):
+		tb.Errorf("directory load did not finish within %v", loadRunBudget)
 	}
-	cache := directory.NewCache()
-	loader := &directory.Loader{Reader: reader, Revocations: revocations, Cache: cache, List: list, Slots: loadSlots, Stats: directory.NewStats(cache)}
-	ctx, cancel := context.WithTimeout(context.Background(), loadRunBudget)
-	defer cancel()
-	if err := loader.Run(ctx); err != nil {
-		tb.Errorf("Loader.Run: %v", err)
-		return cache
+	if err := m.stop(); err != nil {
+		tb.Errorf("Mirror.Run: %v", err)
 	}
-	if !cache.Ready() || cache.Len() != loadUsers {
-		tb.Errorf("ready=%v cache=%d; want ready with %d users", cache.Ready(), cache.Len(), loadUsers)
+	if !m.cache.Ready() || m.cache.Len() != loadUsers {
+		tb.Errorf("ready=%v cache=%d; want ready with %d users", m.cache.Ready(), m.cache.Len(), loadUsers)
 	}
-	return cache
 }
 
 func BenchmarkLoad100K(b *testing.B) {
-	s, raw, _ := itestDatabase(b)
-	seedDirectory(b, raw, loadUsers)
+	it := itestDatabase(b)
+	seedUsers(b, it, loadUsers)
 	for b.Loop() {
-		runLoader(b, s, s)
+		loadOnce(b, it.store)
 	}
 	b.ReportMetric(b.Elapsed().Seconds()/float64(b.N), "s/load")
 }
 
 func TestTenLoadersFinish(t *testing.T) {
-	_, raw, uri := itestDatabase(t)
-	seedDirectory(t, raw, loadUsers)
+	it := itestDatabase(t)
+	seedUsers(t, it, loadUsers)
 	var holders, peak atomic.Int64
 	readyAfter := make([]time.Duration, loadReplicas)
-	stores := make([]*pgstore.Store, loadReplicas)
+	stores := make([]*mongostore.Store, loadReplicas)
 	for i := range stores {
-		s, err := pgstore.Open(context.Background(), uri, pgstore.Options{MaxConns: 4, RevocationKeep: 16 * time.Minute})
-		if err != nil {
-			t.Fatalf("Open replica %d: %v", i, err)
-		}
-		t.Cleanup(s.Close)
-		stores[i] = s
+		stores[i] = openStore(t, it.opts)
 	}
 	began := time.Now()
 	var wg sync.WaitGroup
 	for i, s := range stores {
 		wg.Go(func() {
-			runLoader(t, slotCounter{DirectoryReader: s, holders: &holders, peak: &peak}, s)
+			loadOnce(t, slotCounter{Store: s, holders: &holders, peak: &peak})
 			readyAfter[i] = time.Since(began)
 		})
 	}
 	wg.Wait()
 	total := time.Since(began)
-	if got := peak.Load(); got > loadSlots {
-		t.Fatalf("peak slot holders = %d; want at most %d", got, loadSlots)
+	if got := peak.Load(); got > loadSlots || got == 0 {
+		t.Fatalf("peak slot holders = %d; want 1 to %d", got, loadSlots)
 	}
 	slices.Sort(readyAfter)
 	t.Logf("replicas=%d slots=%d all ready after %.3fs, peak slot holders=%d, ready times=%v", loadReplicas, loadSlots, total.Seconds(), peak.Load(), readyAfter)

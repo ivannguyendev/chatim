@@ -10,6 +10,15 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/revocation"
 )
 
+const (
+	backoffBase = time.Second
+	backoffCap  = 30 * time.Second
+)
+
+type RevocationSource interface {
+	Revocations(ctx context.Context) (revocation.Snapshot, error)
+}
+
 type Mirror struct {
 	Source   Source
 	Cache    *Cache
@@ -132,4 +141,22 @@ func (m *Mirror) pause(ctx context.Context, run *mirrorRun, d time.Duration) {
 			return
 		}
 	}
+}
+
+func refreshRevocations(ctx context.Context, src RevocationSource, list *revocation.List) error {
+	snap, err := src.Revocations(ctx)
+	now := time.Now()
+	if err == nil {
+		list.Merge(snap, now)
+	}
+	list.Prune(now)
+	return err
+}
+
+func retryDelay(failures int) time.Duration {
+	d := backoffCap
+	if failures < 5 {
+		d = min(backoffBase<<failures, backoffCap)
+	}
+	return backoff.Between(d*8/10, d*12/10)
 }
