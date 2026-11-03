@@ -152,7 +152,7 @@ func (f *fakeSource) setTenantState(tenant string, state store.State) {
 	})
 }
 
-var errSource = errors.New("postgres down")
+var errSource = errors.New("store down")
 
 func activeKey(issuer, kid, alg string, jwk []byte) store.TrustedKey {
 	return store.TrustedKey{Issuer: issuer, KeyID: kid, Algorithm: alg, PublicKey: jwk, State: store.StateActive}

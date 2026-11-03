@@ -36,7 +36,7 @@ const (
 
 var (
 	testNow  = time.Date(2026, 11, 2, 10, 0, 0, 0, time.UTC)
-	errStore = errors.New("postgres down")
+	errStore = errors.New("store down")
 )
 
 type recorder struct {

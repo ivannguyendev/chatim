@@ -131,9 +131,9 @@ func TestRevocationsServeTheListWithAnETag(t *testing.T) {
 
 func TestRevocationsStoreErrorIsRetryable(t *testing.T) {
 	h := newInternal(t)
-	h.src.set(revocation.Snapshot{}, errors.New("postgres down"))
+	h.src.set(revocation.Snapshot{}, errors.New("store down"))
 	r := h.get(t, "/internal/v1/revocations", bearer(nodeSecret))
-	if r.StatusCode != http.StatusServiceUnavailable || r.Header.Get("Retry-After") != "1" || strings.Contains(string(r.Body), "postgres") {
+	if r.StatusCode != http.StatusServiceUnavailable || r.Header.Get("Retry-After") != "1" || strings.Contains(string(r.Body), "store down") {
 		t.Fatalf("store error = %d %v %s", r.StatusCode, r.Header, r.Body)
 	}
 	if h.stats.Errors.Load() != 1 {
