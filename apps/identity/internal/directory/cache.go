@@ -19,27 +19,52 @@ type User struct {
 	Entry
 }
 
-type userKey struct {
-	tenant string
-	id     string
-}
-
 type Cache struct {
 	mu       sync.RWMutex
-	users    map[userKey]Entry
+	users    map[store.UserKey]Entry
 	position store.Position
+	token    store.StreamToken
 	ready    atomic.Bool
 }
 
 func NewCache() *Cache {
-	return &Cache{users: map[userKey]Entry{}}
+	return &Cache{users: map[store.UserKey]Entry{}}
+}
+
+func (c *Cache) Replace(users map[store.UserKey]Entry, token store.StreamToken) {
+	c.mu.Lock()
+	c.users, c.token = users, token
+	c.mu.Unlock()
+	c.ready.Store(true)
+}
+
+func (c *Cache) ApplyEntry(e store.DirectoryEntry) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	putEntry(c.users, e)
+}
+
+func (c *Cache) Token() store.StreamToken {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.token
+}
+
+func (c *Cache) SetToken(t store.StreamToken) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.token = t
+}
+
+func putEntry(users map[store.UserKey]Entry, e store.DirectoryEntry) {
+	putUser(users, store.UserKey{TenantID: e.TenantID, ID: e.ID}, Entry{DisplayName: e.DisplayName, AvatarURL: e.AvatarURL, State: e.State, Ver: e.Ver})
 }
 
 func (c *Cache) ApplyEntries(entries []store.DirectoryEntry) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, e := range entries {
-		c.put(userKey{e.TenantID, e.ID}, Entry{DisplayName: e.DisplayName, AvatarURL: e.AvatarURL, State: e.State, Ver: e.Ver})
+		putEntry(c.users, e)
 	}
 }
 
@@ -50,18 +75,18 @@ func (c *Cache) Apply(changes []store.Change) {
 		if ch.Kind != store.ChangeUser || ch.User == nil {
 			continue
 		}
-		c.put(userKey{ch.TenantID, ch.ID}, Entry{DisplayName: ch.User.DisplayName, AvatarURL: ch.User.AvatarURL, State: ch.User.State, Ver: ch.Ver})
+		putUser(c.users, store.UserKey{TenantID: ch.TenantID, ID: ch.ID}, Entry{DisplayName: ch.User.DisplayName, AvatarURL: ch.User.AvatarURL, State: ch.User.State, Ver: ch.Ver})
 	}
 }
 
-func (c *Cache) put(key userKey, e Entry) {
+func putUser(users map[store.UserKey]Entry, key store.UserKey, e Entry) {
 	if e.State != store.StateActive && e.State != store.StateDisabled {
 		return
 	}
-	if old, ok := c.users[key]; ok && e.Ver <= old.Ver {
+	if old, ok := users[key]; ok && e.Ver <= old.Ver {
 		return
 	}
-	c.users[key] = e
+	users[key] = e
 }
 
 func (c *Cache) Lookup(tenant string, ids []string) []User {
@@ -69,7 +94,7 @@ func (c *Cache) Lookup(tenant string, ids []string) []User {
 	defer c.mu.RUnlock()
 	found := make([]User, 0, len(ids))
 	for _, id := range ids {
-		if e, ok := c.users[userKey{tenant, id}]; ok {
+		if e, ok := c.users[store.UserKey{TenantID: tenant, ID: id}]; ok {
 			found = append(found, User{ID: id, Entry: e})
 		}
 	}
@@ -79,7 +104,7 @@ func (c *Cache) Lookup(tenant string, ids []string) []User {
 func (c *Cache) LookupOne(tenant, id string) (User, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	e, ok := c.users[userKey{tenant, id}]
+	e, ok := c.users[store.UserKey{TenantID: tenant, ID: id}]
 	if !ok {
 		return User{}, false
 	}

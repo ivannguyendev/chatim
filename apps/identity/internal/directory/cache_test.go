@@ -102,3 +102,25 @@ func TestPositionAndReadinessStartEmpty(t *testing.T) {
 		t.Fatalf("Position = %+v; want %+v", c.Position(), p)
 	}
 }
+
+func TestReplaceSwapsTheMapAndTheTokenAndMarksReady(t *testing.T) {
+	c := directory.NewCache()
+	c.ApplyEntry(entry("shop", "old", "Old", 1))
+	if c.Ready() || len(c.Token()) != 0 {
+		t.Fatalf("ready=%v token=%q before Replace", c.Ready(), c.Token())
+	}
+	c.Replace(map[store.UserKey]directory.Entry{{TenantID: "shop", ID: "lan"}: {DisplayName: "Lan", State: store.StateActive, Ver: 2}}, store.StreamToken("T0"))
+	if !c.Ready() || string(c.Token()) != "T0" || c.Len() != 1 || displayName(c, "shop", "old") != "" || displayName(c, "shop", "lan") != "Lan" {
+		t.Fatalf("after Replace ready=%v token=%q len=%d", c.Ready(), c.Token(), c.Len())
+	}
+	c.ApplyEntry(entry("shop", "lan", "Lan v1", 1))
+	c.ApplyEntry(entry("shop", "lan", "Lan v3", 3))
+	c.SetToken(store.StreamToken("T1"))
+	if displayName(c, "shop", "lan") != "Lan v3" || string(c.Token()) != "T1" {
+		t.Fatalf("lan=%q token=%q; want Lan v3 and T1", displayName(c, "shop", "lan"), c.Token())
+	}
+	c.SetToken(nil)
+	if !c.Ready() || len(c.Token()) != 0 {
+		t.Fatalf("ready=%v token=%q after clearing the token; want still ready without a token", c.Ready(), c.Token())
+	}
+}

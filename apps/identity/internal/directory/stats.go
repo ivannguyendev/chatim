@@ -14,6 +14,8 @@ type Stats struct {
 	stalledSince     atomic.Int64
 	readErrors       atomic.Uint64
 	revocationErrors atomic.Uint64
+	streamUp         atomic.Bool
+	streamReloads    atomic.Uint64
 }
 
 func NewStats(cache *Cache) *Stats {
@@ -35,6 +37,10 @@ func (s *Stats) ListenUp() bool { return s.listenUp.Load() }
 func (s *Stats) ReadErrors() uint64 { return s.readErrors.Load() }
 
 func (s *Stats) RevocationErrors() uint64 { return s.revocationErrors.Load() }
+
+func (s *Stats) StreamUp() bool { return s.streamUp.Load() }
+
+func (s *Stats) StreamReloads() uint64 { return s.streamReloads.Load() }
 
 func (s *Stats) HorizonStalledSeconds(now time.Time) float64 {
 	since := s.stalledSince.Load()

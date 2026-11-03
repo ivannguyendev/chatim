@@ -90,3 +90,24 @@ func TestStreamCloseKillsTheCursorEvenWithACancelledContext(t *testing.T) {
 		t.Fatalf("cursor %d still on the server after Close (%d)", id, n)
 	}
 }
+
+func TestStreamEventIsCaughtUpOnlyWhenItEmptiesTheBatch(t *testing.T) {
+	s := testDatabase(t)
+	from := streamStart(t, s)
+	for _, id := range []string{"u1", "u2", "u3"} {
+		mustCreateUser(t, s, "shop", id, "Name "+id, "")
+	}
+	cs := openStream(t, s, from)
+	var caughtUp []bool
+	for _, id := range []string{"u1", "u2", "u3"} {
+		ev := nextEvent(t, cs)
+		expectUser(t, ev, id, "Name "+id, 1)
+		caughtUp = append(caughtUp, ev.CaughtUp)
+	}
+	if caughtUp[0] || caughtUp[1] || !caughtUp[2] {
+		t.Fatalf("caught up per event = %v; want only the last event of the batch", caughtUp)
+	}
+	if token := idleNext(t, cs); len(token) == 0 {
+		t.Fatal("idle Next gave no token")
+	}
+}

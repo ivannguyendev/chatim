@@ -4,8 +4,12 @@ import (
 	"context"
 	"sync/atomic"
 
+	"github.com/ivannguyendev/chatim/apps/identity/internal/directory"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
+	"github.com/ivannguyendev/chatim/apps/identity/internal/store/mongostore"
 )
+
+var _ directory.Source = (*mongostore.Store)(nil)
 
 type outage struct {
 	down      atomic.Bool

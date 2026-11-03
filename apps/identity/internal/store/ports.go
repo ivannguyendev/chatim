@@ -265,9 +265,10 @@ const (
 )
 
 type StreamEvent struct {
-	Kinds []EventKind
-	User  DirectoryEntry
-	Token StreamToken
+	Kinds    []EventKind
+	User     DirectoryEntry
+	Token    StreamToken
+	CaughtUp bool
 }
 
 var ErrStreamLost = errors.New("change stream lost")

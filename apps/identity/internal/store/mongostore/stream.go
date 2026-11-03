@@ -86,6 +86,7 @@ func (c *changeStream) Next(ctx context.Context) (store.StreamEvent, bool, error
 			continue
 		}
 		ev.Token = c.token()
+		ev.CaughtUp = c.cursor.RemainingBatchLength() == 0
 		return ev, true, nil
 	}
 	if err := c.cursor.Err(); err != nil {
