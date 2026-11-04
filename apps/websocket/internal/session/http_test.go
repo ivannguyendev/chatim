@@ -192,7 +192,7 @@ func TestSourcesExposeEveryCounterWithFixedLabels(t *testing.T) {
 	if read("commands_rejected_total", "reason", "inflight") != 1 {
 		t.Fatal("rejection counter wrong")
 	}
-	if _, err := metrics.Handler("websocket", h.server.Sources()); err != nil {
+	if _, err := metrics.Handler("chatim", "websocket", h.server.Sources()); err != nil {
 		t.Fatalf("sources do not register: %v", err)
 	}
 }

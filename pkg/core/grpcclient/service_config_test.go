@@ -40,14 +40,14 @@ func TestDefaultRetryPolicyAndThrottlingStillApply(t *testing.T) {
 
 func TestServiceConfigFromTheResolverIsIgnored(t *testing.T) {
 	h, dial := serveUnavailableHealth(t)
-	r := manual.NewBuilderWithScheme("chatimtest")
+	r := manual.NewBuilderWithScheme("testscheme")
 	r.BuildCallback = func(_ resolver.Target, cc resolver.ClientConn, _ resolver.BuildOptions) {
 		r.InitialState(resolver.State{
 			Addresses:     []resolver.Address{{Addr: "bufnet"}},
 			ServiceConfig: cc.ParseServiceConfig(resolverServiceConfig),
 		})
 	}
-	conn := dialHealth(t, "chatimtest:///core", dial, grpc.WithResolvers(r))
+	conn := dialHealth(t, "testscheme:///target", dial, grpc.WithResolvers(r))
 	if got := h.attemptsPerCall(t, conn, 1); !slices.Equal(got, []int32{3}) {
 		t.Fatalf("attempts = %v, want the 3 of the default policy, not the 5 the resolver published", got)
 	}

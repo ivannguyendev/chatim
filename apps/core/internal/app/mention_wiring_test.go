@@ -72,7 +72,7 @@ func TestMentionProbesAreExportedAsChatimMention(t *testing.T) {
 	}
 	p := fakeProbes()
 	p.mention = probes
-	h, err := metrics.Handler(metricsSubsystem, metricSources(p))
+	h, err := metrics.Handler(metricsNamespace, metricsSubsystem, metricSources(p))
 	if err != nil {
 		t.Fatalf("Handler: %v", err)
 	}

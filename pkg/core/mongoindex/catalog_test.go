@@ -41,14 +41,14 @@ func TestPatternKeepsFieldOrderAndDirection(t *testing.T) {
 }
 
 func TestCatalogWithJoinsWithoutTouchingTheParts(t *testing.T) {
-	core := Catalog{Collections: []Collection{{Name: "members"}}, Replacements: []Replacement{{Collection: "members", Old: "x_1", New: "x_1_y_1"}}}
+	base := Catalog{Collections: []Collection{{Name: "members"}}, Replacements: []Replacement{{Collection: "members", Old: "x_1", New: "x_1_y_1"}}}
 	app := Catalog{Collections: []Collection{{Name: "mentions"}}, Replacements: []Replacement{{Collection: "mentions", Old: "z_1"}}}
-	all := core.With(app)
+	all := base.With(app)
 	if got := all.Names(); !slices.Equal(got, []string{"members", "mentions"}) {
 		t.Fatalf("Names = %v", got)
 	}
-	if len(all.Replacements) != 2 || len(core.Replacements) != 1 || len(core.Collections) != 1 {
-		t.Fatalf("With = %+v, core = %+v; want joined copy and core unchanged", all, core)
+	if len(all.Replacements) != 2 || len(base.Replacements) != 1 || len(base.Collections) != 1 {
+		t.Fatalf("With = %+v, base = %+v; want joined copy and base unchanged", all, base)
 	}
 	if got := all.replacementsOf("mentions"); len(got) != 1 || !got[0].Retired() {
 		t.Fatalf("replacementsOf(mentions) = %+v, want one retired entry", got)

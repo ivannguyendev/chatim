@@ -129,7 +129,7 @@ func wireServers(cfg config.Config, log *slog.Logger, w wired) (*node, error) {
 		return nil, err
 	}
 	sources := slices.Concat(metricSources(ws, w.exec), fd.Sources(), rooms.Sources(), publisher.Sources(), typist.Sources(), pres.sources(), sync.Sources())
-	handler, err := metrics.Handler(metricsSubsystem, sources)
+	handler, err := metrics.Handler(metricsNamespace, metricsSubsystem, sources)
 	if err != nil {
 		return nil, err
 	}

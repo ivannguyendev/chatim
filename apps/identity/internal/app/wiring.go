@@ -19,6 +19,7 @@ import (
 )
 
 const (
+	metricsNamespace = "chatim"
 	metricsSubsystem = "identity"
 	tokenLeeway      = 30 * time.Second
 	serveAppName     = "chatim-identity"
@@ -124,7 +125,7 @@ func wireServers(ctx context.Context, cfg config.Config, log *slog.Logger, st St
 	sources = append(sources, schema.metricSources()...)
 	sources = append(sources, metrics.Source{Name: "jit_batch_docs", Help: "Users per just-in-time InsertMany sent to MongoDB.",
 		Histogram: func() metrics.Histogram { return st.JITBatchDocs() }})
-	metricsHandler, err := metrics.Handler(metricsSubsystem, sources)
+	metricsHandler, err := metrics.Handler(metricsNamespace, metricsSubsystem, sources)
 	if err != nil {
 		return nil, err
 	}

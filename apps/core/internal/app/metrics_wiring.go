@@ -18,6 +18,7 @@ import (
 
 const (
 	oplogProbeTimeout = 2 * time.Second
+	metricsNamespace  = "chatim"
 	metricsSubsystem  = "core"
 )
 

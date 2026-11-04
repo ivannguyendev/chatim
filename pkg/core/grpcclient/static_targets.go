@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc/resolver/manual"
 )
 
-const staticScheme = "chatim-static"
+const staticScheme = "static"
 
 func NewStatic(addrs []string, opts Options) (*grpc.ClientConn, error) {
 	if len(addrs) == 0 {
@@ -26,5 +26,5 @@ func NewStatic(addrs []string, opts Options) (*grpc.ClientConn, error) {
 	r := manual.NewBuilderWithScheme(staticScheme)
 	r.InitialState(state)
 	opts.DialOptions = append(slices.Clone(opts.DialOptions), grpc.WithResolvers(r))
-	return New(staticScheme+":///cores", opts)
+	return New(staticScheme+":///targets", opts)
 }

@@ -14,24 +14,24 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-const coreMethod = "/chatim.v1.CoreService/GetRooms"
+const echoMethod = "/test.v1.Echo/Call"
 
-type countingCore struct {
+type countingServer struct {
 	addr   string
 	srv    *grpc.Server
 	done   chan struct{}
 	calls  atomic.Int32
 	hang   atomic.Bool
-	gotOne chan *countingCore
+	gotOne chan *countingServer
 }
 
-func startCountingCore(t *testing.T, gotOne chan *countingCore) *countingCore {
+func startCountingServer(t *testing.T, gotOne chan *countingServer) *countingServer {
 	t.Helper()
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := &countingCore{addr: lis.Addr().String(), done: make(chan struct{}), gotOne: gotOne}
+	c := &countingServer{addr: lis.Addr().String(), done: make(chan struct{}), gotOne: gotOne}
 	c.srv = grpc.NewServer(grpc.UnknownServiceHandler(c.handle))
 	go func() {
 		defer close(c.done)
@@ -41,7 +41,7 @@ func startCountingCore(t *testing.T, gotOne chan *countingCore) *countingCore {
 	return c
 }
 
-func (c *countingCore) handle(_ any, stream grpc.ServerStream) error {
+func (c *countingServer) handle(_ any, stream grpc.ServerStream) error {
 	var in emptypb.Empty
 	if err := stream.RecvMsg(&in); err != nil {
 		return err
@@ -55,7 +55,7 @@ func (c *countingCore) handle(_ any, stream grpc.ServerStream) error {
 	return stream.SendMsg(&emptypb.Empty{})
 }
 
-func (c *countingCore) stop() {
+func (c *countingServer) stop() {
 	c.srv.Stop()
 	<-c.done
 }
@@ -71,7 +71,7 @@ func dialStatic(t *testing.T, addrs ...string) *grpc.ClientConn {
 }
 
 func call(ctx context.Context, conn *grpc.ClientConn) error {
-	return conn.Invoke(ctx, coreMethod, &emptypb.Empty{}, &emptypb.Empty{})
+	return conn.Invoke(ctx, echoMethod, &emptypb.Empty{}, &emptypb.Empty{})
 }
 
 func callUntil(t *testing.T, conn *grpc.ClientConn, done func() bool) {
@@ -95,8 +95,8 @@ func TestNewStaticRefusesBadAddressLists(t *testing.T) {
 	}
 }
 
-func TestStaticTargetsSpreadCallsAndSkipAStoppedCore(t *testing.T) {
-	a, b := startCountingCore(t, nil), startCountingCore(t, nil)
+func TestStaticTargetsSpreadCallsAndSkipAStoppedServer(t *testing.T) {
+	a, b := startCountingServer(t, nil), startCountingServer(t, nil)
 	conn := dialStatic(t, a.addr, b.addr)
 	callUntil(t, conn, func() bool { return a.calls.Load() > 0 && b.calls.Load() > 0 })
 	a.stop()
@@ -112,9 +112,9 @@ func TestStaticTargetsSpreadCallsAndSkipAStoppedCore(t *testing.T) {
 	}
 }
 
-func TestCoreDyingMidCallIsUnavailableWithoutRetry(t *testing.T) {
-	gotOne := make(chan *countingCore, 2)
-	a, b := startCountingCore(t, gotOne), startCountingCore(t, gotOne)
+func TestServerDyingMidCallIsUnavailableWithoutRetry(t *testing.T) {
+	gotOne := make(chan *countingServer, 2)
+	a, b := startCountingServer(t, gotOne), startCountingServer(t, gotOne)
 	conn := dialStatic(t, a.addr, b.addr)
 	callUntil(t, conn, func() bool { return a.calls.Load() > 0 && b.calls.Load() > 0 })
 	a.hang.Store(true)
@@ -127,6 +127,6 @@ func TestCoreDyingMidCallIsUnavailableWithoutRetry(t *testing.T) {
 		t.Fatalf("call = %v, want UNAVAILABLE", err)
 	}
 	if got := a.calls.Load() + b.calls.Load() - before; got != 1 {
-		t.Fatalf("cores saw %d calls, want exactly 1", got)
+		t.Fatalf("servers saw %d calls, want exactly 1", got)
 	}
 }

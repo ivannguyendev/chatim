@@ -14,7 +14,7 @@ import (
 
 func metricsText(t *testing.T, s *identitysync.Syncer) string {
 	t.Helper()
-	h, err := metrics.Handler("test", s.Sources())
+	h, err := metrics.Handler("chatim", "test", s.Sources())
 	if err != nil {
 		t.Fatalf("metrics: %v", err)
 	}

@@ -26,6 +26,7 @@ import (
 )
 
 const (
+	metricsNamespace  = "chatim"
 	metricsSubsystem  = "websocket"
 	wsPath            = "GET /ws"
 	readHeaderTimeout = 5 * time.Second

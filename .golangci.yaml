@@ -36,6 +36,19 @@ linters:
               desc: pkg holds shared code only
             - pkg: github.com/ivannguyendev/chatim/modules
               desc: pkg holds shared code only
+        pkg-core-zero-domain:
+          files:
+            - "**/pkg/core/**"
+          list-mode: lax
+          allow:
+            - github.com/ivannguyendev/chatim/pkg/core
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/pkg
+              desc: pkg/core is zero-domain
+            - pkg: github.com/ivannguyendev/chatim/apps
+              desc: pkg/core is zero-domain
+            - pkg: github.com/ivannguyendev/chatim/modules
+              desc: pkg/core is zero-domain
         wstest-tests-only:
           files:
             - "**/apps/**"

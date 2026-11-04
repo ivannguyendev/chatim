@@ -50,7 +50,7 @@ func (r Report) ConflictNames() []string {
 
 func (r Report) Lines() []string {
 	if r.Absent {
-		return []string{r.Collection + " absent, core creates it at startup"}
+		return []string{r.Collection + " absent, the app creates it at startup"}
 	}
 	var out []string
 	for _, name := range r.MissingNames() {

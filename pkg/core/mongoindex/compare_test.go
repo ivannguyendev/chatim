@@ -89,7 +89,7 @@ func TestCompareOfAnUpToDateCollectionIsNotStale(t *testing.T) {
 	if err != nil || r.Stale() || len(r.Lines()) != 0 {
 		t.Fatalf("Compare = %+v, %v; want nothing to report", r, err)
 	}
-	if got := (Report{Collection: "members", Absent: true}).Lines(); !slices.Equal(got, []string{"members absent, core creates it at startup"}) {
+	if got := (Report{Collection: "members", Absent: true}).Lines(); !slices.Equal(got, []string{"members absent, the app creates it at startup"}) {
 		t.Fatalf("absent Lines = %q", got)
 	}
 }

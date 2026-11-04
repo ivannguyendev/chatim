@@ -12,8 +12,8 @@ import (
 )
 
 func TestHandlerScrubsEveryAttrShape(t *testing.T) {
-	mongoURI := "mongodb://chatim:pw1secret@m1:27017,m2:27017/?replicaSet=rs0&authMechanismProperties=AWS_SESSION_TOKEN:t0k3nsecret"
-	natsURL := "nats://core:pw2secret@n1:4222"
+	mongoURI := "mongodb://app:pw1secret@m1:27017,m2:27017/?replicaSet=rs0&authMechanismProperties=AWS_SESSION_TOKEN:t0k3nsecret"
+	natsURL := "nats://worker:pw2secret@n1:4222"
 	secrets := []string{"m0ng0pwsecret", "st4t3pwsecret", "d3dup3pwsecret"}
 	var buf bytes.Buffer
 	log := slog.New(redact.NewHandler(slog.NewJSONHandler(&buf, nil), []string{mongoURI, natsURL}, secrets))

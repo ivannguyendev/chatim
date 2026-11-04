@@ -11,7 +11,7 @@ import (
 )
 
 func TestMetricsRouteServesOnlyAConfiguredHandler(t *testing.T) {
-	h := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("chatim_up 1\n")) })
+	h := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("app_up 1\n")) })
 	cases := map[string]struct {
 		handler http.Handler
 		code    int

@@ -34,7 +34,7 @@ func TestIndexOutdatedGaugeFollowsTheBootstrapReports(t *testing.T) {
 	health.Report(t.Context(), mongoindex.Report{Collection: "rooms"})
 	p := fakeProbes()
 	p.indexes = indexProbes{health: health, collections: []string{"members", "rooms"}}
-	h, err := metrics.Handler(metricsSubsystem, metricSources(p))
+	h, err := metrics.Handler(metricsNamespace, metricsSubsystem, metricSources(p))
 	if err != nil {
 		t.Fatalf("Handler: %v", err)
 	}

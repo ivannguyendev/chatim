@@ -23,7 +23,10 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-const metricsSubsystem = "gateway"
+const (
+	metricsNamespace = "chatim"
+	metricsSubsystem = "gateway"
+)
 
 func wire(cfg config.Config, log *slog.Logger, deps Deps) (*node, error) {
 	verifier, err := jwtverify.LoadFile(cfg.JWTKeysFile, jwtverify.Config{Issuer: cfg.JWTIssuer, Audience: cfg.JWTAudience, Leeway: cfg.JWTLeeway})
@@ -98,7 +101,7 @@ func wireServers(cfg config.Config, log *slog.Logger, verifier *jwtverify.Verifi
 	if err != nil {
 		return nil, err
 	}
-	metricsHandler, err := metrics.Handler(metricsSubsystem, slices.Concat(metricSources(handler, fwd), sync.Sources()))
+	metricsHandler, err := metrics.Handler(metricsNamespace, metricsSubsystem, slices.Concat(metricSources(handler, fwd), sync.Sources()))
 	if err != nil {
 		return nil, err
 	}

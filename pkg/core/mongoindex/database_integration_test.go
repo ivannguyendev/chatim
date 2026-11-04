@@ -25,7 +25,7 @@ func itDatabase(t *testing.T) *mongo.Database {
 	}
 	suffix := make([]byte, 8)
 	_, _ = rand.Read(suffix)
-	db := client.Database("chatim_index_it_" + hex.EncodeToString(suffix))
+	db := client.Database("mongoindex_it_" + hex.EncodeToString(suffix))
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()

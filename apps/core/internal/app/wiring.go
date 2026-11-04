@@ -182,7 +182,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 		mention:         a.attachMention(mention, liveWatchers{watch, roomWatch}),
 		indexes:         indexProbes{health: a.indexes, collections: indexCatalog(cfg).Names()},
 	}
-	handler, err := metrics.Handler(metricsSubsystem, metricSources(p))
+	handler, err := metrics.Handler(metricsNamespace, metricsSubsystem, metricSources(p))
 	if err != nil {
 		a.abandon(context.Background())
 		return nil, fmt.Errorf("wire metrics: %w", err)

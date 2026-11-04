@@ -26,13 +26,13 @@ func (l *refusingLookup) Consumer(_ context.Context, stream, name string) (jetst
 
 func TestPullSourceLooksUpItsDurableAndReportsAFailedLookup(t *testing.T) {
 	l := &refusingLookup{}
-	src := jsconsume.NewPullSource(l, "CHATIM_EVT", "projection-room_activity")
+	src := jsconsume.NewPullSource(l, "ORDERS", "billing-totals")
 	ds, err := src.Fetch(t.Context(), 8, time.Second)
 	if !errors.Is(err, errLookup) || len(ds) != 0 {
 		t.Fatalf("Fetch = %d deliveries, %v; want the lookup error", len(ds), err)
 	}
-	if l.stream != "CHATIM_EVT" || l.name != "projection-room_activity" {
-		t.Errorf("looked up %s/%s, want CHATIM_EVT/projection-room_activity", l.stream, l.name)
+	if l.stream != "ORDERS" || l.name != "billing-totals" {
+		t.Errorf("looked up %s/%s, want ORDERS/billing-totals", l.stream, l.name)
 	}
 }
 

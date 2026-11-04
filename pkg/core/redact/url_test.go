@@ -11,8 +11,8 @@ func TestRedactURL(t *testing.T) {
 		{"", ""},
 		{"nats://n1:4222", "nats://n1:4222"},
 		{
-			"mongodb://chatim:s3cr3t@chatim-mongodb:27017/?replicaSet=rs0&authSource=admin",
-			"mongodb://xxxxx@chatim-mongodb:27017/?replicaSet=rs0&authSource=admin",
+			"mongodb://app:s3cr3t@db-host:27017/?replicaSet=rs0&authSource=admin",
+			"mongodb://xxxxx@db-host:27017/?replicaSet=rs0&authSource=admin",
 		},
 		{"mongodb+srv://u:s3cr3t@cluster.example.net/db", "mongodb+srv://xxxxx@cluster.example.net/db"},
 		{"mongodb://u:p@ss/w:s3cr3t@m1,m2/?replicaSet=rs0", "mongodb://xxxxx@m1,m2/?replicaSet=rs0"},

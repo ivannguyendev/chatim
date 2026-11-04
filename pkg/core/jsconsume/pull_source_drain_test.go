@@ -52,7 +52,7 @@ func message(delivered uint64) jetstream.Msg {
 func TestPullSourceReadsAStoppedFetchToItsEnd(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		c := &fakeConsumer{batch: fakeBatch{msgs: make(chan jetstream.Msg, 4)}}
-		src := jsconsume.NewPullSource(fixedLookup{c}, "CHATIM_EVT", "projections")
+		src := jsconsume.NewPullSource(fixedLookup{c}, "ORDERS", "billing")
 		c.batch.msgs <- message(1)
 		ctx, cancel := context.WithCancel(t.Context())
 		type result struct {
@@ -90,7 +90,7 @@ func TestPullDeliveryReportsProgressToItsMessage(t *testing.T) {
 		c := &fakeConsumer{batch: fakeBatch{msgs: make(chan jetstream.Msg, 1)}}
 		c.batch.msgs <- m
 		close(c.batch.msgs)
-		ds, err := jsconsume.NewPullSource(fixedLookup{c}, "CHATIM_EVT", "mention").Fetch(t.Context(), 8, time.Second)
+		ds, err := jsconsume.NewPullSource(fixedLookup{c}, "ORDERS", "audit").Fetch(t.Context(), 8, time.Second)
 		if err != nil || len(ds) != 1 {
 			t.Fatalf("Fetch = %d deliveries, %v; want one", len(ds), err)
 		}

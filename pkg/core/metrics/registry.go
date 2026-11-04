@@ -11,8 +11,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-const namespace = "chatim"
-
 type Source struct {
 	Subsystem string
 	Name      string
@@ -23,7 +21,10 @@ type Source struct {
 	Histogram func() Histogram
 }
 
-func Handler(subsystem string, sources []Source) (http.Handler, error) {
+func Handler(namespace, subsystem string, sources []Source) (http.Handler, error) {
+	if namespace == "" {
+		return nil, errors.New("metrics: namespace is required")
+	}
 	reg := prometheus.NewRegistry()
 	if err := reg.Register(collectors.NewGoCollector()); err != nil {
 		return nil, err
@@ -32,7 +33,7 @@ func Handler(subsystem string, sources []Source) (http.Handler, error) {
 		return nil, err
 	}
 	for _, s := range sources {
-		c, err := collector(subsystem, s)
+		c, err := collector(namespace, subsystem, s)
 		if err == nil {
 			err = reg.Register(c)
 		}
@@ -43,7 +44,7 @@ func Handler(subsystem string, sources []Source) (http.Handler, error) {
 	return promhttp.HandlerFor(reg, promhttp.HandlerOpts{}), nil
 }
 
-func collector(defaultSubsystem string, s Source) (prometheus.Collector, error) {
+func collector(namespace, defaultSubsystem string, s Source) (prometheus.Collector, error) {
 	subsystem := cmp.Or(s.Subsystem, defaultSubsystem)
 	switch {
 	case (s.Read == nil) == (s.Histogram == nil):
