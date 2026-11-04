@@ -3,7 +3,7 @@ package actor
 import (
 	"time"
 
-	"github.com/ivannguyendev/chatim/pkg/lru"
+	"github.com/ivannguyendev/chatim/pkg/core/lru"
 )
 
 type dedupeKey struct{ user, cid string }

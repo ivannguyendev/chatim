@@ -10,9 +10,9 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/ivannguyendev/chatim/apps/identity/internal/guard"
-	"github.com/ivannguyendev/chatim/pkg/httpcors"
+	"github.com/ivannguyendev/chatim/pkg/core/httpcors"
+	"github.com/ivannguyendev/chatim/pkg/core/userlimit"
 	"github.com/ivannguyendev/chatim/pkg/pb/chatim/identity/v1/identityv1connect"
-	"github.com/ivannguyendev/chatim/pkg/userlimit"
 )
 
 type Keys interface {

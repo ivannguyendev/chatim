@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/core/apperr"
 )
 
 const (

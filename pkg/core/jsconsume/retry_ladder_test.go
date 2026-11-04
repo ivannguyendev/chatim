@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/pkg/jsconsume"
+	"github.com/ivannguyendev/chatim/pkg/core/jsconsume"
 )
 
 func TestNakDelayClimbsTheLadderAndStaysAtTheTop(t *testing.T) {

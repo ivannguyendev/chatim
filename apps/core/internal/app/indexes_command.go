@@ -14,8 +14,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
-	"github.com/ivannguyendev/chatim/pkg/mongoindex"
-	"github.com/ivannguyendev/chatim/pkg/redact"
+	"github.com/ivannguyendev/chatim/pkg/core/mongoindex"
+	"github.com/ivannguyendev/chatim/pkg/core/redact"
 )
 
 var errIndexesUsage = errors.New("usage: core indexes [-dry-run|-apply|-drop-old]")

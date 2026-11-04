@@ -15,8 +15,8 @@ import (
 	"github.com/ivannguyendev/chatim/modules/mention/internal/grpcsrv"
 	"github.com/ivannguyendev/chatim/modules/mention/internal/roomgroups"
 	"github.com/ivannguyendev/chatim/modules/mention/internal/store/mongostore"
-	"github.com/ivannguyendev/chatim/pkg/apperr"
-	"github.com/ivannguyendev/chatim/pkg/mongoindex"
+	"github.com/ivannguyendev/chatim/pkg/core/apperr"
+	"github.com/ivannguyendev/chatim/pkg/core/mongoindex"
 )
 
 type Config = config.Config

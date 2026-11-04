@@ -15,8 +15,8 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/message/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
+	"github.com/ivannguyendev/chatim/pkg/core/resilience"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
-	"github.com/ivannguyendev/chatim/pkg/resilience"
 )
 
 func TestSendMessageHandsTheCallerAndRequestToTheSender(t *testing.T) {

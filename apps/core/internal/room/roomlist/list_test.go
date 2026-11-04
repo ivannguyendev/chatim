@@ -7,7 +7,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/room/roomlist"
-	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/core/apperr"
 )
 
 type wantItem struct {

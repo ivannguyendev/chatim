@@ -17,7 +17,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
-	"github.com/ivannguyendev/chatim/pkg/metrics"
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
 )
 
 const (

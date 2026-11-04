@@ -11,12 +11,12 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/identity/internal/directory"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/core/userlimit"
 	"github.com/ivannguyendev/chatim/pkg/ids"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 	identityv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/identity/v1"
 	"github.com/ivannguyendev/chatim/pkg/pb/chatim/identity/v1/identityv1connect"
 	"github.com/ivannguyendev/chatim/pkg/revocation"
-	"github.com/ivannguyendev/chatim/pkg/userlimit"
 )
 
 const (

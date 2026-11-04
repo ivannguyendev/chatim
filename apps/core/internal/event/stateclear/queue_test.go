@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/stateclear"
-	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/core/apperr"
 )
 
 func TestAddDropsAndCountsWhenTheBufferIsFull(t *testing.T) {

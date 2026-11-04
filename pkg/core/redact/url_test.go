@@ -3,7 +3,7 @@ package redact_test
 import (
 	"testing"
 
-	"github.com/ivannguyendev/chatim/pkg/redact"
+	"github.com/ivannguyendev/chatim/pkg/core/redact"
 )
 
 func TestRedactURL(t *testing.T) {

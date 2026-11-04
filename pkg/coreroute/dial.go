@@ -5,7 +5,7 @@ import (
 
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/ivannguyendev/chatim/pkg/grpcclient"
+	"github.com/ivannguyendev/chatim/pkg/core/grpcclient"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 

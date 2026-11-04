@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivannguyendev/chatim/pkg/metrics"
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
 )
 
 func TestHandlerExposesCountersAndGaugesFromSources(t *testing.T) {

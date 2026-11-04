@@ -9,7 +9,7 @@ import (
 	"syscall"
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/config"
-	"github.com/ivannguyendev/chatim/pkg/admin"
+	"github.com/ivannguyendev/chatim/pkg/core/admin"
 )
 
 const usage = "usage: websocket [serve|probe]"

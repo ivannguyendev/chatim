@@ -9,8 +9,8 @@ import (
 	"sync/atomic"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
-	"github.com/ivannguyendev/chatim/pkg/apperr"
-	"github.com/ivannguyendev/chatim/pkg/jsconsume"
+	"github.com/ivannguyendev/chatim/pkg/core/apperr"
+	"github.com/ivannguyendev/chatim/pkg/core/jsconsume"
 )
 
 var errStarted = errors.New("state clear queue already started")

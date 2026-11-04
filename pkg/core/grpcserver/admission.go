@@ -9,7 +9,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/ivannguyendev/chatim/pkg/resilience"
+	"github.com/ivannguyendev/chatim/pkg/core/resilience"
 )
 
 func LoadShedUnary(l *resilience.Limiter) grpc.UnaryServerInterceptor {

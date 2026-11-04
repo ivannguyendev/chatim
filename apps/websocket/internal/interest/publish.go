@@ -7,7 +7,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/feed"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/frame"
-	"github.com/ivannguyendev/chatim/pkg/metrics"
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/pkg/wspublish"
 )

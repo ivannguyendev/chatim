@@ -10,7 +10,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/projection"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/testlog"
-	"github.com/ivannguyendev/chatim/pkg/jsconsume"
+	"github.com/ivannguyendev/chatim/pkg/core/jsconsume"
 )
 
 type expiringSource struct {

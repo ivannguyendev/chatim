@@ -8,7 +8,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 
-	"github.com/ivannguyendev/chatim/pkg/admin"
+	"github.com/ivannguyendev/chatim/pkg/core/admin"
 )
 
 type readiness struct {

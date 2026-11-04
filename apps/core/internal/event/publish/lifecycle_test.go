@@ -10,7 +10,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish/publishtest"
-	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/core/apperr"
 )
 
 func TestEnqueueNeverBlocksWhenTheQueueIsFull(t *testing.T) {

@@ -12,7 +12,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/identity/internal/api"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/config"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store/mongostore"
-	"github.com/ivannguyendev/chatim/pkg/admin"
+	"github.com/ivannguyendev/chatim/pkg/core/admin"
 )
 
 type Deps struct {

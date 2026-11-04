@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ivannguyendev/chatim/pkg/envconfig"
-	"github.com/ivannguyendev/chatim/pkg/redact"
+	"github.com/ivannguyendev/chatim/pkg/core/envconfig"
+	"github.com/ivannguyendev/chatim/pkg/core/redact"
 )
 
 const (

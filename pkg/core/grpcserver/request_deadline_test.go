@@ -8,7 +8,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/ivannguyendev/chatim/pkg/grpcserver"
+	"github.com/ivannguyendev/chatim/pkg/core/grpcserver"
 )
 
 func TestRequestDeadlineBoundsHandlersWithoutClientDeadline(t *testing.T) {

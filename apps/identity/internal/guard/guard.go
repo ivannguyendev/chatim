@@ -9,7 +9,7 @@ import (
 
 	"golang.org/x/time/rate"
 
-	"github.com/ivannguyendev/chatim/pkg/lru"
+	"github.com/ivannguyendev/chatim/pkg/core/lru"
 )
 
 type IPLimiter struct {

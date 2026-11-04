@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ivannguyendev/chatim/pkg/redact"
+	"github.com/ivannguyendev/chatim/pkg/core/redact"
 )
 
 var secretFields = map[string]func(Config) slog.Attr{

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
-	"github.com/ivannguyendev/chatim/pkg/lru"
+	"github.com/ivannguyendev/chatim/pkg/core/lru"
 )
 
 const memberCacheTTL = 10 * time.Second

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/timer"
-	"github.com/ivannguyendev/chatim/pkg/jsconsume"
+	"github.com/ivannguyendev/chatim/pkg/core/jsconsume"
 )
 
 type fakeDelivery struct {

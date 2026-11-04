@@ -11,7 +11,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/ivannguyendev/chatim/pkg/backoff"
+	"github.com/ivannguyendev/chatim/pkg/core/backoff"
 )
 
 const (

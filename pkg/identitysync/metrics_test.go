@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
 	"github.com/ivannguyendev/chatim/pkg/identitysync"
-	"github.com/ivannguyendev/chatim/pkg/metrics"
 )
 
 func metricsText(t *testing.T, s *identitysync.Syncer) string {

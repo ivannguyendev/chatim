@@ -9,7 +9,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/resync"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
-	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/core/apperr"
 )
 
 func TestResyncMarksDocsOfTheLostRangeOnly(t *testing.T) {

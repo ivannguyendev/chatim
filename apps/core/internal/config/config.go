@@ -20,8 +20,8 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/slot"
 	"github.com/ivannguyendev/chatim/modules/mention/mentionapp"
-	"github.com/ivannguyendev/chatim/pkg/envconfig"
-	"github.com/ivannguyendev/chatim/pkg/grpcserver"
+	"github.com/ivannguyendev/chatim/pkg/core/envconfig"
+	"github.com/ivannguyendev/chatim/pkg/core/grpcserver"
 )
 
 const (

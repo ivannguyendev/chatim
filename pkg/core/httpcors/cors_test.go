@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/ivannguyendev/chatim/pkg/httpcors"
+	"github.com/ivannguyendev/chatim/pkg/core/httpcors"
 )
 
 func newHandler() http.Handler {

@@ -160,7 +160,7 @@ Publish lỗi thì để cờ; CAS thua trong sweeper thì để cờ; projectio
 | `event/sweep` | Sweeper slot 0: `pass`, `page`, `publish`, `pace`, `rebuild_*` cho 7 collection |
 | `event/projection` | Consumer `projections` (một durable, slot 0, ack từng tin) với 2 handler (`room_activity`, `reply_index`), `EnsureConsumer` (xoá 3 durable cũ), `Decode` |
 | `event/timer` | `CHATIM_TIMER`, `Timers` (`Arm*`, `Disarm`), consumer `timer-due`, `count_repair`, `member_count_repair` |
-| `event/eventkit` | Phần riêng của core: `Gone`, `Undeliverable`, `RoomTypes`, `MessageKey`. Phần dùng chung với Mention App (`PullSource`, `Delivery`, `NakDelay`, `LimitedLog`, `FetchExpiryGrace`) ở `pkg/jsconsume` |
+| `event/eventkit` | Phần riêng của core: `Gone`, `Undeliverable`, `RoomTypes`, `MessageKey`. Phần dùng chung với Mention App (`PullSource`, `Delivery`, `NakDelay`, `LimitedLog`, `FetchExpiryGrace`) ở `pkg/core/jsconsume` |
 | `event/resync` | `/app resync`: chọn room, bật lại cờ (`EventStates.Mark`) |
 | `store` | Ports `EventStates` (`Pending`, `Clear`, `Mark`), `SweepCheckpoints` (`Get`, `Advance`); contract `storetest.RunEventStates`, `RunMessageStates`, `RunFactStates`, `RunMemberStates` |
 

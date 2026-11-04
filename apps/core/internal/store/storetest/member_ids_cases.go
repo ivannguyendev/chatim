@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/core/apperr"
 )
 
 func memberIDCases() []memberCase {

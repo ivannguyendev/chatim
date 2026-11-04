@@ -22,7 +22,7 @@ Toàn bộ đọc qua `apps/core/internal/config`; thiếu thì dùng giá trị
 | `NATS_URL` | `nats://chatim-nats:4222` | |
 | `CORE_CONNECT_TIMEOUT` | `10s` | Timeout nối Mongo/Redis/NATS lúc khởi động |
 | `CORE_REQUEST_DEADLINE` | `3s` | Deadline phía server cho mỗi unary RPC (D42), cũng là group deadline của actor |
-| `CORE_SLOW_RPC` | `500ms` | RPC chạy lâu hơn mức này được log là chậm (interceptor log của `pkg/grpcserver`); phải dương |
+| `CORE_SLOW_RPC` | `500ms` | RPC chạy lâu hơn mức này được log là chậm (interceptor log của `pkg/core/grpcserver`); phải dương |
 | `CORE_QUEUE_WAIT`, `CORE_MAX_INFLIGHT` | `25ms` / `2048` | Giới hạn chờ và số RPC đang xử lý đồng thời (load shedding) |
 | `CORE_DRAIN_DELAY` | `2s` | Chờ trước khi gRPC graceful stop, để LB ngừng gửi request mới |
 | `CORE_GRPC_SHUTDOWN` | `5s` | Hạn graceful stop của gRPC server |
@@ -86,7 +86,7 @@ Toàn bộ đọc qua `apps/core/internal/config`; thiếu thì dùng giá trị
 
 ## Metric và alert
 
-Mọi metric của core có tiền tố `chatim_core_`, của Mention App `chatim_mention_`; đăng ký pull-based trên registry riêng (`pkg/metrics`, wiring ở `apps/core/internal/app/metrics_wiring.go`, `event_metrics_wiring.go`). Bảng cam kết và detector: [architecture.md §8](../architecture.md#8-cam-kết-đúng-đắn-guarantees--detectors).
+Mọi metric của core có tiền tố `chatim_core_`, của Mention App `chatim_mention_`; đăng ký pull-based trên registry riêng (`pkg/core/metrics`, wiring ở `apps/core/internal/app/metrics_wiring.go`, `event_metrics_wiring.go`). Bảng cam kết và detector: [architecture.md §8](../architecture.md#8-cam-kết-đúng-đắn-guarantees--detectors).
 
 - Đường ghi: `publish_dropped_total{reason}`, `redis_degraded{client}`, `cid_settle_dropped_total`, `cid_pending_elsewhere_total`, `grpc_load_shed_total`, `room_yields_total`.
 - Event chờ phát: `state_clear_cleared_total`, `state_clear_dropped_total`, `state_clear_failures_total`, `publish_state_track_full_total`, `event_pending_oldest_seconds{collection}` (chỉ core giữ slot 0 có giá trị), `sweep_republished_total{collection}`, `sweep_dropped_total{collection}`, `sweep_publish_failures_total`, `sweep_failures_total`, `sweep_passes_total`.

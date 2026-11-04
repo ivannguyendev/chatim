@@ -3,7 +3,7 @@ package lru_test
 import (
 	"testing"
 
-	"github.com/ivannguyendev/chatim/pkg/lru"
+	"github.com/ivannguyendev/chatim/pkg/core/lru"
 )
 
 func TestCacheEvictsTheLeastRecentlyUsed(t *testing.T) {

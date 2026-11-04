@@ -8,7 +8,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
-	"github.com/ivannguyendev/chatim/pkg/mongobound"
+	"github.com/ivannguyendev/chatim/pkg/core/mongobound"
 )
 
 type stateWrite struct {

@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
-	"github.com/ivannguyendev/chatim/pkg/jsconsume"
+	"github.com/ivannguyendev/chatim/pkg/core/jsconsume"
 )
 
 func (c *Consumer) handle(ctx context.Context, ds []jsconsume.Delivery) []jsconsume.Delivery {

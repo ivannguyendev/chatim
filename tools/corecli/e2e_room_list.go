@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ivannguyendev/chatim/pkg/backoff"
+	"github.com/ivannguyendev/chatim/pkg/core/backoff"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/tools/corecli/internal/e2e"
 )

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/ivannguyendev/chatim/apps/identity/internal/admincmd"
-	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/core/apperr"
 )
 
 func TestSplitGroupsTrimsEachPart(t *testing.T) {

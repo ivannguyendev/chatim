@@ -10,7 +10,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/ivannguyendev/chatim/apps/identity/internal/trust"
-	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/core/apperr"
 )
 
 type refusalCase struct {

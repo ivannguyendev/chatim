@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/ivannguyendev/chatim/pkg/envconfig"
+	"github.com/ivannguyendev/chatim/pkg/core/envconfig"
 )
 
 func FromEnv(prefix string) (Config, error) {

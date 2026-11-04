@@ -8,7 +8,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
-	"github.com/ivannguyendev/chatim/pkg/mongoindex"
+	"github.com/ivannguyendev/chatim/pkg/core/mongoindex"
 )
 
 func Bootstrap(ctx context.Context, db *mongo.Database, reporters ...mongoindex.Reporter) error {

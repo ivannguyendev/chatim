@@ -12,8 +12,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
-	"github.com/ivannguyendev/chatim/pkg/metrics"
-	"github.com/ivannguyendev/chatim/pkg/mongoindex"
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
+	"github.com/ivannguyendev/chatim/pkg/core/mongoindex"
 )
 
 func TestIndexCatalogAddsMentionCollectionsOnlyWhenEnabled(t *testing.T) {

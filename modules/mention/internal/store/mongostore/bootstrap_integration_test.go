@@ -11,7 +11,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
-	"github.com/ivannguyendev/chatim/pkg/mongoindex"
+	"github.com/ivannguyendev/chatim/pkg/core/mongoindex"
 )
 
 func indexNames(t *testing.T, db *mongo.Database, coll string) []string {

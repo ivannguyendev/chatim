@@ -12,7 +12,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/identity/internal/keyring"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/signing"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
-	"github.com/ivannguyendev/chatim/pkg/admin"
+	"github.com/ivannguyendev/chatim/pkg/core/admin"
 )
 
 type hangingStore struct {

@@ -3,7 +3,7 @@ package domain
 import (
 	"fmt"
 
-	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/core/apperr"
 )
 
 var (

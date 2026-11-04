@@ -13,7 +13,7 @@ import (
 	"github.com/lxzan/gws"
 	"golang.org/x/time/rate"
 
-	"github.com/ivannguyendev/chatim/pkg/metrics"
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
 )
 
 const subprotocolHeader = "Sec-WebSocket-Protocol"

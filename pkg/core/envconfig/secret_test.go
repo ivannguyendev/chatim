@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivannguyendev/chatim/pkg/envconfig"
+	"github.com/ivannguyendev/chatim/pkg/core/envconfig"
 )
 
 func writeSecret(t *testing.T, content string) string {

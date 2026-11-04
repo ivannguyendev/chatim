@@ -9,7 +9,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/modules/mention/internal/config"
 	"github.com/ivannguyendev/chatim/modules/mention/internal/notify"
-	"github.com/ivannguyendev/chatim/pkg/jsconsume"
+	"github.com/ivannguyendev/chatim/pkg/core/jsconsume"
 )
 
 const StuckDeliveries uint64 = 6

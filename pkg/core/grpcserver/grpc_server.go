@@ -14,7 +14,7 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 
-	"github.com/ivannguyendev/chatim/pkg/resilience"
+	"github.com/ivannguyendev/chatim/pkg/core/resilience"
 )
 
 const DefaultSlowRPC = 500 * time.Millisecond

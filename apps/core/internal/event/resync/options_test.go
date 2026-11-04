@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/resync"
-	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/core/apperr"
 )
 
 var rangeArgs = []string{"-from", "2026-10-01T10:00:00Z", "-to", "2026-10-01T18:00:00+07:00"}

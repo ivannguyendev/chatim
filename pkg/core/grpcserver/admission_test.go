@@ -8,8 +8,8 @@ import (
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
 
-	"github.com/ivannguyendev/chatim/pkg/grpcserver"
-	"github.com/ivannguyendev/chatim/pkg/resilience"
+	"github.com/ivannguyendev/chatim/pkg/core/grpcserver"
+	"github.com/ivannguyendev/chatim/pkg/core/resilience"
 )
 
 func TestLoadShedExemptsHealth(t *testing.T) {

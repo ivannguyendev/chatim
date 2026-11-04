@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/eventkit"
-	"github.com/ivannguyendev/chatim/pkg/jsconsume"
+	"github.com/ivannguyendev/chatim/pkg/core/jsconsume"
 )
 
 var errUnanswered = errors.New("projection gave no result for the event")

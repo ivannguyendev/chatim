@@ -3,8 +3,8 @@ package api
 import (
 	"sync/atomic"
 
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
-	"github.com/ivannguyendev/chatim/pkg/metrics"
 )
 
 const (

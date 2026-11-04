@@ -143,7 +143,7 @@ sequenceDiagram
 - `grpcsrv` đọc tenant và user từ metadata `x-chatim-tenant`, `x-chatim-user` (`pkg/callerid`); người gọi là app nội bộ được tin cậy cho tới khi có mTLS.
 - Liên kết trong tin được kiểm trước actor bởi `message.Editor`: `reply_to` (chỉ thread 0) là một `Find` tin cha (`CheckReply` trong `message/reply_link.go`, gọi từ `grpcsrv/send_links.go`); tin cha không có thì hỏi `Admit` trước, để người ngoài room không dò được seq nào tồn tại. `forward_from` đi qua `message.Editor.Forward` (`message/forward_link.go`, 4 lần đọc theo khoá, D116); `grpcsrv/forward.go` chỉ parse và từ chối khi có cả `forward_from` lẫn `reply_to`. Tin không có liên kết không tốn lần đọc nào.
 - `Router.Send` chuẩn hoá mention (`domain.ValidateMentions` theo `MENTION_TARGETS_MAX`); có `@all` thì actor hỏi thêm quyền `mention_all` sau `send_message`.
-- Handler trả lỗi domain hoặc `apperr`; `pkg/grpcserver` đổi sang mã gRPC ở một chỗ duy nhất, client chỉ thấy text của lỗi sentinel.
+- Handler trả lỗi domain hoặc `apperr`; `pkg/core/grpcserver` đổi sang mã gRPC ở một chỗ duy nhất, client chỉ thấy text của lỗi sentinel.
 - **Tin hệ thống (M3, D132):** `grpcsrv` kiểm `meta` ≤ 8KB, `kind` chỉ `text`/`system`, và từ chối liên kết hay mention trên tin `system` trước actor (`INVALID_ARGUMENT`). Actor luôn kiểm tenant, nhưng với `system` thì bỏ kiểm thành viên và cache thành viên, chỉ hỏi policy `send_system_message` với `Member` và `Kind` rỗng. Doc lưu `k = 2`, `nu` (chỉ khi true), `m`. Forward giữ `skip_unread`/`meta` của request.
 
 ### 3.2. Cơ chế chống trùng 2 tầng + lọc lúc đọc (Deduplication)

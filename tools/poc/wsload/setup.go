@@ -14,7 +14,7 @@ import (
 	"connectrpc.com/connect"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/ivannguyendev/chatim/pkg/backoff"
+	"github.com/ivannguyendev/chatim/pkg/core/backoff"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/pkg/pb/chatim/v1/chatimv1connect"
 	"github.com/ivannguyendev/chatim/pkg/wstest"

@@ -4,7 +4,7 @@ import (
 	"sort"
 	"sync/atomic"
 
-	"github.com/ivannguyendev/chatim/pkg/metrics"
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
 )
 
 var jitBatchBounds = []float64{1, 2, 4, 8, 16, 32, 64, 128, 256, 512}

@@ -1,6 +1,6 @@
 # Module 11: Cổng HTTPS — Tải dữ liệu & Quản lý room (App `gateway`)
 
-> **Trạng thái:** đã xây trên `feat/m4` (M4 phần gateway, 2026-10-23), theo [tóm tắt](../plans/2026-10-23-m4-gateway-https-summary.md); quyết định D197–D198 ở [decision log §17.9–17.10](../decision-log.md). Code: `apps/gateway` (app), `pkg/corecall` (chuyển lệnh dùng chung với websocket), `pkg/grpcclient.NewStatic` (kết nối core round robin), `pkg/pb/chatim/v1/chatimv1connect` (code Connect sinh từ proto).
+> **Trạng thái:** đã xây trên `feat/m4` (M4 phần gateway, 2026-10-23), theo [tóm tắt](../plans/2026-10-23-m4-gateway-https-summary.md); quyết định D197–D198 ở [decision log §17.9–17.10](../decision-log.md). Code: `apps/gateway` (app), `pkg/corecall` (chuyển lệnh dùng chung với websocket), `pkg/core/grpcclient.NewStatic` (kết nối core round robin), `pkg/pb/chatim/v1/chatimv1connect` (code Connect sinh từ proto).
 >
 > **Mục tiêu module:** Cho máy tải dữ liệu (danh sách hội thoại, lịch sử, thành viên...) và quản lý room (tạo nhóm, thêm người, đổi tên...) qua HTTPS bình thường, còn WebSocket ([module 09](./09-feature-realtime-delivery-and-ephemeral.md)) chỉ lo ghi realtime và đẩy event.
 
@@ -76,8 +76,8 @@ Một `grpc.ClientConn` duy nhất tới mọi địa chỉ trong `GW_CORE_ADDRS
 
 - **Connect** `connectrpc.com/connect` v1.21.0 (plugin `buf.build/connectrpc/go` v1.21.0 sinh `chatimv1connect`): `POST /chatim.v1.{CoreService,MentionService}/{Lệnh}`, JSON hoặc protobuf; client sinh sẵn cho web, iOS, Android từ cùng proto.
 - **HTTP/1.1 và h2c** (`http.Server.Protocols`), TLS ở load balancer. Server: `ReadHeaderTimeout` 5s, `ReadTimeout` 10s, `WriteTimeout` ≥ `CORE_REQUEST_DEADLINE` + 5s, `IdleTimeout` 60s, header ≤ 16KB, 250 stream HTTP/2 mỗi kết nối.
-- **Kho giới hạn theo user** (`pkg/userlimit`): token bucket `golang.org/x/time/rate` + bộ đếm đang chạy, LRU `GW_USER_LIMITERS` (100.000) có khoá, chỉ đẩy người không có lệnh đang chạy.
-- **Admin** (`pkg/admin`): `/livez`, `/readyz` (có core READY và chưa tắt), `/metrics`, pprof; `/app probe` cho healthcheck.
+- **Kho giới hạn theo user** (`pkg/core/userlimit`): token bucket `golang.org/x/time/rate` + bộ đếm đang chạy, LRU `GW_USER_LIMITERS` (100.000) có khoá, chỉ đẩy người không có lệnh đang chạy.
+- **Admin** (`pkg/core/admin`): `/livez`, `/readyz` (có core READY và chưa tắt), `/metrics`, pprof; `/app probe` cho healthcheck.
 
 ---
 

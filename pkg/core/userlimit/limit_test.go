@@ -10,7 +10,7 @@ import (
 
 	"go.uber.org/goleak"
 
-	"github.com/ivannguyendev/chatim/pkg/userlimit"
+	"github.com/ivannguyendev/chatim/pkg/core/userlimit"
 )
 
 func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }

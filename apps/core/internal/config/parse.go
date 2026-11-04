@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
-	"github.com/ivannguyendev/chatim/pkg/envconfig"
+	"github.com/ivannguyendev/chatim/pkg/core/envconfig"
 )
 
 type parser struct {

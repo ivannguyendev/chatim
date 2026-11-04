@@ -19,11 +19,11 @@ import (
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/presence"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/session"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/typing"
-	"github.com/ivannguyendev/chatim/pkg/admin"
+	"github.com/ivannguyendev/chatim/pkg/core/admin"
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
 	"github.com/ivannguyendev/chatim/pkg/coreroute"
 	"github.com/ivannguyendev/chatim/pkg/identitysync"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
-	"github.com/ivannguyendev/chatim/pkg/metrics"
 )
 
 type Deps struct {

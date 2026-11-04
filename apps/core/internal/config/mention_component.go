@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/ivannguyendev/chatim/modules/mention/mentionapp"
-	"github.com/ivannguyendev/chatim/pkg/envconfig"
+	"github.com/ivannguyendev/chatim/pkg/core/envconfig"
 )
 
 func (p *parser) mentionConfig(c *Config) {

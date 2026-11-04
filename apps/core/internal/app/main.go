@@ -9,7 +9,7 @@ import (
 	"syscall"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
-	"github.com/ivannguyendev/chatim/pkg/admin"
+	"github.com/ivannguyendev/chatim/pkg/core/admin"
 )
 
 const usage = "usage: core [serve|probe|resync -from RFC3339 -to RFC3339 [-tenant T] [-room ID] [-rate N] [-dry-run]|recount -room ID [-dry-run]|indexes [-dry-run|-apply|-drop-old]]"

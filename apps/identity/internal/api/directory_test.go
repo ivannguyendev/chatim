@@ -11,9 +11,9 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/ivannguyendev/chatim/apps/identity/internal/api"
+	"github.com/ivannguyendev/chatim/pkg/core/userlimit"
 	identityv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/identity/v1"
 	"github.com/ivannguyendev/chatim/pkg/revocation"
-	"github.com/ivannguyendev/chatim/pkg/userlimit"
 )
 
 type directoryCall func(d *dirHarness, token string) error

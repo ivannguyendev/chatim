@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
-	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/core/apperr"
 )
 
 func myInteractionCases() []interactionCase {

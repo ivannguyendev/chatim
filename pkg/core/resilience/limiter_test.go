@@ -9,7 +9,7 @@ import (
 
 	"go.uber.org/goleak"
 
-	"github.com/ivannguyendev/chatim/pkg/resilience"
+	"github.com/ivannguyendev/chatim/pkg/core/resilience"
 )
 
 func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }

@@ -29,11 +29,11 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/ivannguyendev/chatim/apps/gateway/internal/api"
+	"github.com/ivannguyendev/chatim/pkg/core/grpcclient"
+	"github.com/ivannguyendev/chatim/pkg/core/userlimit"
 	"github.com/ivannguyendev/chatim/pkg/corecall"
-	"github.com/ivannguyendev/chatim/pkg/grpcclient"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
-	"github.com/ivannguyendev/chatim/pkg/userlimit"
 )
 
 func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }

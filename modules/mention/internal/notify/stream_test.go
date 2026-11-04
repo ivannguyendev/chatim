@@ -10,7 +10,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/modules/mention/internal/config"
 	"github.com/ivannguyendev/chatim/modules/mention/internal/notify"
-	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/core/apperr"
 )
 
 func streamConfig() config.Config {

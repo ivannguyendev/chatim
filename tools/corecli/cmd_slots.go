@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/ivannguyendev/chatim/pkg/backoff"
+	"github.com/ivannguyendev/chatim/pkg/core/backoff"
 	"github.com/ivannguyendev/chatim/tools/corecli/internal/e2e"
 )
 

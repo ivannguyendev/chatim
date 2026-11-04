@@ -7,7 +7,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
-	"github.com/ivannguyendev/chatim/pkg/mongoindex"
+	"github.com/ivannguyendev/chatim/pkg/core/mongoindex"
 )
 
 func declaredNames(t *testing.T, cat mongoindex.Catalog, coll string) []string {

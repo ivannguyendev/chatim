@@ -12,7 +12,7 @@ import (
 	"github.com/ivannguyendev/chatim/modules/mention/internal/domain"
 	"github.com/ivannguyendev/chatim/modules/mention/internal/recipients"
 	"github.com/ivannguyendev/chatim/modules/mention/internal/store"
-	"github.com/ivannguyendev/chatim/pkg/lru"
+	"github.com/ivannguyendev/chatim/pkg/core/lru"
 )
 
 const (

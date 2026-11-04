@@ -8,7 +8,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
-	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/core/apperr"
 )
 
 var errMissingReaderDeps = fmt.Errorf("%w: message reader needs access, pages, edits, hidden and interactions", apperr.ErrInvalidArgument)

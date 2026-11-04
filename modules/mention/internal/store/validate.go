@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/modules/mention/internal/domain"
-	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/core/apperr"
 	"github.com/ivannguyendev/chatim/pkg/ids"
 	"github.com/ivannguyendev/chatim/pkg/keys"
 )

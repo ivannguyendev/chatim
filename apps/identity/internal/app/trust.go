@@ -13,7 +13,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/identity/internal/guard"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/keyring"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/trust"
-	"github.com/ivannguyendev/chatim/pkg/metrics"
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
 )
 
 type trustParts struct {

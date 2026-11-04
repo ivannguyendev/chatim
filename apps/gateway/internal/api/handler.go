@@ -13,10 +13,10 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/reflect/protoregistry"
 
+	"github.com/ivannguyendev/chatim/pkg/core/httpcors"
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
+	"github.com/ivannguyendev/chatim/pkg/core/userlimit"
 	"github.com/ivannguyendev/chatim/pkg/corecall"
-	"github.com/ivannguyendev/chatim/pkg/httpcors"
-	"github.com/ivannguyendev/chatim/pkg/metrics"
-	"github.com/ivannguyendev/chatim/pkg/userlimit"
 )
 
 const msgNotSupported = "request not supported"

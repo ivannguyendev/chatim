@@ -8,7 +8,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store/mongostore"
-	"github.com/ivannguyendev/chatim/pkg/metrics"
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
 )
 
 type schemaStats struct {

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/identity/internal/keyring"
-	"github.com/ivannguyendev/chatim/pkg/admin"
+	"github.com/ivannguyendev/chatim/pkg/core/admin"
 )
 
 const storeCallTimeout = 3 * time.Second

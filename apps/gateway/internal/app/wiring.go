@@ -13,14 +13,14 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/gateway/internal/api"
 	"github.com/ivannguyendev/chatim/apps/gateway/internal/config"
-	"github.com/ivannguyendev/chatim/pkg/admin"
+	"github.com/ivannguyendev/chatim/pkg/core/admin"
+	"github.com/ivannguyendev/chatim/pkg/core/grpcclient"
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
+	"github.com/ivannguyendev/chatim/pkg/core/userlimit"
 	"github.com/ivannguyendev/chatim/pkg/corecall"
-	"github.com/ivannguyendev/chatim/pkg/grpcclient"
 	"github.com/ivannguyendev/chatim/pkg/identitysync"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
-	"github.com/ivannguyendev/chatim/pkg/metrics"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
-	"github.com/ivannguyendev/chatim/pkg/userlimit"
 )
 
 const metricsSubsystem = "gateway"

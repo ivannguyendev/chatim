@@ -5,7 +5,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/identity/internal/api"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/keyring"
-	"github.com/ivannguyendev/chatim/pkg/metrics"
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
 )
 
 type labelled struct {

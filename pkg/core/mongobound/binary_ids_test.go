@@ -6,8 +6,8 @@ import (
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/ivannguyendev/chatim/pkg/core/mongobound"
 	"github.com/ivannguyendev/chatim/pkg/keys"
-	"github.com/ivannguyendev/chatim/pkg/mongobound"
 )
 
 func idRange[K []byte | string](lo, hi K, extra ...bson.E) bson.D {

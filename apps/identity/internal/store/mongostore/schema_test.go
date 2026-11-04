@@ -6,7 +6,7 @@ import (
 
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
-	"github.com/ivannguyendev/chatim/pkg/mongoindex"
+	"github.com/ivannguyendev/chatim/pkg/core/mongoindex"
 )
 
 func TestIndexesDeclareTheFourSecondaryIndexes(t *testing.T) {

@@ -9,10 +9,10 @@ import (
 	"github.com/ivannguyendev/chatim/apps/identity/internal/api"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/config"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/directory"
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
+	"github.com/ivannguyendev/chatim/pkg/core/userlimit"
 	"github.com/ivannguyendev/chatim/pkg/identitysync"
-	"github.com/ivannguyendev/chatim/pkg/metrics"
 	"github.com/ivannguyendev/chatim/pkg/revocation"
-	"github.com/ivannguyendev/chatim/pkg/userlimit"
 )
 
 type directoryParts struct {

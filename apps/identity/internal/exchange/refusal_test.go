@@ -9,7 +9,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/identity/internal/exchange"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/trust"
-	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/core/apperr"
 )
 
 func assertOneLogLine(t *testing.T, h *harness, want ...string) {

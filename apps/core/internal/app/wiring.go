@@ -14,13 +14,13 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/message/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/slot"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
-	"github.com/ivannguyendev/chatim/pkg/admin"
-	"github.com/ivannguyendev/chatim/pkg/grpcserver"
-	"github.com/ivannguyendev/chatim/pkg/metrics"
-	"github.com/ivannguyendev/chatim/pkg/mongoindex"
+	"github.com/ivannguyendev/chatim/pkg/core/admin"
+	"github.com/ivannguyendev/chatim/pkg/core/grpcserver"
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
+	"github.com/ivannguyendev/chatim/pkg/core/mongoindex"
+	"github.com/ivannguyendev/chatim/pkg/core/redact"
+	"github.com/ivannguyendev/chatim/pkg/core/resilience"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
-	"github.com/ivannguyendev/chatim/pkg/redact"
-	"github.com/ivannguyendev/chatim/pkg/resilience"
 )
 
 type runner interface {

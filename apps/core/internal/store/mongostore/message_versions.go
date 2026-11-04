@@ -8,8 +8,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/core/mongobound"
 	"github.com/ivannguyendev/chatim/pkg/keys"
-	"github.com/ivannguyendev/chatim/pkg/mongobound"
 )
 
 var _ store.MessageVersions = (*Store)(nil)

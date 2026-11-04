@@ -3,7 +3,7 @@ package typing
 import (
 	"sync/atomic"
 
-	"github.com/ivannguyendev/chatim/pkg/metrics"
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
 )
 
 type dropReason int

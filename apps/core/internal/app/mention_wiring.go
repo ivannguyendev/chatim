@@ -9,8 +9,8 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store/mongostore"
 	"github.com/ivannguyendev/chatim/modules/mention/mentionapp"
-	"github.com/ivannguyendev/chatim/pkg/metrics"
-	"github.com/ivannguyendev/chatim/pkg/mongoindex"
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
+	"github.com/ivannguyendev/chatim/pkg/core/mongoindex"
 )
 
 const mentionSubsystem = "mention"

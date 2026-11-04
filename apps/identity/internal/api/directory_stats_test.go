@@ -7,7 +7,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/ivannguyendev/chatim/apps/identity/internal/api"
-	"github.com/ivannguyendev/chatim/pkg/userlimit"
+	"github.com/ivannguyendev/chatim/pkg/core/userlimit"
 )
 
 func TestDirectoryStatsCountGetUsersByResult(t *testing.T) {

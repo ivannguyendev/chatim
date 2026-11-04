@@ -3,7 +3,7 @@ package projection
 import (
 	"context"
 
-	"github.com/ivannguyendev/chatim/pkg/jsconsume"
+	"github.com/ivannguyendev/chatim/pkg/core/jsconsume"
 )
 
 type outcome uint8

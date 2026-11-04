@@ -14,7 +14,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/identity/internal/keyring"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/signing"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
-	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/core/apperr"
 )
 
 var t0 = time.Date(2026, 10, 26, 8, 0, 0, 0, time.UTC)

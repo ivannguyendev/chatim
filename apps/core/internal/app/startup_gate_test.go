@@ -15,8 +15,8 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
 	"github.com/ivannguyendev/chatim/apps/core/internal/message/flush"
 	"github.com/ivannguyendev/chatim/apps/core/internal/platform/testlog"
-	"github.com/ivannguyendev/chatim/pkg/admin"
-	"github.com/ivannguyendev/chatim/pkg/grpcserver"
+	"github.com/ivannguyendev/chatim/pkg/core/admin"
+	"github.com/ivannguyendev/chatim/pkg/core/grpcserver"
 )
 
 const (

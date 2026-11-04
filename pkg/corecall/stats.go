@@ -7,7 +7,7 @@ import (
 
 	"google.golang.org/grpc/codes"
 
-	"github.com/ivannguyendev/chatim/pkg/metrics"
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
 )
 
 const codeCount = int(codes.Unauthenticated) + 1

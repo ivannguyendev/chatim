@@ -8,8 +8,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/core/mongobound"
 	"github.com/ivannguyendev/chatim/pkg/keys"
-	"github.com/ivannguyendev/chatim/pkg/mongobound"
 )
 
 var myInteractionFields = bson.D{{Key: "_id", Value: 1}, {Key: "value", Value: 1}, {Key: "state", Value: 1}, {Key: "ver", Value: 1}}

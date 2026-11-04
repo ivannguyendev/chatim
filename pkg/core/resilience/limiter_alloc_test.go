@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/pkg/resilience"
+	"github.com/ivannguyendev/chatim/pkg/core/resilience"
 )
 
 func TestLimiterAllocs(t *testing.T) {

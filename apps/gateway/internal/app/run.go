@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/ivannguyendev/chatim/apps/gateway/internal/config"
-	"github.com/ivannguyendev/chatim/pkg/admin"
+	"github.com/ivannguyendev/chatim/pkg/core/admin"
 	"github.com/ivannguyendev/chatim/pkg/identitysync"
 )
 

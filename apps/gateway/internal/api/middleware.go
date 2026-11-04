@@ -10,9 +10,9 @@ import (
 	"connectrpc.com/connect"
 	"golang.org/x/time/rate"
 
+	"github.com/ivannguyendev/chatim/pkg/core/userlimit"
 	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 	"github.com/ivannguyendev/chatim/pkg/revocation"
-	"github.com/ivannguyendev/chatim/pkg/userlimit"
 )
 
 const (

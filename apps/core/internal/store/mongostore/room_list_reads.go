@@ -9,8 +9,8 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/core/mongobound"
 	"github.com/ivannguyendev/chatim/pkg/keys"
-	"github.com/ivannguyendev/chatim/pkg/mongobound"
 )
 
 var roomInfoFields = bson.D{{Key: "pins", Value: 0}, {Key: "pin_ver", Value: 0}}

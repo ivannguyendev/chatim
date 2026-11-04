@@ -19,11 +19,11 @@ import (
 	"github.com/ivannguyendev/chatim/apps/identity/internal/keyring"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/signing"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/core/userlimit"
 	"github.com/ivannguyendev/chatim/pkg/identitysync"
 	identityv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/identity/v1"
 	"github.com/ivannguyendev/chatim/pkg/pb/chatim/identity/v1/identityv1connect"
 	"github.com/ivannguyendev/chatim/pkg/revocation"
-	"github.com/ivannguyendev/chatim/pkg/userlimit"
 )
 
 const (

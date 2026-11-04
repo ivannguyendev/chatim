@@ -10,8 +10,8 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/config"
 	"github.com/ivannguyendev/chatim/apps/core/internal/event/publish"
-	"github.com/ivannguyendev/chatim/pkg/jsconsume"
-	"github.com/ivannguyendev/chatim/pkg/redact"
+	"github.com/ivannguyendev/chatim/pkg/core/jsconsume"
+	"github.com/ivannguyendev/chatim/pkg/core/redact"
 )
 
 func (c *clients) connectNATS(cfg config.Config, log *slog.Logger) error {

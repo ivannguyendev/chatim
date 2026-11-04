@@ -15,7 +15,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/identity/internal/api"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/exchange"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/guard"
-	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/core/apperr"
 )
 
 const (
