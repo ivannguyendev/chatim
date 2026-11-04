@@ -39,6 +39,7 @@ func TestBadTokenGetsAuthRequiredInvalidAndALaterGoodTokenGetsReady(t *testing.T
 		if f := tc.nextFrame(); f.GetReady() == nil {
 			t.Fatalf("frame after a good token = %v, want ready", f)
 		}
+		synctest.Wait()
 		if h.authCount("ok") != 1 || h.server.stats.unauth.Load() != 0 {
 			t.Fatalf("ok %v unauth %d", h.authCount("ok"), h.server.stats.unauth.Load())
 		}
