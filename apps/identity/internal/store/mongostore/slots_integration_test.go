@@ -16,7 +16,7 @@ const loadPurpose = "directory-load"
 
 func sameDatabase(t *testing.T, s *Store) *Store {
 	t.Helper()
-	other, err := Open(Options{URI: itURI(t), Database: s.db.Name(), AppName: "chatim-identity-it", RevocationKeep: time.Hour})
+	other, err := Open(testOptions(itURI(t), s.db.Name()))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

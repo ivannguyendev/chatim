@@ -15,7 +15,7 @@ const conflictWait = 30 * time.Second
 
 func TestOpenIsLazyAndPingFailsWithinTheDeadline(t *testing.T) {
 	itURI(t)
-	s, err := Open(Options{URI: "mongodb://no-such-host.invalid:27017", Database: "identity_it_lazy", RevocationKeep: time.Hour})
+	s, err := Open(testOptions("mongodb://no-such-host.invalid:27017", "identity_it_lazy"))
 	if err != nil {
 		t.Fatalf("Open with an unreachable host = %v; want nil", err)
 	}

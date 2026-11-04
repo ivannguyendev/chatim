@@ -36,12 +36,7 @@ func emptyDatabase(t *testing.T) *Store {
 	uri := itURI(t)
 	suffix := make([]byte, 6)
 	_, _ = rand.Read(suffix)
-	s, err := Open(Options{
-		URI:            uri,
-		Database:       "identity_it_" + hex.EncodeToString(suffix),
-		AppName:        "chatim-identity-it",
-		RevocationKeep: time.Hour,
-	})
+	s, err := Open(testOptions(uri, "identity_it_"+hex.EncodeToString(suffix)))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

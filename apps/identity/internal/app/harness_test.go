@@ -115,6 +115,7 @@ func testConfig(kek []byte) config.Config {
 		Issuer: "iss", Audience: "aud", TokenTTL: 5 * time.Minute, ExchangeAudience: "tenant-aud", ExchangeMaxLifetime: 10 * time.Minute, TrustReload: 10 * time.Second,
 		ExchangeIPRate: 50, ExchangeIPBurst: 500, ExchangeIPTracked: 100000, KeyEncryptionKey: kek, KeyReload: time.Hour, KeyActivateLead: 2 * time.Hour,
 		DirectoryLoadSlots: 1, InflightMax: 100, UserRate: 50, UserBurst: 100, UserInflight: 32, UserLimiters: 1000,
+		JITWriters: 1, JITWindow: time.Millisecond, JITMaxBatch: 16, JITQueue: 64, JITInsertTimeout: time.Second,
 		BodyMax: 16 << 10, DrainDelay: 10 * time.Millisecond, ShutdownBudget: 20 * time.Second,
 		ReadHeaderTimeout: time.Second, ReadTimeout: time.Second, WriteTimeout: time.Second, IdleTimeout: time.Second, MaxHeaderBytes: 16 << 10,
 	}

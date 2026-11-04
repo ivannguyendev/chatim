@@ -35,6 +35,7 @@ type Store interface {
 	ActivateDueSigningKey(ctx context.Context, lead time.Duration) (string, error)
 	Ping(ctx context.Context) error
 	Schema(ctx context.Context) (store.SchemaState, error)
+	JITBatchDocs() metrics.Histogram
 	Close()
 }
 
@@ -50,6 +51,7 @@ func mongoOptions(cfg config.Config, appName string) mongostore.Options {
 	return mongostore.Options{
 		URI: cfg.MongoURI, Database: cfg.MongoDB, User: cfg.MongoUser, Password: cfg.MongoPassword, AuthSource: cfg.MongoAuthSource,
 		AppName: appName, RevocationKeep: cfg.RevocationKeep(),
+		JITWriters: cfg.JITWriters, JITWindow: cfg.JITWindow, JITMaxBatch: cfg.JITMaxBatch, JITQueue: cfg.JITQueue, JITInsertTimeout: cfg.JITInsertTimeout,
 	}
 }
 
@@ -120,6 +122,8 @@ func wireServers(ctx context.Context, cfg config.Config, log *slog.Logger, st St
 	sources := append(metricSources(ring, n.internalStats, &n.cleanup, &n.keys), directoryMetricSources(dir, memoryLimited, time.Now)...)
 	sources = append(sources, trustMetricSources(tr)...)
 	sources = append(sources, schema.metricSources()...)
+	sources = append(sources, metrics.Source{Name: "jit_batch_docs", Help: "Users per just-in-time InsertMany sent to MongoDB.",
+		Histogram: func() metrics.Histogram { return st.JITBatchDocs() }})
 	metricsHandler, err := metrics.Handler(metricsSubsystem, sources)
 	if err != nil {
 		return nil, err

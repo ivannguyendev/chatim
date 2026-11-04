@@ -57,6 +57,11 @@ type Config struct {
 	UserBurst           int
 	UserInflight        int
 	UserLimiters        int
+	JITWriters          int
+	JITWindow           time.Duration
+	JITMaxBatch         int
+	JITQueue            int
+	JITInsertTimeout    time.Duration
 }
 
 func AdminAddr() string { return envconfig.String("IDENTITY_ADMIN_ADDR", defaultAdminAddr) }
@@ -102,6 +107,11 @@ func Load() (Config, error) {
 		UserBurst:           p.number("IDENTITY_USER_BURST", 100),
 		UserInflight:        p.number("IDENTITY_USER_INFLIGHT", 32),
 		UserLimiters:        p.number("IDENTITY_USER_LIMITERS", 100000),
+		JITWriters:          p.number("IDENTITY_JIT_WRITERS", 4),
+		JITWindow:           p.span("IDENTITY_JIT_WINDOW", 2*time.Millisecond),
+		JITMaxBatch:         p.number("IDENTITY_JIT_MAX_BATCH", 256),
+		JITQueue:            p.number("IDENTITY_JIT_QUEUE", 1024),
+		JITInsertTimeout:    p.span("IDENTITY_JIT_INSERT_TIMEOUT", time.Second),
 	}
 	if err := errors.Join(p.errs...); err != nil {
 		return Config{}, err
@@ -148,6 +158,11 @@ func (c Config) LogValue() slog.Value {
 		slog.Int("user_burst", c.UserBurst),
 		slog.Int("user_inflight", c.UserInflight),
 		slog.Int("user_limiters", c.UserLimiters),
+		slog.Int("jit_writers", c.JITWriters),
+		slog.Duration("jit_window", c.JITWindow),
+		slog.Int("jit_max_batch", c.JITMaxBatch),
+		slog.Int("jit_queue", c.JITQueue),
+		slog.Duration("jit_insert_timeout", c.JITInsertTimeout),
 	)
 }
 

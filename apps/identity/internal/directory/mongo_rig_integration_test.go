@@ -42,7 +42,8 @@ func itestDatabase(tb testing.TB) itest {
 	}
 	suffix := make([]byte, 6)
 	_, _ = rand.Read(suffix)
-	opts := mongostore.Options{URI: uri, Database: "identity_it_" + hex.EncodeToString(suffix), AppName: "chatim-identity-it", RevocationKeep: 16 * time.Minute}
+	opts := mongostore.Options{URI: uri, Database: "identity_it_" + hex.EncodeToString(suffix), AppName: "chatim-identity-it", RevocationKeep: 16 * time.Minute,
+		JITWriters: 1, JITWindow: time.Millisecond, JITMaxBatch: 16, JITQueue: 64, JITInsertTimeout: time.Second}
 	client, err := mongo.Connect(options.Client().ApplyURI(uri))
 	if err != nil {
 		tb.Fatalf("connect: %v", err)

@@ -17,13 +17,18 @@ import (
 const disconnectTimeout = 5 * time.Second
 
 type Options struct {
-	URI            string
-	Database       string
-	User           string
-	Password       string
-	AuthSource     string
-	AppName        string
-	RevocationKeep time.Duration
+	URI              string
+	Database         string
+	User             string
+	Password         string
+	AuthSource       string
+	AppName          string
+	RevocationKeep   time.Duration
+	JITWriters       int
+	JITWindow        time.Duration
+	JITMaxBatch      int
+	JITQueue         int
+	JITInsertTimeout time.Duration
 }
 
 type Store struct {
@@ -32,11 +37,12 @@ type Store struct {
 	uri    string
 	keep   time.Duration
 	holder string
+	jit    *jitBatcher
 }
 
 func Open(opts Options) (*Store, error) {
-	if opts.RevocationKeep <= 0 {
-		return nil, errors.New("mongostore: revocation keep must be positive")
+	if err := opts.validate(); err != nil {
+		return nil, err
 	}
 	client, err := mongo.Connect(clientOptions(opts))
 	if err != nil {
@@ -45,7 +51,22 @@ func Open(opts Options) (*Store, error) {
 	db := client.Database(opts.Database, options.Database().
 		SetWriteConcern(writeconcern.Majority()).
 		SetReadPreference(readpref.Primary()))
-	return &Store{client: client, db: db, uri: opts.URI, keep: opts.RevocationKeep, holder: newHolder()}, nil
+	s := &Store{client: client, db: db, uri: opts.URI, keep: opts.RevocationKeep, holder: newHolder()}
+	s.jit = newJITBatcher(jitConfig{
+		writers: opts.JITWriters, window: opts.JITWindow, maxBatch: opts.JITMaxBatch, queue: opts.JITQueue, timeout: opts.JITInsertTimeout,
+	}, s.insertUsers, s.unavailable)
+	return s, nil
+}
+
+func (o Options) validate() error {
+	switch {
+	case o.RevocationKeep <= 0:
+		return errors.New("mongostore: revocation keep must be positive")
+	case o.JITWriters <= 0 || o.JITWindow <= 0 || o.JITMaxBatch <= 0 || o.JITQueue <= 0 || o.JITInsertTimeout <= 0:
+		return errors.New("mongostore: just-in-time writers, window, max batch, queue and insert timeout must be positive")
+	default:
+		return nil
+	}
 }
 
 func clientOptions(opts Options) *options.ClientOptions {
@@ -60,6 +81,7 @@ func clientOptions(opts Options) *options.ClientOptions {
 }
 
 func (s *Store) Close() {
+	s.jit.close()
 	ctx, cancel := context.WithTimeout(context.Background(), disconnectTimeout)
 	defer cancel()
 	_ = s.client.Disconnect(ctx)

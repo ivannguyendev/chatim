@@ -17,6 +17,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/metrics"
 )
 
 const (
@@ -71,6 +72,10 @@ func (f *fakeStore) TrustedKeys(context.Context) ([]store.TrustedKey, error) {
 func (f *fakeStore) WriteProfile(context.Context, store.ProfileWrite) (bool, error) {
 	f.profiles.Add(1)
 	return true, nil
+}
+
+func (f *fakeStore) JITBatchDocs() metrics.Histogram {
+	return metrics.Histogram{Bounds: []float64{1, 2}, Cumulative: []uint64{1, 3}, Count: 3, Sum: 5}
 }
 
 func newTenantKey(t *testing.T) ed25519.PrivateKey {

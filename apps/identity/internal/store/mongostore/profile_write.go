@@ -2,11 +2,14 @@ package mongostore
 
 import (
 	"context"
+	"fmt"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/redact"
 )
 
 func (s *Store) WriteProfile(ctx context.Context, w store.ProfileWrite) (bool, error) {
@@ -35,8 +38,9 @@ func (s *Store) WriteProfile(ctx context.Context, w store.ProfileWrite) (bool, e
 }
 
 func (s *Store) insertProfile(ctx context.Context, w store.ProfileWrite) (bool, error) {
-	_, err := s.db.Collection(usersCollection).InsertOne(ctx, bson.D{
-		{Key: "_id", Value: tenantKey(w.TenantID, w.UserID)},
+	id := tenantKey(w.TenantID, w.UserID)
+	return s.jit.write(ctx, id, bson.D{
+		{Key: "_id", Value: id},
 		{Key: "tenant_id", Value: w.TenantID},
 		{Key: "id", Value: w.UserID},
 		{Key: "display_name", Value: w.DisplayName},
@@ -48,12 +52,13 @@ func (s *Store) insertProfile(ctx context.Context, w store.ProfileWrite) (bool, 
 		{Key: "updated_at", Value: w.At},
 		{Key: "updated_by", Value: w.By},
 	})
-	switch {
-	case err == nil:
-		return true, nil
-	case mongo.IsDuplicateKeyError(err):
-		return false, nil
-	default:
-		return false, s.mapErr(err)
-	}
+}
+
+func (s *Store) insertUsers(ctx context.Context, docs []any) error {
+	_, err := s.db.Collection(usersCollection).InsertMany(ctx, docs, options.InsertMany().SetOrdered(false))
+	return err
+}
+
+func (s *Store) unavailable(err error) error {
+	return fmt.Errorf("%w: %w", apperr.ErrUnavailable, redact.Error(err, s.uri))
 }
