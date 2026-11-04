@@ -1,0 +1,22 @@
+sends due=120000 sent=120000 acked=120000 failed=0 shed_by_client=0 (max in-flight 4096)
+pacer lag (issue minus scheduled time): n=120000 p50=220.221µs p95=1.665439ms p99=5.496693ms p99.9=51.241758ms max=86.785053ms
+ack latency from scheduled time: n=120000 p50=17.701648ms p95=91.931432ms p99=185.880216ms p99.9=302.382612ms max=570.018628ms
+live events on 20 watched rooms: received=2374 of acked=2374 missing=0 duplicates=0 undecoded=0 (waited 0s after the last send returned)
+live lag, receive time minus event ts (ts = seq assignment on the core, before the insert; one host clock): n=2374 p50=16.107218ms p95=74.724157ms p99=189.228714ms p99.9=272.657656ms max=361.605092ms
+--- CPU_Speed_Limit samples over the cell: 34×100 1×2 
+--- docker stats avg from start+5s to end-2s (one sample per ~3s)
+chatim-bench-vm avg_cpu=0.3% n=19
+chatim-core-1 avg_cpu=102.2% n=19
+chatim-core-2 avg_cpu=97.2% n=19
+chatim-gateway-1 avg_cpu=2.0% n=19
+chatim-identity-1 avg_cpu=1.5% n=19
+chatim-identity-2 avg_cpu=1.2% n=19
+chatim-mongodb avg_cpu=207.3% n=19
+chatim-nats avg_cpu=57.2% n=19
+chatim-redis avg_cpu=3.7% n=19
+chatim-redis-dedupe avg_cpu=25.2% n=19
+chatim-redis-presence avg_cpu=2.3% n=19
+chatim-websocket-1 avg_cpu=13.5% n=19
+chatim-websocket-2 avg_cpu=13.1% n=19
+--- mongo opcounters delta (serverStatus before/after)
+insert=131000 query=30870 update=48600 delete=914 getmore=138 command=1405 

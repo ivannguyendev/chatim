@@ -1,0 +1,32 @@
+exchangebench alg=RS256 kid=bench-rs256 issuer=pmrs256-backend tenant="pmrs256" rate=1700/s duration=1m0s warmup=5s max-inflight=2048 users=100001 user-prefix="u" users-file="bin/bench/exchange-keys/rs256-users.txt" ttl=9m0s
+ready: probe exchange 200 after 6ms
+signed 110500 tenant tokens with 10 goroutines in 27.369s
+rate target=1700/s sent=1700/s ok=1700/s over the 1m0s measured window (after 5s warmup), pacer elapsed 1m5s
+exchanges due=102000 sent=102000 shed_by_client=0 (max in-flight 2048); with warmup due=110500 sent=110500 shed=0
+http codes: 200=102000; 5xx=0
+pacer lag (issue minus scheduled time): n=102000 p50=351.626µs p95=1.068572ms p99=1.142817ms p99.9=1.874523ms max=11.185494ms
+latency of 200 from scheduled time: n=102000 p50=729.927µs p95=1.537019ms p99=1.87949ms p99.9=6.638637ms max=25.478734ms
+latency of every answer from scheduled time: n=102000 p50=729.927µs p95=1.537019ms p99=1.87949ms p99.9=6.638637ms max=25.478734ms
+identity metrics over 1m5.007s (scrape before the first shot to scrape after the last answer):
+  chatim_identity_exchanges_total{result="disabled"} +0
+  chatim_identity_exchanges_total{result="error"} +0
+  chatim_identity_exchanges_total{result="invalid"} +0
+  chatim_identity_exchanges_total{result="ok"} +110500
+  chatim_identity_exchanges_total{result="rate"} +0
+  chatim_identity_jit_writes_total{result="conflict"} +0
+  chatim_identity_jit_writes_total{result="created"} +0
+  chatim_identity_jit_writes_total{result="error"} +0
+  chatim_identity_jit_writes_total{result="updated"} +0
+  chatim_identity_store_errors_total +0
+  chatim_identity_trust_reload_errors_total +0
+  process_cpu_seconds_total +29.27s = 0.45 cores
+--- CPU_Speed_Limit (pmset -g therm)
+before 1793768051  CPU_Speed_Limit = 100
+after 1793768144  CPU_Speed_Limit = 100
+measured window (last 60s before end): 30×100 
+--- docker stats avg over last 60s (one sample per ~3s)
+chatim-identity-1 avg_cpu=41.3% n=20
+chatim-identity-2 avg_cpu=0.6% n=20
+chatim-mongodb avg_cpu=7.6% n=20
+--- identity log lines in the run: identity-1/2: 'revocation list unavailable' 0, 'signing key activation failed' 0, level ERROR 0, WARN 0
+note: CPU_Speed_Limit 76-79 only while presigning RSA tokens and at warmup start; 100 over the measured window

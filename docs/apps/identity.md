@@ -150,7 +150,8 @@ Script in mỗi nhóm đã sửa; `ancestors` không phải field hiện ra ngo�
 
 ## Giới hạn đã biết
 
-- Số đổi token (lạnh và ấm), tải change stream lên primary khi corebench 2K tin/s và thời gian nạp 100K user trên MongoDB: đo ở bước bench cuối phase PM, viết lại mục này sau khi có số. Số đo ở PA trên store cũ: [docs/poc/README.md](../poc/README.md).
+- Đổi token trên dev (một replica nhận tải, MongoDB một node; [docs/poc/README.md](../poc/README.md) mục M6 PM): user đã có đạt 1.700/s, p99 dưới 2 ms, cả ES256 và RS256. User mới (mỗi lần đổi là một lần JIT ghi user) **chưa đạt ≥ 1.700/s ở lần đo đầu**: 849/s (2026-11-03), client bỏ 51.075 lần vì đầy 2.048 request đang chờ, 0 lỗi 5xx. Lúc đó mỗi lần ghi user (`w:majority`) chờ khoảng 151 ms, pool 100 kết nối của driver đầy, nên lần nạp lại danh sách thu hồi và lần kích hoạt khoá ký cũng hết giờ chờ pool. Đo lại 2026-11-04 sau khi bật lại stack: ES256 và RS256 user mới đều 1.700/s, p99 36–72 ms; vì sao lần đầu chậm chưa có nguồn. Owner hoãn quyết định xử lý đường user mới (2026-11-03); đo lại trên prod-like (P13).
+- Change stream khi core chạy 2K tin/s: CPU MongoDB 1,87 → 2,07 core (+11,2%) khi bật hai replica `identity`, mỗi replica dùng khoảng 1,5% core; độ trễ ack lệch cả hai chiều vì nhiễu máy dev (p99 277 → 186 ms, p95 52 → 92 ms). Nạp 100K user lúc khởi động: 0,58s (Postgres 0,73s).
 - Gán nhiều user vào cùng một nhóm cùng lúc, hay hai lệnh ghi cây cùng tenant: lệnh thứ hai báo `unavailable` ngay, chạy lại (tóm tắt PM §5).
 - Vị trí change stream cũ hơn cửa sổ oplog → replica nạp lại toàn bộ danh bạ (setup mục 8).
 

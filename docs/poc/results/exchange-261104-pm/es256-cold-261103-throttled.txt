@@ -1,0 +1,31 @@
+run 2026-11-03 22:23; CPU throttled, trust counts only
+exchangebench alg=ES256 kid=bench-es256 issuer=pmes256-backend tenant="pmes256" rate=1700/s duration=1m0s warmup=5s max-inflight=2048 users=100000 user-prefix="u" users-file="" ttl=9m0s
+ready: probe exchange 200 after 189ms
+signed 110500 tenant tokens with 10 goroutines in 3.028s
+rate target=1700/s sent=1571/s ok=1571/s over the 1m0s measured window (after 5s warmup), pacer elapsed 1m5.001s
+exchanges due=102000 sent=94267 shed_by_client=7733 (max in-flight 2048); with warmup due=110500 sent=102767 shed=7733
+http codes: 200=94267; 5xx=0
+pacer lag (issue minus scheduled time): n=102000 p50=365.143µs p95=3.221174ms p99=23.593983ms p99.9=105.436239ms max=129.899081ms
+latency of 200 from scheduled time: n=94267 p50=791.714186ms p95=1.804123777s p99=2.596870086s p99.9=2.698958947s max=2.75274464s
+latency of every answer from scheduled time: n=94267 p50=791.714186ms p95=1.804123777s p99=2.596870086s p99.9=2.698958947s max=2.75274464s
+identity metrics over 1m5.039s (scrape before the first shot to scrape after the last answer):
+  chatim_identity_exchanges_total{result="disabled"} +0
+  chatim_identity_exchanges_total{result="error"} +0
+  chatim_identity_exchanges_total{result="invalid"} +0
+  chatim_identity_exchanges_total{result="ok"} +102767
+  chatim_identity_exchanges_total{result="rate"} +0
+  chatim_identity_jit_writes_total{result="conflict"} +0
+  chatim_identity_jit_writes_total{result="created"} +93130
+  chatim_identity_jit_writes_total{result="error"} +0
+  chatim_identity_jit_writes_total{result="updated"} +0
+  chatim_identity_store_errors_total +0
+  chatim_identity_trust_reload_errors_total +0
+  process_cpu_seconds_total +144.75s = 2.23 cores
+--- CPU_Speed_Limit (pmset -g therm)
+before 1793719424  CPU_Speed_Limit = 53
+after 1793719501  CPU_Speed_Limit = 34
+measured window (last 60s before end): 2×37 4×39 2×41 2×44 2×46 2×48 5×51 5×53 5×55 
+--- docker stats avg over last 60s (one sample per ~3s)
+chatim-identity-1 avg_cpu=245.8% n=17
+chatim-identity-2 avg_cpu=9.1% n=17
+chatim-mongodb avg_cpu=251.1% n=17
