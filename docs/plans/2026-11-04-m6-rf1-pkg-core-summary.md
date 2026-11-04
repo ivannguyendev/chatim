@@ -1,6 +1,6 @@
 # M6 RF1 — `pkg/core`: tách hạ tầng không biết `chatim` (tóm tắt)
 
-> Ngày 2026-11-04 · Nhánh `feat/m6` · Trạng thái: **chờ owner duyệt** · Phase 1/3 của đợt refactor trước M7 (RF1 `pkg/core` → RF2 `pkg/auth` + `pkg/chatrpc` → RF3 đổi `core` → `chat`), cùng PR M6 (owner 2026-11-04). Không đổi hành vi, không đổi tên metric, không đổi dữ liệu.
+> Ngày 2026-11-04 · Nhánh `feat/m6` · Trạng thái: **✅ `dev-done`** (owner duyệt 2026-11-04; xây cùng ngày, commit `3e4fa4b`, `75147cc`) · Phase 1/3 của đợt refactor trước M7 (RF1 `pkg/core` → RF2 `pkg/auth` + `pkg/chatrpc` → RF3 đổi `core` → `chat`), cùng PR M6 (owner 2026-11-04). Không đổi hành vi, không đổi tên metric, không đổi dữ liệu.
 
 ## 1. Scope và ranh giới
 
@@ -97,8 +97,16 @@ Không đổi chi phí chạy: cùng binary, cùng tên metric, cùng hành vi. 
 
 | Yêu cầu | Thành phần | Task | Test | Bằng chứng |
 | :- | :- | :- | :- | :- |
-| DL#1 chuyển 15 package | `pkg/core/*`, mọi importer | §4.1, §4.2 | `make test`, `make lint`, `make itest` | (sau thực thi) |
-| DL#2 bỏ `chatim` cứng | `pkg/core/metrics`, `pkg/core/grpcclient`, 4 app | §4.3–§4.5 | test namespace, test `NewStatic` | (sau thực thi) |
-| DL#3 depguard zero-domain | `.golangci.yaml` | §4.6 | `make lint` + kiểm âm | (sau thực thi) |
-| DL#13 path lint đã chuyển | `.golangci.yaml:317,323` | §4.7 | `make lint` | (sau thực thi) |
-| DL#8 doc đang dùng (phần path `pkg/core`) | `INDEXES.csv`, CLAUDE.md, docs | §4.8 | grep path cũ | (sau thực thi) |
+| DL#1 chuyển 15 package | `pkg/core/*`, mọi importer | §4.1, §4.2 | `make test`, `make lint`, `make itest` | `3e4fa4b` 475 file; `make test` 105 package ok; `make lint` 0 issues; `make itest` 105 package ok; grep path cũ ngoài lịch sử 0 dòng (562 trước khi chuyển) |
+| DL#2 bỏ `chatim` cứng | `pkg/core/metrics`, `pkg/core/grpcclient`, 4 app | §4.3–§4.5 | test namespace (`acme_orders_*`, namespace rỗng lỗi), test `static_targets` sẵn có, lifecycle test 3 app, itest core | `75147cc`; `pkg/core/metrics` ok; `apps/core/itest` ok 180,7s; grep chữ nghiệp vụ trong `pkg/core` 0 dòng |
+| DL#3 depguard zero-domain | `.golangci.yaml` | §4.6 | `make lint` + kiểm âm | cây thật 0 issues; `mongobound` import `pkg/keys` và `lru` import `pkg/ids` → `not allowed from list 'pkg-core-zero-domain': pkg/core is zero-domain (depguard)` |
+| DL#13 path lint đã chuyển | `.golangci.yaml` exclusion `backoff`, `envconfig` | §4.7 | `make lint` | 0 issues |
+| DL#8 doc đang dùng (phần path `pkg/core`) | `INDEXES.csv`, CLAUDE.md, docs | §4.8 | grep path cũ | grep 0 dòng |
+
+## 12. Như đã xây (lệch so với plan, ghi chú)
+
+- Kiểm âm thứ hai dùng `pkg/core/lru` import `pkg/ids` thay vì `modules/mention/mentionapp`: `mention` dùng `lru`, nên import ngược tạo vòng import và typecheck dừng trước depguard. Deny `apps`/`modules` của luật mới không kiểm âm riêng được vì cùng lý do vòng import; `pkg-shared-only` đã chặn hai nhánh đó từ trước.
+- Không thêm test riêng cho scheme `static` (resolver vốn gắn riêng từng kết nối); test `static_targets` sẵn có chạy với scheme mới.
+- Fixture test của 15 package đổi sang tên trung tính (`acme`, `orders`, `ORDERS`, user `app`/`worker`, host `db-host`, `APP_TEST_SECRET`, database `mongoindex_it_`); giữ `CHATIM_IT_MONGO_URI` (biến itest chung của repo).
+- Không chạy `alerts-check`, `e2e`, corebench, R5: tên metric, `slot`/`slotmap` và hành vi không đổi (bảng ngân sách).
+- Decision log của đợt RF1–RF3 giữ local tới khi đóng RF3, rồi gộp vào `docs/decision-log.md` thành một D; plan chi tiết RF1 đã xoá.
