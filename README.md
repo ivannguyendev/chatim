@@ -2,7 +2,7 @@
 
 Hạ tầng chat dùng chung (CPaaS nội bộ) cho nhiều sản phẩm: quản lý room, tin nhắn, tương tác realtime hiệu năng cao; lấy lịch sử cực nhanh ở bất kỳ vị trí nào; phát event mạnh tới các app khác kết nối vào. Multi-tenant về mặt logic.
 
-> Trạng thái: Phase 1 (M0 → M4: `core`, Mention App, `websocket`, `gateway`) đã xong và merge `main` (`dev-done`, PR #19, 2026-10-25). Phase 2 đang làm: M6 `identity` (PA trên `feat/m6`; tiếp PM chuyển store sang MongoDB, rồi PB) → M7 media → M8 notification + push → M9 tìm người/nhóm → go-live `v1.0.0` (D207); PoC prod-like và M5 chạy song song khi có hạ tầng. Chi tiết: [roadmap](docs/roadmap.md), kết quả đo: [docs/poc/README.md](docs/poc/README.md), bản đồ code: [INDEXES.csv](INDEXES.csv).
+> Trạng thái: Phase 1 (M0 → M4: `core`, Mention App, `websocket`, `gateway`) đã xong và merge `main` (`dev-done`, PR #19, 2026-10-25). Phase 2 đang làm: M6 `identity` (PA và PM xong trên `feat/m6`: đổi token, store MongoDB; tiếp PB server API theo lô) → M7 media → M8 notification + push → M9 tìm người/nhóm → go-live `v1.0.0` (D207); PoC prod-like và M5 chạy song song khi có hạ tầng. Chi tiết: [roadmap](docs/roadmap.md), kết quả đo: [docs/poc/README.md](docs/poc/README.md), bản đồ code: [INDEXES.csv](INDEXES.csv).
 
 ## Kiến trúc
 

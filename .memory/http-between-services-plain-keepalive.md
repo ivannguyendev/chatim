@@ -9,4 +9,6 @@ On 2026-10-31 (D227) the owner described the directory feed as "khi request cầ
 
 **Why:** a held request looks like SSE to the owner; they want the simplest HTTP shape, with the connection reuse giving the efficiency.
 
-**How to apply:** any service-to-service HTTP (a future directory feed for Mention 3b, M8, M9, revocation sync) answers immediately with the data and a `next` position; the caller polls at its own interval over one kept-alive connection (Go default transport, body fully read and closed). Do not propose long polling or SSE; state the trade-off as "change arrives within one poll interval". `pkg/identitysync` already works this way (2s poll, 304 when unchanged). Related: [[identity-store-on-mongodb]], [[cache-follows-db]].
+**How to apply:** any service-to-service HTTP (a future directory feed for Mention 3b, M8, M9, revocation sync) answers immediately with the data and a `next` position; the caller polls at its own interval over one kept-alive connection (Go default transport, body fully read and closed). Do not propose long polling or SSE; state the trade-off as "change arrives within one poll interval". `pkg/identitysync` already works this way (2s poll, 304 when unchanged). The rule text sits in the `CLAUDE.md` Design checklist since the PM close (2026-11-04); the feed itself was removed in PM (D257).
+
+Related: [[identity-store-on-mongodb]], [[cache-follows-db]].
