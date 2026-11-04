@@ -1,7 +1,7 @@
 # M6 phase PM: `identity` chạy trên MongoDB, follower bằng change stream — tóm tắt
 
 > Ngày: 2026-11-02 (duyệt) → 2026-11-04 (xây xong) · Nhánh `feat/m6` · Trạng thái: **đã xây, `dev-done` trên `feat/m6`** (commit `f23a58c` → `77abf88`) · Quyết định: D245–D259 (`docs/decision-log.md` §17.19) · Dựa trên: D244 (owner 2026-11-02 "chuyển sang mongodb"), owner 2026-11-02 "ok" change stream thay `NOTIFY`, "bỏ Feed HTTP", "cắt đứt postgres", một phase kiểm một lần ở cuối; owner 2026-11-03 và 2026-11-04 trong lúc làm (§8)
-> **Các phase của M6:** (PA) gỡ đăng nhập, đổi tên, đổi token ✅ · **(PM) MongoDB + change stream + gỡ Postgres ✅** · (PB) server API theo lô, khoá user, thu hồi theo giờ — tiếp theo
+> **Các phase của M6:** (PA) gỡ đăng nhập, đổi tên, đổi token ✅ · **(PM) MongoDB + change stream + gỡ Postgres ✅** · (PB) server API theo lô, khoá user, thu hồi theo giờ — dời tới khi tenant đầu tiên tích hợp, trước go-live (D260); M6 đóng ở PA + PM
 
 ## Scope và ranh giới
 
@@ -194,7 +194,7 @@ Lệnh owner và lệch trong lúc làm:
 | `make core-up && make e2e` | PASS 14 phase, 13 và 15 trên MongoDB, không container Postgres (`bin/pm-verify/e2e.txt`) |
 | Review độc lập toàn diff | 0 Critical; 1 Important sửa ở `cd38812`; review gom lô: APPROVE |
 
-Minor (mang sang M5 hoặc PB, không chặn): `beforeCommit`/`afterBatch` là biến toàn package dùng cho test; mật khẩu Mongo chưa đưa vào bộ che log (URI không kèm credential nên chưa lộ); mất suất bị phát hiện muộn nếu một trang đọc > ~20s (chỉ làm trùng việc); `key-activate` theo id có thể bật khoá chờ cũ hơn (cố ý, như Postgres); hash `int(h.Sum32()) % n` âm trên int 32-bit; `Close` huỷ `InsertMany` đang chạy (vô hại, idempotent); histogram lô dừng ở 512; e2e 13 còn thử lại mỗi 1s trong `keyRemoved`/`tenantDisabled`; e2e 15 chỉ hỏi `GetUsers` ở `identity-1`; lần kiểm lược đồ trước lần ready đầu chờ tới `IDENTITY_KEY_RELOAD`; dữ liệu bench (tenant `pmes256` ~350K user, `pmrs256`) còn trong `chatim_identity` dev.
+Minor (mang sang M5 hoặc PB, không chặn): `beforeCommit`/`afterBatch` là biến toàn package dùng cho test; mật khẩu Mongo chưa đưa vào bộ che log (URI không kèm credential nên chưa lộ); mất suất bị phát hiện muộn nếu một trang đọc > ~20s (chỉ làm trùng việc); `key-activate` theo id có thể bật khoá chờ cũ hơn (cố ý, như Postgres); hash `int(h.Sum32()) % n` âm trên int 32-bit; `Close` huỷ `InsertMany` đang chạy (vô hại, idempotent); histogram lô dừng ở 512; e2e 13 còn thử lại mỗi 1s trong `keyRemoved`/`tenantDisabled`; e2e 15 chỉ hỏi `GetUsers` ở `identity-1`; lần kiểm lược đồ trước lần ready đầu chờ tới `IDENTITY_KEY_RELOAD`; dữ liệu bench (tenant `pmes256`, `pmrs256`, 542.649 user) đã xoá khỏi `chatim_identity` dev khi đóng M6 (2026-11-04).
 
 ## Bảng phủ
 
