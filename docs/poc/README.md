@@ -150,7 +150,7 @@ Lượt lạnh thứ hai trên cùng tenant cần tập user mới: thêm `-user
 
 ### M6 PM — đổi token và change stream trên MongoDB (dev 2026-11-03 và 2026-11-04)
 
-Cùng công cụ và cách đo như PA, nay store `identity` là MongoDB replica set một node của `make infra-up` (OrbStack). Chạy cả hai replica `identity-1` và `identity-2`; `exchangebench` chỉ gửi vào `identity-1`. Tenant `pmes256` (ES256) và `pmrs256` (RS256). CPU `identity` là Δ`process_cpu_seconds_total` của `identity-1`; CPU Mongo là trung bình `docker stats` trong 60s cuối (1 core = 100%). `CPU_Speed_Limit` bằng 100 suốt 60s đo của mọi lượt, trừ lượt ghi "hạ xung"; RSA chỉ bị hạ xung lúc ký trước token và trong 5s khởi động. Log `identity-1/2` của bốn lượt 2026-11-04: 0 dòng `revocation list unavailable`, 0 dòng `signing key activation failed`, 0 dòng `ERROR`.
+Cùng công cụ và cách đo như PA, nay store `identity` là MongoDB replica set một node của `make infra-up` (OrbStack). Chạy cả hai replica `identity-1` và `identity-2`; `exchangebench` chỉ gửi vào `identity-1`. Tenant `pmes256` (ES256) và `pmrs256` (RS256). CPU `identity` là Δ`process_cpu_seconds_total` của `identity-1`; CPU Mongo là trung bình `docker stats` trong 60s cuối (1 core = 100%). `CPU_Speed_Limit` bằng 100 suốt 60s đo của mọi lượt, trừ lượt ghi "hạ xung"; RSA chỉ bị hạ xung lúc ký trước token và trong 5s khởi động. Log `identity-1/2` của sáu lượt 2026-11-04: 0 dòng `revocation list unavailable`, 0 dòng `signing key activation failed`, 0 dòng `ERROR`.
 
 | Lượt | Ngày | Đạt | Client bỏ | 5xx | Độ trễ p50/p99 | CPU `identity` | CPU Mongo | JIT tạo | Kết quả |
 |---|---|---|---|---|---|---|---|---|---|
@@ -160,10 +160,13 @@ Cùng công cụ và cách đo như PA, nay store `identity` là MongoDB replica
 | ES256 lạnh | 11-04 | 1.700/s | 0 | 0 | 5,7/36 ms | 1,17 core | 1,39 core | 100.000 | [es256-cold-261104.txt](results/exchange-261104-pm/es256-cold-261104.txt) |
 | ES256 lạnh, lần đầu | 11-03 | 849/s | 51.075 | 0 | 2,2/6,9 s | 0,92 core | 0,83 core | 49.513 | [es256-cold-261103.txt](results/exchange-261104-pm/es256-cold-261103.txt) |
 | ES256 lạnh, hạ xung 37–55 (chỉ tin số đếm) | 11-03 | 1.571/s | 7.733 | 0 | 0,79/2,6 s | 2,23 core | 2,51 core | 93.130 | [es256-cold-261103-throttled.txt](results/exchange-261104-pm/es256-cold-261103-throttled.txt) |
+| ES256 lạnh, gom lô JIT, lượt A (hạ xung 65–97 trong 18s cuối) | 11-04 | 1.700/s | 0 | 0 | 13,3/72,6 ms | 1,31 core | 1,44 core | 100.000 | [es256-cold-batched-a.txt](results/exchange-261104-pm/es256-cold-batched-a.txt) |
+| ES256 lạnh, gom lô JIT, lượt B ngay sau A, hạ xung 53–62 (chỉ tin số đếm) | 11-04 | 1.700/s | 0 | 0 | 14,9/86,8 ms | 1,55 core | 1,59 core | 100.000 | [es256-cold-batched-b.txt](results/exchange-261104-pm/es256-cold-batched-b.txt) |
 
 - Lượt ấm giống PA: 1.700/s, p99 dưới 2 ms, không đọc database (Mongo 0,08–0,10 core).
 - Lượt lạnh lần đầu (2026-11-03 22:27, khoảng 2 phút sau lượt hạ xung vừa ghi 93.130 user) dừng ở 849/s. Chẩn đoán lúc chạy: mỗi `InsertOne` của JIT (`w:majority`) chờ khoảng 151 ms, pool 100 kết nối của driver đầy, lần nạp lại danh sách thu hồi và lần kích hoạt khoá ký hết giờ chờ pool (`trust_reload_errors_total` +1). Log thô của lần này không còn (container được tạo lại 2026-11-04).
-- Ngày 2026-11-04, sau khi bật lại cả stack (không xoá volume), hai lượt lạnh ES256 và RS256 đều đạt 1.700/s, không bỏ lần nào, p99 36–72 ms, Mongo khoảng 1,4 core. Vì sao lần đầu chậm: chưa có nguồn. Owner hoãn việc xử lý đường user mới (2026-11-03); prod-like đo lại (P13).
+- Ngày 2026-11-04, sau khi bật lại cả stack (không xoá volume), hai lượt lạnh ES256 và RS256 (còn ghi từng `InsertOne`) đều đạt 1.700/s, không bỏ lần nào, p99 36–72 ms, Mongo khoảng 1,4 core. Vì sao lần đầu chậm: chưa có nguồn.
+- Gom lô JIT (quyết định M18, owner 2026-11-04; mặc định `IDENTITY_JIT_*`: 4 writer, cửa sổ 2ms, lô tối đa 256): lượt A chạy trên stack vừa bật lại (`IDENTITY_EXCHANGE_IP_RATE=100000 make core-up`), lượt B bắt đầu 6s sau khi A ghi xong 100.000 user, tức đúng ca chậm của 2026-11-03. Cả hai đạt 1.700/s, 0 lần bỏ, 0 lỗi 5xx, `store_errors_total` +0, `trust_reload_errors_total` +0, 0 dòng `revocation list unavailable`/`signing key activation failed`/`ERROR`. Số user mỗi `InsertMany` (`jit_batch_docs`): A 100.001 user trong 23.251 lần ghi (trung bình 4,3; 95% lô ≤ 8 user; lô lớn nhất 65–128), B 100.001 trong 21.568 lần (trung bình 4,6; 94% ≤ 8). p50 13,3–14,9 ms cao hơn lượt không gom (5,7 ms); nguyên nhân chưa đo tách (hạ xung ở cả hai lượt, mỗi writer chỉ chờ một `InsertMany` một lúc). Prod-like đo lại (P13).
 
 Change stream: corebench 2K tin/s, 60s, không reset, cùng stack, `CPU_Speed_Limit` 100 suốt cả hai ô. Ô tắt dừng cả hai replica `identity` (`docker stop`); ô bật chạy lại hai replica, đợi healthy rồi đo.
 
@@ -209,7 +212,7 @@ Hạ tầng: Mongo rs 3 member NVMe, NATS 3 node, 2 host Linux, dữ liệu th�
 | P10 | Bộ nhớ NATS cho map chống trùng 5m (~3M id ở 10K tin/s) | Cỡ NATS |
 | P11 | Tải đọc Redis presence khi có watch: ước tính ~800K khoá/s toàn hệ thống ở 100K máy × 50 người được xem, chưa có cache phía offline (M4 phần 4) | Cỡ `chatim-redis-presence`, có cần cache offline không (D201) |
 | P12 | Nạp lại hàng loạt sau một lần nhảy (`WS_RELOAD_RATE` 1.000 user/s mỗi node, D195): thời gian tới `ready`/`resync` cho mọi user và tải `ListMyRoomIDs` lên core; `wsload` chưa có kịch bản nhảy | Giá trị `WS_RELOAD_RATE`, cỡ core |
-| P13 | Đổi token `POST /v1/token` khi 100K user nối lại hàng loạt (~1.700/s) trên store MongoDB của `identity`, cả lượt lạnh (JIT tạo user) lẫn ấm; dev Postgres lạnh dừng ở ~560/s/node, dev MongoDB lạnh 849/s lần đầu rồi 1.700/s ở hai lượt sau (M6 PM) | Số replica `identity`, cỡ database |
+| P13 | Đổi token `POST /v1/token` khi 100K user nối lại hàng loạt (~1.700/s) trên store MongoDB của `identity`, cả lượt lạnh (JIT tạo user) lẫn ấm; dev Postgres lạnh dừng ở ~560/s/node, dev MongoDB lạnh 849/s lần đầu rồi 1.700/s ở hai lượt sau, gom lô JIT 1.700/s ở hai lượt lạnh liền nhau (M6 PM) | Số replica `identity`, cỡ database |
 
 ## Kết quả lưu trong repo
 
