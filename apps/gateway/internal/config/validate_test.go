@@ -14,10 +14,8 @@ func TestLoadValidation(t *testing.T) {
 		wantErr string
 	}{
 		{"defaults are valid", nil, ""},
-		{"missing chat addrs", map[string]string{"GW_CHAT_ADDRS": " , "}, "GW_CHAT_ADDRS is required"},
-		{"chat addr without port", map[string]string{"GW_CHAT_ADDRS": "chatim-chat-1"}, `GW_CHAT_ADDRS entry "chatim-chat-1" must be host:port`},
-		{"chat addr without host", map[string]string{"GW_CHAT_ADDRS": ":9000"}, "must be host:port"},
-		{"chat addr twice", map[string]string{"GW_CHAT_ADDRS": "a:1,a:1"}, `GW_CHAT_ADDRS lists "a:1" twice`},
+		{"negative redis db", map[string]string{"REDIS_DB": "-1"}, "REDIS_DB must not be negative"},
+		{"unreadable redis password file", map[string]string{"REDIS_PASSWORD_FILE": "/no/such/file"}, "REDIS_PASSWORD_FILE"},
 		{"missing keys file", map[string]string{"GW_JWT_KEYS_FILE": ""}, "GW_JWT_KEYS_FILE is required"},
 		{"missing issuer", map[string]string{"GW_JWT_ISSUER": ""}, "GW_JWT_ISSUER is required"},
 		{"missing audience", map[string]string{"GW_JWT_AUDIENCE": ""}, "GW_JWT_AUDIENCE is required"},

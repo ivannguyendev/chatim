@@ -1,6 +1,6 @@
 # Module 11: Cổng HTTPS — Tải dữ liệu & Quản lý room (App `gateway`)
 
-> **Trạng thái:** đã xây trên `feat/m4` (M4 phần gateway, 2026-10-23), theo [tóm tắt](../plans/2026-10-23-m4-gateway-https-summary.md); quyết định D197–D198 ở [decision log §17.9–17.10](../decision-log.md). Code: `apps/gateway` (app), `pkg/chatrpc` (chuyển lệnh dùng chung với websocket), `pkg/core/grpcclient.NewStatic` (kết nối chat round robin), `pkg/pb/chatim/v1/chatimv1connect` (code Connect sinh từ proto).
+> **Trạng thái:** đã xây trên `feat/m4` (M4 phần gateway, 2026-10-23), theo [tóm tắt](../plans/2026-10-23-m4-gateway-https-summary.md); quyết định D197–D198 ở [decision log §17.9–17.10](../decision-log.md). Code: `apps/gateway` (app), `pkg/chatrpc` (chuyển lệnh dùng chung với websocket), `chatrpc.Router` (sổ node chat trong Redis state, theo vòng), `pkg/pb/chatim/v1/chatimv1connect` (code Connect sinh từ proto).
 >
 > **Mục tiêu module:** Cho máy tải dữ liệu (danh sách hội thoại, lịch sử, thành viên...) và quản lý room (tạo nhóm, thêm người, đổi tên...) qua HTTPS bình thường, còn WebSocket ([module 09](./09-feature-realtime-delivery-and-ephemeral.md)) chỉ lo ghi realtime và đẩy event.
 
@@ -57,7 +57,7 @@ Chuỗi xử lý trong `apps/gateway/internal/api`, theo thứ tự:
 
 ### 2.3. Gọi chat
 
-Một `grpc.ClientConn` duy nhất tới mọi địa chỉ trong `GW_CHAT_ADDRS` (resolver tĩnh, `round_robin`). Không Redis, không chọn theo slot: lệnh đọc đọc thẳng Mongo, lệnh quản lý không qua actor, nên node chat nào cũng đúng. Không retry của mình: node chat chết giữa lệnh → máy nhận `unavailable` sau đúng một lần gọi; lần sau round robin chọn node chat khác.
+Gateway đọc sổ node chat sống trong Redis state (`chatrpc.OpenRouter`, như websocket; D261 thay D198 (3)), giữ một kết nối gRPC mỗi node và gửi mỗi lệnh tới node kế tiếp theo vòng (`Router.Any`), bỏ qua node có kết nối đang hỏng. Ví dụ: bật `chat-11`, nó tự ghi vào sổ, Redis báo thay đổi, gateway đọc lại sau vài giây và bắt đầu gửi lệnh tới `chat-11`; không sửa env, không khởi động lại. Không chọn theo slot: lệnh đọc đọc thẳng Mongo, lệnh quản lý không qua actor, nên node chat nào cũng đúng. Không retry của mình: node chat chết giữa lệnh → máy nhận `unavailable` sau đúng một lần gọi và gateway kích đọc lại sổ; lần sau chọn node khác. Redis state chết lúc đang chạy: giữ sổ và kết nối đang có. `/readyz` bật khi đã đọc sổ lần đầu; sổ rỗng lúc chạy không tắt `/readyz` (thay D198 (7), lý do như D186).
 
 ---
 

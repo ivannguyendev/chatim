@@ -22,7 +22,7 @@ func TestReadyWaitsForTheFirstIdentitySyncOrItsTimeout(t *testing.T) {
 	keys := newSigner(t)
 	chat := startChatNode(t, &fakeChat{})
 	lis, logs := newListeners(), newLogWatch()
-	cfg := testConfig(keys.path, chat)
+	cfg := testConfig(t, keys.path, chat)
 	cfg.Identity.ReadyTimeout = 2 * time.Second
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
@@ -53,7 +53,7 @@ func TestNodeRefusedByIdentityStaysNotReady(t *testing.T) {
 	keys := newSigner(t)
 	chat := startChatNode(t, &fakeChat{})
 	lis, logs := newListeners(), newLogWatch()
-	cfg := testConfig(keys.path, chat)
+	cfg := testConfig(t, keys.path, chat)
 	cfg.Identity.ReadyTimeout = 200 * time.Millisecond
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()

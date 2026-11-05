@@ -1,14 +1,13 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"slices"
 
 	"github.com/redis/go-redis/v9"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ivannguyendev/chatim/apps/gateway/internal/api"
@@ -16,10 +15,8 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/auth"
 	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	"github.com/ivannguyendev/chatim/pkg/core/admin"
-	"github.com/ivannguyendev/chatim/pkg/core/grpcclient"
 	"github.com/ivannguyendev/chatim/pkg/core/metrics"
 	"github.com/ivannguyendev/chatim/pkg/core/userlimit"
-	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 const (
@@ -27,28 +24,44 @@ const (
 	metricsSubsystem = "gateway"
 )
 
-func wire(cfg config.Config, log *slog.Logger, deps Deps) (*node, error) {
+func wire(ctx context.Context, cfg config.Config, log *slog.Logger, deps Deps) (*node, error) {
 	verifier, err := auth.LoadVerifier(cfg.JWTKeysFile, auth.VerifierConfig{Issuer: cfg.JWTIssuer, Audience: cfg.JWTAudience, Leeway: cfg.JWTLeeway})
 	if err != nil {
 		return nil, fmt.Errorf("load jwt key set: %w", err)
 	}
-	conn, err := grpcclient.NewStatic(cfg.ChatAddrs, grpcclient.Options{
-		Creds:       insecure.NewCredentials(),
-		DialOptions: append([]grpc.DialOption{grpc.WithIdleTimeout(0)}, deps.DialOptions...),
-	})
+	router, err := openRouter(ctx, cfg, log, deps)
 	if err != nil {
 		return nil, err
 	}
 	shared := sharedRedis(cfg)
-	n, err := wireServers(cfg, log, verifier, conn, shared, deps.IdentityDoer)
+	n, err := wireServers(cfg, log, verifier, router, shared, deps.IdentityDoer)
 	if err != nil {
-		_ = conn.Close()
+		_ = router.Close()
 		if shared != nil {
 			_ = shared.Close()
 		}
 		return nil, err
 	}
 	return n, nil
+}
+
+func openRouter(ctx context.Context, cfg config.Config, log *slog.Logger, deps Deps) (*chatrpc.Router, error) {
+	life, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	abort := context.AfterFunc(ctx, cancel)
+	r, err := chatrpc.OpenRouter(life, chatrpc.RouterConfig{
+		RedisAddr:     cfg.Redis.Addr,
+		RedisDB:       cfg.Redis.DB,
+		RedisPassword: cfg.Redis.Password,
+		ClientName:    "chatim-gateway",
+		ReadyTimeout:  deps.ReadyTimeout,
+		Log:           log,
+	})
+	abort()
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("open chat router: %w", err)
+	}
+	return r, nil
 }
 
 func sharedRedis(cfg config.Config) *redis.Client {
@@ -63,7 +76,7 @@ func sharedRedis(cfg config.Config) *redis.Client {
 	})
 }
 
-func wireServers(cfg config.Config, log *slog.Logger, verifier *auth.Verifier, conn *grpc.ClientConn, shared *redis.Client, doer auth.Doer) (*node, error) {
+func wireServers(cfg config.Config, log *slog.Logger, verifier *auth.Verifier, router *chatrpc.Router, shared *redis.Client, doer auth.Doer) (*node, error) {
 	list, err := auth.NewNodeRevocationList(cfg.JWTLeeway)
 	if err != nil {
 		return nil, err
@@ -76,11 +89,14 @@ func wireServers(cfg config.Config, log *slog.Logger, verifier *auth.Verifier, c
 	if err != nil {
 		return nil, err
 	}
-	chat := chatrpc.Clients{Chat: chatimv1.NewChatServiceClient(conn), Mention: chatimv1.NewMentionServiceClient(conn)}
 	fwd, err := chatrpc.NewForwarder(chatrpc.ForwarderOptions{
 		Methods:  chatrpc.Request(),
 		Deadline: cfg.RequestDeadline,
-		Route:    func(chatrpc.Command, proto.Message) (chatrpc.Clients, error) { return chat, nil },
+		Route: func(chatrpc.Command, proto.Message) (chatrpc.Clients, error) {
+			c, err := router.Any()
+			return c.Clients, err
+		},
+		OnUnavailable: router.Trigger,
 	})
 	if err != nil {
 		return nil, err
@@ -106,14 +122,14 @@ func wireServers(cfg config.Config, log *slog.Logger, verifier *auth.Verifier, c
 	}
 	adm := admin.New(admin.Config{Addr: cfg.AdminAddr, Metrics: metricsHandler}, log)
 	return &node{
-		cfg:   cfg,
-		log:   log,
-		conn:  conn,
-		sync:  sync,
-		redis: shared,
-		admin: adm,
-		http:  newHTTPServer(cfg, handler, log),
-		ready: &readiness{admin: adm, log: log},
+		cfg:    cfg,
+		log:    log,
+		router: router,
+		sync:   sync,
+		redis:  shared,
+		admin:  adm,
+		http:   newHTTPServer(cfg, handler, log),
+		ready:  &readiness{admin: adm, log: log},
 	}, nil
 }
 

@@ -340,9 +340,10 @@ services:
     restart: unless-stopped
     mem_limit: 1g
     stop_grace_period: 18s
-    secrets: [ws_jwks, identity_node_secret, redis_presence_password]
+    secrets: [ws_jwks, identity_node_secret, redis_password, redis_presence_password]
     environment:
-      GW_CHAT_ADDRS: chatim-chat-1:9000,chatim-chat-2:9000
+      REDIS_ADDR: chatim-redis:6379
+      REDIS_PASSWORD_FILE: /run/secrets/redis_password
       GW_JWT_KEYS_FILE: /run/secrets/ws_jwks
       GW_JWT_ISSUER: chatim-dev
       GW_JWT_AUDIENCE: chatim-websocket
@@ -361,6 +362,8 @@ services:
       identity-1:
         condition: service_healthy
       identity-2:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       redis-presence:
         condition: service_healthy

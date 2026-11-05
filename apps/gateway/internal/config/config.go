@@ -19,7 +19,7 @@ const (
 type Config struct {
 	ListenAddr        string
 	AdminAddr         string
-	ChatAddrs         []string
+	Redis             StateRedis
 	JWTKeysFile       string
 	JWTIssuer         string
 	JWTAudience       string
@@ -44,6 +44,12 @@ type Config struct {
 	SharedRedis       SharedRedis
 }
 
+type StateRedis struct {
+	Addr     string
+	DB       int
+	Password string
+}
+
 type SharedRedis struct {
 	Addr     string
 	DB       int
@@ -57,9 +63,13 @@ func Load() (Config, error) {
 	var p parser
 	deadline := p.span("CHAT_REQUEST_DEADLINE", 5*time.Second)
 	c := Config{
-		ListenAddr:        envconfig.String("GW_ADDR", ":8080"),
-		AdminAddr:         AdminAddr(),
-		ChatAddrs:         list("GW_CHAT_ADDRS"),
+		ListenAddr: envconfig.String("GW_ADDR", ":8080"),
+		AdminAddr:  AdminAddr(),
+		Redis: StateRedis{
+			Addr:     envconfig.String("REDIS_ADDR", "chatim-redis:6379"),
+			DB:       p.number("REDIS_DB", 0),
+			Password: p.secret("REDIS_PASSWORD"),
+		},
 		JWTKeysFile:       envconfig.String("GW_JWT_KEYS_FILE", ""),
 		JWTIssuer:         envconfig.String("GW_JWT_ISSUER", ""),
 		JWTAudience:       envconfig.String("GW_JWT_AUDIENCE", ""),
@@ -105,7 +115,7 @@ func (c Config) LogValue() slog.Value {
 	return slog.GroupValue(
 		slog.String("listen_addr", c.ListenAddr),
 		slog.String("admin_addr", c.AdminAddr),
-		slog.String("chat_addrs", strings.Join(c.ChatAddrs, ",")),
+		slog.Group("redis", slog.String("addr", c.Redis.Addr), slog.Int("db", c.Redis.DB), slog.Bool("auth", c.Redis.Password != "")),
 		slog.String("jwt_keys_file", c.JWTKeysFile),
 		slog.String("jwt_issuer", c.JWTIssuer),
 		slog.String("jwt_audience", c.JWTAudience),

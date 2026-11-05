@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/status"
 
 	"github.com/ivannguyendev/chatim/pkg/ids"
@@ -68,8 +69,50 @@ func (p *Pool) Room(roomID string) (PoolConn, error) {
 }
 
 func (p *Pool) Any() (PoolConn, error) {
-	addr, ok := p.loc.AnyAddr()
-	return p.at(addr, ok)
+	first, ok := p.loc.AnyAddr()
+	if !ok {
+		return PoolConn{}, ErrNoRoute
+	}
+	addr := first
+	for range p.size() {
+		if !p.failing(addr) {
+			return p.at(addr, true)
+		}
+		next, ok := p.loc.AnyAddr()
+		if !ok || next == first {
+			break
+		}
+		addr = next
+	}
+	if p.failing(addr) {
+		addr = first
+	}
+	return p.at(addr, true)
+}
+
+type stateReporter interface {
+	GetState() connectivity.State
+}
+
+func (p *Pool) size() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.conns)
+}
+
+func (p *Pool) failing(addr string) bool {
+	p.mu.Lock()
+	pc, found := p.conns[addr]
+	p.mu.Unlock()
+	if !found {
+		return false
+	}
+	r, ok := pc.closer.(stateReporter)
+	if !ok {
+		return false
+	}
+	s := r.GetState()
+	return s == connectivity.TransientFailure || s == connectivity.Shutdown
 }
 
 func (p *Pool) Refresh(ctx context.Context) error { return p.loc.Refresh(ctx) }

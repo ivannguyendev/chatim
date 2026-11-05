@@ -186,7 +186,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: More than 5% of gateway commands end Unavailable; chat is down, overloaded or unreachable from the gateway.
+          summary: More than 5% of gateway commands end Unavailable; chat is down, overloaded, unreachable from the gateway, or no live chat node is left in the node table.
   - name: chatim-identity-health
     rules:
       - alert: ChatimIdentityNoSigningKey

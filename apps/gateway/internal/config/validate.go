@@ -3,9 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
-	"net"
 	"net/url"
-	"slices"
 	"time"
 
 	"github.com/ivannguyendev/chatim/pkg/auth"
@@ -21,7 +19,8 @@ func (c Config) Validate() error {
 		{c.ListenAddr != "", "GW_ADDR is required"},
 		{c.AdminAddr != "", "GW_ADMIN_ADDR is required"},
 		{c.ListenAddr != c.AdminAddr, "GW_ADMIN_ADDR must differ from GW_ADDR"},
-		{len(c.ChatAddrs) > 0, "GW_CHAT_ADDRS is required"},
+		{c.Redis.Addr != "", "REDIS_ADDR is required"},
+		{c.Redis.DB >= 0, "REDIS_DB must not be negative"},
 		{c.JWTKeysFile != "", "GW_JWT_KEYS_FILE is required"},
 		{c.JWTIssuer != "", "GW_JWT_ISSUER is required"},
 		{c.JWTAudience != "", "GW_JWT_AUDIENCE is required"},
@@ -49,7 +48,6 @@ func (c Config) Validate() error {
 		{c.WriteTimeout >= c.RequestDeadline+writeTimeoutMargin, fmt.Sprintf("GW_WRITE_TIMEOUT %v must be at least CHAT_REQUEST_DEADLINE + %v = %v", c.WriteTimeout, writeTimeoutMargin, c.RequestDeadline+writeTimeoutMargin)},
 	}
 	errs := ruleErrors(rules)
-	errs = append(errs, chatAddrErrors(c.ChatAddrs)...)
 	errs = append(errs, originErrors(c.CORSOrigins)...)
 	if err := c.Identity.Validate(); err != nil {
 		errs = append(errs, err)
@@ -62,20 +60,6 @@ func ruleErrors(rules []rule) []error {
 	for _, r := range rules {
 		if !r.ok {
 			errs = append(errs, errors.New(r.msg))
-		}
-	}
-	return errs
-}
-
-func chatAddrErrors(addrs []string) []error {
-	var errs []error
-	for i, addr := range addrs {
-		host, port, err := net.SplitHostPort(addr)
-		switch {
-		case err != nil || host == "" || port == "":
-			errs = append(errs, fmt.Errorf("GW_CHAT_ADDRS entry %q must be host:port", addr))
-		case slices.Contains(addrs[:i], addr):
-			errs = append(errs, fmt.Errorf("GW_CHAT_ADDRS lists %q twice", addr))
 		}
 	}
 	return errs

@@ -15,10 +15,12 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/alicebob/miniredis/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"go.uber.org/goleak"
 	"google.golang.org/grpc"
@@ -27,6 +29,7 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/auth/authtest"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/pkg/pb/chatim/v1/chatimv1connect"
+	"github.com/ivannguyendev/chatim/pkg/slotmap"
 )
 
 func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
@@ -72,9 +75,11 @@ type fakeChat struct {
 	chatimv1.UnimplementedChatServiceServer
 	started chan struct{}
 	release chan struct{}
+	calls   atomic.Int32
 }
 
 func (f *fakeChat) GetHistory(ctx context.Context, _ *chatimv1.GetHistoryRequest) (*chatimv1.GetHistoryResponse, error) {
+	f.calls.Add(1)
 	if f.release != nil {
 		f.started <- struct{}{}
 		select {
@@ -119,9 +124,21 @@ func deadAddr(t *testing.T) string {
 	return addr
 }
 
-func testConfig(keysFile string, nodes ...string) config.Config {
+func nodeTable(t *testing.T, addrs ...string) string {
+	t.Helper()
+	mr := miniredis.RunT(t)
+	for i, addr := range addrs {
+		id := fmt.Sprintf("chat-%d", i+1)
+		_ = mr.Set(slotmap.NodeKey(id), addr)
+		_, _ = mr.ZAdd(slotmap.NodeRegistryKey, slotmap.NodeExpiryScore(time.Now().Add(time.Hour)), id)
+	}
+	return mr.Addr()
+}
+
+func testConfig(t *testing.T, keysFile string, nodes ...string) config.Config {
+	t.Helper()
 	return config.Config{
-		ListenAddr: "api", AdminAddr: "admin", ChatAddrs: nodes,
+		ListenAddr: "api", AdminAddr: "admin", Redis: config.StateRedis{Addr: nodeTable(t, nodes...)},
 		JWTKeysFile: keysFile, JWTIssuer: testIssuer, JWTAudience: testAudience, JWTLeeway: time.Second,
 		BodyMax: 128 << 10, UserRate: 50, UserBurst: 100, UserInflight: 32, UserLimiters: 1000, InflightMax: 100,
 		DrainDelay: 100 * time.Millisecond, ShutdownBudget: 15 * time.Second,
