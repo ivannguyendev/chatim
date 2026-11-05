@@ -1,0 +1,103 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"flag"
+	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+)
+
+const usage = `usage: chatcli <command> [flags]
+
+commands:
+  create-room        create a group through any live chat (-request-id: reuse it to retry)
+  open-dm            open the direct room of the caller and -other, creating it on first use
+  send               send one message to the chat serving the room
+  history            read one history page of a room
+  edit               edit a message (-base: the version you saw)
+  delete             delete a message for everyone (-base: the version you saw)
+  hide               hide a message for the caller only
+  clear              hide the history up to a seq for the caller only
+  edits              list the edit history of a message
+  react              set or change the caller's reaction on a message (-emoji "" removes it)
+  reaction-settings  print the reaction emojis the chat accepts, as JSON
+  pin                pin a message in its room
+  unpin              unpin a message
+  add-members        add users to a group (-request-id: reuse it to retry)
+  remove-member      remove -target from a group
+  leave              leave a room as the caller
+  set-role           set the role of -target: owner, admin or member
+  set-priority       set the priority of -target
+  read               mark the room read up to -seq (0: the last message)
+  unread             mark the room unread from -seq
+  set-user-groups    set the full group list of -user (-ver: newer than the stored one)
+  set-groups         add or change a taggable group (-inactive keeps it out of notifications and lists)
+  room-groups        list the taggable groups with a member in -room
+  watch              print live events of a room from NATS
+  dev-keys           write a dev Ed25519 signing key and its public JWKS for the websocket node
+  token              sign a dev websocket token with the key from dev-keys
+  dev-issuer-key     write a tenant issuer private JWK (0600) and print its public JWK for identity issuer-key-add
+  slots              show how live chat nodes share the slots
+  e2e                end-to-end scenario steps: setup, send, change, react-pin, members, links, rooms, mentions, ws, ws-events, ws-drill, gateway, ws-ephemeral, ws-ephemeral-kill, ws-resilience, ws-node-stop, identity-exchange, identity-directory, check
+
+run "chatcli <command> -h" for the flags of a command`
+
+type command func(ctx context.Context, args []string) error
+
+func main() { os.Exit(realMain(os.Args[1:])) }
+
+func realMain(args []string) int {
+	commands := map[string]command{
+		"create-room":       createRoomCmd,
+		"open-dm":           openDirectCmd,
+		"send":              sendCmd,
+		"history":           historyCmd,
+		"edit":              editCmd,
+		"delete":            deleteCmd,
+		"hide":              hideCmd,
+		"clear":             clearCmd,
+		"edits":             editsCmd,
+		"react":             reactCmd,
+		"reaction-settings": reactionSettingsCmd,
+		"pin":               pinCmd,
+		"unpin":             unpinCmd,
+		"add-members":       addMembersCmd,
+		"remove-member":     removeMemberCmd,
+		"leave":             leaveCmd,
+		"set-role":          setRoleCmd,
+		"set-priority":      setPriorityCmd,
+		"read":              readCmd,
+		"unread":            unreadCmd,
+		"set-user-groups":   setUserGroupsCmd,
+		"set-groups":        setGroupsCmd,
+		"room-groups":       roomGroupsCmd,
+		"watch":             watchCmd,
+		"dev-keys":          devKeysCmd,
+		"token":             tokenCmd,
+		"dev-issuer-key":    devIssuerKeyCmd,
+		"slots":             slotsCmd,
+		"e2e":               e2eCmd,
+	}
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, usage)
+		return 2
+	}
+	cmd, ok := commands[args[0]]
+	if !ok {
+		fmt.Fprintln(os.Stderr, usage)
+		return 2
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := cmd(ctx, args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 2
+		}
+		fmt.Fprintf(os.Stderr, "chatcli %s: %v\n", args[0], err)
+		return 1
+	}
+	return 0
+}

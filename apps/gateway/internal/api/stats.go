@@ -3,27 +3,30 @@ package api
 import (
 	"sync/atomic"
 
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
-	"github.com/ivannguyendev/chatim/pkg/metrics"
+	"github.com/ivannguyendev/chatim/pkg/auth"
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
 )
 
 const (
-	reasonMissing  = "missing"
-	reasonRepeated = "repeated"
-	reasonTooLong  = "too long"
-	reasonBadValue = "bad header"
-	reasonOther    = "other"
-	limitRate      = "rate"
-	limitInflight  = "inflight"
+	reasonMissing       = "missing"
+	reasonRepeated      = "repeated"
+	reasonTooLong       = "too long"
+	reasonBadValue      = "bad header"
+	reasonOther         = "other"
+	reasonRevoked       = "revoked"
+	reasonTenantRevoked = "tenant_revoked"
+	reasonKeyPending    = "key_pending"
+	limitRate           = "rate"
+	limitInflight       = "inflight"
 )
 
 var authReasons = []string{
 	reasonMissing, reasonRepeated, reasonTooLong, reasonBadValue, reasonOther,
-	string(jwtverify.ReasonMalformed), string(jwtverify.ReasonAlgorithm), string(jwtverify.ReasonSignature),
-	string(jwtverify.ReasonKeyID), string(jwtverify.ReasonType), string(jwtverify.ReasonIssuer),
-	string(jwtverify.ReasonAudience), string(jwtverify.ReasonExpired), string(jwtverify.ReasonNotYetValid),
-	string(jwtverify.ReasonMissingClaim), string(jwtverify.ReasonSubject), string(jwtverify.ReasonTenant),
-	string(jwtverify.ReasonClaims),
+	string(auth.ReasonMalformed), string(auth.ReasonAlgorithm), string(auth.ReasonSignature),
+	string(auth.ReasonKeyID), string(auth.ReasonType), string(auth.ReasonIssuer),
+	string(auth.ReasonAudience), string(auth.ReasonExpired), string(auth.ReasonNotYetValid),
+	string(auth.ReasonMissingClaim), string(auth.ReasonSubject), string(auth.ReasonTenant),
+	string(auth.ReasonClaims), string(auth.ReasonSession), reasonRevoked, reasonTenantRevoked, reasonKeyPending,
 }
 
 type stats struct {
@@ -60,7 +63,7 @@ func counter(name, help string, labels map[string]string, c *atomic.Uint64) metr
 func (s *stats) sources() []metrics.Source {
 	out := make([]metrics.Source, 0, len(authReasons)+6)
 	for _, r := range authReasons {
-		out = append(out, counter("auth_failures_total", "Requests refused before any core call because the token was missing or invalid, by reason.", map[string]string{"reason": r}, s.auth[r]))
+		out = append(out, counter("auth_failures_total", "Requests refused before any chat call because the token was missing or invalid, by reason.", map[string]string{"reason": r}, s.auth[r]))
 	}
 	return append(out,
 		counter("rate_limited_total", "Requests refused by the per-user limits, by limit.", map[string]string{"limit": limitRate}, &s.rateLimited),

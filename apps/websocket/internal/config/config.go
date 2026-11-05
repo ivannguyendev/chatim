@@ -8,8 +8,9 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/ivannguyendev/chatim/pkg/envconfig"
-	"github.com/ivannguyendev/chatim/pkg/redact"
+	"github.com/ivannguyendev/chatim/pkg/auth"
+	"github.com/ivannguyendev/chatim/pkg/core/envconfig"
+	"github.com/ivannguyendev/chatim/pkg/core/redact"
 	"github.com/ivannguyendev/chatim/pkg/wspublish"
 )
 
@@ -79,6 +80,7 @@ type Config struct {
 	PresenceBatch         int
 	PresenceCache         time.Duration
 	PresenceWatchMax      int
+	Identity              auth.SyncConfig
 }
 
 func AdminAddr() string { return envconfig.String("WS_ADMIN_ADDR", defaultAdminAddr) }
@@ -111,7 +113,7 @@ func Load() (Config, error) {
 		SendQueue:          p.number("WS_SEND_QUEUE", 256),
 		SendQueueBytes:     p.number("WS_SEND_QUEUE_BYTES", 1<<20),
 		WriteTimeout:       p.span("WS_WRITE_TIMEOUT", 10*time.Second),
-		RequestDeadline:    p.span("CORE_REQUEST_DEADLINE", 5*time.Second),
+		RequestDeadline:    p.span("CHAT_REQUEST_DEADLINE", 5*time.Second),
 		DrainDelay:         p.span("WS_DRAIN_DELAY", 2*time.Second),
 		ShutdownBudget:     p.span("WS_SHUTDOWN_BUDGET", 15*time.Second),
 		NATSURL:            envconfig.String("NATS_URL", ""),
@@ -146,6 +148,11 @@ func Load() (Config, error) {
 		PresenceCache:         p.span("WS_PRESENCE_CACHE", 5*time.Second),
 		PresenceWatchMax:      p.number("WS_PRESENCE_WATCH_MAX", 200),
 	}
+	identity, err := auth.SyncConfigFromEnv("WS")
+	if err != nil {
+		p.fail(err)
+	}
+	c.Identity = identity
 	if err := errors.Join(p.errs...); err != nil {
 		return Config{}, err
 	}
@@ -215,6 +222,7 @@ func (c Config) LogValue() slog.Value {
 		slog.Int("presence_batch", c.PresenceBatch),
 		slog.Duration("presence_cache", c.PresenceCache),
 		slog.Int("presence_watch_max", c.PresenceWatchMax),
+		slog.Any("identity", c.Identity),
 	)
 }
 

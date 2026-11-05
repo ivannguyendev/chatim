@@ -21,7 +21,7 @@ const (
 	ReadHistory = domain.ActionReadHistory
 )
 
-type CoreReader interface {
+type ChatReader interface {
 	MembersOf(ctx context.Context, room uint64, users []string) ([]Member, error)
 	ListMembers(ctx context.Context, room uint64, after MemberCursor, limit int) ([]Member, error)
 	RoomMemberIDs(ctx context.Context, room uint64) ([]string, error)

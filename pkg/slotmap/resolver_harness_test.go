@@ -39,17 +39,17 @@ func newResolverRig(t *testing.T, cfg ResolverConfig) *resolverRig {
 }
 
 func (g *resolverRig) heartbeat(id, addr string, ttl time.Duration) {
-	_ = g.mr.Set(CoreKey(id), addr)
+	_ = g.mr.Set(NodeKey(id), addr)
 	expiry := g.now.Add(24 * time.Hour)
 	if ttl > 0 {
-		g.mr.SetTTL(CoreKey(id), ttl)
+		g.mr.SetTTL(NodeKey(id), ttl)
 		expiry = g.now.Add(ttl)
 	}
 	g.register(id, expiry)
 }
 
 func (g *resolverRig) register(id string, expiry time.Time) {
-	_, _ = g.mr.ZAdd(CoreRegistryKey, CoreExpiryScore(expiry), id)
+	_, _ = g.mr.ZAdd(NodeRegistryKey, NodeExpiryScore(expiry), id)
 }
 
 func (g *resolverRig) advance(d time.Duration) {
@@ -118,12 +118,12 @@ func eventually(t *testing.T, what string, cond func() bool) {
 	}
 }
 
-func coreAddr(id string) string { return id + ":9000" }
+func nodeAddr(id string) string { return id + ":9000" }
 
-func coreIDs(n int) []string {
+func nodeIDs(n int) []string {
 	ids := make([]string, n)
 	for i := range ids {
-		ids[i] = "core-" + strconv.Itoa(i)
+		ids[i] = "chat-" + strconv.Itoa(i)
 	}
 	return ids
 }

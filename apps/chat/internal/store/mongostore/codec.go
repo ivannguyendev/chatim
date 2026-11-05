@@ -1,0 +1,126 @@
+package mongostore
+
+import (
+	"errors"
+	"fmt"
+	"math"
+	"time"
+
+	"github.com/ivannguyendev/chatim/apps/chat/internal/model/domain"
+	"github.com/ivannguyendev/chatim/apps/chat/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/core/apperr"
+	"github.com/ivannguyendev/chatim/pkg/keys"
+)
+
+var errCorrupt = errors.New("mongostore: corrupt document")
+
+type messageDoc struct {
+	ID           []byte         `bson:"_id"`
+	Tenant       string         `bson:"t"`
+	From         string         `bson:"f"`
+	Kind         domain.Kind    `bson:"k"`
+	Text         string         `bson:"x"`
+	CID          string         `bson:"c"`
+	CreatedAt    time.Time      `bson:"ts"`
+	Version      int32          `bson:"v,omitempty"`
+	Deleted      bool           `bson:"d,omitempty"`
+	EditedAt     time.Time      `bson:"ea,omitempty"`
+	Reactions    *reactionsDoc  `bson:"rx,omitempty"`
+	ReplyTo      *replyDoc      `bson:"rp,omitempty"`
+	Replies      *replyCountDoc `bson:"rc,omitempty"`
+	Forward      *forwardDoc    `bson:"fw,omitempty"`
+	Mentions     []mentionDoc   `bson:"mt,omitempty"`
+	MentionAll   bool           `bson:"ma,omitempty"`
+	MentionAllAt time.Time      `bson:"mat,omitempty"`
+	SkipUnread   bool           `bson:"nu,omitempty"`
+	Meta         []byte         `bson:"m,omitempty"`
+}
+
+func encodeMessage(m domain.Message) (messageDoc, error) {
+	if err := store.KeyOf(m).Validate(); err != nil {
+		return messageDoc{}, err
+	}
+	if _, err := toInt64("seq", m.Seq); err != nil {
+		return messageDoc{}, err
+	}
+	version, err := toInt32("version", m.Version)
+	if err != nil {
+		return messageDoc{}, err
+	}
+	d := messageDoc{
+		ID:        keys.Msg(m.Room, m.Thread, m.Seq),
+		Tenant:    m.Tenant,
+		From:      m.From,
+		Kind:      m.Kind,
+		Text:      m.Text,
+		CID:       m.CID,
+		CreatedAt: m.CreatedAt,
+		Version:   version,
+		Deleted:   m.Deleted,
+		EditedAt:  m.EditedAt,
+	}
+	if err := encodeLinks(m, &d); err != nil {
+		return messageDoc{}, err
+	}
+	return d, nil
+}
+
+func decodeMessage(d messageDoc) (domain.Message, error) {
+	room, thread, seq, err := keys.ParseMsg(d.ID)
+	if err != nil {
+		return domain.Message{}, fmt.Errorf("%w: message _id: %w", errCorrupt, err)
+	}
+	version, err := toUint32("message version", d.Version)
+	if err != nil {
+		return domain.Message{}, err
+	}
+	reactions, err := decodeSummary(d.Reactions)
+	if err != nil {
+		return domain.Message{}, err
+	}
+	m := domain.Message{
+		Room:      room,
+		Thread:    thread,
+		Seq:       seq,
+		Tenant:    d.Tenant,
+		From:      d.From,
+		Kind:      d.Kind,
+		Text:      d.Text,
+		CID:       d.CID,
+		CreatedAt: d.CreatedAt,
+		Version:   version,
+		Deleted:   d.Deleted,
+		EditedAt:  d.EditedAt,
+		Reactions: reactions,
+	}
+	if err := decodeLinks(d, &m); err != nil {
+		return domain.Message{}, err
+	}
+	return m, nil
+}
+
+func decodeMessages(docs []messageDoc) ([]domain.Message, error) {
+	out := make([]domain.Message, len(docs))
+	for i, d := range docs {
+		m, err := decodeMessage(d)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = m
+	}
+	return out, nil
+}
+
+func toInt64(field string, v uint64) (int64, error) {
+	if v > math.MaxInt64 {
+		return 0, fmt.Errorf("%w: %s above max int64", apperr.ErrInvalidArgument, field)
+	}
+	return int64(v), nil
+}
+
+func toUint64(field string, v int64) (uint64, error) {
+	if v < 0 {
+		return 0, fmt.Errorf("%w: negative %s", errCorrupt, field)
+	}
+	return uint64(v), nil
+}

@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ivannguyendev/chatim/pkg/apperr"
-	"github.com/ivannguyendev/chatim/pkg/lru"
+	"github.com/ivannguyendev/chatim/pkg/core/apperr"
+	"github.com/ivannguyendev/chatim/pkg/core/lru"
 )
 
 const recentForgetRooms = 4096

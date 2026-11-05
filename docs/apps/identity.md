@@ -1,0 +1,170 @@
+# App `identity`
+
+Chat không giữ danh tính (owner 2026-11-02, D239): không mật khẩu, đăng nhập, phiên, refresh token, role. `identity` là cầu nối: tin issuer của từng tenant, đổi JWT do backend tenant ký lấy token chat Ed25519 5 phút (`POST /v1/token`, D240–D241), giữ bản sao user và nhóm (danh bạ trong RAM mỗi replica, `DirectoryService` cho client, D226, D230–D231), thu hồi theo tenant và khoá ký tới websocket/gateway qua HTTPS, không qua NATS (D219–D225). `identity` không đọc dữ liệu của chat, chat không đọc dữ liệu của `identity`. Store: database MongoDB riêng `chatim_identity` trên replica set của chat (D244, phase PM), user MongoDB `identity` chỉ có quyền `readWrite` trên database đó. Mỗi replica giữ danh bạ trong RAM và theo dõi thay đổi bằng change stream của MongoDB (mục [Danh bạ trong RAM](#danh-bạ-trong-ram-và-change-stream)). Audit (`audit_events`) bỏ ở PM, làm lại ở PB. Thiết kế: [tóm tắt PA](../plans/2026-11-02-m6-pa-identity-doi-token-summary.md), [tóm tắt PM](../plans/2026-11-02-m6-pm-identity-mongodb-summary.md), `docs/decision-log.md` §17.15–§17.18.
+
+## Biến môi trường
+
+Đọc qua `apps/identity/internal/config`; sai thì node không khởi động và báo gộp mọi lỗi. Biến `*_FILE` đọc secret từ file (compose secret).
+
+| Biến | Mặc định | Ý nghĩa |
+|---|---|---|
+| `IDENTITY_ADDR` | `:8080` | HTTP/1.1 và h2c công khai (chỉ cổng này đứng sau LB); đặt rỗng là tắt |
+| `IDENTITY_INTERNAL_ADDR` | `:8081` | Cổng nội bộ cho node websocket/gateway (danh sách thu hồi), **không** đứng sau LB; đặt rỗng là tắt. Phải bật ít nhất một trong hai cổng |
+| `IDENTITY_NODE_SECRET` / `_FILE` | — (bắt buộc khi bật cổng nội bộ) | Secret node gửi trong `Authorization: Bearer`, tối thiểu 32 byte (`openssl rand -hex 32`); so bằng hằng thời gian |
+| `IDENTITY_ADMIN_ADDR` | `:9090` | `/livez`, `/readyz`, `/metrics`, pprof; **không bao giờ public**; `/app probe` hỏi địa chỉ này |
+| `IDENTITY_MONGO_URI` | — (bắt buộc) | URI MongoDB **không** kèm user hay mật khẩu (có thì không khởi động), ví dụ `mongodb://chatim-mongodb:27017/?replicaSet=rs0` |
+| `IDENTITY_MONGO_DB` | `chatim_identity` | Database riêng của `identity` (D244) |
+| `IDENTITY_MONGO_USER` | rỗng | User MongoDB; rỗng = không xác thực |
+| `IDENTITY_MONGO_PASSWORD` / `_FILE` | — | Mật khẩu của `IDENTITY_MONGO_USER`; đặt mà không có user thì không khởi động |
+| `IDENTITY_MONGO_AUTH_SOURCE` | = `IDENTITY_MONGO_DB` | Database xác thực của user |
+| `IDENTITY_ISSUER`, `IDENTITY_AUDIENCE` | — (bắt buộc) | `iss`, `aud` của access token; phải khớp `WS_JWT_*`/`GW_JWT_*` |
+| `IDENTITY_TOKEN_TTL` | `5m` | Hạn token chat do `identity` cấp; cũng là cửa sổ giữ khoá ký nghỉ và mục thu hồi (`IDENTITY_TOKEN_TTL` + 1m, phải ≤ 2h). Thay `IDENTITY_ACCESS_TTL` (không còn đọc) |
+| `IDENTITY_EXCHANGE_AUDIENCE` | — (bắt buộc) | `aud` mà token của tenant phải mang khi đổi lấy token chat; phải khác `IDENTITY_AUDIENCE`, để token chat không bao giờ được nhận như token tenant; compose dev `chatim` |
+| `IDENTITY_EXCHANGE_MAX_LIFETIME` | `10m` | `exp` − `iat` tối đa của token tenant; dài hơn thì từ chối |
+| `IDENTITY_TRUST_RELOAD` | `10s` | Nhịp nạp lại issuer và khoá tin cậy từ MongoDB (lưới an toàn; change stream đánh thức ngay khi đổi), cũng là nhịp nạp lại danh sách thu hồi của follower; tối đa `1m` |
+| `IDENTITY_EXCHANGE_IP_RATE`, `IDENTITY_EXCHANGE_IP_BURST` | `50` / `500` | Lần đổi token mỗi IP mỗi node (token bucket); quá thì `429`. Ước tính, chưa có nguồn số: văn phòng NAT 2.000 người nối lại trong 1 phút ≈ 33/s (controller Q4 2026-11-02); compose dev đọc `IDENTITY_EXCHANGE_IP_RATE` từ `.env` để bench ghi đè |
+| `IDENTITY_EXCHANGE_IP_TRACKED` | `100000` | Số IP giữ bộ đếm (LRU) của giới hạn đổi token |
+| `IDENTITY_KEY_ENCRYPTION_KEY` / `_FILE` | — (bắt buộc) | 32 byte base64, mã hoá khoá ký riêng (AES-256-GCM); sinh bằng `openssl rand -base64 32` |
+| `IDENTITY_KEY_RELOAD` | `30s` | Nhịp nạp lại khoá ký, tự kích hoạt khoá chờ đã đủ giờ, kiểm readiness và xoá dòng thu hồi đã hết hạn; compose dev `5s` |
+| `IDENTITY_KEY_ACTIVATE_LEAD` | `2m` | Khoá chờ được `identity` tự kích hoạt khi đủ tuổi này; `key-activate` từ chối khoá chưa đủ tuổi. Phải ≥ `IDENTITY_KEY_RELOAD` + 1m (khoảng hỏi khoá tối đa của node), sai thì `identity` không khởi động; compose dev `65s` |
+| `IDENTITY_BODY_MAX` | `16384` | Cỡ body tối đa |
+| `IDENTITY_CORS_ORIGINS` | rỗng | Origin trình duyệt được phép, đúng từng origin |
+| `IDENTITY_CLIENT_IP_HEADER` | rỗng | Header IP do edge ghi đè (`X-Real-IP`); `X-Forwarded-For` lấy phần tử cuối; rỗng = `RemoteAddr` |
+| `IDENTITY_DRAIN_DELAY`, `IDENTITY_SHUTDOWN_BUDGET` | `5s` / `25s` | Dừng: `/readyz` false, drain, `http.Shutdown`, đóng kết nối MongoDB; budget > drain + write timeout + 1s |
+| `IDENTITY_READ_HEADER_TIMEOUT`, `IDENTITY_READ_TIMEOUT`, `IDENTITY_WRITE_TIMEOUT`, `IDENTITY_IDLE_TIMEOUT` | `5s` / `10s` / `15s` / `60s` | Hạn của HTTP server |
+| `IDENTITY_MAX_HEADER_BYTES` | `16384` | Cỡ header tối đa |
+| `IDENTITY_DIRECTORY_LOAD_SLOTS` | `4` | Số replica được nạp toàn bộ danh bạ cùng lúc (suất `directory_load` trong collection `slots`); ≥ 1, sai thì không khởi động |
+| `IDENTITY_INFLIGHT_MAX` | `10000` | Lời gọi `DirectoryService` chạy cùng lúc mỗi node; quá thì `unavailable` |
+| `IDENTITY_USER_RATE`, `IDENTITY_USER_BURST` | `50` / `100` | Lời gọi `DirectoryService` mỗi người dùng mỗi node (token bucket); quá thì `resource_exhausted` |
+| `IDENTITY_USER_INFLIGHT` | `32` | Lời gọi `DirectoryService` chạy cùng lúc của một người dùng; quá thì `resource_exhausted` |
+| `IDENTITY_USER_LIMITERS` | `100000` | Số người dùng giữ bộ đếm (LRU) của `DirectoryService`; phải ≥ `IDENTITY_INFLIGHT_MAX` |
+| `IDENTITY_JIT_WRITERS` | `4` | Số goroutine gom user mới (JIT) thành lô; mỗi goroutine một hàng đợi, user chọn goroutine theo hash của `_id` |
+| `IDENTITY_JIT_WINDOW` | `2ms` | Lô đóng sau khoảng này kể từ user đầu tiên của lô |
+| `IDENTITY_JIT_MAX_BATCH` | `256` | Lô đóng ngay khi đủ số user này |
+| `IDENTITY_JIT_QUEUE` | `1024` | Chỗ chờ mỗi goroutine; đầy thì đổi token trả `unavailable` ngay, không chờ |
+| `IDENTITY_JIT_INSERT_TIMEOUT` | `1s` | Hạn của một lần `InsertMany`; quá hạn thì mọi user của lô nhận `unavailable` |
+
+User mới (JIT) không ghi từng `InsertOne` nữa mà gom thành lô `InsertMany` (`ordered:false`, `w:majority`), để một lần chờ ghi bền giữ một kết nối pool cho cả lô thay vì một kết nối mỗi user (D259, owner 2026-11-04). Kết quả từng user: ghi được là `created`; trùng `_id` (kể cả hai user trùng trong cùng lô: user sau) là `conflict`, token vẫn cấp; lỗi khác của user đó, hay lỗi cả lệnh (hết hạn, mạng), là `unavailable`, không thử lại. Sửa hồ sơ (CAS) vẫn ghi từng user. Năm biến `IDENTITY_JIT_*` đều phải > 0, sai thì không khởi động; metric `jit_batch_docs` đếm số user mỗi lô.
+
+`/readyz` lần đầu true khi ping được MongoDB, lược đồ đủ (đủ 9 collection clustered trên `_id` và đủ index khai báo trong binary), có đúng một khoá đang ký, danh bạ đã nạp xong vào RAM và issuer/khoá tin cậy đã nạp lần đầu (kiểm ngay khi mỗi thứ nạp xong, không chờ `IDENTITY_KEY_RELOAD`). Sau lần ready đầu, chỉ còn cần khoá ký và danh bạ; issuer/khoá tin cậy nạp lại lỗi thì giữ bản cũ và replica vẫn ready (`trust_reload_errors_total` tăng) (không ping MongoDB và hỏi lược đồ nữa, chỉ nạp lại khoá): MongoDB mất thì replica vẫn ready vì `GetUsers`, `GetMyProfile` và JWKS trả từ RAM. Lược đồ thiếu (database chưa chạy `/app migrate -apply`) thì `/readyz` false, log Warn `identity schema incomplete, run /app migrate -apply` kèm `missing`, và replica **không ghi gì**: chưa nạp danh bạ, chưa tự kích hoạt khoá ký, chưa dọn thu hồi (ghi trên database chưa migrate sẽ tạo collection không clustered mà `migrate -apply` từ chối); lần kiểm kế tiếp thấy lược đồ đủ thì chạy cả ba. Index lệch tuỳ chọn thì vẫn ready, log Warn `index outdated, run /app migrate -apply` và gauge `index_outdated{collection}` = 1 (theo lần kiểm gần nhất trước lần ready đầu). Mỗi lần kiểm (nạp khoá, ping, lược đồ), kích hoạt khoá đến hạn và dọn mục thu hồi hết hạn đều có hạn 3s: MongoDB treo (mất gói) thì lần kiểm đó tính là lỗi, không treo đến timeout TCP. Việc kiểm chạy trong goroutine riêng sau khi admin đã phục vụ, nên lúc khởi động `/livez` trả ngay và SIGTERM dừng được; nạp danh bạ xong chỉ báo goroutine đó kiểm lại ngay, không chờ, nên follower chạy luôn. Khởi động khi MongoDB chưa lên thì process không thoát: `/livez` OK, `/readyz` false, kiểm lại mỗi `IDENTITY_KEY_RELOAD` đến khi MongoDB lên. `GOMEMLIMIT` chưa đặt thì log cảnh báo một lần lúc khởi động và metric `memory_limit_set` = 0.
+
+## API công khai
+
+| Đường | Ghi chú |
+|---|---|
+| `GET /.well-known/jwks.json` | Khoá công khai (chờ, đang ký, nghỉ chưa quá `IDENTITY_TOKEN_TTL` + 30s, mặc định 5m30s), `Cache-Control: public, max-age=60`; chưa có khoá → 503. Node prod lấy khoá **chỉ** từ đường này qua HTTPS của LB |
+| `POST /v1/token` | Đổi token tenant lấy token chat (RFC 8693, mục dưới) |
+| `POST /chatim.identity.v1.DirectoryService/GetUsers` | Connect, Bearer access token của `identity`. 1–500 `user_ids` mỗi lần (id trùng gộp lại); trả `id`, `display_name`, `avatar_url`, `state` (`ACTIVE`/`DISABLED`) **từ RAM**, không chạm MongoDB; **không bao giờ** có email hay username. Id lạ hoặc của tenant khác bị bỏ qua, không báo lỗi. Ví dụ: Lan gửi 300 id người trong danh sách hội thoại, nhận lại 300 tên |
+| `POST /chatim.identity.v1.DirectoryService/GetMyProfile` | Bearer; hồ sơ của chính mình (`id`, `display_name`, `avatar_url`) đọc **từ RAM** theo `tid`, `sub` của token, không chạm MongoDB; không có trong danh bạ → `not_found`. `UpdateMyProfile` đã bỏ; đổi tên, ảnh bằng lệnh `user-set` |
+
+**Đổi token `POST /v1/token`** (cổng public `IDENTITY_ADDR`). Body `application/x-www-form-urlencoded`, đúng một lần mỗi tham số: `grant_type=urn:ietf:params:oauth:grant-type:token-exchange`, `subject_token=<JWT do backend hoặc IdP của tenant ký>`, `subject_token_type=urn:ietf:params:oauth:token-type:jwt`; tham số khác bỏ qua. Thứ tự kiểm: content type và form → `grant_type` → giới hạn IP (`IDENTITY_EXCHANGE_IP_RATE`/`_BURST`, IP lấy từ `IDENTITY_CLIENT_IP_HEADER` khi đặt, không thì địa chỉ TCP) → `subject_token_type`, `subject_token` → kiểm token tenant (summary §4.1 bước 1–7: `kid`, `alg` đúng khoá, issuer và khoá active, chữ ký, `aud` = `IDENTITY_EXCHANGE_AUDIENCE`, `exp`/`iat` ≤ `IDENTITY_EXCHANGE_MAX_LIFETIME`, tenant active và `tid` khớp, `sub` theo `pkg/ids`) → user trong danh bạ RAM không bị khoá → khoá ký đang dùng → JIT hồ sơ (tạo user mới, sửa `display_name`/`avatar_url` khi claim `name`/`picture` hợp lệ khác bản RAM; `picture` rỗng hay sai, `name` sai coi như vắng; giống thì không ghi; CAS thua vẫn cấp) → ký token chat (`sid` mới, hạn `IDENTITY_TOKEN_TTL`). Khoá tenant (`tenant-disable`) ghi doc `tenants`; change stream báo follower, follower đánh thức việc nạp lại issuer và nạp lại danh sách thu hồi ngay, nên lần đổi kế tiếp bị từ chối mà không chờ `IDENTITY_TRUST_RELOAD` (e2e 13 đòi ≤ 2s, `tools/chatcli/e2e_identity_forged.go:16`); token chat đã cấp trước đó sống tới hết hạn (≤ 5 phút) hoặc bị node chặn theo `sessions_revoked_at`.
+
+| Kết quả | Trả về |
+|---|---|
+| Thành công | `200 {"access_token", "issued_token_type": "urn:ietf:params:oauth:token-type:access_token", "token_type": "Bearer", "expires_in"}` (`expires_in` = giây còn lại tới `exp`, làm tròn lên, thường `300`), `Cache-Control: no-store` |
+| Thiếu, lặp tham số, sai content type, `subject_token_type` khác `…:jwt` | `400 {"error": "invalid_request"}` |
+| `grant_type` khác token exchange | `400 {"error": "unsupported_grant_type"}` |
+| Token tenant sai (mọi bước 1–7), tenant hay user bị khoá | `400 {"error": "invalid_grant"}`, body, `Content-Length` và header giống hệt nhau mọi ca; lý do (`reason`, `iss`, `kid`, `ip`, không bao giờ token) chỉ ở một dòng log Info `token exchange refused` |
+| Body quá `IDENTITY_BODY_MAX` | `413 {"error": "invalid_request"}` |
+| Quá giới hạn IP | `429 {"error": "temporarily_unavailable"}` + `Retry-After: 1` |
+| Danh bạ hay issuer chưa nạp, không có khoá ký, MongoDB lỗi khi JIT cần ghi | `503 {"error": "temporarily_unavailable"}` + `Retry-After: 1`; nguyên nhân ở một dòng log Warn `token exchange unavailable`. Không có khoá ký thì không ghi JIT |
+
+Mọi body lỗi có thêm `error_description` cố định theo mã. Ví dụ dev: `curl -s localhost:8084/v1/token -d grant_type=urn:ietf:params:oauth:grant-type:token-exchange -d subject_token_type=urn:ietf:params:oauth:token-type:jwt -d subject_token=$TENANT_JWT`.
+
+**Giới hạn và mã lỗi của `DirectoryService`** (cả hai lệnh): body tối đa 64 KiB; mỗi người dùng `IDENTITY_USER_RATE`/`IDENTITY_USER_BURST` lời gọi và `IDENTITY_USER_INFLIGHT` lời gọi chạy cùng lúc mỗi node; cả node tối đa `IDENTITY_INFLIGHT_MAX` lời gọi chạy cùng lúc. Token kiểm bằng khoá ký và danh sách thu hồi **trong RAM**: follower nạp lại danh sách khi change stream báo đổi ở `tenants` hay `revoked_sessions` và mỗi `IDENTITY_TRUST_RELOAD`, nên phiên vừa bị thu hồi còn đọc được thêm một lúc ngắn; change stream đứt thì tối đa `IDENTITY_TRUST_RELOAD` (mặc định 10s).
+
+| Mã | Khi nào |
+|---|---|
+| `invalid_argument` | Không có id, quá 500 id, id sai dạng |
+| `unauthenticated` | Thiếu hoặc hỏng token (`unauthenticated`); token đã thu hồi (`session revoked`) |
+| `not_found` | `GetMyProfile` của user chưa có trong danh bạ |
+| `resource_exhausted` | Quá giới hạn theo người dùng; chờ rồi gọi lại |
+| `unavailable` + `Retry-After: 1` | Replica chưa nạp xong danh bạ (`directory is loading`); node đầy `IDENTITY_INFLIGHT_MAX` |
+
+**Cổng nội bộ** (`IDENTITY_INTERNAL_ADDR`): chỉ `GET /internal/v1/revocations` (header `Authorization: Bearer <IDENTITY_NODE_SECRET>`; sai/thiếu → 401). Trả mọi mục còn hạn: `sessions[{session_id, tenant_id, expires_at}]` (collection `revoked_sessions`; hiện không có đường nào ghi, vòng dọn vẫn chạy; PB quyết định) và `tenants[{tenant_id, revoked_before, expires_at}]` (khoá tenant, giờ MongoDB `$$NOW`). Mục giữ `IDENTITY_TOKEN_TTL` + 1 phút. `ETag` theo băm body, `If-None-Match` khớp → 304. Đường khác → 404, kể cả JWKS và `/internal/v1/directory/changes`.
+
+**Feed danh bạ cho app khác: đã gỡ ở PM** (owner 2026-11-02, D257, thay D227): chưa app nào dùng (chỉ e2e và test gọi). Làm lại khi app đầu tiên cần (sớm nhất Mention 3b, M8 hoặc M9), theo nhu cầu của app đó, dạng request thường trả ngay trên một kết nối keep-alive, không giữ request chờ thay đổi, không long poll hay SSE (`.memory/http-between-services-plain-keepalive.md`); change stream ở mục dưới là nền sẵn có. `identity` vẫn không dùng NATS ([events.md §8](../events.md)).
+
+**Node đồng bộ** (`pkg/auth`, websocket và gateway như nhau, tiền tố `WS_`/`GW_`): `*_IDENTITY_INTERNAL_URL`, `*_IDENTITY_SECRET`/`_FILE` và `*_IDENTITY_JWKS_URL` **bắt buộc** (JWKS phải `https://` trừ khi `*_IDENTITY_ALLOW_HTTP=true`, chỉ cho dev), `*_IDENTITY_REVOCATIONS_INTERVAL` (`2s`), `*_IDENTITY_KEYS_INTERVAL` (`1m`, tối đa `1m`, dev `10s`), `*_IDENTITY_READY_TIMEOUT` (`10s`). Node hỏi danh sách mỗi 2s, gộp vào RAM (chỉ thêm), ghi bản đó lên Redis chung `chatim:identity:revocations:<issuer>` (hạn 60s; issuer = `*_JWT_ISSUER`, nên staging và prod chung Redis không trộn nhau); hỏi `identity` lỗi thì đọc bản Redis do node khác ghi. Khoá ký không bao giờ đi qua Redis. `kid` lạ → hỏi JWKS ngay (tối đa 1 lần/5s), trong lúc chờ websocket trả `retry_later`, gateway 503. Node chỉ `ready` sau lần đồng bộ đầu hoặc sau `*_IDENTITY_READY_TIMEOUT` (khi `identity` không với tới). `identity` trả 4xx (trừ 429), ví dụ sai secret (401) hay sai đường (404) → node **không ready**, log lỗi `identity refused this node`, metric `identity_refused{kind}` = mã lỗi, kể cả khi đọc được bản Redis; `identity` nhận lại thì node `ready`. `*_JWT_LEEWAY` tối đa 1 phút. `IDENTITY_TOKEN_TTL` + 1m phải ≤ 2h (node bỏ mục thu hồi hạn xa hơn), sai thì `identity` không khởi động.
+
+## Lệnh admin
+
+Chạy trong container (`make identity-admin ARGS="…"` = `docker exec chatim-identity-1 /app …`); kết quả ra stdout, log ra stderr; sai cú pháp thoát 2, lỗi thoát 1 (kể cả tên, id nhóm, URL ảnh sai: kiểm bằng hàm của `directory` trước khi chạm store). Mọi thay đổi ghi `updated_by`/`created_by` = `admin-cli` (`admincmd/run.go:18`); không còn audit (bỏ ở PM). Mọi lệnh trừ `migrate` và `bootstrap` kiểm lược đồ trước: thiếu collection hay index → lỗi `schema incomplete, run migrate -apply`, thoát 1, không ghi gì. User chỉ được tạo bằng đổi token (JIT ở `POST /v1/token`; itest chèn thẳng doc `users`).
+
+| Lệnh | Việc |
+|---|---|
+| `migrate [-apply]` | Mặc định chạy thử (`-dry-run`): in collection và index thiếu hoặc lệch, không ghi gì; đủ thì in `schema is up to date`. `-apply` tạo collection còn thiếu (clustered trên `_id`, nén zstd) và index còn thiếu, in từng dòng kèm `applied: `; **không bao giờ xoá** và không sửa index lệch (chỉ in). Collection có sẵn mà không clustered trên `_id`, hay index trùng tên khác khoá → từ chối toàn bộ (`failed_precondition`), thoát 1. Lược đồ khai báo trong code (`mongostore.Indexes`, `pkg/core/mongoindex`): 9 collection `tenants`, `users`, `groups`, `trusted_issuers`, `trusted_keys`, `signing_keys`, `signing_key_claims`, `revoked_sessions`, `slots`; 4 index phụ `users {tenant_id, groups}`, `groups {tenant_id, ancestors}`, `groups {tenant_id, parent_id, state}`, `revoked_sessions {expires_at}`; không index unique nào ngoài `_id` (`store/mongostore/schema.go:45-63`) |
+| `tenant-create -id -name`, `tenant-disable -id`, `tenant-enable -id` | Khoá tenant ghi `sessions_revoked_at`: mọi token cấp trước giờ đó bị node từ chối |
+| `user-disable`, `user-enable` (`-tenant -user <id>`) | Đổi `state`, tăng `ver`; user không có → `not found`, thoát 1 |
+| `key-rotate [-activate-if-none]`, `key-activate -kid` | Tạo khoá chờ, in giờ `identity` sẽ tự kích hoạt; `key-activate` kích hoạt tay (khoá cũ và khoá chờ cũ hơn sang nghỉ, luôn đúng một khoá đang ký), từ chối khoá chưa đủ `IDENTITY_KEY_ACTIVATE_LEAD` và khoá đã nghỉ |
+| `jwks-export -out file [-merge file]` | Ghi JWKS công khai (khoá chờ, đang ký, nghỉ chưa quá `IDENTITY_TOKEN_TTL` + 30s, mặc định 5m30s), ghi file tạm rồi đổi tên |
+| `bootstrap -jwks file` | Dev: chạy `migrate -apply` trước (`admincmd/keys.go:111`), tạo và kích hoạt khoá đầu nếu chưa có, gộp vào file JWKS |
+| `group-create -tenant -id -name [-parent] [-mentionable=true]` | Tạo nhóm; `-parent` phải là nhóm còn sống; `-mentionable=false` để không gắn `@nhóm` được. Tenant hay nhóm cha không có → lỗi, thoát 1 |
+| `group-update -tenant -id [-name] [-parent] [-mentionable=BOOL]` | Chỉ đổi cờ có ghi trên lệnh; `-parent ""` chuyển nhóm lên gốc; chuyển vào chính nó hoặc nhóm con → lỗi `group cycle`, thoát 1; không ghi cờ nào để đổi → thoát 2 |
+| `group-delete -tenant -id` | Xoá mềm nhóm (transaction: còn nhóm con sống → lỗi, thoát 1), rồi gỡ id nhóm khỏi user theo lô 500, in `group X deleted, N users updated`. Đứt giữa chừng thì nhóm đã xoá, user còn giữ id (bên đọc bỏ qua); chạy lại cùng lệnh trên nhóm đã xoá để gỡ tiếp |
+| `user-groups -tenant -user <id> -groups a,b` | Thay **toàn bộ** nhóm của user; tách theo dấu phẩy, bỏ khoảng trắng hai đầu; phần rỗng, id sai, id lặp hay nhóm không có → lỗi, không đổi gì; `-groups ""` (phải ghi rõ) gỡ mọi nhóm |
+| `user-set -tenant -user <id> [-name] [-avatar URL]` | Đổi tên hiển thị và/hoặc ảnh, `users.ver` chỉ tăng khi giá trị thật sự đổi (phải ít nhất một cờ, không thì thoát 2); ảnh chỉ nhận `https://`, `-avatar ""` xoá ảnh; giá trị sai hay user không có → thoát 1, không đổi gì |
+| `issuer-add -issuer I -tenant T` | Tin issuer `I` (giá trị claim `iss` của token tenant) cho tenant `T`; một issuer chỉ thuộc một tenant. `I` 1–255 byte ASCII in được, không khoảng trắng (sai → thoát 2); `I` bằng `IDENTITY_ISSUER` của chính node → từ chối, thoát 1 (token chat không dùng làm token tenant được); tenant không có hay issuer đã có → thoát 1 |
+| `issuer-disable -issuer I`, `issuer-enable -issuer I` | Tắt/bật issuer; tắt thì token ký bởi mọi khoá của nó bị từ chối ở lần nạp lại kế tiếp. Issuer không có → thoát 1 |
+| `issuer-key-add -issuer I -kid K -alg EdDSA\|ES256\|RS256 -jwk '<JSON công khai>'` | Thêm khoá công khai. `-alg` khác ba giá trị trên → thoát 2. JWK kiểm bằng `trust.ParsePublicJWK` trước khi chạm store: EdDSA = `OKP`/`Ed25519`, ES256 = `EC`/`P-256` (điểm trên đường cong), RS256 = `RSA` 2048–4096 bit, `e` 65537; có thành phần khoá riêng (`d`, `p`, …), `alg`/`use` lệch, hay `kid` trong JWK khác `-kid` → thoát 1, không ghi gì. Lưu JSON chuẩn hoá (`kty`, `crv`, `x`, `y`, `n`, `e`, `kid`, `alg`), không lưu JSON gốc. Nhận đúng output `devtoken` khoá công khai. `-kid` trùng khoá đã có (kể cả đã gỡ) → thoát 1 |
+| `issuer-key-remove -issuer I -kid K` | Gỡ khoá (`state` 2, giữ dòng); khoá không có hay đã gỡ → thoát 1 |
+| `issuer-keys -issuer I` | Bảng `KID`, `ALG`, `STATE` (`active`/`removed`), `CREATED_AT`; không in khoá |
+
+**Lệnh nhóm.** Lệnh CLI không kiểm quyền: ai vào được container là người vận hành. Chỉ 5 việc chạy transaction MongoDB: `group-create`, `group-update` khi đổi cha, bước đánh dấu của `group-delete`, `user-groups` và kích hoạt khoá ký. Transaction mở và commit bằng tay (`store/mongostore/transaction.go`), một lần, không retry. Hai lệnh cùng ghi cây của một tenant (`tenants.group_tree_ver`) hay cùng gán vào một nhóm (`groups.members_ver`) thì lệnh thua thoát 1 với lỗi `unavailable` ngay; chạy lại là được. Lệnh khác ghi một doc, không transaction.
+
+**Xoay khoá:** chỉ một lệnh `key-rotate`. `identity` công bố khoá chờ qua JWKS ở lần nạp lại kế tiếp (≤ `IDENTITY_KEY_RELOAD`), node lấy về trong ≤ 1m, và `identity` tự kích hoạt khoá khi đủ `IDENTITY_KEY_ACTIVATE_LEAD` (nhiều replica cùng thử; transaction ghi doc nhận chỗ `signing_key_claims` `_id: "active"` nên chỉ một replica thắng, bên thua thấy khoá đã bật ở lần sau; metric `signing_keys_activated_total`, log `signing key activated`). Không ai phải canh giờ, không khởi động lại node. Lỡ có node chưa có khoá, client chỉ nhận `retry_later`/503 vài giây trong lúc node hỏi JWKS ngay. File JWKS của node chỉ là dự phòng lúc khởi động; khoá đã nằm trong file chỉ gỡ được bằng cách sửa file và khởi động lại node.
+
+**Lưu ý khi setup** (mọi số khác để mặc định; đặt sai thì app không khởi động hoặc node không `ready` kèm log rõ):
+
+1. Tạo `IDENTITY_KEY_ENCRYPTION_KEY` và `IDENTITY_NODE_SECRET`; secret giống nhau ở `identity`, websocket (`WS_IDENTITY_SECRET`) và gateway (`GW_IDENTITY_SECRET`).
+2. `IDENTITY_ISSUER`/`IDENTITY_AUDIENCE` trùng `*_JWT_ISSUER`/`*_JWT_AUDIENCE` của node.
+3. Node trỏ `*_IDENTITY_INTERNAL_URL` vào cổng nội bộ (`:8081`) và `*_IDENTITY_JWKS_URL` vào địa chỉ public `https://…/.well-known/jwks.json`.
+4. Chạy `bootstrap -jwks` một lần, gắn file đó làm `*_JWT_KEYS_FILE` của node.
+5. Websocket và gateway dùng chung một Redis presence; mỗi môi trường một issuer riêng.
+6. K8s: liveness trỏ `/livez`, readiness trỏ `/readyz`. Trỏ liveness vào `/readyz` thì pod đang nạp danh bạ bị giết liên tục.
+7. Chạy `migrate -apply` (hoặc `bootstrap`) trước khi bật replica; lược đồ thiếu thì replica không ready và không ghi gì. User MongoDB `identity` chỉ cần quyền `readWrite` trên `chatim_identity`: đủ cho change stream ở mức database (e2e 13 và 15 chạy với quyền đó, `deploy/compose/docker-compose.yml:268`).
+8. Giữ cửa sổ oplog ≥ 24h (alert `ChatimOplogWindowCritical`, `deploy/prometheus/alerts.yml:12-19`): vị trí change stream cũ hơn cửa sổ thì replica phải nạp lại toàn bộ danh bạ.
+9. Mọi replica đặt cùng `IDENTITY_DIRECTORY_LOAD_SLOTS`.
+10. Đặt `GOMEMLIMIT` (khoảng 90% trần RAM của pod); chưa đặt thì có alert `ChatimIdentityMemoryLimitUnset`.
+
+### Danh bạ trong RAM và change stream
+
+Mỗi replica giữ danh bạ (user kèm nhóm trực tiếp) trong RAM (`directory.Mirror`, `apps/identity/internal/directory/mirror.go`):
+
+- **Nạp toàn bộ:** lấy một suất `directory_load` trong collection `slots` (tối đa `IDENTITY_DIRECTORY_LOAD_SLOTS` replica cùng nạp; thuê 30s, gia hạn mỗi 10s, giờ MongoDB; pod chết thì suất tự trống sau ≤ 30s), ghi vị trí change stream, đọc `users` theo trang 5.000 vào bản RAM mới, rồi đổi sang bản đó và ready.
+- **Theo dõi:** mở change stream mức database từ vị trí đã ghi (`fullDocument: updateLookup`, `maxAwaitTime` 1s) trên `users`, `tenants`, `trusted_issuers`, `trusted_keys`, `revoked_sessions`. User: nhận bản có `ver` lớn hơn. Tenant, issuer, khoá tin cậy: đánh thức việc nạp lại trust. Tenant, `revoked_sessions`: nạp lại danh sách thu hồi. Danh sách thu hồi còn được nạp lại mỗi `IDENTITY_TRUST_RELOAD`.
+- **Lỗi stream:** mở lại từ vị trí cuối sau 1s→30s ±20%. Mất vị trí (lỗi 286, 280; event `invalidate`, `drop`, `dropDatabase`, `rename`) → nạp lại toàn bộ như lúc khởi động, bản RAM cũ vẫn phục vụ tới khi bản mới xong (`directory_stream_reloads_total` tăng).
+- Ví dụ: admin chạy `user-set -name "Bình Trần"` → doc `T│binh` `ver` tăng → mọi replica nhận event → `GetUsers` trả tên mới (e2e 15 đòi < 1s sau khi lệnh xong, `tools/chatcli/e2e_identity_directory.go:19`).
+
+### Sửa cây nhóm bằng tay
+
+`groups.ancestors` (chuỗi tổ tiên từ gốc tới cha, nhóm gốc có `parent_id: ""` và `ancestors: []`) do `group-create` và `group-update` đổi cha ghi trong cùng transaction với `$inc tenants.group_tree_ver` (`store/mongostore/group_tree.go`). Ghi tay vào `groups` (mongosh, script) không giữ được điều đó; tránh ghi tay.
+
+`ancestors` lỡ sai thì cách đơn giản nhất là chạy lại lệnh: `group-update -tenant T -id G -parent <cha hiện tại>` tính lại `ancestors` của `G` từ cha và sửa cả cây con. Cha cũng sai thì chạy từ gốc xuống. Nhiều nhóm sai thì dựng lại cả tenant từ `parent_id` bằng mongosh, lúc không có lệnh nhóm nào đang chạy (thay `T`):
+
+```bash
+docker exec chatim-mongodb mongosh --quiet --eval '
+db.getSiblingDB("admin").auth(process.env.MONGO_INITDB_ROOT_USERNAME, require("fs").readFileSync("/run/secrets/mongo_password", "utf8").trim());
+const d = db.getSiblingDB("chatim_identity"), tenant = "T";
+const all = d.groups.find({tenant_id: tenant}, {id: 1, parent_id: 1, ancestors: 1}).toArray();
+const byId = new Map(all.map(g => [g.id, g]));
+const path = g => { const out = [], seen = new Set([g.id]); for (let p = g.parent_id; p; p = byId.get(p).parent_id) { if (seen.has(p) || !byId.has(p)) throw new Error("bad parent chain at " + g.id); seen.add(p); out.unshift(p); } return out; };
+for (const g of all) { const want = path(g); if (JSON.stringify(want) !== JSON.stringify(g.ancestors || [])) { d.groups.updateOne({_id: g._id}, {$set: {ancestors: want}}); print(g.id, JSON.stringify(want)); } }
+d.tenants.updateOne({_id: tenant}, {$inc: {group_tree_ver: 1}});'
+```
+
+Script in mỗi nhóm đã sửa; `ancestors` không phải field hiện ra ngoài nên không tăng `ver`.
+
+## Giới hạn đã biết
+
+- Đổi token trên dev (một replica nhận tải, MongoDB một node; [docs/poc/README.md](../poc/README.md) mục M6 PM): user đã có đạt 1.700/s, p99 dưới 2 ms, cả ES256 và RS256. User mới (mỗi lần đổi là một lần JIT ghi user): khi còn ghi từng `InsertOne`, lần đo đầu 2026-11-03 chỉ đạt 849/s, client bỏ 51.075 lần, vì mỗi lần ghi `w:majority` chờ khoảng 151 ms, pool 100 kết nối đầy và lần nạp lại danh sách thu hồi, lần kích hoạt khoá ký hết giờ chờ pool ([es256-cold-261103.txt](../poc/results/exchange-261104-pm/es256-cold-261103.txt)). Từ khi gom lô (D259, 2026-11-04), hai lượt lạnh ES256 liền nhau (lượt B bắt đầu 6s sau khi lượt A ghi xong 100.000 user) đều đạt 1.700/s, 0 lần bỏ, 0 lỗi 5xx, 0 dòng log `revocation list unavailable`/`signing key activation failed`; mỗi `InsertMany` trung bình 4,3–4,6 user; p50/p99 13,3/72,6 ms và 14,9/86,8 ms, cao hơn lượt không gom 5,7/36 ms; lượt B bị hạ xung 53–62 ([es256-cold-batched-a.txt](../poc/results/exchange-261104-pm/es256-cold-batched-a.txt), [es256-cold-batched-b.txt](../poc/results/exchange-261104-pm/es256-cold-batched-b.txt), [es256-cold-261104.txt](../poc/results/exchange-261104-pm/es256-cold-261104.txt)). Prod-like đo lại (P13).
+- Change stream khi chat chạy 2K tin/s: CPU MongoDB 1,87 → 2,07 core (+11,2%) khi bật hai replica `identity`, mỗi replica dùng khoảng 1,5% core; độ trễ ack lệch cả hai chiều vì nhiễu máy dev (p99 277 → 186 ms, p95 52 → 92 ms). Nạp 100K user lúc khởi động: 0,58s (Postgres 0,73s).
+- Gán nhiều user vào cùng một nhóm cùng lúc, hay hai lệnh ghi cây cùng tenant: lệnh thứ hai báo `unavailable` ngay, chạy lại (tóm tắt PM §5).
+- Vị trí change stream cũ hơn cửa sổ oplog → replica nạp lại toàn bộ danh bạ (setup mục 8).
+
+## Cổng, compose, metric
+
+- Compose dev (profile `app`): `identity-mongo-init` (mongo 8.2, sau `mongodb-init`; mongosh xác thực root từ file secret bên trong `--eval`, tạo user `identity` với quyền `readWrite` trên `chatim_identity` hoặc đổi mật khẩu theo secret `identity_mongo_password`), `identity-bootstrap` (chạy bằng uid của host, `migrate -apply`, khoá đầu, ghi `.local/ws-keys/jwks.json`), `identity-1` (publish `127.0.0.1:8084`) và `identity-2` (không publish), chung alias mạng `chatim-identity`, cùng `IDENTITY_MONGO_URI=mongodb://chatim-mongodb:27017/?replicaSet=rs0`, `IDENTITY_MONGO_USER=identity`. cả hai bật cổng nội bộ `:8081` (không publish), websocket/gateway hỏi `http://chatim-identity:8081` và JWKS ở `http://chatim-identity:8080/.well-known/jwks.json` (Docker DNS trả cả hai, như URL service ở môi trường thật) (`*_IDENTITY_ALLOW_HTTP=true`), Redis chung là `chatim-redis-presence`. Websocket và gateway chờ `identity-bootstrap` xong mới khởi động.
+- `.env`: `IDENTITY_MONGO_PASSWORD`, `IDENTITY_KEY_ENCRYPTION_KEY`, `IDENTITY_NODE_SECRET` (`make identity-env` kiểm); không in giá trị.
+- Metric `chatim_identity_*`: `signing_key_ready`. Đổi token: `exchanges_total{result}` (`ok`, `invalid`, `disabled`, `rate`, `error`; một nhãn mỗi request đã qua bước form, request hỏng form không đếm), `jit_writes_total{result}` (`created`, `updated`, `conflict`, `error`), `jit_batch_docs` (histogram số user mỗi lần `InsertMany` JIT), `trust_reload_errors_total` (lần nạp issuer/khoá tin cậy lỗi cộng khoá tin cậy bị bỏ vì không dùng được), `store_errors_total` (lỗi MongoDB trên đường đổi token, tức ghi JIT). `revocation_requests_total{result}`, `revocations_cleaned_total`, `revocation_cleanup_errors_total`, `signing_keys_activated_total`. Alert nhóm `chatim-identity-health`: `ChatimIdentityNoSigningKey` (không cấp được token chat, đổi token trả 503), `ChatimIdentityStoreErrors` (JIT ghi lỗi, đổi token cần ghi trả 503; series `store_errors_total` đếm lỗi ghi JIT), `ChatimIdentityExchangeErrors` (`exchanges_total{result="error"}` tăng trong 5 phút: không khoá ký, danh bạ chưa nạp hoặc MongoDB lỗi khi JIT), `ChatimIdentityTrustStale` (suốt 3 phút replica không nạp được issuer/khoá tin cậy hoặc có khoá không dùng được, ví dụ JWK hỏng ghi tay vào DB; nạp lỗi thì khoá vừa gỡ vẫn dùng được ở replica đó). Danh bạ: `directory_ready`, `directory_entries`, `directory_load_seconds`, `directory_load_failures_total`, `directory_lag_seconds` (giây từ lần cuối change stream báo đã đuổi kịp; 0 trước lần nạp đầu), `directory_stream_up` (1 khi change stream đang mở), `directory_stream_reloads_total` (lần nạp lại toàn bộ vì mất vị trí stream), `directory_read_errors_total` (lỗi mở và đọc change stream), `directory_revocation_errors_total`, `get_users_total{result}` (`ok`, `bad_request`, `unauthenticated`, `limited`, `unavailable`, `error`), `get_users_ids_total`, `user_limited_total`, `inflight_rejected_total`, `memory_limit_set`, `index_outdated{collection}` (1 khi collection có index lệch so với binary; chỉ log Warn, không alert). Alert nhóm `chatim-identity-directory`: `ChatimIdentityDirectoryNotReady` (replica chưa nạp xong > 1 phút), `ChatimIdentityDirectoryStale` (`directory_lag_seconds` > 30s trong 1 phút), `ChatimIdentityDirectoryStreamDown` (`directory_stream_up` = 0 trong 2 phút: tên mới, khoá user, đổi khoá tin cậy và thu hồi không tới replica đó ngay; khoá tin cậy và danh sách thu hồi vẫn tới qua lần nạp lại mỗi `IDENTITY_TRUST_RELOAD`, tên và khoá user chờ stream; kiểm MongoDB và quyền `changeStream` của user `identity`), `ChatimIdentityMemoryHigh` (heap > 80% `GOMEMLIMIT` trong 5 phút; chỉ tính khi `GOMEMLIMIT` đã đặt, lọc replica `identity` bằng `memory_limit_set`), `ChatimIdentityMemoryLimitUnset` (10 phút). Phía node (`chatim_websocket_*`/`chatim_gateway_*`): `identity_refused{kind}`, `identity_revocations_age_seconds`, `identity_keys_age_seconds`, `identity_sync_errors_total{kind}`, `identity_shared_reads_total{result}`, `identity_shared_write_errors_total`, `identity_boot_timeouts_total`, `jwks_conflicts_total`, `revocations{kind}`, `revocations_dropped_total`; nhóm `chatim-identity-sync`: `ChatimIdentitySyncStale` (> 30s), `ChatimIdentityKeysStale` (> 3 phút), `ChatimIdentityRefused` (node bị `identity` từ chối > 1 phút), `ChatimJwksConflict`.
+- Log: `make identity-logs`. Image: `make image TARGET=apps/identity` (`chatim/identity:dev`). itest: `CHATIM_IT_MONGO_URI` (database tạm `identity_it_<hex>` mỗi lần chạy, cùng MongoDB của `make infra-up`). Chỉ chạy package `identity`: `make itest ITEST_ARGS="-race -count=1 ./apps/identity/..."`; `$` trong `ITEST_ARGS` viết `$$`, ví dụ chỉ chạy bench: `make itest ITEST_ARGS="-run '^$$' -bench . ./apps/identity/internal/directory/"`.

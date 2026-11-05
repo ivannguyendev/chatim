@@ -39,6 +39,7 @@ func TestBadTokenGetsAuthRequiredInvalidAndALaterGoodTokenGetsReady(t *testing.T
 		if f := tc.nextFrame(); f.GetReady() == nil {
 			t.Fatalf("frame after a good token = %v, want ready", f)
 		}
+		synctest.Wait()
 		if h.authCount("ok") != 1 || h.server.stats.unauth.Load() != 0 {
 			t.Fatalf("ok %v unauth %d", h.authCount("ok"), h.server.stats.unauth.Load())
 		}
@@ -145,7 +146,7 @@ func TestRenewalWithAnotherIdentityOrABadTokenKeepsTheConnectionRunning(t *testi
 				}
 				tc.history(1)
 				tc.next()
-				if claims := <-h.core.claims; claims.Tenant != "t1" || claims.User != "u1" {
+				if claims := <-h.chat.claims; claims.Tenant != "t1" || claims.User != "u1" {
 					t.Fatalf("claims after a refused renewal = %+v", claims)
 				}
 				if h.authCount("invalid") != 1 || h.interestUsers() != 1 {
@@ -167,8 +168,8 @@ func TestFramesAfterTheServerChoseToCloseAreIgnored(t *testing.T) {
 		h.server.CloseAll(CodeUnauthenticated)
 		tc.history(2)
 		synctest.Wait()
-		if got := h.core.calls.Load(); got != 1 {
-			t.Fatalf("core calls = %d, want 1", got)
+		if got := h.chat.calls.Load(); got != 1 {
+			t.Fatalf("chat calls = %d, want 1", got)
 		}
 		<-tc.serverDone
 		_ = tc.raw.Close()
@@ -186,7 +187,7 @@ func TestCommandsRunWithTheClaimsOfTheLatestToken(t *testing.T) {
 		if resp := tc.next(); resp.GetCode() != int32(codes.OK) {
 			t.Fatalf("response code = %d", resp.GetCode())
 		}
-		claims := <-h.core.claims
+		claims := <-h.chat.claims
 		if claims.Tenant != "t1" || claims.User != "u1" || !claims.ExpiresAt.Equal(renewed) {
 			t.Fatalf("claims = %+v", claims)
 		}

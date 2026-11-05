@@ -37,7 +37,7 @@ func realMain() int {
 	flag.IntVar(&c.subs, "subs", 100_000, "room subscriptions across all gateway connections")
 	flag.IntVar(&c.conns, "conns", 4, "gateway connections")
 	flag.IntVar(&c.rate, "rate", 5000, "events per second")
-	flag.IntVar(&c.publishers, "publishers", 8, "parallel publishers (≈ core flushers)")
+	flag.IntVar(&c.publishers, "publishers", 8, "parallel publishers (≈ chat flushers)")
 	flag.IntVar(&c.size, "size", 256, "event payload bytes")
 	flag.DurationVar(&c.duration, "duration", 30*time.Second, "publish duration")
 	flag.Parse()

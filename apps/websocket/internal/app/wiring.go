@@ -18,13 +18,14 @@ import (
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/presence"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/session"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/typing"
-	"github.com/ivannguyendev/chatim/pkg/coreroute"
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
-	"github.com/ivannguyendev/chatim/pkg/metrics"
-	"github.com/ivannguyendev/chatim/pkg/redact"
+	"github.com/ivannguyendev/chatim/pkg/auth"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
+	"github.com/ivannguyendev/chatim/pkg/core/redact"
 )
 
 const (
+	metricsNamespace  = "chatim"
 	metricsSubsystem  = "websocket"
 	wsPath            = "GET /ws"
 	readHeaderTimeout = 5 * time.Second
@@ -68,7 +69,7 @@ func (r eventRouter) Publish(env feed.Envelope) { r.publisher.Deliver(env) }
 func (r eventRouter) Jumped(j feed.Jump) { r.rooms.Jumped(j) }
 
 func newInterest(cfg config.Config, routes *routerHolder, log *slog.Logger) (*interest.Table, error) {
-	loader, err := interest.NewCoreLoader(routes, cfg.RequestDeadline)
+	loader, err := interest.NewChatNodeLoader(routes, cfg.RequestDeadline)
 	if err != nil {
 		return nil, err
 	}
@@ -80,8 +81,8 @@ func newInterest(cfg config.Config, routes *routerHolder, log *slog.Logger) (*in
 	}, loader, log)
 }
 
-func jwtConfig(cfg config.Config) jwtverify.Config {
-	return jwtverify.Config{Issuer: cfg.JWTIssuer, Audience: cfg.JWTAudience, Leeway: cfg.JWTLeeway}
+func jwtConfig(cfg config.Config) auth.VerifierConfig {
+	return auth.VerifierConfig{Issuer: cfg.JWTIssuer, Audience: cfg.JWTAudience, Leeway: cfg.JWTLeeway}
 }
 
 func sessionOptions(cfg config.Config) session.Options {
@@ -116,6 +117,7 @@ func newTyping(cfg config.Config, rooms *interest.Table) (*typing.Service, error
 }
 
 type presenceParts struct {
+	raw      presence.Conn
 	client   *presence.Client
 	stamper  *presence.Stamper
 	answerer *presence.Answerer
@@ -165,7 +167,7 @@ func newPresence(cfg config.Config, deps Deps) (presenceParts, error) {
 	if err != nil {
 		return presenceParts{}, errors.Join(err, client.Close())
 	}
-	return presenceParts{client: client, stamper: stamper, answerer: answerer}, nil
+	return presenceParts{raw: conn, client: client, stamper: stamper, answerer: answerer}, nil
 }
 
 func closeConn(conn presence.Conn) error {
@@ -182,8 +184,20 @@ func closePresence(client *presence.Client) error {
 	return nil
 }
 
-func routerConfig(cfg config.Config, deps Deps, log *slog.Logger) coreroute.Config {
-	return coreroute.Config{
+func newSync(cfg config.Config, verifier *auth.Verifier, conn presence.Conn, doer auth.Doer, log *slog.Logger) (*auth.Syncer, error) {
+	list, err := auth.NewNodeRevocationList(cfg.JWTLeeway)
+	if err != nil {
+		return nil, err
+	}
+	var shared auth.Shared
+	if rc, ok := conn.(auth.RedisClient); ok {
+		shared = auth.NewRedisShared(rc, cfg.JWTIssuer)
+	}
+	return auth.NewSyncer(cfg.Identity, list, verifier, shared, doer, log)
+}
+
+func routerConfig(cfg config.Config, deps Deps, log *slog.Logger) chatrpc.RouterConfig {
+	return chatrpc.RouterConfig{
 		RedisAddr:     cfg.RedisAddr,
 		RedisDB:       cfg.RedisDB,
 		RedisPassword: cfg.RedisPassword,
@@ -207,10 +221,10 @@ func newHTTPServer(ws http.Handler, log *slog.Logger) *http.Server {
 
 func metricSources(ws *session.Server, exec *command.Executor) []metrics.Source {
 	out := append(ws.Sources(), exec.CommandSources()...)
-	for _, latency := range exec.CoreCallLatency() {
+	for _, latency := range exec.ChatCallLatency() {
 		out = append(out, metrics.Source{
-			Name:      "core_call_seconds",
-			Help:      "Core call latency of client commands, in seconds.",
+			Name:      "chat_call_seconds",
+			Help:      "Chat call latency of client commands, in seconds.",
 			Labels:    map[string]string{"command": latency.Command},
 			Histogram: latency.Read,
 		})
@@ -219,23 +233,23 @@ func metricSources(ws *session.Server, exec *command.Executor) []metrics.Source 
 }
 
 type routerHolder struct {
-	current atomic.Pointer[coreroute.Router]
+	current atomic.Pointer[chatrpc.Router]
 }
 
-func (h *routerHolder) set(r *coreroute.Router) { h.current.Store(r) }
+func (h *routerHolder) set(r *chatrpc.Router) { h.current.Store(r) }
 
-func (h *routerHolder) Room(roomID string) (coreroute.Conn, error) {
+func (h *routerHolder) Room(roomID string) (chatrpc.PoolConn, error) {
 	r := h.current.Load()
 	if r == nil {
-		return coreroute.Conn{}, coreroute.ErrNoRoute
+		return chatrpc.PoolConn{}, chatrpc.ErrNoRoute
 	}
 	return r.Room(roomID)
 }
 
-func (h *routerHolder) Any() (coreroute.Conn, error) {
+func (h *routerHolder) Any() (chatrpc.PoolConn, error) {
 	r := h.current.Load()
 	if r == nil {
-		return coreroute.Conn{}, coreroute.ErrNoRoute
+		return chatrpc.PoolConn{}, chatrpc.ErrNoRoute
 	}
 	return r.Any()
 }

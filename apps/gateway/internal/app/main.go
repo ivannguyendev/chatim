@@ -9,7 +9,7 @@ import (
 	"syscall"
 
 	"github.com/ivannguyendev/chatim/apps/gateway/internal/config"
-	"github.com/ivannguyendev/chatim/pkg/admin"
+	"github.com/ivannguyendev/chatim/pkg/core/admin"
 )
 
 const usage = "usage: gateway [serve|probe]"

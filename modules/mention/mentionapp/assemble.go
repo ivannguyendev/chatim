@@ -17,14 +17,14 @@ func (a *App) assemble() error {
 	userGroups, groupStore := mongostore.NewUserGroups(db), mongostore.NewGroups(db)
 	catalog := groups.New(groupStore)
 	c, err := consumer.New(a.cfg, consumer.Deps{
-		Source: consumer.NewSource(a.deps.JS, a.cfg), Mentions: mentions, Rooms: rooms, Versions: a.deps.Core,
-		Resolver: recipients.Resolver{Core: a.deps.Core, UserGroups: userGroups, Catalog: catalog},
+		Source: consumer.NewSource(a.deps.JS, a.cfg), Mentions: mentions, Rooms: rooms, Versions: a.deps.Chat,
+		Resolver: recipients.Resolver{Chat: a.deps.Chat, UserGroups: userGroups, Catalog: catalog},
 		Notify:   a.deps.NotifyJS, Log: a.deps.Log,
 	})
 	if err != nil {
 		return fmt.Errorf("mention consumer: %w", err)
 	}
-	builder, err := roomgroups.NewBuilder(a.deps.Core, userGroups)
+	builder, err := roomgroups.NewBuilder(a.deps.Chat, userGroups)
 	if err != nil {
 		return fmt.Errorf("mention room groups builder: %w", err)
 	}
@@ -38,7 +38,7 @@ func (a *App) assemble() error {
 		return fmt.Errorf("mention room groups watch: %w", err)
 	}
 	svc, err := grpcsrv.New(grpcsrv.Deps{
-		Core: a.deps.Core, Mentions: mentions, Rooms: rooms, UserGroups: userGroups, Groups: groupStore,
+		Chat: a.deps.Chat, Mentions: mentions, Rooms: rooms, UserGroups: userGroups, Groups: groupStore,
 		Catalog: catalog, RoomGroups: sets, HideRead: a.cfg.HideReadTenants,
 	})
 	if err != nil {

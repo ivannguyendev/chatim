@@ -15,17 +15,21 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/alicebob/miniredis/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"go.uber.org/goleak"
 	"google.golang.org/grpc"
 
 	"github.com/ivannguyendev/chatim/apps/gateway/internal/config"
+	"github.com/ivannguyendev/chatim/pkg/auth/authtest"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/pkg/pb/chatim/v1/chatimv1connect"
+	"github.com/ivannguyendev/chatim/pkg/slotmap"
 )
 
 func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
@@ -58,7 +62,7 @@ func newSigner(t *testing.T) signer {
 
 func (s signer) token(t *testing.T) string {
 	t.Helper()
-	tok := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{"iss": testIssuer, "aud": testAudience, "sub": "u1", "tid": "t1", "exp": time.Now().Add(time.Hour).Unix()})
+	tok := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{"iss": testIssuer, "aud": testAudience, "sub": "u1", "tid": "t1", "sid": "s1", "iat": time.Now().Unix(), "exp": time.Now().Add(time.Hour).Unix()})
 	tok.Header["kid"] = testKID
 	signed, err := tok.SignedString(s.priv)
 	if err != nil {
@@ -67,13 +71,15 @@ func (s signer) token(t *testing.T) string {
 	return signed
 }
 
-type fakeCore struct {
-	chatimv1.UnimplementedCoreServiceServer
+type fakeChat struct {
+	chatimv1.UnimplementedChatServiceServer
 	started chan struct{}
 	release chan struct{}
+	calls   atomic.Int32
 }
 
-func (f *fakeCore) GetHistory(ctx context.Context, _ *chatimv1.GetHistoryRequest) (*chatimv1.GetHistoryResponse, error) {
+func (f *fakeChat) GetHistory(ctx context.Context, _ *chatimv1.GetHistoryRequest) (*chatimv1.GetHistoryResponse, error) {
+	f.calls.Add(1)
 	if f.release != nil {
 		f.started <- struct{}{}
 		select {
@@ -85,7 +91,7 @@ func (f *fakeCore) GetHistory(ctx context.Context, _ *chatimv1.GetHistoryRequest
 	return &chatimv1.GetHistoryResponse{}, nil
 }
 
-func startCore(t *testing.T, core *fakeCore) string {
+func startChatNode(t *testing.T, chat *fakeChat) string {
 	t.Helper()
 	var lc net.ListenConfig
 	lis, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
@@ -93,7 +99,7 @@ func startCore(t *testing.T, core *fakeCore) string {
 		t.Fatal(err)
 	}
 	srv := grpc.NewServer()
-	chatimv1.RegisterCoreServiceServer(srv, core)
+	chatimv1.RegisterChatServiceServer(srv, chat)
 	served := make(chan struct{})
 	go func() {
 		defer close(served)
@@ -118,14 +124,26 @@ func deadAddr(t *testing.T) string {
 	return addr
 }
 
-func testConfig(keysFile string, cores ...string) config.Config {
+func nodeTable(t *testing.T, addrs ...string) string {
+	t.Helper()
+	mr := miniredis.RunT(t)
+	for i, addr := range addrs {
+		id := fmt.Sprintf("chat-%d", i+1)
+		_ = mr.Set(slotmap.NodeKey(id), addr)
+		_, _ = mr.ZAdd(slotmap.NodeRegistryKey, slotmap.NodeExpiryScore(time.Now().Add(time.Hour)), id)
+	}
+	return mr.Addr()
+}
+
+func testConfig(t *testing.T, keysFile string, nodes ...string) config.Config {
+	t.Helper()
 	return config.Config{
-		ListenAddr: "api", AdminAddr: "admin", CoreAddrs: cores,
+		ListenAddr: "api", AdminAddr: "admin", Redis: config.StateRedis{Addr: nodeTable(t, nodes...)},
 		JWTKeysFile: keysFile, JWTIssuer: testIssuer, JWTAudience: testAudience, JWTLeeway: time.Second,
 		BodyMax: 128 << 10, UserRate: 50, UserBurst: 100, UserInflight: 32, UserLimiters: 1000, InflightMax: 100,
 		DrainDelay: 100 * time.Millisecond, ShutdownBudget: 15 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: time.Minute,
-		MaxHeaderBytes: 16 << 10, H2MaxStreams: 250, RequestDeadline: 5 * time.Second,
+		MaxHeaderBytes: 16 << 10, H2MaxStreams: 250, RequestDeadline: 5 * time.Second, Identity: authtest.SyncConfig(),
 	}
 }
 
@@ -208,8 +226,12 @@ func receive[T any](t *testing.T, ch <-chan T, what string) T {
 }
 
 func runAsync(ctx context.Context, cfg config.Config, log *slog.Logger, lis *listeners) chan error {
+	return runAsyncWith(ctx, cfg, log, Deps{Listen: lis.listen})
+}
+
+func runAsyncWith(ctx context.Context, cfg config.Config, log *slog.Logger, deps Deps) chan error {
 	done := make(chan error, 1)
-	go func() { done <- Run(ctx, cfg, log, Deps{Listen: lis.listen}) }()
+	go func() { done <- run(ctx, cfg, log, deps) }()
 	return done
 }
 
@@ -229,7 +251,7 @@ func httpStatus(t *testing.T, addr, path string) (int, string) {
 	return resp.StatusCode, string(body)
 }
 
-func h2cClient(t *testing.T, addr, token string) chatimv1connect.CoreServiceClient {
+func h2cClient(t *testing.T, addr, token string) chatimv1connect.ChatServiceClient {
 	t.Helper()
 	var protocols http.Protocols
 	protocols.SetUnencryptedHTTP2(true)
@@ -241,5 +263,12 @@ func h2cClient(t *testing.T, addr, token string) chatimv1connect.CoreServiceClie
 			return next(ctx, req)
 		}
 	})
-	return chatimv1connect.NewCoreServiceClient(&http.Client{Transport: transport}, "http://"+addr, connect.WithInterceptors(auth))
+	return chatimv1connect.NewChatServiceClient(&http.Client{Transport: transport}, "http://"+addr, connect.WithInterceptors(auth))
+}
+
+func run(ctx context.Context, cfg config.Config, log *slog.Logger, deps Deps) error {
+	if deps.IdentityDoer == nil {
+		deps.IdentityDoer = authtest.Accepting{}
+	}
+	return Run(ctx, cfg, log, deps)
 }

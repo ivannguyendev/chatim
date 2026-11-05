@@ -1,0 +1,40 @@
+package memstore
+
+import (
+	"context"
+	"slices"
+	"time"
+
+	"github.com/ivannguyendev/chatim/apps/chat/internal/model/domain"
+	"github.com/ivannguyendev/chatim/apps/chat/internal/store"
+)
+
+var _ store.MessageEditor = (*Messages)(nil)
+
+func (s *Messages) ApplyEdit(ctx context.Context, e domain.Edit) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := store.ValidateProjectedEdit(e); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	line := s.lines[timeline{e.Room, e.Thread}]
+	i, found := slices.BinarySearchFunc(line, e.Seq, bySeq)
+	if !found || line[i].Version >= e.Version {
+		return nil
+	}
+	line[i] = projected(line[i], e)
+	return nil
+}
+
+func projected(m domain.Message, e domain.Edit) domain.Message {
+	m.Version, m.EditedAt, m.Text, m.Deleted = e.Version, e.At, e.Text, false
+	m.Mentions, m.MentionAll, m.MentionAllAt = slices.Clone(e.Mentions), e.MentionAll, e.MentionAllAt
+	if e.Kind == domain.EditDelete {
+		m.Text, m.Deleted = "", true
+		m.Mentions, m.MentionAll, m.MentionAllAt, m.Forward, m.Meta = nil, false, time.Time{}, nil, nil
+	}
+	return m
+}

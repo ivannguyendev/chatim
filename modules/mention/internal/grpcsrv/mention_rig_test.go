@@ -36,7 +36,7 @@ type options struct {
 type mentionRig struct {
 	svc        *grpcsrv.Service
 	deps       grpcsrv.Deps
-	core       *fakeCore
+	chat       *fakeChat
 	mentions   *memstore.Mentions
 	rooms      *memstore.Rooms
 	userGroups *memstore.UserGroups
@@ -54,10 +54,10 @@ func as(t *testing.T, tenant, user string) context.Context {
 func newMentionRig(t *testing.T, o options) *mentionRig {
 	t.Helper()
 	rg := &mentionRig{
-		core: newFakeCore(), mentions: memstore.NewMentions(), rooms: memstore.NewRooms(), userGroups: memstore.NewUserGroups(),
+		chat: newFakeChat(), mentions: memstore.NewMentions(), rooms: memstore.NewRooms(), userGroups: memstore.NewUserGroups(),
 		groups: memstore.NewGroups(), alice: as(t, "acme", "alice"), bob: as(t, "acme", "bob"), seqs: map[[2]uint64]uint64{}, nextRoom: 1000,
 	}
-	builder, err := roomgroups.NewBuilder(rg.core, rg.userGroups)
+	builder, err := roomgroups.NewBuilder(rg.chat, rg.userGroups)
 	if err != nil {
 		t.Fatalf("NewBuilder: %v", err)
 	}
@@ -71,7 +71,7 @@ func newMentionRig(t *testing.T, o options) *mentionRig {
 		listing = o.listing(rg.mentions)
 	}
 	rg.deps = grpcsrv.Deps{
-		Core: rg.core, Mentions: listing, Rooms: rg.rooms, UserGroups: rg.userGroups, Groups: rg.groups,
+		Chat: rg.chat, Mentions: listing, Rooms: rg.rooms, UserGroups: rg.userGroups, Groups: rg.groups,
 		Catalog: groups.New(rg.groups), RoomGroups: rg.sets, HideRead: o.hide,
 	}
 	rg.svc = rg.service(t, func(*grpcsrv.Deps) {})
@@ -113,17 +113,17 @@ func (rg *mentionRig) room(t *testing.T, at int, members ...string) uint64 {
 
 func (rg *mentionRig) join(t *testing.T, room uint64, at int, user string) {
 	t.Helper()
-	rg.core.setMember(room, user, func(m *domain.MemberRoom) { m.JoinedAt = sec(at) })
+	rg.chat.setMember(room, user, func(m *domain.MemberRoom) { m.JoinedAt = sec(at) })
 }
 
 func (rg *mentionRig) clear(t *testing.T, room uint64, at int) {
 	t.Helper()
-	rg.core.setMember(room, "bob", func(m *domain.MemberRoom) { m.ClearedAt = sec(at) })
+	rg.chat.setMember(room, "bob", func(m *domain.MemberRoom) { m.ClearedAt = sec(at) })
 }
 
 func (rg *mentionRig) read(t *testing.T, room, seq uint64) {
 	t.Helper()
-	rg.core.setMember(room, "bob", func(m *domain.MemberRoom) { m.ReadSeq = seq })
+	rg.chat.setMember(room, "bob", func(m *domain.MemberRoom) { m.ReadSeq = seq })
 }
 
 func (rg *mentionRig) post(t *testing.T, room uint64, text string, at int, targets ...domain.Target) uint64 {
@@ -156,7 +156,7 @@ func (rg *mentionRig) postIn(t *testing.T, room, thread uint64, text string, at 
 			}
 		}
 	}
-	rg.core.putMessage(key, sec(at), msg)
+	rg.chat.putMessage(key, sec(at), msg)
 	if len(plan.Live) > 0 {
 		if err := rg.mentions.Apply(t.Context(), plan); err != nil {
 			t.Fatalf("Apply(%s): %v", text, err)

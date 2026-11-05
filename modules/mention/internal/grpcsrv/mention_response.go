@@ -22,7 +22,7 @@ func (s *Service) mentionResponse(ctx context.Context, r mentionRead, page store
 	for i, d := range page.Items {
 		keys[i] = d.Key
 	}
-	msgs, err := s.core.VisibleMessages(ctx, r.who.Tenant, r.who.User, keys)
+	msgs, err := s.chat.VisibleMessages(ctx, r.who.Tenant, r.who.User, keys)
 	if err != nil {
 		return nil, dependencyErr("visible messages", err)
 	}

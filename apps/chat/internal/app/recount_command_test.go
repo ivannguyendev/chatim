@@ -1,0 +1,162 @@
+package app
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
+
+	"github.com/ivannguyendev/chatim/apps/chat/internal/model/domain"
+	"github.com/ivannguyendev/chatim/apps/chat/internal/model/pbconv"
+	"github.com/ivannguyendev/chatim/apps/chat/internal/store"
+	"github.com/ivannguyendev/chatim/apps/chat/internal/store/memstore"
+)
+
+const recountRoom uint64 = 7_350_000_001
+
+var recountAt = time.Date(2026, 10, 8, 9, 0, 0, 0, time.UTC)
+
+var errRecountPublish = errors.New("publish refused")
+
+type sentEvents struct {
+	msgs []*nats.Msg
+	err  error
+}
+
+func (s *sentEvents) PublishMsg(_ context.Context, m *nats.Msg, _ ...jetstream.PublishOpt) (*jetstream.PubAck, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	s.msgs = append(s.msgs, m)
+	return &jetstream.PubAck{}, nil
+}
+
+func memberCountPending(t *testing.T, rooms *memstore.Rooms) bool {
+	t.Helper()
+	docs, _, err := memstore.NewEventStates(memstore.EventStateStores{Rooms: rooms}).Pending(t.Context(), store.StateRooms, time.Time{}, recountAt.AddDate(100, 0, 0), store.PendingCursor{}, store.MaxPendingPage)
+	if err != nil {
+		t.Fatalf("Pending: %v", err)
+	}
+	for _, d := range docs {
+		if d.Room == recountRoom && d.State&store.BitMemberCount != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+type racingCounts struct{ *memstore.Rooms }
+
+func (r racingCounts) CountMembers(ctx context.Context, room uint64) (int, error) {
+	if _, err := r.AddMemberCount(ctx, room, 1); err != nil {
+		return 0, err
+	}
+	return r.Rooms.CountMembers(ctx, room)
+}
+
+func driftedRooms(t *testing.T) *memstore.Rooms {
+	t.Helper()
+	rooms := memstore.NewRooms()
+	r := domain.Room{ID: recountRoom, Tenant: "acme", Type: domain.RoomGroup, Name: "Team", CreatedBy: "alice", CreatedAt: recountAt, MemberCount: 2}
+	members := []domain.Member{
+		{Room: recountRoom, Tenant: "acme", User: "alice", Role: domain.RoleOwner, JoinedAt: recountAt},
+		{Room: recountRoom, Tenant: "acme", User: "bob", Role: domain.RoleMember, JoinedAt: recountAt},
+	}
+	if err := rooms.Create(t.Context(), r, members); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, ok, err := rooms.SetMemberCount(t.Context(), recountRoom, 1, 5); err != nil || !ok {
+		t.Fatalf("SetMemberCount(drift) = %v, %v", ok, err)
+	}
+	return rooms
+}
+
+func newRecounter(rooms *memstore.Rooms, pub *sentEvents, out *bytes.Buffer) recounter {
+	return newRecounterOver(rooms, rooms, pub, out)
+}
+
+func newRecounterOver(counts recountRooms, rooms *memstore.Rooms, pub *sentEvents, out *bytes.Buffer) recounter {
+	states := memstore.NewEventStates(memstore.EventStateStores{Rooms: rooms})
+	return recounter{rooms: counts, pub: pub, states: states, root: "evt", now: func() time.Time { return recountAt }, out: out}
+}
+
+func TestRecountDryRunPrintsBothCountsAndWritesNothing(t *testing.T) {
+	rooms, pub, out := driftedRooms(t), &sentEvents{}, &bytes.Buffer{}
+	if err := newRecounter(rooms, pub, out).run(t.Context(), RecountOptions{Room: recountRoom, DryRun: true}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if got := out.String(); got != "room=7350000001 stored=5 counted=2\n" {
+		t.Fatalf("output = %q", got)
+	}
+	r, err := rooms.Get(t.Context(), recountRoom)
+	if err != nil || r.MemberCount != 5 || r.MemberCountVer != 2 || len(pub.msgs) != 0 {
+		t.Fatalf("after dry run room = %+v, %v with %d events; want the drift kept and nothing sent", r, err, len(pub.msgs))
+	}
+}
+
+func TestRecountRestoresTheCountAndPublishesIt(t *testing.T) {
+	rooms, pub, out := driftedRooms(t), &sentEvents{}, &bytes.Buffer{}
+	if err := newRecounter(rooms, pub, out).run(t.Context(), RecountOptions{Room: recountRoom}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if got := out.String(); got != "room=7350000001 stored=5 counted=2\nmember_count_ver=3\n" {
+		t.Fatalf("output = %q", got)
+	}
+	r, err := rooms.Get(t.Context(), recountRoom)
+	if err != nil || r.MemberCount != 2 || r.MemberCountVer != 3 {
+		t.Fatalf("room = %+v, %v; want 2 members at ver 3", r, err)
+	}
+	if len(pub.msgs) != 1 || pub.msgs[0].Header.Get(jetstream.MsgIDHeader) != pbconv.MemberCountEventID(recountRoom, 3) ||
+		!strings.HasSuffix(pub.msgs[0].Subject, ".member_count_changed") {
+		t.Fatalf("events = %+v, want one member_count_changed at ver 3", pub.msgs)
+	}
+	if memberCountPending(t, rooms) {
+		t.Fatalf("member count flag still pending after the publish, want it cleared")
+	}
+}
+
+func TestRecountKeepsThePendingFlagWhenThePublishFails(t *testing.T) {
+	rooms, out := driftedRooms(t), &bytes.Buffer{}
+	err := newRecounter(rooms, &sentEvents{err: errRecountPublish}, out).run(t.Context(), RecountOptions{Room: recountRoom})
+	if !errors.Is(err, errRecountPublish) {
+		t.Fatalf("run = %v, want errRecountPublish", err)
+	}
+	if r, err := rooms.Get(t.Context(), recountRoom); err != nil || r.MemberCount != 2 || r.MemberCountVer != 3 {
+		t.Fatalf("room = %+v, %v; want the count written at ver 3", r, err)
+	}
+	if !memberCountPending(t, rooms) {
+		t.Fatalf("member count flag cleared after a failed publish, want it kept for the sweeper")
+	}
+}
+
+func TestRecountFailsWhenTheCountMovesMeanwhile(t *testing.T) {
+	rooms, pub, out := driftedRooms(t), &sentEvents{}, &bytes.Buffer{}
+	err := newRecounterOver(racingCounts{rooms}, rooms, pub, out).run(t.Context(), RecountOptions{Room: recountRoom})
+	if !errors.Is(err, errRecountRaced) || len(pub.msgs) != 0 {
+		t.Fatalf("run = %v with %d events, want errRecountRaced and nothing sent", err, len(pub.msgs))
+	}
+}
+
+func TestRecountOfAMissingRoomFails(t *testing.T) {
+	err := newRecounter(memstore.NewRooms(), &sentEvents{}, &bytes.Buffer{}).run(t.Context(), RecountOptions{Room: recountRoom})
+	if !errors.Is(err, domain.ErrRoomNotFound) {
+		t.Fatalf("run = %v, want ErrRoomNotFound", err)
+	}
+}
+
+func TestParseRecountArgs(t *testing.T) {
+	got, err := parseRecountArgs([]string{"-room", "7350000001", "-dry-run"}, &bytes.Buffer{})
+	if err != nil || got != (RecountOptions{Room: recountRoom, DryRun: true}) {
+		t.Fatalf("parse = %+v, %v", got, err)
+	}
+	for _, args := range [][]string{nil, {"-dry-run"}, {"-room", "0"}, {"-room", "abc"}, {"-room", "1", "extra"}} {
+		if _, err := parseRecountArgs(args, &bytes.Buffer{}); err == nil {
+			t.Errorf("parse(%v) = nil, want an error", args)
+		}
+	}
+}

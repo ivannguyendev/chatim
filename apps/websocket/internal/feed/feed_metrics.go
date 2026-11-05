@@ -5,8 +5,8 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/ivannguyendev/chatim/pkg/jsconsume"
-	"github.com/ivannguyendev/chatim/pkg/metrics"
+	"github.com/ivannguyendev/chatim/pkg/core/jsconsume"
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
 )
 
 func (f *Feed) consumeErrors(stream string) jetstream.ConsumeErrHandler {

@@ -5,7 +5,7 @@ import (
 
 	"google.golang.org/protobuf/reflect/protoreflect"
 
-	"github.com/ivannguyendev/chatim/pkg/corecall"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -19,14 +19,14 @@ type command struct {
 	result protoreflect.FieldDescriptor
 }
 
-func servedMethods() []string { return corecall.Realtime() }
+func servedMethods() []string { return chatrpc.Realtime() }
 
-func checks() map[string]corecall.Check {
-	return map[string]corecall.Check{chatimv1.CoreService_SendMessage_FullMethodName: checkSendMessage}
+func checks() map[string]chatrpc.Check {
+	return map[string]chatrpc.Check{chatimv1.ChatService_SendMessage_FullMethodName: checkSendMessage}
 }
 
-func buildCommands(served []corecall.Command) (map[protoreflect.FieldNumber]command, []string, error) {
-	byRequest := make(map[protoreflect.FullName]corecall.Command, len(served))
+func buildCommands(served []chatrpc.Command) (map[protoreflect.FieldNumber]command, []string, error) {
+	byRequest := make(map[protoreflect.FullName]chatrpc.Command, len(served))
 	for _, c := range served {
 		byRequest[c.Request.FullName()] = c
 	}
@@ -48,7 +48,7 @@ func buildCommands(served []corecall.Command) (map[protoreflect.FieldNumber]comm
 		methods = append(methods, c.Method)
 	}
 	if len(byRequest) > 0 {
-		return nil, nil, fmt.Errorf("command: %d core calls have no client request field", len(byRequest))
+		return nil, nil, fmt.Errorf("command: %d chat calls have no client request field", len(byRequest))
 	}
 	return cmds, methods, nil
 }

@@ -10,7 +10,7 @@ import (
 	"github.com/ivannguyendev/chatim/modules/mention/internal/groups"
 	"github.com/ivannguyendev/chatim/modules/mention/internal/roomgroups"
 	"github.com/ivannguyendev/chatim/modules/mention/internal/store"
-	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/core/apperr"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -22,7 +22,7 @@ var passedThrough = []error{
 	context.Canceled, context.DeadlineExceeded,
 }
 
-type CoreReader interface {
+type ChatReader interface {
 	RoomsOf(ctx context.Context, tenant, user string) ([]domain.MemberRoom, error)
 	SentTimes(ctx context.Context, keys []domain.MessageKey) (map[domain.MessageKey]time.Time, error)
 	VisibleMessages(ctx context.Context, tenant, user string, keys []domain.MessageKey) ([]*chatimv1.Message, error)
@@ -31,7 +31,7 @@ type CoreReader interface {
 }
 
 type Deps struct {
-	Core       CoreReader
+	Chat       ChatReader
 	Mentions   store.Mentions
 	Rooms      store.Rooms
 	UserGroups store.UserGroups
@@ -43,7 +43,7 @@ type Deps struct {
 
 type Service struct {
 	chatimv1.UnimplementedMentionServiceServer
-	core       CoreReader
+	chat       ChatReader
 	mentions   store.Mentions
 	rooms      store.Rooms
 	userGroups store.UserGroups
@@ -54,15 +54,15 @@ type Service struct {
 }
 
 func New(d Deps) (*Service, error) {
-	if d.Core == nil || d.Mentions == nil || d.Rooms == nil || d.UserGroups == nil || d.Groups == nil || d.Catalog == nil || d.RoomGroups == nil {
-		return nil, fmt.Errorf("%w: mention service needs core, mentions, rooms, user groups, groups, a catalog and room groups", apperr.ErrInvalidArgument)
+	if d.Chat == nil || d.Mentions == nil || d.Rooms == nil || d.UserGroups == nil || d.Groups == nil || d.Catalog == nil || d.RoomGroups == nil {
+		return nil, fmt.Errorf("%w: mention service needs chat, mentions, rooms, user groups, groups, a catalog and room groups", apperr.ErrInvalidArgument)
 	}
 	hide := make(map[string]struct{}, len(d.HideRead))
 	for _, tenant := range d.HideRead {
 		hide[tenant] = struct{}{}
 	}
 	return &Service{
-		core: d.Core, mentions: d.Mentions, rooms: d.Rooms, userGroups: d.UserGroups, groups: d.Groups,
+		chat: d.Chat, mentions: d.Mentions, rooms: d.Rooms, userGroups: d.UserGroups, groups: d.Groups,
 		catalog: d.Catalog, roomGroups: d.RoomGroups, hideRead: hide,
 	}, nil
 }

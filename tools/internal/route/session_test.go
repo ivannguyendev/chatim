@@ -17,26 +17,26 @@ const room = 42
 func leasedRedis(t *testing.T) *miniredis.Miniredis {
 	t.Helper()
 	mr := miniredis.RunT(t)
-	for _, id := range []string{"core-1", "core-2"} {
-		_ = mr.Set(slotmap.CoreKey(id), id+":9000")
-		_, _ = mr.ZAdd(slotmap.CoreRegistryKey, slotmap.CoreExpiryScore(time.Now().Add(time.Hour)), id)
+	for _, id := range []string{"chat-1", "chat-2"} {
+		_ = mr.Set(slotmap.NodeKey(id), id+":9000")
+		_, _ = mr.ZAdd(slotmap.NodeRegistryKey, slotmap.NodeExpiryScore(time.Now().Add(time.Hour)), id)
 	}
-	_ = mr.Set(slotmap.SlotKey(slotmap.Of(room)), "core-2")
+	_ = mr.Set(slotmap.SlotKey(slotmap.Of(room)), "chat-2")
 	return mr
 }
 
 func TestOpenRoutesBySlotLeasesAndCloses(t *testing.T) {
 	mr := leasedRedis(t)
-	net := newFakeNet(map[string]*fakeCore{"core-1:9000": {}, "core-2:9000": {}})
+	net := newFakeNet(map[string]*fakeChat{"chat-1:9000": {}, "chat-2:9000": {}})
 	s, err := route.Open(t.Context(), route.SessionConfig{RedisAddr: mr.Addr(), ClientName: "route-test", Dial: net.dial, Log: quietLog})
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	if addr, ok := s.Resolver.Addr(room); !ok || addr != "core-2:9000" {
-		t.Fatalf("Addr(%d) = %q, %v; want the lease owner core-2:9000", room, addr, ok)
+	if addr, ok := s.Resolver.Addr(room); !ok || addr != "chat-2:9000" {
+		t.Fatalf("Addr(%d) = %q, %v; want the lease owner chat-2:9000", room, addr, ok)
 	}
-	if _, st, err := s.Client.SendMessage(t.Context(), send("c-1")); err != nil || st.Addr != "core-2:9000" {
-		t.Fatalf("SendMessage = %v via %q, want success on core-2", err, st.Addr)
+	if _, st, err := s.Client.SendMessage(t.Context(), send("c-1")); err != nil || st.Addr != "chat-2:9000" {
+		t.Fatalf("SendMessage = %v via %q, want success on chat-2", err, st.Addr)
 	}
 	if err := s.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
@@ -68,13 +68,13 @@ func TestOpenGivesUpWhenTheSlotTableNeverLoads(t *testing.T) {
 func TestOpenAuthenticatesWithTheRedisPassword(t *testing.T) {
 	mr := leasedRedis(t)
 	mr.RequireAuth("route-pw")
-	net := newFakeNet(map[string]*fakeCore{"core-1:9000": {}, "core-2:9000": {}})
+	net := newFakeNet(map[string]*fakeChat{"chat-1:9000": {}, "chat-2:9000": {}})
 	s, err := route.Open(t.Context(), route.SessionConfig{RedisAddr: mr.Addr(), RedisPassword: "route-pw", Dial: net.dial, Log: quietLog})
 	if err != nil {
 		t.Fatalf("Open with the password: %v", err)
 	}
-	if addr, ok := s.Resolver.Addr(room); !ok || addr != "core-2:9000" {
-		t.Errorf("Addr(%d) = %q, %v; want core-2:9000", room, addr, ok)
+	if addr, ok := s.Resolver.Addr(room); !ok || addr != "chat-2:9000" {
+		t.Errorf("Addr(%d) = %q, %v; want chat-2:9000", room, addr, ok)
 	}
 	if err := s.Close(); err != nil {
 		t.Fatalf("Close: %v", err)

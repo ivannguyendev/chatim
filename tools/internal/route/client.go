@@ -6,18 +6,18 @@ import (
 	"errors"
 	"time"
 
-	"github.com/ivannguyendev/chatim/pkg/coreroute"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 type (
-	Locator = coreroute.Locator
-	Dialer  = coreroute.Dialer
+	Locator = chatrpc.Locator
+	Dialer  = chatrpc.Dialer
 )
 
 type routes interface {
-	Room(roomID string) (coreroute.Conn, error)
-	Any() (coreroute.Conn, error)
+	Room(roomID string) (chatrpc.PoolConn, error)
+	Any() (chatrpc.PoolConn, error)
 	Refresh(ctx context.Context) error
 	Close() error
 }
@@ -40,7 +40,7 @@ type Client struct {
 }
 
 func New(loc Locator, dial Dialer, p Policy) (*Client, error) {
-	pool, err := coreroute.NewPool(loc, dial)
+	pool, err := chatrpc.NewPool(loc, dial)
 	if err != nil {
 		return nil, err
 	}
@@ -59,25 +59,25 @@ func newClient(r routes, p Policy) (*Client, error) {
 }
 
 func (c *Client) CreateRoom(ctx context.Context, req *chatimv1.CreateRoomRequest) (*chatimv1.CreateRoomResponse, Stats, error) {
-	return anyCore(ctx, c, func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.CreateRoomResponse, error) {
+	return anyChatNode(ctx, c, func(ctx context.Context, api chatimv1.ChatServiceClient) (*chatimv1.CreateRoomResponse, error) {
 		return api.CreateRoom(ctx, req)
 	})
 }
 
 func (c *Client) OpenDirectRoom(ctx context.Context, req *chatimv1.OpenDirectRoomRequest) (*chatimv1.OpenDirectRoomResponse, Stats, error) {
-	return anyCore(ctx, c, func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.OpenDirectRoomResponse, error) {
+	return anyChatNode(ctx, c, func(ctx context.Context, api chatimv1.ChatServiceClient) (*chatimv1.OpenDirectRoomResponse, error) {
 		return api.OpenDirectRoom(ctx, req)
 	})
 }
 
 func (c *Client) SendMessage(ctx context.Context, req *chatimv1.SendMessageRequest) (*chatimv1.SendMessageResponse, Stats, error) {
-	return inRoom(ctx, c, req.GetRoomId(), func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.SendMessageResponse, error) {
+	return inRoom(ctx, c, req.GetRoomId(), func(ctx context.Context, api chatimv1.ChatServiceClient) (*chatimv1.SendMessageResponse, error) {
 		return api.SendMessage(ctx, req)
 	})
 }
 
 func (c *Client) GetHistory(ctx context.Context, req *chatimv1.GetHistoryRequest) (*chatimv1.GetHistoryResponse, Stats, error) {
-	return inRoom(ctx, c, req.GetRoomId(), func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.GetHistoryResponse, error) {
+	return inRoom(ctx, c, req.GetRoomId(), func(ctx context.Context, api chatimv1.ChatServiceClient) (*chatimv1.GetHistoryResponse, error) {
 		return api.GetHistory(ctx, req)
 	})
 }

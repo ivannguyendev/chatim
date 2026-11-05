@@ -161,6 +161,7 @@ func TestALoginAfterExpiryWithAnotherIdentityIsRefused(t *testing.T) {
 		if f := tc.nextFrame(); f.GetReady() == nil {
 			t.Fatalf("frame after the same identity = %v, want ready", f)
 		}
+		synctest.Wait()
 		if h.authCount("invalid") != 2 || h.authCount("ok") != 2 {
 			t.Fatalf("invalid %v ok %v", h.authCount("invalid"), h.authCount("ok"))
 		}

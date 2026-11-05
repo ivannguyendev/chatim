@@ -10,20 +10,23 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/gateway/internal/config"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 )
 
 var envKeys = []string{
-	"GW_ADDR", "GW_ADMIN_ADDR", "GW_CORE_ADDRS", "GW_JWT_KEYS_FILE", "GW_JWT_ISSUER", "GW_JWT_AUDIENCE", "GW_JWT_LEEWAY",
+	"GW_ADDR", "GW_ADMIN_ADDR", "REDIS_ADDR", "REDIS_DB", "REDIS_PASSWORD", "REDIS_PASSWORD_FILE", "GW_JWT_KEYS_FILE", "GW_JWT_ISSUER", "GW_JWT_AUDIENCE", "GW_JWT_LEEWAY",
 	"GW_BODY_MAX", "GW_USER_RATE", "GW_USER_BURST", "GW_USER_INFLIGHT", "GW_USER_LIMITERS", "GW_INFLIGHT_MAX",
 	"GW_CORS_ORIGINS", "GW_DRAIN_DELAY", "GW_SHUTDOWN_BUDGET", "GW_READ_HEADER_TIMEOUT", "GW_READ_TIMEOUT",
-	"GW_WRITE_TIMEOUT", "GW_IDLE_TIMEOUT", "GW_MAX_HEADER_BYTES", "GW_H2_MAX_STREAMS", "CORE_REQUEST_DEADLINE",
+	"GW_WRITE_TIMEOUT", "GW_IDLE_TIMEOUT", "GW_MAX_HEADER_BYTES", "GW_H2_MAX_STREAMS", "CHAT_REQUEST_DEADLINE",
 }
 
 var requiredEnv = map[string]string{
-	"GW_CORE_ADDRS":    "chatim-core-1:9000,chatim-core-2:9000",
-	"GW_JWT_KEYS_FILE": "/run/secrets/jwks.json",
-	"GW_JWT_ISSUER":    "chatim-identity",
-	"GW_JWT_AUDIENCE":  "chatim-gateway",
+	"GW_JWT_KEYS_FILE":         "/run/secrets/jwks.json",
+	"GW_JWT_ISSUER":            "chatim-identity",
+	"GW_JWT_AUDIENCE":          "chatim-gateway",
+	"GW_IDENTITY_INTERNAL_URL": "http://chatim-identity-1:8081",
+	"GW_IDENTITY_JWKS_URL":     "https://identity.example.com/.well-known/jwks.json",
+	"GW_IDENTITY_SECRET":       "node-secret-value-0123456789abcdef",
 }
 
 func setEnv(t *testing.T, env map[string]string) {
@@ -54,7 +57,7 @@ func TestLoadDefaults(t *testing.T) {
 	want := config.Config{
 		ListenAddr:        ":8080",
 		AdminAddr:         ":9090",
-		CoreAddrs:         []string{"chatim-core-1:9000", "chatim-core-2:9000"},
+		Redis:             config.StateRedis{Addr: "chatim-redis:6379"},
 		JWTKeysFile:       "/run/secrets/jwks.json",
 		JWTIssuer:         "chatim-identity",
 		JWTAudience:       "chatim-gateway",
@@ -74,6 +77,8 @@ func TestLoadDefaults(t *testing.T) {
 		MaxHeaderBytes:    16 << 10,
 		H2MaxStreams:      250,
 		RequestDeadline:   5 * time.Second,
+		Identity:          identityWant(),
+		SharedRedis:       config.SharedRedis{Timeout: 500 * time.Millisecond},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Load() = %+v\nwant %+v", got, want)
@@ -82,14 +87,14 @@ func TestLoadDefaults(t *testing.T) {
 
 func TestLoadReadsOverrides(t *testing.T) {
 	setEnv(t, map[string]string{
-		"GW_ADDR": "127.0.0.1:7080", "GW_ADMIN_ADDR": "127.0.0.1:7090", "GW_CORE_ADDRS": " a:1 , ,b:2 ",
+		"GW_ADDR": "127.0.0.1:7080", "GW_ADMIN_ADDR": "127.0.0.1:7090", "REDIS_ADDR": "redis-a:6390", "REDIS_DB": "2",
 		"GW_JWT_LEEWAY": "0s", "GW_BODY_MAX": "4096", "GW_USER_RATE": "5", "GW_USER_BURST": "6", "GW_USER_INFLIGHT": "7",
 		"GW_USER_LIMITERS": "900", "GW_INFLIGHT_MAX": "800", "GW_CORS_ORIGINS": "https://chat.example.com, http://localhost:3000",
 		"GW_DRAIN_DELAY": "1s", "GW_SHUTDOWN_BUDGET": "20s", "GW_READ_HEADER_TIMEOUT": "2s", "GW_READ_TIMEOUT": "3s",
-		"GW_IDLE_TIMEOUT": "30s", "GW_MAX_HEADER_BYTES": "8192", "GW_H2_MAX_STREAMS": "100", "CORE_REQUEST_DEADLINE": "8s",
+		"GW_IDLE_TIMEOUT": "30s", "GW_MAX_HEADER_BYTES": "8192", "GW_H2_MAX_STREAMS": "100", "CHAT_REQUEST_DEADLINE": "8s",
 	})
 	got := mustLoad(t)
-	if got.ListenAddr != "127.0.0.1:7080" || got.AdminAddr != "127.0.0.1:7090" || !reflect.DeepEqual(got.CoreAddrs, []string{"a:1", "b:2"}) ||
+	if got.ListenAddr != "127.0.0.1:7080" || got.AdminAddr != "127.0.0.1:7090" || got.Redis != (config.StateRedis{Addr: "redis-a:6390", DB: 2}) ||
 		got.JWTLeeway != 0 || got.BodyMax != 4096 || got.UserRate != 5 || got.UserBurst != 6 || got.UserInflight != 7 ||
 		got.UserLimiters != 900 || got.InflightMax != 800 || !reflect.DeepEqual(got.CORSOrigins, []string{"https://chat.example.com", "http://localhost:3000"}) ||
 		got.DrainDelay != time.Second || got.ShutdownBudget != 20*time.Second || got.ReadHeaderTimeout != 2*time.Second || got.ReadTimeout != 3*time.Second ||
@@ -97,12 +102,12 @@ func TestLoadReadsOverrides(t *testing.T) {
 		t.Fatalf("Load() = %+v", got)
 	}
 	if got.WriteTimeout != 13*time.Second {
-		t.Fatalf("WriteTimeout = %v, want CORE_REQUEST_DEADLINE + 5s", got.WriteTimeout)
+		t.Fatalf("WriteTimeout = %v, want CHAT_REQUEST_DEADLINE + 5s", got.WriteTimeout)
 	}
 }
 
 func TestLogValueCoversEveryField(t *testing.T) {
-	setEnv(t, map[string]string{"GW_CORS_ORIGINS": "https://chat.example.com"})
+	setEnv(t, map[string]string{"GW_CORS_ORIGINS": "https://chat.example.com", "GW_SHARED_REDIS_ADDR": "chatim-redis-presence:6379", "GW_SHARED_REDIS_PASSWORD": "redis-secret", "REDIS_PASSWORD": "state-secret"})
 	cfg := mustLoad(t)
 	attrs := cfg.LogValue().Group()
 	if got, want := len(attrs), reflect.TypeFor[config.Config]().NumField(); got != want {
@@ -110,7 +115,10 @@ func TestLogValueCoversEveryField(t *testing.T) {
 	}
 	var buf bytes.Buffer
 	slog.New(slog.NewJSONHandler(&buf, nil)).Info("config loaded", "config", cfg)
-	for _, want := range []string{`"core_addrs":"chatim-core-1:9000,chatim-core-2:9000"`, `"cors_origins":"https://chat.example.com"`, `"body_max":131072`} {
+	if strings.Contains(buf.String(), "redis-secret") || strings.Contains(buf.String(), "state-secret") {
+		t.Fatalf("summary leaks a redis password: %s", buf.String())
+	}
+	for _, want := range []string{`"redis":{"addr":"chatim-redis:6379","db":0,"auth":true}`, `"cors_origins":"https://chat.example.com"`, `"body_max":131072`} {
 		if !strings.Contains(buf.String(), want) {
 			t.Errorf("summary %s misses %s", buf.String(), want)
 		}
@@ -121,7 +129,7 @@ func TestLogValueCoversEveryField(t *testing.T) {
 }
 
 func TestAdminAddrReadsOnlyItsVariable(t *testing.T) {
-	setEnv(t, map[string]string{"GW_ADMIN_ADDR": "127.0.0.1:7090", "GW_CORE_ADDRS": ""})
+	setEnv(t, map[string]string{"GW_ADMIN_ADDR": "127.0.0.1:7090", "REDIS_ADDR": ""})
 	if got := config.AdminAddr(); got != "127.0.0.1:7090" {
 		t.Fatalf("AdminAddr = %q", got)
 	}
@@ -129,4 +137,10 @@ func TestAdminAddrReadsOnlyItsVariable(t *testing.T) {
 	if got := config.AdminAddr(); got != ":9090" {
 		t.Fatalf("default AdminAddr = %q", got)
 	}
+}
+
+func identityWant() auth.SyncConfig {
+	c := auth.SyncDefaults()
+	c.InternalURL, c.JWKSURL, c.Secret = "http://chatim-identity-1:8081", "https://identity.example.com/.well-known/jwks.json", "node-secret-value-0123456789abcdef"
+	return c
 }

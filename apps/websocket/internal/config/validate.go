@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ivannguyendev/chatim/pkg/auth"
 	"github.com/ivannguyendev/chatim/pkg/wspublish"
 )
 
@@ -37,6 +38,7 @@ func (c Config) Validate() error {
 		{c.JWTIssuer != "", "WS_JWT_ISSUER is required"},
 		{c.JWTAudience != "", "WS_JWT_AUDIENCE is required"},
 		{c.JWTLeeway >= 0, "WS_JWT_LEEWAY must not be negative"},
+		{c.JWTLeeway <= auth.MaxNodeLeeway, fmt.Sprintf("WS_JWT_LEEWAY must not exceed %v, the extra time identity keeps a revocation", auth.MaxNodeLeeway)},
 		positive("WS_AUTH_GRACE", c.AuthGrace),
 		positive("WS_AUTH_RATE", c.AuthRate),
 		positive("WS_AUTH_BURST", c.AuthBurst),
@@ -53,14 +55,14 @@ func (c Config) Validate() error {
 		positive("WS_SEND_QUEUE", c.SendQueue),
 		positive("WS_SEND_QUEUE_BYTES", c.SendQueueBytes),
 		positive("WS_WRITE_TIMEOUT", c.WriteTimeout),
-		positive("CORE_REQUEST_DEADLINE", c.RequestDeadline),
+		positive("CHAT_REQUEST_DEADLINE", c.RequestDeadline),
 		positive("WS_DRAIN_DELAY", c.DrainDelay),
 		positive("WS_SHUTDOWN_BUDGET", c.ShutdownBudget),
 		{c.FrameMax <= 0 || c.FrameMax >= minFrameMax, fmt.Sprintf("WS_FRAME_MAX must be at least %d", minFrameMax)},
 		{c.SendQueue <= 0 || c.SendQueue >= minSendQueue, fmt.Sprintf("WS_SEND_QUEUE must be at least %d", minSendQueue)},
 		{c.SendQueueBytes <= 0 || c.SendQueueBytes >= c.FrameMax, fmt.Sprintf("WS_SEND_QUEUE_BYTES %d must be at least WS_FRAME_MAX %d", c.SendQueueBytes, c.FrameMax)},
 		{c.HeartbeatTimeout <= 0 || c.HeartbeatTimeout >= minHeartbeatTimeout, fmt.Sprintf("WS_HEARTBEAT_TIMEOUT must be at least %v (two heartbeat gaps of %v)", minHeartbeatTimeout, maxHeartbeatGap)},
-		{stop <= c.ShutdownBudget, fmt.Sprintf("WS_DRAIN_DELAY + CORE_REQUEST_DEADLINE + %v (feed) + %v (close) = %v must not exceed WS_SHUTDOWN_BUDGET %v", FeedStopTimeout, CloseTimeout, stop, c.ShutdownBudget)},
+		{stop <= c.ShutdownBudget, fmt.Sprintf("WS_DRAIN_DELAY + CHAT_REQUEST_DEADLINE + %v (feed) + %v (close) = %v must not exceed WS_SHUTDOWN_BUDGET %v", FeedStopTimeout, CloseTimeout, stop, c.ShutdownBudget)},
 		{c.NATSURL != "", "NATS_URL is required"},
 		{wspublish.ValidStream(c.EventStream) == nil, "EVT_STREAM must be upper-case letters, digits and _"},
 		{wspublish.ValidStream(c.PublishStream) == nil, "WS_PUBLISH_STREAM must be upper-case letters, digits and _"},
@@ -90,6 +92,9 @@ func (c Config) Validate() error {
 		if !r.ok {
 			errs = append(errs, errors.New(r.msg))
 		}
+	}
+	if err := c.Identity.Validate(); err != nil {
+		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
 }

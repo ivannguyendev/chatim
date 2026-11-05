@@ -10,8 +10,8 @@ import (
 	"connectrpc.com/connect"
 	"golang.org/x/time/rate"
 
-	"github.com/ivannguyendev/chatim/apps/gateway/internal/limit"
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
+	"github.com/ivannguyendev/chatim/pkg/auth"
+	"github.com/ivannguyendev/chatim/pkg/core/userlimit"
 )
 
 const (
@@ -19,20 +19,27 @@ const (
 	msgUnauthorized  = "missing or invalid token"
 	msgTooMany       = "too many requests, retry later"
 	msgBusy          = "gateway busy, retry later"
+	msgKeyPending    = "signing key not loaded yet, retry later"
 )
 
 type Verifier interface {
-	Verify(token string) (jwtverify.Claims, error)
+	Verify(token string) (auth.Claims, error)
+}
+
+type Revocations interface {
+	Check(claims auth.Claims) auth.Verdict
+	UnknownKey(kid string) bool
 }
 
 type chain struct {
-	verifier Verifier
-	gate     *limit.Gate
-	users    *limit.Users
-	bodyMax  int64
-	stats    *stats
-	log      *slog.Logger
-	authLog  *rate.Limiter
+	verifier    Verifier
+	revocations Revocations
+	gate        *userlimit.Gate
+	users       *userlimit.Users
+	bodyMax     int64
+	stats       *stats
+	log         *slog.Logger
+	authLog     *rate.Limiter
 }
 
 func (c *chain) gated(next http.Handler) http.Handler {
@@ -55,6 +62,10 @@ func (c *chain) authenticated(next http.Handler) http.Handler {
 			if c.authLog.Allow() {
 				c.log.WarnContext(r.Context(), "gateway auth failed", "reason", label)
 			}
+			if reason == reasonKeyPending {
+				writeError(w, connect.CodeUnavailable, msgKeyPending)
+				return
+			}
 			writeError(w, connect.CodeUnauthenticated, msgUnauthorized)
 			return
 		}
@@ -62,14 +73,25 @@ func (c *chain) authenticated(next http.Handler) http.Handler {
 	})
 }
 
-func (c *chain) authenticate(h http.Header) (jwtverify.Claims, string) {
+func (c *chain) authenticate(h http.Header) (auth.Claims, string) {
 	token, reason := bearer(h)
 	if reason != "" {
-		return jwtverify.Claims{}, reason
+		return auth.Claims{}, reason
 	}
 	claims, err := c.verifier.Verify(token)
 	if err != nil {
-		return jwtverify.Claims{}, string(jwtverify.ReasonOf(err))
+		reason := auth.ReasonOf(err)
+		if reason == auth.ReasonKeyID && c.revocations.UnknownKey(auth.KeyIDOf(token)) {
+			return auth.Claims{}, reasonKeyPending
+		}
+		return auth.Claims{}, string(reason)
+	}
+	switch c.revocations.Check(claims) {
+	case auth.SessionRevoked:
+		return auth.Claims{}, reasonRevoked
+	case auth.TenantRevoked:
+		return auth.Claims{}, reasonTenantRevoked
+	case auth.Allowed:
 	}
 	return claims, ""
 }
@@ -99,9 +121,9 @@ func bearer(h http.Header) (string, string) {
 func (c *chain) limited(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		claims, _ := ClaimsFrom(r.Context())
-		release, err := c.users.Acquire(limit.Key{Tenant: claims.Tenant, User: claims.User})
+		release, err := c.users.Acquire(userlimit.Key{Tenant: claims.Tenant, User: claims.User})
 		if err != nil {
-			if errors.Is(err, limit.ErrInflight) {
+			if errors.Is(err, userlimit.ErrInflight) {
 				c.stats.userInflight.Add(1)
 			} else {
 				c.stats.rateLimited.Add(1)

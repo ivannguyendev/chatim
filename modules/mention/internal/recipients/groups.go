@@ -44,7 +44,7 @@ func (r Resolver) groupInRoom(ctx context.Context, tenant string, room uint64, i
 		if err != nil || len(page) == 0 {
 			return err
 		}
-		members, err := r.Core.MembersOf(ctx, room, page)
+		members, err := r.Chat.MembersOf(ctx, room, page)
 		if err != nil {
 			return err
 		}

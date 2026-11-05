@@ -5,8 +5,8 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
-	"github.com/ivannguyendev/chatim/pkg/metrics"
+	"github.com/ivannguyendev/chatim/pkg/auth"
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
 )
 
 type rejectReason int
@@ -28,6 +28,8 @@ const (
 	authRate
 	authThrottled
 	authUserLimit
+	authRevoked
+	authKeyPending
 	authResultCount
 )
 
@@ -39,11 +41,11 @@ const (
 
 var (
 	rejectLabels     = [rejectReasonCount]string{"rate", "inflight", "unimplemented", "shutdown"}
-	authResultLabels = [authResultCount]string{"ok", "invalid", "expired", "rate", "throttled", "user_limit"}
+	authResultLabels = [authResultCount]string{"ok", "invalid", "expired", "rate", "throttled", "user_limit", "revoked", "key_pending"}
 	sendKindLabels   = [sendKindCount]string{"response", "control"}
 	closeCodes       = []uint16{
 		CodeNormal, CodeGoingAway, CodeProtocolError, CodeAbnormal, CodeInvalidPayload,
-		CodeTooLarge, CodeInternalError, CodeTryAgainLater, CodeUnauthenticated, CodeTooManyConnections,
+		CodeTooLarge, CodeInternalError, CodeTryAgainLater, CodeUnauthenticated, CodeTenantRevoked, CodeTooManyConnections,
 	}
 )
 
@@ -54,6 +56,7 @@ type stats struct {
 	unknownFrames       atomic.Uint64
 	unauthOverCap       atomic.Uint64
 	authRequiredExpired atomic.Uint64
+	authRequiredRevoked atomic.Uint64
 	rejected            [rejectReasonCount]atomic.Uint64
 	auths               [authResultCount]atomic.Uint64
 	sendDropped         [sendKindCount]atomic.Uint64
@@ -70,7 +73,7 @@ func newStats() *stats {
 	return s
 }
 
-func reasonLabel(reason jwtverify.Reason) string {
+func reasonLabel(reason auth.Reason) string {
 	if reason == "" {
 		return reasonUnknown
 	}
@@ -100,6 +103,10 @@ func (s *stats) sources() []metrics.Source {
 			Name: "auth_required_total", Help: "auth_required frames sent to running connections, by reason.",
 			Labels: map[string]string{"reason": "expired"}, Read: counterOf(&s.authRequiredExpired),
 		},
+		{
+			Name: "auth_required_total", Help: "auth_required frames sent to running connections, by reason.",
+			Labels: map[string]string{"reason": "revoked"}, Read: counterOf(&s.authRequiredRevoked),
+		},
 	}
 	for result := range authResultCount {
 		out = append(out, metrics.Source{
@@ -127,7 +134,7 @@ func (s *stats) sources() []metrics.Source {
 	}
 	for reason := range rejectReasonCount {
 		out = append(out, metrics.Source{
-			Name: "commands_rejected_total", Help: "Client requests answered without calling core, by reason.",
+			Name: "commands_rejected_total", Help: "Client requests answered without calling chat, by reason.",
 			Labels: map[string]string{"reason": rejectLabels[reason]}, Read: counterOf(&s.rejected[reason]),
 		})
 	}

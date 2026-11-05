@@ -62,7 +62,7 @@ func (c countedPresenceConn) Close() error {
 func TestRunStampsAConnectedUserAndClosesThePresenceRedisOnStop(t *testing.T) {
 	mr := slotRedis(t)
 	keys := newSigner(t)
-	_, dial := startFakeCore(t)
+	_, dial := startFakeChatNode(t)
 	pres := newPresenceRedis(t)
 	lis, logs := newListeners(), newLogWatch()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -148,7 +148,7 @@ func TestAFailedStartStopsTheStamperAndClosesThePresenceRedis(t *testing.T) {
 			mr := slotRedis(t)
 			mr.SetError("LOADING redis is loading the dataset")
 			pres := newPresenceRedis(t)
-			err := Run(t.Context(), testConfig(mr.Addr(), keys.path), newLogWatch().logger(), deps(pres, newListeners()))
+			err := run(t.Context(), testConfig(mr.Addr(), keys.path), newLogWatch().logger(), deps(pres, newListeners()))
 			if err == nil {
 				t.Fatal("Run = nil, want a start failure")
 			}

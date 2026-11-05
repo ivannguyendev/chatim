@@ -4,13 +4,13 @@ import (
 	"context"
 
 	"github.com/ivannguyendev/chatim/modules/mention/internal/domain"
-	"github.com/ivannguyendev/chatim/pkg/callerid"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	"github.com/ivannguyendev/chatim/pkg/ids"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 func (s *Service) ListRoomGroups(ctx context.Context, req *chatimv1.ListRoomGroupsRequest) (*chatimv1.ListRoomGroupsResponse, error) {
-	who, err := callerid.Of(ctx)
+	who, err := chatrpc.CallerOf(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -18,10 +18,10 @@ func (s *Service) ListRoomGroups(ctx context.Context, req *chatimv1.ListRoomGrou
 	if err != nil {
 		return nil, invalid("room id")
 	}
-	if err := s.core.Authorize(ctx, who.Tenant, who.User, room, domain.ActionReadMembers); err != nil {
+	if err := s.chat.Authorize(ctx, who.Tenant, who.User, room, domain.ActionReadMembers); err != nil {
 		return nil, dependencyErr("authorize read members", err)
 	}
-	members, err := s.core.RoomMemberCount(ctx, room)
+	members, err := s.chat.RoomMemberCount(ctx, room)
 	if err != nil {
 		return nil, dependencyErr("room member count", err)
 	}

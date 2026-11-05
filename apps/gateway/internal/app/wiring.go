@@ -1,94 +1,144 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"slices"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ivannguyendev/chatim/apps/gateway/internal/api"
 	"github.com/ivannguyendev/chatim/apps/gateway/internal/config"
-	"github.com/ivannguyendev/chatim/apps/gateway/internal/limit"
-	"github.com/ivannguyendev/chatim/pkg/admin"
-	"github.com/ivannguyendev/chatim/pkg/corecall"
-	"github.com/ivannguyendev/chatim/pkg/grpcclient"
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
-	"github.com/ivannguyendev/chatim/pkg/metrics"
-	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
+	"github.com/ivannguyendev/chatim/pkg/auth"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
+	"github.com/ivannguyendev/chatim/pkg/core/admin"
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
+	"github.com/ivannguyendev/chatim/pkg/core/userlimit"
 )
 
-const metricsSubsystem = "gateway"
+const (
+	metricsNamespace = "chatim"
+	metricsSubsystem = "gateway"
+)
 
-func wire(cfg config.Config, log *slog.Logger, deps Deps) (*node, error) {
-	verifier, err := jwtverify.LoadFile(cfg.JWTKeysFile, jwtverify.Config{Issuer: cfg.JWTIssuer, Audience: cfg.JWTAudience, Leeway: cfg.JWTLeeway})
+func wire(ctx context.Context, cfg config.Config, log *slog.Logger, deps Deps) (*node, error) {
+	verifier, err := auth.LoadVerifier(cfg.JWTKeysFile, auth.VerifierConfig{Issuer: cfg.JWTIssuer, Audience: cfg.JWTAudience, Leeway: cfg.JWTLeeway})
 	if err != nil {
 		return nil, fmt.Errorf("load jwt key set: %w", err)
 	}
-	conn, err := grpcclient.NewStatic(cfg.CoreAddrs, grpcclient.Options{
-		Creds:       insecure.NewCredentials(),
-		DialOptions: append([]grpc.DialOption{grpc.WithIdleTimeout(0)}, deps.DialOptions...),
-	})
+	router, err := openRouter(ctx, cfg, log, deps)
 	if err != nil {
 		return nil, err
 	}
-	n, err := wireServers(cfg, log, verifier, conn)
+	shared := sharedRedis(cfg)
+	n, err := wireServers(cfg, log, verifier, router, shared, deps.IdentityDoer)
 	if err != nil {
-		_ = conn.Close()
+		_ = router.Close()
+		if shared != nil {
+			_ = shared.Close()
+		}
 		return nil, err
 	}
 	return n, nil
 }
 
-func wireServers(cfg config.Config, log *slog.Logger, verifier *jwtverify.Verifier, conn *grpc.ClientConn) (*node, error) {
-	core := corecall.Conn{Core: chatimv1.NewCoreServiceClient(conn), Mention: chatimv1.NewMentionServiceClient(conn)}
-	fwd, err := corecall.New(corecall.Options{
-		Methods:  corecall.Request(),
+func openRouter(ctx context.Context, cfg config.Config, log *slog.Logger, deps Deps) (*chatrpc.Router, error) {
+	life, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	abort := context.AfterFunc(ctx, cancel)
+	r, err := chatrpc.OpenRouter(life, chatrpc.RouterConfig{
+		RedisAddr:     cfg.Redis.Addr,
+		RedisDB:       cfg.Redis.DB,
+		RedisPassword: cfg.Redis.Password,
+		ClientName:    "chatim-gateway",
+		ReadyTimeout:  deps.ReadyTimeout,
+		Log:           log,
+	})
+	abort()
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("open chat router: %w", err)
+	}
+	return r, nil
+}
+
+func sharedRedis(cfg config.Config) *redis.Client {
+	if cfg.SharedRedis.Addr == "" {
+		return nil
+	}
+	r := cfg.SharedRedis
+	return redis.NewClient(&redis.Options{
+		Addr: r.Addr, DB: r.DB, Password: r.Password, ClientName: "chatim-gateway-identity-sync",
+		DialTimeout: r.Timeout, ReadTimeout: r.Timeout, WriteTimeout: r.Timeout, PoolSize: 2,
+		MaxRetries: 1, DisableIdentity: true, ContextTimeoutEnabled: true,
+	})
+}
+
+func wireServers(cfg config.Config, log *slog.Logger, verifier *auth.Verifier, router *chatrpc.Router, shared *redis.Client, doer auth.Doer) (*node, error) {
+	list, err := auth.NewNodeRevocationList(cfg.JWTLeeway)
+	if err != nil {
+		return nil, err
+	}
+	var copyStore auth.Shared
+	if shared != nil {
+		copyStore = auth.NewRedisShared(shared, cfg.JWTIssuer)
+	}
+	sync, err := auth.NewSyncer(cfg.Identity, list, verifier, copyStore, doer, log)
+	if err != nil {
+		return nil, err
+	}
+	fwd, err := chatrpc.NewForwarder(chatrpc.ForwarderOptions{
+		Methods:  chatrpc.Request(),
 		Deadline: cfg.RequestDeadline,
-		Route:    func(corecall.Command, proto.Message) (corecall.Conn, error) { return core, nil },
+		Route: func(chatrpc.Command, proto.Message) (chatrpc.Clients, error) {
+			c, err := router.Any()
+			return c.Clients, err
+		},
+		OnUnavailable: router.Trigger,
 	})
 	if err != nil {
 		return nil, err
 	}
-	gate, err := limit.NewGate(cfg.InflightMax)
+	gate, err := userlimit.NewGate(cfg.InflightMax)
 	if err != nil {
 		return nil, err
 	}
-	users, err := limit.NewUsers(limit.UserConfig{Rate: cfg.UserRate, Burst: cfg.UserBurst, Inflight: cfg.UserInflight, Capacity: cfg.UserLimiters})
+	users, err := userlimit.NewUsers(userlimit.UserConfig{Rate: cfg.UserRate, Burst: cfg.UserBurst, Inflight: cfg.UserInflight, Capacity: cfg.UserLimiters})
 	if err != nil {
 		return nil, err
 	}
 	handler, err := api.New(api.Options{
-		Forwarder: fwd, Verifier: verifier, Gate: gate, Users: users,
+		Forwarder: fwd, Verifier: verifier, Revocations: sync, Gate: gate, Users: users,
 		BodyMax: cfg.BodyMax, CORSOrigins: cfg.CORSOrigins, Log: log,
 	})
 	if err != nil {
 		return nil, err
 	}
-	metricsHandler, err := metrics.Handler(metricsSubsystem, metricSources(handler, fwd))
+	metricsHandler, err := metrics.Handler(metricsNamespace, metricsSubsystem, slices.Concat(metricSources(handler, fwd), sync.Sources()))
 	if err != nil {
 		return nil, err
 	}
 	adm := admin.New(admin.Config{Addr: cfg.AdminAddr, Metrics: metricsHandler}, log)
 	return &node{
-		cfg:   cfg,
-		log:   log,
-		conn:  conn,
-		admin: adm,
-		http:  newHTTPServer(cfg, handler, log),
-		ready: &readiness{admin: adm, log: log},
+		cfg:    cfg,
+		log:    log,
+		router: router,
+		sync:   sync,
+		redis:  shared,
+		admin:  adm,
+		http:   newHTTPServer(cfg, handler, log),
+		ready:  &readiness{admin: adm, log: log},
 	}, nil
 }
 
-func metricSources(handler *api.Handler, fwd *corecall.Forwarder) []metrics.Source {
+func metricSources(handler *api.Handler, fwd *chatrpc.Forwarder) []metrics.Source {
 	out := slices.Concat(handler.Sources(), fwd.CommandSources())
-	for _, latency := range fwd.CoreCallLatency() {
+	for _, latency := range fwd.ChatCallLatency() {
 		out = append(out, metrics.Source{
-			Name:      "core_call_seconds",
-			Help:      "Core call latency of client commands, in seconds.",
+			Name:      "chat_call_seconds",
+			Help:      "Chat call latency of client commands, in seconds.",
 			Labels:    map[string]string{"command": latency.Command},
 			Histogram: latency.Read,
 		})

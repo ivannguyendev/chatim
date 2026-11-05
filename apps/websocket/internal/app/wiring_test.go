@@ -91,7 +91,7 @@ func TestFeedWiringCarriesTheNATSAndStreamSettings(t *testing.T) {
 	}
 }
 
-func TestEventRouterHandsCoreEventsToTheInterestTable(t *testing.T) {
+func TestEventRouterHandsChatEventsToTheInterestTable(t *testing.T) {
 	rooms, err := newInterest(testConfig("redis:6379", "/keys.json"), &routerHolder{}, newLogWatch().logger())
 	if err != nil {
 		t.Fatalf("newInterest: %v", err)

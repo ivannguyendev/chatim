@@ -1,8 +1,8 @@
 groups:
-  - name: chatim-core-guarantees
+  - name: chatim-chat-guarantees
     rules:
       - alert: ChatimOplogWindowShort
-        expr: min(chatim_core_mongo_oplog_window_seconds) < 172800
+        expr: min(chatim_chat_mongo_oplog_window_seconds) < 172800
         for: 15m
         labels:
           severity: warning
@@ -10,7 +10,7 @@ groups:
         annotations:
           summary: The oplog covers less than 48h; a lagging or resyncing secondary has little room to catch up.
       - alert: ChatimOplogWindowCritical
-        expr: min(chatim_core_mongo_oplog_window_seconds) < 86400
+        expr: min(chatim_chat_mongo_oplog_window_seconds) < 86400
         for: 15m
         labels:
           severity: critical
@@ -18,15 +18,15 @@ groups:
         annotations:
           summary: The oplog covers less than 24h, below the minimum retention for replica health.
       - alert: ChatimOplogWindowUnknown
-        expr: count(chatim_core_mongo_oplog_window_seconds != chatim_core_mongo_oplog_window_seconds) > 0
+        expr: count(chatim_chat_mongo_oplog_window_seconds != chatim_chat_mongo_oplog_window_seconds) > 0
         for: 10m
         labels:
           severity: warning
           guarantee: RC5
         annotations:
-          summary: A core cannot read the oplog window; the replica health check is blind.
+          summary: A chat cannot read the oplog window; the replica health check is blind.
       - alert: ChatimEventsDropped
-        expr: sum(rate(chatim_core_publish_dropped_total[5m])) > 0
+        expr: sum(rate(chatim_chat_publish_dropped_total[5m])) > 0
         for: 10m
         labels:
           severity: warning
@@ -34,36 +34,36 @@ groups:
         annotations:
           summary: The fast path keeps dropping events; delivery waits for the sweeper.
       - alert: ChatimRedisDegraded
-        expr: max by (client) (chatim_core_redis_degraded) == 1
+        expr: max by (client) (chatim_chat_redis_degraded) == 1
         for: 1m
         labels:
           severity: warning
           guarantee: CD2
         annotations:
-          summary: A dedupe redis client is degraded; cross-core duplicates are possible.
+          summary: A dedupe redis client is degraded; cross-chat duplicates are possible.
       - alert: ChatimCIDSettleDropped
-        expr: sum(increase(chatim_core_cid_settle_dropped_total[5m])) > 0
+        expr: sum(increase(chatim_chat_cid_settle_dropped_total[5m])) > 0
         labels:
           severity: warning
           guarantee: CD1
         annotations:
           summary: Cid commits were dropped; retries may wait for the pending window.
       - alert: ChatimCIDPendingElsewhere
-        expr: sum(increase(chatim_core_cid_pending_elsewhere_total[5m])) > 0
+        expr: sum(increase(chatim_chat_cid_pending_elsewhere_total[5m])) > 0
         labels:
           severity: info
           guarantee: CD3
         annotations:
-          summary: Sends hit a cid pending on another core, the CD3 duplicate window.
+          summary: Sends hit a cid pending on another chat node, the CD3 duplicate window.
       - alert: ChatimSeqContention
-        expr: sum(increase(chatim_core_room_yields_total[5m])) > 10
+        expr: sum(increase(chatim_chat_room_yields_total[5m])) > 10
         labels:
           severity: warning
           guarantee: P1
         annotations:
           summary: Actors keep yielding rooms after seq contention; check slot ownership.
       - alert: ChatimCounterRepairSurge
-        expr: sum by (counter) (rate(chatim_core_counter_repaired_total[5m])) > 1
+        expr: sum by (counter) (rate(chatim_chat_counter_repaired_total[5m])) > 1
         for: 10m
         labels:
           severity: warning
@@ -71,7 +71,7 @@ groups:
         annotations:
           summary: Survival timer repairs keep rewriting counter summaries the fast path left stale; check fast path count failures and hot targets.
       - alert: ChatimEventPendingStuck
-        expr: max(chatim_core_event_pending_oldest_seconds) > 60
+        expr: max(chatim_chat_event_pending_oldest_seconds) > 60
         for: 5m
         labels:
           severity: warning
@@ -79,7 +79,7 @@ groups:
         annotations:
           summary: A pending event flag has waited more than 60s; the sweeper cannot republish it (check NATS and the sweeper logs).
       - alert: ChatimProjectionLagging
-        expr: max by (projection) (chatim_core_projection_lag_seconds) > 10
+        expr: max by (projection) (chatim_chat_projection_lag_seconds) > 10
         for: 5m
         labels:
           severity: warning
@@ -87,7 +87,7 @@ groups:
         annotations:
           summary: A projection runs more than 10s behind its events; room activity and reply indexes are stale.
       - alert: ChatimProjectionFailing
-        expr: sum by (projection) (increase(chatim_core_projection_stuck_total[15m])) > 0
+        expr: sum by (projection) (increase(chatim_chat_projection_stuck_total[15m])) > 0
         labels:
           severity: warning
           guarantee: RC1
@@ -109,15 +109,15 @@ groups:
         annotations:
           summary: The mention consumer keeps failing an event that has been delivered six times or more.
       - alert: ChatimSweeperIdle
-        expr: sum(increase(chatim_core_sweep_passes_total[10m])) == 0
+        expr: sum(increase(chatim_chat_sweep_passes_total[10m])) == 0
         for: 10m
         labels:
           severity: critical
           guarantee: RC1
         annotations:
-          summary: No core finished a sweeper pass for 10 minutes; events lost before their ack are not republished.
+          summary: No chat finished a sweeper pass for 10 minutes; events lost before their ack are not republished.
       - alert: ChatimTimerFailing
-        expr: sum(increase(chatim_core_timer_failures_total[15m])) > 0
+        expr: sum(increase(chatim_chat_timer_failures_total[15m])) > 0
         for: 15m
         labels:
           severity: warning
@@ -152,7 +152,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: Room loads of a websocket node keep failing; its users get load_failed and no events until a load succeeds (check core ListMyRoomIDs).
+          summary: Room loads of a websocket node keep failing; its users get load_failed and no events until a load succeeds (check chat ListMyRoomIDs).
       - alert: ChatimWebsocketDeliverySlow
         expr: histogram_quantile(0.99, sum by (le, instance) (rate(chatim_websocket_event_delivery_seconds_bucket[5m]))) > 0.1
         for: 5m
@@ -180,10 +180,117 @@ groups:
           severity: warning
         annotations:
           summary: More than 1000 running connections of a websocket node went back to waiting on an expired token in 10m; clients are not renewing tokens in time. The threshold depends on the user count of the node.
-      - alert: ChatimGatewayCoreUnavailable
+      - alert: ChatimGatewayChatUnavailable
         expr: sum(rate(chatim_gateway_commands_total{code="Unavailable"}[5m])) / sum(rate(chatim_gateway_commands_total[5m])) > 0.05
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: More than 5% of gateway commands end Unavailable; core is down, overloaded or unreachable from the gateway.
+          summary: More than 5% of gateway commands end Unavailable; chat is down, overloaded, unreachable from the gateway, or no live chat node is left in the node table.
+  - name: chatim-identity-health
+    rules:
+      - alert: ChatimIdentityNoSigningKey
+        expr: min(chatim_identity_signing_key_ready) == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: An identity node has no active signing key, so it cannot issue chat tokens and the token exchange answers 503; run key-rotate -activate-if-none, or check IDENTITY_KEY_ENCRYPTION_KEY.
+      - alert: ChatimIdentityStoreErrors
+        expr: sum(rate(chatim_identity_store_errors_total[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: identity has been getting MongoDB errors for 5m; just-in-time user writes fail, so token exchanges that need one answer 503.
+      - alert: ChatimIdentityExchangeErrors
+        expr: sum(increase(chatim_identity_exchanges_total{result="error"}[5m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: The identity token exchange answered 503 in the last 5m because a node had no signing key, its directory was not loaded yet, or MongoDB failed a just-in-time user write.
+      - alert: ChatimIdentityTrustStale
+        expr: max by (instance) (increase(chatim_identity_trust_reload_errors_total[1m])) > 0
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: For 3 minutes an identity replica has failed to reload trusted issuers and keys or holds a trusted key it cannot use; while reloads fail, a tenant key just removed still works for the token exchange on that replica.
+  - name: chatim-identity-sync
+    rules:
+      - alert: ChatimIdentitySyncStale
+        expr: |
+          max by (instance) (chatim_websocket_identity_revocations_age_seconds) > 30
+          or
+          max by (instance) (chatim_gateway_identity_revocations_age_seconds) > 30
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: A websocket or gateway node has not refreshed the identity revocation list from identity or the shared redis copy for over 30s; tokens revoked since then still work on that node until they expire.
+      - alert: ChatimIdentityKeysStale
+        expr: |
+          max by (instance) (chatim_websocket_identity_keys_age_seconds) > 180
+          or
+          max by (instance) (chatim_gateway_identity_keys_age_seconds) > 180
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: A websocket or gateway node has not fetched the identity JWKS for over 3 minutes; tokens signed by a newly activated key are refused there.
+      - alert: ChatimIdentityRefused
+        expr: max by (instance) (chatim_websocket_identity_refused) > 0 or max by (instance) (chatim_gateway_identity_refused) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: identity answers a websocket or gateway node with 4xx (wrong node secret or identity url); the node stays not ready. Check *_IDENTITY_SECRET, *_IDENTITY_INTERNAL_URL and *_IDENTITY_JWKS_URL against identity.
+      - alert: ChatimJwksConflict
+        expr: sum by (instance) (increase(chatim_websocket_jwks_conflicts_total[10m])) > 0 or sum by (instance) (increase(chatim_gateway_jwks_conflicts_total[10m])) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: identity published a key whose kid the node key file holds with a different key; the identity key is ignored there. Check the JWKS file and the identity signing keys.
+  - name: chatim-identity-directory
+    rules:
+      - alert: ChatimIdentityDirectoryNotReady
+        expr: min by (instance) (chatim_identity_directory_ready) == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: An identity replica has not loaded the directory into memory for over 1m, so it stays not ready and serves nothing; MongoDB is down or unreachable, or every load slot is held. Check chatim_identity_directory_load_failures_total and the identity log.
+      - alert: ChatimIdentityDirectoryStale
+        expr: max by (instance) (chatim_identity_directory_lag_seconds) > 30
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: An identity replica has not caught up with the directory change stream for over 30s; GetUsers there returns old names and groups, and sessions revoked since then can still read the directory until the next periodic revocation reload. MongoDB is unreachable from that replica or its change stream keeps failing.
+      - alert: ChatimIdentityDirectoryStreamDown
+        expr: min by (instance) (chatim_identity_directory_stream_up) == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: An identity replica has had no MongoDB change stream for 2m; name changes, user disables, trusted key changes and revocations stop reaching that replica at once; trusted keys and the revocation list still arrive through the periodic reload every IDENTITY_TRUST_RELOAD, names and disables wait for the stream. Check MongoDB and that the Mongo user identity can open a changeStream on chatim_identity.
+      - alert: ChatimIdentityMemoryHigh
+        expr: |
+          (
+            go_memstats_heap_inuse_bytes > 0.8 * go_gc_gomemlimit_bytes
+            and
+            go_gc_gomemlimit_bytes < 9e18
+          )
+          and on (instance, job) chatim_identity_memory_limit_set
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: An identity replica has used over 80% of GOMEMLIMIT for 5m; the directory has grown past what the pod was sized for. Raise the pod memory and GOMEMLIMIT together.
+      - alert: ChatimIdentityMemoryLimitUnset
+        expr: min by (instance) (chatim_identity_memory_limit_set) == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: An identity replica runs without GOMEMLIMIT, so the directory in memory can push it into an OOM kill without the GC trying to hold back first. Set GOMEMLIMIT to about 90% of the pod memory limit.

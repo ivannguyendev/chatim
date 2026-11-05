@@ -10,7 +10,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -21,12 +21,12 @@ func expiredTokenError(t *testing.T) error {
 		t.Fatalf("generate key: %v", err)
 	}
 	jwks := fmt.Sprintf(`{"keys":[{"kty":"OKP","crv":"Ed25519","kid":"k1","x":%q}]}`, base64.RawURLEncoding.EncodeToString(public))
-	verifier, err := jwtverify.New(jwtverify.Config{JWKS: []byte(jwks), Issuer: "issuer", Audience: "audience"})
+	verifier, err := auth.NewVerifier(auth.VerifierConfig{JWKS: []byte(jwks), Issuer: "issuer", Audience: "audience"})
 	if err != nil {
 		t.Fatalf("verifier: %v", err)
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{
-		"iss": "issuer", "aud": "audience", "sub": "u1", "tid": "t1",
+		"iss": "issuer", "aud": "audience", "sub": "u1", "tid": "t1", "sid": "s1",
 		"iat": time.Now().Add(-2 * time.Hour).Unix(), "exp": time.Now().Add(-time.Hour).Unix(),
 	})
 	token.Header["kid"] = "k1"
@@ -35,7 +35,7 @@ func expiredTokenError(t *testing.T) error {
 		t.Fatalf("sign: %v", err)
 	}
 	_, err = verifier.Verify(signed)
-	if jwtverify.ReasonOf(err) != jwtverify.ReasonExpired {
+	if auth.ReasonOf(err) != auth.ReasonExpired {
 		t.Fatalf("expected an expired token error, got %v", err)
 	}
 	return err

@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/pkg/metrics"
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/pkg/wstest"
 )
@@ -143,18 +143,21 @@ func TestNewRejectsInvalidOptions(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			opts := testOptions()
 			mutate(&opts)
-			if _, err := New(opts, newFakeVerifier(t), newFakeCore(), newTestInterest(t), newTestTyping(t, newTestInterest(t)), &fakePresence{}, slog.New(slog.DiscardHandler)); err == nil {
+			if _, err := New(opts, newFakeVerifier(t), newFakeRevocations(t), newFakeChat(), newTestInterest(t), newTestTyping(t, newTestInterest(t)), &fakePresence{}, slog.New(slog.DiscardHandler)); err == nil {
 				t.Fatal("New accepted invalid options")
 			}
 		})
 	}
-	if _, err := New(testOptions(), nil, newFakeCore(), newTestInterest(t), newTestTyping(t, newTestInterest(t)), &fakePresence{}, slog.New(slog.DiscardHandler)); err == nil {
+	if _, err := New(testOptions(), newFakeVerifier(t), nil, newFakeChat(), newTestInterest(t), newTestTyping(t, newTestInterest(t)), &fakePresence{}, slog.New(slog.DiscardHandler)); err == nil {
+		t.Fatal("New accepted nil revocations")
+	}
+	if _, err := New(testOptions(), nil, newFakeRevocations(t), newFakeChat(), newTestInterest(t), newTestTyping(t, newTestInterest(t)), &fakePresence{}, slog.New(slog.DiscardHandler)); err == nil {
 		t.Fatal("New accepted a nil verifier")
 	}
-	if _, err := New(testOptions(), newFakeVerifier(t), newFakeCore(), nil, newTestTyping(t, newTestInterest(t)), &fakePresence{}, slog.New(slog.DiscardHandler)); err == nil {
+	if _, err := New(testOptions(), newFakeVerifier(t), newFakeRevocations(t), newFakeChat(), nil, newTestTyping(t, newTestInterest(t)), &fakePresence{}, slog.New(slog.DiscardHandler)); err == nil {
 		t.Fatal("New accepted a nil interest")
 	}
-	if _, err := New(testOptions(), newFakeVerifier(t), newFakeCore(), newTestInterest(t), nil, &fakePresence{}, slog.New(slog.DiscardHandler)); err == nil {
+	if _, err := New(testOptions(), newFakeVerifier(t), newFakeRevocations(t), newFakeChat(), newTestInterest(t), nil, &fakePresence{}, slog.New(slog.DiscardHandler)); err == nil {
 		t.Fatal("New accepted a nil typing service")
 	}
 }
@@ -189,7 +192,7 @@ func TestSourcesExposeEveryCounterWithFixedLabels(t *testing.T) {
 	if read("commands_rejected_total", "reason", "inflight") != 1 {
 		t.Fatal("rejection counter wrong")
 	}
-	if _, err := metrics.Handler("websocket", h.server.Sources()); err != nil {
+	if _, err := metrics.Handler("chatim", "websocket", h.server.Sources()); err != nil {
 		t.Fatalf("sources do not register: %v", err)
 	}
 }

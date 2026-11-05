@@ -13,18 +13,20 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/reflect/protoregistry"
 
-	"github.com/ivannguyendev/chatim/apps/gateway/internal/limit"
-	"github.com/ivannguyendev/chatim/pkg/corecall"
-	"github.com/ivannguyendev/chatim/pkg/metrics"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
+	"github.com/ivannguyendev/chatim/pkg/core/httpcors"
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
+	"github.com/ivannguyendev/chatim/pkg/core/userlimit"
 )
 
 const msgNotSupported = "request not supported"
 
 type Options struct {
-	Forwarder   *corecall.Forwarder
+	Forwarder   *chatrpc.Forwarder
 	Verifier    Verifier
-	Gate        *limit.Gate
-	Users       *limit.Users
+	Revocations Revocations
+	Gate        *userlimit.Gate
+	Users       *userlimit.Users
 	BodyMax     int
 	CORSOrigins []string
 	Log         *slog.Logger
@@ -36,33 +38,38 @@ type Handler struct {
 }
 
 func New(opts Options) (*Handler, error) {
-	if opts.Forwarder == nil || opts.Verifier == nil || opts.Gate == nil || opts.Users == nil || opts.Log == nil {
-		return nil, errors.New("api: forwarder, verifier, gate, users and log are required")
+	if opts.Forwarder == nil || opts.Verifier == nil || opts.Revocations == nil || opts.Gate == nil || opts.Users == nil || opts.Log == nil {
+		return nil, errors.New("api: forwarder, verifier, revocations, gate, users and log are required")
 	}
 	if opts.BodyMax <= 0 {
 		return nil, errors.New("api: body max must be positive")
 	}
 	st := newStats(opts.Gate.InFlight)
 	c := &chain{
-		verifier: opts.Verifier,
-		gate:     opts.Gate,
-		users:    opts.Users,
-		bodyMax:  int64(opts.BodyMax),
-		stats:    st,
-		log:      opts.Log,
-		authLog:  rate.NewLimiter(rate.Every(time.Second), 1),
+		verifier:    opts.Verifier,
+		revocations: opts.Revocations,
+		gate:        opts.Gate,
+		users:       opts.Users,
+		bodyMax:     int64(opts.BodyMax),
+		stats:       st,
+		log:         opts.Log,
+		authLog:     rate.NewLimiter(rate.Every(time.Second), 1),
 	}
 	mux, err := c.procedures(opts.Forwarder, opts.BodyMax)
 	if err != nil {
 		return nil, err
 	}
 	inner := c.gated(c.authenticated(c.limited(c.measured(mux))))
-	return &Handler{Handler: cors{origins: opts.CORSOrigins, next: inner}, stats: st}, nil
+	return &Handler{Handler: httpcors.New(httpcors.Config{
+		Origins:       opts.CORSOrigins,
+		AllowHeaders:  []string{"Authorization", "Content-Type", "Connect-Protocol-Version", "Connect-Timeout-Ms"},
+		ExposeHeaders: []string{"Grpc-Status", "Grpc-Message", "Grpc-Status-Details-Bin"},
+	}, inner), stats: st}, nil
 }
 
 func (h *Handler) Sources() []metrics.Source { return h.stats.sources() }
 
-func (c *chain) procedures(fwd *corecall.Forwarder, bodyMax int) (*http.ServeMux, error) {
+func (c *chain) procedures(fwd *chatrpc.Forwarder, bodyMax int) (*http.ServeMux, error) {
 	mux := http.NewServeMux()
 	for _, cmd := range fwd.Commands() {
 		mt, err := protoregistry.GlobalTypes.FindMessageByName(cmd.Request.FullName())
@@ -84,7 +91,7 @@ func (c *chain) procedures(fwd *corecall.Forwarder, bodyMax int) (*http.ServeMux
 	return mux, nil
 }
 
-func forward(fwd *corecall.Forwarder, method string) func(context.Context, *connect.Request[envelope]) (*connect.Response[envelope], error) {
+func forward(fwd *chatrpc.Forwarder, method string) func(context.Context, *connect.Request[envelope]) (*connect.Response[envelope], error) {
 	return func(ctx context.Context, req *connect.Request[envelope]) (*connect.Response[envelope], error) {
 		claims, ok := ClaimsFrom(ctx)
 		if !ok {

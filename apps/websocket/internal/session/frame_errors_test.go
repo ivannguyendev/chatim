@@ -141,8 +141,8 @@ func TestATextFloodIsBoundedByTheSharedLimiter(t *testing.T) {
 		if resp := tc.next(); resp.GetCode() == 0 {
 			t.Fatalf("a request after the flood was answered with %v", resp)
 		}
-		if h.core.calls.Load() != 0 || !tc.isOpen() {
-			t.Fatalf("core calls %d open %v", h.core.calls.Load(), tc.isOpen())
+		if h.chat.calls.Load() != 0 || !tc.isOpen() {
+			t.Fatalf("chat calls %d open %v", h.chat.calls.Load(), tc.isOpen())
 		}
 		tc.close()
 	})

@@ -1,0 +1,198 @@
+package config_test
+
+import (
+	"slices"
+	"strconv"
+	"strings"
+	"testing"
+
+	"github.com/ivannguyendev/chatim/apps/chat/internal/config"
+	"github.com/ivannguyendev/chatim/apps/chat/internal/model/domain"
+)
+
+func TestLoadJoinsAllParseErrors(t *testing.T) {
+	setEnv(t, map[string]string{
+		"REDIS_DB": "x", "FLUSH_WINDOW": "fast", "FLUSH_SHARDS": "four", "CHAT_GRPC_SHUTDOWN": "10",
+		"PUB_QUEUE": "many", "SLOT_TICK": "1", "CID_PENDING_TTL": "ten", "CHAT_GRPC_ADDR": "9000",
+	})
+	_, err := config.Load()
+	if err == nil {
+		t.Fatal("Load() = nil, want parse errors")
+	}
+	for _, key := range []string{"REDIS_DB", "FLUSH_WINDOW", "FLUSH_SHARDS", "CHAT_GRPC_SHUTDOWN", "PUB_QUEUE", "SLOT_TICK", "CID_PENDING_TTL", "CHAT_GRPC_ADDR"} {
+		if !strings.Contains(err.Error(), key) {
+			t.Errorf("Load() error %q does not mention %s", err, key)
+		}
+	}
+}
+
+func TestLoadRejectsNonPositiveValues(t *testing.T) {
+	tests := []struct{ key, value string }{
+		{"REDIS_DB", "-1"},
+		{"REDIS_DEDUPE_DB", "-1"},
+		{"CHAT_MAX_INFLIGHT", "0"},
+		{"CHAT_REQUEST_DEADLINE", "0s"},
+		{"CHAT_SLOW_RPC", "0s"},
+		{"CHAT_CONNECT_TIMEOUT", "-1s"},
+		{"CHAT_QUEUE_WAIT", "0s"},
+		{"CHAT_DRAIN_DELAY", "0s"},
+		{"CHAT_GRPC_SHUTDOWN", "0s"},
+		{"CHAT_PUBLISHER_DRAIN", "0s"},
+		{"CHAT_SHUTDOWN_BUDGET", "0s"},
+		{"FLUSH_SHARDS", "-1"},
+		{"FLUSH_MAX_BATCH", "0"},
+		{"FLUSH_QUEUE", "0"},
+		{"FLUSH_WINDOW", "0s"},
+		{"FLUSH_INSERT_TIMEOUT", "0s"},
+		{"ACTOR_MAILBOX", "0"},
+		{"ACTOR_IDLE", "-1s"},
+		{"ACTOR_MAX_GROUP", "0"},
+		{"ACTOR_MAX", "0"},
+		{"MENTION_TARGETS_MAX", "0"},
+		{"MENTION_TARGETS_MAX", "-1"},
+		{"CID_PENDING_TTL", "0s"},
+		{"CID_COMMITTED_TTL", "0s"},
+		{"REDIS_OP_TIMEOUT", "0s"},
+		{"REDIS_COOLDOWN", "0s"},
+		{"PUB_SHARDS", "0"},
+		{"PUB_QUEUE", "0"},
+		{"PUB_MAX_PENDING", "0"},
+		{"PUB_ACK_TIMEOUT", "0s"},
+		{"EVT_STREAM_REPLICAS", "0"},
+		{"EVT_STREAM_MAX_AGE", "0s"},
+		{"EVT_STREAM_DUPLICATES", "0s"},
+		{"SLOT_TICK", "0s"},
+		{"SLOT_HEARTBEAT_TTL", "0s"},
+		{"SLOT_LEASE_TTL", "0s"},
+		{"SLOT_HOOK_TIMEOUT", "0s"},
+		{"PIN_LIMIT", "0"},
+		{"MEMBER_COUNT_CHECK_DELAY", "0s"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.key, func(t *testing.T) {
+			setEnv(t, map[string]string{tt.key: tt.value})
+			_, err := config.Load()
+			if err == nil || !strings.Contains(err.Error(), tt.key) {
+				t.Fatalf("Load() with %s=%s = %v, want an error naming %s", tt.key, tt.value, err, tt.key)
+			}
+		})
+	}
+}
+
+func TestLoadReadsLockedMessageKinds(t *testing.T) {
+	tests := []struct {
+		value string
+		want  []domain.Kind
+	}{
+		{"", nil},
+		{" text , ", []domain.Kind{domain.KindText}},
+		{",text,,text", []domain.Kind{domain.KindText, domain.KindText}},
+	}
+	for _, tt := range tests {
+		setEnv(t, map[string]string{"MESSAGE_LOCKED_KINDS": tt.value})
+		got, err := config.Load()
+		if err != nil || !slices.Equal(got.LockedMessageKinds, tt.want) {
+			t.Fatalf("MESSAGE_LOCKED_KINDS=%q gives %v, %v; want %v", tt.value, got.LockedMessageKinds, err, tt.want)
+		}
+	}
+}
+
+func TestLoadRejectsAnUnknownLockedMessageKind(t *testing.T) {
+	setEnv(t, map[string]string{"MESSAGE_LOCKED_KINDS": "text,nope"})
+	_, err := config.Load()
+	if err == nil || !strings.Contains(err.Error(), "MESSAGE_LOCKED_KINDS") || !strings.Contains(err.Error(), "nope") {
+		t.Fatalf("Load() = %v, want an error naming MESSAGE_LOCKED_KINDS and nope", err)
+	}
+}
+
+func TestLoadReadsMentionHideReadTenants(t *testing.T) {
+	tests := []struct {
+		value string
+		want  []string
+	}{
+		{"", nil},
+		{" acme , ", []string{"acme"}},
+		{"acme,globex-2", []string{"acme", "globex-2"}},
+	}
+	for _, tt := range tests {
+		setEnv(t, map[string]string{"MENTION_HIDE_READ_TENANTS": tt.value})
+		got, err := config.Load()
+		if err != nil || !slices.Equal(got.Mention.HideReadTenants, tt.want) {
+			t.Fatalf("MENTION_HIDE_READ_TENANTS=%q gives %v, %v; want %v", tt.value, got.Mention.HideReadTenants, err, tt.want)
+		}
+	}
+}
+
+func TestLoadRejectsABadMentionHideReadTenant(t *testing.T) {
+	for _, value := range []string{"acme,Bad Tenant", "acme," + strings.Repeat("a", 33)} {
+		setEnv(t, map[string]string{"MENTION_HIDE_READ_TENANTS": value})
+		_, err := config.Load()
+		if err == nil || !strings.Contains(err.Error(), "MENTION_HIDE_READ_TENANTS") {
+			t.Fatalf("MENTION_HIDE_READ_TENANTS=%q: Load() = %v, want an error naming the key", value, err)
+		}
+	}
+}
+
+func TestLoadReadsReactionEmojis(t *testing.T) {
+	tests := []struct {
+		value string
+		want  []string
+	}{
+		{"", []string{"👍", "❤️", "😂", "😮", "😢", "🙏"}},
+		{" , ", []string{"👍", "❤️", "😂", "😮", "😢", "🙏"}},
+		{" 🎉 , 👍 ,", []string{"🎉", "👍"}},
+	}
+	for _, tt := range tests {
+		setEnv(t, map[string]string{"REACTION_EMOJIS": tt.value})
+		got, err := config.Load()
+		if err != nil || !slices.Equal(got.Interactions.Emojis, tt.want) {
+			t.Fatalf("REACTION_EMOJIS=%q gives %q, %v; want %q", tt.value, got.Interactions.Emojis, err, tt.want)
+		}
+	}
+}
+
+func TestLoadRejectsBadReactionEmojis(t *testing.T) {
+	var many []string
+	for i := range 101 {
+		many = append(many, "e"+strconv.Itoa(i))
+	}
+	tests := []struct {
+		value, bad string
+	}{
+		{"👍,❤️,👍", "👍"},
+		{"👍," + strings.Repeat("x", 33), strings.Repeat("x", 33)},
+		{strings.Join(many, ","), "101"},
+	}
+	for _, tt := range tests {
+		setEnv(t, map[string]string{"REACTION_EMOJIS": tt.value})
+		_, err := config.Load()
+		if err == nil || !strings.Contains(err.Error(), "REACTION_EMOJIS") || !strings.Contains(err.Error(), tt.bad) {
+			t.Fatalf("REACTION_EMOJIS=%q: Load() = %v, want an error naming REACTION_EMOJIS and %q", tt.value, err, tt.bad)
+		}
+	}
+	setEnv(t, map[string]string{"REACTION_EMOJIS": strings.Join(many[:100], ",")})
+	if _, err := config.Load(); err != nil {
+		t.Fatalf("100 emojis: Load() = %v, want nil", err)
+	}
+}
+
+func TestMemberBatchMaxDefaultsAndBounds(t *testing.T) {
+	setEnv(t, nil)
+	got, err := config.Load()
+	if err != nil || got.Members.MemberBatch != 500 {
+		t.Fatalf("default MEMBER_BATCH_MAX = %d, %v; want 500", got.Members.MemberBatch, err)
+	}
+	for _, value := range []string{"0", "1", "1001", "-3"} {
+		setEnv(t, map[string]string{"MEMBER_BATCH_MAX": value})
+		if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "MEMBER_BATCH_MAX") {
+			t.Fatalf("MEMBER_BATCH_MAX=%s: Load() = %v, want an error naming MEMBER_BATCH_MAX", value, err)
+		}
+	}
+	for _, want := range []int{2, 1000} {
+		setEnv(t, map[string]string{"MEMBER_BATCH_MAX": strconv.Itoa(want)})
+		got, err := config.Load()
+		if err != nil || got.Members.MemberBatch != want {
+			t.Fatalf("MEMBER_BATCH_MAX=%d gives %d, %v; want it accepted", want, got.Members.MemberBatch, err)
+		}
+	}
+}

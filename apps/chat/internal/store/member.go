@@ -1,0 +1,88 @@
+package store
+
+import (
+	"context"
+	"time"
+
+	"github.com/ivannguyendev/chatim/apps/chat/internal/model/domain"
+)
+
+const MaxMemberScan = 1000
+
+type MemberRoom struct {
+	Room      uint64
+	JoinedAt  time.Time
+	ClearedAt time.Time
+	ReadSeq   uint64
+}
+
+type RoomVersion struct {
+	Room uint64
+	Ver  uint32
+	Left bool
+}
+
+type JoinResult struct {
+	Members []domain.Member
+	Changed int
+}
+
+type MemberWriter interface {
+	AddMembers(ctx context.Context, j domain.Join, users []string) (JoinResult, error)
+	ApplyMember(ctx context.Context, cur, next domain.Member) (bool, error)
+}
+
+type MemberReader interface {
+	MembersOf(ctx context.Context, room uint64, users []string) ([]domain.Member, error)
+	MembersBetween(ctx context.Context, room uint64, from, to time.Time, limit int) ([]domain.Member, error)
+	RoomsOf(ctx context.Context, tenant, user string) ([]MemberRoom, error)
+	RoomVersionsOf(ctx context.Context, tenant, user string) ([]RoomVersion, error)
+	ListMembers(ctx context.Context, room uint64, after MemberCursor, limit int) ([]domain.Member, error)
+}
+
+type OwnerView struct {
+	OwnersVer  uint64
+	Docs       []domain.Member
+	Owners     []domain.Member
+	Candidates []domain.Member
+}
+
+type MemberWrite struct {
+	Cur, Next domain.Member
+}
+
+type OwnerDecision func(OwnerView) ([]MemberWrite, error)
+
+type OwnerResult struct {
+	Written      []domain.Member
+	Count        domain.MemberCount
+	CountChanged bool
+}
+
+type OwnerChanges interface {
+	ChangeOwners(ctx context.Context, room uint64, users []string, decide OwnerDecision) (OwnerResult, error)
+}
+
+type MemberCounts interface {
+	AddMemberCount(ctx context.Context, room uint64, delta int) (domain.MemberCount, error)
+	CountMembers(ctx context.Context, room uint64) (int, error)
+	SetMemberCount(ctx context.Context, room, base uint64, count int) (domain.MemberCount, bool, error)
+}
+
+type ReadPositions interface {
+	MarkRead(ctx context.Context, room uint64, user string, seq uint64) (domain.ReadPosition, bool, error)
+	MarkUnread(ctx context.Context, room uint64, user string, to uint64) (domain.ReadPosition, bool, error)
+}
+
+func MemberCountDelta(writes []MemberWrite) int {
+	delta := 0
+	for _, w := range writes {
+		switch {
+		case w.Cur.Active() && !w.Next.Active():
+			delta--
+		case !w.Cur.Active() && w.Next.Active():
+			delta++
+		}
+	}
+	return delta
+}

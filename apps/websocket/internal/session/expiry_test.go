@@ -8,7 +8,7 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/interest"
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 )
 
 func TestExpiryStopsDeliveryUntilANewTokenGivesReady(t *testing.T) {
@@ -75,12 +75,12 @@ func TestExpiryClearsTheWatchListAndDropsAnAnswerInFlight(t *testing.T) {
 func TestCommandQueuedBeforeExpiryRunsWithTheClaimsItArrivedWith(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		h := newHarness(t, testOptions())
-		hold := h.core.hold(1)
+		hold := h.chat.hold(1)
 		original := time.Now().Add(time.Minute)
 		tc := h.readyClientWith(h.token("u1", time.Minute))
 		tc.send(1, "88")
 		tc.send(2, "88")
-		claims := <-h.core.claims
+		claims := <-h.chat.claims
 		tc.keepAlive(10*time.Second, 80*time.Second)
 		tc.expectAuthRequired(promptExpired)
 		tc.history(3)
@@ -93,14 +93,14 @@ func TestCommandQueuedBeforeExpiryRunsWithTheClaimsItArrivedWith(t *testing.T) {
 				t.Fatalf("queued response = %v", resp)
 			}
 		}
-		second := <-h.core.claims
-		for _, c := range []jwtverify.Claims{claims, second} {
+		second := <-h.chat.claims
+		for _, c := range []auth.Claims{claims, second} {
 			if c.User != "u1" || !c.ExpiresAt.Equal(original) {
 				t.Fatalf("claims = %+v, want u1 expiring %v", c, original)
 			}
 		}
-		if h.core.calls.Load() != 2 {
-			t.Fatalf("core calls = %d, want 2", h.core.calls.Load())
+		if h.chat.calls.Load() != 2 {
+			t.Fatalf("chat calls = %d, want 2", h.chat.calls.Load())
 		}
 		tc.close()
 	})

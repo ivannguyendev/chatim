@@ -5,44 +5,26 @@ import (
 	"log/slog"
 	"sync"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/connectivity"
-
-	"github.com/ivannguyendev/chatim/pkg/admin"
+	"github.com/ivannguyendev/chatim/pkg/core/admin"
 )
 
 type readiness struct {
 	admin    *admin.Server
 	log      *slog.Logger
 	mu       sync.Mutex
-	core     bool
+	ready    bool
 	stopping bool
 }
 
-func (r *readiness) watch(ctx context.Context, conn *grpc.ClientConn) {
-	conn.Connect()
-	for {
-		state := conn.GetState()
-		r.coreReady(ctx, state == connectivity.Ready)
-		if !conn.WaitForStateChange(ctx, state) {
-			return
-		}
-	}
-}
-
-func (r *readiness) coreReady(ctx context.Context, ready bool) {
+func (r *readiness) identityBooted(ctx context.Context) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.stopping || ready == r.core {
+	if r.stopping || r.ready {
 		return
 	}
-	r.core = ready
-	r.admin.SetReady(ready)
-	if ready {
-		r.log.InfoContext(ctx, "gateway ready")
-	} else {
-		r.log.WarnContext(ctx, "gateway not ready: no core connection is ready")
-	}
+	r.ready = true
+	r.admin.SetReady(true)
+	r.log.InfoContext(ctx, "gateway ready")
 }
 
 func (r *readiness) stop() {

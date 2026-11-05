@@ -6,7 +6,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/ivannguyendev/chatim/pkg/callerid"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/tools/poc/internal/latency"
 )
@@ -24,7 +24,7 @@ type cell struct {
 }
 
 type meter struct {
-	api     chatimv1.CoreServiceClient
+	api     chatimv1.ChatServiceClient
 	probe   *mongoProbe
 	metrics string
 	tenant  string
@@ -58,7 +58,7 @@ func (m *meter) call(ctx context.Context, key, user, next string) (*chatimv1.Lis
 		return nil, err
 	}
 	started := time.Now()
-	resp, err := m.api.ListMyRooms(callerid.WithCaller(ctx, m.tenant, user), &chatimv1.ListMyRoomsRequest{Folder: chatimv1.RoomFolder_ROOM_FOLDER_MAIN, Next: next, Limit: m.page})
+	resp, err := m.api.ListMyRooms(chatrpc.WithCaller(ctx, m.tenant, user), &chatimv1.ListMyRoomsRequest{Folder: chatimv1.RoomFolder_ROOM_FOLDER_MAIN, Next: next, Limit: m.page})
 	took := time.Since(started)
 	if err != nil {
 		return nil, fmt.Errorf("ListMyRooms %s for %s: %w", key, user, err)

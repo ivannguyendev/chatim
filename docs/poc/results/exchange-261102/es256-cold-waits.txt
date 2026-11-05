@@ -1,0 +1,40 @@
+== 1793611238
+idle|Client|ClientRead|INSERT INTO users (tenant_id, |13
+idle|Client|ClientRead|SELECT id, sessions_revoked_at|2
+idle|Client|ClientRead|SELECT issuer, key_id, algorit|2
+idle|Client|ClientRead|WITH horizon AS ( SELECT pg_sn|1
+idle|Client|ClientRead|LISTEN identity_changes|1
+idle|Client|ClientRead|DELETE FROM revoked_sessions W|1
+active|CPU|-|WITH horizon AS ( SELECT pg_sn|1
+== 1793611241
+active|Lock|object|INSERT INTO users (tenant_id, |18
+active|IO|WalSync|INSERT INTO users (tenant_id, |1
+idle|Client|ClientRead|INSERT INTO users (tenant_id, |1
+idle|Client|ClientRead|LISTEN identity_changes|1
+== 1793611243
+active|Lock|object|INSERT INTO users (tenant_id, |18
+active|IO|WalSync|INSERT INTO users (tenant_id, |1
+idle|Client|ClientRead|INSERT INTO users (tenant_id, |1
+idle|CPU|-|LISTEN identity_changes|1
+== 1793611245
+active|Lock|object|INSERT INTO users (tenant_id, |18
+active|CPU|-|INSERT INTO users (tenant_id, |1
+active|IO|WalSync|INSERT INTO users (tenant_id, |1
+idle|Client|ClientRead|LISTEN identity_changes|1
+== 1793611247
+active|Lock|object|INSERT INTO users (tenant_id, |19
+active|IO|WalSync|INSERT INTO users (tenant_id, |1
+idle|Client|ClientRead|LISTEN identity_changes|1
+== 1793611249
+active|Lock|object|INSERT INTO users (tenant_id, |19
+active|IO|WalSync|INSERT INTO users (tenant_id, |1
+idle|Client|ClientRead|LISTEN identity_changes|1
+== 1793611251
+active|Lock|object|INSERT INTO users (tenant_id, |19
+active|IO|WalSync|INSERT INTO users (tenant_id, |1
+idle|Client|ClientRead|LISTEN identity_changes|1
+== 1793611254
+active|Lock|object|INSERT INTO users (tenant_id, |19
+active|IO|WalSync|INSERT INTO users (tenant_id, |1
+idle|Client|ClientRead|LISTEN identity_changes|1
+== 1793611256

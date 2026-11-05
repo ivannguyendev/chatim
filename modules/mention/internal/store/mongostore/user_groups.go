@@ -12,7 +12,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/modules/mention/internal/domain"
 	"github.com/ivannguyendev/chatim/modules/mention/internal/store"
-	"github.com/ivannguyendev/chatim/pkg/mongobound"
+	"github.com/ivannguyendev/chatim/pkg/core/mongobound"
 )
 
 var _ store.UserGroups = (*UserGroups)(nil)

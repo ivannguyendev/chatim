@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/command"
-	"github.com/ivannguyendev/chatim/pkg/metrics"
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -67,9 +67,9 @@ func TestCommandCountersArePrebuiltForEveryPair(t *testing.T) {
 	}
 }
 
-func TestCoreCallLatencyCountsOnlyCoreCalls(t *testing.T) {
+func TestChatCallLatencyCountsOnlyChatCalls(t *testing.T) {
 	h := newHarness(t, time.Second)
-	latencies := h.exec.CoreCallLatency()
+	latencies := h.exec.ChatCallLatency()
 	if len(latencies) != 12 {
 		t.Fatalf("latencies = %d", len(latencies))
 	}

@@ -21,7 +21,7 @@ restore() {
   if [ -n "$killed" ]; then
     echo "restarting $node"
     docker start "$node" >/dev/null
-    "$scripts/wait-core-healthy.sh" "$node"
+    "$scripts/wait-healthy.sh" "$node"
   fi
 }
 trap restore EXIT
@@ -54,7 +54,7 @@ status=0
 wait "$tool" || status=$?
 tool=""
 docker start "$node" >/dev/null
-"$scripts/wait-core-healthy.sh" "$node"
+"$scripts/wait-healthy.sh" "$node"
 killed=""
 cat "$root/$out/summary.txt" 2>/dev/null || tail -n 20 "$log"
 exit "$status"

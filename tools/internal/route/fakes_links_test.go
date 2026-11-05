@@ -8,14 +8,14 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-func (f *fakeCore) SetBookmark(ctx context.Context, in *chatimv1.SetBookmarkRequest, _ ...grpc.CallOption) (*chatimv1.SetBookmarkResponse, error) {
+func (f *fakeChat) SetBookmark(ctx context.Context, in *chatimv1.SetBookmarkRequest, _ ...grpc.CallOption) (*chatimv1.SetBookmarkResponse, error) {
 	if err := f.record(ctx, in); err != nil {
 		return nil, err
 	}
 	return &chatimv1.SetBookmarkResponse{Changed: in.GetOn()}, nil
 }
 
-func (f *fakeCore) GetReplies(ctx context.Context, in *chatimv1.GetRepliesRequest, _ ...grpc.CallOption) (*chatimv1.GetRepliesResponse, error) {
+func (f *fakeChat) GetReplies(ctx context.Context, in *chatimv1.GetRepliesRequest, _ ...grpc.CallOption) (*chatimv1.GetRepliesResponse, error) {
 	if err := f.record(ctx, in); err != nil {
 		return nil, err
 	}
@@ -23,7 +23,7 @@ func (f *fakeCore) GetReplies(ctx context.Context, in *chatimv1.GetRepliesReques
 	return &chatimv1.GetRepliesResponse{Messages: []*chatimv1.Message{reply}, Next: in.GetSeq() + 1}, nil
 }
 
-func (f *fakeCore) ListBookmarks(ctx context.Context, in *chatimv1.ListBookmarksRequest, _ ...grpc.CallOption) (*chatimv1.ListBookmarksResponse, error) {
+func (f *fakeChat) ListBookmarks(ctx context.Context, in *chatimv1.ListBookmarksRequest, _ ...grpc.CallOption) (*chatimv1.ListBookmarksResponse, error) {
 	if err := f.record(ctx, in); err != nil {
 		return nil, err
 	}
@@ -31,7 +31,7 @@ func (f *fakeCore) ListBookmarks(ctx context.Context, in *chatimv1.ListBookmarks
 	return &chatimv1.ListBookmarksResponse{Items: []*chatimv1.BookmarkItem{item}, Next: "b1"}, nil
 }
 
-func (f *fakeCore) ListMentions(ctx context.Context, in *chatimv1.ListMentionsRequest, _ ...grpc.CallOption) (*chatimv1.ListMentionsResponse, error) {
+func (f *fakeChat) ListMentions(ctx context.Context, in *chatimv1.ListMentionsRequest, _ ...grpc.CallOption) (*chatimv1.ListMentionsResponse, error) {
 	if err := f.record(ctx, in); err != nil {
 		return nil, err
 	}

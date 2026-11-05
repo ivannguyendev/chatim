@@ -3,10 +3,10 @@ set -euo pipefail
 
 scripts="$(cd "$(dirname "$0")" && pwd)"
 network="${NETWORK:-chatim_default}"
-image="${CORECLI_IMAGE:-chatim/corecli:dev}"
+image="${CHATCLI_IMAGE:-chatim/chatcli:dev}"
 first="${E2E_FIRST:-40}"
 after="${E2E_AFTER:-40}"
-victim="${E2E_KILL:-core-1}"
+victim="${E2E_KILL:-chat-1}"
 watcher="chatim-e2e-watch-$$"
 ws_key="${WS_KEY:-$scripts/../.local/ws-keys/private.jwk}"
 ws_url="${WS_URL:-ws://chatim-websocket-1:8080/ws}"
@@ -15,8 +15,10 @@ ws2_url="${WS2_URL:-ws://chatim-websocket-2:8080/ws}"
 ws2_container="${WS2_CONTAINER:-chatim-websocket-2}"
 ws2_watcher="chatim-e2e-ws2-watch-$$"
 ws1_stopper="chatim-e2e-ws1-stop-$$"
+identity_watch="chatim-e2e-identity-watch-$$"
 gw_url="${GW_URL:-http://chatim-gateway-1:8080}"
 gw_container="${GW_CONTAINER:-chatim-gateway-1}"
+identity_container="${IDENTITY_CONTAINER:-chatim-identity-1}"
 state="$(mktemp -d "${TMPDIR:-/tmp}/chatim-e2e.XXXXXX")"
 killed=""
 ws2_killed=""
@@ -32,7 +34,7 @@ restore() {
   if [ -n "$killed" ]; then
     echo "restore: docker start chatim-$killed"
     docker start "chatim-$killed" >/dev/null
-    "$scripts/wait-core-healthy.sh" "chatim-$killed"
+    "$scripts/wait-healthy.sh" "chatim-$killed"
     killed=""
   fi
 }
@@ -41,7 +43,7 @@ restore_ws2() {
   if [ -n "$ws2_killed" ]; then
     echo "restore: docker start $ws2_container"
     docker start "$ws2_container" >/dev/null
-    "$scripts/wait-core-healthy.sh" "$ws2_container"
+    "$scripts/wait-healthy.sh" "$ws2_container"
     ws2_killed=""
   fi
 }
@@ -50,14 +52,14 @@ restore_ws1() {
   if [ -n "$ws1_stopped" ]; then
     echo "restore: docker start $ws_container"
     docker start "$ws_container" >/dev/null
-    "$scripts/wait-core-healthy.sh" "$ws_container"
+    "$scripts/wait-healthy.sh" "$ws_container"
     ws1_stopped=""
   fi
 }
 
 finish() {
   set +e
-  docker rm -f "$watcher" "$ws2_watcher" "$ws1_stopper" >/dev/null 2>&1
+  docker rm -f "$watcher" "$ws2_watcher" "$ws1_stopper" "$identity_watch" >/dev/null 2>&1
   if [ -n "$killed" ]; then
     restore || result=FAIL
   fi
@@ -68,8 +70,12 @@ finish() {
     restore_ws1 || result=FAIL
   fi
   rm -rf "$state"
+  if [ "$result" = PASS ] && [ -n "${E2E_ONLY:-}" ]; then
+    echo "e2e PASS: phase $E2E_ONLY only"
+    exit 0
+  fi
   if [ "$result" = PASS ]; then
-    echo "e2e PASS: $first messages before and $after after killing $victim, no loss, no duplicate, every acked seq live; seq 1 edited and seq 2 deleted on history, edit history and live; seq 3 reacted with the first then the second emoji from GetReactionSettings and an unlisted emoji refused, seq 4 pinned, on replies, history and live; members added, promoted, removed and refused, read positions, hide and clear, the last owner leaving and coming back, on replies, history and live room, member and message subjects; a direct room opened twice into one room, replies counted and listed, the parent kept while replied, mentions of a user, a group and @all listed, a forward and a bookmark, on replies, lists and live; a system message from a non-member raising unread and one with skip_unread not, the room list ordered and counted after sends, reads, a delete and a hide, pinned first, archived apart, paged by cursor, refreshed by GetRooms and renamed live, history around a seq, messages by seq, threads, reactors, pins newest first, members owner first and a forward keeping skip_unread and meta; Mention App groups set and moved, @group notifying only its current members in the room and never the sender, an inactive group notifying and listing nobody, an edit adding then dropping a user notified then retracted and listed then gone, a delete retracting, @all notifying every other member, room groups with names and an older user group list ignored; through the websocket a dev token connecting, a send, an edit, a reaction and a bookmark, with history and bookmarks read through the gateway matching gRPC, a system message refused, an unknown key answered auth_required INVALID and an expired token auth_required EXPIRED with the connection kept open, a silent connection closed 1000 after the heartbeat timeout, two users on the websocket hearing a new group at once, messages without duplicate or gap, reactions only with the room open, nothing of the other user's hides and bookmarks, one notification each for @user and @all, a read position reaching the viewer and the reader's other device but not a member without the room open, member_removed then room_closed and silence after removal, the left group listed with its version by ListMyRoomIDs and still silent after a reconnect, and no token in the websocket logs; through the gateway a group created, a member added and the group renamed with the events reaching a member with the group open on the websocket, ListMyRooms, GetHistory, ListMembers and ListBookmarks equal to gRPC, an expired token refused with 401, SendMessage unimplemented on the gateway and GetHistory unimplemented on the websocket, a CORS preflight answered for a listed origin, and no token in the gateway logs; across two websocket nodes typing reaching a member with the group open on the other node and nobody else, an outsider's typing dropped, a watched user online, offline after closing, still online across a reconnect after 3s, offline after its node was killed, and no token in the logs of $ws2_container; a connection whose token ran out answered auth_required EXPIRED, heard nothing while it waited, refused a write and came back with ready on a fresh token with the missed seq reported as a gap, a text frame and a garbage frame answered frame_error UNSUPPORTED and INVALID on a connection kept open, ten connections of one user ready on a node and the eleventh closed 4009, a user on a stopped $ws_container reconnecting to $ws2_container and hearing the next message, and no token of phase 12 in the logs of either websocket node"
+    echo "e2e PASS: $first messages before and $after after killing $victim, no loss, no duplicate, every acked seq live; seq 1 edited and seq 2 deleted on history, edit history and live; seq 3 reacted with the first then the second emoji from GetReactionSettings and an unlisted emoji refused, seq 4 pinned, on replies, history and live; members added, promoted, removed and refused, read positions, hide and clear, the last owner leaving and coming back, on replies, history and live room, member and message subjects; a direct room opened twice into one room, replies counted and listed, the parent kept while replied, mentions of a user, a group and @all listed, a forward and a bookmark, on replies, lists and live; a system message from a non-member raising unread and one with skip_unread not, the room list ordered and counted after sends, reads, a delete and a hide, pinned first, archived apart, paged by cursor, refreshed by GetRooms and renamed live, history around a seq, messages by seq, threads, reactors, pins newest first, members owner first and a forward keeping skip_unread and meta; Mention App groups set and moved, @group notifying only its current members in the room and never the sender, an inactive group notifying and listing nobody, an edit adding then dropping a user notified then retracted and listed then gone, a delete retracting, @all notifying every other member, room groups with names and an older user group list ignored; through the websocket a dev token connecting, a send, an edit, a reaction and a bookmark, with history and bookmarks read through the gateway matching gRPC, a system message refused, an unknown key answered retry_later then auth_required INVALID once the keys were fetched and an expired token auth_required EXPIRED with the connection kept open, a silent connection closed 1000 after the heartbeat timeout, two users on the websocket hearing a new group at once, messages without duplicate or gap, reactions only with the room open, nothing of the other user's hides and bookmarks, one notification each for @user and @all, a read position reaching the viewer and the reader's other device but not a member without the room open, member_removed then room_closed and silence after removal, the left group listed with its version by ListMyRoomIDs and still silent after a reconnect, and no token in the websocket logs; through the gateway a group created, a member added and the group renamed with the events reaching a member with the group open on the websocket, ListMyRooms, GetHistory, ListMembers and ListBookmarks equal to gRPC, an expired token refused with 401, SendMessage unimplemented on the gateway and GetHistory unimplemented on the websocket, a CORS preflight answered for a listed origin, and no token in the gateway logs; across two websocket nodes typing reaching a member with the group open on the other node and nobody else, an outsider's typing dropped, a watched user online, offline after closing, still online across a reconnect after 3s, offline after its node was killed, and no token in the logs of $ws2_container; a connection whose token ran out answered auth_required EXPIRED, heard nothing while it waited, refused a write and came back with ready on a fresh token with the missed seq reported as a gap, a text frame and a garbage frame answered frame_error UNSUPPORTED and INVALID on a connection kept open, ten connections of one user ready on a node and the eleventh closed 4009, a user on a stopped $ws_container reconnecting to $ws2_container and hearing the next message, and no token of phase 12 in the logs of either websocket node; through identity a tenant token signed by a trusted ES256 key exchanged for a chat token carrying only aud, exp, iat, iss, sid, sub and tid with a 300s lifetime, accepted by $ws_container and $gw_container, the user created just in time and seen by GetUsers, a second exchange with the same name writing nothing, a new name seen by GetUsers, an RS256 key exchanged too, alg none, HS256 keyed with the public key, a kid of the wrong algorithm, an unknown kid, an unknown issuer, a wrong audience, an expired token, an 11 minute lifetime, the tid of another tenant and an invalid sub all refused with the same invalid_grant body, a wrong grant_type refused as unsupported_grant_type, user-disable refusing the next exchange, a removed key refused within two seconds while the other kept working, tenant-disable refusing every key within two seconds, and no token in the identity logs; a directory of exchanged users with a group under another, GetUsers returning only the known users with no email or username, GetUsers showing the name set by user-set in under a second through the change stream, user-disable reaching GetUsers within two seconds, the removed directory feed answering 404 and a wrong node secret refused with 401, the same users served to a fresh exchange after an identity restart once ready, and no token or secret of phase 15 in the identity logs"
     exit 0
   fi
   echo "e2e FAIL during: $step" >&2
@@ -77,13 +83,23 @@ finish() {
 }
 trap finish EXIT
 
+. "$scripts/e2e-identity-exchange.sh"
+. "$scripts/e2e-identity-directory.sh"
+
 case "$victim" in
-  core-1 | core-2) ;;
-  *) echo "E2E_KILL must be core-1 or core-2" >&2; exit 1 ;;
+  chat-1 | chat-2) ;;
+  *) echo "E2E_KILL must be chat-1 or chat-2" >&2; exit 1 ;;
 esac
 
-step="both cores share the slots"
-cli slots -cores 2 -wait 60s
+case "${E2E_ONLY:-}" in
+  "") ;;
+  13) phase13_identity_exchange; result=PASS; exit 0 ;;
+  15) phase15_identity_directory; result=PASS; exit 0 ;;
+  *) echo "E2E_ONLY supports only 13 and 15" >&2; exit 1 ;;
+esac
+
+step="both chat nodes share the slots"
+cli slots -nodes 2 -wait 60s
 
 step="create a room owned by $victim"
 setup="$(cli e2e setup -state /state -owner "$victim")"
@@ -122,8 +138,8 @@ cli e2e check -state /state
 
 step="restart $owner"
 restore
-step="both cores share the slots again"
-cli slots -cores 2 -wait 60s
+step="both chat nodes share the slots again"
+cli slots -nodes 2 -wait 60s
 
 step="phase 3 edit seq 1 and delete seq 2"
 echo "phase 3: edit seq 1, delete seq 2 (base version 0)"
@@ -308,4 +324,6 @@ done
 echo "phase 12: the logs of $ws_container and $ws2_container hold none of the $(wc -l <"$state/ws12-all-tokens" | tr -d ' ') tokens used"
 step="phase 12 check"
 cli e2e check -state /state
+phase13_identity_exchange
+phase15_identity_directory
 result=PASS

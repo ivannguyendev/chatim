@@ -1,0 +1,22 @@
+exchangebench alg=RS256 kid=bench-rs256 issuer=xb67bb53rs256-backend tenant="xb67bb53rs256" rate=1700/s duration=1m0s warmup=5s max-inflight=2048 users=100000 user-prefix="u" users-file="" ttl=9m0s
+ready: probe exchange 200 after 22ms
+signed 110500 tenant tokens with 10 goroutines in 32.243s
+rate target=1700/s sent=564/s ok=564/s over the 1m0s measured window (after 5s warmup), pacer elapsed 1m5s
+exchanges due=102000 sent=33829 shed_by_client=68171 (max in-flight 2048); with warmup due=110500 sent=38232 shed=72268
+http codes: 200=33829; 5xx=0
+pacer lag (issue minus scheduled time): n=102000 p50=399.104µs p95=1.090808ms p99=1.22844ms p99.9=1.639624ms max=6.292111ms
+latency of 200 from scheduled time: n=33829 p50=3.934467208s p95=4.731306551s p99=4.916190848s p99.9=5.050387725s max=5.05971187s
+latency of every answer from scheduled time: n=33829 p50=3.934467208s p95=4.731306551s p99=4.916190848s p99.9=5.050387725s max=5.05971187s
+identity metrics over 1m8.706s (scrape before the first shot to scrape after the last answer):
+  chatim_identity_exchanges_total{result="disabled"} +0
+  chatim_identity_exchanges_total{result="error"} +0
+  chatim_identity_exchanges_total{result="invalid"} +0
+  chatim_identity_exchanges_total{result="ok"} +38232
+  chatim_identity_exchanges_total{result="rate"} +0
+  chatim_identity_jit_writes_total{result="conflict"} +0
+  chatim_identity_jit_writes_total{result="created"} +34432
+  chatim_identity_jit_writes_total{result="error"} +0
+  chatim_identity_jit_writes_total{result="updated"} +0
+  chatim_identity_store_errors_total +0
+  chatim_identity_trust_reload_errors_total +0
+  process_cpu_seconds_total +25.44s = 0.37 cores

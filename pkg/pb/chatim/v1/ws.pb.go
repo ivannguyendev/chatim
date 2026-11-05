@@ -28,6 +28,7 @@ const (
 	AuthRequiredReason_AUTH_REQUIRED_REASON_MISSING     AuthRequiredReason = 1
 	AuthRequiredReason_AUTH_REQUIRED_REASON_INVALID     AuthRequiredReason = 2
 	AuthRequiredReason_AUTH_REQUIRED_REASON_EXPIRED     AuthRequiredReason = 3
+	AuthRequiredReason_AUTH_REQUIRED_REASON_REVOKED     AuthRequiredReason = 4
 )
 
 // Enum value maps for AuthRequiredReason.
@@ -37,12 +38,14 @@ var (
 		1: "AUTH_REQUIRED_REASON_MISSING",
 		2: "AUTH_REQUIRED_REASON_INVALID",
 		3: "AUTH_REQUIRED_REASON_EXPIRED",
+		4: "AUTH_REQUIRED_REASON_REVOKED",
 	}
 	AuthRequiredReason_value = map[string]int32{
 		"AUTH_REQUIRED_REASON_UNSPECIFIED": 0,
 		"AUTH_REQUIRED_REASON_MISSING":     1,
 		"AUTH_REQUIRED_REASON_INVALID":     2,
 		"AUTH_REQUIRED_REASON_EXPIRED":     3,
+		"AUTH_REQUIRED_REASON_REVOKED":     4,
 	}
 )
 
@@ -2634,7 +2637,7 @@ var File_chatim_v1_ws_proto protoreflect.FileDescriptor
 
 const file_chatim_v1_ws_proto_rawDesc = "" +
 	"\n" +
-	"\x12chatim/v1/ws.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x16chatim/v1/events.proto\x1a\x17chatim/v1/members.proto\x1a\x1fchatim/v1/mention_service.proto\x1a\x1dchatim/v1/message_reads.proto\x1a\x1dchatim/v1/notifications.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a*chatim/v1/replies_bookmarks_mentions.proto\x1a\x19chatim/v1/room_list.proto\"\xde\x03\n" +
+	"\x12chatim/v1/ws.proto\x12\tchatim.v1\x1a\x14chatim/v1/chat.proto\x1a\x16chatim/v1/events.proto\x1a\x17chatim/v1/members.proto\x1a\x1fchatim/v1/mention_service.proto\x1a\x1dchatim/v1/message_reads.proto\x1a\x1dchatim/v1/notifications.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a*chatim/v1/replies_bookmarks_mentions.proto\x1a\x19chatim/v1/room_list.proto\"\xde\x03\n" +
 	"\vClientFrame\x12*\n" +
 	"\x04auth\x18\n" +
 	" \x01(\v2\x14.chatim.v1.AuthFrameH\x00R\x04auth\x129\n" +
@@ -2797,12 +2800,13 @@ const file_chatim_v1_ws_proto_rawDesc = "" +
 	"\rlist_mentions\x18) \x01(\v2\x1f.chatim.v1.ListMentionsResponseH\x00R\flistMentions\x12M\n" +
 	"\x10list_room_groups\x18* \x01(\v2!.chatim.v1.ListRoomGroupsResponseH\x00R\x0elistRoomGroups\x12:\n" +
 	"\tmark_read\x18+ \x01(\v2\x1b.chatim.v1.MarkReadResponseH\x00R\bmarkReadB\b\n" +
-	"\x06result*\xa0\x01\n" +
+	"\x06result*\xc2\x01\n" +
 	"\x12AuthRequiredReason\x12$\n" +
 	" AUTH_REQUIRED_REASON_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cAUTH_REQUIRED_REASON_MISSING\x10\x01\x12 \n" +
 	"\x1cAUTH_REQUIRED_REASON_INVALID\x10\x02\x12 \n" +
-	"\x1cAUTH_REQUIRED_REASON_EXPIRED\x10\x03*\x97\x01\n" +
+	"\x1cAUTH_REQUIRED_REASON_EXPIRED\x10\x03\x12 \n" +
+	"\x1cAUTH_REQUIRED_REASON_REVOKED\x10\x04*\x97\x01\n" +
 	"\x10FrameErrorReason\x12\"\n" +
 	"\x1eFRAME_ERROR_REASON_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eFRAME_ERROR_REASON_UNSUPPORTED\x10\x01\x12\x1e\n" +
@@ -3037,7 +3041,7 @@ func file_chatim_v1_ws_proto_init() {
 	if File_chatim_v1_ws_proto != nil {
 		return
 	}
-	file_chatim_v1_core_proto_init()
+	file_chatim_v1_chat_proto_init()
 	file_chatim_v1_events_proto_init()
 	file_chatim_v1_members_proto_init()
 	file_chatim_v1_mention_service_proto_init()

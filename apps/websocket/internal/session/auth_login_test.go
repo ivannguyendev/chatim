@@ -67,6 +67,7 @@ func TestEmptyNodeLimiterGivesRetryLaterAndALaterAuthSucceeds(t *testing.T) {
 		if f := tc.nextFrame(); f.GetReady() == nil {
 			t.Fatalf("frame after the limiter refilled = %v, want ready", f)
 		}
+		synctest.Wait()
 		if h.authCount("ok") != 2 || h.unauth() != 0 {
 			t.Fatalf("ok %v unauth %d", h.authCount("ok"), h.unauth())
 		}
@@ -98,6 +99,7 @@ func TestGarbageTokensDoNotStarveAValidLogin(t *testing.T) {
 		if f := valid.nextFrame(); f.GetReady() == nil {
 			t.Fatalf("valid login frame = %v, want ready", f)
 		}
+		synctest.Wait()
 		if got := h.verifier.calls.Load(); got > int64(3*len(garbage)+1) {
 			t.Fatalf("verify calls = %d, want at most one per garbage connection per second", got)
 		}

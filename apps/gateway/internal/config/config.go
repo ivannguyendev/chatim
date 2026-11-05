@@ -7,7 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ivannguyendev/chatim/pkg/envconfig"
+	"github.com/ivannguyendev/chatim/pkg/auth"
+	"github.com/ivannguyendev/chatim/pkg/core/envconfig"
 )
 
 const (
@@ -18,7 +19,7 @@ const (
 type Config struct {
 	ListenAddr        string
 	AdminAddr         string
-	CoreAddrs         []string
+	Redis             StateRedis
 	JWTKeysFile       string
 	JWTIssuer         string
 	JWTAudience       string
@@ -39,17 +40,36 @@ type Config struct {
 	MaxHeaderBytes    int
 	H2MaxStreams      int
 	RequestDeadline   time.Duration
+	Identity          auth.SyncConfig
+	SharedRedis       SharedRedis
+}
+
+type StateRedis struct {
+	Addr     string
+	DB       int
+	Password string
+}
+
+type SharedRedis struct {
+	Addr     string
+	DB       int
+	Password string
+	Timeout  time.Duration
 }
 
 func AdminAddr() string { return envconfig.String("GW_ADMIN_ADDR", defaultAdminAddr) }
 
 func Load() (Config, error) {
 	var p parser
-	deadline := p.span("CORE_REQUEST_DEADLINE", 5*time.Second)
+	deadline := p.span("CHAT_REQUEST_DEADLINE", 5*time.Second)
 	c := Config{
-		ListenAddr:        envconfig.String("GW_ADDR", ":8080"),
-		AdminAddr:         AdminAddr(),
-		CoreAddrs:         list("GW_CORE_ADDRS"),
+		ListenAddr: envconfig.String("GW_ADDR", ":8080"),
+		AdminAddr:  AdminAddr(),
+		Redis: StateRedis{
+			Addr:     envconfig.String("REDIS_ADDR", "chatim-redis:6379"),
+			DB:       p.number("REDIS_DB", 0),
+			Password: p.secret("REDIS_PASSWORD"),
+		},
 		JWTKeysFile:       envconfig.String("GW_JWT_KEYS_FILE", ""),
 		JWTIssuer:         envconfig.String("GW_JWT_ISSUER", ""),
 		JWTAudience:       envconfig.String("GW_JWT_AUDIENCE", ""),
@@ -70,7 +90,18 @@ func Load() (Config, error) {
 		MaxHeaderBytes:    p.number("GW_MAX_HEADER_BYTES", 16<<10),
 		H2MaxStreams:      p.number("GW_H2_MAX_STREAMS", 250),
 		RequestDeadline:   deadline,
+		SharedRedis: SharedRedis{
+			Addr:     envconfig.String("GW_SHARED_REDIS_ADDR", ""),
+			DB:       p.number("GW_SHARED_REDIS_DB", 0),
+			Password: p.secret("GW_SHARED_REDIS_PASSWORD"),
+			Timeout:  p.span("GW_SHARED_REDIS_TIMEOUT", 500*time.Millisecond),
+		},
 	}
+	identity, err := auth.SyncConfigFromEnv("GW")
+	if err != nil {
+		p.fail(err)
+	}
+	c.Identity = identity
 	if err := errors.Join(p.errs...); err != nil {
 		return Config{}, err
 	}
@@ -84,7 +115,7 @@ func (c Config) LogValue() slog.Value {
 	return slog.GroupValue(
 		slog.String("listen_addr", c.ListenAddr),
 		slog.String("admin_addr", c.AdminAddr),
-		slog.String("core_addrs", strings.Join(c.CoreAddrs, ",")),
+		slog.Group("redis", slog.String("addr", c.Redis.Addr), slog.Int("db", c.Redis.DB), slog.Bool("auth", c.Redis.Password != "")),
 		slog.String("jwt_keys_file", c.JWTKeysFile),
 		slog.String("jwt_issuer", c.JWTIssuer),
 		slog.String("jwt_audience", c.JWTAudience),
@@ -105,6 +136,9 @@ func (c Config) LogValue() slog.Value {
 		slog.Int("max_header_bytes", c.MaxHeaderBytes),
 		slog.Int("h2_max_streams", c.H2MaxStreams),
 		slog.Duration("request_deadline", c.RequestDeadline),
+		slog.Any("identity", c.Identity),
+		slog.Group("shared_redis", slog.String("addr", c.SharedRedis.Addr), slog.Int("db", c.SharedRedis.DB),
+			slog.Bool("auth", c.SharedRedis.Password != ""), slog.Duration("timeout", c.SharedRedis.Timeout)),
 	)
 }
 
@@ -128,6 +162,14 @@ func (p *parser) fail(err error) { p.errs = append(p.errs, err) }
 
 func (p *parser) number(key string, def int) int {
 	v, err := envconfig.Int(key, def)
+	if err != nil {
+		p.fail(err)
+	}
+	return v
+}
+
+func (p *parser) secret(key string) string {
+	v, err := envconfig.Secret(key)
 	if err != nil {
 		p.fail(err)
 	}

@@ -29,10 +29,10 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/ivannguyendev/chatim/apps/gateway/internal/api"
-	"github.com/ivannguyendev/chatim/apps/gateway/internal/limit"
-	"github.com/ivannguyendev/chatim/pkg/corecall"
-	"github.com/ivannguyendev/chatim/pkg/grpcclient"
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
+	"github.com/ivannguyendev/chatim/pkg/auth"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
+	"github.com/ivannguyendev/chatim/pkg/core/grpcclient"
+	"github.com/ivannguyendev/chatim/pkg/core/userlimit"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -45,22 +45,22 @@ const (
 	testOrigin   = "https://chat.example.com"
 )
 
-type coreCall struct {
+type chatCall struct {
 	method string
 	md     metadata.MD
 	body   []byte
 }
 
-type fakeCore struct {
+type fakeChat struct {
 	mu      sync.Mutex
-	calls   []coreCall
+	calls   []chatCall
 	err     error
 	reply   proto.Message
 	started chan struct{}
 	release chan struct{}
 }
 
-func (f *fakeCore) handle(_ any, stream grpc.ServerStream) error {
+func (f *fakeChat) handle(_ any, stream grpc.ServerStream) error {
 	method, _ := grpc.MethodFromServerStream(stream)
 	var in emptypb.Empty
 	if err := stream.RecvMsg(&in); err != nil {
@@ -68,7 +68,7 @@ func (f *fakeCore) handle(_ any, stream grpc.ServerStream) error {
 	}
 	md, _ := metadata.FromIncomingContext(stream.Context())
 	f.mu.Lock()
-	f.calls = append(f.calls, coreCall{method: method, md: md, body: in.ProtoReflect().GetUnknown()})
+	f.calls = append(f.calls, chatCall{method: method, md: md, body: in.ProtoReflect().GetUnknown()})
 	err, reply, started, release := f.err, f.reply, f.started, f.release
 	f.mu.Unlock()
 	if started != nil {
@@ -88,16 +88,16 @@ func (f *fakeCore) handle(_ any, stream grpc.ServerStream) error {
 	return stream.SendMsg(reply)
 }
 
-func (f *fakeCore) set(fn func(*fakeCore)) {
+func (f *fakeChat) set(fn func(*fakeChat)) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	fn(f)
 }
 
-func (f *fakeCore) recorded() []coreCall {
+func (f *fakeChat) recorded() []chatCall {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return append([]coreCall(nil), f.calls...)
+	return append([]chatCall(nil), f.calls...)
 }
 
 type limits struct {
@@ -107,13 +107,14 @@ type limits struct {
 var roomy = limits{rate: 1000, burst: 1000, inflight: 32, node: 100}
 
 type harness struct {
-	core    *fakeCore
+	chat    *fakeChat
 	handler *api.Handler
 	server  *httptest.Server
 	priv    ed25519.PrivateKey
 	logs    *syncBuffer
 	panics  atomic.Bool
 	served  chan struct{}
+	revoked *fakeRevocations
 }
 
 type syncBuffer struct {
@@ -135,12 +136,12 @@ func (b *syncBuffer) String() string {
 
 func newHarness(t *testing.T, l limits) *harness {
 	t.Helper()
-	h := &harness{core: &fakeCore{}, logs: &syncBuffer{}, served: make(chan struct{}, 64)}
-	conn := startCore(t, h.core)
-	fwd, err := corecall.New(corecall.Options{
-		Methods:  corecall.Request(),
+	h := &harness{chat: &fakeChat{}, logs: &syncBuffer{}, served: make(chan struct{}, 64)}
+	conn := startChatNode(t, h.chat)
+	fwd, err := chatrpc.NewForwarder(chatrpc.ForwarderOptions{
+		Methods:  chatrpc.Request(),
 		Deadline: 2 * time.Second,
-		Route: func(corecall.Command, proto.Message) (corecall.Conn, error) {
+		Route: func(chatrpc.Command, proto.Message) (chatrpc.Clients, error) {
 			if h.panics.Load() {
 				panic("route failed")
 			}
@@ -156,20 +157,21 @@ func newHarness(t *testing.T, l limits) *harness {
 	}
 	h.priv = priv
 	jwks := fmt.Sprintf(`{"keys":[{"kty":"OKP","crv":"Ed25519","kid":%q,"x":%q}]}`, testKID, base64.RawURLEncoding.EncodeToString(pub))
-	verifier, err := jwtverify.New(jwtverify.Config{JWKS: []byte(jwks), Issuer: testIssuer, Audience: testAudience, Leeway: time.Second})
+	verifier, err := auth.NewVerifier(auth.VerifierConfig{JWKS: []byte(jwks), Issuer: testIssuer, Audience: testAudience, Leeway: time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
-	gate, err := limit.NewGate(l.node)
+	gate, err := userlimit.NewGate(l.node)
 	if err != nil {
 		t.Fatal(err)
 	}
-	users, err := limit.NewUsers(limit.UserConfig{Rate: l.rate, Burst: l.burst, Inflight: l.inflight, Capacity: 1000})
+	users, err := userlimit.NewUsers(userlimit.UserConfig{Rate: l.rate, Burst: l.burst, Inflight: l.inflight, Capacity: 1000})
 	if err != nil {
 		t.Fatal(err)
 	}
+	h.revoked = newFakeRevocations(t)
 	h.handler, err = api.New(api.Options{
-		Forwarder: fwd, Verifier: verifier, Gate: gate, Users: users, BodyMax: 4 << 10,
+		Forwarder: fwd, Verifier: verifier, Revocations: h.revoked, Gate: gate, Users: users, BodyMax: 4 << 10,
 		CORSOrigins: []string{testOrigin}, Log: slog.New(slog.NewJSONHandler(h.logs, nil)),
 	})
 	if err != nil {
@@ -190,17 +192,17 @@ func newHarness(t *testing.T, l limits) *harness {
 	return h
 }
 
-func startCore(t *testing.T, core *fakeCore) corecall.Conn {
+func startChatNode(t *testing.T, chat *fakeChat) chatrpc.Clients {
 	t.Helper()
 	lis := bufconn.Listen(1 << 20)
-	srv := grpc.NewServer(grpc.UnknownServiceHandler(core.handle))
+	srv := grpc.NewServer(grpc.UnknownServiceHandler(chat.handle))
 	served := make(chan struct{})
 	go func() {
 		defer close(served)
 		_ = srv.Serve(lis)
 	}()
 	dialer := grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) { return lis.DialContext(ctx) })
-	cc, err := grpcclient.New("passthrough:///core", grpcclient.Options{Creds: insecure.NewCredentials(), DialOptions: []grpc.DialOption{dialer}})
+	cc, err := grpcclient.New("passthrough:///chat", grpcclient.Options{Creds: insecure.NewCredentials(), DialOptions: []grpc.DialOption{dialer}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,12 +211,12 @@ func startCore(t *testing.T, core *fakeCore) corecall.Conn {
 		srv.Stop()
 		<-served
 	})
-	return corecall.Conn{Core: chatimv1.NewCoreServiceClient(cc), Mention: chatimv1.NewMentionServiceClient(cc)}
+	return chatrpc.Clients{Chat: chatimv1.NewChatServiceClient(cc), Mention: chatimv1.NewMentionServiceClient(cc)}
 }
 
 type claims struct {
-	tenant, user, issuer, audience string
-	expires                        time.Time
+	tenant, user, issuer, audience, session, kid string
+	expires                                      time.Time
 }
 
 func (h *harness) token(t *testing.T, c claims) string {
@@ -234,8 +236,14 @@ func (h *harness) token(t *testing.T, c claims) string {
 	if c.expires.IsZero() {
 		c.expires = time.Now().Add(time.Hour)
 	}
-	tok := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{"iss": c.issuer, "aud": c.audience, "sub": c.user, "tid": c.tenant, "exp": c.expires.Unix()})
-	tok.Header["kid"] = testKID
+	if c.session == "" {
+		c.session = "s1"
+	}
+	if c.kid == "" {
+		c.kid = testKID
+	}
+	tok := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{"iss": c.issuer, "aud": c.audience, "sub": c.user, "tid": c.tenant, "sid": c.session, "iat": c.expires.Add(-time.Hour).Unix(), "exp": c.expires.Unix()})
+	tok.Header["kid"] = c.kid
 	signed, err := tok.SignedString(h.priv)
 	if err != nil {
 		t.Fatal(err)

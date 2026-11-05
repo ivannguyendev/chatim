@@ -18,7 +18,7 @@ func TestRunIsReadyOnlyAfterTheSlotTableAndStopAnswersRunningCommandsBefore1001(
 	mr := slotRedis(t)
 	mr.SetError("LOADING redis is loading the dataset")
 	keys := newSigner(t)
-	core, dial := startFakeCore(t)
+	chat, dial := startFakeChatNode(t)
 	lis, logs := newListeners(), newLogWatch()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -36,7 +36,7 @@ func TestRunIsReadyOnlyAfterTheSlotTableAndStopAnswersRunningCommandsBefore1001(
 		"chatim_websocket_connections 0",
 		"chatim_websocket_unauthenticated_connections 0",
 		`chatim_websocket_commands_total{code="OK",command="EditMessage"} 0`,
-		`chatim_websocket_core_call_seconds_count{command="EditMessage"} 0`,
+		`chatim_websocket_chat_call_seconds_count{command="EditMessage"} 0`,
 		`chatim_websocket_commands_rejected_total{reason="shutdown"} 0`,
 		"chatim_websocket_unknown_frames_total 0",
 		"chatim_websocket_interest_users 0",
@@ -78,14 +78,14 @@ func TestRunIsReadyOnlyAfterTheSlotTableAndStopAnswersRunningCommandsBefore1001(
 		}})
 		answered <- resp
 	}()
-	receive(t, core.started, "core call")
+	receive(t, chat.started, "chat call")
 
 	cancel()
 	logs.await(t, "websocket shutting down")
 	if code, _ := httpStatus(t, adminAddr, "/readyz"); code != 503 {
 		t.Fatalf("/readyz = %d while stopping, want 503", code)
 	}
-	close(core.release)
+	close(chat.release)
 	if resp := receive(t, answered, "command answer"); resp == nil || resp.GetCode() != 0 {
 		t.Fatalf("running command answer = %v, want OK", resp)
 	}
@@ -115,7 +115,7 @@ func TestRunRefusesToStartOnBadConfigOrMissingKeys(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			lis := newListeners()
-			err := Run(t.Context(), tc.cfg, newLogWatch().logger(), Deps{PresenceRedis: newPresenceRedis(t).open, Listen: lis.listen})
+			err := run(t.Context(), tc.cfg, newLogWatch().logger(), Deps{PresenceRedis: newPresenceRedis(t).open, Listen: lis.listen})
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("Run = %v, want an error naming %q", err, tc.want)
 			}
@@ -133,7 +133,7 @@ func TestRunFailsWhenTheSlotTableNeverLoads(t *testing.T) {
 	lis := newListeners()
 	nats := newFakeNATS()
 	deps := Deps{PresenceRedis: newPresenceRedis(t).open, Listen: lis.listen, ReadyTimeout: 300 * time.Millisecond, NATS: nats.dial}
-	err := Run(t.Context(), testConfig(mr.Addr(), keys.path), newLogWatch().logger(), deps)
+	err := run(t.Context(), testConfig(mr.Addr(), keys.path), newLogWatch().logger(), deps)
 	if err == nil || !strings.Contains(err.Error(), "slot table") {
 		t.Fatalf("Run = %v, want a slot table error", err)
 	}
@@ -166,7 +166,7 @@ func TestRunStopsCleanlyWhenSignalledWhileWaitingForTheSlotTable(t *testing.T) {
 func TestRunFailsWhenTheAdminAddressCannotBeBound(t *testing.T) {
 	keys := newSigner(t)
 	refuse := func(context.Context, string) (net.Listener, error) { return nil, errors.New("address in use") }
-	err := Run(t.Context(), testConfig("127.0.0.1:1", keys.path), newLogWatch().logger(), Deps{PresenceRedis: newPresenceRedis(t).open, Listen: refuse})
+	err := run(t.Context(), testConfig("127.0.0.1:1", keys.path), newLogWatch().logger(), Deps{PresenceRedis: newPresenceRedis(t).open, Listen: refuse})
 	if err == nil || !strings.Contains(err.Error(), "address in use") {
 		t.Fatalf("Run = %v, want the listen error", err)
 	}
@@ -200,7 +200,7 @@ func TestRunClosesTheWebsocketListenerWhenStartupEndsRightAfterBindingIt(t *test
 				return lis, tc.listenErr
 			}
 			logs := newLogWatch()
-			err := Run(ctx, testConfig(mr.Addr(), keys.path), logs.logger(), Deps{PresenceRedis: newPresenceRedis(t).open, Listen: listen, NATS: newFakeNATS().dial})
+			err := run(ctx, testConfig(mr.Addr(), keys.path), logs.logger(), Deps{PresenceRedis: newPresenceRedis(t).open, Listen: listen, NATS: newFakeNATS().dial})
 			if !errors.Is(err, tc.listenErr) || (tc.listenErr == nil && err != nil) {
 				t.Fatalf("Run = %v, want %v", err, tc.listenErr)
 			}

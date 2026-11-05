@@ -5,21 +5,24 @@ export CHATIM_IT_REDIS_DEDUPE_PASSWORD := $(REDIS_DEDUPE_PASSWORD)
 export CHATIM_IT_PRESENCE_REDIS_PASSWORD := $(REDIS_PRESENCE_PASSWORD)
 export MONGO_URI := mongodb://$(MONGO_ROOT_USER):$(MONGO_ROOT_PASSWORD)@chatim-mongodb:27017/?replicaSet=rs0&authSource=admin
 export CHATIM_IT_MONGO_URI := $(MONGO_URI)
-export PG_URI := postgres://$(PG_USER):$(PG_PASSWORD)@chatim-postgres:5432/chatim_poc
+export CHATIM_UID := $(shell id -u)
+export CHATIM_GID := $(shell id -g)
 
 GO_IMAGE ?= golang:1.26.10
 LINT_IMAGE ?= golangci/golangci-lint:v2.14.0
 BUF_IMAGE ?= bufbuild/buf:1.73.0
 PROM_IMAGE ?= prom/prometheus:v3.5.0
 NETWORK  ?= chatim_default
+ITEST_ARGS ?= -race -shuffle=on -count=1 ./...
 COMPOSE  := docker compose -f deploy/compose/docker-compose.yml --env-file .env
-COMPOSE_ALL := $(COMPOSE) --profile postgres --profile app
-CORE_COMPOSE := $(COMPOSE) --profile app
-CORES    := core-1 core-2
+COMPOSE_ALL := $(COMPOSE) --profile app
+APP_COMPOSE := $(COMPOSE) --profile app
+CHAT_NODES    := chat-1 chat-2
 WEBSOCKETS := websocket-1 websocket-2
 GATEWAYS := gateway-1
+IDENTITIES := identity-1 identity-2
 WS_KEYS_DIR := .local/ws-keys
-CORECLI_IMAGE := chatim/corecli:dev
+CHATCLI_IMAGE := chatim/chatcli:dev
 INSTANCE ?= state
 NODE ?= 1
 REDIS_CONTAINER_state  := chatim-redis
@@ -27,9 +30,9 @@ REDIS_CONTAINER_dedupe := chatim-redis-dedupe
 REDIS_CONTAINER_presence := chatim-redis-presence
 GO_RUN   := docker run --rm -v "$(CURDIR)":/src -w /src -v chatim-gomod:/go/pkg/mod -v chatim-gocache:/root/.cache/go-build -e GOFLAGS=-buildvcs=false
 BUF_RUN  := docker run --rm -v "$(CURDIR)":/src -w /src $(BUF_IMAGE)
-POC_RUN  := $(GO_RUN) --network $(NETWORK) -e MONGO_URI -e PG_URI -e REDIS_PASSWORD
+POC_RUN  := $(GO_RUN) --network $(NETWORK) -e MONGO_URI -e REDIS_PASSWORD
 
-.PHONY: go check-env test itest vet fmt-check lint vuln tidy proto buf-lint alerts-check poc image infra-up infra-down infra-reset pg-up pg-down core-up core-down dev-keys ws-token ws-logs gw-logs e2e redis-cli
+.PHONY: go check-env test itest vet fmt-check lint vuln tidy proto buf-lint alerts-check poc image infra-up infra-down infra-reset app-up app-down identity-env identity-admin identity-logs dev-keys ws-token ws-logs gw-logs e2e redis-cli
 
 go:
 	$(GO_RUN) $(GO_IMAGE) go $(ARGS)
@@ -41,7 +44,7 @@ test:
 	$(GO_RUN) $(GO_IMAGE) go test -race -shuffle=on ./...
 
 itest: check-env
-	$(GO_RUN) --network $(NETWORK) -e CHATIM_IT_MONGO_URI -e CHATIM_IT_REDIS_ADDR=chatim-redis:6379 -e CHATIM_IT_REDIS_PASSWORD -e CHATIM_IT_REDIS_DEDUPE_ADDR=chatim-redis-dedupe:6379 -e CHATIM_IT_REDIS_DEDUPE_PASSWORD -e CHATIM_IT_PRESENCE_REDIS_ADDR=chatim-redis-presence:6379 -e CHATIM_IT_PRESENCE_REDIS_PASSWORD -e CHATIM_IT_NATS_URL=nats://chatim-nats:4222 $(GO_IMAGE) go test -race -shuffle=on -count=1 ./...
+	$(GO_RUN) --network $(NETWORK) -e CHATIM_IT_MONGO_URI -e CHATIM_IT_REDIS_ADDR=chatim-redis:6379 -e CHATIM_IT_REDIS_PASSWORD -e CHATIM_IT_REDIS_DEDUPE_ADDR=chatim-redis-dedupe:6379 -e CHATIM_IT_REDIS_DEDUPE_PASSWORD -e CHATIM_IT_PRESENCE_REDIS_ADDR=chatim-redis-presence:6379 -e CHATIM_IT_PRESENCE_REDIS_PASSWORD -e CHATIM_IT_NATS_URL=nats://chatim-nats:4222 $(GO_IMAGE) go test $(ITEST_ARGS)
 
 vet:
 	$(GO_RUN) $(GO_IMAGE) go vet ./...
@@ -89,34 +92,39 @@ redis-cli:
 	@test -n "$(REDIS_CONTAINER_$(INSTANCE))" || (echo "INSTANCE must be state, dedupe or presence" && exit 1)
 	docker exec $(REDIS_CONTAINER_$(INSTANCE)) sh -c 'read -r REDISCLI_AUTH < "$$REDIS_SECRET_FILE"; export REDISCLI_AUTH; exec redis-cli "$$@"' redis-cli $(ARGS)
 
-pg-up: check-env
-	$(COMPOSE_ALL) up -d postgres
-	./scripts/wait-postgres.sh
-
-pg-down: check-env
-	$(COMPOSE_ALL) stop postgres
-
-core-up: check-env dev-keys
-	$(MAKE) -s image TARGET=apps/core
+app-up: check-env identity-env dev-keys
+	$(MAKE) -s image TARGET=apps/chat
 	$(MAKE) -s image TARGET=apps/websocket
 	$(MAKE) -s image TARGET=apps/gateway
-	$(CORE_COMPOSE) up -d $(CORES) $(WEBSOCKETS) $(GATEWAYS)
-	./scripts/wait-core-healthy.sh $(addprefix chatim-,$(CORES) $(WEBSOCKETS) $(GATEWAYS))
+	$(MAKE) -s image TARGET=apps/identity
+	$(APP_COMPOSE) up -d $(CHAT_NODES) $(WEBSOCKETS) $(GATEWAYS) $(IDENTITIES)
+	./scripts/wait-healthy.sh $(addprefix chatim-,$(IDENTITIES) $(CHAT_NODES) $(WEBSOCKETS) $(GATEWAYS))
 
-core-down: check-env
-	$(CORE_COMPOSE) rm -s -f $(GATEWAYS) $(WEBSOCKETS) $(CORES)
+app-down: check-env
+	$(APP_COMPOSE) rm -s -f $(GATEWAYS) $(WEBSOCKETS) $(IDENTITIES) identity-bootstrap identity-mongo-init $(CHAT_NODES)
+
+identity-env:
+	@test -n "$(IDENTITY_MONGO_PASSWORD)" || (echo "set IDENTITY_MONGO_PASSWORD in .env" && exit 1)
+	@test -n "$(IDENTITY_KEY_ENCRYPTION_KEY)" || (echo "set IDENTITY_KEY_ENCRYPTION_KEY in .env (openssl rand -base64 32)" && exit 1)
+	@test -n "$(IDENTITY_NODE_SECRET)" || (echo "set IDENTITY_NODE_SECRET in .env (openssl rand -hex 32)" && exit 1)
+
+identity-admin:
+	docker exec chatim-identity-1 /app $(ARGS)
+
+identity-logs:
+	docker logs --tail 200 -f chatim-identity-1
 
 dev-keys:
 	@if [ -f $(WS_KEYS_DIR)/private.jwk ] && [ -f $(WS_KEYS_DIR)/jwks.json ]; then \
 		echo "dev keys present in $(WS_KEYS_DIR)" >&2; \
 	else \
-		$(MAKE) -s image TARGET=tools/corecli && \
+		$(MAKE) -s image TARGET=tools/chatcli && \
 		mkdir -p $(WS_KEYS_DIR) && chmod 700 $(WS_KEYS_DIR) && \
-		docker run --rm --user "$$(id -u):$$(id -g)" -v "$(CURDIR)/$(WS_KEYS_DIR)":/keys $(CORECLI_IMAGE) dev-keys -out /keys >&2; \
+		docker run --rm --user "$$(id -u):$$(id -g)" -v "$(CURDIR)/$(WS_KEYS_DIR)":/keys $(CHATCLI_IMAGE) dev-keys -out /keys >&2; \
 	fi
 
 ws-token: dev-keys
-	@docker run --rm --user "$$(id -u):$$(id -g)" -v "$(CURDIR)/$(WS_KEYS_DIR)/private.jwk":/keys/private.jwk:ro $(CORECLI_IMAGE) token -key /keys/private.jwk $(ARGS)
+	@docker run --rm --user "$$(id -u):$$(id -g)" -v "$(CURDIR)/$(WS_KEYS_DIR)/private.jwk":/keys/private.jwk:ro $(CHATCLI_IMAGE) token -key /keys/private.jwk $(ARGS)
 
 ws-logs:
 	docker logs --tail 200 -f chatim-websocket-$(NODE)
@@ -125,5 +133,5 @@ gw-logs:
 	docker logs --tail 200 -f chatim-gateway-1
 
 e2e: check-env
-	$(MAKE) -s image TARGET=tools/corecli
+	$(MAKE) -s image TARGET=tools/chatcli
 	NETWORK=$(NETWORK) WS_KEY=$(CURDIR)/$(WS_KEYS_DIR)/private.jwk ./scripts/e2e.sh

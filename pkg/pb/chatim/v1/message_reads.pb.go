@@ -842,7 +842,7 @@ var File_chatim_v1_message_reads_proto protoreflect.FileDescriptor
 
 const file_chatim_v1_message_reads_proto_rawDesc = "" +
 	"\n" +
-	"\x1dchatim/v1/message_reads.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x17chatim/v1/members.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"b\n" +
+	"\x1dchatim/v1/message_reads.proto\x12\tchatim.v1\x1a\x14chatim/v1/chat.proto\x1a\x17chatim/v1/members.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"b\n" +
 	"\x12GetMessagesRequest\x12\x17\n" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x1f\n" +
 	"\vthread_root\x18\x02 \x01(\x04R\n" +
@@ -962,7 +962,7 @@ func file_chatim_v1_message_reads_proto_init() {
 	if File_chatim_v1_message_reads_proto != nil {
 		return
 	}
-	file_chatim_v1_core_proto_init()
+	file_chatim_v1_chat_proto_init()
 	file_chatim_v1_members_proto_init()
 	file_chatim_v1_reactions_pins_proto_init()
 	type x struct{}

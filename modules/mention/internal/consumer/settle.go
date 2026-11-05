@@ -6,8 +6,8 @@ import (
 	"fmt"
 
 	"github.com/ivannguyendev/chatim/modules/mention/internal/plan"
-	"github.com/ivannguyendev/chatim/pkg/apperr"
-	"github.com/ivannguyendev/chatim/pkg/jsconsume"
+	"github.com/ivannguyendev/chatim/pkg/core/apperr"
+	"github.com/ivannguyendev/chatim/pkg/core/jsconsume"
 )
 
 var errInvalidEvent = errors.New("invalid mention event")

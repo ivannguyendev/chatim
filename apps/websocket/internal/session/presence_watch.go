@@ -7,8 +7,8 @@ import (
 	"github.com/lxzan/gws"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
 	"github.com/ivannguyendev/chatim/pkg/ids"
-	"github.com/ivannguyendev/chatim/pkg/metrics"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 

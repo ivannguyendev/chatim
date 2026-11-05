@@ -8,17 +8,17 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/grpc/codes"
 
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 )
 
 type claimsKey struct{}
 
-func withClaims(ctx context.Context, c jwtverify.Claims) context.Context {
+func withClaims(ctx context.Context, c auth.Claims) context.Context {
 	return context.WithValue(ctx, claimsKey{}, c)
 }
 
-func ClaimsFrom(ctx context.Context) (jwtverify.Claims, bool) {
-	c, ok := ctx.Value(claimsKey{}).(jwtverify.Claims)
+func ClaimsFrom(ctx context.Context) (auth.Claims, bool) {
+	c, ok := ctx.Value(claimsKey{}).(auth.Claims)
 	return c, ok
 }
 

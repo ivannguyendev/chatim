@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/ivannguyendev/chatim/pkg/coreroute"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	"github.com/ivannguyendev/chatim/pkg/slotmap"
 )
 
@@ -24,11 +24,11 @@ type SessionConfig struct {
 type Session struct {
 	Resolver *slotmap.Resolver
 	Client   *Client
-	router   *coreroute.Router
+	router   *chatrpc.Router
 }
 
 func Open(ctx context.Context, cfg SessionConfig) (*Session, error) {
-	router, err := coreroute.Open(ctx, coreroute.Config{
+	router, err := chatrpc.OpenRouter(ctx, chatrpc.RouterConfig{
 		RedisAddr: cfg.RedisAddr, RedisDB: cfg.RedisDB, RedisPassword: cfg.RedisPassword, ClientName: cfg.ClientName,
 		ReadyTimeout: cfg.ReadyTimeout, Log: cfg.Log, Dial: cfg.Dial,
 	})

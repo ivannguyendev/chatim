@@ -14,7 +14,7 @@ import (
 	"connectrpc.com/connect"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/ivannguyendev/chatim/pkg/backoff"
+	"github.com/ivannguyendev/chatim/pkg/core/backoff"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/pkg/pb/chatim/v1/chatimv1connect"
 	"github.com/ivannguyendev/chatim/pkg/wstest"
@@ -77,11 +77,11 @@ func newLoad(c config, key devtoken.KeyPair, run string) (*load, error) {
 
 func (l *load) createGroups(ctx context.Context) error {
 	httpClient := &http.Client{Timeout: setupTimeout, Transport: &http.Transport{MaxIdleConnsPerHost: setupWorkers}}
-	core := chatimv1connect.NewCoreServiceClient(httpClient, l.cfg.gateway)
+	chat := chatimv1connect.NewChatServiceClient(httpClient, l.cfg.gateway)
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(setupWorkers)
 	for group := range l.cfg.groups {
-		g.Go(func() error { return l.createGroup(gctx, core, group) })
+		g.Go(func() error { return l.createGroup(gctx, chat, group) })
 	}
 	if err := g.Wait(); err != nil {
 		return err
@@ -92,7 +92,7 @@ func (l *load) createGroups(ctx context.Context) error {
 	return nil
 }
 
-func (l *load) createGroup(ctx context.Context, core chatimv1connect.CoreServiceClient, group int) error {
+func (l *load) createGroup(ctx context.Context, chat chatimv1connect.ChatServiceClient, group int) error {
 	creator := l.clients[l.layout.SenderOf(group)]
 	members := l.layout.Members(group)
 	users := make([]string, len(members))
@@ -106,7 +106,7 @@ func (l *load) createGroup(ctx context.Context, core chatimv1connect.CoreService
 	for attempt := 1; ; attempt++ {
 		req := connect.NewRequest(msg)
 		req.Header().Set("Authorization", "Bearer "+creator.token)
-		resp, err := core.CreateRoom(ctx, req)
+		resp, err := chat.CreateRoom(ctx, req)
 		if err == nil {
 			if l.rooms[group] = resp.Msg.GetRoom().GetId(); l.rooms[group] == "" {
 				return fmt.Errorf("group %d: CreateRoom returned no room id", group)

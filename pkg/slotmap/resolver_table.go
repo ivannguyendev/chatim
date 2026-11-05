@@ -6,18 +6,18 @@ import (
 	"slices"
 )
 
-type core struct{ id, addr string }
+type node struct{ id, addr string }
 
 type table struct {
-	cores []core
-	route [Count]*core
+	nodes []node
+	route [Count]*node
 	owned [Count]bool
 }
 
 func (r *Resolver) load(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, r.cfg.LoadTimeout)
 	defer cancel()
-	cores, err := r.liveCores(ctx)
+	nodes, err := r.liveNodes(ctx)
 	if err != nil {
 		return err
 	}
@@ -25,7 +25,7 @@ func (r *Resolver) load(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("read slot owners: %w", err)
 	}
-	t := buildTable(cores, owners)
+	t := buildTable(nodes, owners)
 	r.table.Store(t)
 	r.once.Do(func() { close(r.ready) })
 	if r.cfg.OnLoad != nil {
@@ -35,22 +35,22 @@ func (r *Resolver) load(ctx context.Context) error {
 }
 
 func (t *table) addrs() []string {
-	addrs := make([]string, len(t.cores))
-	for i, c := range t.cores {
+	addrs := make([]string, len(t.nodes))
+	for i, c := range t.nodes {
 		addrs[i] = c.addr
 	}
 	return addrs
 }
 
-const liveCoresScript = `
+const liveNodesScript = `
 local t = redis.call('TIME')
 local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
 return redis.call('ZRANGEBYSCORE', KEYS[1], '(' .. string.format('%.0f', now), '+inf', 'LIMIT', 0, ARGV[1])`
 
-func (r *Resolver) liveCores(ctx context.Context) ([]core, error) {
-	ids, err := r.rdb.Eval(ctx, liveCoresScript, []string{CoreRegistryKey}, MaxCores).StringSlice()
+func (r *Resolver) liveNodes(ctx context.Context) ([]node, error) {
+	ids, err := r.rdb.Eval(ctx, liveNodesScript, []string{NodeRegistryKey}, MaxNodes).StringSlice()
 	if err != nil {
-		return nil, fmt.Errorf("read core registry: %w", err)
+		return nil, fmt.Errorf("read node registry: %w", err)
 	}
 	if len(ids) == 0 {
 		return nil, nil
@@ -58,28 +58,28 @@ func (r *Resolver) liveCores(ctx context.Context) ([]core, error) {
 	slices.Sort(ids)
 	keys := make([]string, len(ids))
 	for i, id := range ids {
-		keys[i] = CoreKey(id)
+		keys[i] = NodeKey(id)
 	}
 	addrs, err := r.rdb.MGet(ctx, keys...).Result()
 	if err != nil {
-		return nil, fmt.Errorf("read core addresses: %w", err)
+		return nil, fmt.Errorf("read node addresses: %w", err)
 	}
-	cores := make([]core, 0, len(ids))
+	nodes := make([]node, 0, len(ids))
 	for i, id := range ids {
 		if addr, _ := addrs[i].(string); id != "" && addr != "" {
-			cores = append(cores, core{id: id, addr: addr})
+			nodes = append(nodes, node{id: id, addr: addr})
 		}
 	}
-	return cores, nil
+	return nodes, nil
 }
 
-func buildTable(cores []core, owners []any) *table {
-	t := &table{cores: cores}
-	byID := make(map[string]*core, len(cores))
-	ids := make([]string, len(cores))
-	for i := range cores {
-		byID[cores[i].id] = &cores[i]
-		ids[i] = cores[i].id
+func buildTable(nodes []node, owners []any) *table {
+	t := &table{nodes: nodes}
+	byID := make(map[string]*node, len(nodes))
+	ids := make([]string, len(nodes))
+	for i := range nodes {
+		byID[nodes[i].id] = &nodes[i]
+		ids[i] = nodes[i].id
 	}
 	for s := range uint16(Count) {
 		owner, _ := owners[s].(string)

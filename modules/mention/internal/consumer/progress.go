@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ivannguyendev/chatim/pkg/jsconsume"
+	"github.com/ivannguyendev/chatim/pkg/core/jsconsume"
 )
 
 const progressEvery = AckWait / 3

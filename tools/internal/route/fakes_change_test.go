@@ -10,7 +10,7 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-func (f *fakeCore) EditMessage(ctx context.Context, in *chatimv1.EditMessageRequest, _ ...grpc.CallOption) (*chatimv1.EditMessageResponse, error) {
+func (f *fakeChat) EditMessage(ctx context.Context, in *chatimv1.EditMessageRequest, _ ...grpc.CallOption) (*chatimv1.EditMessageResponse, error) {
 	if err := f.next(ctx); err != nil {
 		return nil, err
 	}
@@ -18,7 +18,7 @@ func (f *fakeCore) EditMessage(ctx context.Context, in *chatimv1.EditMessageRequ
 	return &chatimv1.EditMessageResponse{Message: m}, nil
 }
 
-func (f *fakeCore) DeleteMessage(ctx context.Context, in *chatimv1.DeleteMessageRequest, _ ...grpc.CallOption) (*chatimv1.DeleteMessageResponse, error) {
+func (f *fakeChat) DeleteMessage(ctx context.Context, in *chatimv1.DeleteMessageRequest, _ ...grpc.CallOption) (*chatimv1.DeleteMessageResponse, error) {
 	if err := f.next(ctx); err != nil {
 		return nil, err
 	}
@@ -26,21 +26,21 @@ func (f *fakeCore) DeleteMessage(ctx context.Context, in *chatimv1.DeleteMessage
 	return &chatimv1.DeleteMessageResponse{Message: m}, nil
 }
 
-func (f *fakeCore) HideMessage(ctx context.Context, _ *chatimv1.HideMessageRequest, _ ...grpc.CallOption) (*chatimv1.HideMessageResponse, error) {
+func (f *fakeChat) HideMessage(ctx context.Context, _ *chatimv1.HideMessageRequest, _ ...grpc.CallOption) (*chatimv1.HideMessageResponse, error) {
 	if err := f.next(ctx); err != nil {
 		return nil, err
 	}
 	return &chatimv1.HideMessageResponse{}, nil
 }
 
-func (f *fakeCore) ClearHistory(ctx context.Context, in *chatimv1.ClearHistoryRequest, _ ...grpc.CallOption) (*chatimv1.ClearHistoryResponse, error) {
+func (f *fakeChat) ClearHistory(ctx context.Context, in *chatimv1.ClearHistoryRequest, _ ...grpc.CallOption) (*chatimv1.ClearHistoryResponse, error) {
 	if err := f.next(ctx); err != nil {
 		return nil, err
 	}
 	return &chatimv1.ClearHistoryResponse{ClearedAt: timestamppb.New(time.UnixMilli(int64(len(in.GetRoomId()))))}, nil
 }
 
-func (f *fakeCore) GetEditHistory(ctx context.Context, in *chatimv1.GetEditHistoryRequest, _ ...grpc.CallOption) (*chatimv1.GetEditHistoryResponse, error) {
+func (f *fakeChat) GetEditHistory(ctx context.Context, in *chatimv1.GetEditHistoryRequest, _ ...grpc.CallOption) (*chatimv1.GetEditHistoryResponse, error) {
 	if err := f.next(ctx); err != nil {
 		return nil, err
 	}

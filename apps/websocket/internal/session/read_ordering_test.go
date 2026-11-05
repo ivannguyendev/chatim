@@ -21,7 +21,7 @@ func (tc *testClient) markUnread(id uint64, room string, seq uint64) {
 func TestReadMovesOfOneRoomKeepOrderWithSendsAndOtherRoomsRunInParallel(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		h := newHarness(t, testOptions())
-		read, send, unread, other := h.core.hold(1), h.core.hold(2), h.core.hold(3), h.core.hold(4)
+		read, send, unread, other := h.chat.hold(1), h.chat.hold(2), h.chat.hold(3), h.chat.hold(4)
 		tc := h.dial(true)
 		tc.auth(h.token("u1", time.Hour))
 		tc.markRead(1, "77", 9)
@@ -29,7 +29,7 @@ func TestReadMovesOfOneRoomKeepOrderWithSendsAndOtherRoomsRunInParallel(t *testi
 		tc.markUnread(3, "77", 4)
 		tc.markRead(4, "88", 1)
 		synctest.Wait()
-		if got := h.core.startedIDs(); !sameIDs(got, 1, 4) {
+		if got := h.chat.startedIDs(); !sameIDs(got, 1, 4) {
 			t.Fatalf("started = %v, want the first read of room 77 and the read of room 88", got)
 		}
 		for i, step := range []struct {
@@ -42,7 +42,7 @@ func TestReadMovesOfOneRoomKeepOrderWithSendsAndOtherRoomsRunInParallel(t *testi
 				t.Fatalf("step %d: response id = %d, want %d", i, resp.GetId(), step.id)
 			}
 			synctest.Wait()
-			if got := h.core.startedIDs(); !sameIDs(got, step.next...) {
+			if got := h.chat.startedIDs(); !sameIDs(got, step.next...) {
 				t.Fatalf("step %d: started = %v, want %v", i, got, step.next)
 			}
 		}
@@ -57,7 +57,7 @@ func TestAFailedReadMoveKeepsTheSendsQueuedBehindIt(t *testing.T) {
 		t.Run(code.String(), func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				h := newHarness(t, testOptions())
-				read, unread := h.core.hold(1), h.core.hold(3)
+				read, unread := h.chat.hold(1), h.chat.hold(3)
 				tc := h.dial(true)
 				tc.auth(h.token("u1", time.Hour))
 				tc.markRead(1, "77", 9)
@@ -83,8 +83,8 @@ func TestAFailedReadMoveKeepsTheSendsQueuedBehindIt(t *testing.T) {
 						t.Fatalf("response = %v, want id %d code %v", resp, want.id, want.code)
 					}
 				}
-				if got := h.core.calls.Load(); got != 4 {
-					t.Fatalf("core calls = %d, want every queued request sent", got)
+				if got := h.chat.calls.Load(); got != 4 {
+					t.Fatalf("chat calls = %d, want every queued request sent", got)
 				}
 				tc.close()
 			})

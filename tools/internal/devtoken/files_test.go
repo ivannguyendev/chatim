@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 	"github.com/ivannguyendev/chatim/tools/internal/devtoken"
 )
 
@@ -49,14 +49,14 @@ func TestWriteFilesKeepsThePrivateKeyOwnerOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Sign: %v", err)
 	}
-	v, err := jwtverify.LoadFile(public, jwtverify.Config{
+	v, err := auth.LoadVerifier(public, auth.VerifierConfig{
 		Issuer:   "chatim-dev",
 		Audience: "chatim-websocket",
 		Leeway:   30 * time.Second,
 		Now:      func() time.Time { return testNow },
 	})
 	if err != nil {
-		t.Fatalf("jwtverify.LoadFile: %v", err)
+		t.Fatalf("auth.LoadVerifier: %v", err)
 	}
 	if _, err := v.Verify(token); err != nil {
 		t.Fatalf("Verify with the written key set: %v", err)

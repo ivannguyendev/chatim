@@ -21,7 +21,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/interest"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/typing"
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -52,17 +52,18 @@ func testOptions() Options {
 
 type fakeVerifier struct {
 	mu     sync.Mutex
-	tokens map[string]jwtverify.Claims
+	tokens map[string]auth.Claims
+	errs   map[string]error
 	holds  map[string]chan struct{}
 	bad    error
 	calls  atomic.Int64
 }
 
 func newFakeVerifier(t *testing.T) *fakeVerifier {
-	return &fakeVerifier{tokens: map[string]jwtverify.Claims{}, bad: malformedTokenError(t)}
+	return &fakeVerifier{tokens: map[string]auth.Claims{}, errs: map[string]error{}, bad: malformedTokenError(t)}
 }
 
-func (v *fakeVerifier) Verify(token string) (jwtverify.Claims, error) {
+func (v *fakeVerifier) Verify(token string) (auth.Claims, error) {
 	v.calls.Add(1)
 	v.mu.Lock()
 	hold := v.holds[token]
@@ -72,9 +73,12 @@ func (v *fakeVerifier) Verify(token string) (jwtverify.Claims, error) {
 	}
 	v.mu.Lock()
 	defer v.mu.Unlock()
+	if err, ok := v.errs[token]; ok {
+		return auth.Claims{}, err
+	}
 	claims, ok := v.tokens[token]
 	if !ok {
-		return jwtverify.Claims{}, v.bad
+		return auth.Claims{}, v.bad
 	}
 	return claims, nil
 }
@@ -82,8 +86,21 @@ func (v *fakeVerifier) Verify(token string) (jwtverify.Claims, error) {
 func (v *fakeVerifier) issue(token, tenant, user string, expiresAt time.Time) string {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	v.tokens[token] = jwtverify.Claims{Tenant: tenant, User: user, ExpiresAt: expiresAt}
+	v.tokens[token] = auth.Claims{Tenant: tenant, User: user, Session: "s-" + token, IssuedAt: time.Now(), ExpiresAt: expiresAt}
 	return token
+}
+
+func (v *fakeVerifier) issueClaims(token string, c auth.Claims) string {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.tokens[token] = c
+	return token
+}
+
+func (v *fakeVerifier) fail(token string, err error) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.errs[token] = err
 }
 
 func malformedTokenError(t *testing.T) error {
@@ -93,22 +110,44 @@ func malformedTokenError(t *testing.T) error {
 		t.Fatalf("generate key: %v", err)
 	}
 	jwks := fmt.Sprintf(`{"keys":[{"kty":"OKP","crv":"Ed25519","kid":"k1","x":%q}]}`, base64.RawURLEncoding.EncodeToString(public))
-	verifier, err := jwtverify.New(jwtverify.Config{JWKS: []byte(jwks), Issuer: "issuer", Audience: "audience"})
+	verifier, err := auth.NewVerifier(auth.VerifierConfig{JWKS: []byte(jwks), Issuer: "issuer", Audience: "audience"})
 	if err != nil {
 		t.Fatalf("verifier: %v", err)
 	}
 	_, err = verifier.Verify("not-a-token")
-	if jwtverify.ReasonOf(err) != jwtverify.ReasonMalformed {
+	if auth.ReasonOf(err) != auth.ReasonMalformed {
 		t.Fatalf("expected a malformed token error, got %v", err)
 	}
 	return err
 }
 
+type fakeRevocations struct {
+	list    *auth.RevocationList
+	unknown atomic.Bool
+	asked   atomic.Int64
+}
+
+func newFakeRevocations(t *testing.T) *fakeRevocations {
+	list, err := auth.NewRevocationList(auth.RevocationListConfig{Leeway: 30 * time.Second, MaxKeep: 17 * time.Minute, MaxAhead: time.Minute})
+	if err != nil {
+		t.Fatalf("revocation list: %v", err)
+	}
+	return &fakeRevocations{list: list}
+}
+
+func (f *fakeRevocations) Check(c auth.Claims) auth.Verdict { return f.list.Check(c) }
+
+func (f *fakeRevocations) UnknownKey(string) bool {
+	f.asked.Add(1)
+	return f.unknown.Load()
+}
+
 type harness struct {
 	t        *testing.T
 	server   *Server
+	revoked  *fakeRevocations
 	verifier *fakeVerifier
-	core     *fakeCore
+	chat     *fakeChat
 	rooms    *interest.Table
 	loader   *roomLoader
 	typing   *typing.Service
@@ -122,14 +161,15 @@ func newHarness(t *testing.T, opts Options) *harness {
 
 func newHarnessWith(t *testing.T, opts Options, wrap func(Interest) Interest) *harness {
 	t.Helper()
-	verifier, core, loader := newFakeVerifier(t), newFakeCore(), &roomLoader{rooms: map[string][]interest.Room{}}
+	verifier, chat, loader := newFakeVerifier(t), newFakeChat(), &roomLoader{rooms: map[string][]interest.Room{}}
 	rooms := newInterestWith(t, loader)
 	typist, presence := newTestTyping(t, rooms), &fakePresence{}
-	server, err := New(opts, verifier, core, wrap(rooms), typist, presence, slog.New(slog.DiscardHandler))
+	revoked := newFakeRevocations(t)
+	server, err := New(opts, verifier, revoked, chat, wrap(rooms), typist, presence, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	return &harness{t: t, server: server, verifier: verifier, core: core, rooms: rooms, loader: loader, typing: typist, presence: presence}
+	return &harness{t: t, server: server, revoked: revoked, verifier: verifier, chat: chat, rooms: rooms, loader: loader, typing: typist, presence: presence}
 }
 
 type testClient struct {

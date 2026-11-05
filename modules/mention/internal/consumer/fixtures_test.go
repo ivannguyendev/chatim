@@ -14,7 +14,7 @@ import (
 	"github.com/ivannguyendev/chatim/modules/mention/internal/consumer"
 	"github.com/ivannguyendev/chatim/modules/mention/internal/domain"
 	"github.com/ivannguyendev/chatim/modules/mention/internal/store/memstore"
-	"github.com/ivannguyendev/chatim/pkg/jsconsume"
+	"github.com/ivannguyendev/chatim/pkg/core/jsconsume"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 

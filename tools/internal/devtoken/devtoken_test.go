@@ -6,19 +6,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 	"github.com/ivannguyendev/chatim/tools/internal/devtoken"
 )
 
 var testNow = time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
 
-func verifierFor(t *testing.T, key devtoken.KeyPair) *jwtverify.Verifier {
+func verifierFor(t *testing.T, key devtoken.KeyPair) *auth.Verifier {
 	t.Helper()
 	jwks, err := key.PublicJWKS()
 	if err != nil {
 		t.Fatalf("PublicJWKS: %v", err)
 	}
-	v, err := jwtverify.New(jwtverify.Config{
+	v, err := auth.NewVerifier(auth.VerifierConfig{
 		JWKS:     jwks,
 		Issuer:   "chatim-dev",
 		Audience: "chatim-websocket",
@@ -26,7 +26,7 @@ func verifierFor(t *testing.T, key devtoken.KeyPair) *jwtverify.Verifier {
 		Now:      func() time.Time { return testNow },
 	})
 	if err != nil {
-		t.Fatalf("jwtverify.New: %v", err)
+		t.Fatalf("auth.NewVerifier: %v", err)
 	}
 	return v
 }
@@ -58,6 +58,26 @@ func TestSignedTokensPassVerify(t *testing.T) {
 	if got.Tenant != "acme" || got.User != "alice" || !got.ExpiresAt.Equal(testNow.Add(time.Hour)) {
 		t.Fatalf("Verify = %+v", got)
 	}
+	if len(got.Session) != 26 || !got.IssuedAt.Equal(testNow) {
+		t.Fatalf("session %q, issued %v; want a 26-character session and the issue time", got.Session, got.IssuedAt)
+	}
+	again, err := key.Sign(testClaims())
+	if err != nil {
+		t.Fatalf("Sign: %v", err)
+	}
+	second, err := verifierFor(t, key).Verify(again)
+	if err != nil || second.Session == got.Session {
+		t.Fatalf("second token session %q (%v); want a new random session", second.Session, err)
+	}
+	claims := testClaims()
+	claims.Session = "phone-1"
+	fixed, err := key.Sign(claims)
+	if err != nil {
+		t.Fatalf("Sign: %v", err)
+	}
+	if third, err := verifierFor(t, key).Verify(fixed); err != nil || third.Session != "phone-1" {
+		t.Fatalf("given session = %q (%v); want phone-1", third.Session, err)
+	}
 }
 
 func TestNegativeTTLMintsAnExpiredToken(t *testing.T) {
@@ -71,7 +91,7 @@ func TestNegativeTTLMintsAnExpiredToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Sign: %v", err)
 	}
-	if _, err := verifierFor(t, key).Verify(token); jwtverify.ReasonOf(err) != jwtverify.ReasonExpired {
+	if _, err := verifierFor(t, key).Verify(token); auth.ReasonOf(err) != auth.ReasonExpired {
 		t.Fatalf("Verify err = %v; want expired", err)
 	}
 }
@@ -109,7 +129,7 @@ func TestPrivateJWKRoundTripsAndStaysOutOfTheVerifier(t *testing.T) {
 		t.Fatalf("Verify with the loaded key: %v", err)
 	}
 	set := append(append([]byte(`{"keys":[`), private...), ']', '}')
-	if _, err := jwtverify.New(jwtverify.Config{JWKS: set, Issuer: "i", Audience: "a"}); !errors.Is(err, jwtverify.ErrInvalidKeySet) {
+	if _, err := auth.NewVerifier(auth.VerifierConfig{JWKS: set, Issuer: "i", Audience: "a"}); !errors.Is(err, auth.ErrInvalidKeySet) {
 		t.Fatalf("verifier accepted a private key: %v", err)
 	}
 }

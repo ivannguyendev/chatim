@@ -53,8 +53,8 @@ func fixed(addr string) func(int) (string, bool) {
 	return func(int) (string, bool) { return addr, true }
 }
 
-type fakeCore struct {
-	chatimv1.CoreServiceClient
+type fakeChat struct {
+	chatimv1.ChatServiceClient
 	chatimv1.MentionServiceClient
 	mu      sync.Mutex
 	fail    []error
@@ -64,7 +64,7 @@ type fakeCore struct {
 	callers []metadata.MD
 }
 
-func (f *fakeCore) next(ctx context.Context) error {
+func (f *fakeChat) next(ctx context.Context) error {
 	f.mu.Lock()
 	md, _ := metadata.FromOutgoingContext(ctx)
 	f.callers = append(f.callers, md)
@@ -84,14 +84,14 @@ func (f *fakeCore) next(ctx context.Context) error {
 	return err
 }
 
-func (f *fakeCore) CreateRoom(ctx context.Context, in *chatimv1.CreateRoomRequest, _ ...grpc.CallOption) (*chatimv1.CreateRoomResponse, error) {
+func (f *fakeChat) CreateRoom(ctx context.Context, in *chatimv1.CreateRoomRequest, _ ...grpc.CallOption) (*chatimv1.CreateRoomResponse, error) {
 	if err := f.record(ctx, in); err != nil {
 		return nil, err
 	}
 	return &chatimv1.CreateRoomResponse{Room: &chatimv1.Room{Id: "42"}}, nil
 }
 
-func (f *fakeCore) SendMessage(ctx context.Context, in *chatimv1.SendMessageRequest, _ ...grpc.CallOption) (*chatimv1.SendMessageResponse, error) {
+func (f *fakeChat) SendMessage(ctx context.Context, in *chatimv1.SendMessageRequest, _ ...grpc.CallOption) (*chatimv1.SendMessageResponse, error) {
 	f.mu.Lock()
 	f.sends = append(f.sends, in)
 	f.mu.Unlock()
@@ -101,7 +101,7 @@ func (f *fakeCore) SendMessage(ctx context.Context, in *chatimv1.SendMessageRequ
 	return &chatimv1.SendMessageResponse{Seq: 7}, nil
 }
 
-func (f *fakeCore) GetHistory(ctx context.Context, _ *chatimv1.GetHistoryRequest, _ ...grpc.CallOption) (*chatimv1.GetHistoryResponse, error) {
+func (f *fakeChat) GetHistory(ctx context.Context, _ *chatimv1.GetHistoryRequest, _ ...grpc.CallOption) (*chatimv1.GetHistoryResponse, error) {
 	if err := f.next(ctx); err != nil {
 		return nil, err
 	}
@@ -122,24 +122,24 @@ func (c closeCounter) Close() error {
 
 type fakeNet struct {
 	mu     sync.Mutex
-	cores  map[string]*fakeCore
+	nodes  map[string]*fakeChat
 	dials  map[string]int
 	closed int
 }
 
-func newFakeNet(cores map[string]*fakeCore) *fakeNet {
-	return &fakeNet{cores: cores, dials: map[string]int{}}
+func newFakeNet(nodes map[string]*fakeChat) *fakeNet {
+	return &fakeNet{nodes: nodes, dials: map[string]int{}}
 }
 
-func (n *fakeNet) dial(addr string) (chatimv1.CoreServiceClient, io.Closer, error) {
+func (n *fakeNet) dial(addr string) (chatimv1.ChatServiceClient, io.Closer, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	core, ok := n.cores[addr]
+	chat, ok := n.nodes[addr]
 	if !ok {
 		return nil, nil, errors.New("unknown address " + addr)
 	}
 	n.dials[addr]++
-	return core, closeCounter{mu: &n.mu, n: &n.closed}, nil
+	return chat, closeCounter{mu: &n.mu, n: &n.closed}, nil
 }
 
 func newClient(t *testing.T, loc route.Locator, net *fakeNet, p route.Policy) *route.Client {

@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ivannguyendev/chatim/pkg/metrics"
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -105,7 +105,7 @@ func (t *Table) Sources() []metrics.Source {
 		{Name: "users_suspended", Help: "Users whose delivery is suspended until their rooms are loaded again after the feed skipped part of the stream.", Gauge: true, Read: gaugeOfInt64(&s.suspended)},
 		{Name: "reloads_total", Help: "Suspended users whose rooms were loaded again.", Read: counterOf(&s.reloads)},
 		{Name: "reload_seconds", Help: "Time from the first suspension of a user to the end of its reload, in seconds.", Histogram: s.reload.read},
-		{Name: "event_delivery_seconds", Help: "Time from the JetStream store time of a core event to its frame queued to the first connections on this node, in seconds.", Histogram: s.delivery.read},
+		{Name: "event_delivery_seconds", Help: "Time from the JetStream store time of a chat event to its frame queued to the first connections on this node, in seconds.", Histogram: s.delivery.read},
 		{Name: "reload_failures_total", Help: "Reloads of suspended users that failed; the connections of the user got load_failed.", Read: counterOf(&s.reloadFailures)},
 	}
 	for reason, label := range resyncLabels {
@@ -125,7 +125,7 @@ func (t *Table) Sources() []metrics.Source {
 	}
 	for r := range dropReasonCount {
 		out = append(out, metrics.Source{
-			Name: "events_dropped_total", Help: "Core events dropped before routing, by reason.",
+			Name: "events_dropped_total", Help: "Chat events dropped before routing, by reason.",
 			Labels: map[string]string{"reason": dropLabels[r]}, Read: counterOf(&s.dropped[r]),
 		})
 	}

@@ -17,7 +17,7 @@ func TestOpenRoomWhileSuspendedOrAfterAFailedLoadIsIgnored(t *testing.T) {
 		f.table.Jumped(lagJump(5))
 		synctest.Wait()
 		c.Open("1")
-		f.loader.answer(1, reply{err: errors.New("core down")})
+		f.loader.answer(1, reply{err: errors.New("chat down")})
 		synctest.Wait()
 		c.Open("1")
 		if got := s.take(); !slices.Equal(got, []string{"load_failed"}) || len(c.open) != 0 || len(c.pending) != 0 {
@@ -43,7 +43,7 @@ func TestMemberChangesWhileALoadFailedUserWaitsAreDroppedAndTheNextLoadDecides(t
 		s := &fakeSink{}
 		c := mustRegister(t, f.table, "t1", "u", s)
 		synctest.Wait()
-		f.loader.answer(0, reply{err: errors.New("core down")})
+		f.loader.answer(0, reply{err: errors.New("chat down")})
 		synctest.Wait()
 		s.take()
 		f.route(withSeq(added("t1", 1, "u", 1), 9))

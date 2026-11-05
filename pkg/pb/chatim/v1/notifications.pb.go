@@ -325,7 +325,7 @@ var File_chatim_v1_notifications_proto protoreflect.FileDescriptor
 
 const file_chatim_v1_notifications_proto_rawDesc = "" +
 	"\n" +
-	"\x1dchatim/v1/notifications.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x1dchatim/v1/message_links.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb5\x03\n" +
+	"\x1dchatim/v1/notifications.proto\x12\tchatim.v1\x1a\x14chatim/v1/chat.proto\x1a\x1dchatim/v1/message_links.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb5\x03\n" +
 	"\fNotification\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06tenant\x18\x02 \x01(\tR\x06tenant\x12\x12\n" +
@@ -397,7 +397,7 @@ func file_chatim_v1_notifications_proto_init() {
 	if File_chatim_v1_notifications_proto != nil {
 		return
 	}
-	file_chatim_v1_core_proto_init()
+	file_chatim_v1_chat_proto_init()
 	file_chatim_v1_message_links_proto_init()
 	file_chatim_v1_notifications_proto_msgTypes[0].OneofWrappers = []any{
 		(*Notification_MentionNotified)(nil),

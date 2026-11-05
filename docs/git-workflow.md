@@ -12,7 +12,7 @@
 Không có nhánh `prod`, `develop` hay `release` thường trực.
 
 ```
-feat/<milestone> ──một PR──▶ main ──tag vX.Y.Z──▶ image chatim/core:vX.Y.Z (ghim digest)
+feat/<milestone> ──một PR──▶ main ──tag vX.Y.Z──▶ image chatim/chat:vX.Y.Z (ghim digest)
                                                   ├─▶ staging / prod-like
                                                   └─▶ prod  (cùng image, không build lại)
 ```
@@ -28,15 +28,15 @@ feat/<milestone> ──một PR──▶ main ──tag vX.Y.Z──▶ image ch
 ## CI và bảo vệ nhánh
 
 - `.github/workflows/ci.yml`, job `checks`: chạy `make fmt-check`, `make vet`, `make lint`, `make test` trên mọi PR vào `main` và mỗi lần push lên `main`. Go vẫn chạy trong container `golang:1.26.10` qua `make`, giống máy dev.
-- CI chỉ chạy unit test. `make itest` và `make core-up && make e2e` cần hạ tầng nên vẫn chạy trên máy dev (DoD bước 2).
+- CI chỉ chạy unit test. `make itest` và `make app-up && make e2e` cần hạ tầng nên vẫn chạy trên máy dev (DoD bước 2).
 - Branch protection `main`: bắt buộc PR, bắt buộc status check `checks` xanh, không ai được bỏ qua.
 
 ## Definition of Done để merge vào main
 
 1. Mọi task trong plan execute `.claude/plans/<plan>.md` đã xong và bản tóm tắt `docs/plans/<plan>-summary.md` đã cập nhật theo cái đã xây; bước nào cho kết quả khác "Expected" đã được báo và xử lý.
-2. Xanh: `make fmt-check`, `make vet`, `make lint`, `make test`, `make itest`, `make core-up && make e2e`.
+2. Xanh: `make fmt-check`, `make vet`, `make lint`, `make test`, `make itest`, `make app-up && make e2e`.
 3. Không còn finding Critical/Important; finding Minor ghi vào plan hoặc docs.
-4. Cùng PR cập nhật: `docs/roadmap.md` (trạng thái và mức sẵn sàng), Decision Log trong design doc, `INDEXES.csv`, mục Done/Next trong `CLAUDE.md`.
+4. Cùng PR cập nhật: `docs/roadmap.md` (trạng thái và mức sẵn sàng), `docs/decision-log.md` (chỉ quyết định đã được chấp nhận), `INDEXES.csv`. `CLAUDE.md` chỉ đổi khi có rule đổi, không ghi trạng thái.
 5. Mô tả PR ghi mức sẵn sàng và những gì còn thiếu để go-live.
 
 ## Mức sẵn sàng

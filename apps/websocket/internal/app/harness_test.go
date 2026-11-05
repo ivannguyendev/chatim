@@ -24,7 +24,8 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/config"
-	"github.com/ivannguyendev/chatim/pkg/coreroute"
+	"github.com/ivannguyendev/chatim/pkg/auth/authtest"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/pkg/slotmap"
 )
@@ -62,7 +63,7 @@ func newSigner(t *testing.T) signer {
 func (s signer) token(t *testing.T, expiresAt time.Time) string {
 	t.Helper()
 	tok := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{
-		"iss": testIssuer, "aud": testAudience, "sub": "u1", "tid": "t1", "exp": expiresAt.Unix(),
+		"iss": testIssuer, "aud": testAudience, "sub": "u1", "tid": "t1", "sid": "s1", "iat": time.Now().Unix(), "exp": expiresAt.Unix(),
 	})
 	tok.Header["kid"] = testKID
 	signed, err := tok.SignedString(s.priv)
@@ -88,7 +89,7 @@ func testConfig(redisAddr, keysFile string) config.Config {
 		TypingRate: 2, TypingBurst: 4, TypingQueue: 64, TypingPendingMsgs: 128,
 		PresenceRedisAddr: "presence:6379", PresenceRedisPassword: testPresencePassword, PresenceRedisTimeout: 500 * time.Millisecond,
 		PresenceRedisPool: 4, PresenceTTL: 15 * time.Second, PresenceStampEvery: 2 * time.Second, PresenceFlush: 50 * time.Millisecond, PresenceBatch: 500,
-		PresenceCache: 5 * time.Second, PresenceWatchMax: 200,
+		PresenceCache: 5 * time.Second, PresenceWatchMax: 200, Identity: authtest.SyncConfig(),
 	}
 }
 
@@ -96,19 +97,19 @@ func slotRedis(t *testing.T) *miniredis.Miniredis {
 	t.Helper()
 	mr := miniredis.RunT(t)
 	mr.RequireAuth(testRedisPassword)
-	_ = mr.Set(slotmap.CoreKey("core-1"), "core-1:9000")
-	_, _ = mr.ZAdd(slotmap.CoreRegistryKey, slotmap.CoreExpiryScore(time.Now().Add(time.Hour)), "core-1")
-	_ = mr.Set(slotmap.SlotKey(slotmap.Of(testRoom)), "core-1")
+	_ = mr.Set(slotmap.NodeKey("chat-1"), "chat-1:9000")
+	_, _ = mr.ZAdd(slotmap.NodeRegistryKey, slotmap.NodeExpiryScore(time.Now().Add(time.Hour)), "chat-1")
+	_ = mr.Set(slotmap.SlotKey(slotmap.Of(testRoom)), "chat-1")
 	return mr
 }
 
-type fakeCore struct {
-	chatimv1.UnimplementedCoreServiceServer
+type fakeChat struct {
+	chatimv1.UnimplementedChatServiceServer
 	started chan struct{}
 	release chan struct{}
 }
 
-func (f *fakeCore) EditMessage(ctx context.Context, _ *chatimv1.EditMessageRequest) (*chatimv1.EditMessageResponse, error) {
+func (f *fakeChat) EditMessage(ctx context.Context, _ *chatimv1.EditMessageRequest) (*chatimv1.EditMessageResponse, error) {
 	f.started <- struct{}{}
 	select {
 	case <-f.release:
@@ -118,16 +119,16 @@ func (f *fakeCore) EditMessage(ctx context.Context, _ *chatimv1.EditMessageReque
 	}
 }
 
-func (f *fakeCore) ListMyRoomIDs(context.Context, *chatimv1.ListMyRoomIDsRequest) (*chatimv1.ListMyRoomIDsResponse, error) {
+func (f *fakeChat) ListMyRoomIDs(context.Context, *chatimv1.ListMyRoomIDsRequest) (*chatimv1.ListMyRoomIDsResponse, error) {
 	return &chatimv1.ListMyRoomIDsResponse{}, nil
 }
 
-func startFakeCore(t *testing.T) (*fakeCore, coreroute.Dialer) {
+func startFakeChatNode(t *testing.T) (*fakeChat, chatrpc.Dialer) {
 	t.Helper()
-	core := &fakeCore{started: make(chan struct{}, 8), release: make(chan struct{})}
+	chat := &fakeChat{started: make(chan struct{}, 8), release: make(chan struct{})}
 	lis := bufconn.Listen(1 << 20)
 	srv := grpc.NewServer()
-	chatimv1.RegisterCoreServiceServer(srv, core)
+	chatimv1.RegisterChatServiceServer(srv, chat)
 	served := make(chan struct{})
 	go func() {
 		defer close(served)
@@ -137,16 +138,16 @@ func startFakeCore(t *testing.T) (*fakeCore, coreroute.Dialer) {
 		srv.Stop()
 		<-served
 	})
-	dial := func(string) (chatimv1.CoreServiceClient, io.Closer, error) {
-		cc, err := grpc.NewClient("passthrough:///core",
+	dial := func(string) (chatimv1.ChatServiceClient, io.Closer, error) {
+		cc, err := grpc.NewClient("passthrough:///chat",
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) { return lis.DialContext(ctx) }))
 		if err != nil {
 			return nil, nil, err
 		}
-		return chatimv1.NewCoreServiceClient(cc), cc, nil
+		return chatimv1.NewChatServiceClient(cc), cc, nil
 	}
-	return core, dial
+	return chat, dial
 }
 
 type listeners struct {
@@ -255,7 +256,7 @@ func httpStatus(t *testing.T, addr, path string) (int, string) {
 
 func runAsync(ctx context.Context, cfg config.Config, log *slog.Logger, deps Deps) chan error {
 	done := make(chan error, 1)
-	go func() { done <- Run(ctx, cfg, log, deps) }()
+	go func() { done <- run(ctx, cfg, log, deps) }()
 	return done
 }
 
@@ -280,4 +281,11 @@ func receive[T any](t *testing.T, ch <-chan T, what string) T {
 		var zero T
 		return zero
 	}
+}
+
+func run(ctx context.Context, cfg config.Config, log *slog.Logger, deps Deps) error {
+	if deps.IdentityDoer == nil {
+		deps.IdentityDoer = authtest.Accepting{}
+	}
+	return Run(ctx, cfg, log, deps)
 }

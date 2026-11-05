@@ -12,7 +12,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/ivannguyendev/chatim/pkg/redact"
+	"github.com/ivannguyendev/chatim/pkg/core/redact"
 	"github.com/ivannguyendev/chatim/pkg/wspublish"
 )
 

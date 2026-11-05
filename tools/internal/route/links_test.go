@@ -52,23 +52,23 @@ type splitLocator struct {
 	roomLocator
 }
 
-func (l *splitLocator) AnyAddr() (string, bool) { return "core-2:9000", true }
+func (l *splitLocator) AnyAddr() (string, bool) { return "chat-2:9000", true }
 
 func TestLinkCallsRetryAttemptTimeoutsWithTheSameRequest(t *testing.T) {
 	retried := []error{status.Error(codes.Unavailable, "x"), status.Error(codes.ResourceExhausted, "x")}
 	for name, lc := range linkCalls() {
 		synctest.Test(t, func(t *testing.T) {
-			byRoom, anyCore := &fakeCore{block: 1, fail: slices.Clone(retried)}, &fakeCore{block: 1, fail: slices.Clone(retried)}
+			byRoom, anyChatNode := &fakeChat{block: 1, fail: slices.Clone(retried)}, &fakeChat{block: 1, fail: slices.Clone(retried)}
 			loc := &splitLocator{}
-			net := newFakeNet(map[string]*fakeCore{"core-1:9000": byRoom, "core-2:9000": anyCore})
+			net := newFakeNet(map[string]*fakeChat{"chat-1:9000": byRoom, "chat-2:9000": anyChatNode})
 			c := newClient(t, loc, net, route.Policy{Attempt: time.Second})
 			got, st, err := lc.call(t.Context(), c)
 			if err != nil || st.Attempts != 4 || !proto.Equal(got, lc.want) {
 				t.Fatalf("%s = %v, %v after %d attempts; want %v on the fourth attempt", name, got, err, st.Attempts, lc.want)
 			}
-			served, idle, wantAddr := anyCore, byRoom, "core-2:9000"
+			served, idle, wantAddr := anyChatNode, byRoom, "chat-2:9000"
 			if lc.inRoom {
-				served, idle, wantAddr = byRoom, anyCore, "core-1:9000"
+				served, idle, wantAddr = byRoom, anyChatNode, "chat-1:9000"
 			}
 			reqs := served.requests()
 			if st.Addr != wantAddr || len(reqs) != 4 || slices.ContainsFunc(reqs, func(r proto.Message) bool { return r != lc.req }) || len(idle.requests()) != 0 {
@@ -79,8 +79,8 @@ func TestLinkCallsRetryAttemptTimeoutsWithTheSameRequest(t *testing.T) {
 }
 
 func TestLinkCallsKeepRefusalsAndBadRoomIDsLocal(t *testing.T) {
-	core := &fakeCore{fail: []error{status.Error(codes.FailedPrecondition, "message deleted")}}
-	c := newClient(t, &roomLocator{}, newFakeNet(map[string]*fakeCore{"core-1:9000": core}), route.Policy{})
+	chat := &fakeChat{fail: []error{status.Error(codes.FailedPrecondition, "message deleted")}}
+	c := newClient(t, &roomLocator{}, newFakeNet(map[string]*fakeChat{"chat-1:9000": chat}), route.Policy{})
 	if _, st, err := linkCalls()["bookmark"].call(t.Context(), c); status.Code(err) != codes.FailedPrecondition || st.Attempts != 1 {
 		t.Fatalf("bookmark of a deleted message = %v after %d attempts, want FailedPrecondition at once", err, st.Attempts)
 	}

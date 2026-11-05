@@ -10,35 +10,35 @@ import (
 
 func TestResolverReloadsOnSlotChangeNotifications(t *testing.T) {
 	g := newResolverRig(t, ResolverConfig{Refresh: time.Hour})
-	g.heartbeat("core-a", coreAddr("core-a"), 0)
-	g.heartbeat("core-b", coreAddr("core-b"), 0)
-	g.own(3, "core-a")
+	g.heartbeat("chat-a", nodeAddr("chat-a"), 0)
+	g.heartbeat("chat-b", nodeAddr("chat-b"), 0)
+	g.own(3, "chat-a")
 	g.start(t)
 	g.awaitReady(t)
-	if rt := g.routeOf(t, 3); rt.Core != "core-a" {
-		t.Fatalf("slot 3 route = %+v, want core-a", rt)
+	if rt := g.routeOf(t, 3); rt.Node != "chat-a" {
+		t.Fatalf("slot 3 route = %+v, want chat-a", rt)
 	}
-	g.own(3, "core-b")
-	if err := g.rdb.Publish(t.Context(), ChangedChannel, "core-b").Err(); err != nil {
+	g.own(3, "chat-b")
+	if err := g.rdb.Publish(t.Context(), ChangedChannel, "chat-b").Err(); err != nil {
 		t.Fatalf("publish change: %v", err)
 	}
-	eventually(t, "reload after a change notification", func() bool { return g.routeOf(t, 3).Core == "core-b" })
+	eventually(t, "reload after a change notification", func() bool { return g.routeOf(t, 3).Node == "chat-b" })
 }
 
 func TestResolverReloadsPeriodicallyWithoutNotifications(t *testing.T) {
 	g := newResolverRig(t, ResolverConfig{Refresh: 20 * time.Millisecond})
-	g.heartbeat("core-a", coreAddr("core-a"), 0)
-	g.heartbeat("core-b", coreAddr("core-b"), 0)
-	g.own(3, "core-a")
+	g.heartbeat("chat-a", nodeAddr("chat-a"), 0)
+	g.heartbeat("chat-b", nodeAddr("chat-b"), 0)
+	g.own(3, "chat-a")
 	g.start(t)
 	g.awaitReady(t)
-	g.own(3, "core-b")
-	eventually(t, "periodic reload", func() bool { return g.routeOf(t, 3).Core == "core-b" })
+	g.own(3, "chat-b")
+	eventually(t, "periodic reload", func() bool { return g.routeOf(t, 3).Node == "chat-b" })
 }
 
 func TestResolverIsReadyOnlyAfterTheFirstSuccessfulLoad(t *testing.T) {
 	g := newResolverRig(t, ResolverConfig{Refresh: time.Hour})
-	g.heartbeat("core-a", coreAddr("core-a"), 0)
+	g.heartbeat("chat-a", nodeAddr("chat-a"), 0)
 	g.mr.SetError("LOADING redis is loading")
 	g.start(t)
 	select {
@@ -48,15 +48,15 @@ func TestResolverIsReadyOnlyAfterTheFirstSuccessfulLoad(t *testing.T) {
 	}
 	g.mr.SetError("")
 	g.awaitReady(t)
-	if addr, ok := g.r.AnyAddr(); !ok || addr != coreAddr("core-a") {
+	if addr, ok := g.r.AnyAddr(); !ok || addr != nodeAddr("chat-a") {
 		t.Fatalf("AnyAddr = %q, %v after recovery", addr, ok)
 	}
 }
 
 func TestResolverServesConcurrentRefreshesAndReads(t *testing.T) {
 	g := newResolverRig(t, ResolverConfig{})
-	g.heartbeat("core-a", coreAddr("core-a"), 0)
-	g.ownByRendezvous("core-a")
+	g.heartbeat("chat-a", nodeAddr("chat-a"), 0)
+	g.ownByRendezvous("chat-a")
 	var wg sync.WaitGroup
 	for i := range 8 {
 		wg.Go(func() {

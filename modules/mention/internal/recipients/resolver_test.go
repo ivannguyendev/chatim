@@ -38,18 +38,18 @@ func expect(t *testing.T, got, want map[string]domain.Target) {
 
 func TestUsersStillInTheRoomExceptTheSender(t *testing.T) {
 	f := newFixture(t)
-	f.core.join(room, "Lan", "Minh", "Tu")
-	f.core.leave(room, "Tu")
+	f.chat.join(room, "Lan", "Minh", "Tu")
+	f.chat.leave(room, "Tu")
 	got := resolve(t, f, domain.RoomGroup, user("Minh"), user("Tu"), user("Ghost"), user("Lan"))
 	expect(t, got, map[string]domain.Target{"Minh": user("Minh")})
-	if f.core.membersOf != 1 || f.core.listCalls != 0 {
-		t.Fatalf("calls MembersOf %d, ListMembers %d; want 1, 0", f.core.membersOf, f.core.listCalls)
+	if f.chat.membersOf != 1 || f.chat.listCalls != 0 {
+		t.Fatalf("calls MembersOf %d, ListMembers %d; want 1, 0", f.chat.membersOf, f.chat.listCalls)
 	}
 }
 
 func TestOnlyTaggableCatalogGroupsNotify(t *testing.T) {
 	f := newFixture(t)
-	f.core.join(room, "Lan", "Ha", "Minh", "Tu")
+	f.chat.join(room, "Lan", "Ha", "Minh", "Tu")
 	f.catalogue(t, "team-sale", true)
 	f.catalogue(t, "hr", false)
 	f.inGroups(t, "Ha", "team-sale")
@@ -59,32 +59,32 @@ func TestOnlyTaggableCatalogGroupsNotify(t *testing.T) {
 	got := resolve(t, f, domain.RoomGroup, group("team-sale"), group("hr"), group("ghost"))
 	expect(t, got, map[string]domain.Target{"Ha": group("team-sale")})
 	f2 := newFixture(t)
-	f2.core.join(room, "Minh")
+	f2.chat.join(room, "Minh")
 	f2.inGroups(t, "Minh", "hr")
 	f2.catalogue(t, "hr", false)
 	expect(t, resolve(t, f2, domain.RoomGroup, group("hr")), map[string]domain.Target{})
-	if f2.core.listCalls != 0 {
-		t.Fatalf("an untaggable group read the room: %d ListMembers calls", f2.core.listCalls)
+	if f2.chat.listCalls != 0 {
+		t.Fatalf("an untaggable group read the room: %d ListMembers calls", f2.chat.listCalls)
 	}
 }
 
 func TestEveryoneInDMAndGroupButNotInChannel(t *testing.T) {
 	f := newFixture(t)
-	f.core.join(room, "Lan", "Minh", "Tu", "Ha")
-	f.core.leave(room, "Ha")
+	f.chat.join(room, "Lan", "Minh", "Tu", "Ha")
+	f.chat.leave(room, "Ha")
 	want := map[string]domain.Target{"Minh": everyone, "Tu": everyone}
 	expect(t, resolve(t, f, domain.RoomGroup, everyone), want)
 	expect(t, resolve(t, f, domain.RoomDM, everyone), want)
-	calls := f.core.listCalls
+	calls := f.chat.listCalls
 	expect(t, resolve(t, f, domain.RoomChannel, everyone, user("Minh")), map[string]domain.Target{"Minh": user("Minh")})
-	if f.core.listCalls != calls {
+	if f.chat.listCalls != calls {
 		t.Fatalf("channel @all listed the room")
 	}
 }
 
 func TestOneEntryPerUserByPriority(t *testing.T) {
 	f := newFixture(t)
-	f.core.join(room, "Lan", "Minh", "Ha", "Tu")
+	f.chat.join(room, "Lan", "Minh", "Ha", "Tu")
 	f.catalogue(t, "team-sale", true)
 	f.catalogue(t, "a-team", true)
 	f.inGroups(t, "Minh", "team-sale")
@@ -107,7 +107,7 @@ func TestSmallAndLargeRoomsGiveTheSameRecipients(t *testing.T) {
 			t.Fatalf("set staff: %v", err)
 		}
 		members := append(users("s", 1900, 1900+size/2), users("x", 0, size-size/2)...)
-		f.core.join(room, members...)
+		f.chat.join(room, members...)
 		want := map[string]domain.Target{}
 		for _, u := range users("s", 1900, 2100) {
 			want[u] = group("staff")
@@ -119,8 +119,8 @@ func TestSmallAndLargeRoomsGiveTheSameRecipients(t *testing.T) {
 		if small != (f.groups.of == 1 && f.groups.byGroup == 0) || !small && f.groups.byGroup != 4 {
 			t.Fatalf("room of %d: Of %d, MembersOfGroup %d calls", size, f.groups.of, f.groups.byGroup)
 		}
-		if f.core.listLimits[0] != recipients.PageSize || recipients.PageSize > coreMemberPage {
-			t.Fatalf("first ListMembers limit = %d, want one page of %d within the core page %d", f.core.listLimits[0], recipients.PageSize, coreMemberPage)
+		if f.chat.listLimits[0] != recipients.PageSize || recipients.PageSize > chatMemberPage {
+			t.Fatalf("first ListMembers limit = %d, want one page of %d within the chat page %d", f.chat.listLimits[0], recipients.PageSize, chatMemberPage)
 		}
 	}
 }
@@ -128,8 +128,8 @@ func TestSmallAndLargeRoomsGiveTheSameRecipients(t *testing.T) {
 func TestPortErrorsPropagate(t *testing.T) {
 	for _, step := range []string{"MembersOf", "ListMembers"} {
 		f := newFixture(t)
-		f.core.join(room, "Minh")
-		f.core.failOn = step
+		f.chat.join(room, "Minh")
+		f.chat.failOn = step
 		_, err := f.r.Resolve(t.Context(), tenant, room, domain.RoomGroup, "Lan", []domain.Target{user("Minh"), everyone})
 		if !errors.Is(err, errDown) {
 			t.Fatalf("%s failing: Resolve = %v, want the port error", step, err)
@@ -146,13 +146,13 @@ func TestLeftMembersInTheFirstPageStillPickTheLargePath(t *testing.T) {
 	f := newFixture(t)
 	f.catalogue(t, "staff", true)
 	left := users("a", 0, 50)
-	f.core.join(room, left...)
+	f.chat.join(room, left...)
 	for _, u := range left {
-		f.core.leave(room, u)
+		f.chat.leave(room, u)
 	}
-	f.core.join(room, users("m", 0, recipients.SmallRoom-len(left)+1)...)
+	f.chat.join(room, users("m", 0, recipients.SmallRoom-len(left)+1)...)
 	late := users("z", 0, 100)
-	f.core.join(room, late...)
+	f.chat.join(room, late...)
 	items := make([]domain.UserGroups, 0, len(late))
 	for _, u := range append(slices.Clone(late), left...) {
 		items = append(items, domain.UserGroups{Tenant: tenant, User: u, Groups: []string{"staff"}, Ver: 1})
@@ -166,6 +166,6 @@ func TestLeftMembersInTheFirstPageStillPickTheLargePath(t *testing.T) {
 	}
 	expect(t, resolve(t, f, domain.RoomGroup, group("staff")), want)
 	if f.groups.byGroup == 0 {
-		t.Fatalf("a room of %d rows took the small path", len(f.core.rooms[room]))
+		t.Fatalf("a room of %d rows took the small path", len(f.chat.rooms[room]))
 	}
 }

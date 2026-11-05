@@ -6,7 +6,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/ivannguyendev/chatim/pkg/coreroute"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	"github.com/ivannguyendev/chatim/tools/internal/route"
 )
 
@@ -53,7 +53,7 @@ func seed(ctx context.Context, cl *route.Client, probe *mongoProbe, c config, ru
 }
 
 func measureAll(ctx context.Context, probe *mongoProbe, c config, users []*benchUser) error {
-	api, closer, err := coreroute.DialInsecure(c.core)
+	api, closer, err := chatrpc.DialInsecure(c.chatAddr)
 	if err != nil {
 		return err
 	}
@@ -94,7 +94,7 @@ func (m *meter) report(size int, c config) {
 	if size > c.joinMax {
 		path = "stepwise"
 	}
-	fmt.Printf("ListMyRooms on %s, limit %d; reads = mongo opcounters query+command per call, getmore separate; caches = room_cache_* deltas per call\n", c.core, c.page)
+	fmt.Printf("ListMyRooms on %s, limit %d; reads = mongo opcounters query+command per call, getmore separate; caches = room_cache_* deltas per call\n", c.chatAddr, c.page)
 	for _, phase := range phases {
 		cl := m.cells[cellKey(size, phase)]
 		if cl == nil {

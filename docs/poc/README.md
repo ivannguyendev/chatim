@@ -15,18 +15,20 @@
 | R4 | gws 50K connection | ≤ 40KB/conn; lần ghi cuối ≤ 100ms | ≤ 10.3KB/conn; 155–245ms | RAM đạt, độ trễ không đạt trên dev |
 | R4b | wsload: 10K user thật trên 2 node websocket (steady, kill một node, burst đăng nhập) | Trễ giao `msg_created` p50/p90/p99; thời gian hồi phục sau kill; số `retry_later` | steady 1K tin/s: giao p50/p90/p99 16.1/35.8/100.4ms, 100% giao, 0 trùng; kill: 5K máy nối lại trong 3.05s; burst 10K: 2.949 `retry_later`, tất cả `ready` sau 32.1s | Chạy được; p99 sát ngưỡng 100ms trên dev (chung CPU), đo lại ở prod-like |
 | R5 | Soft ownership khi Redis mất dữ liệu | `-race -count=20` pass | pass ở mức unit | Còn chaos test |
-| C1 | corebench 2 core qua gRPC | Ack p99 ≤ 30ms (A1) | 5K/s đủ tải, p99 292ms; 10K/s đạt 9452/s, bỏ 5.5%, p99 818ms | Không đạt trên dev (VM bão hoà CPU) |
+| C1 | chatbench 2 node chat qua gRPC | Ack p99 ≤ 30ms (A1) | 5K/s đủ tải, p99 292ms; 10K/s đạt 9452/s, bỏ 5.5%, p99 818ms | Không đạt trên dev (VM bão hoà CPU) |
 | C1-M2a.3 | Perf đường ghi ở 5K/s | Trước/sau | Lệnh Redis/tin 6.35 → 4.74; CPU redis-dedupe 89% → 69% | Chỉ so trước/sau |
-| W1 | Xả backlog work stream (reader slot 0 + worker 2 core), M2b.1 | ≥ 3× ingest đỉnh (D66; đo thật ở P3) | 36000 record (1000 `RoomInserted` + 35000 `MessageInserted`) trong ~4s ≈ ≥ 9000 record/s (cận dưới, mẫu cách nhau 1–2s) sau 35s ghi 1000 tin/s với reader tắt; lag worker tối đa 52.4s (backlog tích luỹ); `work_failures_total` 0; republish `room_created` 1000 (không mark, stream bỏ trùng), `msg_created` 0 (fast path đã mark); CPU_Speed_Limit 100 | Chỉ kiểm công cụ |
+| W1 | Xả backlog work stream (reader slot 0 + worker 2 node chat), M2b.1 | ≥ 3× ingest đỉnh (D66; đo thật ở P3) | 36000 record (1000 `RoomInserted` + 35000 `MessageInserted`) trong ~4s ≈ ≥ 9000 record/s (cận dưới, mẫu cách nhau 1–2s) sau 35s ghi 1000 tin/s với reader tắt; lag worker tối đa 52.4s (backlog tích luỹ); `work_failures_total` 0; republish `room_created` 1000 (không mark, stream bỏ trùng), `msg_created` 0 (fast path đã mark); CPU_Speed_Limit 100 | Chỉ kiểm công cụ |
 | DB | MongoDB vs PostgreSQL | — | Mongo thắng đọc ngẫu nhiên khi dữ liệu > RAM (8.4 vs 35ms) và dung lượng (130 vs 393B/tin); Postgres thắng độ trễ ghi bền | Giữ MongoDB (D9), chờ prod-like |
+
+Bench Postgres đo bằng `postgresbench` với `PG_SHARED_BUFFERS=3GB` và `PG_EFFECTIVE_CACHE_SIZE=6GB`. Công cụ đã gỡ 2026-11-02 cùng Postgres khỏi repo (owner: "bỏ container thì bỏ luôn tools/poc/postgresbench"); muốn so lại thì lấy từ lịch sử git.
 
 ### M3 — `ListMyRooms` trên replica set (2026-10-15)
 
-Công cụ `tools/poc/roomlistbench`, rs0 1 node, core-1 + core-2, mặc định `ROOM_LIST_JOIN_MAX` 2000, trang 20 room. Kết quả: [results/m3-roomlist-rs0/](results/m3-roomlist-rs0/).
+Công cụ `tools/poc/roomlistbench`, rs0 1 node, chat-1 + chat-2, mặc định `ROOM_LIST_JOIN_MAX` 2000, trang 20 room. Kết quả: [results/m3-roomlist-rs0/](results/m3-roomlist-rs0/).
 
-- **Seed qua API core** (`-mode seed`, 4 lời gọi song song, mỗi lời gọi tối đa 2 phút, thử lại giữ `request_id`/cid): 60 user (20 cho mỗi cỡ 200, 2.000, 5.000), 4.960 room nền dùng chung (1 tin mỗi room) và 40 room riêng mỗi user (5 tin của người kia, chưa đọc, mới nhất) → trang đầu và trang sau đều là room riêng. 7.360 room, 151.360 member doc trong 5m36s, 16.960 tin trong 36s; chờ `rooms.last_seq` đủ ở mọi room (6s) rồi Mongo dưới 40 op/s trong 3s.
-- **Lạnh** = user mới (room riêng của user chỉ nằm trong trang của nó nên cache info, đuôi, đường và ảnh chụp đều trượt; cache WiredTiger của Mongo vẫn nóng); không khởi động lại core. Mỗi user: trang đầu + trang sau lạnh, rồi 5 cặp nóng (trong TTL 30s).
-- **Truy vấn/trang** = delta `opcounters` query + command của `serverStatus` quanh từng lời gọi (trừ lần đọc `serverStatus` của chính nó; `getmore` riêng); khung rỗng 20ms trước mỗi cỡ đo được 0 truy vấn. Lệnh bắt tay của kết nối Mongo mới (hiếm, thấy ở max) bị tính vào; `top` theo collection dùng để tách nguồn. Cache = delta `room_cache_hits/misses_total` của core-1.
+- **Seed qua API chat** (`-mode seed`, 4 lời gọi song song, mỗi lời gọi tối đa 2 phút, thử lại giữ `request_id`/cid): 60 user (20 cho mỗi cỡ 200, 2.000, 5.000), 4.960 room nền dùng chung (1 tin mỗi room) và 40 room riêng mỗi user (5 tin của người kia, chưa đọc, mới nhất) → trang đầu và trang sau đều là room riêng. 7.360 room, 151.360 member doc trong 5m36s, 16.960 tin trong 36s; chờ `rooms.last_seq` đủ ở mọi room (6s) rồi Mongo dưới 40 op/s trong 3s.
+- **Lạnh** = user mới (room riêng của user chỉ nằm trong trang của nó nên cache info, đuôi, đường và ảnh chụp đều trượt; cache WiredTiger của Mongo vẫn nóng); không khởi động lại chat. Mỗi user: trang đầu + trang sau lạnh, rồi 5 cặp nóng (trong TTL 30s).
+- **Truy vấn/trang** = delta `opcounters` query + command của `serverStatus` quanh từng lời gọi (trừ lần đọc `serverStatus` của chính nó; `getmore` riêng); khung rỗng 20ms trước mỗi cỡ đo được 0 truy vấn. Lệnh bắt tay của kết nối Mongo mới (hiếm, thấy ở max) bị tính vào; `top` theo collection dùng để tách nguồn. Cache = delta `room_cache_hits/misses_total` của chat-1.
 - **CPU_Speed_Limit** = 100 trước và trong cả ba ô (29/29 mẫu, mỗi 3s); seed làm máy hạ xung xuống 76 nên mỗi ô chờ về 100 trước khi đo.
 
 | Room | Đường | Trang | n | p50 | p99 | Truy vấn (trung vị) | Dự kiến §9 | Cache/lời gọi |
@@ -49,7 +51,7 @@ Kết luận dev:
 - Cache lạnh đúng như lệch Task 9: mỗi lần nạp đuôi = `TailWindow` + `TailPreviews` riêng → 40 truy vấn `messages` cho 20 room, nên trang lạnh 44–50 thay vì 23–30. Gộp `TailPreviews` cả trang còn ~25–31.
 - Độ trễ do đọc thứ tự: join 2.000 room tốn ~200ms ở cả lạnh lẫn nóng (`top` thấy 2.000 lượt đọc `rooms` của `$lookup` mỗi lời gọi), chậm hơn đường từng bước ở 5.000 room (~134ms). Trên dev này điểm chuyển 2.000 quá cao; chưa đo đường từng bước ở 2.000 room để chọn `ROOM_LIST_JOIN_MAX` mới (việc của owner).
 
-**Sau gộp xem trước và tra `_id` có giới hạn (2026-10-15).** Owner hạ `ROOM_LIST_JOIN_MAX` còn 1.500 (user 2.000 room nay đi đường từng bước). Mỗi trang một `TailPreviews` cho mọi tin xem trước còn thiếu. Lần đo đầu chỉ có gộp: 25 truy vấn nhưng trang lạnh 200 room p50 221ms (từ 30.6ms). `explain` cho thấy `_id $in` trên collection clustered chạy thành một lần quét từ khoá nhỏ nhất tới lớn nhất: 20 room trên dữ liệu bench đọc 320.040 doc cho 100 tin. Mọi tra `_id` theo tập khoá (`Find`, `TailPreviews`, `SentTimes`, `MembersByKeys`, `MembersOf`, `MyInteractions`) chuyển sang `$or` các khoảng (design §5.1). Số đo dưới đây: cùng layout, core dựng lại, một lượt khởi động bỏ đi rồi chờ 70s cho cache hết hạn; `CPU_Speed_Limit` 100 ở mọi mẫu (15/15). Kết quả: `results/m3-roomlist-rs0/measure-*-bounded.txt`.
+**Sau gộp xem trước và tra `_id` có giới hạn (2026-10-15).** Owner hạ `ROOM_LIST_JOIN_MAX` còn 1.500 (user 2.000 room nay đi đường từng bước). Mỗi trang một `TailPreviews` cho mọi tin xem trước còn thiếu. Lần đo đầu chỉ có gộp: 25 truy vấn nhưng trang lạnh 200 room p50 221ms (từ 30.6ms). `explain` cho thấy `_id $in` trên collection clustered chạy thành một lần quét từ khoá nhỏ nhất tới lớn nhất: 20 room trên dữ liệu bench đọc 320.040 doc cho 100 tin. Mọi tra `_id` theo tập khoá (`Find`, `TailPreviews`, `SentTimes`, `MembersByKeys`, `MembersOf`, `MyInteractions`) chuyển sang `$or` các khoảng (design §5.1). Số đo dưới đây: cùng layout, chat dựng lại, một lượt khởi động bỏ đi rồi chờ 70s cho cache hết hạn; `CPU_Speed_Limit` 100 ở mọi mẫu (15/15). Kết quả: `results/m3-roomlist-rs0/measure-*-bounded.txt`.
 
 | Room | Đường | Trang | n | p50 | p99 | Truy vấn (trung vị) | Cache/lời gọi |
 |---|---|---|---|---|---|---|---|
@@ -72,14 +74,14 @@ Kết luận dev:
 
 ### M3.1 — event theo trạng thái doc, 2K tin/s (2026-10-16 → 2026-10-17)
 
-`scripts/bench-cell.sh NAME 2000 reset`, 60s, core-1 + core-2, rs0 1 node, cả hai ô `CPU_Speed_Limit` 100. Engine cũ = image từ `f5b2e8e`; M3.1 = `ac9fb97`. Trễ danh sách = now − `ts` của tin đầu tiên sau `rooms.last_seq`, 20 room ngẫu nhiên mỗi giây (`room-lag.log`). Kết quả: [results/base-2k-v8/](results/base-2k-v8/corebench.txt), [results/after-2k-v7/](results/after-2k-v7/corebench.txt).
+`scripts/bench-cell.sh NAME 2000 reset`, 60s, chat-1 + chat-2, rs0 1 node, cả hai ô `CPU_Speed_Limit` 100. Engine cũ = image từ `f5b2e8e`; M3.1 = `ac9fb97`. Trễ danh sách = now − `ts` của tin đầu tiên sau `rooms.last_seq`, 20 room ngẫu nhiên mỗi giây (`room-lag.log`). Kết quả: [results/base-2k-v8/](results/base-2k-v8/corebench.txt), [results/after-2k-v7/](results/after-2k-v7/corebench.txt).
 
 | | Engine cũ | M3.1 |
 |---|---|---|
 | ack p50 / p99 | 13.2 / 121ms | 13.0 / 131ms |
 | live p50 / p95 / max | 12 / 40 / 232ms | 12 / 32 / 233ms |
 | trễ danh sách trung vị / p95 / max | 2.7 / 3.7 / 5.7s | 1.6 / 3.3 / 3.6s |
-| CPU Mongo / NATS / hai core / Redis dedupe | 286% / 80% / 329% / 43% | 278% / 70% / 303% / 39% |
+| CPU Mongo / NATS / hai node chat / Redis dedupe | 286% / 80% / 329% / 43% | 278% / 70% / 303% / 39% |
 | Mongo `top` 60s | `rooms` update 17.1K, `members` update 4K | `messages` update 24.8K (xoá cờ), `rooms` update 21.8K, `members` update 8K |
 
 - Bench đầu (`8121816`) không đạt: Mongo 287% → 507%, trễ danh sách 2.8s → 21s; lệnh xoá cờ `updateMany` + `$or` 500 nhánh 854ms mỗi lệnh (45% thời gian lệnh Mongo) gây vòng phát lại của sweeper. Các bước sửa và số từng bước: [tóm tắt M3.1 mục 9](../plans/2026-10-16-m3-1-state-driven-events-summary.md#9-chi-phí).
@@ -95,9 +97,9 @@ Công cụ tạo `-groups` nhóm qua gateway (mỗi user trong một nhóm, mộ
 
 Giới hạn:
 - Mỗi kết nối tốn một file descriptor: chạy với `POC_FLAGS="--ulimit nofile=65536:65536"` (công cụ cảnh báo khi giới hạn thấp hơn `-conns` + 256). Node websocket có `ulimits: nofile: 65536` trong anchor `x-websocket` của compose (cần tạo lại container để có hiệu lực).
-- Trên dev công cụ chung CPU với node websocket, core và database, nên số dev chỉ để kiểm công cụ.
+- Trên dev công cụ chung CPU với node websocket, chat và database, nên số dev chỉ để kiểm công cụ.
 
-Kết quả trên dev (2026-10-25; 10.000 user, 500 nhóm × 20 người, 2 node websocket, 2 core; tool chung máy):
+Kết quả trên dev (2026-10-25; 10.000 user, 500 nhóm × 20 người, 2 node websocket, 2 node chat; tool chung máy):
 
 | Kịch bản | Kết quả | Thư mục |
 |---|---|---|
@@ -109,6 +111,85 @@ Kết quả trên dev (2026-10-25; 10.000 user, 500 nhóm × 20 người, 2 node
 make poc TOOL=wsload POC_FLAGS="--ulimit nofile=65536:65536" ARGS="-scenario steady"
 ./scripts/wsload-kill.sh                     # WSLOAD_RATE (100), WSLOAD_KILL_NODE, tham số thêm chuyển cho công cụ
 make poc TOOL=wsload POC_FLAGS="--ulimit nofile=65536:65536" ARGS="-scenario burst"
+```
+
+### M6 PA — đổi token `POST /v1/token` (`tools/poc/exchangebench`, dev 2026-11-02)
+
+Mục tiêu 1.700 lần đổi/s là lúc 100K máy nối lại hàng loạt với token chat 5 phút. Một node `identity-1` chạy trên Postgres compose, mặc định `shared_buffers` 512MB, với `IDENTITY_EXCHANGE_IP_RATE=100000` vì mọi request đến từ một IP. Công cụ ký sẵn mọi token tenant trước khi pacer chạy, nên thời gian ký phía client không làm lệch lịch gửi. Mỗi lượt đi qua toàn bộ tập user theo thứ tự ngẫu nhiên. Lượt **lạnh** dùng issuer mới, mỗi lần đổi là một lần JIT tạo user. Lượt **ấm** chạy lại trên các user lượt lạnh đã tạo (`-users-file`), không ghi gì. Độ trễ tính từ giờ đã lên lịch. CPU của `identity` là Δ`process_cpu_seconds_total`. `CPU_Speed_Limit` bằng 100 suốt khung đo của cả bốn lượt; RS256 bị hạ xuống 65–76 chỉ trong lúc ký trước 110.500 token RSA, trước khi pacer chạy.
+
+| Lượt | Đạt | 5xx | Độ trễ p50/p99 | CPU `identity` | JIT tạo |
+|---|---|---|---|---|---|
+| ES256 ấm | 1.700/s | 0 | 0,82/2,08 ms | 0,62 core | 0 |
+| RS256 ấm | 1.700/s | 0 | 0,84/2,20 ms | 0,60 core | 0 |
+| ES256 lạnh | 562/s (client bỏ 68.254 lần vì đầy 2.048 request đang chờ) | 0 | 3,9/5,0 s | 0,40 core | 34.285 |
+| RS256 lạnh | 564/s (bỏ 68.171) | 0 | 3,9/4,9 s | 0,37 core | 34.432 |
+
+Kết quả: [results/exchange-261102/](results/exchange-261102/es256-warm.txt).
+
+- Khi không phải ghi, một node đạt 1.700/s và chỉ dùng khoảng 0,6 core, nên kiểm chữ ký RS256 hay ES256 không phải nút thắt.
+- Lượt lạnh dừng ở khoảng 560/s, trong khi `identity` chỉ dùng 0,4 core. Lượt chẩn đoán 20s ([es256-cold-waits.txt](results/exchange-261102/es256-cold-waits.txt), lấy mẫu `pg_stat_activity` mỗi 2s) thấy 18–19 trên 20 kết nối chờ `Lock|object` trên `INSERT INTO users`, kết nối còn lại ở `IO|WalSync`. Mỗi lần ghi user là một transaction có `NOTIFY` (trigger `directory_changes`). Postgres xếp hàng các commit có `NOTIFY` qua một khoá chung, nên các commit không gộp được lần fsync WAL. Kết luận này suy ra từ trạng thái chờ, chưa đọc `pg_locks`.
+- Sau đợt lạnh, follower danh bạ chạy liên tục và giữ Postgres gần một core. Hai nguyên nhân: mỗi `NOTIFY` chạy một lượt đọc feed, và câu feed dùng prepared statement bị chốt kế hoạch chung, quét cả `directory_changes`. Lỗi có từ phần 3a.
+- Owner 2026-11-02 quyết định chuyển store `identity` sang MongoDB ở phase PM, trước PB, nên PA không sửa hai lỗi trên. Đo lại lượt lạnh trên MongoDB ở PM.
+
+Lệnh dưới chạy lượt lạnh rồi lượt ấm trên store hiện tại (MongoDB từ PM). Id tenant chỉ gồm chữ thường, số, `-` và `_` (`pkg/ids/ident.go` `ValidTenant`; `-tenant T` bị từ chối), và tenant phải có trước khi thêm issuer (`tenant-create`). Ví dụ dùng tenant `bench`. Lượt ấm lấy danh sách user của tenant từ `chatim_identity.users` bằng mongosh trong container `chatim-mongodb`, xác thực root từ `/run/secrets/mongo_password` như `scripts/bench-cell.sh:22-26`, không in mật khẩu. RS256 giống hệt, thay `-alg RS256`, `-kid bench-rs256` và tên file khoá.
+
+```bash
+IDENTITY_EXCHANGE_IP_RATE=100000 make app-up
+make -s go ARGS="run ./tools/chatcli dev-issuer-key -alg ES256 -kid bench-es256 -out bin/bench/exchange-keys/es256.jwk" > bin/bench/exchange-keys/es256.pub
+make identity-admin ARGS="tenant-create -id bench -name bench"
+make identity-admin ARGS="issuer-add -issuer bench-backend -tenant bench"
+make identity-admin ARGS="issuer-key-add -issuer bench-backend -kid bench-es256 -alg ES256 -jwk '$(cat bin/bench/exchange-keys/es256.pub)'"
+make poc TOOL=exchangebench ARGS="-alg ES256 -key bin/bench/exchange-keys/es256.jwk -issuer bench-backend -tenant bench"
+docker exec chatim-mongodb mongosh --quiet --eval '
+db.getSiblingDB("admin").auth(process.env.MONGO_INITDB_ROOT_USERNAME, require("fs").readFileSync("/run/secrets/mongo_password", "utf8").trim());
+db.getSiblingDB("chatim_identity").users.find({tenant_id: "bench"}, {_id: 0, id: 1}).forEach(u => print(u.id))' > bin/bench/exchange-keys/es256-users.txt
+make poc TOOL=exchangebench ARGS="-alg ES256 -key bin/bench/exchange-keys/es256.jwk -issuer bench-backend -tenant bench -users-file bin/bench/exchange-keys/es256-users.txt"
+```
+
+Lượt lạnh thứ hai trên cùng tenant cần tập user mới: thêm `-user-prefix` khác (mặc định `u`).
+
+### M6 PM — đổi token và change stream trên MongoDB (dev 2026-11-03 và 2026-11-04)
+
+Cùng công cụ và cách đo như PA, nay store `identity` là MongoDB replica set một node của `make infra-up` (OrbStack). Chạy cả hai replica `identity-1` và `identity-2`; `exchangebench` chỉ gửi vào `identity-1`. Tenant `pmes256` (ES256) và `pmrs256` (RS256). CPU `identity` là Δ`process_cpu_seconds_total` của `identity-1`; CPU Mongo là trung bình `docker stats` trong 60s cuối (1 core = 100%). `CPU_Speed_Limit` bằng 100 suốt 60s đo của mọi lượt, trừ lượt ghi "hạ xung"; RSA chỉ bị hạ xung lúc ký trước token và trong 5s khởi động. Log `identity-1/2` của sáu lượt 2026-11-04: 0 dòng `revocation list unavailable`, 0 dòng `signing key activation failed`, 0 dòng `ERROR`.
+
+| Lượt | Ngày | Đạt | Client bỏ | 5xx | Độ trễ p50/p99 | CPU `identity` | CPU Mongo | JIT tạo | Kết quả |
+|---|---|---|---|---|---|---|---|---|---|
+| ES256 ấm | 11-04 | 1.700/s | 0 | 0 | 0,78/1,97 ms | 0,57 core | 0,10 core | 0 | [es256-warm.txt](results/exchange-261104-pm/es256-warm.txt) |
+| RS256 ấm | 11-04 | 1.700/s | 0 | 0 | 0,73/1,88 ms | 0,45 core | 0,08 core | 0 | [rs256-warm.txt](results/exchange-261104-pm/rs256-warm.txt) |
+| RS256 lạnh | 11-04 | 1.700/s | 0 | 0 | 6,3/72 ms | 1,10 core | 1,41 core | 100.000 | [rs256-cold.txt](results/exchange-261104-pm/rs256-cold.txt) |
+| ES256 lạnh | 11-04 | 1.700/s | 0 | 0 | 5,7/36 ms | 1,17 core | 1,39 core | 100.000 | [es256-cold-261104.txt](results/exchange-261104-pm/es256-cold-261104.txt) |
+| ES256 lạnh, lần đầu | 11-03 | 849/s | 51.075 | 0 | 2,2/6,9 s | 0,92 core | 0,83 core | 49.513 | [es256-cold-261103.txt](results/exchange-261104-pm/es256-cold-261103.txt) |
+| ES256 lạnh, hạ xung 37–55 (chỉ tin số đếm) | 11-03 | 1.571/s | 7.733 | 0 | 0,79/2,6 s | 2,23 core | 2,51 core | 93.130 | [es256-cold-261103-throttled.txt](results/exchange-261104-pm/es256-cold-261103-throttled.txt) |
+| ES256 lạnh, gom lô JIT, lượt A (hạ xung 65–97 trong 18s cuối) | 11-04 | 1.700/s | 0 | 0 | 13,3/72,6 ms | 1,31 core | 1,44 core | 100.000 | [es256-cold-batched-a.txt](results/exchange-261104-pm/es256-cold-batched-a.txt) |
+| ES256 lạnh, gom lô JIT, lượt B ngay sau A, hạ xung 53–62 (chỉ tin số đếm) | 11-04 | 1.700/s | 0 | 0 | 14,9/86,8 ms | 1,55 core | 1,59 core | 100.000 | [es256-cold-batched-b.txt](results/exchange-261104-pm/es256-cold-batched-b.txt) |
+
+- Lượt ấm giống PA: 1.700/s, p99 dưới 2 ms, không đọc database (Mongo 0,08–0,10 core).
+- Lượt lạnh lần đầu (2026-11-03 22:27, khoảng 2 phút sau lượt hạ xung vừa ghi 93.130 user) dừng ở 849/s. Chẩn đoán lúc chạy: mỗi `InsertOne` của JIT (`w:majority`) chờ khoảng 151 ms, pool 100 kết nối của driver đầy, lần nạp lại danh sách thu hồi và lần kích hoạt khoá ký hết giờ chờ pool (`trust_reload_errors_total` +1). Log thô của lần này không còn (container được tạo lại 2026-11-04).
+- Ngày 2026-11-04, sau khi bật lại cả stack (không xoá volume), hai lượt lạnh ES256 và RS256 (còn ghi từng `InsertOne`) đều đạt 1.700/s, không bỏ lần nào, p99 36–72 ms, Mongo khoảng 1,4 core. Vì sao lần đầu chậm: chưa có nguồn.
+- Gom lô JIT (D259, owner 2026-11-04; mặc định `IDENTITY_JIT_*`: 4 writer, cửa sổ 2ms, lô tối đa 256): lượt A chạy trên stack vừa bật lại (`IDENTITY_EXCHANGE_IP_RATE=100000 make app-up`), lượt B bắt đầu 6s sau khi A ghi xong 100.000 user, tức đúng ca chậm của 2026-11-03. Cả hai đạt 1.700/s, 0 lần bỏ, 0 lỗi 5xx, `store_errors_total` +0, `trust_reload_errors_total` +0, 0 dòng `revocation list unavailable`/`signing key activation failed`/`ERROR`. Số user mỗi `InsertMany` (`jit_batch_docs`): A 100.001 user trong 23.251 lần ghi (trung bình 4,3; 95% lô ≤ 8 user; lô lớn nhất 65–128), B 100.001 trong 21.568 lần (trung bình 4,6; 94% ≤ 8). p50 13,3–14,9 ms cao hơn lượt không gom (5,7 ms); nguyên nhân chưa đo tách (hạ xung ở cả hai lượt, mỗi writer chỉ chờ một `InsertMany` một lúc). Prod-like đo lại (P13).
+
+Change stream: chatbench 2K tin/s, 60s, không reset, cùng stack, `CPU_Speed_Limit` 100 suốt cả hai ô. Ô tắt dừng cả hai replica `identity` (`docker stop`); ô bật chạy lại hai replica, đợi healthy rồi đo.
+
+| Ô | Ack p50/p95/p99 | Pacer lag p99.9 | CPU Mongo | CPU `identity-1`/`-2` | `getmore` Mongo | Kết quả |
+|---|---|---|---|---|---|---|
+| `identity` tắt | 13,9/51,8/277,0 ms | 256,5 ms | 1,87 core | — | 0 | [stream-off.txt](results/exchange-261104-pm/stream-off.txt) |
+| `identity` bật | 17,7/91,9/185,9 ms | 51,2 ms | 2,07 core | 0,015/0,012 core | 138 | [stream-on.txt](results/exchange-261104-pm/stream-on.txt) |
+| Lệch | +27,8% / +77,3% / −32,9% | | +11,2% | | | |
+
+- CPU Mongo lệch 11,2%, vượt ngưỡng 10% (ngưỡng chưa có nguồn). Độ trễ lệch cả hai chiều: p99 ô bật thấp hơn, p50 và p95 cao hơn; ô tắt có pacer lag p99.9 256 ms, tức máy dev bị khựng trong ô đó. Một ô mỗi bên không tách được chi phí change stream khỏi nhiễu của máy dev. Hai replica `identity` chỉ dùng khoảng 1,5% core mỗi replica.
+
+Danh bạ:
+
+| Bench | Kết quả | So với | File |
+|---|---|---|---|
+| `BenchmarkLoad100K` (nạp 100K user từ MongoDB, 3 lần) | 0,578 s/lần | Postgres phần 3a: 0,73s | [load100k.txt](results/exchange-261104-pm/load100k.txt) |
+| `BenchmarkGetUsersHTTP50` (50 id qua đủ đường HTTP, 100K user trong RAM, không database) | 115,6 µs/lần, 1,02 ms CPU mỗi lần cho cả process (client và server chung process), 74,6 KB, 1.751 alloc | Phần 3a ghi ~0,65 ms CPU server mỗi lần; cách 3a tách phần server chưa có nguồn, không so thẳng | [getusers-http50.txt](results/exchange-261104-pm/getusers-http50.txt) |
+
+```bash
+docker stop chatim-identity-1 chatim-identity-2 && scripts/bench-cell.sh pm-stream-off 2000
+docker start chatim-identity-1 chatim-identity-2 && ./scripts/wait-healthy.sh chatim-identity-1 chatim-identity-2 && scripts/bench-cell.sh pm-stream-on 2000
+make itest ITEST_ARGS="-run '^$$' -bench Load100K -benchtime 3x ./apps/identity/internal/directory/"
+make -s go ARGS="test -run '^$' -bench GetUsersHTTP50 ./apps/identity/internal/api/"
 ```
 
 ## Đo prod-like (chưa chạy)
@@ -130,8 +211,9 @@ Hạ tầng: Mongo rs 3 member NVMe, NATS 3 node, 2 host Linux, dữ liệu th�
 | P9 | Tỉ lệ tin không đếm unread sau `rs` | Giới hạn S của R17 (D73) |
 | P10 | Bộ nhớ NATS cho map chống trùng 5m (~3M id ở 10K tin/s) | Cỡ NATS |
 | P11 | Tải đọc Redis presence khi có watch: ước tính ~800K khoá/s toàn hệ thống ở 100K máy × 50 người được xem, chưa có cache phía offline (M4 phần 4) | Cỡ `chatim-redis-presence`, có cần cache offline không (D201) |
-| P12 | Nạp lại hàng loạt sau một lần nhảy (`WS_RELOAD_RATE` 1.000 user/s mỗi node, D195): thời gian tới `ready`/`resync` cho mọi user và tải `ListMyRoomIDs` lên core; `wsload` chưa có kịch bản nhảy | Giá trị `WS_RELOAD_RATE`, cỡ core |
+| P12 | Nạp lại hàng loạt sau một lần nhảy (`WS_RELOAD_RATE` 1.000 user/s mỗi node, D195): thời gian tới `ready`/`resync` cho mọi user và tải `ListMyRoomIDs` lên chat; `wsload` chưa có kịch bản nhảy | Giá trị `WS_RELOAD_RATE`, cỡ chat |
+| P13 | Đổi token `POST /v1/token` khi 100K user nối lại hàng loạt (~1.700/s) trên store MongoDB của `identity`, cả lượt lạnh (JIT tạo user) lẫn ấm; dev Postgres lạnh dừng ở ~560/s/node, dev MongoDB lạnh 849/s lần đầu rồi 1.700/s ở hai lượt sau, gom lô JIT 1.700/s ở hai lượt lạnh liền nhau (M6 PM) | Số replica `identity`, cỡ database |
 
 ## Kết quả lưu trong repo
 
-`results/` giữ bản tóm tắt nhỏ (`corebench.txt`, `summary.txt`, `measure-*-bounded.txt`) của các lần chạy được tài liệu trích dẫn. Số thô đầy đủ (log, profile Mongo, metrics) chỉ nằm ở `bin/bench/` và `bin/drill/` trên máy chạy, không commit, có thể đã xoá.
+`results/` giữ bản tóm tắt nhỏ (`corebench.txt` trước RF3, `chatbench.txt` từ RF3, `summary.txt`, `measure-*-bounded.txt`) của các lần chạy được tài liệu trích dẫn. Số thô đầy đủ (log, profile Mongo, metrics) chỉ nằm ở `bin/bench/` và `bin/drill/` trên máy chạy, không commit, có thể đã xoá.

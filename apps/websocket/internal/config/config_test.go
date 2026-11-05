@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/config"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 )
 
 var envKeys = []string{
@@ -21,7 +22,7 @@ var envKeys = []string{
 	"WS_AUTH_TIMEOUT", "WS_AUTH_GRACE", "WS_AUTH_RATE", "WS_AUTH_BURST", "WS_AUTH_RETRY_MIN", "WS_AUTH_RETRY_MAX",
 	"WS_USER_CONNECTIONS_MAX", "WS_UNAUTH_MAX", "WS_FRAME_MAX", "WS_HEARTBEAT_TIMEOUT",
 	"WS_COMMAND_RATE", "WS_COMMAND_BURST", "WS_COMMAND_INFLIGHT", "WS_SEND_QUEUE", "WS_SEND_QUEUE_BYTES", "WS_WRITE_TIMEOUT",
-	"CORE_REQUEST_DEADLINE", "WS_DRAIN_DELAY", "WS_SHUTDOWN_BUDGET",
+	"CHAT_REQUEST_DEADLINE", "WS_DRAIN_DELAY", "WS_SHUTDOWN_BUDGET",
 	"NATS_URL", "EVT_STREAM", "EVT_SUBJECT_ROOT", "WS_PUBLISH_ROOT", "WS_PUBLISH_STREAM", "EVT_STREAM_REPLICAS",
 	"WS_FANOUT_WORKERS", "WS_FANOUT_QUEUE", "WS_REPLAY_RATE", "WS_CONSUME_BATCH", "WS_CONSUME_BYTES",
 	"WS_ROOM_IDS_INFLIGHT", "WS_OPEN_PENDING", "WS_REPLAY_MAX_AGE", "WS_RELOAD_RATE",
@@ -32,11 +33,14 @@ var envKeys = []string{
 }
 
 var requiredEnv = map[string]string{
-	"WS_NODE_ID":       "ws-a",
-	"WS_JWT_KEYS_FILE": "/run/secrets/jwks.json",
-	"WS_JWT_ISSUER":    "chatim-identity",
-	"WS_JWT_AUDIENCE":  "chatim-websocket",
-	"NATS_URL":         "nats://chatim-nats:4222",
+	"WS_NODE_ID":               "ws-a",
+	"WS_JWT_KEYS_FILE":         "/run/secrets/jwks.json",
+	"WS_JWT_ISSUER":            "chatim-identity",
+	"WS_JWT_AUDIENCE":          "chatim-websocket",
+	"NATS_URL":                 "nats://chatim-nats:4222",
+	"WS_IDENTITY_INTERNAL_URL": "http://chatim-identity-1:8081",
+	"WS_IDENTITY_JWKS_URL":     "https://identity.example.com/.well-known/jwks.json",
+	"WS_IDENTITY_SECRET":       "node-secret-value-0123456789abcdef",
 }
 
 func setEnv(t *testing.T, env map[string]string) {
@@ -116,6 +120,7 @@ func TestLoadDefaults(t *testing.T) {
 		PresenceBatch:        500,
 		PresenceCache:        5 * time.Second,
 		PresenceWatchMax:     200,
+		Identity:             identityWant(),
 	}
 	if got != want {
 		t.Fatalf("Load() = %+v, want %+v", fields(got), fields(want))
@@ -267,4 +272,10 @@ func TestLogValueCoversEveryField(t *testing.T) {
 	if got, want := len(attrs), reflect.TypeFor[config.Config]().NumField(); got != want {
 		t.Fatalf("LogValue has %d attrs, Config has %d fields", got, want)
 	}
+}
+
+func identityWant() auth.SyncConfig {
+	c := auth.SyncDefaults()
+	c.InternalURL, c.JWKSURL, c.Secret = "http://chatim-identity-1:8081", "https://identity.example.com/.well-known/jwks.json", "node-secret-value-0123456789abcdef"
+	return c
 }

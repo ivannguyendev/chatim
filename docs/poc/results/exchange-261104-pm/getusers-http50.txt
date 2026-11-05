@@ -1,0 +1,8 @@
+make -s go ARGS="test -run '^$' -bench GetUsersHTTP50 ./apps/identity/internal/api/"   (2026-11-04, unit bench, no database, CPU_Speed_Limit 100 before and after)
+goos: linux
+goarch: amd64
+pkg: github.com/ivannguyendev/chatim/apps/identity/internal/api
+cpu: Intel(R) Core(TM) i7-8850H CPU @ 2.60GHz
+BenchmarkGetUsersHTTP50-10    	    9237	    115569 ns/op	   1021989 cpu-ns/op	   74608 B/op	    1751 allocs/op
+PASS
+ok  	github.com/ivannguyendev/chatim/apps/identity/internal/api	2.990s

@@ -47,9 +47,15 @@ func (c *connection) stopRunning(gen uint64) bool {
 		c.armExpiry(remaining)
 		return false
 	}
+	c.toWaiting(promptExpired)
+	return true
+}
+
+func (c *connection) toWaiting(reason chatimv1.AuthRequiredReason) {
+	stopTimer(c.expiry)
 	c.running = false
 	c.authGen++
-	c.reason = promptExpired
+	c.reason = reason
 	if c.member != nil {
 		c.member.Unregister()
 	}
@@ -61,7 +67,6 @@ func (c *connection) stopRunning(gen uint64) bool {
 		c.server.stats.unauthOverCap.Add(1)
 	}
 	c.startGrace()
-	return true
 }
 
 func (c *connection) setReason(reason chatimv1.AuthRequiredReason) {

@@ -116,7 +116,7 @@ func (s *Service) readPoints(ctx context.Context, r mentionRead, rooms []uint64)
 	if len(keys) == 0 {
 		return nil
 	}
-	times, err := s.core.SentTimes(ctx, keys)
+	times, err := s.chat.SentTimes(ctx, keys)
 	if err != nil {
 		return dependencyErr("sent times", err)
 	}

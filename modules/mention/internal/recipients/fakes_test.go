@@ -16,14 +16,14 @@ import (
 
 const tenant = "t1"
 
-const coreMemberPage = 1000
+const chatMemberPage = 1000
 
 var (
-	errDown      = errors.New("core down")
+	errDown      = errors.New("chat down")
 	errPageLimit = errors.New("invalid argument")
 )
 
-type fakeCore struct {
+type fakeChat struct {
 	rooms      map[uint64][]domain.Member
 	membersOf  int
 	listCalls  int
@@ -31,16 +31,16 @@ type fakeCore struct {
 	listLimits []int
 }
 
-func newCore() *fakeCore { return &fakeCore{rooms: map[uint64][]domain.Member{}} }
+func newChatNode() *fakeChat { return &fakeChat{rooms: map[uint64][]domain.Member{}} }
 
-func (c *fakeCore) join(room uint64, users ...string) {
+func (c *fakeChat) join(room uint64, users ...string) {
 	for _, u := range users {
 		c.rooms[room] = append(c.rooms[room], domain.Member{User: u, Role: "member", Active: true})
 	}
 	slices.SortFunc(c.rooms[room], func(a, b domain.Member) int { return strings.Compare(a.User, b.User) })
 }
 
-func (c *fakeCore) leave(room uint64, user string) {
+func (c *fakeChat) leave(room uint64, user string) {
 	for i, m := range c.rooms[room] {
 		if m.User == user {
 			c.rooms[room][i].Active = false
@@ -48,7 +48,7 @@ func (c *fakeCore) leave(room uint64, user string) {
 	}
 }
 
-func (c *fakeCore) MembersOf(_ context.Context, room uint64, users []string) ([]domain.Member, error) {
+func (c *fakeChat) MembersOf(_ context.Context, room uint64, users []string) ([]domain.Member, error) {
 	c.membersOf++
 	if c.failOn == "MembersOf" {
 		return nil, errDown
@@ -62,13 +62,13 @@ func (c *fakeCore) MembersOf(_ context.Context, room uint64, users []string) ([]
 	return out, nil
 }
 
-func (c *fakeCore) ListMembers(_ context.Context, room uint64, after domain.MemberCursor, limit int) ([]domain.Member, error) {
+func (c *fakeChat) ListMembers(_ context.Context, room uint64, after domain.MemberCursor, limit int) ([]domain.Member, error) {
 	c.listCalls++
 	c.listLimits = append(c.listLimits, limit)
 	switch {
 	case c.failOn == "ListMembers":
 		return nil, errDown
-	case limit < 1 || limit > coreMemberPage:
+	case limit < 1 || limit > chatMemberPage:
 		return nil, fmt.Errorf("%w: limit", errPageLimit)
 	}
 	var out []domain.Member
@@ -96,7 +96,7 @@ func (g *countingGroups) MembersOfGroup(ctx context.Context, tenant, group, afte
 }
 
 type fixture struct {
-	core    *fakeCore
+	chat    *fakeChat
 	groups  *countingGroups
 	catalog *memstore.Groups
 	r       recipients.Resolver
@@ -104,8 +104,8 @@ type fixture struct {
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
-	f := &fixture{core: newCore(), groups: &countingGroups{UserGroups: memstore.NewUserGroups()}, catalog: memstore.NewGroups()}
-	f.r = recipients.Resolver{Core: f.core, UserGroups: f.groups, Catalog: recipients.StoreCatalog{Groups: f.catalog}}
+	f := &fixture{chat: newChatNode(), groups: &countingGroups{UserGroups: memstore.NewUserGroups()}, catalog: memstore.NewGroups()}
+	f.r = recipients.Resolver{Chat: f.chat, UserGroups: f.groups, Catalog: recipients.StoreCatalog{Groups: f.catalog}}
 	return f
 }
 

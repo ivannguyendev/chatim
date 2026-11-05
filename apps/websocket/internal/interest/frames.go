@@ -6,7 +6,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/ivannguyendev/chatim/pkg/backoff"
+	"github.com/ivannguyendev/chatim/pkg/core/backoff"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 

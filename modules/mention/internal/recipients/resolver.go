@@ -12,13 +12,13 @@ const (
 	SmallRoom = PageSize - 1
 )
 
-type Core interface {
+type Chat interface {
 	MembersOf(ctx context.Context, room uint64, users []string) ([]domain.Member, error)
 	ListMembers(ctx context.Context, room uint64, after domain.MemberCursor, limit int) ([]domain.Member, error)
 }
 
 type Resolver struct {
-	Core       Core
+	Chat       Chat
 	UserGroups store.UserGroups
 	Catalog    Catalog
 }
@@ -46,7 +46,7 @@ func (r Resolver) Resolve(ctx context.Context, tenant string, room uint64, roomT
 	}
 	small := len(roster) <= SmallRoom
 	if !whole {
-		if roster, err = r.Core.ListMembers(ctx, room, domain.MemberCursor{}, PageSize); err != nil {
+		if roster, err = r.Chat.ListMembers(ctx, room, domain.MemberCursor{}, PageSize); err != nil {
 			return nil, err
 		}
 		small = len(roster) <= SmallRoom
@@ -71,7 +71,7 @@ func (r Resolver) users(ctx context.Context, room uint64, targets map[string]dom
 	for id := range targets {
 		ids = append(ids, id)
 	}
-	members, err := r.Core.MembersOf(ctx, room, ids)
+	members, err := r.Chat.MembersOf(ctx, room, ids)
 	if err != nil {
 		return err
 	}
@@ -85,7 +85,7 @@ func (r Resolver) everyone(ctx context.Context, room uint64) ([]domain.Member, e
 	var out []domain.Member
 	after := domain.MemberCursor{}
 	for {
-		page, err := r.Core.ListMembers(ctx, room, after, PageSize)
+		page, err := r.Chat.ListMembers(ctx, room, after, PageSize)
 		if err != nil {
 			return nil, err
 		}

@@ -37,9 +37,9 @@ func TestOfIsDeterministic(t *testing.T) {
 	}
 }
 
-func TestPreferredMovesOnlyTheNewCoreShare(t *testing.T) {
-	before := []string{"core-a", "core-b", "core-c"}
-	after := append(slices.Clone(before), "core-d")
+func TestPreferredMovesOnlyTheNewChatNodeShare(t *testing.T) {
+	before := []string{"chat-a", "chat-b", "chat-c"}
+	after := append(slices.Clone(before), "chat-d")
 	moved := 0
 	for s := range uint16(Count) {
 		was, now := Preferred(s, before), Preferred(s, after)
@@ -47,8 +47,8 @@ func TestPreferredMovesOnlyTheNewCoreShare(t *testing.T) {
 			continue
 		}
 		moved++
-		if now != "core-d" {
-			t.Fatalf("slot %d moved %s -> %s, want moves only to core-d", s, was, now)
+		if now != "chat-d" {
+			t.Fatalf("slot %d moved %s -> %s, want moves only to chat-d", s, was, now)
 		}
 	}
 	if moved < Count*15/100 || moved > Count*35/100 {
@@ -56,19 +56,19 @@ func TestPreferredMovesOnlyTheNewCoreShare(t *testing.T) {
 	}
 }
 
-func TestPreferredBalancesCores(t *testing.T) {
-	cores := []string{"core-a", "core-b", "core-c"}
+func TestPreferredBalancesChatNodes(t *testing.T) {
+	nodes := []string{"chat-a", "chat-b", "chat-c"}
 	share := map[string]int{}
 	for s := range uint16(Count) {
-		share[Preferred(s, cores)]++
+		share[Preferred(s, nodes)]++
 	}
-	for _, c := range cores {
+	for _, c := range nodes {
 		if share[c] < Count*25/100 || share[c] > Count*42/100 {
-			t.Fatalf("core %s prefers %d of %d slots, want about a third", c, share[c], Count)
+			t.Fatalf("chat %s prefers %d of %d slots, want about a third", c, share[c], Count)
 		}
 	}
 	if Preferred(0, nil) != "" {
-		t.Fatal("Preferred with no cores must return empty string")
+		t.Fatal("Preferred with no nodes must return empty string")
 	}
 }
 
@@ -76,11 +76,11 @@ func TestRedisKeys(t *testing.T) {
 	if got := SlotKey(17); got != "chatim:slot:17" {
 		t.Fatalf("SlotKey(17) = %q", got)
 	}
-	if got := CoreKey("core-a"); got != "chatim:core:core-a" {
-		t.Fatalf("CoreKey(core-a) = %q", got)
+	if got := NodeKey("chat-a"); got != "chatim:chat-node:chat-a" {
+		t.Fatalf("NodeKey(chat-a) = %q", got)
 	}
 	at := time.UnixMilli(1_700_000_005_123)
-	if got := CoreExpiryScore(at); got != 1_700_000_005_123 {
-		t.Fatalf("CoreExpiryScore = %v, want unix milliseconds", got)
+	if got := NodeExpiryScore(at); got != 1_700_000_005_123 {
+		t.Fatalf("NodeExpiryScore = %v, want unix milliseconds", got)
 	}
 }

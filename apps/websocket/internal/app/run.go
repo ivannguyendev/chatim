@@ -19,18 +19,19 @@ import (
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/presence"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/session"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/typing"
-	"github.com/ivannguyendev/chatim/pkg/admin"
-	"github.com/ivannguyendev/chatim/pkg/coreroute"
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
-	"github.com/ivannguyendev/chatim/pkg/metrics"
+	"github.com/ivannguyendev/chatim/pkg/auth"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
+	"github.com/ivannguyendev/chatim/pkg/core/admin"
+	"github.com/ivannguyendev/chatim/pkg/core/metrics"
 )
 
 type Deps struct {
-	Dial          coreroute.Dialer
+	Dial          chatrpc.Dialer
 	ReadyTimeout  time.Duration
 	Listen        func(ctx context.Context, addr string) (net.Listener, error)
 	NATS          func(ctx context.Context) (feed.Broker, error)
 	PresenceRedis func(opts *redis.Options) presence.Conn
+	IdentityDoer  auth.Doer
 }
 
 type node struct {
@@ -39,17 +40,18 @@ type node struct {
 	admin  *admin.Server
 	ws     *session.Server
 	routes *routerHolder
-	router *coreroute.Router
+	router *chatrpc.Router
 	feed   *feed.Feed
 	rooms  *interest.Table
 	typing *typing.Service
 	online *presence.Stamper
 	redis  *presence.Client
+	sync   *auth.Syncer
 	http   *http.Server
 }
 
 type tasks struct {
-	admin, listener *task
+	admin, listener, sync *task
 }
 
 func Run(ctx context.Context, cfg config.Config, log *slog.Logger, deps Deps) error {
@@ -69,7 +71,7 @@ func Run(ctx context.Context, cfg config.Config, log *slog.Logger, deps Deps) er
 }
 
 func wire(cfg config.Config, log *slog.Logger, deps Deps) (*node, error) {
-	verifier, err := jwtverify.LoadFile(cfg.JWTKeysFile, jwtConfig(cfg))
+	verifier, err := auth.LoadVerifier(cfg.JWTKeysFile, jwtConfig(cfg))
 	if err != nil {
 		return nil, fmt.Errorf("load jwt key set: %w", err)
 	}
@@ -87,7 +89,7 @@ func wire(cfg config.Config, log *slog.Logger, deps Deps) (*node, error) {
 		_ = pres.client.Close()
 		return nil, err
 	}
-	n, err := wireServers(cfg, log, verifier, exec, rooms, pres)
+	n, err := wireServers(cfg, log, wired{verifier: verifier, exec: exec, rooms: rooms, pres: pres, doer: deps.IdentityDoer})
 	if err != nil {
 		rooms.Close()
 		_ = pres.client.Close()
@@ -97,22 +99,36 @@ func wire(cfg config.Config, log *slog.Logger, deps Deps) (*node, error) {
 	return n, nil
 }
 
-func wireServers(cfg config.Config, log *slog.Logger, verifier *jwtverify.Verifier, exec *command.Executor, rooms *interest.Table, pres presenceParts) (*node, error) {
+type wired struct {
+	verifier *auth.Verifier
+	exec     *command.Executor
+	rooms    *interest.Table
+	pres     presenceParts
+	doer     auth.Doer
+}
+
+func wireServers(cfg config.Config, log *slog.Logger, w wired) (*node, error) {
+	rooms, pres := w.rooms, w.pres
 	typist, err := newTyping(cfg, rooms)
 	if err != nil {
 		return nil, err
 	}
-	ws, err := session.New(sessionOptions(cfg), verifier, exec, rooms, typist, pres.service(), log)
+	sync, err := newSync(cfg, w.verifier, pres.raw, w.doer, log)
 	if err != nil {
 		return nil, err
 	}
+	ws, err := session.New(sessionOptions(cfg), w.verifier, sync, w.exec, rooms, typist, pres.service(), log)
+	if err != nil {
+		return nil, err
+	}
+	sync.OnAdded(ws.Revoke)
 	publisher := interest.NewPublisher(rooms)
 	fd, err := feed.New(feedConfig(cfg), eventRouter{rooms, publisher}, log)
 	if err != nil {
 		return nil, err
 	}
-	sources := slices.Concat(metricSources(ws, exec), fd.Sources(), rooms.Sources(), publisher.Sources(), typist.Sources(), pres.sources())
-	handler, err := metrics.Handler(metricsSubsystem, sources)
+	sources := slices.Concat(metricSources(ws, w.exec), fd.Sources(), rooms.Sources(), publisher.Sources(), typist.Sources(), pres.sources(), sync.Sources())
+	handler, err := metrics.Handler(metricsNamespace, metricsSubsystem, sources)
 	if err != nil {
 		return nil, err
 	}
@@ -126,6 +142,7 @@ func wireServers(cfg config.Config, log *slog.Logger, verifier *jwtverify.Verifi
 		typing: typist,
 		online: pres.stamper,
 		redis:  pres.client,
+		sync:   sync,
 		http:   newHTTPServer(ws, log),
 	}, nil
 }
@@ -138,6 +155,7 @@ func (n *node) serve(ctx context.Context, deps Deps) error {
 	}
 	sup := newSupervisor(ctx)
 	t := tasks{admin: sup.start("admin", func(c context.Context) error { return n.admin.ServeListener(c, adminLis) })}
+	t.sync = sup.start("identity sync", func(c context.Context) error { n.sync.Run(c); return c.Err() })
 	wsLis, cause := n.openRoutes(ctx, deps)
 	if cause != nil || ctx.Err() != nil {
 		closeListener(wsLis)
@@ -150,7 +168,9 @@ func (n *node) serve(ctx context.Context, deps Deps) error {
 	select {
 	case failed := <-sup.failed:
 		return n.shutdown(ctx, sup, t, failed)
-	default:
+	case <-ctx.Done():
+		return n.shutdown(ctx, sup, t, nil)
+	case <-n.sync.Booted():
 	}
 	n.admin.SetReady(true)
 	n.log.InfoContext(ctx, "websocket ready", "listen", wsLis.Addr().String(), "admin", adminLis.Addr().String())
@@ -197,11 +217,11 @@ func (n *node) openFeed(ctx context.Context, deps Deps) error {
 func (n *node) openRouter(ctx context.Context, deps Deps) error {
 	life, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	abort := context.AfterFunc(ctx, cancel)
-	r, err := coreroute.Open(life, routerConfig(n.cfg, deps, n.log))
+	r, err := chatrpc.OpenRouter(life, routerConfig(n.cfg, deps, n.log))
 	abort()
 	if err != nil {
 		cancel()
-		return fmt.Errorf("open core router: %w", err)
+		return fmt.Errorf("open chat router: %w", err)
 	}
 	n.router = r
 	n.routes.set(r)
@@ -212,7 +232,7 @@ func (n *node) abandon(ctx context.Context, sup *supervisor, t tasks) error {
 	sup.stopping.Store(true)
 	stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), n.cfg.ShutdownBudget)
 	defer cancel()
-	err := errors.Join(n.typing.Stop(), n.feed.Stop(stopCtx))
+	err := errors.Join(n.typing.Stop(), n.feed.Stop(stopCtx), t.sync.stop(stopCtx))
 	n.online.Stop()
 	err = errors.Join(err, closePresence(n.redis))
 	n.rooms.Close()

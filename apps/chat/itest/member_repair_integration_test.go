@@ -1,0 +1,128 @@
+package itest
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"maps"
+	"testing"
+
+	"github.com/ivannguyendev/chatim/apps/chat/internal/dedupe"
+	"github.com/ivannguyendev/chatim/apps/chat/internal/event/timer"
+	"github.com/ivannguyendev/chatim/apps/chat/internal/member"
+	"github.com/ivannguyendev/chatim/apps/chat/internal/model/access"
+	"github.com/ivannguyendev/chatim/apps/chat/internal/model/domain"
+	"github.com/ivannguyendev/chatim/apps/chat/internal/model/pbconv"
+	"github.com/ivannguyendev/chatim/apps/chat/internal/store/mongostore"
+	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
+)
+
+const itMembersRepairedSeries = `chatim_chat_counter_repaired_total{counter="members"}`
+
+var errChatNodeDiedBeforeCount = errors.New("chat node died before the member count")
+
+type countLost struct{ *mongostore.Store }
+
+func (countLost) AddMemberCount(context.Context, uint64, int) (domain.MemberCount, error) {
+	return domain.MemberCount{}, errChatNodeDiedBeforeCount
+}
+
+type droppedEvents struct{}
+
+func (droppedEvents) Enqueue(uint64, []*chatimv1.Event) error { return nil }
+
+type freshRequests struct{}
+
+func (freshRequests) Begin(context.Context, dedupe.Key) (dedupe.RequestStatus, dedupe.Record, error) {
+	return dedupe.RequestNew, dedupe.Record{}, nil
+}
+
+func (freshRequests) Finish(context.Context, dedupe.Key, dedupe.Record) {}
+
+func (freshRequests) Cancel(context.Context, dedupe.Key) {}
+
+type noForget struct{}
+
+func (noForget) ForgetMembers(uint64) {}
+
+func membersWithoutEvents(t *testing.T, it *itInfra, chat itChatNode, members member.MemberStore) *member.Service {
+	t.Helper()
+	st, tc := itStore(it, chat), chat.cfg.Timer
+	return built(member.New(member.Deps{
+		Access: built(access.NewChecker(st, access.DefaultPolicy{}))(t), Messages: st, Rooms: st,
+		Events: droppedEvents{}, Limits: chat.cfg.Members, Members: members, Requests: freshRequests{},
+		Forget: noForget{}, Reads: st, ReadSink: noReads{}, Log: slog.New(slog.DiscardHandler),
+		Timers: built(timer.NewTimers(it.js, tc.Name, tc.SubjectRoot, chat.cfg.MemberCountCheckDelay))(t),
+	}))(t)
+}
+
+func TestRealInfraACountMissedByACrashIsRepairedByItsTimer(t *testing.T) {
+	it := realInfra(t)
+	env := maps.Clone(itFastSweep)
+	env["CHAT_REQUEST_DEADLINE"], env["MEMBER_COUNT_CHECK_DELAY"] = "2s", "2500ms"
+	chat := startChatNode(t, it, env)
+	client := dialChat(t, chat.cfg)
+	st := itStore(it, chat)
+	normal := createRoom(t, client)
+	addMembersAs(t, client, itUser, normal, "timer-normal", "carol")
+	if n := pendingTimers(t, it, chat.cfg, parseRoom(t, normal)); n != 0 {
+		t.Fatalf("a normal add left %d count check timers, want none", n)
+	}
+
+	roomID := createRoom(t, client)
+	room := parseRoom(t, roomID)
+	live := subscribeLive(t, it, chat.cfg, roomID)
+	repaired := itMetric(t, chat.cfg, itMembersRepairedSeries)
+	cmd := member.AddMembersCmd{Tenant: itTenant, User: itUser, Room: room, Users: []string{"carol", "dave"}, RequestID: "timer-crash"}
+	added, err := membersWithoutEvents(t, it, chat, countLost{st}).AddMembers(t.Context(), cmd)
+	if err != nil || len(added) != 2 {
+		t.Fatalf("AddMembers with a lost count = %v, %v; want both added", added, err)
+	}
+	if r, err := st.Get(t.Context(), room); err != nil || r.MemberCount != 2 || r.MemberCountVer != 1 || pendingTimers(t, it, chat.cfg, room) != 1 {
+		t.Fatalf("room after the lost count = %+v, %v; want 2 members at ver 1 and one armed timer", r, err)
+	}
+	fixed := awaitStored(t, "member count", func() (domain.Room, error) { return st.Get(t.Context(), room) },
+		func(r domain.Room) bool { return r.MemberCount == 4 })
+	ev := awaitLiveEvent(t, live, pbconv.MemberCountEventID(room, 2))
+	if c := ev.GetMemberCountChanged(); fixed.MemberCountVer != 2 || c.GetMemberCount() != 4 || c.GetMemberCountVer() != 2 {
+		t.Fatalf("repaired room ver %d, event %v; want 4 members at ver 2", fixed.MemberCountVer, ev)
+	}
+	if got := awaitMetric(t, chat.cfg, itMembersRepairedSeries, func(v float64) bool { return v > repaired }); got != repaired+1 {
+		t.Fatalf("%s = %v, want %v", itMembersRepairedSeries, got, repaired+1)
+	}
+}
+
+func TestRealInfraLostMemberAndReadEventsAreRepublished(t *testing.T) {
+	it := realInfra(t)
+	chat := startChatNode(t, it, itFastSweep)
+	client := dialChat(t, chat.cfg)
+	roomID := createRoom(t, client)
+	room := parseRoom(t, roomID)
+	live := subscribeLive(t, it, chat.cfg, roomID)
+	quiet := membersWithoutEvents(t, it, chat, itStore(it, chat))
+	cmd := member.AddMembersCmd{Tenant: itTenant, User: itUser, Room: room, Users: []string{"erin"}, RequestID: "lost-erin"}
+	if added, err := quiet.AddMembers(t.Context(), cmd); err != nil || len(added) != 1 {
+		t.Fatalf("AddMembers without events = %v, %v; want erin added", added, err)
+	}
+	seq := sendAs(t, client, itUser, roomID, "lost-1", "erin reads this")
+	pos, err := quiet.MarkRead(t.Context(), member.ReadCmd{Tenant: itTenant, User: "erin", Room: room, Seq: seq})
+	if err != nil || pos.Seq != seq {
+		t.Fatalf("MarkRead without events = %+v, %v; want read up to %d", pos, err, seq)
+	}
+
+	ids := []string{pbconv.MemberEventID(room, "erin", 1), pbconv.MemberCountEventID(room, 2), pbconv.ReadPositionsEventID(room, []*chatimv1.ReadEntry{{User: "erin", ReadSeq: seq, ReadVer: pos.Ver}})}
+	evs := awaitLiveEvents(t, live, ids...)
+	if a := evs[ids[0]].GetMemberAdded(); a.GetUser() != "erin" || a.GetVer() != 1 || a.GetRole() != chatimv1.MemberRole_MEMBER_ROLE_MEMBER || a.GetReadVer() == 0 {
+		t.Fatalf("republished member_added = %v, want erin as a member at ver 1 with a read position", a)
+	}
+	if c := evs[ids[1]].GetMemberCountChanged(); c.GetMemberCount() != 3 || c.GetMemberCountVer() != 2 {
+		t.Fatalf("republished member_count_changed = %v, want 3 members at ver 2", c)
+	}
+	if r := evs[ids[2]].GetReadPositions().GetEntries(); len(r) != 1 || r[0].GetUser() != "erin" || r[0].GetReadSeq() != seq || r[0].GetReadVer() != pos.Ver {
+		t.Fatalf("republished read_positions = %v, want only erin at seq %d ver %d", r, seq, pos.Ver)
+	}
+}
+
+type noReads struct{}
+
+func (noReads) Add(domain.Room, string, domain.ReadPosition) {}

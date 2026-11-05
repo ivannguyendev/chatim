@@ -9,11 +9,11 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/ivannguyendev/chatim/pkg/apperr"
+	"github.com/ivannguyendev/chatim/pkg/core/apperr"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-var errDown = errors.New("core down")
+var errDown = errors.New("chat down")
 
 type settledAs struct {
 	acks, terms int

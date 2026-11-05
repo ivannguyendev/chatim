@@ -17,8 +17,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 
-	"github.com/ivannguyendev/chatim/pkg/callerid"
-	"github.com/ivannguyendev/chatim/pkg/corecall"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/pkg/pb/chatim/v1/chatimv1connect"
 )
@@ -43,8 +42,8 @@ func errorCode(t *testing.T, r reply) string {
 	return body.Code
 }
 
-func TestEveryRequestCommandReachesCoreAsTheTokenUser(t *testing.T) {
-	cmds, err := corecall.Commands(corecall.Request())
+func TestEveryRequestCommandReachesChatAsTheTokenUser(t *testing.T) {
+	cmds, err := chatrpc.Commands(chatrpc.Request())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,14 +67,14 @@ func TestEveryRequestCommandReachesCoreAsTheTokenUser(t *testing.T) {
 		if resp.status != http.StatusOK {
 			t.Fatalf("%s status = %d", c.Name, resp.status)
 		}
-		calls := h.core.recorded()
+		calls := h.chat.recorded()
 		if len(calls) != i+1 || calls[i].method != c.Method {
-			t.Fatalf("%s core calls = %+v", c.Name, calls)
+			t.Fatalf("%s chat calls = %+v", c.Name, calls)
 		}
-		if got := calls[i].md.Get(callerid.TenantHeader); len(got) != 1 || got[0] != "acme" {
+		if got := calls[i].md.Get(chatrpc.TenantHeader); len(got) != 1 || got[0] != "acme" {
 			t.Fatalf("%s tenant = %v", c.Name, got)
 		}
-		if got := calls[i].md.Get(callerid.UserHeader); len(got) != 1 || got[0] != "alice" {
+		if got := calls[i].md.Get(chatrpc.UserHeader); len(got) != 1 || got[0] != "alice" {
 			t.Fatalf("%s user = %v", c.Name, got)
 		}
 	}
@@ -83,10 +82,10 @@ func TestEveryRequestCommandReachesCoreAsTheTokenUser(t *testing.T) {
 
 func TestGeneratedClientsSpeakJSONAndProtobuf(t *testing.T) {
 	h := newHarness(t, roomy)
-	h.core.set(func(f *fakeCore) { f.reply = &chatimv1.GetRoomsResponse{Missing: []string{"7"}} })
+	h.chat.set(func(f *fakeChat) { f.reply = &chatimv1.GetRoomsResponse{Missing: []string{"7"}} })
 	token := h.token(t, claims{})
 	for name, opts := range map[string][]connect.ClientOption{"proto": nil, "json": {connect.WithProtoJSON()}} {
-		client := chatimv1connect.NewCoreServiceClient(h.server.Client(), h.server.URL, append(opts, withToken(token))...)
+		client := chatimv1connect.NewChatServiceClient(h.server.Client(), h.server.URL, append(opts, withToken(token))...)
 		resp, err := client.GetRooms(t.Context(), connect.NewRequest(&chatimv1.GetRoomsRequest{RoomIds: []string{"7"}}))
 		if err != nil || !slices.Equal(resp.Msg.GetMissing(), []string{"7"}) {
 			t.Fatalf("%s GetRooms = %v, %v", name, resp, err)
@@ -105,17 +104,17 @@ func TestUnknownFieldsAreDroppedForJSONAndProtobuf(t *testing.T) {
 	raw = protowire.AppendVarint(protowire.AppendTag(raw, 99, protowire.VarintType), 1)
 	bodies := map[string][]byte{"application/json": []byte(`{"roomId":"42","limit":5,"bogus":true}`), "application/proto": raw}
 	for contentType, body := range bodies {
-		resp := h.post(t, chatimv1.CoreService_GetHistory_FullMethodName, contentType, token, body, nil)
+		resp := h.post(t, chatimv1.ChatService_GetHistory_FullMethodName, contentType, token, body, nil)
 		if resp.status != http.StatusOK {
 			t.Fatalf("%s status = %d", contentType, resp.status)
 		}
-		calls := h.core.recorded()
+		calls := h.chat.recorded()
 		var got chatimv1.GetHistoryRequest
 		if err := proto.Unmarshal(calls[len(calls)-1].body, &got); err != nil {
 			t.Fatal(err)
 		}
 		if !proto.Equal(&got, known) || len(got.ProtoReflect().GetUnknown()) != 0 {
-			t.Fatalf("%s core got %v with unknown %x", contentType, &got, got.ProtoReflect().GetUnknown())
+			t.Fatalf("%s chat got %v with unknown %x", contentType, &got, got.ProtoReflect().GetUnknown())
 		}
 	}
 }
@@ -123,9 +122,9 @@ func TestUnknownFieldsAreDroppedForJSONAndProtobuf(t *testing.T) {
 func TestEveryMethodOutsideRequestIsUnimplemented(t *testing.T) {
 	h := newHarness(t, roomy)
 	token := bearerOf(h.token(t, claims{}))
-	served := corecall.Request()
+	served := chatrpc.Request()
 	refused := 0
-	for _, service := range []protoreflect.FullName{"chatim.v1.CoreService", "chatim.v1.MentionService"} {
+	for _, service := range []protoreflect.FullName{"chatim.v1.ChatService", "chatim.v1.MentionService"} {
 		d, err := protoregistry.GlobalFiles.FindDescriptorByName(service)
 		if err != nil {
 			t.Fatal(err)
@@ -142,8 +141,8 @@ func TestEveryMethodOutsideRequestIsUnimplemented(t *testing.T) {
 			}
 		}
 	}
-	if refused != 15 || len(h.core.recorded()) != 0 {
-		t.Fatalf("refused = %d, core calls = %d", refused, len(h.core.recorded()))
+	if refused != 15 || len(h.chat.recorded()) != 0 {
+		t.Fatalf("refused = %d, chat calls = %d", refused, len(h.chat.recorded()))
 	}
 	if got := h.read(t, "commands_total", map[string]string{"command": "unknown", "code": "Unimplemented"}); got != 15 {
 		t.Fatalf("unknown counted = %v", got)
@@ -153,11 +152,11 @@ func TestEveryMethodOutsideRequestIsUnimplemented(t *testing.T) {
 func TestInternalAndRealtimeCallsAreRefusedOnTheGeneratedClient(t *testing.T) {
 	h := newHarness(t, roomy)
 	opt := withToken(h.token(t, claims{}))
-	core := chatimv1connect.NewCoreServiceClient(h.server.Client(), h.server.URL, opt)
+	chat := chatimv1connect.NewChatServiceClient(h.server.Client(), h.server.URL, opt)
 	mention := chatimv1connect.NewMentionServiceClient(h.server.Client(), h.server.URL, opt)
 	calls := map[string]error{}
-	_, calls["SendMessage"] = core.SendMessage(t.Context(), connect.NewRequest(&chatimv1.SendMessageRequest{RoomId: "42", Cid: "c1"}))
-	_, calls["ListMyRoomIDs"] = core.ListMyRoomIDs(t.Context(), connect.NewRequest(&chatimv1.ListMyRoomIDsRequest{}))
+	_, calls["SendMessage"] = chat.SendMessage(t.Context(), connect.NewRequest(&chatimv1.SendMessageRequest{RoomId: "42", Cid: "c1"}))
+	_, calls["ListMyRoomIDs"] = chat.ListMyRoomIDs(t.Context(), connect.NewRequest(&chatimv1.ListMyRoomIDsRequest{}))
 	_, calls["SetUserGroups"] = mention.SetUserGroups(t.Context(), connect.NewRequest(&chatimv1.SetUserGroupsRequest{}))
 	_, calls["SetGroups"] = mention.SetGroups(t.Context(), connect.NewRequest(&chatimv1.SetGroupsRequest{}))
 	for name, err := range calls {
@@ -165,28 +164,28 @@ func TestInternalAndRealtimeCallsAreRefusedOnTheGeneratedClient(t *testing.T) {
 			t.Fatalf("%s = %v, want unimplemented", name, err)
 		}
 	}
-	if len(h.core.recorded()) != 0 {
-		t.Fatal("a refused call reached core")
+	if len(h.chat.recorded()) != 0 {
+		t.Fatal("a refused call reached chat")
 	}
 }
 
-func TestCoreCodesMapOneToOneWithFixedInfraMessages(t *testing.T) {
+func TestChatCodesMapOneToOneWithFixedInfraMessages(t *testing.T) {
 	kept := map[codes.Code]bool{codes.InvalidArgument: true, codes.NotFound: true, codes.FailedPrecondition: true, codes.PermissionDenied: true, codes.AlreadyExists: true, codes.ResourceExhausted: true}
 	for code := codes.Canceled; code <= codes.Unauthenticated; code++ {
 		t.Run(code.String(), func(t *testing.T) {
 			h := newHarness(t, roomy)
-			h.core.set(func(f *fakeCore) { f.err = status.Error(code, "core detail at 10.9.8.7") })
-			client := chatimv1connect.NewCoreServiceClient(h.server.Client(), h.server.URL, connect.WithProtoJSON(), withToken(h.token(t, claims{})))
+			h.chat.set(func(f *fakeChat) { f.err = status.Error(code, "chat detail at 10.9.8.7") })
+			client := chatimv1connect.NewChatServiceClient(h.server.Client(), h.server.URL, connect.WithProtoJSON(), withToken(h.token(t, claims{})))
 			_, err := client.GetHistory(t.Context(), connect.NewRequest(&chatimv1.GetHistoryRequest{RoomId: "42"}))
 			ce := new(connect.Error)
 			if !errors.As(err, &ce) || int(ce.Code()) != int(code) || !strings.EqualFold(strings.ReplaceAll(ce.Code().String(), "_", ""), code.String()) {
 				t.Fatalf("err = %v", err)
 			}
-			if kept[code] != (ce.Message() == "core detail at 10.9.8.7") || strings.Contains(ce.Message(), "10.9.8.7") != kept[code] || ce.Message() == "" {
+			if kept[code] != (ce.Message() == "chat detail at 10.9.8.7") || strings.Contains(ce.Message(), "10.9.8.7") != kept[code] || ce.Message() == "" {
 				t.Fatalf("message = %q", ce.Message())
 			}
-			if len(h.core.recorded()) != 1 {
-				t.Fatalf("core calls = %d, want exactly 1", len(h.core.recorded()))
+			if len(h.chat.recorded()) != 1 {
+				t.Fatalf("chat calls = %d, want exactly 1", len(h.chat.recorded()))
 			}
 		})
 	}

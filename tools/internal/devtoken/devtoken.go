@@ -4,10 +4,12 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/subtle"
+	"encoding/base32"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -25,6 +27,7 @@ type Claims struct {
 	Audience string
 	Subject  string
 	Tenant   string
+	Session  string
 	IssuedAt time.Time
 	TTL      time.Duration
 }
@@ -90,11 +93,19 @@ func (k KeyPair) Sign(c Claims) (string, error) {
 	if issued.IsZero() {
 		issued = time.Now()
 	}
+	session := c.Session
+	if session == "" {
+		var err error
+		if session, err = randomSession(); err != nil {
+			return "", err
+		}
+	}
 	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{
 		"iss": c.Issuer,
 		"aud": c.Audience,
 		"sub": c.Subject,
 		"tid": c.Tenant,
+		"sid": session,
 		"iat": issued.Unix(),
 		"exp": issued.Add(c.TTL).Unix(),
 	})
@@ -115,6 +126,14 @@ func (k KeyPair) publicJWK() jwk {
 		Use:     "sig",
 		X:       encode(k.Private.Public().(ed25519.PublicKey)),
 	}
+}
+
+func randomSession() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("draw dev session: %w", err)
+	}
+	return strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(b))[:26], nil
 }
 
 func encode(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
