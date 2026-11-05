@@ -113,6 +113,7 @@ func TestUnauthCountFollowsEveryTransition(t *testing.T) {
 		}
 		tc.auth(h.token("u1", time.Minute))
 		tc.nextFrame()
+		synctest.Wait()
 		if h.unauth() != 0 {
 			t.Fatalf("unauth after login = %d, want 0", h.unauth())
 		}
@@ -123,6 +124,7 @@ func TestUnauthCountFollowsEveryTransition(t *testing.T) {
 		}
 		tc.auth(h.token("u1", time.Hour))
 		tc.nextFrame()
+		synctest.Wait()
 		if h.unauth() != 0 {
 			t.Fatalf("unauth after a new login = %d, want 0", h.unauth())
 		}
