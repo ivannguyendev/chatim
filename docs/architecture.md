@@ -2,7 +2,7 @@
 
 > Ngày cập nhật: 2026-10-17 · Trạng thái: **Nguồn sự thật duy nhất (SSOT)** cho toàn bộ quy chuẩn kiến trúc của `chatim`.
 > Nhật ký quyết định kỹ thuật: [docs/decision-log.md](./decision-log.md). Danh mục event (chat phát gì, ai nhận gì): [docs/events.md](./events.md).
-> Đặc tả chi tiết các Module tính năng (How-It-Works & Flowcharts): [docs/modules/README.md](./modules/README.md).
+> Đặc tả chi tiết các Module tính năng (How-It-Works & Flowcharts): [docs/features/README.md](./features/README.md).
 > Lộ trình phát triển các Milestone: [docs/roadmap.md](./roadmap.md).
 
 ---
@@ -77,7 +77,7 @@ Mọi thiết kế và dòng code trong `chatim` bắt buộc phải tuân thủ
 
 ## 4. Khung lớp dữ liệu (Data Class Framework)
 
-> **Đường event chung cho mọi lớp (M3.1, D141–D160):** lệnh ghi doc kèm bit trong `_state` (+ `_state_at`) ở cùng lần ghi → ack → publish → sau PubAck xoá bit theo lô. Bit nào còn quá 15s (`SWEEP_MIN_AGE`) thì sweeper trên chat giữ slot 0 dựng lại event từ doc hiện tại và phát bù. Projection (`room_activity`, `reply_index`) đọc một consumer `projections` trên `CHATIM_EVT` (chỉ chat giữ slot 0, cửa sổ gom 3s), không delay cố định. Mention App đọc consumer riêng `mention` (queue group, mọi node chat) và ghi collection của nó. Chi tiết: [Module 10](modules/10-feature-data-reconciliation-and-repair.md), [bản tóm tắt M3.1](plans/2026-10-16-m3-1-state-driven-events-summary.md).
+> **Đường event chung cho mọi lớp (M3.1, D141–D160):** lệnh ghi doc kèm bit trong `_state` (+ `_state_at`) ở cùng lần ghi → ack → publish → sau PubAck xoá bit theo lô. Bit nào còn quá 15s (`SWEEP_MIN_AGE`) thì sweeper trên chat giữ slot 0 dựng lại event từ doc hiện tại và phát bù. Projection (`room_activity`, `reply_index`) đọc một consumer `projections` trên `CHATIM_EVT` (chỉ chat giữ slot 0, cửa sổ gom 3s), không delay cố định. Mention App đọc consumer riêng `mention` (queue group, mọi node chat) và ghi collection của nó. Chi tiết: [Module 10](features/10-feature-data-reconciliation-and-repair.md), [bản tóm tắt M3.1](plans/2026-10-16-m3-1-state-driven-events-summary.md).
 
 > **Quy định bất di bất dịch:** Mọi tính năng mới bắt buộc phải map vào đúng một lớp dữ liệu dưới đây trước khi viết plan. Tính năng không khớp lớp nào thì phải dừng lại để thiết kế lớp mới (D61).
 
@@ -102,7 +102,7 @@ Mọi thiết kế và dòng code trong `chatim` bắt buộc phải tuân thủ
 
 Mọi collection dùng tên tiếng Anh đầy đủ (D96), ngoại trừ `messages` dùng tên ngắn để tiết kiệm bộ nhớ cache RAM của MongoDB.
 
-Cờ event chờ phát (M3.1, D142–D149): 7 collection `messages`, `message_edits`, `message_interactions`, `pin_actions`, `members`, `hidden`, `rooms` có thêm hai field nội bộ `_state` (int32 bitmask, mỗi bit một event đã ghi DB nhưng chưa chắc vào NATS) và `_state_at` (lúc bật bit cũ nhất, `$min`; insert lấy giờ của doc, update lấy giờ server `$$NOW`). Hết bit thì cả hai field bị `$unset`, nên doc đã phát xong không tốn thêm byte. Mỗi collection có partial index `state_pending {_state_at: 1, _id: 1}` chỉ chứa doc còn `_state`. Proto không đọc hai field này. Bảng bit: [Module 10](modules/10-feature-data-reconciliation-and-repair.md#31-bit-theo-collection).
+Cờ event chờ phát (M3.1, D142–D149): 7 collection `messages`, `message_edits`, `message_interactions`, `pin_actions`, `members`, `hidden`, `rooms` có thêm hai field nội bộ `_state` (int32 bitmask, mỗi bit một event đã ghi DB nhưng chưa chắc vào NATS) và `_state_at` (lúc bật bit cũ nhất, `$min`; insert lấy giờ của doc, update lấy giờ server `$$NOW`). Hết bit thì cả hai field bị `$unset`, nên doc đã phát xong không tốn thêm byte. Mỗi collection có partial index `state_pending {_state_at: 1, _id: 1}` chỉ chứa doc còn `_state`. Proto không đọc hai field này. Bảng bit: [Module 10](features/10-feature-data-reconciliation-and-repair.md#31-bit-theo-collection).
 
 | Collection | Cấu trúc `_id` (Khoá nhị phân) | Lớp dữ liệu | Index phụ bắt buộc | Vai trò & Trạng thái |
 |---|---|---|---|---|
@@ -324,21 +324,21 @@ Mỗi cam kết hệ thống bắt buộc phải đi kèm với Detector đo lư
 
 ## 9. Bản đồ Module tính năng chi tiết
 
-Toàn bộ chi tiết kỹ thuật vận hành (How-It-Works), sơ đồ Mermaid trình tự gọi lệnh, cấu trúc payload và mã lỗi từng tính năng được phân rã độc lập trong thư mục [`docs/modules/`](./modules/README.md):
+Toàn bộ chi tiết kỹ thuật vận hành (How-It-Works), sơ đồ Mermaid trình tự gọi lệnh, cấu trúc payload và mã lỗi từng tính năng được phân rã độc lập trong thư mục [`docs/features/`](./features/README.md):
 
 | # | Module | Tài liệu chi tiết | Trọng tâm nghiệp vụ |
 |---|---|---|---|
-| **01** | Rooms, DMs & Channels | [01-feature-rooms-dms-and-channels.md](./modules/01-feature-rooms-dms-and-channels.md) | Mở chat 1-1, tạo nhóm ≤5K, kênh ~200K, sổ nhận chỗ `room_dms`. |
-| **02** | Message Sending & Ordering | [02-feature-message-sending-and-ordering.md](./modules/02-feature-message-sending-and-ordering.md) | Actor per-room, monotonic seq, chống trùng CID 2 tầng (LRU RAM → Redis dedupe), Group Commit. |
-| **03** | Message Edit & Delete | [03-feature-message-edit-delete-and-privacy.md](./modules/03-feature-message-edit-delete-and-privacy.md) | Fact `message_edits`, projection CAS `messages`, thu hồi và ẩn tin. |
-| **04** | Reactions, Pins & Bookmarks | [04-feature-reactions-pins-and-bookmarks.md](./modules/04-feature-reactions-pins-and-bookmarks.md) | Survivor timers tự sửa sai số đếm, pin folding CAS hạn mức 50. |
-| **05** | Membership & Roles | [05-feature-membership-roles-and-succession.md](./modules/05-feature-membership-roles-and-succession.md) | Thêm/xoá member, transaction kế nhiệm owner duy nhất, `memberwatch`. |
-| **06** | Threads & Mentions | [06-feature-threads-replies-and-mentions.md](./modules/06-feature-threads-replies-and-mentions.md) | Trả lời trên timeline chính (`messages.rp {th, s}`), `reply_threads`; đích mention trên tin (chat) và Mention App (chỉ mục, nhóm, thông báo). |
-| **07** | Read Receipts & Unread | [07-feature-read-receipts-and-unread-badge.md](./modules/07-feature-read-receipts-and-unread-badge.md) | Đánh dấu đã đọc/chưa đọc, unread tính lúc đọc từ đuôi room (đếm tới 100, cờ `approx`). |
-| **08** | History & Reconnect Sync | [08-feature-history-retrieval-and-sync.md](./modules/08-feature-history-retrieval-and-sync.md) | Phân trang theo `seq` (`LATEST`/`OLDEST`/`BEFORE`/`AFTER`/`AROUND`), View pipeline che tin nhạy cảm. |
-| **09** | Realtime Delivery & Ephemeral | [09-feature-realtime-delivery-and-ephemeral.md](./modules/09-feature-realtime-delivery-and-ephemeral.md) | WebSocket gws, dynamic interest routing NATS, typing/presence. |
-| **10** | Reconciliation & Self-Healing | [10-feature-data-reconciliation-and-repair.md](./modules/10-feature-data-reconciliation-and-repair.md) | Cờ `_state` trên doc, xoá cờ sau PubAck, sweeper slot 0, consumer `projections` (2 handler), phiếu hẹn `CHATIM_TIMER`, resync/recount. |
-| **11** | HTTPS Gateway | [11-feature-https-gateway.md](./modules/11-feature-https-gateway.md) | App `gateway` (D198): 22 lệnh đọc và quản lý qua HTTPS (Connect), Bearer JWT, node chat bất kỳ round robin, giới hạn theo user, CORS.
+| **01** | Rooms, DMs & Channels | [01-feature-rooms-dms-and-channels.md](./features/01-feature-rooms-dms-and-channels.md) | Mở chat 1-1, tạo nhóm ≤5K, kênh ~200K, sổ nhận chỗ `room_dms`. |
+| **02** | Message Sending & Ordering | [02-feature-message-sending-and-ordering.md](./features/02-feature-message-sending-and-ordering.md) | Actor per-room, monotonic seq, chống trùng CID 2 tầng (LRU RAM → Redis dedupe), Group Commit. |
+| **03** | Message Edit & Delete | [03-feature-message-edit-delete-and-privacy.md](./features/03-feature-message-edit-delete-and-privacy.md) | Fact `message_edits`, projection CAS `messages`, thu hồi và ẩn tin. |
+| **04** | Reactions, Pins & Bookmarks | [04-feature-reactions-pins-and-bookmarks.md](./features/04-feature-reactions-pins-and-bookmarks.md) | Survivor timers tự sửa sai số đếm, pin folding CAS hạn mức 50. |
+| **05** | Membership & Roles | [05-feature-membership-roles-and-succession.md](./features/05-feature-membership-roles-and-succession.md) | Thêm/xoá member, transaction kế nhiệm owner duy nhất, `memberwatch`. |
+| **06** | Threads & Mentions | [06-feature-threads-replies-and-mentions.md](./features/06-feature-threads-replies-and-mentions.md) | Trả lời trên timeline chính (`messages.rp {th, s}`), `reply_threads`; đích mention trên tin (chat) và Mention App (chỉ mục, nhóm, thông báo). |
+| **07** | Read Receipts & Unread | [07-feature-read-receipts-and-unread-badge.md](./features/07-feature-read-receipts-and-unread-badge.md) | Đánh dấu đã đọc/chưa đọc, unread tính lúc đọc từ đuôi room (đếm tới 100, cờ `approx`). |
+| **08** | History & Reconnect Sync | [08-feature-history-retrieval-and-sync.md](./features/08-feature-history-retrieval-and-sync.md) | Phân trang theo `seq` (`LATEST`/`OLDEST`/`BEFORE`/`AFTER`/`AROUND`), View pipeline che tin nhạy cảm. |
+| **09** | Realtime Delivery & Ephemeral | [09-feature-realtime-delivery-and-ephemeral.md](./features/09-feature-realtime-delivery-and-ephemeral.md) | WebSocket gws, dynamic interest routing NATS, typing/presence. |
+| **10** | Reconciliation & Self-Healing | [10-feature-data-reconciliation-and-repair.md](./features/10-feature-data-reconciliation-and-repair.md) | Cờ `_state` trên doc, xoá cờ sau PubAck, sweeper slot 0, consumer `projections` (2 handler), phiếu hẹn `CHATIM_TIMER`, resync/recount. |
+| **11** | HTTPS Gateway | [11-feature-https-gateway.md](./features/11-feature-https-gateway.md) | App `gateway` (D198): 22 lệnh đọc và quản lý qua HTTPS (Connect), Bearer JWT, node chat bất kỳ round robin, giới hạn theo user, CORS.
 
 ---
 

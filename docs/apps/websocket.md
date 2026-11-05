@@ -1,6 +1,6 @@
 # App `websocket`
 
-Giữ kết nối WebSocket (gws) của client: 12 lệnh ghi realtime chuyển tới chat theo slot, đẩy event và thông báo, đang gõ, online, giữ kết nối khi token hết hạn. Không có database. Cơ chế, giao thức và đặc tả client: [module 09](../modules/09-feature-realtime-delivery-and-ephemeral.md) (§7 giao thức, §8 đẩy event, §10 đang gõ và online, §11 đặc tả client).
+Giữ kết nối WebSocket (gws) của client: 12 lệnh ghi realtime chuyển tới chat theo slot, đẩy event và thông báo, đang gõ, online, giữ kết nối khi token hết hạn. Không có database. Cơ chế, giao thức và đặc tả client: [module 09](../features/09-feature-realtime-delivery-and-ephemeral.md) (§7 giao thức, §8 đẩy event, §10 đang gõ và online, §11 đặc tả client).
 
 ## Biến môi trường
 
@@ -59,7 +59,7 @@ Giữ kết nối WebSocket (gws) của client: 12 lệnh ghi realtime chuyển 
 ## Cổng và admin
 
 - WebSocket `WS_ADDR` (`:8080`), đường dẫn `/ws`, subprotocol `chatim.v1`; compose publish `websocket-1` ở `127.0.0.1:8081`; `websocket-2` không publish (e2e gọi `chatim-websocket-2:8080` trong mạng compose).
-- Admin `WS_ADMIN_ADDR` (`:9090`, không publish): `/livez`, `/readyz`, `/metrics` (`chatim_websocket_*`). Metric và 9 luật alert websocket/gateway: [module 09 §6.1](../modules/09-feature-realtime-delivery-and-ephemeral.md); vận hành (NTP bắt buộc, deploy từng node): §6.2.
+- Admin `WS_ADMIN_ADDR` (`:9090`, không publish): `/livez`, `/readyz`, `/metrics` (`chatim_websocket_*`). Metric và 9 luật alert websocket/gateway: [module 09 §6.1](../features/09-feature-realtime-delivery-and-ephemeral.md); vận hành (NTP bắt buộc, deploy từng node): §6.2.
 - Log: `make ws-logs` (websocket-1), `make ws-logs NODE=2` (websocket-2). Không token nào được nằm trong log.
 
 ## Khoá và token dev

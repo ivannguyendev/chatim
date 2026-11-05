@@ -1,6 +1,6 @@
 # App `gateway`
 
-HTTPS (Connect trên HTTP/1.1 và h2c) cho tải dữ liệu và quản lý room: 22 lệnh `chatrpc.Request()` (14 lệnh đọc và `CreateRoom`, `OpenDirectRoom`, `UpdateRoom`, `AddMembers`, `RemoveMember`, `LeaveRoom`, `ChangeMemberRole`, `SetMemberPriority`), JWT như websocket, gọi node chat bất kỳ (round robin), giới hạn theo user. Không có database, không dùng NATS; Redis chỉ (tuỳ chọn) cho bản danh sách thu hồi dùng chung (M6 phần 2). Cơ chế: [module 11](../modules/11-feature-https-gateway.md).
+HTTPS (Connect trên HTTP/1.1 và h2c) cho tải dữ liệu và quản lý room: 22 lệnh `chatrpc.Request()` (14 lệnh đọc và `CreateRoom`, `OpenDirectRoom`, `UpdateRoom`, `AddMembers`, `RemoveMember`, `LeaveRoom`, `ChangeMemberRole`, `SetMemberPriority`), JWT như websocket, gọi node chat bất kỳ (round robin), giới hạn theo user. Không có database, không dùng NATS; Redis chỉ (tuỳ chọn) cho bản danh sách thu hồi dùng chung (M6 phần 2). Cơ chế: [module 11](../features/11-feature-https-gateway.md).
 
 ## Biến môi trường
 
@@ -32,7 +32,7 @@ HTTPS (Connect trên HTTP/1.1 và h2c) cho tải dữ liệu và quản lý room
 ## Cổng và admin
 
 - HTTP `GW_ADDR` (`:8080`); compose publish `gateway-1` ở `127.0.0.1:8082`, `GW_CORS_ORIGINS=http://localhost:3000`, cả hai node chat.
-- Admin `GW_ADMIN_ADDR` (`:9090`, không publish): `/livez`, `/readyz`, `/metrics` (`chatim_gateway_*`, bảng ở [module 11 §6.1](../modules/11-feature-https-gateway.md)). Alert `ChatimGatewayChatUnavailable` (> 5% `Unavailable`).
+- Admin `GW_ADMIN_ADDR` (`:9090`, không publish): `/livez`, `/readyz`, `/metrics` (`chatim_gateway_*`, bảng ở [module 11 §6.1](../features/11-feature-https-gateway.md)). Alert `ChatimGatewayChatUnavailable` (> 5% `Unavailable`).
 - Log: `make gw-logs`. Image: `make image TARGET=apps/gateway` (`chatim/gateway:dev`).
 
 ## Gọi thử

@@ -48,7 +48,7 @@ Ví dụ: `apps/core` hôm nay import `github.com/ivannguyendev/chatim/pkg/jscon
 | 5 | Chuỗi trung tính | Code: `mongoindex` báo "`members absent, core creates it at startup`" → "`... the app creates it at startup`" (thư viện không được nhắc tên app; hôm nay chỉ core in dòng này; không script nào khớp chuỗi này). Test của 15 package: bỏ `chatim_core_*`, `/chatim.v1.CoreService/...`, `CHATIM_EVT`, user `chatim`... trong fixture, giữ nguyên ý nghĩa từng ca; giữ `CHATIM_IT_MONGO_URI` (biến itest chung của repo) | decision log #2; `pkg/mongoindex/report.go:53` |
 | 6 | depguard `pkg-core-zero-domain` | file `**/pkg/core/**`, `list-mode: lax` như luật `event-layer-tests` có sẵn: allow `chatim/pkg/core`, deny `chatim/pkg` (mục dài hơn thắng), deny `chatim/apps`, `chatim/modules` (đã có trong `pkg-shared-only`) | decision log #3 |
 | 7 | Path lint đã chuyển | exclusion `^pkg/backoff/backoff\.go$` (`.golangci.yaml:317`), `^pkg/envconfig/secret\.go$` (`:323`) → `^pkg/core/...` | decision log #13 |
-| 8 | Doc đang dùng | `INDEXES.csv` (15 dòng), CLAUDE.md, `docs/apps/core.md`, `docs/apps/identity.md`, `docs/modules/02`, `10`, `11`, phần hiện hành của `docs/roadmap.md`; không sửa `docs/decision-log.md` và `docs/plans/*` cũ | decision log #8 |
+| 8 | Doc đang dùng | `INDEXES.csv` (15 dòng), CLAUDE.md, `docs/apps/core.md`, `docs/apps/identity.md`, `docs/features/02`, `10`, `11`, phần hiện hành của `docs/roadmap.md`; không sửa `docs/decision-log.md` và `docs/plans/*` cũ | decision log #8 |
 
 ## 5. Tính đúng
 

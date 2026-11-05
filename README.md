@@ -12,7 +12,7 @@ Monorepo Go, mỗi app một container. Thiết kế: [architecture.md](docs/arc
 |---|---|---|
 | `chat` | Room, member, tin nhắn, tương tác; cấp seq; lưu MongoDB; mỗi lần ghi bật cờ `_state` trên doc, publish lên NATS JetStream sau ack, sweeper phát bù cờ còn sót | [docs/apps/chat.md](docs/apps/chat.md) |
 | `mention` (Mention App) | Nhúng trong chat (`modules/mention`): chỉ mục mention, `ListMentions`, nhóm của user, nhóm được tag, dữ liệu gợi ý `@nhóm`, thông báo dạng gói `WsPublish` trên `CHATIM_WS`. Giữ nhúng (D177) cho tới khi có team, SLA, nhịp release hay nhu cầu scale riêng có số đo, hoặc database riêng + CDC; khi tách thì app tự giữ dữ liệu và chỉ gọi chat qua API, không đọc bảng của chat | [docs/apps/chat.md](docs/apps/chat.md#mention-app) |
-| `websocket` | WebSocket (gws): các lệnh ghi realtime (`chatrpc.Realtime()`), đẩy event và thông báo, đang gõ, online, giới hạn đăng nhập, giữ kết nối khi token hết hạn. Repo chỉ có server (D206): SDK client ở repo khác, theo [module 09 §11](docs/modules/09-feature-realtime-delivery-and-ephemeral.md) | [docs/apps/websocket.md](docs/apps/websocket.md) |
+| `websocket` | WebSocket (gws): các lệnh ghi realtime (`chatrpc.Realtime()`), đẩy event và thông báo, đang gõ, online, giới hạn đăng nhập, giữ kết nối khi token hết hạn. Repo chỉ có server (D206): SDK client ở repo khác, theo [module 09 §11](docs/features/09-feature-realtime-delivery-and-ephemeral.md) | [docs/apps/websocket.md](docs/apps/websocket.md) |
 | `gateway` | HTTPS (Connect): các lệnh đọc và quản lý room (`chatrpc.Request()`), JWT, gọi node chat bất kỳ (round robin), giới hạn theo user | [docs/apps/gateway.md](docs/apps/gateway.md) |
 | `identity` | Cầu danh tính, không phải IAM (D239; tên cũ `iam`, D243): chat không giữ mật khẩu, đăng nhập, phiên hay role. Giữ issuer tin cậy theo tenant cùng khoá công khai của họ (EdDSA/ES256/RS256, thêm bằng CLI); đổi JWT do backend tenant ký lấy token chat Ed25519 5 phút ở `POST /v1/token` (RFC 8693, D240–D241); giữ bản sao user ghi ngay lúc đổi token từ `name`/`picture` (D242), cây nhóm, thu hồi theo tenant, khoá ký và JWKS. Danh bạ (`GetUsers`, `GetMyProfile`) phục vụ từ bản sao trong RAM mỗi replica, nạp theo trang dưới lease `slots` và theo kịp bằng change stream MongoDB (D245–D246, D252); không có feed danh bạ cho app khác (D257). Lưu ở database MongoDB riêng `chatim_identity`, user `identity`, trên replica set của chat, không Postgres (D244, D253). Không đọc dữ liệu chat, chat cũng không đọc bảng của nó | [docs/apps/identity.md](docs/apps/identity.md) |
 | media, `notification` + push, search | Phase 2 (D207) | — |
@@ -64,7 +64,7 @@ App chỉ publish trên loopback (caller còn được tin qua metadata tới kh
 
 ## Tài liệu
 
-- [Kiến trúc (nguồn sự thật)](docs/architecture.md) · [Module tính năng](docs/modules/README.md) · [Decision log](docs/decision-log.md) · [Danh mục event](docs/events.md)
+- [Kiến trúc (nguồn sự thật)](docs/architecture.md) · [Module tính năng](docs/features/README.md) · [Decision log](docs/decision-log.md) · [Danh mục event](docs/events.md)
 - Vận hành từng app (biến môi trường, cổng, metric, lệnh): [chat](docs/apps/chat.md) · [websocket](docs/apps/websocket.md) · [gateway](docs/apps/gateway.md) · [identity](docs/apps/identity.md)
 - [Roadmap](docs/roadmap.md) · [Quy trình git](docs/git-workflow.md) · [Kiểm thử e2e](docs/e2e.md) · [Kết quả PoC](docs/poc/README.md)
 - Nghiên cứu: [cơ chế hệ thống](docs/research/261005-system-mechanisms-synthesis-report.md) · [kiến trúc chat mã nguồn mở](docs/research/260930-opensource-chat-architecture-research.md)

@@ -3,7 +3,7 @@
 > Cập nhật: 2026-11-02 (§8 feed danh bạ của `identity`, tên cũ `iam`; M6 phần 3a, PA). Trạng thái: Mention App đã merge `main` (PR #16), D162–D176 ([tóm tắt](plans/2026-10-17-mention-app-summary.md)); websocket M4 phần 2 (nhận và đẩy event, gói `WsPublish`) xây trên `feat/m4`, D189–D195 ([tóm tắt](plans/2026-10-21-m4-2-nhan-va-day-event-summary.md)); M4 phần 3 (`read_positions` thay `read_updated`), D196–D197 ([tóm tắt](plans/2026-10-22-m4-3-da-doc-va-da-xem-summary.md)); M4 phần 4 (đang gõ và online, tín hiệu riêng của websocket, §7), D199–D201 ([tóm tắt](plans/2026-10-24-m4-4-typing-va-online-summary.md)).
 >
 > Tài liệu liên quan:
-> - Nguồn sự thật cơ chế: [thiết kế](architecture.md) §8.1 (hợp đồng consumer) và [Module 10](modules/10-feature-data-reconciliation-and-repair.md) (cờ `_state`, sweeper, projection).
+> - Nguồn sự thật cơ chế: [thiết kế](architecture.md) §8.1 (hợp đồng consumer) và [Module 10](features/10-feature-data-reconciliation-and-repair.md) (cờ `_state`, sweeper, projection).
 > - Quyết định: [Decision Log](decision-log.md) D104, D108, D141–D160, D162–D176, D189–D197, D199–D201.
 
 Tài liệu này trả lời ba câu: chat và Mention App phát event gì, ở subject nào; ai nhận event nào; và app sau này nên đăng ký subject nào để chỉ nhận đúng data mình cần.
@@ -90,7 +90,7 @@ Mỗi node websocket một kết nối NATS, hai **ordered consumer** (không du
 | `read_positions` | `member` | kết nối đang mở room (mức mở) cộng mọi kết nối của từng user có tên trong `entries` mà danh sách room trong RAM còn room đó và không tạm ngừng; mỗi kết nối nhận một lần (D196) |
 | kind khác | — | không ai; bỏ và đếm `events_dropped_total{reason="unknown_kind"}` (mặc định chặn, để event riêng tư mới không lọt) |
 
-Event đi xuống máy nguyên bytes trong `ServerFrame.event` (field 21), mã hoá một lần mỗi node. Gói `WsPublish` từ `CHATIM_WS`: tenant gói phải bằng tenant subject, `kind` là một token; nội dung đi trong `ServerFrame.notification` (field 22) tới từng người trong `targets.users` đang sẵn sàng trên node (tên trùng chỉ gửi một lần); người khác bỏ qua. Máy áp event theo hợp đồng §5 (đặc tả client ở [Module 09 §11](modules/09-feature-realtime-delivery-and-ephemeral.md); repo không còn SDK mẫu, D206).
+Event đi xuống máy nguyên bytes trong `ServerFrame.event` (field 21), mã hoá một lần mỗi node. Gói `WsPublish` từ `CHATIM_WS`: tenant gói phải bằng tenant subject, `kind` là một token; nội dung đi trong `ServerFrame.notification` (field 22) tới từng người trong `targets.users` đang sẵn sàng trên node (tên trùng chỉ gửi một lần); người khác bỏ qua. Máy áp event theo hợp đồng §5 (đặc tả client ở [Module 09 §11](features/09-feature-realtime-delivery-and-ephemeral.md); repo không còn SDK mẫu, D206).
 
 Projection `mention_read` đã bỏ (D165); chat vẫn xoá durable cũ `projection-mention_read` lúc khởi động.
 

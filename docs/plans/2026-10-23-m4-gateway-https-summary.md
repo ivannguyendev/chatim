@@ -90,7 +90,7 @@ Token hết hạn → `401` ngay ở lệnh HTTPS kế tiếp (WebSocket: đóng
 - **Websocket:** danh sách còn 12 lệnh; lệnh đã chuyển nhận `unimplemented`. Vẫn chọn core theo slot (vì `SendMessage` đi actor).
 - **Compose:** `gateway-1` ở `127.0.0.1:8082`, admin không publish, chỉ mount khoá công khai JWKS.
 - **Client mẫu và e2e:** client Connect sinh từ proto (`chatimv1connect`) trong `tools/corecli`; e2e phase 9 chuyển lệnh đọc và quản lý sang gateway, phase 10 mới cho gateway. `pkg/wsclient.FlushReads(ctx)`: app gọi trước khi tải danh sách hội thoại qua HTTPS để các `MarkRead` đang chờ tới core trước.
-- **Docs:** D198, module mới [11](../modules/11-feature-https-gateway.md), module 09 (còn 12 lệnh), kiến trúc, roadmap, README env, CLAUDE.md.
+- **Docs:** D198, module mới [11](../features/11-feature-https-gateway.md), module 09 (còn 12 lệnh), kiến trúc, roadmap, README env, CLAUDE.md.
 
 ## 8. Quyết định
 

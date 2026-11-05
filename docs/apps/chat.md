@@ -1,6 +1,6 @@
 # App `chat`
 
-Chat giữ room, member, tin nhắn và tương tác: cấp seq, lưu MongoDB, phát event lên NATS JetStream. Mention App (`modules/mention`) chạy nhúng trong chat và đọc chung config. Cơ chế: [architecture.md](../architecture.md), [module 01–10](../modules/README.md), [danh mục event](../events.md).
+Chat giữ room, member, tin nhắn và tương tác: cấp seq, lưu MongoDB, phát event lên NATS JetStream. Mention App (`modules/mention`) chạy nhúng trong chat và đọc chung config. Cơ chế: [architecture.md](../architecture.md), [module 01–10](../features/README.md), [danh mục event](../events.md).
 
 ## Biến môi trường
 

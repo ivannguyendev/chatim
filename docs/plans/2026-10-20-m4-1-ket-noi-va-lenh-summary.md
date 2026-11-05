@@ -1,6 +1,6 @@
 # M4 phần 1: kết nối, token và chuyển lệnh tới core
 
-> **Trạng thái:** owner duyệt 2026-10-20; **đã xây xong** trên `feat/m4` ngày 2026-10-21 (kết quả ở §10, quyết định D183–D188 ở [decision log §17.7](../decision-log.md), giao thức ở [Module 09 §7](../modules/09-feature-realtime-delivery-and-ephemeral.md)). Phần 1 trong 5 phần của M4.
+> **Trạng thái:** owner duyệt 2026-10-20; **đã xây xong** trên `feat/m4` ngày 2026-10-21 (kết quả ở §10, quyết định D183–D188 ở [decision log §17.7](../decision-log.md), giao thức ở [Module 09 §7](../features/09-feature-realtime-delivery-and-ephemeral.md)). Phần 1 trong 5 phần của M4.
 > **Năm phần:** (1) kết nối, token, lệnh · (2) nhận và đẩy event · (3) đã đọc, đã xem · (4) typing, online · (5) reconnect, vận hành, kiểm thử.
 > **Nguồn:** hướng M4 owner duyệt 2026-10-20 (D183–D188), hàng M4 [roadmap](../roadmap.md), [exit Phase 1](2026-10-19-phase1-exit-summary.md).
 

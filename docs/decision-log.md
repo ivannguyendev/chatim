@@ -2,7 +2,7 @@
 
 > Ngày cập nhật: 2026-11-05
 > Trạng thái: nhật ký quyết định chính thức, chỉ gồm quyết định đã được owner duyệt.
-> Tài liệu liên quan: [Kiến trúc hệ thống SSOT](./architecture.md) · [Module tính năng](./modules/README.md).
+> Tài liệu liên quan: [Kiến trúc hệ thống SSOT](./architecture.md) · [Module tính năng](./features/README.md).
 
 Quyết định nằm trong `docs/decisions/`, mỗi milestone một file tên `D<đầu>-<milestone>.md` (số 3 chữ số). D-id đánh số chung cho cả repo; tìm một quyết định theo D-id bằng tên file hoặc `grep '| D161 |' docs/decisions/`. Tiêu chí và format dòng: `CLAUDE.md` §Docs.
 

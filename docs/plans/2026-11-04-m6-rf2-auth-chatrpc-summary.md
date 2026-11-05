@@ -68,7 +68,7 @@ Test: `TestNewRejectsBadConfig` (có ở `revocation` và `identitysync`), helpe
 
 - `.golangci.yaml`: `wstest-tests-only` deny `pkg/identitysync/identitysynctest` → `pkg/auth/authtest`; `identity-sync-no-nats` (files `pkg/identitysync`, `pkg/revocation`) → `auth-no-nats`, files `**/pkg/auth/**` (giữ desc owner 2026-10-27); exclusion gosec G101 `^pkg/identitysync/identitysynctest/` → `^pkg/auth/authtest/`.
 - `INDEXES.csv`: 7 dòng cũ → 3 dòng `pkg/auth`, `pkg/auth/authtest`, `pkg/chatrpc`; cột `used_by` của dòng khác đổi theo.
-- Doc đang dùng: CLAUDE.md, `docs/apps/gateway.md`, `docs/apps/identity.md`, `docs/modules/02`, `09`, `11`, `docs/modules/README.md`, dòng M6 của roadmap (PB nhắc `pkg/revocation`), `.memory/` 3 file. Không sửa lịch sử.
+- Doc đang dùng: CLAUDE.md, `docs/apps/gateway.md`, `docs/apps/identity.md`, `docs/features/02`, `09`, `11`, `docs/features/README.md`, dòng M6 của roadmap (PB nhắc `pkg/revocation`), `.memory/` 3 file. Không sửa lịch sử.
 - `deploy/prometheus/alerts.yml` chỉ có chữ "revocation" trong câu mô tả, không phải tên package → không đổi.
 
 ## 6. Tính đúng

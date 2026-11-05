@@ -114,7 +114,7 @@ make poc TOOL=chatbench ARGS="-rate 2000 -duration 60s -watch 20"   # needs app-
 
 ## Architecture
 
-Reference (keys, collections, shard rationale, package tree, lifecycle, metrics): `docs/architecture.md` §5–§8, `docs/modules/`, `docs/events.md`.
+Reference (keys, collections, shard rationale, package tree, lifecycle, metrics): `docs/architecture.md` §5–§8, `docs/features/`, `docs/events.md`.
 
 - One Go module `github.com/ivannguyendev/chatim`, one Dockerfile `deploy/docker/Dockerfile` (`ARG TARGET`).
 - Layout (D182): `apps/<app>/` = program (`main.go` + `internal/`); `modules/<module>/` = embedded business module (one public package + `internal/`), only when it owns collections nobody else writes, depends one way on chat and talks to it through events and a port; chat domains stay in `apps/chat/internal`.
@@ -133,7 +133,7 @@ Reference (keys, collections, shard rationale, package tree, lifecycle, metrics)
   - A row is a decision that is hard or costly to reverse and shapes the project's direction: data model, contracts, events and APIs, app and module boundaries, correctness mechanisms, operating procedures, product scope. Not a row: how we work (phases, order, branches, PRs), implementation detail (package lists, env, metrics), status.
   - Lý do says why this choice over the alternatives, naming them; there is no rejected-alternatives column. No owner quotes.
   - Proposed decisions live in the local decision log and are discussed (brainstorm, independent reviewer) before the owner accepts them; only then are they folded in. A decision taken while coding goes into the as-built summary and enters the log only when the owner accepts it at the close. Nobody adds a row on their own. A replaced row starts its Quyết định with `**Thay bởi D141 (M3.1).**` or `**Thay một phần bởi D202 (vế ngắn).**`. Add new decisions there.
-- `docs/modules/`: feature guides (09 = websocket, client spec in §11; 11 = HTTPS gateway). `docs/apps/*.md`: per-app operations. `docs/e2e.md`: e2e phases.
+- `docs/features/`: feature guides (09 = websocket, client spec in §11; 11 = HTTPS gateway). `docs/apps/*.md`: per-app operations. `docs/e2e.md`: e2e phases.
 - `docs/events.md`: the event catalog (streams, subjects, ids, consumers, contract); update it whenever an event, subject or consumer changes.
 - `docs/roadmap.md`: milestones, status, plan rules. `docs/git-workflow.md`: branches, DoD, readiness, SemVer.
 - `docs/plans/<date>-<milestone>-<n>-<slug>-summary.md`: owner-approved summaries, rewritten as built at phase close; they are the milestone record. `.claude/plans/` (local, gitignored) is folded and deleted at close.

@@ -11,7 +11,7 @@
 | Chia `change/mutate` thành service theo domain; kéo logic ghi và đọc ra khỏi `api/grpcsrv` | Đổi API gRPC, proto, subject, event id, field DB, tên env |
 | Luật `depguard` cưỡng chế chiều phụ thuộc | Tách `store` hoặc `model/domain` theo domain |
 | Chuyển `apps/mention` → `modules/mention` (bước 4, D182): `apps/` chỉ còn binary có `main.go`, `modules/` là module nghiệp vụ nhúng | Đổi code bên trong Mention App; tách Mention thành service (D177 giữ nguyên) |
-| `INDEXES.csv`, kiến trúc §6.2, `CLAUDE.md`, `docs/modules` | Summary của các milestone cũ (hồ sơ lưu trữ) |
+| `INDEXES.csv`, kiến trúc §6.2, `CLAUDE.md`, `docs/features` | Summary của các milestone cũ (hồ sơ lưu trữ) |
 
 Ví dụ cái đổi được: trước đây muốn biết "member" làm gì phải mở 5 chỗ (`change/mutate/member_*.go`, `change/ownership`, `send/memberwatch`, `api/grpcsrv/members*.go`, `api/grpcsrv/read.go`). Giờ chỉ cần mở `internal/member/`.
 
