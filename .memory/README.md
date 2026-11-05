@@ -1,36 +1,7 @@
 # Memory
 
-Owner-confirmed rules, reasons and decisions for chatim, one fact per file. Read this index before any brainstorm, summary or plan, after the Design checklist and §Workflows of `CLAUDE.md`. Each file is a snapshot: verify a named file, flag or behaviour against the code before relying on it.
+Owner-confirmed working knowledge for chatim that is neither a rule in `CLAUDE.md` nor a decision in `docs/decision-log.md`. Rules for writing here: `CLAUDE.md` §Repo Memory. Each note is a snapshot: verify any file, flag or behaviour it names against the code.
 
-## How we work
-
-- [workflow-pipeline](workflow-pipeline.md) — brainstorm → decision log → independent phase-split review → summary and detailed plan per phase (format, ~130-line summary, code-free plan) → plan review → TDD → verify → close the phase with a progress report; fold local plans and decision logs into tracked docs, then delete them
-- [rule-retrospective](rule-retrospective.md) — after each phase/milestone and each owner correction: add owner-confirmed rules to CLAUDE.md, reasons here, fix or delete stale ones
-- [milestone-keeps-its-own-scope](milestone-keeps-its-own-scope.md) — a milestone finishes its own system; integrating into another module (iam → Mention) waits until it is done, never reopens that module's problems (D234, 2026-10-31)
-- [owner-communication](owner-communication.md) — requirements and scope table first, plain Vietnamese with an example, only pivotal questions, rewrite from the final state, real risks only, short summaries, walk-through before asking, failures with numbers, plainest version first
-
-## Design
-
-- [design-principles](design-principles.md) — data classes not patches; state-driven `_state` events (effect engine dropped); survival timer; no internal retries; no limits without a use case; publish every change; mentions per target; shard-ready; full field names; self-expiring state per node
-- [no-sharding-in-chat](no-sharding-in-chat.md) — chat never shards; keep the shard-ready rules; deployers pick the shard key (D161)
-- [no-shared-tables-across-services](no-shared-tables-across-services.md) — never a separate service reading another service's tables; modular monolith by default
-- [index-changes-by-command](index-changes-by-command.md) — index changes on an existing DB only through an explicit command with dry run
-- [ops-setup-hard-to-get-wrong](ops-setup-hard-to-get-wrong.md) — cross-app settings and dependent timers are enforced in code (refuse to boot / not ready), never only documented; procedures like key rotation are one command (M6 part 2, 2026-10-31)
-- [cache-follows-db](cache-follows-db.md) — server caches change with the database (change signal with the data: change stream in identity since PM, `_state` events in chat; never TTL); design for load, client caching is not ours; boot warm-ups must not storm on K8s restarts (M6 part 3a, 2026-10-31)
-- [http-between-services-plain-keepalive](http-between-services-plain-keepalive.md) — service-to-service HTTP answers at once and reuses one kept-alive connection; never hold a request (no long polling, no SSE) (owner 2026-11-02)
-
-## Owner decisions by area
-
-Decisions of a built milestone live in `docs/decision-log.md`, `docs/events.md` and `docs/modules/`; keep a note here only while it is not yet in those docs or when it carries a reason they do not.
-
-- [phase1-phase2-realign](phase1-phase2-realign.md) — Phase 1 exit = prod-like validated; dev bench ≤ 2K/s, dev load 10K; real numbers 5,000 MarkRead/s, 5% edits, 1,000 active rooms (D177–D181)
-- [phase2-go-live-scope](phase2-go-live-scope.md) — go-live v1.0.0 for a new product: identity (D209 iam, renamed back by D243), media, push, people/group search; order M6 → M9; migrator and webhooks after go-live (D207)
-- [chat-mirrors-users-tenant-owns-identity](chat-mirrors-users-tenant-owns-identity.md) — owner 2026-11-02: chat owns no identity; user mirror, groups, per-tenant trusted issuers, revocation, token exchange to a chat token; reverses D179, D209 and the Keycloak choice
-- [tenant-apis-wait-for-a-tenant](tenant-apis-wait-for-a-tenant.md) — owner 2026-11-04: M6 closed at PA + PM; PB (batch server API, revoke-before), external IAM and group sync wait until the first tenant integrates, still before go-live (D260)
-- [identity-store-on-mongodb](identity-store-on-mongodb.md) — owner 2026-11-02: identity moved from Postgres to MongoDB in phase PM (built 2026-11-04, D245–D259); reverses D210 (scope is now a small mirror, no Postgres HA for go-live); feed and audit dropped, Postgres gone
-- [mention-app-role](mention-app-role.md) — Mention App in `modules/mention`, embedded in chat; owns groups; own filtered consumer; notifications as `WsPublish`; mute is the notification app's
-- [server-spec-client-owns-behavior](server-spec-client-owns-behavior.md) — repo is server-only; the server specifies and enforces, client behaviour belongs to the client repo
-
-## Adding a memory
-
-One file per fact, kebab-case name, frontmatter `name`, `description`, `metadata.type` (`user`, `feedback`, `project`, `reference`). For feedback and project notes add **Why:** and **How to apply:**. Link related notes with `[[name]]`. Add one line here. Save only what the owner stated or confirmed; update an existing file instead of adding a duplicate, and delete notes that turn out wrong. The rule text itself belongs in `CLAUDE.md`; this folder keeps the reason, the owner's words and the date.
+- [owner-communication](owner-communication.md) — how to brainstorm, ask and write for the owner, beyond the Design checklist
+- [milestone-keeps-its-own-scope](milestone-keeps-its-own-scope.md) — list the modules a design changes; integrating another module waits until the milestone's own system is done
+- [ops-setup-hard-to-get-wrong](ops-setup-hard-to-get-wrong.md) — settings that must agree across apps and dependent timers are enforced in code; procedures are one command
