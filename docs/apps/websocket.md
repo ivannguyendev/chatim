@@ -1,6 +1,6 @@
 # App `websocket`
 
-Giữ kết nối WebSocket (gws) của client: 12 lệnh ghi realtime chuyển tới core theo slot, đẩy event và thông báo, đang gõ, online, giữ kết nối khi token hết hạn. Không có database. Cơ chế, giao thức và đặc tả client: [module 09](../modules/09-feature-realtime-delivery-and-ephemeral.md) (§7 giao thức, §8 đẩy event, §10 đang gõ và online, §11 đặc tả client).
+Giữ kết nối WebSocket (gws) của client: 12 lệnh ghi realtime chuyển tới chat theo slot, đẩy event và thông báo, đang gõ, online, giữ kết nối khi token hết hạn. Không có database. Cơ chế, giao thức và đặc tả client: [module 09](../modules/09-feature-realtime-delivery-and-ephemeral.md) (§7 giao thức, §8 đẩy event, §10 đang gõ và online, §11 đặc tả client).
 
 ## Biến môi trường
 
@@ -11,8 +11,8 @@ Giữ kết nối WebSocket (gws) của client: 12 lệnh ghi realtime chuyển 
 | `WS_NODE_ID` | hostname | Định danh node, nằm trong tên client Redis `chatim-websocket-{node}` |
 | `WS_ADDR` | `:8080` | Lắng nghe WebSocket, đường dẫn `/ws`, subprotocol `chatim.v1` |
 | `WS_ADMIN_ADDR` | `:9090` | `/livez`, `/readyz`, `/metrics`; `/app probe` hỏi địa chỉ này; không publish ra host |
-| `REDIS_ADDR`, `REDIS_DB` | `chatim-redis:6379` / `0` | Redis state của core, chỉ đọc bảng slot để route lệnh tới core giữ room |
-| `REDIS_PASSWORD`, `REDIS_PASSWORD_FILE` | rỗng | Như của core; `_FILE` thắng. Compose trỏ `_FILE` vào secret `redis_password` |
+| `REDIS_ADDR`, `REDIS_DB` | `chatim-redis:6379` / `0` | Redis state của chat, chỉ đọc bảng slot để route lệnh tới chat giữ room |
+| `REDIS_PASSWORD`, `REDIS_PASSWORD_FILE` | rỗng | Như của chat; `_FILE` thắng. Compose trỏ `_FILE` vào secret `redis_password` |
 | `WS_JWT_KEYS_FILE` | — (bắt buộc) | JWKS công khai (Ed25519, có `kid`); file có khoá riêng (`d`) bị từ chối. Đọc một lần lúc khởi động |
 | `WS_JWT_ISSUER`, `WS_JWT_AUDIENCE` | — (bắt buộc) | `iss`, `aud` phải khớp; compose dev đặt `chatim-dev` / `chatim-websocket` |
 | `WS_JWT_LEEWAY` | `30s` | Dung sai giờ cho `exp`/`nbf` (0–1 phút; `identity` giữ mục thu hồi thêm 1 phút) |
@@ -20,7 +20,7 @@ Giữ kết nối WebSocket (gws) của client: 12 lệnh ghi realtime chuyển 
 | `WS_AUTH_GRACE` | `3m` | Kết nối mới và kết nối có token hết hạn ở trạng thái chờ đăng nhập: không nhận event, thông báo, typing, online; lệnh nhận `UNAUTHENTICATED`, frame khác (trừ `auth`, heartbeat) nhận `auth_required` tối đa 1 lần/giây. Chờ quá mức này thì đóng 4001 |
 | `WS_AUTH_RATE`, `WS_AUTH_BURST` | `1000` / `2000` | Số lần đăng nhập mỗi giây và burst mỗi node; chỉ token hợp lệ mới tốn suất, gia hạn cùng người không tốn. Hết suất thì `retry_later` (đếm `rate`) và giữ kết nối chờ. Mỗi kết nối đang chờ gửi `auth` tối đa 1 lần/giây, dồn hơn thì `retry_later{1000}` mà không kiểm token (đếm `throttled`) |
 | `WS_AUTH_RETRY_MIN`, `WS_AUTH_RETRY_MAX` | `5s` / `30s` | `retry_after_ms` của `retry_later` lấy ngẫu nhiên đều trong khoảng này (MIN ≤ MAX) |
-| `WS_USER_CONNECTIONS_MAX` | `10` | Số kết nối tối đa của một người trên một node (đếm trong RAM); kết nối vượt bị đóng 4009 ngay sau `auth` hợp lệ, không gọi core |
+| `WS_USER_CONNECTIONS_MAX` | `10` | Số kết nối tối đa của một người trên một node (đếm trong RAM); kết nối vượt bị đóng 4009 ngay sau `auth` hợp lệ, không gọi chat |
 | `WS_UNAUTH_MAX` | `10000` | Số kết nối đang chờ đăng nhập tối đa mỗi node; quá thì bắt tay nhận 503. Kết nối đang chạy quay lại chờ (token hết hạn) vẫn giữ kết nối dù vượt trần, đếm `unauth_over_cap_total` |
 | `WS_FRAME_MAX` | `131072` | Cỡ frame tối đa (≥ 4096); quá thì đóng 1009 |
 | `WS_HEARTBEAT_TIMEOUT` | `15s` | Không nhận frame nào trong thời gian này thì đóng (≥ 10s; với mặc định presence phải ≥ 13s vì `WS_PRESENCE_TTL` ≤ `WS_HEARTBEAT_TIMEOUT + WS_PRESENCE_STAMP_EVERY`) |
@@ -29,11 +29,11 @@ Giữ kết nối WebSocket (gws) của client: 12 lệnh ghi realtime chuyển 
 | `WS_SEND_QUEUE` | `256` | Hàng frame chờ ghi mỗi kết nối (≥ 2); đầy thì không đóng: event không vừa làm kết nối ngừng nhận event, khi hàng xuống dưới một nửa `WS_SEND_QUEUE` và dưới một nửa `WS_SEND_QUEUE_BYTES` thì nhận một `resync{CLIENT_BACKLOG}` rồi event chạy lại; `ready` hoặc `load_failed` không vừa thì chính frame đó được gửi lại thay cho `resync` (người chưa nạp xong hoặc nạp lỗi không bao giờ nhận `CLIENT_BACKLOG`), `resync` khác và `room_closed` không vừa dẫn tới `resync{CLIENT_BACKLOG}`; giới hạn đã biết: frame trả nợ này chỉ đi khi kết nối có event tiếp theo hoặc khi node nhận một event live bất kỳ, không có timer; `response` và frame điều khiển (`auth_required`, `retry_later`, `frame_error`, pong) không vừa thì bỏ, đếm `send_dropped_total{kind=response\|control}` |
 | `WS_SEND_QUEUE_BYTES` | `1048576` | Byte chờ ghi mỗi kết nối (≥ `WS_FRAME_MAX`); vượt thì xử lý như `WS_SEND_QUEUE` đầy (`resync{CLIENT_BACKLOG}` sau khi hàng xuống dưới một nửa, không đóng). Không có ngân sách toàn node: compose đặt `mem_limit 2g`, `GOMEMLIMIT 1600MiB` |
 | `WS_WRITE_TIMEOUT` | `10s` | Hạn ghi một frame; quá hạn hoặc ghi lỗi thì cắt socket (máy thấy 1006) |
-| `CORE_REQUEST_DEADLINE` | `5s` | Deadline mỗi lệnh gọi core |
-| `WS_DRAIN_DELAY`, `WS_SHUTDOWN_BUDGET` | `2s` / `15s` | Chuỗi dừng: `WS_DRAIN_DELAY + CORE_REQUEST_DEADLINE + 2s` (dừng feed NATS) `+ 1s` (đóng kết nối) phải ≤ budget, mặc định 10s; compose `stop_grace_period` = budget + 3s = 18s |
-| `NATS_URL` | — (bắt buộc) | NATS của core; credential bị che trong log. Lần sẵn sàng đầu cần NATS; mất NATS sau đó `/readyz` vẫn true, gauge `nats_connected` = 0 |
-| `EVT_STREAM`, `EVT_SUBJECT_ROOT` | `CHATIM_EVT` / `evt` | Stream event của core và gốc subject; mỗi node đọc `{root}.>` bằng một ordered consumer, bắt đầu ở seq cuối + 1 (D190). Phải khớp config core |
-| `WS_PUBLISH_STREAM`, `WS_PUBLISH_ROOT` | `CHATIM_WS` / `websocket.publish` | Hộp thư của websocket: gói `WsPublish` trên `{root}.{tenant}` (D192); websocket tạo hoặc cập nhật stream lúc khởi động (cấu hình chung `pkg/wspublish`). Phải khớp `MENTION_WS_PUBLISH_*` của core; stream khác `EVT_STREAM`, root không bắt đầu bằng token đầu của `EVT_SUBJECT_ROOT` |
+| `CHAT_REQUEST_DEADLINE` | `5s` | Deadline mỗi lệnh gọi chat |
+| `WS_DRAIN_DELAY`, `WS_SHUTDOWN_BUDGET` | `2s` / `15s` | Chuỗi dừng: `WS_DRAIN_DELAY + CHAT_REQUEST_DEADLINE + 2s` (dừng feed NATS) `+ 1s` (đóng kết nối) phải ≤ budget, mặc định 10s; compose `stop_grace_period` = budget + 3s = 18s |
+| `NATS_URL` | — (bắt buộc) | NATS của chat; credential bị che trong log. Lần sẵn sàng đầu cần NATS; mất NATS sau đó `/readyz` vẫn true, gauge `nats_connected` = 0 |
+| `EVT_STREAM`, `EVT_SUBJECT_ROOT` | `CHATIM_EVT` / `evt` | Stream event của chat và gốc subject; mỗi node đọc `{root}.>` bằng một ordered consumer, bắt đầu ở seq cuối + 1 (D190). Phải khớp config chat |
+| `WS_PUBLISH_STREAM`, `WS_PUBLISH_ROOT` | `CHATIM_WS` / `websocket.publish` | Hộp thư của websocket: gói `WsPublish` trên `{root}.{tenant}` (D192); websocket tạo hoặc cập nhật stream lúc khởi động (cấu hình chung `pkg/wspublish`). Phải khớp `MENTION_WS_PUBLISH_*` của chat; stream khác `EVT_STREAM`, root không bắt đầu bằng token đầu của `EVT_SUBJECT_ROOT` |
 | `EVT_STREAM_REPLICAS` | `1` | Số bản sao khi websocket tạo `CHATIM_WS` |
 | `WS_FANOUT_WORKERS`, `WS_FANOUT_QUEUE` | số CPU / `4096` | Worker theo room (`hash(room)`, giữ thứ tự từng room) và hàng event mỗi worker; đầy thì vòng nhận chờ |
 | `WS_CONSUME_BATCH`, `WS_CONSUME_BYTES` | `500` / `8388608` | Lô kéo của ordered consumer theo số tin và byte (byte ≥ 1MB) |
@@ -58,7 +58,7 @@ Giữ kết nối WebSocket (gws) của client: 12 lệnh ghi realtime chuyển 
 
 ## Cổng và admin
 
-- WebSocket `WS_ADDR` (`:8080`), đường dẫn `/ws`, subprotocol `chatim.v1`; compose publish `websocket-1` ở `127.0.0.1:8081` (`WS1_PORT`) và `websocket-2` ở `127.0.0.1:8083` (`WS2_PORT`).
+- WebSocket `WS_ADDR` (`:8080`), đường dẫn `/ws`, subprotocol `chatim.v1`; compose publish `websocket-1` ở `127.0.0.1:8081`; `websocket-2` không publish (e2e gọi `chatim-websocket-2:8080` trong mạng compose).
 - Admin `WS_ADMIN_ADDR` (`:9090`, không publish): `/livez`, `/readyz`, `/metrics` (`chatim_websocket_*`). Metric và 9 luật alert websocket/gateway: [module 09 §6.1](../modules/09-feature-realtime-delivery-and-ephemeral.md); vận hành (NTP bắt buộc, deploy từng node): §6.2.
 - Log: `make ws-logs` (websocket-1), `make ws-logs NODE=2` (websocket-2). Không token nào được nằm trong log.
 
@@ -75,7 +75,7 @@ Từ M6 phần 2: khoá của `identity` xoay không cần khởi động lại 
 
 ## Bài tải và diễn tập
 
-Cần `make core-up` trước.
+Cần `make app-up` trước.
 
     make poc TOOL=wsload POC_FLAGS="--ulimit nofile=65536:65536" ARGS="-scenario steady"
     ./scripts/wsload-kill.sh

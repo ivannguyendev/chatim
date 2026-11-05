@@ -59,7 +59,7 @@ func TestAHandlerPanicReleasesTheGateAndTheUserSlot(t *testing.T) {
 
 func TestAClientCancelReleasesTheGateAndTheUserSlot(t *testing.T) {
 	h := newHarness(t, limits{rate: 100, burst: 100, inflight: 1, node: 1})
-	started, release := hangCore(h)
+	started, release := hangingChat(h)
 	token := bearerOf(h.token(t, claims{}))
 	ctx, cancel := context.WithCancel(t.Context())
 	failed := make(chan error, 1)
@@ -95,7 +95,7 @@ func TestGetStreamingAndUnknownPathsWithoutTokenGet401(t *testing.T) {
 			t.Fatalf("%s status = %d", contentType, resp.status)
 		}
 	}
-	if resp := h.post(t, "/chatim.v1.CoreService/Nope", "application/json", "", nil, nil); resp.status != http.StatusUnauthorized {
+	if resp := h.post(t, "/chatim.v1.ChatService/Nope", "application/json", "", nil, nil); resp.status != http.StatusUnauthorized {
 		t.Fatalf("unknown path status = %d", resp.status)
 	}
 	if got := h.read(t, "commands_total", map[string]string{"command": "unknown", "code": "Unimplemented"}); got != 0 {
@@ -105,7 +105,7 @@ func TestGetStreamingAndUnknownPathsWithoutTokenGet401(t *testing.T) {
 		t.Fatalf("missing tokens counted = %v", got)
 	}
 	drainServed(h)
-	if len(h.core.recorded()) != 0 {
-		t.Fatal("an unauthenticated request reached core")
+	if len(h.chat.recorded()) != 0 {
+		t.Fatal("an unauthenticated request reached chat")
 	}
 }

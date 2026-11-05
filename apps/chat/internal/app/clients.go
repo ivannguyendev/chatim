@@ -73,7 +73,7 @@ func (c *clients) connectMongo(ctx context.Context, cfg config.Config) error {
 
 func mongoOptions(cfg config.Config) *options.ClientOptions {
 	opts := options.Client().ApplyURI(cfg.MongoURI).
-		SetAppName("chatim-core").
+		SetAppName("chatim-chat").
 		SetConnectTimeout(cfg.ConnectTimeout).
 		SetServerSelectionTimeout(cfg.ConnectTimeout)
 	if cfg.MongoUser != "" {
@@ -88,8 +88,8 @@ func (c *clients) connectRedis(ctx context.Context, cfg config.Config) error {
 		size: batchConns + dedupeSideConns, maxActive: batchConns + dedupeSideConns, minIdle: batchConns,
 		maxRetries: -1, dialerRetries: 1,
 	}
-	c.slots = redis.NewClient(redisOptions(cfg.RedisAddr, cfg.RedisDB, cfg.RedisPassword, "chatim-core-slots-"+cfg.CoreID, redisPool{size: slotRedisPool}))
-	c.dedupe = redis.NewClient(redisOptions(cfg.RedisDedupeAddr, cfg.RedisDedupeDB, cfg.RedisDedupePassword, "chatim-core-dedupe-"+cfg.CoreID, dedupePool))
+	c.slots = redis.NewClient(redisOptions(cfg.RedisAddr, cfg.RedisDB, cfg.RedisPassword, "chatim-chat-slots-"+cfg.NodeID, redisPool{size: slotRedisPool}))
+	c.dedupe = redis.NewClient(redisOptions(cfg.RedisDedupeAddr, cfg.RedisDedupeDB, cfg.RedisDedupePassword, "chatim-chat-dedupe-"+cfg.NodeID, dedupePool))
 	pings := []struct {
 		instance string
 		rdb      *redis.Client

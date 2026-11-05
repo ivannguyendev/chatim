@@ -10,7 +10,7 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-var errNoMentionService = status.Error(codes.Unimplemented, "route: the dialed core client has no mention service")
+var errNoMentionService = status.Error(codes.Unimplemented, "route: the dialed chat client has no mention service")
 
 func (c *Client) ListMentions(ctx context.Context, req *chatimv1.ListMentionsRequest) (*chatimv1.ListMentionsResponse, Stats, error) {
 	return viaMention(ctx, c, func(ctx context.Context, api chatimv1.MentionServiceClient) (*chatimv1.ListMentionsResponse, error) {

@@ -67,9 +67,9 @@ func TestCommandCountersArePrebuiltForEveryPair(t *testing.T) {
 	}
 }
 
-func TestCoreCallLatencyCountsOnlyCoreCalls(t *testing.T) {
+func TestChatCallLatencyCountsOnlyChatCalls(t *testing.T) {
 	h := newHarness(t, time.Second)
-	latencies := h.exec.CoreCallLatency()
+	latencies := h.exec.ChatCallLatency()
 	if len(latencies) != 12 {
 		t.Fatalf("latencies = %d", len(latencies))
 	}

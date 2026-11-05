@@ -9,11 +9,11 @@ import (
 )
 
 var (
-	ErrNoRoute          = status.Error(codes.Unavailable, "no live core to route to")
-	ErrDial             = errors.New("dial core")
-	ErrTooManyAddresses = fmt.Errorf("more than %d core addresses", MaxAddresses)
+	ErrNoRoute          = status.Error(codes.Unavailable, "no live chat to route to")
+	ErrDial             = errors.New("dial chat")
+	ErrTooManyAddresses = fmt.Errorf("more than %d chat addresses", MaxAddresses)
 
-	errClosed = status.Error(codes.Unavailable, "core routes closed")
+	errClosed = status.Error(codes.Unavailable, "chat routes closed")
 )
 
 type unavailableError struct {

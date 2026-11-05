@@ -16,7 +16,7 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-func sendLinked(t *testing.T, client chatimv1.CoreServiceClient, user string, req *chatimv1.SendMessageRequest) uint64 {
+func sendLinked(t *testing.T, client chatimv1.ChatServiceClient, user string, req *chatimv1.SendMessageRequest) uint64 {
 	t.Helper()
 	resp, err := sendRetrying(callerAs(t.Context(), user), client, req)
 	if err != nil {
@@ -41,7 +41,7 @@ func seqsOf(msgs []*chatimv1.Message) []uint64 {
 	return out
 }
 
-func repliesOf(t *testing.T, client chatimv1.CoreServiceClient, roomID string, parent uint64) []*chatimv1.Message {
+func repliesOf(t *testing.T, client chatimv1.ChatServiceClient, roomID string, parent uint64) []*chatimv1.Message {
 	t.Helper()
 	resp, err := client.GetReplies(caller(t.Context()), &chatimv1.GetRepliesRequest{RoomId: roomID, Seq: parent, Limit: 10})
 	if err != nil {
@@ -50,7 +50,7 @@ func repliesOf(t *testing.T, client chatimv1.CoreServiceClient, roomID string, p
 	return resp.GetMessages()
 }
 
-func deleteAs(ctx context.Context, client chatimv1.CoreServiceClient, user, roomID string, seq uint64) error {
+func deleteAs(ctx context.Context, client chatimv1.ChatServiceClient, user, roomID string, seq uint64) error {
 	_, err := retryingUnavailable(callerAs(ctx, user), func(ctx context.Context) (*chatimv1.DeleteMessageResponse, error) {
 		return client.DeleteMessage(ctx, &chatimv1.DeleteMessageRequest{RoomId: roomID, Seq: seq})
 	})
@@ -67,11 +67,11 @@ func awaitReplyCount(t *testing.T, live <-chan *nats.Msg, room, parent, ver uint
 
 func TestRealInfraRepliesAreCountedListedAndKeepTheParent(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastSweep)
-	client := dialCore(t, core.cfg)
+	chat := startChatNode(t, it, itFastSweep)
+	client := dialChat(t, chat.cfg)
 	roomID := createRoomWith(t, client, []string{itUser, "bob"})
 	room := parseRoom(t, roomID)
-	live := subscribeLive(t, it, core.cfg, roomID)
+	live := subscribeLive(t, it, chat.cfg, roomID)
 
 	parent := sendAs(t, client, itUser, roomID, "parent", "the parent")
 	var replies []uint64
@@ -109,13 +109,13 @@ func TestRealInfraRepliesAreCountedListedAndKeepTheParent(t *testing.T) {
 
 func TestRealInfraMentionsForwardsAndBookmarksReachTheirLists(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastSweep)
-	client := dialCore(t, core.cfg)
-	mentions := dialMention(t, core.cfg)
+	chat := startChatNode(t, it, itFastSweep)
+	client := dialChat(t, chat.cfg)
+	mentions := dialMention(t, chat.cfg)
 	tagGroups(t, mentions, nil, "design")
 	roomID, otherID := createRoomWith(t, client, []string{itUser, "bob"}), createRoomWith(t, client, []string{itUser, "bob"})
 	room := parseRoom(t, roomID)
-	live := subscribeLive(t, it, core.cfg, roomID)
+	live := subscribeLive(t, it, chat.cfg, roomID)
 
 	since := time.Now().Add(-time.Minute)
 	sets := []*chatimv1.MentionSet{

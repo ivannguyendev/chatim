@@ -31,7 +31,7 @@ func TestAFailedReloadSendsLoadFailedAndWaitsForTheClientToAskAgain(t *testing.T
 		f.loader.answer(3, reply{rooms: []Room{{ID: 1, Ver: 1}}})
 		time.Sleep(time.Second)
 		synctest.Wait()
-		f.loader.answer(4, reply{err: errors.New("core down")})
+		f.loader.answer(4, reply{err: errors.New("chat down")})
 		synctest.Wait()
 		for i, s := range []*fakeSink{sinks[failing], waiting} {
 			if got := s.take(); !slices.Equal(got, []string{"load_failed"}) || s.failures() != 0 {
@@ -80,7 +80,7 @@ func TestAFailedFirstLoadSendsLoadFailedAndLoadRoomsReadiesTheUser(t *testing.T)
 		c1 := mustRegister(t, f.table, "t1", "u", s1)
 		c2 := mustRegister(t, f.table, "t1", "u", s2)
 		synctest.Wait()
-		f.loader.answer(0, reply{err: errors.New("core down")})
+		f.loader.answer(0, reply{err: errors.New("chat down")})
 		synctest.Wait()
 		for i, s := range []*fakeSink{s1, s2} {
 			if got := s.take(); !slices.Equal(got, []string{"load_failed"}) || s.failures() != 0 {
@@ -125,7 +125,7 @@ func TestAFailedReloadOfAUserNeverReadyKeepsItSuspendedUntilItLeaves(t *testing.
 		synctest.Wait()
 		f.table.Jumped(lagJump(8))
 		synctest.Wait()
-		f.loader.answer(1, reply{err: errors.New("core down")})
+		f.loader.answer(1, reply{err: errors.New("chat down")})
 		synctest.Wait()
 		if got := s.take(); !slices.Equal(got, []string{"load_failed"}) || s.failures() != 0 || f.table.stats.suspended.Load() != 1 || f.table.stats.reloadFailures.Load() != 1 {
 			t.Fatalf("frames %v failures %d suspended %d", got, s.failures(), f.table.stats.suspended.Load())

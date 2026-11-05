@@ -76,7 +76,7 @@ func TestSameCIDFromConcurrentCallersIsStoredOnce(t *testing.T) {
 	const callers = 8
 	waits := make([]<-chan sendResult, callers)
 	for i := range waits {
-		waits[i] = sendAsync(context.Background(), cl.cores[0], cmd(roomA, "u0", "dup"))
+		waits[i] = sendAsync(context.Background(), cl.nodes[0], cmd(roomA, "u0", "dup"))
 	}
 	var first sendResult
 	for i, w := range waits {
@@ -91,7 +91,7 @@ func TestSameCIDFromConcurrentCallersIsStoredOnce(t *testing.T) {
 			t.Fatalf("caller %d got %+v, want %+v", i, got.ack, first.ack)
 		}
 	}
-	if again := mustSend(t, cl.cores[0], cmd(roomA, "u0", "dup")); !sameAck(again, first.ack) {
+	if again := mustSend(t, cl.nodes[0], cmd(roomA, "u0", "dup")); !sameAck(again, first.ack) {
 		t.Fatalf("resend after commit got %+v, want %+v", again, first.ack)
 	}
 	docs := storedCIDs(t, cl.msgs, roomA)["dup"]

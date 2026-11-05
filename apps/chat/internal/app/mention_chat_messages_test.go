@@ -9,8 +9,8 @@ import (
 	"github.com/ivannguyendev/chatim/modules/mention/mentionapp"
 )
 
-func TestMentionCoreLooksUpTimesAndVersionsBeyondOneStoreBatch(t *testing.T) {
-	c, _, msgs := newMentionCore(t)
+func TestMentionChatNodeLooksUpTimesAndVersionsBeyondOneStoreBatch(t *testing.T) {
+	c, _, msgs := newMentionChatNode(t)
 	total := store.MaxMessageLookup + 5
 	batch := make([]domain.Message, total)
 	keys := make([]mentionapp.MessageKey, 0, total+1)
@@ -35,8 +35,8 @@ func TestMentionCoreLooksUpTimesAndVersionsBeyondOneStoreBatch(t *testing.T) {
 	}
 }
 
-func TestMentionCoreConvertsVisibleMessagesOncePerKey(t *testing.T) {
-	c, _, _ := newMentionCore(t)
+func TestMentionChatNodeConvertsVisibleMessagesOncePerKey(t *testing.T) {
+	c, _, _ := newMentionChatNode(t)
 	visible := c.visible.(*fakeVisible)
 	shown := domain.Message{Room: mentionRoom, Thread: 4, Seq: 2, Tenant: mentionTenant, From: "bob", Kind: domain.KindText, Text: "hey", CreatedAt: mentionJoined}
 	visible.got = map[store.MsgKey]domain.Message{store.KeyOf(shown): shown}

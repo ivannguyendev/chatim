@@ -7,37 +7,37 @@ import (
 )
 
 func (c *Client) ListMyRooms(ctx context.Context, req *chatimv1.ListMyRoomsRequest) (*chatimv1.ListMyRoomsResponse, Stats, error) {
-	return anyCore(ctx, c, func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.ListMyRoomsResponse, error) {
+	return anyChatNode(ctx, c, func(ctx context.Context, api chatimv1.ChatServiceClient) (*chatimv1.ListMyRoomsResponse, error) {
 		return api.ListMyRooms(ctx, req)
 	})
 }
 
 func (c *Client) GetRooms(ctx context.Context, req *chatimv1.GetRoomsRequest) (*chatimv1.GetRoomsResponse, Stats, error) {
-	return anyCore(ctx, c, func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.GetRoomsResponse, error) {
+	return anyChatNode(ctx, c, func(ctx context.Context, api chatimv1.ChatServiceClient) (*chatimv1.GetRoomsResponse, error) {
 		return api.GetRooms(ctx, req)
 	})
 }
 
 func (c *Client) ListMyRoomIDs(ctx context.Context, req *chatimv1.ListMyRoomIDsRequest) (*chatimv1.ListMyRoomIDsResponse, Stats, error) {
-	return anyCore(ctx, c, func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.ListMyRoomIDsResponse, error) {
+	return anyChatNode(ctx, c, func(ctx context.Context, api chatimv1.ChatServiceClient) (*chatimv1.ListMyRoomIDsResponse, error) {
 		return api.ListMyRoomIDs(ctx, req)
 	})
 }
 
 func (c *Client) UpdateRoom(ctx context.Context, req *chatimv1.UpdateRoomRequest) (*chatimv1.UpdateRoomResponse, Stats, error) {
-	return inRoom(ctx, c, req.GetRoomId(), func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.UpdateRoomResponse, error) {
+	return inRoom(ctx, c, req.GetRoomId(), func(ctx context.Context, api chatimv1.ChatServiceClient) (*chatimv1.UpdateRoomResponse, error) {
 		return api.UpdateRoom(ctx, req)
 	})
 }
 
 func (c *Client) SetRoomPreferences(ctx context.Context, req *chatimv1.SetRoomPreferencesRequest) (*chatimv1.SetRoomPreferencesResponse, Stats, error) {
-	return inRoom(ctx, c, req.GetRoomId(), func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.SetRoomPreferencesResponse, error) {
+	return inRoom(ctx, c, req.GetRoomId(), func(ctx context.Context, api chatimv1.ChatServiceClient) (*chatimv1.SetRoomPreferencesResponse, error) {
 		return api.SetRoomPreferences(ctx, req)
 	})
 }
 
 func (c *Client) ListMembers(ctx context.Context, req *chatimv1.ListMembersRequest) (*chatimv1.ListMembersResponse, Stats, error) {
-	return inRoom(ctx, c, req.GetRoomId(), func(ctx context.Context, api chatimv1.CoreServiceClient) (*chatimv1.ListMembersResponse, error) {
+	return inRoom(ctx, c, req.GetRoomId(), func(ctx context.Context, api chatimv1.ChatServiceClient) (*chatimv1.ListMembersResponse, error) {
 		return api.ListMembers(ctx, req)
 	})
 }

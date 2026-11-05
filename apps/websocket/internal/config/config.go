@@ -113,7 +113,7 @@ func Load() (Config, error) {
 		SendQueue:          p.number("WS_SEND_QUEUE", 256),
 		SendQueueBytes:     p.number("WS_SEND_QUEUE_BYTES", 1<<20),
 		WriteTimeout:       p.span("WS_WRITE_TIMEOUT", 10*time.Second),
-		RequestDeadline:    p.span("CORE_REQUEST_DEADLINE", 5*time.Second),
+		RequestDeadline:    p.span("CHAT_REQUEST_DEADLINE", 5*time.Second),
 		DrainDelay:         p.span("WS_DRAIN_DELAY", 2*time.Second),
 		ShutdownBudget:     p.span("WS_SHUTDOWN_BUDGET", 15*time.Second),
 		NATSURL:            envconfig.String("NATS_URL", ""),

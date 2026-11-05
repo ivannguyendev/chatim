@@ -26,7 +26,7 @@ func resyncMain(args []string) int {
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	cfg, err := config.Load()
 	if err != nil {
-		logger.ErrorContext(ctx, "invalid core config", "err", err)
+		logger.ErrorContext(ctx, "invalid chat config", "err", err)
 		return 1
 	}
 	log := redactedLogger(logger, cfg)

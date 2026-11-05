@@ -52,7 +52,7 @@ func TestSentMessagesArePublishedInSeqOrder(t *testing.T) {
 	createRoom(t, w.rooms, roomB, "alice", "bob")
 	js := &publishtest.JetStream{}
 	pub := startPublisher(t, js)
-	core := startCoreWith(t, w.msgs, w.rooms, &fakeRegistry{}, pub)
+	chat := startChatNodeWith(t, w.msgs, w.rooms, &fakeRegistry{}, pub)
 	const perRoom = 25
 	rooms := []uint64{roomA, roomB}
 	var wg sync.WaitGroup
@@ -60,14 +60,14 @@ func TestSentMessagesArePublishedInSeqOrder(t *testing.T) {
 		for i := range perRoom {
 			wg.Go(func() {
 				c := cmd(room, []string{"alice", "bob"}[i%2], fmt.Sprintf("m%d", i))
-				if _, attempts, err := sendRetrying(core, c); err != nil {
+				if _, attempts, err := sendRetrying(chat, c); err != nil {
 					t.Errorf("Send %d/%s: %v after %d attempts", room, c.CID, err, attempts)
 				}
 			})
 		}
 	}
 	wg.Wait()
-	drain(t, core.Close, pub.Close)
+	drain(t, chat.Close, pub.Close)
 
 	for _, room := range rooms {
 		docs := timeline(t, w.msgs, room)

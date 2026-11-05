@@ -45,7 +45,7 @@ func (p *parser) components(c *Config) {
 	}
 	c.Messages.MentionTargets = c.Actor.MentionTargets
 	c.Dedupe = dedupe.Config{
-		CoreID:       c.CoreID,
+		NodeID:       c.NodeID,
 		PendingTTL:   pendingTTL,
 		CommittedTTL: p.span("CID_COMMITTED_TTL", dedupe.DefaultCommittedTTL),
 		Timeout:      redisTimeout,
@@ -80,7 +80,7 @@ func (p *parser) components(c *Config) {
 		AckWait:     timer.DefaultAckWait,
 	}
 	c.Slot = slot.Config{
-		CoreID:       c.CoreID,
+		NodeID:       c.NodeID,
 		Addr:         c.AdvertiseAddr,
 		Tick:         tick,
 		HeartbeatTTL: p.span("SLOT_HEARTBEAT_TTL", 5*time.Second),

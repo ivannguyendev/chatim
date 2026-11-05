@@ -24,7 +24,7 @@ func runWrite(ctx context.Context, args []string) error {
 	rooms := fs.Int("rooms", 5000, "active rooms receiving messages")
 	fs.DurationVar(&cfg.Window, "window", 2*time.Millisecond, "flush window")
 	fs.IntVar(&cfg.MaxBatch, "max-batch", 256, "flush when a batch reaches this size")
-	fs.IntVar(&cfg.Flushers, "flushers", 6, "parallel flushers (≈ cores × flush workers)")
+	fs.IntVar(&cfg.Flushers, "flushers", 6, "parallel flushers (≈ nodes × flush workers)")
 	w := fs.String("w", "majority", "write concern: majority or 1")
 	journal := fs.Bool("j", false, "also wait for the on-disk journal")
 	_ = fs.Parse(args)

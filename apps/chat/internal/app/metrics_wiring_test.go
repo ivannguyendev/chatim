@@ -87,7 +87,7 @@ func readings(sources []metrics.Source) map[string]float64 {
 	return got
 }
 
-func TestCoreMetricSourcesCoverEveryGuarantee(t *testing.T) {
+func TestChatMetricSourcesCoverEveryGuarantee(t *testing.T) {
 	sources := metricSources(fakeProbes())
 	if _, err := metrics.Handler(metricsNamespace, metricsSubsystem, sources); err != nil {
 		t.Fatalf("Handler: %v", err)

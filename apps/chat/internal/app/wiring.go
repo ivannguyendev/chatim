@@ -160,7 +160,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 		SlowRPC:         cfg.SlowRPC,
 		Limiter:         limiter,
 	}, log)
-	chatimv1.RegisterCoreServiceServer(a.grpc, svc)
+	chatimv1.RegisterChatServiceServer(a.grpc, svc)
 	mention, err := wireMention(cfg, cl, st, caches, reader, a.indexes, log)
 	if err != nil {
 		return nil, err

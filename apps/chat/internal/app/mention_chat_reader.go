@@ -36,7 +36,7 @@ type roomAuthorizer interface {
 	Authorize(ctx context.Context, action access.Action, tenant, user string, room uint64) (access.Request, error)
 }
 
-type mentionCore struct {
+type mentionChatNode struct {
 	members  mentionMembers
 	messages mentionMessages
 	infos    roomInfoReader
@@ -45,24 +45,24 @@ type mentionCore struct {
 	access   roomAuthorizer
 }
 
-var _ mentionapp.CoreReader = mentionCore{}
+var _ mentionapp.ChatReader = mentionChatNode{}
 
-func (c mentionCore) MembersOf(ctx context.Context, room uint64, users []string) ([]mentionapp.Member, error) {
+func (c mentionChatNode) MembersOf(ctx context.Context, room uint64, users []string) ([]mentionapp.Member, error) {
 	ms, err := c.members.MembersOf(ctx, room, users)
 	return mentionMembersOf(ms), err
 }
 
-func (c mentionCore) ListMembers(ctx context.Context, room uint64, after mentionapp.MemberCursor, limit int) ([]mentionapp.Member, error) {
+func (c mentionChatNode) ListMembers(ctx context.Context, room uint64, after mentionapp.MemberCursor, limit int) ([]mentionapp.Member, error) {
 	cursor := store.MemberCursor{Role: domain.Role(after.Role), Priority: after.Priority, JoinedAt: after.JoinedAt, User: after.User}
 	ms, err := c.members.ListMembers(ctx, room, cursor, limit)
 	return mentionMembersOf(ms), err
 }
 
-func (c mentionCore) RoomMemberIDs(ctx context.Context, room uint64) ([]string, error) {
+func (c mentionChatNode) RoomMemberIDs(ctx context.Context, room uint64) ([]string, error) {
 	return c.members.MemberUserIDs(ctx, room)
 }
 
-func (c mentionCore) RoomMemberCount(ctx context.Context, room uint64) (int64, error) {
+func (c mentionChatNode) RoomMemberCount(ctx context.Context, room uint64) (int64, error) {
 	mark := c.info.Mark()
 	if hit, _ := c.info.Get([]uint64{room}); len(hit) == 1 {
 		return int64(hit[room].MemberCount), nil
@@ -80,7 +80,7 @@ func (c mentionCore) RoomMemberCount(ctx context.Context, room uint64) (int64, e
 	return 0, apperr.ErrNotFound
 }
 
-func (c mentionCore) RoomsOf(ctx context.Context, tenant, user string) ([]mentionapp.MemberRoom, error) {
+func (c mentionChatNode) RoomsOf(ctx context.Context, tenant, user string) ([]mentionapp.MemberRoom, error) {
 	rooms, err := c.members.RoomsOf(ctx, tenant, user)
 	if err != nil {
 		return nil, err
@@ -92,15 +92,15 @@ func (c mentionCore) RoomsOf(ctx context.Context, tenant, user string) ([]mentio
 	return out, nil
 }
 
-func (c mentionCore) SentTimes(ctx context.Context, keys []mentionapp.MessageKey) (map[mentionapp.MessageKey]time.Time, error) {
+func (c mentionChatNode) SentTimes(ctx context.Context, keys []mentionapp.MessageKey) (map[mentionapp.MessageKey]time.Time, error) {
 	return lookupInChunks(ctx, keys, c.messages.SentTimes)
 }
 
-func (c mentionCore) MessageVersions(ctx context.Context, keys []mentionapp.MessageKey) (map[mentionapp.MessageKey]uint32, error) {
+func (c mentionChatNode) MessageVersions(ctx context.Context, keys []mentionapp.MessageKey) (map[mentionapp.MessageKey]uint32, error) {
 	return lookupInChunks(ctx, keys, c.messages.MessageVersions)
 }
 
-func (c mentionCore) Authorize(ctx context.Context, tenant, user string, room uint64, action mentionapp.Action) error {
+func (c mentionChatNode) Authorize(ctx context.Context, tenant, user string, room uint64, action mentionapp.Action) error {
 	_, err := c.access.Authorize(ctx, access.Action(action), tenant, user, room)
 	return err
 }

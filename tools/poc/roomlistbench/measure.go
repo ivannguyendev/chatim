@@ -24,7 +24,7 @@ type cell struct {
 }
 
 type meter struct {
-	api     chatimv1.CoreServiceClient
+	api     chatimv1.ChatServiceClient
 	probe   *mongoProbe
 	metrics string
 	tenant  string

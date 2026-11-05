@@ -147,7 +147,7 @@ type harness struct {
 	server   *Server
 	revoked  *fakeRevocations
 	verifier *fakeVerifier
-	core     *fakeCore
+	chat     *fakeChat
 	rooms    *interest.Table
 	loader   *roomLoader
 	typing   *typing.Service
@@ -161,15 +161,15 @@ func newHarness(t *testing.T, opts Options) *harness {
 
 func newHarnessWith(t *testing.T, opts Options, wrap func(Interest) Interest) *harness {
 	t.Helper()
-	verifier, core, loader := newFakeVerifier(t), newFakeCore(), &roomLoader{rooms: map[string][]interest.Room{}}
+	verifier, chat, loader := newFakeVerifier(t), newFakeChat(), &roomLoader{rooms: map[string][]interest.Room{}}
 	rooms := newInterestWith(t, loader)
 	typist, presence := newTestTyping(t, rooms), &fakePresence{}
 	revoked := newFakeRevocations(t)
-	server, err := New(opts, verifier, revoked, core, wrap(rooms), typist, presence, slog.New(slog.DiscardHandler))
+	server, err := New(opts, verifier, revoked, chat, wrap(rooms), typist, presence, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	return &harness{t: t, server: server, revoked: revoked, verifier: verifier, core: core, rooms: rooms, loader: loader, typing: typist, presence: presence}
+	return &harness{t: t, server: server, revoked: revoked, verifier: verifier, chat: chat, rooms: rooms, loader: loader, typing: typist, presence: presence}
 }
 
 type testClient struct {

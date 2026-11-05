@@ -19,7 +19,7 @@
 
 ### 2.1. Sơ đồ Đường ống Chế biến Dữ liệu Đọc (Reader View Pipeline)
 
-Trước khi dữ liệu thô từ cơ sở dữ liệu được trả về cho Client, nó bắt buộc phải đi qua **Reader View Pipeline** trong bộ nhớ của Core để thi hành các chính sách riêng tư cá nhân hoá:
+Trước khi dữ liệu thô từ cơ sở dữ liệu được trả về cho Client, nó bắt buộc phải đi qua **Reader View Pipeline** trong bộ nhớ của Chat để thi hành các chính sách riêng tư cá nhân hoá:
 
 ```mermaid
 flowchart LR
@@ -45,23 +45,23 @@ Toàn bộ dữ liệu thô từ cơ sở dữ liệu đều phải đi qua **Đ
 sequenceDiagram
     autonumber
     participant Client as Client SDK
-    participant Core as Core (api/grpcsrv)
+    participant Chat as Chat (api/grpcsrv)
     participant View as Reader View Pipeline (message/view)
     participant Msgs as MongoDB (messages)
     participant Members as MongoDB (members)
     participant Hidden as MongoDB (hidden)
 
-    Client->>Core: GetHistory(room_id, anchor=BEFORE, seq=10042, limit=50)
+    Client->>Chat: GetHistory(room_id, anchor=BEFORE, seq=10042, limit=50)
 
-    Note over Core,Msgs: 1. Đọc dữ liệu thô từ Clustered Index (p99 ≤ 20ms)
-    Core->>Msgs: Find({_id: {$gte: room│0│0, $lt: room│0│10042}}).sort({_id: -1}).limit(50)
-    Msgs-->>Core: 50 documents thô
+    Note over Chat,Msgs: 1. Đọc dữ liệu thô từ Clustered Index (p99 ≤ 20ms)
+    Chat->>Msgs: Find({_id: {$gte: room│0│0, $lt: room│0│10042}}).sort({_id: -1}).limit(50)
+    Msgs-->>Chat: 50 documents thô
 
-    Note over Core,View: 2. Đưa vào Reader View Pipeline chế biến
-    Core->>View: Process(raw_messages, reader_user_id)
+    Note over Chat,View: 2. Đưa vào Reader View Pipeline chế biến
+    Chat->>View: Process(raw_messages, reader_user_id)
 
-    Note over Core,Members: cleared_at lấy từ doc member khi kiểm quyền (Authorize)
-    Core->>Hidden: HiddenIn: tin ẩn của người đọc trong khoảng seq này
+    Note over Chat,Members: cleared_at lấy từ doc member khi kiểm quyền (Authorize)
+    Chat->>Hidden: HiddenIn: tin ẩn của người đọc trong khoảng seq này
 
     loop Với từng tin nhắn
         alt Tin nhắn có created_at <= cleared_at HOẶC nằm trong hidden
@@ -73,8 +73,8 @@ sequenceDiagram
         end
     end
 
-    View-->>Core: Danh sách tin nhắn đã che
-    Core-->>Client: Trả về tối đa 50 tin, trang sau gọi BEFORE với seq nhỏ nhất vừa nhận
+    View-->>Chat: Danh sách tin nhắn đã che
+    Chat-->>Client: Trả về tối đa 50 tin, trang sau gọi BEFORE với seq nhỏ nhất vừa nhận
 ```
 
 ---
@@ -93,8 +93,8 @@ sequenceDiagram
 - **Vấn đề cần giải quyết (Reconnect Storm):** Khi một sự cố mạng diện rộng kết thúc, hàng trăm nghìn thiết bị cùng kết nối lại hệ thống tại cùng một thời điểm. Nếu hệ thống cố gắng phát lại (Replay) toàn bộ các sự kiện NATS mà thiết bị đã bỏ lỡ, hệ thống sẽ sập nguồn vì quá tải băng thông và CPU (Thundering Herd).
 - **Cơ chế bảo đảm:**
   - **Không phát lại Event Stream (Nguyên tắc P8):** Thiết bị kết nối lại **không kéo event stream**, mà kéo **Snapshot trạng thái mới nhất**.
-  - **Những gì core có hôm nay:** `ListMyRooms` trả danh sách hội thoại kèm unread và tin xem trước (`preview.seq` là tin mới nhất người đọc thấy) của từng phòng; client so với `seq` cuối mình có rồi gọi `GetHistory(anchor=AFTER, seq=seq cuối)` cho những phòng có tin mới (hoặc `LATEST` nếu khoảng hở quá lớn).
-  - **Sync token** (một bảng `{room: last_seq}` gửi một lần) chưa có trong core: vai trò này thuộc Mention App và còn mở (kiến trúc §1.2).
+  - **Những gì chat có hôm nay:** `ListMyRooms` trả danh sách hội thoại kèm unread và tin xem trước (`preview.seq` là tin mới nhất người đọc thấy) của từng phòng; client so với `seq` cuối mình có rồi gọi `GetHistory(anchor=AFTER, seq=seq cuối)` cho những phòng có tin mới (hoặc `LATEST` nếu khoảng hở quá lớn).
+  - **Sync token** (một bảng `{room: last_seq}` gửi một lần) chưa có trong chat: vai trò này thuộc Mention App và còn mở (kiến trúc §1.2).
   - Mỗi doc tin nhắn trả về luôn mang **toàn bộ snapshot trạng thái hiện tại** (nội dung mới nhất, cờ đã xoá, tóm tắt reaction `rx`, số replies `rc`). Nhờ đó, Client chỉ cần đè snapshot này lên giao diện là đạt trạng thái đồng bộ tuyệt đối mà không cần tính toán chuỗi sự kiện phức tạp.
 
 ```mermaid
@@ -110,7 +110,7 @@ flowchart TD
 ```
 
 ### 3.3. Client Jitter (Rải đều tải khi Reconnect)
-- Để bảo vệ cụm Core lúc mạng vừa phục hồi:
+- Để bảo vệ cụm Chat lúc mạng vừa phục hồi:
   - Client SDK được tích hợp thuật toán **Exponential Backoff with Full Jitter**:
     $$T_{\text{wait}} = \text{random}(0, \min(T_{\text{max}}, T_{\text{base}} \times 2^{\text{attempt}}))$$
   - Các kết nối Reconnect được rải đều tự nhiên trong khoảng thời gian từ vài giây đến vài chục giây, triệt tiêu hoàn toàn đỉnh nhọn lưu lượng (Traffic Spike).
@@ -123,13 +123,13 @@ flowchart TD
 - Nhờ khoá chính `_id` 24 bytes gồm `(8 bytes room_id + 8 bytes thread_root + 8 bytes seq)`, toàn bộ các tin nhắn của cùng một phòng được lưu trữ vật lý nằm liền kề nhau trên các trang nhớ (Data Pages) của công cụ lưu trữ WiredTiger.
 - Khi truy vấn 50 tin nhắn theo `seq`, MongoDB chỉ cần nạp 1–2 trang nhớ từ ổ cứng NVMe vào bộ nhớ đệm (WiredTiger Cache), giúp câu lệnh hoàn thành trong vòng **2–5ms**.
 
-### 4.2. Bộ nhớ đệm Room-Tail Cache trên Core (M3)
+### 4.2. Bộ nhớ đệm Room-Tail Cache trên Chat (M3)
 - `GetHistory` **không** dùng cache: nó đọc thẳng store mỗi lần (không qua actor), rồi chạy view pipeline và gắn `reply_preview` (0 hoặc 1 `Find` theo khoá mỗi trang). `GetReplies`, `ListBookmarks` và các lệnh đọc M3 cũng đọc thẳng store:
   - `GetMessages`: 1..100 seq, qua `view.Default()`.
   - `ListThreads`, `ListPins` và bước kiểm tin của `GetReactions` chỉ chạy `MaskDeleted` + `HideForViewer`.
   - `my_reaction`/`bookmarked` chỉ có trên `GetHistory`, `GetMessages`, `GetReplies`.
   - `GetReplies` và `ListBookmarks` phân trang bằng `domain.PageLimit` (0 → 50, tối đa 100); mọi cursor mới là base64url; lỗi store đổi thành `UNAVAILABLE`.
-- `room/roomcache` trên mỗi core giữ đuôi phòng (≤ 300 tin gọn + 10 tin xem trước, TTL 30s, singleflight, đối chiếu `last_seq`/`last_edit_at`) chỉ để phục vụ danh sách hội thoại (`ListMyRooms`/`GetRooms`: unread, tin xem trước), xem Module 07.
+- `room/roomcache` trên mỗi node chat giữ đuôi phòng (≤ 300 tin gọn + 10 tin xem trước, TTL 30s, singleflight, đối chiếu `last_seq`/`last_edit_at`) chỉ để phục vụ danh sách hội thoại (`ListMyRooms`/`GetRooms`: unread, tin xem trước), xem Module 07.
 
 ### 4.3. Hợp đồng Mã lỗi gRPC (Error Matrix)
 
@@ -158,12 +158,12 @@ flowchart TD
 | Thành phần phụ thuộc | Mục đích phụ thuộc | Ứng xử khi thành phần gặp sự cố (Failure Behavior) |
 |---|---|---|
 | **MongoDB Replica Set (Primary)** | Phục vụ đọc lịch sử | Store đọc từ Primary (read concern `majority` hoặc `local` tuỳ collection). Mongo failover: lệnh đọc trả `UNAVAILABLE`, client backoff rồi gọi lại. |
-| **Reader View Pipeline** | Che giấu dữ liệu theo người đọc | Chạy hoàn toàn in-memory trên tiến trình Core, không truy vấn thêm (quyền và `cleared_at` đã có từ bước `Authorize`). |
-| **Room-Tail Cache (`room/roomcache`)** | Tăng tốc danh sách hội thoại | Là cache tạm thời (In-memory). Nếu Core khởi động lại, cache sẽ tự động nạp lại từ MongoDB trong lần truy vấn đầu tiên mà không làm mất dữ liệu. |
+| **Reader View Pipeline** | Che giấu dữ liệu theo người đọc | Chạy hoàn toàn in-memory trên tiến trình Chat, không truy vấn thêm (quyền và `cleared_at` đã có từ bước `Authorize`). |
+| **Room-Tail Cache (`room/roomcache`)** | Tăng tốc danh sách hội thoại | Là cache tạm thời (In-memory). Nếu Chat khởi động lại, cache sẽ tự động nạp lại từ MongoDB trong lần truy vấn đầu tiên mà không làm mất dữ liệu. |
 
 ### 6.1. Chỉ số Sức khoẻ Vận hành & Cảnh báo SRE (Key Metrics & Alerts)
 
-Core chưa xuất metric độ trễ `GetHistory` hay lưu lượng reconnect; mục tiêu p99 ≤ 20ms (A1) chưa có detector. Metric thực có liên quan:
+Chat chưa xuất metric độ trễ `GetHistory` hay lưu lượng reconnect; mục tiêu p99 ≤ 20ms (A1) chưa có detector. Metric thực có liên quan:
 
-- **`chatim_core_room_cache_hits_total{cache}`**, **`chatim_core_room_cache_misses_total{cache}`** (`cache` = `info`, `tail`, `snapshot`, `path`): Lượt đọc cache danh sách hội thoại từ RAM hay từ store; tỷ lệ trúng tính bằng PromQL. Chỉ để xem tốc độ, không có alert.
-- **`chatim_core_grpc_load_shed_total`:** Lệnh gRPC bị từ chối do quá số lệnh đang chạy (dấu hiệu reconnect dồn dập).
+- **`chatim_chat_room_cache_hits_total{cache}`**, **`chatim_chat_room_cache_misses_total{cache}`** (`cache` = `info`, `tail`, `snapshot`, `path`): Lượt đọc cache danh sách hội thoại từ RAM hay từ store; tỷ lệ trúng tính bằng PromQL. Chỉ để xem tốc độ, không có alert.
+- **`chatim_chat_grpc_load_shed_total`:** Lệnh gRPC bị từ chối do quá số lệnh đang chạy (dấu hiệu reconnect dồn dập).

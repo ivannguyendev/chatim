@@ -20,11 +20,11 @@ const room = 42
 func leasedRedis(t *testing.T) *miniredis.Miniredis {
 	t.Helper()
 	mr := miniredis.RunT(t)
-	for _, id := range []string{"core-1", "core-2"} {
-		_ = mr.Set(slotmap.CoreKey(id), id+":9000")
-		_, _ = mr.ZAdd(slotmap.CoreRegistryKey, slotmap.CoreExpiryScore(time.Now().Add(time.Hour)), id)
+	for _, id := range []string{"chat-1", "chat-2"} {
+		_ = mr.Set(slotmap.NodeKey(id), id+":9000")
+		_, _ = mr.ZAdd(slotmap.NodeRegistryKey, slotmap.NodeExpiryScore(time.Now().Add(time.Hour)), id)
 	}
-	_ = mr.Set(slotmap.SlotKey(slotmap.Of(room)), "core-2")
+	_ = mr.Set(slotmap.SlotKey(slotmap.Of(room)), "chat-2")
 	return mr
 }
 
@@ -56,15 +56,15 @@ func awaitClose(t *testing.T, net *fakeNet, want string) {
 
 func TestOpenRoutesByTheSlotLeaseAndClosesTwice(t *testing.T) {
 	mr := leasedRedis(t)
-	net := newFakeNet("core-1:9000", "core-2:9000")
+	net := newFakeNet("chat-1:9000", "chat-2:9000")
 	r, err := chatrpc.OpenRouter(t.Context(), chatrpc.RouterConfig{RedisAddr: mr.Addr(), Dial: net.dial, Log: quietLog})
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	if c, err := r.Room("42"); err != nil || c.Addr != "core-2:9000" || c.Mention == nil {
-		t.Fatalf("Room(42) = %+v, %v; want the lease owner core-2", c, err)
+	if c, err := r.Room("42"); err != nil || c.Addr != "chat-2:9000" || c.Mention == nil {
+		t.Fatalf("Room(42) = %+v, %v; want the lease owner chat-2", c, err)
 	}
-	if c, err := r.Any(); err != nil || (c.Addr != "core-1:9000" && c.Addr != "core-2:9000") {
+	if c, err := r.Any(); err != nil || (c.Addr != "chat-1:9000" && c.Addr != "chat-2:9000") {
 		t.Fatalf("Any = %+v, %v", c, err)
 	}
 	if _, err := r.Room("nope"); status.Code(err) != codes.InvalidArgument {
@@ -73,80 +73,80 @@ func TestOpenRoutesByTheSlotLeaseAndClosesTwice(t *testing.T) {
 	if err := errors.Join(r.Close(), r.Close()); err != nil {
 		t.Fatalf("Close twice: %v", err)
 	}
-	if _, closes := net.counts("core-2:9000"); closes != 1 {
-		t.Fatalf("core-2 closed %d times, want once", closes)
+	if _, closes := net.counts("chat-2:9000"); closes != 1 {
+		t.Fatalf("chat-2 closed %d times, want once", closes)
 	}
 	r.Trigger()
 }
 
-func TestRouterDropsTheOldConnectionWhenACoreChangesAddress(t *testing.T) {
+func TestRouterDropsTheOldConnectionWhenAChatNodeChangesAddress(t *testing.T) {
 	mr := leasedRedis(t)
-	net := newFakeNet("core-1:9000", "core-2:9000", "core-2:9100")
+	net := newFakeNet("chat-1:9000", "chat-2:9000", "chat-2:9100")
 	r := openRouter(t, mr, net)
 	if _, err := r.Room("42"); err != nil {
 		t.Fatal(err)
 	}
-	_ = mr.Set(slotmap.CoreKey("core-2"), "core-2:9100")
+	_ = mr.Set(slotmap.NodeKey("chat-2"), "chat-2:9100")
 	if err := r.Refresh(t.Context()); err != nil {
 		t.Fatalf("Refresh: %v", err)
 	}
-	if _, closes := net.counts("core-2:9000"); closes != 1 {
-		t.Fatalf("old core-2 address closed %d times, want once", closes)
+	if _, closes := net.counts("chat-2:9000"); closes != 1 {
+		t.Fatalf("old chat-2 address closed %d times, want once", closes)
 	}
-	if c, err := r.Room("42"); err != nil || c.Addr != "core-2:9100" {
+	if c, err := r.Room("42"); err != nil || c.Addr != "chat-2:9100" {
 		t.Fatalf("Room(42) = %+v, %v; want the new address", c, err)
 	}
 }
 
 func TestRouterKeepsConnectionsOnAnEmptyTableAndPrunesOnTheNextLoad(t *testing.T) {
 	mr := leasedRedis(t)
-	net := newFakeNet("core-1:9000", "core-2:9000")
+	net := newFakeNet("chat-1:9000", "chat-2:9000")
 	r := openRouter(t, mr, net)
 	if _, err := r.Room("42"); err != nil {
 		t.Fatal(err)
 	}
-	mr.Del(slotmap.CoreKey("core-1"))
-	mr.Del(slotmap.CoreKey("core-2"))
+	mr.Del(slotmap.NodeKey("chat-1"))
+	mr.Del(slotmap.NodeKey("chat-2"))
 	if err := r.Refresh(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	if _, closes := net.counts("core-2:9000"); closes != 0 {
-		t.Fatalf("core-2 closed %d times on a table with no cores, want kept", closes)
+	if _, closes := net.counts("chat-2:9000"); closes != 0 {
+		t.Fatalf("chat-2 closed %d times on a table with no nodes, want kept", closes)
 	}
-	_ = mr.Set(slotmap.CoreKey("core-1"), "core-1:9000")
+	_ = mr.Set(slotmap.NodeKey("chat-1"), "chat-1:9000")
 	if err := r.Refresh(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	if _, closes := net.counts("core-2:9000"); closes != 1 {
-		t.Fatalf("core-2 closed %d times after a table without it, want once", closes)
+	if _, closes := net.counts("chat-2:9000"); closes != 1 {
+		t.Fatalf("chat-2 closed %d times after a table without it, want once", closes)
 	}
 }
 
 func TestTriggerReloadsTheTableInTheBackground(t *testing.T) {
 	mr := leasedRedis(t)
-	net := newFakeNet("core-1:9000", "core-2:9000")
+	net := newFakeNet("chat-1:9000", "chat-2:9000")
 	r := openRouter(t, mr, net)
 	if _, err := r.Room("42"); err != nil {
 		t.Fatal(err)
 	}
-	mr.Del(slotmap.CoreKey("core-2"))
+	mr.Del(slotmap.NodeKey("chat-2"))
 	r.Trigger()
-	awaitClose(t, net, "core-2:9000")
-	if c, err := r.Room("42"); err != nil || c.Addr != "core-1:9000" {
-		t.Fatalf("Room(42) = %+v, %v; want the remaining core-1", c, err)
+	awaitClose(t, net, "chat-2:9000")
+	if c, err := r.Room("42"); err != nil || c.Addr != "chat-1:9000" {
+		t.Fatalf("Room(42) = %+v, %v; want the remaining chat-1", c, err)
 	}
 }
 
-func TestRouterReportsNoLiveCore(t *testing.T) {
+func TestRouterReportsNoLiveChatNode(t *testing.T) {
 	mr := leasedRedis(t)
 	r := openRouter(t, mr, newFakeNet())
-	mr.Del(slotmap.CoreKey("core-1"))
-	mr.Del(slotmap.CoreKey("core-2"))
+	mr.Del(slotmap.NodeKey("chat-1"))
+	mr.Del(slotmap.NodeKey("chat-2"))
 	if err := r.Refresh(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := r.Room("42"); !errors.Is(err, chatrpc.ErrNoRoute) || status.Code(err) != codes.Unavailable {
-		t.Fatalf("Room without cores = %v, want ErrNoRoute", err)
+		t.Fatalf("Room without nodes = %v, want ErrNoRoute", err)
 	}
 }
 

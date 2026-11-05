@@ -28,7 +28,7 @@ type Deps struct {
 	JS       jetstream.JetStream
 	NotifyJS jetstream.JetStream
 	NATS     *nats.Conn
-	Core     CoreReader
+	Chat     ChatReader
 	Log      *slog.Logger
 	Indexes  mongoindex.Reporter
 }
@@ -69,8 +69,8 @@ func (d Deps) bootstrap(ctx context.Context, db *mongo.Database) error {
 }
 
 func (d Deps) validate() error {
-	if d.Mongo == nil || d.JS == nil || d.NotifyJS == nil || d.NATS == nil || d.Core == nil || d.Log == nil {
-		return fmt.Errorf("%w: mention app needs mongo, jetstream, notify jetstream, nats, a core reader and a logger", apperr.ErrInvalidArgument)
+	if d.Mongo == nil || d.JS == nil || d.NotifyJS == nil || d.NATS == nil || d.Chat == nil || d.Log == nil {
+		return fmt.Errorf("%w: mention app needs mongo, jetstream, notify jetstream, nats, a chat reader and a logger", apperr.ErrInvalidArgument)
 	}
 	return nil
 }

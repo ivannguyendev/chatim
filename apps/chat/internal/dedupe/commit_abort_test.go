@@ -6,7 +6,7 @@ import (
 
 func TestCommitOverwritesUnconditionallyWithCommittedTTL(t *testing.T) {
 	mr, rdb := newRedis(t)
-	a, b := newStore(t, rdb, "core-a", nil), newStore(t, rdb, "core-b", nil)
+	a, b := newStore(t, rdb, "chat-a", nil), newStore(t, rdb, "chat-b", nil)
 	x, y := key("x"), key("y")
 	expectStatuses(t, reserve(t, b, x), Reserved)
 	second := Record{Seq: 8, CreatedAt: sampleRecord.CreatedAt}
@@ -27,9 +27,9 @@ func TestCommitOverwritesUnconditionallyWithCommittedTTL(t *testing.T) {
 	expectStatuses(t, reserve(t, b, x), Reserved)
 }
 
-func TestAbortDeletesOnlyThisCoresPendingReservations(t *testing.T) {
+func TestAbortDeletesOnlyThisChatNodesPendingReservations(t *testing.T) {
 	mr, rdb := newRedis(t)
-	a, b := newStore(t, rdb, "core-a", nil), newStore(t, rdb, "core-b", nil)
+	a, b := newStore(t, rdb, "chat-a", nil), newStore(t, rdb, "chat-b", nil)
 	mine, theirs, done, missing, hash := key("mine"), key("theirs"), key("done"), key("missing"), key("hash")
 	expectStatuses(t, reserve(t, a, mine, done), Reserved, Reserved)
 	expectStatuses(t, reserve(t, b, theirs), Reserved)
@@ -44,7 +44,7 @@ func TestAbortDeletesOnlyThisCoresPendingReservations(t *testing.T) {
 	if mr.Exists(mine.String()) || mr.Exists(missing.String()) {
 		t.Fatal("own pending reservation survived Abort")
 	}
-	expectValue(t, mr, theirs, "p:core-b")
+	expectValue(t, mr, theirs, "p:chat-b")
 	expectValue(t, mr, done, committedValue(sampleRecord))
 	if !mr.Exists(hash.String()) {
 		t.Fatal("Abort deleted a key of another type")

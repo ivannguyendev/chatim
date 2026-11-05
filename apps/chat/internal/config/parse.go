@@ -18,29 +18,29 @@ type parser struct {
 
 func (p *parser) fail(err error) { p.errs = append(p.errs, err) }
 
-func (p *parser) coreID() string {
-	if id := os.Getenv("CORE_ID"); id != "" {
+func (p *parser) nodeID() string {
+	if id := os.Getenv("CHAT_NODE_ID"); id != "" {
 		return id
 	}
 	host, err := os.Hostname()
 	if err != nil {
-		p.fail(fmt.Errorf("CORE_ID unset and hostname unavailable: %w", err))
+		p.fail(fmt.Errorf("CHAT_NODE_ID unset and hostname unavailable: %w", err))
 	}
 	return host
 }
 
-func (p *parser) advertiseAddr(coreID, grpcAddr string) string {
+func (p *parser) advertiseAddr(nodeID, grpcAddr string) string {
 	_, port, err := net.SplitHostPort(grpcAddr)
 	if err != nil {
-		p.fail(fmt.Errorf("CORE_GRPC_ADDR=%q: %w", grpcAddr, err))
+		p.fail(fmt.Errorf("CHAT_GRPC_ADDR=%q: %w", grpcAddr, err))
 	}
-	if v := os.Getenv("CORE_ADVERTISE_ADDR"); v != "" {
+	if v := os.Getenv("CHAT_ADVERTISE_ADDR"); v != "" {
 		return v
 	}
 	if err != nil {
 		return ""
 	}
-	return net.JoinHostPort(coreID, port)
+	return net.JoinHostPort(nodeID, port)
 }
 
 func (p *parser) count(key string, def int) int {

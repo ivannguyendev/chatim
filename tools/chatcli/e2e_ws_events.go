@@ -90,7 +90,7 @@ func (r *wsEventsRun) run() error {
 		{"A's MarkRead reaches B viewing the group and A's second device, not C", r.readSeen},
 		{"A's MarkUnread reaches B with a higher read_ver and a lower read_seq", r.unreadSeen},
 		{"A removes B, B gets member_removed then room_closed and nothing more", r.removeB},
-		{"core lists the group in B's left rooms with its version and not in B's rooms", r.leftListed},
+		{"chat lists the group in B's left rooms with its version and not in B's rooms", r.leftListed},
 		{"B reconnects and hears nothing of the group it left", r.reconnectB},
 		{"no duplicate, gap or resync on either connection", r.clean},
 	}

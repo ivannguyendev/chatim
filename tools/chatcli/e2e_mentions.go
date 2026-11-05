@@ -44,8 +44,8 @@ func e2eMentions(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("e2e mentions", flag.ContinueOnError)
 	o := addOptions(fs)
 	live := addLiveFlags(fs)
-	root := fs.String("ws-publish-root", wspublish.DefaultRoot, "ws publish subject root, MENTION_WS_PUBLISH_ROOT of the cores")
-	catalogTTL := fs.Duration("catalog-ttl", 60*time.Second, "how long a core keeps the group catalog before it reads it again")
+	root := fs.String("ws-publish-root", wspublish.DefaultRoot, "ws publish subject root, MENTION_WS_PUBLISH_ROOT of the nodes")
+	catalogTTL := fs.Duration("catalog-ttl", 60*time.Second, "how long a chat keeps the group catalog before it reads it again")
 	dir := fs.String("state", "/state", "directory holding the scenario state")
 	wait := fs.Duration("wait", 45*time.Second, "wait this long for the notifications and lists of each step")
 	if err := fs.Parse(args); err != nil {
@@ -130,7 +130,7 @@ func (r *mentionRun) setUserGroupsAs(items ...*chatimv1.UserGroupsItem) ([]strin
 }
 
 func (r *mentionRun) awaitCatalog() error {
-	fmt.Fprintf(os.Stderr, "group catalog changed: waiting %v so every core reads it again\n", r.catalogTTL)
+	fmt.Fprintf(os.Stderr, "group catalog changed: waiting %v so every chat reads it again\n", r.catalogTTL)
 	if !backoff.Pause(r.base, r.catalogTTL+time.Second) {
 		return r.base.Err()
 	}

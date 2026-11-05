@@ -25,7 +25,7 @@ type liveFlags struct {
 func addLiveFlags(fs *flag.FlagSet) liveFlags {
 	return liveFlags{
 		url:  fs.String("nats", cmp.Or(os.Getenv("NATS_URL"), "nats://chatim-nats:4222"), "NATS URL (env NATS_URL)"),
-		root: fs.String("live-root", "live", "live subject root, EVT_LIVE_ROOT of the cores"),
+		root: fs.String("live-root", "live", "live subject root, EVT_LIVE_ROOT of the nodes"),
 	}
 }
 

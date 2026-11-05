@@ -40,8 +40,8 @@ func TestRevokedTokensGet401(t *testing.T) {
 	if resp.status != http.StatusUnauthorized || h.read(t, "auth_failures_total", map[string]string{"reason": "tenant_revoked"}) != 1 {
 		t.Fatalf("revoked tenant status = %d", resp.status)
 	}
-	if len(h.core.recorded()) != 0 {
-		t.Fatal("a revoked token reached core")
+	if len(h.chat.recorded()) != 0 {
+		t.Fatal("a revoked token reached chat")
 	}
 	ok := h.post(t, historyPath, "application/json", "", historyJSON, http.Header{"Authorization": {bearerOf(h.token(t, claims{session: "laptop"}))}})
 	if ok.status != http.StatusOK {

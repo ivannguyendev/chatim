@@ -100,7 +100,7 @@ func TestWatchPresenceKeepsTheFirstLimitUsersAndCountsTheCut(t *testing.T) {
 func TestWatchingWorksBeforeReady(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		h := newHarness(t, testOptions())
-		h.loader.fail(errors.New("core down"))
+		h.loader.fail(errors.New("chat down"))
 		tc := h.dial(true)
 		tc.auth(h.token("u1", time.Hour))
 		if f := tc.nextFrame(); f.GetLoadFailed() == nil {
@@ -271,7 +271,7 @@ func TestNewRequiresAPositivePresenceWatchLimit(t *testing.T) {
 	opts := testOptions()
 	opts.PresenceWatchMax = 0
 	rooms := newTestInterest(t)
-	if _, err := New(opts, newFakeVerifier(t), newFakeRevocations(t), newFakeCore(), rooms, newTestTyping(t, rooms), &fakePresence{}, slog.New(slog.DiscardHandler)); err == nil {
+	if _, err := New(opts, newFakeVerifier(t), newFakeRevocations(t), newFakeChat(), rooms, newTestTyping(t, rooms), &fakePresence{}, slog.New(slog.DiscardHandler)); err == nil {
 		t.Fatal("New accepted a zero presence watch limit")
 	}
 }

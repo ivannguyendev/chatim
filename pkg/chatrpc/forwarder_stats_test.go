@@ -37,7 +37,7 @@ func TestStatsCoverOnlyTheCallersCommands(t *testing.T) {
 		}
 		names[s.Labels["command"]] = true
 	}
-	if len(names) != 12 || !names["SendMessage"] || names["GetHistory"] || len(fwd.CoreCallLatency()) != 12 {
+	if len(names) != 12 || !names["SendMessage"] || names["GetHistory"] || len(fwd.ChatCallLatency()) != 12 {
 		t.Fatalf("names = %v", names)
 	}
 	if _, outcome := fwd.Forward(t.Context(), testClaims, sendMethod, plainSend()); outcome.Message != "" {
@@ -46,7 +46,7 @@ func TestStatsCoverOnlyTheCallersCommands(t *testing.T) {
 	if got := readCount(t, fwd, "SendMessage", "OK"); got != 1 {
 		t.Fatalf("SendMessage OK = %v", got)
 	}
-	if got := fwd.CoreCallLatency()[0].Read().Count; got != 1 {
+	if got := fwd.ChatCallLatency()[0].Read().Count; got != 1 {
 		t.Fatalf("SendMessage latency count = %d", got)
 	}
 }

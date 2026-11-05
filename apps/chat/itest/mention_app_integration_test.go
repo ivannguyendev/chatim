@@ -9,14 +9,14 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-func TestRealInfraMentionAppIndexesNotifiesAndListsAcrossTwoCores(t *testing.T) {
+func TestRealInfraMentionAppIndexesNotifiesAndListsAcrossTwoChatNodes(t *testing.T) {
 	it := realInfra(t)
-	core1 := startCore(t, it, itFastSweep)
+	chat1 := startChatNode(t, it, itFastSweep)
 	env := maps.Clone(itFastSweep)
-	env["CORE_ID"] = "it-core-2-" + it.suffix
-	core2 := startCore(t, it, env)
-	client, mentions := dialCore(t, core1.cfg), dialMention(t, core2.cfg)
-	notices := subscribeNotify(t, it, core1.cfg)
+	env["CHAT_NODE_ID"] = "it-chat-2-" + it.suffix
+	chat2 := startChatNode(t, it, env)
+	client, mentions := dialChat(t, chat1.cfg), dialMention(t, chat2.cfg)
+	notices := subscribeNotify(t, it, chat1.cfg)
 	tagGroups(t, mentions, map[string][]string{"carol": {"design"}}, "design")
 	roomID := createRoomWith(t, client, []string{itUser, "bob", "carol", "dave"})
 	room := parseRoom(t, roomID)
@@ -26,7 +26,7 @@ func TestRealInfraMentionAppIndexesNotifiesAndListsAcrossTwoCores(t *testing.T) 
 	}, All: true}
 	seq := sendLinked(t, client, itUser, &chatimv1.SendMessageRequest{RoomId: roomID, Cid: "mention-app-1", Text: "hello", Mentions: set})
 
-	docs := awaitStored(t, "mention docs", storedMentions(t, it, core1.cfg, room, seq), func(d []mentionDocView) bool { return len(d) >= 3 })
+	docs := awaitStored(t, "mention docs", storedMentions(t, it, chat1.cfg, room, seq), func(d []mentionDocView) bool { return len(d) >= 3 })
 	targets := make([]string, len(docs))
 	for i, d := range docs {
 		if d.State != 1 {

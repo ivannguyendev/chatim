@@ -32,7 +32,7 @@ func wire(cfg config.Config, log *slog.Logger, deps Deps) (*node, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load jwt key set: %w", err)
 	}
-	conn, err := grpcclient.NewStatic(cfg.CoreAddrs, grpcclient.Options{
+	conn, err := grpcclient.NewStatic(cfg.ChatAddrs, grpcclient.Options{
 		Creds:       insecure.NewCredentials(),
 		DialOptions: append([]grpc.DialOption{grpc.WithIdleTimeout(0)}, deps.DialOptions...),
 	})
@@ -76,11 +76,11 @@ func wireServers(cfg config.Config, log *slog.Logger, verifier *auth.Verifier, c
 	if err != nil {
 		return nil, err
 	}
-	core := chatrpc.Clients{Core: chatimv1.NewCoreServiceClient(conn), Mention: chatimv1.NewMentionServiceClient(conn)}
+	chat := chatrpc.Clients{Chat: chatimv1.NewChatServiceClient(conn), Mention: chatimv1.NewMentionServiceClient(conn)}
 	fwd, err := chatrpc.NewForwarder(chatrpc.ForwarderOptions{
 		Methods:  chatrpc.Request(),
 		Deadline: cfg.RequestDeadline,
-		Route:    func(chatrpc.Command, proto.Message) (chatrpc.Clients, error) { return core, nil },
+		Route:    func(chatrpc.Command, proto.Message) (chatrpc.Clients, error) { return chat, nil },
 	})
 	if err != nil {
 		return nil, err
@@ -119,10 +119,10 @@ func wireServers(cfg config.Config, log *slog.Logger, verifier *auth.Verifier, c
 
 func metricSources(handler *api.Handler, fwd *chatrpc.Forwarder) []metrics.Source {
 	out := slices.Concat(handler.Sources(), fwd.CommandSources())
-	for _, latency := range fwd.CoreCallLatency() {
+	for _, latency := range fwd.ChatCallLatency() {
 		out = append(out, metrics.Source{
-			Name:      "core_call_seconds",
-			Help:      "Core call latency of client commands, in seconds.",
+			Name:      "chat_call_seconds",
+			Help:      "Chat call latency of client commands, in seconds.",
 			Labels:    map[string]string{"command": latency.Command},
 			Histogram: latency.Read,
 		})

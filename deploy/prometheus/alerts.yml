@@ -1,8 +1,8 @@
 groups:
-  - name: chatim-core-guarantees
+  - name: chatim-chat-guarantees
     rules:
       - alert: ChatimOplogWindowShort
-        expr: min(chatim_core_mongo_oplog_window_seconds) < 172800
+        expr: min(chatim_chat_mongo_oplog_window_seconds) < 172800
         for: 15m
         labels:
           severity: warning
@@ -10,7 +10,7 @@ groups:
         annotations:
           summary: The oplog covers less than 48h; a lagging or resyncing secondary has little room to catch up.
       - alert: ChatimOplogWindowCritical
-        expr: min(chatim_core_mongo_oplog_window_seconds) < 86400
+        expr: min(chatim_chat_mongo_oplog_window_seconds) < 86400
         for: 15m
         labels:
           severity: critical
@@ -18,15 +18,15 @@ groups:
         annotations:
           summary: The oplog covers less than 24h, below the minimum retention for replica health.
       - alert: ChatimOplogWindowUnknown
-        expr: count(chatim_core_mongo_oplog_window_seconds != chatim_core_mongo_oplog_window_seconds) > 0
+        expr: count(chatim_chat_mongo_oplog_window_seconds != chatim_chat_mongo_oplog_window_seconds) > 0
         for: 10m
         labels:
           severity: warning
           guarantee: RC5
         annotations:
-          summary: A core cannot read the oplog window; the replica health check is blind.
+          summary: A chat cannot read the oplog window; the replica health check is blind.
       - alert: ChatimEventsDropped
-        expr: sum(rate(chatim_core_publish_dropped_total[5m])) > 0
+        expr: sum(rate(chatim_chat_publish_dropped_total[5m])) > 0
         for: 10m
         labels:
           severity: warning
@@ -34,36 +34,36 @@ groups:
         annotations:
           summary: The fast path keeps dropping events; delivery waits for the sweeper.
       - alert: ChatimRedisDegraded
-        expr: max by (client) (chatim_core_redis_degraded) == 1
+        expr: max by (client) (chatim_chat_redis_degraded) == 1
         for: 1m
         labels:
           severity: warning
           guarantee: CD2
         annotations:
-          summary: A dedupe redis client is degraded; cross-core duplicates are possible.
+          summary: A dedupe redis client is degraded; cross-chat duplicates are possible.
       - alert: ChatimCIDSettleDropped
-        expr: sum(increase(chatim_core_cid_settle_dropped_total[5m])) > 0
+        expr: sum(increase(chatim_chat_cid_settle_dropped_total[5m])) > 0
         labels:
           severity: warning
           guarantee: CD1
         annotations:
           summary: Cid commits were dropped; retries may wait for the pending window.
       - alert: ChatimCIDPendingElsewhere
-        expr: sum(increase(chatim_core_cid_pending_elsewhere_total[5m])) > 0
+        expr: sum(increase(chatim_chat_cid_pending_elsewhere_total[5m])) > 0
         labels:
           severity: info
           guarantee: CD3
         annotations:
-          summary: Sends hit a cid pending on another core, the CD3 duplicate window.
+          summary: Sends hit a cid pending on another chat node, the CD3 duplicate window.
       - alert: ChatimSeqContention
-        expr: sum(increase(chatim_core_room_yields_total[5m])) > 10
+        expr: sum(increase(chatim_chat_room_yields_total[5m])) > 10
         labels:
           severity: warning
           guarantee: P1
         annotations:
           summary: Actors keep yielding rooms after seq contention; check slot ownership.
       - alert: ChatimCounterRepairSurge
-        expr: sum by (counter) (rate(chatim_core_counter_repaired_total[5m])) > 1
+        expr: sum by (counter) (rate(chatim_chat_counter_repaired_total[5m])) > 1
         for: 10m
         labels:
           severity: warning
@@ -71,7 +71,7 @@ groups:
         annotations:
           summary: Survival timer repairs keep rewriting counter summaries the fast path left stale; check fast path count failures and hot targets.
       - alert: ChatimEventPendingStuck
-        expr: max(chatim_core_event_pending_oldest_seconds) > 60
+        expr: max(chatim_chat_event_pending_oldest_seconds) > 60
         for: 5m
         labels:
           severity: warning
@@ -79,7 +79,7 @@ groups:
         annotations:
           summary: A pending event flag has waited more than 60s; the sweeper cannot republish it (check NATS and the sweeper logs).
       - alert: ChatimProjectionLagging
-        expr: max by (projection) (chatim_core_projection_lag_seconds) > 10
+        expr: max by (projection) (chatim_chat_projection_lag_seconds) > 10
         for: 5m
         labels:
           severity: warning
@@ -87,7 +87,7 @@ groups:
         annotations:
           summary: A projection runs more than 10s behind its events; room activity and reply indexes are stale.
       - alert: ChatimProjectionFailing
-        expr: sum by (projection) (increase(chatim_core_projection_stuck_total[15m])) > 0
+        expr: sum by (projection) (increase(chatim_chat_projection_stuck_total[15m])) > 0
         labels:
           severity: warning
           guarantee: RC1
@@ -109,15 +109,15 @@ groups:
         annotations:
           summary: The mention consumer keeps failing an event that has been delivered six times or more.
       - alert: ChatimSweeperIdle
-        expr: sum(increase(chatim_core_sweep_passes_total[10m])) == 0
+        expr: sum(increase(chatim_chat_sweep_passes_total[10m])) == 0
         for: 10m
         labels:
           severity: critical
           guarantee: RC1
         annotations:
-          summary: No core finished a sweeper pass for 10 minutes; events lost before their ack are not republished.
+          summary: No chat finished a sweeper pass for 10 minutes; events lost before their ack are not republished.
       - alert: ChatimTimerFailing
-        expr: sum(increase(chatim_core_timer_failures_total[15m])) > 0
+        expr: sum(increase(chatim_chat_timer_failures_total[15m])) > 0
         for: 15m
         labels:
           severity: warning
@@ -152,7 +152,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: Room loads of a websocket node keep failing; its users get load_failed and no events until a load succeeds (check core ListMyRoomIDs).
+          summary: Room loads of a websocket node keep failing; its users get load_failed and no events until a load succeeds (check chat ListMyRoomIDs).
       - alert: ChatimWebsocketDeliverySlow
         expr: histogram_quantile(0.99, sum by (le, instance) (rate(chatim_websocket_event_delivery_seconds_bucket[5m]))) > 0.1
         for: 5m
@@ -180,13 +180,13 @@ groups:
           severity: warning
         annotations:
           summary: More than 1000 running connections of a websocket node went back to waiting on an expired token in 10m; clients are not renewing tokens in time. The threshold depends on the user count of the node.
-      - alert: ChatimGatewayCoreUnavailable
+      - alert: ChatimGatewayChatUnavailable
         expr: sum(rate(chatim_gateway_commands_total{code="Unavailable"}[5m])) / sum(rate(chatim_gateway_commands_total[5m])) > 0.05
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: More than 5% of gateway commands end Unavailable; core is down, overloaded or unreachable from the gateway.
+          summary: More than 5% of gateway commands end Unavailable; chat is down, overloaded or unreachable from the gateway.
   - name: chatim-identity-health
     rules:
       - alert: ChatimIdentityNoSigningKey

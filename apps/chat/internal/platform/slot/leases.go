@@ -47,7 +47,7 @@ func (m *Manager) renew(ctx context.Context, stamp time.Time) (lost []uint16, er
 	for i, s := range slots {
 		keys[i] = slotmap.SlotKey(s)
 	}
-	kept, err := m.rdb.Eval(ctx, renewScript, keys, m.cfg.CoreID, m.cfg.LeaseTTL.Milliseconds()).Int64Slice()
+	kept, err := m.rdb.Eval(ctx, renewScript, keys, m.cfg.NodeID, m.cfg.LeaseTTL.Milliseconds()).Int64Slice()
 	if err != nil {
 		return nil, fmt.Errorf("renew: %w", err)
 	}
@@ -81,10 +81,10 @@ func (m *Manager) claim(ctx context.Context, alive map[string]bool, need int, st
 	var cands []candidate
 	for s, v := range owners {
 		owner, _ := v.(string)
-		if m.Owns(uint16(s)) || (owner != "" && owner != m.cfg.CoreID && alive[owner]) {
+		if m.Owns(uint16(s)) || (owner != "" && owner != m.cfg.NodeID && alive[owner]) {
 			continue
 		}
-		cands = append(cands, candidate{uint16(s), owner, slotmap.Score(uint16(s), m.cfg.CoreID)})
+		cands = append(cands, candidate{uint16(s), owner, slotmap.Score(uint16(s), m.cfg.NodeID)})
 	}
 	slices.SortFunc(cands, func(a, b candidate) int { return cmp.Compare(b.score, a.score) })
 	cands = cands[:min(need, len(cands))]
@@ -94,7 +94,7 @@ func (m *Manager) claim(ctx context.Context, alive map[string]bool, need int, st
 	pipe := m.rdb.Pipeline()
 	cmds := make([]*redis.Cmd, len(cands))
 	for i, c := range cands {
-		cmds[i] = pipe.Eval(ctx, claimScript, []string{keys[c.slot]}, c.expect, m.cfg.CoreID, m.cfg.LeaseTTL.Milliseconds())
+		cmds[i] = pipe.Eval(ctx, claimScript, []string{keys[c.slot]}, c.expect, m.cfg.NodeID, m.cfg.LeaseTTL.Milliseconds())
 	}
 	_, execErr := pipe.Exec(ctx)
 	var claimed []uint16
@@ -115,7 +115,7 @@ func (m *Manager) claim(ctx context.Context, alive map[string]bool, need int, st
 func (m *Manager) release(ctx, hookCtx context.Context, count int) error {
 	slots := m.Owned()
 	slices.SortFunc(slots, func(a, b uint16) int {
-		return cmp.Compare(slotmap.Score(a, m.cfg.CoreID), slotmap.Score(b, m.cfg.CoreID))
+		return cmp.Compare(slotmap.Score(a, m.cfg.NodeID), slotmap.Score(b, m.cfg.NodeID))
 	})
 	return m.releaseSlots(ctx, hookCtx, slots[:count:count])
 }
@@ -132,7 +132,7 @@ func (m *Manager) ReleaseAll(ctx context.Context) error {
 	if err := m.deregister(ctx); err != nil {
 		return err
 	}
-	return m.rdb.Publish(ctx, slotmap.ChangedChannel, m.cfg.CoreID).Err()
+	return m.rdb.Publish(ctx, slotmap.ChangedChannel, m.cfg.NodeID).Err()
 }
 
 func (m *Manager) releaseSlots(ctx, hookCtx context.Context, slots []uint16) error {
@@ -144,7 +144,7 @@ func (m *Manager) releaseSlots(ctx, hookCtx context.Context, slots []uint16) err
 	deliver(hookCtx, m.cfg.BeforeRelease, slots)
 	pipe := m.rdb.Pipeline()
 	for _, s := range slots {
-		pipe.Eval(ctx, releaseScript, []string{slotmap.SlotKey(s)}, m.cfg.CoreID)
+		pipe.Eval(ctx, releaseScript, []string{slotmap.SlotKey(s)}, m.cfg.NodeID)
 	}
 	if _, err := pipe.Exec(ctx); err != nil {
 		return fmt.Errorf("release: %w", err)

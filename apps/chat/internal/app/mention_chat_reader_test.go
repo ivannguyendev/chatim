@@ -33,7 +33,7 @@ func (f *fakeVisible) VisibleMessages(_ context.Context, _, _ string, keys []sto
 	return f.got, nil
 }
 
-func newMentionCore(t *testing.T) (mentionCore, *memstore.Rooms, *memstore.Messages) {
+func newMentionChatNode(t *testing.T) (mentionChatNode, *memstore.Rooms, *memstore.Messages) {
 	t.Helper()
 	rooms, msgs := memstore.NewRooms(), memstore.NewMessages()
 	members := []domain.Member{
@@ -53,11 +53,11 @@ func newMentionCore(t *testing.T) (mentionCore, *memstore.Rooms, *memstore.Messa
 	if err != nil {
 		t.Fatalf("NewChecker: %v", err)
 	}
-	return mentionCore{members: rooms, messages: msgs, infos: rooms, info: info, visible: &fakeVisible{}, access: checker}, rooms, msgs
+	return mentionChatNode{members: rooms, messages: msgs, infos: rooms, info: info, visible: &fakeVisible{}, access: checker}, rooms, msgs
 }
 
-func TestMentionCoreListsMembersFromTheStartForAZeroCursor(t *testing.T) {
-	c, _, _ := newMentionCore(t)
+func TestMentionChatNodeListsMembersFromTheStartForAZeroCursor(t *testing.T) {
+	c, _, _ := newMentionChatNode(t)
 	first, err := c.ListMembers(t.Context(), mentionRoom, mentionapp.MemberCursor{}, 2)
 	if err != nil || len(first) != 2 || first[0].User != "alice" || first[0].Role != "owner" || !first[0].Active || first[1].User != "bob" {
 		t.Fatalf("first page = %+v, %v; want alice (owner) then bob", first, err)
@@ -68,8 +68,8 @@ func TestMentionCoreListsMembersFromTheStartForAZeroCursor(t *testing.T) {
 	}
 }
 
-func TestMentionCoreReadsMembersRoomsAndIDs(t *testing.T) {
-	c, _, _ := newMentionCore(t)
+func TestMentionChatNodeReadsMembersRoomsAndIDs(t *testing.T) {
+	c, _, _ := newMentionChatNode(t)
 	got, err := c.MembersOf(t.Context(), mentionRoom, []string{"bob", "nobody"})
 	if err != nil || len(got) != 1 || got[0].User != "bob" || got[0].Role != "member" || !got[0].Active {
 		t.Fatalf("MembersOf = %+v, %v; want bob only", got, err)
@@ -85,8 +85,8 @@ func TestMentionCoreReadsMembersRoomsAndIDs(t *testing.T) {
 	}
 }
 
-func TestMentionCoreCountsMembersThroughTheInfoCache(t *testing.T) {
-	c, _, _ := newMentionCore(t)
+func TestMentionChatNodeCountsMembersThroughTheInfoCache(t *testing.T) {
+	c, _, _ := newMentionChatNode(t)
 	for range 2 {
 		if n, err := c.RoomMemberCount(t.Context(), mentionRoom); err != nil || n != 3 {
 			t.Fatalf("RoomMemberCount = %d, %v; want 3", n, err)
@@ -100,8 +100,8 @@ func TestMentionCoreCountsMembersThroughTheInfoCache(t *testing.T) {
 	}
 }
 
-func TestMentionCoreAuthorizesThroughTheChecker(t *testing.T) {
-	c, _, _ := newMentionCore(t)
+func TestMentionChatNodeAuthorizesThroughTheChecker(t *testing.T) {
+	c, _, _ := newMentionChatNode(t)
 	if err := c.Authorize(t.Context(), mentionTenant, "bob", mentionRoom, mentionapp.ReadMembers); err != nil {
 		t.Fatalf("Authorize(member) = %v", err)
 	}

@@ -130,7 +130,7 @@ func (r *gatewayRun) inRoom(kind, user string) e2e.WSMatch {
 }
 
 func (r *gatewayRun) createGroup() error {
-	resp, err := viaGateway(r.a, r.a.core.CreateRoom, &chatimv1.CreateRoomRequest{
+	resp, err := viaGateway(r.a, r.a.chat.CreateRoom, &chatimv1.CreateRoomRequest{
 		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "e2e gateway", Members: []string{r.aUser, r.b.user}, RequestId: randomCID(),
 	})
 	if err != nil {
@@ -150,7 +150,7 @@ func (r *gatewayRun) createGroup() error {
 
 func (r *gatewayRun) addC() error {
 	mark := r.b.feed.Len()
-	if _, err := viaGateway(r.a, r.a.core.AddMembers, &chatimv1.AddMembersRequest{RoomId: r.room, Users: []string{r.cUser}, RequestId: randomCID()}); err != nil {
+	if _, err := viaGateway(r.a, r.a.chat.AddMembers, &chatimv1.AddMembersRequest{RoomId: r.room, Users: []string{r.cUser}, RequestId: randomCID()}); err != nil {
 		return fmt.Errorf("add %s: %w", r.cUser, err)
 	}
 	_, err := r.b.await(mark, r.inRoom("member_added", r.cUser))
@@ -160,7 +160,7 @@ func (r *gatewayRun) addC() error {
 func (r *gatewayRun) rename() error {
 	mark := r.b.feed.Len()
 	name := gatewayRenamed
-	resp, err := viaGateway(r.a, r.a.core.UpdateRoom, &chatimv1.UpdateRoomRequest{RoomId: r.room, Name: &name})
+	resp, err := viaGateway(r.a, r.a.chat.UpdateRoom, &chatimv1.UpdateRoomRequest{RoomId: r.room, Name: &name})
 	if err != nil {
 		return fmt.Errorf("rename: %w", err)
 	}

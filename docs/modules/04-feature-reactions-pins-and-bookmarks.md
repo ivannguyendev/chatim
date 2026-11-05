@@ -37,12 +37,12 @@ flowchart TD
     Dec --> UpdateMsg
     Swap --> UpdateMsg
 
-    UpdateMsg --> CheckCrash{"Node Core có bị sập nguồn<br/>trước khi tháo ngòi?"}
+    UpdateMsg --> CheckCrash{"Node Chat có bị sập nguồn<br/>trước khi tháo ngòi?"}
 
     CheckCrash -- "Bình thường (Đường chính)" --> Disarm["4. Tháo ngòi nổ: Disarm Survivor Timer<br/>(Thao tác toàn vẹn, huỷ lịch hẹn)"]
     Disarm --> ReturnSuccess["Trả kết quả thành công cho Client (p99 <= 15ms)"]
 
-    CheckCrash -- "Node Core bị sập nguồn!" --> TimerFires["5. Phiếu hẹn phát nổ sau 5s!<br/>Consumer timer-due chạy count_repair"]
+    CheckCrash -- "Node Chat bị sập nguồn!" --> TimerFires["5. Phiếu hẹn phát nổ sau 5s!<br/>Consumer timer-due chạy count_repair"]
     TimerFires --> Recount["count_repair truy vấn đếm lại toàn bộ tương tác thực tế<br/>trong message_interactions"]
     Recount --> CASFix["count_repair CAS lại mảng rx chuẩn xác (kèm bit 2) rồi phát counts_changed<br/>bảo đảm tính hội tụ cuối cùng (Eventual Consistency)"]
 ```
@@ -55,34 +55,34 @@ flowchart TD
 sequenceDiagram
     autonumber
     participant Client as Client SDK
-    participant Core as Core (interaction.Service)
+    participant Chat as Chat (interaction.Service)
     participant Timers as event/timer.Timers
     participant Inter as MongoDB (message_interactions)
     participant Msgs as MongoDB (messages)
     participant WorkQ as NATS JetStream (CHATIM_TIMER)
     participant Worker as Consumer timer-due (count_repair)
 
-    Client->>Core: ReactMessage(room, seq, emoji="👍")
+    Client->>Chat: ReactMessage(room, seq, emoji="👍")
 
-    Note over Core,Timers: 1. Lên dây cót phiếu hẹn sinh tồn (Arm Timer)
-    Core->>Timers: ArmMessageCountCheck(key, counter="reactions")
+    Note over Chat,Timers: 1. Lên dây cót phiếu hẹn sinh tồn (Arm Timer)
+    Chat->>Timers: ArmMessageCountCheck(key, counter="reactions")
     Timers->>WorkQ: Đặt lịch hẹn tự sửa sai sau 5s
 
-    Note over Core,Inter: 2. Ghi nhận tương tác của người dùng
-    Core->>Inter: Upsert doc {_id: khoá tin│1│user, value: "👍", ver: v+1, _state bit 1}
-    Inter-->>Core: Đã ghi nhận (Doc thực sự thay đổi: delta = +1)
+    Note over Chat,Inter: 2. Ghi nhận tương tác của người dùng
+    Chat->>Inter: Upsert doc {_id: khoá tin│1│user, value: "👍", ver: v+1, _state bit 1}
+    Inter-->>Chat: Đã ghi nhận (Doc thực sự thay đổi: delta = +1)
 
-    Note over Core,Msgs: 3. Tăng/giảm bộ đếm trực tiếp trên tin
-    Core->>Msgs: AddReactionCounts(👍 +1): pipeline trên rx.c, rx.v + 1, _state bit 2
-    Msgs-->>Core: Update thành công
+    Note over Chat,Msgs: 3. Tăng/giảm bộ đếm trực tiếp trên tin
+    Chat->>Msgs: AddReactionCounts(👍 +1): pipeline trên rx.c, rx.v + 1, _state bit 2
+    Msgs-->>Chat: Update thành công
 
-    Note over Core,Timers: 4. Tháo ngòi nổ phiếu hẹn (Disarm Timer)
-    Core->>Timers: Disarm() (Thao tác đã trọn vẹn, không cần sửa)
+    Note over Chat,Timers: 4. Tháo ngòi nổ phiếu hẹn (Disarm Timer)
+    Chat->>Timers: Disarm() (Thao tác đã trọn vẹn, không cần sửa)
 
-    Core-->>Client: Trả về kết quả thành công
-    Note over Core: Publish reaction_changed + counts_changed, PubAck thì xoá hai bit, rớt thì sweeper phát bù (Module 10)
+    Chat-->>Client: Trả về kết quả thành công
+    Note over Chat: Publish reaction_changed + counts_changed, PubAck thì xoá hai bit, rớt thì sweeper phát bù (Module 10)
 
-    opt Nếu Core bị sập nguồn ở Bước 3 (chưa kịp Disarm)
+    opt Nếu Chat bị sập nguồn ở Bước 3 (chưa kịp Disarm)
         Note over WorkQ,Worker: Phiếu hẹn nổ sau 5s!
         WorkQ->>Worker: Giao nhiệm vụ kiểm tra doc {room, seq}
         Worker->>Inter: Đếm lại toàn bộ reaction thực tế trong DB
@@ -98,20 +98,20 @@ Khi người dùng đã thả `👍` và bấm chọn sang `❤️`, hệ thốn
 sequenceDiagram
     autonumber
     participant Client as Client SDK
-    participant Core as Core (interaction.Service)
+    participant Chat as Chat (interaction.Service)
     participant Inter as MongoDB (message_interactions)
     participant Msgs as MongoDB (messages)
 
-    Client->>Core: ReactMessage(room, seq, emoji="❤️")
-    Note over Core,Inter: 1. Đọc và cập nhật doc tương tác của User
-    Core->>Inter: FindOneAndUpdate({_id: khoá tin│1│user}, pipeline upsert:<br/>value = "❤️", previous_value = "👍", state = 1, ver + 1, ReturnDocument Before)
-    Inter-->>Core: Trả về emoji cũ: "👍" (Xác định biến động: 👍: -1, ❤️: +1)
+    Client->>Chat: ReactMessage(room, seq, emoji="❤️")
+    Note over Chat,Inter: 1. Đọc và cập nhật doc tương tác của User
+    Chat->>Inter: FindOneAndUpdate({_id: khoá tin│1│user}, pipeline upsert:<br/>value = "❤️", previous_value = "👍", state = 1, ver + 1, ReturnDocument Before)
+    Inter-->>Chat: Trả về emoji cũ: "👍" (Xác định biến động: 👍: -1, ❤️: +1)
 
-    Note over Core,Msgs: 2. Lệnh Atomic cập nhật đồng thời 2 loại emoji
-    Core->>Msgs: AddReactionCounts({👍: -1, ❤️: +1}): một pipeline<br/>($map/$reduce/$filter/$sortArray) trên rx.c, rx.v + 1
-    Msgs-->>Core: Update thành công (Cả 2 số đếm đều chuẩn xác)
+    Note over Chat,Msgs: 2. Lệnh Atomic cập nhật đồng thời 2 loại emoji
+    Chat->>Msgs: AddReactionCounts({👍: -1, ❤️: +1}): một pipeline<br/>($map/$reduce/$filter/$sortArray) trên rx.c, rx.v + 1
+    Msgs-->>Chat: Update thành công (Cả 2 số đếm đều chuẩn xác)
 
-    Core-->>Client: Trả về kết quả thành công
+    Chat-->>Client: Trả về kết quả thành công
 ```
 
 > [!NOTE]
@@ -136,8 +136,8 @@ sequenceDiagram
 ### 3.2. Đếm trực tiếp `$inc` kết hợp Phiếu hẹn sinh tồn (Survivor Timers D111 / D113)
 - **Vấn đề cần giải quyết:** Nếu mỗi lần thả reaction đều phải quét toàn bộ collection để `COUNT(*)` rồi ghi lại số lượng (Recount), database sẽ bị nghẽn IOPS khi có hàng nghìn reaction mỗi giây. Ngược lại, nếu chỉ dùng `$inc`, nếu server crash giữa chừng thì số đếm sẽ vĩnh viễn bị lệch (Drift counter).
 - **Cơ chế bảo đảm:**
-  - **Đường bình thường (Fast-path):** Khi ghi bản ghi tương tác thành công, nếu thực sự có thay đổi, Core cộng delta vào `rx.c` bằng một update pipeline (`AddReactionCounts`, `rx.v + 1`) ngay trên document `messages`.
-  - **Bảo hiểm sinh tồn (Slow-path Insurance):** Trước khi ghi, Core bật một "phiếu hẹn" trên NATS JetStream. Nếu lệnh `$inc` thành công, phiếu hẹn được tháo ngòi (`Disarm`). Nếu Core crash trước khi kịp `$inc`, phiếu hẹn trên `CHATIM_TIMER` nổ sau 5s và consumer `timer-due` chạy `count_repair` đếm lại để đưa số lượng về chuẩn xác tuyệt đối.
+  - **Đường bình thường (Fast-path):** Khi ghi bản ghi tương tác thành công, nếu thực sự có thay đổi, Chat cộng delta vào `rx.c` bằng một update pipeline (`AddReactionCounts`, `rx.v + 1`) ngay trên document `messages`.
+  - **Bảo hiểm sinh tồn (Slow-path Insurance):** Trước khi ghi, Chat bật một "phiếu hẹn" trên NATS JetStream. Nếu lệnh `$inc` thành công, phiếu hẹn được tháo ngòi (`Disarm`). Nếu Chat crash trước khi kịp `$inc`, phiếu hẹn trên `CHATIM_TIMER` nổ sau 5s và consumer `timer-due` chạy `count_repair` đếm lại để đưa số lượng về chuẩn xác tuyệt đối.
   - **Lỗi giữa chừng:** ghi doc reaction lỗi thì giữ phiếu (không biết kết quả). `AddReactionCounts` lỗi thì chỉ ghi log, giữ phiếu, lệnh vẫn ack và trả tóm tắt cũ cộng delta, không phát `counts_changed`.
   - `rx` = `{c: [{e, n}], v}`, mảng `c` sắp giảm dần theo số đếm rồi tăng dần theo emoji; `rc` = `{n, v}`.
   - **Event bảo đảm tới:** doc reaction mang bit 1 (`reaction_changed`), `$inc rx` bật bit 2 trên tin (`counts_changed`); mỗi bit chỉ được xoá sau PubAck và khi version còn bằng, nếu không sweeper slot 0 phát bù trạng thái hiện tại (Module 10).
@@ -147,7 +147,7 @@ sequenceDiagram
 - Bảng hiển thị ghim tại `rooms.pins` là bản chiếu (Projection) được sinh ra bằng cách gấp nếp (Fold) các hành động từ `pin_actions`.
 - Lệnh ghim không nhận base version: `pinproj.Projector.Current` fold `rooms.pins/pin_ver` với các fact sau nó; tin đã ở đúng trạng thái → thành công, không ghi fact. Chèn fact trùng `_id` mà cùng thao tác, cùng tin, cùng người → coi là kết quả của chính lệnh; fact khác → `ErrRetryLater` (`UNAVAILABLE`) ngay. Sau đó `Project` một lần (fold + CAS `pin_ver`). `Rooms.Get` không bao giờ đọc `pins`.
 - **Bảo đảm hạn mức `PIN_LIMIT = 50`:** `pin_actions` dùng `_id = room│pin_ver` liền nhau (dense), lệnh fold `rooms.pins/pin_ver` với các fact sau nó rồi chỉ chèn đúng một fact `pin_ver + 1`, nên số tin ghim đang hoạt động không bao giờ vượt quá 50 tin (ghim thứ 51 → `FailedPrecondition`).
-- **Tự phục hồi (M3.1):** fact ghim mang cờ `_state: 1`. Lệnh chỉ phát `msg_pinned`/`msg_unpinned` khi `Project` thành công; `Project` lỗi (thua CAS hay lỗi DB) thì lệnh trả lời bằng bản fold tại chỗ, không phát và giữ cờ. Thua CAS hoặc core chết trước khi phát thì sweeper slot 0 fold + CAS lại rồi mới phát (D151, event trễ ~15–17s); thua CAS lần nữa thì giữ cờ cho lượt sau. Cờ chỉ mất sau PubAck của event, nên `rooms.pins` luôn bắt kịp sổ `pin_actions`; ghim không cần phiếu hẹn vì `Project` là fold lại từ sổ, chạy lại bao nhiêu lần cũng ra một kết quả.
+- **Tự phục hồi (M3.1):** fact ghim mang cờ `_state: 1`. Lệnh chỉ phát `msg_pinned`/`msg_unpinned` khi `Project` thành công; `Project` lỗi (thua CAS hay lỗi DB) thì lệnh trả lời bằng bản fold tại chỗ, không phát và giữ cờ. Thua CAS hoặc node chat chết trước khi phát thì sweeper slot 0 fold + CAS lại rồi mới phát (D151, event trễ ~15–17s); thua CAS lần nữa thì giữ cờ cho lượt sau. Cờ chỉ mất sau PubAck của event, nên `rooms.pins` luôn bắt kịp sổ `pin_actions`; ghim không cần phiếu hẹn vì `Project` là fold lại từ sổ, chạy lại bao nhiêu lần cũng ra một kết quả.
 
 ---
 
@@ -195,7 +195,7 @@ sequenceDiagram
 
 ### 4.3. Danh mục Emoji cố định & API
 - Hệ thống quy định danh sách emoji hợp lệ qua cấu hình `REACTION_EMOJIS` (ví dụ: `👍`, `❤️`, `😂`, `😮`, `😢`, `🙏`). Client SDK gọi `GetReactionSettings` lúc khởi động để lấy danh sách emoji này.
-- Mọi emoji nằm ngoài danh sách đều bị Core từ chối ngay tại tầng API với mã lỗi `codes.InvalidArgument` (`domain.ErrEmojiNotAllowed`).
+- Mọi emoji nằm ngoài danh sách đều bị Chat từ chối ngay tại tầng API với mã lỗi `codes.InvalidArgument` (`domain.ErrEmojiNotAllowed`).
 - Để trống = danh sách mặc định; boot kiểm danh sách không rỗng, tối đa 100, emoji hợp lệ, không trùng (D95). Độ dài danh sách cũng là số emoji tối đa trên một tin.
 - `GetReactionSettings` không định tuyến theo room, chỉ cần metadata người gọi, trả danh sách đúng thứ tự cấu hình.
 
@@ -235,11 +235,11 @@ sequenceDiagram
 
 ### 6.1. Chỉ số Sức khoẻ Vận hành & Cảnh báo SRE (Key Metrics & Alerts)
 
-- **`chatim_core_counter_repaired_total{counter="reactions"}`:** Bộ đếm tổng số lần `count_repair` phải can thiệp để sửa lệch số reaction.
+- **`chatim_chat_counter_repaired_total{counter="reactions"}`:** Bộ đếm tổng số lần `count_repair` phải can thiệp để sửa lệch số reaction.
   - *Ngưỡng bình thường:* Gần như bằng 0 trong điều kiện vận hành ổn định.
-  - *Luật cảnh báo (`ChatimCounterRepairSurge`):* Khi tốc độ sửa sai `> 1 lần/giây` kéo dài 10 phút, cảnh báo Core đang bị crash đột ngột hoặc mạng giữa Core và MongoDB gặp tình trạng nghẽn nặng.
-- **`chatim_core_timer_failures_total`**, **`chatim_core_timer_dropped_total`:** Phiếu hẹn đã bật nhưng sửa lỗi (đưa lại) hoặc bị bỏ (tin không còn, payload hỏng).
+  - *Luật cảnh báo (`ChatimCounterRepairSurge`):* Khi tốc độ sửa sai `> 1 lần/giây` kéo dài 10 phút, cảnh báo Chat đang bị crash đột ngột hoặc mạng giữa Chat và MongoDB gặp tình trạng nghẽn nặng.
+- **`chatim_chat_timer_failures_total`**, **`chatim_chat_timer_dropped_total`:** Phiếu hẹn đã bật nhưng sửa lỗi (đưa lại) hoặc bị bỏ (tin không còn, payload hỏng).
   - *Luật cảnh báo (`ChatimTimerFailing`):* `timer_failures_total` tăng trong 15 phút.
-- **`chatim_core_event_pending_oldest_seconds{collection="message_interactions"}`** (và `pin_actions`, `messages`): Tuổi cờ `reaction_changed`/`bookmark_changed`, `msg_pinned`/`msg_unpinned`, `counts_changed` chờ phát.
+- **`chatim_chat_event_pending_oldest_seconds{collection="message_interactions"}`** (và `pin_actions`, `messages`): Tuổi cờ `reaction_changed`/`bookmark_changed`, `msg_pinned`/`msg_unpinned`, `counts_changed` chờ phát.
   - *Luật cảnh báo (`ChatimEventPendingStuck`):* > 60s trong 5 phút.
 - Chưa có metric đếm số lần ghim/bỏ ghim.

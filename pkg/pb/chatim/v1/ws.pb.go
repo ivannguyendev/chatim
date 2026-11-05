@@ -2637,7 +2637,7 @@ var File_chatim_v1_ws_proto protoreflect.FileDescriptor
 
 const file_chatim_v1_ws_proto_rawDesc = "" +
 	"\n" +
-	"\x12chatim/v1/ws.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x16chatim/v1/events.proto\x1a\x17chatim/v1/members.proto\x1a\x1fchatim/v1/mention_service.proto\x1a\x1dchatim/v1/message_reads.proto\x1a\x1dchatim/v1/notifications.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a*chatim/v1/replies_bookmarks_mentions.proto\x1a\x19chatim/v1/room_list.proto\"\xde\x03\n" +
+	"\x12chatim/v1/ws.proto\x12\tchatim.v1\x1a\x14chatim/v1/chat.proto\x1a\x16chatim/v1/events.proto\x1a\x17chatim/v1/members.proto\x1a\x1fchatim/v1/mention_service.proto\x1a\x1dchatim/v1/message_reads.proto\x1a\x1dchatim/v1/notifications.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a*chatim/v1/replies_bookmarks_mentions.proto\x1a\x19chatim/v1/room_list.proto\"\xde\x03\n" +
 	"\vClientFrame\x12*\n" +
 	"\x04auth\x18\n" +
 	" \x01(\v2\x14.chatim.v1.AuthFrameH\x00R\x04auth\x129\n" +
@@ -3041,7 +3041,7 @@ func file_chatim_v1_ws_proto_init() {
 	if File_chatim_v1_ws_proto != nil {
 		return
 	}
-	file_chatim_v1_core_proto_init()
+	file_chatim_v1_chat_proto_init()
 	file_chatim_v1_events_proto_init()
 	file_chatim_v1_members_proto_init()
 	file_chatim_v1_mention_service_proto_init()

@@ -27,9 +27,9 @@ func wireMention(cfg config.Config, cl *clients, st *mongostore.Store, caches ro
 	if err != nil {
 		return nil, fmt.Errorf("wire mention access checker: %w", err)
 	}
-	core := mentionCore{members: st, messages: st, infos: st, info: caches.info, visible: visible, access: checker}
+	chat := mentionChatNode{members: st, messages: st, infos: st, info: caches.info, visible: visible, access: checker}
 	app, err := mentionapp.New(cfg.Mention, mentionapp.Deps{
-		Mongo: cl.mongo.Database(cfg.MongoDB), JS: cl.js, NotifyJS: cl.notifyJS, NATS: cl.nats, Core: core, Log: log.With("app", mentionSubsystem), Indexes: indexes,
+		Mongo: cl.mongo.Database(cfg.MongoDB), JS: cl.js, NotifyJS: cl.notifyJS, NATS: cl.nats, Chat: chat, Log: log.With("app", mentionSubsystem), Indexes: indexes,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("wire mention app: %w", err)

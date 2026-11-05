@@ -76,7 +76,7 @@ func e2eWSDrill(ctx context.Context, args []string) error {
 }
 
 func (d *wsDrill) prepare() error {
-	resp, err := viaGateway(d.sender.gw, d.sender.gw.core.CreateRoom, &chatimv1.CreateRoomRequest{
+	resp, err := viaGateway(d.sender.gw, d.sender.gw.chat.CreateRoom, &chatimv1.CreateRoomRequest{
 		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "ws drill", Members: []string{d.sender.user, d.receiver.user, d.leaver.user}, RequestId: randomCID(),
 	})
 	if err != nil {
@@ -189,7 +189,7 @@ func (d *wsDrill) history() ([]uint64, error) {
 	var stored []uint64
 	req := &chatimv1.GetHistoryRequest{RoomId: d.room, Anchor: chatimv1.HistoryAnchor_HISTORY_ANCHOR_OLDEST, Limit: drillHistoryPage}
 	for {
-		resp, err := viaGateway(d.receiver.gw, d.receiver.gw.core.GetHistory, req)
+		resp, err := viaGateway(d.receiver.gw, d.receiver.gw.chat.GetHistory, req)
 		if err != nil {
 			return nil, fmt.Errorf("history: %w", err)
 		}

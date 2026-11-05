@@ -129,7 +129,7 @@ func (n *node) shutdown(ctx context.Context, r running, cause error) error {
 		}
 	}
 	if err := n.conn.Close(); err != nil {
-		errs = append(errs, fmt.Errorf("close core connection: %w", err))
+		errs = append(errs, fmt.Errorf("close chat connection: %w", err))
 	}
 	r.stopAdmin()
 	select {

@@ -15,7 +15,7 @@ func TestLoadValidation(t *testing.T) {
 	}{
 		{"defaults are valid", nil, ""},
 		{"missing mongo uri", map[string]string{"MONGO_URI": ""}, "MONGO_URI is required"},
-		{"advertise addr without host", map[string]string{"CORE_ADVERTISE_ADDR": ":9000"}, "CORE_ADVERTISE_ADDR"},
+		{"advertise addr without host", map[string]string{"CHAT_ADVERTISE_ADDR": ":9000"}, "CHAT_ADVERTISE_ADDR"},
 		{"lowercase stream", map[string]string{"EVT_STREAM": "chatim_evt"}, "EVT_STREAM must match"},
 		{"dotted stream", map[string]string{"EVT_STREAM": "CHATIM.EVT"}, "EVT_STREAM must match"},
 		{"dotted subject root", map[string]string{"EVT_SUBJECT_ROOT": "evt.x"}, "EVT_SUBJECT_ROOT must match"},
@@ -29,19 +29,19 @@ func TestLoadValidation(t *testing.T) {
 		{"dotted timer root", map[string]string{"TIMER_SUBJECT_ROOT": "timer.x"}, "TIMER_SUBJECT_ROOT must match"},
 		{"timer root equals the event root", map[string]string{"TIMER_SUBJECT_ROOT": "evt"}, "TIMER_SUBJECT_ROOT must differ"},
 		{"timer root equals the live root", map[string]string{"TIMER_SUBJECT_ROOT": "live"}, "TIMER_SUBJECT_ROOT must differ"},
-		{"request deadline equals grpc shutdown", map[string]string{"CORE_REQUEST_DEADLINE": "5s"}, "CORE_REQUEST_DEADLINE must be shorter than CORE_GRPC_SHUTDOWN"},
-		{"request deadline just under grpc shutdown", map[string]string{"CORE_REQUEST_DEADLINE": "4999ms", "CORE_SHUTDOWN_BUDGET": "32s"}, ""},
-		{"queue wait above a tenth of the deadline", map[string]string{"CORE_QUEUE_WAIT": "301ms"}, "CORE_QUEUE_WAIT"},
-		{"queue wait at a tenth of the deadline", map[string]string{"CORE_QUEUE_WAIT": "300ms"}, ""},
+		{"request deadline equals grpc shutdown", map[string]string{"CHAT_REQUEST_DEADLINE": "5s"}, "CHAT_REQUEST_DEADLINE must be shorter than CHAT_GRPC_SHUTDOWN"},
+		{"request deadline just under grpc shutdown", map[string]string{"CHAT_REQUEST_DEADLINE": "4999ms", "CHAT_SHUTDOWN_BUDGET": "32s"}, ""},
+		{"queue wait above a tenth of the deadline", map[string]string{"CHAT_QUEUE_WAIT": "301ms"}, "CHAT_QUEUE_WAIT"},
+		{"queue wait at a tenth of the deadline", map[string]string{"CHAT_QUEUE_WAIT": "300ms"}, ""},
 		{"insert timeout equals request deadline", map[string]string{"FLUSH_INSERT_TIMEOUT": "3s"}, "FLUSH_INSERT_TIMEOUT must be shorter"},
-		{"insert timeout just under request deadline", map[string]string{"FLUSH_INSERT_TIMEOUT": "2999ms", "CORE_SHUTDOWN_BUDGET": "32s"}, ""},
+		{"insert timeout just under request deadline", map[string]string{"FLUSH_INSERT_TIMEOUT": "2999ms", "CHAT_SHUTDOWN_BUDGET": "32s"}, ""},
 		{"redis op timeout above a tenth of the deadline", map[string]string{"REDIS_OP_TIMEOUT": "301ms"}, "REDIS_OP_TIMEOUT must be at most"},
-		{"redis op timeout at a tenth of the deadline", map[string]string{"REDIS_OP_TIMEOUT": "300ms", "CORE_SHUTDOWN_BUDGET": "31s"}, ""},
+		{"redis op timeout at a tenth of the deadline", map[string]string{"REDIS_OP_TIMEOUT": "300ms", "CHAT_SHUTDOWN_BUDGET": "31s"}, ""},
 		{"pending ttl within deadline plus 1s", map[string]string{"CID_PENDING_TTL": "4s"}, "CID_PENDING_TTL"},
 		{"pending ttl just over deadline plus 1s", map[string]string{"CID_PENDING_TTL": "4001ms"}, ""},
 		{"committed ttl below pending ttl", map[string]string{"CID_COMMITTED_TTL": "5s"}, "CID_*"},
-		{"core id with a colon", map[string]string{"CORE_ID": "core:a"}, "CORE_ID"},
-		{"core id with a space", map[string]string{"CORE_ID": "core a", "CORE_ADVERTISE_ADDR": "core-a:9000"}, "SLOT_*, CORE_ID"},
+		{"node id with a colon", map[string]string{"CHAT_NODE_ID": "chat:a"}, "CHAT_NODE_ID"},
+		{"node id with a space", map[string]string{"CHAT_NODE_ID": "chat a", "CHAT_ADVERTISE_ADDR": "chat-a:9000"}, "SLOT_*, CHAT_NODE_ID"},
 		{"lease ttl within two ticks", map[string]string{"SLOT_LEASE_TTL": "2s"}, "SLOT_*"},
 		{"heartbeat ttl within two ticks", map[string]string{"SLOT_HEARTBEAT_TTL": "2s"}, "SLOT_*"},
 		{"hook timeout equals tick", map[string]string{"SLOT_HOOK_TIMEOUT": "1s"}, "SLOT_*"},
@@ -66,8 +66,8 @@ func TestLoadValidation(t *testing.T) {
 		{"clear timeout just inside the sweep min age", map[string]string{"STATE_CLEAR_TIMEOUT": "9999ms"}, ""},
 		{"sweep min age plus interval reach the duplicate window", map[string]string{"EVT_STREAM_DUPLICATES": "7s"}, "SWEEP_MIN_AGE + SWEEP_INTERVAL must be shorter than EVT_STREAM_DUPLICATES"},
 		{"sweep min age plus interval just under the duplicate window", map[string]string{"EVT_STREAM_DUPLICATES": "17001ms"}, ""},
-		{"sweep lookback within request deadline plus 10s", map[string]string{"CORE_REQUEST_DEADLINE": "4s", "PUB_ACK_TIMEOUT": "1s", "STATE_CLEAR_FLUSH": "500ms", "STATE_CLEAR_TIMEOUT": "1s", "READ_EVENT_WINDOW": "100ms", "SWEEP_MIN_AGE": "3s", "SWEEP_LOOKBACK": "14s"}, "SWEEP_LOOKBACK must be longer than CORE_REQUEST_DEADLINE + 10s"},
-		{"sweep lookback just past request deadline plus 10s", map[string]string{"CORE_REQUEST_DEADLINE": "4s", "PUB_ACK_TIMEOUT": "1s", "STATE_CLEAR_FLUSH": "500ms", "STATE_CLEAR_TIMEOUT": "1s", "READ_EVENT_WINDOW": "100ms", "SWEEP_MIN_AGE": "3s", "SWEEP_LOOKBACK": "14001ms", "CORE_SHUTDOWN_BUDGET": "31s"}, ""},
+		{"sweep lookback within request deadline plus 10s", map[string]string{"CHAT_REQUEST_DEADLINE": "4s", "PUB_ACK_TIMEOUT": "1s", "STATE_CLEAR_FLUSH": "500ms", "STATE_CLEAR_TIMEOUT": "1s", "READ_EVENT_WINDOW": "100ms", "SWEEP_MIN_AGE": "3s", "SWEEP_LOOKBACK": "14s"}, "SWEEP_LOOKBACK must be longer than CHAT_REQUEST_DEADLINE + 10s"},
+		{"sweep lookback just past request deadline plus 10s", map[string]string{"CHAT_REQUEST_DEADLINE": "4s", "PUB_ACK_TIMEOUT": "1s", "STATE_CLEAR_FLUSH": "500ms", "STATE_CLEAR_TIMEOUT": "1s", "READ_EVENT_WINDOW": "100ms", "SWEEP_MIN_AGE": "3s", "SWEEP_LOOKBACK": "14001ms", "CHAT_SHUTDOWN_BUDGET": "31s"}, ""},
 		{"sweep lookback within min age plus 10s", map[string]string{"SWEEP_LOOKBACK": "25s"}, "SWEEP_LOOKBACK must be longer than SWEEP_MIN_AGE + 10s"},
 		{"sweep lookback just past min age plus 10s", map[string]string{"SWEEP_LOOKBACK": "25001ms"}, ""},
 		{"zero state clear timeout", map[string]string{"STATE_CLEAR_TIMEOUT": "0"}, "STATE_CLEAR_TIMEOUT"},
@@ -76,16 +76,16 @@ func TestLoadValidation(t *testing.T) {
 		{"zero sweep rate", map[string]string{"SWEEP_RATE": "0"}, "SWEEP_RATE"},
 		{"state clear batch above its queue", map[string]string{"STATE_CLEAR_BATCH": "70000"}, "STATE_CLEAR_*"},
 		{"zero state clear queue", map[string]string{"STATE_CLEAR_QUEUE": "0"}, "STATE_CLEAR_QUEUE"},
-		{"stop phases fill the budget", map[string]string{"CORE_SHUTDOWN_BUDGET": "29700ms"}, "CORE_SHUTDOWN_BUDGET"},
-		{"stop phases just fit the budget", map[string]string{"CORE_SHUTDOWN_BUDGET": "29701ms"}, ""},
-		{"cid batch drain follows the redis op timeout", map[string]string{"REDIS_OP_TIMEOUT": "300ms", "CORE_SHUTDOWN_BUDGET": "30100ms"}, "2 x REDIS_OP_TIMEOUT (cid batcher drain) + FLUSH_INSERT_TIMEOUT"},
+		{"stop phases fill the budget", map[string]string{"CHAT_SHUTDOWN_BUDGET": "29700ms"}, "CHAT_SHUTDOWN_BUDGET"},
+		{"stop phases just fit the budget", map[string]string{"CHAT_SHUTDOWN_BUDGET": "29701ms"}, ""},
+		{"cid batch drain follows the redis op timeout", map[string]string{"REDIS_OP_TIMEOUT": "300ms", "CHAT_SHUTDOWN_BUDGET": "30100ms"}, "2 x REDIS_OP_TIMEOUT (cid batcher drain) + FLUSH_INSERT_TIMEOUT"},
 		{"zero projection fetch batch", map[string]string{"PROJECTION_FETCH_BATCH": "0"}, "PROJECTION_FETCH_BATCH"},
 		{"projection fetch batch above the limit", map[string]string{"PROJECTION_FETCH_BATCH": "8193"}, "PROJECTION_*"},
 		{"projection fetch batch at the limit", map[string]string{"PROJECTION_FETCH_BATCH": "8192"}, ""},
 		{"projection fetch wait above the limit", map[string]string{"PROJECTION_FETCH_WAIT": "3001ms"}, "PROJECTION_*"},
 		{"projection fetch wait at the limit", map[string]string{"PROJECTION_FETCH_WAIT": "3s"}, ""},
-		{"projection fetch wait counts in the stop plan", map[string]string{"PROJECTION_FETCH_WAIT": "500ms", "CORE_SHUTDOWN_BUDGET": "27200ms"}, "max(PROJECTION_FETCH_WAIT, MENTION_FETCH_WAIT) + 1s (projections and mention)"},
-		{"shorter projection fetch wait shrinks the stop plan", map[string]string{"PROJECTION_FETCH_WAIT": "500ms", "CORE_SHUTDOWN_BUDGET": "27201ms"}, ""},
+		{"projection fetch wait counts in the stop plan", map[string]string{"PROJECTION_FETCH_WAIT": "500ms", "CHAT_SHUTDOWN_BUDGET": "27200ms"}, "max(PROJECTION_FETCH_WAIT, MENTION_FETCH_WAIT) + 1s (projections and mention)"},
+		{"shorter projection fetch wait shrinks the stop plan", map[string]string{"PROJECTION_FETCH_WAIT": "500ms", "CHAT_SHUTDOWN_BUDGET": "27201ms"}, ""},
 		{"zero projection fetch wait", map[string]string{"PROJECTION_FETCH_WAIT": "0s"}, "PROJECTION_FETCH_WAIT"},
 		{"old room activity fetch variables are ignored", map[string]string{"PROJECTION_ACTIVITY_FETCH_BATCH": "junk", "PROJECTION_ACTIVITY_FETCH_WAIT": "-1s"}, ""},
 		{"old engine variables are ignored", map[string]string{
@@ -102,8 +102,8 @@ func TestLoadValidation(t *testing.T) {
 		{"room tail cache under 1MB", map[string]string{"ROOM_TAIL_CACHE_BYTES": "1048575"}, "ROOM_TAIL_CACHE_BYTES must be at least 1048576"},
 		{"room tail cache at 1MB", map[string]string{"ROOM_TAIL_CACHE_BYTES": "1048576"}, ""},
 		{"stop phases overflow", map[string]string{
-			"CORE_DRAIN_DELAY": "1000000h", "CORE_GRPC_SHUTDOWN": "1000000h", "CORE_PUBLISHER_DRAIN": "1000000h",
-		}, "CORE_SHUTDOWN_BUDGET"},
+			"CHAT_DRAIN_DELAY": "1000000h", "CHAT_GRPC_SHUTDOWN": "1000000h", "CHAT_PUBLISHER_DRAIN": "1000000h",
+		}, "CHAT_SHUTDOWN_BUDGET"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -131,13 +131,13 @@ func TestCountCheckDelaysMustOutliveARequest(t *testing.T) {
 			{map[string]string{key: "3s"}, true},
 			{map[string]string{key: "2s"}, true},
 			{map[string]string{key: "3001ms"}, false},
-			{map[string]string{key: "4s", "CORE_REQUEST_DEADLINE": "4s", "CORE_SHUTDOWN_BUDGET": "32s"}, true},
-			{map[string]string{"CORE_REQUEST_DEADLINE": "4999ms", "CORE_SHUTDOWN_BUDGET": "32s"}, false},
+			{map[string]string{key: "4s", "CHAT_REQUEST_DEADLINE": "4s", "CHAT_SHUTDOWN_BUDGET": "32s"}, true},
+			{map[string]string{"CHAT_REQUEST_DEADLINE": "4999ms", "CHAT_SHUTDOWN_BUDGET": "32s"}, false},
 		}
 		for _, tt := range tests {
 			setEnv(t, tt.env)
 			_, err := config.Load()
-			failed := err != nil && strings.Contains(err.Error(), key+" must be longer than CORE_REQUEST_DEADLINE")
+			failed := err != nil && strings.Contains(err.Error(), key+" must be longer than CHAT_REQUEST_DEADLINE")
 			if failed != tt.wantErr || (!tt.wantErr && err != nil) {
 				t.Fatalf("%v: Load() = %v; want rule broken %v", tt.env, err, tt.wantErr)
 			}
@@ -163,7 +163,7 @@ func TestLoadNeverEchoesMongoURI(t *testing.T) {
 	for _, broken := range []map[string]string{
 		{"MONGO_URI": secret, "FLUSH_SHARDS": "2000"},
 		{"MONGO_URI": secret, "REDIS_DB": "x"},
-		{"MONGO_URI": secret, "CORE_ID": "core a"},
+		{"MONGO_URI": secret, "CHAT_NODE_ID": "chat a"},
 	} {
 		setEnv(t, broken)
 		_, err := config.Load()

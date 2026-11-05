@@ -61,7 +61,7 @@ func TestTypingBeforeTheRoomsAreLoadedIsDropped(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		h := newHarness(t, testOptions())
 		h.loader.set("t1", "a", interest.Room{ID: 7, Ver: 1})
-		h.loader.fail(errors.New("core down"))
+		h.loader.fail(errors.New("chat down"))
 		a := h.dial(true)
 		a.auth(h.token("a", time.Hour))
 		if f := a.nextFrame(); f.GetLoadFailed() == nil {

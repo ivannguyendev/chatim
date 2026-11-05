@@ -20,7 +20,7 @@ func TestValuesRoundTripStrictly(t *testing.T) {
 	}
 	for _, r := range records {
 		v := committedValue(r)
-		got, ok := parseValue(v, "core-a")
+		got, ok := parseValue(v, "chat-a")
 		if !ok || got.Status != Committed || !sameRecord(got.Record, r) {
 			t.Fatalf("parse(%q) = %+v, %v; want committed %+v", v, got, ok, r)
 		}
@@ -28,9 +28,9 @@ func TestValuesRoundTripStrictly(t *testing.T) {
 			t.Fatalf("parsed time %v is not UTC", got.Record.CreatedAt)
 		}
 	}
-	pending := map[string]Status{"p:core-a": PendingHere, "p:core-b": PendingElsewhere, "p:core-a.svc": PendingElsewhere}
+	pending := map[string]Status{"p:chat-a": PendingHere, "p:chat-b": PendingElsewhere, "p:chat-a.svc": PendingElsewhere}
 	for v, want := range pending {
-		if got, ok := parseValue(v, "core-a"); !ok || got.Status != want {
+		if got, ok := parseValue(v, "chat-a"); !ok || got.Status != want {
 			t.Fatalf("parse(%q) = %+v, %v; want %v", v, got, ok, want)
 		}
 	}

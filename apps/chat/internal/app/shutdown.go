@@ -30,7 +30,7 @@ func (a *node) shutdown(ctx context.Context, sup *supervisor, t tasks, cause err
 	plan := a.cfg.StopPlan()
 	stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), a.cfg.ShutdownBudget-config.CloseTimeout)
 	defer cancel()
-	a.log.InfoContext(stopCtx, "core shutting down", "component_failed", cause != nil, "stop_plan", plan.Total(), "budget", a.cfg.ShutdownBudget)
+	a.log.InfoContext(stopCtx, "chat shutting down", "component_failed", cause != nil, "stop_plan", plan.Total(), "budget", a.cfg.ShutdownBudget)
 
 	a.admin.SetReady(false)
 	a.grpc.Health().Shutdown()
@@ -52,7 +52,7 @@ func (a *node) shutdown(ctx context.Context, sup *supervisor, t tasks, cause err
 	s.step("state clear queue", plan.StateClear, a.stateClears.Close, t.stateClears)
 	s.step("slot manager", 0, nil, t.slots)
 	s.step("admin", 0, nil, t.admin)
-	a.log.InfoContext(stopCtx, "core stopped", "failed_steps", s.failed)
+	a.log.InfoContext(stopCtx, "chat stopped", "failed_steps", s.failed)
 	return errors.Join(cause, s.err())
 }
 

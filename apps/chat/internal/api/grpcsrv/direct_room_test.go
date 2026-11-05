@@ -25,7 +25,7 @@ type failingJoins struct {
 
 func (f *failingJoins) AddMembers(ctx context.Context, j domain.Join, users []string) (store.JoinResult, error) {
 	if f.fails.Add(-1) >= 0 {
-		return store.JoinResult{}, errors.New("core died before the members")
+		return store.JoinResult{}, errors.New("chat node died before the members")
 	}
 	return f.Rooms.AddMembers(ctx, j, users)
 }

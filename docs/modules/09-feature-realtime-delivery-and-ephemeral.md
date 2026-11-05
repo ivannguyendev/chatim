@@ -1,6 +1,6 @@
 # Module 09: Thời gian thực — Phân phối Realtime & Tín hiệu tức thời (Typing/Presence)
 
-> **Trạng thái:** App `websocket` (M4) **đã xây đủ 5 phần** trên `feat/m4`; từ phần gateway (D198) websocket chỉ còn 12 lệnh ghi realtime, lệnh đọc và quản lý room đi HTTPS qua app `gateway` ([module 11](./11-feature-https-gateway.md)): kết nối, token, chuyển lệnh tới core (phần 1, [§7](#7-giao-thức-kết-nối-m4-phần-1-đã-xây), D183–D188); nhận và đẩy event, gói thông báo `WsPublish` (phần 2, [§8](#8-nhận-và-đẩy-event-m4-phần-2-đã-xây), D189–D195); đã đọc/đã xem (phần 3, [§9](#9-đã-đọc-và-đã-xem-m4-phần-3-đã-xây), D196–D197); đang gõ và online (phần 4, [§10](#10-đang-gõ-và-online-m4-phần-4-đã-xây), D199–D201); giữ kết nối, chống bão và vận hành (phần 5, D202–D206), với đặc tả đầy đủ cho client ở [§11](#11-đặc-tả-cho-client-m4-phần-5). Chỗ nào khác §7–§11 thì §7–§11 đúng.
+> **Trạng thái:** App `websocket` (M4) **đã xây đủ 5 phần** trên `feat/m4`; từ phần gateway (D198) websocket chỉ còn 12 lệnh ghi realtime, lệnh đọc và quản lý room đi HTTPS qua app `gateway` ([module 11](./11-feature-https-gateway.md)): kết nối, token, chuyển lệnh tới chat (phần 1, [§7](#7-giao-thức-kết-nối-m4-phần-1-đã-xây), D183–D188); nhận và đẩy event, gói thông báo `WsPublish` (phần 2, [§8](#8-nhận-và-đẩy-event-m4-phần-2-đã-xây), D189–D195); đã đọc/đã xem (phần 3, [§9](#9-đã-đọc-và-đã-xem-m4-phần-3-đã-xây), D196–D197); đang gõ và online (phần 4, [§10](#10-đang-gõ-và-online-m4-phần-4-đã-xây), D199–D201); giữ kết nối, chống bão và vận hành (phần 5, D202–D206), với đặc tả đầy đủ cho client ở [§11](#11-đặc-tả-cho-client-m4-phần-5). Chỗ nào khác §7–§11 thì §7–§11 đúng.
 >
 > **Mục tiêu module:** Đẩy các thông điệp và biến động dữ liệu đến người dùng đang online với độ trễ siêu thấp (p99 ≤100ms) qua kết nối WebSocket hai chiều, hỗ trợ các tương tác sinh động tức thời như "Đang gõ..." (Typing Indicator) và trạng thái trực tuyến (Presence) mà không làm suy giảm hiệu năng cơ sở dữ liệu.
 
@@ -39,14 +39,14 @@ flowchart TD
         NATSEph["NATS thường (không JetStream)<br/>Subject: eph.tenant1.101.typing"]
     end
 
-    subgraph CoreLayer["Cụm Core Service"]
-        CoreSrv["Core Service (Lưu trữ MongoDB)"]
+    subgraph ChatLayer["Cụm Chat Service"]
+        ChatSrv["Chat Service (Lưu trữ MongoDB)"]
     end
 
     %% Luồng gửi tin chính thức
     ClientA -- "1. Gửi tin (WS Frame)" --> GW1
-    GW1 -- "2. gRPC SendMessage" --> CoreSrv
-    CoreSrv -- "3. Commit Mongo & Publish" --> NATSLive
+    GW1 -- "2. gRPC SendMessage" --> ChatSrv
+    ChatSrv -- "3. Commit Mongo & Publish" --> NATSLive
 
     %% Mỗi node nhận mọi event, lọc theo room trong RAM
     NATSLive -- "4. Mọi event tới mọi node" --> GW1
@@ -54,7 +54,7 @@ flowchart TD
 
     %% Luồng gõ bàn phím (Bỏ qua DB hoàn toàn)
     ClientA -. "Gõ bàn phím (Typing)" .-> GW1
-    GW1 -. "Bypass Core: Publish trực tiếp" .-> NATSEph
+    GW1 -. "Bypass Chat: Publish trực tiếp" .-> NATSEph
     NATSEph -. "Broadcast tức thì" .-> GW1
     GW1 -. "Hiển thị 'Đang gõ...'" .-> ClientB
 
@@ -96,7 +96,7 @@ stateDiagram-v2
 ### 3.2. Đường truyền tắt cho Tín hiệu tạm thời (Ephemeral Bypass — Tiết kiệm 100% DB IOPS)
 - **Vấn đề:** Các tín hiệu như "Đang gõ tin" (Typing) hay "Nhịp tim trực tuyến" (Presence Ping) diễn ra liên tục hàng nghìn lần mỗi giây nhưng không có giá trị lưu trữ lâu dài. Nếu ghi các tín hiệu này vào MongoDB, cơ sở dữ liệu sẽ sập ngay lập tức vì quá tải ghi đĩa.
 - **Cơ chế bảo đảm (đã xây ở phần 4, chi tiết §10):**
-  - App websocket nhận tín hiệu từ máy và **bỏ qua hoàn toàn core và MongoDB**.
+  - App websocket nhận tín hiệu từ máy và **bỏ qua hoàn toàn chat và MongoDB**.
   - **Đang gõ** đi qua core NATS thường (không JetStream) trên subject `eph.{tenant}.{room}.typing`, bắn rồi quên (D199). Node nào cũng nhận và đẩy cho người đang mở room.
   - **Online** không đi qua NATS: mỗi người online là một khoá có hạn `chatim:presence:{tenant}:{user}` trong Redis riêng `chatim-redis-presence`, do node của người đó đóng dấu theo heartbeat (D200). Người hỏi nhận câu trả lời đọc từ Redis ở mỗi heartbeat của mình (D201).
   - Không có gì để dọn: tín hiệu gõ mất thì máy tự tắt sau 6 giây, khoá online hết hạn thì Redis tự xoá.
@@ -108,9 +108,9 @@ stateDiagram-v2
 
 ### 3.4. Sinh tin nhắn hệ thống tất định (Deterministic SysMsg CID, D132)
 - Khi có các sự kiện hệ thống (như Ghim tin, Thêm thành viên):
-  - Một app SysMsg ngoài core (chưa xây) lắng nghe sự kiện từ NATS và gọi `SendMessage(kind = system, skip_unread, meta)` với mã định danh tất định:
+  - Một app SysMsg ngoài chat (chưa xây) lắng nghe sự kiện từ NATS và gọi `SendMessage(kind = system, skip_unread, meta)` với mã định danh tất định:
     $$\text{cid} = \text{"sys-"}\{\text{event\_id}\}$$
-  - Core chỉ cung cấp đường gửi: tin `system` bỏ kiểm membership, không cho link hay mention (D132).
+  - Chat chỉ cung cấp đường gửi: tin `system` bỏ kiểm membership, không cho link hay mention (D132).
   - Nhờ cơ chế chống trùng CID (Module 02), ngay cả khi có 2 node cùng xử lý sự kiện này trong cửa sổ `CID_COMMITTED_TTL` (15 phút), chỉ có đúng 1 tin nhắn hệ thống được ghi vào phòng chat.
 
 ### 3.5. Hợp đồng chống trùng và lấp lỗ (D156, bắt buộc cho websocket M4)
@@ -157,7 +157,7 @@ Token sai hay hết hạn, frame sai, máy nhận chậm và hết suất đăng
 2. **Không bảo đảm sống sót của Ephemeral:**
    - Các tín hiệu Typing và Presence không có cơ chế gửi lại khi mất gói tin (Best-effort unacknowledged). Nếu rớt mạng, client chỉ đơn giản là không thấy báo đang gõ.
 3. **Chế độ Xoá chặt cho Tenant đặc thù (Privacy Strict Mode):**
-   - Chưa có: event core phát luôn mang snapshot hiện tại kèm nội dung văn bản; chưa có cấu hình tenant để event chỉ chứa metadata và ID.
+   - Chưa có: event chat phát luôn mang snapshot hiện tại kèm nội dung văn bản; chưa có cấu hình tenant để event chỉ chứa metadata và ID.
 
 ---
 
@@ -167,15 +167,15 @@ Token sai hay hết hạn, frame sai, máy nhận chậm và hết suất đăng
 |---|---|---|
 | **NATS JetStream (`CHATIM_EVT`, `CHATIM_WS`)** | Nhận event và gói thông báo (hai ordered consumer mỗi node) | Lần khởi động đầu cần NATS (không có thì node không sẵn sàng và thoát). Mất NATS sau đó: lệnh vẫn chạy, `/readyz` vẫn true, gauge `nats_connected` = 0; nối lại thì thư viện đọc tiếp từ số cuối, không mất tin; trễ quá 2 phút thì nhảy tới hiện tại + nạp lại + `resync` rải 60s (D190). Event chưa vào JetStream được sweeper slot 0 phát bù (Module 10). |
 | **File JWKS (khoá công khai)** | Xác thực JWT khi mở kết nối và khi gia hạn | Phần 1: file JWKS nạp một lần lúc khởi động (`WS_JWT_KEYS_FILE`), không gọi dịch vụ nào lúc kiểm token; file sai thì node không khởi động. Xoay khoá bằng rolling restart (D183). Từ M6 phần 2 node lấy thêm JWKS của `identity` qua HTTPS (`WS_IDENTITY_JWKS_URL`), xoay khoá không cần restart. |
-| **Redis state** | Đọc bảng slot để chọn core (chỉ đọc) | Redis chết: node giữ bảng slot đang có và mọi kết nối gRPC tới core; lần nạp không thấy core nào cũng không đóng kết nối (D186). Lúc khởi động node chờ bảng slot rồi mới bật `/readyz`. |
-| **Core `ListMyRoomIDs`** | Danh sách room đang ở và đã rời của người dùng khi login và khi nạp lại sau một lần nhảy (D195) | Tối đa `WS_ROOM_IDS_INFLIGHT` (64) lần gọi đang chạy mỗi node, nạp lại theo `WS_RELOAD_RATE`; lỗi thì gửi `load_failed` cho mọi kết nối của người đó, máy tự xin nạp lại (`load_rooms`) hoặc nối lại. |
+| **Redis state** | Đọc bảng slot để chọn chat (chỉ đọc) | Redis chết: node giữ bảng slot đang có và mọi kết nối gRPC tới chat; lần nạp không thấy node chat nào cũng không đóng kết nối (D186). Lúc khởi động node chờ bảng slot rồi mới bật `/readyz`. |
+| **Chat `ListMyRoomIDs`** | Danh sách room đang ở và đã rời của người dùng khi login và khi nạp lại sau một lần nhảy (D195) | Tối đa `WS_ROOM_IDS_INFLIGHT` (64) lần gọi đang chạy mỗi node, nạp lại theo `WS_RELOAD_RATE`; lỗi thì gửi `load_failed` cho mọi kết nối của người đó, máy tự xin nạp lại (`load_rooms`) hoặc nối lại. |
 | **Core NATS (`eph.*.*.typing`, phần 4)** | Chuyển tín hiệu đang gõ giữa các node (D199) | Bắn rồi quên: mất NATS thì người cùng node vẫn thấy, node khác không thấy (đếm `typing_relay_failures_total`); không gửi lại, máy tự tắt "đang gõ" sau 6 giây. |
 | **Redis presence `chatim-redis-presence` (phần 4)** | Khoá online `chatim:presence:{tenant}:{user}` có hạn `WS_PRESENCE_TTL` (D200, D201) | Một primary, không Cluster (`MGET` nhiều khoá), không lưu đĩa, `noeviction`. Node không chờ nó lúc khởi động và `/readyz` không phụ thuộc nó (gauge `presence_redis_up`). Lỗi ghi: người trên node đó hiện offline ở mọi nơi tới khi node ghi lại được. Lỗi đọc: không gửi `presence`, máy giữ trạng thái đang thấy. Redis khởi động lại hoặc bị xoá sạch: một số người hiện offline tối đa ~10s rồi node đóng dấu lại. |
-| **Core Service (gRPC Unary)** | Xử lý mọi lệnh của máy | App websocket gọi Core qua gRPC theo bảng slot, hạn `CORE_REQUEST_DEADLINE` (5s), **không tự gửi lại** (luật không retry nội bộ). Core lỗi `UNAVAILABLE` thì app trả nguyên mã cho máy và kích làm mới bảng slot (gom, ≥ 250ms một lần); máy gửi lại cùng `cid`/`request_id` và lần sau đi đúng core mới. |
+| **Chat Service (gRPC Unary)** | Xử lý mọi lệnh của máy | App websocket gọi Chat qua gRPC theo bảng slot, hạn `CHAT_REQUEST_DEADLINE` (5s), **không tự gửi lại** (luật không retry nội bộ). Chat lỗi `UNAVAILABLE` thì app trả nguyên mã cho máy và kích làm mới bảng slot (gom, ≥ 250ms một lần); máy gửi lại cùng `cid`/`request_id` và lần sau đi đúng node chat mới. |
 
 ### 6.1. Chỉ số Sức khoẻ Vận hành & Cảnh báo SRE (Key Metrics & Alerts)
 
-> **Đã có từ phần 1** (trên `/metrics` cổng admin, tiền tố `chatim_websocket_`): `connections`, `unauthenticated_connections` (gauge; từ phần 5 là số kết nối đang chờ đăng nhập), `auth_failures_total{reason}` (phần 5 thay bằng `auth_total{result}`), `closes_total{code}` (chỉ mã do server đóng; nhãn 1000 gồm cả hết hạn heartbeat), `commands_rejected_total{reason=rate|inflight|unimplemented|shutdown}`, `unknown_frames_total`, `commands_total{command,code}`, histogram `core_call_seconds{command}`.
+> **Đã có từ phần 1** (trên `/metrics` cổng admin, tiền tố `chatim_websocket_`): `connections`, `unauthenticated_connections` (gauge; từ phần 5 là số kết nối đang chờ đăng nhập), `auth_failures_total{reason}` (phần 5 thay bằng `auth_total{result}`), `closes_total{code}` (chỉ mã do server đóng; nhãn 1000 gồm cả hết hạn heartbeat), `commands_rejected_total{reason=rate|inflight|unimplemented|shutdown}`, `unknown_frames_total`, `commands_total{command,code}`, histogram `chat_call_seconds{command}`.
 >
 > **Thêm ở phần 2:** feed `nats_connected`, `nats_reconnects_total`, `consumer_lag_seconds{stream}` (tuổi tin vừa giao theo giờ lưu), `consumer_behind_seconds{stream}` (từ lúc watchdog thấy consumer sau đuôi stream, 0 khi kịp), `consumer_pending{stream}`, `consumer_resets_total{stream}`, `consumer_stale_skipped_total{stream}`, `catchup_jumps_total{stream}`, `catchup_jump_suppressed_total{stream}`, `catchup_jump_failures_total{stream}`, `fanout_queue_depth`, `fanout_handler_panics_total`, `events_unknown_total`, `events_dropped_at_stop_total`; bảng quan tâm `interest_users`, `interest_room_pairs`, histogram `room_ids_load_seconds`, `room_ids_load_failures_total`, `open_room_rejected_total`, `users_suspended`, `reloads_total`, histogram `reload_seconds`, `reload_failures_total`, `resyncs_total{reason}`, `events_delivered_total{level}`, `events_dropped_total{reason}`; gói `publish_packets_total`, `publish_delivered_total`, `publish_dropped_total{reason}`; hàng ghi `send_queue_bytes`. Luật alert cho websocket thêm ở phần 5 (bên dưới).
 >
@@ -190,12 +190,12 @@ Token sai hay hết hạn, frame sai, máy nhận chậm và hết suất đăng
 > | `ChatimWebsocketNATSDown` | `chatim_websocket_nats_connected == 0` trong 1 phút | critical | Node mất NATS, máy trên node không nhận event hay thông báo tới khi nối lại |
 > | `ChatimWebsocketBehind` | `chatim_websocket_consumer_behind_seconds > 30` trong 2 phút (theo `stream`) | warning | Consumer nằm sau đuôi stream quá 30s, event tới máy trễ |
 > | `ChatimWebsocketJumpSuppressed` | `increase(chatim_websocket_catchup_jump_suppressed_total[10m]) > 0` | warning | Node lại trễ quá xa ngay trong thời gian chờ giữa hai lần nhảy, đang đọc lại backlog cũ thay vì nhảy |
-> | `ChatimWebsocketReloadFailing` | tổng `increase` 5 phút của `reload_failures_total` và `room_ids_load_failures_total` theo `instance` > 10, trong 5 phút | warning | Nạp room liên tục lỗi, người dùng nhận `load_failed` và không có event (xem `ListMyRoomIDs` của core) |
+> | `ChatimWebsocketReloadFailing` | tổng `increase` 5 phút của `reload_failures_total` và `room_ids_load_failures_total` theo `instance` > 10, trong 5 phút | warning | Nạp room liên tục lỗi, người dùng nhận `load_failed` và không có event (xem `ListMyRoomIDs` của chat) |
 > | `ChatimWebsocketDeliverySlow` | p99 của `chatim_websocket_event_delivery_seconds` theo `instance` (rate 5 phút) > 0,1s trong 5 phút | warning | Vượt ngưỡng p99 ≤ 100ms từ giờ lưu tới lúc frame vào hàng gửi |
 > | `ChatimPresenceRedisDown` | `chatim_websocket_presence_redis_up == 0` trong 1 phút | warning | Node không tới được Redis presence: người trên node hiện offline ở mọi nơi, máy không nhận `presence` |
 > | `ChatimWebsocketAuthRateLimited` | tỉ lệ `chatim_websocket_auth_total{result="rate"}` trên mọi `auth_total` theo `instance` (rate 10 phút) > 10% trong 10 phút | warning | Hơn 10% lần login trên node bị bộ giới hạn login của node trả `retry_later`: đang có cơn kết nối lại, hoặc `WS_AUTH_RATE`/`WS_AUTH_BURST` quá thấp cho node. Ví dụ: 10 phút có 50.000 auth, 6.000 bị `rate` (12%) thì báo |
 > | `ChatimWebsocketTokenExpiredSurge` | `increase(chatim_websocket_auth_required_total{reason="expired"}[10m])` theo `instance` > 1000 | warning | Hơn 1.000 kết nối đang chạy trên node quay về chờ vì token hết hạn trong 10 phút: client không gia hạn token kịp. Ngưỡng tuỳ số người dùng trên node, chỉnh theo quy mô thật |
-> | `ChatimGatewayCoreUnavailable` | tỉ lệ `chatim_gateway_commands_total{code="Unavailable"}` trên mọi lệnh (rate 5 phút) > 5% trong 5 phút | warning | Core chết, quá tải hoặc gateway không tới được core |
+> | `ChatimGatewayChatUnavailable` | tỉ lệ `chatim_gateway_commands_total{code="Unavailable"}` trên mọi lệnh (rate 5 phút) > 5% trong 5 phút | warning | Chat chết, quá tải hoặc gateway không tới được chat |
 >
 > **Thiết kế cũ, không xây:** `chatim_websocket_connected_clients` chính là gauge `chatim_websocket_connections`; `chatim_realtime_delivery_latency_seconds` thay bằng `chatim_websocket_event_delivery_seconds` và luật `ChatimWebsocketDeliverySlow` (đo tới lúc frame vào hàng gửi trên node, không tới lúc máy nhận; ngưỡng vẫn p99 ≤ 100ms); `chatim_websocket_slow_clients_dropped_total` không cần vì máy chậm không bị đóng (D205): xem `resyncs_total{reason="client_backlog"}` và `send_dropped_total`.
 
@@ -209,7 +209,7 @@ Token sai hay hết hạn, frame sai, máy nhận chậm và hết suất đăng
 
 ## 7. Giao thức kết nối (M4 phần 1, đã xây)
 
-> Xây trên `feat/m4` (commit `4363410`…`ae11be4`), theo [tóm tắt phần 1](../plans/2026-10-20-m4-1-ket-noi-va-lenh-summary.md); quyết định D183–D188 ở [decision log §17.7](../decision-log.md). Code: `apps/websocket` (app), `pkg/auth` (kiểm token), `pkg/chatrpc` (chọn core, không retry), `proto/chatim/v1/ws.proto` (frame), `pkg/wstest` (client test cho test và e2e, thay `pkg/wsclient` từ phần 5, D206). Phần 5 đổi §7.2–§7.4 và §7.6 (D202–D205).
+> Xây trên `feat/m4` (commit `4363410`…`ae11be4`), theo [tóm tắt phần 1](../plans/2026-10-20-m4-1-ket-noi-va-lenh-summary.md); quyết định D183–D188 ở [decision log §17.7](../decision-log.md). Code: `apps/websocket` (app), `pkg/auth` (kiểm token), `pkg/chatrpc` (chọn chat, không retry), `proto/chatim/v1/ws.proto` (frame), `pkg/wstest` (client test cho test và e2e, thay `pkg/wsclient` từ phần 5, D206). Phần 5 đổi §7.2–§7.4 và §7.6 (D202–D205).
 
 ### 7.1. Mở kết nối
 
@@ -233,8 +233,8 @@ Từ phần 5 (D202–D204) kết nối có hai trạng thái phía server, **ch
 
 1. Kết nối mới ở trạng thái chờ. Không còn mốc "phải `auth` trong 5 giây" (bỏ `WS_AUTH_TIMEOUT` và mã 4002): kết nối còn heartbeat được chờ tới `WS_AUTH_GRACE` (3 phút, tính từ lúc vào trạng thái chờ), quá thì đóng **4001**.
 2. Máy gửi `auth{token}`. Token là JWT `EdDSA` (Ed25519), khoá chọn theo `kid` trong file JWKS; kiểm `iss`, `aud`, `sub` (user), `tid` (tenant), `exp`, `nbf` (lệch giờ 30s). Sai → `auth_required{INVALID}` (đã hết hạn → `auth_required{EXPIRED}`), kết nối ở lại trạng thái chờ (D202). Máy chỉ thấy lý do thô; lý do chi tiết vào log mức debug, metric `auth_total{result}`; token không bao giờ vào log.
-3. Token hợp lệ đi tiếp theo thứ tự: (tenant, user) phải trùng lần đăng nhập đầu của kết nối, nếu đã có (khác → `auth_required{INVALID}`); còn suất đăng nhập của node (D203; hết → `retry_later{5–30s}`); người đó chưa có 10 kết nối trên node (D204; có rồi → đóng **4009**, không gọi core); rồi nạp room như §8.1 và gửi `ready` (nạp lỗi → `load_failed`). Mỗi kết nối đang chờ được `auth` tối đa 1 lần/giây; `auth` dồn hơn nhận `retry_later{1000}` mà không kiểm token.
-4. **Khi chờ:** `request` → `response{UNAUTHENTICATED, "authentication required"}`, không gọi core; `open_room`, `close_room`, `load_rooms`, `typing`, `watch_presence` → `auth_required{lý do lần trước}` (`MISSING` nếu chưa từng gửi token), tối đa 1 lần/giây; không event, thông báo, typing, `presence`; không đóng dấu online.
+3. Token hợp lệ đi tiếp theo thứ tự: (tenant, user) phải trùng lần đăng nhập đầu của kết nối, nếu đã có (khác → `auth_required{INVALID}`); còn suất đăng nhập của node (D203; hết → `retry_later{5–30s}`); người đó chưa có 10 kết nối trên node (D204; có rồi → đóng **4009**, không gọi chat); rồi nạp room như §8.1 và gửi `ready` (nạp lỗi → `load_failed`). Mỗi kết nối đang chờ được `auth` tối đa 1 lần/giây; `auth` dồn hơn nhận `retry_later{1000}` mà không kiểm token.
+4. **Khi chờ:** `request` → `response{UNAUTHENTICATED, "authentication required"}`, không gọi chat; `open_room`, `close_room`, `load_rooms`, `typing`, `watch_presence` → `auth_required{lý do lần trước}` (`MISSING` nếu chưa từng gửi token), tối đa 1 lần/giây; không event, thông báo, typing, `presence`; không đóng dấu online.
 5. **Gia hạn trong kết nối:** trước khi hết hạn, máy gửi lại `auth` với token mới cùng `sub` và `tid`; không qua giới hạn đăng nhập, không có frame trả lời khi thành công. Token sai, đã hết hạn hay của người khác → `auth_required{INVALID}`, kết nối chạy tiếp bằng token đang có. Một kết nối không bao giờ đổi người; muốn đổi người thì mở kết nối mới.
 6. **Hết hạn khi đang chạy** (`exp + 30s`): node gỡ kết nối khỏi bảng quan tâm, bỏ danh sách hỏi online, về trạng thái chờ, gửi `auth_required{EXPIRED}` và bắt đầu hẹn giờ 3 phút. Lệnh đã nhận trước đó chạy bằng danh tính lúc nhận và vẫn được trả lời. Token mới → nạp room lại → `ready`.
 7. **Heartbeat:** máy gửi `heartbeat` mỗi 5–10 giây (client test `pkg/wstest` gửi mỗi 5 giây). Mọi frame của máy đều tính là còn sống ở cả hai trạng thái: heartbeat, lệnh, `auth`, và cả WebSocket ping (app trả pong). 15 giây (`WS_HEARTBEAT_TIMEOUT`) không có frame nào → app đóng (mã 1000).
@@ -273,20 +273,20 @@ Từ phần 5 (D205) server chỉ còn đóng ở các trường hợp dưới. 
 
 - Máy gửi `request{id, <một lệnh>}`; app trả `response{id, code, message, result}` với cùng `id`. `id` do máy đặt; app không kiểm trùng. `code` là mã gRPC (0 = OK). Result số N đi với request số N.
 - **Danh sách cho phép 12 lệnh ghi realtime** (D198, `chatrpc.Realtime()`; trước phần gateway là 34 lệnh, D184, D196): `SendMessage`, `EditMessage`, `DeleteMessage`, `HideMessage`, `ReactMessage`, `PinMessage`, `UnpinMessage`, `SetBookmark`, `MarkRead`, `MarkUnread`, `ClearHistory`, `SetRoomPreferences`. 22 lệnh đọc và quản lý (`ListMyRooms`, `GetHistory`, `CreateRoom`, `AddMembers`...) đi HTTPS qua `gateway` ([module 11](./11-feature-https-gateway.md)); gửi qua WebSocket thì nhận `UNIMPLEMENTED` "request not supported" như lệnh không biết, đếm `commands_rejected_total{reason="unimplemented"}`, không đóng kết nối; proto `ClientRequest` giữ đủ field. Không bao giờ có: `ListMyRoomIDs` (chỉ websocket gọi), `SetUserGroups`, `SetGroups` (hệ thống user/nhóm gọi).
-- Field app không biết bị bỏ ở mọi tầng, không bao giờ tới core. `SendMessage` chỉ nhận `kind` mặc định hoặc `TEXT`; `kind` khác, `skip_unread` hay `meta` → `INVALID_ARGUMENT`. Lệnh rỗng (máy mới hơn app) → `UNIMPLEMENTED`, không đóng kết nối.
-- Tenant và user gửi tới core (`x-chatim-tenant`, `x-chatim-user`) **chỉ lấy từ token**.
-- Chọn core (D186): cả 12 lệnh đều có `room_id` → core đang giữ slot của room (`room_id` sai dạng → `INVALID_ARGUMENT` "invalid room_id"). Không có core sống → `UNAVAILABLE`. Phần chuyển lệnh chung (chép field biết, caller từ token, hạn, ánh xạ lỗi, bộ đếm) nằm trong `pkg/chatrpc`, dùng chung với gateway.
-- Một lần gọi, hạn `CORE_REQUEST_DEADLINE` (5s). **App không tự gửi lại**; gặp `UNAVAILABLE` thì kích làm mới bảng slot rồi trả lỗi; máy gửi lại cùng `cid`/`request_id`.
-- **Lời lỗi** (D184): giữ lời của core cho `INVALID_ARGUMENT`, `NOT_FOUND`, `FAILED_PRECONDITION`, `PERMISSION_DENIED`, `ALREADY_EXISTS`, `RESOURCE_EXHAUSTED`; câu cố định cho `UNAVAILABLE` ("core unavailable, retry later"), `DEADLINE_EXCEEDED` ("core did not answer in time"), `CANCELED` ("request canceled"), `UNIMPLEMENTED` ("request not supported"); mã khác → "request failed". Lời gốc chỉ vào log.
-- **Thứ tự** (D187, D196): các `SendMessage`, `MarkRead` và `MarkUnread` của cùng kết nối vào cùng room chạy lần lượt theo thứ tự nhận. Một `SendMessage` lỗi `UNAVAILABLE`, `DEADLINE_EXCEEDED` hoặc `CANCELED` thì các lệnh đang chờ phía sau của room đó trả cùng lỗi ngay, không gọi core; `MarkRead`/`MarkUnread` lỗi thì không quét hàng (lệnh phía sau vẫn chạy); máy gửi lại theo đúng thứ tự. Kết nối đóng → bỏ các lần đang chờ. Lệnh khác chạy song song.
+- Field app không biết bị bỏ ở mọi tầng, không bao giờ tới chat. `SendMessage` chỉ nhận `kind` mặc định hoặc `TEXT`; `kind` khác, `skip_unread` hay `meta` → `INVALID_ARGUMENT`. Lệnh rỗng (máy mới hơn app) → `UNIMPLEMENTED`, không đóng kết nối.
+- Tenant và user gửi tới chat (`x-chatim-tenant`, `x-chatim-user`) **chỉ lấy từ token**.
+- Chọn chat (D186): cả 12 lệnh đều có `room_id` → chat đang giữ slot của room (`room_id` sai dạng → `INVALID_ARGUMENT` "invalid room_id"). Không có chat sống → `UNAVAILABLE`. Phần chuyển lệnh chung (chép field biết, caller từ token, hạn, ánh xạ lỗi, bộ đếm) nằm trong `pkg/chatrpc`, dùng chung với gateway.
+- Một lần gọi, hạn `CHAT_REQUEST_DEADLINE` (5s). **App không tự gửi lại**; gặp `UNAVAILABLE` thì kích làm mới bảng slot rồi trả lỗi; máy gửi lại cùng `cid`/`request_id`.
+- **Lời lỗi** (D184): giữ lời của chat cho `INVALID_ARGUMENT`, `NOT_FOUND`, `FAILED_PRECONDITION`, `PERMISSION_DENIED`, `ALREADY_EXISTS`, `RESOURCE_EXHAUSTED`; câu cố định cho `UNAVAILABLE` ("chat unavailable, retry later"), `DEADLINE_EXCEEDED` ("chat did not answer in time"), `CANCELED` ("request canceled"), `UNIMPLEMENTED` ("request not supported"); mã khác → "request failed". Lời gốc chỉ vào log.
+- **Thứ tự** (D187, D196): các `SendMessage`, `MarkRead` và `MarkUnread` của cùng kết nối vào cùng room chạy lần lượt theo thứ tự nhận. Một `SendMessage` lỗi `UNAVAILABLE`, `DEADLINE_EXCEEDED` hoặc `CANCELED` thì các lệnh đang chờ phía sau của room đó trả cùng lỗi ngay, không gọi chat; `MarkRead`/`MarkUnread` lỗi thì không quét hàng (lệnh phía sau vẫn chạy); máy gửi lại theo đúng thứ tự. Kết nối đóng → bỏ các lần đang chờ. Lệnh khác chạy song song.
 
-Ví dụ: máy gửi `request{id 17, SendMessage{room "77", cid "c-9", text "Ok anh"}}` rồi ngay sau đó `request{id 18, SendMessage{room "77", cid "c-10", text "Mai gặp"}}`. App gọi core cho id 17 trước; nếu core trả `UNAVAILABLE`, id 18 nhận `UNAVAILABLE` luôn mà không gửi, máy gửi lại 17 rồi 18 với cùng cid nên không sinh tin trùng và không đảo thứ tự.
+Ví dụ: máy gửi `request{id 17, SendMessage{room "77", cid "c-9", text "Ok anh"}}` rồi ngay sau đó `request{id 18, SendMessage{room "77", cid "c-10", text "Mai gặp"}}`. App gọi chat cho id 17 trước; nếu chat trả `UNAVAILABLE`, id 18 nhận `UNAVAILABLE` luôn mà không gửi, máy gửi lại 17 rồi 18 với cùng cid nên không sinh tin trùng và không đảo thứ tự.
 
 ### 7.6. Giới hạn mỗi kết nối
 
 | Giới hạn | Mặc định | Vượt thì |
 |---|---|---|
-| Tốc độ frame (`WS_COMMAND_RATE`, `WS_COMMAND_BURST`), tính cả `auth`, `heartbeat`, ping; kiểm trước khi giải mã | 50/s, dồn 100 | Lệnh: `response` `RESOURCE_EXHAUSTED` "too many requests", không gọi core. Frame khác và ping: bỏ (ping không có pong), `frame_error{RATE}`, không đóng |
+| Tốc độ frame (`WS_COMMAND_RATE`, `WS_COMMAND_BURST`), tính cả `auth`, `heartbeat`, ping; kiểm trước khi giải mã | 50/s, dồn 100 | Lệnh: `response` `RESOURCE_EXHAUSTED` "too many requests", không gọi chat. Frame khác và ping: bỏ (ping không có pong), `frame_error{RATE}`, không đóng |
 | `auth` khi đang chờ đăng nhập | 1 lần/giây | `retry_later{1000}`, không kiểm token |
 | `auth_required` và `frame_error` gửi về máy | 1 lần/giây mỗi loại | Phần dư không gửi (vẫn đếm `frame_errors_total`) |
 | Lệnh đang chạy + đang chờ (`WS_COMMAND_INFLIGHT`) | 32 | `RESOURCE_EXHAUSTED` "too many requests in flight" |
@@ -295,7 +295,7 @@ Ví dụ: máy gửi `request{id 17, SendMessage{room "77", cid "c-9", text "Ok 
 | Byte chờ ghi (`WS_SEND_QUEUE_BYTES`, ≥ `WS_FRAME_MAX`) | 1MB | Như hàng đợi gửi đầy |
 | Hạn mỗi lần ghi (`WS_WRITE_TIMEOUT`) | 10s | Cắt socket (máy thấy 1006) |
 
-Khi node tắt: `/readyz` false → chờ `WS_DRAIN_DELAY` (2s) → thôi nhận kết nối mới → lệnh mới nhận `UNAVAILABLE` "server shutting down, retry later", lệnh đang chạy vẫn được trả lời (trong `CORE_REQUEST_DEADLINE`) → dừng feed (≤ 2s: dừng hai consumer, xả worker, đóng NATS) → đóng mọi kết nối 1001 (≤ 1s); cả quá trình trong `WS_SHUTDOWN_BUDGET` (15s), mặc định 2 + 5 + 2 + 1 = 10s.
+Khi node tắt: `/readyz` false → chờ `WS_DRAIN_DELAY` (2s) → thôi nhận kết nối mới → lệnh mới nhận `UNAVAILABLE` "server shutting down, retry later", lệnh đang chạy vẫn được trả lời (trong `CHAT_REQUEST_DEADLINE`) → dừng feed (≤ 2s: dừng hai consumer, xả worker, đóng NATS) → đóng mọi kết nối 1001 (≤ 1s); cả quá trình trong `WS_SHUTDOWN_BUDGET` (15s), mặc định 2 + 5 + 2 + 1 = 10s.
 
 ---
 
@@ -305,12 +305,12 @@ Khi node tắt: `/readyz` false → chờ `WS_DRAIN_DELAY` (2s) → thôi nhận
 
 ### 8.1. Sau khi auth: `ready`
 
-1. Auth xong (lần đầu, hoặc đăng nhập lại trên cùng kết nối sau `auth_required`, §7.3), node đăng ký kết nối vào bảng quan tâm theo (tenant, user). Người đã có kết nối khác trên node dùng chung danh sách room, không gọi core lại.
-2. Người mới: node gọi core `ListMyRoomIDs` (tối đa `WS_ROOM_IDS_INFLIGHT` lần cùng lúc mỗi node), ghi mốc seq stream lúc bắt đầu gọi; core trả room đang ở (`rooms`) và room đã rời (`left`, kèm `ver`). Node ghi dấu "đã rời" từ `left` trước, rồi áp event thành viên tới trong lúc gọi theo `ver` lớn hơn thắng; `member_added` có `ver` ≤ dấu đã rời bị bỏ (D195). Lỗi → `load_failed` (§8.4), kết nối vẫn giữ.
-   Danh sách room chỉ nạp từ core lúc login hoặc lúc node "khởi động lại" (§8.4); giữa hai lần đó node tự cập nhật trong RAM theo `member_added`/`member_removed`.
+1. Auth xong (lần đầu, hoặc đăng nhập lại trên cùng kết nối sau `auth_required`, §7.3), node đăng ký kết nối vào bảng quan tâm theo (tenant, user). Người đã có kết nối khác trên node dùng chung danh sách room, không gọi chat lại.
+2. Người mới: node gọi chat `ListMyRoomIDs` (tối đa `WS_ROOM_IDS_INFLIGHT` lần cùng lúc mỗi node), ghi mốc seq stream lúc bắt đầu gọi; chat trả room đang ở (`rooms`) và room đã rời (`left`, kèm `ver`). Node ghi dấu "đã rời" từ `left` trước, rồi áp event thành viên tới trong lúc gọi theo `ver` lớn hơn thắng; `member_added` có `ver` ≤ dấu đã rời bị bỏ (D195). Lỗi → `load_failed` (§8.4), kết nối vẫn giữ.
+   Danh sách room chỉ nạp từ chat lúc login hoặc lúc node "khởi động lại" (§8.4); giữa hai lần đó node tự cập nhật trong RAM theo `member_added`/`member_removed`.
 3. Xong thì gửi **`ready{}`**. Trước `ready` máy chưa nhận event nào; sau `ready` máy nên gọi `ListMyRooms` để có trạng thái đầy đủ (event chỉ báo cái mới).
 
-Ví dụ: Lan nối lúc stream ở seq 5.000; trong lúc node hỏi core, Lan bị xoá khỏi Kho HCM (seq 5.003). Danh sách core trả có thể còn Kho HCM hoặc không; node áp event seq 5.003 sau (vì > 5.000), nên kết quả luôn là "không còn Kho HCM". Sau đó sweeper phát bù một `member_added` cũ (`ver 1`) của Lan: `left` đã ghi Kho HCM ở `ver 2`, nên node bỏ nó.
+Ví dụ: Lan nối lúc stream ở seq 5.000; trong lúc node hỏi chat, Lan bị xoá khỏi Kho HCM (seq 5.003). Danh sách chat trả có thể còn Kho HCM hoặc không; node áp event seq 5.003 sau (vì > 5.000), nên kết quả luôn là "không còn Kho HCM". Sau đó sweeper phát bù một `member_added` cũ (`ver 1`) của Lan: `left` đã ghi Kho HCM ở `ver 2`, nên node bỏ nó.
 
 ### 8.2. Mở và đóng room
 
@@ -320,14 +320,14 @@ Ví dụ: Lan nối lúc stream ở seq 5.000; trong lúc node hỏi core, Lan b
 
 ### 8.3. Event và thông báo
 
-- **`event`** mang nguyên bytes `Event` core phát (node không giải mã lại, trừ event loại `member` để biết người nào). Ai nhận kind nào: [events.md §3.1](../events.md). Máy áp theo hợp đồng D156 (§3.5): bỏ trùng theo id, version lớn hơn thắng, lỗ seq `msg_created` thì gọi `GetHistory`.
+- **`event`** mang nguyên bytes `Event` chat phát (node không giải mã lại, trừ event loại `member` để biết người nào). Ai nhận kind nào: [events.md §3.1](../events.md). Máy áp theo hợp đồng D156 (§3.5): bỏ trùng theo id, version lớn hơn thắng, lỗ seq `msg_created` thì gọi `GetHistory`.
 - **`notification`** mang `Notification` từ gói `WsPublish` mà app phát vào `websocket.publish.{tenant}` (D192). Websocket chỉ đẩy cho người có tên trong `targets.users` và đang nối vào node; máy bỏ trùng theo `Notification.id`. Mất thông báo lúc rớt mạng thì vẫn thấy trong `ListMentions`. Phase 1 server không lọc room đang tắt thông báo: máy tự ẩn (D193).
 
 ### 8.4. Đọc stream và đuổi theo
 
 - Mỗi node hai ordered consumer (`CHATIM_EVT` `evt.>`, `CHATIM_WS` `websocket.publish.>`), bắt đầu ở seq cuối + 1. Lỡ tin (mạng chập, NATS restart) thì thư viện tự đọc lại từ số cuối đã giao, đúng thứ tự, không mất tin.
 - Tin có giờ lưu cũ hơn 5s = đang đuổi theo: đọc tối đa `WS_REPLAY_RATE` (20.000/s).
-- **Trễ từ `WS_REPLAY_MAX_AGE` trở lên (2m, đo bằng giờ JetStream lưu tin)**, watchdog thấy consumer đứng yên, hoặc stream bị tạo lại = **node coi như khởi động lại** (D195): bỏ đoạn cũ, đọc tiếp từ hiện tại, và **ngay lúc đó tạm ngừng mọi người trên node**: không event, không thông báo, máy mới của họ chưa nhận `ready`. Node nạp lại từ core từng người với tốc độ `WS_RELOAD_RATE` (1.000 người/giây mỗi node), thứ tự: máy đang chờ `ready` → người đang mở room → còn lại (máy mới đưa người đó lên đầu). Nạp xong: máy chưa `ready` nhận `ready`, máy đã `ready` nhận **`resync{LAG_TOO_OLD}`** (hoặc `CONSUMER_LOST`), rồi nhận tin bình thường. Máy nhận `resync` thì tải lại danh sách hội thoại và room đang mở (`ListMyRooms`, `GetHistory`). Nhảy lần hai giữa chừng thì mọi người lại tạm ngừng.
+- **Trễ từ `WS_REPLAY_MAX_AGE` trở lên (2m, đo bằng giờ JetStream lưu tin)**, watchdog thấy consumer đứng yên, hoặc stream bị tạo lại = **node coi như khởi động lại** (D195): bỏ đoạn cũ, đọc tiếp từ hiện tại, và **ngay lúc đó tạm ngừng mọi người trên node**: không event, không thông báo, máy mới của họ chưa nhận `ready`. Node nạp lại từ chat từng người với tốc độ `WS_RELOAD_RATE` (1.000 người/giây mỗi node), thứ tự: máy đang chờ `ready` → người đang mở room → còn lại (máy mới đưa người đó lên đầu). Nạp xong: máy chưa `ready` nhận `ready`, máy đã `ready` nhận **`resync{LAG_TOO_OLD}`** (hoặc `CONSUMER_LOST`), rồi nhận tin bình thường. Máy nhận `resync` thì tải lại danh sách hội thoại và room đang mở (`ListMyRooms`, `GetHistory`). Nhảy lần hai giữa chừng thì mọi người lại tạm ngừng.
 - **Nạp lỗi** (lúc login hay sau nhảy) → node gửi **`load_failed{retry_after_ms}`** tới mọi kết nối của người đó, giữ kết nối, người đó vẫn tạm ngừng (không event, không `ready`; lệnh vẫn chạy), và **server không làm gì thêm, không tự nạp lại** (owner 2026-10-22, đúng luật không retry nội bộ). **Máy quyết định**: gửi **`load_rooms`** để xin nạp lại, hoặc ngắt và kết nối lại (login nạp lại). `retry_after_ms` chỉ là gợi ý. `load_rooms` xếp một lần nạp lên đầu hàng (vẫn theo `WS_RELOAD_RATE`; gửi trùng khi đang chờ thì bỏ); thành công → `ready` cho máy chưa từng `ready`, `resync` cho máy đã `ready`; lỗi → `load_failed` lần nữa. Client nên gửi `load_rooms` sau gợi ý cộng jitter (§11.3); e2e (`WSFeed.Run` trong `tools/chatcli`) làm đúng như vậy.
 - Hộp thư `CHATIM_WS` nhảy riêng: không tạm ngừng ai, không `resync`; thông báo `@` của đoạn bỏ qua mất (vẫn có trong `ListMentions`).
 - Watchdog mỗi 5s phát hiện consumer đứng yên khi stream có tin mới; hai lần nhảy vì trễ cách nhau ít nhất `WS_REPLAY_MAX_AGE` (giờ node lệch NATS thì không nhảy liên tục, chỉ đếm `catchup_jump_suppressed_total`).
@@ -362,15 +362,15 @@ Ví dụ: máy của Hùng vào thang máy, không đọc socket trong lúc nhó
 
 > Xây trên `feat/m4`, theo [tóm tắt phần 3](../plans/2026-10-22-m4-3-da-doc-va-da-xem-summary.md); quyết định D196–D197 ở [decision log §17.9](../decision-log.md).
 
-- **Đường đi:** máy gửi `request{MarkRead{room_id, seq}}` (lệnh thứ 34) hoặc `MarkUnread`; websocket chuyển tới core theo hàng (kết nối, room) như `SendMessage`. Core ghi doc `members` một lần mỗi lệnh, trả `read_seq`/`read_ver` ngay, rồi đưa vị trí vào hàng gom `event/readbatch`.
-- **Gom ở core:** mỗi `READ_EVENT_WINDOW` (1s) core phát một event `read_positions` mỗi room có người đọc, mỗi user một dòng (`read_ver` lớn nhất), tối đa 1.000 dòng mỗi event; id theo nội dung. Sau PubAck mọi cờ bit 2 có tên trong event được xoá; core chết thì sweeper phát `read_positions` một dòng từ doc (~15s).
+- **Đường đi:** máy gửi `request{MarkRead{room_id, seq}}` (lệnh thứ 34) hoặc `MarkUnread`; websocket chuyển tới chat theo hàng (kết nối, room) như `SendMessage`. Chat ghi doc `members` một lần mỗi lệnh, trả `read_seq`/`read_ver` ngay, rồi đưa vị trí vào hàng gom `event/readbatch`.
+- **Gom ở chat:** mỗi `READ_EVENT_WINDOW` (1s) chat phát một event `read_positions` mỗi room có người đọc, mỗi user một dòng (`read_ver` lớn nhất), tối đa 1.000 dòng mỗi event; id theo nội dung. Sau PubAck mọi cờ bit 2 có tên trong event được xoá; node chat chết thì sweeper phát `read_positions` một dòng từ doc (~15s).
 - **Ai nhận:** kết nối đang mở room, cộng mọi kết nối của từng user có tên trong `entries` mà room còn trong danh sách RAM và không tạm ngừng; mỗi kết nối nhận một lần. Ví dụ: Lan đọc nhóm "Kho" trên điện thoại; máy tính của Lan (không mở nhóm) và Minh (đang mở nhóm) nhận; Hùng (thành viên, không mở nhóm) không nhận.
 - **Client (đặc tả §11.5, D206):** SDK ở repo client giãn `MarkRead` tối đa 1 lần/giây mỗi room (lần đầu của room đang yên gửi ngay, sau đó seq lớn nhất đang chờ); `MarkUnread` huỷ `MarkRead` đang chờ của room rồi mới gửi (không bao giờ có `MarkRead` cũ đi sau nó); gửi phần chờ trước `close_room`; chờ trả lời mọi `MarkRead` đang gửi rồi mới tải danh sách hội thoại qua HTTPS (D198) để unread đúng; áp `read_positions` theo (room, user) `read_ver` lớn hơn. Repo này không còn `pkg/wsclient`; e2e gọi `MarkRead` bằng `pkg/wstest` `Call` và chờ `response` trước `ListMyRooms`.
 - **Độ trễ:** e2e qua websocket-1 đo A → B 353ms (cửa sổ 1s).
 
 ## 10. Đang gõ và online (M4 phần 4, đã xây)
 
-> Xây trên `feat/m4`, theo [tóm tắt phần 4](../plans/2026-10-24-m4-4-typing-va-online-summary.md); quyết định D199–D201 ở [decision log §17.11](../decision-log.md). Code: `apps/websocket/internal/typing` (nhận, đẩy, chuyển giữa node), `apps/websocket/internal/presence` (đóng dấu, đọc, bộ đệm), `apps/websocket/internal/session` (frame, giới hạn, danh sách hỏi), `proto/chatim/v1/ws.proto` và `ws_ephemeral.proto` (`TypingSignal`). Giãn nhịp và tự tắt là việc của client (§11.5). Không đụng core, Mongo hay JetStream.
+> Xây trên `feat/m4`, theo [tóm tắt phần 4](../plans/2026-10-24-m4-4-typing-va-online-summary.md); quyết định D199–D201 ở [decision log §17.11](../decision-log.md). Code: `apps/websocket/internal/typing` (nhận, đẩy, chuyển giữa node), `apps/websocket/internal/presence` (đóng dấu, đọc, bộ đệm), `apps/websocket/internal/session` (frame, giới hạn, danh sách hỏi), `proto/chatim/v1/ws.proto` và `ws_ephemeral.proto` (`TypingSignal`). Giãn nhịp và tự tắt là việc của client (§11.5). Không đụng chat, Mongo hay JetStream.
 
 ### 10.1. Frame
 
@@ -448,7 +448,7 @@ Ví dụ: Lan ở `websocket-1`, Nam cùng node, Hòa ở `websocket-2`; Nam và
 | Vào khi | Mới mở kết nối; token hết hạn khi đang chạy | `auth` hợp lệ, còn suất đăng nhập, chưa quá 10 kết nối, nạp room xong (`ready`) |
 | Event, thông báo, `typing`, `presence` | Không nhận | Nhận (sau `ready`) |
 | Đóng dấu online | Không | Có, trên mọi frame |
-| `request` | `response{UNAUTHENTICATED, "authentication required"}`, không gọi core | Chuyển tới core (12 lệnh ghi realtime, §7.5) |
+| `request` | `response{UNAUTHENTICATED, "authentication required"}`, không gọi chat | Chuyển tới chat (12 lệnh ghi realtime, §7.5) |
 | `open_room`, `close_room`, `load_rooms`, `typing`, `watch_presence` | `auth_required{lý do lần trước}`, tối đa 1 lần/giây | Chạy |
 | `auth` | Đăng nhập, tối đa 1 lần/giây mỗi kết nối | Gia hạn, phải cùng người |
 | Hết thời | Quá `WS_AUTH_GRACE` (3 phút) → đóng 4001 | `exp + 30s` → về chờ, `auth_required{EXPIRED}` |
@@ -458,8 +458,8 @@ Ví dụ: Lan ở `websocket-1`, Nam cùng node, Hòa ở `websocket-2`; Nam và
 2. Token sai → `auth_required{INVALID}`; token đã hết hạn → `auth_required{EXPIRED}`. Vẫn chờ.
 3. Kết nối đã từng đăng nhập bằng (tenant, user) khác → `auth_required{INVALID}`. Danh tính ghim theo kết nối từ lần đăng nhập đầu.
 4. Node hết suất đăng nhập → `retry_later{5.000–30.000}` (ms, ngẫu nhiên đều). Vẫn chờ.
-5. Người đó đã có 10 kết nối trên node → đóng **4009**, không gọi core, không đóng dấu online.
-6. Nạp room từ core → `ready`; nạp lỗi → `load_failed{retry_after_ms}` (kết nối giữ, §11.3).
+5. Người đó đã có 10 kết nối trên node → đóng **4009**, không gọi chat, không đóng dấu online.
+6. Nạp room từ chat → `ready`; nạp lỗi → `load_failed{retry_after_ms}` (kết nối giữ, §11.3).
 
 Gia hạn (đang chạy, gửi `auth`): cùng (tenant, user) → hạn mới, **không có frame trả lời**, không tốn suất đăng nhập; token sai, đã hết hạn hay của người khác → `auth_required{INVALID}`, kết nối **chạy tiếp bằng token đang có**. Token của phiên đã bị thu hồi (M6 phần 2) → kết nối về chờ, `auth_required{REVOKED}`; token cấp trước lúc tenant bị khoá → đóng `4003`. Muốn đổi người thì mở kết nối mới.
 
@@ -471,7 +471,7 @@ Hết hạn (đang chạy): server gỡ kết nối khỏi bảng quan tâm, b�
 |---|---|---|
 | `response` (10) | Trả lời `request` cùng `id`; `code` là mã gRPC (0 = OK) | Khớp theo `id`. `UNAUTHENTICATED`: đang chờ đăng nhập, gửi token rồi tự quyết có gửi lại không. `RESOURCE_EXHAUSTED`: giảm nhịp. `UNAVAILABLE`/`DEADLINE_EXCEEDED`: có thể gửi lại cùng `cid`/`request_id`, đúng thứ tự (§7.5) |
 | `ready` (20) | Room của người dùng đã nạp; event bắt đầu chảy | Gửi lại `open_room` các room đang xem và `watch_presence` đầy đủ, rồi tải lại qua HTTPS (`ListMyRooms`, `GetHistory` room đang xem). Làm vậy sau **mọi** `ready`: kết nối mới, hay sau `auth_required` trên cùng kết nối |
-| `event` (21) | Bytes `Event` core phát | Áp theo hợp đồng D156 (§3.5): bỏ trùng theo id, version lớn hơn thắng, lỗ seq `msg_created` thì gọi `GetHistory` |
+| `event` (21) | Bytes `Event` chat phát | Áp theo hợp đồng D156 (§3.5): bỏ trùng theo id, version lớn hơn thắng, lỗ seq `msg_created` thì gọi `GetHistory` |
 | `notification` (22) | Thông báo (`@` của Mention App) | Bỏ trùng theo `Notification.id`; mất lúc rớt thì vẫn có trong `ListMentions` |
 | `resync` (23) | `LAG_TOO_OLD`, `CONSUMER_LOST` (node trễ hoặc mất consumer), `CLIENT_BACKLOG` (máy nhận chậm, §8.5) | Chỉ tải lại dữ liệu qua HTTPS; server **vẫn nhớ** room đang mở và danh sách hỏi online. `resync` tới khi client chưa thấy `ready` thì coi như `ready` |
 | `room_closed` (24) | `NOT_MEMBER` (`open_room` của room không phải thành viên, sau tối đa 10 giây chờ `member_added`, hoặc ngay khi id sai) hoặc `REMOVED` (bị xoá khỏi room) | Đóng màn hình room; không nhận gì của room đó nữa |
@@ -488,7 +488,7 @@ Hết hạn (đang chạy): server gỡ kết nối khỏi bảng quan tâm, b�
 |---|---|
 | Nối lại | Chờ theo mã: 1001 → ngẫu nhiên 0–60 giây; mất mạng, 1000, 1006 → 0–3 giây; 4009 → 30–60 giây; 4001 → lấy token mới trước; 4003 → không tự nối lại; bắt tay lỗi, 503 và mã khác (1002, 1011, 1013) → chờ tăng dần 1, 2, 4… tối đa 60 giây. Không bao giờ nối lại vì `auth_required`, `retry_later` hay `frame_error` |
 | Gia hạn token | Ở mốc ngẫu nhiên trong 70–85% của `exp − iat`, tính từ lúc nhận token (không theo đồng hồ máy); gửi `auth` trên kết nối đang mở. Dùng token mới cho cả HTTPS (gateway trả 401 với token hết hạn) |
-| Lệnh chưa có trả lời lúc rớt kết nối | **Không gửi lại** (owner 2026-10-24); kết quả coi như chưa rõ. Nếu app muốn gửi lại thì dùng cùng `cid`/`request_id` (core chống trùng trong 15 phút) |
+| Lệnh chưa có trả lời lúc rớt kết nối | **Không gửi lại** (owner 2026-10-24); kết quả coi như chưa rõ. Nếu app muốn gửi lại thì dùng cùng `cid`/`request_id` (chat chống trùng trong 15 phút) |
 | Sau **mọi** `ready` | Gửi lại `open_room` các room đang xem và `watch_presence`, rồi tải lại dữ liệu qua HTTPS. `resync` tới trước `ready` thì coi như `ready` |
 | `resync` trên kết nối đang chạy | Chỉ tải lại dữ liệu; không gửi lại `open_room`/`watch_presence` |
 | `auth_required` / `retry_later` / `frame_error` | Gửi token mới / chờ đúng số mili giây rồi `auth` lại / sửa frame đó |

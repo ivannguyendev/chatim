@@ -21,8 +21,8 @@ const unlistedEmoji = "🎉"
 
 var (
 	errMarkedTwice = errors.New("this scenario already holds its reaction and pin")
-	errFewEmojis   = errors.New("the core lists fewer than two reaction emojis")
-	errEmojiListed = fmt.Errorf("the core lists %s, which the scenario needs unlisted", unlistedEmoji)
+	errFewEmojis   = errors.New("the chat lists fewer than two reaction emojis")
+	errEmojiListed = fmt.Errorf("the chat lists %s, which the scenario needs unlisted", unlistedEmoji)
 )
 
 func e2eReactPin(ctx context.Context, args []string) error {

@@ -18,7 +18,7 @@ func ShareOf(slot func(uint16) (slotmap.Route, bool)) Share {
 	sh := Share{Owned: map[string]int{}}
 	for s := range uint16(slotmap.Count) {
 		if rt, ok := slot(s); ok && rt.Owner {
-			sh.Owned[rt.Core]++
+			sh.Owned[rt.Node]++
 			continue
 		}
 		sh.Unowned++
@@ -26,11 +26,11 @@ func ShareOf(slot func(uint16) (slotmap.Route, bool)) Share {
 	return sh
 }
 
-func (sh Share) Balanced(cores int) bool {
-	if cores <= 0 || sh.Unowned > 0 || len(sh.Owned) != cores {
+func (sh Share) Balanced(nodes int) bool {
+	if nodes <= 0 || sh.Unowned > 0 || len(sh.Owned) != nodes {
 		return false
 	}
-	least := slotmap.Count/cores - cores
+	least := slotmap.Count/nodes - nodes
 	for _, n := range sh.Owned {
 		if n < least {
 			return false

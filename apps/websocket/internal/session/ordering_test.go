@@ -12,14 +12,14 @@ import (
 func TestSendsToOneRoomKeepOrderAndOtherRoomsRunInParallel(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		h := newHarness(t, testOptions())
-		first, second, other := h.core.hold(1), h.core.hold(2), h.core.hold(3)
+		first, second, other := h.chat.hold(1), h.chat.hold(2), h.chat.hold(3)
 		tc := h.dial(true)
 		tc.auth(h.token("u1", time.Hour))
 		tc.send(1, "77")
 		tc.send(2, "77")
 		tc.send(3, "88")
 		synctest.Wait()
-		if got := h.core.startedIDs(); !sameIDs(got, 1, 3) {
+		if got := h.chat.startedIDs(); !sameIDs(got, 1, 3) {
 			t.Fatalf("started = %v, want 1 and 3", got)
 		}
 		first <- codes.OK
@@ -27,7 +27,7 @@ func TestSendsToOneRoomKeepOrderAndOtherRoomsRunInParallel(t *testing.T) {
 			t.Fatalf("first response id = %d", resp.GetId())
 		}
 		synctest.Wait()
-		if got := h.core.startedIDs(); !sameIDs(got, 2) {
+		if got := h.chat.startedIDs(); !sameIDs(got, 2) {
 			t.Fatalf("started after the first send = %v, want 2", got)
 		}
 		second <- codes.OK
@@ -41,13 +41,13 @@ func TestSendsToOneRoomKeepOrderAndOtherRoomsRunInParallel(t *testing.T) {
 func TestRoomIDsWithLeadingZerosShareOneQueue(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		h := newHarness(t, testOptions())
-		first := h.core.hold(1)
+		first := h.chat.hold(1)
 		tc := h.dial(true)
 		tc.auth(h.token("u1", time.Hour))
 		tc.send(1, "77")
 		tc.send(2, "077")
 		synctest.Wait()
-		if got := h.core.startedIDs(); !sameIDs(got, 1) {
+		if got := h.chat.startedIDs(); !sameIDs(got, 1) {
 			t.Fatalf("started = %v, want only 1", got)
 		}
 		first <- codes.OK
@@ -62,7 +62,7 @@ func TestRoomIDsWithLeadingZerosShareOneQueue(t *testing.T) {
 func TestInvalidRoomIDSkipsTheQueue(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		h := newHarness(t, testOptions())
-		first := h.core.hold(1)
+		first := h.chat.hold(1)
 		tc := h.dial(true)
 		tc.auth(h.token("u1", time.Hour))
 		tc.send(1, "77")
@@ -76,12 +76,12 @@ func TestInvalidRoomIDSkipsTheQueue(t *testing.T) {
 	})
 }
 
-func TestInfrastructureFailureAnswersTheWaitingSendsWithoutCallingCore(t *testing.T) {
+func TestInfrastructureFailureAnswersTheWaitingSendsWithoutCallingChat(t *testing.T) {
 	for _, code := range []codes.Code{codes.Unavailable, codes.DeadlineExceeded} {
 		t.Run(code.String(), func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				h := newHarness(t, testOptions())
-				first := h.core.hold(1)
+				first := h.chat.hold(1)
 				tc := h.dial(true)
 				tc.auth(h.token("u1", time.Hour))
 				tc.send(1, "77")
@@ -95,8 +95,8 @@ func TestInfrastructureFailureAnswersTheWaitingSendsWithoutCallingCore(t *testin
 						t.Fatalf("response = %v, want id %d code %v", resp, want, code)
 					}
 				}
-				if got := h.core.calls.Load(); got != 1 {
-					t.Fatalf("core calls = %d, want 1", got)
+				if got := h.chat.calls.Load(); got != 1 {
+					t.Fatalf("chat calls = %d, want 1", got)
 				}
 				tc.send(4, "77")
 				if resp := tc.next(); resp.GetId() != 4 || resp.GetCode() != 0 {
@@ -111,7 +111,7 @@ func TestInfrastructureFailureAnswersTheWaitingSendsWithoutCallingCore(t *testin
 func TestBusinessFailureDoesNotSweepTheQueue(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		h := newHarness(t, testOptions())
-		first := h.core.hold(1)
+		first := h.chat.hold(1)
 		tc := h.dial(true)
 		tc.auth(h.token("u1", time.Hour))
 		tc.send(1, "77")
@@ -136,7 +136,7 @@ func TestPanicInACommandClosesOnlyThatConnection(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				h := newHarness(t, testOptions())
-				h.core.panicOn(1)
+				h.chat.panicOn(1)
 				broken, healthy := h.dial(true), h.dial(true)
 				broken.auth(h.token("u1", time.Hour))
 				healthy.auth(h.token("u2", time.Hour))
@@ -160,8 +160,8 @@ func TestPanicInACommandClosesOnlyThatConnection(t *testing.T) {
 func TestClosingDropsQueuedSendsAndCancelsTheRunningOne(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		h := newHarness(t, testOptions())
-		h.core.hold(1)
-		h.core.hold(3)
+		h.chat.hold(1)
+		h.chat.hold(3)
 		tc := h.dial(true)
 		tc.auth(h.token("u1", time.Hour))
 		tc.send(1, "77")
@@ -169,7 +169,7 @@ func TestClosingDropsQueuedSendsAndCancelsTheRunningOne(t *testing.T) {
 		tc.history(3)
 		synctest.Wait()
 		tc.close()
-		if got := h.core.startedIDs(); !sameIDs(got, 1, 3) {
+		if got := h.chat.startedIDs(); !sameIDs(got, 1, 3) {
 			t.Fatalf("started = %v, want 1 and 3", got)
 		}
 		if h.server.commands.count.Load() != 0 {

@@ -62,7 +62,7 @@ func (c countedPresenceConn) Close() error {
 func TestRunStampsAConnectedUserAndClosesThePresenceRedisOnStop(t *testing.T) {
 	mr := slotRedis(t)
 	keys := newSigner(t)
-	_, dial := startFakeCore(t)
+	_, dial := startFakeChatNode(t)
 	pres := newPresenceRedis(t)
 	lis, logs := newListeners(), newLogWatch()
 	ctx, cancel := context.WithCancel(context.Background())

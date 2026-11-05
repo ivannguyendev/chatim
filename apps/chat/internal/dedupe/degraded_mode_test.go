@@ -12,7 +12,7 @@ import (
 func TestRedisFailureDegradesOnceAndProbesAfterCooldown(t *testing.T) {
 	mr, rdb := newRedis(t)
 	sink := &testlog.Sink{}
-	s := newStore(t, rdb, "core-a", sink)
+	s := newStore(t, rdb, "chat-a", sink)
 	now := time.Unix(1_700_000_000, 0)
 	s.now = func() time.Time { return now }
 	ctx := t.Context()
@@ -56,7 +56,7 @@ func TestRedisFailureDegradesOnceAndProbesAfterCooldown(t *testing.T) {
 func TestCallerCancellationIsNotARedisFailure(t *testing.T) {
 	_, rdb := newRedis(t)
 	sink := &testlog.Sink{}
-	s := newStore(t, rdb, "core-a", sink)
+	s := newStore(t, rdb, "chat-a", sink)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	if _, err := s.Reserve(ctx, []Key{key("a")}); !errors.Is(err, context.Canceled) {

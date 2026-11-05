@@ -19,10 +19,10 @@ flowchart TD
 
     subgraph Entry["Tầng Cổng & Thời gian thực"]
         M09["Module 09: Realtime Delivery & Ephemeral<br/>(App websocket M4: phần 1–5 đã xây, 12 lệnh ghi realtime, typing và presence, giữ kết nối, đặc tả client)"]
-        M11["Module 11: HTTPS Gateway<br/>(App gateway: 22 lệnh đọc và quản lý, Connect, core bất kỳ)"]
+        M11["Module 11: HTTPS Gateway<br/>(App gateway: 22 lệnh đọc và quản lý, Connect, node chat bất kỳ)"]
     end
 
-    subgraph CoreFeatures["Tầng Nghiệp vụ Hội thoại (Core Features)"]
+    subgraph ChatFeatures["Tầng Nghiệp vụ Hội thoại (Chat Features)"]
         M01["Module 01: Rooms, DMs & Channels<br/>(Phòng chat 1-1, Nhóm ≤5K, Kênh ~200K chưa xây)"]
         M02["Module 02: Message Sending & Ordering<br/>(Gửi tin, Timeline sequence, Chống trùng CID)"]
         M03["Module 03: Message Edit, Delete & Privacy<br/>(Sửa tin + Audit log, Thu hồi, Ẩn tin, Xoá lịch sử)"]
@@ -39,9 +39,9 @@ flowchart TD
 
     Client <-->|WebSocket| M09
     Client -->|HTTPS Bearer JWT| M11
-    M11 -->|gRPC Unary core bất kỳ| M01
-    M11 -->|gRPC Unary core bất kỳ| M05
-    M11 -->|gRPC Unary core bất kỳ| M08
+    M11 -->|gRPC Unary node chat bất kỳ| M01
+    M11 -->|gRPC Unary node chat bất kỳ| M05
+    M11 -->|gRPC Unary node chat bất kỳ| M08
     M09 -->|gRPC Unary theo Slot| M01
     M09 -->|gRPC Unary theo Slot| M02
     M09 -->|gRPC Unary theo Slot| M03
@@ -84,8 +84,8 @@ flowchart TD
         EphemRouter["Ephemeral Bypass (Typing / Presence)"]
     end
 
-    %% Tầng Core
-    subgraph CoreLayer["Cụm Dịch vụ Lõi (Core Service Modules)"]
+    %% Tầng Chat
+    subgraph ChatLayer["Cụm Dịch vụ Lõi (Chat Service Modules)"]
         M01["M01: Rooms & DMs<br/>(Sổ nhận chỗ tất định)"]
         M02["M02: Send Actor & Flusher<br/>(Single-Writer seq)"]
         M03["M03: Edit & Delete<br/>(Fact & CAS Projection)"]
@@ -112,7 +112,7 @@ flowchart TD
     %% Tầng Projection & Tự phục hồi
     subgraph AsyncWorkers["Tầng Xử lý Ngầm & Tự phục hồi (M3.1)"]
         WorkerIndex["Projection room_activity · reply_index (M06, M07, M10)"]
-        MentionApp["Mention App: consumer mention (mọi core) → mentions, gói WsPublish trên CHATIM_WS (M06)"]
+        MentionApp["Mention App: consumer mention (mọi node chat) → mentions, gói WsPublish trên CHATIM_WS (M06)"]
         WorkerTimer["Consumer timer-due: count_repair · member_count_repair (M04, M05, M10)"]
         M10Reconcile["M10: Sweeper slot 0<br/>(quét cờ _state trên partial index)"]
     end
@@ -127,12 +127,12 @@ flowchart TD
     ConnHub -->|Đọc lịch sử| M08
     M08 -->|Clustered read| MongoStorage
 
-    %% Core ghi Storage
+    %% Chat ghi Storage
     M02 <-->|Reserve CID| RedisStorage
     M02 -->|Group Commit| MongoStorage
     M03 & M04 & M05 & M07 --> MongoStorage
 
-    %% Core phát event
+    %% Chat phát event
     M02 -.->|Fast-path Ack| ConnHub
     M02 -.->|Fast-path Event| NATSEvt
     M03 & M04 & M05 & M07 -.-> NATSEvt
@@ -166,13 +166,13 @@ Mỗi module dưới đây là một tập tài liệu đặc tả hoàn chỉnh
 | **02** | [02. Message Sending & Ordering](./02-feature-message-sending-and-ordering.md) | Gửi tin nhắn văn bản, tệp, metadata; thứ tự timeline | Goroutine per-room actor độc quyền cấp monotonic seq; dedupe 2 tầng (LRU -> Redis), bản trùng lọt được `view.CollapseRetried` ẩn khi đọc; Fast-ack sau `w:majority`. |
 | **03** | [03. Message Edit, Delete & Privacy](./03-feature-message-edit-delete-and-privacy.md) | Sửa tin, xem lịch sử sửa, thu hồi, ẩn tin, xoá lịch sử | Fact/Projection pattern (`message_edits` -> `messages`); Optimistic CAS `base_ver`; Sparse fact filtering phía người đọc. |
 | **04** | [04. Reactions, Pins & Bookmarks](./04-feature-reactions-pins-and-bookmarks.md) | Thả reaction, ghim tin nhắn, lưu trữ bookmark | Tập `(target, user)` với Tombstone; Survivor timers (Phiếu hẹn sinh tồn D111) tự sửa sai biến đếm; Pin folding CAS hạn mức 50 pins. |
-| **05** | [05. Membership & Roles](./05-feature-membership-roles-and-succession.md) | Thêm/xoá thành viên, rời phòng, chuyển giao owner | BulkWrite upsert kèm `request_id`; Transaction Mongo duy nhất cho kế nhiệm Owner; NATS `memberwatch` xoá cache quyền Core. |
-| **06** | [06. Threads, Replies & Mentions](./06-feature-threads-replies-and-mentions.md) | Trả lời trích dẫn, đếm reply, tag @mention, inbox nhắc tên | Trả lời trên timeline chính qua `messages.rp {th, s}`, doc trả lời trong `message_interactions`, `reply_preview` tính lúc đọc; Biến đếm `rc` `$inc` + survivor timer (projection `reply_index`); Mention App (nhúng trong core, D162–D176) lập chỉ mục mention từ event tự đủ, `ListMentions`, nhóm, gợi ý `@nhóm`, thông báo `CHATIM_NOTIFY`. |
+| **05** | [05. Membership & Roles](./05-feature-membership-roles-and-succession.md) | Thêm/xoá thành viên, rời phòng, chuyển giao owner | BulkWrite upsert kèm `request_id`; Transaction Mongo duy nhất cho kế nhiệm Owner; NATS `memberwatch` xoá cache quyền Chat. |
+| **06** | [06. Threads, Replies & Mentions](./06-feature-threads-replies-and-mentions.md) | Trả lời trích dẫn, đếm reply, tag @mention, inbox nhắc tên | Trả lời trên timeline chính qua `messages.rp {th, s}`, doc trả lời trong `message_interactions`, `reply_preview` tính lúc đọc; Biến đếm `rc` `$inc` + survivor timer (projection `reply_index`); Mention App (nhúng trong chat, D162–D176) lập chỉ mục mention từ event tự đủ, `ListMentions`, nhóm, gợi ý `@nhóm`, thông báo `CHATIM_NOTIFY`. |
 | **07** | [07. Read Receipts & Unread Badge](./07-feature-read-receipts-and-unread-badge.md) | Đánh dấu đã đọc/chưa đọc, badge số tin chưa đọc | Cập nhật vị trí đọc trên doc Member (`read_seq`, `read_ver`); Unread tính lúc đọc trong `ListMyRooms` từ đuôi phòng ≤ 300 tin, dừng ở 100, `approx` khi hết cửa sổ. |
 | **08** | [08. History Retrieval & Reconnect Sync](./08-feature-history-retrieval-and-sync.md) | Cuộn xem lịch sử tin nhắn, khôi phục sau mất mạng | Phân trang theo `seq` (`LATEST`/`OLDEST`/`BEFORE`/`AFTER`/`AROUND`); Dynamic View pipeline che giấu tin nhạy cảm; reconnect kéo snapshot (`ListMyRooms` + `GetHistory AFTER`), sync token thuộc Mention App (chưa có). |
 | **09** | [09. Realtime Delivery & Ephemeral](./09-feature-realtime-delivery-and-ephemeral.md) | Đẩy tin realtime, ghi realtime (12 lệnh), báo đang gõ, trạng thái online | (M4 phần 1–5 đã xây: kết nối, token, lệnh, §7; đẩy event phần 2, §8; đã đọc phần 3, §9; từ phần gateway chỉ còn 12 lệnh ghi realtime, D198; đang gõ và online phần 4, §10; giữ kết nối, giới hạn đăng nhập, `frame_error`, alert và đặc tả client phần 5, §6.1–§6.2, §11) Dynamic interest routing trên NATS PubSub; Bỏ qua DB cho tín hiệu tạm thời (typing, presence); Zero-alloc fanout WebSocket `gws`. |
 | **10** | [10. Data Reconciliation & Self-Healing](./10-feature-data-reconciliation-and-repair.md) | Bù đắp event rớt mạng, tự sửa sai bộ đếm, resync | Cờ `_state` ghi cùng lệnh, xoá sau PubAck; sweeper slot 0 phát bù cờ quá 15s; một consumer `projections` (slot 0, 3 handler) không delay; phiếu hẹn `CHATIM_TIMER`; CLI `/app resync` bật lại cờ. |
-| **11** | [11. HTTPS Gateway](./11-feature-https-gateway.md) | Tải danh sách hội thoại, lịch sử, thành viên; tạo nhóm, thêm người, đổi tên qua HTTPS | App `gateway` (D198): Connect trên HTTP/1.1 + h2c, 22 lệnh `chatrpc.Request`, Bearer JWT như websocket, core bất kỳ qua round robin không Redis, giới hạn theo user và trần toàn node, CORS theo danh sách; thay đổi tới người khác qua event trên WebSocket. |
+| **11** | [11. HTTPS Gateway](./11-feature-https-gateway.md) | Tải danh sách hội thoại, lịch sử, thành viên; tạo nhóm, thêm người, đổi tên qua HTTPS | App `gateway` (D198): Connect trên HTTP/1.1 + h2c, 22 lệnh `chatrpc.Request`, Bearer JWT như websocket, node chat bất kỳ qua round robin không Redis, giới hạn theo user và trần toàn node, CORS theo danh sách; thay đổi tới người khác qua event trên WebSocket. |
 
 ---
 
@@ -204,7 +204,7 @@ Mỗi module dưới đây là một tập tài liệu đặc tả hoàn chỉnh
 - **Dành cho Frontend / Client SDK Developers:**
   Đọc kỹ **Module 02 (Gửi tin & Chống trùng CID)**, **Module 07 (Vị trí đọc & Unread)**, **Module 08 (Đọc lịch sử & Reconnect Token)** và **Module 09 (WebSocket Realtime)**, **Module 11 (HTTPS Gateway)** để nắm bắt chính xác hợp đồng giao tiếp, mã lỗi gRPC, cơ chế client retry và cách hiển thị snapshot.
 
-- **Dành cho Backend / Core Developers:**
+- **Dành cho Backend / Chat Developers:**
   Đọc toàn bộ 11 module, đặc biệt chú ý phần **3. Cơ chế bảo đảm tính đúng đắn** và **4. Kỹ thuật triển khai**. Mọi thay đổi logic hay thêm tính năng mới bắt buộc phải đối chiếu với nguyên tắc: *Một ghi đơn doc atomic, không retry nội bộ, dùng phiếu hẹn sinh tồn cho dữ liệu phái sinh*.
 
 - **Dành cho SRE / DevOps / Infrastructure Engineers:**
@@ -214,11 +214,11 @@ Mỗi module dưới đây là một tập tài liệu đặc tả hoàn chỉnh
 
 ## 6. Ma trận Mã lỗi Hệ thống chung (System-Wide Error Codes Matrix)
 
-Để đồng bộ hành vi xử lý ngoại lệ trên toàn bộ các nền tảng Client (iOS, Android, Web SDK), mọi RPC gọi đến Core đều tuân thủ nguyên tắc phân loại lỗi chuẩn:
+Để đồng bộ hành vi xử lý ngoại lệ trên toàn bộ các nền tảng Client (iOS, Android, Web SDK), mọi RPC gọi đến Chat đều tuân thủ nguyên tắc phân loại lỗi chuẩn:
 
 | Mã lỗi gRPC | Ý nghĩa trong chatim | Hành vi Client SDK bắt buộc | Ví dụ tình huống |
 |---|---|---|---|
-| `codes.Unavailable` | Lỗi tạm thời do contention/failover | **BẮT BUỘC RETRY** kèm Exponential Backoff & Jitter (50ms–500ms). Không báo lỗi ngay cho người dùng. | Trùng `pin_ver` khi ghim, trượt CAS `info_ver` của `UpdateRoom`, xung đột transaction đổi owner, cid đang pending ở core khác, Mongo đang failover bầu Primary. |
+| `codes.Unavailable` | Lỗi tạm thời do contention/failover | **BẮT BUỘC RETRY** kèm Exponential Backoff & Jitter (50ms–500ms). Không báo lỗi ngay cho người dùng. | Trùng `pin_ver` khi ghim, trượt CAS `info_ver` của `UpdateRoom`, xung đột transaction đổi owner, cid đang pending ở node chat khác, Mongo đang failover bầu Primary. |
 | `codes.FailedPrecondition` | Lệch trạng thái / Phiên bản cũ | **KHÔNG RETRY MÙ**. Phải tải lại Snapshot mới nhất từ server rồi cập nhật giao diện. | Sửa tin khi `base_ver` bị trôi do người khác đã sửa trước; ghim tin thứ 51 (`PIN_LIMIT = 50`); xoá tin còn trả lời. |
 | `codes.InvalidArgument` | Dữ liệu đầu vào sai quy cách | **KHÔNG RETRY**. Kiểm tra lại payload đầu vào. | Text > 16KB, CID chứa ký tự cấm, Emoji không thuộc whitelist. |
 | `codes.PermissionDenied` | Vi phạm quyền hạn nghiệp vụ | **KHÔNG RETRY**. Hiển thị thông báo cấm thao tác. | Người bị kick cố gửi tin, thành viên thường cố sửa tin người khác. |
@@ -231,10 +231,10 @@ Mỗi module dưới đây là một tập tài liệu đặc tả hoàn chỉnh
 
 | Mục tiêu vận hành | Chỉ số cam kết (SLO) | Metric Prometheus tương ứng | Ngưỡng Cảnh báo (Alert Rule) |
 |---|---|---|---|
-| **Độ trễ Ack gửi tin** | p99 ≤ 30ms | Chưa có metric trong core; đo bằng `chatbench` (bench 2K: p99 ~121–131ms trên máy dev) | Chưa có alert |
+| **Độ trễ Ack gửi tin** | p99 ≤ 30ms | Chưa có metric trong chat; đo bằng `chatbench` (bench 2K: p99 ~121–131ms trên máy dev) | Chưa có alert |
 | **Độ trễ phân phối Realtime** | p99 ≤ 100ms | `chatim_websocket_event_delivery_seconds` (từ giờ JetStream lưu tới lúc frame vào hàng gửi trên node, M4 phần 5) | `ChatimWebsocketDeliverySlow` (p99 > 100ms trong 5 phút) |
 | **Độ trễ đọc 50 tin lịch sử** | p99 ≤ 20ms | Chưa có metric | Chưa có alert |
-| **Bảo đảm không mất tin** | 100% (At-least-once) | `chatim_core_event_pending_oldest_seconds`, `chatim_core_sweep_passes_total` | `ChatimEventPendingStuck`: cờ cũ nhất > 60s kéo dài 5 phút; `ChatimSweeperIdle`: không lượt quét nào trong 10 phút |
-| **Projection theo kịp** | Danh sách hội thoại ổn định ≤ ~3s (cửa sổ gom 3s; bench 2K trung vị 1,6s) | `chatim_core_projection_lag_seconds` | `ChatimProjectionLagging`: > 10s kéo dài 5 phút |
-| **Cân bằng bộ đếm tự động** | Tự sửa sai trong ≤ 10s | `chatim_core_counter_repaired_total` | `ChatimCounterRepairSurge`: > 1 lần/giây kéo dài 10 phút |
+| **Bảo đảm không mất tin** | 100% (At-least-once) | `chatim_chat_event_pending_oldest_seconds`, `chatim_chat_sweep_passes_total` | `ChatimEventPendingStuck`: cờ cũ nhất > 60s kéo dài 5 phút; `ChatimSweeperIdle`: không lượt quét nào trong 10 phút |
+| **Projection theo kịp** | Danh sách hội thoại ổn định ≤ ~3s (cửa sổ gom 3s; bench 2K trung vị 1,6s) | `chatim_chat_projection_lag_seconds` | `ChatimProjectionLagging`: > 10s kéo dài 5 phút |
+| **Cân bằng bộ đếm tự động** | Tự sửa sai trong ≤ 10s | `chatim_chat_counter_repaired_total` | `ChatimCounterRepairSurge`: > 1 lần/giây kéo dài 10 phút |
 

@@ -10,31 +10,31 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-func TestResolverTakesLiveCoresFromTheRegistry(t *testing.T) {
+func TestResolverTakesLiveChatNodesFromTheRegistry(t *testing.T) {
 	g := newResolverRig(t, ResolverConfig{})
-	g.heartbeat("core-b", coreAddr("core-b"), 5*time.Second)
-	_ = g.mr.Set(CoreKey("core-expired"), coreAddr("core-expired"))
-	g.register("core-expired", g.now.Add(-time.Millisecond))
-	_ = g.mr.Set(CoreKey("core-edge"), coreAddr("core-edge"))
-	g.register("core-edge", g.now)
-	_ = g.mr.Set(CoreKey("core-unregistered"), coreAddr("core-unregistered"))
-	g.register("core-keyless", g.now.Add(time.Minute))
-	for i, id := range []string{"core-expired", "core-edge", "core-unregistered", "core-keyless"} {
+	g.heartbeat("chat-b", nodeAddr("chat-b"), 5*time.Second)
+	_ = g.mr.Set(NodeKey("chat-expired"), nodeAddr("chat-expired"))
+	g.register("chat-expired", g.now.Add(-time.Millisecond))
+	_ = g.mr.Set(NodeKey("chat-edge"), nodeAddr("chat-edge"))
+	g.register("chat-edge", g.now)
+	_ = g.mr.Set(NodeKey("chat-unregistered"), nodeAddr("chat-unregistered"))
+	g.register("chat-keyless", g.now.Add(time.Minute))
+	for i, id := range []string{"chat-expired", "chat-edge", "chat-unregistered", "chat-keyless"} {
 		g.own(uint16(i), id)
 	}
 	g.refresh(t)
-	if n := len(g.r.table.Load().cores); n != 1 {
-		t.Fatalf("table holds %d cores, want only core-b", n)
+	if n := len(g.r.table.Load().nodes); n != 1 {
+		t.Fatalf("table holds %d nodes, want only chat-b", n)
 	}
 	for s := range uint16(Count) {
-		if rt := g.routeOf(t, s); rt.Owner || rt.Core != "core-b" {
-			t.Fatalf("slot %d route = %+v, want fallback to the one registered live core", s, rt)
+		if rt := g.routeOf(t, s); rt.Owner || rt.Node != "chat-b" {
+			t.Fatalf("slot %d route = %+v, want fallback to the one registered live node", s, rt)
 		}
 	}
 	g.advance(5 * time.Second)
 	g.refresh(t)
 	if _, ok := g.r.AnyAddr(); ok {
-		t.Fatal("core-b still routed once its registry score passed")
+		t.Fatal("chat-b still routed once its registry score passed")
 	}
 }
 
@@ -42,8 +42,8 @@ func TestResolverLoadCostIgnoresUnrelatedKeys(t *testing.T) {
 	g := newResolverRig(t, ResolverConfig{})
 	counter := &commandCounter{}
 	g.rdb.AddHook(counter)
-	g.heartbeat("core-a", coreAddr("core-a"), 5*time.Second)
-	g.ownByRendezvous("core-a")
+	g.heartbeat("chat-a", nodeAddr("chat-a"), 5*time.Second)
+	g.ownByRendezvous("chat-a")
 	g.refresh(t)
 	base := counter.during(func() { g.refresh(t) })
 	for i := range 100_000 {

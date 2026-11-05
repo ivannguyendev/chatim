@@ -17,7 +17,7 @@ const (
 	itSendRetryMaxGap   = 400 * time.Millisecond
 )
 
-func sendRetrying(ctx context.Context, client chatimv1.CoreServiceClient, req *chatimv1.SendMessageRequest) (*chatimv1.SendMessageResponse, error) {
+func sendRetrying(ctx context.Context, client chatimv1.ChatServiceClient, req *chatimv1.SendMessageRequest) (*chatimv1.SendMessageResponse, error) {
 	return retryingUnavailable(ctx, func(ctx context.Context) (*chatimv1.SendMessageResponse, error) {
 		return client.SendMessage(ctx, req)
 	})

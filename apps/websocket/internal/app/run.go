@@ -221,7 +221,7 @@ func (n *node) openRouter(ctx context.Context, deps Deps) error {
 	abort()
 	if err != nil {
 		cancel()
-		return fmt.Errorf("open core router: %w", err)
+		return fmt.Errorf("open chat router: %w", err)
 	}
 	n.router = r
 	n.routes.set(r)

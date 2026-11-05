@@ -63,7 +63,7 @@ func counter(name, help string, labels map[string]string, c *atomic.Uint64) metr
 func (s *stats) sources() []metrics.Source {
 	out := make([]metrics.Source, 0, len(authReasons)+6)
 	for _, r := range authReasons {
-		out = append(out, counter("auth_failures_total", "Requests refused before any core call because the token was missing or invalid, by reason.", map[string]string{"reason": r}, s.auth[r]))
+		out = append(out, counter("auth_failures_total", "Requests refused before any chat call because the token was missing or invalid, by reason.", map[string]string{"reason": r}, s.auth[r]))
 	}
 	return append(out,
 		counter("rate_limited_total", "Requests refused by the per-user limits, by limit.", map[string]string{"limit": limitRate}, &s.rateLimited),

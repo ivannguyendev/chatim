@@ -28,14 +28,14 @@ func indexNames(t *testing.T, db *mongo.Database, coll string) []string {
 	return names
 }
 
-func TestBootstrapKeepsCoreMentionsAndLeavesTheReadIndexToTheCommand(t *testing.T) {
+func TestBootstrapKeepsChatMentionsAndLeavesTheReadIndexToTheCommand(t *testing.T) {
 	db := itDatabase(t, itClient(t))
 	if err := ensureClustered(t.Context(), db, mentionsCollection); err != nil {
 		t.Fatalf("seed clustered mentions: %v", err)
 	}
 	old := mongo.IndexModel{Keys: bson.D{{Key: "room_id", Value: 1}, {Key: "target", Value: 1}, {Key: "thread_root", Value: 1}, {Key: "seq", Value: 1}}}
 	if _, err := db.Collection(mentionsCollection).Indexes().CreateMany(t.Context(), append(mentionIndexes(), old)); err != nil {
-		t.Fatalf("seed core indexes: %v", err)
+		t.Fatalf("seed chat indexes: %v", err)
 	}
 	var logs bytes.Buffer
 	health := mongoindex.NewHealth(slog.New(slog.NewTextHandler(&logs, nil)))

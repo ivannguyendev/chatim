@@ -25,7 +25,7 @@ func TestTheNextPageIsCutFromTheSnapshotWithFreshMemberFields(t *testing.T) {
 	}
 }
 
-func TestAnotherCoreRerunsTheOrderAndKeepsOnlyKeysAfterTheCursor(t *testing.T) {
+func TestAnotherChatNodeRerunsTheOrderAndKeepsOnlyKeysAfterTheCursor(t *testing.T) {
 	st := seedMinh(t, 45)
 	first := list(t, newLister(t, st, 2000), acme, domain.FolderMain, nil, 2)
 	expectItems(t, first.Items, wantItem{room: direct, preview: 12, peerRead: 10}, wantItem{room: shop, unread: 2, preview: 45})

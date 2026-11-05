@@ -19,7 +19,7 @@ func authedRedis(t *testing.T, password string) *miniredis.Miniredis {
 
 func redisConfig(state, dedupe *miniredis.Miniredis, statePW, dedupePW string) config.Config {
 	return config.Config{
-		CoreID: "core-redis", ConnectTimeout: time.Second,
+		NodeID: "chat-redis", ConnectTimeout: time.Second,
 		RedisAddr: state.Addr(), RedisDB: 0, RedisPassword: statePW,
 		RedisDedupeAddr: dedupe.Addr(), RedisDedupeDB: 0, RedisDedupePassword: dedupePW,
 	}
@@ -35,7 +35,7 @@ func TestConnectRedisSplitsStateAndDedupe(t *testing.T) {
 	if err := c.dedupe.Set(t.Context(), "chatim:cid:probe", "1", 0).Err(); err != nil {
 		t.Fatalf("set on dedupe: %v", err)
 	}
-	if err := c.slots.Set(t.Context(), "chatim:slot:1", "core-redis", 0).Err(); err != nil {
+	if err := c.slots.Set(t.Context(), "chatim:slot:1", "chat-redis", 0).Err(); err != nil {
 		t.Fatalf("set on slots: %v", err)
 	}
 	if !dedupe.Exists("chatim:cid:probe") || state.Exists("chatim:cid:probe") {

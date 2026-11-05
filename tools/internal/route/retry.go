@@ -13,7 +13,7 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-type rpc[T any] func(ctx context.Context, api chatimv1.CoreServiceClient) (T, error)
+type rpc[T any] func(ctx context.Context, api chatimv1.ChatServiceClient) (T, error)
 
 type connRPC[T any] func(ctx context.Context, conn chatrpc.PoolConn) (T, error)
 
@@ -58,15 +58,15 @@ func inRoom[T any](ctx context.Context, c *Client, roomID string, do rpc[T]) (T,
 		var zero T
 		return zero, Stats{}, err
 	}
-	return call(ctx, c, func() (chatrpc.PoolConn, error) { return c.routes.Room(roomID) }, onCore(do))
+	return call(ctx, c, func() (chatrpc.PoolConn, error) { return c.routes.Room(roomID) }, onChatNode(do))
 }
 
-func anyCore[T any](ctx context.Context, c *Client, do rpc[T]) (T, Stats, error) {
-	return call(ctx, c, c.routes.Any, onCore(do))
+func anyChatNode[T any](ctx context.Context, c *Client, do rpc[T]) (T, Stats, error) {
+	return call(ctx, c, c.routes.Any, onChatNode(do))
 }
 
-func onCore[T any](do rpc[T]) connRPC[T] {
-	return func(ctx context.Context, conn chatrpc.PoolConn) (T, error) { return do(ctx, conn.Core) }
+func onChatNode[T any](do rpc[T]) connRPC[T] {
+	return func(ctx context.Context, conn chatrpc.PoolConn) (T, error) { return do(ctx, conn.Chat) }
 }
 
 func retryable(err error) bool {

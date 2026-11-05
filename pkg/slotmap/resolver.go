@@ -17,7 +17,7 @@ import (
 const (
 	DefaultRefresh     = 5 * time.Second
 	DefaultLoadTimeout = 2 * time.Second
-	MaxCores           = 256
+	MaxNodes           = 256
 
 	firstRetry = 100 * time.Millisecond
 )
@@ -29,7 +29,7 @@ type ResolverConfig struct {
 }
 
 type Route struct {
-	Core  string
+	Node  string
 	Addr  string
 	Owner bool
 }
@@ -80,15 +80,15 @@ func (r *Resolver) Slot(slot uint16) (Route, bool) {
 		return Route{}, false
 	}
 	c := t.route[slot]
-	return Route{Core: c.id, Addr: c.addr, Owner: t.owned[slot]}, true
+	return Route{Node: c.id, Addr: c.addr, Owner: t.owned[slot]}, true
 }
 
 func (r *Resolver) AnyAddr() (string, bool) {
 	t := r.table.Load()
-	if t == nil || len(t.cores) == 0 {
+	if t == nil || len(t.nodes) == 0 {
 		return "", false
 	}
-	return t.cores[r.rotation.Add(1)%uint64(len(t.cores))].addr, true
+	return t.nodes[r.rotation.Add(1)%uint64(len(t.nodes))].addr, true
 }
 
 func (r *Resolver) Refresh(ctx context.Context) error {

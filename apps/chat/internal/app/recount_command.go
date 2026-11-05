@@ -26,7 +26,7 @@ import (
 )
 
 var (
-	errRecountUsage = errors.New("usage: core recount -room ID [-dry-run]")
+	errRecountUsage = errors.New("usage: chat recount -room ID [-dry-run]")
 	errRecountRaced = errors.New("member count changed while recounting, run recount again")
 )
 
@@ -90,7 +90,7 @@ func recountMain(args []string) int {
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	cfg, err := config.Load()
 	if err != nil {
-		logger.ErrorContext(ctx, "invalid core config", "err", err)
+		logger.ErrorContext(ctx, "invalid chat config", "err", err)
 		return 1
 	}
 	log := redactedLogger(logger, cfg)

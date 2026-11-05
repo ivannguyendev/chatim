@@ -13,7 +13,7 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-var errDown = errors.New("core down")
+var errDown = errors.New("chat down")
 
 type settledAs struct {
 	acks, terms int

@@ -128,7 +128,7 @@ func (r *wsRun) call(req *chatimv1.ClientRequest) (*chatimv1.ServerResponse, err
 }
 
 func (r *wsRun) createRoom() error {
-	resp, err := viaGateway(r.gw, r.gw.core.CreateRoom, &chatimv1.CreateRoomRequest{
+	resp, err := viaGateway(r.gw, r.gw.chat.CreateRoom, &chatimv1.CreateRoomRequest{
 		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "e2e websocket", Members: []string{r.user}, RequestId: randomCID(),
 	})
 	if err != nil {
@@ -160,7 +160,7 @@ func (r *wsRun) historySees() error {
 }
 
 func (r *wsRun) history() (*chatimv1.GetHistoryResponse, error) {
-	resp, err := viaGateway(r.gw, r.gw.core.GetHistory, r.historyRequest())
+	resp, err := viaGateway(r.gw, r.gw.chat.GetHistory, r.historyRequest())
 	if err != nil {
 		return nil, fmt.Errorf("history through the gateway: %w", err)
 	}

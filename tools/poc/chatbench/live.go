@@ -81,7 +81,7 @@ func (w *liveWatch) report(out io.Writer) {
 	s := w.live.Summary()
 	fmt.Fprintf(out, "live events on %d watched rooms: received=%d of acked=%d missing=%d duplicates=%d undecoded=%d (waited %v after the last send returned)\n",
 		w.rooms, s.Received, s.Expected, max(s.Expected-s.Received, 0), s.Duplicates, w.undecoded.Load(), w.waited.Round(time.Millisecond))
-	fmt.Fprintf(out, "live lag, receive time minus event ts (ts = seq assignment on the core, before the insert; one host clock): %v\n", s.Lag)
+	fmt.Fprintf(out, "live lag, receive time minus event ts (ts = seq assignment on the chat, before the insert; one host clock): %v\n", s.Lag)
 }
 
 func (w *liveWatch) close() { w.nc.Close() }

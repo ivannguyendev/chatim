@@ -67,8 +67,8 @@ func hiddenOnly(m *chatimv1.Message) bool {
 
 func TestRealInfraConcurrentEditsOnOneBaseHaveOneWinner(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastSweep)
-	client := dialCore(t, core.cfg)
+	chat := startChatNode(t, it, itFastSweep)
+	client := dialChat(t, chat.cfg)
 	roomID := createRoom(t, client)
 	seq := sendAs(t, client, itUser, roomID, "edit-d", "base")
 
@@ -109,10 +109,10 @@ func TestRealInfraConcurrentEditsOnOneBaseHaveOneWinner(t *testing.T) {
 
 func TestRealInfraHideAndClearApplyOnlyToTheReaderAndAnnounceIt(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastSweep)
-	client := dialCore(t, core.cfg)
+	chat := startChatNode(t, it, itFastSweep)
+	client := dialChat(t, chat.cfg)
 	roomID := createRoom(t, client)
-	live := subscribeLive(t, it, core.cfg, roomID)
+	live := subscribeLive(t, it, chat.cfg, roomID)
 	for i := range 3 {
 		sendAs(t, client, itUser, roomID, "hide-"+strconv.Itoa(i+1), "visible "+strconv.Itoa(i+1))
 	}
@@ -149,7 +149,7 @@ func TestRealInfraHideAndClearApplyOnlyToTheReaderAndAnnounceIt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("room id %q: %v", roomID, err)
 	}
-	awaitMemberEvents(t, live, core.cfg.Stream.LiveRoot, roomID, map[string]string{
+	awaitMemberEvents(t, live, chat.cfg.Stream.LiveRoot, roomID, map[string]string{
 		pbconv.HiddenEventID(room, "bob", 0, 3):  "message_hidden",
 		pbconv.ClearedEventID(room, "bob", mark): "history_cleared",
 	})

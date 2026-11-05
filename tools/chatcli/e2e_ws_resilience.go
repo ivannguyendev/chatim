@@ -219,7 +219,7 @@ func groupOf(creator *wsPeer, name string, members ...*wsPeer) (string, error) {
 	for _, p := range members {
 		users = append(users, p.user)
 	}
-	resp, err := viaGateway(creator.gw, creator.gw.core.CreateRoom, &chatimv1.CreateRoomRequest{
+	resp, err := viaGateway(creator.gw, creator.gw.chat.CreateRoom, &chatimv1.CreateRoomRequest{
 		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: name, Members: users, RequestId: randomCID(),
 	})
 	if err != nil {

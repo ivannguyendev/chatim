@@ -17,10 +17,10 @@ import (
 
 func TestRealInfraRecountRestoresADriftedCount(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastSweep)
-	roomID := createRoom(t, dialCore(t, core.cfg))
+	chat := startChatNode(t, it, itFastSweep)
+	roomID := createRoom(t, dialChat(t, chat.cfg))
 	room := parseRoom(t, roomID)
-	db := it.mongo.Database(core.cfg.MongoDB)
+	db := it.mongo.Database(chat.cfg.MongoDB)
 	st := mongostore.New(db, mongostore.Options{})
 	before, err := st.Get(t.Context(), room)
 	if err != nil {
@@ -30,7 +30,7 @@ func TestRealInfraRecountRestoresADriftedCount(t *testing.T) {
 		t.Fatalf("drift member_count: %v", err)
 	}
 	live := make(chan *nats.Msg, 16)
-	sub, err := it.nc.ChanSubscribe(core.cfg.Stream.LiveRoot+"."+itTenant+".room."+roomID+".evt.member_count_changed", live)
+	sub, err := it.nc.ChanSubscribe(chat.cfg.Stream.LiveRoot+"."+itTenant+".room."+roomID+".evt.member_count_changed", live)
 	if err != nil {
 		t.Fatalf("subscribe: %v", err)
 	}
@@ -38,7 +38,7 @@ func TestRealInfraRecountRestoresADriftedCount(t *testing.T) {
 
 	counts := fmt.Sprintf("room=%s stored=9 counted=2\n", roomID)
 	var out bytes.Buffer
-	if err := app.RunRecount(t.Context(), core.cfg, app.RecountOptions{Room: room, DryRun: true}, quiet, &out); err != nil || out.String() != counts {
+	if err := app.RunRecount(t.Context(), chat.cfg, app.RecountOptions{Room: room, DryRun: true}, quiet, &out); err != nil || out.String() != counts {
 		t.Fatalf("dry run = %v, output %q; want %q", err, out.String(), counts)
 	}
 	if r, err := st.Get(t.Context(), room); err != nil || r.MemberCount != 9 || r.MemberCountVer != before.MemberCountVer {
@@ -46,7 +46,7 @@ func TestRealInfraRecountRestoresADriftedCount(t *testing.T) {
 	}
 
 	out.Reset()
-	if err := app.RunRecount(t.Context(), core.cfg, app.RecountOptions{Room: room}, quiet, &out); err != nil {
+	if err := app.RunRecount(t.Context(), chat.cfg, app.RecountOptions{Room: room}, quiet, &out); err != nil {
 		t.Fatalf("recount: %v (output %q)", err, out.String())
 	}
 	ver := before.MemberCountVer + 1

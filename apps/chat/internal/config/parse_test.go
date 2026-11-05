@@ -12,14 +12,14 @@ import (
 
 func TestLoadJoinsAllParseErrors(t *testing.T) {
 	setEnv(t, map[string]string{
-		"REDIS_DB": "x", "FLUSH_WINDOW": "fast", "FLUSH_SHARDS": "four", "CORE_GRPC_SHUTDOWN": "10",
-		"PUB_QUEUE": "many", "SLOT_TICK": "1", "CID_PENDING_TTL": "ten", "CORE_GRPC_ADDR": "9000",
+		"REDIS_DB": "x", "FLUSH_WINDOW": "fast", "FLUSH_SHARDS": "four", "CHAT_GRPC_SHUTDOWN": "10",
+		"PUB_QUEUE": "many", "SLOT_TICK": "1", "CID_PENDING_TTL": "ten", "CHAT_GRPC_ADDR": "9000",
 	})
 	_, err := config.Load()
 	if err == nil {
 		t.Fatal("Load() = nil, want parse errors")
 	}
-	for _, key := range []string{"REDIS_DB", "FLUSH_WINDOW", "FLUSH_SHARDS", "CORE_GRPC_SHUTDOWN", "PUB_QUEUE", "SLOT_TICK", "CID_PENDING_TTL", "CORE_GRPC_ADDR"} {
+	for _, key := range []string{"REDIS_DB", "FLUSH_WINDOW", "FLUSH_SHARDS", "CHAT_GRPC_SHUTDOWN", "PUB_QUEUE", "SLOT_TICK", "CID_PENDING_TTL", "CHAT_GRPC_ADDR"} {
 		if !strings.Contains(err.Error(), key) {
 			t.Errorf("Load() error %q does not mention %s", err, key)
 		}
@@ -30,15 +30,15 @@ func TestLoadRejectsNonPositiveValues(t *testing.T) {
 	tests := []struct{ key, value string }{
 		{"REDIS_DB", "-1"},
 		{"REDIS_DEDUPE_DB", "-1"},
-		{"CORE_MAX_INFLIGHT", "0"},
-		{"CORE_REQUEST_DEADLINE", "0s"},
-		{"CORE_SLOW_RPC", "0s"},
-		{"CORE_CONNECT_TIMEOUT", "-1s"},
-		{"CORE_QUEUE_WAIT", "0s"},
-		{"CORE_DRAIN_DELAY", "0s"},
-		{"CORE_GRPC_SHUTDOWN", "0s"},
-		{"CORE_PUBLISHER_DRAIN", "0s"},
-		{"CORE_SHUTDOWN_BUDGET", "0s"},
+		{"CHAT_MAX_INFLIGHT", "0"},
+		{"CHAT_REQUEST_DEADLINE", "0s"},
+		{"CHAT_SLOW_RPC", "0s"},
+		{"CHAT_CONNECT_TIMEOUT", "-1s"},
+		{"CHAT_QUEUE_WAIT", "0s"},
+		{"CHAT_DRAIN_DELAY", "0s"},
+		{"CHAT_GRPC_SHUTDOWN", "0s"},
+		{"CHAT_PUBLISHER_DRAIN", "0s"},
+		{"CHAT_SHUTDOWN_BUDGET", "0s"},
 		{"FLUSH_SHARDS", "-1"},
 		{"FLUSH_MAX_BATCH", "0"},
 		{"FLUSH_QUEUE", "0"},

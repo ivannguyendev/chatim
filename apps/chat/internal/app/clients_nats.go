@@ -55,7 +55,7 @@ func notifyOptions(cfg config.Config, log *slog.Logger) []jetstream.JetStreamOpt
 
 func natsOptions(cfg config.Config, log *slog.Logger) []nats.Option {
 	return []nats.Option{
-		nats.Name("chatim-core-" + cfg.CoreID),
+		nats.Name("chatim-chat-" + cfg.NodeID),
 		nats.Timeout(cfg.ConnectTimeout),
 		nats.MaxReconnects(-1),
 		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {

@@ -1,13 +1,13 @@
 # Kiểm thử e2e
 
-`make e2e` build image `chatim/chatcli:dev` rồi chạy `scripts/e2e.sh` trên cụm compose (cần `make infra-up` và `make core-up`): route theo slot, mỗi phase kiểm cả câu trả lời, lịch sử và event live. Chạy ở cuối milestone (bảng ngân sách kiểm thử trong `CLAUDE.md`). Hỏng ở phase nào thì script in tên bước (`step`) và dừng.
+`make e2e` build image `chatim/chatcli:dev` rồi chạy `scripts/e2e.sh` trên cụm compose (cần `make infra-up` và `make app-up`): route theo slot, mỗi phase kiểm cả câu trả lời, lịch sử và event live. Chạy ở cuối milestone (bảng ngân sách kiểm thử trong `CLAUDE.md`). Hỏng ở phase nào thì script in tên bước (`step`) và dừng.
 
-Phase 13 và 15 chạy trên `identity` (`scripts/e2e-identity-exchange.sh`, `scripts/e2e-identity-directory.sh`, viết lại ở M6 PA cho đổi token); phase 14 (thu hồi tới node) trở lại ở PB, phase 16 (role) đã gỡ cùng `AdminService`. `E2E_ONLY=13` hoặc `E2E_ONLY=15 make e2e` chạy riêng một phase đó (cần `make core-up`), thành công in `e2e PASS: phase N only`. Khoá tenant do `chatcli dev-issuer-key -alg -kid -out` sinh (file khoá riêng `0600` trong thư mục state, JWK công khai in ra stdout rồi đưa vào `issuer-key-add`). Issuer hay khoá vừa thêm chỉ có hiệu lực sau lần nạp lại kế tiếp (`IDENTITY_TRUST_RELOAD` 10s), nên lần đổi token đầu của mỗi phase hỏi lại mỗi 1s tới 15s.
+Phase 13 và 15 chạy trên `identity` (`scripts/e2e-identity-exchange.sh`, `scripts/e2e-identity-directory.sh`, viết lại ở M6 PA cho đổi token); phase 14 (thu hồi tới node) trở lại ở PB, phase 16 (role) đã gỡ cùng `AdminService`. `E2E_ONLY=13` hoặc `E2E_ONLY=15 make e2e` chạy riêng một phase đó (cần `make app-up`), thành công in `e2e PASS: phase N only`. Khoá tenant do `chatcli dev-issuer-key -alg -kid -out` sinh (file khoá riêng `0600` trong thư mục state, JWK công khai in ra stdout rồi đưa vào `issuer-key-add`). Issuer hay khoá vừa thêm chỉ có hiệu lực sau lần nạp lại kế tiếp (`IDENTITY_TRUST_RELOAD` 10s), nên lần đổi token đầu của mỗi phase hỏi lại mỗi 1s tới 15s.
 
 | Phase | Kiểm gì |
 |---|---|
-| 1 | Tạo room, gửi tin, đọc lịch sử; ghi lại core giữ slot của room |
-| 2 | Gửi tiếp trong khi `kill` core giữ slot (slot chuyển sang core kia): không mất, không trùng, mọi seq đã ack có event live |
+| 1 | Tạo room, gửi tin, đọc lịch sử; ghi lại chat giữ slot của room |
+| 2 | Gửi tiếp trong khi `kill` chat giữ slot (slot chuyển sang node chat kia): không mất, không trùng, mọi seq đã ack có event live |
 | 3 | Sửa seq 1, xoá seq 2 (base version 0): lịch sử, lịch sử sửa và event live |
 | 4 | Đọc danh sách emoji (`GetReactionSettings`), từ chối emoji ngoài danh sách, react seq 3 rồi đổi emoji, ghim seq 4 |
 | 5 | Member: DM từ chối lệnh member, thêm `e2e-bob` và `e2e-carol`, đổi role và priority, xoá, vị trí đọc, ẩn và clear, owner cuối rời rồi vào lại; event trên subject `room`/`member`/`message` |

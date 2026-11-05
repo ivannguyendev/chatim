@@ -40,13 +40,13 @@ func (l *fakeLocator) Refresh(context.Context) error {
 }
 
 type fakeAPIs struct {
-	chatimv1.CoreServiceClient
+	chatimv1.ChatServiceClient
 	chatimv1.MentionServiceClient
 	addr string
 }
 
-type coreOnly struct {
-	chatimv1.CoreServiceClient
+type chatOnly struct {
+	chatimv1.ChatServiceClient
 }
 
 type fakeNet struct {
@@ -72,7 +72,7 @@ func (n *fakeNet) allow(addr string) {
 	n.known[addr] = true
 }
 
-func (n *fakeNet) dial(addr string) (chatimv1.CoreServiceClient, io.Closer, error) {
+func (n *fakeNet) dial(addr string) (chatimv1.ChatServiceClient, io.Closer, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	if !n.known[addr] {
@@ -80,7 +80,7 @@ func (n *fakeNet) dial(addr string) (chatimv1.CoreServiceClient, io.Closer, erro
 	}
 	n.dials[addr]++
 	if n.noMention {
-		return coreOnly{}, closer{n: n, addr: addr}, nil
+		return chatOnly{}, closer{n: n, addr: addr}, nil
 	}
 	return fakeAPIs{addr: addr}, closer{n: n, addr: addr}, nil
 }

@@ -42,7 +42,7 @@ func TestSendMessageMapsSenderFailures(t *testing.T) {
 		code codes.Code
 	}{
 		{"mailbox full", fmt.Errorf("room 42 mailbox of 16 full: %w", domain.ErrBusy), codes.ResourceExhausted},
-		{"retry later", fmt.Errorf("flusher closed on core-7: %w", domain.ErrRetryLater), codes.Unavailable},
+		{"retry later", fmt.Errorf("flusher closed on chat-7: %w", domain.ErrRetryLater), codes.Unavailable},
 		{"room missing", domain.ErrRoomNotFound, codes.NotFound},
 		{"not a member", domain.ErrNotMember, codes.PermissionDenied},
 		{"unexpected", errors.New("mongo 10.0.0.7:27017: connection reset"), codes.Internal},

@@ -22,7 +22,7 @@ type command struct {
 func servedMethods() []string { return chatrpc.Realtime() }
 
 func checks() map[string]chatrpc.Check {
-	return map[string]chatrpc.Check{chatimv1.CoreService_SendMessage_FullMethodName: checkSendMessage}
+	return map[string]chatrpc.Check{chatimv1.ChatService_SendMessage_FullMethodName: checkSendMessage}
 }
 
 func buildCommands(served []chatrpc.Command) (map[protoreflect.FieldNumber]command, []string, error) {
@@ -48,7 +48,7 @@ func buildCommands(served []chatrpc.Command) (map[protoreflect.FieldNumber]comma
 		methods = append(methods, c.Method)
 	}
 	if len(byRequest) > 0 {
-		return nil, nil, fmt.Errorf("command: %d core calls have no client request field", len(byRequest))
+		return nil, nil, fmt.Errorf("command: %d chat calls have no client request field", len(byRequest))
 	}
 	return cmds, methods, nil
 }

@@ -21,7 +21,7 @@ func foreignDatabase(t *testing.T, s *Store) *mongo.Database {
 	t.Helper()
 	suffix := make([]byte, 6)
 	_, _ = rand.Read(suffix)
-	db := s.client.Database("core_it_"+hex.EncodeToString(suffix), options.Database().SetWriteConcern(writeconcern.Majority()))
+	db := s.client.Database("chat_it_"+hex.EncodeToString(suffix), options.Database().SetWriteConcern(writeconcern.Majority()))
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()

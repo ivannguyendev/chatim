@@ -30,7 +30,7 @@ func TestProbeCommandExitCodes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("CORE_ADMIN_ADDR", readyzServer(t, tt.status))
+			t.Setenv("CHAT_ADMIN_ADDR", readyzServer(t, tt.status))
 			if got := Main([]string{"probe"}); got != tt.want {
 				t.Fatalf("Main(probe) = %d, want %d", got, tt.want)
 			}

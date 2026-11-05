@@ -54,7 +54,7 @@ var (
 )
 
 type rig struct {
-	client    chatimv1.CoreServiceClient
+	client    chatimv1.ChatServiceClient
 	rooms     *memstore.Rooms
 	msgs      *memstore.Messages
 	edits     *memstore.Edits
@@ -120,11 +120,11 @@ func startRouter(t *testing.T, rg *rig, policy access.Policy) *actor.Router {
 	return router
 }
 
-func serve(t *testing.T, svc chatimv1.CoreServiceServer, limiter *resilience.Limiter) chatimv1.CoreServiceClient {
+func serve(t *testing.T, svc chatimv1.ChatServiceServer, limiter *resilience.Limiter) chatimv1.ChatServiceClient {
 	t.Helper()
 	lis := bufconn.Listen(1 << 20)
 	srv := grpcserver.New(grpcserver.Config{Limiter: limiter}, quiet)
-	chatimv1.RegisterCoreServiceServer(srv, svc)
+	chatimv1.RegisterChatServiceServer(srv, svc)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- srv.ServeListener(ctx, lis) }()
@@ -144,7 +144,7 @@ func serve(t *testing.T, svc chatimv1.CoreServiceServer, limiter *resilience.Lim
 			t.Errorf("ServeListener: %v", err)
 		}
 	})
-	return chatimv1.NewCoreServiceClient(conn)
+	return chatimv1.NewChatServiceClient(conn)
 }
 
 func as(t *testing.T, tenant, user string) context.Context {

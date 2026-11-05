@@ -60,29 +60,29 @@ Hệ thống tách biệt việc **Ghi nhận sự thật (Fact)** và **Chiếu
 sequenceDiagram
     autonumber
     participant Client as Client SDK
-    participant Core as Core (api/grpcsrv)
+    participant Chat as Chat (api/grpcsrv)
     participant Policy as Access Policy
     participant Edits as MongoDB (message_edits - Fact)
     participant Msgs as MongoDB (messages - Projection)
     participant Pub as Publisher
     participant NATS as NATS JetStream
 
-    Client->>Core: EditMessage(room_id, seq, base_ver=0, new_text="...")
-    Core->>Policy: Kiểm tra quyền (phải là tác giả, kind không bị khoá)
-    Policy-->>Core: Cho phép (Admitted)
+    Client->>Chat: EditMessage(room_id, seq, base_ver=0, new_text="...")
+    Chat->>Policy: Kiểm tra quyền (phải là tác giả, kind không bị khoá)
+    Policy-->>Chat: Cho phép (Admitted)
 
-    Note over Core,Edits: Bước 1: Ghi Fact bất biến (Append-only)
-    Core->>Edits: Insert fact _id = room│thread│seq│1 {kind: text, created_by, text, created_at}<br/>(lần sửa đầu cũng chèn-nếu-chưa-có hàng ver 0 = bản gốc)
-    Edits-->>Core: Insert thành công (trùng _id với nội dung khác = base_ver cũ)
+    Note over Chat,Edits: Bước 1: Ghi Fact bất biến (Append-only)
+    Chat->>Edits: Insert fact _id = room│thread│seq│1 {kind: text, created_by, text, created_at}<br/>(lần sửa đầu cũng chèn-nếu-chưa-có hàng ver 0 = bản gốc)
+    Edits-->>Chat: Insert thành công (trùng _id với nội dung khác = base_ver cũ)
 
-    Note over Core,Msgs: Bước 2: Cập nhật Projection có điều kiện CAS
-    Core->>Msgs: ApplyEdit: UpdateOne(filter: {_id, v < 1}, update: {x: text, v: 1, ea})
-    Msgs-->>Core: Matched 1 doc, Modified 1 doc
+    Note over Chat,Msgs: Bước 2: Cập nhật Projection có điều kiện CAS
+    Chat->>Msgs: ApplyEdit: UpdateOne(filter: {_id, v < 1}, update: {x: text, v: 1, ea})
+    Msgs-->>Chat: Matched 1 doc, Modified 1 doc
 
-    Core-->>Client: Trả về EditResponse(ver=1)
+    Chat-->>Client: Trả về EditResponse(ver=1)
 
-    Note over Core,NATS: Bước 3: Phát tán sự kiện có snapshot
-    Core->>Pub: Enqueue msg_edited (snapshot hiện tại, ver=1, id {room}-{thread}-{seq}-v1)
+    Note over Chat,NATS: Bước 3: Phát tán sự kiện có snapshot
+    Chat->>Pub: Enqueue msg_edited (snapshot hiện tại, ver=1, id {room}-{thread}-{seq}-v1)
     Pub->>NATS: PublishAsync(CHATIM_EVT)
 ```
 
@@ -98,14 +98,14 @@ sequenceDiagram
   - **Mention khi sửa:** `EditCmd.Mentions` nil thì giữ mention hiện có (chép vào fact), tập rỗng thì xoá hết; mọi fact và hàng `ver 0` mang đủ tập mention kèm `at` từng đích (`mention_targets`, `mention_all`, `mention_all_at`); thêm `@all` mới thì hỏi policy `mention_all`.
   - **Lịch sử sửa (`GetEditHistory`, action `read_edit_history`, phân trang `after_ver`):** trang đầu trả hàng `ver 0` rồi từng fact; tin đã xoá hoặc có fact mới nhất là xoá thì trả rỗng (R2); tin không có → `NOT_FOUND`.
   - **Projection (Bản chiếu hiện tại):** Bảng `messages` chỉ đóng vai trò là bản chiếu (View Projection) trạng thái mới nhất để phục vụ việc đọc nhanh.
-  - **Tự phục hồi Projection:** Nếu sau khi ghi Fact vào `message_edits`, máy chủ Core bị crash trước khi cập nhật bảng `messages`: fact mang cờ `_state: 1` nên **sweeper slot 0 (Module 10)** thấy nó sau khoảng 15–17s, chạy lại `ApplyEdit` (idempotent, chỉ áp khi `v < ver`; xoá tin thì dọn text) rồi mới phát `msg_edited`/`msg_deleted` với snapshot đã áp (D151).
+  - **Tự phục hồi Projection:** Nếu sau khi ghi Fact vào `message_edits`, máy chủ Chat bị crash trước khi cập nhật bảng `messages`: fact mang cờ `_state: 1` nên **sweeper slot 0 (Module 10)** thấy nó sau khoảng 15–17s, chạy lại `ApplyEdit` (idempotent, chỉ áp khi `v < ver`; xoá tin thì dọn text) rồi mới phát `msg_edited`/`msg_deleted` với snapshot đã áp (D151).
 
 ### 3.2. Chống ghi đè tranh chấp bằng Optimistic CAS (Check-And-Set)
 - Khi client gửi lệnh sửa, client **bắt buộc phải gửi kèm `base_ver`** (phiên bản mà client đang nhìn thấy).
 - CAS nằm ở `_id` của fact: lệnh chèn `message_edits` với `_id = room│thread│seq│(base_ver + 1)` (28 byte). `_id` duy nhất nên chỉ một lệnh thắng cho mỗi version.
 - Nếu có hai người (hoặc hai thiết bị) cùng sửa một tin nhắn tại cùng một thời điểm:
   - Người thứ nhất hoàn tất -> version nâng lên `base_ver + 1`.
-  - Người thứ hai gửi lệnh với `base_ver` cũ -> chèn trùng `_id`. Fact trùng cùng tác giả, cùng kind, cùng text (và cùng tập mention) là lần gửi lại của chính lệnh đó → thành công; khác nội dung → `codes.FailedPrecondition` (`domain.ErrVersionConflict`), client tải lại phiên bản mới nhất rồi mới thử lại. Core không chạy vòng lặp retry nội bộ.
+  - Người thứ hai gửi lệnh với `base_ver` cũ -> chèn trùng `_id`. Fact trùng cùng tác giả, cùng kind, cùng text (và cùng tập mention) là lần gửi lại của chính lệnh đó → thành công; khác nội dung → `codes.FailedPrecondition` (`domain.ErrVersionConflict`), client tải lại phiên bản mới nhất rồi mới thử lại. Chat không chạy vòng lặp retry nội bộ.
 - Projection `ApplyEdit` chỉ ghi khi `messages.v < ver`, nên áp lại (sweeper) không bao giờ lùi version.
 - Thứ tự kiểm: `Admit` → `Find` → `Allow` (policy nhận tác giả và kind của tin) trước khi nhận diện lần gửi lại; sau đó mới tới tin đã xoá / `base_ver` cũ, rồi (chỉ với xoá) `CountLiveReplies > 0` → `ErrHasReplies`, tất cả trước mọi lần ghi. Lần gửi lại được nhận diện thì enqueue lại event cùng id `{room}-{thread}-{seq}-v{ver}` (stream bỏ bản trùng).
 
@@ -158,10 +158,10 @@ sequenceDiagram
 - Mọi yêu cầu sửa/xoá đều phải đi qua `access.Admit` (kiểm tra còn là thành viên không) và `access.Allow`:
   - **Sửa tin:** Mặc định chỉ tác giả (`sender_id == caller_id`) mới được sửa.
   - **Thu hồi tin:** Mặc định cũng chỉ tác giả (`access.DefaultPolicy`, D86); quyền Owner/Admin xoá tin người khác chờ module policy theo vai trò (Phase 2).
-  - **Khoá loại tin (`MESSAGE_LOCKED_KINDS`):** Danh sách tên kind (`text`, `system`, phân biệt hoa thường) bị cấm sửa/xoá kể cả với tác giả; mặc định rỗng (không khoá gì), tên lạ là lỗi khi boot (D87). Core không có luật cứng nào theo tác giả, owner hay kind trong `message.Editor`; mọi quyền chỉ đến từ `access.Policy`. Chỉ checker domain dùng chung (message, interaction, member, room) nhận cấu hình này; checker của `grpcsrv` và actor dùng `DefaultPolicy{}`. Thêm kind mới = thêm một mục vào `domain.kindNames`.
+  - **Khoá loại tin (`MESSAGE_LOCKED_KINDS`):** Danh sách tên kind (`text`, `system`, phân biệt hoa thường) bị cấm sửa/xoá kể cả với tác giả; mặc định rỗng (không khoá gì), tên lạ là lỗi khi boot (D87). Chat không có luật cứng nào theo tác giả, owner hay kind trong `message.Editor`; mọi quyền chỉ đến từ `access.Policy`. Chỉ checker domain dùng chung (message, interaction, member, room) nhận cấu hình này; checker của `grpcsrv` và actor dùng `DefaultPolicy{}`. Thêm kind mới = thêm một mục vào `domain.kindNames`.
 - **`access.Checker`:** luôn kiểm tenant và membership trước rồi mới hỏi policy. `Admit` chỉ kiểm tenant + membership; `Allow` hỏi policy với `Request.Author`/`Request.Kind` (tác giả và kind của tin đích, rỗng với lệnh trên room); `Authorize` làm cả hai. Lệnh trên một tin (sửa, xoá, ẩn, xem lịch sử sửa) chạy `Admit` → `Find` → `Allow`. `Rooms.Member` coi doc `state ≠ 1` là không phải thành viên.
 - **`access.DefaultPolicy`:** sửa/xoá chỉ tác giả; thêm người và `update_room` cho owner/admin; xoá người cho owner, admin chỉ xoá người vai `member`; đổi vai và `priority` chỉ owner; mọi action khác (kể cả `read_reactions`, `read_members`, `send_system_message`) cho mọi thành viên; `set_room_preferences` chỉ qua `Admit`. `send_system_message` nhận `Member` rỗng, nên policy theo vai sau này không được dựa vào nó.
-- **Nơi hỏi quyền:** `SendMessage` trong actor (`mention_all` sau `send_message`); `forward_message`, admit của reply, sửa/xoá/ẩn trong `message.Editor`; react/bookmark/pin/unpin trong `interaction.Service`; clear, lệnh thành viên và vị trí đọc trong `member.Service`; `open_direct`, `update_room` trong `room.Service`; `GetHistory`, `GetMessages`, `GetEditHistory` trong `message.Reader`; `GetReplies` (`read_replies`), `ListBookmarks`, `ListPins`, `ListThreads`, `GetReactions` trong `interaction.Reader`; `ListMembers` trong `member.Reader`; Mention App hỏi `read_history` cho `ListMentions` và `read_members` cho `ListRoomGroups` qua checker của core.
+- **Nơi hỏi quyền:** `SendMessage` trong actor (`mention_all` sau `send_message`); `forward_message`, admit của reply, sửa/xoá/ẩn trong `message.Editor`; react/bookmark/pin/unpin trong `interaction.Service`; clear, lệnh thành viên và vị trí đọc trong `member.Service`; `open_direct`, `update_room` trong `room.Service`; `GetHistory`, `GetMessages`, `GetEditHistory` trong `message.Reader`; `GetReplies` (`read_replies`), `ListBookmarks`, `ListPins`, `ListThreads`, `GetReactions` trong `interaction.Reader`; `ListMembers` trong `member.Reader`; Mention App hỏi `read_history` cho `ListMentions` và `read_members` cho `ListRoomGroups` qua checker của chat.
 
 ### 4.3. Hợp đồng Mã lỗi gRPC (Error Matrix)
 
@@ -182,7 +182,7 @@ sequenceDiagram
    - *Hạn chế:* Tồn tại một khoảng thời gian cực ngắn (vài phần triệu giây) giữa lúc ghi Fact vào `message_edits` và cập nhật Projection `messages`.
    - *Đánh đổi:* Chấp nhận độ trễ này để đổi lấy tính an toàn dữ liệu: không bao giờ mất lịch sử kiểm toán ngay cả khi máy chủ sập nguồn giữa chừng.
 2. **Quyền riêng tư vs Kiểm toán tuân thủ (Audit Compliance):**
-   - *Hạn chế:* Khi người dùng chọn "Xoá tin nhắn cho mọi người", core xoá text khỏi `messages` và khỏi mọi fact trong `message_edits` (`PurgeText`), nhưng các event `msg_created`/`msg_edited` đã phát trước đó vẫn mang text và còn trong stream `CHATIM_EVT` tới hết `EVT_STREAM_MAX_AGE` (mặc định 7 ngày).
+   - *Hạn chế:* Khi người dùng chọn "Xoá tin nhắn cho mọi người", chat xoá text khỏi `messages` và khỏi mọi fact trong `message_edits` (`PurgeText`), nhưng các event `msg_created`/`msg_edited` đã phát trước đó vẫn mang text và còn trong stream `CHATIM_EVT` tới hết `EVT_STREAM_MAX_AGE` (mặc định 7 ngày).
    - *Đánh đổi:* Hiện chưa có cấu hình tenant để event không mang text; event luôn mang snapshot hiện tại của tin.
 
 ---
@@ -193,11 +193,11 @@ sequenceDiagram
 |---|---|---|
 | **MongoDB Clustered Collection** | Lưu Fact `message_edits` và Projection `messages` | Nếu MongoDB lỗi ghi CAS: Lệnh sửa/xoá trả lỗi `UNAVAILABLE`. Trạng thái tin nhắn giữ nguyên, không xảy ra tình trạng dữ liệu nửa vời. |
 | **Model Access Policy** | Thẩm định quyền sửa/xoá | Nếu cache quyền bị cũ (chưa nhận event kick thành viên): Sẽ kiểm tra trực tiếp doc `members` trên DB để đảm bảo không ai bị thu hồi quyền mà vẫn sửa được tin. |
-| **Sweeper slot 0 (Module 10)** | Áp lại Fact sang Projection và phát bù event khi lệnh dừng giữa chừng | Nếu core chết giữa fact và projection: Client đọc `messages` thấy bản cũ khoảng 15–17s cho tới khi sweeper áp lại; projection còn chậm thì sweeper giữ cờ và thử ở lượt sau. |
+| **Sweeper slot 0 (Module 10)** | Áp lại Fact sang Projection và phát bù event khi lệnh dừng giữa chừng | Nếu node chat chết giữa fact và projection: Client đọc `messages` thấy bản cũ khoảng 15–17s cho tới khi sweeper áp lại; projection còn chậm thì sweeper giữ cờ và thử ở lượt sau. |
 
 ### 6.1. Chỉ số Sức khoẻ Vận hành & Cảnh báo SRE (Key Metrics & Alerts)
 
 Chưa có metric đếm số lần sửa, xoá hay số lần lệch `base_ver`. Metric thực có liên quan:
 
-- **`chatim_core_event_pending_oldest_seconds{collection="message_edits"}`:** Tuổi fact sửa/xoá cũ nhất còn cờ chờ phát (sweeper đo).
+- **`chatim_chat_event_pending_oldest_seconds{collection="message_edits"}`:** Tuổi fact sửa/xoá cũ nhất còn cờ chờ phát (sweeper đo).
   - *Luật cảnh báo (`ChatimEventPendingStuck`):* cờ cũ nhất > 60s trong 5 phút.

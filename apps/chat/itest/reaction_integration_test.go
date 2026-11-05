@@ -26,7 +26,7 @@ func itReactorNames() []string {
 	return users
 }
 
-func reactAll(t *testing.T, client chatimv1.CoreServiceClient, roomID string, seq uint64, users []string, change uint32, emojiOf func(int) string) []domain.ReactionCount {
+func reactAll(t *testing.T, client chatimv1.ChatServiceClient, roomID string, seq uint64, users []string, change uint32, emojiOf func(int) string) []domain.ReactionCount {
 	t.Helper()
 	emojis := make([]string, len(users))
 	errs := make([]error, len(users))
@@ -65,17 +65,17 @@ func emojiDeltas(prev, next string) []store.EmojiDelta {
 	return out
 }
 
-func TestRealInfraSweeperPublishesReactionChangesWrittenOutsideTheCore(t *testing.T) {
+func TestRealInfraSweeperPublishesReactionChangesWrittenOutsideTheChat(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastSweep)
-	client := dialCore(t, core.cfg)
+	chat := startChatNode(t, it, itFastSweep)
+	client := dialChat(t, chat.cfg)
 	roomID := createRoom(t, client)
 	room := parseRoom(t, roomID)
-	live := subscribeLive(t, it, core.cfg, roomID)
-	seq := sendAs(t, client, itUser, roomID, "react-a", "reacted outside the core")
-	core.awaitSweeper(t)
+	live := subscribeLive(t, it, chat.cfg, roomID)
+	seq := sendAs(t, client, itUser, roomID, "react-a", "reacted outside the chat")
+	chat.awaitSweeper(t)
 
-	st := itStore(it, core)
+	st := itStore(it, chat)
 	key := store.MsgKey{Room: room, Seq: seq}
 	steps := []struct {
 		n           uint32
@@ -92,10 +92,10 @@ func TestRealInfraSweeperPublishesReactionChangesWrittenOutsideTheCore(t *testin
 			_, changed, err = itReactions(st).SetReaction(t.Context(), domain.Reaction{Room: room, Seq: seq, Tenant: itTenant, User: "bob", Emoji: step.emoji, At: at})
 		}
 		if err != nil || !changed {
-			t.Fatalf("change %d outside the core = %v, %v; want a change", n, changed, err)
+			t.Fatalf("change %d outside the chat = %v, %v; want a change", n, changed, err)
 		}
 		if _, err := st.AddReactionCounts(t.Context(), key, emojiDeltas(step.prev, step.emoji)); err != nil {
-			t.Fatalf("count change %d outside the core: %v", n, err)
+			t.Fatalf("count change %d outside the chat: %v", n, err)
 		}
 		reactionID, countsID := pbconv.ReactionEventID(room, 0, seq, "bob", n), pbconv.ReactionCountsEventID(room, 0, seq, uint64(n))
 		evs := awaitLiveEvents(t, live, reactionID, countsID)
@@ -115,13 +115,13 @@ func TestRealInfraSweeperPublishesReactionChangesWrittenOutsideTheCore(t *testin
 
 func TestRealInfraConcurrentReactionsConvergeToExactCounts(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastSweep)
-	client := dialCore(t, core.cfg)
+	chat := startChatNode(t, it, itFastSweep)
+	client := dialChat(t, chat.cfg)
 	users := itReactorNames()
 	roomID := createRoomWith(t, client, users)
 	seq := sendAs(t, client, itUser, roomID, "react-c", "react to me")
 	key := store.MsgKey{Room: parseRoom(t, roomID), Seq: seq}
-	st := itStore(it, core)
+	st := itStore(it, chat)
 
 	first := reactAll(t, client, roomID, seq, users, 1, func(i int) string { return itEmojis[i%len(itEmojis)] })
 	before := awaitCounts(t, st, key, first)

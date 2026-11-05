@@ -22,7 +22,7 @@ func wireMemberWatch(cfg config.Config, nc *nats.Conn, router *actor.Router, log
 
 func memberWatchSources(forgets, malformed func() uint64) []metrics.Source {
 	return []metrics.Source{
-		{Name: "member_cache_forgets_total", Help: "Rooms whose cached members this core forgot after a member_removed or member_role_changed event.", Read: func() float64 { return float64(forgets()) }},
+		{Name: "member_cache_forgets_total", Help: "Rooms whose cached members this chat node forgot after a member_removed or member_role_changed event.", Read: func() float64 { return float64(forgets()) }},
 		{Name: "member_watch_malformed_total", Help: "Member events skipped because their subject carried no valid room id.", Read: func() float64 { return float64(malformed()) }},
 	}
 }

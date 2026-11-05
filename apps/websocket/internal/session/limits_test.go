@@ -8,7 +8,7 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
-func TestRequestsOverTheRateGetResourceExhaustedWithoutCallingCore(t *testing.T) {
+func TestRequestsOverTheRateGetResourceExhaustedWithoutCallingChat(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		opts := testOptions()
 		opts.CommandRate, opts.CommandBurst = 1, 3
@@ -26,8 +26,8 @@ func TestRequestsOverTheRateGetResourceExhaustedWithoutCallingCore(t *testing.T)
 		if codesByID[1] != 0 || codesByID[2] != 0 || codesByID[3] != int32(codes.ResourceExhausted) {
 			t.Fatalf("codes = %v", codesByID)
 		}
-		if h.core.calls.Load() != 2 || h.server.stats.rejected[rejectRate].Load() != 1 {
-			t.Fatalf("core calls = %d, rate rejections = %d", h.core.calls.Load(), h.server.stats.rejected[rejectRate].Load())
+		if h.chat.calls.Load() != 2 || h.server.stats.rejected[rejectRate].Load() != 1 {
+			t.Fatalf("chat calls = %d, rate rejections = %d", h.chat.calls.Load(), h.server.stats.rejected[rejectRate].Load())
 		}
 		time.Sleep(time.Second)
 		tc.history(4)
@@ -64,7 +64,7 @@ func TestRequestsOverTheInflightLimitGetResourceExhausted(t *testing.T) {
 		opts := testOptions()
 		opts.CommandInflight = 2
 		h := newHarness(t, opts)
-		first, second := h.core.hold(1), h.core.hold(2)
+		first, second := h.chat.hold(1), h.chat.hold(2)
 		tc := h.dial(true)
 		tc.auth(h.token("u1", time.Hour))
 		tc.history(1)

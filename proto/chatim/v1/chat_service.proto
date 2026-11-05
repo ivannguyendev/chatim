@@ -2,14 +2,14 @@ syntax = "proto3";
 
 package chatim.v1;
 
-import "chatim/v1/core.proto";
+import "chatim/v1/chat.proto";
 import "chatim/v1/members.proto";
 import "chatim/v1/message_reads.proto";
 import "chatim/v1/reactions_pins.proto";
 import "chatim/v1/replies_bookmarks_mentions.proto";
 import "chatim/v1/room_list.proto";
 
-service CoreService {
+service ChatService {
   rpc CreateRoom(CreateRoomRequest) returns (CreateRoomResponse);
   rpc OpenDirectRoom(OpenDirectRoomRequest) returns (OpenDirectRoomResponse);
   rpc ListMyRooms(ListMyRoomsRequest) returns (ListMyRoomsResponse);

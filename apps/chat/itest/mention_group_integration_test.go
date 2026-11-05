@@ -9,9 +9,9 @@ import (
 
 func TestRealInfraGroupMentionWithoutAllNotifiesTheGroupMembersInTheRoom(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastSweep)
-	client, mentions := dialCore(t, core.cfg), dialMention(t, core.cfg)
-	notices := subscribeNotify(t, it, core.cfg)
+	chat := startChatNode(t, it, itFastSweep)
+	client, mentions := dialChat(t, chat.cfg), dialMention(t, chat.cfg)
+	notices := subscribeNotify(t, it, chat.cfg)
 	tagGroups(t, mentions, map[string][]string{itUser: {"sales"}, "carol": {"sales"}, "erin": {"sales"}}, "sales")
 	roomID := createRoomWith(t, client, []string{itUser, "bob", "carol"})
 

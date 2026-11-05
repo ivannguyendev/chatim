@@ -89,7 +89,7 @@ func assertLinksUnchanged(t *testing.T, before, after linkProjections) {
 	}
 }
 
-func writeEveryKind(t *testing.T, it *itInfra, cfg config.Config, client chatimv1.CoreServiceClient, roomID string) (parent, reply, mention uint64) {
+func writeEveryKind(t *testing.T, it *itInfra, cfg config.Config, client chatimv1.ChatServiceClient, roomID string) (parent, reply, mention uint64) {
 	t.Helper()
 	parent = sendAs(t, client, itUser, roomID, "resync-1", "parent")
 	reply = sendLinked(t, client, "bob", &chatimv1.SendMessageRequest{RoomId: roomID, Cid: "resync-2", Text: "reply", ReplyTo: &chatimv1.ReplyRef{Seq: parent}})

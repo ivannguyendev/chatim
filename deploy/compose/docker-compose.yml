@@ -22,7 +22,7 @@ x-redis: &redis
     timeout: 3s
     retries: 10
 
-x-core: &core
+x-chat: &chat
   image: chatim/chat:dev
   profiles: ["app"]
   restart: unless-stopped
@@ -46,7 +46,7 @@ x-core: &core
     start_period: 60s
     start_interval: 1s
 
-x-core-env: &core-env
+x-chat-env: &chat-env
   MONGO_URI: "mongodb://chatim-mongodb:27017/?replicaSet=rs0&authSource=admin"
   MONGO_USER: ${MONGO_ROOT_USER:?set MONGO_ROOT_USER in .env}
   MONGO_PASSWORD_FILE: /run/secrets/mongo_password
@@ -56,7 +56,7 @@ x-core-env: &core-env
   REDIS_DEDUPE_PASSWORD_FILE: /run/secrets/redis_dedupe_password
   NATS_URL: nats://chatim-nats:4222
   GOMEMLIMIT: 920MiB
-  GOGC: ${CORE_GOGC:-100}
+  GOGC: ${CHAT_GOGC:-100}
 
 x-identity-env: &identity-env
   IDENTITY_MONGO_URI: mongodb://chatim-mongodb:27017/?replicaSet=rs0
@@ -82,6 +82,9 @@ x-identity: &identity
   secrets: [identity_mongo_password, identity_key_encryption_key, identity_node_secret]
   environment:
     <<: *identity-env
+  networks:
+    default:
+      aliases: [chatim-identity]
   depends_on:
     identity-bootstrap:
       condition: service_completed_successfully
@@ -105,13 +108,15 @@ x-websocket: &websocket
   depends_on:
     identity-1:
       condition: service_healthy
+    identity-2:
+      condition: service_healthy
     redis:
       condition: service_healthy
     redis-presence:
       condition: service_healthy
-    core-1:
+    chat-1:
       condition: service_healthy
-    core-2:
+    chat-2:
       condition: service_healthy
   healthcheck:
     test: ["CMD", "/app", "probe"]
@@ -129,9 +134,9 @@ x-websocket-env: &websocket-env
   WS_JWT_KEYS_FILE: /run/secrets/ws_jwks
   WS_JWT_ISSUER: chatim-dev
   WS_JWT_AUDIENCE: chatim-websocket
-  WS_IDENTITY_INTERNAL_URL: http://chatim-identity-1:8081
+  WS_IDENTITY_INTERNAL_URL: http://chatim-identity:8081
   WS_IDENTITY_SECRET_FILE: /run/secrets/identity_node_secret
-  WS_IDENTITY_JWKS_URL: http://chatim-identity-1:8080/.well-known/jwks.json
+  WS_IDENTITY_JWKS_URL: http://chatim-identity:8080/.well-known/jwks.json
   WS_IDENTITY_KEYS_INTERVAL: 10s
   WS_IDENTITY_ALLOW_HTTP: "true"
   NATS_URL: nats://chatim-nats:4222
@@ -292,31 +297,25 @@ services:
     <<: *identity
     container_name: chatim-identity-1
     ports:
-      - "127.0.0.1:${IDENTITY1_PORT:-8084}:8080"
+      - "127.0.0.1:8084:8080"
 
   identity-2:
     <<: *identity
     container_name: chatim-identity-2
-    ports:
-      - "127.0.0.1:${IDENTITY2_PORT:-8085}:8080"
 
-  core-1:
-    <<: *core
-    container_name: chatim-core-1
+  chat-1:
+    <<: *chat
+    container_name: chatim-chat-1
     environment:
-      <<: *core-env
-      CORE_ID: core-1
-    ports:
-      - "127.0.0.1:${CORE1_GRPC_PORT:-9001}:9000"
+      <<: *chat-env
+      CHAT_NODE_ID: chat-1
 
-  core-2:
-    <<: *core
-    container_name: chatim-core-2
+  chat-2:
+    <<: *chat
+    container_name: chatim-chat-2
     environment:
-      <<: *core-env
-      CORE_ID: core-2
-    ports:
-      - "127.0.0.1:${CORE2_GRPC_PORT:-9002}:9000"
+      <<: *chat-env
+      CHAT_NODE_ID: chat-2
 
   websocket-1:
     <<: *websocket
@@ -325,7 +324,7 @@ services:
       <<: *websocket-env
       WS_NODE_ID: websocket-1
     ports:
-      - "127.0.0.1:${WS1_PORT:-8081}:8080"
+      - "127.0.0.1:8081:8080"
 
   websocket-2:
     <<: *websocket
@@ -333,8 +332,6 @@ services:
     environment:
       <<: *websocket-env
       WS_NODE_ID: websocket-2
-    ports:
-      - "127.0.0.1:${WS2_PORT:-8083}:8080"
 
   gateway-1:
     image: chatim/gateway:dev
@@ -345,13 +342,13 @@ services:
     stop_grace_period: 18s
     secrets: [ws_jwks, identity_node_secret, redis_presence_password]
     environment:
-      GW_CORE_ADDRS: chatim-core-1:9000,chatim-core-2:9000
+      GW_CHAT_ADDRS: chatim-chat-1:9000,chatim-chat-2:9000
       GW_JWT_KEYS_FILE: /run/secrets/ws_jwks
       GW_JWT_ISSUER: chatim-dev
       GW_JWT_AUDIENCE: chatim-websocket
-      GW_IDENTITY_INTERNAL_URL: http://chatim-identity-1:8081
+      GW_IDENTITY_INTERNAL_URL: http://chatim-identity:8081
       GW_IDENTITY_SECRET_FILE: /run/secrets/identity_node_secret
-      GW_IDENTITY_JWKS_URL: http://chatim-identity-1:8080/.well-known/jwks.json
+      GW_IDENTITY_JWKS_URL: http://chatim-identity:8080/.well-known/jwks.json
       GW_IDENTITY_KEYS_INTERVAL: 10s
       GW_IDENTITY_ALLOW_HTTP: "true"
       GW_SHARED_REDIS_ADDR: chatim-redis-presence:6379
@@ -359,15 +356,17 @@ services:
       GW_CORS_ORIGINS: ${GW_CORS_ORIGINS:-http://localhost:3000}
       GOMEMLIMIT: 800MiB
     ports:
-      - "127.0.0.1:${GW1_PORT:-8082}:8080"
+      - "127.0.0.1:8082:8080"
     depends_on:
       identity-1:
         condition: service_healthy
+      identity-2:
+        condition: service_healthy
       redis-presence:
         condition: service_healthy
-      core-1:
+      chat-1:
         condition: service_healthy
-      core-2:
+      chat-2:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "/app", "probe"]

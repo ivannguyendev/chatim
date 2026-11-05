@@ -10,17 +10,17 @@ import (
 
 func TestReserveReportsTheStateOfEachKey(t *testing.T) {
 	mr, rdb := newRedis(t)
-	a, b := newStore(t, rdb, "core-a", nil), newStore(t, rdb, "core-b", nil)
+	a, b := newStore(t, rdb, "chat-a", nil), newStore(t, rdb, "chat-b", nil)
 	x, y := key("x"), key("y")
 
 	expectStatuses(t, reserve(t, a, x, y), Reserved, Reserved)
-	expectValue(t, mr, x, "p:core-a")
+	expectValue(t, mr, x, "p:chat-a")
 	if ttl := mr.TTL(x.String()); ttl != DefaultPendingTTL {
 		t.Fatalf("pending ttl = %v, want %v", ttl, DefaultPendingTTL)
 	}
 	expectStatuses(t, reserve(t, a, x), PendingHere)
 	expectStatuses(t, reserve(t, b, x, y), PendingElsewhere, PendingElsewhere)
-	expectValue(t, mr, x, "p:core-a")
+	expectValue(t, mr, x, "p:chat-a")
 
 	if err := a.Commit(t.Context(), []Entry{{Key: x, Record: sampleRecord}}); err != nil {
 		t.Fatalf("Commit: %v", err)
@@ -35,20 +35,20 @@ func TestReserveReportsTheStateOfEachKey(t *testing.T) {
 
 func TestPendingReservationExpiresAfterPendingTTL(t *testing.T) {
 	mr, rdb := newRedis(t)
-	a, b := newStore(t, rdb, "core-a", nil), newStore(t, rdb, "core-b", nil)
+	a, b := newStore(t, rdb, "chat-a", nil), newStore(t, rdb, "chat-b", nil)
 	x := key("x")
 	expectStatuses(t, reserve(t, a, x), Reserved)
 	mr.FastForward(DefaultPendingTTL - time.Millisecond)
 	expectStatuses(t, reserve(t, b, x), PendingElsewhere)
 	mr.FastForward(time.Millisecond)
 	expectStatuses(t, reserve(t, b, x), Reserved)
-	expectValue(t, mr, x, "p:core-b")
+	expectValue(t, mr, x, "p:chat-b")
 }
 
 func TestMalformedValuesAreTreatedAsAbsentAndLeftAlone(t *testing.T) {
 	mr, rdb := newRedis(t)
 	sink := &testlog.Sink{}
-	s := newStore(t, rdb, "core-a", sink)
+	s := newStore(t, rdb, "chat-a", sink)
 	values := []string{
 		"", "garbage", "p:", "p:a b", "p:a:b", "c:1", "c:0:5", "c:01:5", "c:1:+5",
 		"c:7:7:1", "c:1:5:6", "c:18446744073709551616:1", "x:1:1",
@@ -83,7 +83,7 @@ func TestMalformedValuesAreTreatedAsAbsentAndLeftAlone(t *testing.T) {
 
 func TestEachBatchIsOneRoundTrip(t *testing.T) {
 	_, rdb := newRedis(t)
-	s := newStore(t, rdb, "core-a", nil)
+	s := newStore(t, rdb, "chat-a", nil)
 	reserve(t, s, key("warm"))
 	if err := s.Abort(t.Context(), []Key{key("warm")}); err != nil {
 		t.Fatalf("Abort: %v", err)
@@ -108,7 +108,7 @@ func TestEachBatchIsOneRoundTrip(t *testing.T) {
 
 func TestEmptyBatchesSkipRedis(t *testing.T) {
 	mr, rdb := newRedis(t)
-	s := newStore(t, rdb, "core-a", nil)
+	s := newStore(t, rdb, "chat-a", nil)
 	mr.Close()
 	got, err := s.Reserve(t.Context(), nil)
 	if err != nil || got != nil {

@@ -16,13 +16,13 @@ NETWORK  ?= chatim_default
 ITEST_ARGS ?= -race -shuffle=on -count=1 ./...
 COMPOSE  := docker compose -f deploy/compose/docker-compose.yml --env-file .env
 COMPOSE_ALL := $(COMPOSE) --profile app
-CORE_COMPOSE := $(COMPOSE) --profile app
-CORES    := core-1 core-2
+APP_COMPOSE := $(COMPOSE) --profile app
+CHAT_NODES    := chat-1 chat-2
 WEBSOCKETS := websocket-1 websocket-2
 GATEWAYS := gateway-1
 IDENTITIES := identity-1 identity-2
 WS_KEYS_DIR := .local/ws-keys
-CORECLI_IMAGE := chatim/chatcli:dev
+CHATCLI_IMAGE := chatim/chatcli:dev
 INSTANCE ?= state
 NODE ?= 1
 REDIS_CONTAINER_state  := chatim-redis
@@ -32,7 +32,7 @@ GO_RUN   := docker run --rm -v "$(CURDIR)":/src -w /src -v chatim-gomod:/go/pkg/
 BUF_RUN  := docker run --rm -v "$(CURDIR)":/src -w /src $(BUF_IMAGE)
 POC_RUN  := $(GO_RUN) --network $(NETWORK) -e MONGO_URI -e REDIS_PASSWORD
 
-.PHONY: go check-env test itest vet fmt-check lint vuln tidy proto buf-lint alerts-check poc image infra-up infra-down infra-reset core-up core-down identity-env identity-admin identity-logs dev-keys ws-token ws-logs gw-logs e2e redis-cli
+.PHONY: go check-env test itest vet fmt-check lint vuln tidy proto buf-lint alerts-check poc image infra-up infra-down infra-reset app-up app-down identity-env identity-admin identity-logs dev-keys ws-token ws-logs gw-logs e2e redis-cli
 
 go:
 	$(GO_RUN) $(GO_IMAGE) go $(ARGS)
@@ -92,16 +92,16 @@ redis-cli:
 	@test -n "$(REDIS_CONTAINER_$(INSTANCE))" || (echo "INSTANCE must be state, dedupe or presence" && exit 1)
 	docker exec $(REDIS_CONTAINER_$(INSTANCE)) sh -c 'read -r REDISCLI_AUTH < "$$REDIS_SECRET_FILE"; export REDISCLI_AUTH; exec redis-cli "$$@"' redis-cli $(ARGS)
 
-core-up: check-env identity-env dev-keys
+app-up: check-env identity-env dev-keys
 	$(MAKE) -s image TARGET=apps/chat
 	$(MAKE) -s image TARGET=apps/websocket
 	$(MAKE) -s image TARGET=apps/gateway
 	$(MAKE) -s image TARGET=apps/identity
-	$(CORE_COMPOSE) up -d $(CORES) $(WEBSOCKETS) $(GATEWAYS) $(IDENTITIES)
-	./scripts/wait-healthy.sh $(addprefix chatim-,$(IDENTITIES) $(CORES) $(WEBSOCKETS) $(GATEWAYS))
+	$(APP_COMPOSE) up -d $(CHAT_NODES) $(WEBSOCKETS) $(GATEWAYS) $(IDENTITIES)
+	./scripts/wait-healthy.sh $(addprefix chatim-,$(IDENTITIES) $(CHAT_NODES) $(WEBSOCKETS) $(GATEWAYS))
 
-core-down: check-env
-	$(CORE_COMPOSE) rm -s -f $(GATEWAYS) $(WEBSOCKETS) $(IDENTITIES) identity-bootstrap identity-mongo-init $(CORES)
+app-down: check-env
+	$(APP_COMPOSE) rm -s -f $(GATEWAYS) $(WEBSOCKETS) $(IDENTITIES) identity-bootstrap identity-mongo-init $(CHAT_NODES)
 
 identity-env:
 	@test -n "$(IDENTITY_MONGO_PASSWORD)" || (echo "set IDENTITY_MONGO_PASSWORD in .env" && exit 1)
@@ -120,11 +120,11 @@ dev-keys:
 	else \
 		$(MAKE) -s image TARGET=tools/chatcli && \
 		mkdir -p $(WS_KEYS_DIR) && chmod 700 $(WS_KEYS_DIR) && \
-		docker run --rm --user "$$(id -u):$$(id -g)" -v "$(CURDIR)/$(WS_KEYS_DIR)":/keys $(CORECLI_IMAGE) dev-keys -out /keys >&2; \
+		docker run --rm --user "$$(id -u):$$(id -g)" -v "$(CURDIR)/$(WS_KEYS_DIR)":/keys $(CHATCLI_IMAGE) dev-keys -out /keys >&2; \
 	fi
 
 ws-token: dev-keys
-	@docker run --rm --user "$$(id -u):$$(id -g)" -v "$(CURDIR)/$(WS_KEYS_DIR)/private.jwk":/keys/private.jwk:ro $(CORECLI_IMAGE) token -key /keys/private.jwk $(ARGS)
+	@docker run --rm --user "$$(id -u):$$(id -g)" -v "$(CURDIR)/$(WS_KEYS_DIR)/private.jwk":/keys/private.jwk:ro $(CHATCLI_IMAGE) token -key /keys/private.jwk $(ARGS)
 
 ws-logs:
 	docker logs --tail 200 -f chatim-websocket-$(NODE)

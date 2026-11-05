@@ -19,7 +19,7 @@ const (
 type Config struct {
 	ListenAddr        string
 	AdminAddr         string
-	CoreAddrs         []string
+	ChatAddrs         []string
 	JWTKeysFile       string
 	JWTIssuer         string
 	JWTAudience       string
@@ -55,11 +55,11 @@ func AdminAddr() string { return envconfig.String("GW_ADMIN_ADDR", defaultAdminA
 
 func Load() (Config, error) {
 	var p parser
-	deadline := p.span("CORE_REQUEST_DEADLINE", 5*time.Second)
+	deadline := p.span("CHAT_REQUEST_DEADLINE", 5*time.Second)
 	c := Config{
 		ListenAddr:        envconfig.String("GW_ADDR", ":8080"),
 		AdminAddr:         AdminAddr(),
-		CoreAddrs:         list("GW_CORE_ADDRS"),
+		ChatAddrs:         list("GW_CHAT_ADDRS"),
 		JWTKeysFile:       envconfig.String("GW_JWT_KEYS_FILE", ""),
 		JWTIssuer:         envconfig.String("GW_JWT_ISSUER", ""),
 		JWTAudience:       envconfig.String("GW_JWT_AUDIENCE", ""),
@@ -105,7 +105,7 @@ func (c Config) LogValue() slog.Value {
 	return slog.GroupValue(
 		slog.String("listen_addr", c.ListenAddr),
 		slog.String("admin_addr", c.AdminAddr),
-		slog.String("core_addrs", strings.Join(c.CoreAddrs, ",")),
+		slog.String("chat_addrs", strings.Join(c.ChatAddrs, ",")),
 		slog.String("jwt_keys_file", c.JWTKeysFile),
 		slog.String("jwt_issuer", c.JWTIssuer),
 		slog.String("jwt_audience", c.JWTAudience),

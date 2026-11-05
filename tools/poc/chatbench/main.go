@@ -21,9 +21,9 @@ import (
 	"github.com/ivannguyendev/chatim/tools/poc/internal/openloop"
 )
 
-var coreKnobs = []string{
+var chatKnobs = []string{
 	"FLUSH_SHARDS", "FLUSH_WINDOW", "FLUSH_MAX_BATCH", "FLUSH_QUEUE", "FLUSH_INSERT_TIMEOUT",
-	"ACTOR_MAX_GROUP", "ACTOR_MAILBOX", "CORE_REQUEST_DEADLINE", "CORE_MAX_INFLIGHT", "CORE_QUEUE_WAIT",
+	"ACTOR_MAX_GROUP", "ACTOR_MAILBOX", "CHAT_REQUEST_DEADLINE", "CHAT_MAX_INFLIGHT", "CHAT_QUEUE_WAIT",
 }
 
 type config struct {
@@ -42,10 +42,10 @@ func main() { os.Exit(realMain()) }
 func realMain() int {
 	var c config
 	flag.StringVar(&c.redis, "redis", cmp.Or(os.Getenv("REDIS_ADDR"), "chatim-redis:6379"), "Redis holding slot leases (env REDIS_ADDR)")
-	flag.IntVar(&c.redisDB, "redis-db", 0, "Redis database index of the cores")
+	flag.IntVar(&c.redisDB, "redis-db", 0, "Redis database index of the nodes")
 	flag.StringVar(&c.redisPW, "redis-password", "", "password of that Redis; env REDIS_PASSWORD when empty")
 	flag.StringVar(&c.nats, "nats", cmp.Or(os.Getenv("NATS_URL"), "nats://chatim-nats:4222"), "NATS URL for -watch (env NATS_URL)")
-	flag.StringVar(&c.liveRoot, "live-root", "live", "live subject root, EVT_LIVE_ROOT of the cores")
+	flag.StringVar(&c.liveRoot, "live-root", "live", "live subject root, EVT_LIVE_ROOT of the nodes")
 	flag.StringVar(&c.tenant, "tenant", "bench", "tenant of the bench rooms")
 	flag.IntVar(&c.rooms, "rooms", 1000, "group rooms to create and send to")
 	flag.IntVar(&c.members, "members", 4, "members per room, the creator included; each send comes from one of them")
@@ -144,11 +144,11 @@ func run(ctx context.Context, c config) error {
 func printConfig(c config, texts int, share string) {
 	fmt.Printf("chatbench rate=%d/s duration=%v warmup=%v max-inflight=%d rooms=%d members=%d zipf=%v mention-rate=%v deadline=%v attempt=%v watch=%d texts=%d\n",
 		c.plan.Rate, c.plan.Duration, c.plan.Warmup, c.plan.MaxInflight, c.rooms, c.members, c.zipf, c.mentionRate, c.deadline, c.attempt, c.watch, texts)
-	knobs := make([]string, len(coreKnobs))
-	for i, k := range coreKnobs {
+	knobs := make([]string, len(chatKnobs))
+	for i, k := range chatKnobs {
 		knobs[i] = k + "=" + cmp.Or(os.Getenv(k), "default")
 	}
-	fmt.Printf("core config declared for this run (chatbench env, not read from the cores; default = core built-in): %s\n", strings.Join(knobs, " "))
+	fmt.Printf("chat config declared for this run (chatbench env, not read from the nodes; default = chat built-in): %s\n", strings.Join(knobs, " "))
 	fmt.Printf("slot owners: %s\n", share)
 }
 

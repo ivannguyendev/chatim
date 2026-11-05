@@ -117,7 +117,7 @@ func (r *wsEphemeralRun) connect() error {
 			return err
 		}
 	}
-	resp, err := viaGateway(r.a.gw, r.a.gw.core.CreateRoom, &chatimv1.CreateRoomRequest{
+	resp, err := viaGateway(r.a.gw, r.a.gw.chat.CreateRoom, &chatimv1.CreateRoomRequest{
 		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "e2e websocket ephemeral", Members: []string{r.a.user, r.b.user, r.c.user}, RequestId: randomCID(),
 	})
 	if err != nil {

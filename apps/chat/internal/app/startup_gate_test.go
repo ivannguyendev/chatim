@@ -21,7 +21,7 @@ import (
 
 const (
 	grpcListening = "grpc server listening"
-	coreReady     = "core ready"
+	chatReady     = "chat ready"
 	gateLimit     = 10 * time.Second
 )
 
@@ -111,8 +111,8 @@ func (rg *gateRig) assertGRPCNeverServed(t *testing.T) {
 	if n := rg.sink.Count(grpcListening); n != 0 {
 		t.Errorf("grpc served %d times, want never", n)
 	}
-	if n := rg.sink.Count(coreReady); n != 0 {
-		t.Errorf("core reported ready %d times, want never", n)
+	if n := rg.sink.Count(chatReady); n != 0 {
+		t.Errorf("chat reported ready %d times, want never", n)
 	}
 	if conn, err := net.Dial("tcp", rg.grpcAddr); err == nil {
 		_ = conn.Close()
@@ -169,7 +169,7 @@ func TestServeOpensGRPCAndReadinessAfterACleanStart(t *testing.T) {
 	if err := rg.wait(t); err != nil {
 		t.Fatalf("serve = %v, want a clean stop", err)
 	}
-	if rg.sink.Count(grpcListening) != 1 || rg.sink.Count(coreReady) != 1 {
-		t.Fatalf("grpc served %d times and ready %d times, want once each", rg.sink.Count(grpcListening), rg.sink.Count(coreReady))
+	if rg.sink.Count(grpcListening) != 1 || rg.sink.Count(chatReady) != 1 {
+		t.Fatalf("grpc served %d times and ready %d times, want once each", rg.sink.Count(grpcListening), rg.sink.Count(chatReady))
 	}
 }

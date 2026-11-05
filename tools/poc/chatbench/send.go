@@ -90,9 +90,9 @@ func slotShare(s *route.Session) string {
 		case !ok:
 			owned["none"]++
 		case rt.Owner:
-			owned[rt.Core]++
+			owned[rt.Node]++
 		default:
-			owned[rt.Core+"(preferred, no lease)"]++
+			owned[rt.Node+"(preferred, no lease)"]++
 		}
 	}
 	parts := make([]string, 0, len(owned))

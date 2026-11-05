@@ -13,7 +13,7 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-type fakeCore struct {
+type fakeChat struct {
 	mu       sync.Mutex
 	members  map[uint64]map[string]domain.MemberRoom
 	messages map[domain.MessageKey]*chatimv1.Message
@@ -21,21 +21,21 @@ type fakeCore struct {
 	err      error
 }
 
-func newFakeCore() *fakeCore {
-	return &fakeCore{
+func newFakeChat() *fakeChat {
+	return &fakeChat{
 		members:  map[uint64]map[string]domain.MemberRoom{},
 		messages: map[domain.MessageKey]*chatimv1.Message{},
 		sent:     map[domain.MessageKey]time.Time{},
 	}
 }
 
-func (c *fakeCore) fail(err error) {
+func (c *fakeChat) fail(err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.err = err
 }
 
-func (c *fakeCore) setMember(room uint64, user string, update func(*domain.MemberRoom)) {
+func (c *fakeChat) setMember(room uint64, user string, update func(*domain.MemberRoom)) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.members[room] == nil {
@@ -49,20 +49,20 @@ func (c *fakeCore) setMember(room uint64, user string, update func(*domain.Membe
 	c.members[room][user] = m
 }
 
-func (c *fakeCore) putMessage(key domain.MessageKey, at time.Time, m *chatimv1.Message) {
+func (c *fakeChat) putMessage(key domain.MessageKey, at time.Time, m *chatimv1.Message) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	m.RoomId, m.ThreadRoot, m.Seq = ids.FormatRoomID(key.Room), key.Thread, key.Seq
 	c.messages[key], c.sent[key] = m, at
 }
 
-func (c *fakeCore) editMessage(key domain.MessageKey, edit func(*chatimv1.Message)) {
+func (c *fakeChat) editMessage(key domain.MessageKey, edit func(*chatimv1.Message)) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	edit(c.messages[key])
 }
 
-func (c *fakeCore) RoomsOf(_ context.Context, _, user string) ([]domain.MemberRoom, error) {
+func (c *fakeChat) RoomsOf(_ context.Context, _, user string) ([]domain.MemberRoom, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.err != nil {
@@ -77,7 +77,7 @@ func (c *fakeCore) RoomsOf(_ context.Context, _, user string) ([]domain.MemberRo
 	return out, nil
 }
 
-func (c *fakeCore) SentTimes(_ context.Context, keys []domain.MessageKey) (map[domain.MessageKey]time.Time, error) {
+func (c *fakeChat) SentTimes(_ context.Context, keys []domain.MessageKey) (map[domain.MessageKey]time.Time, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	out := map[domain.MessageKey]time.Time{}
@@ -89,7 +89,7 @@ func (c *fakeCore) SentTimes(_ context.Context, keys []domain.MessageKey) (map[d
 	return out, nil
 }
 
-func (c *fakeCore) VisibleMessages(_ context.Context, _, user string, keys []domain.MessageKey) ([]*chatimv1.Message, error) {
+func (c *fakeChat) VisibleMessages(_ context.Context, _, user string, keys []domain.MessageKey) ([]*chatimv1.Message, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	var out []*chatimv1.Message
@@ -103,7 +103,7 @@ func (c *fakeCore) VisibleMessages(_ context.Context, _, user string, keys []dom
 	return out, nil
 }
 
-func (c *fakeCore) Authorize(_ context.Context, _, user string, room uint64, _ domain.Action) error {
+func (c *fakeChat) Authorize(_ context.Context, _, user string, room uint64, _ domain.Action) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	users, ok := c.members[room]
@@ -116,13 +116,13 @@ func (c *fakeCore) Authorize(_ context.Context, _, user string, room uint64, _ d
 	return nil
 }
 
-func (c *fakeCore) RoomMemberCount(_ context.Context, room uint64) (int64, error) {
+func (c *fakeChat) RoomMemberCount(_ context.Context, room uint64) (int64, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return int64(len(c.members[room])), c.err
 }
 
-func (c *fakeCore) RoomMemberIDs(_ context.Context, room uint64) ([]string, error) {
+func (c *fakeChat) RoomMemberIDs(_ context.Context, room uint64) ([]string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	var out []string

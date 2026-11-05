@@ -36,14 +36,14 @@ func newRedis(t *testing.T) (*miniredis.Miniredis, *redis.Client) {
 	return mr, rdb
 }
 
-func newStore(t *testing.T, rdb *redis.Client, core string, sink *testlog.Sink) *Store {
+func newStore(t *testing.T, rdb *redis.Client, chat string, sink *testlog.Sink) *Store {
 	t.Helper()
 	if sink == nil {
 		sink = &testlog.Sink{}
 	}
-	s, err := New(rdb, Config{CoreID: core, Timeout: testTimeout}, sink.Logger())
+	s, err := New(rdb, Config{NodeID: chat, Timeout: testTimeout}, sink.Logger())
 	if err != nil {
-		t.Fatalf("New(%s): %v", core, err)
+		t.Fatalf("New(%s): %v", chat, err)
 	}
 	return s
 }

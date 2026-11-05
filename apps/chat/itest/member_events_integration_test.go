@@ -56,12 +56,12 @@ func awaitExactlyOnce(t *testing.T, live <-chan *nats.Msg, cfg config.Config, ro
 
 func TestRealInfraEachChangeGoesToTheSubjectOfItsData(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastSweep)
-	client := dialCore(t, core.cfg)
-	live := subscribeLive(t, it, core.cfg, "*")
+	chat := startChatNode(t, it, itFastSweep)
+	client := dialChat(t, chat.cfg)
+	live := subscribeLive(t, it, chat.cfg, "*")
 	roomID := createRoom(t, client)
 	room := parseRoom(t, roomID)
-	awaitExactlyOnce(t, live, core.cfg, roomID, map[string]liveWant{
+	awaitExactlyOnce(t, live, chat.cfg, roomID, map[string]liveWant{
 		pbconv.RoomCreatedEventID(room):       {"room", "room_created"},
 		pbconv.MemberEventID(room, itUser, 1): {"member", "member_added"},
 		pbconv.MemberEventID(room, "bob", 1):  {"member", "member_added"},
@@ -74,7 +74,7 @@ func TestRealInfraEachChangeGoesToTheSubjectOfItsData(t *testing.T) {
 	if err != nil || len(added) != 1 || read.GetReadSeq() != seq {
 		t.Fatalf("added %v, MarkRead = %v, %v; want carol added and bob's read position at %d", added, read, err, seq)
 	}
-	awaitExactlyOnce(t, live, core.cfg, roomID, map[string]liveWant{
+	awaitExactlyOnce(t, live, chat.cfg, roomID, map[string]liveWant{
 		pbconv.MessageEventID(room, 0, seq):                    {"message", "msg_created"},
 		pbconv.MemberEventID(room, "carol", added[0].GetVer()): {"member", "member_added"},
 		pbconv.MemberCountEventID(room, 2):                     {"room", "member_count_changed"},
@@ -84,12 +84,12 @@ func TestRealInfraEachChangeGoesToTheSubjectOfItsData(t *testing.T) {
 
 func TestRealInfraMemberCountFollowsEachCommand(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastSweep)
-	client := dialCore(t, core.cfg)
+	chat := startChatNode(t, it, itFastSweep)
+	client := dialChat(t, chat.cfg)
 	roomID := createRoom(t, client)
 	room := parseRoom(t, roomID)
-	live := subscribeLive(t, it, core.cfg, roomID)
-	st := itStore(it, core)
+	live := subscribeLive(t, it, chat.cfg, roomID)
+	st := itStore(it, chat)
 	if r := assertCountMatchesDocs(t, st, room, 2); r.MemberCountVer != 1 {
 		t.Fatalf("member_count_ver after create = %d, want 1", r.MemberCountVer)
 	}
@@ -113,12 +113,12 @@ func TestRealInfraMemberCountFollowsEachCommand(t *testing.T) {
 
 func TestRealInfraHidingAMessageAgainPublishesNoEvent(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastSweep)
-	client := dialCore(t, core.cfg)
+	chat := startChatNode(t, it, itFastSweep)
+	client := dialChat(t, chat.cfg)
 	roomID := createRoom(t, client)
 	room := parseRoom(t, roomID)
 	published := make(chan *nats.Msg, 64)
-	sub, err := it.nc.ChanSubscribe(core.cfg.Stream.SubjectRoot+"."+itTenant+".member."+roomID+".message_hidden", published)
+	sub, err := it.nc.ChanSubscribe(chat.cfg.Stream.SubjectRoot+"."+itTenant+".member."+roomID+".message_hidden", published)
 	if err != nil {
 		t.Fatalf("subscribe raw member events: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestRealInfraHidingAMessageAgainPublishesNoEvent(t *testing.T) {
 				t.Fatalf("raw publish %s, want only %s", m.Header.Get(jetstream.MsgIDHeader), id)
 			}
 			if publishes++; publishes == 1 {
-				quiet = time.After(core.cfg.Sweep.MinAge + core.cfg.Sweep.Interval + time.Second)
+				quiet = time.After(chat.cfg.Sweep.MinAge + chat.cfg.Sweep.Interval + time.Second)
 			}
 		case <-quiet:
 			if publishes != 1 {

@@ -18,7 +18,7 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/slotmap"
 )
 
-func addMembersAs(t *testing.T, client chatimv1.CoreServiceClient, user, roomID, requestID string, users ...string) []*chatimv1.AddedMember {
+func addMembersAs(t *testing.T, client chatimv1.ChatServiceClient, user, roomID, requestID string, users ...string) []*chatimv1.AddedMember {
 	t.Helper()
 	resp, err := retryingUnavailable(callerAs(t.Context(), user), func(ctx context.Context) (*chatimv1.AddMembersResponse, error) {
 		return client.AddMembers(ctx, &chatimv1.AddMembersRequest{RoomId: roomID, Users: users, RequestId: requestID})
@@ -29,7 +29,7 @@ func addMembersAs(t *testing.T, client chatimv1.CoreServiceClient, user, roomID,
 	return resp.GetAdded()
 }
 
-func changeRole(t *testing.T, client chatimv1.CoreServiceClient, roomID, user string, role chatimv1.MemberRole) {
+func changeRole(t *testing.T, client chatimv1.ChatServiceClient, roomID, user string, role chatimv1.MemberRole) {
 	t.Helper()
 	_, err := retryingUnavailable(caller(t.Context()), func(ctx context.Context) (*chatimv1.ChangeMemberRoleResponse, error) {
 		return client.ChangeMemberRole(ctx, &chatimv1.ChangeMemberRoleRequest{RoomId: roomID, User: user, Role: role})
@@ -39,7 +39,7 @@ func changeRole(t *testing.T, client chatimv1.CoreServiceClient, roomID, user st
 	}
 }
 
-func removeAs(t *testing.T, client chatimv1.CoreServiceClient, user, roomID, target string) *chatimv1.RemoveMemberResponse {
+func removeAs(t *testing.T, client chatimv1.ChatServiceClient, user, roomID, target string) *chatimv1.RemoveMemberResponse {
 	t.Helper()
 	resp, err := retryingUnavailable(callerAs(t.Context(), user), func(ctx context.Context) (*chatimv1.RemoveMemberResponse, error) {
 		return client.RemoveMember(ctx, &chatimv1.RemoveMemberRequest{RoomId: roomID, User: target})
@@ -110,13 +110,13 @@ func awaitMetric(t *testing.T, cfg config.Config, series string, done func(float
 	return awaitStored(t, series, func() (float64, error) { return itMetric(t, cfg, series), nil }, done)
 }
 
-func awaitSlotsSplit(t *testing.T, it *itInfra, coreIDs ...string) {
+func awaitSlotsSplit(t *testing.T, it *itInfra, nodeIDs ...string) {
 	t.Helper()
 	keys := make([]string, slotmap.Count)
 	for s := range slotmap.Count {
 		keys[s] = slotmap.SlotKey(uint16(s))
 	}
-	share := slotmap.Count / len(coreIDs)
+	share := slotmap.Count / len(nodeIDs)
 	awaitStored(t, "slot owners", func() (map[string]int, error) {
 		vals, err := it.rdb.MGet(t.Context(), keys...).Result()
 		owners := map[string]int{}
@@ -127,7 +127,7 @@ func awaitSlotsSplit(t *testing.T, it *itInfra, coreIDs ...string) {
 		}
 		return owners, err
 	}, func(owners map[string]int) bool {
-		for _, id := range coreIDs {
+		for _, id := range nodeIDs {
 			if owners[id] != share {
 				return false
 			}

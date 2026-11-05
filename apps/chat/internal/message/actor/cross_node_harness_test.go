@@ -40,11 +40,11 @@ func newWorld(t *testing.T) *world {
 	return w
 }
 
-func (w *world) registry(t *testing.T, core string, log *slog.Logger, cooldown time.Duration) *dedupe.Store {
+func (w *world) registry(t *testing.T, chat string, log *slog.Logger, cooldown time.Duration) *dedupe.Store {
 	t.Helper()
-	s, err := dedupe.New(w.rdb, dedupe.Config{CoreID: core, Timeout: time.Second, Cooldown: cooldown}, log)
+	s, err := dedupe.New(w.rdb, dedupe.Config{NodeID: chat, Timeout: time.Second, Cooldown: cooldown}, log)
 	if err != nil {
-		t.Fatalf("dedupe.New(%s): %v", core, err)
+		t.Fatalf("dedupe.New(%s): %v", chat, err)
 	}
 	return s
 }

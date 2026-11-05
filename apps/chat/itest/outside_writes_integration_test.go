@@ -16,11 +16,11 @@ const itActivityPoll = 100 * time.Millisecond
 
 const itSweepMargin = 1500 * time.Millisecond
 
-func (c itCore) sweepBound() time.Duration {
+func (c itChatNode) sweepBound() time.Duration {
 	return c.cfg.Sweep.MinAge + c.cfg.Sweep.Interval + itSweepMargin
 }
 
-func expectSweptWithin(t *testing.T, c itCore, since time.Time, what string) {
+func expectSweptWithin(t *testing.T, c itChatNode, since time.Time, what string) {
 	t.Helper()
 	took := time.Since(since)
 	if took > c.sweepBound() {
@@ -53,7 +53,7 @@ func awaitUnflagged(t *testing.T, st *mongostore.Store, c store.StateCollection,
 	}
 }
 
-func itStore(it *itInfra, c itCore) *mongostore.Store {
+func itStore(it *itInfra, c itChatNode) *mongostore.Store {
 	return mongostore.New(it.mongo.Database(c.cfg.MongoDB), mongostore.Options{})
 }
 
@@ -75,28 +75,28 @@ func awaitActivity(t *testing.T, st *mongostore.Store, room, seq uint64) domain.
 	}
 }
 
-func TestRealInfraSweeperPublishesWritesThatSkippedTheCore(t *testing.T) {
+func TestRealInfraSweeperPublishesWritesThatSkippedTheChat(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastSweep)
-	roomID := createRoom(t, dialCore(t, core.cfg))
+	chat := startChatNode(t, it, itFastSweep)
+	roomID := createRoom(t, dialChat(t, chat.cfg))
 	room := parseRoom(t, roomID)
-	live := subscribeLive(t, it, core.cfg, roomID)
-	core.awaitSweeper(t)
+	live := subscribeLive(t, it, chat.cfg, roomID)
+	chat.awaitSweeper(t)
 
 	inserted := time.Now()
 	outside := domain.Message{
-		Room: room, Seq: 1, Tenant: itTenant, From: "migrator", Kind: domain.KindText, Text: "written outside the core",
+		Room: room, Seq: 1, Tenant: itTenant, From: "migrator", Kind: domain.KindText, Text: "written outside the chat",
 		CID: "outside-1", CreatedAt: time.Now().UTC().Truncate(time.Millisecond),
 	}
-	st := itStore(it, core)
+	st := itStore(it, chat)
 	if res := st.Insert(t.Context(), []domain.Message{outside}); res[0].Outcome != store.Inserted {
-		t.Fatalf("insert outside the core: %+v", res)
+		t.Fatalf("insert outside the chat: %+v", res)
 	}
 	if !flagged(t, st, store.StateMessages, room, 1) {
-		t.Fatalf("message written outside the core is not flagged, want it pending until a publish")
+		t.Fatalf("message written outside the chat is not flagged, want it pending until a publish")
 	}
 	awaitLiveIDs(t, live, inserted, pbconv.MessageEventID(room, 0, 1))
-	expectSweptWithin(t, core, inserted, "msg_created of a message no core published")
+	expectSweptWithin(t, chat, inserted, "msg_created of a message no chat published")
 	awaitUnflagged(t, st, store.StateMessages, room, 1)
 	if got := awaitActivity(t, st, room, 1); got.LastMsgAt.IsZero() || got.LastChangeAt.Before(got.LastMsgAt) {
 		t.Fatalf("room activity = %+v, want last message and change times", got)
@@ -105,34 +105,34 @@ func TestRealInfraSweeperPublishesWritesThatSkippedTheCore(t *testing.T) {
 
 func TestRealInfraRoomCreatedComesFromTheFastPathAndTheSweeper(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastSweep)
-	live := subscribeLive(t, it, core.cfg, "*")
+	chat := startChatNode(t, it, itFastSweep)
+	live := subscribeLive(t, it, chat.cfg, "*")
 
 	began := time.Now()
-	fast := createRoom(t, dialCore(t, core.cfg))
+	fast := createRoom(t, dialChat(t, chat.cfg))
 	awaitLiveIDs(t, live, began, pbconv.RoomCreatedEventID(parseRoom(t, fast)))
 
-	core.awaitSweeper(t)
+	chat.awaitSweeper(t)
 	created := time.Now().UTC().Truncate(time.Millisecond)
 	outside := domain.Room{ID: ids.NewRoomID(), Tenant: itTenant, Type: domain.RoomGroup, Name: "outside", CreatedBy: "migrator", CreatedAt: created, MemberCount: 1}
 	owner := domain.Member{Room: outside.ID, Tenant: itTenant, User: "migrator", Role: domain.RoleOwner, JoinedAt: created}
-	if err := itStore(it, core).Create(t.Context(), outside, []domain.Member{owner}); err != nil {
-		t.Fatalf("create a room outside the core: %v", err)
+	if err := itStore(it, chat).Create(t.Context(), outside, []domain.Member{owner}); err != nil {
+		t.Fatalf("create a room outside the chat: %v", err)
 	}
 	awaitLiveIDs(t, live, time.Now(), pbconv.RoomCreatedEventID(outside.ID))
 }
 
 func TestRealInfraSendMessageMovesRoomActivity(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastSweep)
-	client := dialCore(t, core.cfg)
+	chat := startChatNode(t, it, itFastSweep)
+	client := dialChat(t, chat.cfg)
 	roomID := createRoom(t, client)
 	room := parseRoom(t, roomID)
 	resp, err := sendRetrying(caller(t.Context()), client, &chatimv1.SendMessageRequest{RoomId: roomID, Cid: "activity-1", Text: "moves the room"})
 	if err != nil {
 		t.Fatalf("SendMessage: %v", err)
 	}
-	got := awaitActivity(t, itStore(it, core), room, resp.GetSeq())
+	got := awaitActivity(t, itStore(it, chat), room, resp.GetSeq())
 	if got.LastSeq != resp.GetSeq() || got.LastMsgAt.IsZero() || got.LastChangeAt.IsZero() {
 		t.Fatalf("room activity = %+v, want last seq %d with message and change times", got, resp.GetSeq())
 	}

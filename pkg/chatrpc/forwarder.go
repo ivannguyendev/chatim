@@ -18,7 +18,7 @@ import (
 var (
 	errUnknownMethod = status.Error(codes.Unimplemented, "method not served")
 	errMalformed     = status.Error(codes.InvalidArgument, "malformed request")
-	errEmptyResult   = status.Error(codes.Internal, "core returned no result")
+	errEmptyResult   = status.Error(codes.Internal, "chat returned no result")
 )
 
 type Route func(cmd Command, req proto.Message) (Clients, error)
@@ -48,7 +48,7 @@ func NewForwarder(opts ForwarderOptions) (*Forwarder, error) {
 		return nil, errors.New("chatrpc: route is required")
 	}
 	if opts.Deadline <= 0 {
-		return nil, errors.New("chatrpc: core request deadline must be positive")
+		return nil, errors.New("chatrpc: chat request deadline must be positive")
 	}
 	cmds, err := Commands(opts.Methods)
 	if err != nil {
@@ -88,12 +88,12 @@ func (f *Forwarder) Forward(ctx context.Context, claims auth.Claims, method stri
 	cmd := f.commands[i]
 	result, err := f.run(ctx, claims, i, req)
 	if err != nil {
-		code, coreMessage := codeOf(err)
+		code, chatMessage := codeOf(err)
 		f.stats.count(i, code)
 		if code == codes.Unavailable && f.onUnavailable != nil {
 			f.onUnavailable()
 		}
-		return nil, Outcome{Command: cmd.Name, Code: code, Detail: err.Error(), Message: ClientMessage(code, coreMessage)}
+		return nil, Outcome{Command: cmd.Name, Code: code, Detail: err.Error(), Message: ClientMessage(code, chatMessage)}
 	}
 	f.stats.count(i, codes.OK)
 	return result, Outcome{Command: cmd.Name, Code: codes.OK}
@@ -101,7 +101,7 @@ func (f *Forwarder) Forward(ctx context.Context, claims auth.Claims, method stri
 
 func (f *Forwarder) CommandSources() []metrics.Source { return f.stats.commandSources() }
 
-func (f *Forwarder) CoreCallLatency() []CommandLatency { return f.stats.latencies() }
+func (f *Forwarder) ChatCallLatency() []CommandLatency { return f.stats.latencies() }
 
 func (f *Forwarder) run(ctx context.Context, claims auth.Claims, i int, inner proto.Message) (proto.Message, error) {
 	cmd := f.commands[i]

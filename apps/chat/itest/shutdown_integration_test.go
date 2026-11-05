@@ -35,25 +35,25 @@ type running struct {
 
 func TestRealInfraStopUnderLoadKeepsEveryAckedMessage(t *testing.T) {
 	it := realInfra(t)
-	cfg := it.coreConfig(t, map[string]string{"CORE_DRAIN_DELAY": "200ms"})
+	cfg := it.chatConfig(t, map[string]string{"CHAT_DRAIN_DELAY": "200ms"})
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
 	ctx, cancel := context.WithCancel(context.Background())
-	core := &running{done: make(chan struct{})}
+	chat := &running{done: make(chan struct{})}
 	go func() {
-		defer close(core.done)
-		core.err = app.Run(ctx, cfg, logger)
+		defer close(chat.done)
+		chat.err = app.Run(ctx, cfg, logger)
 	}()
 	t.Cleanup(func() {
 		cancel()
 		select {
-		case <-core.done:
+		case <-chat.done:
 		case <-time.After(itCleanupLimit):
 			t.Errorf("run still running %v after cleanup cancelled it", itCleanupLimit)
 		}
 	})
-	awaitReady(t, cfg, core)
+	awaitReady(t, cfg, chat)
 
-	client := dialCore(t, cfg)
+	client := dialChat(t, cfg)
 	rooms := make([]string, itRooms)
 	for i := range rooms {
 		rooms[i] = createRoom(t, client)
@@ -64,28 +64,28 @@ func TestRealInfraStopUnderLoadKeepsEveryAckedMessage(t *testing.T) {
 	stopAt := time.Now()
 	cancel()
 	select {
-	case <-core.done:
+	case <-chat.done:
 	case <-time.After(itStopLimit):
 		l.stop()
 		t.Fatalf("run did not return within %v of the stop signal", itStopLimit)
 	}
 	took := time.Since(stopAt)
 	l.stop()
-	if core.err != nil {
-		t.Fatalf("run = %v, want a clean stop", core.err)
+	if chat.err != nil {
+		t.Fatalf("run = %v, want a clean stop", chat.err)
 	}
 	acks := l.acked()
 	t.Logf("stopped in %v after %d acked sends, %d sends after the stop signal", took, len(acks), l.afterStop())
 	verifyAcked(t, it, cfg, acks)
 }
 
-func awaitReady(t *testing.T, cfg config.Config, core *running) {
+func awaitReady(t *testing.T, cfg config.Config, chat *running) {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
 	for {
 		select {
-		case <-core.done:
-			t.Fatalf("run returned before ready: %v", core.err)
+		case <-chat.done:
+			t.Fatalf("run returned before ready: %v", chat.err)
 		default:
 		}
 		ctx, cancel := context.WithTimeout(t.Context(), itProbeTimeout)
@@ -95,23 +95,23 @@ func awaitReady(t *testing.T, cfg config.Config, core *running) {
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("core not ready: %v", err)
+			t.Fatalf("chat not ready: %v", err)
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
 }
 
-func dialCore(t *testing.T, cfg config.Config) chatimv1.CoreServiceClient {
+func dialChat(t *testing.T, cfg config.Config) chatimv1.ChatServiceClient {
 	t.Helper()
 	conn, err := grpc.NewClient(cfg.GRPCAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		t.Fatalf("grpc.NewClient: %v", err)
 	}
 	t.Cleanup(func() { _ = conn.Close() })
-	return chatimv1.NewCoreServiceClient(conn)
+	return chatimv1.NewChatServiceClient(conn)
 }
 
-func createRoom(t *testing.T, client chatimv1.CoreServiceClient) string {
+func createRoom(t *testing.T, client chatimv1.ChatServiceClient) string {
 	t.Helper()
 	resp, err := client.CreateRoom(caller(t.Context()), &chatimv1.CreateRoomRequest{
 		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "load", Members: []string{itUser, "bob"}, RequestId: rand.Text(),

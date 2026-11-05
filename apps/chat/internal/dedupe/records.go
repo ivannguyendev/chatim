@@ -92,7 +92,7 @@ type Verdict struct {
 	Record Record
 }
 
-func pendingValue(core string) string { return pendingPrefix + core }
+func pendingValue(chat string) string { return pendingPrefix + chat }
 
 func committedValue(r Record) string {
 	return committedPrefix + strconv.FormatUint(r.Seq, 10) + ":" + strconv.FormatInt(r.CreatedAt.UnixMilli(), 10)
@@ -101,7 +101,7 @@ func committedValue(r Record) string {
 func parseValue(v, self string) (Verdict, bool) {
 	if owner, ok := strings.CutPrefix(v, pendingPrefix); ok {
 		switch {
-		case !validCoreID(owner):
+		case !validNodeID(owner):
 			return Verdict{}, false
 		case owner == self:
 			return Verdict{Status: PendingHere}, true

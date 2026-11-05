@@ -14,7 +14,7 @@ import (
 	"github.com/ivannguyendev/chatim/tools/internal/route"
 )
 
-var unavailable = status.Error(codes.Unavailable, "core down")
+var unavailable = status.Error(codes.Unavailable, "chat down")
 
 func send(cid string) *chatimv1.SendMessageRequest {
 	return &chatimv1.SendMessageRequest{RoomId: "42", Cid: cid, Text: "hello"}
@@ -22,22 +22,22 @@ func send(cid string) *chatimv1.SendMessageRequest {
 
 func TestSendRetriesOnTheRefreshedRouteWithTheSameCID(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		dead := &fakeCore{fail: []error{unavailable, unavailable, unavailable}}
-		live := &fakeCore{}
-		net := newFakeNet(map[string]*fakeCore{"core-1:9000": dead, "core-2:9000": live})
+		dead := &fakeChat{fail: []error{unavailable, unavailable, unavailable}}
+		live := &fakeChat{}
+		net := newFakeNet(map[string]*fakeChat{"chat-1:9000": dead, "chat-2:9000": live})
 		loc := &fakeLocator{route: func(n int) (string, bool) {
 			if n < 2 {
-				return "core-1:9000", true
+				return "chat-1:9000", true
 			}
-			return "core-2:9000", true
+			return "chat-2:9000", true
 		}}
 		c := newClient(t, loc, net, route.Policy{})
 		resp, st, err := c.SendMessage(chatrpc.WithCaller(t.Context(), "acme", "alice"), send("c-1"))
 		if err != nil || resp.GetSeq() != 7 {
 			t.Fatalf("SendMessage = %v, %v; want seq 7", resp, err)
 		}
-		if st.Attempts != 3 || st.Addr != "core-2:9000" || loc.count() != 2 {
-			t.Fatalf("stats = %+v after %d refreshes, want 3 attempts ending on core-2", st, loc.count())
+		if st.Attempts != 3 || st.Addr != "chat-2:9000" || loc.count() != 2 {
+			t.Fatalf("stats = %+v after %d refreshes, want 3 attempts ending on chat-2", st, loc.count())
 		}
 		for _, req := range append(dead.sends, live.sends...) {
 			if req.GetCid() != "c-1" || req.GetText() != "hello" {
@@ -55,9 +55,9 @@ func TestSendRetriesOnTheRefreshedRouteWithTheSameCID(t *testing.T) {
 }
 
 func TestPermanentErrorsReturnAfterOneAttempt(t *testing.T) {
-	core := &fakeCore{fail: []error{status.Error(codes.InvalidArgument, "text")}}
-	loc := &fakeLocator{route: fixed("core-1:9000")}
-	c := newClient(t, loc, newFakeNet(map[string]*fakeCore{"core-1:9000": core}), route.Policy{})
+	chat := &fakeChat{fail: []error{status.Error(codes.InvalidArgument, "text")}}
+	loc := &fakeLocator{route: fixed("chat-1:9000")}
+	c := newClient(t, loc, newFakeNet(map[string]*fakeChat{"chat-1:9000": chat}), route.Policy{})
 	_, st, err := c.SendMessage(t.Context(), send("c-1"))
 	if status.Code(err) != codes.InvalidArgument || st.Attempts != 1 || loc.count() != 0 {
 		t.Fatalf("SendMessage = %v with %+v and %d refreshes, want InvalidArgument at once", err, st, loc.count())
@@ -66,12 +66,12 @@ func TestPermanentErrorsReturnAfterOneAttempt(t *testing.T) {
 
 func TestSendGivesUpAtTheDeadlineWithTheLastError(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		core := &fakeCore{fail: make([]error, 1000)}
-		for i := range core.fail {
-			core.fail[i] = unavailable
+		chat := &fakeChat{fail: make([]error, 1000)}
+		for i := range chat.fail {
+			chat.fail[i] = unavailable
 		}
-		loc := &fakeLocator{route: fixed("core-1:9000")}
-		c := newClient(t, loc, newFakeNet(map[string]*fakeCore{"core-1:9000": core}), route.Policy{Deadline: 3 * time.Second})
+		loc := &fakeLocator{route: fixed("chat-1:9000")}
+		c := newClient(t, loc, newFakeNet(map[string]*fakeChat{"chat-1:9000": chat}), route.Policy{Deadline: 3 * time.Second})
 		start := time.Now()
 		_, st, err := c.SendMessage(t.Context(), send("c-1"))
 		if status.Code(err) != codes.Unavailable || st.Attempts < 4 {
@@ -85,13 +85,13 @@ func TestSendGivesUpAtTheDeadlineWithTheLastError(t *testing.T) {
 
 func TestAttemptTimeoutsAreRetriedOnlyForIdempotentCalls(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		core := &fakeCore{block: 1}
-		loc := &fakeLocator{route: fixed("core-1:9000")}
-		c := newClient(t, loc, newFakeNet(map[string]*fakeCore{"core-1:9000": core}), route.Policy{Attempt: time.Second})
+		chat := &fakeChat{block: 1}
+		loc := &fakeLocator{route: fixed("chat-1:9000")}
+		c := newClient(t, loc, newFakeNet(map[string]*fakeChat{"chat-1:9000": chat}), route.Policy{Attempt: time.Second})
 		if _, st, err := c.SendMessage(t.Context(), send("c-1")); err != nil || st.Attempts != 2 {
 			t.Fatalf("SendMessage = %v after %d attempts, want success on the second", err, st.Attempts)
 		}
-		core.block = 1
+		chat.block = 1
 		if _, st, err := c.GetHistory(t.Context(), &chatimv1.GetHistoryRequest{RoomId: "42"}); err != nil || st.Attempts != 2 {
 			t.Fatalf("GetHistory = %v after %d attempts, want success on the second", err, st.Attempts)
 		}
@@ -100,9 +100,9 @@ func TestAttemptTimeoutsAreRetriedOnlyForIdempotentCalls(t *testing.T) {
 
 func TestCallsWaitForARouteToAppear(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		core := &fakeCore{}
-		loc := &fakeLocator{route: func(n int) (string, bool) { return "core-1:9000", n > 0 }}
-		c := newClient(t, loc, newFakeNet(map[string]*fakeCore{"core-1:9000": core}), route.Policy{})
+		chat := &fakeChat{}
+		loc := &fakeLocator{route: func(n int) (string, bool) { return "chat-1:9000", n > 0 }}
+		c := newClient(t, loc, newFakeNet(map[string]*fakeChat{"chat-1:9000": chat}), route.Policy{})
 		resp, st, err := c.CreateRoom(t.Context(), &chatimv1.CreateRoomRequest{})
 		if err != nil || resp.GetRoom().GetId() != "42" || st.Attempts != 2 {
 			t.Fatalf("CreateRoom = %v, %v after %d attempts", resp, err, st.Attempts)
@@ -111,8 +111,8 @@ func TestCallsWaitForARouteToAppear(t *testing.T) {
 }
 
 func TestConnectionsAreReusedPerAddressAndClosedOnce(t *testing.T) {
-	net := newFakeNet(map[string]*fakeCore{"core-1:9000": {}})
-	c, err := route.New(&fakeLocator{route: fixed("core-1:9000")}, net.dial, route.Policy{})
+	net := newFakeNet(map[string]*fakeChat{"chat-1:9000": {}})
+	c, err := route.New(&fakeLocator{route: fixed("chat-1:9000")}, net.dial, route.Policy{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,14 +124,14 @@ func TestConnectionsAreReusedPerAddressAndClosedOnce(t *testing.T) {
 	if err := errors.Join(c.Close(), c.Close()); err != nil {
 		t.Fatal(err)
 	}
-	if net.dials["core-1:9000"] != 1 || net.closed != 1 {
+	if net.dials["chat-1:9000"] != 1 || net.closed != 1 {
 		t.Fatalf("dials = %v, closes = %d; want one of each", net.dials, net.closed)
 	}
 }
 
 func TestInvalidRoomIDsAndSettingsAreRejectedLocally(t *testing.T) {
-	net := newFakeNet(map[string]*fakeCore{})
-	c := newClient(t, &fakeLocator{route: fixed("core-1:9000")}, net, route.Policy{})
+	net := newFakeNet(map[string]*fakeChat{})
+	c := newClient(t, &fakeLocator{route: fixed("chat-1:9000")}, net, route.Policy{})
 	if _, st, err := c.SendMessage(t.Context(), send("c-1")); err == nil || st.Attempts != 1 {
 		t.Fatalf("SendMessage to an undialable address = %v after %d attempts, want one failed attempt", err, st.Attempts)
 	}

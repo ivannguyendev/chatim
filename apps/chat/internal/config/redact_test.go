@@ -14,7 +14,7 @@ import (
 func TestConfigLogValueHidesSecrets(t *testing.T) {
 	setEnv(t, map[string]string{
 		"MONGO_URI":             "mongodb://chatim:s3cr3t@chatim-mongodb:27017/?replicaSet=rs0&authSource=admin",
-		"NATS_URL":              "nats://core:s3cr3t@chatim-nats:4222",
+		"NATS_URL":              "nats://chat:s3cr3t@chatim-nats:4222",
 		"REDIS_PASSWORD":        "st4t3s3cr3t",
 		"REDIS_DEDUPE_PASSWORD": "d3dup3s3cr3t",
 	})

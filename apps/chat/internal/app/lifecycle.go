@@ -15,7 +15,7 @@ type tasks struct {
 
 func Run(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	log = redactedLogger(log, cfg)
-	log.InfoContext(ctx, "starting core", "config", cfg.LogValue())
+	log.InfoContext(ctx, "starting chat", "config", cfg.LogValue())
 	cl, err := connect(ctx, cfg, log)
 	if err != nil {
 		return err
@@ -80,7 +80,7 @@ func (a *node) serve(ctx context.Context, adminLis, grpcLis net.Listener) error 
 	}
 	t.grpc = sup.start("grpc", func(c context.Context) error { return a.grpc.ServeListener(c, grpcLis) })
 	a.admin.SetReady(true)
-	a.log.InfoContext(ctx, "core ready", "grpc", grpcLis.Addr().String(), "admin", adminLis.Addr().String())
+	a.log.InfoContext(ctx, "chat ready", "grpc", grpcLis.Addr().String(), "admin", adminLis.Addr().String())
 	return a.shutdown(ctx, sup, t, sup.wait(ctx))
 }
 

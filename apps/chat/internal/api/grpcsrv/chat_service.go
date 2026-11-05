@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	errMissingDeps = fmt.Errorf("%w: core service needs a sender, a message editor, a message reader, an interaction service, an interaction reader, a member service, a member reader, a room service and a room lister", apperr.ErrInvalidArgument)
+	errMissingDeps = fmt.Errorf("%w: chat service needs a sender, a message editor, a message reader, an interaction service, an interaction reader, a member service, a member reader, a room service and a room lister", apperr.ErrInvalidArgument)
 	errBadRoomID   = fmt.Errorf("%w: room id", apperr.ErrInvalidArgument)
 )
 
@@ -39,7 +39,7 @@ type Deps struct {
 }
 
 type Service struct {
-	chatimv1.UnimplementedCoreServiceServer
+	chatimv1.UnimplementedChatServiceServer
 	sender             Sender
 	editor             *message.Editor
 	reader             *message.Reader
@@ -51,7 +51,7 @@ type Service struct {
 	roomList           RoomLister
 }
 
-var _ chatimv1.CoreServiceServer = (*Service)(nil)
+var _ chatimv1.ChatServiceServer = (*Service)(nil)
 
 func New(d Deps) (*Service, error) {
 	if d.Sender == nil || d.Editor == nil || d.Reader == nil || d.InteractionService == nil || d.InteractionReader == nil ||

@@ -15,10 +15,10 @@ import (
 )
 
 var leakyConfig = config.Config{
-	CoreID:              "core-redact",
+	NodeID:              "chat-redact",
 	ConnectTimeout:      time.Second,
 	MongoURI:            "mongodb://chatim:pw1secret@m1:27017,m2:27017/?replicaSet=rs0&authMechanismProperties=AWS_SESSION_TOKEN:t0k3nsecret",
-	NATSURL:             "nats://core:pw2secret@n1:4222",
+	NATSURL:             "nats://chat:pw2secret@n1:4222",
 	MongoPassword:       "m0ng0pwsecret",
 	RedisPassword:       "st4t3pwsecret",
 	RedisDedupePassword: "d3dup3pwsecret",

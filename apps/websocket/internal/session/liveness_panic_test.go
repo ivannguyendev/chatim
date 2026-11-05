@@ -114,9 +114,9 @@ func TestPanicInTheWriterClosesOnlyThatConnection(t *testing.T) {
 func TestNilResponseFromTheExecutorIsAnsweredWithInternal(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		h := newHarness(t, testOptions())
-		h.core.mu.Lock()
-		h.core.nils[1] = true
-		h.core.mu.Unlock()
+		h.chat.mu.Lock()
+		h.chat.nils[1] = true
+		h.chat.mu.Unlock()
 		tc := h.dial(true)
 		tc.auth(h.token("u1", time.Hour))
 		tc.history(1)

@@ -76,16 +76,16 @@ func runIndexes(t *testing.T, cfg config.Config, mode app.IndexesMode) (string, 
 
 func TestRealInfraStartupFlagsOutdatedIndexesAndTheCommandReplacesThem(t *testing.T) {
 	it := realInfra(t)
-	cfg := it.coreConfig(t, nil)
+	cfg := it.chatConfig(t, nil)
 	db := it.mongo.Database(cfg.MongoDB)
 	seedOutdatedIndexes(t, db)
-	core := startCore(t, it, nil)
+	chat := startChatNode(t, it, nil)
 	members, mentions := itIndexNames(t, db, "members"), itIndexNames(t, db, "mentions")
 	if slices.Contains(members, itMembersUserIndex) || !slices.Contains(members, itOldMembersUserIndex) || !slices.Contains(mentions, itMentionReadIndex) {
 		t.Fatalf("after startup members %v, mentions %v; want the old indexes kept and no new members index built", members, mentions)
 	}
 	for coll, want := range map[string]float64{"members": 1, "mentions": 1, "rooms": 0} {
-		if got := itMetric(t, core.cfg, `chatim_core_index_outdated{collection="`+coll+`"}`); got != want {
+		if got := itMetric(t, chat.cfg, `chatim_chat_index_outdated{collection="`+coll+`"}`); got != want {
 			t.Errorf("index_outdated{%s} = %v, want %v", coll, got, want)
 		}
 	}

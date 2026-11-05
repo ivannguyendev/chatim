@@ -19,13 +19,13 @@ func (s signalingStore) Commit(ctx context.Context, entries []Entry) error {
 
 func TestBatchedReserveMatchesTheStoreOnRedis(t *testing.T) {
 	mr, rdb := newRedis(t)
-	other := newStore(t, rdb, "core-b", nil)
-	reg := signalingStore{Store: newStore(t, rdb, "core-a", nil), committed: make(chan struct{}, 1)}
+	other := newStore(t, rdb, "chat-b", nil)
+	reg := signalingStore{Store: newStore(t, rdb, "chat-a", nil), committed: make(chan struct{}, 1)}
 	b, _ := startBatcher(t, reg, BatchConfig{})
 	x, y, z := key("x"), key("y"), key("z")
 
 	expectStatuses(t, batchReserve(t, b, x), Reserved)
-	expectValue(t, mr, x, "p:core-a")
+	expectValue(t, mr, x, "p:chat-a")
 	expectStatuses(t, batchReserve(t, b, x), PendingHere)
 	expectNil(t, b.Commit(t.Context(), []Entry{{Key: x, Record: sampleRecord}}))
 	select {

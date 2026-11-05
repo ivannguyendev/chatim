@@ -15,13 +15,13 @@ const (
 	DefaultTimeout      = 100 * time.Millisecond
 	DefaultCooldown     = time.Second
 
-	maxCoreIDLen = 128
+	maxNodeIDLen = 128
 )
 
 var ErrDegraded = fmt.Errorf("cid dedupe cooling down after a redis failure: %w", apperr.ErrUnavailable)
 
 type Config struct {
-	CoreID       string
+	NodeID       string
 	PendingTTL   time.Duration
 	CommittedTTL time.Duration
 	Timeout      time.Duration
@@ -40,8 +40,8 @@ func (c Config) withDefaults() Config {
 
 func (c Config) validate() error {
 	switch {
-	case !validCoreID(c.CoreID):
-		return fmt.Errorf("%w: dedupe core id %q must be 1-%d printable characters without ':' or spaces", apperr.ErrInvalidArgument, c.CoreID, maxCoreIDLen)
+	case !validNodeID(c.NodeID):
+		return fmt.Errorf("%w: dedupe node id %q must be 1-%d printable characters without ':' or spaces", apperr.ErrInvalidArgument, c.NodeID, maxNodeIDLen)
 	case c.Timeout <= 0 || c.Cooldown <= 0:
 		return fmt.Errorf("%w: dedupe timeout %v and cooldown %v must be positive", apperr.ErrInvalidArgument, c.Timeout, c.Cooldown)
 	case c.PendingTTL < time.Millisecond || c.PendingTTL <= c.Timeout:
@@ -53,8 +53,8 @@ func (c Config) validate() error {
 	}
 }
 
-func validCoreID(id string) bool {
-	if id == "" || len(id) > maxCoreIDLen {
+func validNodeID(id string) bool {
+	if id == "" || len(id) > maxNodeIDLen {
 		return false
 	}
 	for i := range len(id) {

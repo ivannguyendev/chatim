@@ -9,7 +9,7 @@ import (
 )
 
 func (r *wsEventsRun) createGroup() error {
-	resp, err := viaGateway(r.a.gw, r.a.gw.core.CreateRoom, &chatimv1.CreateRoomRequest{
+	resp, err := viaGateway(r.a.gw, r.a.gw.chat.CreateRoom, &chatimv1.CreateRoomRequest{
 		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "e2e websocket events", Members: []string{r.a.user}, RequestId: randomCID(),
 	})
 	if err != nil {
@@ -27,7 +27,7 @@ func (r *wsEventsRun) createGroup() error {
 }
 
 func (r *wsEventsRun) addB() error {
-	_, err := viaGateway(r.a.gw, r.a.gw.core.AddMembers, &chatimv1.AddMembersRequest{
+	_, err := viaGateway(r.a.gw, r.a.gw.chat.AddMembers, &chatimv1.AddMembersRequest{
 		RoomId: r.room, Users: []string{r.b.user}, RequestId: randomCID(),
 	})
 	if err != nil {
@@ -60,7 +60,7 @@ func (r *wsEventsRun) sendSeen() error {
 }
 
 func (r *wsEventsRun) reactions() error {
-	settings, err := viaGateway(r.a.gw, r.a.gw.core.GetReactionSettings, &chatimv1.GetReactionSettingsRequest{})
+	settings, err := viaGateway(r.a.gw, r.a.gw.chat.GetReactionSettings, &chatimv1.GetReactionSettingsRequest{})
 	if err != nil {
 		return fmt.Errorf("reaction settings: %w", err)
 	}
@@ -165,7 +165,7 @@ func (r *wsEventsRun) mentions() error {
 
 func (r *wsEventsRun) removeB() error {
 	markB := r.b.feed.Len()
-	if _, err := viaGateway(r.a.gw, r.a.gw.core.RemoveMember, &chatimv1.RemoveMemberRequest{
+	if _, err := viaGateway(r.a.gw, r.a.gw.chat.RemoveMember, &chatimv1.RemoveMemberRequest{
 		RoomId: r.room, User: r.b.user,
 	}); err != nil {
 		return fmt.Errorf("remove %s: %w", r.b.user, err)

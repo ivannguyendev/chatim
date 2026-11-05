@@ -39,13 +39,13 @@ func TestRealRedisRequestLifecycle(t *testing.T) {
 	rdb := itClient(t)
 	ctx := t.Context()
 	const pending = 400 * time.Millisecond
-	a := newRequests(t, itStore(t, rdb, "it-core-a", pending))
-	b := newRequests(t, itStore(t, rdb, "it-core-b", pending))
+	a := newRequests(t, itStore(t, rdb, "it-chat-a", pending))
+	b := newRequests(t, itStore(t, rdb, "it-chat-b", pending))
 	keys := itRequestKeys(t, rdb, "add", "dropped")
 	add, dropped := keys[0], keys[1]
 
 	expectBegin(t, a, add, RequestNew)
-	if v := rdb.Get(ctx, add.String()).Val(); v != "p:it-core-a" {
+	if v := rdb.Get(ctx, add.String()).Val(); v != "p:it-chat-a" {
 		t.Fatalf("pending value = %q", v)
 	}
 	if ttl := rdb.PTTL(ctx, add.String()).Val(); ttl <= 0 || ttl > pending+ttlSlack {
@@ -62,7 +62,7 @@ func TestRealRedisRequestLifecycle(t *testing.T) {
 		t.Fatalf("committed ttl = %v, want within (%v, %v]", ttl, pending, DefaultCommittedTTL)
 	}
 	expectBegin(t, b, add, RequestDone)
-	restarted := newRequests(t, itStore(t, rdb, "it-core-a", pending))
+	restarted := newRequests(t, itStore(t, rdb, "it-chat-a", pending))
 	expectBegin(t, restarted, add, RequestDone)
 
 	expectBegin(t, b, dropped, RequestNew)

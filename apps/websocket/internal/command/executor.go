@@ -86,7 +86,7 @@ func (e *Executor) Execute(ctx context.Context, claims auth.Claims, req *chatimv
 
 func (e *Executor) CommandSources() []metrics.Source { return e.forward.CommandSources() }
 
-func (e *Executor) CoreCallLatency() []CommandLatency { return e.forward.CoreCallLatency() }
+func (e *Executor) ChatCallLatency() []CommandLatency { return e.forward.ChatCallLatency() }
 
 func (e *Executor) route(cmd chatrpc.Command, req proto.Message) (chatrpc.Clients, error) {
 	roomID, ok := cmd.RoomID(req)

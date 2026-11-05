@@ -22,7 +22,7 @@ func loggedConfig(t *testing.T) map[string]any {
 		t.Fatalf("Load: %v", err)
 	}
 	var buf bytes.Buffer
-	slog.New(slog.NewJSONHandler(&buf, nil)).Info("starting core", "config", cfg)
+	slog.New(slog.NewJSONHandler(&buf, nil)).Info("starting chat", "config", cfg)
 	var line struct{ Config map[string]any }
 	if err := json.Unmarshal(buf.Bytes(), &line); err != nil {
 		t.Fatalf("decode %s: %v", buf.String(), err)
@@ -59,7 +59,7 @@ func TestConfigLogValueLogsEveryField(t *testing.T) {
 		}
 	}
 	walk(reflect.TypeFor[config.Config](), "", logged)
-	for _, key := range []string{"core_id", "grpc_addr", "cid_batch", "nats_url", "mongo_auth", "locked_message_kinds", "member_count_check_delay", "room_list"} {
+	for _, key := range []string{"node_id", "grpc_addr", "cid_batch", "nats_url", "mongo_auth", "locked_message_kinds", "member_count_check_delay", "room_list"} {
 		if _, ok := logged[key]; !ok {
 			t.Errorf("summary misses %s: %v", key, logged)
 		}
@@ -102,7 +102,7 @@ func TestSecretLookingFieldsAreRedacted(t *testing.T) {
 
 func TestSnakeCaseKeepsAcronymsTogether(t *testing.T) {
 	for name, want := range map[string]string{
-		"CoreID": "core_id", "GRPCAddr": "grpc_addr", "CIDBatch": "cid_batch", "MongoDB": "mongo_db",
+		"NodeID": "node_id", "GRPCAddr": "grpc_addr", "CIDBatch": "cid_batch", "MongoDB": "mongo_db",
 		"HeartbeatTTL": "heartbeat_ttl", "TTL": "ttl", "MaxKeys": "max_keys", "StateClear": "state_clear",
 	} {
 		if got := config.SnakeCase(name); got != want {

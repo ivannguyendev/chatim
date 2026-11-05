@@ -23,7 +23,7 @@ func clientRequestMethods(t *testing.T) []string {
 	for i := range oneof.Fields().Len() {
 		method, ok := byRequest[string(oneof.Fields().Get(i).Message().FullName())]
 		if !ok {
-			t.Fatalf("client request %s has no core call", oneof.Fields().Get(i).Name())
+			t.Fatalf("client request %s has no chat call", oneof.Fields().Get(i).Name())
 		}
 		methods = append(methods, method)
 	}
@@ -52,7 +52,7 @@ func TestRealtimeAndRequestSplitEveryClientCall(t *testing.T) {
 
 func TestInternalCallsAreInNoSet(t *testing.T) {
 	internal := []string{
-		chatimv1.CoreService_ListMyRoomIDs_FullMethodName,
+		chatimv1.ChatService_ListMyRoomIDs_FullMethodName,
 		chatimv1.MentionService_SetUserGroups_FullMethodName,
 		chatimv1.MentionService_SetGroups_FullMethodName,
 	}

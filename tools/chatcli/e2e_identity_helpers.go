@@ -131,7 +131,7 @@ func gatewayStatus(ctx context.Context, url, token string, timeout time.Duration
 	g := newGateway(ctx, url, token, timeout)
 	callCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	_, err := g.core.ListMyRooms(callCtx, connect.NewRequest(&chatimv1.ListMyRoomsRequest{Folder: chatimv1.RoomFolder_ROOM_FOLDER_MAIN, Limit: 1}))
+	_, err := g.chat.ListMyRooms(callCtx, connect.NewRequest(&chatimv1.ListMyRoomsRequest{Folder: chatimv1.RoomFolder_ROOM_FOLDER_MAIN, Limit: 1}))
 	switch connect.CodeOf(err) {
 	case connect.CodeUnknown:
 		if err == nil {

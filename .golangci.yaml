@@ -216,7 +216,7 @@ linters:
             - "**/apps/websocket/**"
           deny:
             - pkg: github.com/ivannguyendev/chatim/apps/chat
-              desc: websocket reaches core only through gRPC and shared pkg code
+              desc: websocket reaches chat only through gRPC and shared pkg code
             - pkg: github.com/ivannguyendev/chatim/apps/identity
               desc: websocket reaches identity only over the network
             - pkg: github.com/ivannguyendev/chatim/modules
@@ -234,7 +234,7 @@ linters:
             - "**/apps/gateway/**"
           deny:
             - pkg: github.com/ivannguyendev/chatim/apps/chat
-              desc: gateway reaches core only through gRPC and shared pkg code
+              desc: gateway reaches chat only through gRPC and shared pkg code
             - pkg: github.com/ivannguyendev/chatim/apps/websocket
               desc: gateway shares code with websocket only through pkg
             - pkg: github.com/ivannguyendev/chatim/apps/identity
@@ -254,7 +254,7 @@ linters:
             - "**/apps/identity/**"
           deny:
             - pkg: github.com/ivannguyendev/chatim/apps/chat
-              desc: identity owns its own data and never reaches core tables or code
+              desc: identity owns its own data and never reaches chat tables or code
             - pkg: github.com/ivannguyendev/chatim/apps/websocket
               desc: identity shares code with websocket only through pkg
             - pkg: github.com/ivannguyendev/chatim/apps/gateway

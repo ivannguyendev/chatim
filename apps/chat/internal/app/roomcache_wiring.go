@@ -78,7 +78,7 @@ func (c roomCaches) probes(w watchCounter) roomCacheProbes {
 }
 
 func roomCacheSources(p roomCacheProbes) []metrics.Source {
-	const hitHelp = "Room list cache lookups served from this core's RAM."
+	const hitHelp = "Room list cache lookups served from this chat node's RAM."
 	const missHelp = "Room list cache lookups that read the store."
 	out := make([]metrics.Source, 0, 2*len(p.caches)+3)
 	for _, name := range []string{"info", "tail", "snapshot", "path"} {
@@ -93,7 +93,7 @@ func roomCacheSources(p roomCacheProbes) []metrics.Source {
 	}
 	return append(out,
 		metrics.Source{Name: "room_tail_cache_bytes", Help: "Estimated bytes held by the room tail cache.", Gauge: true, Read: func() float64 { return float64(p.tailBytes()) }},
-		metrics.Source{Name: "room_watch_forgets_total", Help: "Rooms whose cached info this core forgot after a room_updated or member_count_changed event.", Read: func() float64 { return float64(p.forgets()) }},
+		metrics.Source{Name: "room_watch_forgets_total", Help: "Rooms whose cached info this chat node forgot after a room_updated or member_count_changed event.", Read: func() float64 { return float64(p.forgets()) }},
 		metrics.Source{Name: "room_watch_malformed_total", Help: "Room events skipped because their subject carried no valid room id.", Read: func() float64 { return float64(p.malformed()) }},
 	)
 }

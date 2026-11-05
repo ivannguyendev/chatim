@@ -18,23 +18,23 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-const fakeCoreAddr = "10.9.8.7:9000"
+const fakeChatAddr = "10.9.8.7:9000"
 
-type coreCall struct {
+type chatCall struct {
 	method string
 	md     metadata.MD
 	body   []byte
 }
 
-type fakeCore struct {
+type fakeChat struct {
 	mu       sync.Mutex
-	calls    []coreCall
+	calls    []chatCall
 	err      error
 	response proto.Message
 	hanging  bool
 }
 
-func (f *fakeCore) handle(_ any, stream grpc.ServerStream) error {
+func (f *fakeChat) handle(_ any, stream grpc.ServerStream) error {
 	method, _ := grpc.MethodFromServerStream(stream)
 	var in emptypb.Empty
 	if err := stream.RecvMsg(&in); err != nil {
@@ -42,7 +42,7 @@ func (f *fakeCore) handle(_ any, stream grpc.ServerStream) error {
 	}
 	md, _ := metadata.FromIncomingContext(stream.Context())
 	f.mu.Lock()
-	f.calls = append(f.calls, coreCall{method: method, md: md, body: in.ProtoReflect().GetUnknown()})
+	f.calls = append(f.calls, chatCall{method: method, md: md, body: in.ProtoReflect().GetUnknown()})
 	err, reply, hanging := f.err, f.response, f.hanging
 	f.mu.Unlock()
 	if hanging {
@@ -58,42 +58,42 @@ func (f *fakeCore) handle(_ any, stream grpc.ServerStream) error {
 	return stream.SendMsg(reply)
 }
 
-func (f *fakeCore) fail(err error) {
+func (f *fakeChat) fail(err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.err = err
 }
 
-func (f *fakeCore) hang() {
+func (f *fakeChat) hang() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.hanging = true
 }
 
-func (f *fakeCore) reply(m proto.Message) {
+func (f *fakeChat) reply(m proto.Message) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.response = m
 }
 
-func (f *fakeCore) recorded() []coreCall {
+func (f *fakeChat) recorded() []chatCall {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return append([]coreCall(nil), f.calls...)
+	return append([]chatCall(nil), f.calls...)
 }
 
-func startFakeCore(t *testing.T) (*fakeCore, chatrpc.PoolConn) {
+func startFakeChatNode(t *testing.T) (*fakeChat, chatrpc.PoolConn) {
 	t.Helper()
-	core := &fakeCore{}
+	chat := &fakeChat{}
 	lis := bufconn.Listen(1 << 20)
-	srv := grpc.NewServer(grpc.UnknownServiceHandler(core.handle))
+	srv := grpc.NewServer(grpc.UnknownServiceHandler(chat.handle))
 	served := make(chan struct{})
 	go func() {
 		defer close(served)
 		_ = srv.Serve(lis)
 	}()
 	dialer := grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) { return lis.DialContext(ctx) })
-	cc, err := grpcclient.New("passthrough:///core", grpcclient.Options{Creds: insecure.NewCredentials(), DialOptions: []grpc.DialOption{dialer}})
+	cc, err := grpcclient.New("passthrough:///chat", grpcclient.Options{Creds: insecure.NewCredentials(), DialOptions: []grpc.DialOption{dialer}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func startFakeCore(t *testing.T) (*fakeCore, chatrpc.PoolConn) {
 		srv.Stop()
 		<-served
 	})
-	return core, chatrpc.PoolConn{Addr: fakeCoreAddr, Clients: chatrpc.Clients{Core: chatimv1.NewCoreServiceClient(cc), Mention: chatimv1.NewMentionServiceClient(cc)}}
+	return chat, chatrpc.PoolConn{Addr: fakeChatAddr, Clients: chatrpc.Clients{Chat: chatimv1.NewChatServiceClient(cc), Mention: chatimv1.NewMentionServiceClient(cc)}}
 }
 
 type fakeRouter struct {

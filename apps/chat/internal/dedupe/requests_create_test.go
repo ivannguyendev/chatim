@@ -35,13 +35,13 @@ func TestCreateKeysSpreadByTenantAndUserNotBySlotZero(t *testing.T) {
 
 func TestBeginReturnsTheFinishedRecord(t *testing.T) {
 	_, rdb := newRedis(t)
-	r := newRequests(t, newStore(t, rdb, "core-a", nil))
+	r := newRequests(t, newStore(t, rdb, "chat-a", nil))
 	k := CreateKey("acme", "alice", "r1")
 	rec := Record{Seq: 8812, CreatedAt: time.UnixMilli(1_700_000_000_123).UTC()}
 
 	expectBegin(t, r, k, RequestNew)
 	r.Finish(t.Context(), k, rec)
-	for name, req := range map[string]*Requests{"same core": r, "restarted core": newRequests(t, newStore(t, rdb, "core-a", nil))} {
+	for name, req := range map[string]*Requests{"same chat": r, "restarted chat": newRequests(t, newStore(t, rdb, "chat-a", nil))} {
 		status, got, err := req.Begin(t.Context(), k)
 		if err != nil || status != RequestDone || got.Seq != rec.Seq || !got.CreatedAt.Equal(rec.CreatedAt) {
 			t.Fatalf("%s: Begin = %v, %+v, %v; want done with %+v", name, status, got, err, rec)

@@ -20,19 +20,19 @@ type Router interface {
 	Trigger()
 }
 
-type CoreLoader struct {
+type ChatLoader struct {
 	router   Router
 	deadline time.Duration
 }
 
-func NewCoreLoader(router Router, deadline time.Duration) (*CoreLoader, error) {
+func NewChatNodeLoader(router Router, deadline time.Duration) (*ChatLoader, error) {
 	if router == nil || deadline <= 0 {
-		return nil, errors.New("interest: core loader needs a router and a positive deadline")
+		return nil, errors.New("interest: chat loader needs a router and a positive deadline")
 	}
-	return &CoreLoader{router: router, deadline: deadline}, nil
+	return &ChatLoader{router: router, deadline: deadline}, nil
 }
 
-func (l *CoreLoader) Load(ctx context.Context, tenant, user string) (Membership, error) {
+func (l *ChatLoader) Load(ctx context.Context, tenant, user string) (Membership, error) {
 	conn, err := l.router.Any()
 	if err != nil {
 		return Membership{}, err
@@ -40,7 +40,7 @@ func (l *CoreLoader) Load(ctx context.Context, tenant, user string) (Membership,
 	callCtx, cancel := context.WithTimeout(ctx, l.deadline)
 	defer cancel()
 	callCtx = chatrpc.WithCaller(metadata.NewOutgoingContext(callCtx, metadata.MD{}), tenant, user)
-	resp, err := conn.Core.ListMyRoomIDs(callCtx, &chatimv1.ListMyRoomIDsRequest{})
+	resp, err := conn.Chat.ListMyRoomIDs(callCtx, &chatimv1.ListMyRoomIDsRequest{})
 	if err != nil {
 		if status.Code(err) == codes.Unavailable {
 			l.router.Trigger()

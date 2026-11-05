@@ -41,20 +41,20 @@ func roomListCalls() map[string]linkCase {
 	}
 }
 
-func TestRoomListAndReadCallsRetryWithTheSameRequestOnTheirCore(t *testing.T) {
+func TestRoomListAndReadCallsRetryWithTheSameRequestOnTheirChatNode(t *testing.T) {
 	retried := []error{status.Error(codes.Unavailable, "x"), status.Error(codes.Aborted, "x")}
 	for name, lc := range roomListCalls() {
 		synctest.Test(t, func(t *testing.T) {
-			byRoom, anyCore := &fakeCore{block: 1, fail: slices.Clone(retried)}, &fakeCore{block: 1, fail: slices.Clone(retried)}
-			net := newFakeNet(map[string]*fakeCore{"core-1:9000": byRoom, "core-2:9000": anyCore})
+			byRoom, anyChatNode := &fakeChat{block: 1, fail: slices.Clone(retried)}, &fakeChat{block: 1, fail: slices.Clone(retried)}
+			net := newFakeNet(map[string]*fakeChat{"chat-1:9000": byRoom, "chat-2:9000": anyChatNode})
 			c := newClient(t, &splitLocator{}, net, route.Policy{Attempt: time.Second})
 			got, st, err := lc.call(t.Context(), c)
 			if err != nil || st.Attempts != 4 || !proto.Equal(got, lc.want) {
 				t.Fatalf("%s = %v, %v after %d attempts; want %v on the fourth attempt", name, got, err, st.Attempts, lc.want)
 			}
-			served, idle, wantAddr := anyCore, byRoom, "core-2:9000"
+			served, idle, wantAddr := anyChatNode, byRoom, "chat-2:9000"
 			if lc.inRoom {
-				served, idle, wantAddr = byRoom, anyCore, "core-1:9000"
+				served, idle, wantAddr = byRoom, anyChatNode, "chat-1:9000"
 			}
 			reqs := served.requests()
 			if st.Addr != wantAddr || len(reqs) != 4 || slices.ContainsFunc(reqs, func(r proto.Message) bool { return r != lc.req }) || len(idle.requests()) != 0 {
@@ -65,8 +65,8 @@ func TestRoomListAndReadCallsRetryWithTheSameRequestOnTheirCore(t *testing.T) {
 }
 
 func TestRoomListAndReadCallsKeepRefusalsAndBadRoomIDsLocal(t *testing.T) {
-	core := &fakeCore{fail: []error{status.Error(codes.PermissionDenied, "not an owner")}}
-	c := newClient(t, &roomLocator{}, newFakeNet(map[string]*fakeCore{"core-1:9000": core}), route.Policy{})
+	chat := &fakeChat{fail: []error{status.Error(codes.PermissionDenied, "not an owner")}}
+	c := newClient(t, &roomLocator{}, newFakeNet(map[string]*fakeChat{"chat-1:9000": chat}), route.Policy{})
 	if _, st, err := roomListCalls()["update room"].call(t.Context(), c); status.Code(err) != codes.PermissionDenied || st.Attempts != 1 {
 		t.Fatalf("update by a member = %v after %d attempts, want PermissionDenied at once", err, st.Attempts)
 	}
@@ -96,8 +96,8 @@ func TestRoomListAndReadCallsKeepRefusalsAndBadRoomIDsLocal(t *testing.T) {
 			t.Fatalf("%s with a bad room id = %v, want a local InvalidArgument", name, err)
 		}
 	}
-	if n := len(core.requests()); n != 1 {
-		t.Fatalf("core saw %d requests, want only the refused update", n)
+	if n := len(chat.requests()); n != 1 {
+		t.Fatalf("chat saw %d requests, want only the refused update", n)
 	}
 }
 

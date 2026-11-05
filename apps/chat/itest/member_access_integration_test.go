@@ -15,10 +15,10 @@ import (
 
 const (
 	itMemberCacheTTL = 10 * time.Second
-	itForgetsSeries  = "chatim_core_member_cache_forgets_total"
+	itForgetsSeries  = "chatim_chat_member_cache_forgets_total"
 )
 
-func assertDeniedEverywhere(t *testing.T, client chatimv1.CoreServiceClient, user, roomID string) {
+func assertDeniedEverywhere(t *testing.T, client chatimv1.ChatServiceClient, user, roomID string) {
 	t.Helper()
 	ctx := callerAs(t.Context(), user)
 	_, sendErr := retryingUnavailable(ctx, func(ctx context.Context) (*chatimv1.SendMessageResponse, error) {
@@ -36,8 +36,8 @@ func assertDeniedEverywhere(t *testing.T, client chatimv1.CoreServiceClient, use
 
 func TestRealInfraRemovedMemberIsDeniedAtOnceThroughTheActorCache(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastSweep)
-	client := dialCore(t, core.cfg)
+	chat := startChatNode(t, it, itFastSweep)
+	client := dialChat(t, chat.cfg)
 	roomID := createRoom(t, client)
 	cached := time.Now()
 	sendAs(t, client, "bob", roomID, "cache-bob-1", "bob is cached")
@@ -49,35 +49,35 @@ func TestRealInfraRemovedMemberIsDeniedAtOnceThroughTheActorCache(t *testing.T) 
 	}
 }
 
-func TestRealInfraARemovalOnAnotherCoreReachesTheActorThroughTheMemberEvent(t *testing.T) {
+func TestRealInfraARemovalOnAnotherChatNodeReachesTheActorThroughTheMemberEvent(t *testing.T) {
 	it := realInfra(t)
-	core1 := startCore(t, it, itFastSweep)
+	chat1 := startChatNode(t, it, itFastSweep)
 	env := maps.Clone(itFastSweep)
-	env["CORE_ID"] = "it-core-2-" + it.suffix
-	core2 := startCore(t, it, env)
-	awaitSlotsSplit(t, it, core1.cfg.CoreID, core2.cfg.CoreID)
-	via1, via2 := dialCore(t, core1.cfg), dialCore(t, core2.cfg)
+	env["CHAT_NODE_ID"] = "it-chat-2-" + it.suffix
+	chat2 := startChatNode(t, it, env)
+	awaitSlotsSplit(t, it, chat1.cfg.NodeID, chat2.cfg.NodeID)
+	via1, via2 := dialChat(t, chat1.cfg), dialChat(t, chat2.cfg)
 	roomID := createRoom(t, via1)
 	room := parseRoom(t, roomID)
-	live := subscribeLive(t, it, core1.cfg, roomID)
-	forgets := itMetric(t, core1.cfg, itForgetsSeries)
+	live := subscribeLive(t, it, chat1.cfg, roomID)
+	forgets := itMetric(t, chat1.cfg, itForgetsSeries)
 
 	cached := time.Now()
-	sendAs(t, via1, "bob", roomID, "watch-bob-1", "bob is cached on core-1")
+	sendAs(t, via1, "bob", roomID, "watch-bob-1", "bob is cached on chat-1")
 	removed := removeAs(t, via2, itUser, roomID, "bob")
 	awaitLiveEvent(t, live, pbconv.MemberEventID(room, "bob", removed.GetVer()))
-	awaitMetric(t, core1.cfg, itForgetsSeries, func(v float64) bool { return v > forgets })
+	awaitMetric(t, chat1.cfg, itForgetsSeries, func(v float64) bool { return v > forgets })
 
 	_, err := via1.SendMessage(callerAs(t.Context(), "bob"), &chatimv1.SendMessageRequest{RoomId: roomID, Cid: "watch-bob-2", Text: "after removal"})
 	if took := time.Since(cached); status.Code(err) != codes.PermissionDenied || took >= itMemberCacheTTL {
-		t.Fatalf("bob sends through core-1 %v after caching = %v, want PermissionDenied before the %v cache TTL", took, err, itMemberCacheTTL)
+		t.Fatalf("bob sends through chat-1 %v after caching = %v, want PermissionDenied before the %v cache TTL", took, err, itMemberCacheTTL)
 	}
 }
 
 func TestRealInfraAddMembersRetryWithTheSameRequestIDNeverReAddsARemovedUser(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastSweep)
-	client := dialCore(t, core.cfg)
+	chat := startChatNode(t, it, itFastSweep)
+	client := dialChat(t, chat.cfg)
 	roomID := createRoom(t, client)
 
 	if added := addMembersAs(t, client, itUser, roomID, "erin-r", "erin"); len(added) != 1 || added[0].GetVer() != 1 {
@@ -92,15 +92,15 @@ func TestRealInfraAddMembersRetryWithTheSameRequestIDNeverReAddsARemovedUser(t *
 	if fresh := addMembersAs(t, client, itUser, roomID, "erin-r2", "erin"); len(fresh) != 1 || fresh[0].GetVer() != 3 {
 		t.Fatalf("add with a new request id = %v, want erin back at ver 3", fresh)
 	}
-	if docs := storedMembers(t, itStore(it, core), parseRoom(t, roomID), "erin"); !docs["erin"].Active() || docs["erin"].Ver != 3 {
+	if docs := storedMembers(t, itStore(it, chat), parseRoom(t, roomID), "erin"); !docs["erin"].Active() || docs["erin"].Ver != 3 {
 		t.Fatalf("erin = %+v, want active at ver 3", docs["erin"])
 	}
 }
 
 func TestRealInfraClearHistoryHidesByTimeAndSurvivesARejoin(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastSweep)
-	client := dialCore(t, core.cfg)
+	chat := startChatNode(t, it, itFastSweep)
+	client := dialChat(t, chat.cfg)
 	roomID := createRoom(t, client)
 	room := parseRoom(t, roomID)
 	sendAs(t, client, itUser, roomID, "rejoin-1", "before the clear 1")
@@ -115,7 +115,7 @@ func TestRealInfraClearHistoryHidesByTimeAndSurvivesARejoin(t *testing.T) {
 	if back := addMembersAs(t, client, itUser, roomID, "rejoin-bob", "bob"); len(back) != 1 {
 		t.Fatalf("rejoin = %v, want bob added back", back)
 	}
-	bob := storedMembers(t, itStore(it, core), room, "bob")["bob"]
+	bob := storedMembers(t, itStore(it, chat), room, "bob")["bob"]
 	if !bob.ClearedAt.Equal(mark) || bob.ReadSeq != last {
 		t.Fatalf("bob after rejoin = %+v, want cleared_at %v kept and read_seq %d", bob, mark, last)
 	}

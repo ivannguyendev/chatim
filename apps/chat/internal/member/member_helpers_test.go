@@ -166,14 +166,14 @@ func newMemberParts(t *testing.T, rooms *memstore.Rooms) memberParts {
 		members: &spyMembers{Rooms: rooms, log: calls}, calls: calls, forgets: &forgetter{}, requestIDs: &requestIDs{},
 		timers: &fakeTimers{log: calls, armed: map[uint64]uint64{}}, redis: mr, rdb: rdb,
 	}
-	p.registry = newRegistry(t, rdb, "core-1")
+	p.registry = newRegistry(t, rdb, "chat-1")
 	p.requests = newRequests(t, p.registry)
 	return p
 }
 
-func newRegistry(t *testing.T, rdb *redis.Client, core string) *dedupe.Store {
+func newRegistry(t *testing.T, rdb *redis.Client, chat string) *dedupe.Store {
 	t.Helper()
-	reg, err := dedupe.New(rdb, dedupe.Config{CoreID: core, Timeout: time.Second}, nil)
+	reg, err := dedupe.New(rdb, dedupe.Config{NodeID: chat, Timeout: time.Second}, nil)
 	if err != nil {
 		t.Fatalf("dedupe.New: %v", err)
 	}

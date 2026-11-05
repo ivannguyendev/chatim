@@ -9,7 +9,7 @@ import (
 	"github.com/ivannguyendev/chatim/tools/chatcli/internal/e2e"
 )
 
-func TestRoomListEventIDsAndSubjectsFollowTheCore(t *testing.T) {
+func TestRoomListEventIDsAndSubjectsFollowTheChat(t *testing.T) {
 	cases := map[string]string{
 		e2e.RoomInfoEventID("77", 2):                            "77-info-v2",
 		e2e.PreferencesEventID("77", "mia", 3):                  "77-pf-mia-v3",

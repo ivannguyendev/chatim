@@ -12,7 +12,7 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/core/admin"
 )
 
-const usage = "usage: core [serve|probe|resync -from RFC3339 -to RFC3339 [-tenant T] [-room ID] [-rate N] [-dry-run]|recount -room ID [-dry-run]|indexes [-dry-run|-apply|-drop-old]]"
+const usage = "usage: chat [serve|probe|resync -from RFC3339 -to RFC3339 [-tenant T] [-room ID] [-rate N] [-dry-run]|recount -room ID [-dry-run]|indexes [-dry-run|-apply|-drop-old]]"
 
 func Main(args []string) int {
 	cmd := "serve"
@@ -49,11 +49,11 @@ func serveMain() int {
 
 	cfg, err := config.Load()
 	if err != nil {
-		logger.ErrorContext(ctx, "invalid core config", "err", err)
+		logger.ErrorContext(ctx, "invalid chat config", "err", err)
 		return 1
 	}
 	if err := Run(ctx, cfg, logger); err != nil {
-		redactedLogger(logger, cfg).ErrorContext(ctx, "core exited with error", "err", err)
+		redactedLogger(logger, cfg).ErrorContext(ctx, "chat exited with error", "err", err)
 		return 1
 	}
 	return 0

@@ -67,9 +67,9 @@ func TestListRoomGroupsChecksTheCallerFirst(t *testing.T) {
 	_, err := rg.svc.ListRoomGroups(t.Context(), &chatimv1.ListRoomGroupsRequest{RoomId: ids.FormatRoomID(theirs)})
 	expectCode(t, "no caller", err, codes.Unauthenticated)
 	mine := rg.room(t, 0, "bob")
-	rg.core.fail(errDown)
+	rg.chat.fail(errDown)
 	_, err = rg.svc.ListRoomGroups(rg.bob, &chatimv1.ListRoomGroupsRequest{RoomId: ids.FormatRoomID(mine)})
-	expectCode(t, "core down", err, codes.Unavailable)
+	expectCode(t, "chat down", err, codes.Unavailable)
 }
 
 func TestListRoomGroupsOfASmallRoomListsTaggableGroupsOfItsMembersByName(t *testing.T) {

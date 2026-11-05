@@ -33,7 +33,7 @@ func (r *wsRun) edit() error {
 }
 
 func (r *wsRun) react() error {
-	settings, err := viaGateway(r.gw, r.gw.core.GetReactionSettings, &chatimv1.GetReactionSettingsRequest{})
+	settings, err := viaGateway(r.gw, r.gw.chat.GetReactionSettings, &chatimv1.GetReactionSettingsRequest{})
 	if err != nil {
 		return fmt.Errorf("reaction settings: %w", err)
 	}
@@ -71,7 +71,7 @@ func (r *wsRun) bookmark() error {
 }
 
 func (r *wsRun) bookmarks() (*chatimv1.ListBookmarksResponse, error) {
-	resp, err := viaGateway(r.gw, r.gw.core.ListBookmarks, &chatimv1.ListBookmarksRequest{Limit: wsBookmarks})
+	resp, err := viaGateway(r.gw, r.gw.chat.ListBookmarks, &chatimv1.ListBookmarksRequest{Limit: wsBookmarks})
 	if err != nil {
 		return nil, fmt.Errorf("bookmarks through the gateway: %w", err)
 	}

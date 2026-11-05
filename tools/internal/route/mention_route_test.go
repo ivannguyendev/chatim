@@ -12,8 +12,8 @@ import (
 	"github.com/ivannguyendev/chatim/tools/internal/route"
 )
 
-type coreOnly struct {
-	chatimv1.CoreServiceClient
+type chatOnly struct {
+	chatimv1.ChatServiceClient
 }
 
 type nopCloser struct{}
@@ -32,7 +32,7 @@ func mentionCalls() map[string]linkCase {
 }
 
 func TestMentionCallsNeedTheMentionServiceOnTheDialedConnection(t *testing.T) {
-	dial := func(string) (chatimv1.CoreServiceClient, io.Closer, error) { return coreOnly{}, nopCloser{}, nil }
+	dial := func(string) (chatimv1.ChatServiceClient, io.Closer, error) { return chatOnly{}, nopCloser{}, nil }
 	c, err := route.New(&splitLocator{}, dial, route.Policy{})
 	if err != nil {
 		t.Fatalf("route.New: %v", err)
@@ -42,7 +42,7 @@ func TestMentionCallsNeedTheMentionServiceOnTheDialedConnection(t *testing.T) {
 	calls["mentions"] = linkCaseOf(&chatimv1.ListMentionsRequest{}, (*route.Client).ListMentions, nil, false)
 	for name, mc := range calls {
 		if _, st, err := mc.call(context.Background(), c); status.Code(err) != codes.Unimplemented || st.Attempts != 1 {
-			t.Fatalf("%s over a core-only client = %v after %d attempts, want Unimplemented at once", name, err, st.Attempts)
+			t.Fatalf("%s over a chat-only client = %v after %d attempts, want Unimplemented at once", name, err, st.Attempts)
 		}
 	}
 }

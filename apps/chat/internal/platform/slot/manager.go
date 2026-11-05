@@ -18,7 +18,7 @@ import (
 const ReleaseTimeout = 5 * time.Second
 
 type Config struct {
-	CoreID       string
+	NodeID       string
 	Addr         string
 	Tick         time.Duration
 	HeartbeatTTL time.Duration
@@ -47,7 +47,7 @@ func New(rdb redis.UniversalClient, cfg Config, log *slog.Logger) (*Manager, err
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Manager{cfg: cfg, rdb: rdb, log: log.With("core", cfg.CoreID), owned: map[uint16]time.Time{}, now: time.Now}, nil
+	return &Manager{cfg: cfg, rdb: rdb, log: log.With("node", cfg.NodeID), owned: map[uint16]time.Time{}, now: time.Now}, nil
 }
 
 func (c Config) Validate() error { return c.withDefaults().validate() }
@@ -62,8 +62,8 @@ func (c Config) withDefaults() Config {
 
 func (c Config) validate() error {
 	switch {
-	case c.CoreID == "" || strings.ContainsAny(c.CoreID, "*?[]\\ "):
-		return errors.New("slot: CoreID must be non-empty and free of glob characters and spaces")
+	case c.NodeID == "" || strings.ContainsAny(c.NodeID, "*?[]\\ "):
+		return errors.New("slot: NodeID must be non-empty and free of glob characters and spaces")
 	case c.Tick <= 0:
 		return errors.New("slot: Tick must be positive")
 	case c.LeaseTTL <= 2*c.Tick || c.HeartbeatTTL <= 2*c.Tick:
@@ -135,7 +135,7 @@ func (m *Manager) Step(ctx context.Context) error {
 		deliver(hookCtx, m.cfg.AfterClaim, claimed)
 	}
 	if len(lost) > 0 || moved {
-		err = errors.Join(err, m.rdb.Publish(ctx, slotmap.ChangedChannel, m.cfg.CoreID).Err())
+		err = errors.Join(err, m.rdb.Publish(ctx, slotmap.ChangedChannel, m.cfg.NodeID).Err())
 	}
 	return err
 }

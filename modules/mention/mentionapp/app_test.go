@@ -19,7 +19,7 @@ import (
 
 type fakeJS struct{ jetstream.JetStream }
 
-type fakeCore struct{ mentionapp.CoreReader }
+type fakeChat struct{ mentionapp.ChatReader }
 
 func config() mentionapp.Config {
 	c := mentionapp.DefaultConfig()
@@ -44,7 +44,7 @@ func deps(t *testing.T) mentionapp.Deps {
 		JS:       fakeJS{},
 		NotifyJS: fakeJS{},
 		NATS:     &nats.Conn{},
-		Core:     fakeCore{},
+		Chat:     fakeChat{},
 		Log:      slog.New(slog.DiscardHandler),
 	}
 }
@@ -84,7 +84,7 @@ func TestNewRejectsMissingDeps(t *testing.T) {
 		"js":        func(d *mentionapp.Deps) { d.JS = nil },
 		"notify js": func(d *mentionapp.Deps) { d.NotifyJS = nil },
 		"nats":      func(d *mentionapp.Deps) { d.NATS = nil },
-		"core":      func(d *mentionapp.Deps) { d.Core = nil },
+		"chat":      func(d *mentionapp.Deps) { d.Chat = nil },
 		"log":       func(d *mentionapp.Deps) { d.Log = nil },
 	}
 	for name, drop := range cases {

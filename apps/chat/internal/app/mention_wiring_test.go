@@ -53,14 +53,14 @@ func TestShutdownWithoutMentionSkipsItsPhase(t *testing.T) {
 	}
 }
 
-func TestAttachWithoutMentionKeepsTheCoreWatches(t *testing.T) {
+func TestAttachWithoutMentionKeepsTheChatWatches(t *testing.T) {
 	a := &node{}
 	watches := liveWatchers{&fakeWatch{}, &fakeWatch{}}
 	if probes := a.attachMention(nil, watches); probes != nil || a.mention != nil || len(a.setups) != 0 {
 		t.Fatalf("attach(nil) = %v, mention %v, setups %v; want nothing attached", probes, a.mention, a.setups)
 	}
 	if got, ok := a.watches.(liveWatchers); !ok || len(got) != 2 {
-		t.Fatalf("watches = %v, want the two core watches", a.watches)
+		t.Fatalf("watches = %v, want the two chat watches", a.watches)
 	}
 }
 

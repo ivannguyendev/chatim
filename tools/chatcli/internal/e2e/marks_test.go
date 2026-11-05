@@ -16,7 +16,7 @@ func summary(version uint64, emoji string) *chatimv1.ReactionSummary {
 	return &chatimv1.ReactionSummary{Counts: []*chatimv1.ReactionCount{{Emoji: emoji, Count: 1}}, Ver: version}
 }
 
-func TestMarkEventIDsMatchTheCore(t *testing.T) {
+func TestMarkEventIDsMatchTheChat(t *testing.T) {
 	cases := map[string]string{
 		e2e.ReactionEventID("42", 3, reactor, 2): "42-0-3-e2e-user-n2",
 		e2e.CountsEventID("42", 3, 2):            "42-0-3-reactions-v2",

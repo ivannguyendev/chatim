@@ -25,12 +25,12 @@ func TestListMentionsDropsAnItemWhoseMessageNoLongerCarriesTheTarget(t *testing.
 		t.Fatalf("before the edits = %v", got)
 	}
 	for seq := uint64(1); seq <= 3; seq++ {
-		rg.core.editMessage(domain.MessageKey{Room: a, Seq: seq}, func(m *chatimv1.Message) {
+		rg.chat.editMessage(domain.MessageKey{Room: a, Seq: seq}, func(m *chatimv1.Message) {
 			m.MentionAll = false
 			m.MentionTargets = []*chatimv1.MentionTarget{{Kind: chatimv1.MentionKind_MENTION_KIND_GROUP, Id: "bob"}, {Kind: chatimv1.MentionKind_MENTION_KIND_USER, Id: "ops"}}
 		})
 	}
-	rg.core.editMessage(domain.MessageKey{Room: a, Seq: 4}, func(m *chatimv1.Message) { m.MentionTargets = nil })
+	rg.chat.editMessage(domain.MessageKey{Room: a, Seq: 4}, func(m *chatimv1.Message) { m.MentionTargets = nil })
 	if got, _, _ := rg.list(t, &chatimv1.ListMentionsRequest{Groups: ops}); !slices.Equal(got, []string{"kept"}) {
 		t.Fatalf("after the targets left the messages = %v, want only kept (still @all, newest item first)", got)
 	}
@@ -62,7 +62,7 @@ func TestListMentionsMapsDependencyFailuresToUnavailable(t *testing.T) {
 	_, err := rg.svc.ListMentions(rg.bob, &chatimv1.ListMentionsRequest{})
 	expectCode(t, "store down", err, codes.Unavailable)
 	counter.err = nil
-	rg.core.fail(errDown)
+	rg.chat.fail(errDown)
 	_, err = rg.svc.ListMentions(rg.bob, &chatimv1.ListMentionsRequest{})
-	expectCode(t, "core down", err, codes.Unavailable)
+	expectCode(t, "chat down", err, codes.Unavailable)
 }

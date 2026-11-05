@@ -1035,7 +1035,7 @@ var File_chatim_v1_room_list_proto protoreflect.FileDescriptor
 
 const file_chatim_v1_room_list_proto_rawDesc = "" +
 	"\n" +
-	"\x19chatim/v1/room_list.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x17chatim/v1/members.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xbc\x03\n" +
+	"\x19chatim/v1/room_list.proto\x12\tchatim.v1\x1a\x14chatim/v1/chat.proto\x1a\x17chatim/v1/members.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xbc\x03\n" +
 	"\vMyRoomState\x12)\n" +
 	"\x04role\x18\x01 \x01(\x0e2\x15.chatim.v1.MemberRoleR\x04role\x127\n" +
 	"\tjoined_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\bjoinedAt\x129\n" +
@@ -1189,7 +1189,7 @@ func file_chatim_v1_room_list_proto_init() {
 	if File_chatim_v1_room_list_proto != nil {
 		return
 	}
-	file_chatim_v1_core_proto_init()
+	file_chatim_v1_chat_proto_init()
 	file_chatim_v1_members_proto_init()
 	file_chatim_v1_room_list_proto_msgTypes[11].OneofWrappers = []any{}
 	file_chatim_v1_room_list_proto_msgTypes[13].OneofWrappers = []any{}

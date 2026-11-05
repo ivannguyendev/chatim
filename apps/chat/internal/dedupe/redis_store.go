@@ -54,7 +54,7 @@ func New(rdb *redis.Client, cfg Config, log *slog.Logger) (*Store, error) {
 	if log == nil {
 		log = slog.Default()
 	}
-	log = log.With("core", cfg.CoreID)
+	log = log.With("node", cfg.NodeID)
 	s := &Store{rdb: rdb, cfg: cfg, log: log, now: time.Now}
 	guard, err := redisguard.New(redisguard.Config{
 		Name:      "cid dedupe",
@@ -78,7 +78,7 @@ func (s *Store) Reserve(ctx context.Context, keys []Key) ([]Verdict, error) {
 	}
 	var out []Verdict
 	err := s.guard.Do(ctx, "reserve", func(cctx context.Context) error {
-		raw, err := reserveScript.Run(cctx, s.rdb, redisKeys(keys), pendingValue(s.cfg.CoreID), s.cfg.PendingTTL.Milliseconds()).Slice()
+		raw, err := reserveScript.Run(cctx, s.rdb, redisKeys(keys), pendingValue(s.cfg.NodeID), s.cfg.PendingTTL.Milliseconds()).Slice()
 		if err != nil {
 			return err
 		}
@@ -117,7 +117,7 @@ func (s *Store) Abort(ctx context.Context, keys []Key) error {
 		return nil
 	}
 	return s.guard.Do(ctx, "abort", func(cctx context.Context) error {
-		return abortScript.Run(cctx, s.rdb, redisKeys(keys), pendingValue(s.cfg.CoreID)).Err()
+		return abortScript.Run(cctx, s.rdb, redisKeys(keys), pendingValue(s.cfg.NodeID)).Err()
 	})
 }
 
@@ -126,7 +126,7 @@ func (s *Store) verdict(ctx context.Context, k Key, v any) Verdict {
 		return Verdict{Status: Reserved}
 	}
 	str, _ := v.(string)
-	if out, ok := parseValue(str, s.cfg.CoreID); ok {
+	if out, ok := parseValue(str, s.cfg.NodeID); ok {
 		return out
 	}
 	s.log.WarnContext(ctx, "malformed cid dedupe value treated as absent", "key", k.String(), "bytes", len(str))

@@ -134,7 +134,7 @@ func (s *stats) sources() []metrics.Source {
 	}
 	for reason := range rejectReasonCount {
 		out = append(out, metrics.Source{
-			Name: "commands_rejected_total", Help: "Client requests answered without calling core, by reason.",
+			Name: "commands_rejected_total", Help: "Client requests answered without calling chat, by reason.",
 			Labels: map[string]string{"reason": rejectLabels[reason]}, Read: counterOf(&s.rejected[reason]),
 		})
 	}

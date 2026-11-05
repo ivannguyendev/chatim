@@ -25,7 +25,7 @@ var (
 
 type cluster struct {
 	msgs  *memstore.Messages
-	cores []*actor.Router
+	nodes []*actor.Router
 }
 
 func newCluster(t *testing.T, n int) *cluster {
@@ -36,17 +36,17 @@ func newCluster(t *testing.T, n int) *cluster {
 		createRoom(t, rooms, id, clusterUsers...)
 	}
 	for range n {
-		cl.cores = append(cl.cores, startCore(t, cl.msgs, rooms, &fakeRegistry{}))
+		cl.nodes = append(cl.nodes, startChatNode(t, cl.msgs, rooms, &fakeRegistry{}))
 	}
 	return cl
 }
 
-func startCore(t *testing.T, msgs store.Messages, rooms store.Rooms, cids actor.CIDRegistry) *actor.Router {
+func startChatNode(t *testing.T, msgs store.Messages, rooms store.Rooms, cids actor.CIDRegistry) *actor.Router {
 	t.Helper()
-	return startCoreWith(t, msgs, rooms, cids, nopPublisher{})
+	return startChatNodeWith(t, msgs, rooms, cids, nopPublisher{})
 }
 
-func startCoreWith(t *testing.T, msgs store.Messages, rooms store.Rooms, cids actor.CIDRegistry, events actor.EventPublisher) *actor.Router {
+func startChatNodeWith(t *testing.T, msgs store.Messages, rooms store.Rooms, cids actor.CIDRegistry, events actor.EventPublisher) *actor.Router {
 	t.Helper()
 	fl, err := flush.New(msgs, flushConfig)
 	if err != nil {
@@ -92,7 +92,7 @@ func sendRetrying(r *actor.Router, c actor.SendCmd) (actor.Ack, int, error) {
 	}
 }
 
-func TestCompetingCoresKeepEveryTimelineGapless(t *testing.T) {
+func TestCompetingChatNodesKeepEveryTimelineGapless(t *testing.T) {
 	cl := newCluster(t, 2)
 	const workers, perWorker = 16, 30
 	var mu sync.Mutex
@@ -105,7 +105,7 @@ func TestCompetingCoresKeepEveryTimelineGapless(t *testing.T) {
 			for i := range perWorker {
 				room := clusterRooms[(w+i)%len(clusterRooms)]
 				c := actor.SendCmd{Tenant: tenant, User: clusterUsers[w%len(clusterUsers)], Room: room, CID: fmt.Sprintf("w%d-%d", w, i), Text: "hi"}
-				ack, attempts, err := sendRetrying(cl.cores[(w+i/3)%2], c)
+				ack, attempts, err := sendRetrying(cl.nodes[(w+i/3)%2], c)
 				if err != nil {
 					t.Errorf("Send %s: %v after %d attempts", c.CID, err, attempts)
 					return

@@ -8,7 +8,7 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-func (f *fakeCore) SetUserGroups(ctx context.Context, in *chatimv1.SetUserGroupsRequest, _ ...grpc.CallOption) (*chatimv1.SetUserGroupsResponse, error) {
+func (f *fakeChat) SetUserGroups(ctx context.Context, in *chatimv1.SetUserGroupsRequest, _ ...grpc.CallOption) (*chatimv1.SetUserGroupsResponse, error) {
 	if err := f.record(ctx, in); err != nil {
 		return nil, err
 	}
@@ -19,7 +19,7 @@ func (f *fakeCore) SetUserGroups(ctx context.Context, in *chatimv1.SetUserGroups
 	return &chatimv1.SetUserGroupsResponse{ChangedUsers: users}, nil
 }
 
-func (f *fakeCore) SetGroups(ctx context.Context, in *chatimv1.SetGroupsRequest, _ ...grpc.CallOption) (*chatimv1.SetGroupsResponse, error) {
+func (f *fakeChat) SetGroups(ctx context.Context, in *chatimv1.SetGroupsRequest, _ ...grpc.CallOption) (*chatimv1.SetGroupsResponse, error) {
 	if err := f.record(ctx, in); err != nil {
 		return nil, err
 	}
@@ -30,7 +30,7 @@ func (f *fakeCore) SetGroups(ctx context.Context, in *chatimv1.SetGroupsRequest,
 	return &chatimv1.SetGroupsResponse{ChangedGroups: groups}, nil
 }
 
-func (f *fakeCore) ListRoomGroups(ctx context.Context, in *chatimv1.ListRoomGroupsRequest, _ ...grpc.CallOption) (*chatimv1.ListRoomGroupsResponse, error) {
+func (f *fakeChat) ListRoomGroups(ctx context.Context, in *chatimv1.ListRoomGroupsRequest, _ ...grpc.CallOption) (*chatimv1.ListRoomGroupsResponse, error) {
 	if err := f.record(ctx, in); err != nil {
 		return nil, err
 	}

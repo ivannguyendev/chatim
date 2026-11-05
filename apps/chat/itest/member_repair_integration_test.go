@@ -17,14 +17,14 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-const itMembersRepairedSeries = `chatim_core_counter_repaired_total{counter="members"}`
+const itMembersRepairedSeries = `chatim_chat_counter_repaired_total{counter="members"}`
 
-var errCoreDiedBeforeCount = errors.New("core died before the member count")
+var errChatNodeDiedBeforeCount = errors.New("chat node died before the member count")
 
 type countLost struct{ *mongostore.Store }
 
 func (countLost) AddMemberCount(context.Context, uint64, int) (domain.MemberCount, error) {
-	return domain.MemberCount{}, errCoreDiedBeforeCount
+	return domain.MemberCount{}, errChatNodeDiedBeforeCount
 }
 
 type droppedEvents struct{}
@@ -45,40 +45,40 @@ type noForget struct{}
 
 func (noForget) ForgetMembers(uint64) {}
 
-func membersWithoutEvents(t *testing.T, it *itInfra, core itCore, members member.MemberStore) *member.Service {
+func membersWithoutEvents(t *testing.T, it *itInfra, chat itChatNode, members member.MemberStore) *member.Service {
 	t.Helper()
-	st, tc := itStore(it, core), core.cfg.Timer
+	st, tc := itStore(it, chat), chat.cfg.Timer
 	return built(member.New(member.Deps{
 		Access: built(access.NewChecker(st, access.DefaultPolicy{}))(t), Messages: st, Rooms: st,
-		Events: droppedEvents{}, Limits: core.cfg.Members, Members: members, Requests: freshRequests{},
+		Events: droppedEvents{}, Limits: chat.cfg.Members, Members: members, Requests: freshRequests{},
 		Forget: noForget{}, Reads: st, ReadSink: noReads{}, Log: slog.New(slog.DiscardHandler),
-		Timers: built(timer.NewTimers(it.js, tc.Name, tc.SubjectRoot, core.cfg.MemberCountCheckDelay))(t),
+		Timers: built(timer.NewTimers(it.js, tc.Name, tc.SubjectRoot, chat.cfg.MemberCountCheckDelay))(t),
 	}))(t)
 }
 
 func TestRealInfraACountMissedByACrashIsRepairedByItsTimer(t *testing.T) {
 	it := realInfra(t)
 	env := maps.Clone(itFastSweep)
-	env["CORE_REQUEST_DEADLINE"], env["MEMBER_COUNT_CHECK_DELAY"] = "2s", "2500ms"
-	core := startCore(t, it, env)
-	client := dialCore(t, core.cfg)
-	st := itStore(it, core)
+	env["CHAT_REQUEST_DEADLINE"], env["MEMBER_COUNT_CHECK_DELAY"] = "2s", "2500ms"
+	chat := startChatNode(t, it, env)
+	client := dialChat(t, chat.cfg)
+	st := itStore(it, chat)
 	normal := createRoom(t, client)
 	addMembersAs(t, client, itUser, normal, "timer-normal", "carol")
-	if n := pendingTimers(t, it, core.cfg, parseRoom(t, normal)); n != 0 {
+	if n := pendingTimers(t, it, chat.cfg, parseRoom(t, normal)); n != 0 {
 		t.Fatalf("a normal add left %d count check timers, want none", n)
 	}
 
 	roomID := createRoom(t, client)
 	room := parseRoom(t, roomID)
-	live := subscribeLive(t, it, core.cfg, roomID)
-	repaired := itMetric(t, core.cfg, itMembersRepairedSeries)
+	live := subscribeLive(t, it, chat.cfg, roomID)
+	repaired := itMetric(t, chat.cfg, itMembersRepairedSeries)
 	cmd := member.AddMembersCmd{Tenant: itTenant, User: itUser, Room: room, Users: []string{"carol", "dave"}, RequestID: "timer-crash"}
-	added, err := membersWithoutEvents(t, it, core, countLost{st}).AddMembers(t.Context(), cmd)
+	added, err := membersWithoutEvents(t, it, chat, countLost{st}).AddMembers(t.Context(), cmd)
 	if err != nil || len(added) != 2 {
 		t.Fatalf("AddMembers with a lost count = %v, %v; want both added", added, err)
 	}
-	if r, err := st.Get(t.Context(), room); err != nil || r.MemberCount != 2 || r.MemberCountVer != 1 || pendingTimers(t, it, core.cfg, room) != 1 {
+	if r, err := st.Get(t.Context(), room); err != nil || r.MemberCount != 2 || r.MemberCountVer != 1 || pendingTimers(t, it, chat.cfg, room) != 1 {
 		t.Fatalf("room after the lost count = %+v, %v; want 2 members at ver 1 and one armed timer", r, err)
 	}
 	fixed := awaitStored(t, "member count", func() (domain.Room, error) { return st.Get(t.Context(), room) },
@@ -87,19 +87,19 @@ func TestRealInfraACountMissedByACrashIsRepairedByItsTimer(t *testing.T) {
 	if c := ev.GetMemberCountChanged(); fixed.MemberCountVer != 2 || c.GetMemberCount() != 4 || c.GetMemberCountVer() != 2 {
 		t.Fatalf("repaired room ver %d, event %v; want 4 members at ver 2", fixed.MemberCountVer, ev)
 	}
-	if got := awaitMetric(t, core.cfg, itMembersRepairedSeries, func(v float64) bool { return v > repaired }); got != repaired+1 {
+	if got := awaitMetric(t, chat.cfg, itMembersRepairedSeries, func(v float64) bool { return v > repaired }); got != repaired+1 {
 		t.Fatalf("%s = %v, want %v", itMembersRepairedSeries, got, repaired+1)
 	}
 }
 
 func TestRealInfraLostMemberAndReadEventsAreRepublished(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastSweep)
-	client := dialCore(t, core.cfg)
+	chat := startChatNode(t, it, itFastSweep)
+	client := dialChat(t, chat.cfg)
 	roomID := createRoom(t, client)
 	room := parseRoom(t, roomID)
-	live := subscribeLive(t, it, core.cfg, roomID)
-	quiet := membersWithoutEvents(t, it, core, itStore(it, core))
+	live := subscribeLive(t, it, chat.cfg, roomID)
+	quiet := membersWithoutEvents(t, it, chat, itStore(it, chat))
 	cmd := member.AddMembersCmd{Tenant: itTenant, User: itUser, Room: room, Users: []string{"erin"}, RequestID: "lost-erin"}
 	if added, err := quiet.AddMembers(t.Context(), cmd); err != nil || len(added) != 1 {
 		t.Fatalf("AddMembers without events = %v, %v; want erin added", added, err)

@@ -14,7 +14,7 @@ import (
 func TestDrainAnswersRunningCommandsThenCloseAllSends1001(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		h := newHarness(t, testOptions())
-		running := h.core.hold(1)
+		running := h.chat.hold(1)
 		tc := h.dial(true)
 		tc.auth(h.token("u1", time.Hour))
 		tc.history(1)
@@ -58,7 +58,7 @@ func TestDrainAnswersRunningCommandsThenCloseAllSends1001(t *testing.T) {
 func TestShutdownPastItsDeadlineCancelsRunningCommandsAndCloses(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		h := newHarness(t, testOptions())
-		h.core.hold(1)
+		h.chat.hold(1)
 		tc := h.dial(true)
 		tc.auth(h.token("u1", time.Hour))
 		tc.history(1)

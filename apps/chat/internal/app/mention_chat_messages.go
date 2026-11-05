@@ -9,7 +9,7 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-func (c mentionCore) VisibleMessages(ctx context.Context, tenant, user string, keys []mentionapp.MessageKey) ([]*chatimv1.Message, error) {
+func (c mentionChatNode) VisibleMessages(ctx context.Context, tenant, user string, keys []mentionapp.MessageKey) ([]*chatimv1.Message, error) {
 	ks := storeKeys(keys)
 	visible, err := c.visible.VisibleMessages(ctx, tenant, user, ks)
 	if err != nil {

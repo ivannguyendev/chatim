@@ -20,13 +20,13 @@ import (
 )
 
 type config struct {
-	mode, layoutPath                               string
-	redis, redisPW, tenant, core, metrics, mongoDB string
-	sizes                                          []int
-	perSize, private, privateMessages, page        int
-	backgroundMessages, workers, joinMax, repeats  int
-	quietOps                                       int64
-	settle, callDeadline                           time.Duration
+	mode, layoutPath                                   string
+	redis, redisPW, tenant, chatAddr, metrics, mongoDB string
+	sizes                                              []int
+	perSize, private, privateMessages, page            int
+	backgroundMessages, workers, joinMax, repeats      int
+	quietOps                                           int64
+	settle, callDeadline                               time.Duration
 }
 
 func main() { os.Exit(realMain()) }
@@ -39,9 +39,9 @@ func realMain() int {
 	flag.StringVar(&c.redis, "redis", cmp.Or(os.Getenv("REDIS_ADDR"), "chatim-redis:6379"), "Redis holding slot leases (env REDIS_ADDR)")
 	flag.StringVar(&c.redisPW, "redis-password", "", "password of that Redis; env REDIS_PASSWORD when empty")
 	flag.StringVar(&c.tenant, "tenant", "rlb", "tenant of the bench rooms")
-	flag.StringVar(&c.core, "core", "chatim-core-1:9000", "core gRPC address every measured call goes to, so its caches are the ones measured")
-	flag.StringVar(&c.metrics, "metrics", "http://chatim-core-1:9090/metrics", "admin /metrics of that core for room_cache_* deltas; empty skips")
-	flag.StringVar(&c.mongoDB, "mongo-db", "chatim", "database of the cores")
+	flag.StringVar(&c.chatAddr, "chat-addr", "chatim-chat-1:9000", "chat node gRPC address every measured call goes to, so its caches are the ones measured")
+	flag.StringVar(&c.metrics, "metrics", "http://chatim-chat-1:9090/metrics", "admin /metrics of that chat node for room_cache_* deltas; empty skips")
+	flag.StringVar(&c.mongoDB, "mongo-db", "chatim", "database of the nodes")
 	flag.IntVar(&c.perSize, "users-per-size", 20, "users per room count; each has its own private rooms, so each first call is cold")
 	flag.IntVar(&c.private, "private", 40, "private rooms per user with the newest messages (first and next page)")
 	flag.IntVar(&c.privateMessages, "private-messages", 5, "messages per private room, sent by the peer, so they are unread")
@@ -49,7 +49,7 @@ func realMain() int {
 	flag.IntVar(&c.page, "page", 20, "ListMyRooms limit")
 	flag.IntVar(&c.repeats, "repeats", 5, "warm first and next page calls per user after its cold pair")
 	flag.IntVar(&c.workers, "workers", 4, "parallel seeding calls")
-	flag.IntVar(&c.joinMax, "join-max", 1500, "ROOM_LIST_JOIN_MAX of the cores, only to label the path")
+	flag.IntVar(&c.joinMax, "join-max", 1500, "ROOM_LIST_JOIN_MAX of the nodes, only to label the path")
 	flag.Int64Var(&c.quietOps, "quiet-ops", 40, "measure only once Mongo runs below this many ops/s for 3s")
 	flag.DurationVar(&c.settle, "settle", 15*time.Minute, "wait at most this long for room activity and a quiet Mongo")
 	flag.DurationVar(&c.callDeadline, "call-deadline", 2*time.Minute, "total deadline of one seeding call across its retries (same request_id and cid)")

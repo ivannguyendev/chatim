@@ -118,18 +118,18 @@ func batchSizes(batches [][]uint16) []int {
 
 func claimLeftovers(t *testing.T, mr *miniredis.Miniredis, m *Manager, crowded uint16) {
 	t.Helper()
-	heartbeat(t, mr, "core-x")
-	overwriteLeases(t, mr, "core-x", slotRange(0, crowded)...)
+	heartbeat(t, mr, "chat-x")
+	overwriteLeases(t, mr, "chat-x", slotRange(0, crowded)...)
 	stepAll(t, m)
 }
 
-func heartbeat(t *testing.T, mr *miniredis.Miniredis, core string) {
+func heartbeat(t *testing.T, mr *miniredis.Miniredis, node string) {
 	t.Helper()
-	if err := mr.Set(slotmap.CoreKey(core), core+":9000"); err != nil {
-		t.Fatalf("heartbeat %s: %v", core, err)
+	if err := mr.Set(slotmap.NodeKey(node), node+":9000"); err != nil {
+		t.Fatalf("heartbeat %s: %v", node, err)
 	}
-	if _, err := mr.ZAdd(slotmap.CoreRegistryKey, slotmap.CoreExpiryScore(redisEpoch.Add(time.Hour)), core); err != nil {
-		t.Fatalf("register %s: %v", core, err)
+	if _, err := mr.ZAdd(slotmap.NodeRegistryKey, slotmap.NodeExpiryScore(redisEpoch.Add(time.Hour)), node); err != nil {
+		t.Fatalf("register %s: %v", node, err)
 	}
 }
 

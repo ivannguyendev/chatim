@@ -68,13 +68,13 @@ func (s signer) token(t *testing.T) string {
 	return signed
 }
 
-type fakeCore struct {
-	chatimv1.UnimplementedCoreServiceServer
+type fakeChat struct {
+	chatimv1.UnimplementedChatServiceServer
 	started chan struct{}
 	release chan struct{}
 }
 
-func (f *fakeCore) GetHistory(ctx context.Context, _ *chatimv1.GetHistoryRequest) (*chatimv1.GetHistoryResponse, error) {
+func (f *fakeChat) GetHistory(ctx context.Context, _ *chatimv1.GetHistoryRequest) (*chatimv1.GetHistoryResponse, error) {
 	if f.release != nil {
 		f.started <- struct{}{}
 		select {
@@ -86,7 +86,7 @@ func (f *fakeCore) GetHistory(ctx context.Context, _ *chatimv1.GetHistoryRequest
 	return &chatimv1.GetHistoryResponse{}, nil
 }
 
-func startCore(t *testing.T, core *fakeCore) string {
+func startChatNode(t *testing.T, chat *fakeChat) string {
 	t.Helper()
 	var lc net.ListenConfig
 	lis, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
@@ -94,7 +94,7 @@ func startCore(t *testing.T, core *fakeCore) string {
 		t.Fatal(err)
 	}
 	srv := grpc.NewServer()
-	chatimv1.RegisterCoreServiceServer(srv, core)
+	chatimv1.RegisterChatServiceServer(srv, chat)
 	served := make(chan struct{})
 	go func() {
 		defer close(served)
@@ -119,9 +119,9 @@ func deadAddr(t *testing.T) string {
 	return addr
 }
 
-func testConfig(keysFile string, cores ...string) config.Config {
+func testConfig(keysFile string, nodes ...string) config.Config {
 	return config.Config{
-		ListenAddr: "api", AdminAddr: "admin", CoreAddrs: cores,
+		ListenAddr: "api", AdminAddr: "admin", ChatAddrs: nodes,
 		JWTKeysFile: keysFile, JWTIssuer: testIssuer, JWTAudience: testAudience, JWTLeeway: time.Second,
 		BodyMax: 128 << 10, UserRate: 50, UserBurst: 100, UserInflight: 32, UserLimiters: 1000, InflightMax: 100,
 		DrainDelay: 100 * time.Millisecond, ShutdownBudget: 15 * time.Second,
@@ -234,7 +234,7 @@ func httpStatus(t *testing.T, addr, path string) (int, string) {
 	return resp.StatusCode, string(body)
 }
 
-func h2cClient(t *testing.T, addr, token string) chatimv1connect.CoreServiceClient {
+func h2cClient(t *testing.T, addr, token string) chatimv1connect.ChatServiceClient {
 	t.Helper()
 	var protocols http.Protocols
 	protocols.SetUnencryptedHTTP2(true)
@@ -246,7 +246,7 @@ func h2cClient(t *testing.T, addr, token string) chatimv1connect.CoreServiceClie
 			return next(ctx, req)
 		}
 	})
-	return chatimv1connect.NewCoreServiceClient(&http.Client{Transport: transport}, "http://"+addr, connect.WithInterceptors(auth))
+	return chatimv1connect.NewChatServiceClient(&http.Client{Transport: transport}, "http://"+addr, connect.WithInterceptors(auth))
 }
 
 func run(ctx context.Context, cfg config.Config, log *slog.Logger, deps Deps) error {

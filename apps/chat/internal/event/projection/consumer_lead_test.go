@@ -44,7 +44,7 @@ func TestLeaderGatedConsumerNeverFetchesWithoutTheLeaderSlot(t *testing.T) {
 		time.Sleep(10 * leadTick)
 		synctest.Wait()
 		if n := rg.src.asks(); n != 0 {
-			t.Fatalf("a core without slot 0 fetched %d times, want never", n)
+			t.Fatalf("a chat without slot 0 fetched %d times, want never", n)
 		}
 		owner.owns.Store(true)
 		time.Sleep(leadTick)

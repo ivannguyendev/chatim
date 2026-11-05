@@ -24,7 +24,7 @@ Kiến trúc xử lý gửi tin nhắn được tách lớp nghiêm ngặt nhằ
 ```mermaid
 flowchart LR
     Client["Client SDK"] -->|1. WS Frame| GW["App websocket<br/>(gws / Protobuf)"]
-    GW -->|2. gRPC SendMessage| Core["Core Service<br/>(api/grpcsrv)"]
+    GW -->|2. gRPC SendMessage| Chat["Chat Service<br/>(api/grpcsrv)"]
 
     subgraph ActorDomain["Tầng Quản lý Phòng (In-Memory Actor)"]
         Mailbox["Mailbox Channel<br/>(Tuần tự hoá tin)"] --> RoomActor["Room Actor<br/>(Single-Writer seq)"]
@@ -45,12 +45,12 @@ flowchart LR
         NATSJet[("NATS JetStream CHATIM_EVT<br/>Subject: evt.{t}.message.{rid}.msg_created")]
     end
 
-    Core --> Mailbox
+    Chat --> Mailbox
     RoomActor <--> MemLRU
     RoomActor <--> RedisDed
     RoomActor -->|Bàn giao Doc| Flusher
     Flusher -->|Group Commit| MongoDb
-    RoomActor -.->|Fast Ack| Core
+    RoomActor -.->|Fast Ack| Chat
     RoomActor -.->|Best-effort Async| PubQueue
     PubQueue --> NATSJet
 ```
@@ -89,7 +89,7 @@ sequenceDiagram
     autonumber
     participant Client as Client SDK
     participant GW as App websocket
-    participant Core as Core (api/grpcsrv)
+    participant Chat as Chat (api/grpcsrv)
     participant Actor as Room Actor (message/actor)
     participant Dedupe as Redis Dedupe (EVALSHA)
     participant Flush as Flusher (message/flush)
@@ -98,8 +98,8 @@ sequenceDiagram
     participant NATS as NATS JetStream
 
     Client->>GW: Gửi tin (room_id, cid="c-123", text="Xin chào")
-    GW->>Core: gRPC SendMessage
-    Core->>Actor: Đẩy vào hàng đợi Mailbox của Actor phòng
+    GW->>Chat: gRPC SendMessage
+    Chat->>Actor: Đẩy vào hàng đợi Mailbox của Actor phòng
 
     Note over Actor,Dedupe: 1. Kiểm tra chống trùng (Reserve Phase)
     Actor->>Dedupe: Reserve(cid) qua Redis Lua (gom batch nhiều phòng)
@@ -113,8 +113,8 @@ sequenceDiagram
     Mongo-->>Flush: Ghi thành công
 
     Flush-->>Actor: Xác nhận đã ghi đĩa
-    Actor-->>Core: Xác nhận hoàn tất
-    Core-->>GW: Trả gRPC Response (seq)
+    Actor-->>Chat: Xác nhận hoàn tất
+    Chat-->>GW: Trả gRPC Response (seq)
     GW-->>Client: Trả Ack cho người gửi (p99 ≤ 30ms)
 
     Note over Actor,NATS: 4. Phát tán bất đồng bộ & Cam kết CID
@@ -133,7 +133,7 @@ sequenceDiagram
 ### 3.1. Single-Writer per Room (Mô hình Actor)
 - **Vấn đề cần giải quyết:** Nếu nhiều người cùng bấm gửi tin vào 1 phòng chat tại cùng 1 mili-giây trên nhiều luồng khác nhau, làm sao cấp số thứ tự `seq` tăng dần liên tục mà không bị nhảy cóc (gap) hoặc tranh chấp khoá (lock contention)?
 - **Cơ chế bảo đảm:**
-  - Mỗi phòng chat đang hoạt động được quản lý bởi **duy nhất một Goroutine Actor** trong bộ nhớ của node Core nắm giữ Slot.
+  - Mỗi phòng chat đang hoạt động được quản lý bởi **duy nhất một Goroutine Actor** trong bộ nhớ của node Chat nắm giữ Slot.
   - Mọi yêu cầu gửi tin vào phòng đó đều xếp hàng tuần tự qua một kênh Go channel (Mailbox).
   - Actor là người duy nhất nắm giữ biến `current_seq` trong RAM. Việc cấp `seq = current_seq + 1` diễn ra trong 0 microsecond mà không cần gọi câu lệnh khoá phân tán nặng nề nào.
   - `actor.Router` chạy một goroutine mỗi room với mailbox có giới hạn (`ACTOR_MAILBOX` 1024) và tự dừng khi rảnh (`ACTOR_IDLE` 5 phút). Mỗi actor chỉ có **một nhóm ghi đang bay**; actor bị cho nghỉ (retire) khi slot của room chuyển đi.
@@ -150,10 +150,10 @@ sequenceDiagram
 - **Cơ chế:** Để đảm bảo tính Idempotency khi Client retry, hệ thống áp dụng bộ lọc 2 tầng khi ghi và một bước lọc khi đọc:
   1. **Tầng 1 — In-Memory LRU Cache:** Mỗi actor phòng giữ tới 4,096 `cid` đã ack (10 phút) trong RAM để trả lại ack cũ ngay cho các gói tin gửi lặp.
   2. **Tầng 2 — Redis Dedupe (Chu trình 2 pha Reserve-Commit, khoá `chatim:cid:{room}:{user}:{cid}`):**
-     - **Pha 1 (Reserve):** Đặt chỗ CID bằng Redis Lua Script (`dedupe.Batcher` gom nhiều phòng vào một `EVALSHA`), trạng thái pending `p:{core}` với `CID_PENDING_TTL` 10 giây. CID đang pending ở core khác → từ chối `UNAVAILABLE` (đếm `cid_pending_elsewhere_total`); đã `Committed` → trả kết quả cũ ngay lập tức.
+     - **Pha 1 (Reserve):** Đặt chỗ CID bằng Redis Lua Script (`dedupe.Batcher` gom nhiều phòng vào một `EVALSHA`), trạng thái pending `p:{chat}` với `CID_PENDING_TTL` 10 giây. CID đang pending ở node chat khác → từ chối `UNAVAILABLE` (đếm `cid_pending_elsewhere_total`); đã `Committed` → trả kết quả cũ ngay lập tức.
      - **Batcher (D58):** chia shard theo `slot % CID_BATCH_SHARDS` (mặc định 4). Reserve chặn người gọi: không có vòng nào đang bay thì đi ngay, có thì nhập vòng kế (một `EVALSHA`, tối đa `CID_BATCH_MAX_KEYS` 256 khoá). Commit và Abort chỉ xếp hàng; vòng settle của mỗi shard gửi chúng theo pipeline.
      - **Pha 2 (Commit):** Sau ack, CID được chuyển sang trạng thái `Committed` (`c:{seq}:{ms}`) với `CID_COMMITTED_TTL` 15 phút.
-  3. **Không có unique index theo `cid` trên MongoDB:** `messages` không có index phụ (chỉ partial `state_pending`); `_id` (room│thread│seq) chỉ chặn hai lần ghi cùng seq. Nếu Redis lỗi, `redisguard` cho dedupe chạy chỉ với LRU; một bản trùng lọt qua (gửi lại sang core khác) bị `view.CollapseRetried` ẩn khi đọc theo (người gửi, cid).
+  3. **Không có unique index theo `cid` trên MongoDB:** `messages` không có index phụ (chỉ partial `state_pending`); `_id` (room│thread│seq) chỉ chặn hai lần ghi cùng seq. Nếu Redis lỗi, `redisguard` cho dedupe chạy chỉ với LRU; một bản trùng lọt qua (gửi lại sang node chat khác) bị `view.CollapseRetried` ẩn khi đọc theo (người gửi, cid).
 
 ### 3.3. Nhóm ghi đồng loạt (Group Commit / Batch Flusher)
 - Thay vì mỗi tin nhắn gọi một lệnh `InsertOne` xuống MongoDB làm quá tải IOPS đĩa:
@@ -167,19 +167,19 @@ sequenceDiagram
 - Mỗi entry kết thúc ở một trong bốn kết quả `store.Inserted`, `Duplicate`, `Unknown`, `Rejected`. Mỗi entry chỉ được ghi **một lần**: actor không bao giờ gửi lại hay xếp hàng lại (owner 2026-10-10; retry của driver, go-redis và nats.go vẫn giữ).
 - `Duplicate` và `Unknown` được đúng một `Find` (đọc majority) theo khoá, với hạn riêng 1s tách khỏi context của nhóm (`reservationMargin`):
   - Doc của mình (cùng người gửi, cùng cid) → coi là đã ghi.
-  - Doc của core khác ở seq của mình (tranh chấp seq): entry đó trả `ErrRetryLater` ngay, entry đã commit vẫn được ack, và actor nhường room một lần qua `requestRetire` (giữ `r.mu`) → `a.retire`, để lệnh sau tới đúng chủ; đếm `room_yields_total`.
-  - Không thấy, hoặc `Find` lỗi → không chắc chắn: `ErrRetryLater` (`errUnconfirmed`) ngay, cid vẫn pending (`p:{core}`, không Abort), actor `dirty` và nhớ lần ghi theo (user, cid) trong `ReservationTTL` (`ambiguous_writes.go`).
+  - Doc của node chat khác ở seq của mình (tranh chấp seq): entry đó trả `ErrRetryLater` ngay, entry đã commit vẫn được ack, và actor nhường room một lần qua `requestRetire` (giữ `r.mu`) → `a.retire`, để lệnh sau tới đúng chủ; đếm `room_yields_total`.
+  - Không thấy, hoặc `Find` lỗi → không chắc chắn: `ErrRetryLater` (`errUnconfirmed`) ngay, cid vẫn pending (`p:{chat}`, không Abort), actor `dirty` và nhớ lần ghi theo (user, cid) trong `ReservationTTL` (`ambiguous_writes.go`).
   - `Rejected` thất bại và nhả cid.
 - Client gửi lại cùng cid cho một lần ghi đang nhớ → một `Find` seq đã nhớ (hạn 1s): doc của mình → trả ack gốc và Commit cid; seq bị người khác chiếm → Abort và `errCIDUnsettled`, lần gửi lại sau ghi mới; không thấy hoặc lỗi → `errCIDUnsettled`, vẫn nhớ. Vì vậy lần nạp lại do traffic khác gây ra không che được một lần ghi tới muộn.
 - Actor đã mất bộ nhớ (bị đuổi) nạp lại `Last` và trang seed; cho tới khi doc hiện ra, lần gửi lại gặp `PendingHere` → `errCIDUnsettled` (actor `dirty` lại) cho tới khi doc hiện hoặc `CID_PENDING_TTL` hết. Boot kiểm một lần thử nằm gọn trong lần đặt chỗ: `CID_PENDING_TTL` > hạn nhóm + 1s.
-- Sau commit, thứ tự là: ack (ghi LRU trước) → đưa event cho `publish.Publisher` → xếp Commit cid (`c:{seq}:{ms}`) vào batcher (D59). Core chết giữa ack và Commit để lại khoá pending tới `CID_PENDING_TTL`; client retry nhanh sau một lần ghi lỗi có thể gặp `PendingHere` và nhận `ErrRetryLater`.
+- Sau commit, thứ tự là: ack (ghi LRU trước) → đưa event cho `publish.Publisher` → xếp Commit cid (`c:{seq}:{ms}`) vào batcher (D59). Chat chết giữa ack và Commit để lại khoá pending tới `CID_PENDING_TTL`; client retry nhanh sau một lần ghi lỗi có thể gặp `PendingHere` và nhận `ErrRetryLater`.
 
 ### 3.4. Fast Ack & Publish bất đồng bộ có bảo đảm (M3.1)
 - **Nguyên tắc:** Trả Ack cho người gửi ngay sau khi Mongo ghi nhận `w:majority`. Không bắt người gửi phải chờ đến khi tin được phát tán qua NATS JetStream.
 - Doc tin được insert kèm cờ `_state: 1` (`msg_created` chờ phát) trong cùng lệnh `insertMany`. Sau ack, publisher phát `msg_created` bất đồng bộ; PubAck về thì hàng xoá cờ tắt bit theo lô (2s sau đích đầu, các khoảng `_id` liền nhau thành một `UpdateMany`, khoá lẻ `UpdateOne`).
-- Nếu Core tắt đột ngột trước khi phát, hoặc NATS từ chối, doc còn cờ và **sweeper trên core giữ slot 0 (Module 10)** phát bù `msg_created` với đúng id sau khoảng 15–17s. Giao ít nhất một lần; stream bỏ bản trùng theo id.
+- Nếu Chat tắt đột ngột trước khi phát, hoặc NATS từ chối, doc còn cờ và **sweeper trên chat giữ slot 0 (Module 10)** phát bù `msg_created` với đúng id sau khoảng 15–17s. Giao ít nhất một lần; stream bỏ bản trùng theo id.
 - **Publisher (D50):** chỉ giữ một hàng đợi mỗi shard (chia theo slot), nên `Enqueue` không bao giờ chặn (hàng đầy thì bỏ và đếm `publish_dropped_total`, sweeper phát bù) và event của một room giữ thứ tự tới. Mỗi shard gọi `PublishMsgAsync` không chờ ack; nats.go lo giới hạn đang bay (`PUB_MAX_PENDING`), hạn ack (`PUB_ACK_TIMEOUT` 2s) và retry khi chưa có leader; lỗi đi vào `WithPublishAsyncErrHandler` và chỉ được log, tối đa một lần mỗi giây.
-- Subject và id: `msg_created` đi `evt.{t}.message.{rid}.msg_created` trên `CHATIM_EVT` (loại data `mention` khi tin có mention), `Nats-Msg-Id` = id tự nhiên; subject theo loại data do `publish.subjectFor` chọn (D108), kind lạ không được phát. Core không có subject theo user và không chọn người nhận (P3). Bảng đầy đủ: [events.md](../events.md) §1–2.
+- Subject và id: `msg_created` đi `evt.{t}.message.{rid}.msg_created` trên `CHATIM_EVT` (loại data `mention` khi tin có mention), `Nats-Msg-Id` = id tự nhiên; subject theo loại data do `publish.subjectFor` chọn (D108), kind lạ không được phát. Chat không có subject theo user và không chọn người nhận (P3). Bảng đầy đủ: [events.md](../events.md) §1–2.
 
 ### 3.5. Hợp đồng Snapshot & Xử lý Đến lệch thứ tự (Out-of-order Resilience — Quy tắc R6/R7)
 - **Vấn đề thực tế mạng di động:** Do NATS JetStream và kết nối mạng di động, Client SDK có thể nhận được sự kiện `msg_edited` (sửa tin) **trước khi** nhận được sự kiện `msg_created` (tạo tin ban đầu).
@@ -189,16 +189,16 @@ sequenceDiagram
   - Nếu nhận được `msg_edited` cho một tin nhắn chưa có trên màn hình, Client SDK lưu snapshot này vào bộ nhớ và hiển thị trực tiếp. Khi sự kiện `msg_created` (bản gốc, `ver: 0`) đến sau, Client so sánh thấy phiên bản hiện tại đã là `ver: 1` nên sẽ bỏ qua gói tin cũ một cách an toàn.
 
 ### 3.6. Slot và quyền sở hữu mềm (`platform/slot`, `pkg/slotmap`)
-- `slot = mix64(room) % 1024` (`slotmap.Of`); `slotmap.Score` và `Preferred` là băm rendezvous chọn core ưu tiên cho một slot. Client đổi slot ra địa chỉ core bằng `slotmap.Resolver`.
+- `slot = mix64(room) % 1024` (`slotmap.Of`); `slotmap.Score` và `Preferred` là băm rendezvous chọn chat ưu tiên cho một slot. Client đổi slot ra địa chỉ chat bằng `slotmap.Resolver`.
 - `slot.Manager.Step` chạy mỗi tick (`SLOT_TICK` 1s):
-  1. Heartbeat bằng một Lua script: `SET chatim:core:{id}`, `ZADD chatim:cores` chấm điểm theo `TIME` của Redis, rồi xoá core đã hết hạn.
+  1. Heartbeat bằng một Lua script: `SET chatim:chat-node:{id}`, `ZADD chatim:chat-nodes` chấm điểm theo `TIME` của Redis, rồi xoá chat đã hết hạn.
   2. Gia hạn lease `chatim:slot:{n}` bằng Lua nhiều khoá, nên Redis state phải là một primary, không phải Redis Cluster.
-  3. Nhận hoặc nhả slot hướng tới `ceil(1024 / số core sống)`.
+  3. Nhận hoặc nhả slot hướng tới `ceil(1024 / số chat sống)`.
   4. Phát `chatim:slots:changed` khi có slot mất hoặc chuyển.
 - Hook nhận slot theo lô và dùng chung một `HookTimeout` (`SLOT_HOOK_TIMEOUT`, mặc định nửa tick) mỗi Step. `BeforeRelease`, `AfterLose` và `AfterClaim` đều chỉ gọi `Router.EvictSlots`.
 - `Owns()` chỉ đúng khi dấu lease còn mới hơn `min(LeaseTTL, HeartbeatTTL) − Tick`, tính từ đầu tick (D24).
 - Slot manager dùng Redis client riêng (pool 4, retry mặc định). Không bao giờ dùng `SCAN` hay `KEYS`: khoá cid lấp đầy keyspace.
-- **Bất biến: core nào cũng xử lý đúng room nào.** Quyền sở hữu chỉ mua gom lô, thứ tự và cache hit. Tính đúng đến từ `_id` duy nhất đóng vai CAS, nên Redis failover hay hai chủ cùng lúc không làm mất hay nhân đôi tin (hai chủ chỉ dẫn tới tranh chấp seq ở §3.3a).
+- **Bất biến: node chat nào cũng xử lý đúng room nào.** Quyền sở hữu chỉ mua gom lô, thứ tự và cache hit. Tính đúng đến từ `_id` duy nhất đóng vai CAS, nên Redis failover hay hai chủ cùng lúc không làm mất hay nhân đôi tin (hai chủ chỉ dẫn tới tranh chấp seq ở §3.3a).
 
 ---
 
@@ -242,8 +242,8 @@ Tên field trong `messages` là tên ngắn (ngoại lệ duy nhất của luậ
 - Thành viên: `ver` (≤ MaxUint32) đếm thay đổi membership của một doc (room, user); `read_ver` đếm thay đổi vị trí đọc; `rooms.member_count_ver` đếm thay đổi `member_count` (1 khi tạo); `rooms.owners_ver` tăng ở mọi transaction owner. Mọi version chỉ tăng, có thể nhảy cóc; tombstone không bao giờ bị xoá nên id event không bao giờ lặp lại.
 
 ### 4.2. Kỹ thuật Redis Lua Script (CID Dedupe)
-- Sử dụng lệnh `EVALSHA` gọi trước mã SHA1 của script Lua trên Redis để kiểm tra và đặt chỗ CID nguyên tử, tránh round-trip mạng nhiều lần giữa Core và Redis.
-- Khi Redis gặp sự cố, thành phần `platform/redisguard` tự động kích hoạt chế độ bảo vệ (cooldown circuit breaker), bypass tầng Redis và chỉ dùng LRU trong RAM để hệ thống không bị gián đoạn; trong lúc đó bản trùng gửi lại qua core khác có thể được ghi (alert `ChatimRedisDegraded`) và được ẩn khi đọc.
+- Sử dụng lệnh `EVALSHA` gọi trước mã SHA1 của script Lua trên Redis để kiểm tra và đặt chỗ CID nguyên tử, tránh round-trip mạng nhiều lần giữa Chat và Redis.
+- Khi Redis gặp sự cố, thành phần `platform/redisguard` tự động kích hoạt chế độ bảo vệ (cooldown circuit breaker), bypass tầng Redis và chỉ dùng LRU trong RAM để hệ thống không bị gián đoạn; trong lúc đó bản trùng gửi lại qua node chat khác có thể được ghi (alert `ChatimRedisDegraded`) và được ẩn khi đọc.
 
 ### 4.3. Hợp đồng Mã lỗi gRPC (Error Matrix)
 
@@ -252,7 +252,7 @@ Tên field trong `messages` là tên ngắn (ngoại lệ duy nhất của luậ
 | `InvalidArgument` | `ERR_PAYLOAD_TOO_LARGE` | Văn bản gửi vượt quá 16KB hoặc metadata > 8KB. | Không retry; hiển thị thông báo tin nhắn quá dài. |
 | `InvalidArgument` | `ERR_INVALID_CID` | Mã `cid` gửi lên rỗng, quá dài hoặc chứa ký tự ngoài `[A-Za-z0-9_-]` (ví dụ dấu `:`). | Không retry; sửa cách sinh CID trên Client. |
 | `ResourceExhausted` | `domain.ErrBusy` | Mailbox actor của phòng (`ACTOR_MAILBOX` 1024) hoặc hàng flusher đầy. | Có retry; Client backoff jitter rồi gọi lại với cùng `cid`. |
-| `Unavailable` | `ERR_SLOT_UNAVAILABLE` | Node Core vừa mất quyền sở hữu slot hoặc MongoDB đang failover bầu cử Primary. | Có retry; Client tự động backoff jitter (50ms–200ms) và gọi lại. |
+| `Unavailable` | `ERR_SLOT_UNAVAILABLE` | Node Chat vừa mất quyền sở hữu slot hoặc MongoDB đang failover bầu cử Primary. | Có retry; Client tự động backoff jitter (50ms–200ms) và gọi lại. |
 | `PermissionDenied` | `ERR_NOT_IN_ROOM` | Người gửi không phải là thành viên hợp lệ của phòng chat. | Không retry; chặn ô nhập tin nhắn trên giao diện. |
 
 ---
@@ -267,7 +267,7 @@ Tên field trong `messages` là tên ngắn (ngoại lệ duy nhất của luậ
 3. **Giới hạn kích thước gói tin (Payload Quota):**
    - Độ dài văn bản tối đa: **16 KB**.
    - Dữ liệu metadata tối đa: **8 KB**.
-   - Số lượng tệp/tham chiếu đính kèm tối đa: **10 tệp** (yêu cầu A6; core chưa có trường đính kèm riêng, chỉ có `meta` ≤ 8KB).
+   - Số lượng tệp/tham chiếu đính kèm tối đa: **10 tệp** (yêu cầu A6; chat chưa có trường đính kèm riêng, chỉ có `meta` ≤ 8KB).
 
 ---
 
@@ -276,24 +276,24 @@ Tên field trong `messages` là tên ngắn (ngoại lệ duy nhất của luậ
 | Thành phần phụ thuộc | Mục đích phụ thuộc | Ứng xử khi thành phần gặp sự cố (Failure Behavior) |
 |---|---|---|
 | **MongoDB Clustered Collection** | Lưu trữ tin vĩnh viễn (`messages`) | Nếu Mongo Replica Set mất kết nối hoặc quá tải: Pipeline flush bị nghẽn, Actor từ chối nhận thêm tin và trả `UNAVAILABLE` cho Client. |
-| **Redis Dedupe Instance** | Lưu trữ tạm CID để chống trùng nhanh | Nếu Redis Dedupe bị chậm hoặc ngắt kết nối: `redisguard` kích hoạt mạch ngắt. Hệ thống bỏ qua Redis và chỉ chống trùng bằng LRU trong RAM; bản trùng gửi lại qua core khác có thể lọt và được `view.CollapseRetried` ẩn khi đọc. Không chết dịch vụ. |
-| **NATS JetStream (CHATIM_EVT)** | Kênh phát tán sự kiện tin mới | Nếu NATS quá tải: Fast-path publish thất bại nhưng Core vẫn trả Ack thành công cho người gửi. Doc giữ cờ `_state`; sweeper slot 0 phát bù sau khoảng 15–17s (hoặc khi NATS sống lại). |
-| **Platform Slot Manager** | Đảm bảo duy nhất 1 Core sở hữu phòng | Nếu Core bị mất hợp đồng thuê Slot: Actor của phòng tự động từ chối các lệnh gửi tin mới (`AfterLose`), hoàn tất các tin đang ghi dở rồi giải phóng tài nguyên. |
+| **Redis Dedupe Instance** | Lưu trữ tạm CID để chống trùng nhanh | Nếu Redis Dedupe bị chậm hoặc ngắt kết nối: `redisguard` kích hoạt mạch ngắt. Hệ thống bỏ qua Redis và chỉ chống trùng bằng LRU trong RAM; bản trùng gửi lại qua node chat khác có thể lọt và được `view.CollapseRetried` ẩn khi đọc. Không chết dịch vụ. |
+| **NATS JetStream (CHATIM_EVT)** | Kênh phát tán sự kiện tin mới | Nếu NATS quá tải: Fast-path publish thất bại nhưng Chat vẫn trả Ack thành công cho người gửi. Doc giữ cờ `_state`; sweeper slot 0 phát bù sau khoảng 15–17s (hoặc khi NATS sống lại). |
+| **Platform Slot Manager** | Đảm bảo duy nhất 1 Chat sở hữu phòng | Nếu Chat bị mất hợp đồng thuê Slot: Actor của phòng tự động từ chối các lệnh gửi tin mới (`AfterLose`), hoàn tất các tin đang ghi dở rồi giải phóng tài nguyên. |
 
 ### 6.1. Chỉ số Sức khoẻ Vận hành & Cảnh báo SRE (Key Metrics & Alerts)
 
-Core chưa xuất metric độ trễ flush/ack, số lần bắt trùng theo tầng hay độ sâu mailbox; độ trễ ack p50/p99 hiện đo bằng `chatbench` (`make poc TOOL=chatbench`). Các metric thực có liên quan:
+Chat chưa xuất metric độ trễ flush/ack, số lần bắt trùng theo tầng hay độ sâu mailbox; độ trễ ack p50/p99 hiện đo bằng `chatbench` (`make poc TOOL=chatbench`). Các metric thực có liên quan:
 
-- **`chatim_core_redis_degraded{client="cid_dedupe"}`:** 1 khi client Redis dedupe đang ở chế độ suy giảm.
-  - *Luật cảnh báo (`ChatimRedisDegraded`):* = 1 trong 1 phút (có thể lọt bản trùng giữa các core).
-- **`chatim_core_cid_pending_elsewhere_total`:** Lệnh gửi bị từ chối vì cid đang pending ở core khác (cửa sổ trùng CD3).
+- **`chatim_chat_redis_degraded{client="cid_dedupe"}`:** 1 khi client Redis dedupe đang ở chế độ suy giảm.
+  - *Luật cảnh báo (`ChatimRedisDegraded`):* = 1 trong 1 phút (có thể lọt bản trùng giữa các node chat).
+- **`chatim_chat_cid_pending_elsewhere_total`:** Lệnh gửi bị từ chối vì cid đang pending ở node chat khác (cửa sổ trùng CD3).
   - *Luật cảnh báo (`ChatimCIDPendingElsewhere`):* tăng trong 5 phút.
-- **`chatim_core_cid_settle_dropped_total`:** Lệnh Commit/Abort cid bị batcher bỏ.
+- **`chatim_chat_cid_settle_dropped_total`:** Lệnh Commit/Abort cid bị batcher bỏ.
   - *Luật cảnh báo (`ChatimCIDSettleDropped`):* tăng trong 5 phút.
-- **`chatim_core_room_yields_total`:** Actor nhường phòng khi đụng seq của core khác.
+- **`chatim_chat_room_yields_total`:** Actor nhường phòng khi đụng seq của node chat khác.
   - *Luật cảnh báo (`ChatimSeqContention`):* > 10 lần trong 5 phút.
-- **`chatim_core_grpc_load_shed_total`:** Lệnh gRPC bị bộ giới hạn in-flight từ chối (`UNAVAILABLE`).
-- **`chatim_core_publish_dropped_total{reason}`:** Event rơi trước khi JetStream ack (sweeper phát bù).
+- **`chatim_chat_grpc_load_shed_total`:** Lệnh gRPC bị bộ giới hạn in-flight từ chối (`UNAVAILABLE`).
+- **`chatim_chat_publish_dropped_total{reason}`:** Event rơi trước khi JetStream ack (sweeper phát bù).
   - *Luật cảnh báo (`ChatimEventsDropped`):* tăng liên tục 10 phút.
-- **`chatim_core_event_pending_oldest_seconds{collection="messages"}`:** Tuổi cờ `msg_created` chờ phát cũ nhất.
+- **`chatim_chat_event_pending_oldest_seconds{collection="messages"}`:** Tuổi cờ `msg_created` chờ phát cũ nhất.
   - *Luật cảnh báo (`ChatimEventPendingStuck`):* > 60s trong 5 phút.

@@ -8,7 +8,7 @@ import (
 	"github.com/ivannguyendev/chatim/tools/chatcli/internal/e2e"
 )
 
-func TestLinkEventIDsFollowTheCore(t *testing.T) {
+func TestLinkEventIDsFollowTheChat(t *testing.T) {
 	cases := map[string]string{
 		e2e.RepliesEventID("77", 1, 2):                       "77-0-1-replies-v2",
 		e2e.BookmarkEventID("77", 4, "e2e-p", 1):             "77-bm-0-4-e2e-p-v1",

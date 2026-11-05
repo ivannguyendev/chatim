@@ -12,8 +12,8 @@ var (
 	subjectRootPattern = regexp.MustCompile(`^[a-z0-9_]+$`)
 )
 
-const stopPhases = "CORE_DRAIN_DELAY + CORE_GRPC_SHUTDOWN + 1s (sweeper) + max(PROJECTION_FETCH_WAIT, MENTION_FETCH_WAIT) + 1s (projections and mention) + 500ms + 1s (timer consumer) + CORE_REQUEST_DEADLINE (router drain) + " +
-	"2 x REDIS_OP_TIMEOUT (cid batcher drain) + FLUSH_INSERT_TIMEOUT (flusher drain) + CORE_PUBLISHER_DRAIN + 1s (state clear) + slot release + client close"
+const stopPhases = "CHAT_DRAIN_DELAY + CHAT_GRPC_SHUTDOWN + 1s (sweeper) + max(PROJECTION_FETCH_WAIT, MENTION_FETCH_WAIT) + 1s (projections and mention) + 500ms + 1s (timer consumer) + CHAT_REQUEST_DEADLINE (router drain) + " +
+	"2 x REDIS_OP_TIMEOUT (cid batcher drain) + FLUSH_INSERT_TIMEOUT (flusher drain) + CHAT_PUBLISHER_DRAIN + 1s (state clear) + slot release + client close"
 
 const minAgeRule = "SWEEP_MIN_AGE must be longer than PUB_ACK_TIMEOUT + STATE_CLEAR_FLUSH + STATE_CLEAR_TIMEOUT + READ_EVENT_WINDOW"
 
@@ -28,7 +28,7 @@ func (c Config) validate() error {
 		{c.MongoURI != "", "MONGO_URI is required"},
 		{c.MongoUser == "" || !uriHasCredentials(c.MongoURI), "MONGO_USER must not be set when MONGO_URI carries credentials"},
 		{c.MongoPassword == "" || c.MongoUser != "", "MONGO_PASSWORD needs MONGO_USER"},
-		{validAdvertiseAddr(c.AdvertiseAddr), "CORE_ADVERTISE_ADDR must be host:port with a host"},
+		{validAdvertiseAddr(c.AdvertiseAddr), "CHAT_ADVERTISE_ADDR must be host:port with a host"},
 		{streamNamePattern.MatchString(c.Stream.Name), "EVT_STREAM must match " + streamNamePattern.String()},
 		{subjectRootPattern.MatchString(c.Stream.SubjectRoot), "EVT_SUBJECT_ROOT must match " + subjectRootPattern.String()},
 		{subjectRootPattern.MatchString(c.Stream.LiveRoot), "EVT_LIVE_ROOT must match " + subjectRootPattern.String()},
@@ -36,20 +36,20 @@ func (c Config) validate() error {
 		{subjectRootPattern.MatchString(c.Timer.SubjectRoot), "TIMER_SUBJECT_ROOT must match " + subjectRootPattern.String()},
 		{c.Timer.Name != c.Stream.Name, "TIMER_STREAM must differ from EVT_STREAM"},
 		{c.Timer.SubjectRoot != c.Stream.SubjectRoot && c.Timer.SubjectRoot != c.Stream.LiveRoot, "TIMER_SUBJECT_ROOT must differ from EVT_SUBJECT_ROOT and EVT_LIVE_ROOT"},
-		{c.RequestDeadline < c.GRPCShutdown, "CORE_REQUEST_DEADLINE must be shorter than CORE_GRPC_SHUTDOWN"},
-		{c.QueueWait <= c.RequestDeadline/10, "CORE_QUEUE_WAIT must be at most a tenth of CORE_REQUEST_DEADLINE"},
-		{c.Flush.InsertTimeout < c.RequestDeadline, "FLUSH_INSERT_TIMEOUT must be shorter than CORE_REQUEST_DEADLINE"},
-		{c.Dedupe.Timeout <= c.RequestDeadline/10, "REDIS_OP_TIMEOUT must be at most a tenth of CORE_REQUEST_DEADLINE"},
+		{c.RequestDeadline < c.GRPCShutdown, "CHAT_REQUEST_DEADLINE must be shorter than CHAT_GRPC_SHUTDOWN"},
+		{c.QueueWait <= c.RequestDeadline/10, "CHAT_QUEUE_WAIT must be at most a tenth of CHAT_REQUEST_DEADLINE"},
+		{c.Flush.InsertTimeout < c.RequestDeadline, "FLUSH_INSERT_TIMEOUT must be shorter than CHAT_REQUEST_DEADLINE"},
+		{c.Dedupe.Timeout <= c.RequestDeadline/10, "REDIS_OP_TIMEOUT must be at most a tenth of CHAT_REQUEST_DEADLINE"},
 		{c.Actor.MaxGroup <= c.Flush.MaxBatch, "ACTOR_MAX_GROUP must not exceed FLUSH_MAX_BATCH"},
-		{c.Publish.AckTimeout < c.PublisherDrain, "PUB_ACK_TIMEOUT must be shorter than CORE_PUBLISHER_DRAIN"},
+		{c.Publish.AckTimeout < c.PublisherDrain, "PUB_ACK_TIMEOUT must be shorter than CHAT_PUBLISHER_DRAIN"},
 		{c.Sweep.MinAge > c.Publish.AckTimeout+c.StateClear.Flush+c.StateClear.Timeout+c.ReadBatch.Window, minAgeRule},
 		{c.Sweep.MinAge+c.Sweep.Interval < c.Stream.Duplicates, "SWEEP_MIN_AGE + SWEEP_INTERVAL must be shorter than EVT_STREAM_DUPLICATES"},
-		{c.Sweep.Lookback > c.RequestDeadline+sweepLookbackSlack, "SWEEP_LOOKBACK must be longer than CORE_REQUEST_DEADLINE + 10s"},
+		{c.Sweep.Lookback > c.RequestDeadline+sweepLookbackSlack, "SWEEP_LOOKBACK must be longer than CHAT_REQUEST_DEADLINE + 10s"},
 		{c.Sweep.Lookback > c.Sweep.MinAge+sweepLookbackSlack, "SWEEP_LOOKBACK must be longer than SWEEP_MIN_AGE + 10s"},
-		{c.MemberCountCheckDelay > c.RequestDeadline, "MEMBER_COUNT_CHECK_DELAY must be longer than CORE_REQUEST_DEADLINE"},
-		{c.MessageCountCheckDelay > c.RequestDeadline, "MESSAGE_COUNT_CHECK_DELAY must be longer than CORE_REQUEST_DEADLINE"},
+		{c.MemberCountCheckDelay > c.RequestDeadline, "MEMBER_COUNT_CHECK_DELAY must be longer than CHAT_REQUEST_DEADLINE"},
+		{c.MessageCountCheckDelay > c.RequestDeadline, "MESSAGE_COUNT_CHECK_DELAY must be longer than CHAT_REQUEST_DEADLINE"},
 		{c.RoomList.TailCacheBytes >= minRoomTailCacheBytes, fmt.Sprintf("ROOM_TAIL_CACHE_BYTES must be at least %d (1MB)", minRoomTailCacheBytes)},
-		{plan.fitsWithin(c.ShutdownBudget), fmt.Sprintf("%s = %v must be shorter than CORE_SHUTDOWN_BUDGET %v", stopPhases, plan.Total(), c.ShutdownBudget)},
+		{plan.fitsWithin(c.ShutdownBudget), fmt.Sprintf("%s = %v must be shorter than CHAT_SHUTDOWN_BUDGET %v", stopPhases, plan.Total(), c.ShutdownBudget)},
 	}
 	rules = append(rules, c.mentionRules()...)
 	var errs []error
@@ -67,13 +67,13 @@ func (c Config) componentErrors() []error {
 		err  error
 	}{
 		{"FLUSH_*", c.Flush.Validate()},
-		{"ACTOR_*, MENTION_TARGETS_MAX, CID_PENDING_TTL, CORE_REQUEST_DEADLINE", c.Actor.Validate()},
-		{"CORE_ID, CID_*, REDIS_OP_TIMEOUT, REDIS_COOLDOWN", c.Dedupe.Validate()},
+		{"ACTOR_*, MENTION_TARGETS_MAX, CID_PENDING_TTL, CHAT_REQUEST_DEADLINE", c.Actor.Validate()},
+		{"CHAT_NODE_ID, CID_*, REDIS_OP_TIMEOUT, REDIS_COOLDOWN", c.Dedupe.Validate()},
 		{"CID_BATCH_*", c.CIDBatch.Validate()},
 		{"PUB_*, EVT_SUBJECT_ROOT", c.Publish.Validate()},
 		{"EVT_*", c.Stream.Validate()},
 		{"TIMER_*, EVT_STREAM_REPLICAS", c.Timer.Validate()},
-		{"SLOT_*, CORE_ID", c.Slot.Validate()},
+		{"SLOT_*, CHAT_NODE_ID", c.Slot.Validate()},
 		{"STATE_CLEAR_*", c.StateClear.Validate()},
 		{"READ_EVENT_WINDOW", c.ReadBatch.Validate()},
 		{"SWEEP_*, EVT_SUBJECT_ROOT, SLOT_TICK, PUB_ACK_TIMEOUT", c.Sweep.Validate()},

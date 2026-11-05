@@ -45,22 +45,22 @@ const (
 	testOrigin   = "https://chat.example.com"
 )
 
-type coreCall struct {
+type chatCall struct {
 	method string
 	md     metadata.MD
 	body   []byte
 }
 
-type fakeCore struct {
+type fakeChat struct {
 	mu      sync.Mutex
-	calls   []coreCall
+	calls   []chatCall
 	err     error
 	reply   proto.Message
 	started chan struct{}
 	release chan struct{}
 }
 
-func (f *fakeCore) handle(_ any, stream grpc.ServerStream) error {
+func (f *fakeChat) handle(_ any, stream grpc.ServerStream) error {
 	method, _ := grpc.MethodFromServerStream(stream)
 	var in emptypb.Empty
 	if err := stream.RecvMsg(&in); err != nil {
@@ -68,7 +68,7 @@ func (f *fakeCore) handle(_ any, stream grpc.ServerStream) error {
 	}
 	md, _ := metadata.FromIncomingContext(stream.Context())
 	f.mu.Lock()
-	f.calls = append(f.calls, coreCall{method: method, md: md, body: in.ProtoReflect().GetUnknown()})
+	f.calls = append(f.calls, chatCall{method: method, md: md, body: in.ProtoReflect().GetUnknown()})
 	err, reply, started, release := f.err, f.reply, f.started, f.release
 	f.mu.Unlock()
 	if started != nil {
@@ -88,16 +88,16 @@ func (f *fakeCore) handle(_ any, stream grpc.ServerStream) error {
 	return stream.SendMsg(reply)
 }
 
-func (f *fakeCore) set(fn func(*fakeCore)) {
+func (f *fakeChat) set(fn func(*fakeChat)) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	fn(f)
 }
 
-func (f *fakeCore) recorded() []coreCall {
+func (f *fakeChat) recorded() []chatCall {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return append([]coreCall(nil), f.calls...)
+	return append([]chatCall(nil), f.calls...)
 }
 
 type limits struct {
@@ -107,7 +107,7 @@ type limits struct {
 var roomy = limits{rate: 1000, burst: 1000, inflight: 32, node: 100}
 
 type harness struct {
-	core    *fakeCore
+	chat    *fakeChat
 	handler *api.Handler
 	server  *httptest.Server
 	priv    ed25519.PrivateKey
@@ -136,8 +136,8 @@ func (b *syncBuffer) String() string {
 
 func newHarness(t *testing.T, l limits) *harness {
 	t.Helper()
-	h := &harness{core: &fakeCore{}, logs: &syncBuffer{}, served: make(chan struct{}, 64)}
-	conn := startCore(t, h.core)
+	h := &harness{chat: &fakeChat{}, logs: &syncBuffer{}, served: make(chan struct{}, 64)}
+	conn := startChatNode(t, h.chat)
 	fwd, err := chatrpc.NewForwarder(chatrpc.ForwarderOptions{
 		Methods:  chatrpc.Request(),
 		Deadline: 2 * time.Second,
@@ -192,17 +192,17 @@ func newHarness(t *testing.T, l limits) *harness {
 	return h
 }
 
-func startCore(t *testing.T, core *fakeCore) chatrpc.Clients {
+func startChatNode(t *testing.T, chat *fakeChat) chatrpc.Clients {
 	t.Helper()
 	lis := bufconn.Listen(1 << 20)
-	srv := grpc.NewServer(grpc.UnknownServiceHandler(core.handle))
+	srv := grpc.NewServer(grpc.UnknownServiceHandler(chat.handle))
 	served := make(chan struct{})
 	go func() {
 		defer close(served)
 		_ = srv.Serve(lis)
 	}()
 	dialer := grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) { return lis.DialContext(ctx) })
-	cc, err := grpcclient.New("passthrough:///core", grpcclient.Options{Creds: insecure.NewCredentials(), DialOptions: []grpc.DialOption{dialer}})
+	cc, err := grpcclient.New("passthrough:///chat", grpcclient.Options{Creds: insecure.NewCredentials(), DialOptions: []grpc.DialOption{dialer}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +211,7 @@ func startCore(t *testing.T, core *fakeCore) chatrpc.Clients {
 		srv.Stop()
 		<-served
 	})
-	return chatrpc.Clients{Core: chatimv1.NewCoreServiceClient(cc), Mention: chatimv1.NewMentionServiceClient(cc)}
+	return chatrpc.Clients{Chat: chatimv1.NewChatServiceClient(cc), Mention: chatimv1.NewMentionServiceClient(cc)}
 }
 
 type claims struct {

@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.12
 // 	protoc        (unknown)
-// source: chatim/v1/core.proto
+// source: chatim/v1/chat.proto
 
 package chatimv1
 
@@ -55,11 +55,11 @@ func (x RoomType) String() string {
 }
 
 func (RoomType) Descriptor() protoreflect.EnumDescriptor {
-	return file_chatim_v1_core_proto_enumTypes[0].Descriptor()
+	return file_chatim_v1_chat_proto_enumTypes[0].Descriptor()
 }
 
 func (RoomType) Type() protoreflect.EnumType {
-	return &file_chatim_v1_core_proto_enumTypes[0]
+	return &file_chatim_v1_chat_proto_enumTypes[0]
 }
 
 func (x RoomType) Number() protoreflect.EnumNumber {
@@ -68,7 +68,7 @@ func (x RoomType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use RoomType.Descriptor instead.
 func (RoomType) EnumDescriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{0}
+	return file_chatim_v1_chat_proto_rawDescGZIP(), []int{0}
 }
 
 type MessageKind int32
@@ -104,11 +104,11 @@ func (x MessageKind) String() string {
 }
 
 func (MessageKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_chatim_v1_core_proto_enumTypes[1].Descriptor()
+	return file_chatim_v1_chat_proto_enumTypes[1].Descriptor()
 }
 
 func (MessageKind) Type() protoreflect.EnumType {
-	return &file_chatim_v1_core_proto_enumTypes[1]
+	return &file_chatim_v1_chat_proto_enumTypes[1]
 }
 
 func (x MessageKind) Number() protoreflect.EnumNumber {
@@ -117,7 +117,7 @@ func (x MessageKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use MessageKind.Descriptor instead.
 func (MessageKind) EnumDescriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{1}
+	return file_chatim_v1_chat_proto_rawDescGZIP(), []int{1}
 }
 
 type HistoryAnchor int32
@@ -162,11 +162,11 @@ func (x HistoryAnchor) String() string {
 }
 
 func (HistoryAnchor) Descriptor() protoreflect.EnumDescriptor {
-	return file_chatim_v1_core_proto_enumTypes[2].Descriptor()
+	return file_chatim_v1_chat_proto_enumTypes[2].Descriptor()
 }
 
 func (HistoryAnchor) Type() protoreflect.EnumType {
-	return &file_chatim_v1_core_proto_enumTypes[2]
+	return &file_chatim_v1_chat_proto_enumTypes[2]
 }
 
 func (x HistoryAnchor) Number() protoreflect.EnumNumber {
@@ -175,7 +175,7 @@ func (x HistoryAnchor) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use HistoryAnchor.Descriptor instead.
 func (HistoryAnchor) EnumDescriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{2}
+	return file_chatim_v1_chat_proto_rawDescGZIP(), []int{2}
 }
 
 type EditKind int32
@@ -214,11 +214,11 @@ func (x EditKind) String() string {
 }
 
 func (EditKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_chatim_v1_core_proto_enumTypes[3].Descriptor()
+	return file_chatim_v1_chat_proto_enumTypes[3].Descriptor()
 }
 
 func (EditKind) Type() protoreflect.EnumType {
-	return &file_chatim_v1_core_proto_enumTypes[3]
+	return &file_chatim_v1_chat_proto_enumTypes[3]
 }
 
 func (x EditKind) Number() protoreflect.EnumNumber {
@@ -227,7 +227,7 @@ func (x EditKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use EditKind.Descriptor instead.
 func (EditKind) EnumDescriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{3}
+	return file_chatim_v1_chat_proto_rawDescGZIP(), []int{3}
 }
 
 type Room struct {
@@ -248,7 +248,7 @@ type Room struct {
 
 func (x *Room) Reset() {
 	*x = Room{}
-	mi := &file_chatim_v1_core_proto_msgTypes[0]
+	mi := &file_chatim_v1_chat_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -260,7 +260,7 @@ func (x *Room) String() string {
 func (*Room) ProtoMessage() {}
 
 func (x *Room) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_core_proto_msgTypes[0]
+	mi := &file_chatim_v1_chat_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -273,7 +273,7 @@ func (x *Room) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Room.ProtoReflect.Descriptor instead.
 func (*Room) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{0}
+	return file_chatim_v1_chat_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *Room) GetId() string {
@@ -378,7 +378,7 @@ type Message struct {
 
 func (x *Message) Reset() {
 	*x = Message{}
-	mi := &file_chatim_v1_core_proto_msgTypes[1]
+	mi := &file_chatim_v1_chat_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -390,7 +390,7 @@ func (x *Message) String() string {
 func (*Message) ProtoMessage() {}
 
 func (x *Message) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_core_proto_msgTypes[1]
+	mi := &file_chatim_v1_chat_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -403,7 +403,7 @@ func (x *Message) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Message.ProtoReflect.Descriptor instead.
 func (*Message) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{1}
+	return file_chatim_v1_chat_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *Message) GetRoomId() string {
@@ -588,7 +588,7 @@ type MessageVersion struct {
 
 func (x *MessageVersion) Reset() {
 	*x = MessageVersion{}
-	mi := &file_chatim_v1_core_proto_msgTypes[2]
+	mi := &file_chatim_v1_chat_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -600,7 +600,7 @@ func (x *MessageVersion) String() string {
 func (*MessageVersion) ProtoMessage() {}
 
 func (x *MessageVersion) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_core_proto_msgTypes[2]
+	mi := &file_chatim_v1_chat_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -613,7 +613,7 @@ func (x *MessageVersion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MessageVersion.ProtoReflect.Descriptor instead.
 func (*MessageVersion) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{2}
+	return file_chatim_v1_chat_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *MessageVersion) GetVer() uint32 {
@@ -670,7 +670,7 @@ type CreateRoomRequest struct {
 
 func (x *CreateRoomRequest) Reset() {
 	*x = CreateRoomRequest{}
-	mi := &file_chatim_v1_core_proto_msgTypes[3]
+	mi := &file_chatim_v1_chat_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -682,7 +682,7 @@ func (x *CreateRoomRequest) String() string {
 func (*CreateRoomRequest) ProtoMessage() {}
 
 func (x *CreateRoomRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_core_proto_msgTypes[3]
+	mi := &file_chatim_v1_chat_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -695,7 +695,7 @@ func (x *CreateRoomRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateRoomRequest.ProtoReflect.Descriptor instead.
 func (*CreateRoomRequest) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{3}
+	return file_chatim_v1_chat_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *CreateRoomRequest) GetType() RoomType {
@@ -735,7 +735,7 @@ type CreateRoomResponse struct {
 
 func (x *CreateRoomResponse) Reset() {
 	*x = CreateRoomResponse{}
-	mi := &file_chatim_v1_core_proto_msgTypes[4]
+	mi := &file_chatim_v1_chat_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -747,7 +747,7 @@ func (x *CreateRoomResponse) String() string {
 func (*CreateRoomResponse) ProtoMessage() {}
 
 func (x *CreateRoomResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_core_proto_msgTypes[4]
+	mi := &file_chatim_v1_chat_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -760,7 +760,7 @@ func (x *CreateRoomResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateRoomResponse.ProtoReflect.Descriptor instead.
 func (*CreateRoomResponse) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{4}
+	return file_chatim_v1_chat_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *CreateRoomResponse) GetRoom() *Room {
@@ -779,7 +779,7 @@ type OpenDirectRoomRequest struct {
 
 func (x *OpenDirectRoomRequest) Reset() {
 	*x = OpenDirectRoomRequest{}
-	mi := &file_chatim_v1_core_proto_msgTypes[5]
+	mi := &file_chatim_v1_chat_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -791,7 +791,7 @@ func (x *OpenDirectRoomRequest) String() string {
 func (*OpenDirectRoomRequest) ProtoMessage() {}
 
 func (x *OpenDirectRoomRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_core_proto_msgTypes[5]
+	mi := &file_chatim_v1_chat_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -804,7 +804,7 @@ func (x *OpenDirectRoomRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenDirectRoomRequest.ProtoReflect.Descriptor instead.
 func (*OpenDirectRoomRequest) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{5}
+	return file_chatim_v1_chat_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *OpenDirectRoomRequest) GetOtherUser() string {
@@ -824,7 +824,7 @@ type OpenDirectRoomResponse struct {
 
 func (x *OpenDirectRoomResponse) Reset() {
 	*x = OpenDirectRoomResponse{}
-	mi := &file_chatim_v1_core_proto_msgTypes[6]
+	mi := &file_chatim_v1_chat_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -836,7 +836,7 @@ func (x *OpenDirectRoomResponse) String() string {
 func (*OpenDirectRoomResponse) ProtoMessage() {}
 
 func (x *OpenDirectRoomResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_core_proto_msgTypes[6]
+	mi := &file_chatim_v1_chat_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -849,7 +849,7 @@ func (x *OpenDirectRoomResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenDirectRoomResponse.ProtoReflect.Descriptor instead.
 func (*OpenDirectRoomResponse) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{6}
+	return file_chatim_v1_chat_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *OpenDirectRoomResponse) GetRoom() *Room {
@@ -884,7 +884,7 @@ type SendMessageRequest struct {
 
 func (x *SendMessageRequest) Reset() {
 	*x = SendMessageRequest{}
-	mi := &file_chatim_v1_core_proto_msgTypes[7]
+	mi := &file_chatim_v1_chat_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -896,7 +896,7 @@ func (x *SendMessageRequest) String() string {
 func (*SendMessageRequest) ProtoMessage() {}
 
 func (x *SendMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_core_proto_msgTypes[7]
+	mi := &file_chatim_v1_chat_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -909,7 +909,7 @@ func (x *SendMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendMessageRequest.ProtoReflect.Descriptor instead.
 func (*SendMessageRequest) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{7}
+	return file_chatim_v1_chat_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *SendMessageRequest) GetRoomId() string {
@@ -992,7 +992,7 @@ type SendMessageResponse struct {
 
 func (x *SendMessageResponse) Reset() {
 	*x = SendMessageResponse{}
-	mi := &file_chatim_v1_core_proto_msgTypes[8]
+	mi := &file_chatim_v1_chat_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1004,7 +1004,7 @@ func (x *SendMessageResponse) String() string {
 func (*SendMessageResponse) ProtoMessage() {}
 
 func (x *SendMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_core_proto_msgTypes[8]
+	mi := &file_chatim_v1_chat_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1017,7 +1017,7 @@ func (x *SendMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendMessageResponse.ProtoReflect.Descriptor instead.
 func (*SendMessageResponse) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{8}
+	return file_chatim_v1_chat_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *SendMessageResponse) GetSeq() uint64 {
@@ -1047,7 +1047,7 @@ type GetHistoryRequest struct {
 
 func (x *GetHistoryRequest) Reset() {
 	*x = GetHistoryRequest{}
-	mi := &file_chatim_v1_core_proto_msgTypes[9]
+	mi := &file_chatim_v1_chat_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1059,7 +1059,7 @@ func (x *GetHistoryRequest) String() string {
 func (*GetHistoryRequest) ProtoMessage() {}
 
 func (x *GetHistoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_core_proto_msgTypes[9]
+	mi := &file_chatim_v1_chat_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1072,7 +1072,7 @@ func (x *GetHistoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetHistoryRequest.ProtoReflect.Descriptor instead.
 func (*GetHistoryRequest) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{9}
+	return file_chatim_v1_chat_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GetHistoryRequest) GetRoomId() string {
@@ -1119,7 +1119,7 @@ type GetHistoryResponse struct {
 
 func (x *GetHistoryResponse) Reset() {
 	*x = GetHistoryResponse{}
-	mi := &file_chatim_v1_core_proto_msgTypes[10]
+	mi := &file_chatim_v1_chat_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1131,7 +1131,7 @@ func (x *GetHistoryResponse) String() string {
 func (*GetHistoryResponse) ProtoMessage() {}
 
 func (x *GetHistoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_core_proto_msgTypes[10]
+	mi := &file_chatim_v1_chat_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1144,7 +1144,7 @@ func (x *GetHistoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetHistoryResponse.ProtoReflect.Descriptor instead.
 func (*GetHistoryResponse) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{10}
+	return file_chatim_v1_chat_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GetHistoryResponse) GetMessages() []*Message {
@@ -1168,7 +1168,7 @@ type EditMessageRequest struct {
 
 func (x *EditMessageRequest) Reset() {
 	*x = EditMessageRequest{}
-	mi := &file_chatim_v1_core_proto_msgTypes[11]
+	mi := &file_chatim_v1_chat_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1180,7 +1180,7 @@ func (x *EditMessageRequest) String() string {
 func (*EditMessageRequest) ProtoMessage() {}
 
 func (x *EditMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_core_proto_msgTypes[11]
+	mi := &file_chatim_v1_chat_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1193,7 +1193,7 @@ func (x *EditMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EditMessageRequest.ProtoReflect.Descriptor instead.
 func (*EditMessageRequest) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{11}
+	return file_chatim_v1_chat_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *EditMessageRequest) GetRoomId() string {
@@ -1247,7 +1247,7 @@ type EditMessageResponse struct {
 
 func (x *EditMessageResponse) Reset() {
 	*x = EditMessageResponse{}
-	mi := &file_chatim_v1_core_proto_msgTypes[12]
+	mi := &file_chatim_v1_chat_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1259,7 +1259,7 @@ func (x *EditMessageResponse) String() string {
 func (*EditMessageResponse) ProtoMessage() {}
 
 func (x *EditMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_core_proto_msgTypes[12]
+	mi := &file_chatim_v1_chat_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1272,7 +1272,7 @@ func (x *EditMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EditMessageResponse.ProtoReflect.Descriptor instead.
 func (*EditMessageResponse) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{12}
+	return file_chatim_v1_chat_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *EditMessageResponse) GetMessage() *Message {
@@ -1294,7 +1294,7 @@ type DeleteMessageRequest struct {
 
 func (x *DeleteMessageRequest) Reset() {
 	*x = DeleteMessageRequest{}
-	mi := &file_chatim_v1_core_proto_msgTypes[13]
+	mi := &file_chatim_v1_chat_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1306,7 +1306,7 @@ func (x *DeleteMessageRequest) String() string {
 func (*DeleteMessageRequest) ProtoMessage() {}
 
 func (x *DeleteMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_core_proto_msgTypes[13]
+	mi := &file_chatim_v1_chat_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1319,7 +1319,7 @@ func (x *DeleteMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteMessageRequest.ProtoReflect.Descriptor instead.
 func (*DeleteMessageRequest) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{13}
+	return file_chatim_v1_chat_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *DeleteMessageRequest) GetRoomId() string {
@@ -1359,7 +1359,7 @@ type DeleteMessageResponse struct {
 
 func (x *DeleteMessageResponse) Reset() {
 	*x = DeleteMessageResponse{}
-	mi := &file_chatim_v1_core_proto_msgTypes[14]
+	mi := &file_chatim_v1_chat_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1371,7 +1371,7 @@ func (x *DeleteMessageResponse) String() string {
 func (*DeleteMessageResponse) ProtoMessage() {}
 
 func (x *DeleteMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_core_proto_msgTypes[14]
+	mi := &file_chatim_v1_chat_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1384,7 +1384,7 @@ func (x *DeleteMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteMessageResponse.ProtoReflect.Descriptor instead.
 func (*DeleteMessageResponse) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{14}
+	return file_chatim_v1_chat_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *DeleteMessageResponse) GetMessage() *Message {
@@ -1405,7 +1405,7 @@ type HideMessageRequest struct {
 
 func (x *HideMessageRequest) Reset() {
 	*x = HideMessageRequest{}
-	mi := &file_chatim_v1_core_proto_msgTypes[15]
+	mi := &file_chatim_v1_chat_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1417,7 +1417,7 @@ func (x *HideMessageRequest) String() string {
 func (*HideMessageRequest) ProtoMessage() {}
 
 func (x *HideMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_core_proto_msgTypes[15]
+	mi := &file_chatim_v1_chat_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1430,7 +1430,7 @@ func (x *HideMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HideMessageRequest.ProtoReflect.Descriptor instead.
 func (*HideMessageRequest) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{15}
+	return file_chatim_v1_chat_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *HideMessageRequest) GetRoomId() string {
@@ -1462,7 +1462,7 @@ type HideMessageResponse struct {
 
 func (x *HideMessageResponse) Reset() {
 	*x = HideMessageResponse{}
-	mi := &file_chatim_v1_core_proto_msgTypes[16]
+	mi := &file_chatim_v1_chat_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1474,7 +1474,7 @@ func (x *HideMessageResponse) String() string {
 func (*HideMessageResponse) ProtoMessage() {}
 
 func (x *HideMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_core_proto_msgTypes[16]
+	mi := &file_chatim_v1_chat_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1487,7 +1487,7 @@ func (x *HideMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HideMessageResponse.ProtoReflect.Descriptor instead.
 func (*HideMessageResponse) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{16}
+	return file_chatim_v1_chat_proto_rawDescGZIP(), []int{16}
 }
 
 type ClearHistoryRequest struct {
@@ -1499,7 +1499,7 @@ type ClearHistoryRequest struct {
 
 func (x *ClearHistoryRequest) Reset() {
 	*x = ClearHistoryRequest{}
-	mi := &file_chatim_v1_core_proto_msgTypes[17]
+	mi := &file_chatim_v1_chat_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1511,7 +1511,7 @@ func (x *ClearHistoryRequest) String() string {
 func (*ClearHistoryRequest) ProtoMessage() {}
 
 func (x *ClearHistoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_core_proto_msgTypes[17]
+	mi := &file_chatim_v1_chat_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1524,7 +1524,7 @@ func (x *ClearHistoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClearHistoryRequest.ProtoReflect.Descriptor instead.
 func (*ClearHistoryRequest) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{17}
+	return file_chatim_v1_chat_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ClearHistoryRequest) GetRoomId() string {
@@ -1543,7 +1543,7 @@ type ClearHistoryResponse struct {
 
 func (x *ClearHistoryResponse) Reset() {
 	*x = ClearHistoryResponse{}
-	mi := &file_chatim_v1_core_proto_msgTypes[18]
+	mi := &file_chatim_v1_chat_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1555,7 +1555,7 @@ func (x *ClearHistoryResponse) String() string {
 func (*ClearHistoryResponse) ProtoMessage() {}
 
 func (x *ClearHistoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_core_proto_msgTypes[18]
+	mi := &file_chatim_v1_chat_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1568,7 +1568,7 @@ func (x *ClearHistoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClearHistoryResponse.ProtoReflect.Descriptor instead.
 func (*ClearHistoryResponse) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{18}
+	return file_chatim_v1_chat_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ClearHistoryResponse) GetClearedAt() *timestamppb.Timestamp {
@@ -1591,7 +1591,7 @@ type GetEditHistoryRequest struct {
 
 func (x *GetEditHistoryRequest) Reset() {
 	*x = GetEditHistoryRequest{}
-	mi := &file_chatim_v1_core_proto_msgTypes[19]
+	mi := &file_chatim_v1_chat_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1603,7 +1603,7 @@ func (x *GetEditHistoryRequest) String() string {
 func (*GetEditHistoryRequest) ProtoMessage() {}
 
 func (x *GetEditHistoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_core_proto_msgTypes[19]
+	mi := &file_chatim_v1_chat_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1616,7 +1616,7 @@ func (x *GetEditHistoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEditHistoryRequest.ProtoReflect.Descriptor instead.
 func (*GetEditHistoryRequest) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{19}
+	return file_chatim_v1_chat_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *GetEditHistoryRequest) GetRoomId() string {
@@ -1663,7 +1663,7 @@ type GetEditHistoryResponse struct {
 
 func (x *GetEditHistoryResponse) Reset() {
 	*x = GetEditHistoryResponse{}
-	mi := &file_chatim_v1_core_proto_msgTypes[20]
+	mi := &file_chatim_v1_chat_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1675,7 +1675,7 @@ func (x *GetEditHistoryResponse) String() string {
 func (*GetEditHistoryResponse) ProtoMessage() {}
 
 func (x *GetEditHistoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_core_proto_msgTypes[20]
+	mi := &file_chatim_v1_chat_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1688,7 +1688,7 @@ func (x *GetEditHistoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEditHistoryResponse.ProtoReflect.Descriptor instead.
 func (*GetEditHistoryResponse) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_core_proto_rawDescGZIP(), []int{20}
+	return file_chatim_v1_chat_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *GetEditHistoryResponse) GetVersions() []*MessageVersion {
@@ -1698,11 +1698,11 @@ func (x *GetEditHistoryResponse) GetVersions() []*MessageVersion {
 	return nil
 }
 
-var File_chatim_v1_core_proto protoreflect.FileDescriptor
+var File_chatim_v1_chat_proto protoreflect.FileDescriptor
 
-const file_chatim_v1_core_proto_rawDesc = "" +
+const file_chatim_v1_chat_proto_rawDesc = "" +
 	"\n" +
-	"\x14chatim/v1/core.proto\x12\tchatim.v1\x1a\x1dchatim/v1/message_links.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xbe\x02\n" +
+	"\x14chatim/v1/chat.proto\x12\tchatim.v1\x1a\x1dchatim/v1/message_links.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xbe\x02\n" +
 	"\x04Room\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06tenant\x18\x02 \x01(\tR\x06tenant\x12'\n" +
@@ -1857,24 +1857,24 @@ const file_chatim_v1_core_proto_rawDesc = "" +
 	"\x12EDIT_KIND_ORIGINAL\x10\x01\x12\x12\n" +
 	"\x0eEDIT_KIND_TEXT\x10\x02\x12\x14\n" +
 	"\x10EDIT_KIND_DELETE\x10\x03B\x9a\x01\n" +
-	"\rcom.chatim.v1B\tCoreProtoP\x01Z9github.com/ivannguyendev/chatim/pkg/pb/chatim/v1;chatimv1\xa2\x02\x03CXX\xaa\x02\tChatim.V1\xca\x02\tChatim\\V1\xe2\x02\x15Chatim\\V1\\GPBMetadata\xea\x02\n" +
+	"\rcom.chatim.v1B\tChatProtoP\x01Z9github.com/ivannguyendev/chatim/pkg/pb/chatim/v1;chatimv1\xa2\x02\x03CXX\xaa\x02\tChatim.V1\xca\x02\tChatim\\V1\xe2\x02\x15Chatim\\V1\\GPBMetadata\xea\x02\n" +
 	"Chatim::V1b\x06proto3"
 
 var (
-	file_chatim_v1_core_proto_rawDescOnce sync.Once
-	file_chatim_v1_core_proto_rawDescData []byte
+	file_chatim_v1_chat_proto_rawDescOnce sync.Once
+	file_chatim_v1_chat_proto_rawDescData []byte
 )
 
-func file_chatim_v1_core_proto_rawDescGZIP() []byte {
-	file_chatim_v1_core_proto_rawDescOnce.Do(func() {
-		file_chatim_v1_core_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_chatim_v1_core_proto_rawDesc), len(file_chatim_v1_core_proto_rawDesc)))
+func file_chatim_v1_chat_proto_rawDescGZIP() []byte {
+	file_chatim_v1_chat_proto_rawDescOnce.Do(func() {
+		file_chatim_v1_chat_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_chatim_v1_chat_proto_rawDesc), len(file_chatim_v1_chat_proto_rawDesc)))
 	})
-	return file_chatim_v1_core_proto_rawDescData
+	return file_chatim_v1_chat_proto_rawDescData
 }
 
-var file_chatim_v1_core_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_chatim_v1_core_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
-var file_chatim_v1_core_proto_goTypes = []any{
+var file_chatim_v1_chat_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_chatim_v1_chat_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_chatim_v1_chat_proto_goTypes = []any{
 	(RoomType)(0),                  // 0: chatim.v1.RoomType
 	(MessageKind)(0),               // 1: chatim.v1.MessageKind
 	(HistoryAnchor)(0),             // 2: chatim.v1.HistoryAnchor
@@ -1909,7 +1909,7 @@ var file_chatim_v1_core_proto_goTypes = []any{
 	(*ReplyPreview)(nil),           // 31: chatim.v1.ReplyPreview
 	(*MentionSet)(nil),             // 32: chatim.v1.MentionSet
 }
-var file_chatim_v1_core_proto_depIdxs = []int32{
+var file_chatim_v1_chat_proto_depIdxs = []int32{
 	0,  // 0: chatim.v1.Room.type:type_name -> chatim.v1.RoomType
 	25, // 1: chatim.v1.Room.created_at:type_name -> google.protobuf.Timestamp
 	1,  // 2: chatim.v1.Message.kind:type_name -> chatim.v1.MessageKind
@@ -1947,9 +1947,9 @@ var file_chatim_v1_core_proto_depIdxs = []int32{
 	0,  // [0:30] is the sub-list for field type_name
 }
 
-func init() { file_chatim_v1_core_proto_init() }
-func file_chatim_v1_core_proto_init() {
-	if File_chatim_v1_core_proto != nil {
+func init() { file_chatim_v1_chat_proto_init() }
+func file_chatim_v1_chat_proto_init() {
+	if File_chatim_v1_chat_proto != nil {
 		return
 	}
 	file_chatim_v1_message_links_proto_init()
@@ -1958,18 +1958,18 @@ func file_chatim_v1_core_proto_init() {
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_chatim_v1_core_proto_rawDesc), len(file_chatim_v1_core_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_chatim_v1_chat_proto_rawDesc), len(file_chatim_v1_chat_proto_rawDesc)),
 			NumEnums:      4,
 			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_chatim_v1_core_proto_goTypes,
-		DependencyIndexes: file_chatim_v1_core_proto_depIdxs,
-		EnumInfos:         file_chatim_v1_core_proto_enumTypes,
-		MessageInfos:      file_chatim_v1_core_proto_msgTypes,
+		GoTypes:           file_chatim_v1_chat_proto_goTypes,
+		DependencyIndexes: file_chatim_v1_chat_proto_depIdxs,
+		EnumInfos:         file_chatim_v1_chat_proto_enumTypes,
+		MessageInfos:      file_chatim_v1_chat_proto_msgTypes,
 	}.Build()
-	File_chatim_v1_core_proto = out.File
-	file_chatim_v1_core_proto_goTypes = nil
-	file_chatim_v1_core_proto_depIdxs = nil
+	File_chatim_v1_chat_proto = out.File
+	file_chatim_v1_chat_proto_goTypes = nil
+	file_chatim_v1_chat_proto_depIdxs = nil
 }

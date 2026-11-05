@@ -64,7 +64,7 @@ flowchart TD
     StepB --> StepC["3. Cập nhật Room: $inc owners_ver và member_count −1"]
     StepC --> Commit["Commit Transaction (w: majority)"]
 
-    Commit --> InvalidateCache["Phát member_role_changed, member_removed, memberwatch trên mọi core quên cache member"]
+    Commit --> InvalidateCache["Phát member_role_changed, member_removed, memberwatch trên mọi node chat quên cache member"]
 ```
 
 ### 2.3. Luồng Kế nhiệm Owner (Sequence Diagram)
@@ -75,31 +75,31 @@ Việc chuyển giao quyền sở hữu nhóm là tác vụ nhạy cảm cao, y�
 sequenceDiagram
     autonumber
     participant Owner as Owner hiện tại
-    participant Core as Core (member/ownership)
+    participant Chat as Chat (member/ownership)
     participant Mongo as MongoDB (Transaction Session)
     participant Watch as NATS (memberwatch)
     participant App websocket as WebSocket App websocket
 
-    Owner->>Core: LeaveRoom(room_id)
-    Core->>Core: Nhận diện: Người rời đi đang là Owner!
+    Owner->>Chat: LeaveRoom(room_id)
+    Chat->>Chat: Nhận diện: Người rời đi đang là Owner!
 
-    Note over Core,Mongo: Bắt đầu MongoDB Transaction duy nhất
-    Core->>Mongo: StartTransaction(readConcern="snapshot", writeConcern="majority")
+    Note over Chat,Mongo: Bắt đầu MongoDB Transaction duy nhất
+    Chat->>Mongo: StartTransaction(readConcern="snapshot", writeConcern="majority")
 
-    Note over Core: Thuật toán chọn người kế vị:<br/>1. Role cao nhất (Admin > Member)<br/>2. App Priority do app đặt (số lớn hơn ưu tiên)<br/>3. Thời gian gia nhập lâu nhất (joined_at nhỏ nhất)
-    Core->>Mongo: Đọc owners_ver, tối đa 2 owner, ứng viên admin/member đứng đầu
-    Mongo-->>Core: Chọn được Successor (usr_2002)
+    Note over Chat: Thuật toán chọn người kế vị:<br/>1. Role cao nhất (Admin > Member)<br/>2. App Priority do app đặt (số lớn hơn ưu tiên)<br/>3. Thời gian gia nhập lâu nhất (joined_at nhỏ nhất)
+    Chat->>Mongo: Đọc owners_ver, tối đa 2 owner, ứng viên admin/member đứng đầu
+    Mongo-->>Chat: Chọn được Successor (usr_2002)
 
-    Core->>Mongo: Update member usr_2002 -> role = owner, CAS ver = v+1
-    Core->>Mongo: Update member Owner cũ -> state = 2 (Left), CAS ver = v+1
-    Core->>Mongo: Update room -> $inc owners_ver, $inc member_count −1
-    Core->>Mongo: CommitTransaction()
-    Mongo-->>Core: Giao dịch thành công!
+    Chat->>Mongo: Update member usr_2002 -> role = owner, CAS ver = v+1
+    Chat->>Mongo: Update member Owner cũ -> state = 2 (Left), CAS ver = v+1
+    Chat->>Mongo: Update room -> $inc owners_ver, $inc member_count −1
+    Chat->>Mongo: CommitTransaction()
+    Mongo-->>Chat: Giao dịch thành công!
 
-    Note over Core,App websocket: Đồng bộ cache quyền tức thì
-    Core->>Watch: Publish member_role_changed (usr_2002 là owner), member_removed (LEFT)
-    Watch-->>App websocket: Mọi core quên cache member của room, app websocket (M4, chưa xây) nhận cùng event
-    Core-->>Owner: Xác nhận rời phòng thành công
+    Note over Chat,App websocket: Đồng bộ cache quyền tức thì
+    Chat->>Watch: Publish member_role_changed (usr_2002 là owner), member_removed (LEFT)
+    Watch-->>App websocket: Mọi chat quên cache member của room, app websocket (M4, chưa xây) nhận cùng event
+    Chat-->>Owner: Xác nhận rời phòng thành công
 ```
 
 ---
@@ -115,12 +115,12 @@ sequenceDiagram
     - Nếu member chưa có: Chèn mới với `state = 1`.
     - Nếu member trước đây đã rời nhóm (`state == 2`): Kích hoạt lại (`state = 1`, `role = member`, `priority = 0`, `read_seq = max(cũ, seq cuối)`, giữ `cleared_at`).
   - Hệ thống đếm chính xác số lượng document **thực sự thay đổi trạng thái** để chỉ tăng bộ đếm `member_count` đúng bằng số lượng đó kết hợp với **Phiếu hẹn sinh tồn (Survivor Timers D111)**.
-  - Chống lặp qua `dedupe.Requests` (`chatim:req:{room}:{user}:{request_id}`, LRU RAM + Redis, giữ `CID_COMMITTED_TTL` 15 phút và chỉ khi Redis còn khoá): đã xong → đọc lại và trả những người còn active do chính request này thêm; đang chạy ở core khác → `UNAVAILABLE`; mới → đặt phiếu → một `BulkWrite(ordered:false)` các upsert pipeline → quên cache member của actor → `$inc member_count` bằng `UpsertedCount + ModifiedCount` → gỡ phiếu → mỗi người một `member_added`, rồi `member_count_changed`.
+  - Chống lặp qua `dedupe.Requests` (`chatim:req:{room}:{user}:{request_id}`, LRU RAM + Redis, giữ `CID_COMMITTED_TTL` 15 phút và chỉ khi Redis còn khoá): đã xong → đọc lại và trả những người còn active do chính request này thêm; đang chạy ở node chat khác → `UNAVAILABLE`; mới → đặt phiếu → một `BulkWrite(ordered:false)` các upsert pipeline → quên cache member của actor → `$inc member_count` bằng `UpsertedCount + ModifiedCount` → gỡ phiếu → mỗi người một `member_added`, rồi `member_count_changed`.
 
 #### Đường thường và quyền mặc định (D101)
 - **Policy mặc định:** owner làm mọi thứ; admin thêm người và xoá người vai `member`; chỉ owner đổi vai và đặt `priority`; ai cũng rời được. Policy được hỏi **trước** khi lộ ra người đích có tồn tại hay không (đích không có hoặc đã rời được đưa vào policy như một `member` giả).
 - **Đường thường** (đích không phải owner, không nâng lên owner): một `UpdateOne` CAS trên `ver` của đích (`ApplyMember`); trượt CAS → `UNAVAILABLE` ngay. Xoá/rời một doc active thì đặt phiếu trước và `$inc −1` sau.
-- **Ai được đổi `member_count`:** chỉ `Rooms.Create`, `$inc` trong lệnh (theo số doc thật sự đổi trạng thái), transaction owner, consumer `member_count_repair` và `/app recount`; mỗi nơi bật bit 2 trên `rooms`. `$inc` lỗi thì ghi log, phiếu còn đặt, lệnh vẫn thành công; đặt phiếu lỗi → `UNAVAILABLE` trước mọi lần ghi. `MEMBER_COUNT_CHECK_DELAY` (5s) phải lớn hơn `CORE_REQUEST_DEADLINE`.
+- **Ai được đổi `member_count`:** chỉ `Rooms.Create`, `$inc` trong lệnh (theo số doc thật sự đổi trạng thái), transaction owner, consumer `member_count_repair` và `/app recount`; mỗi nơi bật bit 2 trên `rooms`. `$inc` lỗi thì ghi log, phiếu còn đặt, lệnh vẫn thành công; đặt phiếu lỗi → `UNAVAILABLE` trước mọi lần ghi. `MEMBER_COUNT_CHECK_DELAY` (5s) phải lớn hơn `CHAT_REQUEST_DEADLINE`.
 
 ### 3.2. Thuật toán Kế nhiệm Owner tất định (Owner Succession Algorithm)
 - Nhóm chat không bao giờ tồn tại trạng thái không có chủ (Orphan group) hoặc có 2 chủ (Split-owner).
@@ -129,7 +129,7 @@ sequenceDiagram
   2. **Độ ưu tiên do ứng dụng đặt (`priority`):** Giá trị số nguyên do nghiệp vụ gán (ví dụ: cấp bậc trong công ty).
   3. **Thâm niên trong nhóm (`joined_at`):** Người gia nhập nhóm sớm nhất sẽ được chọn nếu các tiêu chí trên bằng nhau; cuối cùng là user id nhỏ nhất.
 - Toàn bộ bước đổi vai trò của người mới, ghi người cũ rời và `$inc rooms.owners_ver` (điểm xung đột chung) được khoá chặt trong **một MongoDB Transaction duy nhất** (D100; phòng không có trường `owner_id`; ngoại lệ duy nhất của toàn hệ thống `chatim`, vi phạm nguyên tắc "chỉ ghi đơn doc" để đổi lấy tính an toàn tuyệt đối).
-- Nếu có xung đột giao dịch (Transaction Conflict): Core trả mã lỗi `codes.Unavailable` ngay lập tức, không retry nội bộ.
+- Nếu có xung đột giao dịch (Transaction Conflict): Chat trả mã lỗi `codes.Unavailable` ngay lập tức, không retry nội bộ.
 - Cách chạy: `ownership.Affects` chọn đường owner → `OwnerChanges.ChangeOwners` chạy một transaction bằng `StartTransaction`/`CommitTransaction` (không bao giờ `WithTransaction`, chỉ một lần thử): đọc `owners_ver`, các doc, tối đa 2 owner và ứng viên admin/member đứng đầu; hàm thuần `ownership.Plan` ghi người kế vị trước rồi tới đích, mỗi doc một CAS trên `ver`; `$inc owners_ver` và số member nằm cùng một lần update doc `rooms`. Đường này không dùng phiếu hẹn. `LeaveRoom` trả `new_owner`; `member_removed` không mang người kế vị. memstore cho cùng ngữ nghĩa.
 
 #### Ca biên đặc biệt: Owner là thành viên duy nhất còn lại (không có ứng viên)
@@ -139,10 +139,10 @@ Khi phòng chỉ còn đúng 1 người (chính là Owner) và người này b�
 - Owner tự hạ quyền khi là owner cuối thì bị từ chối `FailedPrecondition` (`domain.ErrLastOwner`).
 
 ### 3.3. Cơ chế Quên Cache tức thời (`memberwatch` D106)
-- Để tối ưu hiệu năng, actor gửi tin trên mỗi core lưu cache member của room trong RAM (generation + TTL 10s, không cache phủ định; D106, D110).
+- Để tối ưu hiệu năng, actor gửi tin trên mỗi node chat lưu cache member của room trong RAM (generation + TTL 10s, không cache phủ định; D106, D110).
 - Khi một người bị kick hoặc bị hạ quyền:
-  - Core phát `member_removed` hoặc `member_role_changed` lên `CHATIM_EVT`; stream RePublish sang NATS core `live.{t}.member.{rid}.evt.{kind}`. Core thực hiện lệnh tự quên cache của mình ngay (`Router.ForgetMembers`).
-  - `member/memberwatch` trên mọi core subscribe NATS core `{live}.*.member.*.evt.member_removed` và `….member_role_changed`, lấy room id từ token thứ 4 của subject và quên cache member của room đó. NATS core không phát lại, nên event lạc thì cache tự hết hạn sau TTL 10s. Lệnh gửi tin tiếp theo của người bị kick sẽ bị từ chối ngay lập tức tại tầng xác thực quyền `access.Policy`.
+  - Chat phát `member_removed` hoặc `member_role_changed` lên `CHATIM_EVT`; stream RePublish sang NATS core `live.{t}.member.{rid}.evt.{kind}`. Chat thực hiện lệnh tự quên cache của mình ngay (`Router.ForgetMembers`).
+  - `member/memberwatch` trên mọi node chat subscribe NATS core `{live}.*.member.*.evt.member_removed` và `….member_role_changed`, lấy room id từ token thứ 4 của subject và quên cache member của room đó. NATS core không phát lại, nên event lạc thì cache tự hết hạn sau TTL 10s. Lệnh gửi tin tiếp theo của người bị kick sẽ bị từ chối ngay lập tức tại tầng xác thực quyền `access.Policy`.
 
 ---
 
@@ -207,16 +207,16 @@ Khi phòng chỉ còn đúng 1 người (chính là Owner) và người này b�
 | Thành phần phụ thuộc | Mục đích phụ thuộc | Ứng xử khi thành phần gặp sự cố (Failure Behavior) |
 |---|---|---|
 | **MongoDB Replica Set (Transactions)** | Đảm bảo nguyên tử khi đổi Owner | Nếu cụm MongoDB không hỗ trợ transaction (ví dụ standalone) hoặc đang bầu lại Primary: Thao tác đổi Owner sẽ bị huỷ bỏ để tránh tạo ra nhóm vô chủ. |
-| **NATS core (`memberwatch`, subject `live.*`)** | Lan toả thông báo huỷ cache quyền | Nếu NATS bị nghẽn hoặc event lạc: Cache member trên một số Core có thể bị trễ tối đa bằng TTL của cache RAM (10 giây), sau đó cache tự hết hạn và đọc lại từ DB. |
+| **NATS core (`memberwatch`, subject `live.*`)** | Lan toả thông báo huỷ cache quyền | Nếu NATS bị nghẽn hoặc event lạc: Cache member trên một số Chat có thể bị trễ tối đa bằng TTL của cache RAM (10 giây), sau đó cache tự hết hạn và đọc lại từ DB. |
 | **Consumer `timer-due` (`member_count_repair`, `CHATIM_TIMER`)** | Tự động cân bằng lại số đếm member (CAS `member_count_ver` kèm cờ `_state` bit 2 rồi phát `member_count_changed`) | Giúp bảo đảm số lượng thành viên hiển thị trên giao diện không bao giờ bị sai lệch vĩnh viễn ngay cả khi server bị sập nguồn đột ngột. |
 
 ### 6.1. Chỉ số Sức khoẻ Vận hành & Cảnh báo SRE (Key Metrics & Alerts)
 
 Chưa có metric cho số lần kế nhiệm owner hay số transaction owner xung đột (transaction không để lại trạng thái nửa vời; xung đột trả `UNAVAILABLE` cho client).
 
-- **`chatim_core_member_cache_forgets_total`:** Số room mà core này quên cache member sau `member_removed`/`member_role_changed`.
-- **`chatim_core_member_watch_malformed_total`:** Event member bị bỏ qua vì subject không có room id hợp lệ (không có alert).
-- **`chatim_core_counter_repaired_total{counter="members"}`:** Số lần phiếu hẹn sửa lại `member_count`.
+- **`chatim_chat_member_cache_forgets_total`:** Số room mà chat này quên cache member sau `member_removed`/`member_role_changed`.
+- **`chatim_chat_member_watch_malformed_total`:** Event member bị bỏ qua vì subject không có room id hợp lệ (không có alert).
+- **`chatim_chat_counter_repaired_total{counter="members"}`:** Số lần phiếu hẹn sửa lại `member_count`.
   - *Luật cảnh báo (`ChatimCounterRepairSurge`):* > 1 lần/giây trong 10 phút.
-- **`chatim_core_timer_failures_total`:** Phiếu hẹn đã bật nhưng sửa lỗi, đưa lại để thử sau.
+- **`chatim_chat_timer_failures_total`:** Phiếu hẹn đã bật nhưng sửa lỗi, đưa lại để thử sau.
   - *Luật cảnh báo (`ChatimTimerFailing`):* tăng trong 15 phút.

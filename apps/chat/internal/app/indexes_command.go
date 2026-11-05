@@ -18,7 +18,7 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/core/redact"
 )
 
-var errIndexesUsage = errors.New("usage: core indexes [-dry-run|-apply|-drop-old]")
+var errIndexesUsage = errors.New("usage: chat indexes [-dry-run|-apply|-drop-old]")
 
 type IndexesMode int
 
@@ -75,7 +75,7 @@ func indexesMain(args []string) int {
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	cfg, err := config.Load()
 	if err != nil {
-		logger.ErrorContext(ctx, "invalid core config", "err", err)
+		logger.ErrorContext(ctx, "invalid chat config", "err", err)
 		return 1
 	}
 	log := redactedLogger(logger, cfg)

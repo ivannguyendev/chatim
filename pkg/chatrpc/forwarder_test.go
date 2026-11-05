@@ -19,13 +19,13 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-const sendMethod = chatimv1.CoreService_SendMessage_FullMethodName
+const sendMethod = chatimv1.ChatService_SendMessage_FullMethodName
 
 var testClaims = auth.Claims{Tenant: "t1", User: "u1"}
 
 type harness struct {
 	fwd         *chatrpc.Forwarder
-	core        *fakeCore
+	chat        *fakeChat
 	conn        chatrpc.Clients
 	routeErr    error
 	routes      []string
@@ -34,8 +34,8 @@ type harness struct {
 
 func newHarness(t *testing.T, deadline time.Duration, checks map[string]chatrpc.Check) *harness {
 	t.Helper()
-	core, conn := startFakeCore(t)
-	h := &harness{core: core, conn: conn}
+	chat, conn := startFakeChatNode(t)
+	h := &harness{chat: chat, conn: conn}
 	fwd, err := chatrpc.NewForwarder(chatrpc.ForwarderOptions{
 		Methods:  chatrpc.All(),
 		Deadline: deadline,
@@ -90,8 +90,8 @@ func TestEveryCommandCallsItsMethodOnce(t *testing.T) {
 			if len(h.routes) != 1 || h.routes[0] != want {
 				t.Fatalf("routes = %v, want %s", h.routes, want)
 			}
-			if calls := h.core.recorded(); len(calls) != 1 || calls[0].method != c.Method {
-				t.Fatalf("core calls = %+v", calls)
+			if calls := h.chat.recorded(); len(calls) != 1 || calls[0].method != c.Method {
+				t.Fatalf("chat calls = %+v", calls)
 			}
 		})
 	}
@@ -103,7 +103,7 @@ func TestCallerComesOnlyFromTheClaims(t *testing.T) {
 	if _, outcome := h.fwd.Forward(ctx, testClaims, sendMethod, plainSend()); outcome.Code != codes.OK {
 		t.Fatalf("outcome = %+v", outcome)
 	}
-	md := h.core.recorded()[0].md
+	md := h.chat.recorded()[0].md
 	if got := md.Get(chatrpc.TenantHeader); len(got) != 1 || got[0] != "t1" {
 		t.Fatalf("tenant = %v", got)
 	}
@@ -112,7 +112,7 @@ func TestCallerComesOnlyFromTheClaims(t *testing.T) {
 	}
 }
 
-func TestUnknownFieldsNeverReachCore(t *testing.T) {
+func TestUnknownFieldsNeverReachChat(t *testing.T) {
 	h := newHarness(t, time.Second, nil)
 	send := plainSend()
 	send.Mentions = &chatimv1.MentionSet{All: true}
@@ -123,14 +123,14 @@ func TestUnknownFieldsNeverReachCore(t *testing.T) {
 		t.Fatalf("outcome = %+v", outcome)
 	}
 	var got chatimv1.SendMessageRequest
-	if err := proto.Unmarshal(h.core.recorded()[0].body, &got); err != nil {
+	if err := proto.Unmarshal(h.chat.recorded()[0].body, &got); err != nil {
 		t.Fatal(err)
 	}
 	if len(got.ProtoReflect().GetUnknown()) != 0 || len(got.GetMentions().ProtoReflect().GetUnknown()) != 0 {
-		t.Fatal("unknown fields reached core")
+		t.Fatal("unknown fields reached chat")
 	}
 	if got.GetText() != "hi" || !got.GetMentions().GetAll() || len(send.ProtoReflect().GetUnknown()) == 0 {
-		t.Fatalf("core got %v, caller's request changed: %v", &got, len(send.ProtoReflect().GetUnknown()) == 0)
+		t.Fatalf("chat got %v, caller's request changed: %v", &got, len(send.ProtoReflect().GetUnknown()) == 0)
 	}
 }
 
@@ -149,48 +149,48 @@ func TestCopyKnownDropsUnknownFieldsOnACopy(t *testing.T) {
 
 var fixedMessages = map[codes.Code]string{
 	codes.Canceled:         "request canceled",
-	codes.DeadlineExceeded: "core did not answer in time",
-	codes.Unavailable:      "core unavailable, retry later",
+	codes.DeadlineExceeded: "chat did not answer in time",
+	codes.Unavailable:      "chat unavailable, retry later",
 	codes.Unimplemented:    "request not supported",
 }
 
-var coreMessageKept = map[codes.Code]bool{
+var chatMessageKept = map[codes.Code]bool{
 	codes.InvalidArgument: true, codes.NotFound: true, codes.FailedPrecondition: true,
 	codes.PermissionDenied: true, codes.AlreadyExists: true, codes.ResourceExhausted: true,
 }
 
-func TestCoreErrorsGetAFixedMessageUnlessKept(t *testing.T) {
+func TestChatErrorsGetAFixedMessageUnlessKept(t *testing.T) {
 	for code := codes.Canceled; code <= codes.Unauthenticated; code++ {
 		t.Run(code.String(), func(t *testing.T) {
 			h := newHarness(t, time.Second, nil)
-			h.core.set(func(f *fakeCore) { f.err = status.Error(code, "core detail at 10.9.8.7") })
+			h.chat.set(func(f *fakeChat) { f.err = status.Error(code, "chat detail at 10.9.8.7") })
 			resp, outcome := h.fwd.Forward(t.Context(), testClaims, sendMethod, plainSend())
 			want := fixedMessages[code]
 			switch {
-			case coreMessageKept[code]:
-				want = "core detail at 10.9.8.7"
+			case chatMessageKept[code]:
+				want = "chat detail at 10.9.8.7"
 			case want == "":
 				want = "request failed"
 			}
-			if resp != nil || outcome.Code != code || outcome.Message != want || !strings.Contains(outcome.Detail, "core detail") {
+			if resp != nil || outcome.Code != code || outcome.Message != want || !strings.Contains(outcome.Detail, "chat detail") {
 				t.Fatalf("resp = %v, outcome = %+v", resp, outcome)
 			}
-			if wantHooks := map[bool]int{true: 1}[code == codes.Unavailable]; h.unavailable != wantHooks || len(h.core.recorded()) != 1 {
-				t.Fatalf("hooks = %d, calls = %d", h.unavailable, len(h.core.recorded()))
+			if wantHooks := map[bool]int{true: 1}[code == codes.Unavailable]; h.unavailable != wantHooks || len(h.chat.recorded()) != 1 {
+				t.Fatalf("hooks = %d, calls = %d", h.unavailable, len(h.chat.recorded()))
 			}
 		})
 	}
 }
 
-func TestRouteErrorsPassThroughWithoutACoreCall(t *testing.T) {
+func TestRouteErrorsPassThroughWithoutAChatNodeCall(t *testing.T) {
 	h := newHarness(t, time.Second, nil)
-	h.routeErr = status.Error(codes.Unavailable, "dial core 10.9.8.7:9000: refused")
+	h.routeErr = status.Error(codes.Unavailable, "dial chat 10.9.8.7:9000: refused")
 	_, outcome := h.fwd.Forward(t.Context(), testClaims, sendMethod, plainSend())
-	if outcome.Code != codes.Unavailable || outcome.Detail != h.routeErr.Error() || outcome.Message != "core unavailable, retry later" {
+	if outcome.Code != codes.Unavailable || outcome.Detail != h.routeErr.Error() || outcome.Message != "chat unavailable, retry later" {
 		t.Fatalf("outcome = %+v", outcome)
 	}
-	if h.unavailable != 1 || len(h.core.recorded()) != 0 {
-		t.Fatalf("hooks = %d, calls = %d", h.unavailable, len(h.core.recorded()))
+	if h.unavailable != 1 || len(h.chat.recorded()) != 0 {
+		t.Fatalf("hooks = %d, calls = %d", h.unavailable, len(h.chat.recorded()))
 	}
 }
 
@@ -198,7 +198,7 @@ func TestCheckRefusesBeforeRouting(t *testing.T) {
 	refused := status.Error(codes.InvalidArgument, "kind not allowed")
 	h := newHarness(t, time.Second, map[string]chatrpc.Check{sendMethod: func(proto.Message) error { return refused }})
 	_, outcome := h.fwd.Forward(t.Context(), testClaims, sendMethod, plainSend())
-	if outcome.Code != codes.InvalidArgument || outcome.Message != "kind not allowed" || len(h.routes) != 0 || len(h.core.recorded()) != 0 {
+	if outcome.Code != codes.InvalidArgument || outcome.Message != "kind not allowed" || len(h.routes) != 0 || len(h.chat.recorded()) != 0 {
 		t.Fatalf("outcome = %+v, routes = %v", outcome, h.routes)
 	}
 	if got := readCount(t, h.fwd, "SendMessage", "InvalidArgument"); got != 1 {
@@ -206,18 +206,18 @@ func TestCheckRefusesBeforeRouting(t *testing.T) {
 	}
 }
 
-func TestCoreCallIsBoundedByTheDeadline(t *testing.T) {
+func TestChatCallIsBoundedByTheDeadline(t *testing.T) {
 	h := newHarness(t, 50*time.Millisecond, nil)
-	h.core.set(func(f *fakeCore) { f.hanging = true })
+	h.chat.set(func(f *fakeChat) { f.hanging = true })
 	_, outcome := h.fwd.Forward(t.Context(), testClaims, sendMethod, plainSend())
-	if outcome.Code != codes.DeadlineExceeded || outcome.Message != "core did not answer in time" {
+	if outcome.Code != codes.DeadlineExceeded || outcome.Message != "chat did not answer in time" {
 		t.Fatalf("outcome = %+v", outcome)
 	}
 }
 
-func TestUnservedMethodAndWrongRequestNeverReachCore(t *testing.T) {
+func TestUnservedMethodAndWrongRequestNeverReachChat(t *testing.T) {
 	h := newHarness(t, time.Second, nil)
-	_, outcome := h.fwd.Forward(t.Context(), testClaims, chatimv1.CoreService_ListMyRoomIDs_FullMethodName, &chatimv1.ListMyRoomIDsRequest{})
+	_, outcome := h.fwd.Forward(t.Context(), testClaims, chatimv1.ChatService_ListMyRoomIDs_FullMethodName, &chatimv1.ListMyRoomIDsRequest{})
 	if outcome.Code != codes.Unimplemented || outcome.Command != "" || outcome.Message != "request not supported" {
 		t.Fatalf("unserved outcome = %+v", outcome)
 	}
@@ -226,8 +226,8 @@ func TestUnservedMethodAndWrongRequestNeverReachCore(t *testing.T) {
 			t.Fatalf("wrong request outcome = %+v", outcome)
 		}
 	}
-	if len(h.routes) != 0 || len(h.core.recorded()) != 0 {
-		t.Fatalf("routes = %v, calls = %d", h.routes, len(h.core.recorded()))
+	if len(h.routes) != 0 || len(h.chat.recorded()) != 0 {
+		t.Fatalf("routes = %v, calls = %d", h.routes, len(h.chat.recorded()))
 	}
 }
 
@@ -235,7 +235,7 @@ func TestMissingMentionClientIsUnimplemented(t *testing.T) {
 	h := newHarness(t, time.Second, nil)
 	h.conn.Mention = nil
 	_, outcome := h.fwd.Forward(t.Context(), testClaims, chatimv1.MentionService_ListMentions_FullMethodName, &chatimv1.ListMentionsRequest{})
-	if outcome.Code != codes.Unimplemented || outcome.Detail == "" || len(h.core.recorded()) != 0 {
+	if outcome.Code != codes.Unimplemented || outcome.Detail == "" || len(h.chat.recorded()) != 0 {
 		t.Fatalf("outcome = %+v", outcome)
 	}
 }

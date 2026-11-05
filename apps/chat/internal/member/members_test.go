@@ -113,12 +113,12 @@ func TestARetryWithTheSameRequestNeverReAddsSomeoneRemovedSince(t *testing.T) {
 
 func TestARequestStillRunningElsewhereIsRetryLater(t *testing.T) {
 	rg := newMemberRig(t, nil)
-	other := newRegistry(t, rg.rdb, "core-2")
+	other := newRegistry(t, rg.rdb, "chat-2")
 	if v, err := other.Reserve(t.Context(), []dedupe.Key{dedupe.RequestKey(group, "owen", "r1")}); err != nil || v[0].Status != dedupe.Reserved {
-		t.Fatalf("core-2 reserve = %v, %v", v, err)
+		t.Fatalf("chat-2 reserve = %v, %v", v, err)
 	}
 	if _, err := rg.m.AddMembers(t.Context(), add("owen", "r1", "nia")); !errors.Is(err, domain.ErrRetryLater) {
-		t.Fatalf("AddMembers while core-2 runs it = %v, want ErrRetryLater", err)
+		t.Fatalf("AddMembers while chat-2 runs it = %v, want ErrRetryLater", err)
 	}
 	if calls := rg.calls.list(); len(calls) != 0 {
 		t.Fatalf("calls = %v, want nothing armed or written", calls)

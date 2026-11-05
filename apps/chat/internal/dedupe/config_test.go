@@ -13,11 +13,11 @@ import (
 
 func TestNewAppliesDefaults(t *testing.T) {
 	_, rdb := newRedis(t)
-	s, err := New(rdb, Config{CoreID: "core-a"}, nil)
+	s, err := New(rdb, Config{NodeID: "chat-a"}, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	want := Config{CoreID: "core-a", PendingTTL: 10 * time.Second, CommittedTTL: 15 * time.Minute, Timeout: 100 * time.Millisecond, Cooldown: time.Second}
+	want := Config{NodeID: "chat-a", PendingTTL: 10 * time.Second, CommittedTTL: 15 * time.Minute, Timeout: 100 * time.Millisecond, Cooldown: time.Second}
 	if s.cfg != want {
 		t.Fatalf("config = %+v, want %+v", s.cfg, want)
 	}
@@ -25,13 +25,13 @@ func TestNewAppliesDefaults(t *testing.T) {
 
 func TestNewRejectsInvalidConfig(t *testing.T) {
 	_, rdb := newRedis(t)
-	base := Config{CoreID: "core-a"}
+	base := Config{NodeID: "chat-a"}
 	mutations := map[string]func(*Config){
-		"empty core id":           func(c *Config) { c.CoreID = "" },
-		"core id with colon":      func(c *Config) { c.CoreID = "core:a" },
-		"core id with space":      func(c *Config) { c.CoreID = "core a" },
-		"core id with control":    func(c *Config) { c.CoreID = "core\x01" },
-		"core id too long":        func(c *Config) { c.CoreID = strings.Repeat("a", maxCoreIDLen+1) },
+		"empty node id":           func(c *Config) { c.NodeID = "" },
+		"node id with colon":      func(c *Config) { c.NodeID = "chat:a" },
+		"node id with space":      func(c *Config) { c.NodeID = "chat a" },
+		"node id with control":    func(c *Config) { c.NodeID = "chat\x01" },
+		"node id too long":        func(c *Config) { c.NodeID = strings.Repeat("a", maxNodeIDLen+1) },
 		"negative timeout":        func(c *Config) { c.Timeout = -time.Millisecond },
 		"negative cooldown":       func(c *Config) { c.Cooldown = -time.Second },
 		"sub-millisecond pending": func(c *Config) { c.PendingTTL, c.Timeout = 500*time.Microsecond, 100*time.Microsecond },
@@ -50,13 +50,13 @@ func TestNewRejectsInvalidConfig(t *testing.T) {
 }
 
 func TestNewRejectsClientsThatIgnoreContextDeadlines(t *testing.T) {
-	if _, err := New(nil, Config{CoreID: "core-a"}, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
+	if _, err := New(nil, Config{NodeID: "chat-a"}, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
 		t.Fatalf("New(nil client) = %v, want ErrInvalidArgument", err)
 	}
 	mr, _ := newRedis(t)
 	plain := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = plain.Close() })
-	if _, err := New(plain, Config{CoreID: "core-a"}, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
+	if _, err := New(plain, Config{NodeID: "chat-a"}, nil); !errors.Is(err, apperr.ErrInvalidArgument) {
 		t.Fatalf("New(client without context timeouts) = %v, want ErrInvalidArgument", err)
 	}
 }

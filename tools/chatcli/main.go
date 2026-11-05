@@ -13,9 +13,9 @@ import (
 const usage = `usage: chatcli <command> [flags]
 
 commands:
-  create-room        create a group through any live core (-request-id: reuse it to retry)
+  create-room        create a group through any live chat (-request-id: reuse it to retry)
   open-dm            open the direct room of the caller and -other, creating it on first use
-  send               send one message to the core serving the room
+  send               send one message to the chat serving the room
   history            read one history page of a room
   edit               edit a message (-base: the version you saw)
   delete             delete a message for everyone (-base: the version you saw)
@@ -23,7 +23,7 @@ commands:
   clear              hide the history up to a seq for the caller only
   edits              list the edit history of a message
   react              set or change the caller's reaction on a message (-emoji "" removes it)
-  reaction-settings  print the reaction emojis the core accepts, as JSON
+  reaction-settings  print the reaction emojis the chat accepts, as JSON
   pin                pin a message in its room
   unpin              unpin a message
   add-members        add users to a group (-request-id: reuse it to retry)
@@ -40,7 +40,7 @@ commands:
   dev-keys           write a dev Ed25519 signing key and its public JWKS for the websocket node
   token              sign a dev websocket token with the key from dev-keys
   dev-issuer-key     write a tenant issuer private JWK (0600) and print its public JWK for identity issuer-key-add
-  slots              show how live cores share the slots
+  slots              show how live chat nodes share the slots
   e2e                end-to-end scenario steps: setup, send, change, react-pin, members, links, rooms, mentions, ws, ws-events, ws-drill, gateway, ws-ephemeral, ws-ephemeral-kill, ws-resilience, ws-node-stop, identity-exchange, identity-directory, check
 
 run "chatcli <command> -h" for the flags of a command`

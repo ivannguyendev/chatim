@@ -15,7 +15,7 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/slotmap"
 )
 
-const MaxAddresses = slotmap.MaxCores
+const MaxAddresses = slotmap.MaxNodes
 
 type Locator interface {
 	Addr(room uint64) (string, bool)
@@ -23,7 +23,7 @@ type Locator interface {
 	Refresh(ctx context.Context) error
 }
 
-type Dialer func(addr string) (chatimv1.CoreServiceClient, io.Closer, error)
+type Dialer func(addr string) (chatimv1.ChatServiceClient, io.Closer, error)
 
 type PoolConn struct {
 	Addr string
@@ -120,12 +120,12 @@ func (p *Pool) at(addr string, ok bool) (PoolConn, error) {
 	case len(p.conns) >= MaxAddresses:
 		return PoolConn{Addr: addr}, unavailable(ErrTooManyAddresses)
 	}
-	core, closer, err := p.dial(addr)
+	chat, closer, err := p.dial(addr)
 	if err != nil {
 		return PoolConn{Addr: addr}, unavailable(fmt.Errorf("%w %s: %w", ErrDial, addr, err))
 	}
-	mention, _ := core.(chatimv1.MentionServiceClient)
-	c := PoolConn{Addr: addr, Clients: Clients{Core: core, Mention: mention}}
+	mention, _ := chat.(chatimv1.MentionServiceClient)
+	c := PoolConn{Addr: addr, Clients: Clients{Chat: chat, Mention: mention}}
 	p.conns[addr] = pooled{conn: c, closer: closer}
 	return c, nil
 }

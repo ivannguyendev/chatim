@@ -48,7 +48,7 @@ func TestHeartbeatsWithoutAuthKeepTheConnectionUntilTheGraceCloses4001(t *testin
 	})
 }
 
-func TestRequestsWhileWaitingGetUnauthenticatedWithoutCallingCore(t *testing.T) {
+func TestRequestsWhileWaitingGetUnauthenticatedWithoutCallingChat(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		opts := testOptions()
 		opts.CommandRate, opts.CommandBurst = 1, 2
@@ -67,8 +67,8 @@ func TestRequestsWhileWaitingGetUnauthenticatedWithoutCallingCore(t *testing.T) 
 				t.Fatalf("message = %q, want %q", resp.GetMessage(), messageAuth)
 			}
 		}
-		if h.core.calls.Load() != 0 || !tc.isOpen() {
-			t.Fatalf("core calls %d open %v", h.core.calls.Load(), tc.isOpen())
+		if h.chat.calls.Load() != 0 || !tc.isOpen() {
+			t.Fatalf("chat calls %d open %v", h.chat.calls.Load(), tc.isOpen())
 		}
 		tc.close()
 	})

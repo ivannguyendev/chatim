@@ -47,7 +47,7 @@ func TestRoomFramesWhileWaitingGetAuthRequired(t *testing.T) {
 func TestAFailedRoomLoadSendsLoadFailedAndLoadRoomsAsksAgain(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		h := newHarness(t, testOptions())
-		h.loader.fail(errors.New("core down"))
+		h.loader.fail(errors.New("chat down"))
 		tc := h.dial(true)
 		tc.auth(h.token("u1", time.Hour))
 		if f := tc.nextFrame(); f.GetLoadFailed() == nil || f.GetLoadFailed().GetRetryAfterMs() == 0 {

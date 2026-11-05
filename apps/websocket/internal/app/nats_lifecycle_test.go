@@ -10,7 +10,7 @@ import (
 func TestRunIsReadyOnlyAfterNATSAndStaysReadyWhenNATSDrops(t *testing.T) {
 	mr := slotRedis(t)
 	keys := newSigner(t)
-	_, dial := startFakeCore(t)
+	_, dial := startFakeChatNode(t)
 	nats := heldNATS()
 	lis, logs := newListeners(), newLogWatch()
 	ctx, cancel := context.WithCancel(context.Background())

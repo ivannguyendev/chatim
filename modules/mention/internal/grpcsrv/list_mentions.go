@@ -37,7 +37,7 @@ func (s *Service) ListMentions(ctx context.Context, req *chatimv1.ListMentionsRe
 	if err != nil {
 		return nil, err
 	}
-	rooms, err := s.core.RoomsOf(ctx, who.Tenant, who.User)
+	rooms, err := s.chat.RoomsOf(ctx, who.Tenant, who.User)
 	if err != nil {
 		return nil, dependencyErr("rooms of caller", err)
 	}

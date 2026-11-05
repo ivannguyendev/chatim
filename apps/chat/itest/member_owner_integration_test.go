@@ -19,13 +19,13 @@ const (
 	itRemoveRaceRounds = 10
 )
 
-func leaveAs(ctx context.Context, client chatimv1.CoreServiceClient, user, roomID string) (*chatimv1.LeaveRoomResponse, error) {
+func leaveAs(ctx context.Context, client chatimv1.ChatServiceClient, user, roomID string) (*chatimv1.LeaveRoomResponse, error) {
 	return retryingUnavailable(callerAs(ctx, user), func(ctx context.Context) (*chatimv1.LeaveRoomResponse, error) {
 		return client.LeaveRoom(ctx, &chatimv1.LeaveRoomRequest{RoomId: roomID})
 	})
 }
 
-func removeRetrying(ctx context.Context, client chatimv1.CoreServiceClient, user, roomID, target string) (*chatimv1.RemoveMemberResponse, error) {
+func removeRetrying(ctx context.Context, client chatimv1.ChatServiceClient, user, roomID, target string) (*chatimv1.RemoveMemberResponse, error) {
 	return retryingUnavailable(callerAs(ctx, user), func(ctx context.Context) (*chatimv1.RemoveMemberResponse, error) {
 		return client.RemoveMember(ctx, &chatimv1.RemoveMemberRequest{RoomId: roomID, User: target})
 	})
@@ -56,9 +56,9 @@ func atOnce(calls ...func()) {
 
 func TestRealInfraTwoOwnersLeavingAtOnceKeepAnOwner(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastSweep)
-	client := dialCore(t, core.cfg)
-	st := itStore(it, core)
+	chat := startChatNode(t, it, itFastSweep)
+	client := dialChat(t, chat.cfg)
+	st := itStore(it, chat)
 	for round := range itOwnerRaceRounds {
 		roomID := createRoomWith(t, client, []string{itUser, "bob", "dave"})
 		room := parseRoom(t, roomID)
@@ -92,9 +92,9 @@ func TestRealInfraTwoOwnersLeavingAtOnceKeepAnOwner(t *testing.T) {
 
 func TestRealInfraTwoOwnersRemovingEachOtherLeaveOneOwner(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastSweep)
-	client := dialCore(t, core.cfg)
-	st := itStore(it, core)
+	chat := startChatNode(t, it, itFastSweep)
+	client := dialChat(t, chat.cfg)
+	st := itStore(it, chat)
 	for round := range itRemoveRaceRounds {
 		roomID := createRoomWith(t, client, []string{itUser, "bob", "carol"})
 		room := parseRoom(t, roomID)
@@ -120,8 +120,8 @@ func TestRealInfraTwoOwnersRemovingEachOtherLeaveOneOwner(t *testing.T) {
 
 func TestRealInfraTheHighestPriorityAdminSucceedsTheLastOwner(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastSweep)
-	client := dialCore(t, core.cfg)
+	chat := startChatNode(t, it, itFastSweep)
+	client := dialChat(t, chat.cfg)
 	roomID := createRoomWith(t, client, []string{itUser, "carol"})
 	addMembersAs(t, client, itUser, roomID, "priority-dave", "dave")
 	changeRole(t, client, roomID, "carol", chatimv1.MemberRole_MEMBER_ROLE_ADMIN)
@@ -135,7 +135,7 @@ func TestRealInfraTheHighestPriorityAdminSucceedsTheLastOwner(t *testing.T) {
 	if err != nil || resp.GetNewOwner() != "dave" {
 		t.Fatalf("LeaveRoom of the last owner = %v, %v; want dave, the later admin with the higher priority", resp, err)
 	}
-	docs := storedMembers(t, itStore(it, core), parseRoom(t, roomID), "carol", "dave")
+	docs := storedMembers(t, itStore(it, chat), parseRoom(t, roomID), "carol", "dave")
 	if owners := activeOwners(docs); !slices.Equal(owners, []string{"dave"}) || docs["carol"].Role != domain.RoleAdmin {
 		t.Fatalf("owners = %v, carol = %+v; want dave as the only owner and carol still admin", owners, docs["carol"])
 	}

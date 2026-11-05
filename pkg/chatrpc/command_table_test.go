@@ -28,9 +28,9 @@ func TestCommandsKeepTheOrderAndDescribeEachCall(t *testing.T) {
 }
 
 func TestCommandsRefuseUnknownAndRepeatedMethods(t *testing.T) {
-	send := chatimv1.CoreService_SendMessage_FullMethodName
+	send := chatimv1.ChatService_SendMessage_FullMethodName
 	for name, methods := range map[string][]string{
-		"unknown":  {"/chatim.v1.CoreService/Nope"},
+		"unknown":  {"/chatim.v1.ChatService/Nope"},
 		"repeated": {send, send},
 	} {
 		if _, err := chatrpc.Commands(methods); err == nil {
@@ -40,7 +40,7 @@ func TestCommandsRefuseUnknownAndRepeatedMethods(t *testing.T) {
 }
 
 func TestRoomIDReadsTheRoomField(t *testing.T) {
-	cmds, err := chatrpc.Commands([]string{chatimv1.CoreService_SendMessage_FullMethodName, chatimv1.CoreService_ListMyRooms_FullMethodName})
+	cmds, err := chatrpc.Commands([]string{chatimv1.ChatService_SendMessage_FullMethodName, chatimv1.ChatService_ListMyRooms_FullMethodName})
 	if err != nil {
 		t.Fatal(err)
 	}

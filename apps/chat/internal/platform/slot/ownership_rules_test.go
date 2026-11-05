@@ -11,26 +11,26 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/slotmap"
 )
 
-func TestOwnsExpiresBeforeOtherCoresMayTakeOver(t *testing.T) {
+func TestOwnsExpiresBeforeOtherChatNodesMayTakeOver(t *testing.T) {
 	_, rdb := newRedis(t)
-	a := newManager(t, rdb, "core-a")
+	a := newManager(t, rdb, "chat-a")
 	t0 := time.Unix(1_700_000_000, 0)
 	a.now = func() time.Time { return t0 }
 	stepAll(t, a)
 	cutoff := t0.Add(a.cfg.HeartbeatTTL - a.cfg.Tick)
 	a.now = func() time.Time { return cutoff.Add(-100 * time.Millisecond) }
 	if !a.Owns(0) {
-		t.Fatal("Owns(0) = false while no other core may take the slot over yet")
+		t.Fatal("Owns(0) = false while no other chat node may take the slot over yet")
 	}
 	a.now = func() time.Time { return cutoff.Add(100 * time.Millisecond) }
 	if a.Owns(0) {
-		t.Fatal("Owns(0) = true after other cores may already have taken the slot over")
+		t.Fatal("Owns(0) = true after other chat nodes may already have taken the slot over")
 	}
 }
 
 func TestOwnershipStampedAtStepStart(t *testing.T) {
 	_, rdb := newRedis(t)
-	a := newManager(t, rdb, "core-a")
+	a := newManager(t, rdb, "chat-a")
 	t0 := time.Unix(1_700_000_000, 0)
 	clock := t0
 	a.now = func() time.Time { return clock }
@@ -65,20 +65,20 @@ func (h slowRoundTrips) ProcessPipelineHook(next redis.ProcessPipelineHook) redi
 
 func TestReleaseDropsLowestScoreSlots(t *testing.T) {
 	_, rdb := newRedis(t)
-	a, b := newManager(t, rdb, "core-a"), newManager(t, rdb, "core-b")
+	a, b := newManager(t, rdb, "chat-a"), newManager(t, rdb, "chat-b")
 	stepAll(t, a)
 	stepAll(t, b)
 	if n := len(b.Owned()); n != 0 {
-		t.Fatalf("core-b claimed %d slots held by a live core", n)
+		t.Fatalf("chat-b claimed %d slots held by a live node", n)
 	}
 	stepAll(t, a)
 	kept := a.Owned()
 	if len(kept) != slotmap.Count/2 {
-		t.Fatalf("core-a owns %d slots, want %d", len(kept), slotmap.Count/2)
+		t.Fatalf("chat-a owns %d slots, want %d", len(kept), slotmap.Count/2)
 	}
 	var keptScores, releasedScores []uint64
 	for s := range uint16(slotmap.Count) {
-		score := slotmap.Score(s, "core-a")
+		score := slotmap.Score(s, "chat-a")
 		if slices.Contains(kept, s) {
 			keptScores = append(keptScores, score)
 		} else {

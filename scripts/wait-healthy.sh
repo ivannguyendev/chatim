@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-limit="${CORE_WAIT_SECONDS:-120}"
+limit="${HEALTHY_WAIT_SECONDS:-120}"
 deadline=$((SECONDS + limit))
 for name in "$@"; do
   until [ "$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$name" 2>/dev/null)" = healthy ]; do

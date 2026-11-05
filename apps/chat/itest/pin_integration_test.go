@@ -18,26 +18,26 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-func TestRealInfraSweeperProjectsAPinFactWrittenOutsideTheCore(t *testing.T) {
+func TestRealInfraSweeperProjectsAPinFactWrittenOutsideTheChat(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastSweep)
-	client := dialCore(t, core.cfg)
+	chat := startChatNode(t, it, itFastSweep)
+	client := dialChat(t, chat.cfg)
 	roomID := createRoom(t, client)
 	room := parseRoom(t, roomID)
-	live := subscribeLive(t, it, core.cfg, roomID)
-	first := sendAs(t, client, itUser, roomID, "pin-b-1", "pinned outside the core")
-	second := sendAs(t, client, itUser, roomID, "pin-b-2", "pinned through the core")
-	core.awaitSweeper(t)
+	live := subscribeLive(t, it, chat.cfg, roomID)
+	first := sendAs(t, client, itUser, roomID, "pin-b-1", "pinned outside the chat")
+	second := sendAs(t, client, itUser, roomID, "pin-b-2", "pinned through the chat")
+	chat.awaitSweeper(t)
 
-	st := itStore(it, core)
+	st := itStore(it, chat)
 	at := time.Now().UTC().Truncate(time.Millisecond)
 	fact := domain.PinAction{Room: room, PV: 1, Tenant: itTenant, Op: domain.PinOpPin, Seq: first, By: itUser, At: at}
 	if err := itPins(st).Append(t.Context(), fact); err != nil {
-		t.Fatalf("append a pin outside the core: %v", err)
+		t.Fatalf("append a pin outside the chat: %v", err)
 	}
 	pinnedID := pbconv.PinEventID(room, 1)
 	ev := awaitLiveEvents(t, live, pinnedID)[pinnedID]
-	if p := ev.GetMessagePinned(); p.GetPinVer() != 1 || p.GetMessage().GetSeq() != first || p.GetMessage().GetText() != "pinned outside the core" || ev.GetActor() != itUser {
+	if p := ev.GetMessagePinned(); p.GetPinVer() != 1 || p.GetMessage().GetSeq() != first || p.GetMessage().GetText() != "pinned outside the chat" || ev.GetActor() != itUser {
 		t.Fatalf("msg_pinned from the sweeper = %v, want seq %d at pin version 1 by %s", ev, first, itUser)
 	}
 	state, err := st.PinState(t.Context(), room)
@@ -66,8 +66,8 @@ func TestRealInfraPinLimitHoldsUnderConcurrentPins(t *testing.T) {
 	it := realInfra(t)
 	env := maps.Clone(itFastSweep)
 	env["PIN_LIMIT"] = "3"
-	core := startCore(t, it, env)
-	client := dialCore(t, core.cfg)
+	chat := startChatNode(t, it, env)
+	client := dialChat(t, chat.cfg)
 	roomID := createRoom(t, client)
 	room := parseRoom(t, roomID)
 	seqs := make([]uint64, 6)
@@ -102,7 +102,7 @@ func TestRealInfraPinLimitHoldsUnderConcurrentPins(t *testing.T) {
 	if pinned != 3 {
 		t.Fatalf("%d of %d concurrent pins succeeded, want exactly PIN_LIMIT 3", pinned, len(seqs))
 	}
-	st := itStore(it, core)
+	st := itStore(it, chat)
 	facts, err := itPins(st).After(t.Context(), room, 0, store.MaxPinScan)
 	if err != nil || len(facts) != 3 {
 		t.Fatalf("pin facts = %+v, %v; want exactly 3", facts, err)

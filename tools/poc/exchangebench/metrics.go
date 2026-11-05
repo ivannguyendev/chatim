@@ -85,7 +85,7 @@ func writeDeltas(w io.Writer, before, after sample) {
 	for _, series := range slices.Sorted(maps.Keys(after.values)) {
 		delta := after.values[series] - before.values[series]
 		if series == cpuSeries {
-			fmt.Fprintf(w, "  %s +%.2fs = %.2f cores\n", series, delta, delta/span.Seconds())
+			fmt.Fprintf(w, "  %s +%.2fs = %.2f nodes\n", series, delta, delta/span.Seconds())
 			continue
 		}
 		fmt.Fprintf(w, "  %s +%.0f\n", series, delta)

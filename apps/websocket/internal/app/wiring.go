@@ -69,7 +69,7 @@ func (r eventRouter) Publish(env feed.Envelope) { r.publisher.Deliver(env) }
 func (r eventRouter) Jumped(j feed.Jump) { r.rooms.Jumped(j) }
 
 func newInterest(cfg config.Config, routes *routerHolder, log *slog.Logger) (*interest.Table, error) {
-	loader, err := interest.NewCoreLoader(routes, cfg.RequestDeadline)
+	loader, err := interest.NewChatNodeLoader(routes, cfg.RequestDeadline)
 	if err != nil {
 		return nil, err
 	}
@@ -221,10 +221,10 @@ func newHTTPServer(ws http.Handler, log *slog.Logger) *http.Server {
 
 func metricSources(ws *session.Server, exec *command.Executor) []metrics.Source {
 	out := append(ws.Sources(), exec.CommandSources()...)
-	for _, latency := range exec.CoreCallLatency() {
+	for _, latency := range exec.ChatCallLatency() {
 		out = append(out, metrics.Source{
-			Name:      "core_call_seconds",
-			Help:      "Core call latency of client commands, in seconds.",
+			Name:      "chat_call_seconds",
+			Help:      "Chat call latency of client commands, in seconds.",
 			Labels:    map[string]string{"command": latency.Command},
 			Histogram: latency.Read,
 		})

@@ -50,14 +50,14 @@ func TestMemberCallsRouteByRoomAndRetryWithTheSameRequest(t *testing.T) {
 	retried := []error{status.Error(codes.Unavailable, "x"), status.Error(codes.ResourceExhausted, "x"), status.Error(codes.Aborted, "x")}
 	for name, mc := range memberCalls("42") {
 		synctest.Test(t, func(t *testing.T) {
-			core := &fakeCore{block: 1, fail: slices.Clone(retried)}
+			chat := &fakeChat{block: 1, fail: slices.Clone(retried)}
 			loc := &roomLocator{}
-			c := newClient(t, loc, newFakeNet(map[string]*fakeCore{"core-1:9000": core}), route.Policy{Attempt: time.Second})
+			c := newClient(t, loc, newFakeNet(map[string]*fakeChat{"chat-1:9000": chat}), route.Policy{Attempt: time.Second})
 			got, st, err := mc.call(t.Context(), c)
 			if err != nil || st.Attempts != 5 || !proto.Equal(got, mc.want) {
 				t.Fatalf("%s = %v, %v after %d attempts; want %v on the fifth attempt", name, got, err, st.Attempts, mc.want)
 			}
-			reqs := core.requests()
+			reqs := chat.requests()
 			if len(reqs) != 5 || slices.ContainsFunc(reqs, func(r proto.Message) bool { return r != mc.req }) {
 				t.Fatalf("%s sent %v, want the same request on all 5 attempts", name, reqs)
 			}
@@ -70,14 +70,14 @@ func TestMemberCallsRouteByRoomAndRetryWithTheSameRequest(t *testing.T) {
 
 func TestMemberCallsKeepRefusalsAndBadRoomIDsLocal(t *testing.T) {
 	for name, mc := range memberCalls("42") {
-		core := &fakeCore{fail: []error{status.Error(codes.FailedPrecondition, "direct room")}}
-		c := newClient(t, &roomLocator{}, newFakeNet(map[string]*fakeCore{"core-1:9000": core}), route.Policy{})
+		chat := &fakeChat{fail: []error{status.Error(codes.FailedPrecondition, "direct room")}}
+		c := newClient(t, &roomLocator{}, newFakeNet(map[string]*fakeChat{"chat-1:9000": chat}), route.Policy{})
 		if _, st, err := mc.call(t.Context(), c); status.Code(err) != codes.FailedPrecondition || st.Attempts != 1 {
 			t.Fatalf("%s refused = %v after %d attempts, want FailedPrecondition at once", name, err, st.Attempts)
 		}
 	}
 	for name, mc := range memberCalls("not-a-room") {
-		c := newClient(t, &roomLocator{}, newFakeNet(map[string]*fakeCore{"core-1:9000": {}}), route.Policy{})
+		c := newClient(t, &roomLocator{}, newFakeNet(map[string]*fakeChat{"chat-1:9000": {}}), route.Policy{})
 		if _, st, err := mc.call(t.Context(), c); status.Code(err) != codes.InvalidArgument || st.Attempts != 0 {
 			t.Fatalf("%s with a bad room id = %v with %+v, want a local InvalidArgument", name, err, st)
 		}

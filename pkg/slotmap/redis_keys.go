@@ -7,14 +7,14 @@ import (
 
 const (
 	ChangedChannel  = "chatim:slots:changed"
-	CoreRegistryKey = "chatim:cores"
+	NodeRegistryKey = "chatim:chat-nodes"
 
-	corePrefix = "chatim:core:"
+	nodePrefix = "chatim:chat-node:"
 	slotPrefix = "chatim:slot:"
 )
 
-func CoreKey(id string) string { return corePrefix + id }
+func NodeKey(id string) string { return nodePrefix + id }
 
 func SlotKey(slot uint16) string { return slotPrefix + strconv.Itoa(int(slot)) }
 
-func CoreExpiryScore(at time.Time) float64 { return float64(at.UnixMilli()) }
+func NodeExpiryScore(at time.Time) float64 { return float64(at.UnixMilli()) }

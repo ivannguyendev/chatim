@@ -21,7 +21,7 @@ func (c Config) Validate() error {
 		{c.ListenAddr != "", "GW_ADDR is required"},
 		{c.AdminAddr != "", "GW_ADMIN_ADDR is required"},
 		{c.ListenAddr != c.AdminAddr, "GW_ADMIN_ADDR must differ from GW_ADDR"},
-		{len(c.CoreAddrs) > 0, "GW_CORE_ADDRS is required"},
+		{len(c.ChatAddrs) > 0, "GW_CHAT_ADDRS is required"},
 		{c.JWTKeysFile != "", "GW_JWT_KEYS_FILE is required"},
 		{c.JWTIssuer != "", "GW_JWT_ISSUER is required"},
 		{c.JWTAudience != "", "GW_JWT_AUDIENCE is required"},
@@ -38,18 +38,18 @@ func (c Config) Validate() error {
 		{c.UserLimiters >= c.InflightMax, fmt.Sprintf("GW_USER_LIMITERS %d must be at least GW_INFLIGHT_MAX %d", c.UserLimiters, c.InflightMax)},
 		positive("GW_DRAIN_DELAY", c.DrainDelay),
 		positive("GW_SHUTDOWN_BUDGET", c.ShutdownBudget),
-		positive("CORE_REQUEST_DEADLINE", c.RequestDeadline),
-		{c.ShutdownBudget > c.DrainDelay+c.RequestDeadline, fmt.Sprintf("GW_SHUTDOWN_BUDGET %v must exceed GW_DRAIN_DELAY + CORE_REQUEST_DEADLINE = %v", c.ShutdownBudget, c.DrainDelay+c.RequestDeadline)},
+		positive("CHAT_REQUEST_DEADLINE", c.RequestDeadline),
+		{c.ShutdownBudget > c.DrainDelay+c.RequestDeadline, fmt.Sprintf("GW_SHUTDOWN_BUDGET %v must exceed GW_DRAIN_DELAY + CHAT_REQUEST_DEADLINE = %v", c.ShutdownBudget, c.DrainDelay+c.RequestDeadline)},
 		positive("GW_READ_HEADER_TIMEOUT", c.ReadHeaderTimeout),
 		positive("GW_READ_TIMEOUT", c.ReadTimeout),
 		positive("GW_IDLE_TIMEOUT", c.IdleTimeout),
 		positive("GW_MAX_HEADER_BYTES", c.MaxHeaderBytes),
 		positive("GW_H2_MAX_STREAMS", c.H2MaxStreams),
 		{c.ReadHeaderTimeout <= c.ReadTimeout, "GW_READ_HEADER_TIMEOUT must not exceed GW_READ_TIMEOUT"},
-		{c.WriteTimeout >= c.RequestDeadline+writeTimeoutMargin, fmt.Sprintf("GW_WRITE_TIMEOUT %v must be at least CORE_REQUEST_DEADLINE + %v = %v", c.WriteTimeout, writeTimeoutMargin, c.RequestDeadline+writeTimeoutMargin)},
+		{c.WriteTimeout >= c.RequestDeadline+writeTimeoutMargin, fmt.Sprintf("GW_WRITE_TIMEOUT %v must be at least CHAT_REQUEST_DEADLINE + %v = %v", c.WriteTimeout, writeTimeoutMargin, c.RequestDeadline+writeTimeoutMargin)},
 	}
 	errs := ruleErrors(rules)
-	errs = append(errs, coreAddrErrors(c.CoreAddrs)...)
+	errs = append(errs, chatAddrErrors(c.ChatAddrs)...)
 	errs = append(errs, originErrors(c.CORSOrigins)...)
 	if err := c.Identity.Validate(); err != nil {
 		errs = append(errs, err)
@@ -67,15 +67,15 @@ func ruleErrors(rules []rule) []error {
 	return errs
 }
 
-func coreAddrErrors(addrs []string) []error {
+func chatAddrErrors(addrs []string) []error {
 	var errs []error
 	for i, addr := range addrs {
 		host, port, err := net.SplitHostPort(addr)
 		switch {
 		case err != nil || host == "" || port == "":
-			errs = append(errs, fmt.Errorf("GW_CORE_ADDRS entry %q must be host:port", addr))
+			errs = append(errs, fmt.Errorf("GW_CHAT_ADDRS entry %q must be host:port", addr))
 		case slices.Contains(addrs[:i], addr):
-			errs = append(errs, fmt.Errorf("GW_CORE_ADDRS lists %q twice", addr))
+			errs = append(errs, fmt.Errorf("GW_CHAT_ADDRS lists %q twice", addr))
 		}
 	}
 	return errs

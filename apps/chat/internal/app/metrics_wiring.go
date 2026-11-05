@@ -19,7 +19,7 @@ import (
 const (
 	oplogProbeTimeout = 2 * time.Second
 	metricsNamespace  = "chatim"
-	metricsSubsystem  = "core"
+	metricsSubsystem  = "chat"
 )
 
 type probes struct {
@@ -50,7 +50,7 @@ func metricSources(p probes) []metrics.Source {
 		{Name: "publish_dropped_total", Help: dropHelp, Labels: map[string]string{"reason": "async_failed"}, Read: func() float64 { return float64(p.drops().AsyncFailed) }},
 		{Name: "redis_degraded", Help: degradedHelp, Gauge: true, Labels: map[string]string{"client": "cid_dedupe"}, Read: func() float64 { return flag(p.cidDegraded()) }},
 		{Name: "cid_settle_dropped_total", Help: "Cid commits or aborts dropped by the batcher.", Read: func() float64 { return float64(p.cidDropped()) }},
-		{Name: "cid_pending_elsewhere_total", Help: "Sends refused because their cid is pending on another core (CD3 window).", Read: func() float64 { return float64(p.router().CIDElsewhere) }},
+		{Name: "cid_pending_elsewhere_total", Help: "Sends refused because their cid is pending on another chat node (CD3 window).", Read: func() float64 { return float64(p.router().CIDElsewhere) }},
 		{Name: "room_yields_total", Help: "Rooms an actor gave up after exhausting seq contention retries.", Read: func() float64 { return float64(p.router().Yields) }},
 		{Name: "grpc_load_shed_total", Help: "gRPC calls rejected by the in-flight limiter.", Read: func() float64 { return float64(p.loadShed()) }},
 		{Name: "mongo_oplog_window_seconds", Help: "Time span covered by the MongoDB oplog; NaN when unreadable.", Gauge: true, Read: p.oplogWindow},

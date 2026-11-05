@@ -32,7 +32,7 @@ func (b *blockedIdentity) Do(req *http.Request) (*http.Response, error) {
 func TestReadyWaitsForTheFirstIdentitySyncOrItsTimeout(t *testing.T) {
 	mr := slotRedis(t)
 	keys := newSigner(t)
-	_, dial := startFakeCore(t)
+	_, dial := startFakeChatNode(t)
 	lis, logs := newListeners(), newLogWatch()
 	cfg := testConfig(mr.Addr(), keys.path)
 	cfg.Identity.ReadyTimeout, cfg.Identity.HTTPTimeout = 2*time.Second, 5*time.Second
@@ -68,7 +68,7 @@ func TestReadyWaitsForTheFirstIdentitySyncOrItsTimeout(t *testing.T) {
 func TestNodeRefusedByIdentityStaysNotReady(t *testing.T) {
 	mr := slotRedis(t)
 	keys := newSigner(t)
-	_, dial := startFakeCore(t)
+	_, dial := startFakeChatNode(t)
 	lis, logs := newListeners(), newLogWatch()
 	cfg := testConfig(mr.Addr(), keys.path)
 	cfg.Identity.ReadyTimeout = 200 * time.Millisecond

@@ -7,16 +7,16 @@ import (
 	"github.com/ivannguyendev/chatim/apps/chat/internal/config"
 )
 
-func TestLoadAdvertiseAddrFollowsCoreIDAndGRPCPort(t *testing.T) {
+func TestLoadAdvertiseAddrFollowsNodeIDAndGRPCPort(t *testing.T) {
 	tests := []struct {
 		name string
 		env  map[string]string
 		want string
 	}{
-		{"default port", map[string]string{"CORE_ID": "core-b"}, "core-b:9000"},
-		{"port of a bare grpc addr", map[string]string{"CORE_ID": "core-b", "CORE_GRPC_ADDR": ":7100"}, "core-b:7100"},
-		{"port of a bound grpc addr", map[string]string{"CORE_ID": "core-b", "CORE_GRPC_ADDR": "0.0.0.0:7200"}, "core-b:7200"},
-		{"explicit advertise addr wins", map[string]string{"CORE_ID": "core-b", "CORE_ADVERTISE_ADDR": "10.1.1.1:7300"}, "10.1.1.1:7300"},
+		{"default port", map[string]string{"CHAT_NODE_ID": "chat-b"}, "chat-b:9000"},
+		{"port of a bare grpc addr", map[string]string{"CHAT_NODE_ID": "chat-b", "CHAT_GRPC_ADDR": ":7100"}, "chat-b:7100"},
+		{"port of a bound grpc addr", map[string]string{"CHAT_NODE_ID": "chat-b", "CHAT_GRPC_ADDR": "0.0.0.0:7200"}, "chat-b:7200"},
+		{"explicit advertise addr wins", map[string]string{"CHAT_NODE_ID": "chat-b", "CHAT_ADVERTISE_ADDR": "10.1.1.1:7300"}, "10.1.1.1:7300"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -50,7 +50,7 @@ func TestAdminAddrReadsOnlyTheAdminKey(t *testing.T) {
 	if got := config.AdminAddr(); got != ":9090" {
 		t.Errorf("AdminAddr() = %q, want :9090", got)
 	}
-	t.Setenv("CORE_ADMIN_ADDR", "127.0.0.1:7091")
+	t.Setenv("CHAT_ADMIN_ADDR", "127.0.0.1:7091")
 	if got := config.AdminAddr(); got != "127.0.0.1:7091" {
 		t.Errorf("AdminAddr() = %q, want 127.0.0.1:7091", got)
 	}

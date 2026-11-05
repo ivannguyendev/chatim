@@ -26,7 +26,7 @@ func (l *roomLocator) Addr(room uint64) (string, bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.rooms = append(l.rooms, room)
-	return "core-1:9000", true
+	return "chat-1:9000", true
 }
 
 func (l *roomLocator) AnyAddr() (string, bool) { return "", false }
@@ -85,11 +85,11 @@ var changeReplies = map[string]proto.Message{
 
 func TestChangeCallsRouteByRoomAndRetryAttemptTimeouts(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		core := &fakeCore{}
+		chat := &fakeChat{}
 		loc := &roomLocator{}
-		c := newClient(t, loc, newFakeNet(map[string]*fakeCore{"core-1:9000": core}), route.Policy{Attempt: time.Second})
+		c := newClient(t, loc, newFakeNet(map[string]*fakeChat{"chat-1:9000": chat}), route.Policy{Attempt: time.Second})
 		for name, call := range changeCalls {
-			core.block = 1
+			chat.block = 1
 			got, st, err := call(t.Context(), c, "42")
 			if err != nil || st.Attempts != 2 || !proto.Equal(got, changeReplies[name]) {
 				t.Fatalf("%s = %v, %v after %d attempts; want %v on the second attempt", name, got, err, st.Attempts, changeReplies[name])
@@ -103,8 +103,8 @@ func TestChangeCallsRouteByRoomAndRetryAttemptTimeouts(t *testing.T) {
 }
 
 func TestChangeCallsKeepConflictsAndBadRoomIDsLocal(t *testing.T) {
-	core := &fakeCore{fail: []error{status.Error(codes.FailedPrecondition, "message version conflict")}}
-	c := newClient(t, &roomLocator{}, newFakeNet(map[string]*fakeCore{"core-1:9000": core}), route.Policy{})
+	chat := &fakeChat{fail: []error{status.Error(codes.FailedPrecondition, "message version conflict")}}
+	c := newClient(t, &roomLocator{}, newFakeNet(map[string]*fakeChat{"chat-1:9000": chat}), route.Policy{})
 	if _, st, err := changeCalls["edit"](t.Context(), c, "42"); status.Code(err) != codes.FailedPrecondition || st.Attempts != 1 {
 		t.Fatalf("edit on a stale base = %v after %d attempts, want FailedPrecondition at once", err, st.Attempts)
 	}

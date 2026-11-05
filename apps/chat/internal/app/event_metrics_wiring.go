@@ -57,7 +57,7 @@ func eventSources(p eventProbes, drops func() publish.Drops) []metrics.Source {
 		{Name: "read_batch_enqueue_failures_total", Help: "read_positions events the publisher refused; the sweeper republishes their read positions.", Read: count(p.reads.EnqueueFailures)},
 		{Name: "sweep_publish_failures_total", Help: "Pending events the sweeper could not republish; their flag stays for the next pass.", Read: count(p.sweeper.PublishFailures)},
 		{Name: "sweep_failures_total", Help: "Pending documents or flag clears the sweeper failed on; they stay flagged for the next pass.", Read: count(p.sweeper.Failures)},
-		{Name: "sweep_passes_total", Help: "Sweeper passes this core finished while it held the leader slot.", Read: count(p.sweeper.Passes)},
+		{Name: "sweep_passes_total", Help: "Sweeper passes this chat node finished while it held the leader slot.", Read: count(p.sweeper.Passes)},
 	}
 	for _, c := range store.AllStateCollections() {
 		labels := map[string]string{"collection": c.String()}

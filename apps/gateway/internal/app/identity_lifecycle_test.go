@@ -20,9 +20,9 @@ func (unreachableIdentity) Do(req *http.Request) (*http.Response, error) {
 
 func TestReadyWaitsForTheFirstIdentitySyncOrItsTimeout(t *testing.T) {
 	keys := newSigner(t)
-	core := startCore(t, &fakeCore{})
+	chat := startChatNode(t, &fakeChat{})
 	lis, logs := newListeners(), newLogWatch()
-	cfg := testConfig(keys.path, core)
+	cfg := testConfig(keys.path, chat)
 	cfg.Identity.ReadyTimeout = 2 * time.Second
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
@@ -51,9 +51,9 @@ func TestReadyWaitsForTheFirstIdentitySyncOrItsTimeout(t *testing.T) {
 
 func TestNodeRefusedByIdentityStaysNotReady(t *testing.T) {
 	keys := newSigner(t)
-	core := startCore(t, &fakeCore{})
+	chat := startChatNode(t, &fakeChat{})
 	lis, logs := newListeners(), newLogWatch()
-	cfg := testConfig(keys.path, core)
+	cfg := testConfig(keys.path, chat)
 	cfg.Identity.ReadyTimeout = 200 * time.Millisecond
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()

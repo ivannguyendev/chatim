@@ -11,14 +11,14 @@ import (
 const fallbackMessage = "request failed"
 
 var (
-	coreMessageKept = map[codes.Code]bool{
+	chatMessageKept = map[codes.Code]bool{
 		codes.InvalidArgument: true, codes.NotFound: true, codes.FailedPrecondition: true,
 		codes.PermissionDenied: true, codes.AlreadyExists: true, codes.ResourceExhausted: true,
 	}
 	fixedMessages = map[codes.Code]string{
 		codes.Canceled:         "request canceled",
-		codes.DeadlineExceeded: "core did not answer in time",
-		codes.Unavailable:      "core unavailable, retry later",
+		codes.DeadlineExceeded: "chat did not answer in time",
+		codes.Unavailable:      "chat unavailable, retry later",
 		codes.Unimplemented:    "request not supported",
 	}
 )
@@ -50,9 +50,9 @@ func codeOf(err error) (codes.Code, string) {
 	return codes.Unknown, ""
 }
 
-func ClientMessage(code codes.Code, coreMessage string) string {
-	if coreMessageKept[code] && coreMessage != "" {
-		return coreMessage
+func ClientMessage(code codes.Code, chatMessage string) string {
+	if chatMessageKept[code] && chatMessage != "" {
+		return chatMessage
 	}
 	if m, ok := fixedMessages[code]; ok {
 		return m

@@ -77,14 +77,14 @@ func realInfra(t *testing.T) *itInfra {
 	return it
 }
 
-func (it *itInfra) coreConfig(t *testing.T, env map[string]string) config.Config {
+func (it *itInfra) chatConfig(t *testing.T, env map[string]string) config.Config {
 	t.Helper()
 	base := map[string]string{
-		"CORE_ID":                   "it-core-" + it.suffix,
-		"CORE_GRPC_ADDR":            freeAddr(t),
-		"CORE_ADMIN_ADDR":           freeAddr(t),
+		"CHAT_NODE_ID":              "it-chat-" + it.suffix,
+		"CHAT_GRPC_ADDR":            freeAddr(t),
+		"CHAT_ADMIN_ADDR":           freeAddr(t),
 		"MONGO_URI":                 it.mongoURI,
-		"MONGO_DB":                  "chatim_it_core_" + it.suffix,
+		"MONGO_DB":                  "chatim_it_chat_" + it.suffix,
 		"REDIS_ADDR":                it.state.addr,
 		"REDIS_DB":                  strconv.Itoa(itRedisDB),
 		"REDIS_PASSWORD":            it.state.password,
@@ -92,7 +92,7 @@ func (it *itInfra) coreConfig(t *testing.T, env map[string]string) config.Config
 		"REDIS_DEDUPE_DB":           strconv.Itoa(itRedisDB),
 		"REDIS_DEDUPE_PASSWORD":     it.dedupe.password,
 		"NATS_URL":                  it.natsURL,
-		"EVT_STREAM":                "IT_CORE_" + strings.ToUpper(it.suffix),
+		"EVT_STREAM":                "IT_CHAT_" + strings.ToUpper(it.suffix),
 		"EVT_SUBJECT_ROOT":          "itcevt" + it.suffix,
 		"EVT_LIVE_ROOT":             "itclive" + it.suffix,
 		"TIMER_STREAM":              "IT_TIMER_" + strings.ToUpper(it.suffix),

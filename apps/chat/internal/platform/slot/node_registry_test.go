@@ -16,35 +16,35 @@ import (
 
 var redisEpoch = time.UnixMilli(1_700_000_000_000)
 
-func TestHeartbeatRegistersTheCoreUntilItsTTL(t *testing.T) {
+func TestHeartbeatRegistersTheChatNodeUntilItsTTL(t *testing.T) {
 	mr, rdb := newRedis(t)
-	a := newManager(t, rdb, "core-a")
+	a := newManager(t, rdb, "chat-a")
 	stepAll(t, a)
-	score, err := mr.ZScore(slotmap.CoreRegistryKey, "core-a")
-	if want := slotmap.CoreExpiryScore(redisEpoch.Add(a.cfg.HeartbeatTTL)); err != nil || score != want {
+	score, err := mr.ZScore(slotmap.NodeRegistryKey, "chat-a")
+	if want := slotmap.NodeExpiryScore(redisEpoch.Add(a.cfg.HeartbeatTTL)); err != nil || score != want {
 		t.Fatalf("registry score = %v, %v; want heartbeat expiry %v", score, err, want)
 	}
-	if addr, _ := mr.Get(slotmap.CoreKey("core-a")); addr != "core-a:9000" || mr.TTL(slotmap.CoreKey("core-a")) != a.cfg.HeartbeatTTL {
-		t.Fatalf("core key = %q with ttl %v, want the advertise address for %v", addr, mr.TTL(slotmap.CoreKey("core-a")), a.cfg.HeartbeatTTL)
+	if addr, _ := mr.Get(slotmap.NodeKey("chat-a")); addr != "chat-a:9000" || mr.TTL(slotmap.NodeKey("chat-a")) != a.cfg.HeartbeatTTL {
+		t.Fatalf("chat key = %q with ttl %v, want the advertise address for %v", addr, mr.TTL(slotmap.NodeKey("chat-a")), a.cfg.HeartbeatTTL)
 	}
 }
 
-func TestExpiredCoreIsPrunedAndNotAlive(t *testing.T) {
+func TestExpiredChatNodeIsPrunedAndNotAlive(t *testing.T) {
 	mr, rdb := newRedis(t)
-	a, b := newManager(t, rdb, "core-a"), newManager(t, rdb, "core-b")
+	a, b := newManager(t, rdb, "chat-a"), newManager(t, rdb, "chat-b")
 	for range 3 {
 		stepAll(t, a, b)
 	}
 	assertShares(t, 512, 512, a, b)
 	advance(t, mr, rdb, b.cfg.HeartbeatTTL-time.Millisecond)
 	stepAll(t, a)
-	if !registered(mr, "core-b") || len(a.Owned()) != 512 {
-		t.Fatalf("core-b dropped %v before its heartbeat expired; core-a owns %d", time.Millisecond, len(a.Owned()))
+	if !registered(mr, "chat-b") || len(a.Owned()) != 512 {
+		t.Fatalf("chat-b dropped %v before its heartbeat expired; chat-a owns %d", time.Millisecond, len(a.Owned()))
 	}
 	advance(t, mr, rdb, time.Millisecond)
 	stepAll(t, a)
-	if members, _ := mr.ZMembers(slotmap.CoreRegistryKey); !slices.Equal(members, []string{"core-a"}) {
-		t.Fatalf("registry = %v once core-b expired, want only core-a", members)
+	if members, _ := mr.ZMembers(slotmap.NodeRegistryKey); !slices.Equal(members, []string{"chat-a"}) {
+		t.Fatalf("registry = %v once chat-b expired, want only chat-a", members)
 	}
 	assertPartition(t, mr, a)
 }
@@ -53,7 +53,7 @@ func TestStepCommandsIgnoreUnrelatedKeys(t *testing.T) {
 	mr, rdb := newRedis(t)
 	counter := &commandCounter{}
 	rdb.AddHook(counter)
-	a := newManager(t, rdb, "core-a")
+	a := newManager(t, rdb, "chat-a")
 	stepAll(t, a)
 	base := counter.during(func() { stepAll(t, a) })
 	for i := range 100_000 {
@@ -77,9 +77,9 @@ func advance(t *testing.T, mr *miniredis.Miniredis, rdb *redis.Client, d time.Du
 	mr.FastForward(d)
 }
 
-func registered(mr *miniredis.Miniredis, core string) bool {
-	members, _ := mr.ZMembers(slotmap.CoreRegistryKey)
-	return slices.Contains(members, core)
+func registered(mr *miniredis.Miniredis, node string) bool {
+	members, _ := mr.ZMembers(slotmap.NodeRegistryKey)
+	return slices.Contains(members, node)
 }
 
 type commandCounter struct{ n atomic.Int64 }

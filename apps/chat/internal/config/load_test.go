@@ -37,7 +37,7 @@ func TestLoadDefaults(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 	want := config.Config{
-		CoreID: host, GRPCAddr: ":9000", AdvertiseAddr: host + ":9000", AdminAddr: ":9090",
+		NodeID: host, GRPCAddr: ":9000", AdvertiseAddr: host + ":9000", AdminAddr: ":9090",
 		MongoURI: testMongoURI, MongoDB: "chatim", MongoAuthSource: "admin", RedisAddr: "chatim-redis:6379", RedisDB: 0,
 		RedisDedupeAddr: "chatim-redis-dedupe:6379",
 		NATSURL:         "nats://chatim-nats:4222", ConnectTimeout: 10 * time.Second, RequestDeadline: 3 * time.Second,
@@ -48,7 +48,7 @@ func TestLoadDefaults(t *testing.T) {
 			Mailbox: 1024, Idle: 5 * time.Minute, MaxGroup: 64, MaxActors: 100000,
 			GroupDeadline: 3 * time.Second, ReservationTTL: 10 * time.Second, MentionTargets: 50,
 		},
-		Dedupe:   dedupe.Config{CoreID: host, PendingTTL: 10 * time.Second, CommittedTTL: 15 * time.Minute, Timeout: 100 * time.Millisecond, Cooldown: time.Second},
+		Dedupe:   dedupe.Config{NodeID: host, PendingTTL: 10 * time.Second, CommittedTTL: 15 * time.Minute, Timeout: 100 * time.Millisecond, Cooldown: time.Second},
 		CIDBatch: dedupe.BatchConfig{Shards: 4, MaxKeys: 256, Queue: 4096},
 		Publish: publish.Config{
 			SubjectRoot: "evt", Shards: 4, QueueSize: 1024, MaxPending: 256, AckTimeout: 2 * time.Second,
@@ -56,7 +56,7 @@ func TestLoadDefaults(t *testing.T) {
 		Stream: publish.StreamConfig{Name: "CHATIM_EVT", SubjectRoot: "evt", LiveRoot: "live", Replicas: 1, MaxAge: 7 * day, Duplicates: 5 * time.Minute},
 		Timer:  timer.StreamConfig{Name: "CHATIM_TIMER", SubjectRoot: "timer", Replicas: 1, MaxAge: 2 * time.Hour, Duplicates: 2 * time.Minute, AckWait: 30 * time.Second},
 		Slot: slot.Config{
-			CoreID: host, Addr: host + ":9000", Tick: time.Second, HeartbeatTTL: 5 * time.Second,
+			NodeID: host, Addr: host + ":9000", Tick: time.Second, HeartbeatTTL: 5 * time.Second,
 			LeaseTTL: 10 * time.Second, HookTimeout: 500 * time.Millisecond,
 		},
 		StateClear: stateclear.Config{Flush: 2 * time.Second, Batch: 16384, Queue: 65536, Timeout: 5 * time.Second},
@@ -94,9 +94,9 @@ func TestLoadOverrides(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 	want := config.Config{
-		CoreID: "core-a", GRPCAddr: ":7000", AdvertiseAddr: "10.0.0.5:7000", AdminAddr: "127.0.0.1:7090",
+		NodeID: "chat-a", GRPCAddr: ":7000", AdvertiseAddr: "10.0.0.5:7000", AdminAddr: "127.0.0.1:7090",
 		MongoURI: "mongodb://m1,m2/?replicaSet=rs1", MongoDB: "chatim_it",
-		MongoUser: "core-user", MongoPassword: "mongo-pw", MongoAuthSource: "chatim", RedisAddr: "redis:6380", RedisDB: 3,
+		MongoUser: "chat-user", MongoPassword: "mongo-pw", MongoAuthSource: "chatim", RedisAddr: "redis:6380", RedisDB: 3,
 		RedisPassword: "state-pw", RedisDedupeAddr: "dedupe:6381", RedisDedupeDB: 2, RedisDedupePassword: "dedupe-pw",
 		NATSURL: "nats://n1:4222", ConnectTimeout: 4 * time.Second, RequestDeadline: 2 * time.Second,
 		SlowRPC: 750 * time.Millisecond, QueueWait: 10 * time.Millisecond, MaxInflight: 100, DrainDelay: time.Second, GRPCShutdown: 4 * time.Second,
@@ -106,7 +106,7 @@ func TestLoadOverrides(t *testing.T) {
 			Mailbox: 64, Idle: time.Minute, MaxGroup: 32, MaxActors: 5000,
 			GroupDeadline: 2 * time.Second, ReservationTTL: 8 * time.Second, MentionTargets: 20,
 		},
-		Dedupe:   dedupe.Config{CoreID: "core-a", PendingTTL: 8 * time.Second, CommittedTTL: 30 * time.Minute, Timeout: 50 * time.Millisecond, Cooldown: 2 * time.Second},
+		Dedupe:   dedupe.Config{NodeID: "chat-a", PendingTTL: 8 * time.Second, CommittedTTL: 30 * time.Minute, Timeout: 50 * time.Millisecond, Cooldown: 2 * time.Second},
 		CIDBatch: dedupe.BatchConfig{Shards: 2, MaxKeys: 64, Queue: 512},
 		Publish: publish.Config{
 			SubjectRoot: "evt_it", Shards: 2, QueueSize: 512, MaxPending: 128, AckTimeout: time.Second,
@@ -114,7 +114,7 @@ func TestLoadOverrides(t *testing.T) {
 		Stream: publish.StreamConfig{Name: "CHATIM_EVT_IT", SubjectRoot: "evt_it", LiveRoot: "live_it", Replicas: 3, MaxAge: 2 * day, Duplicates: 5 * time.Minute},
 		Timer:  timer.StreamConfig{Name: "CHATIM_TIMER_IT", SubjectRoot: "timer_it", Replicas: 3, MaxAge: 2 * time.Hour, Duplicates: 2 * time.Minute, AckWait: 30 * time.Second},
 		Slot: slot.Config{
-			CoreID: "core-a", Addr: "10.0.0.5:7000", Tick: 500 * time.Millisecond, HeartbeatTTL: 3 * time.Second,
+			NodeID: "chat-a", Addr: "10.0.0.5:7000", Tick: 500 * time.Millisecond, HeartbeatTTL: 3 * time.Second,
 			LeaseTTL: 6 * time.Second, HookTimeout: 200 * time.Millisecond,
 		},
 		StateClear: stateclear.Config{Flush: 50 * time.Millisecond, Batch: 200, Queue: 4096, Timeout: 2 * time.Second},

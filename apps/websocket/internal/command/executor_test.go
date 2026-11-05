@@ -24,19 +24,19 @@ var realtimeCommands = map[string]bool{
 
 type harness struct {
 	exec   *command.Executor
-	core   *fakeCore
+	chat   *fakeChat
 	router *fakeRouter
 }
 
 func newHarness(t *testing.T, deadline time.Duration) harness {
 	t.Helper()
-	core, conn := startFakeCore(t)
+	chat, conn := startFakeChatNode(t)
 	router := &fakeRouter{conn: conn}
 	exec, err := command.New(router, deadline)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return harness{exec: exec, core: core, router: router}
+	return harness{exec: exec, chat: chat, router: router}
 }
 
 func requestFields() []protoreflect.FieldDescriptor {
@@ -67,7 +67,7 @@ func sendRequest(send *chatimv1.SendMessageRequest) *chatimv1.ClientRequest {
 	return &chatimv1.ClientRequest{Id: 5, Request: &chatimv1.ClientRequest_SendMessage{SendMessage: send}}
 }
 
-func TestEveryRealtimeCommandGoesToItsCoreOnce(t *testing.T) {
+func TestEveryRealtimeCommandGoesToItsChatOnce(t *testing.T) {
 	fields := requestFields()
 	if len(fields) != 34 {
 		t.Fatalf("client request fields = %d, want 34", len(fields))
@@ -92,9 +92,9 @@ func TestEveryRealtimeCommandGoesToItsCoreOnce(t *testing.T) {
 			if len(h.router.routes) != 1 || h.router.routes[0] != "room:42" {
 				t.Fatalf("routes = %v, want room:42", h.router.routes)
 			}
-			calls := h.core.recorded()
-			if len(calls) != 1 || calls[0].method != "/chatim.v1.CoreService/"+name {
-				t.Fatalf("core calls = %+v", calls)
+			calls := h.chat.recorded()
+			if len(calls) != 1 || calls[0].method != "/chatim.v1.ChatService/"+name {
+				t.Fatalf("chat calls = %+v", calls)
 			}
 		})
 	}
@@ -120,8 +120,8 @@ func TestRequestCommandsTakeTheUnknownRequestPath(t *testing.T) {
 			if outcome.Code != codes.Unimplemented || outcome.Command != "" {
 				t.Fatalf("outcome = %+v, want the unknown-request outcome", outcome)
 			}
-			if len(h.router.routes) != 0 || len(h.core.recorded()) != 0 {
-				t.Fatalf("routes = %v, core calls = %d", h.router.routes, len(h.core.recorded()))
+			if len(h.router.routes) != 0 || len(h.chat.recorded()) != 0 {
+				t.Fatalf("routes = %v, chat calls = %d", h.router.routes, len(h.chat.recorded()))
 			}
 			for _, src := range h.exec.CommandSources() {
 				if src.Labels["command"] == name {
@@ -142,7 +142,7 @@ func TestCallerComesOnlyFromTheClaims(t *testing.T) {
 	if resp.GetCode() != 0 {
 		t.Fatalf("resp = %v", resp)
 	}
-	md := h.core.recorded()[0].md
+	md := h.chat.recorded()[0].md
 	if got := md.Get(chatrpc.TenantHeader); len(got) != 1 || got[0] != "t1" {
 		t.Fatalf("tenant = %v", got)
 	}
@@ -165,8 +165,8 @@ func TestSendMessageRefusesInternalFields(t *testing.T) {
 			if codes.Code(resp.GetCode()) != codes.InvalidArgument || outcome.Code != codes.InvalidArgument || resp.GetMessage() == "" {
 				t.Fatalf("resp = %v", resp)
 			}
-			if resp.GetResult() != nil || len(h.core.recorded()) != 0 || len(h.router.routes) != 0 {
-				t.Fatalf("forwarded: resp %v calls %d routes %v", resp, len(h.core.recorded()), h.router.routes)
+			if resp.GetResult() != nil || len(h.chat.recorded()) != 0 || len(h.router.routes) != 0 {
+				t.Fatalf("forwarded: resp %v calls %d routes %v", resp, len(h.chat.recorded()), h.router.routes)
 			}
 		})
 	}
@@ -175,14 +175,14 @@ func TestSendMessageRefusesInternalFields(t *testing.T) {
 func TestSendMessageAcceptsAnExplicitTextKind(t *testing.T) {
 	h := newHarness(t, time.Second)
 	resp, _ := h.exec.Execute(t.Context(), testClaims, sendRequest(&chatimv1.SendMessageRequest{RoomId: "42", Cid: "c1", Text: "hi", Kind: chatimv1.MessageKind_MESSAGE_KIND_TEXT}))
-	if resp.GetCode() != 0 || len(h.core.recorded()) != 1 {
-		t.Fatalf("resp = %v, core calls = %d", resp, len(h.core.recorded()))
+	if resp.GetCode() != 0 || len(h.chat.recorded()) != 1 {
+		t.Fatalf("resp = %v, chat calls = %d", resp, len(h.chat.recorded()))
 	}
 }
 
-func TestSendMessageReturnsTheCoreResult(t *testing.T) {
+func TestSendMessageReturnsTheChatResult(t *testing.T) {
 	h := newHarness(t, time.Second)
-	h.core.reply(&chatimv1.SendMessageResponse{Seq: 7})
+	h.chat.reply(&chatimv1.SendMessageResponse{Seq: 7})
 	resp, _ := h.exec.Execute(t.Context(), testClaims, sendRequest(&chatimv1.SendMessageRequest{RoomId: "42", Cid: "c1", Text: "hi"}))
 	if resp.GetSendMessage().GetSeq() != 7 || resp.GetId() != 5 {
 		t.Fatalf("resp = %v", resp)
@@ -195,8 +195,8 @@ func TestEmptyRequestIsUnimplemented(t *testing.T) {
 	if codes.Code(resp.GetCode()) != codes.Unimplemented || resp.GetId() != 3 || outcome.Command != "" || resp.GetMessage() == "" {
 		t.Fatalf("resp = %v, outcome = %+v", resp, outcome)
 	}
-	if len(h.router.routes) != 0 || len(h.core.recorded()) != 0 {
-		t.Fatal("an empty request reached the router or core")
+	if len(h.router.routes) != 0 || len(h.chat.recorded()) != 0 {
+		t.Fatal("an empty request reached the router or chat")
 	}
 }
 

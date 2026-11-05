@@ -23,7 +23,7 @@ func (r *wsEventsRun) readPeers() error {
 			return err
 		}
 	}
-	if _, err := viaGateway(r.a.gw, r.a.gw.core.AddMembers, &chatimv1.AddMembersRequest{
+	if _, err := viaGateway(r.a.gw, r.a.gw.chat.AddMembers, &chatimv1.AddMembersRequest{
 		RoomId: r.room, Users: []string{r.c.user}, RequestId: randomCID(),
 	}); err != nil {
 		return fmt.Errorf("add %s: %w", r.c.user, err)

@@ -18,7 +18,7 @@ var (
 
 type anyCall func(ctx context.Context, cl *route.Client) (proto.Message, route.Stats, error)
 
-func anyCoreCmd(ctx context.Context, fs *flag.FlagSet, o *options, args []string, check func() error, call anyCall) error {
+func anyChatNodeCmd(ctx context.Context, fs *flag.FlagSet, o *options, args []string, check func() error, call anyCall) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -46,7 +46,7 @@ func setUserGroupsCmd(ctx context.Context, args []string) error {
 		}
 		return nil
 	}
-	return anyCoreCmd(ctx, fs, o, args, check, func(ctx context.Context, cl *route.Client) (proto.Message, route.Stats, error) {
+	return anyChatNodeCmd(ctx, fs, o, args, check, func(ctx context.Context, cl *route.Client) (proto.Message, route.Stats, error) {
 		item := &chatimv1.UserGroupsItem{User: o.user, Groups: splitList(*groups), Ver: *ver}
 		return reply(cl.SetUserGroups(ctx, &chatimv1.SetUserGroupsRequest{Items: []*chatimv1.UserGroupsItem{item}}))
 	})
@@ -68,7 +68,7 @@ func setGroupsCmd(ctx context.Context, args []string) error {
 		}
 		return nil
 	}
-	return anyCoreCmd(ctx, fs, o, args, check, func(ctx context.Context, cl *route.Client) (proto.Message, route.Stats, error) {
+	return anyChatNodeCmd(ctx, fs, o, args, check, func(ctx context.Context, cl *route.Client) (proto.Message, route.Stats, error) {
 		item := &chatimv1.GroupItem{Id: *group, Name: *name, Active: !*inactive, Ver: *ver}
 		return reply(cl.SetGroups(ctx, &chatimv1.SetGroupsRequest{Items: []*chatimv1.GroupItem{item}}))
 	})

@@ -62,11 +62,11 @@ func itKeys(t *testing.T, rdb *redis.Client, cids ...string) []Key {
 	return keys
 }
 
-func itStore(t *testing.T, rdb *redis.Client, core string, pending time.Duration) *Store {
+func itStore(t *testing.T, rdb *redis.Client, chat string, pending time.Duration) *Store {
 	t.Helper()
-	s, err := New(rdb, Config{CoreID: core, PendingTTL: pending}, slog.New(slog.DiscardHandler))
+	s, err := New(rdb, Config{NodeID: chat, PendingTTL: pending}, slog.New(slog.DiscardHandler))
 	if err != nil {
-		t.Fatalf("New(%s): %v", core, err)
+		t.Fatalf("New(%s): %v", chat, err)
 	}
 	return s
 }
@@ -75,12 +75,12 @@ func TestRealRedisReservationLifecycle(t *testing.T) {
 	rdb := itClient(t)
 	ctx := t.Context()
 	const pending = 400 * time.Millisecond
-	a, b := itStore(t, rdb, "it-core-a", pending), itStore(t, rdb, "it-core-b", pending)
+	a, b := itStore(t, rdb, "it-chat-a", pending), itStore(t, rdb, "it-chat-b", pending)
 	keys := itKeys(t, rdb, "x", "y", "z", "hash")
 	x, y, z, hash := keys[0], keys[1], keys[2], keys[3]
 
 	expectStatuses(t, reserve(t, a, x, y), Reserved, Reserved)
-	if v := rdb.Get(ctx, x.String()).Val(); v != "p:it-core-a" {
+	if v := rdb.Get(ctx, x.String()).Val(); v != "p:it-chat-a" {
 		t.Fatalf("pending value = %q", v)
 	}
 	if ttl := rdb.PTTL(ctx, x.String()).Val(); ttl <= 0 || ttl > pending+ttlSlack {
@@ -106,8 +106,8 @@ func TestRealRedisReservationLifecycle(t *testing.T) {
 	if n := rdb.Exists(ctx, y.String()).Val(); n != 0 {
 		t.Fatal("own reservation survived Abort")
 	}
-	if v := rdb.Get(ctx, z.String()).Val(); v != "p:it-core-b" {
-		t.Fatalf("Abort touched another core's reservation: %q", v)
+	if v := rdb.Get(ctx, z.String()).Val(); v != "p:it-chat-b" {
+		t.Fatalf("Abort touched another chat node's reservation: %q", v)
 	}
 
 	if err := rdb.HSet(ctx, hash.String(), "f", "v").Err(); err != nil {

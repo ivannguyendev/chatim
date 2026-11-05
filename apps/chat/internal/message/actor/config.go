@@ -31,7 +31,7 @@ var (
 	errUnavailable   = fmt.Errorf("room store unavailable: %w", domain.ErrRetryLater)
 	errUnconfirmed   = fmt.Errorf("message write unconfirmed: %w", domain.ErrRetryLater)
 	errSeqContention = fmt.Errorf("sequence taken by another write: %w", domain.ErrRetryLater)
-	errCIDElsewhere  = fmt.Errorf("cid in flight on another core: %w", domain.ErrRetryLater)
+	errCIDElsewhere  = fmt.Errorf("cid in flight on another chat node: %w", domain.ErrRetryLater)
 	errCIDUnsettled  = fmt.Errorf("cid reservation of an abandoned write still held: %w", domain.ErrRetryLater)
 	errGroupExpired  = fmt.Errorf("write group deadline passed before the insert was sent: %w", domain.ErrRetryLater)
 	errMailboxFull   = fmt.Errorf("room mailbox full: %w", domain.ErrBusy)

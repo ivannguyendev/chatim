@@ -26,20 +26,20 @@ func (l *loadRecorder) seen() [][]string {
 func TestResolverReportsTheLiveAddressesAfterEverySuccessfulLoad(t *testing.T) {
 	rec := &loadRecorder{}
 	g := newResolverRig(t, ResolverConfig{OnLoad: rec.record})
-	g.heartbeat("core-a", coreAddr("core-a"), 0)
-	g.heartbeat("core-b", coreAddr("core-b"), 0)
+	g.heartbeat("chat-a", nodeAddr("chat-a"), 0)
+	g.heartbeat("chat-b", nodeAddr("chat-b"), 0)
 	g.refresh(t)
-	_ = g.mr.Set(CoreKey("core-b"), "core-b:9100")
+	_ = g.mr.Set(NodeKey("chat-b"), "chat-b:9100")
 	g.refresh(t)
 	g.mr.SetError("LOADING redis is loading")
 	if err := g.r.Refresh(t.Context()); err == nil {
 		t.Fatal("Refresh with failing redis = nil, want an error")
 	}
 	g.mr.SetError("")
-	g.mr.Del(CoreKey("core-a"))
-	g.mr.Del(CoreKey("core-b"))
+	g.mr.Del(NodeKey("chat-a"))
+	g.mr.Del(NodeKey("chat-b"))
 	g.refresh(t)
-	want := [][]string{{"core-a:9000", "core-b:9000"}, {"core-a:9000", "core-b:9100"}, {}}
+	want := [][]string{{"chat-a:9000", "chat-b:9000"}, {"chat-a:9000", "chat-b:9100"}, {}}
 	got := rec.seen()
 	if len(got) != len(want) {
 		t.Fatalf("OnLoad calls = %v, want %v", got, want)

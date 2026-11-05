@@ -30,7 +30,7 @@ const (
 )
 
 type Config struct {
-	CoreID                 string
+	NodeID                 string
 	GRPCAddr               string
 	AdvertiseAddr          string
 	AdminAddr              string
@@ -99,13 +99,13 @@ type StopPlan struct {
 	Close       time.Duration
 }
 
-func AdminAddr() string { return envconfig.String("CORE_ADMIN_ADDR", defaultAdminAddr) }
+func AdminAddr() string { return envconfig.String("CHAT_ADMIN_ADDR", defaultAdminAddr) }
 
 func Load() (Config, error) {
 	var p parser
 	c := Config{
-		CoreID:              p.coreID(),
-		GRPCAddr:            envconfig.String("CORE_GRPC_ADDR", ":9000"),
+		NodeID:              p.nodeID(),
+		GRPCAddr:            envconfig.String("CHAT_GRPC_ADDR", ":9000"),
 		AdminAddr:           AdminAddr(),
 		MongoURI:            envconfig.String("MONGO_URI", ""),
 		MongoDB:             envconfig.String("MONGO_DB", "chatim"),
@@ -119,15 +119,15 @@ func Load() (Config, error) {
 		RedisDedupeDB:       p.index("REDIS_DEDUPE_DB", 0),
 		RedisDedupePassword: p.secret("REDIS_DEDUPE_PASSWORD"),
 		NATSURL:             envconfig.String("NATS_URL", "nats://chatim-nats:4222"),
-		ConnectTimeout:      p.span("CORE_CONNECT_TIMEOUT", 10*time.Second),
-		RequestDeadline:     p.span("CORE_REQUEST_DEADLINE", 3*time.Second),
-		SlowRPC:             p.span("CORE_SLOW_RPC", grpcserver.DefaultSlowRPC),
-		QueueWait:           p.span("CORE_QUEUE_WAIT", 25*time.Millisecond),
-		MaxInflight:         p.count("CORE_MAX_INFLIGHT", 2048),
-		DrainDelay:          p.span("CORE_DRAIN_DELAY", 2*time.Second),
-		GRPCShutdown:        p.span("CORE_GRPC_SHUTDOWN", 5*time.Second),
-		PublisherDrain:      p.span("CORE_PUBLISHER_DRAIN", 5*time.Second),
-		ShutdownBudget:      p.span("CORE_SHUTDOWN_BUDGET", 30*time.Second),
+		ConnectTimeout:      p.span("CHAT_CONNECT_TIMEOUT", 10*time.Second),
+		RequestDeadline:     p.span("CHAT_REQUEST_DEADLINE", 3*time.Second),
+		SlowRPC:             p.span("CHAT_SLOW_RPC", grpcserver.DefaultSlowRPC),
+		QueueWait:           p.span("CHAT_QUEUE_WAIT", 25*time.Millisecond),
+		MaxInflight:         p.count("CHAT_MAX_INFLIGHT", 2048),
+		DrainDelay:          p.span("CHAT_DRAIN_DELAY", 2*time.Second),
+		GRPCShutdown:        p.span("CHAT_GRPC_SHUTDOWN", 5*time.Second),
+		PublisherDrain:      p.span("CHAT_PUBLISHER_DRAIN", 5*time.Second),
+		ShutdownBudget:      p.span("CHAT_SHUTDOWN_BUDGET", 30*time.Second),
 		LockedMessageKinds:  p.kinds("MESSAGE_LOCKED_KINDS"),
 		Interactions: interaction.Limits{
 			Emojis:   p.listOr("REACTION_EMOJIS", interaction.DefaultEmojis),
@@ -135,7 +135,7 @@ func Load() (Config, error) {
 		},
 		Members: member.Limits{MemberBatch: p.count("MEMBER_BATCH_MAX", member.DefaultMemberBatch)},
 	}
-	c.AdvertiseAddr = p.advertiseAddr(c.CoreID, c.GRPCAddr)
+	c.AdvertiseAddr = p.advertiseAddr(c.NodeID, c.GRPCAddr)
 	p.components(&c)
 	c.RoomList = p.roomList()
 	if err := errors.Join(p.errs...); err != nil {

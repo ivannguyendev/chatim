@@ -44,8 +44,8 @@ func TestRealMainServeFailsOnInvalidConfig(t *testing.T) {
 
 func TestRunFailsFastWhenMongoIsUnreachable(t *testing.T) {
 	t.Setenv("MONGO_URI", "mongodb://chatim:s3cr3t@127.0.0.1:1/?directConnection=true")
-	t.Setenv("CORE_ID", "core-unreachable")
-	t.Setenv("CORE_CONNECT_TIMEOUT", "300ms")
+	t.Setenv("CHAT_NODE_ID", "chat-unreachable")
+	t.Setenv("CHAT_CONNECT_TIMEOUT", "300ms")
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -56,7 +56,7 @@ func TestRunFailsFastWhenMongoIsUnreachable(t *testing.T) {
 		t.Fatal("run = nil, want a connect error")
 	}
 	if took := time.Since(begin); took > 5*time.Second {
-		t.Fatalf("run took %v to fail, want it bounded by CORE_CONNECT_TIMEOUT", took)
+		t.Fatalf("run took %v to fail, want it bounded by CHAT_CONNECT_TIMEOUT", took)
 	}
 	if strings.Contains(err.Error(), "s3cr3t") {
 		t.Fatalf("run error %q leaks the mongo password", err)
@@ -65,10 +65,10 @@ func TestRunFailsFastWhenMongoIsUnreachable(t *testing.T) {
 
 func TestConnectErrorsHideCredentials(t *testing.T) {
 	cfg := config.Config{
-		CoreID:         "core-redact",
+		NodeID:         "chat-redact",
 		ConnectTimeout: 300 * time.Millisecond,
 		MongoURI:       "mongodb://chatim:s3cr3t@[bad/?replicaSet=rs0",
-		NATSURL:        "nats://core:s3cr3t@[bad",
+		NATSURL:        "nats://chat:s3cr3t@[bad",
 	}
 	c := &clients{}
 	defer c.close(t.Context(), quiet)

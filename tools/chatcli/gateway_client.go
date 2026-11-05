@@ -16,7 +16,7 @@ const defaultGatewayURL = "http://chatim-gateway-1:8080"
 type gateway struct {
 	base    context.Context
 	timeout time.Duration
-	core    chatimv1connect.CoreServiceClient
+	chat    chatimv1connect.ChatServiceClient
 	mention chatimv1connect.MentionServiceClient
 }
 
@@ -31,7 +31,7 @@ func newGateway(base context.Context, url, token string, timeout time.Duration) 
 	return &gateway{
 		base:    base,
 		timeout: timeout,
-		core:    chatimv1connect.NewCoreServiceClient(client, url, connect.WithInterceptors(bearer)),
+		chat:    chatimv1connect.NewChatServiceClient(client, url, connect.WithInterceptors(bearer)),
 		mention: chatimv1connect.NewMentionServiceClient(client, url, connect.WithInterceptors(bearer)),
 	}
 }

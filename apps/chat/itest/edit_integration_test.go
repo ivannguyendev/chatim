@@ -23,7 +23,7 @@ func callerAs(ctx context.Context, user string) context.Context {
 	return metadata.AppendToOutgoingContext(ctx, chatrpc.TenantHeader, itTenant, chatrpc.UserHeader, user)
 }
 
-func sendAs(t *testing.T, client chatimv1.CoreServiceClient, user, roomID, cid, text string) uint64 {
+func sendAs(t *testing.T, client chatimv1.ChatServiceClient, user, roomID, cid, text string) uint64 {
 	t.Helper()
 	resp, err := sendRetrying(callerAs(t.Context(), user), client, &chatimv1.SendMessageRequest{RoomId: roomID, Cid: cid, Text: text})
 	if err != nil {
@@ -32,7 +32,7 @@ func sendAs(t *testing.T, client chatimv1.CoreServiceClient, user, roomID, cid, 
 	return resp.GetSeq()
 }
 
-func historyAs(t *testing.T, client chatimv1.CoreServiceClient, user, roomID string) map[uint64]*chatimv1.Message {
+func historyAs(t *testing.T, client chatimv1.ChatServiceClient, user, roomID string) map[uint64]*chatimv1.Message {
 	t.Helper()
 	req := &chatimv1.GetHistoryRequest{RoomId: roomID, Anchor: chatimv1.HistoryAnchor_HISTORY_ANCHOR_LATEST, Limit: 50}
 	resp, err := client.GetHistory(callerAs(t.Context(), user), req)
@@ -46,7 +46,7 @@ func historyAs(t *testing.T, client chatimv1.CoreServiceClient, user, roomID str
 	return out
 }
 
-func editHistory(t *testing.T, client chatimv1.CoreServiceClient, roomID string, seq uint64) []*chatimv1.MessageVersion {
+func editHistory(t *testing.T, client chatimv1.ChatServiceClient, roomID string, seq uint64) []*chatimv1.MessageVersion {
 	t.Helper()
 	resp, err := client.GetEditHistory(caller(t.Context()), &chatimv1.GetEditHistoryRequest{RoomId: roomID, Seq: seq, Limit: 100})
 	if err != nil {
@@ -77,11 +77,11 @@ func awaitLiveEvent(t *testing.T, live <-chan *nats.Msg, id string) *chatimv1.Ev
 
 func TestRealInfraEditShowsInHistoryEditHistoryAndLive(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastSweep)
-	client := dialCore(t, core.cfg)
+	chat := startChatNode(t, it, itFastSweep)
+	client := dialChat(t, chat.cfg)
 	roomID := createRoom(t, client)
 	room := parseRoom(t, roomID)
-	live := subscribeLive(t, it, core.cfg, roomID)
+	live := subscribeLive(t, it, chat.cfg, roomID)
 	seq := sendAs(t, client, itUser, roomID, "edit-a", "before")
 
 	req := &chatimv1.EditMessageRequest{RoomId: roomID, Seq: seq, Text: "after"}
@@ -109,38 +109,38 @@ func TestRealInfraEditShowsInHistoryEditHistoryAndLive(t *testing.T) {
 	}
 }
 
-func TestRealInfraSweeperProjectsAnEditWrittenOutsideTheCore(t *testing.T) {
+func TestRealInfraSweeperProjectsAnEditWrittenOutsideTheChat(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastSweep)
-	client := dialCore(t, core.cfg)
+	chat := startChatNode(t, it, itFastSweep)
+	client := dialChat(t, chat.cfg)
 	roomID := createRoom(t, client)
 	room := parseRoom(t, roomID)
-	live := subscribeLive(t, it, core.cfg, roomID)
+	live := subscribeLive(t, it, chat.cfg, roomID)
 	seq := sendAs(t, client, itUser, roomID, "edit-b", "original")
-	core.awaitSweeper(t)
+	chat.awaitSweeper(t)
 
-	st := itStore(it, core)
+	st := itStore(it, chat)
 	sentAt := time.Now().UTC().Truncate(time.Millisecond)
 	original := domain.Edit{
 		Room: room, Seq: seq, Kind: domain.EditOriginal, Tenant: itTenant, By: itUser, Text: "original", At: sentAt,
 		Mentions: []domain.MentionTarget{{Kind: domain.MentionUser, ID: "minh", At: sentAt}},
 	}
 	if err := st.Append(t.Context(), original); err != nil {
-		t.Fatalf("append the original row outside the core: %v", err)
+		t.Fatalf("append the original row outside the chat: %v", err)
 	}
 	fact := domain.Edit{
 		Room: room, Seq: seq, Version: 1, Kind: domain.EditText, Tenant: itTenant, By: itUser,
-		Text: "edited outside the core", At: time.Now().UTC().Truncate(time.Millisecond),
+		Text: "edited outside the chat", At: time.Now().UTC().Truncate(time.Millisecond),
 	}
 	appended := time.Now()
 	if err := st.Append(t.Context(), fact); err != nil {
-		t.Fatalf("append an edit outside the core: %v", err)
+		t.Fatalf("append an edit outside the chat: %v", err)
 	}
 	if !flagged(t, st, store.StateEdits, room, seq) {
-		t.Fatalf("edit fact appended outside the core is not flagged, want it pending until the sweeper projects it")
+		t.Fatalf("edit fact appended outside the chat is not flagged, want it pending until the sweeper projects it")
 	}
 	ev := awaitLiveEvent(t, live, pbconv.MessageChangeEventID(room, 0, seq, 1))
-	expectSweptWithin(t, core, appended, "msg_edited of a fact never projected")
+	expectSweptWithin(t, chat, appended, "msg_edited of a fact never projected")
 	if e := ev.GetMessageEdited(); e.GetVer() != 1 || e.GetMessage().GetText() != fact.Text || e.GetMessage().GetVer() != 1 {
 		t.Fatalf("msg_edited from the sweeper = %v, want the projected snapshot at version 1", ev)
 	}
@@ -156,11 +156,11 @@ func TestRealInfraSweeperProjectsAnEditWrittenOutsideTheCore(t *testing.T) {
 
 func TestRealInfraDeletePurgesOlderTextsAndBlocksLaterEdits(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastSweep)
-	client := dialCore(t, core.cfg)
+	chat := startChatNode(t, it, itFastSweep)
+	client := dialChat(t, chat.cfg)
 	roomID := createRoom(t, client)
 	room := parseRoom(t, roomID)
-	live := subscribeLive(t, it, core.cfg, roomID)
+	live := subscribeLive(t, it, chat.cfg, roomID)
 	seq := sendAs(t, client, itUser, roomID, "edit-c", "secret v0")
 	if _, err := client.EditMessage(caller(t.Context()), &chatimv1.EditMessageRequest{RoomId: roomID, Seq: seq, Text: "secret v1"}); err != nil {
 		t.Fatalf("EditMessage: %v", err)
@@ -177,11 +177,11 @@ func TestRealInfraDeletePurgesOlderTextsAndBlocksLaterEdits(t *testing.T) {
 	if d := ev.GetMessageDeleted(); d.GetVer() != 2 || !d.GetMessage().GetDeleted() || d.GetMessage().GetText() != "" {
 		t.Fatalf("msg_deleted event = %v, want version 2 without text", ev)
 	}
-	facts, err := itStore(it, core).History(t.Context(), store.MsgKey{Room: room, Seq: seq}, 0, store.MaxEditPage)
+	facts, err := itStore(it, chat).History(t.Context(), store.MsgKey{Room: room, Seq: seq}, 0, store.MaxEditPage)
 	if err != nil || len(facts) != 2 || facts[0].Text != "" || facts[1].Kind != domain.EditDelete {
 		t.Fatalf("facts after delete = %+v, %v; want v1 without text, then the delete", facts, err)
 	}
-	if row, err := itStore(it, core).At(t.Context(), store.MsgKey{Room: room, Seq: seq}, 0); err != nil || row.Kind != domain.EditOriginal || row.Text != "" {
+	if row, err := itStore(it, chat).At(t.Context(), store.MsgKey{Room: room, Seq: seq}, 0); err != nil || row.Kind != domain.EditOriginal || row.Text != "" {
 		t.Fatalf("original row after delete = %+v, %v; want it kept without text", row, err)
 	}
 	if v := editHistory(t, client, roomID, seq); len(v) != 0 {

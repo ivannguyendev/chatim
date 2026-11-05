@@ -46,7 +46,7 @@ Scenarios:
 Limits: each websocket connection uses one file descriptor. Run with
   make poc TOOL=wsload POC_FLAGS="--ulimit nofile=65536:65536" ARGS="..."
 The websocket nodes need the same limit (compose x-websocket sets ulimits nofile 65536).
-On dev the tool shares the CPU with the nodes, the cores and the databases, so latency
+On dev the tool shares the CPU with the nodes, the nodes and the databases, so latency
 numbers only validate the tool.
 
 Results go to -out as summary.txt and summary.json.

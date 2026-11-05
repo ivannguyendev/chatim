@@ -58,7 +58,7 @@ func (j *joinsAfterFinish) AddMembers(ctx context.Context, jn domain.Join, users
 	fail := j.failFirst && len(j.finished) == 1
 	j.mu.Unlock()
 	if fail {
-		return store.JoinResult{}, errors.New("core died after finishing the request")
+		return store.JoinResult{}, errors.New("chat node died after finishing the request")
 	}
 	return j.Rooms.AddMembers(ctx, jn, users)
 }

@@ -24,16 +24,16 @@ const itProbeTimeout = 2 * time.Second
 
 const itSweeperStarted = "event sweeper started"
 
-var itFastSweep = map[string]string{"CORE_DRAIN_DELAY": "200ms", "PUB_ACK_TIMEOUT": "500ms", "SWEEP_MIN_AGE": "2s", "SWEEP_INTERVAL": "200ms", "STATE_CLEAR_FLUSH": "100ms", "STATE_CLEAR_TIMEOUT": "1s", "READ_EVENT_WINDOW": "200ms"}
+var itFastSweep = map[string]string{"CHAT_DRAIN_DELAY": "200ms", "PUB_ACK_TIMEOUT": "500ms", "SWEEP_MIN_AGE": "2s", "SWEEP_INTERVAL": "200ms", "STATE_CLEAR_FLUSH": "100ms", "STATE_CLEAR_TIMEOUT": "1s", "READ_EVENT_WINDOW": "200ms"}
 
-type itCore struct {
+type itChatNode struct {
 	cfg     config.Config
 	started <-chan struct{}
 }
 
-func startCore(t *testing.T, it *itInfra, env map[string]string) itCore {
+func startChatNode(t *testing.T, it *itInfra, env map[string]string) itChatNode {
 	t.Helper()
-	cfg := it.coreConfig(t, env)
+	cfg := it.chatConfig(t, env)
 	started := make(chan struct{})
 	logger := slog.New(&sweeperStartSignal{
 		Handler: slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}),
@@ -41,20 +41,20 @@ func startCore(t *testing.T, it *itInfra, env map[string]string) itCore {
 		started: started,
 	})
 	ctx, cancel := context.WithCancel(context.Background())
-	core := &running{done: make(chan struct{})}
+	chat := &running{done: make(chan struct{})}
 	go func() {
-		defer close(core.done)
-		core.err = app.Run(ctx, cfg, logger)
+		defer close(chat.done)
+		chat.err = app.Run(ctx, cfg, logger)
 	}()
 	t.Cleanup(func() {
 		cancel()
-		<-core.done
+		<-chat.done
 	})
-	awaitReady(t, cfg, core)
-	return itCore{cfg: cfg, started: started}
+	awaitReady(t, cfg, chat)
+	return itChatNode{cfg: cfg, started: started}
 }
 
-func (c itCore) awaitSweeper(t *testing.T) {
+func (c itChatNode) awaitSweeper(t *testing.T) {
 	t.Helper()
 	select {
 	case <-c.started:

@@ -15,11 +15,11 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/pb/chatim/v1/chatimv1connect"
 )
 
-const historyPath = chatimv1.CoreService_GetHistory_FullMethodName
+const historyPath = chatimv1.ChatService_GetHistory_FullMethodName
 
 var historyJSON = []byte(`{"roomId":"42"}`)
 
-func TestBadTokensGet401BeforeAnyCoreCall(t *testing.T) {
+func TestBadTokensGet401BeforeAnyChatNodeCall(t *testing.T) {
 	h := newHarness(t, roomy)
 	good := h.token(t, claims{})
 	other := &harness{}
@@ -49,8 +49,8 @@ func TestBadTokensGet401BeforeAnyCoreCall(t *testing.T) {
 			t.Fatalf("%s reason %q not counted", tc.name, tc.reason)
 		}
 	}
-	if len(h.core.recorded()) != 0 {
-		t.Fatal("a refused request reached core")
+	if len(h.chat.recorded()) != 0 {
+		t.Fatal("a refused request reached chat")
 	}
 	logs := h.logs.String()
 	if !strings.Contains(logs, "gateway auth failed") || strings.Contains(logs, good) || strings.Contains(logs, "Authorization") {
@@ -80,9 +80,9 @@ func TestPerUserRateKeepsUsersAndTenantsApart(t *testing.T) {
 	}
 }
 
-func hangCore(h *harness) (started, release chan struct{}) {
+func hangingChat(h *harness) (started, release chan struct{}) {
 	started, release = make(chan struct{}, 4), make(chan struct{})
-	h.core.set(func(f *fakeCore) { f.started, f.release = started, release })
+	h.chat.set(func(f *fakeChat) { f.started, f.release = started, release })
 	return started, release
 }
 
@@ -90,7 +90,7 @@ func TestUserInflightAndNodeGateRefuseWhileACallHangs(t *testing.T) {
 	for name, l := range map[string]limits{"user": {rate: 100, burst: 100, inflight: 1, node: 100}, "node": {rate: 100, burst: 100, inflight: 32, node: 1}} {
 		t.Run(name, func(t *testing.T) {
 			h := newHarness(t, l)
-			started, release := hangCore(h)
+			started, release := hangingChat(h)
 			token := bearerOf(h.token(t, claims{}))
 			first := make(chan int, 1)
 			go func() {
@@ -125,7 +125,7 @@ func TestUserInflightAndNodeGateRefuseWhileACallHangs(t *testing.T) {
 	}
 }
 
-func TestOversizeAndCompressedBodiesNeverReachCore(t *testing.T) {
+func TestOversizeAndCompressedBodiesNeverReachChat(t *testing.T) {
 	h := newHarness(t, roomy)
 	token := bearerOf(h.token(t, claims{}))
 	big := []byte(`{"roomId":"` + strings.Repeat("4", 5000) + `"}`)
@@ -140,8 +140,8 @@ func TestOversizeAndCompressedBodiesNeverReachCore(t *testing.T) {
 	if gz.status == http.StatusOK {
 		t.Fatal("a gzip body was accepted")
 	}
-	if len(h.core.recorded()) != 0 {
-		t.Fatal("an oversize or compressed body reached core")
+	if len(h.chat.recorded()) != 0 {
+		t.Fatal("an oversize or compressed body reached chat")
 	}
 }
 
@@ -201,7 +201,7 @@ func TestMetricSourcesArePrebuilt(t *testing.T) {
 	if names["auth_failures_total"] != 22 || names["rate_limited_total"] != 2 || names["inflight_rejected_total"] != 1 || names["body_too_large_total"] != 1 || names["commands_total"] != 1 || names["inflight"] != 1 {
 		t.Fatalf("sources = %v", names)
 	}
-	client := chatimv1connect.NewCoreServiceClient(h.server.Client(), h.server.URL, withToken(h.token(t, claims{})))
+	client := chatimv1connect.NewChatServiceClient(h.server.Client(), h.server.URL, withToken(h.token(t, claims{})))
 	if _, err := client.GetHistory(t.Context(), connect.NewRequest(&chatimv1.GetHistoryRequest{RoomId: "42"})); err != nil {
 		t.Fatal(err)
 	}

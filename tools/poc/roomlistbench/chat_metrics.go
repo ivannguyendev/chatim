@@ -32,7 +32,7 @@ func scrapeCaches(ctx context.Context, url string) (cacheCounts, error) {
 	for sc.Scan() {
 		line := sc.Text()
 		for _, kind := range []string{"hits", "misses"} {
-			prefix := "chatim_core_room_cache_" + kind + "_total{cache=\""
+			prefix := "chatim_chat_room_cache_" + kind + "_total{cache=\""
 			rest, ok := strings.CutPrefix(line, prefix)
 			if !ok {
 				continue

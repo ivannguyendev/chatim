@@ -928,7 +928,7 @@ var File_chatim_v1_events_proto protoreflect.FileDescriptor
 
 const file_chatim_v1_events_proto_rawDesc = "" +
 	"\n" +
-	"\x16chatim/v1/events.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x17chatim/v1/members.proto\x1a\x1dchatim/v1/message_links.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a\x19chatim/v1/room_list.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xed\f\n" +
+	"\x16chatim/v1/events.proto\x12\tchatim.v1\x1a\x14chatim/v1/chat.proto\x1a\x17chatim/v1/members.proto\x1a\x1dchatim/v1/message_links.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a\x19chatim/v1/room_list.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xed\f\n" +
 	"\x05Event\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06tenant\x18\x02 \x01(\tR\x06tenant\x12\x17\n" +
@@ -1079,7 +1079,7 @@ func file_chatim_v1_events_proto_init() {
 	if File_chatim_v1_events_proto != nil {
 		return
 	}
-	file_chatim_v1_core_proto_init()
+	file_chatim_v1_chat_proto_init()
 	file_chatim_v1_members_proto_init()
 	file_chatim_v1_message_links_proto_init()
 	file_chatim_v1_reactions_pins_proto_init()

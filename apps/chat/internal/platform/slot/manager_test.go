@@ -12,12 +12,12 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/slotmap"
 )
 
-func TestSingleCoreClaimsAllSlots(t *testing.T) {
+func TestSingleChatNodeClaimsAllSlots(t *testing.T) {
 	mr, rdb := newRedis(t)
-	a := newManager(t, rdb, "core-a")
+	a := newManager(t, rdb, "chat-a")
 	stepAll(t, a)
 	if n := len(a.Owned()); n != slotmap.Count {
-		t.Fatalf("core-a owns %d slots, want %d", n, slotmap.Count)
+		t.Fatalf("chat-a owns %d slots, want %d", n, slotmap.Count)
 	}
 	assertPartition(t, mr, a)
 	if !a.Owns(0) {
@@ -25,9 +25,9 @@ func TestSingleCoreClaimsAllSlots(t *testing.T) {
 	}
 }
 
-func TestCoresConvergeToFairShares(t *testing.T) {
+func TestChatNodesConvergeToFairShares(t *testing.T) {
 	mr, rdb := newRedis(t)
-	ms := []*Manager{newManager(t, rdb, "core-a"), newManager(t, rdb, "core-b"), newManager(t, rdb, "core-c")}
+	ms := []*Manager{newManager(t, rdb, "chat-a"), newManager(t, rdb, "chat-b"), newManager(t, rdb, "chat-c")}
 	for range 4 {
 		stepAll(t, ms...)
 	}
@@ -35,9 +35,9 @@ func TestCoresConvergeToFairShares(t *testing.T) {
 	assertShares(t, 340, 342, ms...)
 }
 
-func TestDeadCoreSlotsAreTakenOver(t *testing.T) {
+func TestDeadChatNodeSlotsAreTakenOver(t *testing.T) {
 	mr, rdb := newRedis(t)
-	a, b, c := newManager(t, rdb, "core-a"), newManager(t, rdb, "core-b"), newManager(t, rdb, "core-c")
+	a, b, c := newManager(t, rdb, "chat-a"), newManager(t, rdb, "chat-b"), newManager(t, rdb, "chat-c")
 	for range 4 {
 		stepAll(t, a, b, c)
 	}
@@ -46,8 +46,8 @@ func TestDeadCoreSlotsAreTakenOver(t *testing.T) {
 		advance(t, mr, rdb, time.Second)
 		stepAll(t, a, b)
 	}
-	if mr.Exists(slotmap.CoreKey("core-c")) {
-		t.Fatal("core-c heartbeat should have expired")
+	if mr.Exists(slotmap.NodeKey("chat-c")) {
+		t.Fatal("chat-c heartbeat should have expired")
 	}
 	assertPartition(t, mr, a, b)
 	assertShares(t, 512, 512, a, b)
@@ -55,7 +55,7 @@ func TestDeadCoreSlotsAreTakenOver(t *testing.T) {
 
 func TestRedisDataLossReconverges(t *testing.T) {
 	mr, rdb := newRedis(t)
-	ms := []*Manager{newManager(t, rdb, "core-a"), newManager(t, rdb, "core-b"), newManager(t, rdb, "core-c")}
+	ms := []*Manager{newManager(t, rdb, "chat-a"), newManager(t, rdb, "chat-b"), newManager(t, rdb, "chat-c")}
 	for range 4 {
 		stepAll(t, ms...)
 	}
@@ -71,8 +71,8 @@ func TestRedisDataLossReconverges(t *testing.T) {
 func TestReleaseAllHandsSlotsBack(t *testing.T) {
 	mr, rdb := newRedis(t)
 	drained := &hookLog{}
-	a := newManager(t, rdb, "core-a", withBeforeRelease(drained.record))
-	b := newManager(t, rdb, "core-b")
+	a := newManager(t, rdb, "chat-a", withBeforeRelease(drained.record))
+	b := newManager(t, rdb, "chat-b")
 	for range 3 {
 		stepAll(t, a, b)
 	}
@@ -89,7 +89,7 @@ func TestReleaseAllHandsSlotsBack(t *testing.T) {
 			t.Fatalf("slot %d lease still in redis after ReleaseAll", s)
 		}
 	}
-	if mr.Exists(slotmap.CoreKey("core-a")) || registered(mr, "core-a") {
+	if mr.Exists(slotmap.NodeKey("chat-a")) || registered(mr, "chat-a") {
 		t.Fatal("ReleaseAll must remove the heartbeat and the registry member")
 	}
 	stepAll(t, b)
@@ -98,26 +98,26 @@ func TestReleaseAllHandsSlotsBack(t *testing.T) {
 
 func TestLostLeaseStopsOwnership(t *testing.T) {
 	mr, rdb := newRedis(t)
-	a := newManager(t, rdb, "core-a")
+	a := newManager(t, rdb, "chat-a")
 	stepAll(t, a)
 	mr.FlushAll()
-	b := newManager(t, rdb, "core-b")
+	b := newManager(t, rdb, "chat-b")
 	stepAll(t, b)
 	stepAll(t, a)
 	if a.Owns(0) || len(a.Owned()) != 0 {
-		t.Fatalf("core-a still owns %d slots after losing its leases", len(a.Owned()))
+		t.Fatalf("chat-a still owns %d slots after losing its leases", len(a.Owned()))
 	}
 }
 
 func TestNewValidatesConfig(t *testing.T) {
 	_, rdb := newRedis(t)
 	bad := []Config{
-		{CoreID: ""},
-		{CoreID: "core*"},
-		{CoreID: "core-a", Tick: time.Second, LeaseTTL: 2 * time.Second},
-		{CoreID: "core-a", Tick: time.Second, HeartbeatTTL: 2 * time.Second, LeaseTTL: 10 * time.Second},
-		{CoreID: "core-a", Tick: time.Second, HookTimeout: time.Second},
-		{CoreID: "core-a", Tick: time.Second, HookTimeout: -time.Millisecond},
+		{NodeID: ""},
+		{NodeID: "chat*"},
+		{NodeID: "chat-a", Tick: time.Second, LeaseTTL: 2 * time.Second},
+		{NodeID: "chat-a", Tick: time.Second, HeartbeatTTL: 2 * time.Second, LeaseTTL: 10 * time.Second},
+		{NodeID: "chat-a", Tick: time.Second, HookTimeout: time.Second},
+		{NodeID: "chat-a", Tick: time.Second, HookTimeout: -time.Millisecond},
 	}
 	for _, cfg := range bad {
 		if _, err := New(rdb, cfg, nil); err == nil {
@@ -137,7 +137,7 @@ func newRedis(t *testing.T) (*miniredis.Miniredis, *redis.Client) {
 
 func newManager(t *testing.T, rdb *redis.Client, id string, tune ...func(*Config)) *Manager {
 	t.Helper()
-	cfg := Config{CoreID: id, Addr: id + ":9000"}
+	cfg := Config{NodeID: id, Addr: id + ":9000"}
 	for _, f := range tune {
 		f(&cfg)
 	}
@@ -152,7 +152,7 @@ func stepAll(t *testing.T, ms ...*Manager) {
 	t.Helper()
 	for _, m := range ms {
 		if err := m.Step(context.Background()); err != nil {
-			t.Fatalf("%s Step: %v", m.cfg.CoreID, err)
+			t.Fatalf("%s Step: %v", m.cfg.NodeID, err)
 		}
 	}
 }
@@ -174,9 +174,9 @@ func assertDisjoint(t *testing.T, ms ...*Manager) map[uint16]string {
 	for _, m := range ms {
 		for _, s := range m.Owned() {
 			if prev, dup := owner[s]; dup {
-				t.Fatalf("slot %d owned by both %s and %s", s, prev, m.cfg.CoreID)
+				t.Fatalf("slot %d owned by both %s and %s", s, prev, m.cfg.NodeID)
 			}
-			owner[s] = m.cfg.CoreID
+			owner[s] = m.cfg.NodeID
 		}
 	}
 	return owner
@@ -186,7 +186,7 @@ func assertShares(t *testing.T, lo, hi int, ms ...*Manager) {
 	t.Helper()
 	for _, m := range ms {
 		if n := len(m.Owned()); n < lo || n > hi {
-			t.Fatalf("%s owns %d slots, want %d..%d", m.cfg.CoreID, n, lo, hi)
+			t.Fatalf("%s owns %d slots, want %d..%d", m.cfg.NodeID, n, lo, hi)
 		}
 	}
 }

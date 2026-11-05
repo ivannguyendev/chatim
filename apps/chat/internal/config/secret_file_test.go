@@ -30,7 +30,7 @@ func TestLoadReadsPasswordFiles(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			setEnv(t, map[string]string{
-				"MONGO_USER": "core", "MONGO_PASSWORD_FILE": secretFile(t, "mongo-"+tt.content), "MONGO_PASSWORD": tt.plain,
+				"MONGO_USER": "chat", "MONGO_PASSWORD_FILE": secretFile(t, "mongo-"+tt.content), "MONGO_PASSWORD": tt.plain,
 				"REDIS_PASSWORD_FILE": secretFile(t, tt.content), "REDIS_PASSWORD": tt.plain,
 				"REDIS_DEDUPE_PASSWORD_FILE": secretFile(t, "dedupe-"+tt.content), "REDIS_DEDUPE_PASSWORD": tt.plain,
 			})

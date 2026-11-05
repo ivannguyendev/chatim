@@ -12,7 +12,7 @@ import (
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-type fakeCore struct {
+type fakeChat struct {
 	mu      sync.Mutex
 	holds   map[uint64]chan codes.Code
 	panics  map[uint64]bool
@@ -22,8 +22,8 @@ type fakeCore struct {
 	calls   atomic.Int64
 }
 
-func newFakeCore() *fakeCore {
-	return &fakeCore{
+func newFakeChat() *fakeChat {
+	return &fakeChat{
 		holds:   map[uint64]chan codes.Code{},
 		panics:  map[uint64]bool{},
 		nils:    map[uint64]bool{},
@@ -32,7 +32,7 @@ func newFakeCore() *fakeCore {
 	}
 }
 
-func (f *fakeCore) Execute(ctx context.Context, claims auth.Claims, req *chatimv1.ClientRequest) (*chatimv1.ServerResponse, command.Outcome) {
+func (f *fakeChat) Execute(ctx context.Context, claims auth.Claims, req *chatimv1.ClientRequest) (*chatimv1.ServerResponse, command.Outcome) {
 	f.calls.Add(1)
 	f.started <- req.GetId()
 	f.claims <- claims
@@ -65,7 +65,7 @@ func (f *fakeCore) Execute(ctx context.Context, claims auth.Claims, req *chatimv
 	return resp, command.Outcome{Command: "Test", Code: code}
 }
 
-func (f *fakeCore) hold(id uint64) chan codes.Code {
+func (f *fakeChat) hold(id uint64) chan codes.Code {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	ch := make(chan codes.Code, 1)
@@ -73,13 +73,13 @@ func (f *fakeCore) hold(id uint64) chan codes.Code {
 	return ch
 }
 
-func (f *fakeCore) panicOn(id uint64) {
+func (f *fakeChat) panicOn(id uint64) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.panics[id] = true
 }
 
-func (f *fakeCore) startedIDs() []uint64 {
+func (f *fakeChat) startedIDs() []uint64 {
 	var ids []uint64
 	for {
 		select {

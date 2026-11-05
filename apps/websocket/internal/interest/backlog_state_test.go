@@ -81,7 +81,7 @@ func TestALoadFailedThatDoesNotFitIsSentAgainOnceTheQueueDrains(t *testing.T) {
 		s := &fakeSink{mode: refuseAll}
 		c := mustRegister(t, f.table, "t1", "u", s)
 		synctest.Wait()
-		f.loader.answer(0, reply{err: errors.New("core down")})
+		f.loader.answer(0, reply{err: errors.New("chat down")})
 		synctest.Wait()
 		if got := s.take(); len(got) != 0 || f.table.backlogged.Load() != 1 {
 			t.Fatalf("frames %v backlogged %d", got, f.table.backlogged.Load())
@@ -112,7 +112,7 @@ func TestASuspendedUserWhoseLoadFailedIsNeverSentABacklogResync(t *testing.T) {
 		f.table.Jumped(lagJump(f.seq))
 		synctest.Wait()
 		s.refusing(refuseAll)
-		f.loader.answer(1, reply{err: errors.New("core down")})
+		f.loader.answer(1, reply{err: errors.New("chat down")})
 		synctest.Wait()
 		if got := s.take(); len(got) != 0 || f.table.backlogged.Load() != 1 {
 			t.Fatalf("frames %v backlogged %d", got, f.table.backlogged.Load())

@@ -29,12 +29,12 @@ func TestRealInfraReadsOfOneWindowShareOneEventAndClearEveryFlag(t *testing.T) {
 	it := realInfra(t)
 	env := maps.Clone(itFastSweep)
 	env["READ_EVENT_WINDOW"], env["SWEEP_MIN_AGE"] = "3s", "6s"
-	core := startCore(t, it, env)
-	client := dialCore(t, core.cfg)
+	chat := startChatNode(t, it, env)
+	client := dialChat(t, chat.cfg)
 	roomID := createRoom(t, client)
 	room := parseRoom(t, roomID)
-	live := subscribeLive(t, it, core.cfg, roomID)
-	st := itStore(it, core)
+	live := subscribeLive(t, it, chat.cfg, roomID)
+	st := itStore(it, chat)
 	seq := sendAs(t, client, itUser, roomID, "read-window-1", "read me")
 	start := time.Now()
 	var entries []*chatimv1.ReadEntry
@@ -49,7 +49,7 @@ func TestRealInfraReadsOfOneWindowShareOneEventAndClearEveryFlag(t *testing.T) {
 	if got := ev.GetReadPositions().GetEntries(); len(got) != 2 || ev.GetActor() != "" {
 		t.Fatalf("read_positions = %v, want both readers in one event with no actor", ev)
 	}
-	deadline := start.Add(core.cfg.Sweep.MinAge)
+	deadline := start.Add(chat.cfg.Sweep.MinAge)
 	for _, user := range []string{itUser, "bob"} {
 		for readFlagged(t, st, room, user) {
 			if time.Now().After(deadline) {

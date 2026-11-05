@@ -22,7 +22,7 @@ func itReactions(st *mongostore.Store) store.Interactions { return st.Interactio
 
 func itPins(st *mongostore.Store) store.Pins { return st.Pins() }
 
-func createRoomWith(t *testing.T, client chatimv1.CoreServiceClient, members []string) string {
+func createRoomWith(t *testing.T, client chatimv1.ChatServiceClient, members []string) string {
 	t.Helper()
 	resp, err := client.CreateRoom(caller(t.Context()), &chatimv1.CreateRoomRequest{
 		Type: chatimv1.RoomType_ROOM_TYPE_GROUP, Name: "reactions", Members: members, RequestId: rand.Text(),

@@ -120,7 +120,7 @@ func TestAmbiguousWriteBesideContentionKeepsItsReservation(t *testing.T) {
 		expectErr(t, (<-c2).err, domain.ErrRetryLater)
 		assertYielded(t, rg)
 		if got, want := abortedKeys(rg), []dedupe.Key{remoteKey(roomA, "alice", "c1")}; !slices.Equal(got, want) {
-			t.Fatalf("aborted %v, want only %v: the ambiguous c2 keeps p:{core}", got, want)
+			t.Fatalf("aborted %v, want only %v: the ambiguous c2 keeps p:{chat}", got, want)
 		}
 		rg.sub.open()
 		_, err := rg.Send(ctx, cmd(roomA, "alice", "c2"))
@@ -151,7 +151,7 @@ func TestContentionWhileRetiringCountsNoYield(t *testing.T) {
 	})
 }
 
-func TestCIDPendingOnAnotherCoreIsCounted(t *testing.T) {
+func TestCIDPendingOnAnotherChatNodeIsCounted(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rg := newRig(t, baseConfig)
 		rg.cids.force(dedupe.Key{Room: roomA, User: "alice", CID: "c1"}, dedupe.PendingElsewhere, dedupe.Record{})

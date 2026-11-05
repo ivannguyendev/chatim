@@ -3,8 +3,8 @@
 > **Mục tiêu module:** Nâng cao trải nghiệm giao tiếp nhóm thông qua việc trả lời tin nhắn có trích dẫn (Quote Reply), theo dõi các cuộc thảo luận phụ theo luồng (Thread), nhắc tên thành viên (@mention), tổng hợp hộp thư "Tôi được nhắc tới" và gửi thông báo cho người được nhắc.
 
 > **Ai giữ phần nào:**
-> - **Core:** trả lời (doc trả lời, `rc`, `reply_threads`, projection `reply_index`), đích mention trên tin (`mt`/`ma` kèm giờ `at`), kiểm hợp lệ và phát event.
-> - **Mention App** (`modules/mention`, chạy nhúng trong core, D162–D176): chỉ mục `mentions`, `ListMentions`, nhóm của từng người, danh mục nhóm được tag, dữ liệu gợi ý `@nhóm`, thông báo theo người trên `CHATIM_NOTIFY`.
+> - **Chat:** trả lời (doc trả lời, `rc`, `reply_threads`, projection `reply_index`), đích mention trên tin (`mt`/`ma` kèm giờ `at`), kiểm hợp lệ và phát event.
+> - **Mention App** (`modules/mention`, chạy nhúng trong chat, D162–D176): chỉ mục `mentions`, `ListMentions`, nhóm của từng người, danh mục nhóm được tag, dữ liệu gợi ý `@nhóm`, thông báo theo người trên `CHATIM_NOTIFY`.
 >
 > Xem [tóm tắt Mention App](../plans/2026-10-17-mention-app-summary.md) và [danh mục event](../events.md).
 
@@ -16,7 +16,7 @@
 |---|---|---|---|
 | **UC-THRD-01** | **Trả lời tin nhắn có trích dẫn (Quote Reply)** | Thành viên | Trả lời một tin nhắn cụ thể. Tin trả lời hiển thị một đoạn trích ngắn của tin nhắn gốc để người đọc dễ dàng nắm bắt ngữ cảnh thảo luận. |
 | **UC-THRD-02** | **Theo dõi luồng trao đổi (Thread)** | Thành viên | Mở xem toàn bộ các tin nhắn trao đổi xoay quanh một tin nhắn gốc (Root message). Tin nhắn gốc hiển thị huy hiệu đếm số lượng phản hồi (`rc`: "5 câu trả lời"). |
-| **UC-THRD-03** | **Đề cập thành viên (@mention)** | Người gửi | Gõ `@tên` để nhắc một hoặc nhiều người, `@all` cho cả phòng, hoặc `@nhóm` (nhóm do hệ thống user/nhóm khai báo với Mention App). Client gợi ý từ `ListMembers` (core) và `ListRoomGroups` (Mention App). |
+| **UC-THRD-03** | **Đề cập thành viên (@mention)** | Người gửi | Gõ `@tên` để nhắc một hoặc nhiều người, `@all` cho cả phòng, hoặc `@nhóm` (nhóm do hệ thống user/nhóm khai báo với Mention App). Client gợi ý từ `ListMembers` (chat) và `ListRoomGroups` (Mention App). |
 | **UC-THRD-04** | **Hộp thư "Tôi được nhắc tới" (Mentions Inbox)** | Người nhận | Mở tab cá nhân xem các tin gần đây mình được nhắc trong mọi room đang ở (`ListMentions` của `MentionService`), mỗi tin một lần, kèm cờ đã đọc. |
 | **UC-THRD-05** | **Thông báo khi được nhắc** | Người nhận | Nhận `mention_notified` khi được nhắc (kể cả qua nhóm hoặc `@all` trong DM/group), `mention_retracted` khi tin bị sửa bỏ đích hoặc bị xoá. App notification (websocket M4, `push` Phase 2) giao tới máy. |
 | **UC-THRD-06** | **Chuyển tiếp tin nhắn (Forward)** | Thành viên | Chuyển tiếp một tin nhắn từ phòng này sang một phòng khác kèm nhãn "Được chuyển tiếp". |
@@ -31,25 +31,25 @@
 
 ```mermaid
 flowchart TD
-    Client["Client SDK (gửi tin kèm reply/mention)"] --> Core["Core (message/actor)"]
+    Client["Client SDK (gửi tin kèm reply/mention)"] --> Chat["Chat (message/actor)"]
 
     subgraph FastPath["1. Đường ghi tức thời"]
-        Core -->|"Insert doc kèm rp {th, s}, mt[{k,i,a}], ma/mat"| MongoMsg[("MongoDB messages")]
-        MongoMsg -->|Ack majority| Core
-        Core -->|Ack| Client
+        Chat -->|"Insert doc kèm rp {th, s}, mt[{k,i,a}], ma/mat"| MongoMsg[("MongoDB messages")]
+        MongoMsg -->|Ack majority| Chat
+        Chat -->|Ack| Client
     end
 
-    subgraph Replies["2. Core: consumer projections (slot 0)"]
-        Core -.->|"evt.{t}.message|mention.{rid}.msg_created"| Evt[("CHATIM_EVT")]
+    subgraph Replies["2. Chat: consumer projections (slot 0)"]
+        Chat -.->|"evt.{t}.message|mention.{rid}.msg_created"| Evt[("CHATIM_EVT")]
         Evt -->|"evt.>"| RI["reply_index"]
         RI -->|"AddReply rồi $inc rc +1 dưới phiếu hẹn, bit 4"| MongoMsg
         RI --> Threads[("reply_threads")]
     end
 
-    subgraph Mentions["3. Mention App: consumer mention (mọi core, queue group)"]
+    subgraph Mentions["3. Mention App: consumer mention (mọi node chat, queue group)"]
         Evt -->|"3 subject: mention msg_created, msg_edited, msg_deleted"| MA["consumer mention"]
         MA -->|"upsert có điều kiện message_ver"| Ments[("mentions, mention_rooms")]
-        MA -->|"người nhận: MembersOf, ListMembers, mention_user_groups"| Core
+        MA -->|"người nhận: MembersOf, ListMembers, mention_user_groups"| Chat
         MA -->|"gói WsPublish websocket.publish.{t}"| Notify[("CHATIM_WS")]
     end
 ```
@@ -60,7 +60,7 @@ flowchart TD
 sequenceDiagram
     autonumber
     participant Client as Client SDK
-    participant Core as Core (message/actor)
+    participant Chat as Chat (message/actor)
     participant Msgs as MongoDB (messages)
     participant Evt as NATS (CHATIM_EVT)
     participant RI as Projection reply_index
@@ -68,19 +68,19 @@ sequenceDiagram
     participant Ments as MongoDB (mentions)
     participant Notify as NATS (CHATIM_WS)
 
-    Client->>Core: SendMessage(reply_to=10010, mentions=[user usr_B], text="@usr_B xem giúp")
-    Core->>Msgs: Insert {_id: room│0│10045, rp: {th: 0, s: 10010}, mt: [{k: "user", i: "usr_B", a: 10:20:00}]}
-    Msgs-->>Core: OK (bit 1 trong _state)
-    Core-->>Client: Ack seq=10045
-    Core->>Evt: msg_created 10045 trên evt.t1.mention.{rid}.msg_created
+    Client->>Chat: SendMessage(reply_to=10010, mentions=[user usr_B], text="@usr_B xem giúp")
+    Chat->>Msgs: Insert {_id: room│0│10045, rp: {th: 0, s: 10010}, mt: [{k: "user", i: "usr_B", a: 10:20:00}]}
+    Msgs-->>Chat: OK (bit 1 trong _state)
+    Chat-->>Client: Ack seq=10045
+    Chat->>Evt: msg_created 10045 trên evt.t1.mention.{rid}.msg_created
 
-    par Phần trả lời (core, slot 0, lô ≤ 8192 / 3s)
+    par Phần trả lời (chat, slot 0, lô ≤ 8192 / 3s)
         Evt->>RI: msg_created 10045
         RI->>Msgs: AddReply rồi $inc rc +1 trên tin 10010 (bit 4), counts_changed
-    and Phần mention (một core bất kỳ, lô ≤ 512 / 250ms)
+    and Phần mention (một node chat bất kỳ, lô ≤ 512 / 250ms)
         Evt->>MA: msg_created 10045
         MA->>Ments: upsert user:usr_B state 1, created_at = at, message_ver 0
-        MA->>Core: MembersOf(room, [usr_B])
+        MA->>Chat: MembersOf(room, [usr_B])
         MA->>Notify: WsPublish mention_notified {room}-0-10045-m0-u:usr_B, targets [usr_B]
         MA-->>Evt: Ack sau PubAck
     end
@@ -89,7 +89,7 @@ sequenceDiagram
 
 ### 2.3. Sửa và xoá tin có mention
 
-- Core đóng dấu giờ cho từng đích (`at`): gửi tin thì mọi đích lấy giờ gửi; sửa tin thì đích giữ nguyên giữ giờ cũ, đích mới thêm lấy giờ của lần sửa (D166). Fact sửa trong `message_edits` lưu đích kèm `at`; fact xoá giữ đích của phiên bản bị xoá.
+- Chat đóng dấu giờ cho từng đích (`at`): gửi tin thì mọi đích lấy giờ gửi; sửa tin thì đích giữ nguyên giữ giờ cũ, đích mới thêm lấy giờ của lần sửa (D166). Fact sửa trong `message_edits` lưu đích kèm `at`; fact xoá giữ đích của phiên bản bị xoá.
 - `msg_edited`/`msg_deleted` mang `previous_mentions` = đích của phiên bản ngay trước (lệnh lấy từ tin trước khi đổi; sweeper lấy từ fact `ver − 1` hoặc fact xoá).
 - Mention App ghi: đích hiện tại → `state 1`; đích trong `previous_mentions` không còn → tombstone `state 2` (kể cả chưa có doc). Mọi lần ghi chỉ thắng khi `message_ver` của doc ≤ phiên bản của event, nên mọi thứ tự xử lý cho cùng doc cuối.
 - Thông báo tính từ chính event: `mention_notified` (`…-m{ver}`) cho người nhận của đích hiện tại trừ người nhận của đích trước; `mention_retracted` (`…-r{ver}`, `EDITED`/`DELETED`) cho phần ngược lại.
@@ -98,15 +98,15 @@ Ví dụ: Minh đã đọc room 777 tới tin 120 (gửi 10:03). 10:10 Lan sửa
 
 ### 2.4. `ListMentions` (Mention App)
 
-1. `RoomsOf(user)` của core: room đang ở, `joined_at`, `cleared_at`, `read_seq`; since của room = `max(joined_at, cleared_at)`.
+1. `RoomsOf(user)` của chat: room đang ở, `joined_at`, `cleared_at`, `read_seq`; since của room = `max(joined_at, cleared_at)`.
 2. Đường A: `user:{caller}` trên index `{tenant, target, state, created_at, message_key}`, chỉ `state 1`.
 3. Đường B: chỉ qua room của người gọi; `mention_rooms.last_shared_mention_at` theo lô 1.000 room → room có gì mới sau since → lô 200 room, một `find` `$or` (`all`; `group` + nhóm người gọi gửi mà đang `state 1` trong danh mục) → SORT_MERGE → dừng sớm.
 4. Gộp, bỏ trùng theo khoá tin; mỗi source tối đa 3 vòng mỗi trang, trang có thể ngắn kèm `next`.
 5. Đã đọc: giờ mention ≤ giờ gửi của tin tại `read_seq` (`SentTimes`, lô ≤ 200 khoá). Tenant trong `MENTION_HIDE_READ_TENANTS` bỏ mục đã đọc.
-6. Nội dung: `Authorize(read_history)` theo room + `VisibleMessages` (view của core: tin đã xoá, bị ẩn hoặc trước `cleared_at` bị bỏ).
+6. Nội dung: `Authorize(read_history)` theo room + `VisibleMessages` (view của chat: tin đã xoá, bị ẩn hoặc trước `cleared_at` bị bỏ).
 7. Lưới an toàn: chỉ giữ mục khi tin hiện tại còn đích đó; và **mỗi tin một mục trên mọi trang** (D174): bỏ mục nếu tin có đích khác chạm tới người xem với `at` mới hơn.
 
-Trang 20 mục (0 → 20, lớn hơn → `INVALID_ARGUMENT`); store hoặc core lỗi → `UNAVAILABLE`.
+Trang 20 mục (0 → 20, lớn hơn → `INVALID_ARGUMENT`); store hoặc chat lỗi → `UNAVAILABLE`.
 
 ### 2.5. Nhóm và gợi ý `@nhóm`
 
@@ -134,7 +134,7 @@ Trang 20 mục (0 → 20, lớn hơn → `INVALID_ARGUMENT`); store hoặc core 
 - Hệ quả: tin cha bị sửa thì trích dẫn hiện nội dung mới; tin cha bị xoá hoặc bị người đọc ẩn/clear thì trích dẫn còn `seq`, `sender` và cờ `deleted`/`hidden`, không còn text. Tin trả lời mà chính nó bị xoá hoặc bị ẩn thì không có `reply_preview`.
 
 ### 3.3. Chỉ mục mention không phụ thuộc thứ tự (D171, D173)
-- Consumer `mention` là queue group: mọi core cùng kéo, nên event của cùng một tin có thể được xử lý song song và lệch thứ tự.
+- Consumer `mention` là queue group: mọi node chat cùng kéo, nên event của cùng một tin có thể được xử lý song song và lệch thứ tự.
 - Event tự đủ thông tin (`at` từng đích, `previous_mentions`), mọi upsert có điều kiện `message_ver`, tombstone ghi cả khi chưa có doc và lấy `at` của đích làm `created_at`. Test chạy đủ 24 hoán vị {gửi, sửa bỏ, sửa thêm lại, xoá} trên memstore và Mongo cho cùng doc cuối.
 - Khoá doc mention duy nhất (D115):
   $$\text{\_id} = \text{khoá tin (24B)} \,│\, \text{loại đích (1 user, 2 group, 3 all)} \,│\, \text{id đích (không có với @all)}$$
@@ -146,7 +146,7 @@ Trang 20 mục (0 → 20, lớn hơn → `INVALID_ARGUMENT`); store hoặc core 
 
 ### 3.5. Đích mention trên tin (D115, D173)
 - Id đích theo `keys.ValidMentionID` (`[A-Za-z0-9_:-]{1,64}`). Actor đóng dấu `a` = giờ gửi; `message.Editor` giữ `a` cho đích đã có và đóng giờ fact cho đích mới. `domain.SameMentions` so đích theo danh tính, không so `a`, nên gửi lại cùng lệnh sửa vẫn là lần thử lại.
-- `publish.subjectFor` đặt `msg_created` có đích lên data kind `mention`, cả ở lệnh lẫn sweeper. Core không bung nhóm, không có `@here` và không giữ chỉ mục mention (việc của Mention App).
+- `publish.subjectFor` đặt `msg_created` có đích lên data kind `mention`, cả ở lệnh lẫn sweeper. Chat không bung nhóm, không có `@here` và không giữ chỉ mục mention (việc của Mention App).
 
 ### 3.6. Chuyển tiếp (D116, `message/forward_link.go`, phần parse ở `grpcsrv/forward.go`)
 - `forward_from` kèm `reply_to`, hoặc nguồn sai dạng (thread ≠ 0, seq 0) → `INVALID_ARGUMENT`.
@@ -236,7 +236,7 @@ Subject `websocket.publish.{t}` (`MENTION_WS_PUBLISH_ROOT`), gói `WsPublish{id,
 | `FailedPrecondition` | `domain.ErrHasReplies` | Xoá tin cha khi còn tin trả lời sống. | Không retry; xoá các tin trả lời trước. |
 | `InvalidArgument` | (Mention App) | `ListMentions` `limit` > 20; `SetUserGroups`/`SetGroups` quá 1.000 mục, id sai, `ver` 0, mục trùng, tên nhóm rỗng. | Không retry; sửa request. |
 | `PermissionDenied` / `NotFound` | (Mention App) | `ListRoomGroups` thiếu `read_members`; room không có hoặc khác tenant. | Không retry. |
-| `Unavailable` | (Mention App) | Store của app hoặc đọc core lỗi. | Retry; gửi lại `SetUserGroups`/`SetGroups` cùng request là an toàn (`ver`). |
+| `Unavailable` | (Mention App) | Store của app hoặc đọc chat lỗi. | Retry; gửi lại `SetUserGroups`/`SetGroups` cùng request là an toàn (`ver`). |
 
 ---
 
@@ -262,15 +262,15 @@ Subject `websocket.publish.{t}` (`MENTION_WS_PUBLISH_ROOT`), gói `WsPublish{id,
 | **MongoDB Clustered Collection** | Lưu tin nhắn kèm con trỏ Thread và đích mention | Nếu MongoDB lỗi ghi: Tin nhắn trả lời bị từ chối như tin nhắn thường; tính toàn vẹn của thread được bảo toàn. |
 | **NATS JetStream (`CHATIM_EVT`)** | Đưa việc đếm trả lời và chỉ mục mention ra nền | Tin vẫn gửi thành công; `rc`, `reply_threads`, tab "Tôi được nhắc tới" và thông báo trễ tới khi hàng đợi xả xong. |
 | **Projection `reply_index`** | Doc trả lời, `rc`, `reply_threads` | Idempotent (doc trả lời chèn một lần theo `_id`, `rc` dưới phiếu hẹn): nhận lại event không sai bộ đếm. |
-| **Mention App (consumer `mention`, `CHATIM_WS`)** | Chỉ mục mention và thông báo | Core không phụ thuộc app: tin vẫn gửi bình thường. Mention đuổi kịp khi app chạy lại (`DeliverAll`); thông báo cũ hơn 5 phút bị bỏ. `MENTION_ENABLED=false` tắt hẳn app. |
+| **Mention App (consumer `mention`, `CHATIM_WS`)** | Chỉ mục mention và thông báo | Chat không phụ thuộc app: tin vẫn gửi bình thường. Mention đuổi kịp khi app chạy lại (`DeliverAll`); thông báo cũ hơn 5 phút bị bỏ. `MENTION_ENABLED=false` tắt hẳn app. |
 
 ### 6.1. Chỉ số Sức khoẻ Vận hành & Cảnh báo SRE (Key Metrics & Alerts)
 
 Phần trả lời (consumer `projections`, nhãn `projection="projections"`):
 
-- **`chatim_core_projection_lag_seconds`:** tuổi event cũ nhất trong lô gần nhất (0 khi rảnh). *Cảnh báo `ChatimProjectionLagging`:* > 10s trong 5 phút.
-- **`chatim_core_projection_failures_total`**, **`_dropped_total`**, **`_stuck_total`**. *Cảnh báo `ChatimProjectionFailing`:* `projection_stuck_total` tăng trong 15 phút.
-- **`chatim_core_counter_repaired_total{counter="replies"}`:** phiếu hẹn sửa lại `rc`. *Cảnh báo `ChatimCounterRepairSurge`:* > 1 lần/giây trong 10 phút.
+- **`chatim_chat_projection_lag_seconds`:** tuổi event cũ nhất trong lô gần nhất (0 khi rảnh). *Cảnh báo `ChatimProjectionLagging`:* > 10s trong 5 phút.
+- **`chatim_chat_projection_failures_total`**, **`_dropped_total`**, **`_stuck_total`**. *Cảnh báo `ChatimProjectionFailing`:* `projection_stuck_total` tăng trong 15 phút.
+- **`chatim_chat_counter_repaired_total{counter="replies"}`:** phiếu hẹn sửa lại `rc`. *Cảnh báo `ChatimCounterRepairSurge`:* > 1 lần/giây trong 10 phút.
 
 Phần mention (Mention App):
 

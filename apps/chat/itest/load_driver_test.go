@@ -30,7 +30,7 @@ type sent struct {
 }
 
 type load struct {
-	client   chatimv1.CoreServiceClient
+	client   chatimv1.ChatServiceClient
 	rooms    []string
 	halt     chan struct{}
 	halted   sync.Once
@@ -46,7 +46,7 @@ func caller(ctx context.Context) context.Context {
 	return metadata.AppendToOutgoingContext(ctx, chatrpc.TenantHeader, itTenant, chatrpc.UserHeader, itUser)
 }
 
-func startLoad(client chatimv1.CoreServiceClient, rooms []string, senders int) *load {
+func startLoad(client chatimv1.ChatServiceClient, rooms []string, senders int) *load {
 	l := &load{client: client, rooms: rooms, halt: make(chan struct{})}
 	for w := range senders {
 		l.senders.Go(func() { l.send(w) })

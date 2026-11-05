@@ -28,7 +28,7 @@ type options struct {
 func addOptions(fs *flag.FlagSet) *options {
 	o := &options{}
 	fs.StringVar(&o.redis, "redis", cmp.Or(os.Getenv("REDIS_ADDR"), "chatim-redis:6379"), "Redis holding slot leases (env REDIS_ADDR)")
-	fs.IntVar(&o.redisDB, "redis-db", 0, "Redis database index of the cores")
+	fs.IntVar(&o.redisDB, "redis-db", 0, "Redis database index of the nodes")
 	fs.StringVar(&o.redisPW, "redis-password", "", "password of that Redis; env REDIS_PASSWORD when empty")
 	fs.StringVar(&o.tenant, "tenant", "e2e", "caller tenant sent as x-chatim-tenant")
 	fs.StringVar(&o.user, "user", "e2e-user", "caller user sent as x-chatim-user")

@@ -14,8 +14,8 @@ func TestRealInfraMembersReactAndPinEvenOnLockedKinds(t *testing.T) {
 	it := realInfra(t)
 	env := maps.Clone(itFastSweep)
 	env["MESSAGE_LOCKED_KINDS"] = "text"
-	core := startCore(t, it, env)
-	client := dialCore(t, core.cfg)
+	chat := startChatNode(t, it, env)
+	client := dialChat(t, chat.cfg)
 	roomID := createRoom(t, client)
 	seq := sendAs(t, client, itUser, roomID, "access-e", "locked text")
 	edit := &chatimv1.EditMessageRequest{RoomId: roomID, Seq: seq, Text: "not allowed"}
@@ -62,8 +62,8 @@ func TestRealInfraMembersReactAndPinEvenOnLockedKinds(t *testing.T) {
 
 func TestRealInfraDeletedMessagesTakeNoNewReactionOrPin(t *testing.T) {
 	it := realInfra(t)
-	core := startCore(t, it, itFastSweep)
-	client := dialCore(t, core.cfg)
+	chat := startChatNode(t, it, itFastSweep)
+	client := dialChat(t, chat.cfg)
 	roomID := createRoom(t, client)
 	seq := sendAs(t, client, itUser, roomID, "deleted-f", "soon deleted")
 	bob := callerAs(t.Context(), "bob")

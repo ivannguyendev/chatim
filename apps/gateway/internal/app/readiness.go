@@ -15,7 +15,7 @@ type readiness struct {
 	admin    *admin.Server
 	log      *slog.Logger
 	mu       sync.Mutex
-	core     bool
+	chat     bool
 	booted   bool
 	ready    bool
 	stopping bool
@@ -25,17 +25,17 @@ func (r *readiness) watch(ctx context.Context, conn *grpc.ClientConn) {
 	conn.Connect()
 	for {
 		state := conn.GetState()
-		r.coreReady(ctx, state == connectivity.Ready)
+		r.chatReady(ctx, state == connectivity.Ready)
 		if !conn.WaitForStateChange(ctx, state) {
 			return
 		}
 	}
 }
 
-func (r *readiness) coreReady(ctx context.Context, ready bool) {
+func (r *readiness) chatReady(ctx context.Context, ready bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.core = ready
+	r.chat = ready
 	r.update(ctx)
 }
 
@@ -47,7 +47,7 @@ func (r *readiness) identityBooted(ctx context.Context) {
 }
 
 func (r *readiness) update(ctx context.Context) {
-	ready := r.core && r.booted
+	ready := r.chat && r.booted
 	if r.stopping || ready == r.ready {
 		return
 	}
@@ -56,7 +56,7 @@ func (r *readiness) update(ctx context.Context) {
 	if ready {
 		r.log.InfoContext(ctx, "gateway ready")
 	} else {
-		r.log.WarnContext(ctx, "gateway not ready: no core connection is ready")
+		r.log.WarnContext(ctx, "gateway not ready: no chat connection is ready")
 	}
 }
 

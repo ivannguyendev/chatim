@@ -577,7 +577,7 @@ var File_chatim_v1_replies_bookmarks_mentions_proto protoreflect.FileDescriptor
 
 const file_chatim_v1_replies_bookmarks_mentions_proto_rawDesc = "" +
 	"\n" +
-	"*chatim/v1/replies_bookmarks_mentions.proto\x12\tchatim.v1\x1a\x14chatim/v1/core.proto\x1a\x1dchatim/v1/message_links.proto\"p\n" +
+	"*chatim/v1/replies_bookmarks_mentions.proto\x12\tchatim.v1\x1a\x14chatim/v1/chat.proto\x1a\x1dchatim/v1/message_links.proto\"p\n" +
 	"\x12SetBookmarkRequest\x12\x17\n" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x1f\n" +
 	"\vthread_root\x18\x02 \x01(\x04R\n" +
@@ -662,7 +662,7 @@ func file_chatim_v1_replies_bookmarks_mentions_proto_init() {
 	if File_chatim_v1_replies_bookmarks_mentions_proto != nil {
 		return
 	}
-	file_chatim_v1_core_proto_init()
+	file_chatim_v1_chat_proto_init()
 	file_chatim_v1_message_links_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{

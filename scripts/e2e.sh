@@ -3,10 +3,10 @@ set -euo pipefail
 
 scripts="$(cd "$(dirname "$0")" && pwd)"
 network="${NETWORK:-chatim_default}"
-image="${CORECLI_IMAGE:-chatim/chatcli:dev}"
+image="${CHATCLI_IMAGE:-chatim/chatcli:dev}"
 first="${E2E_FIRST:-40}"
 after="${E2E_AFTER:-40}"
-victim="${E2E_KILL:-core-1}"
+victim="${E2E_KILL:-chat-1}"
 watcher="chatim-e2e-watch-$$"
 ws_key="${WS_KEY:-$scripts/../.local/ws-keys/private.jwk}"
 ws_url="${WS_URL:-ws://chatim-websocket-1:8080/ws}"
@@ -87,8 +87,8 @@ trap finish EXIT
 . "$scripts/e2e-identity-directory.sh"
 
 case "$victim" in
-  core-1 | core-2) ;;
-  *) echo "E2E_KILL must be core-1 or core-2" >&2; exit 1 ;;
+  chat-1 | chat-2) ;;
+  *) echo "E2E_KILL must be chat-1 or chat-2" >&2; exit 1 ;;
 esac
 
 case "${E2E_ONLY:-}" in
@@ -98,8 +98,8 @@ case "${E2E_ONLY:-}" in
   *) echo "E2E_ONLY supports only 13 and 15" >&2; exit 1 ;;
 esac
 
-step="both cores share the slots"
-cli slots -cores 2 -wait 60s
+step="both chat nodes share the slots"
+cli slots -nodes 2 -wait 60s
 
 step="create a room owned by $victim"
 setup="$(cli e2e setup -state /state -owner "$victim")"
@@ -138,8 +138,8 @@ cli e2e check -state /state
 
 step="restart $owner"
 restore
-step="both cores share the slots again"
-cli slots -cores 2 -wait 60s
+step="both chat nodes share the slots again"
+cli slots -nodes 2 -wait 60s
 
 step="phase 3 edit seq 1 and delete seq 2"
 echo "phase 3: edit seq 1, delete seq 2 (base version 0)"

@@ -79,7 +79,7 @@ func wireService(d serviceDeps) (*grpcsrv.Service, *message.Reader, error) {
 		MemberService: members, MemberReader: readers.members, RoomService: roomService, RoomList: rooms,
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("wire core service: %w", err)
+		return nil, nil, fmt.Errorf("wire chat service: %w", err)
 	}
 	return svc, reader, nil
 }

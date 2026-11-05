@@ -103,7 +103,7 @@ func TestAllIsNeverAMentionTarget(t *testing.T) {
 	for _, k := range []domain.MentionKind{0, domain.MentionUser, domain.MentionGroup, 3, 255} {
 		out := pbconv.MentionTargets([]domain.MentionTarget{{Kind: k, ID: "minh"}})
 		if out[0].GetKind() == chatimv1.MentionKind_MENTION_KIND_ALL {
-			t.Fatalf("domain kind %d left core as MENTION_KIND_ALL", k)
+			t.Fatalf("domain kind %d left chat as MENTION_KIND_ALL", k)
 		}
 	}
 }

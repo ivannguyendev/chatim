@@ -14,7 +14,7 @@ import (
 	"github.com/ivannguyendev/chatim/tools/chatcli/internal/e2e"
 )
 
-const listMyRoomsPath = "/chatim.v1.CoreService/ListMyRooms"
+const listMyRoomsPath = "/chatim.v1.ChatService/ListMyRooms"
 
 func sameEventually[M proto.Message](r *gatewayRun, what string, viaGateway, viaGRPC func() (M, error)) error {
 	var last error
@@ -56,7 +56,7 @@ func (r *gatewayRun) readsMatch() error {
 	checks := []func() error{
 		func() error {
 			return sameEventually(r, "ListMyRooms",
-				func() (*chatimv1.ListMyRoomsResponse, error) { return viaGateway(r.a, r.a.core.ListMyRooms, rooms) },
+				func() (*chatimv1.ListMyRoomsResponse, error) { return viaGateway(r.a, r.a.chat.ListMyRooms, rooms) },
 				func() (*chatimv1.ListMyRoomsResponse, error) {
 					resp, _, err := r.cl.ListMyRooms(r.base, rooms)
 					return resp, err
@@ -64,7 +64,7 @@ func (r *gatewayRun) readsMatch() error {
 		},
 		func() error {
 			return sameEventually(r, "GetHistory",
-				func() (*chatimv1.GetHistoryResponse, error) { return viaGateway(r.a, r.a.core.GetHistory, history) },
+				func() (*chatimv1.GetHistoryResponse, error) { return viaGateway(r.a, r.a.chat.GetHistory, history) },
 				func() (*chatimv1.GetHistoryResponse, error) {
 					resp, _, err := r.cl.GetHistory(r.base, history)
 					return resp, err
@@ -72,7 +72,7 @@ func (r *gatewayRun) readsMatch() error {
 		},
 		func() error {
 			return sameEventually(r, "ListMembers",
-				func() (*chatimv1.ListMembersResponse, error) { return viaGateway(r.a, r.a.core.ListMembers, members) },
+				func() (*chatimv1.ListMembersResponse, error) { return viaGateway(r.a, r.a.chat.ListMembers, members) },
 				func() (*chatimv1.ListMembersResponse, error) {
 					resp, _, err := r.cl.ListMembers(r.base, members)
 					return resp, err
@@ -80,7 +80,7 @@ func (r *gatewayRun) readsMatch() error {
 		},
 		func() error {
 			return sameEventually(r, "ListBookmarks",
-				func() (*chatimv1.ListBookmarksResponse, error) { return viaGateway(r.a, r.a.core.ListBookmarks, marks) },
+				func() (*chatimv1.ListBookmarksResponse, error) { return viaGateway(r.a, r.a.chat.ListBookmarks, marks) },
 				func() (*chatimv1.ListBookmarksResponse, error) {
 					resp, _, err := r.cl.ListBookmarks(r.base, marks)
 					return resp, err
@@ -100,7 +100,7 @@ func (r *gatewayRun) flushedRead() error {
 	if _, err := r.b.call(markReadRequest(r.room, r.seq)); err != nil {
 		return fmt.Errorf("peer B marks read and waits for its answer: %w", err)
 	}
-	list, err := viaGateway(r.b.gw, r.b.gw.core.ListMyRooms, &chatimv1.ListMyRoomsRequest{Folder: chatimv1.RoomFolder_ROOM_FOLDER_MAIN, Limit: 50})
+	list, err := viaGateway(r.b.gw, r.b.gw.chat.ListMyRooms, &chatimv1.ListMyRoomsRequest{Folder: chatimv1.RoomFolder_ROOM_FOLDER_MAIN, Limit: 50})
 	if err != nil {
 		return fmt.Errorf("peer B lists rooms through the gateway: %w", err)
 	}
@@ -151,7 +151,7 @@ func (r *gatewayRun) expiredRefused() error {
 }
 
 func (r *gatewayRun) sendRefused() error {
-	_, err := viaGateway(r.a, r.a.core.SendMessage, &chatimv1.SendMessageRequest{RoomId: r.room, Cid: randomCID(), Text: "never sent"})
+	_, err := viaGateway(r.a, r.a.chat.SendMessage, &chatimv1.SendMessageRequest{RoomId: r.room, Cid: randomCID(), Text: "never sent"})
 	if connect.CodeOf(err) != connect.CodeUnimplemented {
 		return fmt.Errorf("SendMessage through the gateway = %w, want unimplemented", err)
 	}

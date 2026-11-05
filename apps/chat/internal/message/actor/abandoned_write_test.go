@@ -32,39 +32,39 @@ func (l *attemptLog) attempts() int {
 	return l.count
 }
 
-func TestAbandonedWriteNeverLandsAfterAnotherCoreTookTheCID(t *testing.T) {
+func TestAbandonedWriteNeverLandsAfterAnotherChatNodeTookTheCID(t *testing.T) {
 	w := newWorld(t)
 	cfg := clusterConfig
 	cfg.GroupDeadline, cfg.ReservationTTL = 300*time.Millisecond, 1500*time.Millisecond
 	tries := &attemptLog{}
 	sub := &fakeSubmitter{store: w.msgs}
 	sub.alwaysDo(tries.slowAmbiguous(120 * time.Millisecond))
-	a, _ := runRouter(t, w.msgs, w.rooms, sub, w.registry(t, "core-a", quiet, 0), cfg)
+	a, _ := runRouter(t, w.msgs, w.rooms, sub, w.registry(t, "chat-a", quiet, 0), cfg)
 
 	_, err := a.Send(context.Background(), cmd(roomA, "alice", "x"))
 	expectErr(t, err, domain.ErrRetryLater)
 	tried := tries.attempts()
 	if tried < 1 || tried > 2 {
-		t.Fatalf("core A made %d attempts, want the time budget to stop it after at most 2", tried)
+		t.Fatalf("chat A made %d attempts, want the time budget to stop it after at most 2", tried)
 	}
-	if v := w.cidValue("x"); v != "p:core-a" {
-		t.Fatalf("abandoned ambiguous write left %q, want core A's reservation kept", v)
+	if v := w.cidValue("x"); v != "p:chat-a" {
+		t.Fatalf("abandoned ambiguous write left %q, want chat A's reservation kept", v)
 	}
 
-	regB := signalCommits(w.registry(t, "core-b", quiet, 0))
-	b := startCore(t, w.msgs, w.rooms, regB)
+	regB := signalCommits(w.registry(t, "chat-b", quiet, 0))
+	b := startChatNode(t, w.msgs, w.rooms, regB)
 	_, err = b.Send(context.Background(), cmd(roomA, "alice", "x"))
 	expectErr(t, err, domain.ErrRetryLater)
 	w.mr.FastForward(dedupe.DefaultPendingTTL)
 	ack := mustSend(t, b, cmd(roomA, "alice", "x"))
-	awaitSignal(t, "core B cid commit", regB.committed)
+	awaitSignal(t, "chat B cid commit", regB.committed)
 
 	time.Sleep(2 * cfg.GroupDeadline)
 	if got := mustSend(t, a, cmd(roomA, "alice", "x")); !sameAck(got, ack) {
-		t.Fatalf("core A answered its abandoned cid with %+v, want core B's %+v", got, ack)
+		t.Fatalf("chat A answered its abandoned cid with %+v, want chat B's %+v", got, ack)
 	}
 	if n := tries.attempts(); n != tried {
-		t.Fatalf("core A attempted %d more writes after abandoning", n-tried)
+		t.Fatalf("chat A attempted %d more writes after abandoning", n-tried)
 	}
 	assertStoredIn(t, w, "x", ack)
 }

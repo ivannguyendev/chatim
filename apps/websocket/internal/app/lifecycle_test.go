@@ -18,7 +18,7 @@ func TestRunIsReadyOnlyAfterTheSlotTableAndStopAnswersRunningCommandsBefore1001(
 	mr := slotRedis(t)
 	mr.SetError("LOADING redis is loading the dataset")
 	keys := newSigner(t)
-	core, dial := startFakeCore(t)
+	chat, dial := startFakeChatNode(t)
 	lis, logs := newListeners(), newLogWatch()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -36,7 +36,7 @@ func TestRunIsReadyOnlyAfterTheSlotTableAndStopAnswersRunningCommandsBefore1001(
 		"chatim_websocket_connections 0",
 		"chatim_websocket_unauthenticated_connections 0",
 		`chatim_websocket_commands_total{code="OK",command="EditMessage"} 0`,
-		`chatim_websocket_core_call_seconds_count{command="EditMessage"} 0`,
+		`chatim_websocket_chat_call_seconds_count{command="EditMessage"} 0`,
 		`chatim_websocket_commands_rejected_total{reason="shutdown"} 0`,
 		"chatim_websocket_unknown_frames_total 0",
 		"chatim_websocket_interest_users 0",
@@ -78,14 +78,14 @@ func TestRunIsReadyOnlyAfterTheSlotTableAndStopAnswersRunningCommandsBefore1001(
 		}})
 		answered <- resp
 	}()
-	receive(t, core.started, "core call")
+	receive(t, chat.started, "chat call")
 
 	cancel()
 	logs.await(t, "websocket shutting down")
 	if code, _ := httpStatus(t, adminAddr, "/readyz"); code != 503 {
 		t.Fatalf("/readyz = %d while stopping, want 503", code)
 	}
-	close(core.release)
+	close(chat.release)
 	if resp := receive(t, answered, "command answer"); resp == nil || resp.GetCode() != 0 {
 		t.Fatalf("running command answer = %v, want OK", resp)
 	}

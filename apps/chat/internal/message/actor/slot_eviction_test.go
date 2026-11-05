@@ -155,7 +155,7 @@ func TestEvictSlotsReturnsAtItsDeadlineWhileAGroupIsStuck(t *testing.T) {
 	})
 }
 
-func TestFreshActorAfterRetireReloadsSeqWrittenByAnotherCore(t *testing.T) {
+func TestFreshActorAfterRetireReloadsSeqWrittenByAnotherChatNode(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rg := started(t, baseConfig)
 		mustSend(t, rg.Router, cmd(roomA, "alice", "c1"))
