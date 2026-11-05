@@ -1,0 +1,132 @@
+package memstore
+
+import (
+	"context"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/ivannguyendev/chatim/apps/chat/internal/model/domain"
+	"github.com/ivannguyendev/chatim/apps/chat/internal/store"
+)
+
+var (
+	_ store.Rooms          = (*Rooms)(nil)
+	_ store.HistoryClearer = (*Rooms)(nil)
+)
+
+type memberKey struct {
+	room uint64
+	user string
+}
+
+type Rooms struct {
+	mu          sync.RWMutex
+	rooms       map[uint64]domain.Room
+	members     map[memberKey]domain.Member
+	pins        map[uint64]domain.PinState
+	ownersVer   map[uint64]uint64
+	roomFlags   flagMap[uint64]
+	memberFlags flagMap[memberKey]
+}
+
+func NewRooms() *Rooms {
+	return &Rooms{
+		rooms: make(map[uint64]domain.Room), members: make(map[memberKey]domain.Member),
+		pins: make(map[uint64]domain.PinState), ownersVer: make(map[uint64]uint64),
+		roomFlags: make(flagMap[uint64]), memberFlags: make(flagMap[memberKey]),
+	}
+}
+
+func (s *Rooms) Create(ctx context.Context, r domain.Room, members []domain.Member) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := store.ValidateRoom(r, members); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.rooms[r.ID]; ok {
+		return fmt.Errorf("create room %d: %w", r.ID, store.ErrRoomExists)
+	}
+	r.MemberCountVer, r.InfoVer = 1, 1
+	s.rooms[r.ID] = r
+	at := insertFlagTime(r.CreatedAt)
+	s.roomFlags.raise(r.ID, store.BitRoomCreated|store.BitMemberCount, at)
+	for _, m := range members {
+		k := memberKey{m.Room, m.User}
+		if _, ok := s.members[k]; !ok {
+			s.members[k] = stamped(store.CreationMember(r, m))
+			s.memberFlags.raise(k, store.BitMember, at)
+		}
+	}
+	return nil
+}
+
+func (s *Rooms) InsertRoom(ctx context.Context, r domain.Room) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := store.ValidateRoomInsert(r); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.rooms[r.ID]; ok {
+		return fmt.Errorf("insert room %d: %w", r.ID, store.ErrRoomExists)
+	}
+	r.MemberCount, r.MemberCountVer, r.InfoVer = 0, 0, 1
+	s.rooms[r.ID] = r
+	s.roomFlags.raise(r.ID, store.BitRoomCreated, insertFlagTime(r.CreatedAt))
+	return nil
+}
+
+func (s *Rooms) Get(ctx context.Context, id uint64) (domain.Room, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.Room{}, err
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	r, ok := s.rooms[id]
+	if !ok {
+		return domain.Room{}, domain.ErrRoomNotFound
+	}
+	return r, nil
+}
+
+func (s *Rooms) Member(ctx context.Context, room uint64, user string) (domain.Member, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.Member{}, err
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	m, ok := s.members[memberKey{room, user}]
+	if !ok || !m.Active() {
+		return domain.Member{}, domain.ErrNotMember
+	}
+	return m, nil
+}
+
+func (s *Rooms) ClearHistory(ctx context.Context, room uint64, user string, at time.Time) (time.Time, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return time.Time{}, false, err
+	}
+	if err := store.ValidateMarkTime(at); err != nil {
+		return time.Time{}, false, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	k := memberKey{room, user}
+	m, ok := s.members[k]
+	if !ok || !m.Active() {
+		return time.Time{}, false, domain.ErrNotMember
+	}
+	if at = toMillis(at); !at.After(m.ClearedAt) {
+		return m.ClearedAt, false, nil
+	}
+	m.ClearedAt, m.LastChangeAt = at, later(m.LastChangeAt, at)
+	s.members[k] = m
+	s.memberFlags.raise(k, store.BitHistoryCleared, time.Now())
+	return at, true, nil
+}

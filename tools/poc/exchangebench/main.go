@@ -46,7 +46,7 @@ func realMain() int {
 	flag.StringVar(&c.url, "url", "http://chatim-identity-1:8080/v1/token", "token exchange endpoint")
 	flag.StringVar(&c.metrics, "metrics", "http://chatim-identity-1:9090/metrics", "identity admin metrics endpoint")
 	flag.StringVar(&c.alg, "alg", devtoken.AlgorithmES256, "algorithm of -key: ES256 or RS256 (EdDSA also works)")
-	flag.StringVar(&c.keyPath, "key", "", "private JWK of the issuer key, written by corecli dev-issuer-key")
+	flag.StringVar(&c.keyPath, "key", "", "private JWK of the issuer key, written by chatcli dev-issuer-key")
 	flag.StringVar(&c.issuer, "issuer", "", "iss of every tenant token, registered with identity issuer-add")
 	flag.StringVar(&c.audience, "audience", "chatim", "aud of every tenant token (IDENTITY_EXCHANGE_AUDIENCE)")
 	flag.StringVar(&c.tenant, "tenant", "", "tid claim of every tenant token; empty sends none")

@@ -22,7 +22,7 @@ WEBSOCKETS := websocket-1 websocket-2
 GATEWAYS := gateway-1
 IDENTITIES := identity-1 identity-2
 WS_KEYS_DIR := .local/ws-keys
-CORECLI_IMAGE := chatim/corecli:dev
+CORECLI_IMAGE := chatim/chatcli:dev
 INSTANCE ?= state
 NODE ?= 1
 REDIS_CONTAINER_state  := chatim-redis
@@ -93,12 +93,12 @@ redis-cli:
 	docker exec $(REDIS_CONTAINER_$(INSTANCE)) sh -c 'read -r REDISCLI_AUTH < "$$REDIS_SECRET_FILE"; export REDISCLI_AUTH; exec redis-cli "$$@"' redis-cli $(ARGS)
 
 core-up: check-env identity-env dev-keys
-	$(MAKE) -s image TARGET=apps/core
+	$(MAKE) -s image TARGET=apps/chat
 	$(MAKE) -s image TARGET=apps/websocket
 	$(MAKE) -s image TARGET=apps/gateway
 	$(MAKE) -s image TARGET=apps/identity
 	$(CORE_COMPOSE) up -d $(CORES) $(WEBSOCKETS) $(GATEWAYS) $(IDENTITIES)
-	./scripts/wait-core-healthy.sh $(addprefix chatim-,$(IDENTITIES) $(CORES) $(WEBSOCKETS) $(GATEWAYS))
+	./scripts/wait-healthy.sh $(addprefix chatim-,$(IDENTITIES) $(CORES) $(WEBSOCKETS) $(GATEWAYS))
 
 core-down: check-env
 	$(CORE_COMPOSE) rm -s -f $(GATEWAYS) $(WEBSOCKETS) $(IDENTITIES) identity-bootstrap identity-mongo-init $(CORES)
@@ -118,7 +118,7 @@ dev-keys:
 	@if [ -f $(WS_KEYS_DIR)/private.jwk ] && [ -f $(WS_KEYS_DIR)/jwks.json ]; then \
 		echo "dev keys present in $(WS_KEYS_DIR)" >&2; \
 	else \
-		$(MAKE) -s image TARGET=tools/corecli && \
+		$(MAKE) -s image TARGET=tools/chatcli && \
 		mkdir -p $(WS_KEYS_DIR) && chmod 700 $(WS_KEYS_DIR) && \
 		docker run --rm --user "$$(id -u):$$(id -g)" -v "$(CURDIR)/$(WS_KEYS_DIR)":/keys $(CORECLI_IMAGE) dev-keys -out /keys >&2; \
 	fi
@@ -133,5 +133,5 @@ gw-logs:
 	docker logs --tail 200 -f chatim-gateway-1
 
 e2e: check-env
-	$(MAKE) -s image TARGET=tools/corecli
+	$(MAKE) -s image TARGET=tools/chatcli
 	NETWORK=$(NETWORK) WS_KEY=$(CURDIR)/$(WS_KEYS_DIR)/private.jwk ./scripts/e2e.sh

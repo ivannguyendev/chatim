@@ -10,8 +10,8 @@ Monorepo Go, mỗi app một container. Thiết kế: [architecture.md](docs/arc
 
 | App | Vai trò | Vận hành |
 |---|---|---|
-| `core` | Room, member, tin nhắn, tương tác; cấp seq; lưu MongoDB; mỗi lần ghi bật cờ `_state` trên doc, publish lên NATS JetStream sau ack, sweeper phát bù cờ còn sót | [docs/apps/core.md](docs/apps/core.md) |
-| `mention` (Mention App) | Nhúng trong core (`modules/mention`): chỉ mục mention, `ListMentions`, nhóm được tag, gợi ý `@nhóm`, thông báo `WsPublish` | [docs/apps/core.md](docs/apps/core.md#mention-app) |
+| `core` | Room, member, tin nhắn, tương tác; cấp seq; lưu MongoDB; mỗi lần ghi bật cờ `_state` trên doc, publish lên NATS JetStream sau ack, sweeper phát bù cờ còn sót | [docs/apps/chat.md](docs/apps/chat.md) |
+| `mention` (Mention App) | Nhúng trong core (`modules/mention`): chỉ mục mention, `ListMentions`, nhóm được tag, gợi ý `@nhóm`, thông báo `WsPublish` | [docs/apps/chat.md](docs/apps/chat.md#mention-app) |
 | `websocket` | WebSocket (gws): 12 lệnh ghi realtime, đẩy event, đang gõ, online, giữ kết nối khi token hết hạn; SDK client ở repo khác, theo [module 09 §11](docs/modules/09-feature-realtime-delivery-and-ephemeral.md) | [docs/apps/websocket.md](docs/apps/websocket.md) |
 | `gateway` | HTTPS (Connect): 22 lệnh đọc và quản lý room, JWT, gọi core bất kỳ (round robin), giới hạn theo user | [docs/apps/gateway.md](docs/apps/gateway.md) |
 | `identity` | Cầu danh tính (M6, tên cũ `iam`): chat không giữ đăng nhập (owner 2026-11-02); đổi JWT do backend tenant ký (EdDSA/ES256/RS256, issuer tin cậy theo tenant) lấy token chat Ed25519 5 phút, bản sao user và nhóm (danh bạ), thu hồi theo tenant; lưu ở database MongoDB riêng `chatim_identity` (user `identity`, phase PM) | [docs/apps/identity.md](docs/apps/identity.md) |
@@ -26,7 +26,7 @@ apps/{core,websocket,gateway,identity}/ # chương trình chạy được: main.
 modules/mention/                 # Mention App, module nhúng trong core (D182)
 pkg/                             # code dùng chung, không có nghiệp vụ; wstest: client websocket chỉ cho test, e2e, wsload
 proto/chatim/{v1,identity/v1}/   # protobuf (buf) → pkg/pb
-tools/                           # corecli, devtoken; poc/: corebench, wsload, …
+tools/                           # chatcli, devtoken; poc/: chatbench, wsload, …
 scripts/                         # e2e.sh, bench-cell.sh, ws-nats-drill.sh, wsload-kill.sh
 deploy/                          # Dockerfile (ARG TARGET), compose dev, luật alert Prometheus
 docs/                            # thiết kế, module, vận hành từng app, plan, kết quả PoC
@@ -63,6 +63,6 @@ App chỉ publish trên loopback (caller còn được tin qua metadata tới kh
 ## Tài liệu
 
 - [Kiến trúc (nguồn sự thật)](docs/architecture.md) · [11 module tính năng](docs/modules/README.md) · [Decision log D1–D218](docs/decision-log.md) · [Danh mục event](docs/events.md)
-- Vận hành từng app (biến môi trường, cổng, metric, lệnh): [core](docs/apps/core.md) · [websocket](docs/apps/websocket.md) · [gateway](docs/apps/gateway.md) · [identity](docs/apps/identity.md)
+- Vận hành từng app (biến môi trường, cổng, metric, lệnh): [core](docs/apps/chat.md) · [websocket](docs/apps/websocket.md) · [gateway](docs/apps/gateway.md) · [identity](docs/apps/identity.md)
 - [Roadmap](docs/roadmap.md) · [Quy trình git](docs/git-workflow.md) · [Kiểm thử e2e](docs/e2e.md) · [Kết quả PoC](docs/poc/README.md)
 - Nghiên cứu: [cơ chế hệ thống](docs/research/261005-system-mechanisms-synthesis-report.md) · [kiến trúc chat mã nguồn mở](docs/research/260930-opensource-chat-architecture-research.md)

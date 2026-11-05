@@ -50,8 +50,8 @@ echo "$start" >"$dir/start"
 if [ -n "$pprof" ]; then
   (sleep 20; docker run --rm --network chatim_default curlimages/curl -s "http://chatim-core-1:9090/debug/pprof/profile?seconds=20" >"$dir/cpu-core1.pb.gz" 2>/dev/null) &
 fi
-echo "[$(date +%H:%M:%S)] $name: corebench rate=$rate"
-make -s poc TOOL=corebench ARGS="-rate $rate -duration 60s -watch 20 ${BENCH_EXTRA_ARGS:-}" >"$dir/corebench.txt" 2>&1
+echo "[$(date +%H:%M:%S)] $name: chatbench rate=$rate"
+make -s poc TOOL=chatbench ARGS="-rate $rate -duration 60s -watch 20 ${BENCH_EXTRA_ARGS:-}" >"$dir/chatbench.txt" 2>&1
 wait
 date +%s >"$dir/end"
 snapshot after
@@ -63,4 +63,4 @@ mongo_eval "db.getSiblingDB('chatim').system.profile.find({}, {ts: 1, millis: 1,
 for c in chatim-core-1 chatim-core-2; do
   docker logs --since "$start" "$c" 2>&1 | grep -E 'degraded|recovered|rpc finished|sweeper|projection|dropping' >"$dir/$c.log"
 done
-grep -E "^sends|^pacer|^ack latency|^live" "$dir/corebench.txt"
+grep -E "^sends|^pacer|^ack latency|^live" "$dir/chatbench.txt"

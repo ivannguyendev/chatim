@@ -1,0 +1,89 @@
+package memstore_test
+
+import (
+	"testing"
+
+	"github.com/ivannguyendev/chatim/apps/chat/internal/store"
+	"github.com/ivannguyendev/chatim/apps/chat/internal/store/memstore"
+	"github.com/ivannguyendev/chatim/apps/chat/internal/store/storetest"
+)
+
+func TestContract(t *testing.T) {
+	storetest.Run(t, func(*testing.T) (store.Messages, store.Rooms) {
+		return memstore.NewMessages(), memstore.NewRooms()
+	})
+}
+
+func TestEditsContract(t *testing.T) {
+	storetest.RunEdits(t, func(*testing.T) (storetest.EditableMessages, storetest.ClearableRooms, store.Edits, store.Hidden) {
+		return memstore.NewMessages(), memstore.NewRooms(), memstore.NewEdits(), memstore.NewHidden()
+	})
+}
+
+func TestInteractionsContract(t *testing.T) {
+	storetest.RunInteractions(t, func(*testing.T) (storetest.ReactableMessages, store.Interactions) {
+		return memstore.NewMessages(), memstore.NewInteractions()
+	})
+}
+
+func TestMessageCountsContract(t *testing.T) {
+	storetest.RunMessageCounts(t, func(*testing.T) storetest.CountableMessages { return memstore.NewMessages() })
+}
+
+func TestPinsContract(t *testing.T) {
+	storetest.RunPins(t, func(*testing.T) (storetest.PinnableRooms, store.Pins) {
+		return memstore.NewRooms(), memstore.NewPins()
+	})
+}
+
+func TestMembersContract(t *testing.T) {
+	storetest.RunMembers(t, func(*testing.T) storetest.MemberRooms { return memstore.NewRooms() })
+}
+
+func TestDirectRoomsContract(t *testing.T) {
+	storetest.RunDirectRooms(t, func(*testing.T) store.DirectRooms { return memstore.NewDirectRooms() })
+}
+
+func TestReplyThreadsContract(t *testing.T) {
+	storetest.RunReplyThreads(t, func(*testing.T) store.ReplyThreads { return memstore.NewReplyThreads() })
+}
+
+func TestRoomListContract(t *testing.T) {
+	storetest.RunRoomList(t, func(*testing.T) storetest.ListableRooms { return memstore.NewRooms() })
+}
+
+func TestRoomTailsContract(t *testing.T) {
+	storetest.RunRoomTails(t, func(*testing.T) storetest.TailMessages { return memstore.NewMessages() })
+}
+
+func TestMessageStatesContract(t *testing.T) {
+	storetest.RunMessageStates(t, func(*testing.T) storetest.MessageStateStores {
+		msgs := memstore.NewMessages()
+		return storetest.MessageStateStores{Messages: msgs, States: memstore.NewEventStates(memstore.EventStateStores{Messages: msgs})}
+	})
+}
+
+func TestFactStatesContract(t *testing.T) {
+	storetest.RunFactStates(t, func(*testing.T) storetest.FactStateStores {
+		edits, interactions, pins, hidden := memstore.NewEdits(), memstore.NewInteractions(), memstore.NewPins(), memstore.NewHidden()
+		states := memstore.NewEventStates(memstore.EventStateStores{Edits: edits, Interactions: interactions, Pins: pins, Hidden: hidden})
+		return storetest.FactStateStores{Edits: edits, Interactions: interactions, Pins: pins, Hidden: hidden, States: states}
+	})
+}
+
+func TestMemberStatesContract(t *testing.T) {
+	storetest.RunMemberStates(t, func(*testing.T) storetest.MemberStateStores {
+		rooms := memstore.NewRooms()
+		return storetest.MemberStateStores{Rooms: rooms, States: memstore.NewEventStates(memstore.EventStateStores{Rooms: rooms})}
+	})
+}
+
+func TestEventStatesContract(t *testing.T) {
+	storetest.RunEventStates(t, func(*testing.T) storetest.EventStateStores {
+		states := memstore.NewEventStates(memstore.EventStateStores{
+			Messages: memstore.NewMessages(), Rooms: memstore.NewRooms(), Edits: memstore.NewEdits(),
+			Hidden: memstore.NewHidden(), Interactions: memstore.NewInteractions(), Pins: memstore.NewPins(),
+		})
+		return storetest.EventStateStores{States: states, Checkpoints: memstore.NewSweepCheckpoints(), Seeder: states}
+	})
+}

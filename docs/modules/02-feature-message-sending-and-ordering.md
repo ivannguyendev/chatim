@@ -282,7 +282,7 @@ Tên field trong `messages` là tên ngắn (ngoại lệ duy nhất của luậ
 
 ### 6.1. Chỉ số Sức khoẻ Vận hành & Cảnh báo SRE (Key Metrics & Alerts)
 
-Core chưa xuất metric độ trễ flush/ack, số lần bắt trùng theo tầng hay độ sâu mailbox; độ trễ ack p50/p99 hiện đo bằng `corebench` (`make poc TOOL=corebench`). Các metric thực có liên quan:
+Core chưa xuất metric độ trễ flush/ack, số lần bắt trùng theo tầng hay độ sâu mailbox; độ trễ ack p50/p99 hiện đo bằng `chatbench` (`make poc TOOL=chatbench`). Các metric thực có liên quan:
 
 - **`chatim_core_redis_degraded{client="cid_dedupe"}`:** 1 khi client Redis dedupe đang ở chế độ suy giảm.
   - *Luật cảnh báo (`ChatimRedisDegraded`):* = 1 trong 1 phút (có thể lọt bản trùng giữa các core).

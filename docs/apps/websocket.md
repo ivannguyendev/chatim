@@ -64,10 +64,10 @@ Giữ kết nối WebSocket (gws) của client: 12 lệnh ghi realtime chuyển 
 
 ## Khoá và token dev
 
-`make dev-keys` chạy `corecli dev-keys -out /keys` trong image `chatim/corecli:dev` với uid của máy, ghi `.local/ws-keys/private.jwk` (0600, chỉ nằm trong `.local/`, đã gitignore) và `.local/ws-keys/jwks.json` (0644); muốn thay khoá thì xoá thư mục rồi chạy lại. Compose chỉ đưa `jwks.json` vào websocket và gateway làm secret `ws_jwks` (`WS_JWT_KEYS_FILE=/run/secrets/ws_jwks`); khoá riêng không bao giờ mount vào container. Token dev (mặc định `-ttl 15m`, `iss` `chatim-dev`, `aud` `chatim-websocket`), dùng được cho cả hai node websocket và gateway-1:
+`make dev-keys` chạy `chatcli dev-keys -out /keys` trong image `chatim/chatcli:dev` với uid của máy, ghi `.local/ws-keys/private.jwk` (0600, chỉ nằm trong `.local/`, đã gitignore) và `.local/ws-keys/jwks.json` (0644); muốn thay khoá thì xoá thư mục rồi chạy lại. Compose chỉ đưa `jwks.json` vào websocket và gateway làm secret `ws_jwks` (`WS_JWT_KEYS_FILE=/run/secrets/ws_jwks`); khoá riêng không bao giờ mount vào container. Token dev (mặc định `-ttl 15m`, `iss` `chatim-dev`, `aud` `chatim-websocket`), dùng được cho cả hai node websocket và gateway-1:
 
     make -s ws-token ARGS="-tenant e2e -user alice -ttl 10m"
-    docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/.local/ws-keys/private.jwk":/keys/private.jwk:ro chatim/corecli:dev token -key /keys/private.jwk -tenant e2e -user alice
+    docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/.local/ws-keys/private.jwk":/keys/private.jwk:ro chatim/chatcli:dev token -key /keys/private.jwk -tenant e2e -user alice
 
 ## Đổi khoá ký
 
@@ -83,4 +83,4 @@ Cần `make core-up` trước.
 
 - `wsload` (R4b, logic ở `tools/poc/internal/wsload`): `-scenario steady|burst|kill`, `-conns 10000`, `-groups 500`, `-rate`, `-connect-rate`, `-duration`; 10K user khác nhau trên hai node, group tạo qua gateway; kết quả `bin/bench/wsload-<scenario>-<giờ>/` (`summary.txt`, `summary.json`).
 - `scripts/wsload-kill.sh` chạy `-scenario kill`: thấy `kill-ready` thì `docker kill -s KILL chatim-websocket-2` (`WSLOAD_KILL_NODE`), đo tới khi mọi máy `ready` lại, bật lại node (trap cả khi lỗi); `WSLOAD_RATE` (100), tham số thêm chuyển cho công cụ.
-- `scripts/ws-nats-drill.sh`: cắt websocket-1 khỏi NATS (iptables trong sidecar) dưới tải corebench + `corecli e2e ws-drill`. `10 cut` (không nhảy), `180 cut` (quá `WS_REPLAY_MAX_AGE` → nhảy + `resync`), `0 restart-nats`; kết quả `bin/drill/ws-nats-*/` (`summary.txt` do `scripts/ws-drill-summary.sh METRICS START RESTORED` in).
+- `scripts/ws-nats-drill.sh`: cắt websocket-1 khỏi NATS (iptables trong sidecar) dưới tải chatbench + `chatcli e2e ws-drill`. `10 cut` (không nhảy), `180 cut` (quá `WS_REPLAY_MAX_AGE` → nhảy + `resync`), `0 restart-nats`; kết quả `bin/drill/ws-nats-*/` (`summary.txt` do `scripts/ws-drill-summary.sh METRICS START RESTORED` in).

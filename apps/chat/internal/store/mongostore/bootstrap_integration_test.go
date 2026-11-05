@@ -1,0 +1,132 @@
+package mongostore
+
+import (
+	"errors"
+	"fmt"
+	"slices"
+	"strings"
+	"testing"
+
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+
+	"github.com/ivannguyendev/chatim/apps/chat/internal/model/domain"
+	"github.com/ivannguyendev/chatim/apps/chat/internal/store"
+)
+
+func collectionOptions(t *testing.T, db *mongo.Database, name string) bson.Raw {
+	t.Helper()
+	specs, err := db.ListCollectionSpecifications(t.Context(), bson.D{{Key: "name", Value: name}})
+	if err != nil {
+		t.Fatalf("list collections: %v", err)
+	}
+	if len(specs) != 1 {
+		t.Fatalf("collection %q: found %d, want 1", name, len(specs))
+	}
+	return specs[0].Options
+}
+
+func indexKeys(t *testing.T, coll *mongo.Collection) map[string]bool {
+	t.Helper()
+	specs, err := coll.Indexes().ListSpecifications(t.Context())
+	if err != nil {
+		t.Fatalf("list indexes: %v", err)
+	}
+	out := make(map[string]bool, len(specs))
+	for _, s := range specs {
+		out[keyPattern(t, s.KeysDocument)] = s.Unique != nil && *s.Unique
+	}
+	return out
+}
+
+func keyPattern(t *testing.T, keys bson.Raw) string {
+	t.Helper()
+	elems, err := keys.Elements()
+	if err != nil {
+		t.Fatalf("index keys: %v", err)
+	}
+	parts := make([]string, len(elems))
+	for i, e := range elems {
+		dir, _ := e.Value().AsInt64OK()
+		parts[i] = fmt.Sprintf("%s:%d", e.Key(), dir)
+	}
+	return strings.Join(parts, ",")
+}
+
+func assertClusteredLayout(t *testing.T, db *mongo.Database, name string) {
+	t.Helper()
+	opts := collectionOptions(t, db, name)
+	if v, ok := opts.Lookup("clusteredIndex", "key", "_id").AsInt64OK(); !ok || v != 1 {
+		t.Fatalf("%s options %s: want clusteredIndex key {_id: 1}", name, opts)
+	}
+	if u, ok := opts.Lookup("clusteredIndex", "unique").BooleanOK(); !ok || !u {
+		t.Fatalf("%s options %s: want a unique clustered index", name, opts)
+	}
+	if c, _ := opts.Lookup("storageEngine", "wiredTiger", "configString").StringValueOK(); c != "block_compressor=zstd" {
+		t.Fatalf("%s configString = %q, want block_compressor=zstd", name, c)
+	}
+}
+
+func assertMemberIndexes(t *testing.T, db *mongo.Database) {
+	t.Helper()
+	got := indexKeys(t, db.Collection(membersCollection))
+	want := map[string]bool{"room_id:1,state:1,role:1,priority:-1,joined_at:1,user_id:1": false, "tenant:1,user_id:1,state:1,room_id:1,joined_at:1,cleared_at:1,read_seq:1,pinned_at:1,archived_at:1,ver:1": false}
+	for k, unique := range want {
+		if u, ok := got[k]; !ok || u != unique {
+			t.Fatalf("members indexes = %v, want %s with unique=%v", got, k, unique)
+		}
+	}
+}
+
+func assertRoomIndexes(t *testing.T, db *mongo.Database) {
+	t.Helper()
+	got := indexKeys(t, db.Collection(roomsCollection))
+	for _, k := range []string{"activity_bucket:1", "created_at:1"} {
+		if unique, ok := got[k]; !ok || unique {
+			t.Fatalf("rooms indexes = %v, want non-unique %s", got, k)
+		}
+	}
+}
+
+func TestBootstrapIsIdempotent(t *testing.T) {
+	db := itDatabase(t, itClient(t))
+	for i := range 2 {
+		if err := Bootstrap(t.Context(), db); err != nil {
+			t.Fatalf("Bootstrap #%d: %v", i+1, err)
+		}
+	}
+	s := New(db, Options{})
+	m := sampleMessage()
+	if res := s.Insert(t.Context(), []domain.Message{m}); res[0].Outcome != store.Inserted {
+		t.Fatalf("Insert = %+v, want inserted", res)
+	}
+	if err := Bootstrap(t.Context(), db); err != nil {
+		t.Fatalf("Bootstrap with data: %v", err)
+	}
+	assertClusteredLayout(t, db, messagesCollection)
+	assertMemberIndexes(t, db)
+	assertRoomIndexes(t, db)
+	collectionOptions(t, db, roomsCollection)
+	got, err := s.Find(t.Context(), m.Room, []store.MsgKey{store.KeyOf(m)})
+	if err != nil || len(got) != 1 || got[0].CID != m.CID {
+		t.Fatalf("Find after re-bootstrap = %+v, %v; want the inserted message", got, err)
+	}
+}
+
+func TestBootstrapRejectsUnclusteredMessages(t *testing.T) {
+	db := itDatabase(t, itClient(t))
+	if err := db.CreateCollection(t.Context(), messagesCollection); err != nil {
+		t.Fatalf("create plain messages: %v", err)
+	}
+	err := Bootstrap(t.Context(), db)
+	if !errors.Is(err, ErrNotClustered) {
+		t.Fatalf("Bootstrap error = %v, want ErrNotClustered", err)
+	}
+	names, err := db.ListCollectionNames(t.Context(), bson.D{})
+	if err != nil {
+		t.Fatalf("list collections: %v", err)
+	}
+	if !slices.Equal(names, []string{messagesCollection}) {
+		t.Fatalf("collections = %v, want only the pre-existing messages", names)
+	}
+}

@@ -3,7 +3,7 @@ set -euo pipefail
 
 scripts="$(cd "$(dirname "$0")" && pwd)"
 network="${NETWORK:-chatim_default}"
-image="${CORECLI_IMAGE:-chatim/corecli:dev}"
+image="${CORECLI_IMAGE:-chatim/chatcli:dev}"
 first="${E2E_FIRST:-40}"
 after="${E2E_AFTER:-40}"
 victim="${E2E_KILL:-core-1}"
@@ -34,7 +34,7 @@ restore() {
   if [ -n "$killed" ]; then
     echo "restore: docker start chatim-$killed"
     docker start "chatim-$killed" >/dev/null
-    "$scripts/wait-core-healthy.sh" "chatim-$killed"
+    "$scripts/wait-healthy.sh" "chatim-$killed"
     killed=""
   fi
 }
@@ -43,7 +43,7 @@ restore_ws2() {
   if [ -n "$ws2_killed" ]; then
     echo "restore: docker start $ws2_container"
     docker start "$ws2_container" >/dev/null
-    "$scripts/wait-core-healthy.sh" "$ws2_container"
+    "$scripts/wait-healthy.sh" "$ws2_container"
     ws2_killed=""
   fi
 }
@@ -52,7 +52,7 @@ restore_ws1() {
   if [ -n "$ws1_stopped" ]; then
     echo "restore: docker start $ws_container"
     docker start "$ws_container" >/dev/null
-    "$scripts/wait-core-healthy.sh" "$ws_container"
+    "$scripts/wait-healthy.sh" "$ws_container"
     ws1_stopped=""
   fi
 }

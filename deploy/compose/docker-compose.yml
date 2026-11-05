@@ -23,7 +23,7 @@ x-redis: &redis
     retries: 10
 
 x-core: &core
-  image: chatim/core:dev
+  image: chatim/chat:dev
   profiles: ["app"]
   restart: unless-stopped
   mem_limit: 1g

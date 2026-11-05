@@ -231,7 +231,7 @@ Mỗi module dưới đây là một tập tài liệu đặc tả hoàn chỉnh
 
 | Mục tiêu vận hành | Chỉ số cam kết (SLO) | Metric Prometheus tương ứng | Ngưỡng Cảnh báo (Alert Rule) |
 |---|---|---|---|
-| **Độ trễ Ack gửi tin** | p99 ≤ 30ms | Chưa có metric trong core; đo bằng `corebench` (bench 2K: p99 ~121–131ms trên máy dev) | Chưa có alert |
+| **Độ trễ Ack gửi tin** | p99 ≤ 30ms | Chưa có metric trong core; đo bằng `chatbench` (bench 2K: p99 ~121–131ms trên máy dev) | Chưa có alert |
 | **Độ trễ phân phối Realtime** | p99 ≤ 100ms | `chatim_websocket_event_delivery_seconds` (từ giờ JetStream lưu tới lúc frame vào hàng gửi trên node, M4 phần 5) | `ChatimWebsocketDeliverySlow` (p99 > 100ms trong 5 phút) |
 | **Độ trễ đọc 50 tin lịch sử** | p99 ≤ 20ms | Chưa có metric | Chưa có alert |
 | **Bảo đảm không mất tin** | 100% (At-least-once) | `chatim_core_event_pending_oldest_seconds`, `chatim_core_sweep_passes_total` | `ChatimEventPendingStuck`: cờ cũ nhất > 60s kéo dài 5 phút; `ChatimSweeperIdle`: không lượt quét nào trong 10 phút |

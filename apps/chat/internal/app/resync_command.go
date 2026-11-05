@@ -1,0 +1,61 @@
+package app
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"log/slog"
+	"os"
+	"os/signal"
+	"syscall"
+
+	"github.com/ivannguyendev/chatim/apps/chat/internal/config"
+	"github.com/ivannguyendev/chatim/apps/chat/internal/event/resync"
+	"github.com/ivannguyendev/chatim/apps/chat/internal/event/timer"
+	"github.com/ivannguyendev/chatim/apps/chat/internal/store/mongostore"
+)
+
+func resyncMain(args []string) int {
+	opts, err := resync.ParseArgs(args, os.Stderr)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	cfg, err := config.Load()
+	if err != nil {
+		logger.ErrorContext(ctx, "invalid core config", "err", err)
+		return 1
+	}
+	log := redactedLogger(logger, cfg)
+	if err := RunResync(ctx, cfg, opts, log, os.Stdout); err != nil {
+		log.ErrorContext(ctx, "resync failed", "err", err)
+		return 1
+	}
+	return 0
+}
+
+func RunResync(ctx context.Context, cfg config.Config, opts resync.Options, log *slog.Logger, out io.Writer) error {
+	c := &clients{}
+	defer c.close(ctx, log)
+	connectCtx, cancel := context.WithTimeout(ctx, cfg.ConnectTimeout)
+	err := c.connectMongo(connectCtx, cfg)
+	cancel()
+	if err == nil {
+		err = c.connectNATS(cfg, log)
+	}
+	if err != nil {
+		return err
+	}
+	timers, err := timer.NewTimers(c.js, cfg.Timer.Name, cfg.Timer.SubjectRoot, cfg.MessageCountCheckDelay, timer.WithLogger(log))
+	if err != nil {
+		return fmt.Errorf("wire message count timers: %w", err)
+	}
+	st := mongostore.New(c.mongo.Database(cfg.MongoDB), mongostore.Options{})
+	deps := resync.Deps{Rooms: st, Pages: st, Edits: st, Interactions: st.Interactions(), Pins: st.Pins(), Members: st, Hidden: st.Hidden(), States: st.EventStates(), Timers: timers}
+	rep, err := resync.Run(ctx, deps, opts)
+	fmt.Fprintln(out, rep)
+	return err
+}

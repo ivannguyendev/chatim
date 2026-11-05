@@ -54,7 +54,7 @@ phase15_identity_directory() {
   echo "restart: docker restart $identity_container"
   docker restart "$identity_container" >/dev/null
   cli e2e identity-directory -stage restarted "${id15_args[@]}"
-  "$scripts/wait-core-healthy.sh" "$identity_container"
+  "$scripts/wait-healthy.sh" "$identity_container"
   step="phase 15 identity logs hold no token or secret"
   cat "$state/identity15-tokens" "$state/identity15-node.secret" >"$state/identity15-all-secrets"
   identity_logs_clean 15 "$state/identity15-all-secrets"

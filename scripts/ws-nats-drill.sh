@@ -6,7 +6,7 @@ mode="${2:-cut}"
 scripts="$(cd "$(dirname "$0")" && pwd)"
 root="$scripts/.."
 network="${NETWORK:-chatim_default}"
-image="${CORECLI_IMAGE:-chatim/corecli:dev}"
+image="${CORECLI_IMAGE:-chatim/chatcli:dev}"
 ws_container="${WS_CONTAINER:-chatim-websocket-1}"
 ws_key="${WS_KEY:-$root/.local/ws-keys/private.jwk}"
 lead="${DRILL_LEAD:-30}"
@@ -50,8 +50,8 @@ if [ "$mode" = cut ]; then
   until docker exec "$net" test -f /ready 2>/dev/null; do sleep 1; done
 fi
 
-echo "drill $mode ${cut}s: lead ${lead}s, tail ${tail_seconds}s, corebench ${bench_rate}/s + websocket ${drill_rate}/s, results in $out"
-(cd "$root" && make -s poc TOOL=corebench ARGS="-tenant drill-bench -rooms 200 -rate $bench_rate -warmup 1s -duration $((total + 10))s" >"$out/corebench.txt" 2>&1) &
+echo "drill $mode ${cut}s: lead ${lead}s, tail ${tail_seconds}s, chatbench ${bench_rate}/s + websocket ${drill_rate}/s, results in $out"
+(cd "$root" && make -s poc TOOL=chatbench ARGS="-tenant drill-bench -rooms 200 -rate $bench_rate -warmup 1s -duration $((total + 10))s" >"$out/chatbench.txt" 2>&1) &
 bench=$!
 sleep 15
 docker run --rm --network "$network" --user "$(id -u):$(id -g)" -v "$ws_key":/keys/private.jwk:ro "$image" \
@@ -85,5 +85,5 @@ echo "$start $restored" >"$out/window.txt"
 docker logs --since "$start" "$ws_container" 2>&1 | grep -E "feed skipped|reload room ids failed" >"$out/ws-log.txt" || true
 cat "$out/ws-log.txt"
 tail -n 20 "$out/client.txt"
-grep -E "sent|errors|p99|shed" "$out/corebench.txt" | tail -n 5 || true
+grep -E "sent|errors|p99|shed" "$out/chatbench.txt" | tail -n 5 || true
 exit "$client_status"

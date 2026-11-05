@@ -140,7 +140,7 @@ Cờ event chờ phát (M3.1, D142–D149): 7 collection `messages`, `message_ed
 
 ---
 
-## 6. Kiến trúc Components & Bố cục Package `apps/core`
+## 6. Kiến trúc Components & Bố cục Package `apps/chat`
 
 ### 6.1 Sơ đồ kiến trúc Macro
 
@@ -181,10 +181,10 @@ flowchart TD
     NATS -.->|Subscribe| AppEvents
 ```
 
-### 6.2 Phân cấp & Hướng phụ thuộc Packages (`apps/core`)
+### 6.2 Phân cấp & Hướng phụ thuộc Packages (`apps/chat`)
 
 ```
-apps/core/
+apps/chat/
   main.go          os.Exit(app.Main(os.Args[1:]))
   itest/           Integration tests toàn diện với infra thật
   internal/
@@ -215,7 +215,7 @@ modules/mention/
   internal/        config, domain, store (memstore, mongostore, storetest), plan, recipients, notify, consumer, groups, roomgroups, grpcsrv
 ```
 
-Luật layout (D182): `apps/<x>` là chương trình có `main.go`; `modules/<x>` là module nghiệp vụ nhúng, một package công khai + `internal/`. Một phần chỉ thành module khi có collection riêng không ai khác ghi, phụ thuộc một chiều vào core và nối qua event + port; domain của core không đủ nên ở lại `apps/core/internal`. `modules/mention/internal` không import `apps/core/internal` (luật `internal/` của Go) và chỉ mở 4 collection của nó (test `owned_collections_test.go`); trong core chỉ `app` và `config` import `mentionapp` (depguard `mention-module-entry`); phần dùng chung nằm ở `pkg/` (`jsconsume`, `mongobound`, `chatrpc`, `ids`, `keys`). Core nối app trong `apps/core/internal/app` (`mention_wiring.go`, `mention_core_reader.go`).
+Luật layout (D182): `apps/<x>` là chương trình có `main.go`; `modules/<x>` là module nghiệp vụ nhúng, một package công khai + `internal/`. Một phần chỉ thành module khi có collection riêng không ai khác ghi, phụ thuộc một chiều vào core và nối qua event + port; domain của core không đủ nên ở lại `apps/chat/internal`. `modules/mention/internal` không import `apps/chat/internal` (luật `internal/` của Go) và chỉ mở 4 collection của nó (test `owned_collections_test.go`); trong core chỉ `app` và `config` import `mentionapp` (depguard `mention-module-entry`); phần dùng chung nằm ở `pkg/` (`jsconsume`, `mongobound`, `chatrpc`, `ids`, `keys`). Core nối app trong `apps/chat/internal/app` (`mention_wiring.go`, `mention_chat_reader.go`).
 
 ```mermaid
 flowchart TB
@@ -244,7 +244,7 @@ flowchart TB
 
 ## 7. Hạ tầng, Vòng đời & Vận hành
 
-Biến môi trường, cổng, metric và lệnh vận hành của từng app: [apps/core.md](./apps/core.md), [apps/websocket.md](./apps/websocket.md), [apps/gateway.md](./apps/gateway.md).
+Biến môi trường, cổng, metric và lệnh vận hành của từng app: [apps/chat.md](./apps/chat.md), [apps/websocket.md](./apps/websocket.md), [apps/gateway.md](./apps/gateway.md).
 
 ### 7.1 Hạ tầng Lưu trữ & Message Bus
 - **Hai cụm Redis độc lập (D44):**
