@@ -1,6 +1,6 @@
 ---
 name: index-changes-by-command
-description: "Owner rule - index changes on an existing database run through an explicit one-shot command, never automatically at core startup (bootstrap)"
+description: "Owner rule - index changes on an existing database run through an explicit one-shot command, never automatically at chat startup (bootstrap)"
 metadata:
   type: feedback
 ---

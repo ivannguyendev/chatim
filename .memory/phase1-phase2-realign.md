@@ -7,7 +7,7 @@ metadata:
 
 The owner approved `docs/plans/2026-10-19-phase1-exit-summary.md` on 2026-10-19. The decisions are D177–D181 in `docs/decision-log.md` §17.5. The RFC and the critique round were folded into D177–D181 and deleted on 2026-10-25.
 
-- **Phase 1 exit.** `core` (Mention App embedded) + `websocket` reach `prod-like validated`. Go-live comes after `identity`.
+- **Phase 1 exit.** `chat` (Mention App embedded) + `websocket` reach `prod-like validated`. Go-live comes after `identity`.
 - **Order.** M4 → prod-like PoC → M5. Mention App stays embedded (D177).
 - **Accounts.** Chatim owns them (`identity` + `identity-verifier`), and never hands user ownership to another party.
 - **Migrator.** It runs dual with real data, on dev too.

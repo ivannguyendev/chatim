@@ -12,11 +12,11 @@ Owner-confirmed rules, reasons and decisions for chatim, one fact per file. Read
 ## Design
 
 - [design-principles](design-principles.md) — data classes not patches; state-driven `_state` events (effect engine dropped); survival timer; no internal retries; no limits without a use case; publish every change; mentions per target; shard-ready; full field names; self-expiring state per node
-- [no-sharding-in-core](no-sharding-in-core.md) — core never shards; keep the shard-ready rules; deployers pick the shard key (D161)
+- [no-sharding-in-chat](no-sharding-in-chat.md) — chat never shards; keep the shard-ready rules; deployers pick the shard key (D161)
 - [no-shared-tables-across-services](no-shared-tables-across-services.md) — never a separate service reading another service's tables; modular monolith by default
 - [index-changes-by-command](index-changes-by-command.md) — index changes on an existing DB only through an explicit command with dry run
 - [ops-setup-hard-to-get-wrong](ops-setup-hard-to-get-wrong.md) — cross-app settings and dependent timers are enforced in code (refuse to boot / not ready), never only documented; procedures like key rotation are one command (M6 part 2, 2026-10-31)
-- [cache-follows-db](cache-follows-db.md) — server caches change with the database (change signal with the data: change stream in identity since PM, `_state` events in core; never TTL); design for load, client caching is not ours; boot warm-ups must not storm on K8s restarts (M6 part 3a, 2026-10-31)
+- [cache-follows-db](cache-follows-db.md) — server caches change with the database (change signal with the data: change stream in identity since PM, `_state` events in chat; never TTL); design for load, client caching is not ours; boot warm-ups must not storm on K8s restarts (M6 part 3a, 2026-10-31)
 - [http-between-services-plain-keepalive](http-between-services-plain-keepalive.md) — service-to-service HTTP answers at once and reuses one kept-alive connection; never hold a request (no long polling, no SSE) (owner 2026-11-02)
 
 ## Owner decisions by area
@@ -28,7 +28,7 @@ Decisions of a built milestone live in `docs/decision-log.md`, `docs/events.md` 
 - [chat-mirrors-users-tenant-owns-identity](chat-mirrors-users-tenant-owns-identity.md) — owner 2026-11-02: chat owns no identity; user mirror, groups, per-tenant trusted issuers, revocation, token exchange to a chat token; reverses D179, D209 and the Keycloak choice
 - [tenant-apis-wait-for-a-tenant](tenant-apis-wait-for-a-tenant.md) — owner 2026-11-04: M6 closed at PA + PM; PB (batch server API, revoke-before), external IAM and group sync wait until the first tenant integrates, still before go-live (D260)
 - [identity-store-on-mongodb](identity-store-on-mongodb.md) — owner 2026-11-02: identity moved from Postgres to MongoDB in phase PM (built 2026-11-04, D245–D259); reverses D210 (scope is now a small mirror, no Postgres HA for go-live); feed and audit dropped, Postgres gone
-- [mention-app-role](mention-app-role.md) — Mention App in `modules/mention`, embedded in core; owns groups; own filtered consumer; notifications as `WsPublish`; mute is the notification app's
+- [mention-app-role](mention-app-role.md) — Mention App in `modules/mention`, embedded in chat; owns groups; own filtered consumer; notifications as `WsPublish`; mute is the notification app's
 - [server-spec-client-owns-behavior](server-spec-client-owns-behavior.md) — repo is server-only; the server specifies and enforces, client behaviour belongs to the client repo
 
 ## Adding a memory

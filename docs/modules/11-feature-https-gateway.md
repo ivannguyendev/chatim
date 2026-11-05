@@ -77,7 +77,7 @@ Gateway đọc sổ node chat sống trong Redis state (`chatrpc.OpenRouter`, nh
 - **Connect** `connectrpc.com/connect` v1.21.0 (plugin `buf.build/connectrpc/go` v1.21.0 sinh `chatimv1connect`): `POST /chatim.v1.{ChatService,MentionService}/{Lệnh}`, JSON hoặc protobuf; client sinh sẵn cho web, iOS, Android từ cùng proto.
 - **HTTP/1.1 và h2c** (`http.Server.Protocols`), TLS ở load balancer. Server: `ReadHeaderTimeout` 5s, `ReadTimeout` 10s, `WriteTimeout` ≥ `CHAT_REQUEST_DEADLINE` + 5s, `IdleTimeout` 60s, header ≤ 16KB, 250 stream HTTP/2 mỗi kết nối.
 - **Kho giới hạn theo user** (`pkg/core/userlimit`): token bucket `golang.org/x/time/rate` + bộ đếm đang chạy, LRU `GW_USER_LIMITERS` (100.000) có khoá, chỉ đẩy người không có lệnh đang chạy.
-- **Admin** (`pkg/core/admin`): `/livez`, `/readyz` (có chat READY và chưa tắt), `/metrics`, pprof; `/app probe` cho healthcheck.
+- **Admin** (`pkg/core/admin`): `/livez`, `/readyz` (đã đọc sổ node chat, identity đã đồng bộ lần đầu và chưa tắt; sổ rỗng lúc chạy không tắt `/readyz`), `/metrics`, pprof; `/app probe` cho healthcheck.
 
 ---
 
