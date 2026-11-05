@@ -1,6 +1,6 @@
 # M6 RF2 — gộp `pkg/auth` và `pkg/chatrpc` (tóm tắt)
 
-> Ngày 2026-11-04 · Nhánh `feat/m6` · Trạng thái: **owner duyệt 2026-11-05**, chưa xây · Phase 2/3 của đợt refactor trước M7 (RF1 `pkg/core` ✅ → **RF2** → RF3 đổi `core` → `chat`), cùng PR M6 (owner 2026-11-04). Không đổi hành vi, không đổi metric, env, wire hay dữ liệu.
+> Ngày 2026-11-04 · Nhánh `feat/m6` · Trạng thái: **✅ `dev-done`** (owner duyệt 2026-11-05; xây cùng ngày, commit `c59accd`, sửa test `6d10161`) · Phase 2/3 của đợt refactor trước M7 (RF1 `pkg/core` ✅ → **RF2** → RF3 đổi `core` → `chat`), cùng PR M6 (owner 2026-11-04). Không đổi hành vi, không đổi metric, env, wire hay dữ liệu.
 
 ## 1. Scope và ranh giới
 
@@ -120,8 +120,15 @@ Không chạy `e2e`, `alerts-check`, corebench, R5 (bảng ngân sách; e2e ch�
 
 | Yêu cầu | Thành phần | Task | Test | Bằng chứng |
 | :- | :- | :- | :- | :- |
-| DL#4 gộp `pkg/auth` + `authtest` | `pkg/auth`, websocket, gateway, identity | §4 phần auth | `make test`, `make itest` | (sau thực thi) |
-| DL#5 gộp `pkg/chatrpc` | `pkg/chatrpc`, websocket, gateway, core, mention, tools | §4 phần chatrpc | `make test`, `make itest` | (sau thực thi) |
-| DL#6 giữ package giao thức ở `pkg/` | `pkg/` còn `pb`, `auth`, `chatrpc`, `ids`, `keys`, `slotmap`, `wspublish`, `wstest`, `core/` | toàn phase | `ls pkg` | (sau thực thi) |
-| DL#13 luật lint theo path mới | `.golangci.yaml` | §5 | `make lint` + kiểm âm | (sau thực thi) |
-| DL#8 doc đang dùng (phần package gộp) | CLAUDE.md, `INDEXES.csv`, docs, `.memory/` | §5 | grep tên cũ | (sau thực thi) |
+| DL#4 gộp `pkg/auth` + `authtest` | `pkg/auth`, websocket, gateway, identity | §4 phần auth | `make test`, `make itest` | `c59accd`; `make test` 101 package ok; `make itest` `pkg/auth`, `pkg/auth/authtest`, `apps/{websocket,gateway,identity}/internal/app` ok |
+| DL#5 gộp `pkg/chatrpc` | `pkg/chatrpc`, websocket, gateway, core, mention, tools | §4 phần chatrpc | `make test`, `make itest` | `c59accd`; `pkg/chatrpc` ok (goleak phủ cả test forwarder và caller); `make itest` 100/101 ok lượt đầu, package còn lại xem §13 |
+| DL#6 giữ package giao thức ở `pkg/` | `pkg/` còn `pb`, `auth`, `chatrpc`, `ids`, `keys`, `slotmap`, `wspublish`, `wstest`, `core/` | toàn phase | `ls pkg` | `ls pkg` = `auth chatrpc core ids keys pb slotmap wspublish wstest` |
+| DL#13 luật lint theo path mới | `.golangci.yaml` | §5 | `make lint` + kiểm âm | 0 issues; blank import `authtest` từ `apps/gateway/internal/api` → `not allowed from list 'wstest-tests-only'`; blank import `nats.go` trong `pkg/auth` → `not allowed from list 'auth-no-nats'` |
+| DL#8 doc đang dùng (phần package gộp) | CLAUDE.md, `INDEXES.csv`, docs, `.memory/` | §5 | grep tên cũ | grep chỉ còn allowlist (dòng RF2 của roadmap, `INDEXES.csv` dòng decision log và summary M4) và chữ "revocation" nghĩa thường trong một câu test |
+
+## 13. Như đã xây (lệch so với plan, ghi chú)
+
+- Làm bằng một script (chuyển file, đổi `package`, đổi tên có và không có tiền tố, sửa import, gộp import trùng, đổi tiền tố chuỗi lỗi), rồi sửa tay hai chỗ biên dịch/lint bắt được: field `Tenant` trong `RevokedSession` bị đổi nhầm thành `RevokedTenant`; bỏ import tự trỏ trong `pkg/chatrpc/forwarder.go` làm dính nhóm import (goimports).
+- Thêm: `ClientName` trong test router `coreroute-test` → `chatrpc-test`.
+- Test chập chờn có từ trước, không do RF2: `TestUnauthCountFollowsEveryTransition` (`apps/websocket/internal/session/waiting_test.go`) đọc `unauth` ngay sau frame `ready`, trước khi `startRunning` trả slot chưa xác thực — cùng cuộc đua `50a2426` đã sửa cho 4 test khác. Lỗi 1 lần ở `make test` và 1 lần ở `make itest` (lượt chạy trên code trước khi sửa). Owner duyệt 2026-11-05 sửa riêng: `6d10161` thêm `synctest.Wait()` sau hai lần đăng nhập; 50 lần chạy riêng ok, `make itest` package `session` `-count=3` ok. Đường hết hạn không cần: `toWaiting` tăng `unauth` trước khi gửi frame.
+- Decision log của đợt RF1–RF3 vẫn giữ local tới khi đóng RF3; plan chi tiết RF2 đã xoá.
