@@ -1,6 +1,6 @@
 # M6 RF3 — đổi tên app `core` thành `chat`, gateway tìm node chat qua Redis (tóm tắt)
 
-> Ngày 2026-11-05 · Nhánh `feat/m6` · Trạng thái: **chờ owner duyệt bản sửa** (bản đầu duyệt 2026-11-05; owner 2026-11-05 thêm: rà env theo instance, gateway đọc sổ node trong Redis) · Phase 3/3 của đợt refactor trước M7 (RF1 `pkg/core` ✅ → RF2 `pkg/auth` + `pkg/chatrpc` ✅ → **RF3**), cùng PR M6 (owner 2026-11-04). Đổi tên không đổi hành vi nghiệp vụ, dữ liệu Mongo hay subject NATS; một thay đổi hành vi có chủ đích: gateway bỏ danh sách địa chỉ cố định (§5).
+> Ngày 2026-11-05 · Nhánh `feat/m6` · Trạng thái: **✅ `dev-done`** (owner duyệt 2026-11-05, gồm phần thêm: rà env theo instance, gateway đọc sổ node trong Redis; xây cùng ngày, commit `366d099`, `86bd9b5`, `eb3319c`, `1f86cd7`; D261) · Phase 3/3 của đợt refactor trước M7 (RF1 `pkg/core` ✅ → RF2 `pkg/auth` + `pkg/chatrpc` ✅ → **RF3**), cùng PR M6 (owner 2026-11-04). Đổi tên không đổi hành vi nghiệp vụ, dữ liệu Mongo hay subject NATS; một thay đổi hành vi có chủ đích: gateway bỏ danh sách địa chỉ cố định (§5).
 
 ## 1. Scope và ranh giới
 
@@ -134,12 +134,22 @@ Không đổi chi phí chạy. Gateway thêm một kết nối Redis state (đ�
 
 | Yêu cầu | Thành phần | Task | Test | Bằng chứng |
 | :- | :- | :- | :- | :- |
-| DL#7 đổi app, proto, env, metric, Redis, compose, tools | mọi app, `pkg/slotmap`, `pkg/chatrpc`, `deploy/`, `tools/` | commit 1, 2 | `test`, `itest`, `e2e`, `alerts-check` | điền sau khi thực thi |
-| DL#8 doc đang dùng đổi, lịch sử giữ, D mới | doc, `.memory/`, `docs/decision-log.md` | commit 1, 2, 4 | grep allowlist | điền sau khi thực thi |
-| DL#9 không sed hàng loạt | toàn phase | commit 1–2 | grep hai chiều | điền sau khi thực thi |
-| DL#11 symbol Go | Go | commit 2 | `vet`, `lint`, `test` | điền sau khi thực thi |
-| DL#12 `wait-healthy.sh` | `scripts/`, Makefile | commit 1 | `make app-up` | điền sau khi thực thi |
-| DL#13 luật lint theo `apps/chat` | `.golangci.yaml` | commit 1 | `make lint` + đếm 73 + kiểm âm | điền sau khi thực thi |
-| Gateway đọc sổ node (owner 2026-11-05) | `apps/gateway`, `pkg/chatrpc` | commit 3 | test gateway, `itest`, `e2e` | điền sau khi thực thi |
-| Dọn env theo instance, alias identity (owner 2026-11-05) | compose, `.env.example`, README | commit 2 | `make app-up`, `e2e` | điền sau khi thực thi |
-| `pkg/slotmap` đổi → R5 | `apps/chat/internal/platform/slot` | commit 2 | R5 | điền sau khi thực thi |
+| DL#7 đổi app, proto, env, metric, Redis, compose, tools | mọi app, `pkg/slotmap`, `pkg/chatrpc`, `deploy/`, `tools/` | commit 1, 2 | `test`, `itest`, `e2e`, `alerts-check` | `366d099`, `86bd9b5`; `make test` 101 package ok; `make itest` xanh; `make alerts-check` 38 luật; `make e2e` PASS 14 phase; gateway `POST /chatim.v1.ChatService/ListMyRooms` 200, `CoreService` 404; `/metrics` của `chatim-chat-1` có 78 dòng `chatim_chat_`, 0 dòng `chatim_core_`; Redis `exists chatim:chat-nodes` = 1 |
+| DL#8 doc đang dùng đổi, lịch sử giữ, D mới | doc, `.memory/`, `docs/decision-log.md` | commit 1, 2, 4 | grep allowlist | `1f86cd7` (D261, `.memory/no-sharding-in-chat.md`); grep `CoreService\|CORE_\|chatim_core\|chatim:cores\|core-up\|corecli\|corebench` ngoài lịch sử = 0 dòng (trừ tên file kết quả cũ `corebench.txt`) |
+| DL#9 không sed hàng loạt | toàn phase | commit 1–2 | grep hai chiều | grep `(?i)core` chỉ còn: tên luật `pkg-core-zero-domain`, dòng lịch sử trong `INDEXES.csv` và roadmap, số đo "N core" (lõi CPU) trong `docs/poc/README.md` và `docs/apps/identity.md`, link tới file lịch sử; grep đổi nhầm `chat NATS\|pkg/chat/\|schat` = 0 |
+| DL#11 symbol Go | Go | commit 2 | `vet`, `lint`, `test` | `86bd9b5`; `make vet` sạch, `make lint` 0 issues, `make test` 101 package ok |
+| DL#12 `wait-healthy.sh` | `scripts/`, Makefile | commit 1 | `make app-up` | `make app-up` đợi đủ 8 container healthy qua `scripts/wait-healthy.sh` |
+| DL#13 luật lint theo `apps/chat` | `.golangci.yaml` | commit 1 | `make lint` + đếm 73 + kiểm âm | `366d099`; `apps/core` 0 chỗ, `apps/chat` 73 chỗ; kiểm âm trên cây cũ và mới cùng báo `member-domain`, `room-domain`, `mention-module-entry` |
+| Gateway đọc sổ node (owner 2026-11-05) | `apps/gateway`, `pkg/chatrpc` | commit 3 | test gateway, `itest`, `e2e` | `eb3319c`; `go test -race -shuffle=on -count=5 ./apps/gateway/... ./pkg/chatrpc/...` ok (goleak); `make itest` gateway + `chatrpc` ok; e2e phase 9–10 qua gateway PASS; reviewer duyệt, không Critical/Important |
+| Dọn env theo instance, alias identity (owner 2026-11-05) | compose, `.env.example`, README | commit 2 | `make app-up`, `e2e` | `86bd9b5`; `docker compose config -q` ok; e2e phase 13, 15 (có `docker restart chatim-identity-1`) PASS qua `chatim-identity` |
+| `pkg/slotmap` đổi → R5 | `apps/chat/internal/platform/slot` | commit 2 | R5 | `make go ARGS="test -race -count=20 -timeout 20m ./apps/chat/internal/platform/slot/"` ok 449s |
+
+## 14. Như đã xây (lệch so với plan, ghi chú)
+
+- Đổi tên bằng script theo bảng §4 và danh sách của plan (không `sed` toàn repo), rồi sửa tay chỗ trình biên dịch và grep bắt được: `slotmap.Route.Node` ở `tools/chatcli` và `tools/poc/chatbench`; vài tên đổi nhầm thành `ChatNode` (`mentionChat`, `NewChatLoader`); script doc đổi nhầm "N core" nghĩa lõi CPU trong bảng số đo, link tới file lịch sử có chữ core trong tên, biến `CHAT_NODES` của Makefile và tên luật `pkg-core-zero-domain` — đều đã trả lại.
+- `make e2e` chạy một lần sau commit 3, phủ cả commit 2 (plan ghi chạy trước commit 2). R5 chạy sau commit 2, không có lần sửa nào sau đó vào `slot`/`pkg/slotmap`.
+- Commit 2 tạm đổi `GW_CORE_ADDRS` → `GW_CHAT_ADDRS`, commit 3 bỏ hẳn; `grpcclient.NewStatic` bị xoá vì chỉ gateway dùng.
+- `make infra-reset` chỉ xoá volume, không bật lại hạ tầng: lượt `itest` đầu lỗi vì không thấy `chatim-mongodb`. Hai container `chatim-core-1/2` cũ còn chạy từ trước khi đổi tên đã ghi `chatim:cores` vào Redis mới; đã gỡ container, xoá key, chờ 12s không xuất hiện lại.
+- Minor của reviewer commit 3, chưa sửa: gateway nhận SIGTERM đúng lúc đang đọc sổ khi khởi động thì thoát mã lỗi (websocket bỏ qua lỗi khi ctx đã huỷ); chưa có test end-to-end cho việc bỏ qua node có kết nối hỏng (test `pkg/chatrpc` đã phủ) và cho `Router.Trigger` khi `UNAVAILABLE`; test "không đọc được sổ" chờ thật 300ms; kết nối gRPC rảnh 30 phút thì ngủ và tự nối lại khi dùng (giống websocket, bỏ `WithIdleTimeout(0)` cũ của gateway).
+- Việc của owner: `.env` local (không tracked) còn `CORE1_GRPC_PORT`, `CORE2_GRPC_PORT` hoặc `CORE_GOGC` thì đổi/bỏ; biến cũ bị bỏ qua, dùng mặc định.
+- Decision log RF1–RF3 gộp vào D261; plan chi tiết RF3 và decision log local đã xoá.
