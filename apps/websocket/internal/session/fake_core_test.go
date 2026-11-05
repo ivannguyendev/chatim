@@ -8,7 +8,7 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/command"
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -18,7 +18,7 @@ type fakeCore struct {
 	panics  map[uint64]bool
 	nils    map[uint64]bool
 	started chan uint64
-	claims  chan jwtverify.Claims
+	claims  chan auth.Claims
 	calls   atomic.Int64
 }
 
@@ -28,11 +28,11 @@ func newFakeCore() *fakeCore {
 		panics:  map[uint64]bool{},
 		nils:    map[uint64]bool{},
 		started: make(chan uint64, 256),
-		claims:  make(chan jwtverify.Claims, 256),
+		claims:  make(chan auth.Claims, 256),
 	}
 }
 
-func (f *fakeCore) Execute(ctx context.Context, claims jwtverify.Claims, req *chatimv1.ClientRequest) (*chatimv1.ServerResponse, command.Outcome) {
+func (f *fakeCore) Execute(ctx context.Context, claims auth.Claims, req *chatimv1.ClientRequest) (*chatimv1.ServerResponse, command.Outcome) {
 	f.calls.Add(1)
 	f.started <- req.GetId()
 	f.claims <- claims

@@ -10,7 +10,7 @@ import (
 
 	"google.golang.org/grpc/metadata"
 
-	"github.com/ivannguyendev/chatim/pkg/callerid"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	"github.com/ivannguyendev/chatim/pkg/ids"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
@@ -43,7 +43,7 @@ type load struct {
 }
 
 func caller(ctx context.Context) context.Context {
-	return metadata.AppendToOutgoingContext(ctx, callerid.TenantHeader, itTenant, callerid.UserHeader, itUser)
+	return metadata.AppendToOutgoingContext(ctx, chatrpc.TenantHeader, itTenant, chatrpc.UserHeader, itUser)
 }
 
 func startLoad(client chatimv1.CoreServiceClient, rooms []string, senders int) *load {

@@ -11,10 +11,9 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
+	"github.com/ivannguyendev/chatim/pkg/auth"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	"github.com/ivannguyendev/chatim/pkg/core/metrics"
-	"github.com/ivannguyendev/chatim/pkg/corecall"
-	"github.com/ivannguyendev/chatim/pkg/coreroute"
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -24,19 +23,19 @@ var (
 )
 
 type (
-	Outcome        = corecall.Outcome
-	CommandLatency = corecall.CommandLatency
+	Outcome        = chatrpc.Outcome
+	CommandLatency = chatrpc.CommandLatency
 )
 
 type Router interface {
-	Room(roomID string) (coreroute.Conn, error)
-	Any() (coreroute.Conn, error)
+	Room(roomID string) (chatrpc.PoolConn, error)
+	Any() (chatrpc.PoolConn, error)
 	Trigger()
 }
 
 type Executor struct {
 	router   Router
-	forward  *corecall.Forwarder
+	forward  *chatrpc.Forwarder
 	commands map[protoreflect.FieldNumber]command
 }
 
@@ -44,7 +43,7 @@ func New(router Router, deadline time.Duration) (*Executor, error) {
 	if router == nil {
 		return nil, errors.New("command: router is required")
 	}
-	served, err := corecall.Commands(servedMethods())
+	served, err := chatrpc.Commands(servedMethods())
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +52,7 @@ func New(router Router, deadline time.Duration) (*Executor, error) {
 		return nil, err
 	}
 	e := &Executor{router: router, commands: cmds}
-	e.forward, err = corecall.New(corecall.Options{
+	e.forward, err = chatrpc.NewForwarder(chatrpc.ForwarderOptions{
 		Methods:       methods,
 		Deadline:      deadline,
 		Route:         e.route,
@@ -66,7 +65,7 @@ func New(router Router, deadline time.Duration) (*Executor, error) {
 	return e, nil
 }
 
-func (e *Executor) Execute(ctx context.Context, claims jwtverify.Claims, req *chatimv1.ClientRequest) (*chatimv1.ServerResponse, Outcome) {
+func (e *Executor) Execute(ctx context.Context, claims auth.Claims, req *chatimv1.ClientRequest) (*chatimv1.ServerResponse, Outcome) {
 	resp := &chatimv1.ServerResponse{Id: req.GetId()}
 	msg := req.ProtoReflect()
 	var cmd command
@@ -75,7 +74,7 @@ func (e *Executor) Execute(ctx context.Context, claims jwtverify.Claims, req *ch
 		cmd = e.commands[field.Number()]
 	}
 	if cmd.method == "" {
-		return failed(resp, Outcome{Code: codes.Unimplemented, Detail: errUnknownRequest.Error(), Message: corecall.ClientMessage(codes.Unimplemented, "")})
+		return failed(resp, Outcome{Code: codes.Unimplemented, Detail: errUnknownRequest.Error(), Message: chatrpc.ClientMessage(codes.Unimplemented, "")})
 	}
 	result, outcome := e.forward.Forward(ctx, claims, cmd.method, msg.Get(field).Message().Interface())
 	if outcome.Code != codes.OK {
@@ -89,22 +88,22 @@ func (e *Executor) CommandSources() []metrics.Source { return e.forward.CommandS
 
 func (e *Executor) CoreCallLatency() []CommandLatency { return e.forward.CoreCallLatency() }
 
-func (e *Executor) route(cmd corecall.Command, req proto.Message) (corecall.Conn, error) {
+func (e *Executor) route(cmd chatrpc.Command, req proto.Message) (chatrpc.Clients, error) {
 	roomID, ok := cmd.RoomID(req)
 	if !ok {
 		return conn(e.router.Any())
 	}
-	if _, err := coreroute.ParseRoom(roomID); err != nil {
-		return corecall.Conn{}, fmt.Errorf("%w: %w", errBadRoom, err)
+	if _, err := chatrpc.ParseRoom(roomID); err != nil {
+		return chatrpc.Clients{}, fmt.Errorf("%w: %w", errBadRoom, err)
 	}
 	return conn(e.router.Room(roomID))
 }
 
-func conn(c coreroute.Conn, err error) (corecall.Conn, error) {
+func conn(c chatrpc.PoolConn, err error) (chatrpc.Clients, error) {
 	if err != nil {
-		return corecall.Conn{}, err
+		return chatrpc.Clients{}, err
 	}
-	return corecall.Conn{Core: c.Core, Mention: c.Mention}, nil
+	return c.Clients, nil
 }
 
 func failed(resp *chatimv1.ServerResponse, outcome Outcome) (*chatimv1.ServerResponse, Outcome) {

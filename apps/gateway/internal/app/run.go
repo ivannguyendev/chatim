@@ -13,21 +13,21 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/ivannguyendev/chatim/apps/gateway/internal/config"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 	"github.com/ivannguyendev/chatim/pkg/core/admin"
-	"github.com/ivannguyendev/chatim/pkg/identitysync"
 )
 
 type Deps struct {
 	Listen       func(ctx context.Context, addr string) (net.Listener, error)
 	DialOptions  []grpc.DialOption
-	IdentityDoer identitysync.Doer
+	IdentityDoer auth.Doer
 }
 
 type node struct {
 	cfg   config.Config
 	log   *slog.Logger
 	conn  *grpc.ClientConn
-	sync  *identitysync.Syncer
+	sync  *auth.Syncer
 	redis *redis.Client
 	admin *admin.Server
 	http  *http.Server

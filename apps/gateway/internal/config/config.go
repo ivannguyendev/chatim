@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ivannguyendev/chatim/pkg/auth"
 	"github.com/ivannguyendev/chatim/pkg/core/envconfig"
-	"github.com/ivannguyendev/chatim/pkg/identitysync"
 )
 
 const (
@@ -40,7 +40,7 @@ type Config struct {
 	MaxHeaderBytes    int
 	H2MaxStreams      int
 	RequestDeadline   time.Duration
-	Identity          identitysync.Config
+	Identity          auth.SyncConfig
 	SharedRedis       SharedRedis
 }
 
@@ -87,7 +87,7 @@ func Load() (Config, error) {
 			Timeout:  p.span("GW_SHARED_REDIS_TIMEOUT", 500*time.Millisecond),
 		},
 	}
-	identity, err := identitysync.FromEnv("GW")
+	identity, err := auth.SyncConfigFromEnv("GW")
 	if err != nil {
 		p.fail(err)
 	}

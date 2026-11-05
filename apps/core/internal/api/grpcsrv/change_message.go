@@ -8,7 +8,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/member"
 	"github.com/ivannguyendev/chatim/apps/core/internal/message"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
-	"github.com/ivannguyendev/chatim/pkg/callerid"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -72,14 +72,14 @@ func (s *Service) ClearHistory(ctx context.Context, req *chatimv1.ClearHistoryRe
 	return &chatimv1.ClearHistoryResponse{ClearedAt: timestamppb.New(at)}, nil
 }
 
-func callerAndRoom(ctx context.Context, roomID string) (callerid.Caller, uint64, error) {
-	who, err := callerid.Of(ctx)
+func callerAndRoom(ctx context.Context, roomID string) (chatrpc.Caller, uint64, error) {
+	who, err := chatrpc.CallerOf(ctx)
 	if err != nil {
-		return callerid.Caller{}, 0, err
+		return chatrpc.Caller{}, 0, err
 	}
 	room, err := parseRoomID(roomID)
 	if err != nil {
-		return callerid.Caller{}, 0, err
+		return chatrpc.Caller{}, 0, err
 	}
 	return who, room, nil
 }

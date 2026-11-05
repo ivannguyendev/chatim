@@ -24,8 +24,8 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/config"
-	"github.com/ivannguyendev/chatim/pkg/coreroute"
-	"github.com/ivannguyendev/chatim/pkg/identitysync/identitysynctest"
+	"github.com/ivannguyendev/chatim/pkg/auth/authtest"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/pkg/slotmap"
 )
@@ -89,7 +89,7 @@ func testConfig(redisAddr, keysFile string) config.Config {
 		TypingRate: 2, TypingBurst: 4, TypingQueue: 64, TypingPendingMsgs: 128,
 		PresenceRedisAddr: "presence:6379", PresenceRedisPassword: testPresencePassword, PresenceRedisTimeout: 500 * time.Millisecond,
 		PresenceRedisPool: 4, PresenceTTL: 15 * time.Second, PresenceStampEvery: 2 * time.Second, PresenceFlush: 50 * time.Millisecond, PresenceBatch: 500,
-		PresenceCache: 5 * time.Second, PresenceWatchMax: 200, Identity: identitysynctest.Config(),
+		PresenceCache: 5 * time.Second, PresenceWatchMax: 200, Identity: authtest.SyncConfig(),
 	}
 }
 
@@ -123,7 +123,7 @@ func (f *fakeCore) ListMyRoomIDs(context.Context, *chatimv1.ListMyRoomIDsRequest
 	return &chatimv1.ListMyRoomIDsResponse{}, nil
 }
 
-func startFakeCore(t *testing.T) (*fakeCore, coreroute.Dialer) {
+func startFakeCore(t *testing.T) (*fakeCore, chatrpc.Dialer) {
 	t.Helper()
 	core := &fakeCore{started: make(chan struct{}, 8), release: make(chan struct{})}
 	lis := bufconn.Listen(1 << 20)
@@ -285,7 +285,7 @@ func receive[T any](t *testing.T, ch <-chan T, what string) T {
 
 func run(ctx context.Context, cfg config.Config, log *slog.Logger, deps Deps) error {
 	if deps.IdentityDoer == nil {
-		deps.IdentityDoer = identitysynctest.Accepting{}
+		deps.IdentityDoer = authtest.Accepting{}
 	}
 	return Run(ctx, cfg, log, deps)
 }

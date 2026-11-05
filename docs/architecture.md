@@ -215,7 +215,7 @@ modules/mention/
   internal/        config, domain, store (memstore, mongostore, storetest), plan, recipients, notify, consumer, groups, roomgroups, grpcsrv
 ```
 
-Luật layout (D182): `apps/<x>` là chương trình có `main.go`; `modules/<x>` là module nghiệp vụ nhúng, một package công khai + `internal/`. Một phần chỉ thành module khi có collection riêng không ai khác ghi, phụ thuộc một chiều vào core và nối qua event + port; domain của core không đủ nên ở lại `apps/core/internal`. `modules/mention/internal` không import `apps/core/internal` (luật `internal/` của Go) và chỉ mở 4 collection của nó (test `owned_collections_test.go`); trong core chỉ `app` và `config` import `mentionapp` (depguard `mention-module-entry`); phần dùng chung nằm ở `pkg/` (`jsconsume`, `mongobound`, `callerid`, `ids`, `keys`). Core nối app trong `apps/core/internal/app` (`mention_wiring.go`, `mention_core_reader.go`).
+Luật layout (D182): `apps/<x>` là chương trình có `main.go`; `modules/<x>` là module nghiệp vụ nhúng, một package công khai + `internal/`. Một phần chỉ thành module khi có collection riêng không ai khác ghi, phụ thuộc một chiều vào core và nối qua event + port; domain của core không đủ nên ở lại `apps/core/internal`. `modules/mention/internal` không import `apps/core/internal` (luật `internal/` của Go) và chỉ mở 4 collection của nó (test `owned_collections_test.go`); trong core chỉ `app` và `config` import `mentionapp` (depguard `mention-module-entry`); phần dùng chung nằm ở `pkg/` (`jsconsume`, `mongobound`, `chatrpc`, `ids`, `keys`). Core nối app trong `apps/core/internal/app` (`mention_wiring.go`, `mention_core_reader.go`).
 
 ```mermaid
 flowchart TB

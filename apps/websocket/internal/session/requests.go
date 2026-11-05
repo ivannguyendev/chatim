@@ -3,8 +3,8 @@ package session
 import (
 	"google.golang.org/grpc/codes"
 
+	"github.com/ivannguyendev/chatim/pkg/auth"
 	"github.com/ivannguyendev/chatim/pkg/ids"
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -25,14 +25,14 @@ var sweepingCodes = map[codes.Code]bool{codes.Unavailable: true, codes.DeadlineE
 
 type clientCommand struct {
 	req    *chatimv1.ClientRequest
-	claims jwtverify.Claims
+	claims auth.Claims
 }
 
 type roomQueue struct {
 	waiting []clientCommand
 }
 
-func (c *connection) request(req *chatimv1.ClientRequest, allowed bool, claims jwtverify.Claims, running bool) {
+func (c *connection) request(req *chatimv1.ClientRequest, allowed bool, claims auth.Claims, running bool) {
 	switch {
 	case !allowed:
 		c.reject(req, rejectRate, wireResourceExhausted, messageRate)

@@ -9,7 +9,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/ivannguyendev/chatim/pkg/callerid"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/tools/internal/route"
 )
@@ -32,7 +32,7 @@ func TestSendRetriesOnTheRefreshedRouteWithTheSameCID(t *testing.T) {
 			return "core-2:9000", true
 		}}
 		c := newClient(t, loc, net, route.Policy{})
-		resp, st, err := c.SendMessage(callerid.WithCaller(t.Context(), "acme", "alice"), send("c-1"))
+		resp, st, err := c.SendMessage(chatrpc.WithCaller(t.Context(), "acme", "alice"), send("c-1"))
 		if err != nil || resp.GetSeq() != 7 {
 			t.Fatalf("SendMessage = %v, %v; want seq 7", resp, err)
 		}
@@ -45,10 +45,10 @@ func TestSendRetriesOnTheRefreshedRouteWithTheSameCID(t *testing.T) {
 			}
 		}
 		md := live.callers[0]
-		if got := md.Get(callerid.TenantHeader); len(got) != 1 || got[0] != "acme" {
+		if got := md.Get(chatrpc.TenantHeader); len(got) != 1 || got[0] != "acme" {
 			t.Fatalf("tenant metadata = %v", got)
 		}
-		if got := md.Get(callerid.UserHeader); len(got) != 1 || got[0] != "alice" {
+		if got := md.Get(chatrpc.UserHeader); len(got) != 1 || got[0] != "alice" {
 			t.Fatalf("user metadata = %v", got)
 		}
 	})

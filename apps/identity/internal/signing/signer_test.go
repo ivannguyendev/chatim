@@ -11,7 +11,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/ivannguyendev/chatim/apps/identity/internal/signing"
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 )
 
 const (
@@ -37,15 +37,15 @@ func newSigner(t testing.TB, k signing.Key) *signing.Signer {
 	return s
 }
 
-func newVerifier(t testing.TB, k signing.Key, now time.Time) *jwtverify.Verifier {
+func newVerifier(t testing.TB, k signing.Key, now time.Time) *auth.Verifier {
 	t.Helper()
 	set, err := signing.JWKS([]signing.PublicKey{k.PublicKey()})
 	if err != nil {
 		t.Fatalf("JWKS: %v", err)
 	}
-	v, err := jwtverify.New(jwtverify.Config{JWKS: set, Issuer: testIssuer, Audience: testAudience, Now: func() time.Time { return now }})
+	v, err := auth.NewVerifier(auth.VerifierConfig{JWKS: set, Issuer: testIssuer, Audience: testAudience, Now: func() time.Time { return now }})
 	if err != nil {
-		t.Fatalf("jwtverify.New: %v", err)
+		t.Fatalf("auth.NewVerifier: %v", err)
 	}
 	return v
 }

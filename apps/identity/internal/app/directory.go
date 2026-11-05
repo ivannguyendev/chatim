@@ -9,15 +9,14 @@ import (
 	"github.com/ivannguyendev/chatim/apps/identity/internal/api"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/config"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/directory"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 	"github.com/ivannguyendev/chatim/pkg/core/metrics"
 	"github.com/ivannguyendev/chatim/pkg/core/userlimit"
-	"github.com/ivannguyendev/chatim/pkg/identitysync"
-	"github.com/ivannguyendev/chatim/pkg/revocation"
 )
 
 type directoryParts struct {
 	cache    *directory.Cache
-	list     *revocation.List
+	list     *auth.RevocationList
 	stats    *directory.Stats
 	mirror   *directory.Mirror
 	gate     *userlimit.Gate
@@ -26,7 +25,7 @@ type directoryParts struct {
 }
 
 func newDirectory(cfg config.Config, st Store) (*directoryParts, error) {
-	list, err := identitysync.NewList(tokenLeeway)
+	list, err := auth.NewNodeRevocationList(tokenLeeway)
 	if err != nil {
 		return nil, err
 	}

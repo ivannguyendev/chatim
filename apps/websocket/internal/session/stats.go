@@ -5,8 +5,8 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/ivannguyendev/chatim/pkg/auth"
 	"github.com/ivannguyendev/chatim/pkg/core/metrics"
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 )
 
 type rejectReason int
@@ -73,7 +73,7 @@ func newStats() *stats {
 	return s
 }
 
-func reasonLabel(reason jwtverify.Reason) string {
+func reasonLabel(reason auth.Reason) string {
 	if reason == "" {
 		return reasonUnknown
 	}

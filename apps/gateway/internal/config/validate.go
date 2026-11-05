@@ -8,7 +8,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/ivannguyendev/chatim/pkg/identitysync"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 )
 
 type rule struct {
@@ -26,7 +26,7 @@ func (c Config) Validate() error {
 		{c.JWTIssuer != "", "GW_JWT_ISSUER is required"},
 		{c.JWTAudience != "", "GW_JWT_AUDIENCE is required"},
 		{c.JWTLeeway >= 0, "GW_JWT_LEEWAY must not be negative"},
-		{c.JWTLeeway <= identitysync.MaxNodeLeeway, fmt.Sprintf("GW_JWT_LEEWAY must not exceed %v, the extra time identity keeps a revocation", identitysync.MaxNodeLeeway)},
+		{c.JWTLeeway <= auth.MaxNodeLeeway, fmt.Sprintf("GW_JWT_LEEWAY must not exceed %v, the extra time identity keeps a revocation", auth.MaxNodeLeeway)},
 		{c.SharedRedis.DB >= 0, "GW_SHARED_REDIS_DB must not be negative"},
 		{c.SharedRedis.Addr == "" || c.SharedRedis.Timeout > 0, "GW_SHARED_REDIS_TIMEOUT must be positive"},
 		positive("GW_BODY_MAX", c.BodyMax),

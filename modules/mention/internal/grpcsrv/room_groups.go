@@ -4,13 +4,13 @@ import (
 	"context"
 
 	"github.com/ivannguyendev/chatim/modules/mention/internal/domain"
-	"github.com/ivannguyendev/chatim/pkg/callerid"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	"github.com/ivannguyendev/chatim/pkg/ids"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 func (s *Service) ListRoomGroups(ctx context.Context, req *chatimv1.ListRoomGroupsRequest) (*chatimv1.ListRoomGroupsResponse, error) {
-	who, err := callerid.Of(ctx)
+	who, err := chatrpc.CallerOf(ctx)
 	if err != nil {
 		return nil, err
 	}

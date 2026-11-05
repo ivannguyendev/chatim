@@ -22,7 +22,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/identity/internal/signing"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store/mongostore"
-	"github.com/ivannguyendev/chatim/pkg/revocation"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 )
 
 func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
@@ -34,7 +34,7 @@ type fakeStore struct {
 	missing  atomic.Bool
 	outdated []string
 	closed   atomic.Bool
-	snapshot revocation.Snapshot
+	snapshot auth.RevocationSnapshot
 	cleaned  chan struct{}
 	due      string
 	dueAsked chan time.Duration
@@ -54,9 +54,9 @@ func (f *fakeStore) ActivateDueSigningKey(_ context.Context, lead time.Duration)
 	return kid, nil
 }
 
-func (f *fakeStore) Revocations(context.Context) (revocation.Snapshot, error) {
+func (f *fakeStore) Revocations(context.Context) (auth.RevocationSnapshot, error) {
 	if f.down.Load() {
-		return revocation.Snapshot{}, errOpen
+		return auth.RevocationSnapshot{}, errOpen
 	}
 	return f.snapshot, nil
 }

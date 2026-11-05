@@ -13,8 +13,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	"github.com/ivannguyendev/chatim/pkg/core/grpcclient"
-	"github.com/ivannguyendev/chatim/pkg/coreroute"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -82,7 +82,7 @@ func (f *fakeCore) recorded() []coreCall {
 	return append([]coreCall(nil), f.calls...)
 }
 
-func startFakeCore(t *testing.T) (*fakeCore, coreroute.Conn) {
+func startFakeCore(t *testing.T) (*fakeCore, chatrpc.PoolConn) {
 	t.Helper()
 	core := &fakeCore{}
 	lis := bufconn.Listen(1 << 20)
@@ -102,34 +102,34 @@ func startFakeCore(t *testing.T) (*fakeCore, coreroute.Conn) {
 		srv.Stop()
 		<-served
 	})
-	return core, coreroute.Conn{Addr: fakeCoreAddr, Core: chatimv1.NewCoreServiceClient(cc), Mention: chatimv1.NewMentionServiceClient(cc)}
+	return core, chatrpc.PoolConn{Addr: fakeCoreAddr, Clients: chatrpc.Clients{Core: chatimv1.NewCoreServiceClient(cc), Mention: chatimv1.NewMentionServiceClient(cc)}}
 }
 
 type fakeRouter struct {
-	conn     coreroute.Conn
+	conn     chatrpc.PoolConn
 	err      error
 	routes   []string
 	triggers int
 }
 
-func (r *fakeRouter) Room(roomID string) (coreroute.Conn, error) {
+func (r *fakeRouter) Room(roomID string) (chatrpc.PoolConn, error) {
 	r.routes = append(r.routes, "room:"+roomID)
-	if _, err := coreroute.ParseRoom(roomID); err != nil {
-		return coreroute.Conn{}, err
+	if _, err := chatrpc.ParseRoom(roomID); err != nil {
+		return chatrpc.PoolConn{}, err
 	}
 	return r.pick()
 }
 
-func (r *fakeRouter) Any() (coreroute.Conn, error) {
+func (r *fakeRouter) Any() (chatrpc.PoolConn, error) {
 	r.routes = append(r.routes, "any")
 	return r.pick()
 }
 
 func (r *fakeRouter) Trigger() { r.triggers++ }
 
-func (r *fakeRouter) pick() (coreroute.Conn, error) {
+func (r *fakeRouter) pick() (chatrpc.PoolConn, error) {
 	if r.err != nil {
-		return coreroute.Conn{}, r.err
+		return chatrpc.PoolConn{}, r.err
 	}
 	return r.conn, nil
 }

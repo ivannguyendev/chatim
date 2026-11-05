@@ -12,8 +12,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/identity/internal/directory"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
-	"github.com/ivannguyendev/chatim/pkg/identitysync"
-	"github.com/ivannguyendev/chatim/pkg/revocation"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 )
 
 const streamIdleAfter = time.Second
@@ -207,7 +206,7 @@ func (f *fakeSource) slot(t *testing.T, n int) *fakeSlot {
 type mirrorRig struct {
 	src      *fakeSource
 	cache    *directory.Cache
-	list     *revocation.List
+	list     *auth.RevocationList
 	stats    *directory.Stats
 	loaded   atomic.Int32
 	trusted  atomic.Int32
@@ -219,7 +218,7 @@ type mirrorRig struct {
 
 func newMirrorRig(t *testing.T, entries ...store.DirectoryEntry) *mirrorRig {
 	t.Helper()
-	list, err := identitysync.NewList(0)
+	list, err := auth.NewNodeRevocationList(0)
 	if err != nil {
 		t.Fatalf("NewList: %v", err)
 	}

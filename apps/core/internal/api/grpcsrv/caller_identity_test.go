@@ -7,7 +7,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 
-	"github.com/ivannguyendev/chatim/pkg/callerid"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -138,13 +138,13 @@ func TestEveryRPCChecksCallerIdentityFirst(t *testing.T) {
 		code  codes.Code
 	}{
 		{"no metadata", nil, codes.Unauthenticated},
-		{"tenant only", []string{callerid.TenantHeader, "acme"}, codes.Unauthenticated},
-		{"user only", []string{callerid.UserHeader, "alice"}, codes.Unauthenticated},
-		{"tenant under another key", []string{"x-chatim-tenants", "acme", callerid.UserHeader, "alice"}, codes.Unauthenticated},
-		{"invalid tenant", []string{callerid.TenantHeader, "Acme", callerid.UserHeader, "alice"}, codes.InvalidArgument},
-		{"invalid user", []string{callerid.TenantHeader, "acme", callerid.UserHeader, "al.ice"}, codes.InvalidArgument},
-		{"repeated tenant", []string{callerid.TenantHeader, "acme", callerid.TenantHeader, "other", callerid.UserHeader, "alice"}, codes.InvalidArgument},
-		{"repeated user", []string{callerid.TenantHeader, "acme", callerid.UserHeader, "alice", callerid.UserHeader, "bob"}, codes.InvalidArgument},
+		{"tenant only", []string{chatrpc.TenantHeader, "acme"}, codes.Unauthenticated},
+		{"user only", []string{chatrpc.UserHeader, "alice"}, codes.Unauthenticated},
+		{"tenant under another key", []string{"x-chatim-tenants", "acme", chatrpc.UserHeader, "alice"}, codes.Unauthenticated},
+		{"invalid tenant", []string{chatrpc.TenantHeader, "Acme", chatrpc.UserHeader, "alice"}, codes.InvalidArgument},
+		{"invalid user", []string{chatrpc.TenantHeader, "acme", chatrpc.UserHeader, "al.ice"}, codes.InvalidArgument},
+		{"repeated tenant", []string{chatrpc.TenantHeader, "acme", chatrpc.TenantHeader, "other", chatrpc.UserHeader, "alice"}, codes.InvalidArgument},
+		{"repeated user", []string{chatrpc.TenantHeader, "acme", chatrpc.UserHeader, "alice", chatrpc.UserHeader, "bob"}, codes.InvalidArgument},
 	}
 	for rpc, call := range rpcs {
 		for _, c := range callers {

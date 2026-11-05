@@ -8,7 +8,7 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/interest"
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 )
 
 func TestExpiryStopsDeliveryUntilANewTokenGivesReady(t *testing.T) {
@@ -94,7 +94,7 @@ func TestCommandQueuedBeforeExpiryRunsWithTheClaimsItArrivedWith(t *testing.T) {
 			}
 		}
 		second := <-h.core.claims
-		for _, c := range []jwtverify.Claims{claims, second} {
+		for _, c := range []auth.Claims{claims, second} {
 			if c.User != "u1" || !c.ExpiresAt.Equal(original) {
 				t.Fatalf("claims = %+v, want u1 expiring %v", c, original)
 			}

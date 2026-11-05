@@ -12,10 +12,9 @@ import (
 	"github.com/ivannguyendev/chatim/apps/identity/internal/api"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/directory"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 	"github.com/ivannguyendev/chatim/pkg/core/userlimit"
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 	"github.com/ivannguyendev/chatim/pkg/pb/chatim/identity/v1/identityv1connect"
-	"github.com/ivannguyendev/chatim/pkg/revocation"
 )
 
 const (
@@ -26,12 +25,12 @@ const (
 	tokenGhost   = "tok-ghost"
 )
 
-type fakeClaims map[string]jwtverify.Claims
+type fakeClaims map[string]auth.Claims
 
-func (f fakeClaims) Claims(token string) (jwtverify.Claims, error) {
+func (f fakeClaims) Claims(token string) (auth.Claims, error) {
 	c, ok := f[token]
 	if !ok {
-		return jwtverify.Claims{}, errors.New("bad token")
+		return auth.Claims{}, errors.New("bad token")
 	}
 	return c, nil
 }
@@ -64,7 +63,7 @@ func directoryEntry(tenant, id, name string, state store.State) store.DirectoryE
 type dirHarness struct {
 	*harness
 	dir    *testDirectory
-	list   *revocation.List
+	list   *auth.RevocationList
 	gate   *userlimit.Gate
 	client identityv1connect.DirectoryServiceClient
 }
@@ -97,13 +96,13 @@ func newDirHarness(t *testing.T, mods ...func(*api.Options)) *dirHarness {
 	return d
 }
 
-func newTestRevocations(t *testing.T) *revocation.List {
+func newTestRevocations(t *testing.T) *auth.RevocationList {
 	t.Helper()
-	list, err := revocation.New(revocation.Config{MaxKeep: time.Hour, MaxAhead: time.Minute})
+	list, err := auth.NewRevocationList(auth.RevocationListConfig{MaxKeep: time.Hour, MaxAhead: time.Minute})
 	if err != nil {
 		t.Fatal(err)
 	}
-	list.Merge(revocation.Snapshot{Sessions: []revocation.Session{{ID: "s-revoked", Tenant: "shop", ExpiresAt: t0.Add(15 * time.Minute)}}}, t0)
+	list.Merge(auth.RevocationSnapshot{Sessions: []auth.RevokedSession{{ID: "s-revoked", Tenant: "shop", ExpiresAt: t0.Add(15 * time.Minute)}}}, t0)
 	return list
 }
 

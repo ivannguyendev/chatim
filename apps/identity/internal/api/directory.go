@@ -11,12 +11,11 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/identity/internal/directory"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 	"github.com/ivannguyendev/chatim/pkg/core/userlimit"
 	"github.com/ivannguyendev/chatim/pkg/ids"
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 	identityv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/identity/v1"
 	"github.com/ivannguyendev/chatim/pkg/pb/chatim/identity/v1/identityv1connect"
-	"github.com/ivannguyendev/chatim/pkg/revocation"
 )
 
 const (
@@ -31,11 +30,11 @@ type Directory interface {
 }
 
 type Revocations interface {
-	Check(c jwtverify.Claims) revocation.Verdict
+	Check(c auth.Claims) auth.Verdict
 }
 
 type Claims interface {
-	Claims(token string) (jwtverify.Claims, error)
+	Claims(token string) (auth.Claims, error)
 }
 
 type directoryService struct {
@@ -96,21 +95,21 @@ type limiter struct {
 	inflightRejected *atomic.Uint64
 }
 
-func (s *server) enter(req headered, l limiter) (jwtverify.Claims, func(), error) {
+func (s *server) enter(req headered, l limiter) (auth.Claims, func(), error) {
 	if !l.gate.Enter() {
 		l.inflightRejected.Add(1)
-		return jwtverify.Claims{}, nil, errUnavailable("temporarily unavailable")
+		return auth.Claims{}, nil, errUnavailable("temporarily unavailable")
 	}
 	claims, err := s.authenticate(req)
 	if err != nil {
 		l.gate.Leave()
-		return jwtverify.Claims{}, nil, err
+		return auth.Claims{}, nil, err
 	}
 	release, err := l.users.Acquire(userlimit.Key{Tenant: claims.Tenant, User: claims.User})
 	if err != nil {
 		l.gate.Leave()
 		l.userLimited.Add(1)
-		return jwtverify.Claims{}, nil, connect.NewError(connect.CodeResourceExhausted, errors.New("too many requests, retry later"))
+		return auth.Claims{}, nil, connect.NewError(connect.CodeResourceExhausted, errors.New("too many requests, retry later"))
 	}
 	return claims, func() {
 		release()
@@ -118,17 +117,17 @@ func (s *server) enter(req headered, l limiter) (jwtverify.Claims, func(), error
 	}, nil
 }
 
-func (s *server) authenticate(req headered) (jwtverify.Claims, error) {
+func (s *server) authenticate(req headered) (auth.Claims, error) {
 	token, ok := bearerToken(req.Header())
 	if !ok {
-		return jwtverify.Claims{}, errUnauthenticated()
+		return auth.Claims{}, errUnauthenticated()
 	}
 	claims, err := s.opts.Claims.Claims(token)
 	if err != nil {
-		return jwtverify.Claims{}, errUnauthenticated()
+		return auth.Claims{}, errUnauthenticated()
 	}
-	if s.opts.Revocations.Check(claims) != revocation.Allowed {
-		return jwtverify.Claims{}, connect.NewError(connect.CodeUnauthenticated, errors.New("session revoked"))
+	if s.opts.Revocations.Check(claims) != auth.Allowed {
+		return auth.Claims{}, connect.NewError(connect.CodeUnauthenticated, errors.New("session revoked"))
 	}
 	return claims, nil
 }

@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/config"
-	"github.com/ivannguyendev/chatim/pkg/identitysync"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 )
 
 var envKeys = []string{
@@ -274,8 +274,8 @@ func TestLogValueCoversEveryField(t *testing.T) {
 	}
 }
 
-func identityWant() identitysync.Config {
-	c := identitysync.Defaults()
+func identityWant() auth.SyncConfig {
+	c := auth.SyncDefaults()
 	c.InternalURL, c.JWKSURL, c.Secret = "http://chatim-identity-1:8081", "https://identity.example.com/.well-known/jwks.json", "node-secret-value-0123456789abcdef"
 	return c
 }

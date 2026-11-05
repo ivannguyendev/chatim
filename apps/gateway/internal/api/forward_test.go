@@ -17,8 +17,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 
-	"github.com/ivannguyendev/chatim/pkg/callerid"
-	"github.com/ivannguyendev/chatim/pkg/corecall"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/pkg/pb/chatim/v1/chatimv1connect"
 )
@@ -44,7 +43,7 @@ func errorCode(t *testing.T, r reply) string {
 }
 
 func TestEveryRequestCommandReachesCoreAsTheTokenUser(t *testing.T) {
-	cmds, err := corecall.Commands(corecall.Request())
+	cmds, err := chatrpc.Commands(chatrpc.Request())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,10 +71,10 @@ func TestEveryRequestCommandReachesCoreAsTheTokenUser(t *testing.T) {
 		if len(calls) != i+1 || calls[i].method != c.Method {
 			t.Fatalf("%s core calls = %+v", c.Name, calls)
 		}
-		if got := calls[i].md.Get(callerid.TenantHeader); len(got) != 1 || got[0] != "acme" {
+		if got := calls[i].md.Get(chatrpc.TenantHeader); len(got) != 1 || got[0] != "acme" {
 			t.Fatalf("%s tenant = %v", c.Name, got)
 		}
-		if got := calls[i].md.Get(callerid.UserHeader); len(got) != 1 || got[0] != "alice" {
+		if got := calls[i].md.Get(chatrpc.UserHeader); len(got) != 1 || got[0] != "alice" {
 			t.Fatalf("%s user = %v", c.Name, got)
 		}
 	}
@@ -123,7 +122,7 @@ func TestUnknownFieldsAreDroppedForJSONAndProtobuf(t *testing.T) {
 func TestEveryMethodOutsideRequestIsUnimplemented(t *testing.T) {
 	h := newHarness(t, roomy)
 	token := bearerOf(h.token(t, claims{}))
-	served := corecall.Request()
+	served := chatrpc.Request()
 	refused := 0
 	for _, service := range []protoreflect.FullName{"chatim.v1.CoreService", "chatim.v1.MentionService"} {
 		d, err := protoregistry.GlobalFiles.FindDescriptorByName(service)

@@ -7,7 +7,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/message/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/store"
-	"github.com/ivannguyendev/chatim/pkg/callerid"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	"github.com/ivannguyendev/chatim/pkg/core/apperr"
 	"github.com/ivannguyendev/chatim/pkg/ids"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
@@ -18,7 +18,7 @@ var (
 	errForwardWithReply = fmt.Errorf("%w: forward_from with reply_to", apperr.ErrInvalidArgument)
 )
 
-func (s *Service) forwardCmd(ctx context.Context, who callerid.Caller, room uint64, req *chatimv1.SendMessageRequest) (actor.SendCmd, error) {
+func (s *Service) forwardCmd(ctx context.Context, who chatrpc.Caller, room uint64, req *chatimv1.SendMessageRequest) (actor.SendCmd, error) {
 	if req.GetReplyTo() != nil {
 		return actor.SendCmd{}, errForwardWithReply
 	}

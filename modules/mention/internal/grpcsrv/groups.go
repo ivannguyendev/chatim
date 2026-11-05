@@ -5,12 +5,12 @@ import (
 
 	"github.com/ivannguyendev/chatim/modules/mention/internal/domain"
 	"github.com/ivannguyendev/chatim/modules/mention/internal/store"
-	"github.com/ivannguyendev/chatim/pkg/callerid"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 func (s *Service) SetGroups(ctx context.Context, req *chatimv1.SetGroupsRequest) (*chatimv1.SetGroupsResponse, error) {
-	who, err := callerid.Of(ctx)
+	who, err := chatrpc.CallerOf(ctx)
 	if err != nil {
 		return nil, err
 	}

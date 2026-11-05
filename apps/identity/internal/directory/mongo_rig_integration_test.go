@@ -18,7 +18,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/identity/internal/directory"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store/mongostore"
-	"github.com/ivannguyendev/chatim/pkg/identitysync"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 )
 
 const (
@@ -109,7 +109,7 @@ type runningMirror struct {
 
 func startMirror(tb testing.TB, src directory.Source, slots int) *runningMirror {
 	tb.Helper()
-	list, err := identitysync.NewList(0)
+	list, err := auth.NewNodeRevocationList(0)
 	if err != nil {
 		tb.Fatalf("NewList: %v", err)
 	}

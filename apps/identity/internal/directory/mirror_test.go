@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
-	"github.com/ivannguyendev/chatim/pkg/revocation"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 )
 
 func startedMirror(t *testing.T, entries ...store.DirectoryEntry) *mirrorRig {
@@ -52,7 +52,7 @@ func TestMirrorWakesTrustAndReloadsRevocationsOnTheirEvents(t *testing.T) {
 		if r.trusted.Load() != 1 || r.src.count() != 1 {
 			t.Fatalf("trust wakes=%d revocation loads=%d; want 1 and 1", r.trusted.Load(), r.src.count())
 		}
-		r.src.fakeRevocations.set(revocation.Snapshot{Sessions: []revocation.Session{{ID: "iphone", Tenant: "shop", ExpiresAt: time.Now().Add(time.Hour)}}}, nil)
+		r.src.fakeRevocations.set(auth.RevocationSnapshot{Sessions: []auth.RevokedSession{{ID: "iphone", Tenant: "shop", ExpiresAt: time.Now().Add(time.Hour)}}}, nil)
 		s.send(kindEvent("T2", store.EventRevocation))
 		synctest.Wait()
 		if sessions, _ := r.list.Counts(); r.src.count() != 2 || sessions != 1 || r.trusted.Load() != 1 {
@@ -192,7 +192,7 @@ func TestMirrorReloadsRevocationsEveryRecheckWithoutEvents(t *testing.T) {
 		if r.src.count() != 3 || r.stats.RevocationErrors() != 0 {
 			t.Fatalf("revocation loads after 11s idle = %d errors=%d; want 3", r.src.count(), r.stats.RevocationErrors())
 		}
-		r.src.fakeRevocations.set(revocation.Snapshot{}, errDown)
+		r.src.fakeRevocations.set(auth.RevocationSnapshot{}, errDown)
 		time.Sleep(5 * time.Second)
 		synctest.Wait()
 		if r.stats.RevocationErrors() != 1 || !r.cache.Ready() {

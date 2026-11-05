@@ -5,7 +5,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/core/internal/interaction"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
-	"github.com/ivannguyendev/chatim/pkg/callerid"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -24,7 +24,7 @@ func (s *Service) SetBookmark(ctx context.Context, req *chatimv1.SetBookmarkRequ
 }
 
 func (s *Service) ListBookmarks(ctx context.Context, req *chatimv1.ListBookmarksRequest) (*chatimv1.ListBookmarksResponse, error) {
-	who, err := callerid.Of(ctx)
+	who, err := chatrpc.CallerOf(ctx)
 	if err != nil {
 		return nil, err
 	}

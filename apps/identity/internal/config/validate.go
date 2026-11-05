@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ivannguyendev/chatim/pkg/identitysync"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 )
 
 const (
@@ -29,8 +29,8 @@ func (c Config) Validate() error {
 		{c.ListenAddr != c.AdminAddr, "IDENTITY_ADMIN_ADDR must differ from IDENTITY_ADDR"},
 		{c.InternalAddr == "" || (c.InternalAddr != c.AdminAddr && c.InternalAddr != c.ListenAddr), "IDENTITY_INTERNAL_ADDR must differ from IDENTITY_ADDR and IDENTITY_ADMIN_ADDR"},
 		{c.InternalAddr == "" || len(c.NodeSecret) >= minNodeSecretLength, fmt.Sprintf("IDENTITY_NODE_SECRET must hold at least %d bytes when IDENTITY_INTERNAL_ADDR is on", minNodeSecretLength)},
-		{c.KeyActivateLead >= c.KeyReload+identitysync.MaxKeysInterval, fmt.Sprintf("IDENTITY_KEY_ACTIVATE_LEAD %v must be at least IDENTITY_KEY_RELOAD + %v = %v so every node fetches a new key before it signs", c.KeyActivateLead, identitysync.MaxKeysInterval, c.KeyReload+identitysync.MaxKeysInterval)},
-		{c.RevocationKeep() <= identitysync.MaxEntryKeep, fmt.Sprintf("IDENTITY_TOKEN_TTL %v + %v must not exceed %v, the longest revocation a node keeps", c.TokenTTL, revocationMargin, identitysync.MaxEntryKeep)},
+		{c.KeyActivateLead >= c.KeyReload+auth.MaxKeysInterval, fmt.Sprintf("IDENTITY_KEY_ACTIVATE_LEAD %v must be at least IDENTITY_KEY_RELOAD + %v = %v so every node fetches a new key before it signs", c.KeyActivateLead, auth.MaxKeysInterval, c.KeyReload+auth.MaxKeysInterval)},
+		{c.RevocationKeep() <= auth.MaxEntryKeep, fmt.Sprintf("IDENTITY_TOKEN_TTL %v + %v must not exceed %v, the longest revocation a node keeps", c.TokenTTL, revocationMargin, auth.MaxEntryKeep)},
 		{c.MongoURI != "", "IDENTITY_MONGO_URI is required"},
 		{!hasCredentials(c.MongoURI), "IDENTITY_MONGO_URI must not carry credentials; use IDENTITY_MONGO_USER and IDENTITY_MONGO_PASSWORD or IDENTITY_MONGO_PASSWORD_FILE"},
 		{c.MongoPassword == "" || c.MongoUser != "", "IDENTITY_MONGO_PASSWORD needs IDENTITY_MONGO_USER"},

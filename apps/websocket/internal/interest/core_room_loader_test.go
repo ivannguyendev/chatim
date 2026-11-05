@@ -12,8 +12,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	"github.com/ivannguyendev/chatim/pkg/callerid"
-	"github.com/ivannguyendev/chatim/pkg/coreroute"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -39,11 +38,11 @@ type anyRouter struct {
 	triggers int
 }
 
-func (r *anyRouter) Any() (coreroute.Conn, error) {
+func (r *anyRouter) Any() (chatrpc.PoolConn, error) {
 	if r.err != nil {
-		return coreroute.Conn{}, r.err
+		return chatrpc.PoolConn{}, r.err
 	}
-	return coreroute.Conn{Core: r.core}, nil
+	return chatrpc.PoolConn{Clients: chatrpc.Clients{Core: r.core}}, nil
 }
 
 func (r *anyRouter) Trigger() { r.triggers++ }
@@ -64,10 +63,10 @@ func TestCoreLoaderAsksAnyCoreAsTheCallerWithinTheDeadline(t *testing.T) {
 	if !slices.Equal(m.Joined, []Room{{ID: 7, Ver: 3}, {ID: 12, Ver: 1}}) || !slices.Equal(m.Left, []Room{{ID: 9, Ver: 4}}) {
 		t.Fatalf("membership = %+v", m)
 	}
-	if got := core.md.Get(callerid.TenantHeader); !slices.Equal(got, []string{"acme"}) {
+	if got := core.md.Get(chatrpc.TenantHeader); !slices.Equal(got, []string{"acme"}) {
 		t.Fatalf("tenant header = %v", got)
 	}
-	if got := core.md.Get(callerid.UserHeader); !slices.Equal(got, []string{"alice"}) {
+	if got := core.md.Get(chatrpc.UserHeader); !slices.Equal(got, []string{"alice"}) {
 		t.Fatalf("user header = %v", got)
 	}
 	if core.deadline <= 0 || core.deadline > 2*time.Second {
@@ -76,8 +75,8 @@ func TestCoreLoaderAsksAnyCoreAsTheCallerWithinTheDeadline(t *testing.T) {
 }
 
 func TestCoreLoaderFailures(t *testing.T) {
-	noRoute := &anyRouter{err: coreroute.ErrNoRoute}
-	if _, err := mustLoader(t, noRoute).Load(context.Background(), "t", "u"); !errors.Is(err, coreroute.ErrNoRoute) {
+	noRoute := &anyRouter{err: chatrpc.ErrNoRoute}
+	if _, err := mustLoader(t, noRoute).Load(context.Background(), "t", "u"); !errors.Is(err, chatrpc.ErrNoRoute) {
 		t.Fatalf("no route = %v", err)
 	}
 	down := &anyRouter{core: &roomIDsCore{err: status.Error(codes.Unavailable, "down")}}

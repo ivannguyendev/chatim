@@ -58,8 +58,8 @@ linters:
           deny:
             - pkg: github.com/ivannguyendev/chatim/pkg/wstest
               desc: pkg/wstest is a test client for tests and tools only (D208)
-            - pkg: github.com/ivannguyendev/chatim/pkg/identitysync/identitysynctest
-              desc: pkg/identitysync/identitysynctest holds identity fakes for tests only
+            - pkg: github.com/ivannguyendev/chatim/pkg/auth/authtest
+              desc: pkg/auth/authtest holds identity fakes for tests only
         domain-boundaries:
           files:
             - "**/apps/core/internal/message/**"
@@ -263,10 +263,9 @@ linters:
               desc: identity embeds no chat module
             - pkg: github.com/nats-io
               desc: identity does not depend on NATS (owner 2026-10-27)
-        identity-sync-no-nats:
+        auth-no-nats:
           files:
-            - "**/pkg/identitysync/**"
-            - "**/pkg/revocation/**"
+            - "**/pkg/auth/**"
           deny:
             - pkg: github.com/nats-io
               desc: revocations and keys reach nodes over https from identity, never through NATS (owner 2026-10-27)
@@ -330,7 +329,7 @@ linters:
       - path: ^pkg/core/backoff/backoff\.go$
         linters: [gosec]
         text: G404
-      - path: ^pkg/identitysync/identitysynctest/
+      - path: ^pkg/auth/authtest/
         linters: [gosec]
         text: G101
       - path: ^pkg/core/envconfig/secret\.go$

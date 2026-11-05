@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/pkg/identitysync/identitysynctest"
+	"github.com/ivannguyendev/chatim/pkg/auth/authtest"
 )
 
 type blockedIdentity struct {
@@ -74,7 +74,7 @@ func TestNodeRefusedByIdentityStaysNotReady(t *testing.T) {
 	cfg.Identity.ReadyTimeout = 200 * time.Millisecond
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	done := runAsync(ctx, cfg, logs.logger(), Deps{PresenceRedis: newPresenceRedis(t).open, Dial: dial, Listen: lis.listen, NATS: newFakeNATS().dial, IdentityDoer: identitysynctest.Refusing{Status: http.StatusUnauthorized}})
+	done := runAsync(ctx, cfg, logs.logger(), Deps{PresenceRedis: newPresenceRedis(t).open, Dial: dial, Listen: lis.listen, NATS: newFakeNATS().dial, IdentityDoer: authtest.Refusing{Status: http.StatusUnauthorized}})
 	adminAddr := awaitListener(t, lis.admin)
 	logs.await(t, "identity refused this node")
 	if code, _ := httpStatus(t, adminAddr, "/readyz"); code != http.StatusServiceUnavailable {

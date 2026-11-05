@@ -6,18 +6,18 @@ import (
 	"errors"
 	"time"
 
-	"github.com/ivannguyendev/chatim/pkg/coreroute"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 type (
-	Locator = coreroute.Locator
-	Dialer  = coreroute.Dialer
+	Locator = chatrpc.Locator
+	Dialer  = chatrpc.Dialer
 )
 
 type routes interface {
-	Room(roomID string) (coreroute.Conn, error)
-	Any() (coreroute.Conn, error)
+	Room(roomID string) (chatrpc.PoolConn, error)
+	Any() (chatrpc.PoolConn, error)
 	Refresh(ctx context.Context) error
 	Close() error
 }
@@ -40,7 +40,7 @@ type Client struct {
 }
 
 func New(loc Locator, dial Dialer, p Policy) (*Client, error) {
-	pool, err := coreroute.NewPool(loc, dial)
+	pool, err := chatrpc.NewPool(loc, dial)
 	if err != nil {
 		return nil, err
 	}

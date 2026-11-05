@@ -13,16 +13,16 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/reflect/protoregistry"
 
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	"github.com/ivannguyendev/chatim/pkg/core/httpcors"
 	"github.com/ivannguyendev/chatim/pkg/core/metrics"
 	"github.com/ivannguyendev/chatim/pkg/core/userlimit"
-	"github.com/ivannguyendev/chatim/pkg/corecall"
 )
 
 const msgNotSupported = "request not supported"
 
 type Options struct {
-	Forwarder   *corecall.Forwarder
+	Forwarder   *chatrpc.Forwarder
 	Verifier    Verifier
 	Revocations Revocations
 	Gate        *userlimit.Gate
@@ -69,7 +69,7 @@ func New(opts Options) (*Handler, error) {
 
 func (h *Handler) Sources() []metrics.Source { return h.stats.sources() }
 
-func (c *chain) procedures(fwd *corecall.Forwarder, bodyMax int) (*http.ServeMux, error) {
+func (c *chain) procedures(fwd *chatrpc.Forwarder, bodyMax int) (*http.ServeMux, error) {
 	mux := http.NewServeMux()
 	for _, cmd := range fwd.Commands() {
 		mt, err := protoregistry.GlobalTypes.FindMessageByName(cmd.Request.FullName())
@@ -91,7 +91,7 @@ func (c *chain) procedures(fwd *corecall.Forwarder, bodyMax int) (*http.ServeMux
 	return mux, nil
 }
 
-func forward(fwd *corecall.Forwarder, method string) func(context.Context, *connect.Request[envelope]) (*connect.Response[envelope], error) {
+func forward(fwd *chatrpc.Forwarder, method string) func(context.Context, *connect.Request[envelope]) (*connect.Response[envelope], error) {
 	return func(ctx context.Context, req *connect.Request[envelope]) (*connect.Response[envelope], error) {
 		claims, ok := ClaimsFrom(ctx)
 		if !ok {

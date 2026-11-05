@@ -7,7 +7,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
 	"github.com/ivannguyendev/chatim/apps/core/internal/room/roomlist"
-	"github.com/ivannguyendev/chatim/pkg/callerid"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	"github.com/ivannguyendev/chatim/pkg/core/apperr"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
@@ -25,7 +25,7 @@ type RoomLister interface {
 }
 
 func (s *Service) ListMyRooms(ctx context.Context, req *chatimv1.ListMyRoomsRequest) (*chatimv1.ListMyRoomsResponse, error) {
-	who, err := callerid.Of(ctx)
+	who, err := chatrpc.CallerOf(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +60,7 @@ func (s *Service) ListMyRooms(ctx context.Context, req *chatimv1.ListMyRoomsRequ
 }
 
 func (s *Service) GetRooms(ctx context.Context, req *chatimv1.GetRoomsRequest) (*chatimv1.GetRoomsResponse, error) {
-	who, err := callerid.Of(ctx)
+	who, err := chatrpc.CallerOf(ctx)
 	if err != nil {
 		return nil, err
 	}

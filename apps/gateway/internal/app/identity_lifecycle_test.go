@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivannguyendev/chatim/pkg/identitysync/identitysynctest"
+	"github.com/ivannguyendev/chatim/pkg/auth/authtest"
 )
 
 type unreachableIdentity struct{}
@@ -57,7 +57,7 @@ func TestNodeRefusedByIdentityStaysNotReady(t *testing.T) {
 	cfg.Identity.ReadyTimeout = 200 * time.Millisecond
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	done := runAsyncWith(ctx, cfg, logs.logger(), Deps{Listen: lis.listen, IdentityDoer: identitysynctest.Refusing{Status: http.StatusNotFound}})
+	done := runAsyncWith(ctx, cfg, logs.logger(), Deps{Listen: lis.listen, IdentityDoer: authtest.Refusing{Status: http.StatusNotFound}})
 	adminAddr := receive(t, lis.admin, "admin listener")
 	logs.await(t, "identity refused this node")
 	if code, _ := httpStatus(t, adminAddr, "/readyz"); code != http.StatusServiceUnavailable {

@@ -29,10 +29,10 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/ivannguyendev/chatim/apps/gateway/internal/api"
+	"github.com/ivannguyendev/chatim/pkg/auth"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	"github.com/ivannguyendev/chatim/pkg/core/grpcclient"
 	"github.com/ivannguyendev/chatim/pkg/core/userlimit"
-	"github.com/ivannguyendev/chatim/pkg/corecall"
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -138,10 +138,10 @@ func newHarness(t *testing.T, l limits) *harness {
 	t.Helper()
 	h := &harness{core: &fakeCore{}, logs: &syncBuffer{}, served: make(chan struct{}, 64)}
 	conn := startCore(t, h.core)
-	fwd, err := corecall.New(corecall.Options{
-		Methods:  corecall.Request(),
+	fwd, err := chatrpc.NewForwarder(chatrpc.ForwarderOptions{
+		Methods:  chatrpc.Request(),
 		Deadline: 2 * time.Second,
-		Route: func(corecall.Command, proto.Message) (corecall.Conn, error) {
+		Route: func(chatrpc.Command, proto.Message) (chatrpc.Clients, error) {
 			if h.panics.Load() {
 				panic("route failed")
 			}
@@ -157,7 +157,7 @@ func newHarness(t *testing.T, l limits) *harness {
 	}
 	h.priv = priv
 	jwks := fmt.Sprintf(`{"keys":[{"kty":"OKP","crv":"Ed25519","kid":%q,"x":%q}]}`, testKID, base64.RawURLEncoding.EncodeToString(pub))
-	verifier, err := jwtverify.New(jwtverify.Config{JWKS: []byte(jwks), Issuer: testIssuer, Audience: testAudience, Leeway: time.Second})
+	verifier, err := auth.NewVerifier(auth.VerifierConfig{JWKS: []byte(jwks), Issuer: testIssuer, Audience: testAudience, Leeway: time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +192,7 @@ func newHarness(t *testing.T, l limits) *harness {
 	return h
 }
 
-func startCore(t *testing.T, core *fakeCore) corecall.Conn {
+func startCore(t *testing.T, core *fakeCore) chatrpc.Clients {
 	t.Helper()
 	lis := bufconn.Listen(1 << 20)
 	srv := grpc.NewServer(grpc.UnknownServiceHandler(core.handle))
@@ -211,7 +211,7 @@ func startCore(t *testing.T, core *fakeCore) corecall.Conn {
 		srv.Stop()
 		<-served
 	})
-	return corecall.Conn{Core: chatimv1.NewCoreServiceClient(cc), Mention: chatimv1.NewMentionServiceClient(cc)}
+	return chatrpc.Clients{Core: chatimv1.NewCoreServiceClient(cc), Mention: chatimv1.NewMentionServiceClient(cc)}
 }
 
 type claims struct {

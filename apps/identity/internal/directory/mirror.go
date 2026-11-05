@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 	"github.com/ivannguyendev/chatim/pkg/core/backoff"
-	"github.com/ivannguyendev/chatim/pkg/revocation"
 )
 
 const (
@@ -16,13 +16,13 @@ const (
 )
 
 type RevocationSource interface {
-	Revocations(ctx context.Context) (revocation.Snapshot, error)
+	Revocations(ctx context.Context) (auth.RevocationSnapshot, error)
 }
 
 type Mirror struct {
 	Source   Source
 	Cache    *Cache
-	List     *revocation.List
+	List     *auth.RevocationList
 	Stats    *Stats
 	Slots    int
 	Recheck  time.Duration
@@ -148,7 +148,7 @@ func (m *Mirror) pause(ctx context.Context, run *mirrorRun, d time.Duration) {
 	}
 }
 
-func refreshRevocations(ctx context.Context, src RevocationSource, list *revocation.List) error {
+func refreshRevocations(ctx context.Context, src RevocationSource, list *auth.RevocationList) error {
 	snap, err := src.Revocations(ctx)
 	now := time.Now()
 	if err == nil {

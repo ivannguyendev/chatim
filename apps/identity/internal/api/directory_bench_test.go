@@ -19,11 +19,10 @@ import (
 	"github.com/ivannguyendev/chatim/apps/identity/internal/keyring"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/signing"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 	"github.com/ivannguyendev/chatim/pkg/core/userlimit"
-	"github.com/ivannguyendev/chatim/pkg/identitysync"
 	identityv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/identity/v1"
 	"github.com/ivannguyendev/chatim/pkg/pb/chatim/identity/v1/identityv1connect"
-	"github.com/ivannguyendev/chatim/pkg/revocation"
 )
 
 const (
@@ -90,22 +89,22 @@ func benchTokens(b *testing.B, ring *keyring.Ring) []string {
 	return tokens
 }
 
-func benchRevocations(b *testing.B) *revocation.List {
+func benchRevocations(b *testing.B) *auth.RevocationList {
 	b.Helper()
-	list, err := identitysync.NewList(30 * time.Second)
+	list, err := auth.NewNodeRevocationList(30 * time.Second)
 	if err != nil {
 		b.Fatal(err)
 	}
 	now := time.Now()
-	sessions := make([]revocation.Session, benchRevoked)
+	sessions := make([]auth.RevokedSession, benchRevoked)
 	for i := range sessions {
 		sid, err := signing.NewSessionID(rand.Reader)
 		if err != nil {
 			b.Fatal(err)
 		}
-		sessions[i] = revocation.Session{ID: sid, Tenant: "shop", ExpiresAt: now.Add(15 * time.Minute)}
+		sessions[i] = auth.RevokedSession{ID: sid, Tenant: "shop", ExpiresAt: now.Add(15 * time.Minute)}
 	}
-	list.Merge(revocation.Snapshot{Sessions: sessions}, now)
+	list.Merge(auth.RevocationSnapshot{Sessions: sessions}, now)
 	return list
 }
 

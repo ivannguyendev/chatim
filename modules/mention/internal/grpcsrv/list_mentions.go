@@ -8,7 +8,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/modules/mention/internal/domain"
 	"github.com/ivannguyendev/chatim/modules/mention/internal/store"
-	"github.com/ivannguyendev/chatim/pkg/callerid"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	"github.com/ivannguyendev/chatim/pkg/keys"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
@@ -16,7 +16,7 @@ import (
 const MentionPageMax = 20
 
 type mentionRead struct {
-	who        callerid.Caller
+	who        chatrpc.Caller
 	rooms      map[uint64]domain.MemberRoom
 	groups     map[string]time.Time
 	groupIDs   []string
@@ -29,7 +29,7 @@ type mentionRead struct {
 }
 
 func (s *Service) ListMentions(ctx context.Context, req *chatimv1.ListMentionsRequest) (*chatimv1.ListMentionsResponse, error) {
-	who, err := callerid.Of(ctx)
+	who, err := chatrpc.CallerOf(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +60,7 @@ func (s *Service) ListMentions(ctx context.Context, req *chatimv1.ListMentionsRe
 	return s.mentionResponse(ctx, r, page, mentionReasons(user, shared))
 }
 
-func (s *Service) mentionReadOf(ctx context.Context, who callerid.Caller, req *chatimv1.ListMentionsRequest) (mentionRead, error) {
+func (s *Service) mentionReadOf(ctx context.Context, who chatrpc.Caller, req *chatimv1.ListMentionsRequest) (mentionRead, error) {
 	before, err := decodePageCursor(req.GetBefore())
 	if err != nil {
 		return mentionRead{}, err

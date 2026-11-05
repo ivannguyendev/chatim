@@ -6,7 +6,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/ivannguyendev/chatim/pkg/coreroute"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -37,7 +37,7 @@ func (c *Client) ListRoomGroups(ctx context.Context, req *chatimv1.ListRoomGroup
 }
 
 func viaMention[T any](ctx context.Context, c *Client, do func(context.Context, chatimv1.MentionServiceClient) (T, error)) (T, Stats, error) {
-	return call(ctx, c, c.routes.Any, func(ctx context.Context, conn coreroute.Conn) (T, error) {
+	return call(ctx, c, c.routes.Any, func(ctx context.Context, conn chatrpc.PoolConn) (T, error) {
 		if conn.Mention == nil {
 			var zero T
 			return zero, errNoMentionService

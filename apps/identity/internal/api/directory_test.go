@@ -11,9 +11,9 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/ivannguyendev/chatim/apps/identity/internal/api"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 	"github.com/ivannguyendev/chatim/pkg/core/userlimit"
 	identityv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/identity/v1"
-	"github.com/ivannguyendev/chatim/pkg/revocation"
 )
 
 type directoryCall func(d *dirHarness, token string) error
@@ -87,7 +87,7 @@ func TestRevokedSessionIsRefusedWithoutReadingTheStore(t *testing.T) {
 }
 
 func revokeTenantAt(d *dirHarness, at time.Time) {
-	d.list.Merge(revocation.Snapshot{Tenants: []revocation.Tenant{{ID: "shop", RevokedBefore: at, ExpiresAt: at.Add(15 * time.Minute)}}}, at)
+	d.list.Merge(auth.RevocationSnapshot{Tenants: []auth.RevokedTenant{{ID: "shop", RevokedBefore: at, ExpiresAt: at.Add(15 * time.Minute)}}}, at)
 }
 
 func TestTokenIssuedAfterTenantRevocationIsAllowed(t *testing.T) {

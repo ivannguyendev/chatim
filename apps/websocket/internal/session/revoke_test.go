@@ -6,21 +6,20 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/interest"
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
-	"github.com/ivannguyendev/chatim/pkg/revocation"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 )
 
 func (h *harness) sessionToken(token, session string, issued time.Time) string {
-	return h.verifier.issueClaims(token, jwtverify.Claims{Tenant: "t1", User: "u1", Session: session, IssuedAt: issued, ExpiresAt: issued.Add(time.Hour)})
+	return h.verifier.issueClaims(token, auth.Claims{Tenant: "t1", User: "u1", Session: session, IssuedAt: issued, ExpiresAt: issued.Add(time.Hour)})
 }
 
 func (h *harness) revokeSession(session string) {
-	added := h.revoked.list.Merge(revocation.Snapshot{Sessions: []revocation.Session{{ID: session, Tenant: "t1", ExpiresAt: time.Now().Add(16 * time.Minute)}}}, time.Now())
+	added := h.revoked.list.Merge(auth.RevocationSnapshot{Sessions: []auth.RevokedSession{{ID: session, Tenant: "t1", ExpiresAt: time.Now().Add(16 * time.Minute)}}}, time.Now())
 	h.server.Revoke(added)
 }
 
 func (h *harness) revokeTenant(before time.Time) {
-	added := h.revoked.list.Merge(revocation.Snapshot{Tenants: []revocation.Tenant{{ID: "t1", RevokedBefore: before, ExpiresAt: before.Add(16 * time.Minute)}}}, time.Now())
+	added := h.revoked.list.Merge(auth.RevocationSnapshot{Tenants: []auth.RevokedTenant{{ID: "t1", RevokedBefore: before, ExpiresAt: before.Add(16 * time.Minute)}}}, time.Now())
 	h.server.Revoke(added)
 }
 
@@ -136,12 +135,12 @@ func TestUnknownKeyAsksToRetryUntilKeysAreFresh(t *testing.T) {
 
 func keyIDError(t *testing.T) error {
 	t.Helper()
-	v, err := jwtverify.New(jwtverify.Config{JWKS: []byte(`{"keys":[{"kty":"OKP","crv":"Ed25519","kid":"k1","x":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"}]}`), Issuer: "issuer", Audience: "audience"})
+	v, err := auth.NewVerifier(auth.VerifierConfig{JWKS: []byte(`{"keys":[{"kty":"OKP","crv":"Ed25519","kid":"k1","x":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"}]}`), Issuer: "issuer", Audience: "audience"})
 	if err != nil {
 		t.Fatalf("verifier: %v", err)
 	}
 	_, err = v.Verify("eyJhbGciOiJFZERTQSIsImtpZCI6Im5ldyJ9.e30.c2ln")
-	if jwtverify.ReasonOf(err) != jwtverify.ReasonKeyID {
+	if auth.ReasonOf(err) != auth.ReasonKeyID {
 		t.Fatalf("want an unknown kid error, got %v", err)
 	}
 	return err

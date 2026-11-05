@@ -9,7 +9,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
-	"github.com/ivannguyendev/chatim/pkg/revocation"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 )
 
 type revokedSessionDoc struct {
@@ -24,25 +24,25 @@ type revokedTenantDoc struct {
 	ExpiresAt     time.Time `bson:"expires_at"`
 }
 
-func (s *Store) Revocations(ctx context.Context) (revocation.Snapshot, error) {
-	var snap revocation.Snapshot
+func (s *Store) Revocations(ctx context.Context) (auth.RevocationSnapshot, error) {
+	var snap auth.RevocationSnapshot
 	var sessions []revokedSessionDoc
 	live := bson.D{{Key: "$expr", Value: bson.D{{Key: "$gt", Value: bson.A{"$expires_at", "$$NOW"}}}}}
 	if err := s.findAll(ctx, revokedSessionsCollection, live, &sessions); err != nil {
 		return snap, err
 	}
 	for _, d := range sessions {
-		snap.Sessions = append(snap.Sessions, revocation.Session{ID: d.ID, Tenant: d.TenantID, ExpiresAt: d.ExpiresAt})
+		snap.Sessions = append(snap.Sessions, auth.RevokedSession{ID: d.ID, Tenant: d.TenantID, ExpiresAt: d.ExpiresAt})
 	}
 	var tenants []revokedTenantDoc
 	if err := s.revokedTenants(ctx, &tenants); err != nil {
 		return snap, err
 	}
 	for _, d := range tenants {
-		snap.Tenants = append(snap.Tenants, revocation.Tenant{ID: d.ID, RevokedBefore: d.RevokedBefore, ExpiresAt: d.ExpiresAt})
+		snap.Tenants = append(snap.Tenants, auth.RevokedTenant{ID: d.ID, RevokedBefore: d.RevokedBefore, ExpiresAt: d.ExpiresAt})
 	}
-	slices.SortFunc(snap.Sessions, func(a, b revocation.Session) int { return cmp.Compare(a.ID, b.ID) })
-	slices.SortFunc(snap.Tenants, func(a, b revocation.Tenant) int { return cmp.Compare(a.ID, b.ID) })
+	slices.SortFunc(snap.Sessions, func(a, b auth.RevokedSession) int { return cmp.Compare(a.ID, b.ID) })
+	slices.SortFunc(snap.Tenants, func(a, b auth.RevokedTenant) int { return cmp.Compare(a.ID, b.ID) })
 	return snap, nil
 }
 

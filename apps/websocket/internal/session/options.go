@@ -8,9 +8,8 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/command"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/interest"
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
-	"github.com/ivannguyendev/chatim/pkg/revocation"
 )
 
 const Subprotocol = "chatim.v1"
@@ -30,16 +29,16 @@ const (
 )
 
 type Verifier interface {
-	Verify(token string) (jwtverify.Claims, error)
+	Verify(token string) (auth.Claims, error)
 }
 
 type Revocations interface {
-	Check(claims jwtverify.Claims) revocation.Verdict
+	Check(claims auth.Claims) auth.Verdict
 	UnknownKey(kid string) bool
 }
 
 type Executor interface {
-	Execute(ctx context.Context, claims jwtverify.Claims, req *chatimv1.ClientRequest) (*chatimv1.ServerResponse, command.Outcome)
+	Execute(ctx context.Context, claims auth.Claims, req *chatimv1.ClientRequest) (*chatimv1.ServerResponse, command.Outcome)
 }
 
 type Interest interface {

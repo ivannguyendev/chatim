@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ivannguyendev/chatim/pkg/identitysync"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 	"github.com/ivannguyendev/chatim/pkg/wspublish"
 )
 
@@ -38,7 +38,7 @@ func (c Config) Validate() error {
 		{c.JWTIssuer != "", "WS_JWT_ISSUER is required"},
 		{c.JWTAudience != "", "WS_JWT_AUDIENCE is required"},
 		{c.JWTLeeway >= 0, "WS_JWT_LEEWAY must not be negative"},
-		{c.JWTLeeway <= identitysync.MaxNodeLeeway, fmt.Sprintf("WS_JWT_LEEWAY must not exceed %v, the extra time identity keeps a revocation", identitysync.MaxNodeLeeway)},
+		{c.JWTLeeway <= auth.MaxNodeLeeway, fmt.Sprintf("WS_JWT_LEEWAY must not exceed %v, the extra time identity keeps a revocation", auth.MaxNodeLeeway)},
 		positive("WS_AUTH_GRACE", c.AuthGrace),
 		positive("WS_AUTH_RATE", c.AuthRate),
 		positive("WS_AUTH_BURST", c.AuthBurst),

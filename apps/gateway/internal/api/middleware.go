@@ -10,9 +10,8 @@ import (
 	"connectrpc.com/connect"
 	"golang.org/x/time/rate"
 
+	"github.com/ivannguyendev/chatim/pkg/auth"
 	"github.com/ivannguyendev/chatim/pkg/core/userlimit"
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
-	"github.com/ivannguyendev/chatim/pkg/revocation"
 )
 
 const (
@@ -24,11 +23,11 @@ const (
 )
 
 type Verifier interface {
-	Verify(token string) (jwtverify.Claims, error)
+	Verify(token string) (auth.Claims, error)
 }
 
 type Revocations interface {
-	Check(claims jwtverify.Claims) revocation.Verdict
+	Check(claims auth.Claims) auth.Verdict
 	UnknownKey(kid string) bool
 }
 
@@ -74,25 +73,25 @@ func (c *chain) authenticated(next http.Handler) http.Handler {
 	})
 }
 
-func (c *chain) authenticate(h http.Header) (jwtverify.Claims, string) {
+func (c *chain) authenticate(h http.Header) (auth.Claims, string) {
 	token, reason := bearer(h)
 	if reason != "" {
-		return jwtverify.Claims{}, reason
+		return auth.Claims{}, reason
 	}
 	claims, err := c.verifier.Verify(token)
 	if err != nil {
-		reason := jwtverify.ReasonOf(err)
-		if reason == jwtverify.ReasonKeyID && c.revocations.UnknownKey(jwtverify.KeyIDOf(token)) {
-			return jwtverify.Claims{}, reasonKeyPending
+		reason := auth.ReasonOf(err)
+		if reason == auth.ReasonKeyID && c.revocations.UnknownKey(auth.KeyIDOf(token)) {
+			return auth.Claims{}, reasonKeyPending
 		}
-		return jwtverify.Claims{}, string(reason)
+		return auth.Claims{}, string(reason)
 	}
 	switch c.revocations.Check(claims) {
-	case revocation.SessionRevoked:
-		return jwtverify.Claims{}, reasonRevoked
-	case revocation.TenantRevoked:
-		return jwtverify.Claims{}, reasonTenantRevoked
-	case revocation.Allowed:
+	case auth.SessionRevoked:
+		return auth.Claims{}, reasonRevoked
+	case auth.TenantRevoked:
+		return auth.Claims{}, reasonTenantRevoked
+	case auth.Allowed:
 	}
 	return claims, ""
 }

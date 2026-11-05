@@ -11,7 +11,7 @@ import (
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/ivannguyendev/chatim/pkg/coreroute"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -81,7 +81,7 @@ func TestHugeBadRoomGetsAShortFixedMessage(t *testing.T) {
 
 func TestNoLiveCoreIsUnavailableAndRefreshesRoutes(t *testing.T) {
 	routeErrors := []error{
-		coreroute.ErrNoRoute,
+		chatrpc.ErrNoRoute,
 		status.Error(codes.Unavailable, fmt.Sprintf("dial core %s: connection refused", fakeCoreAddr)),
 	}
 	for _, routeErr := range routeErrors {

@@ -13,24 +13,24 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/identity/internal/api"
-	"github.com/ivannguyendev/chatim/pkg/revocation"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 )
 
 const nodeSecret = "node-secret-value-0123456789abcdef"
 
 type fakeRevocations struct {
 	mu   sync.Mutex
-	snap revocation.Snapshot
+	snap auth.RevocationSnapshot
 	err  error
 }
 
-func (f *fakeRevocations) Revocations(context.Context) (revocation.Snapshot, error) {
+func (f *fakeRevocations) Revocations(context.Context) (auth.RevocationSnapshot, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.snap, f.err
 }
 
-func (f *fakeRevocations) set(snap revocation.Snapshot, err error) {
+func (f *fakeRevocations) set(snap auth.RevocationSnapshot, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.snap, f.err = snap, err
@@ -44,7 +44,7 @@ type internalHarness struct {
 
 func newInternal(t *testing.T) *internalHarness {
 	t.Helper()
-	src := &fakeRevocations{snap: revocation.Snapshot{Sessions: []revocation.Session{{ID: "iphone", Tenant: "shop", ExpiresAt: t0}}}}
+	src := &fakeRevocations{snap: auth.RevocationSnapshot{Sessions: []auth.RevokedSession{{ID: "iphone", Tenant: "shop", ExpiresAt: t0}}}}
 	stats := &api.InternalStats{}
 	h, err := api.NewInternal(api.InternalOptions{Revocations: src, Secret: nodeSecret, Stats: stats})
 	if err != nil {
@@ -107,7 +107,7 @@ func TestRevocationsServeTheListWithAnETag(t *testing.T) {
 	if first.StatusCode != http.StatusOK || first.Header.Get("Content-Type") != "application/json" || first.Header.Get("Cache-Control") != "no-store" {
 		t.Fatalf("first = %d %v", first.StatusCode, first.Header)
 	}
-	var snap revocation.Snapshot
+	var snap auth.RevocationSnapshot
 	if err := json.Unmarshal(first.Body, &snap); err != nil || len(snap.Sessions) != 1 || snap.Sessions[0].ID != "iphone" {
 		t.Fatalf("body = %s (%v)", first.Body, err)
 	}
@@ -119,7 +119,7 @@ func TestRevocationsServeTheListWithAnETag(t *testing.T) {
 	if same.StatusCode != http.StatusNotModified || len(same.Body) != 0 {
 		t.Fatalf("unchanged = %d %q; want 304 without a body", same.StatusCode, same.Body)
 	}
-	h.src.set(revocation.Snapshot{Tenants: []revocation.Tenant{{ID: "shop", RevokedBefore: t0, ExpiresAt: t0.Add(time.Minute)}}}, nil)
+	h.src.set(auth.RevocationSnapshot{Tenants: []auth.RevokedTenant{{ID: "shop", RevokedBefore: t0, ExpiresAt: t0.Add(time.Minute)}}}, nil)
 	changed := h.get(t, "/internal/v1/revocations", map[string]string{"Authorization": "Bearer " + nodeSecret, "If-None-Match": tag})
 	if changed.StatusCode != http.StatusOK || changed.Header.Get("ETag") == tag {
 		t.Fatalf("changed = %d etag %q", changed.StatusCode, changed.Header.Get("ETag"))
@@ -131,7 +131,7 @@ func TestRevocationsServeTheListWithAnETag(t *testing.T) {
 
 func TestRevocationsStoreErrorIsRetryable(t *testing.T) {
 	h := newInternal(t)
-	h.src.set(revocation.Snapshot{}, errors.New("store down"))
+	h.src.set(auth.RevocationSnapshot{}, errors.New("store down"))
 	r := h.get(t, "/internal/v1/revocations", bearer(nodeSecret))
 	if r.StatusCode != http.StatusServiceUnavailable || r.Header.Get("Retry-After") != "1" || strings.Contains(string(r.Body), "store down") {
 		t.Fatalf("store error = %d %v %s", r.StatusCode, r.Header, r.Body)

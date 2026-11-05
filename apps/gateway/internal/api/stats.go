@@ -3,8 +3,8 @@ package api
 import (
 	"sync/atomic"
 
+	"github.com/ivannguyendev/chatim/pkg/auth"
 	"github.com/ivannguyendev/chatim/pkg/core/metrics"
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 )
 
 const (
@@ -22,11 +22,11 @@ const (
 
 var authReasons = []string{
 	reasonMissing, reasonRepeated, reasonTooLong, reasonBadValue, reasonOther,
-	string(jwtverify.ReasonMalformed), string(jwtverify.ReasonAlgorithm), string(jwtverify.ReasonSignature),
-	string(jwtverify.ReasonKeyID), string(jwtverify.ReasonType), string(jwtverify.ReasonIssuer),
-	string(jwtverify.ReasonAudience), string(jwtverify.ReasonExpired), string(jwtverify.ReasonNotYetValid),
-	string(jwtverify.ReasonMissingClaim), string(jwtverify.ReasonSubject), string(jwtverify.ReasonTenant),
-	string(jwtverify.ReasonClaims), string(jwtverify.ReasonSession), reasonRevoked, reasonTenantRevoked, reasonKeyPending,
+	string(auth.ReasonMalformed), string(auth.ReasonAlgorithm), string(auth.ReasonSignature),
+	string(auth.ReasonKeyID), string(auth.ReasonType), string(auth.ReasonIssuer),
+	string(auth.ReasonAudience), string(auth.ReasonExpired), string(auth.ReasonNotYetValid),
+	string(auth.ReasonMissingClaim), string(auth.ReasonSubject), string(auth.ReasonTenant),
+	string(auth.ReasonClaims), string(auth.ReasonSession), reasonRevoked, reasonTenantRevoked, reasonKeyPending,
 }
 
 type stats struct {

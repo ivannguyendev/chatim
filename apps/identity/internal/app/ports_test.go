@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
-	"github.com/ivannguyendev/chatim/pkg/revocation"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 )
 
 func nodeHeader() http.Header { return http.Header{"Authorization": {"Bearer " + testNodeSecret}} }
@@ -15,7 +15,7 @@ func nodeHeader() http.Header { return http.Header{"Authorization": {"Bearer " +
 func TestBothPortsServeTheirOwnRoutes(t *testing.T) {
 	kek := newKEK(t)
 	st := &fakeStore{keys: []store.SigningKey{activeKey(t, kek)},
-		snapshot: revocation.Snapshot{Sessions: []revocation.Session{{ID: "iphone", Tenant: "shop", ExpiresAt: time.Now().Add(time.Minute)}}}}
+		snapshot: auth.RevocationSnapshot{Sessions: []auth.RevokedSession{{ID: "iphone", Tenant: "shop", ExpiresAt: time.Now().Add(time.Minute)}}}}
 	r := runIdentity(t, testConfig(kek), st)
 	r.logs.await(t, "identity ready")
 	if code, body := httpGetWith(t, r.internal, "/internal/v1/revocations", nodeHeader()); code != http.StatusOK || !strings.Contains(body, "iphone") {

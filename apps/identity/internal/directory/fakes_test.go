@@ -11,7 +11,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/identity/internal/directory"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
-	"github.com/ivannguyendev/chatim/pkg/revocation"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 )
 
 func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
@@ -24,13 +24,13 @@ func entry(tenant, id, name string, ver int64) store.DirectoryEntry {
 
 type fakeRevocations struct {
 	mu     sync.Mutex
-	snap   revocation.Snapshot
+	snap   auth.RevocationSnapshot
 	err    error
 	calls  int
 	onCall func()
 }
 
-func (f *fakeRevocations) Revocations(context.Context) (revocation.Snapshot, error) {
+func (f *fakeRevocations) Revocations(context.Context) (auth.RevocationSnapshot, error) {
 	f.mu.Lock()
 	f.calls++
 	snap, err, hook := f.snap, f.err, f.onCall
@@ -41,7 +41,7 @@ func (f *fakeRevocations) Revocations(context.Context) (revocation.Snapshot, err
 	return snap, err
 }
 
-func (f *fakeRevocations) set(snap revocation.Snapshot, err error) {
+func (f *fakeRevocations) set(snap auth.RevocationSnapshot, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.snap, f.err = snap, err

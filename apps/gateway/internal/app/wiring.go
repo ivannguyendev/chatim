@@ -13,13 +13,12 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/gateway/internal/api"
 	"github.com/ivannguyendev/chatim/apps/gateway/internal/config"
+	"github.com/ivannguyendev/chatim/pkg/auth"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	"github.com/ivannguyendev/chatim/pkg/core/admin"
 	"github.com/ivannguyendev/chatim/pkg/core/grpcclient"
 	"github.com/ivannguyendev/chatim/pkg/core/metrics"
 	"github.com/ivannguyendev/chatim/pkg/core/userlimit"
-	"github.com/ivannguyendev/chatim/pkg/corecall"
-	"github.com/ivannguyendev/chatim/pkg/identitysync"
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
@@ -29,7 +28,7 @@ const (
 )
 
 func wire(cfg config.Config, log *slog.Logger, deps Deps) (*node, error) {
-	verifier, err := jwtverify.LoadFile(cfg.JWTKeysFile, jwtverify.Config{Issuer: cfg.JWTIssuer, Audience: cfg.JWTAudience, Leeway: cfg.JWTLeeway})
+	verifier, err := auth.LoadVerifier(cfg.JWTKeysFile, auth.VerifierConfig{Issuer: cfg.JWTIssuer, Audience: cfg.JWTAudience, Leeway: cfg.JWTLeeway})
 	if err != nil {
 		return nil, fmt.Errorf("load jwt key set: %w", err)
 	}
@@ -64,24 +63,24 @@ func sharedRedis(cfg config.Config) *redis.Client {
 	})
 }
 
-func wireServers(cfg config.Config, log *slog.Logger, verifier *jwtverify.Verifier, conn *grpc.ClientConn, shared *redis.Client, doer identitysync.Doer) (*node, error) {
-	list, err := identitysync.NewList(cfg.JWTLeeway)
+func wireServers(cfg config.Config, log *slog.Logger, verifier *auth.Verifier, conn *grpc.ClientConn, shared *redis.Client, doer auth.Doer) (*node, error) {
+	list, err := auth.NewNodeRevocationList(cfg.JWTLeeway)
 	if err != nil {
 		return nil, err
 	}
-	var copyStore identitysync.Shared
+	var copyStore auth.Shared
 	if shared != nil {
-		copyStore = identitysync.NewRedisShared(shared, cfg.JWTIssuer)
+		copyStore = auth.NewRedisShared(shared, cfg.JWTIssuer)
 	}
-	sync, err := identitysync.New(cfg.Identity, list, verifier, copyStore, doer, log)
+	sync, err := auth.NewSyncer(cfg.Identity, list, verifier, copyStore, doer, log)
 	if err != nil {
 		return nil, err
 	}
-	core := corecall.Conn{Core: chatimv1.NewCoreServiceClient(conn), Mention: chatimv1.NewMentionServiceClient(conn)}
-	fwd, err := corecall.New(corecall.Options{
-		Methods:  corecall.Request(),
+	core := chatrpc.Clients{Core: chatimv1.NewCoreServiceClient(conn), Mention: chatimv1.NewMentionServiceClient(conn)}
+	fwd, err := chatrpc.NewForwarder(chatrpc.ForwarderOptions{
+		Methods:  chatrpc.Request(),
 		Deadline: cfg.RequestDeadline,
-		Route:    func(corecall.Command, proto.Message) (corecall.Conn, error) { return core, nil },
+		Route:    func(chatrpc.Command, proto.Message) (chatrpc.Clients, error) { return core, nil },
 	})
 	if err != nil {
 		return nil, err
@@ -118,7 +117,7 @@ func wireServers(cfg config.Config, log *slog.Logger, verifier *jwtverify.Verifi
 	}, nil
 }
 
-func metricSources(handler *api.Handler, fwd *corecall.Forwarder) []metrics.Source {
+func metricSources(handler *api.Handler, fwd *chatrpc.Forwarder) []metrics.Source {
 	out := slices.Concat(handler.Sources(), fwd.CommandSources())
 	for _, latency := range fwd.CoreCallLatency() {
 		out = append(out, metrics.Source{

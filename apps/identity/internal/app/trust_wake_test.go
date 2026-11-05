@@ -20,7 +20,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/identity/internal/exchange"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/signing"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
-	"github.com/ivannguyendev/chatim/pkg/revocation"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 )
 
 type wakeStore struct {
@@ -73,8 +73,8 @@ func (s *wakeStore) LoadPage(_ context.Context, after store.UserKey, _ int) ([]s
 	return []store.DirectoryEntry{{TenantID: "shop", ID: "lan", DisplayName: "Lan", State: store.StateActive, Ver: 1}}, nil
 }
 
-func (s *wakeStore) Revocations(context.Context) (revocation.Snapshot, error) {
-	return revocation.Snapshot{}, nil
+func (s *wakeStore) Revocations(context.Context) (auth.RevocationSnapshot, error) {
+	return auth.RevocationSnapshot{}, nil
 }
 
 func (s *wakeStore) TrustedIssuers(context.Context) ([]store.TrustedIssuer, error) {

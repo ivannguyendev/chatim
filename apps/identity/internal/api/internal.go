@@ -12,11 +12,11 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/ivannguyendev/chatim/pkg/revocation"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 )
 
 type RevocationSource interface {
-	Revocations(ctx context.Context) (revocation.Snapshot, error)
+	Revocations(ctx context.Context) (auth.RevocationSnapshot, error)
 }
 
 type InternalStats struct {

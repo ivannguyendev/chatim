@@ -10,12 +10,12 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/command"
-	"github.com/ivannguyendev/chatim/pkg/callerid"
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
+	"github.com/ivannguyendev/chatim/pkg/auth"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-var testClaims = jwtverify.Claims{Tenant: "t1", User: "u1"}
+var testClaims = auth.Claims{Tenant: "t1", User: "u1"}
 
 var realtimeCommands = map[string]bool{
 	"SendMessage": true, "EditMessage": true, "DeleteMessage": true, "HideMessage": true, "ReactMessage": true, "PinMessage": true,
@@ -137,16 +137,16 @@ func TestRequestCommandsTakeTheUnknownRequestPath(t *testing.T) {
 
 func TestCallerComesOnlyFromTheClaims(t *testing.T) {
 	h := newHarness(t, time.Second)
-	ctx := metadata.AppendToOutgoingContext(t.Context(), callerid.TenantHeader, "evil", callerid.UserHeader, "mallory")
+	ctx := metadata.AppendToOutgoingContext(t.Context(), chatrpc.TenantHeader, "evil", chatrpc.UserHeader, "mallory")
 	resp, _ := h.exec.Execute(ctx, testClaims, sendRequest(&chatimv1.SendMessageRequest{RoomId: "42", Cid: "c1", Text: "hi"}))
 	if resp.GetCode() != 0 {
 		t.Fatalf("resp = %v", resp)
 	}
 	md := h.core.recorded()[0].md
-	if got := md.Get(callerid.TenantHeader); len(got) != 1 || got[0] != "t1" {
+	if got := md.Get(chatrpc.TenantHeader); len(got) != 1 || got[0] != "t1" {
 		t.Fatalf("tenant = %v", got)
 	}
-	if got := md.Get(callerid.UserHeader); len(got) != 1 || got[0] != "u1" {
+	if got := md.Get(chatrpc.UserHeader); len(got) != 1 || got[0] != "u1" {
 		t.Fatalf("user = %v", got)
 	}
 }

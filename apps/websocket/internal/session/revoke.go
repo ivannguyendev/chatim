@@ -1,8 +1,8 @@
 package session
 
-import "github.com/ivannguyendev/chatim/pkg/revocation"
+import "github.com/ivannguyendev/chatim/pkg/auth"
 
-func (s *Server) Revoke(added revocation.Added) {
+func (s *Server) Revoke(added auth.RevocationsAdded) {
 	if added.Empty() {
 		return
 	}
@@ -25,16 +25,16 @@ func (c *connection) applyRevocations() {
 		return
 	}
 	verdict := c.server.revocations.Check(c.claims)
-	if verdict == revocation.SessionRevoked {
+	if verdict == auth.SessionRevoked {
 		c.toWaiting(promptRevoked)
 	}
 	c.mu.Unlock()
 	switch verdict {
-	case revocation.SessionRevoked:
+	case auth.SessionRevoked:
 		c.server.stats.authRequiredRevoked.Add(1)
 		c.sendAuthRequired(promptRevoked)
-	case revocation.TenantRevoked:
+	case auth.TenantRevoked:
 		c.closeWith(CodeTenantRevoked)
-	case revocation.Allowed:
+	case auth.Allowed:
 	}
 }

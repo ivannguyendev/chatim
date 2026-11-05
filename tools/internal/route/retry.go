@@ -8,16 +8,16 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	"github.com/ivannguyendev/chatim/pkg/core/backoff"
-	"github.com/ivannguyendev/chatim/pkg/coreroute"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 type rpc[T any] func(ctx context.Context, api chatimv1.CoreServiceClient) (T, error)
 
-type connRPC[T any] func(ctx context.Context, conn coreroute.Conn) (T, error)
+type connRPC[T any] func(ctx context.Context, conn chatrpc.PoolConn) (T, error)
 
-func call[T any](ctx context.Context, c *Client, pick func() (coreroute.Conn, error), do connRPC[T]) (T, Stats, error) {
+func call[T any](ctx context.Context, c *Client, pick func() (chatrpc.PoolConn, error), do connRPC[T]) (T, Stats, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.policy.Deadline)
 	defer cancel()
 	var st Stats
@@ -39,7 +39,7 @@ func call[T any](ctx context.Context, c *Client, pick func() (coreroute.Conn, er
 	}
 }
 
-func attempt[T any](ctx context.Context, c *Client, pick func() (coreroute.Conn, error), st *Stats, do connRPC[T]) (T, error) {
+func attempt[T any](ctx context.Context, c *Client, pick func() (chatrpc.PoolConn, error), st *Stats, do connRPC[T]) (T, error) {
 	conn, err := pick()
 	if conn.Addr != "" {
 		st.Addr = conn.Addr
@@ -54,11 +54,11 @@ func attempt[T any](ctx context.Context, c *Client, pick func() (coreroute.Conn,
 }
 
 func inRoom[T any](ctx context.Context, c *Client, roomID string, do rpc[T]) (T, Stats, error) {
-	if _, err := coreroute.ParseRoom(roomID); err != nil {
+	if _, err := chatrpc.ParseRoom(roomID); err != nil {
 		var zero T
 		return zero, Stats{}, err
 	}
-	return call(ctx, c, func() (coreroute.Conn, error) { return c.routes.Room(roomID) }, onCore(do))
+	return call(ctx, c, func() (chatrpc.PoolConn, error) { return c.routes.Room(roomID) }, onCore(do))
 }
 
 func anyCore[T any](ctx context.Context, c *Client, do rpc[T]) (T, Stats, error) {
@@ -66,11 +66,11 @@ func anyCore[T any](ctx context.Context, c *Client, do rpc[T]) (T, Stats, error)
 }
 
 func onCore[T any](do rpc[T]) connRPC[T] {
-	return func(ctx context.Context, conn coreroute.Conn) (T, error) { return do(ctx, conn.Core) }
+	return func(ctx context.Context, conn chatrpc.PoolConn) (T, error) { return do(ctx, conn.Core) }
 }
 
 func retryable(err error) bool {
-	if errors.Is(err, coreroute.ErrDial) || errors.Is(err, coreroute.ErrTooManyAddresses) {
+	if errors.Is(err, chatrpc.ErrDial) || errors.Is(err, chatrpc.ErrTooManyAddresses) {
 		return false
 	}
 	switch status.Code(err) {

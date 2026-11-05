@@ -19,20 +19,19 @@ import (
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/presence"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/session"
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/typing"
+	"github.com/ivannguyendev/chatim/pkg/auth"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	"github.com/ivannguyendev/chatim/pkg/core/admin"
 	"github.com/ivannguyendev/chatim/pkg/core/metrics"
-	"github.com/ivannguyendev/chatim/pkg/coreroute"
-	"github.com/ivannguyendev/chatim/pkg/identitysync"
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 )
 
 type Deps struct {
-	Dial          coreroute.Dialer
+	Dial          chatrpc.Dialer
 	ReadyTimeout  time.Duration
 	Listen        func(ctx context.Context, addr string) (net.Listener, error)
 	NATS          func(ctx context.Context) (feed.Broker, error)
 	PresenceRedis func(opts *redis.Options) presence.Conn
-	IdentityDoer  identitysync.Doer
+	IdentityDoer  auth.Doer
 }
 
 type node struct {
@@ -41,13 +40,13 @@ type node struct {
 	admin  *admin.Server
 	ws     *session.Server
 	routes *routerHolder
-	router *coreroute.Router
+	router *chatrpc.Router
 	feed   *feed.Feed
 	rooms  *interest.Table
 	typing *typing.Service
 	online *presence.Stamper
 	redis  *presence.Client
-	sync   *identitysync.Syncer
+	sync   *auth.Syncer
 	http   *http.Server
 }
 
@@ -72,7 +71,7 @@ func Run(ctx context.Context, cfg config.Config, log *slog.Logger, deps Deps) er
 }
 
 func wire(cfg config.Config, log *slog.Logger, deps Deps) (*node, error) {
-	verifier, err := jwtverify.LoadFile(cfg.JWTKeysFile, jwtConfig(cfg))
+	verifier, err := auth.LoadVerifier(cfg.JWTKeysFile, jwtConfig(cfg))
 	if err != nil {
 		return nil, fmt.Errorf("load jwt key set: %w", err)
 	}
@@ -101,11 +100,11 @@ func wire(cfg config.Config, log *slog.Logger, deps Deps) (*node, error) {
 }
 
 type wired struct {
-	verifier *jwtverify.Verifier
+	verifier *auth.Verifier
 	exec     *command.Executor
 	rooms    *interest.Table
 	pres     presenceParts
-	doer     identitysync.Doer
+	doer     auth.Doer
 }
 
 func wireServers(cfg config.Config, log *slog.Logger, w wired) (*node, error) {
@@ -218,7 +217,7 @@ func (n *node) openFeed(ctx context.Context, deps Deps) error {
 func (n *node) openRouter(ctx context.Context, deps Deps) error {
 	life, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	abort := context.AfterFunc(ctx, cancel)
-	r, err := coreroute.Open(life, routerConfig(n.cfg, deps, n.log))
+	r, err := chatrpc.OpenRouter(life, routerConfig(n.cfg, deps, n.log))
 	abort()
 	if err != nil {
 		cancel()

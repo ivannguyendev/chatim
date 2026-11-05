@@ -1,6 +1,6 @@
 # App `gateway`
 
-HTTPS (Connect trên HTTP/1.1 và h2c) cho tải dữ liệu và quản lý room: 22 lệnh `corecall.Request()` (14 lệnh đọc và `CreateRoom`, `OpenDirectRoom`, `UpdateRoom`, `AddMembers`, `RemoveMember`, `LeaveRoom`, `ChangeMemberRole`, `SetMemberPriority`), JWT như websocket, gọi core bất kỳ (round robin), giới hạn theo user. Không có database, không dùng NATS; Redis chỉ (tuỳ chọn) cho bản danh sách thu hồi dùng chung (M6 phần 2). Cơ chế: [module 11](../modules/11-feature-https-gateway.md).
+HTTPS (Connect trên HTTP/1.1 và h2c) cho tải dữ liệu và quản lý room: 22 lệnh `chatrpc.Request()` (14 lệnh đọc và `CreateRoom`, `OpenDirectRoom`, `UpdateRoom`, `AddMembers`, `RemoveMember`, `LeaveRoom`, `ChangeMemberRole`, `SetMemberPriority`), JWT như websocket, gọi core bất kỳ (round robin), giới hạn theo user. Không có database, không dùng NATS; Redis chỉ (tuỳ chọn) cho bản danh sách thu hồi dùng chung (M6 phần 2). Cơ chế: [module 11](../modules/11-feature-https-gateway.md).
 
 ## Biến môi trường
 

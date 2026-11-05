@@ -6,11 +6,11 @@ import (
 	"github.com/ivannguyendev/chatim/apps/core/internal/message/actor"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/core/internal/model/pbconv"
-	"github.com/ivannguyendev/chatim/pkg/callerid"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
-func (s *Service) sendCmd(ctx context.Context, who callerid.Caller, room uint64, req *chatimv1.SendMessageRequest) (actor.SendCmd, error) {
+func (s *Service) sendCmd(ctx context.Context, who chatrpc.Caller, room uint64, req *chatimv1.SendMessageRequest) (actor.SendCmd, error) {
 	kind, err := sendKind(req)
 	if err != nil {
 		return actor.SendCmd{}, err
@@ -43,7 +43,7 @@ func sendKind(req *chatimv1.SendMessageRequest) (domain.Kind, error) {
 	return kind, domain.ValidateMeta(req.GetMeta())
 }
 
-func (s *Service) linkedCmd(ctx context.Context, who callerid.Caller, room uint64, req *chatimv1.SendMessageRequest) (actor.SendCmd, error) {
+func (s *Service) linkedCmd(ctx context.Context, who chatrpc.Caller, room uint64, req *chatimv1.SendMessageRequest) (actor.SendCmd, error) {
 	if req.GetForwardFrom() != nil {
 		return s.forwardCmd(ctx, who, room, req)
 	}

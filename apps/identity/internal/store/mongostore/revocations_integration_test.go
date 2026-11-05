@@ -8,7 +8,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
-	"github.com/ivannguyendev/chatim/pkg/revocation"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 )
 
 func TestRevocationsListDisabledTenantsWithinKeep(t *testing.T) {
@@ -63,11 +63,11 @@ func TestRevocationsListLiveSessionsAndDeleteExpiredDropsTheRest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Revocations: %v", err)
 	}
-	want := []revocation.Session{
+	want := []auth.RevokedSession{
 		{ID: "s-a", Tenant: "shop", ExpiresAt: now.Add(2 * time.Hour)},
 		{ID: "s-b", Tenant: "shop", ExpiresAt: now.Add(time.Hour)},
 	}
-	if !slices.EqualFunc(snap.Sessions, want, func(a, b revocation.Session) bool {
+	if !slices.EqualFunc(snap.Sessions, want, func(a, b auth.RevokedSession) bool {
 		return a.ID == b.ID && a.Tenant == b.Tenant && a.ExpiresAt.Equal(b.ExpiresAt)
 	}) {
 		t.Fatalf("sessions = %+v; want %+v", snap.Sessions, want)

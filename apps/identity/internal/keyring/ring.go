@@ -10,8 +10,8 @@ import (
 
 	"github.com/ivannguyendev/chatim/apps/identity/internal/signing"
 	"github.com/ivannguyendev/chatim/apps/identity/internal/store"
+	"github.com/ivannguyendev/chatim/pkg/auth"
 	"github.com/ivannguyendev/chatim/pkg/core/apperr"
-	"github.com/ivannguyendev/chatim/pkg/jwtverify"
 )
 
 var (
@@ -35,7 +35,7 @@ type Ring struct {
 	cfg      Config
 	mu       sync.RWMutex
 	signer   *signing.Signer
-	verifier *jwtverify.Verifier
+	verifier *auth.Verifier
 	jwks     []byte
 }
 
@@ -80,9 +80,9 @@ func (r *Ring) Reload(ctx context.Context) error {
 			return err
 		}
 	}
-	var verifier *jwtverify.Verifier
+	var verifier *auth.Verifier
 	if len(keys) > 0 {
-		verifier, err = jwtverify.New(jwtverify.Config{JWKS: set, Issuer: r.cfg.Token.Issuer, Audience: r.cfg.Token.Audience, Leeway: r.cfg.Leeway, Now: r.cfg.Now})
+		verifier, err = auth.NewVerifier(auth.VerifierConfig{JWKS: set, Issuer: r.cfg.Token.Issuer, Audience: r.cfg.Token.Audience, Leeway: r.cfg.Leeway, Now: r.cfg.Now})
 		if err != nil {
 			return err
 		}
@@ -117,16 +117,16 @@ func (r *Ring) Current() (*signing.Signer, error) {
 	return r.signer, nil
 }
 
-func (r *Ring) Claims(token string) (jwtverify.Claims, error) {
+func (r *Ring) Claims(token string) (auth.Claims, error) {
 	r.mu.RLock()
 	verifier := r.verifier
 	r.mu.RUnlock()
 	if verifier == nil {
-		return jwtverify.Claims{}, errBadToken
+		return auth.Claims{}, errBadToken
 	}
 	claims, err := verifier.Verify(token)
 	if err != nil || !signing.ValidSessionID(claims.Session) {
-		return jwtverify.Claims{}, errBadToken
+		return auth.Claims{}, errBadToken
 	}
 	return claims, nil
 }

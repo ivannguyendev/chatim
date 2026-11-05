@@ -140,7 +140,7 @@ sequenceDiagram
   - Actor bị đánh dấu `dirty` (sau ghi không chắc chắn, hoặc mới tạo lại sau khi bị đuổi) nạp lại `Last` và trang seed mới nhất trước lệnh kế tiếp.
 
 ### 3.1a. Kiểm tra trước actor (`grpcsrv`) và tin hệ thống
-- `grpcsrv` đọc tenant và user từ metadata `x-chatim-tenant`, `x-chatim-user` (`pkg/callerid`); người gọi là app nội bộ được tin cậy cho tới khi có mTLS.
+- `grpcsrv` đọc tenant và user từ metadata `x-chatim-tenant`, `x-chatim-user` (`pkg/chatrpc`); người gọi là app nội bộ được tin cậy cho tới khi có mTLS.
 - Liên kết trong tin được kiểm trước actor bởi `message.Editor`: `reply_to` (chỉ thread 0) là một `Find` tin cha (`CheckReply` trong `message/reply_link.go`, gọi từ `grpcsrv/send_links.go`); tin cha không có thì hỏi `Admit` trước, để người ngoài room không dò được seq nào tồn tại. `forward_from` đi qua `message.Editor.Forward` (`message/forward_link.go`, 4 lần đọc theo khoá, D116); `grpcsrv/forward.go` chỉ parse và từ chối khi có cả `forward_from` lẫn `reply_to`. Tin không có liên kết không tốn lần đọc nào.
 - `Router.Send` chuẩn hoá mention (`domain.ValidateMentions` theo `MENTION_TARGETS_MAX`); có `@all` thì actor hỏi thêm quyền `mention_all` sau `send_message`.
 - Handler trả lỗi domain hoặc `apperr`; `pkg/core/grpcserver` đổi sang mã gRPC ở một chỗ duy nhất, client chỉ thấy text của lỗi sentinel.
