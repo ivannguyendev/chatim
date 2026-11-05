@@ -1,8 +1,8 @@
 # chatim — Kiến trúc hệ thống (Single Source of Truth)
 
 > Ngày cập nhật: 2026-10-17 · Trạng thái: **Nguồn sự thật duy nhất (SSOT)** cho toàn bộ quy chuẩn kiến trúc của `chatim`.
-> Nhật ký 218 quyết định kỹ thuật: [docs/decision-log.md](./decision-log.md) (D1–D218). Danh mục event (chat phát gì, ai nhận gì): [docs/events.md](./events.md).
-> Đặc tả chi tiết 11 Module tính năng (How-It-Works & Flowcharts): [docs/modules/README.md](./modules/README.md).
+> Nhật ký quyết định kỹ thuật: [docs/decision-log.md](./decision-log.md). Danh mục event (chat phát gì, ai nhận gì): [docs/events.md](./events.md).
+> Đặc tả chi tiết các Module tính năng (How-It-Works & Flowcharts): [docs/modules/README.md](./modules/README.md).
 > Lộ trình phát triển các Milestone: [docs/roadmap.md](./roadmap.md).
 
 ---
@@ -31,7 +31,7 @@ Phase 2 (owner 2026-10-19, D179–D180; thứ tự và tập go-live owner 2026-
 - ~100K kết nối đồng thời (CCU).
 - 5–10K tin/s lúc đỉnh điểm.
 - Lưu trữ 5–20 tỷ tin nhắn sau 2 năm.
-- Số thật (owner 2026-10-19, D181): ~5.000 `MarkRead`/s, 5% tin bị sửa, 1.000 room hoạt động cùng lúc. Load test: dev 10K kết nối, prod-like 100K.
+- Số thật về tải: §2.2.
 
 ---
 
@@ -48,6 +48,13 @@ Phase 2 (owner 2026-10-19, D179–D180; thứ tự và tập go-live owner 2026-
 | **A5** | **Bảo mật:** JWT do app auth cấp; mTLS nội bộ; không mã hoá đầu cuối (no E2EE). |
 | **A6** | **Hạn mức:** Text ≤ 16KB, meta ≤ 8KB, ≤ 50 mention, ≤ 10 tham chiếu đính kèm. |
 | **A7** | **Quyền riêng tư:** Member đọc được lịch sử sửa của room; tenant có thể tắt. |
+
+### 2.2 Số thật về tải (owner 2026-10-12, 2026-10-19, D181)
+
+- 99% user ở dưới 200 room; 1% còn lại là user chủ chốt ở ~5.000 room, cần đọc nhanh và đủ. API đọc phải tính cỡ cho nhóm này, không đặt giới hạn cho họ.
+- ~100K kết nối; các lần nối lại rải ra ít nhất một phút.
+- ~5.000 `MarkRead`/s, 5% tin bị sửa, 1.000 room hoạt động cùng lúc.
+- Trên dev, bench dừng ở 2K tin/s và load test dừng ở 10K kết nối; tốc độ production (100K kết nối) chỉ chạy trên prod-like.
 
 ---
 
@@ -85,7 +92,7 @@ Mọi thiết kế và dòng code trong `chatim` bắt buộc phải tuân thủ
 | **Sổ nhận chỗ** | `room_dms`: một room DM mỗi cặp user (D117) | Upsert `$setOnInsert` theo `_id` unique duy nhất; người tới sau nhận lại phòng đã có. Bước đảm bảo chạy lại an toàn. | Không event riêng; thuộc room/member tạo tương ứng. | Lần mở sau hoàn tất bước dở; số member qua phiếu hẹn sinh tồn. |
 | **Ephemeral** | Typing, presence | Không lưu DB, không qua chat (M4 phần 4). Typing: node websocket ↔ core NATS thường, bắn rồi quên (D199). Presence: khoá có hạn do node của người đó đóng dấu theo heartbeat trong Redis riêng `chatim-redis-presence`, người hỏi đọc mỗi heartbeat của mình (D200, D201). | Typing: subject `eph.{tenant}.{room}.typing`. Presence: khoá Redis `chatim:presence:{tenant}:{user}` `EX` 15s, không qua NATS | Mất khi rớt mạng, không cần phục hồi: máy tắt "đang gõ" sau 6s, khoá hết hạn thì offline. |
 | **Cấu hình tin cậy** (`identity`; [M6 PA](plans/2026-11-02-m6-pa-identity-doi-token-summary.md), [PM](plans/2026-11-02-m6-pm-identity-mongodb-summary.md)) | Tenant (`tenants`), issuer của tenant (`trusted_issuers`: issuer → tenant, trạng thái), khoá công khai của issuer (`trusted_keys`: `kid`, EdDSA/ES256/RS256, trạng thái), khoá ký (`signing_keys`, doc nhận chỗ `signing_key_claims` `_id: "active"`) | Một lệnh CLI (`tenant-*`, `issuer-*`, `issuer-key-*`) = ghi một doc; khoá kiểm bằng `trust.ParsePublicJWK` trước khi ghi; kích hoạt khoá ký = một transaction, một lần. Tenant của token luôn lấy từ issuer, không từ claim. Không audit (bỏ ở PM, làm lại ở PB). | Không NATS. Change stream MongoDB trong mỗi replica đánh thức nạp lại trust (tenant, issuer, khoá) và danh sách thu hồi (tenant, `revoked_sessions`). | Nạp lại mỗi `IDENTITY_TRUST_RELOAD` (10s) làm lưới an toàn; nạp lỗi thì giữ bản cũ, tăng `trust_reload_errors_total`, alert `ChatimIdentityTrustStale`. |
-| **Danh bạ identity** (`identity`; D226, D230–D231, D245–D259, [PA](plans/2026-11-02-m6-pa-identity-doi-token-summary.md), [PM](plans/2026-11-02-m6-pm-identity-mongodb-summary.md), [vận hành](apps/identity.md)) | Bản sao user của tenant (`users`: tên, ảnh, trạng thái, nhóm trực tiếp `groups`, `ver`), nhóm (`groups`, cây qua `ancestors`, `members_ver`) | JIT lúc đổi token: user mới gom lô `InsertMany` `w:majority` (D259), sửa hồ sơ ghi một doc với CAS trên giá trị đã thấy (trùng `_id` hay thua CAS thì vẫn cấp token); CLI `user-*` ghi một doc; `group-create`, `group-update` đổi cha, bước đánh dấu của `group-delete` và `user-groups` = một transaction, một lần (`tenants.group_tree_ver`, `groups.members_ver` làm hai lệnh cùng chỗ xung đột); `ver` chỉ tăng khi field hiện ra ngoài đổi. Xung đột → `unavailable`, không retry nội bộ. | Không NATS, không feed cho app khác (gỡ ở PM, M15; làm lại khi app đầu tiên cần). Mỗi replica đọc change stream MongoDB (`fullDocument: updateLookup`). | Mỗi replica nạp toàn bộ theo trang dưới suất `directory_load` (D231), rồi theo change stream từ vị trí đã ghi, chỉ nhận `ver` lớn hơn (D230); mất vị trí stream → nạp lại toàn bộ, bản RAM cũ vẫn phục vụ. |
+| **Danh bạ identity** (`identity`; D230–D231, D245–D259, [PA](plans/2026-11-02-m6-pa-identity-doi-token-summary.md), [PM](plans/2026-11-02-m6-pm-identity-mongodb-summary.md), [vận hành](apps/identity.md)) | Bản sao user của tenant (`users`: tên, ảnh, trạng thái, nhóm trực tiếp `groups`, `ver`), nhóm (`groups`, cây qua `ancestors`, `members_ver`) | JIT lúc đổi token: user mới gom lô `InsertMany` `w:majority` (D259), sửa hồ sơ ghi một doc với CAS trên giá trị đã thấy (trùng `_id` hay thua CAS thì vẫn cấp token); CLI `user-*` ghi một doc; `group-create`, `group-update` đổi cha, bước đánh dấu của `group-delete` và `user-groups` = một transaction, một lần (`tenants.group_tree_ver`, `groups.members_ver` làm hai lệnh cùng chỗ xung đột); `ver` chỉ tăng khi field hiện ra ngoài đổi. Xung đột → `unavailable`, không retry nội bộ. | Không NATS, không feed cho app khác (gỡ ở PM, M15; làm lại khi app đầu tiên cần). Mỗi replica đọc change stream MongoDB (`fullDocument: updateLookup`). | Mỗi replica nạp toàn bộ theo trang dưới suất `directory_load` (D231), rồi theo change stream từ vị trí đã ghi, chỉ nhận `ver` lớn hơn (D230); mất vị trí stream → nạp lại toàn bộ, bản RAM cũ vẫn phục vụ. |
 
 ---
 
@@ -118,19 +125,25 @@ Cờ event chờ phát (M3.1, D142–D149): 7 collection `messages`, `message_ed
 - `message_edits`: khoá tin cộng version uint32 (28B).
 - `message_interactions`: khoá tin, một byte kind (1 reaction, 2 bookmark, 3 reply), rồi phần đuôi: byte của user (1..64B) hoặc `thread│seq` của tin trả lời (16B). Mọi khoá reply của một tin dài 41B nên `keys.InteractionReplyRange` (hai biên 41B) quét các reply theo seq; khoá reaction và bookmark dài ngắn khác nhau nên đếm và liệt kê qua index.
 - `mentions`: khoá tin, một byte loại đích (1 user, 2 nhóm, 3 `@all`), rồi id đích (`@all` không có id, khoá 25B).
-- `members` = `keys.Member(room, user)`: room 8B cộng byte user (1..64B). Mongo so BinData theo độ dài trước, nên không bao giờ quét khoảng `members` theo `_id`: theo room thì dùng index `room_id`, theo khoá cụ thể thì `_id` bằng hoặc `mongobound.IDs`.
+- `members` = `keys.Member(room, user)`: room 8B cộng byte user (1..64B). Mongo so BinData theo độ dài trước, nên không bao giờ quét khoảng `members` theo `_id`: theo room thì dùng index `room_id`, theo khoá cụ thể thì `_id` bằng hoặc `mongobound.IDs` (không bao giờ `_id $in`, D139).
+- `room_dms` = chuỗi `tenant│user nhỏ│user lớn` (`│` là U+2502, nằm ngoài bộ ký tự của id; `domain.DirectKey`), cũng lưu ở `rooms.dm_key`.
 
 ### 5.2 Quy tắc Sharding & Clustered Keys (Shard-Ready)
 
 > Chat **không làm sharding** (owner 2026-10-17, D161). Các quy tắc dưới đây giữ cho đường shard mở; người triển khai tự chọn shard key và cấu hình theo nghiệp vụ của họ (số đo 2 shard để tham khảo: [open topics](plans/2026-10-15-m3-open-topics.md) §2).
 
-1. **Khoá cụm (Clustered Index):** Toàn bộ collection lớn đều dùng Clustered Index trên `_id` với tiền tố `room_id`. Truy vấn khoảng trong một room là `SINGLE_SHARD`.
-2. **Cấm Secondary Index trên `messages`:** Giữ kích thước working set của `messages` vừa vặn hoàn toàn trong RAM. Ngoại lệ duy nhất (M3.1, D148): partial index `{_state_at: 1, _id: 1}` chỉ chứa doc còn `_state` (event chờ phát), thường vài chục entry.
+1. **Khoá cụm (Clustered Index):** Toàn bộ collection lớn đều dùng Clustered Index trên `_id` với tiền tố `room_id`; shard key tương lai là `{_id: 1}`. Truy vấn khoảng trong một room là `SINGLE_SHARD`. Lần thử hai shard ngày 2026-10-14 cho thấy điều này chỉ giữ một room trên một shard với khoá dài cố định (`messages`, `message_edits`, `pin_actions`, `reply_threads`); `members`, `message_interactions` và `mentions` kết thúc bằng một id dài 1–64 byte, BinData so độ dài trước nên chúng rải ra nhiều shard.
+2. **Cấm Secondary Index trên `messages`:** Mọi truy vấn trên `messages` mang tiền tố room. Giữ kích thước working set của `messages` vừa vặn hoàn toàn trong RAM. Ngoại lệ duy nhất (M3.1, D148): partial index `state_pending {_state_at: 1, _id: 1}` chỉ chứa doc còn `_state` (event chờ phát), thường vài chục entry; khi đã shard, sweeper hỏi mọi shard. Collection fact nhỏ (`message_edits`, `pin_actions`) được có index `{room_id, created_at}` (D70).
 3. **Quy tắc Bounded Lookups (D139):**
-   - **Tuyệt đối không gửi `_id: {$in: [...]}`** hoặc `$or` các phép bằng trên collection clustered. MongoDB 8.2 so sánh BinData theo độ dài trước giá trị, khiến `$in` biến thành Full Range Scan xuyên qua nhiều room.
-   - Bắt buộc gom qua hàm `mongobound.IDs`: Sắp xếp key theo thứ tự BinData, gộp các dải key liền kề thành `$or` các khoảng `{_id: {$gte, $lte}}`. Mỗi key kiểm tra đúng ≤ 2 docs.
+   - **Tuyệt đối không gửi `_id: {$in: [...]}`** hoặc `$or` các phép bằng trên `_id` (planner gộp chúng thành `$in`) tới collection clustered. MongoDB 8.2 so sánh BinData theo độ dài trước giá trị, khiến `$in` chạy thành một lần quét từ khoá nhỏ nhất tới khoá lớn nhất, xuyên qua nhiều room và nhiều độ dài khoá (20 room của bench: đọc 320.040 doc để lấy 100).
+   - Bắt buộc gom qua hàm `mongobound.IDs`: Sắp xếp key theo thứ tự BinData, gộp các dải key liền kề thành `$or` các khoảng `{_id: {$gte, $lte}}`, một key thì dùng phép bằng. Mỗi key kiểm tra đúng ≤ 2 docs.
+   - Điều kiện thêm đặt bên trong từng nhánh; không sort trên server (sort trong Go). Một sort hay một điều kiện nằm ngoài `$or` biến truy vấn thành `COLLSCAN`. Itest explain `bounded_lookup_integration_test.go` (`apps/chat/internal/store/mongostore`) canh mọi chỗ gọi.
 4. **Không giao dịch phân tán (No Multi-doc Transactions):**
-   - **Ngoại lệ duy nhất (D100):** Kế nhiệm Owner (Owner rời, nhường quyền) dùng 1 transaction duy nhất cập nhật `members` + `rooms.owners_ver`. Xung đột trả `ErrRetryLater` ngay, không retry nội bộ.
+   - **Ngoại lệ duy nhất (D100):** lệnh chạm tới owner (owner rời, nhường quyền) chạy một transaction MongoDB trên các doc `members` của room và doc `rooms` (`$inc owners_ver`), chạy một lần. Xung đột trả `ErrRetryLater` (`UNAVAILABLE`) ngay, không retry nội bộ.
+   - Không `$lookup` vào collection lớn. Tra điểm có giới hạn thì được; join không giới hạn thì không.
+5. **Collection tương tác và mention:** `message_interactions` và `mentions` là clustered với `_id` mang tiền tố khoá tin, nên tương tác và mention của một tin nằm trên một shard dưới shard key `{_id: 1}`. Các index theo user, đích, room và resync của chúng (`{tenant, actor_id, …}`, `{tenant, target, …}`, `{room_id, kind, …}`, `{message_key}`, `{room_id, kind, updated_at}`) sẽ scatter-gather khi đã shard (D112, D115; thay `reactions` của D88). `room_dms` bảo đảm một DM mỗi cặp user chỉ nhờ `_id` (D117). `mentions` do Mention App ghi; `mention_user_groups`/`mention_groups` dùng `_id` chuỗi clustered (`tenant│user`, `tenant│group`) đọc qua các dải `mongobound.StringIDs`; `mention_rooms` là collection thường khoá theo room id, ở đó `_id $in` dùng được.
+6. **`members`:** clustered với `_id` = room + user; "các room của một user" đọc qua index `{tenant, user_id, state, room_id, joined_at, cleared_at, read_seq, pinned_at, archived_at}` (không có collection `user_rooms`, D98), index này scatter-gather khi shard theo room.
+7. **Cấu hình và bootstrap:** URI, read preference và write concern lấy từ cấu hình. Collection chỉ được tạo ở bước bootstrap; index chỉ đổi qua `/app indexes` (D191).
 
 ### 5.3 Ràng buộc schema và giới hạn đã biết
 
@@ -217,6 +230,14 @@ modules/mention/
 
 Luật layout (D182): `apps/<x>` là chương trình có `main.go`; `modules/<x>` là module nghiệp vụ nhúng, một package công khai + `internal/`. Một phần chỉ thành module khi có collection riêng không ai khác ghi, phụ thuộc một chiều vào chat và nối qua event + port; domain của chat không đủ nên ở lại `apps/chat/internal`. `modules/mention/internal` không import `apps/chat/internal` (luật `internal/` của Go) và chỉ mở 4 collection của nó (test `owned_collections_test.go`); trong chat chỉ `app` và `config` import `mentionapp` (depguard `mention-module-entry`); phần dùng chung nằm ở `pkg/` (`jsconsume`, `mongobound`, `chatrpc`, `ids`, `keys`). Chat nối app trong `apps/chat/internal/app` (`mention_wiring.go`, `mention_chat_reader.go`).
 
+Trong `apps/chat`, `main.go` chỉ gọi `app.Main`; itest toàn chat ở `apps/chat/itest` khởi động node chat bằng `app.Run`. Hướng import giữa các package do depguard trong `.golangci.yaml` giữ (luật ở `CLAUDE.md` §Architecture). Cả repo là một Go module `github.com/ivannguyendev/chatim` với một Dockerfile `deploy/docker/Dockerfile` (`ARG TARGET`).
+
+Các app khác, `pkg/` và `tools/`:
+- `apps/websocket`: `internal/{app,config,session,command}`; `apps/gateway`: `internal/{app,config,api,limit}`. Cả hai không có database.
+- `apps/identity`: `internal/{app,config,api,admincmd,directory,exchange,guard,keyring,signing,store,trust}`, store duy nhất là `store/mongostore`, database MongoDB riêng `chatim_identity` (depguard `identity-boundaries`).
+- `pkg/`: code dùng chung, không nghiệp vụ: `jsconsume` (pull source và bậc Nak), `mongobound` (tra `_id` có giới hạn), `chatrpc` (gọi chat: forwarder, định tuyến slot, header caller), `auth` (kiểm token, đồng bộ với identity), `ids`, `keys`, … (depguard `pkg-shared-only`). `pkg/wstest` là client websocket nhỏ chỉ cho test, e2e và `wsload` (D208, depguard `wstest-tests-only`); không bao giờ lớn thành SDK (D206).
+- `tools/`: `chatcli`, `chatbench` và `tools/internal/route`, client gRPC định tuyến theo slot, retry giữ nguyên cid.
+
 ```mermaid
 flowchart TB
     app["app"]
@@ -274,7 +295,7 @@ Biến môi trường, cổng, metric và lệnh vận hành của từng app: [
 
 ## 8. Cam kết đúng đắn (Guarantees & Detectors)
 
-Mỗi cam kết hệ thống bắt buộc phải đi kèm với Detector đo lường trên Prometheus `/metrics` và Alert Rule cảnh báo (D76, D78). Tên metric đầy đủ có tiền tố `chatim_chat_` (của Mention App: `chatim_mention_`); DM1 và SQ1 hiện chưa có detector:
+Mỗi cam kết hệ thống bắt buộc phải đi kèm với Detector đo lường trên Prometheus `/metrics` và Alert Rule cảnh báo (D76, D78). Cam kết mới phải có metric và luật alert (`deploy/prometheus/alerts.yml`) trong cùng PR. Metric nằm ở cổng admin của từng app, tên đầy đủ có tiền tố `chatim_chat_` (Mention App: `chatim_mention_`; các app khác: `chatim_websocket_`, `chatim_gateway_`, `chatim_identity_`); DM1 và SQ1 hiện chưa có detector:
 
 | Mã | Cam kết hệ thống | Cơ chế bảo đảm | Metric đo lường & Cảnh báo |
 |---|---|---|---|
@@ -301,7 +322,7 @@ Mỗi cam kết hệ thống bắt buộc phải đi kèm với Detector đo lư
 
 ---
 
-## 9. Bản đồ 11 Module tính năng chi tiết
+## 9. Bản đồ Module tính năng chi tiết
 
 Toàn bộ chi tiết kỹ thuật vận hành (How-It-Works), sơ đồ Mermaid trình tự gọi lệnh, cấu trúc payload và mã lỗi từng tính năng được phân rã độc lập trong thư mục [`docs/modules/`](./modules/README.md):
 
@@ -324,4 +345,4 @@ Toàn bộ chi tiết kỹ thuật vận hành (How-It-Works), sơ đồ Mermaid
 ## 10. Tra cứu Quyết định Kỹ thuật (Decision Log)
 
 Mọi quyết định lựa chọn giải pháp kỹ thuật, đánh đổi (trade-offs), phương án bị loại bỏ (rejected alternatives) từ ngày đầu dự án đến Mention App hiện tại được lưu trữ đầy đủ tại:
-👉 **[Architecture Decision Records (D1–D218)](./decision-log.md)**
+👉 **[Architecture Decision Records](./decision-log.md)**

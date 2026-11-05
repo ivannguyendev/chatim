@@ -4,17 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-chatim is an internal, logically multi-tenant chat platform (CPaaS) in Go. Project docs are written in Vietnamese. Five apps:
-
-- `chat`: rooms, members, messages, interactions, seq allocation, MongoDB storage, events to NATS JetStream.
-- `mention` (Mention App): `modules/mention`, embedded in chat (D177: a modular monolith until its own team, SLA, release cadence, measured scaling need, or its own database + CDC; then it owns its data and reaches chat only through APIs, never chat tables). Mention index, `ListMentions`, user groups, taggable groups, `@group` picker data, notifications as `WsPublish` packets on `CHATIM_WS`.
-- `websocket`: WebSocket (gws), the 12 realtime writes `chatrpc.Realtime()`, event and notification fanout, typing, presence, login limits, connections kept through token expiry. The repo is server-only (D206): the client SDK lives in another repo and follows `docs/modules/09-feature-realtime-delivery-and-ephemeral.md` §11.
-- `gateway`: HTTPS (Connect) for the 22 `chatrpc.Request()` calls (reads and room management).
-- `identity` (M6; was `iam`, renamed in PA, D243): a bridge, not an IAM (owner 2026-11-02, D239). Chat owns no passwords, login, sessions or roles. It keeps per-tenant trusted issuers and their public keys (EdDSA, ES256, RS256, added by CLI), exchanges a JWT signed by the tenant's backend for a 5-minute Ed25519 chat token at `POST /v1/token` (RFC 8693, D240–D241), and keeps a user mirror written just in time from the token's `name`/`picture` (D242), the group tree, revocation by tenant and the signing keys with their JWKS. The directory (`GetUsers`, `GetMyProfile`) is served from an in-memory copy per replica, loaded in pages under a `slots` lease and kept current by a MongoDB change stream (D245–D246, D252); there is no directory feed for other apps (removed in PM, D257). Store: its own MongoDB database `chatim_identity` with user `identity` on the chat replica set, no Postgres (D244, D253). Never reads chat data and chat never reads its tables (`docs/apps/identity.md`).
-
-Status: Phase 1 M0–M4 merged to `main` (`dev-done`, last PR #19 on 2026-10-25). M6 `identity` is closed on `feat/m6` at phases PA + PM (`dev-done` 2026-11-04, PR to `main` pending): parts 1, 2, 3a and 3c.1 were built as a self-built IAM (D209); owner 2026-11-02 changed direction (D239), and phase PA (built 2026-11-02) removed login, sessions, DPoP and roles, renamed `iam` to `identity` and added the token exchange. Phase PM (built 2026-11-04, D245–D259) moved the store to MongoDB, follows it with a change stream, removed Postgres and the HTTP directory feed, and batches just-in-time user inserts. PB (batch server API for users, groups and members, user disable and revoke-before), external IAM integration and group sync to Mention wait until the first tenant integrates, still before go-live (owner 2026-11-04, D260); token checks stay embedded in websocket/gateway (no `identity-verifier`). Before the M6 PR (owner 2026-11-04): refactor phases RF1 (15 infrastructure packages moved to `pkg/core/*`, zero-domain depguard; done 2026-11-04), RF2 (`pkg/auth`, `pkg/chatrpc`; done 2026-11-05) and RF3 (app `core` renamed `chat`, numbered dev port variables removed, gateway reads the Redis chat node table; done 2026-11-05, D261), all on `feat/m6`. Next: one PR `feat/m6` → `main` (draft `bin/feat-m6-pr.md`), then M7 media, starting with a brainstorm. Phase 2 order (D207): M6 → M7 media → M8 `notification` + push → M9 people/group search → go-live `v1.0.0` for a new product (no migration); PoC prod-like and M5 run in parallel when hardware exists. Phase 1 exit = `chat` + `mention` + `websocket` `prod-like validated` (D177–D181). Open: NATS permissions for websocket (M5, blocks go-live), the date the prod-like hardware is ready, who picks push recipients for plain messages (D104). Milestone history lives in `docs/roadmap.md` and the summaries in `docs/plans/`, not here.
-
-Real numbers (owner 2026-10-12, 2026-10-19, design §2.3, D181): 99% of users are in under 200 rooms, the other 1% are key users in ~5,000 rooms who need fast, complete reads (size read APIs for them, not a limit); ~100K connections, reconnects spread over at least a minute; ~5,000 `MarkRead`/s, 5% of messages edited, 1,000 rooms active at once. Dev benches stop at 2K msg/s and dev load tests at 10K connections; production rates run only on prod-like.
+chatim is an internal, logically multi-tenant chat platform (CPaaS) in Go. Read `README.md` for the apps and their boundaries and `docs/roadmap.md` for status. Project docs are written in Vietnamese.
 
 ## Hard rules
 
@@ -41,161 +31,110 @@ Check every brainstorm, summary and plan against this list before showing it to 
 - Field names: full basic English words except `messages`; counters end in `_ver`; time fields end in `_at` (owner 2026-11-02, e.g. `expires_at`, never `until`); `updated_at`/`updated_by`; `request_id`.
 - Owner summaries: Vietnamese, plain words with examples, written from the final state (rewrite after a review round, never append patches). Risks list only real consequences of this plan, not other systems' operations and not mechanisms already accepted.
 - Ask the owner only pivotal questions, in plain words with an example; never re-ask an answered one.
-- Identity (owner 2026-11-02, replaces D179, D209 and the 2026-11-01 Keycloak choice): chat owns no identity (no passwords, login, sessions, SSO). It keeps per-tenant trusted issuers, a user mirror, groups and revocation, and exchanges a JWT signed by the tenant's backend or IdP for its own chat token. The tenant always comes from the issuer config, never from a token claim. Never write plugins for an external IAM. Tenant-facing APIs (batch user/group API, revoke-before, external IAM, SCIM) are built when a real tenant integrates, so its needs shape them (owner 2026-11-04, D260).
+- A decision-log row that starts with `**Thay bởi …**` is a dropped design: never propose it again unless the owner asks.
+- Identity: chat owns no identity (no passwords, login, sessions, SSO). It keeps per-tenant trusted issuers, a user mirror, groups and revocation, and exchanges a JWT signed by the tenant's backend or IdP for its own chat token. The tenant always comes from the issuer config, never from a token claim. Never write plugins for an external IAM. Tenant-facing APIs (batch user/group API, revoke-before, external IAM, SCIM) are built when a real tenant integrates, so its needs shape them (D260).
 
 ## Workflows
 
-Mandatory for every milestone, phase or other large task (owner 2026-10-25). Reasons in `.memory/workflow-pipeline.md` and `.memory/rule-retrospective.md`.
+Mandatory for every milestone, phase or other large task; format per `docs/roadmap.md` §"Quy tắc viết plan". This file changes only when a rule changes (no status here).
 
-1. **Brainstorm** (skill `brainstorming`): requirements table with sources first, then the recommendation.
-2. **Decision log** on the owner's go: `.claude/plans/<feature>_design.md` (local, gitignored, kept only until step 9).
-3. **Phase-split review**: an independent reviewer (an agent that never saw my reasoning) reads the decision log and proposes phases (goal, deliverable testable alone, dependencies, requirements covered). The owner approves the split; the phase list goes into the milestone row of `docs/roadmap.md`. A phase is a part on `feat/<milestone>`.
-4. **Summary for one phase only**, `docs/plans/<date>-<milestone>-<n>-<slug>-summary.md` (contents per `docs/roadmap.md` §"Quy tắc viết plan"); the owner approves.
-5. **Detailed plan for that phase only**, `.claude/plans/<plan>.md`, no code.
-6. **Plan review**: an independent reviewer judges enterprise fitness and the coverage table; fold in Critical/Important findings, report the verdict, code only after the owner's go.
-7. **Code with TDD**; code review per "Verification and review budget" (overrides the global "review after every implementation").
-8. **Verify** per the budget table.
-9. **Close the phase**: rewrite the summary as built; update roadmap, Decision Log, `INDEXES.csv` and this file; fold the decision log into `docs/decision-log.md` and the plan's Minor findings into the summary or roadmap "Mục mang sang M5", then delete both local files (tracked docs never cite `.claude/plans/`, owner 2026-10-25); run the rule check; update the milestone row, then end the report with the phase just finished (evidence), the next phase (goal, first step) and the remaining phases with their status.
+1. **Brainstorm** (skill `brainstorming`): read `README.md`, this file, the `.memory/` index, `INDEXES.csv`, related docs; requirements table with sources, then the recommendation. Every claim cites a source (design §2, D-id, owner answer with date, `path:line`, command or test output, `docs/poc/results/` or `bin/bench/`); none → write "chưa có nguồn" and ask. With no requirement, decision or summary covering the work, stop and present the purpose and component split first.
+2. **Proposed decisions** on the owner's go: `.claude/plans/<feature>_design.md` (local, gitignored, kept until step 9).
+3. **Phase split**: an independent reviewer (never saw my reasoning) reads it and proposes phases (goal, deliverable testable alone, dependencies, requirements covered); the owner approves; the list goes into the milestone row of `docs/roadmap.md`. A phase is a part on `feat/<milestone>`.
+4. **Summary for one phase**: `docs/plans/<date>-<milestone>-<n>-<slug>-summary.md` with the coverage table (requirement → phase/component → task → test → evidence after execution; an empty cell blocks approval; both reviewers check it); the owner approves.
+5. **Detailed plan** for that phase: `.claude/plans/<plan>.md`, coverage table, no code.
+6. **Plan review**: an independent reviewer judges enterprise fitness and the coverage table; fold in Critical/Important findings, report the verdict; code only after the owner's go.
+7. **Code with TDD**; review per the budget below (overrides the global "review after every implementation").
+8. **Verify** per the budget; "done"/"green" only next to command output.
+9. **Close-out**: (a) Docs: rewrite the summary as built; fold only accepted decisions meeting the decision-log criteria (§Docs) into the milestone's file in `docs/decisions/` (work-process choices go to the summary); Minor findings → summary or roadmap "Mục mang sang M5"; delete the local files (tracked docs never cite `.claude/plans/`); update `INDEXES.csv`. (b) Rules and memory: note owner corrections in the local decision log when they happen; at close add owner-confirmed rules here, update or delete superseded ones, or say "không có rule mới"; propose memory drafts per Repo Memory. (c) Progress: update the roadmap milestone row; end the report with the phase just finished (evidence), the next phase (goal, first step) and the remaining phases with status.
 
-- **Evidence, never invention.** Every claim cites a source: design §2 requirement, D-id, owner answer with date, `path:line`, command or test output, `docs/poc/results/` or `bin/bench/` folder. No source = write "chưa có nguồn" and ask. With no requirement, decision or summary covering the work, stop and present the purpose and the component split for approval first. "Done"/"green" only next to the command output.
-- **Coverage table** in every summary and detailed plan: requirement → phase/component → task → test → evidence (after execution). An empty cell blocks approval; both reviewers check it.
-- **Rule check** at the close of each phase and milestone and after each owner correction: add only owner-confirmed rules (rule text here, reason in `.memory/`), update or delete the rules they supersede, and say "không có rule mới" when there is none.
-- **Memory** lives in `.memory/` (committed; index `.memory/README.md`); read it before any brainstorm, summary or plan, and save new memories there.
+## Repo Memory
+
+`.memory/` (committed; index `.memory/README.md`) holds the why behind rules and decisions. Read the index before any brainstorm, summary or plan and open only the notes that apply.
+
+- Gate: any create, update or delete in `.memory/` (index included) needs the owner's approval of the exact draft (file name + full content, or the file to delete), given once for all drafts at the phase close. An answer to another question, a general "ok" or silence is not approval.
+- When: only at Close-out (Workflows step 9).
+- Criteria: write a note only when all hold: the owner confirmed it; it stays true after the task; it is not already in this file, `docs/`, code or git; a future agent would act differently without it. Never store status, proposals, open questions, commit hashes, code or owner quotes.
+- Where else: rules → this file; decisions and their reasons → `docs/decisions/`; requirements and specs → `docs/`; phase scope and status → roadmap and summaries; drafts → `.claude/plans/`.
+- Format: one fact per note, frontmatter `name`, `description`, `metadata.type`, one line in the index; update a note instead of adding a duplicate. At the close, propose deleting notes a D-id or this file now covers.
 
 ## Verification and review budget
 
-The user finds long review and test loops too slow. Run the cheapest check that proves the change, and escalate only for the area that changed.
+The user finds long review and test loops slow: run the cheapest check that proves the change; escalate only for the area that changed.
 
-| When                                                        | Run                                                                                                                                                                                                                                                                                                                                     |
-| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| While coding                                                | `make -s go ARGS="test -race -shuffle=on ./<touched pkgs>/..."`                                                                                                                                                                                                                                                                         |
-| Before each commit                                          | `make fmt-check`, `make vet`, `make lint`, and the tests of touched packages                                                                                                                                                                                                                                                            |
-| New goroutines, channels or locks                           | add `-count=5` on that package only                                                                                                                                                                                                                                                                                                     |
-| `apps/chat/internal/platform/slot` or `pkg/slotmap` changed | R5 once at the end of the task: `make go ARGS="test -race -count=20 -timeout 20m ./apps/chat/internal/platform/slot/"` (~9 min)                                                                                                                                                                                                         |
-| Mongo/Redis/NATS adapters or `apps/chat` wiring changed     | `make itest` once (needs `make infra-up`)                                                                                                                                                                                                                                                                                               |
-| Milestone end only                                          | `make test`, `make itest`, `make app-up && make e2e`, chatbench                                                                                                                                                                                                                                                                        |
-| Perf milestones only                                        | before/after sweep with `scripts/bench-cell.sh NAME RATE reset [pprof]` at 1K and 2K msg/s, never above 2K on dev (owner 2026-10-19: the machine cannot take more; production rates run only on prod-like) (results in `bin/bench/NAME/`). The dev MacBook throttles on heat above 2K and other host load skews latency: record `CPU_Speed_Limit` and chatbench pacer lag, and trust only CPU and Redis command counts from a cell where either is off |
-
-- **Risky tasks get one reviewer.** These are the write path, dedupe, publish, slots and lifecycle.
-  - The reviewer checks spec and quality in a single pass over the diff.
-  - It does not re-run suites the implementer already ran green; at most `-count=3` on touched packages.
-- **Findings:**
-  - Fix Critical and Important findings in one follow-up commit.
-  - Re-review only after a Critical fix, and only that diff.
-  - Write Minor findings into the plan or docs instead of starting another loop.
-- **Low-risk tasks** (docs, config, compose, CLI, PoC tools) get one quick check by the controller and no reviewer subagent.
-- No mutation-testing passes, repeated stress runs or benchmark re-runs unless asked.
-- When task N and task N+1 touch different files, review task N while task N+1 is being implemented.
-- Report in a few lines. If nothing changed since the last green run, don't re-run the whole repo at the end.
+- While coding: `make -s go ARGS="test -race -shuffle=on ./<touched pkgs>/..."`. Before each commit: `make fmt-check`, `vet`, `lint` and the touched packages' tests.
+- New goroutines, channels or locks: `-count=5` on that package only.
+- `apps/chat/internal/platform/slot` or `pkg/slotmap` changed: R5 once at task end, `make go ARGS="test -race -count=20 -timeout 20m ./apps/chat/internal/platform/slot/"` (~9 min).
+- Mongo/Redis/NATS adapters or `apps/chat` wiring changed: `make itest` once (needs `make infra-up`).
+- Milestone end only: `make test`, `make itest`, `make app-up && make e2e`, chatbench.
+- Perf milestones only: before/after `scripts/bench-cell.sh NAME RATE reset [pprof]` at 1K and 2K msg/s, never above 2K on dev (owner 2026-10-19; production rates only on prod-like; results in `bin/bench/NAME/`). The dev MacBook throttles above 2K and host load skews latency: record `CPU_Speed_Limit` and chatbench pacer lag, and trust only CPU and Redis command counts from a cell where either is off.
+- Risky tasks (write path, dedupe, publish, slots, lifecycle) get one reviewer: spec and quality in one pass over the diff, no re-run of suites already green (at most `-count=3` on touched packages). Low-risk tasks (docs, config, compose, CLI, PoC tools): one quick check by the controller, no reviewer subagent.
+- Findings: fix Critical and Important in one follow-up commit; re-review only a Critical fix's diff; Minor findings go into the plan or docs, no new loop.
+- No mutation testing, repeated stress runs or benchmark re-runs unless asked. Review task N while task N+1 is implemented when they touch different files.
+- Report in a few lines; if nothing changed since the last green run, don't re-run the whole repo.
 
 ## Git workflow
 
-Full rules in `docs/git-workflow.md`.
+Full rules (Definition of Done, readiness, SemVer tags, broken `main`): `docs/git-workflow.md`.
 
-- Branches (standard, owner 2026-10-08; do not ask again): one shared branch per milestone, `feat/<milestone>` (e.g. `feat/m2c`) from `main`. Every part of the milestone is committed and pushed there, with no PR per part. When the whole milestone meets the Definition of Done, draft the PR description in `bin/<branch>-pr.md` and the owner opens and merges one PR. `fix/<slug>` for stray fixes on `main`, `docs/<slug>` for docs outside a milestone. No long-lived `prod`, `develop` or `release` branches.
-- `main` holds finished, green work (`dev-done`), not necessarily go-live. Merge by PR with a merge commit. Never commit directly to, force-push or rewrite `main`.
-- Merge only when the milestone's Definition of Done holds: plan tasks done; `fmt-check`, `vet`, `lint`, `test`, `itest`, `e2e` green; no open Critical/Important findings; roadmap, Decision Log, `INDEXES.csv` and this file updated in the same PR; the PR states the readiness level.
-- CI: `.github/workflows/ci.yml` job `checks` runs `make fmt-check`, `vet`, `lint` and `test` on every PR to `main`; branch protection requires it. `itest` and `e2e` still run on the dev machine.
-- Readiness: `dev-done` → `prod-like validated` → `go-live`.
-- Releases are SemVer tags on `main`, one per release, not per PR. `v1.0.0` is the first go-live. Prod runs the image built from a tag; the same image goes staging → prod.
-- Broken `main`: fix forward with `fix/*`; if that takes more than about a day or blocks others, revert the merge (`git revert -m 1`). A prod bug gets a patch tag; cut `release/vX.Y` from the tag only when `main` holds unready work.
+- One branch per milestone, `feat/<milestone>` from `main` (standard, do not ask again), every part pushed there with no PR per part; the PR description is drafted in `bin/<branch>-pr.md` and the owner opens and merges one PR. `fix/<slug>` for stray fixes, `docs/<slug>` for docs outside a milestone; no long-lived `prod`, `develop` or `release` branches.
+- `main` holds green `dev-done` work, merged by PR with a merge commit, only when the Definition of Done holds. Never commit directly to, force-push or rewrite `main`.
+- CI job `checks` (`.github/workflows/ci.yml`) runs `fmt-check`, `vet`, `lint`, `test` on every PR to `main` (required); `itest` and `e2e` run on the dev machine.
 
 ## Commands
 
-Run from the repo root. `make -s …` hides the echoed `docker run` line.
+Run from the repo root; `make -s …` hides the echoed `docker run` line. Ports and the app list: `README.md`.
 
 ```bash
-cp .env.example .env        # MONGO_ROOT_PASSWORD, REDIS_PASSWORD, REDIS_DEDUPE_PASSWORD, REDIS_PRESENCE_PASSWORD: letters, digits, - or _ (spliced unescaped into URIs)
-make infra-up               # mongo rs0 :27117, redis state :6380, redis dedupe :6381, redis presence :6382, nats :4223 (monitor :8223); infra-down / infra-reset
-make redis-cli ARGS="dbsize"                  # redis-cli inside the container with the secret; INSTANCE=state (default), dedupe or presence
-make test                   # go test -race -shuffle=on ./... (unit only, miniredis; no infra)
-make go ARGS="test -race -run TestName ./apps/chat/internal/message/actor/"   # single test
-make vet; make fmt-check; make lint; make vuln; make tidy
-make proto; make buf-lint   # Buf v2, proto/chatim/v1 → pkg/pb
-make itest                  # all tests with CHATIM_IT_MONGO_URI/REDIS_ADDR/NATS_URL set (real infra); one area: make itest ITEST_ARGS="-race -count=1 ./apps/identity/..." ($ written $$)
-make image TARGET=apps/chat # distroless chatim/<name>:dev for any main package
-make app-up; make app-down   # identity-mongo-init, identity-1, identity-2, chat-1, chat-2, websocket-1, websocket-2, gateway-1 (compose profile app); runs identity-env and dev-keys first; identity-bootstrap merges the identity key into the dev JWKS
-make identity-admin ARGS="issuer-add -issuer T-backend -tenant T"   # identity one-shot commands: tenant-*, issuer-*, issuer-key-*, user-set, user-disable, group-*, key-* (docs/apps/identity.md); make identity-logs
-make -s ws-token ARGS="-tenant T -user U"   # dev token (default -ttl 15m) for both websocket nodes and gateway-1; make ws-logs [NODE=2], make gw-logs
-make alerts-check           # promtool check rules on deploy/prometheus/alerts.yml (in Docker)
-make e2e                    # tools/chatcli + scripts/e2e.sh, phases 1–13 and 15 (docs/e2e.md); E2E_ONLY=13 or 15 runs only that identity phase
-make poc TOOL=chatbench ARGS="-rate 2000 -duration 60s -watch 20"   # needs app-up; other tools: mongobench, natsbench, wsbench, wsload, exchangebench
+cp .env.example .env        # passwords: letters, digits, - or _ (spliced unescaped into URIs)
+make infra-up               # mongo, 3 redis, nats; infra-down / infra-reset
+make test                   # unit only, miniredis, no infra
+make go ARGS="test -race -run TestName ./apps/chat/internal/message/actor/"
+make vet; make fmt-check; make lint; make vuln; make tidy; make proto; make buf-lint
+make itest                  # real infra; one area: ITEST_ARGS="-race -count=1 ./apps/identity/..." ($ written $$)
+make app-up; make app-down  # all apps, compose profile app
+make e2e                    # docs/e2e.md; E2E_ONLY=<phase> runs one identity phase
+make -s ws-token ARGS="-tenant T -user U"; make identity-admin ARGS="…"; make redis-cli INSTANCE=dedupe ARGS="dbsize"
+make image TARGET=apps/chat   # distroless chatim/<name>:dev; make alerts-check (promtool)
+make poc TOOL=chatbench ARGS="-rate 2000 -duration 60s -watch 20"   # needs app-up; also mongobench, natsbench, wsbench, wsload, exchangebench
 ```
 
-- Chat one-shot commands (`docker exec chatim-chat-1 /app resync|recount|indexes …`) and `chatcli` subcommands: `docs/apps/chat.md`. Indexes change only through `/app indexes` (D191).
-- Dev keys, key rotation, `wsload`, `scripts/wsload-kill.sh` and `scripts/ws-nats-drill.sh`: `docs/apps/websocket.md`. Gateway curl example: `docs/apps/gateway.md`.
-- `make poc` builds `bin/<tool>` and runs it on the compose network `chatim_default`. `POC_FLAGS` passes extra `docker run` flags. `MONGO_URI` and `REDIS_PASSWORD` are built from `.env`, exported by make and passed as bare `-e NAME`, so no password shows up in the echoed command.
-- Inside that network, services are reached by name: `chatim-mongodb:27017`, `chatim-redis:6379`, `chatim-redis-dedupe:6379`, `chatim-nats:4222`, `chatim-chat-1:9000`.
-- Integration tests skip unless the `CHATIM_IT_*` env vars are set. There are no build tags. Unit tests sit next to their code; only whole-chat integration tests live apart, in `apps/chat/itest`.
-- The `apps/chat`, `apps/websocket` and `apps/gateway` env vars, their defaults and the ports are listed in README.md.
-- Env vars, defaults, boot rules, ports, admin endpoints and metrics of each app: `docs/apps/chat.md`, `docs/apps/websocket.md`, `docs/apps/gateway.md`. When a config var changes, update its row in the same commit.
+- `make poc` runs `bin/<tool>` on the compose network `chatim_default` (`POC_FLAGS` adds `docker run` flags; `MONGO_URI`, `REDIS_PASSWORD` passed as bare `-e NAME`, so no password is echoed). Services there: `chatim-mongodb:27017`, `chatim-redis:6379`, `chatim-redis-dedupe:6379`, `chatim-nats:4222`, `chatim-chat-1:9000`.
+- Integration tests skip unless `CHATIM_IT_*` is set (no build tags). Unit tests sit next to their code; whole-chat integration tests live in `apps/chat/itest`.
+- Indexes change only through `/app indexes` (D191). Per-app env vars, ports, admin, metrics and commands (`docker exec chatim-chat-1 /app resync|recount|indexes …`, `chatcli`, dev keys, `wsload`, drills, `identity-admin`): `docs/apps/{chat,websocket,gateway,identity}.md`; when a config var changes, update its row in the same commit.
 
 ## Code index
 
-`INDEXES.csv` at the repo root lists every Go package, plus the key docs, scripts and deploy files. Its columns are `path,kind,purpose,key_symbols,used_by,tests` (decisions live in `docs/decision-log.md`, not here). Read it before searching the tree.
+`INDEXES.csv` at the repo root is the entry point for searching the tree; read it first. Columns `path,kind,purpose,key_symbols,used_by,tests`.
 
-When you add, remove or rename a package, or change its purpose or key symbols, update its row in the same commit.
+- Scope: one row per Go package, plus the official docs, scripts, configs and deploy files useful as retrieval context. Never index plans, drafts, generated code (`pkg/pb` is one row), files always loaded (`CLAUDE.md`) or single summaries (`docs/plans` is one row).
+- `purpose`: at most ~300 characters, present tense: what it owns or does and when to open it. No history, status, task or phase ids, env or metric lists, counts that drift, or line numbers.
+- `key_symbols`: at most ~15 main symbols; `used_by`: main importers; `tests`: kinds only (`unit`, `itest`, `e2e`, `none`, `synctest`, `goleak`).
+- When you add, remove or rename a package or file in scope, or change its purpose or key symbols, update its row in the same commit, written from the current code.
 
 ## Architecture
 
-There is one module, `github.com/ivannguyendev/chatim`, and one Dockerfile (`deploy/docker/Dockerfile`, `ARG TARGET`).
+Reference (keys, collections, shard rationale, package tree, lifecycle, metrics): `docs/architecture.md` §5–§8, `docs/modules/`, `docs/events.md`.
 
-- Layout (D182): `apps/<app>/` is a runnable program with `main.go` and `internal/` (`apps/chat`, `apps/websocket` with `internal/{app,config,session,command}` and `apps/gateway` with `internal/{app,config,api,limit}`, both with no database, never importing `apps/chat` or `modules/*`, and gateway never importing `apps/websocket`; `apps/identity` with `internal/{app,config,api,admincmd,directory,exchange,guard,keyring,signing,store,trust}` (`store/mongostore` is its only store), its own MongoDB database `chatim_identity`, importing no other app or module, and no other app importing it — depguard `identity-boundaries`); `modules/<module>/` is a business module embedded in a program, with one public package and `internal/`. Mention App lives in `modules/mention`, embedded in chat: `modules/mention/mentionapp` is the only thing chat imports, and only from `apps/chat/internal/app` and `config` (depguard `mention-module-entry`); `modules/mention/internal` cannot import `apps/chat/internal` (Go `internal/` rule; shared code lives in `pkg/`) and opens only its four collections (`owned_collections_test.go`). A part becomes a module only when it owns collections nobody else writes, depends one way on chat, and talks to chat through events and a port; chat domains fail all three and stay in `apps/chat/internal`.
-- `apps/chat/main.go` only calls `app.Main`; wiring lives in `apps/chat/internal/app`, whole-chat integration tests in `apps/chat/itest` (they start chat nodes with `app.Run`). Packages are grouped by domain (design §6.2). Each domain keeps its use cases at its root: `message.Editor`/`message.Reader`, `interaction.Service`/`interaction.Reader`, `member.Service`/`member.Reader`, `room.Service`; its own subpackages sit under it: `message/` (actor, flush, view), `interaction/` (pinproj), `member/` (ownership, memberwatch), `room/` (roomlist, roomcache). Shared packages hold no use case: `model/` (domain, access, pbconv), `store/` (ports, mongostore, memstore, storetest), `event/` (publish, stateclear, projection, sweep, timer, eventkit, resync), `dedupe/`, `platform/` (slot, redisguard, testlog). `api/grpcsrv` is thin transport (caller, proto ↔ domain, one use case call); `app` wires and `config` loads. depguard in `.golangci.yaml` enforces the direction: domains never import `api`, `app`, `config` or event delivery (only `event/timer`); `member`, `message` and `interaction` import no other domain, except `interaction` → `message`, and `room` imports only `member`; `room/roomlist` and `room/roomcache` import no domain; only the actor imports `message/actor` among domains; event packages import no domain (event tests may build `interaction/pinproj`); only `app` reads `config`. Package names stay short (`actor`, not `sendactor`); a new package goes under the domain it serves, or into a shared group when it has no business logic.
-- `pkg/` holds shared code and no business logic (`jsconsume` pull source and Nak ladder, `mongobound` bounded `_id` lookups, `chatrpc` calls to chat (forwarder, slot routing, caller headers), `auth` token checks and identity sync, `ids`, `keys`, …); depguard `pkg-shared-only` keeps it from importing `apps/*` or `modules/*`. `pkg/wstest` is the small websocket client for tests, e2e and `wsload` only (D208; depguard `wstest-tests-only` bars non-test code in `apps/`, `modules/`, `pkg/`); it never grows into an SDK (D206).
-- `tools/` holds `chatcli`, `chatbench` and `tools/internal/route`, a slot-routed gRPC client whose retries keep the same cid.
-- Communication is one-way: client ↔ websocket (WebSocket frames, realtime writes and events), client → gateway (HTTPS Connect, reads and room management), websocket → chat over gRPC unary by slot (`pkg/chatrpc`), gateway → any live chat node from the Redis node table over gRPC unary (`pkg/chatrpc` `Router.Any`, no slot), chat → JetStream, websocket ← NATS (part 2), websocket ↔ core NATS `eph.{t}.{room}.typing` between nodes, websocket ↔ `chatim-redis-presence` (part 4), and websocket/gateway → `identity` over HTTPS for the revocation list (internal port) and the JWKS (public port), sharing the last list through `chatim-redis-presence` (M6 part 2).
-
-**Key encoding (`pkg/keys`).** Big-endian uint64 fields are concatenated, so byte order matches numeric order:
-
-- messages `_id` = `room│thread_root│seq` (24B)
-- message_edits = the same plus a uint32 version (28B)
-- message_interactions = the message key, a kind byte (1 reaction, 2 bookmark, 3 reply) and a part: the user bytes (1..64B) or the reply's `thread│seq` (16B). Every reply key of a message is 41B, so `keys.InteractionReplyRange` (both bounds 41B) scans one message's replies in seq order; reaction and bookmark keys vary in length, so count and list them through indexes
-- mentions = the message key, a target kind byte (1 user, 2 group, 3 `@all`) and the target id (none for `@all`, 25B)
-- pin_actions = `room│pin_ver` (16B)
-- reply_threads = the parent message key (24B, M3)
-- members = `keys.Member(room, user)`: room 8B plus the user bytes (1..64B). Mongo compares BinData by length first, so never range-scan `members` by `_id`; query by room through the `room_id` index, by user with `_id` equality or `mongobound.IDs` (never `_id $in`, D139)
-- room_dms = the string `tenant│smaller user│larger user` (`│` is U+2502, outside the id charset; `domain.DirectKey`), also stored as `rooms.dm_key`
-
-These are `_id`s of MongoDB clustered collections (`members` too), so any history page, including the oldest, is one range scan. `thread_root = 0` is the main timeline, seq starts at 1, and `MaxUint64` is reserved.
-
-**Chat mechanics (details in `docs/modules/`, `docs/events.md`, `docs/apps/chat.md`).**
-
-- Send path (module 02): `grpcsrv` reads tenant and user from metadata `x-chatim-tenant`/`x-chatim-user` (trusted internal callers until mTLS) → `actor.Router` (one goroutine per room) → `dedupe` cid (RAM LRU + dedupe Redis, batched) → `flush.Flusher` (`insertMany` `w:majority`) → ack → event to `publish.Publisher` → cid Commit. Every entry is written once; an uncertain outcome returns `ErrRetryLater` and is remembered by (user, cid); seq contention yields the room. Handlers return domain or `apperr` errors mapped to gRPC codes in `pkg/core/grpcserver`.
-- Slots (module 02): `slot = mix64(room) % 1024` (`pkg/slotmap`), leases in the state Redis by a multi-key Lua script (single primary, not Redis Cluster), `Owns()` per D24. Never `SCAN` or `KEYS`: cid keys fill the keyspace.
-- Events (module 10, `docs/events.md`): `_state` bits + `_state_at` on 7 collections set in the same write; the publisher clears them after the PubAck through `event/stateclear`; the slot 0 sweeper republishes what is left; one `projections` consumer (slot 0) feeds `room_activity` and `reply_index`; survival timers on `CHATIM_TIMER`; `/app resync` re-flags. Consumer contract D156: dedupe by event id and doc version, a seq gap → `GetHistory`, never "drop if seq ≤ last seen".
-- Domains: edits and deletes as facts in `message_edits` (module 03); reactions, bookmarks, pins (module 04); replies and mention targets (module 06); rooms, DMs, members, owners, read positions (modules 01, 05, 07); every permission through `access.Policy` and the `view` reader pipeline (modules 03, 08).
-- Writes made outside chat (mongosh, migrations) must set `_state` + `_state_at` themselves (architecture §7.3).
-- Metrics are `chatim_chat_*`/`chatim_mention_*`/`chatim_websocket_*`/`chatim_gateway_*`/`chatim_identity_*` on the admin port; 38 alert rules in `deploy/prometheus/alerts.yml`. A new guarantee needs a metric and a rule in the same PR. Boot and stop order, stop budget: architecture §7.2.
-
-**Invariant: any chat node must handle any room correctly.** Ownership only buys batching, ordering and cache hits. Correctness comes from the unique `_id` acting as CAS, so a Redis failover or a double owner never loses or duplicates a message.
-
-**Shard-readiness rules (design §5.1).** Mongo runs as a replica set without sharding, but sharding must later need configuration only:
-
-- Large collections use a room-prefixed `_id`; the future shard key is `{_id: 1}`. The 2026-10-14 two-shard try showed this keeps a room on one shard only for fixed-length keys (`messages`, `message_edits`, `pin_actions`, `reply_threads`); `members`, `message_interactions` and `mentions` end in a 1–64-byte id and BinData compares length first, so they scatter. Chat does not shard (owner 2026-10-17, D161): it keeps these rules so deployers can choose a shard key for their own workload.
-- Every query on `messages` carries the room prefix, and `messages` has no secondary index except the partial `state_pending {_state_at: 1, _id: 1}` (only docs with a pending event, usually a few dozen; D148; once sharded the sweeper asks every shard). Small fact collections (`message_edits`, `pin_actions`) may have `{room_id, created_at}` (D70).
-- No multi-document transactions, with one exception (D100): commands that touch an owner run one MongoDB transaction over the room's `members` docs and its `rooms` doc (`$inc owners_ver`), once, a conflict returns `UNAVAILABLE`. No `$lookup` into large collections. Bounded point lookups are fine; unbounded joins are not.
-- `message_interactions` and `mentions` are clustered with `_id` prefixed by the message key, so one message's interactions and mentions sit on one shard under the future shard key `{_id: 1}`; their user/target/room/resync indexes (`{tenant, actor_id, …}`, `{tenant, target, …}`, `{room_id, kind, …}`, `{message_key}`, `{room_id, kind, updated_at}`) scatter-gather once sharded (D112, D115, replaces `reactions` of D88). `room_dms` gives one DM per user pair through `_id` alone (D117). `mentions` is written by Mention App; `mention_user_groups`/`mention_groups` use clustered string `_id`s (`tenant│user`, `tenant│group`) read through `mongobound.StringIDs` ranges; `mention_rooms` is a plain collection keyed by room id, where `_id $in` is fine.
-- `members` is clustered with `_id` = room + user; "rooms of a user" is its `{tenant, user_id, state, room_id, joined_at, cleared_at, read_seq, pinned_at, archived_at}` index (no `user_rooms`, D98), which scatter-gathers once sharded by room.
-- Never send `_id $in` (or an `$or` of `_id` equalities, which the planner folds into `$in`) to a clustered collection: Mongo runs it as one scan from the smallest to the largest key, across rooms and key lengths (20 rooms of the bench: 320,040 docs read for 100). Build the filter with `mongobound.IDs` (`$or` of `{_id: {$gte, $lte}}` per key or per run of consecutive keys, equality for one key), put extra predicates inside each branch and never sort on the server (sort in Go); a sort or a predicate outside the `$or` turns it into a `COLLSCAN` (D139). The explain itest `bounded_lookup_integration_test.go` guards every call site.
-- The URI, read preference and write concern come from config.
-- Collections are created only in the bootstrap step.
-
-**Testing conventions.**
-
-- Packages with goroutines use `testing/synctest` and `goleak`.
-- Unit tests use miniredis. Call `testlog.SilenceRedis()` in TestMain when dials fail on purpose.
-- No short real-time polls: on the dev VM, CPU clocks skew by up to ~7ms and timers wake up to ~36ms late. Wait on explicit signals instead.
-- The actor acks before the cid `Commit` is queued (D59), so a test that reads commits or aborts calls `synctest.Wait()` first (a flaky test from M2c, fixed in M3).
+- One Go module `github.com/ivannguyendev/chatim`, one Dockerfile `deploy/docker/Dockerfile` (`ARG TARGET`).
+- Layout (D182): `apps/<app>/` = program (`main.go` + `internal/`); `modules/<module>/` = embedded business module (one public package + `internal/`), only when it owns collections nobody else writes, depends one way on chat and talks to it through events and a port; chat domains stay in `apps/chat/internal`.
+- Imports (depguard, `.golangci.yaml`): websocket and gateway have no database and never import `apps/chat` or `modules/*`; gateway never imports `apps/websocket`; `apps/identity` (own database `chatim_identity`) imports no other app or module and none imports it (`identity-boundaries`); chat imports only `modules/mention/mentionapp`, only from `apps/chat/internal/app` and `config` (`mention-module-entry`); `modules/mention/internal` never imports `apps/chat/internal` and opens only its own collections; `pkg/` has no business logic and never imports `apps/*` or `modules/*` (`pkg-shared-only`); `pkg/wstest` is for tests, e2e and `wsload` only (`wstest-tests-only`), never an SDK (D206).
+- `apps/chat`: `apps/chat/main.go` only calls `app.Main`; only `app` reads `config`; `api/grpcsrv` is thin transport (caller, proto ↔ domain, one use case call); use cases sit at each domain root, shared packages hold none. Domains never import `api`, `app`, `config` or event delivery (only `event/timer`); `member`, `message`, `interaction` import no other domain except `interaction` → `message`; `room` imports only `member`; `room/roomlist`, `room/roomcache` import no domain; only the actor imports `message/actor`; event packages import no domain (event tests may build `interaction/pinproj`). Short package names (`actor`, not `sendactor`); a new package goes under its domain, or a shared group if it has no business logic.
+- One-way communication: client ↔ websocket (frames, realtime writes, events); client → gateway (HTTPS Connect, reads, room management); websocket → chat gRPC unary by slot (`pkg/chatrpc`); gateway → any live chat node from the Redis node table (`Router.Any`, no slot); chat → JetStream → websocket; websocket ↔ core NATS `eph.{t}.{room}.typing` and `chatim-redis-presence`; websocket/gateway → `identity` HTTPS for the revocation list (internal port, shared via `chatim-redis-presence`) and JWKS (public port).
+- **Invariant: any chat node must handle any room correctly.** Ownership only buys batching, ordering and cache hits; correctness comes from the unique `_id` acting as CAS, so a Redis failover or a double owner never loses or duplicates a message.
+- Handlers return domain or `apperr` errors, mapped to gRPC codes in `pkg/core/grpcserver`. Every permission goes through `access.Policy` and the `view` reader pipeline. Never `SCAN` or `KEYS` Redis (cid keys fill the keyspace). Writes outside chat (mongosh, migrations) set `_state` + `_state_at` themselves (design §7.3). A new guarantee needs a metric and an alert rule (`deploy/prometheus/alerts.yml`) in the same PR.
+- Shard-ready beyond the checklist (design §5.2; chat does not shard, D161, but sharding must need configuration only): every `messages` query carries the room prefix; never send `_id $in` or an `$or` of `_id` equalities to a clustered collection, use `mongobound.IDs`/`StringIDs`, predicates inside each branch, sort in Go (D139); never range-scan `members` by `_id`; no `$lookup` into large collections; URI, read preference and write concern from config; collections created only in bootstrap.
+- Tests: goroutine packages use `testing/synctest` and `goleak`; miniredis for unit tests (`testlog.SilenceRedis()` in TestMain when dials fail on purpose); no short real-time polls (dev VM clocks skew ~7ms, timers wake ~36ms late), wait on explicit signals; the actor acks before the cid `Commit` is queued (D59), so a test reading commits or aborts calls `synctest.Wait()` first.
 
 ## Docs
 
-- `docs/architecture.md`: the single source of truth: requirements, principles P1–P8, the data-class framework every plan must use (§4), data model and shard rules, package layout, lifecycle, guarantees with detectors (§8).
-- `docs/decision-log.md`: decisions D1–D261 with rejected alternatives. Add new decisions there.
-- `docs/modules/README.md`: the 11 feature guides (01–11; 09 is websocket with the client spec in §11, 11 is the HTTPS gateway): flows, diagrams, error codes, mechanisms.
-- `docs/apps/{chat,websocket,gateway,identity}.md`: per-app env vars, ports, admin, metrics and operating commands. `docs/e2e.md`: the e2e phases (1–13 and 15).
-- `docs/events.md`: the event catalog (streams, subjects, ids, consumers, contract). Update it whenever an event, subject or consumer changes.
-- `docs/roadmap.md`: milestones, readiness and plan-writing rules (§"Quy tắc viết plan"). `docs/git-workflow.md`: branches, Definition of Done, SemVer.
-- `docs/plans/<date>-<milestone>-<n>-<slug>-summary.md`: owner-approved summaries, rewritten as built when a phase closes; they are the milestone record. Detailed execution plans and decision logs live in `.claude/plans/` (local, gitignored) and are folded and deleted at phase close (Workflows step 9); tracked docs never cite them.
-- `docs/poc/README.md`: dev results and the prod-like measurement list P1–P10 (dev numbers only validate tools); small result files in `docs/poc/results/`, raw output in `bin/bench/` and `bin/drill/` (gitignored).
-- `docs/research/`: the system mechanisms synthesis report and the open-source chat architecture research.
+- `docs/architecture.md`: the single source of truth: requirements and load numbers (§2), principles, data classes every plan must use (§4), data model, keys and shard rules (§5), layout (§6), lifecycle (§7), guarantees with detectors (§8).
+- `docs/decision-log.md` is the index; accepted decisions live in `docs/decisions/`, one file per milestone named `D<first>-<milestone>.md` (3 digits, e.g. `D209-m6-identity.md`); the index lists each file's D-id range, sections and dates, so a phase close adds or updates its index row. D-ids are global; find one through the index or `grep '| D161 |' docs/decisions/`. Rows `| # | Quyết định | Lý do |`, date in the section heading. The index header holds only the update date, never a changelog.
+  - A row is a decision that is hard or costly to reverse and shapes the project's direction: data model, contracts, events and APIs, app and module boundaries, correctness mechanisms, operating procedures, product scope. Not a row: how we work (phases, order, branches, PRs), implementation detail (package lists, env, metrics), status.
+  - Lý do says why this choice over the alternatives, naming them; there is no rejected-alternatives column. No owner quotes.
+  - Proposed decisions live in the local decision log and are discussed (brainstorm, independent reviewer) before the owner accepts them; only then are they folded in. A decision taken while coding goes into the as-built summary and enters the log only when the owner accepts it at the close. Nobody adds a row on their own. A replaced row starts its Quyết định with `**Thay bởi D141 (M3.1).**` or `**Thay một phần bởi D202 (vế ngắn).**`. Add new decisions there.
+- `docs/modules/`: feature guides (09 = websocket, client spec in §11; 11 = HTTPS gateway). `docs/apps/*.md`: per-app operations. `docs/e2e.md`: e2e phases.
+- `docs/events.md`: the event catalog (streams, subjects, ids, consumers, contract); update it whenever an event, subject or consumer changes.
+- `docs/roadmap.md`: milestones, status, plan rules. `docs/git-workflow.md`: branches, DoD, readiness, SemVer.
+- `docs/plans/<date>-<milestone>-<n>-<slug>-summary.md`: owner-approved summaries, rewritten as built at phase close; they are the milestone record. `.claude/plans/` (local, gitignored) is folded and deleted at close.
+- `docs/poc/README.md`: dev results (they only validate tools) and the prod-like measurement list; small results in `docs/poc/results/`, raw output in `bin/bench/`, `bin/drill/` (gitignored). `docs/research/`: mechanisms synthesis and open-source chat research.
