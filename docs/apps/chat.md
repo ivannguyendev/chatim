@@ -68,6 +68,23 @@ Toàn bộ đọc qua `apps/chat/internal/config`; thiếu thì dùng giá trị
 | `MENTION_ROOM_GROUPS_SYNC_MAX` | `5000` | Room tới cỡ này thì `ListRoomGroups` dựng tập nhóm ngay khi được hỏi, lớn hơn thì dựng ở nền (D172); không phải giới hạn dữ liệu |
 | `MENTION_ROOM_GROUPS_TTL`, `MENTION_ROOM_GROUPS_REBUILD` | `60s` / `10m` | Tập nhóm của room nhỏ hết hạn sau TTL (và quên khi có `member_added`/`member_removed`); room lớn dựng lại ở nền khi có người hỏi và tập cũ hơn `REBUILD` |
 
+### Media (module `modules/media`)
+
+Media lỗi (config sai, thiếu bucket, sai key, S3 sập) không bao giờ làm chat dừng: module chỉ thành chưa sẵn sàng, `GetClientConfig` trả `media.enabled = false`, 4 lệnh upload trả `UNAVAILABLE`, `chatim_media_ready` = 0. Chỉ lỗi parse (giá trị không phải số, thời lượng sai) chặn boot như mọi biến khác. Code không tạo bucket, luật lifecycle hay CORS: dev chạy `make media-buckets`, production do hạ tầng tạo sẵn.
+
+| Biến | Mặc định | Ghi chú |
+|---|---|---|
+| `MEDIA_ENABLED` | `true` | `false`: `MediaService` vẫn đăng ký nhưng mọi lệnh trả `FAILED_PRECONDITION` |
+| `MEDIA_S3_ENDPOINT`, `MEDIA_S3_PUBLIC_ENDPOINT` | (rỗng) | Endpoint chat gọi S3; endpoint ghi vào URL ký mà máy dùng (chữ ký gồm host, sai thì mọi URL hỏng) |
+| `MEDIA_S3_REGION` | (rỗng, bắt buộc) | Đặt sẵn để ký URL không phải hỏi vùng |
+| `MEDIA_S3_ACCESS_KEY`, `MEDIA_S3_SECRET_KEY[_FILE]` | (rỗng) | Key chỉ cần quyền trên 2 bucket (tạo/đóng/huỷ multipart, head, delete); secret không vào log |
+| `MEDIA_S3_BUCKET_PROCESSING`, `MEDIA_S3_BUCKET_COMPLETED` | (rỗng) | Phải khác nhau; `processing` có luật huỷ multipart dở 1 ngày và xoá object 30 ngày, CORS cho PUT và đọc header `ETag` |
+| `MEDIA_MAX_FILE_BYTES` | `4294967296` | ≤ `MEDIA_MAX_PARTS` × `MEDIA_MAX_PART_BYTES` |
+| `MEDIA_MIN_PART_BYTES`, `MEDIA_MAX_PART_BYTES`, `MEDIA_MAX_PARTS` | `16777216` / `134217728` / `2000` | Phần ≥ 5 MiB (S3), tối thiểu ≤ tối đa, ≤ 10.000 phần |
+| `MEDIA_MAX_PARALLEL_UPLOADS` | `4` | Số URL mỗi lần cấp và số luồng máy chạy (qua `GetClientConfig`) |
+| `MEDIA_PART_URL_TTL` | `15m` | Hạn URL ký từng phần |
+| `MEDIA_READY_CHECK_INTERVAL` | `30s` | Chu kỳ `HeadBucket` hai bucket để biết media sẵn sàng |
+
 `CHAT_GOGC` (mặc định 100) chỉ compose đọc lúc `make app-up` và đưa vào `GOGC` của chat, dùng khi đo; không có trong `.env.example`.
 
 ## Kết nối và bí mật
@@ -77,7 +94,7 @@ Toàn bộ đọc qua `apps/chat/internal/config`; thiếu thì dùng giá trị
 - **Không bao giờ `SCAN` hay `KEYS`**: key cid lấp đầy keyspace.
 - **Mật khẩu.** Cả ba Redis bắt AUTH. Compose lấy mật khẩu từ `.env` qua secret; chat đọc `REDIS_PASSWORD_FILE`/`REDIS_DEDUPE_PASSWORD_FILE`, tool đọc `-redis-password` hoặc `REDIS_PASSWORD`. Mật khẩu không bao giờ nằm ở argv, `docker inspect`, dòng make in ra hay log. Container không có `REDISCLI_AUTH`: dùng `make redis-cli [INSTANCE=dedupe|presence] ARGS=…`.
 - **Mongo (D46).** Secret `mongo_password` lấy từ `MONGO_ROOT_PASSWORD`; chat nhận `MONGO_URI` không credential cùng `MONGO_USER` và `MONGO_PASSWORD_FILE` (`MONGO_AUTH_SOURCE` mặc định `admin`). URI có credential vẫn chạy (itest, chạy ngoài compose) nhưng không đi cùng `MONGO_USER`. mongosh không bao giờ nhận `-p`: script xác thực trong `--eval` bằng `db.getSiblingDB("admin").auth(user, require("fs").readFileSync("/run/secrets/mongo_password", "utf8").trim())`.
-- Mọi dòng log đi qua handler che credential của `MONGO_URI`, `NATS_URL`, mật khẩu Mongo và hai mật khẩu Redis.
+- Mọi dòng log đi qua handler che credential của `MONGO_URI`, `NATS_URL`, mật khẩu Mongo, hai mật khẩu Redis và `MEDIA_S3_SECRET_KEY`; URL ký không bao giờ vào log.
 
 ## Cổng và admin
 
@@ -93,6 +110,7 @@ Mọi metric của chat có tiền tố `chatim_chat_`, của Mention App `chati
 - Projection: `projection_lag_seconds{projection}` (tính theo `ts` nghiệp vụ, nên tin sweeper phát lại hiện lag cao), `projection_failures_total`, `projection_dropped_total`, `projection_stuck_total`.
 - Phiếu hẹn: `timer_failures_total`, `timer_dropped_total`, `counter_repaired_total{counter="reactions"|"replies"|"members"}`.
 - Cache và watcher: `member_cache_forgets_total`, `member_watch_malformed_total`, `room_cache_hits_total`/`room_cache_misses_total{cache=info|tail|snapshot|path}`, `room_tail_cache_bytes`, `room_watch_forgets_total`, `room_watch_malformed_total` (chỉ để xem tốc độ, không alert). Index: `index_outdated{collection}`. `mongo_oplog_window_seconds` là NaN khi không đọc được oplog (cần quyền đọc `local`).
+- Media (tiền tố `chatim_media_`): `ready`, `uploads_started_total`, `uploads_completed_total`, `storage_operations_total{operation, result="ok"|"client"|"error"}`.
 - Mention App: `lag_seconds`, `failures_total`, `dropped_total`, `stuck_total`, `notified_total`, `retracted_total`, `notify_failures_total`, `notify_skipped_total{reason="stale"|"superseded"}`, `room_groups_hits_total`, `room_groups_misses_total`, `room_groups_rebuild_failures_total`, `room_groups_watch_forgets_total`, `room_groups_watch_malformed_total`.
 
 16 luật alert của chat và Mention App trong `deploy/prometheus/alerts.yml` (kiểm bằng `make alerts-check`): `ChatimOplogWindowShort`, `ChatimOplogWindowCritical`, `ChatimOplogWindowUnknown`, `ChatimEventsDropped`, `ChatimRedisDegraded`, `ChatimCIDSettleDropped`, `ChatimCIDPendingElsewhere`, `ChatimSeqContention`, `ChatimCounterRepairSurge`, `ChatimEventPendingStuck` (cờ cũ nhất > 60s trong 5 phút), `ChatimProjectionLagging` (> 10s trong 5 phút), `ChatimProjectionFailing` (`projection_stuck_total` tăng trong 15 phút), `ChatimSweeperIdle` (10 phút không có lượt quét), `ChatimTimerFailing`, `ChatimMentionLagging` (> 10s trong 5 phút), `ChatimMentionFailing` (`chatim_mention_stuck_total` tăng trong 15 phút). Cam kết mới phải có metric và luật trong cùng PR.

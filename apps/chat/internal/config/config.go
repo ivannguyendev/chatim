@@ -19,6 +19,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/chat/internal/message/flush"
 	"github.com/ivannguyendev/chatim/apps/chat/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/chat/internal/platform/slot"
+	"github.com/ivannguyendev/chatim/modules/media/mediaapp"
 	"github.com/ivannguyendev/chatim/modules/mention/mentionapp"
 	"github.com/ivannguyendev/chatim/pkg/core/envconfig"
 	"github.com/ivannguyendev/chatim/pkg/core/grpcserver"
@@ -68,6 +69,7 @@ type Config struct {
 	Sweep                  sweep.Config
 	Projection             projection.Config
 	Mention                mentionapp.Config
+	Media                  mediaapp.Config
 	LockedMessageKinds     []domain.Kind
 	Messages               message.Limits
 	Interactions           interaction.Limits

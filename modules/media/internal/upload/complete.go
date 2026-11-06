@@ -45,6 +45,7 @@ func (s *Service) settle(ctx context.Context, u domain.Upload) (domain.Upload, e
 	}
 	done, err := s.deps.Uploads.Transition(ctx, u.Key, domain.StateUploading, u.Ver, domain.StateUploaded)
 	if err == nil {
+		s.completed.Add(1)
 		return done, nil
 	}
 	return s.reread(ctx, u.Key, domain.StateUploaded, err)

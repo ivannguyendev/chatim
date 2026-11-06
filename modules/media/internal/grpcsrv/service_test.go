@@ -78,8 +78,8 @@ func TestCallsWithoutACallerAreRefused(t *testing.T) {
 	}
 }
 
-func TestDisabledRefusesEveryCall(t *testing.T) {
-	var d grpcsrv.Disabled
+func TestRefusingAnswersEveryCallWithItsError(t *testing.T) {
+	d := grpcsrv.Refusing{Err: domain.ErrDisabled}
 	ctx := caller("acme", "an")
 	_, e1 := d.StartUpload(ctx, &chatimv1.StartUploadRequest{})
 	_, e2 := d.GetPartURLs(ctx, &chatimv1.GetPartURLsRequest{})

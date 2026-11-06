@@ -118,8 +118,8 @@ func TestConcurrentCompletesBothSucceed(t *testing.T) {
 		}
 	}
 	got, _ := r.uploads.Get(t.Context(), s.Upload.Key)
-	if got.State != domain.StateUploaded || got.Ver != 2 {
-		t.Fatalf("final %+v", got)
+	if got.State != domain.StateUploaded || got.Ver != 2 || r.svc.Completed() != 1 {
+		t.Fatalf("final %+v, completed %d", got, r.svc.Completed())
 	}
 }
 

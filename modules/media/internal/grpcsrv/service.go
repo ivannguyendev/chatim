@@ -94,22 +94,23 @@ func partURLs(in []upload.PartURL) []*chatimv1.PartURL {
 	return out
 }
 
-type Disabled struct {
+type Refusing struct {
 	chatimv1.UnimplementedMediaServiceServer
+	Err error
 }
 
-func (Disabled) StartUpload(context.Context, *chatimv1.StartUploadRequest) (*chatimv1.StartUploadResponse, error) {
-	return nil, domain.ErrDisabled
+func (r Refusing) StartUpload(context.Context, *chatimv1.StartUploadRequest) (*chatimv1.StartUploadResponse, error) {
+	return nil, r.Err
 }
 
-func (Disabled) GetPartURLs(context.Context, *chatimv1.GetPartURLsRequest) (*chatimv1.GetPartURLsResponse, error) {
-	return nil, domain.ErrDisabled
+func (r Refusing) GetPartURLs(context.Context, *chatimv1.GetPartURLsRequest) (*chatimv1.GetPartURLsResponse, error) {
+	return nil, r.Err
 }
 
-func (Disabled) CompleteUpload(context.Context, *chatimv1.CompleteUploadRequest) (*chatimv1.CompleteUploadResponse, error) {
-	return nil, domain.ErrDisabled
+func (r Refusing) CompleteUpload(context.Context, *chatimv1.CompleteUploadRequest) (*chatimv1.CompleteUploadResponse, error) {
+	return nil, r.Err
 }
 
-func (Disabled) AbortUpload(context.Context, *chatimv1.AbortUploadRequest) (*chatimv1.AbortUploadResponse, error) {
-	return nil, domain.ErrDisabled
+func (r Refusing) AbortUpload(context.Context, *chatimv1.AbortUploadRequest) (*chatimv1.AbortUploadResponse, error) {
+	return nil, r.Err
 }

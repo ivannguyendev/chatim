@@ -21,6 +21,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/chat/internal/message/flush"
 	"github.com/ivannguyendev/chatim/apps/chat/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/chat/internal/platform/slot"
+	"github.com/ivannguyendev/chatim/modules/media/mediaapp"
 	"github.com/ivannguyendev/chatim/modules/mention/mentionapp"
 )
 
@@ -75,6 +76,7 @@ func TestLoadDefaults(t *testing.T) {
 		MessageCountCheckDelay: 5 * time.Second,
 		RoomList:               config.RoomListConfig{JoinMax: 1500, TailCacheBytes: 256 << 20, InfoCacheEntries: 100000},
 		Mention:                defaultMention(),
+		Media:                  mediaapp.DefaultConfig(),
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Load() =\n%#v\nwant\n%#v", got, want)
@@ -133,6 +135,7 @@ func TestLoadOverrides(t *testing.T) {
 		MemberCountCheckDelay:  4 * time.Second,
 		MessageCountCheckDelay: 6 * time.Second,
 		RoomList:               config.RoomListConfig{JoinMax: 300, TailCacheBytes: 2 << 20, InfoCacheEntries: 5000},
+		Media:                  mediaapp.DefaultConfig(),
 		Mention: mentionapp.Config{
 			Enabled: true, EventStream: "CHATIM_EVT_IT", EventSubjectRoot: "evt_it", LiveRoot: "live_it", Replicas: 3,
 			FetchBatch: 64, FetchWait: 200 * time.Millisecond, Workers: 4, MaxAckPending: 1024, NotifyMaxAge: 2 * time.Minute,

@@ -27,6 +27,9 @@ func TestStartPlansPartsAndSignsTheFirstRound(t *testing.T) {
 			t.Fatalf("signed %v", r.objects.signed)
 		}
 	}
+	if r.svc.Started() != 1 || r.svc.Completed() != 0 {
+		t.Fatalf("started %d completed %d", r.svc.Started(), r.svc.Completed())
+	}
 	stored, err := r.uploads.Get(t.Context(), s.Upload.Key)
 	if err != nil || stored.State != domain.StateUploading || stored.Ver != 1 || stored.UploadID == "" {
 		t.Fatalf("stored %+v, %v", stored, err)

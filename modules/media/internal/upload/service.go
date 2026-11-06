@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/ivannguyendev/chatim/modules/media/internal/domain"
@@ -56,9 +57,15 @@ type Started struct {
 }
 
 type Service struct {
-	cfg  Config
-	deps Deps
+	cfg       Config
+	deps      Deps
+	started   atomic.Uint64
+	completed atomic.Uint64
 }
+
+func (s *Service) Started() uint64 { return s.started.Load() }
+
+func (s *Service) Completed() uint64 { return s.completed.Load() }
 
 func New(cfg Config, deps Deps) (*Service, error) {
 	if err := cfg.Limits.Validate(); err != nil {
@@ -119,6 +126,7 @@ func (s *Service) Start(ctx context.Context, who Caller, in StartInput) (Started
 	if err != nil {
 		return Started{}, err
 	}
+	s.started.Add(1)
 	return Started{Upload: u, Parts: parts, URLs: urls, ExpiresAt: expires}, nil
 }
 
