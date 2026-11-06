@@ -1,6 +1,6 @@
 # M7 phase P1: upload nhiều phần qua module `media` — tóm tắt
 
-> Ngày: 2026-11-06 · Nhánh `feat/m7` · Trạng thái: **chờ owner duyệt bản viết lại sau review plan** · Dựa trên: D207 (media qua presigned URL, gateway); owner 2026-11-06: file vài GB, có dọn file, chưa quét mã độc, module nhúng, chia P1–P3, API config chung, 2 bucket, 16–128 MiB/phần, ≤ 2.000 phần, 4 luồng, máy gửi ETag, S3 lỗi không làm hỏng chat, code không tạo bucket, giới hạn `GetPartURLs` 3 tầng, dev dùng Garage hoặc versitygw
+> Ngày: 2026-11-06 · Nhánh `feat/m7` · Trạng thái: **đã xây, `dev-done` trên `feat/m7`** (2026-11-07, commit `a162977` → `bd8b5cf`) · Dựa trên: D207 (media qua presigned URL, gateway); owner 2026-11-06: file vài GB, có dọn file, chưa quét mã độc, module nhúng, chia P1–P3, API config chung, 2 bucket, 16–128 MiB/phần, ≤ 2.000 phần, 4 luồng, máy gửi ETag, S3 lỗi không làm hỏng chat, code không tạo bucket, giới hạn `GetPartURLs` 3 tầng, dev dùng Garage hoặc versitygw
 > **Các phase của M7:** **(P1) upload nhiều phần** · (P2) đính kèm trong tin, URL tải · (P3) chuyển và dọn file
 
 ## Scope và ranh giới
@@ -154,7 +154,7 @@ flowchart TB
 
 **Máy xin URL theo vòng:** một `GetPartURLs` cho 4 phần kế, gọi khi bắt đầu vòng hiện tại để không phải chờ. Giới hạn thiết bị 1 lần/5 giây → tối đa 4 phần mỗi 5 giây: ≈ 25 MiB/s với phần 32 MiB, ≈ 100 MiB/s với phần 128 MiB.
 
-**Giới hạn `GetPartURLs`** (owner 2026-11-06) ở gateway, đếm chung mọi node trong Redis state:
+**Giới hạn `GetPartURLs`** (owner 2026-11-06) ở gateway, đếm chung mọi node trong Redis chung `chatim-redis-presence` (`GW_SHARED_REDIS_*`; Redis state chỉ dành cho slot manager):
 
 | Khoá | Mức |
 |---|---|
@@ -162,7 +162,7 @@ flowchart TB
 | user + IP | 1 lần/giây |
 | user + IP + thiết bị (`sid` của token chat) | 1 lần/5 giây |
 
-IP lấy từ header của load balancer, chỉ tin khi request đến từ proxy đã khai. Redis lỗi → cho qua, đếm metric (giới hạn theo user sẵn có trên từng node vẫn chạy).
+IP lấy từ `GW_CLIENT_IP_HEADER` (mặc định `X-Forwarded-For`) chỉ khi kết nối đến từ `GW_TRUSTED_PROXIES`. Redis chung rỗng hoặc lỗi → cho qua, log và `command_rate_limit_errors_total` (giới hạn theo user sẵn có trên từng node vẫn chạy).
 
 ## 5. Tính đúng và chạy đua
 
@@ -185,7 +185,7 @@ IP lấy từ header của load balancer, chỉ tin khi request đến từ prox
 - Bucket: code không tạo bucket, không đặt luật. Dev: `scripts/media-buckets.sh` tạo `processing`, `completed`, CORS (cho PUT và đọc header `ETag`), luật lifecycle nếu server dev hỗ trợ. Production: hạ tầng tạo sẵn hai bucket, luật `processing` (huỷ phiên dở 1 ngày, xoá object 30 ngày), CORS, key chỉ có quyền trên hai bucket.
 - Config chat: `MEDIA_ENABLED`, `MEDIA_S3_ENDPOINT`, `MEDIA_S3_PUBLIC_ENDPOINT` (host trong URL ký), `MEDIA_S3_REGION` (bắt buộc, để ký không phải hỏi vùng), `MEDIA_S3_BUCKET_PROCESSING`, `MEDIA_S3_BUCKET_COMPLETED`, `MEDIA_S3_ACCESS_KEY`, `MEDIA_S3_SECRET_KEY[_FILE]`, `MEDIA_MAX_FILE_BYTES` (4 GiB), `MEDIA_MIN_PART_BYTES` (16 MiB), `MEDIA_MAX_PART_BYTES` (128 MiB), `MEDIA_MAX_PARTS` (2000), `MEDIA_MAX_PARALLEL_UPLOADS` (4), `MEDIA_PART_URL_TTL` (15m), `MEDIA_READY_CHECK_INTERVAL` (30s). Số cấu hình sai (vd. cỡ phần tối thiểu > tối đa) → media không sẵn sàng, log lý do; chat vẫn chạy.
 - Config gateway: ba mức giới hạn `GetPartURLs`, header IP và dải proxy tin cậy.
-- Metric: `media_ready` (0/1), `media_storage_operations_total{operation, result}`, `media_uploads_started_total`, `media_uploads_completed_total`, `media_uploads_rejected_total{reason}`; gateway: `gateway_rate_limited_total{command, tier}`, `gateway_rate_limit_errors_total`. Alert: `ChatimMediaNotReady`, `ChatimMediaStorageErrors`.
+- Metric: `media_ready` (0/1), `media_storage_operations_total{operation, result}`, `media_uploads_started_total`, `media_uploads_completed_total`, gateway: `command_rate_limited_total{command, tier}`, `command_rate_limit_errors_total`. Alert: `ChatimMediaNotReady`, `ChatimMediaStorageErrors`.
 
 ## 8. Quyết định và phương án bị loại
 
@@ -195,7 +195,7 @@ IP lấy từ header của load balancer, chỉ tin khi request đến từ prox
 | Máy gửi ETag lúc đóng phiên (owner 2026-11-06) | Server gọi `ListParts`: thêm lệnh S3, phải đọc 2 trang với 2.000 phần |
 | S3/bucket lỗi chỉ làm media chưa sẵn sàng (owner 2026-11-06) | Chặn boot: S3 lỗi làm mất cả nhắn tin |
 | Code không tạo bucket (owner 2026-11-06) | Lệnh `/app media-bucket` trong chat: key của chat phải có quyền tạo bucket, thừa ở production |
-| Giới hạn `GetPartURLs` ở gateway, đếm trong Redis | Đếm trong RAM từng node: N node gateway nới giới hạn gấp N. Đặt trong module: module không thấy IP và thiết bị |
+| Giới hạn `GetPartURLs` ở gateway, đếm trong Redis chung `chatim-redis-presence` | Đếm trong RAM từng node: N node gateway nới giới hạn gấp N. Redis state: chỉ dành cho slot manager. Đặt trong module: module không thấy IP và thiết bị |
 | Hai bucket `processing`/`completed` (owner, sau review chi phí) | Bucket thứ ba cho file tin đã xoá: owner chọn chỉ đánh dấu |
 | Phiên dở do luật bucket huỷ sau 1 ngày | Worker tự huỷ: luật bucket đủ cho phiên mất doc |
 
@@ -231,15 +231,37 @@ Nhắm mỗi phần ~8 giây, mặc định 32 MiB khi máy không báo tốc đ
 
 | Yêu cầu (nguồn) | Thành phần | Task | Test | Bằng chứng |
 |---|---|---|---|---|
-| Presigned URL qua gateway (D207) | `MediaService`, `pkg/chatrpc` | proto, chatrpc, module | e2e | |
-| File vài GB, 16–128 MiB/phần, ≤ 2.000 phần, 4 luồng (owner 2026-11-06) | chia phần, `max_parallel_uploads` | domain, module | unit + fuzz, spike | |
-| Không vượt cỡ khai (review 2026-11-06) | ký ghim cỡ, `Head` sau đóng | spike, module | spike, itest | |
-| Máy gửi ETag (owner 2026-11-06) | `CompleteUpload.parts` | proto, module | unit, spike, e2e | |
-| Đóng phiên gọi lại an toàn | `NoSuchUpload` → `Head` | module | unit, itest hai `Complete` | |
-| S3 lỗi không làm hỏng chat; code không tạo bucket (owner 2026-11-06) | kiểm sẵn sàng, script ngoài | module, deploy | unit, itest bucket thiếu | |
-| Giới hạn `GetPartURLs` 3 tầng (owner 2026-11-06) | gateway + Redis | gateway | unit gateway, e2e | |
-| API config chung (owner 2026-11-06) | `GetClientConfig` | proto, chat | unit, e2e | |
-| Prefix tenant (roadmap M7) | khoá object | domain, module | unit, e2e | |
-| Đấu nối module (D182) | `Clients.Media`, depguard, bản tắt | chatrpc, lint, wiring | kiểm âm, itest tắt | |
-| S3 dev thay MinIO (owner 2026-11-06) | Garage hoặc versitygw | spike, deploy | spike | |
-| Guarantee mới có metric + alert (CLAUDE.md) | `media_ready`, alert | module, deploy | `make alerts-check` | |
+| Presigned URL qua gateway (D207) | `MediaService`, `pkg/chatrpc` | proto, chatrpc, module | e2e || `make test` 111 package; e2e phase 16 bước 2–4 |
+| File vài GB, 16–128 MiB/phần, ≤ 2.000 phần, 4 luồng (owner 2026-11-06) | chia phần, `max_parallel_uploads` | domain, module | unit + fuzz, spike || unit `TestPlanPartsKeepsFourStreamsBusy`; fuzz 30s 2,2 triệu lần; spike (d) |
+| Không vượt cỡ khai (review 2026-11-06) | ký ghim cỡ, `Head` sau đóng | spike, module | spike, itest || spike (b) 403; itest `TestMultipartLifecycleOnS3` PUT +1 byte 403; unit cỡ lệch → `aborted` |
+| Máy gửi ETag (owner 2026-11-06) | `CompleteUpload.parts` | proto, module | unit, spike, e2e || spike (c); itest ETag sai `ErrInvalidPart`; e2e phase 16 bước 4 |
+| Đóng phiên gọi lại an toàn | `NoSuchUpload` → `Head` | module | unit, itest hai `Complete` || unit `TestConcurrentCompletesBothSucceed` `-count=5`; e2e phase 16 bước 5 |
+| S3 lỗi không làm hỏng chat; code không tạo bucket (owner 2026-11-06) | kiểm sẵn sàng, script ngoài | module, deploy | unit, itest bucket thiếu || synctest `readiness` `-count=5`; itest `TestCheckBucketsTellsWhyStorageIsNotReady`; unit `TestBrokenMediaConfigDoesNotStopChat`, `TestEnabledMediaRefusesWhileStorageIsNotReady` |
+| Giới hạn `GetPartURLs` 3 tầng (owner 2026-11-06) | gateway + Redis | gateway | unit gateway, e2e || unit miniredis `ratelimit`; unit `TestPartURLsAreLimitedByUserIPAndDevice`; e2e phase 16 bước 8 |
+| API config chung (owner 2026-11-06) | `GetClientConfig` | proto, chat | unit, e2e || unit `TestClientConfigFollowsSettingsAndMediaReadiness`; e2e phase 16 bước 1 |
+| Prefix tenant (roadmap M7) | khoá object | domain, module | unit, e2e || unit `TestObjectKeys`; e2e phase 16 bước 7 |
+| Đấu nối module (D182) | `Clients.Media`, depguard, bản tắt | chatrpc, lint, wiring | kiểm âm, itest tắt || kiểm âm depguard đỏ 2 luật (`1237b26`); unit `TestDisabledMediaStillServesAClearRefusal` |
+| S3 dev thay MinIO (owner 2026-11-06) | Garage hoặc versitygw | spike, deploy | spike || [kết quả spike](../poc/results/m7-mediaspike/run.md): Garage qua (a)–(k) |
+| Guarantee mới có metric + alert (CLAUDE.md) | `media_ready`, alert | module, deploy | `make alerts-check` || `make alerts-check` 40 luật; `chatim_media_ready` có trên chat-1 |
+
+## 14. Như đã xây (2026-11-07)
+
+**Kiểm cuối phase:** `make fmt-check`/`vet`/`lint` sạch; `make test` 111 package; `make itest` 111 package; `make alerts-check` 40 luật; `make app-up` mọi container healthy, chat log `media storage ready`; `make e2e` PASS 16 phase (phase 16 media mới, các phase cũ không đổi). Không chạy chatbench (đường gửi tin không đổi ở P1).
+
+**Lệch so với plan, đã chấp nhận khi làm:**
+- Bộ đếm giới hạn `GetPartURLs` nằm ở Redis chung `chatim-redis-presence` thay vì Redis state, vì Redis state chỉ dành cho slot manager (`docs/apps/chat.md`).
+- Spike: S3 (cả Garage, versitygw) cho đóng phiên với một tập con các phần → module tự kiểm đủ 1..n và tổng cỡ (đã có trong plan); versitygw trả thành công khi đóng lần hai, Garage trả `NoSuchUpload` → module xử lý cả hai. Chọn Garage v2.4.1 + `minio-go/v7` v7.4.1.
+- `minio-go` mặc định tự thử lại tới 10 lần → đặt `MaxRetries: 1` (không retry nội bộ).
+- Config media sai không chặn chat boot (chỉ lỗi parse chặn); field `PartSignatureTTL` (biến `MEDIA_PART_URL_TTL`) đổi tên vì test redaction coi chữ "url" là bí mật; log che cả `MEDIA_S3_ACCESS_KEY`.
+- Số trong `client_config.proto` là `int64`; T3 và T4 gộp một commit (`7d27805`) để không có commit làm đỏ test gateway; một commit sửa lint (`3446151`).
+- Đổi cách tính bất biến fuzz: số phần là bội của 4 chỉ đúng khi không làm tròn lên MiB; bất biến đúng là "file ≥ 64 MiB có ≥ 4 phần".
+
+**Minor từ review (không mở vòng sửa):**
+- Khoá Redis giới hạn nối bằng `:` nên địa chỉ IPv6 có thể trùng khoá trong cùng tenant (rất hiếm) → đổi dấu nối khi cần.
+- Hop `X-Forwarded-For` dạng `ip:port` rơi về IP proxy → mọi máy dùng chung tầng (user, IP).
+- Lỗi parse endpoint S3 in chuỗi endpoint vào log (nguy cơ chỉ khi ai đó đặt credential trong URL).
+- Xoá object sai cỡ bỏ qua lỗi → object ở lại tới luật 30 ngày.
+- `sign` lỗi sau `Insert` để lại doc `uploading`; doc `media_uploads` chưa có hạn (P3 xem lại).
+- `Abort` trả `UNAVAILABLE` khi S3 chưa sẵn sàng.
+- Compose dùng `chatim-s3:3900` làm endpoint public: trình duyệt trên host không tới được (chỉ e2e trong mạng); CORS dev `*`.
+- Redis chung lỗi thì giới hạn `GetPartURLs` cho qua: cần owner xác nhận cho production.
