@@ -21,7 +21,7 @@ type uploadDoc struct {
 	ContentType string     `bson:"content_type"`
 	Size        int64      `bson:"size"`
 	PartSize    int64      `bson:"part_size"`
-	PartCount   int32      `bson:"part_count"`
+	PartCount   int64      `bson:"part_count"`
 	UploadID    string     `bson:"upload_id"`
 	State       int32      `bson:"state"`
 	Ver         int64      `bson:"ver"`
@@ -86,7 +86,7 @@ func (s *Uploads) Transition(ctx context.Context, key string, from domain.State,
 func toDoc(u domain.Upload) uploadDoc {
 	d := uploadDoc{
 		Key: u.Key, Tenant: u.Tenant, User: u.User, FileName: u.FileName, ContentType: u.ContentType,
-		Size: u.Size, PartSize: u.PartSize, PartCount: int32(u.PartCount), UploadID: u.UploadID,
+		Size: u.Size, PartSize: u.PartSize, PartCount: int64(u.PartCount), UploadID: u.UploadID,
 		State: int32(u.State), Ver: u.Ver, CreatedAt: u.CreatedAt, UpdatedAt: u.UpdatedAt,
 	}
 	if !u.CompletedAt.IsZero() {
