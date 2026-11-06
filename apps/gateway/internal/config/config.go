@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"log/slog"
+	"net/netip"
 	"os"
 	"strings"
 	"time"
@@ -42,6 +43,9 @@ type Config struct {
 	RequestDeadline   time.Duration
 	Identity          auth.SyncConfig
 	SharedRedis       SharedRedis
+	PartURLLimits     PartURLLimits
+	ClientIPHeader    string
+	TrustedProxies    []netip.Prefix
 }
 
 type StateRedis struct {
@@ -97,6 +101,9 @@ func Load() (Config, error) {
 			Timeout:  p.span("GW_SHARED_REDIS_TIMEOUT", 500*time.Millisecond),
 		},
 	}
+	c.PartURLLimits = p.partURLLimits()
+	c.ClientIPHeader = envconfig.String("GW_CLIENT_IP_HEADER", "X-Forwarded-For")
+	c.TrustedProxies = p.prefixes("GW_TRUSTED_PROXIES")
 	identity, err := auth.SyncConfigFromEnv("GW")
 	if err != nil {
 		p.fail(err)
@@ -139,6 +146,9 @@ func (c Config) LogValue() slog.Value {
 		slog.Any("identity", c.Identity),
 		slog.Group("shared_redis", slog.String("addr", c.SharedRedis.Addr), slog.Int("db", c.SharedRedis.DB),
 			slog.Bool("auth", c.SharedRedis.Password != ""), slog.Duration("timeout", c.SharedRedis.Timeout)),
+		c.PartURLLimits.logValue(),
+		slog.String("client_ip_header", c.ClientIPHeader),
+		slog.Int("trusted_proxies", len(c.TrustedProxies)),
 	)
 }
 

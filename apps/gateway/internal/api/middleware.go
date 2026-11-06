@@ -40,6 +40,9 @@ type chain struct {
 	stats       *stats
 	log         *slog.Logger
 	authLog     *rate.Limiter
+	parts       PartLimiter
+	clientIP    ClientIP
+	limitLog    *rate.Limiter
 }
 
 func (c *chain) gated(next http.Handler) http.Handler {
