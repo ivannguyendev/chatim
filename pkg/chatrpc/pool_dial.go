@@ -12,6 +12,7 @@ import (
 type chatAPIs struct {
 	chatimv1.ChatServiceClient
 	chatimv1.MentionServiceClient
+	chatimv1.MediaServiceClient
 }
 
 func DialInsecure(addr string) (chatimv1.ChatServiceClient, io.Closer, error) {
@@ -19,5 +20,9 @@ func DialInsecure(addr string) (chatimv1.ChatServiceClient, io.Closer, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return chatAPIs{ChatServiceClient: chatimv1.NewChatServiceClient(cc), MentionServiceClient: chatimv1.NewMentionServiceClient(cc)}, cc, nil
+	return chatAPIs{
+		ChatServiceClient:    chatimv1.NewChatServiceClient(cc),
+		MentionServiceClient: chatimv1.NewMentionServiceClient(cc),
+		MediaServiceClient:   chatimv1.NewMediaServiceClient(cc),
+	}, cc, nil
 }

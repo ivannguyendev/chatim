@@ -211,7 +211,7 @@ func startChatNode(t *testing.T, chat *fakeChat) chatrpc.Clients {
 		srv.Stop()
 		<-served
 	})
-	return chatrpc.Clients{Chat: chatimv1.NewChatServiceClient(cc), Mention: chatimv1.NewMentionServiceClient(cc)}
+	return chatrpc.Clients{Chat: chatimv1.NewChatServiceClient(cc), Mention: chatimv1.NewMentionServiceClient(cc), Media: chatimv1.NewMediaServiceClient(cc)}
 }
 
 type claims struct {

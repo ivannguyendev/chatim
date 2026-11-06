@@ -3,6 +3,7 @@ syntax = "proto3";
 package chatim.v1;
 
 import "chatim/v1/chat.proto";
+import "chatim/v1/client_config.proto";
 import "chatim/v1/members.proto";
 import "chatim/v1/message_reads.proto";
 import "chatim/v1/reactions_pins.proto";
@@ -43,4 +44,5 @@ service ChatService {
   rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);
   rpc MarkRead(MarkReadRequest) returns (MarkReadResponse);
   rpc MarkUnread(MarkUnreadRequest) returns (MarkUnreadResponse);
+  rpc GetClientConfig(GetClientConfigRequest) returns (GetClientConfigResponse);
 }

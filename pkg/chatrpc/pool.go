@@ -168,7 +168,8 @@ func (p *Pool) at(addr string, ok bool) (PoolConn, error) {
 		return PoolConn{Addr: addr}, unavailable(fmt.Errorf("%w %s: %w", ErrDial, addr, err))
 	}
 	mention, _ := chat.(chatimv1.MentionServiceClient)
-	c := PoolConn{Addr: addr, Clients: Clients{Chat: chat, Mention: mention}}
+	media, _ := chat.(chatimv1.MediaServiceClient)
+	c := PoolConn{Addr: addr, Clients: Clients{Chat: chat, Mention: mention, Media: media}}
 	p.conns[addr] = pooled{conn: c, closer: closer}
 	return c, nil
 }

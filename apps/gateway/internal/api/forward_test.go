@@ -124,7 +124,7 @@ func TestEveryMethodOutsideRequestIsUnimplemented(t *testing.T) {
 	token := bearerOf(h.token(t, claims{}))
 	served := chatrpc.Request()
 	refused := 0
-	for _, service := range []protoreflect.FullName{"chatim.v1.ChatService", "chatim.v1.MentionService"} {
+	for _, service := range []protoreflect.FullName{"chatim.v1.ChatService", "chatim.v1.MentionService", "chatim.v1.MediaService"} {
 		d, err := protoregistry.GlobalFiles.FindDescriptorByName(service)
 		if err != nil {
 			t.Fatal(err)

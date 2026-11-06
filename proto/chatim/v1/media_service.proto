@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package chatim.v1;
+
+import "google/protobuf/timestamp.proto";
+
+service MediaService {
+  rpc StartUpload(StartUploadRequest) returns (StartUploadResponse);
+  rpc GetPartURLs(GetPartURLsRequest) returns (GetPartURLsResponse);
+  rpc CompleteUpload(CompleteUploadRequest) returns (CompleteUploadResponse);
+  rpc AbortUpload(AbortUploadRequest) returns (AbortUploadResponse);
+}
+
+message UploadPart {
+  int32 part_number = 1;
+  int64 size = 2;
+}
+
+message PartURL {
+  int32 part_number = 1;
+  string url = 2;
+}
+
+message UploadedPart {
+  int32 part_number = 1;
+  string etag = 2;
+}
+
+message StartUploadRequest {
+  string file_name = 1;
+  string content_type = 2;
+  int64 size = 3;
+  int64 upload_bytes_per_second = 4;
+}
+
+message StartUploadResponse {
+  string key = 1;
+  int64 part_size = 2;
+  repeated UploadPart parts = 3;
+  repeated PartURL urls = 4;
+  google.protobuf.Timestamp expires_at = 5;
+}
+
+message GetPartURLsRequest {
+  string key = 1;
+  repeated int32 part_numbers = 2;
+}
+
+message GetPartURLsResponse {
+  repeated PartURL urls = 1;
+  google.protobuf.Timestamp expires_at = 2;
+}
+
+message CompleteUploadRequest {
+  string key = 1;
+  repeated UploadedPart parts = 2;
+}
+
+message CompleteUploadResponse {
+  string key = 1;
+  int64 size = 2;
+}
+
+message AbortUploadRequest {
+  string key = 1;
+}
+
+message AbortUploadResponse {}

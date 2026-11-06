@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package chatim.v1;
+
+message MessageLimits {
+  int32 max_text_bytes = 1;
+  int32 max_meta_bytes = 2;
+  int32 max_mentions = 3;
+  int32 max_attachments = 4;
+}
+
+message MentionFeature {
+  bool enabled = 1;
+}
+
+message MediaFeature {
+  bool enabled = 1;
+  int64 max_file_bytes = 2;
+  int32 max_parallel_uploads = 3;
+}
+
+message GetClientConfigRequest {}
+
+message GetClientConfigResponse {
+  MessageLimits message = 1;
+  MentionFeature mention = 2;
+  MediaFeature media = 3;
+}
