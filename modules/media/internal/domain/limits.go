@@ -1,9 +1,6 @@
 package domain
 
-import (
-	"errors"
-	"fmt"
-)
+import "fmt"
 
 const (
 	MiB             = int64(1) << 20
@@ -12,8 +9,6 @@ const (
 	partSeconds     = 8
 	defaultPartSize = 32 * MiB
 )
-
-var ErrInvalid = errors.New("invalid argument")
 
 type Limits struct {
 	MinPartBytes int64
