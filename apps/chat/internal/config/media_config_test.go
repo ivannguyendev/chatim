@@ -33,7 +33,7 @@ func TestMediaConfigIsReadFromTheEnvironment(t *testing.T) {
 	if err := m.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	if logged := c.String(); strings.Contains(logged, "top-secret-s3-key") || !strings.Contains(logged, "secret_key=true") {
+	if logged := c.String(); strings.Contains(logged, "top-secret-s3-key") || strings.Contains(logged, "GK1") || !strings.Contains(logged, "secret_key=true") || !strings.Contains(logged, "access_key=true") {
 		t.Fatalf("log line leaks or misses the secret flag: %s", logged)
 	}
 	if !slices.Contains(c.Secrets(), "top-secret-s3-key") {

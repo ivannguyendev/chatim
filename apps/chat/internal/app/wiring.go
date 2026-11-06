@@ -165,6 +165,10 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 	if err != nil {
 		return nil, err
 	}
+	media, err := wireMedia(cfg, cl, a.indexes, log)
+	if err != nil {
+		return nil, err
+	}
 	p := probes{
 		drops:           cl.pubCounters.Drops,
 		router:          router.Stats,
@@ -180,6 +184,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 		roomCache:       caches.probes(roomWatch),
 		events:          eventProbes{clears: clears, reads: reads, projection: projections, sweeper: sweeper},
 		mention:         a.attachMention(mention, liveWatchers{watch, roomWatch}),
+		media:           a.attachMedia(media),
 		indexes:         indexProbes{health: a.indexes, collections: indexCatalog(cfg).Names()},
 	}
 	handler, err := metrics.Handler(metricsNamespace, metricsSubsystem, metricSources(p))

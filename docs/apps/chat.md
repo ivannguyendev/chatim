@@ -94,7 +94,7 @@ Media lỗi (config sai, thiếu bucket, sai key, S3 sập) không bao giờ là
 - **Không bao giờ `SCAN` hay `KEYS`**: key cid lấp đầy keyspace.
 - **Mật khẩu.** Cả ba Redis bắt AUTH. Compose lấy mật khẩu từ `.env` qua secret; chat đọc `REDIS_PASSWORD_FILE`/`REDIS_DEDUPE_PASSWORD_FILE`, tool đọc `-redis-password` hoặc `REDIS_PASSWORD`. Mật khẩu không bao giờ nằm ở argv, `docker inspect`, dòng make in ra hay log. Container không có `REDISCLI_AUTH`: dùng `make redis-cli [INSTANCE=dedupe|presence] ARGS=…`.
 - **Mongo (D46).** Secret `mongo_password` lấy từ `MONGO_ROOT_PASSWORD`; chat nhận `MONGO_URI` không credential cùng `MONGO_USER` và `MONGO_PASSWORD_FILE` (`MONGO_AUTH_SOURCE` mặc định `admin`). URI có credential vẫn chạy (itest, chạy ngoài compose) nhưng không đi cùng `MONGO_USER`. mongosh không bao giờ nhận `-p`: script xác thực trong `--eval` bằng `db.getSiblingDB("admin").auth(user, require("fs").readFileSync("/run/secrets/mongo_password", "utf8").trim())`.
-- Mọi dòng log đi qua handler che credential của `MONGO_URI`, `NATS_URL`, mật khẩu Mongo, hai mật khẩu Redis và `MEDIA_S3_SECRET_KEY`; URL ký không bao giờ vào log.
+- Mọi dòng log đi qua handler che credential của `MONGO_URI`, `NATS_URL`, mật khẩu Mongo, hai mật khẩu Redis, `MEDIA_S3_ACCESS_KEY` và `MEDIA_S3_SECRET_KEY`; URL ký không bao giờ vào log.
 
 ## Cổng và admin
 

@@ -16,6 +16,7 @@ var secretFields = map[string]func(Config) slog.Attr{
 	"RedisPassword":       func(c Config) slog.Attr { return slog.Bool("redis_auth", c.RedisPassword != "") },
 	"RedisDedupePassword": func(c Config) slog.Attr { return slog.Bool("redis_dedupe_auth", c.RedisDedupePassword != "") },
 	"NATSURL":             func(c Config) slog.Attr { return slog.String("nats_url", redact.URL(c.NATSURL)) },
+	"Media.AccessKey":     func(c Config) slog.Attr { return slog.Bool("access_key", c.Media.AccessKey != "") },
 	"Media.SecretKey":     func(c Config) slog.Attr { return slog.Bool("secret_key", c.Media.SecretKey != "") },
 }
 

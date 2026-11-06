@@ -12,6 +12,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/chat/internal/event/publish"
 	"github.com/ivannguyendev/chatim/apps/chat/internal/message/actor"
 	"github.com/ivannguyendev/chatim/apps/chat/internal/store/mongostore"
+	"github.com/ivannguyendev/chatim/modules/media/mediaapp"
 	"github.com/ivannguyendev/chatim/modules/mention/mentionapp"
 	"github.com/ivannguyendev/chatim/pkg/core/metrics"
 )
@@ -37,6 +38,7 @@ type probes struct {
 	roomCache       roomCacheProbes
 	events          eventProbes
 	mention         []mentionapp.Probe
+	media           []mediaapp.Probe
 	indexes         indexProbes
 }
 
@@ -61,6 +63,7 @@ func metricSources(p probes) []metrics.Source {
 	out = append(out, memberWatchSources(p.memberForgets, p.memberMalformed)...)
 	out = append(out, roomCacheSources(p.roomCache)...)
 	out = append(out, indexSources(p.indexes)...)
+	out = append(out, mediaSources(p.media)...)
 	return append(out, mentionSources(p.mention)...)
 }
 
