@@ -33,10 +33,11 @@ type Limit struct {
 }
 
 type Config struct {
-	Command string
-	User    Limit
-	UserIP  Limit
-	Device  Limit
+	Command    string
+	User       Limit
+	UserIP     Limit
+	Device     Limit
+	LocalUsers int
 }
 
 type Key struct {
@@ -56,23 +57,24 @@ type tier struct {
 }
 
 type Limiter struct {
-	rdb     redis.Scripter
-	command string
-	tiers   [3]*tier
-	errors  atomic.Uint64
-	now     func() time.Time
+	rdb       redis.Scripter
+	command   string
+	tiers     [3]*tier
+	local     *local
+	fallbacks atomic.Uint64
+	now       func() time.Time
 }
 
 func New(rdb redis.Scripter, c Config) (*Limiter, error) {
-	if rdb == nil || c.Command == "" {
-		return nil, errors.New("ratelimit: needs redis and a command name")
+	if c.Command == "" || c.LocalUsers < 1 {
+		return nil, errors.New("ratelimit: needs a command name and a positive local capacity")
 	}
 	for _, l := range []Limit{c.User, c.UserIP, c.Device} {
 		if l.Count < 1 || l.Window < time.Millisecond {
 			return nil, fmt.Errorf("ratelimit: limit %d per %s must be at least 1 per 1ms", l.Count, l.Window)
 		}
 	}
-	return &Limiter{rdb: rdb, command: c.Command, now: time.Now, tiers: [3]*tier{
+	return &Limiter{rdb: rdb, command: c.Command, now: time.Now, local: newLocal(3 * c.LocalUsers), tiers: [3]*tier{
 		{name: TierUser, limit: c.User, key: func(k Key) string { return k.Tenant + ":" + k.User }},
 		{name: TierUserIP, limit: c.UserIP, key: func(k Key) string { return k.Tenant + ":" + k.User + ":" + k.IP }},
 		{name: TierDevice, limit: c.Device, key: func(k Key) string { return k.Tenant + ":" + k.User + ":" + k.IP + ":" + k.Device }},
@@ -82,24 +84,33 @@ func New(rdb redis.Scripter, c Config) (*Limiter, error) {
 func (l *Limiter) Allow(ctx context.Context, k Key) (Decision, error) {
 	now := l.now().UnixMilli()
 	keys := make([]string, len(l.tiers))
+	indexes := make([]int64, len(l.tiers))
 	windows := make([]any, len(l.tiers))
 	for i, t := range l.tiers {
 		window := t.limit.Window.Milliseconds()
-		keys[i] = "chatim:ratelimit:" + l.command + ":" + t.name + ":" + t.key(k) + ":" + strconv.FormatInt(now/window, 10)
+		indexes[i] = now / window
+		keys[i] = "chatim:ratelimit:" + l.command + ":" + t.name + ":" + t.key(k) + ":" + strconv.FormatInt(indexes[i], 10)
 		windows[i] = window
+	}
+	if l.rdb == nil {
+		return l.decide(l.local.count(keys, indexes)), nil
 	}
 	counts, err := countScript.Run(ctx, l.rdb, keys, windows...).Int64Slice()
 	if err != nil || len(counts) != len(l.tiers) {
-		l.errors.Add(1)
-		return Decision{Allowed: true}, fmt.Errorf("ratelimit %s: %w", l.command, errors.Join(err, errShortReply(len(counts))))
+		l.fallbacks.Add(1)
+		return l.decide(l.local.count(keys, indexes)), fmt.Errorf("ratelimit %s: counted on this node: %w", l.command, errors.Join(err, errShortReply(len(counts))))
 	}
+	return l.decide(counts), nil
+}
+
+func (l *Limiter) decide(counts []int64) Decision {
 	for i := len(l.tiers) - 1; i >= 0; i-- {
 		if counts[i] > int64(l.tiers[i].limit.Count) {
 			l.tiers[i].hits.Add(1)
-			return Decision{Tier: l.tiers[i].name}, nil
+			return Decision{Tier: l.tiers[i].name}
 		}
 	}
-	return Decision{Allowed: true}, nil
+	return Decision{Allowed: true}
 }
 
 func errShortReply(n int) error {
@@ -122,4 +133,4 @@ func (l *Limiter) Limited() []Count {
 	return out
 }
 
-func (l *Limiter) Errors() uint64 { return l.errors.Load() }
+func (l *Limiter) Fallbacks() uint64 { return l.fallbacks.Load() }

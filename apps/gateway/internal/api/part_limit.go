@@ -26,7 +26,7 @@ func (c *chain) partLimited(next http.Handler) http.Handler {
 		claims, _ := ClaimsFrom(r.Context())
 		d, err := c.parts.Allow(r.Context(), ratelimit.Key{Tenant: claims.Tenant, User: claims.User, IP: c.clientIP.Of(r), Device: claims.Session})
 		if err != nil && c.limitLog.Allow() {
-			c.log.WarnContext(r.Context(), "part URL limit skipped, redis unavailable", "err", err)
+			c.log.WarnContext(r.Context(), "part URL limit counted on this node, shared redis unavailable", "err", err)
 		}
 		if !d.Allowed {
 			writeError(w, connect.CodeResourceExhausted, msgTooMany)

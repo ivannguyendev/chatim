@@ -162,7 +162,7 @@ flowchart TB
 | user + IP | 1 lần/giây |
 | user + IP + thiết bị (`sid` của token chat) | 1 lần/5 giây |
 
-IP lấy từ `GW_CLIENT_IP_HEADER` (mặc định `X-Forwarded-For`) chỉ khi kết nối đến từ `GW_TRUSTED_PROXIES`. Redis chung rỗng hoặc lỗi → cho qua, log và `command_rate_limit_errors_total` (giới hạn theo user sẵn có trên từng node vẫn chạy).
+IP lấy từ `GW_CLIENT_IP_HEADER` (mặc định `X-Forwarded-For`) chỉ khi kết nối đến từ `GW_TRUSTED_PROXIES`. Redis chung rỗng hoặc lỗi → đếm riêng trên từng node, vẫn đủ ba tầng (owner 2026-11-07), log và `command_rate_limit_fallbacks_total`.
 
 ## 5. Tính đúng và chạy đua
 
@@ -185,7 +185,7 @@ IP lấy từ `GW_CLIENT_IP_HEADER` (mặc định `X-Forwarded-For`) chỉ khi 
 - Bucket: code không tạo bucket, không đặt luật. Dev: `scripts/media-buckets.sh` tạo `processing`, `completed`, CORS (cho PUT và đọc header `ETag`), luật lifecycle nếu server dev hỗ trợ. Production: hạ tầng tạo sẵn hai bucket, luật `processing` (huỷ phiên dở 1 ngày, xoá object 30 ngày), CORS, key chỉ có quyền trên hai bucket.
 - Config chat: `MEDIA_ENABLED`, `MEDIA_S3_ENDPOINT`, `MEDIA_S3_PUBLIC_ENDPOINT` (host trong URL ký), `MEDIA_S3_REGION` (bắt buộc, để ký không phải hỏi vùng), `MEDIA_S3_BUCKET_PROCESSING`, `MEDIA_S3_BUCKET_COMPLETED`, `MEDIA_S3_ACCESS_KEY`, `MEDIA_S3_SECRET_KEY[_FILE]`, `MEDIA_MAX_FILE_BYTES` (4 GiB), `MEDIA_MIN_PART_BYTES` (16 MiB), `MEDIA_MAX_PART_BYTES` (128 MiB), `MEDIA_MAX_PARTS` (2000), `MEDIA_MAX_PARALLEL_UPLOADS` (4), `MEDIA_PART_URL_TTL` (15m), `MEDIA_READY_CHECK_INTERVAL` (30s). Số cấu hình sai (vd. cỡ phần tối thiểu > tối đa) → media không sẵn sàng, log lý do; chat vẫn chạy.
 - Config gateway: ba mức giới hạn `GetPartURLs`, header IP và dải proxy tin cậy.
-- Metric: `media_ready` (0/1), `media_storage_operations_total{operation, result}`, `media_uploads_started_total`, `media_uploads_completed_total`, gateway: `command_rate_limited_total{command, tier}`, `command_rate_limit_errors_total`. Alert: `ChatimMediaNotReady`, `ChatimMediaStorageErrors`.
+- Metric: `media_ready` (0/1), `media_storage_operations_total{operation, result}`, `media_uploads_started_total`, `media_uploads_completed_total`, gateway: `command_rate_limited_total{command, tier}`, `command_rate_limit_fallbacks_total`. Alert: `ChatimMediaNotReady`, `ChatimMediaStorageErrors`.
 
 ## 8. Quyết định và phương án bị loại
 
@@ -214,7 +214,7 @@ Mỗi file: 1 insert + 1 CAS Mongo; lệnh S3: mở phiên, đóng phiên, `Head
 
 ## 11. Điểm đội tự chọn (owner phản biện)
 
-Nhắm mỗi phần ~8 giây, mặc định 32 MiB khi máy không báo tốc độ (hằng số, chỉnh sau khi đo); URL phần hạn 15 phút; tên file ≤ 255 byte; kiểm sẵn sàng mỗi 30 s; `media_uploads` chung DB chat; `MEDIA_ENABLED` mặc định bật; Redis lỗi thì giới hạn 3 tầng cho qua.
+Nhắm mỗi phần ~8 giây, mặc định 32 MiB khi máy không báo tốc độ (hằng số, chỉnh sau khi đo); URL phần hạn 15 phút; tên file ≤ 255 byte; kiểm sẵn sàng mỗi 30 s; `media_uploads` chung DB chat; `MEDIA_ENABLED` mặc định bật; Redis chung lỗi thì giới hạn 3 tầng đếm theo từng node.
 
 ## 12. Kiểm thử
 
@@ -264,4 +264,4 @@ Nhắm mỗi phần ~8 giây, mặc định 32 MiB khi máy không báo tốc đ
 - `sign` lỗi sau `Insert` để lại doc `uploading`; doc `media_uploads` chưa có hạn (P3 xem lại).
 - `Abort` trả `UNAVAILABLE` khi S3 chưa sẵn sàng.
 - Compose dùng `chatim-s3:3900` làm endpoint public: trình duyệt trên host không tới được (chỉ e2e trong mạng); CORS dev `*`.
-- Redis chung lỗi thì giới hạn `GetPartURLs` cho qua: cần owner xác nhận cho production.
+- Redis chung lỗi: owner 2026-11-07 chọn đếm theo từng node (N node gateway nới giới hạn gấp N trong lúc lỗi) thay vì cho qua; đã sửa sau review.

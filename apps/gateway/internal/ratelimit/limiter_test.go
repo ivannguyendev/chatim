@@ -12,10 +12,11 @@ import (
 
 func ownerLimits() ratelimit.Config {
 	return ratelimit.Config{
-		Command: "GetPartURLs",
-		User:    ratelimit.Limit{Count: 2, Window: time.Second},
-		UserIP:  ratelimit.Limit{Count: 1, Window: time.Second},
-		Device:  ratelimit.Limit{Count: 1, Window: 5 * time.Second},
+		Command:    "GetPartURLs",
+		User:       ratelimit.Limit{Count: 2, Window: time.Second},
+		UserIP:     ratelimit.Limit{Count: 1, Window: time.Second},
+		Device:     ratelimit.Limit{Count: 1, Window: 5 * time.Second},
+		LocalUsers: 1000,
 	}
 }
 
@@ -94,12 +95,55 @@ func TestKeysExpireWithTheirWindow(t *testing.T) {
 	}
 }
 
-func TestRedisDownLetsTheCallThroughAndCounts(t *testing.T) {
+func TestRedisDownFallsBackToCountingOnThisNode(t *testing.T) {
 	l, mr, _ := newLimiter(t)
 	mr.Close()
-	d, err := l.Allow(t.Context(), ratelimit.Key{Tenant: "acme", User: "an", IP: "10.0.0.1", Device: "s1"})
-	if err == nil || !d.Allowed || l.Errors() != 1 {
-		t.Fatalf("decision %+v err %v errors %d", d, err, l.Errors())
+	phone := ratelimit.Key{Tenant: "acme", User: "an", IP: "10.0.0.1", Device: "s1"}
+	first, err := l.Allow(t.Context(), phone)
+	if err == nil || !first.Allowed {
+		t.Fatalf("first decision %+v err %v", first, err)
+	}
+	second, err := l.Allow(t.Context(), phone)
+	if err == nil || second.Allowed || second.Tier != ratelimit.TierDevice || l.Fallbacks() != 2 {
+		t.Fatalf("second decision %+v err %v fallbacks %d", second, err, l.Fallbacks())
+	}
+}
+
+func TestWithoutSharedRedisEveryNodeCountsAlone(t *testing.T) {
+	l, err := ratelimit.New(nil, ownerLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := time.UnixMilli(1_790_000_000_000)
+	l.SetClock(func() time.Time { return clock })
+	phone := ratelimit.Key{Tenant: "acme", User: "an", IP: "10.0.0.1", Device: "s1"}
+	if d := allow(t, l, phone); !d.Allowed {
+		t.Fatalf("first %+v", d)
+	}
+	if d := allow(t, l, phone); d.Allowed {
+		t.Fatalf("second %+v", d)
+	}
+	clock = clock.Add(5 * time.Second)
+	if d := allow(t, l, phone); !d.Allowed || l.Fallbacks() != 0 {
+		t.Fatalf("after the window %+v fallbacks %d", d, l.Fallbacks())
+	}
+}
+
+func TestLocalCountsStayBounded(t *testing.T) {
+	c := ownerLimits()
+	c.LocalUsers = 2
+	l, err := ratelimit.New(nil, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range 50 {
+		k := ratelimit.Key{Tenant: "acme", User: "u" + string(rune('a'+i%26)) + string(rune('a'+i/26)), IP: "10.0.0.1", Device: "s"}
+		if d := allow(t, l, k); !d.Allowed {
+			t.Fatalf("user %d refused %+v", i, d)
+		}
+	}
+	if n := ratelimit.LocalSize(l); n > 6 {
+		t.Fatalf("local counts grew to %d", n)
 	}
 }
 
@@ -108,5 +152,10 @@ func TestNewRefusesZeroLimits(t *testing.T) {
 	c.Device.Count = 0
 	if _, err := ratelimit.New(redis.NewClient(&redis.Options{}), c); err == nil {
 		t.Fatal("zero limit accepted")
+	}
+	c = ownerLimits()
+	c.LocalUsers = 0
+	if _, err := ratelimit.New(nil, c); err == nil {
+		t.Fatal("zero local capacity accepted")
 	}
 }

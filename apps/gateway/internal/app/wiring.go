@@ -118,9 +118,7 @@ func wireServers(cfg config.Config, log *slog.Logger, verifier *auth.Verifier, r
 		BodyMax: cfg.BodyMax, CORSOrigins: cfg.CORSOrigins, Log: log,
 		ClientIP: api.ClientIP{Header: cfg.ClientIPHeader, Trusted: cfg.TrustedProxies},
 	}
-	if parts != nil {
-		opts.PartURLs = parts
-	}
+	opts.PartURLs = parts
 	handler, err := api.New(opts)
 	if err != nil {
 		return nil, err
