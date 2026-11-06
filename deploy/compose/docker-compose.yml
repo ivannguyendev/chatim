@@ -250,6 +250,24 @@ services:
       timeout: 3s
       retries: 10
 
+  s3:
+    image: dxflrs/garage:v2.4.1@sha256:9c96caa2612d3411acc5b0e6701fb238dbfba33e533a6d7d3d811a4b12d0d020
+    container_name: chatim-s3
+    restart: unless-stopped
+    secrets: [s3_rpc_secret]
+    environment:
+      GARAGE_ALLOW_WORLD_READABLE_SECRETS: "true"
+    ports:
+      - "${S3_PORT:-9100}:3900"
+    volumes:
+      - ./garage.toml:/etc/garage.toml:ro
+      - s3_data:/var/lib/garage
+    healthcheck:
+      test: ["CMD", "/garage", "status"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   identity-mongo-init:
     image: mongo:8.2
     container_name: chatim-identity-mongo-init
@@ -396,6 +414,8 @@ secrets:
     environment: IDENTITY_KEY_ENCRYPTION_KEY
   identity_node_secret:
     environment: IDENTITY_NODE_SECRET
+  s3_rpc_secret:
+    environment: S3_RPC_SECRET
 
 networks:
   default:
@@ -403,5 +423,6 @@ networks:
 
 volumes:
   mongodb_data:
+  s3_data:
   redis_data:
   nats_data:
