@@ -23,10 +23,10 @@ const (
 
 type MessageLimits struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
-	MaxTextBytes   int32                  `protobuf:"varint,1,opt,name=max_text_bytes,json=maxTextBytes,proto3" json:"max_text_bytes,omitempty"`
-	MaxMetaBytes   int32                  `protobuf:"varint,2,opt,name=max_meta_bytes,json=maxMetaBytes,proto3" json:"max_meta_bytes,omitempty"`
-	MaxMentions    int32                  `protobuf:"varint,3,opt,name=max_mentions,json=maxMentions,proto3" json:"max_mentions,omitempty"`
-	MaxAttachments int32                  `protobuf:"varint,4,opt,name=max_attachments,json=maxAttachments,proto3" json:"max_attachments,omitempty"`
+	MaxTextBytes   int64                  `protobuf:"varint,1,opt,name=max_text_bytes,json=maxTextBytes,proto3" json:"max_text_bytes,omitempty"`
+	MaxMetaBytes   int64                  `protobuf:"varint,2,opt,name=max_meta_bytes,json=maxMetaBytes,proto3" json:"max_meta_bytes,omitempty"`
+	MaxMentions    int64                  `protobuf:"varint,3,opt,name=max_mentions,json=maxMentions,proto3" json:"max_mentions,omitempty"`
+	MaxAttachments int64                  `protobuf:"varint,4,opt,name=max_attachments,json=maxAttachments,proto3" json:"max_attachments,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -61,28 +61,28 @@ func (*MessageLimits) Descriptor() ([]byte, []int) {
 	return file_chatim_v1_client_config_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *MessageLimits) GetMaxTextBytes() int32 {
+func (x *MessageLimits) GetMaxTextBytes() int64 {
 	if x != nil {
 		return x.MaxTextBytes
 	}
 	return 0
 }
 
-func (x *MessageLimits) GetMaxMetaBytes() int32 {
+func (x *MessageLimits) GetMaxMetaBytes() int64 {
 	if x != nil {
 		return x.MaxMetaBytes
 	}
 	return 0
 }
 
-func (x *MessageLimits) GetMaxMentions() int32 {
+func (x *MessageLimits) GetMaxMentions() int64 {
 	if x != nil {
 		return x.MaxMentions
 	}
 	return 0
 }
 
-func (x *MessageLimits) GetMaxAttachments() int32 {
+func (x *MessageLimits) GetMaxAttachments() int64 {
 	if x != nil {
 		return x.MaxAttachments
 	}
@@ -137,7 +137,7 @@ type MediaFeature struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	Enabled            bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	MaxFileBytes       int64                  `protobuf:"varint,2,opt,name=max_file_bytes,json=maxFileBytes,proto3" json:"max_file_bytes,omitempty"`
-	MaxParallelUploads int32                  `protobuf:"varint,3,opt,name=max_parallel_uploads,json=maxParallelUploads,proto3" json:"max_parallel_uploads,omitempty"`
+	MaxParallelUploads int64                  `protobuf:"varint,3,opt,name=max_parallel_uploads,json=maxParallelUploads,proto3" json:"max_parallel_uploads,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -186,7 +186,7 @@ func (x *MediaFeature) GetMaxFileBytes() int64 {
 	return 0
 }
 
-func (x *MediaFeature) GetMaxParallelUploads() int32 {
+func (x *MediaFeature) GetMaxParallelUploads() int64 {
 	if x != nil {
 		return x.MaxParallelUploads
 	}
@@ -295,16 +295,16 @@ const file_chatim_v1_client_config_proto_rawDesc = "" +
 	"\n" +
 	"\x1dchatim/v1/client_config.proto\x12\tchatim.v1\"\xa7\x01\n" +
 	"\rMessageLimits\x12$\n" +
-	"\x0emax_text_bytes\x18\x01 \x01(\x05R\fmaxTextBytes\x12$\n" +
-	"\x0emax_meta_bytes\x18\x02 \x01(\x05R\fmaxMetaBytes\x12!\n" +
-	"\fmax_mentions\x18\x03 \x01(\x05R\vmaxMentions\x12'\n" +
-	"\x0fmax_attachments\x18\x04 \x01(\x05R\x0emaxAttachments\"*\n" +
+	"\x0emax_text_bytes\x18\x01 \x01(\x03R\fmaxTextBytes\x12$\n" +
+	"\x0emax_meta_bytes\x18\x02 \x01(\x03R\fmaxMetaBytes\x12!\n" +
+	"\fmax_mentions\x18\x03 \x01(\x03R\vmaxMentions\x12'\n" +
+	"\x0fmax_attachments\x18\x04 \x01(\x03R\x0emaxAttachments\"*\n" +
 	"\x0eMentionFeature\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\"\x80\x01\n" +
 	"\fMediaFeature\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12$\n" +
 	"\x0emax_file_bytes\x18\x02 \x01(\x03R\fmaxFileBytes\x120\n" +
-	"\x14max_parallel_uploads\x18\x03 \x01(\x05R\x12maxParallelUploads\"\x18\n" +
+	"\x14max_parallel_uploads\x18\x03 \x01(\x03R\x12maxParallelUploads\"\x18\n" +
 	"\x16GetClientConfigRequest\"\xb1\x01\n" +
 	"\x17GetClientConfigResponse\x122\n" +
 	"\amessage\x18\x01 \x01(\v2\x18.chatim.v1.MessageLimitsR\amessage\x123\n" +

@@ -36,6 +36,7 @@ type Deps struct {
 	MemberReader       *member.Reader
 	RoomService        *room.Service
 	RoomList           RoomLister
+	ClientConfig       func() *chatimv1.GetClientConfigResponse
 }
 
 type Service struct {
@@ -49,6 +50,7 @@ type Service struct {
 	memberReader       *member.Reader
 	roomService        *room.Service
 	roomList           RoomLister
+	clientConfig       func() *chatimv1.GetClientConfigResponse
 }
 
 var _ chatimv1.ChatServiceServer = (*Service)(nil)
@@ -61,6 +63,7 @@ func New(d Deps) (*Service, error) {
 	return &Service{
 		sender: d.Sender, editor: d.Editor, reader: d.Reader, interactionService: d.InteractionService, interactionReader: d.InteractionReader,
 		memberService: d.MemberService, memberReader: d.MemberReader, roomService: d.RoomService, roomList: d.RoomList,
+		clientConfig: d.ClientConfig,
 	}, nil
 }
 

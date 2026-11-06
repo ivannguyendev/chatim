@@ -148,7 +148,11 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 	a.readBatch = reads
 	a.publisher, a.stateClears, a.flusher, a.cidBatch, a.router, a.slots = pub, clears, fl, batch, router, slots
 	a.projections, a.sweeper = projections, sweeper
-	svc, reader, err := wireService(serviceDeps{store: st, router: router, pub: pub, reads: reads, cidBatch: batch, timers: ts.members, msgTimers: ts.messages, rooms: caches, cfg: cfg, log: log})
+	media, err := wireMedia(cfg, cl, a.indexes, log)
+	if err != nil {
+		return nil, err
+	}
+	svc, reader, err := wireService(serviceDeps{store: st, router: router, pub: pub, reads: reads, cidBatch: batch, timers: ts.members, msgTimers: ts.messages, rooms: caches, cfg: cfg, log: log, config: clientConfig(cfg, media)})
 	if err != nil {
 		return nil, err
 	}
@@ -162,10 +166,6 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 	}, log)
 	chatimv1.RegisterChatServiceServer(a.grpc, svc)
 	mention, err := wireMention(cfg, cl, st, caches, reader, a.indexes, log)
-	if err != nil {
-		return nil, err
-	}
-	media, err := wireMedia(cfg, cl, a.indexes, log)
 	if err != nil {
 		return nil, err
 	}
