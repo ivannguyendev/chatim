@@ -211,6 +211,26 @@ linters:
           deny:
             - pkg: github.com/ivannguyendev/chatim/modules/mention
               desc: only app and config embed the mention module
+        media-module-entry:
+          files:
+            - "**/apps/chat/**"
+            - "!**/apps/chat/internal/app/**"
+            - "!**/apps/chat/internal/config/**"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/modules/media
+              desc: only app and config embed the media module
+        modules-independent-mention:
+          files:
+            - "**/modules/mention/**"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/modules/media
+              desc: embedded modules never import each other
+        modules-independent-media:
+          files:
+            - "**/modules/media/**"
+          deny:
+            - pkg: github.com/ivannguyendev/chatim/modules/mention
+              desc: embedded modules never import each other
         websocket-boundaries:
           files:
             - "**/apps/websocket/**"
