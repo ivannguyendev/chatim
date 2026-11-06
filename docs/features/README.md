@@ -19,7 +19,8 @@ flowchart TD
 
     subgraph Entry["Tầng Cổng & Thời gian thực"]
         M09["Module 09: Realtime Delivery & Ephemeral<br/>(App websocket M4: phần 1–5 đã xây, 12 lệnh ghi realtime, typing và presence, giữ kết nối, đặc tả client)"]
-        M11["Module 11: HTTPS Gateway<br/>(App gateway: 22 lệnh đọc và quản lý, Connect, node chat bất kỳ)"]
+        M11["Module 11: HTTPS Gateway<br/>(App gateway: 22 lệnh đọc và quản lý, config, upload media, Connect, node chat bất kỳ)"]
+        M12["Module 12: Media<br/>(upload nhiều phần thẳng lên S3, URL ký)"]
     end
 
     subgraph ChatFeatures["Tầng Nghiệp vụ Hội thoại (Chat Features)"]
@@ -173,6 +174,7 @@ Mỗi module dưới đây là một tập tài liệu đặc tả hoàn chỉnh
 | **09** | [09. Realtime Delivery & Ephemeral](./09-feature-realtime-delivery-and-ephemeral.md) | Đẩy tin realtime, ghi realtime (12 lệnh), báo đang gõ, trạng thái online | (M4 phần 1–5 đã xây: kết nối, token, lệnh, §7; đẩy event phần 2, §8; đã đọc phần 3, §9; từ phần gateway chỉ còn 12 lệnh ghi realtime, D198; đang gõ và online phần 4, §10; giữ kết nối, giới hạn đăng nhập, `frame_error`, alert và đặc tả client phần 5, §6.1–§6.2, §11) Dynamic interest routing trên NATS PubSub; Bỏ qua DB cho tín hiệu tạm thời (typing, presence); Zero-alloc fanout WebSocket `gws`. |
 | **10** | [10. Data Reconciliation & Self-Healing](./10-feature-data-reconciliation-and-repair.md) | Bù đắp event rớt mạng, tự sửa sai bộ đếm, resync | Cờ `_state` ghi cùng lệnh, xoá sau PubAck; sweeper slot 0 phát bù cờ quá 15s; một consumer `projections` (slot 0, 3 handler) không delay; phiếu hẹn `CHATIM_TIMER`; CLI `/app resync` bật lại cờ. |
 | **11** | [11. HTTPS Gateway](./11-feature-https-gateway.md) | Tải danh sách hội thoại, lịch sử, thành viên; tạo nhóm, thêm người, đổi tên qua HTTPS | App `gateway` (D198): Connect trên HTTP/1.1 + h2c, 22 lệnh `chatrpc.Request`, Bearer JWT như websocket, node chat bất kỳ qua round robin không Redis, giới hạn theo user và trần toàn node, CORS theo danh sách; thay đổi tới người khác qua event trên WebSocket. |
+| **12** | [12. Media](./12-feature-media.md) | Upload ảnh, video, tệp tới vài GB | Module `media` (M7 P1): `GetClientConfig`, `StartUpload`/`GetPartURLs`/`CompleteUpload`/`AbortUpload`, phần 16–128 MiB, ≤ 2.000 phần, 4 luồng, ETag máy gửi, S3 lỗi chỉ làm media chưa sẵn sàng |
 
 ---
 
