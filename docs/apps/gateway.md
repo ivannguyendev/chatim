@@ -18,7 +18,7 @@ HTTPS (Connect trên HTTP/1.1 và h2c) cho tải dữ liệu và quản lý room
 | `GW_PART_URLS_USER_LIMIT`, `GW_PART_URLS_USER_IP_LIMIT`, `GW_PART_URLS_DEVICE_LIMIT` | `2/1s` / `1/1s` / `1/5s` | Giới hạn `MediaService/GetPartURLs` (owner 2026-11-06) theo user, user + IP, user + IP + thiết bị (`sid` của token); dạng `SỐ/THỜI_LƯỢNG`; đếm chung mọi node trong Redis chung (khoá `chatim:ratelimit:GetPartURLs:*` hết hạn theo cửa sổ). Redis chung rỗng hoặc lỗi: đếm riêng trên từng node, vẫn đủ ba tầng (owner 2026-11-07; tối đa `3 × GW_USER_LIMITERS` khoá trong RAM), log và `command_rate_limit_fallbacks_total` |
 | `GW_CLIENT_IP_HEADER`, `GW_TRUSTED_PROXIES` | `X-Forwarded-For` / rỗng | IP máy lấy từ header chỉ khi kết nối đến từ một CIDR trong `GW_TRUSTED_PROXIES` (lấy hop cuối không tin cậy); rỗng = dùng địa chỉ kết nối |
 | `GW_BODY_MAX` | `131072` | Cỡ body tối đa; quá thì `resource_exhausted` |
-| `GW_USER_RATE`, `GW_USER_BURST` | `50` / `100` | Lệnh mỗi giây và burst mỗi (tenant, user) trên node; quá thì `resource_exhausted` (429) |
+| `GW_USER_RATE`, `GW_USER_BURST` | `50` / `100` | Lệnh mỗi giây và burst mỗi (tenant, user) trên node; quá thì `resource_exhausted` (429); `GetAttachmentURLs` và `ListUploads` của `MediaService` dùng giới hạn này, không có limiter riêng |
 | `GW_USER_INFLIGHT` | `32` | Lệnh đang chạy tối đa mỗi (tenant, user) trên node |
 | `GW_USER_LIMITERS` | `100000` | Số người giữ bộ đếm trong RAM (LRU, chỉ đẩy người không có lệnh đang chạy; ≥ `GW_INFLIGHT_MAX`) |
 | `GW_INFLIGHT_MAX` | `10000` | Lệnh đang chạy tối đa cả node, kiểm trước token; quá thì `unavailable` (503) |

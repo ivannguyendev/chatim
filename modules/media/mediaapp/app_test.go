@@ -1,14 +1,17 @@
 package mediaapp_test
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"testing"
 
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/ivannguyendev/chatim/modules/media/mediaapp"
+	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	"github.com/ivannguyendev/chatim/pkg/core/apperr"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
@@ -20,7 +23,17 @@ func deps(t *testing.T) mediaapp.Deps {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = client.Disconnect(t.Context()) })
-	return mediaapp.Deps{Mongo: client.Database("chatim"), Log: slog.New(slog.DiscardHandler)}
+	return mediaapp.Deps{Mongo: client.Database("chatim"), Log: slog.New(slog.DiscardHandler), Chat: noChat{}}
+}
+
+func withCaller(ctx context.Context) context.Context {
+	return metadata.NewIncomingContext(ctx, metadata.Pairs(chatrpc.TenantHeader, "acme", chatrpc.UserHeader, "an"))
+}
+
+type noChat struct{}
+
+func (noChat) VisibleAttachments(context.Context, string, string, []mediaapp.MessageRef) ([]mediaapp.MessageFiles, error) {
+	return nil, nil
 }
 
 func valid() mediaapp.Config {
@@ -30,9 +43,14 @@ func valid() mediaapp.Config {
 	return c
 }
 
-func TestNewNeedsMongoAndALogger(t *testing.T) {
+func TestNewNeedsMongoALoggerAndChat(t *testing.T) {
 	if _, err := mediaapp.New(valid(), mediaapp.Deps{}); !errors.Is(err, apperr.ErrInvalidArgument) {
 		t.Fatalf("err = %v", err)
+	}
+	d := deps(t)
+	d.Chat = nil
+	if _, err := mediaapp.New(valid(), d); !errors.Is(err, apperr.ErrInvalidArgument) {
+		t.Fatalf("no chat err = %v", err)
 	}
 }
 
@@ -50,6 +68,11 @@ func TestBadConfigLeavesMediaNotReadyInsteadOfFailing(t *testing.T) {
 	if !errors.Is(err, apperr.ErrUnavailable) {
 		t.Fatalf("start = %v", err)
 	}
+	w := a.Watch()
+	if err := w.Start(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	w.Stop()
 	probes := a.Probes()
 	if len(probes) != 1 || probes[0].Name != "ready" || probes[0].Read() != 0 {
 		t.Fatalf("probes %+v", probes)
@@ -64,9 +87,18 @@ func TestValidConfigServesUploadsOnceStorageIsReady(t *testing.T) {
 	if a.Ready() {
 		t.Fatal("ready before the first bucket check")
 	}
+	a.Watch().Stop()
 	cc := a.ClientConfig()
-	if cc.Enabled || cc.MaxFileBytes != 4<<30 || cc.MaxParallelUploads != 4 {
+	if cc.Enabled || cc.MaxFileBytes != 4<<30 || cc.MaxParallelUploads != 4 || cc.Thumbnails {
 		t.Fatalf("client config %+v", cc)
+	}
+	c := valid()
+	c.Thumbnails = true
+	if on, err := mediaapp.New(c, deps(t)); err != nil || !on.ClientConfig().Thumbnails {
+		t.Fatalf("thumbnails on: %v", err)
+	}
+	if _, err := a.Server().GetAttachmentURLs(withCaller(t.Context()), &chatimv1.GetAttachmentURLsRequest{Messages: []*chatimv1.MessageRef{{RoomId: "7", Seq: 1}}}); !errors.Is(err, apperr.ErrUnavailable) {
+		t.Fatalf("attachment urls before ready = %v", err)
 	}
 	if got := len(a.Probes()); got != 1+2+18 {
 		t.Fatalf("probes = %d", got)

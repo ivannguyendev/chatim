@@ -28,39 +28,48 @@ type Config struct {
 type S3 struct {
 	api       minio.Core
 	signer    *minio.Client
+	transport *http.Transport
 	bucket    string
 	completed string
 	stats     Stats
 }
 
 func New(c Config) (*S3, error) {
-	api, err := client(c.Endpoint, c)
+	api, transport, err := client(c.Endpoint, c)
 	if err != nil {
 		return nil, fmt.Errorf("objectstore endpoint: %w", err)
 	}
-	signer, err := client(c.PublicEndpoint, c)
+	signer, _, err := client(c.PublicEndpoint, c)
 	if err != nil {
 		return nil, fmt.Errorf("objectstore public endpoint: %w", err)
 	}
-	return &S3{api: minio.Core{Client: api}, signer: signer, bucket: c.Bucket, completed: c.CompletedBucket}, nil
+	return &S3{api: minio.Core{Client: api}, signer: signer, transport: transport, bucket: c.Bucket, completed: c.CompletedBucket}, nil
 }
 
-func client(endpoint string, c Config) (*minio.Client, error) {
+func client(endpoint string, c Config) (*minio.Client, *http.Transport, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
-		return nil, fmt.Errorf("endpoint %q needs http or https and a host", endpoint)
+		return nil, nil, fmt.Errorf("endpoint %q needs http or https and a host", endpoint)
 	}
-	return minio.New(u.Host, &minio.Options{
+	transport, err := minio.DefaultTransport(u.Scheme == "https")
+	if err != nil {
+		return nil, nil, err
+	}
+	cl, err := minio.New(u.Host, &minio.Options{
 		Creds:        credentials.NewStaticV4(c.AccessKey, c.SecretKey, ""),
 		Secure:       u.Scheme == "https",
 		Region:       c.Region,
 		BucketLookup: minio.BucketLookupPath,
 		MaxRetries:   1,
+		Transport:    transport,
 	})
+	return cl, transport, err
 }
+
+func (s *S3) CloseIdle() { s.transport.CloseIdleConnections() }
 
 func (s *S3) Stats() *Stats { return &s.stats }
 
@@ -77,6 +86,21 @@ func (s *S3) SignPart(ctx context.Context, key, uploadID string, number int32, s
 	u, err := s.signer.PresignHeader(ctx, http.MethodPut, s.bucket, key, ttl, params, header)
 	if err != nil {
 		return "", fmt.Errorf("sign part %d: %w", number, err)
+	}
+	return u.String(), nil
+}
+
+func (s *S3) SignGet(ctx context.Context, key string, ttl time.Duration, d domain.Disposition) (string, error) {
+	params := url.Values{}
+	if d.ContentType != "" {
+		params.Set("response-content-type", d.ContentType)
+	}
+	if d.Disposition != "" {
+		params.Set("response-content-disposition", d.Disposition)
+	}
+	u, err := s.signer.PresignHeader(ctx, http.MethodGet, s.bucket, key, ttl, params, nil)
+	if err != nil {
+		return "", fmt.Errorf("sign get: %w", err)
 	}
 	return u.String(), nil
 }

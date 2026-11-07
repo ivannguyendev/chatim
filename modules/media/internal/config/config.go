@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/ivannguyendev/chatim/modules/media/internal/domain"
@@ -17,24 +18,34 @@ const (
 	DefaultMaxParallelUploads = 4
 	DefaultPartSignatureTTL   = 15 * time.Minute
 	DefaultReadyCheckInterval = 30 * time.Second
+	DefaultDownloadTTL        = time.Hour
+	DefaultRetention          = 30 * 24 * time.Hour
+	DefaultThumbnailSuffix    = ".thumb"
+	minThumbnailSuffix        = 2
+	maxThumbnailSuffix        = 32
+	thumbnailSuffixAlphabet   = "abcdefghijklmnopqrstuvwxyz0123456789."
 )
 
 type Config struct {
-	Enabled            bool
-	Endpoint           string
-	PublicEndpoint     string
-	Region             string
-	AccessKey          string
-	SecretKey          string
-	ProcessingBucket   string
-	CompletedBucket    string
-	MaxFileBytes       int64
-	MinPartBytes       int64
-	MaxPartBytes       int64
-	MaxParts           int
-	MaxParallelUploads int
-	PartSignatureTTL   time.Duration
-	ReadyCheckInterval time.Duration
+	Enabled              bool
+	Endpoint             string
+	PublicEndpoint       string
+	Region               string
+	AccessKey            string
+	SecretKey            string
+	ProcessingBucket     string
+	CompletedBucket      string
+	MaxFileBytes         int64
+	MinPartBytes         int64
+	MaxPartBytes         int64
+	MaxParts             int
+	MaxParallelUploads   int
+	PartSignatureTTL     time.Duration
+	ReadyCheckInterval   time.Duration
+	DownloadSignatureTTL time.Duration
+	ProcessingRetention  time.Duration
+	Thumbnails           bool
+	ThumbnailSuffix      string
 }
 
 func Defaults() Config {
@@ -42,7 +53,12 @@ func Defaults() Config {
 		Enabled: true, MaxFileBytes: DefaultMaxFileBytes, MinPartBytes: DefaultMinPartBytes, MaxPartBytes: DefaultMaxPartBytes,
 		MaxParts: DefaultMaxParts, MaxParallelUploads: DefaultMaxParallelUploads,
 		PartSignatureTTL: DefaultPartSignatureTTL, ReadyCheckInterval: DefaultReadyCheckInterval,
+		DownloadSignatureTTL: DefaultDownloadTTL, ProcessingRetention: DefaultRetention, ThumbnailSuffix: DefaultThumbnailSuffix,
 	}
+}
+
+func (c Config) ThumbnailRule() domain.Thumbnails {
+	return domain.Thumbnails{Enabled: c.Thumbnails, Suffix: c.ThumbnailSuffix}
 }
 
 func (c Config) Limits() domain.Limits {
@@ -70,8 +86,18 @@ func (c Config) Validate() error {
 	if c.PartSignatureTTL <= 0 || c.ReadyCheckInterval <= 0 {
 		errs = append(errs, errors.New("MEDIA_PART_URL_TTL and MEDIA_READY_CHECK_INTERVAL must be positive"))
 	}
+	if c.DownloadSignatureTTL <= 0 || c.ProcessingRetention <= 0 {
+		errs = append(errs, errors.New("MEDIA_DOWNLOAD_URL_TTL and MEDIA_PROCESSING_RETENTION must be positive"))
+	}
+	if !validThumbnailSuffix(c.ThumbnailSuffix) {
+		errs = append(errs, fmt.Errorf("MEDIA_THUMBNAIL_SUFFIX must start with a dot and be %d..%d characters of a-z, 0-9 and dots", minThumbnailSuffix, maxThumbnailSuffix))
+	}
 	if err := c.Limits().Validate(); err != nil {
 		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
+}
+
+func validThumbnailSuffix(s string) bool {
+	return len(s) >= minThumbnailSuffix && len(s) <= maxThumbnailSuffix && strings.HasPrefix(s, ".") && strings.Trim(s, thumbnailSuffixAlphabet) == ""
 }

@@ -21,6 +21,7 @@ func TestMediaConfigIsReadFromTheEnvironment(t *testing.T) {
 		"MEDIA_S3_REGION": "us-east-1", "MEDIA_S3_ACCESS_KEY": "GK1", "MEDIA_S3_SECRET_KEY_FILE": secret,
 		"MEDIA_S3_BUCKET_PROCESSING": "p", "MEDIA_S3_BUCKET_COMPLETED": "c",
 		"MEDIA_MAX_PARALLEL_UPLOADS": "6", "MEDIA_PART_URL_TTL": "10m",
+		"MEDIA_DOWNLOAD_URL_TTL": "30m", "MEDIA_PROCESSING_RETENTION": "240h", "MEDIA_THUMBNAILS": "true", "MEDIA_THUMBNAIL_SUFFIX": ".small",
 	})
 	c, err := config.Load()
 	if err != nil {
@@ -29,6 +30,9 @@ func TestMediaConfigIsReadFromTheEnvironment(t *testing.T) {
 	m := c.Media
 	if !m.Enabled || m.SecretKey != "top-secret-s3-key" || m.MaxParallelUploads != 6 || m.PartSignatureTTL != 10*time.Minute || m.MaxPartBytes != 128<<20 {
 		t.Fatalf("media %+v", m)
+	}
+	if m.DownloadSignatureTTL != 30*time.Minute || m.ProcessingRetention != 240*time.Hour || !m.Thumbnails || m.ThumbnailSuffix != ".small" {
+		t.Fatalf("download settings %+v", m)
 	}
 	if err := m.Validate(); err != nil {
 		t.Fatal(err)
@@ -53,8 +57,23 @@ func TestBrokenMediaConfigDoesNotStopChat(t *testing.T) {
 }
 
 func TestMediaNumbersMustParse(t *testing.T) {
-	setEnv(t, map[string]string{"MEDIA_MAX_PARTS": "many"})
-	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "MEDIA_MAX_PARTS") {
-		t.Fatalf("err = %v", err)
+	for key, value := range map[string]string{"MEDIA_MAX_PARTS": "many", "MEDIA_DOWNLOAD_URL_TTL": "soon", "MEDIA_PROCESSING_RETENTION": "0s", "MEDIA_THUMBNAILS": "maybe"} {
+		t.Run(key, func(t *testing.T) {
+			setEnv(t, map[string]string{key: value})
+			if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), key) {
+				t.Errorf("%s=%s: err = %v", key, value, err)
+			}
+		})
+	}
+}
+
+func TestMediaDownloadDefaults(t *testing.T) {
+	setEnv(t, nil)
+	c, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := c.Media; m.DownloadSignatureTTL != time.Hour || m.ProcessingRetention != 720*time.Hour || m.Thumbnails || m.ThumbnailSuffix != ".thumb" {
+		t.Fatalf("media %+v", m)
 	}
 }

@@ -84,6 +84,10 @@ Media lỗi (config sai, thiếu bucket, sai key, S3 sập) không bao giờ là
 | `MEDIA_MAX_PARALLEL_UPLOADS` | `4` | Số URL mỗi lần cấp và số luồng máy chạy (qua `GetClientConfig`) |
 | `MEDIA_PART_URL_TTL` | `15m` | Hạn URL ký từng phần |
 | `MEDIA_READY_CHECK_INTERVAL` | `30s` | Chu kỳ `HeadBucket` hai bucket để biết media sẵn sàng |
+| `MEDIA_DOWNLOAD_URL_TTL` | `1h` | Hạn URL tải (`GetAttachmentURLs`) |
+| `MEDIA_PROCESSING_RETENTION` | `720h` | Phải bằng luật xoá object của bucket `processing` (30 ngày) |
+| `MEDIA_THUMBNAILS` | `false` | `true` khi hạ tầng có Lambda sinh thumb: ảnh/video có `thumbnail_url`; tắt thì rỗng (qua `GetClientConfig`) |
+| `MEDIA_THUMBNAIL_SUFFIX` | `.thumb` | Hậu tố khoá thumb (`{key}{hậu tố}`), bắt đầu bằng `.`, 2..32 ký tự `a-z0-9.`; phải bằng hậu tố Lambda ghi |
 
 `CHAT_GOGC` (mặc định 100) chỉ compose đọc lúc `make app-up` và đưa vào `GOGC` của chat, dùng khi đo; không có trong `.env.example`.
 

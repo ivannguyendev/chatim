@@ -12,11 +12,11 @@ import (
 
 const mediaSubsystem = "media"
 
-func wireMedia(cfg config.Config, cl *clients, indexes *mongoindex.Health, log *slog.Logger) (*mediaapp.App, error) {
+func wireMedia(cfg config.Config, cl *clients, indexes *mongoindex.Health, chat *mediaChatNode, log *slog.Logger) (*mediaapp.App, error) {
 	if !cfg.Media.Enabled {
 		return nil, nil
 	}
-	app, err := mediaapp.New(cfg.Media, mediaapp.Deps{Mongo: cl.mongo.Database(cfg.MongoDB), Log: log.With("app", mediaSubsystem), Indexes: indexes})
+	app, err := mediaapp.New(cfg.Media, mediaapp.Deps{Mongo: cl.mongo.Database(cfg.MongoDB), Log: log.With("app", mediaSubsystem), Indexes: indexes, Chat: chat})
 	if err != nil {
 		return nil, fmt.Errorf("wire media app: %w", err)
 	}

@@ -62,9 +62,14 @@ func TestDisabledMediaStillServesAClearRefusal(t *testing.T) {
 	if probes := a.attachMedia(nil); probes != nil || len(a.setups) != 0 {
 		t.Fatalf("attach(nil) probes %v setups %v", probes, a.setups)
 	}
-	_, err := mediaClient(t, a).StartUpload(withCaller(t.Context()), &chatimv1.StartUploadRequest{})
+	client := mediaClient(t, a)
+	_, err := client.StartUpload(withCaller(t.Context()), &chatimv1.StartUploadRequest{})
 	if status.Code(err) != codes.FailedPrecondition {
 		t.Fatalf("disabled start = %v", err)
+	}
+	_, err = client.GetAttachmentURLs(withCaller(t.Context()), &chatimv1.GetAttachmentURLsRequest{})
+	if status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("disabled attachment urls = %v", err)
 	}
 }
 
@@ -77,7 +82,7 @@ func TestEnabledMediaRefusesWhileStorageIsNotReady(t *testing.T) {
 	cfg := mediaapp.DefaultConfig()
 	cfg.Endpoint, cfg.PublicEndpoint, cfg.Region = "http://127.0.0.1:1", "http://127.0.0.1:1", "us-east-1"
 	cfg.AccessKey, cfg.SecretKey, cfg.ProcessingBucket, cfg.CompletedBucket = "k", "s", "p", "c"
-	app, err := mediaapp.New(cfg, mediaapp.Deps{Mongo: client.Database("chatim"), Log: quiet})
+	app, err := mediaapp.New(cfg, mediaapp.Deps{Mongo: client.Database("chatim"), Log: quiet, Chat: &mediaChatNode{}})
 	if err != nil {
 		t.Fatal(err)
 	}

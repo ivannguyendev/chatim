@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/ivannguyendev/chatim/modules/media/internal/domain"
+	"github.com/ivannguyendev/chatim/modules/media/internal/download"
 	"github.com/ivannguyendev/chatim/modules/media/internal/grpcsrv"
 	"github.com/ivannguyendev/chatim/modules/media/internal/store/memstore"
 	"github.com/ivannguyendev/chatim/modules/media/internal/upload"
@@ -32,6 +34,18 @@ func (o objects) Complete(_ context.Context, key, _ string, _ []domain.UploadedP
 func (objects) Abort(context.Context, string, string) error { return nil }
 func (objects) Head(context.Context, string) (int64, error) { return 40 << 20, nil }
 func (objects) Delete(context.Context, string) error        { return nil }
+func (objects) SignGet(_ context.Context, key string, _ time.Duration, d domain.Disposition) (string, error) {
+	return "https://s3/" + key + "?" + d.Disposition, nil
+}
+
+type chat struct{}
+
+func (chat) VisibleAttachments(_ context.Context, _, user string, refs []domain.MessageRef) ([]domain.MessageFiles, error) {
+	if user != "binh" {
+		return nil, nil
+	}
+	return []domain.MessageFiles{{Ref: refs[0], Files: []domain.File{{Key: "acme/an/20261107/0123456789abcdefghijklmnop", Name: "a.png", Mime: "image/png"}}}}, nil
+}
 
 func caller(tenant, user string) context.Context {
 	return metadata.NewIncomingContext(context.Background(), metadata.Pairs(chatrpc.TenantHeader, tenant, chatrpc.UserHeader, user))
@@ -39,15 +53,39 @@ func caller(tenant, user string) context.Context {
 
 func newService(t *testing.T) (*grpcsrv.Service, *memstore.Uploads) {
 	t.Helper()
-	uploads := memstore.NewUploads()
+	uploads, store := memstore.NewUploads(), objects{completed: map[string]bool{}}
 	svc, err := upload.New(upload.Config{
 		Limits:     domain.Limits{MinPartBytes: 16 << 20, MaxPartBytes: 128 << 20, MaxParts: 2000, MaxParallel: 4, MaxFileBytes: 4 << 30},
 		PartURLTTL: time.Minute,
-	}, upload.Deps{Uploads: uploads, Objects: objects{completed: map[string]bool{}}})
+	}, upload.Deps{Uploads: uploads, Objects: store})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return grpcsrv.New(svc), uploads
+	downloads, err := download.New(download.Config{SignatureTTL: time.Hour, Thumbnails: domain.Thumbnails{Enabled: true, Suffix: ".thumb"}}, download.Deps{Chat: chat{}, Objects: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return grpcsrv.New(svc, downloads), uploads
+}
+
+func TestGetAttachmentURLsOverTheService(t *testing.T) {
+	s, _ := newService(t)
+	req := &chatimv1.GetAttachmentURLsRequest{Messages: []*chatimv1.MessageRef{{RoomId: "7", Thread: 3, Seq: 9}}}
+	got, err := s.GetAttachmentURLs(caller("acme", "binh"), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := "acme/an/20261107/0123456789abcdefghijklmnop"
+	want := &chatimv1.MessageFiles{RoomId: "7", Thread: 3, Seq: 9, Files: []*chatimv1.FileURL{{Key: key, Url: "https://s3/" + key + "?inline", ThumbnailUrl: "https://s3/" + key + ".thumb?inline"}}}
+	if len(got.GetMessages()) != 1 || !proto.Equal(got.GetMessages()[0], want) || !got.GetExpiresAt().IsValid() {
+		t.Fatalf("got %v", got)
+	}
+	if none, err := s.GetAttachmentURLs(caller("acme", "an"), req); err != nil || len(none.GetMessages()) != 0 {
+		t.Fatalf("other reader got %v, %v", none, err)
+	}
+	if _, err := s.GetAttachmentURLs(caller("acme", "binh"), &chatimv1.GetAttachmentURLsRequest{}); !errors.Is(err, apperr.ErrInvalidArgument) {
+		t.Fatalf("no refs err = %v", err)
+	}
 }
 
 func TestUploadRoundTripOverTheService(t *testing.T) {
@@ -111,7 +149,9 @@ func TestRefusingAnswersEveryCallWithItsError(t *testing.T) {
 	_, e2 := d.GetPartURLs(ctx, &chatimv1.GetPartURLsRequest{})
 	_, e3 := d.CompleteUpload(ctx, &chatimv1.CompleteUploadRequest{})
 	_, e4 := d.AbortUpload(ctx, &chatimv1.AbortUploadRequest{})
-	for _, err := range []error{e1, e2, e3, e4} {
+	_, e5 := d.GetAttachmentURLs(ctx, &chatimv1.GetAttachmentURLsRequest{})
+	_, e6 := d.ListUploads(ctx, &chatimv1.ListUploadsRequest{})
+	for _, err := range []error{e1, e2, e3, e4, e5, e6} {
 		if !errors.Is(err, apperr.ErrFailedPrecondition) {
 			t.Fatalf("err = %v", err)
 		}

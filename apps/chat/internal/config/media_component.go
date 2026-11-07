@@ -22,5 +22,9 @@ func (p *parser) mediaConfig(c *Config) {
 	m.MaxParallelUploads = p.count("MEDIA_MAX_PARALLEL_UPLOADS", m.MaxParallelUploads)
 	m.PartSignatureTTL = p.span("MEDIA_PART_URL_TTL", m.PartSignatureTTL)
 	m.ReadyCheckInterval = p.span("MEDIA_READY_CHECK_INTERVAL", m.ReadyCheckInterval)
+	m.DownloadSignatureTTL = p.span("MEDIA_DOWNLOAD_URL_TTL", m.DownloadSignatureTTL)
+	m.ProcessingRetention = p.span("MEDIA_PROCESSING_RETENTION", m.ProcessingRetention)
+	m.Thumbnails = p.flag("MEDIA_THUMBNAILS", m.Thumbnails)
+	m.ThumbnailSuffix = envconfig.String("MEDIA_THUMBNAIL_SUFFIX", m.ThumbnailSuffix)
 	c.Media = m
 }

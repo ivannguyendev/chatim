@@ -29,7 +29,7 @@ func itConfig(t *testing.T) Config {
 		AccessKey: os.Getenv("CHATIM_IT_S3_ACCESS_KEY"), SecretKey: os.Getenv("CHATIM_IT_S3_SECRET_KEY"),
 		Bucket: itBucket(t, "p"), CompletedBucket: itBucket(t, "c"),
 	}
-	admin, err := client(endpoint, c)
+	admin, _, err := client(endpoint, c)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -17,7 +17,7 @@ func clientConfig(cfg config.Config, media *mediaapp.App) func() *chatimv1.GetCl
 		feature := &chatimv1.MediaFeature{}
 		if media != nil {
 			c := media.ClientConfig()
-			feature = &chatimv1.MediaFeature{Enabled: c.Enabled, MaxFileBytes: c.MaxFileBytes, MaxParallelUploads: int64(c.MaxParallelUploads)}
+			feature = &chatimv1.MediaFeature{Enabled: c.Enabled, MaxFileBytes: c.MaxFileBytes, MaxParallelUploads: int64(c.MaxParallelUploads), Thumbnails: c.Thumbnails}
 		}
 		return &chatimv1.GetClientConfigResponse{Message: limits, Mention: mention, Media: feature}
 	}

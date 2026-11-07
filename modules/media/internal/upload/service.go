@@ -35,7 +35,7 @@ type Deps struct {
 	Random  func() [10]byte
 }
 
-type Caller struct{ Tenant, User string }
+type Caller = domain.Caller
 
 type StartInput struct {
 	FileName       string

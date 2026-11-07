@@ -10,6 +10,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/modules/media/internal/config"
 	"github.com/ivannguyendev/chatim/modules/media/internal/domain"
+	"github.com/ivannguyendev/chatim/modules/media/internal/download"
 	"github.com/ivannguyendev/chatim/modules/media/internal/grpcsrv"
 	"github.com/ivannguyendev/chatim/modules/media/internal/objectstore"
 	"github.com/ivannguyendev/chatim/modules/media/internal/readiness"
@@ -28,6 +29,7 @@ type Deps struct {
 	Mongo   *mongo.Database
 	Log     *slog.Logger
 	Indexes mongoindex.Reporter
+	Chat    ChatReader
 }
 
 type Watcher interface {
@@ -39,6 +41,7 @@ type ClientConfig struct {
 	Enabled            bool
 	MaxFileBytes       int64
 	MaxParallelUploads int
+	Thumbnails         bool
 }
 
 type App struct {
@@ -51,8 +54,8 @@ type App struct {
 }
 
 func New(cfg Config, deps Deps) (*App, error) {
-	if deps.Mongo == nil || deps.Log == nil {
-		return nil, fmt.Errorf("%w: media app needs mongo and a logger", apperr.ErrInvalidArgument)
+	if deps.Mongo == nil || deps.Log == nil || deps.Chat == nil {
+		return nil, fmt.Errorf("%w: media app needs mongo, a logger and the chat reader", apperr.ErrInvalidArgument)
 	}
 	a := &App{cfg: cfg, deps: deps}
 	if err := a.assemble(); err != nil {
@@ -83,7 +86,13 @@ func (a *App) assemble() error {
 	if err != nil {
 		return err
 	}
-	a.server = grpcsrv.New(a.uploads)
+	downloads, err := download.New(download.Config{SignatureTTL: a.cfg.DownloadSignatureTTL, Thumbnails: a.cfg.ThumbnailRule()}, download.Deps{
+		Chat: a.deps.Chat, Objects: objects, Ready: a.watch.Ready,
+	})
+	if err != nil {
+		return err
+	}
+	a.server = grpcsrv.New(a.uploads, downloads)
 	return nil
 }
 
@@ -108,10 +117,24 @@ func RegisterDisabled(r grpc.ServiceRegistrar) {
 
 func (a *App) Ready() bool { return a.watch.Ready() }
 
-func (a *App) Watch() Watcher { return a.watch }
+func (a *App) Watch() Watcher { return storageWatch{Watch: a.watch, objects: a.objects} }
+
+type storageWatch struct {
+	*readiness.Watch
+	objects *objectstore.S3
+}
+
+func (w storageWatch) Stop() {
+	w.Watch.Stop()
+	if w.objects != nil {
+		w.objects.CloseIdle()
+	}
+}
 
 func (a *App) ClientConfig() ClientConfig {
-	return ClientConfig{Enabled: a.Ready(), MaxFileBytes: a.cfg.MaxFileBytes, MaxParallelUploads: a.cfg.MaxParallelUploads}
+	return ClientConfig{
+		Enabled: a.Ready(), MaxFileBytes: a.cfg.MaxFileBytes, MaxParallelUploads: a.cfg.MaxParallelUploads, Thumbnails: a.cfg.Thumbnails,
+	}
 }
 
 func Indexes() mongoindex.Catalog { return mongostore.Indexes() }

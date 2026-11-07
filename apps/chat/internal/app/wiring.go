@@ -148,7 +148,8 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 	a.readBatch = reads
 	a.publisher, a.stateClears, a.flusher, a.cidBatch, a.router, a.slots = pub, clears, fl, batch, router, slots
 	a.projections, a.sweeper = projections, sweeper
-	media, err := wireMedia(cfg, cl, a.indexes, log)
+	mediaChat := &mediaChatNode{}
+	media, err := wireMedia(cfg, cl, a.indexes, mediaChat, log)
 	if err != nil {
 		return nil, err
 	}
@@ -156,6 +157,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 	if err != nil {
 		return nil, err
 	}
+	mediaChat.bind(reader)
 	limiter := resilience.NewLimiter(cfg.MaxInflight, cfg.QueueWait)
 	a.grpc = grpcserver.New(grpcserver.Config{
 		Addr:            cfg.GRPCAddr,

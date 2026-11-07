@@ -6,6 +6,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ivannguyendev/chatim/modules/media/internal/domain"
+	"github.com/ivannguyendev/chatim/modules/media/internal/download"
 	"github.com/ivannguyendev/chatim/modules/media/internal/upload"
 	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
@@ -13,17 +14,20 @@ import (
 
 type Service struct {
 	chatimv1.UnimplementedMediaServiceServer
-	uploads *upload.Service
+	uploads   *upload.Service
+	downloads *download.Service
 }
 
-func New(uploads *upload.Service) *Service { return &Service{uploads: uploads} }
+func New(uploads *upload.Service, downloads *download.Service) *Service {
+	return &Service{uploads: uploads, downloads: downloads}
+}
 
-func callerOf(ctx context.Context) (upload.Caller, error) {
+func callerOf(ctx context.Context) (domain.Caller, error) {
 	who, err := chatrpc.CallerOf(ctx)
 	if err != nil {
-		return upload.Caller{}, err
+		return domain.Caller{}, err
 	}
-	return upload.Caller{Tenant: who.Tenant, User: who.User}, nil
+	return domain.Caller{Tenant: who.Tenant, User: who.User}, nil
 }
 
 func (s *Service) StartUpload(ctx context.Context, req *chatimv1.StartUploadRequest) (*chatimv1.StartUploadResponse, error) {
@@ -87,6 +91,30 @@ func (s *Service) AbortUpload(ctx context.Context, req *chatimv1.AbortUploadRequ
 	return &chatimv1.AbortUploadResponse{}, nil
 }
 
+func (s *Service) GetAttachmentURLs(ctx context.Context, req *chatimv1.GetAttachmentURLsRequest) (*chatimv1.GetAttachmentURLsResponse, error) {
+	who, err := callerOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	refs := make([]domain.MessageRef, len(req.GetMessages()))
+	for i, m := range req.GetMessages() {
+		refs[i] = domain.MessageRef{Room: m.GetRoomId(), Thread: m.GetThread(), Seq: m.GetSeq()}
+	}
+	got, err := s.downloads.AttachmentURLs(ctx, who, refs)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*chatimv1.MessageFiles, len(got.Messages))
+	for i, m := range got.Messages {
+		files := make([]*chatimv1.FileURL, len(m.Files))
+		for j, f := range m.Files {
+			files[j] = &chatimv1.FileURL{Key: f.Key, Url: f.URL, ThumbnailUrl: f.ThumbnailURL}
+		}
+		out[i] = &chatimv1.MessageFiles{RoomId: m.Ref.Room, Thread: m.Ref.Thread, Seq: m.Ref.Seq, Files: files}
+	}
+	return &chatimv1.GetAttachmentURLsResponse{Messages: out, ExpiresAt: timestamppb.New(got.ExpiresAt)}, nil
+}
+
 func partURLs(in []upload.PartURL) []*chatimv1.PartURL {
 	out := make([]*chatimv1.PartURL, len(in))
 	for i, u := range in {
@@ -113,5 +141,13 @@ func (r Refusing) CompleteUpload(context.Context, *chatimv1.CompleteUploadReques
 }
 
 func (r Refusing) AbortUpload(context.Context, *chatimv1.AbortUploadRequest) (*chatimv1.AbortUploadResponse, error) {
+	return nil, r.Err
+}
+
+func (r Refusing) GetAttachmentURLs(context.Context, *chatimv1.GetAttachmentURLsRequest) (*chatimv1.GetAttachmentURLsResponse, error) {
+	return nil, r.Err
+}
+
+func (r Refusing) ListUploads(context.Context, *chatimv1.ListUploadsRequest) (*chatimv1.ListUploadsResponse, error) {
 	return nil, r.Err
 }

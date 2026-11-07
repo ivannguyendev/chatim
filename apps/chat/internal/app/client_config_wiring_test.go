@@ -30,12 +30,20 @@ func TestClientConfigFollowsSettingsAndMediaReadiness(t *testing.T) {
 	mc := mediaapp.DefaultConfig()
 	mc.Endpoint, mc.PublicEndpoint, mc.Region = "http://127.0.0.1:1", "http://127.0.0.1:1", "us-east-1"
 	mc.AccessKey, mc.SecretKey, mc.ProcessingBucket, mc.CompletedBucket = "k", "s", "p", "c"
-	media, err := mediaapp.New(mc, mediaapp.Deps{Mongo: client.Database("chatim"), Log: quiet})
+	media, err := mediaapp.New(mc, mediaapp.Deps{Mongo: client.Database("chatim"), Log: quiet, Chat: &mediaChatNode{}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	notReady := clientConfig(cfg, media)().GetMedia()
-	if notReady.GetEnabled() || notReady.GetMaxFileBytes() != 4<<30 || notReady.GetMaxParallelUploads() != 4 {
+	if notReady.GetEnabled() || notReady.GetMaxFileBytes() != 4<<30 || notReady.GetMaxParallelUploads() != 4 || notReady.GetThumbnails() {
 		t.Fatalf("media before storage is ready %v", notReady)
+	}
+	mc.Thumbnails = true
+	thumbs, err := mediaapp.New(mc, mediaapp.Deps{Mongo: client.Database("chatim"), Log: quiet, Chat: &mediaChatNode{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := clientConfig(cfg, thumbs)().GetMedia(); !got.GetThumbnails() {
+		t.Fatalf("media with thumbnails on %v", got)
 	}
 }

@@ -21,7 +21,7 @@ func asCaller() context.Context {
 func TestGetClientConfigReturnsWhatTheAppBuilt(t *testing.T) {
 	want := &chatimv1.GetClientConfigResponse{
 		Message: &chatimv1.MessageLimits{MaxTextBytes: 16384, MaxAttachments: 10},
-		Media:   &chatimv1.MediaFeature{Enabled: true, MaxParallelUploads: 4},
+		Media:   &chatimv1.MediaFeature{Enabled: true, MaxParallelUploads: 4, Thumbnails: true},
 	}
 	d := depsOf(t, memStores(), options{sender: &fakeSender{}})
 	d.ClientConfig = func() *chatimv1.GetClientConfigResponse { return want }
