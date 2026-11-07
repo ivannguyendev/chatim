@@ -3,6 +3,7 @@ package domain
 import (
 	"encoding/base32"
 	"mime"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -68,6 +69,7 @@ func ValidateAttachments(list []Attachment, tenant, sender string, now time.Time
 			return nil, err
 		}
 		a.Mime = strings.ToLower(a.Mime)
+		a.Dim = cloneDim(a.Dim)
 		out[i] = a
 	}
 	return out, nil
@@ -116,7 +118,7 @@ func parseAttachmentKey(key string) (attachmentKey, bool) {
 
 func checkAttachmentFacts(a Attachment) error {
 	switch {
-	case a.Name == "" || len(a.Name) > maxAttachmentNameBytes || !utf8.ValidString(a.Name) || strings.ContainsFunc(a.Name, unicode.IsControl):
+	case a.Name == "" || len(a.Name) > maxAttachmentNameBytes || !utf8.ValidString(a.Name) || strings.ContainsFunc(a.Name, hiddenNameRune):
 		return invalid("attachments.name")
 	case len(a.Mime) > MaxAttachmentMimeBytes || !isMediaType(a.Mime):
 		return invalid("attachments.mime")
@@ -160,4 +162,15 @@ func validHash(hash string) bool {
 		}
 	}
 	return true
+}
+
+func hiddenNameRune(r rune) bool {
+	return unicode.IsControl(r) || unicode.Is(unicode.Bidi_Control, r)
+}
+
+func cloneDim(dim []int32) []int32 {
+	if len(dim) == 0 {
+		return nil
+	}
+	return slices.Clone(dim)
 }

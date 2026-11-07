@@ -64,6 +64,10 @@ func TestValidateAttachmentsNormalizesMimeWithoutTouchingInput(t *testing.T) {
 	if got[0].Mime != "image/png" || list[0].Mime != "Image/PNG" {
 		t.Fatalf("mime = %q, input = %q, want image/png and input kept", got[0].Mime, list[0].Mime)
 	}
+	list[0].Dim[0] = 1
+	if got[0].Dim[0] != 640 {
+		t.Fatalf("dim = %v after changing the input, want its own copy", got[0].Dim)
+	}
 }
 
 func TestValidateAttachmentsKeyAge(t *testing.T) {
@@ -155,6 +159,7 @@ func TestValidateAttachmentsRejectsBadFields(t *testing.T) {
 		{"name 256 bytes", func(a *domain.Attachment) { a.Name = strings.Repeat("a", 256) }, "attachments.name"},
 		{"name invalid utf-8", func(a *domain.Attachment) { a.Name = "a\xff" }, "attachments.name"},
 		{"name control char", func(a *domain.Attachment) { a.Name = "a\nb" }, "attachments.name"},
+		{"name bidi override", func(a *domain.Attachment) { a.Name = "invoice\u202efdp.exe" }, "attachments.name"},
 		{"mime without subtype", func(a *domain.Attachment) { a.Mime = "image" }, "attachments.mime"},
 		{"mime empty", func(a *domain.Attachment) { a.Mime = "" }, "attachments.mime"},
 		{"mime over 255", func(a *domain.Attachment) { a.Mime = "image/" + strings.Repeat("p", 250) }, "attachments.mime"},

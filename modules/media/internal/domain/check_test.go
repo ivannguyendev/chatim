@@ -38,14 +38,15 @@ func TestValidateStart(t *testing.T) {
 		t.Fatal(err)
 	}
 	bad := map[string][3]any{
-		"empty name":        {"", "video/mp4", 40 * mib},
-		"long name":         {strings.Repeat("a", 256), "video/mp4", 40 * mib},
-		"broken utf-8":      {"\xff.mp4", "video/mp4", 40 * mib},
-		"control character": {"a\nb.mp4", "video/mp4", 40 * mib},
-		"no subtype":        {"clip.mp4", "video", 40 * mib},
-		"empty type":        {"clip.mp4", "", 40 * mib},
-		"zero size":         {"clip.mp4", "video/mp4", int64(0)},
-		"over the limit":    {"clip.mp4", "video/mp4", l.MaxFileBytes + 1},
+		"empty name":         {"", "video/mp4", 40 * mib},
+		"long name":          {strings.Repeat("a", 256), "video/mp4", 40 * mib},
+		"bidi override name": {"invoice\u202efdp.exe", "video/mp4", 40 * mib},
+		"broken utf-8":       {"\xff.mp4", "video/mp4", 40 * mib},
+		"control character":  {"a\nb.mp4", "video/mp4", 40 * mib},
+		"no subtype":         {"clip.mp4", "video", 40 * mib},
+		"empty type":         {"clip.mp4", "", 40 * mib},
+		"zero size":          {"clip.mp4", "video/mp4", int64(0)},
+		"over the limit":     {"clip.mp4", "video/mp4", l.MaxFileBytes + 1},
 	}
 	for name, in := range bad {
 		if _, err := domain.ValidateStart(in[0].(string), in[1].(string), in[2].(int64), l); !errors.Is(err, domain.ErrInvalid) {

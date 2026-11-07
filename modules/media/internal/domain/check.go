@@ -36,7 +36,7 @@ type UploadedPart struct {
 
 func ValidateStart(name, contentType string, size int64, l Limits) (string, error) {
 	switch {
-	case name == "" || len(name) > maxNameBytes || !utf8.ValidString(name) || strings.ContainsFunc(name, unicode.IsControl):
+	case name == "" || len(name) > maxNameBytes || !utf8.ValidString(name) || strings.ContainsFunc(name, hiddenNameRune):
 		return "", fmt.Errorf("%w: file name must be 1..%d bytes of printable UTF-8", ErrInvalid, maxNameBytes)
 	case len(contentType) > maxContentTypeBytes || !isMediaType(contentType):
 		return "", fmt.Errorf("%w: content type must look like type/subtype", ErrInvalid)
@@ -65,6 +65,10 @@ func ValidateHash(hash string) error {
 		return fmt.Errorf("%w: hash must be %s and %d lowercase hex characters", ErrInvalid, hashPrefix, hashHexChars)
 	}
 	return nil
+}
+
+func hiddenNameRune(r rune) bool {
+	return unicode.IsControl(r) || unicode.Is(unicode.Bidi_Control, r)
 }
 
 func isMediaType(v string) bool {
