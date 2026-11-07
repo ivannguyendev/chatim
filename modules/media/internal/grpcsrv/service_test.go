@@ -13,6 +13,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/modules/media/internal/domain"
 	"github.com/ivannguyendev/chatim/modules/media/internal/download"
+	"github.com/ivannguyendev/chatim/modules/media/internal/gallery"
 	"github.com/ivannguyendev/chatim/modules/media/internal/grpcsrv"
 	"github.com/ivannguyendev/chatim/modules/media/internal/store/memstore"
 	"github.com/ivannguyendev/chatim/modules/media/internal/upload"
@@ -65,7 +66,11 @@ func newService(t *testing.T) (*grpcsrv.Service, *memstore.Uploads) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return grpcsrv.New(svc, downloads), uploads
+	files, err := gallery.New(gallery.Config{SignatureTTL: time.Hour, Retention: 30 * 24 * time.Hour}, gallery.Deps{Uploads: uploads, Objects: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return grpcsrv.New(svc, downloads, files), uploads
 }
 
 func TestGetAttachmentURLsOverTheService(t *testing.T) {

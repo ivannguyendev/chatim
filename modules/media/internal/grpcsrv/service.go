@@ -7,6 +7,7 @@ import (
 
 	"github.com/ivannguyendev/chatim/modules/media/internal/domain"
 	"github.com/ivannguyendev/chatim/modules/media/internal/download"
+	"github.com/ivannguyendev/chatim/modules/media/internal/gallery"
 	"github.com/ivannguyendev/chatim/modules/media/internal/upload"
 	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
@@ -16,10 +17,11 @@ type Service struct {
 	chatimv1.UnimplementedMediaServiceServer
 	uploads   *upload.Service
 	downloads *download.Service
+	gallery   *gallery.Service
 }
 
-func New(uploads *upload.Service, downloads *download.Service) *Service {
-	return &Service{uploads: uploads, downloads: downloads}
+func New(uploads *upload.Service, downloads *download.Service, files *gallery.Service) *Service {
+	return &Service{uploads: uploads, downloads: downloads, gallery: files}
 }
 
 func callerOf(ctx context.Context) (domain.Caller, error) {

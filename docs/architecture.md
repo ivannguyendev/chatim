@@ -122,7 +122,7 @@ Cờ event chờ phát (M3.1, D142–D149): 7 collection `messages`, `message_ed
 | `reply_threads` (clustered) | 24B `room│thread│seq` tin cha | Projection (D130) | `{room_id, last_reply_at, _id}` | Bảng tóm tắt thread và tin trả lời mới nhất. |
 | `hidden` | `ObjectId` | Fact thưa | `{user_id, room_id, thread_root, seq}` unique | Danh sách tin ẩn theo từng người đọc. |
 | `sweeper_state` | tên collection (`"messages"`…) | Vận hành (M3.1) | Không có | Mốc quét của sweeper mỗi collection `{checkpoint, updated_at}`, ghi `w:majority`, chỉ tiến. Thay `reconciler_state` (đã bỏ; DB cũ còn collection này thì xoá tay). |
-| `media_uploads` (clustered) | chuỗi = khoá object `tenant/user/yyyymmdd/random` | Phiên upload (module `media`) | Không có | Phiên upload nhiều phần; chỉ module `media` ghi (M7 P1). |
+| `media_uploads` (clustered) | chuỗi = khoá object `tenant/user/yyyymmdd/random` | Phiên upload (module `media`) | `{tenant_id, user_id, state, _id: -1}` (gallery của chính người upload) | Phiên upload nhiều phần; chỉ module `media` ghi (M7 P1). |
 
 **Mã hoá khoá (`pkg/keys`):** các field uint64 ghi big-endian rồi nối liền, nên thứ tự byte trùng thứ tự số; một trang lịch sử bất kỳ, kể cả trang cũ nhất, là một range scan.
 - `message_edits`: khoá tin cộng version uint32 (28B).

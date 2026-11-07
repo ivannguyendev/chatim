@@ -48,8 +48,15 @@ type Result struct {
 }
 
 type Service struct {
-	cfg  Config
-	deps Deps
+	cfg    Config
+	deps   Deps
+	signer Signer
+}
+
+type Signer struct {
+	Objects    Objects
+	TTL        time.Duration
+	Thumbnails domain.Thumbnails
 }
 
 func New(cfg Config, deps Deps) (*Service, error) {
@@ -62,7 +69,7 @@ func New(cfg Config, deps Deps) (*Service, error) {
 	if deps.Now == nil {
 		deps.Now = time.Now
 	}
-	return &Service{cfg: cfg, deps: deps}, nil
+	return &Service{cfg: cfg, deps: deps, signer: Signer{Objects: deps.Objects, TTL: cfg.SignatureTTL, Thumbnails: cfg.Thumbnails}}, nil
 }
 
 func (s *Service) AttachmentURLs(ctx context.Context, who domain.Caller, refs []domain.MessageRef) (Result, error) {
@@ -80,7 +87,7 @@ func (s *Service) AttachmentURLs(ctx context.Context, who domain.Caller, refs []
 	for _, m := range found {
 		files := make([]FileURL, 0, len(m.Files))
 		for _, f := range m.Files {
-			u, err := s.sign(ctx, f)
+			u, err := s.signer.Sign(ctx, f)
 			if err != nil {
 				return Result{}, err
 			}
@@ -91,14 +98,14 @@ func (s *Service) AttachmentURLs(ctx context.Context, who domain.Caller, refs []
 	return out, nil
 }
 
-func (s *Service) sign(ctx context.Context, f domain.File) (FileURL, error) {
-	u, err := s.deps.Objects.SignGet(ctx, f.Key, s.cfg.SignatureTTL, domain.FileDisposition(f.Name, f.Mime))
+func (s Signer) Sign(ctx context.Context, f domain.File) (FileURL, error) {
+	u, err := s.Objects.SignGet(ctx, f.Key, s.TTL, domain.FileDisposition(f.Name, f.Mime))
 	if err != nil {
 		return FileURL{}, fmt.Errorf("%w: %w", domain.ErrRetryLater, err)
 	}
 	out := FileURL{Key: f.Key, URL: u}
-	if thumb, ok := s.cfg.Thumbnails.KeyFor(f.Key, f.Mime); ok {
-		if out.ThumbnailURL, err = s.deps.Objects.SignGet(ctx, thumb, s.cfg.SignatureTTL, domain.ThumbnailDisposition()); err != nil {
+	if thumb, ok := s.Thumbnails.KeyFor(f.Key, f.Mime); ok {
+		if out.ThumbnailURL, err = s.Objects.SignGet(ctx, thumb, s.TTL, domain.ThumbnailDisposition()); err != nil {
 			return FileURL{}, fmt.Errorf("%w: %w", domain.ErrRetryLater, err)
 		}
 	}

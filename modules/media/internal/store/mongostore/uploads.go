@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -87,6 +88,43 @@ func (s *Uploads) Transition(ctx context.Context, key string, from domain.State,
 		return domain.Upload{}, fmt.Errorf("transition upload: %w", err)
 	}
 	return fromDoc(d), nil
+}
+
+func (s *Uploads) ListOwned(ctx context.Context, tenant, user, before string, kinds domain.Kinds, limit int) ([]domain.Upload, error) {
+	filter := ownedFilter(tenant, user, before, kinds)
+	opts := options.Find().SetSort(bson.D{{Key: "_id", Value: -1}}).SetLimit(int64(limit)).SetHint(uploadsByOwner)
+	cur, err := s.coll.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, fmt.Errorf("list owned uploads: %w", err)
+	}
+	var docs []uploadDoc
+	if err := cur.All(ctx, &docs); err != nil {
+		return nil, fmt.Errorf("list owned uploads: %w", err)
+	}
+	out := make([]domain.Upload, len(docs))
+	for i, d := range docs {
+		out[i] = fromDoc(d)
+	}
+	return out, nil
+}
+
+func ownedFilter(tenant, user, before string, kinds domain.Kinds) bson.D {
+	filter := bson.D{{Key: "tenant_id", Value: tenant}, {Key: "user_id", Value: user}, {Key: "state", Value: int32(domain.StateUploaded)}}
+	if before != "" {
+		filter = append(filter, bson.E{Key: "_id", Value: bson.D{{Key: "$lt", Value: before}}})
+	}
+	if kinds.All() {
+		return filter
+	}
+	included, excluded := kinds.Families()
+	if kinds.Other {
+		return append(filter, bson.E{Key: "content_type", Value: bson.D{{Key: "$not", Value: familyPattern(excluded)}}})
+	}
+	return append(filter, bson.E{Key: "content_type", Value: familyPattern(included)})
+}
+
+func familyPattern(families []string) bson.Regex {
+	return bson.Regex{Pattern: "^(" + strings.Join(families, "|") + ")/"}
 }
 
 func toDoc(u domain.Upload) uploadDoc {

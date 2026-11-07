@@ -39,6 +39,10 @@ func RunUploads(t *testing.T, open func(t *testing.T) store.Uploads) {
 		{"concurrent transitions let exactly one win", transitionRace},
 		{"transition to uploaded writes the hash", transitionWritesHash},
 		{"transition with an empty hash or to aborted writes no hash", transitionSkipsHash},
+		{"list owned returns only the caller's tenant and user", listOnlyOwner},
+		{"list owned skips uploading and aborted uploads", listOnlyUploaded},
+		{"list owned pages newest first", listNewestFirstByPages},
+		{"list owned filters by kinds", listByKinds},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { c.run(t, open(t)) })

@@ -2,6 +2,8 @@ package memstore
 
 import (
 	"context"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -55,4 +57,17 @@ func (s *Uploads) Transition(_ context.Context, key string, from domain.State, f
 	}
 	s.docs[key] = u
 	return u, nil
+}
+
+func (s *Uploads) ListOwned(_ context.Context, tenant, user, before string, kinds domain.Kinds, limit int) ([]domain.Upload, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []domain.Upload
+	for _, u := range s.docs {
+		if u.Tenant == tenant && u.User == user && u.State == domain.StateUploaded && (before == "" || u.Key < before) && kinds.Match(u.ContentType) {
+			out = append(out, u)
+		}
+	}
+	slices.SortFunc(out, func(a, b domain.Upload) int { return strings.Compare(b.Key, a.Key) })
+	return out[:min(len(out), limit)], nil
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/ivannguyendev/chatim/modules/media/internal/config"
 	"github.com/ivannguyendev/chatim/modules/media/internal/domain"
 	"github.com/ivannguyendev/chatim/modules/media/internal/download"
+	"github.com/ivannguyendev/chatim/modules/media/internal/gallery"
 	"github.com/ivannguyendev/chatim/modules/media/internal/grpcsrv"
 	"github.com/ivannguyendev/chatim/modules/media/internal/objectstore"
 	"github.com/ivannguyendev/chatim/modules/media/internal/readiness"
@@ -80,8 +81,9 @@ func (a *App) assemble() error {
 	}
 	a.objects = objects
 	a.watch = readiness.New(objects.CheckBuckets, a.cfg.ReadyCheckInterval, a.deps.Log)
+	uploads := mongostore.NewUploads(a.deps.Mongo)
 	a.uploads, err = upload.New(upload.Config{Limits: a.cfg.Limits(), PartURLTTL: a.cfg.PartSignatureTTL}, upload.Deps{
-		Uploads: mongostore.NewUploads(a.deps.Mongo), Objects: objects, Ready: a.watch.Ready,
+		Uploads: uploads, Objects: objects, Ready: a.watch.Ready,
 	})
 	if err != nil {
 		return err
@@ -92,7 +94,13 @@ func (a *App) assemble() error {
 	if err != nil {
 		return err
 	}
-	a.server = grpcsrv.New(a.uploads, downloads)
+	files, err := gallery.New(gallery.Config{
+		SignatureTTL: a.cfg.DownloadSignatureTTL, Retention: a.cfg.ProcessingRetention, Thumbnails: a.cfg.ThumbnailRule(),
+	}, gallery.Deps{Uploads: uploads, Objects: objects, Ready: a.watch.Ready})
+	if err != nil {
+		return err
+	}
+	a.server = grpcsrv.New(a.uploads, downloads, files)
 	return nil
 }
 
