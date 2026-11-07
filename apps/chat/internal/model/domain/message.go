@@ -49,6 +49,7 @@ type Message struct {
 	Replies      ReplyCount
 	SkipUnread   bool
 	Meta         []byte
+	Attachments  []Attachment
 }
 
 func (m Message) WithoutDeletedContent() Message {
@@ -57,6 +58,7 @@ func (m Message) WithoutDeletedContent() Message {
 	}
 	m.Text = ""
 	m.Mentions, m.MentionAll, m.MentionAllAt, m.Forward, m.Meta = nil, false, time.Time{}, nil, nil
+	m.Attachments = nil
 	m.Reactions, m.Replies = ReactionSummary{}, ReplyCount{}
 	return m
 }

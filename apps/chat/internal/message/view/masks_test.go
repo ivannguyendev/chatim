@@ -54,6 +54,19 @@ func TestHideForViewerHidesClearedAndHiddenSeqs(t *testing.T) {
 	}
 }
 
+func TestHideForViewerDropsAttachmentsAndMeta(t *testing.T) {
+	m := textMsg(1, "a")
+	m.Attachments = []domain.Attachment{{Key: "acme/alice/20261107/k", Name: "a.png", Mime: "image/png", Size: 1}}
+	m.Meta = []byte(`{"call_seconds":180}`)
+	got := view.HideForViewer(view.Viewer{User: "bob", HiddenSeqs: map[uint64]bool{1: true}}, []domain.Message{m})
+	if got[0].Attachments != nil || got[0].Meta != nil {
+		t.Fatalf("hidden = %+v, want no attachments and no meta", got[0])
+	}
+	if kept := view.HideForViewer(view.Viewer{User: "bob"}, []domain.Message{m}); !reflect.DeepEqual(kept[0], m) {
+		t.Fatalf("visible = %+v, want unchanged", kept[0])
+	}
+}
+
 func TestClearedHidesEveryMessageUpToTheMarkTime(t *testing.T) {
 	mark := editedAt.Add(time.Minute)
 	page := []domain.Message{

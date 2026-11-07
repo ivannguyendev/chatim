@@ -17,6 +17,7 @@ func HideForViewer(v Viewer, msgs []domain.Message) []domain.Message {
 		if v.Cleared(m.CreatedAt) || v.HiddenSeqs[m.Seq] {
 			m.Hidden, m.Text = true, ""
 			m.Mentions, m.MentionAll, m.Forward, m.ReplyTo = nil, false, nil, nil
+			m.Attachments, m.Meta = nil, nil
 			m.Reactions, m.Replies = domain.ReactionSummary{}, domain.ReplyCount{}
 		}
 	})
