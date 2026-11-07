@@ -32,7 +32,8 @@ func (s *Service) StartUpload(ctx context.Context, req *chatimv1.StartUploadRequ
 		return nil, err
 	}
 	started, err := s.uploads.Start(ctx, who, upload.StartInput{
-		FileName: req.GetFileName(), ContentType: req.GetContentType(), Size: req.GetSize(), BytesPerSecond: req.GetUploadBytesPerSecond(),
+		FileName: req.GetFileName(), ContentType: req.GetContentType(), Size: req.GetSize(),
+		Dim: req.GetDim(), Dur: req.GetDur(), BytesPerSecond: req.GetUploadBytesPerSecond(),
 	})
 	if err != nil {
 		return nil, err
@@ -68,7 +69,7 @@ func (s *Service) CompleteUpload(ctx context.Context, req *chatimv1.CompleteUplo
 	for i, p := range req.GetParts() {
 		parts[i] = domain.UploadedPart{Number: p.GetPartNumber(), ETag: p.GetEtag()}
 	}
-	u, err := s.uploads.Complete(ctx, who, req.GetKey(), parts)
+	u, err := s.uploads.Complete(ctx, who, req.GetKey(), parts, req.GetHash())
 	if err != nil {
 		return nil, err
 	}

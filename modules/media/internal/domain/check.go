@@ -3,6 +3,7 @@ package domain
 import (
 	"cmp"
 	"encoding/base32"
+	"encoding/binary"
 	"fmt"
 	"mime"
 	"slices"
@@ -19,23 +20,49 @@ const (
 	maxETagBytes        = 128
 	keyDateLayout       = "20060102"
 	keyRandomChars      = 26
+	keyAlphabet         = "0123456789abcdefghijklmnopqrstuv"
+	keyMillisBytes      = 6
+	dimValues           = 2
+	hashPrefix          = "sha256:"
+	hashHexChars        = 64
 )
 
-var keyEncoding = base32.StdEncoding.WithPadding(base32.NoPadding)
+var keyEncoding = base32.HexEncoding.WithPadding(base32.NoPadding)
 
 type UploadedPart struct {
 	Number int32
 	ETag   string
 }
 
-func ValidateStart(name, contentType string, size int64, l Limits) error {
+func ValidateStart(name, contentType string, size int64, l Limits) (string, error) {
 	switch {
 	case name == "" || len(name) > maxNameBytes || !utf8.ValidString(name) || strings.ContainsFunc(name, unicode.IsControl):
-		return fmt.Errorf("%w: file name must be 1..%d bytes of printable UTF-8", ErrInvalid, maxNameBytes)
+		return "", fmt.Errorf("%w: file name must be 1..%d bytes of printable UTF-8", ErrInvalid, maxNameBytes)
 	case len(contentType) > maxContentTypeBytes || !isMediaType(contentType):
-		return fmt.Errorf("%w: content type must look like type/subtype", ErrInvalid)
+		return "", fmt.Errorf("%w: content type must look like type/subtype", ErrInvalid)
 	case size < 1 || size > l.MaxFileBytes:
-		return fmt.Errorf("%w: size %d outside 1..%d", ErrInvalid, size, l.MaxFileBytes)
+		return "", fmt.Errorf("%w: size %d outside 1..%d", ErrInvalid, size, l.MaxFileBytes)
+	}
+	return strings.ToLower(contentType), nil
+}
+
+func ValidateFileFacts(dim []int32, dur int64) error {
+	if len(dim) != 0 && (len(dim) != dimValues || dim[0] < 1 || dim[1] < 1) {
+		return fmt.Errorf("%w: dim must be empty or [width, height] of at least 1", ErrInvalid)
+	}
+	if dur < 0 {
+		return fmt.Errorf("%w: dur %d is negative", ErrInvalid, dur)
+	}
+	return nil
+}
+
+func ValidateHash(hash string) error {
+	if hash == "" {
+		return nil
+	}
+	hex, ok := strings.CutPrefix(hash, hashPrefix)
+	if !ok || len(hex) != hashHexChars || strings.Trim(hex, "0123456789abcdef") != "" {
+		return fmt.Errorf("%w: hash must be %s and %d lowercase hex characters", ErrInvalid, hashPrefix, hashHexChars)
 	}
 	return nil
 }
@@ -49,8 +76,17 @@ func isMediaType(v string) bool {
 	return ok && kind != "" && sub != ""
 }
 
-func NewObjectKey(tenant, user string, now time.Time, random [16]byte) string {
-	return tenant + "/" + user + "/" + now.UTC().Format(keyDateLayout) + "/" + strings.ToLower(keyEncoding.EncodeToString(random[:]))
+func NewObjectKey(tenant, user string, now time.Time, random [10]byte) string {
+	var id [keyMillisBytes + len(random)]byte
+	var millis [8]byte
+	binary.BigEndian.PutUint64(millis[:], uint64(now.UnixMilli()))
+	copy(id[:keyMillisBytes], millis[8-keyMillisBytes:])
+	copy(id[keyMillisBytes:], random[:])
+	return tenant + "/" + user + "/" + now.UTC().Format(keyDateLayout) + "/" + strings.ToLower(keyEncoding.EncodeToString(id[:]))
+}
+
+func ThumbnailKey(key, suffix string) string {
+	return key + suffix
 }
 
 func OwnsKey(key, tenant, user string) bool {
@@ -62,7 +98,7 @@ func OwnsKey(key, tenant, user string) bool {
 		return false
 	}
 	date, random, ok := strings.Cut(rest, "/")
-	if !ok || len(random) != keyRandomChars || strings.Contains(random, "/") {
+	if !ok || len(random) != keyRandomChars || strings.Trim(random, keyAlphabet) != "" {
 		return false
 	}
 	_, err := time.Parse(keyDateLayout, date)

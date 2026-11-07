@@ -8,7 +8,10 @@ import (
 	"github.com/ivannguyendev/chatim/modules/media/internal/objectstore"
 )
 
-func (s *Service) Complete(ctx context.Context, who Caller, key string, parts []domain.UploadedPart) (domain.Upload, error) {
+func (s *Service) Complete(ctx context.Context, who Caller, key string, parts []domain.UploadedPart, hash string) (domain.Upload, error) {
+	if err := domain.ValidateHash(hash); err != nil {
+		return domain.Upload{}, err
+	}
 	u, err := s.owned(ctx, who, key)
 	if err != nil {
 		return domain.Upload{}, err
@@ -28,10 +31,10 @@ func (s *Service) Complete(ctx context.Context, who Caller, key string, parts []
 	if err != nil && !errors.Is(err, objectstore.ErrNoSuchUpload) {
 		return domain.Upload{}, storageError(err)
 	}
-	return s.settle(ctx, u)
+	return s.settle(ctx, u, hash)
 }
 
-func (s *Service) settle(ctx context.Context, u domain.Upload) (domain.Upload, error) {
+func (s *Service) settle(ctx context.Context, u domain.Upload, hash string) (domain.Upload, error) {
 	size, err := s.deps.Objects.Head(ctx, u.Key)
 	switch {
 	case errors.Is(err, objectstore.ErrNotFound):
@@ -40,10 +43,10 @@ func (s *Service) settle(ctx context.Context, u domain.Upload) (domain.Upload, e
 		return domain.Upload{}, storageError(err)
 	case size != u.Size:
 		_ = s.deps.Objects.Delete(context.WithoutCancel(ctx), u.Key)
-		_, _ = s.deps.Uploads.Transition(ctx, u.Key, domain.StateUploading, u.Ver, domain.StateAborted)
+		_, _ = s.deps.Uploads.Transition(ctx, u.Key, domain.StateUploading, u.Ver, domain.StateAborted, "")
 		return domain.Upload{}, domain.ErrSizeMismatch
 	}
-	done, err := s.deps.Uploads.Transition(ctx, u.Key, domain.StateUploading, u.Ver, domain.StateUploaded)
+	done, err := s.deps.Uploads.Transition(ctx, u.Key, domain.StateUploading, u.Ver, domain.StateUploaded, hash)
 	if err == nil {
 		s.completed.Add(1)
 		return done, nil
@@ -75,7 +78,7 @@ func (s *Service) Abort(ctx context.Context, who Caller, key string) error {
 	} else if err != nil {
 		return storageError(err)
 	}
-	if _, err := s.deps.Uploads.Transition(ctx, u.Key, domain.StateUploading, u.Ver, domain.StateAborted); err != nil {
+	if _, err := s.deps.Uploads.Transition(ctx, u.Key, domain.StateUploading, u.Ver, domain.StateAborted, ""); err != nil {
 		_, err = s.reread(ctx, u.Key, domain.StateAborted, err)
 		return err
 	}

@@ -32,7 +32,7 @@ type Deps struct {
 	Objects Objects
 	Ready   func() bool
 	Now     func() time.Time
-	Random  func() [16]byte
+	Random  func() [10]byte
 }
 
 type Caller struct{ Tenant, User string }
@@ -41,6 +41,8 @@ type StartInput struct {
 	FileName       string
 	ContentType    string
 	Size           int64
+	Dim            []int32
+	Dur            int64
 	BytesPerSecond int64
 }
 
@@ -86,8 +88,8 @@ func New(cfg Config, deps Deps) (*Service, error) {
 	return &Service{cfg: cfg, deps: deps}, nil
 }
 
-func randomKeyPart() [16]byte {
-	var b [16]byte
+func randomKeyPart() [10]byte {
+	var b [10]byte
 	_, _ = rand.Read(b[:])
 	return b
 }
@@ -96,7 +98,11 @@ func (s *Service) Start(ctx context.Context, who Caller, in StartInput) (Started
 	if !s.deps.Ready() {
 		return Started{}, domain.ErrNotReady
 	}
-	if err := domain.ValidateStart(in.FileName, in.ContentType, in.Size, s.cfg.Limits); err != nil {
+	contentType, err := domain.ValidateStart(in.FileName, in.ContentType, in.Size, s.cfg.Limits)
+	if err != nil {
+		return Started{}, err
+	}
+	if err := domain.ValidateFileFacts(in.Dim, in.Dur); err != nil {
 		return Started{}, err
 	}
 	partSize, parts, err := domain.PlanParts(in.Size, in.BytesPerSecond, s.cfg.Limits)
@@ -105,13 +111,13 @@ func (s *Service) Start(ctx context.Context, who Caller, in StartInput) (Started
 	}
 	now := s.deps.Now().UTC()
 	key := domain.NewObjectKey(who.Tenant, who.User, now, s.deps.Random())
-	uploadID, err := s.deps.Objects.StartMultipart(ctx, key, in.ContentType)
+	uploadID, err := s.deps.Objects.StartMultipart(ctx, key, contentType)
 	if err != nil {
 		return Started{}, storageError(err)
 	}
 	u := domain.Upload{
-		Key: key, Tenant: who.Tenant, User: who.User, FileName: in.FileName, ContentType: in.ContentType,
-		Size: in.Size, PartSize: partSize, PartCount: len(parts), UploadID: uploadID,
+		Key: key, Tenant: who.Tenant, User: who.User, FileName: in.FileName, ContentType: contentType,
+		Size: in.Size, Dim: in.Dim, Dur: in.Dur, PartSize: partSize, PartCount: len(parts), UploadID: uploadID,
 		State: domain.StateUploading, Ver: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := s.deps.Uploads.Insert(ctx, u); err != nil {

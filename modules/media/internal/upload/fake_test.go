@@ -28,6 +28,8 @@ type signed struct {
 
 type fakeObjects struct {
 	mu          sync.Mutex
+	calls       int
+	contentType string
 	open        map[string]bool
 	objects     map[string]int64
 	signed      []signed
@@ -44,9 +46,11 @@ func newFakeObjects() *fakeObjects {
 	return &fakeObjects{open: map[string]bool{}, objects: map[string]int64{}}
 }
 
-func (f *fakeObjects) StartMultipart(_ context.Context, key, _ string) (string, error) {
+func (f *fakeObjects) StartMultipart(_ context.Context, key, contentType string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.calls++
+	f.contentType = contentType
 	if f.startErr != nil {
 		return "", f.startErr
 	}
@@ -57,6 +61,7 @@ func (f *fakeObjects) StartMultipart(_ context.Context, key, _ string) (string, 
 func (f *fakeObjects) SignPart(_ context.Context, key, id string, n int32, size int64, _ time.Duration) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.calls++
 	f.signed = append(f.signed, signed{number: n, size: size})
 	return fmt.Sprintf("https://s3/%s?uploadId=%s&partNumber=%d", key, id, n), nil
 }
@@ -64,6 +69,7 @@ func (f *fakeObjects) SignPart(_ context.Context, key, id string, n int32, size 
 func (f *fakeObjects) Complete(_ context.Context, key, id string, parts []domain.UploadedPart) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.calls++
 	f.completes++
 	if f.completeErr != nil {
 		return f.completeErr
@@ -79,6 +85,7 @@ func (f *fakeObjects) Complete(_ context.Context, key, id string, parts []domain
 func (f *fakeObjects) Abort(_ context.Context, _, id string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.calls++
 	f.aborts++
 	if !f.open[id] {
 		return objectstore.ErrNoSuchUpload
@@ -90,6 +97,7 @@ func (f *fakeObjects) Abort(_ context.Context, _, id string) error {
 func (f *fakeObjects) Head(_ context.Context, key string) (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.calls++
 	if f.headErr != nil {
 		return 0, f.headErr
 	}
@@ -102,6 +110,7 @@ func (f *fakeObjects) Head(_ context.Context, key string) (int64, error) {
 func (f *fakeObjects) Delete(_ context.Context, key string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.calls++
 	f.deletes++
 	delete(f.objects, key)
 	return nil
@@ -131,7 +140,7 @@ func newRig(t *testing.T) *rig {
 		Uploads: r.uploads, Objects: r.objects,
 		Ready:  func() bool { return r.ready },
 		Now:    func() time.Time { return now },
-		Random: func() [16]byte { serial++; return [16]byte{serial} },
+		Random: func() [10]byte { serial++; return [10]byte{serial} },
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -155,4 +164,10 @@ func etags(n int) []domain.UploadedPart {
 		out[i] = domain.UploadedPart{Number: int32(i + 1), ETag: fmt.Sprintf(`"%d"`, i+1)}
 	}
 	return out
+}
+
+func (f *fakeObjects) callCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls
 }

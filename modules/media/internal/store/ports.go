@@ -9,5 +9,5 @@ import (
 type Uploads interface {
 	Insert(ctx context.Context, u domain.Upload) error
 	Get(ctx context.Context, key string) (domain.Upload, error)
-	Transition(ctx context.Context, key string, from domain.State, fromVer int64, to domain.State) (domain.Upload, error)
+	Transition(ctx context.Context, key string, from domain.State, fromVer int64, to domain.State, hash string) (domain.Upload, error)
 }

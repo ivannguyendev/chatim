@@ -38,7 +38,7 @@ func (s *Uploads) Get(_ context.Context, key string) (domain.Upload, error) {
 	return u, nil
 }
 
-func (s *Uploads) Transition(_ context.Context, key string, from domain.State, fromVer int64, to domain.State) (domain.Upload, error) {
+func (s *Uploads) Transition(_ context.Context, key string, from domain.State, fromVer int64, to domain.State, hash string) (domain.Upload, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	u, ok := s.docs[key]
@@ -49,6 +49,9 @@ func (s *Uploads) Transition(_ context.Context, key string, from domain.State, f
 	u.State, u.Ver, u.UpdatedAt = to, u.Ver+1, now
 	if to == domain.StateUploaded {
 		u.CompletedAt = now
+		if hash != "" {
+			u.Hash = hash
+		}
 	}
 	s.docs[key] = u
 	return u, nil

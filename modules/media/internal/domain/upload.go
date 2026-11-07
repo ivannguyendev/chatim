@@ -17,6 +17,9 @@ type Upload struct {
 	FileName    string
 	ContentType string
 	Size        int64
+	Dim         []int32
+	Dur         int64
+	Hash        string
 	PartSize    int64
 	PartCount   int
 	UploadID    string

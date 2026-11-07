@@ -71,7 +71,7 @@ func TestStartAbortsTheSessionWhenTheDocCannotBeWritten(t *testing.T) {
 	r := newRig(t)
 	first := r.start(t)
 	clash, err := upload.New(upload.Config{Limits: domain.Limits{MinPartBytes: 16 * mib, MaxPartBytes: 128 * mib, MaxParts: 2000, MaxParallel: 4, MaxFileBytes: 1 << 30}, PartURLTTL: 60e9},
-		upload.Deps{Uploads: r.uploads, Objects: r.objects, Now: func() time.Time { return now }, Random: func() [16]byte { return [16]byte{1} }})
+		upload.Deps{Uploads: r.uploads, Objects: r.objects, Now: func() time.Time { return now }, Random: func() [10]byte { return [10]byte{1} }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func TestPartURLs(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	if _, err := r.svc.Complete(t.Context(), an, s.Upload.Key, etags(3)); err != nil {
+	if _, err := r.svc.Complete(t.Context(), an, s.Upload.Key, etags(3), ""); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := r.svc.PartURLs(t.Context(), an, s.Upload.Key, []int32{1}); !errors.Is(err, apperr.ErrFailedPrecondition) {

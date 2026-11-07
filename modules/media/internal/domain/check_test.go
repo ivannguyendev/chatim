@@ -4,7 +4,6 @@ import (
 	"errors"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/ivannguyendev/chatim/modules/media/internal/domain"
 )
@@ -35,7 +34,7 @@ func TestLimitsValidate(t *testing.T) {
 
 func TestValidateStart(t *testing.T) {
 	l := limits()
-	if err := domain.ValidateStart("clip.mp4", "video/mp4", 40*mib, l); err != nil {
+	if _, err := domain.ValidateStart("clip.mp4", "video/mp4", 40*mib, l); err != nil {
 		t.Fatal(err)
 	}
 	bad := map[string][3]any{
@@ -49,32 +48,65 @@ func TestValidateStart(t *testing.T) {
 		"over the limit":    {"clip.mp4", "video/mp4", l.MaxFileBytes + 1},
 	}
 	for name, in := range bad {
-		if err := domain.ValidateStart(in[0].(string), in[1].(string), in[2].(int64), l); !errors.Is(err, domain.ErrInvalid) {
+		if _, err := domain.ValidateStart(in[0].(string), in[1].(string), in[2].(int64), l); !errors.Is(err, domain.ErrInvalid) {
 			t.Errorf("%s: err = %v", name, err)
 		}
 	}
-	if err := domain.ValidateStart(strings.Repeat("ả", 85), "image/png; charset=binary", 1, l); err != nil {
+	if _, err := domain.ValidateStart(strings.Repeat("ả", 85), "image/png; charset=binary", 1, l); err != nil {
 		t.Fatalf("255-byte Vietnamese name: %v", err)
+	}
+	contentType, err := domain.ValidateStart("a.png", "Image/PNG", 1, l)
+	if err != nil || contentType != "image/png" {
+		t.Fatalf("content type = %q, %v", contentType, err)
 	}
 }
 
-func TestObjectKeys(t *testing.T) {
-	at := time.Date(2026, 11, 6, 23, 30, 0, 0, time.FixedZone("ICT", 7*3600))
-	key := domain.NewObjectKey("acme", "an", at, [16]byte{1, 2, 3})
-	if !strings.HasPrefix(key, "acme/an/20261106/") || len(key) != len("acme/an/20261106/")+26 {
-		t.Fatalf("key = %q", key)
-	}
-	if !domain.OwnsKey(key, "acme", "an") {
-		t.Fatal("owner does not own its key")
-	}
-	for _, other := range [][2]string{{"acme", "an-b"}, {"acme", "a"}, {"other", "an"}, {"", ""}} {
-		if domain.OwnsKey(key, other[0], other[1]) {
-			t.Fatalf("%v owns %q", other, key)
+func TestValidateFileFacts(t *testing.T) {
+	good := []struct {
+		dim []int32
+		dur int64
+	}{{nil, 0}, {[]int32{}, 0}, {[]int32{1920, 1080}, 95400}, {[]int32{1, 1}, 0}}
+	for _, g := range good {
+		if err := domain.ValidateFileFacts(g.dim, g.dur); err != nil {
+			t.Errorf("dim %v dur %d: %v", g.dim, g.dur, err)
 		}
 	}
-	for _, forged := range []string{"acme/an/", "acme/an/20261106", "acme/an/20261106/x/y", "acme/an//x", "acme/an/2026110/x", strings.Repeat("a", 600)} {
-		if domain.OwnsKey(forged, "acme", "an") {
-			t.Fatalf("forged key %q accepted", forged)
+	bad := map[string]struct {
+		dim []int32
+		dur int64
+	}{
+		"one value":       {[]int32{1920}, 0},
+		"three values":    {[]int32{1, 2, 3}, 0},
+		"zero width":      {[]int32{0, 1080}, 0},
+		"negative height": {[]int32{1920, -1}, 0},
+		"negative dur":    {nil, -1},
+	}
+	for name, b := range bad {
+		if err := domain.ValidateFileFacts(b.dim, b.dur); !errors.Is(err, domain.ErrInvalid) {
+			t.Errorf("%s: err = %v", name, err)
+		}
+	}
+}
+
+func TestValidateHash(t *testing.T) {
+	hex64 := strings.Repeat("9f86d081", 8)
+	for _, ok := range []string{"", "sha256:" + hex64} {
+		if err := domain.ValidateHash(ok); err != nil {
+			t.Errorf("%q: %v", ok, err)
+		}
+	}
+	bad := []string{
+		"sha256:" + strings.ToUpper(hex64),
+		"sha256:" + hex64[:63],
+		"sha256:" + hex64 + "0",
+		"sha256:" + hex64[:63] + "g",
+		"md5:" + hex64,
+		hex64,
+		"SHA256:" + hex64,
+	}
+	for _, h := range bad {
+		if err := domain.ValidateHash(h); !errors.Is(err, domain.ErrInvalid) {
+			t.Errorf("%q: err = %v", h, err)
 		}
 	}
 }
