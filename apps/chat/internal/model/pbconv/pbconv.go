@@ -120,6 +120,7 @@ func Message(m domain.Message) *chatimv1.Message {
 		ReplyCount:     ReplyCount(m.Replies),
 		SkipUnread:     m.SkipUnread,
 		Meta:           m.Meta,
+		Attachments:    Attachments(m.Attachments),
 	}
 }
 

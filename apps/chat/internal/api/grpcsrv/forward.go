@@ -32,7 +32,7 @@ func (s *Service) forwardCmd(ctx context.Context, who chatrpc.Caller, room uint6
 	}
 	return actor.SendCmd{
 		Tenant: who.Tenant, User: who.User, Room: room, Thread: req.GetThreadRoot(), CID: req.GetCid(), Text: src.Text,
-		Forward: src.Origin,
+		Forward: src.Origin, Attachments: src.Attachments,
 	}, nil
 }
 

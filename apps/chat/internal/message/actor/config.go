@@ -63,6 +63,7 @@ type SendCmd struct {
 	Kind         domain.Kind
 	SkipUnread   bool
 	Meta         []byte
+	Attachments  []domain.Attachment
 }
 
 type Ack struct {
@@ -100,7 +101,7 @@ func (c SendCmd) normalize(mentionLimit int) (SendCmd, error) {
 		domain.ValidUser(c.User),
 		domain.ValidCID(c.CID),
 		domain.ValidateThread(c.Thread),
-		domain.ValidateText(c.Text),
+		domain.ValidateBody(c.Text, len(c.Attachments)),
 		domain.ValidateReply(c.ReplyTo),
 		domain.ValidateMeta(c.Meta),
 	} {
@@ -113,6 +114,9 @@ func (c SendCmd) normalize(mentionLimit int) (SendCmd, error) {
 		return SendCmd{}, err
 	}
 	c.Mentions = mentions
+	if c.Attachments, err = domain.ValidateAttachments(c.Attachments, c.Tenant, c.User, time.Now(), c.Forward != nil); err != nil {
+		return SendCmd{}, err
+	}
 	if c.Kind, err = sendKind(c.Kind); err != nil {
 		return SendCmd{}, err
 	}
@@ -135,18 +139,19 @@ func sendKind(k domain.Kind) (domain.Kind, error) {
 
 func (c SendCmd) message() domain.Message {
 	return domain.Message{
-		Room:       c.Room,
-		Tenant:     c.Tenant,
-		From:       c.User,
-		Kind:       c.Kind,
-		Text:       c.Text,
-		CID:        c.CID,
-		ReplyTo:    c.ReplyTo,
-		Forward:    c.Forward,
-		Mentions:   c.Mentions,
-		MentionAll: c.MentionAll,
-		SkipUnread: c.SkipUnread,
-		Meta:       c.Meta,
+		Room:        c.Room,
+		Tenant:      c.Tenant,
+		From:        c.User,
+		Kind:        c.Kind,
+		Text:        c.Text,
+		CID:         c.CID,
+		ReplyTo:     c.ReplyTo,
+		Forward:     c.Forward,
+		Mentions:    c.Mentions,
+		MentionAll:  c.MentionAll,
+		SkipUnread:  c.SkipUnread,
+		Meta:        c.Meta,
+		Attachments: c.Attachments,
 	}
 }
 

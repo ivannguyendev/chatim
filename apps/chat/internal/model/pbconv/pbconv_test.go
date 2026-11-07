@@ -78,13 +78,15 @@ func TestMessageCopiesEveryField(t *testing.T) {
 	}
 	sys := sample()
 	sys.Kind, sys.SkipUnread, sys.Meta = domain.KindSystem, true, []byte(`{"call_seconds":180}`)
+	sys.Attachments = []domain.Attachment{{Key: "acme/alice/20261107/k", Name: "a.png", Mime: "image/png", Size: 9, Dim: []int32{4, 3}}}
 	want.Kind, want.SkipUnread, want.Meta = chatimv1.MessageKind_MESSAGE_KIND_SYSTEM, true, sys.Meta
+	want.Attachments = []*chatimv1.Attachment{{Key: "acme/alice/20261107/k", Name: "a.png", Mime: "image/png", Size: 9, Dim: []int32{4, 3}}}
 	if got := pbconv.Message(sys); !proto.Equal(got, want) {
 		t.Fatalf("system Message = %v, want %v", got, want)
 	}
 	sys.Deleted = true
-	if got := pbconv.Message(sys); got.GetMeta() != nil || !got.GetSkipUnread() || got.GetKind() != chatimv1.MessageKind_MESSAGE_KIND_SYSTEM {
-		t.Fatalf("deleted system Message = %v, want no meta, kind and skip_unread kept", got)
+	if got := pbconv.Message(sys); got.GetMeta() != nil || got.GetAttachments() != nil || !got.GetSkipUnread() || got.GetKind() != chatimv1.MessageKind_MESSAGE_KIND_SYSTEM {
+		t.Fatalf("deleted system Message = %v, want no meta or attachments, kind and skip_unread kept", got)
 	}
 }
 

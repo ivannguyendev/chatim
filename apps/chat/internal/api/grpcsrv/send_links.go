@@ -53,8 +53,9 @@ func (s *Service) linkedCmd(ctx context.Context, who chatrpc.Caller, room uint64
 	}
 	return actor.SendCmd{
 		Tenant: who.Tenant, User: who.User, Room: room, Thread: req.GetThreadRoot(), CID: req.GetCid(), Text: req.GetText(),
-		ReplyTo:    reply,
-		Mentions:   pbconv.DomainMentionTargets(req.GetMentions().GetTargets()),
-		MentionAll: req.GetMentions().GetAll(),
+		ReplyTo:     reply,
+		Mentions:    pbconv.DomainMentionTargets(req.GetMentions().GetTargets()),
+		MentionAll:  req.GetMentions().GetAll(),
+		Attachments: pbconv.DomainAttachments(req.GetAttachments()),
 	}, nil
 }
