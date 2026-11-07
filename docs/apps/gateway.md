@@ -1,6 +1,6 @@
 # App `gateway`
 
-HTTPS (Connect trên HTTP/1.1 và h2c) cho tải dữ liệu và quản lý room: 27 lệnh `chatrpc.Request()` (`GetClientConfig`, 4 lệnh upload của `MediaService`, 14 lệnh đọc và `CreateRoom`, `OpenDirectRoom`, `UpdateRoom`, `AddMembers`, `RemoveMember`, `LeaveRoom`, `ChangeMemberRole`, `SetMemberPriority`), JWT như websocket, gọi node chat bất kỳ (round robin), giới hạn theo user. Không có database, không dùng NATS; Redis chỉ (tuỳ chọn) cho bản danh sách thu hồi dùng chung (M6 phần 2). Cơ chế: [module 11](../features/11-feature-https-gateway.md).
+HTTPS (Connect trên HTTP/1.1 và h2c) cho tải dữ liệu và quản lý room: 29 lệnh `chatrpc.Request()` (`GetClientConfig`, 6 lệnh của `MediaService`: `StartUpload`, `GetPartURLs`, `CompleteUpload`, `AbortUpload`, `GetAttachmentURLs`, `ListUploads`; 14 lệnh đọc và `CreateRoom`, `OpenDirectRoom`, `UpdateRoom`, `AddMembers`, `RemoveMember`, `LeaveRoom`, `ChangeMemberRole`, `SetMemberPriority`), JWT như websocket, gọi node chat bất kỳ (round robin), giới hạn theo user. Không có database, không dùng NATS; Redis chỉ (tuỳ chọn) cho bản danh sách thu hồi dùng chung (M6 phần 2). Cơ chế: [module 11](../features/11-feature-https-gateway.md).
 
 ## Biến môi trường
 
@@ -8,7 +8,7 @@ HTTPS (Connect trên HTTP/1.1 và h2c) cho tải dữ liệu và quản lý room
 
 | Biến | Mặc định | Ý nghĩa |
 |---|---|---|
-| `GW_ADDR` | `:8080` | Lắng nghe HTTP/1.1 và h2c; đường dẫn `/chatim.v1.ChatService/{Lệnh}`, `/chatim.v1.MentionService/{Lệnh}` (Connect, JSON hoặc protobuf, `POST`) |
+| `GW_ADDR` | `:8080` | Lắng nghe HTTP/1.1 và h2c; đường dẫn `/chatim.v1.ChatService/{Lệnh}`, `/chatim.v1.MentionService/{Lệnh}`, `/chatim.v1.MediaService/{Lệnh}` (Connect, JSON hoặc protobuf, `POST`) |
 | `GW_ADMIN_ADDR` | `:9090` | `/livez`, `/readyz` (đã đọc sổ node chat trong Redis state, identity đã đồng bộ lần đầu và chưa tắt; sổ rỗng lúc đang chạy không tắt `/readyz`, lệnh trả `unavailable`), `/metrics` (`chatim_gateway_*`); `/app probe` hỏi địa chỉ này; không publish ra host |
 | `REDIS_ADDR`, `REDIS_DB`, `REDIS_PASSWORD` (`_FILE`) | `chatim-redis:6379` / `0` / — | Redis **state**: sổ node chat sống (`chatim:chat-nodes`, như websocket). Mỗi lệnh đi node kế tiếp theo vòng, bỏ qua node có kết nối đang hỏng; không chọn theo slot, không retry của mình. Khác Redis chia sẻ `GW_SHARED_REDIS_*` (bản sao thu hồi của identity). Không đọc được sổ trong 10s lúc khởi động → thoát lỗi. Compose dùng secret `redis_password` |
 | `GW_JWT_KEYS_FILE`, `GW_JWT_ISSUER`, `GW_JWT_AUDIENCE` | — (bắt buộc) | Như websocket: JWKS công khai đọc một lần lúc khởi động (đổi khoá = khởi động lại); compose dùng cùng secret `ws_jwks` và `chatim-dev` / `chatim-websocket` |

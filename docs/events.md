@@ -1,6 +1,6 @@
 # chatim — Danh mục event
 
-> Cập nhật: 2026-11-02 (§8 feed danh bạ của `identity`, tên cũ `iam`; M6 phần 3a, PA). Trạng thái: Mention App đã merge `main` (PR #16), D162–D176 ([tóm tắt](plans/2026-10-17-mention-app-summary.md)); websocket M4 phần 2 (nhận và đẩy event, gói `WsPublish`) xây trên `feat/m4`, D189–D195 ([tóm tắt](plans/2026-10-21-m4-2-nhan-va-day-event-summary.md)); M4 phần 3 (`read_positions` thay `read_updated`), D196–D197 ([tóm tắt](plans/2026-10-22-m4-3-da-doc-va-da-xem-summary.md)); M4 phần 4 (đang gõ và online, tín hiệu riêng của websocket, §7), D199–D201 ([tóm tắt](plans/2026-10-24-m4-4-typing-va-online-summary.md)).
+> Cập nhật: 2026-11-07 (`Message.attachments` trong event tin, M7 P2, §5; §8 feed danh bạ của `identity`, tên cũ `iam`, M6 phần 3a, PA). Trạng thái: Mention App đã merge `main` (PR #16), D162–D176 ([tóm tắt](plans/2026-10-17-mention-app-summary.md)); websocket M4 phần 2 (nhận và đẩy event, gói `WsPublish`) xây trên `feat/m4`, D189–D195 ([tóm tắt](plans/2026-10-21-m4-2-nhan-va-day-event-summary.md)); M4 phần 3 (`read_positions` thay `read_updated`), D196–D197 ([tóm tắt](plans/2026-10-22-m4-3-da-doc-va-da-xem-summary.md)); M4 phần 4 (đang gõ và online, tín hiệu riêng của websocket, §7), D199–D201 ([tóm tắt](plans/2026-10-24-m4-4-typing-va-online-summary.md)).
 >
 > Tài liệu liên quan:
 > - Nguồn sự thật cơ chế: [thiết kế](architecture.md) §8.1 (hợp đồng consumer) và [Module 10](features/10-feature-data-reconciliation-and-repair.md) (cờ `_state`, sweeper, projection).
@@ -134,6 +134,7 @@ Chỉ gửi khi event mới hơn 5 phút (`MENTION_NOTIFY_MAX_AGE`, D169), và k
   - không bao giờ "bỏ nếu seq ≤ seq cuối".
 - Chỉ trạng thái cuối của doc tập hợp hoặc bộ đếm được bảo đảm; event trung gian có thể mất.
 - Thông báo: bỏ trùng theo `Notification.id`; với cùng tin, thông báo hoặc lệnh gỡ có `message_ver` lớn hơn thắng. Mention App xử lý song song (queue group), nên `m0`, `r1`, `m2` có thể tới theo thứ tự bất kỳ.
+- `msg_created`, `msg_edited`, `msg_deleted` mang `Message` đầy đủ nên có `Message.attachments` (đính kèm: khoá, tên, loại, cỡ, `dim`, `dur`, `hash`; không có URL, máy xin URL qua `MediaService.GetAttachmentURLs`, [module 12](features/12-feature-media.md)). Sửa tin không đổi đính kèm; `msg_deleted` có `attachments` rỗng. Không có event hay subject riêng cho file; consumer hiện có (projection, Mention App) bỏ qua field này.
 - Mỗi đích trong tin có `at` (giờ đích xuất hiện, `MentionTarget.at`, `Message.mention_all_at`) và `msg_edited`/`msg_deleted` mang `previous_mentions`; người nhận không cần đọc lại lịch sử để biết đích nào mới thêm hay bị bỏ (D173).
 - App mới chỉ đăng ký đúng subject mình cần. Luật này ghi rõ ở đây vì `msg_created` có mention nằm ở loại data `mention`: ai lọc đúng `evt.*.message.*.msg_created` sẽ bỏ sót tin có mention.
 

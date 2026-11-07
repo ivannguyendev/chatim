@@ -208,7 +208,7 @@ sequenceDiagram
 
 Để tối ưu hoá đọc ghi theo trình tự thời gian, collection `messages` được cấu hình dạng **Clustered Index**:
 
-Tên field trong `messages` là tên ngắn (ngoại lệ duy nhất của luật tên tiếng Anh đầy đủ); room, thread và seq chỉ nằm trong `_id`:
+Tên field cũ trong `messages` là mã 1–2 ký tự (ngoại lệ duy nhất của luật tên tiếng Anh đầy đủ); field mới dùng tên ngắn đọc được như `files` (owner 2026-11-07, [architecture §5.1](../architecture.md)); room, thread và seq chỉ nằm trong `_id`:
 
 ```javascript
 {
@@ -220,6 +220,9 @@ Tên field trong `messages` là tên ngắn (ngoại lệ duy nhất của luậ
   "c": "client-uuid-generated-123",     // cid (Client Message ID chống trùng)
   "ts": ISODate("2026-10-10T10:05:00.123Z"), // thời điểm gửi
   "m": BinData(0, "..."),               // meta ≤ 8KB (chỉ khi có)
+  "files": [ { "key": "acme/an/20261107/0cq5tnm8k0a1b2c3d4e5f6g7h8", "name": "hoa-don.pdf",
+               "mime": "application/pdf", "size": 183204, "dim": [1920, 1080], "dur": 95400,
+               "hash": "sha256:9f86d081..." } ], // đính kèm ≤ 10 (chỉ khi có; dim/dur/hash chỉ khi có), module 12
   "nu": true,                           // skip_unread (chỉ khi true)
   "v": 2,                               // version nội dung (chỉ sau khi sửa/xoá)
   "d": true,                            // đã xoá cho mọi người (chỉ khi true)

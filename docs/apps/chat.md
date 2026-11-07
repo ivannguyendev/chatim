@@ -70,24 +70,26 @@ Toàn bộ đọc qua `apps/chat/internal/config`; thiếu thì dùng giá trị
 
 ### Media (module `modules/media`)
 
-Media lỗi (config sai, thiếu bucket, sai key, S3 sập) không bao giờ làm chat dừng: module chỉ thành chưa sẵn sàng, `GetClientConfig` trả `media.enabled = false`, 4 lệnh upload trả `UNAVAILABLE`, `chatim_media_ready` = 0. Chỉ lỗi parse (giá trị không phải số, thời lượng sai) chặn boot như mọi biến khác. Code không tạo bucket, luật lifecycle hay CORS: dev chạy `make media-buckets`, production do hạ tầng tạo sẵn.
+Media lỗi (config sai, thiếu bucket, sai key, S3 sập) không bao giờ làm chat dừng: module chỉ thành chưa sẵn sàng, `GetClientConfig` trả `media.enabled = false`, mọi lệnh `MediaService` (4 lệnh upload, `GetAttachmentURLs`, `ListUploads`) trả `UNAVAILABLE`, `chatim_media_ready` = 0. Chỉ lỗi parse (giá trị không phải số, thời lượng sai) chặn boot như mọi biến khác. Code không tạo bucket, luật lifecycle hay CORS: dev chạy `make media-buckets`, production do hạ tầng tạo sẵn.
 
 | Biến | Mặc định | Ghi chú |
 |---|---|---|
 | `MEDIA_ENABLED` | `true` | `false`: `MediaService` vẫn đăng ký nhưng mọi lệnh trả `FAILED_PRECONDITION` |
 | `MEDIA_S3_ENDPOINT`, `MEDIA_S3_PUBLIC_ENDPOINT` | (rỗng) | Endpoint chat gọi S3; endpoint ghi vào URL ký mà máy dùng (chữ ký gồm host, sai thì mọi URL hỏng) |
 | `MEDIA_S3_REGION` | (rỗng, bắt buộc) | Đặt sẵn để ký URL không phải hỏi vùng |
-| `MEDIA_S3_ACCESS_KEY`, `MEDIA_S3_SECRET_KEY[_FILE]` | (rỗng) | Key chỉ cần quyền trên 2 bucket (tạo/đóng/huỷ multipart, head, delete); secret không vào log |
+| `MEDIA_S3_ACCESS_KEY`, `MEDIA_S3_SECRET_KEY[_FILE]` | (rỗng) | Key chỉ cần quyền trên 2 bucket (tạo/đóng/huỷ multipart, head, delete, đọc object: URL tải ký bằng key này); secret không vào log |
 | `MEDIA_S3_BUCKET_PROCESSING`, `MEDIA_S3_BUCKET_COMPLETED` | (rỗng) | Phải khác nhau; `processing` có luật huỷ multipart dở 1 ngày và xoá object 30 ngày, CORS cho PUT và đọc header `ETag` |
 | `MEDIA_MAX_FILE_BYTES` | `4294967296` | ≤ `MEDIA_MAX_PARTS` × `MEDIA_MAX_PART_BYTES` |
 | `MEDIA_MIN_PART_BYTES`, `MEDIA_MAX_PART_BYTES`, `MEDIA_MAX_PARTS` | `16777216` / `134217728` / `2000` | Phần ≥ 5 MiB (S3), tối thiểu ≤ tối đa, ≤ 10.000 phần |
 | `MEDIA_MAX_PARALLEL_UPLOADS` | `4` | Số URL mỗi lần cấp và số luồng máy chạy (qua `GetClientConfig`) |
-| `MEDIA_PART_URL_TTL` | `15m` | Hạn URL ký từng phần |
+| `MEDIA_PART_URL_TTL` | `15m` | Hạn URL ký từng phần; `1s`..`168h` (khoảng S3 nhận cho URL ký) |
 | `MEDIA_READY_CHECK_INTERVAL` | `30s` | Chu kỳ `HeadBucket` hai bucket để biết media sẵn sàng |
-| `MEDIA_DOWNLOAD_URL_TTL` | `1h` | Hạn URL tải (`GetAttachmentURLs`) |
-| `MEDIA_PROCESSING_RETENTION` | `720h` | Phải bằng luật xoá object của bucket `processing` (30 ngày) |
+| `MEDIA_DOWNLOAD_URL_TTL` | `1h` | Hạn URL tải và URL thumb (`GetAttachmentURLs`, `ListUploads`, trả trong `expires_at`); `1s`..`168h` |
+| `MEDIA_PROCESSING_RETENTION` | `720h` | Phải bằng luật xoá object của bucket `processing` (30 ngày, tính từ lúc tạo object); `ListUploads` gắn `expired` cho file có `created_at` + giá trị này đã qua |
 | `MEDIA_THUMBNAILS` | `false` | `true` khi hạ tầng có Lambda sinh thumb: ảnh/video có `thumbnail_url`; tắt thì rỗng (qua `GetClientConfig`) |
 | `MEDIA_THUMBNAIL_SUFFIX` | `.thumb` | Hậu tố khoá thumb (`{key}{hậu tố}`), bắt đầu bằng `.`, 2..32 ký tự `a-z0-9.`; phải bằng hậu tố Lambda ghi |
+
+Giá trị đúng định dạng nhưng sai luật (TTL ngoài `1s`..`168h`, hậu tố sai) chỉ làm media chưa sẵn sàng. Gallery (`ListUploads`) cần index `{tenant_id, user_id, state, _id: -1}` của `media_uploads`: chat chỉ tự build trên collection rỗng, nên DB đã có dữ liệu `media_uploads` từ trước phải chạy `docker exec chatim-chat-1 /app indexes -apply` một lần ([`/app indexes`](#app-indexes-d191)); tới lúc đó `ListUploads` trả `INTERNAL` (hint tới index chưa có), các lệnh media khác vẫn chạy. Hợp đồng Lambda sinh thumb cho hạ tầng: [module 12 §7](../features/12-feature-media.md#7-thumb-và-hợp-đồng-lambda-cho-hạ-tầng).
 
 `CHAT_GOGC` (mặc định 100) chỉ compose đọc lúc `make app-up` và đưa vào `GOGC` của chat, dùng khi đo; không có trong `.env.example`.
 
