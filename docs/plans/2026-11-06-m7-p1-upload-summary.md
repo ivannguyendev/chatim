@@ -13,7 +13,7 @@
 | `ChatService.GetClientConfig`: API config chung cho máy | Có | chat (`apps/chat/internal/app` dựng, chỉ `app` đọc config) |
 | Gateway: chuyển `MediaService`, giới hạn `GetPartURLs` 3 tầng, đọc IP máy | Có | `pkg/chatrpc`, `apps/gateway` |
 | Tạo bucket, luật lifecycle, CORS ở production | Không | hạ tầng (tạo sẵn trước khi bật media) |
-| Field `attachments` trong tin, URL tải, ép tải xuống | Không | P2 |
+| Field `attachments` trong tin, URL tải | Không | P2 |
 | Chuyển `processing` → `completed`, sổ tin dùng file, đánh dấu file mất tham chiếu | Không | P3 |
 | Quét mã độc, xử lý ảnh/video, CDN, quota tenant | Không | sau go-live |
 | Byte file đi qua server | Không bao giờ | máy ↔ S3 trực tiếp |

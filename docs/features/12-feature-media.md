@@ -81,18 +81,13 @@ Trong doc `messages`, đính kèm nằm ở field `files: [{key, name, mime, siz
 3. Response: `messages: [{room_id, thread, seq, files: [{key, url, thumbnail_url}]}]`, `expires_at`. Tin không đọc được, không còn hoặc không có file thì im lặng không có trong kết quả (không lộ tin tồn tại). Khoá tin trùng chỉ tính một lần.
 4. Máy cache URL tới `expires_at` (`MEDIA_DOWNLOAD_URL_TTL`, mặc định 1 giờ), hết hạn thì gọi lại.
 
-Cách trình duyệt nhận file do server ép trong URL ký (`response-content-type`, `response-content-disposition`):
-
-| `mime` của đính kèm | Trả về |
-|---|---|
-| `image/png`, `image/jpeg`, `image/gif`, `image/webp`, `video/mp4` | Đúng loại đó, `inline` (hiện ngay trong app) |
-| Mọi loại khác, kể cả `image/svg+xml`, `text/html` | `application/octet-stream`, `attachment; filename="<tên ASCII>"; filename*=UTF-8''<tên mã hoá RFC 5987>` (luôn tải xuống, không chạy script trên domain bucket) |
+URL tải là URL GET ký thường, không kèm tham số đổi header trả về: S3 trả file với đúng `Content-Type` máy khai lúc upload. Server không quyết mở hay tải; app/web tự quyết theo `mime` và `name` của đính kèm (vd. ảnh hiện trong khung chat, PDF có nút tải). Máy muốn lưu file với tên gốc thì tự đặt tên từ `name` khi lưu.
 
 `thumbnail_url`:
 
 - Chỉ có khi `media.thumbnails = true` **và** `mime` là `image/*` hoặc `video/*`; còn lại rỗng. Không bao giờ thay bằng URL file gốc.
 - Ký từ khoá `{key}{MEDIA_THUMBNAIL_SUFFIX}` mà không hỏi S3 object có chưa: Lambda chưa xong hoặc không sinh được thì URL trả **404**; máy hiện ảnh gốc hoặc biểu tượng và hỏi lại sau.
-- URL thumb chỉ ép `inline`, không ép loại: loại do Lambda đặt.
+- URL thumb cũng là URL ký thường; S3 trả loại Lambda đặt, máy mở thẳng URL đó làm ảnh.
 
 ## 6. Gallery "file tôi đã upload" (`MediaService.ListUploads`)
 
@@ -123,6 +118,8 @@ App chỉ upload file gốc. Thumb do AWS Lambda của hạ tầng sinh ở prod
 | Hậu tố | Phải bằng đúng `MEDIA_THUMBNAIL_SUFFIX` của chat (bắt đầu bằng `.`, 2..32 ký tự `a-z0-9.`) |
 | Vòng đời | Thumb nằm cùng bucket nên luật lifecycle của `processing` (xoá sau 30 ngày) áp cho cả thumb. Luật xoá phải tính từ lúc **tạo object** (S3 lifecycle `Expiration` theo ngày tính từ lúc tạo; với multipart là lúc mở phiên), cùng mốc với nhãn `expired` (§6) và bằng `MEDIA_PROCESSING_RETENTION` |
 
+**Domain phục vụ file (bắt buộc với hạ tầng).** File của người dùng được trả với đúng `Content-Type` máy khai lúc upload; server không đổi header trả về. Vì vậy domain của bucket hoặc CDN phục vụ file (`MEDIA_S3_PUBLIC_ENDPOINT`) phải **tách hẳn** khỏi domain của app: không phải subdomain của app, không cùng site (khác domain đăng ký). Nhờ vậy một file HTML hay SVG độc mà ai đó upload, khi mở ra, chỉ chạy trên domain của kho, không đọc được cookie hay gọi API của app. Ví dụ: app ở `chat.acme.com`; endpoint mặc định của AWS S3 (`*.s3.amazonaws.com`) đạt yêu cầu; CDN riêng phải dùng domain đăng ký khác như `acme-files.net`, không được dùng `files.acme.com`.
+
 ## 8. Lỗi
 
 | Mã | Khi nào |
@@ -152,7 +149,7 @@ App chỉ upload file gốc. Thumb do AWS Lambda của hạ tầng sinh ở prod
 - Tin bị xoá hoặc ẩn sau khi đã cấp URL: URL đã cấp vẫn dùng được tới hết hạn; lần hỏi sau không còn URL.
 - Mọi file còn ở `processing` tới khi có P3: file của tin quá 30 ngày bị xoá, URL tải trả 404 ("file không còn").
 - Chỉ đính được file upload trong 24 giờ; file cũ hơn trong gallery vẫn tải được nhưng muốn gửi lại thì forward tin cũ hoặc upload lại.
-- `name`, `mime`, `size`, `dim`, `dur`, `hash` là lời máy khai, chỉ để hiển thị và để máy nhận tự kiểm; loại khai sai không chạy được script nhờ ép `attachment`. Tin không có `hash` thì máy nhận không kiểm được file.
+- `name`, `mime`, `size`, `dim`, `dur`, `hash` là lời máy khai, chỉ để hiển thị và để máy nhận tự kiểm; S3 trả file với đúng loại máy khai, nên domain phục vụ file phải tách khỏi domain của app (§7). Tin không có `hash` thì máy nhận không kiểm được file.
 - URL thumb có thể 404 (Lambda chưa xong, file không sinh được thumb); dev không có thumb.
 - Gallery xếp theo lúc mở upload: file mở trước nhưng xong sau khi con trỏ trang đã đi qua sẽ không hiện ở các trang sau (tải lại từ đầu thì thấy). Lọc `kinds` chạy sau index, nên người có nhiều file loại khác thì một trang quét nhiều doc hơn số trả về (chỉ trong file của chính người đó).
 - `ReplyPreview` của tin trả lời một tin chỉ có ảnh có text rỗng; máy tự hiện "📷 Ảnh" khi cần.

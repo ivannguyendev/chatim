@@ -1,6 +1,6 @@
 # M7 phase P2: đính kèm trong tin và URL tải — tóm tắt
 
-> Ngày: 2026-11-07 · Nhánh `feat/m7` · Trạng thái: **đã xây, `dev-done` 2026-11-07** (`6dc5274` → `8bb99e9`; quyết định D266–D270) · Dựa trên: D207 (field đính kèm trong chat, URL GET cấp sau khi chat kiểm quyền), A6 (≤ 10 tham chiếu), D262–D265; owner 2026-11-06: forward ảnh là forward cả ảnh, tin forward vẫn xem được khi tin gốc bị xoá, ép tải xuống loại không phải ảnh/mp4
+> Ngày: 2026-11-07 · Nhánh `feat/m7` · Trạng thái: **đã xây, `dev-done` 2026-11-07** (`6dc5274` → `8bb99e9`, URL tải thường `9de8f9c`; quyết định D266–D270) · Dựa trên: D207 (field đính kèm trong chat, URL GET cấp sau khi chat kiểm quyền), A6 (≤ 10 tham chiếu), D262–D265; owner 2026-11-06: forward ảnh là forward cả ảnh, tin forward vẫn xem được khi tin gốc bị xoá; owner 2026-11-08: URL tải thường, app/web quyết mở hay tải
 > **Các phase của M7:** (P1) upload nhiều phần ✅ · (P2) đính kèm trong tin, URL tải, gallery ✅ · (P3) chuyển và dọn file
 
 ## Scope và ranh giới
@@ -15,7 +15,7 @@
 | Xoá cho mọi người bỏ đính kèm; ẩn/clear che đính kèm **và `meta`** (sửa lỗi có sẵn) | Có | chat (view) |
 | Preview danh sách hội thoại biết tin có đính kèm loại gì | Có | chat (`LastPreview`) |
 | Cổng đọc in-process "đính kèm của các tin người này được đọc" | Có | chat cài, module media gọi |
-| `MediaService.GetAttachmentURLs`: ký URL tải, ép tải xuống loại nguy hiểm | Có | module media |
+| `MediaService.GetAttachmentURLs`: ký URL tải thường (app/web quyết mở hay tải) | Có | module media |
 | Event `msg_created`/`msg_edited`/`msg_deleted` mang đính kèm | Có (tự đi theo `Message`) | chat |
 | Sửa tin để thêm/bỏ file | Không | không làm (D263 giữ đính kèm bất biến) |
 | Chuyển file (và thumb của nó) sang `completed`, sổ tham chiếu, `retired_at` | Không | P3 |
@@ -39,7 +39,7 @@
 |---|---|
 | Đính kèm | Tham chiếu tới một object trong kho: khoá, tên, loại, cỡ, kích thước (ảnh, video), thời lượng (video), hash. Không chứa byte file |
 | Thumb | Ảnh nhỏ do Lambda của hạ tầng sinh từ file gốc (ảnh, video) theo luật của server, khoá luôn là `{khoá file}{hậu tố}` (mặc định `.thumb`, vd. `acme/an/20261107/0f9a….thumb`); app không upload thumb; DB không lưu gì cho thumb (owner 2026-11-07) |
-| URL tải | URL GET ký sẵn, hạn ngắn, ép kiểu và cách hiển thị trả về |
+| URL tải | URL GET ký sẵn, hạn ngắn, không đổi header trả về: S3 trả file với loại lưu lúc upload |
 
 ## 2. Bức tranh chung
 
@@ -146,8 +146,8 @@ flowchart TB
 
 - Máy không bao giờ gửi khoá object; chỉ gửi khoá tin. Tin không được đọc thì im lặng không có trong kết quả (không lộ tin tồn tại).
 - Một lần gọi cho cả màn hình (≤ 100 tin, `maxPage` của chat); máy cache URL tới `expires_at`.
-- Ép cách hiển thị bằng tham số ký `response-content-type` / `response-content-disposition`: `image/png`, `image/jpeg`, `image/gif`, `image/webp`, `video/mp4` → trả đúng loại, `inline`; mọi loại khác (cả SVG, HTML) → `application/octet-stream`, `attachment; filename*=UTF-8''<tên>`.
-- `thumbnail_url` chỉ có khi `MEDIA_THUMBNAILS` bật **và** loại là `image/*` hoặc `video/*`; còn lại `thumbnail_url` rỗng (owner 2026-11-07), không bao giờ trả lại URL file gốc thay cho thumb; ký không kiểm object tồn tại (không gọi S3): Lambda chưa xong hoặc không sinh được thì URL trả 404, app hiện ảnh gốc hoặc biểu tượng và hỏi lại sau. URL thumb mở trực tiếp, không ép loại: loại do Lambda (hạ tầng tin cậy) đặt.
+- URL ký thường, không kèm tham số đổi header trả về: S3 trả file với đúng `Content-Type` máy khai lúc upload. Server không quyết mở hay tải; app/web tự quyết theo `mime` và `name` (owner 2026-11-08). Vì loại do máy khai, hạ tầng phải phục vụ file từ domain tách khỏi domain app ([media §7](../features/12-feature-media.md#7-thumb-và-hợp-đồng-lambda-cho-hạ-tầng)).
+- `thumbnail_url` chỉ có khi `MEDIA_THUMBNAILS` bật **và** loại là `image/*` hoặc `video/*`; còn lại `thumbnail_url` rỗng (owner 2026-11-07), không bao giờ trả lại URL file gốc thay cho thumb; ký không kiểm object tồn tại (không gọi S3): Lambda chưa xong hoặc không sinh được thì URL trả 404, app hiện ảnh gốc hoặc biểu tượng và hỏi lại sau. URL thumb cũng là URL ký thường, máy mở trực tiếp; loại do Lambda (hạ tầng tin cậy) đặt.
 - P2 ký từ bucket `processing` (file chưa được chuyển); P3 thêm vị trí bucket.
 
 | Lỗi | Khi nào |
@@ -206,7 +206,7 @@ Không có event hay subject mới. `msg_created`, `msg_edited`, `msg_deleted` m
 | Chat chỉ kiểm dạng khoá, không gọi S3 lúc gửi | Kiểm object tồn tại lúc gửi: thêm lệnh mạng vào đường ack 30 ms |
 | URL tải ký trong module media, hỏi quyền qua cổng in-process | Chat ký URL trong `GetHistory`: chat cầm khoá S3, URL hết hạn trong cache, event không mang được |
 | Máy hỏi URL theo khoá tin | Máy gửi khoá object: phải kiểm khoá thuộc tin nào, dễ thành ký URL cho file không được xem |
-| Ép `attachment` cho mọi loại ngoài danh sách ảnh/mp4 | Tin loại do máy khai: HTML/SVG chạy script trên domain bucket |
+| URL tải và URL thumb là URL ký thường, app/web quyết mở hay tải (owner 2026-11-08); file phục vụ từ domain tách khỏi domain app | Server ép `application/octet-stream` + `attachment` cho loại ngoài ảnh/mp4: server quyết thay app/web việc mở hay tải |
 | Text được rỗng khi có đính kèm | Bắt máy gửi text giả cho tin chỉ có ảnh |
 | Hash SHA-256 của cả file do máy gửi tính, máy nhận so (owner 2026-11-07) | S3 kiểm hash từng phần: đổi hợp đồng P1, hash S3 trả là hash của các hash phần, không phải SHA-256 của file. Server tự tính: phải đọc lại vài GB mỗi file |
 | Gallery của tôi đọc `media_uploads` bằng phép bằng `tenant_id` + `user_id` qua index mới (owner 2026-11-07), trả mọi file đã xong, gắn nhãn `expired` theo luật 30 ngày (owner 2026-11-07) | Ẩn file hết hạn: người dùng không biết file đã mất. `HeadObject` từng file: thêm một lệnh S3 mỗi mục. Đọc từ `messages`: không có index theo người gửi (D148) và không thấy file chưa gửi. Đọc theo khoảng `_id` (tiền tố `tenant/user/`) không cần index: lọc quyền bằng so sánh chuỗi dễ thành IDOR khi code bị sửa sau này, chỉ hợp cho công cụ admin |
@@ -222,7 +222,8 @@ Không có event hay subject mới. `msg_created`, `msg_edited`, `msg_deleted` m
 ## 10. Rủi ro thật
 
 - Khoá trỏ tới file chưa upload xong hoặc đã bị luật 30 ngày xoá (chưa có P3) → URL tải trả 404 từ S3; máy hiện "file không còn".
-- Rộng, cao, thời lượng, cỡ, loại là lời máy khai; chỉ để hiển thị. Loại khai sai không chạy được script nhờ ép `attachment`.
+- Rộng, cao, thời lượng, cỡ, loại là lời máy khai; chỉ để hiển thị.
+- S3 trả file với loại máy khai: file HTML/SVG độc mở ra chạy script trên domain phục vụ file. Hạ tầng đặt domain đó sai (subdomain hay cùng site với app) thì script đó chạm được cookie và API của app.
 - Gallery lọc loại sau khi đọc index (loại không nằm trong index): người upload nhiều file loại khác thì một trang quét nhiều doc hơn số trả về (chỉ trong file của chính người đó).
 - Hash là lời máy gửi: máy gửi khai sai thì chỉ tin của chính nó bị báo "đã thay đổi". Hash là tuỳ chọn để máy cũ và tin hệ thống vẫn gửi được; tin không có hash thì máy nhận không kiểm được.
 - URL thumb có thể 404 (Lambda chưa xong, file không sinh được thumb, dev không có Lambda); app phải hiện biểu tượng và hỏi lại.
@@ -231,7 +232,7 @@ Không có event hay subject mới. `msg_created`, `msg_edited`, `msg_deleted` m
 
 ## 11. Điểm đội tự chọn (owner phản biện)
 
-`MEDIA_DOWNLOAD_URL_TTL` 1h; ≤ 100 tin mỗi `GetAttachmentURLs`; danh sách hiển thị trực tiếp png/jpeg/gif/webp/mp4; tin hệ thống được kèm file; sửa tin không xoá hết chú thích; preview giữ loại file, không giữ khoá; tên `dim` (owner viết `dime`); hậu tố thumb mặc định `.thumb`; `thumbnail_url` chỉ cấp cho `image/*`, `video/*`; `GetClientConfig` báo `media.thumbnails`; gallery vẫn hiện file của tin đã xoá (file của mình, object chưa bị xoá), `page_size` ≤ 100.
+`MEDIA_DOWNLOAD_URL_TTL` 1h; ≤ 100 tin mỗi `GetAttachmentURLs`; tin hệ thống được kèm file; sửa tin không xoá hết chú thích; preview giữ loại file, không giữ khoá; tên `dim` (owner viết `dime`); hậu tố thumb mặc định `.thumb`; `thumbnail_url` chỉ cấp cho `image/*`, `video/*`; `GetClientConfig` báo `media.thumbnails`; gallery vẫn hiện file của tin đã xoá (file của mình, object chưa bị xoá), `page_size` ≤ 100.
 
 ## 12. Kiểm thử
 
@@ -241,10 +242,10 @@ Không có event hay subject mới. `msg_created`, `msg_edited`, `msg_deleted` m
 | Unit codec + contract store | Round trip field `files`; tin không đính kèm không có `files`; xoá `$unset` `files`; sửa giữ `files` |
 | Unit view / pbconv / roomcache | Ẩn/clear che `attachments` và `meta`; xoá trả rỗng; `LastPreview.file_mimes` |
 | Unit forward | Chép đính kèm nguồn (cả hash), bỏ đính kèm máy gửi, khoá nguồn cũ vẫn được |
-| Unit module media | `StartUpload` lưu `dim`, `dur`; `CompleteUpload` lưu `hash` (kiểm dạng, gọi lại an toàn); `GetAttachmentURLs`: chỉ tin được đọc, ép loại và cách hiển thị, `thumbnail_url` chỉ khi bật thumb và loại ảnh/video, khoá thumb theo hậu tố config, giới hạn 100, chưa sẵn sàng |
+| Unit module media | `StartUpload` lưu `dim`, `dur`; `CompleteUpload` lưu `hash` (kiểm dạng, gọi lại an toàn); `GetAttachmentURLs`: chỉ tin được đọc, URL ký thường (không tham số `response-content-*`), `thumbnail_url` chỉ khi bật thumb và loại ảnh/video, khoá thumb theo hậu tố config, giới hạn 100, chưa sẵn sàng |
 | Unit module media gallery | `ListUploads`: chỉ file của caller (field `tenant_id`/`user_id`), bỏ chưa xong/huỷ, quá 30 ngày vẫn trả với `expired` và không URL, đúng mốc ngày 30, lọc `kinds`, mới nhất trước qua nhiều trang, `before` của người khác bị từ chối; khoá mới sắp đúng theo thời gian (cùng mili giây vẫn khác nhau) |
-| Itest | Cổng `VisibleAttachments` trên Mongo thật; `ListUploads` dùng index mới (explain không quét cả collection), user `an` không thấy `an2`; URL ký tải đúng byte với header `Content-Disposition` đúng trên Garage; thumb giả lập (test tự PUT `{key}.thumb` như Lambda) tải được qua `thumbnail_url` |
-| e2e phase 16 mở rộng | Upload ảnh, gửi tin có ảnh qua websocket, B nhận event có đính kèm, A thấy ảnh vừa upload đứng đầu `ListUploads`; dev tắt thumb nên không có `thumbnail_url`; B lấy URL qua gateway, tải ảnh, SHA-256 của file tải về khớp `hash`; file HTML tải về dạng `attachment`; tin bị ẩn/xoá không cấp URL; forward sang room khác vẫn tải được; preview có loại |
+| Itest | Cổng `VisibleAttachments` trên Mongo thật; `ListUploads` dùng index mới (explain không quét cả collection), user `an` không thấy `an2`; URL ký tải đúng byte và đúng loại lưu lúc upload trên Garage; thumb giả lập (test tự PUT `{key}.thumb` như Lambda) tải được qua `thumbnail_url` |
+| e2e phase 16 mở rộng | Upload ảnh, gửi tin có ảnh qua websocket, B nhận event có đính kèm, A thấy ảnh vừa upload đứng đầu `ListUploads`; dev tắt thumb nên không có `thumbnail_url`; B lấy URL qua gateway, tải ảnh, SHA-256 của file tải về khớp `hash`; file HTML tải về đúng byte và hash; tin bị ẩn/xoá không cấp URL; forward sang room khác vẫn tải được; preview có loại |
 | chatbench 2K tin/s trước/sau | Đường gửi không chậm đi |
 
 ## 13. Bảng phủ
@@ -257,12 +258,12 @@ Không có event hay subject mới. `msg_created`, `msg_edited`, `msg_deleted` m
 | Forward chép đính kèm (owner 2026-11-06) | forward | forward | unit, e2e | `49992d2` (`TestForwardCopiesSourceAttachmentsAndDropsTheRequestOnes`); e2e bước 19 |
 | Xoá bỏ đính kèm; ẩn/clear che đính kèm và `meta` | store, view | codec + store; view | unit, e2e | `fff627f`, `49992d2`, `d27a3ab`: mọi đường đọc (history, `GetMessages`, ghim, thread) không còn file; e2e bước 18–19 |
 | URL tải sau khi chat kiểm quyền (D207) | `GetAttachmentURLs` + cổng | cổng chat; module media URL tải | unit, itest, e2e | `b57d283`; itest node chat thật (ẩn, xoá, room riêng, tin không file vắng mặt); e2e bước 16, 18, 19 |
-| Ép tải xuống loại không phải ảnh/mp4 (owner 2026-11-06) | ký URL | module media URL tải | unit, itest, e2e | `b57d283`; itest Garage: png `image/png` inline, html `application/octet-stream` + `attachment` RFC 5987; e2e bước 16 |
+| URL tải thường, thumb mở trực tiếp; app/web quyết mở hay tải (owner 2026-11-08) | ký URL | module media URL tải | unit, itest, e2e | `9de8f9c`; unit query không có `response-content-type`/`response-content-disposition`; itest Garage: png, html trả đúng byte và loại lưu lúc upload, thumb `image/webp`; e2e bước 16 |
 | Preview biết tin có đính kèm | `LastPreview` | preview + cache đuôi | unit, e2e | `978431d`; e2e bước 15 (`file_mimes`) |
 | `media_uploads` lưu `dim`, `dur`, `hash` (owner 2026-11-07) | module media upload | module media upload | unit, itest | `a8bf32f`; itest đọc doc Mongo thô: field vắng khi không gửi |
 | Hash để biết file đúng hay đã bị đổi (owner 2026-11-07) | field `hash`, kiểm dạng | domain + kiểm; codec + store; forward | unit, e2e | `fff627f`, `a8bf32f`; e2e bước 16: SHA-256 file tải về khớp `hash` |
 | Gallery file tôi đã upload (owner 2026-11-07) | `ListUploads`, khoá sắp theo thời gian | module media gallery; khoá theo thời gian | unit, itest, e2e | `a8bf32f`, `b25f264`; itest `explain` IXSCAN index mới ở 5 kiểu lọc; `an` không thấy `an2`/`an-b`/tenant khác; e2e bước 17 |
-| Thumb do server sinh, URL suy từ khoá + config, DB không lưu (owner 2026-11-07) | config thumb, ký `thumbnail_url`, `GetClientConfig` | module media URL tải; config | unit, itest (thumb giả lập) | `b57d283`; itest thumb giả lập tải qua `thumbnail_url` (`image/webp` inline), chưa có thumb → 404; e2e bước 1, 16 (dev tắt → rỗng) |
+| Thumb do server sinh, URL suy từ khoá + config, DB không lưu (owner 2026-11-07) | config thumb, ký `thumbnail_url`, `GetClientConfig` | module media URL tải; config | unit, itest (thumb giả lập) | `b57d283`; itest thumb giả lập tải qua `thumbnail_url` (`image/webp`), chưa có thumb → 404; e2e bước 1, 16 (dev tắt → rỗng) |
 | Đường gửi không chậm đi (A1, D207) | — | đo cuối phase | chatbench | A/B cùng dữ liệu, load < 3: trước p50/p95/p99 19,2/75,1/445,9 ms, sau 18,1/104,0/340,6 ms, 120.000/120.000 ack, 0 lỗi; ngang nhau trong mức nhiễu (`bin/bench/m7p2-ab/`) |
 
 ## 14. Như đã xây
@@ -277,6 +278,7 @@ Không có event hay subject mới. `msg_created`, `msg_edited`, `msg_deleted` m
 - Tên file có ký tự đảo chiều chữ (U+202E…) bị từ chối ở chat và module media, để `invoice‮fdp.exe` không giả được đuôi `.pdf`.
 - `MEDIA_PART_URL_TTL`, `MEDIA_DOWNLOAD_URL_TTL` phải trong 1 giây..7 ngày (khoảng S3 nhận); sai thì config báo lỗi lúc khởi động thay vì mọi lệnh ký trả `UNAVAILABLE`.
 - Module media đóng kết nối HTTP nhàn rỗi tới S3 khi node dừng.
+- URL tải và URL thumb không đổi header trả về (owner 2026-11-08, `9de8f9c`): S3 trả loại lưu lúc upload, app/web quyết mở hay tải; hạ tầng phải phục vụ file từ domain tách khỏi domain app.
 - Lần đo chatbench đầu sau P2 (máy còn tải sau e2e, pacer lag p99 1,05 s) bị bỏ; đo A/B lại cùng điều kiện, ngang nhau.
 
 **Mang sang P3 hoặc sau:**
@@ -284,6 +286,6 @@ Không có event hay subject mới. `msg_created`, `msg_edited`, `msg_deleted` m
 - Hợp đồng Lambda: thumb luôn một loại ảnh cố định (vd. `image/webp`); `thumbnail_url` vẫn cấp cho SVG mà Lambda có thể bỏ qua (404). Luật lifecycle của `processing` phải tính từ lúc tạo object, cùng mốc với `expired`.
 - Gallery lọc loại sau khi đọc index: người có rất nhiều file khác loại thì một trang đọc nhiều doc hơn số trả về.
 - Con trỏ gallery theo thứ tự mở upload: file xong sau khi con trỏ đã qua không hiện ở trang sau.
-- `mime` nhận cả tham số (`; charset=…`); chỉ loại khớp đúng danh sách mới mở trực tiếp nên vẫn an toàn.
+- `mime` nhận cả tham số (`; charset=…`); S3 trả nguyên chuỗi đó làm `Content-Type`.
 - Actor đọc giờ thẳng từ đồng hồ hệ thống khi kiểm tuổi khoá; lệch đồng hồ cho phép 5 phút chưa có trong spec trước đây, nay ghi ở `docs/features/12`.
 - `ReplyPreview` của tin chỉ có ảnh không có chữ; `HideForViewer` chưa xoá `MentionAllAt` (có từ trước).

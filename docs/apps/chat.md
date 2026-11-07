@@ -75,7 +75,7 @@ Media lỗi (config sai, thiếu bucket, sai key, S3 sập) không bao giờ là
 | Biến | Mặc định | Ghi chú |
 |---|---|---|
 | `MEDIA_ENABLED` | `true` | `false`: `MediaService` vẫn đăng ký nhưng mọi lệnh trả `FAILED_PRECONDITION` |
-| `MEDIA_S3_ENDPOINT`, `MEDIA_S3_PUBLIC_ENDPOINT` | (rỗng) | Endpoint chat gọi S3; endpoint ghi vào URL ký mà máy dùng (chữ ký gồm host, sai thì mọi URL hỏng) |
+| `MEDIA_S3_ENDPOINT`, `MEDIA_S3_PUBLIC_ENDPOINT` | (rỗng) | Endpoint chat gọi S3; endpoint ghi vào URL ký mà máy dùng (chữ ký gồm host, sai thì mọi URL hỏng). Endpoint public phải ở domain đăng ký khác domain của app (không subdomain, không cùng site) vì file trả với loại máy khai ([media §7](../features/12-feature-media.md#7-thumb-và-hợp-đồng-lambda-cho-hạ-tầng)) |
 | `MEDIA_S3_REGION` | (rỗng, bắt buộc) | Đặt sẵn để ký URL không phải hỏi vùng |
 | `MEDIA_S3_ACCESS_KEY`, `MEDIA_S3_SECRET_KEY[_FILE]` | (rỗng) | Key chỉ cần quyền trên 2 bucket (tạo/đóng/huỷ multipart, head, delete, đọc object: URL tải ký bằng key này); secret không vào log |
 | `MEDIA_S3_BUCKET_PROCESSING`, `MEDIA_S3_BUCKET_COMPLETED` | (rỗng) | Phải khác nhau; `processing` có luật huỷ multipart dở 1 ngày và xoá object 30 ngày, CORS cho PUT và đọc header `ETag` |
