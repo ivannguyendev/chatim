@@ -32,6 +32,7 @@ message LastPreview {
   google.protobuf.Timestamp created_at = 5;
   bool deleted = 6;
   bool edited = 7;
+  repeated string file_mimes = 8;
 }
 
 message Unread {

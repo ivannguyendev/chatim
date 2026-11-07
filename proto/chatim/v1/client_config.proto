@@ -17,6 +17,7 @@ message MediaFeature {
   bool enabled = 1;
   int64 max_file_bytes = 2;
   int64 max_parallel_uploads = 3;
+  bool thumbnails = 4;
 }
 
 message GetClientConfigRequest {}

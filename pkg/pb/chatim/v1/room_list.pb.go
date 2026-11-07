@@ -188,6 +188,7 @@ type LastPreview struct {
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	Deleted       bool                   `protobuf:"varint,6,opt,name=deleted,proto3" json:"deleted,omitempty"`
 	Edited        bool                   `protobuf:"varint,7,opt,name=edited,proto3" json:"edited,omitempty"`
+	FileMimes     []string               `protobuf:"bytes,8,rep,name=file_mimes,json=fileMimes,proto3" json:"file_mimes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -269,6 +270,13 @@ func (x *LastPreview) GetEdited() bool {
 		return x.Edited
 	}
 	return false
+}
+
+func (x *LastPreview) GetFileMimes() []string {
+	if x != nil {
+		return x.FileMimes
+	}
+	return nil
 }
 
 type Unread struct {
@@ -1048,7 +1056,7 @@ const file_chatim_v1_room_list_proto_rawDesc = "" +
 	"mutedUntil\x12;\n" +
 	"\varchived_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"archivedAt\x12%\n" +
-	"\x0epreference_ver\x18\t \x01(\x04R\rpreferenceVer\"\xe4\x01\n" +
+	"\x0epreference_ver\x18\t \x01(\x04R\rpreferenceVer\"\x83\x02\n" +
 	"\vLastPreview\x12\x10\n" +
 	"\x03seq\x18\x01 \x01(\x04R\x03seq\x12\x16\n" +
 	"\x06sender\x18\x02 \x01(\tR\x06sender\x12*\n" +
@@ -1057,7 +1065,9 @@ const file_chatim_v1_room_list_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x18\n" +
 	"\adeleted\x18\x06 \x01(\bR\adeleted\x12\x16\n" +
-	"\x06edited\x18\a \x01(\bR\x06edited\"6\n" +
+	"\x06edited\x18\a \x01(\bR\x06edited\x12\x1d\n" +
+	"\n" +
+	"file_mimes\x18\b \x03(\tR\tfileMimes\"6\n" +
 	"\x06Unread\x12\x14\n" +
 	"\x05count\x18\x01 \x01(\rR\x05count\x12\x16\n" +
 	"\x06approx\x18\x02 \x01(\bR\x06approx\"\xd8\x01\n" +

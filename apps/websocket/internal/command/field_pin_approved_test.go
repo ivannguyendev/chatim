@@ -4,6 +4,13 @@ const approvedClientFields = `
 chatim.v1.AddMembersRequest 1 room_id single string
 chatim.v1.AddMembersRequest 2 users repeated string
 chatim.v1.AddMembersRequest 3 request_id single string
+chatim.v1.Attachment 1 key single string
+chatim.v1.Attachment 2 name single string
+chatim.v1.Attachment 3 mime single string
+chatim.v1.Attachment 4 size single int64
+chatim.v1.Attachment 5 dim repeated int32
+chatim.v1.Attachment 6 dur single int64
+chatim.v1.Attachment 7 hash single string
 chatim.v1.ChangeMemberRoleRequest 1 room_id single string
 chatim.v1.ChangeMemberRoleRequest 2 user single string
 chatim.v1.ChangeMemberRoleRequest 3 role single enum chatim.v1.MemberRole
@@ -129,6 +136,7 @@ chatim.v1.SendMessageRequest 7 mentions single message chatim.v1.MentionSet
 chatim.v1.SendMessageRequest 8 kind single enum chatim.v1.MessageKind
 chatim.v1.SendMessageRequest 9 skip_unread single bool
 chatim.v1.SendMessageRequest 10 meta single bytes
+chatim.v1.SendMessageRequest 11 attachments repeated message chatim.v1.Attachment
 chatim.v1.SetBookmarkRequest 1 room_id single string
 chatim.v1.SetBookmarkRequest 2 thread_root single uint64
 chatim.v1.SetBookmarkRequest 3 seq single uint64

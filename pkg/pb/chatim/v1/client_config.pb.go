@@ -138,6 +138,7 @@ type MediaFeature struct {
 	Enabled            bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	MaxFileBytes       int64                  `protobuf:"varint,2,opt,name=max_file_bytes,json=maxFileBytes,proto3" json:"max_file_bytes,omitempty"`
 	MaxParallelUploads int64                  `protobuf:"varint,3,opt,name=max_parallel_uploads,json=maxParallelUploads,proto3" json:"max_parallel_uploads,omitempty"`
+	Thumbnails         bool                   `protobuf:"varint,4,opt,name=thumbnails,proto3" json:"thumbnails,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -191,6 +192,13 @@ func (x *MediaFeature) GetMaxParallelUploads() int64 {
 		return x.MaxParallelUploads
 	}
 	return 0
+}
+
+func (x *MediaFeature) GetThumbnails() bool {
+	if x != nil {
+		return x.Thumbnails
+	}
+	return false
 }
 
 type GetClientConfigRequest struct {
@@ -300,11 +308,14 @@ const file_chatim_v1_client_config_proto_rawDesc = "" +
 	"\fmax_mentions\x18\x03 \x01(\x03R\vmaxMentions\x12'\n" +
 	"\x0fmax_attachments\x18\x04 \x01(\x03R\x0emaxAttachments\"*\n" +
 	"\x0eMentionFeature\x12\x18\n" +
-	"\aenabled\x18\x01 \x01(\bR\aenabled\"\x80\x01\n" +
+	"\aenabled\x18\x01 \x01(\bR\aenabled\"\xa0\x01\n" +
 	"\fMediaFeature\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12$\n" +
 	"\x0emax_file_bytes\x18\x02 \x01(\x03R\fmaxFileBytes\x120\n" +
-	"\x14max_parallel_uploads\x18\x03 \x01(\x03R\x12maxParallelUploads\"\x18\n" +
+	"\x14max_parallel_uploads\x18\x03 \x01(\x03R\x12maxParallelUploads\x12\x1e\n" +
+	"\n" +
+	"thumbnails\x18\x04 \x01(\bR\n" +
+	"thumbnails\"\x18\n" +
 	"\x16GetClientConfigRequest\"\xb1\x01\n" +
 	"\x17GetClientConfigResponse\x122\n" +
 	"\amessage\x18\x01 \x01(\v2\x18.chatim.v1.MessageLimitsR\amessage\x123\n" +

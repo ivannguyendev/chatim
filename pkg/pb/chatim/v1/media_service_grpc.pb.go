@@ -19,10 +19,12 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	MediaService_StartUpload_FullMethodName    = "/chatim.v1.MediaService/StartUpload"
-	MediaService_GetPartURLs_FullMethodName    = "/chatim.v1.MediaService/GetPartURLs"
-	MediaService_CompleteUpload_FullMethodName = "/chatim.v1.MediaService/CompleteUpload"
-	MediaService_AbortUpload_FullMethodName    = "/chatim.v1.MediaService/AbortUpload"
+	MediaService_StartUpload_FullMethodName       = "/chatim.v1.MediaService/StartUpload"
+	MediaService_GetPartURLs_FullMethodName       = "/chatim.v1.MediaService/GetPartURLs"
+	MediaService_CompleteUpload_FullMethodName    = "/chatim.v1.MediaService/CompleteUpload"
+	MediaService_AbortUpload_FullMethodName       = "/chatim.v1.MediaService/AbortUpload"
+	MediaService_GetAttachmentURLs_FullMethodName = "/chatim.v1.MediaService/GetAttachmentURLs"
+	MediaService_ListUploads_FullMethodName       = "/chatim.v1.MediaService/ListUploads"
 )
 
 // MediaServiceClient is the client API for MediaService service.
@@ -33,6 +35,8 @@ type MediaServiceClient interface {
 	GetPartURLs(ctx context.Context, in *GetPartURLsRequest, opts ...grpc.CallOption) (*GetPartURLsResponse, error)
 	CompleteUpload(ctx context.Context, in *CompleteUploadRequest, opts ...grpc.CallOption) (*CompleteUploadResponse, error)
 	AbortUpload(ctx context.Context, in *AbortUploadRequest, opts ...grpc.CallOption) (*AbortUploadResponse, error)
+	GetAttachmentURLs(ctx context.Context, in *GetAttachmentURLsRequest, opts ...grpc.CallOption) (*GetAttachmentURLsResponse, error)
+	ListUploads(ctx context.Context, in *ListUploadsRequest, opts ...grpc.CallOption) (*ListUploadsResponse, error)
 }
 
 type mediaServiceClient struct {
@@ -83,6 +87,26 @@ func (c *mediaServiceClient) AbortUpload(ctx context.Context, in *AbortUploadReq
 	return out, nil
 }
 
+func (c *mediaServiceClient) GetAttachmentURLs(ctx context.Context, in *GetAttachmentURLsRequest, opts ...grpc.CallOption) (*GetAttachmentURLsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetAttachmentURLsResponse)
+	err := c.cc.Invoke(ctx, MediaService_GetAttachmentURLs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mediaServiceClient) ListUploads(ctx context.Context, in *ListUploadsRequest, opts ...grpc.CallOption) (*ListUploadsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListUploadsResponse)
+	err := c.cc.Invoke(ctx, MediaService_ListUploads_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MediaServiceServer is the server API for MediaService service.
 // All implementations must embed UnimplementedMediaServiceServer
 // for forward compatibility.
@@ -91,6 +115,8 @@ type MediaServiceServer interface {
 	GetPartURLs(context.Context, *GetPartURLsRequest) (*GetPartURLsResponse, error)
 	CompleteUpload(context.Context, *CompleteUploadRequest) (*CompleteUploadResponse, error)
 	AbortUpload(context.Context, *AbortUploadRequest) (*AbortUploadResponse, error)
+	GetAttachmentURLs(context.Context, *GetAttachmentURLsRequest) (*GetAttachmentURLsResponse, error)
+	ListUploads(context.Context, *ListUploadsRequest) (*ListUploadsResponse, error)
 	mustEmbedUnimplementedMediaServiceServer()
 }
 
@@ -112,6 +138,12 @@ func (UnimplementedMediaServiceServer) CompleteUpload(context.Context, *Complete
 }
 func (UnimplementedMediaServiceServer) AbortUpload(context.Context, *AbortUploadRequest) (*AbortUploadResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AbortUpload not implemented")
+}
+func (UnimplementedMediaServiceServer) GetAttachmentURLs(context.Context, *GetAttachmentURLsRequest) (*GetAttachmentURLsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetAttachmentURLs not implemented")
+}
+func (UnimplementedMediaServiceServer) ListUploads(context.Context, *ListUploadsRequest) (*ListUploadsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListUploads not implemented")
 }
 func (UnimplementedMediaServiceServer) mustEmbedUnimplementedMediaServiceServer() {}
 func (UnimplementedMediaServiceServer) testEmbeddedByValue()                      {}
@@ -206,6 +238,42 @@ func _MediaService_AbortUpload_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MediaService_GetAttachmentURLs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetAttachmentURLsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MediaServiceServer).GetAttachmentURLs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MediaService_GetAttachmentURLs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MediaServiceServer).GetAttachmentURLs(ctx, req.(*GetAttachmentURLsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MediaService_ListUploads_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListUploadsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MediaServiceServer).ListUploads(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MediaService_ListUploads_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MediaServiceServer).ListUploads(ctx, req.(*ListUploadsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MediaService_ServiceDesc is the grpc.ServiceDesc for MediaService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -228,6 +296,14 @@ var MediaService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AbortUpload",
 			Handler:    _MediaService_AbortUpload_Handler,
+		},
+		{
+			MethodName: "GetAttachmentURLs",
+			Handler:    _MediaService_GetAttachmentURLs_Handler,
+		},
+		{
+			MethodName: "ListUploads",
+			Handler:    _MediaService_ListUploads_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

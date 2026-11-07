@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package chatim.v1;
+
+message Attachment {
+  string key = 1;
+  string name = 2;
+  string mime = 3;
+  int64 size = 4;
+  repeated int32 dim = 5;
+  int64 dur = 6;
+  string hash = 7;
+}

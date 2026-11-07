@@ -22,6 +22,58 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type FileKind int32
+
+const (
+	FileKind_FILE_KIND_UNSPECIFIED FileKind = 0
+	FileKind_FILE_KIND_IMAGE       FileKind = 1
+	FileKind_FILE_KIND_VIDEO       FileKind = 2
+	FileKind_FILE_KIND_OTHER       FileKind = 3
+)
+
+// Enum value maps for FileKind.
+var (
+	FileKind_name = map[int32]string{
+		0: "FILE_KIND_UNSPECIFIED",
+		1: "FILE_KIND_IMAGE",
+		2: "FILE_KIND_VIDEO",
+		3: "FILE_KIND_OTHER",
+	}
+	FileKind_value = map[string]int32{
+		"FILE_KIND_UNSPECIFIED": 0,
+		"FILE_KIND_IMAGE":       1,
+		"FILE_KIND_VIDEO":       2,
+		"FILE_KIND_OTHER":       3,
+	}
+)
+
+func (x FileKind) Enum() *FileKind {
+	p := new(FileKind)
+	*p = x
+	return p
+}
+
+func (x FileKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (FileKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_chatim_v1_media_service_proto_enumTypes[0].Descriptor()
+}
+
+func (FileKind) Type() protoreflect.EnumType {
+	return &file_chatim_v1_media_service_proto_enumTypes[0]
+}
+
+func (x FileKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use FileKind.Descriptor instead.
+func (FileKind) EnumDescriptor() ([]byte, []int) {
+	return file_chatim_v1_media_service_proto_rawDescGZIP(), []int{0}
+}
+
 type UploadPart struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	PartNumber    int32                  `protobuf:"varint,1,opt,name=part_number,json=partNumber,proto3" json:"part_number,omitempty"`
@@ -184,6 +236,8 @@ type StartUploadRequest struct {
 	ContentType          string                 `protobuf:"bytes,2,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
 	Size                 int64                  `protobuf:"varint,3,opt,name=size,proto3" json:"size,omitempty"`
 	UploadBytesPerSecond int64                  `protobuf:"varint,4,opt,name=upload_bytes_per_second,json=uploadBytesPerSecond,proto3" json:"upload_bytes_per_second,omitempty"`
+	Dim                  []int32                `protobuf:"varint,5,rep,packed,name=dim,proto3" json:"dim,omitempty"`
+	Dur                  int64                  `protobuf:"varint,6,opt,name=dur,proto3" json:"dur,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -242,6 +296,20 @@ func (x *StartUploadRequest) GetSize() int64 {
 func (x *StartUploadRequest) GetUploadBytesPerSecond() int64 {
 	if x != nil {
 		return x.UploadBytesPerSecond
+	}
+	return 0
+}
+
+func (x *StartUploadRequest) GetDim() []int32 {
+	if x != nil {
+		return x.Dim
+	}
+	return nil
+}
+
+func (x *StartUploadRequest) GetDur() int64 {
+	if x != nil {
+		return x.Dur
 	}
 	return 0
 }
@@ -430,6 +498,7 @@ type CompleteUploadRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	Parts         []*UploadedPart        `protobuf:"bytes,2,rep,name=parts,proto3" json:"parts,omitempty"`
+	Hash          string                 `protobuf:"bytes,3,opt,name=hash,proto3" json:"hash,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -476,6 +545,13 @@ func (x *CompleteUploadRequest) GetParts() []*UploadedPart {
 		return x.Parts
 	}
 	return nil
+}
+
+func (x *CompleteUploadRequest) GetHash() string {
+	if x != nil {
+		return x.Hash
+	}
+	return ""
 }
 
 type CompleteUploadResponse struct {
@@ -610,6 +686,534 @@ func (*AbortUploadResponse) Descriptor() ([]byte, []int) {
 	return file_chatim_v1_media_service_proto_rawDescGZIP(), []int{10}
 }
 
+type MessageRef struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RoomId        string                 `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
+	Thread        uint64                 `protobuf:"varint,2,opt,name=thread,proto3" json:"thread,omitempty"`
+	Seq           uint64                 `protobuf:"varint,3,opt,name=seq,proto3" json:"seq,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MessageRef) Reset() {
+	*x = MessageRef{}
+	mi := &file_chatim_v1_media_service_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MessageRef) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MessageRef) ProtoMessage() {}
+
+func (x *MessageRef) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_media_service_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MessageRef.ProtoReflect.Descriptor instead.
+func (*MessageRef) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_media_service_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *MessageRef) GetRoomId() string {
+	if x != nil {
+		return x.RoomId
+	}
+	return ""
+}
+
+func (x *MessageRef) GetThread() uint64 {
+	if x != nil {
+		return x.Thread
+	}
+	return 0
+}
+
+func (x *MessageRef) GetSeq() uint64 {
+	if x != nil {
+		return x.Seq
+	}
+	return 0
+}
+
+type FileURL struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Url           string                 `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
+	ThumbnailUrl  string                 `protobuf:"bytes,3,opt,name=thumbnail_url,json=thumbnailUrl,proto3" json:"thumbnail_url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FileURL) Reset() {
+	*x = FileURL{}
+	mi := &file_chatim_v1_media_service_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FileURL) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FileURL) ProtoMessage() {}
+
+func (x *FileURL) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_media_service_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FileURL.ProtoReflect.Descriptor instead.
+func (*FileURL) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_media_service_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *FileURL) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *FileURL) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *FileURL) GetThumbnailUrl() string {
+	if x != nil {
+		return x.ThumbnailUrl
+	}
+	return ""
+}
+
+type MessageFiles struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RoomId        string                 `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
+	Thread        uint64                 `protobuf:"varint,2,opt,name=thread,proto3" json:"thread,omitempty"`
+	Seq           uint64                 `protobuf:"varint,3,opt,name=seq,proto3" json:"seq,omitempty"`
+	Files         []*FileURL             `protobuf:"bytes,4,rep,name=files,proto3" json:"files,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MessageFiles) Reset() {
+	*x = MessageFiles{}
+	mi := &file_chatim_v1_media_service_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MessageFiles) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MessageFiles) ProtoMessage() {}
+
+func (x *MessageFiles) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_media_service_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MessageFiles.ProtoReflect.Descriptor instead.
+func (*MessageFiles) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_media_service_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *MessageFiles) GetRoomId() string {
+	if x != nil {
+		return x.RoomId
+	}
+	return ""
+}
+
+func (x *MessageFiles) GetThread() uint64 {
+	if x != nil {
+		return x.Thread
+	}
+	return 0
+}
+
+func (x *MessageFiles) GetSeq() uint64 {
+	if x != nil {
+		return x.Seq
+	}
+	return 0
+}
+
+func (x *MessageFiles) GetFiles() []*FileURL {
+	if x != nil {
+		return x.Files
+	}
+	return nil
+}
+
+type GetAttachmentURLsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Messages      []*MessageRef          `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetAttachmentURLsRequest) Reset() {
+	*x = GetAttachmentURLsRequest{}
+	mi := &file_chatim_v1_media_service_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAttachmentURLsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAttachmentURLsRequest) ProtoMessage() {}
+
+func (x *GetAttachmentURLsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_media_service_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAttachmentURLsRequest.ProtoReflect.Descriptor instead.
+func (*GetAttachmentURLsRequest) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_media_service_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *GetAttachmentURLsRequest) GetMessages() []*MessageRef {
+	if x != nil {
+		return x.Messages
+	}
+	return nil
+}
+
+type GetAttachmentURLsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Messages      []*MessageFiles        `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
+	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetAttachmentURLsResponse) Reset() {
+	*x = GetAttachmentURLsResponse{}
+	mi := &file_chatim_v1_media_service_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAttachmentURLsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAttachmentURLsResponse) ProtoMessage() {}
+
+func (x *GetAttachmentURLsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_media_service_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAttachmentURLsResponse.ProtoReflect.Descriptor instead.
+func (*GetAttachmentURLsResponse) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_media_service_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *GetAttachmentURLsResponse) GetMessages() []*MessageFiles {
+	if x != nil {
+		return x.Messages
+	}
+	return nil
+}
+
+func (x *GetAttachmentURLsResponse) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+type UploadedFile struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Mime          string                 `protobuf:"bytes,3,opt,name=mime,proto3" json:"mime,omitempty"`
+	Size          int64                  `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
+	Dim           []int32                `protobuf:"varint,5,rep,packed,name=dim,proto3" json:"dim,omitempty"`
+	Dur           int64                  `protobuf:"varint,6,opt,name=dur,proto3" json:"dur,omitempty"`
+	Hash          string                 `protobuf:"bytes,7,opt,name=hash,proto3" json:"hash,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	Expired       bool                   `protobuf:"varint,9,opt,name=expired,proto3" json:"expired,omitempty"`
+	Url           string                 `protobuf:"bytes,10,opt,name=url,proto3" json:"url,omitempty"`
+	ThumbnailUrl  string                 `protobuf:"bytes,11,opt,name=thumbnail_url,json=thumbnailUrl,proto3" json:"thumbnail_url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UploadedFile) Reset() {
+	*x = UploadedFile{}
+	mi := &file_chatim_v1_media_service_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UploadedFile) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UploadedFile) ProtoMessage() {}
+
+func (x *UploadedFile) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_media_service_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UploadedFile.ProtoReflect.Descriptor instead.
+func (*UploadedFile) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_media_service_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *UploadedFile) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *UploadedFile) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *UploadedFile) GetMime() string {
+	if x != nil {
+		return x.Mime
+	}
+	return ""
+}
+
+func (x *UploadedFile) GetSize() int64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+func (x *UploadedFile) GetDim() []int32 {
+	if x != nil {
+		return x.Dim
+	}
+	return nil
+}
+
+func (x *UploadedFile) GetDur() int64 {
+	if x != nil {
+		return x.Dur
+	}
+	return 0
+}
+
+func (x *UploadedFile) GetHash() string {
+	if x != nil {
+		return x.Hash
+	}
+	return ""
+}
+
+func (x *UploadedFile) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *UploadedFile) GetExpired() bool {
+	if x != nil {
+		return x.Expired
+	}
+	return false
+}
+
+func (x *UploadedFile) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *UploadedFile) GetThumbnailUrl() string {
+	if x != nil {
+		return x.ThumbnailUrl
+	}
+	return ""
+}
+
+type ListUploadsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Kinds         []FileKind             `protobuf:"varint,1,rep,packed,name=kinds,proto3,enum=chatim.v1.FileKind" json:"kinds,omitempty"`
+	Before        string                 `protobuf:"bytes,2,opt,name=before,proto3" json:"before,omitempty"`
+	PageSize      int32                  `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListUploadsRequest) Reset() {
+	*x = ListUploadsRequest{}
+	mi := &file_chatim_v1_media_service_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListUploadsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListUploadsRequest) ProtoMessage() {}
+
+func (x *ListUploadsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_media_service_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListUploadsRequest.ProtoReflect.Descriptor instead.
+func (*ListUploadsRequest) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_media_service_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ListUploadsRequest) GetKinds() []FileKind {
+	if x != nil {
+		return x.Kinds
+	}
+	return nil
+}
+
+func (x *ListUploadsRequest) GetBefore() string {
+	if x != nil {
+		return x.Before
+	}
+	return ""
+}
+
+func (x *ListUploadsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+type ListUploadsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Files         []*UploadedFile        `protobuf:"bytes,1,rep,name=files,proto3" json:"files,omitempty"`
+	NextBefore    string                 `protobuf:"bytes,2,opt,name=next_before,json=nextBefore,proto3" json:"next_before,omitempty"`
+	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListUploadsResponse) Reset() {
+	*x = ListUploadsResponse{}
+	mi := &file_chatim_v1_media_service_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListUploadsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListUploadsResponse) ProtoMessage() {}
+
+func (x *ListUploadsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_media_service_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListUploadsResponse.ProtoReflect.Descriptor instead.
+func (*ListUploadsResponse) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_media_service_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ListUploadsResponse) GetFiles() []*UploadedFile {
+	if x != nil {
+		return x.Files
+	}
+	return nil
+}
+
+func (x *ListUploadsResponse) GetNextBefore() string {
+	if x != nil {
+		return x.NextBefore
+	}
+	return ""
+}
+
+func (x *ListUploadsResponse) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
 var File_chatim_v1_media_service_proto protoreflect.FileDescriptor
 
 const file_chatim_v1_media_service_proto_rawDesc = "" +
@@ -627,12 +1231,14 @@ const file_chatim_v1_media_service_proto_rawDesc = "" +
 	"\fUploadedPart\x12\x1f\n" +
 	"\vpart_number\x18\x01 \x01(\x05R\n" +
 	"partNumber\x12\x12\n" +
-	"\x04etag\x18\x02 \x01(\tR\x04etag\"\x9f\x01\n" +
+	"\x04etag\x18\x02 \x01(\tR\x04etag\"\xc3\x01\n" +
 	"\x12StartUploadRequest\x12\x1b\n" +
 	"\tfile_name\x18\x01 \x01(\tR\bfileName\x12!\n" +
 	"\fcontent_type\x18\x02 \x01(\tR\vcontentType\x12\x12\n" +
 	"\x04size\x18\x03 \x01(\x03R\x04size\x125\n" +
-	"\x17upload_bytes_per_second\x18\x04 \x01(\x03R\x14uploadBytesPerSecond\"\xd4\x01\n" +
+	"\x17upload_bytes_per_second\x18\x04 \x01(\x03R\x14uploadBytesPerSecond\x12\x10\n" +
+	"\x03dim\x18\x05 \x03(\x05R\x03dim\x12\x10\n" +
+	"\x03dur\x18\x06 \x01(\x03R\x03dur\"\xd4\x01\n" +
 	"\x13StartUploadResponse\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x1b\n" +
 	"\tpart_size\x18\x02 \x01(\x03R\bpartSize\x12+\n" +
@@ -646,21 +1252,73 @@ const file_chatim_v1_media_service_proto_rawDesc = "" +
 	"\x13GetPartURLsResponse\x12&\n" +
 	"\x04urls\x18\x01 \x03(\v2\x12.chatim.v1.PartURLR\x04urls\x129\n" +
 	"\n" +
-	"expires_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"X\n" +
+	"expires_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"l\n" +
 	"\x15CompleteUploadRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12-\n" +
-	"\x05parts\x18\x02 \x03(\v2\x17.chatim.v1.UploadedPartR\x05parts\">\n" +
+	"\x05parts\x18\x02 \x03(\v2\x17.chatim.v1.UploadedPartR\x05parts\x12\x12\n" +
+	"\x04hash\x18\x03 \x01(\tR\x04hash\">\n" +
 	"\x16CompleteUploadResponse\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n" +
 	"\x04size\x18\x02 \x01(\x03R\x04size\"&\n" +
 	"\x12AbortUploadRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\"\x15\n" +
-	"\x13AbortUploadResponse2\xcf\x02\n" +
+	"\x13AbortUploadResponse\"O\n" +
+	"\n" +
+	"MessageRef\x12\x17\n" +
+	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x16\n" +
+	"\x06thread\x18\x02 \x01(\x04R\x06thread\x12\x10\n" +
+	"\x03seq\x18\x03 \x01(\x04R\x03seq\"R\n" +
+	"\aFileURL\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x10\n" +
+	"\x03url\x18\x02 \x01(\tR\x03url\x12#\n" +
+	"\rthumbnail_url\x18\x03 \x01(\tR\fthumbnailUrl\"{\n" +
+	"\fMessageFiles\x12\x17\n" +
+	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x16\n" +
+	"\x06thread\x18\x02 \x01(\x04R\x06thread\x12\x10\n" +
+	"\x03seq\x18\x03 \x01(\x04R\x03seq\x12(\n" +
+	"\x05files\x18\x04 \x03(\v2\x12.chatim.v1.FileURLR\x05files\"M\n" +
+	"\x18GetAttachmentURLsRequest\x121\n" +
+	"\bmessages\x18\x01 \x03(\v2\x15.chatim.v1.MessageRefR\bmessages\"\x8b\x01\n" +
+	"\x19GetAttachmentURLsResponse\x123\n" +
+	"\bmessages\x18\x01 \x03(\v2\x17.chatim.v1.MessageFilesR\bmessages\x129\n" +
+	"\n" +
+	"expires_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"\xa0\x02\n" +
+	"\fUploadedFile\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
+	"\x04mime\x18\x03 \x01(\tR\x04mime\x12\x12\n" +
+	"\x04size\x18\x04 \x01(\x03R\x04size\x12\x10\n" +
+	"\x03dim\x18\x05 \x03(\x05R\x03dim\x12\x10\n" +
+	"\x03dur\x18\x06 \x01(\x03R\x03dur\x12\x12\n" +
+	"\x04hash\x18\a \x01(\tR\x04hash\x129\n" +
+	"\n" +
+	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x18\n" +
+	"\aexpired\x18\t \x01(\bR\aexpired\x12\x10\n" +
+	"\x03url\x18\n" +
+	" \x01(\tR\x03url\x12#\n" +
+	"\rthumbnail_url\x18\v \x01(\tR\fthumbnailUrl\"t\n" +
+	"\x12ListUploadsRequest\x12)\n" +
+	"\x05kinds\x18\x01 \x03(\x0e2\x13.chatim.v1.FileKindR\x05kinds\x12\x16\n" +
+	"\x06before\x18\x02 \x01(\tR\x06before\x12\x1b\n" +
+	"\tpage_size\x18\x03 \x01(\x05R\bpageSize\"\xa0\x01\n" +
+	"\x13ListUploadsResponse\x12-\n" +
+	"\x05files\x18\x01 \x03(\v2\x17.chatim.v1.UploadedFileR\x05files\x12\x1f\n" +
+	"\vnext_before\x18\x02 \x01(\tR\n" +
+	"nextBefore\x129\n" +
+	"\n" +
+	"expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt*d\n" +
+	"\bFileKind\x12\x19\n" +
+	"\x15FILE_KIND_UNSPECIFIED\x10\x00\x12\x13\n" +
+	"\x0fFILE_KIND_IMAGE\x10\x01\x12\x13\n" +
+	"\x0fFILE_KIND_VIDEO\x10\x02\x12\x13\n" +
+	"\x0fFILE_KIND_OTHER\x10\x032\xfd\x03\n" +
 	"\fMediaService\x12L\n" +
 	"\vStartUpload\x12\x1d.chatim.v1.StartUploadRequest\x1a\x1e.chatim.v1.StartUploadResponse\x12L\n" +
 	"\vGetPartURLs\x12\x1d.chatim.v1.GetPartURLsRequest\x1a\x1e.chatim.v1.GetPartURLsResponse\x12U\n" +
 	"\x0eCompleteUpload\x12 .chatim.v1.CompleteUploadRequest\x1a!.chatim.v1.CompleteUploadResponse\x12L\n" +
-	"\vAbortUpload\x12\x1d.chatim.v1.AbortUploadRequest\x1a\x1e.chatim.v1.AbortUploadResponseB\xa2\x01\n" +
+	"\vAbortUpload\x12\x1d.chatim.v1.AbortUploadRequest\x1a\x1e.chatim.v1.AbortUploadResponse\x12^\n" +
+	"\x11GetAttachmentURLs\x12#.chatim.v1.GetAttachmentURLsRequest\x1a$.chatim.v1.GetAttachmentURLsResponse\x12L\n" +
+	"\vListUploads\x12\x1d.chatim.v1.ListUploadsRequest\x1a\x1e.chatim.v1.ListUploadsResponseB\xa2\x01\n" +
 	"\rcom.chatim.v1B\x11MediaServiceProtoP\x01Z9github.com/ivannguyendev/chatim/pkg/pb/chatim/v1;chatimv1\xa2\x02\x03CXX\xaa\x02\tChatim.V1\xca\x02\tChatim\\V1\xe2\x02\x15Chatim\\V1\\GPBMetadata\xea\x02\n" +
 	"Chatim::V1b\x06proto3"
 
@@ -676,41 +1334,63 @@ func file_chatim_v1_media_service_proto_rawDescGZIP() []byte {
 	return file_chatim_v1_media_service_proto_rawDescData
 }
 
-var file_chatim_v1_media_service_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_chatim_v1_media_service_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_chatim_v1_media_service_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_chatim_v1_media_service_proto_goTypes = []any{
-	(*UploadPart)(nil),             // 0: chatim.v1.UploadPart
-	(*PartURL)(nil),                // 1: chatim.v1.PartURL
-	(*UploadedPart)(nil),           // 2: chatim.v1.UploadedPart
-	(*StartUploadRequest)(nil),     // 3: chatim.v1.StartUploadRequest
-	(*StartUploadResponse)(nil),    // 4: chatim.v1.StartUploadResponse
-	(*GetPartURLsRequest)(nil),     // 5: chatim.v1.GetPartURLsRequest
-	(*GetPartURLsResponse)(nil),    // 6: chatim.v1.GetPartURLsResponse
-	(*CompleteUploadRequest)(nil),  // 7: chatim.v1.CompleteUploadRequest
-	(*CompleteUploadResponse)(nil), // 8: chatim.v1.CompleteUploadResponse
-	(*AbortUploadRequest)(nil),     // 9: chatim.v1.AbortUploadRequest
-	(*AbortUploadResponse)(nil),    // 10: chatim.v1.AbortUploadResponse
-	(*timestamppb.Timestamp)(nil),  // 11: google.protobuf.Timestamp
+	(FileKind)(0),                     // 0: chatim.v1.FileKind
+	(*UploadPart)(nil),                // 1: chatim.v1.UploadPart
+	(*PartURL)(nil),                   // 2: chatim.v1.PartURL
+	(*UploadedPart)(nil),              // 3: chatim.v1.UploadedPart
+	(*StartUploadRequest)(nil),        // 4: chatim.v1.StartUploadRequest
+	(*StartUploadResponse)(nil),       // 5: chatim.v1.StartUploadResponse
+	(*GetPartURLsRequest)(nil),        // 6: chatim.v1.GetPartURLsRequest
+	(*GetPartURLsResponse)(nil),       // 7: chatim.v1.GetPartURLsResponse
+	(*CompleteUploadRequest)(nil),     // 8: chatim.v1.CompleteUploadRequest
+	(*CompleteUploadResponse)(nil),    // 9: chatim.v1.CompleteUploadResponse
+	(*AbortUploadRequest)(nil),        // 10: chatim.v1.AbortUploadRequest
+	(*AbortUploadResponse)(nil),       // 11: chatim.v1.AbortUploadResponse
+	(*MessageRef)(nil),                // 12: chatim.v1.MessageRef
+	(*FileURL)(nil),                   // 13: chatim.v1.FileURL
+	(*MessageFiles)(nil),              // 14: chatim.v1.MessageFiles
+	(*GetAttachmentURLsRequest)(nil),  // 15: chatim.v1.GetAttachmentURLsRequest
+	(*GetAttachmentURLsResponse)(nil), // 16: chatim.v1.GetAttachmentURLsResponse
+	(*UploadedFile)(nil),              // 17: chatim.v1.UploadedFile
+	(*ListUploadsRequest)(nil),        // 18: chatim.v1.ListUploadsRequest
+	(*ListUploadsResponse)(nil),       // 19: chatim.v1.ListUploadsResponse
+	(*timestamppb.Timestamp)(nil),     // 20: google.protobuf.Timestamp
 }
 var file_chatim_v1_media_service_proto_depIdxs = []int32{
-	0,  // 0: chatim.v1.StartUploadResponse.parts:type_name -> chatim.v1.UploadPart
-	1,  // 1: chatim.v1.StartUploadResponse.urls:type_name -> chatim.v1.PartURL
-	11, // 2: chatim.v1.StartUploadResponse.expires_at:type_name -> google.protobuf.Timestamp
-	1,  // 3: chatim.v1.GetPartURLsResponse.urls:type_name -> chatim.v1.PartURL
-	11, // 4: chatim.v1.GetPartURLsResponse.expires_at:type_name -> google.protobuf.Timestamp
-	2,  // 5: chatim.v1.CompleteUploadRequest.parts:type_name -> chatim.v1.UploadedPart
-	3,  // 6: chatim.v1.MediaService.StartUpload:input_type -> chatim.v1.StartUploadRequest
-	5,  // 7: chatim.v1.MediaService.GetPartURLs:input_type -> chatim.v1.GetPartURLsRequest
-	7,  // 8: chatim.v1.MediaService.CompleteUpload:input_type -> chatim.v1.CompleteUploadRequest
-	9,  // 9: chatim.v1.MediaService.AbortUpload:input_type -> chatim.v1.AbortUploadRequest
-	4,  // 10: chatim.v1.MediaService.StartUpload:output_type -> chatim.v1.StartUploadResponse
-	6,  // 11: chatim.v1.MediaService.GetPartURLs:output_type -> chatim.v1.GetPartURLsResponse
-	8,  // 12: chatim.v1.MediaService.CompleteUpload:output_type -> chatim.v1.CompleteUploadResponse
-	10, // 13: chatim.v1.MediaService.AbortUpload:output_type -> chatim.v1.AbortUploadResponse
-	10, // [10:14] is the sub-list for method output_type
-	6,  // [6:10] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	1,  // 0: chatim.v1.StartUploadResponse.parts:type_name -> chatim.v1.UploadPart
+	2,  // 1: chatim.v1.StartUploadResponse.urls:type_name -> chatim.v1.PartURL
+	20, // 2: chatim.v1.StartUploadResponse.expires_at:type_name -> google.protobuf.Timestamp
+	2,  // 3: chatim.v1.GetPartURLsResponse.urls:type_name -> chatim.v1.PartURL
+	20, // 4: chatim.v1.GetPartURLsResponse.expires_at:type_name -> google.protobuf.Timestamp
+	3,  // 5: chatim.v1.CompleteUploadRequest.parts:type_name -> chatim.v1.UploadedPart
+	13, // 6: chatim.v1.MessageFiles.files:type_name -> chatim.v1.FileURL
+	12, // 7: chatim.v1.GetAttachmentURLsRequest.messages:type_name -> chatim.v1.MessageRef
+	14, // 8: chatim.v1.GetAttachmentURLsResponse.messages:type_name -> chatim.v1.MessageFiles
+	20, // 9: chatim.v1.GetAttachmentURLsResponse.expires_at:type_name -> google.protobuf.Timestamp
+	20, // 10: chatim.v1.UploadedFile.created_at:type_name -> google.protobuf.Timestamp
+	0,  // 11: chatim.v1.ListUploadsRequest.kinds:type_name -> chatim.v1.FileKind
+	17, // 12: chatim.v1.ListUploadsResponse.files:type_name -> chatim.v1.UploadedFile
+	20, // 13: chatim.v1.ListUploadsResponse.expires_at:type_name -> google.protobuf.Timestamp
+	4,  // 14: chatim.v1.MediaService.StartUpload:input_type -> chatim.v1.StartUploadRequest
+	6,  // 15: chatim.v1.MediaService.GetPartURLs:input_type -> chatim.v1.GetPartURLsRequest
+	8,  // 16: chatim.v1.MediaService.CompleteUpload:input_type -> chatim.v1.CompleteUploadRequest
+	10, // 17: chatim.v1.MediaService.AbortUpload:input_type -> chatim.v1.AbortUploadRequest
+	15, // 18: chatim.v1.MediaService.GetAttachmentURLs:input_type -> chatim.v1.GetAttachmentURLsRequest
+	18, // 19: chatim.v1.MediaService.ListUploads:input_type -> chatim.v1.ListUploadsRequest
+	5,  // 20: chatim.v1.MediaService.StartUpload:output_type -> chatim.v1.StartUploadResponse
+	7,  // 21: chatim.v1.MediaService.GetPartURLs:output_type -> chatim.v1.GetPartURLsResponse
+	9,  // 22: chatim.v1.MediaService.CompleteUpload:output_type -> chatim.v1.CompleteUploadResponse
+	11, // 23: chatim.v1.MediaService.AbortUpload:output_type -> chatim.v1.AbortUploadResponse
+	16, // 24: chatim.v1.MediaService.GetAttachmentURLs:output_type -> chatim.v1.GetAttachmentURLsResponse
+	19, // 25: chatim.v1.MediaService.ListUploads:output_type -> chatim.v1.ListUploadsResponse
+	20, // [20:26] is the sub-list for method output_type
+	14, // [14:20] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_chatim_v1_media_service_proto_init() }
@@ -723,13 +1403,14 @@ func file_chatim_v1_media_service_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_chatim_v1_media_service_proto_rawDesc), len(file_chatim_v1_media_service_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   11,
+			NumEnums:      1,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_chatim_v1_media_service_proto_goTypes,
 		DependencyIndexes: file_chatim_v1_media_service_proto_depIdxs,
+		EnumInfos:         file_chatim_v1_media_service_proto_enumTypes,
 		MessageInfos:      file_chatim_v1_media_service_proto_msgTypes,
 	}.Build()
 	File_chatim_v1_media_service_proto = out.File

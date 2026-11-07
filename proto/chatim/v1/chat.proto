@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package chatim.v1;
 
+import "chatim/v1/attachment.proto";
 import "chatim/v1/message_links.proto";
 import "chatim/v1/reactions_pins.proto";
 import "google/protobuf/timestamp.proto";
@@ -74,6 +75,7 @@ message Message {
   string my_reaction = 23;
   bool bookmarked = 24;
   google.protobuf.Timestamp mention_all_at = 25;
+  repeated Attachment attachments = 26;
 }
 
 message MessageVersion {
@@ -116,6 +118,7 @@ message SendMessageRequest {
   MessageKind kind = 8;
   bool skip_unread = 9;
   bytes meta = 10;
+  repeated Attachment attachments = 11;
 }
 
 message SendMessageResponse {

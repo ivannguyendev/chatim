@@ -185,5 +185,7 @@ func tableSpecs() []spec {
 		via(chatimv1.MediaService_GetPartURLs_FullMethodName, mediaClient, chatimv1.MediaServiceClient.GetPartURLs),
 		via(chatimv1.MediaService_CompleteUpload_FullMethodName, mediaClient, chatimv1.MediaServiceClient.CompleteUpload),
 		via(chatimv1.MediaService_AbortUpload_FullMethodName, mediaClient, chatimv1.MediaServiceClient.AbortUpload),
+		via(chatimv1.MediaService_GetAttachmentURLs_FullMethodName, mediaClient, chatimv1.MediaServiceClient.GetAttachmentURLs),
+		via(chatimv1.MediaService_ListUploads_FullMethodName, mediaClient, chatimv1.MediaServiceClient.ListUploads),
 	}
 }
