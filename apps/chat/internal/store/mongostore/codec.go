@@ -34,6 +34,7 @@ type messageDoc struct {
 	MentionAllAt time.Time      `bson:"mat,omitempty"`
 	SkipUnread   bool           `bson:"nu,omitempty"`
 	Meta         []byte         `bson:"m,omitempty"`
+	Files        []fileDoc      `bson:"files,omitempty"`
 }
 
 func encodeMessage(m domain.Message) (messageDoc, error) {

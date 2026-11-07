@@ -35,6 +35,7 @@ func projected(m domain.Message, e domain.Edit) domain.Message {
 	if e.Kind == domain.EditDelete {
 		m.Text, m.Deleted = "", true
 		m.Mentions, m.MentionAll, m.MentionAllAt, m.Forward, m.Meta = nil, false, time.Time{}, nil, nil
+		m.Attachments = nil
 	}
 	return m
 }

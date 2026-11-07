@@ -26,6 +26,7 @@ func edited(m domain.Message, e domain.Edit) domain.Message {
 	m.Mentions, m.MentionAll, m.MentionAllAt = e.Mentions, e.MentionAll, e.MentionAllAt
 	if m.Deleted {
 		m.Mentions, m.MentionAll, m.MentionAllAt, m.Forward, m.Meta = nil, false, time.Time{}, nil, nil
+		m.Attachments = nil
 	}
 	return m
 }

@@ -31,6 +31,16 @@ type forwardDoc struct {
 	SentAt time.Time `bson:"ts"`
 }
 
+type fileDoc struct {
+	Key  string  `bson:"key"`
+	Name string  `bson:"name"`
+	Mime string  `bson:"mime"`
+	Size int64   `bson:"size"`
+	Dim  []int32 `bson:"dim,omitempty"`
+	Dur  int64   `bson:"dur,omitempty"`
+	Hash string  `bson:"hash,omitempty"`
+}
+
 type mentionDoc struct {
 	Kind string    `bson:"k"`
 	ID   string    `bson:"i"`
@@ -62,7 +72,34 @@ func encodeLinks(m domain.Message, d *messageDoc) error {
 	}
 	d.Mentions, d.MentionAll, d.MentionAllAt = mentions, m.MentionAll, m.MentionAllAt
 	d.SkipUnread, d.Meta = m.SkipUnread, m.Meta
+	d.Files = encodeFiles(m.Attachments)
 	return nil
+}
+
+func encodeFiles(list []domain.Attachment) []fileDoc {
+	if len(list) == 0 {
+		return nil
+	}
+	out := make([]fileDoc, len(list))
+	for i, a := range list {
+		out[i] = fileDoc{Key: a.Key, Name: a.Name, Mime: a.Mime, Size: a.Size, Dim: a.Dim, Dur: a.Dur, Hash: a.Hash}
+	}
+	return out
+}
+
+func decodeFiles(docs []fileDoc) []domain.Attachment {
+	if len(docs) == 0 {
+		return nil
+	}
+	out := make([]domain.Attachment, len(docs))
+	for i, f := range docs {
+		var dim []int32
+		if len(f.Dim) > 0 {
+			dim = f.Dim
+		}
+		out[i] = domain.Attachment{Key: f.Key, Name: f.Name, Mime: f.Mime, Size: f.Size, Dim: dim, Dur: f.Dur, Hash: f.Hash}
+	}
+	return out
 }
 
 func encodeMessageMentions(targets []domain.MentionTarget) ([]mentionDoc, error) {
@@ -110,6 +147,7 @@ func decodeLinks(d messageDoc, m *domain.Message) error {
 	}
 	m.MentionAll, m.MentionAllAt = d.MentionAll, d.MentionAllAt
 	m.SkipUnread, m.Meta = d.SkipUnread, d.Meta
+	m.Attachments = decodeFiles(d.Files)
 	return nil
 }
 
