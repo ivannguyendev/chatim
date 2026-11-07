@@ -151,12 +151,12 @@ flowchart TB
 flowchart TB
   A["Máy An: ListUploads{kinds: [image, video], before: khoá cuối trang trước, page_size ≤ 100}"] --> GW["gateway: token"]
   GW --> M["module media: sẵn sàng?"]
-  M --> Q["media_uploads: _id trong khoảng 'tenant/An/' (range trên khoá cluster, không index mới), state = uploaded, không phải .thumb, lọc loại, mới nhất trước"]
+  M --> Q["media_uploads: tenant_id = acme AND user_id = An AND state = uploaded (index mới), _id < before, không phải .thumb, lọc loại, xếp _id giảm dần"]
   Q --> S["mỗi file: bucket processing và created_at + MEDIA_PROCESSING_RETENTION ≤ giờ hiện tại → expired, không ký; còn lại ký url + thumbnail_url (ảnh/video) như GetAttachmentURLs"]
   S --> R["trả [{key, name, mime, size, dim, dur, hash, created_at, expired, url, thumbnail_url}], next_before, expires_at"]
 ```
 
-- Chỉ thấy file của chính mình: khoảng `_id` dựng từ tenant và user của token, máy không gửi prefix.
+- **Chỉ thấy file của chính mình (owner 2026-11-07):** lọc bằng phép bằng trên field `tenant_id`, `user_id` lấy từ token, qua index mới `{tenant_id: 1, user_id: 1, state: 1, _id: -1}` (tạo qua `/app indexes`, D191). Không lọc quyền bằng so sánh khoảng trên khoá: cách đó chỉ dùng cho công cụ admin, dùng trong logic thì người sửa code sau dễ làm lọt IDOR. `before` vẫn phải là khoá của caller (kiểm field `tenant_id`/`user_id` của doc, không chỉ tiền tố khoá). Khoá sắp theo thời gian (cách A) nên xếp `_id` giảm dần là mới nhất trước và con trỏ chỉ cần một khoá.
 - Trả **mọi** file đã upload xong, không phân biệt đã gắn tin hay chưa (owner 2026-11-07).
 - **Nhãn `expired`** (owner 2026-11-07): module tính từ doc, không gọi S3: file nằm ở bucket `processing` và `created_at + MEDIA_PROCESSING_RETENTION` (30 ngày, phải bằng luật lifecycle của `processing`) đã qua → `expired = true`, không có `url`/`thumbnail_url`. Tính từ `created_at` (lúc mở multipart, S3 tính tuổi object multipart từ lúc này) và S3 làm tròn lên nửa đêm UTC, nên nhãn có thể bật sớm hơn lúc object thật sự mất, không bao giờ trễ hơn. P2 mọi file còn ở `processing`; P3 chuyển file đã gắn tin sang `completed` (không hết hạn) và thêm vị trí bucket vào doc.
 - `kinds`: `image` = `image/*`, `video` = `video/*`, `file` = còn lại; rỗng = tất cả.
@@ -198,8 +198,8 @@ Không có event hay subject mới. `msg_created`, `msg_edited`, `msg_deleted` m
 | Ép `attachment` cho mọi loại ngoài danh sách ảnh/mp4 | Tin loại do máy khai: HTML/SVG chạy script trên domain bucket |
 | Text được rỗng khi có đính kèm | Bắt máy gửi text giả cho tin chỉ có ảnh |
 | Hash SHA-256 của cả file do máy gửi tính, máy nhận so (owner 2026-11-07) | S3 kiểm hash từng phần: đổi hợp đồng P1, hash S3 trả là hash của các hash phần, không phải SHA-256 của file. Server tự tính: phải đọc lại vài GB mỗi file |
-| Gallery của tôi đọc `media_uploads` theo khoảng `_id`, trả mọi file đã xong, gắn nhãn `expired` theo luật 30 ngày (owner 2026-11-07) | Ẩn file hết hạn: người dùng không biết file đã mất. `HeadObject` từng file: thêm một lệnh S3 mỗi mục. Đọc từ `messages`: không có index theo người gửi (D148) và không thấy file chưa gửi. Thêm index `{tenant_id, user_id, created_at}`: thừa vì `_id` đã bắt đầu bằng tenant/user |
-| Phần ngẫu nhiên của khoá sắp theo thời gian (owner 2026-11-07) | Giữ khoá, thêm index `{tenant_id, user_id, created_at, _id}`: thêm một index phải cập nhật mỗi lần ghi và cursor hai phần, trong khi đổi khoá lúc chưa có dữ liệu thật không tốn gì |
+| Gallery của tôi đọc `media_uploads` bằng phép bằng `tenant_id` + `user_id` qua index mới (owner 2026-11-07), trả mọi file đã xong, gắn nhãn `expired` theo luật 30 ngày (owner 2026-11-07) | Ẩn file hết hạn: người dùng không biết file đã mất. `HeadObject` từng file: thêm một lệnh S3 mỗi mục. Đọc từ `messages`: không có index theo người gửi (D148) và không thấy file chưa gửi. Đọc theo khoảng `_id` (tiền tố `tenant/user/`) không cần index: lọc quyền bằng so sánh chuỗi dễ thành IDOR khi code bị sửa sau này, chỉ hợp cho công cụ admin |
+| Phần ngẫu nhiên của khoá sắp theo thời gian (owner 2026-11-07); vẫn giữ khi đã có index vì con trỏ gallery chỉ cần một khoá và chat kiểm tuổi khoá chính xác | Giữ khoá, index theo `created_at`: con trỏ hai phần, chat không biết tuổi khoá; đổi khoá lúc chưa có dữ liệu thật không tốn gì |
 | Khoá ảnh nhỏ suy từ khoá file `{key}.thumb` (owner 2026-11-07) | Lưu khoá ảnh nhỏ trong tin: thêm byte mỗi đính kèm và thêm một khoá phải kiểm lúc gửi |
 
 ## 9. Chi phí và tải
@@ -212,7 +212,7 @@ Không có event hay subject mới. `msg_created`, `msg_edited`, `msg_deleted` m
 
 - Khoá trỏ tới file chưa upload xong hoặc đã bị luật 30 ngày xoá (chưa có P3) → URL tải trả 404 từ S3; máy hiện "file không còn".
 - Rộng, cao, thời lượng, cỡ, loại là lời máy khai; chỉ để hiển thị. Loại khai sai không chạy được script nhờ ép `attachment`.
-- Gallery lọc loại sau khi đọc theo khoảng `_id`: người upload nhiều file loại khác thì một trang quét nhiều doc hơn số trả về (chỉ trong file của chính người đó).
+- Gallery lọc loại sau khi đọc index (loại không nằm trong index): người upload nhiều file loại khác thì một trang quét nhiều doc hơn số trả về (chỉ trong file của chính người đó).
 - Hash là lời máy gửi: máy gửi khai sai thì chỉ tin của chính nó bị báo "đã thay đổi". Hash là tuỳ chọn để máy cũ và tin hệ thống vẫn gửi được; tin không có hash thì máy nhận không kiểm được.
 - Ảnh/video gửi không kèm ảnh nhỏ vẫn có `thumbnail_url`, tải về 404; máy phải xử lý.
 - URL tải là bearer trong `MEDIA_DOWNLOAD_URL_TTL`: ai có URL tải được dù không ở trong room.
@@ -231,7 +231,7 @@ Không có event hay subject mới. `msg_created`, `msg_edited`, `msg_deleted` m
 | Unit forward | Chép đính kèm nguồn (cả hash), bỏ đính kèm máy gửi, khoá nguồn cũ vẫn được |
 | Unit module media | `StartUpload` lưu `dim`, `dur`; `CompleteUpload` lưu `hash` (kiểm dạng, gọi lại an toàn); `StartUpload{thumbnail_of}`: khoá `.thumb`, file của người khác, loại không phải ảnh, mở lần hai; `GetAttachmentURLs`: chỉ tin được đọc, ép loại và cách hiển thị, `thumbnail_url` chỉ cho ảnh/video, giới hạn 100, chưa sẵn sàng |
 | Unit module media gallery | `ListUploads`: chỉ khoá của caller, bỏ `.thumb`, bỏ chưa xong/huỷ, quá 30 ngày vẫn trả với `expired` và không URL, đúng mốc ngày 30, lọc `kinds`, mới nhất trước qua nhiều trang, `before` của người khác bị từ chối; khoá mới sắp đúng theo thời gian (cùng mili giây vẫn khác nhau) |
-| Itest | Cổng `VisibleAttachments` trên Mongo thật; `ListUploads` trên khoảng `_id` clustered thật; URL ký tải đúng byte với header `Content-Disposition` đúng trên Garage; ảnh nhỏ upload và tải qua `{key}.thumb` |
+| Itest | Cổng `VisibleAttachments` trên Mongo thật; `ListUploads` dùng index mới (explain không quét cả collection), user `an` không thấy `an2`; URL ký tải đúng byte với header `Content-Disposition` đúng trên Garage; ảnh nhỏ upload và tải qua `{key}.thumb` |
 | e2e phase 16 mở rộng | Upload ảnh và ảnh nhỏ, gửi tin có ảnh qua websocket, B nhận event có đính kèm, A thấy ảnh vừa upload đứng đầu `ListUploads` với `thumbnail_url`; B lấy URL qua gateway, tải cả ảnh lẫn ảnh nhỏ, SHA-256 của file tải về khớp `hash`; file HTML tải về dạng `attachment`; tin bị ẩn/xoá không cấp URL; forward sang room khác vẫn tải được; preview có loại |
 | chatbench 2K tin/s trước/sau | Đường gửi không chậm đi |
 
