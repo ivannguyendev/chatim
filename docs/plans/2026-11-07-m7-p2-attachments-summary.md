@@ -91,7 +91,7 @@ Không lưu khoá ảnh nhỏ: nó luôn là `{key}.thumb`.
 | Kiểm | Lỗi |
 |---|---|
 | ≤ `MaxAttachments` (10, A6) đính kèm | `INVALID_ARGUMENT` |
-| Mỗi khoá có dạng `{tenant}/{người gửi}/{yyyymmdd}/{26 ký tự}` (khoá `.thumb` bị từ chối) và ngày không cũ hơn 24h so với giờ gửi | `INVALID_ARGUMENT` |
+| Mỗi khoá có dạng `{tenant}/{người gửi}/{yyyymmdd}/{26 ký tự}` (khoá `.thumb` bị từ chối) và khoá không cũ hơn 24h: tính chính xác từ mốc mili giây nằm trong khoá (khoá P2 sắp theo thời gian), ngày trong khoá phải khớp mốc đó | `INVALID_ARGUMENT` |
 | Không trùng khoá trong một tin; tên 1..255 byte UTF-8 in được; loại dạng `type/subtype` ≤ 255 byte; cỡ ≥ 1; `dim` rỗng hoặc đúng 2 số ≥ 1; `dur` ≥ 0; `hash` rỗng hoặc đúng dạng `sha256:<64 hex>` | `INVALID_ARGUMENT` |
 | Text: được rỗng **chỉ khi** có ≥ 1 đính kèm (trước đây luôn bắt buộc) | `INVALID_ARGUMENT` |
 
@@ -117,7 +117,7 @@ Chat không gọi S3 hay module media khi gửi: ack vẫn ≤ 30 ms (A1). Khoá
 
 Phiên ảnh nhỏ không cần field mới: `_id` `{khoá file}.thumb` đã nói nó là ảnh nhỏ của file nào. Lúc gửi tin chat **không** đọc `media_uploads` (ack 30 ms), nên máy vẫn gửi lại các giá trị này trong đính kèm. Dùng ở P3: consumer `msg_created` so đính kèm của tin với doc upload (cỡ thật đã `HeadObject`, hash, loại) và đếm tin khai lệch.
 
-**Upload ảnh nhỏ** (module media, sau khi đã có khoá file): `StartUpload{thumbnail_of: khoá file, mime, size, …}`. Module kiểm khoá file là của caller và phiên của nó còn `uploading` hoặc `uploaded`; loại phải là `image/png|jpeg|gif|webp` (ảnh nhỏ luôn hiển thị trực tiếp); khoá cấp ra là `{khoá file}.thumb`, rồi upload như mọi file (thường một phần). Mỗi file một ảnh nhỏ: mở lần hai → `FAILED_PRECONDITION`. Máy upload ảnh nhỏ trước khi gửi tin; không có ảnh nhỏ thì thôi.
+**Upload ảnh nhỏ** (module media, sau khi đã có khoá file): `StartUpload{thumbnail_of: khoá file, mime, size, …}`. Module kiểm khoá file là của caller và phiên của nó còn `uploading` hoặc `uploaded`; loại phải là `image/png|jpeg|gif|webp`; khoá cấp ra là `{khoá file}.thumb`, rồi upload như mọi file (thường một phần). Mỗi file một ảnh nhỏ: mở lần hai (kể cả sau khi phiên ảnh nhỏ bị huỷ) → `FAILED_PRECONDITION`, máy gửi tin không có ảnh nhỏ; mất response thì máy tự suy khoá `{key}.thumb` và gọi `GetPartURLs`. URL tải ảnh nhỏ luôn ép `application/octet-stream` + `attachment`: URL upload không ghim Content-Type nên byte ảnh nhỏ có thể là HTML; thẻ `<img>` và app vẫn hiển thị được. Loại file (`mime`) được chuẩn hoá chữ thường khi upload và khi gửi tin. Máy upload ảnh nhỏ trước khi gửi tin; không có ảnh nhỏ thì thôi.
 
 **Preview danh sách hội thoại:** `LastPreview.file_mimes` (vd. `["image/jpeg","image/jpeg"]`) để máy hiện "📷 2 ảnh" khi text rỗng; cache đuôi room chỉ giữ loại, không giữ khoá.
 
@@ -125,7 +125,7 @@ Phiên ảnh nhỏ không cần field mới: `_id` `{khoá file}.thumb` đã nó
 
 ```mermaid
 flowchart TB
-  B["Máy Bình: GetAttachmentURLs{messages: [{room_id, thread, seq}…]} ≤ 100 tin"] --> GW["gateway: token, giới hạn theo user"]
+  B["Máy Bình: GetAttachmentURLs{messages: [{room_id, thread, seq}…]} ≤ 100 tin"] --> GW["gateway: token, limiter theo user có sẵn (không thêm limiter riêng)"]
   GW --> M["module media: sẵn sàng?"]
   M --> P["cổng chat VisibleAttachments(tenant, Bình, khoá tin)"]
   P --> R["Reader.VisibleMessages: room cho phép đọc, tin không xoá, không ẩn, sau cleared_at; một lần đọc mỗi room"]
@@ -172,7 +172,7 @@ flowchart TB
 
 - **Quyền đi theo tin, không theo khoá:** URL chỉ được ký cho khoá nằm trong tin người hỏi đọc được, qua đúng pipeline đọc lịch sử (`Authorize(ReadHistory)` + view). Forward sang room khác thì người trong room đó tải được qua tin forward.
 - **Không đính file người khác:** khoá phải mang `{tenant}/{người gửi}/`, user id không chứa `/` (`pkg/ids/ident.go`).
-- **Ngày trong khoá ≤ 24h:** giới hạn cửa sổ dùng lại khoá cũ, chuẩn bị cho P3 dọn file theo ngày.
+- **Khoá ≤ 24h (chính xác tới mili giây):** giới hạn cửa sổ dùng lại khoá cũ, chuẩn bị cho P3 dọn file theo ngày.
 - **Xoá/ẩn sau khi đã cấp URL:** URL đã cấp còn dùng tới hết hạn (giới hạn đã chấp nhận ở D264); lần hỏi sau không còn URL.
 - **Không retry nội bộ; không thêm lệnh xếp hàng:** gửi tin chỉ thêm kiểm trong RAM; `GetAttachmentURLs` là đọc theo khoá có giới hạn (D139, `mongobound`).
 
