@@ -1,7 +1,9 @@
 package roomcache
 
 import (
+	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -138,5 +140,60 @@ func TestAttachPreviewsKeepsThePreviewTheEntryAlreadyHolds(t *testing.T) {
 		if tail.Previews[0].Text != "new" || tail.Previews[1].Text != "text" {
 			t.Errorf("%s previews 45/44 = %q/%q, want new/text", name, tail.Previews[0].Text, tail.Previews[1].Text)
 		}
+	}
+}
+
+func withFiles(m domain.Message) domain.Message {
+	m.Attachments = []domain.Attachment{
+		{Key: "acme/lan/a", Name: "a.jpg", Mime: "image/jpeg", Size: 10, Dim: []int32{4, 3}, Dur: 0, Hash: "sha256:x"},
+		{Key: "acme/lan/b", Name: "b.mp4", Mime: "video/mp4", Size: 20, Dim: []int32{16, 9}, Dur: 5000},
+	}
+	return m
+}
+
+func TestAttachPreviewsKeepsOnlyTheFileMimes(t *testing.T) {
+	c := newTails(t, 1<<22)
+	loaded := c.Replace(777, windowOnly(1, 44))
+	source := previewsOf(35, 44)
+	source[0] = withFiles(source[0])
+	got, ok := c.AttachPreviews(777, loaded, source)
+	if !ok {
+		t.Fatal("AttachPreviews refused the matching entry")
+	}
+	want := []domain.Attachment{{Mime: "image/jpeg"}, {Mime: "video/mp4"}}
+	if !reflect.DeepEqual(got.Previews[0].Attachments, want) {
+		t.Errorf("returned attachments = %+v, want only mimes", got.Previews[0].Attachments)
+	}
+	source[0].Attachments[0].Mime = "text/html"
+	source[0].Attachments = append(source[0].Attachments[:1], domain.Attachment{Mime: "text/plain"})
+	cached, _ := c.Lookup(activity(777, 44, editedAt))
+	if !reflect.DeepEqual(cached.Previews[0].Attachments, want) {
+		t.Errorf("cached attachments = %+v after the source changed, want %+v", cached.Previews[0].Attachments, want)
+	}
+	if cached.Previews[1].Attachments != nil {
+		t.Errorf("text-only preview attachments = %+v, want nil", cached.Previews[1].Attachments)
+	}
+}
+
+func TestTailBytesCountsTheFileMimes(t *testing.T) {
+	plain := Tail{Previews: []domain.Message{preview(1, "text")}}
+	files := Tail{Previews: []domain.Message{compactPreview(withFiles(preview(1, "text")))}}
+	if got, want := tailBytes(files)-tailBytes(plain), 2*tailAttachmentBytes+len("image/jpeg")+len("video/mp4"); got != want {
+		t.Fatalf("attachment bytes = %d, want %d", got, want)
+	}
+	id := strings.Repeat("u", maxIDBytes)
+	worst := Tail{}
+	for seq := uint64(TailWindow); seq > 0; seq-- {
+		worst.Window = append(worst.Window, domain.TailMessage{Seq: seq, From: id})
+	}
+	for seq := uint64(TailPreviews); seq > 0; seq-- {
+		m := domain.Message{Seq: seq, Tenant: id, From: id, Text: strings.Repeat("ạ", domain.PreviewRunes)}
+		for range domain.MaxAttachments {
+			m.Attachments = append(m.Attachments, domain.Attachment{Mime: strings.Repeat("m", domain.MaxAttachmentMimeBytes)})
+		}
+		worst.Previews = append(worst.Previews, m)
+	}
+	if got := tailBytes(worst); got > fullTailBytes {
+		t.Fatalf("worst tail %d bytes, above fullTailBytes %d", got, fullTailBytes)
 	}
 }

@@ -107,8 +107,14 @@ func TestPreviewsAreCutAndCompacted(t *testing.T) {
 
 func TestTailCacheEvictsByBytes(t *testing.T) {
 	one := tailOf(1, 300)
-	size := tailBytes(one)
-	want := tailEntryBytes + 300*(tailMessageBytes+3) + TailPreviews*(tailPreviewBytes+4+3+4)
+	for i := range one.Previews {
+		for range domain.MaxAttachments {
+			one.Previews[i].Attachments = append(one.Previews[i].Attachments, domain.Attachment{Key: "k", Mime: "image/jpeg"})
+		}
+	}
+	size := tailBytes(settleTail(one))
+	want := tailEntryBytes + 300*(tailMessageBytes+3) +
+		TailPreviews*(tailPreviewBytes+4+3+4+domain.MaxAttachments*(tailAttachmentBytes+len("image/jpeg")))
 	if size != want {
 		t.Fatalf("tailBytes = %d, want %d", size, want)
 	}

@@ -12,7 +12,7 @@ import (
 const (
 	maxAttachmentKeyBytes  = 512
 	maxAttachmentNameBytes = 255
-	maxAttachmentMimeBytes = 255
+	MaxAttachmentMimeBytes = 255
 	attachmentKeyDate      = "20060102"
 	attachmentKeyRandom    = 26
 	attachmentHashPrefix   = "sha256:"
@@ -118,7 +118,7 @@ func checkAttachmentFacts(a Attachment) error {
 	switch {
 	case a.Name == "" || len(a.Name) > maxAttachmentNameBytes || !utf8.ValidString(a.Name) || strings.ContainsFunc(a.Name, unicode.IsControl):
 		return invalid("attachments.name")
-	case len(a.Mime) > maxAttachmentMimeBytes || !isMediaType(a.Mime):
+	case len(a.Mime) > MaxAttachmentMimeBytes || !isMediaType(a.Mime):
 		return invalid("attachments.mime")
 	case a.Size < 1:
 		return invalid("attachments.size")
