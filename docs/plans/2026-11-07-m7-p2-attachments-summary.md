@@ -66,7 +66,7 @@ Ví dụ: An upload 2 ảnh (P1) được khoá `acme/an/20261107/k1…`, `…/k
 
 ## 3. Dữ liệu
 
-**Proto** `Attachment {string key, string name, string mime, int64 size, repeated int32 dim, int64 dur, string hash}` (`dim` rỗng hoặc `[rộng, cao]`, cùng dạng với doc và JSON `"dim":[1920,1080]`; server kiểm đúng 0 hoặc 2 số); `StartUploadRequest.thumbnail_of` (tag mới); `SendMessageRequest.attachments` (tag 11), `Message.attachments` (tag 26), `LastPreview.attachment_content_types` (tag 8).
+**Proto** `Attachment {string key, string name, string mime, int64 size, repeated int32 dim, int64 dur, string hash}` (`dim` rỗng hoặc `[rộng, cao]`, cùng dạng với doc và JSON `"dim":[1920,1080]`; server kiểm đúng 0 hoặc 2 số); `StartUploadRequest.thumbnail_of` (tag mới); `SendMessageRequest.attachments` (tag 11), `Message.attachments` (tag 26), `LastPreview.file_mimes` (tag 8).
 
 **Doc `messages`** thêm field `files: [{key, name, mime, size, dim: [w, h], dur, hash}]` (`omitempty`). Field mới của `messages` dùng tên ngắn nhưng đọc được, không viết tắt 1–2 ký tự; field cũ giữ tên cũ (owner 2026-11-07):
 
@@ -97,7 +97,7 @@ Không lưu khoá ảnh nhỏ: nó luôn là `{key}.thumb`.
 
 Chat không gọi S3 hay module media khi gửi: ack vẫn ≤ 30 ms (A1). Khoá giả hoặc file chưa upload xong chỉ làm hỏng tin của chính người gửi (URL tải trả lỗi từ S3). Tin hệ thống được kèm đính kèm như tin thường (backend của tenant upload dưới user của nó).
 
-**Forward:** đính kèm chép từ tin nguồn, đính kèm máy gửi kèm bị bỏ im lặng (như mention, D116); không kiểm tuổi khoá của tin nguồn. Khoá giữ nguyên → hai tin trỏ cùng object.
+**Forward:** đính kèm chép từ tin nguồn, đính kèm máy gửi kèm bị bỏ im lặng (như mention, D116); không kiểm chủ khoá và tuổi khoá (khoá là của người gửi gốc, có thể cũ), chỉ kiểm dạng. Khoá giữ nguyên → hai tin trỏ cùng object.
 
 **Sửa:** không đổi đính kèm. Text khi sửa vẫn phải khác rỗng (thêm chú thích cho tin chỉ có ảnh được, xoá hết chú thích thì không).
 
@@ -119,18 +119,18 @@ Phiên ảnh nhỏ không cần field mới: `_id` `{khoá file}.thumb` đã nó
 
 **Upload ảnh nhỏ** (module media, sau khi đã có khoá file): `StartUpload{thumbnail_of: khoá file, mime, size, …}`. Module kiểm khoá file là của caller và phiên của nó còn `uploading` hoặc `uploaded`; loại phải là `image/png|jpeg|gif|webp` (ảnh nhỏ luôn hiển thị trực tiếp); khoá cấp ra là `{khoá file}.thumb`, rồi upload như mọi file (thường một phần). Mỗi file một ảnh nhỏ: mở lần hai → `FAILED_PRECONDITION`. Máy upload ảnh nhỏ trước khi gửi tin; không có ảnh nhỏ thì thôi.
 
-**Preview danh sách hội thoại:** `LastPreview.attachment_content_types` (vd. `["image/jpeg","image/jpeg"]`) để máy hiện "📷 2 ảnh" khi text rỗng; cache đuôi room chỉ giữ loại, không giữ khoá.
+**Preview danh sách hội thoại:** `LastPreview.file_mimes` (vd. `["image/jpeg","image/jpeg"]`) để máy hiện "📷 2 ảnh" khi text rỗng; cache đuôi room chỉ giữ loại, không giữ khoá.
 
 **URL tải** (`MediaService.GetAttachmentURLs` qua gateway):
 
 ```mermaid
 flowchart TB
-  B["Máy Bình: GetAttachmentURLs{messages: [{room_id, seq}…]} ≤ 100 tin"] --> GW["gateway: token, giới hạn theo user"]
+  B["Máy Bình: GetAttachmentURLs{messages: [{room_id, thread, seq}…]} ≤ 100 tin"] --> GW["gateway: token, giới hạn theo user"]
   GW --> M["module media: sẵn sàng?"]
   M --> P["cổng chat VisibleAttachments(tenant, Bình, khoá tin)"]
-  P --> R["Reader.VisibleMessages: room cho phép đọc, tin không xoá, không ẩn, sau cleared_at; theo lô 200"]
+  P --> R["Reader.VisibleMessages: room cho phép đọc, tin không xoá, không ẩn, sau cleared_at; một lần đọc mỗi room"]
   R --> M2["ký GET mỗi khoá; ảnh/video thêm GET cho {key}.thumb; hạn MEDIA_DOWNLOAD_URL_TTL"]
-  M2 --> B2["trả {room_id, seq, attachments: [{key, url, thumbnail_url}]}, expires_at"]
+  M2 --> B2["trả {room_id, thread, seq, files: [{key, url, thumbnail_url}]}, expires_at"]
 ```
 
 - Máy không bao giờ gửi khoá object; chỉ gửi khoá tin. Tin không được đọc thì im lặng không có trong kết quả (không lộ tin tồn tại).
@@ -227,7 +227,7 @@ Không có event hay subject mới. `msg_created`, `msg_edited`, `msg_deleted` m
 |---|---|
 | Unit domain chat | Kiểm đính kèm (số lượng, khoá người khác, khoá cũ hơn 24h, trùng, tên, loại, `dim`, `dur`, `hash`); text rỗng chỉ khi có đính kèm |
 | Unit codec + contract store | Round trip field `files`; tin không đính kèm không có `files`; xoá `$unset` `files`; sửa giữ `files` |
-| Unit view / pbconv / roomcache | Ẩn/clear che `attachments` và `meta`; xoá trả rỗng; `LastPreview.attachment_content_types` |
+| Unit view / pbconv / roomcache | Ẩn/clear che `attachments` và `meta`; xoá trả rỗng; `LastPreview.file_mimes` |
 | Unit forward | Chép đính kèm nguồn (cả hash), bỏ đính kèm máy gửi, khoá nguồn cũ vẫn được |
 | Unit module media | `StartUpload` lưu `dim`, `dur`; `CompleteUpload` lưu `hash` (kiểm dạng, gọi lại an toàn); `StartUpload{thumbnail_of}`: khoá `.thumb`, file của người khác, loại không phải ảnh, mở lần hai; `GetAttachmentURLs`: chỉ tin được đọc, ép loại và cách hiển thị, `thumbnail_url` chỉ cho ảnh/video, giới hạn 100, chưa sẵn sàng |
 | Unit module media gallery | `ListUploads`: chỉ khoá của caller, bỏ `.thumb`, bỏ chưa xong/huỷ, quá 30 ngày vẫn trả với `expired` và không URL, đúng mốc ngày 30, lọc `kinds`, mới nhất trước qua nhiều trang, `before` của người khác bị từ chối; khoá mới sắp đúng theo thời gian (cùng mili giây vẫn khác nhau) |
