@@ -20,6 +20,8 @@ const (
 	DefaultReadyCheckInterval = 30 * time.Second
 	DefaultDownloadTTL        = time.Hour
 	DefaultRetention          = 30 * 24 * time.Hour
+	minSignatureTTL           = time.Second
+	maxSignatureTTL           = 7 * 24 * time.Hour
 	DefaultThumbnailSuffix    = ".thumb"
 	minThumbnailSuffix        = 2
 	maxThumbnailSuffix        = 32
@@ -89,6 +91,7 @@ func (c Config) Validate() error {
 	if c.DownloadSignatureTTL <= 0 || c.ProcessingRetention <= 0 {
 		errs = append(errs, errors.New("MEDIA_DOWNLOAD_URL_TTL and MEDIA_PROCESSING_RETENTION must be positive"))
 	}
+	errs = append(errs, signatureTTLError("MEDIA_PART_URL_TTL", c.PartSignatureTTL), signatureTTLError("MEDIA_DOWNLOAD_URL_TTL", c.DownloadSignatureTTL))
 	if !validThumbnailSuffix(c.ThumbnailSuffix) {
 		errs = append(errs, fmt.Errorf("MEDIA_THUMBNAIL_SUFFIX must start with a dot and be %d..%d characters of a-z, 0-9 and dots", minThumbnailSuffix, maxThumbnailSuffix))
 	}
@@ -100,4 +103,11 @@ func (c Config) Validate() error {
 
 func validThumbnailSuffix(s string) bool {
 	return len(s) >= minThumbnailSuffix && len(s) <= maxThumbnailSuffix && strings.HasPrefix(s, ".") && strings.Trim(s, thumbnailSuffixAlphabet) == ""
+}
+
+func signatureTTLError(name string, ttl time.Duration) error {
+	if ttl < minSignatureTTL || ttl > maxSignatureTTL {
+		return fmt.Errorf("%s must be %v..%v, the range S3 accepts for a signed URL", name, minSignatureTTL, maxSignatureTTL)
+	}
+	return nil
 }

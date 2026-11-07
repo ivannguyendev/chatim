@@ -66,3 +66,27 @@ func TestValidateNamesTheBrokenSetting(t *testing.T) {
 		}
 	}
 }
+
+func TestSignatureTTLsStayWithinS3Limits(t *testing.T) {
+	cases := []struct {
+		want   string
+		change func(*config.Config)
+	}{
+		{"MEDIA_PART_URL_TTL", func(c *config.Config) { c.PartSignatureTTL = 500 * time.Millisecond }},
+		{"MEDIA_PART_URL_TTL", func(c *config.Config) { c.PartSignatureTTL = 7*24*time.Hour + time.Second }},
+		{"MEDIA_DOWNLOAD_URL_TTL", func(c *config.Config) { c.DownloadSignatureTTL = 999 * time.Millisecond }},
+		{"MEDIA_DOWNLOAD_URL_TTL", func(c *config.Config) { c.DownloadSignatureTTL = 240 * time.Hour }},
+	}
+	for _, tc := range cases {
+		c := valid()
+		tc.change(&c)
+		if err := c.Validate(); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: err = %v", tc.want, err)
+		}
+	}
+	c := valid()
+	c.PartSignatureTTL, c.DownloadSignatureTTL = time.Second, 7*24*time.Hour
+	if err := c.Validate(); err != nil {
+		t.Fatalf("bounds: err = %v, want nil", err)
+	}
+}
