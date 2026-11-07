@@ -27,7 +27,7 @@
   12. kiểm thử, mỗi mục chứng minh gì.
 
   Chỗ nào làm việc phải xếp hàng (đánh số liên tục, khoá chung) phải nêu rõ.
-- Tên field DB (owner chốt 2026-10-07): tiếng Anh đầy đủ, từ cơ bản, cho mọi collection trừ `messages` (giữ tên ngắn, có bảng tra trong thiết kế §5); audit `updated_at` / `updated_by`; bộ đếm chỉ tăng, có lỗ đuôi `_ver`; id chống gửi lại `request_id`.
+- Tên field DB: field mới ở mọi collection dùng tên ngắn đọc được hoặc viết tắt quen thuộc (`dim`, `dur`, `mime`, `hash`), không mã 1–2 ký tự (owner 2026-11-07); field đã có giữ tên cũ (đầy đủ theo owner 2026-10-07, `messages` 1–2 ký tự, bảng tra thiết kế §5); audit `updated_at` / `updated_by`; bộ đếm chỉ tăng, có lỗ đuôi `_ver`; id chống gửi lại `request_id`.
 
 ## Milestone
 
