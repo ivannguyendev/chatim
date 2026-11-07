@@ -1,6 +1,6 @@
 # M7 phase P2: đính kèm trong tin và URL tải — tóm tắt
 
-> Ngày: 2026-11-07 · Nhánh `feat/m7` · Trạng thái: **đã xây, `dev-done` 2026-11-07** (`6dc5274` → `8bb99e9`, URL tải thường `9de8f9c`; quyết định D266–D270) · Dựa trên: D207 (field đính kèm trong chat, URL GET cấp sau khi chat kiểm quyền), A6 (≤ 10 tham chiếu), D262–D265; owner 2026-11-06: forward ảnh là forward cả ảnh, tin forward vẫn xem được khi tin gốc bị xoá; owner 2026-11-08: URL tải thường, app/web quyết mở hay tải
+> Ngày: 2026-11-07 · Nhánh `feat/m7` · Trạng thái: **đã xây, `dev-done` 2026-11-07** (`6dc5274` → `8bb99e9`, URL tải thường `9de8f9c`; quyết định D266–D268) · Dựa trên: D207 (field đính kèm trong chat, URL GET cấp sau khi chat kiểm quyền), A6 (≤ 10 tham chiếu), D262–D265; owner 2026-11-06: forward ảnh là forward cả ảnh, tin forward vẫn xem được khi tin gốc bị xoá; owner 2026-11-08: URL tải thường, app/web quyết mở hay tải
 > **Các phase của M7:** (P1) upload nhiều phần ✅ · (P2) đính kèm trong tin, URL tải, gallery ✅ · (P3) chuyển và dọn file
 
 ## Scope và ranh giới
