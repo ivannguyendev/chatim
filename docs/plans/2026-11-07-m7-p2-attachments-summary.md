@@ -1,7 +1,7 @@
 # M7 phase P2: đính kèm trong tin và URL tải — tóm tắt
 
-> Ngày: 2026-11-07 · Nhánh `feat/m7` · Trạng thái: **owner duyệt 2026-11-07** · Dựa trên: D207 (field đính kèm trong chat, URL GET cấp sau khi chat kiểm quyền), A6 (≤ 10 tham chiếu), D262–D265; owner 2026-11-06: forward ảnh là forward cả ảnh, tin forward vẫn xem được khi tin gốc bị xoá, ép tải xuống loại không phải ảnh/mp4
-> **Các phase của M7:** (P1) upload nhiều phần ✅ · **(P2) đính kèm trong tin, URL tải** · (P3) chuyển và dọn file
+> Ngày: 2026-11-07 · Nhánh `feat/m7` · Trạng thái: **đã xây, `dev-done` 2026-11-07** (`6dc5274` → `8bb99e9`; quyết định D266–D270) · Dựa trên: D207 (field đính kèm trong chat, URL GET cấp sau khi chat kiểm quyền), A6 (≤ 10 tham chiếu), D262–D265; owner 2026-11-06: forward ảnh là forward cả ảnh, tin forward vẫn xem được khi tin gốc bị xoá, ép tải xuống loại không phải ảnh/mp4
+> **Các phase của M7:** (P1) upload nhiều phần ✅ · (P2) đính kèm trong tin, URL tải, gallery ✅ · (P3) chuyển và dọn file
 
 ## Scope và ranh giới
 
@@ -251,16 +251,39 @@ Không có event hay subject mới. `msg_created`, `msg_edited`, `msg_deleted` m
 
 | Yêu cầu (nguồn) | Thành phần | Task | Test | Bằng chứng |
 |---|---|---|---|---|
-| Field đính kèm trong chat (D207), ≤ 10 (A6) | proto, domain, codec | proto; domain + kiểm; codec + store | unit, e2e | |
-| Khoá thuộc người gửi, tenant từ token (D263) | kiểm khoá lúc gửi | domain + kiểm | unit | |
-| Tin chỉ có đính kèm | `ValidateText` có điều kiện | domain + kiểm; actor | unit, e2e | |
-| Forward chép đính kèm (owner 2026-11-06) | forward | forward | unit, e2e | |
-| Xoá bỏ đính kèm; ẩn/clear che đính kèm và `meta` | store, view | codec + store; view | unit, e2e | |
-| URL tải sau khi chat kiểm quyền (D207) | `GetAttachmentURLs` + cổng | cổng chat; module media URL tải | unit, itest, e2e | |
-| Ép tải xuống loại không phải ảnh/mp4 (owner 2026-11-06) | ký URL | module media URL tải | unit, itest, e2e | |
-| Preview biết tin có đính kèm | `LastPreview` | preview + cache đuôi | unit, e2e | |
-| `media_uploads` lưu `dim`, `dur`, `hash` (owner 2026-11-07) | module media upload | module media upload | unit, itest | |
-| Hash để biết file đúng hay đã bị đổi (owner 2026-11-07) | field `hash`, kiểm dạng | domain + kiểm; codec + store; forward | unit, e2e | |
-| Gallery file tôi đã upload (owner 2026-11-07) | `ListUploads`, khoá sắp theo thời gian | module media gallery; khoá theo thời gian | unit, itest, e2e | |
-| Thumb do server sinh, URL suy từ khoá + config, DB không lưu (owner 2026-11-07) | config thumb, ký `thumbnail_url`, `GetClientConfig` | module media URL tải; config | unit, itest (thumb giả lập) | |
-| Đường gửi không chậm đi (A1, D207) | — | đo cuối phase | chatbench | |
+| Field đính kèm trong chat (D207), ≤ 10 (A6) | proto, domain, codec | proto; domain + kiểm; codec + store | unit, e2e | `6dc5274`, `fff627f`, `d27a3ab`; storetest `files` trên memstore + Mongo; e2e 16 bước 13–14 |
+| Khoá thuộc người gửi, tenant từ token (D263) | kiểm khoá lúc gửi | domain + kiểm | unit | `fff627f`, `49992d2`: khoá người khác, tenant khác, quá 24h, `.thumb` bị từ chối (unit domain + actor) |
+| Tin chỉ có đính kèm | `ValidateBody` | domain + kiểm; actor | unit, e2e | `fff627f`, `49992d2`; e2e bước 13 gửi tin text rỗng kèm 2 file |
+| Forward chép đính kèm (owner 2026-11-06) | forward | forward | unit, e2e | `49992d2` (`TestForwardCopiesSourceAttachmentsAndDropsTheRequestOnes`); e2e bước 19 |
+| Xoá bỏ đính kèm; ẩn/clear che đính kèm và `meta` | store, view | codec + store; view | unit, e2e | `fff627f`, `49992d2`, `d27a3ab`: mọi đường đọc (history, `GetMessages`, ghim, thread) không còn file; e2e bước 18–19 |
+| URL tải sau khi chat kiểm quyền (D207) | `GetAttachmentURLs` + cổng | cổng chat; module media URL tải | unit, itest, e2e | `b57d283`; itest node chat thật (ẩn, xoá, room riêng, tin không file vắng mặt); e2e bước 16, 18, 19 |
+| Ép tải xuống loại không phải ảnh/mp4 (owner 2026-11-06) | ký URL | module media URL tải | unit, itest, e2e | `b57d283`; itest Garage: png `image/png` inline, html `application/octet-stream` + `attachment` RFC 5987; e2e bước 16 |
+| Preview biết tin có đính kèm | `LastPreview` | preview + cache đuôi | unit, e2e | `978431d`; e2e bước 15 (`file_mimes`) |
+| `media_uploads` lưu `dim`, `dur`, `hash` (owner 2026-11-07) | module media upload | module media upload | unit, itest | `a8bf32f`; itest đọc doc Mongo thô: field vắng khi không gửi |
+| Hash để biết file đúng hay đã bị đổi (owner 2026-11-07) | field `hash`, kiểm dạng | domain + kiểm; codec + store; forward | unit, e2e | `fff627f`, `a8bf32f`; e2e bước 16: SHA-256 file tải về khớp `hash` |
+| Gallery file tôi đã upload (owner 2026-11-07) | `ListUploads`, khoá sắp theo thời gian | module media gallery; khoá theo thời gian | unit, itest, e2e | `a8bf32f`, `b25f264`; itest `explain` IXSCAN index mới ở 5 kiểu lọc; `an` không thấy `an2`/`an-b`/tenant khác; e2e bước 17 |
+| Thumb do server sinh, URL suy từ khoá + config, DB không lưu (owner 2026-11-07) | config thumb, ký `thumbnail_url`, `GetClientConfig` | module media URL tải; config | unit, itest (thumb giả lập) | `b57d283`; itest thumb giả lập tải qua `thumbnail_url` (`image/webp` inline), chưa có thumb → 404; e2e bước 1, 16 (dev tắt → rỗng) |
+| Đường gửi không chậm đi (A1, D207) | — | đo cuối phase | chatbench | A/B cùng dữ liệu, load < 3: trước p50/p95/p99 19,2/75,1/445,9 ms, sau 18,1/104,0/340,6 ms, 120.000/120.000 ack, 0 lỗi; ngang nhau trong mức nhiễu (`bin/bench/m7p2-ab/`) |
+
+## 14. Như đã xây
+
+**Kiểm cuối phase:** `make fmt-check`/`vet`/`lint` sạch, `make test` 113 package, `make itest` 113 package, `make alerts-check` 40 luật, `make e2e` PASS 16 phase (phase 16 thêm 9 bước đính kèm, tải, gallery). Review: đường ghi tin (T2–T4) và module media (T6–T8) mỗi phần một reviewer, không Critical/Important.
+
+**Lệch so với bản duyệt:**
+- Text chỉ toàn khoảng trắng bị từ chối cả khi có file; chỉ `""` đi kèm file được.
+- Loại "file khác" của gallery là `FILE_KIND_OTHER`; `FILE_KIND_UNSPECIFIED` trong `kinds` → `INVALID_ARGUMENT`.
+- `next_before` có mỗi khi trang đủ cỡ, nên trang cuối có thể rỗng.
+- Thiếu index gallery (database đã có `media_uploads` trước P2, D191 không tự tạo) thì `ListUploads` trả `INTERNAL` tới khi chạy `/app indexes -apply` một lần.
+- Tên file có ký tự đảo chiều chữ (U+202E…) bị từ chối ở chat và module media, để `invoice‮fdp.exe` không giả được đuôi `.pdf`.
+- `MEDIA_PART_URL_TTL`, `MEDIA_DOWNLOAD_URL_TTL` phải trong 1 giây..7 ngày (khoảng S3 nhận); sai thì config báo lỗi lúc khởi động thay vì mọi lệnh ký trả `UNAVAILABLE`.
+- Module media đóng kết nối HTTP nhàn rỗi tới S3 khi node dừng.
+- Lần đo chatbench đầu sau P2 (máy còn tải sau e2e, pacer lag p99 1,05 s) bị bỏ; đo A/B lại cùng điều kiện, ngang nhau.
+
+**Mang sang P3 hoặc sau:**
+- Nhãn `expired` chưa xét bucket (đúng khi mọi file ở `processing`); P3 thêm bucket khi chuyển file sang `completed`.
+- Hợp đồng Lambda: thumb luôn một loại ảnh cố định (vd. `image/webp`); `thumbnail_url` vẫn cấp cho SVG mà Lambda có thể bỏ qua (404). Luật lifecycle của `processing` phải tính từ lúc tạo object, cùng mốc với `expired`.
+- Gallery lọc loại sau khi đọc index: người có rất nhiều file khác loại thì một trang đọc nhiều doc hơn số trả về.
+- Con trỏ gallery theo thứ tự mở upload: file xong sau khi con trỏ đã qua không hiện ở trang sau.
+- `mime` nhận cả tham số (`; charset=…`); chỉ loại khớp đúng danh sách mới mở trực tiếp nên vẫn an toàn.
+- Actor đọc giờ thẳng từ đồng hồ hệ thống khi kiểm tuổi khoá; lệch đồng hồ cho phép 5 phút chưa có trong spec trước đây, nay ghi ở `docs/features/12`.
+- `ReplyPreview` của tin chỉ có ảnh không có chữ; `HideForViewer` chưa xoá `MentionAllAt` (có từ trước).
