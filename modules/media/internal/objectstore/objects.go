@@ -90,15 +90,8 @@ func (s *S3) SignPart(ctx context.Context, key, uploadID string, number int32, s
 	return u.String(), nil
 }
 
-func (s *S3) SignGet(ctx context.Context, key string, ttl time.Duration, d domain.Disposition) (string, error) {
-	params := url.Values{}
-	if d.ContentType != "" {
-		params.Set("response-content-type", d.ContentType)
-	}
-	if d.Disposition != "" {
-		params.Set("response-content-disposition", d.Disposition)
-	}
-	u, err := s.signer.PresignHeader(ctx, http.MethodGet, s.bucket, key, ttl, params, nil)
+func (s *S3) SignGet(ctx context.Context, key string, ttl time.Duration) (string, error) {
+	u, err := s.signer.PresignHeader(ctx, http.MethodGet, s.bucket, key, ttl, nil, nil)
 	if err != nil {
 		return "", fmt.Errorf("sign get: %w", err)
 	}

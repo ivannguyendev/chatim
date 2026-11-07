@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
@@ -61,13 +60,13 @@ func (r *mediaRun) downloads() error {
 	if len(files) != 2 || files[r.image.key] == nil || files[r.page.key] == nil {
 		return fmt.Errorf("message seq %d gave B %d files, want the PNG and the HTML", r.seq, len(files))
 	}
-	if err := checkDownload(r.base, r.image, files[r.image.key].GetUrl(), r.image.mime, "inline"); err != nil {
+	if err := checkDownload(r.base, r.image, files[r.image.key].GetUrl()); err != nil {
 		return err
 	}
-	return checkDownload(r.base, r.page, files[r.page.key].GetUrl(), "application/octet-stream", "attachment")
+	return checkDownload(r.base, r.page, files[r.page.key].GetUrl())
 }
 
-func checkDownload(ctx context.Context, f *mediaFile, url, wantType, wantDisposition string) error {
+func checkDownload(ctx context.Context, f *mediaFile, url string) error {
 	d, err := getSigned(ctx, url)
 	if err != nil {
 		return fmt.Errorf("download %s: %w", f.name, err)
@@ -80,10 +79,6 @@ func checkDownload(ctx context.Context, f *mediaFile, url, wantType, wantDisposi
 		return fmt.Errorf("download %s gave %d bytes that differ from the %d uploaded", f.name, len(d.body), len(f.body))
 	case "sha256:"+hex.EncodeToString(sum[:]) != f.hash:
 		return fmt.Errorf("download %s hashes to %x, want %s", f.name, sum, f.hash)
-	case d.header.Get("Content-Type") != wantType:
-		return fmt.Errorf("download %s has Content-Type %q, want %q", f.name, d.header.Get("Content-Type"), wantType)
-	case !strings.HasPrefix(d.header.Get("Content-Disposition"), wantDisposition):
-		return fmt.Errorf("download %s has Content-Disposition %q, want %s", f.name, d.header.Get("Content-Disposition"), wantDisposition)
 	}
 	return nil
 }

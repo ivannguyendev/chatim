@@ -16,7 +16,7 @@ type Chat interface {
 }
 
 type Objects interface {
-	SignGet(ctx context.Context, key string, ttl time.Duration, d domain.Disposition) (string, error)
+	SignGet(ctx context.Context, key string, ttl time.Duration) (string, error)
 }
 
 type Config struct {
@@ -99,13 +99,13 @@ func (s *Service) AttachmentURLs(ctx context.Context, who domain.Caller, refs []
 }
 
 func (s Signer) Sign(ctx context.Context, f domain.File) (FileURL, error) {
-	u, err := s.Objects.SignGet(ctx, f.Key, s.TTL, domain.FileDisposition(f.Name, f.Mime))
+	u, err := s.Objects.SignGet(ctx, f.Key, s.TTL)
 	if err != nil {
 		return FileURL{}, fmt.Errorf("%w: %w", domain.ErrRetryLater, err)
 	}
 	out := FileURL{Key: f.Key, URL: u}
 	if thumb, ok := s.Thumbnails.KeyFor(f.Key, f.Mime); ok {
-		if out.ThumbnailURL, err = s.Objects.SignGet(ctx, thumb, s.TTL, domain.ThumbnailDisposition()); err != nil {
+		if out.ThumbnailURL, err = s.Objects.SignGet(ctx, thumb, s.TTL); err != nil {
 			return FileURL{}, fmt.Errorf("%w: %w", domain.ErrRetryLater, err)
 		}
 	}

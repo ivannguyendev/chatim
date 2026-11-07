@@ -25,7 +25,6 @@ type fetched struct {
 	status      int
 	body        []byte
 	contentType string
-	disposition string
 }
 
 func fetch(t *testing.T, url string) fetched {
@@ -43,7 +42,7 @@ func fetch(t *testing.T, url string) fetched {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return fetched{resp.StatusCode, body, resp.Header.Get("Content-Type"), resp.Header.Get("Content-Disposition")}
+	return fetched{resp.StatusCode, body, resp.Header.Get("Content-Type")}
 }
 
 func putObject(t *testing.T, s *S3, key, contentType string) []byte {
@@ -56,7 +55,7 @@ func putObject(t *testing.T, s *S3, key, contentType string) []byte {
 	return body
 }
 
-func TestSignedDownloadsForceTheResponseHeadersOnS3(t *testing.T) {
+func TestSignedDownloadsServeTheStoredBytesAndType(t *testing.T) {
 	s, err := New(itConfig(t))
 	if err != nil {
 		t.Fatal(err)
@@ -69,7 +68,7 @@ func TestSignedDownloadsForceTheResponseHeadersOnS3(t *testing.T) {
 	thumbBody := putObject(t, s, png+".thumb", "image/webp")
 	files := []domain.File{
 		{Key: png, Name: "a.png", Mime: "image/png"},
-		{Key: html, Name: `Trang "lạ".html`, Mime: "text/html"},
+		{Key: html, Name: "trang.html", Mime: "text/html"},
 		{Key: pdf, Name: "r.pdf", Mime: "application/pdf"},
 		{Key: jpg, Name: "b.jpg", Mime: "image/jpeg"},
 	}
@@ -83,17 +82,16 @@ func TestSignedDownloadsForceTheResponseHeadersOnS3(t *testing.T) {
 	}
 	urls := got.Messages[0].Files
 	image := fetch(t, urls[0].URL)
-	if image.status != http.StatusOK || !bytes.Equal(image.body, pngBody) || image.contentType != "image/png" || image.disposition != "inline" {
-		t.Fatalf("png: %d %s %q", image.status, image.contentType, image.disposition)
+	if image.status != http.StatusOK || !bytes.Equal(image.body, pngBody) || image.contentType != "image/png" {
+		t.Fatalf("png: %d %s", image.status, image.contentType)
 	}
 	page := fetch(t, urls[1].URL)
-	want := domain.FileDisposition(files[1].Name, files[1].Mime)
-	if page.status != http.StatusOK || !bytes.Equal(page.body, htmlBody) || page.contentType != "application/octet-stream" || page.disposition != want.Disposition {
-		t.Fatalf("html: %d %s %q", page.status, page.contentType, page.disposition)
+	if page.status != http.StatusOK || !bytes.Equal(page.body, htmlBody) || page.contentType != "text/html" {
+		t.Fatalf("html: %d %s", page.status, page.contentType)
 	}
 	thumb := fetch(t, urls[0].ThumbnailURL)
-	if thumb.status != http.StatusOK || !bytes.Equal(thumb.body, thumbBody) || thumb.contentType != "image/webp" || thumb.disposition != "inline" {
-		t.Fatalf("thumbnail: %d %s %q", thumb.status, thumb.contentType, thumb.disposition)
+	if thumb.status != http.StatusOK || !bytes.Equal(thumb.body, thumbBody) || thumb.contentType != "image/webp" {
+		t.Fatalf("thumbnail: %d %s", thumb.status, thumb.contentType)
 	}
 	if urls[1].ThumbnailURL != "" || urls[2].ThumbnailURL != "" {
 		t.Fatalf("html or pdf thumbnail: %+v", urls)

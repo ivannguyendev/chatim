@@ -35,8 +35,8 @@ func (o objects) Complete(_ context.Context, key, _ string, _ []domain.UploadedP
 func (objects) Abort(context.Context, string, string) error { return nil }
 func (objects) Head(context.Context, string) (int64, error) { return 40 << 20, nil }
 func (objects) Delete(context.Context, string) error        { return nil }
-func (objects) SignGet(_ context.Context, key string, _ time.Duration, d domain.Disposition) (string, error) {
-	return "https://s3/" + key + "?" + d.Disposition, nil
+func (objects) SignGet(_ context.Context, key string, _ time.Duration) (string, error) {
+	return "https://s3/" + key, nil
 }
 
 type chat struct{}
@@ -81,7 +81,7 @@ func TestGetAttachmentURLsOverTheService(t *testing.T) {
 		t.Fatal(err)
 	}
 	key := "acme/an/20261107/0123456789abcdefghijklmnop"
-	want := &chatimv1.MessageFiles{RoomId: "7", Thread: 3, Seq: 9, Files: []*chatimv1.FileURL{{Key: key, Url: "https://s3/" + key + "?inline", ThumbnailUrl: "https://s3/" + key + ".thumb?inline"}}}
+	want := &chatimv1.MessageFiles{RoomId: "7", Thread: 3, Seq: 9, Files: []*chatimv1.FileURL{{Key: key, Url: "https://s3/" + key, ThumbnailUrl: "https://s3/" + key + ".thumb"}}}
 	if len(got.GetMessages()) != 1 || !proto.Equal(got.GetMessages()[0], want) || !got.GetExpiresAt().IsValid() {
 		t.Fatalf("got %v", got)
 	}

@@ -26,7 +26,6 @@ var (
 type signedGet struct {
 	key string
 	ttl time.Duration
-	how domain.Disposition
 }
 
 type fakeObjects struct {
@@ -35,10 +34,10 @@ type fakeObjects struct {
 	err    error
 }
 
-func (f *fakeObjects) SignGet(_ context.Context, key string, ttl time.Duration, how domain.Disposition) (string, error) {
+func (f *fakeObjects) SignGet(_ context.Context, key string, ttl time.Duration) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.signed = append(f.signed, signedGet{key: key, ttl: ttl, how: how})
+	f.signed = append(f.signed, signedGet{key: key, ttl: ttl})
 	return "https://s3/" + key, f.err
 }
 
@@ -110,7 +109,7 @@ func TestListShowsOnlyTheCallersFiles(t *testing.T) {
 	if f.Expired || f.URL != "https://s3/"+mine.Key || f.ThumbnailURL != "" {
 		t.Fatalf("file %+v", f)
 	}
-	want := []signedGet{{mine.Key, time.Hour, domain.FileDisposition(mine.FileName, mine.ContentType)}}
+	want := []signedGet{{mine.Key, time.Hour}}
 	if !slices.Equal(r.objects.signed, want) {
 		t.Fatalf("signed %+v", r.objects.signed)
 	}

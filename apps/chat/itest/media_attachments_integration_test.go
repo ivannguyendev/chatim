@@ -127,7 +127,7 @@ func TestRealInfraAttachmentURLsFollowTheChatReadCheck(t *testing.T) {
 		t.Fatalf("bob got %v, want only seq %d", bob.GetMessages(), shown)
 	}
 	file := bob.GetMessages()[0].GetFiles()[0]
-	if file.GetKey() != shownKey || !strings.Contains(file.GetUrl(), "response-content-disposition=inline") || file.GetThumbnailUrl() != "" || !bob.GetExpiresAt().IsValid() {
+	if file.GetKey() != shownKey || !strings.Contains(file.GetUrl(), "X-Amz-Signature=") || strings.Contains(file.GetUrl(), "response-content-") || file.GetThumbnailUrl() != "" || !bob.GetExpiresAt().IsValid() {
 		t.Fatalf("bob's file %v", file)
 	}
 	alice := ask(itUser, ref(private, secret), ref(shared, hidden), ref(shared, shown))

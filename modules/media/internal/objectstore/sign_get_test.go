@@ -5,8 +5,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/ivannguyendev/chatim/modules/media/internal/domain"
 )
 
 func signerOnly(t *testing.T) *S3 {
@@ -21,10 +19,9 @@ func signerOnly(t *testing.T) *S3 {
 	return s
 }
 
-func TestSignGetForcesTheResponseHeadersOnThePublicEndpoint(t *testing.T) {
-	s := signerOnly(t)
-	d := domain.FileDisposition("Báo cáo.pdf", "application/pdf")
-	signed, err := s.SignGet(t.Context(), "acme/an/20261107/0123456789abcdefghijklmnop", time.Hour, d)
+func signedQuery(t *testing.T, key string, ttl time.Duration) (*url.URL, url.Values) {
+	t.Helper()
+	signed, err := signerOnly(t).SignGet(t.Context(), key, ttl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,11 +29,15 @@ func TestSignGetForcesTheResponseHeadersOnThePublicEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	q := u.Query()
+	return u, u.Query()
+}
+
+func TestSignGetSignsAPlainURLOnThePublicEndpoint(t *testing.T) {
+	u, q := signedQuery(t, "acme/an/20261107/0123456789abcdefghijklmnop", time.Hour)
 	if u.Host != "media.example.com" || u.Path != "/processing/acme/an/20261107/0123456789abcdefghijklmnop" {
-		t.Fatalf("url %s", signed)
+		t.Fatalf("url %s", u)
 	}
-	if q.Get("response-content-type") != d.ContentType || q.Get("response-content-disposition") != d.Disposition || q.Get("X-Amz-Expires") != "3600" {
+	if q.Has("response-content-type") || q.Has("response-content-disposition") || q.Get("X-Amz-Expires") != "3600" {
 		t.Fatalf("query %v", q)
 	}
 	if !strings.Contains(q.Get("X-Amz-SignedHeaders"), "host") || q.Get("X-Amz-Signature") == "" {
@@ -44,16 +45,9 @@ func TestSignGetForcesTheResponseHeadersOnThePublicEndpoint(t *testing.T) {
 	}
 }
 
-func TestSignGetForAThumbnailLeavesTheTypeToStorage(t *testing.T) {
-	signed, err := signerOnly(t).SignGet(t.Context(), "acme/an/20261107/0123456789abcdefghijklmnop.thumb", time.Minute, domain.ThumbnailDisposition())
-	if err != nil {
-		t.Fatal(err)
-	}
-	u, err := url.Parse(signed)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if q := u.Query(); q.Has("response-content-type") || q.Get("response-content-disposition") != "inline" {
+func TestSignGetForAThumbnailIsPlainToo(t *testing.T) {
+	_, q := signedQuery(t, "acme/an/20261107/0123456789abcdefghijklmnop.thumb", time.Minute)
+	if q.Has("response-content-type") || q.Has("response-content-disposition") || q.Get("X-Amz-Expires") != "60" {
 		t.Fatalf("query %v", q)
 	}
 }

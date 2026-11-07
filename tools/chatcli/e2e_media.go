@@ -104,7 +104,7 @@ func (r *mediaRun) steps() []wsEventsStep {
 		{"A sends a message with no text and both files over the websocket", r.sendFiles},
 		{"B reads the message through the gateway with both attachments", r.readFiles},
 		{"B's room list preview names both file mimes", r.previewMimes},
-		{"B's URLs give the PNG inline with its exact bytes and hash, the HTML as an octet-stream attachment and no thumbnail", r.downloads},
+		{"B's plain URLs give the PNG and the HTML with their exact bytes and hashes and no thumbnail", r.downloads},
 		{"ListUploads gives A the PNG first then the HTML and the 40 MiB file, kind image only the PNG, and B only its own file", r.gallery},
 		{"after B hides the message B gets no URL for it while A still does", r.hidden},
 		{"A forwards the message to a group with C and deletes the original; the original has no URL and C downloads through the forward", r.forwarded},

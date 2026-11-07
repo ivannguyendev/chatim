@@ -28,7 +28,6 @@ func putSigned(ctx context.Context, url string, body []byte) (int, string, error
 type signedDownload struct {
 	status int
 	body   []byte
-	header http.Header
 }
 
 func getSigned(ctx context.Context, url string) (signedDownload, error) {
@@ -45,5 +44,5 @@ func getSigned(ctx context.Context, url string) (signedDownload, error) {
 	if err != nil {
 		return signedDownload{}, err
 	}
-	return signedDownload{status: resp.StatusCode, body: body, header: resp.Header}, nil
+	return signedDownload{status: resp.StatusCode, body: body}, nil
 }

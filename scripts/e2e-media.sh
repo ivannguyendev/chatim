@@ -4,7 +4,7 @@ phase16_media() {
   step="phase 16 media buckets"
   "$scripts/media-buckets.sh" >/dev/null
   step="phase 16 media upload, attachments and gallery through the gateway and websocket"
-  echo "phase 16: through $gw_container GetClientConfig with media on, a 40 MiB file uploaded in 16, 16 and 8 MiB parts straight to S3 and completed with client ETags, completed again, a stale part URL refused, another user's not_found, the device limit on GetPartURLs, too many parts invalid, no part URL after AbortUpload, then a PNG and an HTML page sent with no text over $ws_container, read by B with both attachments and their mimes in the room list preview, the PNG downloaded inline with its exact bytes and hash and the HTML forced to an octet-stream attachment, ListUploads newest first and per user, no URL after a hide or a delete, and C downloading through a forward"
+  echo "phase 16: through $gw_container GetClientConfig with media on, a 40 MiB file uploaded in 16, 16 and 8 MiB parts straight to S3 and completed with client ETags, completed again, a stale part URL refused, another user's not_found, the device limit on GetPartURLs, too many parts invalid, no part URL after AbortUpload, then a PNG and an HTML page sent with no text over $ws_container, read by B with both attachments and their mimes in the room list preview, the PNG and the HTML downloaded from plain signed URLs with their exact bytes and hashes, ListUploads newest first and per user, no URL after a hide or a delete, and C downloading through a forward"
   docker run --rm --network "$network" --user "$(id -u):$(id -g)" -v "$state":/state -v "$ws_key":/keys/private.jwk:ro "$image" \
     e2e media -state /state -url "$ws_url" -gateway "$gw_url"
   step="phase 16 logs hold no token and no signed URL"

@@ -43,7 +43,6 @@ func (f *fakeChat) VisibleAttachments(_ context.Context, tenant, user string, re
 type signedGet struct {
 	key string
 	ttl time.Duration
-	how domain.Disposition
 }
 
 type fakeObjects struct {
@@ -52,10 +51,10 @@ type fakeObjects struct {
 	err    error
 }
 
-func (f *fakeObjects) SignGet(_ context.Context, key string, ttl time.Duration, how domain.Disposition) (string, error) {
+func (f *fakeObjects) SignGet(_ context.Context, key string, ttl time.Duration) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.signed = append(f.signed, signedGet{key: key, ttl: ttl, how: how})
+	f.signed = append(f.signed, signedGet{key: key, ttl: ttl})
 	return "https://s3/" + key, f.err
 }
 
@@ -118,9 +117,9 @@ func TestAttachmentURLsSignEveryVisibleFile(t *testing.T) {
 		t.Fatalf("files %+v", first)
 	}
 	want := []signedGet{
-		{photo, time.Hour, domain.FileDisposition("a.png", "image/png")},
-		{report, time.Hour, domain.FileDisposition("r.pdf", "application/pdf")},
-		{clip, time.Hour, domain.FileDisposition("c.mp4", "video/mp4")},
+		{photo, time.Hour},
+		{report, time.Hour},
+		{clip, time.Hour},
 	}
 	if !slices.Equal(r.objects.signed, want) {
 		t.Fatalf("signed %+v", r.objects.signed)
@@ -146,9 +145,6 @@ func TestThumbnailURLsFollowTheConfiguredSuffixForImagesAndVideos(t *testing.T) 
 	for _, s := range r.objects.signed {
 		if strings.HasSuffix(s.key, ".small") {
 			thumbs++
-			if s.how != domain.ThumbnailDisposition() {
-				t.Fatalf("thumbnail signed with %+v", s.how)
-			}
 		}
 	}
 	if thumbs != 2 || len(r.objects.signed) != 5 {

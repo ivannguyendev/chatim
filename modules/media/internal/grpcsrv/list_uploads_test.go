@@ -37,7 +37,7 @@ func TestListUploadsOverTheService(t *testing.T) {
 	f := files[0]
 	if f.GetKey() != image.Key || f.GetName() != "a.png" || f.GetMime() != "image/png" || f.GetSize() != image.Size ||
 		!slices.Equal(f.GetDim(), image.Dim) || f.GetHash() != image.Hash || !f.GetCreatedAt().AsTime().Equal(image.CreatedAt) ||
-		f.GetExpired() || f.GetUrl() != "https://s3/"+image.Key+"?inline" {
+		f.GetExpired() || f.GetUrl() != "https://s3/"+image.Key {
 		t.Fatalf("file %v", f)
 	}
 	rest, err := s.ListUploads(caller("acme", "an"), &chatimv1.ListUploadsRequest{Before: got.GetNextBefore(), PageSize: 2})
