@@ -102,7 +102,7 @@ Mọi thiết kế và dòng code trong `chatim` bắt buộc phải tuân thủ
 
 ### 5.1 Các Collection chính trong MongoDB
 
-Mọi collection dùng tên tiếng Anh đầy đủ (D96), ngoại trừ `messages` dùng tên ngắn để tiết kiệm bộ nhớ cache RAM của MongoDB.
+Field mới ở mọi collection dùng tên ngắn đọc được hoặc viết tắt quen thuộc (`dim`, `dur`, `mime`, `hash`), không dùng mã 1–2 ký tự (owner 2026-11-07, thay một phần D96). Field đã có giữ tên cũ: các collection dùng tên tiếng Anh đầy đủ (D96), `messages` dùng tên 1–2 ký tự để tiết kiệm bộ nhớ cache RAM của MongoDB.
 
 Cờ event chờ phát (M3.1, D142–D149): 7 collection `messages`, `message_edits`, `message_interactions`, `pin_actions`, `members`, `hidden`, `rooms` có thêm hai field nội bộ `_state` (int32 bitmask, mỗi bit một event đã ghi DB nhưng chưa chắc vào NATS) và `_state_at` (lúc bật bit cũ nhất, `$min`; insert lấy giờ của doc, update lấy giờ server `$$NOW`). Hết bit thì cả hai field bị `$unset`, nên doc đã phát xong không tốn thêm byte. Mỗi collection có partial index `state_pending {_state_at: 1, _id: 1}` chỉ chứa doc còn `_state`. Proto không đọc hai field này. Bảng bit: [Module 10](features/10-feature-data-reconciliation-and-repair.md#31-bit-theo-collection).
 
