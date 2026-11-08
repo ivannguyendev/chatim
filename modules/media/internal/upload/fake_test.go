@@ -107,7 +107,7 @@ func (f *fakeObjects) Head(_ context.Context, key string) (int64, error) {
 	return 40*mib + f.sizeDelta, nil
 }
 
-func (f *fakeObjects) Delete(_ context.Context, key string) error {
+func (f *fakeObjects) DeleteProcessing(_ context.Context, key string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls++

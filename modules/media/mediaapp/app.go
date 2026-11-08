@@ -74,7 +74,7 @@ func (a *App) assemble() error {
 	objects, err := objectstore.New(objectstore.Config{
 		Endpoint: a.cfg.Endpoint, PublicEndpoint: a.cfg.PublicEndpoint, Region: a.cfg.Region,
 		AccessKey: a.cfg.AccessKey, SecretKey: a.cfg.SecretKey,
-		Bucket: a.cfg.ProcessingBucket, CompletedBucket: a.cfg.CompletedBucket,
+		Bucket: a.cfg.ProcessingBucket, CompletedBucket: a.cfg.CompletedBucket, Copy: a.cfg.CopyLimits(),
 	})
 	if err != nil {
 		return err

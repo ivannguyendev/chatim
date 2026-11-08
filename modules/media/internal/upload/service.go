@@ -19,7 +19,7 @@ type Objects interface {
 	Complete(ctx context.Context, key, uploadID string, parts []domain.UploadedPart) error
 	Abort(ctx context.Context, key, uploadID string) error
 	Head(ctx context.Context, key string) (int64, error)
-	Delete(ctx context.Context, key string) error
+	DeleteProcessing(ctx context.Context, key string) error
 }
 
 type Config struct {

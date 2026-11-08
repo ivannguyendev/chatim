@@ -26,5 +26,7 @@ func (p *parser) mediaConfig(c *Config) {
 	m.ProcessingRetention = p.span("MEDIA_PROCESSING_RETENTION", m.ProcessingRetention)
 	m.Thumbnails = p.flag("MEDIA_THUMBNAILS", m.Thumbnails)
 	m.ThumbnailSuffix = envconfig.String("MEDIA_THUMBNAIL_SUFFIX", m.ThumbnailSuffix)
+	m.CopySingleMax = int64(p.count("MEDIA_COPY_SINGLE_MAX", int(m.CopySingleMax)))
+	m.CopyPartBytes = int64(p.count("MEDIA_COPY_PART_BYTES", int(m.CopyPartBytes)))
 	c.Media = m
 }

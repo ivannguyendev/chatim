@@ -20,6 +20,8 @@ const (
 	DefaultReadyCheckInterval = 30 * time.Second
 	DefaultDownloadTTL        = time.Hour
 	DefaultRetention          = 30 * 24 * time.Hour
+	DefaultCopySingleMax      = 5 << 30
+	DefaultCopyPartBytes      = 1 << 30
 	minSignatureTTL           = time.Second
 	maxSignatureTTL           = 7 * 24 * time.Hour
 	DefaultThumbnailSuffix    = ".thumb"
@@ -48,6 +50,8 @@ type Config struct {
 	ProcessingRetention  time.Duration
 	Thumbnails           bool
 	ThumbnailSuffix      string
+	CopySingleMax        int64
+	CopyPartBytes        int64
 }
 
 func Defaults() Config {
@@ -56,6 +60,7 @@ func Defaults() Config {
 		MaxParts: DefaultMaxParts, MaxParallelUploads: DefaultMaxParallelUploads,
 		PartSignatureTTL: DefaultPartSignatureTTL, ReadyCheckInterval: DefaultReadyCheckInterval,
 		DownloadSignatureTTL: DefaultDownloadTTL, ProcessingRetention: DefaultRetention, ThumbnailSuffix: DefaultThumbnailSuffix,
+		CopySingleMax: DefaultCopySingleMax, CopyPartBytes: DefaultCopyPartBytes,
 	}
 }
 
@@ -68,6 +73,10 @@ func (c Config) Limits() domain.Limits {
 		MinPartBytes: c.MinPartBytes, MaxPartBytes: c.MaxPartBytes, MaxParts: c.MaxParts,
 		MaxParallel: c.MaxParallelUploads, MaxFileBytes: c.MaxFileBytes,
 	}
+}
+
+func (c Config) CopyLimits() domain.CopyLimits {
+	return domain.CopyLimits{SingleMax: c.CopySingleMax, PartBytes: c.CopyPartBytes}
 }
 
 func (c Config) Validate() error {
@@ -98,6 +107,7 @@ func (c Config) Validate() error {
 	if err := c.Limits().Validate(); err != nil {
 		errs = append(errs, err)
 	}
+	errs = append(errs, c.copyError())
 	return errors.Join(errs...)
 }
 
@@ -108,6 +118,16 @@ func validThumbnailSuffix(s string) bool {
 func signatureTTLError(name string, ttl time.Duration) error {
 	if ttl < minSignatureTTL || ttl > maxSignatureTTL {
 		return fmt.Errorf("%s must be %v..%v, the range S3 accepts for a signed URL", name, minSignatureTTL, maxSignatureTTL)
+	}
+	return nil
+}
+
+func (c Config) copyError() error {
+	if err := c.CopyLimits().Validate(); err != nil {
+		return fmt.Errorf("MEDIA_COPY_SINGLE_MAX and MEDIA_COPY_PART_BYTES: %w", err)
+	}
+	if _, err := c.CopyLimits().Parts(c.MaxFileBytes); err != nil {
+		return fmt.Errorf("MEDIA_COPY_PART_BYTES too small for MEDIA_MAX_FILE_BYTES: %w", err)
 	}
 	return nil
 }

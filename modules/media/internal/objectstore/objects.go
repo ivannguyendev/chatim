@@ -23,6 +23,7 @@ type Config struct {
 	SecretKey       string
 	Bucket          string
 	CompletedBucket string
+	Copy            domain.CopyLimits
 }
 
 type S3 struct {
@@ -31,10 +32,14 @@ type S3 struct {
 	transport *http.Transport
 	bucket    string
 	completed string
+	copy      domain.CopyLimits
 	stats     Stats
 }
 
 func New(c Config) (*S3, error) {
+	if err := c.Copy.Validate(); err != nil {
+		return nil, fmt.Errorf("objectstore: %w", err)
+	}
 	api, transport, err := client(c.Endpoint, c)
 	if err != nil {
 		return nil, fmt.Errorf("objectstore endpoint: %w", err)
@@ -43,7 +48,7 @@ func New(c Config) (*S3, error) {
 	if err != nil {
 		return nil, fmt.Errorf("objectstore public endpoint: %w", err)
 	}
-	return &S3{api: minio.Core{Client: api}, signer: signer, transport: transport, bucket: c.Bucket, completed: c.CompletedBucket}, nil
+	return &S3{api: minio.Core{Client: api}, signer: signer, transport: transport, bucket: c.Bucket, completed: c.CompletedBucket, copy: c.Copy}, nil
 }
 
 func client(endpoint string, c Config) (*minio.Client, *http.Transport, error) {
@@ -90,8 +95,12 @@ func (s *S3) SignPart(ctx context.Context, key, uploadID string, number int32, s
 	return u.String(), nil
 }
 
-func (s *S3) SignGet(ctx context.Context, key string, ttl time.Duration) (string, error) {
-	u, err := s.signer.PresignHeader(ctx, http.MethodGet, s.bucket, key, ttl, nil, nil)
+func (s *S3) SignGet(ctx context.Context, bucket domain.Bucket, key string, ttl time.Duration) (string, error) {
+	name, err := s.bucketOf(bucket)
+	if err != nil {
+		return "", err
+	}
+	u, err := s.signer.PresignHeader(ctx, http.MethodGet, name, key, ttl, nil, nil)
 	if err != nil {
 		return "", fmt.Errorf("sign get: %w", err)
 	}
@@ -122,10 +131,34 @@ func (s *S3) Head(ctx context.Context, key string) (int64, error) {
 	return info.Size, err
 }
 
-func (s *S3) Delete(ctx context.Context, key string) error {
+func (s *S3) Exists(ctx context.Context, bucket domain.Bucket, key string) (bool, error) {
+	name, err := s.bucketOf(bucket)
+	if err != nil {
+		return false, err
+	}
+	_, err = s.api.StatObject(ctx, name, key, minio.StatObjectOptions{})
+	err = classify(err)
+	s.stats.record(opHead, err)
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func (s *S3) DeleteProcessing(ctx context.Context, key string) error {
 	err := classify(s.api.RemoveObject(ctx, s.bucket, key, minio.RemoveObjectOptions{}))
 	s.stats.record(opDelete, err)
 	return err
+}
+
+func (s *S3) bucketOf(b domain.Bucket) (string, error) {
+	switch b {
+	case "", domain.BucketProcessing:
+		return s.bucket, nil
+	case domain.BucketCompleted:
+		return s.completed, nil
+	}
+	return "", fmt.Errorf("%w: %q", ErrUnknownBucket, b)
 }
 
 func (s *S3) CheckBuckets(ctx context.Context) error {

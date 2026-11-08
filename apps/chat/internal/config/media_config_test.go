@@ -22,6 +22,7 @@ func TestMediaConfigIsReadFromTheEnvironment(t *testing.T) {
 		"MEDIA_S3_BUCKET_PROCESSING": "p", "MEDIA_S3_BUCKET_COMPLETED": "c",
 		"MEDIA_MAX_PARALLEL_UPLOADS": "6", "MEDIA_PART_URL_TTL": "10m",
 		"MEDIA_DOWNLOAD_URL_TTL": "30m", "MEDIA_PROCESSING_RETENTION": "240h", "MEDIA_THUMBNAILS": "true", "MEDIA_THUMBNAIL_SUFFIX": ".small",
+		"MEDIA_COPY_SINGLE_MAX": "1073741824", "MEDIA_COPY_PART_BYTES": "268435456",
 	})
 	c, err := config.Load()
 	if err != nil {
@@ -33,6 +34,9 @@ func TestMediaConfigIsReadFromTheEnvironment(t *testing.T) {
 	}
 	if m.DownloadSignatureTTL != 30*time.Minute || m.ProcessingRetention != 240*time.Hour || !m.Thumbnails || m.ThumbnailSuffix != ".small" {
 		t.Fatalf("download settings %+v", m)
+	}
+	if m.CopySingleMax != 1<<30 || m.CopyPartBytes != 256<<20 {
+		t.Fatalf("copy settings %+v", m.CopyLimits())
 	}
 	if err := m.Validate(); err != nil {
 		t.Fatal(err)
@@ -57,7 +61,7 @@ func TestBrokenMediaConfigDoesNotStopChat(t *testing.T) {
 }
 
 func TestMediaNumbersMustParse(t *testing.T) {
-	for key, value := range map[string]string{"MEDIA_MAX_PARTS": "many", "MEDIA_DOWNLOAD_URL_TTL": "soon", "MEDIA_PROCESSING_RETENTION": "0s", "MEDIA_THUMBNAILS": "maybe"} {
+	for key, value := range map[string]string{"MEDIA_MAX_PARTS": "many", "MEDIA_DOWNLOAD_URL_TTL": "soon", "MEDIA_PROCESSING_RETENTION": "0s", "MEDIA_THUMBNAILS": "maybe", "MEDIA_COPY_SINGLE_MAX": "big", "MEDIA_COPY_PART_BYTES": "0"} {
 		t.Run(key, func(t *testing.T) {
 			setEnv(t, map[string]string{key: value})
 			if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), key) {
@@ -73,7 +77,7 @@ func TestMediaDownloadDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m := c.Media; m.DownloadSignatureTTL != time.Hour || m.ProcessingRetention != 720*time.Hour || m.Thumbnails || m.ThumbnailSuffix != ".thumb" {
+	if m := c.Media; m.DownloadSignatureTTL != time.Hour || m.ProcessingRetention != 720*time.Hour || m.Thumbnails || m.ThumbnailSuffix != ".thumb" || m.CopySingleMax != 5<<30 || m.CopyPartBytes != 1<<30 {
 		t.Fatalf("media %+v", m)
 	}
 }

@@ -32,10 +32,10 @@ func (o objects) Complete(_ context.Context, key, _ string, _ []domain.UploadedP
 	o.completed[key] = true
 	return nil
 }
-func (objects) Abort(context.Context, string, string) error { return nil }
-func (objects) Head(context.Context, string) (int64, error) { return 40 << 20, nil }
-func (objects) Delete(context.Context, string) error        { return nil }
-func (objects) SignGet(_ context.Context, key string, _ time.Duration) (string, error) {
+func (objects) Abort(context.Context, string, string) error    { return nil }
+func (objects) Head(context.Context, string) (int64, error)    { return 40 << 20, nil }
+func (objects) DeleteProcessing(context.Context, string) error { return nil }
+func (objects) SignGet(_ context.Context, _ domain.Bucket, key string, _ time.Duration) (string, error) {
 	return "https://s3/" + key, nil
 }
 

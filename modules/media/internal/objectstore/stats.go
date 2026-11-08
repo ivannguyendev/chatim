@@ -11,6 +11,7 @@ const (
 	opHead
 	opDelete
 	opCheckBuckets
+	opCopy
 	operationCount
 )
 
@@ -24,7 +25,7 @@ const (
 )
 
 var (
-	operationNames = [operationCount]string{"start", "complete", "abort", "head", "delete", "check_buckets"}
+	operationNames = [operationCount]string{"start", "complete", "abort", "head", "delete", "check_buckets", "copy"}
 	resultNames    = [resultCount]string{"ok", "client", "error"}
 )
 

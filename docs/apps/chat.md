@@ -88,6 +88,7 @@ Media lỗi (config sai, thiếu bucket, sai key, S3 sập) không bao giờ là
 | `MEDIA_PROCESSING_RETENTION` | `720h` | Phải bằng luật xoá object của bucket `processing` (30 ngày, tính từ lúc tạo object); `ListUploads` gắn `expired` cho file có `created_at` + giá trị này đã qua |
 | `MEDIA_THUMBNAILS` | `false` | `true` khi hạ tầng có Lambda sinh thumb: ảnh/video có `thumbnail_url`; tắt thì rỗng (qua `GetClientConfig`) |
 | `MEDIA_THUMBNAIL_SUFFIX` | `.thumb` | Hậu tố khoá thumb (`{key}{hậu tố}`), bắt đầu bằng `.`, 2..32 ký tự `a-z0-9.`; phải bằng hậu tố Lambda ghi |
+| `MEDIA_COPY_SINGLE_MAX`, `MEDIA_COPY_PART_BYTES` | `5368709120` / `1073741824` | Chuyển file `processing` → `completed`: cỡ ≤ ngưỡng đầu thì một lệnh `CopyObject` (ngưỡng 1..5 GiB), lớn hơn thì copy nhiều phần theo dải cỡ phần (5 MiB..5 GiB, `MEDIA_MAX_FILE_BYTES` ≤ 10.000 phần) |
 
 Giá trị đúng định dạng nhưng sai luật (TTL ngoài `1s`..`168h`, hậu tố sai) chỉ làm media chưa sẵn sàng. Gallery (`ListUploads`) cần index `{tenant_id, user_id, state, _id: -1}` của `media_uploads`: chat chỉ tự build trên collection rỗng, nên DB đã có dữ liệu `media_uploads` từ trước phải chạy `docker exec chatim-chat-1 /app indexes -apply` một lần ([`/app indexes`](#app-indexes-d191)); tới lúc đó `ListUploads` trả `INTERNAL` (hint tới index chưa có), các lệnh media khác vẫn chạy. Hợp đồng Lambda sinh thumb cho hạ tầng: [module 12 §7](../features/12-feature-media.md#7-thumb-và-hợp-đồng-lambda-cho-hạ-tầng).
 

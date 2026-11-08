@@ -14,6 +14,8 @@ var (
 	ErrBucketMissing = errors.New("objectstore: bucket does not exist")
 	ErrAccess        = errors.New("objectstore: access denied")
 	ErrUnavailable   = errors.New("objectstore: storage unavailable")
+	ErrUnknownBucket = errors.New("objectstore: unknown bucket")
+	ErrCopySize      = errors.New("objectstore: copied object has another size")
 )
 
 func classify(err error) error {

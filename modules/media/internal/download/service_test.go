@@ -51,7 +51,7 @@ type fakeObjects struct {
 	err    error
 }
 
-func (f *fakeObjects) SignGet(_ context.Context, key string, ttl time.Duration) (string, error) {
+func (f *fakeObjects) SignGet(_ context.Context, _ domain.Bucket, key string, ttl time.Duration) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.signed = append(f.signed, signedGet{key: key, ttl: ttl})

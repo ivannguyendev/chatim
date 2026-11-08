@@ -46,7 +46,7 @@ func TestStatsCountByOperationAndResult(t *testing.T) {
 			t.Errorf("%s = %d, want %d", k, got[k], v)
 		}
 	}
-	if len(got) != 18 {
+	if len(got) != 21 || got["copy/ok"] != 0 {
 		t.Fatalf("%d counters", len(got))
 	}
 }

@@ -100,7 +100,7 @@ func TestValidConfigServesUploadsOnceStorageIsReady(t *testing.T) {
 	if _, err := a.Server().GetAttachmentURLs(withCaller(t.Context()), &chatimv1.GetAttachmentURLsRequest{Messages: []*chatimv1.MessageRef{{RoomId: "7", Seq: 1}}}); !errors.Is(err, apperr.ErrUnavailable) {
 		t.Fatalf("attachment urls before ready = %v", err)
 	}
-	if got := len(a.Probes()); got != 1+2+18 {
+	if got := len(a.Probes()); got != 1+2+21 {
 		t.Fatalf("probes = %d", got)
 	}
 	if mediaapp.Indexes().Collections[0].Name != "media_uploads" {

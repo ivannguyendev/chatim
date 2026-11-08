@@ -27,7 +27,7 @@ func itConfig(t *testing.T) Config {
 	c := Config{
 		Endpoint: endpoint, PublicEndpoint: endpoint, Region: "us-east-1",
 		AccessKey: os.Getenv("CHATIM_IT_S3_ACCESS_KEY"), SecretKey: os.Getenv("CHATIM_IT_S3_SECRET_KEY"),
-		Bucket: itBucket(t, "p"), CompletedBucket: itBucket(t, "c"),
+		Bucket: itBucket(t, "p"), CompletedBucket: itBucket(t, "c"), Copy: testCopyLimits,
 	}
 	admin, _, err := client(endpoint, c)
 	if err != nil {
@@ -129,7 +129,7 @@ func TestMultipartLifecycleOnS3(t *testing.T) {
 	if err := s.Abort(ctx, key, id); !errors.Is(err, ErrNoSuchUpload) {
 		t.Fatalf("abort after complete: %v", err)
 	}
-	if err := s.Delete(ctx, key); err != nil {
+	if err := s.DeleteProcessing(ctx, key); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Head(ctx, key); !errors.Is(err, ErrNotFound) {

@@ -42,7 +42,7 @@ func (s *Service) settle(ctx context.Context, u domain.Upload, hash string) (dom
 	case err != nil:
 		return domain.Upload{}, storageError(err)
 	case size != u.Size:
-		_ = s.deps.Objects.Delete(context.WithoutCancel(ctx), u.Key)
+		_ = s.deps.Objects.DeleteProcessing(context.WithoutCancel(ctx), u.Key)
 		_, _ = s.deps.Uploads.Transition(ctx, u.Key, domain.StateUploading, u.Ver, domain.StateAborted, "")
 		return domain.Upload{}, domain.ErrSizeMismatch
 	}
