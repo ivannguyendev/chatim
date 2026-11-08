@@ -97,7 +97,7 @@ func (a *App) assemble() error {
 		return err
 	}
 	downloads, err := download.New(download.Config{SignatureTTL: a.cfg.DownloadSignatureTTL, Thumbnails: a.cfg.ThumbnailRule()}, download.Deps{
-		Chat: a.deps.Chat, Objects: objects, Ready: a.watch.Ready,
+		Chat: a.deps.Chat, Uploads: uploads, Objects: objects, Ready: a.watch.Ready,
 	})
 	if err != nil {
 		return err

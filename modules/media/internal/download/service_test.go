@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -41,8 +42,25 @@ func (f *fakeChat) VisibleAttachments(_ context.Context, tenant, user string, re
 }
 
 type signedGet struct {
-	key string
-	ttl time.Duration
+	bucket domain.Bucket
+	key    string
+	ttl    time.Duration
+}
+
+type getMany struct {
+	tenant string
+	keys   []string
+}
+
+type fakeUploads struct {
+	asked []getMany
+	docs  map[string]domain.Upload
+	err   error
+}
+
+func (f *fakeUploads) GetMany(_ context.Context, tenant string, keys []string) (map[string]domain.Upload, error) {
+	f.asked = append(f.asked, getMany{tenant: tenant, keys: slices.Clone(keys)})
+	return maps.Clone(f.docs), f.err
 }
 
 type fakeObjects struct {
@@ -51,25 +69,26 @@ type fakeObjects struct {
 	err    error
 }
 
-func (f *fakeObjects) SignGet(_ context.Context, _ domain.Bucket, key string, ttl time.Duration) (string, error) {
+func (f *fakeObjects) SignGet(_ context.Context, bucket domain.Bucket, key string, ttl time.Duration) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.signed = append(f.signed, signedGet{key: key, ttl: ttl})
-	return "https://s3/" + key, f.err
+	f.signed = append(f.signed, signedGet{bucket: bucket, key: key, ttl: ttl})
+	return "https://s3/" + string(bucket) + "/" + key, f.err
 }
 
 type rig struct {
 	svc     *download.Service
 	chat    *fakeChat
+	uploads *fakeUploads
 	objects *fakeObjects
 	ready   bool
 }
 
 func newRig(t *testing.T, thumbs domain.Thumbnails) *rig {
 	t.Helper()
-	r := &rig{chat: &fakeChat{}, objects: &fakeObjects{}, ready: true}
+	r := &rig{chat: &fakeChat{}, uploads: &fakeUploads{}, objects: &fakeObjects{}, ready: true}
 	svc, err := download.New(download.Config{SignatureTTL: time.Hour, Thumbnails: thumbs}, download.Deps{
-		Chat: r.chat, Objects: r.objects, Ready: func() bool { return r.ready }, Now: func() time.Time { return now },
+		Chat: r.chat, Uploads: r.uploads, Objects: r.objects, Ready: func() bool { return r.ready }, Now: func() time.Time { return now },
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -90,11 +109,18 @@ func filesMessage(seq uint64, files ...domain.File) domain.MessageFiles {
 	return domain.MessageFiles{Ref: domain.MessageRef{Room: "7", Seq: seq}, Files: files}
 }
 
-func TestNewNeedsChatObjectsAndATTL(t *testing.T) {
-	if _, err := download.New(download.Config{SignatureTTL: time.Hour}, download.Deps{Chat: &fakeChat{}}); err == nil {
+func inProcessing(key string) string { return "https://s3/processing/" + key }
+
+func inCompleted(key string) string { return "https://s3/completed/" + key }
+
+func TestNewNeedsChatUploadsObjectsAndATTL(t *testing.T) {
+	if _, err := download.New(download.Config{SignatureTTL: time.Hour}, download.Deps{Chat: &fakeChat{}, Uploads: &fakeUploads{}}); err == nil {
 		t.Fatal("missing objects accepted")
 	}
-	if _, err := download.New(download.Config{}, download.Deps{Chat: &fakeChat{}, Objects: &fakeObjects{}}); err == nil {
+	if _, err := download.New(download.Config{SignatureTTL: time.Hour}, download.Deps{Chat: &fakeChat{}, Objects: &fakeObjects{}}); err == nil {
+		t.Fatal("missing uploads accepted")
+	}
+	if _, err := download.New(download.Config{}, download.Deps{Chat: &fakeChat{}, Uploads: &fakeUploads{}, Objects: &fakeObjects{}}); err == nil {
 		t.Fatal("zero ttl accepted")
 	}
 }
@@ -113,13 +139,13 @@ func TestAttachmentURLsSignEveryVisibleFile(t *testing.T) {
 		t.Fatalf("result %+v", got)
 	}
 	first := got.Messages[0].Files
-	if len(first) != 2 || first[0] != (download.FileURL{Key: photo, URL: "https://s3/" + photo}) || first[1].URL != "https://s3/"+report || first[1].ThumbnailURL != "" {
+	if len(first) != 2 || first[0] != (download.FileURL{Key: photo, URL: inProcessing(photo)}) || first[1].URL != inProcessing(report) || first[1].ThumbnailURL != "" {
 		t.Fatalf("files %+v", first)
 	}
 	want := []signedGet{
-		{photo, time.Hour},
-		{report, time.Hour},
-		{clip, time.Hour},
+		{domain.BucketProcessing, photo, time.Hour},
+		{domain.BucketProcessing, report, time.Hour},
+		{domain.BucketProcessing, clip, time.Hour},
 	}
 	if !slices.Equal(r.objects.signed, want) {
 		t.Fatalf("signed %+v", r.objects.signed)
@@ -138,7 +164,7 @@ func TestThumbnailURLsFollowTheConfiguredSuffixForImagesAndVideos(t *testing.T) 
 		t.Fatal(err)
 	}
 	files := got.Messages[0].Files
-	if files[0].ThumbnailURL != "https://s3/"+photo+".small" || files[1].ThumbnailURL != "https://s3/"+clip+".small" || files[2].ThumbnailURL != "" {
+	if files[0].ThumbnailURL != inProcessing(photo+".small") || files[1].ThumbnailURL != inProcessing(clip+".small") || files[2].ThumbnailURL != "" {
 		t.Fatalf("thumbnails %+v", files)
 	}
 	thumbs := 0

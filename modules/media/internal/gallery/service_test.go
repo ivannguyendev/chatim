@@ -24,8 +24,9 @@ var (
 )
 
 type signedGet struct {
-	key string
-	ttl time.Duration
+	bucket domain.Bucket
+	key    string
+	ttl    time.Duration
 }
 
 type fakeObjects struct {
@@ -34,10 +35,10 @@ type fakeObjects struct {
 	err    error
 }
 
-func (f *fakeObjects) SignGet(_ context.Context, _ domain.Bucket, key string, ttl time.Duration) (string, error) {
+func (f *fakeObjects) SignGet(_ context.Context, bucket domain.Bucket, key string, ttl time.Duration) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.signed = append(f.signed, signedGet{key: key, ttl: ttl})
+	f.signed = append(f.signed, signedGet{bucket: bucket, key: key, ttl: ttl})
 	return "https://s3/" + key, f.err
 }
 
@@ -109,7 +110,7 @@ func TestListShowsOnlyTheCallersFiles(t *testing.T) {
 	if f.Expired || f.URL != "https://s3/"+mine.Key || f.ThumbnailURL != "" {
 		t.Fatalf("file %+v", f)
 	}
-	want := []signedGet{{mine.Key, time.Hour}}
+	want := []signedGet{{domain.BucketProcessing, mine.Key, time.Hour}}
 	if !slices.Equal(r.objects.signed, want) {
 		t.Fatalf("signed %+v", r.objects.signed)
 	}
@@ -223,5 +224,29 @@ func TestListRefusesUntilReadyAndReportsSigningErrors(t *testing.T) {
 	r.objects.err = errors.New("no credentials")
 	if _, err := r.svc.List(t.Context(), an, gallery.Input{PageSize: 10}); !errors.Is(err, apperr.ErrUnavailable) {
 		t.Fatalf("sign err = %v", err)
+	}
+}
+
+func TestCompletedFilesNeverExpireAndAreSignedFromCompleted(t *testing.T) {
+	r := newRig(t, domain.Thumbnails{Enabled: true, Suffix: ".thumb"})
+	moved := uploaded("an", "0002", "image/png", 2*retention)
+	moved.Bucket = domain.BucketCompleted
+	old := uploaded("an", "0001", "image/png", retention)
+	old.Bucket = domain.BucketProcessing
+	r.add(t, moved, old)
+	page, err := r.svc.List(t.Context(), an, gallery.Input{PageSize: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	kept, gone := page.Files[0], page.Files[1]
+	if kept.Expired || kept.URL != "https://s3/"+moved.Key || kept.ThumbnailURL != "https://s3/"+moved.Key+".thumb" {
+		t.Fatalf("completed file %+v", kept)
+	}
+	if !gone.Expired || gone.URL != "" {
+		t.Fatalf("processing file %+v", gone)
+	}
+	want := []signedGet{{domain.BucketCompleted, moved.Key, time.Hour}, {domain.BucketCompleted, moved.Key + ".thumb", time.Hour}}
+	if !slices.Equal(r.objects.signed, want) {
+		t.Fatalf("signed %+v", r.objects.signed)
 	}
 }

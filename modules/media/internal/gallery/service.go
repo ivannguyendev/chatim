@@ -115,10 +115,11 @@ func (s *Service) checkBefore(ctx context.Context, who domain.Caller, before str
 }
 
 func (s *Service) file(ctx context.Context, u domain.Upload, now time.Time) (File, error) {
-	if !u.CreatedAt.Add(s.cfg.Retention).After(now) {
+	bucket := u.Bucket.OrProcessing()
+	if bucket == domain.BucketProcessing && !u.CreatedAt.Add(s.cfg.Retention).After(now) {
 		return File{Upload: u, Expired: true}, nil
 	}
-	signed, err := s.signer.Sign(ctx, domain.File{Key: u.Key, Name: u.FileName, Mime: u.ContentType})
+	signed, err := s.signer.Sign(ctx, bucket, domain.File{Key: u.Key, Name: u.FileName, Mime: u.ContentType})
 	if err != nil {
 		return File{}, err
 	}

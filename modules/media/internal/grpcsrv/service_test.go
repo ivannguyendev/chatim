@@ -62,7 +62,7 @@ func newService(t *testing.T) (*grpcsrv.Service, *memstore.Uploads) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	downloads, err := download.New(download.Config{SignatureTTL: time.Hour, Thumbnails: domain.Thumbnails{Enabled: true, Suffix: ".thumb"}}, download.Deps{Chat: chat{}, Objects: store})
+	downloads, err := download.New(download.Config{SignatureTTL: time.Hour, Thumbnails: domain.Thumbnails{Enabled: true, Suffix: ".thumb"}}, download.Deps{Chat: chat{}, Uploads: uploads, Objects: store})
 	if err != nil {
 		t.Fatal(err)
 	}
