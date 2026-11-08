@@ -58,3 +58,6 @@ echo "cors set on $processing, $completed"
 lifecycle='{"Rules":[{"ID":"processing","Status":"Enabled","Filter":{"Prefix":""},"AbortIncompleteMultipartUpload":{"DaysAfterInitiation":1},"Expiration":{"Days":30}}]}'
 aws s3api put-bucket-lifecycle-configuration --bucket "$processing" --lifecycle-configuration "$lifecycle"
 echo "lifecycle set on $processing"
+unfinished='{"Rules":[{"ID":"completed","Status":"Enabled","Filter":{"Prefix":""},"AbortIncompleteMultipartUpload":{"DaysAfterInitiation":1}}]}'
+aws s3api put-bucket-lifecycle-configuration --bucket "$completed" --lifecycle-configuration "$unfinished"
+echo "lifecycle set on $completed"
