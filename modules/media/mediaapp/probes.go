@@ -30,5 +30,29 @@ func (a *App) Probes() []Probe {
 			})
 		}
 	}
+	return append(out, a.consumerProbes()...)
+}
+
+func (a *App) consumerProbes() []Probe {
+	if a.consumer == nil {
+		return nil
+	}
+	c, stats := a.consumer, a.attach.Stats()
+	out := []Probe{
+		{Name: "lag_seconds", Help: "Age of the oldest event in the media consumer's last batch; 0 when idle.", Gauge: true, Read: func() float64 { return c.Lag().Seconds() }},
+		{Name: "stuck_total", Help: "Media event deliveries that failed for the sixth time or more, not counting waits for an upload.", Read: func() float64 { return float64(c.Stuck()) }},
+	}
+	for _, d := range stats.DroppedCounts() {
+		out = append(out, Probe{
+			Name: "dropped_total", Help: "Media events or message files given up on, by reason.",
+			Labels: map[string]string{"reason": d.Label}, Read: func() float64 { return float64(d.Read()) },
+		})
+	}
+	for _, m := range stats.MoveCounts() {
+		out = append(out, Probe{
+			Name: "moves_total", Help: "Moves of a file to the completed bucket, by result; cleanup_error is a processing delete left to the retention rule.",
+			Labels: map[string]string{"result": m.Label}, Read: func() float64 { return float64(m.Read()) },
+		})
+	}
 	return out
 }

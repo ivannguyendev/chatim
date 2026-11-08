@@ -27,10 +27,11 @@ func TestClientConfigFollowsSettingsAndMediaReadiness(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = client.Disconnect(context.Background()) })
+	deps := mediaapp.Deps{Mongo: client.Database("chatim"), JS: idleJetStream{}, Stream: "CHATIM_EVT", SubjectRoot: "evt", Log: quiet, Chat: &mediaChatNode{}}
 	mc := mediaapp.DefaultConfig()
 	mc.Endpoint, mc.PublicEndpoint, mc.Region = "http://127.0.0.1:1", "http://127.0.0.1:1", "us-east-1"
 	mc.AccessKey, mc.SecretKey, mc.ProcessingBucket, mc.CompletedBucket = "k", "s", "p", "c"
-	media, err := mediaapp.New(mc, mediaapp.Deps{Mongo: client.Database("chatim"), Log: quiet, Chat: &mediaChatNode{}})
+	media, err := mediaapp.New(mc, deps)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +40,7 @@ func TestClientConfigFollowsSettingsAndMediaReadiness(t *testing.T) {
 		t.Fatalf("media before storage is ready %v", notReady)
 	}
 	mc.Thumbnails = true
-	thumbs, err := mediaapp.New(mc, mediaapp.Deps{Mongo: client.Database("chatim"), Log: quiet, Chat: &mediaChatNode{}})
+	thumbs, err := mediaapp.New(mc, deps)
 	if err != nil {
 		t.Fatal(err)
 	}

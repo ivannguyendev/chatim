@@ -23,7 +23,18 @@ const itS3Region = "us-east-1"
 
 var itKeyCode = base32.NewEncoding("0123456789abcdefghijklmnopqrstuv").WithPadding(base32.NoPadding)
 
+type itMedia struct {
+	env                   map[string]string
+	s3                    *minio.Client
+	processing, completed string
+}
+
 func mediaEnv(t *testing.T, it *itInfra) map[string]string {
+	t.Helper()
+	return mediaBuckets(t, it).env
+}
+
+func mediaBuckets(t *testing.T, it *itInfra) itMedia {
 	t.Helper()
 	endpoint := os.Getenv("CHATIM_IT_S3_ENDPOINT")
 	if endpoint == "" {
@@ -51,13 +62,19 @@ func mediaEnv(t *testing.T, it *itInfra) map[string]string {
 		t.Cleanup(func() {
 			ctx, cancel := context.WithTimeout(context.Background(), itCleanupLimit)
 			defer cancel()
+			for obj := range s3.ListObjects(ctx, b, minio.ListObjectsOptions{Recursive: true}) {
+				_ = s3.RemoveObject(ctx, b, obj.Key, minio.RemoveObjectOptions{})
+			}
 			_ = s3.RemoveBucket(ctx, b)
 		})
 	}
-	return map[string]string{
-		"MEDIA_S3_ENDPOINT": endpoint, "MEDIA_S3_PUBLIC_ENDPOINT": endpoint, "MEDIA_S3_REGION": itS3Region,
-		"MEDIA_S3_ACCESS_KEY": access, "MEDIA_S3_SECRET_KEY": secret,
-		"MEDIA_S3_BUCKET_PROCESSING": processing, "MEDIA_S3_BUCKET_COMPLETED": completed,
+	return itMedia{
+		env: map[string]string{
+			"MEDIA_S3_ENDPOINT": endpoint, "MEDIA_S3_PUBLIC_ENDPOINT": endpoint, "MEDIA_S3_REGION": itS3Region,
+			"MEDIA_S3_ACCESS_KEY": access, "MEDIA_S3_SECRET_KEY": secret,
+			"MEDIA_S3_BUCKET_PROCESSING": processing, "MEDIA_S3_BUCKET_COMPLETED": completed,
+		},
+		s3: s3, processing: processing, completed: completed,
 	}
 }
 

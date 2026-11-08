@@ -53,6 +53,7 @@ type node struct {
 	projections drainer
 	sweeper     drainer
 	mention     drainer
+	media       drainer
 	setups      []preparer
 	watches     liveWatcher
 	indexes     *mongoindex.Health

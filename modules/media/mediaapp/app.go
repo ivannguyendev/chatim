@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/nats-io/nats.go/jetstream"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"google.golang.org/grpc"
 
+	"github.com/ivannguyendev/chatim/modules/media/internal/attach"
 	"github.com/ivannguyendev/chatim/modules/media/internal/config"
+	"github.com/ivannguyendev/chatim/modules/media/internal/consumer"
 	"github.com/ivannguyendev/chatim/modules/media/internal/domain"
 	"github.com/ivannguyendev/chatim/modules/media/internal/download"
 	"github.com/ivannguyendev/chatim/modules/media/internal/gallery"
@@ -27,10 +30,13 @@ type Config = config.Config
 func DefaultConfig() Config { return config.Defaults() }
 
 type Deps struct {
-	Mongo   *mongo.Database
-	Log     *slog.Logger
-	Indexes mongoindex.Reporter
-	Chat    ChatReader
+	Mongo       *mongo.Database
+	JS          jetstream.JetStream
+	Stream      string
+	SubjectRoot string
+	Log         *slog.Logger
+	Indexes     mongoindex.Reporter
+	Chat        ChatReader
 }
 
 type Watcher interface {
@@ -46,17 +52,19 @@ type ClientConfig struct {
 }
 
 type App struct {
-	cfg     Config
-	deps    Deps
-	objects *objectstore.S3
-	uploads *upload.Service
-	watch   *readiness.Watch
-	server  chatimv1.MediaServiceServer
+	cfg      Config
+	deps     Deps
+	objects  *objectstore.S3
+	uploads  *upload.Service
+	attach   *attach.Service
+	consumer *consumer.Consumer
+	watch    *readiness.Watch
+	server   chatimv1.MediaServiceServer
 }
 
 func New(cfg Config, deps Deps) (*App, error) {
-	if deps.Mongo == nil || deps.Log == nil || deps.Chat == nil {
-		return nil, fmt.Errorf("%w: media app needs mongo, a logger and the chat reader", apperr.ErrInvalidArgument)
+	if deps.Mongo == nil || deps.JS == nil || deps.Stream == "" || deps.SubjectRoot == "" || deps.Log == nil || deps.Chat == nil {
+		return nil, fmt.Errorf("%w: media app needs mongo, jetstream with the event stream and subject root, a logger and the chat reader", apperr.ErrInvalidArgument)
 	}
 	a := &App{cfg: cfg, deps: deps}
 	if err := a.assemble(); err != nil {
@@ -100,20 +108,10 @@ func (a *App) assemble() error {
 	if err != nil {
 		return err
 	}
+	if err := a.assembleConsumer(uploads); err != nil {
+		return err
+	}
 	a.server = grpcsrv.New(a.uploads, downloads, files)
-	return nil
-}
-
-func (a *App) Prepare(ctx context.Context) error {
-	var err error
-	if a.deps.Indexes == nil {
-		err = mongostore.Bootstrap(ctx, a.deps.Mongo)
-	} else {
-		err = mongostore.Bootstrap(ctx, a.deps.Mongo, a.deps.Indexes)
-	}
-	if err != nil {
-		return fmt.Errorf("bootstrap media collections: %w", err)
-	}
 	return nil
 }
 

@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync"
 	"testing"
 
+	"github.com/nats-io/nats.go/jetstream"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 	"google.golang.org/grpc/metadata"
@@ -23,7 +25,29 @@ func deps(t *testing.T) mediaapp.Deps {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = client.Disconnect(t.Context()) })
-	return mediaapp.Deps{Mongo: client.Database("chatim"), Log: slog.New(slog.DiscardHandler), Chat: noChat{}}
+	return mediaapp.Deps{
+		Mongo: client.Database("chatim"), JS: &lookups{}, Stream: "CHATIM_EVT", SubjectRoot: "evt",
+		Log: slog.New(slog.DiscardHandler), Chat: noChat{},
+	}
+}
+
+type lookups struct {
+	jetstream.JetStream
+	mu    sync.Mutex
+	asked int
+}
+
+func (l *lookups) Consumer(context.Context, string, string) (jetstream.Consumer, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.asked++
+	return nil, errors.New("no consumer in unit tests")
+}
+
+func (l *lookups) count() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.asked
 }
 
 func withCaller(ctx context.Context) context.Context {
@@ -51,10 +75,17 @@ func TestNewNeedsMongoALoggerAndChat(t *testing.T) {
 	if _, err := mediaapp.New(valid(), mediaapp.Deps{}); !errors.Is(err, apperr.ErrInvalidArgument) {
 		t.Fatalf("err = %v", err)
 	}
-	d := deps(t)
-	d.Chat = nil
-	if _, err := mediaapp.New(valid(), d); !errors.Is(err, apperr.ErrInvalidArgument) {
-		t.Fatalf("no chat err = %v", err)
+	for name, drop := range map[string]func(*mediaapp.Deps){
+		"chat":         func(d *mediaapp.Deps) { d.Chat = nil },
+		"jetstream":    func(d *mediaapp.Deps) { d.JS = nil },
+		"stream":       func(d *mediaapp.Deps) { d.Stream = "" },
+		"subject root": func(d *mediaapp.Deps) { d.SubjectRoot = "" },
+	} {
+		d := deps(t)
+		drop(&d)
+		if _, err := mediaapp.New(valid(), d); !errors.Is(err, apperr.ErrInvalidArgument) {
+			t.Fatalf("no %s err = %v", name, err)
+		}
 	}
 }
 
@@ -104,7 +135,7 @@ func TestValidConfigServesUploadsOnceStorageIsReady(t *testing.T) {
 	if _, err := a.Server().GetAttachmentURLs(withCaller(t.Context()), &chatimv1.GetAttachmentURLsRequest{Messages: []*chatimv1.MessageRef{{RoomId: "7", Seq: 1}}}); !errors.Is(err, apperr.ErrUnavailable) {
 		t.Fatalf("attachment urls before ready = %v", err)
 	}
-	if got := len(a.Probes()); got != 1+2+21 {
+	if got := len(a.Probes()); got != 1+2+21+2+6+3 {
 		t.Fatalf("probes = %d", got)
 	}
 	if mediaapp.Indexes().Collections[0].Name != "media_uploads" {

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nats-io/nats.go/jetstream"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 	"google.golang.org/grpc"
@@ -57,13 +58,22 @@ func mediaClient(t *testing.T, a *node) chatimv1.MediaServiceClient {
 	return chatimv1.NewMediaServiceClient(cc)
 }
 
+type idleJetStream struct{ jetstream.JetStream }
+
 func TestDisabledMediaStillServesAClearRefusal(t *testing.T) {
+	app, err := wireMedia(config.Config{}, nil, nil, &mediaChatNode{}, quiet)
+	if app != nil || err != nil {
+		t.Fatalf("wire disabled media = %v, %v", app, err)
+	}
 	a := &node{grpc: grpcserver.New(grpcserver.Config{RequestDeadline: time.Second}, quiet)}
-	if probes := a.attachMedia(nil); probes != nil || len(a.setups) != 0 {
-		t.Fatalf("attach(nil) probes %v setups %v", probes, a.setups)
+	if probes := a.attachMedia(app); probes != nil || len(a.setups) != 0 || a.media != nil {
+		t.Fatalf("attach(nil) probes %v setups %v consumer %v", probes, a.setups, a.media)
+	}
+	if p := a.mediaPhase(time.Second, nil); p.drain != nil || p.task != nil {
+		t.Fatalf("disabled media has a stop phase %+v", p)
 	}
 	client := mediaClient(t, a)
-	_, err := client.StartUpload(withCaller(t.Context()), &chatimv1.StartUploadRequest{})
+	_, err = client.StartUpload(withCaller(t.Context()), &chatimv1.StartUploadRequest{})
 	if status.Code(err) != codes.FailedPrecondition {
 		t.Fatalf("disabled start = %v", err)
 	}
@@ -82,13 +92,15 @@ func TestEnabledMediaRefusesWhileStorageIsNotReady(t *testing.T) {
 	cfg := mediaapp.DefaultConfig()
 	cfg.Endpoint, cfg.PublicEndpoint, cfg.Region = "http://127.0.0.1:1", "http://127.0.0.1:1", "us-east-1"
 	cfg.AccessKey, cfg.SecretKey, cfg.ProcessingBucket, cfg.CompletedBucket = "k", "s", "p", "c"
-	app, err := mediaapp.New(cfg, mediaapp.Deps{Mongo: client.Database("chatim"), Log: quiet, Chat: &mediaChatNode{}})
+	app, err := mediaapp.New(cfg, mediaapp.Deps{
+		Mongo: client.Database("chatim"), JS: idleJetStream{}, Stream: "CHATIM_EVT", SubjectRoot: "evt", Log: quiet, Chat: &mediaChatNode{},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	a := &node{grpc: grpcserver.New(grpcserver.Config{RequestDeadline: time.Second}, quiet), watches: liveWatchers{&fakeWatch{}}}
 	probes := a.attachMedia(app)
-	if len(a.setups) != 1 || len(a.watches.(liveWatchers)) != 2 {
+	if len(a.setups) != 1 || len(a.watches.(liveWatchers)) != 2 || a.media != app {
 		t.Fatalf("setups %d watches %v", len(a.setups), a.watches)
 	}
 	if _, err := metrics.Handler(metricsNamespace, metricsSubsystem, mediaSources(probes)); err != nil {

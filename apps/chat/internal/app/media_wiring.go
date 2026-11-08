@@ -16,7 +16,10 @@ func wireMedia(cfg config.Config, cl *clients, indexes *mongoindex.Health, chat 
 	if !cfg.Media.Enabled {
 		return nil, nil
 	}
-	app, err := mediaapp.New(cfg.Media, mediaapp.Deps{Mongo: cl.mongo.Database(cfg.MongoDB), Log: log.With("app", mediaSubsystem), Indexes: indexes, Chat: chat})
+	app, err := mediaapp.New(cfg.Media, mediaapp.Deps{
+		Mongo: cl.mongo.Database(cfg.MongoDB), JS: cl.js, Stream: cfg.Stream.Name, SubjectRoot: cfg.Stream.SubjectRoot,
+		Log: log.With("app", mediaSubsystem), Indexes: indexes, Chat: chat,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("wire media app: %w", err)
 	}
@@ -30,7 +33,7 @@ func (a *node) attachMedia(app *mediaapp.App) []mediaapp.Probe {
 	}
 	app.Register(a.grpc)
 	a.watches = liveWatchers{a.watches, app.Watch()}
-	a.setups = append(a.setups, app)
+	a.setups, a.media = append(a.setups, app), app
 	return app.Probes()
 }
 

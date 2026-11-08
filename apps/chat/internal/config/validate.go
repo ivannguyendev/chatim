@@ -12,7 +12,7 @@ var (
 	subjectRootPattern = regexp.MustCompile(`^[a-z0-9_]+$`)
 )
 
-const stopPhases = "CHAT_DRAIN_DELAY + CHAT_GRPC_SHUTDOWN + 1s (sweeper) + max(PROJECTION_FETCH_WAIT, MENTION_FETCH_WAIT) + 1s (projections and mention) + 500ms + 1s (timer consumer) + CHAT_REQUEST_DEADLINE (router drain) + " +
+const stopPhases = "CHAT_DRAIN_DELAY + CHAT_GRPC_SHUTDOWN + 1s (sweeper) + max(PROJECTION_FETCH_WAIT, MENTION_FETCH_WAIT, 250ms media fetch wait) + 1s (projections, mention and media) + 500ms + 1s (timer consumer) + CHAT_REQUEST_DEADLINE (router drain) + " +
 	"2 x REDIS_OP_TIMEOUT (cid batcher drain) + FLUSH_INSERT_TIMEOUT (flusher drain) + CHAT_PUBLISHER_DRAIN + 1s (state clear) + slot release + client close"
 
 const minAgeRule = "SWEEP_MIN_AGE must be longer than PUB_ACK_TIMEOUT + STATE_CLEAR_FLUSH + STATE_CLEAR_TIMEOUT + READ_EVENT_WINDOW"

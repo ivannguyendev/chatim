@@ -22,6 +22,11 @@ const (
 	DefaultRetention          = 30 * 24 * time.Hour
 	DefaultCopySingleMax      = 5 << 30
 	DefaultCopyPartBytes      = 1 << 30
+	DefaultFetchBatch         = 8
+	DefaultWorkers            = 4
+	DefaultAckWait            = 30 * time.Second
+	DefaultSyncTimeout        = 15 * time.Minute
+	minAckWait                = 3 * time.Second
 	minSignatureTTL           = time.Second
 	maxSignatureTTL           = 7 * 24 * time.Hour
 	DefaultThumbnailSuffix    = ".thumb"
@@ -52,6 +57,10 @@ type Config struct {
 	ThumbnailSuffix      string
 	CopySingleMax        int64
 	CopyPartBytes        int64
+	FetchBatch           int
+	Workers              int
+	AckWait              time.Duration
+	SyncTimeout          time.Duration
 }
 
 func Defaults() Config {
@@ -61,6 +70,7 @@ func Defaults() Config {
 		PartSignatureTTL: DefaultPartSignatureTTL, ReadyCheckInterval: DefaultReadyCheckInterval,
 		DownloadSignatureTTL: DefaultDownloadTTL, ProcessingRetention: DefaultRetention, ThumbnailSuffix: DefaultThumbnailSuffix,
 		CopySingleMax: DefaultCopySingleMax, CopyPartBytes: DefaultCopyPartBytes,
+		FetchBatch: DefaultFetchBatch, Workers: DefaultWorkers, AckWait: DefaultAckWait, SyncTimeout: DefaultSyncTimeout,
 	}
 }
 
@@ -107,7 +117,7 @@ func (c Config) Validate() error {
 	if err := c.Limits().Validate(); err != nil {
 		errs = append(errs, err)
 	}
-	errs = append(errs, c.copyError())
+	errs = append(errs, c.copyError(), c.consumerError())
 	return errors.Join(errs...)
 }
 
@@ -128,6 +138,13 @@ func (c Config) copyError() error {
 	}
 	if _, err := c.CopyLimits().Parts(c.MaxFileBytes); err != nil {
 		return fmt.Errorf("MEDIA_COPY_PART_BYTES too small for MEDIA_MAX_FILE_BYTES: %w", err)
+	}
+	return nil
+}
+
+func (c Config) consumerError() error {
+	if c.FetchBatch < 1 || c.Workers < 1 || c.AckWait < minAckWait || c.SyncTimeout <= 0 {
+		return fmt.Errorf("MEDIA_CONSUMER_FETCH_BATCH and MEDIA_CONSUMER_WORKERS must be at least 1, MEDIA_CONSUMER_ACK_WAIT at least %v and MEDIA_CONSUMER_SYNC_TIMEOUT positive", minAckWait)
 	}
 	return nil
 }

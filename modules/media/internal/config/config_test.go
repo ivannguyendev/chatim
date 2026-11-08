@@ -31,6 +31,24 @@ func TestDefaultsMatchTheOwnerLimits(t *testing.T) {
 	if d.CopySingleMax != 5<<30 || d.CopyPartBytes != 1<<30 {
 		t.Fatalf("copy defaults %+v", d.CopyLimits())
 	}
+	if d.FetchBatch != 8 || d.Workers != 4 || d.AckWait != 30*time.Second || d.SyncTimeout != 15*time.Minute {
+		t.Fatalf("consumer defaults %+v", d)
+	}
+}
+
+func TestConsumerSettingsMustLetTheConsumerRun(t *testing.T) {
+	for name, change := range map[string]func(*config.Config){
+		"no batch":     func(c *config.Config) { c.FetchBatch = 0 },
+		"no workers":   func(c *config.Config) { c.Workers = 0 },
+		"short ack":    func(c *config.Config) { c.AckWait = 2 * time.Second },
+		"no sync time": func(c *config.Config) { c.SyncTimeout = 0 },
+	} {
+		c := valid()
+		change(&c)
+		if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "MEDIA_CONSUMER_") {
+			t.Errorf("%s: err = %v", name, err)
+		}
+	}
 }
 
 func TestCopyPartsMustCoverTheLargestFile(t *testing.T) {
