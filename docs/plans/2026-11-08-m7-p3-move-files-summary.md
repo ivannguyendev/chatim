@@ -74,13 +74,13 @@ Index `{message_key}` (tìm cặp của một tin) và `{file_key, state}` (đ�
 
 ## 4. Luồng
 
-**Mỗi event:** consumer không tin nội dung event mà hỏi chat trạng thái hiện tại của tin (đọc doc tin theo `_id`). Event tới theo thứ tự nào cũng ra cùng kết quả.
+**Mỗi event:** `msg_created` không có file → bỏ qua ngay, không đọc gì (tin không bao giờ có thêm file khi sửa). `msg_created` có file → hỏi chat trạng thái hiện tại của tin (đọc doc tin theo `_id`). `msg_deleted` → đi thẳng nhánh xoá theo các cặp đã ghi. Event tới theo thứ tự nào cũng ra cùng kết quả.
 
 **Tin còn sống, có file** (≤ 10 file, gom lô):
-1. Đọc lô doc upload của các khoá. Không có hoặc `aborted` → bỏ, đếm `dropped`. `uploading` → Nak, chờ upload xong (bậc lùi 5s…10m).
+1. Đọc lô doc upload của các khoá. Không có hoặc `aborted` → bỏ, đếm `dropped`. `uploading` → Nak, chờ upload xong (bậc lùi 5s…10m, không tính là kẹt); phiên `uploading` quá 24h (luật huỷ phiên dở) → bỏ.
 2. Ghi lô các cặp bằng upsert `$setOnInsert`: cặp đã có (kể cả đã xoá mềm) giữ nguyên.
 3. File đang `retired_at` → gỡ.
-4. File còn ở `processing`: copy sang `completed` bằng `ComposeObject` (≤ 5 GiB một lệnh, lớn hơn tự copy nhiều phần), copy `{key}{hậu tố thumb}` nếu có; CAS `bucket = completed`, `attached_at`; xoá bản ở `processing`. Xoá lỗi thì để luật 30 ngày dọn.
+4. File còn ở `processing`: copy sang `completed` (≤ 5 GiB một lệnh `CopyObject`; lớn hơn copy nhiều phần, mỗi phần 1 GiB; đặt Content-Type từ doc upload, kiểm cỡ đích), copy `{key}{hậu tố thumb}` nếu có; CAS `bucket = completed`, `attached_at`; xoá bản ở `processing`. Xoá lỗi thì để luật 30 ngày dọn.
 
 **Tin đã xoá:**
 1. Đọc các cặp `state = 1` của tin (index `message_key`).
@@ -106,7 +106,7 @@ Không event hay subject mới, không đổi nội dung event. Consumer mới `
 
 ## 7. Thư viện và hạ tầng
 
-- Không thư viện mới (`minio-go` `ComposeObject`).
+- Không thư viện mới (`minio-go`: `CopyObject`, copy nhiều phần qua `minio.Core`).
 - `mediaapp` thêm JetStream, `Run`/`Close` như Mention; consumer chờ media sẵn sàng.
 - Hợp đồng Lambda (`docs/features/12` §7): trigger cả hai bucket, bỏ qua hậu tố thumb và khoá đã có thumb.
 - Quyền key S3 của chat: đọc `processing`, ghi và xoá ở cả hai bucket.
@@ -132,7 +132,7 @@ Không event hay subject mới, không đổi nội dung event. Consumer mới `
 ## 10. Rủi ro thật
 
 - Consumer trễ quá 30 ngày (S3 lỗi kéo dài) → luật lifecycle xoá file đã gắn tin. Alert trễ bắt sớm hơn nhiều.
-- File có thể không được đặt `retired_at` trong chạy đua hẹp (§5).
+- `retired_at` có thể sai trong hai chạy đua hẹp: thiếu dấu (tin bị xoá đúng lúc ghi cặp, owner chấp nhận) hoặc thừa dấu (forward mới ghi cặp đúng lúc tin cuối bị xoá). Chỉ là dấu; chính sách xoá file sau này phải đếm lại.
 - Tin gửi trước `CompleteUpload` mà phiên bị huỷ → tin trỏ tới file không tồn tại (tải về 404), như P2.
 - Garage chưa thử copy nhiều phần → itest đầu tiên của P3 kiểm.
 
@@ -165,4 +165,4 @@ Consumer chạy trên mọi node; ngưỡng alert trễ (đề xuất lag > 10 p
 | Ký URL đúng bucket; `expired` chỉ ở `processing` | download, gallery | ký URL | unit, e2e | |
 | Thumb theo vị trí file (owner 2026-11-08) | copy thumb, hợp đồng Lambda | copy; docs | unit, itest | |
 | Metric + alert trễ consumer (roadmap P3, MD2) | probes, alerts | metrics | `make alerts-check` | |
-| File lớn hơn 5 GiB copy được | `ComposeObject` | copy | itest | |
+| File lớn hơn 5 GiB copy được | copy nhiều phần | copy | itest | |
