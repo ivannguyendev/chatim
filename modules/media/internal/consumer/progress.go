@@ -12,14 +12,30 @@ type tracked struct {
 	jsconsume.Delivery
 	mu      sync.Mutex
 	settled bool
+	every   time.Duration
+	timer   *time.Timer
+	ctx     context.Context
+	log     *jsconsume.LimitedLog
 }
 
-func track(ds []jsconsume.Delivery) []*tracked {
-	out := make([]*tracked, len(ds))
-	for i, d := range ds {
-		out[i] = &tracked{Delivery: d}
+func (c *Consumer) track(ctx context.Context, d jsconsume.Delivery) *tracked {
+	t := &tracked{Delivery: d, every: c.cfg.AckWait / 3, ctx: ctx, log: c.fails}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.timer = time.AfterFunc(t.every, t.keepAlive)
+	return t
+}
+
+func (t *tracked) keepAlive() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.settled {
+		return
 	}
-	return out
+	if err := t.InProgress(); err != nil {
+		t.log.Warn(t.ctx, progressMsg, "err", err)
+	}
+	t.timer.Reset(t.every)
 }
 
 func (t *tracked) Ack() error { return t.finish(t.Delivery.Ack) }
@@ -30,43 +46,10 @@ func (t *tracked) Nak(delay time.Duration) error {
 	return t.finish(func() error { return t.Delivery.Nak(delay) })
 }
 
-func (t *tracked) InProgress() error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if t.settled {
-		return nil
-	}
-	return t.Delivery.InProgress()
-}
-
 func (t *tracked) finish(settle func() error) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.settled = true
+	t.timer.Stop()
 	return settle()
-}
-
-func (c *Consumer) keepAlive(ctx context.Context, batch []*tracked) func() {
-	done := make(chan struct{})
-	var wg sync.WaitGroup
-	wg.Go(func() {
-		tick := time.NewTicker(c.cfg.AckWait / 3)
-		defer tick.Stop()
-		for {
-			select {
-			case <-done:
-				return
-			case <-tick.C:
-				for _, d := range batch {
-					if err := d.InProgress(); err != nil {
-						c.fails.Warn(ctx, progressMsg, "err", err)
-					}
-				}
-			}
-		}
-	})
-	return func() {
-		close(done)
-		wg.Wait()
-	}
 }

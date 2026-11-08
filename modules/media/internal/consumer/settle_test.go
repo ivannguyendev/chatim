@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/modules/media/internal/attach"
+	"github.com/ivannguyendev/chatim/modules/media/internal/consumer"
 	"github.com/ivannguyendev/chatim/modules/media/internal/domain"
 	"github.com/ivannguyendev/chatim/pkg/core/apperr"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
@@ -115,10 +116,8 @@ func TestSettleNaksZeroWhenRunEndsMidEvent(t *testing.T) {
 		r := newRig()
 		r.sync.block = make(chan struct{})
 		d := delivery(t, withFile(time.Now()), 1)
-		q := &fakeQueue{}
-		q.push(d)
 		ctx, cancel := context.WithCancel(t.Context())
-		run := start(ctx, r.consumer(t, q, cfg()))
+		run := start(ctx, r.consumer(t, newStream(d), cfg()))
 		synctest.Wait()
 		cancel()
 		if err := <-run.done; !errors.Is(err, context.Canceled) {
@@ -130,25 +129,26 @@ func TestSettleNaksZeroWhenRunEndsMidEvent(t *testing.T) {
 	})
 }
 
-func TestLagFollowsTheOldestEventAndDropsWhenIdle(t *testing.T) {
+func TestLagIsTheAgeOfTheLastReceivedEventAndDropsWhenIdle(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		r := newRig()
 		r.sync.block = make(chan struct{})
 		now := time.Now()
-		q := &fakeQueue{}
-		q.push(delivery(t, withFile(now.Add(-2*time.Second)), 1), delivery(t, deleted(42, now), 1))
-		c := r.consumer(t, q, cfg())
+		c := r.consumer(t, newStream(delivery(t, deleted(42, now), 1), delivery(t, withFile(now.Add(-2*time.Second)), 1)), cfg())
 		run := start(t.Context(), c)
 		synctest.Wait()
 		if c.Lag() != 2*time.Second {
-			t.Errorf("lag %v, want 2s", c.Lag())
+			t.Errorf("lag %v, want 2s from the last event received", c.Lag())
+		}
+		time.Sleep(consumer.IdleWait / 2)
+		if c.Lag() != 2*time.Second+consumer.IdleWait/2 {
+			t.Errorf("lag %v, want it to grow while nothing new arrives", c.Lag())
 		}
 		close(r.sync.block)
-		synctest.Wait()
-		time.Sleep(2 * time.Second)
+		time.Sleep(consumer.IdleWait)
 		synctest.Wait()
 		if c.Lag() != 0 {
-			t.Errorf("lag after an empty fetch %v, want 0", c.Lag())
+			t.Errorf("lag after an idle wait %v, want 0", c.Lag())
 		}
 		run.stop(t)
 	})

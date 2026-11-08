@@ -94,42 +94,93 @@ func settledOf(d *fakeDelivery) settledAs {
 	return settledAs{d.acks, d.terms, slices.Clone(d.naks)}
 }
 
-type fakeQueue struct {
-	mu    sync.Mutex
-	items []jsconsume.Delivery
-	asked int
+type fakeStream struct {
+	mu       sync.Mutex
+	items    []jsconsume.Delivery
+	wake     chan struct{}
+	opens    int
+	open     bool
+	draining bool
+	taken    int
+	failOpen error
 }
 
-func (q *fakeQueue) push(ds ...*fakeDelivery) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
+func newStream(ds ...*fakeDelivery) *fakeStream {
+	s := &fakeStream{wake: make(chan struct{})}
+	s.push(ds...)
+	return s
+}
+
+func (s *fakeStream) signal() {
+	close(s.wake)
+	s.wake = make(chan struct{})
+}
+
+func (s *fakeStream) push(ds ...*fakeDelivery) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	for _, d := range ds {
-		q.items = append(q.items, d)
+		s.items = append(s.items, d)
+	}
+	s.signal()
+}
+
+func (s *fakeStream) stats() (opens, taken, left int, open bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.opens, s.taken, len(s.items), s.open
+}
+
+func (s *fakeStream) Open(context.Context) (jsconsume.Stream, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.opens++
+	if s.failOpen != nil {
+		return nil, s.failOpen
+	}
+	s.open, s.draining = true, false
+	return s, nil
+}
+
+func (s *fakeStream) Next(ctx context.Context) (jsconsume.Delivery, error) {
+	for {
+		s.mu.Lock()
+		if !s.open {
+			s.mu.Unlock()
+			return nil, jsconsume.ErrStreamClosed
+		}
+		if len(s.items) > 0 {
+			d := s.items[0]
+			s.items = s.items[1:]
+			s.taken++
+			s.mu.Unlock()
+			return d, nil
+		}
+		if s.draining {
+			s.open = false
+			s.mu.Unlock()
+			return nil, jsconsume.ErrStreamClosed
+		}
+		wake := s.wake
+		s.mu.Unlock()
+		select {
+		case <-wake:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
 }
 
-func (q *fakeQueue) fetches() int {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	return q.asked
+func (s *fakeStream) Drain() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.draining = true
+	s.signal()
 }
 
-func (q *fakeQueue) Fetch(ctx context.Context, limit int, wait time.Duration) ([]jsconsume.Delivery, error) {
-	q.mu.Lock()
-	q.asked++
-	n := min(limit, len(q.items))
-	out := q.items[:n:n]
-	q.items = q.items[n:]
-	q.mu.Unlock()
-	if n > 0 {
-		return out, nil
-	}
-	t := time.NewTimer(wait)
-	defer t.Stop()
-	select {
-	case <-t.C:
-		return nil, nil
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
+func (s *fakeStream) Stop() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.open = false
+	s.signal()
 }

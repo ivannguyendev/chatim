@@ -23,7 +23,7 @@ func TestMediaConfigIsReadFromTheEnvironment(t *testing.T) {
 		"MEDIA_MAX_PARALLEL_UPLOADS": "6", "MEDIA_PART_URL_TTL": "10m",
 		"MEDIA_DOWNLOAD_URL_TTL": "30m", "MEDIA_PROCESSING_RETENTION": "240h", "MEDIA_THUMBNAILS": "true", "MEDIA_THUMBNAIL_SUFFIX": ".small",
 		"MEDIA_COPY_SINGLE_MAX": "1073741824", "MEDIA_COPY_PART_BYTES": "268435456",
-		"MEDIA_CONSUMER_FETCH_BATCH": "16", "MEDIA_CONSUMER_WORKERS": "6", "MEDIA_CONSUMER_ACK_WAIT": "45s", "MEDIA_CONSUMER_SYNC_TIMEOUT": "30m",
+		"MEDIA_CONSUMER_MAX_PENDING": "4096", "MEDIA_CONSUMER_ACK_WAIT": "45s", "MEDIA_CONSUMER_SYNC_TIMEOUT": "30m",
 	})
 	c, err := config.Load()
 	if err != nil {
@@ -39,7 +39,7 @@ func TestMediaConfigIsReadFromTheEnvironment(t *testing.T) {
 	if m.CopySingleMax != 1<<30 || m.CopyPartBytes != 256<<20 {
 		t.Fatalf("copy settings %+v", m.CopyLimits())
 	}
-	if m.FetchBatch != 16 || m.Workers != 6 || m.AckWait != 45*time.Second || m.SyncTimeout != 30*time.Minute {
+	if m.MaxPending != 4096 || m.AckWait != 45*time.Second || m.SyncTimeout != 30*time.Minute {
 		t.Fatalf("consumer settings %+v", m)
 	}
 	if err := m.Validate(); err != nil {
@@ -66,7 +66,7 @@ func TestBrokenMediaConfigDoesNotStopChat(t *testing.T) {
 
 func TestMediaNumbersMustParse(t *testing.T) {
 	for key, value := range map[string]string{"MEDIA_MAX_PARTS": "many", "MEDIA_DOWNLOAD_URL_TTL": "soon", "MEDIA_PROCESSING_RETENTION": "0s", "MEDIA_THUMBNAILS": "maybe", "MEDIA_COPY_SINGLE_MAX": "big", "MEDIA_COPY_PART_BYTES": "0",
-		"MEDIA_CONSUMER_FETCH_BATCH": "0", "MEDIA_CONSUMER_WORKERS": "few", "MEDIA_CONSUMER_ACK_WAIT": "0s", "MEDIA_CONSUMER_SYNC_TIMEOUT": "later"} {
+		"MEDIA_CONSUMER_MAX_PENDING": "few", "MEDIA_CONSUMER_ACK_WAIT": "0s", "MEDIA_CONSUMER_SYNC_TIMEOUT": "later"} {
 		t.Run(key, func(t *testing.T) {
 			setEnv(t, map[string]string{key: value})
 			if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), key) {
@@ -83,7 +83,7 @@ func TestMediaDownloadDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	if m := c.Media; m.DownloadSignatureTTL != time.Hour || m.ProcessingRetention != 720*time.Hour || m.Thumbnails || m.ThumbnailSuffix != ".thumb" || m.CopySingleMax != 5<<30 || m.CopyPartBytes != 1<<30 ||
-		m.FetchBatch != 8 || m.Workers != 4 || m.AckWait != 30*time.Second || m.SyncTimeout != 15*time.Minute {
+		m.MaxPending != 1024 || m.AckWait != 30*time.Second || m.SyncTimeout != 15*time.Minute {
 		t.Fatalf("media %+v", m)
 	}
 }

@@ -39,7 +39,7 @@ func (a *App) consumerProbes() []Probe {
 	}
 	c, stats := a.consumer, a.attach.Stats()
 	out := []Probe{
-		{Name: "lag_seconds", Help: "Age of the oldest event in the media consumer's last batch; 0 when idle.", Gauge: true, Read: func() float64 { return c.Lag().Seconds() }},
+		{Name: "lag_seconds", Help: "Age of the last event the media consumer received, read at scrape time; 0 after an idle wait with no event.", Gauge: true, Read: func() float64 { return c.Lag().Seconds() }},
 		{Name: "stuck_total", Help: "Media event deliveries that failed for the sixth time or more, not counting waits for an upload.", Read: func() float64 { return float64(c.Stuck()) }},
 	}
 	for _, d := range stats.DroppedCounts() {

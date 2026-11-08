@@ -34,11 +34,16 @@ func TestEnsureConsumerConfig(t *testing.T) {
 	if a.stream != "CHATIM_EVT" || got.Durable != "media" || !slices.Equal(got.FilterSubjects, want) || got.FilterSubject != "" {
 		t.Errorf("stream %q config %+v", a.stream, got)
 	}
-	if got.AckPolicy != jetstream.AckExplicitPolicy || got.AckWait != 30*time.Second || got.DeliverPolicy != jetstream.DeliverNewPolicy {
+	if got.AckPolicy != jetstream.AckExplicitPolicy || got.AckWait != 30*time.Second || got.DeliverPolicy != jetstream.DeliverNewPolicy || got.MaxAckPending != 1024 {
 		t.Errorf("config %+v", got)
 	}
-	if consumer.StopTimeout() != 1250*time.Millisecond {
-		t.Errorf("stop timeout %v", consumer.StopTimeout())
+	if consumer.StopTimeout() != 1250*time.Millisecond || cfg().Chunk() != 512 {
+		t.Errorf("stop timeout %v chunk %d", consumer.StopTimeout(), cfg().Chunk())
+	}
+	one := cfg()
+	one.MaxPending = 1
+	if one.Chunk() != 1 {
+		t.Errorf("chunk of one pending %d, want 1", one.Chunk())
 	}
 }
 
@@ -63,22 +68,22 @@ func TestNewRejectsMissingDepsAndBadConfig(t *testing.T) {
 		"stats":  func(d *consumer.Deps) { d.Stats = nil },
 		"ready":  func(d *consumer.Deps) { d.Ready = nil },
 	} {
-		d := newRig().deps(&fakeQueue{})
+		d := newRig().deps(newStream())
 		drop(&d)
 		if _, err := consumer.New(cfg(), d); !errors.Is(err, apperr.ErrInvalidArgument) {
 			t.Errorf("%s: New = %v", name, err)
 		}
 	}
 	for name, change := range map[string]func(*consumer.Config){
-		"workers":  func(c *consumer.Config) { c.Workers = 0 },
-		"batch":    func(c *consumer.Config) { c.FetchBatch = 0 },
-		"ack wait": func(c *consumer.Config) { c.AckWait = time.Second },
-		"timeout":  func(c *consumer.Config) { c.SyncTimeout = 0 },
-		"root":     func(c *consumer.Config) { c.SubjectRoot = "" },
+		"no pending":   func(c *consumer.Config) { c.MaxPending = 0 },
+		"many pending": func(c *consumer.Config) { c.MaxPending = consumer.MaxPendingLimit + 1 },
+		"ack wait":     func(c *consumer.Config) { c.AckWait = time.Second },
+		"timeout":      func(c *consumer.Config) { c.SyncTimeout = 0 },
+		"root":         func(c *consumer.Config) { c.SubjectRoot = "" },
 	} {
 		bad := cfg()
 		change(&bad)
-		if _, err := consumer.New(bad, newRig().deps(&fakeQueue{})); !errors.Is(err, apperr.ErrInvalidArgument) {
+		if _, err := consumer.New(bad, newRig().deps(newStream())); !errors.Is(err, apperr.ErrInvalidArgument) {
 			t.Errorf("%s: New = %v", name, err)
 		}
 	}

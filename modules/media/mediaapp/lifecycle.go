@@ -30,7 +30,7 @@ func (a *App) assembleConsumer(uploads *mongostore.Uploads) error {
 
 func (a *App) consumerConfig() consumer.Config {
 	return consumer.Config{
-		Stream: a.deps.Stream, SubjectRoot: a.deps.SubjectRoot, FetchBatch: a.cfg.FetchBatch, Workers: a.cfg.Workers,
+		Stream: a.deps.Stream, SubjectRoot: a.deps.SubjectRoot, MaxPending: a.cfg.MaxPending,
 		AckWait: a.cfg.AckWait, SyncTimeout: a.cfg.SyncTimeout,
 	}
 }

@@ -15,9 +15,7 @@ func TestASlowSyncStaysInProgressAndASettledOneGetsNone(t *testing.T) {
 		for _, d := range []*fakeDelivery{slow, fast} {
 			d.ackWait, d.touched = cfg().AckWait, now
 		}
-		q := &fakeQueue{}
-		q.push(slow, fast)
-		run := start(t.Context(), r.consumer(t, q, cfg()))
+		run := start(t.Context(), r.consumer(t, newStream(slow, fast), cfg()))
 		synctest.Wait()
 		if got := settledOf(fast); got.acks != 1 {
 			t.Fatalf("fast settled %+v, want acked at once", got)

@@ -22,8 +22,8 @@ const (
 	DefaultRetention          = 30 * 24 * time.Hour
 	DefaultCopySingleMax      = 5 << 30
 	DefaultCopyPartBytes      = 1 << 30
-	DefaultFetchBatch         = 8
-	DefaultWorkers            = 4
+	DefaultMaxPending         = 1024
+	maxPending                = 65536
 	DefaultAckWait            = 30 * time.Second
 	DefaultSyncTimeout        = 15 * time.Minute
 	minAckWait                = 3 * time.Second
@@ -57,8 +57,7 @@ type Config struct {
 	ThumbnailSuffix      string
 	CopySingleMax        int64
 	CopyPartBytes        int64
-	FetchBatch           int
-	Workers              int
+	MaxPending           int
 	AckWait              time.Duration
 	SyncTimeout          time.Duration
 }
@@ -70,7 +69,7 @@ func Defaults() Config {
 		PartSignatureTTL: DefaultPartSignatureTTL, ReadyCheckInterval: DefaultReadyCheckInterval,
 		DownloadSignatureTTL: DefaultDownloadTTL, ProcessingRetention: DefaultRetention, ThumbnailSuffix: DefaultThumbnailSuffix,
 		CopySingleMax: DefaultCopySingleMax, CopyPartBytes: DefaultCopyPartBytes,
-		FetchBatch: DefaultFetchBatch, Workers: DefaultWorkers, AckWait: DefaultAckWait, SyncTimeout: DefaultSyncTimeout,
+		MaxPending: DefaultMaxPending, AckWait: DefaultAckWait, SyncTimeout: DefaultSyncTimeout,
 	}
 }
 
@@ -143,8 +142,8 @@ func (c Config) copyError() error {
 }
 
 func (c Config) consumerError() error {
-	if c.FetchBatch < 1 || c.Workers < 1 || c.AckWait < minAckWait || c.SyncTimeout <= 0 {
-		return fmt.Errorf("MEDIA_CONSUMER_FETCH_BATCH and MEDIA_CONSUMER_WORKERS must be at least 1, MEDIA_CONSUMER_ACK_WAIT at least %v and MEDIA_CONSUMER_SYNC_TIMEOUT positive", minAckWait)
+	if c.MaxPending < 1 || c.MaxPending > maxPending || c.AckWait < minAckWait || c.SyncTimeout <= 0 {
+		return fmt.Errorf("MEDIA_CONSUMER_MAX_PENDING must be 1..%d, MEDIA_CONSUMER_ACK_WAIT at least %v and MEDIA_CONSUMER_SYNC_TIMEOUT positive", maxPending, minAckWait)
 	}
 	return nil
 }

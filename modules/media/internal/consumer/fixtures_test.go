@@ -26,7 +26,7 @@ func TestMain(m *testing.M) {
 }
 
 func cfg() consumer.Config {
-	return consumer.Config{Stream: "CHATIM_EVT", SubjectRoot: "evt", FetchBatch: 8, Workers: 4, AckWait: 30 * time.Second, SyncTimeout: 15 * time.Minute}
+	return consumer.Config{Stream: "CHATIM_EVT", SubjectRoot: "evt", MaxPending: 1024, AckWait: 30 * time.Second, SyncTimeout: 15 * time.Minute}
 }
 
 func envelope(seq uint64, at time.Time) *chatimv1.Event {
@@ -119,11 +119,11 @@ func newRig() *rig {
 	return &rig{sync: &fakeSync{}, stats: &attach.Stats{}, ready: func() bool { return true }}
 }
 
-func (r *rig) deps(src jsconsume.Source) consumer.Deps {
+func (r *rig) deps(src jsconsume.StreamOpener) consumer.Deps {
 	return consumer.Deps{Source: src, Sync: r.sync, Stats: r.stats, Ready: r.ready, Log: slog.New(slog.DiscardHandler)}
 }
 
-func (r *rig) consumer(t *testing.T, src jsconsume.Source, c consumer.Config) *consumer.Consumer {
+func (r *rig) consumer(t *testing.T, src jsconsume.StreamOpener, c consumer.Config) *consumer.Consumer {
 	t.Helper()
 	out, err := consumer.New(c, r.deps(src))
 	if err != nil {
@@ -155,9 +155,7 @@ func (r running) stop(t *testing.T) {
 
 func runOnce(t *testing.T, r *rig, c consumer.Config, ds ...*fakeDelivery) *consumer.Consumer {
 	t.Helper()
-	q := &fakeQueue{}
-	q.push(ds...)
-	cons := r.consumer(t, q, c)
+	cons := r.consumer(t, newStream(ds...), c)
 	run := start(t.Context(), cons)
 	synctest.Wait()
 	run.stop(t)

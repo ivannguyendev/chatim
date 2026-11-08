@@ -28,8 +28,7 @@ func (p *parser) mediaConfig(c *Config) {
 	m.ThumbnailSuffix = envconfig.String("MEDIA_THUMBNAIL_SUFFIX", m.ThumbnailSuffix)
 	m.CopySingleMax = int64(p.count("MEDIA_COPY_SINGLE_MAX", int(m.CopySingleMax)))
 	m.CopyPartBytes = int64(p.count("MEDIA_COPY_PART_BYTES", int(m.CopyPartBytes)))
-	m.FetchBatch = p.count("MEDIA_CONSUMER_FETCH_BATCH", m.FetchBatch)
-	m.Workers = p.count("MEDIA_CONSUMER_WORKERS", m.Workers)
+	m.MaxPending = p.count("MEDIA_CONSUMER_MAX_PENDING", m.MaxPending)
 	m.AckWait = p.span("MEDIA_CONSUMER_ACK_WAIT", m.AckWait)
 	m.SyncTimeout = p.span("MEDIA_CONSUMER_SYNC_TIMEOUT", m.SyncTimeout)
 	c.Media = m

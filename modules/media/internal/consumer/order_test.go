@@ -15,14 +15,13 @@ import (
 
 const orderFile = "acme/an/20261108/0123456789abcdefghijklmnop"
 
-func TestEventsOfOneMessageRunInFetchOrderOneAtATime(t *testing.T) {
+func TestEventsOfOneMessageRunInDeliveryOrderOneAtATime(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		r := newRig()
 		r.sync.block = make(chan struct{})
 		now := time.Now()
-		q := &fakeQueue{}
-		q.push(delivery(t, created(1, now, 1), 1), delivery(t, deleted(1, now), 1), delivery(t, created(2, now, 1), 1))
-		run := start(t.Context(), r.consumer(t, q, cfg()))
+		s := newStream(delivery(t, created(1, now, 1), 1), delivery(t, deleted(1, now), 1), delivery(t, created(2, now, 1), 1))
+		run := start(t.Context(), r.consumer(t, s, cfg()))
 		synctest.Wait()
 		if calls := r.sync.recorded(); r.sync.inFlight() != 2 || len(calls) != 2 {
 			t.Fatalf("in flight %d calls %+v, want the delete of seq 1 to wait", r.sync.inFlight(), calls)
@@ -58,7 +57,7 @@ func (plainObjects) Stat(context.Context, domain.Bucket, string) (domain.Object,
 
 func (plainObjects) DeleteProcessing(context.Context, string) error { return nil }
 
-func TestACreateAndDeleteOfOneMessageInOneBatchLeaveNoLivePair(t *testing.T) {
+func TestACreateAndDeleteOfOneMessageInFlightTogetherLeaveNoLivePair(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		uploads, files := memstore.NewUploads(), memstore.NewMessageFiles()
 		now := time.Now()
@@ -70,9 +69,7 @@ func TestACreateAndDeleteOfOneMessageInOneBatchLeaveNoLivePair(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		q := &fakeQueue{}
-		q.push(delivery(t, created(1, now, 1), 1), delivery(t, deleted(1, now), 1))
-		c, err := consumer.New(cfg(), consumer.Deps{Source: q, Sync: svc, Stats: svc.Stats(), Ready: func() bool { return true }, Log: log})
+		c, err := consumer.New(cfg(), consumer.Deps{Source: newStream(delivery(t, created(1, now, 1), 1), delivery(t, deleted(1, now), 1)), Sync: svc, Stats: svc.Stats(), Ready: func() bool { return true }, Log: log})
 		if err != nil {
 			t.Fatal(err)
 		}
