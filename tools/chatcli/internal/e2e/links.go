@@ -22,8 +22,11 @@ func BookmarkEventID(room string, seq uint64, user string, ver uint32) string {
 
 func CreatedSubject(root, tenant, room string, m *chatimv1.Message) string {
 	class := classOf(KindCreated)
-	if len(m.GetMentionTargets()) > 0 || m.GetMentionAll() {
+	switch {
+	case len(m.GetMentionTargets()) > 0 || m.GetMentionAll():
 		class = "mention"
+	case len(m.GetAttachments()) > 0:
+		class = "media"
 	}
 	return root + "." + tenant + "." + class + "." + room + ".evt." + KindCreated
 }

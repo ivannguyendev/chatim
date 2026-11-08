@@ -74,7 +74,7 @@ Media lỗi (config sai, thiếu bucket, sai key, S3 sập) không bao giờ là
 
 | Biến | Mặc định | Ghi chú |
 |---|---|---|
-| `MEDIA_ENABLED` | `true` | `false`: `MediaService` vẫn đăng ký nhưng mọi lệnh trả `FAILED_PRECONDITION` |
+| `MEDIA_ENABLED` | `true` | `false`: `MediaService` vẫn đăng ký nhưng mọi lệnh trả `FAILED_PRECONDITION`. Compose dev lấy từ biến môi trường lúc `make app-up` (mặc định `true`, không có trong `.env.example`), vd. `MEDIA_ENABLED=false make app-up` để đo A/B không có media |
 | `MEDIA_S3_ENDPOINT`, `MEDIA_S3_PUBLIC_ENDPOINT` | (rỗng) | Endpoint chat gọi S3; endpoint ghi vào URL ký mà máy dùng (chữ ký gồm host, sai thì mọi URL hỏng). Endpoint public phải ở domain đăng ký khác domain của app (không subdomain, không cùng site) vì file trả với loại máy khai ([media §7](../features/12-feature-media.md#7-thumb-và-hợp-đồng-lambda-cho-hạ-tầng)) |
 | `MEDIA_S3_REGION` | (rỗng, bắt buộc) | Đặt sẵn để ký URL không phải hỏi vùng |
 | `MEDIA_S3_ACCESS_KEY`, `MEDIA_S3_SECRET_KEY[_FILE]` | (rỗng) | Key chỉ cần quyền trên 2 bucket: `processing` đọc, head, tạo/đóng/huỷ multipart, xoá (file lệch cỡ, bản cũ sau khi chuyển); `completed` đọc, head, ghi (`CopyObject`, tạo/đóng/huỷ multipart copy). URL tải ký bằng key này nên cần quyền đọc cả hai; secret không vào log |

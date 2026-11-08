@@ -72,7 +72,7 @@ func ConsumerConfig(cfg Config) jetstream.ConsumerConfig {
 
 func Subjects(root string) []string {
 	return []string{
-		root + ".*.message.*.msg_created",
+		root + ".*.media.*.msg_created",
 		root + ".*.mention.*.msg_created",
 		root + ".*.message.*.msg_deleted",
 	}

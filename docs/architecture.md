@@ -323,7 +323,7 @@ Mỗi cam kết hệ thống bắt buộc phải đi kèm với Detector đo lư
 - **`msg_created`:** bỏ nếu đã có đúng seq đó; thấy lỗ (seq > seq cuối + 1) thì gọi `GetHistory` để lấp.
 - **Không bao giờ** dùng luật "seq ≤ seq cuối đã thấy thì bỏ": tin phát bù sẽ mất.
 - Chỉ trạng thái cuối của doc tập và số đếm được bảo đảm; event trung gian có thể không bao giờ được phát bù.
-- **Chỉ đăng ký đúng subject cần** ([events.md](./events.md)). `msg_created` của tin có mention nằm ở loại data `mention` (D170): ai lọc đúng `evt.*.message.*.msg_created` sẽ bỏ sót nó.
+- **Chỉ đăng ký đúng subject cần** ([events.md](./events.md)). `msg_created` của tin có mention nằm ở loại data `mention` (D170), của tin có file mà không mention ở loại `media` (owner 2026-11-08): ai lọc đúng `evt.*.message.*.msg_created` sẽ bỏ sót chúng.
 - Stream chỉ bỏ trùng trong `EVT_STREAM_DUPLICATES` (5 phút); bản phát lại sau đó (projection lỗi lâu, resync) phải được consumer bỏ theo luật trên.
 
 ---

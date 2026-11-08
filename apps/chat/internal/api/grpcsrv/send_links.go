@@ -29,10 +29,11 @@ func sendKind(req *chatimv1.SendMessageRequest) (domain.Kind, error) {
 		return 0, err
 	}
 	links := domain.Message{
-		Kind:       kind,
-		ReplyTo:    pbconv.DomainReplyRef(req.GetReplyTo()),
-		Mentions:   pbconv.DomainMentionTargets(req.GetMentions().GetTargets()),
-		MentionAll: req.GetMentions().GetAll(),
+		Kind:        kind,
+		ReplyTo:     pbconv.DomainReplyRef(req.GetReplyTo()),
+		Mentions:    pbconv.DomainMentionTargets(req.GetMentions().GetTargets()),
+		MentionAll:  req.GetMentions().GetAll(),
+		Attachments: pbconv.DomainAttachments(req.GetAttachments()),
 	}
 	if req.GetForwardFrom() != nil {
 		links.Forward = &domain.ForwardRef{}

@@ -70,14 +70,32 @@ func TestEachKindReachesOnlyItsAudience(t *testing.T) {
 	}
 }
 
-func TestMentionDataKindRoutesLikeAMessage(t *testing.T) {
+func TestMentionAndMediaDataKindsRouteLikeAMessage(t *testing.T) {
+	for _, data := range []string{"message", "mention", "media"} {
+		t.Run(data, func(t *testing.T) {
+			run(t, func(t *testing.T) {
+				a := newAudience(t)
+				env := msg("t1", 1)
+				env.DataKind = data
+				a.route(env)
+				if got := a.receivers(); !slices.Equal(got, []string{"mb", "ow", "va1", "va2"}) {
+					t.Fatalf("%s msg_created reached %v", data, got)
+				}
+			})
+		})
+	}
+}
+
+func TestMediaDataKindIsOnlyForMessageCreated(t *testing.T) {
 	run(t, func(t *testing.T) {
 		a := newAudience(t)
-		env := msg("t1", 1)
-		env.DataKind = "mention"
-		a.route(env)
-		if got := a.receivers(); !slices.Equal(got, []string{"mb", "ow", "va1", "va2"}) {
-			t.Fatalf("mention msg_created reached %v", got)
+		for _, kind := range []string{"msg_edited", "msg_deleted", "reaction_changed"} {
+			env := event(kind, "t1", 1, "ow", 3)
+			env.DataKind = "media"
+			a.route(env)
+		}
+		if got := a.receivers(); len(got) != 0 {
+			t.Fatalf("media data of other kinds reached %v", got)
 		}
 	})
 }

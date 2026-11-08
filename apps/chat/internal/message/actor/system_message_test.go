@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 	"testing/synctest"
+	"time"
 
 	"github.com/ivannguyendev/chatim/apps/chat/internal/message/actor"
 	"github.com/ivannguyendev/chatim/apps/chat/internal/model/access"
@@ -126,6 +127,11 @@ func TestSendRejectsBadSystemMessagesAndMetaBeforeRouting(t *testing.T) {
 			c.MentionAll = true
 			return c
 		}, "mentions"},
+		"system attachments": {func() actor.SendCmd {
+			c := systemCmd("bot", "s1")
+			c.Attachments = []domain.Attachment{photoOf(fileKey("bot", time.Now(), 1))}
+			return c
+		}, "attachments"},
 		"meta over 8KB": {func() actor.SendCmd {
 			c := cmd(roomA, "alice", "c1")
 			c.Meta = bytes.Repeat([]byte("a"), 8193)

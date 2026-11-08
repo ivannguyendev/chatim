@@ -29,7 +29,7 @@ func TestEnsureConsumerConfig(t *testing.T) {
 	if err := consumer.EnsureConsumer(t.Context(), a, cfg()); err != nil {
 		t.Fatalf("EnsureConsumer: %v", err)
 	}
-	want := []string{"evt.*.message.*.msg_created", "evt.*.mention.*.msg_created", "evt.*.message.*.msg_deleted"}
+	want := []string{"evt.*.media.*.msg_created", "evt.*.mention.*.msg_created", "evt.*.message.*.msg_deleted"}
 	got := a.got
 	if a.stream != "CHATIM_EVT" || got.Durable != "media" || !slices.Equal(got.FilterSubjects, want) || got.FilterSubject != "" {
 		t.Errorf("stream %q config %+v", a.stream, got)

@@ -67,11 +67,24 @@ func TestOnlyMessageCreatedMovesToTheMentionData(t *testing.T) {
 	}
 }
 
-func TestSubjectForUsesTheMentionFlagOnlyForMessageCreated(t *testing.T) {
-	if got, _ := publish.SubjectFor("evt", tenant, roomA, "msg_created", true); got != "evt.acme.mention.101.msg_created" {
-		t.Fatalf("msg_created with mentions = %q", got)
+func TestSubjectForUsesTheMentionAndFileFlagsOnlyForMessageCreated(t *testing.T) {
+	cases := map[string]struct {
+		kind            string
+		mentions, files bool
+		subject         string
+	}{
+		"msg_created with mentions":        {"msg_created", true, false, "evt.acme.mention.101.msg_created"},
+		"msg_created with files":           {"msg_created", false, true, "evt.acme.media.101.msg_created"},
+		"msg_created with both":            {"msg_created", true, true, "evt.acme.mention.101.msg_created"},
+		"msg_created with neither":         {"msg_created", false, false, "evt.acme.message.101.msg_created"},
+		"reaction_changed with both flags": {"reaction_changed", true, true, "evt.acme.message.101.reaction_changed"},
+		"msg_deleted with both flags":      {"msg_deleted", true, true, "evt.acme.message.101.msg_deleted"},
+		"member_added with both flags":     {"member_added", true, true, "evt.acme.member.101.member_added"},
+		"room_created with both flags":     {"room_created", true, true, "evt.acme.room.101.room_created"},
 	}
-	if got, _ := publish.SubjectFor("evt", tenant, roomA, "reaction_changed", true); got != "evt.acme.message.101.reaction_changed" {
-		t.Fatalf("reaction_changed with the flag = %q", got)
+	for name, c := range cases {
+		if got, _ := publish.SubjectFor("evt", tenant, roomA, c.kind, c.mentions, c.files); got != c.subject {
+			t.Errorf("%s = %q, want %q", name, got, c.subject)
+		}
 	}
 }

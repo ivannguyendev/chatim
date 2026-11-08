@@ -95,8 +95,9 @@ Không lưu gì cho thumb: khoá thumb luôn suy từ `key`.
 | Mỗi khoá có dạng `{tenant}/{người gửi}/{yyyymmdd}/{26 ký tự}` (khoá `.thumb` bị từ chối) và khoá không cũ hơn 24h: tính chính xác từ mốc mili giây nằm trong khoá (khoá P2 sắp theo thời gian), ngày trong khoá phải khớp mốc đó | `INVALID_ARGUMENT` |
 | Không trùng khoá trong một tin; tên 1..255 byte UTF-8 in được; loại dạng `type/subtype` ≤ 255 byte; cỡ ≥ 1; `dim` rỗng hoặc đúng 2 số ≥ 1; `dur` ≥ 0; `hash` rỗng hoặc đúng dạng `sha256:<64 hex>` | `INVALID_ARGUMENT` |
 | Text: được rỗng **chỉ khi** có ≥ 1 đính kèm (trước đây luôn bắt buộc) | `INVALID_ARGUMENT` |
+| Tin hệ thống (`kind = system`) không có đính kèm (owner 2026-11-08) | `INVALID_ARGUMENT` (field `attachments`) |
 
-Chat không gọi S3 hay module media khi gửi: ack vẫn ≤ 30 ms (A1). Khoá giả hoặc file chưa upload xong chỉ làm hỏng tin của chính người gửi (URL tải trả lỗi từ S3). Tin hệ thống được kèm đính kèm như tin thường (backend của tenant upload dưới user của nó).
+Chat không gọi S3 hay module media khi gửi: ack vẫn ≤ 30 ms (A1). Khoá giả hoặc file chưa upload xong chỉ làm hỏng tin của chính người gửi (URL tải trả lỗi từ S3). Tin hệ thống không kèm file (owner 2026-11-08): `kind = system` có `attachments` → `invalid_argument` (field `attachments`), cùng luật với trả lời, forward, mention.
 
 **Forward:** đính kèm chép từ tin nguồn, đính kèm máy gửi kèm bị bỏ im lặng (như mention, D116); không kiểm chủ khoá và tuổi khoá (khoá là của người gửi gốc, có thể cũ), chỉ kiểm dạng. Khoá giữ nguyên → hai tin trỏ cùng object.
 
@@ -225,14 +226,14 @@ Không có event hay subject mới. `msg_created`, `msg_edited`, `msg_deleted` m
 - Rộng, cao, thời lượng, cỡ, loại là lời máy khai; chỉ để hiển thị.
 - S3 trả file với loại máy khai: file HTML/SVG độc mở ra chạy script trên domain phục vụ file. Hạ tầng đặt domain đó sai (subdomain hay cùng site với app) thì script đó chạm được cookie và API của app.
 - Gallery lọc loại sau khi đọc index (loại không nằm trong index): người upload nhiều file loại khác thì một trang quét nhiều doc hơn số trả về (chỉ trong file của chính người đó).
-- Hash là lời máy gửi: máy gửi khai sai thì chỉ tin của chính nó bị báo "đã thay đổi". Hash là tuỳ chọn để máy cũ và tin hệ thống vẫn gửi được; tin không có hash thì máy nhận không kiểm được.
+- Hash là lời máy gửi: máy gửi khai sai thì chỉ tin của chính nó bị báo "đã thay đổi". Hash là tuỳ chọn để máy cũ vẫn gửi được; tin không có hash thì máy nhận không kiểm được.
 - URL thumb có thể 404 (Lambda chưa xong, file không sinh được thumb, dev không có Lambda); app phải hiện biểu tượng và hỏi lại.
 - Lambda phải bỏ qua object có hậu tố thumb, nếu không mỗi thumb lại kích một lần Lambda (vòng lặp tốn tiền); hậu tố trong config chat và trong Lambda phải giống nhau.
 - URL tải là bearer trong `MEDIA_DOWNLOAD_URL_TTL`: ai có URL tải được dù không ở trong room.
 
 ## 11. Điểm đội tự chọn (owner phản biện)
 
-`MEDIA_DOWNLOAD_URL_TTL` 1h; ≤ 100 tin mỗi `GetAttachmentURLs`; tin hệ thống được kèm file; sửa tin không xoá hết chú thích; preview giữ loại file, không giữ khoá; tên `dim` (owner viết `dime`); hậu tố thumb mặc định `.thumb`; `thumbnail_url` chỉ cấp cho `image/*`, `video/*`; `GetClientConfig` báo `media.thumbnails`; gallery vẫn hiện file của tin đã xoá (file của mình, object chưa bị xoá), `page_size` ≤ 100.
+`MEDIA_DOWNLOAD_URL_TTL` 1h; ≤ 100 tin mỗi `GetAttachmentURLs`; tin hệ thống không kèm file (owner 2026-11-08); sửa tin không xoá hết chú thích; preview giữ loại file, không giữ khoá; tên `dim` (owner viết `dime`); hậu tố thumb mặc định `.thumb`; `thumbnail_url` chỉ cấp cho `image/*`, `video/*`; `GetClientConfig` báo `media.thumbnails`; gallery vẫn hiện file của tin đã xoá (file của mình, object chưa bị xoá), `page_size` ≤ 100.
 
 ## 12. Kiểm thử
 

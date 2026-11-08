@@ -107,7 +107,7 @@ func (r *mediaRun) steps() []wsEventsStep {
 		{"after AbortUpload the session gives no more part URLs", r.abort},
 		{"A uploads an HTML page then a PNG with dim and hash, B uploads a text file", r.uploadFiles},
 		{"A and B connect to the websocket and A creates a group with B", r.connect},
-		{"A sends a message with no text and both files over the websocket", r.sendFiles},
+		{"A sends a message with no text and both files over the websocket and B gets its msg_created", r.sendFiles},
 		{"B reads the message through the gateway with both attachments", r.readFiles},
 		{"B's room list preview names both file mimes", r.previewMimes},
 		{"B's plain URLs give the PNG and the HTML with their exact bytes and hashes and no thumbnail", r.downloads},

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
+	"github.com/ivannguyendev/chatim/tools/chatcli/internal/e2e"
 )
 
 func (r *mediaRun) connect() error {
@@ -47,6 +48,9 @@ func (r *mediaRun) sendFiles() error {
 	}
 	if r.seq = resp.GetSendMessage().GetSeq(); r.seq == 0 {
 		return errors.New("send returned no seq")
+	}
+	if _, err := r.b.await(0, e2e.CreatedMatch(r.room, r.seq)); err != nil {
+		return fmt.Errorf("msg_created to B over the websocket: %w", err)
 	}
 	return nil
 }

@@ -62,6 +62,7 @@ func TestValidateSystemMessageRefusesLinks(t *testing.T) {
 		"forward":     {func(m *domain.Message) { m.Forward = &domain.ForwardRef{Room: 8, Seq: 9} }, "forward_from"},
 		"mention":     {func(m *domain.Message) { m.Mentions = []domain.MentionTarget{{Kind: domain.MentionUser, ID: "lan"}} }, "mentions"},
 		"mention all": {func(m *domain.Message) { m.MentionAll = true }, "mentions"},
+		"attachments": {func(m *domain.Message) { m.Attachments = []domain.Attachment{{Key: "acme/bot/20261108/x"}} }, "attachments"},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {

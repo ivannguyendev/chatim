@@ -73,6 +73,8 @@ func ValidateSystemMessage(m Message) error {
 		return invalid("forward_from")
 	case len(m.Mentions) > 0 || m.MentionAll:
 		return invalid("mentions")
+	case len(m.Attachments) > 0:
+		return invalid("attachments")
 	default:
 		return nil
 	}

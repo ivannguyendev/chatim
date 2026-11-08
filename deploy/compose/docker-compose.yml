@@ -55,6 +55,7 @@ x-chat-env: &chat-env
   REDIS_DEDUPE_ADDR: chatim-redis-dedupe:6379
   REDIS_DEDUPE_PASSWORD_FILE: /run/secrets/redis_dedupe_password
   NATS_URL: nats://chatim-nats:4222
+  MEDIA_ENABLED: ${MEDIA_ENABLED:-true}
   MEDIA_S3_ENDPOINT: http://chatim-s3:3900
   MEDIA_S3_PUBLIC_ENDPOINT: http://chatim-s3:3900
   MEDIA_S3_REGION: us-east-1
