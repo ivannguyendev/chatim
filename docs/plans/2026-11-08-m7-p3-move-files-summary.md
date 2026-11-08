@@ -68,7 +68,7 @@ Ví dụ: An gửi R/42 kèm X, Y. Consumer hỏi chat: R/42 còn sống, file `
 | `state` | 1 tin còn dùng, 2 tin đã bị xoá | `1` |
 | `created_at`, `deleted_at` | Lúc ghi, lúc tin bị xoá | |
 
-Index `{message_key}` (tìm cặp của một tin) và `{file_key, state}` (đếm tin còn dùng file); tra cứu luôn bằng phép bằng trên field. Tạo qua `/app indexes` (D191).
+Index `{tenant_id, message_key, state}` (tìm cặp của một tin) và `{file_key, state}` (đếm tin còn dùng file); tra cứu luôn bằng phép bằng trên field. Tạo qua `/app indexes` (D191).
 
 **`media_uploads`** thêm `bucket` (`processing` | `completed`, thiếu = `processing`), `attached_at` (lần đầu gắn tin), `retired_at` (không còn cặp sống; gỡ khi có cặp mới).
 
