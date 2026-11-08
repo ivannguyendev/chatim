@@ -32,6 +32,9 @@ type uploadDoc struct {
 	CreatedAt   time.Time  `bson:"created_at"`
 	CompletedAt *time.Time `bson:"completed_at,omitempty"`
 	UpdatedAt   time.Time  `bson:"updated_at"`
+	Bucket      string     `bson:"bucket,omitempty"`
+	AttachedAt  *time.Time `bson:"attached_at,omitempty"`
+	RetiredAt   *time.Time `bson:"retired_at,omitempty"`
 }
 
 type Uploads struct {
@@ -128,26 +131,33 @@ func familyPattern(families []string) bson.Regex {
 }
 
 func toDoc(u domain.Upload) uploadDoc {
-	d := uploadDoc{
+	return uploadDoc{
 		Key: u.Key, Tenant: u.Tenant, User: u.User, FileName: u.FileName, ContentType: u.ContentType,
 		Size: u.Size, Dim: u.Dim, Dur: u.Dur, Hash: u.Hash, PartSize: u.PartSize, PartCount: int64(u.PartCount), UploadID: u.UploadID,
 		State: int32(u.State), Ver: u.Ver, CreatedAt: u.CreatedAt, UpdatedAt: u.UpdatedAt,
+		Bucket: string(u.Bucket), CompletedAt: timeOrNil(u.CompletedAt), AttachedAt: timeOrNil(u.AttachedAt), RetiredAt: timeOrNil(u.RetiredAt),
 	}
-	if !u.CompletedAt.IsZero() {
-		at := u.CompletedAt
-		d.CompletedAt = &at
-	}
-	return d
 }
 
 func fromDoc(d uploadDoc) domain.Upload {
-	u := domain.Upload{
+	return domain.Upload{
 		Key: d.Key, Tenant: d.Tenant, User: d.User, FileName: d.FileName, ContentType: d.ContentType,
 		Size: d.Size, Dim: d.Dim, Dur: d.Dur, Hash: d.Hash, PartSize: d.PartSize, PartCount: int(d.PartCount), UploadID: d.UploadID,
 		State: domain.State(d.State), Ver: d.Ver, CreatedAt: d.CreatedAt.UTC(), UpdatedAt: d.UpdatedAt.UTC(),
+		Bucket: domain.Bucket(d.Bucket), CompletedAt: timeOf(d.CompletedAt), AttachedAt: timeOf(d.AttachedAt), RetiredAt: timeOf(d.RetiredAt),
 	}
-	if d.CompletedAt != nil {
-		u.CompletedAt = d.CompletedAt.UTC()
+}
+
+func timeOrNil(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
 	}
-	return u
+	return &t
+}
+
+func timeOf(t *time.Time) time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	return t.UTC()
 }

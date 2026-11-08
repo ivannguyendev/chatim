@@ -28,4 +28,7 @@ type Upload struct {
 	CreatedAt   time.Time
 	CompletedAt time.Time
 	UpdatedAt   time.Time
+	Bucket      Bucket
+	AttachedAt  time.Time
+	RetiredAt   time.Time
 }

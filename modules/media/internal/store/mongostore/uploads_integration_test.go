@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/event"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
@@ -22,11 +23,16 @@ import (
 
 func itDatabase(t *testing.T) *mongo.Database {
 	t.Helper()
+	return itDatabaseWatched(t, nil)
+}
+
+func itDatabaseWatched(t *testing.T, monitor *event.CommandMonitor) *mongo.Database {
+	t.Helper()
 	uri := os.Getenv("CHATIM_IT_MONGO_URI")
 	if uri == "" {
 		t.Skip("set CHATIM_IT_MONGO_URI to run")
 	}
-	client, err := mongo.Connect(options.Client().ApplyURI(uri))
+	client, err := mongo.Connect(options.Client().ApplyURI(uri).SetMonitor(monitor))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,12 +65,14 @@ func TestBootstrapIsClusteredAndRerunnable(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	specs, err := db.ListCollectionSpecifications(t.Context(), bson.D{{Key: "name", Value: uploadsCollection}})
-	if err != nil || len(specs) != 1 {
-		t.Fatalf("specs = %v, %v", specs, err)
-	}
-	if _, ok := specs[0].Options.Lookup("clusteredIndex").DocumentOK(); !ok {
-		t.Fatalf("options = %v", specs[0].Options)
+	for _, name := range []string{uploadsCollection, messageFilesCollection} {
+		specs, err := db.ListCollectionSpecifications(t.Context(), bson.D{{Key: "name", Value: name}})
+		if err != nil || len(specs) != 1 {
+			t.Fatalf("%s specs = %v, %v", name, specs, err)
+		}
+		if _, ok := specs[0].Options.Lookup("clusteredIndex").DocumentOK(); !ok {
+			t.Fatalf("%s options = %v", name, specs[0].Options)
+		}
 	}
 	plain := itDatabase(t)
 	if err := plain.CreateCollection(t.Context(), uploadsCollection); err != nil {

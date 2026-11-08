@@ -71,3 +71,61 @@ func (s *Uploads) ListOwned(_ context.Context, tenant, user, before string, kind
 	slices.SortFunc(out, func(a, b domain.Upload) int { return strings.Compare(b.Key, a.Key) })
 	return out[:min(len(out), limit)], nil
 }
+
+func (s *Uploads) GetMany(_ context.Context, tenant string, keys []string) (map[string]domain.Upload, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make(map[string]domain.Upload, len(keys))
+	for _, k := range keys {
+		if u, ok := s.docs[k]; ok && u.Tenant == tenant {
+			out[k] = locationOf(u)
+		}
+	}
+	return out, nil
+}
+
+func locationOf(u domain.Upload) domain.Upload {
+	return domain.Upload{
+		Key: u.Key, Tenant: u.Tenant, User: u.User, ContentType: u.ContentType, Size: u.Size, State: u.State, Ver: u.Ver,
+		CreatedAt: u.CreatedAt, Bucket: u.Bucket, AttachedAt: u.AttachedAt, RetiredAt: u.RetiredAt,
+	}
+}
+
+func (s *Uploads) MarkMoved(_ context.Context, key string, ver int64, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	u, ok := s.docs[key]
+	if !ok || u.Ver != ver {
+		return domain.ErrRetryLater
+	}
+	if u.AttachedAt.IsZero() {
+		u.AttachedAt = at.UTC()
+	}
+	u.Bucket, u.Ver, u.UpdatedAt = domain.BucketCompleted, u.Ver+1, at.UTC()
+	s.docs[key] = u
+	return nil
+}
+
+func (s *Uploads) Retire(_ context.Context, keys []string, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, k := range keys {
+		if u, ok := s.docs[k]; ok && u.RetiredAt.IsZero() {
+			u.RetiredAt = at.UTC()
+			s.docs[k] = u
+		}
+	}
+	return nil
+}
+
+func (s *Uploads) Unretire(_ context.Context, keys []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, k := range keys {
+		if u, ok := s.docs[k]; ok {
+			u.RetiredAt = time.Time{}
+			s.docs[k] = u
+		}
+	}
+	return nil
+}

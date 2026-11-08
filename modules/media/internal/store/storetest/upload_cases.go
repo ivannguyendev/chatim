@@ -25,11 +25,13 @@ func Upload(key string) domain.Upload {
 	}
 }
 
+type uploadCase struct {
+	name string
+	run  func(t *testing.T, s store.Uploads)
+}
+
 func RunUploads(t *testing.T, open func(t *testing.T) store.Uploads) {
-	cases := []struct {
-		name string
-		run  func(t *testing.T, s store.Uploads)
-	}{
+	cases := []uploadCase{
 		{"insert then get returns the same upload", insertThenGet},
 		{"insert without file facts reads back without them", insertWithoutFacts},
 		{"get of a missing key is not found", getMissing},
@@ -44,7 +46,7 @@ func RunUploads(t *testing.T, open func(t *testing.T) store.Uploads) {
 		{"list owned pages newest first", listNewestFirstByPages},
 		{"list owned filters by kinds", listByKinds},
 	}
-	for _, c := range cases {
+	for _, c := range append(cases, moveCases()...) {
 		t.Run(c.name, func(t *testing.T) { c.run(t, open(t)) })
 	}
 }
