@@ -15,6 +15,7 @@ import (
 var errMediaReaderUnbound = fmt.Errorf("chat reader for media is not bound yet: %w", apperr.ErrUnavailable)
 
 type mediaChatNode struct {
+	mediaMessageFiles
 	reader atomic.Pointer[visibleReader]
 }
 
@@ -47,18 +48,25 @@ func (c *mediaChatNode) VisibleAttachments(ctx context.Context, tenant, user str
 	return out, nil
 }
 
+func mediaMessageKey(ref mediaapp.MessageRef) (store.MsgKey, error) {
+	room, err := ids.ParseRoomID(ref.Room)
+	if err != nil {
+		return store.MsgKey{}, fmt.Errorf("%w: %w", apperr.ErrInvalidArgument, err)
+	}
+	if ref.Seq == 0 {
+		return store.MsgKey{}, fmt.Errorf("%w: message seq must be at least 1", apperr.ErrInvalidArgument)
+	}
+	return store.MsgKey{Room: room, Thread: ref.Thread, Seq: ref.Seq}, nil
+}
+
 func mediaMessageKeys(refs []mediaapp.MessageRef) ([]store.MsgKey, error) {
 	seen := make(map[store.MsgKey]struct{}, len(refs))
 	out := make([]store.MsgKey, 0, len(refs))
 	for _, ref := range refs {
-		room, err := ids.ParseRoomID(ref.Room)
+		k, err := mediaMessageKey(ref)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %w", apperr.ErrInvalidArgument, err)
+			return nil, err
 		}
-		if ref.Seq == 0 {
-			return nil, fmt.Errorf("%w: message seq must be at least 1", apperr.ErrInvalidArgument)
-		}
-		k := store.MsgKey{Room: room, Thread: ref.Thread, Seq: ref.Seq}
 		if _, dup := seen[k]; dup {
 			continue
 		}

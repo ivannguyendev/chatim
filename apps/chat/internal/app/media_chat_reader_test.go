@@ -56,7 +56,7 @@ func newMediaFixture(t *testing.T) mediaFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return mediaFixture{node: &mediaChatNode{}, reader: reader, msgs: msgs, hidden: hidden}
+	return mediaFixture{node: &mediaChatNode{mediaMessageFiles: mediaMessageFiles{messages: msgs}}, reader: reader, msgs: msgs, hidden: hidden}
 }
 
 func (f mediaFixture) insert(t *testing.T, room, thread, seq uint64, deleted bool, files ...domain.Attachment) {

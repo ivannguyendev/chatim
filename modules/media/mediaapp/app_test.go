@@ -36,6 +36,10 @@ func (noChat) VisibleAttachments(context.Context, string, string, []mediaapp.Mes
 	return nil, nil
 }
 
+func (noChat) MessageFiles(context.Context, mediaapp.MessageRef) (mediaapp.MessageState, error) {
+	return mediaapp.MessageState{}, nil
+}
+
 func valid() mediaapp.Config {
 	c := mediaapp.DefaultConfig()
 	c.Endpoint, c.PublicEndpoint, c.Region = "http://127.0.0.1:1", "http://127.0.0.1:1", "us-east-1"
