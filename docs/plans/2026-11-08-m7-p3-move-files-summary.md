@@ -68,7 +68,7 @@ Ví dụ: An gửi R/42 kèm X, Y. Consumer hỏi chat: R/42 còn sống, file `
 | `state` | 1 tin còn dùng, 2 tin đã bị xoá | `1` |
 | `created_at`, `deleted_at` | Lúc ghi, lúc tin bị xoá | |
 
-Index `{tenant_id, message_key, state}` (tìm cặp của một tin) và `{file_key, state}` (đếm tin còn dùng file); tra cứu luôn bằng phép bằng trên field. Tạo qua `/app indexes` (D191).
+Index `{tenant_id, message_key, state}` (tìm cặp của một tin) và `{file_key, state, message_key}` (đếm tin khác còn dùng file, chỉ đọc index); tra cứu luôn bằng phép bằng trên field. Tạo qua `/app indexes` (D191).
 
 **`media_uploads`** thêm `bucket` (`processing` | `completed`, thiếu = `processing`), `attached_at` (lần đầu gắn tin), `retired_at` (không còn cặp sống; gỡ khi có cặp mới).
 
@@ -148,7 +148,7 @@ Consumer chạy trên mọi node; ngưỡng alert trễ (đề xuất lag > 10 p
 | Storetest `media_message_files` + `media_uploads` | Upsert `$setOnInsert`, xoá mềm lô, đếm lô theo `file_key`, CAS `bucket` trên memstore và Mongo |
 | Unit cổng chat | Trả đúng tin còn sống / đã xoá và khoá file |
 | Itest Garage | Copy một lệnh và nhiều phần (cỡ phần nhỏ để ép nhánh nhiều phần) giữ nguyên byte và loại; xoá bản cũ |
-| Itest Mongo | Index `{message_key}`, `{file_key, state}` được dùng (`explain`); kiểm IDOR theo rule (owner 2026-11-08) |
+| Itest Mongo | Index `{tenant_id, message_key, state}`, `{file_key, state, message_key}` được dùng (`explain`); kiểm IDOR theo rule (owner 2026-11-08) |
 | e2e phase 16 mở rộng | Gửi ảnh → file sang `completed`, vẫn tải đúng byte; forward rồi xoá tin gốc → vẫn tải; xoá tin cuối → `retired_at`; file không gửi vẫn ở `processing`; gallery `expired` chỉ cho file ở `processing` |
 | `make alerts-check` | Luật mới |
 
