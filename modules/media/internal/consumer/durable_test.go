@@ -34,7 +34,7 @@ func TestEnsureConsumerConfig(t *testing.T) {
 	if a.stream != "CHATIM_EVT" || got.Durable != "media" || !slices.Equal(got.FilterSubjects, want) || got.FilterSubject != "" {
 		t.Errorf("stream %q config %+v", a.stream, got)
 	}
-	if got.AckPolicy != jetstream.AckExplicitPolicy || got.AckWait != 30*time.Second || got.DeliverPolicy != jetstream.DeliverAllPolicy {
+	if got.AckPolicy != jetstream.AckExplicitPolicy || got.AckWait != 30*time.Second || got.DeliverPolicy != jetstream.DeliverNewPolicy {
 		t.Errorf("config %+v", got)
 	}
 	if consumer.StopTimeout() != 1250*time.Millisecond {

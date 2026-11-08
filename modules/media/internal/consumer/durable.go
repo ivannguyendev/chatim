@@ -62,7 +62,7 @@ func ConsumerConfig(cfg Config) jetstream.ConsumerConfig {
 		FilterSubjects: Subjects(cfg.SubjectRoot),
 		AckPolicy:      jetstream.AckExplicitPolicy,
 		AckWait:        cfg.AckWait,
-		DeliverPolicy:  jetstream.DeliverAllPolicy,
+		DeliverPolicy:  jetstream.DeliverNewPolicy,
 	}
 }
 
