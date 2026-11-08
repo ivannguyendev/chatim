@@ -14,10 +14,12 @@ type s3Call struct {
 }
 
 type fakeS3 struct {
-	mu       sync.Mutex
-	calls    []s3Call
-	failPart string
-	headSize int64
+	mu          sync.Mutex
+	calls       []s3Call
+	failPart    string
+	headSize    int64
+	headType    string
+	headMissing bool
 }
 
 func (f *fakeS3) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -28,7 +30,7 @@ func (f *fakeS3) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	f.mu.Lock()
 	f.calls = append(f.calls, call)
-	failPart, headSize := f.failPart, f.headSize
+	failPart, headSize, headType, headMissing := f.failPart, f.headSize, f.headType, f.headMissing
 	f.mu.Unlock()
 	const stamp = "<LastModified>2026-11-08T00:00:00.000Z</LastModified>"
 	switch {
@@ -45,8 +47,11 @@ func (f *fakeS3) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `<CompleteMultipartUploadResult><Bucket>c</Bucket><Key>k</Key><ETag>"m-3"</ETag></CompleteMultipartUploadResult>`)
 	case r.Method == http.MethodDelete:
 		w.WriteHeader(http.StatusNoContent)
+	case r.Method == http.MethodHead && headMissing:
+		w.WriteHeader(http.StatusNotFound)
 	case r.Method == http.MethodHead:
 		w.Header().Set("Content-Length", strconv.FormatInt(headSize, 10))
+		w.Header().Set("Content-Type", headType)
 		w.Header().Set("ETag", `"e"`)
 		w.Header().Set("Last-Modified", "Sun, 08 Nov 2026 00:00:00 GMT")
 		w.WriteHeader(http.StatusOK)

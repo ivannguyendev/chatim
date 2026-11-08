@@ -132,17 +132,25 @@ func (s *S3) Head(ctx context.Context, key string) (int64, error) {
 }
 
 func (s *S3) Exists(ctx context.Context, bucket domain.Bucket, key string) (bool, error) {
+	_, found, err := s.Stat(ctx, bucket, key)
+	return found, err
+}
+
+func (s *S3) Stat(ctx context.Context, bucket domain.Bucket, key string) (domain.Object, bool, error) {
 	name, err := s.bucketOf(bucket)
 	if err != nil {
-		return false, err
+		return domain.Object{}, false, err
 	}
-	_, err = s.api.StatObject(ctx, name, key, minio.StatObjectOptions{})
+	info, err := s.api.StatObject(ctx, name, key, minio.StatObjectOptions{})
 	err = classify(err)
 	s.stats.record(opHead, err)
-	if errors.Is(err, ErrNotFound) {
-		return false, nil
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return domain.Object{}, false, nil
+	case err != nil:
+		return domain.Object{}, false, err
 	}
-	return err == nil, err
+	return domain.Object{Size: info.Size, ContentType: info.ContentType}, true, nil
 }
 
 func (s *S3) DeleteProcessing(ctx context.Context, key string) error {

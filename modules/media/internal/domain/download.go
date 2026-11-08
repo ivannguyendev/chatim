@@ -1,6 +1,9 @@
 package domain
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 const (
 	thumbnailImagePrefix = "image/"
@@ -13,6 +16,10 @@ type MessageRef struct {
 	Room   string
 	Thread uint64
 	Seq    uint64
+}
+
+func (r MessageRef) Key() string {
+	return r.Room + "-" + strconv.FormatUint(r.Thread, 10) + "-" + strconv.FormatUint(r.Seq, 10)
 }
 
 type File struct{ Key, Name, Mime string }

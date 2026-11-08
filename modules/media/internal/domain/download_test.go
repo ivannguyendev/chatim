@@ -19,3 +19,12 @@ func TestThumbnailsOnlyForImagesAndVideosWhenOn(t *testing.T) {
 		t.Fatalf("off = %q, %v", got, ok)
 	}
 }
+
+func TestMessageRefKeyJoinsRoomThreadAndSeq(t *testing.T) {
+	if got := (domain.MessageRef{Room: "8812", Seq: 42}).Key(); got != "8812-0-42" {
+		t.Fatalf("plain key = %q", got)
+	}
+	if got := (domain.MessageRef{Room: "8812", Thread: 7, Seq: 3}).Key(); got != "8812-7-3" {
+		t.Fatalf("thread key = %q", got)
+	}
+}
