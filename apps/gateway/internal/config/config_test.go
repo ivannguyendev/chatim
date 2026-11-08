@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/gateway/internal/config"
+	"github.com/ivannguyendev/chatim/apps/gateway/internal/ratelimit"
 	"github.com/ivannguyendev/chatim/pkg/auth"
 )
 
@@ -79,6 +80,12 @@ func TestLoadDefaults(t *testing.T) {
 		RequestDeadline:   5 * time.Second,
 		Identity:          identityWant(),
 		SharedRedis:       config.SharedRedis{Timeout: 500 * time.Millisecond},
+		PartURLLimits: config.PartURLLimits{
+			User:   ratelimit.Limit{Count: 2, Window: time.Second},
+			UserIP: ratelimit.Limit{Count: 1, Window: time.Second},
+			Device: ratelimit.Limit{Count: 1, Window: 5 * time.Second},
+		},
+		ClientIPHeader: "X-Forwarded-For",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Load() = %+v\nwant %+v", got, want)
@@ -143,4 +150,18 @@ func identityWant() auth.SyncConfig {
 	c := auth.SyncDefaults()
 	c.InternalURL, c.JWKSURL, c.Secret = "http://chatim-identity-1:8081", "https://identity.example.com/.well-known/jwks.json", "node-secret-value-0123456789abcdef"
 	return c
+}
+
+func TestPartURLLimitsAndTrustedProxies(t *testing.T) {
+	setEnv(t, map[string]string{"GW_PART_URLS_DEVICE_LIMIT": "2/10s", "GW_TRUSTED_PROXIES": "10.0.0.0/8, 192.168.1.7/32", "GW_CLIENT_IP_HEADER": "X-Real-IP"})
+	c := mustLoad(t)
+	if c.PartURLLimits.Device != (ratelimit.Limit{Count: 2, Window: 10 * time.Second}) || len(c.TrustedProxies) != 2 || c.ClientIPHeader != "X-Real-IP" {
+		t.Fatalf("limits %+v proxies %v header %q", c.PartURLLimits, c.TrustedProxies, c.ClientIPHeader)
+	}
+	for key, bad := range map[string]string{"GW_PART_URLS_USER_LIMIT": "2", "GW_PART_URLS_USER_IP_LIMIT": "0/1s", "GW_TRUSTED_PROXIES": "10.0.0.1"} {
+		setEnv(t, map[string]string{key: bad})
+		if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), key) {
+			t.Errorf("%s=%q: err = %v", key, bad, err)
+		}
+	}
 }

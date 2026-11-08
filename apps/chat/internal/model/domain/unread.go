@@ -36,6 +36,7 @@ type RoomPreview struct {
 	CreatedAt time.Time
 	Deleted   bool
 	Edited    bool
+	FileMimes []string
 }
 
 func CountUnread(window []TailMessage, v RoomViewer) Unread {
@@ -64,10 +65,21 @@ func ChoosePreview(previews []Message, v RoomViewer) (RoomPreview, bool) {
 		m = m.WithoutDeletedContent()
 		return RoomPreview{
 			Seq: m.Seq, From: m.From, Kind: m.Kind, Text: PreviewText(m.Text), CreatedAt: m.CreatedAt,
-			Deleted: m.Deleted, Edited: !m.Deleted && !m.EditedAt.IsZero(),
+			Deleted: m.Deleted, Edited: !m.Deleted && !m.EditedAt.IsZero(), FileMimes: fileMimes(m.Attachments),
 		}, true
 	}
 	return RoomPreview{}, false
+}
+
+func fileMimes(list []Attachment) []string {
+	if len(list) == 0 {
+		return nil
+	}
+	out := make([]string, len(list))
+	for i, a := range list {
+		out[i] = a.Mime
+	}
+	return out
 }
 
 func PreviewText(text string) string {

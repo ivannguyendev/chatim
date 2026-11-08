@@ -21,16 +21,19 @@ func TestLinkEventIDsFollowTheChat(t *testing.T) {
 	}
 }
 
-func TestCreatedSubjectFollowsTheMentions(t *testing.T) {
+func TestCreatedSubjectFollowsTheMentionsThenTheFiles(t *testing.T) {
 	user := &chatimv1.Message{MentionTargets: []*chatimv1.MentionTarget{{Id: "u"}}}
-	cases := map[string]string{
-		e2e.CreatedSubject("live", "t", "77", nil):                                 "live.t.message.77.evt.msg_created",
-		e2e.CreatedSubject("live", "t", "77", &chatimv1.Message{MentionAll: true}): "live.t.mention.77.evt.msg_created",
-		e2e.CreatedSubject("live", "t", "77", user):                                "live.t.mention.77.evt.msg_created",
+	files := []*chatimv1.Attachment{{Key: "t/u/x"}}
+	cases := map[string]struct{ got, want string }{
+		"text":  {e2e.CreatedSubject("live", "t", "77", nil), "live.t.message.77.evt.msg_created"},
+		"@all":  {e2e.CreatedSubject("live", "t", "77", &chatimv1.Message{MentionAll: true}), "live.t.mention.77.evt.msg_created"},
+		"user":  {e2e.CreatedSubject("live", "t", "77", user), "live.t.mention.77.evt.msg_created"},
+		"files": {e2e.CreatedSubject("live", "t", "77", &chatimv1.Message{Attachments: files}), "live.t.media.77.evt.msg_created"},
+		"both":  {e2e.CreatedSubject("live", "t", "77", &chatimv1.Message{MentionAll: true, Attachments: files}), "live.t.mention.77.evt.msg_created"},
 	}
-	for got, want := range cases {
-		if got != want {
-			t.Fatalf("got %q, want %q", got, want)
+	for name, c := range cases {
+		if c.got != c.want {
+			t.Fatalf("%s: got %q, want %q", name, c.got, c.want)
 		}
 	}
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/chat/internal/message/flush"
 	"github.com/ivannguyendev/chatim/apps/chat/internal/model/domain"
 	"github.com/ivannguyendev/chatim/apps/chat/internal/platform/slot"
+	"github.com/ivannguyendev/chatim/modules/media/mediaapp"
 	"github.com/ivannguyendev/chatim/modules/mention/mentionapp"
 	"github.com/ivannguyendev/chatim/pkg/core/envconfig"
 	"github.com/ivannguyendev/chatim/pkg/core/grpcserver"
@@ -68,6 +69,7 @@ type Config struct {
 	Sweep                  sweep.Config
 	Projection             projection.Config
 	Mention                mentionapp.Config
+	Media                  mediaapp.Config
 	LockedMessageKinds     []domain.Kind
 	Messages               message.Limits
 	Interactions           interaction.Limits
@@ -89,6 +91,7 @@ type StopPlan struct {
 	Sweeper     time.Duration
 	Projections time.Duration
 	Mention     time.Duration
+	Media       time.Duration
 	Timer       time.Duration
 	Router      time.Duration
 	CIDBatch    time.Duration
@@ -154,6 +157,7 @@ func (c Config) StopPlan() StopPlan {
 		Sweeper:     CloseTimeout,
 		Projections: c.Projection.StopTimeout(),
 		Mention:     c.mentionStop(),
+		Media:       c.mediaStop(),
 		Timer:       timer.ConsumerConfig{}.StopTimeout(),
 		Router:      c.RequestDeadline,
 		CIDBatch:    2 * c.Dedupe.Timeout,
@@ -168,7 +172,7 @@ func (c Config) StopPlan() StopPlan {
 func (s StopPlan) Total() time.Duration {
 	var sum time.Duration
 	for _, d := range []time.Duration{
-		s.DrainDelay, s.GRPC, s.Sweeper, max(s.Projections, s.Mention), s.Timer, s.Router, s.CIDBatch, s.Flusher, s.Publisher, s.StateClear, s.Slots, s.Close,
+		s.DrainDelay, s.GRPC, s.Sweeper, max(s.Projections, s.Mention, s.Media), s.Timer, s.Router, s.CIDBatch, s.Flusher, s.Publisher, s.StateClear, s.Slots, s.Close,
 	} {
 		if d > math.MaxInt64-sum {
 			return math.MaxInt64
@@ -183,6 +187,13 @@ func (c Config) mentionStop() time.Duration {
 		return 0
 	}
 	return c.Mention.StopTimeout()
+}
+
+func (c Config) mediaStop() time.Duration {
+	if !c.Media.Enabled {
+		return 0
+	}
+	return mediaapp.StopTimeout()
 }
 
 func (s StopPlan) fitsWithin(budget time.Duration) bool { return s.Total() < budget }

@@ -108,6 +108,37 @@ groups:
           guarantee: RC1
         annotations:
           summary: The mention consumer keeps failing an event that has been delivered six times or more.
+      - alert: ChatimMediaNotReady
+        expr: min(chatim_media_ready) == 0
+        for: 5m
+        labels:
+          severity: warning
+          guarantee: MD1
+        annotations:
+          summary: Media is not ready on a chat node (bad MEDIA_* settings, a missing bucket, a wrong key or storage down); uploads are refused and clients hide attachments.
+      - alert: ChatimMediaStorageErrors
+        expr: sum(rate(chatim_media_storage_operations_total{result="error"}[10m])) / sum(rate(chatim_media_storage_operations_total[10m])) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+          guarantee: MD1
+        annotations:
+          summary: More than 5% of media S3 calls fail with storage errors.
+      - alert: ChatimMediaLagging
+        expr: max(chatim_media_lag_seconds) > 600
+        for: 15m
+        labels:
+          severity: warning
+          guarantee: MD2
+        annotations:
+          summary: The media consumer runs more than 10 minutes behind message events; attached files wait in the processing bucket, whose 30-day rule deletes them if the delay grows.
+      - alert: ChatimMediaFailing
+        expr: sum(increase(chatim_media_stuck_total[15m])) > 0
+        labels:
+          severity: warning
+          guarantee: MD2
+        annotations:
+          summary: The media consumer keeps failing an event delivered six times or more; that message's files are not moved to the completed bucket.
       - alert: ChatimSweeperIdle
         expr: sum(increase(chatim_chat_sweep_passes_total[10m])) == 0
         for: 10m

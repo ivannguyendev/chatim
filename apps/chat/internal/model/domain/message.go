@@ -49,6 +49,7 @@ type Message struct {
 	Replies      ReplyCount
 	SkipUnread   bool
 	Meta         []byte
+	Attachments  []Attachment
 }
 
 func (m Message) WithoutDeletedContent() Message {
@@ -57,6 +58,7 @@ func (m Message) WithoutDeletedContent() Message {
 	}
 	m.Text = ""
 	m.Mentions, m.MentionAll, m.MentionAllAt, m.Forward, m.Meta = nil, false, time.Time{}, nil, nil
+	m.Attachments = nil
 	m.Reactions, m.Replies = ReactionSummary{}, ReplyCount{}
 	return m
 }
@@ -71,6 +73,8 @@ func ValidateSystemMessage(m Message) error {
 		return invalid("forward_from")
 	case len(m.Mentions) > 0 || m.MentionAll:
 		return invalid("mentions")
+	case len(m.Attachments) > 0:
+		return invalid("attachments")
 	default:
 		return nil
 	}

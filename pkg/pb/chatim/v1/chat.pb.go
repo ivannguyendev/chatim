@@ -372,6 +372,7 @@ type Message struct {
 	MyReaction     string                 `protobuf:"bytes,23,opt,name=my_reaction,json=myReaction,proto3" json:"my_reaction,omitempty"`
 	Bookmarked     bool                   `protobuf:"varint,24,opt,name=bookmarked,proto3" json:"bookmarked,omitempty"`
 	MentionAllAt   *timestamppb.Timestamp `protobuf:"bytes,25,opt,name=mention_all_at,json=mentionAllAt,proto3" json:"mention_all_at,omitempty"`
+	Attachments    []*Attachment          `protobuf:"bytes,26,rep,name=attachments,proto3" json:"attachments,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -570,6 +571,13 @@ func (x *Message) GetBookmarked() bool {
 func (x *Message) GetMentionAllAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.MentionAllAt
+	}
+	return nil
+}
+
+func (x *Message) GetAttachments() []*Attachment {
+	if x != nil {
+		return x.Attachments
 	}
 	return nil
 }
@@ -878,6 +886,7 @@ type SendMessageRequest struct {
 	Kind          MessageKind            `protobuf:"varint,8,opt,name=kind,proto3,enum=chatim.v1.MessageKind" json:"kind,omitempty"`
 	SkipUnread    bool                   `protobuf:"varint,9,opt,name=skip_unread,json=skipUnread,proto3" json:"skip_unread,omitempty"`
 	Meta          []byte                 `protobuf:"bytes,10,opt,name=meta,proto3" json:"meta,omitempty"`
+	Attachments   []*Attachment          `protobuf:"bytes,11,rep,name=attachments,proto3" json:"attachments,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -978,6 +987,13 @@ func (x *SendMessageRequest) GetSkipUnread() bool {
 func (x *SendMessageRequest) GetMeta() []byte {
 	if x != nil {
 		return x.Meta
+	}
+	return nil
+}
+
+func (x *SendMessageRequest) GetAttachments() []*Attachment {
+	if x != nil {
+		return x.Attachments
 	}
 	return nil
 }
@@ -1702,7 +1718,7 @@ var File_chatim_v1_chat_proto protoreflect.FileDescriptor
 
 const file_chatim_v1_chat_proto_rawDesc = "" +
 	"\n" +
-	"\x14chatim/v1/chat.proto\x12\tchatim.v1\x1a\x1dchatim/v1/message_links.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xbe\x02\n" +
+	"\x14chatim/v1/chat.proto\x12\tchatim.v1\x1a\x1achatim/v1/attachment.proto\x1a\x1dchatim/v1/message_links.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xbe\x02\n" +
 	"\x04Room\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06tenant\x18\x02 \x01(\tR\x06tenant\x12'\n" +
@@ -1716,7 +1732,7 @@ const file_chatim_v1_chat_proto_rawDesc = "" +
 	"\x06avatar\x18\b \x01(\tR\x06avatar\x12\x19\n" +
 	"\binfo_ver\x18\t \x01(\x04R\ainfoVer\x12!\n" +
 	"\fdirect_users\x18\n" +
-	" \x03(\tR\vdirectUsers\"\xb8\a\n" +
+	" \x03(\tR\vdirectUsers\"\xf1\a\n" +
 	"\aMessage\x12\x17\n" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x1f\n" +
 	"\vthread_root\x18\x02 \x01(\x04R\n" +
@@ -1750,7 +1766,8 @@ const file_chatim_v1_chat_proto_rawDesc = "" +
 	"\n" +
 	"bookmarked\x18\x18 \x01(\bR\n" +
 	"bookmarked\x12@\n" +
-	"\x0emention_all_at\x18\x19 \x01(\v2\x1a.google.protobuf.TimestampR\fmentionAllAtJ\x04\b\x04\x10\x05R\x03pts\"\xce\x01\n" +
+	"\x0emention_all_at\x18\x19 \x01(\v2\x1a.google.protobuf.TimestampR\fmentionAllAt\x127\n" +
+	"\vattachments\x18\x1a \x03(\v2\x15.chatim.v1.AttachmentR\vattachmentsJ\x04\b\x04\x10\x05R\x03pts\"\xce\x01\n" +
 	"\x0eMessageVersion\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\rR\x03ver\x12'\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x13.chatim.v1.EditKindR\x04kind\x12\x12\n" +
@@ -1771,7 +1788,7 @@ const file_chatim_v1_chat_proto_rawDesc = "" +
 	"other_user\x18\x01 \x01(\tR\totherUser\"W\n" +
 	"\x16OpenDirectRoomResponse\x12#\n" +
 	"\x04room\x18\x01 \x01(\v2\x0f.chatim.v1.RoomR\x04room\x12\x18\n" +
-	"\acreated\x18\x02 \x01(\bR\acreated\"\xf2\x02\n" +
+	"\acreated\x18\x02 \x01(\bR\acreated\"\xab\x03\n" +
 	"\x12SendMessageRequest\x12\x17\n" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x1f\n" +
 	"\vthread_root\x18\x02 \x01(\x04R\n" +
@@ -1785,7 +1802,8 @@ const file_chatim_v1_chat_proto_rawDesc = "" +
 	"\vskip_unread\x18\t \x01(\bR\n" +
 	"skipUnread\x12\x12\n" +
 	"\x04meta\x18\n" +
-	" \x01(\fR\x04meta\"m\n" +
+	" \x01(\fR\x04meta\x127\n" +
+	"\vattachments\x18\v \x03(\v2\x15.chatim.v1.AttachmentR\vattachments\"m\n" +
 	"\x13SendMessageResponse\x12\x10\n" +
 	"\x03seq\x18\x01 \x01(\x04R\x03seq\x129\n" +
 	"\n" +
@@ -1907,7 +1925,8 @@ var file_chatim_v1_chat_proto_goTypes = []any{
 	(*MentionTarget)(nil),          // 29: chatim.v1.MentionTarget
 	(*ReplyCount)(nil),             // 30: chatim.v1.ReplyCount
 	(*ReplyPreview)(nil),           // 31: chatim.v1.ReplyPreview
-	(*MentionSet)(nil),             // 32: chatim.v1.MentionSet
+	(*Attachment)(nil),             // 32: chatim.v1.Attachment
+	(*MentionSet)(nil),             // 33: chatim.v1.MentionSet
 }
 var file_chatim_v1_chat_proto_depIdxs = []int32{
 	0,  // 0: chatim.v1.Room.type:type_name -> chatim.v1.RoomType
@@ -1922,29 +1941,31 @@ var file_chatim_v1_chat_proto_depIdxs = []int32{
 	30, // 9: chatim.v1.Message.reply_count:type_name -> chatim.v1.ReplyCount
 	31, // 10: chatim.v1.Message.reply_preview:type_name -> chatim.v1.ReplyPreview
 	25, // 11: chatim.v1.Message.mention_all_at:type_name -> google.protobuf.Timestamp
-	3,  // 12: chatim.v1.MessageVersion.kind:type_name -> chatim.v1.EditKind
-	25, // 13: chatim.v1.MessageVersion.at:type_name -> google.protobuf.Timestamp
-	32, // 14: chatim.v1.MessageVersion.mentions:type_name -> chatim.v1.MentionSet
-	0,  // 15: chatim.v1.CreateRoomRequest.type:type_name -> chatim.v1.RoomType
-	4,  // 16: chatim.v1.CreateRoomResponse.room:type_name -> chatim.v1.Room
-	4,  // 17: chatim.v1.OpenDirectRoomResponse.room:type_name -> chatim.v1.Room
-	27, // 18: chatim.v1.SendMessageRequest.reply_to:type_name -> chatim.v1.ReplyRef
-	28, // 19: chatim.v1.SendMessageRequest.forward_from:type_name -> chatim.v1.ForwardRef
-	32, // 20: chatim.v1.SendMessageRequest.mentions:type_name -> chatim.v1.MentionSet
-	1,  // 21: chatim.v1.SendMessageRequest.kind:type_name -> chatim.v1.MessageKind
-	25, // 22: chatim.v1.SendMessageResponse.created_at:type_name -> google.protobuf.Timestamp
-	2,  // 23: chatim.v1.GetHistoryRequest.anchor:type_name -> chatim.v1.HistoryAnchor
-	5,  // 24: chatim.v1.GetHistoryResponse.messages:type_name -> chatim.v1.Message
-	32, // 25: chatim.v1.EditMessageRequest.mentions:type_name -> chatim.v1.MentionSet
-	5,  // 26: chatim.v1.EditMessageResponse.message:type_name -> chatim.v1.Message
-	5,  // 27: chatim.v1.DeleteMessageResponse.message:type_name -> chatim.v1.Message
-	25, // 28: chatim.v1.ClearHistoryResponse.cleared_at:type_name -> google.protobuf.Timestamp
-	6,  // 29: chatim.v1.GetEditHistoryResponse.versions:type_name -> chatim.v1.MessageVersion
-	30, // [30:30] is the sub-list for method output_type
-	30, // [30:30] is the sub-list for method input_type
-	30, // [30:30] is the sub-list for extension type_name
-	30, // [30:30] is the sub-list for extension extendee
-	0,  // [0:30] is the sub-list for field type_name
+	32, // 12: chatim.v1.Message.attachments:type_name -> chatim.v1.Attachment
+	3,  // 13: chatim.v1.MessageVersion.kind:type_name -> chatim.v1.EditKind
+	25, // 14: chatim.v1.MessageVersion.at:type_name -> google.protobuf.Timestamp
+	33, // 15: chatim.v1.MessageVersion.mentions:type_name -> chatim.v1.MentionSet
+	0,  // 16: chatim.v1.CreateRoomRequest.type:type_name -> chatim.v1.RoomType
+	4,  // 17: chatim.v1.CreateRoomResponse.room:type_name -> chatim.v1.Room
+	4,  // 18: chatim.v1.OpenDirectRoomResponse.room:type_name -> chatim.v1.Room
+	27, // 19: chatim.v1.SendMessageRequest.reply_to:type_name -> chatim.v1.ReplyRef
+	28, // 20: chatim.v1.SendMessageRequest.forward_from:type_name -> chatim.v1.ForwardRef
+	33, // 21: chatim.v1.SendMessageRequest.mentions:type_name -> chatim.v1.MentionSet
+	1,  // 22: chatim.v1.SendMessageRequest.kind:type_name -> chatim.v1.MessageKind
+	32, // 23: chatim.v1.SendMessageRequest.attachments:type_name -> chatim.v1.Attachment
+	25, // 24: chatim.v1.SendMessageResponse.created_at:type_name -> google.protobuf.Timestamp
+	2,  // 25: chatim.v1.GetHistoryRequest.anchor:type_name -> chatim.v1.HistoryAnchor
+	5,  // 26: chatim.v1.GetHistoryResponse.messages:type_name -> chatim.v1.Message
+	33, // 27: chatim.v1.EditMessageRequest.mentions:type_name -> chatim.v1.MentionSet
+	5,  // 28: chatim.v1.EditMessageResponse.message:type_name -> chatim.v1.Message
+	5,  // 29: chatim.v1.DeleteMessageResponse.message:type_name -> chatim.v1.Message
+	25, // 30: chatim.v1.ClearHistoryResponse.cleared_at:type_name -> google.protobuf.Timestamp
+	6,  // 31: chatim.v1.GetEditHistoryResponse.versions:type_name -> chatim.v1.MessageVersion
+	32, // [32:32] is the sub-list for method output_type
+	32, // [32:32] is the sub-list for method input_type
+	32, // [32:32] is the sub-list for extension type_name
+	32, // [32:32] is the sub-list for extension extendee
+	0,  // [0:32] is the sub-list for field type_name
 }
 
 func init() { file_chatim_v1_chat_proto_init() }
@@ -1952,6 +1973,7 @@ func file_chatim_v1_chat_proto_init() {
 	if File_chatim_v1_chat_proto != nil {
 		return
 	}
+	file_chatim_v1_attachment_proto_init()
 	file_chatim_v1_message_links_proto_init()
 	file_chatim_v1_reactions_pins_proto_init()
 	type x struct{}

@@ -40,7 +40,7 @@ func (a *node) shutdown(ctx context.Context, sup *supervisor, t tasks, cause err
 	s := &stopper{ctx: stopCtx, log: a.log}
 	s.step("grpc", 0, nil, t.grpc)
 	s.step("sweeper", plan.Sweeper, a.sweeper.Close, t.sweeper)
-	s.together(phase{"projections", plan.Projections, a.projections.Close, t.projections}, a.mentionPhase(plan.Mention, t.mention))
+	s.together(phase{"projections", plan.Projections, a.projections.Close, t.projections}, a.mentionPhase(plan.Mention, t.mention), a.mediaPhase(plan.Media, t.media))
 	s.step("timer consumer", plan.Timer, a.timers.Close, t.timers)
 	a.watches.Stop()
 	s.step("router", plan.Router, a.router.Close, t.router)
@@ -92,6 +92,13 @@ func (a *node) mentionPhase(limit time.Duration, t *task) phase {
 		return phase{name: "mention"}
 	}
 	return phase{"mention", limit, a.mention.Close, t}
+}
+
+func (a *node) mediaPhase(limit time.Duration, t *task) phase {
+	if a.media == nil {
+		return phase{name: "media"}
+	}
+	return phase{"media", limit, a.media.Close, t}
 }
 
 func (s *stopper) err() error {

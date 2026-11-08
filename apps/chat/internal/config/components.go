@@ -88,6 +88,7 @@ func (p *parser) components(c *Config) {
 		HookTimeout:  p.span("SLOT_HOOK_TIMEOUT", tick/2),
 	}
 	p.eventConfig(c)
+	p.mediaConfig(c)
 }
 
 func (p *parser) roomList() RoomListConfig {

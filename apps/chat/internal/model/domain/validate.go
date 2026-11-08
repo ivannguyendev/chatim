@@ -7,11 +7,12 @@ import (
 )
 
 const (
-	maxTextBytes = 16384
-	maxMetaBytes = 8192
-	maxNameRunes = 128
-	defaultPage  = 50
-	maxPage      = 100
+	MaxTextBytes   = 16384
+	MaxMetaBytes   = 8192
+	MaxAttachments = 10
+	maxNameRunes   = 128
+	defaultPage    = 50
+	maxPage        = 100
 )
 
 func NewRoom(tenant, creator string, typ RoomType, name string, members []string, now time.Time, id uint64) (Room, []Member, error) {
@@ -95,14 +96,14 @@ func distinctMembers(creator string, members []string) ([]string, error) {
 }
 
 func ValidateText(text string) error {
-	if len(text) > maxTextBytes || !utf8.ValidString(text) || strings.TrimSpace(text) == "" {
+	if len(text) > MaxTextBytes || !utf8.ValidString(text) || strings.TrimSpace(text) == "" {
 		return invalid("text")
 	}
 	return nil
 }
 
 func ValidateMeta(meta []byte) error {
-	if len(meta) > maxMetaBytes {
+	if len(meta) > MaxMetaBytes {
 		return invalid("meta")
 	}
 	return nil

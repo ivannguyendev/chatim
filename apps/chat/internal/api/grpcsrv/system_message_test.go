@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"reflect"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc/codes"
 
@@ -69,10 +70,12 @@ func TestSendMessageRejectsBadSystemMessagesBeforeAnyRead(t *testing.T) {
 	withMention.Mentions = &chatimv1.MentionSet{Targets: []*chatimv1.MentionTarget{{Kind: chatimv1.MentionKind_MENTION_KIND_USER, Id: "alice"}}}
 	withAll := systemRequest(room, "s-4")
 	withAll.Mentions = &chatimv1.MentionSet{All: true}
+	withFiles := systemRequest(room, "s-7")
+	withFiles.Attachments = []*chatimv1.Attachment{photoFile(fileKey("sysmsg-bot", time.Now(), 1))}
 	bigMeta := &chatimv1.SendMessageRequest{RoomId: room, Cid: "s-5", Text: "hi", Meta: bytes.Repeat([]byte("a"), 8193)}
 	badKind := &chatimv1.SendMessageRequest{RoomId: room, Cid: "s-6", Text: "hi", Kind: chatimv1.MessageKind(99)}
 	for name, req := range map[string]*chatimv1.SendMessageRequest{
-		"reply": withReply, "forward": withForward, "mention": withMention, "@all": withAll, "meta over 8KB": bigMeta, "unknown kind": badKind,
+		"reply": withReply, "forward": withForward, "mention": withMention, "@all": withAll, "files": withFiles, "meta over 8KB": bigMeta, "unknown kind": badKind,
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := rg.client.SendMessage(as(t, "acme", "sysmsg-bot"), req)

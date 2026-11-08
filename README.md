@@ -15,9 +15,10 @@ Monorepo Go, mỗi app một container. Thiết kế: [architecture.md](docs/arc
 | `websocket` | WebSocket (gws): các lệnh ghi realtime (`chatrpc.Realtime()`), đẩy event và thông báo, đang gõ, online, giới hạn đăng nhập, giữ kết nối khi token hết hạn. Repo chỉ có server (D206): SDK client ở repo khác, theo [module 09 §11](docs/features/09-feature-realtime-delivery-and-ephemeral.md) | [docs/apps/websocket.md](docs/apps/websocket.md) |
 | `gateway` | HTTPS (Connect): các lệnh đọc và quản lý room (`chatrpc.Request()`), JWT, gọi node chat bất kỳ (round robin), giới hạn theo user | [docs/apps/gateway.md](docs/apps/gateway.md) |
 | `identity` | Cầu danh tính, không phải IAM (D239; tên cũ `iam`, D243): chat không giữ mật khẩu, đăng nhập, phiên hay role. Giữ issuer tin cậy theo tenant cùng khoá công khai của họ (EdDSA/ES256/RS256, thêm bằng CLI); đổi JWT do backend tenant ký lấy token chat Ed25519 5 phút ở `POST /v1/token` (RFC 8693, D240–D241); giữ bản sao user ghi ngay lúc đổi token từ `name`/`picture` (D242), cây nhóm, thu hồi theo tenant, khoá ký và JWKS. Danh bạ (`GetUsers`, `GetMyProfile`) phục vụ từ bản sao trong RAM mỗi replica, nạp theo trang dưới lease `slots` và theo kịp bằng change stream MongoDB (D245–D246, D252); không có feed danh bạ cho app khác (D257). Lưu ở database MongoDB riêng `chatim_identity`, user `identity`, trên replica set của chat, không Postgres (D244, D253). Không đọc dữ liệu chat, chat cũng không đọc bảng của nó | [docs/apps/identity.md](docs/apps/identity.md) |
-| media, `notification` + push, search | Phase 2 (D207) | — |
+| media (module `modules/media`, nhúng trong chat) | M7 P1–P3: upload nhiều phần thẳng lên S3 bằng URL ký qua `MediaService` trên gateway, sổ `media_uploads`, `GetClientConfig` báo media có dùng được; đính kèm trong tin, URL tải ký sau khi chat kiểm quyền đọc tin, gallery file của tôi; consumer `media` chuyển file đã gắn tin sang bucket `completed` và ghi tin nào dùng file nào (file mất tin cuối chỉ được đánh dấu); S3 lỗi chỉ làm media chưa sẵn sàng. Chính sách xoá file chưa có | [docs/apps/chat.md](docs/apps/chat.md#media-module-modulesmedia) |
+| `notification` + push, search | Phase 2 (D207) | — |
 
-Hạ tầng: MongoDB (replica set; `identity` dùng database riêng `chatim_identity`), Redis (state, dedupe, presence), NATS JetStream.
+Hạ tầng: MongoDB (replica set; `identity` dùng database riêng `chatim_identity`), Redis (state, dedupe, presence), NATS JetStream, S3 (dev: Garage `chatim-s3`; production: AWS S3).
 
 Còn mở (chi tiết ở [roadmap](docs/roadmap.md)): quyền NATS riêng cho websocket (M5, chặn go-live); ngày có hạ tầng prod-like; ai chọn người nhận push cho tin thường (D104).
 
@@ -40,8 +41,9 @@ Bản đồ từng package: [INDEXES.csv](INDEXES.csv); hướng phụ thuộc: 
 
 Chỉ cần Docker; Go chạy trong container `golang:1.26.10` qua `make`.
 
-    cp .env.example .env        # đặt các mật khẩu (chữ, số, - hoặc _); IDENTITY_KEY_ENCRYPTION_KEY: openssl rand -base64 32; IDENTITY_NODE_SECRET: openssl rand -hex 32
-    make infra-up               # mongo :27117, redis :6380/:6381/:6382, nats :4223; infra-down / infra-reset
+    cp .env.example .env        # đặt các mật khẩu (chữ, số, - hoặc _); IDENTITY_KEY_ENCRYPTION_KEY: openssl rand -base64 32; IDENTITY_NODE_SECRET: openssl rand -hex 32; S3_RPC_SECRET và MEDIA_S3_SECRET_KEY: openssl rand -hex 32; MEDIA_S3_ACCESS_KEY: GK + openssl rand -hex 12
+    make infra-up               # mongo :27117, redis :6380/:6381/:6382, nats :4223, s3 :9100; infra-down / infra-reset
+    make media-buckets          # bucket, CORS, luật lifecycle trên S3 dev (chạy ngoài chat)
     make test                   # unit test trong container
     make app-up                # build và chạy identity-mongo-init, identity-1, identity-2, chat-1, chat-2, websocket-1, websocket-2, gateway-1; app-down để dừng
     make e2e                    # các phase ở docs/e2e.md
@@ -56,7 +58,7 @@ App chỉ publish trên loopback (caller còn được tin qua metadata tới kh
 
 | Cổng | Dịch vụ |
 |---|---|
-| `27117`, `6380`, `6381`, `6382`, `4223` | Mongo (replica set `rs0`), Redis state, Redis dedupe, Redis presence, NATS |
+| `27117`, `6380`, `6381`, `6382`, `4223`, `9100` | Mongo (replica set `rs0`), Redis state, Redis dedupe, Redis presence, NATS, S3 dev (Garage; tạo bucket bằng `make media-buckets`) |
 | `8223` | NATS monitor |
 | `127.0.0.1:8081` | WebSocket `/ws` `websocket-1` |
 | `127.0.0.1:8082` | HTTP Connect `gateway-1` |

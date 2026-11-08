@@ -25,14 +25,15 @@ func TestParseKindMapsConfigNamesToKinds(t *testing.T) {
 func TestWithoutDeletedContentKeepsOnlyTheReplyLink(t *testing.T) {
 	m := domain.Message{
 		Room: 7, Seq: 2, From: "alice", Text: "t", Version: 3,
-		ReplyTo:    &domain.ReplyRef{Seq: 1},
-		Forward:    &domain.ForwardRef{Room: 8, Seq: 9},
-		Mentions:   []domain.MentionTarget{{Kind: domain.MentionUser, ID: "minh"}},
-		MentionAll: true,
-		Reactions:  domain.ReactionSummary{Counts: []domain.ReactionCount{{Emoji: "👍", Count: 1}}, Version: 1},
-		Replies:    domain.ReplyCount{N: 1, Version: 1},
-		SkipUnread: true,
-		Meta:       []byte(`{"call_seconds":180}`),
+		ReplyTo:     &domain.ReplyRef{Seq: 1},
+		Forward:     &domain.ForwardRef{Room: 8, Seq: 9},
+		Mentions:    []domain.MentionTarget{{Kind: domain.MentionUser, ID: "minh"}},
+		MentionAll:  true,
+		Reactions:   domain.ReactionSummary{Counts: []domain.ReactionCount{{Emoji: "👍", Count: 1}}, Version: 1},
+		Replies:     domain.ReplyCount{N: 1, Version: 1},
+		SkipUnread:  true,
+		Meta:        []byte(`{"call_seconds":180}`),
+		Attachments: []domain.Attachment{{Key: "acme/alice/20261107/k", Name: "a.png", Mime: "image/png", Size: 1}},
 	}
 	if got := m.WithoutDeletedContent(); !reflect.DeepEqual(got, m) {
 		t.Fatalf("live message changed: %+v", got)
@@ -61,6 +62,7 @@ func TestValidateSystemMessageRefusesLinks(t *testing.T) {
 		"forward":     {func(m *domain.Message) { m.Forward = &domain.ForwardRef{Room: 8, Seq: 9} }, "forward_from"},
 		"mention":     {func(m *domain.Message) { m.Mentions = []domain.MentionTarget{{Kind: domain.MentionUser, ID: "lan"}} }, "mentions"},
 		"mention all": {func(m *domain.Message) { m.MentionAll = true }, "mentions"},
+		"attachments": {func(m *domain.Message) { m.Attachments = []domain.Attachment{{Key: "acme/bot/20261108/x"}} }, "attachments"},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {

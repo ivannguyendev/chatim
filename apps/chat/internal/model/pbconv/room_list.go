@@ -43,7 +43,7 @@ func LastPreview(p domain.RoomPreview) *chatimv1.LastPreview {
 	}
 	return &chatimv1.LastPreview{
 		Seq: p.Seq, Sender: p.From, Kind: MessageKind(p.Kind), Text: p.Text,
-		CreatedAt: optionalTime(p.CreatedAt), Deleted: p.Deleted, Edited: p.Edited,
+		CreatedAt: optionalTime(p.CreatedAt), Deleted: p.Deleted, Edited: p.Edited, FileMimes: p.FileMimes,
 	}
 }
 

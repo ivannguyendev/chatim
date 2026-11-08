@@ -10,8 +10,9 @@ import (
 )
 
 type Forwarded struct {
-	Text   string
-	Origin *domain.ForwardRef
+	Text        string
+	Origin      *domain.ForwardRef
+	Attachments []domain.Attachment
 }
 
 func (m *Editor) Forward(ctx context.Context, tenant, user string, key store.MsgKey) (Forwarded, error) {
@@ -19,7 +20,7 @@ func (m *Editor) Forward(ctx context.Context, tenant, user string, key store.Msg
 	if err != nil {
 		return Forwarded{}, err
 	}
-	return Forwarded{Text: src.Text, Origin: forwardOrigin(key, src)}, nil
+	return Forwarded{Text: src.Text, Origin: forwardOrigin(key, src), Attachments: src.Attachments}, nil
 }
 
 func (m *Editor) forwardSource(ctx context.Context, tenant, user string, key store.MsgKey) (domain.Message, error) {

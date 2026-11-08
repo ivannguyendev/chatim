@@ -11,6 +11,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/chat/internal/config"
 	"github.com/ivannguyendev/chatim/apps/chat/internal/event/projection"
 	"github.com/ivannguyendev/chatim/apps/chat/internal/message/flush"
+	"github.com/ivannguyendev/chatim/modules/media/mediaapp"
 	"github.com/ivannguyendev/chatim/modules/mention/mentionapp"
 	"github.com/ivannguyendev/chatim/pkg/core/admin"
 	"github.com/ivannguyendev/chatim/pkg/core/grpcserver"
@@ -86,6 +87,7 @@ func stopNode(order *stopOrder) *node {
 		DrainDelay: 10 * time.Millisecond, GRPCShutdown: time.Second, RequestDeadline: 500 * time.Millisecond,
 		PublisherDrain: time.Second, ShutdownBudget: gateLimit, Flush: flush.Config{InsertTimeout: 100 * time.Millisecond},
 		Projection: projection.Config{FetchWait: 10 * time.Millisecond}, Mention: mentionapp.Config{Enabled: true, FetchWait: 10 * time.Millisecond},
+		Media: mediaapp.Config{Enabled: true},
 	}
 	return &node{
 		cfg: cfg, log: quiet,
@@ -95,7 +97,7 @@ func stopNode(order *stopOrder) *node {
 		flusher: order.drainer("flusher"), cidBatch: order.drainer("cid batcher"),
 		router: &recordedRouter{recordedDrainer: order.drainer("router"), running: running},
 		slots:  idle{}, timers: order.drainer("timer consumer"),
-		projections: order.drainer("projection"), mention: order.drainer("mention"), sweeper: order.drainer("sweeper"),
+		projections: order.drainer("projection"), mention: order.drainer("mention"), media: order.drainer("media"), sweeper: order.drainer("sweeper"),
 		watches: liveWatchers{recordedWatch{name: "member watch", order: order}, recordedWatch{name: "room watch", order: order}},
 	}
 }
@@ -125,11 +127,11 @@ func TestShutdownStopsTheSweeperFirstFlushesReadsBeforeThePublisherAndClearsStat
 		t.Fatalf("serve = %v, want a clean stop", err)
 	}
 	want := []string{
-		"sweeper", "mention", "projection", "timer consumer", "member watch", "room watch", "router", "cid batcher", "flusher", "read batch", "publisher", "state clear queue",
+		"sweeper", "media", "mention", "projection", "timer consumer", "member watch", "room watch", "router", "cid batcher", "flusher", "read batch", "publisher", "state clear queue",
 	}
 	got := order.names()
 	if len(got) == len(want) {
-		slices.Sort(got[1:3])
+		slices.Sort(got[1:4])
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("drain order = %v, want %v", got, want)

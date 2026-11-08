@@ -28,7 +28,7 @@ x-chat: &chat
   restart: unless-stopped
   mem_limit: 1g
   stop_grace_period: 33s
-  secrets: [mongo_password, redis_password, redis_dedupe_password]
+  secrets: [mongo_password, redis_password, redis_dedupe_password, media_s3_secret_key]
   depends_on:
     mongodb-init:
       condition: service_completed_successfully
@@ -55,6 +55,14 @@ x-chat-env: &chat-env
   REDIS_DEDUPE_ADDR: chatim-redis-dedupe:6379
   REDIS_DEDUPE_PASSWORD_FILE: /run/secrets/redis_dedupe_password
   NATS_URL: nats://chatim-nats:4222
+  MEDIA_ENABLED: ${MEDIA_ENABLED:-true}
+  MEDIA_S3_ENDPOINT: http://chatim-s3:3900
+  MEDIA_S3_PUBLIC_ENDPOINT: http://chatim-s3:3900
+  MEDIA_S3_REGION: us-east-1
+  MEDIA_S3_ACCESS_KEY: ${MEDIA_S3_ACCESS_KEY:?set MEDIA_S3_ACCESS_KEY in .env}
+  MEDIA_S3_SECRET_KEY_FILE: /run/secrets/media_s3_secret_key
+  MEDIA_S3_BUCKET_PROCESSING: chatim-media-processing
+  MEDIA_S3_BUCKET_COMPLETED: chatim-media-completed
   GOMEMLIMIT: 920MiB
   GOGC: ${CHAT_GOGC:-100}
 
@@ -250,6 +258,24 @@ services:
       timeout: 3s
       retries: 10
 
+  s3:
+    image: dxflrs/garage:v2.4.1@sha256:9c96caa2612d3411acc5b0e6701fb238dbfba33e533a6d7d3d811a4b12d0d020
+    container_name: chatim-s3
+    restart: unless-stopped
+    secrets: [s3_rpc_secret]
+    environment:
+      GARAGE_ALLOW_WORLD_READABLE_SECRETS: "true"
+    ports:
+      - "${S3_PORT:-9100}:3900"
+    volumes:
+      - ./garage.toml:/etc/garage.toml:ro
+      - s3_data:/var/lib/garage
+    healthcheck:
+      test: ["CMD", "/garage", "status"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   identity-mongo-init:
     image: mongo:8.2
     container_name: chatim-identity-mongo-init
@@ -396,6 +422,10 @@ secrets:
     environment: IDENTITY_KEY_ENCRYPTION_KEY
   identity_node_secret:
     environment: IDENTITY_NODE_SECRET
+  s3_rpc_secret:
+    environment: S3_RPC_SECRET
+  media_s3_secret_key:
+    environment: MEDIA_S3_SECRET_KEY
 
 networks:
   default:
@@ -403,5 +433,6 @@ networks:
 
 volumes:
   mongodb_data:
+  s3_data:
   redis_data:
   nats_data:

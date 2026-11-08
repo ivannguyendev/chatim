@@ -24,6 +24,7 @@ var (
 type Clients struct {
 	Chat    chatimv1.ChatServiceClient
 	Mention chatimv1.MentionServiceClient
+	Media   chatimv1.MediaServiceClient
 }
 
 type caller func(ctx context.Context, conn Clients, req proto.Message) (proto.Message, error)
@@ -77,6 +78,8 @@ func chatClient(c Clients) (chatimv1.ChatServiceClient, bool) { return c.Chat, c
 func mentionClient(c Clients) (chatimv1.MentionServiceClient, bool) {
 	return c.Mention, c.Mention != nil
 }
+
+func mediaClient(c Clients) (chatimv1.MediaServiceClient, bool) { return c.Media, c.Media != nil }
 
 var table = sync.OnceValues(buildTable)
 
@@ -177,5 +180,12 @@ func tableSpecs() []spec {
 		via(chatimv1.ChatService_MarkRead_FullMethodName, chatClient, chatimv1.ChatServiceClient.MarkRead),
 		via(chatimv1.MentionService_ListMentions_FullMethodName, mentionClient, chatimv1.MentionServiceClient.ListMentions),
 		via(chatimv1.MentionService_ListRoomGroups_FullMethodName, mentionClient, chatimv1.MentionServiceClient.ListRoomGroups),
+		via(chatimv1.ChatService_GetClientConfig_FullMethodName, chatClient, chatimv1.ChatServiceClient.GetClientConfig),
+		via(chatimv1.MediaService_StartUpload_FullMethodName, mediaClient, chatimv1.MediaServiceClient.StartUpload),
+		via(chatimv1.MediaService_GetPartURLs_FullMethodName, mediaClient, chatimv1.MediaServiceClient.GetPartURLs),
+		via(chatimv1.MediaService_CompleteUpload_FullMethodName, mediaClient, chatimv1.MediaServiceClient.CompleteUpload),
+		via(chatimv1.MediaService_AbortUpload_FullMethodName, mediaClient, chatimv1.MediaServiceClient.AbortUpload),
+		via(chatimv1.MediaService_GetAttachmentURLs_FullMethodName, mediaClient, chatimv1.MediaServiceClient.GetAttachmentURLs),
+		via(chatimv1.MediaService_ListUploads_FullMethodName, mediaClient, chatimv1.MediaServiceClient.ListUploads),
 	}
 }

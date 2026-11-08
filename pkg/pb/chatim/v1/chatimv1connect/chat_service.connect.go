@@ -113,6 +113,9 @@ const (
 	ChatServiceMarkReadProcedure = "/chatim.v1.ChatService/MarkRead"
 	// ChatServiceMarkUnreadProcedure is the fully-qualified name of the ChatService's MarkUnread RPC.
 	ChatServiceMarkUnreadProcedure = "/chatim.v1.ChatService/MarkUnread"
+	// ChatServiceGetClientConfigProcedure is the fully-qualified name of the ChatService's
+	// GetClientConfig RPC.
+	ChatServiceGetClientConfigProcedure = "/chatim.v1.ChatService/GetClientConfig"
 )
 
 // ChatServiceClient is a client for the chatim.v1.ChatService service.
@@ -150,6 +153,7 @@ type ChatServiceClient interface {
 	ListMembers(context.Context, *connect.Request[v1.ListMembersRequest]) (*connect.Response[v1.ListMembersResponse], error)
 	MarkRead(context.Context, *connect.Request[v1.MarkReadRequest]) (*connect.Response[v1.MarkReadResponse], error)
 	MarkUnread(context.Context, *connect.Request[v1.MarkUnreadRequest]) (*connect.Response[v1.MarkUnreadResponse], error)
+	GetClientConfig(context.Context, *connect.Request[v1.GetClientConfigRequest]) (*connect.Response[v1.GetClientConfigResponse], error)
 }
 
 // NewChatServiceClient constructs a client for the chatim.v1.ChatService service. By default, it
@@ -361,6 +365,12 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(chatServiceMethods.ByName("MarkUnread")),
 			connect.WithClientOptions(opts...),
 		),
+		getClientConfig: connect.NewClient[v1.GetClientConfigRequest, v1.GetClientConfigResponse](
+			httpClient,
+			baseURL+ChatServiceGetClientConfigProcedure,
+			connect.WithSchema(chatServiceMethods.ByName("GetClientConfig")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -399,6 +409,7 @@ type chatServiceClient struct {
 	listMembers         *connect.Client[v1.ListMembersRequest, v1.ListMembersResponse]
 	markRead            *connect.Client[v1.MarkReadRequest, v1.MarkReadResponse]
 	markUnread          *connect.Client[v1.MarkUnreadRequest, v1.MarkUnreadResponse]
+	getClientConfig     *connect.Client[v1.GetClientConfigRequest, v1.GetClientConfigResponse]
 }
 
 // CreateRoom calls chatim.v1.ChatService.CreateRoom.
@@ -566,6 +577,11 @@ func (c *chatServiceClient) MarkUnread(ctx context.Context, req *connect.Request
 	return c.markUnread.CallUnary(ctx, req)
 }
 
+// GetClientConfig calls chatim.v1.ChatService.GetClientConfig.
+func (c *chatServiceClient) GetClientConfig(ctx context.Context, req *connect.Request[v1.GetClientConfigRequest]) (*connect.Response[v1.GetClientConfigResponse], error) {
+	return c.getClientConfig.CallUnary(ctx, req)
+}
+
 // ChatServiceHandler is an implementation of the chatim.v1.ChatService service.
 type ChatServiceHandler interface {
 	CreateRoom(context.Context, *connect.Request[v1.CreateRoomRequest]) (*connect.Response[v1.CreateRoomResponse], error)
@@ -601,6 +617,7 @@ type ChatServiceHandler interface {
 	ListMembers(context.Context, *connect.Request[v1.ListMembersRequest]) (*connect.Response[v1.ListMembersResponse], error)
 	MarkRead(context.Context, *connect.Request[v1.MarkReadRequest]) (*connect.Response[v1.MarkReadResponse], error)
 	MarkUnread(context.Context, *connect.Request[v1.MarkUnreadRequest]) (*connect.Response[v1.MarkUnreadResponse], error)
+	GetClientConfig(context.Context, *connect.Request[v1.GetClientConfigRequest]) (*connect.Response[v1.GetClientConfigResponse], error)
 }
 
 // NewChatServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -808,6 +825,12 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(chatServiceMethods.ByName("MarkUnread")),
 		connect.WithHandlerOptions(opts...),
 	)
+	chatServiceGetClientConfigHandler := connect.NewUnaryHandler(
+		ChatServiceGetClientConfigProcedure,
+		svc.GetClientConfig,
+		connect.WithSchema(chatServiceMethods.ByName("GetClientConfig")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/chatim.v1.ChatService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ChatServiceCreateRoomProcedure:
@@ -876,6 +899,8 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 			chatServiceMarkReadHandler.ServeHTTP(w, r)
 		case ChatServiceMarkUnreadProcedure:
 			chatServiceMarkUnreadHandler.ServeHTTP(w, r)
+		case ChatServiceGetClientConfigProcedure:
+			chatServiceGetClientConfigHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1015,4 +1040,8 @@ func (UnimplementedChatServiceHandler) MarkRead(context.Context, *connect.Reques
 
 func (UnimplementedChatServiceHandler) MarkUnread(context.Context, *connect.Request[v1.MarkUnreadRequest]) (*connect.Response[v1.MarkUnreadResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("chatim.v1.ChatService.MarkUnread is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) GetClientConfig(context.Context, *connect.Request[v1.GetClientConfigRequest]) (*connect.Response[v1.GetClientConfigResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("chatim.v1.ChatService.GetClientConfig is not implemented"))
 }

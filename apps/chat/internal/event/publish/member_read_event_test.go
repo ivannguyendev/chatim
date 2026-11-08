@@ -72,10 +72,10 @@ func TestEachKindGoesToTheSubjectOfItsData(t *testing.T) {
 	if msg, err := publish.Message("evt", roomA, unknown); err == nil || msg != nil {
 		t.Fatalf("Message(no payload) = %v, %v; want an error and nothing to publish", msg, err)
 	}
-	if subject, err := publish.SubjectFor("evt", tenant, roomA, "bogus", false); !errors.Is(err, apperr.ErrInvalidArgument) || subject != "" {
+	if subject, err := publish.SubjectFor("evt", tenant, roomA, "bogus", false, false); !errors.Is(err, apperr.ErrInvalidArgument) || subject != "" {
 		t.Fatalf("SubjectFor(bogus) = %q, %v; want ErrInvalidArgument", subject, err)
 	}
-	if subject, err := publish.SubjectFor("evt", tenant, roomA, "read_positions", false); err != nil || subject != "evt.acme.member.101.read_positions" {
+	if subject, err := publish.SubjectFor("evt", tenant, roomA, "read_positions", false, false); err != nil || subject != "evt.acme.member.101.read_positions" {
 		t.Fatalf("SubjectFor(read_positions) = %q, %v; want the member subject", subject, err)
 	}
 }

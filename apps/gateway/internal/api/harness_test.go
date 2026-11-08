@@ -102,6 +102,7 @@ func (f *fakeChat) recorded() []chatCall {
 
 type limits struct {
 	rate, burst, inflight, node int
+	parts                       api.PartLimiter
 }
 
 var roomy = limits{rate: 1000, burst: 1000, inflight: 32, node: 100}
@@ -172,7 +173,7 @@ func newHarness(t *testing.T, l limits) *harness {
 	h.revoked = newFakeRevocations(t)
 	h.handler, err = api.New(api.Options{
 		Forwarder: fwd, Verifier: verifier, Revocations: h.revoked, Gate: gate, Users: users, BodyMax: 4 << 10,
-		CORSOrigins: []string{testOrigin}, Log: slog.New(slog.NewJSONHandler(h.logs, nil)),
+		CORSOrigins: []string{testOrigin}, Log: slog.New(slog.NewJSONHandler(h.logs, nil)), PartURLs: l.parts,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -211,7 +212,7 @@ func startChatNode(t *testing.T, chat *fakeChat) chatrpc.Clients {
 		srv.Stop()
 		<-served
 	})
-	return chatrpc.Clients{Chat: chatimv1.NewChatServiceClient(cc), Mention: chatimv1.NewMentionServiceClient(cc)}
+	return chatrpc.Clients{Chat: chatimv1.NewChatServiceClient(cc), Mention: chatimv1.NewMentionServiceClient(cc), Media: chatimv1.NewMediaServiceClient(cc)}
 }
 
 type claims struct {

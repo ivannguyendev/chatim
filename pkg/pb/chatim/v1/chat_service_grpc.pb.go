@@ -52,6 +52,7 @@ const (
 	ChatService_ListMembers_FullMethodName         = "/chatim.v1.ChatService/ListMembers"
 	ChatService_MarkRead_FullMethodName            = "/chatim.v1.ChatService/MarkRead"
 	ChatService_MarkUnread_FullMethodName          = "/chatim.v1.ChatService/MarkUnread"
+	ChatService_GetClientConfig_FullMethodName     = "/chatim.v1.ChatService/GetClientConfig"
 )
 
 // ChatServiceClient is the client API for ChatService service.
@@ -91,6 +92,7 @@ type ChatServiceClient interface {
 	ListMembers(ctx context.Context, in *ListMembersRequest, opts ...grpc.CallOption) (*ListMembersResponse, error)
 	MarkRead(ctx context.Context, in *MarkReadRequest, opts ...grpc.CallOption) (*MarkReadResponse, error)
 	MarkUnread(ctx context.Context, in *MarkUnreadRequest, opts ...grpc.CallOption) (*MarkUnreadResponse, error)
+	GetClientConfig(ctx context.Context, in *GetClientConfigRequest, opts ...grpc.CallOption) (*GetClientConfigResponse, error)
 }
 
 type chatServiceClient struct {
@@ -431,6 +433,16 @@ func (c *chatServiceClient) MarkUnread(ctx context.Context, in *MarkUnreadReques
 	return out, nil
 }
 
+func (c *chatServiceClient) GetClientConfig(ctx context.Context, in *GetClientConfigRequest, opts ...grpc.CallOption) (*GetClientConfigResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetClientConfigResponse)
+	err := c.cc.Invoke(ctx, ChatService_GetClientConfig_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ChatServiceServer is the server API for ChatService service.
 // All implementations must embed UnimplementedChatServiceServer
 // for forward compatibility.
@@ -468,6 +480,7 @@ type ChatServiceServer interface {
 	ListMembers(context.Context, *ListMembersRequest) (*ListMembersResponse, error)
 	MarkRead(context.Context, *MarkReadRequest) (*MarkReadResponse, error)
 	MarkUnread(context.Context, *MarkUnreadRequest) (*MarkUnreadResponse, error)
+	GetClientConfig(context.Context, *GetClientConfigRequest) (*GetClientConfigResponse, error)
 	mustEmbedUnimplementedChatServiceServer()
 }
 
@@ -576,6 +589,9 @@ func (UnimplementedChatServiceServer) MarkRead(context.Context, *MarkReadRequest
 }
 func (UnimplementedChatServiceServer) MarkUnread(context.Context, *MarkUnreadRequest) (*MarkUnreadResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method MarkUnread not implemented")
+}
+func (UnimplementedChatServiceServer) GetClientConfig(context.Context, *GetClientConfigRequest) (*GetClientConfigResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetClientConfig not implemented")
 }
 func (UnimplementedChatServiceServer) mustEmbedUnimplementedChatServiceServer() {}
 func (UnimplementedChatServiceServer) testEmbeddedByValue()                     {}
@@ -1192,6 +1208,24 @@ func _ChatService_MarkUnread_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChatService_GetClientConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetClientConfigRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).GetClientConfig(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_GetClientConfig_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).GetClientConfig(ctx, req.(*GetClientConfigRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ChatService_ServiceDesc is the grpc.ServiceDesc for ChatService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1330,6 +1364,10 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "MarkUnread",
 			Handler:    _ChatService_MarkUnread_Handler,
+		},
+		{
+			MethodName: "GetClientConfig",
+			Handler:    _ChatService_GetClientConfig_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -30,6 +30,8 @@ type Options struct {
 	BodyMax     int
 	CORSOrigins []string
 	Log         *slog.Logger
+	PartURLs    PartLimiter
+	ClientIP    ClientIP
 }
 
 type Handler struct {
@@ -54,12 +56,15 @@ func New(opts Options) (*Handler, error) {
 		stats:       st,
 		log:         opts.Log,
 		authLog:     rate.NewLimiter(rate.Every(time.Second), 1),
+		parts:       opts.PartURLs,
+		clientIP:    opts.ClientIP,
+		limitLog:    rate.NewLimiter(rate.Every(time.Second), 1),
 	}
 	mux, err := c.procedures(opts.Forwarder, opts.BodyMax)
 	if err != nil {
 		return nil, err
 	}
-	inner := c.gated(c.authenticated(c.limited(c.measured(mux))))
+	inner := c.gated(c.authenticated(c.limited(c.partLimited(c.measured(mux)))))
 	return &Handler{Handler: httpcors.New(httpcors.Config{
 		Origins:       opts.CORSOrigins,
 		AllowHeaders:  []string{"Authorization", "Content-Type", "Connect-Protocol-Version", "Connect-Timeout-Ms"},

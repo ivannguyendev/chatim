@@ -1,5 +1,7 @@
 -include .env
-export REDIS_PASSWORD REDIS_DEDUPE_PASSWORD REDIS_PRESENCE_PASSWORD
+export REDIS_PASSWORD REDIS_DEDUPE_PASSWORD REDIS_PRESENCE_PASSWORD MEDIA_S3_ACCESS_KEY MEDIA_S3_SECRET_KEY
+export CHATIM_IT_S3_ACCESS_KEY := $(MEDIA_S3_ACCESS_KEY)
+export CHATIM_IT_S3_SECRET_KEY := $(MEDIA_S3_SECRET_KEY)
 export CHATIM_IT_REDIS_PASSWORD := $(REDIS_PASSWORD)
 export CHATIM_IT_REDIS_DEDUPE_PASSWORD := $(REDIS_DEDUPE_PASSWORD)
 export CHATIM_IT_PRESENCE_REDIS_PASSWORD := $(REDIS_PRESENCE_PASSWORD)
@@ -32,7 +34,7 @@ GO_RUN   := docker run --rm -v "$(CURDIR)":/src -w /src -v chatim-gomod:/go/pkg/
 BUF_RUN  := docker run --rm -v "$(CURDIR)":/src -w /src $(BUF_IMAGE)
 POC_RUN  := $(GO_RUN) --network $(NETWORK) -e MONGO_URI -e REDIS_PASSWORD
 
-.PHONY: go check-env test itest vet fmt-check lint vuln tidy proto buf-lint alerts-check poc image infra-up infra-down infra-reset app-up app-down identity-env identity-admin identity-logs dev-keys ws-token ws-logs gw-logs e2e redis-cli
+.PHONY: go check-env test itest vet fmt-check lint vuln tidy proto buf-lint alerts-check poc image infra-up media-buckets infra-down infra-reset app-up app-down identity-env identity-admin identity-logs dev-keys ws-token ws-logs gw-logs e2e redis-cli
 
 go:
 	$(GO_RUN) $(GO_IMAGE) go $(ARGS)
@@ -44,7 +46,7 @@ test:
 	$(GO_RUN) $(GO_IMAGE) go test -race -shuffle=on ./...
 
 itest: check-env
-	$(GO_RUN) --network $(NETWORK) -e CHATIM_IT_MONGO_URI -e CHATIM_IT_REDIS_ADDR=chatim-redis:6379 -e CHATIM_IT_REDIS_PASSWORD -e CHATIM_IT_REDIS_DEDUPE_ADDR=chatim-redis-dedupe:6379 -e CHATIM_IT_REDIS_DEDUPE_PASSWORD -e CHATIM_IT_PRESENCE_REDIS_ADDR=chatim-redis-presence:6379 -e CHATIM_IT_PRESENCE_REDIS_PASSWORD -e CHATIM_IT_NATS_URL=nats://chatim-nats:4222 $(GO_IMAGE) go test $(ITEST_ARGS)
+	$(GO_RUN) --network $(NETWORK) -e CHATIM_IT_MONGO_URI -e CHATIM_IT_REDIS_ADDR=chatim-redis:6379 -e CHATIM_IT_REDIS_PASSWORD -e CHATIM_IT_REDIS_DEDUPE_ADDR=chatim-redis-dedupe:6379 -e CHATIM_IT_REDIS_DEDUPE_PASSWORD -e CHATIM_IT_PRESENCE_REDIS_ADDR=chatim-redis-presence:6379 -e CHATIM_IT_PRESENCE_REDIS_PASSWORD -e CHATIM_IT_NATS_URL=nats://chatim-nats:4222 -e CHATIM_IT_S3_ENDPOINT=http://chatim-s3:3900 -e CHATIM_IT_S3_ACCESS_KEY -e CHATIM_IT_S3_SECRET_KEY $(GO_IMAGE) go test $(ITEST_ARGS)
 
 vet:
 	$(GO_RUN) $(GO_IMAGE) go vet ./...
@@ -81,6 +83,9 @@ image:
 infra-up: check-env
 	$(COMPOSE) up -d
 	./scripts/wait-mongo-primary.sh
+
+media-buckets: check-env
+	./scripts/media-buckets.sh
 
 infra-down: check-env
 	$(COMPOSE_ALL) down

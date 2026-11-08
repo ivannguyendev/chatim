@@ -109,14 +109,21 @@ func wireServers(cfg config.Config, log *slog.Logger, verifier *auth.Verifier, r
 	if err != nil {
 		return nil, err
 	}
-	handler, err := api.New(api.Options{
-		Forwarder: fwd, Verifier: verifier, Revocations: sync, Gate: gate, Users: users,
-		BodyMax: cfg.BodyMax, CORSOrigins: cfg.CORSOrigins, Log: log,
-	})
+	parts, err := partURLLimiter(cfg, shared, log)
 	if err != nil {
 		return nil, err
 	}
-	metricsHandler, err := metrics.Handler(metricsNamespace, metricsSubsystem, slices.Concat(metricSources(handler, fwd), sync.Sources()))
+	opts := api.Options{
+		Forwarder: fwd, Verifier: verifier, Revocations: sync, Gate: gate, Users: users,
+		BodyMax: cfg.BodyMax, CORSOrigins: cfg.CORSOrigins, Log: log,
+		ClientIP: api.ClientIP{Header: cfg.ClientIPHeader, Trusted: cfg.TrustedProxies},
+	}
+	opts.PartURLs = parts
+	handler, err := api.New(opts)
+	if err != nil {
+		return nil, err
+	}
+	metricsHandler, err := metrics.Handler(metricsNamespace, metricsSubsystem, slices.Concat(metricSources(handler, fwd), sync.Sources(), limiterSources(parts)))
 	if err != nil {
 		return nil, err
 	}

@@ -217,3 +217,26 @@ Hạ tầng: Mongo rs 3 member NVMe, NATS 3 node, 2 host Linux, dữ liệu th�
 ## Kết quả lưu trong repo
 
 `results/` giữ bản tóm tắt nhỏ (`corebench.txt` trước RF3, `chatbench.txt` từ RF3, `summary.txt`, `measure-*-bounded.txt`) của các lần chạy được tài liệu trích dẫn. Số thô đầy đủ (log, profile Mongo, metrics) chỉ nằm ở `bin/bench/` và `bin/drill/` trên máy chạy, không commit, có thể đã xoá.
+
+### M7 P1 — spike upload nhiều phần (`tools/poc/mediaspike`, dev 2026-11-06)
+
+Server S3 dev chạy trên mạng `chatim_default`, mỗi server một node: Garage `dxflrs/garage:v2.4.1` (`sha256:9c96caa2…d020`, sqlite) và versitygw `versity/versitygw:v1.9.0` (`sha256:eb7f786f…fdc7`, backend posix). Mỗi server chạy với `minio-go/v7` v7.4.1 và `aws-sdk-go-v2` (service/s3 v1.114.8). Bảng đủ 4 tổ hợp: [results/m7-mediaspike/run.md](results/m7-mediaspike/run.md).
+
+| Check | Garage | versitygw |
+|---|---|---|
+| (b) URL ký ghim `Content-Length` (`X-Amz-SignedHeaders=content-length;host`), PUT cỡ+1 | 403 (cả 2 SDK) | 403 (minio-go); cắt kết nối (aws) |
+| (c) Đóng phiên bằng ETag máy gửi; ETag sai | OK; `InvalidPart` | OK; `InvalidPart` |
+| (c2) Đóng phiên chỉ với phần 1 và 3 | **Được chấp nhận**, object 6 MiB / 11 MiB | **Được chấp nhận**, như Garage |
+| (d) Đóng 2.000 phần | 2.000 phần 1 KiB: 377–460 ms (không ép phần ≥ 5 MiB) | `EntityTooSmall` với phần 1 KiB; 200 × 5 MiB: 1,18–1,22 s |
+| (e) PUT URL cũ sau khi đóng | 404 | cắt kết nối |
+| (f) Đóng lần hai rồi `Head` | `NoSuchUpload`, `Head` đúng cỡ | thành công lần nữa, `Head` đúng cỡ |
+| (g) `CopyObject` 1 GiB `processing` → `completed` | 0,22 s | 8,68 s |
+| (h) Ký bằng endpoint public | 200 qua host public, 403 khi đổi host | như Garage |
+| (i) CORS: preflight, PUT có `Origin`, `Expose-Headers: ETag` | OK | OK |
+| (j) `HeadBucket`: thiếu bucket / sai key / server tắt | minio-go `NoSuchBucket`/`AccessDenied`/lỗi mạng; aws `NotFound`/`Forbidden`/lỗi mạng | như Garage |
+| (k) `PutBucketLifecycle` | OK | `NotImplemented` |
+
+- Chọn **Garage + `minio-go/v7`** cho dev và itest: Garage qua đủ (a)–(k); hai SDK hoà nên theo luật plan chọn `minio-go` (ít module hơn). versitygw thiếu lifecycle và cắt kết nối thay vì trả mã lỗi.
+- Server phải tự kiểm đủ phần 1..n và tổng cỡ (`Head`): S3-compatible (và AWS) cho đóng phiên với một tập con các phần (c2).
+- Đóng phiên lần hai có server trả `NoSuchUpload`, có server trả thành công: module xử lý cả hai (luôn `Head` rồi CAS).
+- Số thời gian là của server dev, không dự báo AWS S3. Garage copy nhanh vì chỉ chép metadata khối; AWS copy thật cần đo ở prod-like (P3).

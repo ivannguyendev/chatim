@@ -17,6 +17,7 @@ import (
 	"github.com/ivannguyendev/chatim/apps/chat/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/chat/internal/room"
 	"github.com/ivannguyendev/chatim/apps/chat/internal/store/mongostore"
+	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
 
 type serviceDeps struct {
@@ -30,6 +31,7 @@ type serviceDeps struct {
 	rooms     roomCaches
 	cfg       config.Config
 	log       *slog.Logger
+	config    func() *chatimv1.GetClientConfigResponse
 }
 
 func wireService(d serviceDeps) (*grpcsrv.Service, *message.Reader, error) {
@@ -77,6 +79,7 @@ func wireService(d serviceDeps) (*grpcsrv.Service, *message.Reader, error) {
 	svc, err := grpcsrv.New(grpcsrv.Deps{
 		Sender: d.router, Editor: editor, Reader: reader, InteractionService: interactions, InteractionReader: readers.interactions,
 		MemberService: members, MemberReader: readers.members, RoomService: roomService, RoomList: rooms,
+		ClientConfig: d.config,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("wire chat service: %w", err)

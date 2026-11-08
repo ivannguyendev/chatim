@@ -12,12 +12,14 @@ const (
 	TailWindow   = domain.UnreadWindow
 	TailPreviews = 10
 
-	tailEntryBytes   = 160
-	tailMessageBytes = 64
-	tailPreviewBytes = 320
-	maxIDBytes       = 64
-	fullTailBytes    = tailEntryBytes + TailWindow*(tailMessageBytes+maxIDBytes) +
-		TailPreviews*(tailPreviewBytes+2*maxIDBytes+4*domain.PreviewRunes)
+	tailEntryBytes      = 160
+	tailMessageBytes    = 64
+	tailPreviewBytes    = 320
+	tailAttachmentBytes = 104
+	maxIDBytes          = 64
+	maxPreviewFileBytes = domain.MaxAttachments * (tailAttachmentBytes + domain.MaxAttachmentMimeBytes)
+	fullTailBytes       = tailEntryBytes + TailWindow*(tailMessageBytes+maxIDBytes) +
+		TailPreviews*(tailPreviewBytes+2*maxIDBytes+4*domain.PreviewRunes+maxPreviewFileBytes)
 )
 
 type Tail struct {
@@ -72,8 +74,19 @@ func compactPreview(m domain.Message) domain.Message {
 	return domain.Message{
 		Room: m.Room, Thread: m.Thread, Seq: m.Seq, Tenant: m.Tenant, From: m.From, Kind: m.Kind,
 		Text: domain.PreviewText(m.Text), CreatedAt: m.CreatedAt, Version: m.Version, Deleted: m.Deleted,
-		EditedAt: m.EditedAt, Hidden: m.Hidden, SkipUnread: m.SkipUnread,
+		EditedAt: m.EditedAt, Hidden: m.Hidden, SkipUnread: m.SkipUnread, Attachments: compactAttachments(m.Attachments),
 	}
+}
+
+func compactAttachments(list []domain.Attachment) []domain.Attachment {
+	if len(list) == 0 {
+		return nil
+	}
+	out := make([]domain.Attachment, len(list))
+	for i, a := range list {
+		out[i] = domain.Attachment{Mime: a.Mime}
+	}
+	return out
 }
 
 func tailBytes(t Tail) int {
@@ -83,6 +96,9 @@ func tailBytes(t Tail) int {
 	}
 	for _, m := range t.Previews {
 		n += tailPreviewBytes + len(m.Tenant) + len(m.From) + len(m.Text)
+		for _, a := range m.Attachments {
+			n += tailAttachmentBytes + len(a.Mime)
+		}
 	}
 	return n
 }

@@ -1,6 +1,6 @@
 # chatim — Decision Log
 
-> Ngày cập nhật: 2026-11-05
+> Ngày cập nhật: 2026-11-08
 > Trạng thái: nhật ký quyết định chính thức, chỉ gồm quyết định đã được owner duyệt.
 > Tài liệu liên quan: [Kiến trúc hệ thống SSOT](./architecture.md) · [Module tính năng](./features/README.md).
 
@@ -15,6 +15,7 @@ Quyết định nằm trong `docs/decisions/`, mỗi milestone một file tên `
 | [D183–D206 M4: websocket và gateway](decisions/D183-m4-websocket-gateway.md) | §17.7–17.12 | 2026-10-21 → 2026-10-25 |
 | [D207–D208 Phạm vi Phase 2](decisions/D207-phase2-scope.md) | §17.13–17.14 | 2026-10-25 |
 | [D209–D261 M6: identity](decisions/D209-m6-identity.md) | §17.15–17.21 | 2026-10-25 → 2026-11-05 |
+| [D262–D268 M7: media](decisions/D262-m7-media.md) | §17.22–§17.23 | 2026-11-06 → 2026-11-08 |
 
 ## Ghi chú chung
 

@@ -88,5 +88,5 @@ func startFakeChatNode(t *testing.T) (*fakeChat, chatrpc.Clients) {
 		srv.Stop()
 		<-served
 	})
-	return chat, chatrpc.Clients{Chat: chatimv1.NewChatServiceClient(cc), Mention: chatimv1.NewMentionServiceClient(cc)}
+	return chat, chatrpc.Clients{Chat: chatimv1.NewChatServiceClient(cc), Mention: chatimv1.NewMentionServiceClient(cc), Media: chatimv1.NewMediaServiceClient(cc)}
 }

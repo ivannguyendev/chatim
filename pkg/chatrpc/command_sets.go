@@ -44,6 +44,13 @@ var request = []string{
 	chatimv1.ChatService_LeaveRoom_FullMethodName,
 	chatimv1.ChatService_ChangeMemberRole_FullMethodName,
 	chatimv1.ChatService_SetMemberPriority_FullMethodName,
+	chatimv1.ChatService_GetClientConfig_FullMethodName,
+	chatimv1.MediaService_StartUpload_FullMethodName,
+	chatimv1.MediaService_GetPartURLs_FullMethodName,
+	chatimv1.MediaService_CompleteUpload_FullMethodName,
+	chatimv1.MediaService_AbortUpload_FullMethodName,
+	chatimv1.MediaService_GetAttachmentURLs_FullMethodName,
+	chatimv1.MediaService_ListUploads_FullMethodName,
 }
 
 func Realtime() []string { return slices.Clone(realtime) }

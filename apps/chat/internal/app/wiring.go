@@ -53,6 +53,7 @@ type node struct {
 	projections drainer
 	sweeper     drainer
 	mention     drainer
+	media       drainer
 	setups      []preparer
 	watches     liveWatcher
 	indexes     *mongoindex.Health
@@ -148,10 +149,16 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 	a.readBatch = reads
 	a.publisher, a.stateClears, a.flusher, a.cidBatch, a.router, a.slots = pub, clears, fl, batch, router, slots
 	a.projections, a.sweeper = projections, sweeper
-	svc, reader, err := wireService(serviceDeps{store: st, router: router, pub: pub, reads: reads, cidBatch: batch, timers: ts.members, msgTimers: ts.messages, rooms: caches, cfg: cfg, log: log})
+	mediaChat := &mediaChatNode{mediaMessageFiles: mediaMessageFiles{messages: st}}
+	media, err := wireMedia(cfg, cl, a.indexes, mediaChat, log)
 	if err != nil {
 		return nil, err
 	}
+	svc, reader, err := wireService(serviceDeps{store: st, router: router, pub: pub, reads: reads, cidBatch: batch, timers: ts.members, msgTimers: ts.messages, rooms: caches, cfg: cfg, log: log, config: clientConfig(cfg, media)})
+	if err != nil {
+		return nil, err
+	}
+	mediaChat.bind(reader)
 	limiter := resilience.NewLimiter(cfg.MaxInflight, cfg.QueueWait)
 	a.grpc = grpcserver.New(grpcserver.Config{
 		Addr:            cfg.GRPCAddr,
@@ -180,6 +187,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 		roomCache:       caches.probes(roomWatch),
 		events:          eventProbes{clears: clears, reads: reads, projection: projections, sweeper: sweeper},
 		mention:         a.attachMention(mention, liveWatchers{watch, roomWatch}),
+		media:           a.attachMedia(media),
 		indexes:         indexProbes{health: a.indexes, collections: indexCatalog(cfg).Names()},
 	}
 	handler, err := metrics.Handler(metricsNamespace, metricsSubsystem, metricSources(p))

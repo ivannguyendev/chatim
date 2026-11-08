@@ -36,9 +36,12 @@ func TestMyRoomStateCopiesEveryField(t *testing.T) {
 }
 
 func TestLastPreviewCopiesEveryFieldAndIsAbsentWhenEmpty(t *testing.T) {
-	p := domain.RoomPreview{Seq: 45, From: "lan", Kind: domain.KindSystem, Text: "Cuộc gọi 3 phút", CreatedAt: sentAt, Deleted: false, Edited: true}
+	p := domain.RoomPreview{Seq: 45, From: "lan", Kind: domain.KindSystem, Text: "Cuộc gọi 3 phút", CreatedAt: sentAt, Deleted: false, Edited: true,
+		FileMimes: []string{"image/jpeg", "application/pdf"},
+	}
 	want := &chatimv1.LastPreview{
 		Seq: 45, Sender: "lan", Kind: chatimv1.MessageKind_MESSAGE_KIND_SYSTEM, Text: "Cuộc gọi 3 phút", CreatedAt: timestamppb.New(sentAt), Edited: true,
+		FileMimes: []string{"image/jpeg", "application/pdf"},
 	}
 	if got := pbconv.LastPreview(p); !proto.Equal(got, want) {
 		t.Fatalf("LastPreview = %v, want %v", got, want)

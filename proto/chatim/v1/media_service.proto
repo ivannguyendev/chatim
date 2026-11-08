@@ -1,0 +1,134 @@
+syntax = "proto3";
+
+package chatim.v1;
+
+import "google/protobuf/timestamp.proto";
+
+service MediaService {
+  rpc StartUpload(StartUploadRequest) returns (StartUploadResponse);
+  rpc GetPartURLs(GetPartURLsRequest) returns (GetPartURLsResponse);
+  rpc CompleteUpload(CompleteUploadRequest) returns (CompleteUploadResponse);
+  rpc AbortUpload(AbortUploadRequest) returns (AbortUploadResponse);
+  rpc GetAttachmentURLs(GetAttachmentURLsRequest) returns (GetAttachmentURLsResponse);
+  rpc ListUploads(ListUploadsRequest) returns (ListUploadsResponse);
+}
+
+message UploadPart {
+  int32 part_number = 1;
+  int64 size = 2;
+}
+
+message PartURL {
+  int32 part_number = 1;
+  string url = 2;
+}
+
+message UploadedPart {
+  int32 part_number = 1;
+  string etag = 2;
+}
+
+message StartUploadRequest {
+  string file_name = 1;
+  string content_type = 2;
+  int64 size = 3;
+  int64 upload_bytes_per_second = 4;
+  repeated int32 dim = 5;
+  int64 dur = 6;
+}
+
+message StartUploadResponse {
+  string key = 1;
+  int64 part_size = 2;
+  repeated UploadPart parts = 3;
+  repeated PartURL urls = 4;
+  google.protobuf.Timestamp expires_at = 5;
+}
+
+message GetPartURLsRequest {
+  string key = 1;
+  repeated int32 part_numbers = 2;
+}
+
+message GetPartURLsResponse {
+  repeated PartURL urls = 1;
+  google.protobuf.Timestamp expires_at = 2;
+}
+
+message CompleteUploadRequest {
+  string key = 1;
+  repeated UploadedPart parts = 2;
+  string hash = 3;
+}
+
+message CompleteUploadResponse {
+  string key = 1;
+  int64 size = 2;
+}
+
+message AbortUploadRequest {
+  string key = 1;
+}
+
+message AbortUploadResponse {}
+
+message MessageRef {
+  string room_id = 1;
+  uint64 thread = 2;
+  uint64 seq = 3;
+}
+
+message FileURL {
+  string key = 1;
+  string url = 2;
+  string thumbnail_url = 3;
+}
+
+message MessageFiles {
+  string room_id = 1;
+  uint64 thread = 2;
+  uint64 seq = 3;
+  repeated FileURL files = 4;
+}
+
+message GetAttachmentURLsRequest {
+  repeated MessageRef messages = 1;
+}
+
+message GetAttachmentURLsResponse {
+  repeated MessageFiles messages = 1;
+  google.protobuf.Timestamp expires_at = 2;
+}
+
+enum FileKind {
+  FILE_KIND_UNSPECIFIED = 0;
+  FILE_KIND_IMAGE = 1;
+  FILE_KIND_VIDEO = 2;
+  FILE_KIND_OTHER = 3;
+}
+
+message UploadedFile {
+  string key = 1;
+  string name = 2;
+  string mime = 3;
+  int64 size = 4;
+  repeated int32 dim = 5;
+  int64 dur = 6;
+  string hash = 7;
+  google.protobuf.Timestamp created_at = 8;
+  bool expired = 9;
+  string url = 10;
+  string thumbnail_url = 11;
+}
+
+message ListUploadsRequest {
+  repeated FileKind kinds = 1;
+  string before = 2;
+  int32 page_size = 3;
+}
+
+message ListUploadsResponse {
+  repeated UploadedFile files = 1;
+  string next_before = 2;
+  google.protobuf.Timestamp expires_at = 3;
+}

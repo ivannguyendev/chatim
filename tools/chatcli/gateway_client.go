@@ -18,6 +18,7 @@ type gateway struct {
 	timeout time.Duration
 	chat    chatimv1connect.ChatServiceClient
 	mention chatimv1connect.MentionServiceClient
+	media   chatimv1connect.MediaServiceClient
 }
 
 func newGateway(base context.Context, url, token string, timeout time.Duration) *gateway {
@@ -33,6 +34,7 @@ func newGateway(base context.Context, url, token string, timeout time.Duration) 
 		timeout: timeout,
 		chat:    chatimv1connect.NewChatServiceClient(client, url, connect.WithInterceptors(bearer)),
 		mention: chatimv1connect.NewMentionServiceClient(client, url, connect.WithInterceptors(bearer)),
+		media:   chatimv1connect.NewMediaServiceClient(client, url, connect.WithInterceptors(bearer)),
 	}
 }
 

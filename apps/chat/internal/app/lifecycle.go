@@ -10,7 +10,7 @@ import (
 )
 
 type tasks struct {
-	admin, publisher, readBatch, stateClears, flusher, cidBatch, router, slots, timers, projections, mention, sweeper, grpc *task
+	admin, publisher, readBatch, stateClears, flusher, cidBatch, router, slots, timers, projections, mention, media, sweeper, grpc *task
 }
 
 func Run(ctx context.Context, cfg config.Config, log *slog.Logger) error {
@@ -55,7 +55,7 @@ func (a *node) abandon(ctx context.Context) {
 }
 
 func (a *node) serve(ctx context.Context, adminLis, grpcLis net.Listener) error {
-	sup := newSupervisor(ctx, 13)
+	sup := newSupervisor(ctx, 14)
 	t := tasks{
 		admin:       sup.start("admin", func(c context.Context) error { return a.admin.ServeListener(c, adminLis) }),
 		publisher:   sup.start("publisher", a.publisher.Run),
@@ -68,6 +68,7 @@ func (a *node) serve(ctx context.Context, adminLis, grpcLis net.Listener) error 
 		timers:      sup.start("timer consumer", a.timers.Run),
 		projections: sup.start("projections", a.projections.Run),
 		mention:     startIf(sup, "mention", a.mention),
+		media:       startIf(sup, "media", a.media),
 		sweeper:     sup.start("sweeper", a.sweeper.Run),
 	}
 	cause := a.awaitRouter(ctx, sup)

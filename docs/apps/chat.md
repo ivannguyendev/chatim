@@ -68,6 +68,35 @@ Toàn bộ đọc qua `apps/chat/internal/config`; thiếu thì dùng giá trị
 | `MENTION_ROOM_GROUPS_SYNC_MAX` | `5000` | Room tới cỡ này thì `ListRoomGroups` dựng tập nhóm ngay khi được hỏi, lớn hơn thì dựng ở nền (D172); không phải giới hạn dữ liệu |
 | `MENTION_ROOM_GROUPS_TTL`, `MENTION_ROOM_GROUPS_REBUILD` | `60s` / `10m` | Tập nhóm của room nhỏ hết hạn sau TTL (và quên khi có `member_added`/`member_removed`); room lớn dựng lại ở nền khi có người hỏi và tập cũ hơn `REBUILD` |
 
+### Media (module `modules/media`)
+
+Media lỗi (config sai, thiếu bucket, sai key, S3 sập) không bao giờ làm chat dừng: module chỉ thành chưa sẵn sàng, `GetClientConfig` trả `media.enabled = false`, mọi lệnh `MediaService` (4 lệnh upload, `GetAttachmentURLs`, `ListUploads`) trả `UNAVAILABLE`, `chatim_media_ready` = 0. Chỉ lỗi parse (giá trị không phải số, thời lượng sai) chặn boot như mọi biến khác. Code không tạo bucket, luật lifecycle hay CORS: dev chạy `make media-buckets`, production do hạ tầng tạo sẵn.
+
+| Biến | Mặc định | Ghi chú |
+|---|---|---|
+| `MEDIA_ENABLED` | `true` | `false`: `MediaService` vẫn đăng ký nhưng mọi lệnh trả `FAILED_PRECONDITION`. Compose dev lấy từ biến môi trường lúc `make app-up` (mặc định `true`, không có trong `.env.example`), vd. `MEDIA_ENABLED=false make app-up` để đo A/B không có media |
+| `MEDIA_S3_ENDPOINT`, `MEDIA_S3_PUBLIC_ENDPOINT` | (rỗng) | Endpoint chat gọi S3; endpoint ghi vào URL ký mà máy dùng (chữ ký gồm host, sai thì mọi URL hỏng). Endpoint public phải ở domain đăng ký khác domain của app (không subdomain, không cùng site) vì file trả với loại máy khai ([media §7](../features/12-feature-media.md#7-thumb-và-hợp-đồng-lambda-cho-hạ-tầng)) |
+| `MEDIA_S3_REGION` | (rỗng, bắt buộc) | Đặt sẵn để ký URL không phải hỏi vùng |
+| `MEDIA_S3_ACCESS_KEY`, `MEDIA_S3_SECRET_KEY[_FILE]` | (rỗng) | Key chỉ cần quyền trên 2 bucket: `processing` đọc, head, tạo/đóng/huỷ multipart, xoá (file lệch cỡ, bản cũ sau khi chuyển); `completed` đọc, head, ghi (`CopyObject`, tạo/đóng/huỷ multipart copy). URL tải ký bằng key này nên cần quyền đọc cả hai; secret không vào log |
+| `MEDIA_S3_BUCKET_PROCESSING`, `MEDIA_S3_BUCKET_COMPLETED` | (rỗng) | Phải khác nhau; `processing` có luật huỷ multipart dở 1 ngày và xoá object 30 ngày, CORS cho PUT và đọc header `ETag` |
+| `MEDIA_MAX_FILE_BYTES` | `4294967296` | ≤ `MEDIA_MAX_PARTS` × `MEDIA_MAX_PART_BYTES` |
+| `MEDIA_MIN_PART_BYTES`, `MEDIA_MAX_PART_BYTES`, `MEDIA_MAX_PARTS` | `16777216` / `134217728` / `2000` | Phần ≥ 5 MiB (S3), tối thiểu ≤ tối đa, ≤ 10.000 phần |
+| `MEDIA_MAX_PARALLEL_UPLOADS` | `4` | Số URL mỗi lần cấp và số luồng máy chạy (qua `GetClientConfig`) |
+| `MEDIA_PART_URL_TTL` | `15m` | Hạn URL ký từng phần; `1s`..`168h` (khoảng S3 nhận cho URL ký) |
+| `MEDIA_READY_CHECK_INTERVAL` | `30s` | Chu kỳ `HeadBucket` hai bucket để biết media sẵn sàng |
+| `MEDIA_DOWNLOAD_URL_TTL` | `1h` | Hạn URL tải và URL thumb (`GetAttachmentURLs`, `ListUploads`, trả trong `expires_at`); `1s`..`168h` |
+| `MEDIA_PROCESSING_RETENTION` | `720h` | Phải bằng luật xoá object của bucket `processing` (30 ngày, tính từ lúc tạo object); `ListUploads` gắn `expired` cho file có `created_at` + giá trị này đã qua |
+| `MEDIA_THUMBNAILS` | `false` | `true` khi hạ tầng có Lambda sinh thumb: ảnh/video có `thumbnail_url`; tắt thì rỗng (qua `GetClientConfig`) |
+| `MEDIA_THUMBNAIL_SUFFIX` | `.thumb` | Hậu tố khoá thumb (`{key}{hậu tố}`), bắt đầu bằng `.`, 2..32 ký tự `a-z0-9.`; phải bằng hậu tố Lambda ghi |
+| `MEDIA_COPY_SINGLE_MAX`, `MEDIA_COPY_PART_BYTES` | `5368709120` / `1073741824` | Chuyển file `processing` → `completed`: cỡ ≤ ngưỡng đầu thì một lệnh `CopyObject` (ngưỡng 1..5 GiB), lớn hơn thì copy nhiều phần theo dải cỡ phần (5 MiB..5 GiB, `MEDIA_MAX_FILE_BYTES` ≤ 10.000 phần) |
+| `MEDIA_CONSUMER_MAX_PENDING` | `1024` | Số event consumer `media` giữ cùng lúc trên một node (1..65536): là `MaxAckPending` của durable và số chỗ chạy; đầy thì ngừng nhận tới khi có event xong. Mỗi lần kéo xin một nửa số này |
+| `MEDIA_CONSUMER_ACK_WAIT` | `30s` | `AckWait` của durable `media` (≥ 3s); event đang xử lý được gửi `InProgress` mỗi một phần ba |
+| `MEDIA_CONSUMER_SYNC_TIMEOUT` | `15m` | Hạn mỗi lần xử lý một event (copy file lớn); quá hạn thì Nak theo bậc lùi |
+
+Giá trị đúng định dạng nhưng sai luật (TTL ngoài `1s`..`168h`, hậu tố sai) chỉ làm media chưa sẵn sàng. Gallery (`ListUploads`) cần index `{tenant_id, user_id, state, _id: -1}` của `media_uploads`: chat chỉ tự build trên collection rỗng, nên DB đã có dữ liệu `media_uploads` từ trước phải chạy `docker exec chatim-chat-1 /app indexes -apply` một lần ([`/app indexes`](#app-indexes-d191)); tới lúc đó `ListUploads` trả `INTERNAL` (hint tới index chưa có), các lệnh media khác vẫn chạy. Cặp tin–file `media_message_files` (M7 P3) cần `{tenant_id, message_key, state}` và `{file_key, state, message_key}`: collection mới nên lần boot đầu tự build; DB mà collection này đã có dữ liệu với index thiếu hoặc khác (vd. DB dev từ bản P3 cũ) phải chạy `/app indexes -apply`, tới lúc đó event `msg_deleted` của tin có file lỗi (hint), bị Nak và `ChatimMediaFailing` báo.
+
+Consumer `media` (M7 P3, [module 12 §8](../features/12-feature-media.md#8-chuyển-file-đã-gắn-tin-sang-completed-p3)) chạy trên mọi node chat khi `MEDIA_ENABLED=true` và config media đúng luật: chat tạo hoặc cập nhật durable `media` trên `EVT_STREAM` lúc khởi động, chỉ kéo event khi media sẵn sàng, dừng song song với projection và Mention App. Nó chuyển file đã gắn tin sang `completed` và ghi cặp tin–file; không nằm trên đường gửi tin. Hợp đồng Lambda sinh thumb cho hạ tầng: [module 12 §7](../features/12-feature-media.md#7-thumb-và-hợp-đồng-lambda-cho-hạ-tầng).
+
 `CHAT_GOGC` (mặc định 100) chỉ compose đọc lúc `make app-up` và đưa vào `GOGC` của chat, dùng khi đo; không có trong `.env.example`.
 
 ## Kết nối và bí mật
@@ -77,7 +106,7 @@ Toàn bộ đọc qua `apps/chat/internal/config`; thiếu thì dùng giá trị
 - **Không bao giờ `SCAN` hay `KEYS`**: key cid lấp đầy keyspace.
 - **Mật khẩu.** Cả ba Redis bắt AUTH. Compose lấy mật khẩu từ `.env` qua secret; chat đọc `REDIS_PASSWORD_FILE`/`REDIS_DEDUPE_PASSWORD_FILE`, tool đọc `-redis-password` hoặc `REDIS_PASSWORD`. Mật khẩu không bao giờ nằm ở argv, `docker inspect`, dòng make in ra hay log. Container không có `REDISCLI_AUTH`: dùng `make redis-cli [INSTANCE=dedupe|presence] ARGS=…`.
 - **Mongo (D46).** Secret `mongo_password` lấy từ `MONGO_ROOT_PASSWORD`; chat nhận `MONGO_URI` không credential cùng `MONGO_USER` và `MONGO_PASSWORD_FILE` (`MONGO_AUTH_SOURCE` mặc định `admin`). URI có credential vẫn chạy (itest, chạy ngoài compose) nhưng không đi cùng `MONGO_USER`. mongosh không bao giờ nhận `-p`: script xác thực trong `--eval` bằng `db.getSiblingDB("admin").auth(user, require("fs").readFileSync("/run/secrets/mongo_password", "utf8").trim())`.
-- Mọi dòng log đi qua handler che credential của `MONGO_URI`, `NATS_URL`, mật khẩu Mongo và hai mật khẩu Redis.
+- Mọi dòng log đi qua handler che credential của `MONGO_URI`, `NATS_URL`, mật khẩu Mongo, hai mật khẩu Redis, `MEDIA_S3_ACCESS_KEY` và `MEDIA_S3_SECRET_KEY`; URL ký không bao giờ vào log.
 
 ## Cổng và admin
 
@@ -86,16 +115,17 @@ Toàn bộ đọc qua `apps/chat/internal/config`; thiếu thì dùng giá trị
 
 ## Metric và alert
 
-Mọi metric của chat có tiền tố `chatim_chat_`, của Mention App `chatim_mention_`; đăng ký pull-based trên registry riêng (`pkg/core/metrics`, wiring ở `apps/chat/internal/app/metrics_wiring.go`, `event_metrics_wiring.go`). Bảng cam kết và detector: [architecture.md §8](../architecture.md#8-cam-kết-đúng-đắn-guarantees--detectors).
+Mọi metric của chat có tiền tố `chatim_chat_`, của Mention App `chatim_mention_`, của media `chatim_media_`; đăng ký pull-based trên registry riêng (`pkg/core/metrics`, wiring ở `apps/chat/internal/app/metrics_wiring.go`, `event_metrics_wiring.go`). Bảng cam kết và detector: [architecture.md §8](../architecture.md#8-cam-kết-đúng-đắn-guarantees--detectors).
 
 - Đường ghi: `publish_dropped_total{reason}`, `redis_degraded{client}`, `cid_settle_dropped_total`, `cid_pending_elsewhere_total`, `grpc_load_shed_total`, `room_yields_total`.
 - Event chờ phát: `state_clear_cleared_total`, `state_clear_dropped_total`, `state_clear_failures_total`, `publish_state_track_full_total`, `event_pending_oldest_seconds{collection}` (chỉ chat giữ slot 0 có giá trị), `sweep_republished_total{collection}`, `sweep_dropped_total{collection}`, `sweep_publish_failures_total`, `sweep_failures_total`, `sweep_passes_total`.
 - Projection: `projection_lag_seconds{projection}` (tính theo `ts` nghiệp vụ, nên tin sweeper phát lại hiện lag cao), `projection_failures_total`, `projection_dropped_total`, `projection_stuck_total`.
 - Phiếu hẹn: `timer_failures_total`, `timer_dropped_total`, `counter_repaired_total{counter="reactions"|"replies"|"members"}`.
 - Cache và watcher: `member_cache_forgets_total`, `member_watch_malformed_total`, `room_cache_hits_total`/`room_cache_misses_total{cache=info|tail|snapshot|path}`, `room_tail_cache_bytes`, `room_watch_forgets_total`, `room_watch_malformed_total` (chỉ để xem tốc độ, không alert). Index: `index_outdated{collection}`. `mongo_oplog_window_seconds` là NaN khi không đọc được oplog (cần quyền đọc `local`).
+- Media (tiền tố `chatim_media_`): `ready`, `uploads_started_total`, `uploads_completed_total`, `storage_operations_total{operation, result="ok"|"client"|"error"}`, `lag_seconds` (tuổi event nhận gần nhất của consumer `media`, đo lúc đọc metric nên tăng dần khi consumer ngừng nhận; về 0 sau 1s chờ không có event), `stuck_total` (lần giao thứ 6 trở lên vẫn lỗi, không tính chờ upload), `dropped_total{reason="no_message"|"no_upload"|"aborted"|"tenant_mismatch"|"upload_expired"|"invalid_event"}`, `moves_total{result="ok"|"error"|"cleanup_error"}`.
 - Mention App: `lag_seconds`, `failures_total`, `dropped_total`, `stuck_total`, `notified_total`, `retracted_total`, `notify_failures_total`, `notify_skipped_total{reason="stale"|"superseded"}`, `room_groups_hits_total`, `room_groups_misses_total`, `room_groups_rebuild_failures_total`, `room_groups_watch_forgets_total`, `room_groups_watch_malformed_total`.
 
-16 luật alert của chat và Mention App trong `deploy/prometheus/alerts.yml` (kiểm bằng `make alerts-check`): `ChatimOplogWindowShort`, `ChatimOplogWindowCritical`, `ChatimOplogWindowUnknown`, `ChatimEventsDropped`, `ChatimRedisDegraded`, `ChatimCIDSettleDropped`, `ChatimCIDPendingElsewhere`, `ChatimSeqContention`, `ChatimCounterRepairSurge`, `ChatimEventPendingStuck` (cờ cũ nhất > 60s trong 5 phút), `ChatimProjectionLagging` (> 10s trong 5 phút), `ChatimProjectionFailing` (`projection_stuck_total` tăng trong 15 phút), `ChatimSweeperIdle` (10 phút không có lượt quét), `ChatimTimerFailing`, `ChatimMentionLagging` (> 10s trong 5 phút), `ChatimMentionFailing` (`chatim_mention_stuck_total` tăng trong 15 phút). Cam kết mới phải có metric và luật trong cùng PR.
+20 luật alert của chat, Mention App và media trong `deploy/prometheus/alerts.yml` (kiểm bằng `make alerts-check`): `ChatimOplogWindowShort`, `ChatimOplogWindowCritical`, `ChatimOplogWindowUnknown`, `ChatimEventsDropped`, `ChatimRedisDegraded`, `ChatimCIDSettleDropped`, `ChatimCIDPendingElsewhere`, `ChatimSeqContention`, `ChatimCounterRepairSurge`, `ChatimEventPendingStuck` (cờ cũ nhất > 60s trong 5 phút), `ChatimProjectionLagging` (> 10s trong 5 phút), `ChatimProjectionFailing` (`projection_stuck_total` tăng trong 15 phút), `ChatimSweeperIdle` (10 phút không có lượt quét), `ChatimTimerFailing`, `ChatimMentionLagging` (> 10s trong 5 phút), `ChatimMentionFailing` (`chatim_mention_stuck_total` tăng trong 15 phút), `ChatimMediaNotReady` (`chatim_media_ready` = 0 trên một node trong 5 phút), `ChatimMediaStorageErrors` (> 5% lệnh S3 lỗi phía storage trong 10 phút), `ChatimMediaLagging` (`chatim_media_lag_seconds` > 600 trong 15 phút), `ChatimMediaFailing` (`chatim_media_stuck_total` tăng trong 15 phút). Cam kết mới phải có metric và luật trong cùng PR.
 
 ## Vòng đời
 
@@ -111,7 +141,7 @@ Các lệnh `/app` dùng config và secret của chat, in lỗi và thoát khác
 
 ### `/app indexes` (D191)
 
-Đổi index chỉ bằng lệnh này. `-dry-run` (mặc định) in index thiếu, đang build, cũ, lạ và xung đột của chat và Mention App; `-apply` tạo bản thiếu bên cạnh bản cũ, không xoá; `-drop-old` xoá bản cũ chỉ khi mọi bản thay đã build xong; có xung đột tuỳ chọn thì từ chối toàn bộ.
+Đổi index chỉ bằng lệnh này. `-dry-run` (mặc định) in index thiếu, đang build, cũ, lạ và xung đột của chat, Mention App và media; `-apply` tạo bản thiếu bên cạnh bản cũ, không xoá; `-drop-old` xoá bản cũ chỉ khi mọi bản thay đã build xong; có xung đột tuỳ chọn thì từ chối toàn bộ.
 
 Khởi động chat chỉ build index trên collection rỗng; collection có dữ liệu mà thiếu hoặc lệch index thì chat log `warn` "index outdated, run /app indexes" và đặt gauge `chatim_chat_index_outdated{collection}` = 1, không tự build hay xoá. Chạy `-dry-run`, rồi `-apply`, chờ build xong (dry-run hết "building"), rồi `-drop-old`.
 

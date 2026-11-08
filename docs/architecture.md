@@ -14,7 +14,7 @@
 ### 1.1 Phạm vi Phase 1
 - `chat`: room, member, message, tương tác, cấp seq, lưu trữ MongoDB, phát event NATS JetStream.
 - `websocket`: giữ kết nối WebSocket (gws), kiểm token, chuyển lệnh tới chat (phần 1 đã xây trên `feat/m4`, D183–D188); đẩy event realtime: mỗi node đọc `CHATIM_EVT` và hộp thư `websocket.publish.{t}` (`CHATIM_WS`) bằng ordered consumer, lọc theo room trong RAM (phần 2 đã xây trên `feat/m4`, D189–D195). Từ phần gateway chỉ còn 12 lệnh ghi realtime (D198).
-- `gateway`: HTTPS (Connect trên HTTP/1.1 và h2c, TLS ở load balancer) cho 22 lệnh tải dữ liệu và quản lý room (14 đọc, 8 quản lý); kiểm Bearer JWT như websocket, gọi node chat bất kỳ trong sổ node sống ở Redis state (theo vòng, không chọn theo slot; D261), giới hạn theo user trên mỗi node; đã xây trên `feat/m4` (D197, D198). Đường của máy: ghi realtime và nhận event qua WebSocket, tải dữ liệu và quản lý qua HTTPS; thay đổi do HTTPS gây ra vẫn tới người khác qua event trên WebSocket.
+- `gateway`: HTTPS (Connect trên HTTP/1.1 và h2c, TLS ở load balancer) cho 22 lệnh tải dữ liệu và quản lý room (14 đọc, 8 quản lý), `GetClientConfig` và 6 lệnh của module media (4 lệnh upload M7 P1, `GetAttachmentURLs`, `ListUploads` M7 P2); kiểm Bearer JWT như websocket, gọi node chat bất kỳ trong sổ node sống ở Redis state (theo vòng, không chọn theo slot; D261), giới hạn theo user trên mỗi node; đã xây trên `feat/m4` (D197, D198). Đường của máy: ghi realtime và nhận event qua WebSocket, tải dữ liệu và quản lý qua HTTPS; thay đổi do HTTPS gây ra vẫn tới người khác qua event trên WebSocket.
 - Room: DM (1-1), group ≤5K member. Channel ~200K subscriber (chỉ admin post) vào backlog (owner 2026-10-19, D178).
 - Exit Phase 1: `chat` + `mention` + `websocket` + `gateway` đạt `prod-like validated`; go-live sau khi có `identity` (D178; hướng owner 2026-11-02 thay D209, [tóm tắt](plans/2026-10-19-phase1-exit-summary.md), [M6 PA](plans/2026-11-02-m6-pa-identity-doi-token-summary.md)).
 - Tin nhắn: gửi, sửa (có lịch sử), xoá cho mọi người / phía tôi, trả lời (quote), chuyển tiếp (forward).
@@ -77,7 +77,7 @@ Mọi thiết kế và dòng code trong `chatim` bắt buộc phải tuân thủ
 
 ## 4. Khung lớp dữ liệu (Data Class Framework)
 
-> **Đường event chung cho mọi lớp (M3.1, D141–D160):** lệnh ghi doc kèm bit trong `_state` (+ `_state_at`) ở cùng lần ghi → ack → publish → sau PubAck xoá bit theo lô. Bit nào còn quá 15s (`SWEEP_MIN_AGE`) thì sweeper trên chat giữ slot 0 dựng lại event từ doc hiện tại và phát bù. Projection (`room_activity`, `reply_index`) đọc một consumer `projections` trên `CHATIM_EVT` (chỉ chat giữ slot 0, cửa sổ gom 3s), không delay cố định. Mention App đọc consumer riêng `mention` (queue group, mọi node chat) và ghi collection của nó. Chi tiết: [Module 10](features/10-feature-data-reconciliation-and-repair.md), [bản tóm tắt M3.1](plans/2026-10-16-m3-1-state-driven-events-summary.md).
+> **Đường event chung cho mọi lớp (M3.1, D141–D160):** lệnh ghi doc kèm bit trong `_state` (+ `_state_at`) ở cùng lần ghi → ack → publish → sau PubAck xoá bit theo lô. Bit nào còn quá 15s (`SWEEP_MIN_AGE`) thì sweeper trên chat giữ slot 0 dựng lại event từ doc hiện tại và phát bù. Projection (`room_activity`, `reply_index`) đọc một consumer `projections` trên `CHATIM_EVT` (chỉ chat giữ slot 0, cửa sổ gom 3s), không delay cố định. Mention App đọc consumer riêng `mention` (queue group, mọi node chat) và ghi collection của nó; module media cũng vậy với consumer `media` (M7 P3). Chi tiết: [Module 10](features/10-feature-data-reconciliation-and-repair.md), [bản tóm tắt M3.1](plans/2026-10-16-m3-1-state-driven-events-summary.md).
 
 > **Quy định bất di bất dịch:** Mọi tính năng mới bắt buộc phải map vào đúng một lớp dữ liệu dưới đây trước khi viết plan. Tính năng không khớp lớp nào thì phải dừng lại để thiết kế lớp mới (D61).
 
@@ -93,6 +93,8 @@ Mọi thiết kế và dòng code trong `chatim` bắt buộc phải tuân thủ
 | **Ephemeral** | Typing, presence | Không lưu DB, không qua chat (M4 phần 4). Typing: node websocket ↔ core NATS thường, bắn rồi quên (D199). Presence: khoá có hạn do node của người đó đóng dấu theo heartbeat trong Redis riêng `chatim-redis-presence`, người hỏi đọc mỗi heartbeat của mình (D200, D201). | Typing: subject `eph.{tenant}.{room}.typing`. Presence: khoá Redis `chatim:presence:{tenant}:{user}` `EX` 15s, không qua NATS | Mất khi rớt mạng, không cần phục hồi: máy tắt "đang gõ" sau 6s, khoá hết hạn thì offline. |
 | **Cấu hình tin cậy** (`identity`; [M6 PA](plans/2026-11-02-m6-pa-identity-doi-token-summary.md), [PM](plans/2026-11-02-m6-pm-identity-mongodb-summary.md)) | Tenant (`tenants`), issuer của tenant (`trusted_issuers`: issuer → tenant, trạng thái), khoá công khai của issuer (`trusted_keys`: `kid`, EdDSA/ES256/RS256, trạng thái), khoá ký (`signing_keys`, doc nhận chỗ `signing_key_claims` `_id: "active"`) | Một lệnh CLI (`tenant-*`, `issuer-*`, `issuer-key-*`) = ghi một doc; khoá kiểm bằng `trust.ParsePublicJWK` trước khi ghi; kích hoạt khoá ký = một transaction, một lần. Tenant của token luôn lấy từ issuer, không từ claim. Không audit (bỏ ở PM, làm lại ở PB). | Không NATS. Change stream MongoDB trong mỗi replica đánh thức nạp lại trust (tenant, issuer, khoá) và danh sách thu hồi (tenant, `revoked_sessions`). | Nạp lại mỗi `IDENTITY_TRUST_RELOAD` (10s) làm lưới an toàn; nạp lỗi thì giữ bản cũ, tăng `trust_reload_errors_total`, alert `ChatimIdentityTrustStale`. |
 | **Danh bạ identity** (`identity`; D230–D231, D245–D259, [PA](plans/2026-11-02-m6-pa-identity-doi-token-summary.md), [PM](plans/2026-11-02-m6-pm-identity-mongodb-summary.md), [vận hành](apps/identity.md)) | Bản sao user của tenant (`users`: tên, ảnh, trạng thái, nhóm trực tiếp `groups`, `ver`), nhóm (`groups`, cây qua `ancestors`, `members_ver`) | JIT lúc đổi token: user mới gom lô `InsertMany` `w:majority` (D259), sửa hồ sơ ghi một doc với CAS trên giá trị đã thấy (trùng `_id` hay thua CAS thì vẫn cấp token); CLI `user-*` ghi một doc; `group-create`, `group-update` đổi cha, bước đánh dấu của `group-delete` và `user-groups` = một transaction, một lần (`tenants.group_tree_ver`, `groups.members_ver` làm hai lệnh cùng chỗ xung đột); `ver` chỉ tăng khi field hiện ra ngoài đổi. Xung đột → `unavailable`, không retry nội bộ. | Không NATS, không feed cho app khác (gỡ ở PM, M15; làm lại khi app đầu tiên cần). Mỗi replica đọc change stream MongoDB (`fullDocument: updateLookup`). | Mỗi replica nạp toàn bộ theo trang dưới suất `directory_load` (D231), rồi theo change stream từ vị trí đã ghi, chỉ nhận `ver` lớn hơn (D230); mất vị trí stream → nạp lại toàn bộ, bản RAM cũ vẫn phục vụ. |
+| **Phiên upload** (module `media`, M7 P1–P3, [module 12](features/12-feature-media.md)) | `media_uploads`: một doc mỗi object S3 (`state` 1 `uploading`, 2 `uploaded`, 3 `aborted`, `ver`, cỡ khai, cỡ phần, số phần, `upload_id`, `dim`, `dur`, `hash`, `bucket`, `attached_at`, `retired_at`); cặp tin–file `media_message_files` (P3, khuôn `mentions`) | `StartUpload` insert `w:majority` sau khi mở multipart (kèm `dim`, `dur`); `CompleteUpload`/`AbortUpload` CAS `{_id, state, ver}` với giờ `$$NOW` (`hash` ghi trong cùng lệnh sang `uploaded`); chuyển file CAS `{_id, ver}` đặt `bucket`, `attached_at`; cặp upsert `$setOnInsert`, xoá tin → `state = 2`; `retired_at` đặt khi chưa có, gỡ khi có cặp mới; thua CAS → Nak hoặc đọc lại, không retry nội bộ | Không phát event; P3 đọc `msg_created`/`msg_deleted` qua consumer `media` | `CompleteUpload` gọi lại an toàn (`NoSuchUpload` → `HeadObject`); phiên mất doc do luật bucket huỷ sau 1 ngày; consumer `media` Nak theo bậc lùi, mọi lệnh idempotent, `/app resync` phát lại `msg_created` (MD2) |
+| **Object ghi một lần** (S3, M7 P1–P3) | File trong bucket `processing`; file đã gắn tin được copy server-side sang `completed` cùng khoá rồi xoá bản cũ (P3) | Máy PUT từng phần bằng URL ký ghim `Content-Length`; server đóng phiên bằng ETag máy gửi rồi kiểm tổng cỡ | Không | Không có giá trị dẫn xuất; cỡ lệch → xoá object, phiên `aborted` |
 
 ---
 
@@ -100,13 +102,13 @@ Mọi thiết kế và dòng code trong `chatim` bắt buộc phải tuân thủ
 
 ### 5.1 Các Collection chính trong MongoDB
 
-Mọi collection dùng tên tiếng Anh đầy đủ (D96), ngoại trừ `messages` dùng tên ngắn để tiết kiệm bộ nhớ cache RAM của MongoDB.
+Field mới ở mọi collection dùng tên ngắn đọc được hoặc viết tắt quen thuộc (`dim`, `dur`, `mime`, `hash`), không dùng mã 1–2 ký tự (owner 2026-11-07, thay một phần D96). Field đã có giữ tên cũ: các collection dùng tên tiếng Anh đầy đủ (D96), `messages` dùng tên 1–2 ký tự để tiết kiệm bộ nhớ cache RAM của MongoDB.
 
 Cờ event chờ phát (M3.1, D142–D149): 7 collection `messages`, `message_edits`, `message_interactions`, `pin_actions`, `members`, `hidden`, `rooms` có thêm hai field nội bộ `_state` (int32 bitmask, mỗi bit một event đã ghi DB nhưng chưa chắc vào NATS) và `_state_at` (lúc bật bit cũ nhất, `$min`; insert lấy giờ của doc, update lấy giờ server `$$NOW`). Hết bit thì cả hai field bị `$unset`, nên doc đã phát xong không tốn thêm byte. Mỗi collection có partial index `state_pending {_state_at: 1, _id: 1}` chỉ chứa doc còn `_state`. Proto không đọc hai field này. Bảng bit: [Module 10](features/10-feature-data-reconciliation-and-repair.md#31-bit-theo-collection).
 
 | Collection | Cấu trúc `_id` (Khoá nhị phân) | Lớp dữ liệu | Index phụ bắt buộc | Vai trò & Trạng thái |
 |---|---|---|---|---|
-| `messages` (clustered) | 24B `room│thread│seq` | Fact + Projection + Aggregate | **Không có index phụ** (ngoại lệ: partial `state_pending`, D148) | Toàn bộ tin nhắn (tên field ngắn: `f`, `x`, `ts`, `v`, `rx`, `rc`, `rp`, `fw`, `mt`, `ma`, `k`, `nu`, `m`). |
+| `messages` (clustered) | 24B `room│thread│seq` | Fact + Projection + Aggregate | **Không có index phụ** (ngoại lệ: partial `state_pending`, D148) | Toàn bộ tin nhắn (tên field ngắn: `f`, `x`, `ts`, `v`, `rx`, `rc`, `rp`, `fw`, `mt`, `ma`, `k`, `nu`, `m`; đính kèm `files: [{key, name, mime, size, dim, dur, hash}]`, M7 P2, bất biến khi sửa, `$unset` khi xoá). |
 | `message_edits` (clustered) | 28B `room│thread│seq│ver` | Fact | `{room_id, created_at}` | Lịch sử sửa/xoá nội dung, dòng `ver 0` lưu bản gốc. |
 | `pin_actions` (clustered) | 16B `room│pin_ver` | Fact | `{room_id, created_at}` | Fact các lần ghim/bỏ ghim tin nhắn. |
 | `rooms` | 8B `int64` | Metadata + Projection + Aggregate | `{activity_bucket}`, `{created_at}` | Thông tin phòng, số thành viên, `last_edit_at`, `dm_key`. |
@@ -120,6 +122,8 @@ Cờ event chờ phát (M3.1, D142–D149): 7 collection `messages`, `message_ed
 | `reply_threads` (clustered) | 24B `room│thread│seq` tin cha | Projection (D130) | `{room_id, last_reply_at, _id}` | Bảng tóm tắt thread và tin trả lời mới nhất. |
 | `hidden` | `ObjectId` | Fact thưa | `{user_id, room_id, thread_root, seq}` unique | Danh sách tin ẩn theo từng người đọc. |
 | `sweeper_state` | tên collection (`"messages"`…) | Vận hành (M3.1) | Không có | Mốc quét của sweeper mỗi collection `{checkpoint, updated_at}`, ghi `w:majority`, chỉ tiến. Thay `reconciler_state` (đã bỏ; DB cũ còn collection này thì xoá tay). |
+| `media_uploads` (clustered) | chuỗi = khoá object `tenant/user/yyyymmdd/random` | Phiên upload (module `media`) | `{tenant_id, user_id, state, _id: -1}` (gallery của chính người upload) | Phiên upload nhiều phần (M7 P1); `bucket` (`processing`/`completed`, thiếu = `processing`), `attached_at`, `retired_at` (dấu không còn tin nào dùng, M7 P3); chỉ module `media` ghi. |
+| `media_message_files` (clustered) | chuỗi `{khoá tin}\|{khoá file}` | Tập theo event của module (khuôn `mentions`, D115), module `media` ghi | `{tenant_id, message_key, state}`, `{file_key, state, message_key}` | Tin nào dùng file nào (M7 P3); `state` 1 còn, 2 tin đã xoá (xoá mềm, `deleted_at`). |
 
 **Mã hoá khoá (`pkg/keys`):** các field uint64 ghi big-endian rồi nối liền, nên thứ tự byte trùng thứ tự số; một trang lịch sử bất kỳ, kể cả trang cũ nhất, là một range scan.
 - `message_edits`: khoá tin cộng version uint32 (28B).
@@ -168,7 +172,7 @@ flowchart TD
 
     subgraph Platform["Hạ tầng Nền tảng chatim"]
         AppWebsocket["App websocket (gws, 12 lệnh ghi realtime)"]
-        AppGateway["App gateway (HTTPS Connect, 22 lệnh đọc và quản lý)"]
+        AppGateway["App gateway (HTTPS Connect, 22 lệnh đọc và quản lý, config, upload media)"]
         AppChat["Chat (Business Logic & Storage Engine)"]
         NATS[("NATS JetStream<br/>CHATIM_EVT, CHATIM_TIMER, CHATIM_WS")]
         RedisState[("Redis State<br/>Slot soft-leases")]
@@ -282,7 +286,7 @@ Biến môi trường, cổng, metric và lệnh vận hành của từng app: [
 
 ### 7.2 Vòng đời Chat (Lifecycle & Graceful Shutdown)
 - **Thứ tự Boot:** Publisher → Hàng xoá cờ (`stateclear`) → Flusher → CID Batcher → Slot Router → Slot Manager → Consumer phiếu hẹn (`timer-due`) → Consumer `projections` → Consumer `mention` (Mention App, khi `MENTION_ENABLED`) → Sweeper (chỉ làm việc khi giữ slot 0) → Watchers (`memberwatch`, `roomcache.Watch`, watch tập nhóm theo room) → Mở cổng gRPC (`ChatService` và `MentionService`). Trước đó `prepare` chạy bootstrap của Mention App, tạo `CHATIM_WS` và consumer `mention`.
-- **Thứ tự Dừng:** Bật `/readyz` false → Drain gRPC → Dừng Sweeper → Dừng Consumer projection và Consumer `mention` song song → Dừng Consumer phiếu hẹn → Unsubscribe Watchers → Dừng Router → Flush CID Batcher → Flusher → Publisher → Xả hàng xoá cờ (1s; phần còn lại sweeper phát bù) → Nhả Slots → Đóng Clients (kế hoạch mặc định 29,7s trong `CHAT_SHUTDOWN_BUDGET = 30s`; pha projection và `mention` dài `max(PROJECTION_FETCH_WAIT, MENTION_FETCH_WAIT)` + 1s = 4s, consumer phiếu hẹn 500ms + 1s, vì lần fetch dở không huỷ được).
+- **Thứ tự Dừng:** Bật `/readyz` false → Drain gRPC → Dừng Sweeper → Dừng Consumer projection, Consumer `mention` và Consumer `media` song song → Dừng Consumer phiếu hẹn → Unsubscribe Watchers → Dừng Router → Flush CID Batcher → Flusher → Publisher → Xả hàng xoá cờ (1s; phần còn lại sweeper phát bù) → Nhả Slots → Đóng Clients (kế hoạch mặc định 29,7s trong `CHAT_SHUTDOWN_BUDGET = 30s`; pha projection và `mention` dài `max(PROJECTION_FETCH_WAIT, MENTION_FETCH_WAIT)` + 1s = 4s, consumer phiếu hẹn 500ms + 1s, vì lần fetch dở không huỷ được).
 - **CLI Subcommands:** `/app resync` (bật lại cờ `_state` của doc trong khoảng để sweeper phát lại; sau khi purge stream phải chờ qua `EVT_STREAM_DUPLICATES`, D155) và `/app recount -room ID` (đếm lại `member_count`, CAS kèm bit 2, publish rồi xoá cờ).
 
 ### 7.3 Quy ước ghi DB ngoài chat
@@ -308,6 +312,8 @@ Mỗi cam kết hệ thống bắt buộc phải đi kèm với Detector đo lư
 | **DM1** | Mỗi cặp user chỉ có 1 room DM | Sổ nhận chỗ `room_dms` `$setOnInsert` theo `_id` | Chưa có detector (đúng nhờ `_id` duy nhất của `room_dms`, không có metric riêng) |
 | **MB1-MB5** | Nhất quán danh sách thành viên & Quyền hạn | BulkWrite upsert + Transaction đổi owner + NATS `memberwatch` | `member_cache_forgets_total`, `counter_repaired_total{counter="members"}` |
 | **SQ1** | Không tạo lỗ seq tùy tiện | Actor giữ dirty state khi gặp lỗi chưa rõ kết quả, nhớ lần ghi theo (user, cid) tới hết `CID_PENDING_TTL` | Chưa có detector (actor không xuất số lần dirty hay số lần ghi chưa rõ kết quả) |
+| **MD1** | Media lỗi (config, bucket, key, S3) không làm dừng chat; máy biết media có dùng được không | Module kiểm `HeadBucket` hai bucket lúc khởi động và định kỳ, chưa sẵn sàng thì `GetClientConfig` trả `media.enabled = false`, lệnh upload `UNAVAILABLE` | `chatim_media_ready`, `chatim_media_storage_operations_total{operation, result}`<br/>Alert: `ChatimMediaNotReady`, `ChatimMediaStorageErrors` |
+| **MD2** | File đã gắn tin được chuyển sang `completed` trước khi luật 30 ngày của `processing` xoá nó | Consumer `media` trên `CHATIM_EVT` chuyển file khi `msg_created` có file; lỗi thì Nak theo bậc lùi, không retry nội bộ | `chatim_media_lag_seconds`, `chatim_media_stuck_total`, `chatim_media_moves_total{result}`, `chatim_media_dropped_total{reason}`<br/>Alert: `ChatimMediaLagging`, `ChatimMediaFailing` |
 
 ### 8.1 Hợp đồng cho consumer event (D156)
 
@@ -317,7 +323,7 @@ Mỗi cam kết hệ thống bắt buộc phải đi kèm với Detector đo lư
 - **`msg_created`:** bỏ nếu đã có đúng seq đó; thấy lỗ (seq > seq cuối + 1) thì gọi `GetHistory` để lấp.
 - **Không bao giờ** dùng luật "seq ≤ seq cuối đã thấy thì bỏ": tin phát bù sẽ mất.
 - Chỉ trạng thái cuối của doc tập và số đếm được bảo đảm; event trung gian có thể không bao giờ được phát bù.
-- **Chỉ đăng ký đúng subject cần** ([events.md](./events.md)). `msg_created` của tin có mention nằm ở loại data `mention` (D170): ai lọc đúng `evt.*.message.*.msg_created` sẽ bỏ sót nó.
+- **Chỉ đăng ký đúng subject cần** ([events.md](./events.md)). `msg_created` của tin có mention nằm ở loại data `mention` (D170), của tin có file mà không mention ở loại `media` (owner 2026-11-08): ai lọc đúng `evt.*.message.*.msg_created` sẽ bỏ sót chúng.
 - Stream chỉ bỏ trùng trong `EVT_STREAM_DUPLICATES` (5 phút); bản phát lại sau đó (projection lỗi lâu, resync) phải được consumer bỏ theo luật trên.
 
 ---
@@ -338,7 +344,8 @@ Toàn bộ chi tiết kỹ thuật vận hành (How-It-Works), sơ đồ Mermaid
 | **08** | History & Reconnect Sync | [08-feature-history-retrieval-and-sync.md](./features/08-feature-history-retrieval-and-sync.md) | Phân trang theo `seq` (`LATEST`/`OLDEST`/`BEFORE`/`AFTER`/`AROUND`), View pipeline che tin nhạy cảm. |
 | **09** | Realtime Delivery & Ephemeral | [09-feature-realtime-delivery-and-ephemeral.md](./features/09-feature-realtime-delivery-and-ephemeral.md) | WebSocket gws, dynamic interest routing NATS, typing/presence. |
 | **10** | Reconciliation & Self-Healing | [10-feature-data-reconciliation-and-repair.md](./features/10-feature-data-reconciliation-and-repair.md) | Cờ `_state` trên doc, xoá cờ sau PubAck, sweeper slot 0, consumer `projections` (2 handler), phiếu hẹn `CHATIM_TIMER`, resync/recount. |
-| **11** | HTTPS Gateway | [11-feature-https-gateway.md](./features/11-feature-https-gateway.md) | App `gateway` (D198): 22 lệnh đọc và quản lý qua HTTPS (Connect), Bearer JWT, node chat bất kỳ round robin, giới hạn theo user, CORS.
+| **11** | HTTPS Gateway | [11-feature-https-gateway.md](./features/11-feature-https-gateway.md) | App `gateway` (D198): 22 lệnh đọc và quản lý, `GetClientConfig` và 6 lệnh media (upload, URL tải, gallery) qua HTTPS (Connect), Bearer JWT, node chat bất kỳ round robin, giới hạn theo user, CORS.
+| **12** | Media | [12-feature-media.md](./features/12-feature-media.md) | Module `media` (M7 P1–P2): upload nhiều phần thẳng lên S3 bằng URL ký, chia phần do server quyết, đóng phiên bằng ETag máy gửi, kiểm sẵn sàng thay vì chặn boot; đính kèm trong tin (field `files` của chat), URL tải ký sau khi chat kiểm quyền đọc tin, gallery file của chính mình, URL thumb suy từ khoá (thumb do Lambda của hạ tầng sinh) |
 
 ---
 

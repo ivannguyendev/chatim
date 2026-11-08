@@ -1,0 +1,163 @@
+package mongostore
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"github.com/ivannguyendev/chatim/modules/media/internal/domain"
+)
+
+type uploadDoc struct {
+	Key         string     `bson:"_id"`
+	Tenant      string     `bson:"tenant_id"`
+	User        string     `bson:"user_id"`
+	FileName    string     `bson:"file_name"`
+	ContentType string     `bson:"content_type"`
+	Size        int64      `bson:"size"`
+	Dim         []int32    `bson:"dim,omitempty"`
+	Dur         int64      `bson:"dur,omitempty"`
+	Hash        string     `bson:"hash,omitempty"`
+	PartSize    int64      `bson:"part_size"`
+	PartCount   int64      `bson:"part_count"`
+	UploadID    string     `bson:"upload_id"`
+	State       int32      `bson:"state"`
+	Ver         int64      `bson:"ver"`
+	CreatedAt   time.Time  `bson:"created_at"`
+	CompletedAt *time.Time `bson:"completed_at,omitempty"`
+	UpdatedAt   time.Time  `bson:"updated_at"`
+	Bucket      string     `bson:"bucket,omitempty"`
+	AttachedAt  *time.Time `bson:"attached_at,omitempty"`
+	RetiredAt   *time.Time `bson:"retired_at,omitempty"`
+}
+
+type Uploads struct {
+	coll *mongo.Collection
+}
+
+func NewUploads(db *mongo.Database) *Uploads {
+	return &Uploads{coll: db.Collection(uploadsCollection)}
+}
+
+func (s *Uploads) Insert(ctx context.Context, u domain.Upload) error {
+	_, err := s.coll.InsertOne(ctx, toDoc(u))
+	switch {
+	case hasCode(err, duplicateKeyCode):
+		return domain.ErrRetryLater
+	case err != nil:
+		return fmt.Errorf("insert upload: %w", err)
+	}
+	return nil
+}
+
+func (s *Uploads) Get(ctx context.Context, key string) (domain.Upload, error) {
+	var d uploadDoc
+	err := s.coll.FindOne(ctx, bson.D{{Key: "_id", Value: key}}).Decode(&d)
+	switch {
+	case errors.Is(err, mongo.ErrNoDocuments):
+		return domain.Upload{}, domain.ErrUploadNotFound
+	case err != nil:
+		return domain.Upload{}, fmt.Errorf("get upload: %w", err)
+	}
+	return fromDoc(d), nil
+}
+
+func (s *Uploads) Transition(ctx context.Context, key string, from domain.State, fromVer int64, to domain.State, hash string) (domain.Upload, error) {
+	set := bson.D{
+		{Key: "state", Value: bson.D{{Key: "$literal", Value: int32(to)}}},
+		{Key: "ver", Value: bson.D{{Key: "$add", Value: bson.A{"$ver", int64(1)}}}},
+		{Key: "updated_at", Value: "$$NOW"},
+	}
+	if to == domain.StateUploaded {
+		set = append(set, bson.E{Key: "completed_at", Value: "$$NOW"})
+		if hash != "" {
+			set = append(set, bson.E{Key: "hash", Value: bson.D{{Key: "$literal", Value: hash}}})
+		}
+	}
+	filter := bson.D{{Key: "_id", Value: key}, {Key: "state", Value: int32(from)}, {Key: "ver", Value: fromVer}}
+	var d uploadDoc
+	err := s.coll.FindOneAndUpdate(ctx, filter, mongo.Pipeline{{{Key: "$set", Value: set}}},
+		options.FindOneAndUpdate().SetReturnDocument(options.After)).Decode(&d)
+	switch {
+	case errors.Is(err, mongo.ErrNoDocuments):
+		return domain.Upload{}, domain.ErrRetryLater
+	case err != nil:
+		return domain.Upload{}, fmt.Errorf("transition upload: %w", err)
+	}
+	return fromDoc(d), nil
+}
+
+func (s *Uploads) ListOwned(ctx context.Context, tenant, user, before string, kinds domain.Kinds, limit int) ([]domain.Upload, error) {
+	filter := ownedFilter(tenant, user, before, kinds)
+	opts := options.Find().SetSort(bson.D{{Key: "_id", Value: -1}}).SetLimit(int64(limit)).SetHint(uploadsByOwner)
+	cur, err := s.coll.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, fmt.Errorf("list owned uploads: %w", err)
+	}
+	var docs []uploadDoc
+	if err := cur.All(ctx, &docs); err != nil {
+		return nil, fmt.Errorf("list owned uploads: %w", err)
+	}
+	out := make([]domain.Upload, len(docs))
+	for i, d := range docs {
+		out[i] = fromDoc(d)
+	}
+	return out, nil
+}
+
+func ownedFilter(tenant, user, before string, kinds domain.Kinds) bson.D {
+	filter := bson.D{{Key: "tenant_id", Value: tenant}, {Key: "user_id", Value: user}, {Key: "state", Value: int32(domain.StateUploaded)}}
+	if before != "" {
+		filter = append(filter, bson.E{Key: "_id", Value: bson.D{{Key: "$lt", Value: before}}})
+	}
+	if kinds.All() {
+		return filter
+	}
+	included, excluded := kinds.Families()
+	if kinds.Other {
+		return append(filter, bson.E{Key: "content_type", Value: bson.D{{Key: "$not", Value: familyPattern(excluded)}}})
+	}
+	return append(filter, bson.E{Key: "content_type", Value: familyPattern(included)})
+}
+
+func familyPattern(families []string) bson.Regex {
+	return bson.Regex{Pattern: "^(" + strings.Join(families, "|") + ")/"}
+}
+
+func toDoc(u domain.Upload) uploadDoc {
+	return uploadDoc{
+		Key: u.Key, Tenant: u.Tenant, User: u.User, FileName: u.FileName, ContentType: u.ContentType,
+		Size: u.Size, Dim: u.Dim, Dur: u.Dur, Hash: u.Hash, PartSize: u.PartSize, PartCount: int64(u.PartCount), UploadID: u.UploadID,
+		State: int32(u.State), Ver: u.Ver, CreatedAt: u.CreatedAt, UpdatedAt: u.UpdatedAt,
+		Bucket: string(u.Bucket), CompletedAt: timeOrNil(u.CompletedAt), AttachedAt: timeOrNil(u.AttachedAt), RetiredAt: timeOrNil(u.RetiredAt),
+	}
+}
+
+func fromDoc(d uploadDoc) domain.Upload {
+	return domain.Upload{
+		Key: d.Key, Tenant: d.Tenant, User: d.User, FileName: d.FileName, ContentType: d.ContentType,
+		Size: d.Size, Dim: d.Dim, Dur: d.Dur, Hash: d.Hash, PartSize: d.PartSize, PartCount: int(d.PartCount), UploadID: d.UploadID,
+		State: domain.State(d.State), Ver: d.Ver, CreatedAt: d.CreatedAt.UTC(), UpdatedAt: d.UpdatedAt.UTC(),
+		Bucket: domain.Bucket(d.Bucket), CompletedAt: timeOf(d.CompletedAt), AttachedAt: timeOf(d.AttachedAt), RetiredAt: timeOf(d.RetiredAt),
+	}
+}
+
+func timeOrNil(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
+}
+
+func timeOf(t *time.Time) time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	return t.UTC()
+}

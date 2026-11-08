@@ -26,6 +26,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/ivannguyendev/chatim/apps/gateway/internal/config"
+	"github.com/ivannguyendev/chatim/apps/gateway/internal/ratelimit"
 	"github.com/ivannguyendev/chatim/pkg/auth/authtest"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 	"github.com/ivannguyendev/chatim/pkg/pb/chatim/v1/chatimv1connect"
@@ -141,6 +142,10 @@ func testConfig(t *testing.T, keysFile string, nodes ...string) config.Config {
 		ListenAddr: "api", AdminAddr: "admin", Redis: config.StateRedis{Addr: nodeTable(t, nodes...)},
 		JWTKeysFile: keysFile, JWTIssuer: testIssuer, JWTAudience: testAudience, JWTLeeway: time.Second,
 		BodyMax: 128 << 10, UserRate: 50, UserBurst: 100, UserInflight: 32, UserLimiters: 1000, InflightMax: 100,
+		PartURLLimits: config.PartURLLimits{
+			User: ratelimit.Limit{Count: 2, Window: time.Second}, UserIP: ratelimit.Limit{Count: 1, Window: time.Second},
+			Device: ratelimit.Limit{Count: 1, Window: 5 * time.Second},
+		},
 		DrainDelay: 100 * time.Millisecond, ShutdownBudget: 15 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: time.Minute,
 		MaxHeaderBytes: 16 << 10, H2MaxStreams: 250, RequestDeadline: 5 * time.Second, Identity: authtest.SyncConfig(),

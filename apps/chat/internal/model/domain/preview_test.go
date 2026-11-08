@@ -1,6 +1,8 @@
 package domain_test
 
 import (
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -20,7 +22,7 @@ func TestChoosePreviewTakesTheNewestVisibleMessage(t *testing.T) {
 	list := previews(40, 45)
 	got, ok := domain.ChoosePreview(list, domain.RoomViewer{User: "minh", Hidden: hidden(45, 44)})
 	want := domain.RoomPreview{Seq: 43, From: "lan", Kind: domain.KindText, Text: list[2].Text, CreatedAt: list[2].CreatedAt}
-	if !ok || got != want {
+	if !ok || !reflect.DeepEqual(got, want) {
 		t.Fatalf("ChoosePreview = %+v, %v; want %+v", got, ok, want)
 	}
 	list[2].Hidden = true
@@ -33,12 +35,36 @@ func TestChoosePreviewKeepsDeletedAndEditedFlags(t *testing.T) {
 	list := previews(44, 45)
 	list[0].Deleted, list[0].EditedAt, list[0].Text, list[0].Meta = true, unreadBase, "gone", []byte("x")
 	got, ok := domain.ChoosePreview(list, domain.RoomViewer{User: "minh"})
-	if want := (domain.RoomPreview{Seq: 45, From: "lan", Kind: domain.KindText, CreatedAt: list[0].CreatedAt, Deleted: true}); !ok || got != want {
+	if want := (domain.RoomPreview{Seq: 45, From: "lan", Kind: domain.KindText, CreatedAt: list[0].CreatedAt, Deleted: true}); !ok || !reflect.DeepEqual(got, want) {
 		t.Fatalf("deleted preview = %+v, %v; want %+v", got, ok, want)
 	}
 	list[0].Deleted = false
 	if got, _ := domain.ChoosePreview(list, domain.RoomViewer{User: "minh"}); !got.Edited || got.Text != "gone" {
 		t.Fatalf("edited preview = %+v, want Edited and the text", got)
+	}
+}
+
+func TestChoosePreviewCopiesTheFileMimes(t *testing.T) {
+	list := previews(44, 45)
+	list[0].Text = ""
+	list[0].Attachments = []domain.Attachment{
+		{Key: "acme/lan/a", Name: "a.jpg", Mime: "image/jpeg", Size: 10, Dim: []int32{4, 3}, Hash: "sha256:x"},
+		{Key: "acme/lan/b", Name: "b.pdf", Mime: "application/pdf", Size: 20},
+	}
+	got, ok := domain.ChoosePreview(list, domain.RoomViewer{User: "minh"})
+	if !ok || !slices.Equal(got.FileMimes, []string{"image/jpeg", "application/pdf"}) || got.Text != "" {
+		t.Fatalf("preview = %+v, %v; want the two mimes and no text", got, ok)
+	}
+	list[0].Attachments[0].Mime = "image/png"
+	if got.FileMimes[0] != "image/jpeg" {
+		t.Fatalf("FileMimes shares the message: %v", got.FileMimes)
+	}
+	if plain, _ := domain.ChoosePreview(list[1:], domain.RoomViewer{User: "minh"}); plain.FileMimes != nil {
+		t.Fatalf("text-only preview FileMimes = %v, want nil", plain.FileMimes)
+	}
+	list[0].Deleted = true
+	if gone, _ := domain.ChoosePreview(list, domain.RoomViewer{User: "minh"}); gone.Seq != 45 || gone.FileMimes != nil {
+		t.Fatalf("deleted preview = %+v, want seq 45 and no mimes", gone)
 	}
 }
 
@@ -49,10 +75,10 @@ func TestChoosePreviewSkipsClearedHistory(t *testing.T) {
 		t.Fatalf("after clear = %+v, %v; want 10", got, ok)
 	}
 	cleared.Hidden = hidden(10, 9)
-	if got, ok := domain.ChoosePreview(list, cleared); ok || got != (domain.RoomPreview{}) {
+	if got, ok := domain.ChoosePreview(list, cleared); ok || !reflect.DeepEqual(got, domain.RoomPreview{}) {
 		t.Fatalf("nothing visible = %+v, %v; want empty", got, ok)
 	}
-	if got, ok := domain.ChoosePreview(nil, cleared); ok || got != (domain.RoomPreview{}) {
+	if got, ok := domain.ChoosePreview(nil, cleared); ok || !reflect.DeepEqual(got, domain.RoomPreview{}) {
 		t.Fatalf("no previews = %+v, %v; want empty", got, ok)
 	}
 }

@@ -31,6 +31,7 @@ const (
 const (
 	dataMessage = "message"
 	dataMention = "mention"
+	dataMedia   = "media"
 	dataRoom    = "room"
 	dataMember  = "member"
 	kindAdded   = "member_added"
@@ -47,7 +48,7 @@ type rule struct {
 var decodeOptions = proto.UnmarshalOptions{DiscardUnknown: true}
 
 var kinds = map[string]rule{
-	"msg_created":              {toMembers, []string{dataMessage, dataMention}, nil},
+	"msg_created":              {toMembers, []string{dataMessage, dataMention, dataMedia}, nil},
 	"msg_edited":               {toMembers, []string{dataMessage}, nil},
 	"msg_deleted":              {toMembers, []string{dataMessage}, nil},
 	"room_created":             {toMembers, []string{dataRoom}, nil},

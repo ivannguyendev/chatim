@@ -3,6 +3,7 @@ package app
 import (
 	"github.com/ivannguyendev/chatim/apps/chat/internal/config"
 	"github.com/ivannguyendev/chatim/apps/chat/internal/store/mongostore"
+	"github.com/ivannguyendev/chatim/modules/media/mediaapp"
 	"github.com/ivannguyendev/chatim/modules/mention/mentionapp"
 	"github.com/ivannguyendev/chatim/pkg/core/metrics"
 	"github.com/ivannguyendev/chatim/pkg/core/mongoindex"
@@ -17,6 +18,9 @@ func indexCatalog(cfg config.Config) mongoindex.Catalog {
 	cat := mongostore.Indexes()
 	if cfg.Mention.Enabled {
 		cat = cat.With(mentionapp.Indexes())
+	}
+	if cfg.Media.Enabled {
+		cat = cat.With(mediaapp.Indexes())
 	}
 	return cat
 }

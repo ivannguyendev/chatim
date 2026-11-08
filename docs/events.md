@@ -1,6 +1,6 @@
 # chatim — Danh mục event
 
-> Cập nhật: 2026-11-02 (§8 feed danh bạ của `identity`, tên cũ `iam`; M6 phần 3a, PA). Trạng thái: Mention App đã merge `main` (PR #16), D162–D176 ([tóm tắt](plans/2026-10-17-mention-app-summary.md)); websocket M4 phần 2 (nhận và đẩy event, gói `WsPublish`) xây trên `feat/m4`, D189–D195 ([tóm tắt](plans/2026-10-21-m4-2-nhan-va-day-event-summary.md)); M4 phần 3 (`read_positions` thay `read_updated`), D196–D197 ([tóm tắt](plans/2026-10-22-m4-3-da-doc-va-da-xem-summary.md)); M4 phần 4 (đang gõ và online, tín hiệu riêng của websocket, §7), D199–D201 ([tóm tắt](plans/2026-10-24-m4-4-typing-va-online-summary.md)).
+> Cập nhật: 2026-11-08 (loại data `media` cho `msg_created` có file, §1; consumer `media`, M7 P3, §3; `Message.attachments` trong event tin, M7 P2, §5; §8 feed danh bạ của `identity`, tên cũ `iam`, M6 phần 3a, PA). Trạng thái: Mention App đã merge `main` (PR #16), D162–D176 ([tóm tắt](plans/2026-10-17-mention-app-summary.md)); websocket M4 phần 2 (nhận và đẩy event, gói `WsPublish`) xây trên `feat/m4`, D189–D195 ([tóm tắt](plans/2026-10-21-m4-2-nhan-va-day-event-summary.md)); M4 phần 3 (`read_positions` thay `read_updated`), D196–D197 ([tóm tắt](plans/2026-10-22-m4-3-da-doc-va-da-xem-summary.md)); M4 phần 4 (đang gõ và online, tín hiệu riêng của websocket, §7), D199–D201 ([tóm tắt](plans/2026-10-24-m4-4-typing-va-online-summary.md)).
 >
 > Tài liệu liên quan:
 > - Nguồn sự thật cơ chế: [thiết kế](architecture.md) §8.1 (hợp đồng consumer) và [Module 10](features/10-feature-data-reconciliation-and-repair.md) (cờ `_state`, sweeper, projection).
@@ -25,13 +25,15 @@ Tín hiệu đang gõ và online không phải event dữ liệu, không vào st
 - `member`: trạng thái của một người trong room.
 - `message`: một tin.
 - `mention` (D170): `msg_created` của tin có mention (`mt` khác rỗng hoặc `ma`), tách riêng để Mention App chỉ nhận tin cần xử lý.
+- `media` (owner 2026-11-08): `msg_created` của tin có đính kèm (`attachments` khác rỗng) mà không có mention, tách riêng để consumer `media` không phải nhận mọi tin. Mention đi trước: tin vừa có mention vừa có file đi `mention`. Tin đã xoá không còn đính kèm và tin hệ thống không được kèm file, nên cả hai đi `message`. Không thêm field nào vào tin; chat chọn loại data từ `Message` trong event (`publish.subjectFor`, cùng hàm cho lệnh, sweeper và `/app resync`).
 
-Consumer đăng ký bằng wildcard (`evt.>`, `live.{t}.*.{rid}.>`) nhận cả `message` lẫn `mention`, không cần đổi gì. Mọi thứ của một room là `live.{t}.*.{rid}.>`. Chat không có subject theo user và không chọn người nhận (P3); payload mang `user` để app phân phối tự định tuyến. Kind lạ không được publish (`publish.subjectFor` từ chối).
+Consumer đăng ký bằng wildcard (`evt.>`, `live.{t}.*.{rid}.>`) nhận cả `message`, `mention` lẫn `media`, không cần đổi gì. Mọi thứ của một room là `live.{t}.*.{rid}.>`. Chat không có subject theo user và không chọn người nhận (P3); payload mang `user` để app phân phối tự định tuyến. Kind lạ không được publish (`publish.subjectFor` từ chối).
 
 Ví dụ: Lan gửi "chào cả nhà" vào room 777 của tenant `t1`.
 - Event: `evt.t1.message.777.msg_created`, id `777-0-41`.
 - Bản live: `live.t1.message.777.evt.msg_created`.
 - Nếu tin là "@Minh xem giúp" thì subject là `evt.t1.mention.777.msg_created`; id không đổi.
+- Nếu tin chỉ kèm ảnh (không mention) thì `evt.t1.media.777.msg_created`; "@Minh xem ảnh" kèm ảnh vẫn là `mention`.
 
 ## 2. Chat phát gì
 
@@ -55,7 +57,7 @@ Nếu publish lỗi, sweeper trên chat giữ slot 0 phát lại từ doc hiện
 | `history_cleared` | `member` | `{room}-cl-{user}-{cleared_at ms}` | `ClearHistory` | lệnh, sweeper |
 | `bookmark_changed` | `member` | `{room}-bm-{thread}-{seq}-{user}-v{ver}` | `SetBookmark` | lệnh, sweeper |
 | `room_preferences_changed` | `member` | `{room}-pf-{user}-v{preference_ver}` | `SetRoomPreferences` (ghim, tắt thông báo, lưu trữ) | lệnh, sweeper |
-| `msg_created` | `message`; `mention` nếu bản chụp tin có mention | `{room}-{thread}-{seq}` | `SendMessage`, tin hệ thống, forward | lệnh, sweeper |
+| `msg_created` | `message`; `mention` nếu bản chụp tin có mention; không mention mà có đính kèm thì `media` | `{room}-{thread}-{seq}` | `SendMessage`, tin hệ thống, forward | lệnh, sweeper |
 | `msg_edited`, `msg_deleted` | `message` | `{room}-{thread}-{seq}-v{ver}` | `EditMessage`, `DeleteMessage`; mang `previous_mentions` (đích của phiên bản trước, D173) | lệnh, sweeper |
 | `reaction_changed` | `message` | `{room}-{thread}-{seq}-{user}-n{số lần đổi}` | `ReactMessage` | lệnh, sweeper |
 | `counts_changed` | `message` | `{room}-{thread}-{seq}-reactions-v{v}` hoặc `…-replies-v{v}` | đổi số reaction; đổi số trả lời | lệnh (reaction), projection reply (trả lời), phiếu hẹn (sửa số), sweeper |
@@ -70,6 +72,7 @@ Nếu publish lỗi, sweeper trên chat giữ slot 0 phát lại từ doc hiện
 | Chat `roomcache.Watch` (mọi node chat) | core NATS `live` | `room_updated`, `member_count_changed` | quên cache thông tin room |
 | Mention App, watch tập nhóm theo room (mọi node chat, D172) | core NATS `live.*.member.*.evt.{kind}` | `member_added`, `member_removed` | quên tập nhóm của room (cache gợi ý `@nhóm`) |
 | **Mention App** | durable `mention`, queue group: mọi pod/chat cùng kéo, mỗi event tới một pod, lô 512/250ms mỗi pod, 8 worker, lọc đúng 3 subject: `evt.*.mention.*.msg_created`, `evt.*.message.*.msg_edited`, `evt.*.message.*.msg_deleted` | 3 kind đó | ghi `mentions`, `mention_rooms`; bung `@nhóm`/`@all`; phát gói `WsPublish` `mention_notified`/`mention_retracted` vào `websocket.publish.{t}` |
+| **Media** (module `modules/media`, M7 P3, [module 12 §8](features/12-feature-media.md#8-chuyển-file-đã-gắn-tin-sang-completed-p3)) | durable `media`, mọi node chat cùng kéo (mỗi event tới một node), chỉ kéo khi media sẵn sàng, nhận liên tục (mỗi lần kéo một nửa `MaxAckPending` 1024), mỗi event một goroutine và Ack ngay khi xong, tối đa 1024 event chưa Ack mỗi node, event của cùng một tin chạy lần lượt; lọc đúng 3 subject: `evt.*.media.*.msg_created`, `evt.*.mention.*.msg_created` (tin vừa mention vừa có file nằm ở đây), `evt.*.message.*.msg_deleted` | `msg_created` (chỉ khi có `attachments`; tin `mention` không file Ack ngay), `msg_deleted` | ghi `media_message_files`, `media_uploads.bucket/attached_at/retired_at`; copy file và thumb `processing` → `completed`. Xong hoặc bỏ (tin, upload không còn) → Ack; event hỏng → Term; file còn `uploading` → Nak chờ theo bậc lùi; lỗi S3, Mongo, CAS → Nak theo bậc lùi, không retry nội bộ |
 | Websocket M4 (mọi node, §3.1) | mỗi node hai ordered consumer: `CHATIM_EVT` filter `evt.>` và `CHATIM_WS` filter `websocket.publish.>`, bắt đầu ở seq cuối + 1 | 19 kind của bảng §3.1 (gồm `read_positions`); gói `WsPublish` | đẩy realtime tới máy đang nối vào node đó; không biết thông báo là gì |
 | App notification + push Phase 2 (chưa xây) | hộp thư `notify.{t}.{kind}` | thông báo | lọc tắt thông báo; `WsPublish` vào `websocket.publish.{t}` cho người online, APNs/FCM cho người offline |
 
@@ -79,7 +82,7 @@ Mỗi node websocket một kết nối NATS, hai **ordered consumer** (không du
 
 | Kind | Loại data | Ai trên node nhận |
 |---|---|---|
-| `msg_created` | `message`, `mention` | mọi thành viên room đang online (mức thành viên) |
+| `msg_created` | `message`, `mention`, `media` | mọi thành viên room đang online (mức thành viên) |
 | `msg_edited`, `msg_deleted` | `message` | mọi thành viên room đang online |
 | `room_created`, `room_updated` | `room` | mọi thành viên room đang online (`room_created` thường tới trước khi node biết thành viên nên không ai nhận; máy lấy room khi nhận `member_added` của mình) |
 | `member_added`, `member_removed` | `member` | chính người đó và kết nối đang mở room; node cập nhật danh sách room của người đó theo `ver` lớn hơn thắng (`member_added` có `ver` ≤ dấu đã rời bị bỏ); bị xoá thì gửi event trước, rồi `room_closed{removed}` |
@@ -98,7 +101,11 @@ Kind không handler nào giữ (`room_created`, `counts_changed`, `member_count_
 
 Tin không có mention không tới Mention App. Bench 2.000 tin/s với 5% tin có mention: Mention App nhận khoảng 100 event/s cộng các lần sửa/xoá, thay vì 2.000.
 
-**Sweeper phát lại `msg_created` sau khi tin đổi:** sweeper dựng event từ doc tin hiện tại. Nếu tin đã bị xoá, hoặc đã sửa bỏ hết đích, bản chụp không còn đích nên event đi loại data `message` và không tới Mention App. Đúng ý: Mention App học thay đổi đó từ `previous_mentions` của `msg_edited`/`msg_deleted`.
+Tin text thường không tới consumer `media`: nó chỉ nhận `msg_created` loại `media` và `mention` cùng `msg_deleted`.
+
+**Thứ tự triển khai loại data `media`:** websocket trước, chat sau. Websocket cũ coi `media` là loại data lạ của `msg_created`, bỏ và đếm `events_dropped_total{reason="malformed"}`, nên máy không nhận tin có file cho tới khi websocket mới chạy. Khi chat chạy lần lượt từng node, node mới đầu tiên khởi động đổi filter của durable `media` (`CreateOrUpdateConsumer` sửa filter tại chỗ, không tạo lại durable); tin có file gửi qua node cũ trong lúc đó vẫn đi `message`, consumer `media` không nhận nên file của tin đó ở lại `processing`. Xong đợt triển khai và qua cửa sổ bỏ trùng 5 phút thì chạy `/app resync -from <lúc bắt đầu> -to <lúc xong>`: sweeper phát lại `msg_created` qua `publish.subjectFor` mới nên tin có file đi `media`.
+
+**Sweeper phát lại `msg_created` sau khi tin đổi:** sweeper dựng event từ doc tin hiện tại. Nếu tin đã bị xoá, hoặc đã sửa bỏ hết đích, bản chụp không còn đích nên event đi loại data `message` và không tới Mention App (tin đã xoá cũng không còn đính kèm nên không đi `media`; consumer `media` học việc xoá từ `msg_deleted`). Đúng ý: Mention App học thay đổi đó từ `previous_mentions` của `msg_edited`/`msg_deleted`.
 
 ## 4. Thông báo
 
@@ -134,8 +141,9 @@ Chỉ gửi khi event mới hơn 5 phút (`MENTION_NOTIFY_MAX_AGE`, D169), và k
   - không bao giờ "bỏ nếu seq ≤ seq cuối".
 - Chỉ trạng thái cuối của doc tập hợp hoặc bộ đếm được bảo đảm; event trung gian có thể mất.
 - Thông báo: bỏ trùng theo `Notification.id`; với cùng tin, thông báo hoặc lệnh gỡ có `message_ver` lớn hơn thắng. Mention App xử lý song song (queue group), nên `m0`, `r1`, `m2` có thể tới theo thứ tự bất kỳ.
+- `msg_created`, `msg_edited`, `msg_deleted` mang `Message` đầy đủ nên có `Message.attachments` (đính kèm: khoá, tên, loại, cỡ, `dim`, `dur`, `hash`; không có URL, máy xin URL qua `MediaService.GetAttachmentURLs`, [module 12](features/12-feature-media.md)). Sửa tin không đổi đính kèm; `msg_deleted` có `attachments` rỗng. Không có event riêng cho file; `msg_created` có file mà không mention đi loại data `media` (§1). Projection và Mention App bỏ qua field này, consumer `media` chỉ dùng nó để biết `msg_created` có file rồi đọc lại tin từ chat (§3).
 - Mỗi đích trong tin có `at` (giờ đích xuất hiện, `MentionTarget.at`, `Message.mention_all_at`) và `msg_edited`/`msg_deleted` mang `previous_mentions`; người nhận không cần đọc lại lịch sử để biết đích nào mới thêm hay bị bỏ (D173).
-- App mới chỉ đăng ký đúng subject mình cần. Luật này ghi rõ ở đây vì `msg_created` có mention nằm ở loại data `mention`: ai lọc đúng `evt.*.message.*.msg_created` sẽ bỏ sót tin có mention.
+- App mới chỉ đăng ký đúng subject mình cần. Luật này ghi rõ ở đây vì `msg_created` có mention nằm ở loại data `mention`: ai lọc đúng `evt.*.message.*.msg_created` sẽ bỏ sót tin có mention và tin có file (loại `media`).
 
 ## 6. Sơ đồ
 
@@ -146,6 +154,8 @@ flowchart LR
   Sweeper["Sweeper slot 0<br/>phát bù cờ > 15s"] --> EVT
   EVT -->|"evt.> (mọi kind)"| Proj["Chat projections (slot 0)<br/>room_activity, reply_index"]
   EVT -->|"evt.*.mention.*.msg_created<br/>evt.*.message.*.msg_edited/deleted"| MA["Mention App (mọi pod, queue group)<br/>ghi mentions, bung nhóm"]
+  EVT -->|"evt.*.media.*.msg_created<br/>evt.*.mention.*.msg_created<br/>evt.*.message.*.msg_deleted"| Media["Module media (mọi node chat)<br/>cặp tin–file, chuyển file sang completed"]
+  Media -->|"đọc trong tiến trình: MessageFiles"| Chat
   EVT -->|RePublish| Live[("live.{t}.{loại}.{rid}.evt.{kind}")]
   Live --> Watch["Chat memberwatch, roomcache"]
   EVT -->|"ordered consumer evt.> (mỗi node)"| WS["Websocket M4<br/>lọc theo room trong RAM"]
