@@ -1,7 +1,7 @@
 # M7 phase P3: chuyển file đã gắn tin sang `completed` — tóm tắt
 
-> Ngày: 2026-11-08 · Nhánh `feat/m7` · Trạng thái: **owner duyệt 2026-11-08** · Dựa trên: D264 (hai bucket, `processing` có luật xoá 30 ngày, file mất tham chiếu chỉ đánh dấu), D266–D267, roadmap M7 P3; owner 2026-11-06: tin forward vẫn xem được file khi tin gốc bị xoá; owner 2026-11-08: file ở đâu thì thumb sinh ở đó, collection trung gian tin–file, xoá mềm, doc tin giữ đủ thông tin file (tránh 1+N)
-> **Các phase của M7:** (P1) upload nhiều phần ✅ · (P2) đính kèm trong tin, URL tải, gallery ✅ · **(P3) chuyển và dọn file**
+> Ngày: 2026-11-08 · Nhánh `feat/m7` · Trạng thái: **đã xây, `dev-done` 2026-11-08** (`5516939` → `6628979`) · Dựa trên: D264 (hai bucket, `processing` có luật xoá 30 ngày, file mất tham chiếu chỉ đánh dấu), D266–D267, roadmap M7 P3; owner 2026-11-06: tin forward vẫn xem được file khi tin gốc bị xoá; owner 2026-11-08: file ở đâu thì thumb sinh ở đó, collection trung gian tin–file, xoá mềm, doc tin giữ đủ thông tin file (tránh 1+N)
+> **Các phase của M7:** (P1) upload nhiều phần ✅ · (P2) đính kèm trong tin, URL tải, gallery ✅ · (P3) chuyển và dọn file ✅
 
 ## Scope và ranh giới
 
@@ -156,13 +156,35 @@ Consumer chạy trên mọi node; ngưỡng alert trễ (đề xuất lag > 10 p
 
 | Yêu cầu (nguồn) | Thành phần | Task | Test | Bằng chứng |
 |---|---|---|---|---|
-| File đã gắn tin chuyển sang `completed` (D264, roadmap P3) | consumer, objectstore copy | consumer; copy | unit, itest, e2e | |
-| Biết tin nào dùng file nào (roadmap P3) | `media_message_files`, cổng chat | store; cổng; consumer | storetest, unit | |
-| Không 1+N khi đọc tin và khi xử lý event (owner 2026-11-08) | doc tin giữ đủ thông tin; lệnh lô | consumer | unit, itest `explain` | |
-| Forward vẫn xem được khi tin gốc bị xoá (owner 2026-11-06) | đếm cặp sống | consumer | unit, e2e | |
-| File mất tham chiếu chỉ đánh dấu (D264) | `retired_at`, xoá mềm | consumer | unit, e2e | |
-| Event lệch thứ tự không làm sai kết quả | hỏi chat trạng thái tin, `$setOnInsert` | consumer | unit | |
-| Ký URL đúng bucket; `expired` chỉ ở `processing` | download, gallery | ký URL | unit, e2e | |
-| Thumb theo vị trí file (owner 2026-11-08) | copy thumb, hợp đồng Lambda | copy; docs | unit, itest | |
-| Metric + alert trễ consumer (roadmap P3, MD2) | probes, alerts | metrics | `make alerts-check` | |
-| File lớn hơn 5 GiB copy được | copy nhiều phần | copy | itest | |
+| File đã gắn tin chuyển sang `completed` (D264, roadmap P3) | consumer, objectstore copy | consumer; copy | unit, itest, e2e | `062db86`, `e8bc32b`; itest node chat thật: file sang `completed`, không còn ở `processing`; e2e 16: URL trỏ `completed` trong 30 s |
+| Biết tin nào dùng file nào (roadmap P3) | `media_message_files`, cổng chat | store; cổng; consumer | storetest, unit | `a4c501f`, `495a46a`; storetest memstore + Mongo; itest cổng xoá thật `$unset files` |
+| Không 1+N khi đọc tin và khi xử lý event (owner 2026-11-08) | doc tin giữ đủ thông tin; lệnh lô | consumer | unit, itest `explain` | `a4c501f`, `4f701a0`: `GetMany` 451 khoá = 3 lệnh; `explain` IXSCAN / DISTINCT_SCAN covered; tin không file 0 lệnh (fake đếm) |
+| Forward vẫn xem được khi tin gốc bị xoá (owner 2026-11-06) | đếm cặp sống | consumer | unit, e2e | itest: xoá tin gốc → file giữ ở `completed`; e2e 16 bước forward tải từ `completed` |
+| File mất tham chiếu chỉ đánh dấu (D264) | `retired_at`, xoá mềm | consumer | unit, itest | itest: xoá tin cuối → `retired_at` (không lộ qua API nên không ở e2e) |
+| Event lệch thứ tự không làm sai kết quả | hỏi chat trạng thái tin, `$setOnInsert`, thứ tự theo tin | consumer | unit | `6b58e2a`: tạo + xoá cùng tin trong một lần nhận → không cặp sống; `msg_created` cũ sau xoá mềm giữ `state 2` |
+| Ký URL đúng bucket; `expired` chỉ ở `processing` | download, gallery | ký URL | unit, e2e | `4f701a0`; e2e 16: file đã gửi ký từ `completed`, file chưa gửi từ `processing`, không `expired` |
+| Thumb theo vị trí file (owner 2026-11-08) | copy thumb, hợp đồng Lambda | copy; docs | unit, itest | `062db86` (copy thumb theo loại S3 báo); `docs/features/12` §7 |
+| Metric + alert trễ consumer (roadmap P3, MD2) | probes, alerts | metrics | `make alerts-check` | `270f441`; `make alerts-check` 42 luật |
+| File lớn hơn 5 GiB copy được | copy nhiều phần | copy | itest | `5516939`: itest Garage 12 MiB qua 3 dải `x-amz-copy-source-range`, giữ byte, cỡ, loại; lỗi giữa chừng huỷ phiên |
+| Media không nhận tin không có file (owner 2026-11-08) | loại data `media` | định tuyến | unit, e2e | `6628979`; bảng định tuyến; e2e 16: B nhận `msg_created` tin có file qua websocket; A/B chatbench CPU NATS như nhau |
+| Tin hệ thống không kèm file (owner 2026-11-08) | `ValidateSystemMessage` | kiểm | unit | `6628979`: actor và grpcsrv trả `INVALID_ARGUMENT` |
+
+## 14. Như đã xây
+
+**Kiểm cuối phase** (trên code cuối): `make fmt-check`/`vet`/`lint` sạch, `make test` 115 package, `make itest` 115 package, `make alerts-check` 42 luật, `make e2e` PASS 16 phase. Chatbench 2K tin/s A/B (cùng điều kiện, `bin/bench/m7p3-ab/`): tắt media p50/p95/p99 21,9/730/1.365 ms (máy chậm đầu lượt, pacer lag p99 78 ms), bật media 18,6/107/296 ms; CPU NATS 41–62% và 49–60%; hàng chờ `media` 0. Review: T4+T5 một reviewer, không Critical; 4 Important sửa ở `6b58e2a`.
+
+**Lệch so với bản duyệt:**
+- **Consumer kéo liên tục** (owner 2026-11-08, `c9e1276`): bỏ lối kéo theo lô có chờ 250 ms (đo được chỉ ~1.400 event/s, thấp hơn 2.000 tin/s); nay mỗi event một goroutine, chỉ giới hạn số event đang dở (`MEDIA_CONSUMER_MAX_PENDING` 1.024), event cùng tin chạy lần lượt, copy file lớn chỉ chiếm một chỗ.
+- **Loại data `media`** (owner 2026-11-08, `6628979`): `msg_created` của tin có file và không mention đi `evt.{t}.media.{room}.msg_created`; consumer media chỉ nghe `media`, `mention` và `msg_deleted`. Websocket phải triển khai trước chat.
+- **Tin hệ thống không kèm file** (owner 2026-11-08, `6628979`): thay điểm P2 "tin hệ thống được kèm file".
+- **Durable `media` tạo lần đầu chỉ nhận event mới** (`25e45b1`): phát lại 7 ngày stream không bao giờ đuổi kịp 2K tin/s; trước module media không tin nào có file.
+- **Thứ tự xoá:** đếm file còn tin khác dùng → `retired_at` → xoá mềm cặp, để lần giao lại vẫn ra đúng; index đếm là `{file_key, state, message_key}`.
+- **Copy nhiều phần tự viết** bằng `minio.Core` (không `ComposeObject`: không chỉnh được cỡ phần, đường nhiều phần làm mất Content-Type); ngưỡng `MEDIA_COPY_SINGLE_MAX`, cỡ phần `MEDIA_COPY_PART_BYTES`.
+- **Bucket `completed` cần luật huỷ phiên multipart dở sau 1 ngày** (node chết giữa lúc copy file > 5 GiB), đã thêm vào script dev (`7acd3f5`); production cần cùng luật.
+- `retired_at` kiểm ở itest, không ở e2e (không lộ qua API).
+
+**Mang sang sau:**
+- Consumer `mention` và `projections` vẫn kéo theo lô có chờ 250 ms; chưa nghẽn nhờ lô 512, nhưng cùng kiểu tự giới hạn → roadmap "Mục mang sang M5".
+- Chưa đo thời gian chuyển file 100 MiB và 4 GiB trên Garage → đo ở prod-like.
+- Hai chạy đua hẹp có thể làm sai dấu `retired_at` (thiếu hoặc thừa); chính sách xoá file sau này phải đếm lại từ doc tin.
+- Lệnh `StatObject` kiểm cỡ sau copy chưa vào `storage_operations_total`; lỗi `InvalidRange` đang đếm là lỗi kho.
