@@ -124,6 +124,21 @@ groups:
           guarantee: MD1
         annotations:
           summary: More than 5% of media S3 calls fail with storage errors.
+      - alert: ChatimMediaLagging
+        expr: max(chatim_media_lag_seconds) > 600
+        for: 15m
+        labels:
+          severity: warning
+          guarantee: MD2
+        annotations:
+          summary: The media consumer runs more than 10 minutes behind message events; attached files wait in the processing bucket, whose 30-day rule deletes them if the delay grows.
+      - alert: ChatimMediaFailing
+        expr: sum(increase(chatim_media_stuck_total[15m])) > 0
+        labels:
+          severity: warning
+          guarantee: MD2
+        annotations:
+          summary: The media consumer keeps failing an event delivered six times or more; that message's files are not moved to the completed bucket.
       - alert: ChatimSweeperIdle
         expr: sum(increase(chatim_chat_sweep_passes_total[10m])) == 0
         for: 10m

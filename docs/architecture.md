@@ -312,6 +312,7 @@ Mỗi cam kết hệ thống bắt buộc phải đi kèm với Detector đo lư
 | **MB1-MB5** | Nhất quán danh sách thành viên & Quyền hạn | BulkWrite upsert + Transaction đổi owner + NATS `memberwatch` | `member_cache_forgets_total`, `counter_repaired_total{counter="members"}` |
 | **SQ1** | Không tạo lỗ seq tùy tiện | Actor giữ dirty state khi gặp lỗi chưa rõ kết quả, nhớ lần ghi theo (user, cid) tới hết `CID_PENDING_TTL` | Chưa có detector (actor không xuất số lần dirty hay số lần ghi chưa rõ kết quả) |
 | **MD1** | Media lỗi (config, bucket, key, S3) không làm dừng chat; máy biết media có dùng được không | Module kiểm `HeadBucket` hai bucket lúc khởi động và định kỳ, chưa sẵn sàng thì `GetClientConfig` trả `media.enabled = false`, lệnh upload `UNAVAILABLE` | `chatim_media_ready`, `chatim_media_storage_operations_total{operation, result}`<br/>Alert: `ChatimMediaNotReady`, `ChatimMediaStorageErrors` |
+| **MD2** | File đã gắn tin được chuyển sang `completed` trước khi luật 30 ngày của `processing` xoá nó | Consumer `media` trên `CHATIM_EVT` chuyển file khi `msg_created` có file; lỗi thì Nak theo bậc lùi, không retry nội bộ | `chatim_media_lag_seconds`, `chatim_media_stuck_total`, `chatim_media_moves_total{result}`, `chatim_media_dropped_total{reason}`<br/>Alert: `ChatimMediaLagging`, `ChatimMediaFailing` |
 
 ### 8.1 Hợp đồng cho consumer event (D156)
 
