@@ -1,6 +1,6 @@
-# Module 12: Media — upload, đính kèm trong tin, URL tải, gallery (M7 P1–P2)
+# Module 12: Media — upload, đính kèm trong tin, URL tải, gallery, chuyển file (M7 P1–P3)
 
-> Phạm vi: M7 phase P1 ([tóm tắt](../plans/2026-11-06-m7-p1-upload-summary.md)) và P2 ([tóm tắt](../plans/2026-11-07-m7-p2-attachments-summary.md)). Chuyển và dọn file (P3) chưa có ở đây: mọi file còn ở bucket `processing`. Module `modules/media` nhúng trong chat; gateway chuyển `MediaService` và `ChatService.GetClientConfig` tới node chat bất kỳ; tin kèm file gửi qua websocket như tin thường. Vận hành: [chat](../apps/chat.md#media-module-modulesmedia), [gateway](../apps/gateway.md).
+> Phạm vi: M7 phase P1 ([tóm tắt](../plans/2026-11-06-m7-p1-upload-summary.md)), P2 ([tóm tắt](../plans/2026-11-07-m7-p2-attachments-summary.md)) và P3 ([tóm tắt](../plans/2026-11-08-m7-p3-move-files-summary.md)). File mới upload nằm ở bucket `processing`; file đã gắn vào tin được chuyển sang bucket `completed` (§8). Chưa có chính sách xoá file không còn tin nào dùng. Module `modules/media` nhúng trong chat; gateway chuyển `MediaService` và `ChatService.GetClientConfig` tới node chat bất kỳ; tin kèm file gửi qua websocket như tin thường. Vận hành: [chat](../apps/chat.md#media-module-modulesmedia), [gateway](../apps/gateway.md).
 
 ## 1. Use case
 
@@ -12,7 +12,8 @@
 | UC-MEDIA-03 | Gửi tin kèm file | Thành viên, backend tenant | `SendMessage` qua websocket với tối đa 10 đính kèm; text được rỗng khi có đính kèm; forward chép file của tin nguồn |
 | UC-MEDIA-04 | Xem và tải file trong tin | Thành viên đọc được tin | `GetAttachmentURLs` một lần cho cả màn hình (≤ 100 tin), nhận URL tải và URL thumb |
 | UC-MEDIA-05 | Gallery "file tôi đã upload" | Người upload | `ListUploads`: mọi file mình đã upload xong, mới nhất trước, lọc ảnh/video/khác, nhãn `expired` khi kho đã xoá |
-| UC-MEDIA-06 | Thumb ảnh, video | Hạ tầng | Lambda production sinh `{key}{hậu tố}` từ file gốc; server chỉ suy khoá và ký URL (§7) |
+| UC-MEDIA-06 | Thumb ảnh, video | Hạ tầng | Lambda production sinh `{key}{hậu tố}` từ file gốc, cạnh file ở bucket nào cũng vậy; server chỉ suy khoá và ký URL (§7) |
+| UC-MEDIA-07 | Giữ file đã gửi | Hệ thống | File đã gắn vào tin được chuyển sang `completed` nên không bị luật 30 ngày của `processing` xoá; biết tin nào đang dùng file nào; file không còn tin nào dùng chỉ được đánh dấu (§8) |
 
 ## 2. Luồng upload (spec client)
 
@@ -66,7 +67,7 @@ Trong doc `messages`, đính kèm nằm ở field `files: [{key, name, mime, siz
 
 **Sửa:** không đổi đính kèm; text khi sửa vẫn phải khác rỗng (thêm chú thích cho tin chỉ có ảnh được, xoá hết chú thích thì không).
 
-**Xoá cho mọi người:** `files` bị xoá cùng text; event `msg_deleted` có `attachments` rỗng. Object trong kho không bị xoá.
+**Xoá cho mọi người:** `files` bị xoá cùng text; event `msg_deleted` có `attachments` rỗng. Object trong kho không bị xoá; file không còn tin nào dùng chỉ được đánh dấu `retired_at` (§8).
 
 **Ẩn / xoá lịch sử (theo người xem):** tin ẩn hoặc trước `cleared_at` trả về không có `attachments` và `meta`.
 
@@ -77,7 +78,7 @@ Trong doc `messages`, đính kèm nằm ở field `files: [{key, name, mime, siz
 ## 5. URL tải (`MediaService.GetAttachmentURLs`)
 
 1. Máy gom các tin có `attachments` đang hiện trên màn hình (≤ 100 tin) và gọi **một lần** qua gateway: `GetAttachmentURLs{messages: [{room_id, thread, seq}, …]}`. Máy chỉ gửi khoá tin, không bao giờ gửi khoá object.
-2. Module media hỏi chat (cổng in-process `VisibleAttachments`, cùng pipeline đọc lịch sử: quyền đọc room, tin không bị xoá, không bị ẩn, sau `cleared_at`; một lần đọc mỗi room) tin nào người hỏi đọc được, rồi ký URL GET cho từng file.
+2. Module media hỏi chat (cổng in-process `VisibleAttachments`, cùng pipeline đọc lịch sử: quyền đọc room, tin không bị xoá, không bị ẩn, sau `cleared_at`; một lần đọc mỗi room) tin nào người hỏi đọc được, đọc `bucket` của các file đó trong `media_uploads` theo lô khoá (lọc `tenant_id` của người hỏi, 200 khoá mỗi lệnh), rồi ký URL GET cho từng file từ đúng bucket file đang nằm (không thấy doc upload thì ký từ `processing`).
 3. Response: `messages: [{room_id, thread, seq, files: [{key, url, thumbnail_url}]}]`, `expires_at`. Tin không đọc được, không còn hoặc không có file thì im lặng không có trong kết quả (không lộ tin tồn tại). Khoá tin trùng chỉ tính một lần.
 4. Máy cache URL tới `expires_at` (`MEDIA_DOWNLOAD_URL_TTL`, mặc định 1 giờ), hết hạn thì gọi lại.
 
@@ -86,7 +87,7 @@ URL tải là URL GET ký thường, không kèm tham số đổi header trả v
 `thumbnail_url`:
 
 - Chỉ có khi `media.thumbnails = true` **và** `mime` là `image/*` hoặc `video/*`; còn lại rỗng. Không bao giờ thay bằng URL file gốc.
-- Ký từ khoá `{key}{MEDIA_THUMBNAIL_SUFFIX}` mà không hỏi S3 object có chưa: Lambda chưa xong hoặc không sinh được thì URL trả **404**; máy hiện ảnh gốc hoặc biểu tượng và hỏi lại sau.
+- Ký từ khoá `{key}{MEDIA_THUMBNAIL_SUFFIX}` ở **cùng bucket với file** mà không hỏi S3 object có chưa: Lambda chưa xong hoặc không sinh được thì URL trả **404**; máy hiện ảnh gốc hoặc biểu tượng và hỏi lại sau.
 - URL thumb cũng là URL ký thường; S3 trả loại Lambda đặt, máy mở thẳng URL đó làm ảnh.
 
 ## 6. Gallery "file tôi đã upload" (`MediaService.ListUploads`)
@@ -98,29 +99,91 @@ URL tải là URL GET ký thường, không kèm tham số đổi header trả v
 - **Mới nhất trước:** xếp `_id` giảm dần (khoá xếp theo lúc `StartUpload`).
 - **Trang:** `page_size` 1..100. Trang đủ `page_size` mục thì có `next_before` (khoá mục cuối); gọi lại với `before = next_before`. `next_before` rỗng là hết (trang cuối có thể rỗng). `before` phải là khoá upload của chính caller (kiểm field `tenant_id`/`user_id` của doc), nếu không → `invalid_argument`.
 - **`kinds`:** `FILE_KIND_IMAGE` = `image/*`, `FILE_KIND_VIDEO` = `video/*`, `FILE_KIND_OTHER` = mọi loại khác; rỗng (hoặc đủ cả ba) = tất cả; `FILE_KIND_UNSPECIFIED` hay số lạ → `invalid_argument`.
-- **`expired`:** `created_at + MEDIA_PROCESSING_RETENTION` (mặc định 30 ngày) đã qua → `expired = true`, không có `url`/`thumbnail_url`; máy hiện "file đã hết hạn". Module tính từ doc, không gọi S3. `created_at` là lúc `StartUpload`, không muộn hơn lúc S3 mở multipart, nên nhãn có thể bật sớm hơn lúc object thật sự mất, không bao giờ trễ hơn.
-- File còn hạn có `url`, `thumbnail_url` theo đúng luật của §5, hạn tới `expires_at`.
+- **`expired`:** chỉ cho file **còn ở `processing`** có `created_at + MEDIA_PROCESSING_RETENTION` (mặc định 30 ngày) đã qua → `expired = true`, không có `url`/`thumbnail_url`; máy hiện "file đã hết hạn". File đã chuyển sang `completed` không bao giờ `expired`. Module tính từ doc, không gọi S3. `created_at` là lúc `StartUpload`, không muộn hơn lúc S3 mở multipart, nên nhãn có thể bật sớm hơn lúc object thật sự mất, không bao giờ trễ hơn.
+- File còn hạn có `url`, `thumbnail_url` theo đúng luật của §5 (ký từ bucket file đang nằm), hạn tới `expires_at`.
 
 Ví dụ: An mở tab "Ảnh của tôi": `ListUploads{kinds: [FILE_KIND_IMAGE], page_size: 30}` → 30 ảnh mới nhất và `next_before`; cuộn xuống gọi lại với `before`.
 
 ## 7. Thumb và hợp đồng Lambda (cho hạ tầng)
 
-App chỉ upload file gốc. Thumb do AWS Lambda của hạ tầng sinh ở production; dev không có Lambda nên để `MEDIA_THUMBNAILS=false` và máy không nhận `thumbnail_url`. Chat và module media không sinh thumb, không lưu gì về thumb trong DB, chỉ suy khoá thumb từ khoá file và ký URL.
+App chỉ upload file gốc. Thumb do AWS Lambda của hạ tầng sinh ở production; dev không có Lambda nên để `MEDIA_THUMBNAILS=false` và máy không nhận `thumbnail_url`. Chat và module media không sinh thumb, không lưu gì về thumb trong DB, chỉ suy khoá thumb từ khoá file, ký URL từ bucket của file, và khi chuyển file (§8) thì chuyển luôn thumb nếu nó đã có.
+
+Luật chung: **file ở đâu thì thumb sinh ở đó.** Ví dụ: An upload ảnh X lúc 9:00, Lambda sinh `X.thumb` ở `processing` lúc 9:00:02; An gửi X lúc 9:01 → module copy cả X và `X.thumb` sang `completed`. Nếu An gửi ngay lúc 9:00:01 (Lambda chưa xong) → module chỉ copy X; bản copy tạo object X ở `completed`, Lambda chạy lần nữa ở đó và sinh `X.thumb` cạnh X; thumb muộn ở `processing` bị luật 30 ngày dọn.
 
 | Mục | Hợp đồng |
 |---|---|
-| Đầu vào | Event `ObjectCreated` của bucket `processing`. Lambda **phải bỏ qua** mọi khoá kết thúc bằng hậu tố thumb, nếu không mỗi thumb lại kích Lambda một lần (vòng lặp tốn tiền) |
-| Đầu ra | Object `{key}{MEDIA_THUMBNAIL_SUFFIX}` (mặc định `.thumb`, vd. `acme/an/20261107/0cq5…h8.thumb`) **cùng bucket** với file gốc |
+| Đầu vào | Event `ObjectCreated:*` của **cả hai bucket** `processing` và `completed`. Phải là `ObjectCreated:*`, không chỉ `Put`/`CompleteMultipartUpload`: file chuyển sang `completed` được tạo bằng `CopyObject` (file ≤ 5 GiB) hoặc multipart copy (lớn hơn) |
+| Bỏ qua | Mọi khoá kết thúc bằng hậu tố thumb (nếu không mỗi thumb lại kích Lambda một lần, vòng lặp tốn tiền), và khoá đã có thumb cạnh nó (file đã chuyển kèm thumb thì không sinh lại) |
+| Đầu ra | Object `{key}{MEDIA_THUMBNAIL_SUFFIX}` (mặc định `.thumb`, vd. `acme/an/20261107/0cq5…h8.thumb`) **cùng bucket** với file đã kích nó |
 | Content-Type | Một loại ảnh raster cố định do Lambda đặt (vd. `image/webp`); không SVG, không HTML |
 | Nội dung | Đã xoá EXIF và metadata khác (vị trí GPS, máy chụp) |
 | Luật sinh (cỡ, chất lượng, khung hình video, loại file nhận) | Của Lambda; module media không cần biết |
 | Không sinh được (loại không hỗ trợ, file hỏng) | Không ghi gì; URL thumb trả 404, app hiện biểu tượng |
 | Hậu tố | Phải bằng đúng `MEDIA_THUMBNAIL_SUFFIX` của chat (bắt đầu bằng `.`, 2..32 ký tự `a-z0-9.`) |
-| Vòng đời | Thumb nằm cùng bucket nên luật lifecycle của `processing` (xoá sau 30 ngày) áp cho cả thumb. Luật xoá phải tính từ lúc **tạo object** (S3 lifecycle `Expiration` theo ngày tính từ lúc tạo; với multipart là lúc mở phiên), cùng mốc với nhãn `expired` (§6) và bằng `MEDIA_PROCESSING_RETENTION` |
+| Vòng đời | Thumb nằm cùng bucket nên luật lifecycle của `processing` (xoá sau 30 ngày) áp cho cả thumb; `completed` không có luật xoá. Luật xoá phải tính từ lúc **tạo object** (S3 lifecycle `Expiration` theo ngày tính từ lúc tạo; với multipart là lúc mở phiên), cùng mốc với nhãn `expired` (§6) và bằng `MEDIA_PROCESSING_RETENTION` |
 
 **Domain phục vụ file (bắt buộc với hạ tầng).** File của người dùng được trả với đúng `Content-Type` máy khai lúc upload; server không đổi header trả về. Vì vậy domain của bucket hoặc CDN phục vụ file (`MEDIA_S3_PUBLIC_ENDPOINT`) phải **tách hẳn** khỏi domain của app: không phải subdomain của app, không cùng site (khác domain đăng ký). Nhờ vậy một file HTML hay SVG độc mà ai đó upload, khi mở ra, chỉ chạy trên domain của kho, không đọc được cookie hay gọi API của app. Ví dụ: app ở `chat.acme.com`; endpoint mặc định của AWS S3 (`*.s3.amazonaws.com`) đạt yêu cầu; CDN riêng phải dùng domain đăng ký khác như `acme-files.net`, không được dùng `files.acme.com`.
 
-## 8. Lỗi
+## 8. Chuyển file đã gắn tin sang `completed` (P3)
+
+Ví dụ: An gửi tin R/42 kèm ảnh X và Y. Module hỏi chat: R/42 còn sống, có `[X, Y]`. Module ghi hai cặp (R/42, X), (R/42, Y), copy X, Y (và thumb nếu Lambda đã sinh) sang `completed`, đặt `bucket = completed` trong doc upload rồi xoá bản ở `processing`. Bình forward R/42 sang S/7: thêm cặp (S/7, X), (S/7, Y), không copy lại. An xoá R/42: hai cặp của R/42 thành `state = 2`; X, Y còn cặp sống của S/7 nên giữ nguyên, người trong S vẫn tải được. Bình xoá S/7: không còn cặp sống nào → X, Y được đặt `retired_at` (chỉ là dấu, object vẫn còn).
+
+**Ai làm.** Consumer durable `media` trên `CHATIM_EVT`, chạy trong mọi node chat (mọi node kéo chung một durable, mỗi event tới một node), chỉ kéo khi media sẵn sàng; media tắt thì không có consumer. Lọc 3 subject: `evt.*.message.*.msg_created`, `evt.*.mention.*.msg_created` (tin có mention nằm ở loại data `mention`) và `evt.*.message.*.msg_deleted`. Mỗi node kéo lô `MEDIA_CONSUMER_FETCH_BATCH` (8) và chạy `MEDIA_CONSUMER_WORKERS` (4) event cùng lúc; event của cùng một tin trong một lô chạy lần lượt theo thứ tự kéo, tin khác nhau chạy song song. Mỗi event có hạn `MEDIA_CONSUMER_SYNC_TIMEOUT` (15 phút, đủ copy file lớn); trong lúc chạy, consumer gửi `InProgress` mỗi một phần ba `MEDIA_CONSUMER_ACK_WAIT` (30s) để event không bị giao lại. Consumer không nằm trên đường gửi tin, nên gửi tin không chậm đi.
+
+**Mỗi event:**
+
+- `msg_created` không có `attachments` → Ack ngay, không đọc gì (sửa tin không bao giờ thêm file).
+- `msg_created` có file → hỏi chat **trạng thái hiện tại** của tin (một lần đọc doc tin theo `_id`, cổng in-process `MessageFiles`), không tin nội dung event. Không thấy tin, hoặc tin khác tenant với event → bỏ. Tin đã xoá → nhánh xoá. Tin còn sống → nhánh gắn với các khoá file trong doc tin.
+- `msg_deleted` → thẳng nhánh xoá, không hỏi chat.
+
+**Nhánh gắn** (≤ 10 file mỗi tin, lệnh theo lô):
+
+1. Đọc lô doc upload của các khoá, lọc `tenant_id` của tin; khoá không mang tiền tố tenant của tin bị bỏ. Từng file: không có doc hoặc `aborted` → bỏ file đó; `uploading` → **cả event Nak, chờ** upload xong (bậc lùi 5s, 30s, 2m, 10m; không tính là kẹt), nhưng phiên `uploading` quá 24 giờ từ `StartUpload` (luật bucket đã huỷ phiên dở) → bỏ file đó; `uploaded` → gắn.
+2. Ghi lô các cặp tin–file bằng upsert `$setOnInsert` theo `_id` cặp: cặp đã có, kể cả đã xoá mềm, giữ nguyên.
+3. Gỡ `retired_at` của các file vừa gắn (một lệnh cho cả lô).
+4. File còn ở `processing` thì chuyển; file đã ở `completed` (vd. forward) thì thôi:
+   1. Copy server-side sang `completed`, cùng khoá: cỡ ≤ `MEDIA_COPY_SINGLE_MAX` (5 GiB, trần của S3) thì một lệnh `CopyObject`; lớn hơn thì multipart copy, mỗi phần `MEDIA_COPY_PART_BYTES` (1 GiB). `Content-Type` đặt từ doc upload. Copy xong đọc cỡ object ở `completed`; lệch cỡ trong doc → lỗi, Nak.
+   2. Thumb bật và file là ảnh/video: nếu `{key}{hậu tố}` đã có ở `processing` thì copy theo (giữ loại Lambda đặt); chưa có thì thôi, Lambda sinh ở `completed` (§7).
+   3. CAS `{_id, ver}` trên doc upload: `bucket = completed`, `attached_at` (giữ mốc lần đầu).
+   4. Xoá bản ở `processing` (file, rồi thumb). Xoá lỗi chỉ ghi log và đếm `cleanup_error`; luật 30 ngày dọn sau.
+
+Thứ tự **copy → đổi `bucket` → xoá bản cũ**: URL ký từ `processing` trước lúc đổi vẫn tải được tới lúc xoá; app gặp 404 đúng khoảnh khắc chuyển thì xin URL lại và nhận URL từ `completed`. Lỗi trước bước 3 thì doc vẫn trỏ `processing`, lần giao sau copy lại (ghi đè cùng byte).
+
+**Nhánh xoá:**
+
+1. Đọc khoá file của các cặp `state = 1` của tin (index `{tenant_id, message_key, state}`). Không có → xong.
+2. Một lệnh `distinct` tìm trong các file đó file nào còn cặp `state = 1` của tin khác (index `{file_key, state, message_key}`, chỉ đọc index).
+3. File không còn tin nào khác dùng → đặt `retired_at` (chỉ khi chưa có).
+4. `updateMany` các cặp của tin → `state = 2`, `deleted_at`.
+
+Đánh dấu trước, xoá mềm sau: lỗi giữa chừng thì lần giao sau làm lại đủ bước và ra cùng kết quả.
+
+**Kết quả mỗi event:** xong hoặc bỏ → Ack; event hỏng dạng → Term; S3 lỗi, CAS thua, Mongo lỗi, chat chưa trả lời, quá hạn → Nak theo bậc lùi 5s, 30s, 2m, 10m, không retry nội bộ. Lần giao thứ 6 trở lên vẫn lỗi được đếm là kẹt (`chatim_media_stuck_total`, alert `ChatimMediaFailing`); consumer trễ (`chatim_media_lag_seconds` > 10 phút trong 15 phút) → `ChatimMediaLagging` (bảo đảm MD2, [architecture §8](../architecture.md#8-cam-kết-đúng-đắn-guarantees--detectors)).
+
+**Event lệch thứ tự:** xoá tới trước tạo → chưa có cặp nào để xoá; tạo tới sau hỏi chat thấy tin đã xoá → không ghi cặp, không chuyển file. `msg_created` cũ tới lại sau khi cặp đã xoá mềm → `$setOnInsert` giữ `state = 2`. Phát lại (`/app resync`) không đổi kết quả.
+
+**`media_message_files`** (mới, chỉ module media ghi, clustered):
+
+| Field | Nghĩa | Ví dụ |
+|---|---|---|
+| `_id` | `{khoá tin}\|{khoá file}`, chống ghi trùng | `8812-0-42\|acme/an/20261108/0f9a…` |
+| `message_key` | Khoá tin `{room}-{thread}-{seq}` | `8812-0-42` |
+| `file_key` | Khoá file | `acme/an/20261108/0f9a…` |
+| `tenant_id` | Tenant | `acme` |
+| `state` | 1 tin còn dùng file, 2 tin đã bị xoá (xoá mềm, doc vẫn giữ) | `1` |
+| `created_at`, `deleted_at` | Lúc ghi cặp, lúc tin bị xoá | |
+
+Index `{tenant_id, message_key, state}` (cặp của một tin) và `{file_key, state, message_key}` (tin khác còn dùng file không); tra cứu luôn bằng phép bằng trên field, tạo qua `/app indexes` (D191).
+
+**`media_uploads`** thêm 3 field:
+
+| Field | Nghĩa |
+|---|---|
+| `bucket` | `processing` hoặc `completed`; thiếu = `processing`. URL tải, URL thumb và gallery ký từ bucket này |
+| `attached_at` | Lúc file được chuyển lần đầu vì gắn tin |
+| `retired_at` | Không còn cặp `state = 1` nào. **Chỉ là dấu**: không xoá object, URL vẫn ký được; cặp mới (vd. forward một tin cũ còn hiện) gỡ dấu. Chính sách xoá file đã `retired` làm sau |
+
+## 9. Lỗi
 
 | Mã | Khi nào |
 |---|---|
@@ -131,9 +194,9 @@ App chỉ upload file gốc. Thumb do AWS Lambda của hạ tầng sinh ở prod
 | `resource_exhausted` | Vượt giới hạn `GetPartURLs` hoặc giới hạn theo user của gateway (`GetAttachmentURLs`, `ListUploads` dùng giới hạn chung, không có limiter riêng) |
 | `internal` | `ListUploads` trên DB thiếu index gallery: chạy `/app indexes -apply` một lần ([chat](../apps/chat.md#app-indexes-d191)) |
 
-## 9. Cơ chế
+## 10. Cơ chế
 
-- **Lớp dữ liệu:** "Phiên upload" (`media_uploads`, một doc mỗi object, `state` 1 `uploading` → 2 `uploaded` hoặc 3 `aborted`, CAS trên `state` + `ver`; `dim`, `dur` ghi lúc `StartUpload`, `hash` ghi trong cùng lệnh CAS sang `uploaded`) và "Object ghi một lần" (S3). Đính kèm là một phần của **fact tin** (`messages.files`): ghi cùng lệnh insert của tin, bất biến khi sửa, `$unset` khi xoá; đi trong `Message` của `msg_created`/`msg_edited`/`msg_deleted`, phục hồi như tin (cờ `_state`, sweeper). URL tải và gallery không lưu gì. Không event hay subject mới.
+- **Lớp dữ liệu:** "Phiên upload" (`media_uploads`, một doc mỗi object, `state` 1 `uploading` → 2 `uploaded` hoặc 3 `aborted`, CAS trên `state` + `ver`; `dim`, `dur` ghi lúc `StartUpload`, `hash` ghi trong cùng lệnh CAS sang `uploaded`) và "Object ghi một lần" (S3); P3 thêm `bucket`, `attached_at` (CAS `{_id, ver}`), `retired_at` (đặt khi chưa có, gỡ khi có cặp mới) vào phiên upload và cặp tin–file `media_message_files` theo khuôn `mentions` (D115: upsert `$setOnInsert`, xoá mềm `state = 2`). Đính kèm là một phần của **fact tin** (`messages.files`): ghi cùng lệnh insert của tin, bất biến khi sửa, `$unset` khi xoá; đi trong `Message` của `msg_created`/`msg_edited`/`msg_deleted`, phục hồi như tin (cờ `_state`, sweeper). URL tải và gallery không lưu gì. Không event hay subject mới; P3 chỉ thêm consumer `media` đọc event sẵn có.
 - **Quyền tải đi theo tin, không theo khoá:** URL chỉ được ký cho khoá nằm trong tin người hỏi đọc được, qua `Reader.VisibleMessages` của chat (chat cài cổng `mediaapp.ChatReader`). Gallery chỉ trả file có `tenant_id`, `user_id` của caller.
 - **Không đính file người khác:** khoá phải mang `{tenant}/{người gửi}/`, user id không chứa `/`.
 - **Đường gửi không chậm đi:** chat chỉ kiểm đính kèm trong RAM, không gọi S3 hay module media; khoá giả hoặc file chưa upload xong chỉ làm hỏng tin của chính người gửi (URL tải trả lỗi từ S3).
@@ -141,13 +204,21 @@ App chỉ upload file gốc. Thumb do AWS Lambda của hạ tầng sinh ở prod
 - **Gọi lại an toàn:** `CompleteUpload` gặp `NoSuchUpload` thì `HeadObject`; đúng cỡ → `uploaded`. `AbortUpload` thua một lần đóng đã xong thì trả `failed_precondition`, không đổi trạng thái.
 - **URL ký trong RAM:** URL tải, URL thumb và URL phần ký bằng HMAC với endpoint public, không gọi S3; hạn trong khoảng S3 nhận (1 giây..7 ngày). URL ký không bao giờ vào log.
 - **Sẵn sàng thay vì chặn boot:** module `HeadBucket` hai bucket lúc khởi động và mỗi `MEDIA_READY_CHECK_INTERVAL`; config sai hay S3 lỗi chỉ làm media chưa sẵn sàng, chat vẫn chạy.
-- **Bucket ngoài code:** dev `make media-buckets`, production hạ tầng tạo `processing` (huỷ phiên dở 1 ngày, xoá object 30 ngày) và `completed`.
+- **Bucket ngoài code:** dev `make media-buckets`, production hạ tầng tạo `processing` (huỷ phiên dở 1 ngày, xoá object 30 ngày) và `completed` (không luật xoá). Key S3 của chat cần đọc, ghi (kể cả multipart) trên cả hai bucket và xoá ở `processing` ([chat](../apps/chat.md#media-module-modulesmedia)).
+- **Không 1+N:** tin có file tốn một đọc tin, một đọc lô doc upload, một ghi lô cặp, một lệnh gỡ `retired_at`, rồi mỗi file lần đầu gắn một copy, một CAS, một xoá S3; forward file đã chuyển chỉ tốn đọc tin và ghi cặp. Xoá tin tốn một đọc cặp, một `distinct`, một lệnh đặt `retired_at`, một `updateMany`.
 
-## 10. Hạn chế
+## 11. Hạn chế
 
 - URL ký là bearer: ai cầm URL phần trong 15 phút PUT được đúng phần đó (đúng cỡ); ai cầm URL tải trong `MEDIA_DOWNLOAD_URL_TTL` tải được file dù không ở trong room.
 - Tin bị xoá hoặc ẩn sau khi đã cấp URL: URL đã cấp vẫn dùng được tới hết hạn; lần hỏi sau không còn URL.
-- Mọi file còn ở `processing` tới khi có P3: file của tin quá 30 ngày bị xoá, URL tải trả 404 ("file không còn").
+- File upload mà không gửi trong tin nào ở lại `processing` và bị xoá sau 30 ngày (gallery hiện `expired`).
+- Consumer `media` trễ quá 30 ngày (vd. S3 lỗi kéo dài) thì luật của `processing` xoá cả file đã gắn tin trước khi kịp chuyển; `ChatimMediaLagging` (trễ > 10 phút trong 15 phút) báo sớm hơn rất nhiều.
+- `retired_at` có thể sai trong hai chạy đua hẹp: thiếu dấu (tin bị xoá đúng lúc đang ghi cặp: thừa một cặp `state = 1`) hoặc thừa dấu (forward mới ghi cặp đúng lúc tin cuối của file bị xoá). Người dùng không thấy gì khác vì mọi đường đọc đi theo tin; chính sách xoá file sau này phải đếm lại cặp, không tin dấu.
+- Tin gửi lúc file còn đang upload: event chờ (Nak) tới khi upload xong; phiên bị huỷ hoặc dở quá 24 giờ thì file bị bỏ, tin trỏ tới file không tồn tại và URL tải trả 404.
+- Đúng khoảnh khắc chuyển file, URL vừa ký từ `processing` có thể trả 404; xin URL lại thì nhận URL từ `completed`.
+- `media_message_files` chỉ lớn lên (xoá mềm không thu nhỏ), mỗi cặp tin–file từng có một doc nhỏ.
+- Node dừng giữa lúc multipart copy file > 5 GiB để lại phần copy dở ở `completed`; `make media-buckets` chỉ đặt luật huỷ multipart dở cho `processing`.
+- Tin gửi trước P3 không tự được chuyển; cần thì phát lại `msg_created` bằng `/app resync`.
 - Chỉ đính được file upload trong 24 giờ; file cũ hơn trong gallery vẫn tải được nhưng muốn gửi lại thì forward tin cũ hoặc upload lại.
 - `name`, `mime`, `size`, `dim`, `dur`, `hash` là lời máy khai, chỉ để hiển thị và để máy nhận tự kiểm; S3 trả file với đúng loại máy khai, nên domain phục vụ file phải tách khỏi domain của app (§7). Tin không có `hash` thì máy nhận không kiểm được file.
 - URL thumb có thể 404 (Lambda chưa xong, file không sinh được thumb); dev không có thumb.
