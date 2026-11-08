@@ -46,6 +46,8 @@ type countingUploads struct {
 	*memstore.Uploads
 	calls        map[string]int
 	conflictOnce bool
+	retireErr    error
+	unretireErr  error
 }
 
 func (u *countingUploads) GetMany(ctx context.Context, tenant string, keys []string) (map[string]domain.Upload, error) {
@@ -64,17 +66,26 @@ func (u *countingUploads) MarkMoved(ctx context.Context, key string, ver int64, 
 
 func (u *countingUploads) Retire(ctx context.Context, keys []string, at time.Time) error {
 	u.calls["retire"]++
+	if err := u.retireErr; err != nil {
+		u.retireErr = nil
+		return err
+	}
 	return u.Uploads.Retire(ctx, keys, at)
 }
 
 func (u *countingUploads) Unretire(ctx context.Context, keys []string) error {
 	u.calls["unretire"]++
+	if err := u.unretireErr; err != nil {
+		u.unretireErr = nil
+		return err
+	}
 	return u.Uploads.Unretire(ctx, keys)
 }
 
 type countingFiles struct {
 	*memstore.MessageFiles
-	calls map[string]int
+	calls      map[string]int
+	releaseErr error
 }
 
 func (f *countingFiles) Attach(ctx context.Context, pairs []domain.MessageFile) error {
@@ -89,12 +100,16 @@ func (f *countingFiles) Active(ctx context.Context, tenant, messageKey string) (
 
 func (f *countingFiles) Release(ctx context.Context, tenant, messageKey string, at time.Time) error {
 	f.calls["release"]++
+	if err := f.releaseErr; err != nil {
+		f.releaseErr = nil
+		return err
+	}
 	return f.MessageFiles.Release(ctx, tenant, messageKey, at)
 }
 
-func (f *countingFiles) StillUsed(ctx context.Context, fileKeys []string) (map[string]bool, error) {
+func (f *countingFiles) StillUsed(ctx context.Context, fileKeys []string, exceptMessage string) (map[string]bool, error) {
 	f.calls["still_used"]++
-	return f.MessageFiles.StillUsed(ctx, fileKeys)
+	return f.MessageFiles.StillUsed(ctx, fileKeys, exceptMessage)
 }
 
 type fakeObjects struct {

@@ -60,6 +60,7 @@ type fakeSync struct {
 	err   error
 	block chan struct{}
 	delay time.Duration
+	slow  map[uint64]time.Duration
 	busy  int
 }
 
@@ -68,6 +69,9 @@ func (s *fakeSync) Sync(ctx context.Context, kind attach.Kind, ev attach.Event) 
 	s.calls = append(s.calls, syncCall{kind, ev})
 	s.busy++
 	block, delay, err := s.block, s.delay, s.err
+	if d, ok := s.slow[ev.Ref.Seq]; ok {
+		delay = d
+	}
 	s.mu.Unlock()
 	defer func() {
 		s.mu.Lock()

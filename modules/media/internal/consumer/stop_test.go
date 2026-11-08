@@ -2,7 +2,6 @@ package consumer_test
 
 import (
 	"context"
-	"errors"
 	"slices"
 	"testing"
 	"testing/synctest"
@@ -65,8 +64,8 @@ func TestCloseDeadlineCancelsEventsInFlightAndNaksThem(t *testing.T) {
 		synctest.Wait()
 		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 		defer cancel()
-		if err := c.Close(ctx); !errors.Is(err, context.DeadlineExceeded) {
-			t.Fatalf("Close = %v, want context.DeadlineExceeded", err)
+		if err := c.Close(ctx); err != nil {
+			t.Fatalf("Close = %v, want nil once every event in flight was handed back", err)
 		}
 		if err := <-run.done; err != nil {
 			t.Fatalf("Run: %v", err)

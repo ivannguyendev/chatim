@@ -55,7 +55,7 @@ func (s *MessageFiles) Release(_ context.Context, tenant, messageKey string, at 
 	return nil
 }
 
-func (s *MessageFiles) StillUsed(_ context.Context, fileKeys []string) (map[string]bool, error) {
+func (s *MessageFiles) StillUsed(_ context.Context, fileKeys []string, exceptMessage string) (map[string]bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	used := make(map[string]bool, len(fileKeys))
@@ -63,7 +63,7 @@ func (s *MessageFiles) StillUsed(_ context.Context, fileKeys []string) (map[stri
 		used[k] = false
 	}
 	for _, p := range s.pairs {
-		if _, asked := used[p.FileKey]; asked && p.State == domain.PairLive {
+		if _, asked := used[p.FileKey]; asked && p.State == domain.PairLive && p.MessageKey != exceptMessage {
 			used[p.FileKey] = true
 		}
 	}

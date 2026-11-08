@@ -22,5 +22,5 @@ type MessageFiles interface {
 	Attach(ctx context.Context, pairs []domain.MessageFile) error
 	Active(ctx context.Context, tenant, messageKey string) ([]string, error)
 	Release(ctx context.Context, tenant, messageKey string, at time.Time) error
-	StillUsed(ctx context.Context, fileKeys []string) (map[string]bool, error)
+	StillUsed(ctx context.Context, fileKeys []string, exceptMessage string) (map[string]bool, error)
 }

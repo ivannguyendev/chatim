@@ -18,6 +18,25 @@ type fakeDelivery struct {
 	naks      []time.Duration
 	progress  int
 	late      int
+	ackWait   time.Duration
+	touched   time.Time
+	expired   bool
+}
+
+func (d *fakeDelivery) touch() {
+	if d.ackWait > 0 && d.acks+d.terms+len(d.naks) == 0 && time.Since(d.touched) > d.ackWait {
+		d.expired = true
+	}
+	d.touched = time.Now()
+}
+
+func (d *fakeDelivery) redelivered() bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.acks+d.terms+len(d.naks) == 0 && d.ackWait > 0 && time.Since(d.touched) > d.ackWait {
+		return true
+	}
+	return d.expired
 }
 
 func (d *fakeDelivery) Data() []byte      { return d.data }
@@ -26,6 +45,7 @@ func (d *fakeDelivery) Delivered() uint64 { return d.delivered }
 func (d *fakeDelivery) Ack() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	d.touch()
 	d.acks++
 	return nil
 }
@@ -33,6 +53,7 @@ func (d *fakeDelivery) Ack() error {
 func (d *fakeDelivery) Nak(delay time.Duration) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	d.touch()
 	d.naks = append(d.naks, delay)
 	return nil
 }
@@ -40,6 +61,7 @@ func (d *fakeDelivery) Nak(delay time.Duration) error {
 func (d *fakeDelivery) Term() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	d.touch()
 	d.terms++
 	return nil
 }
@@ -47,6 +69,7 @@ func (d *fakeDelivery) Term() error {
 func (d *fakeDelivery) InProgress() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	d.touch()
 	d.progress++
 	if d.acks+d.terms+len(d.naks) > 0 {
 		d.late++

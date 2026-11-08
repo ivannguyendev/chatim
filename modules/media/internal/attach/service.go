@@ -1,7 +1,6 @@
 package attach
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
@@ -64,17 +63,19 @@ func (s *Service) created(ctx context.Context, ev Event) error {
 	if err != nil {
 		return err
 	}
-	tenant := cmp.Or(state.Tenant, ev.Tenant)
 	switch {
 	case !state.Found:
 		s.stats.Drop(ReasonNoMessage)
 		return ErrDropped
+	case state.Tenant != ev.Tenant:
+		s.stats.Drop(ReasonTenant)
+		return ErrDropped
 	case state.Deleted:
-		return s.release(ctx, tenant, ev.Ref.Key())
+		return s.release(ctx, ev.Tenant, ev.Ref.Key())
 	case len(state.Keys) == 0:
 		return nil
 	}
-	return s.attach(ctx, tenant, ev.Ref.Key(), state.Keys)
+	return s.attach(ctx, ev.Tenant, ev.Ref.Key(), state.Keys)
 }
 
 func (s *Service) release(ctx context.Context, tenant, messageKey string) error {
@@ -82,11 +83,7 @@ func (s *Service) release(ctx context.Context, tenant, messageKey string) error 
 	if err != nil || len(keys) == 0 {
 		return err
 	}
-	now := s.deps.Now().UTC()
-	if err := s.deps.Files.Release(ctx, tenant, messageKey, now); err != nil {
-		return err
-	}
-	used, err := s.deps.Files.StillUsed(ctx, keys)
+	used, err := s.deps.Files.StillUsed(ctx, keys, messageKey)
 	if err != nil {
 		return err
 	}
@@ -96,8 +93,11 @@ func (s *Service) release(ctx context.Context, tenant, messageKey string) error 
 			idle = append(idle, k)
 		}
 	}
-	if len(idle) == 0 {
-		return nil
+	now := s.deps.Now().UTC()
+	if len(idle) > 0 {
+		if err := s.deps.Uploads.Retire(ctx, idle, now); err != nil {
+			return err
+		}
 	}
-	return s.deps.Uploads.Retire(ctx, idle, now)
+	return s.deps.Files.Release(ctx, tenant, messageKey, now)
 }

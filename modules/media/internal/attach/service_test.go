@@ -126,7 +126,7 @@ func TestAnOldCreateAfterTheReleaseKeepsThePairReleased(t *testing.T) {
 	if err := r.created(t, m); err != nil {
 		t.Fatal(err)
 	}
-	used, err := r.files.MessageFiles.StillUsed(t.Context(), []string{fileX})
+	used, err := r.files.MessageFiles.StillUsed(t.Context(), []string{fileX}, "")
 	if err != nil || used[fileX] || len(r.live(t, m)) != 0 {
 		t.Fatalf("used %v pairs %v err %v", used, r.live(t, m), err)
 	}

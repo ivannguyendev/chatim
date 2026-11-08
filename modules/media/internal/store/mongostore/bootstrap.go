@@ -23,7 +23,7 @@ var (
 	ErrNotClustered = errors.New("mongostore: collection is not clustered on _id")
 	uploadsByOwner  = bson.D{{Key: "tenant_id", Value: 1}, {Key: "user_id", Value: 1}, {Key: "state", Value: 1}, {Key: "_id", Value: -1}}
 	filesByMessage  = bson.D{{Key: "tenant_id", Value: 1}, {Key: "message_key", Value: 1}, {Key: "state", Value: 1}}
-	filesByKey      = bson.D{{Key: "file_key", Value: 1}, {Key: "state", Value: 1}}
+	filesByKey      = bson.D{{Key: "file_key", Value: 1}, {Key: "state", Value: 1}, {Key: "message_key", Value: 1}}
 )
 
 func Indexes() mongoindex.Catalog {

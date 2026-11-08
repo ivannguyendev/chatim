@@ -36,6 +36,7 @@ func RunMessageFiles(t *testing.T, open func(t *testing.T) Stores) {
 		{"attach of a pair again does not revive a released pair", attachKeepsReleased},
 		{"release twice keeps the pairs released", releaseTwice},
 		{"still used is true while another live message holds the file", stillUsedByAnotherMessage},
+		{"still used skips the live pairs of the message being deleted", stillUsedExceptMessage},
 		{"another tenant with the same message key sees and releases nothing", tenantIsolation},
 		{"a forward after the last message retired the file clears the mark", forwardAfterRetire},
 	}
@@ -70,7 +71,7 @@ func active(t *testing.T, s store.MessageFiles, tenant, messageKey string) []str
 
 func stillUsed(t *testing.T, s store.MessageFiles, keys ...string) map[string]bool {
 	t.Helper()
-	used, err := s.StillUsed(t.Context(), keys)
+	used, err := s.StillUsed(t.Context(), keys, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,5 +169,17 @@ func forwardAfterRetire(t *testing.T, s Stores) {
 	}
 	if used := stillUsed(t, s.Files, u.Key); !used[u.Key] {
 		t.Fatalf("still used after the forward = %v", used)
+	}
+}
+
+func stillUsedExceptMessage(t *testing.T, s Stores) {
+	attach(t, s.Files, Pair("acme", firstMessage, fileX), Pair("acme", firstMessage, fileY), Pair("acme", secondMessage, fileX))
+	got, err := s.Files.StillUsed(t.Context(), []string{fileX, fileY}, firstMessage)
+	if want := map[string]bool{fileX: true, fileY: false}; err != nil || !maps.Equal(got, want) {
+		t.Fatalf("still used except %s = %v, %v; want %v", firstMessage, got, err, want)
+	}
+	got, err = s.Files.StillUsed(t.Context(), []string{fileX}, secondMessage)
+	if err != nil || !got[fileX] {
+		t.Fatalf("still used except %s = %v, %v", secondMessage, got, err)
 	}
 }

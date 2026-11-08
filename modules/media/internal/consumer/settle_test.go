@@ -40,7 +40,7 @@ func TestSettleBranches(t *testing.T) {
 			ev.Payload = &chatimv1.Event_RoomCreated{}
 			return ev
 		}, delivered: 1, want: settledAs{terms: 1}, invalid: 1},
-		"invalid argument terms":             {err: fmt.Errorf("ref: %w", apperr.ErrInvalidArgument), ev: withFile, delivered: 1, want: settledAs{terms: 1}, invalid: 1, synced: true},
+		"chat invalid argument naks":         {err: fmt.Errorf("ref: %w", apperr.ErrInvalidArgument), ev: withFile, delivered: 1, want: settledAs{naks: []time.Duration{5 * time.Second}}, synced: true},
 		"waiting upload naks, not stuck":     {err: attach.ErrWaitUpload, ev: withFile, delivered: 6, want: settledAs{naks: []time.Duration{10 * time.Minute}}, synced: true},
 		"failure naks first":                 {err: errDown, ev: withFile, delivered: 1, want: settledAs{naks: []time.Duration{5 * time.Second}}, synced: true},
 		"lost race naks on the ladder":       {err: domain.ErrRetryLater, ev: withFile, delivered: 3, want: settledAs{naks: []time.Duration{2 * time.Minute}}, synced: true},

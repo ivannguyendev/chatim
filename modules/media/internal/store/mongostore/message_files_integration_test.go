@@ -121,7 +121,7 @@ func TestMessageFileQueriesUseTheirIndexes(t *testing.T) {
 	stages, indexes = winningStages(t, db, release)
 	assertIndexScan(t, "Release", stages, indexes, byMessage)
 	keys := []string{"acme/an/20261108/0001", "acme/an/20261108/0016", "acme/an/20261108/9999"}
-	distinct := bson.D{{Key: "distinct", Value: messageFilesCollection}, {Key: "key", Value: "file_key"}, {Key: "query", Value: stillUsedFilter(keys)}}
+	distinct := bson.D{{Key: "distinct", Value: messageFilesCollection}, {Key: "key", Value: "file_key"}, {Key: "query", Value: stillUsedFilter(keys, "8805-0-1")}}
 	stages, indexes = winningStages(t, db, distinct)
 	t.Logf("StillUsed: stages %v on %v", stages, indexes)
 	if !slices.Contains(stages, "DISTINCT_SCAN") || slices.Contains(stages, "FETCH") || slices.Contains(stages, "COLLSCAN") || !slices.Contains(indexes, byKey) {

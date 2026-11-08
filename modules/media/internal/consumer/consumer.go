@@ -36,19 +36,20 @@ type Deps struct {
 }
 
 type Consumer struct {
-	cfg     Config
-	deps    Deps
-	fails   *jsconsume.LimitedLog
-	handles *jsconsume.LimitedLog
-	garbage *jsconsume.LimitedLog
-	stuck   atomic.Uint64
-	lag     atomic.Int64
-	started atomic.Bool
-	stopped context.Context
-	halt    context.CancelFunc
-	aborted context.Context
-	abort   context.CancelFunc
-	done    chan struct{}
+	cfg            Config
+	deps           Deps
+	fails          *jsconsume.LimitedLog
+	handles        *jsconsume.LimitedLog
+	garbage        *jsconsume.LimitedLog
+	stuck          atomic.Uint64
+	settleFailures atomic.Uint64
+	lag            atomic.Int64
+	started        atomic.Bool
+	stopped        context.Context
+	halt           context.CancelFunc
+	aborted        context.Context
+	abort          context.CancelFunc
+	done           chan struct{}
 }
 
 func New(cfg Config, deps Deps) (*Consumer, error) {
@@ -119,9 +120,13 @@ func (c *Consumer) Close(ctx context.Context) error {
 		return nil
 	case <-ctx.Done():
 	}
+	before := c.settleFailures.Load()
 	c.abort()
 	<-c.done
-	return ctx.Err()
+	if c.settleFailures.Load() != before {
+		return ctx.Err()
+	}
+	return nil
 }
 
 func (c *Consumer) Stuck() uint64 { return c.stuck.Load() }

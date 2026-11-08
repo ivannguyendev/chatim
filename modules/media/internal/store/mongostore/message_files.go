@@ -85,11 +85,14 @@ func (s *MessageFiles) Release(ctx context.Context, tenant, messageKey string, a
 	return nil
 }
 
-func stillUsedFilter(fileKeys []string) bson.D {
-	return bson.D{{Key: "file_key", Value: bson.D{{Key: "$in", Value: fileKeys}}}, {Key: "state", Value: int32(domain.PairLive)}}
+func stillUsedFilter(fileKeys []string, exceptMessage string) bson.D {
+	return bson.D{
+		{Key: "file_key", Value: bson.D{{Key: "$in", Value: fileKeys}}}, {Key: "state", Value: int32(domain.PairLive)},
+		{Key: "message_key", Value: bson.D{{Key: "$ne", Value: exceptMessage}}},
+	}
 }
 
-func (s *MessageFiles) StillUsed(ctx context.Context, fileKeys []string) (map[string]bool, error) {
+func (s *MessageFiles) StillUsed(ctx context.Context, fileKeys []string, exceptMessage string) (map[string]bool, error) {
 	used := make(map[string]bool, len(fileKeys))
 	if len(fileKeys) == 0 {
 		return used, nil
@@ -98,7 +101,7 @@ func (s *MessageFiles) StillUsed(ctx context.Context, fileKeys []string) (map[st
 		used[k] = false
 	}
 	var live []string
-	if err := s.coll.Distinct(ctx, "file_key", stillUsedFilter(fileKeys)).Decode(&live); err != nil {
+	if err := s.coll.Distinct(ctx, "file_key", stillUsedFilter(fileKeys, exceptMessage)).Decode(&live); err != nil {
 		return nil, fmt.Errorf("files still used: %w", err)
 	}
 	for _, k := range live {

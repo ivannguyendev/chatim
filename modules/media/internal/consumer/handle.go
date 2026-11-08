@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/modules/media/internal/attach"
-	"github.com/ivannguyendev/chatim/pkg/core/apperr"
 	"github.com/ivannguyendev/chatim/pkg/core/jsconsume"
 )
 
@@ -54,7 +53,7 @@ func (c *Consumer) settle(ctx context.Context, d jsconsume.Delivery, err error) 
 	switch {
 	case err == nil, errors.Is(err, attach.ErrDropped):
 		c.report(ctx, d.Ack())
-	case errors.Is(err, errInvalidEvent), errors.Is(err, apperr.ErrInvalidArgument):
+	case errors.Is(err, errInvalidEvent):
 		c.deps.Stats.Drop(attach.ReasonInvalid)
 		c.report(ctx, d.Term())
 	case ctx.Err() != nil:
@@ -78,6 +77,7 @@ func (c *Consumer) release(ds []jsconsume.Delivery) {
 
 func (c *Consumer) report(ctx context.Context, err error) {
 	if err != nil {
+		c.settleFailures.Add(1)
 		c.fails.Warn(ctx, settleFailedMsg, "err", err)
 	}
 }

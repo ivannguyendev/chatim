@@ -21,10 +21,8 @@ func (s *Service) attach(ctx context.Context, tenant, messageKey string, keys []
 	if err != nil {
 		return err
 	}
-	for _, r := range drops {
-		s.stats.Drop(r)
-	}
 	if len(valid) == 0 {
+		s.countDrops(drops)
 		return nil
 	}
 	pairs := make([]domain.MessageFile, len(valid))
@@ -39,6 +37,7 @@ func (s *Service) attach(ctx context.Context, tenant, messageKey string, keys []
 	if err := s.deps.Uploads.Unretire(ctx, fileKeys); err != nil {
 		return err
 	}
+	s.countDrops(drops)
 	for _, u := range valid {
 		if u.Bucket == domain.BucketCompleted {
 			continue
@@ -48,6 +47,12 @@ func (s *Service) attach(ctx context.Context, tenant, messageKey string, keys []
 		}
 	}
 	return nil
+}
+
+func (s *Service) countDrops(drops []Reason) {
+	for _, r := range drops {
+		s.stats.Drop(r)
+	}
 }
 
 func (s *Service) uploadsOf(ctx context.Context, tenant string, keys []string) (map[string]domain.Upload, error) {
