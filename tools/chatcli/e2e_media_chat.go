@@ -132,5 +132,8 @@ func (r *mediaRun) forwarded() error {
 	if len(files) != 2 || files[r.page.key] == nil || files[r.image.key] == nil {
 		return fmt.Errorf("forward to %s gave C the files %v", r.forwardRoom, files)
 	}
+	if err := r.allIn(files, r.completedBucket); err != nil {
+		return fmt.Errorf("forward to %s: %w", r.forwardRoom, err)
+	}
 	return checkDownload(r.base, r.image, files[r.image.key].GetUrl())
 }

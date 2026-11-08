@@ -51,6 +51,9 @@ type mediaRun struct {
 	seq         uint64
 	forwardRoom string
 	forwardSeq  uint64
+
+	processingBucket string
+	completedBucket  string
 }
 
 func e2eMedia(ctx context.Context, args []string) error {
@@ -61,6 +64,8 @@ func e2eMedia(ctx context.Context, args []string) error {
 	keyFile := fs.String("key", "/keys/"+devtoken.PrivateFile, "private JWK written by dev-keys")
 	callTimeout := fs.Duration("call-timeout", 30*time.Second, "timeout of one request")
 	wait := fs.Duration("wait", 30*time.Second, "how long to wait for one expected websocket frame")
+	processing := fs.String("processing-bucket", "chatim-media-processing", "bucket of uploaded files not yet sent")
+	completed := fs.String("completed-bucket", "chatim-media-completed", "bucket of files sent in a message")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -73,7 +78,8 @@ func e2eMedia(ctx context.Context, args []string) error {
 		return err
 	}
 	r := &mediaRun{base: ctx, key: key, gatewayURL: strings.TrimRight(*gatewayURL, "/"), wsURL: *wsURL, tenant: "e2emedia" + suffix,
-		timeout: *callTimeout, wait: *wait, user: "e2e-media-a", other: "e2e-media-b", third: "e2e-media-c", urls: map[int32]string{}}
+		timeout: *callTimeout, wait: *wait, user: "e2e-media-a", other: "e2e-media-b", third: "e2e-media-c", urls: map[int32]string{},
+		processingBucket: *processing, completedBucket: *completed}
 	r.a = &wsPeer{name: "A", user: r.user, base: ctx, timeout: r.timeout, wait: r.wait}
 	r.b = &wsPeer{name: "B", user: r.other, base: ctx, timeout: r.timeout, wait: r.wait}
 	defer r.a.close()
@@ -105,9 +111,11 @@ func (r *mediaRun) steps() []wsEventsStep {
 		{"B reads the message through the gateway with both attachments", r.readFiles},
 		{"B's room list preview names both file mimes", r.previewMimes},
 		{"B's plain URLs give the PNG and the HTML with their exact bytes and hashes and no thumbnail", r.downloads},
+		{"within 30s B's URLs of the PNG and the HTML point at the completed bucket and still give the exact bytes and hashes", r.movedToCompleted},
 		{"ListUploads gives A the PNG first then the HTML and the 40 MiB file, kind image only the PNG, and B only its own file", r.gallery},
+		{"A's ListUploads signs the sent PNG and HTML in the completed bucket and the 40 MiB file never sent in the processing bucket, none expired", r.unsentStaysProcessing},
 		{"after B hides the message B gets no URL for it while A still does", r.hidden},
-		{"A forwards the message to a group with C and deletes the original; the original has no URL and C downloads through the forward", r.forwarded},
+		{"A forwards the message to a group with C and deletes the original; the original has no URL and C downloads from the completed bucket through the forward", r.forwarded},
 	}
 }
 
