@@ -69,6 +69,7 @@ type Subject struct {
 	Picture    string
 	HasPicture bool
 	Issuer     string
+	Realm      string
 	KeyID      string
 }
 
@@ -211,6 +212,7 @@ func (v *Verifier) subject(claims jwt.MapClaims, found match) (Subject, error) {
 		Picture:    picture,
 		HasPicture: hasPicture,
 		Issuer:     found.issuer,
+		Realm:      found.entry.realm,
 		KeyID:      found.keyID,
 	}, nil
 }

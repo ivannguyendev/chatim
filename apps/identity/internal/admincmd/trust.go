@@ -39,7 +39,7 @@ func issuerAdd(ctx context.Context, env Env, st Store, args []string) error {
 	if *issuer == env.Issuer {
 		return errOwnIssuer
 	}
-	if err := st.CreateTrustedIssuer(ctx, *issuer, *tenant, env.Now(), actor); err != nil {
+	if err := st.CreateTrustedIssuer(ctx, *issuer, *tenant, "", env.Now(), actor); err != nil {
 		return err
 	}
 	_, err := fmt.Fprintf(env.Out, "issuer %s trusted for tenant %s\n", *issuer, *tenant)

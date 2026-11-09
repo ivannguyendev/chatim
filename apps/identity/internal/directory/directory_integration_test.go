@@ -119,7 +119,7 @@ func TestTrustedKeyAddWakesTrustAtOnce(t *testing.T) {
 	if err := it.store.CreateTenant(ctx, store.Tenant{ID: "shop", Name: "Shop", State: store.StateActive, CreatedAt: now, UpdatedAt: now, UpdatedBy: "test"}); err != nil {
 		t.Fatalf("CreateTenant: %v", err)
 	}
-	if err := it.store.CreateTrustedIssuer(ctx, "https://shop.example", "shop", now, "test"); err != nil {
+	if err := it.store.CreateTrustedIssuer(ctx, "https://shop.example", "shop", "", now, "test"); err != nil {
 		t.Fatalf("CreateTrustedIssuer: %v", err)
 	}
 	m := startMirror(t, it.store, 1)

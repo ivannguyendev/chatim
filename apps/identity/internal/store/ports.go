@@ -98,6 +98,7 @@ type Revocation struct {
 type TrustedIssuer struct {
 	Issuer      string
 	TenantID    string
+	Realm       string
 	IssuerState State
 	TenantState State
 }
@@ -158,7 +159,7 @@ type Admin interface {
 	CreateSigningKey(ctx context.Context, k SigningKey) (time.Time, error)
 	ActivateSigningKey(ctx context.Context, id string, lead time.Duration) error
 	SigningKeys(ctx context.Context) ([]SigningKey, error)
-	CreateTrustedIssuer(ctx context.Context, issuer, tenantID string, at time.Time, by string) error
+	CreateTrustedIssuer(ctx context.Context, issuer, tenantID, realm string, at time.Time, by string) error
 	SetTrustedIssuerState(ctx context.Context, issuer string, state State, at time.Time, by string) error
 	AddTrustedKey(ctx context.Context, k TrustedKey, at time.Time, by string) error
 	RemoveTrustedKey(ctx context.Context, issuer, keyID string) error

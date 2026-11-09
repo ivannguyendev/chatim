@@ -20,6 +20,7 @@ const keyRangeEnd = "┃"
 type trustedIssuerDoc struct {
 	Issuer   string      `bson:"_id"`
 	TenantID string      `bson:"tenant_id"`
+	Realm    string      `bson:"realm"`
 	State    store.State `bson:"state"`
 }
 
@@ -38,22 +39,45 @@ type trustedKeyDoc struct {
 	CreatedBy string      `bson:"created_by"`
 }
 
-func (s *Store) CreateTrustedIssuer(ctx context.Context, issuer, tenantID string, at time.Time, by string) error {
+func (s *Store) CreateTrustedIssuer(ctx context.Context, issuer, tenantID, realm string, at time.Time, by string) error {
 	if err := checkKeyPart("issuer", issuer); err != nil {
+		return err
+	}
+	if err := checkKeyPart("realm", realm); err != nil {
 		return err
 	}
 	if err := s.mustExist(ctx, tenantsCollection, tenantID); err != nil {
 		return err
 	}
+	realm = cmp.Or(realm, issuer)
+	if realm != issuer {
+		if err := s.mustHaveRealm(ctx, tenantID, realm); err != nil {
+			return err
+		}
+	}
 	_, err := s.db.Collection(trustedIssuersCollection).InsertOne(ctx, bson.D{
 		{Key: "_id", Value: issuer},
 		{Key: "tenant_id", Value: tenantID},
+		{Key: "realm", Value: realm},
 		{Key: "state", Value: store.StateActive},
 		{Key: "ver", Value: int64(1)},
 		{Key: "created_at", Value: at},
 		{Key: "updated_at", Value: at},
 		{Key: "updated_by", Value: by},
 	})
+	return s.mapErr(err)
+}
+
+func (s *Store) mustHaveRealm(ctx context.Context, tenantID, realm string) error {
+	filter := bson.D{
+		{Key: "tenant_id", Value: tenantID},
+		{Key: "$or", Value: bson.A{
+			bson.D{{Key: "realm", Value: realm}},
+			bson.D{{Key: "_id", Value: realm}, {Key: "realm", Value: bson.D{{Key: "$exists", Value: false}}}},
+		}},
+	}
+	err := s.db.Collection(trustedIssuersCollection).FindOne(ctx, filter,
+		options.FindOne().SetProjection(bson.D{{Key: "_id", Value: 1}})).Err()
 	return s.mapErr(err)
 }
 
@@ -117,7 +141,9 @@ func (s *Store) TrustedIssuers(ctx context.Context) ([]store.TrustedIssuer, erro
 		if !ok {
 			continue
 		}
-		out = append(out, store.TrustedIssuer{Issuer: i.Issuer, TenantID: i.TenantID, IssuerState: i.State, TenantState: tenantState})
+		out = append(out, store.TrustedIssuer{
+			Issuer: i.Issuer, TenantID: i.TenantID, Realm: cmp.Or(i.Realm, i.Issuer), IssuerState: i.State, TenantState: tenantState,
+		})
 	}
 	slices.SortFunc(out, func(a, b store.TrustedIssuer) int { return cmp.Compare(a.Issuer, b.Issuer) })
 	return out, nil

@@ -1,6 +1,7 @@
 package trust
 
 import (
+	"cmp"
 	"context"
 	"crypto"
 	"errors"
@@ -15,6 +16,7 @@ type snapshot struct {
 
 type issuerEntry struct {
 	tenant       string
+	realm        string
 	tenantActive bool
 	keys         map[string]trustedKey
 }
@@ -62,6 +64,7 @@ func buildSnapshot(issuers []store.TrustedIssuer, keys []store.TrustedKey) (*sna
 		}
 		snap.issuers[iss.Issuer] = issuerEntry{
 			tenant:       iss.TenantID,
+			realm:        cmp.Or(iss.Realm, iss.Issuer),
 			tenantActive: iss.TenantState == store.StateActive,
 			keys:         make(map[string]trustedKey),
 		}

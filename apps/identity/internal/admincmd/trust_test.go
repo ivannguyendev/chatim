@@ -25,6 +25,7 @@ type trustStore struct {
 	issuers []store.TrustedIssuer
 	created []string
 	tenants []string
+	realms  []string
 	states  []store.State
 	added   []store.TrustedKey
 	writers []string
@@ -34,9 +35,10 @@ func (s *trustStore) TrustedIssuers(context.Context) ([]store.TrustedIssuer, err
 	return s.issuers, nil
 }
 
-func (s *trustStore) CreateTrustedIssuer(_ context.Context, issuer, tenant string, _ time.Time, by string) error {
+func (s *trustStore) CreateTrustedIssuer(_ context.Context, issuer, tenant, realm string, _ time.Time, by string) error {
 	s.created = append(s.created, issuer)
 	s.tenants = append(s.tenants, tenant)
+	s.realms = append(s.realms, realm)
 	s.writers = append(s.writers, by)
 	return nil
 }
@@ -178,8 +180,8 @@ func TestIssuerAddRefusesOwnIssuer(t *testing.T) {
 	if code := admincmd.Run(context.Background(), env, []string{"issuer-add", "-issuer", "https://blog.example", "-tenant", "shop"}); code != 0 {
 		t.Fatalf("Run other issuer = %d, want 0", code)
 	}
-	if len(st.created) != 1 || st.created[0] != "https://blog.example" || st.tenants[0] != "shop" || st.writers[0] != "admin-cli" {
-		t.Fatalf("created %v for %v by %v", st.created, st.tenants, st.writers)
+	if len(st.created) != 1 || st.created[0] != "https://blog.example" || st.tenants[0] != "shop" || st.realms[0] != "" || st.writers[0] != "admin-cli" {
+		t.Fatalf("created %v for %v in %q by %v", st.created, st.tenants, st.realms, st.writers)
 	}
 	if out.String() != "issuer https://blog.example trusted for tenant shop\n" {
 		t.Fatalf("out = %q", out)

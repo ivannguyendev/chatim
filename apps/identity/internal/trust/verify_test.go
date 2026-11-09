@@ -179,7 +179,7 @@ func TestVerifyAcceptsEachAlgorithmAndTakesTheTenantFromTheIssuer(t *testing.T) 
 			if err != nil {
 				t.Fatalf("Verify: %v", err)
 			}
-			want := trust.Subject{Tenant: "acme", User: "ha", Issuer: acmeIssuer, KeyID: tc.kid}
+			want := trust.Subject{Tenant: "acme", User: "ha", Issuer: acmeIssuer, Realm: acmeIssuer, KeyID: tc.kid}
 			if got != want {
 				t.Fatalf("subject = %+v; want %+v", got, want)
 			}
