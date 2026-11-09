@@ -69,6 +69,9 @@ func loadOnce(tb testing.TB, src directory.Source) {
 	if !m.cache.Ready() || m.cache.Len() != loadUsers {
 		tb.Errorf("ready=%v cache=%d; want ready with %d users", m.cache.Ready(), m.cache.Len(), loadUsers)
 	}
+	if u, ok := m.cache.LookupSubject("shop", "staff", userID(loadUsers)+"@shop"); !ok || u.ID != userID(loadUsers) {
+		tb.Errorf("LookupSubject of the last seeded user = %+v, %v; want %s", u, ok, userID(loadUsers))
+	}
 }
 
 func BenchmarkLoad100K(b *testing.B) {

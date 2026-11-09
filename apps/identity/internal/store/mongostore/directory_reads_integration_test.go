@@ -21,6 +21,7 @@ func insertUsers(t *testing.T, s *Store, tenantID string, n int) {
 			{Key: "display_name", Value: "User " + id}, {Key: "avatar_url", Value: ""}, {Key: "state", Value: store.StateActive},
 			{Key: "groups", Value: bson.A{}}, {Key: "ver", Value: int64(i%3 + 1)}, {Key: "created_at", Value: itAt},
 			{Key: "updated_at", Value: itAt}, {Key: "updated_by", Value: jitBy},
+			{Key: "realm", Value: "staff"}, {Key: "sub", Value: id + "@" + tenantID},
 		})
 	}
 	if _, err := s.db.Collection(usersCollection).InsertMany(t.Context(), docs); err != nil {
@@ -63,7 +64,9 @@ func TestLoadPageReadsEveryUserOnceInIDOrder(t *testing.T) {
 		}
 	}
 	first := all[0]
-	want := store.DirectoryEntry{TenantID: "mall", ID: "u00000", DisplayName: "User u00000", State: store.StateActive, Ver: 1}
+	want := store.DirectoryEntry{
+		TenantID: "mall", ID: "u00000", DisplayName: "User u00000", State: store.StateActive, Ver: 1, Realm: "staff", Sub: "u00000@mall",
+	}
 	if first != want {
 		t.Fatalf("first entry = %+v; want %+v", first, want)
 	}

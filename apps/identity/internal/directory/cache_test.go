@@ -88,7 +88,7 @@ func TestReplaceSwapsTheMapAndTheTokenAndMarksReady(t *testing.T) {
 	if c.Ready() || len(c.Token()) != 0 {
 		t.Fatalf("ready=%v token=%q before Replace", c.Ready(), c.Token())
 	}
-	c.Replace(map[store.UserKey]directory.Entry{{TenantID: "shop", ID: "lan"}: {DisplayName: "Lan", State: store.StateActive, Ver: 2}}, store.StreamToken("T0"))
+	c.Replace(map[store.UserKey]directory.Entry{{TenantID: "shop", ID: "lan"}: {DisplayName: "Lan", State: store.StateActive, Ver: 2}}, nil, store.StreamToken("T0"))
 	if !c.Ready() || string(c.Token()) != "T0" || c.Len() != 1 || displayName(c, "shop", "old") != "" || displayName(c, "shop", "lan") != "Lan" {
 		t.Fatalf("after Replace ready=%v token=%q len=%d", c.Ready(), c.Token(), c.Len())
 	}

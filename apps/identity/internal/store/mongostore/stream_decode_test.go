@@ -36,11 +36,15 @@ func userFull() bson.D {
 		{Key: "_id", Value: "shop│u1"}, {Key: "tenant_id", Value: "shop"}, {Key: "id", Value: "u1"},
 		{Key: "display_name", Value: "Lan"}, {Key: "avatar_url", Value: "https://img/lan.png"},
 		{Key: "state", Value: int32(2)}, {Key: "ver", Value: int64(7)},
+		{Key: "realm", Value: "staff"}, {Key: "sub", Value: "lan@shop"},
 	}
 }
 
 func TestDecodeStreamEventUserCarriesTheDirectoryEntry(t *testing.T) {
-	want := store.DirectoryEntry{TenantID: "shop", ID: "u1", DisplayName: "Lan", AvatarURL: "https://img/lan.png", State: store.StateDisabled, Ver: 7}
+	want := store.DirectoryEntry{
+		TenantID: "shop", ID: "u1", DisplayName: "Lan", AvatarURL: "https://img/lan.png", State: store.StateDisabled, Ver: 7,
+		Realm: "staff", Sub: "lan@shop",
+	}
 	for _, op := range []string{"insert", "update", "replace"} {
 		ev, err := decodeStreamEvent(rawEvent(t, op, usersCollection, userFull()))
 		if err != nil {

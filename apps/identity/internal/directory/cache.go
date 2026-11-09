@@ -20,19 +20,20 @@ type User struct {
 }
 
 type Cache struct {
-	mu    sync.RWMutex
-	users map[store.UserKey]Entry
-	token store.StreamToken
-	ready atomic.Bool
+	mu       sync.RWMutex
+	users    map[store.UserKey]Entry
+	subjects map[store.SubjectKey]string
+	token    store.StreamToken
+	ready    atomic.Bool
 }
 
 func NewCache() *Cache {
-	return &Cache{users: map[store.UserKey]Entry{}}
+	return &Cache{users: map[store.UserKey]Entry{}, subjects: map[store.SubjectKey]string{}}
 }
 
-func (c *Cache) Replace(users map[store.UserKey]Entry, token store.StreamToken) {
+func (c *Cache) Replace(users map[store.UserKey]Entry, subjects map[store.SubjectKey]string, token store.StreamToken) {
 	c.mu.Lock()
-	c.users, c.token = users, token
+	c.users, c.subjects, c.token = users, subjects, token
 	c.mu.Unlock()
 	c.ready.Store(true)
 }
@@ -40,7 +41,7 @@ func (c *Cache) Replace(users map[store.UserKey]Entry, token store.StreamToken) 
 func (c *Cache) ApplyEntry(e store.DirectoryEntry) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	putEntry(c.users, e)
+	putEntry(c.users, c.subjects, e)
 }
 
 func (c *Cache) Token() store.StreamToken {
@@ -55,15 +56,18 @@ func (c *Cache) SetToken(t store.StreamToken) {
 	c.token = t
 }
 
-func putEntry(users map[store.UserKey]Entry, e store.DirectoryEntry) {
+func putEntry(users map[store.UserKey]Entry, subjects map[store.SubjectKey]string, e store.DirectoryEntry) {
 	putUser(users, store.UserKey{TenantID: e.TenantID, ID: e.ID}, Entry{DisplayName: e.DisplayName, AvatarURL: e.AvatarURL, State: e.State, Ver: e.Ver})
+	if e.Realm != "" && e.Sub != "" {
+		subjects[store.SubjectKey{TenantID: e.TenantID, Realm: e.Realm, Sub: e.Sub}] = e.ID
+	}
 }
 
 func (c *Cache) ApplyEntries(entries []store.DirectoryEntry) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, e := range entries {
-		putEntry(c.users, e)
+		putEntry(c.users, c.subjects, e)
 	}
 }
 
@@ -92,6 +96,20 @@ func (c *Cache) Lookup(tenant string, ids []string) []User {
 func (c *Cache) LookupOne(tenant, id string) (User, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
+	e, ok := c.users[store.UserKey{TenantID: tenant, ID: id}]
+	if !ok {
+		return User{}, false
+	}
+	return User{ID: id, Entry: e}, true
+}
+
+func (c *Cache) LookupSubject(tenant, realm, sub string) (User, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	id, ok := c.subjects[store.SubjectKey{TenantID: tenant, Realm: realm, Sub: sub}]
+	if !ok {
+		return User{}, false
+	}
 	e, ok := c.users[store.UserKey{TenantID: tenant, ID: id}]
 	if !ok {
 		return User{}, false

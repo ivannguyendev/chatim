@@ -88,6 +88,7 @@ func seedUsers(tb testing.TB, it itest, count int) {
 				{Key: "display_name", Value: fmt.Sprintf("User %d", n)}, {Key: "avatar_url", Value: ""}, {Key: "state", Value: store.StateActive},
 				{Key: "groups", Value: bson.A{}}, {Key: "ver", Value: int64(1)},
 				{Key: "created_at", Value: now}, {Key: "updated_at", Value: now}, {Key: "updated_by", Value: "test"},
+				{Key: "realm", Value: "staff"}, {Key: "sub", Value: userID(n) + "@shop"},
 			})
 		}
 		if _, err := users.InsertMany(context.Background(), batch); err != nil {

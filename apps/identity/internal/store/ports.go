@@ -171,6 +171,12 @@ type UserKey struct {
 	ID       string
 }
 
+type SubjectKey struct {
+	TenantID string
+	Realm    string
+	Sub      string
+}
+
 type DirectoryEntry struct {
 	TenantID    string
 	ID          string
@@ -178,6 +184,8 @@ type DirectoryEntry struct {
 	AvatarURL   string
 	State       State
 	Ver         int64
+	Realm       string
+	Sub         string
 }
 
 type StreamToken []byte
