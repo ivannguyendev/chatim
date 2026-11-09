@@ -97,6 +97,11 @@ func (f *fakeProfiles) WriteProfile(_ context.Context, w store.ProfileWrite) (bo
 	return f.written, f.err
 }
 
+func (f *fakeProfiles) LinkUser(context.Context, store.NewUser) (store.LinkedUser, error) {
+	f.rec.add("link")
+	return store.LinkedUser{}, nil
+}
+
 type fakeSigners struct {
 	rec    *recorder
 	signer *signing.Signer

@@ -74,7 +74,15 @@ func (f *fakeStore) WriteProfile(context.Context, store.ProfileWrite) (bool, err
 	return true, nil
 }
 
-func (f *fakeStore) JITBatchDocs() metrics.Histogram {
+func (f *fakeStore) LinkUser(context.Context, store.NewUser) (store.LinkedUser, error) {
+	return store.LinkedUser{}, nil
+}
+
+func (f *fakeStore) JITLinkBatchDocs() metrics.Histogram {
+	return metrics.Histogram{Bounds: []float64{1, 2}, Cumulative: []uint64{2, 2}, Count: 2, Sum: 2}
+}
+
+func (f *fakeStore) JITUserBatchDocs() metrics.Histogram {
 	return metrics.Histogram{Bounds: []float64{1, 2}, Cumulative: []uint64{1, 3}, Count: 3, Sum: 5}
 }
 

@@ -51,7 +51,9 @@ func TestReadyOnlyAfterTheFirstTrustLoadAndExchangesServed(t *testing.T) {
 		`chatim_identity_jit_writes_total{result="created"} 1`, `chatim_identity_jit_writes_total{result="updated"} 0`,
 		`chatim_identity_jit_writes_total{result="conflict"} 0`, `chatim_identity_jit_writes_total{result="error"} 0`,
 		"chatim_identity_trust_reload_errors_total 0", "chatim_identity_store_errors_total 0",
-		`chatim_identity_jit_batch_docs_bucket{le="2"} 3`, "chatim_identity_jit_batch_docs_sum 5", "chatim_identity_jit_batch_docs_count 3",
+		`chatim_identity_jit_batch_docs_bucket{writer="users",le="2"} 3`, `chatim_identity_jit_batch_docs_sum{writer="users"} 5`,
+		`chatim_identity_jit_batch_docs_count{writer="users"} 3`, `chatim_identity_jit_batch_docs_bucket{writer="links",le="2"} 2`,
+		`chatim_identity_jit_batch_docs_count{writer="links"} 2`,
 	)
 }
 

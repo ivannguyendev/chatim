@@ -184,15 +184,11 @@ func (w *jitWriter) classify(results []jitResult, err error) {
 		return
 	}
 	bwe, ok := errors.AsType[mongo.BulkWriteException](err)
-	if !ok || len(bwe.WriteErrors) == 0 || !writeErrorsWithin(bwe.WriteErrors, len(results)) {
+	if !ok || bwe.WriteConcernError != nil || len(bwe.WriteErrors) == 0 || !writeErrorsWithin(bwe.WriteErrors, len(results)) {
 		fillResults(results, jitResult{err: w.unavailable(err)})
 		return
 	}
-	clean := jitResult{written: true}
-	if bwe.WriteConcernError != nil {
-		clean = jitResult{err: w.unavailable(err)}
-	}
-	fillResults(results, clean)
+	fillResults(results, jitResult{written: true})
 	for _, we := range bwe.WriteErrors {
 		if mongo.IsDuplicateKeyError(we.WriteError) {
 			results[we.Index] = jitResult{}

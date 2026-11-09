@@ -60,9 +60,9 @@ func TestOutdatedIndexSetsTheGaugeAndStaysReady(t *testing.T) {
 	r.logs.await(t, "identity ready")
 	requireStatus(t, r.admin, "/readyz", http.StatusOK)
 	requireMetrics(t, r.admin, `chatim_identity_index_outdated{collection="users"} 1`, `chatim_identity_index_outdated{collection="groups"} 0`,
-		`chatim_identity_index_outdated{collection="slots"} 0`)
+		`chatim_identity_index_outdated{collection="slots"} 0`, `chatim_identity_index_outdated{collection="user_links"} 0`)
 	_, body := httpGet(t, r.admin, "/metrics")
-	if n := strings.Count(body, "chatim_identity_index_outdated{"); n != 9 {
-		t.Fatalf("index_outdated series = %d, want 9", n)
+	if n := strings.Count(body, "chatim_identity_index_outdated{"); n != 10 {
+		t.Fatalf("index_outdated series = %d, want 10", n)
 	}
 }

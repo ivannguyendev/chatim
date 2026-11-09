@@ -128,6 +128,46 @@ type ProfileWrite struct {
 	By          string
 }
 
+type NewUser struct {
+	TenantID    string
+	Realm       string
+	Sub         string
+	CandidateID string
+	DisplayName string
+	AvatarURL   string
+	At          time.Time
+	By          string
+}
+
+type LinkResult int8
+
+const (
+	LinkCreated LinkResult = iota + 1
+	LinkExisting
+	LinkHealed
+	LinkPending
+)
+
+func (r LinkResult) String() string {
+	switch r {
+	case LinkCreated:
+		return "created"
+	case LinkExisting:
+		return "existing"
+	case LinkHealed:
+		return "healed"
+	case LinkPending:
+		return "pending"
+	default:
+		return "unknown"
+	}
+}
+
+type LinkedUser struct {
+	ID     string
+	Result LinkResult
+}
+
 type SchemaState struct {
 	Missing  []string
 	Outdated []string
@@ -140,6 +180,7 @@ type TrustSource interface {
 
 type ProfileWriter interface {
 	WriteProfile(ctx context.Context, w ProfileWrite) (written bool, err error)
+	LinkUser(ctx context.Context, u NewUser) (LinkedUser, error)
 }
 
 type Directory interface {

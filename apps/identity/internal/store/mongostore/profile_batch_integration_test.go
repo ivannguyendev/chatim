@@ -60,7 +60,7 @@ func TestWriteProfileBatchesConcurrentCreates(t *testing.T) {
 	if n := countUsers(t, s); n != batchUsers {
 		t.Fatalf("users = %d; want %d", n, batchUsers)
 	}
-	h := s.JITBatchDocs()
+	h := s.JITUserBatchDocs()
 	if h.Sum != batchUsers || h.Count*maxBatchShare > batchUsers {
 		t.Fatalf("inserts = %d for %v docs; want at most %d inserts for %d docs", h.Count, h.Sum, batchUsers/maxBatchShare, batchUsers)
 	}
