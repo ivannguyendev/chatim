@@ -70,7 +70,7 @@ func (s *wakeStore) LoadPage(_ context.Context, after store.UserKey, _ int) ([]s
 	if after.ID != "" {
 		return nil, nil
 	}
-	return []store.DirectoryEntry{{TenantID: "shop", ID: "lan", DisplayName: "Lan", State: store.StateActive, Ver: 1}}, nil
+	return []store.DirectoryEntry{{TenantID: "shop", ID: "lan", DisplayName: "Lan", State: store.StateActive, Ver: 1, Realm: "https://shop.example", Sub: "lan"}}, nil
 }
 
 func (s *wakeStore) Revocations(context.Context) (auth.RevocationSnapshot, error) {

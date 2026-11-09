@@ -12,9 +12,11 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/core/redact"
 )
 
+var errProfileWithoutSeen = fmt.Errorf("%w: a profile write needs the seen values", apperr.ErrInvalidArgument)
+
 func (s *Store) WriteProfile(ctx context.Context, w store.ProfileWrite) (bool, error) {
 	if w.Seen == nil {
-		return s.insertProfile(ctx, w)
+		return false, errProfileWithoutSeen
 	}
 	filter := bson.D{
 		{Key: "_id", Value: tenantKey(w.TenantID, w.UserID)},
@@ -35,11 +37,6 @@ func (s *Store) WriteProfile(ctx context.Context, w store.ProfileWrite) (bool, e
 		return false, s.mapErr(err)
 	}
 	return res.MatchedCount > 0, nil
-}
-
-func (s *Store) insertProfile(ctx context.Context, w store.ProfileWrite) (bool, error) {
-	id := tenantKey(w.TenantID, w.UserID)
-	return s.users.write(ctx, id, newUserDoc(id, w))
 }
 
 func newUserDoc(key string, w store.ProfileWrite) bson.D {

@@ -78,7 +78,8 @@ func TestWritesDuringLoadAreInTheCacheAfterReady(t *testing.T) {
 	if !m.cache.Ready() || during == 0 {
 		t.Fatalf("ready=%v writes during load=%d; want ready with writes during the load", m.cache.Ready(), during)
 	}
-	if _, err := it.store.WriteProfile(ctx, store.ProfileWrite{TenantID: "shop", UserID: markerID, DisplayName: "Marker", At: time.Now(), By: "test"}); err != nil {
+	marker := store.NewUser{TenantID: "shop", Realm: "test", Sub: markerID, CandidateID: markerID, DisplayName: "Marker", At: time.Now(), By: "test"}
+	if _, err := it.store.LinkUser(ctx, marker); err != nil {
 		t.Fatalf("write marker: %v", err)
 	}
 	await(t, markerSeen, loadLimit, "marker user applied")

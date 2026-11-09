@@ -10,7 +10,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/ivannguyendev/chatim/pkg/core/apperr"
-	"github.com/ivannguyendev/chatim/pkg/ids"
 )
 
 type Reason string
@@ -199,7 +198,7 @@ func (v *Verifier) subject(claims jwt.MapClaims, found match) (Subject, error) {
 		}
 	}
 	sub, ok := claims["sub"].(string)
-	if !ok || ids.ValidUser(sub) != nil {
+	if !ok || !validSubject(sub) {
 		return Subject{}, refuse(ReasonSubject)
 	}
 	name, hasName := claims["name"].(string)

@@ -58,9 +58,12 @@ func metricSources(ring *keyring.Ring, internal *api.InternalStats, cleanup *cle
 
 func jitBatchSources(st Store) []metrics.Source {
 	var out []metrics.Source
-	for writer, read := range map[string]func() metrics.Histogram{"links": st.JITLinkBatchDocs, "users": st.JITUserBatchDocs} {
+	for _, w := range []struct {
+		writer string
+		read   func() metrics.Histogram
+	}{{"links", st.JITLinkBatchDocs}, {"users", st.JITUserBatchDocs}} {
 		out = append(out, metrics.Source{Name: "jit_batch_docs", Help: "Documents per just-in-time InsertMany sent to MongoDB, by writer.",
-			Labels: map[string]string{"writer": writer}, Histogram: read})
+			Labels: map[string]string{"writer": w.writer}, Histogram: w.read})
 	}
 	return out
 }

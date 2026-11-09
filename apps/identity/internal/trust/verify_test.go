@@ -122,12 +122,6 @@ func refusalCases() []refusalCase {
 		{"tid number", func(t *testing.T) string {
 			return signEd(t, withClaims(func(c jwt.MapClaims) { c["tid"] = 1 }))
 		}, trust.ReasonTenantMismatch},
-		{"sub with a pipe", func(t *testing.T) string {
-			return signEd(t, withClaims(func(c jwt.MapClaims) { c["sub"] = "auth0|abc" }))
-		}, trust.ReasonSubject},
-		{"sub of 65 bytes", func(t *testing.T) string {
-			return signEd(t, withClaims(func(c jwt.MapClaims) { c["sub"] = strings.Repeat("a", 65) }))
-		}, trust.ReasonSubject},
 		{"sub number", func(t *testing.T) string {
 			return signEd(t, withClaims(func(c jwt.MapClaims) { c["sub"] = 5 }))
 		}, trust.ReasonSubject},

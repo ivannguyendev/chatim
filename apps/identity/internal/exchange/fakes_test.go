@@ -32,6 +32,7 @@ const (
 	chatAud    = "chat"
 	tokenTTL   = 5 * time.Minute
 	clientIP   = "203.0.113.9"
+	knownID    = "k7q2m9xw4rbd6tjhn3vcpa5e8f"
 )
 
 var (
@@ -78,17 +79,21 @@ func (f *fakeDirectory) Ready() bool {
 	return !f.notReady
 }
 
-func (f *fakeDirectory) LookupOne(tenant, id string) (directory.User, bool) {
+func (f *fakeDirectory) LookupSubject(tenant, realm, sub string) (directory.User, bool) {
 	f.rec.add("lookup")
-	u, ok := f.users[tenant+"/"+id]
+	u, ok := f.users[subjectKey(tenant, realm, sub)]
 	return u, ok
 }
+
+func subjectKey(tenant, realm, sub string) string { return tenant + "/" + realm + "/" + sub }
 
 type fakeProfiles struct {
 	rec     *recorder
 	writes  []store.ProfileWrite
 	written bool
 	err     error
+	links   []store.NewUser
+	link    func(store.NewUser) (store.LinkedUser, error)
 }
 
 func (f *fakeProfiles) WriteProfile(_ context.Context, w store.ProfileWrite) (bool, error) {
@@ -97,9 +102,13 @@ func (f *fakeProfiles) WriteProfile(_ context.Context, w store.ProfileWrite) (bo
 	return f.written, f.err
 }
 
-func (f *fakeProfiles) LinkUser(context.Context, store.NewUser) (store.LinkedUser, error) {
+func (f *fakeProfiles) LinkUser(_ context.Context, u store.NewUser) (store.LinkedUser, error) {
 	f.rec.add("link")
-	return store.LinkedUser{}, nil
+	f.links = append(f.links, u)
+	if f.link != nil {
+		return f.link(u)
+	}
+	return store.LinkedUser{ID: u.CandidateID, Result: store.LinkCreated}, nil
 }
 
 type fakeSigners struct {
@@ -125,11 +134,44 @@ func (s trustSource) TrustedIssuers(context.Context) ([]store.TrustedIssuer, err
 }
 
 func (s trustSource) TrustedKeys(context.Context) ([]store.TrustedKey, error) {
-	jwk, err := json.Marshal(map[string]string{"kty": "OKP", "crv": "Ed25519", "x": base64.RawURLEncoding.EncodeToString(s.public)})
+	return edKeys(s.public, acmeIssuer)
+}
+
+func edKeys(public ed25519.PublicKey, issuers ...string) ([]store.TrustedKey, error) {
+	jwk, err := json.Marshal(map[string]string{"kty": "OKP", "crv": "Ed25519", "x": base64.RawURLEncoding.EncodeToString(public)})
 	if err != nil {
 		return nil, err
 	}
-	return []store.TrustedKey{{Issuer: acmeIssuer, KeyID: acmeKeyID, Algorithm: "EdDSA", PublicKey: jwk, State: store.StateActive}}, nil
+	keys := make([]store.TrustedKey, len(issuers))
+	for i, iss := range issuers {
+		keys[i] = store.TrustedKey{Issuer: iss, KeyID: acmeKeyID, Algorithm: "EdDSA", PublicKey: jwk, State: store.StateActive}
+	}
+	return keys, nil
+}
+
+func loadedVerifier(t *testing.T, src store.TrustSource) *trust.Verifier {
+	t.Helper()
+	v, err := trust.New(trust.Config{Audience: "chatim", MaxLifetime: 10 * time.Minute, Leeway: 30 * time.Second, Now: func() time.Time { return testNow }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := v.Load(t.Context(), src); err != nil {
+		t.Fatal(err)
+	}
+	return v
+}
+
+func tenantToken(t *testing.T, private ed25519.PrivateKey, iss, sub, audience string) string {
+	t.Helper()
+	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{
+		"iss": iss, "sub": sub, "aud": audience, "iat": testNow.Unix(), "exp": testNow.Add(time.Minute).Unix(),
+	})
+	token.Header["kid"] = acmeKeyID
+	signed, err := token.SignedString(private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return signed
 }
 
 func trustRefusal(t *testing.T, tenantState store.State, audience string, want trust.Reason) error {
@@ -138,22 +180,8 @@ func trustRefusal(t *testing.T, tenantState store.State, audience string, want t
 	if err != nil {
 		t.Fatal(err)
 	}
-	v, err := trust.New(trust.Config{Audience: "chatim", MaxLifetime: 10 * time.Minute, Leeway: 30 * time.Second, Now: func() time.Time { return testNow }})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := v.Load(t.Context(), trustSource{tenantState: tenantState, public: public}); err != nil {
-		t.Fatal(err)
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{
-		"iss": acmeIssuer, "sub": "ha", "aud": audience, "iat": testNow.Unix(), "exp": testNow.Add(time.Minute).Unix(),
-	})
-	token.Header["kid"] = acmeKeyID
-	signed, err := token.SignedString(private)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = v.Verify(signed)
+	v := loadedVerifier(t, trustSource{tenantState: tenantState, public: public})
+	_, err = v.Verify(tenantToken(t, private, acmeIssuer, "ha", audience))
 	if !errors.Is(err, trust.ErrRefused) || trust.ReasonOf(err) != want {
 		t.Fatalf("trust refusal = %v (reason %q); want reason %q", err, trust.ReasonOf(err), want)
 	}
@@ -212,7 +240,7 @@ func newHarness(t *testing.T, mods ...func(*exchange.Deps)) *harness {
 }
 
 func subject(user string) trust.Subject {
-	return trust.Subject{Tenant: "acme", User: user, Issuer: acmeIssuer, KeyID: acmeKeyID}
+	return trust.Subject{Tenant: "acme", User: user, Issuer: acmeIssuer, Realm: acmeIssuer, KeyID: acmeKeyID}
 }
 
 func (h *harness) exchange(t *testing.T, token string) (exchange.Issued, error) {
@@ -220,8 +248,9 @@ func (h *harness) exchange(t *testing.T, token string) (exchange.Issued, error) 
 	return h.svc.Exchange(t.Context(), token, clientIP)
 }
 
-func (h *harness) cache(id, name, avatar string, state store.State) {
-	h.dir.users["acme/"+id] = directory.User{ID: id, Entry: directory.Entry{DisplayName: name, AvatarURL: avatar, State: state, Ver: 4}}
+func (h *harness) cache(name, avatar string, state store.State) {
+	h.dir.users[subjectKey("acme", acmeIssuer, "ha")] = directory.User{ID: knownID,
+		Entry: directory.Entry{DisplayName: name, AvatarURL: avatar, State: state, Ver: 4}}
 }
 
 type issuedClaims struct {

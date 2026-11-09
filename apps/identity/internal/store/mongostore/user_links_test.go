@@ -131,10 +131,14 @@ func TestLinkUserFailsWithoutUsingTheCandidate(t *testing.T) {
 			wantErr: apperr.ErrUnavailable,
 		},
 		"stored link holds a bad user id": {
-			links: duplicateEach, read: storedLink("bad id"), reads: 1, wantErr: apperr.ErrUnavailable,
+			links: duplicateEach, read: storedLink("bad id"), reads: 1, wantErr: store.ErrLinkCorrupt,
 		},
 		"link insert fails": {
 			links: func(context.Context, []string) error { return errors.New("reset") }, wantErr: apperr.ErrUnavailable,
+		},
+		"existing link whose user insert has a write concern error": {
+			links: duplicateEach, read: storedLink("winner"), users: writeConcern, reads: 1,
+			wantErr: apperr.ErrUnavailable, userIDs: [][]string{{"t│winner"}},
 		},
 		"user insert fails": {
 			users:   func(context.Context, []string) error { return errors.New("reset") },

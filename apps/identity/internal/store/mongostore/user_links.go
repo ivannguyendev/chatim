@@ -18,7 +18,6 @@ import (
 
 var (
 	errLinkPending   = fmt.Errorf("%w: user link not visible yet", apperr.ErrUnavailable)
-	errLinkCorrupt   = fmt.Errorf("%w: user link holds an invalid user id", apperr.ErrUnavailable)
 	errSubjectFields = fmt.Errorf("%w: tenant, realm and sub are required and must not hold %q", apperr.ErrInvalidArgument, keySeparator)
 )
 
@@ -62,7 +61,7 @@ func (s *Store) storedLink(ctx context.Context, key string) (string, error) {
 	case !found:
 		return "", errLinkPending
 	case ids.ValidUser(id) != nil:
-		return "", errLinkCorrupt
+		return "", store.ErrLinkCorrupt
 	default:
 		return id, nil
 	}

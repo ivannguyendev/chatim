@@ -3,7 +3,10 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
+
+	"github.com/ivannguyendev/chatim/pkg/core/apperr"
 )
 
 type State int16
@@ -162,6 +165,8 @@ func (r LinkResult) String() string {
 		return "unknown"
 	}
 }
+
+var ErrLinkCorrupt = fmt.Errorf("%w: user link holds an invalid user id", apperr.ErrUnavailable)
 
 type LinkedUser struct {
 	ID     string
