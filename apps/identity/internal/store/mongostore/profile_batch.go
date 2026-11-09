@@ -185,7 +185,7 @@ func (w *jitWriter) classify(results []jitResult, err error) {
 	}
 	bwe, ok := errors.AsType[mongo.BulkWriteException](err)
 	if !ok || bwe.WriteConcernError != nil || len(bwe.WriteErrors) == 0 || !writeErrorsWithin(bwe.WriteErrors, len(results)) {
-		fillResults(results, jitResult{err: w.unavailable(err)})
+		fillResults(results, jitResult{err: w.unavailable(scrubBulkWrite(err))})
 		return
 	}
 	fillResults(results, jitResult{written: true})
@@ -194,7 +194,19 @@ func (w *jitWriter) classify(results []jitResult, err error) {
 			results[we.Index] = jitResult{}
 			continue
 		}
-		results[we.Index] = jitResult{err: w.unavailable(we.WriteError)}
+		results[we.Index] = jitResult{err: w.unavailable(fmt.Errorf("bulk write: write error code %d", we.Code))}
+	}
+}
+
+func scrubBulkWrite(err error) error {
+	bwe, ok := errors.AsType[mongo.BulkWriteException](err)
+	switch {
+	case !ok:
+		return err
+	case bwe.WriteConcernError != nil:
+		return fmt.Errorf("bulk write: write concern error code %d", bwe.WriteConcernError.Code)
+	default:
+		return fmt.Errorf("bulk write: %d write errors", len(bwe.WriteErrors))
 	}
 }
 
