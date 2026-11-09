@@ -183,7 +183,7 @@ func TestIssuerAddRefusesOwnIssuer(t *testing.T) {
 	if len(st.created) != 1 || st.created[0] != "https://blog.example" || st.tenants[0] != "shop" || st.realms[0] != "" || st.writers[0] != "admin-cli" {
 		t.Fatalf("created %v for %v in %q by %v", st.created, st.tenants, st.realms, st.writers)
 	}
-	if out.String() != "issuer https://blog.example trusted for tenant shop\n" {
+	if out.String() != "issuer https://blog.example trusted for tenant shop, realm https://blog.example\n" {
 		t.Fatalf("out = %q", out)
 	}
 }

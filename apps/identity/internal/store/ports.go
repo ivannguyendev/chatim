@@ -210,6 +210,7 @@ type Admin interface {
 	AddTrustedKey(ctx context.Context, k TrustedKey, at time.Time, by string) error
 	RemoveTrustedKey(ctx context.Context, issuer, keyID string) error
 	TrustedKeysOf(ctx context.Context, issuer string) ([]TrustedKey, error)
+	ResolveUser(ctx context.Context, issuer, sub string) (tenantID, userID string, err error)
 }
 
 type UserKey struct {

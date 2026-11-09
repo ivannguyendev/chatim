@@ -198,7 +198,7 @@ func (v *Verifier) subject(claims jwt.MapClaims, found match) (Subject, error) {
 		}
 	}
 	sub, ok := claims["sub"].(string)
-	if !ok || !validSubject(sub) {
+	if !ok || !ValidSubject(sub) {
 		return Subject{}, refuse(ReasonSubject)
 	}
 	name, hasName := claims["name"].(string)

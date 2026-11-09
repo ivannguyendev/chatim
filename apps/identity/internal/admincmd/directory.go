@@ -114,9 +114,12 @@ func groupDelete(ctx context.Context, env Env, st Store, args []string) error {
 }
 
 func userGroups(ctx context.Context, env Env, st Store, args []string) error {
-	f, tenant, user := userFlags("user-groups")
+	f, target := userFlags("user-groups")
 	groups := f.set.String("groups", "", `comma-separated group ids; "" removes every group`)
-	if err := f.parse(args, "tenant", "user"); err != nil {
+	if err := f.parse(args); err != nil {
+		return err
+	}
+	if err := target.check(); err != nil {
 		return err
 	}
 	if !f.given()["groups"] {
@@ -126,10 +129,14 @@ func userGroups(ctx context.Context, env Env, st Store, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := st.SetUserGroups(ctx, *tenant, *user, ids, env.Now(), actor); err != nil {
+	tenant, user, err := target.resolve(ctx, st)
+	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(env.Out, "user %s groups: %s\n", *user, listOrNone(ids))
+	if err := st.SetUserGroups(ctx, tenant, user, ids, env.Now(), actor); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(env.Out, "user %s groups: %s\n", user, listOrNone(ids))
 	return err
 }
 
@@ -164,10 +171,13 @@ func listOrNone(ids []string) string {
 }
 
 func userSet(ctx context.Context, env Env, st Store, args []string) error {
-	f, tenant, user := userFlags("user-set")
+	f, target := userFlags("user-set")
 	name := f.set.String("name", "", "display name")
 	avatar := f.set.String("avatar", "", `https avatar url; "" clears it`)
-	if err := f.parse(args, "tenant", "user"); err != nil {
+	if err := f.parse(args); err != nil {
+		return err
+	}
+	if err := target.check(); err != nil {
 		return err
 	}
 	given := f.given()
@@ -188,9 +198,13 @@ func userSet(ctx context.Context, env Env, st Store, args []string) error {
 		}
 		u.AvatarURL = avatar
 	}
-	if err := st.SetProfile(ctx, *tenant, *user, u, env.Now(), actor); err != nil {
+	tenant, user, err := target.resolve(ctx, st)
+	if err != nil {
 		return err
 	}
-	_, err := fmt.Fprintf(env.Out, "user %s updated\n", *user)
+	if err := st.SetProfile(ctx, tenant, user, u, env.Now(), actor); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(env.Out, "user %s updated\n", user)
 	return err
 }

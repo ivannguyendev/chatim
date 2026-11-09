@@ -62,6 +62,7 @@ var commands = map[string]command{
 	"group-delete":      groupDelete,
 	"user-groups":       userGroups,
 	"user-set":          userSet,
+	"user-find":         userFind,
 	"issuer-add":        issuerAdd,
 	"issuer-disable":    issuerState(store.StateDisabled),
 	"issuer-enable":     issuerState(store.StateActive),

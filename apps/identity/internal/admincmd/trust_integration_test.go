@@ -37,7 +37,7 @@ func TestIssuerCommands(t *testing.T) {
 	h.env.Issuer = ownIssuer
 	h.fail(1, "issuer-add", "-issuer", shopIssuer, "-tenant", "blog")
 	h.fail(1, "issuer-add", "-issuer", ownIssuer, "-tenant", "shop")
-	if out := h.run("issuer-add", "-issuer", shopIssuer, "-tenant", "shop"); out != "issuer "+shopIssuer+" trusted for tenant shop\n" {
+	if out := h.run("issuer-add", "-issuer", shopIssuer, "-tenant", "shop"); out != "issuer "+shopIssuer+" trusted for tenant shop, realm "+shopIssuer+"\n" {
 		t.Fatalf("issuer-add output = %q", out)
 	}
 	h.fail(1, "issuer-add", "-issuer", shopIssuer, "-tenant", "shop")

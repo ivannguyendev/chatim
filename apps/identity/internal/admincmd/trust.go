@@ -1,6 +1,7 @@
 package admincmd
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -27,11 +28,17 @@ func issuerAdd(ctx context.Context, env Env, st Store, args []string) error {
 	f := newFlags("issuer-add")
 	issuer := f.set.String("issuer", "", "iss of the tenant tokens")
 	tenant := f.set.String("tenant", "", "tenant id")
+	realm := f.set.String("realm", "", "realm the issuer's subjects belong to; defaults to the issuer")
 	if err := f.parse(args, "issuer", "tenant"); err != nil {
 		return err
 	}
 	if err := checkTrustName("issuer", *issuer); err != nil {
 		return err
+	}
+	if *realm != "" {
+		if err := checkTrustName("realm", *realm); err != nil {
+			return err
+		}
 	}
 	if err := ids.ValidTenant(*tenant); err != nil {
 		return fmt.Errorf("%w: %w", errUsage, err)
@@ -39,10 +46,10 @@ func issuerAdd(ctx context.Context, env Env, st Store, args []string) error {
 	if *issuer == env.Issuer {
 		return errOwnIssuer
 	}
-	if err := st.CreateTrustedIssuer(ctx, *issuer, *tenant, "", env.Now(), actor); err != nil {
+	if err := st.CreateTrustedIssuer(ctx, *issuer, *tenant, *realm, env.Now(), actor); err != nil {
 		return err
 	}
-	_, err := fmt.Fprintf(env.Out, "issuer %s trusted for tenant %s\n", *issuer, *tenant)
+	_, err := fmt.Fprintf(env.Out, "issuer %s trusted for tenant %s, realm %s\n", *issuer, *tenant, cmp.Or(*realm, *issuer))
 	return err
 }
 
