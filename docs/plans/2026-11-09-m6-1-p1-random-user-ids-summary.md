@@ -1,6 +1,6 @@
 # M6.1 phase P1: `identity` tự cấp id user — tóm tắt
 
-> Ngày: 2026-11-09 · Nhánh `feat/m6-1` · Trạng thái: **chờ owner duyệt** · Dựa trên: owner 2026-11-08 ("quá phụ thuộc IAM ngoài", "identity tự làm chủ id", "tìm người chat qua search engine riêng"), owner 2026-11-09 (realm mặc định = issuer; chưa làm lệnh đổi `sub` → id cho backend tenant), D239–D242, D259, D260
+> Ngày: 2026-11-09 · Nhánh `feat/m6-1` · Trạng thái: **đã xây, `dev-done` 2026-11-09** (`5fe3d60` → `34db89f`) · Dựa trên: owner 2026-11-08 ("quá phụ thuộc IAM ngoài", "identity tự làm chủ id", "tìm người chat qua search engine riêng"), owner 2026-11-09 (realm mặc định = issuer; chưa làm lệnh đổi `sub` → id cho backend tenant), D239–D242, D259, D260
 > **Các phase của M6.1:** (P1) id ngẫu nhiên lúc đổi token · (P2) `GetUsers` bỏ `state`, metric + alert tra trượt, docs
 
 ## Scope và ranh giới
@@ -86,7 +86,7 @@ sequenceDiagram
 
 Ghi lỗi → `503 temporarily_unavailable` + `Retry-After: 1`, không thử lại bên trong. Chết giữa hai lệnh: liên kết có mà user chưa có; lần đổi sau RAM không thấy, insert liên kết trùng, đọc id, ghi nốt user (kết quả `healed`, cũng là kết quả của bên thua khi hai replica cùng đăng nhập lần đầu). Trùng khoá mà đọc (majority) chưa thấy liên kết của bên thắng (bên thắng còn chờ ghi bền trên replica set 3 node) → `503` ngay (kết quả `pending`), không bao giờ dùng id tự sinh, vì như vậy một người sẽ thành hai id; máy gửi lại sau `Retry-After` là ra id đúng.
 
-**Lệnh admin:** `issuer-add -issuer I -tenant T [-realm R]`: R phải là realm của một issuer khác cùng tenant (gõ sai không lặng lẽ tạo realm mới); in realm đang dùng. `user-disable|user-enable|user-set|user-groups` nhận `-user <id>` hoặc `-issuer I -sub S` (tra liên kết). `user-find -issuer I -sub S` in id (vận hành, e2e, dev).
+**Lệnh admin:** `issuer-add -issuer I -tenant T [-realm R]`: R phải là realm của một issuer khác cùng tenant (gõ sai không lặng lẽ tạo realm mới); in `issuer I trusted for tenant T, realm R`. `user-disable|user-enable|user-set|user-groups` nhận đúng một cặp `-tenant T -user <id>` hoặc `-issuer I -sub S` (thiếu hay cả hai → thoát 2; issuer hay `sub` không có → thoát 1, log không chứa `sub`). `user-find -issuer I -sub S` in `T <id>` (vận hành, e2e, dev).
 
 ## 5. Đúng đắn và chạy đua
 
@@ -113,49 +113,64 @@ Không thêm thư viện hay hạ tầng. Thêm collection thứ 10: `migrate -a
 | User đã có chỉ đọc RAM | Tra liên kết trên MongoDB mỗi lần: thêm truy vấn vào đường 1,7K/s, mất khả năng cấp token khi MongoDB chết |
 | `sub` theo chuẩn OIDC | Giữ `ids.ValidUser`: từ chối IdP thật có `sub` dạng `auth0|abc` |
 
-## 9. Chi phí và tải
+## 9. Chi phí và tải (đo 2026-11-09, dev, ES256, 1.700 lần đổi/giây, 60 giây, 100K user; `CPU_Speed_Limit` 100)
 
-User đã có: 0 lệnh MongoDB (như hiện nay khi hồ sơ không đổi). User mới: thêm 1 insert liên kết mỗi user, chung lô JIT; thêm một cửa sổ gom lô (2ms) trước khi ghi user. Đọc liên kết chỉ khi trùng khoá hoặc phục hồi. RAM: thêm một map mỗi user.
+| Lần đo | p50 / p99 | CPU `identity` | Ghi | M6 PM |
+|---|---|---|---|---|
+| User đã có | 0,78 / 2,53 ms | 0,83 core | 0 liên kết, 0 user | 0,78 / 1,97 ms, 0,57 core |
+| User mới | 23,1 / 233 ms | 1,27 core | 100.001 liên kết `created`; `existing`, `healed`, `pending`, `error`, `store_errors_total` +0 | 13,3 / 72,6 ms, 1,31 core |
+
+User mới chậm hơn rõ (p50 gấp 1,7, p99 gấp 3,2): mỗi user mới chờ hai lô ghi nối tiếp (liên kết rồi user). Lần đo này có pacer lag p99.9 98 ms nên máy dev có lúc khựng; số chỉ để so hướng. Chỉ lần đăng nhập đầu của mỗi người đi đường này. User đã có chậm và tốn CPU hơn PM chưa rõ vì sao (chưa có nguồn). Nạp danh bạ 100K user: cấp phát +10% (559 → 616 MB mỗi lần nạp), thời gian +0,1 giây. Kết quả: `docs/poc/README.md` mục M6.1 P1, `docs/poc/results/exchange-261109-p1/`.
 
 ## 10. Rủi ro và giới hạn
 
 - Tới M9, web chỉ mời được người đã ở chung room (owner 2026-11-09 chấp nhận). Dev và e2e lấy id bằng `user-find` hoặc từ token.
-- Vận hành quên `-realm` khi tenant đổi IdP: người đăng nhập qua issuer mới nhận id mới, không thấy lịch sử cũ; checklist nhận tenant hỏi "issuer này thay issuer nào".
-- Web/SDK đang xây trên id = mã tenant: báo web khi P1 xong.
+- Vận hành quên `-realm` khi tenant đổi IdP: người đăng nhập qua issuer mới nhận id mới, không thấy lịch sử cũ; checklist "Thêm tenant" ở `docs/apps/identity.md` hỏi "issuer này thay issuer nào".
+- Web/SDK đang xây trên id = mã tenant: id trong chat nay là id do `identity` cấp; user không có claim `name` có tên rỗng.
+- Lần đăng nhập đầu chậm hơn (mục 9).
 - Dữ liệu dev cũ (user id = `sub`, không `realm`): reset, không migration (chưa có production).
 
-## 11. Điểm đội tự chọn để owner phản biện
+## 11. Đã xây khác plan
 
-- Id không tiền tố (`k7q2…`, không `u_k7q2…`).
-- Thêm lệnh `user-find` cho vận hành và dev.
-- `-realm` chỉ nhận realm của issuer đã có cùng tenant.
-- Đo một lần exchangebench (user mới, user đã có) so với số của M6 PM, vì đường ghi user mới đổi.
+- Lọc realm hẹp hơn: nhánh `_id` chỉ khớp doc issuer cũ chưa có field `realm`, để không nhận nhầm tên một issuer đang nằm trong realm khác. Lấy realm của issuer đã tắt vẫn được (ca đổi IdP).
+- Liên kết vừa tạo luôn là `created`, kể cả khi bên thua đã kịp ghi user (bên thua ra `healed`).
+- Bộ ghi theo lô: lô có lỗi ghi bền thì mọi dòng `unavailable`, kể cả dòng trùng khoá (trước đây dòng trùng coi như xong). Sửa hồ sơ trong ca đó nay trả `unavailable` thay vì `conflict`.
+- Lỗi ghi theo lô chỉ còn câu cố định kèm mã lỗi: thông báo gốc của MongoDB chứa khoá `tenant│realm│sub` của cả user khác trong lô và lọt vào log Warn (review T4).
+- Id hỏng trong liên kết có dòng log riêng `user link corrupt` (tenant, realm).
+- e2e 13 thêm bước `user-enable` cho đổi lại được với cùng id; phase 15 kiểm `binh` (không `name`) có tên rỗng.
 
-## 12. Kiểm thử
+## 12. Kiểm thử (đã chạy)
 
 | Test | Chứng minh |
 |---|---|
-| Unit `trust`: `sub` `auth0|abc` nhận, 256 byte hay ký tự ngoài ASCII từ chối | P9 |
-| Unit `exchange`: user mới nhận id ≠ `sub`; cùng `sub` hai lần một id; hai issuer realm mặc định hai id; cùng realm một id; user bị khoá từ chối; log thành công không chứa `sub` | P1, P2, P3 |
-| Unit `directory`: map `(tenant, realm, sub)` dựng từ lần nạp và change stream; tenant khác cùng realm và `sub` không trả user của tenant này | P8, IDOR |
-| Itest `mongostore`: hai goroutine giành cùng liên kết ra một id; liên kết thiếu user được ghi nốt; migrate tạo `user_links` | P2, phục hồi |
-| Itest `admincmd`: `-realm` sai bị từ chối; `user-*` theo issuer + `sub`; `user-find` | P6 |
-| e2e 13 viết lại: `sub` token chat ≠ `sub` tenant; đổi lại ra cùng id; hai issuer, một realm chung; `user-disable -issuer -sub` chặn lần đổi kế | P1, P2, P6 |
-| Metric `user_links_total{created, existing, healed, pending, error}`; lỗi liên kết tăng `store_errors_total` nên alert `ChatimIdentityStoreErrors` đang có báo, không thêm alert mới; `pending` không báo | P12 |
-| Đo một lần bộ nhớ danh bạ (load bench) và exchangebench user mới, user đã có | P8, chi phí |
+| Unit `trust`: `auth0|abc`, 255 byte nhận; 256 byte, dấu cách, ngoài ASCII, rỗng từ chối; issuer không realm → realm = issuer | P9, R4 |
+| Unit `exchange` (bộ kiểm token thật, hai issuer): user mới id 26 ký tự ≠ `sub`; RAM có thì không ghi; realm riêng ra user riêng, cùng realm ra cùng user; tenant khác cùng `sub` không nhận id tenant này; `pending` → 503, không tăng `store_errors_total`; lần thành công không ghi log | P1–P3, IDOR |
+| Unit `directory`: tra theo `(tenant, realm, sub)` từ lần nạp và change stream; tenant khác không thấy | P8, IDOR |
+| Itest `mongostore`: hai "replica" giành một liên kết ra một id, đúng một `created`; liên kết thiếu user → `healed`; `explain` đọc ≤ 1 doc; `ResolveUser`; lỗi lô không chứa `sub` | P2, phục hồi |
+| Itest `admincmd`: `-realm` tenant khác thoát 1; `user-*` theo issuer + `sub`; `user-find`; cờ sai thoát 2 | P6 |
+| e2e 13, 15 PASS (`E2E_ONLY=13`, `E2E_ONLY=15`) | P1, P2, P5, P6 |
 
-Liên kết và tra RAM có phần tử IDOR (lọc theo tenant, realm): reviewer độc lập ở bước review plan theo Design checklist.
+Lệnh: `make -s go ARGS="test -race -shuffle=on ./apps/identity/..."` xanh; `make itest ITEST_ARGS="-race -count=1 ./apps/identity/..."` xanh 12 package (2026-11-09); `fmt-check`, `vet`, `lint` sạch mỗi commit. Review: plan (skill `mongo`, IDOR đạt), T3 và T4 mỗi task một reviewer, không Critical.
+
+## Mục mang sang
+
+- `exchangebench` chưa đọc `user_links_total` nên không tự báo số user tạo (`tools/poc/exchangebench/metrics.go`).
+- `scripts/bench-sample.sh stop` không dừng vòng `mongosh` trong container MongoDB.
+- `Cache.Replace` nhận map `subjects` rỗng (`nil`) thì lần thêm sau sẽ panic; chỉ test truyền `nil`.
+- `ResolveUser` (lệnh admin) đọc liên kết không đặt read concern majority.
 
 ## Bảng phủ
 
-| Yêu cầu / quyết định | Thành phần | Task (plan chi tiết) | Test | Bằng chứng |
+| Yêu cầu / quyết định | Thành phần | Task | Test | Bằng chứng |
 |---|---|---|---|---|
-| R1 id không đoán được, không là dữ liệu cá nhân (P1, P3) | `exchange`, `signing` | Cấp id, ký token | Unit `exchange`, e2e 13 | sau khi chạy |
-| R2 không gộp người hai issuer (P2) | `trust`, `mongostore`, `admincmd` | Realm của issuer, `user_links` | Unit `exchange`, itest, e2e 13 | sau khi chạy |
-| R4 tenant và realm từ cấu hình | `trust` | Issuer mang realm | Unit `trust`, `exchange` | sau khi chạy |
-| R5 bớt phụ thuộc IAM ngoài (P9) | `trust` | Kiểm `sub` theo OIDC | Unit `trust` | sau khi chạy |
-| P5 tên mặc định rỗng | `exchange` | Hồ sơ JIT | Unit `exchange` | sau khi chạy |
-| P6 lệnh admin theo issuer + `sub` | `admincmd` | `user-*`, `user-find`, `-realm` | Itest `admincmd`, e2e 13 | sau khi chạy |
-| P8 user đã có chỉ đọc RAM | `directory`, `exchange` | Map RAM, change stream | Unit `directory`, `exchange` | sau khi chạy |
-| P12 metric + alert | `exchange`, `mongostore` | Đếm kết quả, lỗi vào `store_errors_total` | Unit, itest; alert có sẵn | sau khi chạy |
-| IDOR: tenant khác không thấy gì | `directory`, `exchange`, `mongostore` | Khoá bắt đầu bằng tenant | Unit, `explain` trong itest | sau khi chạy |
+| R1 id không đoán được, không là dữ liệu cá nhân (P1, P3) | `exchange`, `signing` | T4 | Unit `exchange`, e2e 13 | `7591cc5`; e2e 13 PASS (id `gcaam7t3…` ≠ `ha`) |
+| R2 không gộp người hai issuer (P2) | `trust`, `mongostore`, `exchange`, `admincmd` | T1, T3, T4, T5 | Unit, itest, e2e 13 | `5fe3d60`, `0074c38`; e2e 13 realm riêng ra `m4rym6ec…`, realm chung ra `gcaam7t3…` |
+| R4 tenant và realm từ cấu hình | `trust`, `exchange` | T1, T4 | Unit `trust`, `exchange` | itest `./apps/identity/...` xanh |
+| R5 bớt phụ thuộc IAM ngoài (P9) | `trust` | T4, T6 | Unit `trust`, e2e token giả | e2e 13: `auth0|abc` đổi được, 256 byte bị từ chối |
+| P5 tên mặc định rỗng | `exchange` | T4 | Unit, e2e 15 | e2e 15: `binh` tên rỗng |
+| P6 lệnh admin theo issuer + `sub` | `admincmd` | T5, T6 | Test `admincmd`, e2e 13, 15 | `97cd7bb`; e2e 13 `user-find`, `user-disable -issuer -sub` |
+| P8 user đã có chỉ đọc RAM | `directory`, `exchange` | T2, T4 | Unit, đo | `bd7a8da`; exchangebench user đã có: 0 ghi |
+| P12 metric + alert | `exchange`, `mongostore` | T3, T4 | Unit, itest; alert có sẵn | `user_links_total` đo lạnh: 100.001 `created`, `error` +0 |
+| IDOR: tenant khác không thấy gì | `directory`, `exchange`, `mongostore` | T2–T4 | Unit, `explain` | review plan và T4: đạt |
+| Phục hồi, chạy đua replica | `mongostore` | T3 | Itest | itest giành liên kết: một id, một `created` |
+| Log không lộ `sub` | `mongostore` | sửa sau review T4 | Unit | `178d685` |
