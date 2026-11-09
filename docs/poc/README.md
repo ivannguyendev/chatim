@@ -131,7 +131,7 @@ Kết quả: [results/exchange-261102/](results/exchange-261102/es256-warm.txt).
 - Sau đợt lạnh, follower danh bạ chạy liên tục và giữ Postgres gần một core. Hai nguyên nhân: mỗi `NOTIFY` chạy một lượt đọc feed, và câu feed dùng prepared statement bị chốt kế hoạch chung, quét cả `directory_changes`. Lỗi có từ phần 3a.
 - Owner 2026-11-02 quyết định chuyển store `identity` sang MongoDB ở phase PM, trước PB, nên PA không sửa hai lỗi trên. Đo lại lượt lạnh trên MongoDB ở PM.
 
-Lệnh dưới chạy lượt lạnh rồi lượt ấm trên store hiện tại (MongoDB từ PM). Id tenant chỉ gồm chữ thường, số, `-` và `_` (`pkg/ids/ident.go` `ValidTenant`; `-tenant T` bị từ chối), và tenant phải có trước khi thêm issuer (`tenant-create`). Ví dụ dùng tenant `bench`. Lượt ấm lấy danh sách user của tenant từ `chatim_identity.users` bằng mongosh trong container `chatim-mongodb`, xác thực root từ `/run/secrets/mongo_password` như `scripts/bench-cell.sh:22-26`, không in mật khẩu. RS256 giống hệt, thay `-alg RS256`, `-kid bench-rs256` và tên file khoá.
+Lệnh dưới chạy lượt lạnh rồi lượt ấm trên store hiện tại (MongoDB từ PM). Id tenant chỉ gồm chữ thường, số, `-` và `_` (`pkg/ids/ident.go` `ValidTenant`; `-tenant T` bị từ chối), và tenant phải có trước khi thêm issuer (`tenant-create`). Ví dụ dùng tenant `bench`. Lượt ấm gửi lại đúng các `sub` mà lượt lạnh đã gửi: `-users-file` chứa `sub` trong token tenant, lấy từ field `users.sub` lọc theo `tenant_id`, **không** lấy `users.id`. Từ M6.1 P1, `id` là id ngẫu nhiên do `identity` cấp, khác `sub` của tenant; gửi `id` làm `sub` thì mọi lần đổi đều là user mới và lượt "ấm" thành lượt lạnh (`user_links_total{result="created"}` tăng). Danh sách lấy bằng mongosh trong container `chatim-mongodb`, xác thực root từ `/run/secrets/mongo_password` như `scripts/bench-cell.sh:22-26`, không in mật khẩu. RS256 giống hệt, thay `-alg RS256`, `-kid bench-rs256` và tên file khoá.
 
 ```bash
 IDENTITY_EXCHANGE_IP_RATE=100000 make app-up
@@ -142,7 +142,7 @@ make identity-admin ARGS="issuer-key-add -issuer bench-backend -kid bench-es256 
 make poc TOOL=exchangebench ARGS="-alg ES256 -key bin/bench/exchange-keys/es256.jwk -issuer bench-backend -tenant bench"
 docker exec chatim-mongodb mongosh --quiet --eval '
 db.getSiblingDB("admin").auth(process.env.MONGO_INITDB_ROOT_USERNAME, require("fs").readFileSync("/run/secrets/mongo_password", "utf8").trim());
-db.getSiblingDB("chatim_identity").users.find({tenant_id: "bench"}, {_id: 0, id: 1}).forEach(u => print(u.id))' > bin/bench/exchange-keys/es256-users.txt
+db.getSiblingDB("chatim_identity").users.find({tenant_id: "bench"}, {_id: 0, sub: 1}).forEach(u => print(u.sub))' > bin/bench/exchange-keys/es256-users.txt
 make poc TOOL=exchangebench ARGS="-alg ES256 -key bin/bench/exchange-keys/es256.jwk -issuer bench-backend -tenant bench -users-file bin/bench/exchange-keys/es256-users.txt"
 ```
 
@@ -191,6 +191,19 @@ docker start chatim-identity-1 chatim-identity-2 && ./scripts/wait-healthy.sh ch
 make itest ITEST_ARGS="-run '^$$' -bench Load100K -benchtime 3x ./apps/identity/internal/directory/"
 make -s go ARGS="test -run '^$' -bench GetUsersHTTP50 ./apps/identity/internal/api/"
 ```
+
+### M6.1 P1 — đổi token với id do `identity` cấp (dev 2026-11-09)
+
+Cùng công cụ, tham số (ES256, 1.700/s, 60s đo sau 5s khởi động, tối đa 2.048 request đang chờ, 100.000 user) và stack như lượt gom lô của PM (`IDENTITY_EXCHANGE_IP_RATE=100000 make app-up`, hai replica, `exchangebench` chỉ gửi vào `identity-1`), theo đúng lệnh ở mục PA. Tenant mới `p1es256`, issuer `p1es256-backend` (realm mặc định = issuer). Khác PM: user mới nay qua hai bộ gom nối nhau (liên kết `user_links` rồi user `users`, mỗi bộ một lần `InsertMany` `w:majority`); user đã có chỉ tra RAM theo tenant, realm và `sub`. Lượt ấm dùng file `sub` của tenant (mục PA), chạy 20s sau lượt lạnh. `CPU_Speed_Limit` bằng 100 suốt 60s đo của cả hai lượt. CPU `identity` là Δ`process_cpu_seconds_total` của `identity-1`. Số user tạo đọc từ `user_links_total{result="created"}` trên `/metrics` của `identity-1` trước và sau lượt (`exchangebench` chưa in series này; `jit_writes_total` nay chỉ còn `updated`, `conflict`, `error` của sửa hồ sơ).
+
+| Lượt | Đạt | Client bỏ | 5xx | Độ trễ p50/p99 | CPU `identity` | User tạo | So với PM | Kết quả |
+|---|---|---|---|---|---|---|---|---|
+| ES256 ấm (user đã có) | 1.700/s | 0 | 0 | 0,78/2,53 ms | 0,83 core | 0 (`user_links_total` +0, không lô JIT nào) | ES256 ấm: 0,78/1,97 ms, 0,57 core | [es256-warm.txt](results/exchange-261109-p1/es256-warm.txt) |
+| ES256 lạnh (user mới) | 1.700/s | 0 | 0 | 23,1/233 ms | 1,27 core | 100.001 (`created`; `existing`, `healed`, `pending`, `error` +0) | Gom lô lượt A: 13,3/72,6 ms, 1,31 core | [es256-cold.txt](results/exchange-261109-p1/es256-cold.txt) |
+
+- User đã có vẫn không chạm MongoDB: 0 liên kết, 0 lô JIT, p50 như PM. p99 2,53 ms và CPU 0,83 core cao hơn PM 1,97 ms và 0,57 core; nguyên nhân chưa đo tách (chưa có nguồn).
+- User mới vẫn đạt 1.700/s, 0 lần bỏ, 0 lỗi 5xx, `store_errors_total` +0, `trust_reload_errors_total` +0, 0 dòng log ở cả hai replica. Mỗi lô trung bình 4,2 liên kết (100.001 trong 23.620 lần ghi) và 4,3 user (23.415 lần). p50/p99 23,1/233 ms, khoảng gấp 1,7 và 3,2 lần lượt A của PM: mỗi user mới chờ hai lần ghi bền nối nhau thay vì một. Lượt lạnh có pacer lag p99,9 98 ms (lượt ấm 2,6 ms), tức máy dev khựng một lúc trong lượt; p99 nên đọc kèm điều đó. Prod-like đo lại (P13).
+- CPU MongoDB không ghi: hai lượt chạy kèm bộ lấy mẫu `scripts/bench-sample.sh`, các vòng mongosh của nó chạy trong container `chatim-mongodb` (và không dừng khi gọi `stop`), nên số `docker stats` của MongoDB (lạnh 1,58 core, ấm 0,31 core) không so được với PM.
 
 ## Đo prod-like (chưa chạy)
 
