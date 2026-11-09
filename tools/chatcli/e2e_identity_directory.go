@@ -36,6 +36,8 @@ type directoryFlags struct {
 
 type directoryState struct {
 	Access string `json:"access"`
+	Lan    string `json:"lan"`
+	Binh   string `json:"binh"`
 }
 
 type directoryRun struct {
@@ -94,35 +96,45 @@ func e2eIdentityDirectory(ctx context.Context, args []string) (err error) {
 	}
 }
 
-func (r directoryRun) exchange(ctx context.Context, user, name string) (string, error) {
+func (r directoryRun) exchange(ctx context.Context, user, name string) (chatToken, error) {
 	key, err := loadTenantKey(*r.f.key)
 	if err != nil {
-		return "", err
+		return chatToken{}, err
 	}
 	return r.c.awaitExchange(ctx, key, r.c.claims(user, name), trustLimit, "exchange for "+user)
 }
 
 func (r directoryRun) seed(ctx context.Context) error {
-	access, err := r.exchange(ctx, directoryLan, directoryLanName)
+	lan, err := r.exchange(ctx, directoryLan, directoryLanName)
 	if err != nil {
 		return err
 	}
-	if _, err := r.exchange(ctx, directoryBinh, ""); err != nil {
+	binh, err := r.exchange(ctx, directoryBinh, "")
+	if err != nil {
 		return err
 	}
-	fmt.Println("identity: exchanges for lan (name Lan) and binh (no name) created both users")
-	return writeJSON(filepath.Join(*r.f.dir, directoryStateFile), directoryState{Access: access})
+	if lan.User == binh.User {
+		return fmt.Errorf("lan and binh got the same chat id %s", lan.User)
+	}
+	fmt.Printf("identity: exchanges for lan (name Lan) and binh (no name) created both users, chat ids %s and %s\n", lan.User, binh.User)
+	return writeJSON(filepath.Join(*r.f.dir, directoryStateFile), directoryState{Access: lan.Access, Lan: lan.User, Binh: binh.User})
+}
+
+func (r directoryRun) state() (directoryState, error) {
+	var st directoryState
+	err := readJSON(filepath.Join(*r.f.dir, directoryStateFile), &st)
+	return st, err
 }
 
 func (r directoryRun) profile(ctx context.Context) error {
-	var st directoryState
-	if err := readJSON(filepath.Join(*r.f.dir, directoryStateFile), &st); err != nil {
+	st, err := r.state()
+	if err != nil {
 		return err
 	}
-	if err := r.checkFirstUsers(ctx, st.Access); err != nil {
+	if err := r.checkFirstUsers(ctx, st); err != nil {
 		return err
 	}
-	opened, arrived, err := r.watchNewName(ctx, st.Access, filepath.Join(*r.f.dir, pollOpenFile))
+	opened, arrived, err := r.watchNewName(ctx, st, filepath.Join(*r.f.dir, pollOpenFile))
 	if err != nil {
 		return err
 	}
@@ -139,15 +151,15 @@ func (r directoryRun) profile(ctx context.Context) error {
 	return nil
 }
 
-func (r directoryRun) watchNewName(ctx context.Context, access, openPath string) (time.Time, time.Time, error) {
+func (r directoryRun) watchNewName(ctx context.Context, st directoryState, openPath string) (time.Time, time.Time, error) {
 	var opened time.Time
 	for {
-		users, _, err := r.c.getUsers(ctx, access, []string{directoryBinh})
+		users, _, err := r.c.getUsers(ctx, st.Access, []string{st.Binh})
 		if err != nil {
 			return opened, time.Time{}, fmt.Errorf("GetUsers while waiting for the new name: %w", err)
 		}
 		now := time.Now()
-		if slices.ContainsFunc(users, func(u directoryUser) bool { return u.ID == directoryBinh && u.DisplayName == binhNewName }) {
+		if slices.ContainsFunc(users, func(u directoryUser) bool { return u.ID == st.Binh && u.DisplayName == binhNewName }) {
 			if opened.IsZero() {
 				return opened, now, errors.New("GetUsers showed the new name before user-set ran")
 			}
@@ -160,7 +172,7 @@ func (r directoryRun) watchNewName(ctx context.Context, access, openPath string)
 			}
 		}
 		if now.Sub(opened) > cliDoneWait {
-			return opened, time.Time{}, fmt.Errorf("GetUsers(%s) = %+v, the new name never came within %v", directoryBinh, users, cliDoneWait)
+			return opened, time.Time{}, fmt.Errorf("GetUsers(%s) = %+v, the new name never came within %v", st.Binh, users, cliDoneWait)
 		}
 		select {
 		case <-ctx.Done():
@@ -170,11 +182,11 @@ func (r directoryRun) watchNewName(ctx context.Context, access, openPath string)
 	}
 }
 
-func (r directoryRun) checkFirstUsers(ctx context.Context, access string) error {
-	ids := []string{directoryLan, directoryBinh, "e2e-unknown-" + randomHex(4)}
+func (r directoryRun) checkFirstUsers(ctx context.Context, st directoryState) error {
+	ids := []string{st.Lan, st.Binh, randomUserID()}
 	started := time.Now()
 	for {
-		users, raw, err := r.c.getUsers(ctx, access, ids)
+		users, raw, err := r.c.getUsers(ctx, st.Access, ids)
 		if err != nil {
 			return err
 		}
@@ -182,13 +194,16 @@ func (r directoryRun) checkFirstUsers(ctx context.Context, access string) error 
 		if bytes.Contains(lower, []byte("email")) || bytes.Contains(lower, []byte("username")) {
 			return fmt.Errorf("GetUsers leaked email or username: %s", raw)
 		}
+		if bytes.Contains(raw, []byte(`"`+directoryLan+`"`)) || bytes.Contains(raw, []byte(`"`+directoryBinh+`"`)) {
+			return fmt.Errorf("GetUsers leaked a tenant sub: %s", raw)
+		}
 		got := usersByID(users)
-		if len(users) == 2 && got[directoryLan].DisplayName == directoryLanName && got[directoryBinh].DisplayName == directoryBinh {
-			fmt.Println("identity: GetUsers of lan, binh and an unknown id returned the two known users, with no email or username")
+		if len(users) == 2 && got[st.Lan].DisplayName == directoryLanName && got[st.Binh].ID == st.Binh && got[st.Binh].DisplayName == "" {
+			fmt.Println("identity: GetUsers of the chat ids of lan and binh and an unknown id returned the two known users, Lan and binh with no name, with no email, username or tenant sub")
 			return nil
 		}
 		if time.Since(started) > directoryLimit {
-			return fmt.Errorf("GetUsers(lan, binh, unknown) = %+v, want Lan and binh only", users)
+			return fmt.Errorf("GetUsers(lan, binh, unknown) = %+v, want Lan and binh with no name only", users)
 		}
 		select {
 		case <-ctx.Done():
@@ -199,11 +214,11 @@ func (r directoryRun) checkFirstUsers(ctx context.Context, access string) error 
 }
 
 func (r directoryRun) disabled(ctx context.Context) error {
-	var st directoryState
-	if err := readJSON(filepath.Join(*r.f.dir, directoryStateFile), &st); err != nil {
+	st, err := r.state()
+	if err != nil {
 		return err
 	}
-	took, err := r.c.awaitUser(ctx, st.Access, directoryBinh, directoryLimit, func(u directoryUser) bool { return u.State == "USER_STATE_DISABLED" })
+	took, err := r.c.awaitUser(ctx, st.Access, st.Binh, directoryLimit, func(u directoryUser) bool { return u.State == "USER_STATE_DISABLED" })
 	if err != nil {
 		return fmt.Errorf("GetUsers after user-disable: %w", err)
 	}
@@ -228,20 +243,24 @@ func (r directoryRun) restarted(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	access, err := r.exchange(ctx, directoryLan, directoryLanName)
+	st, err := r.state()
 	if err != nil {
 		return err
 	}
-	users, _, err := r.c.getUsers(ctx, access, []string{directoryLan, directoryBinh})
+	fresh, err := r.exchange(ctx, directoryLan, directoryLanName)
+	if err := sameUser(fresh, st.Lan, err, "exchange for lan after the restart"); err != nil {
+		return err
+	}
+	users, _, err := r.c.getUsers(ctx, fresh.Access, []string{st.Lan, st.Binh})
 	if err != nil {
 		return fmt.Errorf("GetUsers after the restart: %w", err)
 	}
 	got := usersByID(users)
-	lan, binh := got[directoryLan], got[directoryBinh]
+	lan, binh := got[st.Lan], got[st.Binh]
 	if len(users) != 2 || lan.DisplayName != directoryLanName || lan.State != "USER_STATE_ACTIVE" || binh.DisplayName != binhNewName || binh.State != "USER_STATE_DISABLED" {
 		return fmt.Errorf("GetUsers after the restart = %+v, want Lan active and %s disabled", users, binhNewName)
 	}
-	fmt.Printf("identity: after a restart /readyz turned true in %v, a fresh exchange for lan worked and GetUsers returned both users as before\n", waited.Round(100*time.Millisecond))
+	fmt.Printf("identity: after a restart /readyz turned true in %v, a fresh exchange for lan gave the same chat id and GetUsers returned both users as before\n", waited.Round(100*time.Millisecond))
 	return nil
 }
 

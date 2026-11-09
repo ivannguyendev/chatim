@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/rand"
+	"encoding/base32"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -12,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -23,7 +25,11 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/wstest"
 )
 
-var chatTokenClaims = []string{"aud", "exp", "iat", "iss", "sid", "sub", "tid"}
+var (
+	chatTokenClaims = []string{"aud", "exp", "iat", "iss", "sid", "sub", "tid"}
+	chatUserID      = regexp.MustCompile(`^[a-z2-7]{26}$`)
+	userIDEncoding  = base32.StdEncoding.WithPadding(base32.NoPadding)
+)
 
 type usedSecrets struct {
 	path string
@@ -147,18 +153,18 @@ func gatewayStatus(ctx context.Context, url, token string, timeout time.Duration
 	}
 }
 
-func checkChatToken(token, tenant, user string, ttl time.Duration) error {
+func checkChatToken(token, tenant, tenantSub string, ttl time.Duration) (string, error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
-		return fmt.Errorf("chat token has %d parts, want 3", len(parts))
+		return "", fmt.Errorf("chat token has %d parts, want 3", len(parts))
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return fmt.Errorf("decode chat token claims: %w", err)
+		return "", fmt.Errorf("decode chat token claims: %w", err)
 	}
 	var claims map[string]any
 	if err := json.Unmarshal(raw, &claims); err != nil {
-		return fmt.Errorf("decode chat token claims: %w", err)
+		return "", fmt.Errorf("decode chat token claims: %w", err)
 	}
 	names := make([]string, 0, len(claims))
 	for name := range claims {
@@ -166,17 +172,18 @@ func checkChatToken(token, tenant, user string, ttl time.Duration) error {
 	}
 	slices.Sort(names)
 	if !slices.Equal(names, chatTokenClaims) {
-		return fmt.Errorf("chat token claims = %v, want %v", names, chatTokenClaims)
+		return "", fmt.Errorf("chat token claims = %v, want %v", names, chatTokenClaims)
 	}
 	exp, okExp := claims["exp"].(float64)
 	iat, okIat := claims["iat"].(float64)
 	if !okExp || !okIat || time.Duration(exp-iat)*time.Second != ttl {
-		return fmt.Errorf("chat token exp - iat = %v - %v, want %v", claims["exp"], claims["iat"], ttl)
+		return "", fmt.Errorf("chat token exp - iat = %v - %v, want %v", claims["exp"], claims["iat"], ttl)
 	}
-	if claims["tid"] != tenant || claims["sub"] != user {
-		return fmt.Errorf("chat token tid, sub = %v, %v; want %s, %s", claims["tid"], claims["sub"], tenant, user)
+	sub, _ := claims["sub"].(string)
+	if claims["tid"] != tenant || !chatUserID.MatchString(sub) || sub == tenantSub {
+		return "", fmt.Errorf("chat token tid, sub = %v, %v; want %s and a 26-char lowercase base32 id other than the tenant sub %q", claims["tid"], claims["sub"], tenant, tenantSub)
 	}
-	return nil
+	return sub, nil
 }
 
 func writeJSON(path string, v any) error {
@@ -198,6 +205,12 @@ func readJSON(path string, v any) error {
 func readSecret(path string) (string, error) {
 	b, err := os.ReadFile(filepath.Clean(path))
 	return strings.TrimSpace(string(b)), err
+}
+
+func randomUserID() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return strings.ToLower(userIDEncoding.EncodeToString(b))
 }
 
 func randomHex(n int) string {
