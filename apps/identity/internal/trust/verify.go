@@ -10,7 +10,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/ivannguyendev/chatim/pkg/core/apperr"
-	"github.com/ivannguyendev/chatim/pkg/ids"
 )
 
 type Reason string
@@ -69,6 +68,7 @@ type Subject struct {
 	Picture    string
 	HasPicture bool
 	Issuer     string
+	Realm      string
 	KeyID      string
 }
 
@@ -198,7 +198,7 @@ func (v *Verifier) subject(claims jwt.MapClaims, found match) (Subject, error) {
 		}
 	}
 	sub, ok := claims["sub"].(string)
-	if !ok || ids.ValidUser(sub) != nil {
+	if !ok || !ValidSubject(sub) {
 		return Subject{}, refuse(ReasonSubject)
 	}
 	name, hasName := claims["name"].(string)
@@ -211,6 +211,7 @@ func (v *Verifier) subject(claims jwt.MapClaims, found match) (Subject, error) {
 		Picture:    picture,
 		HasPicture: hasPicture,
 		Issuer:     found.issuer,
+		Realm:      found.entry.realm,
 		KeyID:      found.keyID,
 	}, nil
 }

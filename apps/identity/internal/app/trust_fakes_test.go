@@ -34,6 +34,7 @@ type trustFake struct {
 	lastTrust  atomic.Int64
 	tenantKey  ed25519.PrivateKey
 	profiles   atomic.Int64
+	links      atomic.Int64
 }
 
 func (f *fakeStore) TrustedIssuers(ctx context.Context) ([]store.TrustedIssuer, error) {
@@ -74,7 +75,16 @@ func (f *fakeStore) WriteProfile(context.Context, store.ProfileWrite) (bool, err
 	return true, nil
 }
 
-func (f *fakeStore) JITBatchDocs() metrics.Histogram {
+func (f *fakeStore) LinkUser(_ context.Context, u store.NewUser) (store.LinkedUser, error) {
+	f.links.Add(1)
+	return store.LinkedUser{ID: u.CandidateID, Result: store.LinkCreated}, nil
+}
+
+func (f *fakeStore) JITLinkBatchDocs() metrics.Histogram {
+	return metrics.Histogram{Bounds: []float64{1, 2}, Cumulative: []uint64{2, 2}, Count: 2, Sum: 2}
+}
+
+func (f *fakeStore) JITUserBatchDocs() metrics.Histogram {
 	return metrics.Histogram{Bounds: []float64{1, 2}, Cumulative: []uint64{1, 3}, Count: 3, Sum: 5}
 }
 

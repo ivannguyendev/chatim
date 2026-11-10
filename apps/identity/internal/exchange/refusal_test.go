@@ -27,6 +27,8 @@ func assertOneLogLine(t *testing.T, h *harness, want ...string) {
 
 func TestStoreErrorIsUnavailableAndLoggedOnce(t *testing.T) {
 	h := newHarness(t)
+	h.cache("Lan", "", store.StateActive)
+	h.verifier.subject.Name, h.verifier.subject.HasName = "Hà", true
 	h.profiles.err = errStore
 	_, err := h.exchange(t, "tenant-token")
 	if !errors.Is(err, apperr.ErrUnavailable) {
@@ -43,7 +45,7 @@ func TestStoreErrorIsUnavailableAndLoggedOnce(t *testing.T) {
 func TestDisabledUserIsRefusedBeforeAnyWrite(t *testing.T) {
 	for _, state := range []store.State{store.StateDisabled, 0, 3} {
 		h := newHarness(t)
-		h.cache("ha", "Hà", "", state)
+		h.cache("Hà", "", state)
 		h.verifier.subject.Name, h.verifier.subject.HasName = "Hà Nguyễn", true
 		_, err := h.exchange(t, "tenant-token")
 		if !errors.Is(err, exchange.ErrDisabled) || errors.Is(err, exchange.ErrRefused) {
@@ -96,7 +98,7 @@ func TestUnavailableDependenciesAreLoggedOnce(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			h := newHarness(t)
 			if tc.cached {
-				h.cache("ha", "Hà", "", store.StateActive)
+				h.cache("Hà", "", store.StateActive)
 			}
 			tc.setup(h)
 			_, err := h.exchange(t, "tenant-token")
@@ -105,6 +107,7 @@ func TestUnavailableDependenciesAreLoggedOnce(t *testing.T) {
 			}
 			assertCalls(t, h, tc.calls...)
 			assertWrites(t, h, nil)
+			assertLinks(t, h, nil)
 			assertOneLogLine(t, h, "level=WARN", "token exchange unavailable")
 		})
 	}
@@ -112,14 +115,15 @@ func TestUnavailableDependenciesAreLoggedOnce(t *testing.T) {
 
 func TestCanceledClientIsNotCountedAsAStoreError(t *testing.T) {
 	h := newHarness(t)
-	h.profiles.err = context.Canceled
+	h.profiles.link = func(store.NewUser) (store.LinkedUser, error) { return store.LinkedUser{}, context.Canceled }
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	_, err := h.svc.Exchange(ctx, "tenant-token", clientIP)
 	if !errors.Is(err, context.Canceled) || !errors.Is(err, apperr.ErrUnavailable) {
 		t.Fatalf("Exchange error = %v; want canceled and unavailable", err)
 	}
-	assertWrites(t, h, map[exchange.WriteResult]uint64{})
+	assertWrites(t, h, nil)
+	assertLinks(t, h, nil)
 	if h.stats.StoreErrors() != 0 {
 		t.Fatalf("store errors = %d; want 0 for a client that left", h.stats.StoreErrors())
 	}

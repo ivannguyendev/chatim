@@ -3,7 +3,10 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
+
+	"github.com/ivannguyendev/chatim/pkg/core/apperr"
 )
 
 type State int16
@@ -98,6 +101,7 @@ type Revocation struct {
 type TrustedIssuer struct {
 	Issuer      string
 	TenantID    string
+	Realm       string
 	IssuerState State
 	TenantState State
 }
@@ -127,6 +131,48 @@ type ProfileWrite struct {
 	By          string
 }
 
+type NewUser struct {
+	TenantID    string
+	Realm       string
+	Sub         string
+	CandidateID string
+	DisplayName string
+	AvatarURL   string
+	At          time.Time
+	By          string
+}
+
+type LinkResult int8
+
+const (
+	LinkCreated LinkResult = iota + 1
+	LinkExisting
+	LinkHealed
+	LinkPending
+)
+
+func (r LinkResult) String() string {
+	switch r {
+	case LinkCreated:
+		return "created"
+	case LinkExisting:
+		return "existing"
+	case LinkHealed:
+		return "healed"
+	case LinkPending:
+		return "pending"
+	default:
+		return "unknown"
+	}
+}
+
+var ErrLinkCorrupt = fmt.Errorf("%w: user link holds an invalid user id", apperr.ErrUnavailable)
+
+type LinkedUser struct {
+	ID     string
+	Result LinkResult
+}
+
 type SchemaState struct {
 	Missing  []string
 	Outdated []string
@@ -139,6 +185,7 @@ type TrustSource interface {
 
 type ProfileWriter interface {
 	WriteProfile(ctx context.Context, w ProfileWrite) (written bool, err error)
+	LinkUser(ctx context.Context, u NewUser) (LinkedUser, error)
 }
 
 type Directory interface {
@@ -158,16 +205,23 @@ type Admin interface {
 	CreateSigningKey(ctx context.Context, k SigningKey) (time.Time, error)
 	ActivateSigningKey(ctx context.Context, id string, lead time.Duration) error
 	SigningKeys(ctx context.Context) ([]SigningKey, error)
-	CreateTrustedIssuer(ctx context.Context, issuer, tenantID string, at time.Time, by string) error
+	CreateTrustedIssuer(ctx context.Context, issuer, tenantID, realm string, at time.Time, by string) error
 	SetTrustedIssuerState(ctx context.Context, issuer string, state State, at time.Time, by string) error
 	AddTrustedKey(ctx context.Context, k TrustedKey, at time.Time, by string) error
 	RemoveTrustedKey(ctx context.Context, issuer, keyID string) error
 	TrustedKeysOf(ctx context.Context, issuer string) ([]TrustedKey, error)
+	ResolveUser(ctx context.Context, issuer, sub string) (tenantID, userID string, err error)
 }
 
 type UserKey struct {
 	TenantID string
 	ID       string
+}
+
+type SubjectKey struct {
+	TenantID string
+	Realm    string
+	Sub      string
 }
 
 type DirectoryEntry struct {
@@ -177,6 +231,8 @@ type DirectoryEntry struct {
 	AvatarURL   string
 	State       State
 	Ver         int64
+	Realm       string
+	Sub         string
 }
 
 type StreamToken []byte

@@ -28,7 +28,7 @@ phase15_identity_directory() {
   step="phase 15 exchanges create lan and binh"
   echo "phase 15: tenant $id15_tenant trusts $id15_issuer with k1 (EdDSA)"
   cli e2e identity-directory -stage seed "${id15_args[@]}"
-  identity_admin user-groups -tenant "$id15_tenant" -user binh -groups kinh-doanh-hcm
+  identity_admin user-groups -issuer "$id15_issuer" -sub binh -groups kinh-doanh-hcm
   step="phase 15 GetUsers polled every 50ms shows the name set by user-set"
   rm -f "$state/identity15-poll-open" "$state/identity15-cli-ms"
   docker run --rm --name "$identity_watch" --network "$network" --user "$(id -u):$(id -g)" -v "$state":/state "$image" \
@@ -42,13 +42,13 @@ phase15_identity_directory() {
     sleep 0.05
   done
   id15_start="$(id15_now_ms)"
-  identity_admin user-set -tenant "$id15_tenant" -user binh -name "Bình Trần"
+  identity_admin user-set -issuer "$id15_issuer" -sub binh -name "Bình Trần"
   id15_end="$(id15_now_ms)"
   awk -v a="$id15_start" -v b="$id15_end" 'BEGIN { printf "%.3f\n", b - a }' >"$state/identity15-cli-ms.tmp"
   mv "$state/identity15-cli-ms.tmp" "$state/identity15-cli-ms"
   wait "$id15_watch"
   step="phase 15 user-disable reaches GetUsers, the removed feed is 404, a wrong secret is 401"
-  identity_admin user-disable -tenant "$id15_tenant" -user binh
+  identity_admin user-disable -issuer "$id15_issuer" -sub binh
   cli e2e identity-directory -stage disabled "${id15_args[@]}"
   step="phase 15 restart $identity_container and read the directory again"
   echo "restart: docker restart $identity_container"

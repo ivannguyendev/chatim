@@ -11,7 +11,7 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/core/apperr"
 )
 
-var directoryFields = []string{"tenant_id", "id", "display_name", "avatar_url", "state", "ver"}
+var directoryFields = []string{"tenant_id", "id", "display_name", "avatar_url", "state", "ver", "realm", "sub"}
 
 type directoryDoc struct {
 	TenantID    string      `bson:"tenant_id"`
@@ -20,11 +20,14 @@ type directoryDoc struct {
 	AvatarURL   string      `bson:"avatar_url"`
 	State       store.State `bson:"state"`
 	Ver         int64       `bson:"ver"`
+	Realm       string      `bson:"realm"`
+	Sub         string      `bson:"sub"`
 }
 
 func (d directoryDoc) entry() store.DirectoryEntry {
 	return store.DirectoryEntry{
 		TenantID: d.TenantID, ID: d.ID, DisplayName: d.DisplayName, AvatarURL: d.AvatarURL, State: d.State, Ver: d.Ver,
+		Realm: d.Realm, Sub: d.Sub,
 	}
 }
 

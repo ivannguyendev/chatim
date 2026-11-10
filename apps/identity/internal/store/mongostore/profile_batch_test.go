@@ -210,6 +210,12 @@ func TestJITBatchFailsEveryDocumentOnACommandError(t *testing.T) {
 		"write concern": func(context.Context, []string) error {
 			return mongo.BulkWriteException{WriteConcernError: &mongo.WriteConcernError{Code: 64}}
 		},
+		"duplicate with a write concern error": func(context.Context, []string) error {
+			return mongo.BulkWriteException{
+				WriteConcernError: &mongo.WriteConcernError{Code: 64},
+				WriteErrors:       []mongo.BulkWriteError{{WriteError: mongo.WriteError{Index: 0, Code: duplicateKeyCode}}},
+			}
+		},
 	}
 	for name, reply := range cases {
 		t.Run(name, func(t *testing.T) {

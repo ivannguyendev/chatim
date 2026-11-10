@@ -184,21 +184,29 @@ func (w *jitWriter) classify(results []jitResult, err error) {
 		return
 	}
 	bwe, ok := errors.AsType[mongo.BulkWriteException](err)
-	if !ok || len(bwe.WriteErrors) == 0 || !writeErrorsWithin(bwe.WriteErrors, len(results)) {
-		fillResults(results, jitResult{err: w.unavailable(err)})
+	if !ok || bwe.WriteConcernError != nil || len(bwe.WriteErrors) == 0 || !writeErrorsWithin(bwe.WriteErrors, len(results)) {
+		fillResults(results, jitResult{err: w.unavailable(scrubBulkWrite(err))})
 		return
 	}
-	clean := jitResult{written: true}
-	if bwe.WriteConcernError != nil {
-		clean = jitResult{err: w.unavailable(err)}
-	}
-	fillResults(results, clean)
+	fillResults(results, jitResult{written: true})
 	for _, we := range bwe.WriteErrors {
 		if mongo.IsDuplicateKeyError(we.WriteError) {
 			results[we.Index] = jitResult{}
 			continue
 		}
-		results[we.Index] = jitResult{err: w.unavailable(we.WriteError)}
+		results[we.Index] = jitResult{err: w.unavailable(fmt.Errorf("bulk write: write error code %d", we.Code))}
+	}
+}
+
+func scrubBulkWrite(err error) error {
+	bwe, ok := errors.AsType[mongo.BulkWriteException](err)
+	switch {
+	case !ok:
+		return err
+	case bwe.WriteConcernError != nil:
+		return fmt.Errorf("bulk write: write concern error code %d", bwe.WriteConcernError.Code)
+	default:
+		return fmt.Errorf("bulk write: %d write errors", len(bwe.WriteErrors))
 	}
 }
 

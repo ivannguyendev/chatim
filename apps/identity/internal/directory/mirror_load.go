@@ -54,7 +54,7 @@ func (m *Mirror) loadPass(ctx context.Context, run *mirrorRun) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	users, err := m.loadUsers(ctx, slot)
+	users, subjects, err := m.loadUsers(ctx, slot)
 	if err != nil {
 		return false, err
 	}
@@ -62,35 +62,35 @@ func (m *Mirror) loadPass(ctx context.Context, run *mirrorRun) (bool, error) {
 		return false, err
 	}
 	run.recheckAt = time.Now().Add(m.Recheck)
-	m.Cache.Replace(users, start)
+	m.Cache.Replace(users, subjects, start)
 	return true, nil
 }
 
-func (m *Mirror) loadUsers(ctx context.Context, slot store.Slot) (map[store.UserKey]Entry, error) {
-	users := map[store.UserKey]Entry{}
+func (m *Mirror) loadUsers(ctx context.Context, slot store.Slot) (map[store.UserKey]Entry, map[store.SubjectKey]string, error) {
+	users, subjects := map[store.UserKey]Entry{}, map[store.SubjectKey]string{}
 	renewedAt := time.Now()
 	var after store.UserKey
 	for {
 		entries, err := m.Source.LoadPage(ctx, after, loadPageSize)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		for _, e := range entries {
-			putEntry(users, e)
+			putEntry(users, subjects, e)
 		}
 		if len(entries) < loadPageSize {
-			return users, nil
+			return users, subjects, nil
 		}
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if time.Since(renewedAt) >= slotRenewEvery {
 			held, err := slot.Renew(ctx)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			if !held {
-				return nil, errLoadSlotLost
+				return nil, nil, errLoadSlotLost
 			}
 			renewedAt = time.Now()
 		}

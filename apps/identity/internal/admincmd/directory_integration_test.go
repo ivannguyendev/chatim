@@ -18,9 +18,10 @@ const (
 
 func seedUser(t *testing.T, h *harness, tenant, id, name string) {
 	t.Helper()
-	created, err := h.store().WriteProfile(context.Background(), store.ProfileWrite{TenantID: tenant, UserID: id, DisplayName: name, At: time.Now(), By: "test"})
-	if err != nil || !created {
-		t.Fatalf("seed user %s = %v, %v", id, created, err)
+	u := store.NewUser{TenantID: tenant, Realm: "test", Sub: id, CandidateID: id, DisplayName: name, At: time.Now(), By: "test"}
+	linked, err := h.store().LinkUser(context.Background(), u)
+	if err != nil || linked != (store.LinkedUser{ID: id, Result: store.LinkCreated}) {
+		t.Fatalf("seed user %s = %+v, %v; want it created", id, linked, err)
 	}
 }
 

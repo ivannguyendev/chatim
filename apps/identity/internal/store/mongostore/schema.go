@@ -25,6 +25,7 @@ const (
 	signingKeyClaimsCollection = "signing_key_claims"
 	revokedSessionsCollection  = "revoked_sessions"
 	slotsCollection            = "slots"
+	userLinksCollection        = "user_links"
 	namespaceExistsCode        = 48
 )
 
@@ -60,6 +61,7 @@ func Indexes() mongoindex.Catalog {
 			{Keys: bson.D{{Key: "expires_at", Value: 1}}},
 		}},
 		{Name: slotsCollection},
+		{Name: userLinksCollection},
 	}}
 }
 

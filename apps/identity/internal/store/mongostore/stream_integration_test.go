@@ -106,7 +106,8 @@ func TestOpenStreamSeesExactlyTheUserWrittenAfterTheStart(t *testing.T) {
 	cs := openStream(t, s, from)
 	ev := nextEvent(t, cs)
 	expectUser(t, ev, "u1", "Lan", 1)
-	want := store.DirectoryEntry{TenantID: "shop", ID: "u1", DisplayName: "Lan", AvatarURL: "https://img/lan.png", State: store.StateActive, Ver: 1}
+	want := store.DirectoryEntry{TenantID: "shop", ID: "u1", DisplayName: "Lan", AvatarURL: "https://img/lan.png", State: store.StateActive, Ver: 1,
+		Realm: itRealm, Sub: "u1"}
 	if ev.User != want {
 		t.Fatalf("user = %+v; want %+v", ev.User, want)
 	}

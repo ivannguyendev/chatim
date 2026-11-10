@@ -25,23 +25,22 @@ func claimedPicture(sub trust.Subject) (string, bool) {
 	return sub.Picture, true
 }
 
-func profileWrite(sub trust.Subject, cached directory.User, known bool, at time.Time) (store.ProfileWrite, bool) {
-	w := store.ProfileWrite{TenantID: sub.Tenant, UserID: sub.User, At: at, By: jitActorPrefix + sub.Issuer}
-	name, hasName := claimedName(sub)
-	picture, hasPicture := claimedPicture(sub)
-	if !known {
-		w.DisplayName = sub.User
-		if hasName {
-			w.DisplayName = name
-		}
-		w.AvatarURL = picture
-		return w, true
+func newUser(sub trust.Subject, candidate string, at time.Time) store.NewUser {
+	name, _ := claimedName(sub)
+	picture, _ := claimedPicture(sub)
+	return store.NewUser{
+		TenantID: sub.Tenant, Realm: sub.Realm, Sub: sub.User, CandidateID: candidate,
+		DisplayName: name, AvatarURL: picture, At: at, By: jitActorPrefix + sub.Issuer,
 	}
-	w.DisplayName, w.AvatarURL = cached.DisplayName, cached.AvatarURL
-	if hasName {
+}
+
+func profileUpdate(sub trust.Subject, cached directory.User, at time.Time) (store.ProfileWrite, bool) {
+	w := store.ProfileWrite{TenantID: sub.Tenant, UserID: cached.ID, DisplayName: cached.DisplayName, AvatarURL: cached.AvatarURL,
+		At: at, By: jitActorPrefix + sub.Issuer}
+	if name, ok := claimedName(sub); ok {
 		w.DisplayName = name
 	}
-	if hasPicture {
+	if picture, ok := claimedPicture(sub); ok {
 		w.AvatarURL = picture
 	}
 	if w.DisplayName == cached.DisplayName && w.AvatarURL == cached.AvatarURL {

@@ -34,7 +34,7 @@ type Verifier interface {
 
 type Directory interface {
 	Ready() bool
-	LookupOne(tenant, id string) (directory.User, bool)
+	LookupSubject(tenant, realm, sub string) (directory.User, bool)
 }
 
 type Signers interface {
@@ -95,7 +95,7 @@ func (s *Service) exchange(ctx context.Context, subjectToken, clientIP string) (
 	if err != nil {
 		return Issued{}, s.refused(ctx, subjectToken, clientIP, err)
 	}
-	cached, known := s.deps.Directory.LookupOne(sub.Tenant, sub.User)
+	cached, known := s.deps.Directory.LookupSubject(sub.Tenant, sub.Realm, sub.User)
 	if known && cached.State != store.StateActive {
 		s.deps.Log.InfoContext(ctx, "token exchange refused", slog.String("reason", reasonUserDisabled),
 			slog.String("tenant", sub.Tenant), slog.String("user", sub.User), slog.String("iss", sub.Issuer),
@@ -107,10 +107,18 @@ func (s *Service) exchange(ctx context.Context, subjectToken, clientIP string) (
 		return Issued{}, fmt.Errorf("%w: no signing key: %w", apperr.ErrUnavailable, err)
 	}
 	now := s.deps.Now()
-	if err := s.writeProfile(ctx, sub, cached, known, now); err != nil {
+	id, err := s.resolveUser(ctx, sub, cached, known, now)
+	if err != nil {
 		return Issued{}, err
 	}
-	return s.sign(signer, sub, now)
+	return s.sign(signer, sub.Tenant, id, now)
+}
+
+func (s *Service) resolveUser(ctx context.Context, sub trust.Subject, cached directory.User, known bool, now time.Time) (string, error) {
+	if !known {
+		return s.linkUser(ctx, sub, now)
+	}
+	return cached.ID, s.writeProfile(ctx, sub, cached, now)
 }
 
 func (s *Service) refused(ctx context.Context, subjectToken, clientIP string, err error) error {
@@ -127,8 +135,8 @@ func (s *Service) refused(ctx context.Context, subjectToken, clientIP string, er
 	return ErrRefused
 }
 
-func (s *Service) writeProfile(ctx context.Context, sub trust.Subject, cached directory.User, known bool, now time.Time) error {
-	w, needed := profileWrite(sub, cached, known, now)
+func (s *Service) writeProfile(ctx context.Context, sub trust.Subject, cached directory.User, now time.Time) error {
+	w, needed := profileUpdate(sub, cached, now)
 	if !needed {
 		return nil
 	}
@@ -142,20 +150,18 @@ func (s *Service) writeProfile(ctx context.Context, sub trust.Subject, cached di
 		return fmt.Errorf("%w: write just-in-time profile: %w", apperr.ErrUnavailable, err)
 	case !written:
 		s.deps.Stats.countWrite(WriteConflict)
-	case w.Seen == nil:
-		s.deps.Stats.countWrite(WriteCreated)
 	default:
 		s.deps.Stats.countWrite(WriteUpdated)
 	}
 	return nil
 }
 
-func (s *Service) sign(signer *signing.Signer, sub trust.Subject, now time.Time) (Issued, error) {
+func (s *Service) sign(signer *signing.Signer, tenant, userID string, now time.Time) (Issued, error) {
 	sid, err := signing.NewSessionID(s.deps.Random)
 	if err != nil {
 		return Issued{}, fmt.Errorf("%w: %w", apperr.ErrUnavailable, err)
 	}
-	token, expires, err := signer.Sign(signing.Claims{Tenant: sub.Tenant, Subject: sub.User, Session: sid, IssuedAt: now})
+	token, expires, err := signer.Sign(signing.Claims{Tenant: tenant, Subject: userID, Session: sid, IssuedAt: now})
 	if err != nil {
 		return Issued{}, fmt.Errorf("%w: %w", apperr.ErrUnavailable, err)
 	}

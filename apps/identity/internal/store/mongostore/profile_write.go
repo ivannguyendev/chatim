@@ -12,9 +12,11 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/core/redact"
 )
 
+var errProfileWithoutSeen = fmt.Errorf("%w: a profile write needs the seen values", apperr.ErrInvalidArgument)
+
 func (s *Store) WriteProfile(ctx context.Context, w store.ProfileWrite) (bool, error) {
 	if w.Seen == nil {
-		return s.insertProfile(ctx, w)
+		return false, errProfileWithoutSeen
 	}
 	filter := bson.D{
 		{Key: "_id", Value: tenantKey(w.TenantID, w.UserID)},
@@ -37,10 +39,9 @@ func (s *Store) WriteProfile(ctx context.Context, w store.ProfileWrite) (bool, e
 	return res.MatchedCount > 0, nil
 }
 
-func (s *Store) insertProfile(ctx context.Context, w store.ProfileWrite) (bool, error) {
-	id := tenantKey(w.TenantID, w.UserID)
-	return s.jit.write(ctx, id, bson.D{
-		{Key: "_id", Value: id},
+func newUserDoc(key string, w store.ProfileWrite) bson.D {
+	return bson.D{
+		{Key: "_id", Value: key},
 		{Key: "tenant_id", Value: w.TenantID},
 		{Key: "id", Value: w.UserID},
 		{Key: "display_name", Value: w.DisplayName},
@@ -51,12 +52,14 @@ func (s *Store) insertProfile(ctx context.Context, w store.ProfileWrite) (bool, 
 		{Key: "created_at", Value: w.At},
 		{Key: "updated_at", Value: w.At},
 		{Key: "updated_by", Value: w.By},
-	})
+	}
 }
 
-func (s *Store) insertUsers(ctx context.Context, docs []any) error {
-	_, err := s.db.Collection(usersCollection).InsertMany(ctx, docs, options.InsertMany().SetOrdered(false))
-	return err
+func (s *Store) insertMany(collection string) insertManyFunc {
+	return func(ctx context.Context, docs []any) error {
+		_, err := s.db.Collection(collection).InsertMany(ctx, docs, options.InsertMany().SetOrdered(false))
+		return err
+	}
 }
 
 func (s *Store) unavailable(err error) error {

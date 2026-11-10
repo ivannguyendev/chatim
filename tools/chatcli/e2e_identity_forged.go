@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -13,7 +14,10 @@ import (
 	"github.com/ivannguyendev/chatim/tools/internal/devtoken"
 )
 
-const trustLimit = 2 * time.Second
+const (
+	trustLimit = 2 * time.Second
+	pipedSub   = "auth0|abc"
+)
 
 type forgedCase struct {
 	name string
@@ -56,7 +60,7 @@ func (r exchangeRun) forgedCases() ([]forgedCase, error) {
 		{"expired", r.signedWith(r.k1, func(c *devtoken.TenantClaims) { c.IssuedAt = now.Add(-5 * time.Minute) })},
 		{"lifetime of 11 minutes", r.signedWith(r.k1, func(c *devtoken.TenantClaims) { c.TTL = 11 * time.Minute })},
 		{"tid of another tenant", r.signedWith(r.k1, func(c *devtoken.TenantClaims) { c.Tenant = "e2e" + randomHex(4) })},
-		{"sub auth0|abc", r.signedWith(r.k1, func(c *devtoken.TenantClaims) { c.Subject = "auth0|abc" })},
+		{"sub of 256 bytes", r.signedWith(r.k1, func(c *devtoken.TenantClaims) { c.Subject = strings.Repeat("a", 256) })},
 	}, nil
 }
 
@@ -93,6 +97,9 @@ func (r exchangeRun) forged(ctx context.Context) error {
 	if reply.Status != http.StatusBadRequest || reply.Error != "unsupported_grant_type" {
 		return fmt.Errorf("grant_type client_credentials = %d %q, want 400 unsupported_grant_type", reply.Status, reply.Error)
 	}
-	fmt.Printf("identity: %d forged or wrong tenant tokens got the same 400 invalid_grant body; a wrong grant_type got unsupported_grant_type\n", len(cases))
+	if _, err := r.c.mustExchange(ctx, r.k1, r.c.claims(pipedSub, exchangeName), "exchange of sub "+pipedSub); err != nil {
+		return err
+	}
+	fmt.Printf("identity: %d forged or wrong tenant tokens got the same 400 invalid_grant body; a wrong grant_type got unsupported_grant_type; sub %s was exchanged\n", len(cases), pipedSub)
 	return nil
 }

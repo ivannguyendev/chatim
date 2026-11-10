@@ -20,6 +20,7 @@ import (
 type trustedIssuerDocument struct {
 	ID        string    `bson:"_id"`
 	TenantID  string    `bson:"tenant_id"`
+	Realm     string    `bson:"realm"`
 	State     int32     `bson:"state"`
 	Ver       int64     `bson:"ver"`
 	CreatedAt time.Time `bson:"created_at"`
@@ -55,7 +56,7 @@ func canonicalEdJWK(t *testing.T, kid string) []byte {
 
 func mustCreateIssuer(t *testing.T, s *Store, issuer, tenantID string) {
 	t.Helper()
-	if err := s.CreateTrustedIssuer(t.Context(), issuer, tenantID, itAt, "cli:admin"); err != nil {
+	if err := s.CreateTrustedIssuer(t.Context(), issuer, tenantID, "", itAt, "cli:admin"); err != nil {
 		t.Fatalf("CreateTrustedIssuer %s: %v", issuer, err)
 	}
 }
@@ -79,7 +80,7 @@ func keyIDs(keys []store.TrustedKey) []string {
 
 func TestCreateTrustedIssuerNeedsTheTenantAndRefusesADuplicate(t *testing.T) {
 	s := testDatabase(t)
-	if err := s.CreateTrustedIssuer(t.Context(), "shop-backend", "ghost", itAt, "cli:admin"); !errors.Is(err, apperr.ErrNotFound) {
+	if err := s.CreateTrustedIssuer(t.Context(), "shop-backend", "ghost", "", itAt, "cli:admin"); !errors.Is(err, apperr.ErrNotFound) {
 		t.Fatalf("issuer for an unknown tenant = %v; want not found", err)
 	}
 	mustCreateTenant(t, s, "shop")
@@ -88,7 +89,7 @@ func TestCreateTrustedIssuerNeedsTheTenantAndRefusesADuplicate(t *testing.T) {
 	if got.TenantID != "shop" || got.State != 1 || got.Ver != 1 || !got.CreatedAt.Equal(itAt) || !got.UpdatedAt.Equal(itAt) || got.UpdatedBy != "cli:admin" {
 		t.Fatalf("issuer = %+v; want tenant shop, state 1, ver 1, at %v by cli:admin", got, itAt)
 	}
-	if err := s.CreateTrustedIssuer(t.Context(), "shop-backend", "shop", itAt, "cli:other"); !errors.Is(err, apperr.ErrAlreadyExists) {
+	if err := s.CreateTrustedIssuer(t.Context(), "shop-backend", "shop", "", itAt, "cli:other"); !errors.Is(err, apperr.ErrAlreadyExists) {
 		t.Fatalf("duplicate issuer = %v; want already exists", err)
 	}
 }
@@ -97,7 +98,7 @@ func TestTrustNamesWithTheKeySeparatorAreRefused(t *testing.T) {
 	s := testDatabase(t)
 	mustCreateTenant(t, s, "shop")
 	mustCreateIssuer(t, s, "shop-backend", "shop")
-	if err := s.CreateTrustedIssuer(t.Context(), "shop│backend", "shop", itAt, "cli:admin"); !errors.Is(err, apperr.ErrInvalidArgument) {
+	if err := s.CreateTrustedIssuer(t.Context(), "shop│backend", "shop", "", itAt, "cli:admin"); !errors.Is(err, apperr.ErrInvalidArgument) {
 		t.Fatalf("issuer with the separator = %v; want invalid argument", err)
 	}
 	k := store.TrustedKey{Issuer: "shop-backend", KeyID: "k│1", Algorithm: trust.AlgorithmEdDSA, PublicKey: canonicalEdJWK(t, "")}
@@ -217,9 +218,9 @@ func TestTrustedIssuersCarryTheTenantStateSortedByIssuer(t *testing.T) {
 		t.Fatalf("TrustedIssuers: %v", err)
 	}
 	want := []store.TrustedIssuer{
-		{Issuer: "bank-backend", TenantID: "bank", IssuerState: store.StateActive, TenantState: store.StateActive},
-		{Issuer: "shop-backend", TenantID: "shop", IssuerState: store.StateActive, TenantState: store.StateDisabled},
-		{Issuer: "shop-idp", TenantID: "shop", IssuerState: store.StateDisabled, TenantState: store.StateDisabled},
+		{Issuer: "bank-backend", TenantID: "bank", Realm: "bank-backend", IssuerState: store.StateActive, TenantState: store.StateActive},
+		{Issuer: "shop-backend", TenantID: "shop", Realm: "shop-backend", IssuerState: store.StateActive, TenantState: store.StateDisabled},
+		{Issuer: "shop-idp", TenantID: "shop", Realm: "shop-idp", IssuerState: store.StateDisabled, TenantState: store.StateDisabled},
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("TrustedIssuers = %+v; want %+v", got, want)

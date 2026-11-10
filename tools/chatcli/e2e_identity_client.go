@@ -35,6 +35,11 @@ type exchangeReply struct {
 	Expiry int64
 }
 
+type chatToken struct {
+	Access string
+	User   string
+}
+
 type directoryUser struct {
 	ID          string `json:"id"`
 	DisplayName string `json:"displayName"`
@@ -100,44 +105,46 @@ func (c *identityClient) exchange(ctx context.Context, subjectToken string) (exc
 	return c.post(ctx, url.Values{"grant_type": {exchangeGrant}, "subject_token": {subjectToken}, "subject_token_type": {subjectTypeJWT}})
 }
 
-func (c *identityClient) mustExchange(ctx context.Context, key devtoken.TenantKey, claims devtoken.TenantClaims, what string) (string, error) {
+func (c *identityClient) mustExchange(ctx context.Context, key devtoken.TenantKey, claims devtoken.TenantClaims, what string) (chatToken, error) {
 	return c.awaitExchange(ctx, key, claims, 0, what)
 }
 
-func (c *identityClient) awaitExchange(ctx context.Context, key devtoken.TenantKey, claims devtoken.TenantClaims, limit time.Duration, what string) (string, error) {
+func (c *identityClient) awaitExchange(ctx context.Context, key devtoken.TenantKey, claims devtoken.TenantClaims, limit time.Duration, what string) (chatToken, error) {
 	started := time.Now()
 	for {
 		token, err := c.sign(key, claims)
 		if err != nil {
-			return "", err
+			return chatToken{}, err
 		}
 		r, err := c.exchange(ctx, token)
 		if err != nil {
-			return "", fmt.Errorf("%s: %w", what, err)
+			return chatToken{}, fmt.Errorf("%s: %w", what, err)
 		}
 		if r.Status == http.StatusBadRequest && r.Error == "invalid_grant" && time.Since(started) < limit {
 			select {
 			case <-ctx.Done():
-				return "", ctx.Err()
+				return chatToken{}, ctx.Err()
 			case <-time.After(time.Second):
 			}
 			continue
 		}
-		return r.Token, c.checkIssued(r, claims.Subject, what)
+		user, err := c.checkIssued(r, claims.Subject, what)
+		return chatToken{Access: r.Token, User: user}, err
 	}
 }
 
-func (c *identityClient) checkIssued(r exchangeReply, user, what string) error {
+func (c *identityClient) checkIssued(r exchangeReply, tenantSub, what string) (string, error) {
 	if r.Status != http.StatusOK || r.Token == "" {
-		return fmt.Errorf("%s: status %d %q, want 200", what, r.Status, r.Error)
+		return "", fmt.Errorf("%s: status %d %q, want 200", what, r.Status, r.Error)
 	}
 	if r.Type != issuedTypeAccess || r.Bearer != "Bearer" || r.Expiry < int64(chatTokenTTL/time.Second)-1 || r.Expiry > int64(chatTokenTTL/time.Second) {
-		return fmt.Errorf("%s: issued_token_type %q, token_type %q, expires_in %d", what, r.Type, r.Bearer, r.Expiry)
+		return "", fmt.Errorf("%s: issued_token_type %q, token_type %q, expires_in %d", what, r.Type, r.Bearer, r.Expiry)
 	}
-	if err := checkChatToken(r.Token, c.tenant, user, chatTokenTTL); err != nil {
-		return fmt.Errorf("%s: %w", what, err)
+	user, err := checkChatToken(r.Token, c.tenant, tenantSub, chatTokenTTL)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", what, err)
 	}
-	return nil
+	return user, nil
 }
 
 func (c *identityClient) refused(ctx context.Context, token string) (exchangeReply, error) {

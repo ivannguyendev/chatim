@@ -15,7 +15,7 @@ import (
 
 var identityCollections = []string{
 	"tenants", "users", "groups", "trusted_issuers", "trusted_keys",
-	"signing_keys", "signing_key_claims", "revoked_sessions", "slots",
+	"signing_keys", "signing_key_claims", "revoked_sessions", "slots", "user_links",
 }
 
 var identityIndexLines = []string{

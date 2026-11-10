@@ -59,7 +59,7 @@ func (f *fakeStore) LoadPage(ctx context.Context, _ store.UserKey, _ int) ([]sto
 	if f.down.Load() {
 		return nil, errOpen
 	}
-	return []store.DirectoryEntry{{TenantID: "shop", ID: "lan", DisplayName: "Lan", State: store.StateActive, Ver: 1}}, nil
+	return []store.DirectoryEntry{{TenantID: "shop", ID: "lan", DisplayName: "Lan", State: store.StateActive, Ver: 1, Realm: shopIssuer, Sub: "lan"}}, nil
 }
 
 func (f *fakeStore) OpenStream(context.Context, store.StreamToken) (store.ChangeStream, error) {

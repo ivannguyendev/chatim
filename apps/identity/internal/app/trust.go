@@ -54,7 +54,7 @@ func trustMetricSources(t *trustParts) []metrics.Source {
 	calls, writes := t.apiStats, t.service.Stats()
 	out := []metrics.Source{
 		counter("trust_reload_errors_total", "Failed trusted issuer and key reloads, plus trusted keys skipped as unusable.", t.verifier.Stats().ReloadErrors),
-		counter("store_errors_total", "MongoDB errors on the token exchange path (just-in-time profile writes).", writes.StoreErrors),
+		counter("store_errors_total", "MongoDB errors on the token exchange path (just-in-time user links and profile writes).", writes.StoreErrors),
 	}
 	for _, s := range []struct {
 		label string
@@ -64,6 +64,10 @@ func trustMetricSources(t *trustParts) []metrics.Source {
 		{"rate", calls.Limited.Load}, {"error", calls.Errors.Load},
 	} {
 		out = append(out, labelledCounter("exchanges_total", "Token exchanges on POST /v1/token by result.", "result", s.label, s.read))
+	}
+	for _, o := range exchange.LinkOutcomes {
+		out = append(out, labelledCounter("user_links_total", "Just-in-time user links by the token exchange for unknown subjects, by result.", "result", o.String(),
+			func() uint64 { return writes.Links(o) }))
 	}
 	for _, r := range exchange.WriteResults {
 		out = append(out, labelledCounter("jit_writes_total", "Just-in-time profile writes by the token exchange by result.", "result", r.String(),

@@ -41,18 +41,26 @@ func TestReadyOnlyAfterTheFirstTrustLoadAndExchangesServed(t *testing.T) {
 	if code, body := postExchange(t, r.api, tenantToken(t, newTenantKey(t), "lan")); code != http.StatusBadRequest || !strings.Contains(body, "invalid_grant") {
 		t.Fatalf("exchange with a foreign key = %d %s; want 400 invalid_grant", code, body)
 	}
-	if code, _ := postExchange(t, r.api, tenantToken(t, st.tenantKey, "minh")); code != http.StatusOK || st.profiles.Load() != 1 {
-		t.Fatalf("new user exchange = %d with %d profile writes; want 200 and one write", code, st.profiles.Load())
+	if code, _ := postExchange(t, r.api, tenantToken(t, st.tenantKey, "minh")); code != http.StatusOK || st.links.Load() != 1 || st.profiles.Load() != 0 {
+		t.Fatalf("new user exchange = %d with %d links and %d profile writes; want 200, one link, no write", code, st.links.Load(), st.profiles.Load())
 	}
 	requireMetrics(t, r.admin,
 		`chatim_identity_exchanges_total{result="ok"} 2`, `chatim_identity_exchanges_total{result="invalid"} 1`,
 		`chatim_identity_exchanges_total{result="disabled"} 0`, `chatim_identity_exchanges_total{result="rate"} 0`,
 		`chatim_identity_exchanges_total{result="error"} 1`,
-		`chatim_identity_jit_writes_total{result="created"} 1`, `chatim_identity_jit_writes_total{result="updated"} 0`,
+		`chatim_identity_user_links_total{result="created"} 1`, `chatim_identity_user_links_total{result="existing"} 0`,
+		`chatim_identity_user_links_total{result="healed"} 0`, `chatim_identity_user_links_total{result="pending"} 0`,
+		`chatim_identity_user_links_total{result="error"} 0`,
+		`chatim_identity_jit_writes_total{result="updated"} 0`,
 		`chatim_identity_jit_writes_total{result="conflict"} 0`, `chatim_identity_jit_writes_total{result="error"} 0`,
 		"chatim_identity_trust_reload_errors_total 0", "chatim_identity_store_errors_total 0",
-		`chatim_identity_jit_batch_docs_bucket{le="2"} 3`, "chatim_identity_jit_batch_docs_sum 5", "chatim_identity_jit_batch_docs_count 3",
+		`chatim_identity_jit_batch_docs_bucket{writer="users",le="2"} 3`, `chatim_identity_jit_batch_docs_sum{writer="users"} 5`,
+		`chatim_identity_jit_batch_docs_count{writer="users"} 3`, `chatim_identity_jit_batch_docs_bucket{writer="links",le="2"} 2`,
+		`chatim_identity_jit_batch_docs_count{writer="links"} 2`,
 	)
+	if _, body := httpGet(t, r.admin, "/metrics"); strings.Contains(body, `jit_writes_total{result="created"}`) {
+		t.Fatal(`metrics still export jit_writes_total{result="created"}`)
+	}
 }
 
 var trustReloadErrors = regexp.MustCompile(`chatim_identity_trust_reload_errors_total [1-9]`)

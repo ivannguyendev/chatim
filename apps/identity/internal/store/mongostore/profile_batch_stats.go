@@ -40,4 +40,6 @@ func (h *docsHistogram) read() metrics.Histogram {
 	return out
 }
 
-func (s *Store) JITBatchDocs() metrics.Histogram { return s.jit.sizes.read() }
+func (s *Store) JITLinkBatchDocs() metrics.Histogram { return s.links.sizes.read() }
+
+func (s *Store) JITUserBatchDocs() metrics.Histogram { return s.users.sizes.read() }

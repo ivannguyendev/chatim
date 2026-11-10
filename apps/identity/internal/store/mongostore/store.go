@@ -32,12 +32,15 @@ type Options struct {
 }
 
 type Store struct {
-	client *mongo.Client
-	db     *mongo.Database
-	uri    string
-	keep   time.Duration
-	holder string
-	jit    *jitBatcher
+	client     *mongo.Client
+	db         *mongo.Database
+	uri        string
+	keep       time.Duration
+	holder     string
+	links      *jitBatcher
+	users      *jitBatcher
+	jitTimeout time.Duration
+	readLink   func(ctx context.Context, id string) (userID string, found bool, err error)
 }
 
 func Open(opts Options) (*Store, error) {
@@ -51,10 +54,13 @@ func Open(opts Options) (*Store, error) {
 	db := client.Database(opts.Database, options.Database().
 		SetWriteConcern(writeconcern.Majority()).
 		SetReadPreference(readpref.Primary()))
-	s := &Store{client: client, db: db, uri: opts.URI, keep: opts.RevocationKeep, holder: newHolder()}
-	s.jit = newJITBatcher(jitConfig{
+	s := &Store{client: client, db: db, uri: opts.URI, keep: opts.RevocationKeep, holder: newHolder(), jitTimeout: opts.JITInsertTimeout}
+	cfg := jitConfig{
 		writers: opts.JITWriters, window: opts.JITWindow, maxBatch: opts.JITMaxBatch, queue: opts.JITQueue, timeout: opts.JITInsertTimeout,
-	}, s.insertUsers, s.unavailable)
+	}
+	s.links = newJITBatcher(cfg, s.insertMany(userLinksCollection), s.unavailable)
+	s.users = newJITBatcher(cfg, s.insertMany(usersCollection), s.unavailable)
+	s.readLink = s.readLinkMajority
 	return s, nil
 }
 
@@ -81,7 +87,8 @@ func clientOptions(opts Options) *options.ClientOptions {
 }
 
 func (s *Store) Close() {
-	s.jit.close()
+	s.links.close()
+	s.users.close()
 	ctx, cancel := context.WithTimeout(context.Background(), disconnectTimeout)
 	defer cancel()
 	_ = s.client.Disconnect(ctx)

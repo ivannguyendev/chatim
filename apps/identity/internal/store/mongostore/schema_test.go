@@ -48,10 +48,10 @@ func TestIndexesDeclareTheFourSecondaryIndexes(t *testing.T) {
 	}
 }
 
-func TestIndexesListTheNineCollections(t *testing.T) {
+func TestIndexesListTheTenCollections(t *testing.T) {
 	want := []string{
 		"tenants", "users", "groups", "trusted_issuers", "trusted_keys",
-		"signing_keys", "signing_key_claims", "revoked_sessions", "slots",
+		"signing_keys", "signing_key_claims", "revoked_sessions", "slots", "user_links",
 	}
 	if got := Indexes().Names(); !slices.Equal(got, want) {
 		t.Fatalf("collections = %v; want %v", got, want)
