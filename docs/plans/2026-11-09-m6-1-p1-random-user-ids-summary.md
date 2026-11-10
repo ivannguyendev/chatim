@@ -1,7 +1,7 @@
 # M6.1 phase P1: `identity` tự cấp id user — tóm tắt
 
 > Ngày: 2026-11-09 · Nhánh `feat/m6-1` · Trạng thái: **đã xây, `dev-done` 2026-11-09** (`5fe3d60` → `34db89f`) · Dựa trên: owner 2026-11-08 ("quá phụ thuộc IAM ngoài", "identity tự làm chủ id", "tìm người chat qua search engine riêng"), owner 2026-11-09 (realm mặc định = issuer; chưa làm lệnh đổi `sub` → id cho backend tenant), D239–D242, D259, D260
-> **Các phase của M6.1:** (P1) id ngẫu nhiên lúc đổi token · (P2) `GetUsers` bỏ `state`, metric + alert tra trượt, docs
+> **Các phase của M6.1:** (P1) id ngẫu nhiên lúc đổi token ✅ · (P2) huỷ (owner 2026-11-10): id không đoán được nên `GetUsers` giữ `state` (D229), không đo tra trượt
 
 ## Scope và ranh giới
 
