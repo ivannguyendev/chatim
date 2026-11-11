@@ -158,3 +158,18 @@ func TestOverridesCoverEveryKey(t *testing.T) {
 		t.Errorf("overrides has %d keys, envKeys %d", len(overrides), len(envKeys))
 	}
 }
+
+func TestAppPrefixedNamesAreNotRead(t *testing.T) {
+	setEnv(t, map[string]string{"CHAT_NODE_ID": "chat-old", "CHAT_GRPC_ADDR": ":7000", "CHAT_REQUEST_DEADLINE": "soon", "MENTION_WS_PUBLISH_STREAM": "OTHER_WS"})
+	host, err := os.Hostname()
+	if err != nil {
+		t.Fatalf("os.Hostname: %v", err)
+	}
+	got, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load with old names: %v", err)
+	}
+	if got.NodeID != host || got.GRPCAddr != ":9000" || got.RequestDeadline != 3*time.Second || got.Mention.WsPublishStream != defaultMention().WsPublishStream {
+		t.Fatalf("Load with old names = node %q addr %q deadline %v ws stream %q; want the defaults", got.NodeID, got.GRPCAddr, got.RequestDeadline, got.Mention.WsPublishStream)
+	}
+}

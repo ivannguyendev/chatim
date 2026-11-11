@@ -102,13 +102,13 @@ type StopPlan struct {
 	Close       time.Duration
 }
 
-func AdminAddr() string { return envconfig.String("CHAT_ADMIN_ADDR", defaultAdminAddr) }
+func AdminAddr() string { return envconfig.String("APP_ADMIN_ADDR", defaultAdminAddr) }
 
 func Load() (Config, error) {
 	var p parser
 	c := Config{
 		NodeID:              p.nodeID(),
-		GRPCAddr:            envconfig.String("CHAT_GRPC_ADDR", ":9000"),
+		GRPCAddr:            envconfig.String("APP_ADDR", ":9000"),
 		AdminAddr:           AdminAddr(),
 		MongoURI:            envconfig.String("MONGO_URI", ""),
 		MongoDB:             envconfig.String("MONGO_DB", "chatim"),
@@ -123,14 +123,14 @@ func Load() (Config, error) {
 		RedisDedupePassword: p.secret("REDIS_DEDUPE_PASSWORD"),
 		NATSURL:             envconfig.String("NATS_URL", "nats://chatim-nats:4222"),
 		ConnectTimeout:      p.span("CHAT_CONNECT_TIMEOUT", 10*time.Second),
-		RequestDeadline:     p.span("CHAT_REQUEST_DEADLINE", 3*time.Second),
+		RequestDeadline:     p.span("APP_REQUEST_DEADLINE", 3*time.Second),
 		SlowRPC:             p.span("CHAT_SLOW_RPC", grpcserver.DefaultSlowRPC),
 		QueueWait:           p.span("CHAT_QUEUE_WAIT", 25*time.Millisecond),
-		MaxInflight:         p.count("CHAT_MAX_INFLIGHT", 2048),
-		DrainDelay:          p.span("CHAT_DRAIN_DELAY", 2*time.Second),
+		MaxInflight:         p.count("APP_INFLIGHT_MAX", 2048),
+		DrainDelay:          p.span("APP_DRAIN_DELAY", 2*time.Second),
 		GRPCShutdown:        p.span("CHAT_GRPC_SHUTDOWN", 5*time.Second),
 		PublisherDrain:      p.span("CHAT_PUBLISHER_DRAIN", 5*time.Second),
-		ShutdownBudget:      p.span("CHAT_SHUTDOWN_BUDGET", 30*time.Second),
+		ShutdownBudget:      p.span("APP_SHUTDOWN_BUDGET", 30*time.Second),
 		LockedMessageKinds:  p.kinds("MESSAGE_LOCKED_KINDS"),
 		Interactions: interaction.Limits{
 			Emojis:   p.listOr("REACTION_EMOJIS", interaction.DefaultEmojis),

@@ -24,7 +24,7 @@ const itProbeTimeout = 2 * time.Second
 
 const itSweeperStarted = "event sweeper started"
 
-var itFastSweep = map[string]string{"CHAT_DRAIN_DELAY": "200ms", "PUB_ACK_TIMEOUT": "500ms", "SWEEP_MIN_AGE": "2s", "SWEEP_INTERVAL": "200ms", "STATE_CLEAR_FLUSH": "100ms", "STATE_CLEAR_TIMEOUT": "1s", "READ_EVENT_WINDOW": "200ms"}
+var itFastSweep = map[string]string{"APP_DRAIN_DELAY": "200ms", "PUB_ACK_TIMEOUT": "500ms", "SWEEP_MIN_AGE": "2s", "SWEEP_INTERVAL": "200ms", "STATE_CLEAR_FLUSH": "100ms", "STATE_CLEAR_TIMEOUT": "1s", "READ_EVENT_WINDOW": "200ms"}
 
 type itChatNode struct {
 	cfg     config.Config

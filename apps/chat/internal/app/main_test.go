@@ -44,7 +44,7 @@ func TestRealMainServeFailsOnInvalidConfig(t *testing.T) {
 
 func TestRunFailsFastWhenMongoIsUnreachable(t *testing.T) {
 	t.Setenv("MONGO_URI", "mongodb://chatim:s3cr3t@127.0.0.1:1/?directConnection=true")
-	t.Setenv("CHAT_NODE_ID", "chat-unreachable")
+	t.Setenv("APP_NODE_ID", "chat-unreachable")
 	t.Setenv("CHAT_CONNECT_TIMEOUT", "300ms")
 	cfg, err := config.Load()
 	if err != nil {

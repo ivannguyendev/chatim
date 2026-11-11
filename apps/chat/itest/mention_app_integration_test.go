@@ -13,7 +13,7 @@ func TestRealInfraMentionAppIndexesNotifiesAndListsAcrossTwoChatNodes(t *testing
 	it := realInfra(t)
 	chat1 := startChatNode(t, it, itFastSweep)
 	env := maps.Clone(itFastSweep)
-	env["CHAT_NODE_ID"] = "it-chat-2-" + it.suffix
+	env["APP_NODE_ID"] = "it-chat-2-" + it.suffix
 	chat2 := startChatNode(t, it, env)
 	client, mentions := dialChat(t, chat1.cfg), dialMention(t, chat2.cfg)
 	notices := subscribeNotify(t, it, chat1.cfg)
