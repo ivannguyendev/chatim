@@ -13,12 +13,13 @@ func clientConfig(cfg config.Config, media *mediaapp.App) func() *chatimv1.GetCl
 		MaxMentions: int64(cfg.Messages.MentionTargets), MaxAttachments: domain.MaxAttachments,
 	}
 	mention := &chatimv1.MentionFeature{Enabled: cfg.Mention.Enabled}
+	room := &chatimv1.RoomLimits{MaxPins: int64(cfg.Interactions.PinLimit), MaxMembersPerCall: int64(cfg.Members.MemberBatch)}
 	return func() *chatimv1.GetClientConfigResponse {
 		feature := &chatimv1.MediaFeature{}
 		if media != nil {
 			c := media.ClientConfig()
 			feature = &chatimv1.MediaFeature{Enabled: c.Enabled, MaxFileBytes: c.MaxFileBytes, MaxParallelUploads: int64(c.MaxParallelUploads), Thumbnails: c.Thumbnails}
 		}
-		return &chatimv1.GetClientConfigResponse{Message: limits, Mention: mention, Media: feature}
+		return &chatimv1.GetClientConfigResponse{Message: limits, Mention: mention, Media: feature, Room: room}
 	}
 }

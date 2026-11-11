@@ -141,7 +141,8 @@ func (r *mediaRun) config() error {
 		}
 		m := c.GetMedia()
 		if m.GetEnabled() {
-			if m.GetMaxParallelUploads() != 4 || m.GetMaxFileBytes() != 4<<30 || c.GetMessage().GetMaxAttachments() != 10 || m.GetThumbnails() {
+			if m.GetMaxParallelUploads() != 4 || m.GetMaxFileBytes() != 4<<30 || c.GetMessage().GetMaxAttachments() != 10 || m.GetThumbnails() ||
+				c.GetRoom().GetMaxPins() != 50 || c.GetRoom().GetMaxMembersPerCall() != 500 {
 				return fmt.Errorf("client config %v", c)
 			}
 			return nil

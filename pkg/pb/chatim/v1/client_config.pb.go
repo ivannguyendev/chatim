@@ -201,6 +201,58 @@ func (x *MediaFeature) GetThumbnails() bool {
 	return false
 }
 
+type RoomLimits struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	MaxPins           int64                  `protobuf:"varint,1,opt,name=max_pins,json=maxPins,proto3" json:"max_pins,omitempty"`
+	MaxMembersPerCall int64                  `protobuf:"varint,2,opt,name=max_members_per_call,json=maxMembersPerCall,proto3" json:"max_members_per_call,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *RoomLimits) Reset() {
+	*x = RoomLimits{}
+	mi := &file_chatim_v1_client_config_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RoomLimits) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RoomLimits) ProtoMessage() {}
+
+func (x *RoomLimits) ProtoReflect() protoreflect.Message {
+	mi := &file_chatim_v1_client_config_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RoomLimits.ProtoReflect.Descriptor instead.
+func (*RoomLimits) Descriptor() ([]byte, []int) {
+	return file_chatim_v1_client_config_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *RoomLimits) GetMaxPins() int64 {
+	if x != nil {
+		return x.MaxPins
+	}
+	return 0
+}
+
+func (x *RoomLimits) GetMaxMembersPerCall() int64 {
+	if x != nil {
+		return x.MaxMembersPerCall
+	}
+	return 0
+}
+
 type GetClientConfigRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -209,7 +261,7 @@ type GetClientConfigRequest struct {
 
 func (x *GetClientConfigRequest) Reset() {
 	*x = GetClientConfigRequest{}
-	mi := &file_chatim_v1_client_config_proto_msgTypes[3]
+	mi := &file_chatim_v1_client_config_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -221,7 +273,7 @@ func (x *GetClientConfigRequest) String() string {
 func (*GetClientConfigRequest) ProtoMessage() {}
 
 func (x *GetClientConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_client_config_proto_msgTypes[3]
+	mi := &file_chatim_v1_client_config_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -234,7 +286,7 @@ func (x *GetClientConfigRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetClientConfigRequest.ProtoReflect.Descriptor instead.
 func (*GetClientConfigRequest) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_client_config_proto_rawDescGZIP(), []int{3}
+	return file_chatim_v1_client_config_proto_rawDescGZIP(), []int{4}
 }
 
 type GetClientConfigResponse struct {
@@ -242,13 +294,14 @@ type GetClientConfigResponse struct {
 	Message       *MessageLimits         `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
 	Mention       *MentionFeature        `protobuf:"bytes,2,opt,name=mention,proto3" json:"mention,omitempty"`
 	Media         *MediaFeature          `protobuf:"bytes,3,opt,name=media,proto3" json:"media,omitempty"`
+	Room          *RoomLimits            `protobuf:"bytes,4,opt,name=room,proto3" json:"room,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetClientConfigResponse) Reset() {
 	*x = GetClientConfigResponse{}
-	mi := &file_chatim_v1_client_config_proto_msgTypes[4]
+	mi := &file_chatim_v1_client_config_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -260,7 +313,7 @@ func (x *GetClientConfigResponse) String() string {
 func (*GetClientConfigResponse) ProtoMessage() {}
 
 func (x *GetClientConfigResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chatim_v1_client_config_proto_msgTypes[4]
+	mi := &file_chatim_v1_client_config_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -273,7 +326,7 @@ func (x *GetClientConfigResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetClientConfigResponse.ProtoReflect.Descriptor instead.
 func (*GetClientConfigResponse) Descriptor() ([]byte, []int) {
-	return file_chatim_v1_client_config_proto_rawDescGZIP(), []int{4}
+	return file_chatim_v1_client_config_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *GetClientConfigResponse) GetMessage() *MessageLimits {
@@ -297,6 +350,13 @@ func (x *GetClientConfigResponse) GetMedia() *MediaFeature {
 	return nil
 }
 
+func (x *GetClientConfigResponse) GetRoom() *RoomLimits {
+	if x != nil {
+		return x.Room
+	}
+	return nil
+}
+
 var File_chatim_v1_client_config_proto protoreflect.FileDescriptor
 
 const file_chatim_v1_client_config_proto_rawDesc = "" +
@@ -315,12 +375,17 @@ const file_chatim_v1_client_config_proto_rawDesc = "" +
 	"\x14max_parallel_uploads\x18\x03 \x01(\x03R\x12maxParallelUploads\x12\x1e\n" +
 	"\n" +
 	"thumbnails\x18\x04 \x01(\bR\n" +
-	"thumbnails\"\x18\n" +
-	"\x16GetClientConfigRequest\"\xb1\x01\n" +
+	"thumbnails\"X\n" +
+	"\n" +
+	"RoomLimits\x12\x19\n" +
+	"\bmax_pins\x18\x01 \x01(\x03R\amaxPins\x12/\n" +
+	"\x14max_members_per_call\x18\x02 \x01(\x03R\x11maxMembersPerCall\"\x18\n" +
+	"\x16GetClientConfigRequest\"\xdc\x01\n" +
 	"\x17GetClientConfigResponse\x122\n" +
 	"\amessage\x18\x01 \x01(\v2\x18.chatim.v1.MessageLimitsR\amessage\x123\n" +
 	"\amention\x18\x02 \x01(\v2\x19.chatim.v1.MentionFeatureR\amention\x12-\n" +
-	"\x05media\x18\x03 \x01(\v2\x17.chatim.v1.MediaFeatureR\x05mediaB\xa2\x01\n" +
+	"\x05media\x18\x03 \x01(\v2\x17.chatim.v1.MediaFeatureR\x05media\x12)\n" +
+	"\x04room\x18\x04 \x01(\v2\x15.chatim.v1.RoomLimitsR\x04roomB\xa2\x01\n" +
 	"\rcom.chatim.v1B\x11ClientConfigProtoP\x01Z9github.com/ivannguyendev/chatim/pkg/pb/chatim/v1;chatimv1\xa2\x02\x03CXX\xaa\x02\tChatim.V1\xca\x02\tChatim\\V1\xe2\x02\x15Chatim\\V1\\GPBMetadata\xea\x02\n" +
 	"Chatim::V1b\x06proto3"
 
@@ -336,23 +401,25 @@ func file_chatim_v1_client_config_proto_rawDescGZIP() []byte {
 	return file_chatim_v1_client_config_proto_rawDescData
 }
 
-var file_chatim_v1_client_config_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_chatim_v1_client_config_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_chatim_v1_client_config_proto_goTypes = []any{
 	(*MessageLimits)(nil),           // 0: chatim.v1.MessageLimits
 	(*MentionFeature)(nil),          // 1: chatim.v1.MentionFeature
 	(*MediaFeature)(nil),            // 2: chatim.v1.MediaFeature
-	(*GetClientConfigRequest)(nil),  // 3: chatim.v1.GetClientConfigRequest
-	(*GetClientConfigResponse)(nil), // 4: chatim.v1.GetClientConfigResponse
+	(*RoomLimits)(nil),              // 3: chatim.v1.RoomLimits
+	(*GetClientConfigRequest)(nil),  // 4: chatim.v1.GetClientConfigRequest
+	(*GetClientConfigResponse)(nil), // 5: chatim.v1.GetClientConfigResponse
 }
 var file_chatim_v1_client_config_proto_depIdxs = []int32{
 	0, // 0: chatim.v1.GetClientConfigResponse.message:type_name -> chatim.v1.MessageLimits
 	1, // 1: chatim.v1.GetClientConfigResponse.mention:type_name -> chatim.v1.MentionFeature
 	2, // 2: chatim.v1.GetClientConfigResponse.media:type_name -> chatim.v1.MediaFeature
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	3, // 3: chatim.v1.GetClientConfigResponse.room:type_name -> chatim.v1.RoomLimits
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_chatim_v1_client_config_proto_init() }
@@ -366,7 +433,7 @@ func file_chatim_v1_client_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_chatim_v1_client_config_proto_rawDesc), len(file_chatim_v1_client_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
