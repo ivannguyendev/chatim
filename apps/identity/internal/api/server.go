@@ -71,7 +71,7 @@ func New(opts Options) (http.Handler, error) {
 	}
 	mux := http.NewServeMux()
 	if opts.Directory != nil {
-		mux.Handle(identityv1connect.NewDirectoryServiceHandler(directoryService{s: s}, connect.WithReadMaxBytes(directoryBodyMax)))
+		mux.Handle(identityv1connect.NewDirectoryServiceHandler(directoryService{s: s}, connect.WithReadMaxBytes(int(opts.BodyMax))))
 	}
 	if opts.Exchange != nil {
 		mux.HandleFunc("POST /v1/token", s.token)
@@ -81,7 +81,7 @@ func New(opts Options) (http.Handler, error) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"code": "not_found", "message": "not found"})
 	})
 	limited := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, s.bodyLimit(r.URL.Path))
+		r.Body = http.MaxBytesReader(w, r.Body, s.opts.BodyMax)
 		mux.ServeHTTP(w, r)
 	})
 	return httpcors.New(httpcors.Config{

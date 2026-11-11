@@ -27,6 +27,7 @@ const (
 	directoryLanName   = "Lan"
 	directoryBinh      = "binh"
 	binhNewName        = "Bình Trần"
+	directoryMaxIDs    = 100
 )
 
 type directoryFlags struct {
@@ -134,6 +135,9 @@ func (r directoryRun) profile(ctx context.Context) error {
 	if err := r.checkFirstUsers(ctx, st); err != nil {
 		return err
 	}
+	if err := r.checkIDCap(ctx, st); err != nil {
+		return err
+	}
 	opened, arrived, err := r.watchNewName(ctx, st, filepath.Join(*r.f.dir, pollOpenFile))
 	if err != nil {
 		return err
@@ -180,6 +184,26 @@ func (r directoryRun) watchNewName(ctx context.Context, st directoryState, openP
 		case <-time.After(watchPause):
 		}
 	}
+}
+
+func (r directoryRun) checkIDCap(ctx context.Context, st directoryState) error {
+	ids := make([]string, directoryMaxIDs+1)
+	for i := range ids {
+		ids[i] = randomUserID()
+	}
+	_, raw, err := r.c.getUsers(ctx, st.Access, ids)
+	if err == nil {
+		return fmt.Errorf("GetUsers accepted %d ids, want invalid_argument", len(ids))
+	}
+	if !bytes.Contains(raw, []byte(`"code":"invalid_argument"`)) {
+		return fmt.Errorf("GetUsers of %d ids, want invalid_argument: %w", len(ids), err)
+	}
+	_, _, err = r.c.getUsers(ctx, st.Access, ids[:directoryMaxIDs])
+	if err != nil {
+		return fmt.Errorf("GetUsers of %d ids: %w", directoryMaxIDs, err)
+	}
+	fmt.Printf("identity: GetUsers took %d ids and refused %d with invalid_argument\n", directoryMaxIDs, len(ids))
+	return nil
 }
 
 func (r directoryRun) checkFirstUsers(ctx context.Context, st directoryState) error {
