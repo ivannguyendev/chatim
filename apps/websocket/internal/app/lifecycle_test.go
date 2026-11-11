@@ -110,7 +110,7 @@ func TestRunRefusesToStartOnBadConfigOrMissingKeys(t *testing.T) {
 		cfg  config.Config
 		want string
 	}{
-		"stop plan over budget": {overBudget, "WS_SHUTDOWN_BUDGET"},
+		"stop plan over budget": {overBudget, "APP_SHUTDOWN_BUDGET"},
 		"missing key set":       {missingKeys, "jwt key set"},
 	} {
 		t.Run(name, func(t *testing.T) {

@@ -175,7 +175,7 @@ func TestRunRefusesBadConfigAndKeys(t *testing.T) {
 	keys := newSigner(t)
 	bad := testConfig(t, keys.path, "chat:9000")
 	bad.ShutdownBudget = time.Second
-	if err := run(t.Context(), bad, newLogWatch().logger(), Deps{}); err == nil || !strings.Contains(err.Error(), "GW_SHUTDOWN_BUDGET") {
+	if err := run(t.Context(), bad, newLogWatch().logger(), Deps{}); err == nil || !strings.Contains(err.Error(), "APP_SHUTDOWN_BUDGET") {
 		t.Fatalf("Run = %v", err)
 	}
 	missing := testConfig(t, keys.path+".missing", "chat:9000")

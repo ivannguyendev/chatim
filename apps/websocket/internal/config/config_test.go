@@ -17,30 +17,30 @@ import (
 )
 
 var envKeys = []string{
-	"WS_NODE_ID", "WS_ADDR", "WS_ADMIN_ADDR", "REDIS_ADDR", "REDIS_DB", "REDIS_PASSWORD", "REDIS_PASSWORD_FILE",
-	"WS_JWT_KEYS_FILE", "WS_JWT_ISSUER", "WS_JWT_AUDIENCE", "WS_JWT_LEEWAY",
+	"APP_NODE_ID", "APP_ADDR", "APP_ADMIN_ADDR", "REDIS_ADDR", "REDIS_DB", "REDIS_PASSWORD", "REDIS_PASSWORD_FILE",
+	"JWT_KEYS_FILE", "JWT_ISSUER", "JWT_AUDIENCE", "JWT_LEEWAY",
 	"WS_AUTH_TIMEOUT", "WS_AUTH_GRACE", "WS_AUTH_RATE", "WS_AUTH_BURST", "WS_AUTH_RETRY_MIN", "WS_AUTH_RETRY_MAX",
 	"WS_USER_CONNECTIONS_MAX", "WS_UNAUTH_MAX", "WS_FRAME_MAX", "WS_HEARTBEAT_TIMEOUT",
 	"WS_COMMAND_RATE", "WS_COMMAND_BURST", "WS_COMMAND_INFLIGHT", "WS_SEND_QUEUE", "WS_SEND_QUEUE_BYTES", "WS_WRITE_TIMEOUT",
-	"CHAT_REQUEST_DEADLINE", "WS_DRAIN_DELAY", "WS_SHUTDOWN_BUDGET",
+	"CHAT_REQUEST_DEADLINE", "APP_DRAIN_DELAY", "APP_SHUTDOWN_BUDGET",
 	"NATS_URL", "EVT_STREAM", "EVT_SUBJECT_ROOT", "WS_PUBLISH_ROOT", "WS_PUBLISH_STREAM", "EVT_STREAM_REPLICAS",
 	"WS_FANOUT_WORKERS", "WS_FANOUT_QUEUE", "WS_REPLAY_RATE", "WS_CONSUME_BATCH", "WS_CONSUME_BYTES",
 	"WS_ROOM_IDS_INFLIGHT", "WS_OPEN_PENDING", "WS_REPLAY_MAX_AGE", "WS_RELOAD_RATE",
 	"WS_TYPING_RATE", "WS_TYPING_BURST", "WS_TYPING_QUEUE", "WS_TYPING_PENDING_MSGS",
-	"WS_PRESENCE_REDIS_ADDR", "WS_PRESENCE_REDIS_DB", "WS_PRESENCE_REDIS_PASSWORD", "WS_PRESENCE_REDIS_PASSWORD_FILE",
-	"WS_PRESENCE_REDIS_TIMEOUT", "WS_PRESENCE_REDIS_POOL", "WS_PRESENCE_TTL", "WS_PRESENCE_STAMP_EVERY", "WS_PRESENCE_FLUSH", "WS_PRESENCE_BATCH",
+	"SHARED_REDIS_ADDR", "SHARED_REDIS_DB", "SHARED_REDIS_PASSWORD", "SHARED_REDIS_PASSWORD_FILE",
+	"SHARED_REDIS_TIMEOUT", "SHARED_REDIS_POOL", "WS_PRESENCE_TTL", "WS_PRESENCE_STAMP_EVERY", "WS_PRESENCE_FLUSH", "WS_PRESENCE_BATCH",
 	"WS_PRESENCE_CACHE", "WS_PRESENCE_WATCH_MAX",
 }
 
 var requiredEnv = map[string]string{
-	"WS_NODE_ID":               "ws-a",
-	"WS_JWT_KEYS_FILE":         "/run/secrets/jwks.json",
-	"WS_JWT_ISSUER":            "chatim-identity",
-	"WS_JWT_AUDIENCE":          "chatim-websocket",
-	"NATS_URL":                 "nats://chatim-nats:4222",
-	"WS_IDENTITY_INTERNAL_URL": "http://chatim-identity-1:8081",
-	"WS_IDENTITY_JWKS_URL":     "https://identity.example.com/.well-known/jwks.json",
-	"WS_IDENTITY_SECRET":       "node-secret-value-0123456789abcdef",
+	"APP_NODE_ID":           "ws-a",
+	"JWT_KEYS_FILE":         "/run/secrets/jwks.json",
+	"JWT_ISSUER":            "chatim-identity",
+	"JWT_AUDIENCE":          "chatim-websocket",
+	"NATS_URL":              "nats://chatim-nats:4222",
+	"IDENTITY_INTERNAL_URL": "http://chatim-identity-1:8081",
+	"IDENTITY_JWKS_URL":     "https://identity.example.com/.well-known/jwks.json",
+	"IDENTITY_NODE_SECRET":  "node-secret-value-0123456789abcdef",
 }
 
 func setEnv(t *testing.T, env map[string]string) {
@@ -137,18 +137,18 @@ func fields(c config.Config) string {
 }
 
 func TestLoadReadsListenAddresses(t *testing.T) {
-	setEnv(t, map[string]string{"WS_ADDR": "127.0.0.1:7080", "WS_ADMIN_ADDR": "127.0.0.1:7090"})
+	setEnv(t, map[string]string{"APP_ADDR": "127.0.0.1:7080", "APP_ADMIN_ADDR": "127.0.0.1:7090"})
 	got, err := config.Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 	if got.ListenAddr != "127.0.0.1:7080" || got.AdminAddr != "127.0.0.1:7090" {
-		t.Fatalf("ListenAddr, AdminAddr = %q, %q, want WS_ADDR and WS_ADMIN_ADDR", got.ListenAddr, got.AdminAddr)
+		t.Fatalf("ListenAddr, AdminAddr = %q, %q, want APP_ADDR and APP_ADMIN_ADDR", got.ListenAddr, got.AdminAddr)
 	}
 }
 
 func TestLoadNodeIDDefaultsToHostname(t *testing.T) {
-	setEnv(t, map[string]string{"WS_NODE_ID": ""})
+	setEnv(t, map[string]string{"APP_NODE_ID": ""})
 	host, err := os.Hostname()
 	if err != nil {
 		t.Skipf("hostname: %v", err)
@@ -182,7 +182,7 @@ func TestLoadReadsThePresenceRedisPasswordFile(t *testing.T) {
 	if err := os.WriteFile(path, []byte("pr3s3nc3f1l3\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	setEnv(t, map[string]string{"WS_PRESENCE_REDIS_PASSWORD": "envs3cr3t", "WS_PRESENCE_REDIS_PASSWORD_FILE": path, "WS_PRESENCE_REDIS_ADDR": "presence:6379", "WS_PRESENCE_REDIS_DB": "2"})
+	setEnv(t, map[string]string{"SHARED_REDIS_PASSWORD": "envs3cr3t", "SHARED_REDIS_PASSWORD_FILE": path, "SHARED_REDIS_ADDR": "presence:6379", "SHARED_REDIS_DB": "2"})
 	got, err := config.Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -278,4 +278,12 @@ func identityWant() auth.SyncConfig {
 	c := auth.SyncDefaults()
 	c.InternalURL, c.JWKSURL, c.Secret = "http://chatim-identity-1:8081", "https://identity.example.com/.well-known/jwks.json", "node-secret-value-0123456789abcdef"
 	return c
+}
+
+func TestAppPrefixedNamesAreNotRead(t *testing.T) {
+	setEnv(t, map[string]string{"JWT_ISSUER": "", "WS_JWT_ISSUER": "chatim-identity", "WS_DRAIN_DELAY": "soon", "WS_PRESENCE_REDIS_ADDR": "elsewhere:6379"})
+	_, err := config.Load()
+	if err == nil || !strings.Contains(err.Error(), "JWT_ISSUER is required") || strings.Contains(err.Error(), "WS_") {
+		t.Fatalf("Load with old names = %v; want only the missing JWT_ISSUER", err)
+	}
 }

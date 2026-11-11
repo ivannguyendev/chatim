@@ -14,23 +14,23 @@ func TestLoadValidation(t *testing.T) {
 		wantErr string
 	}{
 		{"defaults are valid", nil, ""},
-		{"missing keys file", map[string]string{"WS_JWT_KEYS_FILE": ""}, "WS_JWT_KEYS_FILE is required"},
-		{"missing issuer", map[string]string{"WS_JWT_ISSUER": ""}, "WS_JWT_ISSUER is required"},
-		{"missing audience", map[string]string{"WS_JWT_AUDIENCE": ""}, "WS_JWT_AUDIENCE is required"},
+		{"missing keys file", map[string]string{"JWT_KEYS_FILE": ""}, "JWT_KEYS_FILE is required"},
+		{"missing issuer", map[string]string{"JWT_ISSUER": ""}, "JWT_ISSUER is required"},
+		{"missing audience", map[string]string{"JWT_AUDIENCE": ""}, "JWT_AUDIENCE is required"},
 		{"unparsable count", map[string]string{"WS_UNAUTH_MAX": "many"}, "WS_UNAUTH_MAX"},
 		{"unparsable duration", map[string]string{"WS_AUTH_GRACE": "soon"}, "WS_AUTH_GRACE"},
 		{"old auth timeout ignored", map[string]string{"WS_AUTH_TIMEOUT": "soon"}, ""},
 		{"negative redis db", map[string]string{"REDIS_DB": "-1"}, "REDIS_DB must not be negative"},
-		{"zero leeway", map[string]string{"WS_JWT_LEEWAY": "0s"}, ""},
-		{"negative leeway", map[string]string{"WS_JWT_LEEWAY": "-1s"}, "WS_JWT_LEEWAY must not be negative"},
-		{"leeway over a minute", map[string]string{"WS_JWT_LEEWAY": "61s"}, "WS_JWT_LEEWAY must not exceed 1m0s"},
-		{"identity without secret", map[string]string{"WS_IDENTITY_SECRET": ""}, "node secret is required"},
-		{"identity without internal url", map[string]string{"WS_IDENTITY_INTERNAL_URL": ""}, "internal url is required"},
-		{"identity without jwks url", map[string]string{"WS_IDENTITY_JWKS_URL": ""}, "jwks url is required"},
-		{"identity keys interval over a minute", map[string]string{"WS_IDENTITY_KEYS_INTERVAL": "61s"}, "keys interval must not exceed"},
-		{"identity jwks over http", map[string]string{"WS_IDENTITY_JWKS_URL": "http://chatim-identity-1:8080/.well-known/jwks.json"}, "jwks url must be an absolute https url"},
-		{"identity jwks over http in dev", map[string]string{"WS_IDENTITY_JWKS_URL": "http://chatim-identity-1:8080/.well-known/jwks.json", "WS_IDENTITY_ALLOW_HTTP": "true"}, ""},
-		{"bad identity interval", map[string]string{"WS_IDENTITY_REVOCATIONS_INTERVAL": "soon"}, "WS_IDENTITY_REVOCATIONS_INTERVAL"},
+		{"zero leeway", map[string]string{"JWT_LEEWAY": "0s"}, ""},
+		{"negative leeway", map[string]string{"JWT_LEEWAY": "-1s"}, "JWT_LEEWAY must not be negative"},
+		{"leeway over a minute", map[string]string{"JWT_LEEWAY": "61s"}, "JWT_LEEWAY must not exceed 1m0s"},
+		{"identity without secret", map[string]string{"IDENTITY_NODE_SECRET": ""}, "node secret is required"},
+		{"identity without internal url", map[string]string{"IDENTITY_INTERNAL_URL": ""}, "internal url is required"},
+		{"identity without jwks url", map[string]string{"IDENTITY_JWKS_URL": ""}, "jwks url is required"},
+		{"identity keys interval over a minute", map[string]string{"IDENTITY_KEYS_INTERVAL": "61s"}, "keys interval must not exceed"},
+		{"identity jwks over http", map[string]string{"IDENTITY_JWKS_URL": "http://chatim-identity-1:8080/.well-known/jwks.json"}, "jwks url must be an absolute https url"},
+		{"identity jwks over http in dev", map[string]string{"IDENTITY_JWKS_URL": "http://chatim-identity-1:8080/.well-known/jwks.json", "IDENTITY_ALLOW_HTTP": "true"}, ""},
+		{"bad identity interval", map[string]string{"IDENTITY_REVOCATIONS_INTERVAL": "soon"}, "IDENTITY_REVOCATIONS_INTERVAL"},
 		{"zero auth grace", map[string]string{"WS_AUTH_GRACE": "0s"}, "WS_AUTH_GRACE must be positive"},
 		{"zero auth rate", map[string]string{"WS_AUTH_RATE": "0"}, "WS_AUTH_RATE must be positive"},
 		{"zero auth burst", map[string]string{"WS_AUTH_BURST": "0"}, "WS_AUTH_BURST must be positive"},
@@ -52,17 +52,17 @@ func TestLoadValidation(t *testing.T) {
 		{"send queue bytes at one frame", map[string]string{"WS_SEND_QUEUE_BYTES": "131072"}, ""},
 		{"zero write timeout", map[string]string{"WS_WRITE_TIMEOUT": "0s"}, "WS_WRITE_TIMEOUT must be positive"},
 		{"zero request deadline", map[string]string{"CHAT_REQUEST_DEADLINE": "0s"}, "CHAT_REQUEST_DEADLINE must be positive"},
-		{"zero drain delay", map[string]string{"WS_DRAIN_DELAY": "0s"}, "WS_DRAIN_DELAY must be positive"},
-		{"zero shutdown budget", map[string]string{"WS_SHUTDOWN_BUDGET": "0s"}, "WS_SHUTDOWN_BUDGET must be positive"},
+		{"zero drain delay", map[string]string{"APP_DRAIN_DELAY": "0s"}, "APP_DRAIN_DELAY must be positive"},
+		{"zero shutdown budget", map[string]string{"APP_SHUTDOWN_BUDGET": "0s"}, "APP_SHUTDOWN_BUDGET must be positive"},
 		{"frame max under 4KB", map[string]string{"WS_FRAME_MAX": "4095"}, "WS_FRAME_MAX must be at least 4096"},
 		{"frame max at 4KB", map[string]string{"WS_FRAME_MAX": "4096"}, ""},
 		{"heartbeat timeout under two heartbeats", map[string]string{"WS_HEARTBEAT_TIMEOUT": "9999ms"}, "WS_HEARTBEAT_TIMEOUT must be at least 10s"},
 		{"heartbeat timeout at two heartbeats leaves no room for presence", map[string]string{"WS_HEARTBEAT_TIMEOUT": "10s"}, "WS_PRESENCE_TTL 15s must not exceed WS_HEARTBEAT_TIMEOUT + WS_PRESENCE_STAMP_EVERY = 12s"},
 		{"heartbeat timeout with room for presence", map[string]string{"WS_HEARTBEAT_TIMEOUT": "13s"}, ""},
-		{"stop phases over the budget", map[string]string{"WS_SHUTDOWN_BUDGET": "9999ms"}, "WS_DRAIN_DELAY + CHAT_REQUEST_DEADLINE + 2s (feed) + 1s (close) = 10s must not exceed WS_SHUTDOWN_BUDGET 9.999s"},
-		{"stop phases at the budget", map[string]string{"WS_SHUTDOWN_BUDGET": "10s"}, ""},
-		{"request deadline counts in the budget", map[string]string{"CHAT_REQUEST_DEADLINE": "12001ms"}, "WS_SHUTDOWN_BUDGET"},
-		{"drain delay counts in the budget", map[string]string{"WS_DRAIN_DELAY": "7001ms"}, "WS_SHUTDOWN_BUDGET"},
+		{"stop phases over the budget", map[string]string{"APP_SHUTDOWN_BUDGET": "9999ms"}, "APP_DRAIN_DELAY + CHAT_REQUEST_DEADLINE + 2s (feed) + 1s (close) = 10s must not exceed APP_SHUTDOWN_BUDGET 9.999s"},
+		{"stop phases at the budget", map[string]string{"APP_SHUTDOWN_BUDGET": "10s"}, ""},
+		{"request deadline counts in the budget", map[string]string{"CHAT_REQUEST_DEADLINE": "12001ms"}, "APP_SHUTDOWN_BUDGET"},
+		{"drain delay counts in the budget", map[string]string{"APP_DRAIN_DELAY": "7001ms"}, "APP_SHUTDOWN_BUDGET"},
 		{"missing nats url", map[string]string{"NATS_URL": ""}, "NATS_URL is required"},
 		{"bad event stream", map[string]string{"EVT_STREAM": "chatim.evt"}, "EVT_STREAM must be"},
 		{"bad publish stream", map[string]string{"WS_PUBLISH_STREAM": "ws"}, "WS_PUBLISH_STREAM must be"},
@@ -90,10 +90,10 @@ func TestLoadValidation(t *testing.T) {
 		{"zero typing pending messages", map[string]string{"WS_TYPING_PENDING_MSGS": "0"}, "WS_TYPING_PENDING_MSGS must be positive"},
 		{"unparsable typing rate", map[string]string{"WS_TYPING_RATE": "fast"}, "WS_TYPING_RATE"},
 		{"one typing frame per second", map[string]string{"WS_TYPING_RATE": "1", "WS_TYPING_BURST": "1"}, ""},
-		{"blank presence redis addr uses the default", map[string]string{"WS_PRESENCE_REDIS_ADDR": ""}, ""},
-		{"negative presence redis db", map[string]string{"WS_PRESENCE_REDIS_DB": "-1"}, "WS_PRESENCE_REDIS_DB must not be negative"},
-		{"zero presence redis timeout", map[string]string{"WS_PRESENCE_REDIS_TIMEOUT": "0s"}, "WS_PRESENCE_REDIS_TIMEOUT must be positive"},
-		{"zero presence redis pool", map[string]string{"WS_PRESENCE_REDIS_POOL": "0"}, "WS_PRESENCE_REDIS_POOL must be positive"},
+		{"blank presence redis addr uses the default", map[string]string{"SHARED_REDIS_ADDR": ""}, ""},
+		{"negative presence redis db", map[string]string{"SHARED_REDIS_DB": "-1"}, "SHARED_REDIS_DB must not be negative"},
+		{"zero presence redis timeout", map[string]string{"SHARED_REDIS_TIMEOUT": "0s"}, "SHARED_REDIS_TIMEOUT must be positive"},
+		{"zero presence redis pool", map[string]string{"SHARED_REDIS_POOL": "0"}, "SHARED_REDIS_POOL must be positive"},
 		{"zero presence ttl", map[string]string{"WS_PRESENCE_TTL": "0s"}, "WS_PRESENCE_TTL must be positive"},
 		{"zero presence stamp interval", map[string]string{"WS_PRESENCE_STAMP_EVERY": "0s"}, "WS_PRESENCE_STAMP_EVERY must be positive"},
 		{"zero presence flush", map[string]string{"WS_PRESENCE_FLUSH": "0s"}, "WS_PRESENCE_FLUSH must be positive"},
@@ -101,9 +101,9 @@ func TestLoadValidation(t *testing.T) {
 		{"presence batch at 1000", map[string]string{"WS_PRESENCE_BATCH": "1000"}, ""},
 		{"presence batch over 1000", map[string]string{"WS_PRESENCE_BATCH": "1001"}, "WS_PRESENCE_BATCH must be at most 1000"},
 		{"unparsable presence ttl", map[string]string{"WS_PRESENCE_TTL": "long"}, "WS_PRESENCE_TTL"},
-		{"presence refresh at the ttl", map[string]string{"WS_PRESENCE_TTL": "14500ms"}, "WS_PRESENCE_STAMP_EVERY + 10s (frame gap) + 2 x WS_PRESENCE_FLUSH + WS_PRESENCE_REDIS_TIMEOUT = 14.5s must be below WS_PRESENCE_TTL 14.5s"},
+		{"presence refresh at the ttl", map[string]string{"WS_PRESENCE_TTL": "14500ms"}, "WS_PRESENCE_STAMP_EVERY + 10s (frame gap) + 2 x WS_PRESENCE_FLUSH + SHARED_REDIS_TIMEOUT = 14.5s must be below WS_PRESENCE_TTL 14.5s"},
 		{"presence refresh just below the ttl", map[string]string{"WS_PRESENCE_TTL": "14501ms"}, ""},
-		{"presence redis timeout counts in the refresh", map[string]string{"WS_PRESENCE_REDIS_TIMEOUT": "1s"}, "must be below WS_PRESENCE_TTL"},
+		{"presence redis timeout counts in the refresh", map[string]string{"SHARED_REDIS_TIMEOUT": "1s"}, "must be below WS_PRESENCE_TTL"},
 		{"presence flush counts twice in the refresh", map[string]string{"WS_PRESENCE_FLUSH": "1250ms"}, "must be below WS_PRESENCE_TTL"},
 		{"presence ttl at heartbeat timeout plus stamp interval", map[string]string{"WS_PRESENCE_TTL": "17s"}, ""},
 		{"presence ttl over heartbeat timeout plus stamp interval", map[string]string{"WS_PRESENCE_TTL": "17001ms"}, "WS_PRESENCE_TTL 17.001s must not exceed WS_HEARTBEAT_TIMEOUT + WS_PRESENCE_STAMP_EVERY = 17s"},
@@ -138,18 +138,18 @@ func TestValidateRequiresThePresenceRedisAddress(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 	cfg.PresenceRedisAddr = ""
-	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "WS_PRESENCE_REDIS_ADDR is required") {
-		t.Fatalf("Validate() = %v, want WS_PRESENCE_REDIS_ADDR is required", err)
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "SHARED_REDIS_ADDR is required") {
+		t.Fatalf("Validate() = %v, want SHARED_REDIS_ADDR is required", err)
 	}
 }
 
 func TestLoadReportsEveryBrokenRule(t *testing.T) {
-	setEnv(t, map[string]string{"WS_JWT_ISSUER": "", "WS_FRAME_MAX": "10", "WS_SEND_QUEUE": "0", "WS_SHUTDOWN_BUDGET": "1s"})
+	setEnv(t, map[string]string{"JWT_ISSUER": "", "WS_FRAME_MAX": "10", "WS_SEND_QUEUE": "0", "APP_SHUTDOWN_BUDGET": "1s"})
 	_, err := config.Load()
 	if err == nil {
 		t.Fatal("Load() = nil, want errors")
 	}
-	for _, key := range []string{"WS_JWT_ISSUER", "WS_FRAME_MAX", "WS_SEND_QUEUE", "WS_SHUTDOWN_BUDGET"} {
+	for _, key := range []string{"JWT_ISSUER", "WS_FRAME_MAX", "WS_SEND_QUEUE", "APP_SHUTDOWN_BUDGET"} {
 		if !strings.Contains(err.Error(), key) {
 			t.Errorf("Load() error %q does not mention %s", err, key)
 		}

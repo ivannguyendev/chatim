@@ -83,21 +83,21 @@ type Config struct {
 	Identity              auth.SyncConfig
 }
 
-func AdminAddr() string { return envconfig.String("WS_ADMIN_ADDR", defaultAdminAddr) }
+func AdminAddr() string { return envconfig.String("APP_ADMIN_ADDR", defaultAdminAddr) }
 
 func Load() (Config, error) {
 	var p parser
 	c := Config{
 		NodeID:             p.nodeID(),
-		ListenAddr:         envconfig.String("WS_ADDR", ":8080"),
+		ListenAddr:         envconfig.String("APP_ADDR", ":8080"),
 		AdminAddr:          AdminAddr(),
 		RedisAddr:          envconfig.String("REDIS_ADDR", "chatim-redis:6379"),
 		RedisDB:            p.number("REDIS_DB", 0),
 		RedisPassword:      p.secret("REDIS_PASSWORD"),
-		JWTKeysFile:        envconfig.String("WS_JWT_KEYS_FILE", ""),
-		JWTIssuer:          envconfig.String("WS_JWT_ISSUER", ""),
-		JWTAudience:        envconfig.String("WS_JWT_AUDIENCE", ""),
-		JWTLeeway:          p.span("WS_JWT_LEEWAY", 30*time.Second),
+		JWTKeysFile:        envconfig.String("JWT_KEYS_FILE", ""),
+		JWTIssuer:          envconfig.String("JWT_ISSUER", ""),
+		JWTAudience:        envconfig.String("JWT_AUDIENCE", ""),
+		JWTLeeway:          p.span("JWT_LEEWAY", 30*time.Second),
 		AuthGrace:          p.span("WS_AUTH_GRACE", 3*time.Minute),
 		AuthRate:           p.number("WS_AUTH_RATE", 1000),
 		AuthBurst:          p.number("WS_AUTH_BURST", 2000),
@@ -114,8 +114,8 @@ func Load() (Config, error) {
 		SendQueueBytes:     p.number("WS_SEND_QUEUE_BYTES", 1<<20),
 		WriteTimeout:       p.span("WS_WRITE_TIMEOUT", 10*time.Second),
 		RequestDeadline:    p.span("CHAT_REQUEST_DEADLINE", 5*time.Second),
-		DrainDelay:         p.span("WS_DRAIN_DELAY", 2*time.Second),
-		ShutdownBudget:     p.span("WS_SHUTDOWN_BUDGET", 15*time.Second),
+		DrainDelay:         p.span("APP_DRAIN_DELAY", 2*time.Second),
+		ShutdownBudget:     p.span("APP_SHUTDOWN_BUDGET", 15*time.Second),
 		NATSURL:            envconfig.String("NATS_URL", ""),
 		EventStream:        envconfig.String("EVT_STREAM", "CHATIM_EVT"),
 		EventRoot:          envconfig.String("EVT_SUBJECT_ROOT", "evt"),
@@ -136,11 +136,11 @@ func Load() (Config, error) {
 		TypingQueue:        p.number("WS_TYPING_QUEUE", 8192),
 		TypingPendingMsgs:  p.number("WS_TYPING_PENDING_MSGS", 65536),
 
-		PresenceRedisAddr:     envconfig.String("WS_PRESENCE_REDIS_ADDR", "chatim-redis-presence:6379"),
-		PresenceRedisDB:       p.number("WS_PRESENCE_REDIS_DB", 0),
-		PresenceRedisPassword: p.secret("WS_PRESENCE_REDIS_PASSWORD"),
-		PresenceRedisTimeout:  p.span("WS_PRESENCE_REDIS_TIMEOUT", 500*time.Millisecond),
-		PresenceRedisPool:     p.number("WS_PRESENCE_REDIS_POOL", 64),
+		PresenceRedisAddr:     envconfig.String("SHARED_REDIS_ADDR", "chatim-redis-presence:6379"),
+		PresenceRedisDB:       p.number("SHARED_REDIS_DB", 0),
+		PresenceRedisPassword: p.secret("SHARED_REDIS_PASSWORD"),
+		PresenceRedisTimeout:  p.span("SHARED_REDIS_TIMEOUT", 500*time.Millisecond),
+		PresenceRedisPool:     p.number("SHARED_REDIS_POOL", 64),
 		PresenceTTL:           p.span("WS_PRESENCE_TTL", 15*time.Second),
 		PresenceStampEvery:    p.span("WS_PRESENCE_STAMP_EVERY", 2*time.Second),
 		PresenceFlush:         p.span("WS_PRESENCE_FLUSH", time.Second),
@@ -148,7 +148,7 @@ func Load() (Config, error) {
 		PresenceCache:         p.span("WS_PRESENCE_CACHE", 5*time.Second),
 		PresenceWatchMax:      p.number("WS_PRESENCE_WATCH_MAX", 200),
 	}
-	identity, err := auth.SyncConfigFromEnv("WS")
+	identity, err := auth.SyncConfigFromEnv()
 	if err != nil {
 		p.fail(err)
 	}
@@ -235,12 +235,12 @@ type parser struct {
 func (p *parser) fail(err error) { p.errs = append(p.errs, err) }
 
 func (p *parser) nodeID() string {
-	if id := os.Getenv("WS_NODE_ID"); id != "" {
+	if id := os.Getenv("APP_NODE_ID"); id != "" {
 		return id
 	}
 	host, err := os.Hostname()
 	if err != nil {
-		p.fail(fmt.Errorf("WS_NODE_ID unset and hostname unavailable: %w", err))
+		p.fail(fmt.Errorf("APP_NODE_ID unset and hostname unavailable: %w", err))
 	}
 	return host
 }

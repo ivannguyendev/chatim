@@ -8,8 +8,8 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/core/envconfig"
 )
 
-func SyncConfigFromEnv(prefix string) (SyncConfig, error) {
-	key := func(name string) string { return prefix + "_IDENTITY_" + name }
+func SyncConfigFromEnv() (SyncConfig, error) {
+	key := func(name string) string { return "IDENTITY_" + name }
 	var errs []error
 	span := func(name string, def time.Duration) time.Duration {
 		v, err := envconfig.Duration(key(name), def)
@@ -18,7 +18,7 @@ func SyncConfigFromEnv(prefix string) (SyncConfig, error) {
 		}
 		return v
 	}
-	secret, err := envconfig.Secret(key("SECRET"))
+	secret, err := envconfig.Secret(key("NODE_SECRET"))
 	if err != nil {
 		errs = append(errs, err)
 	}
