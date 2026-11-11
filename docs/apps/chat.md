@@ -8,10 +8,10 @@ Toàn bộ đọc qua `apps/chat/internal/config`; thiếu thì dùng giá trị
 
 | Biến | Mặc định | Ghi chú |
 |---|---|---|
-| `CHAT_NODE_ID` | hostname | Định danh chat, cũng là id gửi lên `chatim:chat-nodes` |
-| `CHAT_GRPC_ADDR` | `:9000` | Địa chỉ lắng nghe gRPC |
-| `CHAT_ADVERTISE_ADDR` | `<CHAT_NODE_ID>:<cổng của CHAT_GRPC_ADDR>` | Địa chỉ chat tự quảng cáo cho slot lease |
-| `CHAT_ADMIN_ADDR` | `:9090` | `/healthz`, `/readyz`, `/metrics` (Prometheus), pprof — không công khai ra ngoài mạng compose |
+| `APP_NODE_ID` | hostname | Định danh chat, cũng là id gửi lên `chatim:chat-nodes` |
+| `APP_ADDR` | `:9000` | Địa chỉ lắng nghe gRPC |
+| `CHAT_ADVERTISE_ADDR` | `<APP_NODE_ID>:<cổng của APP_ADDR>` | Địa chỉ chat tự quảng cáo cho slot lease |
+| `APP_ADMIN_ADDR` | `:9090` | `/healthz`, `/readyz`, `/metrics` (Prometheus), pprof — không công khai ra ngoài mạng compose |
 | `MONGO_URI`, `MONGO_DB` | — / `chatim` | Bắt buộc có `MONGO_URI`. Compose truyền URI không kèm credential |
 | `MONGO_USER`, `MONGO_AUTH_SOURCE` | rỗng / `admin` | Nếu đặt `MONGO_USER` thì chat xác thực bằng user này; không được đặt cùng lúc với credential trong `MONGO_URI` (D46) |
 | `MONGO_PASSWORD`, `MONGO_PASSWORD_FILE` | rỗng | Mật khẩu Mongo, cần `MONGO_USER`; `_FILE` đọc từ file (bỏ newline cuối) và thắng biến thường. Compose trỏ `_FILE` vào secret `mongo_password` (D46) |
@@ -21,13 +21,13 @@ Toàn bộ đọc qua `apps/chat/internal/config`; thiếu thì dùng giá trị
 | `REDIS_DEDUPE_PASSWORD`, `REDIS_DEDUPE_PASSWORD_FILE` | rỗng (không AUTH) | Như `REDIS_PASSWORD`, cho Redis dedupe |
 | `NATS_URL` | `nats://chatim-nats:4222` | |
 | `CHAT_CONNECT_TIMEOUT` | `10s` | Timeout nối Mongo/Redis/NATS lúc khởi động |
-| `CHAT_REQUEST_DEADLINE` | `3s` | Deadline phía server cho mỗi unary RPC (D42), cũng là group deadline của actor |
+| `APP_REQUEST_DEADLINE` | `3s` | Deadline phía server cho mỗi unary RPC (D42), cũng là group deadline của actor |
 | `CHAT_SLOW_RPC` | `500ms` | RPC chạy lâu hơn mức này được log là chậm (interceptor log của `pkg/core/grpcserver`); phải dương |
-| `CHAT_QUEUE_WAIT`, `CHAT_MAX_INFLIGHT` | `25ms` / `2048` | Giới hạn chờ và số RPC đang xử lý đồng thời (load shedding) |
-| `CHAT_DRAIN_DELAY` | `2s` | Chờ trước khi gRPC graceful stop, để LB ngừng gửi request mới |
+| `CHAT_QUEUE_WAIT`, `APP_INFLIGHT_MAX` | `25ms` / `2048` | Giới hạn chờ và số RPC đang xử lý đồng thời (load shedding) |
+| `APP_DRAIN_DELAY` | `2s` | Chờ trước khi gRPC graceful stop, để LB ngừng gửi request mới |
 | `CHAT_GRPC_SHUTDOWN` | `5s` | Hạn graceful stop của gRPC server |
 | `CHAT_PUBLISHER_DRAIN` | `5s` | Hạn đẩy hết hàng đợi publisher và chờ `PublishAsyncComplete` lúc dừng; hết hạn thì bỏ phần còn lại (D49, D50) |
-| `CHAT_SHUTDOWN_BUDGET` | `30s` | Tổng ngân sách toàn bộ chuỗi dừng (D39); `Load()` từ chối nếu các mốc dừng cộng lại không nhỏ hơn. Mặc định các mốc là 29.7s (gồm 1s của sweeper, `max(PROJECTION_FETCH_WAIT, MENTION_FETCH_WAIT)` + 1s = 4s của consumer `projections` và consumer `mention` dừng song song, 500ms + 1s = 1.5s của consumer phiếu hẹn (lần fetch dở không huỷ được: đọc tới khi server hết hạn, chậm nhất thêm 1s nếu mất tín hiệu 408), `2 × REDIS_OP_TIMEOUT` để cid batcher gửi hết Commit và 1s để hàng xoá cờ xả sau publisher), nên tăng mốc nào cũng phải tăng ngân sách này và `stop_grace_period` của compose (33s) |
+| `APP_SHUTDOWN_BUDGET` | `30s` | Tổng ngân sách toàn bộ chuỗi dừng (D39); `Load()` từ chối nếu các mốc dừng cộng lại không nhỏ hơn. Mặc định các mốc là 29.7s (gồm 1s của sweeper, `max(PROJECTION_FETCH_WAIT, MENTION_FETCH_WAIT)` + 1s = 4s của consumer `projections` và consumer `mention` dừng song song, 500ms + 1s = 1.5s của consumer phiếu hẹn (lần fetch dở không huỷ được: đọc tới khi server hết hạn, chậm nhất thêm 1s nếu mất tín hiệu 408), `2 × REDIS_OP_TIMEOUT` để cid batcher gửi hết Commit và 1s để hàng xoá cờ xả sau publisher), nên tăng mốc nào cũng phải tăng ngân sách này và `stop_grace_period` của compose (33s) |
 | `CID_PENDING_TTL`, `CID_COMMITTED_TTL` | `10s` / `15m` | TTL key chống trùng cid ở Redis (D34); actor nhớ lần ghi chưa rõ theo cid trong `CID_PENDING_TTL` (D119) |
 | `REDIS_OP_TIMEOUT`, `REDIS_COOLDOWN` | `100ms` / `1s` | Timeout mỗi lệnh Redis và thời gian chờ trước khi probe lại sau khi suy giảm |
 | `CID_BATCH_SHARDS`, `CID_BATCH_MAX_KEYS`, `CID_BATCH_QUEUE` | `4` / `256` / `4096` | cid batcher: số shard (theo slot, tối đa 1024), số key tối đa mỗi lượt Reserve/Commit, hàng đợi mỗi shard (Commit/Abort đầy thì bỏ). Pool Redis dedupe = `2 × CID_BATCH_SHARDS + 4` kết nối, giữ ấm `2 × CID_BATCH_SHARDS` (D58, D60) |
@@ -39,7 +39,7 @@ Toàn bộ đọc qua `apps/chat/internal/config`; thiếu thì dùng giá trị
 | `SLOT_TICK`, `SLOT_HEARTBEAT_TTL`, `SLOT_LEASE_TTL`, `SLOT_HOOK_TIMEOUT` | `1s` / `5s` / `10s` / `Tick/2` | Nhịp slot manager; `HookTimeout` suy ra từ `SLOT_TICK` nếu không đặt riêng (D26) |
 | `STATE_CLEAR_FLUSH`, `STATE_CLEAR_BATCH`, `STATE_CLEAR_QUEUE`, `STATE_CLEAR_TIMEOUT` | `2s` / `16384` / `65536` / `5s` | Hàng xoá cờ `_state` (M3.1, D141+): sau PubAck OK publisher đưa doc vào hàng, hàng gom và xoá theo lô `STATE_CLEAR_FLUSH` sau doc đầu của lô hoặc khi đủ `STATE_CLEAR_BATCH`; mỗi lần xoá có hạn `STATE_CLEAR_TIMEOUT`. Cả lô xếp theo `_id` trước rồi mới chia: các seq liền nhau đã ack của một room thành một lệnh `UpdateMany` theo khoảng, seq lẻ là `UpdateOne`, mỗi `BulkWrite` tối đa 500 lệnh và không cắt đôi khoảng nào. Hàng đầy thì bỏ lượt xoá (đếm `state_clear_dropped_total`), doc giữ cờ và sweeper phát lại, không chặn lệnh. Dừng sau publisher, xả trong 1s |
 | `READ_EVENT_WINDOW` | `1s` | Cửa sổ gom vị trí đã đọc (M4 phần 3): `MarkRead`/`MarkUnread` ghi doc rồi đưa vị trí vào hàng `event/readbatch`; mỗi cửa sổ chat phát một event `read_positions` mỗi room (mỗi user một dòng, bản `read_ver` lớn nhất, tối đa 1.000 dòng mỗi event). Hợp lệ 100ms..3s. Đóng ngay trước bước xả publisher, trong cùng hạn `CHAT_PUBLISHER_DRAIN` |
-| `SWEEP_INTERVAL`, `SWEEP_MIN_AGE`, `SWEEP_LOOKBACK` | `2s` / `15s` / `60s` | Sweeper trên chat giữ slot 0: mỗi `SWEEP_INTERVAL` quét doc còn cờ `_state` cũ hơn `SWEEP_MIN_AGE`, từ mốc lần trước lùi `SWEEP_LOOKBACK`, dựng lại event từ doc hiện tại và phát lại qua JetStream client riêng (D147). Luật khởi động: `SWEEP_MIN_AGE` phải dài hơn `PUB_ACK_TIMEOUT + STATE_CLEAR_FLUSH + STATE_CLEAR_TIMEOUT + READ_EVENT_WINDOW` (mặc định 2s + 2s + 5s + 1s = 10s < 15s); `SWEEP_MIN_AGE + SWEEP_INTERVAL` phải ngắn hơn `EVT_STREAM_DUPLICATES`; `SWEEP_LOOKBACK` phải dài hơn cả `CHAT_REQUEST_DEADLINE + 10s` lẫn `SWEEP_MIN_AGE + 10s`. Dừng trong 1s |
+| `SWEEP_INTERVAL`, `SWEEP_MIN_AGE`, `SWEEP_LOOKBACK` | `2s` / `15s` / `60s` | Sweeper trên chat giữ slot 0: mỗi `SWEEP_INTERVAL` quét doc còn cờ `_state` cũ hơn `SWEEP_MIN_AGE`, từ mốc lần trước lùi `SWEEP_LOOKBACK`, dựng lại event từ doc hiện tại và phát lại qua JetStream client riêng (D147). Luật khởi động: `SWEEP_MIN_AGE` phải dài hơn `PUB_ACK_TIMEOUT + STATE_CLEAR_FLUSH + STATE_CLEAR_TIMEOUT + READ_EVENT_WINDOW` (mặc định 2s + 2s + 5s + 1s = 10s < 15s); `SWEEP_MIN_AGE + SWEEP_INTERVAL` phải ngắn hơn `EVT_STREAM_DUPLICATES`; `SWEEP_LOOKBACK` phải dài hơn cả `APP_REQUEST_DEADLINE + 10s` lẫn `SWEEP_MIN_AGE + 10s`. Dừng trong 1s |
 | `SWEEP_BATCH`, `SWEEP_RATE` | `500` / `5000` | Cỡ trang mỗi lần đọc (1–1000) và số event phát lại tối đa mỗi giây (D154); client JetStream của sweeper cho tối đa `2 × SWEEP_BATCH` publish đang bay, timeout `PUB_ACK_TIMEOUT` |
 | `PROJECTION_FETCH_BATCH`, `PROJECTION_FETCH_WAIT` | `8192` / `3s` | Một consumer durable `projections` trên `CHATIM_EVT` (lọc `evt.>`, ack từng tin, `AckWait` 30s, `MaxAckPending` = 4 × lô; ba durable cũ `projection-*` bị xoá lúc khởi động): số event tối đa mỗi lô (1–8192) và thời gian chờ lô (tối đa 3s). Cửa sổ 3s gom nhiều event mỗi room vào một lệnh ghi `rooms` (2K event/s ≈ 6K event một lô, nên cửa sổ đóng lô chứ không phải cỡ lô), đưa CPU Mongo về ngang engine cũ (D160). Khi dừng, chat đợi lần fetch dở hết hạn rồi trả các tin nhận được bằng `Nak(0)`, không đánh rơi tin nào; mốc dừng là `PROJECTION_FETCH_WAIT` + 1s. Chỉ chat giữ slot 0 fetch (xét lại mỗi `SLOT_TICK`); mỗi lô chia cho `room_activity` (13 kind, một `BulkWrite` `$max` mỗi room-thread) và `reply_index` (`msg_created`/`msg_deleted`). Ổn hay room/doc không còn thì `Ack`, không decode được thì `Term`, lỗi thì `Nak` riêng tin đó theo bậc thang 5s, 30s, 2m, 10m (cố định); lần giao thứ 6 trở đi đếm vào `projection_stuck_total`. Mất slot 0 thì làm xong lô đang ghi, `Nak(0)` lô vừa nhận. `PROJECTION_ACTIVITY_FETCH_*` cũ bị bỏ qua. Dừng trong `PROJECTION_FETCH_WAIT` + 1s (mặc định 4s) |
 | `MESSAGE_LOCKED_KINDS` | (rỗng) | Danh sách loại tin, cách nhau bằng dấu phẩy, mà policy mặc định không cho ai sửa/xoá, kể cả tác giả; tên hợp lệ: `text`; tên lạ thì chat không khởi động (D87) |
@@ -47,8 +47,8 @@ Toàn bộ đọc qua `apps/chat/internal/config`; thiếu thì dùng giá trị
 | `PIN_LIMIT` | `50` | Số tin ghim tối đa mỗi room (1–1000), chính xác vì pv dày; ghim lại tin đã ghim vẫn thành công (D92). Client đọc qua `GetClientConfig.room.max_pins` |
 | `MEMBER_BATCH_MAX` | `500` | Số người tối đa mỗi lệnh `CreateRoom` hoặc `AddMembers` (đếm sau khi bỏ trùng, 2–1000); quá thì `INVALID_ARGUMENT`. Chat không giới hạn tổng số member của room (D107). Client đọc qua `GetClientConfig.room.max_members_per_call` |
 | `MENTION_TARGETS_MAX` | `50` | Số đích mention tối đa mỗi tin và mỗi lần sửa tin (đếm sau khi bỏ trùng, yêu cầu A6); quá thì `INVALID_ARGUMENT`. `@all` không tính là đích, nó qua policy `mention_all` |
-| `MEMBER_COUNT_CHECK_DELAY` | `5s` | Hạn của phiếu hẹn đếm lại `member_count` (message schedule NATS trên stream `CHATIM_TIMER`, D102, D111): lệnh member có thể đổi số đặt phiếu trước khi ghi và xoá phiếu sau `$inc`; lỗi hay node chat chết ở giữa thì phiếu bật sau hạn này (làm tròn lên giây). Phải dài hơn `CHAT_REQUEST_DEADLINE`; không thêm bước dừng |
-| `MESSAGE_COUNT_CHECK_DELAY` | `5s` | Hạn của phiếu hẹn đếm lại số trên tin (`rx` reaction, `rc` trả lời; D113): ghi tương tác đặt phiếu trước, `$inc` số rồi xoá phiếu; lỗi hay node chat chết ở giữa thì phiếu bật sau hạn này (làm tròn lên giây) và consumer phiếu hẹn (`count_repair`) đếm lại + CAS `v`. Phải dài hơn `CHAT_REQUEST_DEADLINE`; không thêm bước dừng |
+| `MEMBER_COUNT_CHECK_DELAY` | `5s` | Hạn của phiếu hẹn đếm lại `member_count` (message schedule NATS trên stream `CHATIM_TIMER`, D102, D111): lệnh member có thể đổi số đặt phiếu trước khi ghi và xoá phiếu sau `$inc`; lỗi hay node chat chết ở giữa thì phiếu bật sau hạn này (làm tròn lên giây). Phải dài hơn `APP_REQUEST_DEADLINE`; không thêm bước dừng |
+| `MESSAGE_COUNT_CHECK_DELAY` | `5s` | Hạn của phiếu hẹn đếm lại số trên tin (`rx` reaction, `rc` trả lời; D113): ghi tương tác đặt phiếu trước, `$inc` số rồi xoá phiếu; lỗi hay node chat chết ở giữa thì phiếu bật sau hạn này (làm tròn lên giây) và consumer phiếu hẹn (`count_repair`) đếm lại + CAS `v`. Phải dài hơn `APP_REQUEST_DEADLINE`; không thêm bước dừng |
 | `ROOM_LIST_JOIN_MAX` | `1500` | Điểm chuyển đường của `ListMyRooms` (≥ 1, không phải giới hạn): user có ≤ số room này thì một aggregate `members → rooms` ở DB, nhiều hơn thì đọc từng bước rồi xếp ở chat; hai đường cùng kết quả, quyết định cache 60s theo user (D136) |
 | `ROOM_TAIL_CACHE_BYTES` | `268435456` (256MB) | Số byte tối đa của cache đuôi room trong RAM mỗi node chat (LRU theo byte, ≥ 1048576 = 1MB; một đuôi 300 tin + 10 preview ≈ 14KB); entry hết hạn sau 30s. Cache ảnh chụp danh sách (64MB, TTL 30s) và cache chọn đường (100.000 user, TTL 60s) có cỡ cố định, không env |
 | `ROOM_INFO_CACHE_ENTRIES` | `100000` | Số room giữ thông tin (tên, loại, số member…) trong cache RAM mỗi node chat (≥ 1, TTL 60s); `room_updated` và `member_count_changed` trên core NATS xoá entry của room ở mọi node chat |
@@ -62,7 +62,7 @@ Toàn bộ đọc qua `apps/chat/internal/config`; thiếu thì dùng giá trị
 | `MENTION_WORKERS` | `8` | Số event một node chat xử lý cùng lúc (≥ 1); event chưa xong được gửi `InProgress` mỗi 10s |
 | `MENTION_MAX_ACK_PENDING` | `16384` | `MaxAckPending` của durable `mention`, tổng cho mọi node chat (≥ `MENTION_FETCH_BATCH`) |
 | `MENTION_NOTIFY_MAX_AGE` | `5m` | Event cũ hơn thì vẫn ghi mention nhưng không gửi thông báo (D169); ≤ cửa sổ bỏ trùng 6 phút của stream gói |
-| `MENTION_WS_PUBLISH_STREAM`, `MENTION_WS_PUBLISH_ROOT` | `CHATIM_WS` / `websocket.publish` | Stream và subject gói `WsPublish` `{root}.{tenant}` (giữ 24h, bỏ trùng 6 phút, cấu hình trong `pkg/wspublish`); stream phải khác `EVT_STREAM`/`TIMER_STREAM`, root không bắt đầu bằng subject root khác. Số bản sao theo `EVT_STREAM_REPLICAS` |
+| `WS_PUBLISH_STREAM`, `WS_PUBLISH_ROOT` | `CHATIM_WS` / `websocket.publish` | Stream và subject gói `WsPublish` `{root}.{tenant}` (giữ 24h, bỏ trùng 6 phút, cấu hình trong `pkg/wspublish`); stream phải khác `EVT_STREAM`/`TIMER_STREAM`, root không bắt đầu bằng subject root khác. Số bản sao theo `EVT_STREAM_REPLICAS` |
 | `MENTION_NOTIFY_TARGETS_PAGE` | `1000` | Số người nhận tối đa mỗi gói `WsPublish` (1..5.000); trần 5.000 giữ gói dưới 1MB kể cả khi `max_payload` của NATS bị hạ |
 | `MENTION_HIDE_READ_TENANTS` | (rỗng) | Danh sách tenant id, cách nhau bằng dấu phẩy, mà `ListMentions` của Mention App ẩn mention đã đọc (giờ mention không muộn hơn tin tại `read_seq` của room); tenant khác thấy mọi mention kèm cờ `read`; tenant id sai định dạng thì chat không khởi động (D115, nay thuộc config Mention App) |
 | `MENTION_ROOM_GROUPS_SYNC_MAX` | `5000` | Room tới cỡ này thì `ListRoomGroups` dựng tập nhóm ngay khi được hỏi, lớn hơn thì dựng ở nền (D172); không phải giới hạn dữ liệu |
@@ -110,8 +110,8 @@ Consumer `media` (M7 P3, [module 12 §8](../features/12-feature-media.md#8-chuy�
 
 ## Cổng và admin
 
-- gRPC `CHAT_GRPC_ADDR` (`:9000`); compose không publish gRPC ra host vì caller còn được tin qua metadata `x-chatim-tenant`/`x-chatim-user` tới khi có mTLS (M5); tools và e2e gọi `chatim-chat-1:9000` trong mạng `chatim_default`.
-- Admin `CHAT_ADMIN_ADDR` (`:9090`, không publish): `/healthz`, `/readyz`, `/metrics`, pprof. `/app probe` là healthcheck của container.
+- gRPC `APP_ADDR` (`:9000`); compose không publish gRPC ra host vì caller còn được tin qua metadata `x-chatim-tenant`/`x-chatim-user` tới khi có mTLS (M5); tools và e2e gọi `chatim-chat-1:9000` trong mạng `chatim_default`.
+- Admin `APP_ADMIN_ADDR` (`:9090`, không publish): `/healthz`, `/readyz`, `/metrics`, pprof. `/app probe` là healthcheck của container.
 
 ## Metric và alert
 
@@ -129,7 +129,7 @@ Mọi metric của chat có tiền tố `chatim_chat_`, của Mention App `chati
 
 ## Vòng đời
 
-Thứ tự khởi động và dừng: [architecture.md §7.2](../architecture.md#72-vòng-đời-chat-lifecycle--graceful-shutdown). Kế hoạch dừng mặc định 29,7s trong `CHAT_SHUTDOWN_BUDGET` 30s (log `chat shutting down` kèm `stop_plan`); tăng mốc dừng nào cũng phải tăng budget và `stop_grace_period` của compose (33s). gRPC chỉ mở sau khi khởi động sạch.
+Thứ tự khởi động và dừng: [architecture.md §7.2](../architecture.md#72-vòng-đời-chat-lifecycle--graceful-shutdown). Kế hoạch dừng mặc định 29,7s trong `APP_SHUTDOWN_BUDGET` 30s (log `chat shutting down` kèm `stop_plan`); tăng mốc dừng nào cũng phải tăng budget và `stop_grace_period` của compose (33s). gRPC chỉ mở sau khi khởi động sạch.
 
 ## Lệnh vận hành
 

@@ -220,7 +220,7 @@ Tên field trong `messages` là tên ngắn (ngoại lệ duy nhất của luậ
 
 ### 4.4. Thông báo: gói `WsPublish` trên `CHATIM_WS` (D192)
 
-Subject `websocket.publish.{t}` (`MENTION_WS_PUBLISH_ROOT`), gói `WsPublish{id, tenant, kind "mention", notification, targets.users, part, parts}`: nội dung một lần, danh sách người nhận chia trang 1.000 (`MENTION_NOTIFY_TARGETS_PAGE`). Proto `Notification{id, tenant, user (để trống trong gói), room_id, room_type, thread_root, seq, message_ver, ts, oneof}`:
+Subject `websocket.publish.{t}` (`WS_PUBLISH_ROOT`), gói `WsPublish{id, tenant, kind "mention", notification, targets.users, part, parts}`: nội dung một lần, danh sách người nhận chia trang 1.000 (`MENTION_NOTIFY_TARGETS_PAGE`). Proto `Notification{id, tenant, user (để trống trong gói), room_id, room_type, thread_root, seq, message_ver, ts, oneof}`:
 - `mention_notified {message, target}`: id `{room}-{thread}-{seq}-m{message_ver}-{đích}` (`u:{id}`, `g:{id}`, `all`); mỗi người chỉ trong một gói, đích theo ưu tiên user > nhóm > `@all` (`MENTION_KIND_ALL`).
 - `mention_retracted {reason}`: id `…-r{message_ver}-{edited|deleted}`.
 - `WsPublish.id` = `Nats-Msg-Id` = id thông báo + `-p{part}-` + 16 hex sha256 danh sách user của trang. Websocket đẩy cho người có tên đang online; `CHATIM_NOTIFY`/`notify.{t}.{kind}` để dành cho app notification Phase 2. Chi tiết: [events.md §4](../events.md).

@@ -8,15 +8,15 @@ Giữ kết nối WebSocket (gws) của client: 12 lệnh ghi realtime chuyển 
 
 | Biến | Mặc định | Ghi chú |
 |---|---|---|
-| `WS_NODE_ID` | hostname | Định danh node, nằm trong tên client Redis `chatim-websocket-{node}` |
-| `WS_ADDR` | `:8080` | Lắng nghe WebSocket, đường dẫn `/ws`, subprotocol `chatim.v1` |
-| `WS_ADMIN_ADDR` | `:9090` | `/livez`, `/readyz`, `/metrics`; `/app probe` hỏi địa chỉ này; không publish ra host |
+| `APP_NODE_ID` | hostname | Định danh node, nằm trong tên client Redis `chatim-websocket-{node}` |
+| `APP_ADDR` | `:8080` | Lắng nghe WebSocket, đường dẫn `/ws`, subprotocol `chatim.v1` |
+| `APP_ADMIN_ADDR` | `:9090` | `/livez`, `/readyz`, `/metrics`; `/app probe` hỏi địa chỉ này; không publish ra host |
 | `REDIS_ADDR`, `REDIS_DB` | `chatim-redis:6379` / `0` | Redis state của chat, chỉ đọc bảng slot để route lệnh tới chat giữ room |
 | `REDIS_PASSWORD`, `REDIS_PASSWORD_FILE` | rỗng | Như của chat; `_FILE` thắng. Compose trỏ `_FILE` vào secret `redis_password` |
-| `WS_JWT_KEYS_FILE` | — (bắt buộc) | JWKS công khai (Ed25519, có `kid`); file có khoá riêng (`d`) bị từ chối. Đọc một lần lúc khởi động |
-| `WS_JWT_ISSUER`, `WS_JWT_AUDIENCE` | — (bắt buộc) | `iss`, `aud` phải khớp; compose dev đặt `chatim-dev` / `chatim-websocket` |
-| `WS_JWT_LEEWAY` | `30s` | Dung sai giờ cho `exp`/`nbf` (0–1 phút; `identity` giữ mục thu hồi thêm 1 phút) |
-| `WS_IDENTITY_INTERNAL_URL`, `WS_IDENTITY_SECRET`/`_FILE`, `WS_IDENTITY_JWKS_URL`, `WS_IDENTITY_REVOCATIONS_INTERVAL`, `WS_IDENTITY_KEYS_INTERVAL`, `WS_IDENTITY_READY_TIMEOUT`, `WS_IDENTITY_ALLOW_HTTP` | bắt buộc / bắt buộc / bắt buộc / `2s` / `1m` (tối đa `1m`) / `10s` / `false` | Đồng bộ danh sách thu hồi và khoá với `identity` ([identity.md](identity.md), node đồng bộ); bản dùng chung nằm trên Redis presence. `identity` trả 4xx (sai secret/URL) → node không `ready` (`identity_refused{kind}`). Phiên bị thu hồi → `auth_required{REVOKED}`, tenant bị khoá → đóng `4003` |
+| `JWT_KEYS_FILE` | — (bắt buộc) | JWKS công khai (Ed25519, có `kid`); file có khoá riêng (`d`) bị từ chối. Đọc một lần lúc khởi động |
+| `JWT_ISSUER`, `JWT_AUDIENCE` | — (bắt buộc) | `iss`, `aud` phải khớp; compose dev đặt `chatim-dev` / `chatim-websocket` |
+| `JWT_LEEWAY` | `30s` | Dung sai giờ cho `exp`/`nbf` (0–1 phút; `identity` giữ mục thu hồi thêm 1 phút) |
+| `IDENTITY_INTERNAL_URL`, `IDENTITY_NODE_SECRET`/`_FILE`, `IDENTITY_JWKS_URL`, `IDENTITY_REVOCATIONS_INTERVAL`, `IDENTITY_KEYS_INTERVAL`, `IDENTITY_READY_TIMEOUT`, `IDENTITY_ALLOW_HTTP` | bắt buộc / bắt buộc / bắt buộc / `2s` / `1m` (tối đa `1m`) / `10s` / `false` | Đồng bộ danh sách thu hồi và khoá với `identity` ([identity.md](identity.md), node đồng bộ); bản dùng chung nằm trên Redis presence. `identity` trả 4xx (sai secret/URL) → node không `ready` (`identity_refused{kind}`). Phiên bị thu hồi → `auth_required{REVOKED}`, tenant bị khoá → đóng `4003` |
 | `WS_AUTH_GRACE` | `3m` | Kết nối mới và kết nối có token hết hạn ở trạng thái chờ đăng nhập: không nhận event, thông báo, typing, online; lệnh nhận `UNAUTHENTICATED`, frame khác (trừ `auth`, heartbeat) nhận `auth_required` tối đa 1 lần/giây. Chờ quá mức này thì đóng 4001 |
 | `WS_AUTH_RATE`, `WS_AUTH_BURST` | `1000` / `2000` | Số lần đăng nhập mỗi giây và burst mỗi node; chỉ token hợp lệ mới tốn suất, gia hạn cùng người không tốn. Hết suất thì `retry_later` (đếm `rate`) và giữ kết nối chờ. Mỗi kết nối đang chờ gửi `auth` tối đa 1 lần/giây, dồn hơn thì `retry_later{1000}` mà không kiểm token (đếm `throttled`) |
 | `WS_AUTH_RETRY_MIN`, `WS_AUTH_RETRY_MAX` | `5s` / `30s` | `retry_after_ms` của `retry_later` lấy ngẫu nhiên đều trong khoảng này (MIN ≤ MAX) |
@@ -30,7 +30,7 @@ Giữ kết nối WebSocket (gws) của client: 12 lệnh ghi realtime chuyển 
 | `WS_SEND_QUEUE_BYTES` | `1048576` | Byte chờ ghi mỗi kết nối (≥ `WS_FRAME_MAX`); vượt thì xử lý như `WS_SEND_QUEUE` đầy (`resync{CLIENT_BACKLOG}` sau khi hàng xuống dưới một nửa, không đóng). Không có ngân sách toàn node: compose đặt `mem_limit 2g`, `GOMEMLIMIT 1600MiB` |
 | `WS_WRITE_TIMEOUT` | `10s` | Hạn ghi một frame; quá hạn hoặc ghi lỗi thì cắt socket (máy thấy 1006) |
 | `CHAT_REQUEST_DEADLINE` | `5s` | Deadline mỗi lệnh gọi chat |
-| `WS_DRAIN_DELAY`, `WS_SHUTDOWN_BUDGET` | `2s` / `15s` | Chuỗi dừng: `WS_DRAIN_DELAY + CHAT_REQUEST_DEADLINE + 2s` (dừng feed NATS) `+ 1s` (đóng kết nối) phải ≤ budget, mặc định 10s; compose `stop_grace_period` = budget + 3s = 18s |
+| `APP_DRAIN_DELAY`, `APP_SHUTDOWN_BUDGET` | `2s` / `15s` | Chuỗi dừng: `APP_DRAIN_DELAY + CHAT_REQUEST_DEADLINE + 2s` (dừng feed NATS) `+ 1s` (đóng kết nối) phải ≤ budget, mặc định 10s; compose `stop_grace_period` = budget + 3s = 18s |
 | `NATS_URL` | — (bắt buộc) | NATS của chat; credential bị che trong log. Lần sẵn sàng đầu cần NATS; mất NATS sau đó `/readyz` vẫn true, gauge `nats_connected` = 0 |
 | `EVT_STREAM`, `EVT_SUBJECT_ROOT` | `CHATIM_EVT` / `evt` | Stream event của chat và gốc subject; mỗi node đọc `{root}.>` bằng một ordered consumer, bắt đầu ở seq cuối + 1 (D190). Phải khớp config chat |
 | `WS_PUBLISH_STREAM`, `WS_PUBLISH_ROOT` | `CHATIM_WS` / `websocket.publish` | Hộp thư của websocket: gói `WsPublish` trên `{root}.{tenant}` (D192); websocket tạo hoặc cập nhật stream lúc khởi động (cấu hình chung `pkg/wspublish`). Phải khớp `MENTION_WS_PUBLISH_*` của chat; stream khác `EVT_STREAM`, root không bắt đầu bằng token đầu của `EVT_SUBJECT_ROOT` |
@@ -43,11 +43,11 @@ Giữ kết nối WebSocket (gws) của client: 12 lệnh ghi realtime chuyển 
 | `WS_TYPING_RATE`, `WS_TYPING_BURST` | `2` / `4` | Giới hạn frame `typing` mỗi giây và burst mỗi kết nối (sau giới hạn frame chung); quá thì bỏ frame, đếm `typing_dropped_total{reason="rate"}`, không đóng kết nối |
 | `WS_TYPING_QUEUE` | `8192` | Hàng chờ tín hiệu `typing` nhận từ node khác (core NATS `eph.{tenant}.{room}.typing`); đầy thì bỏ, đếm `reason="queue_full"` |
 | `WS_TYPING_PENDING_MSGS` | `65536` | Số tin tối đa chờ trong subscription `eph.*.*.typing` của thư viện NATS (kèm 64MB); vượt thì NATS bỏ tin |
-| `WS_PRESENCE_REDIS_ADDR`, `WS_PRESENCE_REDIS_DB` | `chatim-redis-presence:6379` / `0` | Redis presence riêng: mỗi người online là một key `chatim:presence:{tenant}:{user}` = `1` có `EX` = `WS_PRESENCE_TTL`; còn key là online, mất key là offline. Chỉ `SET … EX` (và `MGET` sau), không `SCAN`/`KEYS`, không xoá. Node không chờ Redis này khi khởi động, `/readyz` không phụ thuộc nó; gauge `presence_redis_up` |
-| `WS_PRESENCE_REDIS_PASSWORD`, `WS_PRESENCE_REDIS_PASSWORD_FILE` | rỗng | Như `REDIS_PASSWORD`; `_FILE` thắng. Compose trỏ `_FILE` vào secret `redis_presence_password` |
-| `WS_PRESENCE_REDIS_TIMEOUT` | `500ms` | Dial/đọc/ghi và hạn của mỗi lệnh pipeline, tính cả lần thử lại (`MaxRetries 1`) |
-| `WS_PRESENCE_REDIS_POOL` | `64` | Số kết nối tối đa của client presence (`chatim-websocket-presence-{node}`) |
-| `WS_PRESENCE_TTL` | `15s` | TTL của key online; phải lớn hơn `WS_PRESENCE_STAMP_EVERY + 10s + 2 × WS_PRESENCE_FLUSH + WS_PRESENCE_REDIS_TIMEOUT` và không quá `WS_HEARTBEAT_TIMEOUT + WS_PRESENCE_STAMP_EVERY` |
+| `SHARED_REDIS_ADDR`, `SHARED_REDIS_DB` | `chatim-redis-presence:6379` / `0` | Redis presence riêng: mỗi người online là một key `chatim:presence:{tenant}:{user}` = `1` có `EX` = `WS_PRESENCE_TTL`; còn key là online, mất key là offline. Chỉ `SET … EX` (và `MGET` sau), không `SCAN`/`KEYS`, không xoá. Node không chờ Redis này khi khởi động, `/readyz` không phụ thuộc nó; gauge `presence_redis_up` |
+| `SHARED_REDIS_PASSWORD`, `SHARED_REDIS_PASSWORD_FILE` | rỗng | Như `REDIS_PASSWORD`; `_FILE` thắng. Compose trỏ `_FILE` vào secret `redis_presence_password` |
+| `SHARED_REDIS_TIMEOUT` | `500ms` | Dial/đọc/ghi và hạn của mỗi lệnh pipeline, tính cả lần thử lại (`MaxRetries 1`) |
+| `SHARED_REDIS_POOL` | `64` | Số kết nối tối đa của client presence (`chatim-websocket-presence-{node}`) |
+| `WS_PRESENCE_TTL` | `15s` | TTL của key online; phải lớn hơn `WS_PRESENCE_STAMP_EVERY + 10s + 2 × WS_PRESENCE_FLUSH + SHARED_REDIS_TIMEOUT` và không quá `WS_HEARTBEAT_TIMEOUT + WS_PRESENCE_STAMP_EVERY` |
 | `WS_PRESENCE_STAMP_EVERY` | `2s` | Một người được đóng dấu lại khi lần đóng dấu trước trên node đã cũ hơn mức này; mọi frame (heartbeat, ping) sau auth đều tính, nhiều kết nối cùng người chỉ ghi một lần |
 | `WS_PRESENCE_FLUSH` | `1s` | Chu kỳ ghi những người chờ đóng dấu; batch lỗi đầu tiên dừng lượt, người chưa ghi chờ lượt sau; người không có frame quá `WS_PRESENCE_TTL` bị bỏ khỏi RAM và không ghi lại; dừng node không ghi lượt cuối |
 | `WS_PRESENCE_BATCH` | `500` | Số key mỗi pipeline, `1..1000` |
@@ -58,20 +58,20 @@ Giữ kết nối WebSocket (gws) của client: 12 lệnh ghi realtime chuyển 
 
 ## Cổng và admin
 
-- WebSocket `WS_ADDR` (`:8080`), đường dẫn `/ws`, subprotocol `chatim.v1`; compose publish `websocket-1` ở `127.0.0.1:8081`; `websocket-2` không publish (e2e gọi `chatim-websocket-2:8080` trong mạng compose).
-- Admin `WS_ADMIN_ADDR` (`:9090`, không publish): `/livez`, `/readyz`, `/metrics` (`chatim_websocket_*`). Metric và 9 luật alert websocket/gateway: [module 09 §6.1](../features/09-feature-realtime-delivery-and-ephemeral.md); vận hành (NTP bắt buộc, deploy từng node): §6.2.
+- WebSocket `APP_ADDR` (`:8080`), đường dẫn `/ws`, subprotocol `chatim.v1`; compose publish `websocket-1` ở `127.0.0.1:8081`; `websocket-2` không publish (e2e gọi `chatim-websocket-2:8080` trong mạng compose).
+- Admin `APP_ADMIN_ADDR` (`:9090`, không publish): `/livez`, `/readyz`, `/metrics` (`chatim_websocket_*`). Metric và 9 luật alert websocket/gateway: [module 09 §6.1](../features/09-feature-realtime-delivery-and-ephemeral.md); vận hành (NTP bắt buộc, deploy từng node): §6.2.
 - Log: `make ws-logs` (websocket-1), `make ws-logs NODE=2` (websocket-2). Không token nào được nằm trong log.
 
 ## Khoá và token dev
 
-`make dev-keys` chạy `chatcli dev-keys -out /keys` trong image `chatim/chatcli:dev` với uid của máy, ghi `.local/ws-keys/private.jwk` (0600, chỉ nằm trong `.local/`, đã gitignore) và `.local/ws-keys/jwks.json` (0644); muốn thay khoá thì xoá thư mục rồi chạy lại. Compose chỉ đưa `jwks.json` vào websocket và gateway làm secret `ws_jwks` (`WS_JWT_KEYS_FILE=/run/secrets/ws_jwks`); khoá riêng không bao giờ mount vào container. Token dev (mặc định `-ttl 15m`, `iss` `chatim-dev`, `aud` `chatim-websocket`), dùng được cho cả hai node websocket và gateway-1:
+`make dev-keys` chạy `chatcli dev-keys -out /keys` trong image `chatim/chatcli:dev` với uid của máy, ghi `.local/ws-keys/private.jwk` (0600, chỉ nằm trong `.local/`, đã gitignore) và `.local/ws-keys/jwks.json` (0644); muốn thay khoá thì xoá thư mục rồi chạy lại. Compose chỉ đưa `jwks.json` vào websocket và gateway làm secret `ws_jwks` (`JWT_KEYS_FILE=/run/secrets/ws_jwks`); khoá riêng không bao giờ mount vào container. Token dev (mặc định `-ttl 15m`, `iss` `chatim-dev`, `aud` `chatim-websocket`), dùng được cho cả hai node websocket và gateway-1:
 
     make -s ws-token ARGS="-tenant e2e -user alice -ttl 10m"
     docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/.local/ws-keys/private.jwk":/keys/private.jwk:ro chatim/chatcli:dev token -key /keys/private.jwk -tenant e2e -user alice
 
 ## Đổi khoá ký
 
-Từ M6 phần 2: khoá của `identity` xoay không cần khởi động lại (xem [identity.md](identity.md)). Khoá dev trong file JWKS vẫn theo cách cũ, không cắt kết nối đang sống: thêm khoá mới (`kid` mới) vào JWKS bên cạnh khoá cũ → rolling restart các node websocket và gateway (JWKS chỉ đọc lúc khởi động) → chuyển bên ký sang khoá mới → chờ token cũ hết hạn (TTL + `WS_JWT_LEEWAY`) → bỏ khoá cũ khỏi JWKS và rolling restart lần nữa. Nên giữ TTL token ≤ 15 phút để bước chờ ngắn và token lộ hết hạn nhanh.
+Từ M6 phần 2: khoá của `identity` xoay không cần khởi động lại (xem [identity.md](identity.md)). Khoá dev trong file JWKS vẫn theo cách cũ, không cắt kết nối đang sống: thêm khoá mới (`kid` mới) vào JWKS bên cạnh khoá cũ → rolling restart các node websocket và gateway (JWKS chỉ đọc lúc khởi động) → chuyển bên ký sang khoá mới → chờ token cũ hết hạn (TTL + `JWT_LEEWAY`) → bỏ khoá cũ khỏi JWKS và rolling restart lần nữa. Nên giữ TTL token ≤ 15 phút để bước chờ ngắn và token lộ hết hạn nhanh.
 
 ## Bài tải và diễn tập
 

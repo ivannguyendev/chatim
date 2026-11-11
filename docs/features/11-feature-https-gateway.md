@@ -13,7 +13,7 @@
 | **UC-GW-01** | **Mở app, thấy danh sách hội thoại** | Người dùng | Máy gọi `ListMyRooms` qua HTTPS (trước đó chờ trả lời mọi `MarkRead` đang gửi trên WebSocket để unread đúng, [Module 09 §11](./09-feature-realtime-delivery-and-ephemeral.md)); nhận danh sách đã xếp và đếm unread. |
 | **UC-GW-02** | **Cuộn lịch sử, xem thành viên, bookmark, thread** | Người dùng | 14 lệnh đọc (`GetHistory`, `ListMembers`, `ListBookmarks`...) qua HTTPS, kết quả bằng đúng gọi gRPC thẳng chat. |
 | **UC-GW-03** | **Tạo nhóm, thêm/xoá người, đổi tên, đổi quyền** | Chủ/admin nhóm | 8 lệnh quản lý qua HTTPS; người khác đang online nhận thay đổi realtime qua event trên WebSocket. |
-| **UC-GW-04** | **App web gọi từ trình duyệt** | Frontend | CORS chỉ cho origin trong `GW_CORS_ORIGINS`; preflight không cần token. |
+| **UC-GW-04** | **App web gọi từ trình duyệt** | Frontend | CORS chỉ cho origin trong `APP_CORS_ORIGINS`; preflight không cần token. |
 
 Ví dụ: Lan tạo nhóm "Kho HCM" có Bình bằng `POST /chatim.v1.ChatService/CreateRoom`; máy Bình đang nối WebSocket nhận `member_added` ngay, mở nhóm thì thấy `room_updated` khi Lan đổi tên.
 
@@ -48,8 +48,8 @@ sequenceDiagram
 
 Chuỗi xử lý trong `apps/gateway/internal/api`, theo thứ tự:
 
-1. **CORS:** origin có trong `GW_CORS_ORIGINS` thì trả `Access-Control-Allow-Origin` đúng origin đó, `Vary: Origin`; preflight (`OPTIONS` có `Access-Control-Request-Method`) trả 204 với `Allow-Methods: POST`, `Allow-Headers: Authorization, Content-Type, Connect-Protocol-Version, Connect-Timeout-Ms`, `Max-Age: 600`, không cần token; origin khác → 403 không header CORS. Không bao giờ có `Access-Control-Allow-Credentials`, không `*`.
-2. **Trần toàn node:** quá `GW_INFLIGHT_MAX` (10.000) lệnh đang chạy → 503 `unavailable` "gateway busy, retry later", trước khi kiểm token.
+1. **CORS:** origin có trong `APP_CORS_ORIGINS` thì trả `Access-Control-Allow-Origin` đúng origin đó, `Vary: Origin`; preflight (`OPTIONS` có `Access-Control-Request-Method`) trả 204 với `Allow-Methods: POST`, `Allow-Headers: Authorization, Content-Type, Connect-Protocol-Version, Connect-Timeout-Ms`, `Max-Age: 600`, không cần token; origin khác → 403 không header CORS. Không bao giờ có `Access-Control-Allow-Credentials`, không `*`.
+2. **Trần toàn node:** quá `APP_INFLIGHT_MAX` (10.000) lệnh đang chạy → 503 `unavailable` "gateway busy, retry later", trước khi kiểm token.
 3. **Kiểm token:** đúng một header `Authorization: Bearer <token>`, ký tự ASCII in được, ≤ 8KB; `pkg/auth` như websocket (`EdDSA`, `iss`, `aud`, hạn, `sub`/`tid`). Sai → 401 `unauthenticated`, đếm theo lý do, log tối đa 1 dòng/giây chỉ ghi lý do.
 4. **Giới hạn theo (tenant, user) trên node:** 50 lệnh/giây, dồn 100, tối đa 32 lệnh đang chạy → 429 `resource_exhausted`.
 5. **Body:** quá `APP_BODY_SIZE_MAX` (mặc định 128KB) → `resource_exhausted`; không nhận body nén.
@@ -76,7 +76,7 @@ Gateway đọc sổ node chat sống trong Redis state (`chatrpc.OpenRouter`, nh
 
 - **Connect** `connectrpc.com/connect` v1.21.0 (plugin `buf.build/connectrpc/go` v1.21.0 sinh `chatimv1connect`): `POST /chatim.v1.{ChatService,MentionService}/{Lệnh}`, JSON hoặc protobuf; client sinh sẵn cho web, iOS, Android từ cùng proto.
 - **HTTP/1.1 và h2c** (`http.Server.Protocols`), TLS ở load balancer. Server: `ReadHeaderTimeout` 5s, `ReadTimeout` 10s, `WriteTimeout` ≥ `CHAT_REQUEST_DEADLINE` + 5s, `IdleTimeout` 60s, header ≤ 16KB, 250 stream HTTP/2 mỗi kết nối.
-- **Kho giới hạn theo user** (`pkg/core/userlimit`): token bucket `golang.org/x/time/rate` + bộ đếm đang chạy, LRU `GW_USER_LIMITERS` (100.000) có khoá, chỉ đẩy người không có lệnh đang chạy.
+- **Kho giới hạn theo user** (`pkg/core/userlimit`): token bucket `golang.org/x/time/rate` + bộ đếm đang chạy, LRU `APP_USER_LIMITERS` (100.000) có khoá, chỉ đẩy người không có lệnh đang chạy.
 - **Admin** (`pkg/core/admin`): `/livez`, `/readyz` (đã đọc sổ node chat, identity đã đồng bộ lần đầu và chưa tắt; sổ rỗng lúc chạy không tắt `/readyz`), `/metrics`, pprof; `/app probe` cho healthcheck.
 
 ---
@@ -98,7 +98,7 @@ Gateway đọc sổ node chat sống trong Redis state (`chatrpc.OpenRouter`, nh
 
 - **Chat:** không node chat nào READY → `/readyz` 503, lệnh trả `unavailable`; một node chat chết → round robin sang node chat còn lại.
 - **Không Redis, không NATS, không database:** gateway chết chỉ mất đường tải dữ liệu; WebSocket và ghi realtime vẫn chạy.
-- **Tắt:** `/readyz` false → `GW_DRAIN_DELAY` → `http.Server.Shutdown` chờ lệnh đang chạy trong `GW_SHUTDOWN_BUDGET` (> drain + `CHAT_REQUEST_DEADLINE`) → đóng kết nối chat; compose `stop_grace_period` 18s.
+- **Tắt:** `/readyz` false → `APP_DRAIN_DELAY` → `http.Server.Shutdown` chờ lệnh đang chạy trong `APP_SHUTDOWN_BUDGET` (> drain + `CHAT_REQUEST_DEADLINE`) → đóng kết nối chat; compose `stop_grace_period` 18s.
 
 ### 6.1. Chỉ số vận hành (`chatim_gateway_*`)
 

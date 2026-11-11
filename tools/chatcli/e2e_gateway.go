@@ -48,7 +48,7 @@ func e2eGateway(ctx context.Context, args []string) error {
 	dir := fs.String("state", "/state", "directory holding the scenario state")
 	wsURL := fs.String("url", "ws://chatim-websocket-1:8080/ws", "websocket endpoint")
 	gatewayURL := fs.String("gateway", defaultGatewayURL, "HTTPS gateway endpoint")
-	origin := fs.String("origin", "http://localhost:3000", "a browser origin listed in GW_CORS_ORIGINS")
+	origin := fs.String("origin", "http://localhost:3000", "a browser origin listed in the gateway APP_CORS_ORIGINS")
 	keyFile := fs.String("key", "/keys/"+devtoken.PrivateFile, "private JWK written by dev-keys")
 	callTimeout := fs.Duration("call-timeout", 30*time.Second, "timeout of one request")
 	wait := fs.Duration("wait", 30*time.Second, "how long to wait for one expected websocket frame")

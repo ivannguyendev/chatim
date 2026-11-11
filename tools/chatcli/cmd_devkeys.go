@@ -54,8 +54,8 @@ func tokenCmd(_ context.Context, args []string) error {
 	tenant := fs.String("tenant", "e2e", "tenant claim tid")
 	user := fs.String("user", "e2e-user", "user claim sub")
 	ttl := fs.Duration("ttl", devTokenTTL, "token lifetime")
-	issuer := fs.String("issuer", devIssuer, "issuer claim iss, the websocket WS_JWT_ISSUER")
-	audience := fs.String("audience", devAudience, "audience claim aud, the websocket WS_JWT_AUDIENCE")
+	issuer := fs.String("issuer", devIssuer, "issuer claim iss, JWT_ISSUER of websocket and gateway")
+	audience := fs.String("audience", devAudience, "audience claim aud, JWT_AUDIENCE of websocket and gateway")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}

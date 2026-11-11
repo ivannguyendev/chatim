@@ -52,7 +52,7 @@ func e2eWSResilience(ctx context.Context, args []string) error {
 	callTimeout := fs.Duration("call-timeout", 30*time.Second, "timeout of one request")
 	wait := fs.Duration("wait", 30*time.Second, "how long to wait for one expected frame")
 	shortTTL := fs.Duration("token-ttl", 20*time.Second, "lifetime of the short token of U")
-	expiryWithin := fs.Duration("expired-within", 70*time.Second, "how long after signing U's short token auth_required EXPIRED must come (ttl + WS_JWT_LEEWAY + margin)")
+	expiryWithin := fs.Duration("expired-within", 70*time.Second, "how long after signing U's short token auth_required EXPIRED must come (ttl + JWT_LEEWAY + margin)")
 	userCap := fs.Int("user-connections", 10, "WS_USER_CONNECTIONS_MAX of the websocket node")
 	if err := fs.Parse(args); err != nil {
 		return err
