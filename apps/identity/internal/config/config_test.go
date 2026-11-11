@@ -15,11 +15,11 @@ var kek = base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32)))
 
 func setRequired(t *testing.T) {
 	t.Helper()
-	t.Setenv("IDENTITY_MONGO_URI", "mongodb://chatim-mongodb:27017/?replicaSet=rs0")
-	t.Setenv("IDENTITY_MONGO_USER", "identity")
-	t.Setenv("IDENTITY_MONGO_PASSWORD", "mongo-secret-value")
-	t.Setenv("IDENTITY_ISSUER", "chatim-dev")
-	t.Setenv("IDENTITY_AUDIENCE", "chatim-websocket")
+	t.Setenv("MONGO_URI", "mongodb://chatim-mongodb:27017/?replicaSet=rs0")
+	t.Setenv("MONGO_USER", "identity")
+	t.Setenv("MONGO_PASSWORD", "mongo-secret-value")
+	t.Setenv("JWT_ISSUER", "chatim-dev")
+	t.Setenv("JWT_AUDIENCE", "chatim-websocket")
 	t.Setenv("IDENTITY_EXCHANGE_AUDIENCE", "chatim")
 	t.Setenv("IDENTITY_KEY_ENCRYPTION_KEY", kek)
 	t.Setenv("IDENTITY_NODE_SECRET", nodeSecret)
@@ -77,8 +77,8 @@ func TestSecretsReadFromFiles(t *testing.T) {
 	key := filepath.Join(dir, "kek")
 	_ = os.WriteFile(pw, []byte("from-file\n"), 0o600)
 	_ = os.WriteFile(key, []byte(kek+"\n"), 0o600)
-	t.Setenv("IDENTITY_MONGO_PASSWORD", "")
-	t.Setenv("IDENTITY_MONGO_PASSWORD_FILE", pw)
+	t.Setenv("MONGO_PASSWORD", "")
+	t.Setenv("MONGO_PASSWORD_FILE", pw)
 	t.Setenv("IDENTITY_KEY_ENCRYPTION_KEY", "")
 	t.Setenv("IDENTITY_KEY_ENCRYPTION_KEY_FILE", key)
 	c, err := config.Load()
@@ -93,7 +93,7 @@ func TestSecretsReadFromFiles(t *testing.T) {
 func TestEachPortCanBeTurnedOff(t *testing.T) {
 	t.Run("public off", func(t *testing.T) {
 		setRequired(t)
-		t.Setenv("IDENTITY_ADDR", "")
+		t.Setenv("APP_ADDR", "")
 		c, err := config.Load()
 		if err != nil || c.ListenAddr != "" || c.InternalAddr != ":8081" {
 			t.Fatalf("Load = %+v, %v; want only the internal port", c, err)
@@ -112,16 +112,16 @@ func TestEachPortCanBeTurnedOff(t *testing.T) {
 
 func TestLoadRejectsBadConfig(t *testing.T) {
 	cases := map[string]map[string]string{
-		"missing issuer":      {"IDENTITY_ISSUER": ""},
+		"missing issuer":      {"JWT_ISSUER": ""},
 		"missing kek":         {"IDENTITY_KEY_ENCRYPTION_KEY": ""},
 		"short kek":           {"IDENTITY_KEY_ENCRYPTION_KEY": base64.StdEncoding.EncodeToString([]byte("short"))},
 		"kek not base64":      {"IDENTITY_KEY_ENCRYPTION_KEY": "!!!"},
-		"missing mongo uri":   {"IDENTITY_MONGO_URI": ""},
-		"same ports":          {"IDENTITY_ADMIN_ADDR": ":8080"},
+		"missing mongo uri":   {"MONGO_URI": ""},
+		"same ports":          {"APP_ADMIN_ADDR": ":8080"},
 		"bad duration":        {"IDENTITY_TOKEN_TTL": "soon"},
-		"budget too small":    {"IDENTITY_SHUTDOWN_BUDGET": "1s"},
-		"bad cors origin":     {"IDENTITY_CORS_ORIGINS": "app.example.com"},
-		"both ports off":      {"IDENTITY_ADDR": "", "IDENTITY_INTERNAL_ADDR": ""},
+		"budget too small":    {"APP_SHUTDOWN_BUDGET": "1s"},
+		"bad cors origin":     {"APP_CORS_ORIGINS": "app.example.com"},
+		"both ports off":      {"APP_ADDR": "", "IDENTITY_INTERNAL_ADDR": ""},
 		"internal on admin":   {"IDENTITY_INTERNAL_ADDR": ":9090"},
 		"internal on public":  {"IDENTITY_INTERNAL_ADDR": ":8080"},
 		"missing node secret": {"IDENTITY_NODE_SECRET": ""},
@@ -176,13 +176,13 @@ func TestLoadRefusesBadDirectoryLimits(t *testing.T) {
 	}{
 		"zero load slots":             {map[string]string{"IDENTITY_DIRECTORY_LOAD_SLOTS": "0"}, "IDENTITY_DIRECTORY_LOAD_SLOTS 0 must be at least 1"},
 		"negative load slots":         {map[string]string{"IDENTITY_DIRECTORY_LOAD_SLOTS": "-1"}, "IDENTITY_DIRECTORY_LOAD_SLOTS -1 must be at least 1"},
-		"zero user rate":              {map[string]string{"IDENTITY_USER_RATE": "0"}, "IDENTITY_USER_RATE must be positive"},
-		"zero user burst":             {map[string]string{"IDENTITY_USER_BURST": "0"}, "IDENTITY_USER_BURST must be positive"},
-		"zero user inflight":          {map[string]string{"IDENTITY_USER_INFLIGHT": "0"}, "IDENTITY_USER_INFLIGHT must be positive"},
-		"zero user limiters":          {map[string]string{"IDENTITY_USER_LIMITERS": "0"}, "IDENTITY_USER_LIMITERS must be positive"},
-		"zero inflight max":           {map[string]string{"IDENTITY_INFLIGHT_MAX": "0"}, "IDENTITY_INFLIGHT_MAX must be positive"},
-		"limiters under the node cap": {map[string]string{"IDENTITY_USER_LIMITERS": "9999"}, "IDENTITY_USER_LIMITERS 9999 must be at least IDENTITY_INFLIGHT_MAX 10000"},
-		"unparsable directory number": {map[string]string{"IDENTITY_USER_RATE": "many"}, "IDENTITY_USER_RATE"},
+		"zero user rate":              {map[string]string{"APP_USER_RATE": "0"}, "APP_USER_RATE must be positive"},
+		"zero user burst":             {map[string]string{"APP_USER_BURST": "0"}, "APP_USER_BURST must be positive"},
+		"zero user inflight":          {map[string]string{"APP_USER_INFLIGHT": "0"}, "APP_USER_INFLIGHT must be positive"},
+		"zero user limiters":          {map[string]string{"APP_USER_LIMITERS": "0"}, "APP_USER_LIMITERS must be positive"},
+		"zero inflight max":           {map[string]string{"APP_INFLIGHT_MAX": "0"}, "APP_INFLIGHT_MAX must be positive"},
+		"limiters under the node cap": {map[string]string{"APP_USER_LIMITERS": "9999"}, "APP_USER_LIMITERS 9999 must be at least APP_INFLIGHT_MAX 10000"},
+		"unparsable directory number": {map[string]string{"APP_USER_RATE": "many"}, "APP_USER_RATE"},
 		"zero body size":              {map[string]string{"APP_BODY_SIZE_MAX": "0"}, "APP_BODY_SIZE_MAX must be positive"},
 	}
 	for name, tc := range cases {
@@ -202,7 +202,7 @@ func TestLoadRefusesBadDirectoryLimits(t *testing.T) {
 	}
 	setRequired(t)
 	t.Setenv("IDENTITY_DIRECTORY_LOAD_SLOTS", "1")
-	t.Setenv("IDENTITY_USER_LIMITERS", "10000")
+	t.Setenv("APP_USER_LIMITERS", "10000")
 	if _, err := config.Load(); err != nil {
 		t.Fatalf("Load at the directory limits = %v", err)
 	}
@@ -263,7 +263,7 @@ func TestLoadRefusesBadExchangeSettings(t *testing.T) {
 		want string
 	}{
 		"missing exchange audience":     {map[string]string{"IDENTITY_EXCHANGE_AUDIENCE": ""}, "IDENTITY_EXCHANGE_AUDIENCE is required"},
-		"exchange audience of chat":     {map[string]string{"IDENTITY_EXCHANGE_AUDIENCE": "chatim-websocket"}, "IDENTITY_EXCHANGE_AUDIENCE must differ from IDENTITY_AUDIENCE"},
+		"exchange audience of chat":     {map[string]string{"IDENTITY_EXCHANGE_AUDIENCE": "chatim-websocket"}, "IDENTITY_EXCHANGE_AUDIENCE must differ from JWT_AUDIENCE"},
 		"zero token ttl":                {map[string]string{"IDENTITY_TOKEN_TTL": "0s"}, "IDENTITY_TOKEN_TTL must be positive"},
 		"zero exchange max lifetime":    {map[string]string{"IDENTITY_EXCHANGE_MAX_LIFETIME": "0s"}, "IDENTITY_EXCHANGE_MAX_LIFETIME must be positive"},
 		"zero trust reload":             {map[string]string{"IDENTITY_TRUST_RELOAD": "0s"}, "IDENTITY_TRUST_RELOAD must be positive"},
@@ -302,5 +302,21 @@ func TestLogValueListsExchangeSettings(t *testing.T) {
 		if !strings.Contains(out, key) {
 			t.Fatalf("config log lacks %s: %s", key, out)
 		}
+	}
+}
+
+func TestAppPrefixedNamesAreNotRead(t *testing.T) {
+	setRequired(t)
+	t.Setenv("IDENTITY_DRAIN_DELAY", "soon")
+	t.Setenv("IDENTITY_MONGO_DB", "elsewhere")
+	t.Setenv("IDENTITY_USER_RATE", "many")
+	c, err := config.Load()
+	if err != nil || c.DrainDelay != 5*time.Second || c.UserRate != 50 {
+		t.Fatalf("Load with old names = %+v, %v; want the defaults", c, err)
+	}
+	t.Setenv("JWT_ISSUER", "")
+	t.Setenv("IDENTITY_ISSUER", "chatim-dev")
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "JWT_ISSUER") {
+		t.Fatalf("Load with IDENTITY_ISSUER only = %v; want an error naming JWT_ISSUER", err)
 	}
 }

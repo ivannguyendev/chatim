@@ -64,22 +64,22 @@ type Config struct {
 	JITInsertTimeout    time.Duration
 }
 
-func AdminAddr() string { return envconfig.String("IDENTITY_ADMIN_ADDR", defaultAdminAddr) }
+func AdminAddr() string { return envconfig.String("APP_ADMIN_ADDR", defaultAdminAddr) }
 
 func Load() (Config, error) {
 	var p parser
-	mongoDB := envconfig.String("IDENTITY_MONGO_DB", defaultMongoDB)
+	mongoDB := envconfig.String("MONGO_DB", defaultMongoDB)
 	c := Config{
-		ListenAddr:          optional("IDENTITY_ADDR", ":8080"),
+		ListenAddr:          optional("APP_ADDR", ":8080"),
 		InternalAddr:        optional("IDENTITY_INTERNAL_ADDR", ":8081"),
 		AdminAddr:           AdminAddr(),
-		MongoURI:            envconfig.String("IDENTITY_MONGO_URI", ""),
+		MongoURI:            envconfig.String("MONGO_URI", ""),
 		MongoDB:             mongoDB,
-		MongoUser:           envconfig.String("IDENTITY_MONGO_USER", ""),
-		MongoPassword:       p.secret("IDENTITY_MONGO_PASSWORD"),
-		MongoAuthSource:     envconfig.String("IDENTITY_MONGO_AUTH_SOURCE", mongoDB),
-		Issuer:              envconfig.String("IDENTITY_ISSUER", ""),
-		Audience:            envconfig.String("IDENTITY_AUDIENCE", ""),
+		MongoUser:           envconfig.String("MONGO_USER", ""),
+		MongoPassword:       p.secret("MONGO_PASSWORD"),
+		MongoAuthSource:     envconfig.String("MONGO_AUTH_SOURCE", mongoDB),
+		Issuer:              envconfig.String("JWT_ISSUER", ""),
+		Audience:            envconfig.String("JWT_AUDIENCE", ""),
 		TokenTTL:            p.span("IDENTITY_TOKEN_TTL", 5*time.Minute),
 		ExchangeAudience:    envconfig.String("IDENTITY_EXCHANGE_AUDIENCE", ""),
 		ExchangeMaxLifetime: p.span("IDENTITY_EXCHANGE_MAX_LIFETIME", 10*time.Minute),
@@ -92,21 +92,21 @@ func Load() (Config, error) {
 		KeyActivateLead:     p.span("IDENTITY_KEY_ACTIVATE_LEAD", 2*time.Minute),
 		KeyReload:           p.span("IDENTITY_KEY_RELOAD", 30*time.Second),
 		BodyMax:             p.number(envconfig.BodySizeMaxKey, envconfig.DefaultBodySizeMax),
-		CORSOrigins:         list("IDENTITY_CORS_ORIGINS"),
+		CORSOrigins:         list("APP_CORS_ORIGINS"),
 		ClientIPHeader:      envconfig.String("IDENTITY_CLIENT_IP_HEADER", ""),
-		DrainDelay:          p.span("IDENTITY_DRAIN_DELAY", 5*time.Second),
-		ShutdownBudget:      p.span("IDENTITY_SHUTDOWN_BUDGET", 25*time.Second),
-		ReadHeaderTimeout:   p.span("IDENTITY_READ_HEADER_TIMEOUT", 5*time.Second),
-		ReadTimeout:         p.span("IDENTITY_READ_TIMEOUT", 10*time.Second),
-		WriteTimeout:        p.span("IDENTITY_WRITE_TIMEOUT", 15*time.Second),
-		IdleTimeout:         p.span("IDENTITY_IDLE_TIMEOUT", 60*time.Second),
-		MaxHeaderBytes:      p.number("IDENTITY_MAX_HEADER_BYTES", 16<<10),
+		DrainDelay:          p.span("APP_DRAIN_DELAY", 5*time.Second),
+		ShutdownBudget:      p.span("APP_SHUTDOWN_BUDGET", 25*time.Second),
+		ReadHeaderTimeout:   p.span("APP_READ_HEADER_TIMEOUT", 5*time.Second),
+		ReadTimeout:         p.span("APP_READ_TIMEOUT", 10*time.Second),
+		WriteTimeout:        p.span("APP_WRITE_TIMEOUT", 15*time.Second),
+		IdleTimeout:         p.span("APP_IDLE_TIMEOUT", 60*time.Second),
+		MaxHeaderBytes:      p.number("APP_MAX_HEADER_BYTES", 16<<10),
 		DirectoryLoadSlots:  p.number("IDENTITY_DIRECTORY_LOAD_SLOTS", 4),
-		InflightMax:         p.number("IDENTITY_INFLIGHT_MAX", 10000),
-		UserRate:            p.number("IDENTITY_USER_RATE", 50),
-		UserBurst:           p.number("IDENTITY_USER_BURST", 100),
-		UserInflight:        p.number("IDENTITY_USER_INFLIGHT", 32),
-		UserLimiters:        p.number("IDENTITY_USER_LIMITERS", 100000),
+		InflightMax:         p.number("APP_INFLIGHT_MAX", 10000),
+		UserRate:            p.number("APP_USER_RATE", 50),
+		UserBurst:           p.number("APP_USER_BURST", 100),
+		UserInflight:        p.number("APP_USER_INFLIGHT", 32),
+		UserLimiters:        p.number("APP_USER_LIMITERS", 100000),
 		JITWriters:          p.number("IDENTITY_JIT_WRITERS", 4),
 		JITWindow:           p.span("IDENTITY_JIT_WINDOW", 2*time.Millisecond),
 		JITMaxBatch:         p.number("IDENTITY_JIT_MAX_BATCH", 256),
