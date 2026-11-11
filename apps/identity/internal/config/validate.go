@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/pkg/auth"
+	"github.com/ivannguyendev/chatim/pkg/core/envconfig"
 )
 
 const (
@@ -47,7 +48,7 @@ func (c Config) Validate() error {
 		positive("IDENTITY_EXCHANGE_IP_BURST", c.ExchangeIPBurst),
 		positive("IDENTITY_EXCHANGE_IP_TRACKED", c.ExchangeIPTracked),
 		positive("IDENTITY_KEY_RELOAD", c.KeyReload),
-		positive("IDENTITY_BODY_MAX", c.BodyMax),
+		positive(envconfig.BodySizeMaxKey, c.BodyMax),
 		positive("IDENTITY_DRAIN_DELAY", c.DrainDelay),
 		positive("IDENTITY_READ_HEADER_TIMEOUT", c.ReadHeaderTimeout),
 		positive("IDENTITY_READ_TIMEOUT", c.ReadTimeout),

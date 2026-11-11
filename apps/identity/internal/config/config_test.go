@@ -33,7 +33,7 @@ func TestLoadDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if c.ListenAddr != ":8080" || c.AdminAddr != ":9090" || c.TokenTTL != 5*time.Minute || c.BodyMax != 16<<10 {
+	if c.ListenAddr != ":8080" || c.AdminAddr != ":9090" || c.TokenTTL != 5*time.Minute || c.BodyMax != 128<<10 {
 		t.Fatalf("defaults = %+v", c)
 	}
 	if c.InternalAddr != ":8081" || c.KeyActivateLead != 2*time.Minute || c.NodeSecret != nodeSecret || c.RevocationKeep() != 6*time.Minute {
@@ -183,6 +183,7 @@ func TestLoadRefusesBadDirectoryLimits(t *testing.T) {
 		"zero inflight max":           {map[string]string{"IDENTITY_INFLIGHT_MAX": "0"}, "IDENTITY_INFLIGHT_MAX must be positive"},
 		"limiters under the node cap": {map[string]string{"IDENTITY_USER_LIMITERS": "9999"}, "IDENTITY_USER_LIMITERS 9999 must be at least IDENTITY_INFLIGHT_MAX 10000"},
 		"unparsable directory number": {map[string]string{"IDENTITY_USER_RATE": "many"}, "IDENTITY_USER_RATE"},
+		"zero body size":              {map[string]string{"APP_BODY_SIZE_MAX": "0"}, "APP_BODY_SIZE_MAX must be positive"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -225,13 +226,22 @@ func TestLogValueListsDirectorySettings(t *testing.T) {
 	}
 }
 
+func TestBodySizeComesFromTheSharedSetting(t *testing.T) {
+	setRequired(t)
+	t.Setenv("APP_BODY_SIZE_MAX", "4096")
+	c, err := config.Load()
+	if err != nil || c.BodyMax != 4096 {
+		t.Fatalf("Load = %d, %v; want BodyMax 4096", c.BodyMax, err)
+	}
+}
+
 func TestRemovedLoginAndAdminSettingsAreNotRead(t *testing.T) {
 	setRequired(t)
 	for _, key := range []string{
 		"IDENTITY_PUBLIC_URL", "IDENTITY_SESSION_IDLE", "IDENTITY_SESSION_MAX", "IDENTITY_REFRESH_GRACE", "IDENTITY_DPOP_WINDOW", "IDENTITY_HASH_CONCURRENCY",
 		"IDENTITY_LOGIN_FREE_FAILURES", "IDENTITY_LOGIN_MAX_DELAY", "IDENTITY_LOGIN_IP_RATE", "IDENTITY_LOGIN_IP_BURST", "IDENTITY_LOGIN_IP_TRACKED",
 		"IDENTITY_PASSWORD_MIN", "IDENTITY_ACCESS_TTL", "IDENTITY_ADMIN_USER_RATE", "IDENTITY_ADMIN_USER_BURST", "IDENTITY_ADMIN_INFLIGHT_MAX", "IDENTITY_ADMIN_DB_SLOTS",
-		"IDENTITY_PG_URI", "IDENTITY_PG_PASSWORD", "IDENTITY_PG_MAX_CONNS", "IDENTITY_FEED_WAIT_MAX",
+		"IDENTITY_PG_URI", "IDENTITY_PG_PASSWORD", "IDENTITY_PG_MAX_CONNS", "IDENTITY_FEED_WAIT_MAX", "IDENTITY_BODY_MAX",
 	} {
 		t.Setenv(key, "abc")
 	}

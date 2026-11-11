@@ -16,7 +16,7 @@ import (
 
 var envKeys = []string{
 	"GW_ADDR", "GW_ADMIN_ADDR", "REDIS_ADDR", "REDIS_DB", "REDIS_PASSWORD", "REDIS_PASSWORD_FILE", "GW_JWT_KEYS_FILE", "GW_JWT_ISSUER", "GW_JWT_AUDIENCE", "GW_JWT_LEEWAY",
-	"GW_BODY_MAX", "GW_USER_RATE", "GW_USER_BURST", "GW_USER_INFLIGHT", "GW_USER_LIMITERS", "GW_INFLIGHT_MAX",
+	"APP_BODY_SIZE_MAX", "GW_BODY_MAX", "GW_USER_RATE", "GW_USER_BURST", "GW_USER_INFLIGHT", "GW_USER_LIMITERS", "GW_INFLIGHT_MAX",
 	"GW_CORS_ORIGINS", "GW_DRAIN_DELAY", "GW_SHUTDOWN_BUDGET", "GW_READ_HEADER_TIMEOUT", "GW_READ_TIMEOUT",
 	"GW_WRITE_TIMEOUT", "GW_IDLE_TIMEOUT", "GW_MAX_HEADER_BYTES", "GW_H2_MAX_STREAMS", "CHAT_REQUEST_DEADLINE",
 }
@@ -95,7 +95,7 @@ func TestLoadDefaults(t *testing.T) {
 func TestLoadReadsOverrides(t *testing.T) {
 	setEnv(t, map[string]string{
 		"GW_ADDR": "127.0.0.1:7080", "GW_ADMIN_ADDR": "127.0.0.1:7090", "REDIS_ADDR": "redis-a:6390", "REDIS_DB": "2",
-		"GW_JWT_LEEWAY": "0s", "GW_BODY_MAX": "4096", "GW_USER_RATE": "5", "GW_USER_BURST": "6", "GW_USER_INFLIGHT": "7",
+		"GW_JWT_LEEWAY": "0s", "APP_BODY_SIZE_MAX": "4096", "GW_USER_RATE": "5", "GW_USER_BURST": "6", "GW_USER_INFLIGHT": "7",
 		"GW_USER_LIMITERS": "900", "GW_INFLIGHT_MAX": "800", "GW_CORS_ORIGINS": "https://chat.example.com, http://localhost:3000",
 		"GW_DRAIN_DELAY": "1s", "GW_SHUTDOWN_BUDGET": "20s", "GW_READ_HEADER_TIMEOUT": "2s", "GW_READ_TIMEOUT": "3s",
 		"GW_IDLE_TIMEOUT": "30s", "GW_MAX_HEADER_BYTES": "8192", "GW_H2_MAX_STREAMS": "100", "CHAT_REQUEST_DEADLINE": "8s",
@@ -110,6 +110,13 @@ func TestLoadReadsOverrides(t *testing.T) {
 	}
 	if got.WriteTimeout != 13*time.Second {
 		t.Fatalf("WriteTimeout = %v, want CHAT_REQUEST_DEADLINE + 5s", got.WriteTimeout)
+	}
+}
+
+func TestOldBodyMaxNameIsNotRead(t *testing.T) {
+	setEnv(t, map[string]string{"GW_BODY_MAX": "abc"})
+	if got := mustLoad(t); got.BodyMax != 128<<10 {
+		t.Fatalf("BodyMax = %d with GW_BODY_MAX set, want the APP_BODY_SIZE_MAX default 131072", got.BodyMax)
 	}
 }
 

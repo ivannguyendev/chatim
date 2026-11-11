@@ -30,7 +30,7 @@ func TestLoadValidation(t *testing.T) {
 		{"same addresses", map[string]string{"GW_ADDR": ":9090"}, "GW_ADMIN_ADDR must differ from GW_ADDR"},
 		{"unparsable count", map[string]string{"GW_USER_RATE": "many"}, "GW_USER_RATE"},
 		{"unparsable duration", map[string]string{"GW_DRAIN_DELAY": "soon"}, "GW_DRAIN_DELAY"},
-		{"zero body max", map[string]string{"GW_BODY_MAX": "0"}, "GW_BODY_MAX must be positive"},
+		{"zero body max", map[string]string{"APP_BODY_SIZE_MAX": "0"}, "APP_BODY_SIZE_MAX must be positive"},
 		{"zero user rate", map[string]string{"GW_USER_RATE": "0"}, "GW_USER_RATE must be positive"},
 		{"zero user burst", map[string]string{"GW_USER_BURST": "0"}, "GW_USER_BURST must be positive"},
 		{"zero user inflight", map[string]string{"GW_USER_INFLIGHT": "0"}, "GW_USER_INFLIGHT must be positive"},

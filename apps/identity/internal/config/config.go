@@ -91,7 +91,7 @@ func Load() (Config, error) {
 		NodeSecret:          p.secret("IDENTITY_NODE_SECRET"),
 		KeyActivateLead:     p.span("IDENTITY_KEY_ACTIVATE_LEAD", 2*time.Minute),
 		KeyReload:           p.span("IDENTITY_KEY_RELOAD", 30*time.Second),
-		BodyMax:             p.number("IDENTITY_BODY_MAX", 16<<10),
+		BodyMax:             p.number(envconfig.BodySizeMaxKey, envconfig.DefaultBodySizeMax),
 		CORSOrigins:         list("IDENTITY_CORS_ORIGINS"),
 		ClientIPHeader:      envconfig.String("IDENTITY_CLIENT_IP_HEADER", ""),
 		DrainDelay:          p.span("IDENTITY_DRAIN_DELAY", 5*time.Second),

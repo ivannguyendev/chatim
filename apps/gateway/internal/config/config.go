@@ -78,7 +78,7 @@ func Load() (Config, error) {
 		JWTIssuer:         envconfig.String("GW_JWT_ISSUER", ""),
 		JWTAudience:       envconfig.String("GW_JWT_AUDIENCE", ""),
 		JWTLeeway:         p.span("GW_JWT_LEEWAY", 30*time.Second),
-		BodyMax:           p.number("GW_BODY_MAX", 128<<10),
+		BodyMax:           p.number(envconfig.BodySizeMaxKey, envconfig.DefaultBodySizeMax),
 		UserRate:          p.number("GW_USER_RATE", 50),
 		UserBurst:         p.number("GW_USER_BURST", 100),
 		UserInflight:      p.number("GW_USER_INFLIGHT", 32),

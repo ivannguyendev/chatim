@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ivannguyendev/chatim/pkg/auth"
+	"github.com/ivannguyendev/chatim/pkg/core/envconfig"
 )
 
 type rule struct {
@@ -28,7 +29,7 @@ func (c Config) Validate() error {
 		{c.JWTLeeway <= auth.MaxNodeLeeway, fmt.Sprintf("GW_JWT_LEEWAY must not exceed %v, the extra time identity keeps a revocation", auth.MaxNodeLeeway)},
 		{c.SharedRedis.DB >= 0, "GW_SHARED_REDIS_DB must not be negative"},
 		{c.SharedRedis.Addr == "" || c.SharedRedis.Timeout > 0, "GW_SHARED_REDIS_TIMEOUT must be positive"},
-		positive("GW_BODY_MAX", c.BodyMax),
+		positive(envconfig.BodySizeMaxKey, c.BodyMax),
 		positive("GW_USER_RATE", c.UserRate),
 		positive("GW_USER_BURST", c.UserBurst),
 		positive("GW_USER_INFLIGHT", c.UserInflight),
