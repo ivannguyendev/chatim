@@ -52,7 +52,7 @@ Chuỗi xử lý trong `apps/gateway/internal/api`, theo thứ tự:
 2. **Trần toàn node:** quá `GW_INFLIGHT_MAX` (10.000) lệnh đang chạy → 503 `unavailable` "gateway busy, retry later", trước khi kiểm token.
 3. **Kiểm token:** đúng một header `Authorization: Bearer <token>`, ký tự ASCII in được, ≤ 8KB; `pkg/auth` như websocket (`EdDSA`, `iss`, `aud`, hạn, `sub`/`tid`). Sai → 401 `unauthenticated`, đếm theo lý do, log tối đa 1 dòng/giây chỉ ghi lý do.
 4. **Giới hạn theo (tenant, user) trên node:** 50 lệnh/giây, dồn 100, tối đa 32 lệnh đang chạy → 429 `resource_exhausted`.
-5. **Body:** quá `GW_BODY_MAX` (128KB) → `resource_exhausted`; không nhận body nén.
+5. **Body:** quá `APP_BODY_SIZE_MAX` (mặc định 128KB) → `resource_exhausted`; không nhận body nén.
 6. **Handler Connect:** một handler cho mỗi lệnh của `chatrpc.Request()`, sinh từ descriptor, cùng một hàm chuyển: lấy claims, gọi `chatrpc.Forwarder.Forward` (chép field biết, tenant/user chỉ từ token, hạn `CHAT_REQUEST_DEADLINE`, một lần gọi). Đường khác → `unimplemented`, đếm `commands_total{command="unknown"}`.
 
 ### 2.3. Gọi chat
@@ -109,7 +109,7 @@ Gateway đọc sổ node chat sống trong Redis state (`chatrpc.OpenRouter`, nh
 | `auth_failures_total{reason}` | Token thiếu/sai/hết hạn theo lý do |
 | `rate_limited_total{limit="rate"\|"inflight"}` | Bị giới hạn theo user |
 | `inflight_rejected_total` | Bị trần toàn node từ chối |
-| `body_too_large_total` | Body quá `GW_BODY_MAX` |
+| `body_too_large_total` | Body quá `APP_BODY_SIZE_MAX` |
 | `inflight` | Lệnh đang chạy trên node |
 
 Cấu hình đầy đủ (`GW_*`) và ví dụ `curl` với token dev: [README](../../README.md) mục "Biến môi trường `apps/gateway`".

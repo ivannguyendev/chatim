@@ -6,7 +6,7 @@
 
 | Mã | Use case | Ai | Mô tả |
 |---|---|---|---|
-| UC-MEDIA-00 | Hỏi config | Máy | `GetClientConfig` lúc mở app: `media.enabled` (bật và kho object đang trả lời), `max_file_bytes`, `max_parallel_uploads`, `media.thumbnails` (server có sinh thumb), giới hạn tin (`max_attachments` 10) |
+| UC-MEDIA-00 | Hỏi config | Máy | `GetClientConfig` lúc mở app: `media.enabled` (bật và kho object đang trả lời), `max_file_bytes`, `max_parallel_uploads`, `media.thumbnails` (server có sinh thumb), giới hạn tin (`max_attachments` 10), giới hạn room (`room.max_pins`, `room.max_members_per_call`) |
 | UC-MEDIA-01 | Upload file tới vài GB | Thành viên | Chia phần do server quyết, byte đi thẳng từ máy lên S3 bằng URL ký, server không đọc byte nào |
 | UC-MEDIA-02 | Huỷ upload | Thành viên | `AbortUpload` xoá các phần đã lên |
 | UC-MEDIA-03 | Gửi tin kèm file | Thành viên, backend tenant | `SendMessage` qua websocket với tối đa 10 đính kèm; text được rỗng khi có đính kèm; forward chép file của tin nguồn |

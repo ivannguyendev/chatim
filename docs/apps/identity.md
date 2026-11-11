@@ -27,7 +27,7 @@ Chat không giữ danh tính (owner 2026-11-02, D239): không mật khẩu, đă
 | `IDENTITY_KEY_ENCRYPTION_KEY` / `_FILE` | — (bắt buộc) | 32 byte base64, mã hoá khoá ký riêng (AES-256-GCM); sinh bằng `openssl rand -base64 32` |
 | `IDENTITY_KEY_RELOAD` | `30s` | Nhịp nạp lại khoá ký, tự kích hoạt khoá chờ đã đủ giờ, kiểm readiness và xoá dòng thu hồi đã hết hạn; compose dev `5s` |
 | `IDENTITY_KEY_ACTIVATE_LEAD` | `2m` | Khoá chờ được `identity` tự kích hoạt khi đủ tuổi này; `key-activate` từ chối khoá chưa đủ tuổi. Phải ≥ `IDENTITY_KEY_RELOAD` + 1m (khoảng hỏi khoá tối đa của node), sai thì `identity` không khởi động; compose dev `65s` |
-| `IDENTITY_BODY_MAX` | `16384` | Cỡ body tối đa |
+| `APP_BODY_SIZE_MAX` | `131072` | Cỡ body tối đa, một mức cho mọi API của app (tên chung với gateway; muốn mức riêng thì đặt env ở container). Tối thiểu khoảng 7 KB để `GetUsers` 100 id dài 64 ký tự lọt |
 | `IDENTITY_CORS_ORIGINS` | rỗng | Origin trình duyệt được phép, đúng từng origin |
 | `IDENTITY_CLIENT_IP_HEADER` | rỗng | Header IP do edge ghi đè (`X-Real-IP`); `X-Forwarded-For` lấy phần tử cuối; rỗng = `RemoteAddr` |
 | `IDENTITY_DRAIN_DELAY`, `IDENTITY_SHUTDOWN_BUDGET` | `5s` / `25s` | Dừng: `/readyz` false, drain, `http.Shutdown`, đóng kết nối MongoDB; budget > drain + write timeout + 1s |
@@ -54,7 +54,7 @@ User mới (JIT) đi qua hai bộ gom, mỗi bộ gom doc thành lô `InsertMany
 |---|---|
 | `GET /.well-known/jwks.json` | Khoá công khai (chờ, đang ký, nghỉ chưa quá `IDENTITY_TOKEN_TTL` + 30s, mặc định 5m30s), `Cache-Control: public, max-age=60`; chưa có khoá → 503. Node prod lấy khoá **chỉ** từ đường này qua HTTPS của LB |
 | `POST /v1/token` | Đổi token tenant lấy token chat (RFC 8693, mục dưới) |
-| `POST /chatim.identity.v1.DirectoryService/GetUsers` | Connect, Bearer access token của `identity`. 1–500 `user_ids` mỗi lần (id trùng gộp lại); trả `id`, `display_name`, `avatar_url`, `state` (`ACTIVE`/`DISABLED`) **từ RAM**, không chạm MongoDB; **không bao giờ** có email hay username. Id lạ hoặc của tenant khác bị bỏ qua, không báo lỗi. Ví dụ: Lan gửi 300 id người trong danh sách hội thoại, nhận lại 300 tên |
+| `POST /chatim.identity.v1.DirectoryService/GetUsers` | Connect, Bearer access token của `identity`. 1–100 `user_ids` mỗi lần (đếm trước khi gộp trùng) (id trùng gộp lại); trả `id`, `display_name`, `avatar_url`, `state` (`ACTIVE`/`DISABLED`) **từ RAM**, không chạm MongoDB; **không bao giờ** có email hay username. Id lạ hoặc của tenant khác bị bỏ qua, không báo lỗi. Ví dụ: Lan gửi 80 id người trong danh sách hội thoại, nhận lại 80 tên; cần 150 người thì gọi hai lần (100 + 50) |
 | `POST /chatim.identity.v1.DirectoryService/GetMyProfile` | Bearer; hồ sơ của chính mình (`id`, `display_name`, `avatar_url`) đọc **từ RAM** theo `tid`, `sub` của token chat (id do `identity` cấp), không chạm MongoDB; không có trong danh bạ → `not_found`. `UpdateMyProfile` đã bỏ; đổi tên, ảnh bằng lệnh `user-set` |
 
 **Đổi token `POST /v1/token`** (cổng public `IDENTITY_ADDR`). Body `application/x-www-form-urlencoded`, đúng một lần mỗi tham số: `grant_type=urn:ietf:params:oauth:grant-type:token-exchange`, `subject_token=<JWT do backend hoặc IdP của tenant ký>`, `subject_token_type=urn:ietf:params:oauth:token-type:jwt`; tham số khác bỏ qua. Thứ tự kiểm: content type và form → `grant_type` → giới hạn IP (`IDENTITY_EXCHANGE_IP_RATE`/`_BURST`, IP lấy từ `IDENTITY_CLIENT_IP_HEADER` khi đặt, không thì địa chỉ TCP) → `subject_token_type`, `subject_token` → kiểm token tenant (summary §4.1 bước 1–7: `kid`, `alg` đúng khoá, issuer và khoá active, chữ ký, `aud` = `IDENTITY_EXCHANGE_AUDIENCE`, `exp`/`iat` ≤ `IDENTITY_EXCHANGE_MAX_LIFETIME`, tenant active và `tid` khớp, `sub` là chuỗi ASCII in được dài 1–255 byte, mỗi byte 0x21–0x7E, ví dụ `auth0|abc`) → tìm user theo tenant, realm của issuer (mặc định là chính issuer) và `sub` trong danh bạ RAM; có mà bị khoá thì từ chối → khoá ký đang dùng → JIT: chưa có thì tạo liên kết và user (mục trên; tên từ claim `name` hợp lệ, không có thì rỗng; ảnh từ `picture` hợp lệ), có thì sửa `display_name`/`avatar_url` khi claim `name`/`picture` hợp lệ khác bản RAM (`picture` rỗng hay sai, `name` sai coi như vắng; giống thì không ghi; CAS thua vẫn cấp) → ký token chat (`sub` = id do `identity` cấp, 26 ký tự base32 thường; `sid` mới, hạn `IDENTITY_TOKEN_TTL`). `sub` của tenant không rời `identity`: không vào token chat, không vào log của lần đổi thành công. Khoá tenant (`tenant-disable`) ghi doc `tenants`; change stream báo follower, follower đánh thức việc nạp lại issuer và nạp lại danh sách thu hồi ngay, nên lần đổi kế tiếp bị từ chối mà không chờ `IDENTITY_TRUST_RELOAD` (e2e 13 đòi ≤ 2s, `tools/chatcli/e2e_identity_forged.go:16`); token chat đã cấp trước đó sống tới hết hạn (≤ 5 phút) hoặc bị node chặn theo `sessions_revoked_at`.
@@ -65,17 +65,17 @@ User mới (JIT) đi qua hai bộ gom, mỗi bộ gom doc thành lô `InsertMany
 | Thiếu, lặp tham số, sai content type, `subject_token_type` khác `…:jwt` | `400 {"error": "invalid_request"}` |
 | `grant_type` khác token exchange | `400 {"error": "unsupported_grant_type"}` |
 | Token tenant sai (mọi bước 1–7), tenant hay user bị khoá | `400 {"error": "invalid_grant"}`, body, `Content-Length` và header giống hệt nhau mọi ca; lý do (`reason`, `iss`, `kid`, `ip`, không bao giờ token) chỉ ở một dòng log Info `token exchange refused` |
-| Body quá `IDENTITY_BODY_MAX` | `413 {"error": "invalid_request"}` |
+| Body quá `APP_BODY_SIZE_MAX` | `413 {"error": "invalid_request"}` |
 | Quá giới hạn IP | `429 {"error": "temporarily_unavailable"}` + `Retry-After: 1` |
 | Danh bạ hay issuer chưa nạp, không có khoá ký, MongoDB lỗi khi JIT cần ghi, liên kết của bên thắng chưa đọc thấy | `503 {"error": "temporarily_unavailable"}` + `Retry-After: 1`; nguyên nhân ở một dòng log Warn `token exchange unavailable`. Không có khoá ký thì không ghi JIT |
 
 Mọi body lỗi có thêm `error_description` cố định theo mã. Ví dụ dev: `curl -s localhost:8084/v1/token -d grant_type=urn:ietf:params:oauth:grant-type:token-exchange -d subject_token_type=urn:ietf:params:oauth:token-type:jwt -d subject_token=$TENANT_JWT`.
 
-**Giới hạn và mã lỗi của `DirectoryService`** (cả hai lệnh): body tối đa 64 KiB; mỗi người dùng `IDENTITY_USER_RATE`/`IDENTITY_USER_BURST` lời gọi và `IDENTITY_USER_INFLIGHT` lời gọi chạy cùng lúc mỗi node; cả node tối đa `IDENTITY_INFLIGHT_MAX` lời gọi chạy cùng lúc. Token kiểm bằng khoá ký và danh sách thu hồi **trong RAM**: follower nạp lại danh sách khi change stream báo đổi ở `tenants` hay `revoked_sessions` và mỗi `IDENTITY_TRUST_RELOAD`, nên phiên vừa bị thu hồi còn đọc được thêm một lúc ngắn; change stream đứt thì tối đa `IDENTITY_TRUST_RELOAD` (mặc định 10s).
+**Giới hạn và mã lỗi của `DirectoryService`** (cả hai lệnh): body tối đa `APP_BODY_SIZE_MAX` như mọi API khác, quá thì `resource_exhausted`; mỗi người dùng `IDENTITY_USER_RATE`/`IDENTITY_USER_BURST` lời gọi và `IDENTITY_USER_INFLIGHT` lời gọi chạy cùng lúc mỗi node; cả node tối đa `IDENTITY_INFLIGHT_MAX` lời gọi chạy cùng lúc. Token kiểm bằng khoá ký và danh sách thu hồi **trong RAM**: follower nạp lại danh sách khi change stream báo đổi ở `tenants` hay `revoked_sessions` và mỗi `IDENTITY_TRUST_RELOAD`, nên phiên vừa bị thu hồi còn đọc được thêm một lúc ngắn; change stream đứt thì tối đa `IDENTITY_TRUST_RELOAD` (mặc định 10s).
 
 | Mã | Khi nào |
 |---|---|
-| `invalid_argument` | Không có id, quá 500 id, id sai dạng |
+| `invalid_argument` | Không có id, quá 100 id, id sai dạng |
 | `unauthenticated` | Thiếu hoặc hỏng token (`unauthenticated`); token đã thu hồi (`session revoked`) |
 | `not_found` | `GetMyProfile` của user chưa có trong danh bạ |
 | `resource_exhausted` | Quá giới hạn theo người dùng; chờ rồi gọi lại |

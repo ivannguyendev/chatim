@@ -198,7 +198,7 @@ Khi phòng chỉ còn đúng 1 người (chính là Owner) và người này b�
 2. **Chi phí lan toả khi xoá thành viên ở nhóm lớn:**
    - *Hạn chế:* Khi kick một thành viên khỏi nhóm 5,000 người, App websocket (M4, chưa xây) phải ngắt subscription của user đó đối với phòng. Quá trình này diễn ra bất đồng bộ qua NATS.
 3. **Quy mô nhóm (mục tiêu ≤ 5,000 member):**
-   - Code không đặt trần tổng số thành viên; chỉ giới hạn mỗi lệnh thêm theo `MEMBER_BATCH_MAX` (500). Con số 5,000 là mục tiêu quy mô của nhóm hai chiều (kiến trúc §1.1), không phải giới hạn cứng. Kênh lớn (channel) chưa xây.
+   - Code không đặt trần tổng số thành viên; chỉ giới hạn mỗi lệnh thêm theo `MEMBER_BATCH_MAX` (500); client đọc giá trị này qua `GetClientConfig.room.max_members_per_call` để chia danh sách người. Con số 5,000 là mục tiêu quy mô của nhóm hai chiều (kiến trúc §1.1), không phải giới hạn cứng. Kênh lớn (channel) chưa xây.
 
 ---
 
