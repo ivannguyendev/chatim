@@ -17,6 +17,7 @@ type MemberRooms interface {
 	store.MemberWriter
 	store.MemberReader
 	store.MemberIDs
+	store.AvatarMembers
 	store.OwnerChanges
 	store.MemberCounts
 	store.ReadPositions
@@ -31,7 +32,7 @@ type memberCase struct {
 
 func RunMembers(t *testing.T, open func(t *testing.T) MemberRooms) {
 	t.Helper()
-	for _, c := range slices.Concat(memberCases(), memberRoomCases(), memberChangeCases(), ownerChangeCases(), memberCountCases(), readPositionCases(), roomInfoCases(), preferenceCases(), memberListCases(), memberIDCases(), memberRoomVersionCases()) {
+	for _, c := range slices.Concat(memberCases(), memberRoomCases(), memberChangeCases(), ownerChangeCases(), memberCountCases(), readPositionCases(), roomInfoCases(), preferenceCases(), memberListCases(), memberIDCases(), avatarUserCases(), memberRoomVersionCases()) {
 		t.Run(c.name, func(t *testing.T) { c.run(t, open(t)) })
 	}
 }

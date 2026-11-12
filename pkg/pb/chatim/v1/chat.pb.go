@@ -242,6 +242,7 @@ type Room struct {
 	Avatar        string                 `protobuf:"bytes,8,opt,name=avatar,proto3" json:"avatar,omitempty"`
 	InfoVer       uint64                 `protobuf:"varint,9,opt,name=info_ver,json=infoVer,proto3" json:"info_ver,omitempty"`
 	DirectUsers   []string               `protobuf:"bytes,10,rep,name=direct_users,json=directUsers,proto3" json:"direct_users,omitempty"`
+	AvatarUsers   []string               `protobuf:"bytes,11,rep,name=avatar_users,json=avatarUsers,proto3" json:"avatar_users,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -342,6 +343,13 @@ func (x *Room) GetInfoVer() uint64 {
 func (x *Room) GetDirectUsers() []string {
 	if x != nil {
 		return x.DirectUsers
+	}
+	return nil
+}
+
+func (x *Room) GetAvatarUsers() []string {
+	if x != nil {
+		return x.AvatarUsers
 	}
 	return nil
 }
@@ -1718,7 +1726,7 @@ var File_chatim_v1_chat_proto protoreflect.FileDescriptor
 
 const file_chatim_v1_chat_proto_rawDesc = "" +
 	"\n" +
-	"\x14chatim/v1/chat.proto\x12\tchatim.v1\x1a\x1achatim/v1/attachment.proto\x1a\x1dchatim/v1/message_links.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xbe\x02\n" +
+	"\x14chatim/v1/chat.proto\x12\tchatim.v1\x1a\x1achatim/v1/attachment.proto\x1a\x1dchatim/v1/message_links.proto\x1a\x1echatim/v1/reactions_pins.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe1\x02\n" +
 	"\x04Room\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06tenant\x18\x02 \x01(\tR\x06tenant\x12'\n" +
@@ -1732,7 +1740,8 @@ const file_chatim_v1_chat_proto_rawDesc = "" +
 	"\x06avatar\x18\b \x01(\tR\x06avatar\x12\x19\n" +
 	"\binfo_ver\x18\t \x01(\x04R\ainfoVer\x12!\n" +
 	"\fdirect_users\x18\n" +
-	" \x03(\tR\vdirectUsers\"\xf1\a\n" +
+	" \x03(\tR\vdirectUsers\x12!\n" +
+	"\favatar_users\x18\v \x03(\tR\vavatarUsers\"\xf1\a\n" +
 	"\aMessage\x12\x17\n" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x1f\n" +
 	"\vthread_root\x18\x02 \x01(\x04R\n" +

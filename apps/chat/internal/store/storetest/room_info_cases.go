@@ -1,6 +1,7 @@
 package storetest
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -61,7 +62,7 @@ func assertRoomInfo(t *testing.T, s MemberRooms, want domain.Room, at time.Time)
 	}
 	got.UpdatedAt, want.UpdatedAt = time.Time{}, time.Time{}
 	got.CreatedAt, want.CreatedAt = time.Time{}, time.Time{}
-	if got != want {
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Get = %+v,\nwant %+v", got, want)
 	}
 }

@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"errors"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -44,7 +45,7 @@ func TestNewRoomBuildsRoomAndMembers(t *testing.T) {
 		t.Fatalf("NewRoom: %v", err)
 	}
 	wantRoom := domain.Room{ID: 42, Tenant: "acme", Type: domain.RoomGroup, Name: "Team", CreatedBy: "alice", CreatedAt: now, MemberCount: 3}
-	if room != wantRoom {
+	if !reflect.DeepEqual(room, wantRoom) {
 		t.Errorf("room = %+v, want %+v", room, wantRoom)
 	}
 	created := func(user string, role domain.Role) domain.Member {

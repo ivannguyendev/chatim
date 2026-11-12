@@ -37,6 +37,17 @@ func TestRoomCopiesInfoAndDirectUsers(t *testing.T) {
 	}
 }
 
+func TestRoomGivesAvatarUsersOnlyForGroups(t *testing.T) {
+	group := domain.Room{ID: 777, Tenant: "acme", Type: domain.RoomGroup, AvatarUsers: []string{"binh", "chi"}, AvatarVer: 2, CreatedAt: sentAt}
+	if got := pbconv.Room(group).GetAvatarUsers(); len(got) != 2 || got[0] != "binh" || got[1] != "chi" {
+		t.Fatalf("group avatar users = %v", got)
+	}
+	dm := domain.Room{ID: 888, Tenant: "acme", Type: domain.RoomDM, AvatarUsers: []string{"binh"}, CreatedAt: sentAt}
+	if got := pbconv.Room(dm).GetAvatarUsers(); got != nil {
+		t.Fatalf("DM avatar users = %v, want none", got)
+	}
+}
+
 func TestRoomClampsMemberCountToInt32(t *testing.T) {
 	cases := []struct {
 		in   int

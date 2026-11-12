@@ -46,6 +46,7 @@ message Room {
   string avatar = 8;
   uint64 info_ver = 9;
   repeated string direct_users = 10;
+  repeated string avatar_users = 11;
 }
 
 message Message {

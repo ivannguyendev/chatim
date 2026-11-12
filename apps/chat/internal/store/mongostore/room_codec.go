@@ -24,6 +24,8 @@ type roomDoc struct {
 	InfoVer        int64           `bson:"info_ver,omitempty"`
 	UpdatedAt      time.Time       `bson:"updated_at,omitempty"`
 	UpdatedBy      string          `bson:"updated_by,omitempty"`
+	AvatarUsers    []string        `bson:"avatar_users,omitempty"`
+	AvatarVer      int64           `bson:"avatar_ver,omitempty"`
 }
 
 func encodeRoom(r domain.Room) (roomDoc, error) {
@@ -36,6 +38,10 @@ func encodeRoom(r domain.Room) (roomDoc, error) {
 		return roomDoc{}, err
 	}
 	infoVer, err := toInt64("info ver", r.InfoVer)
+	if err != nil {
+		return roomDoc{}, err
+	}
+	avatarVer, err := toInt64("avatar ver", r.AvatarVer)
 	if err != nil {
 		return roomDoc{}, err
 	}
@@ -53,6 +59,8 @@ func encodeRoom(r domain.Room) (roomDoc, error) {
 		InfoVer:        infoVer,
 		UpdatedAt:      r.UpdatedAt,
 		UpdatedBy:      r.UpdatedBy,
+		AvatarUsers:    r.AvatarUsers,
+		AvatarVer:      avatarVer,
 	}, nil
 }
 
@@ -70,6 +78,10 @@ func decodeRoom(d roomDoc) (domain.Room, error) {
 		return domain.Room{}, err
 	}
 	infoVer, err := toUint64("room info ver", d.InfoVer)
+	if err != nil {
+		return domain.Room{}, err
+	}
+	avatarVer, err := toUint64("room avatar ver", d.AvatarVer)
 	if err != nil {
 		return domain.Room{}, err
 	}
@@ -91,5 +103,7 @@ func decodeRoom(d roomDoc) (domain.Room, error) {
 		InfoVer:        infoVer,
 		UpdatedAt:      d.UpdatedAt,
 		UpdatedBy:      d.UpdatedBy,
+		AvatarUsers:    d.AvatarUsers,
+		AvatarVer:      avatarVer,
 	}, nil
 }

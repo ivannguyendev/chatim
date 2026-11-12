@@ -2,6 +2,7 @@ package mongostore
 
 import (
 	"errors"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -28,7 +29,7 @@ func TestRoomCodecRoundTripsInfoFields(t *testing.T) {
 		t.Fatalf("decodeRoom = %+v, %v; want %+v", got, err, r)
 	}
 	got.CreatedAt, got.UpdatedAt = r.CreatedAt, r.UpdatedAt
-	if got != r {
+	if !reflect.DeepEqual(got, r) {
 		t.Fatalf("decoded %+v, want %+v", got, r)
 	}
 }
@@ -42,5 +43,25 @@ func TestRoomCodecDecodesTheLastEditTime(t *testing.T) {
 	d.InfoVer = -1
 	if _, err := decodeRoom(d); !errors.Is(err, errCorrupt) {
 		t.Fatalf("decodeRoom(negative info ver) = %v, want errCorrupt", err)
+	}
+}
+
+func TestRoomCodecCarriesTheAvatarUsers(t *testing.T) {
+	r := domain.Room{ID: 7_340_000_002, Tenant: "acme", Type: domain.RoomGroup, AvatarUsers: []string{"bob", "carl"}, AvatarVer: 3}
+	doc, err := encodeRoom(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	back, raw := roundTrip(t, doc)
+	if got := fieldNames(t, raw); !slices.Contains(got, "avatar_users") || !slices.Contains(got, "avatar_ver") {
+		t.Fatalf("fields = %v", got)
+	}
+	got, err := decodeRoom(back)
+	if err != nil || !slices.Equal(got.AvatarUsers, r.AvatarUsers) || got.AvatarVer != 3 {
+		t.Fatalf("decodeRoom = %+v, %v", got, err)
+	}
+	back.AvatarVer = -1
+	if _, err := decodeRoom(back); !errors.Is(err, errCorrupt) {
+		t.Fatalf("decodeRoom(negative avatar ver) = %v, want errCorrupt", err)
 	}
 }

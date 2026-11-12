@@ -8,6 +8,7 @@ import (
 const (
 	directKeySeparator = "│"
 	maxAvatarBytes     = 1024
+	MaxAvatarUsers     = 4
 )
 
 type RoomType string
@@ -43,6 +44,8 @@ type Room struct {
 	InfoVer        uint64
 	UpdatedAt      time.Time
 	UpdatedBy      string
+	AvatarUsers    []string
+	AvatarVer      uint64
 }
 
 type RoomUpdate struct {

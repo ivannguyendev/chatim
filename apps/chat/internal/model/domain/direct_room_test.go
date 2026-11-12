@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"errors"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -30,7 +31,7 @@ func TestNewDirectRoomHasTwoPlainMembersAndNoOwner(t *testing.T) {
 		t.Fatalf("NewDirectRoom: %v", err)
 	}
 	wantRoom := domain.Room{ID: 8812, Tenant: "acme", Type: domain.RoomDM, CreatedBy: "minh", CreatedAt: now, MemberCount: 2, DMKey: "acme│lan│minh"}
-	if room != wantRoom {
+	if !reflect.DeepEqual(room, wantRoom) {
 		t.Errorf("room = %+v, want %+v", room, wantRoom)
 	}
 	member := func(user string) domain.Member {

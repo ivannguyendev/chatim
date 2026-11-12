@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -131,7 +132,7 @@ func TestMemberValueTypesHoldTheirFields(t *testing.T) {
 		t.Fatalf("value types = %+v %+v", c, p)
 	}
 	r := domain.Room{ID: 1, MemberCountVer: 5}
-	if r != (domain.Room{ID: 1, MemberCountVer: 5}) {
+	if !reflect.DeepEqual(r, domain.Room{ID: 1, MemberCountVer: 5}) {
 		t.Fatalf("Room = %+v", r)
 	}
 }

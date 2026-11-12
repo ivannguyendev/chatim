@@ -3,6 +3,7 @@ package pbconv
 import (
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"time"
 
@@ -60,7 +61,15 @@ func Room(r domain.Room) *chatimv1.Room {
 		Avatar:      r.Avatar,
 		InfoVer:     r.InfoVer,
 		DirectUsers: r.DirectUsers(),
+		AvatarUsers: groupAvatarUsers(r),
 	}
+}
+
+func groupAvatarUsers(r domain.Room) []string {
+	if r.Type != domain.RoomGroup || len(r.AvatarUsers) == 0 {
+		return nil
+	}
+	return slices.Clone(r.AvatarUsers)
 }
 
 func memberCount(n int) int32 {

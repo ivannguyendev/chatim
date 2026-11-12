@@ -142,7 +142,7 @@ func TestRoomCodecRoundTrip(t *testing.T) {
 		t.Fatalf("decodeRoom = %+v, %v; want %+v", got, err, r)
 	}
 	got.CreatedAt = r.CreatedAt
-	if got != r {
+	if !reflect.DeepEqual(got, r) {
 		t.Fatalf("decoded %+v, want %+v", got, r)
 	}
 }
