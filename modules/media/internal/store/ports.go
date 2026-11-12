@@ -23,4 +23,5 @@ type MessageFiles interface {
 	Active(ctx context.Context, tenant, messageKey string) ([]string, error)
 	Release(ctx context.Context, tenant, messageKey string, at time.Time) error
 	StillUsed(ctx context.Context, fileKeys []string, exceptMessage string) (map[string]bool, error)
+	ListRoom(ctx context.Context, q domain.RoomFilesQuery) ([]domain.MessageFile, error)
 }

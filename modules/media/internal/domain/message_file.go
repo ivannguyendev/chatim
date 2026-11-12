@@ -13,6 +13,9 @@ type MessageFile struct {
 	MessageKey string
 	FileKey    string
 	Tenant     string
+	Room       string
+	Kind       RoomFileKind
+	SentAt     time.Time
 	State      PairState
 	CreatedAt  time.Time
 	DeletedAt  time.Time

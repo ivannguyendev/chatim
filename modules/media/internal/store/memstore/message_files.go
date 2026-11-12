@@ -22,10 +22,13 @@ func (s *MessageFiles) Attach(_ context.Context, pairs []domain.MessageFile) err
 	defer s.mu.Unlock()
 	for _, p := range pairs {
 		id := p.MessageKey + "|" + p.FileKey
-		if _, taken := s.pairs[id]; taken {
+		sent := p.SentAt.Truncate(time.Millisecond).UTC()
+		if had, taken := s.pairs[id]; taken {
+			had.Room, had.Kind, had.SentAt = p.Room, p.Kind, sent
+			s.pairs[id] = had
 			continue
 		}
-		p.State, p.CreatedAt, p.DeletedAt = domain.PairLive, p.CreatedAt.UTC(), time.Time{}
+		p.State, p.CreatedAt, p.DeletedAt, p.SentAt = domain.PairLive, p.CreatedAt.UTC(), time.Time{}, sent
 		s.pairs[id] = p
 	}
 	return nil

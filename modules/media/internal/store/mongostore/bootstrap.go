@@ -24,12 +24,16 @@ var (
 	uploadsByOwner  = bson.D{{Key: "tenant_id", Value: 1}, {Key: "user_id", Value: 1}, {Key: "state", Value: 1}, {Key: "_id", Value: -1}}
 	filesByMessage  = bson.D{{Key: "tenant_id", Value: 1}, {Key: "message_key", Value: 1}, {Key: "state", Value: 1}}
 	filesByKey      = bson.D{{Key: "file_key", Value: 1}, {Key: "state", Value: 1}, {Key: "message_key", Value: 1}}
+	filesByRoom     = bson.D{
+		{Key: "tenant_id", Value: 1}, {Key: "room_id", Value: 1}, {Key: "kind", Value: 1}, {Key: "state", Value: 1},
+		{Key: "sent_at", Value: -1}, {Key: "_id", Value: -1},
+	}
 )
 
 func Indexes() mongoindex.Catalog {
 	return mongoindex.Catalog{Collections: []mongoindex.Collection{
 		{Name: uploadsCollection, Indexes: []mongo.IndexModel{{Keys: uploadsByOwner}}},
-		{Name: messageFilesCollection, Indexes: []mongo.IndexModel{{Keys: filesByMessage}, {Keys: filesByKey}}},
+		{Name: messageFilesCollection, Indexes: []mongo.IndexModel{{Keys: filesByMessage}, {Keys: filesByKey}, {Keys: filesByRoom}}},
 	}}
 }
 
