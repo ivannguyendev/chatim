@@ -112,10 +112,12 @@ func (r *mediaRun) steps() []wsEventsStep {
 		{"B's room list preview names both file mimes", r.previewMimes},
 		{"B's plain URLs give the PNG and the HTML with their exact bytes and hashes and no thumbnail", r.downloads},
 		{"within 30s B's URLs of the PNG and the HTML point at the completed bucket and still give the exact bytes and hashes", r.movedToCompleted},
+		{"ListRoomFiles gives B the PNG on the media tab and the HTML on the file tab from the completed bucket, and C outside the room permission_denied", r.roomFiles},
 		{"ListUploads gives A the PNG first then the HTML and the 40 MiB file, kind image only the PNG, and B only its own file", r.gallery},
 		{"A's ListUploads signs the sent PNG and HTML in the completed bucket and the 40 MiB file never sent in the processing bucket, none expired", r.unsentStaysProcessing},
 		{"after B hides the message B gets no URL for it while A still does", r.hidden},
 		{"A forwards the message to a group with C and deletes the original; the original has no URL and C downloads from the completed bucket through the forward", r.forwarded},
+		{"after the delete the original room lists no files and within 30s C's forward room lists the PNG at the forward", r.roomFilesAfterDelete},
 	}
 }
 
