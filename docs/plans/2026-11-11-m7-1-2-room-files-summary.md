@@ -101,7 +101,7 @@ Không thêm thư viện. Index mới khai trong danh mục index của media, t
 
 | Quyết định | Lý do | Phương án bị loại |
 |---|---|---|
-| `ListRoomFiles` ở module media trên cặp tin–file (ứng viên decision log lúc đóng: API mới cho client) | Dữ liệu tin nào dùng file nào đã có từ M7 P3; một trang = một truy vấn index | Hỏi `messages` theo file: cần index phụ trên `messages` (D148 cấm). Client lật `GetHistory` lọc tin có file: N+1, nhóm 10K tin phải đọc hết |
+| `ListRoomFiles` ở module media trên cặp tin–file (không thành dòng decision log: áp dụng D267, D262; owner 2026-11-12) | Dữ liệu tin nào dùng file nào đã có từ M7 P3; một trang = một truy vấn index | Hỏi `messages` theo file: cần index phụ trên `messages` (D148 cấm). Client lật `GetHistory` lọc tin có file: N+1, nhóm 10K tin phải đọc hết |
 | Hai tab `MEDIA`/`FILE`, lưu `kind` hai giá trị | Đúng hai tab web cần; một phép bằng trên index | Dùng lại `FileKind` ba loại của `ListUploads`: `$in` trên index thành 3–6 lần quét gộp, chưa ai cần lọc riêng video |
 | Kiểm quyền trước, lọc `cleared_at` trong truy vấn | Review độc lập 2026-11-08: đọc cặp trước kiểm quyền lộ khoá tin qua con trỏ; lọc sau đọc làm trang rỗng không trần | Lọc sau đọc; kiểm quyền từng tin |
 | Ba field ghi bằng `$set` (cặp cũ vẫn `$setOnInsert`) | Giao lại hoặc `/app resync` tự điền cặp cũ, không cần script | `$setOnInsert`: cặp tạo trước P2 không bao giờ có field |
