@@ -128,6 +128,8 @@ sequenceDiagram
   "name": "Đội ngũ Kỹ thuật",           // Đối với Group
   "avatar": "https://cdn.example.com/a.png",
   "info_ver": NumberLong(2),            // CAS của UpdateRoom (tên, avatar)
+  "avatar_users": ["usr_1002", "usr_1007", "usr_1009", "usr_1011"], // tối đa 4 thành viên bất kỳ còn trong nhóm (projection avatar_users, M7.1 P3)
+  "avatar_ver": NumberLong(3),          // Bộ đếm nội bộ, tăng mỗi lần ghi avatar_users
   "created_by": "usr_1001",
   "created_at": ISODate("2026-10-10T10:00:00Z"),
   "updated_at": ISODate("2026-10-10T10:00:00Z"),
@@ -146,6 +148,7 @@ sequenceDiagram
 - `OpenDirectRoom(other_user)`: Mở hoặc lấy phòng 1-1, trả `{room, created}`.
 - `CreateRoom(type, name, members, request_id)`: Tạo phòng nhóm (`type = DM` → `INVALID_ARGUMENT`) kèm `request_id` bắt buộc để chống gửi lại (idempotent request).
 - `GetRooms(room_ids)` / `ListMyRooms`: Lấy thông tin phòng kèm trạng thái của người gọi (Module 07, 08).
+- `Room.avatar_users` (M7.1 P3): id tối đa 4 thành viên bất kỳ còn trong nhóm, không thứ tự, có trong `GetRooms`, `ListMyRooms` và `Room` của event; DM luôn rỗng (dùng `direct_users`). Consumer `projections` ghi khi thêm người lúc danh sách chưa đủ 4 và khi có người bị xoá hoặc rời; đổi role/priority không đổi. Không realtime: client thấy ở lần tải room kế tiếp, trễ vài giây cộng cache room tới 60s; nhóm có trước P3 trống tới lần thêm/xoá kế tiếp hoặc `/app resync`.
 - `UpdateRoom(room_id, name?, avatar?)`: Cập nhật thông tin phòng; client không gửi version, chat CAS trên `info_ver` đọc được, trượt → `UNAVAILABLE` (D133).
 
 ### 4.3. Hợp đồng Mã lỗi gRPC (Error Matrix)

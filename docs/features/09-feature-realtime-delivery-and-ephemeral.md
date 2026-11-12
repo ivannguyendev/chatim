@@ -501,6 +501,7 @@ Hết hạn (đang chạy): server gỡ kết nối khỏi bảng quan tâm, b�
 - **Đọc** (D196, D198): `MarkRead` tối đa 1 lần/giây mỗi room (lần đầu gửi ngay, sau đó seq lớn nhất đang chờ); `MarkUnread` huỷ `MarkRead` đang chờ của room rồi mới gửi; gửi phần chờ trước `close_room`; chờ trả lời mọi `MarkRead` đang gửi rồi mới gọi `ListMyRooms` qua HTTPS; áp `read_positions` theo (room, user) `read_ver` lớn hơn.
 - **Đang gõ** (D199): gửi `typing` tối đa 1 lần mỗi 3 giây mỗi room khi còn gõ; gửi `stopped` chỉ khi trước đó đã gửi `typing`; gửi tin thì coi như dừng gõ ở room đó.
 - **Online** (D201): danh sách hỏi sống theo kết nối và mất khi kết nối về trạng thái chờ; gửi lại sau mọi `ready`.
+- **Ảnh ghép nhóm** (M7.1 P3): nhóm chưa có ảnh thì dùng `Room.avatar_users` (tối đa 4 id, không thứ tự) của `ListMyRooms`/`GetRooms`, gom id của cả trang vào một `GetUsers` (tối đa 100 id) để lấy tên và ảnh; không coi `avatar_users` trong `Room` của event là mới hơn bản đã đọc (field không có version); danh sách trống hoặc có người bị khoá thì client tự quyết hiện gì.
 - **Tải dữ liệu và quản lý room** đi HTTPS qua gateway (D198, Module 11); WebSocket chỉ có 12 lệnh ghi realtime, lệnh khác nhận `UNIMPLEMENTED`.
 
 ### 11.6. Server chặn gì khi client làm sai

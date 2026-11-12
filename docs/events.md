@@ -68,6 +68,7 @@ Nếu publish lỗi, sweeper trên chat giữ slot 0 phát lại từ doc hiện
 |---|---|---|---|
 | Chat `projections` → `room_activity` | durable `projections`, `evt.>`, chỉ chat giữ slot 0, lô 8192/3s | `msg_created`, `msg_edited`, `msg_deleted`, `reaction_changed`, `msg_pinned`, `msg_unpinned`, `member_added`, `member_removed`, `member_role_changed`, `member_priority_changed`, `bookmark_changed`, `room_updated`, `room_preferences_changed` | `rooms.last_seq`, `last_message_at`, `last_change_at`, `activity_bucket`, `last_edit_at` |
 | Chat `projections` → `reply_index` (trước là `mention_reply_index`) | như trên | `msg_created`, `msg_deleted` | chỉ phần trả lời: doc trả lời, `rc`, `reply_threads` |
+| Chat `projections` → `avatar_users` (M7.1 P3) | như trên | `member_added`, `member_removed` của nhóm (`room_type` của event) | `rooms.avatar_users`, `rooms.avatar_ver` |
 | Chat `memberwatch` (mọi node chat) | core NATS `live.*.member.*.evt.{kind}` | `member_removed`, `member_role_changed` | quên cache thành viên của actor |
 | Chat `roomcache.Watch` (mọi node chat) | core NATS `live` | `room_updated`, `member_count_changed` | quên cache thông tin room |
 | Mention App, watch tập nhóm theo room (mọi node chat, D172) | core NATS `live.*.member.*.evt.{kind}` | `member_added`, `member_removed` | quên tập nhóm của room (cache gợi ý `@nhóm`) |
