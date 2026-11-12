@@ -14,6 +14,7 @@
 | UC-MEDIA-05 | Gallery "file tôi đã upload" | Người upload | `ListUploads`: mọi file mình đã upload xong, mới nhất trước, lọc ảnh/video/khác, nhãn `expired` khi kho đã xoá |
 | UC-MEDIA-06 | Thumb ảnh, video | Hạ tầng | Lambda production sinh `{key}{hậu tố}` từ file gốc, cạnh file ở bucket nào cũng vậy; server chỉ suy khoá và ký URL (§7) |
 | UC-MEDIA-07 | Giữ file đã gửi | Hệ thống | File đã gắn vào tin được chuyển sang `completed` nên không bị luật 30 ngày của `processing` xoá; biết tin nào đang dùng file nào; file không còn tin nào dùng chỉ được đánh dấu (§8) |
+| UC-MEDIA-08 | Tệp của room | Thành viên | `ListRoomFiles`: tệp đã gửi trong một room, tab ảnh/video hoặc tab file, mới nhất trước, kèm URL tải (§12) |
 
 ## 2. Luồng upload (spec client)
 
@@ -161,7 +162,7 @@ Thứ tự **copy → đổi `bucket` → xoá bản cũ**: URL ký từ `proces
 
 **Kết quả mỗi event:** xong hoặc bỏ → Ack; event hỏng dạng → Term; S3 lỗi, CAS thua, Mongo lỗi, chat chưa trả lời, quá hạn → Nak theo bậc lùi 5s, 30s, 2m, 10m, không retry nội bộ. Lần giao thứ 6 trở lên vẫn lỗi được đếm là kẹt (`chatim_media_stuck_total`, alert `ChatimMediaFailing`); consumer trễ (`chatim_media_lag_seconds` > 10 phút trong 15 phút) → `ChatimMediaLagging` (bảo đảm MD2, [architecture §8](../architecture.md#8-cam-kết-đúng-đắn-guarantees--detectors)).
 
-**Event lệch thứ tự:** xoá tới trước tạo → chưa có cặp nào để xoá; tạo tới sau hỏi chat thấy tin đã xoá → không ghi cặp, không chuyển file. `msg_created` cũ tới lại sau khi cặp đã xoá mềm → `$setOnInsert` giữ `state = 2`. Phát lại (`/app resync`) không đổi kết quả.
+**Event lệch thứ tự:** xoá tới trước tạo → chưa có cặp nào để xoá; tạo tới sau hỏi chat thấy tin đã xoá → không ghi cặp, không chuyển file. `msg_created` cũ tới lại sau khi cặp đã xoá mềm → `$setOnInsert` giữ `state = 2`. Phát lại (`/app resync`) không đổi kết quả. `room_id`, `kind`, `sent_at` (M7.1 P2) ghi bằng `$set` ở mọi lần upsert với cùng giá trị, nên phát lại `msg_created` điền đủ cho cặp tạo trước đó.
 
 **`media_message_files`** (mới, chỉ module media ghi, clustered):
 
@@ -173,8 +174,11 @@ Thứ tự **copy → đổi `bucket` → xoá bản cũ**: URL ký từ `proces
 | `tenant_id` | Tenant | `acme` |
 | `state` | 1 tin còn dùng file, 2 tin đã bị xoá (xoá mềm, doc vẫn giữ) | `1` |
 | `created_at`, `deleted_at` | Lúc ghi cặp, lúc tin bị xoá | |
+| `room_id` | Room của tin (M7.1 P2) | `8812` |
+| `kind` | Tab của §12: `media` (`image/*`, `video/*`) hoặc `file`, theo mime trong đính kèm của tin | `media` |
+| `sent_at` | Giờ gửi của tin, mili giây | |
 
-Index `{tenant_id, message_key, state}` (cặp của một tin) và `{file_key, state, message_key}` (tin khác còn dùng file không); tra cứu luôn bằng phép bằng trên field, tạo qua `/app indexes` (D191).
+Index `{tenant_id, message_key, state}` (cặp của một tin), `{file_key, state, message_key}` (tin khác còn dùng file không) và `{tenant_id, room_id, kind, state, sent_at: -1, _id: -1}` (tệp của room, §12); tra cứu luôn bằng phép bằng trên field, tạo qua `/app indexes` (D191).
 
 **`media_uploads`** thêm 3 field:
 
@@ -188,17 +192,18 @@ Index `{tenant_id, message_key, state}` (cặp của một tin) và `{file_key, 
 
 | Mã | Khi nào |
 |---|---|
-| `invalid_argument` | Upload: tên rỗng/quá 255 byte/ký tự điều khiển hoặc bidi, `content_type` không dạng `type/subtype`, cỡ ngoài 1..`max_file_bytes`, `dim` không phải 0 hay 2 số ≥ 1, `dur` < 0, `hash` sai dạng, xin quá `max_parallel_uploads` phần hoặc phần ngoài 1..n, danh sách ETag thiếu, trùng, thừa. `SendMessage`: vi phạm luật §4. `GetAttachmentURLs`: 0 hoặc > 100 tin, `room_id` sai, `seq` = 0. `ListUploads`: `page_size` ngoài 1..100, `before` không phải upload của caller, `kinds` lạ |
-| `not_found` | Upload: khoá không phải của caller hoặc không tồn tại |
+| `invalid_argument` | Upload: tên rỗng/quá 255 byte/ký tự điều khiển hoặc bidi, `content_type` không dạng `type/subtype`, cỡ ngoài 1..`max_file_bytes`, `dim` không phải 0 hay 2 số ≥ 1, `dur` < 0, `hash` sai dạng, xin quá `max_parallel_uploads` phần hoặc phần ngoài 1..n, danh sách ETag thiếu, trùng, thừa. `SendMessage`: vi phạm luật §4. `GetAttachmentURLs`: 0 hoặc > 100 tin, `room_id` sai, `seq` = 0. `ListUploads`: `page_size` ngoài 1..100, `before` không phải upload của caller, `kinds` lạ. `ListRoomFiles`: `room_id` sai, `kind` không phải media/file, `page_size` ngoài 1..100, `before` hỏng |
+| `permission_denied` | `ListRoomFiles`: caller không phải thành viên room |
+| `not_found` | Upload: khoá không phải của caller hoặc không tồn tại. `ListRoomFiles`: room không có hoặc của tenant khác |
 | `failed_precondition` | Media tắt (`MEDIA_ENABLED=false`, mọi lệnh `MediaService`); phiên đã đóng/huỷ (`GetPartURLs`, huỷ sau khi đã xong); S3 từ chối ETag; cỡ thật lệch cỡ khai (object bị xoá, phiên thành `aborted`); phiên đã mất (quá 1 ngày) |
 | `unavailable` | Media chưa sẵn sàng (config, bucket, key, S3); S3 lỗi; hai lệnh đổi trạng thái cùng lúc; node chat chưa nối xong cổng đọc cho media — gọi lại |
-| `resource_exhausted` | Vượt giới hạn `GetPartURLs` hoặc giới hạn theo user của gateway (`GetAttachmentURLs`, `ListUploads` dùng giới hạn chung, không có limiter riêng) |
-| `internal` | `ListUploads` trên DB thiếu index gallery: chạy `/app indexes -apply` một lần ([chat](../apps/chat.md#app-indexes-d191)) |
+| `resource_exhausted` | Vượt giới hạn `GetPartURLs` hoặc giới hạn theo user của gateway (`GetAttachmentURLs`, `ListUploads`, `ListRoomFiles` dùng giới hạn chung, không có limiter riêng) |
+| `internal` | `ListUploads` hoặc `ListRoomFiles` trên DB thiếu index của nó: chạy `/app indexes -apply` một lần ([chat](../apps/chat.md#app-indexes-d191)) |
 
 ## 10. Cơ chế
 
 - **Lớp dữ liệu:** "Phiên upload" (`media_uploads`, một doc mỗi object, `state` 1 `uploading` → 2 `uploaded` hoặc 3 `aborted`, CAS trên `state` + `ver`; `dim`, `dur` ghi lúc `StartUpload`, `hash` ghi trong cùng lệnh CAS sang `uploaded`) và "Object ghi một lần" (S3); P3 thêm `bucket`, `attached_at` (CAS `{_id, ver}`), `retired_at` (đặt khi chưa có, gỡ khi có cặp mới) vào phiên upload và cặp tin–file `media_message_files` theo khuôn `mentions` (D115: upsert `$setOnInsert`, xoá mềm `state = 2`). Đính kèm là một phần của **fact tin** (`messages.files`): ghi cùng lệnh insert của tin, bất biến khi sửa, `$unset` khi xoá; đi trong `Message` của `msg_created`/`msg_edited`/`msg_deleted`, phục hồi như tin (cờ `_state`, sweeper). URL tải và gallery không lưu gì. Không event mới; `msg_created` có file mà không mention đi loại data `media` (owner 2026-11-08) để consumer `media` không nhận tin text thường.
-- **Quyền tải đi theo tin, không theo khoá:** URL chỉ được ký cho khoá nằm trong tin người hỏi đọc được, qua `Reader.VisibleMessages` của chat (chat cài cổng `mediaapp.ChatReader`). Gallery chỉ trả file có `tenant_id`, `user_id` của caller.
+- **Quyền tải đi theo tin, không theo khoá:** URL chỉ được ký cho khoá nằm trong tin người hỏi đọc được, qua `Reader.VisibleMessages` của chat (chat cài cổng `mediaapp.ChatReader`). Gallery chỉ trả file có `tenant_id`, `user_id` của caller. `ListRoomFiles` hỏi chat quyền đọc room (`RoomReadAccess`, cùng bộ kiểm của `GetHistory`) trước khi đọc cặp nào, rồi vẫn đọc tin qua `VisibleMessages`.
 - **Không đính file người khác:** khoá phải mang `{tenant}/{người gửi}/`, user id không chứa `/`.
 - **Đường gửi không chậm đi:** chat chỉ kiểm đính kèm trong RAM, không gọi S3 hay module media; khoá giả hoặc file chưa upload xong chỉ làm hỏng tin của chính người gửi (URL tải trả lỗi từ S3).
 - **Không vượt cỡ khai:** server chỉ ký phần 1..n, mỗi URL ghim `Content-Length`; S3 chấp nhận đóng phiên với một tập con các phần nên server tự kiểm đủ 1..n rồi `HeadObject` kiểm tổng cỡ.
@@ -219,7 +224,8 @@ Index `{tenant_id, message_key, state}` (cặp của một tin) và `{file_key, 
 - Đúng khoảnh khắc chuyển file, URL vừa ký từ `processing` có thể trả 404; xin URL lại thì nhận URL từ `completed`.
 - `media_message_files` chỉ lớn lên (xoá mềm không thu nhỏ), mỗi cặp tin–file từng có một doc nhỏ.
 - Node dừng giữa lúc multipart copy file > 5 GiB để lại phần copy dở ở `completed`; `make media-buckets` chỉ đặt luật huỷ multipart dở cho `processing`.
-- Tin gửi trước P3 không tự được chuyển; cần thì phát lại `msg_created` bằng `/app resync`.
+- Tin gửi trước P3 không tự được chuyển; cần thì phát lại `msg_created` bằng `/app resync`. Cặp tạo trước M7.1 P2 không có trong `ListRoomFiles` tới khi phát lại như vậy.
+- `ListRoomFiles` có thể trả trang ngắn hoặc rỗng kèm `next_before` khi người gọi đã ẩn nhiều tin có file liền nhau (§12); tệp của tin vừa gửi hiện sau vài giây (consumer `media`).
 - Chỉ đính được file upload trong 24 giờ; file cũ hơn trong gallery vẫn tải được nhưng muốn gửi lại thì forward tin cũ hoặc upload lại.
 - `name`, `mime`, `size`, `dim`, `dur`, `hash` là lời máy khai, chỉ để hiển thị và để máy nhận tự kiểm; S3 trả file với đúng loại máy khai, nên domain phục vụ file phải tách khỏi domain của app (§7). Tin không có `hash` thì máy nhận không kiểm được file.
 - URL thumb có thể 404 (Lambda chưa xong, file không sinh được thumb); dev không có thumb.
@@ -228,3 +234,19 @@ Index `{tenant_id, message_key, state}` (cặp của một tin) và `{file_key, 
 - Giới hạn `GetPartURLs` của một thiết bị trần tốc độ ≈ 4 phần mỗi 5 giây (≈ 25 MiB/s với phần 32 MiB, ≈ 100 MiB/s với phần 128 MiB).
 - Mỗi node tự kiểm sẵn sàng nên trong tối đa 30 giây các node có thể trả `media.enabled` khác nhau.
 - Chưa quét mã độc (sau go-live).
+
+## 12. Tệp của room (`MediaService.ListRoomFiles`, M7.1 P2)
+
+`ListRoomFiles{room_id, kind, before, page_size}` → `{files: [RoomFile], next_before, expires_at}`; `RoomFile` = `{message: {room_id, thread, seq}, sender_id, sent_at, file: Attachment, url, thumbnail_url}`. `file` là đính kèm của tin (§4); `sent_at` là giờ gửi của tin.
+
+- **Tab:** `ROOM_FILE_KIND_MEDIA` = `image/*` và `video/*`, `ROOM_FILE_KIND_FILE` = mọi loại khác (pdf, html, audio…), theo `mime` trong đính kèm của tin. `ROOM_FILE_KIND_UNSPECIFIED` hay số lạ → `invalid_argument`.
+- **Quyền trước dữ liệu:** chat kiểm caller là thành viên room như `GetHistory` trước khi module đọc cặp nào: không phải thành viên → `permission_denied`; room không có hoặc của tenant khác → `not_found`. Tenant lấy từ token.
+- **Theo người xem:** tệp của tin gửi trước `cleared_at` (xoá lịch sử) không có; tin đã xoá hoặc caller đã ẩn bị bỏ.
+- **Mới nhất trước:** theo giờ gửi của tin, cùng tin theo khoá file giảm dần. Tin forward có tệp ở room đích với giờ của tin forward.
+- **Trang:** `page_size` 1..100. `next_before` có khi lần đọc DB đủ `page_size` cặp; rỗng là hết. Trang có thể ít hơn `page_size`, kể cả rỗng, mà vẫn có `next_before`. Ví dụ: Bình ẩn 30 tin ảnh mới nhất, gọi `page_size: 30` → `files: []` và `next_before`; gọi lại với `before = next_before` ra 30 ảnh cũ hơn. Máy gọi tiếp khi màn hình chưa đủ, không suy ra hết từ số tệp nhận được (như `ListMentions`).
+- **Con trỏ:** `next_before` là chuỗi mờ chứa giờ gửi và khoá của cặp cuối (gồm khoá file, chỉ thành viên room mới nhận). Hỏng → `invalid_argument`; cũ hơn `cleared_at` (caller xoá lịch sử giữa hai trang) → trang rỗng, hết.
+- **URL:** như §5 (ký từ bucket của file, thumb theo §7), hạn tới `expires_at`.
+
+Ví dụ: Bình mở tab "Ảnh/Video" của nhóm: `ListRoomFiles{room_id: "9036108543124204147", kind: ROOM_FILE_KIND_MEDIA, page_size: 30}` → 30 ảnh mới nhất kèm URL và `next_before`.
+
+Cách đọc: một truy vấn chỉ đọc index `{tenant_id, room_id, kind, state, sent_at: -1, _id: -1}` của `media_message_files` (phép bằng trên tenant từ token và room đã kiểm quyền, `sent_at > cleared_at`, con trỏ bằng `$or` hai nhánh giữ đủ phép bằng), rồi một lần `VisibleAttachments` của chat cho các tin của trang, một đọc lô `media_uploads` lấy bucket, ký URL trong RAM.

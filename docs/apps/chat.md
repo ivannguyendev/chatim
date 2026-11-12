@@ -70,7 +70,7 @@ Toàn bộ đọc qua `apps/chat/internal/config`; thiếu thì dùng giá trị
 
 ### Media (module `modules/media`)
 
-Media lỗi (config sai, thiếu bucket, sai key, S3 sập) không bao giờ làm chat dừng: module chỉ thành chưa sẵn sàng, `GetClientConfig` trả `media.enabled = false`, mọi lệnh `MediaService` (4 lệnh upload, `GetAttachmentURLs`, `ListUploads`) trả `UNAVAILABLE`, `chatim_media_ready` = 0. Chỉ lỗi parse (giá trị không phải số, thời lượng sai) chặn boot như mọi biến khác. Code không tạo bucket, luật lifecycle hay CORS: dev chạy `make media-buckets`, production do hạ tầng tạo sẵn.
+Media lỗi (config sai, thiếu bucket, sai key, S3 sập) không bao giờ làm chat dừng: module chỉ thành chưa sẵn sàng, `GetClientConfig` trả `media.enabled = false`, mọi lệnh `MediaService` (4 lệnh upload, `GetAttachmentURLs`, `ListUploads`, `ListRoomFiles`) trả `UNAVAILABLE`, `chatim_media_ready` = 0. Chỉ lỗi parse (giá trị không phải số, thời lượng sai) chặn boot như mọi biến khác. Code không tạo bucket, luật lifecycle hay CORS: dev chạy `make media-buckets`, production do hạ tầng tạo sẵn.
 
 | Biến | Mặc định | Ghi chú |
 |---|---|---|
@@ -84,7 +84,7 @@ Media lỗi (config sai, thiếu bucket, sai key, S3 sập) không bao giờ là
 | `MEDIA_MAX_PARALLEL_UPLOADS` | `4` | Số URL mỗi lần cấp và số luồng máy chạy (qua `GetClientConfig`) |
 | `MEDIA_PART_URL_TTL` | `15m` | Hạn URL ký từng phần; `1s`..`168h` (khoảng S3 nhận cho URL ký) |
 | `MEDIA_READY_CHECK_INTERVAL` | `30s` | Chu kỳ `HeadBucket` hai bucket để biết media sẵn sàng |
-| `MEDIA_DOWNLOAD_URL_TTL` | `1h` | Hạn URL tải và URL thumb (`GetAttachmentURLs`, `ListUploads`, trả trong `expires_at`); `1s`..`168h` |
+| `MEDIA_DOWNLOAD_URL_TTL` | `1h` | Hạn URL tải và URL thumb (`GetAttachmentURLs`, `ListUploads`, `ListRoomFiles`, trả trong `expires_at`); `1s`..`168h` |
 | `MEDIA_PROCESSING_RETENTION` | `720h` | Phải bằng luật xoá object của bucket `processing` (30 ngày, tính từ lúc tạo object); `ListUploads` gắn `expired` cho file có `created_at` + giá trị này đã qua |
 | `MEDIA_THUMBNAILS` | `false` | `true` khi hạ tầng có Lambda sinh thumb: ảnh/video có `thumbnail_url`; tắt thì rỗng (qua `GetClientConfig`) |
 | `MEDIA_THUMBNAIL_SUFFIX` | `.thumb` | Hậu tố khoá thumb (`{key}{hậu tố}`), bắt đầu bằng `.`, 2..32 ký tự `a-z0-9.`; phải bằng hậu tố Lambda ghi |
@@ -93,7 +93,7 @@ Media lỗi (config sai, thiếu bucket, sai key, S3 sập) không bao giờ là
 | `MEDIA_CONSUMER_ACK_WAIT` | `30s` | `AckWait` của durable `media` (≥ 3s); event đang xử lý được gửi `InProgress` mỗi một phần ba |
 | `MEDIA_CONSUMER_SYNC_TIMEOUT` | `15m` | Hạn mỗi lần xử lý một event (copy file lớn); quá hạn thì Nak theo bậc lùi |
 
-Giá trị đúng định dạng nhưng sai luật (TTL ngoài `1s`..`168h`, hậu tố sai) chỉ làm media chưa sẵn sàng. Gallery (`ListUploads`) cần index `{tenant_id, user_id, state, _id: -1}` của `media_uploads`: chat chỉ tự build trên collection rỗng, nên DB đã có dữ liệu `media_uploads` từ trước phải chạy `docker exec chatim-chat-1 /app indexes -apply` một lần ([`/app indexes`](#app-indexes-d191)); tới lúc đó `ListUploads` trả `INTERNAL` (hint tới index chưa có), các lệnh media khác vẫn chạy. Cặp tin–file `media_message_files` (M7 P3) cần `{tenant_id, message_key, state}` và `{file_key, state, message_key}`: collection mới nên lần boot đầu tự build; DB mà collection này đã có dữ liệu với index thiếu hoặc khác (vd. DB dev từ bản P3 cũ) phải chạy `/app indexes -apply`, tới lúc đó event `msg_deleted` của tin có file lỗi (hint), bị Nak và `ChatimMediaFailing` báo.
+Giá trị đúng định dạng nhưng sai luật (TTL ngoài `1s`..`168h`, hậu tố sai) chỉ làm media chưa sẵn sàng. Gallery (`ListUploads`) cần index `{tenant_id, user_id, state, _id: -1}` của `media_uploads`: chat chỉ tự build trên collection rỗng, nên DB đã có dữ liệu `media_uploads` từ trước phải chạy `docker exec chatim-chat-1 /app indexes -apply` một lần ([`/app indexes`](#app-indexes-d191)); tới lúc đó `ListUploads` trả `INTERNAL` (hint tới index chưa có), các lệnh media khác vẫn chạy. Cặp tin–file `media_message_files` (M7 P3) cần `{tenant_id, message_key, state}` và `{file_key, state, message_key}`: collection mới nên lần boot đầu tự build; DB mà collection này đã có dữ liệu với index thiếu hoặc khác (vd. DB dev từ bản P3 cũ) phải chạy `/app indexes -apply`, tới lúc đó event `msg_deleted` của tin có file lỗi (hint), bị Nak và `ChatimMediaFailing` báo. `ListRoomFiles` (M7.1 P2) cần thêm `{tenant_id, room_id, kind, state, sent_at: -1, _id: -1}` trên `media_message_files`: DB đã có cặp từ trước phải chạy `/app indexes -apply` trước khi nhận lệnh, tới lúc đó `ListRoomFiles` trả `INTERNAL`.
 
 Consumer `media` (M7 P3, [module 12 §8](../features/12-feature-media.md#8-chuyển-file-đã-gắn-tin-sang-completed-p3)) chạy trên mọi node chat khi `MEDIA_ENABLED=true` và config media đúng luật: chat tạo hoặc cập nhật durable `media` trên `EVT_STREAM` lúc khởi động, chỉ kéo event khi media sẵn sàng, dừng song song với projection và Mention App. Nó chuyển file đã gắn tin sang `completed` và ghi cặp tin–file; không nằm trên đường gửi tin. Hợp đồng Lambda sinh thumb cho hạ tầng: [module 12 §7](../features/12-feature-media.md#7-thumb-và-hợp-đồng-lambda-cho-hạ-tầng).
 
