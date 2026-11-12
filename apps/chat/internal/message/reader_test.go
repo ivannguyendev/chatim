@@ -43,3 +43,21 @@ func TestNewReaderRequiresEveryDependency(t *testing.T) {
 		t.Fatalf("NewReader with every dep: %v", err)
 	}
 }
+
+func TestReadAccessGrantsMembersOnlyInTheirTenant(t *testing.T) {
+	rg := newRig(t, nil)
+	r, err := message.NewReader(rg.readerDeps(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	grant, err := r.ReadAccess(t.Context(), tenant, "bob", room)
+	if err != nil || grant.Member.User != "bob" || grant.Room.ID != room {
+		t.Fatalf("bob = %+v, %v", grant, err)
+	}
+	if _, err := r.ReadAccess(t.Context(), tenant, "dave", room); !errors.Is(err, apperr.ErrPermissionDenied) {
+		t.Fatalf("outsider err = %v", err)
+	}
+	if _, err := r.ReadAccess(t.Context(), "globex", "bob", room); !errors.Is(err, apperr.ErrNotFound) {
+		t.Fatalf("other tenant err = %v", err)
+	}
+}

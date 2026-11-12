@@ -54,3 +54,7 @@ func (r *Reader) visibleIn(ctx context.Context, tenant, user string, g roomThrea
 	}
 	return nil
 }
+
+func (r *Reader) ReadAccess(ctx context.Context, tenant, user string, room uint64) (access.Request, error) {
+	return r.d.Access.Authorize(ctx, access.ReadHistory, tenant, user, room)
+}

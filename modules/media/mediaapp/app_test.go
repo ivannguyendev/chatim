@@ -64,6 +64,10 @@ func (noChat) MessageFiles(context.Context, mediaapp.MessageRef) (mediaapp.Messa
 	return mediaapp.MessageState{}, nil
 }
 
+func (noChat) RoomReadAccess(context.Context, string, string, string) (mediaapp.RoomAccess, error) {
+	return mediaapp.RoomAccess{}, nil
+}
+
 func valid() mediaapp.Config {
 	c := mediaapp.DefaultConfig()
 	c.Endpoint, c.PublicEndpoint, c.Region = "http://127.0.0.1:1", "http://127.0.0.1:1", "us-east-1"
