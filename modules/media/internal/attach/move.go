@@ -10,8 +10,8 @@ import (
 
 const cleanupFailedMsg = "media could not delete a moved object from processing; the retention rule removes it later"
 
-func (s *Service) attach(ctx context.Context, tenant, messageKey string, keys []string) error {
-	keys = unique(keys)
+func (s *Service) attach(ctx context.Context, ev Event, state domain.MessageState) error {
+	tenant, messageKey, keys := ev.Tenant, ev.Ref.Key(), unique(state.Keys)
 	uploads, err := s.uploadsOf(ctx, tenant, keys)
 	if err != nil {
 		return err
@@ -28,7 +28,10 @@ func (s *Service) attach(ctx context.Context, tenant, messageKey string, keys []
 	pairs := make([]domain.MessageFile, len(valid))
 	fileKeys := make([]string, len(valid))
 	for i, u := range valid {
-		pairs[i] = domain.MessageFile{MessageKey: messageKey, FileKey: u.Key, Tenant: tenant, State: domain.PairLive, CreatedAt: now}
+		pairs[i] = domain.MessageFile{
+			MessageKey: messageKey, FileKey: u.Key, Tenant: tenant, Room: ev.Ref.Room,
+			Kind: domain.RoomFileKindOf(state.Mimes[u.Key]), SentAt: state.SentAt, State: domain.PairLive, CreatedAt: now,
+		}
 		fileKeys[i] = u.Key
 	}
 	if err := s.deps.Files.Attach(ctx, pairs); err != nil {

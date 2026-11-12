@@ -2,8 +2,10 @@ package app
 
 import (
 	"errors"
+	"maps"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/ivannguyendev/chatim/apps/chat/internal/model/domain"
 	"github.com/ivannguyendev/chatim/modules/media/mediaapp"
@@ -35,6 +37,11 @@ func TestMediaChatNodeMessageFilesReadsAnyMessageWithoutAViewer(t *testing.T) {
 		if got.Found != tc.want.Found || got.Deleted != tc.want.Deleted || got.Tenant != tc.want.Tenant || !slices.Equal(got.Keys, tc.want.Keys) {
 			t.Errorf("%s: got %+v, want %+v", tc.name, got, tc.want)
 		}
+	}
+	got, err := f.node.MessageFiles(t.Context(), ref("88", 0, 1))
+	want := map[string]string{mediaFileKey: "image/png", mediaFileKey + "x": "application/pdf"}
+	if err != nil || !got.SentAt.Equal(mediaSent.Add(time.Second)) || !maps.Equal(got.Mimes, want) {
+		t.Fatalf("live message sent at %v mimes %v, %v; want %v and %v", got.SentAt, got.Mimes, err, mediaSent.Add(time.Second), want)
 	}
 }
 

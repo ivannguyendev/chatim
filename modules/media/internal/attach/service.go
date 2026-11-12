@@ -75,7 +75,7 @@ func (s *Service) created(ctx context.Context, ev Event) error {
 	case len(state.Keys) == 0:
 		return nil
 	}
-	return s.attach(ctx, ev.Tenant, ev.Ref.Key(), state.Keys)
+	return s.attach(ctx, ev, state)
 }
 
 func (s *Service) release(ctx context.Context, tenant, messageKey string) error {
