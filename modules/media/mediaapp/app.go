@@ -18,6 +18,7 @@ import (
 	"github.com/ivannguyendev/chatim/modules/media/internal/grpcsrv"
 	"github.com/ivannguyendev/chatim/modules/media/internal/objectstore"
 	"github.com/ivannguyendev/chatim/modules/media/internal/readiness"
+	"github.com/ivannguyendev/chatim/modules/media/internal/roomfiles"
 	"github.com/ivannguyendev/chatim/modules/media/internal/store/mongostore"
 	"github.com/ivannguyendev/chatim/modules/media/internal/upload"
 	"github.com/ivannguyendev/chatim/pkg/core/apperr"
@@ -108,10 +109,16 @@ func (a *App) assemble() error {
 	if err != nil {
 		return err
 	}
+	rooms, err := roomfiles.New(roomfiles.Config{SignatureTTL: a.cfg.DownloadSignatureTTL, Thumbnails: a.cfg.ThumbnailRule()}, roomfiles.Deps{
+		Chat: a.deps.Chat, Files: mongostore.NewMessageFiles(a.deps.Mongo), Uploads: uploads, Objects: objects, Ready: a.watch.Ready,
+	})
+	if err != nil {
+		return err
+	}
 	if err := a.assembleConsumer(uploads); err != nil {
 		return err
 	}
-	a.server = grpcsrv.New(a.uploads, downloads, files)
+	a.server = grpcsrv.New(a.uploads, downloads, files, rooms)
 	return nil
 }
 

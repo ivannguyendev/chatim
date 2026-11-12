@@ -51,6 +51,9 @@ const (
 	// MediaServiceListUploadsProcedure is the fully-qualified name of the MediaService's ListUploads
 	// RPC.
 	MediaServiceListUploadsProcedure = "/chatim.v1.MediaService/ListUploads"
+	// MediaServiceListRoomFilesProcedure is the fully-qualified name of the MediaService's
+	// ListRoomFiles RPC.
+	MediaServiceListRoomFilesProcedure = "/chatim.v1.MediaService/ListRoomFiles"
 )
 
 // MediaServiceClient is a client for the chatim.v1.MediaService service.
@@ -61,6 +64,7 @@ type MediaServiceClient interface {
 	AbortUpload(context.Context, *connect.Request[v1.AbortUploadRequest]) (*connect.Response[v1.AbortUploadResponse], error)
 	GetAttachmentURLs(context.Context, *connect.Request[v1.GetAttachmentURLsRequest]) (*connect.Response[v1.GetAttachmentURLsResponse], error)
 	ListUploads(context.Context, *connect.Request[v1.ListUploadsRequest]) (*connect.Response[v1.ListUploadsResponse], error)
+	ListRoomFiles(context.Context, *connect.Request[v1.ListRoomFilesRequest]) (*connect.Response[v1.ListRoomFilesResponse], error)
 }
 
 // NewMediaServiceClient constructs a client for the chatim.v1.MediaService service. By default, it
@@ -110,6 +114,12 @@ func NewMediaServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(mediaServiceMethods.ByName("ListUploads")),
 			connect.WithClientOptions(opts...),
 		),
+		listRoomFiles: connect.NewClient[v1.ListRoomFilesRequest, v1.ListRoomFilesResponse](
+			httpClient,
+			baseURL+MediaServiceListRoomFilesProcedure,
+			connect.WithSchema(mediaServiceMethods.ByName("ListRoomFiles")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -121,6 +131,7 @@ type mediaServiceClient struct {
 	abortUpload       *connect.Client[v1.AbortUploadRequest, v1.AbortUploadResponse]
 	getAttachmentURLs *connect.Client[v1.GetAttachmentURLsRequest, v1.GetAttachmentURLsResponse]
 	listUploads       *connect.Client[v1.ListUploadsRequest, v1.ListUploadsResponse]
+	listRoomFiles     *connect.Client[v1.ListRoomFilesRequest, v1.ListRoomFilesResponse]
 }
 
 // StartUpload calls chatim.v1.MediaService.StartUpload.
@@ -153,6 +164,11 @@ func (c *mediaServiceClient) ListUploads(ctx context.Context, req *connect.Reque
 	return c.listUploads.CallUnary(ctx, req)
 }
 
+// ListRoomFiles calls chatim.v1.MediaService.ListRoomFiles.
+func (c *mediaServiceClient) ListRoomFiles(ctx context.Context, req *connect.Request[v1.ListRoomFilesRequest]) (*connect.Response[v1.ListRoomFilesResponse], error) {
+	return c.listRoomFiles.CallUnary(ctx, req)
+}
+
 // MediaServiceHandler is an implementation of the chatim.v1.MediaService service.
 type MediaServiceHandler interface {
 	StartUpload(context.Context, *connect.Request[v1.StartUploadRequest]) (*connect.Response[v1.StartUploadResponse], error)
@@ -161,6 +177,7 @@ type MediaServiceHandler interface {
 	AbortUpload(context.Context, *connect.Request[v1.AbortUploadRequest]) (*connect.Response[v1.AbortUploadResponse], error)
 	GetAttachmentURLs(context.Context, *connect.Request[v1.GetAttachmentURLsRequest]) (*connect.Response[v1.GetAttachmentURLsResponse], error)
 	ListUploads(context.Context, *connect.Request[v1.ListUploadsRequest]) (*connect.Response[v1.ListUploadsResponse], error)
+	ListRoomFiles(context.Context, *connect.Request[v1.ListRoomFilesRequest]) (*connect.Response[v1.ListRoomFilesResponse], error)
 }
 
 // NewMediaServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -206,6 +223,12 @@ func NewMediaServiceHandler(svc MediaServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(mediaServiceMethods.ByName("ListUploads")),
 		connect.WithHandlerOptions(opts...),
 	)
+	mediaServiceListRoomFilesHandler := connect.NewUnaryHandler(
+		MediaServiceListRoomFilesProcedure,
+		svc.ListRoomFiles,
+		connect.WithSchema(mediaServiceMethods.ByName("ListRoomFiles")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/chatim.v1.MediaService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case MediaServiceStartUploadProcedure:
@@ -220,6 +243,8 @@ func NewMediaServiceHandler(svc MediaServiceHandler, opts ...connect.HandlerOpti
 			mediaServiceGetAttachmentURLsHandler.ServeHTTP(w, r)
 		case MediaServiceListUploadsProcedure:
 			mediaServiceListUploadsHandler.ServeHTTP(w, r)
+		case MediaServiceListRoomFilesProcedure:
+			mediaServiceListRoomFilesHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -251,4 +276,8 @@ func (UnimplementedMediaServiceHandler) GetAttachmentURLs(context.Context, *conn
 
 func (UnimplementedMediaServiceHandler) ListUploads(context.Context, *connect.Request[v1.ListUploadsRequest]) (*connect.Response[v1.ListUploadsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("chatim.v1.MediaService.ListUploads is not implemented"))
+}
+
+func (UnimplementedMediaServiceHandler) ListRoomFiles(context.Context, *connect.Request[v1.ListRoomFilesRequest]) (*connect.Response[v1.ListRoomFilesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("chatim.v1.MediaService.ListRoomFiles is not implemented"))
 }

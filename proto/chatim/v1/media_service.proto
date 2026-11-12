@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package chatim.v1;
 
+import "chatim/v1/attachment.proto";
 import "google/protobuf/timestamp.proto";
 
 service MediaService {
@@ -11,6 +12,7 @@ service MediaService {
   rpc AbortUpload(AbortUploadRequest) returns (AbortUploadResponse);
   rpc GetAttachmentURLs(GetAttachmentURLsRequest) returns (GetAttachmentURLsResponse);
   rpc ListUploads(ListUploadsRequest) returns (ListUploadsResponse);
+  rpc ListRoomFiles(ListRoomFilesRequest) returns (ListRoomFilesResponse);
 }
 
 message UploadPart {
@@ -129,6 +131,34 @@ message ListUploadsRequest {
 
 message ListUploadsResponse {
   repeated UploadedFile files = 1;
+  string next_before = 2;
+  google.protobuf.Timestamp expires_at = 3;
+}
+
+enum RoomFileKind {
+  ROOM_FILE_KIND_UNSPECIFIED = 0;
+  ROOM_FILE_KIND_MEDIA = 1;
+  ROOM_FILE_KIND_FILE = 2;
+}
+
+message ListRoomFilesRequest {
+  string room_id = 1;
+  RoomFileKind kind = 2;
+  string before = 3;
+  int32 page_size = 4;
+}
+
+message RoomFile {
+  MessageRef message = 1;
+  string sender_id = 2;
+  google.protobuf.Timestamp sent_at = 3;
+  Attachment file = 4;
+  string url = 5;
+  string thumbnail_url = 6;
+}
+
+message ListRoomFilesResponse {
+  repeated RoomFile files = 1;
   string next_before = 2;
   google.protobuf.Timestamp expires_at = 3;
 }
