@@ -36,7 +36,7 @@ func wireProjections(cfg config.Config, cl *clients, st *mongostore.Store, owner
 	if err != nil {
 		return nil, fmt.Errorf("wire %s projection: %w", projection.ReplyIndexName, err)
 	}
-	handlers := []projection.Projection{projection.NewRoomActivity(st), replies}
+	handlers := []projection.Projection{projection.NewRoomActivity(st), replies, projection.NewAvatarUsers(st)}
 	c, err := projection.NewConsumer(handlers, projection.NewSource(cl.js, cfg.Projection), cfg.Projection, log, projection.WithLeader(owner, sweep.LeaderSlot, cfg.Slot.Tick))
 	if err != nil {
 		return nil, fmt.Errorf("wire projection consumer: %w", err)
