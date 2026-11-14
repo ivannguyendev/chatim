@@ -47,6 +47,7 @@ type mediaRun struct {
 	image       *mediaFile
 	page        *mediaFile
 	notes       *mediaFile
+	avatar      *mediaFile
 	room        string
 	seq         uint64
 	forwardRoom string
@@ -118,6 +119,14 @@ func (r *mediaRun) steps() []wsEventsStep {
 		{"after B hides the message B gets no URL for it while A still does", r.hidden},
 		{"A forwards the message to a group with C and deletes the original; the original has no URL and C downloads from the completed bucket through the forward", r.forwarded},
 		{"after the delete the original room lists no files and within 30s C's forward room lists the PNG at the forward", r.roomFilesAfterDelete},
+		{"a public upload of an HTML page is invalid_argument", r.publicPageRefused},
+		{"A uploads a public PNG and its key carries pub", r.uploadAvatar},
+		{"A sending the public key in a message over the websocket is invalid_argument", r.publicInMessageRefused},
+		{"UpdateRoom with A's private PNG as the group avatar is invalid_argument", r.privateAvatarRefused},
+		{"A sets the public PNG as the group avatar and B's GetRooms shows it", r.setAvatar},
+		{"B's GetPublicURLs signs only the public key with the exact bytes, and A's ListUploads still lists only private files", r.publicURLs},
+		{"within 30s B's public URL points at the completed bucket and still gives the exact bytes", r.avatarMoved},
+		{"A clears the group avatar and B's GetRooms shows none", r.clearAvatar},
 	}
 }
 
