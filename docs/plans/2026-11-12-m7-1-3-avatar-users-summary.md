@@ -90,7 +90,7 @@ Không thêm thư viện, không index mới. `make proto`, `buf-lint`.
 
 | Quyết định | Lý do | Phương án bị loại |
 |---|---|---|
-| 4 thành viên bất kỳ còn trong nhóm, không thứ tự, một truy vấn `limit 4` không sort (ứng viên decision log lúc đóng: field room mới cho client) | Owner 2026-11-10 và 2026-11-12: không sắp xếp, không ràng buộc thứ tự | Thứ tự `ListMembers` (owner trước): tới 3 truy vấn, owner không chọn. Thứ tự index (admin trước): phải nghe thêm đổi role/priority và ghi lại, owner không cần. Client tự gọi member từng nhóm: N+1 |
+| 4 thành viên bất kỳ còn trong nhóm, không thứ tự, một truy vấn `limit 4` không sort (D273) | Owner 2026-11-10 và 2026-11-12: không sắp xếp, không ràng buộc thứ tự | Thứ tự `ListMembers` (owner trước): tới 3 truy vấn, owner không chọn. Thứ tự index (admin trước): phải nghe thêm đổi role/priority và ghi lại, owner không cần. Client tự gọi member từng nhóm: N+1 |
 | Projection trong consumer `projections`, không phải ghi trong lệnh member | Lệnh member không chậm thêm; một lô 500 người tính một lần | Ghi trong lệnh `AddMembers`/`RemoveMember`: thêm một truy vấn và một ghi vào mọi lệnh, hai lệnh song song cùng room giành nhau |
 | Không realtime, không tăng `info_ver` | Owner 2026-11-10 | Phát `room_updated`: mỗi lần thêm/kick thành hai event, client không cần |
 | Sửa dữ liệu cũ bằng `/app resync -room ID` sẵn có | Resync bật lại cờ member → event phát lại → handler tính lại; không thêm lệnh | Thêm vào `/app recount` (bản design): thêm code cho việc resync đã làm được |
