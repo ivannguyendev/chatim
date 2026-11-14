@@ -188,5 +188,6 @@ func tableSpecs() []spec {
 		via(chatimv1.MediaService_GetAttachmentURLs_FullMethodName, mediaClient, chatimv1.MediaServiceClient.GetAttachmentURLs),
 		via(chatimv1.MediaService_ListUploads_FullMethodName, mediaClient, chatimv1.MediaServiceClient.ListUploads),
 		via(chatimv1.MediaService_ListRoomFiles_FullMethodName, mediaClient, chatimv1.MediaServiceClient.ListRoomFiles),
+		via(chatimv1.MediaService_GetPublicURLs_FullMethodName, mediaClient, chatimv1.MediaServiceClient.GetPublicURLs),
 	}
 }

@@ -22,7 +22,7 @@ func readCount(t *testing.T, fwd *chatrpc.Forwarder, cmd, code string) float64 {
 
 func TestStatsCoverOnlyTheCallersCommands(t *testing.T) {
 	h := newHarness(t, time.Second, nil)
-	if got := len(h.fwd.CommandSources()); got != 42*17 {
+	if got := len(h.fwd.CommandSources()); got != 43*17 {
 		t.Fatalf("sources = %d", got)
 	}
 	route := func(chatrpc.Command, proto.Message) (chatrpc.Clients, error) { return h.conn, nil }

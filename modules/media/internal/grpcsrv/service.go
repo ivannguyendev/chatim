@@ -8,6 +8,7 @@ import (
 	"github.com/ivannguyendev/chatim/modules/media/internal/domain"
 	"github.com/ivannguyendev/chatim/modules/media/internal/download"
 	"github.com/ivannguyendev/chatim/modules/media/internal/gallery"
+	"github.com/ivannguyendev/chatim/modules/media/internal/publicfiles"
 	"github.com/ivannguyendev/chatim/modules/media/internal/roomfiles"
 	"github.com/ivannguyendev/chatim/modules/media/internal/upload"
 	"github.com/ivannguyendev/chatim/pkg/chatrpc"
@@ -20,10 +21,11 @@ type Service struct {
 	downloads *download.Service
 	gallery   *gallery.Service
 	rooms     *roomfiles.Service
+	public    *publicfiles.Service
 }
 
-func New(uploads *upload.Service, downloads *download.Service, files *gallery.Service, rooms *roomfiles.Service) *Service {
-	return &Service{uploads: uploads, downloads: downloads, gallery: files, rooms: rooms}
+func New(uploads *upload.Service, downloads *download.Service, files *gallery.Service, rooms *roomfiles.Service, public *publicfiles.Service) *Service {
+	return &Service{uploads: uploads, downloads: downloads, gallery: files, rooms: rooms, public: public}
 }
 
 func callerOf(ctx context.Context) (domain.Caller, error) {

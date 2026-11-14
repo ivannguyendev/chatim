@@ -40,13 +40,14 @@ func httpsOnlyMethods() []string {
 		chatimv1.MediaService_GetAttachmentURLs_FullMethodName,
 		chatimv1.MediaService_ListUploads_FullMethodName,
 		chatimv1.MediaService_ListRoomFiles_FullMethodName,
+		chatimv1.MediaService_GetPublicURLs_FullMethodName,
 	}
 }
 
 func TestRealtimeAndRequestSplitEveryClientCall(t *testing.T) {
 	realtime, request := chatrpc.Realtime(), chatrpc.Request()
-	if len(realtime) != 12 || len(request) != 30 {
-		t.Fatalf("realtime = %d, request = %d, want 12 and 30", len(realtime), len(request))
+	if len(realtime) != 12 || len(request) != 31 {
+		t.Fatalf("realtime = %d, request = %d, want 12 and 31", len(realtime), len(request))
 	}
 	for _, m := range realtime {
 		if slices.Contains(request, m) {
@@ -55,7 +56,7 @@ func TestRealtimeAndRequestSplitEveryClientCall(t *testing.T) {
 	}
 	union := slices.Sorted(slices.Values(append(slices.Clone(realtime), request...)))
 	client := slices.Sorted(slices.Values(append(clientRequestMethods(t), httpsOnlyMethods()...)))
-	if !slices.Equal(union, client) || len(client) != 42 {
+	if !slices.Equal(union, client) || len(client) != 43 {
 		t.Fatalf("realtime + request = %v\nclient calls = %v", union, client)
 	}
 	if all := slices.Sorted(slices.Values(chatrpc.All())); !slices.Equal(all, union) {

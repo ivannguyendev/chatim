@@ -52,6 +52,7 @@ var request = []string{
 	chatimv1.MediaService_GetAttachmentURLs_FullMethodName,
 	chatimv1.MediaService_ListUploads_FullMethodName,
 	chatimv1.MediaService_ListRoomFiles_FullMethodName,
+	chatimv1.MediaService_GetPublicURLs_FullMethodName,
 }
 
 func Realtime() []string { return slices.Clone(realtime) }

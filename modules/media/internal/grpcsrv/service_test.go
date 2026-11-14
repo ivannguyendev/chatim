@@ -15,6 +15,7 @@ import (
 	"github.com/ivannguyendev/chatim/modules/media/internal/download"
 	"github.com/ivannguyendev/chatim/modules/media/internal/gallery"
 	"github.com/ivannguyendev/chatim/modules/media/internal/grpcsrv"
+	"github.com/ivannguyendev/chatim/modules/media/internal/publicfiles"
 	"github.com/ivannguyendev/chatim/modules/media/internal/roomfiles"
 	"github.com/ivannguyendev/chatim/modules/media/internal/store/memstore"
 	"github.com/ivannguyendev/chatim/modules/media/internal/upload"
@@ -89,7 +90,11 @@ func newServiceWithPairs(t *testing.T) (*grpcsrv.Service, *memstore.Uploads, *me
 	if err != nil {
 		t.Fatal(err)
 	}
-	return grpcsrv.New(svc, downloads, files, rooms), uploads, pairs
+	public, err := publicfiles.New(publicfiles.Config{SignatureTTL: time.Hour, Thumbnails: domain.Thumbnails{Enabled: true, Suffix: ".thumb"}}, publicfiles.Deps{Uploads: uploads, Objects: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return grpcsrv.New(svc, downloads, files, rooms, public), uploads, pairs
 }
 
 func TestGetAttachmentURLsOverTheService(t *testing.T) {
@@ -184,7 +189,8 @@ func TestRefusingAnswersEveryCallWithItsError(t *testing.T) {
 	_, e5 := d.GetAttachmentURLs(ctx, &chatimv1.GetAttachmentURLsRequest{})
 	_, e6 := d.ListUploads(ctx, &chatimv1.ListUploadsRequest{})
 	_, e7 := d.ListRoomFiles(ctx, &chatimv1.ListRoomFilesRequest{})
-	for _, err := range []error{e1, e2, e3, e4, e5, e6, e7} {
+	_, e8 := d.GetPublicURLs(ctx, &chatimv1.GetPublicURLsRequest{})
+	for _, err := range []error{e1, e2, e3, e4, e5, e6, e7, e8} {
 		if !errors.Is(err, apperr.ErrFailedPrecondition) {
 			t.Fatalf("err = %v", err)
 		}

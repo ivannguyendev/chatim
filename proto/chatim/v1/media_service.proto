@@ -13,6 +13,7 @@ service MediaService {
   rpc GetAttachmentURLs(GetAttachmentURLsRequest) returns (GetAttachmentURLsResponse);
   rpc ListUploads(ListUploadsRequest) returns (ListUploadsResponse);
   rpc ListRoomFiles(ListRoomFilesRequest) returns (ListRoomFilesResponse);
+  rpc GetPublicURLs(GetPublicURLsRequest) returns (GetPublicURLsResponse);
 }
 
 message UploadPart {
@@ -100,6 +101,15 @@ message GetAttachmentURLsRequest {
 
 message GetAttachmentURLsResponse {
   repeated MessageFiles messages = 1;
+  google.protobuf.Timestamp expires_at = 2;
+}
+
+message GetPublicURLsRequest {
+  repeated string keys = 1;
+}
+
+message GetPublicURLsResponse {
+  repeated FileURL files = 1;
   google.protobuf.Timestamp expires_at = 2;
 }
 
