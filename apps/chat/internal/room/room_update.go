@@ -3,6 +3,7 @@ package room
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/ivannguyendev/chatim/apps/chat/internal/model/access"
 	"github.com/ivannguyendev/chatim/apps/chat/internal/model/domain"
@@ -37,6 +38,11 @@ func (s *Service) UpdateRoom(ctx context.Context, c UpdateRoomCmd) (RoomResult, 
 	}
 	if err := s.d.Access.Allow(ctx, req); err != nil {
 		return RoomResult{}, err
+	}
+	if a := c.Update.Avatars; a != nil && !slices.Equal(*a, req.Room.Avatars) {
+		if err := domain.ValidateAvatarKeys(*a, c.Tenant, c.User, s.now()); err != nil {
+			return RoomResult{}, err
+		}
 	}
 	next, changed := c.Update.Apply(req.Room)
 	if !changed {

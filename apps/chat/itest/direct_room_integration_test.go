@@ -22,7 +22,7 @@ func TestRealInfraConcurrentOpensOfOnePairOnTwoChatNodesMakeOneDirectRoom(t *tes
 	it := realInfra(t)
 	chat1 := startChatNode(t, it, itFastSweep)
 	env := maps.Clone(itFastSweep)
-	env["CHAT_NODE_ID"] = "it-chat-2-" + it.suffix
+	env["APP_NODE_ID"] = "it-chat-2-" + it.suffix
 	chat2 := startChatNode(t, it, env)
 	awaitSlotsSplit(t, it, chat1.cfg.NodeID, chat2.cfg.NodeID)
 	clients := []chatimv1.ChatServiceClient{dialChat(t, chat1.cfg), dialChat(t, chat2.cfg)}

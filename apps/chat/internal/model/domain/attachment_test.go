@@ -31,6 +31,10 @@ func keyDated(tenant, user string, at time.Time, date string, seed byte) string 
 	return tenant + "/" + user + "/" + date + "/" + testKeyCode.EncodeToString(raw[:])
 }
 
+func publicKeyAt(tenant, user string, at time.Time, seed byte) string {
+	return strings.Replace(keyAt(tenant, user, at, seed), tenant+"/"+user+"/", tenant+"/"+user+"/pub/", 1)
+}
+
 func photo(key string) domain.Attachment {
 	return domain.Attachment{Key: key, Name: "ảnh.png", Mime: "image/png", Size: 2048, Dim: []int32{640, 480}, Dur: 0, Hash: "sha256:" + strings.Repeat("ab", 32)}
 }
@@ -113,6 +117,7 @@ func TestValidateAttachmentsRejectsBadKeys(t *testing.T) {
 		"empty":               "",
 		"over 512 bytes":      "acme/lan/" + strings.Repeat("a", 512),
 		"nested user segment": "acme/lan/lan/" + random,
+		"public key":          publicKeyAt("acme", "lan", at, 1),
 	}
 	for name, key := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -141,6 +146,7 @@ func TestValidateAttachmentsForwardedChecksOnlyShape(t *testing.T) {
 		"bad user":       keyAt("acme", "mi.nh", old, 1),
 		"thumb suffix":   keyAt("acme", "minh", old, 1) + ".thumb",
 		"bad date shape": keyDated("acme", "minh", old, "2026111", 1),
+		"public key":     publicKeyAt("acme", "minh", old, 1),
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := domain.ValidateAttachments([]domain.Attachment{photo(key)}, "acme", "lan", keyNow, true)

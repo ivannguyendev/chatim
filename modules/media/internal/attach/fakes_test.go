@@ -25,8 +25,22 @@ var now = time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
 type fakeChat struct {
 	mu     sync.Mutex
 	states map[domain.MessageRef]domain.MessageState
+	rooms  map[string]domain.RoomAvatarState
 	err    error
 	calls  int
+}
+
+func (c *fakeChat) RoomAvatars(_ context.Context, room string) (domain.RoomAvatarState, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls++
+	return c.rooms[room], c.err
+}
+
+func (c *fakeChat) setRoom(room string, state domain.RoomAvatarState) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.rooms[room] = state
 }
 
 func (c *fakeChat) MessageFiles(_ context.Context, ref domain.MessageRef) (domain.MessageState, error) {
@@ -48,6 +62,7 @@ type countingUploads struct {
 	conflictOnce bool
 	retireErr    error
 	unretireErr  error
+	beforeRetire func()
 }
 
 func (u *countingUploads) GetMany(ctx context.Context, tenant string, keys []string) (map[string]domain.Upload, error) {
@@ -66,6 +81,10 @@ func (u *countingUploads) MarkMoved(ctx context.Context, key string, ver int64, 
 
 func (u *countingUploads) Retire(ctx context.Context, keys []string, at time.Time) error {
 	u.calls["retire"]++
+	if hook := u.beforeRetire; hook != nil {
+		u.beforeRetire = nil
+		hook()
+	}
 	if err := u.retireErr; err != nil {
 		u.retireErr = nil
 		return err
@@ -167,6 +186,7 @@ type rig struct {
 	chat    *fakeChat
 	uploads *countingUploads
 	files   *countingFiles
+	avatars *countingAvatars
 	objects *fakeObjects
 	clock   time.Time
 	svc     *attach.Service
@@ -175,14 +195,15 @@ type rig struct {
 func newRig(t *testing.T, thumbnails bool) *rig {
 	t.Helper()
 	r := &rig{
-		chat:    &fakeChat{states: map[domain.MessageRef]domain.MessageState{}},
+		chat:    &fakeChat{states: map[domain.MessageRef]domain.MessageState{}, rooms: map[string]domain.RoomAvatarState{}},
 		uploads: &countingUploads{Uploads: memstore.NewUploads(), calls: map[string]int{}},
 		files:   &countingFiles{MessageFiles: memstore.NewMessageFiles(), calls: map[string]int{}},
+		avatars: &countingAvatars{RoomAvatars: memstore.NewRoomAvatars(), calls: map[string]int{}},
 		objects: newObjects(),
 		clock:   now,
 	}
 	svc, err := attach.New(attach.Config{Thumbnails: domain.Thumbnails{Enabled: thumbnails, Suffix: ".thumb"}}, attach.Deps{
-		Chat: r.chat, Uploads: r.uploads, Files: r.files, Objects: r.objects, Log: slog.New(slog.DiscardHandler), Now: func() time.Time { return r.clock },
+		Chat: r.chat, Uploads: r.uploads, Files: r.files, Avatars: r.avatars, Objects: r.objects, Log: slog.New(slog.DiscardHandler), Now: func() time.Time { return r.clock },
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -249,6 +270,7 @@ func (r *rig) live(t *testing.T, ref domain.MessageRef) []string {
 func (r *rig) storeCalls() map[string]int {
 	out := maps.Clone(r.uploads.calls)
 	maps.Copy(out, r.files.calls)
+	maps.Copy(out, r.avatars.calls)
 	return out
 }
 

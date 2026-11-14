@@ -20,7 +20,7 @@ const trustNameMaxBytes = 255
 
 var (
 	trustedAlgorithms = []string{trust.AlgorithmEdDSA, trust.AlgorithmES256, trust.AlgorithmRS256}
-	errOwnIssuer      = errors.New("issuer is this node's own IDENTITY_ISSUER")
+	errOwnIssuer      = errors.New("issuer is this node's own JWT_ISSUER")
 	errKeyIDMismatch  = errors.New("jwk kid differs from -kid")
 )
 

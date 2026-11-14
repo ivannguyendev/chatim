@@ -11,7 +11,7 @@ import (
 )
 
 func TestFromEnvDefaultsNeedTheIdentityURLs(t *testing.T) {
-	c, err := auth.SyncConfigFromEnv("WS")
+	c, err := auth.SyncConfigFromEnv()
 	if err != nil {
 		t.Fatalf("FromEnv: %v", err)
 	}
@@ -32,14 +32,14 @@ func TestFromEnvReadsEveryVariableAndHidesTheSecret(t *testing.T) {
 	if err := os.WriteFile(path, []byte(secret+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("GW_IDENTITY_INTERNAL_URL", internalURL)
-	t.Setenv("GW_IDENTITY_JWKS_URL", "http://identity:8080/.well-known/jwks.json")
-	t.Setenv("GW_IDENTITY_SECRET_FILE", path)
-	t.Setenv("GW_IDENTITY_REVOCATIONS_INTERVAL", "3s")
-	t.Setenv("GW_IDENTITY_KEYS_INTERVAL", "10s")
-	t.Setenv("GW_IDENTITY_READY_TIMEOUT", "4s")
-	t.Setenv("GW_IDENTITY_ALLOW_HTTP", "true")
-	c, err := auth.SyncConfigFromEnv("GW")
+	t.Setenv("IDENTITY_INTERNAL_URL", internalURL)
+	t.Setenv("IDENTITY_JWKS_URL", "http://identity:8080/.well-known/jwks.json")
+	t.Setenv("IDENTITY_NODE_SECRET_FILE", path)
+	t.Setenv("IDENTITY_REVOCATIONS_INTERVAL", "3s")
+	t.Setenv("IDENTITY_KEYS_INTERVAL", "10s")
+	t.Setenv("IDENTITY_READY_TIMEOUT", "4s")
+	t.Setenv("IDENTITY_ALLOW_HTTP", "true")
+	c, err := auth.SyncConfigFromEnv()
 	if err != nil {
 		t.Fatalf("FromEnv: %v", err)
 	}
@@ -55,9 +55,19 @@ func TestFromEnvReadsEveryVariableAndHidesTheSecret(t *testing.T) {
 }
 
 func TestFromEnvReportsBadValues(t *testing.T) {
-	t.Setenv("WS_IDENTITY_REVOCATIONS_INTERVAL", "soon")
-	t.Setenv("WS_IDENTITY_ALLOW_HTTP", "maybe")
-	if _, err := auth.SyncConfigFromEnv("WS"); err == nil || !strings.Contains(err.Error(), "WS_IDENTITY_REVOCATIONS_INTERVAL") || !strings.Contains(err.Error(), "WS_IDENTITY_ALLOW_HTTP") {
+	t.Setenv("IDENTITY_REVOCATIONS_INTERVAL", "soon")
+	t.Setenv("IDENTITY_ALLOW_HTTP", "maybe")
+	if _, err := auth.SyncConfigFromEnv(); err == nil || !strings.Contains(err.Error(), "IDENTITY_REVOCATIONS_INTERVAL") || !strings.Contains(err.Error(), "IDENTITY_ALLOW_HTTP") {
 		t.Fatalf("FromEnv err = %v", err)
+	}
+}
+
+func TestFromEnvIgnoresAppPrefixedNames(t *testing.T) {
+	t.Setenv("GW_IDENTITY_INTERNAL_URL", internalURL)
+	t.Setenv("WS_IDENTITY_SECRET", secret)
+	t.Setenv("GW_IDENTITY_REVOCATIONS_INTERVAL", "soon")
+	c, err := auth.SyncConfigFromEnv()
+	if err != nil || c.InternalURL != "" || c.Secret != "" || c.RevocationsEvery != auth.DefaultRevocationsEvery {
+		t.Fatalf("FromEnv with old names = %+v, %v", c, err)
 	}
 }

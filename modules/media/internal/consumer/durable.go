@@ -75,5 +75,6 @@ func Subjects(root string) []string {
 		root + ".*.media.*.msg_created",
 		root + ".*.mention.*.msg_created",
 		root + ".*.message.*.msg_deleted",
+		root + ".*.room.*.room_updated",
 	}
 }

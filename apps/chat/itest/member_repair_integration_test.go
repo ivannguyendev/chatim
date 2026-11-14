@@ -59,7 +59,7 @@ func membersWithoutEvents(t *testing.T, it *itInfra, chat itChatNode, members me
 func TestRealInfraACountMissedByACrashIsRepairedByItsTimer(t *testing.T) {
 	it := realInfra(t)
 	env := maps.Clone(itFastSweep)
-	env["CHAT_REQUEST_DEADLINE"], env["MEMBER_COUNT_CHECK_DELAY"] = "2s", "2500ms"
+	env["APP_REQUEST_DEADLINE"], env["MEMBER_COUNT_CHECK_DELAY"] = "2s", "2500ms"
 	chat := startChatNode(t, it, env)
 	client := dialChat(t, chat.cfg)
 	st := itStore(it, chat)

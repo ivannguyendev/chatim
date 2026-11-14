@@ -20,7 +20,11 @@ var (
 	}
 	membersUserKeysBeforeVer = append(slices.Clone(membersUserKeysBeforePins), bson.E{Key: "pinned_at", Value: 1}, bson.E{Key: "archived_at", Value: 1})
 	membersUserKeys          = append(slices.Clone(membersUserKeysBeforeVer), bson.E{Key: "ver", Value: 1})
-	interactionCountKeysOld  = bson.D{{Key: "message_key", Value: 1}, {Key: "kind", Value: 1}, {Key: "state", Value: 1}, {Key: "value", Value: 1}}
+	membersRoomKeys          = bson.D{
+		{Key: "room_id", Value: 1}, {Key: "state", Value: 1}, {Key: "role", Value: 1},
+		{Key: "priority", Value: -1}, {Key: "joined_at", Value: 1}, {Key: "user_id", Value: 1},
+	}
+	interactionCountKeysOld = bson.D{{Key: "message_key", Value: 1}, {Key: "kind", Value: 1}, {Key: "state", Value: 1}, {Key: "value", Value: 1}}
 )
 
 var replacedIndexes = []mongoindex.Replacement{
@@ -68,10 +72,7 @@ func statePendingModel() mongo.IndexModel {
 
 func memberIndexes() []mongo.IndexModel {
 	return []mongo.IndexModel{
-		{Keys: bson.D{
-			{Key: "room_id", Value: 1}, {Key: "state", Value: 1}, {Key: "role", Value: 1},
-			{Key: "priority", Value: -1}, {Key: "joined_at", Value: 1}, {Key: "user_id", Value: 1},
-		}},
+		{Keys: membersRoomKeys},
 		{Keys: membersUserKeys},
 	}
 }

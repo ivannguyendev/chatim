@@ -11,7 +11,7 @@
 | **UC-ROOM-01** | **Mở trò chuyện 1-1 (Direct Message)** | Người dùng A | Mở cuộc trò chuyện với Người dùng B. Nếu phòng DM giữa hai người đã tồn tại từ trước, trả về phòng cũ; nếu chưa có, tạo phòng mới. Không bao giờ tạo thành 2 phòng riêng biệt cho cùng một cặp người dùng. |
 | **UC-ROOM-02** | **Tạo nhóm chat (Group Chat)** | Người dùng A | Khởi tạo một nhóm làm việc mới với danh sách thành viên ban đầu, tên nhóm, ảnh đại diện và quyền hạn mặc định (Người tạo là Owner). Hỗ trợ quy mô nhóm lên tới 5,000 thành viên. |
 | **UC-ROOM-03** | **Tạo kênh phát sóng (Channel)** | Quản trị viên | *(Yêu cầu Phase 1, chưa xây: proto `RoomType` hiện chỉ có `ROOM_TYPE_DM` và `ROOM_TYPE_GROUP`.)* Tạo kênh tin tức/thông báo tập trung cho tổ chức. Hỗ trợ tới ~200,000 người theo dõi. Chỉ quản trị viên (Admin/Owner) được phép gửi tin; người theo dõi chỉ có quyền đọc. |
-| **UC-ROOM-04** | **Cập nhật thông tin phòng** | Owner / Admin | `UpdateRoom` đổi tên phòng và ảnh đại diện (`avatar`) của nhóm; phòng DM không đổi được (`FailedPrecondition`). |
+| **UC-ROOM-04** | **Cập nhật thông tin phòng** | Owner / Admin | `UpdateRoom` đổi tên phòng và ảnh nhóm (`avatars`: khoá một file ảnh public, Module 12 §13); phòng DM không đổi được (`FailedPrecondition`). |
 
 ---
 
@@ -126,8 +126,10 @@ sequenceDiagram
   "tenant": "t1",
   "type": "group",                      // "dm" | "group"
   "name": "Đội ngũ Kỹ thuật",           // Đối với Group
-  "avatar": "https://cdn.example.com/a.png",
-  "info_ver": NumberLong(2),            // CAS của UpdateRoom (tên, avatar)
+  "avatars": ["t1/usr_1001/pub/20261113/0cr1bk3c00a1b2c3d4e5f6g7h8"], // 0–1 khoá file public (M7.1 P4); không có field = chưa có ảnh
+  "info_ver": NumberLong(2),            // CAS của UpdateRoom (tên, avatars)
+  "avatar_users": ["usr_1002", "usr_1007", "usr_1009", "usr_1011"], // tối đa 4 thành viên bất kỳ còn trong nhóm (projection avatar_users, M7.1 P3)
+  "avatar_ver": NumberLong(3),          // Bộ đếm nội bộ, tăng mỗi lần ghi avatar_users
   "created_by": "usr_1001",
   "created_at": ISODate("2026-10-10T10:00:00Z"),
   "updated_at": ISODate("2026-10-10T10:00:00Z"),
@@ -146,7 +148,9 @@ sequenceDiagram
 - `OpenDirectRoom(other_user)`: Mở hoặc lấy phòng 1-1, trả `{room, created}`.
 - `CreateRoom(type, name, members, request_id)`: Tạo phòng nhóm (`type = DM` → `INVALID_ARGUMENT`) kèm `request_id` bắt buộc để chống gửi lại (idempotent request).
 - `GetRooms(room_ids)` / `ListMyRooms`: Lấy thông tin phòng kèm trạng thái của người gọi (Module 07, 08).
-- `UpdateRoom(room_id, name?, avatar?)`: Cập nhật thông tin phòng; client không gửi version, chat CAS trên `info_ver` đọc được, trượt → `UNAVAILABLE` (D133).
+- `Room.avatar_users` (M7.1 P3): id tối đa 4 thành viên bất kỳ còn trong nhóm, không thứ tự, có trong `GetRooms`, `ListMyRooms` và `Room` của event; DM luôn rỗng (dùng `direct_users`). Consumer `projections` ghi khi thêm người lúc danh sách chưa đủ 4 và khi có người bị xoá hoặc rời; đổi role/priority không đổi. Không realtime: client thấy ở lần tải room kế tiếp, trễ vài giây cộng cache room tới 60s; nhóm có trước P3 trống tới lần thêm/xoá kế tiếp hoặc `/app resync`.
+- `Room.avatars` (M7.1 P4): 0–1 khoá file public làm ảnh nhóm, có trong `GetRooms`, `ListMyRooms`, `UpdateRoom` và event `room_updated`. Client lấy URL bằng `MediaService.GetPublicURLs` (Module 12 §13); nhóm không có ảnh thì ghép ảnh từ `avatar_users`.
+- `UpdateRoom(room_id, name?, avatars?)`: Cập nhật thông tin phòng; client không gửi version, chat CAS trên `info_ver` đọc được, trượt → `UNAVAILABLE` (D133). `avatars` là `RoomAvatars{keys}`: không gửi = giữ ảnh, `keys: []` = xoá ảnh, 1 khoá = đặt ảnh. Khoá mới phải là khoá public, cùng tenant, do chính người gọi upload trong 24 giờ (luật thời gian của đính kèm) → sai thì `INVALID_ARGUMENT`; gửi lại đúng khoá đang dùng thì không kiểm (admin khác đổi tên vẫn được). Chat kiểm trong RAM, không gọi media.
 
 ### 4.3. Hợp đồng Mã lỗi gRPC (Error Matrix)
 

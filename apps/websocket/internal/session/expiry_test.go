@@ -34,6 +34,7 @@ func TestExpiryStopsDeliveryUntilANewTokenGivesReady(t *testing.T) {
 		if f := tc.nextFrame(); f.GetReady() == nil {
 			t.Fatalf("frame after a new token = %v, want ready", f)
 		}
+		synctest.Wait()
 		h.rooms.Route(roomEvent("msg_created", "message", 7, "7-0-2"))
 		if f := tc.nextFrame(); f.GetEvent().GetId() != "7-0-2" {
 			t.Fatalf("frame = %v, want event 7-0-2", f)
@@ -135,6 +136,7 @@ func TestStaleTimersDoNothingAfterANewLogin(t *testing.T) {
 		waitingGen := c.generation()
 		tc.auth(h.token("u1", time.Hour))
 		tc.nextFrame()
+		synctest.Wait()
 		c.tokenExpired(runningGen)
 		c.graceExpired(waitingGen)
 		c.graceExpired(0)

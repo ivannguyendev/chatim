@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"sync/atomic"
 
 	"connectrpc.com/connect"
@@ -15,14 +14,9 @@ import (
 	"github.com/ivannguyendev/chatim/pkg/core/userlimit"
 	"github.com/ivannguyendev/chatim/pkg/ids"
 	identityv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/identity/v1"
-	"github.com/ivannguyendev/chatim/pkg/pb/chatim/identity/v1/identityv1connect"
 )
 
-const (
-	directoryBodyMax = 64 << 10
-	maxDirectoryIDs  = 500
-	directoryPrefix  = "/" + identityv1connect.DirectoryServiceName + "/"
-)
+const maxDirectoryIDs = 100
 
 type Directory interface {
 	Lookup(tenant string, ids []string) []directory.User
@@ -39,13 +33,6 @@ type Claims interface {
 
 type directoryService struct {
 	s *server
-}
-
-func (s *server) bodyLimit(path string) int64 {
-	if s.opts.Directory != nil && strings.HasPrefix(path, directoryPrefix) {
-		return directoryBodyMax
-	}
-	return s.opts.BodyMax
 }
 
 func (d directoryService) GetUsers(_ context.Context, req *connect.Request[identityv1.GetUsersRequest]) (resp *connect.Response[identityv1.GetUsersResponse], err error) {

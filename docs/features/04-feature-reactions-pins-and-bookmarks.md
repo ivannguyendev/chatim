@@ -220,6 +220,7 @@ sequenceDiagram
 2. **Hạn mức Ghim tối đa 50 tin (`PIN_LIMIT = 50`):**
    - *Hạn chế:* Khi danh sách ghim đã đủ 50 tin, yêu cầu ghim tin thứ 51 sẽ bị từ chối trừ khi quản trị viên gỡ bớt tin cũ.
    - *Lý do đánh đổi:* Giữ kích thước document `rooms` nhỏ gọn (<4KB), không làm suy giảm hiệu năng khi tải thông tin phòng.
+   - Client đọc hạn mức đang áp qua `GetClientConfig.room.max_pins` để ẩn hoặc khoá nút ghim khi đủ, không viết cứng 50.
 3. **Không hỗ trợ Reaction ẩn danh:**
    - Mọi lượt reaction đều gắn kèm `user_id` để đảm bảo tính minh bạch và phục vụ việc truy vấn danh sách người thả cảm xúc.
 

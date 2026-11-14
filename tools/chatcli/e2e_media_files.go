@@ -21,13 +21,14 @@ const (
 )
 
 type mediaFile struct {
-	owner string
-	name  string
-	mime  string
-	body  []byte
-	dim   []int32
-	hash  string
-	key   string
+	owner  string
+	name   string
+	mime   string
+	body   []byte
+	dim    []int32
+	hash   string
+	key    string
+	public bool
 }
 
 func newMediaFile(owner, name, mime string, body []byte, dim []int32) *mediaFile {
@@ -78,7 +79,7 @@ func (r *mediaRun) uploadSmall(f *mediaFile) error {
 	if err != nil {
 		return err
 	}
-	up, err := viaGateway(g, g.media.StartUpload, &chatimv1.StartUploadRequest{FileName: f.name, ContentType: f.mime, Size: int64(len(f.body)), Dim: f.dim})
+	up, err := viaGateway(g, g.media.StartUpload, &chatimv1.StartUploadRequest{FileName: f.name, ContentType: f.mime, Size: int64(len(f.body)), Dim: f.dim, Public: f.public})
 	if err != nil {
 		return err
 	}

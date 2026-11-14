@@ -47,6 +47,7 @@ type mediaRun struct {
 	image       *mediaFile
 	page        *mediaFile
 	notes       *mediaFile
+	avatar      *mediaFile
 	room        string
 	seq         uint64
 	forwardRoom string
@@ -112,10 +113,20 @@ func (r *mediaRun) steps() []wsEventsStep {
 		{"B's room list preview names both file mimes", r.previewMimes},
 		{"B's plain URLs give the PNG and the HTML with their exact bytes and hashes and no thumbnail", r.downloads},
 		{"within 30s B's URLs of the PNG and the HTML point at the completed bucket and still give the exact bytes and hashes", r.movedToCompleted},
+		{"ListRoomFiles gives B the PNG on the media tab and the HTML on the file tab from the completed bucket, and C outside the room permission_denied", r.roomFiles},
 		{"ListUploads gives A the PNG first then the HTML and the 40 MiB file, kind image only the PNG, and B only its own file", r.gallery},
 		{"A's ListUploads signs the sent PNG and HTML in the completed bucket and the 40 MiB file never sent in the processing bucket, none expired", r.unsentStaysProcessing},
 		{"after B hides the message B gets no URL for it while A still does", r.hidden},
 		{"A forwards the message to a group with C and deletes the original; the original has no URL and C downloads from the completed bucket through the forward", r.forwarded},
+		{"after the delete the original room lists no files and within 30s C's forward room lists the PNG at the forward", r.roomFilesAfterDelete},
+		{"a public upload of an HTML page is invalid_argument", r.publicPageRefused},
+		{"A uploads a public PNG and its key carries pub", r.uploadAvatar},
+		{"A sending the public key in a message over the websocket is invalid_argument", r.publicInMessageRefused},
+		{"UpdateRoom with A's private PNG as the group avatar is invalid_argument", r.privateAvatarRefused},
+		{"A sets the public PNG as the group avatar and B's GetRooms shows it", r.setAvatar},
+		{"B's GetPublicURLs signs only the public key with the exact bytes, and A's ListUploads still lists only private files", r.publicURLs},
+		{"within 30s B's public URL points at the completed bucket and still gives the exact bytes", r.avatarMoved},
+		{"A clears the group avatar and B's GetRooms shows none", r.clearAvatar},
 	}
 }
 
@@ -141,7 +152,8 @@ func (r *mediaRun) config() error {
 		}
 		m := c.GetMedia()
 		if m.GetEnabled() {
-			if m.GetMaxParallelUploads() != 4 || m.GetMaxFileBytes() != 4<<30 || c.GetMessage().GetMaxAttachments() != 10 || m.GetThumbnails() {
+			if m.GetMaxParallelUploads() != 4 || m.GetMaxFileBytes() != 4<<30 || c.GetMessage().GetMaxAttachments() != 10 || m.GetThumbnails() ||
+				c.GetRoom().GetMaxPins() != 50 || c.GetRoom().GetMaxMembersPerCall() != 500 {
 				return fmt.Errorf("client config %v", c)
 			}
 			return nil

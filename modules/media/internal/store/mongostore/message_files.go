@@ -38,9 +38,13 @@ func (s *MessageFiles) Attach(ctx context.Context, pairs []domain.MessageFile) e
 			{Key: "message_key", Value: p.MessageKey}, {Key: "file_key", Value: p.FileKey}, {Key: "tenant_id", Value: p.Tenant},
 			{Key: "state", Value: int32(domain.PairLive)}, {Key: "created_at", Value: p.CreatedAt},
 		}
+		room := bson.D{
+			{Key: "room_id", Value: p.Room}, {Key: "kind", Value: string(p.Kind)},
+			{Key: "sent_at", Value: p.SentAt.Truncate(time.Millisecond).UTC()},
+		}
 		models[i] = mongo.NewUpdateOneModel().
 			SetFilter(bson.D{{Key: "_id", Value: pairID(p.MessageKey, p.FileKey)}}).
-			SetUpdate(bson.D{{Key: "$setOnInsert", Value: insert}}).
+			SetUpdate(bson.D{{Key: "$setOnInsert", Value: insert}, {Key: "$set", Value: room}}).
 			SetUpsert(true)
 	}
 	_, err := s.coll.BulkWrite(ctx, models, options.BulkWrite().SetOrdered(false))

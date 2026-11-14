@@ -3,6 +3,7 @@ package domain
 import (
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -22,11 +23,21 @@ func (r MessageRef) Key() string {
 	return r.Room + "-" + strconv.FormatUint(r.Thread, 10) + "-" + strconv.FormatUint(r.Seq, 10)
 }
 
-type File struct{ Key, Name, Mime string }
+type File struct {
+	Key  string
+	Name string
+	Mime string
+	Size int64
+	Dim  []int32
+	Dur  int64
+	Hash string
+}
 
 type MessageFiles struct {
-	Ref   MessageRef
-	Files []File
+	Ref    MessageRef
+	Sender string
+	SentAt time.Time
+	Files  []File
 }
 
 type Thumbnails struct {

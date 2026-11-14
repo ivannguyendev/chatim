@@ -50,8 +50,13 @@ func TestDomainRoomUpdateKeepsPresence(t *testing.T) {
 	if got := pbconv.DomainRoomUpdate(&chatimv1.UpdateRoomRequest{RoomId: "777"}); got != (domain.RoomUpdate{}) {
 		t.Fatalf("no fields = %+v, want an empty update", got)
 	}
-	got := pbconv.DomainRoomUpdate(&chatimv1.UpdateRoomRequest{RoomId: "777", Name: new("Kho"), Avatar: new("")})
-	if got.Name == nil || *got.Name != "Kho" || got.Avatar == nil || *got.Avatar != "" {
-		t.Fatalf("both fields = %+v, want name Kho and an empty avatar", got)
+	got := pbconv.DomainRoomUpdate(&chatimv1.UpdateRoomRequest{RoomId: "777", Name: new("Kho"), Avatars: &chatimv1.RoomAvatars{}})
+	if got.Name == nil || *got.Name != "Kho" || got.Avatars == nil || len(*got.Avatars) != 0 {
+		t.Fatalf("both fields = %+v, want name Kho and no avatars", got)
+	}
+	keys := []string{"acme/minh/pub/20261113/0cr1"}
+	got = pbconv.DomainRoomUpdate(&chatimv1.UpdateRoomRequest{RoomId: "777", Avatars: &chatimv1.RoomAvatars{Keys: keys}})
+	if got.Name != nil || got.Avatars == nil || len(*got.Avatars) != 1 || (*got.Avatars)[0] != keys[0] {
+		t.Fatalf("avatars = %+v, want the one key", got)
 	}
 }

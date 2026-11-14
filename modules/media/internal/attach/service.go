@@ -19,6 +19,7 @@ type Deps struct {
 	Chat    Chat
 	Uploads Uploads
 	Files   store.MessageFiles
+	Avatars store.RoomAvatars
 	Objects Objects
 	Log     *slog.Logger
 	Now     func() time.Time
@@ -31,8 +32,8 @@ type Service struct {
 }
 
 func New(cfg Config, deps Deps) (*Service, error) {
-	if deps.Chat == nil || deps.Uploads == nil || deps.Files == nil || deps.Objects == nil {
-		return nil, fmt.Errorf("%w: attach needs chat, uploads, message files and objects", apperr.ErrInvalidArgument)
+	if deps.Chat == nil || deps.Uploads == nil || deps.Files == nil || deps.Avatars == nil || deps.Objects == nil {
+		return nil, fmt.Errorf("%w: attach needs chat, uploads, message files, room avatars and objects", apperr.ErrInvalidArgument)
 	}
 	if deps.Log == nil {
 		deps.Log = slog.Default()
@@ -54,6 +55,8 @@ func (s *Service) Sync(ctx context.Context, kind Kind, ev Event) error {
 			return nil
 		}
 		return s.created(ctx, ev)
+	case RoomUpdated:
+		return s.roomUpdated(ctx, ev)
 	}
 	return fmt.Errorf("%w: unknown message event kind %d", apperr.ErrInvalidArgument, kind)
 }
@@ -75,7 +78,7 @@ func (s *Service) created(ctx context.Context, ev Event) error {
 	case len(state.Keys) == 0:
 		return nil
 	}
-	return s.attach(ctx, ev.Tenant, ev.Ref.Key(), state.Keys)
+	return s.attach(ctx, ev, state)
 }
 
 func (s *Service) release(ctx context.Context, tenant, messageKey string) error {

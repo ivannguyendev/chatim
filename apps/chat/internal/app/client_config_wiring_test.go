@@ -15,7 +15,12 @@ func TestClientConfigFollowsSettingsAndMediaReadiness(t *testing.T) {
 	var cfg config.Config
 	cfg.Messages.MentionTargets = 20
 	cfg.Mention.Enabled = true
+	cfg.Interactions.PinLimit = 7
+	cfg.Members.MemberBatch = 9
 	off := clientConfig(cfg, nil)()
+	if off.GetRoom().GetMaxPins() != 7 || off.GetRoom().GetMaxMembersPerCall() != 9 {
+		t.Fatalf("room limits %v", off.GetRoom())
+	}
 	if off.GetMessage().GetMaxTextBytes() != 16384 || off.GetMessage().GetMaxMetaBytes() != 8192 || off.GetMessage().GetMaxMentions() != 20 || off.GetMessage().GetMaxAttachments() != 10 {
 		t.Fatalf("message limits %v", off.GetMessage())
 	}
@@ -44,7 +49,11 @@ func TestClientConfigFollowsSettingsAndMediaReadiness(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := clientConfig(cfg, thumbs)().GetMedia(); !got.GetThumbnails() {
+	withMedia := clientConfig(cfg, thumbs)()
+	if got := withMedia.GetMedia(); !got.GetThumbnails() {
 		t.Fatalf("media with thumbnails on %v", got)
+	}
+	if withMedia.GetRoom().GetMaxPins() != 7 || withMedia.GetRoom().GetMaxMembersPerCall() != 9 {
+		t.Fatalf("room limits with media %v", withMedia.GetRoom())
 	}
 }

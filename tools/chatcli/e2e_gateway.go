@@ -48,7 +48,7 @@ func e2eGateway(ctx context.Context, args []string) error {
 	dir := fs.String("state", "/state", "directory holding the scenario state")
 	wsURL := fs.String("url", "ws://chatim-websocket-1:8080/ws", "websocket endpoint")
 	gatewayURL := fs.String("gateway", defaultGatewayURL, "HTTPS gateway endpoint")
-	origin := fs.String("origin", "http://localhost:3000", "a browser origin listed in GW_CORS_ORIGINS")
+	origin := fs.String("origin", "http://localhost:3000", "a browser origin listed in the gateway APP_CORS_ORIGINS")
 	keyFile := fs.String("key", "/keys/"+devtoken.PrivateFile, "private JWK written by dev-keys")
 	callTimeout := fs.Duration("call-timeout", 30*time.Second, "timeout of one request")
 	wait := fs.Duration("wait", 30*time.Second, "how long to wait for one expected websocket frame")
@@ -85,8 +85,10 @@ func (r *gatewayRun) run() error {
 		{"A gets a gateway token and B connects to the websocket", r.connect},
 		{"A creates a group with B through the gateway and B hears member_added", r.createGroup},
 		{"A adds C through the gateway and B, with the group open, hears member_added", r.addC},
+		{"GetRooms through the gateway lists A, B and C as the avatar users", r.avatarsOfThree},
 		{"A renames the group through the gateway and B hears room_updated", r.rename},
 		{"ListMyRooms, GetHistory, ListMembers and ListBookmarks through the gateway equal gRPC", r.readsMatch},
+		{"A adds D and E, the avatar users become four of them, and after A removes one of C, D and E it is the other four", r.avatarsFollowRemoval},
 		{"B marks read on the websocket, flushes and lists its rooms through the gateway with that read_seq", r.flushedRead},
 		{"an expired token gets 401", r.expiredRefused},
 		{"SendMessage through the gateway is unimplemented", r.sendRefused},

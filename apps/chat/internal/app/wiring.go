@@ -149,7 +149,7 @@ func wire(cfg config.Config, cl *clients, log *slog.Logger) (*node, error) {
 	a.readBatch = reads
 	a.publisher, a.stateClears, a.flusher, a.cidBatch, a.router, a.slots = pub, clears, fl, batch, router, slots
 	a.projections, a.sweeper = projections, sweeper
-	mediaChat := &mediaChatNode{mediaMessageFiles: mediaMessageFiles{messages: st}}
+	mediaChat := &mediaChatNode{mediaMessageFiles: mediaMessageFiles{messages: st}, mediaRoomAvatars: mediaRoomAvatars{rooms: st}}
 	media, err := wireMedia(cfg, cl, a.indexes, mediaChat, log)
 	if err != nil {
 		return nil, err

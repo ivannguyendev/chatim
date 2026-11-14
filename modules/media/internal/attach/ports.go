@@ -13,6 +13,7 @@ type Kind uint8
 const (
 	Created Kind = iota + 1
 	Deleted
+	RoomUpdated
 )
 
 const UploadExpiry = 24 * time.Hour
@@ -30,6 +31,7 @@ type Event struct {
 
 type Chat interface {
 	MessageFiles(ctx context.Context, ref domain.MessageRef) (domain.MessageState, error)
+	RoomAvatars(ctx context.Context, room string) (domain.RoomAvatarState, error)
 }
 
 type Uploads interface {

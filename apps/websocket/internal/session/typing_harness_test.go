@@ -2,6 +2,7 @@ package session
 
 import (
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/ivannguyendev/chatim/apps/websocket/internal/typing"
@@ -39,6 +40,7 @@ func (h *harness) readyClient(user string, open ...string) *testClient {
 	if f := tc.nextFrame(); f.GetReady() == nil {
 		h.t.Fatalf("first frame of %s = %v, want ready", user, f)
 	}
+	synctest.Wait()
 	for _, room := range open {
 		tc.openRoom(room)
 	}

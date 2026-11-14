@@ -17,8 +17,8 @@ func (p *parser) mentionConfig(c *Config) {
 	m.Workers = p.count("MENTION_WORKERS", m.Workers)
 	m.MaxAckPending = p.count("MENTION_MAX_ACK_PENDING", m.MaxAckPending)
 	m.NotifyMaxAge = p.span("MENTION_NOTIFY_MAX_AGE", m.NotifyMaxAge)
-	m.WsPublishStream = envconfig.String("MENTION_WS_PUBLISH_STREAM", m.WsPublishStream)
-	m.WsPublishRoot = envconfig.String("MENTION_WS_PUBLISH_ROOT", m.WsPublishRoot)
+	m.WsPublishStream = envconfig.String("WS_PUBLISH_STREAM", m.WsPublishStream)
+	m.WsPublishRoot = envconfig.String("WS_PUBLISH_ROOT", m.WsPublishRoot)
 	m.TargetsPage = p.count("MENTION_NOTIFY_TARGETS_PAGE", m.TargetsPage)
 	m.HideReadTenants = p.tenants("MENTION_HIDE_READ_TENANTS")
 	m.RoomGroupsSyncMax = p.count("MENTION_ROOM_GROUPS_SYNC_MAX", m.RoomGroupsSyncMax)
@@ -35,8 +35,8 @@ func (c Config) mentionRules() []rule {
 	first, _, _ := strings.Cut(m.WsPublishRoot, ".")
 	distinctRoot := !slices.Contains([]string{c.Stream.SubjectRoot, c.Stream.LiveRoot, c.Timer.SubjectRoot}, first)
 	return []rule{
-		{m.WsPublishStream != c.Stream.Name && m.WsPublishStream != c.Timer.Name, "MENTION_WS_PUBLISH_STREAM must differ from EVT_STREAM and TIMER_STREAM"},
-		{distinctRoot, "MENTION_WS_PUBLISH_ROOT must not start with EVT_SUBJECT_ROOT, EVT_LIVE_ROOT or TIMER_SUBJECT_ROOT"},
+		{m.WsPublishStream != c.Stream.Name && m.WsPublishStream != c.Timer.Name, "WS_PUBLISH_STREAM must differ from EVT_STREAM and TIMER_STREAM"},
+		{distinctRoot, "WS_PUBLISH_ROOT must not start with EVT_SUBJECT_ROOT, EVT_LIVE_ROOT or TIMER_SUBJECT_ROOT"},
 		{m.FetchWait <= c.Projection.FetchWait, "MENTION_FETCH_WAIT must not exceed PROJECTION_FETCH_WAIT"},
 	}
 }

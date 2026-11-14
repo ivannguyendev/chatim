@@ -39,13 +39,15 @@ func httpsOnlyMethods() []string {
 		chatimv1.MediaService_AbortUpload_FullMethodName,
 		chatimv1.MediaService_GetAttachmentURLs_FullMethodName,
 		chatimv1.MediaService_ListUploads_FullMethodName,
+		chatimv1.MediaService_ListRoomFiles_FullMethodName,
+		chatimv1.MediaService_GetPublicURLs_FullMethodName,
 	}
 }
 
 func TestRealtimeAndRequestSplitEveryClientCall(t *testing.T) {
 	realtime, request := chatrpc.Realtime(), chatrpc.Request()
-	if len(realtime) != 12 || len(request) != 29 {
-		t.Fatalf("realtime = %d, request = %d, want 12 and 29", len(realtime), len(request))
+	if len(realtime) != 12 || len(request) != 31 {
+		t.Fatalf("realtime = %d, request = %d, want 12 and 31", len(realtime), len(request))
 	}
 	for _, m := range realtime {
 		if slices.Contains(request, m) {
@@ -54,7 +56,7 @@ func TestRealtimeAndRequestSplitEveryClientCall(t *testing.T) {
 	}
 	union := slices.Sorted(slices.Values(append(slices.Clone(realtime), request...)))
 	client := slices.Sorted(slices.Values(append(clientRequestMethods(t), httpsOnlyMethods()...)))
-	if !slices.Equal(union, client) || len(client) != 41 {
+	if !slices.Equal(union, client) || len(client) != 43 {
 		t.Fatalf("realtime + request = %v\nclient calls = %v", union, client)
 	}
 	if all := slices.Sorted(slices.Values(chatrpc.All())); !slices.Equal(all, union) {
@@ -68,8 +70,8 @@ func TestHTTPSOnlyCallsAreRequestCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, c := range cmds {
-		if !slices.Contains(chatrpc.Request(), c.Method) || c.Room != nil {
-			t.Fatalf("%s: in request = %v, room field = %v", c.Method, slices.Contains(chatrpc.Request(), c.Method), c.Room)
+		if !slices.Contains(chatrpc.Request(), c.Method) || slices.Contains(chatrpc.Realtime(), c.Method) {
+			t.Fatalf("%s: in request = %v, in realtime = %v", c.Method, slices.Contains(chatrpc.Request(), c.Method), slices.Contains(chatrpc.Realtime(), c.Method))
 		}
 	}
 }

@@ -17,3 +17,7 @@ func TestMessageFilesContract(t *testing.T) {
 		return storetest.Stores{Files: memstore.NewMessageFiles(), Uploads: memstore.NewUploads()}
 	})
 }
+
+func TestRoomAvatarsContract(t *testing.T) {
+	storetest.RunRoomAvatars(t, func(*testing.T) store.RoomAvatars { return memstore.NewRoomAvatars() })
+}

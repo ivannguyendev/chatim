@@ -166,7 +166,7 @@ Token sai hay hết hạn, frame sai, máy nhận chậm và hết suất đăng
 | Thành phần phụ thuộc | Mục đích phụ thuộc | Ứng xử khi thành phần gặp sự cố (Failure Behavior) |
 |---|---|---|
 | **NATS JetStream (`CHATIM_EVT`, `CHATIM_WS`)** | Nhận event và gói thông báo (hai ordered consumer mỗi node) | Lần khởi động đầu cần NATS (không có thì node không sẵn sàng và thoát). Mất NATS sau đó: lệnh vẫn chạy, `/readyz` vẫn true, gauge `nats_connected` = 0; nối lại thì thư viện đọc tiếp từ số cuối, không mất tin; trễ quá 2 phút thì nhảy tới hiện tại + nạp lại + `resync` rải 60s (D190). Event chưa vào JetStream được sweeper slot 0 phát bù (Module 10). |
-| **File JWKS (khoá công khai)** | Xác thực JWT khi mở kết nối và khi gia hạn | Phần 1: file JWKS nạp một lần lúc khởi động (`WS_JWT_KEYS_FILE`), không gọi dịch vụ nào lúc kiểm token; file sai thì node không khởi động. Xoay khoá bằng rolling restart (D183). Từ M6 phần 2 node lấy thêm JWKS của `identity` qua HTTPS (`WS_IDENTITY_JWKS_URL`), xoay khoá không cần restart. |
+| **File JWKS (khoá công khai)** | Xác thực JWT khi mở kết nối và khi gia hạn | Phần 1: file JWKS nạp một lần lúc khởi động (`JWT_KEYS_FILE`), không gọi dịch vụ nào lúc kiểm token; file sai thì node không khởi động. Xoay khoá bằng rolling restart (D183). Từ M6 phần 2 node lấy thêm JWKS của `identity` qua HTTPS (`IDENTITY_JWKS_URL`), xoay khoá không cần restart. |
 | **Redis state** | Đọc bảng slot để chọn chat (chỉ đọc) | Redis chết: node giữ bảng slot đang có và mọi kết nối gRPC tới chat; lần nạp không thấy node chat nào cũng không đóng kết nối (D186). Lúc khởi động node chờ bảng slot rồi mới bật `/readyz`. |
 | **Chat `ListMyRoomIDs`** | Danh sách room đang ở và đã rời của người dùng khi login và khi nạp lại sau một lần nhảy (D195) | Tối đa `WS_ROOM_IDS_INFLIGHT` (64) lần gọi đang chạy mỗi node, nạp lại theo `WS_RELOAD_RATE`; lỗi thì gửi `load_failed` cho mọi kết nối của người đó, máy tự xin nạp lại (`load_rooms`) hoặc nối lại. |
 | **Core NATS (`eph.*.*.typing`, phần 4)** | Chuyển tín hiệu đang gõ giữa các node (D199) | Bắn rồi quên: mất NATS thì người cùng node vẫn thấy, node khác không thấy (đếm `typing_relay_failures_total`); không gửi lại, máy tự tắt "đang gõ" sau 6 giây. |
@@ -201,7 +201,7 @@ Token sai hay hết hạn, frame sai, máy nhận chậm và hết suất đăng
 
 ### 6.2. Vận hành (phần 5)
 
-- **NTP bắt buộc** trên node websocket, gateway và bên ký token. Token chỉ cho lệch giờ `WS_JWT_LEEWAY` (30s) ở `exp` và `nbf`; đồng hồ lệch hơn thì token đúng bị coi là hết hạn hoặc chưa hiệu lực, và hẹn giờ hết hạn của kết nối lệch theo. Dấu hiệu: `auth_total{result="expired"}` hoặc `ChatimWebsocketTokenExpiredSurge` tăng vọt ngay sau một lần đổi giờ.
+- **NTP bắt buộc** trên node websocket, gateway và bên ký token. Token chỉ cho lệch giờ `JWT_LEEWAY` (30s) ở `exp` và `nbf`; đồng hồ lệch hơn thì token đúng bị coi là hết hạn hoặc chưa hiệu lực, và hẹn giờ hết hạn của kết nối lệch theo. Dấu hiệu: `auth_total{result="expired"}` hoặc `ChatimWebsocketTokenExpiredSurge` tăng vọt ngay sau một lần đổi giờ.
 - **Deploy từng node:** dừng một node (máy trên đó nhận 1001 và nối lại sang node khác trong 0–60 giây theo §11), chờ node mới `healthy` (`/readyz` true), rồi mới tới node kế. Dừng nhiều node một lúc dồn cả số máy vào ít node: bộ giới hạn đăng nhập trả `retry_later` nhiều hơn (`ChatimWebsocketAuthRateLimited`) và người dùng chờ lâu hơn.
 - Chuỗi dừng của một node không đổi (§7.6).
 
@@ -213,10 +213,10 @@ Token sai hay hết hạn, frame sai, máy nhận chậm và hết suất đăng
 
 ### 7.1. Mở kết nối
 
-- Máy gọi `GET /ws` (cổng `WS_ADDR`, mặc định `:8080`; dev: `ws://127.0.0.1:8081/ws`) với subprotocol bắt buộc **`chatim.v1`**. Thiếu subprotocol → HTTP 400.
+- Máy gọi `GET /ws` (cổng `APP_ADDR`, mặc định `:8080`; dev: `ws://127.0.0.1:8081/ws`) với subprotocol bắt buộc **`chatim.v1`**. Thiếu subprotocol → HTTP 400.
 - Header HTTP phải tới trong 5 giây và ≤ 16KB (chặn máy gửi header chậm).
 - Số kết nối đang chờ đăng nhập (§7.3) mỗi node ≤ `WS_UNAUTH_MAX` (10.000), giữ chỗ lúc bắt tay rồi mới kiểm; vượt → HTTP 503. Kết nối đang chạy quay về chờ (token hết hạn) không bị đóng dù vượt trần, chỉ đếm `unauth_over_cap_total`. Node đang tắt cũng trả 503.
-- Cổng admin `WS_ADMIN_ADDR` (`:9090`, không publish ra ngoài): `/livez`, `/readyz` (true khi đã có bảng slot và hai consumer NATS đã chạy; mất NATS sau đó không đổi), `/metrics`.
+- Cổng admin `APP_ADMIN_ADDR` (`:9090`, không publish ra ngoài): `/livez`, `/readyz` (true khi đã có bảng slot và hai consumer NATS đã chạy; mất NATS sau đó không đổi), `/metrics`.
 
 ### 7.2. Frame
 
@@ -295,7 +295,7 @@ Ví dụ: máy gửi `request{id 17, SendMessage{room "77", cid "c-9", text "Ok 
 | Byte chờ ghi (`WS_SEND_QUEUE_BYTES`, ≥ `WS_FRAME_MAX`) | 1MB | Như hàng đợi gửi đầy |
 | Hạn mỗi lần ghi (`WS_WRITE_TIMEOUT`) | 10s | Cắt socket (máy thấy 1006) |
 
-Khi node tắt: `/readyz` false → chờ `WS_DRAIN_DELAY` (2s) → thôi nhận kết nối mới → lệnh mới nhận `UNAVAILABLE` "server shutting down, retry later", lệnh đang chạy vẫn được trả lời (trong `CHAT_REQUEST_DEADLINE`) → dừng feed (≤ 2s: dừng hai consumer, xả worker, đóng NATS) → đóng mọi kết nối 1001 (≤ 1s); cả quá trình trong `WS_SHUTDOWN_BUDGET` (15s), mặc định 2 + 5 + 2 + 1 = 10s.
+Khi node tắt: `/readyz` false → chờ `APP_DRAIN_DELAY` (2s) → thôi nhận kết nối mới → lệnh mới nhận `UNAVAILABLE` "server shutting down, retry later", lệnh đang chạy vẫn được trả lời (trong `CHAT_REQUEST_DEADLINE`) → dừng feed (≤ 2s: dừng hai consumer, xả worker, đóng NATS) → đóng mọi kết nối 1001 (≤ 1s); cả quá trình trong `APP_SHUTDOWN_BUDGET` (15s), mặc định 2 + 5 + 2 + 1 = 10s.
 
 ---
 
@@ -397,7 +397,7 @@ Ví dụ: Lan ở `websocket-1`, Nam cùng node, Hòa ở `websocket-2`; Nam và
 ### 10.3. Online (D200, D201)
 
 - **Một luật:** khoá `chatim:presence:{tenant}:{user}` = `1` còn thì online, mất thì offline. Hạn `WS_PRESENCE_TTL` 15s.
-- **Đóng dấu:** sau auth và trên mọi frame đã auth (heartbeat, ping, pong; máy gửi heartbeat mỗi 5–10s), chỉ khi kết nối đang chạy (không ở trạng thái chờ đăng nhập, §7.3), node đánh dấu người đó chờ ghi, mỗi người tối đa một lần mỗi `WS_PRESENCE_STAMP_EVERY` 2s (nhiều máy cùng người ghi một lần). Mỗi `WS_PRESENCE_FLUSH` 1s node ghi `SET … EX` theo lô `WS_PRESENCE_BATCH` 500 trong pipeline, hạn `WS_PRESENCE_REDIS_TIMEOUT` 500ms tính cả lần thử lại; lô lỗi đầu tiên dừng lượt, người chưa ghi chờ lượt sau. Người không có frame quá TTL bị bỏ khỏi RAM. Không ai xoá hay sửa khoá của người khác; nối lại sau 3 giây không làm khoá mất.
+- **Đóng dấu:** sau auth và trên mọi frame đã auth (heartbeat, ping, pong; máy gửi heartbeat mỗi 5–10s), chỉ khi kết nối đang chạy (không ở trạng thái chờ đăng nhập, §7.3), node đánh dấu người đó chờ ghi, mỗi người tối đa một lần mỗi `WS_PRESENCE_STAMP_EVERY` 2s (nhiều máy cùng người ghi một lần). Mỗi `WS_PRESENCE_FLUSH` 1s node ghi `SET … EX` theo lô `WS_PRESENCE_BATCH` 500 trong pipeline, hạn `SHARED_REDIS_TIMEOUT` 500ms tính cả lần thử lại; lô lỗi đầu tiên dừng lượt, người chưa ghi chờ lượt sau. Người không có frame quá TTL bị bỏ khỏi RAM. Không ai xoá hay sửa khoá của người khác; nối lại sau 3 giây không làm khoá mất.
 - **Hỏi:** `watch_presence` thay danh sách hỏi (bỏ id sai và trùng, giữ 200 người đầu) và được trả ngay; sau đó mỗi heartbeat hay ping của người hỏi có danh sách khác rỗng được trả **cả danh sách** trong một frame `presence`, cả trước `ready`. Danh sách mất theo kết nối và mất khi kết nối về trạng thái chờ đăng nhập; máy gửi lại sau mọi `ready` (§11.5).
 - **Đọc:** người đọc thấy online trong `WS_PRESENCE_CACHE` 5s qua lấy từ bộ đệm RAM (chia shard) của node; còn lại một `MGET`. Kết quả offline không bao giờ giữ. Lượt ghi mỗi giây cũng xoá mục bộ đệm cũ hơn 5s.
 - **Một lần trả mỗi kết nối:** đang có lần trả chạy thì lần mới bị bỏ (`busy`); hàng gửi quá nửa thì bỏ (`send_full`); Redis lỗi thì không gửi gì. Lần sau gửi kết quả mới, nên không máy nào kẹt ở trạng thái cũ.
@@ -406,7 +406,7 @@ Ví dụ: Lan ở `websocket-1`, Nam cùng node, Hòa ở `websocket-2`; Nam và
 
 ### 10.4. Cấu hình
 
-`WS_TYPING_RATE` (2), `WS_TYPING_BURST` (4), `WS_TYPING_QUEUE` (8192), `WS_TYPING_PENDING_MSGS` (65536); `WS_PRESENCE_REDIS_ADDR` (`chatim-redis-presence:6379`), `WS_PRESENCE_REDIS_DB` (0), `WS_PRESENCE_REDIS_PASSWORD[_FILE]`, `WS_PRESENCE_REDIS_TIMEOUT` (500ms), `WS_PRESENCE_REDIS_POOL` (64), `WS_PRESENCE_TTL` (15s), `WS_PRESENCE_STAMP_EVERY` (2s), `WS_PRESENCE_FLUSH` (1s), `WS_PRESENCE_BATCH` (500, ≤ 1000), `WS_PRESENCE_CACHE` (5s, < TTL), `WS_PRESENCE_WATCH_MAX` (200). Luật khởi động: `WS_PRESENCE_STAMP_EVERY + 10s + 2 × WS_PRESENCE_FLUSH + WS_PRESENCE_REDIS_TIMEOUT < WS_PRESENCE_TTL` và `WS_PRESENCE_TTL ≤ WS_HEARTBEAT_TIMEOUT + WS_PRESENCE_STAMP_EVERY` (với mặc định `WS_HEARTBEAT_TIMEOUT ≥ 13s`). Bảng đầy đủ ở README.
+`WS_TYPING_RATE` (2), `WS_TYPING_BURST` (4), `WS_TYPING_QUEUE` (8192), `WS_TYPING_PENDING_MSGS` (65536); `SHARED_REDIS_ADDR` (`chatim-redis-presence:6379`), `SHARED_REDIS_DB` (0), `SHARED_REDIS_PASSWORD[_FILE]`, `SHARED_REDIS_TIMEOUT` (500ms), `SHARED_REDIS_POOL` (64), `WS_PRESENCE_TTL` (15s), `WS_PRESENCE_STAMP_EVERY` (2s), `WS_PRESENCE_FLUSH` (1s), `WS_PRESENCE_BATCH` (500, ≤ 1000), `WS_PRESENCE_CACHE` (5s, < TTL), `WS_PRESENCE_WATCH_MAX` (200). Luật khởi động: `WS_PRESENCE_STAMP_EVERY + 10s + 2 × WS_PRESENCE_FLUSH + SHARED_REDIS_TIMEOUT < WS_PRESENCE_TTL` và `WS_PRESENCE_TTL ≤ WS_HEARTBEAT_TIMEOUT + WS_PRESENCE_STAMP_EVERY` (với mặc định `WS_HEARTBEAT_TIMEOUT ≥ 13s`). Bảng đầy đủ ở README.
 
 ### 10.5. Vòng đời
 
@@ -501,6 +501,8 @@ Hết hạn (đang chạy): server gỡ kết nối khỏi bảng quan tâm, b�
 - **Đọc** (D196, D198): `MarkRead` tối đa 1 lần/giây mỗi room (lần đầu gửi ngay, sau đó seq lớn nhất đang chờ); `MarkUnread` huỷ `MarkRead` đang chờ của room rồi mới gửi; gửi phần chờ trước `close_room`; chờ trả lời mọi `MarkRead` đang gửi rồi mới gọi `ListMyRooms` qua HTTPS; áp `read_positions` theo (room, user) `read_ver` lớn hơn.
 - **Đang gõ** (D199): gửi `typing` tối đa 1 lần mỗi 3 giây mỗi room khi còn gõ; gửi `stopped` chỉ khi trước đó đã gửi `typing`; gửi tin thì coi như dừng gõ ở room đó.
 - **Online** (D201): danh sách hỏi sống theo kết nối và mất khi kết nối về trạng thái chờ; gửi lại sau mọi `ready`.
+- **Ảnh nhóm** (M7.1 P4): `Room.avatars` có khoá thì gom khoá của cả trang vào một `MediaService.GetPublicURLs` (tối đa 100 khoá) qua gateway và hiện `thumbnail_url` (hoặc `url`); khoá không có trong `files` (ảnh hỏng, chưa upload xong) thì coi như nhóm chưa có ảnh. Đặt ảnh: upload `StartUpload{public: true}` rồi `UpdateRoom{avatars: {keys: [key]}}`; xoá: `{keys: []}` (JSON `"avatars": {}`); không gửi `avatars` = giữ (Module 12 §13).
+- **Ảnh ghép nhóm** (M7.1 P3): nhóm chưa có ảnh thì dùng `Room.avatar_users` (tối đa 4 id, không thứ tự) của `ListMyRooms`/`GetRooms`, gom id của cả trang vào một `GetUsers` (tối đa 100 id) để lấy tên và ảnh; không coi `avatar_users` trong `Room` của event là mới hơn bản đã đọc (field không có version); danh sách trống hoặc có người bị khoá thì client tự quyết hiện gì.
 - **Tải dữ liệu và quản lý room** đi HTTPS qua gateway (D198, Module 11); WebSocket chỉ có 12 lệnh ghi realtime, lệnh khác nhận `UNIMPLEMENTED`.
 
 ### 11.6. Server chặn gì khi client làm sai

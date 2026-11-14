@@ -35,7 +35,7 @@ type running struct {
 
 func TestRealInfraStopUnderLoadKeepsEveryAckedMessage(t *testing.T) {
 	it := realInfra(t)
-	cfg := it.chatConfig(t, map[string]string{"CHAT_DRAIN_DELAY": "200ms"})
+	cfg := it.chatConfig(t, map[string]string{"APP_DRAIN_DELAY": "200ms"})
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
 	ctx, cancel := context.WithCancel(context.Background())
 	chat := &running{done: make(chan struct{})}

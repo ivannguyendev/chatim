@@ -65,7 +65,7 @@ func TestBootstrapIsClusteredAndRerunnable(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for _, name := range []string{uploadsCollection, messageFilesCollection} {
+	for _, name := range []string{uploadsCollection, messageFilesCollection, roomAvatarsCollection} {
 		specs, err := db.ListCollectionSpecifications(t.Context(), bson.D{{Key: "name", Value: name}})
 		if err != nil || len(specs) != 1 {
 			t.Fatalf("%s specs = %v, %v", name, specs, err)

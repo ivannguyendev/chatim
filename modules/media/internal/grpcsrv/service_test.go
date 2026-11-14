@@ -15,6 +15,8 @@ import (
 	"github.com/ivannguyendev/chatim/modules/media/internal/download"
 	"github.com/ivannguyendev/chatim/modules/media/internal/gallery"
 	"github.com/ivannguyendev/chatim/modules/media/internal/grpcsrv"
+	"github.com/ivannguyendev/chatim/modules/media/internal/publicfiles"
+	"github.com/ivannguyendev/chatim/modules/media/internal/roomfiles"
 	"github.com/ivannguyendev/chatim/modules/media/internal/store/memstore"
 	"github.com/ivannguyendev/chatim/modules/media/internal/upload"
 	"github.com/ivannguyendev/chatim/pkg/chatrpc"
@@ -41,6 +43,13 @@ func (objects) SignGet(_ context.Context, _ domain.Bucket, key string, _ time.Du
 
 type chat struct{}
 
+func (chat) RoomReadAccess(_ context.Context, _, user, room string) (domain.RoomAccess, error) {
+	if user != "binh" {
+		return domain.RoomAccess{}, apperr.ErrPermissionDenied
+	}
+	return domain.RoomAccess{Room: room}, nil
+}
+
 func (chat) VisibleAttachments(_ context.Context, _, user string, refs []domain.MessageRef) ([]domain.MessageFiles, error) {
 	if user != "binh" {
 		return nil, nil
@@ -53,6 +62,12 @@ func caller(tenant, user string) context.Context {
 }
 
 func newService(t *testing.T) (*grpcsrv.Service, *memstore.Uploads) {
+	t.Helper()
+	svc, uploads, _ := newServiceWithPairs(t)
+	return svc, uploads
+}
+
+func newServiceWithPairs(t *testing.T) (*grpcsrv.Service, *memstore.Uploads, *memstore.MessageFiles) {
 	t.Helper()
 	uploads, store := memstore.NewUploads(), objects{completed: map[string]bool{}}
 	svc, err := upload.New(upload.Config{
@@ -70,7 +85,16 @@ func newService(t *testing.T) (*grpcsrv.Service, *memstore.Uploads) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return grpcsrv.New(svc, downloads, files), uploads
+	pairs := memstore.NewMessageFiles()
+	rooms, err := roomfiles.New(roomfiles.Config{SignatureTTL: time.Hour}, roomfiles.Deps{Chat: chat{}, Files: pairs, Uploads: uploads, Objects: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	public, err := publicfiles.New(publicfiles.Config{SignatureTTL: time.Hour, Thumbnails: domain.Thumbnails{Enabled: true, Suffix: ".thumb"}}, publicfiles.Deps{Uploads: uploads, Objects: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return grpcsrv.New(svc, downloads, files, rooms, public), uploads, pairs
 }
 
 func TestGetAttachmentURLsOverTheService(t *testing.T) {
@@ -140,6 +164,14 @@ func TestFileFactsReachTheUploadDoc(t *testing.T) {
 	}
 }
 
+func TestPublicReachesTheUploadKey(t *testing.T) {
+	s, _ := newService(t)
+	started, err := s.StartUpload(caller("acme", "an"), &chatimv1.StartUploadRequest{FileName: "g.png", ContentType: "image/png", Size: 1 << 20, Public: true})
+	if err != nil || !strings.HasPrefix(started.GetKey(), "acme/an/pub/") {
+		t.Fatalf("started %v, %v", started, err)
+	}
+}
+
 func TestCallsWithoutACallerAreRefused(t *testing.T) {
 	s, _ := newService(t)
 	if _, err := s.StartUpload(context.Background(), &chatimv1.StartUploadRequest{FileName: "a", ContentType: "a/b", Size: 1}); err == nil {
@@ -156,7 +188,9 @@ func TestRefusingAnswersEveryCallWithItsError(t *testing.T) {
 	_, e4 := d.AbortUpload(ctx, &chatimv1.AbortUploadRequest{})
 	_, e5 := d.GetAttachmentURLs(ctx, &chatimv1.GetAttachmentURLsRequest{})
 	_, e6 := d.ListUploads(ctx, &chatimv1.ListUploadsRequest{})
-	for _, err := range []error{e1, e2, e3, e4, e5, e6} {
+	_, e7 := d.ListRoomFiles(ctx, &chatimv1.ListRoomFilesRequest{})
+	_, e8 := d.GetPublicURLs(ctx, &chatimv1.GetPublicURLsRequest{})
+	for _, err := range []error{e1, e2, e3, e4, e5, e6, e7, e8} {
 		if !errors.Is(err, apperr.ErrFailedPrecondition) {
 			t.Fatalf("err = %v", err)
 		}

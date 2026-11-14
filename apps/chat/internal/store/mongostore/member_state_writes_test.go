@@ -13,7 +13,7 @@ import (
 func TestMemberAndRoomWritesRaiseTheirBitInTheSameStage(t *testing.T) {
 	m := domain.Member{Room: 9, User: "bob", Role: domain.RoleMember, State: domain.MemberActive, Ver: 1}
 	next := m.Next(domain.RoleAdmin, domain.MemberActive, 2, "$req", "$alice", codecTime)
-	rename := store.RoomInfoChange{Update: domain.RoomUpdate{Name: new("$Design"), Avatar: new("")}, By: "$alice", At: codecTime}
+	rename := store.RoomInfoChange{Update: domain.RoomUpdate{Name: new("$Design"), Avatars: new([]string{})}, By: "$alice", At: codecTime}
 	for name, c := range map[string]struct {
 		pipeline mongo.Pipeline
 		field    string
@@ -59,8 +59,8 @@ func TestMemberWritesQuoteUserStrings(t *testing.T) {
 			t.Fatalf("$set %s is not a $literal: %s", f, set.Lookup(f))
 		}
 	}
-	info := onlySetStage(t, "room info", roomInfoUpdate(store.RoomInfoChange{Update: domain.RoomUpdate{Name: new("$x"), Avatar: new("$y")}, By: "$z", At: codecTime}))
-	for _, f := range []string{"name", "avatar", "updated_by"} {
+	info := onlySetStage(t, "room info", roomInfoUpdate(store.RoomInfoChange{Update: domain.RoomUpdate{Name: new("$x"), Avatars: new([]string{"$y"})}, By: "$z", At: codecTime}))
+	for _, f := range []string{"name", "avatars", "updated_by"} {
 		if _, err := info.LookupErr(f, "$literal"); err != nil {
 			t.Fatalf("room info $set %s is not a $literal: %s", f, info.Lookup(f))
 		}

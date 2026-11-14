@@ -27,11 +27,13 @@ func Pair(tenant, messageKey, fileKey string) domain.MessageFile {
 	return domain.MessageFile{MessageKey: messageKey, FileKey: fileKey, Tenant: tenant, State: domain.PairLive, CreatedAt: created}
 }
 
+type storeCase struct {
+	name string
+	run  func(t *testing.T, s Stores)
+}
+
 func RunMessageFiles(t *testing.T, open func(t *testing.T) Stores) {
-	cases := []struct {
-		name string
-		run  func(t *testing.T, s Stores)
-	}{
+	cases := []storeCase{
 		{"attach then active lists the message's files", attachThenActive},
 		{"attach of a pair again does not revive a released pair", attachKeepsReleased},
 		{"release twice keeps the pairs released", releaseTwice},
@@ -40,7 +42,7 @@ func RunMessageFiles(t *testing.T, open func(t *testing.T) Stores) {
 		{"another tenant with the same message key sees and releases nothing", tenantIsolation},
 		{"a forward after the last message retired the file clears the mark", forwardAfterRetire},
 	}
-	for _, c := range cases {
+	for _, c := range append(cases, roomFileCases()...) {
 		t.Run(c.name, func(t *testing.T) { c.run(t, open(t)) })
 	}
 }

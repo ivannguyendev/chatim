@@ -9,12 +9,12 @@ import (
 
 func TestMongoAuthSourceFollowsTheDatabase(t *testing.T) {
 	setRequired(t)
-	t.Setenv("IDENTITY_MONGO_DB", "identity_eu")
+	t.Setenv("MONGO_DB", "identity_eu")
 	c, err := config.Load()
 	if err != nil || c.MongoDB != "identity_eu" || c.MongoAuthSource != "identity_eu" {
-		t.Fatalf("Load = %q %q, %v; want the auth source to follow IDENTITY_MONGO_DB", c.MongoDB, c.MongoAuthSource, err)
+		t.Fatalf("Load = %q %q, %v; want the auth source to follow MONGO_DB", c.MongoDB, c.MongoAuthSource, err)
 	}
-	t.Setenv("IDENTITY_MONGO_AUTH_SOURCE", "admin")
+	t.Setenv("MONGO_AUTH_SOURCE", "admin")
 	c, err = config.Load()
 	if err != nil || c.MongoAuthSource != "admin" {
 		t.Fatalf("Load = %q, %v; want the set auth source", c.MongoAuthSource, err)
@@ -23,8 +23,8 @@ func TestMongoAuthSourceFollowsTheDatabase(t *testing.T) {
 
 func TestMongoWithoutCredentialsIsAccepted(t *testing.T) {
 	setRequired(t)
-	t.Setenv("IDENTITY_MONGO_USER", "")
-	t.Setenv("IDENTITY_MONGO_PASSWORD", "")
+	t.Setenv("MONGO_USER", "")
+	t.Setenv("MONGO_PASSWORD", "")
 	c, err := config.Load()
 	if err != nil || c.MongoUser != "" || c.MongoPassword != "" {
 		t.Fatalf("Load = %+v, %v; want a config without Mongo credentials", c, err)
@@ -32,15 +32,15 @@ func TestMongoWithoutCredentialsIsAccepted(t *testing.T) {
 }
 
 func TestLoadRefusesMongoCredentialsOutsideTheirSettings(t *testing.T) {
-	const inURI = "IDENTITY_MONGO_URI must not carry credentials; use IDENTITY_MONGO_USER and IDENTITY_MONGO_PASSWORD or IDENTITY_MONGO_PASSWORD_FILE"
+	const inURI = "MONGO_URI must not carry credentials; use MONGO_USER and MONGO_PASSWORD or MONGO_PASSWORD_FILE"
 	cases := map[string]struct {
 		env  map[string]string
 		want string
 	}{
-		"user and password in the uri": {map[string]string{"IDENTITY_MONGO_URI": "mongodb://identity:inline@chatim-mongodb:27017/?replicaSet=rs0"}, inURI},
-		"user only in the uri":         {map[string]string{"IDENTITY_MONGO_URI": "mongodb://identity@m1,m2/chatim_identity"}, inURI},
-		"srv uri with credentials":     {map[string]string{"IDENTITY_MONGO_URI": "mongodb+srv://identity:inline@cluster.example/"}, inURI},
-		"password without a user":      {map[string]string{"IDENTITY_MONGO_USER": ""}, "IDENTITY_MONGO_PASSWORD needs IDENTITY_MONGO_USER"},
+		"user and password in the uri": {map[string]string{"MONGO_URI": "mongodb://identity:inline@chatim-mongodb:27017/?replicaSet=rs0"}, inURI},
+		"user only in the uri":         {map[string]string{"MONGO_URI": "mongodb://identity@m1,m2/chatim_identity"}, inURI},
+		"srv uri with credentials":     {map[string]string{"MONGO_URI": "mongodb+srv://identity:inline@cluster.example/"}, inURI},
+		"password without a user":      {map[string]string{"MONGO_USER": ""}, "MONGO_PASSWORD needs MONGO_USER"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -58,7 +58,7 @@ func TestLoadRefusesMongoCredentialsOutsideTheirSettings(t *testing.T) {
 		})
 	}
 	setRequired(t)
-	t.Setenv("IDENTITY_MONGO_URI", "mongodb://m1:27017,m2:27017/?replicaSet=rs0&authMechanism=SCRAM-SHA-256&tag=a@b")
+	t.Setenv("MONGO_URI", "mongodb://m1:27017,m2:27017/?replicaSet=rs0&authMechanism=SCRAM-SHA-256&tag=a@b")
 	if _, err := config.Load(); err != nil {
 		t.Fatalf("Load with an @ only in the options = %v", err)
 	}
@@ -66,7 +66,7 @@ func TestLoadRefusesMongoCredentialsOutsideTheirSettings(t *testing.T) {
 
 func TestLogValueListsMongoSettings(t *testing.T) {
 	setRequired(t)
-	t.Setenv("IDENTITY_MONGO_URI", "mongodb://chatim-mongodb:27017/?replicaSet=rs0")
+	t.Setenv("MONGO_URI", "mongodb://chatim-mongodb:27017/?replicaSet=rs0")
 	c, err := config.Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)

@@ -19,9 +19,9 @@ func TestMainRejectsUnknownCommands(t *testing.T) {
 }
 
 func TestMainServeFailsOnInvalidConfig(t *testing.T) {
-	t.Setenv("WS_JWT_KEYS_FILE", "")
+	t.Setenv("JWT_KEYS_FILE", "")
 	if got := Main(nil); got != 1 {
-		t.Fatalf("Main() = %d, want 1 without WS_JWT_KEYS_FILE", got)
+		t.Fatalf("Main() = %d, want 1 without JWT_KEYS_FILE", got)
 	}
 }
 
@@ -38,7 +38,7 @@ func TestProbeCommandExitCodes(t *testing.T) {
 				w.WriteHeader(tc.status)
 			}))
 			defer srv.Close()
-			t.Setenv("WS_ADMIN_ADDR", srv.Listener.Addr().String())
+			t.Setenv("APP_ADMIN_ADDR", srv.Listener.Addr().String())
 			if got := Main([]string{"probe"}); got != tc.want {
 				t.Fatalf("Main(probe) = %d, want %d", got, tc.want)
 			}

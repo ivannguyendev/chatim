@@ -8,6 +8,8 @@ import (
 	"github.com/ivannguyendev/chatim/modules/media/internal/domain"
 	"github.com/ivannguyendev/chatim/modules/media/internal/download"
 	"github.com/ivannguyendev/chatim/modules/media/internal/gallery"
+	"github.com/ivannguyendev/chatim/modules/media/internal/publicfiles"
+	"github.com/ivannguyendev/chatim/modules/media/internal/roomfiles"
 	"github.com/ivannguyendev/chatim/modules/media/internal/upload"
 	"github.com/ivannguyendev/chatim/pkg/chatrpc"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
@@ -18,10 +20,12 @@ type Service struct {
 	uploads   *upload.Service
 	downloads *download.Service
 	gallery   *gallery.Service
+	rooms     *roomfiles.Service
+	public    *publicfiles.Service
 }
 
-func New(uploads *upload.Service, downloads *download.Service, files *gallery.Service) *Service {
-	return &Service{uploads: uploads, downloads: downloads, gallery: files}
+func New(uploads *upload.Service, downloads *download.Service, files *gallery.Service, rooms *roomfiles.Service, public *publicfiles.Service) *Service {
+	return &Service{uploads: uploads, downloads: downloads, gallery: files, rooms: rooms, public: public}
 }
 
 func callerOf(ctx context.Context) (domain.Caller, error) {
@@ -39,7 +43,7 @@ func (s *Service) StartUpload(ctx context.Context, req *chatimv1.StartUploadRequ
 	}
 	started, err := s.uploads.Start(ctx, who, upload.StartInput{
 		FileName: req.GetFileName(), ContentType: req.GetContentType(), Size: req.GetSize(),
-		Dim: req.GetDim(), Dur: req.GetDur(), BytesPerSecond: req.GetUploadBytesPerSecond(),
+		Dim: req.GetDim(), Dur: req.GetDur(), BytesPerSecond: req.GetUploadBytesPerSecond(), Public: req.GetPublic(),
 	})
 	if err != nil {
 		return nil, err

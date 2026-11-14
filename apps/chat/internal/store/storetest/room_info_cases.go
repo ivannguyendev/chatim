@@ -1,6 +1,7 @@
 package storetest
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -31,22 +32,22 @@ func roomInfoCAS(t *testing.T, s MemberRooms) {
 	if err != nil || want.InfoVer != 1 {
 		t.Fatalf("Get = %+v, %v; want info ver 1 at creation", want, err)
 	}
-	rename := store.RoomInfoChange{Update: domain.RoomUpdate{Name: new("Design"), Avatar: new("files/av/777.png")}, By: "alice", At: secs(5)}
+	rename := store.RoomInfoChange{Update: domain.RoomUpdate{Name: new("Design"), Avatars: new([]string{"acme/alice/pub/20261113/0cr1"})}, By: "alice", At: secs(5)}
 	if !updateInfo(t, s, 1, rename) {
 		t.Fatal("UpdateRoomInfo(base 1) = false, want written")
 	}
-	want.Name, want.Avatar, want.InfoVer, want.UpdatedBy = "Design", "files/av/777.png", 2, "alice"
+	want.Name, want.Avatars, want.InfoVer, want.UpdatedBy = "Design", []string{"acme/alice/pub/20261113/0cr1"}, 2, "alice"
 	assertRoomInfo(t, s, want, secs(5))
 	stale := store.RoomInfoChange{Update: domain.RoomUpdate{Name: new("Late")}, By: "bob", At: secs(6)}
 	if updateInfo(t, s, 1, stale) {
 		t.Fatal("UpdateRoomInfo(stale base 1) = true, want lost")
 	}
 	assertRoomInfo(t, s, want, secs(5))
-	drop := store.RoomInfoChange{Update: domain.RoomUpdate{Avatar: new("")}, By: "bob", At: secs(7)}
+	drop := store.RoomInfoChange{Update: domain.RoomUpdate{Avatars: new([]string{})}, By: "bob", At: secs(7)}
 	if !updateInfo(t, s, 2, drop) {
 		t.Fatal("UpdateRoomInfo(base 2, drop avatar) = false, want written")
 	}
-	want.Avatar, want.InfoVer, want.UpdatedBy = "", 3, "bob"
+	want.Avatars, want.InfoVer, want.UpdatedBy = nil, 3, "bob"
 	assertRoomInfo(t, s, want, secs(7))
 	if ok, err := s.UpdateRoomInfo(t.Context(), roomB, 1, rename); ok || err != nil {
 		t.Fatalf("UpdateRoomInfo(missing room) = %v, %v; want false, nil", ok, err)
@@ -61,7 +62,7 @@ func assertRoomInfo(t *testing.T, s MemberRooms, want domain.Room, at time.Time)
 	}
 	got.UpdatedAt, want.UpdatedAt = time.Time{}, time.Time{}
 	got.CreatedAt, want.CreatedAt = time.Time{}, time.Time{}
-	if got != want {
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Get = %+v,\nwant %+v", got, want)
 	}
 }

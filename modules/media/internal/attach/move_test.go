@@ -151,7 +151,7 @@ func TestStatsListEveryLabel(t *testing.T) {
 			t.Fatalf("invalid count %d", c.Read())
 		}
 	}
-	if !slices.Equal(labels, []string{"no_message", "no_upload", "aborted", "tenant_mismatch", "upload_expired", "invalid_event"}) {
+	if !slices.Equal(labels, []string{"no_message", "no_upload", "aborted", "tenant_mismatch", "upload_expired", "invalid_event", "no_room"}) {
 		t.Fatalf("drop labels %v", labels)
 	}
 	labels = labels[:0]

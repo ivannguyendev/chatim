@@ -68,8 +68,8 @@ func (s *stats) sources() []metrics.Source {
 	return append(out,
 		counter("rate_limited_total", "Requests refused by the per-user limits, by limit.", map[string]string{"limit": limitRate}, &s.rateLimited),
 		counter("rate_limited_total", "Requests refused by the per-user limits, by limit.", map[string]string{"limit": limitInflight}, &s.userInflight),
-		counter("inflight_rejected_total", "Requests refused because the node already had GW_INFLIGHT_MAX requests in flight.", nil, &s.nodeInflight),
-		counter("body_too_large_total", "Requests whose body was larger than GW_BODY_MAX.", nil, &s.bodyTooLarge),
+		counter("inflight_rejected_total", "Requests refused because the node already had APP_INFLIGHT_MAX requests in flight.", nil, &s.nodeInflight),
+		counter("body_too_large_total", "Requests whose body was larger than APP_BODY_SIZE_MAX.", nil, &s.bodyTooLarge),
 		counter("commands_total", "Client commands handled, by command and result code.", map[string]string{"command": "unknown", "code": "Unimplemented"}, &s.unknownMethod),
 		metrics.Source{Name: "inflight", Help: "Requests in flight on this node.", Gauge: true, Read: func() float64 { return float64(s.inflight()) }},
 	)

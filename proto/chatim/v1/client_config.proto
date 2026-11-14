@@ -20,10 +20,16 @@ message MediaFeature {
   bool thumbnails = 4;
 }
 
+message RoomLimits {
+  int64 max_pins = 1;
+  int64 max_members_per_call = 2;
+}
+
 message GetClientConfigRequest {}
 
 message GetClientConfigResponse {
   MessageLimits message = 1;
   MentionFeature mention = 2;
   MediaFeature media = 3;
+  RoomLimits room = 4;
 }

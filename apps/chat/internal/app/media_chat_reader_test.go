@@ -2,7 +2,7 @@ package app
 
 import (
 	"errors"
-	"slices"
+	"reflect"
 	"testing"
 	"time"
 
@@ -27,6 +27,7 @@ var mediaSent = time.Date(2026, 11, 7, 9, 0, 0, 0, time.UTC)
 type mediaFixture struct {
 	node   *mediaChatNode
 	reader *message.Reader
+	rooms  *memstore.Rooms
 	msgs   *memstore.Messages
 	hidden *memstore.Hidden
 }
@@ -56,7 +57,7 @@ func newMediaFixture(t *testing.T) mediaFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return mediaFixture{node: &mediaChatNode{mediaMessageFiles: mediaMessageFiles{messages: msgs}}, reader: reader, msgs: msgs, hidden: hidden}
+	return mediaFixture{node: &mediaChatNode{mediaMessageFiles: mediaMessageFiles{messages: msgs}}, reader: reader, rooms: rooms, msgs: msgs, hidden: hidden}
 }
 
 func (f mediaFixture) insert(t *testing.T, room, thread, seq uint64, deleted bool, files ...domain.Attachment) {
@@ -71,7 +72,7 @@ func (f mediaFixture) insert(t *testing.T, room, thread, seq uint64, deleted boo
 }
 
 func photo(name string) domain.Attachment {
-	return domain.Attachment{Key: mediaFileKey, Name: name, Mime: "image/png", Size: 9}
+	return domain.Attachment{Key: mediaFileKey, Name: name, Mime: "image/png", Size: 9, Dim: []int32{640, 480}, Hash: "sha256:ab"}
 }
 
 func ref(room string, thread, seq uint64) mediaapp.MessageRef {
@@ -106,12 +107,16 @@ func TestMediaChatNodeReturnsOnlyReadableMessagesWithFilesInRequestOrder(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []mediaapp.MessageFiles{
-		{Ref: ref("77", 0, 5), Files: []mediaapp.File{{Key: mediaFileKey, Name: "five.png", Mime: "image/png"}, {Key: mediaFileKey + "x", Name: "r.pdf", Mime: "application/pdf"}}},
-		{Ref: ref("77", 1, 1), Files: []mediaapp.File{{Key: mediaFileKey, Name: "reply.png", Mime: "image/png"}}},
-		{Ref: ref("77", 0, 1), Files: []mediaapp.File{{Key: mediaFileKey, Name: "one.png", Mime: "image/png"}}},
+	sentAt := func(seq int) time.Time { return mediaSent.Add(time.Duration(seq) * time.Second) }
+	png := func(name string) mediaapp.File {
+		return mediaapp.File{Key: mediaFileKey, Name: name, Mime: "image/png", Size: 9, Dim: []int32{640, 480}, Hash: "sha256:ab"}
 	}
-	if !slices.EqualFunc(got, want, func(a, b mediaapp.MessageFiles) bool { return a.Ref == b.Ref && slices.Equal(a.Files, b.Files) }) {
+	want := []mediaapp.MessageFiles{
+		{Ref: ref("77", 0, 5), Sender: "alice", SentAt: sentAt(5), Files: []mediaapp.File{png("five.png"), {Key: mediaFileKey + "x", Name: "r.pdf", Mime: "application/pdf", Size: 3, Dur: 0}}},
+		{Ref: ref("77", 1, 1), Sender: "alice", SentAt: sentAt(1), Files: []mediaapp.File{png("reply.png")}},
+		{Ref: ref("77", 0, 1), Sender: "alice", SentAt: sentAt(1), Files: []mediaapp.File{png("one.png")}},
+	}
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v\nwant %+v", got, want)
 	}
 	owner, err := f.node.VisibleAttachments(t.Context(), mediaTenant, "alice", []mediaapp.MessageRef{ref("88", 0, 1), ref("77", 0, 3)})
@@ -129,6 +134,36 @@ func TestMediaChatNodeRejectsBadRefs(t *testing.T) {
 	for _, bad := range []mediaapp.MessageRef{ref("", 0, 1), ref("abc", 0, 1), ref("0", 0, 1), ref("-7", 0, 1), ref("77", 0, 0)} {
 		if _, err := f.node.VisibleAttachments(t.Context(), mediaTenant, "bob", []mediaapp.MessageRef{ref("77", 0, 1), bad}); !errors.Is(err, apperr.ErrInvalidArgument) {
 			t.Errorf("%+v: err = %v", bad, err)
+		}
+	}
+}
+
+func TestMediaChatNodeRoomReadAccessChecksMembershipAndGivesTheClearMark(t *testing.T) {
+	f := newMediaFixture(t)
+	if _, err := f.node.RoomReadAccess(t.Context(), mediaTenant, "bob", "77"); !errors.Is(err, apperr.ErrUnavailable) {
+		t.Fatalf("unbound err = %v", err)
+	}
+	f.node.bind(f.reader)
+	cleared := mediaSent.Add(time.Minute)
+	if _, _, err := f.rooms.ClearHistory(t.Context(), mediaRoom, "bob", cleared); err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.node.RoomReadAccess(t.Context(), mediaTenant, "bob", "077")
+	if err != nil || got.Room != "77" || !got.ClearedAt.Equal(cleared) {
+		t.Fatalf("bob = %+v, %v", got, err)
+	}
+	if got, err := f.node.RoomReadAccess(t.Context(), mediaTenant, "alice", "77"); err != nil || !got.ClearedAt.IsZero() {
+		t.Fatalf("alice = %+v, %v", got, err)
+	}
+	if _, err := f.node.RoomReadAccess(t.Context(), mediaTenant, "bob", "88"); !errors.Is(err, apperr.ErrPermissionDenied) {
+		t.Fatalf("outsider err = %v", err)
+	}
+	if _, err := f.node.RoomReadAccess(t.Context(), "globex", "bob", "77"); !errors.Is(err, apperr.ErrNotFound) {
+		t.Fatalf("other tenant err = %v", err)
+	}
+	for _, bad := range []string{"", "abc", "0", "-7"} {
+		if _, err := f.node.RoomReadAccess(t.Context(), mediaTenant, "bob", bad); !errors.Is(err, apperr.ErrInvalidArgument) {
+			t.Fatalf("room %q err = %v", bad, err)
 		}
 	}
 }

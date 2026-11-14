@@ -25,6 +25,8 @@ const (
 	MediaService_AbortUpload_FullMethodName       = "/chatim.v1.MediaService/AbortUpload"
 	MediaService_GetAttachmentURLs_FullMethodName = "/chatim.v1.MediaService/GetAttachmentURLs"
 	MediaService_ListUploads_FullMethodName       = "/chatim.v1.MediaService/ListUploads"
+	MediaService_ListRoomFiles_FullMethodName     = "/chatim.v1.MediaService/ListRoomFiles"
+	MediaService_GetPublicURLs_FullMethodName     = "/chatim.v1.MediaService/GetPublicURLs"
 )
 
 // MediaServiceClient is the client API for MediaService service.
@@ -37,6 +39,8 @@ type MediaServiceClient interface {
 	AbortUpload(ctx context.Context, in *AbortUploadRequest, opts ...grpc.CallOption) (*AbortUploadResponse, error)
 	GetAttachmentURLs(ctx context.Context, in *GetAttachmentURLsRequest, opts ...grpc.CallOption) (*GetAttachmentURLsResponse, error)
 	ListUploads(ctx context.Context, in *ListUploadsRequest, opts ...grpc.CallOption) (*ListUploadsResponse, error)
+	ListRoomFiles(ctx context.Context, in *ListRoomFilesRequest, opts ...grpc.CallOption) (*ListRoomFilesResponse, error)
+	GetPublicURLs(ctx context.Context, in *GetPublicURLsRequest, opts ...grpc.CallOption) (*GetPublicURLsResponse, error)
 }
 
 type mediaServiceClient struct {
@@ -107,6 +111,26 @@ func (c *mediaServiceClient) ListUploads(ctx context.Context, in *ListUploadsReq
 	return out, nil
 }
 
+func (c *mediaServiceClient) ListRoomFiles(ctx context.Context, in *ListRoomFilesRequest, opts ...grpc.CallOption) (*ListRoomFilesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListRoomFilesResponse)
+	err := c.cc.Invoke(ctx, MediaService_ListRoomFiles_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mediaServiceClient) GetPublicURLs(ctx context.Context, in *GetPublicURLsRequest, opts ...grpc.CallOption) (*GetPublicURLsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetPublicURLsResponse)
+	err := c.cc.Invoke(ctx, MediaService_GetPublicURLs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MediaServiceServer is the server API for MediaService service.
 // All implementations must embed UnimplementedMediaServiceServer
 // for forward compatibility.
@@ -117,6 +141,8 @@ type MediaServiceServer interface {
 	AbortUpload(context.Context, *AbortUploadRequest) (*AbortUploadResponse, error)
 	GetAttachmentURLs(context.Context, *GetAttachmentURLsRequest) (*GetAttachmentURLsResponse, error)
 	ListUploads(context.Context, *ListUploadsRequest) (*ListUploadsResponse, error)
+	ListRoomFiles(context.Context, *ListRoomFilesRequest) (*ListRoomFilesResponse, error)
+	GetPublicURLs(context.Context, *GetPublicURLsRequest) (*GetPublicURLsResponse, error)
 	mustEmbedUnimplementedMediaServiceServer()
 }
 
@@ -144,6 +170,12 @@ func (UnimplementedMediaServiceServer) GetAttachmentURLs(context.Context, *GetAt
 }
 func (UnimplementedMediaServiceServer) ListUploads(context.Context, *ListUploadsRequest) (*ListUploadsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListUploads not implemented")
+}
+func (UnimplementedMediaServiceServer) ListRoomFiles(context.Context, *ListRoomFilesRequest) (*ListRoomFilesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListRoomFiles not implemented")
+}
+func (UnimplementedMediaServiceServer) GetPublicURLs(context.Context, *GetPublicURLsRequest) (*GetPublicURLsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetPublicURLs not implemented")
 }
 func (UnimplementedMediaServiceServer) mustEmbedUnimplementedMediaServiceServer() {}
 func (UnimplementedMediaServiceServer) testEmbeddedByValue()                      {}
@@ -274,6 +306,42 @@ func _MediaService_ListUploads_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MediaService_ListRoomFiles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListRoomFilesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MediaServiceServer).ListRoomFiles(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MediaService_ListRoomFiles_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MediaServiceServer).ListRoomFiles(ctx, req.(*ListRoomFilesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MediaService_GetPublicURLs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetPublicURLsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MediaServiceServer).GetPublicURLs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MediaService_GetPublicURLs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MediaServiceServer).GetPublicURLs(ctx, req.(*GetPublicURLsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MediaService_ServiceDesc is the grpc.ServiceDesc for MediaService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -304,6 +372,14 @@ var MediaService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListUploads",
 			Handler:    _MediaService_ListUploads_Handler,
+		},
+		{
+			MethodName: "ListRoomFiles",
+			Handler:    _MediaService_ListRoomFiles_Handler,
+		},
+		{
+			MethodName: "GetPublicURLs",
+			Handler:    _MediaService_GetPublicURLs_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

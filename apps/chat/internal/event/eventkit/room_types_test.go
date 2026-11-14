@@ -3,6 +3,7 @@ package eventkit_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"sync"
 	"testing"
 
@@ -45,7 +46,7 @@ func TestRoomTypesReadsEachRoomOnceAndKeepsOnlyIdentity(t *testing.T) {
 	c := eventkit.NewRoomTypes(rooms, 10)
 	for range 3 {
 		got, err := c.Identity(t.Context(), 1)
-		if err != nil || got != (domain.Room{ID: 1, Tenant: "t1", Type: domain.RoomGroup}) {
+		if err != nil || !reflect.DeepEqual(got, domain.Room{ID: 1, Tenant: "t1", Type: domain.RoomGroup}) {
 			t.Fatalf("Identity = %+v, %v", got, err)
 		}
 	}

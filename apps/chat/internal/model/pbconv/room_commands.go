@@ -1,6 +1,8 @@
 package pbconv
 
 import (
+	"slices"
+
 	"github.com/ivannguyendev/chatim/apps/chat/internal/model/domain"
 	chatimv1 "github.com/ivannguyendev/chatim/pkg/pb/chatim/v1"
 )
@@ -24,8 +26,8 @@ func DomainRoomUpdate(req *chatimv1.UpdateRoomRequest) domain.RoomUpdate {
 	if req.Name != nil {
 		u.Name = new(req.GetName())
 	}
-	if req.Avatar != nil {
-		u.Avatar = new(req.GetAvatar())
+	if req.Avatars != nil {
+		u.Avatars = new(slices.Clone(req.GetAvatars().GetKeys()))
 	}
 	return u
 }

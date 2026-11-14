@@ -19,12 +19,12 @@ type parser struct {
 func (p *parser) fail(err error) { p.errs = append(p.errs, err) }
 
 func (p *parser) nodeID() string {
-	if id := os.Getenv("CHAT_NODE_ID"); id != "" {
+	if id := os.Getenv("APP_NODE_ID"); id != "" {
 		return id
 	}
 	host, err := os.Hostname()
 	if err != nil {
-		p.fail(fmt.Errorf("CHAT_NODE_ID unset and hostname unavailable: %w", err))
+		p.fail(fmt.Errorf("APP_NODE_ID unset and hostname unavailable: %w", err))
 	}
 	return host
 }
@@ -32,7 +32,7 @@ func (p *parser) nodeID() string {
 func (p *parser) advertiseAddr(nodeID, grpcAddr string) string {
 	_, port, err := net.SplitHostPort(grpcAddr)
 	if err != nil {
-		p.fail(fmt.Errorf("CHAT_GRPC_ADDR=%q: %w", grpcAddr, err))
+		p.fail(fmt.Errorf("APP_ADDR=%q: %w", grpcAddr, err))
 	}
 	if v := os.Getenv("CHAT_ADVERTISE_ADDR"); v != "" {
 		return v

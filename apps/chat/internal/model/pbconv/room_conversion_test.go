@@ -3,6 +3,7 @@ package pbconv_test
 import (
 	"errors"
 	"math"
+	"slices"
 	"testing"
 
 	"google.golang.org/protobuf/proto"
@@ -30,10 +31,25 @@ func TestRoomCopiesInfoAndDirectUsers(t *testing.T) {
 	if got := pbconv.Room(dm); got.GetInfoVer() != 1 || len(got.GetDirectUsers()) != 2 || got.GetDirectUsers()[0] != "lan" || got.GetDirectUsers()[1] != "minh" {
 		t.Fatalf("DM Room = %v, want info_ver 1 and direct users [lan minh]", got)
 	}
-	group := domain.Room{ID: 777, Tenant: "acme", Type: domain.RoomGroup, Name: "Cửa hàng 12", Avatar: "files/av/777.png", InfoVer: 3, CreatedAt: sentAt}
+	group := domain.Room{ID: 777, Tenant: "acme", Type: domain.RoomGroup, Name: "Cửa hàng 12", Avatars: []string{"acme/minh/pub/20261113/0cr1"}, InfoVer: 3, CreatedAt: sentAt}
 	got := pbconv.Room(group)
-	if got.GetAvatar() != "files/av/777.png" || got.GetInfoVer() != 3 || got.GetDirectUsers() != nil {
-		t.Fatalf("group Room = %v, want avatar, info_ver 3 and no direct users", got)
+	if !slices.Equal(got.GetAvatars(), group.Avatars) || got.GetInfoVer() != 3 || got.GetDirectUsers() != nil {
+		t.Fatalf("group Room = %v, want avatars, info_ver 3 and no direct users", got)
+	}
+	got.Avatars[0] = "changed"
+	if group.Avatars[0] != "acme/minh/pub/20261113/0cr1" {
+		t.Fatalf("Room shares the avatars slice: %v", group.Avatars)
+	}
+}
+
+func TestRoomGivesAvatarUsersOnlyForGroups(t *testing.T) {
+	group := domain.Room{ID: 777, Tenant: "acme", Type: domain.RoomGroup, AvatarUsers: []string{"binh", "chi"}, AvatarVer: 2, CreatedAt: sentAt}
+	if got := pbconv.Room(group).GetAvatarUsers(); len(got) != 2 || got[0] != "binh" || got[1] != "chi" {
+		t.Fatalf("group avatar users = %v", got)
+	}
+	dm := domain.Room{ID: 888, Tenant: "acme", Type: domain.RoomDM, AvatarUsers: []string{"binh"}, CreatedAt: sentAt}
+	if got := pbconv.Room(dm).GetAvatarUsers(); got != nil {
+		t.Fatalf("DM avatar users = %v, want none", got)
 	}
 }
 

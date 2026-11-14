@@ -93,9 +93,15 @@ message SetRoomPreferencesResponse {
 }
 
 message UpdateRoomRequest {
+  reserved 3;
+  reserved "avatar";
   string room_id = 1;
   optional string name = 2;
-  optional string avatar = 3;
+  RoomAvatars avatars = 4;
+}
+
+message RoomAvatars {
+  repeated string keys = 1;
 }
 
 message UpdateRoomResponse {

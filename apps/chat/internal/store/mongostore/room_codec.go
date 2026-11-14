@@ -20,10 +20,12 @@ type roomDoc struct {
 	LastChangeAt   time.Time       `bson:"last_change_at,omitempty"`
 	LastEditAt     time.Time       `bson:"last_edit_at,omitempty"`
 	DMKey          string          `bson:"dm_key,omitempty"`
-	Avatar         string          `bson:"avatar,omitempty"`
+	Avatars        []string        `bson:"avatars,omitempty"`
 	InfoVer        int64           `bson:"info_ver,omitempty"`
 	UpdatedAt      time.Time       `bson:"updated_at,omitempty"`
 	UpdatedBy      string          `bson:"updated_by,omitempty"`
+	AvatarUsers    []string        `bson:"avatar_users,omitempty"`
+	AvatarVer      int64           `bson:"avatar_ver,omitempty"`
 }
 
 func encodeRoom(r domain.Room) (roomDoc, error) {
@@ -39,6 +41,10 @@ func encodeRoom(r domain.Room) (roomDoc, error) {
 	if err != nil {
 		return roomDoc{}, err
 	}
+	avatarVer, err := toInt64("avatar ver", r.AvatarVer)
+	if err != nil {
+		return roomDoc{}, err
+	}
 	return roomDoc{
 		ID:             id,
 		Tenant:         r.Tenant,
@@ -49,10 +55,12 @@ func encodeRoom(r domain.Room) (roomDoc, error) {
 		MemberCount:    r.MemberCount,
 		MemberCountVer: memberCountVer,
 		DMKey:          r.DMKey,
-		Avatar:         r.Avatar,
+		Avatars:        r.Avatars,
 		InfoVer:        infoVer,
 		UpdatedAt:      r.UpdatedAt,
 		UpdatedBy:      r.UpdatedBy,
+		AvatarUsers:    r.AvatarUsers,
+		AvatarVer:      avatarVer,
 	}, nil
 }
 
@@ -73,6 +81,10 @@ func decodeRoom(d roomDoc) (domain.Room, error) {
 	if err != nil {
 		return domain.Room{}, err
 	}
+	avatarVer, err := toUint64("room avatar ver", d.AvatarVer)
+	if err != nil {
+		return domain.Room{}, err
+	}
 	return domain.Room{
 		ID:             id,
 		Tenant:         d.Tenant,
@@ -87,9 +99,11 @@ func decodeRoom(d roomDoc) (domain.Room, error) {
 		LastEditAt:     d.LastEditAt,
 		MemberCountVer: memberCountVer,
 		DMKey:          d.DMKey,
-		Avatar:         d.Avatar,
+		Avatars:        d.Avatars,
 		InfoVer:        infoVer,
 		UpdatedAt:      d.UpdatedAt,
 		UpdatedBy:      d.UpdatedBy,
+		AvatarUsers:    d.AvatarUsers,
+		AvatarVer:      avatarVer,
 	}, nil
 }

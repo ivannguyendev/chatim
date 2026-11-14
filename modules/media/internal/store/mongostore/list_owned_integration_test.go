@@ -69,11 +69,12 @@ func TestListOwnedUsesTheOwnerIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	cases := map[string]bson.D{
-		"first page":           ownedFilter("acme", "an", "", domain.Kinds{}),
-		"after a cursor":       ownedFilter("acme", "an", "acme/an/20261107/0010", domain.Kinds{}),
-		"images and videos":    ownedFilter("acme", "an", "", domain.Kinds{Image: true, Video: true}),
-		"other with a cursor":  ownedFilter("acme", "an", "acme/an/20261107/0010", domain.Kinds{Other: true}),
-		"other and the images": ownedFilter("acme", "an", "", domain.Kinds{Image: true, Other: true}),
+		"first page":            ownedFilter("acme", "an", "", domain.Kinds{}),
+		"below the public keys": ownedFilter("acme", "an", domain.PublicKeyPrefix("acme", "an"), domain.Kinds{}),
+		"after a cursor":        ownedFilter("acme", "an", "acme/an/20261107/0010", domain.Kinds{}),
+		"images and videos":     ownedFilter("acme", "an", "", domain.Kinds{Image: true, Video: true}),
+		"other with a cursor":   ownedFilter("acme", "an", "acme/an/20261107/0010", domain.Kinds{Other: true}),
+		"other and the images":  ownedFilter("acme", "an", "", domain.Kinds{Image: true, Other: true}),
 	}
 	for name, filter := range cases {
 		find := bson.D{

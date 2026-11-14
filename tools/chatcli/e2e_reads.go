@@ -70,7 +70,7 @@ func (r *roomRun) updateRoom() error {
 			return fmt.Errorf("rename room %s (call %d) = %v changed %v, want %q at info_ver 2 changed %v", room, i+1, resp.GetRoom(), resp.GetChanged(), name, want)
 		}
 	}
-	if err := r.expect(r.want(room, e2e.KindRoomUpdated, e2e.RoomInfoEventID(room, 2), e2e.RoomInfoPayload(name, "", 2))); err != nil {
+	if err := r.expect(r.want(room, e2e.KindRoomUpdated, e2e.RoomInfoEventID(room, 2), e2e.RoomInfoPayload(name, nil, 2))); err != nil {
 		return err
 	}
 	return r.awaitRooms("the new name of room "+room, []string{room}, func(resp *chatimv1.GetRoomsResponse) error {

@@ -61,50 +61,50 @@ type SharedRedis struct {
 	Timeout  time.Duration
 }
 
-func AdminAddr() string { return envconfig.String("GW_ADMIN_ADDR", defaultAdminAddr) }
+func AdminAddr() string { return envconfig.String("APP_ADMIN_ADDR", defaultAdminAddr) }
 
 func Load() (Config, error) {
 	var p parser
 	deadline := p.span("CHAT_REQUEST_DEADLINE", 5*time.Second)
 	c := Config{
-		ListenAddr: envconfig.String("GW_ADDR", ":8080"),
+		ListenAddr: envconfig.String("APP_ADDR", ":8080"),
 		AdminAddr:  AdminAddr(),
 		Redis: StateRedis{
 			Addr:     envconfig.String("REDIS_ADDR", "chatim-redis:6379"),
 			DB:       p.number("REDIS_DB", 0),
 			Password: p.secret("REDIS_PASSWORD"),
 		},
-		JWTKeysFile:       envconfig.String("GW_JWT_KEYS_FILE", ""),
-		JWTIssuer:         envconfig.String("GW_JWT_ISSUER", ""),
-		JWTAudience:       envconfig.String("GW_JWT_AUDIENCE", ""),
-		JWTLeeway:         p.span("GW_JWT_LEEWAY", 30*time.Second),
-		BodyMax:           p.number("GW_BODY_MAX", 128<<10),
-		UserRate:          p.number("GW_USER_RATE", 50),
-		UserBurst:         p.number("GW_USER_BURST", 100),
-		UserInflight:      p.number("GW_USER_INFLIGHT", 32),
-		UserLimiters:      p.number("GW_USER_LIMITERS", 100000),
-		InflightMax:       p.number("GW_INFLIGHT_MAX", 10000),
-		CORSOrigins:       list("GW_CORS_ORIGINS"),
-		DrainDelay:        p.span("GW_DRAIN_DELAY", 2*time.Second),
-		ShutdownBudget:    p.span("GW_SHUTDOWN_BUDGET", 15*time.Second),
-		ReadHeaderTimeout: p.span("GW_READ_HEADER_TIMEOUT", 5*time.Second),
-		ReadTimeout:       p.span("GW_READ_TIMEOUT", 10*time.Second),
-		WriteTimeout:      p.span("GW_WRITE_TIMEOUT", deadline+writeTimeoutMargin),
-		IdleTimeout:       p.span("GW_IDLE_TIMEOUT", 60*time.Second),
-		MaxHeaderBytes:    p.number("GW_MAX_HEADER_BYTES", 16<<10),
+		JWTKeysFile:       envconfig.String("JWT_KEYS_FILE", ""),
+		JWTIssuer:         envconfig.String("JWT_ISSUER", ""),
+		JWTAudience:       envconfig.String("JWT_AUDIENCE", ""),
+		JWTLeeway:         p.span("JWT_LEEWAY", 30*time.Second),
+		BodyMax:           p.number(envconfig.BodySizeMaxKey, envconfig.DefaultBodySizeMax),
+		UserRate:          p.number("APP_USER_RATE", 50),
+		UserBurst:         p.number("APP_USER_BURST", 100),
+		UserInflight:      p.number("APP_USER_INFLIGHT", 32),
+		UserLimiters:      p.number("APP_USER_LIMITERS", 100000),
+		InflightMax:       p.number("APP_INFLIGHT_MAX", 10000),
+		CORSOrigins:       list("APP_CORS_ORIGINS"),
+		DrainDelay:        p.span("APP_DRAIN_DELAY", 2*time.Second),
+		ShutdownBudget:    p.span("APP_SHUTDOWN_BUDGET", 15*time.Second),
+		ReadHeaderTimeout: p.span("APP_READ_HEADER_TIMEOUT", 5*time.Second),
+		ReadTimeout:       p.span("APP_READ_TIMEOUT", 10*time.Second),
+		WriteTimeout:      p.span("APP_WRITE_TIMEOUT", deadline+writeTimeoutMargin),
+		IdleTimeout:       p.span("APP_IDLE_TIMEOUT", 60*time.Second),
+		MaxHeaderBytes:    p.number("APP_MAX_HEADER_BYTES", 16<<10),
 		H2MaxStreams:      p.number("GW_H2_MAX_STREAMS", 250),
 		RequestDeadline:   deadline,
 		SharedRedis: SharedRedis{
-			Addr:     envconfig.String("GW_SHARED_REDIS_ADDR", ""),
-			DB:       p.number("GW_SHARED_REDIS_DB", 0),
-			Password: p.secret("GW_SHARED_REDIS_PASSWORD"),
-			Timeout:  p.span("GW_SHARED_REDIS_TIMEOUT", 500*time.Millisecond),
+			Addr:     envconfig.String("SHARED_REDIS_ADDR", ""),
+			DB:       p.number("SHARED_REDIS_DB", 0),
+			Password: p.secret("SHARED_REDIS_PASSWORD"),
+			Timeout:  p.span("SHARED_REDIS_TIMEOUT", 500*time.Millisecond),
 		},
 	}
 	c.PartURLLimits = p.partURLLimits()
 	c.ClientIPHeader = envconfig.String("GW_CLIENT_IP_HEADER", "X-Forwarded-For")
 	c.TrustedProxies = p.prefixes("GW_TRUSTED_PROXIES")
-	identity, err := auth.SyncConfigFromEnv("GW")
+	identity, err := auth.SyncConfigFromEnv()
 	if err != nil {
 		p.fail(err)
 	}

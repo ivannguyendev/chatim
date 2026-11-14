@@ -15,7 +15,7 @@ func partURLLimiter(cfg config.Config, shared *redis.Client, log *slog.Logger) (
 	if shared != nil {
 		rdb = shared
 	} else {
-		log.Warn("GetPartURLs limits count on this node only: GW_SHARED_REDIS_ADDR is empty")
+		log.Warn("GetPartURLs limits count on this node only: SHARED_REDIS_ADDR is empty")
 	}
 	return ratelimit.New(rdb, ratelimit.Config{
 		Command: "GetPartURLs", User: cfg.PartURLLimits.User, UserIP: cfg.PartURLLimits.UserIP, Device: cfg.PartURLLimits.Device,

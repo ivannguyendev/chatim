@@ -30,8 +30,8 @@ func PreferencesEventID(room, user string, preferenceVer uint64) string {
 	return room + "-pf-" + user + "-v" + strconv.FormatUint(preferenceVer, 10)
 }
 
-func RoomInfoPayload(name, avatar string, infoVer uint64) string {
-	return "name=" + name + " avatar=" + avatar + " info_ver=" + strconv.FormatUint(infoVer, 10)
+func RoomInfoPayload(name string, avatars []string, infoVer uint64) string {
+	return "name=" + name + " avatars=" + strings.Join(avatars, ",") + " info_ver=" + strconv.FormatUint(infoVer, 10)
 }
 
 func PreferencesPayload(pinned, muted, archived bool, ver uint64) string {
@@ -64,7 +64,7 @@ func roomOf(subject string, ev *chatimv1.Event) (Event, bool) {
 	switch {
 	case ev.GetRoomUpdated() != nil:
 		r := ev.GetRoomUpdated().GetRoom()
-		out.Kind, out.Text = KindRoomUpdated, RoomInfoPayload(r.GetName(), r.GetAvatar(), r.GetInfoVer())
+		out.Kind, out.Text = KindRoomUpdated, RoomInfoPayload(r.GetName(), r.GetAvatars(), r.GetInfoVer())
 	case ev.GetRoomPreferencesChanged() != nil:
 		p := ev.GetRoomPreferencesChanged()
 		out.Kind, out.User, out.Text = KindPreferences, p.GetUser(), StatePayload(p.GetState())

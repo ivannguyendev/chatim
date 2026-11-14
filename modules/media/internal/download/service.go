@@ -92,7 +92,7 @@ func (s *Service) AttachmentURLs(ctx context.Context, who domain.Caller, refs []
 	if err != nil {
 		return Result{}, err
 	}
-	buckets, err := s.bucketsOf(ctx, who.Tenant, found)
+	buckets, err := Buckets(ctx, s.deps.Uploads, who.Tenant, fileKeys(found))
 	if err != nil {
 		return Result{}, err
 	}
@@ -111,20 +111,21 @@ func (s *Service) AttachmentURLs(ctx context.Context, who domain.Caller, refs []
 	return out, nil
 }
 
-func (s *Service) bucketsOf(ctx context.Context, tenant string, found []domain.MessageFiles) (map[string]domain.Bucket, error) {
+func fileKeys(found []domain.MessageFiles) []string {
 	var keys []string
-	seen := make(map[string]struct{})
 	for _, m := range found {
 		for _, f := range m.Files {
-			if _, dup := seen[f.Key]; !dup {
-				seen[f.Key] = struct{}{}
-				keys = append(keys, f.Key)
-			}
+			keys = append(keys, f.Key)
 		}
 	}
+	return keys
+}
+
+func Buckets(ctx context.Context, uploads Uploads, tenant string, keys []string) (map[string]domain.Bucket, error) {
+	keys = slices.Compact(slices.Sorted(slices.Values(keys)))
 	out := make(map[string]domain.Bucket, len(keys))
 	for batch := range slices.Chunk(keys, UploadBatch) {
-		docs, err := s.deps.Uploads.GetMany(ctx, tenant, batch)
+		docs, err := uploads.GetMany(ctx, tenant, batch)
 		if err != nil {
 			return nil, err
 		}

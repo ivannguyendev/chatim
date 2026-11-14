@@ -11,6 +11,7 @@ const (
 	ReasonTenant
 	ReasonExpired
 	ReasonInvalid
+	ReasonNoRoom
 	reasonCount
 )
 
@@ -24,7 +25,7 @@ const (
 )
 
 var (
-	reasonNames = [reasonCount]string{"no_message", "no_upload", "aborted", "tenant_mismatch", "upload_expired", "invalid_event"}
+	reasonNames = [reasonCount]string{"no_message", "no_upload", "aborted", "tenant_mismatch", "upload_expired", "invalid_event", "no_room"}
 	resultNames = [resultCount]string{"ok", "error", "cleanup_error"}
 )
 

@@ -275,7 +275,7 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: identity answers a websocket or gateway node with 4xx (wrong node secret or identity url); the node stays not ready. Check *_IDENTITY_SECRET, *_IDENTITY_INTERNAL_URL and *_IDENTITY_JWKS_URL against identity.
+          summary: identity answers a websocket or gateway node with 4xx (wrong node secret or identity url); the node stays not ready. Check IDENTITY_NODE_SECRET, IDENTITY_INTERNAL_URL and IDENTITY_JWKS_URL against identity.
       - alert: ChatimJwksConflict
         expr: sum by (instance) (increase(chatim_websocket_jwks_conflicts_total[10m])) > 0 or sum by (instance) (increase(chatim_gateway_jwks_conflicts_total[10m])) > 0
         labels:

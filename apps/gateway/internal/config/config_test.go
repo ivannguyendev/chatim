@@ -15,19 +15,19 @@ import (
 )
 
 var envKeys = []string{
-	"GW_ADDR", "GW_ADMIN_ADDR", "REDIS_ADDR", "REDIS_DB", "REDIS_PASSWORD", "REDIS_PASSWORD_FILE", "GW_JWT_KEYS_FILE", "GW_JWT_ISSUER", "GW_JWT_AUDIENCE", "GW_JWT_LEEWAY",
-	"GW_BODY_MAX", "GW_USER_RATE", "GW_USER_BURST", "GW_USER_INFLIGHT", "GW_USER_LIMITERS", "GW_INFLIGHT_MAX",
-	"GW_CORS_ORIGINS", "GW_DRAIN_DELAY", "GW_SHUTDOWN_BUDGET", "GW_READ_HEADER_TIMEOUT", "GW_READ_TIMEOUT",
-	"GW_WRITE_TIMEOUT", "GW_IDLE_TIMEOUT", "GW_MAX_HEADER_BYTES", "GW_H2_MAX_STREAMS", "CHAT_REQUEST_DEADLINE",
+	"APP_ADDR", "APP_ADMIN_ADDR", "REDIS_ADDR", "REDIS_DB", "REDIS_PASSWORD", "REDIS_PASSWORD_FILE", "JWT_KEYS_FILE", "JWT_ISSUER", "JWT_AUDIENCE", "JWT_LEEWAY",
+	"APP_BODY_SIZE_MAX", "GW_BODY_MAX", "APP_USER_RATE", "APP_USER_BURST", "APP_USER_INFLIGHT", "APP_USER_LIMITERS", "APP_INFLIGHT_MAX",
+	"APP_CORS_ORIGINS", "APP_DRAIN_DELAY", "APP_SHUTDOWN_BUDGET", "APP_READ_HEADER_TIMEOUT", "APP_READ_TIMEOUT",
+	"APP_WRITE_TIMEOUT", "APP_IDLE_TIMEOUT", "APP_MAX_HEADER_BYTES", "GW_H2_MAX_STREAMS", "CHAT_REQUEST_DEADLINE",
 }
 
 var requiredEnv = map[string]string{
-	"GW_JWT_KEYS_FILE":         "/run/secrets/jwks.json",
-	"GW_JWT_ISSUER":            "chatim-identity",
-	"GW_JWT_AUDIENCE":          "chatim-gateway",
-	"GW_IDENTITY_INTERNAL_URL": "http://chatim-identity-1:8081",
-	"GW_IDENTITY_JWKS_URL":     "https://identity.example.com/.well-known/jwks.json",
-	"GW_IDENTITY_SECRET":       "node-secret-value-0123456789abcdef",
+	"JWT_KEYS_FILE":         "/run/secrets/jwks.json",
+	"JWT_ISSUER":            "chatim-identity",
+	"JWT_AUDIENCE":          "chatim-gateway",
+	"IDENTITY_INTERNAL_URL": "http://chatim-identity-1:8081",
+	"IDENTITY_JWKS_URL":     "https://identity.example.com/.well-known/jwks.json",
+	"IDENTITY_NODE_SECRET":  "node-secret-value-0123456789abcdef",
 }
 
 func setEnv(t *testing.T, env map[string]string) {
@@ -94,11 +94,11 @@ func TestLoadDefaults(t *testing.T) {
 
 func TestLoadReadsOverrides(t *testing.T) {
 	setEnv(t, map[string]string{
-		"GW_ADDR": "127.0.0.1:7080", "GW_ADMIN_ADDR": "127.0.0.1:7090", "REDIS_ADDR": "redis-a:6390", "REDIS_DB": "2",
-		"GW_JWT_LEEWAY": "0s", "GW_BODY_MAX": "4096", "GW_USER_RATE": "5", "GW_USER_BURST": "6", "GW_USER_INFLIGHT": "7",
-		"GW_USER_LIMITERS": "900", "GW_INFLIGHT_MAX": "800", "GW_CORS_ORIGINS": "https://chat.example.com, http://localhost:3000",
-		"GW_DRAIN_DELAY": "1s", "GW_SHUTDOWN_BUDGET": "20s", "GW_READ_HEADER_TIMEOUT": "2s", "GW_READ_TIMEOUT": "3s",
-		"GW_IDLE_TIMEOUT": "30s", "GW_MAX_HEADER_BYTES": "8192", "GW_H2_MAX_STREAMS": "100", "CHAT_REQUEST_DEADLINE": "8s",
+		"APP_ADDR": "127.0.0.1:7080", "APP_ADMIN_ADDR": "127.0.0.1:7090", "REDIS_ADDR": "redis-a:6390", "REDIS_DB": "2",
+		"JWT_LEEWAY": "0s", "APP_BODY_SIZE_MAX": "4096", "APP_USER_RATE": "5", "APP_USER_BURST": "6", "APP_USER_INFLIGHT": "7",
+		"APP_USER_LIMITERS": "900", "APP_INFLIGHT_MAX": "800", "APP_CORS_ORIGINS": "https://chat.example.com, http://localhost:3000",
+		"APP_DRAIN_DELAY": "1s", "APP_SHUTDOWN_BUDGET": "20s", "APP_READ_HEADER_TIMEOUT": "2s", "APP_READ_TIMEOUT": "3s",
+		"APP_IDLE_TIMEOUT": "30s", "APP_MAX_HEADER_BYTES": "8192", "GW_H2_MAX_STREAMS": "100", "CHAT_REQUEST_DEADLINE": "8s",
 	})
 	got := mustLoad(t)
 	if got.ListenAddr != "127.0.0.1:7080" || got.AdminAddr != "127.0.0.1:7090" || got.Redis != (config.StateRedis{Addr: "redis-a:6390", DB: 2}) ||
@@ -113,8 +113,15 @@ func TestLoadReadsOverrides(t *testing.T) {
 	}
 }
 
+func TestOldBodyMaxNameIsNotRead(t *testing.T) {
+	setEnv(t, map[string]string{"GW_BODY_MAX": "abc"})
+	if got := mustLoad(t); got.BodyMax != 128<<10 {
+		t.Fatalf("BodyMax = %d with GW_BODY_MAX set, want the APP_BODY_SIZE_MAX default 131072", got.BodyMax)
+	}
+}
+
 func TestLogValueCoversEveryField(t *testing.T) {
-	setEnv(t, map[string]string{"GW_CORS_ORIGINS": "https://chat.example.com", "GW_SHARED_REDIS_ADDR": "chatim-redis-presence:6379", "GW_SHARED_REDIS_PASSWORD": "redis-secret", "REDIS_PASSWORD": "state-secret"})
+	setEnv(t, map[string]string{"APP_CORS_ORIGINS": "https://chat.example.com", "SHARED_REDIS_ADDR": "chatim-redis-presence:6379", "SHARED_REDIS_PASSWORD": "redis-secret", "REDIS_PASSWORD": "state-secret"})
 	cfg := mustLoad(t)
 	attrs := cfg.LogValue().Group()
 	if got, want := len(attrs), reflect.TypeFor[config.Config]().NumField(); got != want {
@@ -136,11 +143,11 @@ func TestLogValueCoversEveryField(t *testing.T) {
 }
 
 func TestAdminAddrReadsOnlyItsVariable(t *testing.T) {
-	setEnv(t, map[string]string{"GW_ADMIN_ADDR": "127.0.0.1:7090", "REDIS_ADDR": ""})
+	setEnv(t, map[string]string{"APP_ADMIN_ADDR": "127.0.0.1:7090", "REDIS_ADDR": ""})
 	if got := config.AdminAddr(); got != "127.0.0.1:7090" {
 		t.Fatalf("AdminAddr = %q", got)
 	}
-	t.Setenv("GW_ADMIN_ADDR", "")
+	t.Setenv("APP_ADMIN_ADDR", "")
 	if got := config.AdminAddr(); got != ":9090" {
 		t.Fatalf("default AdminAddr = %q", got)
 	}
@@ -163,5 +170,17 @@ func TestPartURLLimitsAndTrustedProxies(t *testing.T) {
 		if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), key) {
 			t.Errorf("%s=%q: err = %v", key, bad, err)
 		}
+	}
+}
+
+func TestAppPrefixedNamesAreNotRead(t *testing.T) {
+	setEnv(t, map[string]string{"GW_DRAIN_DELAY": "soon", "GW_USER_RATE": "many", "GW_SHARED_REDIS_ADDR": "elsewhere:6379"})
+	got := mustLoad(t)
+	if got.DrainDelay != 2*time.Second || got.UserRate != 50 || got.SharedRedis.Addr != "" {
+		t.Fatalf("Load with old names = %+v; want the defaults", got)
+	}
+	setEnv(t, map[string]string{"JWT_ISSUER": "", "GW_JWT_ISSUER": "chatim-identity"})
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "JWT_ISSUER is required") {
+		t.Fatalf("Load with GW_JWT_ISSUER only = %v; want JWT_ISSUER is required", err)
 	}
 }

@@ -120,7 +120,7 @@ sequenceDiagram
 #### Đường thường và quyền mặc định (D101)
 - **Policy mặc định:** owner làm mọi thứ; admin thêm người và xoá người vai `member`; chỉ owner đổi vai và đặt `priority`; ai cũng rời được. Policy được hỏi **trước** khi lộ ra người đích có tồn tại hay không (đích không có hoặc đã rời được đưa vào policy như một `member` giả).
 - **Đường thường** (đích không phải owner, không nâng lên owner): một `UpdateOne` CAS trên `ver` của đích (`ApplyMember`); trượt CAS → `UNAVAILABLE` ngay. Xoá/rời một doc active thì đặt phiếu trước và `$inc −1` sau.
-- **Ai được đổi `member_count`:** chỉ `Rooms.Create`, `$inc` trong lệnh (theo số doc thật sự đổi trạng thái), transaction owner, consumer `member_count_repair` và `/app recount`; mỗi nơi bật bit 2 trên `rooms`. `$inc` lỗi thì ghi log, phiếu còn đặt, lệnh vẫn thành công; đặt phiếu lỗi → `UNAVAILABLE` trước mọi lần ghi. `MEMBER_COUNT_CHECK_DELAY` (5s) phải lớn hơn `CHAT_REQUEST_DEADLINE`.
+- **Ai được đổi `member_count`:** chỉ `Rooms.Create`, `$inc` trong lệnh (theo số doc thật sự đổi trạng thái), transaction owner, consumer `member_count_repair` và `/app recount`; mỗi nơi bật bit 2 trên `rooms`. `$inc` lỗi thì ghi log, phiếu còn đặt, lệnh vẫn thành công; đặt phiếu lỗi → `UNAVAILABLE` trước mọi lần ghi. `MEMBER_COUNT_CHECK_DELAY` (5s) phải lớn hơn `APP_REQUEST_DEADLINE`.
 
 ### 3.2. Thuật toán Kế nhiệm Owner tất định (Owner Succession Algorithm)
 - Nhóm chat không bao giờ tồn tại trạng thái không có chủ (Orphan group) hoặc có 2 chủ (Split-owner).
@@ -198,7 +198,7 @@ Khi phòng chỉ còn đúng 1 người (chính là Owner) và người này b�
 2. **Chi phí lan toả khi xoá thành viên ở nhóm lớn:**
    - *Hạn chế:* Khi kick một thành viên khỏi nhóm 5,000 người, App websocket (M4, chưa xây) phải ngắt subscription của user đó đối với phòng. Quá trình này diễn ra bất đồng bộ qua NATS.
 3. **Quy mô nhóm (mục tiêu ≤ 5,000 member):**
-   - Code không đặt trần tổng số thành viên; chỉ giới hạn mỗi lệnh thêm theo `MEMBER_BATCH_MAX` (500). Con số 5,000 là mục tiêu quy mô của nhóm hai chiều (kiến trúc §1.1), không phải giới hạn cứng. Kênh lớn (channel) chưa xây.
+   - Code không đặt trần tổng số thành viên; chỉ giới hạn mỗi lệnh thêm theo `MEMBER_BATCH_MAX` (500); client đọc giá trị này qua `GetClientConfig.room.max_members_per_call` để chia danh sách người. Con số 5,000 là mục tiêu quy mô của nhóm hai chiều (kiến trúc §1.1), không phải giới hạn cứng. Kênh lớn (channel) chưa xây.
 
 ---
 

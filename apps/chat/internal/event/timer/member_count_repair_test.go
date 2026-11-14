@@ -3,6 +3,7 @@ package timer_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -139,7 +140,7 @@ func TestAFailedMemberArmWritesNothing(t *testing.T) {
 	if err := rg.repair.Repair(t.Context(), memberCheck(room)); !errors.Is(err, errBoom) {
 		t.Fatalf("Repair = %v, want the arm error", err)
 	}
-	if after := rg.stored(t); after != before || len(rg.events.ids()) != 0 || rg.repair.Repaired() != 0 {
+	if after := rg.stored(t); !reflect.DeepEqual(after, before) || len(rg.events.ids()) != 0 || rg.repair.Repaired() != 0 {
 		t.Fatalf("room %+v -> %+v, events %v; want nothing written or sent", before, after, rg.events.ids())
 	}
 }

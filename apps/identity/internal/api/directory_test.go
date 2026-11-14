@@ -124,20 +124,23 @@ func manyIDs(n, size int) []string {
 	return out
 }
 
-func TestMoreThan500IdsIsInvalid(t *testing.T) {
+func TestMoreThan100IdsIsInvalid(t *testing.T) {
 	d := newDirHarness(t)
-	if _, err := getUsers(d, tokenLan, manyIDs(501, 8)...); err == nil {
-		t.Fatal("501 ids accepted")
+	if _, err := getUsers(d, tokenLan, manyIDs(101, 8)...); err == nil {
+		t.Fatal("101 ids accepted")
 	} else {
-		wantCode(t, err, connect.CodeInvalidArgument, "501 ids")
+		ce := wantCode(t, err, connect.CodeInvalidArgument, "101 ids")
+		if !strings.Contains(ce.message, "1 to 100 ids") {
+			t.Fatalf("message %q", ce.message)
+		}
 	}
 	if _, err := getUsers(d, tokenLan); err == nil {
 		t.Fatal("0 ids accepted")
 	} else {
 		wantCode(t, err, connect.CodeInvalidArgument, "0 ids")
 	}
-	if _, err := getUsers(d, tokenLan, manyIDs(500, 8)...); err != nil {
-		t.Fatalf("500 ids: %v", err)
+	if _, err := getUsers(d, tokenLan, manyIDs(100, 64)...); err != nil {
+		t.Fatalf("100 ids of 64 characters: %v", err)
 	}
 }
 
@@ -155,14 +158,11 @@ func TestGetUsersRejectsBadIdsWithoutEchoingThem(t *testing.T) {
 	}
 }
 
-func TestBodyOver64KiBIsResourceExhausted(t *testing.T) {
+func TestDirectoryBodyOverAppLimitIsResourceExhausted(t *testing.T) {
 	d := newDirHarness(t)
-	if _, err := getUsers(d, tokenLan, manyIDs(500, 60)...); err != nil {
-		t.Fatalf("a 30 KiB directory body above the 16 KiB auth limit: %v", err)
-	}
 	before := d.dir.lookups.Load()
-	_, err := getUsers(d, tokenLan, strings.Repeat("n", 70<<10))
-	wantCode(t, err, connect.CodeResourceExhausted, "70 KiB body")
+	_, err := getUsers(d, tokenLan, strings.Repeat("n", 20<<10))
+	wantCode(t, err, connect.CodeResourceExhausted, "20 KiB body over the 16 KiB app limit")
 	if d.dir.lookups.Load() != before {
 		t.Fatal("an oversized body reached the directory")
 	}
