@@ -177,7 +177,7 @@ Từ M2c, chi tiết ở [tóm tắt kỹ thuật, mục 10](plans/2026-10-10-m2
 
 Từ Mention App, chi tiết ở [tóm tắt kỹ thuật, mục 10](plans/2026-10-17-mention-app-summary.md):
 
-- Test `slot` `TestStepCommandsIgnoreUnrelatedKeys` chập chờn khi chạy song song dưới tải.
+- Giành slot: client Redis của chat tự gửi lại cả pipeline khi một lần đọc hết giờ; slot đã giành ở lần đầu trả 0 nên node ghi nhận thiếu slot mình giữ tới tick kế (tự lành sau một tick, đúng đắn không đổi). Sửa ở script giành slot cần chạy R5. (Test `slot` chập chờn cùng nguyên nhân đã sửa ở `fix/flaky-session-slot-tests`: client của test tắt timeout và retry.)
 
 Từ M4, chi tiết ở các tóm tắt phần 1–5 và phần gateway:
 
