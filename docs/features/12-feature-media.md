@@ -1,6 +1,6 @@
-# Module 12: Media — upload, đính kèm trong tin, URL tải, gallery, chuyển file (M7 P1–P3)
+# Module 12: Media — upload, đính kèm trong tin, URL tải, gallery, chuyển file, file public (M7 P1–P3, M7.1 P2, P4)
 
-> Phạm vi: M7 phase P1 ([tóm tắt](../plans/2026-11-06-m7-p1-upload-summary.md)), P2 ([tóm tắt](../plans/2026-11-07-m7-p2-attachments-summary.md)) và P3 ([tóm tắt](../plans/2026-11-08-m7-p3-move-files-summary.md)). File mới upload nằm ở bucket `processing`; file đã gắn vào tin được chuyển sang bucket `completed` (§8). Chưa có chính sách xoá file không còn tin nào dùng. Module `modules/media` nhúng trong chat; gateway chuyển `MediaService` và `ChatService.GetClientConfig` tới node chat bất kỳ; tin kèm file gửi qua websocket như tin thường. Vận hành: [chat](../apps/chat.md#media-module-modulesmedia), [gateway](../apps/gateway.md).
+> Phạm vi: M7 phase P1 ([tóm tắt](../plans/2026-11-06-m7-p1-upload-summary.md)), P2 ([tóm tắt](../plans/2026-11-07-m7-p2-attachments-summary.md)) và P3 ([tóm tắt](../plans/2026-11-08-m7-p3-move-files-summary.md)). File mới upload nằm ở bucket `processing`; file đã gắn vào tin hoặc đang là ảnh nhóm được chuyển sang bucket `completed` (§8, §13). File có hai loại: private (gửi trong tin, xem theo quyền đọc tin) và public (ảnh nhóm, ai đăng nhập cùng tenant cũng xin được URL) (§13). Chưa có chính sách xoá file không còn tin nào dùng. Module `modules/media` nhúng trong chat; gateway chuyển `MediaService` và `ChatService.GetClientConfig` tới node chat bất kỳ; tin kèm file gửi qua websocket như tin thường. Vận hành: [chat](../apps/chat.md#media-module-modulesmedia), [gateway](../apps/gateway.md).
 
 ## 1. Use case
 
@@ -11,15 +11,16 @@
 | UC-MEDIA-02 | Huỷ upload | Thành viên | `AbortUpload` xoá các phần đã lên |
 | UC-MEDIA-03 | Gửi tin kèm file | Thành viên, backend tenant | `SendMessage` qua websocket với tối đa 10 đính kèm; text được rỗng khi có đính kèm; forward chép file của tin nguồn |
 | UC-MEDIA-04 | Xem và tải file trong tin | Thành viên đọc được tin | `GetAttachmentURLs` một lần cho cả màn hình (≤ 100 tin), nhận URL tải và URL thumb |
-| UC-MEDIA-05 | Gallery "file tôi đã upload" | Người upload | `ListUploads`: mọi file mình đã upload xong, mới nhất trước, lọc ảnh/video/khác, nhãn `expired` khi kho đã xoá |
+| UC-MEDIA-05 | Gallery "file tôi đã upload" | Người upload | `ListUploads`: mọi file private mình đã upload xong, mới nhất trước, lọc ảnh/video/khác, nhãn `expired` khi kho đã xoá |
 | UC-MEDIA-06 | Thumb ảnh, video | Hạ tầng | Lambda production sinh `{key}{hậu tố}` từ file gốc, cạnh file ở bucket nào cũng vậy; server chỉ suy khoá và ký URL (§7) |
 | UC-MEDIA-07 | Giữ file đã gửi | Hệ thống | File đã gắn vào tin được chuyển sang `completed` nên không bị luật 30 ngày của `processing` xoá; biết tin nào đang dùng file nào; file không còn tin nào dùng chỉ được đánh dấu (§8) |
 | UC-MEDIA-08 | Tệp của room | Thành viên | `ListRoomFiles`: tệp đã gửi trong một room, tab ảnh/video hoặc tab file, mới nhất trước, kèm URL tải (§12) |
+| UC-MEDIA-09 | Ảnh nhóm | Owner/admin đặt, mọi người cùng tenant xem | Upload ảnh public, đặt bằng `UpdateRoom{avatars}`, xem bằng `GetPublicURLs`; ảnh đang dùng được giữ ở `completed` (§13) |
 
 ## 2. Luồng upload (spec client)
 
 1. Gọi `GetClientConfig`. `media.enabled = false` → ẩn nút đính kèm; file lớn hơn `max_file_bytes` → báo ngay, không gọi server.
-2. `StartUpload{file_name, content_type, size, upload_bytes_per_second, dim, dur}`. `upload_bytes_per_second` là tốc độ một luồng đo ở lần upload trước (0 = chưa biết); server dùng nó để chọn cỡ phần khoảng 8 giây mỗi phần. `dim` = `[rộng, cao]` của ảnh/video (bỏ trống nếu không có), `dur` = thời lượng video/audio tính bằng mili giây. `content_type` được chuyển chữ thường (`Image/PNG` → `image/png`). Response: `key`, `part_size`, `parts` (mọi phần `{part_number, size}`), `urls` (tối đa `max_parallel_uploads` URL dùng ngay), `expires_at` của các URL đó.
+2. `StartUpload{file_name, content_type, size, upload_bytes_per_second, dim, dur, public}`. `public = true` chỉ dùng cho ảnh nhóm và chỉ nhận `image/*` (§13). `upload_bytes_per_second` là tốc độ một luồng đo ở lần upload trước (0 = chưa biết); server dùng nó để chọn cỡ phần khoảng 8 giây mỗi phần. `dim` = `[rộng, cao]` của ảnh/video (bỏ trống nếu không có), `dur` = thời lượng video/audio tính bằng mili giây. `content_type` được chuyển chữ thường (`Image/PNG` → `image/png`). Response: `key`, `part_size`, `parts` (mọi phần `{part_number, size}`), `urls` (tối đa `max_parallel_uploads` URL dùng ngay), `expires_at` của các URL đó.
 3. Chạy `max_parallel_uploads` luồng (mặc định 4). Mỗi luồng PUT đúng `size` byte của phần lên URL (URL ghim `Content-Length`: sai một byte là 403), giữ header `ETag` của response. PUT lỗi thì làm lại đúng phần đó (xin URL mới nếu URL đã hết hạn). Trong lúc đọc file để PUT, máy tính luôn SHA-256 của cả file (không phải đọc file hai lần).
 4. Xin URL theo vòng: một `GetPartURLs{key, part_numbers}` cho tối đa `max_parallel_uploads` phần kế, gọi khi bắt đầu vòng hiện tại để không phải chờ. Gateway giới hạn mỗi thiết bị (`sid`) 1 lần/5 giây, mỗi (user, IP) 1 lần/giây, mỗi user 2 lần/giây; vượt → `resource_exhausted`, chờ rồi gọi lại.
 5. `CompleteUpload{key, parts: [{part_number, etag}], hash}` với đủ mọi phần; `hash` = `sha256:` + 64 ký tự hex thường (tuỳ chọn). Hết hạn hoặc mạng rớt giữa chừng → gọi lại đúng lệnh đó: server nhận ra S3 đã đóng phiên và trả thành công.
@@ -27,7 +28,7 @@
 
 Trình duyệt: bucket phải cho CORS `PUT` và `ExposeHeaders: ETag`, nếu không máy không đọc được ETag.
 
-Khoá object: `{tenant}/{user}/{yyyymmdd}/{26 ký tự}`, ví dụ `acme/an/20261107/0cq5tnm8k0a1b2c3d4e5f6g7h8`. 26 ký tự là base32hex chữ thường (`0-9a-v`) của 6 byte mili giây lúc `StartUpload` + 10 byte ngẫu nhiên, nên khoá cùng người xếp theo thời gian và chat đọc được tuổi khoá. Tenant và user lấy từ token.
+Khoá object: `{tenant}/{user}/{yyyymmdd}/{26 ký tự}`, ví dụ `acme/an/20261107/0cq5tnm8k0a1b2c3d4e5f6g7h8`; file public có thêm đoạn `pub`: `acme/an/pub/20261113/0cr1bk3c00a1b2c3d4e5f6g7h8`. 26 ký tự là base32hex chữ thường (`0-9a-v`) của 6 byte mili giây lúc `StartUpload` + 10 byte ngẫu nhiên, nên khoá cùng người xếp theo thời gian và chat đọc được tuổi khoá. Tenant và user lấy từ token.
 
 ## 3. Chia phần
 
@@ -96,10 +97,11 @@ URL tải là URL GET ký thường, không kèm tham số đổi header trả v
 
 `ListUploads{kinds, before, page_size}` → `{files: [UploadedFile], next_before, expires_at}`; `UploadedFile` = `{key, name, mime, size, dim, dur, hash, created_at, expired, url, thumbnail_url}`.
 
-- **Chỉ file của chính caller:** lọc bằng phép bằng trên `tenant_id`, `user_id` (lấy từ token) và `state = uploaded` qua index `{tenant_id: 1, user_id: 1, state: 1, _id: -1}`; không bao giờ lọc quyền bằng tiền tố khoá.
+- **Chỉ file private của chính caller:** ảnh nhóm (file public) không hiện, vì không gửi được vào tin. Khoá private `acme/an/2026…` luôn xếp trước khoá public `acme/an/pub/…` của cùng người, nên trang đầu đọc `_id < "{tenant}/{user}/pub/"` trên cùng index, không lọc sau khi đọc.
+- **Lọc theo token:** lọc bằng phép bằng trên `tenant_id`, `user_id` (lấy từ token) và `state = uploaded` qua index `{tenant_id: 1, user_id: 1, state: 1, _id: -1}`; không bao giờ lọc quyền bằng tiền tố khoá.
 - **Mọi file đã upload xong**, đã gắn tin hay chưa, kể cả file của tin đã xoá; phiên đang upload hoặc đã huỷ không hiện.
 - **Mới nhất trước:** xếp `_id` giảm dần (khoá xếp theo lúc `StartUpload`).
-- **Trang:** `page_size` 1..100. Trang đủ `page_size` mục thì có `next_before` (khoá mục cuối); gọi lại với `before = next_before`. `next_before` rỗng là hết (trang cuối có thể rỗng). `before` phải là khoá upload của chính caller (kiểm field `tenant_id`/`user_id` của doc), nếu không → `invalid_argument`.
+- **Trang:** `page_size` 1..100. Trang đủ `page_size` mục thì có `next_before` (khoá mục cuối); gọi lại với `before = next_before`. `next_before` rỗng là hết (trang cuối có thể rỗng). `before` phải là khoá upload private của chính caller (kiểm field `tenant_id`/`user_id` của doc), nếu không → `invalid_argument`.
 - **`kinds`:** `FILE_KIND_IMAGE` = `image/*`, `FILE_KIND_VIDEO` = `video/*`, `FILE_KIND_OTHER` = mọi loại khác; rỗng (hoặc đủ cả ba) = tất cả; `FILE_KIND_UNSPECIFIED` hay số lạ → `invalid_argument`.
 - **`expired`:** chỉ cho file **còn ở `processing`** có `created_at + MEDIA_PROCESSING_RETENTION` (mặc định 30 ngày) đã qua → `expired = true`, không có `url`/`thumbnail_url`; máy hiện "file đã hết hạn". File đã chuyển sang `completed` không bao giờ `expired`. Module tính từ doc, không gọi S3. `created_at` là lúc `StartUpload`, không muộn hơn lúc S3 mở multipart, nên nhãn có thể bật sớm hơn lúc object thật sự mất, không bao giờ trễ hơn.
 - File còn hạn có `url`, `thumbnail_url` theo đúng luật của §5 (ký từ bucket file đang nằm), hạn tới `expires_at`.
@@ -192,12 +194,12 @@ Index `{tenant_id, message_key, state}` (cặp của một tin), `{file_key, sta
 
 | Mã | Khi nào |
 |---|---|
-| `invalid_argument` | Upload: tên rỗng/quá 255 byte/ký tự điều khiển hoặc bidi, `content_type` không dạng `type/subtype`, cỡ ngoài 1..`max_file_bytes`, `dim` không phải 0 hay 2 số ≥ 1, `dur` < 0, `hash` sai dạng, xin quá `max_parallel_uploads` phần hoặc phần ngoài 1..n, danh sách ETag thiếu, trùng, thừa. `SendMessage`: vi phạm luật §4. `GetAttachmentURLs`: 0 hoặc > 100 tin, `room_id` sai, `seq` = 0. `ListUploads`: `page_size` ngoài 1..100, `before` không phải upload của caller, `kinds` lạ. `ListRoomFiles`: `room_id` sai, `kind` không phải media/file, `page_size` ngoài 1..100, `before` hỏng |
+| `invalid_argument` | Upload: tên rỗng/quá 255 byte/ký tự điều khiển hoặc bidi, `content_type` không dạng `type/subtype`, cỡ ngoài 1..`max_file_bytes`, `dim` không phải 0 hay 2 số ≥ 1, `dur` < 0, `hash` sai dạng, `public` với file không phải `image/*`, xin quá `max_parallel_uploads` phần hoặc phần ngoài 1..n, danh sách ETag thiếu, trùng, thừa. `SendMessage`: vi phạm luật §4 (kể cả khoá public). `UpdateRoom`: `avatars` quá 1 khoá, khoá không phải public của chính caller trong 24 giờ. `GetPublicURLs`: 0 hoặc > 100 khoá, khoá sai dạng. `GetAttachmentURLs`: 0 hoặc > 100 tin, `room_id` sai, `seq` = 0. `ListUploads`: `page_size` ngoài 1..100, `before` không phải upload private của caller, `kinds` lạ. `ListRoomFiles`: `room_id` sai, `kind` không phải media/file, `page_size` ngoài 1..100, `before` hỏng |
 | `permission_denied` | `ListRoomFiles`: caller không phải thành viên room |
 | `not_found` | Upload: khoá không phải của caller hoặc không tồn tại. `ListRoomFiles`: room không có hoặc của tenant khác |
 | `failed_precondition` | Media tắt (`MEDIA_ENABLED=false`, mọi lệnh `MediaService`); phiên đã đóng/huỷ (`GetPartURLs`, huỷ sau khi đã xong); S3 từ chối ETag; cỡ thật lệch cỡ khai (object bị xoá, phiên thành `aborted`); phiên đã mất (quá 1 ngày) |
 | `unavailable` | Media chưa sẵn sàng (config, bucket, key, S3); S3 lỗi; hai lệnh đổi trạng thái cùng lúc; node chat chưa nối xong cổng đọc cho media — gọi lại |
-| `resource_exhausted` | Vượt giới hạn `GetPartURLs` hoặc giới hạn theo user của gateway (`GetAttachmentURLs`, `ListUploads`, `ListRoomFiles` dùng giới hạn chung, không có limiter riêng) |
+| `resource_exhausted` | Vượt giới hạn `GetPartURLs` hoặc giới hạn theo user của gateway (`GetAttachmentURLs`, `ListUploads`, `ListRoomFiles`, `GetPublicURLs` dùng giới hạn chung, không có limiter riêng) |
 | `internal` | `ListUploads` hoặc `ListRoomFiles` trên DB thiếu index của nó: chạy `/app indexes -apply` một lần ([chat](../apps/chat.md#app-indexes-d191)) |
 
 ## 10. Cơ chế
@@ -250,3 +252,30 @@ Index `{tenant_id, message_key, state}` (cặp của một tin), `{file_key, sta
 Ví dụ: Bình mở tab "Ảnh/Video" của nhóm: `ListRoomFiles{room_id: "9036108543124204147", kind: ROOM_FILE_KIND_MEDIA, page_size: 30}` → 30 ảnh mới nhất kèm URL và `next_before`.
 
 Cách đọc: một truy vấn chỉ đọc index `{tenant_id, room_id, kind, state, sent_at: -1, _id: -1}` của `media_message_files` (phép bằng trên tenant từ token và room đã kiểm quyền, `sent_at > cleared_at`, con trỏ bằng `$or` hai nhánh giữ đủ phép bằng), rồi một lần `VisibleAttachments` của chat cho các tin của trang, một đọc lô `media_uploads` lấy bucket, ký URL trong RAM.
+
+## 13. File public và ảnh nhóm (M7.1 P4)
+
+Tóm tắt: [M7.1 P4](../plans/2026-11-13-m7-1-4-group-avatars-summary.md).
+
+| | File private | File public |
+|---|---|---|
+| Khoá | `{tenant}/{user}/{yyyymmdd}/{26}` | `{tenant}/{user}/pub/{yyyymmdd}/{26}` |
+| Tạo | `StartUpload` | `StartUpload{public: true}`, chỉ `image/*` (khác → `invalid_argument`) |
+| Dùng ở | Đính kèm tin (`SendMessage`, forward) | Ảnh nhóm (`UpdateRoom{avatars}`) |
+| Lấy URL | `GetAttachmentURLs`, `ListRoomFiles` (kiểm quyền đọc tin) | `GetPublicURLs` (chỉ cần đăng nhập cùng tenant) |
+| "File của tôi" | Có | Không |
+
+Hai loại tách hẳn: tin nhắn từ chối khoá public, ảnh nhóm từ chối khoá private; lệnh của loại này không bao giờ trả file của loại kia. `GetPartURLs`, `CompleteUpload`, `AbortUpload` nhận cả hai loại (file của chính người gọi).
+
+**Đặt ảnh nhóm (client):** upload ảnh public như §2, rồi `UpdateRoom{room_id, avatars: {keys: [key]}}` trong 24 giờ; xoá ảnh: `avatars: {keys: []}` (JSON `"avatars": {}`); không gửi `avatars` = giữ ảnh. Chat kiểm khoá trong RAM (Module 01 §4.2), không gọi media.
+
+**`MediaService.GetPublicURLs{keys}`** (1–100 khoá) → `{files: [FileURL{key, url, thumbnail_url}], expires_at}`. Tenant lấy từ token; chỉ khoá public của tenant đó, đã upload xong, mới có trong `files`; khoá private, khoá tenant khác, khoá chưa upload xong hoặc không có thì vắng mặt, không báo lỗi. Khoá sai dạng hoặc ngoài 1..100 → `invalid_argument`. URL ký từ bucket file đang nằm, thumb theo §5. Một lần gọi cho cả màn hình (ví dụ 20 nhóm trong danh sách room). Nhóm không có `avatars` hoặc khoá không có trong `files` → client ghép ảnh từ `avatar_users`.
+
+**Giữ ảnh (consumer `media`):** durable `media` nghe thêm `room_updated` (không có seq; chạy lần lượt theo room). Mỗi event, media hỏi chat room hiện tại (đọc DB) rồi:
+1. Room không có → bỏ (`no_room`); khác tenant → bỏ (`tenant_mismatch`); DM → bỏ qua.
+2. `media_room_avatars` của room có `info_ver` ≥ room → đã làm, bỏ qua. Nhóm chưa từng có ảnh và nay cũng không → không ghi gì.
+3. Room có ảnh: đọc upload; đang upload (< 24 giờ) → Nak chờ; huỷ, hết hạn, không có → đếm drop, đi tiếp; đã upload → bỏ dấu `retired_at`, chuyển sang `completed` nếu chưa. Làm ở mọi event có ảnh nên file hoàn tất muộn được chuyển ở event sau.
+4. Ghi cả doc `media_room_avatars {_id: room, tenant_id, file_key, info_ver, updated_at}` bằng CAS trên `info_ver`; trượt → Nak.
+5. Bỏ dấu `retired_at` ảnh hiện tại lần nữa; ảnh cũ khác ảnh mới và không doc nào trỏ tới (tính cả room vừa ghi) → đánh dấu `retired_at`, rồi kiểm lại, còn doc trỏ tới thì bỏ dấu.
+
+Ảnh cũ chỉ được đánh dấu, chưa có gì xoá file (§11). Rủi ro chấp nhận (owner 2026-11-13): ai cùng tenant giữ khoá vẫn xin được URL sau khi ảnh bị gỡ.

@@ -1,6 +1,6 @@
 # App `gateway`
 
-HTTPS (Connect trên HTTP/1.1 và h2c) cho tải dữ liệu và quản lý room: 30 lệnh `chatrpc.Request()` (`GetClientConfig`, 7 lệnh của `MediaService`: `StartUpload`, `GetPartURLs`, `CompleteUpload`, `AbortUpload`, `GetAttachmentURLs`, `ListUploads`, `ListRoomFiles`; 14 lệnh đọc và `CreateRoom`, `OpenDirectRoom`, `UpdateRoom`, `AddMembers`, `RemoveMember`, `LeaveRoom`, `ChangeMemberRole`, `SetMemberPriority`), JWT như websocket, gọi node chat bất kỳ (round robin), giới hạn theo user. Không có database, không dùng NATS; Redis chỉ (tuỳ chọn) cho bản danh sách thu hồi dùng chung (M6 phần 2). Cơ chế: [module 11](../features/11-feature-https-gateway.md).
+HTTPS (Connect trên HTTP/1.1 và h2c) cho tải dữ liệu và quản lý room: 31 lệnh `chatrpc.Request()` (`GetClientConfig`, 8 lệnh của `MediaService`: `StartUpload`, `GetPartURLs`, `CompleteUpload`, `AbortUpload`, `GetAttachmentURLs`, `ListUploads`, `ListRoomFiles`, `GetPublicURLs`; 14 lệnh đọc và `CreateRoom`, `OpenDirectRoom`, `UpdateRoom`, `AddMembers`, `RemoveMember`, `LeaveRoom`, `ChangeMemberRole`, `SetMemberPriority`), JWT như websocket, gọi node chat bất kỳ (round robin), giới hạn theo user. Không có database, không dùng NATS; Redis chỉ (tuỳ chọn) cho bản danh sách thu hồi dùng chung (M6 phần 2). Cơ chế: [module 11](../features/11-feature-https-gateway.md).
 
 ## Biến môi trường
 
@@ -18,7 +18,7 @@ HTTPS (Connect trên HTTP/1.1 và h2c) cho tải dữ liệu và quản lý room
 | `GW_PART_URLS_USER_LIMIT`, `GW_PART_URLS_USER_IP_LIMIT`, `GW_PART_URLS_DEVICE_LIMIT` | `2/1s` / `1/1s` / `1/5s` | Giới hạn `MediaService/GetPartURLs` (owner 2026-11-06) theo user, user + IP, user + IP + thiết bị (`sid` của token); dạng `SỐ/THỜI_LƯỢNG`; đếm chung mọi node trong Redis chung (khoá `chatim:ratelimit:GetPartURLs:*` hết hạn theo cửa sổ). Redis chung rỗng hoặc lỗi: đếm riêng trên từng node, vẫn đủ ba tầng (owner 2026-11-07; tối đa `3 × APP_USER_LIMITERS` khoá trong RAM), log và `command_rate_limit_fallbacks_total` |
 | `GW_CLIENT_IP_HEADER`, `GW_TRUSTED_PROXIES` | `X-Forwarded-For` / rỗng | IP máy lấy từ header chỉ khi kết nối đến từ một CIDR trong `GW_TRUSTED_PROXIES` (lấy hop cuối không tin cậy); rỗng = dùng địa chỉ kết nối |
 | `APP_BODY_SIZE_MAX` | `131072` | Cỡ body tối đa, một mức cho mọi lệnh (tên chung với `identity`; muốn mức riêng thì đặt env ở container); quá thì `resource_exhausted`. Tối thiểu khoảng 67 KB để `AddMembers` 1.000 người với id dài 64 ký tự lọt |
-| `APP_USER_RATE`, `APP_USER_BURST` | `50` / `100` | Lệnh mỗi giây và burst mỗi (tenant, user) trên node; quá thì `resource_exhausted` (429); `GetAttachmentURLs`, `ListUploads` và `ListRoomFiles` của `MediaService` dùng giới hạn này, không có limiter riêng |
+| `APP_USER_RATE`, `APP_USER_BURST` | `50` / `100` | Lệnh mỗi giây và burst mỗi (tenant, user) trên node; quá thì `resource_exhausted` (429); `GetAttachmentURLs`, `ListUploads`, `ListRoomFiles` và `GetPublicURLs` của `MediaService` dùng giới hạn này, không có limiter riêng |
 | `APP_USER_INFLIGHT` | `32` | Lệnh đang chạy tối đa mỗi (tenant, user) trên node |
 | `APP_USER_LIMITERS` | `100000` | Số người giữ bộ đếm trong RAM (LRU, chỉ đẩy người không có lệnh đang chạy; ≥ `APP_INFLIGHT_MAX`) |
 | `APP_INFLIGHT_MAX` | `10000` | Lệnh đang chạy tối đa cả node, kiểm trước token; quá thì `unavailable` (503) |
