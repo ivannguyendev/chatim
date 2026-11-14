@@ -68,6 +68,10 @@ func (noChat) RoomReadAccess(context.Context, string, string, string) (mediaapp.
 	return mediaapp.RoomAccess{}, nil
 }
 
+func (noChat) RoomAvatars(context.Context, string) (mediaapp.RoomAvatarState, error) {
+	return mediaapp.RoomAvatarState{}, nil
+}
+
 func valid() mediaapp.Config {
 	c := mediaapp.DefaultConfig()
 	c.Endpoint, c.PublicEndpoint, c.Region = "http://127.0.0.1:1", "http://127.0.0.1:1", "us-east-1"
@@ -139,7 +143,7 @@ func TestValidConfigServesUploadsOnceStorageIsReady(t *testing.T) {
 	if _, err := a.Server().GetAttachmentURLs(withCaller(t.Context()), &chatimv1.GetAttachmentURLsRequest{Messages: []*chatimv1.MessageRef{{RoomId: "7", Seq: 1}}}); !errors.Is(err, apperr.ErrUnavailable) {
 		t.Fatalf("attachment urls before ready = %v", err)
 	}
-	if got := len(a.Probes()); got != 1+2+21+2+6+3 {
+	if got := len(a.Probes()); got != 1+2+21+2+7+3 {
 		t.Fatalf("probes = %d", got)
 	}
 	if mediaapp.Indexes().Collections[0].Name != "media_uploads" {

@@ -47,6 +47,10 @@ func (staleChat) MessageFiles(context.Context, domain.MessageRef) (domain.Messag
 	return domain.MessageState{Found: true, Tenant: tenant, Keys: []string{orderFile}}, nil
 }
 
+func (staleChat) RoomAvatars(context.Context, string) (domain.RoomAvatarState, error) {
+	return domain.RoomAvatarState{}, nil
+}
+
 type plainObjects struct{}
 
 func (plainObjects) Copy(context.Context, string, int64, string) error { return nil }
@@ -65,7 +69,7 @@ func TestACreateAndDeleteOfOneMessageInFlightTogetherLeaveNoLivePair(t *testing.
 			t.Fatal(err)
 		}
 		log := slog.New(slog.DiscardHandler)
-		svc, err := attach.New(attach.Config{}, attach.Deps{Chat: staleChat{}, Uploads: uploads, Files: files, Objects: plainObjects{}, Log: log})
+		svc, err := attach.New(attach.Config{}, attach.Deps{Chat: staleChat{}, Uploads: uploads, Files: files, Avatars: memstore.NewRoomAvatars(), Objects: plainObjects{}, Log: log})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -82,6 +86,32 @@ func TestACreateAndDeleteOfOneMessageInFlightTogetherLeaveNoLivePair(t *testing.
 		}
 		if u, err := uploads.Get(t.Context(), orderFile); err != nil || u.RetiredAt.IsZero() {
 			t.Fatalf("upload %+v, %v; want the delete to retire it after the create", u, err)
+		}
+	})
+}
+
+func TestRoomUpdatesOfOneRoomRunOneAtATime(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := newRig()
+		r.sync.block = make(chan struct{})
+		now := time.Now()
+		s := newStream(delivery(t, roomUpdate(now), 1), delivery(t, roomUpdate(now), 1), delivery(t, created(1, now, 1), 1))
+		run := start(t.Context(), r.consumer(t, s, cfg()))
+		synctest.Wait()
+		if calls := r.sync.recorded(); r.sync.inFlight() != 2 || len(calls) != 2 {
+			t.Fatalf("in flight %d calls %+v, want the second room update to wait", r.sync.inFlight(), calls)
+		}
+		close(r.sync.block)
+		synctest.Wait()
+		run.stop(t)
+		rooms := 0
+		for _, c := range r.sync.recorded() {
+			if c.kind == attach.RoomUpdated {
+				rooms++
+			}
+		}
+		if rooms != 2 {
+			t.Fatalf("room updates ran %d times, want 2", rooms)
 		}
 	})
 }

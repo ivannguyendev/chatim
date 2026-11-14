@@ -25,3 +25,9 @@ type MessageFiles interface {
 	StillUsed(ctx context.Context, fileKeys []string, exceptMessage string) (map[string]bool, error)
 	ListRoom(ctx context.Context, q domain.RoomFilesQuery) ([]domain.MessageFile, error)
 }
+
+type RoomAvatars interface {
+	Get(ctx context.Context, room string) (domain.RoomAvatar, bool, error)
+	Put(ctx context.Context, next domain.RoomAvatar, prevVer uint64) error
+	InUse(ctx context.Context, fileKey string) (bool, error)
+}

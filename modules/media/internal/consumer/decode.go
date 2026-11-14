@@ -30,16 +30,24 @@ func decode(data []byte) (attach.Kind, attach.Event, time.Time, error) {
 	if err != nil {
 		return 0, attach.Event{}, time.Time{}, fmt.Errorf("%w: %w", errInvalidEvent, err)
 	}
-	if ev.GetTenant() == "" || ev.GetSeq() == 0 || ev.GetTs().CheckValid() != nil {
-		return 0, attach.Event{}, time.Time{}, fmt.Errorf("%w: tenant, seq and ts are required", errInvalidEvent)
+	if ev.GetTenant() == "" || ev.GetTs().CheckValid() != nil {
+		return 0, attach.Event{}, time.Time{}, fmt.Errorf("%w: tenant and ts are required", errInvalidEvent)
 	}
-	out := attach.Event{Tenant: ev.GetTenant(), Ref: domain.MessageRef{Room: ids.FormatRoomID(room), Thread: ev.GetThreadRoot(), Seq: ev.GetSeq()}}
+	out := attach.Event{Tenant: ev.GetTenant(), Ref: domain.MessageRef{Room: ids.FormatRoomID(room)}}
+	var kind attach.Kind
 	switch p := ev.GetPayload().(type) {
+	case *chatimv1.Event_RoomUpdated:
+		return attach.RoomUpdated, out, ev.GetTs().AsTime(), nil
 	case *chatimv1.Event_MessageCreated:
-		out.HasFiles = len(p.MessageCreated.GetMessage().GetAttachments()) > 0
-		return attach.Created, out, ev.GetTs().AsTime(), nil
+		kind, out.HasFiles = attach.Created, len(p.MessageCreated.GetMessage().GetAttachments()) > 0
 	case *chatimv1.Event_MessageDeleted:
-		return attach.Deleted, out, ev.GetTs().AsTime(), nil
+		kind = attach.Deleted
+	default:
+		return 0, attach.Event{}, time.Time{}, fmt.Errorf("%w: payload is not a message or room update", errInvalidEvent)
 	}
-	return 0, attach.Event{}, time.Time{}, fmt.Errorf("%w: payload is not a created or deleted message", errInvalidEvent)
+	if ev.GetSeq() == 0 {
+		return 0, attach.Event{}, time.Time{}, fmt.Errorf("%w: a message event needs a seq", errInvalidEvent)
+	}
+	out.Ref.Thread, out.Ref.Seq = ev.GetThreadRoot(), ev.GetSeq()
+	return kind, out, ev.GetTs().AsTime(), nil
 }

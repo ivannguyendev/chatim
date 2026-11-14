@@ -12,7 +12,8 @@ import (
 
 func (a *App) assembleConsumer(uploads *mongostore.Uploads) error {
 	svc, err := attach.New(attach.Config{Thumbnails: a.cfg.ThumbnailRule()}, attach.Deps{
-		Chat: a.deps.Chat, Uploads: uploads, Files: mongostore.NewMessageFiles(a.deps.Mongo), Objects: a.objects, Log: a.deps.Log,
+		Chat: a.deps.Chat, Uploads: uploads, Files: mongostore.NewMessageFiles(a.deps.Mongo),
+		Avatars: mongostore.NewRoomAvatars(a.deps.Mongo), Objects: a.objects, Log: a.deps.Log,
 	})
 	if err != nil {
 		return err

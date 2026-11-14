@@ -15,6 +15,7 @@ import (
 const (
 	uploadsCollection      = "media_uploads"
 	messageFilesCollection = "media_message_files"
+	roomAvatarsCollection  = "media_room_avatars"
 	namespaceExistsCode    = 48
 	duplicateKeyCode       = 11000
 )
@@ -24,6 +25,7 @@ var (
 	uploadsByOwner  = bson.D{{Key: "tenant_id", Value: 1}, {Key: "user_id", Value: 1}, {Key: "state", Value: 1}, {Key: "_id", Value: -1}}
 	filesByMessage  = bson.D{{Key: "tenant_id", Value: 1}, {Key: "message_key", Value: 1}, {Key: "state", Value: 1}}
 	filesByKey      = bson.D{{Key: "file_key", Value: 1}, {Key: "state", Value: 1}, {Key: "message_key", Value: 1}}
+	avatarsByFile   = bson.D{{Key: "file_key", Value: 1}}
 	filesByRoom     = bson.D{
 		{Key: "tenant_id", Value: 1}, {Key: "room_id", Value: 1}, {Key: "kind", Value: 1}, {Key: "state", Value: 1},
 		{Key: "sent_at", Value: -1}, {Key: "_id", Value: -1},
@@ -34,11 +36,12 @@ func Indexes() mongoindex.Catalog {
 	return mongoindex.Catalog{Collections: []mongoindex.Collection{
 		{Name: uploadsCollection, Indexes: []mongo.IndexModel{{Keys: uploadsByOwner}}},
 		{Name: messageFilesCollection, Indexes: []mongo.IndexModel{{Keys: filesByMessage}, {Keys: filesByKey}, {Keys: filesByRoom}}},
+		{Name: roomAvatarsCollection, Indexes: []mongo.IndexModel{{Keys: avatarsByFile}}},
 	}}
 }
 
 func Bootstrap(ctx context.Context, db *mongo.Database, reporters ...mongoindex.Reporter) error {
-	for _, name := range []string{uploadsCollection, messageFilesCollection} {
+	for _, name := range []string{uploadsCollection, messageFilesCollection, roomAvatarsCollection} {
 		if err := createClustered(ctx, db, name); err != nil {
 			return err
 		}

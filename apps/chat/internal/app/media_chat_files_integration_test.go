@@ -100,3 +100,9 @@ func TestRealMongoMessageFilesFollowsALiveThenDeletedMessage(t *testing.T) {
 		t.Fatalf("bad room err = %v", err)
 	}
 }
+
+func TestRealMongoRoomAvatarsReadsTheStoredRoom(t *testing.T) {
+	st := mongostore.New(itMediaDatabase(t), mongostore.Options{})
+	seedAvatarRooms(t, st)
+	assertRoomAvatars(t, mediaRoomAvatars{rooms: st}, setGroupAvatar(t, st))
+}

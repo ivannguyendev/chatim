@@ -22,6 +22,7 @@ type mediaReader interface {
 
 type mediaChatNode struct {
 	mediaMessageFiles
+	mediaRoomAvatars
 	reader atomic.Pointer[mediaReader]
 }
 

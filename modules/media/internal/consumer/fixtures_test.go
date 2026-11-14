@@ -49,6 +49,12 @@ func deleted(seq uint64, at time.Time) *chatimv1.Event {
 	return ev
 }
 
+func roomUpdate(at time.Time) *chatimv1.Event {
+	ev := envelope(0, at)
+	ev.Payload = &chatimv1.Event_RoomUpdated{RoomUpdated: &chatimv1.RoomUpdated{Room: &chatimv1.Room{Id: "777"}}}
+	return ev
+}
+
 type syncCall struct {
 	kind attach.Kind
 	ev   attach.Event

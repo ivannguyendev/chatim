@@ -47,6 +47,8 @@ func TestSettleBranches(t *testing.T) {
 		"lost race naks on the ladder":       {err: domain.ErrRetryLater, ev: withFile, delivered: 3, want: settledAs{naks: []time.Duration{2 * time.Minute}}, synced: true},
 		"sixth failed delivery is stuck":     {err: errDown, ev: withFile, delivered: 6, want: settledAs{naks: []time.Duration{10 * time.Minute}}, stuck: 1, synced: true},
 		"deleted message goes to the syncer": {ev: func(now time.Time) *chatimv1.Event { return deleted(41, now) }, delivered: 1, want: settledAs{acks: 1}, synced: true},
+		"message without seq terms":          {ev: func(now time.Time) *chatimv1.Event { return created(0, now, 1) }, delivered: 1, want: settledAs{terms: 1}, invalid: 1},
+		"room update goes to the syncer":     {ev: roomUpdate, delivered: 1, want: settledAs{acks: 1}, synced: true},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -88,6 +90,17 @@ func TestEventsDecodeIntoTheMessageRefAndKind(t *testing.T) {
 		}
 		if !slices.Equal(calls, want) {
 			t.Fatalf("calls %+v", calls)
+		}
+	})
+}
+
+func TestRoomUpdatesDecodeIntoTheRoomWithoutASeq(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := newRig()
+		runOnce(t, r, cfg(), delivery(t, roomUpdate(time.Now()), 1))
+		want := []syncCall{{attach.RoomUpdated, attach.Event{Tenant: tenant, Ref: domain.MessageRef{Room: "777"}}}}
+		if calls := r.sync.recorded(); !slices.Equal(calls, want) {
+			t.Fatalf("calls %+v, want %+v", calls, want)
 		}
 	})
 }
