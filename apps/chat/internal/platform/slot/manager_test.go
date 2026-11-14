@@ -130,7 +130,7 @@ func newRedis(t *testing.T) (*miniredis.Miniredis, *redis.Client) {
 	t.Helper()
 	mr := miniredis.RunT(t)
 	mr.SetTime(redisEpoch)
-	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr(), ReadTimeout: -1, WriteTimeout: -1, MaxRetries: -1})
 	t.Cleanup(func() { _ = rdb.Close() })
 	return mr, rdb
 }
