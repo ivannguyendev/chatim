@@ -41,7 +41,7 @@ func (s *Service) StartUpload(ctx context.Context, req *chatimv1.StartUploadRequ
 	}
 	started, err := s.uploads.Start(ctx, who, upload.StartInput{
 		FileName: req.GetFileName(), ContentType: req.GetContentType(), Size: req.GetSize(),
-		Dim: req.GetDim(), Dur: req.GetDur(), BytesPerSecond: req.GetUploadBytesPerSecond(),
+		Dim: req.GetDim(), Dur: req.GetDur(), BytesPerSecond: req.GetUploadBytesPerSecond(), Public: req.GetPublic(),
 	})
 	if err != nil {
 		return nil, err

@@ -159,6 +159,14 @@ func TestFileFactsReachTheUploadDoc(t *testing.T) {
 	}
 }
 
+func TestPublicReachesTheUploadKey(t *testing.T) {
+	s, _ := newService(t)
+	started, err := s.StartUpload(caller("acme", "an"), &chatimv1.StartUploadRequest{FileName: "g.png", ContentType: "image/png", Size: 1 << 20, Public: true})
+	if err != nil || !strings.HasPrefix(started.GetKey(), "acme/an/pub/") {
+		t.Fatalf("started %v, %v", started, err)
+	}
+}
+
 func TestCallsWithoutACallerAreRefused(t *testing.T) {
 	s, _ := newService(t)
 	if _, err := s.StartUpload(context.Background(), &chatimv1.StartUploadRequest{FileName: "a", ContentType: "a/b", Size: 1}); err == nil {

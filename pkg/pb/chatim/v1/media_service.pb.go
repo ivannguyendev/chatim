@@ -287,6 +287,7 @@ type StartUploadRequest struct {
 	UploadBytesPerSecond int64                  `protobuf:"varint,4,opt,name=upload_bytes_per_second,json=uploadBytesPerSecond,proto3" json:"upload_bytes_per_second,omitempty"`
 	Dim                  []int32                `protobuf:"varint,5,rep,packed,name=dim,proto3" json:"dim,omitempty"`
 	Dur                  int64                  `protobuf:"varint,6,opt,name=dur,proto3" json:"dur,omitempty"`
+	Public               bool                   `protobuf:"varint,7,opt,name=public,proto3" json:"public,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -361,6 +362,13 @@ func (x *StartUploadRequest) GetDur() int64 {
 		return x.Dur
 	}
 	return 0
+}
+
+func (x *StartUploadRequest) GetPublic() bool {
+	if x != nil {
+		return x.Public
+	}
+	return false
 }
 
 type StartUploadResponse struct {
@@ -1492,14 +1500,15 @@ const file_chatim_v1_media_service_proto_rawDesc = "" +
 	"\fUploadedPart\x12\x1f\n" +
 	"\vpart_number\x18\x01 \x01(\x05R\n" +
 	"partNumber\x12\x12\n" +
-	"\x04etag\x18\x02 \x01(\tR\x04etag\"\xc3\x01\n" +
+	"\x04etag\x18\x02 \x01(\tR\x04etag\"\xdb\x01\n" +
 	"\x12StartUploadRequest\x12\x1b\n" +
 	"\tfile_name\x18\x01 \x01(\tR\bfileName\x12!\n" +
 	"\fcontent_type\x18\x02 \x01(\tR\vcontentType\x12\x12\n" +
 	"\x04size\x18\x03 \x01(\x03R\x04size\x125\n" +
 	"\x17upload_bytes_per_second\x18\x04 \x01(\x03R\x14uploadBytesPerSecond\x12\x10\n" +
 	"\x03dim\x18\x05 \x03(\x05R\x03dim\x12\x10\n" +
-	"\x03dur\x18\x06 \x01(\x03R\x03dur\"\xd4\x01\n" +
+	"\x03dur\x18\x06 \x01(\x03R\x03dur\x12\x16\n" +
+	"\x06public\x18\a \x01(\bR\x06public\"\xd4\x01\n" +
 	"\x13StartUploadResponse\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x1b\n" +
 	"\tpart_size\x18\x02 \x01(\x03R\bpartSize\x12+\n" +

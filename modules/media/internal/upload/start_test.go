@@ -117,3 +117,35 @@ func TestPartURLs(t *testing.T) {
 		t.Fatalf("after complete: %v", err)
 	}
 }
+
+func TestStartPublicGivesImagesAPublicKeyTheOwnerDrives(t *testing.T) {
+	r := newRig(t)
+	for _, mime := range []string{"text/html", "video/mp4", "application/pdf"} {
+		if _, err := r.svc.Start(t.Context(), an, upload.StartInput{FileName: "x", ContentType: mime, Size: mib, Public: true}); !errors.Is(err, apperr.ErrInvalidArgument) {
+			t.Fatalf("public %s: %v", mime, err)
+		}
+	}
+	keys := make([]string, 2)
+	for i := range keys {
+		s, err := r.svc.Start(t.Context(), an, upload.StartInput{FileName: "group.png", ContentType: "Image/PNG", Size: 40 * mib, Public: true})
+		if err != nil || !strings.HasPrefix(s.Upload.Key, "acme/an/pub/20261106/") || s.Upload.ContentType != "image/png" {
+			t.Fatalf("started %+v, %v", s.Upload, err)
+		}
+		keys[i] = s.Upload.Key
+	}
+	if private := r.start(t); strings.Contains(private.Upload.Key, "/pub/") {
+		t.Fatalf("private key %q", private.Upload.Key)
+	}
+	if _, _, err := r.svc.PartURLs(t.Context(), binh, keys[0], []int32{1}); !errors.Is(err, apperr.ErrNotFound) {
+		t.Fatalf("someone else's public key: %v", err)
+	}
+	if _, _, err := r.svc.PartURLs(t.Context(), an, keys[0], []int32{1}); err != nil {
+		t.Fatalf("part URLs: %v", err)
+	}
+	if u, err := r.svc.Complete(t.Context(), an, keys[0], etags(3), ""); err != nil || u.State != domain.StateUploaded {
+		t.Fatalf("complete %+v, %v", u, err)
+	}
+	if err := r.svc.Abort(t.Context(), an, keys[1]); err != nil {
+		t.Fatalf("abort: %v", err)
+	}
+}

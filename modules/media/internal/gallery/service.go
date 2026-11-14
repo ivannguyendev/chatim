@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ivannguyendev/chatim/modules/media/internal/domain"
@@ -79,7 +80,11 @@ func (s *Service) List(ctx context.Context, who domain.Caller, in Input) (Page, 
 	if err := s.checkBefore(ctx, who, in.Before); err != nil {
 		return Page{}, err
 	}
-	found, err := s.deps.Uploads.ListOwned(ctx, who.Tenant, who.User, in.Before, in.Kinds, in.PageSize)
+	bound := in.Before
+	if bound == "" {
+		bound = domain.PublicKeyPrefix(who.Tenant, who.User)
+	}
+	found, err := s.deps.Uploads.ListOwned(ctx, who.Tenant, who.User, bound, in.Kinds, in.PageSize)
 	if err != nil {
 		return Page{}, err
 	}
@@ -101,6 +106,9 @@ func (s *Service) List(ctx context.Context, who domain.Caller, in Input) (Page, 
 func (s *Service) checkBefore(ctx context.Context, who domain.Caller, before string) error {
 	if before == "" {
 		return nil
+	}
+	if strings.HasPrefix(before, domain.PublicKeyPrefix(who.Tenant, who.User)) {
+		return fmt.Errorf("%w: before is not one of your uploads", domain.ErrInvalid)
 	}
 	u, err := s.deps.Uploads.Get(ctx, before)
 	switch {

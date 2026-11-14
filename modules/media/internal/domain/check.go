@@ -2,13 +2,10 @@ package domain
 
 import (
 	"cmp"
-	"encoding/base32"
-	"encoding/binary"
 	"fmt"
 	"mime"
 	"slices"
 	"strings"
-	"time"
 	"unicode"
 	"unicode/utf8"
 )
@@ -16,18 +13,11 @@ import (
 const (
 	maxNameBytes        = 255
 	maxContentTypeBytes = 255
-	maxKeyBytes         = 512
 	maxETagBytes        = 128
-	keyDateLayout       = "20060102"
-	keyRandomChars      = 26
-	keyAlphabet         = "0123456789abcdefghijklmnopqrstuv"
-	keyMillisBytes      = 6
 	dimValues           = 2
 	hashPrefix          = "sha256:"
 	hashHexChars        = 64
 )
-
-var keyEncoding = base32.HexEncoding.WithPadding(base32.NoPadding)
 
 type UploadedPart struct {
 	Number int32
@@ -78,35 +68,6 @@ func isMediaType(v string) bool {
 	}
 	kind, sub, ok := strings.Cut(parsed, "/")
 	return ok && kind != "" && sub != ""
-}
-
-func NewObjectKey(tenant, user string, now time.Time, random [10]byte) string {
-	var id [keyMillisBytes + len(random)]byte
-	var millis [8]byte
-	binary.BigEndian.PutUint64(millis[:], uint64(now.UnixMilli()))
-	copy(id[:keyMillisBytes], millis[8-keyMillisBytes:])
-	copy(id[keyMillisBytes:], random[:])
-	return tenant + "/" + user + "/" + now.UTC().Format(keyDateLayout) + "/" + strings.ToLower(keyEncoding.EncodeToString(id[:]))
-}
-
-func ThumbnailKey(key, suffix string) string {
-	return key + suffix
-}
-
-func OwnsKey(key, tenant, user string) bool {
-	if tenant == "" || user == "" || len(key) > maxKeyBytes {
-		return false
-	}
-	rest, ok := strings.CutPrefix(key, tenant+"/"+user+"/")
-	if !ok {
-		return false
-	}
-	date, random, ok := strings.Cut(rest, "/")
-	if !ok || len(random) != keyRandomChars || strings.Trim(random, keyAlphabet) != "" {
-		return false
-	}
-	_, err := time.Parse(keyDateLayout, date)
-	return err == nil
 }
 
 func CheckPartNumbers(numbers []int32, partCount, maxPerCall int) error {

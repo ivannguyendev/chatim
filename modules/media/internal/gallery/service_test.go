@@ -250,3 +250,30 @@ func TestCompletedFilesNeverExpireAndAreSignedFromCompleted(t *testing.T) {
 		t.Fatalf("signed %+v", r.objects.signed)
 	}
 }
+
+func TestListLeavesOutPublicFiles(t *testing.T) {
+	r := newRig(t, domain.Thumbnails{})
+	private := []domain.Upload{
+		uploaded("an", "0001", "image/png", 3*time.Hour),
+		uploaded("an", "0002", "image/png", 2*time.Hour),
+		uploaded("an", "0003", "image/png", time.Hour),
+	}
+	public := uploaded("an", "pub", "image/png", time.Minute)
+	public.Key = domain.NewObjectKey("acme", "an", true, now, [10]byte{9})
+	r.add(t, append(private, public)...)
+	page, err := r.svc.List(t.Context(), an, gallery.Input{PageSize: 10})
+	if err != nil || !slices.Equal(keys(page.Files), []string{private[2].Key, private[1].Key, private[0].Key}) {
+		t.Fatalf("page %v, %v", keys(page.Files), err)
+	}
+	first, err := r.svc.List(t.Context(), an, gallery.Input{PageSize: 2})
+	if err != nil || !slices.Equal(keys(first.Files), []string{private[2].Key, private[1].Key}) || first.NextBefore != private[1].Key {
+		t.Fatalf("first page %v next %q, %v", keys(first.Files), first.NextBefore, err)
+	}
+	second, err := r.svc.List(t.Context(), an, gallery.Input{PageSize: 2, Before: first.NextBefore})
+	if err != nil || !slices.Equal(keys(second.Files), []string{private[0].Key}) {
+		t.Fatalf("second page %v, %v", keys(second.Files), err)
+	}
+	if _, err := r.svc.List(t.Context(), an, gallery.Input{PageSize: 2, Before: public.Key}); !errors.Is(err, apperr.ErrInvalidArgument) {
+		t.Fatalf("before a public key: %v", err)
+	}
+}

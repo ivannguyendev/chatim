@@ -37,6 +37,7 @@ message StartUploadRequest {
   int64 upload_bytes_per_second = 4;
   repeated int32 dim = 5;
   int64 dur = 6;
+  bool public = 7;
 }
 
 message StartUploadResponse {

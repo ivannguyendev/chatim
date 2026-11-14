@@ -44,6 +44,7 @@ type StartInput struct {
 	Dim            []int32
 	Dur            int64
 	BytesPerSecond int64
+	Public         bool
 }
 
 type PartURL struct {
@@ -105,12 +106,17 @@ func (s *Service) Start(ctx context.Context, who Caller, in StartInput) (Started
 	if err := domain.ValidateFileFacts(in.Dim, in.Dur); err != nil {
 		return Started{}, err
 	}
+	if in.Public {
+		if err := domain.ValidatePublicType(contentType); err != nil {
+			return Started{}, err
+		}
+	}
 	partSize, parts, err := domain.PlanParts(in.Size, in.BytesPerSecond, s.cfg.Limits)
 	if err != nil {
 		return Started{}, err
 	}
 	now := s.deps.Now().UTC()
-	key := domain.NewObjectKey(who.Tenant, who.User, now, s.deps.Random())
+	key := domain.NewObjectKey(who.Tenant, who.User, in.Public, now, s.deps.Random())
 	uploadID, err := s.deps.Objects.StartMultipart(ctx, key, contentType)
 	if err != nil {
 		return Started{}, storageError(err)
