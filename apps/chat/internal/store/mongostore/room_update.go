@@ -49,11 +49,11 @@ func roomInfoUpdate(c store.RoomInfoChange) mongo.Pipeline {
 	if c.Update.Name != nil {
 		set = append(set, setLiteral("name", *c.Update.Name))
 	}
-	switch a := c.Update.Avatar; {
-	case a != nil && *a == "":
-		set = append(set, bson.E{Key: "avatar", Value: "$$REMOVE"})
+	switch a := c.Update.Avatars; {
+	case a != nil && len(*a) == 0:
+		set = append(set, bson.E{Key: "avatars", Value: "$$REMOVE"})
 	case a != nil:
-		set = append(set, setLiteral("avatar", *a))
+		set = append(set, setLiteral("avatars", *a))
 	}
 	return flaggedSet(store.BitRoomInfo, set...)
 }

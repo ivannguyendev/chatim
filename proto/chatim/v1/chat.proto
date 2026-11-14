@@ -36,6 +36,8 @@ enum EditKind {
 }
 
 message Room {
+  reserved 8;
+  reserved "avatar";
   string id = 1;
   string tenant = 2;
   RoomType type = 3;
@@ -43,10 +45,10 @@ message Room {
   string created_by = 5;
   google.protobuf.Timestamp created_at = 6;
   int32 member_count = 7;
-  string avatar = 8;
   uint64 info_ver = 9;
   repeated string direct_users = 10;
   repeated string avatar_users = 11;
+  repeated string avatars = 12;
 }
 
 message Message {

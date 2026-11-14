@@ -11,9 +11,9 @@ import (
 func TestValidateRoomUpdate(t *testing.T) {
 	good := []domain.RoomUpdate{
 		{Name: new("Cửa hàng 12")},
-		{Avatar: new("files/av/777.png")},
-		{Avatar: new("")},
-		{Name: new(strings.Repeat("ạ", 128)), Avatar: new(strings.Repeat("a", 1024))},
+		{Avatars: new([]string{"acme/an/pub/20261113/0cr1"})},
+		{Avatars: new([]string{})},
+		{Name: new(strings.Repeat("ạ", 128)), Avatars: new([]string{"acme/an/pub/20261113/0cr1"})},
 	}
 	for _, u := range good {
 		if err := domain.ValidateRoomUpdate(u); err != nil {
@@ -30,7 +30,7 @@ func TestValidateRoomUpdate(t *testing.T) {
 		{"blank name", domain.RoomUpdate{Name: new("  ")}, "name"},
 		{"long name", domain.RoomUpdate{Name: new(strings.Repeat("a", 129))}, "name"},
 		{"bad utf-8 name", domain.RoomUpdate{Name: new("hi \xff")}, "name"},
-		{"long avatar", domain.RoomUpdate{Avatar: new(strings.Repeat("a", 1025))}, "avatar"},
+		{"two avatars", domain.RoomUpdate{Avatars: new([]string{"a", "b"})}, "avatars"},
 	}
 	for _, c := range bad {
 		t.Run(c.name, func(t *testing.T) { assertInvalid(t, domain.ValidateRoomUpdate(c.u), c.field) })
@@ -38,7 +38,8 @@ func TestValidateRoomUpdate(t *testing.T) {
 }
 
 func TestRoomUpdateApplyBumpsInfoVerOnlyOnChange(t *testing.T) {
-	room := domain.Room{ID: 777, Name: "Cửa hàng 12", Avatar: "files/av/777.png", InfoVer: 2}
+	avatar := "acme/an/pub/20261113/0cr1"
+	room := domain.Room{ID: 777, Name: "Cửa hàng 12", Avatars: []string{avatar}, InfoVer: 2}
 	cases := []struct {
 		name    string
 		u       domain.RoomUpdate
@@ -46,15 +47,25 @@ func TestRoomUpdateApplyBumpsInfoVerOnlyOnChange(t *testing.T) {
 		changed bool
 	}{
 		{"same name", domain.RoomUpdate{Name: new("Cửa hàng 12")}, room, false},
-		{"same both", domain.RoomUpdate{Name: new("Cửa hàng 12"), Avatar: new("files/av/777.png")}, room, false},
-		{"rename", domain.RoomUpdate{Name: new("Kho")}, domain.Room{ID: 777, Name: "Kho", Avatar: "files/av/777.png", InfoVer: 3}, true},
-		{"remove avatar", domain.RoomUpdate{Avatar: new("")}, domain.Room{ID: 777, Name: "Cửa hàng 12", InfoVer: 3}, true},
+		{"same both", domain.RoomUpdate{Name: new("Cửa hàng 12"), Avatars: new([]string{avatar})}, room, false},
+		{"rename keeps the avatar", domain.RoomUpdate{Name: new("Kho")}, domain.Room{ID: 777, Name: "Kho", Avatars: []string{avatar}, InfoVer: 3}, true},
+		{"remove avatar", domain.RoomUpdate{Avatars: new([]string{})}, domain.Room{ID: 777, Name: "Cửa hàng 12", InfoVer: 3}, true},
+		{"new avatar", domain.RoomUpdate{Avatars: new([]string{"acme/an/pub/20261113/0cr2"})}, domain.Room{ID: 777, Name: "Cửa hàng 12", Avatars: []string{"acme/an/pub/20261113/0cr2"}, InfoVer: 3}, true},
 	}
 	for _, c := range cases {
 		got, changed := c.u.Apply(room)
 		if changed != c.changed || !reflect.DeepEqual(got, c.want) {
 			t.Errorf("%s: Apply = %+v, %v; want %+v, %v", c.name, got, changed, c.want, c.changed)
 		}
+	}
+}
+
+func TestRoomUpdateApplyCopiesTheAvatarKeys(t *testing.T) {
+	keys := []string{"acme/an/pub/20261113/0cr1"}
+	got, _ := domain.RoomUpdate{Avatars: &keys}.Apply(domain.Room{ID: 777})
+	keys[0] = "changed"
+	if got.Avatars[0] != "acme/an/pub/20261113/0cr1" {
+		t.Fatalf("avatars = %v, want a copy of the update", got.Avatars)
 	}
 }
 

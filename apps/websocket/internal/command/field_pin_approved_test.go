@@ -120,6 +120,7 @@ chatim.v1.RemoveMemberRequest 1 room_id single string
 chatim.v1.RemoveMemberRequest 2 user single string
 chatim.v1.ReplyRef 1 thread_root single uint64
 chatim.v1.ReplyRef 2 seq single uint64
+chatim.v1.RoomAvatars 1 keys repeated string
 chatim.v1.RoomFolder = 0 ROOM_FOLDER_UNSPECIFIED
 chatim.v1.RoomFolder = 1 ROOM_FOLDER_MAIN
 chatim.v1.RoomFolder = 2 ROOM_FOLDER_ARCHIVED
@@ -153,7 +154,7 @@ chatim.v1.UnpinMessageRequest 2 thread_root single uint64
 chatim.v1.UnpinMessageRequest 3 seq single uint64
 chatim.v1.UpdateRoomRequest 1 room_id single string
 chatim.v1.UpdateRoomRequest 2 name optional string
-chatim.v1.UpdateRoomRequest 3 avatar optional string
+chatim.v1.UpdateRoomRequest 4 avatars single message chatim.v1.RoomAvatars
 google.protobuf.Timestamp 1 seconds single int64
 google.protobuf.Timestamp 2 nanos single int32
 `

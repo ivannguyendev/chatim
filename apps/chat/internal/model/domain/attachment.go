@@ -1,7 +1,6 @@
 package domain
 
 import (
-	"encoding/base32"
 	"mime"
 	"slices"
 	"strings"
@@ -11,18 +10,11 @@ import (
 )
 
 const (
-	maxAttachmentKeyBytes  = 512
 	maxAttachmentNameBytes = 255
 	MaxAttachmentMimeBytes = 255
-	attachmentKeyDate      = "20060102"
-	attachmentKeyRandom    = 26
 	attachmentHashPrefix   = "sha256:"
 	attachmentHashHex      = 64
-	attachmentMaxAge       = 24 * time.Hour
-	attachmentMaxSkew      = 5 * time.Minute
 )
-
-var attachmentKeyCode = base32.NewEncoding("0123456789abcdefghijklmnopqrstuv").WithPadding(base32.NoPadding)
 
 type Attachment struct {
 	Key  string
@@ -32,13 +24,6 @@ type Attachment struct {
 	Dim  []int32
 	Dur  int64
 	Hash string
-}
-
-type attachmentKey struct {
-	tenant  string
-	user    string
-	date    string
-	created time.Time
 }
 
 func ValidateBody(text string, attachments int) error {
@@ -76,44 +61,19 @@ func ValidateAttachments(list []Attachment, tenant, sender string, now time.Time
 }
 
 func checkAttachmentKey(key, tenant, sender string, now time.Time, forwarded bool) error {
-	k, ok := parseAttachmentKey(key)
+	k, ok := parseFileKey(key)
 	switch {
-	case !ok || k.tenant != tenant:
+	case !ok || k.public || k.tenant != tenant:
 		return invalid("attachments.key")
 	case forwarded:
 		if ValidUser(k.user) != nil {
 			return invalid("attachments.key")
 		}
 		return nil
-	case k.user != sender, k.created.Format(attachmentKeyDate) != k.date:
-		return invalid("attachments.key")
-	case k.created.Before(now.Add(-attachmentMaxAge)), k.created.After(now.Add(attachmentMaxSkew)):
+	case k.user != sender, !k.freshAt(now):
 		return invalid("attachments.key")
 	}
 	return nil
-}
-
-func parseAttachmentKey(key string) (attachmentKey, bool) {
-	if len(key) > maxAttachmentKeyBytes {
-		return attachmentKey{}, false
-	}
-	parts := strings.Split(key, "/")
-	if len(parts) != 4 || len(parts[3]) != attachmentKeyRandom {
-		return attachmentKey{}, false
-	}
-	if _, err := time.Parse(attachmentKeyDate, parts[2]); err != nil {
-		return attachmentKey{}, false
-	}
-	raw, err := attachmentKeyCode.DecodeString(parts[3])
-	if err != nil || len(raw) != 16 {
-		return attachmentKey{}, false
-	}
-	var ms int64
-	for _, b := range raw[:6] {
-		ms = ms<<8 | int64(b)
-	}
-	created := time.UnixMilli(ms).UTC()
-	return attachmentKey{tenant: parts[0], user: parts[1], date: parts[2], created: created}, true
 }
 
 func checkAttachmentFacts(a Attachment) error {

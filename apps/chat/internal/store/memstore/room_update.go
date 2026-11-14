@@ -25,12 +25,7 @@ func (s *Rooms) UpdateRoomInfo(ctx context.Context, room, base uint64, c store.R
 	if !ok || r.InfoVer != base {
 		return false, nil
 	}
-	if c.Update.Name != nil {
-		r.Name = *c.Update.Name
-	}
-	if c.Update.Avatar != nil {
-		r.Avatar = *c.Update.Avatar
-	}
+	r, _ = c.Update.Apply(r)
 	r.InfoVer, r.UpdatedAt, r.UpdatedBy = base+1, toMillis(c.At), c.By
 	s.rooms[room] = r
 	s.roomFlags.raise(room, store.BitRoomInfo, time.Now())

@@ -1,6 +1,8 @@
 package grpcsrv_test
 
 import (
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,8 +26,9 @@ func TestUpdateRoomThroughTheService(t *testing.T) {
 	if err != nil || !resp.GetChanged() || resp.GetRoom().GetName() != "Design" || resp.GetRoom().GetInfoVer() != 2 {
 		t.Fatalf("owner UpdateRoom = %v, %v; want Design at info_ver 2", resp, err)
 	}
-	resp, err = rg.client.UpdateRoom(bob, &chatimv1.UpdateRoomRequest{RoomId: room, Avatar: new("files/av/1.png")})
-	if err != nil || !resp.GetChanged() || resp.GetRoom().GetAvatar() != "files/av/1.png" || resp.GetRoom().GetName() != "Design" {
+	avatar := strings.Replace(fileKey("bob", time.Now(), 1), "acme/bob/", "acme/bob/pub/", 1)
+	resp, err = rg.client.UpdateRoom(bob, &chatimv1.UpdateRoomRequest{RoomId: room, Avatars: &chatimv1.RoomAvatars{Keys: []string{avatar}}})
+	if err != nil || !resp.GetChanged() || !slices.Equal(resp.GetRoom().GetAvatars(), []string{avatar}) || resp.GetRoom().GetName() != "Design" {
 		t.Fatalf("admin UpdateRoom = %v, %v; want the avatar set and the name kept", resp, err)
 	}
 	resp, err = rg.client.UpdateRoom(bob, &chatimv1.UpdateRoomRequest{RoomId: room, Name: new("Design")})

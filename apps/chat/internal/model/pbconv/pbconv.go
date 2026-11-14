@@ -58,7 +58,7 @@ func Room(r domain.Room) *chatimv1.Room {
 		CreatedBy:   r.CreatedBy,
 		CreatedAt:   timestamppb.New(r.CreatedAt),
 		MemberCount: memberCount(r.MemberCount),
-		Avatar:      r.Avatar,
+		Avatars:     slices.Clone(r.Avatars),
 		InfoVer:     r.InfoVer,
 		DirectUsers: r.DirectUsers(),
 		AvatarUsers: groupAvatarUsers(r),

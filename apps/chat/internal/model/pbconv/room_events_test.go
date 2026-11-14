@@ -22,7 +22,7 @@ func TestRoomSettingEventIDsAreNaturalKeys(t *testing.T) {
 
 func TestRoomUpdatedCarriesTheRoomAtItsInfoVer(t *testing.T) {
 	r := groupRoom()
-	r.Name, r.Avatar, r.InfoVer, r.UpdatedBy, r.UpdatedAt, r.MemberCount = "Kho", "files/av/1.png", 4, "alice", changedAt, 3
+	r.Name, r.Avatars, r.InfoVer, r.UpdatedBy, r.UpdatedAt, r.MemberCount = "Kho", []string{"acme/minh/pub/20261113/0cr1"}, 4, "alice", changedAt, 3
 	want := memberEnvelope("9007199254740993-info-v4", "alice")
 	want.Payload = &chatimv1.Event_RoomUpdated{RoomUpdated: &chatimv1.RoomUpdated{Room: pbconv.Room(r)}}
 	got := pbconv.RoomUpdated(r)

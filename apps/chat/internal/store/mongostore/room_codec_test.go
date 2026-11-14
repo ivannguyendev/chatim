@@ -13,14 +13,14 @@ import (
 func TestRoomCodecRoundTripsInfoFields(t *testing.T) {
 	r := domain.Room{
 		ID: 7_340_000_001, Tenant: "acme", Type: domain.RoomGroup, Name: "Team", CreatedBy: "alice", CreatedAt: codecTime,
-		MemberCount: 2, MemberCountVer: 3, Avatar: "files/av/777.png", InfoVer: 4, UpdatedAt: codecTime.Add(time.Minute), UpdatedBy: "minh",
+		MemberCount: 2, MemberCountVer: 3, Avatars: []string{"acme/alice/pub/20261113/0cr1"}, InfoVer: 4, UpdatedAt: codecTime.Add(time.Minute), UpdatedBy: "minh",
 	}
 	doc, err := encodeRoom(r)
 	if err != nil {
 		t.Fatalf("encodeRoom: %v", err)
 	}
 	back, raw := roundTrip(t, doc)
-	want := []string{"_id", "tenant", "type", "name", "created_by", "created_at", "member_count", "member_count_ver", "avatar", "info_ver", "updated_at", "updated_by"}
+	want := []string{"_id", "tenant", "type", "name", "created_by", "created_at", "member_count", "member_count_ver", "avatars", "info_ver", "updated_at", "updated_by"}
 	if got := fieldNames(t, raw); !slices.Equal(got, want) {
 		t.Fatalf("fields = %v, want %v", got, want)
 	}

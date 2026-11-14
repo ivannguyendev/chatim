@@ -37,7 +37,7 @@ func TestEventOfCarriesRoomUpdatesPreferencesAndSystemMessages(t *testing.T) {
 		ev   *chatimv1.Event
 		want e2e.Event
 	}{
-		{updated, e2e.Event{Kind: e2e.KindRoomUpdated, Room: "77", ID: "77-info-v2", Text: e2e.RoomInfoPayload("Kho", "", 2), Subject: "s"}},
+		{updated, e2e.Event{Kind: e2e.KindRoomUpdated, Room: "77", ID: "77-info-v2", Text: e2e.RoomInfoPayload("Kho", nil, 2), Subject: "s"}},
 		{prefs, e2e.Event{Kind: e2e.KindPreferences, Room: "77", ID: "77-pf-mia-v1", User: "mia", Text: e2e.PreferencesPayload(true, false, false, 1), Subject: "s"}},
 		{system, e2e.Event{Kind: e2e.KindCreated, Room: "77", ID: "77-0-3", Seq: 3, CID: "sys-1", Text: `kind=system skip_unread meta={"e":1}`, Subject: "s"}},
 	}

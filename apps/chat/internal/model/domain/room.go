@@ -1,13 +1,13 @@
 package domain
 
 import (
+	"slices"
 	"strings"
 	"time"
 )
 
 const (
 	directKeySeparator = "│"
-	maxAvatarBytes     = 1024
 	MaxAvatarUsers     = 4
 )
 
@@ -40,7 +40,7 @@ type Room struct {
 	LastEditAt     time.Time
 	MemberCountVer uint64
 	DMKey          string
-	Avatar         string
+	Avatars        []string
 	InfoVer        uint64
 	UpdatedAt      time.Time
 	UpdatedBy      string
@@ -49,8 +49,8 @@ type Room struct {
 }
 
 type RoomUpdate struct {
-	Name   *string
-	Avatar *string
+	Name    *string
+	Avatars *[]string
 }
 
 func DirectKey(tenant, a, b string) string {
@@ -78,7 +78,7 @@ func (r Room) DirectUsers() []string {
 }
 
 func ValidateRoomUpdate(u RoomUpdate) error {
-	if u.Name == nil && u.Avatar == nil {
+	if u.Name == nil && u.Avatars == nil {
 		return invalid("update")
 	}
 	if u.Name != nil {
@@ -86,8 +86,8 @@ func ValidateRoomUpdate(u RoomUpdate) error {
 			return err
 		}
 	}
-	if u.Avatar != nil && len(*u.Avatar) > maxAvatarBytes {
-		return invalid("avatar")
+	if u.Avatars != nil && len(*u.Avatars) > MaxRoomAvatars {
+		return invalid("avatars")
 	}
 	return nil
 }
@@ -97,12 +97,19 @@ func (u RoomUpdate) Apply(r Room) (Room, bool) {
 	if u.Name != nil {
 		next.Name = *u.Name
 	}
-	if u.Avatar != nil {
-		next.Avatar = *u.Avatar
+	if u.Avatars != nil {
+		next.Avatars = cloneKeys(*u.Avatars)
 	}
-	if next.Name == r.Name && next.Avatar == r.Avatar {
+	if next.Name == r.Name && slices.Equal(next.Avatars, r.Avatars) {
 		return r, false
 	}
 	next.InfoVer = r.InfoVer + 1
 	return next, true
+}
+
+func cloneKeys(keys []string) []string {
+	if len(keys) == 0 {
+		return nil
+	}
+	return slices.Clone(keys)
 }
