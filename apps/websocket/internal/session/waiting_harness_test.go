@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -48,6 +49,7 @@ func (h *harness) readyClientWith(token string) *testClient {
 	if f := tc.nextFrame(); f.GetReady() == nil {
 		h.t.Fatalf("first frame = %v, want ready", f)
 	}
+	synctest.Wait()
 	return tc
 }
 
