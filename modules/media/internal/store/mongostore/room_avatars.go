@@ -45,6 +45,9 @@ func (s *RoomAvatars) Get(ctx context.Context, room string) (domain.RoomAvatar, 
 }
 
 func (s *RoomAvatars) Put(ctx context.Context, next domain.RoomAvatar, prevVer uint64) error {
+	if err := next.Validate(); err != nil {
+		return err
+	}
 	prev := bson.E{Key: "info_ver", Value: prevVer}
 	if prevVer == 0 {
 		prev = bson.E{Key: "info_ver", Value: bson.D{{Key: "$exists", Value: false}}}

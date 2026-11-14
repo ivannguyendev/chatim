@@ -2,6 +2,7 @@ package attach
 
 import (
 	"context"
+	"time"
 
 	"github.com/ivannguyendev/chatim/modules/media/internal/domain"
 )
@@ -29,8 +30,9 @@ func (s *Service) roomUpdated(ctx context.Context, ev Event) error {
 	if next == "" && !found {
 		return nil
 	}
+	kept := false
 	if next != "" {
-		if err := s.keepAvatar(ctx, state.Tenant, next); err != nil {
+		if kept, err = s.keepAvatar(ctx, state.Tenant, next); err != nil {
 			return err
 		}
 	}
@@ -39,14 +41,29 @@ func (s *Service) roomUpdated(ctx context.Context, ev Event) error {
 	if err := s.deps.Avatars.Put(ctx, record, doc.InfoVer); err != nil {
 		return err
 	}
+	if kept {
+		if err := s.deps.Uploads.Unretire(ctx, []string{next}); err != nil {
+			return err
+		}
+	}
 	if doc.FileKey == "" || doc.FileKey == next {
 		return nil
 	}
-	used, err := s.deps.Avatars.InUse(ctx, doc.FileKey)
-	if err != nil || used {
+	return s.retireUnlessShown(ctx, doc.FileKey, now)
+}
+
+func (s *Service) retireUnlessShown(ctx context.Context, key string, now time.Time) error {
+	if used, err := s.deps.Avatars.InUse(ctx, key); err != nil || used {
 		return err
 	}
-	return s.deps.Uploads.Retire(ctx, []string{doc.FileKey}, now)
+	if err := s.deps.Uploads.Retire(ctx, []string{key}, now); err != nil {
+		return err
+	}
+	used, err := s.deps.Avatars.InUse(ctx, key)
+	if err != nil || !used {
+		return err
+	}
+	return s.deps.Uploads.Unretire(ctx, []string{key})
 }
 
 func shownAvatar(state domain.RoomAvatarState) string {
@@ -60,26 +77,26 @@ func shownAvatar(state domain.RoomAvatarState) string {
 	return state.Keys[0]
 }
 
-func (s *Service) keepAvatar(ctx context.Context, tenant, key string) error {
+func (s *Service) keepAvatar(ctx context.Context, tenant, key string) (bool, error) {
 	keys := []string{key}
 	uploads, err := s.deps.Uploads.GetMany(ctx, tenant, keys)
 	if err != nil {
-		return err
+		return false, err
 	}
 	now := s.deps.Now().UTC()
 	valid, drops, err := classify(tenant, keys, uploads, now)
 	if err != nil {
-		return err
+		return false, err
 	}
 	s.countDrops(drops)
 	if len(valid) == 0 {
-		return nil
+		return false, nil
 	}
 	if err := s.deps.Uploads.Unretire(ctx, keys); err != nil {
-		return err
+		return false, err
 	}
 	if valid[0].Bucket == domain.BucketCompleted {
-		return nil
+		return true, nil
 	}
-	return s.move(ctx, valid[0], now)
+	return true, s.move(ctx, valid[0], now)
 }

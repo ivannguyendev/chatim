@@ -80,3 +80,29 @@ func TestALostWriteRetiresNothingAndTheRetryCopiesNothing(t *testing.T) {
 		t.Fatalf("retry: copies %v, A retired %v, doc %+v", r.objects.copies, r.retired(t, avatarA), r.avatarOf(t, group))
 	}
 }
+
+func TestARetireThatLandsAfterTheAvatarIsShownAgainIsUndone(t *testing.T) {
+	r := newRig(t, false)
+	r.uploaded(t, avatarA, avatarB)
+	r.group(group, 1, avatarA)
+	r.settle(t, group)
+	r.group(group, 2, avatarB)
+	r.uploads.beforeRetire = func() {
+		r.group(group, 3, avatarA)
+		r.settle(t, group)
+	}
+	r.settle(t, group)
+	if r.retired(t, avatarA) || !r.retired(t, avatarB) || r.avatarOf(t, group).FileKey != avatarA {
+		t.Fatalf("retired A %v B %v, doc %+v; want only B retired", r.retired(t, avatarA), r.retired(t, avatarB), r.avatarOf(t, group))
+	}
+}
+
+func TestTheShownAvatarIsUnretiredAfterTheWrite(t *testing.T) {
+	r := newRig(t, false)
+	r.uploaded(t, avatarA)
+	r.group(group, 2, avatarA)
+	r.settle(t, group)
+	if got := r.storeCalls()["unretire"]; got != 2 {
+		t.Fatalf("unretire calls %d, want one before and one after the write", got)
+	}
+}

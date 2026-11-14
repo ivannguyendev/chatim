@@ -62,6 +62,7 @@ type countingUploads struct {
 	conflictOnce bool
 	retireErr    error
 	unretireErr  error
+	beforeRetire func()
 }
 
 func (u *countingUploads) GetMany(ctx context.Context, tenant string, keys []string) (map[string]domain.Upload, error) {
@@ -80,6 +81,10 @@ func (u *countingUploads) MarkMoved(ctx context.Context, key string, ver int64, 
 
 func (u *countingUploads) Retire(ctx context.Context, keys []string, at time.Time) error {
 	u.calls["retire"]++
+	if hook := u.beforeRetire; hook != nil {
+		u.beforeRetire = nil
+		hook()
+	}
 	if err := u.retireErr; err != nil {
 		u.retireErr = nil
 		return err

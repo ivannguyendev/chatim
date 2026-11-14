@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type RoomAvatarState struct {
 	Found   bool
@@ -16,4 +19,11 @@ type RoomAvatar struct {
 	FileKey   string
 	InfoVer   uint64
 	UpdatedAt time.Time
+}
+
+func (a RoomAvatar) Validate() error {
+	if a.Room == "" || a.Tenant == "" || a.InfoVer == 0 {
+		return fmt.Errorf("%w: a room avatar needs a room, a tenant and an info ver", ErrInvalid)
+	}
+	return nil
 }

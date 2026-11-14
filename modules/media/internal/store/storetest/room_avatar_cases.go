@@ -28,6 +28,7 @@ func RunRoomAvatars(t *testing.T, open func(t *testing.T) store.RoomAvatars) {
 		{"a put on a stale ver or a second first put is a retry", putOnAStaleVer},
 		{"in use sees every room holding the key, the one just written too", inUseSeesEveryRoom},
 		{"a key of another tenant with the same tail is not in use", inUseIgnoresOtherTenants},
+		{"a put without an info ver is refused", putWithoutAVer},
 	} {
 		t.Run(c.name, func(t *testing.T) { c.run(t, open(t)) })
 	}
@@ -105,4 +106,13 @@ func inUseIgnoresOtherTenants(t *testing.T, s store.RoomAvatars) {
 	putAvatar(t, s, RoomAvatar(avatarRoom, "other", foreignAvatar, 1), 0)
 	assertInUse(t, s, avatarA, false)
 	assertInUse(t, s, foreignAvatar, true)
+}
+
+func putWithoutAVer(t *testing.T, s store.RoomAvatars) {
+	if err := s.Put(t.Context(), RoomAvatar(avatarRoom, "acme", avatarA, 0), 0); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("Put(info_ver 0) = %v, want ErrInvalid", err)
+	}
+	if _, found, err := s.Get(t.Context(), avatarRoom); err != nil || found {
+		t.Fatalf("Get after a refused put = %v, %v", found, err)
+	}
 }

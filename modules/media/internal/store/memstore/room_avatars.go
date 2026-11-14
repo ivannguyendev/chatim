@@ -25,6 +25,9 @@ func (s *RoomAvatars) Get(_ context.Context, room string) (domain.RoomAvatar, bo
 }
 
 func (s *RoomAvatars) Put(_ context.Context, next domain.RoomAvatar, prevVer uint64) error {
+	if err := next.Validate(); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if had, ok := s.docs[next.Room]; ok && had.InfoVer != prevVer {
